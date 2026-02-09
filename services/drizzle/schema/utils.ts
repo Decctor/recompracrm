@@ -7,7 +7,7 @@ export const utils = newTable("utils", {
 	id: varchar("id", { length: 255 })
 		.primaryKey()
 		.$defaultFn(() => crypto.randomUUID()),
-	organizacaoId: varchar("organizacao_id", { length: 255 }).references(() => organizations.id),
+	organizacaoId: varchar("organizacao_id", { length: 255 }).references(() => organizations.id, { onDelete: "cascade" }),
 	identificador: text("identificador").notNull(),
 	valor: jsonb("valor").$type<TUtilsValue>().notNull(),
 	dataUltimaAtualizacao: timestamp("data_ultima_atualizacao").defaultNow().notNull(),

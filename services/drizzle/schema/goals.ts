@@ -8,7 +8,7 @@ export const goals = newTable("goals", {
 	id: varchar("id", { length: 255 })
 		.primaryKey()
 		.$defaultFn(() => crypto.randomUUID()),
-	organizacaoId: varchar("organizacao_id", { length: 255 }).references(() => organizations.id),
+	organizacaoId: varchar("organizacao_id", { length: 255 }).references(() => organizations.id, { onDelete: "cascade" }),
 	dataInicio: timestamp("data_inicio").notNull(),
 	dataFim: timestamp("data_fim").notNull(),
 	objetivoValor: doublePrecision("objetivo_valor").notNull(),

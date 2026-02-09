@@ -11,7 +11,7 @@ export const clients = newTable(
 		id: varchar("id", { length: 255 })
 			.primaryKey()
 			.$defaultFn(() => crypto.randomUUID()),
-		organizacaoId: varchar("organizacao_id", { length: 255 }).references(() => organizations.id),
+		organizacaoId: varchar("organizacao_id", { length: 255 }).references(() => organizations.id, { onDelete: "cascade" }),
 		idExterno: varchar("id_externo", { length: 255 }),
 		nome: text("nome").notNull(),
 		// cpfCnpj: text("cpf_cnpj"),

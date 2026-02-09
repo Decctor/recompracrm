@@ -19,7 +19,7 @@ export const cashbackPrograms = newTable("cashback_programs", {
 		.primaryKey()
 		.$defaultFn(() => crypto.randomUUID()),
 	organizacaoId: varchar("organizacao_id", { length: 255 })
-		.references(() => organizations.id)
+		.references(() => organizations.id, { onDelete: "cascade" })
 		.notNull(),
 	ativo: boolean("ativo").notNull().default(true),
 	titulo: text("titulo").notNull(),

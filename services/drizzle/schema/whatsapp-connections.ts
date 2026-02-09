@@ -10,7 +10,7 @@ export const whatsappConnections = newTable("whatsapp_connections", {
 		.primaryKey()
 		.$defaultFn(() => crypto.randomUUID()),
 	organizacaoId: varchar("organizacao_id", { length: 255 })
-		.references(() => organizations.id)
+		.references(() => organizations.id, { onDelete: "cascade" })
 		.notNull(),
 	// Connection type - defaults to META_CLOUD_API for backwards compatibility
 	tipoConexao: whatsappConnectionTypeEnum("tipo_conexao").notNull().default("META_CLOUD_API"),

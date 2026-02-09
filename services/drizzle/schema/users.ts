@@ -2,7 +2,7 @@ import type { TUserPermissions } from "@/schemas/users";
 import { relations } from "drizzle-orm";
 import { boolean, jsonb, text, timestamp, varchar } from "drizzle-orm/pg-core";
 import { newTable } from "./common";
-import { organizationMembers, organizations } from "./organizations";
+import { organizationMembers } from "./organizations";
 
 export const users = newTable("users", {
 	id: varchar("id", { length: 255 })

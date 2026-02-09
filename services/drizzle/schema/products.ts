@@ -10,7 +10,7 @@ export const products = newTable(
 		id: varchar("id", { length: 255 })
 			.primaryKey()
 			.$defaultFn(() => crypto.randomUUID()),
-		organizacaoId: varchar("organizacao_id", { length: 255 }).references(() => organizations.id),
+		organizacaoId: varchar("organizacao_id", { length: 255 }).references(() => organizations.id, { onDelete: "cascade" }),
 		descricao: text("descricao").notNull(),
 		imagemCapaUrl: text("imagem_capa_url"),
 		codigo: text("codigo").notNull(),
@@ -51,7 +51,7 @@ export const productVariants = newTable(
 			.primaryKey()
 			.$defaultFn(() => crypto.randomUUID()),
 		organizacaoId: varchar("organizacao_id", { length: 255 })
-			.references(() => organizations.id)
+			.references(() => organizations.id, { onDelete: "cascade" })
 			.notNull(),
 		produtoId: varchar("produto_id", { length: 255 })
 			.notNull()
@@ -92,7 +92,7 @@ export const productAddOns = newTable("product_add_ons", {
 		.$defaultFn(() => crypto.randomUUID()),
 	organizacaoId: varchar("organizacao_id", { length: 255 })
 		.notNull()
-		.references(() => organizations.id),
+		.references(() => organizations.id, { onDelete: "cascade" }),
 	idExterno: text("id_externo"),
 	nome: text("nome").notNull(), // "Ponto da Carne", "Borda", "Extras"
 	internoNome: text("interno_nome"), // Helpful for management: "Extras de Lanche" vs "Extras de Pizza"
@@ -118,7 +118,7 @@ export const productAddOnOptions = newTable("product_add_on_options", {
 		.$defaultFn(() => crypto.randomUUID()),
 	organizacaoId: varchar("organizacao_id", { length: 255 })
 		.notNull()
-		.references(() => organizations.id),
+		.references(() => organizations.id, { onDelete: "cascade" }),
 	produtoAddOnId: varchar("produto_add_on_id", { length: 255 })
 		.notNull()
 		.references(() => productAddOns.id, { onDelete: "cascade" }),

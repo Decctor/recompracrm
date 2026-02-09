@@ -21,7 +21,7 @@ export const chats = newTable("chats", {
 		.primaryKey()
 		.$defaultFn(() => crypto.randomUUID()),
 	organizacaoId: varchar("organizacao_id", { length: 255 })
-		.references(() => organizations.id)
+		.references(() => organizations.id, { onDelete: "cascade" })
 		.notNull(),
 	clienteId: varchar("cliente_id", { length: 255 })
 		.references(() => clients.id, { onDelete: "cascade" })

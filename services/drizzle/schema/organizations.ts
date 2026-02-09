@@ -67,7 +67,9 @@ export const organizationMembers = newTable("organization_members", {
 		.primaryKey()
 		.$defaultFn(() => crypto.randomUUID()),
 	organizacaoId: varchar("organizacao_id", { length: 255 })
-		.references(() => organizations.id)
+		.references(() => organizations.id, {
+			onDelete: "cascade",
+		})
 		.notNull(),
 	usuarioId: varchar("usuario_id", { length: 255 }).references(() => users.id),
 	usuarioVendedorId: varchar("usuario_vendedor_id", { length: 255 }).references(() => sellers.id),
@@ -96,7 +98,7 @@ export const organizationMembershipInvitations = newTable("organization_membersh
 		.primaryKey()
 		.$defaultFn(() => crypto.randomUUID()),
 	organizacaoId: varchar("organizacao_id", { length: 255 })
-		.references(() => organizations.id)
+		.references(() => organizations.id, { onDelete: "cascade" })
 		.notNull(),
 	nome: text("nome").notNull(),
 	email: text("email").notNull(),

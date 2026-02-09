@@ -759,12 +759,7 @@ function HeroSection() {
 
 					{/* CTA Buttons */}
 					<div className="flex flex-col sm:flex-row items-center justify-center gap-2 md:gap-3">
-						<a
-							href="/auth/signup"
-							target="_blank"
-							rel="noopener noreferrer"
-							className="hero-cta w-full sm:w-auto"
-						>
+						<a href="/auth/signup" target="_blank" rel="noopener noreferrer" className="hero-cta w-full sm:w-auto">
 							<Button className="w-full sm:w-auto bg-[#24549C] hover:bg-[#1e4682] text-white rounded-full px-4 md:px-5 lg:px-6 h-9 md:h-10 lg:h-11 xl:h-12 text-xs md:text-sm lg:text-base font-bold shadow-2xl shadow-blue-600/30 hover:shadow-blue-600/50 hover:-translate-y-1 transition-all duration-300">
 								Teste Gratuitamente <ArrowRight className="w-3.5 h-3.5 md:w-4 md:h-4 ml-1.5 inline" />
 							</Button>
@@ -778,7 +773,7 @@ function HeroSection() {
 							</Button>
 						</Link>
 					</div>
-					<p class="mt-2 text-white/60 text-base font-medium">Teste por 15 dias grátis. Sem cartão de crédito.</p>
+					<p className="mt-2 text-white/60 text-base font-medium">Teste por 15 dias grátis. Sem cartão de crédito.</p>
 				</div>
 			</div>
 		</section>
@@ -788,9 +783,6 @@ function HeroSection() {
 // ==========================================
 // ANIMATED WIREFRAME COMPONENTS
 // ==========================================
-
-
-
 
 // Animated WhatsApp Chat Wireframe
 function AnimatedChatWireframe() {
@@ -814,7 +806,11 @@ function AnimatedChatWireframe() {
 				setVisibleMessages(0);
 				setShowTyping(false);
 
-				const tl = gsap.timeline({ onComplete: () => setTimeout(runAnimation, 4000) });
+				const tl = gsap.timeline({
+					onComplete: () => {
+						setTimeout(() => runAnimation(), 4000);
+					},
+				});
 
 				messages.forEach((msg, index) => {
 					if (msg.type === "bot") {

@@ -7,7 +7,7 @@ export const sellers = newTable("sellers", {
 	id: varchar("id", { length: 255 })
 		.primaryKey()
 		.$defaultFn(() => crypto.randomUUID()),
-	organizacaoId: varchar("organizacao_id", { length: 255 }).references(() => organizations.id),
+	organizacaoId: varchar("organizacao_id", { length: 255 }).references(() => organizations.id, { onDelete: "cascade" }),
 	ativo: boolean("ativo").notNull().default(true),
 	nome: text("nome").notNull(),
 	identificador: text("identificador").notNull(),
