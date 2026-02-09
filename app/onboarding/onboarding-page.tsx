@@ -47,6 +47,9 @@ export function OnboardingPage({ user }: OnboardingPageProps) {
 
 	const handleNext = () => {
 		if (state.stage === "organization-general-info") {
+			if (!state.termsAccepted) {
+				return toast.error("Por favor, aceite os Termos de Uso e Política de Privacidade para continuar.");
+			}
 			const firstStageValidation = OnboardingFirstStageValidationSchema.safeParse({
 				...state.organization,
 				termsAccepted: state.termsAccepted,
@@ -143,7 +146,10 @@ export function OnboardingPage({ user }: OnboardingPageProps) {
 					<h1 className="font-bold text-xl md:text-2xl text-gray-900 tracking-tight">{stageInfo.title}</h1>
 					<p className="text-sm text-gray-500 tracking-tight">{stageInfo.description}</p>
 				</div>
-				<div className="w-full flex flex-col gap-6 grow overflow-y-auto px-1 min-h-0 scrollbar-thin scrollbar-track-primary/10 scrollbar-thumb-primary/30">
+				<div
+					key={state.stage}
+					className="w-full flex flex-col gap-6 grow overflow-y-auto px-1 min-h-0 scrollbar-thin scrollbar-track-primary/10 scrollbar-thumb-primary/30"
+				>
 					{renderStageContent()}
 				</div>
 				{state.stage !== "subscription-plans-section" ? (
