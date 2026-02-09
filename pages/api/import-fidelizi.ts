@@ -4,9 +4,10 @@ import { formatPhoneAsBase, formatToCEP, formatToPhone } from "@/lib/formatting"
 import { calculateStringSimilarity } from "@/lib/utils";
 import { db } from "@/services/drizzle";
 import { type TNewClientEntity, clients } from "@/services/drizzle/schema";
+import { cashbackProgramBalances } from "@/services/drizzle/schema/cashback-programs";
 import axios, { type AxiosError, type AxiosInstance } from "axios";
 import dayjs from "dayjs";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { NextApiRequest, NextApiResponse } from "next";
 import z from "zod";
 
@@ -403,91 +404,135 @@ async function fetchAllFideliziClients() {
 
 export default apiHandler({
 	GET: async (req, res) => {
-		// const clientsInFidelizi = await fetchAllFideliziClients();
-		// console.log("FIDELIZI CLIENTS COUNT:", clientsInFidelizi.length);
-		// const clientsInDb = await db.query.clients.findMany({
-		// 	where: (fields, { eq }) => eq(fields.organizacaoId, "27817d9a-cb04-4704-a1f4-15b81a3610d3"),
-		// });
-		// console.log("DB CLIENTS COUNT:", clientsInDb.length);
-		// let identifiedClientsCount = 0;
-		// let notIdentifiedClientsCount = 0;
-		// const matches: {
-		// 	nameInFidelizi: string;
-		// 	nameInDb: string;
-		// 	birthday: string | null;
-		// 	phoneInFidelizi: string | null;
-		// 	phoneInDb: string | null;
-		// 	similarity: number;
-		// }[] = [];
-		// const nonMatches: string[] = [];
-		// for (const [index, fideliziClient] of clientsInFidelizi.entries()) {
-		// 	const logKey = `${index + 1}/${clientsInFidelizi.length}`;
-		// 	const equivalentClientInDb = clientsInDb.find(
-		// 		(c) => c.telefoneBase === fideliziClient.telefoneBase || calculateStringSimilarity(c.nome.toUpperCase(), fideliziClient.nome.toUpperCase()) > 80,
-		// 	);
-		// 	if (equivalentClientInDb) {
-		// 		identifiedClientsCount++;
-		// 		matches.push({
-		// 			nameInFidelizi: fideliziClient.nome,
-		// 			nameInDb: equivalentClientInDb.nome,
-		// 			birthday: fideliziClient.dataNascimento ? fideliziClient.dataNascimento.toISOString() : null,
-		// 			phoneInFidelizi: fideliziClient.telefone,
-		// 			phoneInDb: equivalentClientInDb.telefone,
-		// 			similarity: calculateStringSimilarity(fideliziClient.nome.toUpperCase(), equivalentClientInDb.nome.toUpperCase()),
-		// 		});
-		// 		console.log(`[${logKey}] Updating client ${equivalentClientInDb.nome} - ${equivalentClientInDb.telefone}`);
-		// 		try {
-		// 			await db
-		// 				.update(clients)
-		// 				.set({
-		// 					telefone: fideliziClient.telefone || equivalentClientInDb.telefone || "",
-		// 					telefoneBase: fideliziClient.telefoneBase || equivalentClientInDb.telefoneBase || "",
-		// 					email: fideliziClient.email,
-		// 					dataNascimento: fideliziClient.dataNascimento || equivalentClientInDb.dataNascimento || null,
-		// 					localizacaoCep: fideliziClient.localizacaoCep || equivalentClientInDb.localizacaoCep || "",
-		// 					localizacaoEstado: fideliziClient.localizacaoEstado || equivalentClientInDb.localizacaoEstado || "",
-		// 					localizacaoCidade: fideliziClient.localizacaoCidade || equivalentClientInDb.localizacaoCidade || "",
-		// 					localizacaoBairro: fideliziClient.localizacaoBairro || equivalentClientInDb.localizacaoBairro || "",
-		// 					localizacaoLogradouro: fideliziClient.localizacaoLogradouro || equivalentClientInDb.localizacaoLogradouro || "",
-		// 				})
-		// 				.where(eq(clients.id, equivalentClientInDb.id));
-		// 		} catch (error) {
-		// 			console.error(`[${logKey}] Error updating client ${equivalentClientInDb.nome} - ${equivalentClientInDb.telefone}:`, error);
-		// 			throw error;
-		// 		}
-		// 	} else {
-		// 		console.log(`[${logKey}] Creating new client ${fideliziClient.nome} - ${fideliziClient.telefone}`);
-		// 		const newClient: TNewClientEntity = {
-		// 			organizacaoId: "27817d9a-cb04-4704-a1f4-15b81a3610d3",
-		// 			nome: fideliziClient.nome,
-		// 			email: fideliziClient.email ?? null,
-		// 			dataNascimento: fideliziClient.dataNascimento ?? null,
-		// 			telefone: fideliziClient.telefone ?? "",
-		// 			telefoneBase: fideliziClient.telefoneBase ?? "",
-		// 			localizacaoCep: fideliziClient.localizacaoCep ?? null,
-		// 			localizacaoEstado: fideliziClient.localizacaoEstado ?? null,
-		// 			localizacaoCidade: fideliziClient.localizacaoCidade ?? null,
-		// 			localizacaoBairro: fideliziClient.localizacaoBairro ?? null,
-		// 			localizacaoLogradouro: fideliziClient.localizacaoLogradouro ?? null,
-		// 		};
-		// 		try {
-		// 			await db.insert(clients).values(newClient);
-		// 		} catch (error) {
-		// 			console.error(`[${logKey}] Error creating new client ${fideliziClient.nome} - ${fideliziClient.telefone}:`, error);
-		// 			throw error;
-		// 		}
-		// 		nonMatches.push(`${fideliziClient.nome} - ${fideliziClient.telefone}`);
-		// 		notIdentifiedClientsCount++;
-		// 	}
-		// }
+		const organizationId = "27817d9a-cb04-4704-a1f4-15b81a3610d3";
+		const organizationCashbackProgram = await db.query.cashbackPrograms.findFirst({
+			where: (fields, { eq }) => eq(fields.organizacaoId, organizationId),
+		});
+		if (!organizationCashbackProgram) {
+			return res.status(404).json({ error: "Programa de cashback não encontrado" });
+		}
 
-		// return res.status(200).json({
-		// 	identifiedClientsCount,
-		// 	notIdentifiedClientsCount,
-		// 	matches,
-		// 	nonMatches,
-		// });
+		const ensureCashbackBalanceForClient = async (clientId: string, saldo: number, logKey: string, clientLabel: string) => {
+			try {
+				const existingBalance = await db.query.cashbackProgramBalances.findFirst({
+					where: (fields, { and, eq }) =>
+						and(eq(fields.organizacaoId, organizationId), eq(fields.clienteId, clientId), eq(fields.programaId, organizationCashbackProgram.id)),
+				});
 
-		return res.status(200).json("OK");
+				if (existingBalance) {
+					await db
+						.update(cashbackProgramBalances)
+						.set({
+							saldoValorDisponivel: saldo,
+							saldoValorAcumuladoTotal: saldo,
+						})
+						.where(eq(cashbackProgramBalances.id, existingBalance.id));
+					return;
+				}
+
+				await db.insert(cashbackProgramBalances).values({
+					clienteId: clientId,
+					programaId: organizationCashbackProgram.id,
+					organizacaoId: organizationId,
+					saldoValorDisponivel: saldo,
+					saldoValorAcumuladoTotal: saldo,
+					saldoValorResgatadoTotal: 0,
+				});
+			} catch (error) {
+				console.error(`[${logKey}] Error syncing cashback balance for ${clientLabel}:`, error);
+				throw error;
+			}
+		};
+
+		const clientsInFidelizi = await fetchAllFideliziClients();
+		console.log("FIDELIZI CLIENTS COUNT:", clientsInFidelizi.length);
+		const clientsInDb = await db.query.clients.findMany({
+			where: (fields, { eq }) => eq(fields.organizacaoId, "27817d9a-cb04-4704-a1f4-15b81a3610d3"),
+		});
+		console.log("DB CLIENTS COUNT:", clientsInDb.length);
+		let identifiedClientsCount = 0;
+		let notIdentifiedClientsCount = 0;
+		const matches: {
+			nameInFidelizi: string;
+			nameInDb: string;
+			birthday: string | null;
+			phoneInFidelizi: string | null;
+			phoneInDb: string | null;
+			similarity: number;
+		}[] = [];
+		const nonMatches: string[] = [];
+		for (const [index, fideliziClient] of clientsInFidelizi.entries()) {
+			const logKey = `${index + 1}/${clientsInFidelizi.length}`;
+			const equivalentClientInDb = clientsInDb.find(
+				(c) => c.telefoneBase === fideliziClient.telefoneBase || calculateStringSimilarity(c.nome.toUpperCase(), fideliziClient.nome.toUpperCase()) > 80,
+			);
+			if (equivalentClientInDb) {
+				identifiedClientsCount++;
+				matches.push({
+					nameInFidelizi: fideliziClient.nome,
+					nameInDb: equivalentClientInDb.nome,
+					birthday: fideliziClient.dataNascimento ? fideliziClient.dataNascimento.toISOString() : null,
+					phoneInFidelizi: fideliziClient.telefone,
+					phoneInDb: equivalentClientInDb.telefone,
+					similarity: calculateStringSimilarity(fideliziClient.nome.toUpperCase(), equivalentClientInDb.nome.toUpperCase()),
+				});
+				console.log(`[${logKey}] Updating client ${equivalentClientInDb.nome} - ${equivalentClientInDb.telefone}`);
+				try {
+					await db
+						.update(clients)
+						.set({
+							telefone: fideliziClient.telefone || equivalentClientInDb.telefone || "",
+							telefoneBase: fideliziClient.telefoneBase || equivalentClientInDb.telefoneBase || "",
+							email: fideliziClient.email,
+							dataNascimento: fideliziClient.dataNascimento || equivalentClientInDb.dataNascimento || null,
+							localizacaoCep: fideliziClient.localizacaoCep || equivalentClientInDb.localizacaoCep || "",
+							localizacaoEstado: fideliziClient.localizacaoEstado || equivalentClientInDb.localizacaoEstado || "",
+							localizacaoCidade: fideliziClient.localizacaoCidade || equivalentClientInDb.localizacaoCidade || "",
+							localizacaoBairro: fideliziClient.localizacaoBairro || equivalentClientInDb.localizacaoBairro || "",
+							localizacaoLogradouro: fideliziClient.localizacaoLogradouro || equivalentClientInDb.localizacaoLogradouro || "",
+						})
+						.where(eq(clients.id, equivalentClientInDb.id));
+					// await ensureCashbackBalanceForClient(equivalentClientInDb.id, fideliziClient.saldo, logKey, equivalentClientInDb.nome);
+				} catch (error) {
+					console.error(`[${logKey}] Error updating client ${equivalentClientInDb.nome} - ${equivalentClientInDb.telefone}:`, error);
+					throw error;
+				}
+			} else {
+				console.log(`[${logKey}] Creating new client ${fideliziClient.nome} - ${fideliziClient.telefone}`);
+				const newClient: TNewClientEntity = {
+					organizacaoId: "27817d9a-cb04-4704-a1f4-15b81a3610d3",
+					nome: fideliziClient.nome,
+					email: fideliziClient.email ?? null,
+					dataNascimento: fideliziClient.dataNascimento ?? null,
+					telefone: fideliziClient.telefone ?? "",
+					telefoneBase: fideliziClient.telefoneBase ?? "",
+					localizacaoCep: fideliziClient.localizacaoCep ?? null,
+					localizacaoEstado: fideliziClient.localizacaoEstado ?? null,
+					localizacaoCidade: fideliziClient.localizacaoCidade ?? null,
+					localizacaoBairro: fideliziClient.localizacaoBairro ?? null,
+					localizacaoLogradouro: fideliziClient.localizacaoLogradouro ?? null,
+				};
+				try {
+					const insertedClientResponse = await db.insert(clients).values(newClient).returning({ id: clients.id });
+					const insertedClientId = insertedClientResponse[0]?.id;
+					if (!insertedClientId) {
+						throw new Error("Erro ao inserir cliente e retornar ID.");
+					}
+					// await ensureCashbackBalanceForClient(insertedClientId, fideliziClient.saldo, logKey, fideliziClient.nome);
+				} catch (error) {
+					console.error(`[${logKey}] Error creating new client ${fideliziClient.nome} - ${fideliziClient.telefone}:`, error);
+					throw error;
+				}
+				nonMatches.push(`${fideliziClient.nome} - ${fideliziClient.telefone}`);
+				notIdentifiedClientsCount++;
+			}
+		}
+
+		return res.status(200).json({
+			identifiedClientsCount,
+			notIdentifiedClientsCount,
+			matches,
+			nonMatches,
+		});
 	},
 });
