@@ -1,3 +1,4 @@
+import { AIHintsBubble } from "@/components/AIHints";
 import AppHeader from "@/components/Layouts/HeaderApp";
 import LoadingComponent from "@/components/Layouts/LoadingComponent";
 import { OnboardingQualityBubble } from "@/components/Onboarding";
@@ -27,6 +28,7 @@ const MainLayout = async ({ children }: { children: ReactNode }) => {
 						<AppHeader />
 						{children}
 						<OnboardingQualityBubble />
+						<AIHintsBubble />
 					</OrgColorsProvider>
 				</SidebarInset>
 			</Suspense>
