@@ -28,7 +28,7 @@ const OnboardingFirstStageValidationSchema = z.object({
 		.refine(isValidCNPJ, "Por favor, preencha um CNPJ válido."),
 	email: z.string({ invalid_type_error: "Tipo não válido para o email da empresa." }).email("Por favor, preencha um email válido."),
 	telefone: z.string({ invalid_type_error: "Tipo não válido para o telefone/whatsapp." }).min(1, "Por favor, preencha o telefone/whatsapp."),
-	termsAccepted: z.literal(true, { message: "Por favor, aceite os Termos de Uso e Política de Privacidade para continuar." }),
+	termsAccepted: z.boolean({ message: "Por favor, aceite os Termos de Uso e Política de Privacidade para continuar." }),
 });
 export function OnboardingPage({ user }: OnboardingPageProps) {
 	const { state, updateOrganization, updateOrganizationLogoHolder, updateOrganizationOnboarding, goToNextStage, goToPreviousStage } =
