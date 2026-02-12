@@ -123,8 +123,9 @@ export default function NewSaleContent({ org, clientId }: NewSaleContentProps) {
 	const { mutate: createSaleMutation, isPending: isCreatingSale } = useMutation({
 		mutationFn: createPointOfInteractionSale,
 		onSuccess: (data) => {
+			const visualAccumulatedCashbackValue = data.data.visualClientAccumulatedCashbackValue ?? data.data.clientAccumulatedCashbackValue;
 			playSuccess();
-			toast.success(`Venda finalizada! Saldo: ${formatToMoney(data.data.clientAccumulatedCashbackValue)}`);
+			toast.success(`Venda finalizada! Saldo: ${formatToMoney(visualAccumulatedCashbackValue)}`);
 			setSuccessData(data.data);
 			setCurrentStep(5);
 		},
@@ -240,8 +241,8 @@ export default function NewSaleContent({ org, clientId }: NewSaleContentProps) {
 						)}
 						{currentStep === 5 && successData && (
 							<SuccessStep
-								cashbackEarned={successData.clientAccumulatedCashbackValue}
-								newBalance={successData.clientNewOverallAvailableBalance ?? 0}
+								cashbackEarned={successData.visualClientAccumulatedCashbackValue ?? successData.clientAccumulatedCashbackValue}
+								newBalance={successData.visualClientNewOverallAvailableBalance ?? successData.clientNewOverallAvailableBalance ?? 0}
 								onReset={handleReset}
 								onGoHome={() => router.push(`/point-of-interaction/${org.id}`)}
 							/>

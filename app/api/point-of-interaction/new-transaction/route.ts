@@ -126,9 +126,37 @@ export type TCreatePointOfInteractionTransactionOutput = {
 		saleId: string | null;
 		clientAccumulatedCashbackValue: number;
 		clientNewOverallAvailableBalance: number | null;
+		visualClientAccumulatedCashbackValue: number;
+		visualClientNewOverallAvailableBalance: number | null;
 	};
 	message: string;
 };
+
+function calculateAccumulatedCashbackValue({
+	accumulationType,
+	accumulationValue,
+	minimumSaleValue,
+	saleValue,
+}: {
+	accumulationType: string;
+	accumulationValue: number;
+	minimumSaleValue: number;
+	saleValue: number;
+}) {
+	if (saleValue < minimumSaleValue) {
+		return 0;
+	}
+
+	if (accumulationType === "FIXO") {
+		return accumulationValue;
+	}
+
+	if (accumulationType === "PERCENTUAL") {
+		return (saleValue * accumulationValue) / 100;
+	}
+
+	return 0;
+}
 
 async function handleNewTransaction(req: NextRequest): Promise<NextResponse<TCreatePointOfInteractionTransactionOutput>> {
 	const body = await req.json();
@@ -212,6 +240,8 @@ async function handleNewTransaction(req: NextRequest): Promise<NextResponse<TCre
 		let clientCashbackAvailableBalance: number | null = null;
 		let clientCashbackAccumulatedBalance: number | null = null;
 		let clientCashbackRedeemedBalanceTotal: number | null = null;
+		let visualClientAccumulatedCashbackValue = 0;
+		let visualClientNewOverallAvailableBalance: number | null = null;
 		if (!clientId) {
 			// Client's current all-time purchase value (from metadata)
 
@@ -291,6 +321,20 @@ async function handleNewTransaction(req: NextRequest): Promise<NextResponse<TCre
 			clientCurrentPurchaseValue = client.metadataValorTotalCompras ?? 0;
 		}
 
+		// Visual-only tracking values for UX (no persistence writes).
+		// They simulate redemption/accumulation computation even when accumulation is handled by external integration.
+		visualClientNewOverallAvailableBalance = clientCashbackAvailableBalance ?? 0;
+		if (transactionRequiresRedemptionProcessing) {
+			visualClientNewOverallAvailableBalance -= input.sale.cashback.valor;
+		}
+		visualClientAccumulatedCashbackValue = calculateAccumulatedCashbackValue({
+			accumulationType: program.acumuloTipo,
+			accumulationValue: program.acumuloValor,
+			minimumSaleValue: program.acumuloRegraValorMinimo,
+			saleValue: input.sale.valor,
+		});
+		visualClientNewOverallAvailableBalance += visualClientAccumulatedCashbackValue;
+
 		// THIRD STEP: Processing cashback redemption (if applicable)
 		if (transactionRequiresRedemptionProcessing) {
 			if (program.resgateLimiteTipo && program.resgateLimiteValor !== null) {
@@ -358,16 +402,12 @@ async function handleNewTransaction(req: NextRequest): Promise<NextResponse<TCre
 			// Getting a snapshot of the current accumulated balance and available balance
 			const previousAccumulatedBalance = clientCashbackAccumulatedBalance;
 			const previousAvailableBalance = clientCashbackAvailableBalance;
-			clientNewAccumulatedCashbackValue = 0;
-			if (program.acumuloTipo === "FIXO") {
-				if (input.sale.valor >= program.acumuloRegraValorMinimo) {
-					clientNewAccumulatedCashbackValue = program.acumuloValor;
-				}
-			} else if (program.acumuloTipo === "PERCENTUAL") {
-				if (input.sale.valor >= program.acumuloRegraValorMinimo) {
-					clientNewAccumulatedCashbackValue = (input.sale.valor * program.acumuloValor) / 100;
-				}
-			}
+			clientNewAccumulatedCashbackValue = calculateAccumulatedCashbackValue({
+				accumulationType: program.acumuloTipo,
+				accumulationValue: program.acumuloValor,
+				minimumSaleValue: program.acumuloRegraValorMinimo,
+				saleValue: input.sale.valor,
+			});
 			clientCashbackAccumulatedBalance += clientNewAccumulatedCashbackValue;
 			clientCashbackAvailableBalance += clientNewAccumulatedCashbackValue;
 
@@ -556,6 +596,8 @@ async function handleNewTransaction(req: NextRequest): Promise<NextResponse<TCre
 			transactionSaleId,
 			clientAccumulatedCashbackValue: clientNewAccumulatedCashbackValue,
 			clientNewOverallAvailableBalance: clientCashbackAvailableBalance,
+			visualClientAccumulatedCashbackValue,
+			visualClientNewOverallAvailableBalance,
 			immediateProcessingDataList,
 		};
 	});
@@ -589,6 +631,8 @@ async function handleNewTransaction(req: NextRequest): Promise<NextResponse<TCre
 				saleId: result.transactionSaleId,
 				clientAccumulatedCashbackValue: result.clientAccumulatedCashbackValue,
 				clientNewOverallAvailableBalance: result.clientNewOverallAvailableBalance,
+				visualClientAccumulatedCashbackValue: result.visualClientAccumulatedCashbackValue,
+				visualClientNewOverallAvailableBalance: result.visualClientNewOverallAvailableBalance,
 			},
 			message: "Transação processada com sucesso.",
 		},
