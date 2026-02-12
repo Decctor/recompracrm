@@ -34,7 +34,7 @@ export function GeneralBlock({ seller, updateSeller, avatarHolder, updateAvatar 
 					value={seller.nome}
 					label="NOME"
 					placeholder="Preencha aqui o nome do vendedor..."
-					handleChange={(value) => updateSeller({ nome: value })}
+					handleChange={(value) => updateSeller({ nome: value, identificador: value.toUpperCase() })}
 					width="100%"
 				/>
 				<TextInput
@@ -49,6 +49,13 @@ export function GeneralBlock({ seller, updateSeller, avatarHolder, updateAvatar 
 					value={seller.email || ""}
 					placeholder="Preencha aqui o email do vendedor..."
 					handleChange={(value) => updateSeller({ email: value })}
+					width="100%"
+				/>
+				<TextInput
+					label="IDENTIFICADOR"
+					value={seller.identificador}
+					placeholder="Preencha aqui o identificador do vendedor..."
+					handleChange={(value) => updateSeller({ identificador: value })}
 					width="100%"
 				/>
 				<TextInput
