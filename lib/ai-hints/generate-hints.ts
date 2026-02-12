@@ -1,20 +1,11 @@
 import { AIHintContentSchema, type TAIHintContent, type TAIHintSubject, type TAIHintType } from "@/schemas/ai-hints";
 import { db } from "@/services/drizzle";
 import { aiHints, organizations } from "@/services/drizzle/schema";
-import { createOpenAI } from "@ai-sdk/openai";
-import { generateObject } from "ai";
+import { generateText, Output, gateway } from "ai";
 import dayjs from "dayjs";
 import { and, count, eq, gte } from "drizzle-orm";
 import { z } from "zod";
 import { buildContextForSubject, type TOrgContext } from "./context-builders";
-
-// ═══════════════════════════════════════════════════════════════
-// CONFIGURATION
-// ═══════════════════════════════════════════════════════════════
-
-const openai = createOpenAI({
-	apiKey: process.env.OPENAI_API_KEY,
-});
 
 // Maps each subject to the hint types that can appear there
 const SUBJECT_HINT_TYPES: Record<TAIHintSubject, TAIHintType[]> = {
@@ -104,11 +95,13 @@ export async function generateHintsForSubject({ organizacaoId, assunto, contexto
 	const systemPrompt = buildSystemPrompt(assunto, allowedTypes, existingTypes);
 	const userPrompt = buildUserPrompt(context, contextoAdicional);
 
-	// 6. Generate hints using AI SDK
-	const { object: generatedHints, usage } = await generateObject({
-		model: openai("gpt-4o"),
-		schema: z.object({
-			hints: z.array(AIHintContentSchema).max(3),
+	// 6. Generate hints using AI SDK with Vercel AI Gateway
+	const { output: generatedHints, usage } = await generateText({
+		model: gateway("openai/gpt-4o"),
+		output: Output.object({
+			schema: z.object({
+				hints: z.array(AIHintContentSchema).max(3),
+			}),
 		}),
 		system: systemPrompt,
 		prompt: userPrompt,
@@ -130,7 +123,7 @@ export async function generateHintsForSubject({ organizacaoId, assunto, contexto
 					assunto,
 					tipo: hint.tipo,
 					conteudo: hint,
-					modeloUtilizado: "gpt-4o",
+					modeloUtilizado: "openai/gpt-4o",
 					tokensUtilizados: Math.floor(usage.totalTokens / Math.max(uniqueHints.length, 1)),
 					relevancia: calculateRelevance(hint),
 					dataExpiracao,
