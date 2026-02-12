@@ -1,12 +1,12 @@
 import ResponsiveMenuSection from "@/components/Utils/ResponsiveMenuSection";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { WhatsappTemplateVariables } from "@/lib/whatsapp/template-variables";
 import type { TWhatsappTemplateBodyParameter } from "@/schemas/whatsapp-templates";
 import Mention from "@tiptap/extension-mention";
 import { type Editor, EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import { FileText, List, ListOrdered } from "lucide-react";
+import { Braces, ChevronDown, FileText, List, ListOrdered } from "lucide-react";
 import { useEffect, useState } from "react";
 import suggestion from "./suggestion";
 type TemplateBodyEditorProps = {
@@ -54,20 +54,30 @@ function TemplateBodyEditor({ content, contentChangeCallback, parametros, onPara
 	// Extract variables from HTML content in the order they appear
 	const extractVariablesFromContent = (editor: Editor) => {
 		const text = editor.getText();
+		const resolveVariableIdentifier = (rawToken: string) => {
+			const token = rawToken.trim();
+			if (!token) {
+				return null;
+			}
+			const matchByValue = WhatsappTemplateVariables.find((variable) => variable.value.toLowerCase() === token.toLowerCase());
+			if (matchByValue) {
+				return matchByValue.value;
+			}
+			const matchByLabel = WhatsappTemplateVariables.find((variable) => variable.label.toLowerCase() === token.toLowerCase());
+			return matchByLabel?.value ?? null;
+		};
 
 		// Extract ALL variables (anything between {{ and }}) in order of appearance
 		const variableRegex = /\{\{([^}]+)\}\}/g;
 		const foundVariables: string[] = []; // Array to maintain order
-		const seenVariables = new Set<string>(); // Set to track unique variables
+		const seenIdentifiers = new Set<string>(); // Set to track unique variables
 
 		const matches = text.matchAll(variableRegex);
 		for (const match of matches) {
-			const variableId = match[1].trim();
-			if (variableId && !seenVariables.has(variableId)) {
-				const identifier = WhatsappTemplateVariables.find((v) => v.label.toUpperCase() === variableId.toUpperCase())?.value;
-				if (!identifier) continue;
+			const identifier = resolveVariableIdentifier(match[1]);
+			if (identifier && !seenIdentifiers.has(identifier)) {
 				foundVariables.push(identifier);
-				seenVariables.add(variableId);
+				seenIdentifiers.add(identifier);
 			}
 		}
 
@@ -115,11 +125,22 @@ function TemplateBodyEditor({ content, contentChangeCallback, parametros, onPara
 		}
 	}, [content, editor]);
 
-	const insertNamedVariable = (variableValue: string, variableLabel: string) => {
+	const insertNamedVariable = (variableValue: string) => {
 		if (!editor) return;
 
-		// Insert the identificador placeholder in the editor (e.g., {{clientName}})
-		editor.chain().focus().insertContent(`{{${variableValue}}}`).insertContent(" ").run();
+		editor
+			.chain()
+			.focus()
+			.insertContent([
+				{
+					type: "mention",
+					attrs: {
+						id: variableValue,
+					},
+				},
+				{ type: "text", text: " " },
+			])
+			.run();
 
 		// The extractVariablesFromContent will be called automatically by onUpdate
 		// and will assign the correct positional number based on order of appearance
@@ -186,21 +207,41 @@ function TemplateBodyEditor({ content, contentChangeCallback, parametros, onPara
 
 				<div className="h-6 w-px bg-gray-300" />
 
-				<DropdownMenu>
+				<DropdownMenu modal={false}>
 					<DropdownMenuTrigger asChild>
-						<Button type="button" size="sm" variant="secondary">
-							+ VARIÁVEL
+						<Button type="button" size="sm" variant="secondary" className="gap-1.5">
+							<Braces className="h-3.5 w-3.5" />
+							<span>+ VARIÁVEL</span>
+							<ChevronDown className="h-3.5 w-3.5 opacity-70" />
 						</Button>
 					</DropdownMenuTrigger>
-					<DropdownMenuContent align="start" className="max-h-[300px] overflow-y-auto">
-						{WhatsappTemplateVariables.map((variable) => (
-							<DropdownMenuItem key={variable.id} onClick={() => insertNamedVariable(variable.value, variable.label)}>
+					<DropdownMenuContent align="start" sideOffset={8} className="z-110 w-[320px] overflow-hidden p-0">
+						<div className="border-b bg-muted/40 px-3 py-2.5">
+							<div className="flex items-center gap-2">
+								<div className="rounded-md bg-primary/10 p-1.5 text-primary">
+									<Braces className="h-3.5 w-3.5" />
+								</div>
 								<div className="flex flex-col">
-									<span className="font-medium">{variable.label}</span>
-									<span className="text-xs text-muted-foreground">{`{{${variable.value}}}`}</span>
+									<span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Variáveis do template</span>
+									<span className="text-xs text-muted-foreground">{WhatsappTemplateVariables.length} disponíveis</span>
+								</div>
+							</div>
+						</div>
+						<div className="max-h-[300px] overflow-y-auto p-1 [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-transparent">
+						{WhatsappTemplateVariables.map((variable) => (
+							<DropdownMenuItem key={variable.id} onSelect={() => insertNamedVariable(variable.value)} className="items-start rounded-md px-2 py-2">
+								<div className="flex w-full items-start justify-between gap-3">
+									<div className="flex min-w-0 flex-col">
+										<span className="truncate font-medium">{variable.label}</span>
+										<span className="truncate text-xs text-muted-foreground">{`{{${variable.value}}}`}</span>
+									</div>
+									<span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">#{variable.id}</span>
 								</div>
 							</DropdownMenuItem>
 						))}
+						</div>
+						<DropdownMenuSeparator className="my-0" />
+						<div className="px-3 py-2 text-[11px] text-muted-foreground">Dica: digite <span className="font-mono">{"{"}</span> no editor para abrir sugestões rápidas.</div>
 					</DropdownMenuContent>
 				</DropdownMenu>
 
