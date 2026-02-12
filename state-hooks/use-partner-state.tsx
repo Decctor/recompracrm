@@ -3,7 +3,9 @@ import { useCallback, useState } from "react";
 
 const getInitialState = (): TPartnerState => ({
 	partner: {
+		clienteId: "",
 		identificador: "",
+		codigoAfiliacao: "",
 		nome: "",
 		avatarUrl: "",
 		cpfCnpj: "",

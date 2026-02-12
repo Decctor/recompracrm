@@ -1,10 +1,12 @@
 import z from "zod";
 
 export const PartnerSchema = z.object({
+	clienteId: z.string({ invalid_type_error: "Tipo não válido para o ID do cliente." }).optional().nullable(),
 	identificador: z.string({
 		required_error: "Identificador do parceiro não informado.",
 		invalid_type_error: "Tipo não válido para o identificador do parceiro.",
 	}),
+	codigoAfiliacao: z.string({ invalid_type_error: "Tipo não válido para o código de afiliação." }).optional().nullable(),
 	nome: z.string({
 		required_error: "Nome do parceiro não informado.",
 		invalid_type_error: "Tipo não válido para o nome do parceiro.",

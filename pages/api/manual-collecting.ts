@@ -7,6 +7,7 @@ import type { TCardapioWebConfig } from "@/lib/data-connectors/cardapio-web/type
 import { DASTJS_TIME_DURATION_UNITS_MAP, getPostponedDateFromReferenceDate } from "@/lib/dates";
 import { formatPhoneAsBase, formatToCPForCNPJ, formatToPhone } from "@/lib/formatting";
 import { type ImmediateProcessingData, delay, processSingleInteractionImmediately } from "@/lib/interactions";
+import { linkPartnerToClient } from "@/lib/partners/link-partner-to-client";
 import type { TTimeDurationUnitsEnum } from "@/schemas/enums";
 import { OnlineSoftwareSaleImportationSchema } from "@/schemas/online-importation.schema";
 import { type DBTransaction, db } from "@/services/drizzle";
@@ -276,12 +277,23 @@ async function handleCardapioWebImportation(
 		// Sync Partners
 		for (const partner of mappedPartners) {
 			if (!existingPartnersMap.has(partner.identificador)) {
+				const linkage = await linkPartnerToClient({
+					tx,
+					orgId: organizationId,
+					partner: {
+						nome: partner.nome,
+					},
+					createClientIfNotFound: true,
+				});
+
 				const [inserted] = await tx
 					.insert(partners)
 					.values({
 						organizacaoId: organizationId,
 						identificador: partner.identificador,
+						codigoAfiliacao: partner.identificador,
 						nome: partner.nome,
+						clienteId: linkage.clientId,
 					})
 					.returning({ id: partners.id });
 				existingPartnersMap.set(partner.identificador, inserted.id);

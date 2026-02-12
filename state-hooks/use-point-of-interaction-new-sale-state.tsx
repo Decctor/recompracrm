@@ -42,6 +42,12 @@ export const PointOfInteractionNewSaleStateSchema = z.object({
 					.nonnegative()
 					.default(0),
 			}),
+			partnerCode: z
+				.string({
+					invalid_type_error: "Tipo não válido para código de parceiro.",
+				})
+				.optional()
+				.nullable(),
 		})
 		.refine((data) => data.valor > 0, {
 			message: "Valor da venda deve ser positivo.",
@@ -58,7 +64,7 @@ export function usePointOfInteractionNewSaleState(initialOrgId: string) {
 	const [state, setState] = useState<TPointOfInteractionNewSaleState>({
 		orgId: initialOrgId,
 		client: { id: null, nome: "", cpfCnpj: null, telefone: "" },
-		sale: { valor: 0, cashback: { aplicar: false, valor: 0 } },
+		sale: { valor: 0, cashback: { aplicar: false, valor: 0 }, partnerCode: null },
 		operatorIdentifier: "",
 	});
 
@@ -94,7 +100,7 @@ export function usePointOfInteractionNewSaleState(initialOrgId: string) {
 		setState({
 			orgId: initialOrgId,
 			client: { id: null, nome: "", cpfCnpj: null, telefone: "" },
-			sale: { valor: 0, cashback: { aplicar: false, valor: 0 } },
+			sale: { valor: 0, cashback: { aplicar: false, valor: 0 }, partnerCode: null },
 			operatorIdentifier: "",
 		});
 	}, [initialOrgId]);

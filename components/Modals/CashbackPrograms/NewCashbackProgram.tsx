@@ -29,6 +29,7 @@ export default function NewCashbackProgram({ user, userOrg, closeModal, callback
 				titulo: "",
 				acumuloTipo: "FIXO",
 				acumuloValor: 0,
+				acumuloValorParceiro: 0,
 				acumuloRegraValorMinimo: 0,
 				expiracaoRegraValidadeValor: 0,
 				acumuloPermitirViaIntegracao: !!userOrg.integracaoTipo,

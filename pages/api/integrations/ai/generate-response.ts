@@ -91,7 +91,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 			cliente: {
 				idApp: chat.cliente?.id || "",
 				nome: chat.cliente?.nome || "",
-				cpfCnpj: chat.cliente?.cpfCnpj,
 				telefone: chat.cliente?.telefone || "",
 				telefoneBase: chat.cliente?.telefoneBase || "",
 				email: chat.cliente?.email,

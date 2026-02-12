@@ -209,7 +209,15 @@ export default function NewSaleContent({ org, clientId }: NewSaleContentProps) {
 								onSubmit={handleNextStep}
 							/>
 						)}
-						{currentStep === 2 && <SaleValueStep value={state.sale.valor} onChange={(v) => updateSale({ valor: v })} onSubmit={handleNextStep} />}
+						{currentStep === 2 && (
+							<SaleValueStep
+								value={state.sale.valor}
+								partnerCode={state.sale.partnerCode ?? ""}
+								onChange={(v) => updateSale({ valor: v })}
+								onPartnerCodeChange={(v) => updateSale({ partnerCode: v })}
+								onSubmit={handleNextStep}
+							/>
+						)}
 						{currentStep === 3 && (
 							<CashbackStep
 								available={getAvailableCashback()}
@@ -541,7 +549,19 @@ function ClientStep({
 	);
 }
 
-function SaleValueStep({ value, onChange, onSubmit }: { value: number; onChange: (value: number) => void; onSubmit: () => void }) {
+function SaleValueStep({
+	value,
+	partnerCode,
+	onChange,
+	onPartnerCodeChange,
+	onSubmit,
+}: {
+	value: number;
+	partnerCode: string;
+	onChange: (value: number) => void;
+	onPartnerCodeChange: (code: string) => void;
+	onSubmit: () => void;
+}) {
 	const helpers = [10, 25, 50, 100];
 	return (
 		<div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
@@ -571,6 +591,15 @@ function SaleValueStep({ value, onChange, onSubmit }: { value: number; onChange:
 				<Button variant="ghost" onClick={() => onChange(0)} className="h-14 rounded-xl font-bold text-muted-foreground col-span-2 md:col-span-4 italic">
 					<X className="w-4 h-4 mr-1" /> LIMPAR VALOR
 				</Button>
+			</div>
+			<div className="max-w-md mx-auto">
+				<TextInput
+					label="CÓDIGO DO PARCEIRO (OPCIONAL)"
+					placeholder="Digite o código de afiliação"
+					value={partnerCode}
+					handleChange={(v) => onPartnerCodeChange(v.toUpperCase())}
+					width="100%"
+				/>
 			</div>
 		</div>
 	);

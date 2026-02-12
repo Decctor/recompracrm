@@ -19,6 +19,7 @@ export function useCashbackProgramState({ initialState }: TUseCashbackProgramSta
 				descricao: initialState?.cashbackProgram?.descricao ?? "",
 				acumuloTipo: initialState?.cashbackProgram?.acumuloTipo ?? "FIXO",
 				acumuloValor: initialState?.cashbackProgram?.acumuloValor ?? 0,
+				acumuloValorParceiro: initialState?.cashbackProgram?.acumuloValorParceiro ?? 0,
 				acumuloRegraValorMinimo: initialState?.cashbackProgram?.acumuloRegraValorMinimo ?? 0,
 				acumuloPermitirViaIntegracao: initialState?.cashbackProgram?.acumuloPermitirViaIntegracao ?? false,
 				acumuloPermitirViaPontoIntegracao: initialState?.cashbackProgram?.acumuloPermitirViaPontoIntegracao ?? false,

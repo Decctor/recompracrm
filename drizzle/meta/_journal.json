@@ -43,6 +43,13 @@
       "when": 1764441548694,
       "tag": "0005_wandering_spitfire",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1765312200000,
+      "tag": "0006_partner_cashback_foundation",
+      "breakpoints": true
     }
   ]
 }

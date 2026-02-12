@@ -19,7 +19,7 @@ export default function CashbackProgramsAccumulationBlock({
 	return (
 		<ResponsiveMenuSection title="ACUMULAÇÃO" icon={<PiggyBank className="h-4 min-h-4 w-4 min-w-4" />}>
 			<div className="w-full flex items-center justify-center gap-2">
-				<div className="w-full lg:w-1/2">
+				<div className="w-full lg:w-1/3">
 					<SelectInput
 						value={cashbackProgram.acumuloTipo}
 						label="TIPO DE ACUMULAÇÃO"
@@ -30,12 +30,21 @@ export default function CashbackProgramsAccumulationBlock({
 						width="100%"
 					/>
 				</div>
-				<div className="w-full lg:w-1/2">
+				<div className="w-full lg:w-1/3">
 					<NumberInput
 						value={cashbackProgram.acumuloValor}
 						label="VALOR DE ACUMULAÇÃO"
 						placeholder="Preencha aqui o valor de acumulação..."
 						handleChange={(value) => updateCashbackProgram({ acumuloValor: value })}
+						width="100%"
+					/>
+				</div>
+				<div className="w-full lg:w-1/3">
+					<NumberInput
+						value={cashbackProgram.acumuloValorParceiro}
+						label="VALOR DE ACÚMULO PARCEIRO"
+						placeholder="Preencha aqui o valor de acúmulo do parceiro..."
+						handleChange={(value) => updateCashbackProgram({ acumuloValorParceiro: value })}
 						width="100%"
 					/>
 				</div>

@@ -56,6 +56,7 @@ export async function reverseSaleCashback({ tx, saleId, clientId, organizationId
 
 	// 2. For each transaction, create a reversal and update balances
 	for (const transaction of relatedTransactions) {
+		const transactionClientId = transaction.clienteId;
 		// Only reverse the remaining amount (not already consumed)
 		const amountToReverse = transaction.valorRestante;
 
@@ -74,12 +75,12 @@ export async function reverseSaleCashback({ tx, saleId, clientId, organizationId
 		// Get current balance
 		const currentBalance = await tx.query.cashbackProgramBalances.findFirst({
 			where: (fields, { and, eq }) =>
-				and(eq(fields.clienteId, clientId), eq(fields.programaId, transaction.programaId), eq(fields.organizacaoId, organizationId)),
+				and(eq(fields.clienteId, transactionClientId), eq(fields.programaId, transaction.programaId), eq(fields.organizacaoId, organizationId)),
 		});
 
 		if (!currentBalance) {
 			console.error(
-				`[CASHBACK_REVERSAL] Balance not found for client ${clientId} and program ${transaction.programaId}. Skipping transaction ${transaction.id}.`,
+				`[CASHBACK_REVERSAL] Balance not found for client ${transactionClientId} and program ${transaction.programaId}. Skipping transaction ${transaction.id}.`,
 			);
 			continue;
 		}
@@ -90,7 +91,7 @@ export async function reverseSaleCashback({ tx, saleId, clientId, organizationId
 		// Create CANCELAMENTO transaction
 		await tx.insert(cashbackProgramTransactions).values({
 			organizacaoId: organizationId,
-			clienteId: clientId,
+			clienteId: transactionClientId,
 			vendaId: saleId,
 			programaId: transaction.programaId,
 			tipo: "CANCELAMENTO",
@@ -130,7 +131,7 @@ export async function reverseSaleCashback({ tx, saleId, clientId, organizationId
 		totalReversedAmount += amountToReverse;
 
 		console.log(
-			`[CASHBACK_REVERSAL] Reversed transaction ${transaction.id}: R$ ${(amountToReverse / 100).toFixed(2)}. ` +
+			`[CASHBACK_REVERSAL] Reversed transaction ${transaction.id} for client ${transactionClientId}: R$ ${(amountToReverse / 100).toFixed(2)}. ` +
 				`Previous balance: R$ ${(previousBalance / 100).toFixed(2)}, New balance: R$ ${(newBalance / 100).toFixed(2)}`,
 		);
 	}
@@ -142,7 +143,15 @@ export async function reverseSaleCashback({ tx, saleId, clientId, organizationId
 	// - Were created around the same time as the sale
 	// Note: We can't directly link interactions to sales in the current schema,
 	// so we delete recent unprocessed interactions for safety
-	const canceledInteractions = await tx
+	const relatedCampaignIds = relatedTransactions.reduce<string[]>((acc, transaction) => {
+		if (transaction.campanhaId) acc.push(transaction.campanhaId);
+		return acc;
+	}, []);
+
+	const canceledInteractions =
+		relatedCampaignIds.length === 0
+			? []
+			: await tx
 		.delete(interactions)
 		.where(
 			and(
@@ -150,7 +159,7 @@ export async function reverseSaleCashback({ tx, saleId, clientId, organizationId
 				eq(interactions.organizacaoId, organizationId),
 				isNull(interactions.dataExecucao),
 				// Only delete interactions from campaigns that might have generated cashback
-				or(...relatedTransactions.filter((t) => t.campanhaId !== null).map((t) => eq(interactions.campanhaId, t.campanhaId!))),
+				or(...relatedCampaignIds.map((campaignId) => eq(interactions.campanhaId, campaignId))),
 			),
 		)
 		.returning({ id: interactions.id });

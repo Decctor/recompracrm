@@ -37,6 +37,7 @@ export default function EditCashbackProgram({ user, userOrg, cashbackProgram, cl
 					descricao: cashbackProgram.descricao,
 					acumuloTipo: cashbackProgram.acumuloTipo,
 					acumuloValor: cashbackProgram.acumuloValor,
+					acumuloValorParceiro: cashbackProgram.acumuloValorParceiro,
 					acumuloRegraValorMinimo: cashbackProgram.acumuloRegraValorMinimo,
 					acumuloPermitirViaIntegracao: cashbackProgram.acumuloPermitirViaIntegracao,
 					acumuloPermitirViaPontoIntegracao: cashbackProgram.acumuloPermitirViaPontoIntegracao,

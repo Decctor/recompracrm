@@ -1,11 +1,21 @@
 import { appApiHandler } from "@/lib/app-api";
+import { accumulateCashbackForClient, calculateAccumulatedCashbackValue, ensureCashbackBalanceForClient } from "@/lib/cashback/accumulation";
 import { generateCashbackForCampaign } from "@/lib/cashback/generate-campaign-cashback";
 import { DASTJS_TIME_DURATION_UNITS_MAP, getPostponedDateFromReferenceDate } from "@/lib/dates";
 import { formatPhoneAsBase } from "@/lib/formatting";
 import { type ImmediateProcessingData, processSingleInteractionImmediately } from "@/lib/interactions";
+import { linkPartnerToClient } from "@/lib/partners/link-partner-to-client";
 import type { TTimeDurationUnitsEnum } from "@/schemas/enums";
 import { type DBTransaction, db } from "@/services/drizzle";
-import { cashbackProgramBalances, cashbackProgramTransactions, cashbackPrograms, clients, interactions, sales } from "@/services/drizzle/schema";
+import {
+	cashbackProgramBalances,
+	cashbackProgramTransactions,
+	cashbackPrograms,
+	clients,
+	interactions,
+	partners,
+	sales,
+} from "@/services/drizzle/schema";
 import { waitUntil } from "@vercel/functions";
 import dayjs from "dayjs";
 import { and, eq } from "drizzle-orm";
@@ -111,6 +121,12 @@ const CreatePointOfInteractionTransactionInputSchema = z.object({
 					.describe("O valor do cashback."),
 			})
 			.describe("Os dados do cashback da transação."),
+		partnerCode: z
+			.string({
+				invalid_type_error: "Tipo não válido para código de parceiro.",
+			})
+			.optional()
+			.nullable(),
 	}),
 	operatorIdentifier: z
 		.string({
@@ -131,32 +147,6 @@ export type TCreatePointOfInteractionTransactionOutput = {
 	};
 	message: string;
 };
-
-function calculateAccumulatedCashbackValue({
-	accumulationType,
-	accumulationValue,
-	minimumSaleValue,
-	saleValue,
-}: {
-	accumulationType: string;
-	accumulationValue: number;
-	minimumSaleValue: number;
-	saleValue: number;
-}) {
-	if (saleValue < minimumSaleValue) {
-		return 0;
-	}
-
-	if (accumulationType === "FIXO") {
-		return accumulationValue;
-	}
-
-	if (accumulationType === "PERCENTUAL") {
-		return (saleValue * accumulationValue) / 100;
-	}
-
-	return 0;
-}
 
 async function handleNewTransaction(req: NextRequest): Promise<NextResponse<TCreatePointOfInteractionTransactionOutput>> {
 	const body = await req.json();
@@ -259,6 +249,7 @@ async function handleNewTransaction(req: NextRequest): Promise<NextResponse<TCre
 				.values({
 					organizacaoId: input.orgId,
 					nome: input.client.nome,
+					cpfCnpj: input.client.cpfCnpj ?? null,
 					telefone: input.client.telefone,
 					telefoneBase: clientPhoneAsBase,
 					canalAquisicao: "PONTO DE INTERAÇÃO",
@@ -274,51 +265,75 @@ async function handleNewTransaction(req: NextRequest): Promise<NextResponse<TCre
 			clientIsNew = true;
 			clientRfmTitle = "CLIENTES RECENTES";
 
-			// Initialize cashback balance for new client
-			await tx.insert(cashbackProgramBalances).values({
-				clienteId: insertedClientId,
-				programaId: program.id,
-				organizacaoId: input.orgId,
-				saldoValorDisponivel: 0,
-				saldoValorAcumuladoTotal: 0,
-				saldoValorResgatadoTotal: 0,
+			const ensuredBalance = await ensureCashbackBalanceForClient({
+				tx,
+				orgId: input.orgId,
+				clientId: insertedClientId,
+				programId: program.id,
 			});
-			clientCashbackAvailableBalance = 0;
-			clientCashbackAccumulatedBalance = 0;
-			clientCashbackRedeemedBalanceTotal = 0;
+			clientCashbackAvailableBalance = ensuredBalance.saldoValorDisponivel;
+			clientCashbackAccumulatedBalance = ensuredBalance.saldoValorAcumuladoTotal;
+			clientCashbackRedeemedBalanceTotal = ensuredBalance.saldoValorResgatadoTotal;
 		} else {
 			const client = await tx.query.clients.findFirst({
 				where: (fields, { and, eq }) => and(eq(fields.id, clientId as string), eq(fields.organizacaoId, input.orgId)),
 			});
 			if (!client) throw new createHttpError.NotFound("Cliente não encontrado.");
 
-			const initialClientCashbackBalance = await tx.query.cashbackProgramBalances.findFirst({
-				where: (fields, { and, eq }) =>
-					and(eq(fields.clienteId, clientId as string), eq(fields.programaId, program.id), eq(fields.organizacaoId, input.orgId)),
+			const ensuredBalance = await ensureCashbackBalanceForClient({
+				tx,
+				orgId: input.orgId,
+				clientId: clientId as string,
+				programId: program.id,
 			});
-			if (initialClientCashbackBalance) {
-				clientCashbackAvailableBalance = initialClientCashbackBalance.saldoValorDisponivel;
-				clientCashbackAccumulatedBalance = initialClientCashbackBalance.saldoValorAcumuladoTotal;
-				clientCashbackRedeemedBalanceTotal = initialClientCashbackBalance.saldoValorResgatadoTotal;
-			} else {
-				await tx.insert(cashbackProgramBalances).values({
-					clienteId: clientId as string,
-					programaId: program.id,
-					organizacaoId: input.orgId,
-					saldoValorDisponivel: 0,
-					saldoValorAcumuladoTotal: 0,
-					saldoValorResgatadoTotal: 0,
-				});
-				clientCashbackAvailableBalance = 0;
-				clientCashbackAccumulatedBalance = 0;
-				clientCashbackRedeemedBalanceTotal = 0;
-			}
+			clientCashbackAvailableBalance = ensuredBalance.saldoValorDisponivel;
+			clientCashbackAccumulatedBalance = ensuredBalance.saldoValorAcumuladoTotal;
+			clientCashbackRedeemedBalanceTotal = ensuredBalance.saldoValorResgatadoTotal;
 			clientFirstSaleId = client.primeiraCompraId;
 			clientFirstSaleDate = client.primeiraCompraData;
 			clientRfmTitle = client.analiseRFMTitulo ?? "CLIENTES RECENTES";
 			// Store current metadata for trigger evaluation
 			clientCurrentPurchaseCount = client.metadataTotalCompras ?? 0;
 			clientCurrentPurchaseValue = client.metadataValorTotalCompras ?? 0;
+		}
+
+		let salePartnerId: string | null = null;
+		let salePartnerClientId: string | null = null;
+		const normalizedPartnerCode = input.sale.partnerCode?.trim().toUpperCase() || null;
+		if (normalizedPartnerCode) {
+			const matchedPartner = await tx.query.partners.findFirst({
+				where: (fields, { and, eq }) => and(eq(fields.organizacaoId, input.orgId), eq(fields.codigoAfiliacao, normalizedPartnerCode)),
+			});
+
+			if (!matchedPartner) {
+				throw new createHttpError.BadRequest("Código de parceiro não encontrado.");
+			}
+
+			salePartnerId = matchedPartner.id;
+			salePartnerClientId = matchedPartner.clienteId;
+
+			if (!salePartnerClientId) {
+				const linkage = await linkPartnerToClient({
+					tx,
+					orgId: input.orgId,
+					partner: {
+						nome: matchedPartner.nome,
+						cpfCnpj: matchedPartner.cpfCnpj,
+						telefone: matchedPartner.telefone,
+						telefoneBase: matchedPartner.telefoneBase,
+					},
+					createClientIfNotFound: true,
+				});
+
+				salePartnerClientId = linkage.clientId;
+
+				if (salePartnerClientId) {
+					await tx
+						.update(partners)
+						.set({ clienteId: salePartnerClientId })
+						.where(and(eq(partners.organizacaoId, input.orgId), eq(partners.id, matchedPartner.id)));
+				}
+			}
 		}
 
 		// Visual-only tracking values for UX (no persistence writes).
@@ -396,57 +411,44 @@ async function handleNewTransaction(req: NextRequest): Promise<NextResponse<TCre
 		}
 		// FOURTH STEP: Processing cashback accumulation (if applicable)
 		if (transactionRequiresAccumulationProcessing) {
-			// If the transaction value is greater than or equal to the minimum value rule, accumulate the value
-			// according to the accumulation type
-
-			// Getting a snapshot of the current accumulated balance and available balance
-			const previousAccumulatedBalance = clientCashbackAccumulatedBalance;
-			const previousAvailableBalance = clientCashbackAvailableBalance;
-			clientNewAccumulatedCashbackValue = calculateAccumulatedCashbackValue({
-				accumulationType: program.acumuloTipo,
-				accumulationValue: program.acumuloValor,
-				minimumSaleValue: program.acumuloRegraValorMinimo,
+			const clientAccumulationResult = await accumulateCashbackForClient({
+				tx,
+				orgId: input.orgId,
+				clientId: clientId as string,
+				saleId: null, // associated after sale insertion if applicable
 				saleValue: input.sale.valor,
+				operatorId: operatorMembershipUser.id,
+				program,
+				metadata: {
+					ator: "CLIENTE",
+					origem: "POI",
+					parceiroId: salePartnerId,
+					codigoParceiro: normalizedPartnerCode,
+				},
 			});
-			clientCashbackAccumulatedBalance += clientNewAccumulatedCashbackValue;
-			clientCashbackAvailableBalance += clientNewAccumulatedCashbackValue;
+			clientNewAccumulatedCashbackValue = clientAccumulationResult.accumulatedValue;
+			clientCashbackAvailableBalance = clientAccumulationResult.newAvailableBalance;
+			clientCashbackAccumulatedBalance = clientAccumulationResult.newAccumulatedBalance;
+			transactionAccumulationId = clientAccumulationResult.transactionId;
 
-			// If the value to accumulate is greater than 0
-			// It means the transaction generated accumulation, so, updating the balance and inserting a new transaction
-			if (clientNewAccumulatedCashbackValue > 0) {
-				// Updating the balances
-				await tx
-					.update(cashbackProgramBalances)
-					.set({
-						saldoValorDisponivel: clientCashbackAvailableBalance,
-						saldoValorAcumuladoTotal: clientCashbackAccumulatedBalance,
-						dataAtualizacao: new Date(),
-					})
-					.where(and(eq(cashbackProgramBalances.organizacaoId, input.orgId), eq(cashbackProgramBalances.clienteId, clientId)));
-				// Inserting a new transaction for ACUMULO
-				// TODO: track ID for further update (in case of sale processing, use the sale ID to update this)
-				const insertedAccumulationTransactionResponse = await tx
-					.insert(cashbackProgramTransactions)
-					.values({
-						organizacaoId: input.orgId,
-						clienteId: clientId,
-						vendaId: null, // No associated sale (yet ?)
-						vendaValor: input.sale.valor,
-						programaId: program.id,
-						tipo: "ACÚMULO",
-						status: "ATIVO",
-						valor: clientNewAccumulatedCashbackValue,
-						valorRestante: clientNewAccumulatedCashbackValue,
-						saldoValorAnterior: previousAvailableBalance,
-						saldoValorPosterior: clientCashbackAvailableBalance,
-						expiracaoData: dayjs().add(program.expiracaoRegraValidadeValor, "day").toDate(),
-						dataInsercao: new Date(),
-						operadorId: operatorMembershipUser.id,
-					})
-					.returning({ id: cashbackProgramTransactions.id });
-				const insertedAccumulationTransactionId = insertedAccumulationTransactionResponse[0]?.id;
-				if (!insertedAccumulationTransactionId) throw new createHttpError.InternalServerError("Oops, um erro ocorreu ao criar transação de acumulo.");
-				transactionAccumulationId = insertedAccumulationTransactionId;
+			if (salePartnerClientId) {
+				await accumulateCashbackForClient({
+					tx,
+					orgId: input.orgId,
+					clientId: salePartnerClientId,
+					saleId: null, // associated after sale insertion if applicable
+					saleValue: input.sale.valor,
+					operatorId: operatorMembershipUser.id,
+					program,
+					accumulationValueOverride: program.acumuloValorParceiro,
+					metadata: {
+						ator: "PARCEIRO",
+						origem: "POI",
+						parceiroId: salePartnerId,
+						codigoParceiro: normalizedPartnerCode,
+						clienteCompradorId: clientId,
+					},
+				});
 			}
 
 			// TODO: Handle campaign proccesing for CASHBACK-ACUMULADO
@@ -476,8 +478,8 @@ async function handleNewTransaction(req: NextRequest): Promise<NextResponse<TCre
 					custoTotal: 0,
 					vendedorNome: operator.nome,
 					vendedorId: operator.id,
-					parceiro: "N/A",
-					parceiroId: null,
+					parceiro: normalizedPartnerCode ?? "N/A",
+					parceiroId: salePartnerId,
 					chave: "N/A",
 					documento: "N/A",
 					modelo: "DV",

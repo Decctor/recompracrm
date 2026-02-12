@@ -20,15 +20,16 @@ export type TChatDetailsForAgentResponse = {
 		idApp: string; // ID in the main database (Drizzle)
 		nome: string;
 		telefone: string;
+		telefoneBase?: string | null;
 		email?: string | null;
-		cpfCnpj?: string;
-		localizacaoCep?: string;
-		localizacaoEstado?: string;
-		localizacaoCidade?: string;
-		localizacaoBairro?: string;
-		localizacaoLogradouro?: string;
-		localizacaoNumero?: string;
-		localizacaoComplemento?: string;
+		cpfCnpj?: string | null;
+		localizacaoCep?: string | null;
+		localizacaoEstado?: string | null;
+		localizacaoCidade?: string | null;
+		localizacaoBairro?: string | null;
+		localizacaoLogradouro?: string | null;
+		localizacaoNumero?: string | null;
+		localizacaoComplemento?: string | null;
 	};
 	ultimasMensagens: Array<{
 		id: string;

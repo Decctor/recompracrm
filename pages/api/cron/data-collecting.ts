@@ -1,4 +1,5 @@
 import { generateCashbackForCampaign } from "@/lib/cashback/generate-campaign-cashback";
+import { calculateAccumulatedCashbackValue } from "@/lib/cashback/accumulation";
 import { reverseSaleCashback } from "@/lib/cashback/reverse-sale-cashback";
 import { processConversionAttribution } from "@/lib/conversions/attribution";
 import { fetchCardapioWebOrdersWithDetails } from "@/lib/data-connectors/cardapio-web";
@@ -7,6 +8,7 @@ import type { TCardapioWebConfig } from "@/lib/data-connectors/cardapio-web/type
 import { DASTJS_TIME_DURATION_UNITS_MAP, getPostponedDateFromReferenceDate } from "@/lib/dates";
 import { formatPhoneAsBase, formatToCPForCNPJ, formatToPhone } from "@/lib/formatting";
 import { type ImmediateProcessingData, delay, processSingleInteractionImmediately } from "@/lib/interactions";
+import { linkPartnerToClient } from "@/lib/partners/link-partner-to-client";
 import type { TTimeDurationUnitsEnum } from "@/schemas/enums";
 import { OnlineSoftwareSaleImportationSchema } from "@/schemas/online-importation.schema";
 import { type DBTransaction, db } from "@/services/drizzle";
@@ -119,6 +121,67 @@ function updateCashbackBalanceInMap(
 	});
 }
 
+async function ensureCashbackBalanceEntry({
+	tx,
+	map,
+	organizationId,
+	clientId,
+	programId,
+}: {
+	tx: DBTransaction;
+	map: Map<string, TCashbackBalanceEntry>;
+	organizationId: string;
+	clientId: string;
+	programId: string;
+}): Promise<TCashbackBalanceEntry> {
+	const fromMap = map.get(clientId);
+	if (fromMap) return fromMap;
+
+	const existingBalance = await tx.query.cashbackProgramBalances.findFirst({
+		where: (fields, { and, eq }) =>
+			and(eq(fields.organizacaoId, organizationId), eq(fields.clienteId, clientId), eq(fields.programaId, programId)),
+		columns: {
+			clienteId: true,
+			programaId: true,
+			saldoValorDisponivel: true,
+			saldoValorAcumuladoTotal: true,
+		},
+	});
+
+	if (existingBalance) {
+		updateCashbackBalanceInMap(
+			map,
+			existingBalance.clienteId,
+			existingBalance.programaId,
+			existingBalance.saldoValorDisponivel,
+			existingBalance.saldoValorAcumuladoTotal,
+		);
+		return {
+			clienteId: existingBalance.clienteId,
+			programaId: existingBalance.programaId,
+			saldoValorDisponivel: existingBalance.saldoValorDisponivel,
+			saldoValorAcumuladoTotal: existingBalance.saldoValorAcumuladoTotal,
+		};
+	}
+
+	await tx.insert(cashbackProgramBalances).values({
+		organizacaoId: organizationId,
+		clienteId: clientId,
+		programaId: programId,
+		saldoValorDisponivel: 0,
+		saldoValorAcumuladoTotal: 0,
+		saldoValorResgatadoTotal: 0,
+	});
+
+	updateCashbackBalanceInMap(map, clientId, programId, 0, 0);
+	return {
+		clienteId: clientId,
+		programaId: programId,
+		saldoValorDisponivel: 0,
+		saldoValorAcumuladoTotal: 0,
+	};
+}
+
 /**
  * Type for campaigns with relations (used by both ONLINE-SOFTWARE and CARDAPIO-WEB handlers)
  */
@@ -197,6 +260,7 @@ async function handleCardapioWebImportation(
 				acumuloTipo: true,
 				acumuloRegraValorMinimo: true,
 				acumuloValor: true,
+				acumuloValorParceiro: true,
 				expiracaoRegraValidadeValor: true,
 				acumuloPermitirViaIntegracao: true,
 			},
@@ -229,7 +293,7 @@ async function handleCardapioWebImportation(
 
 		const existingPartners = await tx.query.partners.findMany({
 			where: (fields, { eq }) => eq(fields.organizacaoId, organizationId),
-			columns: { id: true, identificador: true },
+			columns: { id: true, identificador: true, clienteId: true },
 		});
 
 		const existingAddOns = await tx.query.productAddOns.findMany({
@@ -266,7 +330,7 @@ async function handleCardapioWebImportation(
 			]),
 		);
 		const existingProductsMap = new Map(existingProducts.map((product) => [product.codigo, product.id]));
-		const existingPartnersMap = new Map(existingPartners.map((partner) => [partner.identificador, partner.id]));
+		const existingPartnersMap = new Map(existingPartners.map((partner) => [partner.identificador, { id: partner.id, clienteId: partner.clienteId }]));
 		const existingAddOnsMap = new Map(existingAddOns.map((addon) => [addon.idExterno, addon.id]));
 		const existingAddOnOptionsMap = new Map(
 			existingAddOnOptions.map((option) => [option.idExterno, { id: option.id, addOnId: option.produtoAddOnId }]),
@@ -295,15 +359,26 @@ async function handleCardapioWebImportation(
 		// Sync Partners
 		for (const partner of mappedPartners) {
 			if (!existingPartnersMap.has(partner.identificador)) {
+				const linkage = await linkPartnerToClient({
+					tx,
+					orgId: organizationId,
+					partner: {
+						nome: partner.nome,
+					},
+					createClientIfNotFound: true,
+				});
+
 				const [inserted] = await tx
 					.insert(partners)
 					.values({
 						organizacaoId: organizationId,
 						identificador: partner.identificador,
+						codigoAfiliacao: partner.identificador,
 						nome: partner.nome,
+						clienteId: linkage.clientId,
 					})
 					.returning({ id: partners.id });
-				existingPartnersMap.set(partner.identificador, inserted.id);
+				existingPartnersMap.set(partner.identificador, { id: inserted.id, clienteId: linkage.clientId });
 			}
 		}
 
@@ -404,7 +479,9 @@ async function handleCardapioWebImportation(
 			}
 
 			// Sync Partner
-			const partnerId = cardapioWebSale.parceiro ? existingPartnersMap.get(cardapioWebSale.parceiro.identificador) : null;
+			const matchedPartner = cardapioWebSale.parceiro ? existingPartnersMap.get(cardapioWebSale.parceiro.identificador) : null;
+			const partnerId = matchedPartner?.id ?? null;
+			const partnerClientId = matchedPartner?.clienteId ?? null;
 
 			let saleId: string | null = null;
 			const existingSale = existingSalesMap.get(cardapioWebSale.idExterno);
@@ -718,16 +795,12 @@ async function handleCardapioWebImportation(
 					const previousAvailable = clientBalance.saldoValorDisponivel;
 					const previousAccumulated = clientBalance.saldoValorAcumuladoTotal;
 
-					let accumulatedBalance = 0;
-					if (cashbackProgram.acumuloTipo === "FIXO") {
-						if (saleValue >= cashbackProgram.acumuloRegraValorMinimo) {
-							accumulatedBalance = cashbackProgram.acumuloValor;
-						}
-					} else if (cashbackProgram.acumuloTipo === "PERCENTUAL") {
-						if (saleValue >= cashbackProgram.acumuloRegraValorMinimo) {
-							accumulatedBalance = (saleValue * cashbackProgram.acumuloValor) / 100;
-						}
-					}
+					const accumulatedBalance = calculateAccumulatedCashbackValue({
+						accumulationType: cashbackProgram.acumuloTipo,
+						accumulationValue: cashbackProgram.acumuloValor,
+						minimumSaleValue: cashbackProgram.acumuloRegraValorMinimo,
+						saleValue,
+					});
 
 					if (accumulatedBalance > 0) {
 						const newAvailable = previousAvailable + accumulatedBalance;
@@ -760,6 +833,70 @@ async function handleCardapioWebImportation(
 						});
 
 						updateCashbackBalanceInMap(existingCashbackProgramBalancesMap, saleClientId, cashbackProgram.id, newAvailable, newAccumulated);
+
+						const shouldAccumulateForPartner = !!partnerClientId && partnerClientId !== saleClientId;
+						if (shouldAccumulateForPartner) {
+							const partnerBalance = await ensureCashbackBalanceEntry({
+								tx,
+								map: existingCashbackProgramBalancesMap,
+								organizationId,
+								clientId: partnerClientId,
+								programId: cashbackProgram.id,
+							});
+
+							const partnerAccumulatedBalance = calculateAccumulatedCashbackValue({
+								accumulationType: cashbackProgram.acumuloTipo,
+								accumulationValue: cashbackProgram.acumuloValorParceiro,
+								minimumSaleValue: cashbackProgram.acumuloRegraValorMinimo,
+								saleValue,
+							});
+
+							if (partnerAccumulatedBalance > 0) {
+								const partnerPreviousAvailable = partnerBalance.saldoValorDisponivel;
+								const partnerPreviousAccumulated = partnerBalance.saldoValorAcumuladoTotal;
+								const partnerNewAvailable = partnerPreviousAvailable + partnerAccumulatedBalance;
+								const partnerNewAccumulated = partnerPreviousAccumulated + partnerAccumulatedBalance;
+
+								await tx
+									.update(cashbackProgramBalances)
+									.set({ saldoValorDisponivel: partnerNewAvailable, saldoValorAcumuladoTotal: partnerNewAccumulated })
+									.where(
+										and(
+											eq(cashbackProgramBalances.clienteId, partnerClientId),
+											eq(cashbackProgramBalances.programaId, cashbackProgram.id),
+											eq(cashbackProgramBalances.organizacaoId, organizationId),
+										),
+									);
+
+								await tx.insert(cashbackProgramTransactions).values({
+									organizacaoId: organizationId,
+									clienteId: partnerClientId,
+									vendaId: saleId,
+									programaId: cashbackProgram.id,
+									tipo: "ACÚMULO",
+									valor: partnerAccumulatedBalance,
+									valorRestante: partnerAccumulatedBalance,
+									saldoValorAnterior: partnerPreviousAvailable,
+									saldoValorPosterior: partnerNewAvailable,
+									expiracaoData: dayjs().add(cashbackProgram.expiracaoRegraValidadeValor, "day").toDate(),
+									dataInsercao: saleDate,
+									status: "ATIVO",
+									metadados: {
+										ator: "PARCEIRO",
+										parceiroId: partnerId,
+										clienteCompradorId: saleClientId,
+									},
+								});
+
+								updateCashbackBalanceInMap(
+									existingCashbackProgramBalancesMap,
+									partnerClientId,
+									cashbackProgram.id,
+									partnerNewAvailable,
+									partnerNewAccumulated,
+								);
+							}
+						}
 
 						// CASHBACK-ACUMULADO campaigns
 						if (campaignsForCashbackAccumulation.length > 0) {
@@ -1022,6 +1159,7 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 						acumuloTipo: true,
 						acumuloRegraValorMinimo: true,
 						acumuloValor: true,
+						acumuloValorParceiro: true,
 						expiracaoRegraValidadeValor: true,
 						acumuloPermitirViaIntegracao: true,
 					},
@@ -1065,6 +1203,7 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 					columns: {
 						id: true,
 						identificador: true,
+						clienteId: true,
 					},
 				});
 				const existingCashbackProgramBalances = cashbackProgram
@@ -1095,7 +1234,7 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 				);
 				const existingProductsMap = new Map(existingProducts.map((product) => [product.codigo, product.id]));
 				const existingSellersMap = new Map(existingSellers.map((seller) => [seller.nome, seller.id]));
-				const existingPartnersMap = new Map(existingPartners.map((partner) => [partner.identificador, partner.id]));
+				const existingPartnersMap = new Map(existingPartners.map((partner) => [partner.identificador, { id: partner.id, clienteId: partner.clienteId }]));
 				const existingCashbackProgramBalancesMap = new Map(existingCashbackProgramBalances.map((balance) => [balance.clienteId, balance]));
 
 				let createdSalesCount = 0;
@@ -1180,24 +1319,40 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 					// Then, we check for an existing partner with the same identificador (in this case, our primary key for the integration)
 					const isValidPartner = OnlineSale.parceiro && OnlineSale.parceiro !== "N/A" && OnlineSale.parceiro !== "0";
 					const equivalentSalePartner = isValidPartner ? existingPartnersMap.get(OnlineSale.parceiro as string) : null;
-					let salePartnerId = equivalentSalePartner;
+					let salePartnerId = equivalentSalePartner?.id ?? null;
+					let salePartnerClientId = equivalentSalePartner?.clienteId ?? null;
 					if (!salePartnerId && isValidPartner) {
+						const partnerIdentifier = OnlineSale.parceiro || "N/A";
+						const partnerDocument = formatToCPForCNPJ(partnerIdentifier);
+						const linkage = await linkPartnerToClient({
+							tx,
+							orgId: organization.id,
+							partner: {
+								nome: "NÃO DEFINIDO",
+								cpfCnpj: partnerDocument,
+							},
+							createClientIfNotFound: true,
+						});
+
 						// If no existing partner is found, we create a new one
 						const insertedPartnerResponse = await tx
 							.insert(partners)
 							.values({
 								organizacaoId: organization.id,
 								nome: "NÃO DEFINIDO",
-								identificador: OnlineSale.parceiro || "N/A",
-								cpfCnpj: formatToCPForCNPJ(OnlineSale.parceiro || "N/A"),
+								identificador: partnerIdentifier,
+								codigoAfiliacao: partnerIdentifier,
+								cpfCnpj: partnerDocument,
+								clienteId: linkage.clientId,
 							})
 							.returning({ id: partners.id });
 						const insertedPartnerId = insertedPartnerResponse[0]?.id;
 						if (!insertedPartnerResponse) throw new createHttpError.InternalServerError("Oops, um erro ocorreu ao criar parceiro.");
 						// Define the salePartnerId with the newly created partner id
 						salePartnerId = insertedPartnerId;
+						salePartnerClientId = linkage.clientId;
 						// Add the new partner to the existing partners map
-						existingPartnersMap.set(OnlineSale.parceiro || "N/A", insertedPartnerId);
+						existingPartnersMap.set(OnlineSale.parceiro || "N/A", { id: insertedPartnerId, clienteId: linkage.clientId });
 					}
 
 					let saleId = null;
@@ -1363,9 +1518,7 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 						const isNowCanceled = OnlineSale.natureza !== "SN01" || Number(OnlineSale.valor) === 0;
 
 						if (wasPreviouslyValid && isNowCanceled && saleClientId) {
-							console.log(
-								`[ORG: ${organization.id}] [SALE_CANCELED] Venda ${OnlineSale.id} foi cancelada. ` + "Revertendo cashback e cancelando interações...",
-							);
+							console.log(`[ORG: ${organization.id}] [SALE_CANCELED] Venda ${OnlineSale.id} foi cancelada. Revertendo cashback e cancelando interações...`);
 
 							await reverseSaleCashback({
 								tx,
@@ -1925,23 +2078,20 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 					// Checking for applicable cashback program balance updates
 					if (cashbackProgram && cashbackProgramAllowsAccumulationViaIntegration && isValidSale && isNewSale) {
 						if (!saleClientId) continue; // If no sale client id is found, skip the cashback program balance update
-						const clientCashbackProgramBalance = existingCashbackProgramBalancesMap.get(saleClientId);
+						const buyerClientId = saleClientId;
+						const clientCashbackProgramBalance = existingCashbackProgramBalancesMap.get(buyerClientId);
 
 						if (clientCashbackProgramBalance) {
 							const saleValue = Number(OnlineSale.valor);
 							const previousOverallAvailableBalance = clientCashbackProgramBalance.saldoValorDisponivel;
 							const previousOverallAccumulatedBalance = clientCashbackProgramBalance.saldoValorAcumuladoTotal;
 
-							let accumulatedBalance = 0;
-							if (cashbackProgram.acumuloTipo === "FIXO") {
-								if (saleValue >= cashbackProgram.acumuloRegraValorMinimo) {
-									accumulatedBalance = cashbackProgram.acumuloValor;
-								}
-							} else if (cashbackProgram.acumuloTipo === "PERCENTUAL") {
-								if (saleValue >= cashbackProgram.acumuloRegraValorMinimo) {
-									accumulatedBalance = (saleValue * cashbackProgram.acumuloValor) / 100;
-								}
-							}
+							const accumulatedBalance = calculateAccumulatedCashbackValue({
+								accumulationType: cashbackProgram.acumuloTipo,
+								accumulationValue: cashbackProgram.acumuloValor,
+								minimumSaleValue: cashbackProgram.acumuloRegraValorMinimo,
+								saleValue,
+							});
 
 							const newOverallAvailableBalance = previousOverallAvailableBalance + accumulatedBalance;
 							const newOverallAccumulatedBalance = previousOverallAccumulatedBalance + accumulatedBalance;
@@ -1955,7 +2105,7 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 									})
 									.where(
 										and(
-											eq(cashbackProgramBalances.clienteId, saleClientId),
+											eq(cashbackProgramBalances.clienteId, buyerClientId),
 											eq(cashbackProgramBalances.programaId, cashbackProgram.id),
 											eq(cashbackProgramBalances.organizacaoId, organization.id),
 										),
@@ -1963,7 +2113,7 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 
 								await tx.insert(cashbackProgramTransactions).values({
 									organizacaoId: organization.id,
-									clienteId: saleClientId,
+									clienteId: buyerClientId,
 									vendaId: saleId,
 									programaId: cashbackProgram.id,
 									tipo: "ACÚMULO",
@@ -1979,11 +2129,78 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 								// Update the map for subsequent iterations
 								updateCashbackBalanceInMap(
 									existingCashbackProgramBalancesMap,
-									saleClientId,
+									buyerClientId,
 									cashbackProgram.id,
 									newOverallAvailableBalance,
 									newOverallAccumulatedBalance,
 								);
+
+								if (salePartnerClientId && salePartnerClientId !== buyerClientId) {
+									const partnerClientId = salePartnerClientId;
+									const partnerCashbackProgramBalance = await ensureCashbackBalanceEntry({
+										tx,
+										map: existingCashbackProgramBalancesMap,
+										organizationId: organization.id,
+										clientId: partnerClientId,
+										programId: cashbackProgram.id,
+									});
+
+									const partnerAccumulatedBalance = calculateAccumulatedCashbackValue({
+										accumulationType: cashbackProgram.acumuloTipo,
+										accumulationValue: cashbackProgram.acumuloValorParceiro,
+										minimumSaleValue: cashbackProgram.acumuloRegraValorMinimo,
+										saleValue,
+									});
+
+									if (partnerAccumulatedBalance > 0) {
+										const partnerPreviousAvailableBalance = partnerCashbackProgramBalance.saldoValorDisponivel;
+										const partnerPreviousAccumulatedBalance = partnerCashbackProgramBalance.saldoValorAcumuladoTotal;
+										const partnerNewAvailableBalance = partnerPreviousAvailableBalance + partnerAccumulatedBalance;
+										const partnerNewAccumulatedBalance = partnerPreviousAccumulatedBalance + partnerAccumulatedBalance;
+
+										await tx
+											.update(cashbackProgramBalances)
+											.set({
+												saldoValorDisponivel: partnerNewAvailableBalance,
+												saldoValorAcumuladoTotal: partnerNewAccumulatedBalance,
+											})
+											.where(
+												and(
+													eq(cashbackProgramBalances.clienteId, partnerClientId),
+													eq(cashbackProgramBalances.programaId, cashbackProgram.id),
+													eq(cashbackProgramBalances.organizacaoId, organization.id),
+												),
+											);
+
+										await tx.insert(cashbackProgramTransactions).values({
+											organizacaoId: organization.id,
+											clienteId: partnerClientId,
+											vendaId: saleId,
+											programaId: cashbackProgram.id,
+											tipo: "ACÚMULO",
+											valor: partnerAccumulatedBalance,
+											valorRestante: partnerAccumulatedBalance,
+											saldoValorAnterior: partnerPreviousAvailableBalance,
+											saldoValorPosterior: partnerNewAvailableBalance,
+											expiracaoData: dayjs().add(cashbackProgram.expiracaoRegraValidadeValor, "day").toDate(),
+											dataInsercao: saleDate,
+											status: "ATIVO",
+											metadados: {
+												ator: "PARCEIRO",
+												parceiroId: salePartnerId,
+												clienteCompradorId: buyerClientId,
+											},
+										});
+
+										updateCashbackBalanceInMap(
+											existingCashbackProgramBalancesMap,
+											partnerClientId,
+											cashbackProgram.id,
+											partnerNewAvailableBalance,
+											partnerNewAccumulatedBalance,
+										);
+									}
+								}
 
 								// Checking for applicable campaigns for cashback accumulation
 								if (campaignsForCashbackAccumulation.length > 0) {
@@ -2017,7 +2234,7 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 										// Validate campaign frequency before scheduling
 										const canSchedule = await canScheduleCampaignForClient(
 											tx,
-											saleClientId,
+											buyerClientId,
 											campaign.id,
 											campaign.permitirRecorrencia,
 											campaign.frequenciaIntervaloValor,
@@ -2040,7 +2257,7 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 										const [insertedInteraction] = await tx
 											.insert(interactions)
 											.values({
-												clienteId: saleClientId,
+												clienteId: buyerClientId,
 												campanhaId: campaign.id,
 												organizacaoId: organization.id,
 												titulo: `Envio de mensagem automática via campanha ${campaign.titulo}`,
@@ -2060,7 +2277,7 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 										if (campaign.execucaoAgendadaValor === 0 && campaign.whatsappTemplate && whatsappConnection && campaign.whatsappConexaoTelefoneId) {
 											// Query client data for immediate processing
 											const clientData = await tx.query.clients.findFirst({
-												where: (fields, { eq }) => eq(fields.id, saleClientId),
+												where: (fields, { eq }) => eq(fields.id, buyerClientId),
 												columns: {
 													id: true,
 													nome: true,

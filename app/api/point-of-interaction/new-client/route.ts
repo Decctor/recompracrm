@@ -47,6 +47,7 @@ async function createClientViaPointOfInteraction({ input }: { input: TCreateClie
 			.values({
 				...client,
 				organizacaoId: orgId,
+				cpfCnpj: client.cpfCnpj ?? null,
 				telefone: client.telefone ?? "",
 				telefoneBase: clientPhoneAsBase,
 				canalAquisicao: "PONTO DE INTERAÇÃO",

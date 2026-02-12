@@ -14,7 +14,7 @@ export const clients = newTable(
 		organizacaoId: varchar("organizacao_id", { length: 255 }).references(() => organizations.id, { onDelete: "cascade" }),
 		idExterno: varchar("id_externo", { length: 255 }),
 		nome: text("nome").notNull(),
-		// cpfCnpj: text("cpf_cnpj"),
+		cpfCnpj: text("cpf_cnpj"),
 		// Communication
 		telefone: text("telefone").notNull().default(""),
 		telefoneBase: text("telefone_base").notNull().default(""),

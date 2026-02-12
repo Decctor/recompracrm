@@ -29,6 +29,12 @@ export const CashbackProgramSchema = z.object({
 		required_error: "Valor de acumulação do programa de cashback não informado.",
 		invalid_type_error: "Tipo não válido para o valor de acumulação do programa de cashback.",
 	}),
+	acumuloValorParceiro: z
+		.number({
+			required_error: "Valor de acumulação do parceiro não informado.",
+			invalid_type_error: "Tipo não válido para o valor de acumulação do parceiro.",
+		})
+		.default(0),
 	acumuloRegraValorMinimo: z
 		.number({
 			required_error: "Valor mínimo de acumulação do programa de cashback não informado.",

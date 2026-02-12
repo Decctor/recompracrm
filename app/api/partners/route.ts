@@ -1,13 +1,20 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
+import { formatPhoneAsBase } from "@/lib/formatting";
+import { linkPartnerToClient } from "@/lib/partners/link-partner-to-client";
 import { PartnerSchema } from "@/schemas/partners";
 import { db } from "@/services/drizzle";
 import { partners, sales } from "@/services/drizzle/schema";
-import { and, count, eq, gte, inArray, lte, max, min, notInArray, or, sql, sum } from "drizzle-orm";
+import { and, count, eq, gte, inArray, lte, max, min, ne, notInArray, or, sql, sum } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import z from "zod";
+
+function normalizeOptionalString(value?: string | null) {
+	const normalized = value?.trim();
+	return normalized ? normalized : null;
+}
 
 const CreatePartnerInputSchema = z.object({
 	partner: PartnerSchema.omit({ dataInsercao: true }),
@@ -18,18 +25,58 @@ async function createPartner({ input, session }: { input: TCreatePartnerInput; s
 	const userOrgId = session.membership?.organizacao.id;
 	if (!userOrgId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
 
-	const existingPartner = await db.query.partners.findFirst({
-		where: (fields, { and, eq }) => and(eq(fields.identificador, input.partner.identificador), eq(fields.organizacaoId, userOrgId)),
+	const insertedPartnerId = await db.transaction(async (tx) => {
+		const existingPartner = await tx.query.partners.findFirst({
+			where: (fields, { and, eq }) => and(eq(fields.identificador, input.partner.identificador), eq(fields.organizacaoId, userOrgId)),
+		});
+
+		if (existingPartner) throw new createHttpError.Conflict("Já existe um parceiro com este identificador nesta organização.");
+
+		const normalizedPartner = {
+			...input.partner,
+			identificador: input.partner.identificador.trim(),
+			codigoAfiliacao: normalizeOptionalString(input.partner.codigoAfiliacao)?.toUpperCase() ?? null,
+			cpfCnpj: normalizeOptionalString(input.partner.cpfCnpj),
+			telefone: normalizeOptionalString(input.partner.telefone),
+			telefoneBase: normalizeOptionalString(input.partner.telefoneBase) ?? formatPhoneAsBase(input.partner.telefone ?? ""),
+			email: normalizeOptionalString(input.partner.email),
+			clienteId: normalizeOptionalString(input.partner.clienteId),
+		};
+
+		if (normalizedPartner.codigoAfiliacao) {
+			const partnerAffiliateCode = normalizedPartner.codigoAfiliacao;
+			const codeAlreadyUsed = await tx.query.partners.findFirst({
+				where: (fields, { and, eq }) =>
+					and(eq(fields.organizacaoId, userOrgId), eq(fields.codigoAfiliacao, partnerAffiliateCode)),
+				columns: { id: true },
+			});
+			if (codeAlreadyUsed) {
+				throw new createHttpError.Conflict("Já existe um parceiro com este código de afiliação.");
+			}
+		}
+
+		const linkage = await linkPartnerToClient({
+			tx,
+			orgId: userOrgId,
+			partner: normalizedPartner,
+			manualClientId: normalizedPartner.clienteId,
+			createClientIfNotFound: true,
+		});
+
+		const insertedPartner = await tx
+			.insert(partners)
+			.values({
+				...normalizedPartner,
+				clienteId: linkage.clientId,
+				organizacaoId: userOrgId,
+			})
+			.returning({ id: partners.id });
+		const partnerId = insertedPartner[0]?.id;
+		if (!partnerId) throw new createHttpError.InternalServerError("Oops, houve um erro desconhecido ao criar parceiro.");
+
+		return partnerId;
 	});
 
-	if (existingPartner) throw new createHttpError.Conflict("Já existe um parceiro com este identificador nesta organização.");
-
-	const insertedPartner = await db
-		.insert(partners)
-		.values({ ...input.partner, organizacaoId: userOrgId })
-		.returning({ id: partners.id });
-	const insertedPartnerId = insertedPartner[0]?.id;
-	if (!insertedPartnerId) throw new createHttpError.InternalServerError("Oops, houve um erro desconhecido ao criar parceiro.");
 	return {
 		data: {
 			insertedId: insertedPartnerId,
@@ -127,15 +174,15 @@ async function getPartners({ input, session }: { input: TGetPartnersInput; sessi
 	const partnerConditions = [eq(partners.organizacaoId, userOrgId)];
 	let applyRestrictiveSalesFilters = false;
 	if (input.search) {
-		partnerConditions.push(
-			or(
-				sql`(to_tsvector('portuguese', ${partners.nome}) @@ plainto_tsquery('portuguese', ${input.search}) OR ${partners.nome} ILIKE '%' || ${input.search} || '%')`,
-				sql`(to_tsvector('portuguese', ${partners.identificador}) @@ plainto_tsquery('portuguese', ${input.search}) OR ${partners.identificador} ILIKE '%' || ${input.search} || '%')`,
-				sql`(to_tsvector('portuguese', ${partners.cpfCnpj}) @@ plainto_tsquery('portuguese', ${input.search}) OR ${partners.cpfCnpj} ILIKE '%' || ${input.search} || '%')`,
-				sql`(to_tsvector('portuguese', ${partners.telefone}) @@ plainto_tsquery('portuguese', ${input.search}) OR ${partners.telefone} ILIKE '%' || ${input.search} || '%')`,
-				sql`(to_tsvector('portuguese', ${partners.email}) @@ plainto_tsquery('portuguese', ${input.search}) OR ${partners.email} ILIKE '%' || ${input.search} || '%')`,
-			),
+		const searchCondition = or(
+			sql`(to_tsvector('portuguese', ${partners.nome}) @@ plainto_tsquery('portuguese', ${input.search}) OR ${partners.nome} ILIKE '%' || ${input.search} || '%')`,
+			sql`(to_tsvector('portuguese', ${partners.identificador}) @@ plainto_tsquery('portuguese', ${input.search}) OR ${partners.identificador} ILIKE '%' || ${input.search} || '%')`,
+			sql`(to_tsvector('portuguese', ${partners.codigoAfiliacao}) @@ plainto_tsquery('portuguese', ${input.search}) OR ${partners.codigoAfiliacao} ILIKE '%' || ${input.search} || '%')`,
+			sql`(to_tsvector('portuguese', ${partners.cpfCnpj}) @@ plainto_tsquery('portuguese', ${input.search}) OR ${partners.cpfCnpj} ILIKE '%' || ${input.search} || '%')`,
+			sql`(to_tsvector('portuguese', ${partners.telefone}) @@ plainto_tsquery('portuguese', ${input.search}) OR ${partners.telefone} ILIKE '%' || ${input.search} || '%')`,
+			sql`(to_tsvector('portuguese', ${partners.email}) @@ plainto_tsquery('portuguese', ${input.search}) OR ${partners.email} ILIKE '%' || ${input.search} || '%')`,
 		);
+		if (searchCondition) partnerConditions.push(searchCondition);
 	}
 
 	const statsConditions = [];
@@ -264,13 +311,64 @@ async function updatePartner({ input, session }: UpdatePartnerParams) {
 	const userOrgId = session.membership?.organizacao.id;
 	if (!userOrgId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
 
-	const updatedPartner = await db
-		.update(partners)
-		.set({ ...input.partner, organizacaoId: userOrgId })
-		.where(and(eq(partners.id, input.partnerId), eq(partners.organizacaoId, userOrgId)))
-		.returning({ id: partners.id });
-	const updatedPartnerId = updatedPartner[0]?.id;
-	if (!updatedPartnerId) throw new createHttpError.NotFound("Parceiro não encontrado.");
+	const updatedPartnerId = await db.transaction(async (tx) => {
+		const existingPartner = await tx.query.partners.findFirst({
+			where: (fields, { and, eq }) => and(eq(fields.id, input.partnerId), eq(fields.organizacaoId, userOrgId)),
+		});
+		if (!existingPartner) throw new createHttpError.NotFound("Parceiro não encontrado.");
+
+		const mergedPartnerData = {
+			...existingPartner,
+			...input.partner,
+			identificador: (input.partner.identificador ?? existingPartner.identificador).trim(),
+			codigoAfiliacao:
+				normalizeOptionalString(input.partner.codigoAfiliacao ?? existingPartner.codigoAfiliacao)?.toUpperCase() ?? null,
+			cpfCnpj: normalizeOptionalString(input.partner.cpfCnpj ?? existingPartner.cpfCnpj),
+			telefone: normalizeOptionalString(input.partner.telefone ?? existingPartner.telefone),
+			telefoneBase:
+				normalizeOptionalString(input.partner.telefoneBase ?? existingPartner.telefoneBase) ??
+				formatPhoneAsBase(input.partner.telefone ?? existingPartner.telefone ?? ""),
+			email: normalizeOptionalString(input.partner.email ?? existingPartner.email),
+			clienteId: normalizeOptionalString(input.partner.clienteId ?? existingPartner.clienteId),
+		};
+
+		if (mergedPartnerData.codigoAfiliacao) {
+			const partnerAffiliateCode = mergedPartnerData.codigoAfiliacao;
+			const codeAlreadyUsed = await tx.query.partners.findFirst({
+				where: (fields, { and, eq, ne }) =>
+					and(
+						eq(fields.organizacaoId, userOrgId),
+						eq(fields.codigoAfiliacao, partnerAffiliateCode),
+						ne(fields.id, input.partnerId),
+					),
+				columns: { id: true },
+			});
+			if (codeAlreadyUsed) throw new createHttpError.Conflict("Já existe um parceiro com este código de afiliação.");
+		}
+
+		const linkage = await linkPartnerToClient({
+			tx,
+			orgId: userOrgId,
+			partner: mergedPartnerData,
+			manualClientId: mergedPartnerData.clienteId,
+			createClientIfNotFound: true,
+		});
+
+		const updatedPartner = await tx
+			.update(partners)
+			.set({
+				...mergedPartnerData,
+				clienteId: linkage.clientId,
+				organizacaoId: userOrgId,
+			})
+			.where(and(eq(partners.id, input.partnerId), eq(partners.organizacaoId, userOrgId)))
+			.returning({ id: partners.id });
+
+		const partnerId = updatedPartner[0]?.id;
+		if (!partnerId) throw new createHttpError.NotFound("Parceiro não encontrado.");
+		return partnerId;
+	});
+
 	return {
 		data: {
 			updatedId: updatedPartnerId,
