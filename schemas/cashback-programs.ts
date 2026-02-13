@@ -83,6 +83,73 @@ export const CashbackProgramSchema = z.object({
 		.transform((val) => new Date(val)),
 });
 
+export const CashbackProgramPrizeSchema = z.object({
+	organizacaoId: z.string({
+		required_error: "ID da organização não informado.",
+		invalid_type_error: "Tipo não válido para o ID da organização.",
+	}),
+	programaId: z.string({
+		required_error: "ID do programa de cashback não informado.",
+		invalid_type_error: "Tipo não válido para o ID do programa de cashback.",
+	}),
+	ativo: z
+		.boolean({
+			required_error: "Ativo do prêmio do programa de cashback não informado.",
+			invalid_type_error: "Tipo não válido para o ativo do prêmio do programa de cashback.",
+		})
+		.default(true),
+	produtoId: z
+		.string({
+			required_error: "ID do produto não informado.",
+			invalid_type_error: "Tipo não válido para o ID do produto.",
+		})
+		.optional()
+		.nullable(),
+	produtoVarianteId: z
+		.string({
+			required_error: "ID da variante do produto não informado.",
+			invalid_type_error: "Tipo não válido para o ID da variante do produto.",
+		})
+		.optional()
+		.nullable(),
+	titulo: z.string({
+		required_error: "Título do prêmio do programa de cashback não informado.",
+		invalid_type_error: "Tipo não válido para o título do prêmio do programa de cashback.",
+	}),
+	descricao: z
+		.string({
+			required_error: "Descrição do prêmio do programa de cashback não informada.",
+			invalid_type_error: "Tipo não válido para a descrição do prêmio do programa de cashback.",
+		})
+		.optional()
+		.nullable(),
+	imagemCapaUrl: z
+		.string({
+			required_error: "URL da imagem de capa do prêmio do programa de cashback não informada.",
+			invalid_type_error: "Tipo não válido para a URL da imagem de capa do prêmio do programa de cashback.",
+		})
+		.optional()
+		.nullable(),
+	valor: z.number({
+		required_error: "Valor do prêmio do programa de cashback não informado.",
+		invalid_type_error: "Tipo não válido para o valor do prêmio do programa de cashback.",
+	}),
+	dataInsercao: z
+		.string({
+			required_error: "Data de inserção do prêmio do programa de cashback não informada.",
+			invalid_type_error: "Tipo não válido para a data de inserção do prêmio do programa de cashback.",
+		})
+		.default(new Date().toISOString())
+		.transform((val) => new Date(val)),
+	dataAtualizacao: z
+		.string({
+			required_error: "Data de atualização do prêmio do programa de cashback não informada.",
+			invalid_type_error: "Tipo não válido para a data de atualização do prêmio do programa de cashback.",
+		})
+		.default(new Date().toISOString())
+		.transform((val) => new Date(val)),
+});
+
 export const CashbackProgramBalanceSchema = z.object({
 	clienteId: z.string({
 		required_error: "ID do cliente não informado.",
@@ -168,6 +235,23 @@ export const CashbackProgramTransactionSchema = z.object({
 		.optional()
 		.nullable()
 		.transform((val) => (val ? new Date(val) : null)),
+
+	// Fields to track the reward given for the redemption
+	resgateRecompensaId: z
+		.string({
+			required_error: "ID do prêmio do programa de cashback não informado.",
+			invalid_type_error: "Tipo não válido para o ID do prêmio do programa de cashback.",
+		})
+		.optional()
+		.nullable(),
+	resgateRecompensaValor: z
+		.number({
+			required_error: "Valor do prêmio do programa de cashback não informado.",
+			invalid_type_error: "Tipo não válido para o valor do prêmio do programa de cashback.",
+		})
+		.optional()
+		.nullable(),
+
 	dataInsercao: z
 		.string({
 			required_error: "Data de inserção da transação do programa de cashback não informada.",

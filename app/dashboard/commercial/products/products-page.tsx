@@ -59,8 +59,13 @@ type ProductsPageProps = {
 export default function ProductsPage({ user, userOrg }: ProductsPageProps) {
 	const [viewMode, setViewMode] = useState<"stats" | "database">("stats");
 
-	if (userOrg?.assinaturaPlano !== "CRESCIMENTO") {
-		return <PlanRestrictionComponent />;
+	if (userOrg?.assinaturaPlano === "ESSENCIAL") {
+		return (
+			<PlanRestrictionComponent
+				title="Recurso Exclusivo"
+				message="Este recurso não está disponível no plano ESSENCIAL. Faça um upgrade para desbloquear todo o potencial."
+			/>
+		);
 	}
 
 	return (

@@ -67,11 +67,14 @@ export default function NewCashbackProgram({ user, userOrg, closeModal, callback
 			menuDescription="Preencha os campos abaixo para criar um novo programa de cashback"
 			menuActionButtonText="CRIAR PROGRAMA DE CASHBACK"
 			menuCancelButtonText="CANCELAR"
-			actionFunction={() => handleCreateCashbackProgramMutation({ cashbackProgram: state.cashbackProgram })}
+			actionFunction={() =>
+				handleCreateCashbackProgramMutation({ cashbackProgram: state.cashbackProgram, cashbackProgramPrizes: state.cashbackProgramPrizes })
+			}
 			closeMenu={closeModal}
 			actionIsLoading={isPending}
 			stateIsLoading={false}
 			stateError={null}
+			dialogVariant="md"
 		>
 			<CashbackProgramsGeneralBlock cashbackProgram={state.cashbackProgram} updateCashbackProgram={updateCashbackProgram} />
 			<CashbackProgramsAccumulationBlock

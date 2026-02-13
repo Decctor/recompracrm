@@ -617,7 +617,7 @@ function SaleValueStep({
 					<X className="w-4 h-4 short:w-3 short:h-3 mr-1" /> LIMPAR VALOR
 				</Button>
 			</div>
-			<div className="max-w-md mx-auto">
+			{/* <div className="max-w-md mx-auto">
 				<TextInput
 					label="CÓDIGO DO PARCEIRO (OPCIONAL)"
 					placeholder="Digite o código de afiliação"
@@ -625,7 +625,7 @@ function SaleValueStep({
 					handleChange={(v) => onPartnerCodeChange(v.toUpperCase())}
 					width="100%"
 				/>
-			</div>
+			</div> */}
 		</div>
 	);
 }

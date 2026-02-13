@@ -1,7 +1,7 @@
 import type { DBTransaction } from "@/services/drizzle";
 import { and, eq, inArray, sql } from "drizzle-orm";
 
-type THandleSimpleChildRowsProcessing<T extends { id?: string; deletar?: boolean }> = {
+type THandleSimpleChildRowsProcessing<T extends { id?: string | null; deletar?: boolean | null }> = {
 	trx: DBTransaction;
 	table: any;
 	entities: T[];
@@ -9,7 +9,7 @@ type THandleSimpleChildRowsProcessing<T extends { id?: string; deletar?: boolean
 	fatherEntityId: string;
 	organizacaoId: string;
 };
-export async function handleSimpleChildRowsProcessing<T extends { id?: string; deletar?: boolean }>({
+export async function handleSimpleChildRowsProcessing<T extends { id?: string | null; deletar?: boolean | null }>({
 	trx,
 	table,
 	entities,

@@ -11,6 +11,7 @@ import {
 	cashbackProgramTransactionTypeEnum,
 } from "./enums";
 import { organizations } from "./organizations";
+import { productVariants, products } from "./products";
 import { sales } from "./sales";
 import { users } from "./users";
 
@@ -43,10 +44,49 @@ export const cashbackProgramRelations = relations(cashbackPrograms, ({ one, many
 		references: [organizations.id],
 	}),
 	saldos: many(cashbackProgramBalances),
+	recompensas: many(cashbackProgramPrizes),
 	transacoes: many(cashbackProgramTransactions),
 }));
 export type TCashbackProgramEntity = typeof cashbackPrograms.$inferSelect;
 
+export const cashbackProgramPrizes = newTable("cashback_program_prizes", {
+	id: varchar("id", { length: 255 })
+		.primaryKey()
+		.$defaultFn(() => crypto.randomUUID()),
+	organizacaoId: varchar("organizacao_id", { length: 255 }).references(() => organizations.id),
+	programaId: varchar("programa_id", { length: 255 })
+		.references(() => cashbackPrograms.id)
+		.notNull(),
+	ativo: boolean("ativo").notNull().default(true),
+	produtoId: varchar("produto_id", { length: 255 }).references(() => products.id),
+	produtoVarianteId: varchar("produto_variante_id", { length: 255 }).references(() => productVariants.id),
+	titulo: text("titulo").notNull(),
+	descricao: text("descricao"),
+	imagemCapaUrl: text("imagem_capa_url"),
+	valor: doublePrecision("valor").notNull(), // defines the prize value in cashback "currency"
+	dataInsercao: timestamp("data_insercao").defaultNow().notNull(),
+	dataAtualizacao: timestamp("data_atualizacao").$defaultFn(() => new Date()),
+});
+export const cashbackProgramPrizeRelations = relations(cashbackProgramPrizes, ({ one }) => ({
+	organizacao: one(organizations, {
+		fields: [cashbackProgramPrizes.organizacaoId],
+		references: [organizations.id],
+	}),
+	programa: one(cashbackPrograms, {
+		fields: [cashbackProgramPrizes.programaId],
+		references: [cashbackPrograms.id],
+	}),
+	produto: one(products, {
+		fields: [cashbackProgramPrizes.produtoId],
+		references: [products.id],
+	}),
+	produtoVariante: one(productVariants, {
+		fields: [cashbackProgramPrizes.produtoVarianteId],
+		references: [productVariants.id],
+	}),
+}));
+export type TCashbackProgramPrizeEntity = typeof cashbackProgramPrizes.$inferSelect;
+export type TNewCashbackProgramPrizeEntity = typeof cashbackProgramPrizes.$inferInsert;
 export const cashbackProgramBalances = newTable("cashback_program_balances", {
 	id: varchar("id", { length: 255 })
 		.primaryKey()
@@ -97,6 +137,10 @@ export const cashbackProgramTransactions = newTable("cashback_program_transactio
 	saldoValorPosterior: doublePrecision("saldo_valor_posterior").notNull(),
 
 	expiracaoData: timestamp("expiracao_data"),
+
+	// Fields to track the reward given for the redemption
+	resgateRecompensaId: varchar("resgate_recompensa_id", { length: 255 }).references(() => cashbackProgramPrizes.id),
+	resgateRecompensaValor: doublePrecision("resgate_recompensa_valor"),
 
 	operadorId: varchar("operador_id", { length: 255 }).references(() => users.id),
 	campanhaId: varchar("campanha_id", { length: 255 }).references(() => campaigns.id),

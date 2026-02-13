@@ -7,9 +7,9 @@ import type { TGetProductsGraphInput, TGetProductsGraphOutput } from "@/pages/ap
 import type { TGetProductsOverallStatsInput, TGetProductsOverallStatsOutput } from "@/pages/api/products/stats/overall";
 import type { TGetProductsRankingInput, TGetProductsRankingOutput } from "@/pages/api/products/stats/ranking";
 import type { TProductStatsQueryParams } from "@/schemas/products";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import axios from "axios";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useDebounceMemo } from "../hooks/use-debounce";
 
 async function fetchProducts(input: TGetProductsDefaultInput) {
@@ -199,6 +199,67 @@ export function useProductsBySearch({ initialParams }: UseProductsBySearchParams
 		queryKey: ["products-by-search", debouncedParams],
 		params,
 		updateParams,
+	};
+}
+
+type TProductsBySearchProduct = TGetProductsBySearchOutput["data"]["products"][number];
+type UseProductsBySearchInfiniteQueryParams = {
+	initialSearch?: string;
+};
+export function useProductsBySearchInfiniteQuery({ initialSearch = "" }: UseProductsBySearchInfiniteQueryParams = {}) {
+	const [search, setSearch] = useState(initialSearch);
+	const debouncedSearch = useDebounceMemo({ search }, 500);
+	const query = useInfiniteQuery({
+		queryKey: ["products-by-search-infinite-query", debouncedSearch.search],
+		queryFn: ({ pageParam }) => fetchProductsBySearch({ search: debouncedSearch.search, page: pageParam }),
+		initialPageParam: 1,
+		getNextPageParam: (lastPage, allPages) => {
+			const nextPage = allPages.length + 1;
+			return nextPage <= lastPage.totalPages ? nextPage : undefined;
+		},
+		refetchOnWindowFocus: false,
+	});
+
+	const products = useMemo<TProductsBySearchProduct[]>(() => {
+		const allProducts = query.data?.pages.flatMap((page) => page.products) ?? [];
+		return allProducts.reduce<TProductsBySearchProduct[]>((prev, current) => {
+			const ids = new Set(prev.map((item) => item.id));
+			if (ids.has(current.id)) return prev;
+			prev.push(current);
+			return prev;
+		}, []);
+	}, [query.data?.pages]);
+
+	const firstPage = query.data?.pages[0];
+	const totalPages = firstPage?.totalPages ?? 0;
+	const productsMatched = firstPage?.productsMatched ?? 0;
+	const hasMorePages = query.hasNextPage ?? false;
+	const page = query.data?.pages.length ?? 1;
+
+	function updateSearch(value: string) {
+		setSearch(value);
+	}
+
+	function loadMore() {
+		if (!hasMorePages || query.isFetchingNextPage) return;
+		query.fetchNextPage();
+	}
+
+	function reset() {
+		setSearch("");
+	}
+
+	return {
+		...query,
+		search,
+		updateSearch,
+		page,
+		products,
+		totalPages,
+		productsMatched,
+		hasMorePages,
+		loadMore,
+		reset,
 	};
 }
 

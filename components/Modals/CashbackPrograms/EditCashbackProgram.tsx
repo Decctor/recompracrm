@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import CashbackProgramsAccumulationBlock from "./Blocks/Accumulation";
 import CashbackProgramsExpirationBlock from "./Blocks/Expiration";
 import CashbackProgramsGeneralBlock from "./Blocks/General";
+import CashbackProgramsPrizesBlock from "./Blocks/Prizes";
 import CashbackProgramsRedemptionLimitBlock from "./Blocks/RedemptionLimit";
 
 type EditCashbackProgramProps = {
@@ -26,7 +27,14 @@ type EditCashbackProgramProps = {
 };
 
 export default function EditCashbackProgram({ user, userOrg, cashbackProgram, closeModal, callbacks }: EditCashbackProgramProps) {
-	const { state, updateCashbackProgram: updateState, redefineState } = useCashbackProgramState({});
+	const {
+		state,
+		updateCashbackProgram: updateState,
+		redefineState,
+		addCashbackProgramPrize,
+		updateCashbackProgramPrize,
+		deleteCashbackProgramPrize,
+	} = useCashbackProgramState({});
 
 	useEffect(() => {
 		if (cashbackProgram) {
@@ -45,6 +53,7 @@ export default function EditCashbackProgram({ user, userOrg, cashbackProgram, cl
 					resgateLimiteTipo: cashbackProgram.resgateLimiteTipo,
 					resgateLimiteValor: cashbackProgram.resgateLimiteValor,
 				},
+				cashbackProgramPrizes: cashbackProgram.recompensas,
 			});
 		}
 	}, [cashbackProgram, redefineState]);
@@ -70,6 +79,7 @@ export default function EditCashbackProgram({ user, userOrg, cashbackProgram, cl
 		},
 	});
 
+	console.log("PRÊMIOS:", state.cashbackProgramPrizes);
 	return (
 		<ResponsiveMenu
 			menuTitle="EDITAR PROGRAMA DE CASHBACK"
@@ -80,12 +90,14 @@ export default function EditCashbackProgram({ user, userOrg, cashbackProgram, cl
 				handleUpdateCashbackProgramMutation({
 					cashbackProgramId: cashbackProgram.id,
 					cashbackProgram: state.cashbackProgram,
+					cashbackProgramPrizes: state.cashbackProgramPrizes,
 				})
 			}
 			closeMenu={closeModal}
 			actionIsLoading={isPending}
 			stateIsLoading={false}
 			stateError={null}
+			dialogVariant="md"
 		>
 			<CashbackProgramsGeneralBlock cashbackProgram={state.cashbackProgram} updateCashbackProgram={updateState} />
 			<CashbackProgramsAccumulationBlock
@@ -95,6 +107,12 @@ export default function EditCashbackProgram({ user, userOrg, cashbackProgram, cl
 			/>
 			<CashbackProgramsExpirationBlock cashbackProgram={state.cashbackProgram} updateCashbackProgram={updateState} />
 			<CashbackProgramsRedemptionLimitBlock cashbackProgram={state.cashbackProgram} updateCashbackProgram={updateState} />
+			<CashbackProgramsPrizesBlock
+				cashbackProgramPrizes={state.cashbackProgramPrizes}
+				addCashbackProgramPrize={addCashbackProgramPrize}
+				updateCashbackProgramPrize={updateCashbackProgramPrize}
+				deleteCashbackProgramPrize={deleteCashbackProgramPrize}
+			/>
 		</ResponsiveMenu>
 	);
 }

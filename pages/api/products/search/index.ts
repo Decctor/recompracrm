@@ -44,7 +44,9 @@ async function getProductsBySearch({ input, userOrgId }: { input: TGetProductsBy
 	const productsResult = await db.query.products.findMany({
 		where: and(...conditions),
 		with: {
-			variantes: true,
+			variantes: {
+				where: (variant, { eq }) => eq(variant.ativo, true),
+			},
 		},
 		offset: skip,
 		limit: limit,

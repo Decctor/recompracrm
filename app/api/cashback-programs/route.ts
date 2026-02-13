@@ -1,9 +1,10 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
-import { CashbackProgramSchema } from "@/schemas/cashback-programs";
+import { handleSimpleChildRowsProcessing } from "@/lib/db-utils";
+import { CashbackProgramPrizeSchema, CashbackProgramSchema } from "@/schemas/cashback-programs";
 import { db } from "@/services/drizzle";
-import { cashbackProgramBalances, cashbackPrograms } from "@/services/drizzle/schema";
+import { cashbackProgramBalances, cashbackProgramPrizes, cashbackPrograms } from "@/services/drizzle/schema";
 import { and, eq } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
@@ -15,6 +16,9 @@ async function getCashbackPrograms({ session }: { session: TAuthUserSession }) {
 
 	const cashbackProgram = await db.query.cashbackPrograms.findFirst({
 		where: (fields, { eq }) => eq(fields.organizacaoId, userOrgId),
+		with: {
+			recompensas: true,
+		},
 	});
 
 	return {
@@ -35,6 +39,9 @@ export const GET = appApiHandler({
 
 const CreateCashbackProgramInputSchema = z.object({
 	cashbackProgram: CashbackProgramSchema.omit({ dataInsercao: true, dataAtualizacao: true }),
+	cashbackProgramPrizes: z.array(
+		CashbackProgramPrizeSchema.omit({ dataInsercao: true, dataAtualizacao: true, organizacaoId: true, programaId: true }),
+	),
 });
 export type TCreateCashbackProgramInput = z.infer<typeof CreateCashbackProgramInputSchema>;
 
@@ -88,6 +95,13 @@ async function createCashbackProgram({ input, session }: { input: TCreateCashbac
 			}
 		}
 
+		if (input.cashbackProgramPrizes.length > 0) {
+			const prizesToInsert = input.cashbackProgramPrizes.map((prize) => ({
+				...prize,
+				programaId: programId,
+			}));
+			await tx.insert(cashbackProgramPrizes).values(prizesToInsert);
+		}
 		return programId;
 	});
 
@@ -118,22 +132,56 @@ const UpdateCashbackProgramInputSchema = z.object({
 		invalid_type_error: "Tipo não válido para o ID do programa de cashback.",
 	}),
 	cashbackProgram: CashbackProgramSchema.omit({ dataInsercao: true, dataAtualizacao: true }),
+	cashbackProgramPrizes: z.array(
+		CashbackProgramPrizeSchema.omit({ dataInsercao: true, dataAtualizacao: true, organizacaoId: true, programaId: true }).extend({
+			id: z
+				.string({
+					required_error: "ID do prêmio do programa de cashback não informado.",
+					invalid_type_error: "Tipo não válido para o ID do prêmio do programa de cashback.",
+				})
+				.optional()
+				.nullable(),
+			deletar: z
+				.boolean({
+					required_error: "Deletar prêmio do programa de cashback não informado.",
+					invalid_type_error: "Tipo não válido para deletar prêmio do programa de cashback.",
+				})
+				.optional()
+				.nullable(),
+		}),
+	),
 });
 export type TUpdateCashbackProgramInput = z.infer<typeof UpdateCashbackProgramInputSchema>;
 
 async function updateCashbackProgram({ input, session }: { input: TUpdateCashbackProgramInput; session: TAuthUserSession }) {
 	const userOrgId = session.membership?.organizacao.id;
 	if (!userOrgId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
-	const updatedCashbackProgram = await db
-		.update(cashbackPrograms)
-		.set({ ...input.cashbackProgram, organizacaoId: userOrgId })
-		.where(and(eq(cashbackPrograms.id, input.cashbackProgramId), eq(cashbackPrograms.organizacaoId, userOrgId)))
-		.returning({ id: cashbackPrograms.id });
-	const updatedCashbackProgramId = updatedCashbackProgram[0]?.id;
-	if (!updatedCashbackProgramId) throw new createHttpError.InternalServerError("Oops, houve um erro desconhecido ao atualizar programa de cashback.");
+
+	const transactionReturn = await db.transaction(async (tx) => {
+		const updatedCashbackProgram = await db
+			.update(cashbackPrograms)
+			.set({ ...input.cashbackProgram, organizacaoId: userOrgId })
+			.where(and(eq(cashbackPrograms.id, input.cashbackProgramId), eq(cashbackPrograms.organizacaoId, userOrgId)))
+			.returning({ id: cashbackPrograms.id });
+		const updatedCashbackProgramId = updatedCashbackProgram[0]?.id;
+		if (!updatedCashbackProgramId) throw new createHttpError.InternalServerError("Oops, houve um erro desconhecido ao atualizar programa de cashback.");
+
+		await handleSimpleChildRowsProcessing({
+			trx: tx,
+			table: cashbackProgramPrizes,
+			entities: input.cashbackProgramPrizes,
+			fatherEntityKey: "programaId",
+			fatherEntityId: updatedCashbackProgramId,
+			organizacaoId: userOrgId,
+		});
+		return {
+			updatedCashbackProgramId,
+		};
+	});
+
 	return {
 		data: {
-			updatedId: updatedCashbackProgramId,
+			updatedId: transactionReturn.updatedCashbackProgramId,
 		},
 		message: "Programa de cashback atualizado com sucesso.",
 	};
