@@ -5,7 +5,6 @@ import TextInput from "@/components/Inputs/TextInput";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { getErrorMessage } from "@/lib/errors";
 import { formatToCPForCNPJ, formatToMoney, formatToNumericPassword, formatToPhone } from "@/lib/formatting";
 import { createPointOfInteractionSale } from "@/lib/mutations/sales";
@@ -462,7 +461,7 @@ function PrizeSelectionStep({
 			<div className="text-center space-y-2 short:space-y-0.5">
 				<h2 className="text-xl short:text-base font-black uppercase tracking-tight">Escolha a recompensa</h2>
 				<p className="text-muted-foreground short:text-xs">
-					Saldo disponível: <span className="font-black text-green-600">{formatToMoney(availableBalance)}</span>
+					Saldo disponível: <span className="font-black text-green-600">{availableBalance} créditos</span>
 				</p>
 			</div>
 			<div className="grid grid-cols-1 sm:grid-cols-2 gap-4 short:gap-2">
@@ -494,7 +493,7 @@ function PrizeSelectionStep({
 								<h3 className="font-black text-sm short:text-xs uppercase tracking-tight">{prize.titulo}</h3>
 								{prize.descricao && <p className="text-xs short:text-[0.55rem] text-muted-foreground line-clamp-2">{prize.descricao}</p>}
 								<div className="flex items-center justify-between mt-1">
-									<span className="font-black text-lg short:text-base text-brand">{formatToMoney(prize.valor)}</span>
+									<span className="font-black text-lg short:text-base text-brand">{prize.valor} créditos</span>
 									{isDisabled && <span className="text-[0.6rem] short:text-[0.5rem] font-bold text-red-500 uppercase">Saldo insuficiente</span>}
 								</div>
 							</div>
@@ -1051,7 +1050,39 @@ function CashbackStep({
 						</div>
 						<h3 className="font-black uppercase italic short:text-xs">Usar Cashback?</h3>
 					</div>
-					<Switch checked={applied} onCheckedChange={onToggle} disabled={available === 0} className="scale-125 short:scale-90" />
+					<div
+						className={cn(
+							"inline-flex items-center rounded-full p-1 border border-brand/20 bg-white/80 shadow-sm",
+							available === 0 && "opacity-60",
+						)}
+					>
+						<button
+							type="button"
+							onClick={() => onToggle(true)}
+							disabled={available === 0}
+							aria-pressed={applied}
+							className={cn(
+								"h-8 short:h-6 px-4 short:px-2 rounded-full text-xs short:text-[0.6rem] font-black uppercase tracking-wide transition-all",
+								applied ? "bg-brand text-brand-foreground shadow-sm" : "text-brand hover:bg-brand/10",
+								available === 0 && "cursor-not-allowed hover:bg-transparent",
+							)}
+						>
+							Sim
+						</button>
+						<button
+							type="button"
+							onClick={() => onToggle(false)}
+							disabled={available === 0}
+							aria-pressed={!applied}
+							className={cn(
+								"h-8 short:h-6 px-4 short:px-2 rounded-full text-xs short:text-[0.6rem] font-black uppercase tracking-wide transition-all",
+								!applied ? "bg-brand text-brand-foreground shadow-sm" : "text-brand hover:bg-brand/10",
+								available === 0 && "cursor-not-allowed hover:bg-transparent",
+							)}
+						>
+							Não
+						</button>
+					</div>
 				</div>
 				<div className="grid grid-cols-2 gap-4 short:gap-1.5">
 					<div className="bg-white p-4 short:p-2 rounded-2xl short:rounded-lg shadow-sm border border-brand/20">

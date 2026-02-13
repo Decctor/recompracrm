@@ -495,7 +495,7 @@ function PointOfInteractionActions({ org, router, handleOpenProfileMenu, handleP
 							<ShoppingCart className="w-16 h-16 md:w-20 md:h-20" />
 						</div>
 						<div className="text-center">
-							<h3 className="text-2xl md:text-3xl font-black tracking-tight">REGISTRAR COMPRA</h3>
+							<h3 className="text-2xl md:text-3xl font-black tracking-tight">RESGATE SEU CASHBACK</h3>
 							<p className="text-sm md:text-base opacity-90 mt-2 font-medium text-wrap whitespace-pre-wrap">
 								Ganhe ou resgate cashback <br className="hidden md:block" /> em suas compras.
 							</p>
