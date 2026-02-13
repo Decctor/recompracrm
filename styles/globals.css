@@ -2,6 +2,10 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Variante para telas com altura limitada (tablets pequenos, landscape) */
+@custom-variant short (@media (max-height: 700px));
+@custom-variant shorter (@media (max-height: 600px));
+
 @theme {
 	/* Define a animação vinculando ao nome dos keyframes */
 	--animate-pulse-slow: pulse-slow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
