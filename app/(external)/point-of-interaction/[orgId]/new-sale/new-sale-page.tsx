@@ -55,6 +55,8 @@ type NewSaleContentProps = {
 		nome: TOrganizationEntity["nome"];
 		logoUrl: TOrganizationEntity["logoUrl"];
 		telefone: TOrganizationEntity["telefone"];
+		modalidadeDescontosPermitida: boolean;
+		modalidadeRecompensasPermitida: boolean;
 	};
 	clientId?: string;
 	prizes: TPrize[];
@@ -74,7 +76,11 @@ export default function NewSaleContent({ org, clientId, prizes }: NewSaleContent
 	const [selectedPrize, setSelectedPrize] = React.useState<TPrize | null>(null);
 
 	const hasPrizes = prizes.length > 0;
-	const isPrizeMode = flowMode === "prize";
+	const isDiscountModeAllowed = org.modalidadeDescontosPermitida;
+	const isPrizeModeAllowed = org.modalidadeRecompensasPermitida && hasPrizes;
+	const shouldShowFlowModeSelection = isDiscountModeAllowed && isPrizeModeAllowed;
+	const effectiveFlowMode: "discount" | "prize" = shouldShowFlowModeSelection ? (flowMode ?? "discount") : isPrizeModeAllowed ? "prize" : "discount";
+	const isPrizeMode = effectiveFlowMode === "prize";
 	const totalSteps = isPrizeMode ? 3 : 4;
 	const successStep = isPrizeMode ? 4 : 5;
 
@@ -109,8 +115,8 @@ export default function NewSaleContent({ org, clientId, prizes }: NewSaleContent
 			if (!state.client.id && (!state.client.nome || !state.client.telefone)) {
 				return toast.error("Complete os dados do cliente.");
 			}
-			// If org has prizes and mode not yet selected, show mode selection
-			if (hasPrizes && flowMode === null) {
+			// If both flows are allowed and mode not yet selected, show mode selection
+			if (shouldShowFlowModeSelection && flowMode === null) {
 				setShowModeSelection(true);
 				return;
 			}
@@ -130,6 +136,9 @@ export default function NewSaleContent({ org, clientId, prizes }: NewSaleContent
 	};
 
 	const handleSelectFlowMode = (mode: "discount" | "prize") => {
+		if ((mode === "discount" && !isDiscountModeAllowed) || (mode === "prize" && !isPrizeModeAllowed)) {
+			return;
+		}
 		setFlowMode(mode);
 		setShowModeSelection(false);
 		playAction();

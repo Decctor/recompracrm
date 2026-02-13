@@ -13,6 +13,8 @@ import {
 	clients,
 	interactions,
 	organizations,
+	products,
+	saleItems,
 	sales,
 } from "@/services/drizzle/schema";
 import dayjs from "dayjs";
@@ -135,6 +137,40 @@ const GetSalesInputSchema = z.object({
 		.optional()
 		.nullable()
 		.transform((val) => (val ? val.split(",") : [])),
+	clientId: z
+		.string({
+			invalid_type_error: "Tipo inválido para ID do cliente.",
+		})
+		.optional()
+		.nullable(),
+	productGroups: z
+		.string({
+			invalid_type_error: "Tipo inválido para grupos de produto.",
+		})
+		.optional()
+		.nullable()
+		.transform((val) => (val ? val.split(",") : [])),
+	productIds: z
+		.string({
+			invalid_type_error: "Tipo inválido para IDs de produto.",
+		})
+		.optional()
+		.nullable()
+		.transform((val) => (val ? val.split(",") : [])),
+	totalMin: z
+		.string({
+			invalid_type_error: "Tipo inválido para valor mínimo.",
+		})
+		.optional()
+		.nullable()
+		.transform((val) => (val ? Number(val) : null)),
+	totalMax: z
+		.string({
+			invalid_type_error: "Tipo inválido para valor máximo.",
+		})
+		.optional()
+		.nullable()
+		.transform((val) => (val ? Number(val) : null)),
 });
 
 export type TGetSalesInput = z.infer<typeof GetSalesInputSchema>;
@@ -143,7 +179,8 @@ async function getSales({ input, sessionUser }: { input: TGetSalesInput; session
 	const PAGE_SIZE = 25;
 	const userOrgId = sessionUser.membership?.organizacao.id;
 	if (!userOrgId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
-	const { id, page, search, periodAfter, periodBefore, sellersIds, partnersIds, saleNatures } = input;
+	const { id, page, search, periodAfter, periodBefore, sellersIds, partnersIds, saleNatures, clientId, productGroups, productIds, totalMin, totalMax } =
+		input;
 
 	if (id) {
 		const sale = await db.query.sales.findFirst({
@@ -259,6 +296,7 @@ async function getSales({ input, sessionUser }: { input: TGetSalesInput; session
 			data: {
 				default: null,
 				byId: sale,
+				byClientId: null,
 			},
 			message: "Venda encontrada com sucesso.",
 		};
@@ -282,6 +320,32 @@ async function getSales({ input, sessionUser }: { input: TGetSalesInput; session
 	if (sellersIds && sellersIds.length > 0) conditions.push(inArray(sales.vendedorId, sellersIds));
 	if (partnersIds && partnersIds.length > 0) conditions.push(inArray(sales.parceiroId, partnersIds));
 	if (saleNatures && saleNatures.length > 0) conditions.push(inArray(sales.natureza, saleNatures));
+	if (clientId) conditions.push(eq(sales.clienteId, clientId));
+	if (totalMin !== null && totalMin !== undefined) conditions.push(gte(sales.valorTotal, totalMin));
+	if (totalMax !== null && totalMax !== undefined) conditions.push(lte(sales.valorTotal, totalMax));
+	if (productIds && productIds.length > 0) {
+		conditions.push(
+			inArray(
+				sales.id,
+				db
+					.select({ id: saleItems.vendaId })
+					.from(saleItems)
+					.where(and(eq(saleItems.organizacaoId, userOrgId), inArray(saleItems.produtoId, productIds))),
+			),
+		);
+	}
+	if (productGroups && productGroups.length > 0) {
+		conditions.push(
+			inArray(
+				sales.id,
+				db
+					.select({ id: saleItems.vendaId })
+					.from(saleItems)
+					.innerJoin(products, eq(products.id, saleItems.produtoId))
+					.where(and(eq(saleItems.organizacaoId, userOrgId), eq(products.organizacaoId, userOrgId), inArray(products.grupo, productGroups))),
+			),
+		);
+	}
 
 	const salesMatched = await db
 		.select({ count: count() })
@@ -397,12 +461,21 @@ async function getSales({ input, sessionUser }: { input: TGetSalesInput; session
 
 	return {
 		data: {
-			default: {
-				sales: salesResult,
-				totalPages: totalPages,
-				salesMatched: salesMatchedCount,
-			},
+			default: clientId
+				? null
+				: {
+						sales: salesResult,
+						totalPages: totalPages,
+						salesMatched: salesMatchedCount,
+					},
 			byId: null,
+			byClientId: clientId
+				? {
+						sales: salesResult,
+						totalPages: totalPages,
+						salesMatched: salesMatchedCount,
+					}
+				: null,
 		},
 		message: "Vendas encontradas com sucesso.",
 	};
@@ -410,6 +483,7 @@ async function getSales({ input, sessionUser }: { input: TGetSalesInput; session
 export type TGetSalesOutput = Awaited<ReturnType<typeof getSales>>;
 export type TGetSalesOutputDefault = Exclude<Awaited<TGetSalesOutput>["data"]["default"], null>;
 export type TGetSalesOutputById = Exclude<Awaited<TGetSalesOutput>["data"]["byId"], null>;
+export type TGetSalesOutputByClientId = Exclude<Awaited<TGetSalesOutput>["data"]["byClientId"], null>;
 const getSalesRoute: NextApiHandler<TGetSalesOutput> = async (req, res) => {
 	const sessionUser = await getCurrentSessionUncached(req.cookies);
 	if (!sessionUser) throw new createHttpError.Unauthorized("Você não está autenticado.");

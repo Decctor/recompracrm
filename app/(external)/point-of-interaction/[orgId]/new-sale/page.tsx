@@ -41,6 +41,19 @@ export default async function NewSalePage({
 			valor: true,
 		},
 	});
+	const cashbackProgramConfig = await db.query.cashbackPrograms.findFirst({
+		where: (fields, { and, eq }) => and(eq(fields.organizacaoId, orgId), eq(fields.ativo, true)),
+		columns: {
+			modalidadeDescontosPermitida: true,
+			modalidadeRecompensasPermitida: true,
+		},
+	});
+
+	const orgWithCashbackConfig = {
+		...org,
+		modalidadeDescontosPermitida: cashbackProgramConfig?.modalidadeDescontosPermitida ?? true,
+		modalidadeRecompensasPermitida: cashbackProgramConfig?.modalidadeRecompensasPermitida ?? false,
+	};
 
 	return (
 		<OrgColorsProvider
@@ -49,7 +62,7 @@ export default async function NewSalePage({
 			corSecundaria={org.corSecundaria}
 			corSecundariaForeground={org.corSecundariaForeground}
 		>
-			<NewSaleContent org={org} clientId={clientId} prizes={prizes} />
+			<NewSaleContent org={orgWithCashbackConfig} clientId={clientId} prizes={prizes} />
 		</OrgColorsProvider>
 	);
 }

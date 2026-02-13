@@ -14,9 +14,15 @@ async function fetchSales(input: TGetSalesInput) {
 	if (input.sellersIds) searchParams.set("sellersIds", input.sellersIds.join(","));
 	if (input.partnersIds) searchParams.set("partnersIds", input.partnersIds.join(","));
 	if (input.saleNatures) searchParams.set("saleNatures", input.saleNatures.join(","));
+	if (input.clientId) searchParams.set("clientId", input.clientId);
+	if (input.productGroups) searchParams.set("productGroups", input.productGroups.join(","));
+	if (input.productIds) searchParams.set("productIds", input.productIds.join(","));
+	if (input.totalMin !== null && input.totalMin !== undefined) searchParams.set("totalMin", input.totalMin.toString());
+	if (input.totalMax !== null && input.totalMax !== undefined) searchParams.set("totalMax", input.totalMax.toString());
 	const { data } = await axios.get<TGetSalesOutput>(`/api/sales?${searchParams.toString()}`);
-	if (!data.data.default) throw new Error("Vendas não encontradas.");
-	return data.data.default;
+	const result = input.clientId ? data.data.byClientId : data.data.default;
+	if (!result) throw new Error("Vendas não encontradas.");
+	return result;
 }
 
 type UseSalesParams = {
@@ -31,6 +37,11 @@ export function useSales({ initialParams }: UseSalesParams) {
 		sellersIds: initialParams.sellersIds || [],
 		partnersIds: initialParams.partnersIds || [],
 		saleNatures: initialParams.saleNatures || [],
+		clientId: initialParams.clientId ?? null,
+		productGroups: initialParams.productGroups ?? [],
+		productIds: initialParams.productIds ?? [],
+		totalMin: initialParams.totalMin ?? null,
+		totalMax: initialParams.totalMax ?? null,
 	});
 	function updateParams(newParams: Partial<TGetSalesInput>) {
 		setParams((prev) => ({ ...prev, ...newParams }));

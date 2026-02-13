@@ -25,6 +25,8 @@ export const cashbackPrograms = newTable("cashback_programs", {
 	ativo: boolean("ativo").notNull().default(true),
 	titulo: text("titulo").notNull(),
 	descricao: text("descricao"),
+	modalidadeDescontosPermitida: boolean("modalidade_descontos_permitida").notNull().default(true),
+	modalidadeRecompensasPermitida: boolean("modalidade_recompensas_permitida").notNull().default(false),
 	acumuloTipo: cashbackProgramAccumulationTypeEnum().notNull().default("FIXO"),
 	acumuloValor: doublePrecision("acumulo_valor").notNull().default(0),
 	acumuloValorParceiro: doublePrecision("acumulo_valor_parceiro").notNull().default(0),

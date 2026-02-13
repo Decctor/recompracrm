@@ -9,7 +9,7 @@ import {
 	sales,
 	utils,
 } from "@/services/drizzle/schema";
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import type { NextApiRequest, NextApiResponse } from "next";
 
 // Configurações
@@ -190,7 +190,7 @@ type DuplicateGroup = {
 async function findDuplicateClients(organizacaoId: string): Promise<DuplicateGroup[]> {
 	// First, find all clients for this organization
 	const allClients = await db.query.clients.findMany({
-		where: eq(clients.organizacaoId, organizacaoId),
+		where: and(eq(clients.organizacaoId, organizacaoId), ne(clients.telefoneBase, "")),
 		columns: {
 			id: true,
 			nome: true,
@@ -203,7 +203,7 @@ async function findDuplicateClients(organizacaoId: string): Promise<DuplicateGro
 	// Group by nome + telefoneBase
 	const groupedClients = new Map<string, typeof allClients>();
 	for (const client of allClients) {
-		const key = `${client.nome ?? ""}|${client.telefoneBase ?? ""}`;
+		const key = client.telefoneBase ?? "";
 		const existing = groupedClients.get(key);
 		if (existing) {
 			existing.push(client);
@@ -273,192 +273,103 @@ async function fixAllDuplicates(organizacaoId: string) {
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-	const congelatteClients = await db.query.clients.findMany({
-		where: eq(clients.organizacaoId, "27817d9a-cb04-4704-a1f4-15b81a3610d3"),
-	});
-
-	const congelatteSales = await db.query.sales.findMany({
-		where: eq(sales.organizacaoId, "27817d9a-cb04-4704-a1f4-15b81a3610d3"),
-	});
-
-	const salesByClient = new Map<
-		string,
-		{
-			oldestSale?: { id: string; dataVenda: Date | null };
-			newestSale?: { id: string; dataVenda: Date | null };
-		}
-	>();
-
-	for (const sale of congelatteSales) {
-		if (!sale.clienteId || !sale.dataVenda) {
-			continue;
-		}
-
-		const currentData = salesByClient.get(sale.clienteId) ?? {};
-		const currentTimestamp = (sale.dataVenda as Date).getTime();
-		const oldestTimestamp = currentData.oldestSale?.dataVenda ? (currentData.oldestSale.dataVenda as Date).getTime() : Number.POSITIVE_INFINITY;
-		const newestTimestamp = currentData.newestSale?.dataVenda ? (currentData.newestSale.dataVenda as Date).getTime() : Number.NEGATIVE_INFINITY;
-
-		if (currentTimestamp < oldestTimestamp) {
-			currentData.oldestSale = { id: sale.id, dataVenda: sale.dataVenda };
-		}
-
-		if (currentTimestamp > newestTimestamp) {
-			currentData.newestSale = { id: sale.id, dataVenda: sale.dataVenda };
-		}
-
-		salesByClient.set(sale.clienteId, currentData);
-	}
-
-	const clientBatches = chunkArray(congelatteClients, CONFIG.CLIENT_PURCHASE_BATCH_SIZE);
-	console.log(
-		`[INFO] [TESTING] Processing ${congelatteClients.length} clients in ${clientBatches.length} batches of up to ${CONFIG.CLIENT_PURCHASE_BATCH_SIZE} with delay ${CONFIG.CLIENT_PURCHASE_BATCH_DELAY_MS}ms`,
-	);
-
-	for (const [batchIndex, clientBatch] of clientBatches.entries()) {
-		console.log(`[INFO] [TESTING] Processing client batch ${batchIndex + 1}/${clientBatches.length} (${clientBatch.length} clients)...`);
-
-		const concurrentChunks = chunkArray(clientBatch, CONFIG.CONCURRENT_UPDATES);
-		for (const chunk of concurrentChunks) {
-			await Promise.all(
-				chunk.map(async (client) => {
-					const clientSales = salesByClient.get(client.id);
-					const clientOldestSale = clientSales?.oldestSale;
-					const clientNewestSale = clientSales?.newestSale;
-
-					if (!clientOldestSale && !clientNewestSale) {
-						return;
-					}
-
-					await db
-						.update(clients)
-						.set({
-							primeiraCompraId: clientOldestSale?.id,
-							primeiraCompraData: clientOldestSale?.dataVenda ?? undefined,
-							ultimaCompraId: clientNewestSale?.id,
-							ultimaCompraData: clientNewestSale?.dataVenda ?? undefined,
-						})
-						.where(eq(clients.id, client.id));
-				}),
-			);
-		}
-
-		if (batchIndex < clientBatches.length - 1) {
-			console.log(`[INFO] [TESTING] Waiting ${CONFIG.CLIENT_PURCHASE_BATCH_DELAY_MS}ms before next client batch...`);
-			await delay(CONFIG.CLIENT_PURCHASE_BATCH_DELAY_MS);
+	const organizacaoId = "27817d9a-cb04-4704-a1f4-15b81a3610d3";
+	// Query param to switch between preview and fix mode
+	const mode = req.query.mode as string | undefined;
+	if (mode === "fix") {
+		// Actually fix the duplicates
+		const startTime = Date.now();
+		try {
+			const result = await fixAllDuplicates(organizacaoId);
+			const durationMs = Date.now() - startTime;
+			return res.status(200).json({
+				message: result.errors.length === 0 ? "Todos os duplicados corrigidos com sucesso" : "Processo concluído com alguns erros",
+				stats: {
+					totalGroups: result.totalGroups,
+					totalClientsDeleted: result.totalClientsDeleted,
+					errorsCount: result.errors.length,
+				},
+				errors: result.errors.length > 0 ? result.errors.map((e) => ({ nome: e.group.nome, telefone: e.group.telefoneBase, error: e.error })) : undefined,
+				durationMs,
+				durationSeconds: `${(durationMs / 1000).toFixed(2)}s`,
+			});
+		} catch (error) {
+			const errorMessage = error instanceof Error ? error.message : String(error);
+			return res.status(500).json({ message: "Erro fatal", error: errorMessage });
 		}
 	}
-	// const deletedResult = await db
-	// 	.delete(utils)
-	// 	.where(inArray(utils.identificador, ["ONLINE_IMPORTATION", "CARDAPIO_WEB_IMPORTATION", "CARDAPIO_WEB_CATALOG_SYNC"]))
-	// 	.returning({
-	// 		id: utils.id,
-	// 	});
-
-	// const deletedCount = deletedResult.length;
-	return res.status(200).json({ message: "Hello, world!", totalClients: congelatteClients.length, totalSales: congelatteSales.length });
-	// const organizacaoId = "4a4e8578-63f0-4119-9695-a2cc068de8d6";
-
-	// // Query param to switch between preview and fix mode
-	// const mode = req.query.mode as string | undefined;
-
-	// if (mode === "fix") {
-	// 	// Actually fix the duplicates
-	// 	const startTime = Date.now();
-	// 	try {
-	// 		const result = await fixAllDuplicates(organizacaoId);
-	// 		const durationMs = Date.now() - startTime;
-
-	// 		return res.status(200).json({
-	// 			message: result.errors.length === 0 ? "Todos os duplicados corrigidos com sucesso" : "Processo concluído com alguns erros",
-	// 			stats: {
-	// 				totalGroups: result.totalGroups,
-	// 				totalClientsDeleted: result.totalClientsDeleted,
-	// 				errorsCount: result.errors.length,
-	// 			},
-	// 			errors: result.errors.length > 0 ? result.errors.map((e) => ({ nome: e.group.nome, telefone: e.group.telefoneBase, error: e.error })) : undefined,
-	// 			durationMs,
-	// 			durationSeconds: `${(durationMs / 1000).toFixed(2)}s`,
-	// 		});
-	// 	} catch (error) {
-	// 		const errorMessage = error instanceof Error ? error.message : String(error);
-	// 		return res.status(500).json({ message: "Erro fatal", error: errorMessage });
-	// 	}
-	// }
-
-	// // Default: preview mode - just show the duplicates
-	// const duplicateGroups = await findDuplicateClients(organizacaoId);
-
-	// return res.status(200).json({
-	// 	message: "Preview dos duplicados encontrados. Use ?mode=fix para corrigir.",
-	// 	totalGroups: duplicateGroups.length,
-	// 	totalClientsToDelete: duplicateGroups.reduce((acc, g) => acc + g.clientsToDeleteIds.length, 0),
-	// 	duplicates: duplicateGroups.map((g) => ({
-	// 		nome: g.nome,
-	// 		telefoneBase: g.telefoneBase,
-	// 		totalClients: g.clientIds.length,
-	// 		clientToKeepId: g.clientToKeepId,
-	// 		clientToDeleteIds: g.clientsToDeleteIds,
-	// 	})),
-	// });
-	// try {
-	// 	console.log("[INFO] [TESTING] Iniciando processo de correção de vendas...");
-	// 	// Busca registros que precisam ser corrigidos
-	// 	const salesToFix = await db.query.sales.findMany({
-	// 		where: (fields, { and, eq, isNull }) =>
-	// 			and(eq(fields.organizacaoId, "27817d9a-cb04-4704-a1f4-15b81a3610d3"), eq(fields.entregaModalidade, "NÃO DEFINIDO")),
-	// 		columns: {
-	// 			id: true,
-	// 			parceiro: true,
-	// 			tipo: true,
-	// 		},
-	// 	});
-	// 	if (salesToFix.length === 0) {
-	// 		console.log("[INFO] [TESTING] Nenhuma venda encontrada para corrigir.");
-	// 		return res.status(200).json({
-	// 			message: "Nenhuma venda encontrada para corrigir",
-	// 			stats: { total: 0, successful: 0, failed: 0 },
-	// 			durationMs: Date.now() - startTime,
-	// 		});
-	// 	}
-	// 	console.log(`[INFO] [TESTING] Encontradas ${salesToFix.length} vendas para corrigir`);
-	// 	// Divide em lotes
-	// 	const batches = chunkArray(salesToFix, CONFIG.BATCH_SIZE);
-	// 	console.log(`[INFO] [TESTING] Dividido em ${batches.length} lotes de até ${CONFIG.BATCH_SIZE} registros`);
-	// 	// Métricas
-	// 	const allSuccessful: string[] = [];
-	// 	const allFailed: Array<{ id: string; error: string }> = [];
-	// 	// Processa cada lote
-	// 	for (const [batchIndex, batch] of batches.entries()) {
-	// 		const { successful, failed } = await processBatch(batch, batchIndex, batches.length);
-	// 		allSuccessful.push(...successful);
-	// 		allFailed.push(...failed);
-	// 	}
-	// 	const durationMs = Date.now() - startTime;
-	// 	const durationSeconds = (durationMs / 1000).toFixed(2);
-	// 	console.log(`[INFO] [TESTING] Processo concluído em ${durationSeconds}s`);
-	// 	console.log(`[INFO] [TESTING] Total: ${salesToFix.length} | Sucesso: ${allSuccessful.length} | Falhas: ${allFailed.length}`);
-	// 	if (allFailed.length > 0) {
-	// 		console.error("[ERROR] [TESTING] IDs com falha:", allFailed.map((f) => f.id).join(", "));
-	// 	}
-	// 	return res.status(200).json({
-	// 		message: allFailed.length === 0 ? "Todas as vendas atualizadas com sucesso" : "Processo concluído com algumas falhas",
-	// 		stats: {
-	// 			total: salesToFix.length,
-	// 			successful: allSuccessful.length,
-	// 			failed: allFailed.length,
-	// 		},
-	// 		failedIds: allFailed.length > 0 ? allFailed : undefined,
-	// 		durationMs,
-	// 		durationSeconds: `${durationSeconds}s`,
-	// 	});
-	// } catch (error) {
-	// 	const errorMessage = error instanceof Error ? error.message : String(error);
-	// 	console.error("[ERROR] [TESTING] Erro fatal no processo:", errorMessage);
-	// 	return res.status(500).json({
-	// 		message: "Erro fatal no processo de atualização",
-	// 		error: errorMessage,
-	// 		durationMs: Date.now() - startTime,
-	// 	});
-	// }
+	// Default: preview mode - just show the duplicates
+	const duplicateGroups = await findDuplicateClients(organizacaoId);
+	return res.status(200).json({
+		message: "Preview dos duplicados encontrados. Use ?mode=fix para corrigir.",
+		totalGroups: duplicateGroups.length,
+		totalClientsToDelete: duplicateGroups.reduce((acc, g) => acc + g.clientsToDeleteIds.length, 0),
+		duplicates: duplicateGroups.map((g) => ({
+			nome: g.nome,
+			telefoneBase: g.telefoneBase,
+			totalClients: g.clientIds.length,
+			clientToKeepId: g.clientToKeepId,
+			clientToDeleteIds: g.clientsToDeleteIds,
+		})),
+	});
+	try {
+		console.log("[INFO] [TESTING] Iniciando processo de correção de vendas...");
+		// Busca registros que precisam ser corrigidos
+		const salesToFix = await db.query.sales.findMany({
+			where: (fields, { and, eq, isNull }) =>
+				and(eq(fields.organizacaoId, "27817d9a-cb04-4704-a1f4-15b81a3610d3"), eq(fields.entregaModalidade, "NÃO DEFINIDO")),
+			columns: {
+				id: true,
+				parceiro: true,
+				tipo: true,
+			},
+		});
+		if (salesToFix.length === 0) {
+			console.log("[INFO] [TESTING] Nenhuma venda encontrada para corrigir.");
+			return res.status(200).json({
+				message: "Nenhuma venda encontrada para corrigir",
+				stats: { total: 0, successful: 0, failed: 0 },
+				durationMs: Date.now() - startTime,
+			});
+		}
+		console.log(`[INFO] [TESTING] Encontradas ${salesToFix.length} vendas para corrigir`);
+		// Divide em lotes
+		const batches = chunkArray(salesToFix, CONFIG.BATCH_SIZE);
+		console.log(`[INFO] [TESTING] Dividido em ${batches.length} lotes de até ${CONFIG.BATCH_SIZE} registros`);
+		// Métricas
+		const allSuccessful: string[] = [];
+		const allFailed: Array<{ id: string; error: string }> = [];
+		// Processa cada lote
+		for (const [batchIndex, batch] of batches.entries()) {
+			const { successful, failed } = await processBatch(batch, batchIndex, batches.length);
+			allSuccessful.push(...successful);
+			allFailed.push(...failed);
+		}
+		const durationMs = Date.now() - startTime;
+		const durationSeconds = (durationMs / 1000).toFixed(2);
+		console.log(`[INFO] [TESTING] Processo concluído em ${durationSeconds}s`);
+		console.log(`[INFO] [TESTING] Total: ${salesToFix.length} | Sucesso: ${allSuccessful.length} | Falhas: ${allFailed.length}`);
+		if (allFailed.length > 0) {
+			console.error("[ERROR] [TESTING] IDs com falha:", allFailed.map((f) => f.id).join(", "));
+		}
+		return res.status(200).json({
+			message: allFailed.length === 0 ? "Todas as vendas atualizadas com sucesso" : "Processo concluído com algumas falhas",
+			stats: {
+				total: salesToFix.length,
+				successful: allSuccessful.length,
+				failed: allFailed.length,
+			},
+			failedIds: allFailed.length > 0 ? allFailed : undefined,
+			durationMs,
+			durationSeconds: `${durationSeconds}s`,
+		});
+	} catch (error) {
+		const errorMessage = error instanceof Error ? error.message : String(error);
+		console.error("[ERROR] [TESTING] Erro fatal no processo:", errorMessage);
+		return res.status(500).json({
+			message: "Erro fatal no processo de atualização",
+			error: errorMessage,
+			durationMs: Date.now() - startTime,
+		});
+	}
 }

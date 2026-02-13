@@ -1,5 +1,5 @@
-import { generateCashbackForCampaign } from "@/lib/cashback/generate-campaign-cashback";
 import { calculateAccumulatedCashbackValue } from "@/lib/cashback/accumulation";
+import { generateCashbackForCampaign } from "@/lib/cashback/generate-campaign-cashback";
 import { reverseSaleCashback } from "@/lib/cashback/reverse-sale-cashback";
 import { processConversionAttribution } from "@/lib/conversions/attribution";
 import { fetchCardapioWebOrdersWithDetails } from "@/lib/data-connectors/cardapio-web";
@@ -138,8 +138,7 @@ async function ensureCashbackBalanceEntry({
 	if (fromMap) return fromMap;
 
 	const existingBalance = await tx.query.cashbackProgramBalances.findFirst({
-		where: (fields, { and, eq }) =>
-			and(eq(fields.organizacaoId, organizationId), eq(fields.clienteId, clientId), eq(fields.programaId, programId)),
+		where: (fields, { and, eq }) => and(eq(fields.organizacaoId, organizationId), eq(fields.clienteId, clientId), eq(fields.programaId, programId)),
 		columns: {
 			clienteId: true,
 			programaId: true,

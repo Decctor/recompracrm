@@ -1,12 +1,14 @@
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { getErrorMessage } from "@/lib/errors";
-import { formatDecimalPlaces, formatToMoney } from "@/lib/formatting";
+import { formatDateAsLocale, formatDecimalPlaces, formatToMoney } from "@/lib/formatting";
 import { useClientStatsById } from "@/lib/queries/clients";
+import { useSales } from "@/lib/queries/sales";
 import { isValidNumber } from "@/lib/validation";
 import type { TGetClientStatsOutput } from "@/pages/api/clients/stats/by-client";
+import type { TGetSalesOutputByClientId } from "@/pages/api/sales";
 import type { TUserSession } from "@/schemas/users";
 import dayjs from "dayjs";
-import { BadgeDollarSign, Calendar, CirclePlus, Mail, Phone, ShoppingBag, UserRound } from "lucide-react";
+import { BadgeDollarSign, Calendar, CirclePlus, ListFilter, Mail, Phone, ShoppingBag, UserRound } from "lucide-react";
 import { useState } from "react";
 import { BsCart, BsTicketPerforated } from "react-icons/bs";
 import DateIntervalInput from "../Inputs/DateIntervalInput";
@@ -14,13 +16,17 @@ import ErrorComponent from "../Layouts/ErrorComponent";
 import Header from "../Layouts/Header";
 import LoadingComponent from "../Layouts/LoadingComponent";
 import StatUnitCard from "../Stats/StatUnitCard";
+import GeneralPaginationComponent from "../Utils/Pagination";
+import { Button } from "../ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
+import ClientPurchasesFilterMenu from "./ClientPurchasesFilterMenu";
 
 type ClientMainProps = {
 	id: string;
 	user: TAuthUserSession["user"];
 };
 export default function ClientMain({ id, user }: ClientMainProps) {
+	const [purchasesFilterMenuIsOpen, setPurchasesFilterMenuIsOpen] = useState(false);
 	const {
 		data: stats,
 		isLoading,
@@ -33,6 +39,34 @@ export default function ClientMain({ id, user }: ClientMainProps) {
 		clientId: id,
 		initialFilters: { periodAfter: dayjs().startOf("month").toISOString(), periodBefore: dayjs().endOf("month").toISOString() },
 	});
+	const {
+		data: purchasesResult,
+		isLoading: isPurchasesLoading,
+		isError: isPurchasesError,
+		isSuccess: isPurchasesSuccess,
+		error: purchasesError,
+		params: purchasesParams,
+		updateParams: updatePurchasesParams,
+	} = useSales({
+		initialParams: {
+			page: 1,
+			search: "",
+			periodAfter: dayjs().startOf("month").toDate(),
+			periodBefore: dayjs().endOf("month").toDate(),
+			sellersIds: [],
+			partnersIds: [],
+			saleNatures: [],
+			clientId: id,
+			productGroups: [],
+			productIds: [],
+			totalMin: null,
+			totalMax: null,
+		},
+	});
+	const purchases = purchasesResult?.sales ?? [];
+	const purchasesMatched = purchasesResult?.salesMatched ?? 0;
+	const purchasesTotalPages = purchasesResult?.totalPages ?? 0;
+	const purchasesShowing = purchases.length;
 
 	if (isLoading) return <LoadingComponent />;
 	if (isError) return <ErrorComponent msg={getErrorMessage(error)} />;
@@ -45,7 +79,6 @@ export default function ClientMain({ id, user }: ClientMainProps) {
 					<div className="flex items-center justify-end">
 						<DateIntervalInput
 							label="Período"
-							showLabel={false}
 							value={{
 								after: filters.periodAfter ? new Date(filters.periodAfter) : undefined,
 								before: filters.periodBefore ? new Date(filters.periodBefore) : undefined,
@@ -107,6 +140,27 @@ export default function ClientMain({ id, user }: ClientMainProps) {
 							/>
 						</div>
 					</div>
+					<div className="bg-card border-primary/20 flex w-full flex-col gap-3 rounded-xl border px-4 py-4 shadow-2xs">
+						<div className="flex w-full items-center justify-between gap-2">
+							<h1 className="text-sm font-bold tracking-tight uppercase">Compras do Cliente</h1>
+							<Button className="flex items-center gap-2" size="sm" onClick={() => setPurchasesFilterMenuIsOpen(true)}>
+								<ListFilter className="w-4 h-4 min-w-4 min-h-4" />
+								FILTROS
+							</Button>
+						</div>
+						<GeneralPaginationComponent
+							activePage={purchasesParams.page}
+							queryLoading={isPurchasesLoading}
+							selectPage={(page) => updatePurchasesParams({ page })}
+							totalPages={purchasesTotalPages}
+							itemsMatchedText={purchasesMatched > 1 ? `${purchasesMatched} compras encontradas.` : `${purchasesMatched} compra encontrada.`}
+							itemsShowingText={purchasesShowing > 1 ? `Mostrando ${purchasesShowing} compras.` : `Mostrando ${purchasesShowing} compra.`}
+						/>
+						{isPurchasesLoading ? <LoadingComponent /> : null}
+						{isPurchasesError ? <ErrorComponent msg={getErrorMessage(purchasesError)} /> : null}
+						{isPurchasesSuccess && purchases.length > 0 ? purchases.map((sale) => <ClientPurchaseCard key={sale.id} sale={sale} />) : null}
+						{isPurchasesSuccess && purchases.length === 0 ? <p className="w-full tracking-tight text-center">Nenhuma compra encontrada.</p> : null}
+					</div>
 					<div className="flex w-full flex-col lg:flex-row gap-2 items-stretch">
 						<div className="w-full lg:w-1/3">
 							<GroupedByMonthDay data={stats.resultadosAgrupados.dia} />
@@ -130,10 +184,35 @@ export default function ClientMain({ id, user }: ClientMainProps) {
 						</div>
 					</div>
 				</div>
+				{purchasesFilterMenuIsOpen ? (
+					<ClientPurchasesFilterMenu
+						queryParams={purchasesParams}
+						updateQueryParams={updatePurchasesParams}
+						closeMenu={() => setPurchasesFilterMenuIsOpen(false)}
+					/>
+				) : null}
 			</>
 		);
 
 	return <></>;
+}
+
+function ClientPurchaseCard({ sale }: { sale: TGetSalesOutputByClientId["sales"][number] }) {
+	return (
+		<div className="bg-background border-primary/20 flex w-full flex-col gap-2 rounded-xl border px-3 py-3">
+			<div className="flex w-full items-center justify-between gap-2">
+				<h1 className="text-sm font-semibold tracking-tight uppercase">{sale.cliente?.nome ?? "AO CONSUMIDOR"}</h1>
+				<h1 className="text-sm font-black text-primary">{formatToMoney(sale.valorTotal)}</h1>
+			</div>
+			<div className="flex items-center gap-2 flex-wrap text-xs text-muted-foreground">
+				<span className="bg-secondary px-2 py-0.5 rounded-md">{formatDateAsLocale(sale.dataVenda, true)}</span>
+				<span className="bg-secondary px-2 py-0.5 rounded-md">{sale.natureza}</span>
+				{sale.vendedor?.nome ? <span className="bg-secondary px-2 py-0.5 rounded-md">{sale.vendedor.nome}</span> : null}
+				{sale.parceiro?.nome ? <span className="bg-secondary px-2 py-0.5 rounded-md">{sale.parceiro.nome}</span> : null}
+			</div>
+			<p className="text-xs tracking-tight text-muted-foreground">{sale.itens.length} item(ns) na compra.</p>
+		</div>
+	);
 }
 
 function GroupedByMonthDay({ data }: { data: TGetClientStatsOutput["data"]["resultadosAgrupados"]["dia"] }) {

@@ -34,6 +34,7 @@ import {
 	Clock,
 	Code,
 	Diamond,
+	DollarSign,
 	Info,
 	ListFilter,
 	Package,
@@ -547,17 +548,27 @@ function ProductCard({
 						</TooltipProvider>
 					</div>
 				</div>
-				<div className="w-full flex items-center justify-end gap-2 flex-wrap">
-					<Button variant="ghost" className="flex items-center gap-1.5" size="sm" onClick={handleEditClick}>
-						<PencilIcon className="w-3 min-w-3 h-3 min-h-3" />
-						EDITAR
-					</Button>
-					<Button variant="link" className="flex items-center gap-1.5" size="sm" asChild>
-						<Link href={`/dashboard/commercial/products/id/${product.id}`}>
-							<Info className="w-3 min-w-3 h-3 min-h-3" />
-							DETALHES
-						</Link>
-					</Button>
+				<div className="w-full flex items-center justify-between gap-2 flex-wrap">
+					<div className="flex items-center gap-1.5">
+						<div className="flex items-center gap-1">
+							<DollarSign className="w-4 h-4 min-w-4 min-h-4" />
+							<h1 className="py-0.5 text-center text-[0.65rem] font-medium italic text-primary/80">
+								{product.precoVenda ? `${formatToMoney(product.precoVenda)} / ${product.unidade}` : "PREÇO DE VENDA NÃO DEFINIDO"}
+							</h1>
+						</div>
+					</div>
+					<div className="flex items-center gap-1.5">
+						<Button variant="ghost" className="flex items-center gap-1.5" size="sm" onClick={handleEditClick}>
+							<PencilIcon className="w-3 min-w-3 h-3 min-h-3" />
+							EDITAR
+						</Button>
+						<Button variant="link" className="flex items-center gap-1.5" size="sm" asChild>
+							<Link href={`/dashboard/commercial/products/id/${product.id}`}>
+								<Info className="w-3 min-w-3 h-3 min-h-3" />
+								DETALHES
+							</Link>
+						</Button>
+					</div>
 				</div>
 			</div>
 		</div>
