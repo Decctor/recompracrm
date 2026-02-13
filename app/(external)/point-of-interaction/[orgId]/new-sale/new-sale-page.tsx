@@ -98,6 +98,7 @@ export default function NewSaleContent({ org, clientId, prizes }: NewSaleContent
 				telefone: client.telefone,
 				cpfCnpj: null,
 			});
+
 			playAction();
 		}
 	}, [client, updateClient, playAction]);
@@ -116,6 +117,13 @@ export default function NewSaleContent({ org, clientId, prizes }: NewSaleContent
 		}
 		if (!isPrizeMode && currentStep === 2 && state.sale.valor <= 0) {
 			return toast.error("Digite o valor da venda.");
+		}
+		if (!isPrizeMode && currentStep === 2) {
+			const maxCashbackAllowed = getMaxCashbackToUse();
+			updateCashback({
+				aplicar: maxCashbackAllowed > 0,
+				valor: maxCashbackAllowed,
+			});
 		}
 		playAction();
 		setCurrentStep((prev) => Math.min(prev + 1, totalSteps));
@@ -216,8 +224,8 @@ export default function NewSaleContent({ org, clientId, prizes }: NewSaleContent
 	const confirmationStep = isPrizeMode ? 3 : 4;
 
 	return (
-		<div className="w-full min-h-screen p-6 md:p-10 short:p-2 short:min-h-0 flex flex-col items-center">
-			<div className="w-full max-w-4xl flex flex-col gap-6 short:gap-2">
+		<div className="w-full min-h-screen p-6 md:p-10 short:p-3 short:min-h-0 flex flex-col items-center">
+			<div className="w-full max-w-4xl flex flex-col gap-6 short:gap-3">
 				{/* Header com Navegação */}
 				<div className="flex items-center gap-4 short:gap-1.5">
 					<Button
@@ -237,7 +245,7 @@ export default function NewSaleContent({ org, clientId, prizes }: NewSaleContent
 						</div>
 						<div>
 							<h1 className="text-2xl md:text-3xl short:text-base font-black tracking-tighter">NOVA VENDA</h1>
-							<p className="text-[0.6rem] md:text-xs short:text-[0.5rem] text-muted-foreground font-bold uppercase tracking-widest opacity-70">
+							<p className="text-[0.6rem] md:text-xs short:text-[0.6rem] text-muted-foreground font-bold uppercase tracking-widest opacity-70">
 								{showModeSelection ? "Escolha o modo" : `Passo ${currentStep} de ${totalSteps}`}
 							</p>
 						</div>
@@ -257,7 +265,7 @@ export default function NewSaleContent({ org, clientId, prizes }: NewSaleContent
 									)}
 								>
 									<step.icon className="w-4 h-4 short:w-3 short:h-3" />
-									<span className="text-[0.6rem] lg:text-xs short:text-[0.5rem] font-black tracking-widest">{step.label}</span>
+									<span className="text-[0.6rem] lg:text-xs short:text-[0.6rem] font-black tracking-widest">{step.label}</span>
 								</div>
 							))}
 						</div>
@@ -360,7 +368,7 @@ export default function NewSaleContent({ org, clientId, prizes }: NewSaleContent
 
 						{/* Action Buttons */}
 						{!showModeSelection && currentStep < successStep && !(currentStep === 1 && client) && (
-							<div className="flex gap-4 short:gap-2 mt-10 short:mt-3">
+							<div className="flex gap-4 short:gap-3 mt-10 short:mt-4">
 								{currentStep > 1 && (
 									<Button
 										onClick={() => {
@@ -375,7 +383,7 @@ export default function NewSaleContent({ org, clientId, prizes }: NewSaleContent
 										}}
 										variant="outline"
 										size="lg"
-										className="flex-1 rounded-2xl short:rounded-lg h-16 short:h-10 text-lg short:text-sm font-bold"
+										className="flex-1 rounded-2xl short:rounded-lg h-16 short:h-11 text-lg short:text-base font-bold"
 									>
 										VOLTAR
 									</Button>
@@ -387,15 +395,15 @@ export default function NewSaleContent({ org, clientId, prizes }: NewSaleContent
 										size="lg"
 										disabled={isCreatingSale || (!isPrizeMode && isAttemptingToUseMoreCashbackThanAllowed)}
 										className={cn(
-											"flex-1 rounded-2xl short:rounded-lg h-16 short:h-10 text-lg short:text-sm font-bold shadow-lg shadow-brand/20 uppercase tracking-widest",
+											"flex-1 rounded-2xl short:rounded-lg h-16 short:h-11 text-lg short:text-base font-bold shadow-lg shadow-brand/20 uppercase tracking-widest",
 											currentStep === confirmationStep && "bg-green-600 hover:bg-green-700",
 										)}
 									>
 										{currentStep === confirmationStep ? (isCreatingSale ? "PROCESSANDO..." : "FINALIZAR") : "PRÓXIMO"}
 										{currentStep === confirmationStep ? (
-											<Check className="ml-2 w-6 h-6 short:w-4 short:h-4" />
+											<Check className="ml-2 w-6 h-6 short:w-5 short:h-5" />
 										) : (
-											<ArrowRight className="ml-2 w-6 h-6 short:w-4 short:h-4" />
+											<ArrowRight className="ml-2 w-6 h-6 short:w-5 short:h-5" />
 										)}
 									</Button>
 								)}
@@ -412,7 +420,7 @@ function ModeSelectionStep({ onSelectMode }: { onSelectMode: (mode: "discount" |
 	return (
 		<div className="space-y-8 short:space-y-3 animate-in fade-in slide-in-from-bottom-4">
 			<div className="text-center space-y-2 short:space-y-0.5">
-				<h2 className="text-xl short:text-base font-black uppercase tracking-tight">O que deseja fazer?</h2>
+				<h2 className="text-xl short:text-lg font-black uppercase tracking-tight">O que deseja fazer?</h2>
 				<p className="text-muted-foreground short:text-xs">Escolha entre usar desconto ou resgatar uma recompensa.</p>
 			</div>
 			<div className="grid grid-cols-1 sm:grid-cols-2 gap-4 short:gap-2 max-w-2xl mx-auto">
@@ -426,7 +434,7 @@ function ModeSelectionStep({ onSelectMode }: { onSelectMode: (mode: "discount" |
 					</div>
 					<div className="text-center">
 						<h3 className="font-black text-lg short:text-sm uppercase tracking-tight">PONTUAR E OBTER DESCONTOS</h3>
-						<p className="text-xs short:text-[0.6rem] text-muted-foreground mt-1">Registre a compra e utilize o saldo como desconto</p>
+						<p className="text-xs short:text-[0.7rem] text-muted-foreground mt-1">Registre a compra e utilize o saldo como desconto</p>
 					</div>
 				</button>
 				<button
@@ -439,7 +447,7 @@ function ModeSelectionStep({ onSelectMode }: { onSelectMode: (mode: "discount" |
 					</div>
 					<div className="text-center">
 						<h3 className="font-black text-lg short:text-sm uppercase tracking-tight">PONTUAR E RESGATAR RECOMPENSA</h3>
-						<p className="text-xs short:text-[0.6rem] text-muted-foreground mt-1">Use seu saldo para resgatar uma recompensa disponível</p>
+						<p className="text-xs short:text-[0.7rem] text-muted-foreground mt-1">Use seu saldo para resgatar uma recompensa disponível</p>
 					</div>
 				</button>
 			</div>
@@ -459,7 +467,7 @@ function PrizeSelectionStep({
 	return (
 		<div className="space-y-6 short:space-y-2 animate-in fade-in slide-in-from-bottom-4">
 			<div className="text-center space-y-2 short:space-y-0.5">
-				<h2 className="text-xl short:text-base font-black uppercase tracking-tight">Escolha a recompensa</h2>
+				<h2 className="text-xl short:text-lg font-black uppercase tracking-tight">Escolha a recompensa</h2>
 				<p className="text-muted-foreground short:text-xs">
 					Saldo disponível: <span className="font-black text-green-600">{availableBalance} créditos</span>
 				</p>
@@ -491,10 +499,10 @@ function PrizeSelectionStep({
 							</div>
 							<div className="p-4 short:p-2 flex flex-col gap-1.5 short:gap-0.5">
 								<h3 className="font-black text-sm short:text-xs uppercase tracking-tight">{prize.titulo}</h3>
-								{prize.descricao && <p className="text-xs short:text-[0.55rem] text-muted-foreground line-clamp-2">{prize.descricao}</p>}
+								{prize.descricao && <p className="text-xs short:text-[0.65rem] text-muted-foreground line-clamp-2">{prize.descricao}</p>}
 								<div className="flex items-center justify-between mt-1">
 									<span className="font-black text-lg short:text-base text-brand">{prize.valor} créditos</span>
-									{isDisabled && <span className="text-[0.6rem] short:text-[0.5rem] font-bold text-red-500 uppercase">Saldo insuficiente</span>}
+									{isDisabled && <span className="text-[0.6rem] short:text-[0.6rem] font-bold text-red-500 uppercase">Saldo insuficiente</span>}
 								</div>
 							</div>
 						</button>
@@ -530,7 +538,7 @@ function PrizeConfirmationStep({
 			}}
 		>
 			<div className="text-center space-y-2 short:space-y-0.5">
-				<h2 className="text-xl short:text-base font-black uppercase tracking-tight">Confirmar Resgate</h2>
+				<h2 className="text-xl short:text-lg font-black uppercase tracking-tight">Confirmar Resgate</h2>
 				<p className="text-muted-foreground short:text-xs">Confira os dados e digite a senha do operador.</p>
 			</div>
 
@@ -555,11 +563,11 @@ function PrizeConfirmationStep({
 
 			<div className="bg-brand/5 rounded-3xl short:rounded-xl p-6 short:p-2.5 space-y-3 short:space-y-1.5 border border-brand/20">
 				<div className="flex justify-between">
-					<span className="text-muted-foreground font-bold text-xs short:text-[0.6rem] uppercase">Cliente</span>
+					<span className="text-muted-foreground font-bold text-xs short:text-[0.7rem] uppercase">Cliente</span>
 					<span className="font-black text-brand short:text-xs">{clientName}</span>
 				</div>
 				<div className="flex justify-between items-center">
-					<span className="text-muted-foreground font-bold text-xs short:text-[0.6rem] uppercase">Saldo</span>
+					<span className="text-muted-foreground font-bold text-xs short:text-[0.7rem] uppercase">Saldo</span>
 					<div className="flex items-center gap-2 short:gap-1">
 						<span className="font-bold text-sm short:text-xs text-muted-foreground">{formatToMoney(availableBalance)}</span>
 						<ArrowRight className="w-3 h-3 text-muted-foreground" />
@@ -569,7 +577,7 @@ function PrizeConfirmationStep({
 			</div>
 
 			<div className="space-y-4 short:space-y-1.5 max-w-md mx-auto">
-				<Label className="block text-center font-black text-xs short:text-[0.6rem] text-muted-foreground uppercase tracking-widest italic">
+				<Label className="block text-center font-black text-xs short:text-[0.7rem] text-muted-foreground uppercase tracking-widest italic">
 					Senha do Operador
 				</Label>
 				<Input
@@ -577,7 +585,7 @@ function PrizeConfirmationStep({
 					placeholder="*****"
 					value={operatorIdentifier}
 					onChange={(e) => onOperatorIdentifierChange(formatToNumericPassword(e.target.value))}
-					className="h-16 short:h-10 text-2xl short:text-lg text-center rounded-2xl short:rounded-lg border-4 short:border border-brand/20 focus:border-green-500 transition-all font-bold"
+					className="h-16 short:h-11 text-2xl short:text-xl text-center rounded-2xl short:rounded-lg border-4 short:border border-brand/20 focus:border-green-500 transition-all font-bold"
 					onFocus={(e) => {
 						setTimeout(() => {
 							e.target.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -616,7 +624,7 @@ function PrizeSuccessStep({
 
 			<div className="space-y-2 short:space-y-0.5">
 				<h2 className="text-4xl short:text-lg font-black uppercase tracking-tighter text-green-700">RESGATE REALIZADO!</h2>
-				<p className="text-muted-foreground font-medium text-lg short:text-xs">A recompensa foi resgatada com sucesso.</p>
+				<p className="text-muted-foreground font-medium text-lg short:text-sm">A recompensa foi resgatada com sucesso.</p>
 			</div>
 
 			{selectedPrize && (
@@ -639,11 +647,11 @@ function PrizeSuccessStep({
 
 			<div className="grid grid-cols-1 md:grid-cols-2 gap-6 short:gap-2 w-full max-w-xl">
 				<div className="bg-green-50 border-2 short:border border-green-200 rounded-3xl short:rounded-xl p-6 short:p-2 shadow-sm">
-					<p className="text-[0.7rem] short:text-[0.5rem] font-black text-green-600 uppercase tracking-widest mb-1 short:mb-0">CASHBACK GERADO</p>
+					<p className="text-[0.7rem] short:text-[0.6rem] font-black text-green-600 uppercase tracking-widest mb-1 short:mb-0">CASHBACK GERADO</p>
 					<p className="text-4xl short:text-xl font-black text-green-700">{formatToMoney(cashbackEarned)}</p>
 				</div>
 				<div className="bg-brand/5 border-2 short:border border-brand/20 rounded-3xl short:rounded-xl p-6 short:p-2 shadow-sm">
-					<p className="text-[0.7rem] short:text-[0.5rem] font-black text-brand uppercase tracking-widest mb-1 short:mb-0">NOVO SALDO TOTAL</p>
+					<p className="text-[0.7rem] short:text-[0.6rem] font-black text-brand uppercase tracking-widest mb-1 short:mb-0">NOVO SALDO TOTAL</p>
 					<p className="text-4xl short:text-xl font-black text-brand">{formatToMoney(newBalance)}</p>
 				</div>
 			</div>
@@ -652,7 +660,7 @@ function PrizeSuccessStep({
 				<Button
 					onClick={onReset}
 					size="lg"
-					className="flex-1 rounded-2xl short:rounded-lg h-20 short:h-10 short:py-2 text-xl short:text-sm font-black shadow-xl uppercase tracking-wider"
+					className="flex-1 rounded-2xl short:rounded-lg h-20 short:h-11 short:py-2.5 text-xl short:text-base font-black shadow-xl uppercase tracking-wider"
 				>
 					NOVA VENDA
 				</Button>
@@ -660,7 +668,7 @@ function PrizeSuccessStep({
 					onClick={onGoHome}
 					variant="outline"
 					size="lg"
-					className="flex-1 rounded-2xl short:rounded-lg h-20 short:h-10 short:py-2 text-xl short:text-sm font-black border-4 short:border hover:bg-muted uppercase tracking-wider"
+					className="flex-1 rounded-2xl short:rounded-lg h-20 short:h-11 short:py-2.5 text-xl short:text-base font-black border-4 short:border hover:bg-muted uppercase tracking-wider"
 				>
 					VOLTAR AO INÍCIO
 				</Button>
@@ -694,16 +702,16 @@ function SuccessStep({
 
 			<div className="space-y-2 short:space-y-0.5">
 				<h2 className="text-4xl short:text-lg font-black uppercase tracking-tighter text-green-700">VENDA REALIZADA!</h2>
-				<p className="text-muted-foreground font-medium text-lg short:text-xs">A operação foi processada com sucesso.</p>
+				<p className="text-muted-foreground font-medium text-lg short:text-sm">A operação foi processada com sucesso.</p>
 			</div>
 
 			<div className="grid grid-cols-1 md:grid-cols-2 gap-6 short:gap-2 w-full max-w-xl">
 				<div className="bg-green-50 border-2 short:border border-green-200 rounded-3xl short:rounded-xl p-6 short:p-2 shadow-sm">
-					<p className="text-[0.7rem] short:text-[0.5rem] font-black text-green-600 uppercase tracking-widest mb-1 short:mb-0">CASHBACK GERADO</p>
+					<p className="text-[0.7rem] short:text-[0.6rem] font-black text-green-600 uppercase tracking-widest mb-1 short:mb-0">CASHBACK GERADO</p>
 					<p className="text-4xl short:text-xl font-black text-green-700">{formatToMoney(cashbackEarned)}</p>
 				</div>
 				<div className="bg-brand/5 border-2 short:border border-brand/20 rounded-3xl short:rounded-xl p-6 short:p-2 shadow-sm">
-					<p className="text-[0.7rem] short:text-[0.5rem] font-black text-brand uppercase tracking-widest mb-1 short:mb-0">NOVO SALDO TOTAL</p>
+					<p className="text-[0.7rem] short:text-[0.6rem] font-black text-brand uppercase tracking-widest mb-1 short:mb-0">NOVO SALDO TOTAL</p>
 					<p className="text-4xl short:text-xl font-black text-brand">{formatToMoney(newBalance)}</p>
 				</div>
 			</div>
@@ -712,7 +720,7 @@ function SuccessStep({
 				<Button
 					onClick={onReset}
 					size="lg"
-					className="flex-1 rounded-2xl short:rounded-lg h-20 short:h-10 text-xl short:text-sm font-black shadow-xl uppercase tracking-wider"
+					className="flex-1 rounded-2xl short:rounded-lg h-20 short:h-11 text-xl short:text-base font-black shadow-xl uppercase tracking-wider"
 				>
 					NOVA VENDA
 				</Button>
@@ -720,7 +728,7 @@ function SuccessStep({
 					onClick={onGoHome}
 					variant="outline"
 					size="lg"
-					className="flex-1 rounded-2xl short:rounded-lg h-20 short:h-10 text-xl short:text-sm font-black border-4 short:border hover:bg-muted uppercase tracking-wider"
+					className="flex-1 rounded-2xl short:rounded-lg h-20 short:h-11 text-xl short:text-base font-black border-4 short:border hover:bg-muted uppercase tracking-wider"
 				>
 					VOLTAR AO INÍCIO
 				</Button>
@@ -820,7 +828,7 @@ function ClientStep({
 			}}
 		>
 			<div className="text-center space-y-2 short:space-y-0.5">
-				<h2 className="text-xl short:text-base font-black uppercase tracking-tight">Quem é o cliente?</h2>
+				<h2 className="text-xl short:text-lg font-black uppercase tracking-tight">Quem é o cliente?</h2>
 				<p className="text-muted-foreground short:text-xs">Digite o número de telefone para localizar o perfil.</p>
 			</div>
 
@@ -852,12 +860,12 @@ function ClientStep({
 			{showFoundClientCard && client ? (
 				<div className="bg-green-50 border-2 short:border border-green-200 rounded-3xl short:rounded-xl p-6 short:p-2.5 flex flex-col items-center gap-4 short:gap-2 animate-in zoom-in">
 					<div className="text-center">
-						<p className="text-xs short:text-[0.55rem] font-bold text-green-600 uppercase tracking-widest mb-1 short:mb-0">✓ Perfil Encontrado</p>
+						<p className="text-xs short:text-[0.65rem] font-bold text-green-600 uppercase tracking-widest mb-1 short:mb-0">✓ Perfil Encontrado</p>
 						<p className="text-green-900 font-black text-2xl short:text-base uppercase italic">{client.nome}</p>
 						<p className="text-green-600 font-bold short:text-xs">{formatToPhone(client.telefone)}</p>
 					</div>
 					<div className="bg-green-600 w-full rounded-2xl short:rounded-lg p-4 short:p-2 text-center text-white shadow-md">
-						<p className="text-[0.6rem] short:text-[0.5rem] font-bold opacity-80 uppercase tracking-widest">Saldo Disponível</p>
+						<p className="text-[0.6rem] short:text-[0.6rem] font-bold opacity-80 uppercase tracking-widest">Saldo Disponível</p>
 						<p className="text-3xl short:text-xl font-black">{formatToMoney(client.saldos[0]?.saldoValorDisponivel ?? 0)}</p>
 					</div>
 
@@ -878,7 +886,7 @@ function ClientStep({
 						type="button"
 						variant="outline"
 						size="fit"
-						className="w-full p-4 short:p-2 font-black border-green-300 text-green-700 hover:bg-green-100 short:text-xs"
+						className="w-full p-4 short:p-2.5 font-black border-green-300 text-green-700 hover:bg-green-100 short:text-sm"
 						onClick={handleCancelAdvance}
 					>
 						CANCELAR
@@ -901,7 +909,7 @@ function ClientStep({
 						</div>
 						<div>
 							<h3 className="font-black uppercase text-blue-900 short:text-xs">NOVO CLIENTE</h3>
-							<p className="text-xs short:text-[0.55rem] text-blue-600">Complete os dados para criar o seu cadastro !</p>
+							<p className="text-xs short:text-[0.65rem] text-blue-600">Complete os dados para criar o seu cadastro !</p>
 						</div>
 					</div>
 					<div className="w-full flex flex-col gap-1.5 short:gap-0.5">
@@ -954,7 +962,7 @@ function SaleValueStep({
 	return (
 		<div className="space-y-8 short:space-y-2 animate-in fade-in slide-in-from-bottom-4">
 			<div className="text-center space-y-2 short:space-y-0.5">
-				<h2 className="text-xl short:text-base font-black uppercase tracking-tight">Qual o valor da compra?</h2>
+				<h2 className="text-xl short:text-lg font-black uppercase tracking-tight">Qual o valor da compra?</h2>
 			</div>
 			<div className="relative max-w-md mx-auto">
 				<span className="absolute left-6 short:left-3 top-1/2 -translate-y-1/2 text-2xl short:text-lg font-black text-muted-foreground">R$</span>
@@ -962,7 +970,7 @@ function SaleValueStep({
 					type="number"
 					value={value || ""}
 					onChange={(e) => onChange(Number(e.target.value))}
-					className="h-24 short:h-12 text-5xl short:text-2xl font-black text-center rounded-3xl short:rounded-xl border-4 short:border border-brand/20 focus:border-brand px-12 short:px-8"
+					className="h-24 short:h-14 text-5xl short:text-3xl font-black text-center rounded-3xl short:rounded-xl border-4 short:border border-brand/20 focus:border-brand px-12 short:px-9"
 					onFocus={(e) => {
 						setTimeout(() => {
 							e.target.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -976,7 +984,7 @@ function SaleValueStep({
 						key={h}
 						variant="secondary"
 						onClick={() => onChange(value + h)}
-						className="h-14 short:h-8 rounded-xl short:rounded-lg font-black text-lg short:text-sm"
+						className="h-14 short:h-9 rounded-xl short:rounded-lg font-black text-lg short:text-base"
 					>
 						<Plus className="w-4 h-4 short:w-3 short:h-3 mr-1 text-brand" /> {formatToMoney(h)}
 					</Button>
@@ -984,7 +992,7 @@ function SaleValueStep({
 				<Button
 					variant="ghost"
 					onClick={() => onChange(0)}
-					className="h-14 short:h-8 rounded-xl short:rounded-lg font-bold text-muted-foreground col-span-2 md:col-span-4 italic short:text-xs"
+					className="h-14 short:h-9 rounded-xl short:rounded-lg font-bold text-muted-foreground col-span-2 md:col-span-4 italic short:text-sm"
 				>
 					<X className="w-4 h-4 short:w-3 short:h-3 mr-1" /> LIMPAR VALOR
 				</Button>
@@ -1050,19 +1058,14 @@ function CashbackStep({
 						</div>
 						<h3 className="font-black uppercase italic short:text-xs">Usar Cashback?</h3>
 					</div>
-					<div
-						className={cn(
-							"inline-flex items-center rounded-full p-1 border border-brand/20 bg-white/80 shadow-sm",
-							available === 0 && "opacity-60",
-						)}
-					>
+					<div className={cn("inline-flex items-center rounded-full p-1 border border-brand/20 bg-white/80 shadow-sm", available === 0 && "opacity-60")}>
 						<button
 							type="button"
 							onClick={() => onToggle(true)}
 							disabled={available === 0}
 							aria-pressed={applied}
 							className={cn(
-								"h-8 short:h-6 px-4 short:px-2 rounded-full text-xs short:text-[0.6rem] font-black uppercase tracking-wide transition-all",
+								"h-8 short:h-7 px-4 short:px-2.5 rounded-full text-xs short:text-[0.7rem] font-black uppercase tracking-wide transition-all",
 								applied ? "bg-brand text-brand-foreground shadow-sm" : "text-brand hover:bg-brand/10",
 								available === 0 && "cursor-not-allowed hover:bg-transparent",
 							)}
@@ -1075,7 +1078,7 @@ function CashbackStep({
 							disabled={available === 0}
 							aria-pressed={!applied}
 							className={cn(
-								"h-8 short:h-6 px-4 short:px-2 rounded-full text-xs short:text-[0.6rem] font-black uppercase tracking-wide transition-all",
+								"h-8 short:h-7 px-4 short:px-2.5 rounded-full text-xs short:text-[0.7rem] font-black uppercase tracking-wide transition-all",
 								!applied ? "bg-brand text-brand-foreground shadow-sm" : "text-brand hover:bg-brand/10",
 								available === 0 && "cursor-not-allowed hover:bg-transparent",
 							)}
@@ -1086,16 +1089,16 @@ function CashbackStep({
 				</div>
 				<div className="grid grid-cols-2 gap-4 short:gap-1.5">
 					<div className="bg-white p-4 short:p-2 rounded-2xl short:rounded-lg shadow-sm border border-brand/20">
-						<p className="text-[0.6rem] short:text-[0.5rem] font-bold text-muted-foreground uppercase">Seu Saldo</p>
+						<p className="text-[0.6rem] short:text-[0.6rem] font-bold text-muted-foreground uppercase">Seu Saldo</p>
 						<p className="text-xl short:text-base font-black text-green-600">{formatToMoney(available)}</p>
 					</div>
 					<div className="bg-white p-4 short:p-2 rounded-2xl short:rounded-lg shadow-sm border border-brand/20">
-						<p className="text-[0.6rem] short:text-[0.5rem] font-bold text-muted-foreground uppercase">Limite p/ esta compra</p>
+						<p className="text-[0.6rem] short:text-[0.6rem] font-bold text-muted-foreground uppercase">Limite p/ esta compra</p>
 						<p className="text-xl short:text-base font-black text-brand">{formatToMoney(maxAllowed)}</p>
 					</div>
 				</div>
 				{getLimitDescription() && (
-					<p className="text-[0.65rem] short:text-[0.5rem] font-medium text-muted-foreground text-center mt-2 short:mt-1 italic">
+					<p className="text-[0.65rem] short:text-[0.6rem] font-medium text-muted-foreground text-center mt-2 short:mt-1 italic">
 						{getLimitDescription()}
 					</p>
 				)}
@@ -1103,13 +1106,13 @@ function CashbackStep({
 
 			{applied && (
 				<div className="space-y-2 short:space-y-0.5 max-w-xs mx-auto text-center animate-in zoom-in">
-					<Label className="font-bold text-xs short:text-[0.55rem] text-muted-foreground uppercase tracking-widest">Valor a Resgatar</Label>
+					<Label className="font-bold text-xs short:text-[0.65rem] text-muted-foreground uppercase tracking-widest">Valor a Resgatar</Label>
 					<Input
 						type="number"
 						max={maxAllowed}
 						value={amount}
 						onChange={(e) => onAmountChange(Number(e.target.value))}
-						className="h-16 short:h-10 text-3xl short:text-xl font-black text-center rounded-2xl short:rounded-lg border-2 short:border border-green-200 bg-green-50/30"
+						className="h-16 short:h-11 text-3xl short:text-2xl font-black text-center rounded-2xl short:rounded-lg border-2 short:border border-green-200 bg-green-50/30"
 						onFocus={(e) => {
 							setTimeout(() => {
 								e.target.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -1122,12 +1125,12 @@ function CashbackStep({
 			<div className="bg-brand rounded-3xl short:rounded-xl p-8 short:p-3 text-brand-foreground shadow-2xl relative overflow-hidden">
 				<div className="relative z-10 flex flex-col gap-4 short:gap-1">
 					<div className="flex justify-between items-center opacity-60">
-						<span className="text-sm short:text-[0.6rem] font-bold uppercase tracking-widest">Subtotal</span>
+						<span className="text-sm short:text-[0.7rem] font-bold uppercase tracking-widest">Subtotal</span>
 						<span className="font-bold short:text-xs">{formatToMoney(saleValue)}</span>
 					</div>
 					{applied && (
 						<div className="flex justify-between items-center text-green-400">
-							<span className="text-sm short:text-[0.6rem] font-bold uppercase tracking-widest">Desconto Cashback</span>
+							<span className="text-sm short:text-[0.7rem] font-bold uppercase tracking-widest">Desconto Cashback</span>
 							<span className="font-bold short:text-xs">- {formatToMoney(amount)}</span>
 						</div>
 					)}
@@ -1143,7 +1146,7 @@ function CashbackStep({
 				<div className="w-full flex items-center justify-center">
 					<div className="w-fit self-center flex items-center justify-center px-2 py-1 short:px-1.5 short:py-0.5 bg-red-200 text-red-600 rounded-2xl short:rounded-lg gap-1.5 short:gap-1">
 						<AlertTriangle className="w-4 h-4 short:w-3 short:h-3" />
-						<p className="text-[0.65rem] short:text-[0.5rem] font-medium text-center italic">
+						<p className="text-[0.65rem] short:text-[0.6rem] font-medium text-center italic">
 							O valor do cashback não pode ser maior que o valor máximo permitido.
 						</p>
 					</div>
@@ -1175,23 +1178,23 @@ function ConfirmationStep({
 			}}
 		>
 			<div className="text-center space-y-2 short:space-y-0.5">
-				<h2 className="text-xl short:text-base font-black uppercase tracking-tight">Finalizar Operação</h2>
+				<h2 className="text-xl short:text-lg font-black uppercase tracking-tight">Finalizar Operação</h2>
 				<p className="text-muted-foreground short:text-xs">Confira os dados e digite o usuário do operador.</p>
 			</div>
 
 			<div className="bg-brand/5 rounded-3xl short:rounded-xl p-6 short:p-2.5 space-y-3 short:space-y-1.5 border border-brand/20">
 				<div className="flex justify-between">
-					<span className="text-muted-foreground font-bold text-xs short:text-[0.6rem] uppercase">Cliente</span>
+					<span className="text-muted-foreground font-bold text-xs short:text-[0.7rem] uppercase">Cliente</span>
 					<span className="font-black text-brand short:text-xs">{clientName}</span>
 				</div>
 				<div className="flex justify-between">
-					<span className="text-muted-foreground font-bold text-xs short:text-[0.6rem] uppercase">Valor Final</span>
+					<span className="text-muted-foreground font-bold text-xs short:text-[0.7rem] uppercase">Valor Final</span>
 					<span className="font-black text-brand text-xl short:text-base">{formatToMoney(finalValue)}</span>
 				</div>
 			</div>
 
 			<div className="space-y-4 short:space-y-1.5 max-w-md mx-auto">
-				<Label className="block text-center font-black text-xs short:text-[0.6rem] text-muted-foreground uppercase tracking-widest italic">
+				<Label className="block text-center font-black text-xs short:text-[0.7rem] text-muted-foreground uppercase tracking-widest italic">
 					Senha do Operador
 				</Label>
 				<Input
@@ -1199,7 +1202,7 @@ function ConfirmationStep({
 					placeholder="*****"
 					value={operatorIdentifier}
 					onChange={(e) => onOperatorIdentifierChange(formatToNumericPassword(e.target.value))}
-					className="h-16 short:h-10 text-2xl short:text-lg text-center rounded-2xl short:rounded-lg border-4 short:border border-brand/20 focus:border-green-500 transition-all font-bold"
+					className="h-16 short:h-11 text-2xl short:text-xl text-center rounded-2xl short:rounded-lg border-4 short:border border-brand/20 focus:border-green-500 transition-all font-bold"
 					onFocus={(e) => {
 						setTimeout(() => {
 							e.target.scrollIntoView({ behavior: "smooth", block: "center" });

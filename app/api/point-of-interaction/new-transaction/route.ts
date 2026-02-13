@@ -184,7 +184,11 @@ async function handleNewTransaction(req: NextRequest): Promise<NextResponse<TCre
 		const transactionRequiresSaleProcessing = !program.organizacao.integracaoTipo;
 		// Transactions only require redemption processing when cashback is applied and has a positive value
 		const transactionRequiresRedemptionProcessing = input.sale.cashback.aplicar && input.sale.cashback.valor > 0;
-
+		console.log({
+			transactionRequiresAccumulationProcessing,
+			transactionRequiresSaleProcessing,
+			transactionRequiresRedemptionProcessing,
+		});
 		// PRE-STEPS:
 		const organizationWhatsappConnection = await tx.query.whatsappConnections.findFirst({
 			where: (fields, { eq }) => eq(fields.organizacaoId, input.orgId),
@@ -370,11 +374,7 @@ async function handleNewTransaction(req: NextRequest): Promise<NextResponse<TCre
 		if (isPrizeRedemption) {
 			const prize = await tx.query.cashbackProgramPrizes.findFirst({
 				where: (fields, { and, eq }) =>
-					and(
-						eq(fields.id, input.sale.prizeRedemption!.prizeId),
-						eq(fields.ativo, true),
-						eq(fields.programaId, program.id),
-					),
+					and(eq(fields.id, input.sale.prizeRedemption!.prizeId), eq(fields.ativo, true), eq(fields.programaId, program.id)),
 				columns: {
 					id: true,
 					valor: true,
