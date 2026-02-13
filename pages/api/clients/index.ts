@@ -104,17 +104,20 @@ async function getClients({ input, session }: { input: TGetClientsInput; session
 	if (input.search && input.search.trim().length > 0) {
 		const searchCondition = or(
 			createSimplifiedSearchCondition(clients.nome, input.search),
-			createSimplifiedPhoneSearchCondition(clients.telefone, input.search),
+			createSimplifiedPhoneSearchCondition(clients.telefoneBase, input.search),
 			createSimplifiedEmailSearchCondition(clients.email, input.search),
 		);
+		console.log("SEARCH CONDITION APPIED");
 		if (searchCondition) {
 			clientConditions.push(searchCondition);
 		}
 	}
 	if (input.acquisitionChannels && input.acquisitionChannels.length > 0) {
+		console.log("ACQUISITION CHANNELS CONDITION APPIED");
 		clientConditions.push(inArray(clients.canalAquisicao, input.acquisitionChannels));
 	}
 	if (input.segmentationTitles && input.segmentationTitles.length > 0) {
+		console.log("SEGMENTATION TITLES CONDITION APPIED");
 		clientConditions.push(inArray(clients.analiseRFMTitulo, input.segmentationTitles));
 	}
 	const PAGE_SIZE = 25;
@@ -137,24 +140,25 @@ async function getClients({ input, session }: { input: TGetClientsInput; session
 		offset: skip,
 	});
 	const clientIds = clientsResult.map((client) => client.id);
+	if (clientIds.length === 0) {
+		return {
+			data: {
+				byId: undefined,
+				default: {
+					clients: [],
+					clientsMatched: clientsFoundResult.length,
+					totalPages,
+				},
+			},
+		};
+	}
+	console.log("CONDITIONS:", clientConditions.length);
 
-	const statsConditions = [eq(sales.organizacaoId, userOrgId), inArray(sales.clienteId, clientIds)];
+	const statsConditions = [eq(sales.organizacaoId, userOrgId)];
 	if (input.statsPeriodAfter) statsConditions.push(gte(sales.dataVenda, input.statsPeriodAfter));
 	if (input.statsPeriodBefore) statsConditions.push(lte(sales.dataVenda, input.statsPeriodBefore));
 	if (input.statsSaleNatures && input.statsSaleNatures.length > 0) statsConditions.push(inArray(sales.natureza, input.statsSaleNatures));
 	if (input.statsExcludedSalesIds && input.statsExcludedSalesIds.length > 0) statsConditions.push(notInArray(sales.id, input.statsExcludedSalesIds));
-
-	const matchedSubquery = db
-		.select({
-			clientId: clients.id,
-		})
-		.from(clients)
-		.leftJoin(sales, eq(clients.id, sales.clienteId))
-		.where(and(...clientConditions, ...statsConditions))
-		.groupBy(clients.id);
-
-	const statsByClientMatchedCountResult = await db.select({ count: count() }).from(matchedSubquery.as("sq"));
-	const statsByClientMatchedCount = statsByClientMatchedCountResult[0]?.count ?? 0;
 
 	const statsByClientResult = await db
 		.select({
@@ -165,8 +169,8 @@ async function getClients({ input, session }: { input: TGetClientsInput; session
 			lastPurchaseDate: max(sales.dataVenda),
 		})
 		.from(clients)
-		.leftJoin(sales, eq(clients.id, sales.clienteId))
-		.where(and(...statsConditions))
+		.leftJoin(sales, and(eq(clients.id, sales.clienteId), ...statsConditions))
+		.where(inArray(clients.id, clientIds))
 		.groupBy(clients.id)
 		.orderBy(sql`${clients.nome} asc`);
 
@@ -187,7 +191,7 @@ async function getClients({ input, session }: { input: TGetClientsInput; session
 			byId: undefined,
 			default: {
 				clients: clientsWithStats,
-				clientsMatched: statsByClientMatchedCount,
+				clientsMatched: clientsFoundResult.length,
 				totalPages,
 			},
 		},

@@ -23,6 +23,7 @@ import {
 	Check,
 	CheckCircle2,
 	CreditCard,
+	Gift,
 	Loader2,
 	Lock,
 	PartyPopper,
@@ -33,11 +34,20 @@ import {
 	UserRound,
 	X,
 } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import React, { useEffect } from "react";
 import { toast } from "sonner";
 import useSound from "use-sound";
+
+type TPrize = {
+	id: string;
+	titulo: string;
+	descricao: string | null;
+	imagemCapaUrl: string | null;
+	valor: number;
+};
 
 type NewSaleContentProps = {
 	org: {
@@ -48,14 +58,27 @@ type NewSaleContentProps = {
 		telefone: TOrganizationEntity["telefone"];
 	};
 	clientId?: string;
+	prizes: TPrize[];
 };
-export default function NewSaleContent({ org, clientId }: NewSaleContentProps) {
+export default function NewSaleContent({ org, clientId, prizes }: NewSaleContentProps) {
 	const router = useRouter();
 	const queryClient = useQueryClient();
-	const { state, updateClient, updateSale, updateCashback, updateOperatorIdentifier, resetState } = usePointOfInteractionNewSaleState(org.id);
+	const { state, updateClient, updateSale, updateCashback, updatePrizeRedemption, updateOperatorIdentifier, resetState } =
+		usePointOfInteractionNewSaleState(org.id);
 
 	const [currentStep, setCurrentStep] = React.useState<number>(1);
 	const [successData, setSuccessData] = React.useState<TCreatePointOfInteractionTransactionOutput["data"] | null>(null);
+
+	// Prize flow state
+	const [flowMode, setFlowMode] = React.useState<"discount" | "prize" | null>(null);
+	const [showModeSelection, setShowModeSelection] = React.useState(false);
+	const [selectedPrize, setSelectedPrize] = React.useState<TPrize | null>(null);
+
+	const hasPrizes = prizes.length > 0;
+	const isPrizeMode = flowMode === "prize";
+	const totalSteps = isPrizeMode ? 3 : 4;
+	const successStep = isPrizeMode ? 4 : 5;
+
 	const {
 		data: client,
 		queryKey,
@@ -86,12 +109,35 @@ export default function NewSaleContent({ org, clientId }: NewSaleContentProps) {
 			if (!state.client.id && (!state.client.nome || !state.client.telefone)) {
 				return toast.error("Complete os dados do cliente.");
 			}
+			// If org has prizes and mode not yet selected, show mode selection
+			if (hasPrizes && flowMode === null) {
+				setShowModeSelection(true);
+				return;
+			}
 		}
-		if (currentStep === 2 && state.sale.valor <= 0) {
+		if (!isPrizeMode && currentStep === 2 && state.sale.valor <= 0) {
 			return toast.error("Digite o valor da venda.");
 		}
 		playAction();
-		setCurrentStep((prev) => Math.min(prev + 1, 4));
+		setCurrentStep((prev) => Math.min(prev + 1, totalSteps));
+	};
+
+	const handleSelectFlowMode = (mode: "discount" | "prize") => {
+		setFlowMode(mode);
+		setShowModeSelection(false);
+		playAction();
+		setCurrentStep(2);
+	};
+
+	const handleSelectPrize = (prize: TPrize) => {
+		const available = getAvailableCashback();
+		if (available < prize.valor) return;
+		setSelectedPrize(prize);
+		updateSale({ valor: prize.valor });
+		updateCashback({ aplicar: true, valor: prize.valor });
+		updatePrizeRedemption({ prizeId: prize.id, prizeValue: prize.valor });
+		playAction();
+		setCurrentStep(3); // Go to confirmation (step 3 in prize mode)
 	};
 
 	const getAvailableCashback = () => client?.saldos?.[0]?.saldoValorDisponivel ?? 0;
@@ -127,7 +173,7 @@ export default function NewSaleContent({ org, clientId }: NewSaleContentProps) {
 			playSuccess();
 			toast.success(`Venda finalizada! Saldo: ${formatToMoney(visualAccumulatedCashbackValue)}`);
 			setSuccessData(data.data);
-			setCurrentStep(5);
+			setCurrentStep(successStep);
 		},
 		onError: (error) => {
 			toast.error(getErrorMessage(error));
@@ -139,6 +185,9 @@ export default function NewSaleContent({ org, clientId }: NewSaleContentProps) {
 		updateParams({ phone: "" });
 		setSuccessData(null);
 		setCurrentStep(1);
+		setFlowMode(null);
+		setShowModeSelection(false);
+		setSelectedPrize(null);
 	};
 
 	async function handleCancelRedirect() {
@@ -149,6 +198,24 @@ export default function NewSaleContent({ org, clientId }: NewSaleContentProps) {
 
 	const maximumCashbackAllowed = getMaxCashbackToUse();
 	const isAttemptingToUseMoreCashbackThanAllowed = state.sale.cashback.aplicar && state.sale.cashback.valor > maximumCashbackAllowed;
+
+	// Define header steps based on flow mode
+	const discountSteps = [
+		{ id: 1, label: "CLIENTE", icon: UserRound },
+		{ id: 2, label: "VENDA", icon: Tag },
+		{ id: 3, label: "CASHBACK", icon: BadgePercent },
+		{ id: 4, label: "CONFIRMAÇÃO", icon: Lock },
+	];
+	const prizeSteps = [
+		{ id: 1, label: "CLIENTE", icon: UserRound },
+		{ id: 2, label: "RECOMPENSA", icon: Gift },
+		{ id: 3, label: "CONFIRMAÇÃO", icon: Lock },
+	];
+	const headerSteps = isPrizeMode ? prizeSteps : discountSteps;
+
+	// Determine the last step (confirmation) for button logic
+	const confirmationStep = isPrizeMode ? 3 : 4;
+
 	return (
 		<div className="w-full min-h-screen p-6 md:p-10 short:p-2 short:min-h-0 flex flex-col items-center">
 			<div className="w-full max-w-4xl flex flex-col gap-6 short:gap-2">
@@ -172,22 +239,17 @@ export default function NewSaleContent({ org, clientId }: NewSaleContentProps) {
 						<div>
 							<h1 className="text-2xl md:text-3xl short:text-base font-black tracking-tighter">NOVA VENDA</h1>
 							<p className="text-[0.6rem] md:text-xs short:text-[0.5rem] text-muted-foreground font-bold uppercase tracking-widest opacity-70">
-								Passo {currentStep} de 4
+								{showModeSelection ? "Escolha o modo" : `Passo ${currentStep} de ${totalSteps}`}
 							</p>
 						</div>
 					</div>
 				</div>
 
-				{/* Wrapper de Estágios (Mantido conforme preferência) */}
+				{/* Wrapper de Estágios */}
 				<div className="bg-card rounded-3xl short:rounded-xl shadow-xl overflow-hidden border border-brand/20">
-					{currentStep < 5 && (
+					{currentStep < successStep && !showModeSelection && (
 						<div className="flex border-b">
-							{[
-								{ id: 1, label: "CLIENTE", icon: UserRound },
-								{ id: 2, label: "VENDA", icon: Tag },
-								{ id: 3, label: "CASHBACK", icon: BadgePercent },
-								{ id: 4, label: "CONFIRMAÇÃO", icon: Lock },
-							].map((step) => (
+							{headerSteps.map((step) => (
 								<div
 									key={step.id}
 									className={cn(
@@ -203,7 +265,11 @@ export default function NewSaleContent({ org, clientId }: NewSaleContentProps) {
 					)}
 
 					<div className="p-6 md:p-10 short:p-3">
-						{currentStep === 1 && (
+						{/* Mode Selection Screen */}
+						{showModeSelection && <ModeSelectionStep onSelectMode={handleSelectFlowMode} />}
+
+						{/* Step 1: Client */}
+						{!showModeSelection && currentStep === 1 && (
 							<ClientStep
 								isLoadingClient={isLoadingClient}
 								isSuccessClient={isSuccessClient}
@@ -216,7 +282,9 @@ export default function NewSaleContent({ org, clientId }: NewSaleContentProps) {
 								onSubmit={handleNextStep}
 							/>
 						)}
-						{currentStep === 2 && (
+
+						{/* Discount mode steps */}
+						{!showModeSelection && !isPrizeMode && currentStep === 2 && (
 							<SaleValueStep
 								value={state.sale.valor}
 								partnerCode={state.sale.partnerCode ?? ""}
@@ -225,7 +293,7 @@ export default function NewSaleContent({ org, clientId }: NewSaleContentProps) {
 								onSubmit={handleNextStep}
 							/>
 						)}
-						{currentStep === 3 && (
+						{!showModeSelection && !isPrizeMode && currentStep === 3 && (
 							<CashbackStep
 								available={getAvailableCashback()}
 								maxAllowed={maximumCashbackAllowed}
@@ -245,7 +313,7 @@ export default function NewSaleContent({ org, clientId }: NewSaleContentProps) {
 								onSubmit={handleNextStep}
 							/>
 						)}
-						{currentStep === 4 && (
+						{!showModeSelection && !isPrizeMode && currentStep === 4 && (
 							<ConfirmationStep
 								clientName={state.client.nome || client?.nome || ""}
 								finalValue={getFinalValue()}
@@ -254,7 +322,24 @@ export default function NewSaleContent({ org, clientId }: NewSaleContentProps) {
 								onSubmit={() => createSaleMutation(state)}
 							/>
 						)}
-						{currentStep === 5 && successData && (
+
+						{/* Prize mode steps */}
+						{!showModeSelection && isPrizeMode && currentStep === 2 && (
+							<PrizeSelectionStep prizes={prizes} availableBalance={getAvailableCashback()} onSelectPrize={handleSelectPrize} />
+						)}
+						{!showModeSelection && isPrizeMode && currentStep === 3 && (
+							<PrizeConfirmationStep
+								clientName={state.client.nome || client?.nome || ""}
+								selectedPrize={selectedPrize}
+								availableBalance={getAvailableCashback()}
+								operatorIdentifier={state.operatorIdentifier}
+								onOperatorIdentifierChange={updateOperatorIdentifier}
+								onSubmit={() => createSaleMutation(state)}
+							/>
+						)}
+
+						{/* Discount mode success */}
+						{!showModeSelection && !isPrizeMode && currentStep === 5 && successData && (
 							<SuccessStep
 								cashbackEarned={successData.visualClientAccumulatedCashbackValue ?? successData.clientAccumulatedCashbackValue}
 								newBalance={successData.visualClientNewOverallAvailableBalance ?? successData.clientNewOverallAvailableBalance ?? 0}
@@ -263,12 +348,32 @@ export default function NewSaleContent({ org, clientId }: NewSaleContentProps) {
 							/>
 						)}
 
-						{/* Botões de Ação */}
-						{currentStep < 5 && !(currentStep === 1 && client) && (
+						{/* Prize mode success */}
+						{!showModeSelection && isPrizeMode && currentStep === 4 && successData && (
+							<PrizeSuccessStep
+								selectedPrize={selectedPrize}
+								cashbackEarned={successData.visualClientAccumulatedCashbackValue ?? successData.clientAccumulatedCashbackValue}
+								newBalance={successData.visualClientNewOverallAvailableBalance ?? successData.clientNewOverallAvailableBalance ?? 0}
+								onReset={handleReset}
+								onGoHome={() => router.push(`/point-of-interaction/${org.id}`)}
+							/>
+						)}
+
+						{/* Action Buttons */}
+						{!showModeSelection && currentStep < successStep && !(currentStep === 1 && client) && (
 							<div className="flex gap-4 short:gap-2 mt-10 short:mt-3">
 								{currentStep > 1 && (
 									<Button
-										onClick={() => setCurrentStep((p) => p - 1)}
+										onClick={() => {
+											if (isPrizeMode && currentStep === 3) {
+												// Going back from confirmation to prize selection: clear prize data
+												setSelectedPrize(null);
+												updatePrizeRedemption(null);
+												updateSale({ valor: 0 });
+												updateCashback({ aplicar: false, valor: 0 });
+											}
+											setCurrentStep((p) => p - 1);
+										}}
 										variant="outline"
 										size="lg"
 										className="flex-1 rounded-2xl short:rounded-lg h-16 short:h-10 text-lg short:text-sm font-bold"
@@ -276,22 +381,290 @@ export default function NewSaleContent({ org, clientId }: NewSaleContentProps) {
 										VOLTAR
 									</Button>
 								)}
-								<Button
-									onClick={currentStep === 4 ? () => createSaleMutation(state) : handleNextStep}
-									size="lg"
-									disabled={isCreatingSale || isAttemptingToUseMoreCashbackThanAllowed}
-									className={cn(
-										"flex-1 rounded-2xl short:rounded-lg h-16 short:h-10 text-lg short:text-sm font-bold shadow-lg shadow-brand/20 uppercase tracking-widest",
-										currentStep === 4 && "bg-green-600 hover:bg-green-700",
-									)}
-								>
-									{currentStep === 4 ? (isCreatingSale ? "PROCESSANDO..." : "FINALIZAR") : "PRÓXIMO"}
-									{currentStep === 4 ? <Check className="ml-2 w-6 h-6 short:w-4 short:h-4" /> : <ArrowRight className="ml-2 w-6 h-6 short:w-4 short:h-4" />}
-								</Button>
+								{/* Hide "next" button in prize mode step 2 (prize selection handles advancing) */}
+								{!(isPrizeMode && currentStep === 2) && (
+									<Button
+										onClick={currentStep === confirmationStep ? () => createSaleMutation(state) : handleNextStep}
+										size="lg"
+										disabled={isCreatingSale || (!isPrizeMode && isAttemptingToUseMoreCashbackThanAllowed)}
+										className={cn(
+											"flex-1 rounded-2xl short:rounded-lg h-16 short:h-10 text-lg short:text-sm font-bold shadow-lg shadow-brand/20 uppercase tracking-widest",
+											currentStep === confirmationStep && "bg-green-600 hover:bg-green-700",
+										)}
+									>
+										{currentStep === confirmationStep ? (isCreatingSale ? "PROCESSANDO..." : "FINALIZAR") : "PRÓXIMO"}
+										{currentStep === confirmationStep ? (
+											<Check className="ml-2 w-6 h-6 short:w-4 short:h-4" />
+										) : (
+											<ArrowRight className="ml-2 w-6 h-6 short:w-4 short:h-4" />
+										)}
+									</Button>
+								)}
 							</div>
 						)}
 					</div>
 				</div>
+			</div>
+		</div>
+	);
+}
+
+function ModeSelectionStep({ onSelectMode }: { onSelectMode: (mode: "discount" | "prize") => void }) {
+	return (
+		<div className="space-y-8 short:space-y-3 animate-in fade-in slide-in-from-bottom-4">
+			<div className="text-center space-y-2 short:space-y-0.5">
+				<h2 className="text-xl short:text-base font-black uppercase tracking-tight">O que deseja fazer?</h2>
+				<p className="text-muted-foreground short:text-xs">Escolha entre usar desconto ou resgatar uma recompensa.</p>
+			</div>
+			<div className="grid grid-cols-1 sm:grid-cols-2 gap-4 short:gap-2 max-w-2xl mx-auto">
+				<button
+					type="button"
+					onClick={() => onSelectMode("discount")}
+					className="group flex flex-col items-center gap-4 short:gap-2 p-8 short:p-4 bg-brand/5 border-2 border-brand/20 rounded-3xl short:rounded-xl hover:border-brand hover:bg-brand/10 transition-all cursor-pointer"
+				>
+					<div className="p-4 short:p-2 bg-brand/10 rounded-2xl short:rounded-lg text-brand group-hover:bg-brand group-hover:text-brand-foreground transition-all">
+						<BadgePercent className="w-10 h-10 short:w-6 short:h-6" />
+					</div>
+					<div className="text-center">
+						<h3 className="font-black text-lg short:text-sm uppercase tracking-tight">PONTUAR E OBTER DESCONTOS</h3>
+						<p className="text-xs short:text-[0.6rem] text-muted-foreground mt-1">Registre a compra e utilize o saldo como desconto</p>
+					</div>
+				</button>
+				<button
+					type="button"
+					onClick={() => onSelectMode("prize")}
+					className="group flex flex-col items-center gap-4 short:gap-2 p-8 short:p-4 bg-amber-50 border-2 border-amber-200 rounded-3xl short:rounded-xl hover:border-amber-400 hover:bg-amber-100 transition-all cursor-pointer"
+				>
+					<div className="p-4 short:p-2 bg-amber-100 rounded-2xl short:rounded-lg text-amber-600 group-hover:bg-amber-500 group-hover:text-white transition-all">
+						<Gift className="w-10 h-10 short:w-6 short:h-6" />
+					</div>
+					<div className="text-center">
+						<h3 className="font-black text-lg short:text-sm uppercase tracking-tight">PONTUAR E RESGATAR RECOMPENSA</h3>
+						<p className="text-xs short:text-[0.6rem] text-muted-foreground mt-1">Use seu saldo para resgatar uma recompensa disponível</p>
+					</div>
+				</button>
+			</div>
+		</div>
+	);
+}
+
+function PrizeSelectionStep({
+	prizes,
+	availableBalance,
+	onSelectPrize,
+}: {
+	prizes: TPrize[];
+	availableBalance: number;
+	onSelectPrize: (prize: TPrize) => void;
+}) {
+	return (
+		<div className="space-y-6 short:space-y-2 animate-in fade-in slide-in-from-bottom-4">
+			<div className="text-center space-y-2 short:space-y-0.5">
+				<h2 className="text-xl short:text-base font-black uppercase tracking-tight">Escolha a recompensa</h2>
+				<p className="text-muted-foreground short:text-xs">
+					Saldo disponível: <span className="font-black text-green-600">{formatToMoney(availableBalance)}</span>
+				</p>
+			</div>
+			<div className="grid grid-cols-1 sm:grid-cols-2 gap-4 short:gap-2">
+				{prizes.map((prize) => {
+					const isDisabled = availableBalance < prize.valor;
+					return (
+						<button
+							key={prize.id}
+							type="button"
+							onClick={() => !isDisabled && onSelectPrize(prize)}
+							disabled={isDisabled}
+							className={cn(
+								"flex flex-col rounded-2xl short:rounded-xl border-2 overflow-hidden transition-all text-left",
+								isDisabled
+									? "opacity-50 cursor-not-allowed border-muted bg-muted/30"
+									: "border-brand/20 hover:border-brand hover:shadow-lg cursor-pointer bg-card",
+							)}
+						>
+							<div className="relative w-full aspect-[16/9] bg-muted">
+								{prize.imagemCapaUrl ? (
+									<Image src={prize.imagemCapaUrl} alt={prize.titulo} fill className="object-cover" />
+								) : (
+									<div className="flex h-full w-full items-center justify-center bg-brand/10 text-brand">
+										<Gift className="w-10 h-10 short:w-6 short:h-6" />
+									</div>
+								)}
+							</div>
+							<div className="p-4 short:p-2 flex flex-col gap-1.5 short:gap-0.5">
+								<h3 className="font-black text-sm short:text-xs uppercase tracking-tight">{prize.titulo}</h3>
+								{prize.descricao && <p className="text-xs short:text-[0.55rem] text-muted-foreground line-clamp-2">{prize.descricao}</p>}
+								<div className="flex items-center justify-between mt-1">
+									<span className="font-black text-lg short:text-base text-brand">{formatToMoney(prize.valor)}</span>
+									{isDisabled && <span className="text-[0.6rem] short:text-[0.5rem] font-bold text-red-500 uppercase">Saldo insuficiente</span>}
+								</div>
+							</div>
+						</button>
+					);
+				})}
+			</div>
+		</div>
+	);
+}
+
+function PrizeConfirmationStep({
+	clientName,
+	selectedPrize,
+	availableBalance,
+	operatorIdentifier,
+	onOperatorIdentifierChange,
+	onSubmit,
+}: {
+	clientName: string;
+	selectedPrize: TPrize | null;
+	availableBalance: number;
+	operatorIdentifier: string;
+	onOperatorIdentifierChange: (identifier: string) => void;
+	onSubmit: () => void;
+}) {
+	const balanceAfter = selectedPrize ? availableBalance - selectedPrize.valor : availableBalance;
+	return (
+		<form
+			className="space-y-8 short:space-y-2 animate-in fade-in slide-in-from-bottom-4"
+			onSubmit={(e) => {
+				e.preventDefault();
+				onSubmit();
+			}}
+		>
+			<div className="text-center space-y-2 short:space-y-0.5">
+				<h2 className="text-xl short:text-base font-black uppercase tracking-tight">Confirmar Resgate</h2>
+				<p className="text-muted-foreground short:text-xs">Confira os dados e digite a senha do operador.</p>
+			</div>
+
+			{/* Prize compact card */}
+			{selectedPrize && (
+				<div className="bg-amber-50 border-2 short:border border-amber-200 rounded-3xl short:rounded-xl p-4 short:p-2 flex items-center gap-4 short:gap-2">
+					<div className="relative w-16 h-16 short:w-10 short:h-10 min-w-16 short:min-w-10 rounded-xl short:rounded-lg overflow-hidden">
+						{selectedPrize.imagemCapaUrl ? (
+							<Image src={selectedPrize.imagemCapaUrl} alt={selectedPrize.titulo} fill className="object-cover" />
+						) : (
+							<div className="flex h-full w-full items-center justify-center bg-amber-200 text-amber-700">
+								<Gift className="w-6 h-6 short:w-4 short:h-4" />
+							</div>
+						)}
+					</div>
+					<div className="flex-1 min-w-0">
+						<h3 className="font-black text-sm short:text-xs uppercase tracking-tight truncate">{selectedPrize.titulo}</h3>
+						<p className="font-black text-lg short:text-base text-amber-700">{formatToMoney(selectedPrize.valor)}</p>
+					</div>
+				</div>
+			)}
+
+			<div className="bg-brand/5 rounded-3xl short:rounded-xl p-6 short:p-2.5 space-y-3 short:space-y-1.5 border border-brand/20">
+				<div className="flex justify-between">
+					<span className="text-muted-foreground font-bold text-xs short:text-[0.6rem] uppercase">Cliente</span>
+					<span className="font-black text-brand short:text-xs">{clientName}</span>
+				</div>
+				<div className="flex justify-between items-center">
+					<span className="text-muted-foreground font-bold text-xs short:text-[0.6rem] uppercase">Saldo</span>
+					<div className="flex items-center gap-2 short:gap-1">
+						<span className="font-bold text-sm short:text-xs text-muted-foreground">{formatToMoney(availableBalance)}</span>
+						<ArrowRight className="w-3 h-3 text-muted-foreground" />
+						<span className="font-black text-sm short:text-xs text-brand">{formatToMoney(Math.max(0, balanceAfter))}</span>
+					</div>
+				</div>
+			</div>
+
+			<div className="space-y-4 short:space-y-1.5 max-w-md mx-auto">
+				<Label className="block text-center font-black text-xs short:text-[0.6rem] text-muted-foreground uppercase tracking-widest italic">
+					Senha do Operador
+				</Label>
+				<Input
+					type="number"
+					placeholder="*****"
+					value={operatorIdentifier}
+					onChange={(e) => onOperatorIdentifierChange(formatToNumericPassword(e.target.value))}
+					className="h-16 short:h-10 text-2xl short:text-lg text-center rounded-2xl short:rounded-lg border-4 short:border border-brand/20 focus:border-green-500 transition-all font-bold"
+					onFocus={(e) => {
+						setTimeout(() => {
+							e.target.scrollIntoView({ behavior: "smooth", block: "center" });
+						}, 300);
+					}}
+				/>
+			</div>
+		</form>
+	);
+}
+
+function PrizeSuccessStep({
+	selectedPrize,
+	cashbackEarned,
+	newBalance,
+	onReset,
+	onGoHome,
+}: {
+	selectedPrize: TPrize | null;
+	cashbackEarned: number;
+	newBalance: number;
+	onReset: () => void;
+	onGoHome: () => void;
+}) {
+	return (
+		<div className="flex flex-col items-center text-center space-y-8 short:space-y-2 animate-in zoom-in duration-500">
+			<div className="relative">
+				<div className="absolute inset-0 bg-green-500/20 blur-3xl rounded-full scale-150 animate-pulse short:hidden" />
+				<div className="relative bg-green-600 p-8 short:p-3 rounded-full text-white shadow-2xl shadow-green-600/30">
+					<CheckCircle2 className="w-20 h-20 short:w-8 short:h-8" />
+				</div>
+				<div className="absolute -top-4 -right-4 short:-top-1 short:-right-1 bg-yellow-400 p-3 short:p-1 rounded-2xl short:rounded-lg text-yellow-900 shadow-lg animate-bounce">
+					<PartyPopper className="w-6 h-6 short:w-3 short:h-3" />
+				</div>
+			</div>
+
+			<div className="space-y-2 short:space-y-0.5">
+				<h2 className="text-4xl short:text-lg font-black uppercase tracking-tighter text-green-700">RESGATE REALIZADO!</h2>
+				<p className="text-muted-foreground font-medium text-lg short:text-xs">A recompensa foi resgatada com sucesso.</p>
+			</div>
+
+			{selectedPrize && (
+				<div className="bg-amber-50 border-2 short:border border-amber-200 rounded-3xl short:rounded-xl p-4 short:p-2 flex items-center gap-4 short:gap-2 w-full max-w-xl">
+					<div className="relative w-14 h-14 short:w-10 short:h-10 min-w-14 short:min-w-10 rounded-xl short:rounded-lg overflow-hidden">
+						{selectedPrize.imagemCapaUrl ? (
+							<Image src={selectedPrize.imagemCapaUrl} alt={selectedPrize.titulo} fill className="object-cover" />
+						) : (
+							<div className="flex h-full w-full items-center justify-center bg-amber-200 text-amber-700">
+								<Gift className="w-6 h-6 short:w-4 short:h-4" />
+							</div>
+						)}
+					</div>
+					<div className="flex-1 min-w-0 text-left">
+						<h3 className="font-black text-sm short:text-xs uppercase tracking-tight truncate">{selectedPrize.titulo}</h3>
+						<p className="font-black text-lg short:text-base text-amber-700">{formatToMoney(selectedPrize.valor)}</p>
+					</div>
+				</div>
+			)}
+
+			<div className="grid grid-cols-1 md:grid-cols-2 gap-6 short:gap-2 w-full max-w-xl">
+				<div className="bg-green-50 border-2 short:border border-green-200 rounded-3xl short:rounded-xl p-6 short:p-2 shadow-sm">
+					<p className="text-[0.7rem] short:text-[0.5rem] font-black text-green-600 uppercase tracking-widest mb-1 short:mb-0">CASHBACK GERADO</p>
+					<p className="text-4xl short:text-xl font-black text-green-700">{formatToMoney(cashbackEarned)}</p>
+				</div>
+				<div className="bg-brand/5 border-2 short:border border-brand/20 rounded-3xl short:rounded-xl p-6 short:p-2 shadow-sm">
+					<p className="text-[0.7rem] short:text-[0.5rem] font-black text-brand uppercase tracking-widest mb-1 short:mb-0">NOVO SALDO TOTAL</p>
+					<p className="text-4xl short:text-xl font-black text-brand">{formatToMoney(newBalance)}</p>
+				</div>
+			</div>
+
+			<div className="flex flex-col sm:flex-row gap-4 short:gap-2 w-full max-w-xl">
+				<Button
+					onClick={onReset}
+					size="lg"
+					className="flex-1 rounded-2xl short:rounded-lg h-20 short:h-10 short:py-2 text-xl short:text-sm font-black shadow-xl uppercase tracking-wider"
+				>
+					NOVA VENDA
+				</Button>
+				<Button
+					onClick={onGoHome}
+					variant="outline"
+					size="lg"
+					className="flex-1 rounded-2xl short:rounded-lg h-20 short:h-10 short:py-2 text-xl short:text-sm font-black border-4 short:border hover:bg-muted uppercase tracking-wider"
+				>
+					VOLTAR AO INÍCIO
+				</Button>
 			</div>
 		</div>
 	);

@@ -48,6 +48,13 @@ export const PointOfInteractionNewSaleStateSchema = z.object({
 				})
 				.optional()
 				.nullable(),
+			prizeRedemption: z
+				.object({
+					prizeId: z.string(),
+					prizeValue: z.number(),
+				})
+				.optional()
+				.nullable(),
 		})
 		.refine((data) => data.valor > 0, {
 			message: "Valor da venda deve ser positivo.",
@@ -64,7 +71,7 @@ export function usePointOfInteractionNewSaleState(initialOrgId: string) {
 	const [state, setState] = useState<TPointOfInteractionNewSaleState>({
 		orgId: initialOrgId,
 		client: { id: null, nome: "", cpfCnpj: null, telefone: "" },
-		sale: { valor: 0, cashback: { aplicar: false, valor: 0 }, partnerCode: null },
+		sale: { valor: 0, cashback: { aplicar: false, valor: 0 }, partnerCode: null, prizeRedemption: null },
 		operatorIdentifier: "",
 	});
 
@@ -89,6 +96,13 @@ export function usePointOfInteractionNewSaleState(initialOrgId: string) {
 		}));
 	}, []);
 
+	const updatePrizeRedemption = useCallback((prizeRedemption: TPointOfInteractionNewSaleState["sale"]["prizeRedemption"]) => {
+		setState((prev) => ({
+			...prev,
+			sale: { ...prev.sale, prizeRedemption },
+		}));
+	}, []);
+
 	const updateOperatorIdentifier = useCallback((operatorIdentifier: string) => {
 		setState((prev) => ({
 			...prev,
@@ -100,7 +114,7 @@ export function usePointOfInteractionNewSaleState(initialOrgId: string) {
 		setState({
 			orgId: initialOrgId,
 			client: { id: null, nome: "", cpfCnpj: null, telefone: "" },
-			sale: { valor: 0, cashback: { aplicar: false, valor: 0 }, partnerCode: null },
+			sale: { valor: 0, cashback: { aplicar: false, valor: 0 }, partnerCode: null, prizeRedemption: null },
 			operatorIdentifier: "",
 		});
 	}, [initialOrgId]);
@@ -114,6 +128,7 @@ export function usePointOfInteractionNewSaleState(initialOrgId: string) {
 		updateClient,
 		updateSale,
 		updateCashback,
+		updatePrizeRedemption,
 		updateOperatorIdentifier,
 		resetState,
 		redefineState,

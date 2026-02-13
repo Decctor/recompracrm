@@ -31,14 +31,25 @@ export default async function NewSalePage({
 		return <ErrorComponent msg="Organização não encontrada" />;
 	}
 
+	const prizes = await db.query.cashbackProgramPrizes.findMany({
+		where: (fields, { and, eq }) => and(eq(fields.organizacaoId, orgId), eq(fields.ativo, true)),
+		columns: {
+			id: true,
+			titulo: true,
+			descricao: true,
+			imagemCapaUrl: true,
+			valor: true,
+		},
+	});
+
 	return (
-		<OrgColorsProvider 
-			corPrimaria={org.corPrimaria} 
+		<OrgColorsProvider
+			corPrimaria={org.corPrimaria}
 			corPrimariaForeground={org.corPrimariaForeground}
 			corSecundaria={org.corSecundaria}
 			corSecundariaForeground={org.corSecundariaForeground}
 		>
-			<NewSaleContent org={org} clientId={clientId} />
+			<NewSaleContent org={org} clientId={clientId} prizes={prizes} />
 		</OrgColorsProvider>
 	);
 }

@@ -18,6 +18,8 @@ const CONFIG = {
 	MAX_RETRIES: 3, // Número máximo de tentativas por registro
 	RETRY_DELAY_MS: 1000, // Delay entre tentativas (em ms)
 	CONCURRENT_UPDATES: 10, // Número de updates paralelos dentro de cada lote
+	CLIENT_PURCHASE_BATCH_SIZE: 100, // Quantidade de clientes por lote no recálculo de compras
+	CLIENT_PURCHASE_BATCH_DELAY_MS: 500, // Delay entre lotes de clientes para aliviar o banco
 };
 
 const FULFILLMENT_METHOD_MAP: Record<string, string> = {
@@ -271,6 +273,81 @@ async function fixAllDuplicates(organizacaoId: string) {
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+	const congelatteClients = await db.query.clients.findMany({
+		where: eq(clients.organizacaoId, "27817d9a-cb04-4704-a1f4-15b81a3610d3"),
+	});
+
+	const congelatteSales = await db.query.sales.findMany({
+		where: eq(sales.organizacaoId, "27817d9a-cb04-4704-a1f4-15b81a3610d3"),
+	});
+
+	const salesByClient = new Map<
+		string,
+		{
+			oldestSale?: { id: string; dataVenda: Date | null };
+			newestSale?: { id: string; dataVenda: Date | null };
+		}
+	>();
+
+	for (const sale of congelatteSales) {
+		if (!sale.clienteId || !sale.dataVenda) {
+			continue;
+		}
+
+		const currentData = salesByClient.get(sale.clienteId) ?? {};
+		const currentTimestamp = (sale.dataVenda as Date).getTime();
+		const oldestTimestamp = currentData.oldestSale?.dataVenda ? (currentData.oldestSale.dataVenda as Date).getTime() : Number.POSITIVE_INFINITY;
+		const newestTimestamp = currentData.newestSale?.dataVenda ? (currentData.newestSale.dataVenda as Date).getTime() : Number.NEGATIVE_INFINITY;
+
+		if (currentTimestamp < oldestTimestamp) {
+			currentData.oldestSale = { id: sale.id, dataVenda: sale.dataVenda };
+		}
+
+		if (currentTimestamp > newestTimestamp) {
+			currentData.newestSale = { id: sale.id, dataVenda: sale.dataVenda };
+		}
+
+		salesByClient.set(sale.clienteId, currentData);
+	}
+
+	const clientBatches = chunkArray(congelatteClients, CONFIG.CLIENT_PURCHASE_BATCH_SIZE);
+	console.log(
+		`[INFO] [TESTING] Processing ${congelatteClients.length} clients in ${clientBatches.length} batches of up to ${CONFIG.CLIENT_PURCHASE_BATCH_SIZE} with delay ${CONFIG.CLIENT_PURCHASE_BATCH_DELAY_MS}ms`,
+	);
+
+	for (const [batchIndex, clientBatch] of clientBatches.entries()) {
+		console.log(`[INFO] [TESTING] Processing client batch ${batchIndex + 1}/${clientBatches.length} (${clientBatch.length} clients)...`);
+
+		const concurrentChunks = chunkArray(clientBatch, CONFIG.CONCURRENT_UPDATES);
+		for (const chunk of concurrentChunks) {
+			await Promise.all(
+				chunk.map(async (client) => {
+					const clientSales = salesByClient.get(client.id);
+					const clientOldestSale = clientSales?.oldestSale;
+					const clientNewestSale = clientSales?.newestSale;
+
+					if (!clientOldestSale && !clientNewestSale) {
+						return;
+					}
+
+					await db
+						.update(clients)
+						.set({
+							primeiraCompraId: clientOldestSale?.id,
+							primeiraCompraData: clientOldestSale?.dataVenda ?? undefined,
+							ultimaCompraId: clientNewestSale?.id,
+							ultimaCompraData: clientNewestSale?.dataVenda ?? undefined,
+						})
+						.where(eq(clients.id, client.id));
+				}),
+			);
+		}
+
+		if (batchIndex < clientBatches.length - 1) {
+			console.log(`[INFO] [TESTING] Waiting ${CONFIG.CLIENT_PURCHASE_BATCH_DELAY_MS}ms before next client batch...`);
+			await delay(CONFIG.CLIENT_PURCHASE_BATCH_DELAY_MS);
+		}
+	}
 	// const deletedResult = await db
 	// 	.delete(utils)
 	// 	.where(inArray(utils.identificador, ["ONLINE_IMPORTATION", "CARDAPIO_WEB_IMPORTATION", "CARDAPIO_WEB_CATALOG_SYNC"]))
@@ -279,7 +356,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 	// 	});
 
 	// const deletedCount = deletedResult.length;
-	return res.status(200).json({ message: "Hello, world!" });
+	return res.status(200).json({ message: "Hello, world!", totalClients: congelatteClients.length, totalSales: congelatteSales.length });
 	// const organizacaoId = "4a4e8578-63f0-4119-9695-a2cc068de8d6";
 
 	// // Query param to switch between preview and fix mode

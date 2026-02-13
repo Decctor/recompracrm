@@ -9,11 +9,13 @@ import type { TTimeDurationUnitsEnum } from "@/schemas/enums";
 import { type DBTransaction, db } from "@/services/drizzle";
 import {
 	cashbackProgramBalances,
+	cashbackProgramPrizes,
 	cashbackProgramTransactions,
 	cashbackPrograms,
 	clients,
 	interactions,
 	partners,
+	saleItems,
 	sales,
 } from "@/services/drizzle/schema";
 import { waitUntil } from "@vercel/functions";
@@ -124,6 +126,13 @@ const CreatePointOfInteractionTransactionInputSchema = z.object({
 		partnerCode: z
 			.string({
 				invalid_type_error: "Tipo não válido para código de parceiro.",
+			})
+			.optional()
+			.nullable(),
+		prizeRedemption: z
+			.object({
+				prizeId: z.string(),
+				prizeValue: z.number(),
 			})
 			.optional()
 			.nullable(),
@@ -350,20 +359,52 @@ async function handleNewTransaction(req: NextRequest): Promise<NextResponse<TCre
 		});
 		visualClientNewOverallAvailableBalance += visualClientAccumulatedCashbackValue;
 
+		// PRIZE VALIDATION (if prize redemption is requested)
+		const isPrizeRedemption = !!input.sale.prizeRedemption;
+		let validatedPrize: {
+			id: string;
+			valor: number;
+			produtoId: string | null;
+			produtoVarianteId: string | null;
+		} | null = null;
+		if (isPrizeRedemption) {
+			const prize = await tx.query.cashbackProgramPrizes.findFirst({
+				where: (fields, { and, eq }) =>
+					and(
+						eq(fields.id, input.sale.prizeRedemption!.prizeId),
+						eq(fields.ativo, true),
+						eq(fields.programaId, program.id),
+					),
+				columns: {
+					id: true,
+					valor: true,
+					produtoId: true,
+					produtoVarianteId: true,
+				},
+			});
+			if (!prize) {
+				throw new createHttpError.BadRequest("Recompensa não encontrada ou inativa.");
+			}
+			validatedPrize = prize;
+		}
+
 		// THIRD STEP: Processing cashback redemption (if applicable)
 		if (transactionRequiresRedemptionProcessing) {
-			if (program.resgateLimiteTipo && program.resgateLimiteValor !== null) {
-				let maxAllowedRedemption: number;
+			// Skip redemption limit checks for prize redemptions (limits only apply to cash discounts)
+			if (!isPrizeRedemption) {
+				if (program.resgateLimiteTipo && program.resgateLimiteValor !== null) {
+					let maxAllowedRedemption: number;
 
-				if (program.resgateLimiteTipo === "FIXO") {
-					maxAllowedRedemption = program.resgateLimiteValor;
-				} else if (program.resgateLimiteTipo === "PERCENTUAL") {
-					maxAllowedRedemption = (input.sale.valor * program.resgateLimiteValor) / 100;
-				} else {
-					maxAllowedRedemption = Number.MAX_SAFE_INTEGER;
-				}
-				if (input.sale.cashback.valor > maxAllowedRedemption) {
-					throw new createHttpError.BadRequest(`Valor de resgate excede o limite permitido. Máximo: R$ ${maxAllowedRedemption.toFixed(2)}`);
+					if (program.resgateLimiteTipo === "FIXO") {
+						maxAllowedRedemption = program.resgateLimiteValor;
+					} else if (program.resgateLimiteTipo === "PERCENTUAL") {
+						maxAllowedRedemption = (input.sale.valor * program.resgateLimiteValor) / 100;
+					} else {
+						maxAllowedRedemption = Number.MAX_SAFE_INTEGER;
+					}
+					if (input.sale.cashback.valor > maxAllowedRedemption) {
+						throw new createHttpError.BadRequest(`Valor de resgate excede o limite permitido. Máximo: R$ ${maxAllowedRedemption.toFixed(2)}`);
+					}
 				}
 			}
 			if (clientCashbackAvailableBalance < input.sale.cashback.valor) {
@@ -403,6 +444,9 @@ async function handleNewTransaction(req: NextRequest): Promise<NextResponse<TCre
 					saldoValorPosterior: newBalanceAfterRedemption,
 					expiracaoData: null, // RESGATE transactions do not have expiration date
 					operadorId: operatorMembershipUser.id,
+					// Prize redemption fields
+					resgateRecompensaId: validatedPrize?.id ?? null,
+					resgateRecompensaValor: validatedPrize?.valor ?? null,
 				})
 				.returning({ id: cashbackProgramTransactions.id });
 			const insertedRedemptionTransactionId = insertedRedemptionTransactionResponse[0]?.id;
@@ -532,6 +576,24 @@ async function handleNewTransaction(req: NextRequest): Promise<NextResponse<TCre
 						vendaId: transactionSaleId,
 					})
 					.where(eq(cashbackProgramTransactions.id, transactionRedemptionId));
+			}
+
+			// Insert saleItem if this is a prize redemption and the prize has a linked product
+			if (isPrizeRedemption && validatedPrize?.produtoId && transactionSaleId) {
+				await tx.insert(saleItems).values({
+					organizacaoId: input.orgId,
+					vendaId: transactionSaleId,
+					clienteId: clientId,
+					produtoId: validatedPrize.produtoId,
+					produtoVarianteId: validatedPrize.produtoVarianteId ?? null,
+					quantidade: 1,
+					valorVendaUnitario: validatedPrize.valor,
+					valorCustoUnitario: 0,
+					valorVendaTotalBruto: validatedPrize.valor,
+					valorTotalDesconto: validatedPrize.valor,
+					valorVendaTotalLiquido: 0,
+					valorCustoTotal: 0,
+				});
 			}
 
 			// TODO: Handle campaign proccesing for NOVA-COMPRA, PRIMEIRA-COMPRA, QUANTIDADE-TOTAL-COMPRAS, VALOR-TOTAL-COMPRAS
