@@ -277,6 +277,7 @@ async function handleCardapioWebImportation(
 				id: true,
 				idExterno: true,
 				nome: true,
+				telefoneBase: true,
 				primeiraCompraData: true,
 				ultimaCompraData: true,
 				analiseRFMTitulo: true,
@@ -314,20 +315,51 @@ async function handleCardapioWebImportation(
 
 		// Create maps for quick lookups
 		const existingSalesMap = new Map(existingSales.map((sale) => [sale.idExterno, sale]));
-		const existingClientsMap = new Map(
-			existingClients.map((client) => [
-				client.nome,
-				{
-					id: client.id,
-					externalId: client.idExterno,
-					firstPurchaseDate: client.primeiraCompraData,
-					lastPurchaseDate: client.ultimaCompraData,
-					rfmTitle: client.analiseRFMTitulo,
-					metadataTotalCompras: client.metadataTotalCompras ?? 0,
-					metadataValorTotalCompras: client.metadataValorTotalCompras ?? 0,
-				},
-			]),
+		const buildClientLookupData = (client: (typeof existingClients)[number]) => ({
+			id: client.id,
+			externalId: client.idExterno,
+			basePhone: client.telefoneBase,
+			firstPurchaseDate: client.primeiraCompraData,
+			lastPurchaseDate: client.ultimaCompraData,
+			rfmTitle: client.analiseRFMTitulo,
+			metadataTotalCompras: client.metadataTotalCompras ?? 0,
+			metadataValorTotalCompras: client.metadataValorTotalCompras ?? 0,
+		});
+		const existingClientsMapByExternalId = new Map(
+			existingClients.filter((client) => !!client.idExterno).map((client) => [client.idExterno, buildClientLookupData(client)]),
 		);
+		const existingClientsMapByBasePhone = new Map(
+			existingClients.filter((client) => !!client.telefoneBase).map((client) => [client.telefoneBase, buildClientLookupData(client)]),
+		);
+		const indexClientInLookupMaps = (client: ReturnType<typeof buildClientLookupData>) => {
+			if (client.externalId) {
+				existingClientsMapByExternalId.set(client.externalId, client);
+			}
+			if (client.basePhone) {
+				existingClientsMapByBasePhone.set(client.basePhone, client);
+			}
+		};
+		const resolveExistingClient = (sale: MappedCardapioWebSale) => {
+			const externalId = sale.cliente?.idExterno;
+			if (externalId) {
+				const clientByExternalId = existingClientsMapByExternalId.get(externalId);
+				if (clientByExternalId) return clientByExternalId;
+			}
+
+			const basePhone = sale.cliente?.telefoneBase;
+			if (basePhone) {
+				const clientByBasePhone = existingClientsMapByBasePhone.get(basePhone);
+				if (clientByBasePhone) {
+					// When we match by base phone, we also index by external id for upcoming sales in this same run.
+					if (externalId && !existingClientsMapByExternalId.has(externalId)) {
+						existingClientsMapByExternalId.set(externalId, clientByBasePhone);
+					}
+					return clientByBasePhone;
+				}
+			}
+
+			return undefined;
+		};
 		const existingProductsMap = new Map(existingProducts.map((product) => [product.codigo, product.id]));
 		const existingPartnersMap = new Map(existingPartners.map((partner) => [partner.identificador, { id: partner.id, clienteId: partner.clienteId }]));
 		const existingAddOnsMap = new Map(existingAddOns.map((addon) => [addon.idExterno, addon.id]));
@@ -434,7 +466,7 @@ async function handleCardapioWebImportation(
 			const isValidClient = !!clientName && clientName !== "CLIENTE CARDAPIO WEB";
 
 			// Sync Client
-			const equivalentSaleClient = clientName ? existingClientsMap.get(clientName) : undefined;
+			const equivalentSaleClient = cardapioWebSale.cliente ? resolveExistingClient(cardapioWebSale) : undefined;
 			let saleClientId = equivalentSaleClient?.id;
 
 			if (!saleClientId && isValidClient && cardapioWebSale.cliente) {
@@ -455,9 +487,10 @@ async function handleCardapioWebImportation(
 
 				saleClientId = insertedClient.id;
 				isNewClient = true;
-				existingClientsMap.set(clientName, {
+				indexClientInLookupMaps({
 					id: insertedClient.id,
 					externalId: cardapioWebSale.cliente.idExterno,
+					basePhone: cardapioWebSale.cliente.telefoneBase,
 					firstPurchaseDate: isValidSale ? saleDate : null,
 					lastPurchaseDate: isValidSale ? saleDate : null,
 					rfmTitle: "CLIENTES RECENTES",
@@ -684,7 +717,7 @@ async function handleCardapioWebImportation(
 
 			// Campaign processing for NOVA-COMPRA
 			if (isNewSale && !isNewClient && isValidSale && saleClientId) {
-				const clientRfmTitle = existingClientsMap.get(clientName || "")?.rfmTitle ?? "CLIENTES RECENTES";
+				const clientRfmTitle = equivalentSaleClient?.rfmTitle ?? "CLIENTES RECENTES";
 				const applicableCampaigns = campaignsForNewPurchase.filter((campaign) => {
 					const meetsValueTrigger =
 						campaign.gatilhoNovaCompraValorMinimo === null ||
@@ -899,7 +932,7 @@ async function handleCardapioWebImportation(
 
 						// CASHBACK-ACUMULADO campaigns
 						if (campaignsForCashbackAccumulation.length > 0) {
-							const clientRfmTitle = existingClientsMap.get(clientName || "")?.rfmTitle ?? "CLIENTES RECENTES";
+							const clientRfmTitle = equivalentSaleClient?.rfmTitle ?? "CLIENTES RECENTES";
 							const applicableCampaigns = campaignsForCashbackAccumulation.filter((campaign) => {
 								const meetsNewThreshold =
 									campaign.gatilhoNovoCashbackAcumuladoValorMinimo == null || accumulatedBalance >= campaign.gatilhoNovoCashbackAcumuladoValorMinimo;

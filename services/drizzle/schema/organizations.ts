@@ -2,7 +2,10 @@ import type { TOrganizationConfiguration, TOrganizationIntegrationConfig } from 
 import type { TUserPermissions } from "@/schemas/users";
 import { relations } from "drizzle-orm";
 import { boolean, integer, jsonb, text, timestamp, varchar } from "drizzle-orm/pg-core";
-import { newTable, organizationIntegrationTypeEnum, sellers, users } from ".";
+import { organizationIntegrationTypeEnum } from "./enums";
+import { newTable } from "./common";
+import { sellers } from "./sellers";
+import { users } from "./users";
 
 export const organizations = newTable("organizations", {
 	id: varchar("id", { length: 255 })
