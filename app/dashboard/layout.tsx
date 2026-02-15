@@ -28,7 +28,7 @@ const MainLayout = async ({ children }: { children: ReactNode }) => {
 						<AppHeader />
 						{children}
 						<OnboardingQualityBubble />
-						<AIHintsBubble />
+						{/* <AIHintsBubble /> */}
 					</OrgColorsProvider>
 				</SidebarInset>
 			</Suspense>

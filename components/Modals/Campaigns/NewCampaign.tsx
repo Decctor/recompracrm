@@ -58,6 +58,7 @@ export default function NewCampaign({ user, organizationId, closeModal, callback
 			stateIsLoading={false}
 			stateError={null}
 			closeMenu={closeModal}
+			dialogVariant="md"
 		>
 			<CampaignsGeneralBlock
 				campaign={state.campaign}

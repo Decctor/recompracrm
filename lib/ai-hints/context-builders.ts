@@ -89,7 +89,8 @@ export async function buildContextForSubject(organizacaoId: string, assunto: TAI
 // ═══════════════════════════════════════════════════════════════
 
 async function getBaseContext(organizacaoId: string): Promise<TOrgContext> {
-	const thirtyDaysAgo = dayjs().subtract(30, "days").toDate();
+	const thirtyDaysAgoDate = dayjs().subtract(30, "days").toDate();
+	const thirtyDaysAgoIso = thirtyDaysAgoDate.toISOString();
 
 	// Parallel queries for efficiency
 	const [org, clientStats, salesStats] = await Promise.all([
@@ -99,7 +100,7 @@ async function getBaseContext(organizacaoId: string): Promise<TOrgContext> {
 		db
 			.select({
 				total: count(),
-				ativos: sql<number>`count(*) filter (where ${clients.ultimaCompraData} >= ${thirtyDaysAgo})`,
+				ativos: sql<number>`count(*) filter (where ${clients.ultimaCompraData} >= ${thirtyDaysAgoIso}::timestamptz)`,
 			})
 			.from(clients)
 			.where(eq(clients.organizacaoId, organizacaoId)),
@@ -109,7 +110,7 @@ async function getBaseContext(organizacaoId: string): Promise<TOrgContext> {
 				count: count(),
 			})
 			.from(sales)
-			.where(and(eq(sales.organizacaoId, organizacaoId), gte(sales.dataVenda, thirtyDaysAgo))),
+			.where(and(eq(sales.organizacaoId, organizacaoId), gte(sales.dataVenda, thirtyDaysAgoDate))),
 	]);
 
 	const totalClientes = clientStats[0]?.total || 0;
@@ -178,7 +179,7 @@ async function getCampaignsContext(organizacaoId: string) {
 		db
 			.select({ count: count() })
 			.from(campaigns)
-			.where(and(eq(campaigns.organizacaoId, organizacaoId), eq(campaigns.status, "ATIVA"))),
+			.where(and(eq(campaigns.organizacaoId, organizacaoId), eq(campaigns.ativo, true))),
 		db
 			.select({ count: count() })
 			.from(sales)
@@ -223,6 +224,7 @@ async function getSellersContext(organizacaoId: string) {
 async function getTrendContext(organizacaoId: string) {
 	const thirtyDaysAgo = dayjs().subtract(30, "days").toDate();
 	const sixtyDaysAgo = dayjs().subtract(60, "days").toDate();
+	const thirtyDaysAgoIso = thirtyDaysAgo.toISOString();
 
 	const [currentPeriod, previousPeriod] = await Promise.all([
 		db
@@ -236,7 +238,7 @@ async function getTrendContext(organizacaoId: string) {
 				and(
 					eq(sales.organizacaoId, organizacaoId),
 					gte(sales.dataVenda, sixtyDaysAgo),
-					sql`${sales.dataVenda} < ${thirtyDaysAgo}`,
+					sql`${sales.dataVenda} < ${thirtyDaysAgoIso}::timestamptz`,
 				),
 			),
 	]);

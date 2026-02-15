@@ -44,6 +44,31 @@ interface GenerateHintsResult {
 	limiteAtingido: boolean;
 }
 
+// Provider-safe schema for structured output generation.
+// We intentionally keep this schema simple to avoid unsupported JSON Schema constructs
+// (e.g. nested anyOf/not) generated from complex unions with optional+nullable fields.
+const AIHintGeneratedItemSchema = z.object({
+	tipo: z.enum([
+		"campaign-suggestion",
+		"campaign-optimization",
+		"rfm-action",
+		"client-reactivation",
+		"sales-trend",
+		"product-insight",
+		"seller-performance",
+		"general",
+	]),
+	titulo: z.string().max(100),
+	descricao: z.string().max(500),
+	acaoSugerida: z.string().max(200).nullable(),
+	urlAcao: z.string().nullable(),
+	dadosJson: z.string(),
+});
+
+const AIHintsGenerationSchema = z.object({
+	hints: z.array(AIHintGeneratedItemSchema).max(3),
+});
+
 // ═══════════════════════════════════════════════════════════════
 // MAIN FUNCTION
 // ═══════════════════════════════════════════════════════════════
@@ -97,20 +122,43 @@ export async function generateHintsForSubject({ organizacaoId, assunto, contexto
 
 	// 6. Generate hints using AI SDK with Vercel AI Gateway
 	const { output: generatedHints, usage } = await generateText({
-		model: gateway("openai/gpt-4o"),
+		model: gateway('openai/gpt-4o'),
 		output: Output.object({
-			schema: z.object({
-				hints: z.array(AIHintContentSchema).max(3),
-			}),
+			schema: AIHintsGenerationSchema,
 		}),
 		system: systemPrompt,
 		prompt: userPrompt,
 	});
+	console.log("[GENERATE HINTS] Generated hints:", generatedHints);
+	// 7. Validate generated hints against the strict domain schema
+	const validHints = generatedHints.hints
+		.map((hint) => {
+			let parsedDados: unknown = {};
+			try {
+				parsedDados = JSON.parse(hint.dadosJson);
+			} catch {
+				parsedDados = {};
+			}
 
-	// 7. Filter duplicates
-	const uniqueHints = filterDuplicateHints(generatedHints.hints, existingHints);
-
-	// 8. Store hints in database
+			const { success, data, error } = AIHintContentSchema.safeParse({
+				tipo: hint.tipo,
+				titulo: hint.titulo,
+				descricao: hint.descricao,
+				acaoSugerida: hint.acaoSugerida,
+				urlAcao: hint.urlAcao,
+				dados: parsedDados,
+			});
+			console.log({success, data, error})
+			return { success, data, error };
+		})
+		.filter((result)=> result.success)
+		.map((result) => result.data);
+		console.log("[GENERATE HINTS] Valid hints:", validHints);
+	console.log("[GENERATE HINTS] Valid hints length:", validHints.length);
+	// 8. Filter duplicates
+	const uniqueHints = filterDuplicateHints(validHints, existingHints);
+	console.log("[GENERATE HINTS] Unique hints length:", uniqueHints.length);
+	// 9. Store hints in database
 	const insertedHints = await Promise.all(
 		uniqueHints.map(async (hint) => {
 			const expirationHours = HINT_EXPIRATION_HOURS[hint.tipo];
@@ -124,7 +172,7 @@ export async function generateHintsForSubject({ organizacaoId, assunto, contexto
 					tipo: hint.tipo,
 					conteudo: hint,
 					modeloUtilizado: "openai/gpt-4o",
-					tokensUtilizados: Math.floor(usage.totalTokens / Math.max(uniqueHints.length, 1)),
+					tokensUtilizados: Math.floor((usage.totalTokens ?? 0) / Math.max(uniqueHints.length, 1)),
 					relevancia: calculateRelevance(hint),
 					dataExpiracao,
 				})
@@ -136,7 +184,7 @@ export async function generateHintsForSubject({ organizacaoId, assunto, contexto
 
 	return {
 		hints: insertedHints,
-		tokensUsados: usage.totalTokens,
+		tokensUsados: usage.totalTokens ?? 0,
 		limiteAtingido: false,
 	};
 }
@@ -175,7 +223,7 @@ FORMATO OBRIGATÓRIO:
 - descricao: Explicação clara do insight com dados (máx 500 caracteres)
 - acaoSugerida: CTA claro e direto (ex: "Ver clientes em risco", "Criar campanha")
 - urlAcao: URL relativa para a ação (ex: "/dashboard/commercial/clients")
-- dados: Campos específicos do tipo de hint conforme o schema
+- dadosJson: string JSON válida com os campos específicos do tipo de hint
 
 EXEMPLOS DE BONS HINTS:
 - "42 clientes em risco de churn precisam de atenção imediata"

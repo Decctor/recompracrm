@@ -45,6 +45,8 @@ type CampaignsPageProps = {
 };
 export default function CampaignsPage({ user, membership }: CampaignsPageProps) {
 	const [viewMode, setViewMode] = useState<"stats" | "database">("stats");
+	const [newCampaignModalIsOpen, setNewCampaignModalIsOpen] = useState<boolean>(false);
+
 	return (
 		<div className="w-full h-full flex flex-col gap-3">
 			<Tabs value={viewMode} onValueChange={(v: string) => setViewMode(v as "stats" | "database")}>
@@ -55,13 +57,13 @@ export default function CampaignsPage({ user, membership }: CampaignsPageProps) 
 					</TabsTrigger>
 					<TabsTrigger value="database" className="flex items-center gap-1.5 px-2 py-2 rounded-lg">
 						<Database className="w-4 h-4 min-w-4 min-h-4" />
-						Banco de Dados
+						Minhas Campanhas
 					</TabsTrigger>
 				</TabsList>
-				<TabsContent value="stats">
+				<TabsContent value="stats" className="flex flex-col gap-3">
 					<CampaignsStatsView />
 				</TabsContent>
-				<TabsContent value="database">
+				<TabsContent value="database" className="flex flex-col gap-3">
 					<CampaignsDatabaseView user={user} membership={membership} />
 				</TabsContent>
 			</Tabs>

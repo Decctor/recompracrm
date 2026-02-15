@@ -46,7 +46,7 @@ export const AIHintCampaignSuggestionSchema = AIHintBaseSchema.extend({
 		gatilhoSugerido: z.enum(["nova-compra", "permanencia-segmentacao", "cashback-acumulado", "aniversario"]).optional().nullable(),
 		segmentosAlvo: z.array(z.string()).optional().nullable(),
 		cashbackSugerido: z.number().min(0).max(100).optional().nullable(),
-		motivacao: z.string(),
+		motivacao: z.string().optional().nullable(),
 	}),
 });
 
