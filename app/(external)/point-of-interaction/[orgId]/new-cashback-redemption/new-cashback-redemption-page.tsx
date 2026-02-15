@@ -4,27 +4,27 @@ import type {
 	TCreateCashbackProgramRedemptionInput,
 	TCreateCashbackProgramRedemptionOutput,
 } from "@/app/api/cashback-programs/transactions/redemption/route";
-import TextInput from "@/components/Inputs/TextInput";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getErrorMessage } from "@/lib/errors";
-import { formatToCPForCNPJ, formatToMoney, formatToNumericPassword, formatToPhone } from "@/lib/formatting";
+import { formatToMoney, formatToNumericPassword, formatToPhone } from "@/lib/formatting";
 import { createCashbackProgramRedemption } from "@/lib/mutations/cashback-programs";
 import { createClientViaPointOfInteraction } from "@/lib/mutations/clients";
 import { useClientByLookup } from "@/lib/queries/clients";
 import { cn } from "@/lib/utils";
-import type { TClientByLookupOutput } from "@/pages/api/clients/lookup";
 import type { TOrganizationEntity } from "@/services/drizzle/schema";
 import { usePointOfInteractionCashbackRedemptionState } from "@/state-hooks/use-point-of-interaction-cashback-redemption-state";
+import { ClientStep } from "../_shared/components/client-step";
+import { StepProgressHeader } from "../_shared/components/step-progress-header";
+import { SuccessCelebration } from "../_shared/components/success-celebration";
+import type { TStepDefinition } from "../_shared/types";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
 	AlertTriangle,
 	ArrowLeft,
 	ArrowRight,
 	Check,
-	CheckCircle2,
-	Loader2,
 	Lock,
 	PartyPopper,
 	Plus,
@@ -40,6 +40,13 @@ import { useRouter } from "next/navigation";
 import React, { useEffect } from "react";
 import { toast } from "sonner";
 import useSound from "use-sound";
+
+const REDEMPTION_STEPS: TStepDefinition[] = [
+	{ id: 1, label: "CLIENTE", icon: UserRound },
+	{ id: 2, label: "VENDA", icon: Tag },
+	{ id: 3, label: "RESGATE", icon: Wallet },
+	{ id: 4, label: "CONFIRMAÇÃO", icon: Lock },
+];
 
 type NewCashbackRedemptionContentProps = {
 	org: {
@@ -208,27 +215,7 @@ export default function NewCashbackRedemptionContent({ org, clientId, redemption
 
 				{/* Wrapper de Estágios */}
 				<div className="bg-card rounded-3xl shadow-xl overflow-hidden border border-brand/20">
-					{currentStep < 5 && (
-						<div className="flex border-b">
-							{[
-								{ id: 1, label: "CLIENTE", icon: UserRound },
-								{ id: 2, label: "VENDA", icon: Tag },
-								{ id: 3, label: "RESGATE", icon: Wallet },
-								{ id: 4, label: "CONFIRMAÇÃO", icon: Lock },
-							].map((step) => (
-								<div
-									key={step.id}
-									className={cn(
-										"flex-1 flex flex-col lg:flex-row items-center justify-center gap-2 py-4 transition-all border-b-4",
-										currentStep === step.id ? "border-brand text-brand bg-brand/5" : "border-transparent text-muted-foreground",
-									)}
-								>
-									<step.icon className="w-4 h-4" />
-									<span className="text-[0.6rem] lg:text-xs font-black tracking-widest">{step.label}</span>
-								</div>
-							))}
-						</div>
-					)}
+					{currentStep < 5 && <StepProgressHeader steps={REDEMPTION_STEPS} currentStep={currentStep} />}
 
 					<div className="p-6 md:p-10">
 						{currentStep === 1 && (
@@ -242,17 +229,21 @@ export default function NewCashbackRedemptionContent({ org, clientId, redemption
 								newClientData={state.client}
 								onNewClientChange={updateClient}
 								onSubmit={handleNextStep}
-								onCreateNewClient={() => {
-									createClientMutation({
-										orgId: org.id,
-										client: {
-											nome: state.client.nome,
-											telefone: state.client.telefone,
-											cpfCnpj: state.client.cpfCnpj || null,
-										},
-									});
+								newClientAction={{
+									label: "CRIAR CADASTRO",
+									loadingLabel: "CRIANDO CADASTRO...",
+									onSubmit: () => {
+										createClientMutation({
+											orgId: org.id,
+											client: {
+												nome: state.client.nome,
+												telefone: state.client.telefone,
+												cpfCnpj: state.client.cpfCnpj || null,
+											},
+										});
+									},
+									isPending: isCreatingClient,
 								}}
-								isCreatingClient={isCreatingClient}
 							/>
 						)}
 						{currentStep === 2 && <SaleValueStep value={state.saleValue} onChange={updateSaleValue} onSubmit={handleNextStep} />}
@@ -295,11 +286,15 @@ export default function NewCashbackRedemptionContent({ org, clientId, redemption
 							/>
 						)}
 						{currentStep === 5 && !isNewClientSignup && successData && (
-							<SuccessStep
-								redeemedAmount={state.redemptionValue}
-								newBalance={successData.newBalance}
-								onReset={handleReset}
-								onGoHome={() => router.push(`/point-of-interaction/${org.id}`)}
+							<SuccessCelebration
+								title="RESGATE REALIZADO!"
+								subtitle="O saldo foi baixado com sucesso."
+								stats={[
+									{ label: "VALOR RESGATADO", value: state.redemptionValue, variant: "green" },
+									{ label: "NOVO SALDO TOTAL", value: successData.newBalance, variant: "brand" },
+								]}
+								primaryAction={{ label: "NOVO RESGATE", onClick: handleReset }}
+								secondaryAction={{ label: "VOLTAR AO INÍCIO", onClick: () => router.push(`/point-of-interaction/${org.id}`) }}
 							/>
 						)}
 
@@ -409,308 +404,7 @@ function NewClientSuccessStep({
 	);
 }
 
-function SuccessStep({
-	redeemedAmount,
-	newBalance,
-	onReset,
-	onGoHome,
-}: {
-	redeemedAmount: number;
-	newBalance: number;
-	onReset: () => void;
-	onGoHome: () => void;
-}) {
-	return (
-		<div className="flex flex-col items-center text-center space-y-8 animate-in zoom-in duration-500">
-			<div className="relative">
-				<div className="absolute inset-0 bg-green-500/20 blur-3xl rounded-full scale-150 animate-pulse" />
-				<div className="relative bg-green-600 p-8 rounded-full text-white shadow-2xl shadow-green-600/30">
-					<CheckCircle2 className="w-20 h-20" />
-				</div>
-				<div className="absolute -top-4 -right-4 bg-yellow-400 p-3 rounded-2xl text-yellow-900 shadow-lg animate-bounce">
-					<PartyPopper className="w-6 h-6" />
-				</div>
-			</div>
-
-			<div className="space-y-2">
-				<h2 className="text-4xl font-black uppercase tracking-tighter text-green-700">RESGATE REALIZADO!</h2>
-				<p className="text-muted-foreground font-medium text-lg">O saldo foi baixado com sucesso.</p>
-			</div>
-
-			<div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-xl">
-				<div className="bg-green-50 border-2 border-green-200 rounded-3xl p-6 shadow-sm">
-					<p className="text-[0.7rem] font-black text-green-600 uppercase tracking-widest mb-1">VALOR RESGATADO</p>
-					<p className="text-4xl font-black text-green-700">{formatToMoney(redeemedAmount)}</p>
-				</div>
-				<div className="bg-brand/5 border-2 border-brand/20 rounded-3xl p-6 shadow-sm">
-					<p className="text-[0.7rem] font-black text-brand uppercase tracking-widest mb-1">NOVO SALDO TOTAL</p>
-					<p className="text-4xl font-black text-brand">{formatToMoney(newBalance)}</p>
-				</div>
-			</div>
-
-			<div className="flex flex-col sm:flex-row gap-4 w-full max-w-xl">
-				<Button onClick={onReset} size="lg" className="flex-1 rounded-2xl h-20 text-xl font-black shadow-xl uppercase tracking-wider">
-					NOVO RESGATE
-				</Button>
-				<Button
-					onClick={onGoHome}
-					variant="outline"
-					size="lg"
-					className="flex-1 rounded-2xl h-20 text-xl font-black border-4 hover:bg-muted uppercase tracking-wider"
-				>
-					VOLTAR AO INÍCIO
-				</Button>
-			</div>
-		</div>
-	);
-}
-
 // --- Sub-componentes ---
-
-function ClientStep({
-	client,
-	phone,
-	onPhoneChange,
-	newClientData,
-	onNewClientChange,
-	isLoadingClient,
-	isSuccessClient,
-	onSubmit,
-	onCancelSearch,
-	onCreateNewClient,
-	isCreatingClient,
-}: {
-	client: TClientByLookupOutput["data"];
-	phone: string;
-	onPhoneChange: (phone: string) => void;
-	newClientData: { id?: string | null; nome: string; cpfCnpj?: string | null; telefone: string };
-	onNewClientChange: (data: Partial<typeof newClientData>) => void;
-	isLoadingClient: boolean;
-	isSuccessClient: boolean;
-	onSubmit: () => void;
-	onCancelSearch: () => void;
-	onCreateNewClient: () => void;
-	isCreatingClient: boolean;
-}) {
-	// Auto-advance timer state
-	const ADVANCE_COUNTDOWN_SECONDS = 3;
-	const [countdown, setCountdown] = React.useState<number | null>(null);
-	const [isAdvancing, setIsAdvancing] = React.useState(false);
-	const [wasCancelled, setWasCancelled] = React.useState(false);
-	const [playAction] = useSound("/sounds/action-completed.mp3");
-
-	// Reset wasCancelled when user starts typing a new phone number
-	React.useEffect(() => {
-		if (phone && wasCancelled) {
-			setWasCancelled(false);
-		}
-	}, [phone, wasCancelled]);
-
-	// Start countdown when client is found
-	React.useEffect(() => {
-		if (isSuccessClient && client && countdown === null && !isAdvancing && !wasCancelled) {
-			playAction();
-			setCountdown(ADVANCE_COUNTDOWN_SECONDS);
-		}
-	}, [isSuccessClient, client, countdown, isAdvancing, wasCancelled, playAction]);
-
-	// Handle countdown timer and auto-advance
-	React.useEffect(() => {
-		if (countdown === null || countdown < 0) return;
-
-		if (countdown === 0) {
-			setIsAdvancing(true);
-			onSubmit();
-			return;
-		}
-
-		const timer = setTimeout(() => {
-			setCountdown((prev) => (prev !== null ? prev - 1 : null));
-		}, 1000);
-
-		return () => clearTimeout(timer);
-	}, [countdown, onSubmit]);
-
-	// Cancel auto-advance and reset search
-	function handleCancelAdvance() {
-		setCountdown(null);
-		setIsAdvancing(false);
-		setWasCancelled(true);
-		onCancelSearch();
-	}
-
-	React.useEffect(() => {
-		// Keep phone in sync with lookup
-		if (phone && phone !== newClientData.telefone) {
-			onNewClientChange({ telefone: phone });
-		}
-	}, [phone, newClientData.telefone, onNewClientChange]);
-
-	// Show found client card with auto-advance
-	const showFoundClientCard = isSuccessClient && client && !isAdvancing && !wasCancelled;
-	// Show input only when not found or cancelled
-	const showInput = !showFoundClientCard && !isAdvancing;
-	// Check if we're creating a new client (no existing client found)
-	const isNewClient = isSuccessClient && !client;
-
-	const handleFormSubmit = () => {
-		if (isNewClient) {
-			// Validate new client data
-			if (!newClientData.nome || !newClientData.telefone) {
-				toast.error("Complete os dados do cliente.");
-				return;
-			}
-			onCreateNewClient();
-		} else {
-			onSubmit();
-		}
-	};
-
-	return (
-		<form
-			className="space-y-8 animate-in fade-in slide-in-from-bottom-4"
-			onSubmit={(e) => {
-				e.preventDefault();
-				handleFormSubmit();
-			}}
-		>
-			<div className="text-center space-y-2">
-				<h2 className="text-xl font-black uppercase tracking-tight">Quem é o cliente?</h2>
-				<p className="text-muted-foreground">Digite o número de telefone para localizar o perfil.</p>
-			</div>
-
-			{showInput ? (
-				<>
-					<div className="max-w-md mx-auto">
-						<TextInput
-							label="TELEFONE"
-							inputType="tel"
-							placeholder="(00) 00000-0000"
-							value={phone}
-							handleChange={onPhoneChange}
-							onFocus={(e) => {
-								setTimeout(() => {
-									e.target.scrollIntoView({ behavior: "smooth", block: "center" });
-								}, 300);
-							}}
-						/>
-					</div>
-					{isLoadingClient ? (
-						<div className="w-full flex items-center justify-center gap-1.5">
-							<Loader2 className="w-4 h-4 animate-spin" />
-							<p className="text-sm text-muted-foreground">Buscando registros...</p>
-						</div>
-					) : null}
-				</>
-			) : null}
-
-			{showFoundClientCard && client ? (
-				<div className="bg-green-50 border-2 border-green-200 rounded-3xl p-6 flex flex-col items-center gap-4 animate-in zoom-in">
-					<div className="text-center">
-						<p className="text-xs font-bold text-green-600 uppercase tracking-widest mb-1">✓ Perfil Encontrado</p>
-						<p className="text-green-900 font-black text-2xl uppercase italic">{client.nome}</p>
-						<p className="text-green-600 font-bold">{formatToPhone(client.telefone)}</p>
-					</div>
-					<div className="bg-green-600 w-full rounded-2xl p-4 text-center text-white shadow-md">
-						<p className="text-[0.6rem] font-bold opacity-80 uppercase tracking-widest">Saldo Disponível</p>
-						<p className="text-3xl font-black">{formatToMoney(client.saldos[0]?.saldoValorDisponivel ?? 0)}</p>
-					</div>
-
-					{/* Progress bar and countdown */}
-					<div className="w-full flex flex-col gap-2">
-						<div className="w-full h-2 bg-green-200 rounded-full overflow-hidden">
-							<div
-								className="h-full bg-green-600 transition-all duration-1000 ease-linear"
-								style={{ width: `${((countdown ?? 0) / ADVANCE_COUNTDOWN_SECONDS) * 100}%` }}
-							/>
-						</div>
-						<p className="text-sm text-green-700 text-center font-medium">
-							Avançando em {countdown} segundo{countdown !== 1 ? "s" : ""}...
-						</p>
-					</div>
-
-					<Button
-						type="button"
-						variant="outline"
-						size="fit"
-						className="w-full p-4 font-black border-green-300 text-green-700 hover:bg-green-100"
-						onClick={handleCancelAdvance}
-					>
-						CANCELAR
-					</Button>
-				</div>
-			) : null}
-
-			{isAdvancing ? (
-				<div className="w-full flex flex-col items-center justify-center gap-3 py-8">
-					<Loader2 className="w-8 h-8 text-green-600 animate-spin" />
-					<p className="text-sm text-muted-foreground font-medium">Avançando...</p>
-				</div>
-			) : null}
-
-			{isSuccessClient && !client && showInput ? (
-				<div className="bg-blue-50 border-2 border-blue-200 rounded-3xl p-6 animate-in zoom-in">
-					<div className="flex items-center gap-3 mb-4">
-						<div className="p-2 bg-blue-600 rounded-lg text-white">
-							<UserPlus className="w-5 h-5" />
-						</div>
-						<div>
-							<h3 className="font-black uppercase text-blue-900">NOVO CLIENTE</h3>
-							<p className="text-xs text-blue-600">Complete os dados para criar o seu cadastro!</p>
-						</div>
-					</div>
-					<div className="w-full flex flex-col gap-4">
-						<div className="w-full flex flex-col gap-1.5">
-							<TextInput
-								label="NOME COMPLETO"
-								placeholder="Digite o nome do cliente"
-								value={newClientData.nome}
-								handleChange={(value) => onNewClientChange({ nome: value })}
-								onFocus={(e) => {
-									setTimeout(() => {
-										e.target.scrollIntoView({ behavior: "smooth", block: "center" });
-									}, 300);
-								}}
-								width="100%"
-							/>
-							<TextInput
-								label="CPF/CNPJ (OPCIONAL)"
-								inputType="tel"
-								placeholder="Digite o CPF/CNPJ do cliente"
-								value={newClientData.cpfCnpj || ""}
-								handleChange={(value) => onNewClientChange({ cpfCnpj: formatToCPForCNPJ(value) })}
-								onFocus={(e) => {
-									setTimeout(() => {
-										e.target.scrollIntoView({ behavior: "smooth", block: "center" });
-									}, 300);
-								}}
-								width="100%"
-							/>
-						</div>
-						<Button
-							type="submit"
-							size="lg"
-							disabled={isCreatingClient || !newClientData.nome || !newClientData.telefone}
-							className="w-full rounded-2xl h-16 text-lg font-bold shadow-lg shadow-blue-600/20 bg-blue-600 hover:bg-blue-700 uppercase tracking-widest"
-						>
-							{isCreatingClient ? (
-								<>
-									<Loader2 className="w-5 h-5 mr-2 animate-spin" />
-									CRIANDO CADASTRO...
-								</>
-							) : (
-								<>
-									<UserPlus className="w-5 h-5 mr-2" />
-									CRIAR CADASTRO
-								</>
-							)}
-						</Button>
-					</div>
-				</div>
-			) : null}
-		</form>
-	);
-}
 
 function SaleValueStep({ value, onChange, onSubmit }: { value: number; onChange: (value: number) => void; onSubmit: () => void }) {
 	const helpers = [10, 25, 50, 100];
