@@ -40,6 +40,13 @@ export default async function NewSalePage({
 			imagemCapaUrl: true,
 			valor: true,
 		},
+		with: {
+			produto: {
+				columns: {
+					grupo: true,
+				},
+			},
+		},
 	});
 	const cashbackProgramConfig = await db.query.cashbackPrograms.findFirst({
 		where: (fields, { and, eq }) => and(eq(fields.organizacaoId, orgId), eq(fields.ativo, true)),
