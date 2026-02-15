@@ -13,6 +13,7 @@ import StatUnitCard from "@/components/Stats/StatUnitCard";
 import GeneralPaginationComponent from "@/components/Utils/Pagination";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { StatBadge } from "@/components/ui/stat-badge";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { TAuthUserSession } from "@/lib/authentication/types";
@@ -361,14 +362,20 @@ function PartnersPagePartnerCard({
 				</div>
 				<div className="flex items-center gap-3 flex-col md:flex-row gap-y-1">
 					<div className="flex items-center gap-3">
-						<div className={cn("flex items-center gap-1.5 rounded-md px-1.5 py-1.5 text-[0.65rem] font-bold bg-primary/10 text-primary")}>
-							<CirclePlus className="w-3 min-w-3 h-3 min-h-3" />
-							<p className="text-xs font-bold tracking-tight uppercase">{partner.estatisticas.vendasQtdeTotal}</p>
-						</div>
-						<div className={cn("flex items-center gap-1.5 rounded-md px-1.5 py-1.5 text-[0.65rem] font-bold bg-primary/10 text-primary")}>
-							<BadgeDollarSign className="w-3 min-w-3 h-3 min-h-3" />
-							<p className="text-xs font-bold tracking-tight uppercase">{formatToMoney(partner.estatisticas.vendasValorTotal)}</p>
-						</div>
+						<StatBadge
+							icon={<CirclePlus className="w-3 min-w-3 h-3 min-h-3" />}
+							value={partner.estatisticas.vendasQtdeTotal}
+							tooltipContent="Quantidade total de vendas no período de filtro"
+							className="rounded-md px-1.5 py-1.5 font-bold bg-primary/10 text-primary"
+							valueClassName="font-bold"
+						/>
+						<StatBadge
+							icon={<BadgeDollarSign className="w-3 min-w-3 h-3 min-h-3" />}
+							value={formatToMoney(partner.estatisticas.vendasValorTotal)}
+							tooltipContent="Valor total de vendas no período de filtro"
+							className="rounded-md px-1.5 py-1.5 font-bold bg-primary/10 text-primary"
+							valueClassName="font-bold"
+						/>
 					</div>
 				</div>
 			</div>

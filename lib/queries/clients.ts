@@ -22,6 +22,8 @@ async function fetchClients(input: TGetClientsInput) {
 		if (input.statsPeriodBefore) searchParams.set("statsPeriodBefore", input.statsPeriodBefore.toISOString());
 		if (input.statsSaleNatures.length > 0) searchParams.set("statsSaleNatures", input.statsSaleNatures.join(","));
 		if (input.statsExcludedSalesIds.length > 0) searchParams.set("statsExcludedSalesIds", input.statsExcludedSalesIds.join(","));
+		if (input.orderByField) searchParams.set("orderByField", input.orderByField);
+		if (input.orderByDirection) searchParams.set("orderByDirection", input.orderByDirection);
 		if (input.page) searchParams.set("page", input.page.toString());
 		const { data } = await axios.get<TGetClientsOutput>(`/api/clients?${searchParams.toString()}`);
 
@@ -45,6 +47,8 @@ export function useClients({ initialFilters }: UseClientsParams) {
 		statsPeriodBefore: initialFilters?.statsPeriodBefore || null,
 		statsSaleNatures: initialFilters?.statsSaleNatures || [],
 		statsExcludedSalesIds: initialFilters?.statsExcludedSalesIds || [],
+		orderByField: initialFilters?.orderByField || "nome",
+		orderByDirection: initialFilters?.orderByDirection || "asc",
 		page: initialFilters?.page || 1,
 	});
 	function updateFilters(newFilters: Partial<TGetClientsInput>) {

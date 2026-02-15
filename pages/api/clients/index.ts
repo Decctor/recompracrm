@@ -6,7 +6,7 @@ import { createSimplifiedEmailSearchCondition, createSimplifiedPhoneSearchCondit
 import { ClientSchema } from "@/schemas/clients";
 import { db } from "@/services/drizzle";
 import { clients, sales } from "@/services/drizzle/schema";
-import { and, count, eq, gte, inArray, lte, max, min, notInArray, or, sql, sum } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, lte, max, min, notInArray, or, sql, sum } from "drizzle-orm";
 import createHttpError from "http-errors";
 import type { NextApiHandler } from "next";
 import z from "zod";
@@ -74,6 +74,8 @@ const GetClientsInputSchema = z.object({
 		.optional()
 		.nullable()
 		.transform((v) => (v ? v.split(",") : [])),
+	orderByField: z.enum(["nome", "comprasValorTotal", "comprasQtdeTotal", "primeiraCompraData", "ultimaCompraData"]).optional().nullable(),
+	orderByDirection: z.enum(["asc", "desc"]).optional().nullable(),
 });
 export type TGetClientsInput = z.infer<typeof GetClientsInputSchema>;
 
@@ -123,30 +125,21 @@ async function getClients({ input, session }: { input: TGetClientsInput; session
 	const PAGE_SIZE = 25;
 	const skip = PAGE_SIZE * (input.page - 1);
 
-	const clientsFoundResult = await db
+	const [{ clientsMatched }] = await db
 		.select({
-			id: clients.id,
+			clientsMatched: count(),
 		})
 		.from(clients)
 		.where(and(...clientConditions));
 
-	const totalPages = Math.ceil(clientsFoundResult.length / PAGE_SIZE);
-	const clientsResult = await db.query.clients.findMany({
-		where: and(...clientConditions),
-		with: {
-			saldos: true,
-		},
-		limit: PAGE_SIZE,
-		offset: skip,
-	});
-	const clientIds = clientsResult.map((client) => client.id);
-	if (clientIds.length === 0) {
+	const totalPages = Math.ceil(clientsMatched / PAGE_SIZE);
+	if (clientsMatched === 0) {
 		return {
 			data: {
 				byId: undefined,
 				default: {
 					clients: [],
-					clientsMatched: clientsFoundResult.length,
+					clientsMatched,
 					totalPages,
 				},
 			},
@@ -160,38 +153,104 @@ async function getClients({ input, session }: { input: TGetClientsInput; session
 	if (input.statsSaleNatures && input.statsSaleNatures.length > 0) statsConditions.push(inArray(sales.natureza, input.statsSaleNatures));
 	if (input.statsExcludedSalesIds && input.statsExcludedSalesIds.length > 0) statsConditions.push(notInArray(sales.id, input.statsExcludedSalesIds));
 
-	const statsByClientResult = await db
+	const statsByClientSubquery = db
+		.select({
+			clientId: sales.clienteId,
+			totalPurchasesValue: sum(sales.valorTotal).as("totalPurchasesValue"),
+			totalPurchasesQty: count(sales.id).as("totalPurchasesQty"),
+			firstPurchaseDate: min(sales.dataVenda).as("firstPurchaseDate"),
+			lastPurchaseDate: max(sales.dataVenda).as("lastPurchaseDate"),
+		})
+		.from(sales)
+		.where(and(...statsConditions))
+		.groupBy(sales.clienteId)
+		.as("stats_by_client");
+
+	const direction = input.orderByDirection === "desc" ? desc : asc;
+	let orderByClause = asc(clients.nome);
+	switch (input.orderByField) {
+		case "nome":
+			orderByClause = direction(clients.nome);
+			break;
+		case "comprasValorTotal":
+			orderByClause = direction(sql`COALESCE(${statsByClientSubquery.totalPurchasesValue}, 0)`);
+			break;
+		case "comprasQtdeTotal":
+			orderByClause = direction(sql`COALESCE(${statsByClientSubquery.totalPurchasesQty}, 0)`);
+			break;
+		case "primeiraCompraData":
+			orderByClause = direction(sql`COALESCE(${statsByClientSubquery.firstPurchaseDate}, '1900-01-01'::timestamp)`);
+			break;
+		case "ultimaCompraData":
+			orderByClause = direction(sql`COALESCE(${statsByClientSubquery.lastPurchaseDate}, '1900-01-01'::timestamp)`);
+			break;
+		default:
+			orderByClause = asc(clients.nome);
+			break;
+	}
+
+	const paginatedClientsWithStats = await db
 		.select({
 			clientId: clients.id,
-			totaPurchasesValue: sum(sales.valorTotal),
-			totalPurchasesQty: count(sales.id),
-			firstPurchaseDate: min(sales.dataVenda),
-			lastPurchaseDate: max(sales.dataVenda),
+			totalPurchasesValue: sql<number>`COALESCE(${statsByClientSubquery.totalPurchasesValue}, 0)`,
+			totalPurchasesQty: sql<number>`COALESCE(${statsByClientSubquery.totalPurchasesQty}, 0)`,
+			firstPurchaseDate: statsByClientSubquery.firstPurchaseDate,
+			lastPurchaseDate: statsByClientSubquery.lastPurchaseDate,
 		})
 		.from(clients)
-		.leftJoin(sales, and(eq(clients.id, sales.clienteId), ...statsConditions))
-		.where(inArray(clients.id, clientIds))
-		.groupBy(clients.id)
-		.orderBy(sql`${clients.nome} asc`);
+		.leftJoin(statsByClientSubquery, eq(clients.id, statsByClientSubquery.clientId))
+		.where(and(...clientConditions))
+		.orderBy(orderByClause, asc(clients.nome))
+		.offset(skip)
+		.limit(PAGE_SIZE);
 
-	const clientsWithStats = clientsResult.map((client) => {
-		const stats = statsByClientResult.find((s) => s.clientId === client.id);
+	const clientIds = paginatedClientsWithStats.map((client) => client.clientId);
+	if (clientIds.length === 0) {
 		return {
-			...client,
-			estatisticas: {
-				comprasValorTotal: stats?.totaPurchasesValue ? Number(stats.totaPurchasesValue) : 0,
-				comprasQtdeTotal: stats?.totalPurchasesQty ? Number(stats.totalPurchasesQty) : 0,
-				primeiraCompraData: stats?.firstPurchaseDate ? stats.firstPurchaseDate : null,
-				ultimaCompraData: stats?.lastPurchaseDate ? stats.lastPurchaseDate : null,
+			data: {
+				byId: undefined,
+				default: {
+					clients: [],
+					clientsMatched,
+					totalPages,
+				},
 			},
 		};
+	}
+
+	const clientsResult = await db.query.clients.findMany({
+		where: inArray(clients.id, clientIds),
+		with: {
+			saldos: true,
+		},
 	});
+
+	const clientsMap = new Map(clientsResult.map((client) => [client.id, client]));
+	const statsMap = new Map(paginatedClientsWithStats.map((client) => [client.clientId, client]));
+
+	const clientsWithStats = clientIds
+		.map((clientId) => {
+			const client = clientsMap.get(clientId);
+			const stats = statsMap.get(clientId);
+			if (!client) return null;
+
+			return {
+				...client,
+				estatisticas: {
+					comprasValorTotal: stats?.totalPurchasesValue ? Number(stats.totalPurchasesValue) : 0,
+					comprasQtdeTotal: stats?.totalPurchasesQty ? Number(stats.totalPurchasesQty) : 0,
+					primeiraCompraData: stats?.firstPurchaseDate ? stats.firstPurchaseDate : null,
+					ultimaCompraData: stats?.lastPurchaseDate ? stats.lastPurchaseDate : null,
+				},
+			};
+		})
+		.filter((client): client is NonNullable<typeof client> => !!client);
 	return {
 		data: {
 			byId: undefined,
 			default: {
 				clients: clientsWithStats,
-				clientsMatched: clientsFoundResult.length,
+				clientsMatched,
 				totalPages,
 			},
 		},
@@ -201,7 +260,7 @@ export type TGetClientsOutput = Awaited<ReturnType<typeof getClients>>;
 export type TGetClientsOutputDefault = Exclude<TGetClientsOutput["data"]["default"], null>;
 export type TGetClientsOutputById = Exclude<TGetClientsOutput["data"]["byId"], null>;
 
-const getClientsRoute: NextApiHandler<any> = async (req, res) => {
+const getClientsRoute: NextApiHandler<TGetClientsOutput> = async (req, res) => {
 	const sessionUser = await getCurrentSessionUncached(req.cookies);
 
 	if (!sessionUser) throw new createHttpError.Unauthorized("Você não está autenticado.");

@@ -9,6 +9,7 @@ import StatUnitCard from "@/components/Stats/StatUnitCard";
 import GeneralPaginationComponent from "@/components/Utils/Pagination";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { StatBadge } from "@/components/ui/stat-badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { getErrorMessage } from "@/lib/errors";
@@ -28,6 +29,7 @@ import {
 	Mail,
 	Megaphone,
 	Phone,
+	ShoppingCart,
 	TrendingUp,
 	UserPlus,
 	UserRoundX,
@@ -334,51 +336,67 @@ function ClientPageCard({ client }: ClientCardProps) {
 			<div className="w-full flex items-center justify-between flex-col md:flex-row gap-2">
 				<div className="flex items-center gap-2 flex-wrap">
 					<h1 className="text-xs font-bold tracking-tight lg:text-sm">{client.nome}</h1>
-					<div className="flex items-center gap-1">
+					<div className={cn("flex items-center gap-1")}>
 						<Phone className="w-4 h-4 min-w-4 min-h-4" />
-						<h1 className="py-0.5 text-center text-[0.65rem] font-medium italic text-primary/80">{client.telefone}</h1>
+						<h1 className="py-0.5 text-center text-[0.65rem] font-medium italic">{client.telefone || "NÃO DEFINIDO"}</h1>
 					</div>
 					{client.email ? (
 						<div className="flex items-center gap-1">
 							<Mail className="w-4 h-4 min-w-4 min-h-4" />
-							<h1 className="py-0.5 text-center text-[0.65rem] font-medium italic text-primary/80">{client.email}</h1>
+							<h1 className="py-0.5 text-center text-[0.65rem] font-medium italic">{client.email}</h1>
 						</div>
 					) : null}
 					{client.canalAquisicao ? (
 						<div className="flex items-center gap-1">
 							<Megaphone width={15} height={15} />
-							<h1 className="py-0.5 text-center text-[0.65rem] font-medium italic text-primary/80">{client.canalAquisicao || "N/A"}</h1>
+							<h1 className="py-0.5 text-center text-[0.65rem] font-medium italic">{client.canalAquisicao || "N/A"}</h1>
 						</div>
 					) : null}
 				</div>
 				<div className="flex items-center gap-3 flex-col md:flex-row gap-y-1">
 					<div className="flex items-center gap-3">
-						<div className={cn("flex items-center gap-1.5 rounded-md px-1.5 py-1.5 text-[0.65rem] font-bold bg-primary/10 text-primary")}>
-							<CirclePlus className="w-3 min-w-3 h-3 min-h-3" />
-							<p className="text-xs font-bold tracking-tight uppercase">{client.estatisticas.comprasQtdeTotal}</p>
-						</div>
-						<div className={cn("flex items-center gap-1.5 rounded-md px-1.5 py-1.5 text-[0.65rem] font-bold bg-primary/10 text-primary")}>
-							<BadgeDollarSign className="w-3 min-w-3 h-3 min-h-3" />
-							<p className="text-xs font-bold tracking-tight uppercase">{formatToMoney(client.estatisticas.comprasValorTotal)}</p>
-						</div>
+						<StatBadge
+							icon={<CirclePlus className="w-4 min-w-4 h-4 min-h-4" />}
+							value={client.estatisticas.comprasQtdeTotal}
+							tooltipContent="Quantidade total de compras no período de filtro"
+						/>
+						<StatBadge
+							icon={<BadgeDollarSign className="w-4 min-w-4 h-4 min-h-4" />}
+							value={formatToMoney(client.estatisticas.comprasValorTotal)}
+							tooltipContent="Valor total de compras no período de filtro"
+						/>
 						{clientCashbackBalance ? (
-							<div className={cn("flex items-center gap-1.5 rounded-md px-1.5 py-1.5 text-[0.65rem] font-bold bg-primary/10 text-primary")}>
-								<BadgePercent className="w-3 min-w-3 h-3 min-h-3" />
-								<p className="text-xs font-bold tracking-tight uppercase">CASHBACK: {formatToMoney(clientCashbackBalance.saldoValorDisponivel)}</p>
-							</div>
+							<StatBadge
+								icon={<BadgePercent className="w-4 min-w-4 h-4 min-h-4" />}
+								value={`CASHBACK: ${formatToMoney(clientCashbackBalance.saldoValorDisponivel)}`}
+								tooltipContent="Saldo em cashback disponível"
+							/>
 						) : null}
 					</div>
 				</div>
 			</div>
-			<div className="w-full flex items-center justify-center lg:justify-end gap-2 flex-wrap">
-				<div className={cn("flex items-center gap-1.5 text-[0.65rem] font-bold text-primary")}>
-					<BsCalendar className="w-3 min-w-3 h-3 min-h-3" />
-					<p className="text-xs font-medium tracking-tight uppercase">PRIMEIRA VENDA: {formatDateAsLocale(client.estatisticas.primeiraCompraData)}</p>
+			<div className="w-full flex items-center justify-center lg:justify-between gap-2 flex-wrap">
+				<div className="flex items-center gap-2">
+					{client.estatisticas.primeiraCompraData ? (
+						<div className={cn("flex items-center gap-1.5 text-[0.65rem] font-bold text-primary")}>
+							<BsCalendar className="w-3 min-w-3 h-3 min-h-3" />
+							<p className="text-xs font-medium tracking-tight uppercase">PRIMEIRA VENDA: {formatDateAsLocale(client.estatisticas.primeiraCompraData)}</p>
+						</div>
+					) : null}
+					{client.estatisticas.ultimaCompraData ? (
+						<div className={cn("flex items-center gap-1.5 text-[0.65rem] font-bold text-primary")}>
+							<BsCalendar className="w-3 min-w-3 h-3 min-h-3" />
+							<p className="text-xs font-medium tracking-tight uppercase">ÚLTIMA VENDA: {formatDateAsLocale(client.estatisticas.ultimaCompraData)}</p>
+						</div>
+					) : null}
+					{client.metadataGrupoProdutoMaisComprado ? (
+						<div className={cn("flex items-center gap-1.5 text-[0.65rem] font-bold text-primary")}>
+							<ShoppingCart className="w-3 min-w-3 h-3 min-h-3" />
+							<p className="text-xs font-medium tracking-tight uppercase">PREFERÊNCIA: {client.metadataGrupoProdutoMaisComprado}</p>
+						</div>
+					) : null}
 				</div>
-				<div className={cn("flex items-center gap-1.5 text-[0.65rem] font-bold text-primary")}>
-					<BsCalendar className="w-3 min-w-3 h-3 min-h-3" />
-					<p className="text-xs font-medium tracking-tight uppercase">ÚLTIMA VENDA: {formatDateAsLocale(client.estatisticas.ultimaCompraData)}</p>
-				</div>
+
 				<Button variant="link" className="flex items-center gap-1.5" size="sm" asChild>
 					<Link href={`/dashboard/commercial/clients/id/${client.id}`}>
 						<Info className="w-3 min-w-3 h-3 min-h-3" />
@@ -395,6 +413,16 @@ type ClientPageFilterShowcaseProps = {
 	updateQueryParams: (params: Partial<TGetClientsInput>) => void;
 };
 function ClientPageFilterShowcase({ queryParams, updateQueryParams }: ClientPageFilterShowcaseProps) {
+	const orderingFieldLabelMap: Record<NonNullable<TGetClientsInput["orderByField"]>, string> = {
+		nome: "NOME",
+		comprasValorTotal: "VALOR TOTAL DE COMPRAS",
+		comprasQtdeTotal: "QUANTIDADE TOTAL DE COMPRAS",
+		primeiraCompraData: "PRIMEIRA COMPRA",
+		ultimaCompraData: "ÚLTIMA COMPRA",
+	};
+	const orderingDirectionLabel = queryParams.orderByDirection === "desc" ? "DECRESCENTE" : "CRESCENTE";
+	const orderingFieldLabel = orderingFieldLabelMap[queryParams.orderByField || "nome"];
+
 	const FilterTag = ({
 		label,
 		value,
@@ -448,6 +476,11 @@ function ClientPageFilterShowcase({ queryParams, updateQueryParams }: ClientPage
 					onRemove={() => updateQueryParams({ segmentationTitles: [] })}
 				/>
 			) : null}
+			<FilterTag
+				label="ORDENAÇÃO"
+				value={`${orderingFieldLabel} (${orderingDirectionLabel})`}
+				onRemove={() => updateQueryParams({ orderByField: "nome", orderByDirection: "asc" })}
+			/>
 		</div>
 	);
 }

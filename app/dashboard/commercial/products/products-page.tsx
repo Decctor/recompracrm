@@ -14,8 +14,9 @@ import StatUnitCard from "@/components/Stats/StatUnitCard";
 import GeneralPaginationComponent from "@/components/Utils/Pagination";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { StatBadge } from "@/components/ui/stat-badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { getErrorMessage } from "@/lib/errors";
 import { formatDateAsLocale, formatDecimalPlaces, formatToMoney } from "@/lib/formatting";
@@ -465,85 +466,53 @@ function ProductCard({
 						<TooltipProvider>
 							<div className="flex items-center gap-3 flex-wrap">
 								{/* Stock Status Badge */}
-								<Tooltip>
-									<TooltipTrigger asChild>
-										<div className={cn("flex items-center gap-1.5 rounded-md px-1.5 py-1.5 text-[0.65rem] font-bold", stockStatus.color)}>
-											<Package className="w-4 min-w-4 h-4 min-h-4" />
-											<p className="text-xs font-bold tracking-tight uppercase">{stockStatus.label}</p>
-										</div>
-									</TooltipTrigger>
-									<TooltipContent>
-										<p>Quantidade em estoque atual</p>
-									</TooltipContent>
-								</Tooltip>
+								<StatBadge
+									icon={<Package className="w-4 min-w-4 h-4 min-h-4" />}
+									value={stockStatus.label}
+									tooltipContent="Quantidade em estoque atual"
+									className={cn(stockStatus.color)}
+								/>
 								{/* Turnover Indicator */}
 								{turnoverDays !== null && (
-									<Tooltip>
-										<TooltipTrigger asChild>
-											<div
-												className={cn("flex items-center gap-1.5 rounded-md px-1.5 py-1.5 text-[0.65rem] font-bold", {
-													"bg-red-500 dark:bg-red-600 text-white": turnoverDays < 7,
-													"bg-yellow-500 dark:bg-yellow-600 text-white": turnoverDays >= 7 && turnoverDays < 30,
-													"bg-green-500 dark:bg-green-600 text-white": turnoverDays >= 30 && turnoverDays < 90,
-													"bg-blue-500 dark:bg-blue-600 text-white": turnoverDays >= 90 && turnoverDays < 180,
-													"bg-purple-500 dark:bg-purple-600 text-white": turnoverDays >= 180,
-												})}
-											>
-												<Clock className="w-4 min-w-4 h-4 min-h-4" />
-												<p className="text-xs font-bold tracking-tight uppercase">{turnoverResult?.isCapped ? `${turnoverDays}+D` : `${turnoverDays}D`}</p>
-											</div>
-										</TooltipTrigger>
-										<TooltipContent>
-											<p>Dias de estoque restantes no ritmo de vendas atual</p>
-										</TooltipContent>
-									</Tooltip>
+									<StatBadge
+										icon={<Clock className="w-4 min-w-4 h-4 min-h-4" />}
+										value={turnoverResult?.isCapped ? `${turnoverDays}+D` : `${turnoverDays}D`}
+										tooltipContent="Dias de estoque restantes no ritmo de vendas atual"
+										className={cn({
+											"bg-red-500 dark:bg-red-600 text-white": turnoverDays < 7,
+											"bg-yellow-500 dark:bg-yellow-600 text-white": turnoverDays >= 7 && turnoverDays < 30,
+											"bg-green-500 dark:bg-green-600 text-white": turnoverDays >= 30 && turnoverDays < 90,
+											"bg-blue-500 dark:bg-blue-600 text-white": turnoverDays >= 90 && turnoverDays < 180,
+											"bg-purple-500 dark:bg-purple-600 text-white": turnoverDays >= 180,
+										})}
+									/>
 								)}
-								<Tooltip>
-									<TooltipTrigger asChild>
-										<div className={cn("flex items-center gap-1.5 rounded-md px-1.5 py-1.5 text-[0.65rem] font-bold bg-primary/10 text-primary")}>
-											<CirclePlus className="w-4 min-w-4 h-4 min-h-4" />
-											<p className="text-xs font-bold tracking-tight uppercase">{product.estatisticas.vendasQtdeTotal}</p>
-										</div>
-									</TooltipTrigger>
-									<TooltipContent>
-										<p>Quantidade total vendida no período</p>
-									</TooltipContent>
-								</Tooltip>
-								<Tooltip>
-									<TooltipTrigger asChild>
-										<div className={cn("flex items-center gap-1.5 rounded-md px-1.5 py-1.5 text-[0.65rem] font-bold bg-primary/10 text-primary")}>
-											<BadgeDollarSign className="w-4 min-w-4 h-4 min-h-4" />
-											<p className="text-xs font-bold tracking-tight uppercase">{formatToMoney(product.estatisticas.vendasValorTotal)}</p>
-										</div>
-									</TooltipTrigger>
-									<TooltipContent>
-										<p>Faturamento total no período</p>
-									</TooltipContent>
-								</Tooltip>
-								<Tooltip>
-									<TooltipTrigger asChild>
-										<div
-											className={cn("flex items-center gap-1.5 rounded-md px-1.5 py-1.5 text-[0.65rem] font-bold bg-primary/10 text-primary", {
-												"bg-green-500 dark:bg-green-600 text-white": product.estatisticas.curvaABC === "A",
-												"bg-yellow-500 dark:bg-yellow-600 text-white": product.estatisticas.curvaABC === "B",
-												"bg-red-500 dark:bg-red-600 text-white": product.estatisticas.curvaABC === "C",
-											})}
-										>
-											<Star className="w-4 min-w-4 h-4 min-h-4" />
-											<p className="text-xs font-bold tracking-tight uppercase">{product.estatisticas.curvaABC}</p>
-										</div>
-									</TooltipTrigger>
-									<TooltipContent>
-										<p>
-											Curva ABC:{" "}
-											{product.estatisticas.curvaABC === "A"
-												? "80% do faturamento"
-												: product.estatisticas.curvaABC === "B"
-													? "15% do faturamento"
-													: "5% do faturamento"}
-										</p>
-									</TooltipContent>
-								</Tooltip>
+								<StatBadge
+									icon={<CirclePlus className="w-4 min-w-4 h-4 min-h-4" />}
+									value={product.estatisticas.vendasQtdeTotal}
+									tooltipContent="Quantidade total vendida no período"
+								/>
+								<StatBadge
+									icon={<BadgeDollarSign className="w-4 min-w-4 h-4 min-h-4" />}
+									value={formatToMoney(product.estatisticas.vendasValorTotal)}
+									tooltipContent="Faturamento total no período"
+								/>
+								<StatBadge
+									icon={<Star className="w-4 min-w-4 h-4 min-h-4" />}
+									value={product.estatisticas.curvaABC}
+									tooltipContent={`Curva ABC: ${
+										product.estatisticas.curvaABC === "A"
+											? "80% do faturamento"
+											: product.estatisticas.curvaABC === "B"
+												? "15% do faturamento"
+												: "5% do faturamento"
+									}`}
+									className={cn({
+										"bg-green-500 dark:bg-green-600 text-white": product.estatisticas.curvaABC === "A",
+										"bg-yellow-500 dark:bg-yellow-600 text-white": product.estatisticas.curvaABC === "B",
+										"bg-red-500 dark:bg-red-600 text-white": product.estatisticas.curvaABC === "C",
+									})}
+								/>
 							</div>
 						</TooltipProvider>
 					</div>
