@@ -23,6 +23,8 @@ import {
 	CheckCircle2,
 	CreditCard,
 	Gift,
+	LayoutGrid,
+	List,
 	Loader2,
 	Lock,
 	PartyPopper,
@@ -46,6 +48,7 @@ type TPrize = {
 	descricao: string | null;
 	imagemCapaUrl: string | null;
 	valor: number;
+	produto: { grupo: string } | null;
 };
 
 type NewSaleContentProps = {
@@ -464,6 +467,48 @@ function ModeSelectionStep({ onSelectMode }: { onSelectMode: (mode: "discount" |
 	);
 }
 
+function PrizeCard({
+	prize,
+	isDisabled,
+	onSelect,
+}: {
+	prize: TPrize;
+	isDisabled: boolean;
+	onSelect: () => void;
+}) {
+	return (
+		<button
+			type="button"
+			onClick={() => !isDisabled && onSelect()}
+			disabled={isDisabled}
+			className={cn(
+				"flex items-center gap-3 short:gap-2 rounded-2xl short:rounded-xl border-2 overflow-hidden transition-all text-left p-2 short:p-1.5",
+				isDisabled
+					? "opacity-50 cursor-not-allowed border-muted bg-muted/30"
+					: "border-brand/20 hover:border-brand hover:shadow-lg cursor-pointer bg-card",
+			)}
+		>
+			<div className="relative w-16 h-16 short:w-12 short:h-12 min-w-16 short:min-w-12 rounded-xl short:rounded-lg overflow-hidden bg-muted shrink-0">
+				{prize.imagemCapaUrl ? (
+					<Image src={prize.imagemCapaUrl} alt={prize.titulo} fill className="object-cover" />
+				) : (
+					<div className="flex h-full w-full items-center justify-center bg-brand/10 text-brand">
+						<Gift className="w-6 h-6 short:w-4 short:h-4" />
+					</div>
+				)}
+			</div>
+			<div className="flex-1 min-w-0 flex flex-col gap-0.5">
+				<h3 className="font-black text-sm short:text-xs uppercase tracking-tight truncate">{prize.titulo}</h3>
+				{prize.descricao && <p className="text-xs short:text-[0.65rem] text-muted-foreground line-clamp-1">{prize.descricao}</p>}
+				<div className="flex items-center gap-2 mt-0.5">
+					<span className="font-black text-base short:text-sm text-brand">{prize.valor} créditos</span>
+					{isDisabled && <span className="text-[0.6rem] font-bold text-red-500 uppercase">Saldo insuficiente</span>}
+				</div>
+			</div>
+		</button>
+	);
+}
+
 function PrizeSelectionStep({
 	prizes,
 	availableBalance,
@@ -473,6 +518,44 @@ function PrizeSelectionStep({
 	availableBalance: number;
 	onSelectPrize: (prize: TPrize) => void;
 }) {
+	const FALLBACK_GROUP = "Outros";
+	const SHOW_TOGGLE_THRESHOLD = 4;
+
+	const [viewMode, setViewMode] = React.useState<"categories" | "list">("categories");
+	const [selectedCategory, setSelectedCategory] = React.useState<string | null>(null);
+
+	const categories = React.useMemo(() => {
+		const groupSet = new Set<string>();
+		for (const prize of prizes) {
+			groupSet.add(prize.produto?.grupo ?? FALLBACK_GROUP);
+		}
+		return Array.from(groupSet).sort();
+	}, [prizes]);
+
+	const groupedPrizes = React.useMemo(() => {
+		const groups: Record<string, TPrize[]> = {};
+		for (const prize of prizes) {
+			const group = prize.produto?.grupo ?? FALLBACK_GROUP;
+			if (!groups[group]) groups[group] = [];
+			groups[group].push(prize);
+		}
+		for (const group of Object.keys(groups)) {
+			groups[group].sort((a, b) => a.valor - b.valor);
+		}
+		return groups;
+	}, [prizes]);
+
+	const sortedPrizes = React.useMemo(() => {
+		return [...prizes].sort((a, b) => a.valor - b.valor);
+	}, [prizes]);
+
+	const showToggle = prizes.length > SHOW_TOGGLE_THRESHOLD || categories.length > 1;
+
+	const handleViewModeChange = (mode: "categories" | "list") => {
+		setViewMode(mode);
+		setSelectedCategory(null);
+	};
+
 	return (
 		<div className="space-y-6 short:space-y-2 animate-in fade-in slide-in-from-bottom-4">
 			<div className="text-center space-y-2 short:space-y-0.5">
@@ -480,44 +563,97 @@ function PrizeSelectionStep({
 				<p className="text-muted-foreground short:text-xs">
 					Saldo disponível: <span className="font-black text-green-600">{availableBalance} créditos</span>
 				</p>
-			</div>
-			<div className="grid grid-cols-1 sm:grid-cols-2 gap-4 short:gap-2">
-				{prizes.map((prize) => {
-					const isDisabled = availableBalance < prize.valor;
-					return (
-						<button
-							key={prize.id}
+				{showToggle && (
+					<div className="flex items-center justify-center gap-1 pt-1">
+						<Button
 							type="button"
-							onClick={() => !isDisabled && onSelectPrize(prize)}
-							disabled={isDisabled}
-							className={cn(
-								"flex flex-col rounded-2xl short:rounded-xl border-2 overflow-hidden transition-all text-left",
-								isDisabled
-									? "opacity-50 cursor-not-allowed border-muted bg-muted/30"
-									: "border-brand/20 hover:border-brand hover:shadow-lg cursor-pointer bg-card",
-							)}
+							variant={viewMode === "categories" ? "default" : "ghost"}
+							size="fit"
+							className="rounded-lg p-2"
+							onClick={() => handleViewModeChange("categories")}
 						>
-							<div className="relative w-full aspect-[16/9] bg-muted">
-								{prize.imagemCapaUrl ? (
-									<Image src={prize.imagemCapaUrl} alt={prize.titulo} fill className="object-cover" />
-								) : (
-									<div className="flex h-full w-full items-center justify-center bg-brand/10 text-brand">
-										<Gift className="w-10 h-10 short:w-6 short:h-6" />
-									</div>
-								)}
-							</div>
-							<div className="p-4 short:p-2 flex flex-col gap-1.5 short:gap-0.5">
-								<h3 className="font-black text-sm short:text-xs uppercase tracking-tight">{prize.titulo}</h3>
-								{prize.descricao && <p className="text-xs short:text-[0.65rem] text-muted-foreground line-clamp-2">{prize.descricao}</p>}
-								<div className="flex items-center justify-between mt-1">
-									<span className="font-black text-lg short:text-base text-brand">{prize.valor} créditos</span>
-									{isDisabled && <span className="text-[0.6rem] short:text-[0.6rem] font-bold text-red-500 uppercase">Saldo insuficiente</span>}
-								</div>
-							</div>
-						</button>
-					);
-				})}
+							<LayoutGrid className="w-4 h-4" />
+						</Button>
+						<Button
+							type="button"
+							variant={viewMode === "list" ? "default" : "ghost"}
+							size="fit"
+							className="rounded-lg p-2"
+							onClick={() => handleViewModeChange("list")}
+						>
+							<List className="w-4 h-4" />
+						</Button>
+					</div>
+				)}
 			</div>
+
+			{showToggle && viewMode === "categories" ? (
+				selectedCategory === null ? (
+					<div className="grid grid-cols-1 sm:grid-cols-2 gap-4 short:gap-2">
+						{categories.map((category) => {
+							const categoryPrizes = groupedPrizes[category];
+							const coverImage = categoryPrizes.find((p) => p.imagemCapaUrl)?.imagemCapaUrl ?? null;
+							const itemCount = categoryPrizes.length;
+							return (
+								<button
+									key={category}
+									type="button"
+									onClick={() => setSelectedCategory(category)}
+									className="flex flex-col rounded-2xl short:rounded-xl border-2 border-brand/20 overflow-hidden transition-all text-left hover:border-brand hover:shadow-lg cursor-pointer bg-card"
+								>
+									<div className="relative w-full aspect-[16/9] bg-muted">
+										{coverImage ? (
+											<Image src={coverImage} alt={category} fill className="object-cover" />
+										) : (
+											<div className="flex h-full w-full items-center justify-center bg-brand/10 text-brand">
+												<Gift className="w-10 h-10 short:w-6 short:h-6" />
+											</div>
+										)}
+									</div>
+									<div className="p-4 short:p-2 flex items-center justify-between gap-2">
+										<h3 className="font-black text-sm short:text-xs uppercase tracking-tight">{category}</h3>
+										<span className="text-[0.65rem] short:text-[0.6rem] font-bold bg-brand/10 text-brand rounded-full px-2 py-0.5">
+											{itemCount} {itemCount === 1 ? "item" : "itens"}
+										</span>
+									</div>
+								</button>
+							);
+						})}
+					</div>
+				) : (
+					<div className="space-y-4 short:space-y-2 animate-in fade-in slide-in-from-right-4">
+						<button
+							type="button"
+							onClick={() => setSelectedCategory(null)}
+							className="flex items-center gap-2 text-sm font-bold text-muted-foreground hover:text-foreground transition-colors"
+						>
+							<ArrowLeft className="w-4 h-4" />
+							<span className="uppercase tracking-tight">{selectedCategory}</span>
+						</button>
+						<div className="flex flex-col gap-2 short:gap-1.5">
+							{groupedPrizes[selectedCategory].map((prize) => (
+								<PrizeCard
+									key={prize.id}
+									prize={prize}
+									isDisabled={availableBalance < prize.valor}
+									onSelect={() => onSelectPrize(prize)}
+								/>
+							))}
+						</div>
+					</div>
+				)
+			) : (
+				<div className="flex flex-col gap-2 short:gap-1.5">
+					{sortedPrizes.map((prize) => (
+						<PrizeCard
+							key={prize.id}
+							prize={prize}
+							isDisabled={availableBalance < prize.valor}
+							onSelect={() => onSelectPrize(prize)}
+						/>
+					))}
+				</div>
+			)}
 		</div>
 	);
 }
