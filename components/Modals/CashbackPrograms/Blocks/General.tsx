@@ -34,6 +34,24 @@ export default function CashbackProgramsGeneralBlock({ cashbackProgram, updateCa
 				placeholder="Preencha aqui a descrição do programa de cashback..."
 				handleChange={(value) => updateCashbackProgram({ descricao: value })}
 			/>
+			<div className="w-full flex items-center gap-2 flex-col lg:flex-row">
+				<div className="w-full flex items-center justify-center lg:w-1/2">
+					<CheckboxInput
+						checked={cashbackProgram.modalidadeDescontosPermitida}
+						labelTrue="PERMITIR DESCONTOS"
+						labelFalse="PERMITIR DESCONTOS"
+						handleChange={(value) => updateCashbackProgram({ modalidadeDescontosPermitida: value })}
+					/>
+				</div>
+				<div className="w-full flex items-center justify-center lg:w-1/2">
+					<CheckboxInput
+						checked={cashbackProgram.modalidadeRecompensasPermitida}
+						labelTrue="PERMITIR RECOMPENSAS"
+						labelFalse="PERMITIR RECOMPENSAS"
+						handleChange={(value) => updateCashbackProgram({ modalidadeRecompensasPermitida: value })}
+					/>
+				</div>
+			</div>
 		</ResponsiveMenuSection>
 	);
 }

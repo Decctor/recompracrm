@@ -27,6 +27,8 @@ export default function NewCashbackProgram({ user, userOrg, closeModal, callback
 			cashbackProgram: {
 				ativo: true,
 				titulo: "",
+				modalidadeDescontosPermitida: true,
+				modalidadeRecompensasPermitida: false,
 				acumuloTipo: "FIXO",
 				acumuloValor: 0,
 				acumuloValorParceiro: 0,

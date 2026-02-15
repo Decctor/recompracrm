@@ -24,6 +24,18 @@ export const CashbackProgramSchema = z.object({
 		})
 		.optional()
 		.nullable(),
+	modalidadeDescontosPermitida: z
+		.boolean({
+			required_error: "Modalidade de descontos permitida do programa de cashback não informada.",
+			invalid_type_error: "Tipo não válido para a modalidade de descontos permitida do programa de cashback.",
+		})
+		.default(true),
+	modalidadeRecompensasPermitida: z
+		.boolean({
+			required_error: "Modalidade de recompensas permitida do programa de cashback não informada.",
+			invalid_type_error: "Tipo não válido para a modalidade de recompensas permitida do programa de cashback.",
+		})
+		.default(false),
 	acumuloTipo: CashbackProgramAccumulationTypeEnum,
 	acumuloValor: z.number({
 		required_error: "Valor de acumulação do programa de cashback não informado.",

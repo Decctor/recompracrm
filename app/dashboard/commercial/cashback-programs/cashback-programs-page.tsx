@@ -1,7 +1,7 @@
 "use client";
 import type { TGetCashbackProgramOutput } from "@/app/api/cashback-programs/route";
 import DateIntervalInput from "@/components/Inputs/DateIntervalInput";
-import EditCashbackProgram from "@/components/Modals/CashbackPrograms/EditCashbackProgram";
+import ControlCashbackProgram from "@/components/Modals/CashbackPrograms/ControlCashbackProgram";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -121,7 +121,7 @@ export default function CashbackProgramsPage({ user, userOrg, cashbackProgram, o
 				</div>
 			</div>
 			{editCashbackProgramModalIsOpen ? (
-				<EditCashbackProgram
+				<ControlCashbackProgram
 					user={user}
 					userOrg={userOrg}
 					cashbackProgram={cashbackProgram}
