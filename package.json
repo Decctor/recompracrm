@@ -14,7 +14,6 @@
 		"knip": "knip"
 	},
 	"dependencies": {
-		"@ai-sdk/openai": "^2.0.53",
 		"@ai-sdk/react": "^2.0.78",
 		"@biomejs/biome": "^1.9.4",
 		"@gsap/react": "^2.1.2",
@@ -40,7 +39,7 @@
 		"@tiptap/suggestion": "^3.6.2",
 		"@types/http-errors": "^2.0.4",
 		"@vercel/functions": "^3.3.6",
-		"ai": "^5.0.78",
+		"ai": "^6.0.0",
 		"arctic": "^3.7.0",
 		"axios": "^1.7.4",
 		"cheerio": "^1.1.2",

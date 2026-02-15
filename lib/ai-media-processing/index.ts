@@ -1,19 +1,18 @@
-import { openai } from "@ai-sdk/openai";
-import { generateText, experimental_transcribe as transcribe } from "ai";
+import { gateway, generateText, experimental_transcribe as transcribe } from "ai";
 
 export async function handleAIAudioProcessing(fileBuffer: Buffer, mimeType: string): Promise<{ transcription: string; summary: string }> {
 	console.log("[AI_MEDIA] Processing audio file");
 
 	try {
 		const transcriptionResponse = await transcribe({
-			model: openai.transcription("whisper-1"),
+			model: gateway("openai/whisper-1"),
 			audio: fileBuffer,
 		});
 
 		const transcription = transcriptionResponse.text;
 
 		const summaryResult = await generateText({
-			model: openai("gpt-4o-mini"),
+			model: gateway("openai/gpt-4o-mini"),
 			prompt: `Resuma o seguinte áudio transcrito em português de forma concisa (máximo 3 linhas):\n\n${transcription}`,
 		});
 
@@ -35,7 +34,7 @@ export async function handleAIImageProcessing(fileBuffer: Buffer, mimeType: stri
 		const dataUrl = `data:${mimeType};base64,${base64Image}`;
 
 		const descriptionResult = await generateText({
-			model: openai("gpt-4o"),
+			model: gateway("openai/gpt-4o"),
 			messages: [
 				{
 					role: "user",
@@ -55,7 +54,7 @@ export async function handleAIImageProcessing(fileBuffer: Buffer, mimeType: stri
 		});
 
 		const summaryResult = await generateText({
-			model: openai("gpt-4o-mini"),
+			model: gateway("openai/gpt-4o-mini"),
 			prompt: `Resuma a seguinte descrição de imagem em português de forma concisa (máximo 2 linhas):\n\n${descriptionResult.text}`,
 		});
 
@@ -98,12 +97,12 @@ export async function handleAIDocumentProcessing(fileBuffer: Buffer, mimeType: s
 		}
 
 		const extractionResult = await generateText({
-			model: openai("gpt-4o-mini"),
+			model: gateway("openai/gpt-4o-mini"),
 			prompt: `Analise o seguinte documento e extraia as informações-chave mais importantes em português:\n\n${textContent}`,
 		});
 
 		const summaryResult = await generateText({
-			model: openai("gpt-4o-mini"),
+			model: gateway("openai/gpt-4o-mini"),
 			prompt: `Resuma o seguinte documento em português de forma concisa (máximo 3 linhas):\n\n${extractionResult.text}`,
 		});
 

@@ -1,18 +1,8 @@
 import type { TChatMessageEntity } from "@/services/drizzle/schema";
-import { createOpenAI } from "@ai-sdk/openai";
-import { Experimental_Agent as Agent, Output, stepCountIs } from "ai";
+import { gateway, Agent, Output, stepCountIs } from "ai";
 import z from "zod";
 import { ENHANCED_SYSTEM_PROMPT, detectEscalationNeeded } from "./prompts";
 import { agentTools } from "./tools";
-
-// const AI_GATEWAY_KEY = process.env.AI_GATEWAY_API_KEY;
-const AI_GATEWAY_KEY = process.env.OPENAI_API_KEY;
-
-// Configure OpenAI with Vercel AI Gateway
-const openai = createOpenAI({
-	apiKey: AI_GATEWAY_KEY,
-	// baseURL: "https://gateway.ai.cloudflare.com/v1/YOUR_ACCOUNT_ID/YOUR_GATEWAY_ID/openai", // Update with your gateway URL
-});
 
 export type TChatDetailsForAgentResponse = {
 	id: string;
@@ -57,10 +47,10 @@ type AIResponse = {
 };
 
 export const agent = new Agent({
-	model: openai("gpt-5"),
-	system: ENHANCED_SYSTEM_PROMPT,
+	model: gateway("openai/gpt-5"),
+	instructions: ENHANCED_SYSTEM_PROMPT,
 	tools: agentTools,
-	experimental_output: Output.object({
+	output: Output.object({
 		schema: z.object({
 			message: z
 				.string()
@@ -140,16 +130,16 @@ Analise a conversa e responda apropriadamente. Use suas ferramentas quando neces
 		});
 
 		console.log("[AI_AGENT] Complete result:", result);
-		const experimental_output = result.experimental_output;
-		if (!experimental_output) {
-			console.log("[AI_AGENT] No experimental_output");
+		const agentOutput = result.output;
+		if (!agentOutput) {
+			console.log("[AI_AGENT] No output");
 			throw new Error("Não foi possível gerar a resposta da IA");
 		}
 		return {
-			message: experimental_output.message,
+			message: agentOutput.message,
 			metadata: {
 				toolsUsed,
-				serviceDescription: experimental_output.serviceDescription,
+				serviceDescription: agentOutput.serviceDescription,
 				tokensUsed: result.usage.totalTokens ?? 0,
 			},
 		};

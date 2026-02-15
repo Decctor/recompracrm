@@ -1,6 +1,5 @@
 import { supabaseClient } from "@/services/supabase";
-import { openai } from "@ai-sdk/openai";
-import { generateText, experimental_transcribe as transcribe } from "ai";
+import { gateway, generateText, experimental_transcribe as transcribe } from "ai";
 import type { NextApiRequest, NextApiResponse } from "next";
 import z from "zod";
 
@@ -106,14 +105,14 @@ async function processAudio(fileBuffer: Buffer, mimeType: string): Promise<{ tra
 
 	try {
 		const transcriptionResponse = await transcribe({
-			model: openai.transcription("whisper-1"),
+			model: gateway("openai/whisper-1"),
 			audio: fileBuffer,
 		});
 
 		const transcription = transcriptionResponse.text;
 
 		const summaryResult = await generateText({
-			model: openai("gpt-4o-mini"),
+			model: gateway("openai/gpt-4o-mini"),
 			prompt: `Resuma o seguinte áudio transcrito em português de forma concisa (máximo 3 linhas):\n\n${transcription}`,
 		});
 
@@ -135,7 +134,7 @@ async function processImage(fileBuffer: Buffer, mimeType: string): Promise<{ des
 		const dataUrl = `data:${mimeType};base64,${base64Image}`;
 
 		const descriptionResult = await generateText({
-			model: openai("gpt-4o"),
+			model: gateway("openai/gpt-4o"),
 			messages: [
 				{
 					role: "user",
@@ -155,7 +154,7 @@ async function processImage(fileBuffer: Buffer, mimeType: string): Promise<{ des
 		});
 
 		const summaryResult = await generateText({
-			model: openai("gpt-4o-mini"),
+			model: gateway("openai/gpt-4o-mini"),
 			prompt: `Resuma a seguinte descrição de imagem em português de forma concisa (máximo 2 linhas):\n\n${descriptionResult.text}`,
 		});
 
@@ -198,12 +197,12 @@ async function processDocument(fileBuffer: Buffer, mimeType: string): Promise<{ 
 		}
 
 		const extractionResult = await generateText({
-			model: openai("gpt-4o-mini"),
+			model: gateway("openai/gpt-4o-mini"),
 			prompt: `Analise o seguinte documento e extraia as informações-chave mais importantes em português:\n\n${textContent}`,
 		});
 
 		const summaryResult = await generateText({
-			model: openai("gpt-4o-mini"),
+			model: gateway("openai/gpt-4o-mini"),
 			prompt: `Resuma o seguinte documento em português de forma concisa (máximo 3 linhas):\n\n${extractionResult.text}`,
 		});
 
