@@ -521,7 +521,7 @@ function PrizeSelectionStep({
 	const FALLBACK_GROUP = "Outros";
 	const SHOW_TOGGLE_THRESHOLD = 4;
 
-	const [viewMode, setViewMode] = React.useState<"categories" | "list">("list");
+	const [viewMode, setViewMode] = React.useState<"categories" | "list">("categories");
 	const [selectedCategory, setSelectedCategory] = React.useState<string | null>(null);
 
 	const categories = React.useMemo(() => {
