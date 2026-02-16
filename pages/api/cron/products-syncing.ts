@@ -7,7 +7,6 @@ import { productAddOnOptions, productAddOnReferences, productAddOns, products, u
 import dayjs from "dayjs";
 import { eq, inArray } from "drizzle-orm";
 import type { NextApiHandler } from "next";
-
 /**
  * Products Syncing Cron Job
  *
@@ -32,11 +31,14 @@ async function handleCardapioWebCatalogSync(organizationId: string, config: TCar
 
 	// Extract all mapped data
 	const {
+		rawCatalog,
 		products: mappedProducts,
 		addOns: mappedAddOns,
 		addOnOptions: mappedAddOnOptions,
 		productAddOnReferences: mappedReferences,
 	} = extractAllCatalogData(catalog);
+
+	await fs.writeFileSync("mappedProducts.json", JSON.stringify(mappedProducts, null, 2));
 
 	console.log(
 		`[ORG: ${organizationId}] [CATALOG-SYNC] Extracted ${mappedProducts.length} products, ${mappedAddOns.length} addOns, ${mappedAddOnOptions.length} options, ${mappedReferences.length} references`,
@@ -64,6 +66,7 @@ async function handleCardapioWebCatalogSync(organizationId: string, config: TCar
 				await tx
 					.update(products)
 					.set({
+						ativo: product.ativo,
 						descricao: product.descricao,
 						imagemCapaUrl: product.imagemCapaUrl,
 						precoVenda: product.precoVenda,
@@ -81,6 +84,7 @@ async function handleCardapioWebCatalogSync(organizationId: string, config: TCar
 					.insert(products)
 					.values({
 						organizacaoId: organizationId,
+						ativo: product.ativo,
 						codigo: product.codigo,
 						descricao: product.descricao,
 						imagemCapaUrl: product.imagemCapaUrl,

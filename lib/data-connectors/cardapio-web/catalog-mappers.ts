@@ -6,6 +6,7 @@ import type { TGetCardapioWebCatalogOutput } from "./types";
 
 export interface MappedCatalogProduct {
 	idExterno: string;
+	ativo: boolean;
 	codigo: string;
 	descricao: string;
 	imagemCapaUrl: string | null;
@@ -61,6 +62,7 @@ type CatalogOption = CatalogOptionGroup["options"][number];
 function mapCatalogProduct(item: CatalogItem, categoryName: string): MappedCatalogProduct {
 	return {
 		idExterno: item.id.toString(),
+		ativo: item.status === "ACTIVE",
 		codigo: item.id.toString(),
 		descricao: item.name,
 		imagemCapaUrl: item.image?.image_url ?? null,
@@ -211,6 +213,7 @@ export function extractCatalogProductAddOnReferences(catalog: TGetCardapioWebCat
 // -----------------------------------------------------------------------------
 
 export interface ExtractedCatalogData {
+	rawCatalog: TGetCardapioWebCatalogOutput;
 	products: MappedCatalogProduct[];
 	addOns: MappedCatalogAddOn[];
 	addOnOptions: MappedCatalogAddOnOption[];
@@ -223,6 +226,7 @@ export interface ExtractedCatalogData {
  */
 export function extractAllCatalogData(catalog: TGetCardapioWebCatalogOutput): ExtractedCatalogData {
 	return {
+		rawCatalog: catalog,
 		products: extractCatalogProducts(catalog),
 		addOns: extractCatalogAddOns(catalog),
 		addOnOptions: extractCatalogAddOnOptions(catalog),
