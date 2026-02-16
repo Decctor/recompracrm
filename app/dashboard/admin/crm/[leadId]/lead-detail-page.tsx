@@ -8,7 +8,7 @@ import LoadingComponent from "@/components/Layouts/LoadingComponent";
 import NewActivity from "@/components/Modals/CRM/NewActivity";
 import NewNote from "@/components/Modals/CRM/NewNote";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import SectionWrapper from "@/components/ui/section-wrapper";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { getErrorMessage } from "@/lib/errors";
 import { formatDateAsLocale, formatToMoney } from "@/lib/formatting";
@@ -20,8 +20,10 @@ import {
 	ArrowLeft,
 	Building2,
 	Calendar,
+	CheckSquare,
 	Clock,
 	DollarSign,
+	FileText,
 	Globe,
 	Mail,
 	Phone,
@@ -44,7 +46,6 @@ export default function LeadDetailPage({ user, leadId }: LeadDetailPageProps) {
 	const { data: notes } = useInternalLeadNotes({ leadId });
 	const [newActivityModalOpen, setNewActivityModalOpen] = useState(false);
 	const [newNoteModalOpen, setNewNoteModalOpen] = useState(false);
-	const [activeTab, setActiveTab] = useState<"timeline" | "activities" | "notes">("timeline");
 
 	async function handleCompleteActivity(activityId: string) {
 		try {
@@ -97,11 +98,10 @@ export default function LeadDetailPage({ user, leadId }: LeadDetailPageProps) {
 				{/* Left - Lead Info */}
 				<div className="lg:col-span-1 flex flex-col gap-3">
 					{/* Organization */}
-					<div className="border rounded-lg p-4">
-						<h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
-							<Building2 className="w-4 h-4" />
-							Organização
-						</h3>
+					<SectionWrapper
+						title="Organização"
+						icon={<Building2 className="w-4 h-4" />}
+					>
 						<div className="flex flex-col gap-1.5 text-sm">
 							<span className="font-medium">{lead.organizacaoNome}</span>
 							<span className="text-muted-foreground">{lead.organizacaoCnpj}</span>
@@ -124,14 +124,13 @@ export default function LeadDetailPage({ user, leadId }: LeadDetailPageProps) {
 								</span>
 							)}
 						</div>
-					</div>
+					</SectionWrapper>
 
 					{/* Contact */}
-					<div className="border rounded-lg p-4">
-						<h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
-							<User className="w-4 h-4" />
-							Contato
-						</h3>
+					<SectionWrapper
+						title="Contato"
+						icon={<User className="w-4 h-4" />}
+					>
 						<div className="flex flex-col gap-1.5 text-sm">
 							<span className="font-medium">{lead.contatoNome}</span>
 							{lead.contatoCargo && <span className="text-muted-foreground">{lead.contatoCargo}</span>}
@@ -146,14 +145,13 @@ export default function LeadDetailPage({ user, leadId }: LeadDetailPageProps) {
 								</span>
 							)}
 						</div>
-					</div>
+					</SectionWrapper>
 
 					{/* Deal Info */}
-					<div className="border rounded-lg p-4">
-						<h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
-							<DollarSign className="w-4 h-4" />
-							Oportunidade
-						</h3>
+					<SectionWrapper
+						title="Oportunidade"
+						icon={<DollarSign className="w-4 h-4" />}
+					>
 						<div className="flex flex-col gap-1.5 text-sm">
 							{lead.valor != null && (
 								<span>
@@ -170,75 +168,68 @@ export default function LeadDetailPage({ user, leadId }: LeadDetailPageProps) {
 								Criado em {formatDateAsLocale(lead.dataInsercao)}
 							</span>
 						</div>
-					</div>
+					</SectionWrapper>
 				</div>
 
 				{/* Right - Timeline / Activities / Notes */}
-				<div className="lg:col-span-2">
-					<Tabs value={activeTab} onValueChange={(v: string) => setActiveTab(v as any)}>
-						<div className="flex items-center justify-between mb-3">
-							<TabsList className="h-fit">
-								<TabsTrigger value="timeline" className="px-3 py-1.5">
-									<Clock className="w-4 h-4 mr-1" />
-									Timeline
-								</TabsTrigger>
-								<TabsTrigger value="activities" className="px-3 py-1.5">
-									Atividades
-								</TabsTrigger>
-								<TabsTrigger value="notes" className="px-3 py-1.5">
-									Notas
-								</TabsTrigger>
-							</TabsList>
-							<div className="flex items-center gap-2">
-								{activeTab === "activities" && (
-									<Button size="sm" onClick={() => setNewActivityModalOpen(true)}>
-										<Plus className="w-4 h-4 mr-1" />
-										Atividade
-									</Button>
-								)}
-								{activeTab === "notes" && (
-									<Button size="sm" onClick={() => setNewNoteModalOpen(true)}>
-										<Plus className="w-4 h-4 mr-1" />
-										Nota
-									</Button>
-								)}
-							</div>
+				<div className="lg:col-span-2 flex flex-col gap-3">
+					{/* Timeline */}
+					<SectionWrapper
+						title="Timeline"
+						icon={<Clock className="w-4 h-4" />}
+					>
+						<LeadTimeline leadId={leadId} />
+					</SectionWrapper>
+
+					{/* Activities */}
+					<SectionWrapper
+						title="Atividades"
+						icon={<CheckSquare className="w-4 h-4" />}
+						actions={
+							<Button size="sm" onClick={() => setNewActivityModalOpen(true)}>
+								<Plus className="w-4 h-4 mr-1" />
+								Adicionar
+							</Button>
+						}
+					>
+						<div className="flex flex-col gap-2">
+							{activitiesData?.activities.map((activity) => (
+								<ActivityCard
+									key={activity.id}
+									activity={activity as any}
+									onComplete={handleCompleteActivity}
+								/>
+							))}
+							{(!activitiesData || activitiesData.activities.length === 0) && (
+								<p className="text-sm text-muted-foreground text-center py-8">
+									Nenhuma atividade registrada.
+								</p>
+							)}
 						</div>
+					</SectionWrapper>
 
-						<TabsContent value="timeline">
-							<LeadTimeline leadId={leadId} />
-						</TabsContent>
-
-						<TabsContent value="activities">
-							<div className="flex flex-col gap-2">
-								{activitiesData?.activities.map((activity) => (
-									<ActivityCard
-										key={activity.id}
-										activity={activity as any}
-										onComplete={handleCompleteActivity}
-									/>
-								))}
-								{(!activitiesData || activitiesData.activities.length === 0) && (
-									<p className="text-sm text-muted-foreground text-center py-8">
-										Nenhuma atividade registrada.
-									</p>
-								)}
-							</div>
-						</TabsContent>
-
-						<TabsContent value="notes">
-							<div className="flex flex-col gap-2">
-								{notes?.map((note) => (
-									<NoteCard key={note.id} note={note as any} onDelete={handleDeleteNote} />
-								))}
-								{(!notes || notes.length === 0) && (
-									<p className="text-sm text-muted-foreground text-center py-8">
-										Nenhuma nota registrada.
-									</p>
-								)}
-							</div>
-						</TabsContent>
-					</Tabs>
+					{/* Notes */}
+					<SectionWrapper
+						title="Notas"
+						icon={<FileText className="w-4 h-4" />}
+						actions={
+							<Button size="sm" onClick={() => setNewNoteModalOpen(true)}>
+								<Plus className="w-4 h-4 mr-1" />
+								Adicionar
+							</Button>
+						}
+					>
+						<div className="flex flex-col gap-2">
+							{notes?.map((note) => (
+								<NoteCard key={note.id} note={note as any} onDelete={handleDeleteNote} />
+							))}
+							{(!notes || notes.length === 0) && (
+								<p className="text-sm text-muted-foreground text-center py-8">
+									Nenhuma nota registrada.
+								</p>
+							)}
+						</div>
+					</SectionWrapper>
 				</div>
 			</div>
 

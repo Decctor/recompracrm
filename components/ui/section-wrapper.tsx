@@ -8,7 +8,7 @@ type SectionWrapperProps = PropsWithChildren<{
 
 export default function SectionWrapper({ children, title, icon, actions }: SectionWrapperProps) {
 	return (
-		<div className={"bg-card border-primary/20 flex w-full h-full flex-col gap-6 rounded-xl border px-3 py-4 shadow-xs"}>
+		<div className={"bg-card border-primary/20 flex w-full flex-col gap-6 rounded-xl border px-3 py-4 shadow-xs"}>
 			<div className="flex items-center justify-between min-h-8">
 				<div className="flex items-center gap-1">
 					{icon}
