@@ -1,4 +1,8 @@
 import type { TGetCampaignAnalyticsInput, TGetCampaignAnalyticsOutput } from "@/app/api/campaigns/analytics/route";
+import type {
+	TGetCampaignInteractionsInput,
+	TGetCampaignInteractionsOutput,
+} from "@/app/api/campaigns/interactions/route";
 import type { TGetCampaignsInput, TGetCampaignsOutput } from "@/app/api/campaigns/route";
 import type { TGetStatsBySegmentationInput, TGetStatsBySegmentationOutput } from "@/app/api/campaigns/stats/by-segmentation/route";
 import type { TGetConversionQualityInput, TGetConversionQualityOutput } from "@/app/api/campaigns/stats/conversion-quality/route";
@@ -15,6 +19,8 @@ async function fetchCampaigns(input: Omit<TGetCampaignsInput, "id">) {
 		const searchParams = new URLSearchParams();
 		if (input.search) searchParams.set("search", input.search);
 		if (input.activeOnly) searchParams.set("activeOnly", input.activeOnly.toString());
+		if (input.statsPeriodAfter) searchParams.set("statsPeriodAfter", input.statsPeriodAfter.toISOString());
+		if (input.statsPeriodBefore) searchParams.set("statsPeriodBefore", input.statsPeriodBefore.toISOString());
 		const { data } = await axios.get<TGetCampaignsOutput>(`/api/campaigns?${searchParams.toString()}`);
 		if (!data.data.default) throw new Error("Campanhas não encontradas.");
 		return data.data.default;
@@ -65,6 +71,42 @@ export function useCampaignById({ id }: UseCampaignByIdParams) {
 			queryFn: async () => await fetchCampaignById(id),
 		}),
 		queryKey: ["campaign-by-id", id],
+	};
+}
+
+async function fetchCampaignInteractionsLogs(input: TGetCampaignInteractionsInput) {
+	try {
+		const searchParams = new URLSearchParams();
+		if (input.page) searchParams.set("page", input.page.toString());
+		if (input.search) searchParams.set("search", input.search);
+		if (input.status && input.status.length > 0) searchParams.set("status", input.status.join(","));
+		if (input.orderByField) searchParams.set("orderByField", input.orderByField);
+		if (input.orderByDirection) searchParams.set("orderByDirection", input.orderByDirection);
+		const { data } = await axios.get<TGetCampaignInteractionsOutput>(`/api/campaigns/interactions?${searchParams.toString()}`);
+		return data.data;
+	} catch (error) {
+		console.log("Error running fetchCampaignInteractionsLogs", error);
+		throw error;
+	}
+}
+
+type UseCampaignInteractionsLogsParams = {
+	initialFilters: TGetCampaignInteractionsInput;
+};
+export function useCampaignInteractionsLogs({ initialFilters }: UseCampaignInteractionsLogsParams) {
+	const [filters, setFilters] = useState<TGetCampaignInteractionsInput>(initialFilters);
+	function updateFilters(newFilters: Partial<TGetCampaignInteractionsInput>) {
+		setFilters((prevFilters) => ({ ...prevFilters, ...newFilters }));
+	}
+	const debouncedFilters = useDebounceMemo(filters, 500);
+	return {
+		...useQuery({
+			queryKey: ["campaign-interactions-logs", debouncedFilters],
+			queryFn: async () => await fetchCampaignInteractionsLogs(debouncedFilters),
+		}),
+		queryKey: ["campaign-interactions-logs", debouncedFilters],
+		filters,
+		updateFilters,
 	};
 }
 

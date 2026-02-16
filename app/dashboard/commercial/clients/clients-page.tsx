@@ -348,7 +348,7 @@ function ClientPageCard({ client }: ClientCardProps) {
 					) : null}
 					{client.canalAquisicao ? (
 						<div className="flex items-center gap-1">
-							<Megaphone width={15} height={15} />
+							<Megaphone className="w-4 h-4 min-w-4 min-h-4" />
 							<h1 className="py-0.5 text-center text-[0.65rem] font-medium italic">{client.canalAquisicao || "N/A"}</h1>
 						</div>
 					) : null}

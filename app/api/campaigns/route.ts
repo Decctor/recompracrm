@@ -4,8 +4,10 @@ import type { TAuthUserSession } from "@/lib/authentication/types";
 import { handleSimpleChildRowsProcessing } from "@/lib/db-utils";
 import { CampaignSchema, CampaignSegmentationSchema } from "@/schemas/campaigns";
 import { db } from "@/services/drizzle";
+import { campaignConversions, interactions } from "@/services/drizzle/schema";
 import { campaignSegmentations, campaigns } from "@/services/drizzle/schema/campaigns";
-import { and, eq, or, sql } from "drizzle-orm";
+import dayjs from "dayjs";
+import { and, count, eq, gte, inArray, lte, or, sql, sum } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import z from "zod";
@@ -135,6 +137,22 @@ const GetCampaignsInputSchema = z.object({
 		.optional()
 		.nullable()
 		.transform((v) => v === "true"),
+	statsPeriodAfter: z
+		.string({
+			required_error: "Período inicial das estatísticas não informado.",
+			invalid_type_error: "Tipo não válido para o período inicial das estatísticas.",
+		})
+		.optional()
+		.nullable()
+		.transform((v) => (v ? dayjs(v).startOf("day").toDate() : null)),
+	statsPeriodBefore: z
+		.string({
+			required_error: "Período final das estatísticas não informado.",
+			invalid_type_error: "Tipo não válido para o período final das estatísticas.",
+		})
+		.optional()
+		.nullable()
+		.transform((v) => (v ? dayjs(v).endOf("day").toDate() : null)),
 });
 export type TGetCampaignsInput = z.infer<typeof GetCampaignsInputSchema>;
 
@@ -184,10 +202,90 @@ async function getCampaigns({ input, session }: { input: TGetCampaignsInput; ses
 		},
 	});
 
+	if (campaignsResult.length === 0) {
+		return {
+			data: {
+				byId: null,
+				default: [],
+			},
+			message: "Campanhas encontradas com sucesso.",
+		};
+	}
+
+	const campaignIds = campaignsResult.map((campaign) => campaign.id);
+	const interactionsConditions = [
+		eq(interactions.organizacaoId, userOrgId),
+		eq(interactions.tipo, "ENVIO-MENSAGEM"),
+		inArray(interactions.campanhaId, campaignIds),
+	];
+	if (input.statsPeriodAfter) interactionsConditions.push(gte(interactions.dataInsercao, input.statsPeriodAfter));
+	if (input.statsPeriodBefore) interactionsConditions.push(lte(interactions.dataInsercao, input.statsPeriodBefore));
+
+	const interactionsStats = await db
+		.select({
+			campaignId: interactions.campanhaId,
+			sentCount: count(interactions.id),
+			deliveredCount: sum(sql<number>`CASE WHEN ${interactions.statusEnvio} IN ('DELIVERED', 'READ') THEN 1 ELSE 0 END`),
+		})
+		.from(interactions)
+		.where(and(...interactionsConditions))
+		.groupBy(interactions.campanhaId);
+
+	const conversionsConditions = [eq(campaignConversions.organizacaoId, userOrgId), inArray(campaignConversions.campanhaId, campaignIds)];
+	if (input.statsPeriodAfter) conversionsConditions.push(gte(campaignConversions.dataConversao, input.statsPeriodAfter));
+	if (input.statsPeriodBefore) conversionsConditions.push(lte(campaignConversions.dataConversao, input.statsPeriodBefore));
+
+	const conversionsStats = await db
+		.select({
+			campaignId: campaignConversions.campanhaId,
+			conversionsCount: count(campaignConversions.id),
+			revenueTotal: sum(campaignConversions.atribuicaoReceita),
+		})
+		.from(campaignConversions)
+		.where(and(...conversionsConditions))
+		.groupBy(campaignConversions.campanhaId);
+
+	const interactionsStatsMap = new Map(
+		interactionsStats.map((row) => [
+			row.campaignId,
+			{
+				sentCount: Number(row.sentCount ?? 0),
+				deliveredCount: Number(row.deliveredCount ?? 0),
+			},
+		]),
+	);
+	const conversionsStatsMap = new Map(
+		conversionsStats.map((row) => [
+			row.campaignId,
+			{
+				conversionsCount: Number(row.conversionsCount ?? 0),
+				revenueTotal: Number(row.revenueTotal ?? 0),
+			},
+		]),
+	);
+	const campaignsEnriched = campaignsResult.map((campaign) => {
+		const interactionStats = interactionsStatsMap.get(campaign.id);
+		const conversionStats = conversionsStatsMap.get(campaign.id);
+		const envios = interactionStats?.sentCount ?? 0;
+		const convertidos = conversionStats?.conversionsCount ?? 0;
+		const taxaConversao = envios > 0 ? (convertidos / envios) * 100 : 0;
+
+		return {
+			...campaign,
+			estatisticas: {
+				envios,
+				entregues: interactionStats?.deliveredCount ?? 0,
+				convertidos,
+				taxaConversao: Math.round(taxaConversao * 100) / 100,
+				receita: conversionStats?.revenueTotal ?? 0,
+			},
+		};
+	});
+
 	return {
 		data: {
 			byId: null,
-			default: campaignsResult,
+			default: campaignsEnriched,
 		},
 		message: "Campanhas encontradas com sucesso.",
 	};
@@ -205,6 +303,8 @@ const getCampaignsRoute = async (request: NextRequest) => {
 		id: searchParams.get("id") ?? undefined,
 		search: searchParams.get("search") ?? undefined,
 		activeOnly: searchParams.get("activeOnly") ?? undefined,
+		statsPeriodAfter: searchParams.get("statsPeriodAfter") ?? undefined,
+		statsPeriodBefore: searchParams.get("statsPeriodBefore") ?? undefined,
 	});
 	const result = await getCampaigns({ input, session: session });
 	return NextResponse.json(result, { status: 200 });

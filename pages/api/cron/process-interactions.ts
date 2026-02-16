@@ -7,10 +7,16 @@ import type { TInteractionsCronJobTimeBlocksEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
 import { chatMessages, chats, interactions, organizations } from "@/services/drizzle/schema";
 import dayjs from "dayjs";
+import timezone from "dayjs/plugin/timezone";
+import utc from "dayjs/plugin/utc";
 import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import type { NextApiHandler } from "next";
 
+dayjs.extend(utc);
+dayjs.extend(timezone);
+
 const TIME_BLOCKS = ["00:00", "03:00", "06:00", "09:00", "12:00", "15:00", "18:00", "21:00"];
+const INTERACTIONS_CRON_TIMEZONE = process.env.INTERACTIONS_CRON_TIMEZONE ?? "America/Sao_Paulo";
 
 /**
  * Gets the most recent time block that has passed (or current if exact match)
@@ -46,9 +52,12 @@ function getCurrentTimeBlock(currentTime = dayjs()): (typeof TIME_BLOCKS)[number
 
 const processInteractionsHandler: NextApiHandler = async (req, res) => {
 	try {
-		const currentDateAsISO8601 = dayjs().format("YYYY-MM-DD");
-		const currentTimeBlock = getCurrentTimeBlock();
+		const nowInCronTimezone = dayjs().tz(INTERACTIONS_CRON_TIMEZONE);
+		const currentDateAsISO8601 = nowInCronTimezone.format("YYYY-MM-DD");
+		const currentTimeBlock = getCurrentTimeBlock(nowInCronTimezone);
 		console.log("[INFO] [PROCESS_INTERACTIONS] Starting interactions processing", {
+			timezone: INTERACTIONS_CRON_TIMEZONE,
+			nowInTimezone: nowInCronTimezone.format(),
 			currentDate: currentDateAsISO8601,
 			currentTimeBlock,
 		});
