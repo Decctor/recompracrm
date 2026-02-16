@@ -7,6 +7,16 @@ import type {
 	TRecurrenceFrequencyEnum,
 	TTimeDurationUnitsEnum,
 } from "@/schemas/enums";
+import type { TInternalLeadStatusCRMEnum } from "@/schemas/internal-leads";
+
+export const InternalLeadStatusCRMOptions: { id: number; label: string; value: TInternalLeadStatusCRMEnum }[] = [
+	{ id: 1, label: "NOVO", value: "NOVO" },
+	{ id: 2, label: "CONTATO INICIAL", value: "CONTATO_INICIAL" },
+	{ id: 3, label: "QUALIFICADO", value: "QUALIFICADO" },
+	{ id: 4, label: "PROPOSTA", value: "PROPOSTA" },
+	{ id: 5, label: "NEGOCIACAO", value: "NEGOCIACAO" },
+	{ id: 6, label: "GANHO", value: "GANHO" },
+];
 
 export const OrganizationNicheOptions: { id: number; label: string; value: string }[] = [
 	{ id: 1, label: "ALIMENTAÇÃO", value: "Alimentação" },

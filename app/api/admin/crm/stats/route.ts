@@ -1,13 +1,9 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { db } from "@/services/drizzle";
-import {
-	INTERNAL_LEAD_STATUS_CRM,
-	internalLeadActivities,
-	internalLeadStageHistory,
-	internalLeads,
-} from "@/services/drizzle/schema";
-import { and, avg, count, eq, gte, lte, sql, sum } from "drizzle-orm";
+import { internalLeadActivities, internalLeads } from "@/services/drizzle/schema";
+import { InternalLeadStatusCRMOptions } from "@/utils/select-options";
+import { and, count, gte, lte, sum } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import z from "zod";
@@ -38,8 +34,8 @@ async function getCrmStats(input: TGetStatsInput) {
 		.groupBy(internalLeads.statusCRM);
 
 	const stageMap: Record<string, { count: number; totalValor: number }> = {};
-	for (const stage of INTERNAL_LEAD_STATUS_CRM) {
-		stageMap[stage] = { count: 0, totalValor: 0 };
+	for (const stage of InternalLeadStatusCRMOptions) {
+		stageMap[stage.value] = { count: 0, totalValor: 0 };
 	}
 	for (const row of leadsPerStage) {
 		stageMap[row.status] = {

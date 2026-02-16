@@ -143,16 +143,18 @@ export function useInternalLeadActivities({ initialParams }: UseActivitiesParams
 
 // ==================== Notes ====================
 
-async function fetchNotes(leadId: string) {
+async function fetchNotesByLeadId(leadId: string) {
 	const { data } = await axios.get<TGetNotesOutput>(`/api/admin/crm/notes?leadId=${leadId}`);
-	return data.data.notes;
+	const result = data.data.byLeadId;
+	if (!result) throw new Error("Notas não encontradas.");
+	return result;
 }
 
 export function useInternalLeadNotes({ leadId }: { leadId: string }) {
 	return {
 		...useQuery({
 			queryKey: ["internal-lead-notes", leadId],
-			queryFn: () => fetchNotes(leadId),
+			queryFn: () => fetchNotesByLeadId(leadId),
 			enabled: !!leadId,
 		}),
 		queryKey: ["internal-lead-notes", leadId],

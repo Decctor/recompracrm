@@ -1,32 +1,10 @@
+import type { TInternalLeadOrigemEnum, TInternalLeadStatusCRMEnum } from "@/schemas/internal-leads";
 import { relations } from "drizzle-orm";
 import { doublePrecision, index, integer, text, timestamp, varchar } from "drizzle-orm/pg-core";
 import { newTable, organizations, users } from ".";
 import { internalLeadActivities } from "./internal-lead-activities";
 import { internalLeadNotes } from "./internal-lead-notes";
 import { internalLeadStageHistory } from "./internal-lead-stage-history";
-
-export const INTERNAL_LEAD_STATUS_CRM = [
-	"NOVO",
-	"CONTATO_INICIAL",
-	"QUALIFICADO",
-	"PROPOSTA",
-	"NEGOCIACAO",
-	"GANHO",
-	"PERDIDO",
-] as const;
-export type TInternalLeadStatusCRM = (typeof INTERNAL_LEAD_STATUS_CRM)[number];
-
-export const INTERNAL_LEAD_ORIGEM = [
-	"INDICACAO",
-	"SITE",
-	"COLD_CALL",
-	"COLD_EMAIL",
-	"LINKEDIN",
-	"EVENTO",
-	"INBOUND",
-	"OUTRO",
-] as const;
-export type TInternalLeadOrigem = (typeof INTERNAL_LEAD_ORIGEM)[number];
 
 export const internalLeads = newTable(
 	"internal_leads",
@@ -36,7 +14,7 @@ export const internalLeads = newTable(
 			.$defaultFn(() => crypto.randomUUID()),
 
 		// Pipeline
-		statusCRM: text("status_crm").$type<TInternalLeadStatusCRM>().notNull().default("NOVO"),
+		statusCRM: text("status_crm").$type<TInternalLeadStatusCRMEnum>().notNull().default("NOVO"),
 		posicaoKanban: integer("posicao_kanban").notNull().default(0),
 
 		// Opportunity
@@ -44,7 +22,7 @@ export const internalLeads = newTable(
 		descricao: text("descricao"),
 		valor: doublePrecision("valor"),
 		probabilidade: integer("probabilidade"),
-		origemLead: text("origem_lead").$type<TInternalLeadOrigem>(),
+		origemLead: text("origem_lead").$type<TInternalLeadOrigemEnum>(),
 		motivoPerda: text("motivo_perda"),
 
 		// Organization Information

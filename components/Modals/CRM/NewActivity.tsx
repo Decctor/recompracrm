@@ -1,11 +1,14 @@
 "use client";
-import TextInput from "@/components/Inputs/TextInput";
-import TextareaInput from "@/components/Inputs/TextareaInput";
+import type { TCreateActivityInput } from "@/app/api/admin/crm/activities/route";
+import DateTimeInput from "@/components/Inputs/DateTimeInput";
 import NumberInput from "@/components/Inputs/NumberInput";
 import SelectInput from "@/components/Inputs/SelectInput";
+import TextInput from "@/components/Inputs/TextInput";
+import TextareaInput from "@/components/Inputs/TextareaInput";
 import ResponsiveMenu from "@/components/Utils/ResponsiveMenu";
 import ResponsiveMenuSection from "@/components/Utils/ResponsiveMenuSection";
 import { getErrorMessage } from "@/lib/errors";
+import { formatDateForInputValue, formatDateOnInputChange } from "@/lib/formatting";
 import { createActivity } from "@/lib/mutations/crm";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Calendar, Clock } from "lucide-react";
@@ -15,6 +18,12 @@ import { toast } from "sonner";
 type NewActivityProps = {
 	leadId: string;
 	closeMenu: () => void;
+	callbacks?: {
+		onMutate?: (variables: TCreateActivityInput) => void;
+		onSuccess?: () => void;
+		onError?: () => void;
+		onSettled?: () => void;
+	};
 };
 
 const TIPO_OPTIONS = [
@@ -25,36 +34,41 @@ const TIPO_OPTIONS = [
 	{ id: "WHATSAPP", value: "WHATSAPP", label: "WhatsApp" },
 ];
 
-export default function NewActivity({ leadId, closeMenu }: NewActivityProps) {
+export default function NewActivity({ leadId, closeMenu, callbacks }: NewActivityProps) {
 	const queryClient = useQueryClient();
-	const [titulo, setTitulo] = useState("");
-	const [descricao, setDescricao] = useState("");
-	const [tipo, setTipo] = useState("TAREFA");
-	const [dataAgendada, setDataAgendada] = useState("");
-	const [duracaoMinutos, setDuracaoMinutos] = useState<number | null>(null);
 
+	const [activity, setActivity] = useState<TCreateActivityInput["activity"]>({
+		leadId,
+		tipo: "TAREFA",
+		titulo: "",
+		descricao: null,
+		status: "PENDENTE",
+		dataAgendada: new Date(),
+		duracaoMinutos: null,
+	});
+	function updateActivity(activity: Partial<TCreateActivityInput["activity"]>) {
+		setActivity((prev) => ({ ...prev, ...activity }));
+	}
 	const { mutate, isPending } = useMutation({
 		mutationKey: ["create-activity"],
 		mutationFn: () =>
 			createActivity({
-				activity: {
-					leadId,
-					tipo: tipo as any,
-					titulo,
-					descricao: descricao || null,
-					status: "PENDENTE",
-					dataAgendada: dataAgendada || new Date().toISOString(),
-					duracaoMinutos,
-				},
+				activity,
 			}),
+		onMutate: async () => {
+			if (callbacks?.onMutate) callbacks.onMutate({ activity });
+		},
 		onSuccess: (data) => {
 			toast.success(data.message);
-			queryClient.invalidateQueries({ queryKey: ["internal-lead-activities"] });
-			queryClient.invalidateQueries({ queryKey: ["internal-lead-timeline", leadId] });
+			if (callbacks?.onSuccess) callbacks.onSuccess();
 			closeMenu();
 		},
 		onError: (error) => {
 			toast.error(getErrorMessage(error));
+			if (callbacks?.onError) callbacks.onError();
+		},
+		onSettled: () => {
+			if (callbacks?.onSettled) callbacks.onSettled();
 		},
 	});
 
@@ -73,42 +87,41 @@ export default function NewActivity({ leadId, closeMenu }: NewActivityProps) {
 		>
 			<ResponsiveMenuSection title="DETALHES" icon={<Calendar className="w-3.5 h-3.5" />}>
 				<SelectInput
-					label="Tipo"
-					value={tipo}
+					label="TIPI"
+					value={activity.tipo}
 					options={TIPO_OPTIONS}
-					resetOptionLabel="Selecione"
-					handleChange={setTipo}
-					onReset={() => setTipo("TAREFA")}
+					resetOptionLabel="NÃO DEFINIDO"
+					handleChange={(v) => updateActivity({ tipo: v as TCreateActivityInput["activity"]["tipo"] })}
+					onReset={() => updateActivity({ tipo: "TAREFA" })}
 					required
 				/>
 				<TextInput
-					label="Título"
-					placeholder="Título da atividade"
-					value={titulo}
-					handleChange={setTitulo}
+					label="TÍTULO"
+					placeholder="Preencha aqui o título da atividade"
+					value={activity.titulo}
+					handleChange={(v) => updateActivity({ titulo: v })}
 					required
 				/>
 				<TextareaInput
-					label="Descrição"
-					placeholder="Detalhes da atividade..."
-					value={descricao}
-					handleChange={setDescricao}
+					label="DESCRIÇÃO"
+					placeholder="Preencha aqui a descrição da atividade"
+					value={activity.descricao || ""}
+					handleChange={(v) => updateActivity({ descricao: v })}
 				/>
 			</ResponsiveMenuSection>
 
 			<ResponsiveMenuSection title="AGENDAMENTO" icon={<Clock className="w-3.5 h-3.5" />}>
-				<TextInput
-					label="Data e Hora"
-					placeholder="AAAA-MM-DD HH:MM"
-					value={dataAgendada}
-					handleChange={setDataAgendada}
+				<DateTimeInput
+					label="DATA E HORA"
+					value={formatDateForInputValue(activity.dataAgendada, "datetime")}
+					handleChange={(v) => updateActivity({ dataAgendada: formatDateOnInputChange(v, "date") || activity.dataAgendada })}
 					required
 				/>
 				<NumberInput
-					label="Duração (min)"
+					label="DURAÇÃO (MIN)"
 					placeholder="Ex: 30"
-					value={duracaoMinutos}
-					handleChange={setDuracaoMinutos}
+					value={activity.duracaoMinutos}
+					handleChange={(v) => updateActivity({ duracaoMinutos: v })}
 				/>
 			</ResponsiveMenuSection>
 		</ResponsiveMenu>

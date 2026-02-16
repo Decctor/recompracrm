@@ -11,6 +11,7 @@ export const products = newTable(
 			.primaryKey()
 			.$defaultFn(() => crypto.randomUUID()),
 		organizacaoId: varchar("organizacao_id", { length: 255 }).references(() => organizations.id, { onDelete: "cascade" }),
+		ativo: boolean("ativo").default(true),
 		descricao: text("descricao").notNull(),
 		imagemCapaUrl: text("imagem_capa_url"),
 		codigo: text("codigo").notNull(),

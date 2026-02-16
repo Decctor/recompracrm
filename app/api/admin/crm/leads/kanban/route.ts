@@ -1,7 +1,9 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import type { TInternalLeadStatusCRMEnum } from "@/schemas/internal-leads";
 import { db } from "@/services/drizzle";
-import { INTERNAL_LEAD_STATUS_CRM, type TInternalLeadStatusCRM, internalLeadStageHistory, internalLeads } from "@/services/drizzle/schema";
+import { internalLeadStageHistory, internalLeads } from "@/services/drizzle/schema";
+import { InternalLeadStatusCRMOptions } from "@/utils/select-options";
 import { eq } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
@@ -18,7 +20,7 @@ async function getKanbanLeads() {
 		orderBy: (fields, { asc }) => [asc(fields.posicaoKanban)],
 	});
 
-	const grouped: Record<TInternalLeadStatusCRM, typeof allLeads> = {
+	const grouped: Record<TInternalLeadStatusCRMEnum, typeof allLeads> = {
 		NOVO: [],
 		CONTATO_INICIAL: [],
 		QUALIFICADO: [],
@@ -29,14 +31,14 @@ async function getKanbanLeads() {
 	};
 
 	for (const lead of allLeads) {
-		const status = lead.statusCRM as TInternalLeadStatusCRM;
+		const status = lead.statusCRM as TInternalLeadStatusCRMEnum;
 		if (grouped[status]) {
 			grouped[status].push(lead);
 		}
 	}
 
 	return {
-		data: { columns: grouped, stages: INTERNAL_LEAD_STATUS_CRM },
+		data: { columns: grouped, stages: InternalLeadStatusCRMOptions },
 		message: "Kanban obtido com sucesso.",
 	};
 }
@@ -81,7 +83,7 @@ async function moveLead({ input, autorId }: { input: TMoveLeadInput; autorId: st
 		await tx
 			.update(internalLeads)
 			.set({
-				statusCRM: input.novoStatus as TInternalLeadStatusCRM,
+				statusCRM: input.novoStatus as TInternalLeadStatusCRMEnum,
 				posicaoKanban: input.novaPosicao,
 				dataUltimaAtualizacao: new Date(),
 			})

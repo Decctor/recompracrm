@@ -69,6 +69,8 @@ async function getActivities(input: TGetActivitiesInput) {
 	};
 }
 export type TGetActivitiesOutput = Awaited<ReturnType<typeof getActivities>>;
+export type TGetActivitiesOutputDefault = NonNullable<TGetActivitiesOutput["data"]["default"]>;
+export type TGetActivitiesOutputById = NonNullable<TGetActivitiesOutput["data"]["byId"]>;
 
 async function getActivitiesRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
@@ -125,13 +127,17 @@ async function createActivityRoute(request: NextRequest) {
 // ==================== PUT - Update / Complete Activity ====================
 
 const UpdateActivityInputSchema = z.object({
+	activityId: z.string({
+		invalid_type_error: "Tipo não válido para o ID da atividade.",
+		required_error: "ID da atividade não informado.",
+	}),
 	activity: InternalLeadActivitySchema.partial(),
 });
 export type TUpdateActivityInput = z.infer<typeof UpdateActivityInputSchema>;
 
-async function updateActivity({ id, input }: { id: string; input: TUpdateActivityInput }) {
+async function updateActivity({ input }: { input: TUpdateActivityInput }) {
 	const existing = await db.query.internalLeadActivities.findFirst({
-		where: (fields, { eq }) => eq(fields.id, id),
+		where: (fields, { eq }) => eq(fields.id, input.activityId),
 	});
 	if (!existing) throw new createHttpError.NotFound("Atividade não encontrada.");
 
@@ -142,10 +148,10 @@ async function updateActivity({ id, input }: { id: string; input: TUpdateActivit
 		updateData.dataConclusao = new Date();
 	}
 
-	await db.update(internalLeadActivities).set(updateData).where(eq(internalLeadActivities.id, id));
+	await db.update(internalLeadActivities).set(updateData).where(eq(internalLeadActivities.id, input.activityId));
 
 	return {
-		data: { updatedId: id },
+		data: { updatedId: input.activityId },
 		message: "Atividade atualizada com sucesso.",
 	};
 }
@@ -156,12 +162,9 @@ async function updateActivityRoute(request: NextRequest) {
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
 	if (!session.user.admin) throw new createHttpError.Forbidden("Acesso restrito a administradores.");
 
-	const id = request.nextUrl.searchParams.get("id");
-	if (!id) throw new createHttpError.BadRequest("ID da atividade não informado.");
-
 	const payload = await request.json();
 	const input = UpdateActivityInputSchema.parse(payload);
-	const result = await updateActivity({ id, input });
+	const result = await updateActivity({ input });
 	return NextResponse.json(result);
 }
 

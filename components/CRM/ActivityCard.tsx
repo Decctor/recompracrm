@@ -1,9 +1,13 @@
 "use client";
-import type { TInternalLeadActivityEntity } from "@/services/drizzle/schema";
-import { formatDateAsLocale } from "@/lib/formatting";
-import { cn } from "@/lib/utils";
-import { Calendar, Check, Clock, Mail, MessageSquare, Phone, Video, X } from "lucide-react";
+import type { TGetActivitiesOutputDefault, TUpdateActivityInput } from "@/app/api/admin/crm/activities/route";
 import { Button } from "@/components/ui/button";
+import { formatDateAsLocale, formatNameAsInitials } from "@/lib/formatting";
+import { updateActivity } from "@/lib/mutations/crm";
+import { cn } from "@/lib/utils";
+import { useMutation } from "@tanstack/react-query";
+import { Calendar, Check, Clock, Mail, MessageSquare, Phone, Video, X } from "lucide-react";
+import { BsCalendarCheck, BsCalendarEvent, BsCalendarPlus } from "react-icons/bs";
+import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 
 const TIPO_ICONS: Record<string, React.ReactNode> = {
 	LIGACAO: <Phone className="w-4 h-4" />,
@@ -27,40 +31,57 @@ const STATUS_STYLES: Record<string, string> = {
 	CANCELADA: "bg-red-100 text-red-700",
 };
 
-type ActivityCardProps = {
-	activity: TInternalLeadActivityEntity & { autor?: { nome: string } | null };
-	onComplete?: (id: string) => void;
-	onEdit?: (id: string) => void;
+type InternalActivityCardProps = {
+	activity: TGetActivitiesOutputDefault["activities"][number];
+	callbacks?: {
+		onMutate?: (variables: TUpdateActivityInput) => void;
+		onSuccess?: () => void;
+		onError?: () => void;
+		onSettled?: () => void;
+	};
 };
 
-export default function ActivityCard({ activity, onComplete, onEdit }: ActivityCardProps) {
+export default function InternalActivityCard({ activity, callbacks }: InternalActivityCardProps) {
+	const { mutate: updateActivityMutation, isPending: isUpdatingActivity } = useMutation({
+		mutationKey: ["update-internal-activity"],
+		mutationFn: updateActivity,
+	});
 	return (
-		<div className="flex items-start gap-3 p-3 border rounded-lg">
-			<div className="mt-0.5 text-muted-foreground">{TIPO_ICONS[activity.tipo]}</div>
-			<div className="flex-1 min-w-0">
-				<div className="flex items-center gap-2">
-					<span className="text-sm font-medium truncate">{activity.titulo}</span>
-					<span className={cn("text-xs rounded px-1.5 py-0.5 shrink-0", STATUS_STYLES[activity.status])}>
-						{activity.status === "PENDENTE" ? "Pendente" : activity.status === "CONCLUIDA" ? "Concluída" : "Cancelada"}
-					</span>
-				</div>
-				{activity.descricao && (
-					<p className="text-xs text-muted-foreground mt-0.5 truncate">{activity.descricao}</p>
-				)}
-				<div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground">
-					<span className="flex items-center gap-1">
-						<Calendar className="w-3 h-3" />
-						{formatDateAsLocale(activity.dataAgendada)}
-					</span>
-					<span>{TIPO_LABELS[activity.tipo] ?? activity.tipo}</span>
-					{activity.autor && <span>por {activity.autor.nome}</span>}
+		<div className={cn("bg-card border-primary/20 flex w-full flex-col gap-1 rounded-xl border px-3 py-2 shadow-2xs")}>
+			<div className="w-full flex items-center justify-between gap-2">
+				<div className="flex items-center gap-1.5">
+					{TIPO_ICONS[activity.tipo]}
+					<span className="text-xs font-bold tracking-tight lg:text-sm">{activity.titulo}</span>
 				</div>
 			</div>
-			{activity.status === "PENDENTE" && onComplete && (
-				<Button variant="ghost" size="sm" onClick={() => onComplete(activity.id)} className="shrink-0">
-					<Check className="w-4 h-4" />
-				</Button>
-			)}
+			<div className="w-full flex flex-col gap-1 grow">
+				{activity.descricao && <p className="text-xs text-muted-foreground mt-0.5 truncate">{activity.descricao}</p>}
+			</div>
+			<div className="w-full flex items-center justify-between gap-2">
+				<div className="flex items-center gap-2">
+					{activity.autor && (
+						<div className="flex items-center gap-1">
+							<Avatar className="w-4 h-4 min-w-4 min-h-4">
+								<AvatarImage src={activity.autor.avatarUrl ?? undefined} alt={activity.autor.nome} />
+								<AvatarFallback>{formatNameAsInitials(activity.autor.nome)}</AvatarFallback>
+							</Avatar>
+							<span className="text-xs font-medium">{activity.autor.nome}</span>
+						</div>
+					)}
+
+					{activity.dataConclusao ? (
+						<div className={cn("flex items-center gap-1.5 text-[0.65rem] font-bold text-green-500 dark:text-green-400")}>
+							<BsCalendarCheck className="w-4 min-w-4 h-4 min-h-4" />
+							<p className="text-xs font-medium tracking-tight uppercase">CONCLUÍDA EM: {formatDateAsLocale(activity.dataConclusao, true)}</p>
+						</div>
+					) : (
+						<div className={cn("flex items-center gap-1.5 text-[0.65rem] font-bold text-primary")}>
+							<BsCalendarEvent className="w-4 min-w-4 h-4 min-h-4" />
+							<p className="text-xs font-medium tracking-tight uppercase">PARA: {formatDateAsLocale(activity.dataAgendada, true)}</p>
+						</div>
+					)}
+				</div>
+			</div>
 		</div>
 	);
 }

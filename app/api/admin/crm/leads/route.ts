@@ -86,6 +86,7 @@ async function getLeads(input: TGetLeadsInput) {
 }
 export type TGetLeadsOutput = Awaited<ReturnType<typeof getLeads>>;
 export type TGetLeadsOutputDefault = NonNullable<TGetLeadsOutput["data"]["default"]>;
+export type TGetLeadsOutputById = NonNullable<TGetLeadsOutput["data"]["byId"]>;
 
 async function getLeadsRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
@@ -153,6 +154,10 @@ async function createLeadRoute(request: NextRequest) {
 // ==================== PUT - Update Lead ====================
 
 const UpdateLeadInputSchema = z.object({
+	leadId: z.string({
+		invalid_type_error: "Tipo não válido para o ID do lead.",
+		required_error: "ID do lead não informado.",
+	}),
 	lead: InternalLeadSchema.partial(),
 });
 export type TUpdateLeadInput = z.infer<typeof UpdateLeadInputSchema>;

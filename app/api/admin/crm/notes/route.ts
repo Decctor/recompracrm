@@ -11,23 +11,88 @@ import z from "zod";
 // ==================== GET - List Notes by Lead ====================
 
 const GetNotesInputSchema = z.object({
-	leadId: z.string(),
+	id: z
+		.string({
+			required_error: "ID da nota não informado.",
+			invalid_type_error: "ID da nota não válido.",
+		})
+		.optional(),
+	leadId: z
+		.string({
+			required_error: "ID do lead não informado.",
+			invalid_type_error: "ID do lead não válido.",
+		})
+		.optional(),
 });
 export type TGetNotesInput = z.infer<typeof GetNotesInputSchema>;
 
 async function getNotes(input: TGetNotesInput) {
+	const inputId = input.id;
+	const inputLeadId = input.leadId;
+	if (inputId) {
+		const note = await db.query.internalLeadNotes.findFirst({
+			where: (fields, { eq }) => eq(fields.id, inputId),
+			with: {
+				autor: {
+					columns: {
+						id: true,
+						nome: true,
+						avatarUrl: true,
+					},
+				},
+			},
+		});
+		if (!note) throw new createHttpError.NotFound("Nota não encontrada.");
+		return {
+			data: {
+				byId: note,
+				byLeadId: null,
+				default: null,
+			},
+			message: "Nota obtida com sucesso.",
+		};
+	}
+	if (inputLeadId) {
+		const notes = await db.query.internalLeadNotes.findMany({
+			where: (fields, { eq }) => eq(fields.leadId, inputLeadId),
+			with: {
+				autor: {
+					columns: {
+						id: true,
+						nome: true,
+						avatarUrl: true,
+					},
+				},
+			},
+			orderBy: (fields, { desc }) => [desc(fields.dataInsercao)],
+		});
+		return {
+			data: { byLeadId: notes, byId: null, default: null },
+			message: "Notas obtidas com sucesso.",
+		};
+	}
+
 	const notes = await db.query.internalLeadNotes.findMany({
-		where: (fields, { eq }) => eq(fields.leadId, input.leadId),
-		with: { autor: true },
+		with: {
+			autor: {
+				columns: {
+					id: true,
+					nome: true,
+					avatarUrl: true,
+				},
+			},
+		},
 		orderBy: (fields, { desc }) => [desc(fields.dataInsercao)],
 	});
-
 	return {
-		data: { notes },
+		data: { default: notes, byLeadId: null, byId: null },
 		message: "Notas obtidas com sucesso.",
 	};
 }
 export type TGetNotesOutput = Awaited<ReturnType<typeof getNotes>>;
+export type TGetNotesOutputDefault = NonNullable<TGetNotesOutput["data"]["default"]>;
+export type TGetNotesOutputByLeadId = NonNullable<TGetNotesOutput["data"]["byLeadId"]>;
+export type TGetNotesOutputById = NonNullable<TGetNotesOutput["data"]["byId"]>;
 
 async function getNotesRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
@@ -115,7 +180,15 @@ async function updateNoteRoute(request: NextRequest) {
 
 // ==================== DELETE - Delete Note ====================
 
-async function deleteNote({ id }: { id: string }) {
+const DeleteNoteInputSchema = z.object({
+	id: z.string({
+		required_error: "ID da nota não informado.",
+		invalid_type_error: "ID da nota não válido.",
+	}),
+});
+export type TDeleteNoteInput = z.infer<typeof DeleteNoteInputSchema>;
+async function deleteNote({ input }: { input: TDeleteNoteInput }) {
+	const id = input.id;
 	const existing = await db.query.internalLeadNotes.findFirst({
 		where: (fields, { eq }) => eq(fields.id, id),
 	});
@@ -138,7 +211,8 @@ async function deleteNoteRoute(request: NextRequest) {
 	const id = request.nextUrl.searchParams.get("id");
 	if (!id) throw new createHttpError.BadRequest("ID da nota não informado.");
 
-	const result = await deleteNote({ id });
+	const input = DeleteNoteInputSchema.parse({ id });
+	const result = await deleteNote({ input });
 	return NextResponse.json(result);
 }
 

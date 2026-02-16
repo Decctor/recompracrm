@@ -1,8 +1,27 @@
-import type { TCreateLeadInput, TCreateLeadOutput, TDeleteLeadOutput, TUpdateLeadInput, TUpdateLeadOutput } from "@/app/api/admin/crm/leads/route";
+import type {
+	TCreateActivityInput,
+	TCreateActivityOutput,
+	TDeleteActivityOutput,
+	TUpdateActivityInput,
+	TUpdateActivityOutput,
+} from "@/app/api/admin/crm/activities/route";
+import type {
+	TCreateTemplateInput,
+	TCreateTemplateOutput,
+	TDeleteTemplateOutput,
+	TUpdateTemplateInput,
+	TUpdateTemplateOutput,
+} from "@/app/api/admin/crm/activity-templates/route";
 import type { TMoveLeadInput, TMoveLeadOutput } from "@/app/api/admin/crm/leads/kanban/route";
-import type { TCreateActivityInput, TCreateActivityOutput, TDeleteActivityOutput, TUpdateActivityInput, TUpdateActivityOutput } from "@/app/api/admin/crm/activities/route";
-import type { TCreateNoteInput, TCreateNoteOutput, TDeleteNoteOutput, TUpdateNoteInput, TUpdateNoteOutput } from "@/app/api/admin/crm/notes/route";
-import type { TCreateTemplateInput, TCreateTemplateOutput, TDeleteTemplateOutput, TUpdateTemplateInput, TUpdateTemplateOutput } from "@/app/api/admin/crm/activity-templates/route";
+import type { TCreateLeadInput, TCreateLeadOutput, TDeleteLeadOutput, TUpdateLeadInput, TUpdateLeadOutput } from "@/app/api/admin/crm/leads/route";
+import type {
+	TCreateNoteInput,
+	TCreateNoteOutput,
+	TDeleteNoteInput,
+	TDeleteNoteOutput,
+	TUpdateNoteInput,
+	TUpdateNoteOutput,
+} from "@/app/api/admin/crm/notes/route";
 import axios from "axios";
 
 // ==================== Leads ====================
@@ -17,14 +36,9 @@ export async function createInternalLead(info: TCreateLeadInput) {
 	}
 }
 
-export async function updateInternalLead({ id, ...info }: TUpdateLeadInput & { id: string }) {
-	try {
-		const { data } = await axios.put<TUpdateLeadOutput>(`/api/admin/crm/leads?id=${id}`, info);
-		return data;
-	} catch (error) {
-		console.log("Error running updateInternalLead", error);
-		throw error;
-	}
+export async function updateInternalLead(input: TUpdateLeadInput) {
+	const { data } = await axios.put<TUpdateLeadOutput>(`/api/admin/crm/leads?id=${input.leadId}`, input);
+	return data;
 }
 
 export async function deleteInternalLead(id: string) {
@@ -59,9 +73,9 @@ export async function createActivity(info: TCreateActivityInput) {
 	}
 }
 
-export async function updateActivity({ id, ...info }: TUpdateActivityInput & { id: string }) {
+export async function updateActivity(input: TUpdateActivityInput) {
 	try {
-		const { data } = await axios.put<TUpdateActivityOutput>(`/api/admin/crm/activities?id=${id}`, info);
+		const { data } = await axios.put<TUpdateActivityOutput>("/api/admin/crm/activities", input);
 		return data;
 	} catch (error) {
 		console.log("Error running updateActivity", error);
@@ -113,9 +127,9 @@ export async function updateNote({ id, conteudo }: TUpdateNoteInput & { id: stri
 	}
 }
 
-export async function deleteNote(id: string) {
+export async function deleteNote(input: TDeleteNoteInput) {
 	try {
-		const { data } = await axios.delete<TDeleteNoteOutput>(`/api/admin/crm/notes?id=${id}`);
+		const { data } = await axios.delete<TDeleteNoteOutput>(`/api/admin/crm/notes?id=${input.id}`);
 		return data;
 	} catch (error) {
 		console.log("Error running deleteNote", error);
