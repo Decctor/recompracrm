@@ -18,3 +18,8 @@ export * from "./organizations";
 export * from "./whatsapp-connections";
 export * from "./chats";
 export * from "./ai-hints";
+export * from "./internal-lead-activity-templates";
+export * from "./internal-lead-activities";
+export * from "./internal-lead-notes";
+export * from "./internal-lead-stage-history";
+export * from "./internal-leads";

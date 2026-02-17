@@ -4,7 +4,7 @@ import { uploadFile } from "@/lib/files-storage";
 import { OrganizationSchema } from "@/schemas/organizations";
 import { NewUserSchema } from "@/schemas/users";
 import { db } from "@/services/drizzle";
-import { organizations, products, users } from "@/services/drizzle/schema";
+import { organizationMembers, organizations, products, users } from "@/services/drizzle/schema";
 import { sql } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
@@ -34,10 +34,10 @@ async function getOrganizations() {
 			telefone: organizations.telefone,
 			email: organizations.email,
 			dataInsercao: organizations.dataInsercao,
-			userCount: sql<number>`count(${users.id})::int`,
+			userCount: sql<number>`count(${organizationMembers.id})::int`,
 		})
 		.from(organizations)
-		.leftJoin(users, sql`${users.organizacaoId} = ${organizations.id}`)
+		.leftJoin(organizationMembers, sql`${organizationMembers.organizacaoId} = ${organizations.id}`)
 		.groupBy(organizations.id)
 		.orderBy(sql`${organizations.dataInsercao} DESC`);
 
