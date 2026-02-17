@@ -68,3 +68,11 @@ export const chatMessageWhatsappStatusEnum = pgEnum("chat_message_whatsapp_statu
 export const conversionTypeEnum = pgEnum("conversion_type", ["AQUISICAO", "REATIVACAO", "ACELERACAO", "REGULAR", "ATRASADA"]);
 
 export const whatsappConnectionTypeEnum = pgEnum("whatsapp_connection_type", ["META_CLOUD_API", "INTERNAL_GATEWAY"]);
+
+export const communityCourseAccessLevelEnum = pgEnum("community_course_access_level", ["PUBLICO", "AUTENTICADO", "ASSINATURA"]);
+
+export const communityCourseStatusEnum = pgEnum("community_course_status", ["RASCUNHO", "PUBLICADO", "ARQUIVADO"]);
+
+export const communityLessonContentTypeEnum = pgEnum("community_lesson_content_type", ["VIDEO", "TEXTO", "VIDEO_TEXTO"]);
+
+export const communityMuxAssetStatusEnum = pgEnum("community_mux_asset_status", ["AGUARDANDO", "PROCESSANDO", "PRONTO", "ERRO"]);

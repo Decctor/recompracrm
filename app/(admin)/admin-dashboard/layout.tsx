@@ -1,10 +1,11 @@
+import AppHeader from "@/components/Layouts/HeaderApp";
 import LoadingComponent from "@/components/Layouts/LoadingComponent";
 import { AdminSidebar } from "@/components/Sidebar/AdminSidebar";
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import UnauthorizedPage from "@/components/Utils/UnauthorizedPage";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { getCurrentSession } from "@/lib/authentication/session";
 import { redirect } from "next/navigation";
-import { Suspense, type ReactNode } from "react";
+import { type ReactNode, Suspense } from "react";
 
 type AdminDashboardLayoutProps = {
 	children: ReactNode;
@@ -20,7 +21,11 @@ export default async function AdminDashboardLayout({ children }: AdminDashboardL
 		<SidebarProvider className="font-raleway">
 			<AdminSidebar user={session.user} organization={session.membership?.organizacao ?? null} />
 			<Suspense fallback={<LoadingComponent />}>
-				<SidebarInset className="overflow-y-auto p-6 flex flex-col gap-3">{children}</SidebarInset>
+				<SidebarInset className="overflow-y-auto p-6 flex flex-col gap-3">
+					<AppHeader />
+
+					{children}
+				</SidebarInset>
 			</Suspense>
 		</SidebarProvider>
 	);

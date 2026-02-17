@@ -1,14 +1,16 @@
 "use client";
 
-import type { TGetAdminCoursesOutput } from "@/app/api/admin/community/courses/route";
-import { Badge } from "@/components/ui/badge";
+import type { TGetCommunityCoursesOutputById } from "@/app/api/admin/community/courses/route";
 import { Button } from "@/components/ui/button";
-import { deleteLesson } from "@/lib/mutations/community-admin";
+import { StatBadge } from "@/components/ui/stat-badge";
+import { formatDateAsLocale } from "@/lib/formatting";
+import { deleteCommunityLesson } from "@/lib/mutations/community-admin";
+import { cn } from "@/lib/utils";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronUp, Edit, FileText, Loader2, PlayCircle, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Calendar, Diamond, FileText, Loader2, Pencil, PlayCircle, Trash2, VideoIcon } from "lucide-react";
 import { toast } from "sonner";
 
-type Lesson = TGetAdminCoursesOutput["data"][number]["secoes"][number]["aulas"][number];
+type Lesson = TGetCommunityCoursesOutputById["secoes"][number]["aulas"][number];
 
 type LessonBlockProps = {
 	lesson: Lesson;
@@ -25,11 +27,27 @@ const CONTENT_TYPE_CONFIG = {
 	VIDEO_TEXTO: { label: "Vídeo + Texto", icon: PlayCircle, className: "text-purple-600" },
 };
 
-const MUX_STATUS_CONFIG: Record<string, { label: string; className: string }> = {
-	AGUARDANDO: { label: "Aguardando upload", className: "text-muted-foreground border-muted" },
-	PROCESSANDO: { label: "Processando", className: "text-amber-600 border-amber-300 bg-amber-50" },
-	PRONTO: { label: "Pronto", className: "text-emerald-600 border-emerald-300 bg-emerald-50" },
-	ERRO: { label: "Erro", className: "text-destructive border-destructive/30 bg-destructive/10" },
+const MUX_STATUS_CONFIG: Record<string, { label: string; className: string; mediaClassName: string }> = {
+	AGUARDANDO: {
+		label: "Aguardando upload",
+		className: "text-muted-foreground",
+		mediaClassName: "bg-primary/5 text-muted-foreground",
+	},
+	PROCESSANDO: {
+		label: "Processando",
+		className: "text-amber-700",
+		mediaClassName: "bg-amber-100 text-amber-700",
+	},
+	PRONTO: {
+		label: "Pronto",
+		className: "text-emerald-700",
+		mediaClassName: "bg-emerald-100 text-emerald-700",
+	},
+	ERRO: {
+		label: "Erro",
+		className: "text-destructive",
+		mediaClassName: "bg-destructive/10 text-destructive",
+	},
 };
 
 function formatDuration(seconds: number | null) {
@@ -41,12 +59,12 @@ function formatDuration(seconds: number | null) {
 
 export default function LessonBlock({ lesson, index, totalLessons, onMoveUp, onMoveDown, onEdit }: LessonBlockProps) {
 	const queryClient = useQueryClient();
-	const contentConfig = CONTENT_TYPE_CONFIG[lesson.tipoConteudo];
+	const contentConfig = CONTENT_TYPE_CONFIG[lesson.tipoConteudo as keyof typeof CONTENT_TYPE_CONFIG];
 	const ContentIcon = contentConfig.icon;
 	const muxStatus = lesson.muxAssetStatus ? MUX_STATUS_CONFIG[lesson.muxAssetStatus] : null;
 
 	const { mutate: handleDelete, isPending: isDeleting } = useMutation({
-		mutationFn: () => deleteLesson(lesson.id),
+		mutationFn: () => deleteCommunityLesson(lesson.id),
 		onSuccess: () => {
 			toast.success("Aula excluída.");
 			queryClient.invalidateQueries({ queryKey: ["admin-community-courses"] });
@@ -55,60 +73,69 @@ export default function LessonBlock({ lesson, index, totalLessons, onMoveUp, onM
 	});
 
 	return (
-		<div className="flex items-center gap-2 px-3 py-2 rounded-md bg-primary/[0.02] border border-primary/10 hover:bg-primary/[0.04] transition-colors group">
-			{/* Reorder */}
-			<div className="flex flex-col">
-				<button
-					type="button"
-					onClick={onMoveUp}
-					disabled={index === 0}
-					className="text-muted-foreground hover:text-foreground disabled:opacity-30 p-0.5"
-				>
-					<ChevronUp className="w-3 h-3" />
-				</button>
-				<button
-					type="button"
-					onClick={onMoveDown}
-					disabled={index >= totalLessons - 1}
-					className="text-muted-foreground hover:text-foreground disabled:opacity-30 p-0.5"
-				>
-					<ChevronDown className="w-3 h-3" />
-				</button>
+		<div className="bg-card border-primary/20 flex w-full flex-col gap-2 rounded-xl border p-3 shadow-2xs">
+			<div className={cn("relative aspect-video w-full overflow-hidden rounded-lg", muxStatus?.mediaClassName ?? "bg-primary/5 text-muted-foreground")}>
+				<div className="flex h-full w-full flex-col items-center justify-center gap-1">
+					{lesson.muxAssetStatus === "PROCESSANDO" ? <Loader2 className="h-6 w-6 animate-spin" /> : <VideoIcon className="h-6 w-6" />}
+					<p className="text-xs font-medium">{muxStatus ? muxStatus.label : "Sem vídeo definido"}</p>
+				</div>
 			</div>
 
-			{/* Content type icon */}
-			<ContentIcon className={`w-4 h-4 min-w-4 ${contentConfig.className}`} />
+			<div className="flex items-start justify-between gap-2">
+				<div className="flex items-center gap-1">
+					<div className="p-2 rounded-full bg-secondary text-primary font-bold text-[0.65rem]">#{index + 1}</div>
+					<h3 className="truncate text-sm font-bold tracking-tight">{lesson.titulo}</h3>
+				</div>
+				{muxStatus ? (
+					<StatBadge
+						icon={<Diamond className={cn("h-3.5 w-3.5", muxStatus.className)} />}
+						value={muxStatus.label}
+						tooltipContent="Status do processamento de vídeo da aula"
+						className="px-2 py-1"
+						valueClassName={cn("text-[10px]", muxStatus.className)}
+					/>
+				) : null}
+			</div>
 
-			{/* Title */}
-			<span className="flex-1 text-sm truncate">{lesson.titulo}</span>
+			<div className="flex items-center justify-between text-xs text-muted-foreground">
+				<div className="flex items-center gap-1">
+					<Calendar className="h-3.5 w-3.5" />
+					<span>{formatDateAsLocale(lesson.dataInsercao)}</span>
+				</div>
+				<div className="flex items-center gap-1">
+					{lesson.duracaoSegundos ? <span>{formatDuration(lesson.duracaoSegundos)}</span> : null}
+					<div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+						<ContentIcon className={`h-3.5 w-3.5 ${contentConfig.className}`} />
+						<span>{contentConfig.label}</span>
+					</div>
+				</div>
+			</div>
 
-			{/* Duration */}
-			{lesson.duracaoSegundos && (
-				<span className="text-xs text-muted-foreground">{formatDuration(lesson.duracaoSegundos)}</span>
-			)}
-
-			{/* Mux status */}
-			{muxStatus && (
-				<Badge variant="outline" className={`text-[10px] h-5 ${muxStatus.className}`}>
-					{lesson.muxAssetStatus === "PROCESSANDO" && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
-					{muxStatus.label}
-				</Badge>
-			)}
-
-			{/* Actions */}
-			<div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-				<Button variant="ghost" size="icon" className="h-6 w-6" onClick={onEdit}>
-					<Edit className="w-3 h-3" />
-				</Button>
-				<Button
-					variant="ghost"
-					size="icon"
-					className="h-6 w-6 text-destructive hover:text-destructive"
-					onClick={() => handleDelete()}
-					disabled={isDeleting}
-				>
-					<Trash2 className="w-3 h-3" />
-				</Button>
+			<div className="flex items-center justify-between gap-1 pt-1">
+				<div className="flex items-center gap-1">
+					<Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={onMoveUp} disabled={index === 0}>
+						<ArrowUp className="h-3.5 w-3.5" />
+					</Button>
+					<Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={onMoveDown} disabled={index >= totalLessons - 1}>
+						<ArrowDown className="h-3.5 w-3.5" />
+					</Button>
+				</div>
+				<div className="flex items-center gap-1">
+					<Button variant="ghost" size="sm" className="h-7 gap-1.5 px-2" onClick={onEdit}>
+						<Pencil className="h-3.5 w-3.5" />
+						EDITAR
+					</Button>
+					<Button
+						variant="ghost"
+						size="sm"
+						className="h-7 gap-1.5 px-2 text-destructive hover:text-destructive"
+						onClick={() => handleDelete()}
+						disabled={isDeleting}
+					>
+						<Trash2 className="h-3.5 w-3.5" />
+						EXCLUIR
+					</Button>
+				</div>
 			</div>
 		</div>
 	);

@@ -1,7 +1,7 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { deleteMuxAsset } from "@/lib/mux/upload";
-import { CommunityLessonSchema } from "@/schemas/community";
+import { CommunityLessonMuxMetadataSchema, CommunityLessonSchema } from "@/schemas/community";
 import { db } from "@/services/drizzle";
 import { communityLessons } from "@/services/drizzle/schema";
 import { eq, sql } from "drizzle-orm";
@@ -43,6 +43,38 @@ async function createLessonRoute(request: NextRequest) {
 	return NextResponse.json(result);
 }
 
+// ---- GET: Get a lesson by ID ----
+
+const GetLessonInputSchema = z.object({
+	id: z.string({
+		required_error: "ID da aula não informado.",
+		invalid_type_error: "Tipo não válido para o ID da aula.",
+	}),
+});
+export type TGetLessonInput = z.infer<typeof GetLessonInputSchema>;
+
+async function getLesson({ input }: { input: TGetLessonInput }) {
+	const lesson = await db.query.communityLessons.findFirst({
+		where: eq(communityLessons.id, input.id),
+	});
+	if (!lesson) throw new createHttpError.NotFound("Aula não encontrada.");
+	return { data: lesson, message: "Aula obtida com sucesso." };
+}
+export type TGetLessonOutput = Awaited<ReturnType<typeof getLesson>>;
+
+async function getLessonRoute(request: NextRequest) {
+	const session = await getCurrentSessionUncached();
+	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	if (!session.user.admin) throw new createHttpError.Forbidden("Acesso restrito a administradores.");
+
+	const { searchParams } = new URL(request.url);
+	const input = GetLessonInputSchema.parse({
+		id: searchParams.get("id"),
+	});
+	const result = await getLesson({ input });
+	return NextResponse.json(result);
+}
+
 // ---- PUT: Update a lesson ----
 
 const UpdateLessonInputSchema = z.object({
@@ -50,14 +82,37 @@ const UpdateLessonInputSchema = z.object({
 	data: CommunityLessonSchema.omit({ secaoId: true }).partial().extend({
 		muxUploadId: z.string().optional().nullable(),
 		muxAssetStatus: z.enum(["AGUARDANDO", "PROCESSANDO", "PRONTO", "ERRO"]).optional().nullable(),
+		muxMetadata: CommunityLessonMuxMetadataSchema.optional(),
 	}),
 });
 export type TUpdateLessonInput = z.infer<typeof UpdateLessonInputSchema>;
 
 async function updateLesson({ input }: { input: TUpdateLessonInput }) {
+	const existingLesson = await db.query.communityLessons.findFirst({
+		where: eq(communityLessons.id, input.id),
+		columns: {
+			id: true,
+			muxAssetId: true,
+			muxUploadId: true,
+			muxMetadata: true,
+		},
+	});
+	if (!existingLesson) throw new createHttpError.NotFound("Aula não encontrada.");
+
+	const muxMetadata = { ...(existingLesson.muxMetadata ?? {}), ...(input.data.muxMetadata ?? {}) };
+	const hasNewMuxUploadId = !!input.data.muxUploadId && input.data.muxUploadId !== existingLesson.muxUploadId;
+	if (hasNewMuxUploadId && existingLesson.muxAssetId) {
+		muxMetadata.alteracaoMuxAssetId = existingLesson.muxAssetId;
+		muxMetadata.alteracaoMuxAssetData = new Date().toISOString();
+		muxMetadata.alteracaoMusAssetMotivo = "substituicao_manual";
+	}
+
 	const updated = await db
 		.update(communityLessons)
-		.set(input.data)
+		.set({
+			...input.data,
+			muxMetadata,
+		})
 		.where(eq(communityLessons.id, input.id))
 		.returning();
 
@@ -110,6 +165,7 @@ async function deleteLessonRoute(request: NextRequest) {
 	return NextResponse.json({ data: { id }, message: "Aula excluída com sucesso." });
 }
 
+export const GET = appApiHandler({ GET: getLessonRoute });
 export const POST = appApiHandler({ POST: createLessonRoute });
 export const PUT = appApiHandler({ PUT: updateLessonRoute });
 export const DELETE = appApiHandler({ DELETE: deleteLessonRoute });

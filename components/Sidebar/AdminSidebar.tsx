@@ -5,7 +5,7 @@ import AppSidebarHeader from "@/components/Sidebar/AppSidebarHeader";
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarRail } from "@/components/ui/sidebar";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { CheckboxIcon } from "@radix-ui/react-icons";
-import { ChartBarIcon, Shield, SquareKanban } from "lucide-react";
+import { ChartBarIcon, Shield, SquareKanban, VideoIcon } from "lucide-react";
 import AdminSidebarFooter from "./AdminSidebarFooter";
 import type { TSidebarConfigItem } from "./AppSidebar";
 
@@ -40,6 +40,17 @@ const adminSidebarConfig: TSidebarConfigItem[] = [
 				title: "Atividades",
 				url: "/admin-dashboard/crm/activities",
 				icon: <CheckboxIcon className="w-4 h-4" />,
+				items: null,
+			},
+		],
+	},
+	{
+		group: "Comunidade",
+		items: [
+			{
+				title: "Cursos",
+				url: "/admin-dashboard/community",
+				icon: <VideoIcon className="w-4 h-4" />,
 				items: null,
 			},
 		],

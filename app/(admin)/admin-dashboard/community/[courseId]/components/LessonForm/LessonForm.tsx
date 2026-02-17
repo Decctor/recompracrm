@@ -6,8 +6,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { getErrorMessage } from "@/lib/errors";
-import { updateLesson } from "@/lib/mutations/community-admin";
-import type { TCommunityLessonContentType } from "@/schemas/community";
+import { updateCommunityLesson } from "@/lib/mutations/community-admin";
+import type { TCommunityLessonContentTypeEnum } from "@/schemas/enums";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
@@ -23,7 +23,7 @@ type LessonFormProps = {
 type LessonFormState = {
 	titulo: string;
 	descricao: string;
-	tipoConteudo: TCommunityLessonContentType;
+	tipoConteudo: TCommunityLessonContentTypeEnum;
 	conteudoTexto: string;
 	muxUploadId: string | null;
 };
@@ -47,7 +47,7 @@ export default function LessonForm({ lessonId, sectionId, courseId, closeModal }
 	const { mutate, isPending } = useMutation({
 		mutationFn: async () => {
 			if (!lessonId) throw new Error("Aula não encontrada para edição.");
-			return await updateLesson({
+			return await updateCommunityLesson({
 				id: lessonId,
 				data: {
 					titulo: state.titulo || undefined,
@@ -88,31 +88,19 @@ export default function LessonForm({ lessonId, sectionId, courseId, closeModal }
 				{/* Title */}
 				<div className="flex flex-col gap-1.5">
 					<Label>Título da aula</Label>
-					<Input
-						placeholder="Título da aula..."
-						value={state.titulo}
-						onChange={(e) => updateState("titulo", e.target.value)}
-					/>
+					<Input placeholder="Título da aula..." value={state.titulo} onChange={(e) => updateState("titulo", e.target.value)} />
 				</div>
 
 				{/* Description */}
 				<div className="flex flex-col gap-1.5">
 					<Label>Descrição (opcional)</Label>
-					<Textarea
-						placeholder="Breve descrição da aula..."
-						value={state.descricao}
-						onChange={(e) => updateState("descricao", e.target.value)}
-						rows={2}
-					/>
+					<Textarea placeholder="Breve descrição da aula..." value={state.descricao} onChange={(e) => updateState("descricao", e.target.value)} rows={2} />
 				</div>
 
 				{/* Content type */}
 				<div className="flex flex-col gap-1.5">
 					<Label>Tipo de conteúdo</Label>
-					<Select
-						value={state.tipoConteudo}
-						onValueChange={(v) => updateState("tipoConteudo", v as TCommunityLessonContentType)}
-					>
+					<Select value={state.tipoConteudo} onValueChange={(v) => updateState("tipoConteudo", v as TCommunityLessonContentTypeEnum)}>
 						<SelectTrigger>
 							<SelectValue />
 						</SelectTrigger>
@@ -125,11 +113,7 @@ export default function LessonForm({ lessonId, sectionId, courseId, closeModal }
 				</div>
 
 				{/* Video upload */}
-				{showVideoUpload && (
-					<VideoUploadBlock
-						onUploadComplete={(uploadId) => updateState("muxUploadId", uploadId)}
-					/>
-				)}
+				{showVideoUpload && <VideoUploadBlock onUploadComplete={(uploadId) => updateState("muxUploadId", uploadId)} />}
 
 				{/* Text content */}
 				{showTextEditor && (

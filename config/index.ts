@@ -581,71 +581,96 @@ export const AppRoutes = [
 	{
 		path: "/dashboard",
 		title: "Dashboard",
+		description: "Visão geral das principais métricas do seu negócio",
 	},
 	{
 		path: "/dashboard/commercial/sales",
 		title: "Vendas",
+		description: "Listagem das vendas realizadas",
 	},
 	{
 		path: "/dashboard/commercial/segments",
 		title: "Segmentações",
+		description: "Visualização da matriz RFM de clientes.",
 	},
 	{
 		path: "/dashboard/commercial/clients",
 		title: "Clientes",
+		description: "Painel detalhadado do seu portfólio de clientes.",
 	},
 	{
 		path: "/dashboard/commercial/partners",
 		title: "Parceiros",
+		description: "Painel detalhadado dos seus parceiros comerciais.",
 	},
 	{
 		path: "/dashboard/commercial/products",
 		title: "Produtos",
+		description: "Painel detalhadado dos seus produtos.",
 	},
 	{
 		path: "/dashboard/commercial/campaigns",
 		title: "Campanhas",
+		description: "Painel de acompanhamento e gestão das campanhas de vendas.",
 	},
 	{
 		path: "/dashboard/commercial/cashback-programs",
 		title: "Programas de Cashback",
+		description: "Painel de acompanhamento e gestão do seu programa de cashback.",
 	},
 	{
 		path: "/dashboard/team/sellers",
 		title: "Vendedores",
+		description: "Painel detalhadado dos seus vendedores.",
 	},
 	{
 		path: "/dashboard/team/goals",
 		title: "Metas",
+		description: "Painel de acompanhamento e gestão das metas de vendas.",
 	},
 	{
 		path: "/dashboard/chats",
 		title: "Conversas",
+		description: "Hub de atendimento com os clientes.",
 	},
 	{
 		path: "/dashboard/settings",
 		title: "Configurações",
+		description: "Configurações do seu negócio.",
 	},
 	{
 		path: "/admin-dashboard",
 		title: "Painel Admin",
+		description: "Painel de administração do sistema.",
 	},
 	{
 		path: "/admin-dashboard/crm",
 		title: "Funil de Vendas",
+		description: "Funil de vendas da plataforma.",
 	},
 	{
 		path: "/admin-dashboard/crm/dashboard",
 		title: "Dashboard",
+		description: "Dashboard do funil de vendas.",
 	},
 	{
 		path: "/admin-dashboard/crm/activities",
 		title: "Atividades",
+		description: "Painel de acompanhamento das atividades.",
+	},
+	{
+		path: "/admin-dashboard/community",
+		title: "Comunidade",
+		description: "Painel de acompanhamento e gestão da comunidade RecompraCRM.",
 	},
 ];
 export function getAppRouteTitle(path: string) {
 	const route = AppRoutes.find((route) => route.path === path);
 	return route?.title || "";
+}
+export function getAppRouteDescription(path: string) {
+	const route = AppRoutes.find((route) => route.path === path);
+	return route?.description || "";
 }
 
 type TCheckSubscriptionStatus = {

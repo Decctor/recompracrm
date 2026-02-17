@@ -1,3 +1,4 @@
+import { deleteMuxAsset } from "@/lib/mux/upload";
 import { db } from "@/services/drizzle";
 import { communityLessons } from "@/services/drizzle/schema";
 import { eq } from "drizzle-orm";
@@ -52,6 +53,15 @@ export async function POST(request: NextRequest) {
 				const assetId = event.data.id;
 				const playbackId = event.data.playback_ids?.[0]?.id;
 				const duration = event.data.duration ? Math.round(event.data.duration) : null;
+				const lesson = await db.query.communityLessons.findFirst({
+					where: eq(communityLessons.muxAssetId, assetId),
+					columns: {
+						id: true,
+						muxMetadata: true,
+					},
+				});
+				const assetAnteriorId = lesson?.muxMetadata?.alteracaoMuxAssetId ?? null;
+				const { alteracaoMuxAssetId, alteracaoMuxAssetData, alteracaoMusAssetMotivo, ...muxMetadata } = lesson?.muxMetadata ?? {};
 
 				await db
 					.update(communityLessons)
@@ -59,8 +69,17 @@ export async function POST(request: NextRequest) {
 						muxPlaybackId: playbackId,
 						muxAssetStatus: "PRONTO",
 						duracaoSegundos: duration,
+						muxMetadata,
 					})
 					.where(eq(communityLessons.muxAssetId, assetId));
+
+				if (assetAnteriorId && assetAnteriorId !== assetId) {
+					try {
+						await deleteMuxAsset(assetAnteriorId);
+					} catch (error) {
+						console.error("Falha ao excluir asset antigo no Mux:", error);
+					}
+				}
 				break;
 			}
 

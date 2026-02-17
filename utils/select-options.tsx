@@ -3,13 +3,30 @@ import type {
 	TCampaignTriggerTypeEnum,
 	TCashbackProgramAccumulationTypeEnum,
 	TCashbackProgramRedemptionLimitTypeEnum,
+	TCommunityCourseStatusEnum,
+	TCommunityLessonContentTypeEnum,
 	TInteractionsCronJobTimeBlocksEnum,
 	TInternalLeadActivityTypeEnum,
 	TRecurrenceFrequencyEnum,
 	TTimeDurationUnitsEnum,
 } from "@/schemas/enums";
 import type { TInternalLeadOriginEnum, TInternalLeadStatusCRMEnum } from "@/schemas/enums";
-import { Clock, Mail, MessageSquare, Minus, Percent, Phone, Target, TrendingDown, TrendingUp, Video } from "lucide-react";
+import {
+	Archive,
+	Clock,
+	FileIcon,
+	FileText,
+	Globe,
+	Mail,
+	MessageSquare,
+	Minus,
+	Percent,
+	Phone,
+	Target,
+	TrendingDown,
+	TrendingUp,
+	Video,
+} from "lucide-react";
 
 export const InternalActivityTypeOptions: { id: number; label: string; value: TInternalLeadActivityTypeEnum; icon: React.ReactNode }[] = [
 	{
@@ -88,16 +105,48 @@ export const InternalLeadProbabilityOptions: {
 	},
 ];
 
+export const CommunityCourseStatusOptions: {
+	id: number;
+	label: string;
+	value: TCommunityCourseStatusEnum;
+	icon: React.ReactNode;
+	className: string;
+}[] = [
+	{
+		id: 1,
+		label: "RASCUNHO",
+		value: "RASCUNHO",
+		icon: <FileIcon className="w-4 h-4" />,
+		className: "bg-gray-200 text-gray-600 border border-gray-600 hover:bg-gray-100 hover:text-gray-500 hover:border-gray-500",
+	},
+	{
+		id: 2,
+		label: "PUBLICADO",
+		value: "PUBLICADO",
+		icon: <Globe className="w-4 h-4" />,
+		className: "bg-green-200 text-green-600 border border-green-600 hover:bg-green-100 hover:text-green-500 hover:border-green-500",
+	},
+	{
+		id: 3,
+		label: "ARQUIVADO",
+		value: "ARQUIVADO",
+		icon: <Archive className="w-4 h-4" />,
+		className: "bg-red-200 text-red-600 border border-red-600 hover:bg-red-100 hover:text-red-500 hover:border-red-500",
+	},
+];
+
+export const LessonContentTypeOptions: { id: number; label: string; value: TCommunityLessonContentTypeEnum; icon: React.ReactNode }[] = [
+	{ id: 1, label: "VÍDEO", value: "VIDEO", icon: <Video className="w-4 h-4" /> },
+	{ id: 2, label: "TEXTO", value: "TEXTO", icon: <FileText className="w-4 h-4" /> },
+	{ id: 3, label: "VÍDEO + TEXTO", value: "VIDEO_TEXTO", icon: <Video className="w-4 h-4" /> },
+];
+
 const PROBABILITY_TIERS = [20, 40, 60, 80, 100] as const;
 
-export function getProbabilityTier(
-	value: number | null | undefined,
-): (typeof InternalLeadProbabilityOptions)[number] | null {
+export function getProbabilityTier(value: number | null | undefined): (typeof InternalLeadProbabilityOptions)[number] | null {
 	if (value == null || Number.isNaN(value)) return null;
 	const clamped = Math.max(0, Math.min(100, value));
-	const nearest = PROBABILITY_TIERS.reduce((prev, curr) =>
-		Math.abs(clamped - curr) < Math.abs(clamped - prev) ? curr : prev,
-	);
+	const nearest = PROBABILITY_TIERS.reduce((prev, curr) => (Math.abs(clamped - curr) < Math.abs(clamped - prev) ? curr : prev));
 	return InternalLeadProbabilityOptions.find((opt) => opt.value === nearest) ?? null;
 }
 

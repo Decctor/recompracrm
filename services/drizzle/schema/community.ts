@@ -1,26 +1,9 @@
+import type { TCommunityLessonMuxMetadata } from "@/schemas/community";
 import { relations } from "drizzle-orm";
-import { boolean, index, integer, pgEnum, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/pg-core";
+import { boolean, index, integer, jsonb, pgEnum, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/pg-core";
 import { newTable } from "./common";
+import { communityCourseAccessLevelEnum, communityCourseStatusEnum, communityLessonContentTypeEnum, communityMuxAssetStatusEnum } from "./enums";
 import { users } from "./users";
-
-// ---- ENUMS ----
-
-export const communityCourseAccessLevelEnum = pgEnum("community_course_access_level", [
-	"PUBLICO",
-	"AUTENTICADO",
-	"ASSINATURA",
-]);
-
-export const communityCourseStatusEnum = pgEnum("community_course_status", ["RASCUNHO", "PUBLICADO", "ARQUIVADO"]);
-
-export const communityLessonContentTypeEnum = pgEnum("community_lesson_content_type", ["VIDEO", "TEXTO", "VIDEO_TEXTO"]);
-
-export const communityMuxAssetStatusEnum = pgEnum("community_mux_asset_status", [
-	"AGUARDANDO",
-	"PROCESSANDO",
-	"PRONTO",
-	"ERRO",
-]);
 
 // ---- COURSES ----
 
@@ -106,6 +89,7 @@ export const communityLessons = newTable(
 		muxPlaybackId: text("mux_playback_id"),
 		muxAssetStatus: communityMuxAssetStatusEnum("mux_asset_status"),
 		muxUploadId: text("mux_upload_id"),
+		muxMetadata: jsonb("mux_metadata").$type<TCommunityLessonMuxMetadata>().notNull().default({}),
 		dataInsercao: timestamp("data_insercao").defaultNow().notNull(),
 	},
 	(table) => ({
