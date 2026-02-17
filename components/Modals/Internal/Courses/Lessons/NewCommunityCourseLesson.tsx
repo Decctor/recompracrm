@@ -2,7 +2,7 @@
 
 import ResponsiveMenu from "@/components/Utils/ResponsiveMenu";
 import { getErrorMessage } from "@/lib/errors";
-import { createCommunityLesson, requestMuxUploadUrl, updateCommunityLesson } from "@/lib/mutations/community-admin";
+import { createCommunityLesson, requestMuxUploadUrl } from "@/lib/mutations/community-admin";
 import { useInternalCommunityCourseLessonState } from "@/state-hooks/use-internal-community-course-lesson-state";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -20,6 +20,8 @@ type NewCommunityCourseLessonProps = {
 	};
 };
 
+type TCreateCommunityLessonPayload = Parameters<typeof createCommunityLesson>[0]["communityLesson"];
+
 export default function NewCommunityCourseLesson({ sectionId, closeModal, callbacks }: NewCommunityCourseLessonProps) {
 	const queryClient = useQueryClient();
 	const { state, updateLesson, updateVideoHolder, resetState } = useInternalCommunityCourseLessonState();
@@ -27,7 +29,7 @@ export default function NewCommunityCourseLesson({ sectionId, closeModal, callba
 	const showVideoUpload = state.lesson.tipoConteudo === "VIDEO" || state.lesson.tipoConteudo === "VIDEO_TEXTO";
 	const showTextContent = state.lesson.tipoConteudo === "TEXTO" || state.lesson.tipoConteudo === "VIDEO_TEXTO";
 
-	function getNormalizedLessonPayload() {
+	function getNormalizedLessonPayload(): TCreateCommunityLessonPayload {
 		return {
 			secaoId: sectionId,
 			titulo: state.lesson.titulo.trim(),
@@ -35,6 +37,8 @@ export default function NewCommunityCourseLesson({ sectionId, closeModal, callba
 			tipoConteudo: state.lesson.tipoConteudo,
 			conteudoTexto: showTextContent ? state.lesson.conteudoTexto?.trim() || null : null,
 			ordem: state.lesson.ordem,
+			muxMetadata: {},
+			dataInsercao: new Date(),
 		};
 	}
 
@@ -63,20 +67,13 @@ export default function NewCommunityCourseLesson({ sectionId, closeModal, callba
 			if (!normalizedPayload.titulo) throw new Error("Informe o título da aula.");
 			if (showVideoUpload && !state.videoHolder.file) throw new Error("Selecione um vídeo para esta aula.");
 
-			const createdLesson = await createCommunityLesson(normalizedPayload);
-
 			if (showVideoUpload && state.videoHolder.file) {
 				const muxUploadId = await uploadLessonVideo(state.videoHolder.file);
-				await updateCommunityLesson({
-					id: createdLesson.data.id,
-					data: {
-						muxUploadId,
-						muxAssetStatus: "AGUARDANDO",
-					},
-				});
+				normalizedPayload.muxUploadId = muxUploadId;
+				normalizedPayload.muxAssetStatus = "AGUARDANDO";
 			}
 
-			return createdLesson;
+			return await createCommunityLesson({ communityLesson: normalizedPayload });
 		},
 		onMutate: async () => {
 			if (callbacks?.onMutate) callbacks.onMutate();

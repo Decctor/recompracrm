@@ -28,6 +28,7 @@ export function useInternalCommunityCourseLessonState({ initialState }: TUseInte
 				tipoConteudo: initialState?.lesson?.tipoConteudo ?? "VIDEO",
 				conteudoTexto: initialState?.lesson?.conteudoTexto ?? "",
 				ordem: initialState?.lesson?.ordem ?? 0,
+				muxMetadata: initialState?.lesson?.muxMetadata ?? {},
 			},
 			videoHolder: {
 				file: initialState?.videoHolder?.file ?? null,

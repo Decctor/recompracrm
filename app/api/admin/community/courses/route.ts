@@ -67,7 +67,7 @@ async function getCommunityCourses({ input }: { input: TGetCommunityCoursesInput
 				},
 				secoes: {
 					orderBy: [asc(communityCourseSections.ordem)],
-					columns: { id: true, titulo: true, ordem: true },
+					columns: { id: true, titulo: true, descricao: true, ordem: true },
 					with: {
 						aulas: true,
 					},

@@ -1,17 +1,16 @@
 "use client";
 
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
+import NewCommunityCourseSection from "@/components/Modals/Internal/Courses/Sections/NewCommunityCourseSection";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import SectionWrapper from "@/components/ui/section-wrapper";
 import { StatBadge } from "@/components/ui/stat-badge";
 import { getErrorMessage } from "@/lib/errors";
-import { createCommunityCourseSection, reorderItems } from "@/lib/mutations/community-admin";
-import { useAdminCommunityCourseById, useAdminCommunityCourses } from "@/lib/queries/community-admin";
+import { reorderCommunityItems } from "@/lib/mutations/community-admin";
+import { useAdminCommunityCourseById } from "@/lib/queries/community-admin";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Diamond, FolderIcon, GripVertical, Plus } from "lucide-react";
-import Link from "next/link";
-import { useMemo, useState } from "react";
+import { Diamond, FolderIcon, Plus } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
 import SectionBlock from "./components/SectionBlock";
 
@@ -28,21 +27,13 @@ const STATUS_LABELS: Record<string, { label: string; className: string }> = {
 export default function CourseEditorPage({ courseId }: CourseEditorPageProps) {
 	const queryClient = useQueryClient();
 	const { data: course, isLoading, isError, error, isSuccess } = useAdminCommunityCourseById({ courseId });
-
-	const [newSectionTitle, setNewSectionTitle] = useState("");
-
-	const { mutate: handleCreateSection, isPending: isCreatingSection } = useMutation({
-		mutationFn: () => createCommunityCourseSection({ cursoId: courseId, titulo: newSectionTitle, ordem: 0 }),
-		onSuccess: (data) => {
-			toast.success(data.message);
-			setNewSectionTitle("");
-			queryClient.invalidateQueries({ queryKey: ["admin-community-courses"] });
-		},
-		onError: (error) => toast.error(getErrorMessage(error)),
-	});
+	const [newSectionModalOpen, setNewSectionModalOpen] = useState(false);
 
 	const { mutate: handleReorder } = useMutation({
-		mutationFn: (args: { tipo: "secao" | "aula"; itens: Array<{ id: string; ordem: number }> }) => reorderItems(args),
+		mutationFn: (args: { tipo: "secao" | "aula"; itens: Array<{ id: string; ordem: number }> }) =>
+			reorderCommunityItems(
+				args.tipo === "secao" ? { communityCourseSectionReorder: { itens: args.itens } } : { communityLessonReorder: { itens: args.itens } },
+			),
 		onSuccess: () => queryClient.invalidateQueries({ queryKey: ["admin-community-courses"] }),
 		onError: (error) => toast.error(getErrorMessage(error)),
 	});
@@ -110,7 +101,6 @@ export default function CourseEditorPage({ courseId }: CourseEditorPageProps) {
 								<SectionBlock
 									key={section.id}
 									section={section}
-									courseId={courseId}
 									index={index}
 									totalSections={course.secoes.length}
 									onMoveUp={() => moveSectionUp(index)}
@@ -124,6 +114,18 @@ export default function CourseEditorPage({ courseId }: CourseEditorPageProps) {
 						</div>
 					)}
 				</SectionWrapper>
+
+				{newSectionModalOpen ? (
+					<NewCommunityCourseSection
+						courseId={courseId}
+						closeModal={() => setNewSectionModalOpen(false)}
+						callbacks={{
+							onSuccess: () => {
+								setNewSectionModalOpen(false);
+							},
+						}}
+					/>
+				) : null}
 			</div>
 		);
 	}

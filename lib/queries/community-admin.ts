@@ -1,5 +1,6 @@
 import type { TGetCommunityCoursesInput, TGetCommunityCoursesOutput } from "@/app/api/admin/community/courses/route";
-import type { TGetLessonOutput } from "@/app/api/admin/community/lessons/route";
+import type { TGetCommunityLessonsOutput } from "@/app/api/admin/community/lessons/route";
+import type { TGetCommunityCourseSectionsOutput } from "@/app/api/admin/community/sections/route";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import { useState } from "react";
@@ -22,9 +23,28 @@ export function useAdminCommunityCourseById({ courseId }: { courseId: string }) 
 	};
 }
 
+async function fetchAdminCommunityCourseSectionById(sectionId: string) {
+	const { data } = await axios.get<TGetCommunityCourseSectionsOutput>(`/api/admin/community/sections?id=${sectionId}`);
+	const result = data.data.byId;
+	if (!result) throw new Error("Seção não encontrada.");
+	return result;
+}
+
+export function useAdminCommunityCourseSectionById({ sectionId }: { sectionId: string }) {
+	return {
+		...useQuery({
+			queryKey: ["admin-community-course-section-by-id", sectionId],
+			queryFn: () => fetchAdminCommunityCourseSectionById(sectionId),
+		}),
+		queryKey: ["admin-community-course-section-by-id", sectionId],
+	};
+}
+
 async function fetchAdminCommunityLessonById(lessonId: string) {
-	const { data } = await axios.get<TGetLessonOutput>(`/api/admin/community/lessons?id=${lessonId}`);
-	return data.data;
+	const { data } = await axios.get<TGetCommunityLessonsOutput>(`/api/admin/community/lessons?id=${lessonId}`);
+	const result = data.data.byId;
+	if (!result) throw new Error("Aula não encontrada.");
+	return result;
 }
 
 export function useAdminCommunityLessonById({ lessonId }: { lessonId: string }) {

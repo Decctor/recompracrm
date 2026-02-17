@@ -4,92 +4,165 @@ import { deleteMuxAsset } from "@/lib/mux/upload";
 import { CommunityLessonMuxMetadataSchema, CommunityLessonSchema } from "@/schemas/community";
 import { db } from "@/services/drizzle";
 import { communityLessons } from "@/services/drizzle/schema";
-import { eq, sql } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import z from "zod";
 
-// ---- POST: Create a lesson ----
+// ---- GET: List / fetch lessons ----
 
-const CreateLessonInputSchema = CommunityLessonSchema;
-export type TCreateLessonInput = z.infer<typeof CreateLessonInputSchema>;
-
-async function createLesson({ input }: { input: TCreateLessonInput }) {
-	const maxOrdem = await db
-		.select({ max: sql<number>`COALESCE(MAX(${communityLessons.ordem}), -1)` })
-		.from(communityLessons)
-		.where(eq(communityLessons.secaoId, input.secaoId));
-
-	const inserted = await db
-		.insert(communityLessons)
-		.values({
-			...input,
-			ordem: input.ordem || (maxOrdem[0]?.max ?? -1) + 1,
+const GetCommunityLessonsInputSchema = z.object({
+	id: z
+		.string({
+			required_error: "ID da aula não informado.",
+			invalid_type_error: "Tipo não válido para o ID da aula.",
 		})
-		.returning();
-
-	return { data: inserted[0], message: "Aula criada com sucesso." };
-}
-export type TCreateLessonOutput = Awaited<ReturnType<typeof createLesson>>;
-
-async function createLessonRoute(request: NextRequest) {
-	const session = await getCurrentSessionUncached();
-	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
-	if (!session.user.admin) throw new createHttpError.Forbidden("Acesso restrito a administradores.");
-
-	const payload = await request.json();
-	const input = CreateLessonInputSchema.parse(payload);
-	const result = await createLesson({ input });
-	return NextResponse.json(result);
-}
-
-// ---- GET: Get a lesson by ID ----
-
-const GetLessonInputSchema = z.object({
-	id: z.string({
-		required_error: "ID da aula não informado.",
-		invalid_type_error: "Tipo não válido para o ID da aula.",
-	}),
+		.optional(),
+	courseId: z
+		.string({
+			required_error: "ID do curso não informado.",
+			invalid_type_error: "Tipo não válido para o ID do curso.",
+		})
+		.optional(),
+	courseSectionId: z
+		.string({
+			required_error: "ID da seção não informado.",
+			invalid_type_error: "Tipo não válido para o ID da seção.",
+		})
+		.optional(),
 });
-export type TGetLessonInput = z.infer<typeof GetLessonInputSchema>;
+export type TGetCommunityLessonsInput = z.infer<typeof GetCommunityLessonsInputSchema>;
 
-async function getLesson({ input }: { input: TGetLessonInput }) {
-	const lesson = await db.query.communityLessons.findFirst({
-		where: eq(communityLessons.id, input.id),
+async function getCommunityLessons({ input }: { input: TGetCommunityLessonsInput }) {
+	// Mode: byId
+	if (input.id) {
+		const communityLesson = await db.query.communityLessons.findFirst({
+			where: eq(communityLessons.id, input.id),
+		});
+		if (!communityLesson) throw new createHttpError.NotFound("Aula não encontrada.");
+		return {
+			data: { byId: communityLesson, byCourseSectionId: null, byCourseId: null, default: null },
+			message: "Aula obtida com sucesso.",
+		};
+	}
+
+	// Mode: byCourseSectionId
+	if (input.courseSectionId) {
+		const lessons = await db.query.communityLessons.findMany({
+			where: eq(communityLessons.secaoId, input.courseSectionId),
+			orderBy: [asc(communityLessons.ordem)],
+		});
+		return {
+			data: { byId: null, byCourseSectionId: lessons, byCourseId: null, default: null },
+			message: "Aulas da seção obtidas com sucesso.",
+		};
+	}
+
+	// Mode: byCourseId — fetch all lessons from all sections of the given course
+	if (input.courseId) {
+		const { communityCourseSections } = await import("@/services/drizzle/schema");
+		const sectionsWithLessons = await db.query.communityCourseSections.findMany({
+			where: eq(communityCourseSections.cursoId, input.courseId),
+			orderBy: [asc(communityCourseSections.ordem)],
+			columns: { id: true },
+			with: {
+				aulas: {
+					orderBy: [asc(communityLessons.ordem)],
+				},
+			},
+		});
+		const lessons = sectionsWithLessons.flatMap((s) => s.aulas);
+		return {
+			data: { byId: null, byCourseSectionId: null, byCourseId: lessons, default: null },
+			message: "Aulas do curso obtidas com sucesso.",
+		};
+	}
+
+	// Mode: default — all lessons
+	const allLessons = await db.query.communityLessons.findMany({
+		orderBy: [asc(communityLessons.ordem)],
 	});
-	if (!lesson) throw new createHttpError.NotFound("Aula não encontrada.");
-	return { data: lesson, message: "Aula obtida com sucesso." };
+	return {
+		data: { byId: null, byCourseSectionId: null, byCourseId: null, default: allLessons },
+		message: "Aulas obtidas com sucesso.",
+	};
 }
-export type TGetLessonOutput = Awaited<ReturnType<typeof getLesson>>;
+export type TGetCommunityLessonsOutput = Awaited<ReturnType<typeof getCommunityLessons>>;
+export type TGetCommunityLessonsOutputById = NonNullable<TGetCommunityLessonsOutput["data"]["byId"]>;
+export type TGetCommunityLessonsOutputByCourseSectionId = NonNullable<TGetCommunityLessonsOutput["data"]["byCourseSectionId"]>;
+export type TGetCommunityLessonsOutputByCourseId = NonNullable<TGetCommunityLessonsOutput["data"]["byCourseId"]>;
+export type TGetCommunityLessonsOutputDefault = NonNullable<TGetCommunityLessonsOutput["data"]["default"]>;
 
-async function getLessonRoute(request: NextRequest) {
+async function getCommunityLessonsRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
 	if (!session.user.admin) throw new createHttpError.Forbidden("Acesso restrito a administradores.");
 
 	const { searchParams } = new URL(request.url);
-	const input = GetLessonInputSchema.parse({
-		id: searchParams.get("id"),
+	const input = GetCommunityLessonsInputSchema.parse({
+		id: searchParams.get("id") ?? undefined,
+		courseId: searchParams.get("courseId") ?? undefined,
+		courseSectionId: searchParams.get("courseSectionId") ?? undefined,
 	});
-	const result = await getLesson({ input });
+	const result = await getCommunityLessons({ input });
+	return NextResponse.json(result);
+}
+
+// ---- POST: Create a lesson ----
+
+const CreateCommunityLessonInputSchema = z.object({
+	communityLesson: CommunityLessonSchema,
+});
+export type TCreateCommunityLessonInput = z.infer<typeof CreateCommunityLessonInputSchema>;
+
+async function createCommunityLesson({ input }: { input: TCreateCommunityLessonInput }) {
+	const { communityLesson } = input;
+
+	const inserted = await db
+		.insert(communityLessons)
+		.values({
+			...communityLesson,
+		})
+		.returning({ id: communityLessons.id });
+
+	const insertedLessonId = inserted[0]?.id;
+	if (!insertedLessonId) throw new createHttpError.InternalServerError("Oops, houve um erro desconhecido ao criar aula.");
+
+	return { data: { insertedLessonId }, message: "Aula criada com sucesso." };
+}
+export type TCreateCommunityLessonOutput = Awaited<ReturnType<typeof createCommunityLesson>>;
+
+async function createCommunityLessonRoute(request: NextRequest) {
+	const session = await getCurrentSessionUncached();
+	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	if (!session.user.admin) throw new createHttpError.Forbidden("Acesso restrito a administradores.");
+
+	const payload = await request.json();
+	const input = CreateCommunityLessonInputSchema.parse(payload);
+	const result = await createCommunityLesson({ input });
 	return NextResponse.json(result);
 }
 
 // ---- PUT: Update a lesson ----
 
-const UpdateLessonInputSchema = z.object({
-	id: z.string(),
-	data: CommunityLessonSchema.omit({ secaoId: true }).partial().extend({
-		muxUploadId: z.string().optional().nullable(),
-		muxAssetStatus: z.enum(["AGUARDANDO", "PROCESSANDO", "PRONTO", "ERRO"]).optional().nullable(),
-		muxMetadata: CommunityLessonMuxMetadataSchema.optional(),
+const UpdateCommunityLessonInputSchema = z.object({
+	communityLessonId: z.string({
+		required_error: "ID da aula não informado.",
+		invalid_type_error: "Tipo não válido para o ID da aula.",
 	}),
+	communityLesson: CommunityLessonSchema.omit({ secaoId: true })
+		.partial()
+		.extend({
+			muxUploadId: z.string().optional().nullable(),
+			muxAssetStatus: z.enum(["AGUARDANDO", "PROCESSANDO", "PRONTO", "ERRO"]).optional().nullable(),
+			muxMetadata: CommunityLessonMuxMetadataSchema.optional(),
+		}),
 });
-export type TUpdateLessonInput = z.infer<typeof UpdateLessonInputSchema>;
+export type TUpdateCommunityLessonInput = z.infer<typeof UpdateCommunityLessonInputSchema>;
 
-async function updateLesson({ input }: { input: TUpdateLessonInput }) {
+async function updateCommunityLesson({ input }: { input: TUpdateCommunityLessonInput }) {
 	const existingLesson = await db.query.communityLessons.findFirst({
-		where: eq(communityLessons.id, input.id),
+		where: eq(communityLessons.id, input.communityLessonId),
 		columns: {
 			id: true,
 			muxAssetId: true,
@@ -99,8 +172,8 @@ async function updateLesson({ input }: { input: TUpdateLessonInput }) {
 	});
 	if (!existingLesson) throw new createHttpError.NotFound("Aula não encontrada.");
 
-	const muxMetadata = { ...(existingLesson.muxMetadata ?? {}), ...(input.data.muxMetadata ?? {}) };
-	const hasNewMuxUploadId = !!input.data.muxUploadId && input.data.muxUploadId !== existingLesson.muxUploadId;
+	const muxMetadata = { ...(existingLesson.muxMetadata ?? {}), ...(input.communityLesson.muxMetadata ?? {}) };
+	const hasNewMuxUploadId = !!input.communityLesson.muxUploadId && input.communityLesson.muxUploadId !== existingLesson.muxUploadId;
 	if (hasNewMuxUploadId && existingLesson.muxAssetId) {
 		muxMetadata.alteracaoMuxAssetId = existingLesson.muxAssetId;
 		muxMetadata.alteracaoMuxAssetData = new Date().toISOString();
@@ -110,31 +183,60 @@ async function updateLesson({ input }: { input: TUpdateLessonInput }) {
 	const updated = await db
 		.update(communityLessons)
 		.set({
-			...input.data,
+			...input.communityLesson,
 			muxMetadata,
 		})
-		.where(eq(communityLessons.id, input.id))
-		.returning();
+		.where(eq(communityLessons.id, input.communityLessonId))
+		.returning({ id: communityLessons.id });
 
-	if (!updated[0]) throw new createHttpError.NotFound("Aula não encontrada.");
-	return { data: updated[0], message: "Aula atualizada com sucesso." };
+	const updatedLessonId = updated[0]?.id;
+	if (!updatedLessonId) throw new createHttpError.NotFound("Aula não encontrada.");
+	return { data: { updatedLessonId }, message: "Aula atualizada com sucesso." };
 }
-export type TUpdateLessonOutput = Awaited<ReturnType<typeof updateLesson>>;
+export type TUpdateCommunityLessonOutput = Awaited<ReturnType<typeof updateCommunityLesson>>;
 
-async function updateLessonRoute(request: NextRequest) {
+async function updateCommunityLessonRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
 	if (!session.user.admin) throw new createHttpError.Forbidden("Acesso restrito a administradores.");
 
 	const payload = await request.json();
-	const input = UpdateLessonInputSchema.parse(payload);
-	const result = await updateLesson({ input });
+	const input = UpdateCommunityLessonInputSchema.parse(payload);
+	const result = await updateCommunityLesson({ input });
 	return NextResponse.json(result);
 }
 
 // ---- DELETE: Delete a lesson ----
 
-async function deleteLessonRoute(request: NextRequest) {
+const DeleteCommunityLessonInputSchema = z.object({
+	id: z.string({
+		required_error: "ID da aula não informado.",
+		invalid_type_error: "Tipo não válido para o ID da aula.",
+	}),
+});
+export type TDeleteCommunityLessonInput = z.infer<typeof DeleteCommunityLessonInputSchema>;
+
+async function deleteCommunityLesson({ input }: { input: TDeleteCommunityLessonInput }) {
+	const lesson = await db.query.communityLessons.findFirst({
+		where: eq(communityLessons.id, input.id),
+		columns: { id: true, muxAssetId: true },
+	});
+	if (!lesson) throw new createHttpError.NotFound("Aula não encontrada.");
+
+	if (lesson.muxAssetId) {
+		try {
+			await deleteMuxAsset(lesson.muxAssetId);
+		} catch (err) {
+			console.error("Falha ao excluir asset no Mux:", err);
+		}
+	}
+
+	await db.delete(communityLessons).where(eq(communityLessons.id, input.id));
+	return { data: { deletedLessonId: input.id }, message: "Aula excluída com sucesso." };
+}
+export type TDeleteCommunityLessonOutput = Awaited<ReturnType<typeof deleteCommunityLesson>>;
+
+async function deleteCommunityLessonRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
 	if (!session.user.admin) throw new createHttpError.Forbidden("Acesso restrito a administradores.");
@@ -143,29 +245,12 @@ async function deleteLessonRoute(request: NextRequest) {
 	const id = searchParams.get("id");
 	if (!id) throw new createHttpError.BadRequest("ID da aula não informado.");
 
-	// Get the lesson to check for Mux asset
-	const lesson = await db.query.communityLessons.findFirst({
-		where: eq(communityLessons.id, id),
-		columns: { id: true, muxAssetId: true },
-	});
-
-	if (!lesson) throw new createHttpError.NotFound("Aula não encontrada.");
-
-	// Delete Mux asset if exists
-	if (lesson.muxAssetId) {
-		try {
-			await deleteMuxAsset(lesson.muxAssetId);
-		} catch (err) {
-			console.error("Failed to delete Mux asset:", err);
-		}
-	}
-
-	await db.delete(communityLessons).where(eq(communityLessons.id, id));
-
-	return NextResponse.json({ data: { id }, message: "Aula excluída com sucesso." });
+	const input = DeleteCommunityLessonInputSchema.parse({ id });
+	const result = await deleteCommunityLesson({ input });
+	return NextResponse.json(result);
 }
 
-export const GET = appApiHandler({ GET: getLessonRoute });
-export const POST = appApiHandler({ POST: createLessonRoute });
-export const PUT = appApiHandler({ PUT: updateLessonRoute });
-export const DELETE = appApiHandler({ DELETE: deleteLessonRoute });
+export const GET = appApiHandler({ GET: getCommunityLessonsRoute });
+export const POST = appApiHandler({ POST: createCommunityLessonRoute });
+export const PUT = appApiHandler({ PUT: updateCommunityLessonRoute });
+export const DELETE = appApiHandler({ DELETE: deleteCommunityLessonRoute });

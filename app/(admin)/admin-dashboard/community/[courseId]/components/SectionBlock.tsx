@@ -1,14 +1,12 @@
 "use client";
 
 import type { TGetCommunityCoursesOutputById } from "@/app/api/admin/community/courses/route";
-import ControlCommunityCourseLesson from "@/components/Modals/Internal/Courses/Lessons/ControlCommunityCourseLesson";
-import NewCommunityCourseLesson from "@/components/Modals/Internal/Courses/Lessons/NewCommunityCourseLesson";
+import ControlCommunityCourseSection from "@/components/Modals/Internal/Courses/Sections/ControlCommunityCourseSection";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { getErrorMessage } from "@/lib/errors";
-import { deleteCommunityCourseSection, reorderItems, updateCommunityCourseSection } from "@/lib/mutations/community-admin";
+import { deleteCommunityCourseSection, reorderCommunityItems } from "@/lib/mutations/community-admin";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronUp, Edit, Pencil, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Pencil, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import LessonBlock from "./LessonBlock";
@@ -17,31 +15,16 @@ type Section = TGetCommunityCoursesOutputById["secoes"][number];
 
 type SectionBlockProps = {
 	section: Section;
-	courseId: string;
 	index: number;
 	totalSections: number;
 	onMoveUp: () => void;
 	onMoveDown: () => void;
 };
 
-export default function SectionBlock({ section, courseId: _courseId, index, totalSections, onMoveUp, onMoveDown }: SectionBlockProps) {
+export default function SectionBlock({ section, index, totalSections, onMoveUp, onMoveDown }: SectionBlockProps) {
 	const queryClient = useQueryClient();
 	const [isExpanded, setIsExpanded] = useState(true);
-	const [isEditing, setIsEditing] = useState(false);
-	const [newLessonMenuIsOpen, setNewLessonMenuIsOpen] = useState(false);
-	const [editTitle, setEditTitle] = useState(section.titulo);
-	const [controlLessonMenuIsOpen, setControlLessonMenuIsOpen] = useState(false);
-	const [editingLessonId, setEditingLessonId] = useState<string | null>(null);
-
-	const { mutate: handleUpdateTitle, isPending: isUpdating } = useMutation({
-		mutationFn: () => updateCommunityCourseSection({ id: section.id, data: { titulo: editTitle } }),
-		onSuccess: (data) => {
-			toast.success(data.message);
-			setIsEditing(false);
-			queryClient.invalidateQueries({ queryKey: ["admin-community-courses"] });
-		},
-		onError: (error) => toast.error(getErrorMessage(error)),
-	});
+	const [controlSectionMenuIsOpen, setControlSectionMenuIsOpen] = useState(false);
 
 	const { mutate: handleDelete, isPending: isDeleting } = useMutation({
 		mutationFn: () => deleteCommunityCourseSection(section.id),
@@ -53,7 +36,7 @@ export default function SectionBlock({ section, courseId: _courseId, index, tota
 	});
 
 	const { mutate: handleReorderLessons } = useMutation({
-		mutationFn: (items: Array<{ id: string; ordem: number }>) => reorderItems({ tipo: "aula", itens: items }),
+		mutationFn: (items: Array<{ id: string; ordem: number }>) => reorderCommunityItems({ communityLessonReorder: { itens: items } }),
 		onSuccess: () => queryClient.invalidateQueries({ queryKey: ["admin-community-courses"] }),
 	});
 
@@ -101,46 +84,20 @@ export default function SectionBlock({ section, courseId: _courseId, index, tota
 
 				{/* Title / edit */}
 				<div className="flex-1 min-w-0">
-					{isEditing ? (
-						<div className="flex items-center gap-2">
-							<Input
-								value={editTitle}
-								onChange={(e) => setEditTitle(e.target.value)}
-								onKeyDown={(e) => {
-									if (e.key === "Enter") handleUpdateTitle();
-									if (e.key === "Escape") setIsEditing(false);
-								}}
-								className="h-7 text-sm"
-								autoFocus
-							/>
-							<Button size="sm" variant="ghost" onClick={() => handleUpdateTitle()} disabled={isUpdating} className="h-7 text-xs">
-								Salvar
-							</Button>
-						</div>
-					) : (
-						<button type="button" onClick={() => setIsExpanded(!isExpanded)} className="flex items-center gap-2 text-left w-full">
-							<ChevronDown className={`w-4 h-4 transition-transform ${isExpanded ? "" : "-rotate-90"}`} />
-							<span className="font-semibold text-sm truncate">{section.titulo}</span>
-							<span className="text-xs text-muted-foreground ml-1">
-								({section.aulas?.length ?? 0} {(section.aulas?.length ?? 0) === 1 ? "aula" : "aulas"})
-							</span>
-						</button>
-					)}
+					<button type="button" onClick={() => setIsExpanded(!isExpanded)} className="flex items-center gap-2 text-left w-full">
+						<ChevronDown className={`w-4 h-4 transition-transform ${isExpanded ? "" : "-rotate-90"}`} />
+						<span className="font-semibold text-sm truncate">{section.titulo}</span>
+						<span className="text-xs text-muted-foreground ml-1">
+							({section.aulas?.length ?? 0} {(section.aulas?.length ?? 0) === 1 ? "aula" : "aulas"})
+						</span>
+					</button>
 				</div>
 
 				{/* Actions */}
 				<div className="flex items-center gap-1">
-					<Button
-						variant="ghost"
-						size="sm"
-						className="h-7 gap-1.5 px-2"
-						onClick={() => {
-							setIsEditing(true);
-							setEditTitle(section.titulo);
-						}}
-					>
+					<Button variant="ghost" size="sm" className="h-7 gap-1.5 px-2" onClick={() => setControlSectionMenuIsOpen(true)}>
 						<Pencil className="h-3.5 w-3.5" />
-						EDITAR
+						CONTROLAR
 					</Button>
 					<Button
 						variant="ghost"
@@ -162,7 +119,7 @@ export default function SectionBlock({ section, courseId: _courseId, index, tota
 						<div className="grid grid-cols-1 gap-2 md:grid-cols-3 xl:grid-cols-4">
 							<button
 								type="button"
-								onClick={() => setNewLessonMenuIsOpen(true)}
+								onClick={() => setControlSectionMenuIsOpen(true)}
 								className="bg-primary text-primary-foreground flex w-full flex-col gap-2 rounded-xl p-3 text-left shadow-2xs transition-colors"
 							>
 								<div className="relative aspect-video w-full overflow-hidden rounded-lg border border-dashed border-primary/20 bg-primary/5">
@@ -183,10 +140,7 @@ export default function SectionBlock({ section, courseId: _courseId, index, tota
 									totalLessons={section.aulas.length}
 									onMoveUp={() => moveLessonUp(lessonIndex)}
 									onMoveDown={() => moveLessonDown(lessonIndex)}
-									onEdit={() => {
-										setEditingLessonId(lesson.id);
-										setControlLessonMenuIsOpen(true);
-									}}
+									onEdit={() => setControlSectionMenuIsOpen(true)}
 								/>
 							))}
 						</div>
@@ -194,7 +148,7 @@ export default function SectionBlock({ section, courseId: _courseId, index, tota
 						<div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
 							<button
 								type="button"
-								onClick={() => setNewLessonMenuIsOpen(true)}
+								onClick={() => setControlSectionMenuIsOpen(true)}
 								className="bg-primary text-primary-foreground flex w-full flex-col gap-2 rounded-xl border border-dashed p-3 text-left shadow-2xs transition-colors"
 							>
 								<div className="relative aspect-video w-full overflow-hidden rounded-lg border border-dashed border-primary/20 bg-primary/5">
@@ -212,23 +166,13 @@ export default function SectionBlock({ section, courseId: _courseId, index, tota
 				</div>
 			)}
 
-			{/* Lesson control modal */}
-			{controlLessonMenuIsOpen && editingLessonId && (
-				<ControlCommunityCourseLesson
-					lessonId={editingLessonId}
-					closeModal={() => {
-						setControlLessonMenuIsOpen(false);
-						setEditingLessonId(null);
-					}}
-				/>
-			)}
-			{newLessonMenuIsOpen && (
-				<NewCommunityCourseLesson
-					closeModal={() => setNewLessonMenuIsOpen(false)}
+			{controlSectionMenuIsOpen && (
+				<ControlCommunityCourseSection
 					sectionId={section.id}
+					closeModal={() => setControlSectionMenuIsOpen(false)}
 					callbacks={{
 						onSuccess: () => {
-							setNewLessonMenuIsOpen(false);
+							setControlSectionMenuIsOpen(false);
 						},
 					}}
 				/>

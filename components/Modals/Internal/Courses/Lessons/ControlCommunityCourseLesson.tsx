@@ -1,6 +1,6 @@
 "use client";
 
-import type { TUpdateLessonInput } from "@/app/api/admin/community/lessons/route";
+import type { TUpdateCommunityLessonInput } from "@/app/api/admin/community/lessons/route";
 import ResponsiveMenu from "@/components/Utils/ResponsiveMenu";
 import { getErrorMessage } from "@/lib/errors";
 import { requestMuxUploadUrl, updateCommunityLesson } from "@/lib/mutations/community-admin";
@@ -16,7 +16,7 @@ type ControlCommunityCourseLessonProps = {
 	lessonId: string;
 	closeModal: () => void;
 	callbacks?: {
-		onMutate?: (variables: TUpdateLessonInput) => void;
+		onMutate?: (variables: TUpdateCommunityLessonInput) => void;
 		onSuccess?: () => void;
 		onError?: (error: Error) => void;
 		onSettled?: () => void;
@@ -69,7 +69,7 @@ export default function ControlCommunityCourseLesson({ lessonId, closeModal, cal
 
 	const { mutate: handleControlLessonMutation, isPending } = useMutation({
 		mutationKey: ["update-community-lesson", lessonId],
-		mutationFn: async (variables: TUpdateLessonInput) => {
+		mutationFn: async (variables: TUpdateCommunityLessonInput) => {
 			if (!lesson) throw new Error("Aula não encontrada.");
 			if (!state.lesson.titulo.trim()) throw new Error("Informe o título da aula.");
 
@@ -78,7 +78,7 @@ export default function ControlCommunityCourseLesson({ lessonId, closeModal, cal
 				throw new Error("Selecione um vídeo para esta aula.");
 			}
 
-			const data: TUpdateLessonInput["data"] = {
+			const communityLesson: TUpdateCommunityLessonInput["communityLesson"] = {
 				titulo: state.lesson.titulo.trim(),
 				descricao: state.lesson.descricao?.trim() || null,
 				tipoConteudo: state.lesson.tipoConteudo,
@@ -88,11 +88,11 @@ export default function ControlCommunityCourseLesson({ lessonId, closeModal, cal
 
 			if (showVideoUpload && state.videoHolder.file) {
 				const muxUploadId = await uploadLessonVideo(state.videoHolder.file);
-				data.muxUploadId = muxUploadId;
-				data.muxAssetStatus = "AGUARDANDO";
+				communityLesson.muxUploadId = muxUploadId;
+				communityLesson.muxAssetStatus = "AGUARDANDO";
 			}
 
-			return await updateCommunityLesson({ id: variables.id, data });
+			return await updateCommunityLesson({ communityLessonId: variables.communityLessonId, communityLesson });
 		},
 		onMutate: async (variables) => {
 			await queryClient.cancelQueries({ queryKey });
@@ -121,7 +121,7 @@ export default function ControlCommunityCourseLesson({ lessonId, closeModal, cal
 			menuDescription="Edite os dados e o conteúdo da aula"
 			menuActionButtonText="SALVAR ALTERAÇÕES"
 			menuCancelButtonText="CANCELAR"
-			actionFunction={() => handleControlLessonMutation({ id: lessonId, data: {} })}
+			actionFunction={() => handleControlLessonMutation({ communityLessonId: lessonId, communityLesson: {} })}
 			actionIsLoading={isPending}
 			stateIsLoading={isLoading}
 			stateError={error ? getErrorMessage(error) : null}

@@ -73,3 +73,5 @@ export const CommunityCourseStatusEnum = z.enum(["RASCUNHO", "PUBLICADO", "ARQUI
 export type TCommunityCourseStatusEnum = z.infer<typeof CommunityCourseStatusEnum>;
 export const CommunityLessonContentTypeEnum = z.enum(["VIDEO", "TEXTO", "VIDEO_TEXTO"]);
 export type TCommunityLessonContentTypeEnum = z.infer<typeof CommunityLessonContentTypeEnum>;
+export const CommunityMuxAssetStatusEnum = z.enum(["AGUARDANDO", "PROCESSANDO", "PRONTO", "ERRO"]);
+export type TCommunityMuxAssetStatusEnum = z.infer<typeof CommunityMuxAssetStatusEnum>;
