@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
 		}
 
 		const event = (await request.json()) as MuxWebhookEvent;
-
+		console.log("Mux webhook event:", event);
 		switch (event.type) {
 			case "video.upload.asset_created": {
 				// An asset was created from a direct upload
