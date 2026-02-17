@@ -1,3 +1,4 @@
+import type { TInteractionsStatusEnum } from "@/schemas/interactions";
 import { relations } from "drizzle-orm";
 import { jsonb, text, timestamp, varchar } from "drizzle-orm/pg-core";
 import { campaigns } from "./campaigns";
@@ -30,7 +31,8 @@ export const interactions = newTable("interactions", {
 
 	// Delivery status tracking
 	dataEnvio: timestamp("data_envio"), // When message was actually sent
-	statusEnvio: text("status_envio"), // PENDING, SENT, DELIVERED, READ, FAILED
+	statusEnvio: text("status_envio").$type<TInteractionsStatusEnum>(), // PENDING, SENT, DELIVERED, READ, FAILED
+	erroEnvio: text("erro_envio"), // Error message if status is FALHOU
 });
 export const interactionRelations = relations(interactions, ({ one }) => ({
 	cliente: one(clients, {

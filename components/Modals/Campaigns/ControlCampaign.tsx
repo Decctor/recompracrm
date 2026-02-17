@@ -5,7 +5,7 @@ import { createCampaign } from "@/lib/mutations/campaigns";
 import { updateCampaign as updateCampaignMutation } from "@/lib/mutations/campaigns";
 import { useCampaignById } from "@/lib/queries/campaigns";
 import { useCampaignState } from "@/state-hooks/use-campaign-state";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { toast } from "sonner";
 import CampaignsActionBlock from "./Blocks/Action";
@@ -29,6 +29,7 @@ type ControlCampaignProps = {
 	};
 };
 export default function ControlCampaign({ campaignId, user, organizationId, closeModal, callbacks }: ControlCampaignProps) {
+	const queryClient = useQueryClient();
 	const { state, updateCampaign, addSegmentation, updateSegmentation, deleteSegmentation, resetState, redefineState } = useCampaignState();
 
 	const { data: campaign, queryKey, isLoading, isError, isSuccess, error } = useCampaignById({ id: campaignId });
@@ -37,6 +38,7 @@ export default function ControlCampaign({ campaignId, user, organizationId, clos
 		mutationKey: ["update-campaign"],
 		mutationFn: updateCampaignMutation,
 		onMutate: async () => {
+			await queryClient.cancelQueries({ queryKey });
 			if (callbacks?.onMutate) callbacks.onMutate();
 			return;
 		},
@@ -50,10 +52,9 @@ export default function ControlCampaign({ campaignId, user, organizationId, clos
 		},
 		onSettled: async () => {
 			if (callbacks?.onSettled) callbacks.onSettled();
-			return;
+			return queryClient.invalidateQueries({ queryKey });
 		},
 	});
-	console.log(campaign?.atribuicaoModelo);
 	useEffect(() => {
 		if (campaign) redefineState({ campaign: campaign, segmentations: campaign.segmentacoes });
 	}, [campaign, redefineState]);

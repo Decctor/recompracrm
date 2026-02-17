@@ -84,6 +84,18 @@ export const InteractionSchema = z.object({
 			.optional()
 			.nullable(),
 	}),
+
+	// Delivery status tracking
+	statusEnvio: InteractionsStatusEnum.optional().nullable(),
+	dataEnvio: z
+		.string({
+			required_error: "Data de envio da interação não informada.",
+			invalid_type_error: "Tipo não válido para a data de envio da interação.",
+		})
+		.datetime({ message: "Tipo não válido para a data de envio da interação." })
+		.transform((val) => new Date(val))
+		.optional()
+		.nullable(),
 });
 
 export const InteractionStateSchema = z.object({

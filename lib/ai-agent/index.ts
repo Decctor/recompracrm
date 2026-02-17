@@ -1,5 +1,5 @@
 import type { TChatMessageEntity } from "@/services/drizzle/schema";
-import { gateway, Agent, Output, stepCountIs } from "ai";
+import { Output, ToolLoopAgent, gateway, stepCountIs } from "ai";
 import z from "zod";
 import { ENHANCED_SYSTEM_PROMPT, detectEscalationNeeded } from "./prompts";
 import { agentTools } from "./tools";
@@ -46,7 +46,7 @@ type AIResponse = {
 	};
 };
 
-export const agent = new Agent({
+export const agent = new ToolLoopAgent({
 	model: gateway("openai/gpt-5"),
 	instructions: ENHANCED_SYSTEM_PROMPT,
 	tools: agentTools,

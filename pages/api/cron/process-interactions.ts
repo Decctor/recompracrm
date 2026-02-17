@@ -141,6 +141,17 @@ const processInteractionsHandler: NextApiHandler = async (req, res) => {
 					const interactionCampaign = interaction.campanha;
 					if (!campaign || !interactionCampaign) continue;
 
+					// First, checking if client has valid phone number
+					if (!interaction.cliente.telefone) {
+						await db
+							.update(interactions)
+							.set({
+								statusEnvio: "FALHOU",
+								erroEnvio: "Cliente não tem telefone válido",
+							})
+							.where(eq(interactions.id, interaction.id));
+						continue;
+					}
 					const whatsappConnectionPhone = interactionCampaign.whatsappConexaoTelefone;
 					if (!whatsappConnectionPhone) {
 						console.warn(`[ORG: ${organization.id}] [WARN] [PROCESS_INTERACTIONS] No WhatsApp connection phone for interaction ${interaction.id}`);
@@ -301,6 +312,13 @@ const processInteractionsHandler: NextApiHandler = async (req, res) => {
 								})
 								.where(eq(chatMessages.id, insertedChatMessageId));
 						}
+						await db
+							.update(interactions)
+							.set({
+								statusEnvio: "FALHOU",
+								erroEnvio: "Houve uma falha ao enviar a mensagem via WhatsApp.",
+							})
+							.where(eq(interactions.id, interaction.id));
 
 						// Don't mark interaction as executed, so it can be retried
 						// Continue processing other interactions
