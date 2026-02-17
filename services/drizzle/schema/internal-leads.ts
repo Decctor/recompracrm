@@ -1,4 +1,4 @@
-import type { TInternalLeadOrigemEnum, TInternalLeadStatusCRMEnum } from "@/schemas/internal-leads";
+import type { TInternalLeadOriginEnum, TInternalLeadStatusCRMEnum } from "@/schemas/enums";
 import { relations } from "drizzle-orm";
 import { doublePrecision, index, integer, text, timestamp, varchar } from "drizzle-orm/pg-core";
 import { newTable, organizations, users } from ".";
@@ -22,7 +22,7 @@ export const internalLeads = newTable(
 		descricao: text("descricao"),
 		valor: doublePrecision("valor"),
 		probabilidade: integer("probabilidade"),
-		origemLead: text("origem_lead").$type<TInternalLeadOrigemEnum>(),
+		origemLead: text("origem_lead").$type<TInternalLeadOriginEnum>(),
 		motivoPerda: text("motivo_perda"),
 
 		// Organization Information

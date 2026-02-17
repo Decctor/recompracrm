@@ -1,15 +1,5 @@
+import { InternalLeadActivityStatusEnum, InternalLeadActivityTypeEnum, InternalLeadOriginEnum, InternalLeadStatusCRMEnum } from "./enums";
 import z from "zod";
-
-// ==================== Enums ====================
-
-export const InternalLeadStatusCRMEnum = z.enum(["NOVO", "CONTATO_INICIAL", "QUALIFICADO", "PROPOSTA", "NEGOCIACAO", "GANHO", "PERDIDO"]);
-export type TInternalLeadStatusCRMEnum = z.infer<typeof InternalLeadStatusCRMEnum>;
-
-export const InternalLeadOrigemEnum = z.enum(["INDICACAO", "SITE", "COLD_CALL", "COLD_EMAIL", "LINKEDIN", "EVENTO", "INBOUND", "OUTRO"]);
-export type TInternalLeadOrigemEnum = z.infer<typeof InternalLeadOrigemEnum>;
-export const InternalLeadActivityTipoEnum = z.enum(["LIGACAO", "EMAIL", "REUNIAO", "TAREFA", "WHATSAPP"]);
-
-export const InternalLeadActivityStatusEnum = z.enum(["PENDENTE", "CONCLUIDA", "CANCELADA"]);
 
 // ==================== Recurrence / Reminder ====================
 
@@ -43,7 +33,7 @@ export const InternalLeadSchema = z.object({
 	descricao: z.string({ invalid_type_error: "Tipo não válido para a descrição." }).optional().nullable(),
 	valor: z.number({ invalid_type_error: "Tipo não válido para o valor." }).optional().nullable(),
 	probabilidade: z.number({ invalid_type_error: "Tipo não válido para a probabilidade." }).min(0).max(100).optional().nullable(),
-	origemLead: InternalLeadOrigemEnum.optional().nullable(),
+	origemLead: InternalLeadOriginEnum.optional().nullable(),
 	motivoPerda: z.string({ invalid_type_error: "Tipo não válido para o motivo de perda." }).optional().nullable(),
 
 	// Organization
@@ -86,7 +76,7 @@ export const InternalLeadActivitySchema = z.object({
 		required_error: "ID do lead não informado.",
 		invalid_type_error: "Tipo não válido para o ID do lead.",
 	}),
-	tipo: InternalLeadActivityTipoEnum,
+	tipo: InternalLeadActivityTypeEnum,
 	titulo: z.string({
 		required_error: "Título da atividade não informado.",
 		invalid_type_error: "Tipo não válido para o título da atividade.",
@@ -127,7 +117,7 @@ export const InternalLeadActivityTemplateSchema = z.object({
 		required_error: "Nome do template não informado.",
 		invalid_type_error: "Tipo não válido para o nome do template.",
 	}),
-	tipo: InternalLeadActivityTipoEnum,
+	tipo: InternalLeadActivityTypeEnum,
 	descricaoPadrao: z.string({ invalid_type_error: "Tipo não válido para a descrição padrão." }).optional().nullable(),
 	duracaoPadraoMinutos: z.number({ invalid_type_error: "Tipo não válido para a duração padrão em minutos." }).optional().nullable(),
 });

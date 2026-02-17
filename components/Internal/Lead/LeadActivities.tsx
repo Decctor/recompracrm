@@ -1,6 +1,6 @@
 import type { TCreateActivityInput, TGetActivitiesOutputDefault, TUpdateActivityInput } from "@/app/api/admin/crm/activities/route";
 import InternalActivityCard from "@/components/CRM/ActivityCard";
-import NewActivity from "@/components/Modals/CRM/NewActivity";
+import NewActivity from "@/components/Modals/Internal/Activities/NewActivity";
 import { Button } from "@/components/ui/button";
 
 import SectionWrapper from "@/components/ui/section-wrapper";

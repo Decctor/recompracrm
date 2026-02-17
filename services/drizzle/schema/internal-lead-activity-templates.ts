@@ -1,14 +1,14 @@
 import { relations } from "drizzle-orm";
 import { integer, text, timestamp, varchar } from "drizzle-orm/pg-core";
 import { newTable, users } from ".";
-import type { TInternalLeadActivityTipo } from "./internal-lead-activities";
+import type { TInternalLeadActivityTypeEnum } from "@/schemas/enums";
 
 export const internalLeadActivityTemplates = newTable("internal_lead_activity_templates", {
 	id: varchar("id", { length: 255 })
 		.primaryKey()
 		.$defaultFn(() => crypto.randomUUID()),
 	nome: text("nome").notNull(),
-	tipo: text("tipo").$type<TInternalLeadActivityTipo>().notNull(),
+	tipo: text("tipo").$type<TInternalLeadActivityTypeEnum>().notNull(),
 	descricaoPadrao: text("descricao_padrao"),
 	duracaoPadraoMinutos: integer("duracao_padrao_minutos"),
 	autorId: varchar("autor_id", { length: 255 }).references(() => users.id, { onDelete: "set null" }),

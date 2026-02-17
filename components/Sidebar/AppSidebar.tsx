@@ -166,7 +166,7 @@ export function AppSidebar({
 	return (
 		<Sidebar variant="inset" collapsible="icon" {...props}>
 			<SidebarHeader>
-				<AppSidebarHeader sessionUserOrg={organization} />
+				<AppSidebarHeader sessionUserOrg={organization} user={user} />
 			</SidebarHeader>
 			<SidebarContent>
 				{filteredConfig.map((group) => (

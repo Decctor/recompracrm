@@ -1,6 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
-import type { TInternalLeadStatusCRMEnum } from "@/schemas/internal-leads";
+import { InternalLeadStatusCRMEnum, type TInternalLeadStatusCRMEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
 import { internalLeadStageHistory, internalLeads } from "@/services/drizzle/schema";
 import { InternalLeadStatusCRMOptions } from "@/utils/select-options";
@@ -55,27 +55,68 @@ async function getKanbanLeadsRoute(request: NextRequest) {
 
 // ==================== PATCH - Move lead (drag-and-drop) ====================
 
-const MoveLeadInputSchema = z.object({
-	leadId: z.string(),
-	novoStatus: z.string(),
-	novaPosicao: z.number(),
-});
+const MoveLeadInputSchema = z
+	.object({
+		leadId: z.string({
+			required_error: "ID do lead não informado.",
+			invalid_type_error: "Tipo inválido para ID do lead.",
+		}),
+		previousStatus: InternalLeadStatusCRMEnum.optional(),
+		previousPosition: z.number({ invalid_type_error: "Tipo inválido para posição anterior." }).int().nonnegative().optional(),
+		newStatus: InternalLeadStatusCRMEnum.optional(),
+		newPosition: z.number({ invalid_type_error: "Tipo inválido para posição nova." }).int().nonnegative().optional(),
+		novoStatus: InternalLeadStatusCRMEnum.optional(),
+		novaPosicao: z.number({ invalid_type_error: "Tipo inválido para posição nova." }).int().nonnegative().optional(),
+	})
+	.transform((input) => ({
+		leadId: input.leadId,
+		previousStatus: input.previousStatus,
+		previousPosition: input.previousPosition,
+		novoStatus: input.novoStatus ?? input.newStatus,
+		novaPosicao: input.novaPosicao ?? input.newPosition,
+	}))
+	.superRefine((input, ctx) => {
+		if (!input.novoStatus) {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				message: "Status novo não informado.",
+				path: ["novoStatus"],
+			});
+		}
+		if (input.novaPosicao == null) {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				message: "Posição nova não informada.",
+				path: ["novaPosicao"],
+			});
+		}
+	});
 export type TMoveLeadInput = z.infer<typeof MoveLeadInputSchema>;
 
 async function moveLead({ input, autorId }: { input: TMoveLeadInput; autorId: string }) {
+	console.log("[INPUT]", {
+		authorId: autorId,
+		input,
+	});
+	if (!input.novoStatus || input.novaPosicao == null) {
+		throw new createHttpError.BadRequest("Status e posição de destino são obrigatórios.");
+	}
+	const novoStatus = input.novoStatus;
+	const novaPosicao = input.novaPosicao;
+
 	await db.transaction(async (tx) => {
 		const existing = await tx.query.internalLeads.findFirst({
 			where: (fields, { eq }) => eq(fields.id, input.leadId),
 		});
 		if (!existing) throw new createHttpError.NotFound("Lead não encontrado.");
 
-		const statusChanged = existing.statusCRM !== input.novoStatus;
+		const statusChanged = existing.statusCRM !== novoStatus;
 
 		if (statusChanged) {
 			await tx.insert(internalLeadStageHistory).values({
 				leadId: input.leadId,
 				statusAnterior: existing.statusCRM,
-				statusNovo: input.novoStatus,
+				statusNovo: novoStatus,
 				autorId,
 			});
 		}
@@ -83,8 +124,8 @@ async function moveLead({ input, autorId }: { input: TMoveLeadInput; autorId: st
 		await tx
 			.update(internalLeads)
 			.set({
-				statusCRM: input.novoStatus as TInternalLeadStatusCRMEnum,
-				posicaoKanban: input.novaPosicao,
+				statusCRM: novoStatus as TInternalLeadStatusCRMEnum,
+				posicaoKanban: novaPosicao,
 				dataUltimaAtualizacao: new Date(),
 			})
 			.where(eq(internalLeads.id, input.leadId));
@@ -103,8 +144,9 @@ async function moveLeadRoute(request: NextRequest) {
 	if (!session.user.admin) throw new createHttpError.Forbidden("Acesso restrito a administradores.");
 
 	const payload = await request.json();
+	console.log("[DEBUG] [PAYLOAD]", payload);
 	const input = MoveLeadInputSchema.parse(payload);
-
+	console.log("[DEBUG] [INPUT]", input);
 	const result = await moveLead({ input, autorId: session.user.id });
 	return NextResponse.json(result);
 }

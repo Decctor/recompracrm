@@ -1,11 +1,11 @@
 "use client";
-import { useCrmStats } from "@/lib/queries/crm";
-import { STAGE_LABELS } from "./Kanban/KanbanColumn";
-import { INTERNAL_LEAD_STATUS_CRM } from "@/services/drizzle/schema";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
-import LoadingComponent from "@/components/Layouts/LoadingComponent";
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
+import LoadingComponent from "@/components/Layouts/LoadingComponent";
 import { getErrorMessage } from "@/lib/errors";
+import { useCrmStats } from "@/lib/queries/crm";
+import { InternalLeadStatusCRMEnum } from "@/schemas/enums";
+import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { STAGE_LABELS } from "./Kanban/KanbanColumn";
 
 const STAGE_BAR_COLORS: Record<string, string> = {
 	NOVO: "#3b82f6",
@@ -29,7 +29,7 @@ export default function FunnelChart({ periodAfter, periodBefore }: FunnelChartPr
 	if (isError) return <ErrorComponent msg={getErrorMessage(error)} />;
 	if (!data) return null;
 
-	const chartData = INTERNAL_LEAD_STATUS_CRM.map((stage) => ({
+	const chartData = Object.values(InternalLeadStatusCRMEnum).map((stage) => ({
 		name: STAGE_LABELS[stage] ?? stage,
 		stage,
 		leads: data.stageMap[stage]?.count ?? 0,

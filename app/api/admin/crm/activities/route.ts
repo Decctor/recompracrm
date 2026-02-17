@@ -147,7 +147,10 @@ async function updateActivity({ input }: { input: TUpdateActivityInput }) {
 	if (input.activity.status === "CONCLUIDA" && existing.status !== "CONCLUIDA") {
 		updateData.dataConclusao = new Date();
 	}
-
+	// If concluded and now there set to PENDENTE or CANCELADA, set dataConclusao
+	if (existing.status === "CONCLUIDA" && input.activity.status !== "CONCLUIDA") {
+		updateData.dataConclusao = null;
+	}
 	await db.update(internalLeadActivities).set(updateData).where(eq(internalLeadActivities.id, input.activityId));
 
 	return {

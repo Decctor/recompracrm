@@ -32,16 +32,6 @@ export default function ActivitiesPage({ user }: ActivitiesPageProps) {
 		initialParams: { page: 1, status: statusFilter },
 	});
 
-	async function handleComplete(activityId: string) {
-		try {
-			await completeActivity(activityId);
-			toast.success("Atividade concluída!");
-			queryClient.invalidateQueries({ queryKey: ["internal-lead-activities"] });
-		} catch {
-			toast.error("Erro ao concluir atividade.");
-		}
-	}
-
 	const statusOptions = [
 		{ label: "Todas", value: undefined },
 		{ label: "Pendentes", value: "PENDENTE" },
@@ -76,17 +66,9 @@ export default function ActivitiesPage({ user }: ActivitiesPageProps) {
 				<>
 					<div className="flex flex-col gap-2">
 						{activitiesData.activities.map((activity) => (
-							<ActivityCard
-								key={activity.id}
-								activity={activity as any}
-								onComplete={handleComplete}
-							/>
+							<ActivityCard key={activity.id} activity={activity as any} />
 						))}
-						{activitiesData.activities.length === 0 && (
-							<p className="text-sm text-muted-foreground text-center py-8">
-								Nenhuma atividade encontrada.
-							</p>
-						)}
+						{activitiesData.activities.length === 0 && <p className="text-sm text-muted-foreground text-center py-8">Nenhuma atividade encontrada.</p>}
 					</div>
 					<GeneralPaginationComponent
 						activePage={queryParams.page}

@@ -626,6 +626,22 @@ export const AppRoutes = [
 		path: "/dashboard/settings",
 		title: "Configurações",
 	},
+	{
+		path: "/admin-dashboard",
+		title: "Painel Admin",
+	},
+	{
+		path: "/admin-dashboard/crm",
+		title: "CRM",
+	},
+	{
+		path: "/admin-dashboard/crm/dashboard",
+		title: "Dashboard CRM",
+	},
+	{
+		path: "/admin-dashboard/crm/activities",
+		title: "Atividades CRM",
+	},
 ];
 export function getAppRouteTitle(path: string) {
 	const route = AppRoutes.find((route) => route.path === path);

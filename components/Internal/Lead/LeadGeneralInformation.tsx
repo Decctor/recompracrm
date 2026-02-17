@@ -1,14 +1,35 @@
-import type { TGetLeadsOutputById } from "@/app/api/admin/crm/leads/route";
+import type { TGetLeadsOutputById, TUpdateLeadInput } from "@/app/api/admin/crm/leads/route";
+import ControlLead from "@/components/Modals/Internal/Leads/ControlLead";
+import { Button } from "@/components/ui/button";
 import SectionWrapper from "@/components/ui/section-wrapper";
-import { formatDecimalPlaces, formatToMoney } from "@/lib/formatting";
-import { BriefcaseBusiness, Building2, DollarSign, Funnel, Globe, IdCard, Mail, Percent, Phone, TextIcon, User } from "lucide-react";
+import { formatToMoney } from "@/lib/formatting";
+import { getProbabilityTier } from "@/utils/select-options";
+import { BriefcaseBusiness, Building2, DollarSign, Funnel, Globe, IdCard, Mail, Pencil, Percent, Phone, TextIcon, User } from "lucide-react";
+import { useMemo, useState } from "react";
 
 type LeadGeneralInformationProps = {
 	lead: TGetLeadsOutputById;
+	updateCallbacks?: {
+		onMutate?: (variables: TUpdateLeadInput) => void;
+		onSuccess?: () => void;
+		onError?: () => void;
+		onSettled?: () => void;
+	};
 };
-export default function LeadGeneralInformation({ lead }: LeadGeneralInformationProps) {
+export default function LeadGeneralInformation({ lead, updateCallbacks }: LeadGeneralInformationProps) {
+	const [editLeadModalOpen, setEditLeadModalOpen] = useState(false);
+	const probabilityTier = useMemo(() => getProbabilityTier(lead.probabilidade), [lead.probabilidade]);
 	return (
-		<SectionWrapper title="INFORMAÇÕES DO LEAD" icon={<Funnel className="w-4 h-4" />}>
+		<SectionWrapper
+			title="INFORMAÇÕES DO LEAD"
+			icon={<Funnel className="w-4 h-4" />}
+			actions={
+				<Button variant="ghost" size="xs" onClick={() => setEditLeadModalOpen(true)} className="flex items-center gap-1">
+					<Pencil className="w-4 h-4 min-w-4 min-h-4" />
+					EDITAR
+				</Button>
+			}
+		>
 			<div className="flex w-full grow flex-col gap-4">
 				<div className="w-full flex flex-col gap-2">
 					<h1 className="text-xs leading-none tracking-tight">INFORMAÇÕES GERAIS</h1>
@@ -29,9 +50,16 @@ export default function LeadGeneralInformation({ lead }: LeadGeneralInformationP
 							<h3 className="text-sm font-semibold tracking-tight">{formatToMoney(lead.valor || 0)}</h3>
 						</div>
 						<div className="w-full flex items-center gap-1.5">
-							<Percent className="w-4 h-4" />
-							<h3 className="text-sm font-semibold tracking-tighter text-primary/80">PROBABILIDADE</h3>
-							<h3 className="text-sm font-semibold tracking-tight">{formatDecimalPlaces(lead.probabilidade || 0, 1)}%</h3>
+							<Percent className="w-4 h-4 min-w-4 min-h-4 shrink-0" />
+							<h3 className="text-sm font-semibold tracking-tighter text-primary/80 shrink-0">PROBABILIDADE</h3>
+							{probabilityTier ? (
+								<span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${probabilityTier.className}`}>
+									<span>{probabilityTier.label}</span>
+									<span className="opacity-90">({lead.probabilidade}%)</span>
+								</span>
+							) : (
+								<span className="text-sm font-semibold tracking-tight text-muted-foreground">—</span>
+							)}
 						</div>
 					</div>
 				</div>
@@ -91,6 +119,7 @@ export default function LeadGeneralInformation({ lead }: LeadGeneralInformationP
 					</div>
 				</div>
 			</div>
+			{editLeadModalOpen && <ControlLead leadId={lead.id} closeModal={() => setEditLeadModalOpen(false)} callbacks={updateCallbacks} />}
 		</SectionWrapper>
 	);
 }

@@ -1,4 +1,11 @@
 "use client";
+import type { TGetKanbanLeadsOutput } from "@/app/api/admin/crm/leads/kanban/route";
+import ErrorComponent from "@/components/Layouts/ErrorComponent";
+import LoadingComponent from "@/components/Layouts/LoadingComponent";
+import { getErrorMessage } from "@/lib/errors";
+import { moveInternalLead } from "@/lib/mutations/crm";
+import { useInternalLeadsKanban } from "@/lib/queries/crm";
+import type { TInternalLeadEntity } from "@/services/drizzle/schema";
 import {
 	DndContext,
 	type DragEndEvent,
@@ -10,24 +17,38 @@ import {
 	useSensor,
 	useSensors,
 } from "@dnd-kit/core";
-import type { TInternalLeadEntity, TInternalLeadStatusCRM } from "@/services/drizzle/schema";
-import { useInternalLeadsKanban } from "@/lib/queries/crm";
-import { moveInternalLead } from "@/lib/mutations/crm";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
-import KanbanColumn from "./KanbanColumn";
 import KanbanCard from "./KanbanCard";
-import LoadingComponent from "@/components/Layouts/LoadingComponent";
-import ErrorComponent from "@/components/Layouts/ErrorComponent";
-import { getErrorMessage } from "@/lib/errors";
-import type { TGetKanbanLeadsOutput } from "@/app/api/admin/crm/leads/kanban/route";
+import KanbanColumn from "./KanbanColumn";
 
 type LeadWithRelations = TInternalLeadEntity & { responsavel?: { nome: string } | null; autor?: { nome: string } | null };
+type KanbanData = TGetKanbanLeadsOutput["data"];
+type Stage = keyof KanbanData["columns"];
+
+type MoveLeadPayload = {
+	leadId: string;
+	previousStatus: Stage;
+	previousPosition: number;
+	newStatus: Stage;
+	newPosition: number;
+	// Compatibilidade com payload já usado no backend atual.
+	novoStatus: Stage;
+	novaPosicao: number;
+};
+
+function findLeadLocation(columns: KanbanData["columns"], leadId: string): { stage: Stage; index: number } | null {
+	for (const [stage, leads] of Object.entries(columns) as [Stage, LeadWithRelations[]][]) {
+		const index = leads.findIndex((lead) => lead.id === leadId);
+		if (index >= 0) return { stage, index };
+	}
+	return null;
+}
 
 export default function KanbanBoard() {
 	const queryClient = useQueryClient();
-	const { data: kanbanData, isLoading, isError, error } = useInternalLeadsKanban();
+	const { data: kanbanData, queryKey, isLoading, isError, error } = useInternalLeadsKanban();
 	const [activeLead, setActiveLead] = useState<LeadWithRelations | null>(null);
 
 	const sensors = useSensors(
@@ -45,75 +66,110 @@ export default function KanbanBoard() {
 		const { active, over } = event;
 		if (!over || !kanbanData) return;
 
-		const leadId = active.id as string;
-		const targetStage = over.id as string;
+		const leadId = String(active.id);
+		const overId = String(over.id);
+		const source = findLeadLocation(kanbanData.columns, leadId);
+		if (!source) return;
 
-		// Find which column the lead was in
-		let sourceStage: string | null = null;
-		for (const [stage, leads] of Object.entries(kanbanData.columns)) {
-			if (leads.some((l) => l.id === leadId)) {
-				sourceStage = stage;
-				break;
+		let destinationStage: Stage | null = null;
+		let destinationIndex = -1;
+
+		// Drop sobre a coluna vazia ou área da coluna.
+		if (Object.hasOwn(kanbanData.columns, overId)) {
+			destinationStage = overId as Stage;
+			destinationIndex = kanbanData.columns[destinationStage].length;
+		} else {
+			// Drop sobre outro card.
+			const overLocation = findLeadLocation(kanbanData.columns, overId);
+			if (overLocation) {
+				destinationStage = overLocation.stage;
+				destinationIndex = overLocation.index;
 			}
 		}
+		if (!destinationStage || destinationIndex < 0) return;
+		if (source.stage === destinationStage && source.index === destinationIndex) return;
 
-		if (!sourceStage || sourceStage === targetStage) return;
-
-		// Optimistic update
-		const previousData = queryClient.getQueryData<TGetKanbanLeadsOutput>(["internal-leads-kanban"]);
-		queryClient.setQueryData<TGetKanbanLeadsOutput>(["internal-leads-kanban"], (old) => {
-			if (!old) return old;
-			const newColumns = { ...old.data.columns };
-			const lead = newColumns[sourceStage as TInternalLeadStatusCRM]?.find((l) => l.id === leadId);
-			if (!lead) return old;
-
-			newColumns[sourceStage as TInternalLeadStatusCRM] = newColumns[sourceStage as TInternalLeadStatusCRM].filter(
-				(l) => l.id !== leadId,
-			);
-			newColumns[targetStage as TInternalLeadStatusCRM] = [
-				...newColumns[targetStage as TInternalLeadStatusCRM],
-				{ ...lead, statusCRM: targetStage as TInternalLeadStatusCRM },
-			];
-
-			return { ...old, data: { ...old.data, columns: newColumns } };
+		handleMoveLeadMutation({
+			leadId,
+			previousStatus: source.stage,
+			previousPosition: source.index,
+			newStatus: destinationStage,
+			newPosition: destinationIndex,
+			novoStatus: destinationStage,
+			novaPosicao: destinationIndex,
 		});
-
-		try {
-			await moveInternalLead({
-				leadId,
-				novoStatus: targetStage,
-				novaPosicao: (kanbanData.columns[targetStage as TInternalLeadStatusCRM]?.length ?? 0),
-			});
-			queryClient.invalidateQueries({ queryKey: ["internal-leads-kanban"] });
-		} catch {
-			queryClient.setQueryData(["internal-leads-kanban"], previousData);
-			toast.error("Erro ao mover lead.");
-		}
 	}
+
+	const { mutate: handleMoveLeadMutation } = useMutation({
+		mutationKey: ["move-internal-lead"],
+		mutationFn: (variables: MoveLeadPayload) => moveInternalLead(variables as never),
+		onMutate: async (variables) => {
+			await queryClient.cancelQueries({ queryKey });
+			const previousData = queryClient.getQueryData<KanbanData>(queryKey);
+			if (!previousData) return { previousData: null };
+
+			queryClient.setQueryData<KanbanData>(queryKey, (old) => {
+				if (!old) return old;
+
+				const sourceStage = variables.previousStatus;
+				const targetStage = variables.novoStatus;
+				const sourceLeads = [...(old.columns[sourceStage] as LeadWithRelations[])];
+				const targetLeads = sourceStage === targetStage ? sourceLeads : [...(old.columns[targetStage] as LeadWithRelations[])];
+				const leadIndex = sourceLeads.findIndex((lead) => lead.id === variables.leadId);
+				if (leadIndex < 0) return old;
+
+				const [movedLead] = sourceLeads.splice(leadIndex, 1);
+				const nextLead = { ...movedLead, statusCRM: targetStage as LeadWithRelations["statusCRM"] };
+				const requestedIndex = Math.max(0, variables.novaPosicao);
+
+				if (sourceStage === targetStage) {
+					const insertIndex = Math.min(
+						requestedIndex > leadIndex ? requestedIndex - 1 : requestedIndex,
+						sourceLeads.length,
+					);
+					sourceLeads.splice(insertIndex, 0, nextLead);
+				} else {
+					const insertIndex = Math.min(requestedIndex, targetLeads.length);
+					targetLeads.splice(insertIndex, 0, nextLead);
+				}
+
+				return {
+					...old,
+					columns: {
+						...old.columns,
+						[sourceStage]: sourceLeads,
+						[targetStage]: sourceStage === targetStage ? sourceLeads : targetLeads,
+					},
+				};
+			});
+
+			return { previousData };
+		},
+		onError: (error, variables, context) => {
+			if (context?.previousData) queryClient.setQueryData(queryKey, context.previousData);
+			toast.error(getErrorMessage(error));
+		},
+		onSettled: () => {
+			queryClient.invalidateQueries({ queryKey });
+		},
+	});
 
 	if (isLoading) return <LoadingComponent />;
 	if (isError) return <ErrorComponent msg={getErrorMessage(error)} />;
 	if (!kanbanData) return null;
 
 	return (
-		<DndContext
-			sensors={sensors}
-			collisionDetection={closestCorners}
-			onDragStart={handleDragStart}
-			onDragEnd={handleDragEnd}
-		>
+		<DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
 			<div className="flex gap-4 overflow-x-auto pb-4 h-full">
 				{kanbanData.stages.map((stage) => (
 					<KanbanColumn
-						key={stage}
-						stage={stage}
-						leads={(kanbanData.columns[stage] ?? []) as LeadWithRelations[]}
+						key={stage.value}
+						stage={stage.value}
+						leads={(kanbanData.columns[stage.value as keyof typeof kanbanData.columns] ?? []) as LeadWithRelations[]}
 					/>
 				))}
 			</div>
-			<DragOverlay>
-				{activeLead ? <KanbanCard lead={activeLead} /> : null}
-			</DragOverlay>
+			<DragOverlay>{activeLead ? <KanbanCard lead={activeLead} /> : null}</DragOverlay>
 		</DndContext>
 	);
 }

@@ -1,14 +1,9 @@
+import type { TInternalLeadActivityStatusEnum, TInternalLeadActivityTypeEnum } from "@/schemas/enums";
 import { relations } from "drizzle-orm";
 import { index, integer, jsonb, text, timestamp, varchar } from "drizzle-orm/pg-core";
 import { newTable, users } from ".";
 import { internalLeadActivityTemplates } from "./internal-lead-activity-templates";
 import { internalLeads } from "./internal-leads";
-
-export const INTERNAL_LEAD_ACTIVITY_TIPO = ["LIGACAO", "EMAIL", "REUNIAO", "TAREFA", "WHATSAPP"] as const;
-export type TInternalLeadActivityTipo = (typeof INTERNAL_LEAD_ACTIVITY_TIPO)[number];
-
-export const INTERNAL_LEAD_ACTIVITY_STATUS = ["PENDENTE", "CONCLUIDA", "CANCELADA"] as const;
-export type TInternalLeadActivityStatus = (typeof INTERNAL_LEAD_ACTIVITY_STATUS)[number];
 
 export type TActivityRecurrence = {
 	tipo: "DIARIO" | "SEMANAL" | "MENSAL";
@@ -30,10 +25,10 @@ export const internalLeadActivities = newTable(
 		leadId: varchar("lead_id", { length: 255 })
 			.references(() => internalLeads.id, { onDelete: "cascade" })
 			.notNull(),
-		tipo: text("tipo").$type<TInternalLeadActivityTipo>().notNull(),
+		tipo: text("tipo").$type<TInternalLeadActivityTypeEnum>().notNull(),
 		titulo: text("titulo").notNull(),
 		descricao: text("descricao"),
-		status: text("status").$type<TInternalLeadActivityStatus>().notNull().default("PENDENTE"),
+		status: text("status").$type<TInternalLeadActivityStatusEnum>().notNull().default("PENDENTE"),
 		dataAgendada: timestamp("data_agendada").notNull(),
 		dataConclusao: timestamp("data_conclusao"),
 		duracaoMinutos: integer("duracao_minutos"),

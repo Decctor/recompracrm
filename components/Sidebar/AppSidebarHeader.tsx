@@ -14,17 +14,19 @@ import { switchOrganization } from "@/lib/mutations/organizations";
 import { useUserMemberships } from "@/lib/queries/organizations";
 import LogoIcon from "@/utils/images/logo-icon.png";
 import { useMutation } from "@tanstack/react-query";
-import { Check, ChevronsUpDown, Loader2, Plus } from "lucide-react";
+import { ArrowRightLeft, Check, ChevronsUpDown, Loader2, Plus, Shield } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 
 type AppSidebarHeaderProps = {
 	sessionUserOrg: NonNullable<TAuthUserSession["membership"]>["organizacao"] | null;
+	user: TAuthUserSession["user"];
+	mode?: "app" | "admin";
 };
 
-export default function AppSidebarHeader({ sessionUserOrg }: AppSidebarHeaderProps) {
+export default function AppSidebarHeader({ sessionUserOrg, user, mode = "app" }: AppSidebarHeaderProps) {
 	const { isMobile } = useSidebar();
-	const { data: membershipsData, isLoading: isLoadingMemberships } = useUserMemberships();
+	const { data: membershipsData } = useUserMemberships();
 
 	const switchOrgMutation = useMutation({
 		mutationFn: switchOrganization,
@@ -36,13 +38,28 @@ export default function AppSidebarHeader({ sessionUserOrg }: AppSidebarHeaderPro
 	const memberships = membershipsData?.memberships ?? [];
 	const activeOrganizationId = membershipsData?.activeOrganizationId ?? sessionUserOrg?.id;
 	const hasMultipleOrgs = memberships.length > 1;
+	const isAdminMode = mode === "admin";
+	const showPanelLink = mode === "admin" || user.admin;
+	const panelHref = mode === "admin" ? "/dashboard" : "/admin-dashboard";
+	const panelLabel = mode === "admin" ? "Dashboard" : "Painel Admin";
+	const panelLabelUppercase = mode === "admin" ? "DASHBOARD" : "PAINEL ADMIN";
+	const PanelIcon = mode === "admin" ? ArrowRightLeft : Shield;
 
 	// Static header for single org or no org
 	if (!hasMultipleOrgs) {
 		return (
 			<SidebarMenu>
 				<SidebarMenuItem className="flex items-center justify-center">
-					{sessionUserOrg ? (
+					{isAdminMode ? (
+						<div className="flex items-center gap-2 w-full self-center">
+							<div className="relative w-8 h-8 min-w-8 min-h-8 max-w-8 max-h-8 self-center rounded-lg overflow-hidden">
+								<Image src={LogoIcon} alt="RecompraCRM Admin" fill />
+							</div>
+							<div className="grid flex-1 text-left text-sm leading-tight">
+								<span className="truncate font-medium">ADMIN</span>
+							</div>
+						</div>
+					) : sessionUserOrg ? (
 						<div className="flex items-center gap-2 w-full self-center">
 							<div className="relative w-8 h-8 min-w-8 min-h-8 max-w-8 max-h-8 self-center rounded-lg overflow-hidden">
 								<Image src={sessionUserOrg.logoUrl ?? LogoIcon} alt={sessionUserOrg.nome} fill />
@@ -62,6 +79,16 @@ export default function AppSidebarHeader({ sessionUserOrg }: AppSidebarHeaderPro
 						</div>
 					)}
 				</SidebarMenuItem>
+				{showPanelLink && (
+					<SidebarMenuItem>
+						<SidebarMenuButton asChild>
+							<Link href={panelHref}>
+								<PanelIcon className="w-4 h-4 min-w-4 min-h-4" />
+								<span>{panelLabel}</span>
+							</Link>
+						</SidebarMenuButton>
+					</SidebarMenuItem>
+				)}
 			</SidebarMenu>
 		);
 	}
@@ -76,10 +103,14 @@ export default function AppSidebarHeader({ sessionUserOrg }: AppSidebarHeaderPro
 					<DropdownMenuTrigger asChild>
 						<SidebarMenuButton size="lg" className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground">
 							<div className="relative w-8 h-8 min-w-8 min-h-8 max-w-8 max-h-8 rounded-lg overflow-hidden">
-								<Image src={currentOrg?.logoUrl ?? LogoIcon} alt={currentOrg?.nome ?? "Organização"} fill />
+								<Image
+									src={isAdminMode ? LogoIcon : currentOrg?.logoUrl ?? LogoIcon}
+									alt={isAdminMode ? "Admin" : currentOrg?.nome ?? "Organização"}
+									fill
+								/>
 							</div>
 							<div className="grid flex-1 text-left text-sm leading-tight">
-								<span className="truncate font-medium">{currentOrg?.nome ?? "Selecionar organização"}</span>
+								<span className="truncate font-medium">{isAdminMode ? "ADMIN" : currentOrg?.nome ?? "Selecionar organização"}</span>
 							</div>
 							{switchOrgMutation.isPending ? <Loader2 className="ml-auto size-4 animate-spin" /> : <ChevronsUpDown className="ml-auto size-4" />}
 						</SidebarMenuButton>
@@ -124,6 +155,19 @@ export default function AppSidebarHeader({ sessionUserOrg }: AppSidebarHeaderPro
 								</div>
 							</Link>
 						</DropdownMenuItem>
+						{showPanelLink && (
+							<>
+								<DropdownMenuSeparator />
+								<DropdownMenuItem asChild className="cursor-pointer">
+									<Link href={panelHref}>
+										<div className="flex items-center justify-center gap-2 w-full">
+											<PanelIcon className="w-4 h-4 min-w-4 min-h-4" />
+											<span className="flex-1 truncate">{panelLabelUppercase}</span>
+										</div>
+									</Link>
+								</DropdownMenuItem>
+							</>
+						)}
 					</DropdownMenuContent>
 				</DropdownMenu>
 			</SidebarMenuItem>

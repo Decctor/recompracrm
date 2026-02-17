@@ -47,16 +47,22 @@ export default function NoteCard({ note, updateCallbacks, deleteCallbacks }: Not
 		},
 	});
 	return (
-		<div className={cn("bg-yellow-100 border border-yellow-200 flex w-full flex-col gap-1 rounded-xl px-3 py-4 shadow-2xs")}>
+		<div className={cn("bg-yellow-100 border border-yellow-200 text-black flex w-full flex-col gap-1 rounded-xl px-3 py-4 shadow-2xs")}>
 			<div className="flex items-start justify-between gap-2">
-				<p className="text-sm whitespace-pre-wrap flex-1">{note.conteudo}</p>
+				<p className="text-sm whitespace-pre-wrap flex-1 text-black">{note.conteudo}</p>
 				<div className="flex items-center gap-1 shrink-0">
-					<Button disabled={isDeletingNote} variant="ghost" size="sm" onClick={() => deleteNoteMutation({ id: note.id })}>
+					<Button
+						disabled={isDeletingNote}
+						variant="ghost"
+						size="fit"
+						className="hover:text-destructive p-2 rounded-full hover:bg-destructive/20"
+						onClick={() => deleteNoteMutation({ id: note.id })}
+					>
 						<Trash2 className="w-3.5 h-3.5" />
 					</Button>
 				</div>
 			</div>
-			<div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
+			<div className="flex items-center gap-2 mt-2 text-xs">
 				{note.autor && (
 					<div className="flex items-center gap-1">
 						<Avatar className="w-4 h-4 min-w-4 min-h-4">

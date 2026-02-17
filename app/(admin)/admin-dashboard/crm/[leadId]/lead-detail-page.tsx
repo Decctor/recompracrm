@@ -8,8 +8,8 @@ import LeadNotes from "@/components/Internal/Lead/LeadNotes";
 import LeadStatusController from "@/components/Internal/Lead/LeadStatusController";
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
 import LoadingComponent from "@/components/Layouts/LoadingComponent";
-import NewActivity from "@/components/Modals/CRM/NewActivity";
-import NewNote from "@/components/Modals/CRM/NewNote";
+import NewActivity from "@/components/Modals/Internal/Activities/NewActivity";
+import NewNote from "@/components/Modals/Internal/Notes/NewNote";
 import { Button } from "@/components/ui/button";
 import SectionWrapper from "@/components/ui/section-wrapper";
 import type { TAuthUserSession } from "@/lib/authentication/types";
@@ -78,7 +78,7 @@ export default function LeadDetailPage({ user, leadId }: LeadDetailPageProps) {
 			{/* Header */}
 			<div className="flex items-center gap-3">
 				<Button variant="ghost" size="fit" asChild className="rounded-full hover:bg-brand/10 flex items-center gap-1 px-2 py-2">
-					<Link href={"/dashboard/admin/crm"} className="flex items-center gap-1">
+					<Link href={"/admin-dashboard/crm"} className="flex items-center gap-1">
 						<ArrowLeft className="w-5 h-5" />
 						VOLTAR
 					</Link>
@@ -89,7 +89,7 @@ export default function LeadDetailPage({ user, leadId }: LeadDetailPageProps) {
 			<div className="w-full flex items-start gap-3 flex-col lg:flex-row">
 				{/* Left - Lead Info */}
 				<div className="w-full lg:w-1/2 flex flex-col gap-3">
-					<LeadGeneralInformation lead={lead} />
+					<LeadGeneralInformation lead={lead} updateCallbacks={{ onMutate: handleOnMutate, onSettled: handleOnSettled }} />
 				</div>
 
 				{/* Right - Timeline / Activities / Notes */}

@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { getErrorMessage } from "@/lib/errors";
 import { updateInternalLead } from "@/lib/mutations/crm";
 import { cn } from "@/lib/utils";
-import type { TInternalLeadStatusCRMEnum } from "@/schemas/internal-leads";
+import type { TInternalLeadStatusCRMEnum } from "@/schemas/enums";
 import { InternalLeadStatusCRMOptions } from "@/utils/select-options";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Funnel } from "lucide-react";

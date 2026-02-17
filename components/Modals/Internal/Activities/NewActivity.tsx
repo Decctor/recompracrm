@@ -10,8 +10,9 @@ import ResponsiveMenuSection from "@/components/Utils/ResponsiveMenuSection";
 import { getErrorMessage } from "@/lib/errors";
 import { formatDateForInputValue, formatDateOnInputChange } from "@/lib/formatting";
 import { createActivity } from "@/lib/mutations/crm";
+import { InternalActivityTypeOptions } from "@/utils/select-options";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Calendar, Clock } from "lucide-react";
+import { Calendar, Check, Clock } from "lucide-react";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
 
@@ -25,14 +26,6 @@ type NewActivityProps = {
 		onSettled?: () => void;
 	};
 };
-
-const TIPO_OPTIONS = [
-	{ id: "LIGACAO", value: "LIGACAO", label: "Ligação" },
-	{ id: "EMAIL", value: "EMAIL", label: "E-mail" },
-	{ id: "REUNIAO", value: "REUNIAO", label: "Reunião" },
-	{ id: "TAREFA", value: "TAREFA", label: "Tarefa" },
-	{ id: "WHATSAPP", value: "WHATSAPP", label: "WhatsApp" },
-];
 
 export default function NewActivity({ leadId, closeMenu, callbacks }: NewActivityProps) {
 	const queryClient = useQueryClient();
@@ -87,9 +80,14 @@ export default function NewActivity({ leadId, closeMenu, callbacks }: NewActivit
 		>
 			<ResponsiveMenuSection title="DETALHES" icon={<Calendar className="w-3.5 h-3.5" />}>
 				<SelectInput
-					label="TIPI"
+					label="TIPO"
 					value={activity.tipo}
-					options={TIPO_OPTIONS}
+					options={InternalActivityTypeOptions.map((o) => ({
+						id: o.id,
+						label: o.label,
+						value: o.value,
+						startContent: o.icon,
+					}))}
 					resetOptionLabel="NÃO DEFINIDO"
 					handleChange={(v) => updateActivity({ tipo: v as TCreateActivityInput["activity"]["tipo"] })}
 					onReset={() => updateActivity({ tipo: "TAREFA" })}
@@ -115,15 +113,15 @@ export default function NewActivity({ leadId, closeMenu, callbacks }: NewActivit
 					label="DATA E HORA"
 					value={formatDateForInputValue(activity.dataAgendada, "datetime")}
 					handleChange={(v) => updateActivity({ dataAgendada: formatDateOnInputChange(v, "date") || activity.dataAgendada })}
-					required
-				/>
-				<NumberInput
-					label="DURAÇÃO (MIN)"
-					placeholder="Ex: 30"
-					value={activity.duracaoMinutos}
-					handleChange={(v) => updateActivity({ duracaoMinutos: v })}
 				/>
 			</ResponsiveMenuSection>
+			{/* <ResponsiveMenuSection title="CONCLUSÃO" icon={<Check className="w-3.5 h-3.5" />}>
+				<DateTimeInput
+					label="DATA E HORA"
+					value={formatDateForInputValue(activity.dataConclusao, "datetime")}
+					handleChange={(v) => updateActivity({ dataConclusao: formatDateOnInputChange(v, "date") || activity.dataConclusao })}
+				/>
+			</ResponsiveMenuSection> */}
 		</ResponsiveMenu>
 	);
 }
