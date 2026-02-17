@@ -149,6 +149,7 @@ async function getCampaignInteractions({ input, session }: { input: TGetCampaign
 			dataExecucao: true,
 			dataEnvio: true,
 			statusEnvio: true,
+			erroEnvio: true,
 		},
 		with: {
 			campanha: {

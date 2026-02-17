@@ -30,6 +30,7 @@ import {
 	BadgeDollarSign,
 	Calendar,
 	CircleCheck,
+	CircleX,
 	Clock,
 	Database,
 	Grid3x3,
@@ -257,23 +258,6 @@ function CampaignInteractionLogCard({ interaction }: { interaction: TGetCampaign
 	const executionDateText = interaction.dataExecucao ? formatDateAsLocale(interaction.dataExecucao, true) : "Não executada";
 	const sentDateText = interaction.dataEnvio ? formatDateAsLocale(interaction.dataEnvio, true) : null;
 
-	const deliveryStatusLabel = (() => {
-		switch (interaction.statusEnvio) {
-			case "PENDING":
-				return "PENDENTE";
-			case "SENT":
-				return "ENVIADO";
-			case "DELIVERED":
-				return "ENTREGUE";
-			case "READ":
-				return "LIDO";
-			case "FAILED":
-				return "FALHOU";
-			default:
-				return "NÃO INFORMADO";
-		}
-	})();
-
 	return (
 		<div className={cn("bg-card border-primary/20 flex w-full flex-col gap-2 rounded-xl border px-3 py-4 shadow-2xs")}>
 			<div className="w-full flex flex-col gap-0.5">
@@ -285,6 +269,21 @@ function CampaignInteractionLogCard({ interaction }: { interaction: TGetCampaign
 							<p className={cn("text-[0.65rem] font-medium tracking-tight uppercase")}>{interaction.cliente.nome ?? "NÃO INFORMADO"}</p>
 						</div>
 					</div>
+					{interaction.erroEnvio ? (
+						<TooltipProvider>
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<div className="flex items-center gap-1.5 rounded-md px-1.5 py-1.5 text-[0.65rem] font-bold bg-red-500 text-white">
+										<CircleX className="w-4 min-w-4 h-4 min-h-4" />
+										<p className="text-[0.65rem] font-medium tracking-tight">FALHOU</p>
+									</div>
+								</TooltipTrigger>
+								<TooltipContent>
+									<p className="text-xs font-medium tracking-tight text-red-500">{interaction.erroEnvio}</p>
+								</TooltipContent>
+							</Tooltip>
+						</TooltipProvider>
+					) : null}
 					<div
 						className={cn("flex items-center gap-1.5 rounded-md px-1.5 py-1.5 text-[0.65rem] font-bold", {
 							"bg-blue-500 text-white": executionStatus === "AGENDADA",

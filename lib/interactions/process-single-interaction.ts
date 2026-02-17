@@ -49,6 +49,17 @@ export async function processSingleInteractionImmediately(params: ImmediateProce
 	try {
 		console.log(`[IMMEDIATE_PROCESS] Processing interaction ${interactionId} for org ${organizationId}`);
 
+		// First, checking if client has valid phone number
+		if (!client.telefone) {
+			await db
+				.update(interactions)
+				.set({
+					statusEnvio: "FALHOU",
+					erroEnvio: "Cliente não tem telefone válido",
+				})
+				.where(eq(interactions.id, interactionId));
+			return { success: false, error: "Cliente não tem telefone válido" };
+		}
 		// Check if hubAtendimentos access is enabled for this organization
 		const organization = await db.query.organizations.findFirst({
 			where: (fields, { eq }) => eq(fields.id, organizationId),
@@ -171,6 +182,7 @@ export async function processSingleInteractionImmediately(params: ImmediateProce
 				await db
 					.update(interactions)
 					.set({
+						statusEnvio: "ENVIADO",
 						dataExecucao: new Date(),
 						metadados: {
 							whatsappMessageId: sentWhatsappTemplateResponse.whatsappMessageId,
@@ -207,6 +219,7 @@ export async function processSingleInteractionImmediately(params: ImmediateProce
 				await db
 					.update(interactions)
 					.set({
+						statusEnvio: "ENVIADO",
 						dataExecucao: new Date(),
 						metadados: {
 							whatsappMessageId: sentWhatsappTemplateResponse.messageId,
@@ -233,6 +246,13 @@ export async function processSingleInteractionImmediately(params: ImmediateProce
 					})
 					.where(eq(chatMessages.id, insertedChatMessageId));
 			}
+			await db
+				.update(interactions)
+				.set({
+					statusEnvio: "FALHOU",
+					erroEnvio: "Houve uma falha ao enviar a mensagem via WhatsApp.",
+				})
+				.where(eq(interactions.id, interactionId));
 
 			// Don't mark interaction as executed, so it can be retried by cron job
 			return {
