@@ -104,13 +104,13 @@ export default function AppSidebarHeader({ sessionUserOrg, user, mode = "app" }:
 						<SidebarMenuButton size="lg" className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground">
 							<div className="relative w-8 h-8 min-w-8 min-h-8 max-w-8 max-h-8 rounded-lg overflow-hidden">
 								<Image
-									src={isAdminMode ? LogoIcon : currentOrg?.logoUrl ?? LogoIcon}
-									alt={isAdminMode ? "Admin" : currentOrg?.nome ?? "Organização"}
+									src={isAdminMode ? LogoIcon : (currentOrg?.logoUrl ?? LogoIcon)}
+									alt={isAdminMode ? "Admin" : (currentOrg?.nome ?? "Organização")}
 									fill
 								/>
 							</div>
 							<div className="grid flex-1 text-left text-sm leading-tight">
-								<span className="truncate font-medium">{isAdminMode ? "ADMIN" : currentOrg?.nome ?? "Selecionar organização"}</span>
+								<span className="truncate font-medium">{isAdminMode ? "ADMIN" : (currentOrg?.nome ?? "Selecionar organização")}</span>
 							</div>
 							{switchOrgMutation.isPending ? <Loader2 className="ml-auto size-4 animate-spin" /> : <ChevronsUpDown className="ml-auto size-4" />}
 						</SidebarMenuButton>

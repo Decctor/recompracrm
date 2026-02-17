@@ -1,10 +1,11 @@
 "use client";
 
-import { Shield, SquareKanban } from "lucide-react";
 import AppSidebarContentGroup from "@/components/Sidebar/AppSidebarContentGroup";
 import AppSidebarHeader from "@/components/Sidebar/AppSidebarHeader";
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarRail } from "@/components/ui/sidebar";
 import type { TAuthUserSession } from "@/lib/authentication/types";
+import { CheckboxIcon } from "@radix-ui/react-icons";
+import { ChartBarIcon, Shield, SquareKanban } from "lucide-react";
 import AdminSidebarFooter from "./AdminSidebarFooter";
 import type { TSidebarConfigItem } from "./AppSidebar";
 
@@ -24,21 +25,21 @@ const adminSidebarConfig: TSidebarConfigItem[] = [
 		group: "CRM",
 		items: [
 			{
-				title: "CRM",
+				title: "Funil de Vendas",
 				url: "/admin-dashboard/crm",
 				icon: <SquareKanban className="w-4 h-4" />,
 				items: null,
 			},
 			{
-				title: "Dashboard CRM",
+				title: "Dashboard",
 				url: "/admin-dashboard/crm/dashboard",
-				icon: <SquareKanban className="w-4 h-4" />,
+				icon: <ChartBarIcon className="w-4 h-4" />,
 				items: null,
 			},
 			{
-				title: "Atividades CRM",
+				title: "Atividades",
 				url: "/admin-dashboard/crm/activities",
-				icon: <SquareKanban className="w-4 h-4" />,
+				icon: <CheckboxIcon className="w-4 h-4" />,
 				items: null,
 			},
 		],

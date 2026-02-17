@@ -632,15 +632,15 @@ export const AppRoutes = [
 	},
 	{
 		path: "/admin-dashboard/crm",
-		title: "CRM",
+		title: "Funil de Vendas",
 	},
 	{
 		path: "/admin-dashboard/crm/dashboard",
-		title: "Dashboard CRM",
+		title: "Dashboard",
 	},
 	{
 		path: "/admin-dashboard/crm/activities",
-		title: "Atividades CRM",
+		title: "Atividades",
 	},
 ];
 export function getAppRouteTitle(path: string) {
