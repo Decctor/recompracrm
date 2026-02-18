@@ -10,6 +10,7 @@ import { ChevronDown, ChevronUp, Pencil, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import LessonBlock from "./LessonBlock";
+import NewCommunityCourseLesson from "@/components/Modals/Internal/Courses/Lessons/NewCommunityCourseLesson";
 
 type Section = TGetCommunityCoursesOutputById["secoes"][number];
 
@@ -19,25 +20,65 @@ type SectionBlockProps = {
 	totalSections: number;
 	onMoveUp: () => void;
 	onMoveDown: () => void;
+	sectionCallbacks?: {
+		onMutate?: () => void;
+		onSuccess?: () => void;
+		onError?: () => void;
+		onSettled?: () => void;
+	}
+	lessonsCallbacks?: {
+		onMutate?: () => void;
+		onSuccess?: () => void;
+		onError?: () => void;
+		onSettled?: () => void;
+	}
 };
 
-export default function SectionBlock({ section, index, totalSections, onMoveUp, onMoveDown }: SectionBlockProps) {
+export default function SectionBlock({ section, index, totalSections, onMoveUp, onMoveDown, sectionCallbacks, lessonsCallbacks	 }: SectionBlockProps) {
 	const queryClient = useQueryClient();
 	const [isExpanded, setIsExpanded] = useState(true);
 	const [controlSectionMenuIsOpen, setControlSectionMenuIsOpen] = useState(false);
+	const [newLessonMenuIsOpen, setNewLessonMenuIsOpen] = useState(false);
 
 	const { mutate: handleDelete, isPending: isDeleting } = useMutation({
 		mutationFn: () => deleteCommunityCourseSection(section.id),
-		onSuccess: () => {
-			toast.success("Seção excluída com sucesso.");
-			queryClient.invalidateQueries({ queryKey: ["admin-community-courses"] });
+		onMutate: () => {
+			if (sectionCallbacks?.onMutate) sectionCallbacks.onMutate();
+			return;
 		},
-		onError: (error) => toast.error(getErrorMessage(error)),
+		onSuccess: () => {
+			if (sectionCallbacks?.onSuccess) sectionCallbacks.onSuccess();
+			toast.success("Seção excluída com sucesso.");
+			return queryClient.invalidateQueries({ queryKey: ["admin-community-courses"] });
+		},
+		onError: (error) => {
+			if (sectionCallbacks?.onError) sectionCallbacks.onError();
+			return toast.error(getErrorMessage(error));
+		},
+		onSettled: () => {
+			if (sectionCallbacks?.onSettled) sectionCallbacks.onSettled();
+			return;
+		},
 	});
 
 	const { mutate: handleReorderLessons } = useMutation({
 		mutationFn: (items: Array<{ id: string; ordem: number }>) => reorderCommunityItems({ communityLessonReorder: { itens: items } }),
-		onSuccess: () => queryClient.invalidateQueries({ queryKey: ["admin-community-courses"] }),
+		onMutate: () => {
+			if (lessonsCallbacks?.onMutate) lessonsCallbacks.onMutate();
+			return;
+		},
+		onSuccess: () => {
+			if (lessonsCallbacks?.onSuccess) lessonsCallbacks.onSuccess();
+			return queryClient.invalidateQueries({ queryKey: ["admin-community-courses"] });
+		},
+		onError: (error) => {
+			if (lessonsCallbacks?.onError) lessonsCallbacks.onError();
+			return toast.error(getErrorMessage(error));
+		},
+		onSettled: () => {
+			if (lessonsCallbacks?.onSettled) lessonsCallbacks.onSettled();
+			return;
+		},
 	});
 
 	function moveLessonUp(lessonIndex: number) {
@@ -119,7 +160,7 @@ export default function SectionBlock({ section, index, totalSections, onMoveUp, 
 						<div className="grid grid-cols-1 gap-2 md:grid-cols-3 xl:grid-cols-4">
 							<button
 								type="button"
-								onClick={() => setControlSectionMenuIsOpen(true)}
+								onClick={() => setNewLessonMenuIsOpen(true)}	
 								className="bg-primary text-primary-foreground flex w-full flex-col gap-2 rounded-xl p-3 text-left shadow-2xs transition-colors"
 							>
 								<div className="relative aspect-video w-full overflow-hidden rounded-lg border border-dashed border-primary/20 bg-primary/5">
@@ -171,10 +212,31 @@ export default function SectionBlock({ section, index, totalSections, onMoveUp, 
 					sectionId={section.id}
 					closeModal={() => setControlSectionMenuIsOpen(false)}
 					callbacks={{
+						onMutate: () => {
+							if (sectionCallbacks?.onMutate) sectionCallbacks.onMutate();
+							return;
+						},
 						onSuccess: () => {
+							if (sectionCallbacks?.onSuccess) sectionCallbacks.onSuccess();
 							setControlSectionMenuIsOpen(false);
 						},
+						onError: (error) => {
+							if (sectionCallbacks?.onError) sectionCallbacks.onError();
+							return toast.error(getErrorMessage(error));
+						},
+						onSettled: () => {
+							if (sectionCallbacks?.onSettled) sectionCallbacks.onSettled();
+							return;
+						},
 					}}
+				/>
+			)}
+
+			{newLessonMenuIsOpen && (
+				<NewCommunityCourseLesson
+					sectionId={section.id}
+					closeModal={() => setNewLessonMenuIsOpen(false)}
+					callbacks={lessonsCallbacks}
 				/>
 			)}
 		</div>

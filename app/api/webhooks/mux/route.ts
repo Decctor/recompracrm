@@ -1,41 +1,34 @@
 import { deleteMuxAsset } from "@/lib/mux/upload";
 import { db } from "@/services/drizzle";
 import { communityLessons } from "@/services/drizzle/schema";
+import { muxClient } from "@/services/mux";
 import { eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 
-type MuxWebhookEvent = {
-	type: string;
-	data: {
-		id: string;
-		upload_id?: string;
-		playback_ids?: Array<{ id: string; policy: string }>;
-		duration?: number;
-		status?: string;
-	};
-};
-
 export async function POST(request: NextRequest) {
 	try {
-		// Verify webhook signature if MUX_WEBHOOK_SECRET is set
 		const webhookSecret = process.env.MUX_WEBHOOK_SECRET;
-		if (webhookSecret) {
-			const signature = request.headers.get("mux-signature");
-			if (!signature) {
-				return NextResponse.json({ error: "Missing signature" }, { status: 401 });
-			}
-			// Note: For production, implement full HMAC verification using the Mux signature
-			// See: https://docs.mux.com/guides/listen-for-webhooks#verify-webhook-signatures
+		if (!webhookSecret) {
+			console.error("MUX_WEBHOOK_SECRET is not configured");
+			return NextResponse.json({ error: "Webhook secret not configured" }, { status: 500 });
 		}
 
-		const event = (await request.json()) as MuxWebhookEvent;
-		console.log("Mux webhook event:", event);
+		const body = await request.text();
+		let event: Awaited<ReturnType<typeof muxClient.webhooks.unwrap>>;
+		try {
+			// `unwrap` validates signature + parses payload.
+			event = muxClient.webhooks.unwrap(body, request.headers, webhookSecret);
+		} catch (error) {
+			console.error("Invalid Mux webhook signature:", error);
+			return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+		}
+
+		console.log("Mux webhook event:", event.type, event.id);
 		switch (event.type) {
 			case "video.upload.asset_created": {
 				// An asset was created from a direct upload
-				const assetId = event.data.id;
-				const uploadId = event.data.upload_id;
-
+				const uploadId = event.data.id;
+				const assetId = event.data.asset_id;
 				if (uploadId) {
 					await db
 						.update(communityLessons)
@@ -51,8 +44,8 @@ export async function POST(request: NextRequest) {
 			case "video.asset.ready": {
 				// Asset is ready for playback
 				const assetId = event.data.id;
-				const playbackId = event.data.playback_ids?.[0]?.id;
-				const duration = event.data.duration ? Math.round(event.data.duration) : null;
+				const playbackId = event.data.playback_ids?.find((item) => item.policy === "public")?.id ?? event.data.playback_ids?.[0]?.id;
+				const duration = event.data.duration != null ? Math.round(event.data.duration) : null;
 				const lesson = await db.query.communityLessons.findFirst({
 					where: eq(communityLessons.muxAssetId, assetId),
 					columns: {
@@ -86,10 +79,12 @@ export async function POST(request: NextRequest) {
 			case "video.asset.errored": {
 				// Asset processing failed
 				const assetId = event.data.id;
-				await db
-					.update(communityLessons)
-					.set({ muxAssetStatus: "ERRO" })
-					.where(eq(communityLessons.muxAssetId, assetId));
+				await db.update(communityLessons).set({ muxAssetStatus: "ERRO" }).where(eq(communityLessons.muxAssetId, assetId));
+				break;
+			}
+
+			default: {
+				// Keep 2xx for unhandled events to avoid unnecessary retries from Mux.
 				break;
 			}
 		}
