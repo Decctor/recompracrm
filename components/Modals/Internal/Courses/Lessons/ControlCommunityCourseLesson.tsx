@@ -40,6 +40,7 @@ export default function ControlCommunityCourseLesson({ lessonId, closeModal, cal
 				tipoConteudo: lesson.tipoConteudo,
 				conteudoTexto: lesson.conteudoTexto ?? "",
 				ordem: lesson.ordem,
+				muxMetadata: lesson.muxMetadata,
 			},
 			videoHolder: {
 				file: null,

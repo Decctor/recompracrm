@@ -3,6 +3,7 @@
 import type { TCreateCommunityCourseInput, TGetCommunityCoursesOutputDefault } from "@/app/api/admin/community/courses/route";
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
 import LoadingComponent from "@/components/Layouts/LoadingComponent";
+import { ControlCommunityCourse } from "@/components/Modals/Internal/Courses/ControlCommunityCourse";
 import { NewCommunityCourse } from "@/components/Modals/Internal/Courses/NewCommunityCourse";
 import GeneralPaginationComponent from "@/components/Utils/Pagination";
 import { Button } from "@/components/ui/button";
@@ -40,7 +41,7 @@ export default function CommunityAdminPage() {
 	const coursesShowing = courses ? courses.length : 0;
 	const totalPages = coursesData?.totalPages;
 
-	const handleOnMutate = async (variables: TCreateCommunityCourseInput) => await queryClient.cancelQueries({ queryKey: queryKey });
+	const handleOnMutate = async () => await queryClient.cancelQueries({ queryKey: queryKey });
 	const handleOnSettled = async () => await queryClient.invalidateQueries({ queryKey: queryKey });
 	return (
 		<div className="w-full h-full flex flex-col gap-6 p-4 lg:p-6">
@@ -90,6 +91,13 @@ export default function CommunityAdminPage() {
 			{/* Course form modal */}
 			{newCourseModalOpen && (
 				<NewCommunityCourse closeModal={() => setNewCourseModalOpen(false)} callbacks={{ onMutate: handleOnMutate, onSettled: handleOnSettled }} />
+			)}
+			{editCourseId && (
+				<ControlCommunityCourse
+					courseId={editCourseId}
+					closeModal={() => setEditCourseId(null)}
+					callbacks={{ onMutate: handleOnMutate, onSettled: handleOnSettled }}
+				/>
 			)}
 		</div>
 	);

@@ -1,8 +1,9 @@
 import type { TCreateCommunityCourseInput } from "@/app/api/admin/community/courses/route";
 import ResponsiveMenu from "@/components/Utils/ResponsiveMenu";
 import { getErrorMessage } from "@/lib/errors";
+import { uploadFile } from "@/lib/files-storage";
 import { createCommunityCourse } from "@/lib/mutations/community-admin";
-import { useInternalCommunityCourseState } from "@/state-hooks/use-internal-community-course-state";
+import { type TUseInternalCommunityCourseState, useInternalCommunityCourseState } from "@/state-hooks/use-internal-community-course-state";
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import CommunityCourseGeneralBlock from "./Blocks/General";
@@ -21,16 +22,35 @@ export function NewCommunityCourse({ closeModal, callbacks }: NewCommunityCourse
 	const {
 		state,
 		updateCommunityCourse,
+		updateCommunityCourseThumbnailHolder,
 		addCommunityCourseSection,
 		updateCommunityCourseSection,
 		removeCommunityCourseSection,
-		redefineState,
-		resetState,
 	} = useInternalCommunityCourseState({ initialState: {} });
+
+	async function handleCreateCommunityCourse(state: TUseInternalCommunityCourseState["state"]) {
+		let courseThumbnailUrl = state.communityCourse.thumbnailUrl;
+
+		if (state.communityCourseThumbnailHolder.file) {
+			const { url } = await uploadFile({
+				file: state.communityCourseThumbnailHolder.file,
+				fileName: state.communityCourse.titulo || "thumbnail-curso",
+			});
+			courseThumbnailUrl = url;
+		}
+
+		return await createCommunityCourse({
+			communityCourse: {
+				...state.communityCourse,
+				thumbnailUrl: courseThumbnailUrl,
+			},
+			communityCourseSections: state.communityCourseSections,
+		});
+	}
 
 	const { mutate: handleCreateCommunityCourseMutation, isPending } = useMutation({
 		mutationKey: ["create-community-course"],
-		mutationFn: createCommunityCourse,
+		mutationFn: handleCreateCommunityCourse,
 		onMutate: async (variables) => {
 			if (callbacks?.onMutate) callbacks.onMutate(variables);
 			return;
@@ -61,7 +81,12 @@ export function NewCommunityCourse({ closeModal, callbacks }: NewCommunityCourse
 			stateError={null}
 			closeMenu={closeModal}
 		>
-			<CommunityCourseGeneralBlock communityCourse={state.communityCourse} updateCommunityCourse={updateCommunityCourse} />
+			<CommunityCourseGeneralBlock
+				communityCourse={state.communityCourse}
+				updateCommunityCourse={updateCommunityCourse}
+				communityCourseThumbnailHolder={state.communityCourseThumbnailHolder}
+				updateCommunityCourseThumbnailHolder={updateCommunityCourseThumbnailHolder}
+			/>
 			<CommunityCourseSectionsBlock
 				communityCourseSections={state.communityCourseSections}
 				addCommunityCourseSection={addCommunityCourseSection}

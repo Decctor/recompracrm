@@ -26,7 +26,7 @@ const STATUS_LABELS: Record<string, { label: string; className: string }> = {
 
 export default function CourseEditorPage({ courseId }: CourseEditorPageProps) {
 	const queryClient = useQueryClient();
-	const { data: course, isLoading, isError, error, isSuccess } = useAdminCommunityCourseById({ courseId });
+	const { data: course, queryKey, isLoading, isError, error, isSuccess } = useAdminCommunityCourseById({ courseId });
 	const [newSectionModalOpen, setNewSectionModalOpen] = useState(false);
 
 	const { mutate: handleReorder } = useMutation({
@@ -55,6 +55,9 @@ export default function CourseEditorPage({ courseId }: CourseEditorPageProps) {
 		}));
 		handleReorder({ tipo: "secao", itens: items });
 	}
+
+	const handleOnMutate = async () => await queryClient.cancelQueries({ queryKey });
+	const handleOnSettled = async () => await queryClient.invalidateQueries({ queryKey });
 
 	if (isLoading) {
 		return (
@@ -105,6 +108,14 @@ export default function CourseEditorPage({ courseId }: CourseEditorPageProps) {
 									totalSections={course.secoes.length}
 									onMoveUp={() => moveSectionUp(index)}
 									onMoveDown={() => moveSectionDown(index)}
+									sectionCallbacks={{
+										onMutate: handleOnMutate,
+										onSettled: handleOnSettled,
+									}}
+									lessonsCallbacks={{
+										onMutate: handleOnMutate,
+										onSettled: handleOnSettled,
+									}}
 								/>
 							))}
 						</div>
@@ -120,9 +131,11 @@ export default function CourseEditorPage({ courseId }: CourseEditorPageProps) {
 						courseId={courseId}
 						closeModal={() => setNewSectionModalOpen(false)}
 						callbacks={{
+							onMutate: handleOnMutate,
 							onSuccess: () => {
 								setNewSectionModalOpen(false);
 							},
+							onSettled: handleOnSettled,
 						}}
 					/>
 				) : null}

@@ -28,6 +28,15 @@ export const CommunityCourseStateSchema = z.object({
 				.nullable(),
 		}),
 	),
+	communityCourseThumbnailHolder: z.object({
+		file: z.instanceof(File).optional().nullable(),
+		previewUrl: z
+			.string({
+				invalid_type_error: "Tipo não válido para a url do preview da imagem do curso.",
+			})
+			.optional()
+			.nullable(),
+	}),
 });
 type TCommunityCourseState = z.infer<typeof CommunityCourseStateSchema>;
 
@@ -45,6 +54,10 @@ export function useInternalCommunityCourseState({ initialState }: TUseInternalCo
 			thumbnailUrl: initialState.communityCourse?.thumbnailUrl ?? "",
 		},
 		communityCourseSections: initialState.communityCourseSections ?? [],
+		communityCourseThumbnailHolder: {
+			file: initialState.communityCourseThumbnailHolder?.file ?? null,
+			previewUrl: initialState.communityCourseThumbnailHolder?.previewUrl ?? null,
+		},
 	});
 
 	const updateCommunityCourse = useCallback((communityCourse: Partial<TCommunityCourseState["communityCourse"]>) => {
@@ -56,6 +69,18 @@ export function useInternalCommunityCourseState({ initialState }: TUseInternalCo
 			},
 		}));
 	}, []);
+	const updateCommunityCourseThumbnailHolder = useCallback(
+		(communityCourseThumbnailHolder: Partial<TCommunityCourseState["communityCourseThumbnailHolder"]>) => {
+			setState((prevState) => ({
+				...prevState,
+				communityCourseThumbnailHolder: {
+					...prevState.communityCourseThumbnailHolder,
+					...communityCourseThumbnailHolder,
+				},
+			}));
+		},
+		[],
+	);
 	const addCommunityCourseSection = useCallback((communityCourseSection: TCommunityCourseState["communityCourseSections"][number]) => {
 		setState((prevState) => ({
 			...prevState,
@@ -101,11 +126,16 @@ export function useInternalCommunityCourseState({ initialState }: TUseInternalCo
 				thumbnailUrl: initialState.communityCourse?.thumbnailUrl ?? "",
 			},
 			communityCourseSections: initialState.communityCourseSections ?? [],
+			communityCourseThumbnailHolder: {
+				file: initialState.communityCourseThumbnailHolder?.file ?? null,
+				previewUrl: initialState.communityCourseThumbnailHolder?.previewUrl ?? null,
+			},
 		});
 	}, [initialState]);
 	return {
 		state,
 		updateCommunityCourse,
+		updateCommunityCourseThumbnailHolder,
 		addCommunityCourseSection,
 		updateCommunityCourseSection,
 		removeCommunityCourseSection,

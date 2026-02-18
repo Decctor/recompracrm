@@ -1,5 +1,6 @@
 "use client";
 
+import MuxPlayer from "@mux/mux-player-react";
 import { useCourseDetail, useLesson } from "@/lib/queries/community";
 import { updateProgress } from "@/lib/mutations/community";
 import { BookOpen, CheckCircle, ChevronLeft, ChevronRight, FileText, PlayCircle } from "lucide-react";
@@ -124,12 +125,11 @@ export default function LessonViewerPage({
 				{/* Video player */}
 				{hasVideo && lesson.muxPlaybackId && (
 					<div className="w-full bg-black">
-						{/* @ts-expect-error mux-player web component */}
-						<mux-player
-							stream-type="on-demand"
-							playback-id={lesson.muxPlaybackId}
-							metadata-video-title={lesson.titulo}
-							accent-color="#6366f1"
+						<MuxPlayer
+							streamType="on-demand"
+							playbackId={lesson.muxPlaybackId}
+							metadata={{ video_title: lesson.titulo }}
+							accentColor="#6366f1"
 							style={{ width: "100%", aspectRatio: "16/9" }}
 							onTimeUpdate={handleTimeUpdate}
 							onEnded={handleVideoEnded}
