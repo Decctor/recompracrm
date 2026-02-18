@@ -1,5 +1,6 @@
 "use client";
 
+import MuxPlayer from "@mux/mux-player-react";
 import type { TGetCommunityCoursesOutputById } from "@/app/api/admin/community/courses/route";
 import { Button } from "@/components/ui/button";
 import { StatBadge } from "@/components/ui/stat-badge";
@@ -8,6 +9,8 @@ import { deleteCommunityLesson } from "@/lib/mutations/community-admin";
 import { cn } from "@/lib/utils";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowDown, ArrowUp, Calendar, Diamond, FileText, Loader2, Pencil, PlayCircle, Trash2, VideoIcon } from "lucide-react";
+import Image from "next/image";
+import { useState } from "react";
 import { toast } from "sonner";
 
 type Lesson = TGetCommunityCoursesOutputById["secoes"][number]["aulas"][number];
@@ -57,11 +60,17 @@ function formatDuration(seconds: number | null) {
 	return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
+function getMuxThumbnailUrl(playbackId: string) {
+	return `https://image.mux.com/${playbackId}/thumbnail.jpg?time=1`;
+}
+
 export default function LessonBlock({ lesson, index, totalLessons, onMoveUp, onMoveDown, onEdit }: LessonBlockProps) {
 	const queryClient = useQueryClient();
 	const contentConfig = CONTENT_TYPE_CONFIG[lesson.tipoConteudo as keyof typeof CONTENT_TYPE_CONFIG];
 	const ContentIcon = contentConfig.icon;
 	const muxStatus = lesson.muxAssetStatus ? MUX_STATUS_CONFIG[lesson.muxAssetStatus] : null;
+	const canShowThumbnail = lesson.muxAssetStatus === "PRONTO" && Boolean(lesson.muxPlaybackId);
+	const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
 	const { mutate: handleDelete, isPending: isDeleting } = useMutation({
 		mutationFn: () => deleteCommunityLesson(lesson.id),
@@ -74,11 +83,60 @@ export default function LessonBlock({ lesson, index, totalLessons, onMoveUp, onM
 
 	return (
 		<div className="bg-card border-primary/20 flex w-full flex-col gap-2 rounded-xl border p-3 shadow-2xs">
-			<div className={cn("relative aspect-video w-full overflow-hidden rounded-lg", muxStatus?.mediaClassName ?? "bg-primary/5 text-muted-foreground")}>
-				<div className="flex h-full w-full flex-col items-center justify-center gap-1">
-					{lesson.muxAssetStatus === "PROCESSANDO" ? <Loader2 className="h-6 w-6 animate-spin" /> : <VideoIcon className="h-6 w-6" />}
-					<p className="text-xs font-medium">{muxStatus ? muxStatus.label : "Sem vídeo definido"}</p>
-				</div>
+			<div
+				className={cn(
+					"relative aspect-video w-full overflow-hidden rounded-lg",
+					muxStatus?.mediaClassName ?? "bg-primary/5 text-muted-foreground",
+				)}
+			>
+				{canShowThumbnail && lesson.muxPlaybackId && isPreviewOpen ? (
+					<>
+						<MuxPlayer
+							streamType="on-demand"
+							playbackId={lesson.muxPlaybackId}
+							metadata={{ video_title: lesson.titulo }}
+							accentColor="#6366f1"
+							autoPlay
+							style={{ width: "100%", height: "100%", display: "block" }}
+						/>
+						<button
+							type="button"
+							onClick={() => setIsPreviewOpen(false)}
+							className="absolute top-2 right-2 rounded bg-black/60 px-2 py-1 text-[10px] font-semibold text-white hover:bg-black/75"
+						>
+							Fechar prévia
+						</button>
+					</>
+				) : canShowThumbnail && lesson.muxPlaybackId ? (
+					<>
+						<Image
+							src={getMuxThumbnailUrl(lesson.muxPlaybackId)}
+							alt={`Thumbnail da aula ${lesson.titulo}`}
+							fill
+							className="object-cover"
+							sizes="(max-width: 768px) 100vw, 360px"
+						/>
+						<div className="absolute inset-0 flex items-center justify-center bg-black/20">
+							<div className="rounded-full bg-white/90 p-2 text-black">
+								<PlayCircle className="h-5 w-5" />
+							</div>
+						</div>
+						<div className="absolute top-2 right-2 rounded bg-black/60 px-2 py-1 text-[10px] font-semibold text-white">
+							Clique para prévia
+						</div>
+						<button
+							type="button"
+							onClick={() => setIsPreviewOpen(true)}
+							className="absolute inset-0"
+							aria-label="Abrir pré-visualização do vídeo"
+						/>
+					</>
+				) : (
+					<div className="flex h-full w-full flex-col items-center justify-center gap-1">
+						{lesson.muxAssetStatus === "PROCESSANDO" ? <Loader2 className="h-6 w-6 animate-spin" /> : <VideoIcon className="h-6 w-6" />}
+						<p className="text-xs font-medium">{muxStatus ? muxStatus.label : "Sem vídeo definido"}</p>
+					</div>
+				)}
 			</div>
 
 			<div className="flex items-start justify-between gap-2">
@@ -103,11 +161,11 @@ export default function LessonBlock({ lesson, index, totalLessons, onMoveUp, onM
 					<span>{formatDateAsLocale(lesson.dataInsercao)}</span>
 				</div>
 				<div className="flex items-center gap-1">
-					{lesson.duracaoSegundos ? <span>{formatDuration(lesson.duracaoSegundos)}</span> : null}
 					<div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
 						<ContentIcon className={`h-3.5 w-3.5 ${contentConfig.className}`} />
 						<span>{contentConfig.label}</span>
 					</div>
+					{lesson.duracaoSegundos ? <span>{formatDuration(lesson.duracaoSegundos)}</span> : null}
 				</div>
 			</div>
 

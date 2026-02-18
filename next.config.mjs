@@ -39,6 +39,10 @@ const nextConfig = {
 				hostname: "brave-warbler-898.convex.cloud",
 			},
 			{
+				protocol: "https",
+				hostname: "image.mux.com",
+			},
+			{
 				protocol: "http",
 				hostname: "localhost",
 			},
