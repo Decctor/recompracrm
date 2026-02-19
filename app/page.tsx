@@ -122,7 +122,7 @@ export default function LandingPage() {
 	const [rankingTab, setRankingTab] = useState<"sellers" | "partners" | "products">("sellers");
 	const [billingInterval, setBillingInterval] = useState<"monthly" | "yearly">("monthly");
 	const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
-
+	console.log("LandingPage");
 	return (
 		<div className="min-h-screen bg-black text-white antialiased">
 			{/* Navbar */}
