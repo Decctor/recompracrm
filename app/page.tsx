@@ -119,22 +119,10 @@ const RFM_TOOLTIPS = {
 };
 
 export default function LandingPage() {
+	console.log("LandingPage");
 	const [rankingTab, setRankingTab] = useState<"sellers" | "partners" | "products">("sellers");
 	const [billingInterval, setBillingInterval] = useState<"monthly" | "yearly">("monthly");
 	const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
-
-	const currentRankingData = rankingTab === "sellers" ? MOCK_SELLERS : rankingTab === "partners" ? MOCK_PARTNERS : MOCK_PRODUCTS;
-
-	const getRankingLabel = () => {
-		switch (rankingTab) {
-			case "sellers":
-				return "Top Vendedores";
-			case "partners":
-				return "Top Parceiros";
-			case "products":
-				return "Top Produtos";
-		}
-	};
 
 	return (
 		<div className="min-h-screen bg-black text-white antialiased">
