@@ -34,6 +34,7 @@ export const organizations = newTable("organizations", {
 	stripeCustomerId: text("stripe_customer_id"),
 	stripeSubscriptionId: text("stripe_subscription_id"),
 	stripeSubscriptionStatus: text("stripe_subscription_status"),
+	stripeSubscriptionStatusUltimaAlteracao: timestamp("stripe_subscription_status_ultima_alteracao"),
 
 	assinaturaPlano: text("assinatura_plano").default("ESSENCIAL"),
 	dadosViaERP: boolean("dados_via_erp").notNull().default(false),

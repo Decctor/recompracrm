@@ -49,7 +49,7 @@ async function processEvent(event: Stripe.Event) {
 			customerId,
 			event,
 		});
-		return await db.update(organizations).set({ stripeSubscriptionStatus: "canceled" }).where(eq(organizations.stripeCustomerId, customerId));
+		return await db.update(organizations).set({ stripeSubscriptionStatus: "canceled", stripeSubscriptionStatusUltimaAlteracao: new Date() }).where(eq(organizations.stripeCustomerId, customerId));
 	}
 	if (event.type === "customer.subscription.created" || event.type === "customer.discount.updated") {
 		const { id, status } = event.data.object as Stripe.Subscription;
@@ -64,6 +64,7 @@ async function processEvent(event: Stripe.Event) {
 			.set({
 				stripeSubscriptionStatus: status,
 				stripeSubscriptionId: id,
+				stripeSubscriptionStatusUltimaAlteracao: new Date(),
 			})
 			.where(eq(organizations.stripeCustomerId, customerId));
 	}
@@ -80,6 +81,7 @@ async function processEvent(event: Stripe.Event) {
 			.set({
 				stripeSubscriptionStatus: status,
 				stripeSubscriptionId: id,
+				stripeSubscriptionStatusUltimaAlteracao: new Date(),
 			})
 			.where(eq(organizations.stripeCustomerId, customerId));
 	}

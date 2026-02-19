@@ -4,6 +4,7 @@ import type {
 } from "@/app/api/organizations/memberships/invitations/route";
 import type { TGetUserMembershipsOutput } from "@/app/api/organizations/memberships/route";
 import type { TGetOrganizationOutput } from "@/app/api/organizations/route";
+import type { TGetSubscriptionStatusOutput } from "@/app/api/organizations/subscription-status/route";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 
@@ -50,4 +51,22 @@ export function useOrganizationMembershipInvitations(input: TGetOrganizationMemb
 		queryKey: ["organization-membership-invitations", input],
 		queryFn: () => fetchOrganizationMembershipInvitations(input),
 	});
+}
+
+async function fetchSubscriptionStatus() {
+	const { data } = await axios.get<TGetSubscriptionStatusOutput>("/api/organizations/subscription-status");
+	return data.data;
+}
+
+export function useOrganizationSubscriptionStatus() {
+	const queryKey = ["organization-subscription-status"];
+	return {
+		...useQuery({
+			queryKey,
+			queryFn: fetchSubscriptionStatus,
+			staleTime: 5 * 60 * 1000,
+			refetchOnWindowFocus: true,
+		}),
+		queryKey,
+	};
 }

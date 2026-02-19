@@ -2,6 +2,7 @@ import { AIHintsBubble } from "@/components/AIHints";
 import AppHeader from "@/components/Layouts/HeaderApp";
 import LoadingComponent from "@/components/Layouts/LoadingComponent";
 import { OnboardingQualityBubble } from "@/components/Onboarding";
+import SubscriptionPaywall from "@/components/Paywall/SubscriptionPaywall";
 import { OrgColorsProvider } from "@/components/Providers/OrgColorsProvider";
 import { AppSidebar } from "@/components/Sidebar/AppSidebar";
 import { SidebarInset } from "@/components/ui/sidebar";
@@ -29,6 +30,7 @@ const MainLayout = async ({ children }: { children: ReactNode }) => {
 						{children}
 						<OnboardingQualityBubble />
 						{/* <AIHintsBubble /> */}
+						<SubscriptionPaywall />
 					</OrgColorsProvider>
 				</SidebarInset>
 			</Suspense>

@@ -673,15 +673,33 @@ export function getAppRouteDescription(path: string) {
 	return route?.description || "";
 }
 
+export const SUBSCRIPTION_GRACE_PERIOD_DAYS = 15;
+
 type TCheckSubscriptionStatus = {
 	stripeStatus: TOrganizationEntity["stripeSubscriptionStatus"];
+	stripeStatusUltimaAlteracao: TOrganizationEntity["stripeSubscriptionStatusUltimaAlteracao"];
 	trialPeriodStart: TOrganizationEntity["periodoTesteInicio"];
 	trialPeriodEnd: TOrganizationEntity["periodoTesteFim"];
 };
-export function checkSubscriptionStatus({ stripeStatus, trialPeriodStart, trialPeriodEnd }: TCheckSubscriptionStatus) {
+export function checkSubscriptionStatus({ stripeStatus, stripeStatusUltimaAlteracao, trialPeriodStart, trialPeriodEnd }: TCheckSubscriptionStatus) {
 	if (stripeStatus === "active") return true;
-	if (!trialPeriodStart || !trialPeriodEnd) return false;
-	const now = new Date();
-	const trialEnd = new Date(trialPeriodEnd);
-	return now < trialEnd;
+
+	// past_due: allow access during grace period (15 days from status change)
+	if (stripeStatus === "past_due") {
+		if (!stripeStatusUltimaAlteracao) return true; // no timestamp = conservative, grant grace
+		const daysSinceChange = Math.floor((Date.now() - new Date(stripeStatusUltimaAlteracao).getTime()) / (1000 * 60 * 60 * 24));
+		return daysSinceChange < SUBSCRIPTION_GRACE_PERIOD_DAYS;
+	}
+
+	// Trial period: allow access during trial + grace period
+	if (trialPeriodStart && trialPeriodEnd) {
+		const now = new Date();
+		const trialEnd = new Date(trialPeriodEnd);
+		if (now < trialEnd) return true;
+		// Grace period after trial ends
+		const daysSinceTrialEnd = Math.floor((now.getTime() - trialEnd.getTime()) / (1000 * 60 * 60 * 24));
+		return daysSinceTrialEnd < SUBSCRIPTION_GRACE_PERIOD_DAYS;
+	}
+
+	return false;
 }

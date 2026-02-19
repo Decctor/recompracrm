@@ -88,6 +88,7 @@ export async function validateSession(token: string) {
 					logoUrl: membership.organizacao.logoUrl,
 					assinaturaAtiva: checkSubscriptionStatus({
 						stripeStatus: membership.organizacao.stripeSubscriptionStatus,
+						stripeStatusUltimaAlteracao: membership.organizacao.stripeSubscriptionStatusUltimaAlteracao,
 						trialPeriodStart: membership.organizacao.periodoTesteInicio,
 						trialPeriodEnd: membership.organizacao.periodoTesteFim,
 					}),
@@ -125,6 +126,7 @@ export async function validateSession(token: string) {
 					logoUrl: mostRecentMembership.organizacao.logoUrl,
 					assinaturaAtiva: checkSubscriptionStatus({
 						stripeStatus: mostRecentMembership.organizacao.stripeSubscriptionStatus,
+						stripeStatusUltimaAlteracao: mostRecentMembership.organizacao.stripeSubscriptionStatusUltimaAlteracao,
 						trialPeriodStart: mostRecentMembership.organizacao.periodoTesteInicio,
 						trialPeriodEnd: mostRecentMembership.organizacao.periodoTesteFim,
 					}),
