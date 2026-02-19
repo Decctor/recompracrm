@@ -34,6 +34,7 @@ async function getSubscriptionStatus(): Promise<{ data: TSubscriptionStatusData;
 
 	// 1. Active Stripe subscription
 	if (stripeStatus === "active") {
+		console.log("[INFO] Getting subscription status for active subscription:", { stripeStatus });
 		return {
 			data: {
 				ativa: true,
@@ -47,12 +48,12 @@ async function getSubscriptionStatus(): Promise<{ data: TSubscriptionStatusData;
 
 	// 2. Past due Stripe subscription (grace period)
 	if (stripeStatus === "past_due") {
-		const daysSinceChange = statusChangedAt
-			? Math.floor((now.getTime() - new Date(statusChangedAt).getTime()) / (1000 * 60 * 60 * 24))
-			: 0; // no timestamp = conservative, treat as just changed
+		console.log("[INFO] Getting subscription status for past due subscription:", { stripeStatus, statusChangedAt });
+		const daysSinceChange = statusChangedAt ? Math.floor((now.getTime() - new Date(statusChangedAt).getTime()) / (1000 * 60 * 60 * 24)) : 0; // no timestamp = conservative, treat as just changed
 		const daysRemaining = SUBSCRIPTION_GRACE_PERIOD_DAYS - daysSinceChange;
 
 		if (daysRemaining > 0) {
+			console.log("[INFO] Past due subscription, warn mode, days remaining:", { daysRemaining });
 			return {
 				data: {
 					ativa: true,
@@ -64,6 +65,7 @@ async function getSubscriptionStatus(): Promise<{ data: TSubscriptionStatusData;
 			};
 		}
 
+		console.log("[INFO] Past due subscription, fail mode, days remaining:", { daysRemaining });
 		return {
 			data: {
 				ativa: false,
@@ -77,6 +79,7 @@ async function getSubscriptionStatus(): Promise<{ data: TSubscriptionStatusData;
 
 	// 3. Canceled subscription
 	if (stripeStatus === "canceled") {
+		console.log("[INFO] Getting subscription status for canceled subscription:", { stripeStatus });
 		return {
 			data: {
 				ativa: false,
@@ -90,16 +93,18 @@ async function getSubscriptionStatus(): Promise<{ data: TSubscriptionStatusData;
 
 	// 4. Trial period (no Stripe subscription)
 	if (trialStart && trialEnd) {
+		console.log("[INFO] Getting subscription status for trial period:", { trialStart, trialEnd });
 		const trialEndDate = new Date(trialEnd);
 		const msUntilTrialEnd = trialEndDate.getTime() - now.getTime();
 		const daysUntilTrialEnd = Math.ceil(msUntilTrialEnd / (1000 * 60 * 60 * 24));
 
 		// Trial still active, more than 7 days left
 		if (daysUntilTrialEnd > 7) {
+			console.log("[INFO] Trial still active, success mode, more than 7 days left:", { daysUntilTrialEnd });
 			return {
 				data: {
 					ativa: true,
-					status: "Período de teste",
+					status: "Período de teste ativo",
 					modo: "success",
 					mensagem: `Período de teste ativo. Restam ${daysUntilTrialEnd} dias.`,
 				},
@@ -109,10 +114,11 @@ async function getSubscriptionStatus(): Promise<{ data: TSubscriptionStatusData;
 
 		// Trial active, 7 days or less
 		if (daysUntilTrialEnd > 0) {
+			console.log("[INFO] Trial active, warn mode, 7 days or less:", { daysUntilTrialEnd });
 			return {
 				data: {
 					ativa: true,
-					status: "Teste encerrando",
+					status: `Período de teste encerra em ${daysUntilTrialEnd} dia${daysUntilTrialEnd !== 1 ? "s" : ""}`,
 					modo: "warn",
 					mensagem: `Seu período de teste encerra em ${daysUntilTrialEnd} dia${daysUntilTrialEnd !== 1 ? "s" : ""}. Adquira um plano para não perder o acesso.`,
 				},
@@ -125,6 +131,7 @@ async function getSubscriptionStatus(): Promise<{ data: TSubscriptionStatusData;
 		const graceDaysRemaining = SUBSCRIPTION_GRACE_PERIOD_DAYS - daysSinceTrialEnd;
 
 		if (graceDaysRemaining > 0) {
+			console.log("[INFO] Trial ended, within grace period, warn mode:", { graceDaysRemaining });
 			return {
 				data: {
 					ativa: true,
@@ -137,6 +144,7 @@ async function getSubscriptionStatus(): Promise<{ data: TSubscriptionStatusData;
 		}
 
 		// Trial + grace expired
+		console.log("[INFO] Trial + grace expired, fail mode:", { graceDaysRemaining });
 		return {
 			data: {
 				ativa: false,

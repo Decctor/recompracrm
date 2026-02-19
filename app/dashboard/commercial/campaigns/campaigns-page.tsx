@@ -269,29 +269,31 @@ function CampaignInteractionLogCard({ interaction }: { interaction: TGetCampaign
 							<p className={cn("text-[0.65rem] font-medium tracking-tight uppercase")}>{interaction.cliente.nome ?? "NÃO INFORMADO"}</p>
 						</div>
 					</div>
-					{interaction.erroEnvio ? (
-						<TooltipProvider>
-							<Tooltip>
-								<TooltipTrigger asChild>
-									<div className="flex items-center gap-1.5 rounded-md px-1.5 py-1.5 text-[0.65rem] font-bold bg-red-500 text-white">
-										<CircleX className="w-4 min-w-4 h-4 min-h-4" />
-										<p className="text-[0.65rem] font-medium tracking-tight">FALHOU</p>
-									</div>
-								</TooltipTrigger>
-								<TooltipContent>
-									<p className="text-xs font-medium tracking-tight text-red-500">{interaction.erroEnvio}</p>
-								</TooltipContent>
-							</Tooltip>
-						</TooltipProvider>
-					) : null}
-					<div
-						className={cn("flex items-center gap-1.5 rounded-md px-1.5 py-1.5 text-[0.65rem] font-bold", {
-							"bg-blue-500 text-white": executionStatus === "AGENDADA",
-							"bg-green-500 text-white": executionStatus === "EXECUTADA",
-						})}
-					>
-						<CircleCheck className="w-4 min-w-4 h-4 min-h-4" />
-						<p className="text-xs font-bold tracking-tight uppercase">{executionStatus}</p>
+					<div className="flex items-center gap-3">
+						{interaction.erroEnvio ? (
+							<TooltipProvider>
+								<Tooltip>
+									<TooltipTrigger asChild>
+										<div className="flex items-center gap-1.5 rounded-md px-1.5 py-1.5 text-[0.65rem] font-bold bg-red-500 text-white">
+											<CircleX className="w-4 min-w-4 h-4 min-h-4" />
+											<p className="text-[0.65rem] font-medium tracking-tight">FALHOU</p>
+										</div>
+									</TooltipTrigger>
+									<TooltipContent>
+										<p className="text-xs font-medium tracking-tight text-red-500">{interaction.erroEnvio}</p>
+									</TooltipContent>
+								</Tooltip>
+							</TooltipProvider>
+						) : null}
+						<div
+							className={cn("flex items-center gap-1.5 rounded-md px-1.5 py-1.5 text-[0.65rem] font-bold", {
+								"bg-blue-500 text-white": executionStatus === "AGENDADA",
+								"bg-green-500 text-white": executionStatus === "EXECUTADA",
+							})}
+						>
+							<CircleCheck className="w-4 min-w-4 h-4 min-h-4" />
+							<p className="text-xs font-bold tracking-tight uppercase">{executionStatus}</p>
+						</div>
 					</div>
 				</div>
 				<p className="text-xs font-medium tracking-tight text-muted-foreground">{interaction.descricao}</p>
