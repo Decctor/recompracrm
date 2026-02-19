@@ -119,7 +119,6 @@ const RFM_TOOLTIPS = {
 };
 
 export default function LandingPage() {
-	console.log("LandingPage");
 	const [rankingTab, setRankingTab] = useState<"sellers" | "partners" | "products">("sellers");
 	const [billingInterval, setBillingInterval] = useState<"monthly" | "yearly">("monthly");
 	const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
