@@ -11,9 +11,10 @@ const VALUE_HELPERS = [10, 25, 50, 100];
 type SaleValueStepProps = {
 	value: number;
 	onChange: (value: number) => void;
+	onSubmit: () => void;
 };
 
-export function SaleValueStep({ value, onChange }: SaleValueStepProps) {
+export function SaleValueStep({ value, onChange, onSubmit }: SaleValueStepProps) {
 	const handleScrollOnFocus = useAutoScrollOnFocus(300);
 
 	return (
@@ -29,6 +30,9 @@ export function SaleValueStep({ value, onChange }: SaleValueStepProps) {
 					onChange={(e) => onChange(Number(e.target.value))}
 					className="h-24 short:h-14 text-5xl short:text-3xl font-black text-center rounded-3xl short:rounded-xl border-4 short:border border-brand/20 focus:border-brand px-12 short:px-9"
 					onFocus={handleScrollOnFocus}
+					onSubmit={() => {
+						onSubmit();
+					}}
 				/>
 			</div>
 			<div className="grid grid-cols-2 md:grid-cols-4 gap-3 short:gap-1.5 max-w-xl mx-auto">

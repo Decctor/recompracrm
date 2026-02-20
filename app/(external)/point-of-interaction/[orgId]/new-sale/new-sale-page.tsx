@@ -9,11 +9,6 @@ import { useClientByLookup } from "@/lib/queries/clients";
 import { cn } from "@/lib/utils";
 import type { TOrganizationEntity } from "@/services/drizzle/schema";
 import { usePointOfInteractionNewSaleState } from "@/state-hooks/use-point-of-interaction-new-sale-state";
-import { ClientStep } from "../_shared/components/client-step";
-import { StepProgressHeader } from "../_shared/components/step-progress-header";
-import { SuccessCelebration } from "../_shared/components/success-celebration";
-import { getAvailableCashback, getFinalValue, getMaxCashbackToUse, getRedemptionLimitConfig } from "../_shared/helpers/cashback-calculations";
-import type { TPrize, TStepDefinition } from "../_shared/types";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, BadgePercent, Check, Gift, Lock, ShoppingCart, Tag, UserRound } from "lucide-react";
 import Image from "next/image";
@@ -22,6 +17,11 @@ import { useRouter } from "next/navigation";
 import React, { useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import useSound from "use-sound";
+import { ClientStep } from "../_shared/components/client-step";
+import { StepProgressHeader } from "../_shared/components/step-progress-header";
+import { SuccessCelebration } from "../_shared/components/success-celebration";
+import { getAvailableCashback, getFinalValue, getMaxCashbackToUse, getRedemptionLimitConfig } from "../_shared/helpers/cashback-calculations";
+import type { TPrize, TStepDefinition } from "../_shared/types";
 import { CashbackStep } from "./components/cashback-step";
 import { ConfirmationStep } from "./components/confirmation-step";
 import { ModeSelectionStep } from "./components/mode-selection-step";
@@ -244,7 +244,7 @@ export default function NewSaleContent({ org, clientId, prizes }: NewSaleContent
 
 						{/* Discount mode steps */}
 						{!showModeSelection && !isPrizeMode && currentStep === 2 && (
-							<SaleValueStep value={state.sale.valor} onChange={(v) => updateSale({ valor: v })} />
+							<SaleValueStep value={state.sale.valor} onChange={(v) => updateSale({ valor: v })} onSubmit={handleNextStep} />
 						)}
 						{!showModeSelection && !isPrizeMode && currentStep === 3 && (
 							<CashbackStep
@@ -297,8 +297,30 @@ export default function NewSaleContent({ org, clientId, prizes }: NewSaleContent
 								title="VENDA REALIZADA!"
 								subtitle="A operação foi processada com sucesso."
 								stats={[
-									{ label: "CASHBACK GERADO", value: successData.visualClientAccumulatedCashbackValue ?? successData.clientAccumulatedCashbackValue, variant: "green" },
-									{ label: "NOVO SALDO TOTAL", value: successData.visualClientNewOverallAvailableBalance ?? successData.clientNewOverallAvailableBalance ?? 0, variant: "brand" },
+									{
+										label: "CASHBACK GERADO",
+										value: successData.visualClientAccumulatedCashbackValue ?? successData.clientAccumulatedCashbackValue,
+										variant: "green",
+									},
+									{
+										label: "NOVO SALDO TOTAL",
+										value: successData.visualClientNewOverallAvailableBalance ?? successData.clientNewOverallAvailableBalance ?? 0,
+										variant: "brand",
+									},
+									{
+										label: "VALOR DA COMPRA",
+										value: state.sale.valor,
+										variant: "brand",
+									},
+									...(state.sale.cashback.aplicar
+										? [
+												{
+													label: "VALOR COM DESCONTO",
+													value: state.sale.valor - state.sale.cashback.valor,
+													variant: "green" as const,
+												},
+											]
+										: []),
 								]}
 								primaryAction={{ label: "NOVA VENDA", onClick: handleReset }}
 								secondaryAction={{ label: "VOLTAR AO INÍCIO", onClick: () => router.push(`/point-of-interaction/${org.id}`) }}
@@ -311,8 +333,16 @@ export default function NewSaleContent({ org, clientId, prizes }: NewSaleContent
 								title="RESGATE REALIZADO!"
 								subtitle="A recompensa foi resgatada com sucesso."
 								stats={[
-									{ label: "CASHBACK GERADO", value: successData.visualClientAccumulatedCashbackValue ?? successData.clientAccumulatedCashbackValue, variant: "green" },
-									{ label: "NOVO SALDO TOTAL", value: successData.visualClientNewOverallAvailableBalance ?? successData.clientNewOverallAvailableBalance ?? 0, variant: "brand" },
+									{
+										label: "CASHBACK GERADO",
+										value: successData.visualClientAccumulatedCashbackValue ?? successData.clientAccumulatedCashbackValue,
+										variant: "green",
+									},
+									{
+										label: "NOVO SALDO TOTAL",
+										value: successData.visualClientNewOverallAvailableBalance ?? successData.clientNewOverallAvailableBalance ?? 0,
+										variant: "brand",
+									},
 								]}
 								primaryAction={{ label: "NOVA VENDA", onClick: handleReset }}
 								secondaryAction={{ label: "VOLTAR AO INÍCIO", onClick: () => router.push(`/point-of-interaction/${org.id}`) }}

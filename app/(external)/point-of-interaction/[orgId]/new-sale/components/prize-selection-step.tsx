@@ -1,10 +1,10 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import type { TPrize } from "../../_shared/types";
 import { ArrowLeft, Gift, LayoutGrid, List } from "lucide-react";
 import Image from "next/image";
 import React from "react";
+import type { TPrize } from "../../_shared/types";
 import { PrizeCard } from "./prize-card";
 
 const FALLBACK_GROUP = "Outros";
@@ -17,7 +17,7 @@ type PrizeSelectionStepProps = {
 };
 
 export function PrizeSelectionStep({ prizes, availableBalance, onSelectPrize }: PrizeSelectionStepProps) {
-	const [viewMode, setViewMode] = React.useState<"categories" | "list">("categories");
+	const [viewMode, setViewMode] = React.useState<"categories" | "list">("list");
 	const [selectedCategory, setSelectedCategory] = React.useState<string | null>(null);
 
 	const categories = React.useMemo(() => {
@@ -63,21 +63,23 @@ export function PrizeSelectionStep({ prizes, availableBalance, onSelectPrize }: 
 					<div className="flex items-center justify-center gap-1 pt-1">
 						<Button
 							type="button"
-							variant={viewMode === "categories" ? "default" : "ghost"}
-							size="fit"
-							className="rounded-lg p-2"
-							onClick={() => handleViewModeChange("categories")}
-						>
-							<LayoutGrid className="w-4 h-4" />
-						</Button>
-						<Button
-							type="button"
 							variant={viewMode === "list" ? "default" : "ghost"}
 							size="fit"
-							className="rounded-lg p-2"
+							className="flex items-center gap-2 rounded-lg p-2"
 							onClick={() => handleViewModeChange("list")}
 						>
 							<List className="w-4 h-4" />
+							LISTAGEM
+						</Button>
+						<Button
+							type="button"
+							variant={viewMode === "categories" ? "default" : "ghost"}
+							size="fit"
+							className="flex items-center gap-2 rounded-lg p-2"
+							onClick={() => handleViewModeChange("categories")}
+						>
+							<LayoutGrid className="w-4 h-4" />
+							POR CATEGORIA
 						</Button>
 					</div>
 				)}
@@ -128,12 +130,7 @@ export function PrizeSelectionStep({ prizes, availableBalance, onSelectPrize }: 
 						</button>
 						<div className="flex flex-col gap-2 short:gap-1.5">
 							{groupedPrizes[selectedCategory].map((prize) => (
-								<PrizeCard
-									key={prize.id}
-									prize={prize}
-									isDisabled={availableBalance < prize.valor}
-									onSelect={() => onSelectPrize(prize)}
-								/>
+								<PrizeCard key={prize.id} prize={prize} isDisabled={availableBalance < prize.valor} onSelect={() => onSelectPrize(prize)} />
 							))}
 						</div>
 					</div>
@@ -141,12 +138,7 @@ export function PrizeSelectionStep({ prizes, availableBalance, onSelectPrize }: 
 			) : (
 				<div className="flex flex-col gap-2 short:gap-1.5">
 					{sortedPrizes.map((prize) => (
-						<PrizeCard
-							key={prize.id}
-							prize={prize}
-							isDisabled={availableBalance < prize.valor}
-							onSelect={() => onSelectPrize(prize)}
-						/>
+						<PrizeCard key={prize.id} prize={prize} isDisabled={availableBalance < prize.valor} onSelect={() => onSelectPrize(prize)} />
 					))}
 				</div>
 			)}

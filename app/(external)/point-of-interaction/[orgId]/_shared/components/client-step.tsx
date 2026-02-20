@@ -4,7 +4,7 @@ import TextInput from "@/components/Inputs/TextInput";
 import { Button } from "@/components/ui/button";
 import { formatToCPForCNPJ, formatToMoney, formatToPhone } from "@/lib/formatting";
 import { useAutoScrollOnFocus } from "@/lib/hooks/use-auto-scroll-on-focus";
-import { Loader2, UserPlus } from "lucide-react";
+import { Loader2, Phone, UserPlus } from "lucide-react";
 import React from "react";
 import { useAutoAdvanceTimer } from "../hooks/use-auto-advance-timer";
 import { usePoiSounds } from "../hooks/use-poi-sounds";
@@ -76,8 +76,10 @@ export function ClientStep({
 		onCancelSearch();
 	}
 
+	const clientFound = isSuccessClient && client;
+	const clientNotFound = isSuccessClient && !client;
 	const showFoundClientCard = isSuccessClient && client && !isAdvancing && !wasCancelled;
-	const showInput = !showFoundClientCard && !isAdvancing;
+	const showInput = !(clientFound || clientNotFound);
 	const isNewClient = isSuccessClient && !client;
 
 	const handleFormSubmit = () => {
@@ -91,6 +93,11 @@ export function ClientStep({
 		}
 	};
 
+	function handleClearData() {
+		onPhoneChange("");
+		onNewClientChange({ nome: "", cpfCnpj: "" });
+		onCancelSearch();
+	}
 	return (
 		<form
 			className="space-y-8 short:space-y-2 animate-in fade-in slide-in-from-bottom-4"
@@ -99,13 +106,12 @@ export function ClientStep({
 				handleFormSubmit();
 			}}
 		>
-			<div className="text-center space-y-2 short:space-y-0.5">
-				<h2 className="text-xl short:text-lg font-black uppercase tracking-tight">Quem é o cliente?</h2>
-				<p className="text-muted-foreground short:text-xs">Digite o número de telefone para localizar o perfil.</p>
-			</div>
-
 			{showInput ? (
 				<>
+					<div className="text-center space-y-2 short:space-y-0.5">
+						<h2 className="text-xl short:text-lg font-black uppercase tracking-tight">Quem é o cliente?</h2>
+						<p className="text-muted-foreground short:text-xs">Digite o número de telefone para localizar o perfil.</p>
+					</div>
 					<div className="max-w-md mx-auto">
 						<TextInput
 							label="TELEFONE"
@@ -128,9 +134,7 @@ export function ClientStep({
 			{showFoundClientCard && client ? (
 				<div className="bg-green-50 border-2 short:border border-green-200 rounded-3xl short:rounded-xl p-6 short:p-2.5 flex flex-col items-center gap-4 short:gap-2 animate-in zoom-in">
 					<div className="text-center">
-						<p className="text-xs short:text-[0.65rem] font-bold text-green-600 uppercase tracking-widest mb-1 short:mb-0">
-							✓ Perfil Encontrado
-						</p>
+						<p className="text-xs short:text-[0.65rem] font-bold text-green-600 uppercase tracking-widest mb-1 short:mb-0">✓ Perfil Encontrado</p>
 						<p className="text-green-900 font-black text-2xl short:text-base uppercase italic">{client.nome}</p>
 						<p className="text-green-600 font-bold short:text-xs">{formatToPhone(client.telefone)}</p>
 					</div>
@@ -171,8 +175,8 @@ export function ClientStep({
 				</div>
 			) : null}
 
-			{isNewClient && showInput ? (
-				<div className="bg-blue-50 border-2 short:border border-blue-200 rounded-3xl short:rounded-xl p-6 short:p-2.5 animate-in zoom-in">
+			{isNewClient ? (
+				<div className="flex flex-col gap-3 bg-blue-50 border-2 short:border border-blue-200 rounded-3xl short:rounded-xl p-6 short:p-2.5 animate-in zoom-in">
 					<div className="flex items-center gap-3 short:gap-1.5 mb-4 short:mb-2">
 						<div className="p-2 short:p-1 bg-blue-600 rounded-lg short:rounded text-white">
 							<UserPlus className="w-5 h-5 short:w-3.5 short:h-3.5" />
@@ -181,6 +185,10 @@ export function ClientStep({
 							<h3 className="font-black uppercase text-blue-900 short:text-xs">NOVO CLIENTE</h3>
 							<p className="text-xs short:text-[0.65rem] text-blue-600">Complete os dados para criar o seu cadastro!</p>
 						</div>
+					</div>
+					<div className="w-fit flex items-center gap-1.5 self-center bg-blue-600 text-white px-4 py-2 rounded-lg">
+						<Phone className="w-4 h-4" />
+						<h3 className="text-xs font-bold">{formatToPhone(phone)}</h3>
 					</div>
 					<div className="w-full flex flex-col gap-1.5 short:gap-0.5">
 						<TextInput
@@ -221,6 +229,18 @@ export function ClientStep({
 							)}
 						</Button>
 					) : null}
+					<div className="w-full flex items-center flex-col gap-0.5">
+						<p className="text-sm text-gray-500 font-medium">Outro número de telefone?</p>
+						<button
+							type="button"
+							className="px-4 py-2 bg-gray-400 text-white rounded-lg text-xs font-bold"
+							onClick={() => {
+								handleClearData();
+							}}
+						>
+							TENTAR OUTRO NÚMERO
+						</button>
+					</div>
 				</div>
 			) : null}
 		</form>
