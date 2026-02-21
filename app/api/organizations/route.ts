@@ -5,12 +5,23 @@ import {
 	DEFAULT_ORGANIZATION_RFM_CONFIG,
 	FREE_TRIAL_DURATION_DAYS,
 } from "@/config";
+import { RecompraCRMDefaultCampaigns, getOrganizationNicheByValue } from "@/config/onboarding";
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { OrganizationSchema } from "@/schemas/organizations";
 import { db } from "@/services/drizzle";
-import { authSessions, organizationMembers, organizations, users, utils } from "@/services/drizzle/schema";
+import {
+	authSessions,
+	campaignSegmentations,
+	campaigns,
+	cashbackPrograms,
+	organizationMembers,
+	organizations,
+	sellers,
+	users,
+	utils,
+} from "@/services/drizzle/schema";
 import { stripe } from "@/services/stripe";
 import { eq } from "drizzle-orm";
 import createHttpError from "http-errors";
@@ -77,36 +88,99 @@ async function createOrganization({ input, session }: { input: TCreateOrganizati
 	const sessionUser = session.user;
 
 	console.log("[INFO] [CREATE_ORGANIZATION] Starting the organization onboarding conclusion process:", JSON.stringify(input, null, 2));
-	// 1. Insert organization first
-	const insertedOrganizationResponse = await db
-		.insert(organizations)
-		.values({
-			...organization,
-			configuracao: {
-				recursos: DEFAULT_ORGANIZATION_CONFIGURATION_RESOURCES,
-			},
-			autorId: sessionUser.id,
-		})
-		.returning({ id: organizations.id });
 
-	const insertedOrgId = insertedOrganizationResponse[0]?.id;
-	if (!insertedOrgId) throw new createHttpError.InternalServerError("Oops, houve um erro desconhecido ao criar organização.");
-	console.log("[INFO] [CREATE_ORGANIZATION] Organization created successfully with ID:", insertedOrgId);
+	// Pré-Stripe: grava apenas dados locais em uma transação curta.
+	const insertedOrgId = await db.transaction(async (tx) => {
+		// 1. Insert organization first
+		const insertedOrganizationResponse = await tx
+			.insert(organizations)
+			.values({
+				...organization,
+				configuracao: {
+					recursos: DEFAULT_ORGANIZATION_CONFIGURATION_RESOURCES,
+				},
+				autorId: sessionUser.id,
+			})
+			.returning({ id: organizations.id });
 
-	// 2. Inserting the organization member
-	await db.insert(organizationMembers).values({
-		usuarioId: sessionUser.id,
-		organizacaoId: insertedOrgId,
-		permissoes: DEFAULT_ORGANIZATION_OWNER_PERMISSIONS,
+		const createdOrgId = insertedOrganizationResponse[0]?.id;
+		if (!createdOrgId) throw new createHttpError.InternalServerError("Oops, houve um erro desconhecido ao criar organização.");
+		console.log("[INFO] [CREATE_ORGANIZATION] Organization created successfully with ID:", createdOrgId);
+
+		// 2. Inserting the organization member
+		await tx.insert(organizationMembers).values({
+			usuarioId: sessionUser.id,
+			organizacaoId: createdOrgId,
+			permissoes: DEFAULT_ORGANIZATION_OWNER_PERMISSIONS,
+		});
+
+		// 3. Inserting org default seller
+		await tx.insert(sellers).values({
+			organizacaoId: createdOrgId,
+			ativo: true,
+			nome: sessionUser.nome,
+			identificador: sessionUser.nome,
+			telefone: sessionUser.telefone,
+			email: sessionUser.email,
+			avatarUrl: sessionUser.avatarUrl,
+			senhaOperador: "00000",
+		});
+		// 4. Inserting org default RFM Config to avoid "blank canvas" paralysis
+		await tx.insert(utils).values({
+			organizacaoId: createdOrgId,
+			identificador: "CONFIG_RFM",
+			valor: DEFAULT_ORGANIZATION_RFM_CONFIG,
+		});
+
+		// 5. Inserting org default cashback program
+		const orgNiche = organization.atuacaoNicho;
+		const orgNicheData = orgNiche ? getOrganizationNicheByValue(orgNiche) : null;
+		if (orgNicheData) {
+			await tx.insert(cashbackPrograms).values({
+				organizacaoId: createdOrgId,
+				ativo: true,
+				titulo: `Program de Cashback ${organization.nome}`,
+				descricao: "Nosso programa de fidelidade.",
+				...orgNicheData.cashbackProgramDefault,
+			});
+			console.log("[INFO] [CREATE_ORGANIZATION] Default cashback program created successfully.");
+		}
+
+		// 6. Inserting org default campaigns
+		for (const campaign of RecompraCRMDefaultCampaigns) {
+			const insertedCampaignResponse = await tx
+				.insert(campaigns)
+				.values({
+					organizacaoId: createdOrgId,
+					autorId: sessionUser.id,
+					ativo: true,
+					...campaign.campaign,
+				})
+				.returning({ id: campaigns.id });
+			const insertedCampaignId = insertedCampaignResponse[0]?.id;
+			if (!insertedCampaignId) throw new createHttpError.InternalServerError("Oops, houve um erro desconhecido ao criar campanha.");
+			await tx.insert(campaignSegmentations).values(
+				campaign.campaignSegmentations.map((s) => ({
+					campanhaId: insertedCampaignId,
+					organizacaoId: createdOrgId,
+					segmentacao: s.segmentacao,
+				})),
+			);
+			console.log("[INFO] [CREATE_ORGANIZATION] Default campaigns created successfully.");
+		}
+
+		// Define organização ativa logo após criação local para evitar sessão órfã em falhas externas.
+		await tx
+			.update(authSessions)
+			.set({
+				organizacaoAtivaId: createdOrgId,
+			})
+			.where(eq(authSessions.id, session.session.id));
+
+		return createdOrgId;
 	});
 
-	// 3. Inserting org default RFM Config to avoid "blank canvas" paralysis
-	await db.insert(utils).values({
-		organizacaoId: insertedOrgId,
-		identificador: "CONFIG_RFM",
-		valor: DEFAULT_ORGANIZATION_RFM_CONFIG,
-	});
-	// 2. Process subscription
+	// 6. Process subscription
 	if (!subscription || subscription === "FREE-TRIAL") {
 		console.log("[INFO] [CREATE_ORGANIZATION] Free trial selected. Defining free trial period.");
 		// FREE-TRIAL logic
@@ -115,24 +189,18 @@ async function createOrganization({ input, session }: { input: TCreateOrganizati
 		periodoTesteFim.setDate(periodoTesteFim.getDate() + FREE_TRIAL_DURATION_DAYS);
 
 		const freeTrialConfig = AppSubscriptionPlans.CRESCIMENTO.capabilities;
-		await db
-			.update(organizations)
-			.set({
-				configuracao: {
-					recursos: freeTrialConfig,
-				},
-				periodoTesteInicio,
-				periodoTesteFim,
-			})
-			.where(eq(organizations.id, insertedOrgId));
-
-		// Changing the active auth session organization
-		await db
-			.update(authSessions)
-			.set({
-				organizacaoAtivaId: insertedOrgId,
-			})
-			.where(eq(authSessions.id, session.session.id));
+		await db.transaction(async (tx) => {
+			await tx
+				.update(organizations)
+				.set({
+					configuracao: {
+						recursos: freeTrialConfig,
+					},
+					periodoTesteInicio,
+					periodoTesteFim,
+				})
+				.where(eq(organizations.id, insertedOrgId));
+		});
 
 		console.log("[INFO] [CREATE_ORGANIZATION] Free trial period defined successfully.");
 		return {
@@ -171,17 +239,6 @@ async function createOrganization({ input, session }: { input: TCreateOrganizati
 		},
 	});
 	console.log("[INFO] [CREATE_ORGANIZATION] Stripe customer created successfully with ID:", stripeCustomer.id);
-	// Update organization with Stripe customer ID
-	await db
-		.update(organizations)
-		.set({
-			configuracao: {
-				recursos: plan.capabilities,
-			},
-			stripeCustomerId: stripeCustomer.id,
-			assinaturaPlano: planName,
-		})
-		.where(eq(organizations.id, insertedOrgId));
 
 	// Create checkout session
 	const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
@@ -205,13 +262,19 @@ async function createOrganization({ input, session }: { input: TCreateOrganizati
 	if (!checkoutSession.url) throw new createHttpError.InternalServerError("Erro ao criar sessão de checkout.");
 	console.log("[INFO] [CREATE_ORGANIZATION] Stripe checkout session created successfully with URL:", checkoutSession.url);
 
-	// Changing the active auth session organization
-	await db
-		.update(authSessions)
-		.set({
-			organizacaoAtivaId: insertedOrgId,
-		})
-		.where(eq(authSessions.id, session.session.id));
+	// Pós-Stripe: grava dados locais derivados das APIs externas em nova transação curta.
+	await db.transaction(async (tx) => {
+		await tx
+			.update(organizations)
+			.set({
+				configuracao: {
+					recursos: plan.capabilities,
+				},
+				stripeCustomerId: stripeCustomer.id,
+				assinaturaPlano: planName,
+			})
+			.where(eq(organizations.id, insertedOrgId));
+	});
 
 	return {
 		data: {

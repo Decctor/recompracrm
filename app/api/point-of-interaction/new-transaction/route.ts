@@ -223,7 +223,6 @@ async function handleNewTransaction(req: NextRequest): Promise<NextResponse<TCre
 			},
 		});
 		const operatorMembershipUser = operatorMembership?.usuario;
-		if (!operatorMembershipUser) throw new createHttpError.Unauthorized("Operador não encontrado ou não pertence a esta organização.");
 
 		const immediateProcessingDataList: ImmediateProcessingData[] = [];
 
@@ -443,7 +442,8 @@ async function handleNewTransaction(req: NextRequest): Promise<NextResponse<TCre
 					saldoValorAnterior: previousBalance,
 					saldoValorPosterior: newBalanceAfterRedemption,
 					expiracaoData: null, // RESGATE transactions do not have expiration date
-					operadorId: operatorMembershipUser.id,
+					operadorId: operatorMembershipUser?.id,
+					operadorVendedorId: operator.id,
 					// Prize redemption fields
 					resgateRecompensaId: validatedPrize?.id ?? null,
 					resgateRecompensaValor: validatedPrize?.valor ?? null,
@@ -461,7 +461,8 @@ async function handleNewTransaction(req: NextRequest): Promise<NextResponse<TCre
 				clientId: clientId as string,
 				saleId: null, // associated after sale insertion if applicable
 				saleValue: input.sale.valor,
-				operatorId: operatorMembershipUser.id,
+				operatorId: operatorMembershipUser?.id,
+				operatorSellerId: operator.id,
 				program,
 				metadata: {
 					ator: "CLIENTE",
@@ -482,7 +483,8 @@ async function handleNewTransaction(req: NextRequest): Promise<NextResponse<TCre
 					clientId: salePartnerClientId,
 					saleId: null, // associated after sale insertion if applicable
 					saleValue: input.sale.valor,
-					operatorId: operatorMembershipUser.id,
+					operatorId: operatorMembershipUser?.id,
+					operatorSellerId: operator.id,
 					program,
 					accumulationValueOverride: program.acumuloValorParceiro,
 					metadata: {

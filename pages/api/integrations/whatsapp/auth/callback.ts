@@ -3,7 +3,9 @@ import { getCurrentSessionUncached } from "@/lib/authentication/pages-session";
 import { syncWhatsappTemplates } from "@/lib/whatsapp/template-management";
 import { db } from "@/services/drizzle";
 import { type TNewWhatsappConnection, whatsappConnectionPhones, whatsappConnections } from "@/services/drizzle/schema";
+import { campaigns } from "@/services/drizzle/schema/campaigns";
 import type { OAuth2Tokens } from "arctic";
+import { and, eq, isNull } from "drizzle-orm";
 
 import dayjs from "dayjs";
 import type { NextApiRequest, NextApiResponse } from "next";
@@ -187,10 +189,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 		return insertedWhatsappConnectionPhones;
 	});
 
+	const firstPhoneId = insertedPhones[0]?.id;
+	if (firstPhoneId) {
+		await db
+			.update(campaigns)
+			.set({
+				whatsappConexaoTelefoneId: firstPhoneId,
+			})
+			.where(and(eq(campaigns.organizacaoId, userOrgId), isNull(campaigns.whatsappConexaoTelefoneId)));
+	}
+
 	// Sync templates for each connected phone
 	console.log("[INFO] [WHATSAPP_CONNECT_CALLBACK] Starting automatic template sync for connected phones");
 	for (const phone of insertedPhones) {
 		try {
+			if (!phone.whatsappBusinessAccountId || !phone.id) continue;
 			const syncResult = await syncWhatsappTemplates({
 				whatsappToken: accessToken ?? "",
 				whatsappBusinessAccountId: phone.whatsappBusinessAccountId,

@@ -3,8 +3,9 @@ import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { getSessionStatus } from "@/lib/whatsapp/internal-gateway";
 import { db } from "@/services/drizzle";
+import { campaigns } from "@/services/drizzle/schema/campaigns";
 import { whatsappConnections } from "@/services/drizzle/schema/whatsapp-connections";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 
@@ -59,6 +60,25 @@ async function getConnectionStatus({
 		}
 
 		await db.update(whatsappConnections).set(updateData).where(eq(whatsappConnections.id, connectionId));
+	}
+
+	// When connection becomes effective, auto-fill default campaigns without phone.
+	if (gatewayStatus.status === "connected") {
+		const firstConnectionPhone = await db.query.whatsappConnectionPhones.findFirst({
+			where: (fields, { eq }) => eq(fields.conexaoId, connectionId),
+			columns: {
+				id: true,
+			},
+		});
+
+		if (firstConnectionPhone?.id) {
+			await db
+				.update(campaigns)
+				.set({
+					whatsappConexaoTelefoneId: firstConnectionPhone.id,
+				})
+				.where(and(eq(campaigns.organizacaoId, organizacaoId), isNull(campaigns.whatsappConexaoTelefoneId)));
+		}
 	}
 
 	return {

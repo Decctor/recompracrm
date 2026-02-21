@@ -158,9 +158,9 @@ async function updateCashbackProgram({ input, session }: { input: TUpdateCashbac
 	if (!userOrgId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
 
 	const transactionReturn = await db.transaction(async (tx) => {
-		const updatedCashbackProgram = await db
+		const updatedCashbackProgram = await tx
 			.update(cashbackPrograms)
-			.set({ ...input.cashbackProgram, organizacaoId: userOrgId })
+			.set({ ...input.cashbackProgram, organizacaoId: userOrgId, dataAtualizacao: new Date() })
 			.where(and(eq(cashbackPrograms.id, input.cashbackProgramId), eq(cashbackPrograms.organizacaoId, userOrgId)))
 			.returning({ id: cashbackPrograms.id });
 		const updatedCashbackProgramId = updatedCashbackProgram[0]?.id;

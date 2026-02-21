@@ -1,21 +1,12 @@
-import ResponsiveMenuSection from "@/components/Utils/ResponsiveMenuSection";
+import { OrganizationNicheOptions } from "@/config/onboarding";
 import { cn } from "@/lib/utils";
 import type { TUseOrganizationOnboardingState } from "@/state-hooks/use-organization-onboarding-state";
-import { OrganizationNicheOptions } from "@/utils/select-options";
-import { Check, Hammer, HelpCircle, Shirt, SprayCan, TargetIcon, Utensils } from "lucide-react";
+import { Check, HelpCircle } from "lucide-react";
 import { FaGoogle, FaInstagram, FaLinkedin, FaUserGroup, FaYoutube } from "react-icons/fa6";
-import { SelectableCard } from "./SelectableCard";
 
 type NicheOriginStageProps = {
 	state: TUseOrganizationOnboardingState["state"];
 	updateOrganization: TUseOrganizationOnboardingState["updateOrganization"];
-};
-
-const NICHE_ICONS: Record<string, React.ReactNode> = {
-	Alimentação: <Utensils />,
-	Construção: <Hammer />,
-	Moda: <Shirt />,
-	Perfumaria: <SprayCan />,
 };
 
 const ORIGIN_OPTIONS = [
@@ -51,7 +42,7 @@ export function NicheOriginStage({ state, updateOrganization }: NicheOriginStage
 										isSelected ? "bg-[#FFB900] text-white" : "bg-gray-100 text-gray-500",
 									)}
 								>
-									{NICHE_ICONS[niche.value] || <HelpCircle className="h-6 w-6" />}
+									{niche.renderIcon("h-6 w-6") || <HelpCircle className="h-6 w-6" />}
 								</div>
 								<div className="flex flex-col">
 									<span className={cn("font-bold text-sm", isSelected ? "text-[#B38000]" : "text-gray-900")}>{niche.label}</span>

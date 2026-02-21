@@ -143,7 +143,7 @@ export default function SalesEmptyState({ organizationId, organizationConfig }: 
 								style={{ backgroundColor: "#24549C" }}
 								asChild
 							>
-								<Link href={`/point-of-interaction/${organizationId}`}>
+								<Link href={`/point-of-interaction/${organizationId}/new-sale?filledOperatorPassword=00000`}>
 									Fazer nova venda
 									<ArrowRight className="w-4 h-4 ml-1" />
 								</Link>

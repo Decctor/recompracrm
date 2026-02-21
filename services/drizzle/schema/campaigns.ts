@@ -111,3 +111,5 @@ export const campaignSegmentationRelations = relations(campaignSegmentations, ({
 		references: [campaigns.id],
 	}),
 }));
+export type TCampaignSegmentationEntity = typeof campaignSegmentations.$inferSelect;
+export type TNewCampaignSegmentationEntity = typeof campaignSegmentations.$inferInsert;

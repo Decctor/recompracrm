@@ -67,6 +67,7 @@ export async function accumulateCashbackForClient({
 	saleId,
 	saleValue,
 	operatorId,
+	operatorSellerId,
 	program,
 	accumulationValueOverride,
 	createdAt,
@@ -78,6 +79,7 @@ export async function accumulateCashbackForClient({
 	saleId: string | null;
 	saleValue: number;
 	operatorId?: string | null;
+	operatorSellerId?: string | null;
 	program: TProgramSnapshot;
 	accumulationValueOverride?: number | null;
 	createdAt?: Date;
@@ -120,7 +122,13 @@ export async function accumulateCashbackForClient({
 			saldoValorAcumuladoTotal: newAccumulatedBalance,
 			dataAtualizacao: timestamp,
 		})
-		.where(and(eq(cashbackProgramBalances.organizacaoId, orgId), eq(cashbackProgramBalances.clienteId, clientId), eq(cashbackProgramBalances.programaId, program.id)));
+		.where(
+			and(
+				eq(cashbackProgramBalances.organizacaoId, orgId),
+				eq(cashbackProgramBalances.clienteId, clientId),
+				eq(cashbackProgramBalances.programaId, program.id),
+			),
+		);
 
 	const insertedTransaction = await tx
 		.insert(cashbackProgramTransactions)
@@ -139,6 +147,7 @@ export async function accumulateCashbackForClient({
 			expiracaoData: dayjs().add(program.expiracaoRegraValidadeValor, "day").toDate(),
 			dataInsercao: timestamp,
 			operadorId: operatorId ?? null,
+			operadorVendedorId: operatorSellerId ?? null,
 			metadados: metadata ?? null,
 		})
 		.returning({ id: cashbackProgramTransactions.id });

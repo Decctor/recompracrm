@@ -13,6 +13,7 @@ import {
 import { organizations } from "./organizations";
 import { productVariants, products } from "./products";
 import { sales } from "./sales";
+import { sellers } from "./sellers";
 import { users } from "./users";
 
 export const cashbackPrograms = newTable("cashback_programs", {
@@ -38,7 +39,7 @@ export const cashbackPrograms = newTable("cashback_programs", {
 	resgateLimiteTipo: cashbackProgramRedemptionLimitTypeEnum(),
 	resgateLimiteValor: doublePrecision("resgate_limite_valor"),
 	dataInsercao: timestamp("data_insercao").defaultNow().notNull(),
-	dataAtualizacao: timestamp("data_atualizacao").$defaultFn(() => new Date()),
+	dataAtualizacao: timestamp("data_atualizacao"),
 });
 export const cashbackProgramRelations = relations(cashbackPrograms, ({ one, many }) => ({
 	organizacao: one(organizations, {
@@ -50,7 +51,7 @@ export const cashbackProgramRelations = relations(cashbackPrograms, ({ one, many
 	transacoes: many(cashbackProgramTransactions),
 }));
 export type TCashbackProgramEntity = typeof cashbackPrograms.$inferSelect;
-
+export type TNewCashbackProgramEntity = typeof cashbackPrograms.$inferInsert;
 export const cashbackProgramPrizes = newTable("cashback_program_prizes", {
 	id: varchar("id", { length: 255 })
 		.primaryKey()
@@ -144,7 +145,8 @@ export const cashbackProgramTransactions = newTable("cashback_program_transactio
 	resgateRecompensaId: varchar("resgate_recompensa_id", { length: 255 }).references(() => cashbackProgramPrizes.id),
 	resgateRecompensaValor: doublePrecision("resgate_recompensa_valor"),
 
-	operadorId: varchar("operador_id", { length: 255 }).references(() => users.id),
+	operadorId: varchar("operador_id", { length: 255 }).references(() => users.id, { onDelete: "set null" }),
+	operadorVendedorId: varchar("operador_vendedor_id", { length: 255 }).references(() => sellers.id, { onDelete: "set null" }),
 	campanhaId: varchar("campanha_id", { length: 255 }).references(() => campaigns.id),
 	metadados: jsonb("metadados"),
 	dataInsercao: timestamp("data_insercao").defaultNow().notNull(),

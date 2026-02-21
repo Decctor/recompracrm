@@ -63,9 +63,6 @@ async function processRedemption(input: z.infer<typeof RedemptionInputSchema>): 
 				usuario: true,
 			},
 		});
-		if (!membershipForSeller || !membershipForSeller.usuario) {
-			throw new createHttpError.Unauthorized("Operador não encontrado ou não pertence a esta organização.");
-		}
 
 		// 3. Get cashback program
 		const program = await tx.query.cashbackPrograms.findFirst({
@@ -130,7 +127,8 @@ async function processRedemption(input: z.infer<typeof RedemptionInputSchema>): 
 				saldoValorAnterior: previousBalance,
 				saldoValorPosterior: newBalance,
 				expiracaoData: null,
-				operadorId: membershipForSeller.usuario.id,
+				operadorId: membershipForSeller?.usuario?.id,
+				operadorVendedorId: operator.id,
 			})
 			.returning({ id: cashbackProgramTransactions.id });
 

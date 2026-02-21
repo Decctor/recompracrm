@@ -170,13 +170,6 @@ export const InternalLeadOriginOptions: { id: string; label: string; value: TInt
 	{ id: "OUTRO", value: "OUTRO", label: "Outro" },
 ];
 
-export const OrganizationNicheOptions: { id: number; label: string; value: string }[] = [
-	{ id: 1, label: "ALIMENTAÇÃO", value: "Alimentação" },
-	{ id: 2, label: "CONSTRUÇÃO", value: "Construção" },
-	{ id: 3, label: "MODA", value: "Moda" },
-	{ id: 4, label: "PERFUMARIA", value: "Perfumaria" },
-];
-
 export const CustomersAcquisitionChannels = [
 	{ id: 1, label: "ANUNCIO GOOGLE", value: "ANUNCIO GOOGLE" },
 	{ id: 2, label: "ANUNCIO FB", value: "ANUNCIO FB" },

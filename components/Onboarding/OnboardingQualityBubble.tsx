@@ -5,13 +5,13 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Progress } from "@/components/ui/progress";
 import { useOnboardingQuality } from "@/lib/queries/onboarding";
 import { cn } from "@/lib/utils";
-import { ChevronDown, ChevronUp, Circle, Sparkles, X } from "lucide-react";
+import { ChevronDown, Sparkles, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { FaWhatsapp } from "react-icons/fa6";
 import { OnboardingQualityStep } from "./OnboardingQualityStep";
 
 const DISMISS_KEY = "onboarding-quality-dismissed-at";
-const DISMISS_DURATION_MS = 24 * 60 * 60 * 1000; // 1 day (Agrosyer) or keep 7 days as needed. Keeping logic same for now.
+const DISMISS_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 
 function getDismissedAt(): number | null {
 	if (typeof window === "undefined") return null;
@@ -48,8 +48,7 @@ export function OnboardingQualityBubble() {
 		}
 
 		const now = Date.now();
-		// 7 days duration from original code
-		if (now - dismissedAt >= 7 * 24 * 60 * 60 * 1000) {
+		if (now - dismissedAt >= DISMISS_DURATION_MS) {
 			clearDismissedAt();
 			setIsDismissed(false);
 			setIsOpen(true);
@@ -130,7 +129,7 @@ export function OnboardingQualityBubble() {
 					sideOffset={16}
 				>
 					{/* Header Section */}
-					<div className="p-5 pb-2 flex-shrink-0">
+					<div className="p-5 pb-2 shrink-0">
 						<div className="flex items-start justify-between mb-4">
 							<div>
 								<h3 className="text-lg font-bold text-foreground flex items-center gap-2">

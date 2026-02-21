@@ -54,8 +54,9 @@ type NewSaleContentProps = {
 	};
 	clientId?: string;
 	prizes: TPrize[];
+	initialOperatorPassword?: string;
 };
-export default function NewSaleContent({ org, clientId, prizes }: NewSaleContentProps) {
+export default function NewSaleContent({ org, clientId, prizes, initialOperatorPassword }: NewSaleContentProps) {
 	const router = useRouter();
 	const queryClient = useQueryClient();
 	const { state, updateClient, updateSale, updateCashback, updatePrizeRedemption, updateOperatorIdentifier, resetState } =
@@ -111,6 +112,12 @@ export default function NewSaleContent({ org, clientId, prizes }: NewSaleContent
 			playAction();
 		}
 	}, [client, updateClient, playAction]);
+
+	useEffect(() => {
+		if (!initialOperatorPassword) return;
+		if (state.operatorIdentifier) return;
+		updateOperatorIdentifier(initialOperatorPassword);
+	}, [initialOperatorPassword, state.operatorIdentifier, updateOperatorIdentifier]);
 
 	const handleNextStep = () => {
 		if (currentStep === 1) {
