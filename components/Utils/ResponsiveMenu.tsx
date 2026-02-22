@@ -58,6 +58,7 @@ type ResponsiveMenuProps = PropsWithChildren & {
 	closeMenu: () => void;
 	dialogVariant?: "fit" | "sm" | "md" | "lg" | "xl";
 	drawerVariant?: "fit" | "sm" | "md" | "lg" | "xl";
+	lockClose?: boolean;
 };
 function ResponsiveMenu({
 	children,
@@ -78,11 +79,29 @@ function ResponsiveMenu({
 	drawerContentClassName,
 	dialogVariant = "sm",
 	drawerVariant = "sm",
+	lockClose = false,
 }: ResponsiveMenuProps) {
 	const isDesktop = useMediaQuery("(min-width: 768px)");
 	return isDesktop ? (
-		<Dialog onOpenChange={(v) => (v ? null : closeMenu())} open>
-			<DialogContent data-dialog-container className={cn(responsiveMenuVariants({ dialogVariant }), dialogContentClassName)}>
+		<Dialog
+			onOpenChange={(v) => {
+				if (v || lockClose) return;
+				closeMenu();
+			}}
+			open
+		>
+			<DialogContent
+				data-dialog-container
+				className={cn(responsiveMenuVariants({ dialogVariant }), dialogContentClassName)}
+				onEscapeKeyDown={(event) => {
+					if (!lockClose) return;
+					event.preventDefault();
+				}}
+				onPointerDownOutside={(event) => {
+					if (!lockClose) return;
+					event.preventDefault();
+				}}
+			>
 				<DialogHeader>
 					<DialogTitle>{menuTitle}</DialogTitle>
 					<DialogDescription>{menuDescription}</DialogDescription>
@@ -99,7 +118,9 @@ function ResponsiveMenu({
 
 				<DialogFooter className="flex-wrap gap-y-2">
 					<DialogClose asChild>
-						<Button variant="outline">{menuCancelButtonText}</Button>
+						<Button variant="outline" disabled={lockClose}>
+							{menuCancelButtonText}
+						</Button>
 					</DialogClose>
 					{menuSecondaryActionButtonText && secondaryActionFunction && (
 						<LoadingButton
@@ -117,7 +138,13 @@ function ResponsiveMenu({
 			</DialogContent>
 		</Dialog>
 	) : (
-		<Drawer onOpenChange={(v) => (v ? null : closeMenu())} open>
+		<Drawer
+			onOpenChange={(v) => {
+				if (v || lockClose) return;
+				closeMenu();
+			}}
+			open
+		>
 			<DrawerContent className={cn(drawerVariants({ drawerVariant }), drawerContentClassName)}>
 				<DrawerHeader className="text-left">
 					<DrawerTitle>{menuTitle}</DrawerTitle>
@@ -136,7 +163,9 @@ function ResponsiveMenu({
 
 				<DrawerFooter>
 					<DrawerClose asChild>
-						<Button variant="outline">{menuCancelButtonText}</Button>
+						<Button variant="outline" disabled={lockClose}>
+							{menuCancelButtonText}
+						</Button>
 					</DrawerClose>
 					{menuSecondaryActionButtonText && secondaryActionFunction && (
 						<LoadingButton

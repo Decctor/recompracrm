@@ -2,12 +2,14 @@
 
 import type { TUpdateCommunityLessonInput } from "@/app/api/admin/community/lessons/route";
 import ResponsiveMenu from "@/components/Utils/ResponsiveMenu";
+import { Progress } from "@/components/ui/progress";
 import { getErrorMessage } from "@/lib/errors";
-import { requestMuxUploadUrl, updateCommunityLesson } from "@/lib/mutations/community-admin";
+import { updateCommunityLesson } from "@/lib/mutations/community-admin";
 import { useAdminCommunityLessonById } from "@/lib/queries/community-admin";
+import { type TMuxUploadStatus, uploadMuxVideoWithProgress } from "@/lib/uploads/mux-upload-with-progress";
 import { useInternalCommunityCourseLessonState } from "@/state-hooks/use-internal-community-course-lesson-state";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import LessonContentBlock from "./Blocks/Content";
 import LessonGeneralBlock from "./Blocks/General";
@@ -27,6 +29,13 @@ export default function ControlCommunityCourseLesson({ lessonId, closeModal, cal
 	const queryClient = useQueryClient();
 	const { state, updateLesson, updateVideoHolder, redefineState } = useInternalCommunityCourseLessonState();
 	const { data: lesson, queryKey, isLoading, error } = useAdminCommunityLessonById({ lessonId });
+	const [uploadProgress, setUploadProgress] = useState({
+		status: "idle" as TMuxUploadStatus,
+		loadedBytes: 0,
+		totalBytes: 0,
+		progressPercent: 0,
+		errorMessage: null as string | null,
+	});
 
 	const showVideoUpload = state.lesson.tipoConteudo === "VIDEO" || state.lesson.tipoConteudo === "VIDEO_TEXTO";
 	const showTextContent = state.lesson.tipoConteudo === "TEXTO" || state.lesson.tipoConteudo === "VIDEO_TEXTO";
@@ -50,24 +59,6 @@ export default function ControlCommunityCourseLesson({ lessonId, closeModal, cal
 		});
 	}, [lesson, redefineState]);
 
-	async function uploadLessonVideo(file: File) {
-		const { data } = await requestMuxUploadUrl();
-		await new Promise<void>((resolve, reject) => {
-			const xhr = new XMLHttpRequest();
-
-			xhr.addEventListener("load", () => {
-				if (xhr.status >= 200 && xhr.status < 300) return resolve();
-				return reject(new Error("Falha ao enviar vídeo para o Mux."));
-			});
-
-			xhr.addEventListener("error", () => reject(new Error("Erro de rede ao enviar vídeo para o Mux.")));
-			xhr.open("PUT", data.uploadUrl);
-			xhr.send(file);
-		});
-
-		return data.uploadId;
-	}
-
 	const { mutate: handleControlLessonMutation, isPending } = useMutation({
 		mutationKey: ["update-community-lesson", lessonId],
 		mutationFn: async (variables: TUpdateCommunityLessonInput) => {
@@ -88,9 +79,38 @@ export default function ControlCommunityCourseLesson({ lessonId, closeModal, cal
 			};
 
 			if (showVideoUpload && state.videoHolder.file) {
-				const muxUploadId = await uploadLessonVideo(state.videoHolder.file);
-				communityLesson.muxUploadId = muxUploadId;
-				communityLesson.muxAssetStatus = "AGUARDANDO";
+				setUploadProgress({
+					status: "idle",
+					loadedBytes: 0,
+					totalBytes: state.videoHolder.file.size,
+					progressPercent: 0,
+					errorMessage: null,
+				});
+				try {
+					const muxUploadId = await uploadMuxVideoWithProgress({
+						file: state.videoHolder.file,
+						onStatusChange: (status) => {
+							setUploadProgress((prevState) => ({ ...prevState, status }));
+						},
+						onProgress: ({ loadedBytes, totalBytes, progressPercent }) => {
+							setUploadProgress((prevState) => ({
+								...prevState,
+								loadedBytes,
+								totalBytes,
+								progressPercent,
+							}));
+						},
+					});
+					communityLesson.muxUploadId = muxUploadId;
+					communityLesson.muxAssetStatus = "AGUARDANDO";
+				} catch (uploadError) {
+					setUploadProgress((prevState) => ({
+						...prevState,
+						status: "error",
+						errorMessage: getErrorMessage(uploadError),
+					}));
+					throw uploadError;
+				}
 			}
 
 			return await updateCommunityLesson({ communityLessonId: variables.communityLessonId, communityLesson });
@@ -103,6 +123,13 @@ export default function ControlCommunityCourseLesson({ lessonId, closeModal, cal
 		onSuccess: async (data) => {
 			if (callbacks?.onSuccess) callbacks.onSuccess();
 			toast.success(data.message);
+			setUploadProgress({
+				status: "idle",
+				loadedBytes: 0,
+				totalBytes: 0,
+				progressPercent: 0,
+				errorMessage: null,
+			});
 			closeModal();
 		},
 		onError: async (error) => {
@@ -116,6 +143,14 @@ export default function ControlCommunityCourseLesson({ lessonId, closeModal, cal
 		},
 	});
 
+	const uploadStatusLabelByStatus: Record<TMuxUploadStatus, string> = {
+		idle: "Aguardando envio.",
+		preparing: "Preparando upload...",
+		uploading: "Enviando vídeo...",
+		success: "Upload concluído.",
+		error: "Falha no upload.",
+	};
+
 	return (
 		<ResponsiveMenu
 			menuTitle="CONTROLAR AULA"
@@ -127,7 +162,18 @@ export default function ControlCommunityCourseLesson({ lessonId, closeModal, cal
 			stateIsLoading={isLoading}
 			stateError={error ? getErrorMessage(error) : null}
 			closeMenu={closeModal}
+			lockClose={isPending}
 		>
+			{showVideoUpload && (uploadProgress.status !== "idle" || uploadProgress.errorMessage) ? (
+				<div className="flex w-full flex-col gap-1 rounded-md border border-primary/20 bg-primary/5 p-2">
+					<p className="text-xs font-medium">{uploadStatusLabelByStatus[uploadProgress.status]}</p>
+					<Progress value={uploadProgress.progressPercent} className="h-2 w-full" />
+					<p className="text-[0.7rem] text-muted-foreground">
+						{uploadProgress.progressPercent}% ({uploadProgress.loadedBytes} / {uploadProgress.totalBytes} bytes)
+					</p>
+					{uploadProgress.errorMessage ? <p className="text-[0.7rem] text-destructive">{uploadProgress.errorMessage}</p> : null}
+				</div>
+			) : null}
 			<LessonGeneralBlock lesson={state.lesson} updateLesson={updateLesson} />
 			<LessonContentBlock lesson={state.lesson} updateLesson={updateLesson} videoHolder={state.videoHolder} updateVideoHolder={updateVideoHolder} />
 		</ResponsiveMenu>

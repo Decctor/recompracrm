@@ -1,10 +1,13 @@
 "use client";
 
 import ResponsiveMenu from "@/components/Utils/ResponsiveMenu";
+import { Progress } from "@/components/ui/progress";
 import { getErrorMessage } from "@/lib/errors";
-import { createCommunityLesson, requestMuxUploadUrl } from "@/lib/mutations/community-admin";
+import { createCommunityLesson } from "@/lib/mutations/community-admin";
+import { type TMuxUploadStatus, uploadMuxVideoWithProgress } from "@/lib/uploads/mux-upload-with-progress";
 import { useInternalCommunityCourseLessonState } from "@/state-hooks/use-internal-community-course-lesson-state";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { toast } from "sonner";
 import LessonContentBlock from "./Blocks/Content";
 import LessonGeneralBlock from "./Blocks/General";
@@ -25,6 +28,13 @@ type TCreateCommunityLessonPayload = Parameters<typeof createCommunityLesson>[0]
 export default function NewCommunityCourseLesson({ sectionId, closeModal, callbacks }: NewCommunityCourseLessonProps) {
 	const queryClient = useQueryClient();
 	const { state, updateLesson, updateVideoHolder, resetState } = useInternalCommunityCourseLessonState();
+	const [uploadProgress, setUploadProgress] = useState({
+		status: "idle" as TMuxUploadStatus,
+		loadedBytes: 0,
+		totalBytes: 0,
+		progressPercent: 0,
+		errorMessage: null as string | null,
+	});
 
 	const showVideoUpload = state.lesson.tipoConteudo === "VIDEO" || state.lesson.tipoConteudo === "VIDEO_TEXTO";
 	const showTextContent = state.lesson.tipoConteudo === "TEXTO" || state.lesson.tipoConteudo === "VIDEO_TEXTO";
@@ -42,24 +52,6 @@ export default function NewCommunityCourseLesson({ sectionId, closeModal, callba
 		};
 	}
 
-	async function uploadLessonVideo(file: File) {
-		const { data } = await requestMuxUploadUrl();
-		await new Promise<void>((resolve, reject) => {
-			const xhr = new XMLHttpRequest();
-
-			xhr.addEventListener("load", () => {
-				if (xhr.status >= 200 && xhr.status < 300) return resolve();
-				return reject(new Error("Falha ao enviar vídeo para o Mux."));
-			});
-
-			xhr.addEventListener("error", () => reject(new Error("Erro de rede ao enviar vídeo para o Mux.")));
-			xhr.open("PUT", data.uploadUrl);
-			xhr.send(file);
-		});
-
-		return data.uploadId;
-	}
-
 	const { mutate: handleCreateLessonMutation, isPending } = useMutation({
 		mutationKey: ["create-community-lesson"],
 		mutationFn: async () => {
@@ -67,10 +59,40 @@ export default function NewCommunityCourseLesson({ sectionId, closeModal, callba
 			if (!normalizedPayload.titulo) throw new Error("Informe o título da aula.");
 			if (showVideoUpload && !state.videoHolder.file) throw new Error("Selecione um vídeo para esta aula.");
 
+			setUploadProgress({
+				status: "idle",
+				loadedBytes: 0,
+				totalBytes: state.videoHolder.file?.size ?? 0,
+				progressPercent: 0,
+				errorMessage: null,
+			});
+
 			if (showVideoUpload && state.videoHolder.file) {
-				const muxUploadId = await uploadLessonVideo(state.videoHolder.file);
-				normalizedPayload.muxUploadId = muxUploadId;
-				normalizedPayload.muxAssetStatus = "AGUARDANDO";
+				try {
+					const muxUploadId = await uploadMuxVideoWithProgress({
+						file: state.videoHolder.file,
+						onStatusChange: (status) => {
+							setUploadProgress((prevState) => ({ ...prevState, status }));
+						},
+						onProgress: ({ loadedBytes, totalBytes, progressPercent }) => {
+							setUploadProgress((prevState) => ({
+								...prevState,
+								loadedBytes,
+								totalBytes,
+								progressPercent,
+							}));
+						},
+					});
+					normalizedPayload.muxUploadId = muxUploadId;
+					normalizedPayload.muxAssetStatus = "AGUARDANDO";
+				} catch (error) {
+					setUploadProgress((prevState) => ({
+						...prevState,
+						status: "error",
+						errorMessage: getErrorMessage(error),
+					}));
+					throw error;
+				}
 			}
 
 			return await createCommunityLesson({ communityLesson: normalizedPayload });
@@ -84,6 +106,13 @@ export default function NewCommunityCourseLesson({ sectionId, closeModal, callba
 			toast.success(data.message);
 			resetState();
 			queryClient.invalidateQueries({ queryKey: ["admin-community-courses"] });
+			setUploadProgress({
+				status: "idle",
+				loadedBytes: 0,
+				totalBytes: 0,
+				progressPercent: 0,
+				errorMessage: null,
+			});
 			return closeModal();
 		},
 		onError: async (error) => {
@@ -96,6 +125,14 @@ export default function NewCommunityCourseLesson({ sectionId, closeModal, callba
 		},
 	});
 
+	const uploadStatusLabelByStatus: Record<TMuxUploadStatus, string> = {
+		idle: "Aguardando envio.",
+		preparing: "Preparando upload...",
+		uploading: "Enviando vídeo...",
+		success: "Upload concluído.",
+		error: "Falha no upload.",
+	};
+
 	return (
 		<ResponsiveMenu
 			menuTitle="NOVA AULA"
@@ -107,7 +144,18 @@ export default function NewCommunityCourseLesson({ sectionId, closeModal, callba
 			stateIsLoading={false}
 			stateError={null}
 			closeMenu={closeModal}
+			lockClose={isPending}
 		>
+			{showVideoUpload && (uploadProgress.status !== "idle" || uploadProgress.errorMessage) ? (
+				<div className="flex w-full flex-col gap-1 rounded-md border border-primary/20 bg-primary/5 p-2">
+					<p className="text-xs font-medium">{uploadStatusLabelByStatus[uploadProgress.status]}</p>
+					<Progress value={uploadProgress.progressPercent} className="h-2 w-full" />
+					<p className="text-[0.7rem] text-muted-foreground">
+						{uploadProgress.progressPercent}% ({uploadProgress.loadedBytes} / {uploadProgress.totalBytes} bytes)
+					</p>
+					{uploadProgress.errorMessage ? <p className="text-[0.7rem] text-destructive">{uploadProgress.errorMessage}</p> : null}
+				</div>
+			) : null}
 			<LessonGeneralBlock lesson={state.lesson} updateLesson={updateLesson} />
 			<LessonContentBlock lesson={state.lesson} updateLesson={updateLesson} videoHolder={state.videoHolder} updateVideoHolder={updateVideoHolder} />
 		</ResponsiveMenu>

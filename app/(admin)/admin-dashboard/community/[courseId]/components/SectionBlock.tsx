@@ -11,6 +11,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import LessonBlock from "./LessonBlock";
 import NewCommunityCourseLesson from "@/components/Modals/Internal/Courses/Lessons/NewCommunityCourseLesson";
+import ControlCommunityCourseLesson from "@/components/Modals/Internal/Courses/Lessons/ControlCommunityCourseLesson";
 
 type Section = TGetCommunityCoursesOutputById["secoes"][number];
 
@@ -39,7 +40,7 @@ export default function SectionBlock({ section, index, totalSections, onMoveUp, 
 	const [isExpanded, setIsExpanded] = useState(true);
 	const [controlSectionMenuIsOpen, setControlSectionMenuIsOpen] = useState(false);
 	const [newLessonMenuIsOpen, setNewLessonMenuIsOpen] = useState(false);
-
+	const [editLessonId, setEditLessonId] = useState<string | null>(null);
 	const { mutate: handleDelete, isPending: isDeleting } = useMutation({
 		mutationFn: () => deleteCommunityCourseSection(section.id),
 		onMutate: () => {
@@ -181,7 +182,7 @@ export default function SectionBlock({ section, index, totalSections, onMoveUp, 
 									totalLessons={section.aulas.length}
 									onMoveUp={() => moveLessonUp(lessonIndex)}
 									onMoveDown={() => moveLessonDown(lessonIndex)}
-									onEdit={() => setControlSectionMenuIsOpen(true)}
+									onEdit={() => setEditLessonId(lesson.id)}
 								/>
 							))}
 						</div>
@@ -189,7 +190,7 @@ export default function SectionBlock({ section, index, totalSections, onMoveUp, 
 						<div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
 							<button
 								type="button"
-								onClick={() => setControlSectionMenuIsOpen(true)}
+								onClick={() => setNewLessonMenuIsOpen(true)}
 								className="bg-primary text-primary-foreground flex w-full flex-col gap-2 rounded-xl border border-dashed p-3 text-left shadow-2xs transition-colors"
 							>
 								<div className="relative aspect-video w-full overflow-hidden rounded-lg border border-dashed border-primary/20 bg-primary/5">
@@ -239,6 +240,15 @@ export default function SectionBlock({ section, index, totalSections, onMoveUp, 
 					callbacks={lessonsCallbacks}
 				/>
 			)}
+			{
+				editLessonId && (
+					<ControlCommunityCourseLesson
+						lessonId={editLessonId}
+						closeModal={() => setEditLessonId(null)}
+						callbacks={lessonsCallbacks}
+					/>
+				)
+			}
 		</div>
 	);
 }

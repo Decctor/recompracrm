@@ -9,9 +9,12 @@ import LessonGeneralBlock from "@/components/Modals/Internal/Courses/Lessons/Blo
 import ResponsiveMenu from "@/components/Utils/ResponsiveMenu";
 import ResponsiveMenuSection from "@/components/Utils/ResponsiveMenuSection";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import { getErrorMessage } from "@/lib/errors";
-import { requestMuxUploadUrl, updateCommunityCourseSection } from "@/lib/mutations/community-admin";
+import { updateCommunityCourseSection } from "@/lib/mutations/community-admin";
 import { useAdminCommunityCourseSectionById } from "@/lib/queries/community-admin";
+import { type TMuxUploadStatus, uploadMuxVideoWithProgress } from "@/lib/uploads/mux-upload-with-progress";
+import { runLimitedUploads } from "@/lib/uploads/run-limited-uploads";
 import { useInternalCommunityCourseLessonState } from "@/state-hooks/use-internal-community-course-lesson-state";
 import {
 	type TUseInternalCommunityCourseSectionState,
@@ -35,6 +38,14 @@ type ControlCommunityCourseSectionProps = {
 };
 
 type TSectionLessonState = ReturnType<typeof useInternalCommunityCourseSectionState>["state"]["communityCourseSectionLessons"][number];
+type TLessonUploadProgress = {
+	status: TMuxUploadStatus;
+	loadedBytes: number;
+	totalBytes: number;
+	progressPercent: number;
+	errorMessage: string | null;
+	fileName: string | null;
+};
 
 export default function ControlCommunityCourseSection({ sectionId, closeModal, callbacks }: ControlCommunityCourseSectionProps) {
 	const queryClient = useQueryClient();
@@ -51,6 +62,14 @@ export default function ControlCommunityCourseSection({ sectionId, closeModal, c
 
 	const [newLessonMenuIsOpen, setNewLessonMenuIsOpen] = useState(false);
 	const [editingLessonIndex, setEditingLessonIndex] = useState<number | null>(null);
+	const [uploadByLessonKey, setUploadByLessonKey] = useState<Record<string, TLessonUploadProgress>>({});
+	const [overallUploadProgress, setOverallUploadProgress] = useState({
+		loadedBytes: 0,
+		totalBytes: 0,
+		progressPercent: 0,
+		completedItems: 0,
+		totalItems: 0,
+	});
 	const editingLesson = useMemo(
 		() => (editingLessonIndex == null ? null : (state.communityCourseSectionLessons[editingLessonIndex] ?? null)),
 		[editingLessonIndex, state.communityCourseSectionLessons],
@@ -88,19 +107,8 @@ export default function ControlCommunityCourseSection({ sectionId, closeModal, c
 		}
 	}, [redefineState, section]);
 
-	async function uploadLessonVideo(file: File) {
-		const { data } = await requestMuxUploadUrl();
-		await new Promise<void>((resolve, reject) => {
-			const xhr = new XMLHttpRequest();
-			xhr.addEventListener("load", () => {
-				if (xhr.status >= 200 && xhr.status < 300) return resolve();
-				return reject(new Error("Falha ao enviar vídeo para o Mux."));
-			});
-			xhr.addEventListener("error", () => reject(new Error("Erro de rede ao enviar vídeo para o Mux.")));
-			xhr.open("PUT", data.uploadUrl);
-			xhr.send(file);
-		});
-		return data.uploadId;
+	function getLessonUploadKey(lesson: TSectionLessonState, index: number) {
+		return lesson.id ?? `new-${index.toString()}`;
 	}
 
 	const { mutate: handleUpdateSectionMutation, isPending } = useMutation({
@@ -142,19 +150,121 @@ export default function ControlCommunityCourseSection({ sectionId, closeModal, c
 		if (!sectionTitle) throw new Error("Informe o título da seção.");
 
 		const lessonsToSubmit = info.communityCourseSectionLessons.filter((lesson) => !(lesson.deletar && !lesson.id));
-		const communityCourseSectionLessons: TUpdateCommunityCourseSectionInput["communityCourseSectionLessons"] = await Promise.all(
-			lessonsToSubmit.map(async (lesson, lessonIndex) => {
+		for (const [lessonIndex, lesson] of lessonsToSubmit.entries()) {
+			const showVideoUpload = lesson.tipoConteudo === "VIDEO" || lesson.tipoConteudo === "VIDEO_TEXTO";
+			const hasExistingVideo = !!lesson.muxAssetId;
+			const hasNewVideoFile = !!lesson.videoHolder.file;
+			if (!lesson.deletar) {
+				if (!lesson.titulo.trim()) throw new Error(`Informe o título da aula ${lessonIndex + 1}.`);
+				if (showVideoUpload && !hasExistingVideo && !hasNewVideoFile) throw new Error(`Selecione um vídeo para a aula "${lesson.titulo}".`);
+			}
+		}
+
+		const uploadLessons = lessonsToSubmit
+			.map((lesson, index) => ({ lesson, index }))
+			.filter(({ lesson }) => !!lesson.videoHolder.file);
+
+		const uploadMetricsByKey: Record<string, Pick<TLessonUploadProgress, "status" | "loadedBytes" | "totalBytes">> = {};
+		for (const { lesson, index } of uploadLessons) {
+			const key = getLessonUploadKey(lesson, index);
+			uploadMetricsByKey[key] = {
+				status: "idle",
+				loadedBytes: 0,
+				totalBytes: lesson.videoHolder.file?.size ?? 0,
+			};
+		}
+
+		setUploadByLessonKey(
+			Object.fromEntries(
+				uploadLessons.map(({ lesson, index }) => [
+					getLessonUploadKey(lesson, index),
+					{
+						status: "idle",
+						loadedBytes: 0,
+						totalBytes: lesson.videoHolder.file?.size ?? 0,
+						progressPercent: 0,
+						errorMessage: null,
+						fileName: lesson.videoHolder.fileName ?? lesson.videoHolder.file?.name ?? null,
+					} as TLessonUploadProgress,
+				]),
+			),
+		);
+		setOverallUploadProgress({
+			loadedBytes: 0,
+			totalBytes: uploadLessons.reduce((acc, item) => acc + (item.lesson.videoHolder.file?.size ?? 0), 0),
+			progressPercent: 0,
+			completedItems: 0,
+			totalItems: uploadLessons.length,
+		});
+
+		function updateOverallProgress() {
+			const values = Object.values(uploadMetricsByKey);
+			const loadedBytes = values.reduce((acc, item) => acc + item.loadedBytes, 0);
+			const totalBytes = values.reduce((acc, item) => acc + item.totalBytes, 0);
+			const completedItems = values.filter((item) => item.status === "success").length;
+			setOverallUploadProgress({
+				loadedBytes,
+				totalBytes,
+				progressPercent: totalBytes > 0 ? Math.round((loadedBytes / totalBytes) * 100) : 0,
+				completedItems,
+				totalItems: values.length,
+			});
+		}
+
+		const muxUploadIdByKey = new Map<string, string>();
+		await runLimitedUploads({
+			items: uploadLessons,
+			limit: 3,
+			task: async ({ lesson, index }) => {
+				const file = lesson.videoHolder.file;
+				if (!file) return;
+				const key = getLessonUploadKey(lesson, index);
+				try {
+					const muxUploadId = await uploadMuxVideoWithProgress({
+						file,
+						onStatusChange: (status) => {
+							uploadMetricsByKey[key] = { ...uploadMetricsByKey[key], status };
+							updateOverallProgress();
+							setUploadByLessonKey((prevState) => ({
+								...prevState,
+								[key]: { ...prevState[key], status, errorMessage: status === "error" ? prevState[key]?.errorMessage : null },
+							}));
+						},
+						onProgress: ({ loadedBytes, totalBytes, progressPercent }) => {
+							uploadMetricsByKey[key] = { ...uploadMetricsByKey[key], loadedBytes, totalBytes };
+							updateOverallProgress();
+							setUploadByLessonKey((prevState) => ({
+								...prevState,
+								[key]: {
+									...prevState[key],
+									loadedBytes,
+									totalBytes,
+									progressPercent,
+								},
+							}));
+						},
+					});
+					muxUploadIdByKey.set(key, muxUploadId);
+				} catch (uploadError) {
+					setUploadByLessonKey((prevState) => ({
+						...prevState,
+						[key]: {
+							...prevState[key],
+							status: "error",
+							errorMessage: getErrorMessage(uploadError),
+						},
+					}));
+					throw uploadError;
+				}
+			},
+		});
+
+		const communityCourseSectionLessons: TUpdateCommunityCourseSectionInput["communityCourseSectionLessons"] = lessonsToSubmit.map(
+			(lesson, lessonIndex) => {
 				const showVideoUpload = lesson.tipoConteudo === "VIDEO" || lesson.tipoConteudo === "VIDEO_TEXTO";
 				const showTextContent = lesson.tipoConteudo === "TEXTO" || lesson.tipoConteudo === "VIDEO_TEXTO";
-				const hasExistingVideo = !!lesson.muxAssetId;
-				const hasNewVideoFile = !!lesson.videoHolder.file;
 
-				if (!lesson.deletar) {
-					if (!lesson.titulo.trim()) throw new Error(`Informe o título da aula ${lessonIndex + 1}.`);
-					if (showVideoUpload && !hasExistingVideo && !hasNewVideoFile) throw new Error(`Selecione um vídeo para a aula "${lesson.titulo}".`);
-				}
-
-				const muxUploadId = hasNewVideoFile ? await uploadLessonVideo(lesson.videoHolder.file as File) : null;
+				const muxUploadId = muxUploadIdByKey.get(getLessonUploadKey(lesson, lessonIndex)) ?? null;
 
 				return {
 					id: lesson.id,
@@ -172,7 +282,7 @@ export default function ControlCommunityCourseSection({ sectionId, closeModal, c
 					muxMetadata: lesson.muxMetadata ?? {},
 					dataInsercao: lesson.dataInsercao,
 				};
-			}),
+			},
 		);
 
 		return await updateCommunityCourseSection({
@@ -197,6 +307,7 @@ export default function ControlCommunityCourseSection({ sectionId, closeModal, c
 			stateIsLoading={isLoading}
 			stateError={error ? getErrorMessage(error) : null}
 			closeMenu={closeModal}
+			lockClose={isPending}
 		>
 			<ResponsiveMenuSection title="SEÇÃO" icon={<ListIcon className="h-4 w-4 min-h-4 min-w-4" />}>
 				<TextInput
@@ -214,8 +325,17 @@ export default function ControlCommunityCourseSection({ sectionId, closeModal, c
 			</ResponsiveMenuSection>
 
 			<ResponsiveMenuSection title="AULAS DA SEÇÃO" icon={<FilePlus2 className="h-4 w-4 min-h-4 min-w-4" />}>
+				{overallUploadProgress.totalItems > 0 ? (
+					<div className="flex w-full flex-col gap-1 rounded-md border border-primary/20 bg-primary/5 p-2">
+						<p className="text-xs font-medium">Progresso geral de upload</p>
+						<Progress value={overallUploadProgress.progressPercent} className="h-2 w-full" />
+						<p className="text-[0.7rem] text-muted-foreground">
+							{overallUploadProgress.progressPercent}% ({overallUploadProgress.completedItems}/{overallUploadProgress.totalItems} concluídos)
+						</p>
+					</div>
+				) : null}
 				<div className="w-full flex items-center justify-end">
-					<Button variant="ghost" size="xs" className="flex items-center gap-1" onClick={() => setNewLessonMenuIsOpen(true)}>
+					<Button variant="ghost" size="xs" className="flex items-center gap-1" onClick={() => setNewLessonMenuIsOpen(true)} disabled={isPending}>
 						<Plus className="w-4 h-4 min-w-4 min-h-4" />
 						ADICIONAR AULA
 					</Button>
@@ -227,6 +347,8 @@ export default function ControlCommunityCourseSection({ sectionId, closeModal, c
 								<SectionLessonCard
 									key={`${lesson.id ?? "new"}-${index.toString()}`}
 									lesson={lesson}
+									uploadProgress={uploadByLessonKey[getLessonUploadKey(lesson, index)]}
+									disableActions={isPending}
 									handleRemoveClick={() => removeCommunityCourseSectionLesson(index)}
 									handleEditClick={() => setEditingLessonIndex(index)}
 								/>
@@ -270,12 +392,21 @@ export default function ControlCommunityCourseSection({ sectionId, closeModal, c
 
 type SectionLessonCardProps = {
 	lesson: TSectionLessonState;
+	uploadProgress?: TLessonUploadProgress;
+	disableActions: boolean;
 	handleRemoveClick: () => void;
 	handleEditClick: () => void;
 };
 
-function SectionLessonCard({ lesson, handleRemoveClick, handleEditClick }: SectionLessonCardProps) {
+function SectionLessonCard({ lesson, uploadProgress, disableActions, handleRemoveClick, handleEditClick }: SectionLessonCardProps) {
 	const contentTypeLabel = LessonContentTypeOptions.find((option) => option.value === lesson.tipoConteudo)?.label ?? lesson.tipoConteudo;
+	const uploadStatusLabelByStatus: Record<TMuxUploadStatus, string> = {
+		idle: "Aguardando envio.",
+		preparing: "Preparando upload...",
+		uploading: "Enviando vídeo...",
+		success: "Upload concluído.",
+		error: "Falha no upload.",
+	};
 	return (
 		<div className="w-full flex flex-col gap-1.5 bg-card border-primary/20 rounded-xl border p-2 shadow-2xs">
 			<div className="w-full flex items-center justify-between gap-2">
@@ -283,16 +414,27 @@ function SectionLessonCard({ lesson, handleRemoveClick, handleEditClick }: Secti
 				<p className="text-[0.65rem] rounded-md bg-primary/10 px-2 py-0.5">{contentTypeLabel}</p>
 			</div>
 			<p className="text-xs text-muted-foreground">{lesson.descricao || "Nenhuma descrição definida..."}</p>
+			{uploadProgress && (uploadProgress.status !== "idle" || uploadProgress.errorMessage) ? (
+				<div className="flex w-full flex-col gap-1 rounded-md border border-primary/20 bg-primary/5 p-2">
+					<p className="text-[0.7rem] font-medium">{uploadStatusLabelByStatus[uploadProgress.status]}</p>
+					<Progress value={uploadProgress.progressPercent} className="h-1.5 w-full" />
+					<p className="text-[0.65rem] text-muted-foreground">
+						{uploadProgress.progressPercent}% ({uploadProgress.loadedBytes} / {uploadProgress.totalBytes} bytes)
+					</p>
+					{uploadProgress.errorMessage ? <p className="text-[0.65rem] text-destructive">{uploadProgress.errorMessage}</p> : null}
+				</div>
+			) : null}
 			<div className="w-full flex items-center justify-end gap-2 flex-wrap">
 				<Button
 					variant="ghost"
 					className="flex items-center gap-1.5 p-2 rounded-full hover:bg-destructive/10 hover:text-destructive duration-300 ease-in-out"
 					size="fit"
 					onClick={handleRemoveClick}
+					disabled={disableActions}
 				>
 					<Trash2 className="w-3 min-w-3 h-3 min-h-3" />
 				</Button>
-				<Button variant="ghost" className="flex items-center gap-1.5 p-2 rounded-full" size="fit" onClick={handleEditClick}>
+				<Button variant="ghost" className="flex items-center gap-1.5 p-2 rounded-full" size="fit" onClick={handleEditClick} disabled={disableActions}>
 					<PencilIcon className="w-3 min-w-3 h-3 min-h-3" />
 				</Button>
 			</div>
