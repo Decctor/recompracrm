@@ -75,3 +75,42 @@ export const CommunityLessonContentTypeEnum = z.enum(["VIDEO", "TEXTO", "VIDEO_T
 export type TCommunityLessonContentTypeEnum = z.infer<typeof CommunityLessonContentTypeEnum>;
 export const CommunityMuxAssetStatusEnum = z.enum(["AGUARDANDO", "PROCESSANDO", "PRONTO", "ERRO"]);
 export type TCommunityMuxAssetStatusEnum = z.infer<typeof CommunityMuxAssetStatusEnum>;
+
+export const CommunityAssetTypeEnum = z.enum(["VIDEO", "IMAGE", "DOCUMENT", "AUDIO", "TEXT"]);
+export type TCommunityAssetTypeEnum = z.infer<typeof CommunityAssetTypeEnum>;
+export const CommunityAssetPipelineStatusEnum = z.enum([
+	"PENDENTE",
+	"EXTRAINDO",
+	"EM_REVISAO",
+	"AGUARDANDO_AJUSTE",
+	"ANALISANDO",
+	"DERIVANDO",
+	"CONCLUIDO",
+	"REJEITADO",
+	"ERRO",
+]);
+export type TCommunityAssetPipelineStatusEnum = z.infer<typeof CommunityAssetPipelineStatusEnum>;
+export const CommunityAssetReviewVerdictEnum = z.enum(["APROVADO", "NECESSITA_AJUSTE", "REJEITADO"]);
+export type TCommunityAssetReviewVerdictEnum = z.infer<typeof CommunityAssetReviewVerdictEnum>;
+export const CommunityAssetDerivationStatusEnum = z.enum(["SUGERIDO", "APROVADO", "GERANDO", "GERADO", "DESCARTADO"]);
+export type TCommunityAssetDerivationStatusEnum = z.infer<typeof CommunityAssetDerivationStatusEnum>;
+export const CommunityAssetDerivationTypeEnum = z.enum([
+	"POST_INSTAGRAM",
+	"POST_TWITTER",
+	"POST_LINKEDIN",
+	"VIDEO_CURTO",
+	"ARTIGO_BLOG",
+	"EBOOK",
+	"PLAYBOOK",
+	"NEWSLETTER",
+	"CARROSSEL",
+	"THUMBNAIL",
+	"TRANSCRICAO",
+]);
+export type TCommunityAssetDerivationTypeEnum = z.infer<typeof CommunityAssetDerivationTypeEnum>;
+export const CommunityMaterialTypeEnum = z.enum(["EBOOK", "PLAYBOOK", "PLANILHA", "TEMPLATE", "GUIA", "CHECKLIST", "INFOGRAFICO", "DOCUMENTO"]);
+export type TCommunityMaterialTypeEnum = z.infer<typeof CommunityMaterialTypeEnum>;
+export const CommunityTutorialNivelEnum = z.enum(["INICIANTE", "INTERMEDIARIO", "AVANCADO"]);
+export type TCommunityTutorialNivelEnum = z.infer<typeof CommunityTutorialNivelEnum>;
+export const CommunityContentStatusEnum = z.enum(["RASCUNHO", "PUBLICADO", "ARQUIVADO"]);
+export type TCommunityContentStatusEnum = z.infer<typeof CommunityContentStatusEnum>;

@@ -76,3 +76,56 @@ export const communityCourseStatusEnum = pgEnum("community_course_status", ["RAS
 export const communityLessonContentTypeEnum = pgEnum("community_lesson_content_type", ["VIDEO", "TEXTO", "VIDEO_TEXTO"]);
 
 export const communityMuxAssetStatusEnum = pgEnum("community_mux_asset_status", ["AGUARDANDO", "PROCESSANDO", "PRONTO", "ERRO"]);
+
+export const communityAssetTypeEnum = pgEnum("community_asset_type", ["VIDEO", "IMAGE", "DOCUMENT", "AUDIO", "TEXT"]);
+
+export const communityAssetPipelineStatusEnum = pgEnum("community_asset_pipeline_status", [
+	"PENDENTE",
+	"EXTRAINDO",
+	"EM_REVISAO",
+	"AGUARDANDO_AJUSTE",
+	"ANALISANDO",
+	"DERIVANDO",
+	"CONCLUIDO",
+	"REJEITADO",
+	"ERRO",
+]);
+
+export const communityAssetReviewVerdictEnum = pgEnum("community_asset_review_verdict", ["APROVADO", "NECESSITA_AJUSTE", "REJEITADO"]);
+
+export const communityAssetDerivationStatusEnum = pgEnum("community_asset_derivation_status", [
+	"SUGERIDO",
+	"APROVADO",
+	"GERANDO",
+	"GERADO",
+	"DESCARTADO",
+]);
+
+export const communityAssetDerivationTypeEnum = pgEnum("community_asset_derivation_type", [
+	"POST_INSTAGRAM",
+	"POST_TWITTER",
+	"POST_LINKEDIN",
+	"VIDEO_CURTO",
+	"ARTIGO_BLOG",
+	"EBOOK",
+	"PLAYBOOK",
+	"NEWSLETTER",
+	"CARROSSEL",
+	"THUMBNAIL",
+	"TRANSCRICAO",
+]);
+
+export const communityMaterialTypeEnum = pgEnum("community_material_type", [
+	"EBOOK",
+	"PLAYBOOK",
+	"PLANILHA",
+	"TEMPLATE",
+	"GUIA",
+	"CHECKLIST",
+	"INFOGRAFICO",
+	"DOCUMENTO",
+]);
+
+export const communityTutorialNivelEnum = pgEnum("community_tutorial_nivel", ["INICIANTE", "INTERMEDIARIO", "AVANCADO"]);
+
+export const communityContentStatusEnum = pgEnum("community_content_status", ["RASCUNHO", "PUBLICADO", "ARQUIVADO"]);

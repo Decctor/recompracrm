@@ -30,12 +30,12 @@ const adminSidebarConfig: TSidebarConfigItem[] = [
 				icon: <SquareKanban className="w-4 h-4" />,
 				items: null,
 			},
-			{
-				title: "Dashboard",
-				url: "/admin-dashboard/crm/dashboard",
-				icon: <ChartBarIcon className="w-4 h-4" />,
-				items: null,
-			},
+			// {
+			// 	title: "Dashboard",
+			// 	url: "/admin-dashboard/crm/dashboard",
+			// 	icon: <ChartBarIcon className="w-4 h-4" />,
+			// 	items: null,
+			// },
 			{
 				title: "Atividades",
 				url: "/admin-dashboard/crm/activities",
