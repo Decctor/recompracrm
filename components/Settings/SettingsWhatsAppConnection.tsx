@@ -34,8 +34,8 @@ export default function SettingsWhatsAppConnection({ user }: SettingsWhatsAppCon
 		<div className="flex h-full grow flex-col">
 			<div className="border-primary/20 flex w-full flex-col items-center justify-between border-b pb-2 lg:flex-row">
 				<div className="flex flex-col">
-					<h1 className="text-lg font-bold">Conexao WhatsApp</h1>
-					<p className="text-sm text-primary/60">Gerencie a conexao do WhatsApp</p>
+					<h1 className="text-lg font-bold">Conexão com o WhatsApp</h1>
+					<p className="text-sm text-primary/60">Gerencie a conexão do WhatsApp</p>
 				</div>
 			</div>
 			{isPending ? <h3 className="text-sm text-primary/60 animate-pulse py-4">Carregando conexao...</h3> : null}
@@ -76,7 +76,7 @@ function WhatsAppConnectionBlockUnconnected({ onSuccess }: WhatsAppConnectionBlo
 
 	return (
 		<div className="flex w-full flex-col gap-4 py-4">
-			<p className="text-sm text-primary/60">Voce ainda nao possui uma conexao WhatsApp configurada.</p>
+			<p className="text-sm text-primary/60">Voce ainda nao possui uma conexão com o WhatsApp configurada.</p>
 
 			<WhatsAppConnectionTypeSelector selectedType={selectedType} onSelectType={setSelectedType} />
 

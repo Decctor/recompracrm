@@ -17,10 +17,10 @@ const HeaderTypeIconsMap = {
 type TemplateHeaderConfigProps = {
 	header: TWhatsappTemplateHeader | null;
 	onHeaderChange: (header: TWhatsappTemplateHeader | null) => void;
-	organizacaoId: string;
+	organizationId: string;
 };
 
-function TemplateHeaderConfig({ header, onHeaderChange, organizacaoId }: TemplateHeaderConfigProps) {
+function TemplateHeaderConfig({ header, onHeaderChange, organizationId }: TemplateHeaderConfigProps) {
 	const handleAddHeader = () => {
 		onHeaderChange({
 			tipo: "text",
@@ -87,7 +87,7 @@ function TemplateHeaderConfig({ header, onHeaderChange, organizacaoId }: Templat
 								currentUrl={header.conteudo || null}
 								onMediaUploaded={(url) => onHeaderChange({ ...header, conteudo: url })}
 								onMediaRemoved={() => onHeaderChange({ ...header, conteudo: "" })}
-								organizacaoId={organizacaoId}
+								organizationId={organizationId}
 							/>
 						)}
 						{header.tipo === "video" && (
@@ -96,7 +96,7 @@ function TemplateHeaderConfig({ header, onHeaderChange, organizacaoId }: Templat
 								currentUrl={header.conteudo || null}
 								onMediaUploaded={(url) => onHeaderChange({ ...header, conteudo: url })}
 								onMediaRemoved={() => onHeaderChange({ ...header, conteudo: "" })}
-								organizacaoId={organizacaoId}
+								organizationId={organizationId}
 							/>
 						)}
 						{header.tipo === "document" && (
@@ -105,7 +105,7 @@ function TemplateHeaderConfig({ header, onHeaderChange, organizacaoId }: Templat
 								currentUrl={header.conteudo || null}
 								onMediaUploaded={(url) => onHeaderChange({ ...header, conteudo: url })}
 								onMediaRemoved={() => onHeaderChange({ ...header, conteudo: "" })}
-								organizacaoId={organizacaoId}
+								organizationId={organizationId}
 							/>
 						)}
 
@@ -138,4 +138,3 @@ function TemplateHeaderConfigText({ header, onHeaderChange }: TemplateHeaderConf
 		/>
 	);
 }
-

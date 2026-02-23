@@ -56,24 +56,22 @@ export function GeneralInfoStage({ state, updateOrganization, updateOrganization
 							handleChange={(value) => updateOrganization({ telefone: formatToPhone(value) })}
 							width="100%"
 						/>
+						<div className="flex items-start gap-1.5">
+							<Checkbox
+								id="terms-consent"
+								checked={state.termsAccepted}
+								onCheckedChange={(checked) => updateOrganizationOnboarding({ termsAccepted: checked === true })}
+								className="mt-0.5"
+							/>
+							<label htmlFor="terms-consent" className="text-sm text-gray-700 leading-relaxed cursor-pointer">
+								Li e concordo com os{" "}
+								<Link href="/legal" target="_blank" className="text-primary font-medium underline hover:text-primary/80 transition-colors">
+									Termos de Uso e Política de Privacidade
+								</Link>{" "}
+								da plataforma RecompraCRM.
+							</label>
+						</div>
 					</div>
-				</div>
-			</ResponsiveMenuSection>
-			<ResponsiveMenuSection title="TERMOS E CONDIÇÕES" icon={<ShieldCheck className="h-4 min-h-4 w-4 min-w-4" />}>
-				<div className="flex items-start gap-1.5">
-					<Checkbox
-						id="terms-consent"
-						checked={state.termsAccepted}
-						onCheckedChange={(checked) => updateOrganizationOnboarding({ termsAccepted: checked === true })}
-						className="mt-0.5"
-					/>
-					<label htmlFor="terms-consent" className="text-sm text-gray-700 leading-relaxed cursor-pointer">
-						Li e concordo com os{" "}
-						<Link href="/legal" target="_blank" className="text-primary font-medium underline hover:text-primary/80 transition-colors">
-							Termos de Uso e Política de Privacidade
-						</Link>{" "}
-						da plataforma RecompraCRM.
-					</label>
 				</div>
 			</ResponsiveMenuSection>
 		</>

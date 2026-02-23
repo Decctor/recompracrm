@@ -1,23 +1,42 @@
 import ResponsiveMenuSection from "@/components/Utils/ResponsiveMenuSection";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { WhatsappTemplateVariables } from "@/lib/whatsapp/template-variables";
+import { type TWhatsappTemplateVariable, VARIABLE_CONTEXT_GROUP_LABELS, WhatsappTemplateVariables, getVariablesForTrigger } from "@/lib/whatsapp/template-variables";
+import type { TCampaignTriggerTypeEnum } from "@/schemas/enums";
 import type { TWhatsappTemplateBodyParameter } from "@/schemas/whatsapp-templates";
 import Mention from "@tiptap/extension-mention";
 import { type Editor, EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { Braces, ChevronDown, FileText, List, ListOrdered } from "lucide-react";
-import { useEffect, useState } from "react";
-import suggestion from "./suggestion";
+import { useEffect, useMemo, useState } from "react";
+import { createSuggestion } from "./suggestion";
 type TemplateBodyEditorProps = {
 	content: string;
 	contentChangeCallback: (content: string) => void;
 	parametros: TWhatsappTemplateBodyParameter[];
 	onParametrosChange: (parametros: TWhatsappTemplateBodyParameter[]) => void;
+	triggerContext?: TCampaignTriggerTypeEnum;
 };
 
-function TemplateBodyEditor({ content, contentChangeCallback, parametros, onParametrosChange }: TemplateBodyEditorProps) {
+function TemplateBodyEditor({ content, contentChangeCallback, parametros, onParametrosChange, triggerContext }: TemplateBodyEditorProps) {
 	const [charCount, setCharCount] = useState(0);
+
+	const availableVariables = useMemo(() => {
+		if (triggerContext) return getVariablesForTrigger(triggerContext);
+		return WhatsappTemplateVariables;
+	}, [triggerContext]);
+
+	const variablesByGroup = useMemo(() => {
+		const groups = new Map<string, TWhatsappTemplateVariable[]>();
+		for (const variable of availableVariables) {
+			const group = groups.get(variable.contexto) ?? [];
+			group.push(variable);
+			groups.set(variable.contexto, group);
+		}
+		return groups;
+	}, [availableVariables]);
+
+	const suggestionConfig = useMemo(() => createSuggestion(availableVariables), [availableVariables]);
 
 	const editor = useEditor({
 		extensions: [
@@ -27,13 +46,12 @@ function TemplateBodyEditor({ content, contentChangeCallback, parametros, onPara
 					class: "mention",
 				},
 				suggestion: {
-					...suggestion,
+					...suggestionConfig,
 					char: "{",
 				},
 				renderLabel({ node }) {
-					// For mention nodes, we'll display them with their identifier
-					// The extraction logic will assign them numeric positions
-					const label = WhatsappTemplateVariables.find((v) => v.value === node.attrs.id)?.label;
+					const label = availableVariables.find((v) => v.value === node.attrs.id)?.label
+						?? WhatsappTemplateVariables.find((v) => v.value === node.attrs.id)?.label;
 					return `{{${label?.toUpperCase()}}}`;
 				},
 			}),
@@ -54,16 +72,17 @@ function TemplateBodyEditor({ content, contentChangeCallback, parametros, onPara
 	// Extract variables from HTML content in the order they appear
 	const extractVariablesFromContent = (editor: Editor) => {
 		const text = editor.getText();
+		const allVariables = WhatsappTemplateVariables;
 		const resolveVariableIdentifier = (rawToken: string) => {
 			const token = rawToken.trim();
 			if (!token) {
 				return null;
 			}
-			const matchByValue = WhatsappTemplateVariables.find((variable) => variable.value.toLowerCase() === token.toLowerCase());
+			const matchByValue = allVariables.find((variable) => variable.value.toLowerCase() === token.toLowerCase());
 			if (matchByValue) {
 				return matchByValue.value;
 			}
-			const matchByLabel = WhatsappTemplateVariables.find((variable) => variable.label.toLowerCase() === token.toLowerCase());
+			const matchByLabel = allVariables.find((variable) => variable.label.toLowerCase() === token.toLowerCase());
 			return matchByLabel?.value ?? null;
 		};
 
@@ -211,7 +230,7 @@ function TemplateBodyEditor({ content, contentChangeCallback, parametros, onPara
 					<DropdownMenuTrigger asChild>
 						<Button type="button" size="sm" variant="secondary" className="gap-1.5">
 							<Braces className="h-3.5 w-3.5" />
-							<span>+ VARIÁVEL</span>
+							<span>+ VARIAVEL</span>
 							<ChevronDown className="h-3.5 w-3.5 opacity-70" />
 						</Button>
 					</DropdownMenuTrigger>
@@ -223,21 +242,28 @@ function TemplateBodyEditor({ content, contentChangeCallback, parametros, onPara
 								</div>
 								<div className="flex flex-col">
 									<span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Variáveis do template</span>
-									<span className="text-xs text-muted-foreground">{WhatsappTemplateVariables.length} disponíveis</span>
+									<span className="text-xs text-muted-foreground">{availableVariables.length} disponíveis</span>
 								</div>
 							</div>
 						</div>
 						<div className="max-h-[300px] overflow-y-auto p-1 [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-transparent">
-						{WhatsappTemplateVariables.map((variable) => (
-							<DropdownMenuItem key={variable.id} onSelect={() => insertNamedVariable(variable.value)} className="items-start rounded-md px-2 py-2">
-								<div className="flex w-full items-start justify-between gap-3">
-									<div className="flex min-w-0 flex-col">
-										<span className="truncate font-medium">{variable.label}</span>
-										<span className="truncate text-xs text-muted-foreground">{`{{${variable.value}}}`}</span>
-									</div>
-									<span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">#{variable.id}</span>
+						{Array.from(variablesByGroup.entries()).map(([groupKey, groupVariables]) => (
+							<div key={groupKey}>
+								<div className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">
+									{VARIABLE_CONTEXT_GROUP_LABELS[groupKey as keyof typeof VARIABLE_CONTEXT_GROUP_LABELS] ?? groupKey}
 								</div>
-							</DropdownMenuItem>
+								{groupVariables.map((variable) => (
+									<DropdownMenuItem key={variable.id} onSelect={() => insertNamedVariable(variable.value)} className="items-start rounded-md px-2 py-2">
+										<div className="flex w-full items-start justify-between gap-3">
+											<div className="flex min-w-0 flex-col">
+												<span className="truncate font-medium">{variable.label}</span>
+												<span className="truncate text-xs text-muted-foreground">{`{{${variable.value}}}`}</span>
+											</div>
+											<span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">#{variable.id}</span>
+										</div>
+									</DropdownMenuItem>
+								))}
+							</div>
 						))}
 						</div>
 						<DropdownMenuSeparator className="my-0" />
@@ -258,7 +284,7 @@ function TemplateBodyEditor({ content, contentChangeCallback, parametros, onPara
 				<div className="border-t border-primary/10 p-3 space-y-3">
 					<h4 className="text-sm font-semibold">Variáveis e Exemplos</h4>
 					{parametros.map((param, index) => {
-						// Find the variable label from WhatsappTemplateVariables
+						// Find the variable label from all variables (not just available ones)
 						const variableInfo = WhatsappTemplateVariables.find((v) => v.value === param.identificador);
 						const displayLabel = variableInfo?.label || param.identificador || "Variável sem identificador";
 
@@ -300,14 +326,14 @@ function TemplateBodyEditor({ content, contentChangeCallback, parametros, onPara
 				.ProseMirror ol {
 					padding-left: 2rem;
 				}
-				
+
 				.mention {
 					background-color: rgba(0, 0, 0, 0.1);
 					border-radius: 0.2rem;
 					padding: 0.1rem 0.3rem;
 					box-decoration-break: clone;
 				}
-				
+
 				/* Dark mode */
 				@media (prefers-color-scheme: dark) {
 					.mention {

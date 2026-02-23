@@ -1,19 +1,21 @@
 import type { TGetWhatsappTemplatesOutputDefault } from "@/app/api/whatsapp-templates/route";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { getErrorMessage } from "@/lib/errors";
+import { formatDateAsLocale } from "@/lib/formatting";
 import { syncWhatsappTemplates } from "@/lib/mutations/whatsapp-templates";
 import { useWhatsappTemplates } from "@/lib/queries/whatsapp-templates";
 import { cn } from "@/lib/utils";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { CircleGauge, Diamond, Phone, Plus, RefreshCw } from "lucide-react";
+import { CircleGauge, Diamond, Pencil, Phone, Plus, RefreshCw } from "lucide-react";
 import { useState } from "react";
+import { BsCalendarPlus } from "react-icons/bs";
 import { toast } from "sonner";
 import ErrorComponent from "../Layouts/ErrorComponent";
 import LoadingComponent from "../Layouts/LoadingComponent";
+import ControlWhatsappTemplate from "../Modals/WhatsappTemplates/ControlWhatsappTemplate";
 import NewWhatsappTemplate from "../Modals/WhatsappTemplates/NewWhatsappTemplate";
 import GeneralPaginationComponent from "../Utils/Pagination";
 import { Button } from "../ui/button";
-
 type SettingsWhatsappTemplatesProps = {
 	user: TAuthUserSession["user"];
 	membership: NonNullable<TAuthUserSession["membership"]>;
@@ -21,7 +23,7 @@ type SettingsWhatsappTemplatesProps = {
 export default function SettingsWhatsappTemplates({ user, membership }: SettingsWhatsappTemplatesProps) {
 	const queryClient = useQueryClient();
 	const [newWhatsappTemplateModalIsOpen, setNewWhatsappTemplateModalIsOpen] = useState(false);
-
+	const [editWhatsappTemplateId, setEditWhatsappTemplateId] = useState<string | null>(null);
 	const {
 		data: whatsappTemplatesResult,
 		queryKey,
@@ -92,7 +94,11 @@ export default function SettingsWhatsappTemplates({ user, membership }: Settings
 				{isSuccess && whatsappTemplates ? (
 					whatsappTemplates.length > 0 ? (
 						whatsappTemplates.map((whatsappTemplate, index: number) => (
-							<WhatsappTemplateCard key={whatsappTemplate.id} whatsappTemplate={whatsappTemplate} />
+							<WhatsappTemplateCard
+								key={whatsappTemplate.id}
+								whatsappTemplate={whatsappTemplate}
+								onEditClick={() => setEditWhatsappTemplateId(whatsappTemplate.id)}
+							/>
 						))
 					) : (
 						<p className="w-full tracking-tight text-center">Nenhum template encontrado.</p>
@@ -101,9 +107,16 @@ export default function SettingsWhatsappTemplates({ user, membership }: Settings
 			</div>
 			{newWhatsappTemplateModalIsOpen ? (
 				<NewWhatsappTemplate
-					user={user}
-					organizacaoId={membership.organizacao.id}
+					organizationId={membership.organizacao.id}
 					closeMenu={() => setNewWhatsappTemplateModalIsOpen(false)}
+					callbacks={{ onMutate: handleOnMutate, onSettled: handleOnSettled }}
+				/>
+			) : null}
+			{editWhatsappTemplateId ? (
+				<ControlWhatsappTemplate
+					whatsappTemplateId={editWhatsappTemplateId}
+					organizationId={membership.organizacao.id}
+					closeMenu={() => setEditWhatsappTemplateId(null)}
 					callbacks={{ onMutate: handleOnMutate, onSettled: handleOnSettled }}
 				/>
 			) : null}
@@ -113,8 +126,9 @@ export default function SettingsWhatsappTemplates({ user, membership }: Settings
 
 type WhatsappTemplateCardProps = {
 	whatsappTemplate: TGetWhatsappTemplatesOutputDefault["whatsappTemplates"][number];
+	onEditClick: () => void;
 };
-function WhatsappTemplateCard({ whatsappTemplate }: WhatsappTemplateCardProps) {
+function WhatsappTemplateCard({ whatsappTemplate, onEditClick }: WhatsappTemplateCardProps) {
 	return (
 		<div className={cn("bg-card border-primary/20 flex w-full flex-col gap-1 rounded-xl border px-3 py-4 shadow-2xs")}>
 			<div className="w-full flex flex-col gap-2">
@@ -156,6 +170,19 @@ function WhatsappTemplateCard({ whatsappTemplate }: WhatsappTemplateCardProps) {
 						<p className="text-xs font-medium text-primary/80">{whatsappTemplate.qualidadeGeral}</p>
 					</div>
 				</div>
+			</div>
+			<div className="w-full flex items-center justify-between gap-2">
+				<div className="flex items-center gap-1">
+					<BsCalendarPlus className="w-4 h-4 min-w-4 min-h-4" />
+					<p className="text-xs font-medium text-primary/80">{formatDateAsLocale(whatsappTemplate.dataInsercao)}</p>
+				</div>
+				{/** GENERAL TEMPLATES ARE NOT EDITABLE (THOSE WITHOUT ORGANIZATION ID) */}
+				{whatsappTemplate.organizacaoId ? (
+					<Button variant="ghost" className="flex items-center gap-1.5" size="sm" onClick={onEditClick}>
+						<Pencil className="w-3 min-w-3 h-3 min-h-3" />
+						EDITAR
+					</Button>
+				) : null}
 			</div>
 		</div>
 	);

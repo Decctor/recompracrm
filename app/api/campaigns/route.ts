@@ -2,7 +2,9 @@ import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { handleSimpleChildRowsProcessing } from "@/lib/db-utils";
+import { validateTemplateForTrigger } from "@/lib/whatsapp/template-variables";
 import { CampaignSchema, CampaignSegmentationSchema } from "@/schemas/campaigns";
+import type { TCampaignTriggerTypeEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
 import { campaignConversions, interactions } from "@/services/drizzle/schema";
 import { campaignSegmentations, campaigns } from "@/services/drizzle/schema/campaigns";
@@ -40,6 +42,25 @@ function validateRecurrentCampaign(campaign: z.infer<typeof CampaignSchema>) {
 	}
 }
 
+async function validateCampaignTemplateTriggerCompatibility(
+	whatsappTemplateId: string | null | undefined,
+	gatilhoTipo: TCampaignTriggerTypeEnum,
+) {
+	if (!whatsappTemplateId) return;
+	const template = await db.query.whatsappTemplates.findFirst({
+		where: (fields, { eq }) => eq(fields.id, whatsappTemplateId),
+		columns: { componentes: true },
+	});
+	if (!template) return;
+	const parametros = template.componentes.corpo.parametros;
+	const validation = validateTemplateForTrigger(parametros, gatilhoTipo);
+	if (!validation.valid) {
+		throw new createHttpError.BadRequest(
+			`O template selecionado contém variáveis incompatíveis com o gatilho escolhido: ${validation.incompatibleVariables.join(", ")}.`,
+		);
+	}
+}
+
 const CreateCampaignInputSchema = z.object({
 	campaign: CampaignSchema.omit({ dataInsercao: true, autorId: true }),
 	segmentations: z.array(CampaignSegmentationSchema.omit({ campanhaId: true })),
@@ -59,6 +80,9 @@ async function createCampaign({ input, session }: { input: TCreateCampaignInput;
 
 	// Validate recurrent campaign settings
 	validateRecurrentCampaign(input.campaign as z.infer<typeof CampaignSchema>);
+
+	// Validate template-trigger compatibility
+	await validateCampaignTemplateTriggerCompatibility(input.campaign.whatsappTemplateId, input.campaign.gatilhoTipo);
 
 	// Validate cashback generation settings
 	if (input.campaign.cashbackGeracaoAtivo) {
@@ -345,6 +369,9 @@ async function updateCampaign({ input, session }: { input: TUpdateCampaignInput;
 
 	// Validate recurrent campaign settings
 	validateRecurrentCampaign(input.campaign as z.infer<typeof CampaignSchema>);
+
+	// Validate template-trigger compatibility
+	await validateCampaignTemplateTriggerCompatibility(input.campaign.whatsappTemplateId, input.campaign.gatilhoTipo);
 
 	// Validate cashback generation settings
 	if (input.campaign.cashbackGeracaoAtivo) {

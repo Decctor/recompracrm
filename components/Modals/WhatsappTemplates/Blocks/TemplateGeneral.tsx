@@ -19,27 +19,14 @@ export default function TemplateGeneral({ template, updateTemplate, whatsappTemp
 				</p>
 			)}
 			<div className="w-full flex items-center gap-2 lg:flex-row">
-				<div className="w-full lg:w-1/2">
-					<TextInput
-						label="NOME DO TEMPLATE"
-						value={template.nome}
-						placeholder="nome_do_template"
-						handleChange={(value) => updateTemplate({ nome: value.toLowerCase().replace(/[^a-z0-9_]/g, "_") })}
-						width="100%"
-						editable={!whatsappTemplateId}
-					/>
-				</div>
-				<div className="w-full lg:w-1/2">
-					<SelectInput
-						label="CATEGORIA"
-						value={template.categoria}
-						options={TemplateCategoryOptions}
-						resetOptionLabel="label"
-						onReset={() => updateTemplate({ categoria: "AUTENTICAÇÃO" })}
-						handleChange={(value) => updateTemplate({ categoria: value as "AUTENTICAÇÃO" | "MARKETING" | "UTILIDADE" })}
-						width="100%"
-					/>
-				</div>
+				<TextInput
+					label="NOME DO TEMPLATE"
+					value={template.nome}
+					placeholder="nome_do_template"
+					handleChange={(value) => updateTemplate({ nome: value.toLowerCase().replace(/[^a-z0-9_]/g, "_") })}
+					width="100%"
+					editable={!whatsappTemplateId}
+				/>
 			</div>
 		</ResponsiveMenuSection>
 	);

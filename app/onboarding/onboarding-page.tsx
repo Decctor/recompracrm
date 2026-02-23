@@ -11,11 +11,11 @@ import { useMutation } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Check } from "lucide-react";
 import { toast } from "sonner";
 import z from "zod";
-import { ActuationStage } from "./components/ActuationStage";
-import { GeneralInfoStage } from "./components/GeneralInfoStage";
-import { NicheOriginStage } from "./components/NicheOriginStage";
-import { OnboardingLayout } from "./components/OnboardingLayout";
-import { SubscriptionPlansStage } from "./components/SubscriptionPlansStage";
+import { ActuationStage } from "./_components/ActuationStage";
+import { GeneralInfoStage } from "./_components/GeneralInfoStage";
+import { NicheOriginStage } from "./_components/NicheOriginStage";
+import { OnboardingLayout } from "./_components/OnboardingLayout";
+import { SubscriptionPlansStage } from "./_components/SubscriptionPlansStage";
 
 type OnboardingPageProps = {
 	user: unknown; // We might need this later, keeping prop signature

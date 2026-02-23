@@ -1,6 +1,7 @@
+import { buildContextVariablesMap } from "@/lib/interactions/process-single-interaction";
 import { sendTemplateWhatsappMessage } from "@/lib/whatsapp";
 import { parseTemplatePayloadToGatewayContent, sendMessage } from "@/lib/whatsapp/internal-gateway";
-import type { TWhatsappTemplateVariables } from "@/lib/whatsapp/template-variables";
+import type { TInteractionContextMetadados, TWhatsappTemplateVariables } from "@/lib/whatsapp/template-variables";
 import { getWhatsappTemplatePayload } from "@/lib/whatsapp/templates";
 import { formatPhoneForInternalGateway } from "@/lib/whatsapp/utils";
 import type { TInteractionsCronJobTimeBlocksEnum } from "@/schemas/enums";
@@ -166,6 +167,8 @@ const processInteractionsHandler: NextApiHandler = async (req, res) => {
 
 					const whatsappTemplate = campaign.whatsappTemplate;
 					if (!whatsappTemplate) continue;
+					const interactionMetadados = (interaction.metadados ?? {}) as TInteractionContextMetadados & Record<string, unknown>;
+					const contextVars = buildContextVariablesMap(interactionMetadados);
 					const whatsappTemplateVariablesValuesMap: Record<keyof TWhatsappTemplateVariables, string> = {
 						clientEmail: interaction.cliente.email ?? "",
 						clientName: interaction.cliente.nome,
@@ -174,6 +177,7 @@ const processInteractionsHandler: NextApiHandler = async (req, res) => {
 						clientFavoriteProduct: "",
 						clientFavoriteProductGroup: "",
 						clientSuggestedProduct: "",
+						...contextVars,
 					};
 
 					const payload = getWhatsappTemplatePayload({
@@ -292,6 +296,7 @@ const processInteractionsHandler: NextApiHandler = async (req, res) => {
 							.set({
 								dataExecucao: new Date(),
 								metadados: {
+									...(interaction.metadados ?? {}),
 									whatsappMessageId: whatsappMessageId,
 									whatsappTemplateId: campaign.whatsappTemplate.id,
 								},

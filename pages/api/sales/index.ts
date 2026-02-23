@@ -776,7 +776,20 @@ const createSaleRoute: NextApiHandler<TCreateSaleOutput> = async (req, res) => {
 						value: campaign.execucaoAgendadaValor,
 					});
 
-					const [insertedInteraction] = await tx
+					const interactionContextMetadados = {
+							cashbackAcumuladoValor: accumulatedBalance,
+							whatsappMensagemId: null,
+							whatsappTemplateId: null,
+							compraValor: input.saleValue,
+							compraCashbackAcumulado: accumulatedBalance,
+							compraCashbackNovoSaldo: newOverallAvailableBalance,
+							compraVendedorNome: "PONTO DE INTERAÇÃO",
+							cashbackSaldoDisponivel: newOverallAvailableBalance,
+							cashbackTotalAcumuladoVida: newOverallAccumulatedBalance,
+							cashbackTotalResgatadoVida: balance.saldoValorResgatadoTotal,
+						};
+
+						const [insertedInteraction] = await tx
 						.insert(interactions)
 						.values({
 							clienteId: input.clientId,
@@ -787,11 +800,7 @@ const createSaleRoute: NextApiHandler<TCreateSaleOutput> = async (req, res) => {
 							descricao: `Cliente acumulou R$ ${(accumulatedBalance / 100).toFixed(2)} em cashback. Total acumulado: R$ ${(newOverallAccumulatedBalance / 100).toFixed(2)}.`,
 							agendamentoDataReferencia: dayjs(interactionScheduleDate).format("YYYY-MM-DD"),
 							agendamentoBlocoReferencia: campaign.execucaoAgendadaBloco,
-							metadados: {
-								cashbackAcumuladoValor: accumulatedBalance,
-								whatsappMensagemId: null,
-								whatsappTemplateId: null,
-							},
+							metadados: interactionContextMetadados,
 						})
 						.returning({ id: interactions.id });
 
@@ -822,6 +831,7 @@ const createSaleRoute: NextApiHandler<TCreateSaleOutput> = async (req, res) => {
 							},
 							whatsappToken: whatsappConnection.token ?? undefined,
 							whatsappSessionId: whatsappConnection.gatewaySessaoId ?? undefined,
+							contextMetadados: interactionContextMetadados,
 						});
 					}
 				}

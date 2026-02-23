@@ -5,6 +5,7 @@ import { DASTJS_TIME_DURATION_UNITS_MAP, getPostponedDateFromReferenceDate } fro
 import { formatPhoneAsBase } from "@/lib/formatting";
 import { type ImmediateProcessingData, processSingleInteractionImmediately } from "@/lib/interactions";
 import { linkPartnerToClient } from "@/lib/partners/link-partner-to-client";
+import type { TInteractionContextMetadados } from "@/lib/whatsapp/template-variables";
 import type { TTimeDurationUnitsEnum } from "@/schemas/enums";
 import { type DBTransaction, db } from "@/services/drizzle";
 import {
@@ -508,6 +509,10 @@ async function handleNewTransaction(req: NextRequest): Promise<NextResponse<TCre
 				clientId: clientId,
 				clientCashbackToAccumulate: clientNewAccumulatedCashbackValue,
 				clientCashbackAvailableBalance: clientCashbackAvailableBalance,
+				saleValue: input.sale.valor,
+				sellerName: operator.nome,
+				clientCashbackAccumulatedBalance: clientCashbackAccumulatedBalance ?? 0,
+				clientCashbackRedeemedBalanceTotal: clientCashbackRedeemedBalanceTotal ?? 0,
 			});
 		}
 
@@ -612,6 +617,11 @@ async function handleNewTransaction(req: NextRequest): Promise<NextResponse<TCre
 					saleValue: input.sale.valor,
 					clientId: clientId,
 					clientRFMTitle: clientRfmTitle,
+					sellerName: operator.nome,
+					transactionAccumulatedCashback: clientNewAccumulatedCashbackValue,
+					clientCashbackAvailableBalance: clientCashbackAvailableBalance ?? 0,
+					clientCashbackAccumulatedBalance: clientCashbackAccumulatedBalance ?? 0,
+					clientCashbackRedeemedBalanceTotal: clientCashbackRedeemedBalanceTotal ?? 0,
 				});
 			const wouldCauseDoubleInteraction = clientIsNew && campaignsForFirstPurchase.length > 0 && campaignsForNewPurchase.length > 0;
 			// Processing NOVA-COMPRA campaign for existing clients or new clients (if no double interaction would occur)
@@ -627,6 +637,11 @@ async function handleNewTransaction(req: NextRequest): Promise<NextResponse<TCre
 					saleValue: input.sale.valor,
 					clientId: clientId,
 					clientRFMTitle: clientRfmTitle,
+					sellerName: operator.nome,
+					transactionAccumulatedCashback: clientNewAccumulatedCashbackValue,
+					clientCashbackAvailableBalance: clientCashbackAvailableBalance ?? 0,
+					clientCashbackAccumulatedBalance: clientCashbackAccumulatedBalance ?? 0,
+					clientCashbackRedeemedBalanceTotal: clientCashbackRedeemedBalanceTotal ?? 0,
 				});
 			// Processing QUANTIDADE-TOTAL-COMPRAS campaigns
 			await handleCampaignProcessingForTotalPurchaseCount({
@@ -641,6 +656,11 @@ async function handleNewTransaction(req: NextRequest): Promise<NextResponse<TCre
 				clientId: clientId,
 				clientRFMTitle: clientRfmTitle,
 				clientNewTotalPurchaseCount: clientCurrentPurchaseCount,
+				sellerName: operator.nome,
+				transactionAccumulatedCashback: clientNewAccumulatedCashbackValue,
+				clientCashbackAvailableBalance: clientCashbackAvailableBalance ?? 0,
+				clientCashbackAccumulatedBalance: clientCashbackAccumulatedBalance ?? 0,
+				clientCashbackRedeemedBalanceTotal: clientCashbackRedeemedBalanceTotal ?? 0,
 			});
 			// Processing VALOR-TOTAL-COMPRAS campaigns
 			await handleCampaignProcessingForTotalPurchaseValue({
@@ -655,6 +675,11 @@ async function handleNewTransaction(req: NextRequest): Promise<NextResponse<TCre
 				clientId: clientId,
 				clientRFMTitle: clientRfmTitle,
 				clientNewTotalPurchaseValue: clientCurrentPurchaseValue,
+				sellerName: operator.nome,
+				transactionAccumulatedCashback: clientNewAccumulatedCashbackValue,
+				clientCashbackAvailableBalance: clientCashbackAvailableBalance ?? 0,
+				clientCashbackAccumulatedBalance: clientCashbackAccumulatedBalance ?? 0,
+				clientCashbackRedeemedBalanceTotal: clientCashbackRedeemedBalanceTotal ?? 0,
 			});
 		}
 
@@ -761,6 +786,11 @@ type THandleCampaignProcessingForNewPurchaseParams = {
 	saleValue: number;
 	clientId: string;
 	clientRFMTitle: string;
+	sellerName: string;
+	transactionAccumulatedCashback: number;
+	clientCashbackAvailableBalance: number;
+	clientCashbackAccumulatedBalance: number;
+	clientCashbackRedeemedBalanceTotal: number;
 };
 
 async function handleCampaignProcessingForNewPurchase({
@@ -774,6 +804,11 @@ async function handleCampaignProcessingForNewPurchase({
 	saleValue,
 	clientId,
 	clientRFMTitle,
+	sellerName,
+	transactionAccumulatedCashback,
+	clientCashbackAvailableBalance,
+	clientCashbackAccumulatedBalance,
+	clientCashbackRedeemedBalanceTotal,
 }: THandleCampaignProcessingForNewPurchaseParams) {
 	if (campaignsForNewPurchase.length === 0) return;
 	const applicableCampaigns = campaignsForNewPurchase.filter((campaign) => {
@@ -815,6 +850,16 @@ async function handleCampaignProcessingForNewPurchase({
 			`[POI] [ORG: ${orgId}] [NOVA-COMPRA] Client data for immediate processing: ${clientData ? `found (telefone: ${clientData.telefone})` : "NOT FOUND"}`,
 		);
 
+		const interactionContextMetadados: TInteractionContextMetadados = {
+			compraValor: saleValue,
+			compraCashbackAcumulado: transactionAccumulatedCashback,
+			compraCashbackNovoSaldo: clientCashbackAvailableBalance,
+			compraVendedorNome: sellerName,
+			cashbackSaldoDisponivel: clientCashbackAvailableBalance,
+			cashbackTotalAcumuladoVida: clientCashbackAccumulatedBalance,
+			cashbackTotalResgatadoVida: clientCashbackRedeemedBalanceTotal,
+		};
+
 		for (const campaign of applicableCampaigns) {
 			console.log(`[POI] [ORG: ${orgId}] [NOVA-COMPRA] Processing campaign "${campaign.titulo}"`);
 
@@ -852,6 +897,7 @@ async function handleCampaignProcessingForNewPurchase({
 					descricao: `Cliente se enquadrou no parâmetro de nova compra ${clientRFMTitle}.`,
 					agendamentoDataReferencia: dayjs(interactionScheduleDate).format("YYYY-MM-DD"),
 					agendamentoBlocoReferencia: campaign.execucaoAgendadaBloco,
+					metadados: interactionContextMetadados,
 				})
 				.returning({ id: interactions.id });
 
@@ -883,6 +929,7 @@ async function handleCampaignProcessingForNewPurchase({
 					},
 					whatsappToken: orgWhatsappConnectionToken ?? undefined,
 					whatsappSessionId: orgWhatsappConnectionGatewaySessionId ?? undefined,
+					contextMetadados: interactionContextMetadados,
 				});
 			} else {
 				console.log(`[POI] [ORG: ${orgId}] [NOVA-COMPRA] NOT adding to immediate processing - conditions not met`);
@@ -921,6 +968,11 @@ type THandleCampaignProcessingForFirstPurchaseParams = {
 	saleValue: number;
 	clientId: string;
 	clientRFMTitle: string;
+	sellerName: string;
+	transactionAccumulatedCashback: number;
+	clientCashbackAvailableBalance: number;
+	clientCashbackAccumulatedBalance: number;
+	clientCashbackRedeemedBalanceTotal: number;
 };
 async function handleCampaignProcessingForFirstPurchase({
 	tx,
@@ -933,6 +985,11 @@ async function handleCampaignProcessingForFirstPurchase({
 	saleValue,
 	clientId,
 	clientRFMTitle,
+	sellerName,
+	transactionAccumulatedCashback,
+	clientCashbackAvailableBalance,
+	clientCashbackAccumulatedBalance,
+	clientCashbackRedeemedBalanceTotal,
 }: THandleCampaignProcessingForFirstPurchaseParams) {
 	if (campaignsForFirstPurchase.length === 0) return;
 	const applicableCampaigns = campaignsForFirstPurchase.filter((campaign) => campaign.segmentacoes.some((s) => s.segmentacao === clientRFMTitle));
@@ -941,6 +998,16 @@ async function handleCampaignProcessingForFirstPurchase({
 
 	if (applicableCampaigns.length > 0) {
 		console.log(`[ORG: ${orgId}] ${applicableCampaigns.length} campanhas de primeira compra aplicáveis encontradas para o cliente ${clientId}.`);
+
+		const interactionContextMetadados: TInteractionContextMetadados = {
+			compraValor: saleValue,
+			compraCashbackAcumulado: transactionAccumulatedCashback,
+			compraCashbackNovoSaldo: clientCashbackAvailableBalance,
+			compraVendedorNome: sellerName,
+			cashbackSaldoDisponivel: clientCashbackAvailableBalance,
+			cashbackTotalAcumuladoVida: clientCashbackAccumulatedBalance,
+			cashbackTotalResgatadoVida: clientCashbackRedeemedBalanceTotal,
+		};
 
 		for (const campaign of applicableCampaigns) {
 			console.log(`[POI] [ORG: ${orgId}] [PRIMEIRA-COMPRA] Processing campaign "${campaign.titulo}"`);
@@ -977,6 +1044,7 @@ async function handleCampaignProcessingForFirstPurchase({
 					descricao: "Cliente realizou sua primeira compra.",
 					agendamentoDataReferencia: dayjs(interactionScheduleDate).format("YYYY-MM-DD"),
 					agendamentoBlocoReferencia: campaign.execucaoAgendadaBloco,
+					metadados: interactionContextMetadados,
 				})
 				.returning({ id: interactions.id });
 
@@ -1023,6 +1091,7 @@ async function handleCampaignProcessingForFirstPurchase({
 					},
 					whatsappToken: orgWhatsappConnectionToken ?? undefined,
 					whatsappSessionId: orgWhatsappConnectionGatewaySessionId ?? undefined,
+					contextMetadados: interactionContextMetadados,
 				});
 			} else {
 				console.log(`[POI] [ORG: ${orgId}] [PRIMEIRA-COMPRA] NOT adding to immediate processing - conditions not met`);
@@ -1058,6 +1127,10 @@ type THandleCampaignProcessingForCashbackAccumulationParams = {
 	clientId: string;
 	clientCashbackToAccumulate: number;
 	clientCashbackAvailableBalance: number;
+	saleValue: number;
+	sellerName: string;
+	clientCashbackAccumulatedBalance: number;
+	clientCashbackRedeemedBalanceTotal: number;
 };
 async function handleCampaignProcessingForCashbackAccumulation({
 	tx,
@@ -1069,6 +1142,10 @@ async function handleCampaignProcessingForCashbackAccumulation({
 	clientId,
 	clientCashbackToAccumulate,
 	clientCashbackAvailableBalance,
+	saleValue,
+	sellerName,
+	clientCashbackAccumulatedBalance,
+	clientCashbackRedeemedBalanceTotal,
 }: THandleCampaignProcessingForCashbackAccumulationParams) {
 	if (cashbackAccumulationCampaigns.length === 0) return;
 	if (clientCashbackToAccumulate <= 0) return;
@@ -1090,6 +1167,16 @@ async function handleCampaignProcessingForCashbackAccumulation({
 	if (applicableCampaigns.length > 0) {
 		console.log(`[ORG: ${orgId}] ${applicableCampaigns.length} campanhas de cashback acumulado aplicáveis encontradas para o cliente.`);
 	}
+
+	const interactionContextMetadados: TInteractionContextMetadados = {
+		compraValor: saleValue,
+		compraCashbackAcumulado: clientCashbackToAccumulate,
+		compraCashbackNovoSaldo: clientCashbackAvailableBalance,
+		compraVendedorNome: sellerName,
+		cashbackSaldoDisponivel: clientCashbackAvailableBalance,
+		cashbackTotalAcumuladoVida: clientCashbackAccumulatedBalance,
+		cashbackTotalResgatadoVida: clientCashbackRedeemedBalanceTotal,
+	};
 
 	// Query client data for immediate processing
 	const clientData = await tx.query.clients.findFirst({
@@ -1137,11 +1224,7 @@ async function handleCampaignProcessingForCashbackAccumulation({
 				descricao: `Cliente acumulou R$ ${(clientCashbackToAccumulate).toFixed(2)} em cashback. Total acumulado: R$ ${(clientCashbackAvailableBalance).toFixed(2)}.`,
 				agendamentoDataReferencia: dayjs(interactionScheduleDate).format("YYYY-MM-DD"),
 				agendamentoBlocoReferencia: campaign.execucaoAgendadaBloco,
-				metadados: {
-					cashbackAcumuladoValor: clientCashbackToAccumulate,
-					whatsappMensagemId: null,
-					whatsappTemplateId: null,
-				},
+				metadados: interactionContextMetadados,
 			})
 			.returning({ id: interactions.id });
 
@@ -1172,6 +1255,7 @@ async function handleCampaignProcessingForCashbackAccumulation({
 				},
 				whatsappToken: orgWhatsappConnectionToken ?? undefined,
 				whatsappSessionId: orgWhatsappConnectionGatewaySessionId ?? undefined,
+				contextMetadados: interactionContextMetadados,
 			});
 		}
 	}
@@ -1189,6 +1273,11 @@ type THandleCampaignProcessingForTotalPurchaseCountParams = {
 	clientId: string;
 	clientRFMTitle: string;
 	clientNewTotalPurchaseCount: number;
+	sellerName: string;
+	transactionAccumulatedCashback: number;
+	clientCashbackAvailableBalance: number;
+	clientCashbackAccumulatedBalance: number;
+	clientCashbackRedeemedBalanceTotal: number;
 };
 async function handleCampaignProcessingForTotalPurchaseCount({
 	tx,
@@ -1202,6 +1291,11 @@ async function handleCampaignProcessingForTotalPurchaseCount({
 	clientId,
 	clientRFMTitle,
 	clientNewTotalPurchaseCount,
+	sellerName,
+	transactionAccumulatedCashback,
+	clientCashbackAvailableBalance,
+	clientCashbackAccumulatedBalance,
+	clientCashbackRedeemedBalanceTotal,
 }: THandleCampaignProcessingForTotalPurchaseCountParams) {
 	if (campaignsForTotalPurchaseCount.length === 0) return;
 	const applicableCampaigns = campaignsForTotalPurchaseCount.filter((campaign) => {
@@ -1232,6 +1326,16 @@ async function handleCampaignProcessingForTotalPurchaseCount({
 				metadataGrupoProdutoMaisComprado: true,
 			},
 		});
+
+		const interactionContextMetadados: TInteractionContextMetadados = {
+			compraValor: saleValue,
+			compraCashbackAcumulado: transactionAccumulatedCashback,
+			compraCashbackNovoSaldo: clientCashbackAvailableBalance,
+			compraVendedorNome: sellerName,
+			cashbackSaldoDisponivel: clientCashbackAvailableBalance,
+			cashbackTotalAcumuladoVida: clientCashbackAccumulatedBalance,
+			cashbackTotalResgatadoVida: clientCashbackRedeemedBalanceTotal,
+		};
 
 		for (const campaign of applicableCampaigns) {
 			const canSchedule = await canScheduleCampaignForClient(
@@ -1265,6 +1369,7 @@ async function handleCampaignProcessingForTotalPurchaseCount({
 					descricao: `Cliente atingiu ${clientNewTotalPurchaseCount} compras totais (gatilho: ${campaign.gatilhoQuantidadeTotalCompras}).`,
 					agendamentoDataReferencia: dayjs(interactionScheduleDate).format("YYYY-MM-DD"),
 					agendamentoBlocoReferencia: campaign.execucaoAgendadaBloco,
+					metadados: interactionContextMetadados,
 				})
 				.returning({ id: interactions.id });
 
@@ -1287,6 +1392,7 @@ async function handleCampaignProcessingForTotalPurchaseCount({
 					},
 					whatsappToken: orgWhatsappConnectionToken ?? undefined,
 					whatsappSessionId: orgWhatsappConnectionGatewaySessionId ?? undefined,
+					contextMetadados: interactionContextMetadados,
 				});
 			}
 
@@ -1321,6 +1427,11 @@ type THandleCampaignProcessingForTotalPurchaseValueParams = {
 	clientId: string;
 	clientRFMTitle: string;
 	clientNewTotalPurchaseValue: number;
+	sellerName: string;
+	transactionAccumulatedCashback: number;
+	clientCashbackAvailableBalance: number;
+	clientCashbackAccumulatedBalance: number;
+	clientCashbackRedeemedBalanceTotal: number;
 };
 
 async function handleCampaignProcessingForTotalPurchaseValue({
@@ -1335,6 +1446,11 @@ async function handleCampaignProcessingForTotalPurchaseValue({
 	clientId,
 	clientRFMTitle,
 	clientNewTotalPurchaseValue,
+	sellerName,
+	transactionAccumulatedCashback,
+	clientCashbackAvailableBalance,
+	clientCashbackAccumulatedBalance,
+	clientCashbackRedeemedBalanceTotal,
 }: THandleCampaignProcessingForTotalPurchaseValueParams) {
 	if (campaignsForTotalPurchaseValue.length === 0) return;
 
@@ -1366,6 +1482,16 @@ async function handleCampaignProcessingForTotalPurchaseValue({
 				metadataGrupoProdutoMaisComprado: true,
 			},
 		});
+
+		const interactionContextMetadados: TInteractionContextMetadados = {
+			compraValor: saleValue,
+			compraCashbackAcumulado: transactionAccumulatedCashback,
+			compraCashbackNovoSaldo: clientCashbackAvailableBalance,
+			compraVendedorNome: sellerName,
+			cashbackSaldoDisponivel: clientCashbackAvailableBalance,
+			cashbackTotalAcumuladoVida: clientCashbackAccumulatedBalance,
+			cashbackTotalResgatadoVida: clientCashbackRedeemedBalanceTotal,
+		};
 
 		for (const campaign of applicableCampaigns) {
 			const canSchedule = await canScheduleCampaignForClient(
@@ -1399,6 +1525,7 @@ async function handleCampaignProcessingForTotalPurchaseValue({
 					descricao: `Cliente atingiu R$ ${clientNewTotalPurchaseValue.toFixed(2)} em compras totais (gatilho: R$ ${campaign.gatilhoValorTotalCompras?.toFixed(2)}).`,
 					agendamentoDataReferencia: dayjs(interactionScheduleDate).format("YYYY-MM-DD"),
 					agendamentoBlocoReferencia: campaign.execucaoAgendadaBloco,
+					metadados: interactionContextMetadados,
 				})
 				.returning({ id: interactions.id });
 
@@ -1421,6 +1548,7 @@ async function handleCampaignProcessingForTotalPurchaseValue({
 					},
 					whatsappToken: orgWhatsappConnectionToken ?? undefined,
 					whatsappSessionId: orgWhatsappConnectionGatewaySessionId ?? undefined,
+					contextMetadados: interactionContextMetadados,
 				});
 			}
 

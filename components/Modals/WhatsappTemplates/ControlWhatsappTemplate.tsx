@@ -1,10 +1,12 @@
 import ResponsiveMenu from "@/components/Utils/ResponsiveMenu";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { getErrorMessage } from "@/lib/errors";
-import { createWhatsappTemplate } from "@/lib/mutations/whatsapp-templates";
-import type { TCampaignTriggerTypeEnum } from "@/schemas/enums";
+import { updateWhatsappTemplate } from "@/lib/mutations/whatsapp-templates";
+import { useWhatsappTemplateById } from "@/lib/queries/whatsapp-templates";
 import { useWhatsappTemplateState } from "@/state-hooks/use-whatsapp-template-state";
+import type { TCampaignTriggerTypeEnum } from "@/schemas/enums";
 import { useMutation } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { toast } from "sonner";
 import TemplateBodyEditor from "./Blocks/TemplateBodyEditor";
 import TemplateButtonsConfig from "./Blocks/TemplateButtonsConfig";
@@ -12,11 +14,12 @@ import TemplateFooterConfig from "./Blocks/TemplateFooterConfig";
 import TemplateGeneral from "./Blocks/TemplateGeneral";
 import TemplateHeaderConfig from "./Blocks/TemplateHeaderConfig";
 import TemplatePreview from "./Blocks/TemplatePreview";
-type NewWhatsappTemplateProps = {
+type ControlWhatsappTemplateProps = {
+	whatsappTemplateId: string;
 	organizationId: string;
 	callbacks?: {
 		onMutate?: () => void;
-		onSuccess?: (data: { templateId?: string }) => void;
+		onSuccess?: () => void;
 		onError?: () => void;
 		onSettled?: () => void;
 	};
@@ -24,20 +27,21 @@ type NewWhatsappTemplateProps = {
 	triggerContext?: TCampaignTriggerTypeEnum;
 };
 
-function NewWhatsappTemplate({ organizationId, closeMenu, callbacks, triggerContext }: NewWhatsappTemplateProps) {
-	const { state, updateTemplate, updateComponents, updateBodyParameters, resetState } = useWhatsappTemplateState({
+function ControlWhatsappTemplate({ whatsappTemplateId, organizationId, closeMenu, callbacks, triggerContext }: ControlWhatsappTemplateProps) {
+	const { state, updateTemplate, updateComponents, updateBodyParameters, resetState, redefineState } = useWhatsappTemplateState({
 		initialState: {},
 	});
 
-	const { mutate: handleCreateWhatsappTemplateMutation, isPending } = useMutation({
-		mutationKey: ["create-whatsapp-template"],
-		mutationFn: createWhatsappTemplate,
+	const { data: whatsappTemplate, queryKey, isLoading, isError, isSuccess, error } = useWhatsappTemplateById({ id: whatsappTemplateId });
+	const { mutate: handleUpdateWhatsappTemplateMutation, isPending } = useMutation({
+		mutationKey: ["update-whatsapp-template"],
+		mutationFn: updateWhatsappTemplate,
 		onMutate: async () => {
 			if (callbacks?.onMutate) callbacks.onMutate();
 			return;
 		},
 		onSuccess: async (data) => {
-			if (callbacks?.onSuccess) callbacks.onSuccess({ templateId: data.data.insertedId });
+			if (callbacks?.onSuccess) callbacks.onSuccess();
 			return toast.success(data.message);
 		},
 		onError: async (error) => {
@@ -49,23 +53,20 @@ function NewWhatsappTemplate({ organizationId, closeMenu, callbacks, triggerCont
 			return;
 		},
 	});
+
+	useEffect(() => {
+		if (whatsappTemplate) redefineState({ whatsappTemplate: whatsappTemplate });
+	}, [whatsappTemplate, redefineState]);
 	return (
 		<ResponsiveMenu
-			menuTitle="NOVO TEMPLATE WHATSAPP"
-			menuDescription="Crie um novo template de mensagem para WhatsApp Business."
-			menuActionButtonText="CRIAR TEMPLATE"
+			menuTitle="EDITAR TEMPLATE WHATSAPP"
+			menuDescription="Edite o template de mensagem para WhatsApp Business."
+			menuActionButtonText="ATUALIZAR TEMPLATE"
 			menuCancelButtonText="CANCELAR"
-			actionFunction={() =>
-				handleCreateWhatsappTemplateMutation({
-					template: {
-						nome: state.whatsappTemplate.nome,
-						categoria: state.whatsappTemplate.categoria,
-						componentes: state.whatsappTemplate.componentes,
-					},
-				})
-			}
+			actionFunction={() => handleUpdateWhatsappTemplateMutation({ whatsappTemplateId: whatsappTemplateId, whatsappTemplate: state.whatsappTemplate })}
 			actionIsLoading={isPending}
-			stateIsLoading={false}
+			stateIsLoading={isLoading}
+			stateError={error ? getErrorMessage(error) : null}
 			closeMenu={closeMenu}
 			dialogVariant="xl"
 		>
@@ -102,4 +103,4 @@ function NewWhatsappTemplate({ organizationId, closeMenu, callbacks, triggerCont
 	);
 }
 
-export default NewWhatsappTemplate;
+export default ControlWhatsappTemplate;

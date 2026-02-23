@@ -645,6 +645,13 @@ async function handleCardapioWebImportation(
 							value: campaign.execucaoAgendadaValor,
 						});
 
+						const firstPurchaseCWMetadados = {
+							compraValor: cardapioWebSale.valorTotal,
+							compraVendedorNome: "CARDAPIO WEB" as string,
+							cashbackSaldoDisponivel: existingCashbackProgramBalancesMap.get(saleClientId)?.saldoValorDisponivel,
+							cashbackTotalAcumuladoVida: existingCashbackProgramBalancesMap.get(saleClientId)?.saldoValorAcumuladoTotal,
+						};
+
 						const [insertedInteraction] = await tx
 							.insert(interactions)
 							.values({
@@ -656,6 +663,7 @@ async function handleCardapioWebImportation(
 								descricao: "Cliente realizou sua primeira compra via CardapioWeb.",
 								agendamentoDataReferencia: dayjs(interactionScheduleDate).format("YYYY-MM-DD"),
 								agendamentoBlocoReferencia: campaign.execucaoAgendadaBloco,
+								metadados: firstPurchaseCWMetadados,
 							})
 							.returning({ id: interactions.id });
 
@@ -684,6 +692,7 @@ async function handleCardapioWebImportation(
 									},
 									whatsappToken: whatsappConnection.token ?? undefined,
 									whatsappSessionId: whatsappConnection.gatewaySessaoId ?? undefined,
+									contextMetadados: firstPurchaseCWMetadados,
 								});
 							}
 						}
@@ -746,6 +755,13 @@ async function handleCardapioWebImportation(
 							value: campaign.execucaoAgendadaValor,
 						});
 
+						const newPurchaseCWMetadados = {
+							compraValor: cardapioWebSale.valorTotal,
+							compraVendedorNome: "CARDAPIO WEB" as string,
+							cashbackSaldoDisponivel: existingCashbackProgramBalancesMap.get(saleClientId)?.saldoValorDisponivel,
+							cashbackTotalAcumuladoVida: existingCashbackProgramBalancesMap.get(saleClientId)?.saldoValorAcumuladoTotal,
+						};
+
 						const [insertedInteraction] = await tx
 							.insert(interactions)
 							.values({
@@ -757,6 +773,7 @@ async function handleCardapioWebImportation(
 								descricao: `Cliente realizou nova compra via CardapioWeb. Segmento: ${clientRfmTitle}.`,
 								agendamentoDataReferencia: dayjs(interactionScheduleDate).format("YYYY-MM-DD"),
 								agendamentoBlocoReferencia: campaign.execucaoAgendadaBloco,
+								metadados: newPurchaseCWMetadados,
 							})
 							.returning({ id: interactions.id });
 
@@ -785,6 +802,7 @@ async function handleCardapioWebImportation(
 									},
 									whatsappToken: whatsappConnection.token ?? undefined,
 									whatsappSessionId: whatsappConnection.gatewaySessaoId ?? undefined,
+									contextMetadados: newPurchaseCWMetadados,
 								});
 							}
 						}
@@ -959,6 +977,15 @@ async function handleCardapioWebImportation(
 									value: campaign.execucaoAgendadaValor,
 								});
 
+								const cashbackAccCWMetadados = {
+									cashbackAcumuladoValor: accumulatedBalance,
+									compraValor: saleValue,
+									compraCashbackAcumulado: accumulatedBalance,
+									compraCashbackNovoSaldo: newAvailable,
+									cashbackSaldoDisponivel: newAvailable,
+									cashbackTotalAcumuladoVida: newAccumulated,
+								};
+
 								const [insertedInteraction] = await tx
 									.insert(interactions)
 									.values({
@@ -970,7 +997,7 @@ async function handleCardapioWebImportation(
 										descricao: `Cliente acumulou R$ ${(accumulatedBalance / 100).toFixed(2)} em cashback via CardapioWeb. Total: R$ ${(newAccumulated / 100).toFixed(2)}.`,
 										agendamentoDataReferencia: dayjs(interactionScheduleDate).format("YYYY-MM-DD"),
 										agendamentoBlocoReferencia: campaign.execucaoAgendadaBloco,
-										metadados: { cashbackAcumuladoValor: accumulatedBalance },
+										metadados: cashbackAccCWMetadados,
 									})
 									.returning({ id: interactions.id });
 
@@ -999,6 +1026,7 @@ async function handleCardapioWebImportation(
 											},
 											whatsappToken: whatsappConnection.token ?? undefined,
 											whatsappSessionId: whatsappConnection.gatewaySessaoId ?? undefined,
+											contextMetadados: cashbackAccCWMetadados,
 										});
 									}
 								}
@@ -1672,7 +1700,14 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 									unit: campaign.execucaoAgendadaMedida,
 									value: campaign.execucaoAgendadaValor,
 								});
-								const [insertedInteraction] = await tx
+								const firstPurchaseOSMetadados = {
+								compraValor: Number(OnlineSale.valor),
+								compraVendedorNome: OnlineSale.vendedor || "N/A",
+								cashbackSaldoDisponivel: existingCashbackProgramBalancesMap.get(saleClientId)?.saldoValorDisponivel,
+								cashbackTotalAcumuladoVida: existingCashbackProgramBalancesMap.get(saleClientId)?.saldoValorAcumuladoTotal,
+							};
+
+							const [insertedInteraction] = await tx
 									.insert(interactions)
 									.values({
 										clienteId: saleClientId,
@@ -1683,6 +1718,7 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 										descricao: "Cliente realizou sua primeira compra.",
 										agendamentoDataReferencia: dayjs(interactionScheduleDate).format("YYYY-MM-DD"),
 										agendamentoBlocoReferencia: campaign.execucaoAgendadaBloco,
+										metadados: firstPurchaseOSMetadados,
 									})
 									.returning({ id: interactions.id });
 
@@ -1722,6 +1758,7 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 											},
 											whatsappToken: whatsappConnection.token ?? undefined,
 											whatsappSessionId: whatsappConnection.gatewaySessaoId ?? undefined,
+											contextMetadados: firstPurchaseOSMetadados,
 										});
 									}
 								}
@@ -1809,6 +1846,12 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 										descricao: `Cliente se enquadrou no parâmetro de nova compra ${existingClientsMap.get(OnlineSale.cliente)?.rfmTitle}.`,
 										agendamentoDataReferencia: dayjs(interactionScheduleDate).format("YYYY-MM-DD"),
 										agendamentoBlocoReferencia: campaign.execucaoAgendadaBloco,
+										metadados: {
+											compraValor: Number(OnlineSale.valor),
+											compraVendedorNome: OnlineSale.vendedor || "N/A",
+											cashbackSaldoDisponivel: existingCashbackProgramBalancesMap.get(saleClientId)?.saldoValorDisponivel,
+											cashbackTotalAcumuladoVida: existingCashbackProgramBalancesMap.get(saleClientId)?.saldoValorAcumuladoTotal,
+										},
 									})
 									.returning({ id: interactions.id });
 
@@ -1848,6 +1891,12 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 											},
 											whatsappToken: whatsappConnection.token ?? undefined,
 											whatsappSessionId: whatsappConnection.gatewaySessaoId ?? undefined,
+											contextMetadados: {
+												compraValor: Number(OnlineSale.valor),
+												compraVendedorNome: OnlineSale.vendedor || "N/A",
+												cashbackSaldoDisponivel: existingCashbackProgramBalancesMap.get(saleClientId)?.saldoValorDisponivel,
+												cashbackTotalAcumuladoVida: existingCashbackProgramBalancesMap.get(saleClientId)?.saldoValorAcumuladoTotal,
+											},
 										});
 									}
 								}
@@ -1936,6 +1985,11 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 											descricao: `Cliente atingiu ${newTotalPurchaseCount} compras totais (gatilho: ${campaign.gatilhoQuantidadeTotalCompras}).`,
 											agendamentoDataReferencia: dayjs(interactionScheduleDate).format("YYYY-MM-DD"),
 											agendamentoBlocoReferencia: campaign.execucaoAgendadaBloco,
+											metadados: {
+												compraValor: Number(OnlineSale.valor),
+												cashbackSaldoDisponivel: existingCashbackProgramBalancesMap.get(saleClientId)?.saldoValorDisponivel,
+												cashbackTotalAcumuladoVida: existingCashbackProgramBalancesMap.get(saleClientId)?.saldoValorAcumuladoTotal,
+											},
 										})
 										.returning({ id: interactions.id });
 
@@ -1964,6 +2018,11 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 												},
 												whatsappToken: whatsappConnection.token ?? undefined,
 												whatsappSessionId: whatsappConnection.gatewaySessaoId ?? undefined,
+												contextMetadados: {
+													compraValor: Number(OnlineSale.valor),
+													cashbackSaldoDisponivel: existingCashbackProgramBalancesMap.get(saleClientId)?.saldoValorDisponivel,
+													cashbackTotalAcumuladoVida: existingCashbackProgramBalancesMap.get(saleClientId)?.saldoValorAcumuladoTotal,
+												},
 											});
 										}
 									}
@@ -2038,6 +2097,11 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 											descricao: `Cliente atingiu R$ ${newTotalPurchaseValue.toFixed(2)} em compras totais (gatilho: R$ ${campaign.gatilhoValorTotalCompras?.toFixed(2)}).`,
 											agendamentoDataReferencia: dayjs(interactionScheduleDate).format("YYYY-MM-DD"),
 											agendamentoBlocoReferencia: campaign.execucaoAgendadaBloco,
+											metadados: {
+												compraValor: Number(OnlineSale.valor),
+												cashbackSaldoDisponivel: existingCashbackProgramBalancesMap.get(saleClientId)?.saldoValorDisponivel,
+												cashbackTotalAcumuladoVida: existingCashbackProgramBalancesMap.get(saleClientId)?.saldoValorAcumuladoTotal,
+											},
 										})
 										.returning({ id: interactions.id });
 
@@ -2066,6 +2130,11 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 												},
 												whatsappToken: whatsappConnection.token ?? undefined,
 												whatsappSessionId: whatsappConnection.gatewaySessaoId ?? undefined,
+												contextMetadados: {
+													compraValor: Number(OnlineSale.valor),
+													cashbackSaldoDisponivel: existingCashbackProgramBalancesMap.get(saleClientId)?.saldoValorDisponivel,
+													cashbackTotalAcumuladoVida: existingCashbackProgramBalancesMap.get(saleClientId)?.saldoValorAcumuladoTotal,
+												},
 											});
 										}
 									}
@@ -2301,6 +2370,11 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 													cashbackAcumuladoValor: accumulatedBalance,
 													whatsappMensagemId: null,
 													whatsappTemplateId: null,
+													compraValor: saleValue,
+													compraCashbackAcumulado: accumulatedBalance,
+													compraCashbackNovoSaldo: newOverallAvailableBalance,
+													cashbackSaldoDisponivel: newOverallAvailableBalance,
+													cashbackTotalAcumuladoVida: newOverallAccumulatedBalance,
 												},
 											})
 											.returning({ id: interactions.id });
@@ -2341,6 +2415,13 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 													},
 													whatsappToken: whatsappConnection.token ?? undefined,
 													whatsappSessionId: whatsappConnection.gatewaySessaoId ?? undefined,
+													contextMetadados: {
+														compraValor: saleValue,
+														compraCashbackAcumulado: accumulatedBalance,
+														compraCashbackNovoSaldo: newOverallAvailableBalance,
+														cashbackSaldoDisponivel: newOverallAvailableBalance,
+														cashbackTotalAcumuladoVida: newOverallAccumulatedBalance,
+													},
 												});
 											}
 										}

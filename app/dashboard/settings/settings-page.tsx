@@ -82,7 +82,7 @@ export default function SettingsPage({ user, membership }: SettingsPageProps) {
 						onClick={() => setView("meta-oauth")}
 					>
 						<Key className="w-4 h-4 min-w-4 min-h-4" />
-						CONEXAO WHATSAPP
+						CONEXÃO COM WHATSAPP
 					</Button>
 					<Button
 						variant={view === "whatsapp-templates" ? "secondary" : "ghost"}

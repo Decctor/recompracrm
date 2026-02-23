@@ -144,24 +144,20 @@ export function validateTemplateComponents(componentes: TWhatsappTemplateCompone
 	};
 }
 
-/**
- * Converts internal template format to WhatsApp API payload format
- */
-export function convertToWhatsappApiPayload(template: Omit<TWhatsappTemplate, "autorId" | "dataInsercao">) {
-	const components: Array<Record<string, unknown>> = [];
+export function convertLocalComponentsToMetaComponents(components: TWhatsappTemplateComponents): MetaTemplateComponent[] {
+	const metaComponents: MetaTemplateComponent[] = [];
 
 	// Add header component if exists
-	if (template.componentes.cabecalho) {
-		const header = template.componentes.cabecalho;
+	if (components.cabecalho) {
+		const header = components.cabecalho;
 		if (header.tipo === "text") {
-			components.push({
+			metaComponents.push({
 				type: "HEADER",
 				format: "TEXT",
 				text: header.conteudo,
 			});
 		} else {
-			// For media types (image, video, document)
-			components.push({
+			metaComponents.push({
 				type: "HEADER",
 				format: header.tipo.toUpperCase(),
 				example: {
@@ -172,76 +168,83 @@ export function convertToWhatsappApiPayload(template: Omit<TWhatsappTemplate, "a
 	}
 
 	// Add body component
-	let bodyText = convertHtmlToWhatsappText(template.componentes.corpo.conteudo);
+	let bodyText = convertHtmlToWhatsappText(components.corpo.conteudo);
 
-	// Replace any identificador-based variables with their numeric positions
-	// This handles mention nodes that were inserted via autocomplete
-	if (template.componentes.corpo.parametros.length > 0) {
-		for (const param of template.componentes.corpo.parametros) {
-			// Replace {{identificador}} with {{numero}}
+	// Convert identificador placeholders (e.g. {{nome_cliente}}) to positional placeholders (e.g. {{1}})
+	if (components.corpo.parametros.length > 0) {
+		for (const param of components.corpo.parametros) {
 			const identificadorPlaceholder = `{{${param.identificador}}}`;
 			const numericPlaceholder = `{{${param.nome}}}`;
 			bodyText = bodyText.replace(new RegExp(identificadorPlaceholder.replace(/[{}]/g, "\\$&"), "g"), numericPlaceholder);
 		}
 	}
 
-	const bodyComponent: Record<string, unknown> = {
-		type: "body",
+	const bodyComponent: MetaTemplateComponent = {
+		type: "BODY",
 		text: bodyText,
 	};
 
-	if (template.componentes.corpo.parametros.length > 0) {
-		// positional
+	if (components.corpo.parametros.length > 0) {
 		bodyComponent.example = {
-			body_text: [template.componentes.corpo.parametros.map((param) => param.exemplo)],
+			body_text: [components.corpo.parametros.map((param) => param.exemplo)],
 		};
 	}
 
-	components.push(bodyComponent);
+	metaComponents.push(bodyComponent);
 
 	// Add footer component if exists
-	if (template.componentes.rodape) {
-		components.push({
+	if (components.rodape) {
+		metaComponents.push({
 			type: "FOOTER",
-			text: template.componentes.rodape.conteudo,
+			text: components.rodape.conteudo,
 		});
 	}
 
 	// Add buttons component if exists
-	if (template.componentes.botoes && template.componentes.botoes.length > 0) {
-		const buttons = template.componentes.botoes
-			.map((botao) => {
-				if (botao.tipo === "quick_reply") {
-					return {
-						type: "QUICK_REPLY",
-						text: botao.texto,
-					};
-				}
-				if (botao.tipo === "url") {
-					return {
-						type: "URL",
-						text: botao.texto,
-						url: botao.dados?.url || "",
-					};
-				}
-				if (botao.tipo === "phone_number") {
-					return {
-						type: "PHONE_NUMBER",
-						text: botao.texto,
-						phone_number: botao.dados?.telefone || "",
-					};
-				}
-				return null;
-			})
-			.filter(Boolean);
+	if (components.botoes && components.botoes.length > 0) {
+		const buttons: MetaTemplateButton[] = [];
+		for (const botao of components.botoes) {
+			if (botao.tipo === "quick_reply") {
+				buttons.push({
+					type: "QUICK_REPLY",
+					text: botao.texto,
+				});
+				continue;
+			}
+
+			if (botao.tipo === "url") {
+				buttons.push({
+					type: "URL",
+					text: botao.texto,
+					url: botao.dados?.url || "",
+				});
+				continue;
+			}
+
+			if (botao.tipo === "phone_number") {
+				buttons.push({
+					type: "PHONE_NUMBER",
+					text: botao.texto,
+					phone_number: botao.dados?.telefone || "",
+				});
+			}
+		}
 
 		if (buttons.length > 0) {
-			components.push({
+			metaComponents.push({
 				type: "BUTTONS",
 				buttons,
 			});
 		}
 	}
+
+	return metaComponents;
+}
+/**
+ * Converts internal template format to WhatsApp API payload format
+ */
+export function convertToWhatsappApiPayload(template: Omit<TWhatsappTemplate, "autorId" | "dataInsercao">) {
+	const components = convertLocalComponentsToMetaComponents(template.componentes);
 
 	return {
 		name: template.nome,
@@ -491,9 +494,10 @@ type EditWhatsappTemplateResponse = {
 
 /**
  * Edits a template in WhatsApp Business API
+ * Documentation: https://developers.facebook.com/documentation/business-messaging/whatsapp/templates/template-management#edit-templates
  * Note: Only APPROVED, REJECTED, or PAUSED templates can be edited
  */
-export async function editWhatsappTemplate({
+export async function editWhatsappTemplateInMeta({
 	whatsappToken,
 	templateId,
 	category,

@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { uploadFile } from "@/lib/files-storage";
+import { cn } from "@/lib/utils";
 import {
 	TEMPLATE_MEDIA_CONSTRAINTS,
 	type TemplateMediaHeaderType,
@@ -9,7 +10,6 @@ import {
 	getAcceptForHeaderType,
 	validateTemplateMediaFile,
 } from "@/lib/whatsapp/media-upload";
-import { cn } from "@/lib/utils";
 import { FileText, ImageIcon, Loader2, Upload, VideoIcon, X } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -19,7 +19,7 @@ type TemplateMediaUploadProps = {
 	currentUrl: string | null;
 	onMediaUploaded: (url: string) => void;
 	onMediaRemoved: () => void;
-	organizacaoId: string;
+	organizationId: string;
 	disabled?: boolean;
 };
 
@@ -30,7 +30,7 @@ function TemplateMediaUpload({
 	currentUrl,
 	onMediaUploaded,
 	onMediaRemoved,
-	organizacaoId,
+	organizationId,
 	disabled = false,
 }: TemplateMediaUploadProps) {
 	const [uploadState, setUploadState] = useState<UploadState>(currentUrl ? "uploaded" : "idle");
@@ -54,7 +54,7 @@ function TemplateMediaUpload({
 				const result = await uploadFile({
 					file,
 					fileName: file.name,
-					vinculationId: organizacaoId,
+					vinculationId: organizationId,
 					prefix: "organizations",
 				});
 
@@ -67,7 +67,7 @@ function TemplateMediaUpload({
 				setUploadState("idle");
 			}
 		},
-		[headerType, organizacaoId, onMediaUploaded],
+		[headerType, organizationId, onMediaUploaded],
 	);
 
 	const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -144,7 +144,9 @@ function TemplateMediaUpload({
 		if (headerType === "video") {
 			return (
 				<div className="relative w-full aspect-video rounded-lg overflow-hidden bg-gray-100">
-					<video src={currentUrl} className="w-full h-full object-cover" controls />
+					<video src={currentUrl} className="w-full h-full object-cover" controls>
+						<track kind="captions" />
+					</video>
 				</div>
 			);
 		}

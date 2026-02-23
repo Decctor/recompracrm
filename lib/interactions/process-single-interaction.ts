@@ -1,9 +1,10 @@
 import { sendTemplateWhatsappMessage } from "@/lib/whatsapp";
-import type { TWhatsappTemplateVariables } from "@/lib/whatsapp/template-variables";
+import type { TInteractionContextMetadados, TWhatsappTemplateVariables } from "@/lib/whatsapp/template-variables";
 import { getWhatsappTemplatePayload } from "@/lib/whatsapp/templates";
 import { db } from "@/services/drizzle";
 import { type TClientEntity, type TWhatsappTemplate, chatMessages, chats, interactions, organizations } from "@/services/drizzle/schema";
 import { and, eq } from "drizzle-orm";
+import { formatToMoney } from "../formatting";
 import { parseTemplatePayloadToGatewayContent, sendMessage } from "../whatsapp/internal-gateway";
 import { formatPhoneForInternalGateway } from "../whatsapp/utils";
 
@@ -26,12 +27,41 @@ export type ImmediateProcessingData = {
 	};
 	whatsappToken?: string;
 	whatsappSessionId?: string;
+	contextMetadados?: TInteractionContextMetadados;
 };
 
 export type ProcessSingleInteractionResult = {
 	success: boolean;
 	error?: string;
 };
+
+export function buildContextVariablesMap(
+	ctx?: TInteractionContextMetadados,
+): Omit<
+	Record<keyof TWhatsappTemplateVariables, string>,
+	| "clientName"
+	| "clientPhoneNumber"
+	| "clientEmail"
+	| "clientSegmentation"
+	| "clientFavoriteProduct"
+	| "clientFavoriteProductGroup"
+	| "clientSuggestedProduct"
+> {
+	if (!ctx) {
+		console.warn("[TEMPLATE_VARS] buildContextVariablesMap called without context metadados — context variables will resolve to empty strings.");
+	}
+	return {
+		purchaseValue: formatToMoney(ctx?.compraValor ?? 0),
+		purchaseCashbackAccumulated: formatToMoney(ctx?.compraCashbackAcumulado ?? 0),
+		purchaseCashbackNewBalance: formatToMoney(ctx?.compraCashbackNovoSaldo ?? 0),
+		purchaseSellerName: ctx?.compraVendedorNome ?? "",
+		cashbackAvailableBalance: formatToMoney(ctx?.cashbackSaldoDisponivel ?? 0),
+		cashbackLifetimeAccumulated: formatToMoney(ctx?.cashbackTotalAcumuladoVida ?? 0),
+		cashbackLifetimeRedeemed: formatToMoney(ctx?.cashbackTotalResgatadoVida ?? 0),
+		cashbackExpiringAmount: formatToMoney(ctx?.cashbackExpirandoValor ?? 0),
+		cashbackExpiringDate: ctx?.cashbackExpirandoData ?? "",
+	};
+}
 
 /**
  * Processes a single interaction immediately after it's created.
@@ -47,6 +77,10 @@ export async function processSingleInteractionImmediately(params: ImmediateProce
 	const { interactionId, organizationId, client, campaign, whatsappToken, whatsappSessionId } = params;
 
 	try {
+		const previousInteraction = await db.query.interactions.findFirst({
+			where: (fields, { and, eq }) => and(eq(fields.clienteId, client.id), eq(fields.campanhaId, campaign.whatsappTemplate.id)),
+		});
+
 		console.log(`[IMMEDIATE_PROCESS] Processing interaction ${interactionId} for org ${organizationId}`);
 
 		// First, checking if client has valid phone number
@@ -81,6 +115,7 @@ export async function processSingleInteractionImmediately(params: ImmediateProce
 			throw new Error("WhatsApp connection phone not found");
 		}
 		// Build WhatsApp template payload
+		const contextVars = buildContextVariablesMap(params.contextMetadados);
 		const whatsappTemplateVariablesValuesMap: Record<keyof TWhatsappTemplateVariables, string> = {
 			clientEmail: client.email ?? "",
 			clientName: client.nome,
@@ -89,6 +124,7 @@ export async function processSingleInteractionImmediately(params: ImmediateProce
 			clientFavoriteProduct: clientFavoriteProduct ?? "",
 			clientFavoriteProductGroup: client.metadataGrupoProdutoMaisComprado ?? "",
 			clientSuggestedProduct: "",
+			...contextVars,
 		};
 
 		const payload = getWhatsappTemplatePayload({
@@ -185,6 +221,7 @@ export async function processSingleInteractionImmediately(params: ImmediateProce
 						statusEnvio: "ENVIADO",
 						dataExecucao: new Date(),
 						metadados: {
+							...(previousInteraction?.metadados ?? {}),
 							whatsappMessageId: sentWhatsappTemplateResponse.whatsappMessageId,
 							whatsappTemplateId: campaign.whatsappTemplate.id,
 						},
@@ -222,6 +259,7 @@ export async function processSingleInteractionImmediately(params: ImmediateProce
 						statusEnvio: "ENVIADO",
 						dataExecucao: new Date(),
 						metadados: {
+							...(previousInteraction?.metadados ?? {}),
 							whatsappMessageId: sentWhatsappTemplateResponse.messageId,
 							whatsappTemplateId: campaign.whatsappTemplate.id,
 						},

@@ -1,7 +1,6 @@
 import { cn } from "@/lib/utils";
 import type { TUseOrganizationOnboardingState } from "@/state-hooks/use-organization-onboarding-state";
 import { Building2, Check, Globe, LayoutDashboard, ShoppingBag, Store, Truck } from "lucide-react";
-import { SelectableCard } from "./SelectableCard";
 
 type ActuationStageProps = {
 	state: TUseOrganizationOnboardingState["state"];

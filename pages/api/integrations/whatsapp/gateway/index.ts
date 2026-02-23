@@ -387,6 +387,10 @@ async function handleMessageUpdated(body: Extract<WebhookBody, { event: "message
 
 	const { status, whatsappStatus } = mapWhatsAppStatusToAppStatus(data.status);
 
+	const previousInteraction = await db.query.interactions.findFirst({
+		where: sql`${interactions.metadados}->>'whatsappMessageId' = ${data.whatsappMessageId}`,
+	});
+
 	await db
 		.update(chatMessages)
 		.set({ status, whatsappMessageStatus: whatsappStatus })
@@ -394,7 +398,10 @@ async function handleMessageUpdated(body: Extract<WebhookBody, { event: "message
 
 	await db
 		.update(interactions)
-		.set({ statusEnvio: INTERACTION_STATUS_MAPPING[whatsappStatus] })
+		.set({
+			statusEnvio: INTERACTION_STATUS_MAPPING[whatsappStatus],
+			metadados: { ...(previousInteraction?.metadados ?? {}), whatsappMessageId: data.whatsappMessageId },
+		})
 		.where(sql`${interactions.metadados}->>'whatsappMessageId' = ${data.whatsappMessageId}`);
 
 	console.log("[INTERNAL_WHATSAPP_WEBHOOK] Message updated:", {

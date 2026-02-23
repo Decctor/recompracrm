@@ -4,7 +4,7 @@ import type {
 	TWhatsappTemplateComponents,
 	TWhatsappTemplateState,
 } from "@/schemas/whatsapp-templates";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
 type WhatsappTemplateActions = {
 	updateTemplate: (update: Partial<TWhatsappTemplateState["whatsappTemplate"]>) => void;
@@ -40,11 +40,11 @@ export const useWhatsappTemplateState = ({ initialState }: UseWhatsappTemplateSt
 		},
 	});
 
-	function updateTemplate(changes: Partial<TWhatsappTemplateState["whatsappTemplate"]>) {
+	const updateTemplate = useCallback((changes: Partial<TWhatsappTemplateState["whatsappTemplate"]>) => {
 		return setState((prev) => ({ ...prev, whatsappTemplate: { ...prev.whatsappTemplate, ...changes } as TWhatsappTemplateState["whatsappTemplate"] }));
-	}
+	}, []);
 
-	function updateComponents(changes: Partial<TWhatsappTemplateState["whatsappTemplate"]["componentes"]>) {
+	const updateComponents = useCallback((changes: Partial<TWhatsappTemplateState["whatsappTemplate"]["componentes"]>) => {
 		return setState((prev) => ({
 			...prev,
 			whatsappTemplate: {
@@ -52,9 +52,9 @@ export const useWhatsappTemplateState = ({ initialState }: UseWhatsappTemplateSt
 				componentes: { ...prev.whatsappTemplate.componentes, ...changes } as TWhatsappTemplateState["whatsappTemplate"]["componentes"],
 			},
 		}));
-	}
+	}, []);
 
-	function updateBodyParameters(parameters: TWhatsappTemplateBodyParameter[]) {
+	const updateBodyParameters = useCallback((parameters: TWhatsappTemplateBodyParameter[]) => {
 		return setState((prev) => ({
 			...prev,
 			whatsappTemplate: {
@@ -62,9 +62,9 @@ export const useWhatsappTemplateState = ({ initialState }: UseWhatsappTemplateSt
 				componentes: { ...prev.whatsappTemplate.componentes, corpo: { ...prev.whatsappTemplate.componentes.corpo, parametros: parameters } },
 			},
 		}));
-	}
+	}, []);
 
-	function addBodyParameter(parameter: TWhatsappTemplateBodyParameter) {
+	const addBodyParameter = useCallback((parameter: TWhatsappTemplateBodyParameter) => {
 		return setState((prev) => ({
 			...prev,
 			whatsappTemplate: {
@@ -78,9 +78,9 @@ export const useWhatsappTemplateState = ({ initialState }: UseWhatsappTemplateSt
 				},
 			},
 		}));
-	}
+	}, []);
 
-	function removeBodyParameter(index: number) {
+	const removeBodyParameter = useCallback((index: number) => {
 		return setState((prev) => ({
 			...prev,
 			whatsappTemplate: {
@@ -94,9 +94,9 @@ export const useWhatsappTemplateState = ({ initialState }: UseWhatsappTemplateSt
 				},
 			},
 		}));
-	}
+	}, []);
 
-	function updateButton(index: number, button: TWhatsappTemplateButton) {
+	const updateButton = useCallback((index: number, button: TWhatsappTemplateButton) => {
 		return setState((prev) => ({
 			...prev,
 			whatsappTemplate: {
@@ -107,9 +107,9 @@ export const useWhatsappTemplateState = ({ initialState }: UseWhatsappTemplateSt
 				},
 			},
 		}));
-	}
+	}, []);
 
-	function addButton(button: TWhatsappTemplateButton) {
+	const addButton = useCallback((button: TWhatsappTemplateButton) => {
 		return setState((prev) => ({
 			...prev,
 			whatsappTemplate: {
@@ -120,9 +120,9 @@ export const useWhatsappTemplateState = ({ initialState }: UseWhatsappTemplateSt
 				},
 			},
 		}));
-	}
+	}, []);
 
-	function removeButton(index: number) {
+	const removeButton = useCallback((index: number) => {
 		return setState((prev) => ({
 			...prev,
 			whatsappTemplate: {
@@ -133,9 +133,9 @@ export const useWhatsappTemplateState = ({ initialState }: UseWhatsappTemplateSt
 				},
 			},
 		}));
-	}
+	}, []);
 
-	function resetState() {
+	const resetState = useCallback(() => {
 		return setState({
 			whatsappTemplate: {
 				nome: "",
@@ -151,10 +151,10 @@ export const useWhatsappTemplateState = ({ initialState }: UseWhatsappTemplateSt
 				},
 			},
 		});
-	}
-	function redefineState(state: TWhatsappTemplateState) {
+	}, []);
+	const redefineState = useCallback((state: TWhatsappTemplateState) => {
 		return setState(state);
-	}
+	}, []);
 
 	return {
 		state,

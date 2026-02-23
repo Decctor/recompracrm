@@ -183,6 +183,9 @@ async function handleStatusUpdate(body: WebhookBody): Promise<void> {
 
 	const { status, whatsappStatus } = mapWhatsAppStatusToAppStatus(statusUpdate.status);
 
+	const previousInteraction = await db.query.interactions.findFirst({
+		where: sql`${interactions.metadados}->>'whatsappMessageId' = ${statusUpdate.whatsappMessageId}`,
+	});
 	await db
 		.update(chatMessages)
 		.set({ status, whatsappMessageStatus: whatsappStatus })
@@ -193,6 +196,7 @@ async function handleStatusUpdate(body: WebhookBody): Promise<void> {
 		.set({
 			statusEnvio: INTERACTION_STATUS_MAPPING[whatsappStatus],
 			metadados: {
+				...(previousInteraction?.metadados ?? {}),
 				whatsappMessageId: statusUpdate.whatsappMessageId,
 			},
 		})
