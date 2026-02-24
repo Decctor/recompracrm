@@ -78,12 +78,32 @@ export const FileTypes: FileTypes = {
 	},
 };
 
+export type TFileContentKind = "video" | "image" | "audio" | "text" | "document";
+
+export function inferFileContentKind(file: File): TFileContentKind {
+	if (file.type?.startsWith("video/")) return "video";
+	if (file.type?.startsWith("image/")) return "image";
+	if (file.type?.startsWith("audio/")) return "audio";
+	if (file.type?.startsWith("text/")) return "text";
+	if (file.type === "application/json") return "text";
+
+	const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
+	if (["mp4", "mov", "avi", "mkv", "webm"].includes(extension)) return "video";
+	if (["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(extension)) return "image";
+	if (["mp3", "wav", "ogg", "m4a"].includes(extension)) return "audio";
+	if (["txt", "md", "csv", "json"].includes(extension)) return "text";
+
+	return "document";
+}
+
+function removeDiacritics(value: string) {
+	return Array.from(value).filter((char) => char.normalize("NFD") === char).join("");
+}
+
 function sanitizeFileName(fileName: string): string {
 	return (
-		fileName
+		removeDiacritics(fileName.normalize("NFD"))
 			// Remove acentos e normaliza
-			.normalize("NFD")
-			.replace(/[\u0300-\u036f]/g, "")
 			// Converte para minúsculas
 			.toLowerCase()
 			// Remove caracteres especiais não permitidos pelo Supabase

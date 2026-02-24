@@ -20,10 +20,12 @@ const GetCommunityCoursesInputSchema = z.object({
 			invalid_type_error: "Tipo não válido para ID do curso.",
 		})
 		.optional(),
-	page: z.number({
-		required_error: "Página não informada.",
-		invalid_type_error: "Tipo não válido para página.",
-	}),
+	page: z
+		.string({
+			required_error: "Página não informada.",
+			invalid_type_error: "Tipo não válido para página.",
+		})
+		.transform((v) => Number(v)),
 	search: z
 		.string({
 			required_error: "Busca não informada.",

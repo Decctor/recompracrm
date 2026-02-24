@@ -11,6 +11,13 @@ import type {
 	TUpdateCommunityLessonInput,
 	TUpdateCommunityLessonOutput,
 } from "@/app/api/admin/community/lessons/route";
+import type {
+	TCreateCommunityMaterialInput,
+	TCreateCommunityMaterialOutput,
+	TDeleteCommunityMaterialOutput,
+	TUpdateCommunityMaterialInput,
+	TUpdateCommunityMaterialOutput,
+} from "@/app/api/admin/community/materials/route";
 import type { TCreateMuxUploadUrlOutput } from "@/app/api/admin/community/mux/upload-url/route";
 import type { TReorderCommunityInput, TReorderCommunityOutput } from "@/app/api/admin/community/reorder/route";
 import type {
@@ -64,6 +71,21 @@ export async function updateCommunityLesson(input: TUpdateCommunityLessonInput) 
 
 export async function deleteCommunityLesson(id: string) {
 	const response = await axios.delete<TDeleteCommunityLessonOutput>(`/api/admin/community/lessons?id=${id}`);
+	return response.data;
+}
+
+export async function createCommunityMaterial(input: TCreateCommunityMaterialInput) {
+	const response = await axios.post<TCreateCommunityMaterialOutput>("/api/admin/community/materials", input);
+	return response.data;
+}
+
+export async function updateCommunityMaterial(input: TUpdateCommunityMaterialInput) {
+	const response = await axios.put<TUpdateCommunityMaterialOutput>("/api/admin/community/materials", input);
+	return response.data;
+}
+
+export async function deleteCommunityMaterial(id: string) {
+	const response = await axios.delete<TDeleteCommunityMaterialOutput>(`/api/admin/community/materials?id=${id}`);
 	return response.data;
 }
 

@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import type { TGetPublicCommunityCoursesOutput } from "@/app/api/community/courses/public/route";
 import type { TGetPublicCommunityLessonsOutput } from "@/app/api/community/lessons/public/route";
+import type { TGetPublicCommunityMaterialsOutput } from "@/app/api/community/materials/public/route";
 
 export function useCourses() {
 	return useQuery({
@@ -32,6 +33,32 @@ export function useLesson(lessonId: string) {
 			return data.data.byId;
 		},
 		enabled: !!lessonId,
+	});
+}
+
+export function usePublicCommunityMaterials(params?: { tipo?: string[]; search?: string }) {
+	return useQuery({
+		queryKey: ["community-materials", params],
+		queryFn: async () => {
+			const searchParams = new URLSearchParams();
+			if (params?.search?.trim()) searchParams.set("search", params.search.trim());
+			if (params?.tipo && params.tipo.length > 0) searchParams.set("tipo", params.tipo.join(","));
+			const { data } = await axios.get<TGetPublicCommunityMaterialsOutput>(
+				`/api/community/materials/public${searchParams.toString() ? `?${searchParams.toString()}` : ""}`,
+			);
+			return data.data.default ?? [];
+		},
+	});
+}
+
+export function usePublicCommunityMaterialById(materialId: string) {
+	return useQuery({
+		queryKey: ["community-material", materialId],
+		queryFn: async () => {
+			const { data } = await axios.get<TGetPublicCommunityMaterialsOutput>(`/api/community/materials/public?id=${materialId}`);
+			return data.data.byId;
+		},
+		enabled: !!materialId,
 	});
 }
 

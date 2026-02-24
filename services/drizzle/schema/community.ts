@@ -1,4 +1,7 @@
+import type { TCommunityLessonMuxMetadata } from "@/schemas/community";
 import type {
+	TAssetDerivationExecutionError,
+	TAssetDerivationOperation,
 	TAssetExtractedMetadata,
 	TChannelRecommendation,
 	TMaterialSpecificMetadata,
@@ -8,7 +11,6 @@ import type {
 	TSourceSegment,
 	TSuggestedContent,
 } from "@/schemas/community-pipeline";
-import type { TCommunityLessonMuxMetadata } from "@/schemas/community";
 import { relations } from "drizzle-orm";
 import { type AnyPgColumn, boolean, index, integer, jsonb, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/pg-core";
 import { newTable } from "./common";
@@ -227,6 +229,11 @@ export const communityAssetDerivations = newTable(
 		scoreConfianca: integer("score_confianca"),
 		conteudoSugerido: jsonb("conteudo_sugerido").$type<TSuggestedContent>(),
 		trechoOrigem: jsonb("trecho_origem").$type<TSourceSegment>(),
+
+		// New column
+		operacoes: jsonb("operacoes").$type<TAssetDerivationOperation[]>().default([]),
+		// New column for execution errors
+		erroExecucao: jsonb("erro_execucao").$type<TAssetDerivationExecutionError>(),
 		dataInsercao: timestamp("data_insercao").defaultNow().notNull(),
 		dataAtualizacao: timestamp("data_atualizacao").defaultNow().notNull(),
 	},
