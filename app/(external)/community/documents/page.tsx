@@ -13,17 +13,14 @@ import { useMemo, useState } from "react";
 
 export default function DocumentsPage() {
 	const [search, setSearch] = useState("");
-	const { data: allMaterials = [], isLoading } = usePublicCommunityMaterials({ search });
-	const materials = useMemo(() => allMaterials.filter((material) => material.tipo !== "EBOOK"), [allMaterials]);
+	const { data: materials = [], isLoading } = usePublicCommunityMaterials({
+		search,
+		tipo: ["PLAYBOOK", "PLANILHA", "TEMPLATE", "GUIA", "CHECKLIST", "INFOGRAFICO", "DOCUMENTO"],
+	});
 
 	return (
 		<div className="w-full h-full flex flex-col gap-6 p-6">
-			<CommunityHeader
-				breadcrumbs={[
-					{ label: "Início", href: "/community" },
-					{ label: "Documentos" },
-				]}
-			/>
+			<CommunityHeader breadcrumbs={[{ label: "Início", href: "/community" }, { label: "Documentos" }]} />
 			<div className="flex flex-col gap-1">
 				<h1 className="text-xl font-black leading-none tracking-tight md:text-2xl text-primary">Documentos</h1>
 				<p className="text-sm text-muted-foreground">Documentação técnica e guias de referência.</p>
