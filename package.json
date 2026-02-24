@@ -22,6 +22,7 @@
 		"@gsap/react": "^2.1.2",
 		"@mux/mux-node": "^9.0.1",
 		"@mux/mux-player-react": "^3.2.1",
+		"@next/third-parties": "^16.1.6",
 		"@oslojs/crypto": "^1.0.1",
 		"@oslojs/encoding": "^1.1.0",
 		"@radix-ui/react-aspect-ratio": "^1.1.1",

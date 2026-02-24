@@ -1,6 +1,7 @@
 import "@/styles/globals.css";
 import ProvidersWrapper from "@/components/Providers/Wrapper";
 import { cn } from "@/lib/utils";
+import { GoogleTagManager } from "@next/third-parties/google";
 import { Analytics } from "@vercel/analytics/next";
 import type { Metadata, Viewport } from "next";
 import { Raleway } from "next/font/google";
@@ -35,6 +36,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 					<Toaster />
 				</ProvidersWrapper>
 				<Analytics />
+				<GoogleTagManager gtmId="GTM-KHTDGQL4" />
 			</body>
 		</html>
 	);
