@@ -13,10 +13,6 @@ import { type TRFMConfig, getRFMLabel } from "@/utils/rfm";
 import { and, eq, gt, gte, lte, sql } from "drizzle-orm";
 import createHttpError from "http-errors";
 
-export const config = {
-	maxDuration: 25,
-};
-
 const intervalStart = dayjs().subtract(12, "month").startOf("day").toDate();
 const intervalEnd = dayjs().endOf("day").toDate();
 
