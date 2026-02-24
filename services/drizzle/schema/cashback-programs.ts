@@ -56,7 +56,7 @@ export const cashbackProgramPrizes = newTable("cashback_program_prizes", {
 	id: varchar("id", { length: 255 })
 		.primaryKey()
 		.$defaultFn(() => crypto.randomUUID()),
-	organizacaoId: varchar("organizacao_id", { length: 255 }).references(() => organizations.id),
+	organizacaoId: varchar("organizacao_id", { length: 255 }).references(() => organizations.id, { onDelete: "cascade" }),
 	programaId: varchar("programa_id", { length: 255 })
 		.references(() => cashbackPrograms.id)
 		.notNull(),
@@ -94,7 +94,7 @@ export const cashbackProgramBalances = newTable("cashback_program_balances", {
 	id: varchar("id", { length: 255 })
 		.primaryKey()
 		.$defaultFn(() => crypto.randomUUID()),
-	organizacaoId: varchar("organizacao_id", { length: 255 }).references(() => organizations.id),
+	organizacaoId: varchar("organizacao_id", { length: 255 }).references(() => organizations.id, { onDelete: "cascade" }),
 	clienteId: varchar("cliente_id", { length: 255 })
 		.references(() => clients.id, { onDelete: "cascade" })
 		.notNull(),
@@ -122,7 +122,7 @@ export const cashbackProgramTransactions = newTable("cashback_program_transactio
 	id: varchar("id", { length: 255 })
 		.primaryKey()
 		.$defaultFn(() => crypto.randomUUID()),
-	organizacaoId: varchar("organizacao_id", { length: 255 }).references(() => organizations.id),
+	organizacaoId: varchar("organizacao_id", { length: 255 }).references(() => organizations.id, { onDelete: "cascade" }),
 	clienteId: varchar("cliente_id", { length: 255 })
 		.references(() => clients.id, { onDelete: "cascade" })
 		.notNull(),
