@@ -1309,8 +1309,8 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 					const saleDate = dayjs().isSame(onlineBaseSaleDate, "day") ? dayjs().toDate() : onlineBaseSaleDate.add(3, "hours").toDate();
 					const isValidSale = OnlineSale.natureza === "SN01";
 					// First, we check for an existing client with the same name (in this case, our primary key for the integration)
-					const equivalentSaleClient = existingClientsMap.get(OnlineSale.cliente);
 					const isValidClient = OnlineSale.cliente !== "AO CONSUMIDOR";
+					const equivalentSaleClient = isValidClient ? existingClientsMap.get(OnlineSale.cliente) : null;
 					// Initalize the saleClientId holder with the existing client (if any)
 					let saleClientId = equivalentSaleClient?.id;
 					if (!saleClientId && isValidClient) {
@@ -1701,13 +1701,13 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 									value: campaign.execucaoAgendadaValor,
 								});
 								const firstPurchaseOSMetadados = {
-								compraValor: Number(OnlineSale.valor),
-								compraVendedorNome: OnlineSale.vendedor || "N/A",
-								cashbackSaldoDisponivel: existingCashbackProgramBalancesMap.get(saleClientId)?.saldoValorDisponivel,
-								cashbackTotalAcumuladoVida: existingCashbackProgramBalancesMap.get(saleClientId)?.saldoValorAcumuladoTotal,
-							};
+									compraValor: Number(OnlineSale.valor),
+									compraVendedorNome: OnlineSale.vendedor || "N/A",
+									cashbackSaldoDisponivel: existingCashbackProgramBalancesMap.get(saleClientId)?.saldoValorDisponivel,
+									cashbackTotalAcumuladoVida: existingCashbackProgramBalancesMap.get(saleClientId)?.saldoValorAcumuladoTotal,
+								};
 
-							const [insertedInteraction] = await tx
+								const [insertedInteraction] = await tx
 									.insert(interactions)
 									.values({
 										clienteId: saleClientId,
