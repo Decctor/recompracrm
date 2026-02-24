@@ -5,6 +5,7 @@ import {
 	DEFAULT_ORGANIZATION_RFM_CONFIG,
 	FREE_TRIAL_DURATION_DAYS,
 } from "@/config";
+import { notifyInternalsOnNewOrganization } from "@/config/internal-coms";
 import { RecompraCRMDefaultCampaigns, getOrganizationNicheByValue } from "@/config/onboarding";
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
@@ -203,6 +204,19 @@ async function createOrganization({ input, session }: { input: TCreateOrganizati
 		});
 
 		console.log("[INFO] [CREATE_ORGANIZATION] Free trial period defined successfully.");
+
+		void notifyInternalsOnNewOrganization({
+			organization: {
+				nome: organization.nome,
+				cnpj: organization.cnpj,
+				email: organization.email ?? "NÃO INFORMADO",
+				telefone: organization.telefone ?? "NÃO INFORMADO",
+				atuacaoNicho: organization.atuacaoNicho ?? "NÃO INFORMADO",
+				tamanhoBaseClientes: organization.tamanhoBaseClientes ?? null,
+				plataformasUtilizadas: organization.plataformasUtilizadas ?? "NÃO INFORMADO",
+			},
+			subscription: "FREE-TRIAL",
+		}).catch((err) => console.error("[WARN] [CREATE_ORGANIZATION] Falha ao notificar fundadores:", err));
 		return {
 			data: {
 				insertedId: insertedOrgId,
@@ -276,6 +290,18 @@ async function createOrganization({ input, session }: { input: TCreateOrganizati
 			.where(eq(organizations.id, insertedOrgId));
 	});
 
+	void notifyInternalsOnNewOrganization({
+		organization: {
+			nome: organization.nome,
+			cnpj: organization.cnpj,
+			email: organization.email || sessionUser.email,
+			telefone: organization.telefone ?? "NÃO INFORMADO",
+			atuacaoNicho: organization.atuacaoNicho ?? "NÃO INFORMADO",
+			tamanhoBaseClientes: organization.tamanhoBaseClientes ?? null,
+			plataformasUtilizadas: organization.plataformasUtilizadas ?? "NÃO INFORMADO",
+		},
+		subscription: `${planName}-${modalityName}`,
+	}).catch((err) => console.error("[WARN] [CREATE_ORGANIZATION] Falha ao notificar fundadores:", err));
 	return {
 		data: {
 			insertedId: insertedOrgId,
