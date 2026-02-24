@@ -163,11 +163,7 @@ function DashboardPhase({ active }: { active: boolean }) {
 				<motion.div
 					className={cn(
 						"bg-white/[0.03] border rounded-lg p-2 flex items-center gap-2 transition-colors duration-500 relative overflow-hidden",
-						isTriggered
-							? "border-red-500/50 bg-red-500/5"
-							: isWarning
-								? "border-yellow-500/30 bg-yellow-500/5"
-								: "border-white/5",
+						isTriggered ? "border-red-500/50 bg-red-500/5" : isWarning ? "border-yellow-500/30 bg-yellow-500/5" : "border-white/5",
 					)}
 					animate={isTriggered ? { scale: [1, 1.02, 1] } : {}}
 					transition={{ duration: 0.4 }}
@@ -342,7 +338,13 @@ function WhatsAppPhase({ active }: { active: boolean }) {
 			{/* Chat area with WhatsApp-style background */}
 			<div className="flex-1 bg-[#0B141A] relative px-2 py-2 flex flex-col justify-end gap-1.5">
 				{/* Subtle wallpaper pattern */}
-				<div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E\")" }} />
+				<div
+					className="absolute inset-0 opacity-[0.03]"
+					style={{
+						backgroundImage:
+							"url(\"data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E\")",
+					}}
+				/>
 
 				{/* Date separator */}
 				<div className="flex justify-center mb-1">
@@ -482,10 +484,7 @@ function CampaignFlowWireframe() {
 					{PHASES.map((phase) => (
 						<div
 							key={phase}
-							className={cn(
-								"h-1 rounded-full transition-all duration-500",
-								currentPhase === phase ? "w-5 bg-blue-500" : "w-1 bg-white/15",
-							)}
+							className={cn("h-1 rounded-full transition-all duration-500", currentPhase === phase ? "w-5 bg-blue-500" : "w-1 bg-white/15")}
 						/>
 					))}
 				</div>
@@ -498,7 +497,7 @@ function CampaignFlowWireframe() {
 
 export default function CampaignSection() {
 	return (
-		<section id="campanhas" className="py-20 bg-zinc-950 border-y border-white/5 relative overflow-hidden">
+		<section id="campanhas" className="py-24 bg-slate-50 border-y border-black/5 relative overflow-hidden">
 			<div className="container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
 				<div className="grid lg:grid-cols-2 gap-16 items-center">
 					<div className="relative order-1">
@@ -506,33 +505,35 @@ export default function CampaignSection() {
 					</div>
 
 					<div className="order-2">
-						<div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-sm font-medium mb-6 backdrop-blur-sm">
+						<div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 border border-blue-100 text-[#24549C] text-sm font-bold mb-6">
 							<Zap className="w-4 h-4" />
 							Campanhas de Reativação
 						</div>
-						<h2 className="text-3xl md:text-5xl font-bold mb-6 text-white">
+						<h2 className="text-3xl md:text-5xl font-extrabold mb-6 text-slate-900 leading-tight">
 							Cliente sumiu? <br />
-							<span className="text-white/50">O sistema traz de volta.</span>
+							<span className="text-brand">O sistema traz de volta.</span>
 						</h2>
-						<p className="text-lg text-white/60 mb-8 leading-relaxed">
+						<p className="text-lg text-slate-600 mb-8 leading-relaxed font-medium">
 							Defina: &quot;cliente inativo há 30 dias recebe R$ 15 de cashback + mensagem no WhatsApp&quot;. O resto é automático. Você configura uma vez e
 							funciona para sempre.
 						</p>
 
-						<div className="grid gap-6 mb-8">
-							<div className="p-4 rounded-xl bg-zinc-900/50 border border-white/5 hover:border-blue-500/40 transition-colors">
-								<h4 className="font-semibold text-white mb-2 flex items-center gap-2">
-									<MessageSquare className="w-4 h-4 text-blue-400" /> Reativação Automática
+						<div className="grid gap-4 mb-8">
+							<div className="p-5 rounded-2xl bg-white border border-slate-200 hover:border-[#24549C]/30 hover:shadow-lg hover:shadow-blue-900/5 transition-all">
+								<h4 className="font-bold text-slate-900 text-lg mb-2 flex items-center gap-2">
+									<MessageSquare className="w-5 h-5 text-[#24549C]" /> Reativação Automática
 								</h4>
-								<p className="text-sm text-white/60">
+								<p className="text-[15px] text-slate-600 font-medium">
 									O sistema identifica quem parou de comprar e dispara cashback + mensagem. Sem você precisar lembrar.
 								</p>
 							</div>
-							<div className="p-4 rounded-xl bg-zinc-900/50 border border-white/5 hover:border-blue-500/40 transition-colors">
-								<h4 className="font-semibold text-white mb-2 flex items-center gap-2">
-									<Crown className="w-4 h-4 text-yellow-400" /> Datas Comemorativas
+							<div className="p-5 rounded-2xl bg-white border border-slate-200 hover:border-[#24549C]/30 hover:shadow-lg hover:shadow-blue-900/5 transition-all">
+								<h4 className="font-bold text-slate-900 text-lg mb-2 flex items-center gap-2">
+									<Crown className="w-5 h-5 text-[#24549C]" /> Datas Comemorativas
 								</h4>
-								<p className="text-sm text-white/60">Aniversário do cliente, Black Friday, datas especiais. Configure uma vez, roda todo ano.</p>
+								<p className="text-[15px] text-slate-600 font-medium">
+									Aniversário do cliente, Black Friday, datas especiais. Configure uma vez, roda todo ano.
+								</p>
 							</div>
 						</div>
 					</div>

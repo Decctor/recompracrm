@@ -261,9 +261,7 @@ function SaleValueStep({ active }: { active: boolean }) {
 							key={v}
 							className={cn(
 								"px-2 py-1 rounded-md text-[0.5rem] font-bold border transition-all",
-								v <= Math.round(animatedValue)
-									? "bg-[#24549C]/20 border-[#24549C]/30 text-[#24549C]"
-									: "bg-white/5 border-white/10 text-white/30",
+								v <= Math.round(animatedValue) ? "bg-[#24549C]/20 border-[#24549C]/30 text-[#24549C]" : "bg-white/5 border-white/10 text-white/30",
 							)}
 						>
 							+{v}
@@ -436,18 +434,19 @@ function SuccessStepWireframe({ active }: { active: boolean }) {
 			</motion.div>
 
 			{/* Stats */}
-			<motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="grid grid-cols-2 gap-1.5 w-full max-w-[200px]">
+			<motion.div
+				initial={{ opacity: 0, y: 10 }}
+				animate={{ opacity: 1, y: 0 }}
+				transition={{ delay: 0.3 }}
+				className="grid grid-cols-2 gap-1.5 w-full max-w-[200px]"
+			>
 				<div className="bg-green-500/10 border border-green-500/20 rounded-xl p-2 text-center">
 					<div className="text-[0.35rem] text-green-400 uppercase font-bold">Cashback Gerado</div>
-					<div className="text-[0.7rem] font-black text-green-400 tabular-nums">
-						R$ {cashbackEarned.toFixed(2).replace(".", ",")}
-					</div>
+					<div className="text-[0.7rem] font-black text-green-400 tabular-nums">R$ {cashbackEarned.toFixed(2).replace(".", ",")}</div>
 				</div>
 				<div className="bg-[#24549C]/10 border border-[#24549C]/20 rounded-xl p-2 text-center">
 					<div className="text-[0.35rem] text-[#24549C] uppercase font-bold">Novo Saldo</div>
-					<div className="text-[0.7rem] font-black text-[#24549C] tabular-nums">
-						R$ {newBalance.toFixed(2).replace(".", ",")}
-					</div>
+					<div className="text-[0.7rem] font-black text-[#24549C] tabular-nums">R$ {newBalance.toFixed(2).replace(".", ",")}</div>
 				</div>
 			</motion.div>
 
@@ -550,13 +549,7 @@ function POIFlowWireframe() {
 				{/* Bottom progress dots */}
 				<div className="flex items-center justify-center gap-1.5 pb-3">
 					{FLOW_STEPS.map((step) => (
-						<div
-							key={step}
-							className={cn(
-								"h-1 rounded-full transition-all duration-500",
-								currentStep === step ? "w-4 bg-[#24549C]" : "w-1 bg-white/15",
-							)}
-						/>
+						<div key={step} className={cn("h-1 rounded-full transition-all duration-500", currentStep === step ? "w-4 bg-[#24549C]" : "w-1 bg-white/15")} />
 					))}
 				</div>
 			</div>
@@ -567,34 +560,34 @@ function POIFlowWireframe() {
 // ─── Exported Section ───
 export default function CashbackSection() {
 	return (
-		<section id="cashback" className="py-20 bg-black relative overflow-hidden">
-			<div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-[#24549C]/50 to-transparent" />
+		<section id="cashback" className="py-24 bg-white relative overflow-hidden">
+			<div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-blue-200 to-transparent" />
 			<div className="container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
 				<div className="grid lg:grid-cols-2 gap-16 items-center">
 					<div>
-						<div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-sm font-medium mb-6 backdrop-blur-sm">
+						<div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 border border-blue-100 text-[#24549C] text-sm font-bold mb-6">
 							<ShoppingCart className="w-4 h-4" />
 							Programa de Cashback
 						</div>
-						<h2 className="text-3xl md:text-5xl font-bold mb-6 text-white">
+						<h2 className="text-3xl md:text-5xl font-extrabold mb-6 text-slate-900 leading-tight">
 							Cashback que você controla. <br />
-							<span className="text-white/50">Até o centavo.</span>
+							<span className="text-brand">Até o centavo.</span>
 						</h2>
-						<p className="text-lg text-white/60 mb-8 leading-relaxed">
+						<p className="text-lg text-slate-600 mb-8 leading-relaxed font-medium">
 							Configure quanto devolver (2%, 5%, 10%), defina validade (30, 60, 90 dias) e acompanhe em tempo real quem resgatou. Tudo em uma interface
 							simples.
 						</p>
 
 						<div className="grid sm:grid-cols-2 gap-4 mb-8">
-							<div className="p-4 rounded-xl bg-zinc-900/50 border border-white/5 hover:border-[#24549C]/40 transition-colors">
-								<ShoppingCart className="w-5 h-5 text-[#24549C] mb-2" />
-								<h4 className="font-semibold text-white">Tablet no balcão</h4>
-								<p className="text-sm text-white/50">Cliente vê o saldo na hora da compra. Interface Kiosk inclusa.</p>
+							<div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 hover:border-[#24549C]/30 hover:shadow-lg hover:shadow-blue-900/5 transition-all">
+								<ShoppingCart className="w-6 h-6 text-[#24549C] mb-3" />
+								<h4 className="font-bold text-slate-900 text-lg mb-1">Tablet no balcão</h4>
+								<p className="text-sm text-slate-600 font-medium">Cliente vê o saldo na hora da compra. Interface Kiosk inclusa.</p>
 							</div>
-							<div className="p-4 rounded-xl bg-zinc-900/50 border border-white/5 hover:border-[#24549C]/40 transition-colors">
-								<ArrowRight className="w-5 h-5 text-[#24549C] mb-2" />
-								<h4 className="font-semibold text-white">Resgate instantâneo</h4>
-								<p className="text-sm text-white/50">Entrada de venda em poucos cliques. Resgate com CPF na hora.</p>
+							<div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 hover:border-[#24549C]/30 hover:shadow-lg hover:shadow-blue-900/5 transition-all">
+								<ArrowRight className="w-6 h-6 text-[#24549C] mb-3" />
+								<h4 className="font-bold text-slate-900 text-lg mb-1">Resgate instantâneo</h4>
+								<p className="text-sm text-slate-600 font-medium">Entrada de venda em poucos cliques. Resgate com CPF na hora.</p>
 							</div>
 						</div>
 					</div>

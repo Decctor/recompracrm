@@ -2,19 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import { AnimatePresence, motion } from "framer-motion";
-import {
-	ArrowDown,
-	ArrowUp,
-	BarChart3,
-	Calendar,
-	Crown,
-	DollarSign,
-	Package,
-	PieChart,
-	ShoppingCart,
-	TrendingUp,
-	Users,
-} from "lucide-react";
+import { ArrowDown, ArrowUp, BarChart3, Calendar, Crown, DollarSign, Package, PieChart, ShoppingCart, TrendingUp, Users } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 // ─── Types & Constants ───
@@ -657,7 +645,7 @@ function AnalyticsDashboardWireframe() {
 
 export default function AnalyticsSection() {
 	return (
-		<section className="py-24 bg-zinc-950 border-y border-white/5 relative overflow-hidden">
+		<section className="py-24 bg-white border-y border-black/5 relative overflow-hidden">
 			<div className="container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 relative z-10">
 				<div className="grid lg:grid-cols-2 gap-16 items-center">
 					{/* Left: Wireframe */}
@@ -667,39 +655,39 @@ export default function AnalyticsSection() {
 
 					{/* Right: Text content */}
 					<div className="order-1 lg:order-2">
-						<div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-400 text-sm font-medium mb-6 backdrop-blur-sm">
+						<div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-purple-50 border border-purple-100 text-purple-600 text-sm font-bold mb-6">
 							<BarChart3 className="w-4 h-4" />
 							Analytics em Profundidade
 						</div>
-						<h2 className="text-3xl md:text-5xl font-bold mb-6 text-white">
+						<h2 className="text-3xl md:text-5xl font-extrabold mb-6 text-slate-900 leading-tight">
 							Decisões baseadas em dados. <br />
-							<span className="text-white/50">Não em achismo.</span>
+							<span className="text-brand">Não em achismo.</span>
 						</h2>
-						<p className="text-lg text-white/60 mb-8 leading-relaxed">
-							Pare de abrir 5 planilhas. Um dashboard mostra vendas em tempo real, ticket médio, curva ABC de produtos, e performance da equipe. Tudo
-							em uma tela só.
+						<p className="text-lg text-slate-600 mb-8 leading-relaxed font-medium">
+							Pare de abrir 5 planilhas. Um dashboard mostra vendas em tempo real, ticket médio, curva ABC de produtos, e performance da equipe. Tudo em uma
+							tela só.
 						</p>
 
 						<div className="grid sm:grid-cols-2 gap-4">
-							<div className="p-4 rounded-xl bg-zinc-900/50 border border-white/5 hover:border-purple-500/40 transition-colors">
-								<TrendingUp className="w-5 h-5 text-green-400 mb-2" />
-								<h4 className="font-semibold text-white">Vendas em Tempo Real</h4>
-								<p className="text-sm text-white/50">Acompanhe o faturamento do dia sem esperar o fechamento.</p>
+							<div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 hover:border-purple-300 hover:shadow-lg hover:shadow-purple-900/5 transition-all">
+								<TrendingUp className="w-6 h-6 text-green-500 mb-3" />
+								<h4 className="font-bold text-slate-900 text-lg mb-1">Vendas em Tempo Real</h4>
+								<p className="text-[15px] text-slate-600 font-medium">Acompanhe o faturamento do dia sem esperar o fechamento.</p>
 							</div>
-							<div className="p-4 rounded-xl bg-zinc-900/50 border border-white/5 hover:border-purple-500/40 transition-colors">
-								<Package className="w-5 h-5 text-blue-400 mb-2" />
-								<h4 className="font-semibold text-white">Curva ABC de Produtos</h4>
-								<p className="text-sm text-white/50">Saiba quais 20% dos produtos geram 80% do faturamento.</p>
+							<div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 hover:border-purple-300 hover:shadow-lg hover:shadow-purple-900/5 transition-all">
+								<Package className="w-6 h-6 text-blue-500 mb-3" />
+								<h4 className="font-bold text-slate-900 text-lg mb-1">Curva ABC de Produtos</h4>
+								<p className="text-[15px] text-slate-600 font-medium">Saiba quais 20% dos produtos geram 80% do faturamento.</p>
 							</div>
-							<div className="p-4 rounded-xl bg-zinc-900/50 border border-white/5 hover:border-purple-500/40 transition-colors">
-								<Crown className="w-5 h-5 text-yellow-400 mb-2" />
-								<h4 className="font-semibold text-white">Rankings da Equipe</h4>
-								<p className="text-sm text-white/50">Veja quem bateu a meta e quem precisa de apoio.</p>
+							<div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 hover:border-purple-300 hover:shadow-lg hover:shadow-purple-900/5 transition-all">
+								<Crown className="w-6 h-6 text-[#FFB900] mb-3" />
+								<h4 className="font-bold text-slate-900 text-lg mb-1">Rankings da Equipe</h4>
+								<p className="text-[15px] text-slate-600 font-medium">Veja quem bateu a meta e quem precisa de apoio.</p>
 							</div>
-							<div className="p-4 rounded-xl bg-zinc-900/50 border border-white/5 hover:border-purple-500/40 transition-colors">
-								<Calendar className="w-5 h-5 text-purple-400 mb-2" />
-								<h4 className="font-semibold text-white">Padrões por Período</h4>
-								<p className="text-sm text-white/50">Identifique os melhores dias e horários de venda.</p>
+							<div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 hover:border-purple-300 hover:shadow-lg hover:shadow-purple-900/5 transition-all">
+								<Calendar className="w-6 h-6 text-purple-500 mb-3" />
+								<h4 className="font-bold text-slate-900 text-lg mb-1">Padrões por Período</h4>
+								<p className="text-[15px] text-slate-600 font-medium">Identifique os melhores dias e horários de venda.</p>
 							</div>
 						</div>
 					</div>

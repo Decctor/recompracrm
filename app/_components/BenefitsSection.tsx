@@ -2,16 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
-import {
-	BarChart3,
-	Brain,
-	CheckCircle2,
-	MessageCircle,
-	Shield,
-	Smartphone,
-	Sparkles,
-	Zap,
-} from "lucide-react";
+import { BarChart3, Brain, CheckCircle2, MessageCircle, Shield, Smartphone, Sparkles, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 
 // ─── Animated Visual Components ───
@@ -120,19 +111,19 @@ function AnimatedBrain() {
 
 function MiniDashboard() {
 	return (
-		<div className="bg-zinc-900/80 border border-white/10 rounded-lg p-2 w-full max-w-[160px]">
+		<div className="bg-white border border-slate-200 shadow-sm rounded-lg p-3 w-full max-w-[160px]">
 			{/* Mini header */}
-			<div className="flex items-center gap-1 mb-2">
-				<div className="w-1.5 h-1.5 rounded-full bg-red-400/60" />
-				<div className="w-1.5 h-1.5 rounded-full bg-yellow-400/60" />
-				<div className="w-1.5 h-1.5 rounded-full bg-green-400/60" />
+			<div className="flex items-center gap-1.5 mb-3">
+				<div className="w-2 h-2 rounded-full bg-red-400" />
+				<div className="w-2 h-2 rounded-full bg-yellow-400" />
+				<div className="w-2 h-2 rounded-full bg-green-400" />
 			</div>
 			{/* Mini bars */}
-			<div className="flex items-end gap-1 h-10 mb-1.5">
+			<div className="flex items-end gap-1.5 h-12 mb-2">
 				{[40, 65, 45, 80, 55, 70, 90].map((height, i) => (
 					<motion.div
 						key={i}
-						className="flex-1 bg-gradient-to-t from-[#24549C] to-blue-400 rounded-sm"
+						className="flex-1 bg-gradient-to-t from-blue-600 to-blue-300 rounded-sm"
 						initial={{ height: 0 }}
 						animate={{ height: `${height}%` }}
 						transition={{ delay: i * 0.1, duration: 0.5 }}
@@ -140,7 +131,7 @@ function MiniDashboard() {
 				))}
 			</div>
 			{/* Mini stats */}
-			<div className="flex justify-between text-[0.4rem] text-white/40">
+			<div className="flex justify-between text-[0.5rem] font-medium text-slate-400">
 				<span>Seg</span>
 				<span>Dom</span>
 			</div>
@@ -166,41 +157,28 @@ function BentoCard({ className, children, title, description, size }: BentoCardP
 			viewport={{ once: true, margin: "-50px" }}
 			transition={{ duration: 0.5 }}
 			className={cn(
-				"group relative overflow-hidden rounded-2xl border border-white/5 bg-zinc-900/50 p-6 transition-all duration-300 hover:border-[#24549C]/40 hover:bg-zinc-900/70",
+				"group relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-all duration-300 hover:border-[#24549C]/30 hover:shadow-lg hover:shadow-blue-900/5",
 				size === "large" && "md:col-span-2 md:row-span-2",
 				size === "medium" && "md:col-span-1 md:row-span-2",
 				className,
 			)}
 		>
 			{/* Content */}
-			<div className={cn("flex h-full", size === "large" ? "flex-col md:flex-row md:items-center gap-6" : "flex-col gap-4")}>
+			<div className={cn("flex h-full relative z-10", size === "large" ? "flex-col md:flex-row md:items-center gap-6" : "flex-col gap-4")}>
 				{/* Visual */}
-				<div
-					className={cn(
-						"flex items-center justify-center shrink-0",
-						size === "large" && "md:w-1/2",
-						size === "small" && "mb-2",
-					)}
-				>
-					{children}
-				</div>
+				<div className={cn("flex items-center justify-center shrink-0", size === "large" && "md:w-1/2", size === "small" && "mb-2")}>{children}</div>
 
 				{/* Text */}
 				<div className={cn(size === "large" && "md:w-1/2")}>
-					<h3
-						className={cn(
-							"font-bold text-white mb-2",
-							size === "large" ? "text-xl md:text-2xl" : size === "medium" ? "text-lg" : "text-base",
-						)}
-					>
+					<h3 className={cn("font-bold text-slate-900 mb-2", size === "large" ? "text-xl md:text-2xl" : size === "medium" ? "text-lg" : "text-base")}>
 						{title}
 					</h3>
-					<p className={cn("text-white/60 leading-relaxed", size === "large" ? "text-base" : "text-sm")}>{description}</p>
+					<p className={cn("text-slate-600 font-medium leading-relaxed", size === "large" ? "text-base" : "text-sm")}>{description}</p>
 				</div>
 			</div>
 
 			{/* Subtle gradient overlay on hover */}
-			<div className="absolute inset-0 bg-gradient-to-br from-[#24549C]/0 to-[#24549C]/0 group-hover:from-[#24549C]/5 group-hover:to-transparent transition-all duration-500 pointer-events-none" />
+			<div className="absolute inset-0 bg-gradient-to-br from-slate-50/0 to-slate-50/0 group-hover:from-blue-50/50 group-hover:to-transparent transition-all duration-500 pointer-events-none" />
 		</motion.div>
 	);
 }
@@ -222,9 +200,9 @@ function SmallBentoCard({
 			whileInView={{ opacity: 1, y: 0 }}
 			viewport={{ once: true, margin: "-50px" }}
 			transition={{ duration: 0.5 }}
-			className="group relative overflow-hidden rounded-2xl border border-white/5 bg-zinc-900/50 p-5 transition-all duration-300 hover:border-[#24549C]/40 hover:bg-zinc-900/70"
+			className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-all duration-300 hover:border-[#24549C]/30 hover:shadow-lg hover:shadow-blue-900/5"
 		>
-			<div className="flex items-start gap-4">
+			<div className="flex items-start gap-4 relative z-10">
 				<div
 					className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-transform duration-300 group-hover:scale-110"
 					style={{ backgroundColor: `${accentColor}15` }}
@@ -232,10 +210,12 @@ function SmallBentoCard({
 					<Icon className="w-5 h-5" style={{ color: accentColor }} />
 				</div>
 				<div>
-					<h3 className="font-semibold text-white mb-1">{title}</h3>
-					<p className="text-sm text-white/60 leading-relaxed">{description}</p>
+					<h3 className="font-bold text-slate-900 mb-1">{title}</h3>
+					<p className="text-sm font-medium text-slate-600 leading-relaxed">{description}</p>
 				</div>
 			</div>
+			{/* Subtle gradient overlay on hover */}
+			<div className="absolute inset-0 bg-gradient-to-br from-slate-50/0 to-slate-50/0 group-hover:from-blue-50/50 group-hover:to-transparent transition-all duration-500 pointer-events-none" />
 		</motion.div>
 	);
 }
@@ -244,37 +224,54 @@ function SmallBentoCard({
 
 export default function BenefitsSection() {
 	return (
-		<section className="py-20 bg-zinc-950 border-y border-white/5 overflow-hidden">
-			<div className="container mx-auto max-w-6xl px-4">
+		<section className="py-24 bg-slate-50 border-y border-black/5 overflow-hidden">
+			<div className="container mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
 				{/* Header */}
-				<motion.div
-					initial={{ opacity: 0, y: 20 }}
-					whileInView={{ opacity: 1, y: 0 }}
-					viewport={{ once: true }}
-					className="text-center mb-12"
-				>
-					<h2 className="text-3xl md:text-4xl font-bold text-white mb-4">Por que escolher o RecompraCRM?</h2>
-					<p className="text-lg text-white/60">Tudo que você precisa para aumentar recompra. Em uma só plataforma.</p>
+				<motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-center mb-16">
+					<div className="inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 border border-blue-100 text-[#24549C] text-sm font-bold mb-6">
+						<Sparkles className="w-4 h-4" />A Plataforma Completa
+					</div>
+					<h2 className="text-3xl md:text-5xl font-extrabold text-slate-900 mb-6 leading-tight">Por que escolher o RecompraCRM?</h2>
+					<p className="text-lg text-slate-600 font-medium max-w-2xl mx-auto">
+						Tudo que você precisa para aumentar recompra. Em uma só plataforma fácil de usar.
+					</p>
 				</motion.div>
 
 				{/* Bento Grid */}
 				<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 					{/* Row 1: Large + Medium */}
-					<BentoCard size="large" title="Comece em minutos" description="Sem integração obrigatória. Cadastre sua primeira venda hoje e veja o sistema funcionando. Nada de semanas de implantação.">
+					<BentoCard
+						size="large"
+						title="Comece em minutos"
+						description="Sem integração obrigatória. Cadastre sua primeira venda hoje e veja o sistema funcionando. Nada de semanas de implantação."
+					>
 						<AnimatedSpeedometer />
 					</BentoCard>
 
-					<BentoCard size="medium" title="IA que sugere ações" description="Receba dicas práticas baseadas nos seus dados reais. Não em achismo ou intuição.">
+					<BentoCard
+						size="medium"
+						title="IA que sugere ações"
+						description="Receba dicas práticas baseadas nos seus dados reais. Não em achismo ou intuição."
+					>
 						<AnimatedBrain />
 					</BentoCard>
 
 					{/* Row 2: Small cards */}
-					<SmallBentoCard icon={Smartphone} title="Tablet no balcão" description="Interface POI inclusa. Cliente vê o saldo na hora." accentColor="#22c55e" />
+					<SmallBentoCard
+						icon={Smartphone}
+						title="Tablet no balcão"
+						description="Interface POI inclusa. Cliente vê o saldo na hora."
+						accentColor="#22c55e"
+					/>
 
 					<SmallBentoCard icon={Shield} title="Sem surpresas" description="Preço fixo mensal. Cancele quando quiser." accentColor="#f59e0b" />
 
 					{/* Row 3: Medium + Large */}
-					<BentoCard size="medium" title="WhatsApp automático" description="Campanhas de reativação que rodam sozinhas. Você configura uma vez, o sistema trabalha 24/7.">
+					<BentoCard
+						size="medium"
+						title="WhatsApp automático"
+						description="Campanhas de reativação que rodam sozinhas. Você configura uma vez, o sistema trabalha 24/7."
+					>
 						<AnimatedChat />
 					</BentoCard>
 

@@ -173,12 +173,8 @@ function OverviewView({ active }: { active: boolean }) {
 								/>
 							)}
 
-							<div className={cn("text-lg font-black text-white mb-0.5 tabular-nums", isHighlighted && "text-[#FFB900]")}>
-								{values[segment.id]}
-							</div>
-							<div className={cn("text-[0.45rem] font-bold py-0.5 px-1.5 rounded-full inline-block", colors.text, colors.bg)}>
-								{segment.label}
-							</div>
+							<div className={cn("text-lg font-black text-white mb-0.5 tabular-nums", isHighlighted && "text-[#FFB900]")}>{values[segment.id]}</div>
+							<div className={cn("text-[0.45rem] font-bold py-0.5 px-1.5 rounded-full inline-block", colors.text, colors.bg)}>{segment.label}</div>
 						</motion.div>
 					);
 				})}
@@ -289,12 +285,7 @@ function SegmentDetailView({ active }: { active: boolean }) {
 			{/* Action button */}
 			<AnimatePresence>
 				{showActionButton && (
-					<motion.div
-						initial={{ opacity: 0, y: 10 }}
-						animate={{ opacity: 1, y: 0 }}
-						exit={{ opacity: 0 }}
-						className="mt-2 mx-1"
-					>
+					<motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="mt-2 mx-1">
 						<motion.div
 							className="bg-[#FFB900] rounded-lg py-2 px-3 flex items-center justify-center gap-1.5 cursor-pointer"
 							animate={{ scale: [1, 1.02, 1] }}
@@ -356,12 +347,7 @@ function ActionView({ active }: { active: boolean }) {
 	if (showSuccess) {
 		return (
 			<div className="flex flex-col h-full items-center justify-center gap-3 px-2">
-				<motion.div
-					initial={{ scale: 0 }}
-					animate={{ scale: 1 }}
-					transition={{ type: "spring", stiffness: 300, damping: 20 }}
-					className="relative"
-				>
+				<motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 300, damping: 20 }} className="relative">
 					<div className="absolute inset-0 bg-green-500/30 blur-xl rounded-full scale-150" />
 					<div className="relative bg-green-600 p-4 rounded-full text-white shadow-lg">
 						<CheckCircle2 className="w-8 h-8" />
@@ -373,7 +359,12 @@ function ActionView({ active }: { active: boolean }) {
 					<div className="text-[0.4rem] text-white/50 mt-0.5">89 clientes serão notificados</div>
 				</motion.div>
 
-				<motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="grid grid-cols-2 gap-2 w-full max-w-[180px]">
+				<motion.div
+					initial={{ opacity: 0, y: 10 }}
+					animate={{ opacity: 1, y: 0 }}
+					transition={{ delay: 0.4 }}
+					className="grid grid-cols-2 gap-2 w-full max-w-[180px]"
+				>
 					<div className="bg-green-500/10 border border-green-500/20 rounded-lg p-2 text-center">
 						<div className="text-[0.35rem] text-green-400/60 uppercase font-bold">Cashback</div>
 						<div className="text-[0.6rem] font-black text-green-400">R$ 2.225</div>
@@ -411,11 +402,7 @@ function ActionView({ active }: { active: boolean }) {
 				{/* Cashback input */}
 				<AnimatePresence>
 					{step >= 1 && (
-						<motion.div
-							initial={{ opacity: 0, y: 10 }}
-							animate={{ opacity: 1, y: 0 }}
-							className="bg-white/[0.02] border border-white/5 rounded-lg p-2"
-						>
+						<motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-white/[0.02] border border-white/5 rounded-lg p-2">
 							<div className="text-[0.4rem] text-white/50 uppercase font-bold mb-1.5">Valor do Cashback</div>
 							<div className="flex items-center gap-2">
 								<div className="flex-1 bg-zinc-800 rounded-lg px-2 py-1.5 flex items-center">
@@ -453,8 +440,8 @@ function ActionView({ active }: { active: boolean }) {
 								<span className="text-[0.4rem] text-white/50 uppercase font-bold">Mensagem WhatsApp</span>
 							</div>
 							<div className="bg-zinc-800/50 rounded-lg p-2 text-[0.4rem] text-white/70 leading-relaxed">
-								Oi! Sentimos sua falta na loja. Liberamos <span className="text-[#FFB900] font-bold">R$ 25 de cashback</span> especial pra
-								você voltar! Válido por 15 dias.
+								Oi! Sentimos sua falta na loja. Liberamos <span className="text-[#FFB900] font-bold">R$ 25 de cashback</span> especial pra você voltar! Válido
+								por 15 dias.
 							</div>
 						</motion.div>
 					)}
@@ -540,10 +527,7 @@ function RFMDashboardWireframe() {
 				{/* Bottom progress dots */}
 				<div className="flex items-center justify-center gap-1.5 pb-3">
 					{VIEWS.map((view) => (
-						<div
-							key={view}
-							className={cn("h-1 rounded-full transition-all duration-500", currentView === view ? "w-5 bg-[#FFB900]" : "w-1 bg-white/15")}
-						/>
+						<div key={view} className={cn("h-1 rounded-full transition-all duration-500", currentView === view ? "w-5 bg-[#FFB900]" : "w-1 bg-white/15")} />
 					))}
 				</div>
 			</div>
@@ -555,7 +539,7 @@ function RFMDashboardWireframe() {
 
 export default function RFMSection() {
 	return (
-		<section id="bi" className="py-20 bg-black border-y border-white/5">
+		<section id="bi" className="py-24 bg-slate-50 border-y border-black/5 relative overflow-hidden">
 			<div className="container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
 				<div className="grid lg:grid-cols-2 gap-16 items-center">
 					<div className="relative">
@@ -563,30 +547,30 @@ export default function RFMSection() {
 					</div>
 
 					<div>
-						<div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#FFB900]/10 border border-[#FFB900]/20 text-[#FFB900] text-sm font-medium mb-6 backdrop-blur-sm">
+						<div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-yellow-100 border border-yellow-200 text-[#d97706] text-sm font-bold mb-6">
 							<BadgePercent className="w-4 h-4" />
 							Business Intelligence
 						</div>
-						<h2 className="text-3xl md:text-5xl font-bold mb-6 text-white">
+						<h2 className="text-3xl md:text-5xl font-extrabold mb-6 text-slate-900 leading-tight">
 							Saiba exatamente quem <br />
-							<span className="text-white/50">merece seu tempo.</span>
+							<span className="text-brand">merece seu tempo.</span>
 						</h2>
-						<p className="text-lg text-white/60 mb-8 leading-relaxed">
-							A Matriz RFM classifica sua base automaticamente. Você vê quem são seus campeões (cuide bem deles), quem está em risco (hora de
-							reativar) e quem é novo (crie relacionamento).
+						<p className="text-lg text-slate-600 mb-8 leading-relaxed font-medium">
+							A Matriz RFM classifica sua base automaticamente. Você vê quem são seus campeões (cuide bem deles), quem está em risco (hora de reativar) e
+							quem é novo (crie relacionamento).
 						</p>
-						<div className="grid sm:grid-cols-2 gap-6 mb-8">
-							<div className="p-4 rounded-xl bg-zinc-900/50 border border-white/5 hover:border-[#FFB900]/40 transition-colors">
-								<h4 className="font-semibold text-white mb-2 flex items-center gap-2">
-									<Grid3X3 className="w-4 h-4 text-[#FFB900]" /> Segmentação Automática
+						<div className="grid sm:grid-cols-2 gap-4 mb-8">
+							<div className="p-5 rounded-2xl bg-white border border-slate-200 hover:border-yellow-400/50 hover:shadow-lg hover:shadow-yellow-900/5 transition-all">
+								<h4 className="font-bold text-slate-900 text-lg mb-2 flex items-center gap-2">
+									<Grid3X3 className="w-5 h-5 text-[#d97706]" /> Segmentação Automática
 								</h4>
-								<p className="text-sm text-white/60">Sem fórmulas. Sem planilhas. A análise roda sozinha.</p>
+								<p className="text-[15px] text-slate-600 font-medium">Sem fórmulas. Sem planilhas. A análise roda sozinha.</p>
 							</div>
-							<div className="p-4 rounded-xl bg-zinc-900/50 border border-white/5 hover:border-[#FFB900]/40 transition-colors">
-								<h4 className="font-semibold text-white mb-2 flex items-center gap-2">
-									<Wallet className="w-4 h-4 text-[#FFB900]" /> Ação com 1 Clique
+							<div className="p-5 rounded-2xl bg-white border border-slate-200 hover:border-yellow-400/50 hover:shadow-lg hover:shadow-yellow-900/5 transition-all">
+								<h4 className="font-bold text-slate-900 text-lg mb-2 flex items-center gap-2">
+									<Wallet className="w-5 h-5 text-[#d97706]" /> Ação com 1 Clique
 								</h4>
-								<p className="text-sm text-white/60">Viu 89 clientes em risco? Crie uma campanha direto da tela.</p>
+								<p className="text-[15px] text-slate-600 font-medium">Viu 89 clientes em risco? Crie uma campanha direto da tela.</p>
 							</div>
 						</div>
 					</div>

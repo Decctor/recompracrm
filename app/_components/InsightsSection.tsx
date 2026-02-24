@@ -2,19 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import { AnimatePresence, motion } from "framer-motion";
-import {
-	ArrowRight,
-	BarChart3,
-	ChevronDown,
-	Lightbulb,
-	ShoppingBag,
-	ShoppingCart,
-	Sparkles,
-	TrendingUp,
-	UserRound,
-	Users,
-	X,
-} from "lucide-react";
+import { ArrowRight, BarChart3, ChevronDown, Lightbulb, ShoppingBag, ShoppingCart, Sparkles, TrendingUp, UserRound, Users, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 // ─── Types & Constants ───
@@ -148,17 +136,11 @@ function HintCard({
 				<div className="flex-1 min-w-0">
 					<div className="flex items-center gap-1.5 mb-0.5">
 						<span className="text-[0.5rem] font-bold text-white truncate">{hint.title}</span>
-						{hint.isNew && (
-							<span className="text-[0.35rem] font-bold bg-[#FFB900] text-black px-1 py-0.5 rounded uppercase shrink-0">
-								NOVO
-							</span>
-						)}
+						{hint.isNew && <span className="text-[0.35rem] font-bold bg-[#FFB900] text-black px-1 py-0.5 rounded uppercase shrink-0">NOVO</span>}
 					</div>
 
 					{/* Description */}
-					<p className="text-[0.4rem] text-white/50 leading-relaxed">
-						{isExpanded ? hint.fullDescription : hint.shortDescription}
-					</p>
+					<p className="text-[0.4rem] text-white/50 leading-relaxed">{isExpanded ? hint.fullDescription : hint.shortDescription}</p>
 				</div>
 			</div>
 
@@ -186,12 +168,7 @@ function HintCard({
 						)}
 
 						{/* Action buttons */}
-						<motion.div
-							initial={{ opacity: 0, y: 5 }}
-							animate={{ opacity: 1, y: 0 }}
-							transition={{ delay: 0.3 }}
-							className="mt-2 flex items-center gap-2"
-						>
+						<motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="mt-2 flex items-center gap-2">
 							{hint.primaryAction && (
 								<motion.div
 									className="bg-[#FFB900] rounded-lg px-2 py-1.5 flex items-center gap-1"
@@ -211,12 +188,7 @@ function HintCard({
 						</motion.div>
 
 						{/* Timestamp */}
-						<motion.div
-							initial={{ opacity: 0 }}
-							animate={{ opacity: 1 }}
-							transition={{ delay: 0.4 }}
-							className="mt-2 text-[0.35rem] text-white/30"
-						>
+						<motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }} className="mt-2 text-[0.35rem] text-white/30">
 							{hint.timestamp}
 						</motion.div>
 					</motion.div>
@@ -297,9 +269,7 @@ function AIHintsWireframe() {
 					<div className="flex-1">
 						<div className="flex items-center gap-2">
 							<span className="text-[0.6rem] font-black text-white uppercase tracking-wide">AI HINTS</span>
-							<span className="text-[0.4rem] font-medium text-[#FFB900]/80 bg-[#FFB900]/10 px-1.5 py-0.5 rounded">
-								2 novos
-							</span>
+							<span className="text-[0.4rem] font-medium text-[#FFB900]/80 bg-[#FFB900]/10 px-1.5 py-0.5 rounded">2 novos</span>
 						</div>
 						<div className="text-[0.4rem] text-white/40">Seu assistente de inteligência comercial</div>
 					</div>
@@ -334,8 +304,8 @@ function AIHintsWireframe() {
 
 export default function InsightsSection() {
 	return (
-		<section id="insights" className="py-24 bg-zinc-950 border-t border-white/5 relative overflow-hidden">
-			<div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-[#FFB900]/10 via-zinc-950/0 to-zinc-950/0" />
+		<section id="insights" className="py-24 bg-white border-y border-black/5 relative overflow-hidden">
+			<div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-yellow-100/50 via-white to-white" />
 
 			<div className="container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 relative z-10">
 				<div className="grid lg:grid-cols-2 gap-16 items-center">
@@ -346,31 +316,30 @@ export default function InsightsSection() {
 
 					{/* Content */}
 					<div className="order-1 lg:order-2">
-						<div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 text-sm font-medium mb-6 backdrop-blur-sm">
+						<div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-yellow-50 border border-yellow-100 text-[#d97706] text-sm font-bold mb-6">
 							<Lightbulb className="w-4 h-4" />
 							Insights Proativos
 						</div>
-						<h2 className="text-3xl md:text-5xl font-bold mb-6 text-white">
+						<h2 className="text-3xl md:text-5xl font-extrabold mb-6 text-slate-900 leading-tight">
 							A IA avisa. Você age. <br />
-							<span className="text-white/50">O caixa sente.</span>
+							<span className="text-brand">O caixa sente.</span>
 						</h2>
-						<p className="text-lg text-white/60 mb-8 leading-relaxed">
-							Receba alertas práticos baseados nos seus dados. Não perca tempo analisando relatórios: a informação chega
-							pronta para agir.
+						<p className="text-lg text-slate-600 mb-8 leading-relaxed font-medium">
+							Receba alertas práticos baseados nos seus dados. Não perca tempo analisando relatórios: a informação chega pronta para agir.
 						</p>
 
-						<div className="grid sm:grid-cols-2 gap-6 mb-8">
-							<div className="p-4 rounded-xl bg-zinc-900/50 border border-white/5 hover:border-yellow-500/40 transition-colors">
-								<h4 className="font-semibold text-white mb-2 flex items-center gap-2">
-									<TrendingUp className="w-4 h-4 text-yellow-400" /> Análise Automática
+						<div className="grid sm:grid-cols-2 gap-4 mb-8">
+							<div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 hover:border-yellow-400/50 hover:shadow-lg hover:shadow-yellow-900/5 transition-all">
+								<h4 className="font-bold text-slate-900 text-lg mb-2 flex items-center gap-2">
+									<TrendingUp className="w-5 h-5 text-[#d97706]" /> Análise Automática
 								</h4>
-								<p className="text-sm text-white/60">A IA monitora seus dados 24/7 e identifica padrões importantes.</p>
+								<p className="text-[15px] text-slate-600 font-medium">A IA monitora seus dados 24/7 e identifica padrões importantes.</p>
 							</div>
-							<div className="p-4 rounded-xl bg-zinc-900/50 border border-white/5 hover:border-yellow-500/40 transition-colors">
-								<h4 className="font-semibold text-white mb-2 flex items-center gap-2">
-									<Users className="w-4 h-4 text-yellow-400" /> Ações com 1 Clique
+							<div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 hover:border-yellow-400/50 hover:shadow-lg hover:shadow-yellow-900/5 transition-all">
+								<h4 className="font-bold text-slate-900 text-lg mb-2 flex items-center gap-2">
+									<Users className="w-5 h-5 text-[#d97706]" /> Ações com 1 Clique
 								</h4>
-								<p className="text-sm text-white/60">Do insight à campanha em segundos. Sem complicação.</p>
+								<p className="text-[15px] text-slate-600 font-medium">Do insight à campanha em segundos. Sem complicação.</p>
 							</div>
 						</div>
 					</div>
