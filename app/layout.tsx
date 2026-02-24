@@ -1,10 +1,10 @@
 import "@/styles/globals.css";
 import ProvidersWrapper from "@/components/Providers/Wrapper";
 import { cn } from "@/lib/utils";
+import { Analytics } from "@vercel/analytics/next";
 import type { Metadata, Viewport } from "next";
 import { Raleway } from "next/font/google";
 import { Toaster } from "sonner";
-
 const raleway = Raleway({
 	subsets: ["latin"],
 	variable: "--font-raleway",
@@ -34,6 +34,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 					{children}
 					<Toaster />
 				</ProvidersWrapper>
+				<Analytics />
 			</body>
 		</html>
 	);
