@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { accumulateCashbackForClient, calculateAccumulatedCashbackValue, ensureCashbackBalanceForClient } from "@/lib/cashback/accumulation";
+import { applyCashbackRedemptionFIFO } from "@/lib/cashback/redemption";
 import { generateCashbackForCampaign } from "@/lib/cashback/generate-campaign-cashback";
 import { DASTJS_TIME_DURATION_UNITS_MAP, getPostponedDateFromReferenceDate } from "@/lib/dates";
 import { formatPhoneAsBase } from "@/lib/formatting";
@@ -9,7 +10,6 @@ import type { TInteractionContextMetadados } from "@/lib/whatsapp/template-varia
 import type { TTimeDurationUnitsEnum } from "@/schemas/enums";
 import { type DBTransaction, db } from "@/services/drizzle";
 import {
-	cashbackProgramBalances,
 	cashbackProgramPrizes,
 	cashbackProgramTransactions,
 	cashbackPrograms,
@@ -364,17 +364,18 @@ async function handleNewTransaction(req: NextRequest): Promise<NextResponse<TCre
 		visualClientNewOverallAvailableBalance += visualClientAccumulatedCashbackValue;
 
 		// PRIZE VALIDATION (if prize redemption is requested)
-		const isPrizeRedemption = !!input.sale.prizeRedemption;
+		const prizeRedemption = input.sale.prizeRedemption;
+		const isPrizeRedemption = !!prizeRedemption;
 		let validatedPrize: {
 			id: string;
 			valor: number;
 			produtoId: string | null;
 			produtoVarianteId: string | null;
 		} | null = null;
-		if (isPrizeRedemption) {
+		if (isPrizeRedemption && prizeRedemption) {
 			const prize = await tx.query.cashbackProgramPrizes.findFirst({
 				where: (fields, { and, eq }) =>
-					and(eq(fields.id, input.sale.prizeRedemption!.prizeId), eq(fields.ativo, true), eq(fields.programaId, program.id)),
+					and(eq(fields.id, prizeRedemption.prizeId), eq(fields.ativo, true), eq(fields.programaId, program.id)),
 				columns: {
 					id: true,
 					valor: true,
@@ -411,21 +412,18 @@ async function handleNewTransaction(req: NextRequest): Promise<NextResponse<TCre
 				throw new createHttpError.BadRequest("Saldo insuficiente.");
 			}
 
-			// Getting a snapshot of the current available balance
-			const previousBalance = clientCashbackAvailableBalance;
-			// Calculating the new available balance after the redemption
-			const newBalanceAfterRedemption = previousBalance - input.sale.cashback.valor;
+			const redemptionResult = await applyCashbackRedemptionFIFO({
+				tx,
+				orgId: input.orgId,
+				clientId: clientId as string,
+				programId: program.id,
+				redemptionValue: input.sale.cashback.valor,
+			});
 
-			// Updating balance for the redemption process
-			await tx
-				.update(cashbackProgramBalances)
-				.set({
-					saldoValorDisponivel: newBalanceAfterRedemption,
-					saldoValorResgatadoTotal: clientCashbackRedeemedBalanceTotal + input.sale.cashback.valor,
-					dataAtualizacao: new Date(),
-				})
-				.where(and(eq(cashbackProgramBalances.organizacaoId, input.orgId), eq(cashbackProgramBalances.clienteId, clientId)));
+			const previousBalance = redemptionResult.previousBalance;
+			const newBalanceAfterRedemption = redemptionResult.newBalance;
 			clientCashbackAvailableBalance = newBalanceAfterRedemption;
+			clientCashbackRedeemedBalanceTotal = redemptionResult.newResgatadoTotal;
 
 			// Inserting a new transaction for RESGATE
 			const insertedRedemptionTransactionResponse = await tx
@@ -448,6 +446,9 @@ async function handleNewTransaction(req: NextRequest): Promise<NextResponse<TCre
 					// Prize redemption fields
 					resgateRecompensaId: validatedPrize?.id ?? null,
 					resgateRecompensaValor: validatedPrize?.valor ?? null,
+					metadados: {
+						consumoFifo: redemptionResult.consumedFromAccumulations,
+					},
 				})
 				.returning({ id: cashbackProgramTransactions.id });
 			const insertedRedemptionTransactionId = insertedRedemptionTransactionResponse[0]?.id;

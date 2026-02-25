@@ -58,7 +58,7 @@ export async function reverseSaleCashback({ tx, saleId, clientId, organizationId
 	for (const transaction of relatedTransactions) {
 		const transactionClientId = transaction.clienteId;
 		// Only reverse the remaining amount (not already consumed)
-		const amountToReverse = transaction.valorRestante;
+		let amountToReverse = transaction.valorRestante;
 
 		if (amountToReverse <= 0) {
 			console.log(`[CASHBACK_REVERSAL] Transaction ${transaction.id} has no remaining value to reverse. Skipping but marking as EXPIRADO.`);
@@ -86,7 +86,18 @@ export async function reverseSaleCashback({ tx, saleId, clientId, organizationId
 		}
 
 		const previousBalance = currentBalance.saldoValorDisponivel;
-		const newBalance = previousBalance - amountToReverse;
+		amountToReverse = Math.max(0, Math.min(amountToReverse, previousBalance));
+		if (amountToReverse <= 0) {
+			await tx
+				.update(cashbackProgramTransactions)
+				.set({
+					status: "EXPIRADO",
+					valorRestante: 0,
+				})
+				.where(eq(cashbackProgramTransactions.id, transaction.id));
+			continue;
+		}
+		const newBalance = Math.max(0, previousBalance - amountToReverse);
 
 		// Create CANCELAMENTO transaction
 		await tx.insert(cashbackProgramTransactions).values({

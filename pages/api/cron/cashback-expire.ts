@@ -34,7 +34,6 @@ const handleCashbackExpire = async (req: NextApiRequest, res: NextApiResponse) =
 
 				for (const transaction of expiredTransactions) {
 					const valorExpirado = transaction.valorRestante;
-
 					console.log(`[ORG: ${organization.id}] Expiring ${valorExpirado} for client ${transaction.clienteId}.`);
 					const balance = await tx.query.cashbackProgramBalances.findFirst({
 						where: (fields, { and, eq }) =>
@@ -43,21 +42,24 @@ const handleCashbackExpire = async (req: NextApiRequest, res: NextApiResponse) =
 
 					if (balance) {
 						const previousBalance = balance.saldoValorDisponivel;
-						const newBalance = previousBalance - valorExpirado;
+						const amountToExpire = Math.max(0, Math.min(valorExpirado, previousBalance));
+						const newBalance = Math.max(0, previousBalance - amountToExpire);
 
-						// Create EXPIRAÇÃO transaction
-						await tx.insert(cashbackProgramTransactions).values({
-							organizacaoId: organization.id,
-							clienteId: transaction.clienteId,
-							programaId: transaction.programaId,
-							tipo: "EXPIRAÇÃO",
-							status: "EXPIRADO",
-							valor: -valorExpirado,
-							valorRestante: 0,
-							saldoValorAnterior: previousBalance,
-							saldoValorPosterior: newBalance,
-							dataInsercao: new Date(),
-						});
+						// Defensive guard: never allow expirations to push balance below zero.
+						if (amountToExpire > 0) {
+							await tx.insert(cashbackProgramTransactions).values({
+								organizacaoId: organization.id,
+								clienteId: transaction.clienteId,
+								programaId: transaction.programaId,
+								tipo: "EXPIRAÇÃO",
+								status: "EXPIRADO",
+								valor: -amountToExpire,
+								valorRestante: 0,
+								saldoValorAnterior: previousBalance,
+								saldoValorPosterior: newBalance,
+								dataInsercao: new Date(),
+							});
+						}
 
 						// Mark original transaction as EXPIRADO
 						await tx

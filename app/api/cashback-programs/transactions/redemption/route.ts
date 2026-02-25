@@ -1,7 +1,8 @@
 import { appApiHandler } from "@/lib/app-api";
+import { applyCashbackRedemptionFIFO } from "@/lib/cashback/redemption";
 import { db } from "@/services/drizzle";
-import { cashbackProgramBalances, cashbackProgramTransactions, cashbackPrograms, organizations } from "@/services/drizzle/schema";
-import { and, eq } from "drizzle-orm";
+import { cashbackProgramTransactions, cashbackPrograms, organizations } from "@/services/drizzle/schema";
+import { eq } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import z from "zod";
@@ -93,23 +94,18 @@ async function processRedemption(input: z.infer<typeof RedemptionInputSchema>): 
 			}
 		}
 
-		// 5. Get balance
-		const balance = await tx.query.cashbackProgramBalances.findFirst({
-			where: and(eq(cashbackProgramBalances.clienteId, input.clientId), eq(cashbackProgramBalances.organizacaoId, input.orgId)),
+		// 5. Apply redemption with FIFO consumption on ACÚMULO transactions
+		const redemptionResult = await applyCashbackRedemptionFIFO({
+			tx,
+			orgId: input.orgId,
+			clientId: input.clientId,
+			programId: program.id,
+			redemptionValue: input.redemptionValue,
 		});
 
-		if (!balance) {
-			throw new createHttpError.NotFound("Saldo de cashback não encontrado para este cliente.");
-		}
-
-		if (balance.saldoValorDisponivel < input.redemptionValue) {
-			throw new createHttpError.BadRequest("Saldo insuficiente.");
-		}
-
-		// 6. Calculate new balances
-		const previousBalance = balance.saldoValorDisponivel;
-		const newBalance = previousBalance - input.redemptionValue;
-		const newResgatadoTotal = balance.saldoValorResgatadoTotal + input.redemptionValue;
+		const previousBalance = redemptionResult.previousBalance;
+		const newBalance = redemptionResult.newBalance;
+		const newResgatadoTotal = redemptionResult.newResgatadoTotal;
 
 		// 7. Create redemption transaction
 		const transactionResult = await tx
@@ -129,6 +125,9 @@ async function processRedemption(input: z.infer<typeof RedemptionInputSchema>): 
 				expiracaoData: null,
 				operadorId: membershipForSeller?.usuario?.id,
 				operadorVendedorId: operator.id,
+				metadados: {
+					consumoFifo: redemptionResult.consumedFromAccumulations,
+				},
 			})
 			.returning({ id: cashbackProgramTransactions.id });
 
@@ -137,16 +136,6 @@ async function processRedemption(input: z.infer<typeof RedemptionInputSchema>): 
 		if (!transactionId) {
 			throw new createHttpError.InternalServerError("Erro ao criar transação de resgate.");
 		}
-
-		// 8. Update balance
-		await tx
-			.update(cashbackProgramBalances)
-			.set({
-				saldoValorDisponivel: newBalance,
-				saldoValorResgatadoTotal: newResgatadoTotal,
-				dataAtualizacao: new Date(),
-			})
-			.where(eq(cashbackProgramBalances.id, balance.id));
 
 		return {
 			data: {

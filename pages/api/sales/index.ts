@@ -1,5 +1,6 @@
 import { apiHandler } from "@/lib/api";
 import { getCurrentSessionUncached } from "@/lib/authentication/pages-session";
+import { applyCashbackRedemptionFIFO } from "@/lib/cashback/redemption";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { DASTJS_TIME_DURATION_UNITS_MAP, getPostponedDateFromReferenceDate } from "@/lib/dates";
 import { type ImmediateProcessingData, processSingleInteractionImmediately } from "@/lib/interactions";
@@ -576,37 +577,28 @@ const createSaleRoute: NextApiHandler<TCreateSaleOutput> = async (req, res) => {
 		});
 
 		// 3. If using cashback: validate balance and create redemption
-		let currentBalance = 0;
+		let redemptionSnapshot: {
+			previousBalance: number;
+			newBalance: number;
+			consumedFromAccumulations: Array<{
+				accumulationTransactionId: string;
+				consumedValue: number;
+			}>;
+		} | null = null;
 		if (input.cashbackApplied && input.cashbackAppliedAmount > 0) {
-			const balance = await tx.query.cashbackProgramBalances.findFirst({
-				where: and(eq(cashbackProgramBalances.clienteId, input.clientId), eq(cashbackProgramBalances.organizacaoId, input.orgId)),
+			const redemptionResult = await applyCashbackRedemptionFIFO({
+				tx,
+				orgId: input.orgId,
+				clientId: input.clientId,
+				programId: program.id,
+				redemptionValue: input.cashbackAppliedAmount,
 			});
 
-			if (!balance) {
-				throw new createHttpError.NotFound("Saldo de cashback não encontrado para este cliente.");
-			}
-
-			if (balance.saldoValorDisponivel < input.cashbackAppliedAmount) {
-				throw new createHttpError.BadRequest("Saldo insuficiente.");
-			}
-
-			currentBalance = balance.saldoValorDisponivel;
-
-			// Create redemption transaction (will be associated with sale after sale creation)
-			const previousBalance = balance.saldoValorDisponivel;
-			const newBalanceAfterRedemption = previousBalance - input.cashbackAppliedAmount;
-
-			// Update balance (debit)
-			await tx
-				.update(cashbackProgramBalances)
-				.set({
-					saldoValorDisponivel: newBalanceAfterRedemption,
-					saldoValorResgatadoTotal: balance.saldoValorResgatadoTotal + input.cashbackAppliedAmount,
-					dataAtualizacao: new Date(),
-				})
-				.where(eq(cashbackProgramBalances.id, balance.id));
-
-			currentBalance = newBalanceAfterRedemption;
+			redemptionSnapshot = {
+				previousBalance: redemptionResult.previousBalance,
+				newBalance: redemptionResult.newBalance,
+				consumedFromAccumulations: redemptionResult.consumedFromAccumulations,
+			};
 		}
 
 		// 4. Create sale record
@@ -643,6 +635,9 @@ const createSaleRoute: NextApiHandler<TCreateSaleOutput> = async (req, res) => {
 
 		// 5. If cashback was used, create the redemption transaction linked to this sale
 		if (input.cashbackApplied && input.cashbackAppliedAmount > 0) {
+			if (!redemptionSnapshot) {
+				throw new createHttpError.InternalServerError("Erro ao obter snapshot de resgate.");
+			}
 			await tx.insert(cashbackProgramTransactions).values({
 				organizacaoId: input.orgId,
 				clienteId: input.clientId,
@@ -652,9 +647,12 @@ const createSaleRoute: NextApiHandler<TCreateSaleOutput> = async (req, res) => {
 				status: "ATIVO",
 				valor: input.cashbackAppliedAmount,
 				valorRestante: 0,
-				saldoValorAnterior: currentBalance + input.cashbackAppliedAmount,
-				saldoValorPosterior: currentBalance,
+				saldoValorAnterior: redemptionSnapshot.previousBalance,
+				saldoValorPosterior: redemptionSnapshot.newBalance,
 				expiracaoData: null,
+				metadados: {
+					consumoFifo: redemptionSnapshot.consumedFromAccumulations,
+				},
 			});
 		}
 
