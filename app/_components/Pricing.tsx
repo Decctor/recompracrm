@@ -196,20 +196,10 @@ function PlanCard({
 				<ul className="space-y-3 mb-8 flex-1">
 					{plan.pricingTableFeatures.map((feature, fidx) => (
 						<li key={fidx.toString()} className="flex items-start gap-3">
-							<div
-								className={cn(
-									"mt-0.5 shrink-0",
-									feature.checked ? (isPopular ? "text-[#24549C]" : "text-green-500") : "text-slate-300",
-								)}
-							>
+							<div className={cn("mt-0.5 shrink-0", feature.checked ? (isPopular ? "text-[#24549C]" : "text-green-500") : "text-slate-300")}>
 								{feature.checked ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
 							</div>
-							<span
-								className={cn(
-									"text-sm leading-snug font-medium",
-									feature.checked ? "text-slate-700" : "text-slate-300 line-through",
-								)}
-							>
+							<span className={cn("text-sm leading-snug font-medium", feature.checked ? "text-slate-700" : "text-slate-300 line-through")}>
 								{feature.label}
 							</span>
 						</li>
@@ -226,8 +216,8 @@ function PlanCard({
 							isPopular
 								? "bg-[#24549C] hover:bg-[#1e4682] text-white shadow-xl shadow-blue-900/20"
 								: planKey === "ESCALA"
-								? "bg-slate-900 hover:bg-slate-800 text-white"
-								: "bg-slate-50 hover:bg-slate-100 text-slate-900 border border-slate-200",
+									? "bg-slate-900 hover:bg-slate-800 text-white"
+									: "bg-slate-50 hover:bg-slate-100 text-slate-900 border border-slate-200",
 						)}
 					>
 						Testar 15 dias grátis
@@ -261,8 +251,7 @@ export default function Pricing() {
 				>
 					<p className="text-xs font-bold text-[#24549C] uppercase tracking-widest mb-3">Planos e Preços</p>
 					<h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-slate-900 tracking-tight mb-4">
-						Simples e{" "}
-						<span className="text-transparent bg-clip-text bg-gradient-to-r from-[#24549C] to-blue-400">transparente.</span>
+						Simples e <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#24549C] to-blue-400">transparente.</span>
 					</h2>
 					<p className="text-lg text-slate-500 max-w-xl mx-auto">Sem taxa de setup. Sem surpresas. Cancele quando quiser.</p>
 				</motion.div>
@@ -312,7 +301,7 @@ export default function Pricing() {
 					<p className="text-sm text-slate-500">
 						Precisa de um plano customizado para grandes redes?{" "}
 						<a
-							href="https://wa.me/553499480791"
+							href="https://wa.me/553499480791?text=Olá, gostaria de saber mais sobre RecompraCRM."
 							target="_blank"
 							rel="noopener noreferrer"
 							className="text-[#24549C] hover:text-[#1e4682] font-bold border-b border-[#24549C]/30 hover:border-[#24549C] transition-colors"

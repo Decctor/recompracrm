@@ -41,13 +41,8 @@ function MiniDashboard() {
 							<stop offset="100%" stopColor="#24549C" stopOpacity="0.01" />
 						</linearGradient>
 					</defs>
-					<motion.path
-						d={fillD}
-						fill="url(#chartGrad)"
-						initial={{ opacity: 0 }}
-						animate={{ opacity: 1 }}
-						transition={{ duration: 1, delay: 0.5 }}
-					/>
+					<motion.path d={fillD} fill="url(#chartGrad)" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 1, delay: 0.5 }} />
+					<title>Gráfico de faturamento</title>
 					<motion.path
 						d={pathD}
 						fill="none"
@@ -224,6 +219,7 @@ function HeroVisual() {
 
 			{/* Connecting lines (decorative) */}
 			<svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ overflow: "visible" }}>
+				<title>Linha de conexão entre o dashboard e o tablet</title>
 				<motion.line
 					x1="50%"
 					y1="25%"
@@ -280,7 +276,7 @@ export default function Hero() {
 							transition={{ duration: 0.5 }}
 							className="inline-flex items-center gap-2 bg-gradient-to-r from-[#FFB900]/20 to-[#FFB900]/5 border border-[#FFB900]/30 rounded-full px-5 py-2 mb-8"
 						>
-							<span className="text-sm font-bold text-[#24549C]">CRM de Retenção para Varejo</span>
+							<span className="text-sm font-bold text-[#24549C]">CRM DE RETENÇÃO PARA VAREJO</span>
 							<div className="w-1.5 h-1.5 rounded-full bg-[#FFB900]" />
 						</motion.div>
 
@@ -293,9 +289,7 @@ export default function Hero() {
 						>
 							Transforme compradores casuais em{" "}
 							<span className="relative inline-block">
-								<span className="relative z-10 text-transparent bg-clip-text bg-gradient-to-r from-[#24549C] to-blue-500">
-									clientes leais
-								</span>
+								<span className="relative z-10 text-transparent bg-clip-text bg-gradient-to-r from-[#24549C] to-blue-500">clientes leais</span>
 								<motion.span
 									className="absolute -bottom-1 left-0 right-0 h-3 bg-[#FFB900]/35 z-0 rounded-sm"
 									initial={{ scaleX: 0 }}
@@ -314,9 +308,8 @@ export default function Hero() {
 							transition={{ duration: 0.6, delay: 0.2 }}
 							className="text-lg text-slate-600 leading-relaxed mb-10"
 						>
-							O CRM de varejo focado em retenção. Aumente seu LTV com um{" "}
-							<span className="font-semibold text-slate-800">programa de cashback de balcão</span> e{" "}
-							<span className="font-semibold text-slate-800">campanhas automatizadas de WhatsApp</span> que vendem por você.
+							O CRM de varejo focado em retenção. Aumente seu LTV com um <span className="font-semibold text-slate-800">programa de cashback de balcão</span>{" "}
+							e <span className="font-semibold text-slate-800">campanhas automatizadas de WhatsApp</span> que vendem por você.
 						</motion.p>
 
 						{/* CTAs */}
@@ -328,7 +321,7 @@ export default function Hero() {
 						>
 							<Link
 								className="group relative overflow-hidden bg-[#24549C] text-white px-8 py-4 rounded-2xl font-bold text-base shadow-2xl shadow-blue-900/25 hover:shadow-blue-900/35 hover:-translate-y-1 transition-all duration-300"
-								href='/auth/signup'
+								href="/auth/signup"
 							>
 								<span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/15 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
 								<span className="relative flex items-center justify-center gap-2">
@@ -336,12 +329,12 @@ export default function Hero() {
 									<ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
 								</span>
 							</Link>
-							<button
-								type="button"
+							<a
+								href="#planos"
 								className="group flex items-center justify-center gap-2 bg-white hover:bg-slate-50 text-slate-800 px-8 py-4 rounded-2xl font-bold border-2 border-slate-200 hover:border-[#24549C]/30 transition-all duration-300 shadow-sm hover:shadow-md"
 							>
-								Ver Planos
-							</button>
+								VER PLANOS
+							</a>
 						</motion.div>
 
 						{/* Trust indicators */}

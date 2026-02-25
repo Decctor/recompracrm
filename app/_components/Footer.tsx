@@ -31,20 +31,14 @@ export default function FooterV2() {
 				</div>
 
 				<div className="container mx-auto max-w-5xl px-6 lg:px-8 relative z-10 text-center">
-					<motion.div
-						initial={{ opacity: 0, y: 20 }}
-						whileInView={{ opacity: 1, y: 0 }}
-						viewport={{ once: true }}
-						transition={{ duration: 0.5 }}
-					>
+					<motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5 }}>
 						<div className="inline-flex items-center gap-2 bg-white/10 border border-white/20 rounded-full px-4 py-2 mb-8">
 							<div className="w-2 h-2 rounded-full bg-[#FFB900]" />
 							<span className="text-sm font-bold text-white/90">Pronto para modernizar o seu varejo?</span>
 						</div>
 
 						<h2 className="text-4xl sm:text-5xl lg:text-6xl font-black text-white mb-6 leading-tight tracking-tight">
-							Junte-se às lojas que estão{" "}
-							<span className="text-[#FFB900]">escalando o faturamento</span>
+							Junte-se às lojas que estão <span className="text-[#FFB900]">escalando o faturamento</span>
 						</h2>
 
 						<p className="text-lg text-white/75 max-w-2xl mx-auto mb-10 leading-relaxed">
@@ -53,23 +47,25 @@ export default function FooterV2() {
 
 						{/* CTAs */}
 						<div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12">
-							<motion.button
+							<motion.a
 								whileHover={{ scale: 1.03 }}
 								whileTap={{ scale: 0.97 }}
-								type="button"
+								href="https://wa.me/553499480791?text=Olá, gostaria de falar com um especialista do RecompraCRM."
+								target="_blank"
+								rel="noopener noreferrer"
 								className="group bg-[#FFB900] hover:bg-[#e6a800] text-[#1a2f5a] px-10 py-4 rounded-2xl font-black text-base shadow-2xl shadow-black/30 hover:-translate-y-1 transition-all duration-300 flex items-center gap-2"
 							>
 								Falar com um Especialista
 								<ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-							</motion.button>
-							<motion.button
+							</motion.a>
+							<motion.a
 								whileHover={{ scale: 1.03 }}
 								whileTap={{ scale: 0.97 }}
-								type="button"
+								href="#planos"
 								className="bg-white/10 hover:bg-white/20 border border-white/20 text-white px-10 py-4 rounded-2xl font-bold text-base transition-all duration-300"
 							>
 								Ver Planos e Preços
-							</motion.button>
+							</motion.a>
 						</div>
 
 						{/* Trust row */}
@@ -100,13 +96,19 @@ export default function FooterV2() {
 							<h4 className="font-bold text-slate-900 mb-3 text-sm">Produto</h4>
 							<ul className="space-y-2 text-sm text-slate-500">
 								<li>
-									<a href="#funcionalidades" className="hover:text-[#24549C] transition-colors">Funcionalidades</a>
+									<a href="#funcionalidades" className="hover:text-[#24549C] transition-colors">
+										Funcionalidades
+									</a>
 								</li>
 								<li>
-									<a href="#plataforma" className="hover:text-[#24549C] transition-colors">Ponto de Interação</a>
+									<a href="#plataforma" className="hover:text-[#24549C] transition-colors">
+										Ponto de Interação
+									</a>
 								</li>
 								<li>
-									<a href="#campanhas" className="hover:text-[#24549C] transition-colors">Campanhas</a>
+									<a href="#campanhas" className="hover:text-[#24549C] transition-colors">
+										Campanhas
+									</a>
 								</li>
 								<li>
 									<span>Planos & Preços</span>
@@ -130,14 +132,20 @@ export default function FooterV2() {
 							<h4 className="font-bold text-slate-900 mb-3 text-sm">Contato & Legal</h4>
 							<ul className="space-y-2 text-sm text-slate-500">
 								<li>
-									<Link href="/legal" className="hover:text-[#24549C] transition-colors">Termos de Uso</Link>
+									<Link href="/legal" className="hover:text-[#24549C] transition-colors">
+										Termos de Uso
+									</Link>
 								</li>
 								<li>
-									<Link href="/legal" className="hover:text-[#24549C] transition-colors">Política de Privacidade</Link>
+									<Link href="/legal" className="hover:text-[#24549C] transition-colors">
+										Política de Privacidade
+									</Link>
 								</li>
 								<li>Contato</li>
 								<li>
-									<Link href="/auth/signin" className="hover:text-[#24549C] transition-colors">Login da Organização</Link>
+									<Link href="/auth/signin" className="hover:text-[#24549C] transition-colors">
+										Login da Organização
+									</Link>
 								</li>
 							</ul>
 						</div>
