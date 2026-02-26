@@ -4,7 +4,7 @@ import { SalesGeneralStatsFiltersSchema, type TSaleStatsGeneralQueryParams } fro
 import { db } from "@/services/drizzle";
 import { clients, saleItems, sales } from "@/services/drizzle/schema";
 import dayjs from "dayjs";
-import { and, count, eq, exists, gte, inArray, lte, notInArray, sql, sum } from "drizzle-orm";
+import { and, count, eq, exists, gte, inArray, isNull, lt, lte, notInArray, sql, sum } from "drizzle-orm";
 import createHttpError from "http-errors";
 import type { NextApiHandler } from "next";
 
@@ -45,6 +45,21 @@ export type TOverallSalesStats = {
 	valorDiarioVendido: {
 		atual: number;
 		anterior: number | undefined;
+	};
+	faturamentoViaClientesRecorrentes: {
+		atual: number;
+		anterior: number | undefined;
+		porcentagem: number;
+	};
+	faturamentoViaNovosClientes: {
+		atual: number;
+		anterior: number | undefined;
+		porcentagem: number;
+	};
+	faturamentoViaClientesNaoIdentificados: {
+		atual: number;
+		anterior: number | undefined;
+		porcentagem: number;
 	};
 };
 type GetResponse = {
@@ -115,6 +130,9 @@ const getSalesOverallStatsRoute: NextApiHandler<GetResponse> = async (req, res) 
 		qtdeItensVendidos: stats.qtdeItensVendidos,
 		itensPorVendaMedio: stats.itensPorVendaMedio,
 		valorDiarioVendido: stats.valorDiarioVendido,
+		faturamentoViaClientesRecorrentes: stats.faturamentoViaClientesRecorrentes,
+		faturamentoViaNovosClientes: stats.faturamentoViaNovosClientes,
+		faturamentoViaClientesNaoIdentificados: stats.faturamentoViaClientesNaoIdentificados,
 	};
 	return res.status(200).json({ data: overallStats });
 };
@@ -255,6 +273,57 @@ export async function getOverallStats(filters: TSaleStatsGeneralQueryParams, org
 	const totalSalesItemsStats = totalSalesItemsStatsResult[0];
 	const totalSalesItemsQty = totalSalesItemsStats.total ? Number(totalSalesItemsStats.total) : 0;
 
+	const periodAfter = filters.period.after ? new Date(filters.period.after) : null;
+	const periodBefore = filters.period.before ? new Date(filters.period.before) : null;
+
+	// Revenue breakdown: existing clients, new clients, non-identified (ao consumidor)
+	const existingClientsRevenueResult =
+		periodAfter && periodBefore
+			? await db
+					.select({ total: sum(sales.valorTotal) })
+					.from(sales)
+					.innerJoin(clients, eq(sales.clienteId, clients.id))
+					.where(
+						and(
+							...conditions,
+							eq(clients.organizacaoId, organizacaoId),
+							gte(sales.dataVenda, periodAfter),
+							lte(sales.dataVenda, periodBefore),
+							lt(clients.primeiraCompraData, periodAfter),
+						),
+					)
+			: null;
+	const newClientsRevenueResult =
+		periodAfter && periodBefore
+			? await db
+					.select({ total: sum(sales.valorTotal) })
+					.from(sales)
+					.innerJoin(clients, eq(sales.clienteId, clients.id))
+					.where(
+						and(
+							...conditions,
+							eq(clients.organizacaoId, organizacaoId),
+							gte(sales.dataVenda, periodAfter),
+							lte(sales.dataVenda, periodBefore),
+							gte(clients.primeiraCompraData, periodAfter),
+							lte(clients.primeiraCompraData, periodBefore),
+						),
+					)
+			: null;
+	const nonIdentifiedRevenueResult =
+		periodAfter && periodBefore
+			? await db
+					.select({ total: sum(sales.valorTotal) })
+					.from(sales)
+					.leftJoin(clients, eq(sales.clienteId, clients.id))
+					.where(and(...conditions, gte(sales.dataVenda, periodAfter), lte(sales.dataVenda, periodBefore), isNull(clients.id)))
+			: null;
+
+	const existingClientsRevenue = existingClientsRevenueResult?.[0]?.total ? Number(existingClientsRevenueResult[0].total) : 0;
+	const newClientsRevenue = newClientsRevenueResult?.[0]?.total ? Number(newClientsRevenueResult[0].total) : 0;
+	const nonIdentifiedRevenue = nonIdentifiedRevenueResult?.[0]?.total ? Number(nonIdentifiedRevenueResult[0].total) : 0;
+	const revenuePercentage = (val: number) => (totalSalesValorTotal > 0 ? (val / totalSalesValorTotal) * 100 : 0);
+
 	if (!filters.period.after && !filters.period.before) {
 		return {
 			faturamento: {
@@ -284,6 +353,21 @@ export async function getOverallStats(filters: TSaleStatsGeneralQueryParams, org
 			valorDiarioVendido: {
 				atual: totalSalesValorTotal / dayjs(filters.period.before).diff(dayjs(filters.period.after), "days"),
 				anterior: undefined,
+			},
+			faturamentoViaClientesRecorrentes: {
+				atual: existingClientsRevenue,
+				anterior: undefined,
+				porcentagem: revenuePercentage(existingClientsRevenue),
+			},
+			faturamentoViaNovosClientes: {
+				atual: newClientsRevenue,
+				anterior: undefined,
+				porcentagem: revenuePercentage(newClientsRevenue),
+			},
+			faturamentoViaClientesNaoIdentificados: {
+				atual: nonIdentifiedRevenue,
+				anterior: undefined,
+				porcentagem: revenuePercentage(nonIdentifiedRevenue),
 			},
 		};
 	}
@@ -328,6 +412,44 @@ export async function getOverallStats(filters: TSaleStatsGeneralQueryParams, org
 	const previousTotalSalesItemsStats = previousTotalSalesItemsStatsResult[0];
 	const previousTotalSalesItemsQty = previousTotalSalesItemsStats.total ? Number(previousTotalSalesItemsStats.total) : 0;
 
+	// Revenue breakdown - período anterior
+	const prevExistingClientsRevenueResult = await db
+		.select({ total: sum(sales.valorTotal) })
+		.from(sales)
+		.innerJoin(clients, eq(sales.clienteId, clients.id))
+		.where(
+			and(
+				...conditions,
+				eq(clients.organizacaoId, organizacaoId),
+				gte(sales.dataVenda, previousPeriodAfter),
+				lte(sales.dataVenda, previousPeriodBefore),
+				lt(clients.primeiraCompraData, previousPeriodAfter),
+			),
+		);
+	const prevNewClientsRevenueResult = await db
+		.select({ total: sum(sales.valorTotal) })
+		.from(sales)
+		.innerJoin(clients, eq(sales.clienteId, clients.id))
+		.where(
+			and(
+				...conditions,
+				eq(clients.organizacaoId, organizacaoId),
+				gte(sales.dataVenda, previousPeriodAfter),
+				lte(sales.dataVenda, previousPeriodBefore),
+				gte(clients.primeiraCompraData, previousPeriodAfter),
+				lte(clients.primeiraCompraData, previousPeriodBefore),
+			),
+		);
+	const prevNonIdentifiedRevenueResult = await db
+		.select({ total: sum(sales.valorTotal) })
+		.from(sales)
+		.leftJoin(clients, eq(sales.clienteId, clients.id))
+		.where(and(...conditions, gte(sales.dataVenda, previousPeriodAfter), lte(sales.dataVenda, previousPeriodBefore), isNull(clients.id)));
+
+	const prevExistingClientsRevenue = prevExistingClientsRevenueResult[0]?.total ? Number(prevExistingClientsRevenueResult[0].total) : 0;
+	const prevNewClientsRevenue = prevNewClientsRevenueResult[0]?.total ? Number(prevNewClientsRevenueResult[0].total) : 0;
+	const prevNonIdentifiedRevenue = prevNonIdentifiedRevenueResult[0]?.total ? Number(prevNonIdentifiedRevenueResult[0].total) : 0;
+
 	return {
 		faturamento: {
 			atual: totalSalesValorTotal,
@@ -356,6 +478,21 @@ export async function getOverallStats(filters: TSaleStatsGeneralQueryParams, org
 		valorDiarioVendido: {
 			atual: totalSalesValorTotal / dateDiff,
 			anterior: previousTotalSalesValorTotal / dateDiff,
+		},
+		faturamentoViaClientesRecorrentes: {
+			atual: existingClientsRevenue,
+			anterior: prevExistingClientsRevenue,
+			porcentagem: revenuePercentage(existingClientsRevenue),
+		},
+		faturamentoViaNovosClientes: {
+			atual: newClientsRevenue,
+			anterior: prevNewClientsRevenue,
+			porcentagem: revenuePercentage(newClientsRevenue),
+		},
+		faturamentoViaClientesNaoIdentificados: {
+			atual: nonIdentifiedRevenue,
+			anterior: prevNonIdentifiedRevenue,
+			porcentagem: revenuePercentage(nonIdentifiedRevenue),
 		},
 	};
 }

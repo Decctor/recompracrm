@@ -91,6 +91,12 @@ export type TGroupedSalesStats = {
 		qtde: number;
 		total: number;
 	}[];
+	porDiaSemanaHora: {
+		diaSemana: number;
+		hora: number;
+		qtde: number;
+		total: number;
+	}[];
 };
 
 type GetResponse = {
@@ -162,6 +168,12 @@ const getSalesGroupedStatsRoute: NextApiHandler<GetResponse> = async (req, res) 
 			porDiaDoMes: stats.porDiaDoMes.map((item) => ({ dia: item.dia, qtde: item.qtde, total: item.total ? Number(item.total) : 0 })),
 			porMes: stats.porMes.map((item) => ({ mes: item.mes, qtde: item.qtde, total: item.total ? Number(item.total) : 0 })),
 			porDiaDaSemana: stats.porDiaDaSemana.map((item) => ({ diaSemana: item.diaSemana, qtde: item.qtde, total: item.total ? Number(item.total) : 0 })),
+			porDiaSemanaHora: stats.porDiaSemanaHora.map((item) => ({
+				diaSemana: Number(item.diaSemana),
+				hora: Number(item.hora),
+				qtde: item.qtde,
+				total: item.total ? Number(item.total) : 0,
+			})),
 		},
 	});
 
@@ -241,7 +253,7 @@ async function getSalesGroupedStats({ filters, organizacaoId }: GetSalesParams) 
 	if (ajustedAfter) conditions.push(gte(sales.dataVenda, ajustedAfter));
 	if (ajustedBefore) conditions.push(lte(sales.dataVenda, ajustedBefore));
 	if (filters.total.min) conditions.push(gte(sales.valorTotal, filters.total.min));
-	if (filters.total.max) conditions.push(gte(sales.valorTotal, filters.total.max));
+	if (filters.total.max) conditions.push(lte(sales.valorTotal, filters.total.max));
 
 	if (filters.saleNatures.length > 0) conditions.push(inArray(sales.natureza, filters.saleNatures));
 
@@ -406,7 +418,7 @@ async function getSalesGroupedStats({ filters, organizacaoId }: GetSalesParams) 
 			total: sum(sales.valorTotal),
 		})
 		.from(sales)
-		.where(and(...conditions))
+		.where(and(...conditions, isNotNull(sales.dataVenda)))
 		.groupBy(sql`EXTRACT(DAY FROM ${sales.dataVenda})`);
 
 	// Grouping by month
@@ -417,7 +429,7 @@ async function getSalesGroupedStats({ filters, organizacaoId }: GetSalesParams) 
 			total: sum(sales.valorTotal),
 		})
 		.from(sales)
-		.where(and(...conditions))
+		.where(and(...conditions, isNotNull(sales.dataVenda)))
 		.groupBy(sql`EXTRACT(MONTH FROM ${sales.dataVenda})`);
 
 	// Grouping by day of the week (0 = Sunday, 6 = Saturday)
@@ -428,8 +440,20 @@ async function getSalesGroupedStats({ filters, organizacaoId }: GetSalesParams) 
 			total: sum(sales.valorTotal),
 		})
 		.from(sales)
-		.where(and(...conditions))
+		.where(and(...conditions, isNotNull(sales.dataVenda)))
 		.groupBy(sql`EXTRACT(DOW FROM ${sales.dataVenda})`);
+
+	// Heatmap: grouping by day of week + hour (0 = Sunday, 6 = Saturday; hora 0-23)
+	const resultsByDayOfWeekAndHour = await db
+		.select({
+			diaSemana: sql<number>`EXTRACT(DOW FROM ${sales.dataVenda})`,
+			hora: sql<number>`EXTRACT(HOUR FROM ${sales.dataVenda})`,
+			qtde: count(sales.id),
+			total: sum(sales.valorTotal),
+		})
+		.from(sales)
+		.where(and(...conditions, isNotNull(sales.dataVenda)))
+		.groupBy(sql`EXTRACT(DOW FROM ${sales.dataVenda})`, sql`EXTRACT(HOUR FROM ${sales.dataVenda})`);
 
 	const resultsByChannel = await db
 		.select({
@@ -459,6 +483,7 @@ async function getSalesGroupedStats({ filters, organizacaoId }: GetSalesParams) 
 		porDiaDoMes: resultsByDayOfMonth,
 		porMes: resultsByMonth,
 		porDiaDaSemana: resultsByDayOfWeek,
+		porDiaSemanaHora: resultsByDayOfWeekAndHour,
 		porCanal: resultsByChannel,
 		porEntregaModalidade: resultsByFulfillmentMethod,
 	};

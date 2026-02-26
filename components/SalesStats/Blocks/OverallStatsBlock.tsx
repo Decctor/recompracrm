@@ -6,7 +6,7 @@ import { useOverallSalesStats } from "@/lib/queries/stats/overall";
 import { cn } from "@/lib/utils";
 import type { TOverallSalesStats } from "@/pages/api/stats/sales-overall";
 import type { TSaleStatsGeneralQueryParams } from "@/schemas/query-params-utils";
-import { Percent, ShoppingBag } from "lucide-react";
+import { BadgeDollarSign, Percent, ShoppingBag, UserRoundX } from "lucide-react";
 import type React from "react";
 import { useEffect, useState } from "react";
 import { BsCart } from "react-icons/bs";
@@ -62,6 +62,73 @@ export default OverallStatsBlock;
 type OverallStatsBlockStarterProps = {
 	overallStats: TOverallSalesStats | undefined;
 };
+function RevenueBreakdownRow({ overallStats }: { overallStats: TOverallSalesStats | undefined }) {
+	return (
+		<div className="flex w-full flex-col items-center justify-around gap-2 lg:flex-row">
+			<StatUnitCard
+				title="FATURAMENTO POR CLIENTES EXISTENTES"
+				icon={<BadgeDollarSign className="w-4 h-4 min-w-4 min-h-4" />}
+				current={{
+					value: overallStats?.faturamentoViaClientesRecorrentes.atual ?? 0,
+					format: (n) => formatToMoney(n),
+				}}
+				previous={
+					overallStats?.faturamentoViaClientesRecorrentes.anterior != null
+						? { value: overallStats.faturamentoViaClientesRecorrentes.anterior, format: (n) => formatToMoney(n) }
+						: undefined
+				}
+				footer={
+					<div className="flex items-center gap-1">
+						<p className="text-xs text-muted-foreground tracking-tight">REPRESENTATIVIDADE:</p>
+						<p className="text-xs font-bold text-primary">{formatDecimalPlaces(overallStats?.faturamentoViaClientesRecorrentes.porcentagem ?? 0)}%</p>
+					</div>
+				}
+				className="w-full lg:w-1/3"
+			/>
+			<StatUnitCard
+				title="FATURAMENTO POR CLIENTES NOVOS"
+				icon={<BadgeDollarSign className="w-4 h-4 min-w-4 min-h-4" />}
+				current={{
+					value: overallStats?.faturamentoViaNovosClientes.atual ?? 0,
+					format: (n) => formatToMoney(n),
+				}}
+				previous={
+					overallStats?.faturamentoViaNovosClientes.anterior != null
+						? { value: overallStats.faturamentoViaNovosClientes.anterior, format: (n) => formatToMoney(n) }
+						: undefined
+				}
+				footer={
+					<div className="flex items-center gap-1">
+						<p className="text-xs text-muted-foreground tracking-tight">REPRESENTATIVIDADE:</p>
+						<p className="text-xs font-bold text-primary">{formatDecimalPlaces(overallStats?.faturamentoViaNovosClientes.porcentagem ?? 0)}%</p>
+					</div>
+				}
+				className="w-full lg:w-1/3"
+			/>
+			<StatUnitCard
+				title="FATURAMENTO AO CONSUMIDOR"
+				icon={<UserRoundX className="w-4 h-4 min-w-4 min-h-4" />}
+				current={{
+					value: overallStats?.faturamentoViaClientesNaoIdentificados.atual ?? 0,
+					format: (n) => formatToMoney(n),
+				}}
+				previous={
+					overallStats?.faturamentoViaClientesNaoIdentificados.anterior != null
+						? { value: overallStats.faturamentoViaClientesNaoIdentificados.anterior, format: (n) => formatToMoney(n) }
+						: undefined
+				}
+				footer={
+					<div className="flex items-center gap-1">
+						<p className="text-xs text-muted-foreground tracking-tight">REPRESENTATIVIDADE:</p>
+						<p className="text-xs font-bold text-primary">{formatDecimalPlaces(overallStats?.faturamentoViaClientesNaoIdentificados.porcentagem ?? 0)}%</p>
+					</div>
+				}
+				className="w-full lg:w-1/3"
+			/>
+		</div>
+	);
+}
+
 function OverallStatsBlockStarter({ overallStats }: OverallStatsBlockStarterProps) {
 	return (
 		<>
@@ -103,6 +170,7 @@ function OverallStatsBlockStarter({ overallStats }: OverallStatsBlockStarterProp
 					className="w-full lg:w-1/2"
 				/>
 			</div>
+			<RevenueBreakdownRow overallStats={overallStats} />
 		</>
 	);
 }
@@ -186,6 +254,7 @@ function OverallStatsBlockPlus({ overallStats }: OverallStatsBlockPlusProps) {
 					className="w-full lg:w-1/3"
 				/>
 			</div>
+			<RevenueBreakdownRow overallStats={overallStats} />
 		</>
 	);
 }
