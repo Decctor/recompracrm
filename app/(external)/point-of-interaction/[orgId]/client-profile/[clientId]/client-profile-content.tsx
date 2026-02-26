@@ -20,6 +20,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatDateAsLocale, formatToMoney, formatToPhone } from "@/lib/formatting";
 import { cn } from "@/lib/utils";
 import type { TCashbackProgramEntity } from "@/services/drizzle/schema/cashback-programs";
@@ -31,8 +32,10 @@ type Transaction = {
 	tipo: "ACÚMULO" | "RESGATE" | "EXPIRAÇÃO" | "CANCELAMENTO";
 	status: "ATIVO" | "CONSUMIDO" | "EXPIRADO";
 	valor: number;
+	valorRestante: number;
 	dataInsercao: Date;
 	saldoValorPosterior: number;
+	expiracaoData: Date | null;
 };
 
 type ClientProfileContentProps = {
@@ -265,32 +268,60 @@ export default function ClientProfileContent({ orgId, cashbackProgram, client, b
 									Nenhuma movimentação recente.
 								</div>
 							) : (
-								transactions.map((t) => (
-									<div
-										key={t.id}
-										className="flex items-center justify-between p-3 short:p-2 rounded-xl short:rounded-lg border border-brand/20 bg-brand/5 hover:bg-brand/10 transition-colors shrink-0"
-									>
-										<div className="flex flex-col">
-											<span
-												className={cn(
-													"text-[0.65rem] short:text-[0.55rem] font-black uppercase tracking-widest",
-													t.tipo === "ACÚMULO" ? "text-green-600" : "text-red-500",
-												)}
+								<TooltipProvider>
+									{transactions.map((t) => {
+										const now = new Date();
+										const expiracaoData = t.expiracaoData ? new Date(t.expiracaoData) : null;
+										const isExpired = expiracaoData ? now > expiracaoData : false;
+										const displayValor = t.tipo === "ACÚMULO" ? t.valor : Math.abs(t.valor);
+
+										return (
+											<div
+												key={t.id}
+												className="flex items-center justify-between p-3 short:p-2 rounded-xl short:rounded-lg border border-brand/20 bg-brand/5 hover:bg-brand/10 transition-colors shrink-0"
 											>
-												{t.tipo}
-											</span>
-											<span className="text-[0.6rem] short:text-[0.5rem] font-bold text-muted-foreground">{formatDateAsLocale(t.dataInsercao, true)}</span>
-										</div>
-										<div className="text-right">
-											<p className={cn("text-lg short:text-sm font-black leading-none", t.tipo === "ACÚMULO" ? "text-green-600" : "text-red-500")}>
-												{t.tipo === "ACÚMULO" ? "+" : "-"} {formatToMoney(t.valor)}
-											</p>
-											<p className="text-[0.55rem] short:text-[0.45rem] font-bold text-muted-foreground mt-0.5 uppercase">
-												Saldo Final: {formatToMoney(t.saldoValorPosterior)}
-											</p>
-										</div>
-									</div>
-								))
+												<div className="flex flex-col">
+													<span
+														className={cn(
+															"text-[0.65rem] short:text-[0.55rem] font-black uppercase tracking-widest",
+															t.tipo === "ACÚMULO" ? "text-green-600" : "text-red-500",
+														)}
+													>
+														{t.tipo}
+													</span>
+													<div className="flex items-center gap-1.5">
+														<span className="text-[0.65rem] short:text-[0.55rem] font-black uppercase tracking-widest">
+															{formatDateAsLocale(t.dataInsercao, true)}
+														</span>
+														{t.tipo === "ACÚMULO" && expiracaoData && (
+															<span className="text-[0.55rem] short:text-[0.45rem] font-bold text-muted-foreground uppercase">
+																{isExpired ? `EXPIROU EM: ${formatDateAsLocale(expiracaoData, true)}` : `EXPIRARÁ EM: ${formatDateAsLocale(expiracaoData, true)}`}
+															</span>
+														)}
+													</div>
+												</div>
+												<div className="text-right">
+													{t.tipo === "ACÚMULO" ? (
+														<Tooltip>
+															<TooltipTrigger asChild>
+																<p className="text-lg short:text-sm font-black leading-none text-green-600 cursor-help">+ {formatToMoney(displayValor)}</p>
+															</TooltipTrigger>
+															<TooltipContent side="left" className="max-w-[200px]">
+																<p className="font-bold">Valor restante: {formatToMoney(t.valorRestante)}</p>
+																<p className="text-[0.65rem] opacity-90 mt-0.5">Parte pode ter sido usada em resgates.</p>
+															</TooltipContent>
+														</Tooltip>
+													) : (
+														<p className={cn("text-lg short:text-sm font-black leading-none", "text-red-500")}>- {formatToMoney(displayValor)}</p>
+													)}
+													<p className="text-[0.55rem] short:text-[0.45rem] font-bold text-muted-foreground mt-0.5 uppercase">
+														Saldo Final: {formatToMoney(t.saldoValorPosterior)}
+													</p>
+												</div>
+											</div>
+										);
+									})}
+								</TooltipProvider>
 							)}
 						</div>
 					</section>
