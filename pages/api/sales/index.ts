@@ -645,7 +645,7 @@ const createSaleRoute: NextApiHandler<TCreateSaleOutput> = async (req, res) => {
 				programaId: program.id,
 				tipo: "RESGATE",
 				status: "ATIVO",
-				valor: input.cashbackAppliedAmount,
+				valor: -input.cashbackAppliedAmount,
 				valorRestante: 0,
 				saldoValorAnterior: redemptionSnapshot.previousBalance,
 				saldoValorPosterior: redemptionSnapshot.newBalance,

@@ -118,7 +118,7 @@ async function processRedemption(input: z.infer<typeof RedemptionInputSchema>): 
 				vendaValor: input.saleValue,
 				tipo: "RESGATE",
 				status: "ATIVO",
-				valor: input.redemptionValue,
+				valor: -input.redemptionValue,
 				valorRestante: 0, // Fully consumed
 				saldoValorAnterior: previousBalance,
 				saldoValorPosterior: newBalance,

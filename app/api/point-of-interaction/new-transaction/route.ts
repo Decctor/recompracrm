@@ -436,7 +436,7 @@ async function handleNewTransaction(req: NextRequest): Promise<NextResponse<TCre
 					programaId: program.id,
 					tipo: "RESGATE",
 					status: "ATIVO",
-					valor: input.sale.cashback.valor,
+					valor: -input.sale.cashback.valor,
 					valorRestante: 0, // RESGATE transactions are fully consumed
 					saldoValorAnterior: previousBalance,
 					saldoValorPosterior: newBalanceAfterRedemption,
