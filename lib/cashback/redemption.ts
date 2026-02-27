@@ -4,6 +4,7 @@ import { and, eq, gt } from "drizzle-orm";
 import createHttpError from "http-errors";
 
 const EPSILON = 1e-6;
+const ENABLE_IMPORTED_BALANCE_FIFO_BYPASS = true; // process.env.CASHBACK_IMPORTED_BALANCE_FIFO_BYPASS === "true";
 
 function normalizeValue(value: number) {
 	return Math.round((value + Number.EPSILON) * 1_000_000) / 1_000_000;
@@ -100,7 +101,16 @@ export async function applyCashbackRedemptionFIFO({
 	}
 
 	if (remainingToConsume > EPSILON) {
-		throw new createHttpError.Conflict("Saldo inconsistente para consumo FIFO. Tente novamente.");
+		const canBypassImportedBalance =
+			ENABLE_IMPORTED_BALANCE_FIFO_BYPASS && accumulationTransactions.length === 0 && consumedFromAccumulations.length === 0;
+
+		if (!canBypassImportedBalance) {
+			throw new createHttpError.Conflict("Saldo inconsistente para consumo FIFO. Tente novamente.");
+		}
+
+		console.warn(
+			`[WARN] [CASHBACK_REDEMPTION_FIFO] Bypass temporario aplicado para cliente ${clientId}. Sem transacoes de acumulo para consumir ${remainingToConsume}.`,
+		);
 	}
 
 	const previousBalance = balance.saldoValorDisponivel;
