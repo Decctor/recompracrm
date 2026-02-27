@@ -114,7 +114,7 @@ async function processWebhookAsync(body: WebhookBody): Promise<void> {
 
 async function handleConnectionUpdate(body: Extract<WebhookBody, { event: "connection.update" }>): Promise<void> {
 	const { sessionId, data } = body;
-
+	console.log("[INTERNAL_WHATSAPP_WEBHOOK] Handling connection update:", JSON.stringify(data, null, 2));
 	if (!data.status) return;
 
 	// Find connection by session ID
@@ -150,7 +150,7 @@ async function handleConnectionUpdate(body: Extract<WebhookBody, { event: "conne
 
 async function handleIncomingMessage(body: Extract<WebhookBody, { event: "message.received" }>): Promise<void> {
 	const { sessionId, data } = body;
-
+	console.log("[INTERNAL_WHATSAPP_WEBHOOK] Handling incoming message:", JSON.stringify(data, null, 2));
 	if (!data.author?.phoneNumber || !data.whatsappMessageId) {
 		console.error("[INTERNAL_WHATSAPP_WEBHOOK] Missing required fields in message");
 		return;
@@ -379,7 +379,7 @@ const INTERACTION_STATUS_MAPPING: Record<AppWhatsappStatus, TInteractionsStatusE
 };
 async function handleMessageUpdated(body: Extract<WebhookBody, { event: "message.updated" }>): Promise<void> {
 	const { data } = body;
-
+	console.log("[INTERNAL_WHATSAPP_WEBHOOK] Handling message updated:", JSON.stringify(data, null, 2));
 	if (!data.whatsappMessageId) {
 		console.warn("[INTERNAL_WHATSAPP_WEBHOOK] Missing whatsappMessageId in message update");
 		return;
