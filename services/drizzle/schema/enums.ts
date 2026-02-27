@@ -129,3 +129,27 @@ export const communityMaterialTypeEnum = pgEnum("community_material_type", [
 export const communityTutorialNivelEnum = pgEnum("community_tutorial_nivel", ["INICIANTE", "INTERMEDIARIO", "AVANCADO"]);
 
 export const communityContentStatusEnum = pgEnum("community_content_status", ["RASCUNHO", "PUBLICADO", "ARQUIVADO"]);
+
+// ============================================================================
+// FINANCIAL / ERP
+// ============================================================================
+
+export const financialAccountTypeEnum = pgEnum("financial_account_type", ["CAIXA", "BANCO", "CARTEIRA_DIGITAL"]);
+
+export const bankAccountTypeEnum = pgEnum("bank_account_type", ["CORRENTE", "POUPANCA"]);
+
+export const financialTransactionTypeEnum = pgEnum("financial_transaction_type", ["ENTRADA", "SAIDA"]);
+
+export const accountingEntryOriginTypeEnum = pgEnum("accounting_entry_origin_type", ["VENDA", "MANUAL", "ESTORNO"]);
+
+export const fiscalDocumentTypeEnum = pgEnum("fiscal_document_type", ["NFCE", "NFE", "NFSE"]);
+
+export const fiscalDocumentStatusEnum = pgEnum("fiscal_document_status", ["PENDENTE", "AUTORIZADA", "CANCELADA", "INUTILIZADA"]);
+
+export const stockMovementTypeEnum = pgEnum("stock_movement_type", ["ENTRADA _AQUISICAO", "SAIDA", "AJUSTE", "ENTRADA_DEVOLUCAO"]);
+
+export const saleProcessingSourceEnum = pgEnum("origem_processamento_venda", ["EXTERNO", "INTERNO"]);
+
+export const saleStatusEnum = pgEnum("sale_status", ["ORCAMENTO", "CONDICIONAL", "CONFIRMADA", "FATURADA", "CANCELADA"]);
+
+export const defaultDataSourceEnum = pgEnum("origem_dados_padrao", ["RECEPTOR", "ERP"]);

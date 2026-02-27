@@ -1,8 +1,10 @@
 import { relations } from "drizzle-orm";
 import { boolean, doublePrecision, index, integer, primaryKey, text, timestamp, varchar, vector } from "drizzle-orm/pg-core";
 import { newTable } from "./common";
+import { stockMovementTypeEnum } from "./enums";
 import { organizations } from "./organizations";
-import { saleItems } from "./sales";
+import { saleItems, sales } from "./sales";
+import { users } from "./users";
 
 export const products = newTable(
 	"products",
@@ -194,3 +196,58 @@ export const productAddOnReferencesRelations = relations(productAddOnReferences,
 		references: [productAddOns.id],
 	}),
 }));
+
+export const productStockTransactions = newTable(
+	"product_stock_transactions",
+	{
+		id: varchar("id", { length: 255 })
+			.primaryKey()
+			.$defaultFn(() => crypto.randomUUID()),
+		organizacaoId: varchar("organizacao_id", { length: 255 }).references(() => organizations.id, { onDelete: "cascade" }),
+		produtoId: varchar("produto_id", { length: 255 }).references(() => products.id, { onDelete: "cascade" }),
+		produtoVarianteId: varchar("produto_variante_id", { length: 255 }).references(() => productVariants.id, {
+			onDelete: "cascade",
+		}),
+		tipo: stockMovementTypeEnum("tipo").default("SAIDA").notNull(),
+		quantidade: doublePrecision("quantidade").notNull(),
+		motivo: text("motivo"),
+		vendaId: varchar("venda_id", { length: 255 }).references(() => sales.id, { onDelete: "set null" }),
+		vendaItemId: varchar("venda_item_id", { length: 255 }).references(() => saleItems.id, { onDelete: "set null" }),
+		saldoAnterior: doublePrecision("saldo_anterior"),
+		saldoPosterior: doublePrecision("saldo_posterior"),
+		operadorId: varchar("operador_id", { length: 255 }).references(() => users.id, { onDelete: "set null" }),
+		dataInsercao: timestamp("data_insercao").defaultNow().notNull(),
+	},
+	(table) => ({
+		produtoIdIdx: index("idx_product_stock_transactions_produto_id").on(table.produtoId),
+		produtoVarianteIdIdx: index("idx_product_stock_transactions_variante_id").on(table.produtoVarianteId),
+		vendaIdIdx: index("idx_product_stock_transactions_venda_id").on(table.vendaId),
+		tipoIdx: index("idx_product_stock_transactions_tipo").on(table.tipo),
+	}),
+);
+
+export const productStockTransactionsRelations = relations(productStockTransactions, ({ one }) => ({
+	produto: one(products, {
+		fields: [productStockTransactions.produtoId],
+		references: [products.id],
+	}),
+	produtoVariante: one(productVariants, {
+		fields: [productStockTransactions.produtoVarianteId],
+		references: [productVariants.id],
+	}),
+	venda: one(sales, {
+		fields: [productStockTransactions.vendaId],
+		references: [sales.id],
+	}),
+	vendaItem: one(saleItems, {
+		fields: [productStockTransactions.vendaItemId],
+		references: [saleItems.id],
+	}),
+	operador: one(users, {
+		fields: [productStockTransactions.operadorId],
+		references: [users.id],
+	}),
+}));
+
+export type TProductStockTransaction = typeof productStockTransactions.$inferSelect;
+export type TNewProductStockTransaction = typeof productStockTransactions.$inferInsert;

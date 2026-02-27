@@ -176,8 +176,8 @@ async function getCashbackProgramStats({
 		);
 
 	const currentGenerated = generatedResult[0]?.total ? Number(generatedResult[0].total) : 0;
-	const currentRescued = rescuedResult[0]?.total ? Number(rescuedResult[0].total) : 0;
-	const currentExpired = expiredResult[0]?.total ? Number(expiredResult[0].total) : 0;
+	const currentRescued = rescuedResult[0]?.total ? -Number(rescuedResult[0].total) : 0; // using "-" to reverse the value
+	const currentExpired = expiredResult[0]?.total ? -Number(expiredResult[0].total) : 0; // using "-" to reverse the value
 	const currentExpiring = expiringResult[0]?.total ? Number(expiringResult[0].total) : 0;
 	const currentParticipants = participantsResult[0]?.total ? Number(participantsResult[0].total) : 0;
 	const currentNewParticipants = newParticipantsResult[0]?.total ? Number(newParticipantsResult[0].total) : 0;
@@ -418,9 +418,7 @@ async function getCashbackProgramStats({
 			.select({ total: sum(sales.valorTotal) })
 			.from(sales)
 			.leftJoin(clients, eq(sales.clienteId, clients.id))
-			.where(
-				and(...saleConditions, gte(sales.dataVenda, previousPeriodAfter), lte(sales.dataVenda, previousPeriodBefore), isNull(clients.id)),
-			),
+			.where(and(...saleConditions, gte(sales.dataVenda, previousPeriodAfter), lte(sales.dataVenda, previousPeriodBefore), isNull(clients.id))),
 		// Previous total sales count
 		db
 			.select({ count: count() })

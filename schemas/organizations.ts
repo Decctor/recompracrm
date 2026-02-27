@@ -1,5 +1,5 @@
 import z from "zod";
-import { OrganizationIntegrationTypeEnum } from "./enums";
+import { DefaultDataSourceEnum, OrganizationIntegrationTypeEnum } from "./enums";
 
 export const OrganizationIntegrationConfigSchema = z.discriminatedUnion("tipo", [
 	z.object({
@@ -45,6 +45,11 @@ export const OrganizationConfigurationSchema = z.object({
 			acesso: z.boolean({ invalid_type_error: "Tipo não válido para o acesso aos recursos de atendimento via IA." }),
 			limiteCreditos: z.number({ invalid_type_error: "Tipo não válido para o limite de créditos de IA por atendimento." }).nullable(),
 		}),
+		erp: z
+			.object({
+				acesso: z.boolean({ invalid_type_error: "Tipo não válido para o acesso aos recursos de ERP." }),
+			})
+			.default({ acesso: false }),
 	}),
 });
 export type TOrganizationConfiguration = z.infer<typeof OrganizationConfigurationSchema>;
@@ -82,6 +87,7 @@ export const OrganizationSchema = z.object({
 	dadosViaERP: z.boolean({ invalid_type_error: "Tipo não válido para se os dados da organização foram via ERP." }).default(false),
 	dadosViaPDI: z.boolean({ invalid_type_error: "Tipo não válido para se os dados da organização foram via PDI." }).default(false),
 	dadosViaIntegracoes: z.boolean({ invalid_type_error: "Tipo não válido para se os dados da organização foram via integrações." }).default(false),
+	origemDadosPadrao: DefaultDataSourceEnum.default("RECEPTOR"),
 	// Integration
 	integracaoTipo: OrganizationIntegrationTypeEnum.optional().nullable(),
 	integracaoConfiguracao: OrganizationIntegrationConfigSchema.optional().nullable(),

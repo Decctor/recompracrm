@@ -16,16 +16,16 @@ export const campaignConversions = newTable(
 			.$defaultFn(() => crypto.randomUUID()),
 		organizacaoId: varchar("organizacao_id", { length: 255 }).references(() => organizations.id, { onDelete: "cascade" }),
 		vendaId: varchar("venda_id", { length: 255 })
-			.references(() => sales.id)
+			.references(() => sales.id, { onDelete: "cascade" })
 			.notNull(),
 		interacaoId: varchar("interacao_id", { length: 255 })
-			.references(() => interactions.id)
+			.references(() => interactions.id, { onDelete: "cascade" })
 			.notNull(),
 		campanhaId: varchar("campanha_id", { length: 255 })
-			.references(() => campaigns.id)
+			.references(() => campaigns.id, { onDelete: "cascade" })
 			.notNull(),
 		clienteId: varchar("cliente_id", { length: 255 })
-			.references(() => clients.id)
+			.references(() => clients.id, { onDelete: "cascade" })
 			.notNull(),
 
 		// Attribution

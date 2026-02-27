@@ -3,12 +3,14 @@ import { boolean, doublePrecision, index, json, jsonb, text, timestamp, varchar 
 import { campaignConversions } from "./campaign-conversions";
 import { campaigns } from "./campaigns";
 import { cashbackProgramTransactions } from "./cashback-programs";
-import { clients } from "./clients";
+import { clientLocations, clients } from "./clients";
 import { newTable } from "./common";
+import { saleProcessingSourceEnum, saleStatusEnum } from "./enums";
+import { accountingEntries, fiscalDocuments } from "./financial";
 import { interactions } from "./interactions";
 import { organizations } from "./organizations";
 import { partners } from "./partners";
-import { productAddOnOptions, productVariants, products } from "./products";
+import { productAddOnOptions, productStockTransactions, productVariants, products } from "./products";
 import { sellers } from "./sellers";
 
 export const sales = newTable(
@@ -20,7 +22,13 @@ export const sales = newTable(
 		organizacaoId: varchar("organizacao_id", { length: 255 }).references(() => organizations.id, { onDelete: "cascade" }),
 		clienteId: varchar("cliente_id", { length: 255 }).references(() => clients.id, { onDelete: "set null" }), // allow nulls for non-identified clients
 		idExterno: text("id_externo").notNull(),
+
 		valorTotal: doublePrecision("valor_total").notNull(),
+
+		// value "modifiers"
+		descontosTotal: doublePrecision("descontos_total"), // sum of everything that reduces the total "expected" value
+		acrescimosTotal: doublePrecision("acrescimos_total"), // sum of everything that increases the total "expected" value
+
 		custoTotal: doublePrecision("custo_total").notNull(),
 		vendedorNome: text("vendedor_nome").notNull(),
 		vendedorId: varchar("vendedor_id", { length: 255 }).references(() => sellers.id, { onDelete: "set null" }),
@@ -36,16 +44,26 @@ export const sales = newTable(
 		serie: text("serie").notNull(),
 		situacao: text("situacao").notNull(),
 		tipo: text("tipo").notNull(),
-
-		entregaModalidade: text("entrega_modalidade"), // ENTREGA, RETIRADA, PRESENCIAL, COMANDA
 		canal: text("canal"),
+
+		// Delivery
+		entregaModalidade: text("entrega_modalidade"), // ENTREGA, RETIRADA, PRESENCIAL, COMANDA
+		entregaLocalizacaoId: varchar("entrega_localizacao_id", { length: 255 }).references(() => clientLocations.id, { onDelete: "set null" }),
+
 		dataVenda: timestamp("data_venda"),
 		// Conversion Attribution fields
 		atribuicaoProcessada: boolean("atribuicao_processada").default(false),
 		atribuicaoCampanhaPrincipalId: varchar("atribuicao_campanha_principal_id", { length: 255 }).references(() => campaigns.id),
 		atribuicaoCampanhaConversaoId: varchar("atribuicao_campanha_conversao_id", { length: 255 }),
-		atribuicaoInteracaoId: varchar("atribuicao_interacao_id", { length: 255 }).references(() => interactions.id),
+		atribuicaoInteracaoId: varchar("atribuicao_interacao_id", { length: 255 }).references(() => interactions.id, {
+			onDelete: "set null",
+		}),
 		atribuicaoAplicavel: boolean("atribuicao_aplicavel").default(false),
+
+		// ERP: origem do processamento da venda
+		processamentoOrigem: saleProcessingSourceEnum("processamento_origem").default("EXTERNO"),
+		// ERP: status do ciclo de vida da venda
+		status: saleStatusEnum("status"),
 	},
 	(table) => ({
 		clientIdIdx: index("idx_sales_client_id").on(table.clienteId),
@@ -86,6 +104,14 @@ export const salesRelations = relations(sales, ({ one, many }) => ({
 	}),
 	itens: many(saleItems),
 	transacoesCashback: many(cashbackProgramTransactions),
+	entregaLocalizacao: one(clientLocations, {
+		fields: [sales.entregaLocalizacaoId],
+		references: [clientLocations.id],
+	}),
+	// ERP back-relations
+	lancamentosContabeis: many(accountingEntries),
+	documentosFiscais: many(fiscalDocuments),
+	movimentacoesEstoque: many(productStockTransactions),
 }));
 
 export const saleItems = newTable(

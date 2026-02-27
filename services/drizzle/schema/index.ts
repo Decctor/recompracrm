@@ -14,6 +14,7 @@ export * from "./campaign-conversions";
 export * from "./interactions";
 export * from "./whatsapp-templates";
 export * from "./cashback-programs";
+export * from "./financial";
 export * from "./organizations";
 export * from "./whatsapp-connections";
 export * from "./chats";

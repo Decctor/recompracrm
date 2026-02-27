@@ -13,7 +13,7 @@ export const ClientSchema = z.object({
 	telefone: z.string({ invalid_type_error: "Tipo não válido para telefone." }).optional().nullable(),
 	telefoneBase: z.string({ invalid_type_error: "Tipo não válido para telefone base." }),
 	email: z.string({ invalid_type_error: "Tipo não válido para email." }),
-	// Location
+	// Clients main location
 	localizacaoCep: z.string({ invalid_type_error: "Tipo não válido para CEP." }).optional().nullable(),
 	localizacaoEstado: z.string({ invalid_type_error: "Tipo não válido para estado." }).optional().nullable(),
 	localizacaoCidade: z.string({ invalid_type_error: "Tipo não válido para cidade." }).optional().nullable(),
@@ -79,23 +79,42 @@ export const ClientSchema = z.object({
 		.optional()
 		.nullable()
 		.transform((val) => (val ? new Date(val) : null)),
-	dataInsercao: z.date({
-		invalid_type_error: "Tipo não válido para data de inserção.",
-	}),
+	dataInsercao: z
+		.string({
+			required_error: "Data de inserção do cliente não informada.",
+			invalid_type_error: "Tipo não válido para data de inserção.",
+		})
+		.datetime({ message: "Tipo não válido para data de inserção." })
+		.transform((val) => new Date(val))
+		.default(new Date().toISOString()),
 });
 
-const ClientSimplifiedProjection = {
-	nome: 1,
-	telefone: 1,
-	email: 1,
-	canalAquisicao: 1,
-	dataPrimeiraCompra: 1,
-	dataUltimaCompra: 1,
-	analiseRFM: 1,
-	analisePeriodo: 1,
-	"compras.valor": 1,
-	"compras.data": 1,
-};
+export const ClientLocationSchema = z.object({
+	organizacaoId: z.string({ invalid_type_error: "Tipo não válido para o ID da organização." }),
+	clienteId: z.string({ invalid_type_error: "Tipo não válido para o ID do cliente." }),
+	titulo: z.string({
+		required_error: "Título da localização não informado.",
+		invalid_type_error: "Tipo não válido para o título da localização.",
+	}),
+	localizacaoCep: z.string({ invalid_type_error: "Tipo não válido para o CEP da localização." }).optional().nullable(),
+	localizacaoEstado: z.string({ invalid_type_error: "Tipo não válido para o estado da localização." }).optional().nullable(),
+	localizacaoCidade: z.string({ invalid_type_error: "Tipo não válido para a cidade da localização." }).optional().nullable(),
+	localizacaoBairro: z.string({ invalid_type_error: "Tipo não válido para o bairro da localização." }).optional().nullable(),
+	localizacaoLogradouro: z.string({ invalid_type_error: "Tipo não válido para o logradouro da localização." }).optional().nullable(),
+	localizacaoNumero: z.string({ invalid_type_error: "Tipo não válido para o número da localização." }).optional().nullable(),
+	localizacaoComplemento: z.string({ invalid_type_error: "Tipo não válido para o complemento da localização." }).optional().nullable(),
+	localizacaoLatitude: z.string({ invalid_type_error: "Tipo não válido para a latitude da localização." }).optional().nullable(),
+	localizacaoLongitude: z.string({ invalid_type_error: "Tipo não válido para a longitude da localização." }).optional().nullable(),
+	dataInsercao: z
+		.string({
+			required_error: "Data de inserção da localização não informada.",
+			invalid_type_error: "Tipo não válido para a data de inserção da localização.",
+		})
+		.datetime({ message: "Tipo não válido para a data de inserção da localização." })
+		.transform((val) => new Date(val))
+		.default(new Date().toISOString()),
+});
+
 export type TClient = z.infer<typeof ClientSchema>;
 export type TClientDTO = TClient & { _id: string };
 

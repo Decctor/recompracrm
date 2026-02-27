@@ -66,3 +66,29 @@ export const clientsRelations = relations(clients, ({ one, many }) => ({
 }));
 export type TClientEntity = typeof clients.$inferSelect;
 export type TNewClientEntity = typeof clients.$inferInsert;
+
+export const clientLocations = newTable(
+	"client_locations",
+	{
+		id: varchar("id", { length: 255 })
+			.primaryKey()
+			.$defaultFn(() => crypto.randomUUID()),
+		organizacaoId: varchar("organizacao_id", { length: 255 }).references(() => organizations.id, { onDelete: "cascade" }),
+		clienteId: varchar("cliente_id", { length: 255 }).references(() => clients.id, { onDelete: "cascade" }),
+		titulo: text("titulo").notNull(),
+		localizacaoCep: text("localizacao_cep"),
+		localizacaoEstado: text("localizacao_estado"),
+		localizacaoCidade: text("localizacao_cidade"),
+		localizacaoBairro: text("localizacao_bairro"),
+		localizacaoLogradouro: text("localizacao_logradouro"),
+		localizacaoNumero: text("localizacao_numero"),
+		localizacaoComplemento: text("localizacao_complemento"),
+		localizacaoLatitude: text("localizacao_latitude"),
+		localizacaoLongitude: text("localizacao_longitude"),
+		dataInsercao: timestamp("data_insercao").defaultNow().notNull(),
+	},
+	(table) => ({
+		clienteIdIdx: index("idx_client_locations_cliente_id").on(table.clienteId),
+		organizacaoIdIdx: index("idx_client_locations_organizacao_id").on(table.organizacaoId),
+	}),
+);

@@ -114,3 +114,28 @@ export const CommunityTutorialNivelEnum = z.enum(["INICIANTE", "INTERMEDIARIO", 
 export type TCommunityTutorialNivelEnum = z.infer<typeof CommunityTutorialNivelEnum>;
 export const CommunityContentStatusEnum = z.enum(["RASCUNHO", "PUBLICADO", "ARQUIVADO"]);
 export type TCommunityContentStatusEnum = z.infer<typeof CommunityContentStatusEnum>;
+
+// ============================================================================
+// FINANCIAL / ERP
+// ============================================================================
+
+export const FinancialAccountTypeEnum = z.enum(["CAIXA", "BANCO", "CARTEIRA_DIGITAL"]);
+export type TFinancialAccountTypeEnum = z.infer<typeof FinancialAccountTypeEnum>;
+export const BankAccountTypeEnum = z.enum(["CORRENTE", "POUPANCA"]);
+export type TBankAccountTypeEnum = z.infer<typeof BankAccountTypeEnum>;
+export const FinancialTransactionTypeEnum = z.enum(["ENTRADA", "SAIDA"]);
+export type TFinancialTransactionTypeEnum = z.infer<typeof FinancialTransactionTypeEnum>;
+export const AccountingEntryOriginTypeEnum = z.enum(["VENDA", "MANUAL", "ESTORNO"]);
+export type TAccountingEntryOriginTypeEnum = z.infer<typeof AccountingEntryOriginTypeEnum>;
+export const FiscalDocumentTypeEnum = z.enum(["NFCE", "NFE", "NFSE"]);
+export type TFiscalDocumentTypeEnum = z.infer<typeof FiscalDocumentTypeEnum>;
+export const FiscalDocumentStatusEnum = z.enum(["PENDENTE", "AUTORIZADA", "CANCELADA", "INUTILIZADA"]);
+export type TFiscalDocumentStatusEnum = z.infer<typeof FiscalDocumentStatusEnum>;
+export const StockMovementTypeEnum = z.enum(["ENTRADA", "SAIDA", "AJUSTE", "DEVOLUCAO"]);
+export type TStockMovementTypeEnum = z.infer<typeof StockMovementTypeEnum>;
+export const SaleProcessingSourceEnum = z.enum(["EXTERNO", "INTERNO"]);
+export type TSaleProcessingSourceEnum = z.infer<typeof SaleProcessingSourceEnum>;
+export const SaleStatusEnum = z.enum(["ORCAMENTO", "CONDICIONAL", "CONFIRMADA", "FATURADA", "CANCELADA"]);
+export type TSaleStatusEnum = z.infer<typeof SaleStatusEnum>;
+export const DefaultDataSourceEnum = z.enum(["RECEPTOR", "ERP"]);
+export type TDefaultDataSourceEnum = z.infer<typeof DefaultDataSourceEnum>;

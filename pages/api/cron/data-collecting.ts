@@ -1310,6 +1310,11 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 					const isValidSale = OnlineSale.natureza === "SN01";
 					// First, we check for an existing client with the same name (in this case, our primary key for the integration)
 					const isValidClient = OnlineSale.cliente !== "AO CONSUMIDOR";
+
+					console.log(`[ORG: ${organization.id}] [INFO] [DATA_COLLECTING] [CLIENT] Client: ${OnlineSale.cliente}.`);
+					if (!isValidClient)
+						console.log(`[ORG: ${organization.id}] [INFO] [DATA_COLLECTING] [CLIENT] Non-identified client detected: ${OnlineSale.cliente}`);
+
 					const equivalentSaleClient = isValidClient ? existingClientsMap.get(OnlineSale.cliente) : null;
 					// Initalize the saleClientId holder with the existing client (if any)
 					let saleClientId = equivalentSaleClient?.id;

@@ -2,8 +2,8 @@ import type { TOrganizationConfiguration, TOrganizationIntegrationConfig } from 
 import type { TUserPermissions } from "@/schemas/users";
 import { relations } from "drizzle-orm";
 import { boolean, integer, jsonb, text, timestamp, varchar } from "drizzle-orm/pg-core";
-import { organizationIntegrationTypeEnum } from "./enums";
 import { newTable } from "./common";
+import { defaultDataSourceEnum, organizationIntegrationTypeEnum } from "./enums";
 import { sellers } from "./sellers";
 import { users } from "./users";
 
@@ -40,6 +40,8 @@ export const organizations = newTable("organizations", {
 	dadosViaERP: boolean("dados_via_erp").notNull().default(false),
 	dadosViaPDI: boolean("dados_via_pdi").notNull().default(false),
 	dadosViaIntegracoes: boolean("dados_via_integracoes").notNull().default(false),
+	// ERP: modo padrão de processamento de dados
+	origemDadosPadrao: defaultDataSourceEnum("origem_dados_padrao").default("RECEPTOR"),
 	integracaoTipo: organizationIntegrationTypeEnum("integracao_tipo"),
 	integracaoConfiguracao: jsonb("integracao_configuracao").$type<TOrganizationIntegrationConfig>(),
 	integracaoDataUltimaSincronizacao: timestamp("integracao_data_ultima_sincronizacao"),
