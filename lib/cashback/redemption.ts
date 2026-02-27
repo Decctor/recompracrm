@@ -101,12 +101,12 @@ export async function applyCashbackRedemptionFIFO({
 	}
 
 	if (remainingToConsume > EPSILON) {
-		const canBypassImportedBalance =
-			ENABLE_IMPORTED_BALANCE_FIFO_BYPASS && accumulationTransactions.length === 0 && consumedFromAccumulations.length === 0;
+		// const canBypassImportedBalance =
+		// 	ENABLE_IMPORTED_BALANCE_FIFO_BYPASS && accumulationTransactions.length === 0 && consumedFromAccumulations.length === 0;
 
-		if (!canBypassImportedBalance) {
-			throw new createHttpError.Conflict("Saldo inconsistente para consumo FIFO. Tente novamente.");
-		}
+		// if (!canBypassImportedBalance) {
+		// 	throw new createHttpError.Conflict("Saldo inconsistente para consumo FIFO. Tente novamente.");
+		// }
 
 		console.warn(
 			`[WARN] [CASHBACK_REDEMPTION_FIFO] Bypass temporario aplicado para cliente ${clientId}. Sem transacoes de acumulo para consumir ${remainingToConsume}.`,
