@@ -11,6 +11,7 @@ import { chatMessages, chatServices, chats } from "@/services/drizzle/schema/cha
 import { clients } from "@/services/drizzle/schema/clients";
 import { interactions } from "@/services/drizzle/schema/interactions";
 import { supabaseClient } from "@/services/supabase";
+import { waitUntil } from "@vercel/functions";
 import { eq, sql } from "drizzle-orm";
 import type { NextApiRequest, NextApiResponse } from "next";
 
@@ -92,7 +93,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
 	// Process webhook asynchronously
 	try {
-		await processWebhookAsync(body);
+		waitUntil(
+			processWebhookAsync(body).catch((error) => {
+				console.error("[INTERNAL_WHATSAPP_WEBHOOK] Error processing webhook:", error);
+			}),
+		);
 	} catch (error) {
 		console.error("[INTERNAL_WHATSAPP_WEBHOOK] Error processing webhook:", error);
 	}
