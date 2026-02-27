@@ -41,8 +41,8 @@ const handleFixPreviousSales: NextApiHandler<string> = async (req, res) => {
 	// Calculate date range: previous 5 days (excluding today)
 	const startDate = dayjs().subtract(5, "day").startOf("day");
 	const endDate = dayjs().subtract(1, "day").endOf("day");
-	const startDateFormatted = startDate.format("DDMMYYYY");
-	const endDateFormatted = endDate.format("DDMMYYYY");
+	const startDateFormatted = '01022026'  // startDate.format("DDMMYYYY");
+	const endDateFormatted = '28022026'  // endDate.format("DDMMYYYY");
 
 	console.log(`[INFO] [FIX_PREVIOUS_SALES] Processing date range: ${startDateFormatted} to ${endDateFormatted}`);
 
@@ -147,10 +147,17 @@ const handleFixPreviousSales: NextApiHandler<string> = async (req, res) => {
 					const isValidSale = OnlineSale.natureza === "SN01";
 
 					// First, we check for an existing client with the same name (in this case, our primary key for the integration)
-					const equivalentSaleClient = existingClientsMap.get(OnlineSale.cliente);
+					const isValidClient = OnlineSale.cliente !== "AO CONSUMIDOR";
+
+					if (!isValidClient)
+						console.log(`[ORG: ${organization.id}] [INFO] [DATA_COLLECTING] [CLIENT] Non-identified client detected: ${OnlineSale.cliente}`);
+
+					const equivalentSaleClient = isValidClient ? existingClientsMap.get(OnlineSale.cliente) : null;
+					// Initalize the saleClientId holder with the existing client (if any)
 					let saleClientId = equivalentSaleClient?.id;
 
-					if (!saleClientId) {
+
+					if (!saleClientId && isValidClient) {
 						console.log(`[ORG: ${organization.id}] [INFO] [FIX_PREVIOUS_SALES] Creating new client for ${OnlineSale.cliente}`);
 						// If no existing client is found, we create a new one
 						// Note: For fix-previous-sales, we don't set primeiraCompraData as this should be handled by data-collecting
@@ -224,7 +231,7 @@ const handleFixPreviousSales: NextApiHandler<string> = async (req, res) => {
 							.values({
 								organizacaoId: organization.id,
 								idExterno: OnlineSale.id,
-								clienteId: saleClientId,
+								clienteId: saleClientId ?? null,
 								valorTotal: Number(OnlineSale.valor),
 								custoTotal: saleTotalCost,
 								vendedorNome: OnlineSale.vendedor || "N/A",
@@ -283,7 +290,7 @@ const handleFixPreviousSales: NextApiHandler<string> = async (req, res) => {
 							await tx.insert(saleItems).values({
 								organizacaoId: organization.id,
 								vendaId: insertedSaleId,
-								clienteId: saleClientId,
+								clienteId: saleClientId ?? null,
 								produtoId: productId,
 								quantidade: Number(item.qtde),
 								valorVendaUnitario: valorVendaUnitario,
@@ -321,7 +328,7 @@ const handleFixPreviousSales: NextApiHandler<string> = async (req, res) => {
 							.set({
 								organizacaoId: organization.id,
 								idExterno: OnlineSale.id,
-								clienteId: saleClientId,
+								clienteId: saleClientId ?? null,
 								valorTotal: Number(OnlineSale.valor),
 								custoTotal: saleTotalCost,
 								vendedorNome: OnlineSale.vendedor || "N/A",
@@ -344,7 +351,7 @@ const handleFixPreviousSales: NextApiHandler<string> = async (req, res) => {
 						const wasPreviouslyValid = existingSale.natureza === "SN01" && existingSale.valorTotal > 0;
 						const isNowCanceled = OnlineSale.natureza !== "SN01" || Number(OnlineSale.valor) === 0;
 
-						if (wasPreviouslyValid && isNowCanceled) {
+						if (wasPreviouslyValid && isNowCanceled && saleClientId) {
 							console.log(
 								`[ORG: ${organization.id}] [FIX_PREVIOUS_SALES] [SALE_CANCELED] ` + `Venda ${OnlineSale.id} foi cancelada. Revertendo cashback...`,
 							);
@@ -396,7 +403,7 @@ const handleFixPreviousSales: NextApiHandler<string> = async (req, res) => {
 							await tx.insert(saleItems).values({
 								organizacaoId: organization.id,
 								vendaId: existingSale.id,
-								clienteId: saleClientId,
+								clienteId: saleClientId ?? null,
 								produtoId: productId,
 								quantidade: Number(item.qtde),
 								valorVendaUnitario: valorVendaUnitario,
@@ -429,7 +436,7 @@ const handleFixPreviousSales: NextApiHandler<string> = async (req, res) => {
 					}
 
 					// Update client's last purchase date only (not first purchase date)
-					if (isValidSale) {
+					if (isValidSale && saleClientId) {
 						const clientLastPurchaseDate = existingClientsMap.get(OnlineSale.cliente)?.lastPurchaseDate;
 						// Only update if this sale is more recent than the current last purchase date
 						if (!clientLastPurchaseDate || saleDate > clientLastPurchaseDate) {
