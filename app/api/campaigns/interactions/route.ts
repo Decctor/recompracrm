@@ -37,6 +37,7 @@ const GetCampaignInteractionsInputSchema = z.object({
 		.pipe(z.array(interactionExecutionStatusSchema)),
 	orderByField: orderByFieldSchema.optional().nullable(),
 	orderByDirection: orderByDirectionSchema.optional().nullable(),
+	campanhaId: z.string().optional().nullable(),
 });
 export type TGetCampaignInteractionsInput = z.infer<typeof GetCampaignInteractionsInputSchema>;
 
@@ -47,7 +48,11 @@ async function getCampaignInteractions({ input, session }: { input: TGetCampaign
 	const PAGE_SIZE = 25;
 	const safePage = Number.isFinite(input.page) && input.page > 0 ? input.page : 1;
 	const skip = PAGE_SIZE * (safePage - 1);
-	const conditions = [eq(interactions.organizacaoId, userOrgId), isNotNull(interactions.campanhaId)];
+	const conditions = [
+		eq(interactions.organizacaoId, userOrgId),
+		isNotNull(interactions.campanhaId),
+		...(input.campanhaId ? [eq(interactions.campanhaId, input.campanhaId)] : []),
+	];
 
 	if (input.search && input.search.trim().length > 0) {
 		const search = input.search.trim();
@@ -195,6 +200,7 @@ const getCampaignInteractionsRoute = async (request: NextRequest) => {
 		status: searchParams.get("status") ?? undefined,
 		orderByField: searchParams.get("orderByField") ?? undefined,
 		orderByDirection: searchParams.get("orderByDirection") ?? undefined,
+		campanhaId: searchParams.get("campanhaId") ?? undefined,
 	});
 	const result = await getCampaignInteractions({ input, session });
 	return NextResponse.json(result, { status: 200 });

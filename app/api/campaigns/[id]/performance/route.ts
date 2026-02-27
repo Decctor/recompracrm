@@ -4,7 +4,7 @@ import type { TAuthUserSession } from "@/lib/authentication/types";
 import { db } from "@/services/drizzle";
 import { campaignConversions, campaigns, interactions } from "@/services/drizzle/schema";
 import dayjs from "dayjs";
-import { and, avg, count, eq, gte, lte, sum } from "drizzle-orm";
+import { and, avg, count, countDistinct, eq, gte, lte, sum } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import z from "zod";
@@ -42,23 +42,41 @@ async function getCampaignPerformance({
 
 	if (!campaign) throw new createHttpError.NotFound("Campanha não encontrada.");
 
+	const dateRangeConditions = [
+		eq(interactions.campanhaId, campaignId),
+		eq(interactions.organizacaoId, userOrgId),
+		eq(interactions.tipo, "ENVIO-MENSAGEM"),
+		gte(interactions.dataInsercao, input.startDate),
+		lte(interactions.dataInsercao, input.endDate),
+	];
+
 	// Get interactions count (messages sent) for this campaign in the date range
 	const interactionsResult = await db
 		.select({
 			total: count(interactions.id),
+			clientesAlcancados: countDistinct(interactions.clienteId),
 		})
 		.from(interactions)
-		.where(
-			and(
-				eq(interactions.campanhaId, campaignId),
-				eq(interactions.organizacaoId, userOrgId),
-				eq(interactions.tipo, "ENVIO-MENSAGEM"),
-				gte(interactions.dataInsercao, input.startDate),
-				lte(interactions.dataInsercao, input.endDate),
-			),
-		);
+		.where(and(...dateRangeConditions));
 
 	const interacoesEnviadas = interactionsResult[0]?.total ?? 0;
+	const clientesAlcancados = interactionsResult[0]?.clientesAlcancados ?? 0;
+
+	// Get delivery breakdown
+	const deliveryResult = await db
+		.select({
+			statusEnvio: interactions.statusEnvio,
+			total: count(interactions.id),
+		})
+		.from(interactions)
+		.where(and(...dateRangeConditions))
+		.groupBy(interactions.statusEnvio);
+
+	const totalEntregues = deliveryResult
+		.filter((r) => r.statusEnvio === "DELIVERED" || r.statusEnvio === "READ")
+		.reduce((acc, r) => acc + r.total, 0);
+
+	const totalFalhas = deliveryResult.find((r) => r.statusEnvio === "FAILED")?.total ?? 0;
 
 	// Get conversions for this campaign in the date range
 	const conversionsResult = await db
@@ -66,6 +84,8 @@ async function getCampaignPerformance({
 			total: count(campaignConversions.id),
 			receitaTotal: sum(campaignConversions.atribuicaoReceita),
 			tempoMedioMinutos: avg(campaignConversions.tempoParaConversaoMinutos),
+			clientesConvertidos: countDistinct(campaignConversions.clienteId),
+			ticketMedio: avg(campaignConversions.vendaValor),
 		})
 		.from(campaignConversions)
 		.where(
@@ -80,6 +100,8 @@ async function getCampaignPerformance({
 	const conversoes = conversionsResult[0]?.total ?? 0;
 	const receitaAtribuida = Number(conversionsResult[0]?.receitaTotal ?? 0);
 	const tempoMedioMinutos = Number(conversionsResult[0]?.tempoMedioMinutos ?? 0);
+	const clientesConvertidos = conversionsResult[0]?.clientesConvertidos ?? 0;
+	const ticketMedioConversao = Number(conversionsResult[0]?.ticketMedio ?? 0);
 
 	// Calculate conversion rate
 	const taxaConversao = interacoesEnviadas > 0 ? (conversoes / interacoesEnviadas) * 100 : 0;
@@ -92,10 +114,15 @@ async function getCampaignPerformance({
 			campanhaId: campaignId,
 			campanhaTitulo: campaign.titulo,
 			interacoesEnviadas,
+			clientesAlcancados,
+			totalEntregues,
+			totalFalhas,
 			conversoes,
-			taxaConversao: Math.round(taxaConversao * 100) / 100, // Round to 2 decimal places
+			clientesConvertidos,
+			taxaConversao: Math.round(taxaConversao * 100) / 100,
 			receitaAtribuida,
 			tempoMedioConversaoHoras: Math.round(tempoMedioConversaoHoras * 100) / 100,
+			ticketMedioConversao: Math.round(ticketMedioConversao * 100) / 100,
 			periodoInicio: input.startDate,
 			periodoFim: input.endDate,
 		},

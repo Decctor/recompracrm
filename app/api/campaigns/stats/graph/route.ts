@@ -15,6 +15,7 @@ const GetCampaignGraphInputSchema = z.object({
 		required_error: "Tipo de gráfico não informado.",
 		invalid_type_error: "Tipo inválido para tipo de gráfico.",
 	}),
+	campanhaId: z.string().optional().nullable(),
 	startDate: z
 		.string({
 			required_error: "Período não informado.",
@@ -61,12 +62,14 @@ async function getGraphDataForPeriod({
 	bucketCount,
 	groupingFormat,
 	userOrgId,
+	campanhaId,
 }: {
 	graphType: "interactions" | "conversions" | "revenue";
 	period: { after: Date; before: Date };
 	bucketCount: number;
 	groupingFormat: string;
 	userOrgId: string;
+	campanhaId?: string | null;
 }): Promise<Array<{ label: string; value: number }>> {
 	const periodDatesStrs = getEvenlySpacedDates({
 		startDate: period.after,
@@ -90,6 +93,7 @@ async function getGraphDataForPeriod({
 					eq(interactions.tipo, "ENVIO-MENSAGEM"),
 					gte(interactions.dataInsercao, period.after),
 					lte(interactions.dataInsercao, period.before),
+					...(campanhaId ? [eq(interactions.campanhaId, campanhaId)] : []),
 				),
 			)
 			.orderBy(sql`date_trunc('day', ${interactions.dataInsercao})`)
@@ -130,6 +134,7 @@ async function getGraphDataForPeriod({
 					eq(campaignConversions.organizacaoId, userOrgId),
 					gte(campaignConversions.dataConversao, period.after),
 					lte(campaignConversions.dataConversao, period.before),
+					...(campanhaId ? [eq(campaignConversions.campanhaId, campanhaId)] : []),
 				),
 			)
 			.orderBy(sql`date_trunc('day', ${campaignConversions.dataConversao})`)
@@ -170,6 +175,7 @@ async function getGraphDataForPeriod({
 					eq(campaignConversions.organizacaoId, userOrgId),
 					gte(campaignConversions.dataConversao, period.after),
 					lte(campaignConversions.dataConversao, period.before),
+					...(campanhaId ? [eq(campaignConversions.campanhaId, campanhaId)] : []),
 				),
 			)
 			.orderBy(sql`date_trunc('day', ${campaignConversions.dataConversao})`)
@@ -240,6 +246,7 @@ async function getCampaignGraph({ input, session }: { input: TGetCampaignGraphIn
 		bucketCount: bestNumberOfPointsForPeriodsDates,
 		groupingFormat,
 		userOrgId,
+		campanhaId: input.campanhaId,
 	});
 
 	// If comparison period exists, get comparison data with SAME bucket count
@@ -251,6 +258,7 @@ async function getCampaignGraph({ input, session }: { input: TGetCampaignGraphIn
 			bucketCount: bestNumberOfPointsForPeriodsDates,
 			groupingFormat,
 			userOrgId,
+			campanhaId: input.campanhaId,
 		});
 	}
 
@@ -281,6 +289,7 @@ const getCampaignGraphRoute = async (request: NextRequest) => {
 		endDate: searchParams.get("endDate") ?? null,
 		comparingStartDate: searchParams.get("comparingStartDate") ?? null,
 		comparingEndDate: searchParams.get("comparingEndDate") ?? null,
+		campanhaId: searchParams.get("campanhaId") ?? null,
 	});
 
 	const result = await getCampaignGraph({ input, session: session });

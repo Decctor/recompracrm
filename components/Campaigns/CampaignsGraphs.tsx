@@ -58,9 +58,10 @@ type CampaignsGraphsProps = {
 	endDate: Date | null;
 	comparingStartDate?: Date | null;
 	comparingEndDate?: Date | null;
+	campaignId?: string;
 };
 
-export default function CampaignsGraphs({ startDate, endDate, comparingStartDate, comparingEndDate }: CampaignsGraphsProps) {
+export default function CampaignsGraphs({ startDate, endDate, comparingStartDate, comparingEndDate, campaignId }: CampaignsGraphsProps) {
 	const [graphType, setGraphType] = useState<TGetCampaignGraphInput["graphType"]>("interactions");
 
 	const { data: graphData, isLoading: graphLoading } = useCampaignGraph({
@@ -69,6 +70,7 @@ export default function CampaignsGraphs({ startDate, endDate, comparingStartDate
 		endDate: endDate ?? undefined,
 		comparingStartDate: comparingStartDate ?? undefined,
 		comparingEndDate: comparingEndDate ?? undefined,
+		campaignId,
 	});
 
 	const chartConfig = {
