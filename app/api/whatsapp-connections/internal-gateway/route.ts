@@ -1,7 +1,7 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
-import { deleteSession, generateSessionId, initSession } from "@/lib/whatsapp/internal-gateway";
+import { DEFAULT_GATEWAY_ENABLED_EVENTS, deleteSession, generateSessionId, initSession } from "@/lib/whatsapp/internal-gateway";
 import { db } from "@/services/drizzle";
 import { whatsappConnectionPhones, whatsappConnections } from "@/services/drizzle/schema/whatsapp-connections";
 import { whatsappTemplates } from "@/services/drizzle/schema/whatsapp-templates";
@@ -52,7 +52,9 @@ async function initializeInternalGatewayConnection({
 		const sessionId = generateSessionId(organizacaoId);
 
 		// Initialize session with gateway
-		const gatewayResponse = await initSession(sessionId);
+		const gatewayResponse = await initSession(sessionId, {
+			enabledEvents: DEFAULT_GATEWAY_ENABLED_EVENTS,
+		});
 
 		// Create whatsappConnections record
 		const [newConnection] = await tx

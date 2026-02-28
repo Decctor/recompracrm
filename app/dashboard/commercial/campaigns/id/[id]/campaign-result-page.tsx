@@ -253,32 +253,27 @@ export default function CampaignResultPage({ campaignId, membership, user }: Cam
 			<div className="w-full flex items-start flex-col lg:flex-row gap-3">
 				<StatUnitCard
 					title="CLIENTES ALCANÇADOS"
-					subtitle="Únicos que receberam"
 					icon={<Users className="w-4 h-4 min-w-4 min-h-4" />}
 					current={{ value: performance?.clientesAlcancados ?? 0, format: (n) => formatDecimalPlaces(n) }}
 				/>
 				<StatUnitCard
 					title="CLIENTES CONVERTIDOS"
-					subtitle="Únicos que converteram"
 					icon={<UserRoundCheck className="w-4 h-4 min-w-4 min-h-4" />}
 					current={{ value: performance?.clientesConvertidos ?? 0, format: (n) => formatDecimalPlaces(n) }}
 				/>
 				<StatUnitCard
 					title="MENSAGENS ENTREGUES"
-					subtitle="Status DELIVERED ou READ"
 					icon={<Send className="w-4 h-4 min-w-4 min-h-4" />}
 					current={{ value: performance?.totalEntregues ?? 0, format: (n) => formatDecimalPlaces(n) }}
 				/>
 				<StatUnitCard
 					title="FALHAS DE ENVIO"
-					subtitle="Status FAILED"
 					icon={<CircleX className="w-4 h-4 min-w-4 min-h-4" />}
 					current={{ value: performance?.totalFalhas ?? 0, format: (n) => formatDecimalPlaces(n) }}
 					lowerIsBetter
 				/>
 				<StatUnitCard
 					title="TICKET MÉDIO DAS CONVERSÕES"
-					subtitle="Valor médio das vendas"
 					icon={<BadgeDollarSign className="w-4 h-4 min-w-4 min-h-4" />}
 					current={{ value: performance?.ticketMedioConversao ?? 0, format: (n) => formatToMoney(n) }}
 				/>
@@ -288,25 +283,21 @@ export default function CampaignResultPage({ campaignId, membership, user }: Cam
 			<div className="w-full flex items-start flex-col lg:flex-row gap-3">
 				<StatUnitCard
 					title="AQUISIÇÕES"
-					subtitle="Novos clientes"
 					icon={<UserPlus className="w-4 h-4 min-w-4 min-h-4" />}
 					current={{ value: aquisicoes?.quantidade ?? 0, format: (n) => formatDecimalPlaces(n) }}
 				/>
 				<StatUnitCard
 					title="REATIVAÇÕES"
-					subtitle="Clientes resgatados"
 					icon={<RefreshCw className="w-4 h-4 min-w-4 min-h-4" />}
 					current={{ value: reativacoes?.quantidade ?? 0, format: (n) => formatDecimalPlaces(n) }}
 				/>
 				<StatUnitCard
 					title="ACELERAÇÕES"
-					subtitle="Compraram mais rápido"
 					icon={<Zap className="w-4 h-4 min-w-4 min-h-4" />}
 					current={{ value: aceleracoes?.quantidade ?? 0, format: (n) => formatDecimalPlaces(n) }}
 				/>
 				<StatUnitCard
 					title="ANTECIPAÇÃO MÉDIA"
-					subtitle="Dias economizados"
 					icon={<TrendingUp className="w-4 h-4 min-w-4 min-h-4" />}
 					current={{
 						value: qualityData?.impactoFrequencia?.mediasDiasAntecipados ?? 0,
@@ -315,7 +306,6 @@ export default function CampaignResultPage({ campaignId, membership, user }: Cam
 				/>
 				<StatUnitCard
 					title="IMPACTO NO TICKET"
-					subtitle="Variação média vs. histórico"
 					icon={<BadgeDollarSign className="w-4 h-4 min-w-4 min-h-4" />}
 					current={{
 						value: qualityData?.impactoMonetario?.deltaMonetarioPercentualMedio ?? 0,

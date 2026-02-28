@@ -238,16 +238,23 @@ export async function processSingleInteractionImmediately(params: ImmediateProce
 					fallbackText: payload.content,
 				});
 				console.log("[IMMEDIATE_PROCESS] Template content", templateContent);
-				sentWhatsappTemplateResponse = await sendMessage(whatsappSessionId, formatPhoneForInternalGateway(client.telefone), templateContent);
+				sentWhatsappTemplateResponse = await sendMessage(
+					whatsappSessionId,
+					formatPhoneForInternalGateway(client.telefone),
+					templateContent,
+					{ clientMessageId: interactionId },
+				);
 				console.log("[IMMEDIATE_PROCESS] Sent WHATSAPP TEMPLATE RESPONSE", sentWhatsappTemplateResponse);
+				if (!sentWhatsappTemplateResponse.success) {
+					throw new Error(sentWhatsappTemplateResponse.error || "Falha ao enfileirar mensagem no Gateway Interno");
+				}
 
-				// Update chat message with WhatsApp message ID (only if hub access enabled)
+				// Message is queued; wait for webhook to set definitive WhatsApp IDs/statuses
 				if (hasHubAccess && insertedChatMessageId) {
 					await db
 						.update(chatMessages)
 						.set({
-							whatsappMessageId: sentWhatsappTemplateResponse.messageId,
-							whatsappMessageStatus: "ENVIADO",
+							whatsappMessageStatus: "PENDENTE",
 						})
 						.where(eq(chatMessages.id, insertedChatMessageId));
 				}
@@ -256,11 +263,13 @@ export async function processSingleInteractionImmediately(params: ImmediateProce
 				await db
 					.update(interactions)
 					.set({
-						statusEnvio: "ENVIADO",
+						statusEnvio: "PENDENTE",
 						dataExecucao: new Date(),
 						metadados: {
 							...(previousInteraction?.metadados ?? {}),
-							whatsappMessageId: sentWhatsappTemplateResponse.messageId,
+							clientMessageId: interactionId,
+							jobId: sentWhatsappTemplateResponse.jobId,
+							chatMessageId: insertedChatMessageId,
 							whatsappTemplateId: campaign.whatsappTemplate.id,
 						},
 					})

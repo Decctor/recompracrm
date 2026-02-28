@@ -8,11 +8,19 @@ const GATEWAY_API_SECRET = process.env.INTERNAL_WHATSAPP_GATEWAY_API_SECRET;
 
 // Types
 export type ConnectionStatus = "disconnected" | "connecting" | "qr" | "connected";
+export type GatewayEnabledEvent = "connection.update" | "message.received" | "message.sent" | "message.updated" | "message.queue_failed";
+export const DEFAULT_GATEWAY_ENABLED_EVENTS: GatewayEnabledEvent[] = [
+	"connection.update",
+	"message.sent",
+	"message.updated",
+	"message.queue_failed",
+];
 
 export type InitSessionResponse = {
 	sessionId: string;
 	status: ConnectionStatus;
 	qrCode?: string;
+	enabledEvents?: GatewayEnabledEvent[];
 };
 
 export type SessionInfo = {
@@ -25,7 +33,9 @@ export type SessionInfo = {
 
 export type SendMessageResponse = {
 	success: boolean;
-	messageId?: string;
+	queued?: boolean;
+	jobId?: string;
+	clientMessageId?: string;
 	error?: string;
 };
 
@@ -47,6 +57,7 @@ export type SendMessageInput = {
 	sessionId: string;
 	to: string;
 	content: SendMessageContent;
+	clientMessageId?: string;
 };
 
 export function parseTemplatePayloadToGatewayContent(templatePayload: TemplatePayload, options?: { fallbackText?: string }): SendMessageContent {
@@ -138,13 +149,20 @@ export function generateSessionId(orgId: string): string {
  * Initialize a new WhatsApp session
  * Returns QR code for scanning
  */
-export async function initSession(sessionId: string): Promise<InitSessionResponse> {
+export async function initSession(sessionId: string, options?: { enabledEvents?: GatewayEnabledEvent[] }): Promise<InitSessionResponse> {
 	validateGatewayConfig();
 
 	try {
 		console.log("[INTERNAL_GATEWAY] Initializing session:", sessionId);
 
-		const response = await axios.post<InitSessionResponse>(`${GATEWAY_URL}/sessions/init`, { sessionId }, { headers: getGatewayHeaders() });
+		const response = await axios.post<InitSessionResponse>(
+			`${GATEWAY_URL}/sessions/init`,
+			{
+				sessionId,
+				enabledEvents: options?.enabledEvents ?? DEFAULT_GATEWAY_ENABLED_EVENTS,
+			},
+			{ headers: getGatewayHeaders() },
+		);
 
 		console.log("[INTERNAL_GATEWAY] Session initialized:", response.data);
 		return response.data;
@@ -222,7 +240,12 @@ export async function deleteSession(sessionId: string): Promise<void> {
 /**
  * Send a text message via Internal Gateway
  */
-export async function sendMessage(sessionId: string, to: string, content: SendMessageContent): Promise<SendMessageResponse> {
+export async function sendMessage(
+	sessionId: string,
+	to: string,
+	content: SendMessageContent,
+	options?: { clientMessageId?: string },
+): Promise<SendMessageResponse> {
 	validateGatewayConfig();
 
 	try {
@@ -235,6 +258,7 @@ export async function sendMessage(sessionId: string, to: string, content: SendMe
 				sessionId,
 				to,
 				content,
+				clientMessageId: options?.clientMessageId,
 			},
 			{ headers: getGatewayHeaders() },
 		);

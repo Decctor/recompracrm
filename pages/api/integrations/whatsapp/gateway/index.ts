@@ -18,7 +18,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 const API_SECRET = process.env.INTERNAL_WHATSAPP_GATEWAY_API_SECRET;
 const AI_RESPONSE_DELAY_MS = 5000;
 
-type WebhookEventType = "message.received" | "connection.update" | "message.updated";
+type WebhookEventType = "message.received" | "connection.update" | "message.sent" | "message.updated";
 type WebhookMediaType = "image" | "video" | "audio" | "document" | "sticker" | "unknown";
 
 type WebhookMessageReceivedData = {
@@ -44,8 +44,24 @@ type WebhookConnectionUpdateData = {
 	qrCode?: string | null;
 };
 
-type WebhookMessageUpdatedData = {
+type WebhookMessageSentData = {
+	clientMessageId?: string;
 	whatsappMessageId: string;
+	status?: "pending" | "sent";
+	recipient?: {
+		id: string;
+		phoneNumber: string;
+	};
+	content?: {
+		text?: string;
+		mediaType?: WebhookMediaType;
+	};
+	date?: string;
+};
+
+type WebhookMessageUpdatedData = {
+	clientMessageId?: string;
+	whatsappMessageId?: string;
 	status: "pending" | "sent" | "delivered" | "read" | "failed";
 	author: {
 		id: string;
@@ -67,6 +83,11 @@ type WebhookBody =
 			data: WebhookConnectionUpdateData;
 	  }
 	| {
+			event: "message.sent";
+			sessionId: string;
+			data: WebhookMessageSentData;
+	  }
+	| {
 			event: "message.updated";
 			sessionId: string;
 			data: WebhookMessageUpdatedData;
@@ -78,8 +99,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 		return res.status(405).json({ error: "Method not allowed" });
 	}
 
-	const authApiSecret = req.query.apiSecret;
-	if (!authApiSecret || authApiSecret !== API_SECRET) {
+	const queryApiSecret = typeof req.query.apiSecret === "string" ? req.query.apiSecret : undefined;
+	const authorizationHeader = req.headers.authorization;
+	const bearerApiSecret = authorizationHeader?.startsWith("Bearer ") ? authorizationHeader.slice("Bearer ".length).trim() : undefined;
+	const isAuthorized = queryApiSecret === API_SECRET || bearerApiSecret === API_SECRET;
+	if (!isAuthorized) {
 		console.warn("[INTERNAL_WHATSAPP_WEBHOOK] Unauthorized request");
 		return res.status(401).json({ error: "Unauthorized" });
 	}
@@ -110,6 +134,9 @@ async function processWebhookAsync(body: WebhookBody): Promise<void> {
 			break;
 		case "connection.update":
 			await handleConnectionUpdate(body);
+			break;
+		case "message.sent":
+			await handleMessageSent(body);
 			break;
 		case "message.updated":
 			await handleMessageUpdated(body);
@@ -382,34 +409,175 @@ const INTERACTION_STATUS_MAPPING: Record<AppWhatsappStatus, TInteractionsStatusE
 	ENTREGUE: "ENTREGUE",
 	FALHOU: "FALHOU",
 };
+
+function getRecord(value: unknown): Record<string, unknown> {
+	return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
+async function resolveMessageTargets({
+	clientMessageId,
+	whatsappMessageId,
+}: {
+	clientMessageId?: string;
+	whatsappMessageId?: string;
+}): Promise<{
+	chatMessageId: string | null;
+	interactionId: string | null;
+	interactionMetadados: Record<string, unknown>;
+}> {
+	if (clientMessageId) {
+		const chatMessage = await db.query.chatMessages.findFirst({
+			where: (fields, { eq }) => eq(fields.id, clientMessageId),
+			columns: { id: true },
+		});
+		if (chatMessage) {
+			return {
+				chatMessageId: chatMessage.id,
+				interactionId: null,
+				interactionMetadados: {},
+			};
+		}
+
+		const interaction = await db.query.interactions.findFirst({
+			where: (fields, { eq }) => eq(fields.id, clientMessageId),
+			columns: { id: true, metadados: true },
+		});
+
+		if (interaction) {
+			const interactionMetadados = getRecord(interaction.metadados);
+			const chatMessageIdFromMetadata =
+				typeof interactionMetadados.chatMessageId === "string" ? interactionMetadados.chatMessageId : null;
+
+			return {
+				chatMessageId: chatMessageIdFromMetadata,
+				interactionId: interaction.id,
+				interactionMetadados,
+			};
+		}
+	}
+
+	if (whatsappMessageId) {
+		const [chatMessage, interaction] = await Promise.all([
+			db.query.chatMessages.findFirst({
+				where: (fields, { eq }) => eq(fields.whatsappMessageId, whatsappMessageId),
+				columns: { id: true },
+			}),
+			db.query.interactions.findFirst({
+				where: sql`${interactions.metadados}->>'whatsappMessageId' = ${whatsappMessageId}`,
+				columns: { id: true, metadados: true },
+			}),
+		]);
+
+		return {
+			chatMessageId: chatMessage?.id ?? null,
+			interactionId: interaction?.id ?? null,
+			interactionMetadados: getRecord(interaction?.metadados),
+		};
+	}
+
+	return {
+		chatMessageId: null,
+		interactionId: null,
+		interactionMetadados: {},
+	};
+}
+
+async function handleMessageSent(body: Extract<WebhookBody, { event: "message.sent" }>): Promise<void> {
+	const { data } = body;
+	console.log("[INTERNAL_WHATSAPP_WEBHOOK] Handling message sent:", JSON.stringify(data, null, 2));
+	if (!data.whatsappMessageId) {
+		console.warn("[INTERNAL_WHATSAPP_WEBHOOK] Missing whatsappMessageId in message sent");
+		return;
+	}
+
+	const { status, whatsappStatus } = mapWhatsAppStatusToAppStatus(data.status ?? "sent");
+	const targets = await resolveMessageTargets({
+		clientMessageId: data.clientMessageId,
+		whatsappMessageId: data.whatsappMessageId,
+	});
+
+	if (!targets.chatMessageId && !targets.interactionId) {
+		console.warn("[INTERNAL_WHATSAPP_WEBHOOK] No targets found for message sent event");
+		return;
+	}
+
+	if (targets.chatMessageId) {
+		await db
+			.update(chatMessages)
+			.set({
+				status,
+				whatsappMessageStatus: whatsappStatus,
+				whatsappMessageId: data.whatsappMessageId,
+			})
+			.where(eq(chatMessages.id, targets.chatMessageId));
+	}
+
+	if (targets.interactionId) {
+		await db
+			.update(interactions)
+			.set({
+				statusEnvio: INTERACTION_STATUS_MAPPING[whatsappStatus],
+				metadados: {
+					...targets.interactionMetadados,
+					clientMessageId: data.clientMessageId ?? targets.interactionMetadados.clientMessageId,
+					whatsappMessageId: data.whatsappMessageId,
+				},
+			})
+			.where(eq(interactions.id, targets.interactionId));
+	}
+
+	console.log("[INTERNAL_WHATSAPP_WEBHOOK] Message sent reconciled:", {
+		clientMessageId: data.clientMessageId,
+		whatsappMessageId: data.whatsappMessageId,
+	});
+}
+
 async function handleMessageUpdated(body: Extract<WebhookBody, { event: "message.updated" }>): Promise<void> {
 	const { data } = body;
 	console.log("[INTERNAL_WHATSAPP_WEBHOOK] Handling message updated:", JSON.stringify(data, null, 2));
-	if (!data.whatsappMessageId) {
-		console.warn("[INTERNAL_WHATSAPP_WEBHOOK] Missing whatsappMessageId in message update");
+	if (!data.whatsappMessageId && !data.clientMessageId) {
+		console.warn("[INTERNAL_WHATSAPP_WEBHOOK] Missing identifiers in message update");
 		return;
 	}
 
 	const { status, whatsappStatus } = mapWhatsAppStatusToAppStatus(data.status);
-
-	const previousInteraction = await db.query.interactions.findFirst({
-		where: sql`${interactions.metadados}->>'whatsappMessageId' = ${data.whatsappMessageId}`,
+	const targets = await resolveMessageTargets({
+		clientMessageId: data.clientMessageId,
+		whatsappMessageId: data.whatsappMessageId,
 	});
 
-	await db
-		.update(chatMessages)
-		.set({ status, whatsappMessageStatus: whatsappStatus })
-		.where(eq(chatMessages.whatsappMessageId, data.whatsappMessageId));
+	if (!targets.chatMessageId && !targets.interactionId) {
+		console.warn("[INTERNAL_WHATSAPP_WEBHOOK] No targets found for message updated event");
+		return;
+	}
 
-	await db
-		.update(interactions)
-		.set({
-			statusEnvio: INTERACTION_STATUS_MAPPING[whatsappStatus],
-			metadados: { ...(previousInteraction?.metadados ?? {}), whatsappMessageId: data.whatsappMessageId },
-		})
-		.where(sql`${interactions.metadados}->>'whatsappMessageId' = ${data.whatsappMessageId}`);
+	if (targets.chatMessageId) {
+		await db
+			.update(chatMessages)
+			.set({
+				status,
+				whatsappMessageStatus: whatsappStatus,
+				...(data.whatsappMessageId && { whatsappMessageId: data.whatsappMessageId }),
+			})
+			.where(eq(chatMessages.id, targets.chatMessageId));
+	}
+
+	if (targets.interactionId) {
+		await db
+			.update(interactions)
+			.set({
+				statusEnvio: INTERACTION_STATUS_MAPPING[whatsappStatus],
+				metadados: {
+					...targets.interactionMetadados,
+					clientMessageId: data.clientMessageId ?? targets.interactionMetadados.clientMessageId,
+					whatsappMessageId: data.whatsappMessageId ?? targets.interactionMetadados.whatsappMessageId,
+				},
+			})
+			.where(eq(interactions.id, targets.interactionId));
+	}
 
 	console.log("[INTERNAL_WHATSAPP_WEBHOOK] Message updated:", {
+		clientMessageId: data.clientMessageId,
 		whatsappMessageId: data.whatsappMessageId,
 		status: data.status,
 	});
@@ -604,16 +772,23 @@ async function createAIMessage(
 	// Send via Internal Gateway
 	if (chat.whatsappConexao?.gatewaySessaoId && chat.whatsappConexao?.gatewayStatus === "connected" && chat.cliente?.telefone) {
 		try {
-			const response = await sendInternalGatewayMessage(chat.whatsappConexao.gatewaySessaoId, formatPhoneForInternalGateway(chat.cliente.telefone), {
-				type: "text",
-				text: content,
-			});
+			const response = await sendInternalGatewayMessage(
+				chat.whatsappConexao.gatewaySessaoId,
+				formatPhoneForInternalGateway(chat.cliente.telefone),
+				{
+					type: "text",
+					text: content,
+				},
+				{ clientMessageId: insertedMessage.id },
+			);
+			if (!response.success) {
+				throw new Error(response.error || "Falha ao enfileirar mensagem AI no Gateway Interno");
+			}
 
 			await db
 				.update(chatMessages)
 				.set({
-					whatsappMessageId: response.messageId,
-					whatsappMessageStatus: "ENVIADO",
+					whatsappMessageStatus: "PENDENTE",
 				})
 				.where(eq(chatMessages.id, insertedMessage.id));
 

@@ -241,6 +241,9 @@ const processInteractionsHandler: NextApiHandler = async (req, res) => {
 
 					try {
 						let whatsappMessageId: string | undefined;
+						let interactionStatusEnvio: "PENDENTE" | "ENVIADO" = "ENVIADO";
+						let interactionClientMessageId: string | undefined;
+						let interactionJobId: string | undefined;
 
 						// Handle different WhatsApp connection types
 						if (whatsappConnection.tipoConexao === "META_CLOUD_API") {
@@ -273,20 +276,27 @@ const processInteractionsHandler: NextApiHandler = async (req, res) => {
 								whatsappConnection.gatewaySessaoId,
 								formatPhoneForInternalGateway(interaction.cliente.telefone),
 								templateContent,
+								{ clientMessageId: interaction.id },
 							);
-							whatsappMessageId = sentWhatsappTemplateResponse.messageId;
-							console.log(`[ORG: ${organization.id}] [INFO] [PROCESS_INTERACTIONS] Sent via Internal Gateway:`, whatsappMessageId);
+							if (!sentWhatsappTemplateResponse.success) {
+								throw new Error(sentWhatsappTemplateResponse.error || "Falha ao enfileirar mensagem no Gateway Interno");
+							}
+							interactionStatusEnvio = "PENDENTE";
+							interactionClientMessageId = interaction.id;
+							interactionJobId = sentWhatsappTemplateResponse.jobId;
+							console.log(`[ORG: ${organization.id}] [INFO] [PROCESS_INTERACTIONS] Queued via Internal Gateway:`, sentWhatsappTemplateResponse.jobId);
 						} else {
 							throw new Error(`Unknown WhatsApp connection type: ${whatsappConnection.tipoConexao}`);
 						}
 
 						// Update chat message with WhatsApp message ID (only if hub access enabled)
+						// For internal gateway, whatsappMessageId is undefined until webhook message.sent
 						if (hasHubAccess && insertedChatMessageId) {
 							await db
 								.update(chatMessages)
 								.set({
-									whatsappMessageId: whatsappMessageId,
-									whatsappMessageStatus: "ENVIADO",
+									...(whatsappMessageId != null && { whatsappMessageId }),
+									whatsappMessageStatus: interactionStatusEnvio === "PENDENTE" ? "PENDENTE" : "ENVIADO",
 								})
 								.where(eq(chatMessages.id, insertedChatMessageId));
 						}
@@ -294,10 +304,14 @@ const processInteractionsHandler: NextApiHandler = async (req, res) => {
 						await db
 							.update(interactions)
 							.set({
+								statusEnvio: interactionStatusEnvio,
 								dataExecucao: new Date(),
 								metadados: {
 									...(interaction.metadados ?? {}),
-									whatsappMessageId: whatsappMessageId,
+									...(interactionClientMessageId != null && { clientMessageId: interactionClientMessageId }),
+									...(interactionJobId != null && { jobId: interactionJobId }),
+									...(insertedChatMessageId != null && { chatMessageId: insertedChatMessageId }),
+									...(whatsappMessageId != null && { whatsappMessageId }),
 									whatsappTemplateId: campaign.whatsappTemplate.id,
 								},
 							})

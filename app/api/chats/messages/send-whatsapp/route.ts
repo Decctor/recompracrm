@@ -114,6 +114,7 @@ async function sendWhatsappMessage({ session, input }: { session: TAuthUserSessi
 	const fromPhoneNumberId = chat.whatsappTelefoneId;
 
 	let whatsappMessageId: string | null = null;
+	let whatsappMessageStatus: "PENDENTE" | "ENVIADO" | "ENTREGUE" | "FALHOU" = "ENVIADO";
 
 	try {
 		// Internal Gateway path
@@ -127,12 +128,20 @@ async function sendWhatsappMessage({ session, input }: { session: TAuthUserSessi
 					throw new createHttpError.BadRequest("Mensagem não possui conteúdo de texto.");
 				}
 
-				const response = await sendInternalGatewayMessage(gatewaySessionId, formatPhoneForInternalGateway(clientPhone), {
-					type: "text",
-					text: message.conteudoTexto,
-				});
+				const response = await sendInternalGatewayMessage(
+					gatewaySessionId,
+					formatPhoneForInternalGateway(clientPhone),
+					{
+						type: "text",
+						text: message.conteudoTexto,
+					},
+					{ clientMessageId: message.id },
+				);
 
-				whatsappMessageId = response.messageId || null;
+				if (!response.success) {
+					throw new createHttpError.InternalServerError(response.error || "Falha ao enfileirar mensagem no Gateway Interno.");
+				}
+				whatsappMessageStatus = "PENDENTE";
 			} else if (input.type === "media") {
 				if (!message.conteudoMidiaStorageId) {
 					throw new createHttpError.BadRequest("Mensagem não possui storage ID do arquivo.");
@@ -142,23 +151,39 @@ async function sendWhatsappMessage({ session, input }: { session: TAuthUserSessi
 				const gatewayMediaType =
 					input.mediaType === "IMAGEM" ? "image" : input.mediaType === "VIDEO" ? "video" : input.mediaType === "AUDIO" ? "audio" : "document";
 
-				const response = await sendInternalGatewayMessage(gatewaySessionId, formatPhoneForInternalGateway(clientPhone), {
-					type: gatewayMediaType,
-					text: input.caption,
-					mediaUrl,
-					mediaFileName: input.filename,
-					mediaMimeType: input.mimeType,
-				});
+				const response = await sendInternalGatewayMessage(
+					gatewaySessionId,
+					formatPhoneForInternalGateway(clientPhone),
+					{
+						type: gatewayMediaType,
+						text: input.caption,
+						mediaUrl,
+						mediaFileName: input.filename,
+						mediaMimeType: input.mimeType,
+					},
+					{ clientMessageId: message.id },
+				);
 
-				whatsappMessageId = response.messageId || null;
+				if (!response.success) {
+					throw new createHttpError.InternalServerError(response.error || "Falha ao enfileirar mensagem no Gateway Interno.");
+				}
+				whatsappMessageStatus = "PENDENTE";
 			} else if (input.type === "template") {
 				const templateContent = parseTemplatePayloadToGatewayContent(input.templatePayload, {
 					fallbackText: message.conteudoTexto || undefined,
 				});
 
-				const response = await sendInternalGatewayMessage(gatewaySessionId, formatPhoneForInternalGateway(clientPhone), templateContent);
+				const response = await sendInternalGatewayMessage(
+					gatewaySessionId,
+					formatPhoneForInternalGateway(clientPhone),
+					templateContent,
+					{ clientMessageId: message.id },
+				);
 
-				whatsappMessageId = response.messageId || null;
+				if (!response.success) {
+					throw new createHttpError.InternalServerError(response.error || "Falha ao enfileirar mensagem no Gateway Interno.");
+				}
+				whatsappMessageStatus = "PENDENTE";
 			}
 		}
 		// Meta Cloud API path
@@ -262,7 +287,7 @@ async function sendWhatsappMessage({ session, input }: { session: TAuthUserSessi
 			.update(chatMessages)
 			.set({
 				whatsappMessageId,
-				whatsappMessageStatus: "ENVIADO",
+				whatsappMessageStatus,
 			})
 			.where(eq(chatMessages.id, input.messageId));
 
@@ -270,7 +295,7 @@ async function sendWhatsappMessage({ session, input }: { session: TAuthUserSessi
 			data: {
 				messageId: input.messageId,
 				whatsappMessageId,
-				status: "ENVIADO",
+				status: whatsappMessageStatus,
 			},
 			message: "Mensagem enviada via WhatsApp com sucesso.",
 		};
