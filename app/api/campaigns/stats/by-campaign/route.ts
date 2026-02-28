@@ -4,32 +4,42 @@ import type { TAuthUserSession } from "@/lib/authentication/types";
 import { db } from "@/services/drizzle";
 import { campaignConversions, campaigns, interactions } from "@/services/drizzle/schema";
 import dayjs from "dayjs";
-import { and, avg, count, eq, gte, lte, sum } from "drizzle-orm";
+import { and, avg, count, countDistinct, eq, gte, lte, sum } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import z from "zod";
 
-const GetCampaignPerformanceInputSchema = z.object({
+const GetCampaignStatsInputSchema = z.object({
+	campaignId: z.string({
+		required_error: "ID da campanha não informado.",
+		invalid_type_error: "Tipo inválido para ID da campanha.",
+	}),
 	startDate: z
-		.string()
+		.string({
+			required_error: "Período não informado.",
+			invalid_type_error: "Tipo inválido para período.",
+		})
+		.datetime({ message: "Tipo inválido para período." })
 		.optional()
 		.nullable()
 		.transform((v) => (v ? dayjs(v).toDate() : dayjs().subtract(30, "day").toDate())),
 	endDate: z
-		.string()
+		.string({
+			required_error: "Período não informado.",
+			invalid_type_error: "Tipo inválido para período.",
+		})
+		.datetime({ message: "Tipo inválido para período." })
 		.optional()
 		.nullable()
 		.transform((v) => (v ? dayjs(v).toDate() : dayjs().toDate())),
 });
-export type TGetCampaignPerformanceInput = z.infer<typeof GetCampaignPerformanceInputSchema>;
+export type TGetCampaignStatsInput = z.infer<typeof GetCampaignStatsInputSchema>;
 
-async function getCampaignPerformance({
-	campaignId,
+async function getCampaignStats({
 	input,
 	session,
 }: {
-	campaignId: string;
-	input: TGetCampaignPerformanceInput;
+	input: TGetCampaignStatsInput;
 	session: TAuthUserSession;
 }) {
 	const userOrgId = session.membership?.organizacao.id;
@@ -37,28 +47,44 @@ async function getCampaignPerformance({
 
 	// Verify campaign exists and belongs to the organization
 	const campaign = await db.query.campaigns.findFirst({
-		where: and(eq(campaigns.id, campaignId), eq(campaigns.organizacaoId, userOrgId)),
+		where: and(eq(campaigns.id, input.campaignId), eq(campaigns.organizacaoId, userOrgId)),
 	});
 
 	if (!campaign) throw new createHttpError.NotFound("Campanha não encontrada.");
+
+	const dateRangeConditions = [
+		eq(interactions.campanhaId, input.campaignId),
+		eq(interactions.organizacaoId, userOrgId),
+		eq(interactions.tipo, "ENVIO-MENSAGEM"),
+		gte(interactions.dataInsercao, input.startDate),
+		lte(interactions.dataInsercao, input.endDate),
+	];
 
 	// Get interactions count (messages sent) for this campaign in the date range
 	const interactionsResult = await db
 		.select({
 			total: count(interactions.id),
+			clientesAlcancados: countDistinct(interactions.clienteId),
 		})
 		.from(interactions)
-		.where(
-			and(
-				eq(interactions.campanhaId, campaignId),
-				eq(interactions.organizacaoId, userOrgId),
-				eq(interactions.tipo, "ENVIO-MENSAGEM"),
-				gte(interactions.dataInsercao, input.startDate),
-				lte(interactions.dataInsercao, input.endDate),
-			),
-		);
+		.where(and(...dateRangeConditions));
 
 	const interacoesEnviadas = interactionsResult[0]?.total ?? 0;
+	const clientesAlcancados = interactionsResult[0]?.clientesAlcancados ?? 0;
+
+	// Get delivery breakdown
+	const deliveryResult = await db
+		.select({
+			statusEnvio: interactions.statusEnvio,
+			total: count(interactions.id),
+		})
+		.from(interactions)
+		.where(and(...dateRangeConditions))
+		.groupBy(interactions.statusEnvio);
+
+	const totalEntregues = deliveryResult.filter((r) => r.statusEnvio === "ENTREGUE").reduce((acc, r) => acc + r.total, 0);
+
+	const totalFalhas = deliveryResult.find((r) => r.statusEnvio === "FALHOU")?.total ?? 0;
 
 	// Get conversions for this campaign in the date range
 	const conversionsResult = await db
@@ -66,11 +92,13 @@ async function getCampaignPerformance({
 			total: count(campaignConversions.id),
 			receitaTotal: sum(campaignConversions.atribuicaoReceita),
 			tempoMedioMinutos: avg(campaignConversions.tempoParaConversaoMinutos),
+			clientesConvertidos: countDistinct(campaignConversions.clienteId),
+			ticketMedio: avg(campaignConversions.vendaValor),
 		})
 		.from(campaignConversions)
 		.where(
 			and(
-				eq(campaignConversions.campanhaId, campaignId),
+				eq(campaignConversions.campanhaId, input.campaignId),
 				eq(campaignConversions.organizacaoId, userOrgId),
 				gte(campaignConversions.dataConversao, input.startDate),
 				lte(campaignConversions.dataConversao, input.endDate),
@@ -80,6 +108,8 @@ async function getCampaignPerformance({
 	const conversoes = conversionsResult[0]?.total ?? 0;
 	const receitaAtribuida = Number(conversionsResult[0]?.receitaTotal ?? 0);
 	const tempoMedioMinutos = Number(conversionsResult[0]?.tempoMedioMinutos ?? 0);
+	const clientesConvertidos = conversionsResult[0]?.clientesConvertidos ?? 0;
+	const ticketMedioConversao = Number(conversionsResult[0]?.ticketMedio ?? 0);
 
 	// Calculate conversion rate
 	const taxaConversao = interacoesEnviadas > 0 ? (conversoes / interacoesEnviadas) * 100 : 0;
@@ -89,38 +119,41 @@ async function getCampaignPerformance({
 
 	return {
 		data: {
-			campanhaId: campaignId,
+			campanhaId: input.campaignId,
 			campanhaTitulo: campaign.titulo,
 			interacoesEnviadas,
+			clientesAlcancados,
+			totalEntregues,
+			totalFalhas,
 			conversoes,
-			taxaConversao: Math.round(taxaConversao * 100) / 100, // Round to 2 decimal places
+			clientesConvertidos,
+			taxaConversao: Math.round(taxaConversao * 100) / 100,
 			receitaAtribuida,
 			tempoMedioConversaoHoras: Math.round(tempoMedioConversaoHoras * 100) / 100,
+			ticketMedioConversao: Math.round(ticketMedioConversao * 100) / 100,
 			periodoInicio: input.startDate,
 			periodoFim: input.endDate,
 		},
 		message: "Performance da campanha recuperada com sucesso.",
 	};
 }
-export type TGetCampaignPerformanceOutput = Awaited<ReturnType<typeof getCampaignPerformance>>;
+export type TGetCampaignStatsOutput = Awaited<ReturnType<typeof getCampaignStats>>;
 
-const getCampaignPerformanceRoute = async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+const getCampaignStatsRoute = async (request: NextRequest) => {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você precisa estar autenticado para acessar esse recurso.");
 
-	const { id: campaignId } = await params;
-	if (!campaignId) throw new createHttpError.BadRequest("ID da campanha não informado.");
-
 	const searchParams = request.nextUrl.searchParams;
-	const input = GetCampaignPerformanceInputSchema.parse({
+	const input = GetCampaignStatsInputSchema.parse({
+		campaignId: searchParams.get("campaignId"),
 		startDate: searchParams.get("startDate") ?? undefined,
 		endDate: searchParams.get("endDate") ?? undefined,
 	});
 
-	const result = await getCampaignPerformance({ campaignId, input, session: session });
+	const result = await getCampaignStats({ input, session: session });
 	return NextResponse.json(result, { status: 200 });
 };
 
 export const GET = appApiHandler({
-	GET: getCampaignPerformanceRoute,
+	GET: getCampaignStatsRoute,
 });

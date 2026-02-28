@@ -1,7 +1,5 @@
 import ResponsiveMenu from "@/components/Utils/ResponsiveMenu";
-import type { TAuthUserSession } from "@/lib/authentication/types";
 import { getErrorMessage } from "@/lib/errors";
-import { createCampaign } from "@/lib/mutations/campaigns";
 import { updateCampaign as updateCampaignMutation } from "@/lib/mutations/campaigns";
 import { useCampaignById } from "@/lib/queries/campaigns";
 import { useCampaignState } from "@/state-hooks/use-campaign-state";
@@ -18,7 +16,6 @@ import CampaignsTriggerBlock from "./Blocks/Trigger";
 
 type ControlCampaignProps = {
 	campaignId: string;
-	user: TAuthUserSession["user"];
 	organizationId: string;
 	closeModal: () => void;
 	callbacks?: {
@@ -28,7 +25,7 @@ type ControlCampaignProps = {
 		onSettled?: () => void;
 	};
 };
-export default function ControlCampaign({ campaignId, user, organizationId, closeModal, callbacks }: ControlCampaignProps) {
+export default function ControlCampaign({ campaignId, organizationId, closeModal, callbacks }: ControlCampaignProps) {
 	const queryClient = useQueryClient();
 	const { state, updateCampaign, addSegmentation, updateSegmentation, deleteSegmentation, resetState, redefineState } = useCampaignState();
 

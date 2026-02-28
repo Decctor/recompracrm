@@ -22,11 +22,12 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { getErrorMessage } from "@/lib/errors";
 import { formatDateAsLocale, formatDecimalPlaces, formatToMoney } from "@/lib/formatting";
-import { useCampaignAnalytics, useCampaignInteractionsLogs, useCampaigns, useConversionQuality } from "@/lib/queries/campaigns";
+import { useCampaignInteractionsLogs, useCampaignStatsOverall, useCampaigns, useConversionQuality } from "@/lib/queries/campaigns";
 import { cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
 import dayjs from "dayjs";
 import {
+	AreaChart,
 	BadgeDollarSign,
 	Calendar,
 	CircleCheck,
@@ -46,8 +47,8 @@ import {
 	UserRoundCheck,
 	Zap,
 } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
-
 type CampaignsPageProps = {
 	user: TAuthUserSession["user"];
 	membership: NonNullable<TAuthUserSession["membership"]>;
@@ -337,7 +338,7 @@ function CampaignsStatsView() {
 		startDate: initialStartDate.subtract(1, "month").toDate(),
 		endDate: initialEndDate.subtract(1, "month").toDate(),
 	});
-	const { data: analytics, isLoading } = useCampaignAnalytics({
+	const { data: analytics, isLoading } = useCampaignStatsOverall({
 		startDate: filters.startDate ?? undefined,
 		endDate: filters.endDate ?? undefined,
 	});
@@ -577,10 +578,18 @@ function CampaignsPageCampaignCard({ campaign, handleEditClick }: { campaign: TG
 						tooltipContent="Receita total atribuída às conversões da campanha."
 					/>
 				</div>
-				<Button variant="ghost" className="flex items-center gap-1.5" size="sm" onClick={handleEditClick}>
-					<PencilIcon className="w-3 min-w-3 h-3 min-h-3" />
-					EDITAR
-				</Button>
+				<div className="flex items-center gap-1.5">
+					<Button variant="ghost" className="flex items-center gap-1.5" size="sm" onClick={handleEditClick}>
+						<PencilIcon className="w-3 min-w-3 h-3 min-h-3" />
+						EDITAR
+					</Button>
+					<Button variant="link" className="flex items-center gap-1.5" size="sm" asChild>
+						<Link href={`/dashboard/commercial/campaigns/id/${campaign.id}`}>
+							<AreaChart className="w-3 min-w-3 h-3 min-h-3" />
+							VER RESULTADOS
+						</Link>
+					</Button>
+				</div>
 			</div>
 		</div>
 	);
