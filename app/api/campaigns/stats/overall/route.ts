@@ -9,7 +9,7 @@ import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import z from "zod";
 
-const GetCampaignAnalyticsInputSchema = z.object({
+const GetCampaignStatsOverallInputSchema = z.object({
 	startDate: z
 		.string()
 		.optional()
@@ -21,9 +21,9 @@ const GetCampaignAnalyticsInputSchema = z.object({
 		.nullable()
 		.transform((v) => (v ? dayjs(v).endOf("day").toDate() : undefined)),
 });
-export type TGetCampaignAnalyticsInput = z.infer<typeof GetCampaignAnalyticsInputSchema>;
+export type TGetCampaignStatsOverallInput = z.infer<typeof GetCampaignStatsOverallInputSchema>;
 
-async function getCampaignAnalytics({ input, session }: { input: TGetCampaignAnalyticsInput; session: TAuthUserSession }) {
+async function getCampaignStatsOverall({ input, session }: { input: TGetCampaignStatsOverallInput; session: TAuthUserSession }) {
 	const userOrgId = session.membership?.organizacao.id;
 	if (!userOrgId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
 
@@ -144,22 +144,22 @@ async function getCampaignAnalytics({ input, session }: { input: TGetCampaignAna
 		message: "Analytics das campanhas recuperadas com sucesso.",
 	};
 }
-export type TGetCampaignAnalyticsOutput = Awaited<ReturnType<typeof getCampaignAnalytics>>;
+export type TGetCampaignStatsOverallOutput = Awaited<ReturnType<typeof getCampaignStatsOverall>>;
 
-const getCampaignAnalyticsRoute = async (request: NextRequest) => {
+const getCampaignStatsOverallRoute = async (request: NextRequest) => {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você precisa estar autenticado para acessar esse recurso.");
 
 	const searchParams = request.nextUrl.searchParams;
-	const input = GetCampaignAnalyticsInputSchema.parse({
+	const input = GetCampaignStatsOverallInputSchema.parse({
 		startDate: searchParams.get("startDate") ?? undefined,
 		endDate: searchParams.get("endDate") ?? undefined,
 	});
 
-	const result = await getCampaignAnalytics({ input, session: session });
+	const result = await getCampaignStatsOverall({ input, session: session });
 	return NextResponse.json(result, { status: 200 });
 };
 
 export const GET = appApiHandler({
-	GET: getCampaignAnalyticsRoute,
+	GET: getCampaignStatsOverallRoute,
 });

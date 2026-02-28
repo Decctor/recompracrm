@@ -1,6 +1,7 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
+import { createSimplifiedSearchCondition } from "@/lib/search";
 import { db } from "@/services/drizzle";
 import { campaignConversions, campaigns, clients } from "@/services/drizzle/schema";
 import dayjs from "dayjs";
@@ -12,24 +13,25 @@ import z from "zod";
 const conversionTypeFilterSchema = z.enum(["AQUISICAO", "REATIVACAO", "ACELERACAO", "REGULAR", "ATRASADA"]);
 
 const GetCampaignConversionsInputSchema = z.object({
+	campaignId: z.string({ invalid_type_error: "Tipo não válido para ID da campanha." }).optional().nullable(),
 	page: z
 		.string({ invalid_type_error: "Tipo não válido para paginação." })
 		.optional()
 		.nullable()
 		.transform((val) => (val ? Number(val) : 1)),
 	search: z.string({ invalid_type_error: "Tipo não válido para busca." }).optional().nullable(),
-	tipoConversao: z
-		.string({ invalid_type_error: "Tipo não válido para filtro de conversão." })
+	types: z
+		.string({ invalid_type_error: "Tipo não válido para tipos de conversão." })
 		.optional()
 		.nullable()
 		.transform((v) => (v ? v.split(",") : []))
 		.pipe(z.array(conversionTypeFilterSchema)),
-	startDate: z
+	periodAfter: z
 		.string()
 		.optional()
 		.nullable()
 		.transform((v) => (v ? dayjs(v).startOf("day").toDate() : undefined)),
-	endDate: z
+	periodBefore: z
 		.string()
 		.optional()
 		.nullable()
@@ -40,52 +42,39 @@ export type TGetCampaignConversionsInput = z.infer<typeof GetCampaignConversions
 const PAGE_SIZE = 25;
 
 async function getCampaignConversions({
-	campaignId,
 	input,
 	session,
 }: {
-	campaignId: string;
 	input: TGetCampaignConversionsInput;
 	session: TAuthUserSession;
 }) {
 	const userOrgId = session.membership?.organizacao.id;
 	if (!userOrgId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
 
-	// Verify campaign belongs to the organization
-	const campaign = await db.query.campaigns.findFirst({
-		where: and(eq(campaigns.id, campaignId), eq(campaigns.organizacaoId, userOrgId)),
-		columns: { id: true },
-	});
-	if (!campaign) throw new createHttpError.NotFound("Campanha não encontrada.");
-
 	const safePage = Number.isFinite(input.page) && input.page > 0 ? input.page : 1;
 	const skip = PAGE_SIZE * (safePage - 1);
 
-	const baseConditions = [
-		eq(campaignConversions.campanhaId, campaignId),
-		eq(campaignConversions.organizacaoId, userOrgId),
-	];
+	const baseConditions = [eq(campaignConversions.organizacaoId, userOrgId)];
 
-	if (input.startDate) baseConditions.push(gte(campaignConversions.dataConversao, input.startDate));
-	if (input.endDate) baseConditions.push(lte(campaignConversions.dataConversao, input.endDate));
+	if (input.campaignId) baseConditions.push(eq(campaignConversions.campanhaId, input.campaignId));
+	if (input.periodAfter) baseConditions.push(gte(campaignConversions.dataConversao, input.periodAfter));
+	if (input.periodBefore) baseConditions.push(lte(campaignConversions.dataConversao, input.periodBefore));
 
-	if (input.tipoConversao && input.tipoConversao.length > 0) {
-		baseConditions.push(inArray(campaignConversions.tipoConversao, input.tipoConversao));
+	if (input.types && input.types.length > 0) {
+		baseConditions.push(inArray(campaignConversions.tipoConversao, input.types));
 	}
 
 	// Search by client name
 	if (input.search && input.search.trim().length > 0) {
-		const search = input.search.trim();
-		const clientIdsByNameSubquery = db
-			.select({ id: clients.id })
-			.from(clients)
-			.where(
-				and(
-					eq(clients.organizacaoId, userOrgId),
-					sql`(to_tsvector('portuguese', ${clients.nome}) @@ plainto_tsquery('portuguese', ${search}) OR ${clients.nome} ILIKE '%' || ${search} || '%')`,
-				),
-			);
-		baseConditions.push(inArray(campaignConversions.clienteId, clientIdsByNameSubquery));
+		baseConditions.push(
+			inArray(
+				campaignConversions.clienteId,
+				db
+					.select({ id: clients.id })
+					.from(clients)
+					.where(and(eq(clients.organizacaoId, userOrgId), createSimplifiedSearchCondition(clients.nome, input.search))),
+			),
+		);
 	}
 
 	const [{ conversionsMatched }] = await db
@@ -135,9 +124,7 @@ async function getCampaignConversions({
 	});
 
 	const conversionsMap = new Map(conversionsResult.map((c) => [c.id, c]));
-	const orderedItems = conversionIds
-		.map((id) => conversionsMap.get(id))
-		.filter((c): c is NonNullable<typeof c> => !!c);
+	const orderedItems = conversionIds.map((id) => conversionsMap.get(id)).filter((c): c is NonNullable<typeof c> => !!c);
 
 	return {
 		data: { items: orderedItems, conversionsMatched, totalPages },
@@ -148,23 +135,21 @@ async function getCampaignConversions({
 export type TGetCampaignConversionsOutput = Awaited<ReturnType<typeof getCampaignConversions>>;
 export type TGetCampaignConversionsOutputItems = TGetCampaignConversionsOutput["data"]["items"];
 
-const getCampaignConversionsRoute = async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+const getCampaignConversionsRoute = async (request: NextRequest) => {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você precisa estar autenticado para acessar esse recurso.");
 
-	const { id: campaignId } = await params;
-	if (!campaignId) throw new createHttpError.BadRequest("ID da campanha não informado.");
-
 	const searchParams = request.nextUrl.searchParams;
 	const input = GetCampaignConversionsInputSchema.parse({
+		campaignId: searchParams.get("campaignId") ?? undefined,
 		page: searchParams.get("page") ?? undefined,
 		search: searchParams.get("search") ?? undefined,
-		tipoConversao: searchParams.get("tipoConversao") ?? undefined,
-		startDate: searchParams.get("startDate") ?? undefined,
-		endDate: searchParams.get("endDate") ?? undefined,
+		type: searchParams.get("type") ?? undefined,
+		periodAfter: searchParams.get("periodAfter") ?? undefined,
+		periodBefore: searchParams.get("periodBefore") ?? undefined,
 	});
 
-	const result = await getCampaignConversions({ campaignId, input, session });
+	const result = await getCampaignConversions({ input, session });
 	return NextResponse.json(result, { status: 200 });
 };
 

@@ -1,16 +1,13 @@
-import type { TGetCampaignAnalyticsInput, TGetCampaignAnalyticsOutput } from "@/app/api/campaigns/analytics/route";
-import type {
-	TGetCampaignInteractionsInput,
-	TGetCampaignInteractionsOutput,
-} from "@/app/api/campaigns/interactions/route";
+import type { TGetCampaignConversionsInput, TGetCampaignConversionsOutput } from "@/app/api/campaigns/conversions/route";
+import type { TGetCampaignInteractionsInput, TGetCampaignInteractionsOutput } from "@/app/api/campaigns/interactions/route";
 import type { TGetCampaignsInput, TGetCampaignsOutput } from "@/app/api/campaigns/route";
+import type { TGetCampaignStatsInput, TGetCampaignStatsOutput } from "@/app/api/campaigns/stats/by-campaign/route";
 import type { TGetStatsBySegmentationInput, TGetStatsBySegmentationOutput } from "@/app/api/campaigns/stats/by-segmentation/route";
 import type { TGetConversionQualityInput, TGetConversionQualityOutput } from "@/app/api/campaigns/stats/conversion-quality/route";
 import type { TGetCampaignFunnelInput, TGetCampaignFunnelOutput } from "@/app/api/campaigns/stats/funnel/route";
 import type { TGetCampaignGraphInput, TGetCampaignGraphOutput } from "@/app/api/campaigns/stats/graph/route";
+import type { TGetCampaignStatsOverallInput, TGetCampaignStatsOverallOutput } from "@/app/api/campaigns/stats/overall/route";
 import type { TGetCampaignRankingInput, TGetCampaignRankingOutput } from "@/app/api/campaigns/stats/ranking/route";
-import type { TGetCampaignConversionsInput, TGetCampaignConversionsOutput } from "@/app/api/campaigns/[id]/conversions/route";
-import type { TGetCampaignPerformanceOutput } from "@/app/api/campaigns/[id]/performance/route";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import { useState } from "react";
@@ -113,23 +110,23 @@ export function useCampaignInteractionsLogs({ initialFilters }: UseCampaignInter
 	};
 }
 
-async function fetchCampaignAnalytics(input: { startDate?: Date; endDate?: Date }) {
+async function fetchCampaignStatsOverall(input: TGetCampaignStatsOverallInput) {
 	try {
 		const searchParams = new URLSearchParams();
 		if (input.startDate) searchParams.set("startDate", input.startDate.toISOString());
 		if (input.endDate) searchParams.set("endDate", input.endDate.toISOString());
-		const { data } = await axios.get<TGetCampaignAnalyticsOutput>(`/api/campaigns/analytics?${searchParams.toString()}`);
+		const { data } = await axios.get<TGetCampaignStatsOverallOutput>(`/api/campaigns/stats/overall?${searchParams.toString()}`);
 		return data.data;
 	} catch (error) {
-		console.log("Error running fetchCampaignAnalytics", error);
+		console.log("Error running fetchCampaignStatsOverall", error);
 		throw error;
 	}
 }
 
-export function useCampaignAnalytics(input: { startDate?: Date; endDate?: Date }) {
+export function useCampaignStatsOverall(input: TGetCampaignStatsOverallInput) {
 	return useQuery({
-		queryKey: ["campaign-analytics", input],
-		queryFn: async () => await fetchCampaignAnalytics(input),
+		queryKey: ["campaign-stats-overall", input],
+		queryFn: async () => await fetchCampaignStatsOverall(input),
 	});
 }
 
@@ -241,61 +238,69 @@ export function useConversionQuality(input: TGetConversionQualityInput) {
 	});
 }
 
-async function fetchCampaignPerformance({ campaignId, startDate, endDate }: { campaignId: string; startDate?: Date; endDate?: Date }) {
+async function fetchCampaignStats(input: TGetCampaignStatsInput) {
 	try {
 		const searchParams = new URLSearchParams();
-		if (startDate) searchParams.set("startDate", startDate.toISOString());
-		if (endDate) searchParams.set("endDate", endDate.toISOString());
-		const { data } = await axios.get<TGetCampaignPerformanceOutput>(`/api/campaigns/${campaignId}/performance?${searchParams.toString()}`);
+		if (input.campaignId) searchParams.set("campaignId", input.campaignId);
+		if (input.startDate) searchParams.set("startDate", input.startDate.toISOString());
+		if (input.endDate) searchParams.set("endDate", input.endDate.toISOString());
+		const { data } = await axios.get<TGetCampaignStatsOutput>(`/api/campaigns/stats/by-campaign?${searchParams.toString()}`);
 		return data.data;
 	} catch (error) {
-		console.log("Error running fetchCampaignPerformance", error);
+		console.log("Error running fetchCampaignStats", error);
 		throw error;
 	}
 }
 
-export function useCampaignPerformance({ campaignId, startDate, endDate }: { campaignId: string; startDate?: Date; endDate?: Date }) {
+export function useCampaignStats(input: TGetCampaignStatsInput) {
 	return {
 		...useQuery({
-			queryKey: ["campaign-performance", campaignId, startDate, endDate],
-			queryFn: async () => await fetchCampaignPerformance({ campaignId, startDate, endDate }),
+			queryKey: ["campaign-stats", input],
+			queryFn: async () => await fetchCampaignStats(input),
 		}),
-		queryKey: ["campaign-performance", campaignId, startDate, endDate] as const,
+		queryKey: ["campaign-stats", input] as const,
 	};
 }
 
-async function fetchCampaignConversions({ campaignId, input }: { campaignId: string; input: TGetCampaignConversionsInput }) {
+async function fetchCampaignsConversions({ input }: { input: TGetCampaignConversionsInput }) {
 	try {
 		const searchParams = new URLSearchParams();
+		if (input.campaignId) searchParams.set("campaignId", input.campaignId);
 		if (input.page) searchParams.set("page", input.page.toString());
 		if (input.search) searchParams.set("search", input.search);
-		if (input.tipoConversao && input.tipoConversao.length > 0) searchParams.set("tipoConversao", input.tipoConversao.join(","));
-		if (input.startDate) searchParams.set("startDate", input.startDate.toISOString());
-		if (input.endDate) searchParams.set("endDate", input.endDate.toISOString());
-		const { data } = await axios.get<TGetCampaignConversionsOutput>(`/api/campaigns/${campaignId}/conversions?${searchParams.toString()}`);
+		if (input.types && input.types.length > 0) searchParams.set("types", input.types.join(","));
+		if (input.periodAfter) searchParams.set("periodAfter", input.periodAfter.toISOString());
+		if (input.periodBefore) searchParams.set("periodBefore", input.periodBefore.toISOString());
+		const { data } = await axios.get<TGetCampaignConversionsOutput>(`/api/campaigns/conversions?${searchParams.toString()}`);
 		return data.data;
 	} catch (error) {
-		console.log("Error running fetchCampaignConversions", error);
+		console.log("Error running fetchCampaignsConversions", error);
 		throw error;
 	}
 }
 
 type UseCampaignConversionsParams = {
-	campaignId: string;
 	initialFilters: TGetCampaignConversionsInput;
 };
-export function useCampaignConversions({ campaignId, initialFilters }: UseCampaignConversionsParams) {
+export function useCampaignsConversions({ initialFilters }: UseCampaignConversionsParams) {
 	const [filters, setFilters] = useState<TGetCampaignConversionsInput>(initialFilters);
 	function updateFilters(newFilters: Partial<TGetCampaignConversionsInput>) {
 		setFilters((prev) => ({ ...prev, ...newFilters }));
 	}
-	const debouncedFilters = useDebounceMemo(filters, 500);
+
+	const debouncedSearch = useDebounceMemo(
+		{
+			search: filters.search,
+		},
+		1200,
+	);
+	const finalFilters = { ...filters, ...debouncedSearch };
 	return {
 		...useQuery({
-			queryKey: ["campaign-conversions", campaignId, debouncedFilters],
-			queryFn: async () => await fetchCampaignConversions({ campaignId, input: debouncedFilters }),
+			queryKey: ["campaign-conversions", finalFilters],
+			queryFn: async () => await fetchCampaignsConversions({ input: finalFilters }),
 		}),
-		queryKey: ["campaign-conversions", campaignId, debouncedFilters] as const,
+		queryKey: ["campaign-conversions", finalFilters] as const,
 		filters,
 		updateFilters,
 	};

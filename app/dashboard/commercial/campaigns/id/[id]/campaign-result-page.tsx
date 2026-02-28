@@ -1,11 +1,13 @@
 "use client";
-import type { TGetCampaignConversionsOutputItems } from "@/app/api/campaigns/[id]/conversions/route";
+import type { TGetCampaignConversionsOutputItems } from "@/app/api/campaigns/conversions/route";
 import type { TGetCampaignInteractionsOutputItems } from "@/app/api/campaigns/interactions/route";
+import type { TGetConversionQualityOutput } from "@/app/api/campaigns/stats/conversion-quality/route";
 import CampaignInteractionsFilterMenu from "@/components/Campaigns/CampaignInteractionsFilterMenu";
 import CampaignsGraphs from "@/components/Campaigns/CampaignsGraphs";
 import DateIntervalInput from "@/components/Inputs/DateIntervalInput";
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
 import LoadingComponent from "@/components/Layouts/LoadingComponent";
+import ControlCampaign from "@/components/Modals/Campaigns/ControlCampaign";
 import StatUnitCard from "@/components/Stats/StatUnitCard";
 import GeneralPaginationComponent from "@/components/Utils/Pagination";
 import { Button } from "@/components/ui/button";
@@ -16,9 +18,9 @@ import { getErrorMessage } from "@/lib/errors";
 import { formatDateAsLocale, formatDecimalPlaces, formatToMoney } from "@/lib/formatting";
 import {
 	useCampaignById,
-	useCampaignConversions,
 	useCampaignInteractionsLogs,
-	useCampaignPerformance,
+	useCampaignStats,
+	useCampaignsConversions,
 	useConversionQuality,
 } from "@/lib/queries/campaigns";
 import { cn } from "@/lib/utils";
@@ -28,15 +30,22 @@ import {
 	ArrowLeft,
 	BadgeDollarSign,
 	Calendar,
+	CalendarCheck,
+	CalendarClock,
 	CircleCheck,
 	CircleX,
 	Clock,
+	Diamond,
 	Grid3x3,
 	ListFilter,
 	MessageCircle,
 	MousePointerClick,
+	Pencil,
 	RefreshCw,
+	Rocket,
 	Send,
+	ShoppingCart,
+	Ticket,
 	TrendingUp,
 	UserPlus,
 	UserRound,
@@ -45,7 +54,7 @@ import {
 	Zap,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 
 type CampaignResultPageProps = {
 	campaignId: string;
@@ -72,10 +81,7 @@ const ATTRIBUTION_MODEL_LABELS: Record<string, string> = {
 	LINEAR: "Linear",
 };
 
-const CONVERSION_TYPE_CONFIG: Record<
-	string,
-	{ label: string; bgClass: string; textClass: string }
-> = {
+const CONVERSION_TYPE_CONFIG: Record<string, { label: string; bgClass: string; textClass: string }> = {
 	AQUISICAO: { label: "Aquisição", bgClass: "bg-green-500", textClass: "text-green-600 dark:text-green-400" },
 	REATIVACAO: { label: "Reativação", bgClass: "bg-blue-500", textClass: "text-blue-600 dark:text-blue-400" },
 	ACELERACAO: { label: "Aceleração", bgClass: "bg-yellow-500", textClass: "text-yellow-600 dark:text-yellow-400" },
@@ -83,7 +89,12 @@ const CONVERSION_TYPE_CONFIG: Record<
 	ATRASADA: { label: "Atrasada", bgClass: "bg-red-500", textClass: "text-red-600 dark:text-red-400" },
 };
 
-export default function CampaignResultPage({ campaignId }: CampaignResultPageProps) {
+const INTERACTION_SENT_STATUS_CONFIG: Record<string, { label: string; bgClass: string; textClass: string }> = {
+	AGENDADA: { label: "Agendada", bgClass: "bg-gray-400", textClass: "text-gray-600 dark:text-gray-400" },
+	EXECUTADA: { label: "Executada", bgClass: "bg-green-500", textClass: "text-green-600 dark:text-green-400" },
+};
+export default function CampaignResultPage({ campaignId, membership, user }: CampaignResultPageProps) {
+	const [editMenuIsOpen, setEditMenuIsOpen] = useState(false);
 	const initialStartDate = dayjs().startOf("month").toDate();
 	const initialEndDate = dayjs().endOf("month").toDate();
 
@@ -98,7 +109,7 @@ export default function CampaignResultPage({ campaignId }: CampaignResultPagePro
 
 	const { data: campaign, isLoading: campaignLoading, isError: campaignError } = useCampaignById({ id: campaignId });
 
-	const { data: performance, isLoading: performanceLoading } = useCampaignPerformance({
+	const { data: performance, isLoading: performanceLoading } = useCampaignStats({
 		campaignId,
 		startDate: filters.startDate,
 		endDate: filters.endDate,
@@ -120,7 +131,9 @@ export default function CampaignResultPage({ campaignId }: CampaignResultPagePro
 		setFilters({ startDate: newStart, endDate: newEnd });
 		const diffDays = dayjs(newEnd).diff(dayjs(newStart), "day");
 		setComparingFilters({
-			startDate: dayjs(newStart).subtract(diffDays + 1, "day").toDate(),
+			startDate: dayjs(newStart)
+				.subtract(diffDays + 1, "day")
+				.toDate(),
 			endDate: dayjs(newStart).subtract(1, "day").toDate(),
 		});
 	};
@@ -136,11 +149,11 @@ export default function CampaignResultPage({ campaignId }: CampaignResultPagePro
 					<Button variant="ghost" size="sm" asChild className="flex items-center gap-1.5 px-2">
 						<Link href="/dashboard/commercial/campaigns">
 							<ArrowLeft className="w-4 h-4 min-w-4 min-h-4" />
-							Campanhas
+							VOLTAR
 						</Link>
 					</Button>
 				</div>
-				<div className="w-full flex items-start justify-between gap-3 flex-col lg:flex-row">
+				<div className="w-full flex items-center lg:items-start justify-between gap-3 flex-col lg:flex-row">
 					<div className="flex flex-col gap-1.5">
 						<div className="flex items-center gap-3 flex-wrap">
 							<h1 className="text-xl font-bold tracking-tight">{campaign.titulo}</h1>
@@ -154,9 +167,7 @@ export default function CampaignResultPage({ campaignId }: CampaignResultPagePro
 								{campaign.ativo ? "ATIVA" : "INATIVA"}
 							</div>
 						</div>
-						{campaign.descricao && (
-							<p className="text-sm text-muted-foreground">{campaign.descricao}</p>
-						)}
+						{campaign.descricao && <p className="text-sm text-muted-foreground">{campaign.descricao}</p>}
 						<div className="flex items-center gap-2 flex-wrap mt-1">
 							<div className="flex items-center gap-1.5 bg-secondary rounded-lg px-2 py-1 text-xs font-medium">
 								<Zap className="w-3.5 h-3.5 min-w-3.5 min-h-3.5" />
@@ -181,24 +192,28 @@ export default function CampaignResultPage({ campaignId }: CampaignResultPagePro
 												{campaign.segmentacoes.length} {campaign.segmentacoes.length === 1 ? "segmentação" : "segmentações"}
 											</div>
 										</TooltipTrigger>
-										<TooltipContent className="max-w-xs">
-											{campaign.segmentacoes.map((s) => s.segmentacao).join(", ")}
-										</TooltipContent>
+										<TooltipContent className="max-w-xs">{campaign.segmentacoes.map((s) => s.segmentacao).join(", ")}</TooltipContent>
 									</Tooltip>
 								</TooltipProvider>
 							)}
 						</div>
 					</div>
-					<DateIntervalInput
-						label="Período"
-						labelClassName="hidden"
-						className="hover:bg-accent hover:text-accent-foreground border-none shadow-none shrink-0"
-						value={{
-							after: filters.startDate,
-							before: filters.endDate,
-						}}
-						handleChange={handleDateChange}
-					/>
+					<div className="flex items-center gap-3">
+						<DateIntervalInput
+							label="Período"
+							labelClassName="hidden"
+							className="hover:bg-accent hover:text-accent-foreground border-none shadow-none shrink-0"
+							value={{
+								after: filters.startDate,
+								before: filters.endDate,
+							}}
+							handleChange={handleDateChange}
+						/>
+						<Button size="sm" className="flex items-center gap-2" onClick={() => setEditMenuIsOpen(true)}>
+							<Pencil className="w-4 h-4 min-w-4 min-h-4" />
+							EDITAR
+						</Button>
+					</div>
 				</div>
 			</div>
 
@@ -321,92 +336,130 @@ export default function CampaignResultPage({ campaignId }: CampaignResultPagePro
 			</div>
 
 			{/* Section E — Conversion Type Distribution */}
-			{qualityData && qualityData.distribuicaoTipos.length > 0 && (
-				<div className="w-full flex flex-col lg:flex-row gap-3">
-					{/* Distribution */}
-					<div className="bg-card border-primary/20 flex flex-col gap-3 rounded-xl border px-4 py-4 shadow-2xs w-full lg:w-2/3">
-						<h2 className="text-xs font-medium tracking-tight uppercase">DISTRIBUIÇÃO DE CONVERSÕES</h2>
-						<div className="flex flex-col gap-3">
-							{qualityData.distribuicaoTipos.map((item) => {
-								const config = CONVERSION_TYPE_CONFIG[item.tipo ?? ""] ?? {
-									label: item.tipo,
-									bgClass: "bg-gray-400",
-									textClass: "text-gray-600",
-								};
-								return (
-									<div key={item.tipo} className="flex flex-col gap-1">
-										<div className="flex items-center justify-between gap-2">
-											<div className="flex items-center gap-2">
-												<div className={cn("w-2.5 h-2.5 rounded-full shrink-0", config.bgClass)} />
-												<span className="text-xs font-medium">{config.label}</span>
-											</div>
-											<div className="flex items-center gap-3">
-												<span className="text-xs text-muted-foreground">{formatDecimalPlaces(item.quantidade)} conv.</span>
-												<span className={cn("text-xs font-bold", config.textClass)}>{formatDecimalPlaces(item.percentual)}%</span>
-												<span className="text-xs text-muted-foreground">{formatToMoney(item.receita)}</span>
-											</div>
-										</div>
-										<div className="w-full bg-secondary rounded-full h-2">
-											<div
-												className={cn("h-2 rounded-full", config.bgClass)}
-												style={{ width: `${Math.min(item.percentual, 100)}%` }}
-											/>
-										</div>
-									</div>
-								);
-							})}
+			{qualityData ? (
+				<>
+					<CampaignConversionTypeDistributionSection distribution={qualityData.distribuicaoTipos} />
+					<div className="w-full flex flex-col lg:flex-row gap-3">
+						<div className="w-full lg:w-1/2">
+							<CampaignFrequencyImpactSection frequency={qualityData.impactoFrequencia} />
+						</div>
+						<div className="w-full lg:w-1/2">
+							<CampaignMonetaryImpactSection monetary={qualityData.impactoMonetario} />
 						</div>
 					</div>
-
-					{/* Frequency & Monetary Impact */}
-					<div className="flex flex-col gap-3 w-full lg:w-1/3">
-						<div className="bg-card border-primary/20 flex flex-col gap-3 rounded-xl border px-4 py-4 shadow-2xs h-full">
-							<h2 className="text-xs font-medium tracking-tight uppercase">IMPACTO NA FREQUÊNCIA</h2>
-							<div className="flex flex-col gap-2">
-								<ImpactRow
-									label="Aceleradas"
-									value={formatDecimalPlaces(qualityData.impactoFrequencia.totalAceleradas)}
-									positive
-								/>
-								<ImpactRow
-									label="Atrasadas"
-									value={formatDecimalPlaces(qualityData.impactoFrequencia.totalAtrasadas)}
-									positive={false}
-								/>
-								<ImpactRow
-									label="Antecipação média"
-									value={`${formatDecimalPlaces(qualityData.impactoFrequencia.mediasDiasAntecipados, 1, 1)} dias`}
-									positive
-								/>
-							</div>
-							<h2 className="text-xs font-medium tracking-tight uppercase mt-1">IMPACTO NO TICKET</h2>
-							<div className="flex flex-col gap-2">
-								<ImpactRow
-									label="Acima do ticket médio"
-									value={formatDecimalPlaces(qualityData.impactoMonetario.totalAcimaTicket)}
-									positive
-								/>
-								<ImpactRow
-									label="Abaixo do ticket médio"
-									value={formatDecimalPlaces(qualityData.impactoMonetario.totalAbaixoTicket)}
-									positive={false}
-								/>
-								<ImpactRow
-									label="Variação média"
-									value={`${qualityData.impactoMonetario.deltaMonetarioPercentualMedio > 0 ? "+" : ""}${formatDecimalPlaces(qualityData.impactoMonetario.deltaMonetarioPercentualMedio)}%`}
-									positive={qualityData.impactoMonetario.deltaMonetarioPercentualMedio >= 0}
-								/>
-							</div>
-						</div>
-					</div>
+				</>
+			) : (
+				<div className="w-full flex flex-col gap-3">
+					<p className="text-sm text-muted-foreground">Não há dados de qualidade das conversões para exibir.</p>
 				</div>
 			)}
 
-			{/* Section F — Conversions Detail List */}
-			<ConversionsSection campaignId={campaignId} startDate={filters.startDate} endDate={filters.endDate} />
+			<div className="w-full flex flex-col lg:flex-row gap-3">
+				<div className="w-full lg:w-1/2">
+					<InteractionsSection campaignId={campaignId} />
+				</div>
+				<div className="w-full lg:w-1/2">
+					<ConversionsSection campaignId={campaignId} startDate={filters.startDate} endDate={filters.endDate} />
+				</div>
+			</div>
+			{editMenuIsOpen ? (
+				<ControlCampaign campaignId={campaignId} organizationId={membership.organizacao.id} closeModal={() => setEditMenuIsOpen(false)} callbacks={{}} />
+			) : null}
+		</div>
+	);
+}
 
-			{/* Section G — Interactions Log */}
-			<InteractionsSection campaignId={campaignId} />
+function CampaignConversionTypeDistributionSection({ distribution }: { distribution: TGetConversionQualityOutput["data"]["distribuicaoTipos"] }) {
+	const ConversionTypeDistributionItem = memo(
+		function ConversionTypeDistributionItem({ item }: { item: TGetConversionQualityOutput["data"]["distribuicaoTipos"][number] }) {
+			const config = CONVERSION_TYPE_CONFIG[item.tipo ?? ""] ?? {
+				label: item.tipo,
+				bgClass: "bg-gray-400",
+				textClass: "text-gray-600",
+			};
+			return (
+				<div key={item.tipo} className="flex flex-col gap-1">
+					<div className="flex items-center justify-between gap-2">
+						<div className="flex items-center gap-2">
+							<div className={cn("w-2.5 h-2.5 rounded-full shrink-0", config.bgClass)} />
+							<span className="text-xs font-medium">{config.label}</span>
+						</div>
+						<div className="flex items-center gap-3">
+							<span className="text-xs text-muted-foreground">{formatDecimalPlaces(item.quantidade)} conv.</span>
+							<span className={cn("text-xs font-bold", config.textClass)}>{formatDecimalPlaces(item.percentual)}%</span>
+							<span className="text-xs text-muted-foreground">{formatToMoney(item.receita)}</span>
+						</div>
+					</div>
+					<div className="w-full bg-secondary rounded-full h-2">
+						<div className={cn("h-2 rounded-full", config.bgClass)} style={{ width: `${Math.min(item.percentual, 100)}%` }} />
+					</div>
+				</div>
+			);
+		},
+		(prev, next) => prev.item.tipo === next.item.tipo,
+	);
+	return (
+		<div className={cn("bg-card border-primary/20 flex w-full flex-col gap-3 rounded-xl border px-3 py-4 shadow-2xs")}>
+			<div className="flex items-center justify-between">
+				<div className="flex flex-col">
+					<h1 className="text-xs font-medium tracking-tight uppercase">CONVERSÕES POR TIPO</h1>
+				</div>
+				<div className="flex items-center gap-2">
+					<Diamond className="w-4 h-4 min-w-4 min-h-4" />
+				</div>
+			</div>
+			<div className="flex w-full flex-col gap-1">
+				{distribution.map((item) => (
+					<ConversionTypeDistributionItem key={item.tipo} item={item} />
+				))}
+			</div>
+		</div>
+	);
+}
+
+function CampaignFrequencyImpactSection({ frequency }: { frequency: TGetConversionQualityOutput["data"]["impactoFrequencia"] }) {
+	return (
+		<div className={cn("bg-card border-primary/20 flex w-full flex-col gap-3 rounded-xl border px-3 py-4 shadow-2xs")}>
+			<div className="flex items-center justify-between">
+				<div className="flex flex-col">
+					<h1 className="text-xs font-medium tracking-tight uppercase">IMPACTO NA FREQUÊNCIA</h1>
+				</div>
+				<div className="flex items-center gap-2">
+					<Rocket className="w-4 h-4 min-w-4 min-h-4" />
+				</div>
+			</div>
+			<div className="flex w-full flex-col gap-1">
+				<div className="flex flex-col gap-2">
+					<ImpactRow label="Compras aceleradas" value={formatDecimalPlaces(frequency.totalAceleradas)} positive />
+					<ImpactRow label="Compras atrasadas" value={formatDecimalPlaces(frequency.totalAtrasadas)} positive={false} />
+					<ImpactRow label="Antecipação média" value={`${formatDecimalPlaces(frequency.mediasDiasAntecipados, 1, 1)} dias`} positive />
+				</div>
+			</div>
+		</div>
+	);
+}
+function CampaignMonetaryImpactSection({ monetary }: { monetary: TGetConversionQualityOutput["data"]["impactoMonetario"] }) {
+	return (
+		<div className={cn("bg-card border-primary/20 flex w-full flex-col gap-3 rounded-xl border px-3 py-4 shadow-2xs")}>
+			<div className="flex items-center justify-between">
+				<div className="flex flex-col">
+					<h1 className="text-xs font-medium tracking-tight uppercase">IMPACTO NO TICKET</h1>
+				</div>
+				<div className="flex items-center gap-2">
+					<Ticket className="w-4 h-4 min-w-4 min-h-4" />
+				</div>
+			</div>
+			<div className="flex w-full flex-col gap-3">
+				<div className="flex flex-col gap-2">
+					<ImpactRow label="Compras acima do ticket médio" value={formatDecimalPlaces(monetary.totalAcimaTicket)} positive />
+					<ImpactRow label="Compras abaixo do ticket médio" value={formatDecimalPlaces(monetary.totalAbaixoTicket)} positive={false} />
+					<ImpactRow
+						label="Variação média"
+						value={`${monetary.deltaMonetarioPercentualMedio > 0 ? "+" : ""}${formatDecimalPlaces(monetary.deltaMonetarioPercentualMedio)}%`}
+						positive={monetary.deltaMonetarioPercentualMedio >= 0}
+					/>
+				</div>
+			</div>
 		</div>
 	);
 }
@@ -414,16 +467,13 @@ export default function CampaignResultPage({ campaignId }: CampaignResultPagePro
 function ImpactRow({ label, value, positive }: { label: string; value: string; positive: boolean }) {
 	return (
 		<div className="flex items-center justify-between gap-2">
-			<span className="text-xs text-muted-foreground">{label}</span>
-			<span className={cn("text-xs font-bold", positive ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400")}>
-				{value}
-			</span>
+			<span className="text-xs font-medium">{label}</span>
+			<span className={cn("text-xs font-bold", positive ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400")}>{value}</span>
 		</div>
 	);
 }
 
 function ConversionsSection({ campaignId, startDate, endDate }: { campaignId: string; startDate: Date; endDate: Date }) {
-	const [filterMenuOpen, setFilterMenuOpen] = useState(false);
 	const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
 
 	const {
@@ -434,20 +484,20 @@ function ConversionsSection({ campaignId, startDate, endDate }: { campaignId: st
 		error,
 		filters,
 		updateFilters,
-	} = useCampaignConversions({
-		campaignId,
+	} = useCampaignsConversions({
 		initialFilters: {
+			campaignId,
 			page: 1,
 			search: "",
-			tipoConversao: [],
-			startDate,
-			endDate,
+			types: [],
+			periodAfter: startDate,
+			periodBefore: endDate,
 		},
 	});
 
 	// Sync parent date filter changes into the hook's internal state
 	useEffect(() => {
-		updateFilters({ startDate, endDate, page: 1 });
+		updateFilters({ periodAfter: startDate, periodBefore: endDate, page: 1 });
 	}, [startDate.toISOString(), endDate.toISOString()]);
 
 	const items = conversionsData?.items ?? [];
@@ -463,60 +513,67 @@ function ConversionsSection({ campaignId, startDate, endDate }: { campaignId: st
 	const toggleType = (key: string) => {
 		const next = selectedTypes.includes(key) ? selectedTypes.filter((k) => k !== key) : [...selectedTypes, key];
 		setSelectedTypes(next);
-		updateFilters({ tipoConversao: next as typeof filters.tipoConversao, page: 1 });
+		updateFilters({ types: next as typeof filters.types, page: 1 });
 	};
 
 	return (
-		<div className="w-full flex flex-col gap-3">
-			<h2 className="text-sm font-bold tracking-tight uppercase">CONVERSÕES DETALHADAS</h2>
-			<div className="w-full flex items-center gap-2 flex-col-reverse lg:flex-row">
-				<Input
-					value={filters.search ?? ""}
-					placeholder="Pesquisar por cliente..."
-					onChange={(e) => updateFilters({ search: e.target.value, page: 1 })}
-					className="grow rounded-xl"
-				/>
-				<div className="flex items-center gap-1.5 flex-wrap">
-					{conversionTypeOptions.map((opt) => (
-						<button
-							key={opt.key}
-							type="button"
-							onClick={() => toggleType(opt.key)}
-							className={cn(
-								"flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[0.65rem] font-bold uppercase transition-colors border",
-								selectedTypes.includes(opt.key)
-									? `${opt.bgClass} text-white border-transparent`
-									: "bg-secondary text-primary border-transparent hover:bg-secondary/80",
-							)}
-						>
-							{opt.label}
-						</button>
-					))}
+		<div className={cn("bg-card border-primary/20 flex w-full flex-col gap-3 rounded-xl border px-3 py-4 shadow-2xs")}>
+			<div className="flex items-center justify-between">
+				<div className="flex flex-col">
+					<h1 className="text-xs font-medium tracking-tight uppercase">CONVERSÕES</h1>
+				</div>
+				<div className="flex items-center gap-2">
+					<ShoppingCart className="w-4 h-4 min-w-4 min-h-4" />
 				</div>
 			</div>
-
-			<GeneralPaginationComponent
-				activePage={filters.page ?? 1}
-				queryLoading={isLoading}
-				selectPage={(page) => updateFilters({ page })}
-				totalPages={totalPages}
-				itemsMatchedText={`${conversionsMatched} ${conversionsMatched === 1 ? "conversão encontrada." : "conversões encontradas."}`}
-				itemsShowingText={`${items.length} ${items.length === 1 ? "conversão exibida." : "conversões exibidas."}`}
-			/>
-
-			{isLoading ? <LoadingComponent /> : null}
-			{isError ? <ErrorComponent msg={getErrorMessage(error)} /> : null}
-			{isSuccess ? (
+			<div className="flex w-full flex-col gap-3">
 				<div className="w-full flex flex-col gap-1.5">
-					{items.length > 0 ? (
-						items.map((conversion) => <ConversionCard key={conversion.id} conversion={conversion} />)
-					) : (
-						<p className="w-full flex items-center justify-center text-sm text-muted-foreground py-4">
-							Nenhuma conversão encontrada para este período.
-						</p>
-					)}
+					<Input
+						value={filters.search ?? ""}
+						placeholder="Pesquisar por cliente..."
+						onChange={(e) => updateFilters({ search: e.target.value, page: 1 })}
+						className="grow rounded-xl"
+					/>
+					<div className="w-full flex items-center gap-1.5 flex-wrap">
+						{conversionTypeOptions.map((opt) => (
+							<button
+								key={opt.key}
+								type="button"
+								onClick={() => toggleType(opt.key)}
+								className={cn(
+									"flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[0.65rem] font-bold uppercase transition-colors border",
+									selectedTypes.includes(opt.key)
+										? `${opt.bgClass} text-white border-transparent`
+										: "bg-secondary text-primary border-transparent hover:bg-secondary/80",
+								)}
+							>
+								{opt.label}
+							</button>
+						))}
+					</div>
 				</div>
-			) : null}
+				<GeneralPaginationComponent
+					activePage={filters.page ?? 1}
+					queryLoading={isLoading}
+					selectPage={(page) => updateFilters({ page })}
+					totalPages={totalPages}
+					itemsMatchedText={`${conversionsMatched} ${conversionsMatched === 1 ? "conversão encontrada." : "conversões encontradas."}`}
+					itemsShowingText={`${items.length} ${items.length === 1 ? "conversão exibida." : "conversões exibidas."}`}
+				/>
+				<div className="w-full flex flex-col gap-1.5 max-h-[500px] overflow-y-auto overscroll-y-auto scrollbar-thin scrollbar-track-primary/10 scrollbar-thumb-primary/30 px-2">
+					{isLoading ? <LoadingComponent /> : null}
+					{isError ? <ErrorComponent msg={getErrorMessage(error)} /> : null}
+					{isSuccess ? (
+						<div className="w-full flex flex-col gap-1.5">
+							{items.length > 0 ? (
+								items.map((conversion) => <ConversionCard key={conversion.id} conversion={conversion} />)
+							) : (
+								<p className="w-full flex items-center justify-center text-sm text-muted-foreground py-4">Nenhuma conversão encontrada para este período.</p>
+							)}
+						</div>
+					) : null}
+				</div>
+			</div>
 		</div>
 	);
 }
@@ -528,9 +585,7 @@ function ConversionCard({ conversion }: { conversion: TGetCampaignConversionsOut
 		textClass: "text-gray-600",
 	};
 
-	const tempoHoras = conversion.tempoParaConversaoMinutos
-		? Math.round((conversion.tempoParaConversaoMinutos / 60) * 10) / 10
-		: null;
+	const tempoHoras = conversion.tempoParaConversaoMinutos ? Math.round((conversion.tempoParaConversaoMinutos / 60) * 10) / 10 : null;
 
 	return (
 		<div className="bg-card border-primary/20 flex w-full flex-col gap-2 rounded-xl border px-3 py-4 shadow-2xs">
@@ -538,9 +593,7 @@ function ConversionCard({ conversion }: { conversion: TGetCampaignConversionsOut
 				<div className="flex items-center gap-3 flex-wrap">
 					<div className="flex items-center gap-1.5 bg-secondary rounded-xl px-3 py-1.5">
 						<UserRound className="w-4 h-4 min-w-4 min-h-4" />
-						<p className="text-[0.65rem] font-medium tracking-tight uppercase">
-							{conversion.cliente?.nome ?? "Cliente não encontrado"}
-						</p>
+						<p className="text-[0.65rem] font-medium tracking-tight uppercase">{conversion.cliente?.nome ?? "Cliente não encontrado"}</p>
 					</div>
 					<div className={cn("flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-white text-[0.65rem] font-bold uppercase", config.bgClass)}>
 						{config.label}
@@ -636,57 +689,78 @@ function InteractionsSection({ campaignId }: { campaignId: string }) {
 	const interactionsMatched = interactionsResult?.interactionsMatched ?? 0;
 	const totalPages = interactionsResult?.totalPages ?? 0;
 
+	const interactionSentStatusOptions = Object.entries(INTERACTION_SENT_STATUS_CONFIG).map(([key, val]) => ({
+		key,
+		label: val.label,
+		bgClass: val.bgClass,
+	}));
 	return (
-		<div className="w-full flex flex-col gap-3">
-			<h2 className="text-sm font-bold tracking-tight uppercase">INTERAÇÕES</h2>
-			<div className="w-full flex items-center gap-2 flex-col-reverse lg:flex-row">
-				<Input
-					value={filters.search ?? ""}
-					placeholder="Pesquisar interações (título, descrição, cliente)..."
-					onChange={(e) => updateFilters({ search: e.target.value, page: 1 })}
-					className="grow rounded-xl"
-				/>
-				<Button className="flex items-center gap-2" size="sm" onClick={() => setFilterMenuIsOpen(true)}>
-					<ListFilter className="w-4 h-4 min-w-4 min-h-4" />
-					FILTROS
-				</Button>
-			</div>
-
-			<GeneralPaginationComponent
-				activePage={filters.page ?? 1}
-				queryLoading={isLoading}
-				selectPage={(page) => updateFilters({ page })}
-				totalPages={totalPages}
-				itemsMatchedText={`${interactionsMatched} ${interactionsMatched === 1 ? "interação encontrada." : "interações encontradas."}`}
-				itemsShowingText={`${items.length} ${items.length === 1 ? "interação exibida." : "interações exibidas."}`}
-			/>
-
-			{isLoading ? <LoadingComponent /> : null}
-			{isError ? <ErrorComponent msg={getErrorMessage(error)} /> : null}
-			{isSuccess ? (
-				<div className="w-full flex flex-col gap-1.5">
-					{items.length > 0 ? (
-						items.map((interaction) => <InteractionLogCard key={interaction.id} interaction={interaction} />)
-					) : (
-						<p className="w-full flex items-center justify-center text-sm text-muted-foreground py-4">
-							Nenhuma interação encontrada.
-						</p>
-					)}
+		<div className={cn("bg-card border-primary/20 flex w-full flex-col gap-3 rounded-xl border px-3 py-4 shadow-2xs")}>
+			<div className="flex items-center justify-between">
+				<div className="flex flex-col">
+					<h1 className="text-xs font-medium tracking-tight uppercase">INTERAÇÕES</h1>
 				</div>
-			) : null}
+				<div className="flex items-center gap-2">
+					<MessageCircle className="w-4 h-4 min-w-4 min-h-4" />
+				</div>
+			</div>
+			<div className="flex w-full flex-col gap-3">
+				<div className="w-full flex flex-col gap-1.5">
+					<Input
+						value={filters.search ?? ""}
+						placeholder="Pesquisar interações (título, descrição, cliente)..."
+						onChange={(e) => updateFilters({ search: e.target.value, page: 1 })}
+						className="grow rounded-xl"
+					/>
+					<div className="w-full flex items-center gap-1.5 flex-wrap">
+						{interactionSentStatusOptions.map((opt) => (
+							<button
+								key={opt.key}
+								type="button"
+								onClick={() => updateFilters({ status: [opt.key as "AGENDADA" | "EXECUTADA"], page: 1 })}
+								className={cn(
+									"flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[0.65rem] font-bold uppercase transition-colors border",
+									filters.status.includes(opt.key as "AGENDADA" | "EXECUTADA")
+										? `${opt.bgClass} text-white border-transparent`
+										: "bg-secondary text-primary border-transparent hover:bg-secondary/80",
+								)}
+							>
+								{opt.label}
+							</button>
+						))}
+					</div>
+				</div>
+				<GeneralPaginationComponent
+					activePage={filters.page ?? 1}
+					queryLoading={isLoading}
+					selectPage={(page) => updateFilters({ page })}
+					totalPages={totalPages}
+					itemsMatchedText={`${interactionsMatched} ${interactionsMatched === 1 ? "interação encontrada." : "interações encontradas."}`}
+					itemsShowingText={`${items.length} ${items.length === 1 ? "interação exibida." : "interações exibidas."}`}
+				/>
+				<div className="w-full flex flex-col gap-1.5 max-h-[500px] overflow-y-auto overscroll-y-auto scrollbar-thin scrollbar-track-primary/10 scrollbar-thumb-primary/30 px-2">
+					{isLoading ? <LoadingComponent /> : null}
+					{isError ? <ErrorComponent msg={getErrorMessage(error)} /> : null}
+					{isSuccess ? (
+						items.length > 0 ? (
+							items.map((interaction) => <InteractionLogCard key={interaction.id} interaction={interaction} />)
+						) : (
+							<p className="w-full flex items-center justify-center text-sm text-muted-foreground py-4">Nenhuma interação encontrada.</p>
+						)
+					) : null}
+				</div>
 
-			{filterMenuIsOpen ? (
-				<CampaignInteractionsFilterMenu filters={filters} updateFilters={updateFilters} closeMenu={() => setFilterMenuIsOpen(false)} />
-			) : null}
+				{filterMenuIsOpen ? (
+					<CampaignInteractionsFilterMenu filters={filters} updateFilters={updateFilters} closeMenu={() => setFilterMenuIsOpen(false)} />
+				) : null}
+			</div>
 		</div>
 	);
 }
 
 function InteractionLogCard({ interaction }: { interaction: TGetCampaignInteractionsOutputItems[number] }) {
 	const executionStatus = interaction.dataExecucao ? "EXECUTADA" : "AGENDADA";
-	const scheduleDateText = interaction.agendamentoDataReferencia
-		? dayjs(interaction.agendamentoDataReferencia).format("DD/MM/YYYY")
-		: "Não definido";
+	const scheduleDateText = interaction.agendamentoDataReferencia ? dayjs(interaction.agendamentoDataReferencia).format("DD/MM/YYYY") : "Não definido";
 	const scheduleBlockText = interaction.agendamentoBlocoReferencia ?? "--:--";
 	const executionDateText = interaction.dataExecucao ? formatDateAsLocale(interaction.dataExecucao, true) : "Não executada";
 
@@ -697,9 +771,7 @@ function InteractionLogCard({ interaction }: { interaction: TGetCampaignInteract
 					<div className="flex items-center gap-3 flex-wrap">
 						<div className="flex items-center gap-1.5 bg-secondary rounded-xl px-3 py-1.5">
 							<UserRound className="w-4 h-4 min-w-4 min-h-4" />
-							<p className="text-[0.65rem] font-medium tracking-tight uppercase">
-								{interaction.cliente.nome ?? "NÃO INFORMADO"}
-							</p>
+							<p className="text-[0.65rem] font-medium tracking-tight uppercase">{interaction.cliente.nome ?? "NÃO INFORMADO"}</p>
 						</div>
 					</div>
 					<div className="flex items-center gap-3">
@@ -729,26 +801,26 @@ function InteractionLogCard({ interaction }: { interaction: TGetCampaignInteract
 						</div>
 					</div>
 				</div>
-				{interaction.descricao && (
-					<p className="text-xs font-medium tracking-tight text-muted-foreground">{interaction.descricao}</p>
-				)}
+				{interaction.descricao && <p className="text-xs font-medium tracking-tight text-muted-foreground">{interaction.descricao}</p>}
 			</div>
 			<div className="w-full flex items-center justify-end gap-2 flex-wrap">
 				<div className="flex items-center gap-2">
 					<div className="flex items-center gap-1">
-						<Calendar className="w-4 h-4 min-w-4 min-h-4" />
+						<CalendarClock className="w-4 h-4 min-w-4 min-h-4" />
 						<h1 className="py-0.5 text-center text-[0.65rem] font-medium italic">
 							AGENDADO PARA: {scheduleDateText} ({scheduleBlockText})
 						</h1>
 					</div>
-					<div
-						className={cn("flex items-center gap-1", {
-							"text-green-500 dark:text-green-400": !!interaction.dataExecucao,
-						})}
-					>
-						<Calendar className="w-4 h-4 min-w-4 min-h-4" />
-						<h1 className="py-0.5 text-center text-[0.65rem] font-medium italic">{executionDateText}</h1>
-					</div>
+					{interaction.dataExecucao ? (
+						<div
+							className={cn("flex items-center gap-1", {
+								"text-green-500 dark:text-green-400": !!interaction.dataExecucao,
+							})}
+						>
+							<CalendarCheck className="w-4 h-4 min-w-4 min-h-4" />
+							<h1 className="py-0.5 text-center text-[0.65rem] font-medium italic">{executionDateText}</h1>
+						</div>
+					) : null}
 				</div>
 			</div>
 		</div>
