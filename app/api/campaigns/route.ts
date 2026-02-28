@@ -249,7 +249,7 @@ async function getCampaigns({ input, session }: { input: TGetCampaignsInput; ses
 		.select({
 			campaignId: interactions.campanhaId,
 			sentCount: count(interactions.id),
-			deliveredCount: sum(sql<number>`CASE WHEN ${interactions.statusEnvio} IN ('DELIVERED', 'READ') THEN 1 ELSE 0 END`),
+			deliveredCount: sum(sql<number>`CASE WHEN ${interactions.statusEnvio} IN ('ENTREGUE', 'LIDO') THEN 1 ELSE 0 END`),
 		})
 		.from(interactions)
 		.where(and(...interactionsConditions))

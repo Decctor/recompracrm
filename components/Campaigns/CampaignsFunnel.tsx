@@ -34,15 +34,16 @@ export default function CampaignsFunnel({ startDate, endDate }: CampaignsFunnelP
 			bgColor: "bg-green-500/10",
 			rate: funnelData?.taxaEntrega,
 		},
-		{
-			label: "Lidos",
-			value: funnelData?.lidos ?? 0,
-			icon: <Eye className="w-5 h-5 min-w-5 min-h-5" />,
-			color: "bg-yellow-500",
-			textColor: "text-yellow-600 dark:text-yellow-400",
-			bgColor: "bg-yellow-500/10",
-			rate: funnelData?.taxaLeitura,
-		},
+		// Disabling Lidos for now as we dont have enough reliable data to show it
+		// {
+		// 	label: "Lidos",
+		// 	value: funnelData?.lidos ?? 0,
+		// 	icon: <Eye className="w-5 h-5 min-w-5 min-h-5" />,
+		// 	color: "bg-yellow-500",
+		// 	textColor: "text-yellow-600 dark:text-yellow-400",
+		// 	bgColor: "bg-yellow-500/10",
+		// 	rate: funnelData?.taxaLeitura,
+		// },
 		{
 			label: "Convertidos",
 			value: funnelData?.convertidos ?? 0,

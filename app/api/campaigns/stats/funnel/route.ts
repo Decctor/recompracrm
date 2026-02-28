@@ -79,8 +79,8 @@ async function getCampaignFunnel({ input, session }: { input: TGetCampaignFunnel
 	const statusMap = new Map(interactionsByStatus.map((s) => [s.statusEnvio, Number(s.total)]));
 
 	// Calculate funnel stages
-	const entregues = (statusMap.get("DELIVERED") ?? 0) + (statusMap.get("READ") ?? 0);
-	const lidos = statusMap.get("READ") ?? 0;
+	const entregues = (statusMap.get("ENTREGUE") ?? 0) + (statusMap.get("LIDO") ?? 0);
+	const lidos = statusMap.get("LIDO") ?? 0;
 
 	// Get total conversions in the period
 	const totalConversions = await db

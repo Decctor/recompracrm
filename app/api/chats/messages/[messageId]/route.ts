@@ -13,7 +13,7 @@ import { z } from "zod";
 
 const updateMessageBodySchema = z.object({
 	status: z.enum(["CANCELADO", "ENVIADO", "RECEBIDO", "LIDO"]).optional(),
-	whatsappMessageStatus: z.enum(["PENDENTE", "ENVIADO", "ENTREGUE", "FALHOU"]).optional(),
+	whatsappMessageStatus: z.enum(["PENDENTE", "ENVIADO", "ENTREGUE", "LIDO", "FALHOU"]).optional(),
 	whatsappMessageId: z.string().optional(),
 });
 

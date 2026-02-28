@@ -3,7 +3,7 @@ import { formatWhatsappIdAsPhone } from "./utils";
 type WhatsAppMessageStatus = "pending" | "sent" | "delivered" | "read" | "failed";
 
 type AppMessageStatus = "ENVIADO" | "RECEBIDO" | "LIDO";
-export type AppWhatsappStatus = "PENDENTE" | "ENVIADO" | "ENTREGUE" | "FALHOU";
+export type AppWhatsappStatus = "PENDENTE" | "ENVIADO" | "ENTREGUE" | "LIDO" | "FALHOU";
 
 type StatusUpdateResult = {
 	status: AppMessageStatus;
@@ -30,7 +30,7 @@ export function mapWhatsAppStatusToAppStatus(whatsappStatus: WhatsAppMessageStat
 		case "read":
 			return {
 				status: "LIDO",
-				whatsappStatus: "ENTREGUE",
+				whatsappStatus: "LIDO",
 			};
 		case "failed":
 			return {

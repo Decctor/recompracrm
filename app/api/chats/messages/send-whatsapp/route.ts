@@ -114,7 +114,7 @@ async function sendWhatsappMessage({ session, input }: { session: TAuthUserSessi
 	const fromPhoneNumberId = chat.whatsappTelefoneId;
 
 	let whatsappMessageId: string | null = null;
-	let whatsappMessageStatus: "PENDENTE" | "ENVIADO" | "ENTREGUE" | "FALHOU" = "ENVIADO";
+	let whatsappMessageStatus: "PENDENTE" | "ENVIADO" | "ENTREGUE" | "LIDO" | "FALHOU" = "ENVIADO";
 
 	try {
 		// Internal Gateway path

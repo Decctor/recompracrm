@@ -459,6 +459,15 @@ async function getWhatsappTemplates({ input, session }: { input: TGetWhatsappTem
 					qualidade: true,
 					rejeicao: true,
 				},
+				with: {
+					telefone: {
+						columns: {
+							id: true,
+							numero: true,
+							nome: true,
+						},
+					},
+				},
 			},
 		},
 		orderBy: (fields, { asc }) => asc(fields.nome),
@@ -485,6 +494,7 @@ async function getWhatsappTemplates({ input, session }: { input: TGetWhatsappTem
 			autor: template.autor,
 			statusGeral,
 			qualidadeGeral,
+			telefones: template.telefones,
 			telefonesTotal: totalPhones,
 			telefonesAprovados: approvedPhones,
 			rejeicao,

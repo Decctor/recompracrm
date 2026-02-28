@@ -172,6 +172,7 @@ const INTERACTION_STATUS_MAPPING: Record<AppWhatsappStatus, TInteractionsStatusE
 	PENDENTE: "PENDENTE",
 	ENVIADO: "ENVIADO",
 	ENTREGUE: "ENTREGUE",
+	LIDO: "LIDO",
 	FALHOU: "FALHOU",
 };
 /**

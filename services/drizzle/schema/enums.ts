@@ -63,7 +63,7 @@ export const chatMessageAuthorTypeEnum = pgEnum("chat_message_author_type", ["CL
 
 export const chatMessageStatusEnum = pgEnum("chat_message_status", ["CANCELADO", "ENVIADO", "RECEBIDO", "LIDO"]);
 
-export const chatMessageWhatsappStatusEnum = pgEnum("chat_message_whatsapp_status", ["PENDENTE", "ENVIADO", "ENTREGUE", "FALHOU"]);
+export const chatMessageWhatsappStatusEnum = pgEnum("chat_message_whatsapp_status", ["PENDENTE", "ENVIADO", "ENTREGUE", "LIDO", "FALHOU"]);
 
 export const conversionTypeEnum = pgEnum("conversion_type", ["AQUISICAO", "REATIVACAO", "ACELERACAO", "REGULAR", "ATRASADA"]);
 

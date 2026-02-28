@@ -31,7 +31,7 @@ type MessageType = {
 	conteudoMidiaMimeType: string | null;
 	conteudoMidiaArquivoNome: string | null;
 	conteudoMidiaArquivoTamanho: number | null;
-	whatsappMessageStatus: "PENDENTE" | "ENVIADO" | "ENTREGUE" | "FALHOU";
+	whatsappMessageStatus: "PENDENTE" | "ENVIADO" | "ENTREGUE" | "LIDO" | "FALHOU";
 	dataEnvio: Date;
 	chatId: string;
 	autor: { nome: string; avatarUrl?: string | null } | null;

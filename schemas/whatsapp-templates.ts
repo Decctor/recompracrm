@@ -106,6 +106,48 @@ export const WhatsappTemplateSchema = z.object({
 
 export type TWhatsappTemplate = z.infer<typeof WhatsappTemplateSchema>;
 
+export const WhatsappTemplatePhoneSchema = z.object({
+	templateId: z.string({
+		required_error: "ID do template não informado.",
+		invalid_type_error: "Tipo inválido para ID do template.",
+	}),
+	telefoneId: z.string({
+		required_error: "ID do telefone não informado.",
+		invalid_type_error: "Tipo inválido para ID do telefone.",
+	}),
+	whatsappTemplateId: z
+		.string({
+			required_error: "ID do template WhatsApp não informado.",
+			invalid_type_error: "Tipo inválido para ID do template WhatsApp.",
+		})
+		.optional()
+		.nullable(),
+	status: WhatsappTemplateStatusEnum,
+	qualidade: WhatsappTemplateQualityEnum,
+	rejeicao: z
+		.string({
+			invalid_type_error: "Tipo inválido para rejeição.",
+		})
+		.optional()
+		.nullable(),
+	dataInsercao: z
+		.string({
+			required_error: "Data de inserção não informada.",
+			invalid_type_error: "Tipo inválido para data de inserção.",
+		})
+		.datetime({ message: "Formato inválido para data de inserção." })
+		.default(new Date().toISOString())
+		.transform((val) => new Date(val)),
+	dataAtualizacao: z
+		.string({
+			required_error: "Data de atualização não informada.",
+			invalid_type_error: "Tipo inválido para data de atualização.",
+		})
+		.datetime({ message: "Formato inválido para data de atualização." })
+		.default(new Date().toISOString())
+		.transform((val) => new Date(val)),
+});
+
 export const WhatsappTemplatePhoneStatusSchema = z.object({
 	id: z.string(),
 	telefoneId: z.string(),

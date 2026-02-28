@@ -1,7 +1,7 @@
 import z from "zod";
 import { InteractionTypeEnum, InteractionsCronJobTimeBlocksEnum } from "./enums";
 
-export const InteractionsStatusEnum = z.enum(["PENDENTE", "ENVIADO", "ENTREGUE", "FALHOU"]);
+export const InteractionsStatusEnum = z.enum(["PENDENTE", "ENVIADO", "ENTREGUE", "LIDO", "FALHOU"]);
 export type TInteractionsStatusEnum = z.infer<typeof InteractionsStatusEnum>;
 export const InteractionSchema = z.object({
 	clienteId: z.string({

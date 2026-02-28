@@ -82,7 +82,9 @@ async function getCampaignStats({
 		.where(and(...dateRangeConditions))
 		.groupBy(interactions.statusEnvio);
 
-	const totalEntregues = deliveryResult.filter((r) => r.statusEnvio === "ENTREGUE").reduce((acc, r) => acc + r.total, 0);
+	const totalEntregues = deliveryResult
+		.filter((r) => r.statusEnvio === "ENTREGUE" || r.statusEnvio === "LIDO")
+		.reduce((acc, r) => acc + r.total, 0);
 
 	const totalFalhas = deliveryResult.find((r) => r.statusEnvio === "FALHOU")?.total ?? 0;
 

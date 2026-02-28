@@ -3,7 +3,6 @@ import type { TGetCampaignInteractionsOutputItems } from "@/app/api/campaigns/in
 import type { TGetCampaignsOutputDefault } from "@/app/api/campaigns/route";
 import CampaignInteractionsFilterMenu from "@/components/Campaigns/CampaignInteractionsFilterMenu";
 import CampaignsBySegmentation from "@/components/Campaigns/CampaignsBySegmentation";
-import CampaignsConversionQuality from "@/components/Campaigns/CampaignsConversionQuality";
 import CampaignsFunnel from "@/components/Campaigns/CampaignsFunnel";
 import CampaignsGraphs from "@/components/Campaigns/CampaignsGraphs";
 import CampaignsRanking from "@/components/Campaigns/CampaignsRanking";
@@ -169,7 +168,6 @@ function CampaignsDatabaseView({ user, membership }: { user: TAuthUserSession["u
 			{editCampaignModalId ? (
 				<ControlCampaign
 					campaignId={editCampaignModalId}
-					user={user}
 					organizationId={membership.organizacao.id}
 					closeModal={() => setEditCampaignModalId(null)}
 					callbacks={{ onMutate: handleOnMutate, onSettled: handleOnSettled }}
@@ -497,7 +495,7 @@ function CampaignsStatsView() {
 					/>
 				</div>
 			</div>
-			<div className="w-full h-[550px]">
+			<div className="w-full h-[400px]">
 				<CampaignsFunnel startDate={filters.startDate ?? null} endDate={filters.endDate ?? null} />
 			</div>
 			<div className="w-full h-[550px]">
