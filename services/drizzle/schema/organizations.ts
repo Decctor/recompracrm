@@ -3,7 +3,7 @@ import type { TUserPermissions } from "@/schemas/users";
 import { relations } from "drizzle-orm";
 import { boolean, integer, jsonb, text, timestamp, varchar } from "drizzle-orm/pg-core";
 import { newTable } from "./common";
-import { defaultDataSourceEnum, organizationIntegrationTypeEnum } from "./enums";
+import { defaultDataSourceEnum, fiscalProviderEnum, organizationIntegrationTypeEnum, paymentProviderEnum } from "./enums";
 import { sellers } from "./sellers";
 import { users } from "./users";
 
@@ -53,6 +53,16 @@ export const organizations = newTable("organizations", {
 	corSecundaria: text("cor_secundaria"), // Secondary color (hex format, e.g., #15599a)
 	corSecundariaForeground: text("cor_secundaria_foreground"), // Foreground for secondary color (hex, e.g., #FFFFFF)
 	configuracao: jsonb("configuracao").$type<TOrganizationConfiguration>().notNull(),
+
+	// Fiscal config
+	fiscalProvedor: fiscalProviderEnum("fiscal_provedor"),
+	fiscalEmissaoAutomatica: boolean("fiscal_emissao_automatica").default(false).notNull(),
+	fiscalConfiguracao: jsonb("fiscal_configuracao"),
+
+	// Payment provider config
+	pagamentoProvedor: paymentProviderEnum("pagamento_provedor"),
+	pagamentoConfiguracao: jsonb("pagamento_configuracao"),
+
 	autorId: varchar("autor_id", { length: 255 })
 		.references(() => users.id)
 		.notNull(),

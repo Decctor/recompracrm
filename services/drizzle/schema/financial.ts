@@ -18,6 +18,7 @@ import {
 	financialTransactionTypeEnum,
 	fiscalDocumentStatusEnum,
 	fiscalDocumentTypeEnum,
+	paymentMethodEnum,
 } from "./enums";
 import { organizations } from "./organizations";
 import { sales } from "./sales";
@@ -213,11 +214,14 @@ export const financialTransactions = newTable(
 		titulo: text("titulo").notNull(),
 		tipo: financialTransactionTypeEnum("tipo").notNull(),
 		valor: doublePrecision("valor").notNull(),
-		metodo: varchar("metodo", { length: 255 }).notNull(),
+		metodo: paymentMethodEnum("metodo").notNull(),
 		dataPrevisao: timestamp("data_previsao").notNull(),
 		dataEfetivacao: timestamp("data_efetivacao"),
 		parcela: integer("parcela"),
 		totalParcelas: integer("total_parcelas"),
+		// Payment provider tracking (nullable, only populated when a provider is involved)
+		provedorReferencia: text("provedor_referencia"),
+		provedorStatus: text("provedor_status"),
 		autorId: varchar("autor_id", { length: 255 }).references(() => users.id),
 		dataInsercao: timestamp("data_insercao").defaultNow().notNull(),
 	},

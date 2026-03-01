@@ -1,3 +1,4 @@
+import type { TGetSaleDraftOutput } from "@/app/api/pos/sales/route";
 import type { TGetPOSGroupsOutput } from "@/pages/api/pos/groups";
 import type { TGetPOSProductsInput, TGetPOSProductsOutput } from "@/pages/api/pos/products";
 import { useQuery } from "@tanstack/react-query";
@@ -66,4 +67,27 @@ export function usePOSGroups() {
 		queryFn: fetchPOSGroups,
 		staleTime: 5 * 60 * 1000, // 5 minutes
 	});
+}
+
+// ============================================================================
+// Fetch POS sale draft by ID (for checkout page)
+// ============================================================================
+
+async function fetchSaleDraft(saleId: string) {
+	const { data } = await axios.get<TGetSaleDraftOutput>(`/api/pos/sales?id=${saleId}`);
+	const result = data.data.sale;
+	if (!result) throw new Error("Rascunho de venda não encontrado.");
+	return result;
+}
+
+export function useSaleDraft({ saleId }: { saleId: string }) {
+	const queryKey = ["pos-sale-draft", saleId];
+	return {
+		...useQuery({
+			queryKey,
+			queryFn: () => fetchSaleDraft(saleId),
+			enabled: !!saleId,
+		}),
+		queryKey,
+	};
 }

@@ -14,9 +14,10 @@ type CartPaneProps = {
 	organizationId: string;
 	saleState: TUseSaleState;
 	onCheckout: () => void;
+	isCheckoutLoading?: boolean;
 };
 
-export default function CartPane({ organizationId, saleState, onCheckout }: CartPaneProps) {
+export default function CartPane({ organizationId, saleState, onCheckout, isCheckoutLoading }: CartPaneProps) {
 	const {
 		params,
 		updateParams,
@@ -154,9 +155,9 @@ export default function CartPane({ organizationId, saleState, onCheckout }: Cart
 				size="lg"
 				className={cn("w-full h-14 text-lg font-black rounded-xl shadow-lg", !saleState.isReadyForCheckout && "opacity-50 cursor-not-allowed")}
 				onClick={onCheckout}
-				disabled={!saleState.isReadyForCheckout}
+				disabled={!saleState.isReadyForCheckout || isCheckoutLoading}
 			>
-				{saleState.isReadyForCheckout ? "FINALIZAR VENDA" : "ADICIONE ITENS E SELECIONE O CLIENTE"}
+				{isCheckoutLoading ? "CRIANDO RASCUNHO..." : saleState.isReadyForCheckout ? "FINALIZAR VENDA" : "ADICIONE ITENS E SELECIONE O CLIENTE"}
 			</Button>
 		</div>
 	);

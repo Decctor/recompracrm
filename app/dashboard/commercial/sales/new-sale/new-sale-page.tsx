@@ -5,10 +5,13 @@ import LoadingComponent from "@/components/Layouts/LoadingComponent";
 import { Button } from "@/components/ui/button";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { getErrorMessage } from "@/lib/errors";
+import { createSaleDraft } from "@/lib/mutations/pos";
 import { usePOSGroups, usePOSProducts } from "@/lib/queries/pos";
 import type { TGetPOSProductsOutput } from "@/pages/api/pos/products";
 import { useSaleState } from "@/state-hooks/use-sale-state";
+import { useMutation } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 import CartPane from "./components/CartPane";
@@ -21,12 +24,25 @@ type NewSalePageProps = {
 	membership: NonNullable<TAuthUserSession["membership"]>;
 };
 export default function NewSalePage({ user, membership }: NewSalePageProps) {
+	const router = useRouter();
 	const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
 	const [searchValue, setSearchValue] = useState("");
 	const [builderProduct, setBuilderProduct] = useState<TGetPOSProductsOutput["data"]["products"][number] | null>(null);
 
 	// Sale state management
 	const saleState = useSaleState();
+
+	// Draft creation mutation
+	const { mutate: createDraft, isPending: isCreatingDraft } = useMutation({
+		mutationKey: ["create-sale-draft"],
+		mutationFn: createSaleDraft,
+		onSuccess: (data) => {
+			router.push(`/dashboard/commercial/sales/checkout/${data.data.saleId}`);
+		},
+		onError: (err) => {
+			toast.error(getErrorMessage(err));
+		},
+	});
 
 	// Fetch groups
 	const { data: groupsData, isLoading: groupsLoading } = usePOSGroups();
@@ -90,26 +106,31 @@ export default function NewSalePage({ user, membership }: NewSalePageProps) {
 		}
 	};
 
-	// Handle checkout
+	// Handle checkout — creates a draft and navigates to checkout page
 	const handleCheckout = () => {
 		if (!saleState.isReadyForCheckout) {
 			toast.error("Complete o carrinho antes de finalizar a venda.");
 			return;
 		}
 
-		console.log("=== FINALIZANDO VENDA ===");
-		console.log("Estado da Venda:", saleState.state);
-		console.log("Subtotal:", saleState.subtotal);
-		console.log("Total Desconto:", saleState.totalDesconto);
-		console.log("Total:", saleState.total);
-		console.log("Quantidade de Itens:", saleState.itemCount);
-		console.log("========================");
-
-		toast.success("Venda finalizada! (Verifique o console para detalhes)");
-
-		// Clear the cart after checkout
-		saleState.clearCart();
-		saleState.clearCliente();
+		createDraft({
+			clienteId: saleState.state.cliente?.id ?? null,
+			vendedorId: saleState.state.vendedorId ?? null,
+			vendedorNome: saleState.state.vendedorNome ?? null,
+			itens: saleState.state.itens.map((item) => ({
+				produtoId: item.produtoId,
+				produtoVarianteId: item.produtoVarianteId,
+				nome: item.nome,
+				quantidade: item.quantidade,
+				valorUnitarioBase: item.valorUnitarioBase,
+				valorModificadores: item.valorModificadores,
+				valorUnitarioFinal: item.valorUnitarioFinal,
+				valorTotalBruto: item.valorTotalBruto,
+				valorDesconto: item.valorDesconto,
+				valorTotalLiquido: item.valorTotalLiquido,
+				modificadores: item.modificadores,
+			})),
+		});
 	};
 
 	return (
@@ -196,7 +217,7 @@ export default function NewSalePage({ user, membership }: NewSalePageProps) {
 			{/* Right Pane: Cart */}
 			<div className="w-full lg:w-96 shrink-0">
 				<div className="h-full max-h-[calc(100vh-6rem)] sticky top-4 overflow-hidden">
-					<CartPane organizationId={membership.organizacao.id} saleState={saleState} onCheckout={handleCheckout} />
+					<CartPane organizationId={membership.organizacao.id} saleState={saleState} onCheckout={handleCheckout} isCheckoutLoading={isCreatingDraft} />
 				</div>
 			</div>
 

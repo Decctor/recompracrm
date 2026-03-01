@@ -153,3 +153,21 @@ export const saleProcessingSourceEnum = pgEnum("origem_processamento_venda", ["E
 export const saleStatusEnum = pgEnum("sale_status", ["ORCAMENTO", "CONDICIONAL", "CONFIRMADA", "FATURADA", "CANCELADA"]);
 
 export const defaultDataSourceEnum = pgEnum("origem_dados_padrao", ["RECEPTOR", "ERP"]);
+
+export const paymentMethodEnum = pgEnum("payment_method", [
+	"DINHEIRO",
+	"PIX",
+	"CARTAO_CREDITO",
+	"CARTAO_DEBITO",
+	"BOLETO",
+	"TRANSFERENCIA",
+	"CASHBACK",
+	"VALE",
+	"OUTRO",
+]);
+
+export const deliveryModeEnum = pgEnum("delivery_mode", ["PRESENCIAL", "RETIRADA", "ENTREGA", "COMANDA"]);
+
+export const fiscalProviderEnum = pgEnum("fiscal_provider", ["MANUAL", "NUVEM_FISCAL"]);
+
+export const paymentProviderEnum = pgEnum("payment_provider", ["LOCAL", "MERCADO_PAGO", "STRIPE_CONNECT", "PAGARME"]);

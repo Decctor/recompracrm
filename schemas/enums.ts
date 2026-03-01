@@ -139,3 +139,25 @@ export const SaleStatusEnum = z.enum(["ORCAMENTO", "CONDICIONAL", "CONFIRMADA", 
 export type TSaleStatusEnum = z.infer<typeof SaleStatusEnum>;
 export const DefaultDataSourceEnum = z.enum(["RECEPTOR", "ERP"]);
 export type TDefaultDataSourceEnum = z.infer<typeof DefaultDataSourceEnum>;
+
+export const PaymentMethodEnum = z.enum([
+	"DINHEIRO",
+	"PIX",
+	"CARTAO_CREDITO",
+	"CARTAO_DEBITO",
+	"BOLETO",
+	"TRANSFERENCIA",
+	"CASHBACK",
+	"VALE",
+	"OUTRO",
+]);
+export type TPaymentMethodEnum = z.infer<typeof PaymentMethodEnum>;
+
+export const DeliveryModeEnum = z.enum(["PRESENCIAL", "RETIRADA", "ENTREGA", "COMANDA"]);
+export type TDeliveryModeEnum = z.infer<typeof DeliveryModeEnum>;
+
+export const FiscalProviderEnum = z.enum(["MANUAL", "NUVEM_FISCAL"]);
+export type TFiscalProviderEnum = z.infer<typeof FiscalProviderEnum>;
+
+export const PaymentProviderEnum = z.enum(["LOCAL", "MERCADO_PAGO", "STRIPE_CONNECT", "PAGARME"]);
+export type TPaymentProviderEnum = z.infer<typeof PaymentProviderEnum>;

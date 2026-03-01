@@ -5,7 +5,7 @@ import { campaigns } from "./campaigns";
 import { cashbackProgramTransactions } from "./cashback-programs";
 import { clientLocations, clients } from "./clients";
 import { newTable } from "./common";
-import { saleProcessingSourceEnum, saleStatusEnum } from "./enums";
+import { deliveryModeEnum, saleProcessingSourceEnum, saleStatusEnum } from "./enums";
 import { accountingEntries, fiscalDocuments } from "./financial";
 import { interactions } from "./interactions";
 import { organizations } from "./organizations";
@@ -47,8 +47,10 @@ export const sales = newTable(
 		canal: text("canal"),
 
 		// Delivery
-		entregaModalidade: text("entrega_modalidade"), // ENTREGA, RETIRADA, PRESENCIAL, COMANDA
+		entregaModalidade: deliveryModeEnum("entrega_modalidade"),
 		entregaLocalizacaoId: varchar("entrega_localizacao_id", { length: 255 }).references(() => clientLocations.id, { onDelete: "set null" }),
+		comandaNumero: text("comanda_numero"),
+		observacoes: text("observacoes"),
 
 		dataVenda: timestamp("data_venda"),
 		// Conversion Attribution fields
