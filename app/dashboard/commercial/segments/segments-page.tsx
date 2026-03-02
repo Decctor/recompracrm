@@ -9,12 +9,11 @@ import type { TAuthUserSession } from "@/lib/authentication/types";
 import { getErrorMessage } from "@/lib/errors";
 import { getExcelFromJSON } from "@/lib/excel-utils";
 import { formatDateAsLocale, formatToMoney } from "@/lib/formatting";
-import { useClientsBySearch } from "@/lib/queries/clients";
+import { useClients, useClientsBySearch } from "@/lib/queries/clients";
 import { fetchClientExportation } from "@/lib/queries/exportations";
 import { useRFMLabelledStats } from "@/lib/queries/stats/rfm-labelled";
 import { cn } from "@/lib/utils";
-import type { TGetClientsBySearchOutput } from "@/pages/api/clients/search";
-import type { TClientSearchQueryParams } from "@/schemas/clients";
+import type { TGetClientsInput, TGetClientsOutputDefault } from "@/pages/api/clients";
 import { RFMLabels } from "@/utils/rfm";
 import { AspectRatio } from "@radix-ui/react-aspect-ratio";
 import dayjs from "dayjs";
@@ -51,18 +50,16 @@ function SegmentsPageClients() {
 	const [filterMenuIsOpen, setFilterMenuIsOpen] = useState(false);
 	const {
 		data: clientsResult,
+		isSuccess,
 		isLoading,
 		isError,
-		isSuccess,
 		error,
-		queryParams,
-		updateQueryParams,
-	} = useClientsBySearch({
-		initialParams: {
-			period: {
-				after: initialPeriodStart,
-				before: initialPeriodEnd,
-			},
+		filters,
+		updateFilters,
+	} = useClients({
+		initialFilters: {
+			statsPeriodAfter: dayjs().startOf("month").toDate(),
+			statsPeriodBefore: dayjs().endOf("month").toDate(),
 		},
 	});
 	const clients = clientsResult?.clients;
@@ -72,7 +69,22 @@ function SegmentsPageClients() {
 
 	async function handleExportData() {
 		try {
-			const data = await fetchClientExportation({ filters: queryParams });
+			const data = await fetchClientExportation({
+				filters: {
+					acquisitionChannels: filters.acquisitionChannels,
+					page: filters.page,
+					name: filters.search ?? "",
+					excludedSalesIds: filters.statsExcludedSalesIds,
+					period: {
+						after: filters.statsPeriodAfter ? filters.statsPeriodAfter.toISOString() : null,
+						before: filters.statsPeriodBefore ? filters.statsPeriodBefore.toISOString() : null,
+					},
+					phone: filters.search ?? "",
+					rfmTitles: filters.segmentationTitles,
+					saleNatures: filters.statsSaleNatures,
+					total: { min: null, max: null },
+				},
+			});
 			getExcelFromJSON(data, `CLIENTES ${dayjs().format("DD-MM-YYYY")}`);
 
 			return toast.success("Dados exportados com sucesso !");
@@ -100,12 +112,12 @@ function SegmentsPageClients() {
 				</div>
 			</div>
 
-			<SegmentsPageClientsFiltersShowcase queryParams={queryParams} updateQueryParams={updateQueryParams} />
+			<SegmentsPageClientsFiltersShowcase filters={filters} updateFilters={updateFilters} />
 			<div className="w-full flex-1 max-h-[700px] flex flex-col gap-2 overflow-y-auto overscroll-y-auto scrollbar-thin scrollbar-track-primary/10 scrollbar-thumb-primary/30 px-2">
 				<GeneralPaginationComponent
-					activePage={queryParams.page}
+					activePage={filters.page}
 					queryLoading={isLoading}
-					selectPage={(page) => updateQueryParams({ page })}
+					selectPage={(page) => updateFilters({ page })}
 					totalPages={totalPages || 0}
 					itemsMatchedText={clientsMatched > 0 ? `${clientsMatched} clientes encontrados.` : `${clientsMatched} cliente encontrado.`}
 					itemsShowingText={clientsShowing > 0 ? `Mostrando ${clientsShowing} clientes.` : `Mostrando ${clientsShowing} cliente.`}
@@ -119,8 +131,8 @@ function SegmentsPageClients() {
 								key={client.id}
 								client={client}
 								period={{
-									after: queryParams.period.after ? new Date(queryParams.period.after) : new Date(),
-									before: queryParams.period.before ? new Date(queryParams.period.before) : new Date(),
+									after: filters.statsPeriodAfter ? new Date(filters.statsPeriodAfter) : new Date(),
+									before: filters.statsPeriodBefore ? new Date(filters.statsPeriodBefore) : new Date(),
 								}}
 							/>
 						))
@@ -130,16 +142,16 @@ function SegmentsPageClients() {
 				) : null}
 			</div>
 			{filterMenuIsOpen ? (
-				<RFMAnalysisQueryParamsMenu queryParams={queryParams} updateQueryParams={updateQueryParams} closeMenu={() => setFilterMenuIsOpen(false)} />
+				<RFMAnalysisQueryParamsMenu filters={filters} updateFilters={updateFilters} closeMenu={() => setFilterMenuIsOpen(false)} />
 			) : null}
 		</div>
 	);
 }
 type SegmentsPageClientsFiltersShowcaseProps = {
-	queryParams: TClientSearchQueryParams;
-	updateQueryParams: (params: Partial<TClientSearchQueryParams>) => void;
+	filters: TGetClientsInput;
+	updateFilters: (params: Partial<TGetClientsInput>) => void;
 };
-function SegmentsPageClientsFiltersShowcase({ queryParams, updateQueryParams }: SegmentsPageClientsFiltersShowcaseProps) {
+function SegmentsPageClientsFiltersShowcase({ filters, updateFilters }: SegmentsPageClientsFiltersShowcaseProps) {
 	function FilterTag({ label, value, onRemove }: { label: string; value: string; onRemove?: () => void }) {
 		return (
 			<div className="flex items-center gap-1 bg-secondary text-[0.65rem] rounded-lg px-2 py-1">
@@ -156,48 +168,56 @@ function SegmentsPageClientsFiltersShowcase({ queryParams, updateQueryParams }: 
 	}
 	return (
 		<div className="flex items-center justify-center lg:justify-end flex-wrap gap-2">
-			{queryParams.name ? <FilterTag label="NOME" value={queryParams.name} onRemove={() => updateQueryParams({ name: "" })} /> : null}
-			{queryParams.phone ? <FilterTag label="TELEFONE" value={queryParams.phone} onRemove={() => updateQueryParams({ phone: "" })} /> : null}
-			{queryParams.rfmTitles.length > 0 ? (
-				<FilterTag
-					label="CATEGORIA"
-					value={queryParams.rfmTitles.map((title) => title).join(", ")}
-					onRemove={() => updateQueryParams({ rfmTitles: [] })}
-				/>
+			{filters.search && filters.search.trim().length > 0 ? (
+				<FilterTag label="NOME" value={filters.search} onRemove={() => updateFilters({ search: "" })} />
 			) : null}
-			{queryParams.total.min || queryParams.total.max ? (
-				<FilterTag
-					label="VALOR"
-					value={`${queryParams.total.min ? `MIN: R$ ${queryParams.total.min}` : "N/A"} - ${queryParams.total.max ? `MAX: R$ ${queryParams.total.max}` : "N/A"}`}
-					onRemove={() => updateQueryParams({ total: { min: null, max: null } })}
-				/>
-			) : null}
-			{queryParams.saleNatures.length > 0 ? (
-				<FilterTag
-					label="NATUREZA DA VENDA"
-					value={queryParams.saleNatures.map((nature) => nature).join(", ")}
-					onRemove={() => updateQueryParams({ saleNatures: [] })}
-				/>
-			) : null}
-			{queryParams.acquisitionChannels.length > 0 ? (
+			{filters.acquisitionChannels.length > 0 ? (
 				<FilterTag
 					label="CANAL DE AQUISIÇÃO"
-					value={queryParams.acquisitionChannels.map((channel) => channel).join(", ")}
-					onRemove={() => updateQueryParams({ acquisitionChannels: [] })}
+					value={filters.acquisitionChannels.map((channel) => channel).join(", ")}
+					onRemove={() => updateFilters({ acquisitionChannels: [] })}
 				/>
 			) : null}
-			{queryParams.period.after && queryParams.period.before ? (
+			{filters.segmentationTitles.length > 0 ? (
+				<FilterTag
+					label="SEGMENTAÇÃO"
+					value={filters.segmentationTitles.map((title) => title).join(", ")}
+					onRemove={() => updateFilters({ segmentationTitles: [] })}
+				/>
+			) : null}
+			{filters.statsSaleNatures.length > 0 ? (
+				<FilterTag
+					label="NATUREZA DA VENDA"
+					value={filters.statsSaleNatures.map((nature) => nature).join(", ")}
+					onRemove={() => updateFilters({ statsSaleNatures: [] })}
+				/>
+			) : null}
+			{filters.statsPeriodAfter && filters.statsPeriodBefore ? (
 				<FilterTag
 					label="PERÍODO"
-					value={`${formatDateAsLocale(queryParams.period.after)} a ${formatDateAsLocale(queryParams.period.before)}`}
-					onRemove={() => updateQueryParams({ period: { after: null, before: null } })}
+					value={`${formatDateAsLocale(filters.statsPeriodAfter)} a ${formatDateAsLocale(filters.statsPeriodBefore)}`}
+					onRemove={() => updateFilters({ statsPeriodAfter: null, statsPeriodBefore: null })}
+				/>
+			) : null}
+			{filters.statsExcludedSalesIds.length > 0 ? (
+				<FilterTag
+					label="VENDAS EXCLUÍDAS"
+					value={filters.statsExcludedSalesIds.map((id) => id).join(", ")}
+					onRemove={() => updateFilters({ statsExcludedSalesIds: [] })}
+				/>
+			) : null}
+			{filters.orderByField && filters.orderByDirection ? (
+				<FilterTag
+					label="ORDENAÇÃO"
+					value={`${filters.orderByField} (${filters.orderByDirection})`}
+					onRemove={() => updateFilters({ orderByField: "nome", orderByDirection: "asc" })}
 				/>
 			) : null}
 		</div>
 	);
 }
 type SegmentsPageClientCardProps = {
-	client: TGetClientsBySearchOutput["clients"][number];
+	client: TGetClientsOutputDefault["clients"][number];
 	period: { after: Date; before: Date };
 };
 function SegmentsPageClientCard({ client, period }: SegmentsPageClientCardProps) {
@@ -249,12 +269,12 @@ function SegmentsPageClientCard({ client, period }: SegmentsPageClientCardProps)
 					<div className="flex items-center gap-1">
 						<ShoppingCart width={14} height={14} />
 						<h1 className="py-0.5 text-center text-[0.6rem] font-medium italic text-primary/80">Nº DE COMPRAS NO PERÍODO</h1>
-						<h1 className="py-0.5 text-center text-[0.65rem] font-bold  text-primary">{client.metadados.periodoNumeroCompras}</h1>
+						<h1 className="py-0.5 text-center text-[0.65rem] font-bold  text-primary">{client.estatisticas.comprasQtdeTotal}</h1>
 					</div>
 					<div className="flex items-center gap-1">
 						<BadgeDollarSign width={14} height={14} />
 						<h1 className="py-0.5 text-center text-[0.6rem] font-medium italic text-primary/80">TOTAL COMPRO NO PERÍODO</h1>
-						<h1 className="py-0.5 text-center text-[0.65rem] font-bold  text-primary">{formatToMoney(client.metadados.periodoValorCompro)}</h1>
+						<h1 className="py-0.5 text-center text-[0.65rem] font-bold  text-primary">{formatToMoney(client.estatisticas.comprasValorTotal)}</h1>
 					</div>
 				</div>
 			</div>

@@ -17,7 +17,6 @@ import { formatDateAsLocale, formatDecimalPlaces, formatToMoney } from "@/lib/fo
 import { useClients, useClientsBySearch, useClientsOverallStats } from "@/lib/queries/clients";
 import { cn } from "@/lib/utils";
 import type { TGetClientsInput, TGetClientsOutputDefault } from "@/pages/api/clients";
-import type { TGetClientsBySearchOutput } from "@/pages/api/clients/search";
 import type { TGetClientsOverallStatsInput } from "@/pages/api/clients/stats/overall";
 import dayjs from "dayjs";
 import {
