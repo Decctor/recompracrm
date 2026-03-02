@@ -51,29 +51,29 @@ export default function AppSidebarHeader({ sessionUserOrg, user, mode = "app" }:
 			<SidebarMenu>
 				<SidebarMenuItem className="flex items-center justify-center">
 					{isAdminMode ? (
-						<div className="flex items-center gap-2 w-full self-center">
-							<div className="relative w-8 h-8 min-w-8 min-h-8 max-w-8 max-h-8 self-center rounded-lg overflow-hidden">
-								<Image src={LogoIcon} alt="RecompraCRM Admin" fill />
+						<div className="flex w-full items-center gap-2 self-center group-data-[collapsible=icon]:justify-center">
+							<div className="relative h-8 w-8 shrink-0 self-center overflow-hidden rounded-lg">
+								<Image src={LogoIcon} alt="RecompraCRM Admin" fill className="object-cover" />
 							</div>
-							<div className="grid flex-1 text-left text-sm leading-tight">
+							<div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
 								<span className="truncate font-medium">ADMIN</span>
 							</div>
 						</div>
 					) : sessionUserOrg ? (
-						<div className="flex items-center gap-2 w-full self-center">
-							<div className="relative w-8 h-8 min-w-8 min-h-8 max-w-8 max-h-8 self-center rounded-lg overflow-hidden">
-								<Image src={sessionUserOrg.logoUrl ?? LogoIcon} alt={sessionUserOrg.nome} fill />
+						<div className="flex w-full items-center gap-2 self-center group-data-[collapsible=icon]:justify-center">
+							<div className="relative h-8 w-8 shrink-0 self-center overflow-hidden rounded-lg">
+								<Image src={sessionUserOrg.logoUrl ?? LogoIcon} alt={sessionUserOrg.nome} fill className="object-cover" />
 							</div>
-							<div className="grid flex-1 text-left text-sm leading-tight">
+							<div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
 								<span className="truncate font-medium">{sessionUserOrg.nome}</span>
 							</div>
 						</div>
 					) : (
-						<div className="flex items-center gap-2 w-full self-center">
-							<div className="relative w-8 h-8 min-w-8 min-h-8 max-w-8 max-h-8 self-center rounded-lg overflow-hidden">
-								<Image src={LogoIcon} alt="Logo Ampère Mais" fill />
+						<div className="flex w-full items-center gap-2 self-center group-data-[collapsible=icon]:justify-center">
+							<div className="relative h-8 w-8 shrink-0 self-center overflow-hidden rounded-lg">
+								<Image src={LogoIcon} alt="Logo Ampère Mais" fill className="object-cover" />
 							</div>
-							<div className="grid flex-1 text-left text-sm leading-tight">
+							<div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
 								<span className="truncate font-medium">RecompraCRM</span>
 							</div>
 						</div>
@@ -101,18 +101,26 @@ export default function AppSidebarHeader({ sessionUserOrg, user, mode = "app" }:
 			<SidebarMenuItem>
 				<DropdownMenu>
 					<DropdownMenuTrigger asChild>
-						<SidebarMenuButton size="lg" className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground">
-							<div className="relative w-8 h-8 min-w-8 min-h-8 max-w-8 max-h-8 rounded-lg overflow-hidden">
+						<SidebarMenuButton
+							size="lg"
+							className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground group-data-[collapsible=icon]:justify-center"
+						>
+							<div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-lg">
 								<Image
 									src={isAdminMode ? LogoIcon : (currentOrg?.logoUrl ?? LogoIcon)}
 									alt={isAdminMode ? "Admin" : (currentOrg?.nome ?? "Organização")}
 									fill
+									className="object-cover"
 								/>
 							</div>
-							<div className="grid flex-1 text-left text-sm leading-tight">
+							<div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
 								<span className="truncate font-medium">{isAdminMode ? "ADMIN" : (currentOrg?.nome ?? "Selecionar organização")}</span>
 							</div>
-							{switchOrgMutation.isPending ? <Loader2 className="ml-auto size-4 animate-spin" /> : <ChevronsUpDown className="ml-auto size-4" />}
+							{switchOrgMutation.isPending ? (
+								<Loader2 className="ml-auto size-4 animate-spin group-data-[collapsible=icon]:hidden" />
+							) : (
+								<ChevronsUpDown className="ml-auto size-4 group-data-[collapsible=icon]:hidden" />
+							)}
 						</SidebarMenuButton>
 					</DropdownMenuTrigger>
 					<DropdownMenuContent

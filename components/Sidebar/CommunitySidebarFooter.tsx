@@ -38,17 +38,17 @@ export default function CommunitySidebarFooter({ user }: CommunitySidebarFooterP
 						<DropdownMenuTrigger asChild>
 							<SidebarMenuButton
 								size="lg"
-								className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+								className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground group-data-[collapsible=icon]:justify-center"
 							>
-								<Avatar className="h-8 w-8 rounded-lg">
+								<Avatar className="h-8 w-8 shrink-0 rounded-lg">
 									<AvatarImage src={user.avatarUrl ?? undefined} alt={user.nome} />
 									<AvatarFallback className="rounded-lg">{formatNameAsInitials(user.nome)}</AvatarFallback>
 								</Avatar>
-								<div className="grid flex-1 text-left text-sm leading-tight">
+								<div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
 									<span className="truncate font-medium">{user.nome}</span>
 									<span className="truncate text-xs">{user.email}</span>
 								</div>
-								<ChevronsUpDown className="ml-auto size-4" />
+								<ChevronsUpDown className="ml-auto size-4 group-data-[collapsible=icon]:hidden" />
 							</SidebarMenuButton>
 						</DropdownMenuTrigger>
 						<DropdownMenuContent
@@ -87,12 +87,12 @@ export default function CommunitySidebarFooter({ user }: CommunitySidebarFooterP
 				</SidebarMenuItem>
 			) : (
 				<SidebarMenuItem>
-					<SidebarMenuButton asChild size="lg">
+					<SidebarMenuButton asChild size="lg" className="group-data-[collapsible=icon]:justify-center">
 						<Link href="/auth/signin" className="flex items-center gap-2">
 							<div className="w-8 h-8 min-w-8 min-h-8 rounded-lg bg-primary flex items-center justify-center">
 								<LogIn className="w-4 h-4 min-w-4 min-h-4 text-primary-foreground" />
 							</div>
-							<div className="grid flex-1 text-left text-sm leading-tight">
+							<div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
 								<span className="truncate font-medium">Entrar</span>
 								<span className="truncate text-xs text-muted-foreground">Fazer login</span>
 							</div>
