@@ -3,7 +3,6 @@ import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { db } from "@/services/drizzle";
 import { saleItemModifiers, saleItems, sales } from "@/services/drizzle/schema";
-import { products, productVariants } from "@/services/drizzle/schema";
 import { eq, inArray } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
@@ -39,6 +38,13 @@ const CreateSaleDraftInputSchema = z.object({
 	clienteId: z.string({ invalid_type_error: "Tipo não válido para ID do cliente." }).optional().nullable(),
 	vendedorId: z.string({ invalid_type_error: "Tipo não válido para ID do vendedor." }).optional().nullable(),
 	vendedorNome: z.string({ invalid_type_error: "Tipo não válido para nome do vendedor." }).optional().nullable(),
+	entregaModalidade: z.enum(["PRESENCIAL", "RETIRADA", "ENTREGA", "COMANDA"]).optional().nullable(),
+	entregaLocalizacaoId: z.string({ invalid_type_error: "Tipo não válido para ID da localização." }).optional().nullable(),
+	comandaNumero: z.string({ invalid_type_error: "Tipo não válido para comanda." }).optional().nullable(),
+	observacoes: z.string({ invalid_type_error: "Tipo não válido para observações." }).optional().nullable(),
+	descontosTotal: z.number({ invalid_type_error: "Tipo não válido para desconto." }).optional().nullable(),
+	acrescimosTotal: z.number({ invalid_type_error: "Tipo não válido para acréscimo." }).optional().nullable(),
+	rascunhoMetadados: z.unknown().optional().nullable(),
 	itens: z.array(CartItemInputSchema).min(1, { message: "Pelo menos um item é obrigatório." }),
 });
 export type TCreateSaleDraftInput = z.infer<typeof CreateSaleDraftInputSchema>;
@@ -57,6 +63,7 @@ const UpdateSaleDraftInputSchema = z.object({
 	observacoes: z.string({ invalid_type_error: "Tipo não válido para observações." }).optional().nullable(),
 	descontosTotal: z.number({ invalid_type_error: "Tipo não válido para desconto." }).optional().nullable(),
 	acrescimosTotal: z.number({ invalid_type_error: "Tipo não válido para acréscimo." }).optional().nullable(),
+	rascunhoMetadados: z.unknown().optional().nullable(),
 });
 export type TUpdateSaleDraftInput = z.infer<typeof UpdateSaleDraftInputSchema>;
 
@@ -97,12 +104,14 @@ async function createSaleDraft({ input, session }: { input: TCreateSaleDraftInpu
 	]);
 
 	const productCostMap = new Map(produtosResult.map((p) => [p.id, p.precoCusto ?? 0]));
-	const productCodeMap = new Map(produtosResult.map((p) => [p.id, p.codigo]));
 	const variantCostMap = new Map(variantesResult.map((v) => [v.id, v.precoCusto ?? 0]));
 
 	// Calculate totals
-	const valorTotal = input.itens.reduce((sum, item) => sum + item.valorTotalLiquido, 0);
-	const descontosTotal = input.itens.reduce((sum, item) => sum + item.valorDesconto, 0);
+	const valorBaseItens = input.itens.reduce((sum, item) => sum + item.valorTotalLiquido, 0);
+	const descontosTotalItens = input.itens.reduce((sum, item) => sum + item.valorDesconto, 0);
+	const descontosGerais = input.descontosTotal ?? 0;
+	const acrescimosGerais = input.acrescimosTotal ?? 0;
+	const valorTotal = Math.max(0, valorBaseItens - descontosGerais + acrescimosGerais);
 	const custoTotal = input.itens.reduce((sum, item) => {
 		const custo = item.produtoVarianteId ? (variantCostMap.get(item.produtoVarianteId) ?? 0) : (productCostMap.get(item.produtoId) ?? 0);
 		return sum + custo * item.quantidade;
@@ -119,11 +128,16 @@ async function createSaleDraft({ input, session }: { input: TCreateSaleDraftInpu
 				clienteId: input.clienteId ?? null,
 				idExterno,
 				valorTotal,
-				descontosTotal: descontosTotal > 0 ? descontosTotal : null,
-				acrescimosTotal: null,
+				descontosTotal: input.descontosTotal ?? (descontosTotalItens > 0 ? descontosTotalItens : null),
+				acrescimosTotal: input.acrescimosTotal ?? null,
 				custoTotal,
 				vendedorNome: input.vendedorNome ?? session.user.nome,
 				vendedorId: input.vendedorId ?? null,
+				entregaModalidade: input.entregaModalidade ?? null,
+				entregaLocalizacaoId: input.entregaLocalizacaoId ?? null,
+				comandaNumero: input.comandaNumero ?? null,
+				observacoes: input.observacoes ?? null,
+				rascunhoMetadados: input.rascunhoMetadados ?? null,
 				parceiro: "",
 				chave: "",
 				documento: "",
@@ -142,9 +156,7 @@ async function createSaleDraft({ input, session }: { input: TCreateSaleDraftInpu
 		// Create sale items
 		const insertedItems = [];
 		for (const item of input.itens) {
-			const valorCustoUnitario = item.produtoVarianteId
-				? (variantCostMap.get(item.produtoVarianteId) ?? 0)
-				: (productCostMap.get(item.produtoId) ?? 0);
+			const valorCustoUnitario = item.produtoVarianteId ? (variantCostMap.get(item.produtoVarianteId) ?? 0) : (productCostMap.get(item.produtoId) ?? 0);
 
 			const [saleItem] = await tx
 				.insert(saleItems)
@@ -257,6 +269,7 @@ async function updateSaleDraft({ input, session }: { input: TUpdateSaleDraftInpu
 			observacoes: input.observacoes,
 			descontosTotal: input.descontosTotal,
 			acrescimosTotal: input.acrescimosTotal,
+			rascunhoMetadados: input.rascunhoMetadados,
 		})
 		.where(eq(sales.id, input.id));
 

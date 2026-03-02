@@ -4,6 +4,9 @@ import type { TOrganizationEntity } from "@/services/drizzle/schema";
 
 export const SESSION_COOKIE_NAME = "syncrono-session";
 
+export const DEFAULT_POS_CONTA_DEBITO_ID = "TODO_CONTA_DEBITO";
+export const DEFAULT_POS_CONTA_CREDITO_ID = "TODO_CONTA_CREDITO";
+
 export const DEFAULT_ORGANIZATION_OWNER_PERMISSIONS: TUserPermissions = {
 	usuarios: {
 		visualizar: true,

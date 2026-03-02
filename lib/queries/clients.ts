@@ -1,15 +1,13 @@
 import type { TGetClientsInput, TGetClientsOutput } from "@/pages/api/clients";
 import type { TClientByLookupInput, TClientByLookupOutput } from "@/pages/api/clients/lookup";
-import type { TGetClientsBySearchOutput } from "@/pages/api/clients/search";
+import type { TSearchClientsOutput } from "@/pages/api/clients/search";
 import type { TGetClientStatsInput, TGetClientStatsOutput } from "@/pages/api/clients/stats/by-client";
 import type { TGetClientsGraphInput, TGetClientsGraphOutput } from "@/pages/api/clients/stats/graph";
 import type { TGetClientsOverallStatsInput, TGetClientsOverallStatsOutput } from "@/pages/api/clients/stats/overall";
 import type { TGetClientsRankingInput, TGetClientsRankingOutput } from "@/pages/api/clients/stats/ranking";
-import type { TClientDTO, TClientSearchQueryParams } from "@/schemas/clients";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import { useState } from "react";
-import { formatWithoutDiacritics } from "../formatting";
 import { useDebounceMemo } from "../hooks/use-debounce";
 
 async function fetchClients(input: TGetClientsInput) {
@@ -66,11 +64,13 @@ export function useClients({ initialFilters }: UseClientsParams) {
 	};
 }
 
-async function fetchClientsBySearch(params: TClientSearchQueryParams) {
+export async function fetchClientsBySearch({ search }: { search: string }) {
 	try {
-		const { data } = await axios.post("/api/clients/search", params);
+		const searchParams = new URLSearchParams();
+		searchParams.set("search", search);
+		const { data } = await axios.get<TSearchClientsOutput>(`/api/clients/search?${searchParams.toString()}`);
 
-		return data.data as TGetClientsBySearchOutput;
+		return data.data.clients;
 	} catch (error) {
 		console.log("Error running fetchClientsBySearch", error);
 		throw error;
@@ -78,32 +78,27 @@ async function fetchClientsBySearch(params: TClientSearchQueryParams) {
 }
 
 type UseClientsBySearchParams = {
-	initialParams: Partial<TClientSearchQueryParams>;
+	initialSearch?: string;
 };
-export function useClientsBySearch({ initialParams }: UseClientsBySearchParams) {
-	const [queryParams, setQueryParams] = useState<TClientSearchQueryParams>({
-		page: initialParams?.page || 1,
-		name: initialParams?.name || "",
-		phone: initialParams?.phone || "",
-		acquisitionChannels: initialParams?.acquisitionChannels || [],
-		rfmTitles: initialParams?.rfmTitles || [],
-		total: {},
-		saleNatures: [],
-		excludedSalesIds: [],
-		period: { after: initialParams?.period?.after, before: initialParams?.period?.before },
-	});
+export function useClientsBySearch({ initialSearch = "" }: UseClientsBySearchParams) {
+	const [search, setSearch] = useState(initialSearch);
+	const debouncedParams = useDebounceMemo({ search }, 1200);
+	const queryKey = ["clients-by-search", debouncedParams.search];
 
-	function updateQueryParams(newParams: Partial<TClientSearchQueryParams>) {
-		setQueryParams((prevParams) => ({ ...prevParams, ...newParams }));
+	function updateSearch(value: string) {
+		setSearch(value);
 	}
 
 	return {
 		...useQuery({
-			queryKey: ["clients-by-search", queryParams],
-			queryFn: () => fetchClientsBySearch(queryParams),
+			queryKey,
+			queryFn: () => fetchClientsBySearch({ search: debouncedParams.search }),
+			enabled: debouncedParams.search.trim().length >= 2,
 		}),
-		queryParams,
-		updateQueryParams,
+		queryKey,
+		search,
+		setSearch,
+		updateSearch,
 	};
 }
 

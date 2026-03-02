@@ -1,237 +1,77 @@
 import { apiHandler } from "@/lib/api";
 import { getCurrentSessionUncached } from "@/lib/authentication/pages-session";
-import { ClientSearchQueryParams, type TClientSearchQueryParams } from "@/schemas/clients";
+import { createSimplifiedPhoneSearchCondition, createSimplifiedSearchCondition } from "@/lib/search";
 import { db } from "@/services/drizzle";
-import { clients, sales, utils } from "@/services/drizzle/schema";
-import { type TRFMConfig, getRFMLabel } from "@/utils/rfm";
-import dayjs from "dayjs";
-import { and, count, eq, gte, inArray, lte, notInArray, sql } from "drizzle-orm";
+import { clients } from "@/services/drizzle/schema";
+import { and, asc, eq, or } from "drizzle-orm";
 import createHttpError from "http-errors";
-import type { NextApiHandler, NextApiRequest } from "next";
+import type { NextApiHandler } from "next";
+import z from "zod";
 
-// This function encapsulates the core logic for fetching clients with pagination and applying filters.
-// It's a "service-like" function that prepares the data structure for the API response.
-const fetchClientsWithPagination = async (req: NextApiRequest, userOrgId: string) => {
-	const PAGE_SIZE = 30;
+const SearchClientsInputSchema = z.object({
+	search: z.string({
+		required_error: "Termo de busca não informado.",
+		invalid_type_error: "Tipo não válido para termo de busca.",
+	}),
+});
+export type TSearchClientsInput = z.infer<typeof SearchClientsInputSchema>;
 
-	// Parse and validate the request body using Zod schema
-	const filters = ClientSearchQueryParams.parse(req.body);
+async function searchClients({ input, userOrgId }: { input: TSearchClientsInput; userOrgId: string }) {
+	const normalizedSearch = input.search.trim();
+	if (normalizedSearch.length < 2) {
+		return {
+			data: {
+				clients: [],
+			},
+			message: "Busca de clientes realizada com sucesso.",
+		};
+	}
 
-	const skip = PAGE_SIZE * (Number(filters.page) - 1);
-	const limit = PAGE_SIZE;
+	const result = await db.query.clients.findMany({
+		where: and(
+			eq(clients.organizacaoId, userOrgId),
+			or(
+				createSimplifiedSearchCondition(clients.nome, normalizedSearch),
+				createSimplifiedPhoneSearchCondition(clients.telefoneBase, normalizedSearch),
+				createSimplifiedSearchCondition(clients.cpfCnpj, normalizedSearch),
+			),
+		),
+		orderBy: asc(clients.nome),
+		limit: 10,
+		columns: {
+			id: true,
+			nome: true,
+			telefone: true,
+			cpfCnpj: true,
+			email: true,
+			localizacaoCidade: true,
+			localizacaoEstado: true,
+		},
+	});
 
-	// Call the data access function to get the raw client data from the database
-	const { clients, clientsMatched } = await fetchClientsWithPurchases({ filters, skip, limit, userOrgId });
+	return {
+		data: {
+			clients: result,
+		},
+		message: "Busca de clientes realizada com sucesso.",
+	};
+}
 
-	const totalPages = Math.ceil(clientsMatched / PAGE_SIZE);
+export type TSearchClientsOutput = Awaited<ReturnType<typeof searchClients>>;
 
-	// Return the prepared data structure that will be sent in the API response body
-	return { clients: clients, clientsMatched: clientsMatched, totalPages };
-};
-// Infer the return type of the data preparation function. This type will be used for
-// the API response body, excluding the top-level 'data' wrapper.
-export type TGetClientsBySearchOutput = Awaited<ReturnType<typeof fetchClientsWithPagination>>;
-
-// This is the Next.js API route handler. It acts as the "procedure" or entry point
-// for the API endpoint. It handles the request/response lifecycle.
-const handleClientSearchRoute: NextApiHandler<{
-	data: TGetClientsBySearchOutput;
-}> = async (req, res) => {
+const searchClientsRoute: NextApiHandler<TSearchClientsOutput> = async (req, res) => {
 	const sessionUser = await getCurrentSessionUncached(req.cookies);
 	if (!sessionUser) throw new createHttpError.Unauthorized("Você não está autenticado.");
 
 	const userOrgId = sessionUser.membership?.organizacao.id;
 	if (!userOrgId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
 
-	// Call the data preparation function to get the response data
-	const data = await fetchClientsWithPagination(req, userOrgId);
-
-	// Wrap the data in the desired structure and send the JSON response
-	return res.status(200).json({ data });
-};
-
-// Define the parameters for the database query function
-type GetClientsParams = {
-	filters: TClientSearchQueryParams;
-	skip: number;
-	limit: number;
-	userOrgId: string;
-};
-
-// This function is a data access layer function that specifically queries the database
-// for clients, including their purchases, based on the provided filters and pagination.
-async function fetchClientsWithPurchases({ filters, skip, limit, userOrgId }: GetClientsParams) {
-	const rfmConfig = await db.query.utils.findFirst({
-		where: eq(utils.identificador, "CONFIG_RFM"),
-	});
-	if (!rfmConfig) throw new createHttpError.InternalServerError("Configuração RFM não encontrada.");
-
-	// Adjust date filters for database query
-	const ajustedAfter = filters.period.after ? dayjs(filters.period.after).toDate() : null;
-	const ajustedBefore = filters.period.before ? dayjs(filters.period.before).endOf("day").toDate() : null;
-
-	// Build dynamic WHERE conditions based on filters
-	const clientQueryConditions = [eq(clients.organizacaoId, userOrgId)];
-	if (filters.name.trim().length > 0) {
-		clientQueryConditions.push(
-			sql`(to_tsvector('portuguese', ${clients.nome}) @@ plainto_tsquery('portuguese', ${filters.name}) OR ${clients.nome} ILIKE '%' || ${filters.name} || '%')`,
-		);
-	}
-	if (filters.phone.trim().length > 0) {
-		clientQueryConditions.push(
-			sql`(to_tsvector('portuguese', ${clients.telefone}) @@ plainto_tsquery('portuguese', ${filters.phone}) OR ${clients.telefone} ILIKE '%' || ${filters.phone} || '%')`,
-		);
-	}
-	if (filters.acquisitionChannels.length > 0) {
-		clientQueryConditions.push(inArray(clients.canalAquisicao, filters.acquisitionChannels));
-	}
-	if (filters.rfmTitles.length > 0) {
-		clientQueryConditions.push(inArray(clients.analiseRFMTitulo, filters.rfmTitles));
-	}
-
-	const purchasesQueryConditions = [eq(sales.organizacaoId, userOrgId)];
-	if (filters.total.min) purchasesQueryConditions.push(gte(sales.valorTotal, filters.total.min));
-	if (filters.total.max) purchasesQueryConditions.push(lte(sales.valorTotal, filters.total.max));
-	if (filters.saleNatures.length > 0) purchasesQueryConditions.push(inArray(sales.natureza, filters.saleNatures));
-	if (filters.excludedSalesIds.length > 0) purchasesQueryConditions.push(notInArray(sales.id, filters.excludedSalesIds));
-
-	// Query the database to get the total count of matched clients (for pagination)
-	const clientsResultMatched = await db
-		.select({ count: count(clients.id) })
-		.from(clients)
-		.where(and(...clientQueryConditions));
-	const clientsResultMatchedCount = clientsResultMatched[0]?.count || 0;
-
-	// Query the database to fetch the paginated list of clients with their purchases
-	const clientsResult = await db.query.clients.findMany({
-		where: and(...clientQueryConditions),
-		orderBy: (fields, { asc }) => asc(fields.nome),
-		offset: skip,
-		limit: limit,
+	const input = SearchClientsInputSchema.parse({
+		search: req.query.search,
 	});
 
-	// Defining the client ids to each we gotta query accumulated results
-	const clientIds = clientsResult.map((client) => client.id);
+	const result = await searchClients({ input, userOrgId });
+	return res.status(200).json(result);
+};
 
-	const allTimeAccumulatedResults = await db
-		.select({
-			clientId: clients.id,
-			totalPurchases: sql<number>`sum(${sales.valorTotal})`,
-			purchaseCount: sql<number>`count(${sales.id})`,
-			lastPurchaseDate: sql<Date>`max(${sales.dataVenda})`,
-		})
-		.from(clients)
-		.leftJoin(sales, and(eq(sales.clienteId, clients.id), eq(sales.organizacaoId, userOrgId)))
-		.where(and(eq(clients.organizacaoId, userOrgId), inArray(clients.id, clientIds), ...purchasesQueryConditions))
-		.groupBy(clients.id);
-	const inPeriodAccumulatedResults =
-		ajustedAfter && ajustedBefore
-			? await db
-					.select({
-						clientId: clients.id,
-						totalPurchases: sql<number>`sum(${sales.valorTotal})`,
-						purchaseCount: sql<number>`count(${sales.id})`,
-						lastPurchaseDate: sql<Date>`max(${sales.dataVenda})`,
-					})
-					.from(clients)
-					.leftJoin(
-						sales,
-						and(
-							eq(sales.clienteId, clients.id),
-							eq(sales.organizacaoId, userOrgId),
-							gte(sales.dataVenda, ajustedAfter),
-							lte(sales.dataVenda, ajustedBefore),
-							...purchasesQueryConditions,
-						),
-					)
-					.where(and(eq(clients.organizacaoId, userOrgId), inArray(clients.id, clientIds)))
-					.groupBy(clients.id)
-			: [];
-
-	const allTimeAccumulatedResultsMap = new Map(
-		allTimeAccumulatedResults.map((results) => [
-			results.clientId,
-			{
-				totalPurchases: results.totalPurchases,
-				purchaseCount: results.purchaseCount,
-				lastPurchaseDate: results.lastPurchaseDate,
-			},
-		]),
-	);
-
-	const inPeriodAccumulatedResultsMap = new Map(
-		inPeriodAccumulatedResults.map((results) => [
-			results.clientId,
-			{
-				totalPurchases: results.totalPurchases,
-				purchaseCount: results.purchaseCount,
-				lastPurchaseDate: results.lastPurchaseDate,
-			},
-		]),
-	);
-
-	// Return the fetched clients and the total matched count
-	return {
-		clients: clientsResult.map((client) => {
-			const isPeriodDefined = filters.period.after && filters.period.before;
-			const allTimeAccumulatedClientResults = allTimeAccumulatedResultsMap.get(client.id);
-			const inPeriodAccumulatedClientResults = isPeriodDefined ? inPeriodAccumulatedResultsMap.get(client.id) : allTimeAccumulatedClientResults;
-
-			let rfmTitle = client.analiseRFMTitulo;
-			let rfmRecencyScore = client.analiseRFMNotasRecencia;
-			let rfmFrequencyScore = client.analiseRFMNotasFrequencia;
-			let rfmMonetaryScore = client.analiseRFMNotasMonetario;
-			if (isPeriodDefined) {
-				const calculatedRecency = inPeriodAccumulatedClientResults?.lastPurchaseDate
-					? dayjs().diff(dayjs(inPeriodAccumulatedClientResults.lastPurchaseDate), "days")
-					: Number.POSITIVE_INFINITY;
-				const calculatedFrequency = inPeriodAccumulatedClientResults?.purchaseCount || 0;
-				const calculatedMonetary = inPeriodAccumulatedClientResults?.totalPurchases || 0;
-
-				const configRecency =
-					rfmConfig && rfmConfig.valor.identificador === "CONFIG_RFM"
-						? Object.entries(rfmConfig.valor.recencia).find(
-								([key, value]) => calculatedRecency && calculatedRecency >= value.min && calculatedRecency <= value.max,
-							)
-						: null;
-				rfmRecencyScore = configRecency ? configRecency[0] : "1";
-
-				const configFrequency =
-					rfmConfig && rfmConfig.valor.identificador === "CONFIG_RFM"
-						? Object.entries(rfmConfig.valor.frequencia).find(([key, value]) => calculatedFrequency >= value.min && calculatedFrequency <= value.max)
-						: null;
-				rfmFrequencyScore = configFrequency ? configFrequency[0] : "1";
-
-				const configMonetary =
-					rfmConfig && rfmConfig.valor.identificador === "CONFIG_RFM"
-						? Object.entries(rfmConfig.valor.monetario).find(([key, value]) => calculatedMonetary >= value.min && calculatedMonetary <= value.max)
-						: null;
-				rfmMonetaryScore = configMonetary ? configMonetary[0] : "1";
-
-				rfmTitle = getRFMLabel({
-					monetary: Number(rfmMonetaryScore),
-					frequency: Number(rfmFrequencyScore),
-					recency: Number(rfmRecencyScore),
-				});
-			}
-
-			return {
-				...client,
-				metadados: {
-					periodoNumeroCompras: inPeriodAccumulatedClientResults?.purchaseCount || 0,
-					periodoValorCompro: inPeriodAccumulatedClientResults?.totalPurchases || 0,
-					periodoAnaliseRFMTitulo: rfmTitle,
-					periodoAnaliseRFMNotasRecencia: rfmRecencyScore,
-					periodoAnaliseRFMNotasFrequencia: rfmFrequencyScore,
-					periodoAnaliseRFMNotasMonetario: rfmMonetaryScore,
-					todoPeriodoNumeroCompras: allTimeAccumulatedClientResults?.purchaseCount || 0,
-					todoPeriodoValorCompro: allTimeAccumulatedClientResults?.totalPurchases || 0,
-				},
-			};
-		}),
-		clientsMatched: clientsResultMatchedCount,
-	};
-}
-
-// Export the API handler using your custom apiHandler utility
-export default apiHandler({ POST: handleClientSearchRoute });
+export default apiHandler({ GET: searchClientsRoute });

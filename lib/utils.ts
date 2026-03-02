@@ -1,3 +1,4 @@
+import axios from "axios";
 import { type ClassValue, clsx } from "clsx";
 import { toast } from "sonner";
 import { twMerge } from "tailwind-merge";
@@ -55,5 +56,29 @@ export async function copyToClipboard(text: string | undefined) {
 	} catch (err) {
 		toast.error("Erro ao copiar para área de transferência.");
 		console.error("Failed to copy:", err);
+	}
+}
+
+type ViaCEPSuccessfulReturn = {
+	cep: string;
+	logradouro: string;
+	complemento: string;
+	bairro: string;
+	localidade: string;
+	uf: string;
+	ibge: string;
+	gia: string;
+	ddd: string;
+	siafi: string;
+};
+export async function getCEPInfo(cep: string): Promise<ViaCEPSuccessfulReturn | null> {
+	try {
+		const { data } = await axios.get(`https://viacep.com.br/ws/${cep.replace("-", "")}/json/`);
+		console.log(data);
+		if (data.erro) throw new Error("Erro");
+		return data;
+	} catch (error) {
+		toast.error("Erro ao buscar informações à partir do CEP.");
+		return null;
 	}
 }

@@ -1,6 +1,7 @@
+import type { TConfirmSaleInput, TConfirmSaleOutput } from "@/app/api/pos/sales/confirm/route";
+import type { TCreateAndConfirmSaleInput, TCreateAndConfirmSaleOutput } from "@/app/api/pos/sales/create-and-confirm/route";
 import type { TCreateSaleDraftInput, TCreateSaleDraftOutput } from "@/app/api/pos/sales/route";
 import type { TUpdateSaleDraftInput, TUpdateSaleDraftOutput } from "@/app/api/pos/sales/route";
-import type { TConfirmSaleInput, TConfirmSaleOutput } from "@/app/api/pos/sales/confirm/route";
 import axios from "axios";
 
 export async function createSaleDraft(input: TCreateSaleDraftInput) {
@@ -15,6 +16,11 @@ export async function updateSaleDraft(input: TUpdateSaleDraftInput) {
 
 export async function confirmSale(input: TConfirmSaleInput) {
 	const { data } = await axios.post<TConfirmSaleOutput>(`/api/pos/sales/confirm?id=${input.id}`, input);
+	return data;
+}
+
+export async function createAndConfirmSale(input: TCreateAndConfirmSaleInput) {
+	const { data } = await axios.post<TCreateAndConfirmSaleOutput>("/api/pos/sales/create-and-confirm", input);
 	return data;
 }
 

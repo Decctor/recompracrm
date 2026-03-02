@@ -1,109 +1,107 @@
-import React, { useState } from "react";
+"use client";
 
-import type { TUserSession } from "@/schemas/users";
-
-import SelectInput from "@/components/Inputs/SelectInput";
-import TextInput from "@/components/Inputs/TextInput";
-import { LoadingButton } from "@/components/loading-button";
-import { formatToPhone } from "@/lib/formatting";
+import ResponsiveMenu from "@/components/Utils/ResponsiveMenu";
+import { getErrorMessage } from "@/lib/errors";
 import { createClient } from "@/lib/mutations/clients";
-import { useMutationWithFeedback } from "@/lib/mutations/common";
-import type { TClient } from "@/schemas/clients";
-import { CustomersAcquisitionChannels } from "@/utils/select-options";
-import * as Dialog from "@radix-ui/react-dialog";
-import { useQueryClient } from "@tanstack/react-query";
-import { VscChromeClose } from "react-icons/vsc";
+import type { TCreateClientInput } from "@/pages/api/clients";
+import { useClientState } from "@/state-hooks/use-client-state";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import ClientGeneralBlock from "./Blocks/General";
+import ClientLocationsBlock from "./Blocks/Locations";
 
 type NewClientProps = {
-	session: TUserSession;
 	closeModal: () => void;
+	callbacks?: {
+		onMutate?: () => void;
+		onSuccess?: () => void;
+		onError?: () => void;
+		onSettled?: () => void;
+	};
 };
-function NewClient({ session, closeModal }: NewClientProps) {
-	const queryClient = useQueryClient();
-	const [infoHolder, setInfoHolder] = useState<TClient>({
-		nome: "",
-		telefone: "",
-		dataInsercao: new Date().toISOString(),
-		autor: {
-			id: session._id,
-			nome: session.nome,
-			avatar_url: session.avatar || null,
+
+function buildCreateClientInput(input: TCreateClientInput): TCreateClientInput {
+	return {
+		client: input.client,
+		clientLocations: input.clientLocations,
+	};
+}
+
+function NewClient({ closeModal, callbacks }: NewClientProps) {
+	const { state, updateClient, addClientLocation, updateClientLocation, removeClientLocation, resetState } = useClientState();
+
+	const { mutate: handleCreateClient, isPending } = useMutation({
+		mutationKey: ["create-client"],
+		mutationFn: createClient,
+		onMutate: async () => {
+			if (callbacks?.onMutate) callbacks.onMutate();
+			return;
+		},
+		onSuccess: async (response) => {
+			if (callbacks?.onSuccess) callbacks.onSuccess();
+			toast.success(response.message);
+			resetState();
+			closeModal();
+		},
+		onError: (error) => {
+			if (callbacks?.onError) callbacks.onError();
+			toast.error(getErrorMessage(error));
+		},
+		onSettled: async () => {
+			if (callbacks?.onSettled) callbacks.onSettled();
+			return;
 		},
 	});
 
-	const { mutate: handleCreateClient, isPending } = useMutationWithFeedback({
-		mutationKey: ["create-client"],
-		mutationFn: createClient,
-		queryClient,
-		affectedQueryKey: ["clients-by-search"],
-	});
+	function handleSubmit() {
+		if (!state.client.nome.trim()) {
+			toast.error("Nome do cliente não informado.");
+			return;
+		}
+
+		handleCreateClient(
+			buildCreateClientInput({
+				client: state.client,
+				clientLocations: state.clientLocations
+					.filter((location) => !location.deletar)
+					.map((location) => ({
+						titulo: location.titulo,
+						localizacaoCep: location.localizacaoCep,
+						localizacaoEstado: location.localizacaoEstado,
+						localizacaoCidade: location.localizacaoCidade,
+						localizacaoBairro: location.localizacaoBairro,
+						localizacaoLogradouro: location.localizacaoLogradouro,
+						localizacaoNumero: location.localizacaoNumero,
+						localizacaoComplemento: location.localizacaoComplemento,
+						localizacaoLatitude: location.localizacaoLatitude,
+						localizacaoLongitude: location.localizacaoLongitude,
+					})),
+			}),
+		);
+	}
+
 	return (
-		<Dialog.Root open onOpenChange={closeModal}>
-			<Dialog.Overlay className="fixed inset-0 z-100 bg-primary/70 backdrop-blur-xs" />
-			<Dialog.Content className="fixed left-[50%] top-[50%] z-100 h-[90%] w-[90%] translate-x-[-50%] translate-y-[-50%] rounded-md bg-background p-[10px] lg:h-[60%] lg:w-[40%]">
-				<div className="flex h-full w-full flex-col">
-					<div className="flex flex-col items-center justify-between border-b border-gray-200 px-2 pb-2 text-lg lg:flex-row">
-						<h3 className="text-sm font-bold lg:text-xl">NOVO CLIENTE</h3>
-						<button
-							onClick={() => closeModal()}
-							type="button"
-							className="flex items-center justify-center rounded-lg p-1 duration-300 ease-linear hover:scale-105 hover:bg-red-200"
-						>
-							<VscChromeClose style={{ color: "red" }} />
-						</button>
-					</div>
-					<div className="scrollbar-thin scrollbar-track-primary/10 scrollbar-thumb-primary/30 flex h-full flex-col gap-y-2 overflow-y-auto overscroll-y-auto p-2 py-1">
-						<div className="flex w-full flex-col items-center gap-2 lg:flex-row">
-							<div className="w-full lg:w-1/2">
-								<TextInput
-									label="NOME DO CLIENTE"
-									placeholder="Digite o nome do cliente..."
-									value={infoHolder.nome}
-									handleChange={(value) => setInfoHolder((prev) => ({ ...prev, nome: value }))}
-									width="100%"
-								/>
-							</div>
-							<div className="w-full lg:w-1/2">
-								<TextInput
-									label="TELEFONE DO CLIENTE"
-									placeholder="Digite o nome do cliente..."
-									value={infoHolder.telefone || ""}
-									handleChange={(value) => setInfoHolder((prev) => ({ ...prev, telefone: formatToPhone(value) }))}
-									width="100%"
-								/>
-							</div>
-						</div>
-						<TextInput
-							label="EMAIL DO CLIENTE"
-							placeholder="Preencha aqui o email do cliente..."
-							value={infoHolder.email || ""}
-							handleChange={(value) => setInfoHolder((prev) => ({ ...prev, email: value }))}
-						/>
-						<SelectInput
-							label="CANAL DE AQUISIÇÃO"
-							value={infoHolder.canalAquisicao || null}
-							options={CustomersAcquisitionChannels}
-							handleChange={(value) => setInfoHolder((prev) => ({ ...prev, canalAquisicao: value }))}
-							onReset={() => setInfoHolder((prev) => ({ ...prev, canalAquisicao: null }))}
-							resetOptionLabel="NÃO DEFINIDO"
-							width="100%"
-						/>
-					</div>
-					<div className="mt-2 flex w-full items-center justify-end">
-						<LoadingButton
-							loading={isPending}
-							onClick={() =>
-								// @ts-ignore
-								handleCreateClient(infoHolder)
-							}
-							type="button"
-						>
-							CRIAR CLIENTE
-						</LoadingButton>
-					</div>
-				</div>
-			</Dialog.Content>
-		</Dialog.Root>
+		<ResponsiveMenu
+			menuTitle="NOVO CLIENTE"
+			menuDescription="Preencha os dados para cadastrar um novo cliente."
+			menuActionButtonText="CRIAR CLIENTE"
+			menuCancelButtonText="CANCELAR"
+			actionFunction={handleSubmit}
+			actionIsLoading={isPending}
+			stateIsLoading={false}
+			stateError={null}
+			closeMenu={closeModal}
+			dialogVariant="md"
+			drawerVariant="md"
+		>
+			<ClientGeneralBlock client={state.client} updateClient={updateClient} />
+			<ClientLocationsBlock
+				locations={state.clientLocations}
+				addClientLocation={addClientLocation}
+				updateClientLocation={updateClientLocation}
+				removeClientLocation={removeClientLocation}
+			/>
+		</ResponsiveMenu>
 	);
 }
 

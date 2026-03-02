@@ -3,9 +3,10 @@ import { getCurrentSessionUncached } from "@/lib/authentication/pages-session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { formatPhoneAsBase } from "@/lib/formatting";
 import { createSimplifiedEmailSearchCondition, createSimplifiedPhoneSearchCondition, createSimplifiedSearchCondition } from "@/lib/search";
-import { ClientSchema } from "@/schemas/clients";
+import { ClientLocationSchema, ClientSchema } from "@/schemas/clients";
 import { db } from "@/services/drizzle";
 import { clients, sales } from "@/services/drizzle/schema";
+import { clientLocations } from "@/services/drizzle/schema/clients";
 import { and, asc, count, desc, eq, gte, inArray, lte, max, min, notInArray, or, sql, sum } from "drizzle-orm";
 import createHttpError from "http-errors";
 import type { NextApiHandler } from "next";
@@ -275,6 +276,33 @@ type PostResponse = {
 	message: string;
 };
 
+const CreateClientEntityInputSchema = ClientSchema.extend({
+	dataInsercao: z.coerce.date({
+		required_error: "Data de inserção do cliente não informada.",
+		invalid_type_error: "Tipo não válido para data de inserção.",
+	}),
+	dataNascimento: z.coerce
+		.date({
+			invalid_type_error: "Tipo não válido para data de nascimento.",
+		})
+		.optional()
+		.nullable(),
+});
+
+const CreateClientInputSchema = z.object({
+	client: CreateClientEntityInputSchema,
+	clientLocations: z.array(
+		ClientLocationSchema.omit({
+			organizacaoId: true,
+			clienteId: true,
+			dataInsercao: true,
+		}),
+	),
+});
+
+export type TCreateClientInput = z.infer<typeof CreateClientInputSchema>;
+export type TCreateClientOutput = PostResponse;
+
 const createClientRoute: NextApiHandler<PostResponse> = async (req, res) => {
 	const sessionUser = await getCurrentSessionUncached(req.cookies);
 	if (!sessionUser) throw new createHttpError.Unauthorized("Você não está autenticado.");
@@ -282,18 +310,53 @@ const createClientRoute: NextApiHandler<PostResponse> = async (req, res) => {
 	const userOrgId = sessionUser.membership?.organizacao.id;
 	if (!userOrgId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
 
-	const client = ClientSchema.parse(req.body);
+	const input = CreateClientInputSchema.parse(req.body);
 
-	const insertResponse = await db
-		.insert(clients)
-		.values({
-			...client,
-			organizacaoId: userOrgId,
-			telefone: client.telefone ?? "",
-			telefoneBase: formatPhoneAsBase(client.telefone ?? ""),
-		})
-		.returning({ id: clients.id });
-	const insertedId = insertResponse[0]?.id;
+	const insertedId = await db.transaction(async (tx) => {
+		const firstLocation = input.clientLocations[0] ?? null;
+
+		const insertResponse = await tx
+			.insert(clients)
+			.values({
+				...input.client,
+				organizacaoId: userOrgId,
+				telefone: input.client.telefone ?? "",
+				telefoneBase: formatPhoneAsBase(input.client.telefone ?? ""),
+				localizacaoCep: firstLocation?.localizacaoCep ?? input.client.localizacaoCep,
+				localizacaoEstado: firstLocation?.localizacaoEstado ?? input.client.localizacaoEstado,
+				localizacaoCidade: firstLocation?.localizacaoCidade ?? input.client.localizacaoCidade,
+				localizacaoBairro: firstLocation?.localizacaoBairro ?? input.client.localizacaoBairro,
+				localizacaoLogradouro: firstLocation?.localizacaoLogradouro ?? input.client.localizacaoLogradouro,
+				localizacaoNumero: firstLocation?.localizacaoNumero ?? input.client.localizacaoNumero,
+				localizacaoComplemento: firstLocation?.localizacaoComplemento ?? input.client.localizacaoComplemento,
+			})
+			.returning({ id: clients.id });
+
+		const insertedClientId = insertResponse[0]?.id;
+		if (!insertedClientId) throw new createHttpError.InternalServerError("Oops, houve um erro desconhecido ao criar cliente.");
+
+		if (input.clientLocations.length > 0) {
+			await tx.insert(clientLocations).values(
+				input.clientLocations.map((location) => ({
+					organizacaoId: userOrgId,
+					clienteId: insertedClientId,
+					titulo: location.titulo,
+					localizacaoCep: location.localizacaoCep,
+					localizacaoEstado: location.localizacaoEstado,
+					localizacaoCidade: location.localizacaoCidade,
+					localizacaoBairro: location.localizacaoBairro,
+					localizacaoLogradouro: location.localizacaoLogradouro,
+					localizacaoNumero: location.localizacaoNumero,
+					localizacaoComplemento: location.localizacaoComplemento,
+					localizacaoLatitude: location.localizacaoLatitude,
+					localizacaoLongitude: location.localizacaoLongitude,
+				})),
+			);
+		}
+
+		return insertedClientId;
+	});
+
 	if (!insertedId) throw new createHttpError.InternalServerError("Oops, houve um erro desconhecido ao criar cliente.");
 
 	return res.status(201).json({ data: { insertedId }, message: "Cliente criado com sucesso." });

@@ -51,6 +51,7 @@ export const sales = newTable(
 		entregaLocalizacaoId: varchar("entrega_localizacao_id", { length: 255 }).references(() => clientLocations.id, { onDelete: "set null" }),
 		comandaNumero: text("comanda_numero"),
 		observacoes: text("observacoes"),
+		rascunhoMetadados: jsonb("rascunho_metadados"),
 
 		dataVenda: timestamp("data_venda"),
 		// Conversion Attribution fields

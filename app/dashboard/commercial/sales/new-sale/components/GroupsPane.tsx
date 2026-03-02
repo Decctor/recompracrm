@@ -29,29 +29,29 @@ export default function GroupsPane({ groups, selectedGroup, onGroupSelect, searc
 			</div>
 
 			{/* Groups List */}
-			<div className="flex-1 min-h-0">
-				<h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">Categorias</h3>
+			<div className="flex-1 min-h-0 flex flex-col gap-1.5">
+				<h3 className="w-full text-xs text-muted-foreground font-medium">CATEGORIAS</h3>
 				<ScrollArea className="h-full pr-4">
-					<div className="flex flex-col gap-2">
+					<div className="flex flex-col gap-3">
 						{/* All Products */}
 						<Button
-							variant={selectedGroup === null ? "default" : "ghost"}
+							variant={selectedGroup === null ? "brand" : "ghost"}
 							onClick={() => onGroupSelect(null)}
-							className={cn("justify-start h-auto py-3 px-4 rounded-xl font-bold text-left", selectedGroup === null && "shadow-md")}
+							className={cn("justify-start h-auto py-3 px-4 rounded-xl font-bold text-left text-xs", selectedGroup === null && "shadow-md")}
 							disabled={isLoading}
 						>
 							<Grid className="w-4 h-4 min-w-4 min-h-4 mr-2" />
-							Todos os Produtos
+							TODOS OS PRODUTOS
 						</Button>
 
 						{/* Individual Groups */}
 						{groups.map((group) => (
 							<Button
 								key={group}
-								variant={selectedGroup === group ? "default" : "ghost"}
+								variant={selectedGroup === group ? "brand" : "ghost"}
 								onClick={() => onGroupSelect(group)}
 								className={cn(
-									"justify-start h-auto py-3 px-4 rounded-xl font-bold text-left whitespace-normal",
+									"justify-start h-auto py-3 px-4 rounded-xl font-bold text-left whitespace-normal text-xs",
 									selectedGroup === group && "shadow-md",
 								)}
 								disabled={isLoading}
