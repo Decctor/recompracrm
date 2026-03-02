@@ -2,6 +2,7 @@ import TextInput from "@/components/Inputs/TextInput";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { formatToMoney } from "@/lib/formatting";
+import { useClientCashbackBalance } from "@/lib/queries/cashback-programs";
 import { cn } from "@/lib/utils";
 import type { TPaymentMethodEnum } from "@/schemas/enums";
 import type { TUseCheckoutState } from "@/state-hooks/use-checkout-state";
@@ -11,6 +12,7 @@ import { useState } from "react";
 type PaymentStepProps = {
 	sale: {
 		valorTotal: number;
+		clienteId: string | null;
 	};
 	checkoutState: TUseCheckoutState;
 };
@@ -28,6 +30,15 @@ export default function PaymentStep({ sale, checkoutState }: PaymentStepProps) {
 	const [selectedMethod, setSelectedMethod] = useState<TPaymentMethodEnum>("DINHEIRO");
 	const [paymentAmount, setPaymentAmount] = useState("");
 	const [installments, setInstallments] = useState(1);
+	const [cashbackInput, setCashbackInput] = useState("");
+
+	const { data: cashbackBalance, isLoading: isCashbackLoading } = useClientCashbackBalance({
+		clienteId: sale.clienteId,
+	});
+
+	const availableCashback = cashbackBalance?.saldoValorDisponivel ?? 0;
+	const valorRestanteSemCashback = checkoutState.valorRestante + checkoutState.state.cashbackResgate;
+	const maxCashbackResgate = Math.max(0, Math.min(availableCashback, valorRestanteSemCashback));
 
 	const handleAddPayment = () => {
 		const valor = Number(paymentAmount);
@@ -58,12 +69,56 @@ export default function PaymentStep({ sale, checkoutState }: PaymentStepProps) {
 		setInstallments(1);
 	};
 
+	const handleApplyCashback = () => {
+		const value = Number(cashbackInput);
+		if (!value || value <= 0) return;
+		if (value > maxCashbackResgate) return;
+
+		checkoutState.setCashbackResgate(value);
+		checkoutState.setCashbackProgramaId(cashbackBalance?.programaId ?? null);
+		setCashbackInput("");
+	};
+
+	const handleRemoveCashback = () => {
+		checkoutState.setCashbackResgate(0);
+		checkoutState.setCashbackProgramaId(null);
+	};
+
 	return (
 		<div className="flex flex-col gap-6">
 			<div>
 				<h2 className="text-lg font-black">Pagamento</h2>
 				<p className="text-sm text-muted-foreground">Adicione uma ou mais formas de pagamento.</p>
 			</div>
+
+			{sale.clienteId ? (
+				<div className="flex flex-col gap-3 rounded-xl border p-4">
+					<h3 className="font-bold text-sm uppercase tracking-wide text-muted-foreground">Resgate de Cashback</h3>
+					{isCashbackLoading ? <p className="text-sm text-muted-foreground">Carregando saldo de cashback...</p> : null}
+					{!isCashbackLoading ? (
+						<>
+							<p className="text-sm text-muted-foreground">Saldo disponível: {formatToMoney(availableCashback)}</p>
+							<div className="flex items-end gap-2">
+								<div className="flex-1">
+									<TextInput label="Valor do Resgate" placeholder="0,00" value={cashbackInput} handleChange={setCashbackInput} />
+								</div>
+								<Button type="button" onClick={handleApplyCashback} disabled={!cashbackInput || Number(cashbackInput) <= 0 || maxCashbackResgate <= 0}>
+									Usar Cashback
+								</Button>
+							</div>
+							<p className="text-xs text-muted-foreground">Máximo aplicável agora: {formatToMoney(maxCashbackResgate)}</p>
+							{checkoutState.state.cashbackResgate > 0 ? (
+								<div className="flex items-center justify-between rounded-lg border border-green-500/30 bg-green-500/10 px-3 py-2">
+									<p className="text-sm font-medium">Cashback aplicado: {formatToMoney(checkoutState.state.cashbackResgate)}</p>
+									<Button type="button" variant="ghost" size="sm" onClick={handleRemoveCashback}>
+										Remover
+									</Button>
+								</div>
+							) : null}
+						</>
+					) : null}
+				</div>
+			) : null}
 
 			{/* Payment Method Selector */}
 			<div className="flex flex-wrap gap-2">
@@ -76,10 +131,7 @@ export default function PaymentStep({ sale, checkoutState }: PaymentStepProps) {
 							key={method.value}
 							variant="outline"
 							size="sm"
-							className={cn(
-								"gap-2 rounded-lg",
-								isSelected && "border-primary bg-primary/5 ring-1 ring-primary",
-							)}
+							className={cn("gap-2 rounded-lg", isSelected && "border-primary bg-primary/5 ring-1 ring-primary")}
 							onClick={() => setSelectedMethod(method.value)}
 						>
 							<Icon className="w-4 h-4" />
@@ -134,12 +186,8 @@ export default function PaymentStep({ sale, checkoutState }: PaymentStepProps) {
 					{checkoutState.state.pagamentos.map((pagamento) => (
 						<div key={pagamento.id} className="flex items-center justify-between py-2 border-b last:border-b-0">
 							<div>
-								<p className="font-medium text-sm">
-									{PAYMENT_METHODS.find((m) => m.value === pagamento.metodo)?.label ?? pagamento.metodo}
-								</p>
-								{pagamento.totalParcelas && pagamento.totalParcelas > 1 && (
-									<p className="text-xs text-muted-foreground">{pagamento.totalParcelas}x</p>
-								)}
+								<p className="font-medium text-sm">{PAYMENT_METHODS.find((m) => m.value === pagamento.metodo)?.label ?? pagamento.metodo}</p>
+								{pagamento.totalParcelas && pagamento.totalParcelas > 1 && <p className="text-xs text-muted-foreground">{pagamento.totalParcelas}x</p>}
 							</div>
 							<div className="flex items-center gap-2">
 								<span className="font-bold">{formatToMoney(pagamento.valor)}</span>
@@ -163,6 +211,12 @@ export default function PaymentStep({ sale, checkoutState }: PaymentStepProps) {
 					<span className="text-muted-foreground">Valor da Venda</span>
 					<span className="font-bold">{formatToMoney(checkoutState.valorFinal)}</span>
 				</div>
+				{checkoutState.state.cashbackResgate > 0 ? (
+					<div className="flex justify-between text-sm">
+						<span className="text-muted-foreground">Cashback</span>
+						<span className="font-bold text-green-600">-{formatToMoney(checkoutState.state.cashbackResgate)}</span>
+					</div>
+				) : null}
 				<div className="flex justify-between text-sm">
 					<span className="text-muted-foreground">Total Pago</span>
 					<span className="font-bold">{formatToMoney(checkoutState.totalPagamentos)}</span>

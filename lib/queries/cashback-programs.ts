@@ -1,3 +1,4 @@
+import type { TGetClientCashbackBalanceOutput } from "@/app/api/cashback-programs/clients/balance/route";
 import type { TTopCashbackClientsInput, TTopCashbackClientsOutput } from "@/app/api/cashback-programs/clients/top/route";
 import type { TGetCashbackProgramOutput } from "@/app/api/cashback-programs/route";
 import type { TCashbackProgramsGraphInput, TCashbackProgramsGraphOutput } from "@/app/api/cashback-programs/stats/graph/route";
@@ -103,5 +104,24 @@ export function useCashbackProgramsGraph(params: TCashbackProgramsGraphInput) {
 			queryFn: () => fetchCashbackProgramsGraph(params),
 		}),
 		queryKey: ["cashback-programs-graph", params],
+	};
+}
+
+export async function fetchClientCashbackBalance(clienteId: string) {
+	const searchParams = new URLSearchParams();
+	searchParams.set("clienteId", clienteId);
+	const { data } = await axios.get<TGetClientCashbackBalanceOutput>(`/api/cashback-programs/clients/balance?${searchParams.toString()}`);
+	return data.data;
+}
+
+export function useClientCashbackBalance({ clienteId }: { clienteId: string | null | undefined }) {
+	const queryKey = ["client-cashback-balance", clienteId];
+	return {
+		...useQuery({
+			queryKey,
+			queryFn: () => fetchClientCashbackBalance(clienteId as string),
+			enabled: !!clienteId,
+		}),
+		queryKey,
 	};
 }

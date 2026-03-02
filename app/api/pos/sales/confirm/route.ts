@@ -13,6 +13,7 @@ import z from "zod";
 
 const ConfirmSaleInputSchema = z.object({
 	id: z.string({ required_error: "ID da venda não informado." }),
+	clienteId: z.string({ invalid_type_error: "Tipo não válido para ID do cliente." }).optional().nullable(),
 	pagamentos: z
 		.array(
 			z.object({
@@ -25,6 +26,8 @@ const ConfirmSaleInputSchema = z.object({
 			}),
 		)
 		.min(1, { message: "Pelo menos um pagamento é obrigatório." }),
+	cashbackResgate: z.number({ invalid_type_error: "Tipo não válido para resgate de cashback." }).default(0),
+	cashbackProgramaId: z.string({ invalid_type_error: "Tipo não válido para ID do programa de cashback." }).optional().nullable(),
 	contaDebitoId: z.string({ required_error: "Conta de débito não informada." }),
 	contaCreditoId: z.string({ required_error: "Conta de crédito não informada." }),
 });
@@ -46,9 +49,17 @@ async function confirmSale({ input, session }: { input: TConfirmSaleInput; sessi
 
 	const result = await processSaleConfirmation({
 		vendaId: input.id,
-		pagamentos: input.pagamentos,
+		pagamentos: input.pagamentos.map((pagamento) => ({
+			metodo: pagamento.metodo,
+			valor: pagamento.valor,
+			parcela: pagamento.parcela ?? undefined,
+			totalParcelas: pagamento.totalParcelas ?? undefined,
+		})),
 		autorId: session.user.id,
 		organizacao: organization,
+		clienteId: input.clienteId,
+		cashbackResgate: input.cashbackResgate,
+		cashbackProgramaId: input.cashbackProgramaId,
 		contaDebitoId: input.contaDebitoId,
 		contaCreditoId: input.contaCreditoId,
 	});

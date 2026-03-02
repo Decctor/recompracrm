@@ -5,7 +5,7 @@ import LoadingComponent from "@/components/Layouts/LoadingComponent";
 import { Button } from "@/components/ui/button";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { getErrorMessage } from "@/lib/errors";
-import { confirmSale, cancelSaleDraft, updateSaleDraft } from "@/lib/mutations/pos";
+import { cancelSaleDraft, confirmSale, updateSaleDraft } from "@/lib/mutations/pos";
 import { useSaleDraft } from "@/lib/queries/pos";
 import { useCheckoutState } from "@/state-hooks/use-checkout-state";
 import { useMutation } from "@tanstack/react-query";
@@ -55,6 +55,7 @@ export default function CheckoutPage({ user, membership, saleId }: CheckoutPageP
 				comandaNumero: sale.comandaNumero ?? null,
 				pagamentos: [],
 				cashbackResgate: 0,
+				cashbackProgramaId: null,
 			});
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
@@ -115,16 +116,20 @@ export default function CheckoutPage({ user, membership, saleId }: CheckoutPageP
 	};
 
 	const handleConfirm = () => {
+		if (!sale) return;
 		// TODO: contaDebitoId and contaCreditoId should come from org settings
 		// For now, these are required in the API but we'll need a config UI
 		confirm({
 			id: saleId,
+			clienteId: sale.cliente?.id ?? null,
 			pagamentos: checkoutState.state.pagamentos.map((p) => ({
 				metodo: p.metodo,
 				valor: p.valor,
 				parcela: p.parcela,
 				totalParcelas: p.totalParcelas,
 			})),
+			cashbackResgate: checkoutState.state.cashbackResgate,
+			cashbackProgramaId: checkoutState.state.cashbackProgramaId,
 			contaDebitoId: "TODO_CONTA_DEBITO",
 			contaCreditoId: "TODO_CONTA_CREDITO",
 		});
@@ -169,20 +174,16 @@ export default function CheckoutPage({ user, membership, saleId }: CheckoutPageP
 
 				{checkoutState.state.step === 2 && <DeliveryStep sale={sale} checkoutState={checkoutState} />}
 
-				{checkoutState.state.step === 3 && <PaymentStep sale={sale} checkoutState={checkoutState} />}
+				{checkoutState.state.step === 3 && (
+					<PaymentStep sale={{ valorTotal: sale.valorTotal, clienteId: sale.clienteId }} checkoutState={checkoutState} />
+				)}
 
 				{checkoutState.state.step === 4 && <ConfirmationStep sale={sale} checkoutState={checkoutState} />}
 			</div>
 
 			{/* Navigation Footer */}
 			<div className="max-w-4xl mx-auto w-full flex items-center justify-between gap-4 pt-4 border-t">
-				<Button
-					variant="outline"
-					size="lg"
-					onClick={() => checkoutState.prevStep()}
-					disabled={checkoutState.state.step === 1}
-					className="gap-2"
-				>
+				<Button variant="outline" size="lg" onClick={() => checkoutState.prevStep()} disabled={checkoutState.state.step === 1} className="gap-2">
 					<ChevronLeft className="w-4 h-4" />
 					Voltar
 				</Button>

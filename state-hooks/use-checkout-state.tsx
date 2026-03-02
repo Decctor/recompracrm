@@ -49,6 +49,7 @@ export const CheckoutStateSchema = z.object({
 	// Step 3: Payments
 	pagamentos: z.array(CheckoutPaymentSplitSchema).default([]),
 	cashbackResgate: z.number({ invalid_type_error: "Tipo não válido para resgate de cashback." }).default(0),
+	cashbackProgramaId: z.string({ invalid_type_error: "Tipo não válido para ID do programa de cashback." }).optional().nullable(),
 });
 
 export type TCheckoutPaymentSplit = z.infer<typeof CheckoutPaymentSplitSchema>;
@@ -77,6 +78,7 @@ export const useCheckoutState = ({ initialState, valorTotal }: UseCheckoutStateP
 		comandaNumero: initialState?.comandaNumero ?? null,
 		pagamentos: initialState?.pagamentos ?? [],
 		cashbackResgate: initialState?.cashbackResgate ?? 0,
+		cashbackProgramaId: initialState?.cashbackProgramaId ?? null,
 	});
 
 	// ===== STEP NAVIGATION =====
@@ -159,6 +161,10 @@ export const useCheckoutState = ({ initialState, valorTotal }: UseCheckoutStateP
 		setState((prev) => ({ ...prev, cashbackResgate }));
 	}, []);
 
+	const setCashbackProgramaId = useCallback((cashbackProgramaId: string | null) => {
+		setState((prev) => ({ ...prev, cashbackProgramaId }));
+	}, []);
+
 	// ===== COMPUTED VALUES =====
 
 	const computedValues = useMemo(() => {
@@ -223,6 +229,7 @@ export const useCheckoutState = ({ initialState, valorTotal }: UseCheckoutStateP
 		removePagamento,
 		updatePagamento,
 		setCashbackResgate,
+		setCashbackProgramaId,
 		// Computed
 		...computedValues,
 		// Validation

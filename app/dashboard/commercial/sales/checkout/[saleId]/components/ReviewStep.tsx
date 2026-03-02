@@ -1,6 +1,8 @@
+import SelectInput from "@/components/Inputs/SelectInput";
 import TextInput from "@/components/Inputs/TextInput";
 import { Separator } from "@/components/ui/separator";
 import { formatToMoney } from "@/lib/formatting";
+import { useSellersSimplified } from "@/lib/queries/sellers";
 import type { TUseCheckoutState } from "@/state-hooks/use-checkout-state";
 import { Package, User } from "lucide-react";
 
@@ -17,7 +19,7 @@ type ReviewStepProps = {
 			valorVendaTotalLiquido: number;
 			valorTotalDesconto: number;
 			produto: { id: string; descricao: string; codigo: string; imagemCapaUrl: string | null } | null;
-			produtoVariante: { id: string; nome: string; codigo: string; imagemCapaUrl: string | null } | null;
+			produtoVariante: { id: string; nome: string; codigo: string | null; imagemCapaUrl: string | null } | null;
 			adicionais: Array<{ id: string; nome: string; quantidade: number; valorTotal: number }>;
 		}>;
 	};
@@ -25,6 +27,20 @@ type ReviewStepProps = {
 };
 
 export default function ReviewStep({ sale, checkoutState }: ReviewStepProps) {
+	const { data: sellers } = useSellersSimplified();
+
+	const sellerOptions =
+		sellers?.map((seller) => ({
+			id: seller.id,
+			value: seller.id,
+			label: seller.nome,
+			startContent: seller.avatarUrl ? (
+				<img src={seller.avatarUrl} alt={seller.nome} className="mr-2 h-6 w-6 rounded-full object-cover" />
+			) : (
+				<div className="mr-2 h-6 w-6 rounded-full bg-muted" />
+			),
+		})) ?? [];
+
 	return (
 		<div className="flex flex-col gap-6">
 			{/* Client Info */}
@@ -45,6 +61,21 @@ export default function ReviewStep({ sale, checkoutState }: ReviewStepProps) {
 				)}
 			</div>
 
+			<div className="flex flex-col gap-3 p-4 rounded-xl border">
+				<h3 className="font-bold text-sm uppercase tracking-wide text-muted-foreground">Vendedor</h3>
+				<SelectInput
+					label="Selecione um vendedor"
+					options={sellerOptions}
+					value={checkoutState.state.vendedorId}
+					handleChange={(value) => {
+						const seller = sellers?.find((item) => item.id === value);
+						checkoutState.setVendedor(value, seller?.nome ?? null);
+					}}
+					onReset={() => checkoutState.setVendedor(null, null)}
+					resetOptionLabel="Selecione um vendedor"
+				/>
+			</div>
+
 			{/* Items */}
 			<div className="flex flex-col gap-3 p-4 rounded-xl border">
 				<div className="flex items-center gap-2">
@@ -57,15 +88,9 @@ export default function ReviewStep({ sale, checkoutState }: ReviewStepProps) {
 						<div key={item.id} className="flex items-center justify-between py-2 border-b last:border-b-0">
 							<div className="flex-1">
 								<p className="font-medium text-sm">
-									{item.produtoVariante
-										? `${item.produto?.descricao} - ${item.produtoVariante.nome}`
-										: item.produto?.descricao}
+									{item.produtoVariante ? `${item.produto?.descricao} - ${item.produtoVariante.nome}` : item.produto?.descricao}
 								</p>
-								{item.adicionais.length > 0 && (
-									<p className="text-xs text-muted-foreground">
-										+ {item.adicionais.map((a) => a.nome).join(", ")}
-									</p>
-								)}
+								{item.adicionais.length > 0 && <p className="text-xs text-muted-foreground">+ {item.adicionais.map((a) => a.nome).join(", ")}</p>}
 								<p className="text-xs text-muted-foreground">
 									{item.quantidade}x {formatToMoney(item.valorVendaUnitario)}
 								</p>

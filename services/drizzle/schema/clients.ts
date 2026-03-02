@@ -59,13 +59,6 @@ export const clients = newTable(
 		rfmTituloIdx: index("idx_clients_rfm_titulo").on(table.analiseRFMTitulo),
 	}),
 );
-export const clientsRelations = relations(clients, ({ one, many }) => ({
-	compras: many(sales),
-	saldos: many(cashbackProgramBalances),
-	transacoesCashback: many(cashbackProgramTransactions),
-}));
-export type TClientEntity = typeof clients.$inferSelect;
-export type TNewClientEntity = typeof clients.$inferInsert;
 
 export const clientLocations = newTable(
 	"client_locations",
@@ -92,3 +85,25 @@ export const clientLocations = newTable(
 		organizacaoIdIdx: index("idx_client_locations_organizacao_id").on(table.organizacaoId),
 	}),
 );
+
+export const clientsRelations = relations(clients, ({ many }) => ({
+	compras: many(sales),
+	saldos: many(cashbackProgramBalances),
+	transacoesCashback: many(cashbackProgramTransactions),
+	clientLocations: many(clientLocations),
+}));
+export type TClientEntity = typeof clients.$inferSelect;
+export type TNewClientEntity = typeof clients.$inferInsert;
+
+export const clientLocationsRelations = relations(clientLocations, ({ one }) => ({
+	cliente: one(clients, {
+		fields: [clientLocations.clienteId],
+		references: [clients.id],
+	}),
+	organizacao: one(organizations, {
+		fields: [clientLocations.organizacaoId],
+		references: [organizations.id],
+	}),
+}));
+export type TClientLocationEntity = typeof clientLocations.$inferSelect;
+export type TNewClientLocationEntity = typeof clientLocations.$inferInsert;
