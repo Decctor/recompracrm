@@ -18,5 +18,5 @@ export default async function NewSale() {
 	const organizationCashbackProgram = await db.query.cashbackPrograms.findFirst({
 		where: (fields, { eq }) => eq(fields.organizacaoId, organizationId),
 	});
-	return <NewSalePage organizationId={organizationId} organizationCashbackProgram={organizationCashbackProgram ?? null} />;
+	return <NewSalePage organizationCashbackProgram={organizationCashbackProgram ?? null} />;
 }

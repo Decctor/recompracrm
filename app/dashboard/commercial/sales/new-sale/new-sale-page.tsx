@@ -1,6 +1,5 @@
 "use client";
 
-import ErrorComponent from "@/components/Layouts/ErrorComponent";
 import LoadingComponent from "@/components/Layouts/LoadingComponent";
 import { Button } from "@/components/ui/button";
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle, DrawerTrigger } from "@/components/ui/drawer";
@@ -12,13 +11,14 @@ import type { TGetPOSProductsOutput } from "@/pages/api/pos/products";
 import type { TCashbackProgramEntity } from "@/services/drizzle/schema";
 import { type TUseSaleState, getDefaultSaleState, useSaleState } from "@/state-hooks/use-sale-state";
 import { useMutation } from "@tanstack/react-query";
-import { Check, ChevronLeft, ChevronRight, ShoppingCart } from "lucide-react";
+import { Check, ShoppingCart } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import CartPane from "./components/CartPane";
-import GroupsPane from "./components/GroupsPane";
+import CheckoutPanel from "./components/CheckoutPanel";
+import CompositionPanel from "./components/CompositionPanel";
 import ProductBuilderModal from "./components/ProductBuilderModal";
-import ProductCard from "./components/ProductCard";
+import PaginationBlock from "./components/composition/PaginationBlock";
+import ProductsGridBlock from "./components/composition/ProductsGridBlock";
 
 function mapItemsToApi(saleState: TUseSaleState) {
 	return saleState.state.itens.map((item) => ({
@@ -37,10 +37,9 @@ function mapItemsToApi(saleState: TUseSaleState) {
 }
 
 type NewSalePageProps = {
-	organizationId: string;
 	organizationCashbackProgram: TCashbackProgramEntity | null;
 };
-export default function NewSalePage({ organizationId, organizationCashbackProgram }: NewSalePageProps) {
+export default function NewSalePage({ organizationCashbackProgram }: NewSalePageProps) {
 	const isMobile = useIsMobile();
 	const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
 	const [searchValue, setSearchValue] = useState("");
@@ -221,7 +220,7 @@ export default function NewSalePage({ organizationId, organizationCashbackProgra
 				{groupsLoading ? (
 					<LoadingComponent />
 				) : (
-					<GroupsPane
+					<CompositionPanel
 						groups={groupsData?.groups ?? []}
 						selectedGroup={selectedGroup}
 						onGroupSelect={handleGroupSelect}
@@ -234,7 +233,7 @@ export default function NewSalePage({ organizationId, organizationCashbackProgra
 
 			<div className="flex-1 min-w-0 flex flex-col gap-4 overflow-y-auto pr-1 pb-20 lg:pb-0">
 				<div className="lg:hidden shrink-0">
-					<GroupsPane
+					<CompositionPanel
 						groups={groupsData?.groups ?? []}
 						selectedGroup={selectedGroup}
 						onGroupSelect={handleGroupSelect}
@@ -244,48 +243,27 @@ export default function NewSalePage({ organizationId, organizationCashbackProgra
 					/>
 				</div>
 
-				{productsLoading ? <LoadingComponent /> : null}
-				{productsError ? <ErrorComponent msg={getErrorMessage(productsErrorData)} /> : null}
-				{productsData && productsData.products.length > 0 ? (
-					<div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 pb-4">
-						{productsData.products.map((product) => (
-							<ProductCard key={product.id} product={product} onClick={() => handleProductClick(product)} />
-						))}
-					</div>
-				) : !productsLoading && !productsError ? (
-					<div className="w-full h-full flex items-center justify-center rounded-xl border border-dashed p-6 text-sm text-muted-foreground">
-						Nenhum produto encontrado para os filtros atuais.
-					</div>
-				) : null}
+				<ProductsGridBlock
+					productsData={productsData}
+					isLoading={productsLoading}
+					isError={productsError}
+					error={productsErrorData}
+					onProductClick={handleProductClick}
+				/>
 
-				{productsData && productsData.totalPages > 1 ? (
-					<div className="flex items-center justify-between gap-4 shrink-0 pb-4">
-						<Button
-							variant="outline"
-							size="sm"
-							onClick={() => updateFilters({ page: Math.max(1, filters.page - 1) })}
-							disabled={filters.page <= 1 || productsLoading}
-						>
-							<ChevronLeft className="w-4 h-4 mr-1" /> Anterior
-						</Button>
-						<span className="text-sm text-muted-foreground">
-							Página {productsData.currentPage} de {productsData.totalPages}
-						</span>
-						<Button
-							variant="outline"
-							size="sm"
-							onClick={() => updateFilters({ page: Math.min(productsData.totalPages, filters.page + 1) })}
-							disabled={filters.page >= productsData.totalPages || productsLoading}
-						>
-							Próxima <ChevronRight className="w-4 h-4 ml-1" />
-						</Button>
-					</div>
+				{productsData ? (
+					<PaginationBlock
+						currentPage={productsData.currentPage}
+						totalPages={productsData.totalPages}
+						isLoading={productsLoading}
+						onPrevious={() => updateFilters({ page: Math.max(1, filters.page - 1) })}
+						onNext={() => updateFilters({ page: Math.min(productsData.totalPages, filters.page + 1) })}
+					/>
 				) : null}
 			</div>
 
-			<div className="hidden lg:block w-[420px] shrink-0 overflow-y-auto">
-				<CartPane
-					organizationId={organizationId}
+			<div className="hidden lg:block w-[420px] shrink-0 overflow-y-auto scrollbar-thin scrollbar-track-primary/10 scrollbar-thumb-primary/30">
+				<CheckoutPanel
 					organizationCashbackProgram={organizationCashbackProgram}
 					saleState={saleState}
 					onCreateDraft={handleCreateDraft}
@@ -309,8 +287,7 @@ export default function NewSalePage({ organizationId, organizationCashbackProgra
 								<DrawerDescription>Finalize ou salve como orçamento.</DrawerDescription>
 							</DrawerHeader>
 							<div className="overflow-y-auto pb-4">
-								<CartPane
-									organizationId={organizationId}
+								<CheckoutPanel
 									organizationCashbackProgram={organizationCashbackProgram}
 									saleState={saleState}
 									onCreateDraft={handleCreateDraft}

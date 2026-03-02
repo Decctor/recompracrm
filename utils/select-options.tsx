@@ -5,27 +5,37 @@ import type {
 	TCashbackProgramRedemptionLimitTypeEnum,
 	TCommunityCourseStatusEnum,
 	TCommunityLessonContentTypeEnum,
+	TDeliveryModeEnum,
 	TInteractionsCronJobTimeBlocksEnum,
 	TInternalLeadActivityTypeEnum,
+	TPaymentMethodEnum,
 	TRecurrenceFrequencyEnum,
 	TTimeDurationUnitsEnum,
 } from "@/schemas/enums";
 import type { TInternalLeadOriginEnum, TInternalLeadStatusCRMEnum } from "@/schemas/enums";
 import {
 	Archive,
+	Banknote,
+	ClipboardIcon,
 	Clock,
+	CreditCard,
 	FileIcon,
 	FileText,
 	Globe,
 	Mail,
+	MapPin,
 	MessageSquare,
 	Minus,
+	Package,
 	Percent,
 	Phone,
+	QrCode,
+	Store,
 	Target,
 	TrendingDown,
 	TrendingUp,
 	Video,
+	Wallet,
 } from "lucide-react";
 
 export const InternalActivityTypeOptions: { id: number; label: string; value: TInternalLeadActivityTypeEnum; icon: React.ReactNode }[] = [
@@ -237,6 +247,22 @@ export const CashbackProgramAccumulationTypeOptions: { id: number; label: string
 export const CashbackProgramRedemptionLimitTypeOptions: { id: number; label: string; value: TCashbackProgramRedemptionLimitTypeEnum }[] = [
 	{ id: 1, label: "FIXO", value: "FIXO" },
 	{ id: 2, label: "PERCENTUAL", value: "PERCENTUAL" },
+];
+
+export const SaleFullfilmentModesOptions: { id: number; label: string; value: TDeliveryModeEnum; icon: React.ReactNode }[] = [
+	{ id: 1, label: "PRESENCIAL", value: "PRESENCIAL", icon: <Store className="w-4 h-4" /> },
+	{ id: 2, label: "RETIRADA", value: "RETIRADA", icon: <Package className="w-4 h-4" /> },
+	{ id: 3, label: "ENTREGA", value: "ENTREGA", icon: <MapPin className="w-4 h-4" /> },
+	{ id: 4, label: "COMANDA", value: "COMANDA", icon: <ClipboardIcon className="w-4 h-4" /> },
+];
+
+export const SalePaymentMethodsOptions: { id: number; label: string; value: TPaymentMethodEnum; icon: React.ReactNode }[] = [
+	{ id: 1, label: "DINHEIRO", value: "DINHEIRO", icon: <Banknote className="w-4 h-4" /> },
+	{ id: 2, label: "PIX", value: "PIX", icon: <QrCode className="w-4 h-4" /> },
+	{ id: 3, label: "CARTÃO DE CRÉDITO", value: "CARTAO_CREDITO", icon: <CreditCard className="w-4 h-4" /> },
+	{ id: 4, label: "CARTÃO DE DÉBITO", value: "CARTAO_DEBITO", icon: <CreditCard className="w-4 h-4" /> },
+	{ id: 5, label: "TRANSFERÊNCIA", value: "TRANSFERENCIA", icon: <Wallet className="w-4 h-4" /> },
+	{ id: 6, label: "OUTRO", value: "OUTRO", icon: <Wallet className="w-4 h-4" /> },
 ];
 
 export const UnitsOfMeasurementOptions: { id: number; label: string; value: string }[] = [

@@ -1,7 +1,40 @@
 import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import type { TUseSaleState } from "@/state-hooks/use-sale-state";
+import { Minus, Plus, ShoppingCart, Trash2 } from "lucide-react";
+
 import { formatToMoney } from "@/lib/formatting";
 import type { TCartItem } from "@/state-hooks/use-sale-state";
-import { Minus, Plus, Trash2 } from "lucide-react";
+
+type ItemsSectionProps = {
+	saleState: TUseSaleState;
+};
+
+export default function ItemsSection({ saleState }: ItemsSectionProps) {
+	return (
+		<div className="bg-card border-primary/20 flex w-full flex-col gap-3 rounded-xl border px-3 py-3 shadow-2xs">
+			<div className="flex items-center justify-between">
+				<div className="flex items-center gap-1.5">
+					<ShoppingCart className="w-4 h-4 text-primary" />
+					<h3 className="font-bold text-xs tracking-wide">ITENS</h3>
+				</div>
+				{saleState.state.itens.length > 0 ? (
+					<Button type="button" variant="ghost" size="sm" className="gap-1 text-destructive" onClick={saleState.clearCart}>
+						<Trash2 className="w-3 h-3" /> LIMPAR
+					</Button>
+				) : null}
+			</div>
+			<ScrollArea className="max-h-[200px]">
+				<div className="flex flex-col gap-2 pr-3">
+					{saleState.state.itens.map((item) => (
+						<CartItemRow key={item.tempId} item={item} onUpdateQuantity={saleState.updateItemQuantity} onRemove={saleState.removeItem} />
+					))}
+					{saleState.state.itens.length === 0 ? <p className="text-xs text-muted-foreground">Nenhum item no carrinho.</p> : null}
+				</div>
+			</ScrollArea>
+		</div>
+	);
+}
 
 type CartItemRowProps = {
 	item: TCartItem;
@@ -9,7 +42,7 @@ type CartItemRowProps = {
 	onRemove: (tempId: string) => void;
 };
 
-export default function CartItemRow({ item, onUpdateQuantity, onRemove }: CartItemRowProps) {
+function CartItemRow({ item, onUpdateQuantity, onRemove }: CartItemRowProps) {
 	return (
 		<div className="flex flex-col gap-2 p-3 rounded-xl border bg-card">
 			{/* Item Header */}
