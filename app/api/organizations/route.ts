@@ -6,7 +6,7 @@ import {
 	FREE_TRIAL_DURATION_DAYS,
 } from "@/config";
 import { notifyInternalsOnNewOrganization } from "@/config/internal-coms";
-import { RecompraCRMDefaultCampaigns, getOrganizationNicheByValue } from "@/config/onboarding";
+import { RecompraCRMDefaultCampaigns, getOrganizationNicheByValue, welcomeOrganizationOwnerOnOnboarding } from "@/config/onboarding";
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
@@ -217,6 +217,11 @@ async function createOrganization({ input, session }: { input: TCreateOrganizati
 			},
 			subscription: "FREE-TRIAL",
 		}).catch((err) => console.error("[WARN] [CREATE_ORGANIZATION] Falha ao notificar fundadores:", err));
+
+		void welcomeOrganizationOwnerOnOnboarding({ orgOwner: sessionUser }).catch((err) =>
+			console.error("[WARN] [CREATE_ORGANIZATION] Falha ao enviar boas-vindas ao dono da organização:", err),
+		);
+
 		return {
 			data: {
 				insertedId: insertedOrgId,
@@ -302,6 +307,11 @@ async function createOrganization({ input, session }: { input: TCreateOrganizati
 		},
 		subscription: `${planName}-${modalityName}`,
 	}).catch((err) => console.error("[WARN] [CREATE_ORGANIZATION] Falha ao notificar fundadores:", err));
+
+	void welcomeOrganizationOwnerOnOnboarding({ orgOwner: sessionUser }).catch((err) =>
+		console.error("[WARN] [CREATE_ORGANIZATION] Falha ao enviar boas-vindas ao dono da organização:", err),
+	);
+
 	return {
 		data: {
 			insertedId: insertedOrgId,

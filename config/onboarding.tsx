@@ -1,3 +1,5 @@
+import type { TAuthUserSession } from "@/lib/authentication/types";
+import { sendMessage } from "@/lib/whatsapp/internal-gateway";
 import type { TNewCampaignEntity, TNewCampaignSegmentationEntity, TNewCashbackProgramEntity } from "@/services/drizzle/schema";
 import {
 	Baby,
@@ -844,3 +846,25 @@ export const OrganizationOriginOptions = [
 		renderIcon: (className?: string) => <HelpCircle className={className} />,
 	},
 ];
+
+const APP_NAME = "RecompraCRM";
+
+const WELCOME_ORGANIZATION_OWNER_MESSAGE_TEMPLATE = (ownerName: string) =>
+	`Olá, ${ownerName}! Tudo bem? 👋
+
+Que legal ver que você iniciou o onboarding aqui no ${APP_NAME}! 🎉
+
+Estou passando só para dar as boas-vindas e dizer que este é nosso canal direto. 💬 Se você tiver qualquer dúvida nessa etapa inicial, ou precisar de uma mãozinha para configurar algo, é só me chamar por aqui, combinado? 🤝
+
+Um abraço e ótima jornada com a gente! 🚀`;
+
+type TWelcomeOrganizationOwnerOnOnboardingParams = {
+	orgOwner: TAuthUserSession["user"];
+};
+
+export async function welcomeOrganizationOwnerOnOnboarding({ orgOwner }: TWelcomeOrganizationOwnerOnOnboardingParams) {
+	if (!orgOwner.telefone) return;
+	const sessionId = process.env.INTERNAL_WHATSAPP_GATEWAY_SESSION_COMS as string;
+	const text = WELCOME_ORGANIZATION_OWNER_MESSAGE_TEMPLATE(orgOwner.nome);
+	await sendMessage(sessionId, orgOwner.telefone, { type: "text", text });
+}
