@@ -48,25 +48,40 @@ export function useCashbackProgramStats(period: { after: string; before: string 
 	};
 }
 
-async function fetchCashbackProgramTransactions(params: TCashbackProgramTransactionsInput) {
+async function fetchCashbackProgramTransactionsByClientId(input: TCashbackProgramTransactionsInput) {
+	const { data } = await axios.post<TCashbackProgramTransactionsOutput>("/api/cashback-programs/transactions", input);
+	if (!data.data.byClientId) throw new Error("Transações não encontradas.");
+	return data.data.byClientId;
+}
+
+export function useCashbackProgramTransactionsByClientId(input: TCashbackProgramTransactionsInput) {
+	return {
+		...useQuery({
+			queryKey: ["cashback-program-transactions-by-client-id", input],
+			queryFn: () => fetchCashbackProgramTransactionsByClientId(input),
+		}),
+		queryKey: ["cashback-program-transactions-by-client-id", input],
+	};
+}
+
+async function fetchCashbackProgramTransactions(input: Omit<TCashbackProgramTransactionsInput, "clientId">) {
 	try {
-		const { data } = await axios.post<TCashbackProgramTransactionsOutput>("/api/cashback-programs/transactions", params);
-		const result = params.clientId ? data.data.byClientId : data.data.default;
-		if (!result) throw new Error("Transações não encontradas.");
-		return result;
+		const { data } = await axios.post<TCashbackProgramTransactionsOutput>("/api/cashback-programs/transactions", input);
+		if (!data.data.default) throw new Error("Transações não encontradas.");
+		return data.data.default;
 	} catch (error) {
 		console.log("Error running fetchCashbackProgramTransactions", error);
 		throw error;
 	}
 }
 
-export function useCashbackProgramTransactions(params: TCashbackProgramTransactionsInput) {
+export function useCashbackProgramTransactions(input: Omit<TCashbackProgramTransactionsInput, "clientId">) {
 	return {
 		...useQuery({
-			queryKey: ["cashback-program-transactions", params],
-			queryFn: () => fetchCashbackProgramTransactions(params),
+			queryKey: ["cashback-program-transactions", input],
+			queryFn: () => fetchCashbackProgramTransactions(input),
 		}),
-		queryKey: ["cashback-program-transactions", params],
+		queryKey: ["cashback-program-transactions", input],
 	};
 }
 

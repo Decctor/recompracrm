@@ -139,6 +139,13 @@
 		width: 8px;
 		height: 8px;
 	}
+	.scrollbar-thinner {
+		scrollbar-width: thin;
+	}
+	.scrollbar-thinner::-webkit-scrollbar {
+		width: 4px;
+		height: 4px;
+	}
 	/* Hide scrollbar arrow buttons */
 	.scrollbar-thin::-webkit-scrollbar-button {
 		display: none;

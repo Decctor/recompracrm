@@ -1,5 +1,5 @@
 "use client";
-import ClientMain from "@/components/Clients/ClientMain";
+import ClientMain from "@/components/Clients/ClientDetails/ClientDetailsMain";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 
 type ClientPageProps = {
