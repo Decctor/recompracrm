@@ -14,9 +14,11 @@ export default async function NewSale() {
 	if (!sessionUser) redirect("/auth/signin");
 	if (!sessionUser.membership) redirect("/onboarding");
 
-	const organizationId = sessionUser.membership.organizacao.id;
-	const organizationCashbackProgram = await db.query.cashbackPrograms.findFirst({
-		where: (fields, { eq }) => eq(fields.organizacaoId, organizationId),
-	});
-	return <NewSalePage organizationCashbackProgram={organizationCashbackProgram ?? null} />;
+	return redirect("/dashboard/commercial");
+	// DISABLED FOR NOW
+	// const organizationId = sessionUser.membership.organizacao.id;
+	// const organizationCashbackProgram = await db.query.cashbackPrograms.findFirst({
+	// 	where: (fields, { eq }) => eq(fields.organizacaoId, organizationId),
+	// });
+	// return <NewSalePage organizationCashbackProgram={organizationCashbackProgram ?? null} />;
 }
