@@ -9,10 +9,9 @@ import type { TAuthUserSession } from "@/lib/authentication/types";
 import { formatDateAsLocale } from "@/lib/formatting";
 import { useUsers } from "@/lib/queries/users";
 import type { TSaleStatsGeneralQueryParams } from "@/schemas/query-params-utils";
-import type { TUserSession } from "@/schemas/users";
 import dayjs from "dayjs";
 import { GitCompare, ListFilter, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 const initialPeriodStart = dayjs().startOf("month").toISOString();
 const initialPeriodEnd = dayjs().endOf("day").toISOString();
@@ -42,6 +41,7 @@ export function DashboardPage({ user, userOrg, membership }: DashboardPageProps)
 	function updateGeneralQueryParams(newParams: Partial<TSaleStatsGeneralQueryParams>) {
 		setGeneralQueryParams((prevParams) => ({ ...prevParams, ...newParams }));
 	}
+
 	return (
 		<div className="w-full h-full flex flex-col gap-3">
 			<div className="w-full flex items-center justify-end gap-2">
