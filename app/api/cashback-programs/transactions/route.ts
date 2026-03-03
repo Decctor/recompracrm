@@ -14,6 +14,13 @@ const CashbackProgramTransactionsInputSchema = z.object({
 	period: PeriodQueryParamSchema.optional(),
 	page: z.number().int().positive().default(1),
 	limit: z.number().int().positive().default(10),
+	clientId: z
+		.string({
+			required_error: "ID do cliente não informado.",
+			invalid_type_error: "Tipo não válido para ID do cliente.",
+		})
+		.optional()
+		.nullable(),
 	type: z.enum(["ACÚMULO", "RESGATE", "EXPIRAÇÃO"]).optional(),
 });
 export type TCashbackProgramTransactionsInput = z.infer<typeof CashbackProgramTransactionsInputSchema>;
@@ -23,6 +30,7 @@ type TTransaction = {
 	tipo: "ACÚMULO" | "RESGATE" | "EXPIRAÇÃO" | "CANCELAMENTO";
 	status: "ATIVO" | "CONSUMIDO" | "EXPIRADO";
 	valor: number;
+	saldoValorPosterior: number;
 	dataInsercao: Date;
 	expiracaoData: Date | null;
 	cliente: {
@@ -45,15 +53,16 @@ type TTransaction = {
 	} | null;
 };
 
+type TTransactionsResult = {
+	transactions: TTransaction[];
+	transactionsMatched: number;
+	totalPages: number;
+};
+
 type GetResponse = {
 	data: {
-		transactions: TTransaction[];
-		pagination: {
-			total: number;
-			page: number;
-			limit: number;
-			totalPages: number;
-		};
+		default: TTransactionsResult | null;
+		byClientId: TTransactionsResult | null;
 	};
 };
 
@@ -79,6 +88,10 @@ async function getCashbackProgramTransactions({
 
 	if (input.type) {
 		conditions.push(eq(cashbackProgramTransactions.tipo, input.type));
+	}
+
+	if (input.clientId) {
+		conditions.push(eq(cashbackProgramTransactions.clienteId, input.clientId));
 	}
 
 	// Get total count
@@ -129,51 +142,64 @@ async function getCashbackProgramTransactions({
 		},
 	});
 
+	const payload: TTransactionsResult = {
+		transactions: transactions.map((t) => ({
+			id: t.id,
+			tipo: t.tipo,
+			status: t.status,
+			valor: t.valor,
+			saldoValorPosterior: t.saldoValorPosterior,
+			dataInsercao: t.dataInsercao,
+			expiracaoData: t.expiracaoData,
+			cliente: {
+				id: t.cliente.id,
+				nome: t.cliente.nome,
+			},
+			venda: t.venda
+				? {
+						id: t.venda.id,
+						valorTotal: Number(t.venda.valorTotal),
+						canal: t.venda.canal,
+						entregaModalidade: t.venda.entregaModalidade,
+						vendedor: t.venda.vendedor
+							? {
+									id: t.venda.vendedor.id,
+									nome: t.venda.vendedor.nome,
+							  }
+							: null,
+						parceiro: t.venda.parceiro
+							? {
+									id: t.venda.parceiro.id,
+									nome: t.venda.parceiro.nome,
+							  }
+							: null,
+				  }
+				: null,
+		})),
+		transactionsMatched: total,
+		totalPages,
+	};
+
+	if (input.clientId) {
+		return {
+			data: {
+				default: null,
+				byClientId: payload,
+			},
+		};
+	}
+
 	return {
 		data: {
-			transactions: transactions.map((t) => ({
-				id: t.id,
-				tipo: t.tipo,
-				status: t.status,
-				valor: t.valor,
-				dataInsercao: t.dataInsercao,
-				expiracaoData: t.expiracaoData,
-				cliente: {
-					id: t.cliente.id,
-					nome: t.cliente.nome,
-				},
-				venda: t.venda
-					? {
-							id: t.venda.id,
-							valorTotal: Number(t.venda.valorTotal),
-							canal: t.venda.canal,
-							entregaModalidade: t.venda.entregaModalidade,
-							vendedor: t.venda.vendedor
-								? {
-										id: t.venda.vendedor.id,
-										nome: t.venda.vendedor.nome,
-								  }
-								: null,
-							parceiro: t.venda.parceiro
-								? {
-										id: t.venda.parceiro.id,
-										nome: t.venda.parceiro.nome,
-								  }
-								: null,
-						}
-					: null,
-			})),
-			pagination: {
-				total,
-				page: input.page,
-				limit: input.limit,
-				totalPages,
-			},
+			default: payload,
+			byClientId: null,
 		},
 	};
 }
 
 export type TCashbackProgramTransactionsOutput = Awaited<ReturnType<typeof getCashbackProgramTransactions>>;
+export type TCashbackProgramTransactionsOutputDefault = NonNullable<TCashbackProgramTransactionsOutput["data"]["default"]>;
+export type TCashbackProgramTransactionsOutputByClientId = NonNullable<TCashbackProgramTransactionsOutput["data"]["byClientId"]>;
 
 const getCashbackProgramTransactionsRoute = async (request: NextRequest) => {
 	const session = await getCurrentSessionUncached();

@@ -19,6 +19,7 @@ import StatUnitCard from "../Stats/StatUnitCard";
 import GeneralPaginationComponent from "../Utils/Pagination";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
+import ClientCashback from "./ClientCashback";
 import ClientPurchasesFilterMenu from "./ClientPurchasesFilterMenu";
 
 type ClientMainProps = {
@@ -140,26 +141,33 @@ export default function ClientMain({ id, user }: ClientMainProps) {
 							/>
 						</div>
 					</div>
-					<div className="bg-card border-primary/20 flex w-full flex-col gap-3 rounded-xl border px-4 py-4 shadow-2xs">
-						<div className="flex w-full items-center justify-between gap-2">
-							<h1 className="text-sm font-bold tracking-tight uppercase">Compras do Cliente</h1>
-							<Button className="flex items-center gap-2" size="sm" onClick={() => setPurchasesFilterMenuIsOpen(true)}>
-								<ListFilter className="w-4 h-4 min-w-4 min-h-4" />
-								FILTROS
-							</Button>
+					<div className="flex w-full flex-col gap-2 xl:flex-row xl:items-stretch">
+						<div className="w-full xl:w-2/3">
+							<div className="bg-card border-primary/20 flex w-full flex-col gap-3 rounded-xl border px-4 py-4 shadow-2xs">
+								<div className="flex w-full items-center justify-between gap-2">
+									<h1 className="text-sm font-bold tracking-tight uppercase">Compras do Cliente</h1>
+									<Button className="flex items-center gap-2" size="sm" onClick={() => setPurchasesFilterMenuIsOpen(true)}>
+										<ListFilter className="w-4 h-4 min-w-4 min-h-4" />
+										FILTROS
+									</Button>
+								</div>
+								<GeneralPaginationComponent
+									activePage={purchasesParams.page}
+									queryLoading={isPurchasesLoading}
+									selectPage={(page) => updatePurchasesParams({ page })}
+									totalPages={purchasesTotalPages}
+									itemsMatchedText={purchasesMatched > 1 ? `${purchasesMatched} compras encontradas.` : `${purchasesMatched} compra encontrada.`}
+									itemsShowingText={purchasesShowing > 1 ? `Mostrando ${purchasesShowing} compras.` : `Mostrando ${purchasesShowing} compra.`}
+								/>
+								{isPurchasesLoading ? <LoadingComponent /> : null}
+								{isPurchasesError ? <ErrorComponent msg={getErrorMessage(purchasesError)} /> : null}
+								{isPurchasesSuccess && purchases.length > 0 ? purchases.map((sale) => <ClientPurchaseCard key={sale.id} sale={sale} />) : null}
+								{isPurchasesSuccess && purchases.length === 0 ? <p className="w-full tracking-tight text-center">Nenhuma compra encontrada.</p> : null}
+							</div>
 						</div>
-						<GeneralPaginationComponent
-							activePage={purchasesParams.page}
-							queryLoading={isPurchasesLoading}
-							selectPage={(page) => updatePurchasesParams({ page })}
-							totalPages={purchasesTotalPages}
-							itemsMatchedText={purchasesMatched > 1 ? `${purchasesMatched} compras encontradas.` : `${purchasesMatched} compra encontrada.`}
-							itemsShowingText={purchasesShowing > 1 ? `Mostrando ${purchasesShowing} compras.` : `Mostrando ${purchasesShowing} compra.`}
-						/>
-						{isPurchasesLoading ? <LoadingComponent /> : null}
-						{isPurchasesError ? <ErrorComponent msg={getErrorMessage(purchasesError)} /> : null}
-						{isPurchasesSuccess && purchases.length > 0 ? purchases.map((sale) => <ClientPurchaseCard key={sale.id} sale={sale} />) : null}
-						{isPurchasesSuccess && purchases.length === 0 ? <p className="w-full tracking-tight text-center">Nenhuma compra encontrada.</p> : null}
+						<div className="w-full xl:w-1/3">
+							<ClientCashback clientId={id} />
+						</div>
 					</div>
 					<div className="flex w-full flex-col lg:flex-row gap-2 items-stretch">
 						<div className="w-full lg:w-1/3">

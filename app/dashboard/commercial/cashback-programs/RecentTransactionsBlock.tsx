@@ -26,10 +26,11 @@ export default function RecentTransactionsBlock({ period }: RecentTransactionsBl
 	});
 
 	const transactions = data?.transactions || [];
-	const pagination = data?.pagination;
+	const totalPages = data?.totalPages ?? 0;
+	const transactionsMatched = data?.transactionsMatched ?? 0;
 
 	const canGoPrevious = page > 1;
-	const canGoNext = pagination ? page < pagination.totalPages : false;
+	const canGoNext = totalPages > 0 ? page < totalPages : false;
 
 	const getTransactionTypeBadge = (tipo: "ACÚMULO" | "RESGATE" | "EXPIRAÇÃO" | "CANCELAMENTO") => {
 		switch (tipo) {
@@ -236,10 +237,10 @@ export default function RecentTransactionsBlock({ period }: RecentTransactionsBl
 				)}
 			</div>
 
-			{pagination && pagination.totalPages > 1 && (
+			{totalPages > 1 && (
 				<div className="flex items-center justify-between pt-2 border-t border-primary/10">
 					<div className="text-xs text-muted-foreground">
-						Página {pagination.page} de {pagination.totalPages} ({pagination.total} transações)
+						Página {page} de {totalPages} ({transactionsMatched} transações)
 					</div>
 					<div className="flex items-center gap-2">
 						<Button variant="outline" size="sm" onClick={() => setPage((p) => p - 1)} disabled={!canGoPrevious}>

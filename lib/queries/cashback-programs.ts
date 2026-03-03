@@ -51,7 +51,9 @@ export function useCashbackProgramStats(period: { after: string; before: string 
 async function fetchCashbackProgramTransactions(params: TCashbackProgramTransactionsInput) {
 	try {
 		const { data } = await axios.post<TCashbackProgramTransactionsOutput>("/api/cashback-programs/transactions", params);
-		return data.data;
+		const result = params.clientId ? data.data.byClientId : data.data.default;
+		if (!result) throw new Error("Transações não encontradas.");
+		return result;
 	} catch (error) {
 		console.log("Error running fetchCashbackProgramTransactions", error);
 		throw error;
