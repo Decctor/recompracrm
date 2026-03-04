@@ -21,9 +21,11 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { captureClientEvent } from "@/lib/analytics/posthog-client";
 import { formatDateAsLocale, formatToMoney, formatToPhone } from "@/lib/formatting";
 import { cn } from "@/lib/utils";
 import type { TCashbackProgramEntity } from "@/services/drizzle/schema/cashback-programs";
+import { useEffect } from "react";
 
 // --- Tipagens ---
 
@@ -62,6 +64,16 @@ type ClientProfileContentProps = {
 
 export default function ClientProfileContent({ orgId, cashbackProgram, client, balance, rankingPosition, transactions }: ClientProfileContentProps) {
 	const router = useRouter();
+
+	useEffect(() => {
+		captureClientEvent({
+			event: "view_point_of_interaction_profile",
+			properties: {
+				organization_id: orgId,
+				client_id: client.id,
+			},
+		});
+	}, [orgId, client.id]);
 
 	const allowAccumulation = cashbackProgram.acumuloPermitirViaPontoIntegracao;
 

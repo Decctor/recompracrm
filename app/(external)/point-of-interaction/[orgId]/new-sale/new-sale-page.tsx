@@ -2,6 +2,7 @@
 
 import type { TCreatePointOfInteractionTransactionOutput } from "@/app/api/point-of-interaction/new-transaction/route";
 import { Button } from "@/components/ui/button";
+import { captureClientEvent } from "@/lib/analytics/posthog-client";
 import { getErrorMessage } from "@/lib/errors";
 import { formatToMoney, formatToPhone } from "@/lib/formatting";
 import { createPointOfInteractionSale } from "@/lib/mutations/sales";
@@ -91,6 +92,16 @@ export default function NewSaleContent({ org, clientId, prizes, initialOperatorP
 	const [playAction] = useSound("/sounds/action-completed.mp3");
 	const [playSuccess] = useSound("/sounds/success.mp3");
 
+	useEffect(() => {
+		captureClientEvent({
+			event: "view_point_of_interaction_new_sale",
+			properties: {
+				organization_id: org.id,
+				has_client_id: !!clientId,
+			},
+		});
+	}, [org.id, clientId]);
+
 	// Memoized cashback calculations
 	const availableCashback = useMemo(() => getAvailableCashback(client?.saldos), [client?.saldos]);
 	const redemptionLimitConfig = useMemo(() => getRedemptionLimitConfig(client?.saldos), [client?.saldos]);
@@ -146,6 +157,14 @@ export default function NewSaleContent({ org, clientId, prizes, initialOperatorP
 		if ((mode === "discount" && !isDiscountModeAllowed) || (mode === "prize" && !isPrizeModeAllowed)) {
 			return;
 		}
+
+		captureClientEvent({
+			event: mode === "discount" ? "select_point_of_interaction_discount_mode" : "select_point_of_interaction_prize_mode",
+			properties: {
+				organization_id: org.id,
+			},
+		});
+
 		setFlowMode(mode);
 		setShowModeSelection(false);
 		playAction();

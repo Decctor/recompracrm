@@ -1,6 +1,7 @@
 "use client";
 
 import { AppSubscriptionPlans } from "@/config";
+import { captureClientEvent } from "@/lib/analytics/posthog-client";
 import { formatToMoney } from "@/lib/formatting";
 import { cn } from "@/lib/utils";
 import { AnimatePresence, motion } from "framer-motion";
@@ -207,7 +208,21 @@ function PlanCard({
 				</ul>
 
 				{/* CTA */}
-				<Link href="/auth/signup" className="mt-auto">
+				<Link
+					href="/auth/signup"
+					className="mt-auto"
+					onClick={() =>
+						captureClientEvent({
+							event: "landing_cta_clicked",
+							properties: {
+								cta_id: "pricing_testar_15_dias",
+								location: "pricing",
+								plan: planKey,
+								billing_interval: billing,
+							},
+						})
+					}
+				>
 					<motion.div
 						whileHover={{ scale: 1.02 }}
 						whileTap={{ scale: 0.97 }}
@@ -304,6 +319,15 @@ export default function Pricing() {
 							href="https://wa.me/553499480791?text=Olá, gostaria de saber mais sobre RecompraCRM."
 							target="_blank"
 							rel="noopener noreferrer"
+							onClick={() =>
+								captureClientEvent({
+									event: "landing_cta_clicked",
+									properties: {
+										cta_id: "pricing_fale_com_especialistas",
+										location: "pricing",
+									},
+								})
+							}
 							className="text-[#24549C] hover:text-[#1e4682] font-bold border-b border-[#24549C]/30 hover:border-[#24549C] transition-colors"
 						>
 							<MessageCircle className="inline w-3.5 h-3.5 mr-1 -mt-0.5" />

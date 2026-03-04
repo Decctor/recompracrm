@@ -3,12 +3,14 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { captureClientEvent } from "@/lib/analytics/posthog-client";
 import { getErrorMessage } from "@/lib/errors";
 import { createOrganization } from "@/lib/mutations/organizations";
 import { isValidCNPJ } from "@/lib/validation";
 import { useOrganizationOnboardingState } from "@/state-hooks/use-organization-onboarding-state";
 import { useMutation } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Check } from "lucide-react";
+import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import z from "zod";
 import { ActuationStage } from "./_components/ActuationStage";
@@ -30,9 +32,31 @@ const OnboardingFirstStageValidationSchema = z.object({
 	telefone: z.string({ invalid_type_error: "Tipo não válido para o telefone/whatsapp." }).min(1, "Por favor, preencha o telefone/whatsapp."),
 	termsAccepted: z.boolean({ message: "Por favor, aceite os Termos de Uso e Política de Privacidade para continuar." }),
 });
+
+const ONBOARDING_STAGE_EVENTS: Record<string, string> = {
+	"organization-general-info": "onboarding_view_organization_general_info",
+	"organization-niche-origin": "onboarding_view_organization_niche_origin",
+	"organization-actuation": "onboarding_view_organization_actuation",
+	"subscription-plans-section": "onboarding_view_subscription_plans_section",
+};
+
 export function OnboardingPage({ user }: OnboardingPageProps) {
 	const { state, updateOrganization, updateOrganizationLogoHolder, updateOrganizationOnboarding, goToNextStage, goToPreviousStage } =
 		useOrganizationOnboardingState({});
+	const trackedStagesRef = useRef<Set<string>>(new Set());
+
+	useEffect(() => {
+		const stage = state.stage;
+		if (trackedStagesRef.current.has(stage)) return;
+
+		trackedStagesRef.current.add(stage);
+		captureClientEvent({
+			event: ONBOARDING_STAGE_EVENTS[stage] ?? "onboarding_view_unknown_stage",
+			properties: {
+				stage,
+			},
+		});
+	}, [state.stage]);
 
 	const mutation = useMutation({
 		mutationFn: createOrganization,

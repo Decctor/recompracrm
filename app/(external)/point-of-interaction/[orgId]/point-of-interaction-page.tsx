@@ -5,6 +5,7 @@ import TextInput from "@/components/Inputs/TextInput";
 import ResponsiveMenuViewOnly from "@/components/Utils/ResponsiveMenuViewOnly";
 import { LoadingButton } from "@/components/loading-button";
 import { Button } from "@/components/ui/button";
+import { captureClientEvent } from "@/lib/analytics/posthog-client";
 import { getErrorMessage } from "@/lib/errors";
 import { formatToCPForCNPJ, formatToMoney, formatToPhone } from "@/lib/formatting";
 import { createClientViaPointOfInteraction } from "@/lib/mutations/clients";
@@ -112,6 +113,15 @@ export default function PointOfInteractionContent({
 	const router = useRouter();
 	const [showProfileMenu, setShowProfileMenu] = useState(false);
 	const [playAction] = useSound("/sounds/action-completed.mp3");
+
+	useEffect(() => {
+		captureClientEvent({
+			event: "view_point_of_interaction_hub",
+			properties: {
+				organization_id: org.id,
+			},
+		});
+	}, [org.id]);
 
 	return (
 		<div className="grow bg-background p-6 md:p-10 flex flex-col items-center gap-6">

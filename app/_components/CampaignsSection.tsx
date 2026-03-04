@@ -1,5 +1,6 @@
 "use client";
 
+import { captureClientEvent } from "@/lib/analytics/posthog-client";
 import { cn } from "@/lib/utils";
 import { AnimatePresence, motion } from "framer-motion";
 import { CheckCircle2, ChevronDown, Clock, MessageCircle, Send, X, Zap } from "lucide-react";
@@ -47,7 +48,9 @@ function CampaignRuleBuilder() {
 				return next;
 			});
 		}, STEP_DURATIONS[step]);
-		return () => { if (timeoutRef.current) clearTimeout(timeoutRef.current); };
+		return () => {
+			if (timeoutRef.current) clearTimeout(timeoutRef.current);
+		};
 	}, [step]);
 
 	// Typewriter for trigger
@@ -105,10 +108,7 @@ function CampaignRuleBuilder() {
 						className="overflow-hidden"
 					>
 						<div className="bg-green-500 flex items-center gap-2 px-4 py-2.5">
-							<motion.div
-								animate={{ scale: [1, 1.25, 1] }}
-								transition={{ duration: 0.7, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
-							>
+							<motion.div animate={{ scale: [1, 1.25, 1] }} transition={{ duration: 0.7, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}>
 								<CheckCircle2 className="w-4 h-4 text-white" />
 							</motion.div>
 							<span className="text-sm font-bold text-white">Campanha Ativada com sucesso!</span>
@@ -145,7 +145,6 @@ function CampaignRuleBuilder() {
 
 			{/* Body — 4 rows */}
 			<div className="p-4 space-y-4">
-
 				{/* ── ROW 1: QUANDO ACONTECER ── */}
 				<div>
 					<p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Quando Acontecer</p>
@@ -169,9 +168,7 @@ function CampaignRuleBuilder() {
 									<div className="w-2 h-2 rounded-full bg-[#24549C] shrink-0" />
 									<span className="text-xs font-bold text-[#24549C] flex-1">
 										{triggerTyped}
-										{step === "trigger" && triggerTyped.length < TRIGGER_TEXT.length && (
-											<span className="animate-pulse text-[#24549C]/40">|</span>
-										)}
+										{step === "trigger" && triggerTyped.length < TRIGGER_TEXT.length && <span className="animate-pulse text-[#24549C]/40">|</span>}
 									</span>
 									<ChevronDown className="w-3.5 h-3.5 text-[#24549C]/50 shrink-0" />
 								</motion.div>
@@ -184,9 +181,7 @@ function CampaignRuleBuilder() {
 				<div>
 					<p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Para os Clientes</p>
 					<div className="relative min-h-[36px]">
-						{!hasFilter && (
-							<div className="absolute inset-0 bg-slate-50 border border-dashed border-slate-200 rounded-xl" />
-						)}
+						{!hasFilter && <div className="absolute inset-0 bg-slate-50 border border-dashed border-slate-200 rounded-xl" />}
 						<div className="flex flex-wrap gap-1.5 items-center">
 							<AnimatePresence>
 								{hasFilter &&
@@ -254,8 +249,7 @@ function CampaignRuleBuilder() {
 									<div className="flex items-center gap-2">
 										<Send className="w-3.5 h-3.5 text-green-600 shrink-0" />
 										<span className="text-[10px] text-slate-600">
-											Enviar Template:{" "}
-											<span className="font-black text-green-700">Boas Vindas</span>
+											Enviar Template: <span className="font-black text-green-700">Boas Vindas</span>
 										</span>
 									</div>
 								</motion.div>
@@ -273,10 +267,7 @@ function CampaignRuleBuilder() {
 								<motion.div
 									initial={{ opacity: 0, scale: 0.8 }}
 									animate={{ opacity: 1, scale: 1 }}
-									className={cn(
-										"w-9 h-5 rounded-full relative shrink-0 transition-colors duration-400",
-										toggleOn ? "bg-green-500" : "bg-slate-200",
-									)}
+									className={cn("w-9 h-5 rounded-full relative shrink-0 transition-colors duration-400", toggleOn ? "bg-green-500" : "bg-slate-200")}
 								>
 									<motion.div
 										className="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm"
@@ -306,8 +297,7 @@ function CampaignRuleBuilder() {
 								>
 									<span className="text-sm font-black text-[#FFB900]">✓</span>
 									<span className="text-[10px] font-bold text-slate-700">
-										Gerar Cashback:{" "}
-										<span className="font-black text-[#FFB900]">25%</span>
+										Gerar Cashback: <span className="font-black text-[#FFB900]">25%</span>
 									</span>
 									<span className="text-[9px] text-slate-400 ml-auto whitespace-nowrap">Expira em 15 dias</span>
 								</motion.div>
@@ -424,13 +414,12 @@ export default function CampaignsSection() {
 							Marketing de Precisão
 						</div>
 						<h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-slate-900 leading-tight mb-6 tracking-tight">
-							Recuperação de vendas{" "}
-							<span className="text-transparent bg-clip-text bg-gradient-to-r from-[#24549C] to-blue-500">sem esforço manual.</span>
+							Recuperação de vendas <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#24549C] to-blue-500">sem esforço manual.</span>
 						</h2>
 						<p className="text-lg text-slate-600 leading-relaxed mb-8">
 							Crie campanhas baseadas em eventos reais do cliente. Ofereça um{" "}
-							<span className="font-semibold text-slate-800">"giftback" automático de 25%</span> com validade curta para quem acabou de fazer a primeira compra
-							e garanta o retorno imediato.
+							<span className="font-semibold text-slate-800">"giftback" automático de 25%</span> com validade curta para quem acabou de fazer a primeira
+							compra e garanta o retorno imediato.
 						</p>
 
 						<div className="space-y-3 mb-8">
@@ -462,6 +451,15 @@ export default function CampaignsSection() {
 							whileHover={{ scale: 1.02 }}
 							whileTap={{ scale: 0.98 }}
 							type="button"
+							onClick={() =>
+								captureClientEvent({
+									event: "landing_cta_clicked",
+									properties: {
+										cta_id: "campaigns_ver_demonstracao_completa",
+										location: "campaigns_section",
+									},
+								})
+							}
 							className="bg-[#24549C] text-white px-8 py-4 rounded-2xl font-bold text-base shadow-xl shadow-blue-900/20 hover:bg-[#1e4682] transition-colors"
 						>
 							Ver Demonstração Completa

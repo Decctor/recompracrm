@@ -1,5 +1,6 @@
 "use client";
 
+import { captureClientEvent } from "@/lib/analytics/posthog-client";
 import { motion } from "framer-motion";
 import { ArrowRight, Calendar, CheckCircle2, MessageCircle, TrendingUp } from "lucide-react";
 import Link from "next/link";
@@ -322,6 +323,15 @@ export default function Hero() {
 							<Link
 								className="group relative overflow-hidden bg-[#24549C] text-white px-8 py-4 rounded-2xl font-bold text-base shadow-2xl shadow-blue-900/25 hover:shadow-blue-900/35 hover:-translate-y-1 transition-all duration-300"
 								href="/auth/signup"
+								onClick={() =>
+									captureClientEvent({
+										event: "landing_cta_clicked",
+										properties: {
+											cta_id: "hero_testar_agora",
+											location: "hero",
+										},
+									})
+								}
 							>
 								<span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/15 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
 								<span className="relative flex items-center justify-center gap-2">
@@ -331,6 +341,15 @@ export default function Hero() {
 							</Link>
 							<a
 								href="#planos"
+								onClick={() =>
+									captureClientEvent({
+										event: "landing_cta_clicked",
+										properties: {
+											cta_id: "hero_ver_planos",
+											location: "hero",
+										},
+									})
+								}
 								className="group flex items-center justify-center gap-2 bg-white hover:bg-slate-50 text-slate-800 px-8 py-4 rounded-2xl font-bold border-2 border-slate-200 hover:border-[#24549C]/30 transition-all duration-300 shadow-sm hover:shadow-md"
 							>
 								VER PLANOS

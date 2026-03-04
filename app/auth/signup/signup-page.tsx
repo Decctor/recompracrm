@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldDescription, FieldGroup, FieldLabel, FieldSeparator } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { captureClientEvent } from "@/lib/analytics/posthog-client";
 import { signUpWithEmail } from "@/lib/authentication/actions";
 import RecompraCRMLogo from "@/utils/svgs/logos/RECOMPRA - COMPLETE - VERTICAL - COLORFUL.svg";
 import Image from "next/image";
@@ -23,7 +24,18 @@ function SignUpPage() {
 							<div className="bg-[#24549C] relative hidden md:block">
 								<Image src={RecompraCRMLogo} alt="Logo da RecompraCRM" fill={true} />
 							</div>
-							<form action={actionMethod} className="p-6 py-8 md:py-10 md:p-8">
+							<form
+								action={async (formData) => {
+									captureClientEvent({
+										event: "signup_started",
+										properties: {
+											auth_method: "email",
+										},
+									});
+									return actionMethod(formData);
+								}}
+								className="p-6 py-8 md:py-10 md:p-8"
+							>
 								<FieldGroup>
 									<div className="flex flex-col items-center gap-2 text-center mb-4">
 										<h1 className="text-3xl font-semibold tracking-tight text-foreground">Vamos lá !</h1>

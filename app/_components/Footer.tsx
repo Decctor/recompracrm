@@ -1,5 +1,6 @@
 "use client";
 
+import { captureClientEvent } from "@/lib/analytics/posthog-client";
 import { motion } from "framer-motion";
 import { ArrowRight, Lock, MessageCircle, Shield } from "lucide-react";
 import Link from "next/link";
@@ -53,6 +54,15 @@ export default function FooterV2() {
 								href="https://wa.me/553499480791?text=Olá, gostaria de falar com um especialista do RecompraCRM."
 								target="_blank"
 								rel="noopener noreferrer"
+								onClick={() =>
+									captureClientEvent({
+										event: "landing_cta_clicked",
+										properties: {
+											cta_id: "footer_falar_com_especialista",
+											location: "footer",
+										},
+									})
+								}
 								className="group bg-[#FFB900] hover:bg-[#e6a800] text-[#1a2f5a] px-10 py-4 rounded-2xl font-black text-base shadow-2xl shadow-black/30 hover:-translate-y-1 transition-all duration-300 flex items-center gap-2"
 							>
 								Falar com um Especialista
@@ -62,6 +72,15 @@ export default function FooterV2() {
 								whileHover={{ scale: 1.03 }}
 								whileTap={{ scale: 0.97 }}
 								href="#planos"
+								onClick={() =>
+									captureClientEvent({
+										event: "landing_cta_clicked",
+										properties: {
+											cta_id: "footer_ver_planos",
+											location: "footer",
+										},
+									})
+								}
 								className="bg-white/10 hover:bg-white/20 border border-white/20 text-white px-10 py-4 rounded-2xl font-bold text-base transition-all duration-300"
 							>
 								Ver Planos e Preços

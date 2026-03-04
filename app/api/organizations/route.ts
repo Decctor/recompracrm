@@ -7,6 +7,7 @@ import {
 } from "@/config";
 import { notifyInternalsOnNewOrganization } from "@/config/internal-coms";
 import { RecompraCRMDefaultCampaigns, getOrganizationNicheByValue, welcomeOrganizationOwnerOnOnboarding } from "@/config/onboarding";
+import { captureServerEvent } from "@/lib/analytics/posthog-server";
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
@@ -182,6 +183,19 @@ async function createOrganization({ input, session }: { input: TCreateOrganizati
 	});
 
 	// 6. Process subscription
+	try {
+		await captureServerEvent({
+			distinctId: sessionUser.id,
+			event: "onboarding_completed",
+			properties: {
+				organization_id: insertedOrgId,
+				subscription: subscription ?? "FREE-TRIAL",
+			},
+		});
+	} catch (error) {
+		console.error("[WARN] [CREATE_ORGANIZATION] Falha ao capturar evento onboarding_completed:", error);
+	}
+
 	if (!subscription || subscription === "FREE-TRIAL") {
 		console.log("[INFO] [CREATE_ORGANIZATION] Free trial selected. Defining free trial period.");
 		// FREE-TRIAL logic
@@ -221,6 +235,19 @@ async function createOrganization({ input, session }: { input: TCreateOrganizati
 		void welcomeOrganizationOwnerOnOnboarding({ orgOwner: sessionUser }).catch((err) =>
 			console.error("[WARN] [CREATE_ORGANIZATION] Falha ao enviar boas-vindas ao dono da organização:", err),
 		);
+
+		try {
+			await captureServerEvent({
+				distinctId: sessionUser.id,
+				event: "onboarding_completed_with_trial",
+				properties: {
+					organization_id: insertedOrgId,
+					subscription: "FREE-TRIAL",
+				},
+			});
+		} catch (error) {
+			console.error("[WARN] [CREATE_ORGANIZATION] Falha ao capturar evento onboarding_completed_with_trial:", error);
+		}
 
 		return {
 			data: {
@@ -311,6 +338,21 @@ async function createOrganization({ input, session }: { input: TCreateOrganizati
 	void welcomeOrganizationOwnerOnOnboarding({ orgOwner: sessionUser }).catch((err) =>
 		console.error("[WARN] [CREATE_ORGANIZATION] Falha ao enviar boas-vindas ao dono da organização:", err),
 	);
+
+	try {
+		await captureServerEvent({
+			distinctId: sessionUser.id,
+			event: "onboarding_completed_with_plan",
+			properties: {
+				organization_id: insertedOrgId,
+				subscription: `${planName}-${modalityName}`,
+				plan_name: planName,
+				billing_modality: modalityName,
+			},
+		});
+	} catch (error) {
+		console.error("[WARN] [CREATE_ORGANIZATION] Falha ao capturar evento onboarding_completed_with_plan:", error);
+	}
 
 	return {
 		data: {

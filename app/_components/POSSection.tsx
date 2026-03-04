@@ -1,20 +1,9 @@
 "use client";
 
+import { captureClientEvent } from "@/lib/analytics/posthog-client";
 import { cn } from "@/lib/utils";
 import { AnimatePresence, motion } from "framer-motion";
-import {
-	BadgePercent,
-	Check,
-	CheckCircle2,
-	Coins,
-	CreditCard,
-	Lock,
-	PartyPopper,
-	ShoppingCart,
-	Tag,
-	Trophy,
-	UserRound,
-} from "lucide-react";
+import { BadgePercent, Check, CheckCircle2, Coins, CreditCard, Lock, PartyPopper, ShoppingCart, Tag, Trophy, UserRound } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 // ─── Reuse the POI flow from CashbackSection ───
@@ -32,11 +21,16 @@ const STEP_DURATIONS: Record<FlowStep, number> = {
 function useTypewriter(text: string, speed: number, active: boolean) {
 	const [displayed, setDisplayed] = useState("");
 	useEffect(() => {
-		if (!active) { setDisplayed(""); return; }
+		if (!active) {
+			setDisplayed("");
+			return;
+		}
 		let i = 0;
 		const interval = setInterval(() => {
-			if (i < text.length) { setDisplayed(text.slice(0, i + 1)); i++; }
-			else clearInterval(interval);
+			if (i < text.length) {
+				setDisplayed(text.slice(0, i + 1));
+				i++;
+			} else clearInterval(interval);
 		}, speed);
 		return () => clearInterval(interval);
 	}, [text, speed, active]);
@@ -47,7 +41,10 @@ function useAnimatedCounter(target: number, duration: number, active: boolean) {
 	const [value, setValue] = useState(0);
 	const rafRef = useRef<number | null>(null);
 	useEffect(() => {
-		if (!active) { setValue(0); return; }
+		if (!active) {
+			setValue(0);
+			return;
+		}
 		const start = performance.now();
 		const animate = (now: number) => {
 			const progress = Math.min((now - start) / duration, 1);
@@ -56,7 +53,9 @@ function useAnimatedCounter(target: number, duration: number, active: boolean) {
 			if (progress < 1) rafRef.current = requestAnimationFrame(animate);
 		};
 		rafRef.current = requestAnimationFrame(animate);
-		return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
+		return () => {
+			if (rafRef.current) cancelAnimationFrame(rafRef.current);
+		};
 	}, [target, duration, active]);
 	return value;
 }
@@ -132,7 +131,10 @@ function ClientStep({ active }: { active: boolean }) {
 	const phone = useTypewriter("(34) 99876-5432", 80, active);
 	const [found, setFound] = useState(false);
 	useEffect(() => {
-		if (!active) { setFound(false); return; }
+		if (!active) {
+			setFound(false);
+			return;
+		}
 		const t = setTimeout(() => setFound(true), 1800);
 		return () => clearTimeout(t);
 	}, [active]);
@@ -146,7 +148,8 @@ function ClientStep({ active }: { active: boolean }) {
 					{!found ? (
 						<motion.div key="inp" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="w-full max-w-[180px]">
 							<div className="bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-[0.55rem] text-white/70 font-mono">
-								{phone}<span className="animate-pulse text-[#FFB900]">|</span>
+								{phone}
+								<span className="animate-pulse text-[#FFB900]">|</span>
 							</div>
 						</motion.div>
 					) : (
@@ -204,7 +207,10 @@ function SaleValueStep({ active }: { active: boolean }) {
 function CashbackApplyStep({ active }: { active: boolean }) {
 	const [on, setOn] = useState(false);
 	useEffect(() => {
-		if (!active) { setOn(false); return; }
+		if (!active) {
+			setOn(false);
+			return;
+		}
 		const t = setTimeout(() => setOn(true), 800);
 		return () => clearTimeout(t);
 	}, [active]);
@@ -219,7 +225,11 @@ function CashbackApplyStep({ active }: { active: boolean }) {
 						<span className="text-[8px] font-black text-white/80 uppercase">Usar Cashback?</span>
 					</div>
 					<div className={cn("w-7 h-4 rounded-full relative transition-colors duration-300", on ? "bg-green-500" : "bg-white/20")}>
-						<motion.div className="absolute top-0.5 w-3 h-3 rounded-full bg-white shadow" animate={{ left: on ? 14 : 2 }} transition={{ type: "spring", stiffness: 500, damping: 30 }} />
+						<motion.div
+							className="absolute top-0.5 w-3 h-3 rounded-full bg-white shadow"
+							animate={{ left: on ? 14 : 2 }}
+							transition={{ type: "spring", stiffness: 500, damping: 30 }}
+						/>
 					</div>
 				</div>
 				<div className="grid grid-cols-2 gap-1.5">
@@ -234,10 +244,21 @@ function CashbackApplyStep({ active }: { active: boolean }) {
 				</div>
 				<AnimatePresence>
 					{on && (
-						<motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
+						<motion.div
+							initial={{ opacity: 0, height: 0 }}
+							animate={{ opacity: 1, height: "auto" }}
+							exit={{ opacity: 0, height: 0 }}
+							className="overflow-hidden"
+						>
 							<div className="bg-[#24549C] rounded-xl p-2 text-white">
-								<div className="flex justify-between text-[8px] opacity-70 mb-0.5"><span>Subtotal</span><span>R$ 150,00</span></div>
-								<div className="flex justify-between text-[8px] text-green-300 mb-1"><span>Cashback</span><span>- R$ 25,00</span></div>
+								<div className="flex justify-between text-[8px] opacity-70 mb-0.5">
+									<span>Subtotal</span>
+									<span>R$ 150,00</span>
+								</div>
+								<div className="flex justify-between text-[8px] text-green-300 mb-1">
+									<span>Cashback</span>
+									<span>- R$ 25,00</span>
+								</div>
 								<div className="h-px bg-white/20 mb-1" />
 								<div className="flex justify-between items-end">
 									<span className="text-[8px] font-bold uppercase">Total</span>
@@ -272,7 +293,8 @@ function ConfirmationStep({ active }: { active: boolean }) {
 				<div className="w-full max-w-[140px]">
 					<div className="text-[8px] text-white/40 uppercase font-bold text-center mb-1">Senha do Operador</div>
 					<div className="bg-white/5 border-2 border-white/10 rounded-lg px-2 py-1.5 text-center text-sm font-black text-white/80 tracking-[0.3em]">
-						{dots}{dots.length < 5 && <span className="animate-pulse text-[#FFB900]">|</span>}
+						{dots}
+						{dots.length < 5 && <span className="animate-pulse text-[#FFB900]">|</span>}
 					</div>
 				</div>
 				<AnimatePresence>
@@ -298,19 +320,39 @@ function SuccessStep({ active }: { active: boolean }) {
 	const newBalance = useAnimatedCounter(32.5, 800, active);
 	return (
 		<div className="flex flex-col h-full items-center justify-center gap-2 px-2">
-			<motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 300, damping: 20, delay: 0.1 }} className="relative">
+			<motion.div
+				initial={{ scale: 0 }}
+				animate={{ scale: 1 }}
+				transition={{ type: "spring", stiffness: 300, damping: 20, delay: 0.1 }}
+				className="relative"
+			>
 				<div className="absolute inset-0 bg-green-500/30 blur-xl rounded-full scale-150" />
 				<div className="relative bg-green-600 p-3 rounded-full text-white shadow-lg">
 					<CheckCircle2 className="w-6 h-6" />
 				</div>
-				<motion.div initial={{ scale: 0, rotate: -30 }} animate={{ scale: 1, rotate: 0 }} transition={{ delay: 0.3, type: "spring" }} className="absolute -top-2 -right-2 bg-yellow-400 p-1 rounded-lg">
+				<motion.div
+					initial={{ scale: 0, rotate: -30 }}
+					animate={{ scale: 1, rotate: 0 }}
+					transition={{ delay: 0.3, type: "spring" }}
+					className="absolute -top-2 -right-2 bg-yellow-400 p-1 rounded-lg"
+				>
 					<PartyPopper className="w-2.5 h-2.5 text-yellow-900" />
 				</motion.div>
 			</motion.div>
-			<motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }} className="text-[10px] font-black text-green-400 uppercase">
+			<motion.div
+				initial={{ opacity: 0 }}
+				animate={{ opacity: 1 }}
+				transition={{ delay: 0.2 }}
+				className="text-[10px] font-black text-green-400 uppercase"
+			>
 				Venda Realizada!
 			</motion.div>
-			<motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="grid grid-cols-2 gap-1.5 w-full max-w-[200px]">
+			<motion.div
+				initial={{ opacity: 0, y: 10 }}
+				animate={{ opacity: 1, y: 0 }}
+				transition={{ delay: 0.3 }}
+				className="grid grid-cols-2 gap-1.5 w-full max-w-[200px]"
+			>
 				<div className="bg-green-500/10 border border-green-500/20 rounded-xl p-2 text-center">
 					<div className="text-[8px] text-green-400 uppercase font-bold">Cashback Gerado</div>
 					<div className="text-[11px] font-black text-green-400">R$ {earned.toFixed(2).replace(".", ",")}</div>
@@ -337,7 +379,9 @@ function POIFlowDevice() {
 
 	useEffect(() => {
 		timeoutRef.current = setTimeout(advance, STEP_DURATIONS[currentStep]);
-		return () => { if (timeoutRef.current) clearTimeout(timeoutRef.current); };
+		return () => {
+			if (timeoutRef.current) clearTimeout(timeoutRef.current);
+		};
 	}, [currentStep, advance]);
 
 	return (
@@ -399,20 +443,13 @@ export default function POSSection() {
 			<div className="container mx-auto max-w-7xl px-6 lg:px-8">
 				<div className="grid lg:grid-cols-2 gap-16 items-center">
 					{/* Left: Copy */}
-					<motion.div
-						initial={{ opacity: 0, x: -30 }}
-						whileInView={{ opacity: 1, x: 0 }}
-						viewport={{ once: true }}
-						transition={{ duration: 0.6 }}
-					>
+					<motion.div initial={{ opacity: 0, x: -30 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ duration: 0.6 }}>
 						<div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#FFB900]/10 border border-[#FFB900]/20 text-[#FFB900] text-sm font-bold mb-6">
 							<ShoppingCart className="w-4 h-4" />
 							Ponto de Interação
 						</div>
 						<h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-slate-900 leading-tight mb-6 tracking-tight">
-							Uma experiência{" "}
-							<span className="text-transparent bg-clip-text bg-gradient-to-r from-[#24549C] to-blue-500">premium</span>{" "}
-							no seu caixa.
+							Uma experiência <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#24549C] to-blue-500">premium</span> no seu caixa.
 						</h2>
 						<p className="text-lg text-slate-600 leading-relaxed mb-8">
 							Não exija downloads de aplicativos ou preenchimento de formulários longos. Seu cliente só precisa informar o{" "}
@@ -449,6 +486,15 @@ export default function POSSection() {
 							whileHover={{ scale: 1.02 }}
 							whileTap={{ scale: 0.98 }}
 							type="button"
+							onClick={() =>
+								captureClientEvent({
+									event: "landing_cta_clicked",
+									properties: {
+										cta_id: "pos_simular_resgate",
+										location: "pos_section",
+									},
+								})
+							}
 							className="bg-[#24549C] text-white px-8 py-4 rounded-2xl font-bold text-base shadow-xl shadow-blue-900/20 hover:bg-[#1e4682] transition-colors"
 						>
 							Simular Resgate agora
