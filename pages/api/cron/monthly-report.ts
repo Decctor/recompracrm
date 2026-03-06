@@ -1,30 +1,20 @@
-import {
-	getOverallSalesStats,
-	getPartnerRankings,
-	getProductGroupRankings,
-	getProductRankings,
-	getSellerRankings,
-} from "@/lib/reports/data-fetchers";
-import { formatComparisonWithEmoji, formatCurrency, formatNumber, formatPercentage, truncateText } from "@/lib/reports/formatters";
-import { sendTemplateWhatsappMessage } from "@/lib/whatsapp";
-import { WHATSAPP_REPORT_TEMPLATES } from "@/lib/whatsapp/templates";
+import { formatDateAsLocale } from "@/lib/formatting";
+import { getOverallSalesStats, getPartnerRankings, getProductRankings, getSellerRankings } from "@/lib/reports/data-fetchers";
+import { buildMonthlyReportMessage } from "@/lib/reports/message-templates";
+import { sendMessage } from "@/lib/whatsapp/internal-gateway";
+import { formatPhoneForInternalGateway } from "@/lib/whatsapp/utils";
 import { db } from "@/services/drizzle";
-import { organizations } from "@/services/drizzle/schema";
 import dayjs from "dayjs";
+import "dayjs/locale/pt-br";
 import type { NextApiHandler } from "next";
+
+dayjs.locale("pt-br");
 
 export const config = {
 	maxDuration: 60,
 };
 
-// CONFIGURE AQUI OS NÚMEROS QUE RECEBERÃO OS RELATÓRIOS
-// Formato: ["5511999999999", "5511888888888"]
-const REPORT_RECIPIENTS = [
-	"5534996626855",
-	// "5511999999999", // Exemplo: adicione os números aqui
-];
-
-const WHATSAPP_PHONE_NUMBER_ID = "893793573806565";
+const INTERNAL_SESSION_ID = process.env.INTERNAL_WHATSAPP_GATEWAY_SESSION_COMS as string;
 
 const monthlyReportHandler: NextApiHandler = async (req, res) => {
 	try {
@@ -37,19 +27,19 @@ const monthlyReportHandler: NextApiHandler = async (req, res) => {
 			return res.status(401).json({ error: "Unauthorized" });
 		}
 
-		// if (!WHATSAPP_PHONE_NUMBER_ID) {
-		// 	console.error("[ERROR] [MONTHLY_REPORT] WHATSAPP_PHONE_NUMBER_ID not configured");
-		// 	return res.status(500).json({ error: "WhatsApp não configurado" });
-		// }
-
-		if (REPORT_RECIPIENTS.length === 0) {
-			console.warn("[WARN] [MONTHLY_REPORT] No recipients configured");
-			return res.status(200).json({ message: "No recipients configured", sent: 0 });
+		if (!INTERNAL_SESSION_ID) {
+			console.error("[ERROR] [MONTHLY_REPORT] INTERNAL_WHATSAPP_GATEWAY_SESSION_COMS not configured");
+			return res.status(500).json({ error: "Sessão WhatsApp interna não configurada" });
 		}
 
-		// Buscar todas as organizacoes
+		// Buscar todas as organizacoes com o autor (owner)
 		const organizationsList = await db.query.organizations.findMany({
-			columns: { id: true },
+			columns: { id: true, nome: true },
+			with: {
+				autor: {
+					columns: { telefone: true },
+				},
+			},
 		});
 
 		console.log(`[INFO] [MONTHLY_REPORT] Processing ${organizationsList.length} organizations`);
@@ -58,117 +48,89 @@ const monthlyReportHandler: NextApiHandler = async (req, res) => {
 
 		for (const organization of organizationsList) {
 			try {
+				const ownerPhone = organization.autor?.telefone;
+				if (!ownerPhone) {
+					console.warn(`[ORG: ${organization.id}] [WARN] [MONTHLY_REPORT] Owner has no phone number, skipping`);
+					continue;
+				}
+				const recipientPhone = formatPhoneForInternalGateway(ownerPhone);
+
 				console.log(`[ORG: ${organization.id}] [INFO] [MONTHLY_REPORT] Generating report`);
 
 				// Get data for last month (full month)
 				const lastMonth = dayjs().subtract(1, "month");
+				const comparisonMonth = dayjs().subtract(2, "month");
+
 				const periodAfter = lastMonth.startOf("month").toDate();
 				const periodBefore = lastMonth.endOf("month").toDate();
+				const comparisonAfter = comparisonMonth.startOf("month").toDate();
+				const comparisonBefore = comparisonMonth.endOf("month").toDate();
 
 				console.log(`[ORG: ${organization.id}] [INFO] [MONTHLY_REPORT] Fetching data for period:`, {
-					after: periodAfter,
-					before: periodBefore,
+					after: formatDateAsLocale(periodAfter, true),
+					before: formatDateAsLocale(periodBefore, true),
+					comparisonAfter: formatDateAsLocale(comparisonAfter, true),
+					comparisonBefore: formatDateAsLocale(comparisonBefore, true),
 				});
 
 				// Fetch sales stats
-				const stats = await getOverallSalesStats({ after: periodAfter, before: periodBefore, organizacaoId: organization.id });
-
-				// Fetch top sellers, partners, and products
-				const topSellers = await getSellerRankings({ after: periodAfter, before: periodBefore, organizacaoId: organization.id }, 3);
-				const topPartners = await getPartnerRankings({ after: periodAfter, before: periodBefore, organizacaoId: organization.id }, 3);
-				const topProducts = await getProductRankings({ after: periodAfter, before: periodBefore, organizacaoId: organization.id }, 3);
-
-				// Format data for template
-				const periodo = dayjs(periodAfter).format("MMMM/YYYY").toUpperCase();
-				const faturamento = formatCurrency(stats.faturamento.atual);
-				const meta = formatCurrency(stats.faturamentoMeta);
-				const percentualMeta = formatPercentage(stats.faturamentoMetaPorcentagem);
-
-				// Format top sellers list
-				const topVendedor1 = topSellers[0]
-					? `1. ${truncateText(topSellers[0].vendedorNome, 20)}: ${formatCurrency(topSellers[0].faturamento)}`
-					: "1. Nenhuma venda registrada";
-				const topVendedor2 = topSellers[1] ? `2. ${truncateText(topSellers[1].vendedorNome, 20)}: ${formatCurrency(topSellers[1].faturamento)}` : "2. -";
-				const topVendedor3 = topSellers[2] ? `3. ${truncateText(topSellers[2].vendedorNome, 20)}: ${formatCurrency(topSellers[2].faturamento)}` : "3. -";
-
-				// Format top partners list
-				const topParceiro1 = topPartners[0]
-					? `1. ${truncateText(topPartners[0].parceiroNome, 20)}: ${formatCurrency(topPartners[0].faturamento)}`
-					: "1. Nenhum parceiro registrado";
-				const topParceiro2 = topPartners[1]
-					? `2. ${truncateText(topPartners[1].parceiroNome, 20)}: ${formatCurrency(topPartners[1].faturamento)}`
-					: "2. -";
-				const topParceiro3 = topPartners[2]
-					? `3. ${truncateText(topPartners[2].parceiroNome, 20)}: ${formatCurrency(topPartners[2].faturamento)}`
-					: "3. -";
-
-				// Format top products list
-				const topProduto1 = topProducts[0]
-					? `1. ${truncateText(topProducts[0].produtoDescricao, 20)}: ${formatCurrency(topProducts[0].faturamento)}`
-					: "1. Nenhum produto vendido";
-				const topProduto2 = topProducts[1]
-					? `2. ${truncateText(topProducts[1].produtoDescricao, 20)}: ${formatCurrency(topProducts[1].faturamento)}`
-					: "2. -";
-				const topProduto3 = topProducts[2]
-					? `3. ${truncateText(topProducts[2].produtoDescricao, 20)}: ${formatCurrency(topProducts[2].faturamento)}`
-					: "3. -";
-
-				const comparacao = formatComparisonWithEmoji(stats.faturamento.atual, stats.faturamento.anterior);
-
-				console.log(`[ORG: ${organization.id}] [INFO] [MONTHLY_REPORT] Report data prepared:`, {
-					periodo,
-					faturamento,
-					meta,
-					percentualMeta,
-					comparacao,
+				const stats = await getOverallSalesStats({
+					after: periodAfter,
+					before: periodBefore,
+					comparisonAfter,
+					comparisonBefore,
+					organizacaoId: organization.id,
 				});
 
-				// Send to all recipients
-				for (const recipient of REPORT_RECIPIENTS) {
-					try {
-						console.log(`[ORG: ${organization.id}] [INFO] [MONTHLY_REPORT] Sending report to ${recipient}`);
+				if (stats.faturamento.atual === 0) {
+					console.log(`[ORG: ${organization.id}] [INFO] [MONTHLY_REPORT] No relevant stats found, skipping`);
+					continue;
+				}
 
-						const templatePayload = WHATSAPP_REPORT_TEMPLATES.MONTHLY_REPORT.getPayload({
-							templateKey: "MONTHLY_REPORT",
-							toPhoneNumber: recipient,
-							periodo,
-							faturamento,
-							meta,
-							percentualMeta,
-							comparacao,
-							topVendedor1,
-							topVendedor2,
-							topVendedor3,
-							topParceiro1,
-							topParceiro2,
-							topParceiro3,
-							topProduto1,
-							topProduto2,
-							topProduto3,
-						});
+				// Fetch top sellers, partners, and products
+				const periodParams = { after: periodAfter, before: periodBefore, comparisonAfter, comparisonBefore, organizacaoId: organization.id };
+				const topSellers = await getSellerRankings(periodParams, 3);
+				const topPartners = await getPartnerRankings(periodParams, 3);
+				const topProducts = await getProductRankings(periodParams, 3);
 
-						const result = await sendTemplateWhatsappMessage({
-							fromPhoneNumberId: WHATSAPP_PHONE_NUMBER_ID,
-							templatePayload: templatePayload.data,
-						});
+				// Build the styled text message
+				const periodo = dayjs(periodAfter).format("MMMM/YYYY").toUpperCase();
+				const text = buildMonthlyReportMessage({
+					orgNome: organization.nome,
+					periodo,
+					stats,
+					topSellers,
+					topPartners,
+					topProducts,
+				});
 
-						allResults.push({
-							organizationId: organization.id,
-							recipient,
-							status: "success",
-							messageId: result.whatsappMessageId,
-						});
+				// Send to org owner via internal gateway
+				try {
+					console.log(`[ORG: ${organization.id}] [INFO] [MONTHLY_REPORT] Sending report to owner: ${recipientPhone}`);
 
-						console.log(`[ORG: ${organization.id}] [INFO] [MONTHLY_REPORT] Successfully sent report to ${recipient}`);
-					} catch (error) {
-						console.error(`[ORG: ${organization.id}] [ERROR] [MONTHLY_REPORT] Failed to send report to ${recipient}:`, error);
-						allResults.push({
-							organizationId: organization.id,
-							recipient,
-							status: "error",
-							error: error instanceof Error ? error.message : "Unknown error",
-						});
-					}
+					const result = await sendMessage(INTERNAL_SESSION_ID, recipientPhone, { type: "text", text });
+					console.log("[FAKE] [MONTHLY_REPORT] Sending report: ", {
+						organizationId: organization.id,
+						recipient: recipientPhone,
+						text: text,
+					});
+
+					allResults.push({
+						organizationId: organization.id,
+						recipient: recipientPhone,
+						status: "success",
+						messageId: result.clientMessageId ?? result.jobId ?? null,
+					});
+
+					console.log(`[ORG: ${organization.id}] [INFO] [MONTHLY_REPORT] Successfully sent report to owner`);
+				} catch (error) {
+					console.error(`[ORG: ${organization.id}] [ERROR] [MONTHLY_REPORT] Failed to send report to owner:`, error);
+					allResults.push({
+						organizationId: organization.id,
+						recipient: recipientPhone,
+						status: "error",
+						error: error instanceof Error ? error.message : "Unknown error",
+					});
 				}
 
 				console.log(`[ORG: ${organization.id}] [INFO] [MONTHLY_REPORT] Report completed`);
