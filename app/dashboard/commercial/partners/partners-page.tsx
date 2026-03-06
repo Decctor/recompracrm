@@ -13,8 +13,8 @@ import StatUnitCard from "@/components/Stats/StatUnitCard";
 import GeneralPaginationComponent from "@/components/Utils/Pagination";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { StatBadge } from "@/components/ui/stat-badge";
 import { Input } from "@/components/ui/input";
+import { StatBadge } from "@/components/ui/stat-badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { getErrorMessage } from "@/lib/errors";
@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
 import dayjs from "dayjs";
 import { Activity, BadgeDollarSign, CirclePlus, IdCard, ListFilter, Mail, Pencil, Phone, Plus, Ticket, TrendingUp, Users, X } from "lucide-react";
+import { parseAsStringEnum, useQueryState } from "nuqs";
 import { useState } from "react";
 import { BsCalendar } from "react-icons/bs";
 
@@ -31,11 +32,11 @@ type PartnersPageProps = {
 	user: TAuthUserSession["user"];
 };
 export default function PartnersPage({ user }: PartnersPageProps) {
-	const [viewMode, setViewMode] = useState<"stats" | "database">("stats");
+	const [viewMode, setViewMode] = useQueryState("view", parseAsStringEnum(["stats", "database"]));
 
 	return (
 		<div className="w-full h-full flex flex-col gap-3">
-			<Tabs value={viewMode} onValueChange={(v: string) => setViewMode(v as "stats" | "database")}>
+			<Tabs value={viewMode ?? "stats"} onValueChange={(v: string) => setViewMode(v as "stats" | "database")}>
 				<TabsList className="flex items-center gap-1.5 w-fit h-fit self-start rounded-lg px-2 py-1">
 					<TabsTrigger value="stats" className="flex items-center gap-1.5 px-2 py-2 rounded-lg">
 						<TrendingUp className="w-4 h-4 min-w-4 min-h-4" />

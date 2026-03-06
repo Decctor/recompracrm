@@ -1,7 +1,7 @@
 import { appApiHandler } from "@/lib/app-api";
 import { accumulateCashbackForClient, calculateAccumulatedCashbackValue, ensureCashbackBalanceForClient } from "@/lib/cashback/accumulation";
-import { applyCashbackRedemptionFIFO } from "@/lib/cashback/redemption";
 import { generateCashbackForCampaign } from "@/lib/cashback/generate-campaign-cashback";
+import { applyCashbackRedemptionFIFO } from "@/lib/cashback/redemption";
 import { DASTJS_TIME_DURATION_UNITS_MAP, getPostponedDateFromReferenceDate } from "@/lib/dates";
 import { formatPhoneAsBase } from "@/lib/formatting";
 import { type ImmediateProcessingData, processSingleInteractionImmediately } from "@/lib/interactions";
@@ -374,8 +374,7 @@ async function handleNewTransaction(req: NextRequest): Promise<NextResponse<TCre
 		} | null = null;
 		if (isPrizeRedemption && prizeRedemption) {
 			const prize = await tx.query.cashbackProgramPrizes.findFirst({
-				where: (fields, { and, eq }) =>
-					and(eq(fields.id, prizeRedemption.prizeId), eq(fields.ativo, true), eq(fields.programaId, program.id)),
+				where: (fields, { and, eq }) => and(eq(fields.id, prizeRedemption.prizeId), eq(fields.ativo, true), eq(fields.programaId, program.id)),
 				columns: {
 					id: true,
 					valor: true,
@@ -1304,7 +1303,7 @@ async function handleCampaignProcessingForTotalPurchaseCount({
 		const meetsThreshold =
 			campaign.gatilhoQuantidadeTotalCompras !== null &&
 			campaign.gatilhoQuantidadeTotalCompras !== undefined &&
-			clientNewTotalPurchaseCount >= campaign.gatilhoQuantidadeTotalCompras;
+			clientNewTotalPurchaseCount === campaign.gatilhoQuantidadeTotalCompras;
 
 		// Check segmentation match
 		const meetsSegmentation = campaign.segmentacoes.length === 0 || campaign.segmentacoes.some((s) => s.segmentacao === clientRFMTitle);
@@ -1460,7 +1459,7 @@ async function handleCampaignProcessingForTotalPurchaseValue({
 		const meetsThreshold =
 			campaign.gatilhoValorTotalCompras !== null &&
 			campaign.gatilhoValorTotalCompras !== undefined &&
-			clientNewTotalPurchaseValue >= campaign.gatilhoValorTotalCompras;
+			clientNewTotalPurchaseValue === campaign.gatilhoValorTotalCompras; // TODO: Fix this. The validation should occur in obligatory "frequency" definitions
 
 		// Check segmentation match
 		const meetsSegmentation = campaign.segmentacoes.length === 0 || campaign.segmentacoes.some((s) => s.segmentacao === clientRFMTitle);

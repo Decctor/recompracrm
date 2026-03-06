@@ -12,6 +12,7 @@ import type { TAuthUserSession } from "@/lib/authentication/types";
 import { getErrorMessage } from "@/lib/errors";
 import { useInternalLeads } from "@/lib/queries/crm";
 import { Kanban, List, Plus } from "lucide-react";
+import { parseAsStringEnum, useQueryState } from "nuqs";
 import { useState } from "react";
 
 type CrmPageProps = {
@@ -19,13 +20,13 @@ type CrmPageProps = {
 };
 
 export default function CrmPage({ user }: CrmPageProps) {
-	const [viewMode, setViewMode] = useState<"kanban" | "list">("kanban");
+	const [viewMode, setViewMode] = useQueryState("view", parseAsStringEnum(["kanban", "list"]));
 	const [newLeadModalIsOpen, setNewLeadModalIsOpen] = useState(false);
 
 	return (
 		<div className="w-full h-full flex flex-col gap-3">
 			<div className="flex items-center justify-between gap-3">
-				<Tabs value={viewMode} onValueChange={(v: string) => setViewMode(v as "kanban" | "list")}>
+				<Tabs value={viewMode ?? "kanban"} onValueChange={(v: string) => setViewMode(v as "kanban" | "list")}>
 					<TabsList className="h-fit">
 						<TabsTrigger value="kanban" className="flex items-center gap-1.5 px-2 py-1.5">
 							<Kanban className="w-4 h-4" />
@@ -43,7 +44,7 @@ export default function CrmPage({ user }: CrmPageProps) {
 				</Button>
 			</div>
 
-			{viewMode === "kanban" ? <KanbanView /> : <ListView />}
+			{(viewMode ?? "kanban") === "kanban" ? <KanbanView /> : <ListView />}
 
 			{newLeadModalIsOpen && <NewLead closeMenu={() => setNewLeadModalIsOpen(false)} />}
 		</div>

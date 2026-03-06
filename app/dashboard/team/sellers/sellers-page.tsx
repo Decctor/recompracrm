@@ -40,6 +40,7 @@ import {
 	Users,
 } from "lucide-react";
 import Link from "next/link";
+import { parseAsStringEnum, useQueryState } from "nuqs";
 import { useState } from "react";
 
 type SellersPageProps = {
@@ -47,10 +48,10 @@ type SellersPageProps = {
 	membership: NonNullable<TAuthUserSession["membership"]>;
 };
 export default function SellersPage({ user, membership }: SellersPageProps) {
-	const [viewMode, setViewMode] = useState<"stats" | "database">("stats");
+	const [viewMode, setViewMode] = useQueryState("view", parseAsStringEnum(["stats", "database"]));
 	return (
 		<div className="w-full h-full flex flex-col gap-3">
-			<Tabs value={viewMode} onValueChange={(v: string) => setViewMode(v as "stats" | "database")}>
+			<Tabs value={viewMode ?? "stats"} onValueChange={(v: string) => setViewMode(v as "stats" | "database")}>
 				<TabsList className="flex items-center gap-1.5 w-fit h-fit self-start rounded-lg px-2 py-1">
 					<TabsTrigger value="stats" className="flex items-center gap-1.5 px-2 py-2 rounded-lg">
 						<TrendingUp className="w-4 h-4 min-w-4 min-h-4" />
@@ -132,10 +133,12 @@ function SellersDatabaseView({ user, membership }: { user: TAuthUserSession["use
 								seller={seller}
 								handleEditClick={setEditSellerId}
 								userHasEditPermission={
-									membership.permissoes.resultados.visualizar && (!membership.permissoes.resultados.escopo || membership.permissoes.resultados.escopo?.includes(seller.id))
+									membership.permissoes.resultados.visualizar &&
+									(!membership.permissoes.resultados.escopo || membership.permissoes.resultados.escopo?.includes(seller.id))
 								}
 								userHasViewPermission={
-									membership.permissoes.resultados.visualizar && (!membership.permissoes.resultados.escopo || membership.permissoes.resultados.escopo?.includes(seller.id))
+									membership.permissoes.resultados.visualizar &&
+									(!membership.permissoes.resultados.escopo || membership.permissoes.resultados.escopo?.includes(seller.id))
 								}
 							/>
 						))
