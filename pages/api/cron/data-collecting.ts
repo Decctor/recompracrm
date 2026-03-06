@@ -998,7 +998,7 @@ async function handleCardapioWebImportation(
 								organizacaoId: organizationId,
 								titulo: `Envio de mensagem automática via campanha ${campaign.titulo}`,
 								tipo: "ENVIO-MENSAGEM",
-								descricao: `Cliente atingiu ${currentTotalPurchaseValue} em valor total de compras via CardapioWeb (gatilho: ${campaign.gatilhoValorTotalCompras}).`,
+								descricao: `Cliente atingiu R$ ${currentTotalPurchaseValue.toFixed(2)} em valor total de compras via CardapioWeb (gatilho: R$ ${campaign.gatilhoValorTotalCompras?.toFixed(2)}).`,
 								agendamentoDataReferencia: dayjs(interactionScheduleDate).format("YYYY-MM-DD"),
 								agendamentoBlocoReferencia: campaign.execucaoAgendadaBloco,
 								metadados: valueTotalPurchasesCWMetadados,
@@ -1478,6 +1478,7 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 					columns: {
 						id: true,
 						nome: true,
+						telefoneBase: true,
 						primeiraCompraData: true,
 						ultimaCompraData: true,
 						analiseRFMTitulo: true,
@@ -1520,19 +1521,51 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 					: [];
 
 				const existingSalesMap = new Map(existingSales.map((sale) => [sale.idExterno, sale]));
-				const existingClientsMap = new Map(
-					existingClients.map((client) => [
-						client.nome,
-						{
-							id: client.id,
-							firstPurchaseDate: client.primeiraCompraData,
-							lastPurchaseDate: client.ultimaCompraData,
-							rfmTitle: client.analiseRFMTitulo,
-							metadataTotalCompras: client.metadataTotalCompras ?? 0,
-							metadataValorTotalCompras: client.metadataValorTotalCompras ?? 0,
-						},
-					]),
+				const normalizeOnlineClientName = (name?: string | null) => (name ?? "").trim().toUpperCase();
+				const buildOnlineClientLookupData = (client: (typeof existingClients)[number]) => ({
+					id: client.id,
+					name: client.nome,
+					basePhone: client.telefoneBase,
+					firstPurchaseDate: client.primeiraCompraData,
+					lastPurchaseDate: client.ultimaCompraData,
+					rfmTitle: client.analiseRFMTitulo,
+					metadataTotalCompras: client.metadataTotalCompras ?? 0,
+					metadataValorTotalCompras: client.metadataValorTotalCompras ?? 0,
+				});
+				const existingClientsMapByName = new Map(
+					existingClients.filter((client) => !!client.nome).map((client) => [normalizeOnlineClientName(client.nome), buildOnlineClientLookupData(client)]),
 				);
+				const existingClientsMapByBasePhone = new Map(
+					existingClients.filter((client) => !!client.telefoneBase).map((client) => [client.telefoneBase as string, buildOnlineClientLookupData(client)]),
+				);
+				const indexOnlineClientInLookupMaps = (client: ReturnType<typeof buildOnlineClientLookupData>) => {
+					const normalizedName = normalizeOnlineClientName(client.name);
+					if (normalizedName) {
+						existingClientsMapByName.set(normalizedName, client);
+					}
+					if (client.basePhone) {
+						existingClientsMapByBasePhone.set(client.basePhone, client);
+					}
+				};
+				const resolveExistingOnlineClient = (clientName?: string | null, clientBasePhone?: string | null) => {
+					const normalizedName = normalizeOnlineClientName(clientName);
+					if (normalizedName) {
+						const clientByName = existingClientsMapByName.get(normalizedName);
+						if (clientByName) return clientByName;
+					}
+
+					if (clientBasePhone) {
+						const clientByPhone = existingClientsMapByBasePhone.get(clientBasePhone);
+						if (clientByPhone) {
+							if (normalizedName && !existingClientsMapByName.has(normalizedName)) {
+								existingClientsMapByName.set(normalizedName, clientByPhone);
+							}
+							return clientByPhone;
+						}
+					}
+
+					return undefined;
+				};
 				const existingProductsMap = new Map(existingProducts.map((product) => [product.codigo, product.id]));
 				const existingSellersMap = new Map(existingSellers.map((seller) => [seller.nome, seller.id]));
 				const existingPartnersMap = new Map(existingPartners.map((partner) => [partner.identificador, { id: partner.id, clienteId: partner.clienteId }]));
@@ -1543,6 +1576,8 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 				for (const OnlineSale of OnlineSoftwareSales) {
 					let isNewClient = false;
 					let isNewSale = false;
+					let newTotalPurchaseCountForSale: number | undefined;
+					let newTotalPurchaseValueForSale: number | undefined;
 
 					const onlineBaseSaleDate = dayjs(OnlineSale.data, "DD/MM/YYYY");
 					// If the Online sale date is the same as the current date, we use the current date (with time frame component, since cron runs every 5 minutes, we get approximately real time),
@@ -1551,12 +1586,13 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 					const isValidSale = OnlineSale.natureza === "SN01";
 					// First, we check for an existing client with the same name (in this case, our primary key for the integration)
 					const isValidClient = OnlineSale.cliente !== "AO CONSUMIDOR";
+					const onlineSaleClientBasePhone = formatPhoneAsBase(OnlineSale.clientefone || OnlineSale.clientecelular || "");
 
 					console.log(`[ORG: ${organization.id}] [INFO] [DATA_COLLECTING] [CLIENT] Client: ${OnlineSale.cliente}.`);
 					if (!isValidClient)
 						console.log(`[ORG: ${organization.id}] [INFO] [DATA_COLLECTING] [CLIENT] Non-identified client detected: ${OnlineSale.cliente}`);
 
-					const equivalentSaleClient = isValidClient ? existingClientsMap.get(OnlineSale.cliente) : null;
+					const equivalentSaleClient = isValidClient ? resolveExistingOnlineClient(OnlineSale.cliente, onlineSaleClientBasePhone) : undefined;
 					// Initalize the saleClientId holder with the existing client (if any)
 					let saleClientId = equivalentSaleClient?.id;
 					if (!saleClientId && isValidClient) {
@@ -1568,9 +1604,10 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 								nome: OnlineSale.cliente,
 								organizacaoId: organization.id,
 								telefone: formatToPhone(OnlineSale.clientefone || OnlineSale.clientecelular || ""),
-								telefoneBase: formatPhoneAsBase(OnlineSale.clientefone || OnlineSale.clientecelular || ""),
+								telefoneBase: onlineSaleClientBasePhone,
 								primeiraCompraData: isValidSale ? saleDate : null,
 								ultimaCompraData: isValidSale ? saleDate : null,
+								analiseRFMTitulo: "CLIENTES RECENTES",
 							})
 							.returning({
 								id: clients.id,
@@ -1581,8 +1618,10 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 						saleClientId = insertedClientId;
 						isNewClient = true;
 						// Add the new client to the existing clients map
-						existingClientsMap.set(OnlineSale.cliente, {
+						indexOnlineClientInLookupMaps({
 							id: insertedClientId,
+							name: OnlineSale.cliente,
+							basePhone: onlineSaleClientBasePhone,
 							firstPurchaseDate: isValidSale ? saleDate : null,
 							lastPurchaseDate: isValidSale ? saleDate : null,
 							rfmTitle: "CLIENTES RECENTES",
@@ -1988,15 +2027,7 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 										immediateProcessingDataList.push({
 											interactionId: insertedInteraction.id,
 											organizationId: organization.id,
-											client: {
-												id: clientData.id,
-												nome: clientData.nome,
-												telefone: clientData.telefone,
-												email: clientData.email,
-												analiseRFMTitulo: clientData.analiseRFMTitulo,
-												metadataProdutoMaisCompradoId: clientData.metadataProdutoMaisCompradoId,
-												metadataGrupoProdutoMaisComprado: clientData.metadataGrupoProdutoMaisComprado,
-											},
+											client: clientData,
 											campaign: {
 												autorId: campaign.autorId,
 												whatsappConexaoTelefoneId: campaign.whatsappConexaoTelefoneId,
@@ -2040,6 +2071,8 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 					}
 					// Checking for applicable campaigns for new purchase
 					if (isNewSale && !isNewClient && isValidSale) {
+						const resolvedSaleClient = resolveExistingOnlineClient(OnlineSale.cliente, onlineSaleClientBasePhone);
+						const resolvedClientRfmTitle = resolvedSaleClient?.rfmTitle ?? "CLIENTES RECENTES";
 						const applicableCampaigns = campaignsForNewPurchase.filter((campaign) => {
 							// Validate campaign trigger for new purchase
 							const meetsNewPurchaseValueTrigger =
@@ -2047,9 +2080,7 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 								campaign.gatilhoNovaCompraValorMinimo === undefined ||
 								Number(OnlineSale.valor) >= campaign.gatilhoNovaCompraValorMinimo;
 
-							const meetsSegmentationTrigger = campaign.segmentacoes.some(
-								(s) => s.segmentacao === (existingClientsMap.get(OnlineSale.cliente)?.rfmTitle ?? "CLIENTES RECENTES"),
-							);
+							const meetsSegmentationTrigger = campaign.segmentacoes.some((s) => s.segmentacao === resolvedClientRfmTitle);
 
 							return meetsNewPurchaseValueTrigger && meetsSegmentationTrigger;
 						});
@@ -2089,7 +2120,7 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 										organizacaoId: organization.id,
 										titulo: `Envio de mensagem automática via campanha ${campaign.titulo}`,
 										tipo: "ENVIO-MENSAGEM",
-										descricao: `Cliente se enquadrou no parâmetro de nova compra ${existingClientsMap.get(OnlineSale.cliente)?.rfmTitle}.`,
+										descricao: `Cliente se enquadrou no parâmetro de nova compra ${resolvedClientRfmTitle}.`,
 										agendamentoDataReferencia: dayjs(interactionScheduleDate).format("YYYY-MM-DD"),
 										agendamentoBlocoReferencia: campaign.execucaoAgendadaBloco,
 										metadados: {
@@ -2121,15 +2152,7 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 										immediateProcessingDataList.push({
 											interactionId: insertedInteraction.id,
 											organizationId: organization.id,
-											client: {
-												id: clientData.id,
-												nome: clientData.nome,
-												telefone: clientData.telefone,
-												email: clientData.email,
-												analiseRFMTitulo: clientData.analiseRFMTitulo,
-												metadataProdutoMaisCompradoId: clientData.metadataProdutoMaisCompradoId,
-												metadataGrupoProdutoMaisComprado: clientData.metadataGrupoProdutoMaisComprado,
-											},
+											client: clientData,
 											campaign: {
 												autorId: campaign.autorId,
 												whatsappConexaoTelefoneId: campaign.whatsappConexaoTelefoneId,
@@ -2181,11 +2204,13 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 					}
 					// Process QUANTIDADE-TOTAL-COMPRAS and VALOR-TOTAL-COMPRAS campaigns
 					if (isNewSale && isValidSale && saleClientId) {
-						const clientData = existingClientsMap.get(OnlineSale.cliente);
+						const clientData = resolveExistingOnlineClient(OnlineSale.cliente, onlineSaleClientBasePhone);
 						const previousPurchaseCount = clientData?.metadataTotalCompras ?? 0;
 						const previousPurchaseValue = clientData?.metadataValorTotalCompras ?? 0;
 						const newTotalPurchaseCount = previousPurchaseCount + 1;
 						const newTotalPurchaseValue = previousPurchaseValue + Number(OnlineSale.valor);
+						newTotalPurchaseCountForSale = newTotalPurchaseCount;
+						newTotalPurchaseValueForSale = newTotalPurchaseValue;
 						const clientRfmTitle = clientData?.rfmTitle ?? "CLIENTES RECENTES";
 
 						// Process QUANTIDADE-TOTAL-COMPRAS campaigns
@@ -2220,6 +2245,14 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 										value: campaign.execucaoAgendadaValor,
 									});
 
+									const totalPurchaseCountMetadados = {
+										compraValor: Number(OnlineSale.valor),
+										compraQuantidadeTotal: newTotalPurchaseCount,
+										compraValorTotalAcumulado: newTotalPurchaseValue,
+										cashbackSaldoDisponivel: existingCashbackProgramBalancesMap.get(saleClientId)?.saldoValorDisponivel,
+										cashbackTotalAcumuladoVida: existingCashbackProgramBalancesMap.get(saleClientId)?.saldoValorAcumuladoTotal,
+									};
+
 									const [insertedInteraction] = await tx
 										.insert(interactions)
 										.values({
@@ -2231,11 +2264,7 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 											descricao: `Cliente atingiu ${newTotalPurchaseCount} compras totais (gatilho: ${campaign.gatilhoQuantidadeTotalCompras}).`,
 											agendamentoDataReferencia: dayjs(interactionScheduleDate).format("YYYY-MM-DD"),
 											agendamentoBlocoReferencia: campaign.execucaoAgendadaBloco,
-											metadados: {
-												compraValor: Number(OnlineSale.valor),
-												cashbackSaldoDisponivel: existingCashbackProgramBalancesMap.get(saleClientId)?.saldoValorDisponivel,
-												cashbackTotalAcumuladoVida: existingCashbackProgramBalancesMap.get(saleClientId)?.saldoValorAcumuladoTotal,
-											},
+											metadados: totalPurchaseCountMetadados,
 										})
 										.returning({ id: interactions.id });
 
@@ -2264,11 +2293,7 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 												},
 												whatsappToken: whatsappConnection.token ?? undefined,
 												whatsappSessionId: whatsappConnection.gatewaySessaoId ?? undefined,
-												contextMetadados: {
-													compraValor: Number(OnlineSale.valor),
-													cashbackSaldoDisponivel: existingCashbackProgramBalancesMap.get(saleClientId)?.saldoValorDisponivel,
-													cashbackTotalAcumuladoVida: existingCashbackProgramBalancesMap.get(saleClientId)?.saldoValorAcumuladoTotal,
-												},
+												contextMetadados: totalPurchaseCountMetadados,
 											});
 										}
 									}
@@ -2332,6 +2357,14 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 										value: campaign.execucaoAgendadaValor,
 									});
 
+									const totalPurchaseValueMetadados = {
+										compraValor: Number(OnlineSale.valor),
+										compraQuantidadeTotal: newTotalPurchaseCount,
+										compraValorTotalAcumulado: newTotalPurchaseValue,
+										cashbackSaldoDisponivel: existingCashbackProgramBalancesMap.get(saleClientId)?.saldoValorDisponivel,
+										cashbackTotalAcumuladoVida: existingCashbackProgramBalancesMap.get(saleClientId)?.saldoValorAcumuladoTotal,
+									};
+
 									const [insertedInteraction] = await tx
 										.insert(interactions)
 										.values({
@@ -2343,11 +2376,7 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 											descricao: `Cliente atingiu R$ ${newTotalPurchaseValue.toFixed(2)} em compras totais (gatilho: R$ ${campaign.gatilhoValorTotalCompras?.toFixed(2)}).`,
 											agendamentoDataReferencia: dayjs(interactionScheduleDate).format("YYYY-MM-DD"),
 											agendamentoBlocoReferencia: campaign.execucaoAgendadaBloco,
-											metadados: {
-												compraValor: Number(OnlineSale.valor),
-												cashbackSaldoDisponivel: existingCashbackProgramBalancesMap.get(saleClientId)?.saldoValorDisponivel,
-												cashbackTotalAcumuladoVida: existingCashbackProgramBalancesMap.get(saleClientId)?.saldoValorAcumuladoTotal,
-											},
+											metadados: totalPurchaseValueMetadados,
 										})
 										.returning({ id: interactions.id });
 
@@ -2376,11 +2405,7 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 												},
 												whatsappToken: whatsappConnection.token ?? undefined,
 												whatsappSessionId: whatsappConnection.gatewaySessaoId ?? undefined,
-												contextMetadados: {
-													compraValor: Number(OnlineSale.valor),
-													cashbackSaldoDisponivel: existingCashbackProgramBalancesMap.get(saleClientId)?.saldoValorDisponivel,
-													cashbackTotalAcumuladoVida: existingCashbackProgramBalancesMap.get(saleClientId)?.saldoValorAcumuladoTotal,
-												},
+												contextMetadados: totalPurchaseValueMetadados,
 											});
 										}
 									}
@@ -2414,7 +2439,7 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 
 						// Update client metadata in the map for subsequent sales in the same batch
 						if (clientData) {
-							existingClientsMap.set(OnlineSale.cliente, {
+							indexOnlineClientInLookupMaps({
 								...clientData,
 								metadataTotalCompras: newTotalPurchaseCount,
 								metadataValorTotalCompras: newTotalPurchaseValue,
@@ -2564,9 +2589,8 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 											campaign.gatilhoTotalCashbackAcumuladoValorMinimo === undefined ||
 											newOverallAvailableBalance >= campaign.gatilhoTotalCashbackAcumuladoValorMinimo;
 
-										const meetsSegmentationTrigger = campaign.segmentacoes.some(
-											(s) => s.segmentacao === (existingClientsMap.get(OnlineSale.cliente)?.rfmTitle ?? "CLIENTES RECENTES"),
-										);
+										const resolvedClientRfmTitle = resolveExistingOnlineClient(OnlineSale.cliente, onlineSaleClientBasePhone)?.rfmTitle ?? "CLIENTES RECENTES";
+										const meetsSegmentationTrigger = campaign.segmentacoes.some((s) => s.segmentacao === resolvedClientRfmTitle);
 										// All conditions must be met (if defined)
 										return meetsNewCashbackThreshold && meetsTotalCashbackThreshold && meetsSegmentationTrigger;
 									});
@@ -2614,8 +2638,6 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 												agendamentoBlocoReferencia: campaign.execucaoAgendadaBloco,
 												metadados: {
 													cashbackAcumuladoValor: accumulatedBalance,
-													whatsappMensagemId: null,
-													whatsappTemplateId: null,
 													compraValor: saleValue,
 													compraCashbackAcumulado: accumulatedBalance,
 													compraCashbackNovoSaldo: newOverallAvailableBalance,
@@ -2645,15 +2667,7 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 												immediateProcessingDataList.push({
 													interactionId: insertedInteraction.id,
 													organizationId: organization.id,
-													client: {
-														id: clientData.id,
-														nome: clientData.nome,
-														telefone: clientData.telefone,
-														email: clientData.email,
-														analiseRFMTitulo: clientData.analiseRFMTitulo,
-														metadataProdutoMaisCompradoId: clientData.metadataProdutoMaisCompradoId,
-														metadataGrupoProdutoMaisComprado: clientData.metadataGrupoProdutoMaisComprado,
-													},
+													client: clientData,
 													campaign: {
 														autorId: campaign.autorId,
 														whatsappConexaoTelefoneId: campaign.whatsappConexaoTelefoneId,
@@ -2703,18 +2717,26 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 						}
 					}
 					if (isValidSale && saleClientId && isNewSale) {
-						const clientData = existingClientsMap.get(OnlineSale.cliente);
-						const newTotalPurchaseCount = (clientData?.metadataTotalCompras ?? 0) + 1;
-						const newTotalPurchaseValue = (clientData?.metadataValorTotalCompras ?? 0) + Number(OnlineSale.valor);
+						const clientData = resolveExistingOnlineClient(OnlineSale.cliente, onlineSaleClientBasePhone);
+						const finalTotalPurchaseCount = newTotalPurchaseCountForSale ?? (clientData?.metadataTotalCompras ?? 0) + 1;
+						const finalTotalPurchaseValue = newTotalPurchaseValueForSale ?? (clientData?.metadataValorTotalCompras ?? 0) + Number(OnlineSale.valor);
 						await tx
 							.update(clients)
 							.set({
 								ultimaCompraData: saleDate,
 								ultimaCompraId: saleId,
-								metadataTotalCompras: newTotalPurchaseCount,
-								metadataValorTotalCompras: newTotalPurchaseValue,
+								metadataTotalCompras: finalTotalPurchaseCount,
+								metadataValorTotalCompras: finalTotalPurchaseValue,
 							})
 							.where(and(eq(clients.id, saleClientId), eq(clients.organizacaoId, organization.id)));
+
+						if (clientData) {
+							indexOnlineClientInLookupMaps({
+								...clientData,
+								metadataTotalCompras: finalTotalPurchaseCount,
+								metadataValorTotalCompras: finalTotalPurchaseValue,
+							});
+						}
 					}
 				}
 
