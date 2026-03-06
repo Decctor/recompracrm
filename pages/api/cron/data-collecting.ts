@@ -854,7 +854,7 @@ async function handleCardapioWebImportation(
 						const meetsThreshold =
 							campaign.gatilhoQuantidadeTotalCompras !== null &&
 							campaign.gatilhoQuantidadeTotalCompras !== undefined &&
-							currentTotalPurchaseCount >= campaign.gatilhoQuantidadeTotalCompras;
+							currentTotalPurchaseCount === campaign.gatilhoQuantidadeTotalCompras;
 						const meetsSegmentation = campaign.segmentacoes.length === 0 || campaign.segmentacoes.some((s) => s.segmentacao === clientRfmTitle);
 						return meetsThreshold && meetsSegmentation;
 					});
@@ -960,7 +960,7 @@ async function handleCardapioWebImportation(
 						const meetsThreshold =
 							campaign.gatilhoValorTotalCompras !== null &&
 							campaign.gatilhoValorTotalCompras !== undefined &&
-							currentTotalPurchaseValue >= campaign.gatilhoValorTotalCompras;
+							currentTotalPurchaseValue === campaign.gatilhoValorTotalCompras;
 						const meetsSegmentation = campaign.segmentacoes.length === 0 || campaign.segmentacoes.some((s) => s.segmentacao === clientRfmTitle);
 						return meetsThreshold && meetsSegmentation;
 					});
@@ -2219,7 +2219,7 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 								const meetsThreshold =
 									campaign.gatilhoQuantidadeTotalCompras !== null &&
 									campaign.gatilhoQuantidadeTotalCompras !== undefined &&
-									newTotalPurchaseCount >= campaign.gatilhoQuantidadeTotalCompras;
+									newTotalPurchaseCount === campaign.gatilhoQuantidadeTotalCompras;
 								const meetsSegmentation = campaign.segmentacoes.length === 0 || campaign.segmentacoes.some((s) => s.segmentacao === clientRfmTitle);
 								return meetsThreshold && meetsSegmentation;
 							});
@@ -2331,7 +2331,7 @@ const handleOnlineSoftwareImportation: NextApiHandler<string> = async (req, res)
 								const meetsThreshold =
 									campaign.gatilhoValorTotalCompras !== null &&
 									campaign.gatilhoValorTotalCompras !== undefined &&
-									newTotalPurchaseValue >= campaign.gatilhoValorTotalCompras;
+									newTotalPurchaseValue === campaign.gatilhoValorTotalCompras; // TODO: Fix this. The validation should occur in obligatory "frequency" definitions
 								const meetsSegmentation = campaign.segmentacoes.length === 0 || campaign.segmentacoes.some((s) => s.segmentacao === clientRfmTitle);
 								return meetsThreshold && meetsSegmentation;
 							});
