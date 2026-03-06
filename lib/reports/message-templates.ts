@@ -18,6 +18,14 @@ function safeNumber(value: number): string {
 	return formatNumber(Number.isFinite(value) ? value : 0);
 }
 
+function filterValidSellers(sellers: SellerRankingItem[]): SellerRankingItem[] {
+	return sellers.filter((s) => s.vendedorNome !== "N/A");
+}
+
+function filterValidPartners(partners: PartnerRankingItem[]): PartnerRankingItem[] {
+	return partners.filter((p) => p.parceiroNome !== "N/A");
+}
+
 function formatSellerLines(sellers: SellerRankingItem[], showMeta = false): string {
 	if (sellers.length === 0) return "   _Nenhuma venda registrada_";
 	return sellers
@@ -50,6 +58,8 @@ function formatProductLines(products: ProductRankingItem[], showQty = false): st
 
 export function buildDailyReportMessage({ orgNome, periodo, stats, topSellers, topPartners, topProducts }: ReportMessageInput): string {
 	const comparacao = formatComparisonWithEmoji(stats.faturamento.atual, stats.faturamento.anterior);
+	const validSellers = filterValidSellers(topSellers);
+	const validPartners = filterValidPartners(topPartners);
 
 	return `📊 *RELATÓRIO DIÁRIO DE VENDAS*
 📅 ${periodo} · ${orgNome}
@@ -57,18 +67,18 @@ ${"─".repeat(30)}
 
 💰 *Faturamento do dia:* ${formatCurrency(stats.faturamento.atual)}
 ${comparacao} vs. dia anterior
-🎯 *Meta:* ${formatCurrency(stats.faturamentoMeta)} (${formatPercentage(stats.faturamentoMetaPorcentagem)} atingido)
+${stats.faturamentoMeta > 0 ? `🎯 *Meta:* ${formatCurrency(stats.faturamentoMeta)} (${formatPercentage(stats.faturamentoMetaPorcentagem)} atingido)` : ""}
 
 📈 *Resumo do Dia*
 • Vendas realizadas: *${formatNumber(stats.qtdeVendas.atual)}*
 • Ticket médio: *${safeCurrency(stats.ticketMedio.atual)}*
 • Itens vendidos: *${safeNumber(stats.qtdeItensVendidos.atual)}*
-
+${validSellers.length > 0 ? `
 🏆 *Top Vendedores*
-${formatSellerLines(topSellers)}
-
+${formatSellerLines(validSellers)}` : ""}
+${validPartners.length > 0 ? `
 🤝 *Top Parceiros*
-${formatPartnerLines(topPartners)}
+${formatPartnerLines(validPartners)}` : ""}
 
 📦 *Top Produtos*
 ${formatProductLines(topProducts)}
@@ -78,6 +88,8 @@ _Relatório automático · Recompra CRM_`;
 
 export function buildWeeklyReportMessage({ orgNome, periodo, stats, topSellers, topPartners, topProducts }: ReportMessageInput): string {
 	const comparacao = formatComparisonWithEmoji(stats.faturamento.atual, stats.faturamento.anterior);
+	const validSellers = filterValidSellers(topSellers);
+	const validPartners = filterValidPartners(topPartners);
 
 	return `📊 *RELATÓRIO SEMANAL DE VENDAS*
 📅 ${periodo} · ${orgNome}
@@ -85,20 +97,20 @@ ${"─".repeat(30)}
 
 💰 *Faturamento da semana:* ${formatCurrency(stats.faturamento.atual)}
 ${comparacao} vs. semana anterior
-🎯 *Meta:* ${formatCurrency(stats.faturamentoMeta)} (${formatPercentage(stats.faturamentoMetaPorcentagem)} atingido)
+${stats.faturamentoMeta > 0 ? `🎯 *Meta:* ${formatCurrency(stats.faturamentoMeta)} (${formatPercentage(stats.faturamentoMetaPorcentagem)} atingido)` : ""}
 
 📈 *Indicadores da Semana*
 • Total de vendas: *${formatNumber(stats.qtdeVendas.atual)}*
 • Ticket médio: *${safeCurrency(stats.ticketMedio.atual)}*
 • Itens vendidos: *${safeNumber(stats.qtdeItensVendidos.atual)}*
 • Média diária: *${safeCurrency(stats.valorDiarioVendido.atual)}*
-• Margem bruta: *${safeCurrency(stats.margemBruta.atual)}*
-
+${stats.custoTotal.atual > 0 ? `• Margem bruta: *${safeCurrency(stats.margemBruta.atual)}*` : ""}
+${validSellers.length > 0 ? `
 🏆 *Top Vendedores*
-${formatSellerLines(topSellers, true)}
-
+${formatSellerLines(validSellers, true)}` : ""}
+${validPartners.length > 0 ? `
 🤝 *Top Parceiros*
-${formatPartnerLines(topPartners, true)}
+${formatPartnerLines(validPartners, true)}` : ""}
 
 📦 *Top Produtos*
 ${formatProductLines(topProducts, true)}
@@ -108,6 +120,8 @@ _Relatório automático · Recompra CRM_`;
 
 export function buildMonthlyReportMessage({ orgNome, periodo, stats, topSellers, topPartners, topProducts }: ReportMessageInput): string {
 	const comparacao = formatComparisonWithEmoji(stats.faturamento.atual, stats.faturamento.anterior);
+	const validSellers = filterValidSellers(topSellers);
+	const validPartners = filterValidPartners(topPartners);
 
 	return `📊 *RELATÓRIO MENSAL DE VENDAS*
 📅 ${periodo} · ${orgNome}
@@ -115,7 +129,7 @@ ${"─".repeat(30)}
 
 💰 *Faturamento do mês:* ${formatCurrency(stats.faturamento.atual)}
 ${comparacao} vs. mês anterior
-🎯 *Meta:* ${formatCurrency(stats.faturamentoMeta)} (${formatPercentage(stats.faturamentoMetaPorcentagem)} atingido)
+${stats.faturamentoMeta > 0 ? `🎯 *Meta:* ${formatCurrency(stats.faturamentoMeta)} (${formatPercentage(stats.faturamentoMetaPorcentagem)} atingido)` : ""}
 
 📈 *Indicadores do Mês*
 • Total de vendas: *${formatNumber(stats.qtdeVendas.atual)}*
@@ -123,13 +137,13 @@ ${comparacao} vs. mês anterior
 • Itens vendidos: *${safeNumber(stats.qtdeItensVendidos.atual)}*
 • Itens por venda (média): *${safeNumber(stats.itensPorVendaMedio.atual)}*
 • Média diária: *${safeCurrency(stats.valorDiarioVendido.atual)}*
-• Margem bruta: *${safeCurrency(stats.margemBruta.atual)}*
-
+${stats.custoTotal.atual > 0 ? `• Margem bruta: *${safeCurrency(stats.margemBruta.atual)}*` : ""}
+${validSellers.length > 0 ? `
 🏆 *Top Vendedores*
-${formatSellerLines(topSellers, true)}
-
+${formatSellerLines(validSellers, true)}` : ""}
+${validPartners.length > 0 ? `
 🤝 *Top Parceiros*
-${formatPartnerLines(topPartners, true)}
+${formatPartnerLines(validPartners, true)}` : ""}
 
 📦 *Top Produtos*
 ${formatProductLines(topProducts, true)}

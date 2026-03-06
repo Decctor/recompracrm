@@ -1,3 +1,4 @@
+import { formatDateAsLocale } from "@/lib/formatting";
 import { getOverallSalesStats, getPartnerRankings, getProductRankings, getSellerRankings } from "@/lib/reports/data-fetchers";
 import { buildMonthlyReportMessage } from "@/lib/reports/message-templates";
 import { sendMessage } from "@/lib/whatsapp/internal-gateway";
@@ -58,21 +59,39 @@ const monthlyReportHandler: NextApiHandler = async (req, res) => {
 
 				// Get data for last month (full month)
 				const lastMonth = dayjs().subtract(1, "month");
+				const comparisonMonth = dayjs().subtract(2, "month");
+
 				const periodAfter = lastMonth.startOf("month").toDate();
 				const periodBefore = lastMonth.endOf("month").toDate();
+				const comparisonAfter = comparisonMonth.startOf("month").toDate();
+				const comparisonBefore = comparisonMonth.endOf("month").toDate();
 
 				console.log(`[ORG: ${organization.id}] [INFO] [MONTHLY_REPORT] Fetching data for period:`, {
-					after: periodAfter,
-					before: periodBefore,
+					after: formatDateAsLocale(periodAfter, true),
+					before: formatDateAsLocale(periodBefore, true),
+					comparisonAfter: formatDateAsLocale(comparisonAfter, true),
+					comparisonBefore: formatDateAsLocale(comparisonBefore, true),
 				});
 
 				// Fetch sales stats
-				const stats = await getOverallSalesStats({ after: periodAfter, before: periodBefore, organizacaoId: organization.id });
+				const stats = await getOverallSalesStats({
+					after: periodAfter,
+					before: periodBefore,
+					comparisonAfter,
+					comparisonBefore,
+					organizacaoId: organization.id,
+				});
+
+				if (stats.faturamento.atual === 0) {
+					console.log(`[ORG: ${organization.id}] [INFO] [MONTHLY_REPORT] No relevant stats found, skipping`);
+					continue;
+				}
 
 				// Fetch top sellers, partners, and products
-				const topSellers = await getSellerRankings({ after: periodAfter, before: periodBefore, organizacaoId: organization.id }, 3);
-				const topPartners = await getPartnerRankings({ after: periodAfter, before: periodBefore, organizacaoId: organization.id }, 3);
-				const topProducts = await getProductRankings({ after: periodAfter, before: periodBefore, organizacaoId: organization.id }, 3);
+				const periodParams = { after: periodAfter, before: periodBefore, comparisonAfter, comparisonBefore, organizacaoId: organization.id };
+				const topSellers = await getSellerRankings(periodParams, 3);
+				const topPartners = await getPartnerRankings(periodParams, 3);
+				const topProducts = await getProductRankings(periodParams, 3);
 
 				// Build the styled text message
 				const periodo = dayjs(periodAfter).format("MMMM/YYYY").toUpperCase();
@@ -90,6 +109,11 @@ const monthlyReportHandler: NextApiHandler = async (req, res) => {
 					console.log(`[ORG: ${organization.id}] [INFO] [MONTHLY_REPORT] Sending report to owner: ${recipientPhone}`);
 
 					const result = await sendMessage(INTERNAL_SESSION_ID, recipientPhone, { type: "text", text });
+					console.log("[FAKE] [MONTHLY_REPORT] Sending report: ", {
+						organizationId: organization.id,
+						recipient: recipientPhone,
+						text: text,
+					});
 
 					allResults.push({
 						organizationId: organization.id,

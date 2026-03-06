@@ -1,3 +1,4 @@
+import { formatDateAsLocale } from "@/lib/formatting";
 import { getOverallSalesStats, getPartnerRankings, getProductRankings, getSellerRankings } from "@/lib/reports/data-fetchers";
 import { formatDate } from "@/lib/reports/formatters";
 import { buildDailyReportMessage } from "@/lib/reports/message-templates";
@@ -58,19 +59,43 @@ const dailyReportHandler: NextApiHandler = async (req, res) => {
 				const yesterday = dayjs().subtract(1, "day");
 				const periodAfter = yesterday.startOf("day").toDate();
 				const periodBefore = yesterday.endOf("day").toDate();
-
+				const comparisonAfter = yesterday.subtract(1, "day").startOf("day").toDate();
+				const comparisonBefore = yesterday.subtract(1, "day").endOf("day").toDate();
 				console.log(`[ORG: ${organization.id}] [INFO] [DAILY_REPORT] Fetching data for period:`, {
-					after: periodAfter,
-					before: periodBefore,
+					after: formatDateAsLocale(periodAfter, true),
+					before: formatDateAsLocale(periodBefore, true),
+					comparisonAfter: formatDateAsLocale(comparisonAfter, true),
+					comparisonBefore: formatDateAsLocale(comparisonBefore, true),
 				});
 
 				// Fetch sales stats
-				const stats = await getOverallSalesStats({ after: periodAfter, before: periodBefore, organizacaoId: organization.id });
+				const stats = await getOverallSalesStats({
+					after: periodAfter,
+					before: periodBefore,
+					comparisonAfter,
+					comparisonBefore,
+					organizacaoId: organization.id,
+				});
+
+				// Doing a check to validate if there any relevant stats at all
+				if (stats.faturamento.atual === 0) {
+					console.log(`[ORG: ${organization.id}] [INFO] [DAILY_REPORT] No relevant stats found, skipping`);
+					continue;
+				}
 
 				// Fetch top sellers, partners, and products
-				const topSellers = await getSellerRankings({ after: periodAfter, before: periodBefore, organizacaoId: organization.id }, 3);
-				const topPartners = await getPartnerRankings({ after: periodAfter, before: periodBefore, organizacaoId: organization.id }, 3);
-				const topProducts = await getProductRankings({ after: periodAfter, before: periodBefore, organizacaoId: organization.id }, 3);
+				const topSellers = await getSellerRankings(
+					{ after: periodAfter, before: periodBefore, comparisonAfter, comparisonBefore, organizacaoId: organization.id },
+					3,
+				);
+				const topPartners = await getPartnerRankings(
+					{ after: periodAfter, before: periodBefore, comparisonAfter, comparisonBefore, organizacaoId: organization.id },
+					3,
+				);
+				const topProducts = await getProductRankings(
+					{ after: periodAfter, before: periodBefore, comparisonAfter, comparisonBefore, organizacaoId: organization.id },
+					3,
+				);
 
 				// Build the styled text message
 				const periodo = formatDate(periodAfter);
@@ -88,7 +113,11 @@ const dailyReportHandler: NextApiHandler = async (req, res) => {
 					console.log(`[ORG: ${organization.id}] [INFO] [DAILY_REPORT] Sending report to owner: ${recipientPhone}`);
 
 					const result = await sendMessage(INTERNAL_SESSION_ID, recipientPhone, { type: "text", text });
-
+					console.log("[FAKE] [DAILY_REPORT] Sending report: ", {
+						organizationId: organization.id,
+						recipient: recipientPhone,
+						text: text,
+					});
 					allResults.push({
 						organizationId: organization.id,
 						recipient: recipientPhone,

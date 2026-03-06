@@ -1,3 +1,4 @@
+import { formatDateAsLocale } from "@/lib/formatting";
 import { getOverallSalesStats, getPartnerRankings, getProductRankings, getSellerRankings } from "@/lib/reports/data-fetchers";
 import { formatDateRange } from "@/lib/reports/formatters";
 import { buildWeeklyReportMessage } from "@/lib/reports/message-templates";
@@ -55,24 +56,40 @@ const weeklyReportHandler: NextApiHandler = async (req, res) => {
 				console.log(`[ORG: ${organization.id}] [INFO] [WEEKLY_REPORT] Generating report`);
 
 				// Get data for last week (Sunday to Saturday of last week)
-				const lastSunday = dayjs().subtract(1, "week").day(0);
-				const lastSaturday = dayjs().subtract(1, "week").day(6);
+				const lastWeek = dayjs().subtract(1, "week");
+				const comparisonWeek = dayjs().subtract(2, "week");
 
-				const periodAfter = lastSunday.startOf("day").toDate();
-				const periodBefore = lastSaturday.endOf("day").toDate();
+				const periodAfter = lastWeek.day(0).startOf("day").toDate();
+				const periodBefore = lastWeek.day(6).endOf("day").toDate();
+				const comparisonAfter = comparisonWeek.day(0).startOf("day").toDate();
+				const comparisonBefore = comparisonWeek.day(6).endOf("day").toDate();
 
 				console.log(`[ORG: ${organization.id}] [INFO] [WEEKLY_REPORT] Fetching data for period:`, {
-					after: periodAfter,
-					before: periodBefore,
+					after: formatDateAsLocale(periodAfter, true),
+					before: formatDateAsLocale(periodBefore, true),
+					comparisonAfter: formatDateAsLocale(comparisonAfter, true),
+					comparisonBefore: formatDateAsLocale(comparisonBefore, true),
 				});
 
 				// Fetch sales stats
-				const stats = await getOverallSalesStats({ after: periodAfter, before: periodBefore, organizacaoId: organization.id });
+				const stats = await getOverallSalesStats({
+					after: periodAfter,
+					before: periodBefore,
+					comparisonAfter,
+					comparisonBefore,
+					organizacaoId: organization.id,
+				});
+
+				if (stats.faturamento.atual === 0) {
+					console.log(`[ORG: ${organization.id}] [INFO] [WEEKLY_REPORT] No relevant stats found, skipping`);
+					continue;
+				}
 
 				// Fetch top sellers, partners, and products
-				const topSellers = await getSellerRankings({ after: periodAfter, before: periodBefore, organizacaoId: organization.id }, 3);
-				const topPartners = await getPartnerRankings({ after: periodAfter, before: periodBefore, organizacaoId: organization.id }, 3);
-				const topProducts = await getProductRankings({ after: periodAfter, before: periodBefore, organizacaoId: organization.id }, 3);
+				const periodParams = { after: periodAfter, before: periodBefore, comparisonAfter, comparisonBefore, organizacaoId: organization.id };
+				const topSellers = await getSellerRankings(periodParams, 3);
+				const topPartners = await getPartnerRankings(periodParams, 3);
+				const topProducts = await getProductRankings(periodParams, 3);
 
 				// Build the styled text message
 				const periodo = formatDateRange(periodAfter, periodBefore);
@@ -90,6 +107,11 @@ const weeklyReportHandler: NextApiHandler = async (req, res) => {
 					console.log(`[ORG: ${organization.id}] [INFO] [WEEKLY_REPORT] Sending report to owner: ${recipientPhone}`);
 
 					const result = await sendMessage(INTERNAL_SESSION_ID, recipientPhone, { type: "text", text });
+					console.log("[FAKE] [WEEKLY_REPORT] Sending report: ", {
+						organizationId: organization.id,
+						recipient: recipientPhone,
+						text: text,
+					});
 
 					allResults.push({
 						organizationId: organization.id,

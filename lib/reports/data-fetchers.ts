@@ -6,11 +6,17 @@ import { and, count, countDistinct, desc, eq, gte, inArray, isNotNull, lte, notI
 type PeriodParams = {
 	after: Date;
 	before: Date;
+	comparisonAfter: Date;
+	comparisonBefore: Date;
 	organizacaoId: string;
 };
 
 export type OverallSalesStatsResult = {
 	faturamento: {
+		atual: number;
+		anterior: number | undefined;
+	};
+	custoTotal: {
 		atual: number;
 		anterior: number | undefined;
 	};
@@ -42,7 +48,13 @@ export type OverallSalesStatsResult = {
 	faturamentoMetaPorcentagem: number;
 };
 
-export async function getOverallSalesStats({ after, before, organizacaoId }: PeriodParams): Promise<OverallSalesStatsResult> {
+export async function getOverallSalesStats({
+	after,
+	before,
+	comparisonAfter,
+	comparisonBefore,
+	organizacaoId,
+}: PeriodParams): Promise<OverallSalesStatsResult> {
 	// Current period stats
 	const totalSalesStatsResult = await db
 		.select({
@@ -78,8 +90,6 @@ export async function getOverallSalesStats({ after, before, organizacaoId }: Per
 
 	// Previous period stats
 	const dateDiff = dayjs(before).diff(dayjs(after), "days");
-	const previousPeriodAfter = dayjs(after).subtract(dateDiff, "days").toDate();
-	const previousPeriodBefore = dayjs(before).subtract(dateDiff, "days").toDate();
 
 	const previousTotalSalesStatsResult = await db
 		.select({
@@ -92,8 +102,8 @@ export async function getOverallSalesStats({ after, before, organizacaoId }: Per
 			and(
 				eq(sales.organizacaoId, organizacaoId),
 				eq(sales.natureza, "SN01"),
-				gte(sales.dataVenda, previousPeriodAfter),
-				lte(sales.dataVenda, previousPeriodBefore),
+				gte(sales.dataVenda, comparisonAfter),
+				lte(sales.dataVenda, comparisonBefore),
 			),
 		);
 
@@ -117,8 +127,8 @@ export async function getOverallSalesStats({ after, before, organizacaoId }: Per
 						and(
 							eq(sales.organizacaoId, organizacaoId),
 							eq(sales.natureza, "SN01"),
-							gte(sales.dataVenda, previousPeriodAfter),
-							lte(sales.dataVenda, previousPeriodBefore),
+							gte(sales.dataVenda, comparisonAfter),
+							lte(sales.dataVenda, comparisonBefore),
 						),
 					),
 			),
@@ -128,12 +138,16 @@ export async function getOverallSalesStats({ after, before, organizacaoId }: Per
 	const previousTotalSalesItemsQty = previousTotalSalesItemsStats.total ? Number(previousTotalSalesItemsStats.total) : 0;
 
 	// Get sale goals
-	const saleGoal = await getOverallSaleGoal({ after, before, organizacaoId });
+	const saleGoal = await getOverallSaleGoal({ after, before, comparisonAfter, comparisonBefore, organizacaoId });
 
 	return {
 		faturamento: {
 			atual: totalSalesValorTotal,
 			anterior: previousTotalSalesValorTotal,
+		},
+		custoTotal: {
+			atual: totalSalesCustoTotal,
+			anterior: previousTotalSalesCustoTotal,
 		},
 		margemBruta: {
 			atual: totalSalesValorTotal - totalSalesCustoTotal,
@@ -164,7 +178,7 @@ export async function getOverallSalesStats({ after, before, organizacaoId }: Per
 	};
 }
 
-async function getOverallSaleGoal({ after, before, organizacaoId }: PeriodParams): Promise<number> {
+async function getOverallSaleGoal({ after, before, comparisonAfter, comparisonBefore, organizacaoId }: PeriodParams): Promise<number> {
 	try {
 		const goals = await db.query.goals.findMany({
 			where: (fields, { and, or, gte, lte, eq }) =>
