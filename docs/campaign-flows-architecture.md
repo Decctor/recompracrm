@@ -1,8 +1,8 @@
-# Campanhas V2 — Arquitetura de Workflows
+# Campaign Flows — Arquitetura de Workflows
 
 ## 1. Visao Geral
 
-A V2 transforma o sistema de campanhas "flat" (1 trigger -> 1 action) em um **motor de workflows visuais** com grafos de nos (nodes) e arestas (edges), suportando:
+O Campaign Flows transforma o sistema de campanhas "flat" (1 trigger -> 1 action) em um **motor de workflows visuais** com grafos de nos (nodes) e arestas (edges), suportando:
 
 - **Workflows multi-step**: trigger -> delay -> condition -> action -> delay -> action
 - **Multiplas acoes por campanha**: WhatsApp, cashback, notificacao interna (e futuras: email, webhook)
@@ -11,16 +11,16 @@ A V2 transforma o sistema de campanhas "flat" (1 trigger -> 1 action) em um **mo
 - **Delays longos**: via Vercel Workflows (`context.sleep()`)
 - **Condicoes/branching**: caminhos "sim/nao" baseados em atributos do cliente ou resultado de acoes anteriores
 
-A V1 continua rodando em paralelo — sem migracao destrutiva. A V2 e um sistema novo e separado.
+A V1 continua rodando em paralelo — sem migracao destrutiva. O Campaign Flows e um sistema novo e separado.
 
 ---
 
 ## 2. Data Model
 
-### 2.1. `campaign_workflows` — Campanha raiz
+### 2.1. `campaign_flows` — Fluxo de campanha (raiz)
 
 ```
-campaigns_v2
+campaign_flows
 ├── id (PK, UUID)
 ├── organizacao_id (FK -> organizations)
 ├── titulo (text, NOT NULL)
@@ -59,12 +59,12 @@ campaigns_v2
 
 ---
 
-### 2.2. `campaign_workflow_nodes` — Nos do grafo
+### 2.2. `campaign_flow_nodes` — Nos do grafo
 
 ```
-campaign_workflow_nodes
+campaign_flow_nodes
 ├── id (PK, UUID)
-├── campanha_id (FK -> campaigns_v2, CASCADE)
+├── campanha_id (FK -> campaign_flows, CASCADE)
 ├── tipo (enum: GATILHO | ACAO | DELAY | CONDICAO | FILTRO)
 ├── subtipo (text, NOT NULL)          -- tipo especifico (ver secao 3)
 ├── rotulo (text)                     -- label para exibir no builder
@@ -84,14 +84,14 @@ campaign_workflow_nodes
 
 ---
 
-### 2.3. `campaign_workflow_edges` — Arestas do grafo
+### 2.3. `campaign_flow_edges` — Arestas do grafo
 
 ```
-campaign_workflow_edges
+campaign_flow_edges
 ├── id (PK, UUID)
-├── campanha_id (FK -> campaigns_v2, CASCADE)
-├── no_origem_id (FK -> campaign_workflow_nodes, CASCADE)
-├── no_destino_id (FK -> campaign_workflow_nodes, CASCADE)
+├── campanha_id (FK -> campaign_flows, CASCADE)
+├── no_origem_id (FK -> campaign_flow_nodes, CASCADE)
+├── no_destino_id (FK -> campaign_flow_nodes, CASCADE)
 ├── condicao_label (text, nullable)   -- "SIM", "NAO", ou null para fluxo linear
 ├── ordem (integer, default 0)        -- quando um no tem multiplas saidas
 ├── data_insercao (timestamp, default now())
@@ -120,14 +120,14 @@ campaign_audiences
 
 ---
 
-### 2.5. `campaign_workflow_executions` — Execucoes de campanha
+### 2.5. `campaign_flow_executions` — Execucoes de campanha
 
 Uma "execucao" representa **uma rodada do workflow**. Para campanhas de evento, cada evento cria uma execucao por cliente afetado. Para campanhas recorrentes, cada rodada do cron cria uma execucao-mae ("batch").
 
 ```
-campaign_workflow_executions
+campaign_flow_executions
 ├── id (PK, UUID)
-├── campanha_id (FK -> campaigns_v2, CASCADE)
+├── campanha_id (FK -> campaign_flows, CASCADE)
 ├── organizacao_id (FK -> organizations, CASCADE)
 ├── tipo (enum: INDIVIDUAL | LOTE)
 │
@@ -152,15 +152,15 @@ campaign_workflow_executions
 
 ---
 
-### 2.6. `campaign_workflow_execution_steps` — Passos por cliente
+### 2.6. `campaign_flow_execution_steps` — Passos por cliente
 
 Rastreia em qual no cada cliente esta dentro do workflow.
 
 ```
-campaign_workflow_execution_steps
+campaign_flow_execution_steps
 ├── id (PK, UUID)
-├── execucao_id (FK -> campaign_workflow_executions, CASCADE)
-├── no_id (FK -> campaign_workflow_nodes, CASCADE)
+├── execucao_id (FK -> campaign_flow_executions, CASCADE)
+├── no_id (FK -> campaign_flow_nodes, CASCADE)
 ├── cliente_id (FK -> clients, CASCADE)
 │
 ├── status (enum: PENDENTE | EM_EXECUCAO | CONCLUIDO | FALHOU | AGUARDANDO_DELAY | PULADO)
@@ -178,17 +178,17 @@ campaign_workflow_execution_steps
 ### 2.7. Diagrama ER Resumido
 
 ```
-campaigns_v2 ──1:N──> campaign_workflow_nodes
-campaigns_v2 ──1:N──> campaign_workflow_edges
-campaigns_v2 ──N:1──> campaign_audiences
-campaigns_v2 ──1:N──> campaign_workflow_executions
+campaign_flows ──1:N──> campaign_flow_nodes
+campaign_flows ──1:N──> campaign_flow_edges
+campaign_flows ──N:1──> campaign_audiences
+campaign_flows ──1:N──> campaign_flow_executions
 
-campaign_workflow_executions ──1:N──> campaign_workflow_execution_steps
-campaign_workflow_execution_steps ──N:1──> campaign_workflow_nodes
-campaign_workflow_execution_steps ──N:1──> clients
+campaign_flow_executions ──1:N──> campaign_flow_execution_steps
+campaign_flow_execution_steps ──N:1──> campaign_flow_nodes
+campaign_flow_execution_steps ──N:1──> clients
 
-campaign_workflow_edges ──N:1──> campaign_workflow_nodes (origem)
-campaign_workflow_edges ──N:1──> campaign_workflow_nodes (destino)
+campaign_flow_edges ──N:1──> campaign_flow_nodes (origem)
+campaign_flow_edges ──N:1──> campaign_flow_nodes (destino)
 ```
 
 ---
@@ -360,7 +360,7 @@ async function resolveAudience(
         │
         v
 ┌─────────────────────┐
-│  Criar Execucao     │  campaign_workflow_executions (PENDENTE)
+│  Criar Execucao     │  campaign_flow_executions (PENDENTE)
 │  + Resolver Publico │  Filtra clientes aplicaveis
 └─────────┬───────────┘
           │
@@ -389,19 +389,19 @@ async function resolveAudience(
 
 #### A. Campanhas de EVENTO
 
-Disparadas no mesmo local que a V1 (`new-transaction` route, crons de RFM, etc.), mas agora consultam `campaigns_v2` em vez de (ou alem de) `campaigns`:
+Disparadas no mesmo local que a V1 (`new-transaction` route, crons de RFM, etc.), mas agora consultam `campaign_flows` em vez de (ou alem de) `campaigns`:
 
 ```typescript
 // Em app/api/point-of-interaction/new-transaction/route.ts
-// Apos processar campanhas V1, processar V2:
-const v2Campaigns = await getActiveCampaignsV2ByTrigger(orgId, "NOVA-COMPRA");
-for (const campaign of v2Campaigns) {
+// Apos processar campanhas V1, processar campaign flows:
+const flowCampaigns = await getActiveCampaignFlowsByTrigger(orgId, "NOVA-COMPRA");
+for (const campaign of flowCampaigns) {
   // 1. Verificar se cliente passa no publico
   const passesAudience = await checkClientInAudience(clientId, campaign.publicoId);
   if (!passesAudience) continue;
 
   // 2. Criar execucao individual
-  const execution = await createWorkflowExecution({
+  const execution = await createFlowExecution({
     campanhaId: campaign.id,
     clienteId: clientId,
     tipo: "INDIVIDUAL",
@@ -410,16 +410,16 @@ for (const campaign of v2Campaigns) {
   });
 
   // 3. Disparar Vercel Workflow
-  await startWorkflowRun(execution.id);
+  await startFlowRun(execution.id);
 }
 ```
 
 #### B. Campanhas RECORRENTES
 
-Um novo cron job (`process-recurrent-campaigns-v2.ts`) roda nos mesmos time blocks:
+Um novo cron job (`process-recurrent-campaign-flows.ts`) roda nos mesmos time blocks:
 
 ```typescript
-// 1. Buscar campanhas V2 RECORRENTES ativas para o time block atual
+// 1. Buscar campaign flows RECORRENTES ativos para o time block atual
 // 2. Filtrar por shouldCampaignRunToday() (mesma logica V1)
 // 3. Para cada campanha:
 //    a. Resolver publico -> lista de client IDs
@@ -433,7 +433,7 @@ Um novo cron job (`process-recurrent-campaigns-v2.ts`) roda nos mesmos time bloc
 Disparadas por acao do usuario na UI (botao "Disparar Campanha"):
 
 ```typescript
-// POST /api/admin/campaigns-v2/execute
+// POST /api/campaign-flows/execute
 // 1. Verificar que campanha e tipo UNICA e ainda nao foi executada
 // 2. Resolver publico -> lista de client IDs
 // 3. Criar execucao tipo LOTE
@@ -446,14 +446,14 @@ Disparadas por acao do usuario na UI (botao "Disparar Campanha"):
 O workflow runner e uma funcao Vercel Workflow que "caminha" pelo grafo para um cliente especifico:
 
 ```typescript
-// app/api/workflows/campaign-v2/route.ts
+// app/api/workflows/campaign-flow/route.ts
 import { serve } from "@vercel/workflow";
 
-export const POST = serve<CampaignWorkflowInput>(async (context) => {
+export const POST = serve<CampaignFlowRunInput>(async (context) => {
   const { executionId, clientId, campaignId } = context.requestPayload;
 
   // Carregar grafo do workflow (nos + arestas)
-  const graph = await loadWorkflowGraph(campaignId);
+  const graph = await loadFlowGraph(campaignId);
 
   // Encontrar no de entrada (GATILHO)
   const entryNode = graph.nodes.find(n => n.tipo === "GATILHO");
@@ -522,7 +522,7 @@ export const POST = serve<CampaignWorkflowInput>(async (context) => {
 async function processActionWhatsapp(node, clientId, executionId) {
   const { whatsappTemplateId, whatsappConexaoTelefoneId } = node.configuracao;
   // Buscar template, telefone do cliente, conexao
-  // Criar interaction (mesma tabela de interactions existente, com referencia ao campaign_v2)
+  // Criar interaction (mesma tabela de interactions existente, com referencia ao campaign flow)
   // Enviar mensagem via WhatsApp API
   // Retornar { sucesso: true, interactionId }
 }
@@ -592,33 +592,33 @@ async function canExecuteForClient(
 Adicionar em `schema/enums.ts`:
 
 ```typescript
-// Status da campanha V2
-export const campaignV2StatusEnum = pgEnum("campaign_v2_status", [
+// Status do campaign flow
+export const campaignFlowStatusEnum = pgEnum("campaign_flow_status", [
   "RASCUNHO", "ATIVO", "PAUSADO", "ARQUIVADO"
 ]);
 
-// Tipo de campanha V2
-export const campaignV2TypeEnum = pgEnum("campaign_v2_type", [
+// Tipo do campaign flow
+export const campaignFlowTypeEnum = pgEnum("campaign_flow_type", [
   "EVENTO", "RECORRENTE", "UNICA"
 ]);
 
 // Tipo de no no workflow
-export const workflowNodeTypeEnum = pgEnum("workflow_node_type", [
+export const campaignFlowNodeTypeEnum = pgEnum("campaign_flow_node_type", [
   "GATILHO", "ACAO", "DELAY", "CONDICAO", "FILTRO"
 ]);
 
 // Status de execucao
-export const workflowExecutionStatusEnum = pgEnum("workflow_execution_status", [
+export const campaignFlowExecutionStatusEnum = pgEnum("campaign_flow_execution_status", [
   "PENDENTE", "EM_EXECUCAO", "CONCLUIDA", "FALHOU", "CANCELADA"
 ]);
 
 // Tipo de execucao
-export const workflowExecutionTypeEnum = pgEnum("workflow_execution_type", [
+export const campaignFlowExecutionTypeEnum = pgEnum("campaign_flow_execution_type", [
   "INDIVIDUAL", "LOTE"
 ]);
 
 // Status de step
-export const workflowExecutionStepStatusEnum = pgEnum("workflow_execution_step_status", [
+export const campaignFlowExecutionStepStatusEnum = pgEnum("campaign_flow_execution_step_status", [
   "PENDENTE", "EM_EXECUCAO", "CONCLUIDO", "FALHOU", "AGUARDANDO_DELAY", "PULADO"
 ]);
 ```
@@ -627,60 +627,60 @@ export const workflowExecutionStepStatusEnum = pgEnum("workflow_execution_step_s
 
 ## 8. API Routes
 
-### 8.1. CRUD de Campanhas V2
+### 8.1. CRUD de Campaign Flows
 
 ```
-GET    /api/admin/campaigns-v2          -- Listar/buscar por ID
-POST   /api/admin/campaigns-v2          -- Criar (campanha + nos + arestas)
-PUT    /api/admin/campaigns-v2          -- Atualizar (campanha + nos + arestas)
-DELETE /api/admin/campaigns-v2          -- Deletar
+GET    /api/campaign-flows          -- Listar/buscar por ID
+POST   /api/campaign-flows          -- Criar (campanha + nos + arestas)
+PUT    /api/campaign-flows          -- Atualizar (campanha + nos + arestas)
+DELETE /api/campaign-flows          -- Deletar
 ```
 
 O payload de create/update segue o padrao nested do codebase:
 
 ```typescript
-const CreateCampaignV2InputSchema = z.object({
-  campanha: CampaignV2Schema.omit({ dataInsercao: true, autorId: true }),
-  nos: z.array(WorkflowNodeSchema.omit({ campanhaId: true, dataInsercao: true })),
-  arestas: z.array(WorkflowEdgeSchema.omit({ campanhaId: true, dataInsercao: true })),
+const CreateCampaignFlowInputSchema = z.object({
+  campanha: CampaignFlowSchema.omit({ dataInsercao: true, autorId: true }),
+  nos: z.array(CampaignFlowNodeSchema.omit({ campanhaId: true, dataInsercao: true })),
+  arestas: z.array(CampaignFlowEdgeSchema.omit({ campanhaId: true, dataInsercao: true })),
 });
 ```
 
 ### 8.2. CRUD de Publicos
 
 ```
-GET    /api/admin/campaign-audiences     -- Listar/buscar por ID
-POST   /api/admin/campaign-audiences     -- Criar
-PUT    /api/admin/campaign-audiences     -- Atualizar
-DELETE /api/admin/campaign-audiences     -- Deletar
-GET    /api/admin/campaign-audiences/preview -- Preview: retorna contagem e amostra de clientes
+GET    /api/campaign-audiences     -- Listar/buscar por ID
+POST   /api/campaign-audiences     -- Criar
+PUT    /api/campaign-audiences     -- Atualizar
+DELETE /api/campaign-audiences     -- Deletar
+GET    /api/campaign-audiences/preview -- Preview: retorna contagem e amostra de clientes
 ```
 
 ### 8.3. Execucao
 
 ```
-POST   /api/admin/campaigns-v2/execute   -- Disparar campanha UNICA
-GET    /api/admin/campaigns-v2/executions -- Listar execucoes de uma campanha
-GET    /api/admin/campaigns-v2/executions/steps -- Listar steps de uma execucao
+POST   /api/campaign-flows/execute   -- Disparar campanha UNICA
+GET    /api/campaign-flows/executions -- Listar execucoes de uma campanha
+GET    /api/campaign-flows/executions/steps -- Listar steps de uma execucao
 ```
 
 ### 8.4. Vercel Workflow Endpoint
 
 ```
-POST   /api/workflows/campaign-v2       -- Vercel Workflow handler (serve())
+POST   /api/workflows/campaign-flow       -- Vercel Workflow handler (serve())
 ```
 
 ---
 
 ## 9. Estrategia de Migracao
 
-**V1 e V2 rodam em paralelo.** Sem migracao automatica.
+**V1 e Campaign Flows rodam em paralelo.** Sem migracao automatica.
 
 1. Manter todas as tabelas, crons e logica V1 intactos
-2. No `new-transaction` route, adicionar processamento V2 **apos** o V1
-3. Crons V2 sao novos arquivos separados (nao modificam os existentes)
-4. A UI do admin tera uma nova secao "Campanhas V2" ao lado da existente
-5. Ao longo do tempo, usuarios migram manualmente suas campanhas para V2
+2. No `new-transaction` route, adicionar processamento de flows **apos** o V1
+3. Crons de campaign flows sao novos arquivos separados (nao modificam os existentes)
+4. A UI do admin tera uma nova secao "Campaign Flows" ao lado da existente
+5. Ao longo do tempo, usuarios migram manualmente suas campanhas para flows
 6. Quando V1 nao tiver mais campanhas ativas, pode ser deprecada
 
 ---
@@ -699,23 +699,23 @@ POST   /api/workflows/campaign-v2       -- Vercel Workflow handler (serve())
 - Adicionar `delay(100)` entre envios (mesma abordagem V1)
 
 ### 10.3. Observabilidade
-- `campaign_workflow_executions` + `campaign_workflow_execution_steps` dao visibilidade total
+- `campaign_flow_executions` + `campaign_flow_execution_steps` dao visibilidade total
 - Dashboard de campanha mostra: quantos clientes entraram, em qual no estao, quantos concluiram, quantos falharam
 - Logs estruturados em cada step para debugging
 
 ### 10.4. Indexes Recomendados
 ```sql
 -- Busca rapida de execucoes por campanha
-CREATE INDEX idx_wf_executions_campanha ON campaign_workflow_executions(campanha_id, status);
+CREATE INDEX idx_cf_executions_campanha ON campaign_flow_executions(campanha_id, status);
 
 -- Busca rapida de steps por execucao
-CREATE INDEX idx_wf_steps_execucao ON campaign_workflow_execution_steps(execucao_id, status);
+CREATE INDEX idx_cf_steps_execucao ON campaign_flow_execution_steps(execucao_id, status);
 
 -- Busca de steps por cliente (para frequency cap)
-CREATE INDEX idx_wf_steps_cliente ON campaign_workflow_execution_steps(cliente_id, no_id);
+CREATE INDEX idx_cf_steps_cliente ON campaign_flow_execution_steps(cliente_id, no_id);
 
 -- Busca de campanhas ativas por org e tipo
-CREATE INDEX idx_campaigns_v2_org_status ON campaigns_v2(organizacao_id, status, tipo);
+CREATE INDEX idx_campaign_flows_org_status ON campaign_flows(organizacao_id, status, tipo);
 ```
 
 ---
@@ -746,5 +746,5 @@ config: { tipo: "PERCENTUAL", valor: 5, expiracaoMedida: "MESES", expiracaoValor
 ```
 
 Grafo armazenado:
-- 6 nos na tabela `campaign_workflow_nodes`
-- 5 arestas na tabela `campaign_workflow_edges` (a da condicao tem 2: SIM e NAO)
+- 6 nos na tabela `campaign_flow_nodes`
+- 5 arestas na tabela `campaign_flow_edges` (a da condicao tem 2: SIM e NAO)
