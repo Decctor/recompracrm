@@ -32,6 +32,23 @@ export default function CampaignsTriggerBlock({ campaign, updateCampaign }: Camp
 	const selectedDiasSemana = useMemo(() => parseDaysJson(campaign.recorrenciaDiasSemana), [campaign.recorrenciaDiasSemana]);
 	const selectedDiasMes = useMemo(() => parseDaysJson(campaign.recorrenciaDiasMes), [campaign.recorrenciaDiasMes]);
 
+	function handleTriggerTypeChange(value: TCampaignTriggerTypeEnum) {
+		if (value !== "CASHBACK-EXPIRANDO") {
+			updateCampaign({ gatilhoTipo: value });
+			return;
+		}
+
+		const shouldPrefillAntecedenciaValor =
+			typeof campaign.gatilhoCashbackExpirandoAntecedenciaValor !== "number" || campaign.gatilhoCashbackExpirandoAntecedenciaValor <= 0;
+		const shouldPrefillAntecedenciaMedida = !campaign.gatilhoCashbackExpirandoAntecedenciaMedida;
+
+		updateCampaign({
+			gatilhoTipo: value,
+			...(shouldPrefillAntecedenciaValor ? { gatilhoCashbackExpirandoAntecedenciaValor: 3 } : {}),
+			...(shouldPrefillAntecedenciaMedida ? { gatilhoCashbackExpirandoAntecedenciaMedida: "DIAS" } : {}),
+		});
+	}
+
 	return (
 		<ResponsiveMenuSection title="TRIGGER" icon={<SparklesIcon className="h-4 min-h-4 w-4 min-w-4" />}>
 			<SelectInput
@@ -39,15 +56,13 @@ export default function CampaignsTriggerBlock({ campaign, updateCampaign }: Camp
 				value={campaign.gatilhoTipo}
 				resetOptionLabel="SELECIONE O TIPO"
 				options={CampaignTriggerTypeOptions}
-				handleChange={(value) => updateCampaign({ gatilhoTipo: value as TCampaignTriggerTypeEnum })}
+				handleChange={(value) => handleTriggerTypeChange(value as TCampaignTriggerTypeEnum)}
 				onReset={() => updateCampaign({ gatilhoTipo: "NOVA-COMPRA" })}
 				width="100%"
 			/>
 			{campaign.gatilhoTipo === "RECORRENTE" ? (
 				<div className="w-full flex flex-col gap-2">
-					<p className="text-center text-sm tracking-tight text-muted-foreground">
-						Configure o agendamento recorrente da campanha.
-					</p>
+					<p className="text-center text-sm tracking-tight text-muted-foreground">Configure o agendamento recorrente da campanha.</p>
 					<SelectInput
 						label="FREQUÊNCIA"
 						value={campaign.recorrenciaTipo}
@@ -129,6 +144,30 @@ export default function CampaignsTriggerBlock({ campaign, updateCampaign }: Camp
 							value={campaign.gatilhoTotalCashbackAcumuladoValorMinimo ?? null}
 							placeholder="Preencha aqui o valor mínimo de total cashback acumulado..."
 							handleChange={(value) => updateCampaign({ gatilhoTotalCashbackAcumuladoValorMinimo: value })}
+							width="100%"
+						/>
+					</div>
+				</div>
+			) : null}
+			{campaign.gatilhoTipo === "CASHBACK-EXPIRANDO" ? (
+				<div className="w-full flex flex-col gap-2 items-center lg:flex-row">
+					<div className="w-full lg:w-1/2">
+						<SelectInput
+							label="ANTECEDÊNCIA DE AVISO (MEDIDA)"
+							value={campaign.gatilhoCashbackExpirandoAntecedenciaMedida}
+							resetOptionLabel="SELECIONE A MEDIDA"
+							options={TimeDurationUnitsOptions}
+							handleChange={(value) => updateCampaign({ gatilhoCashbackExpirandoAntecedenciaMedida: value as TTimeDurationUnitsEnum })}
+							onReset={() => updateCampaign({ gatilhoCashbackExpirandoAntecedenciaMedida: null })}
+							width="100%"
+						/>
+					</div>
+					<div className="w-full lg:w-1/2">
+						<NumberInput
+							label="ANTECEDÊNCIA DE AVISO (VALOR)"
+							value={campaign.gatilhoCashbackExpirandoAntecedenciaValor ?? null}
+							placeholder="Ex: 3 para avisar 3 dias antes de expirar..."
+							handleChange={(value) => updateCampaign({ gatilhoCashbackExpirandoAntecedenciaValor: value })}
 							width="100%"
 						/>
 					</div>

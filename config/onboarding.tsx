@@ -59,6 +59,8 @@ type TRecompraCRMDefaultCampaign = {
 		gatilhoTempoPermanenciaValor: TNewCampaignEntity["gatilhoTempoPermanenciaValor"];
 		gatilhoNovoCashbackAcumuladoValorMinimo: TNewCampaignEntity["gatilhoNovoCashbackAcumuladoValorMinimo"];
 		gatilhoTotalCashbackAcumuladoValorMinimo: TNewCampaignEntity["gatilhoTotalCashbackAcumuladoValorMinimo"];
+		gatilhoCashbackExpirandoAntecedenciaValor: TNewCampaignEntity["gatilhoCashbackExpirandoAntecedenciaValor"];
+		gatilhoCashbackExpirandoAntecedenciaMedida: TNewCampaignEntity["gatilhoCashbackExpirandoAntecedenciaMedida"];
 		gatilhoQuantidadeTotalCompras: TNewCampaignEntity["gatilhoQuantidadeTotalCompras"];
 		gatilhoValorTotalCompras: TNewCampaignEntity["gatilhoValorTotalCompras"];
 		execucaoAgendadaMedida: TNewCampaignEntity["execucaoAgendadaMedida"];
@@ -93,6 +95,8 @@ export const RecompraCRMDefaultCampaigns: TRecompraCRMDefaultCampaign[] = [
 			gatilhoQuantidadeTotalCompras: null,
 			gatilhoNovoCashbackAcumuladoValorMinimo: null,
 			gatilhoTotalCashbackAcumuladoValorMinimo: null,
+			gatilhoCashbackExpirandoAntecedenciaValor: null,
+			gatilhoCashbackExpirandoAntecedenciaMedida: null,
 			gatilhoTempoPermanenciaMedida: null,
 			gatilhoTempoPermanenciaValor: null,
 			recorrenciaTipo: null,
@@ -160,6 +164,8 @@ export const RecompraCRMDefaultCampaigns: TRecompraCRMDefaultCampaign[] = [
 			gatilhoQuantidadeTotalCompras: 2,
 			gatilhoNovoCashbackAcumuladoValorMinimo: null,
 			gatilhoTotalCashbackAcumuladoValorMinimo: null,
+			gatilhoCashbackExpirandoAntecedenciaValor: null,
+			gatilhoCashbackExpirandoAntecedenciaMedida: null,
 			gatilhoTempoPermanenciaMedida: null,
 			gatilhoTempoPermanenciaValor: null,
 			recorrenciaTipo: null,
@@ -227,6 +233,8 @@ export const RecompraCRMDefaultCampaigns: TRecompraCRMDefaultCampaign[] = [
 			gatilhoQuantidadeTotalCompras: null,
 			gatilhoNovoCashbackAcumuladoValorMinimo: null,
 			gatilhoTotalCashbackAcumuladoValorMinimo: null,
+			gatilhoCashbackExpirandoAntecedenciaValor: null,
+			gatilhoCashbackExpirandoAntecedenciaMedida: null,
 			gatilhoTempoPermanenciaMedida: null,
 			gatilhoTempoPermanenciaValor: null,
 			recorrenciaTipo: null,
@@ -294,6 +302,8 @@ export const RecompraCRMDefaultCampaigns: TRecompraCRMDefaultCampaign[] = [
 			gatilhoQuantidadeTotalCompras: null,
 			gatilhoNovoCashbackAcumuladoValorMinimo: null,
 			gatilhoTotalCashbackAcumuladoValorMinimo: null,
+			gatilhoCashbackExpirandoAntecedenciaValor: null,
+			gatilhoCashbackExpirandoAntecedenciaMedida: null,
 			gatilhoTempoPermanenciaMedida: null,
 			gatilhoTempoPermanenciaValor: null,
 			recorrenciaTipo: null,

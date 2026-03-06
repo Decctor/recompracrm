@@ -42,10 +42,27 @@ function validateRecurrentCampaign(campaign: z.infer<typeof CampaignSchema>) {
 	}
 }
 
-async function validateCampaignTemplateTriggerCompatibility(
-	whatsappTemplateId: string | null | undefined,
-	gatilhoTipo: TCampaignTriggerTypeEnum,
-) {
+function validateCampaignFrequencyInterval(campaign: z.infer<typeof CampaignSchema>) {
+	if (!campaign.permitirRecorrencia) return;
+
+	if (!campaign.frequenciaIntervaloMedida || !campaign.frequenciaIntervaloValor || campaign.frequenciaIntervaloValor <= 0) {
+		throw new createHttpError.BadRequest("A frequência de intervalo deve ser maior que zero quando a recorrência estiver ativa.");
+	}
+}
+
+function validateCashbackExpiringTrigger(campaign: z.infer<typeof CampaignSchema>) {
+	if (campaign.gatilhoTipo !== "CASHBACK-EXPIRANDO") return;
+
+	if (
+		!campaign.gatilhoCashbackExpirandoAntecedenciaMedida ||
+		!campaign.gatilhoCashbackExpirandoAntecedenciaValor ||
+		campaign.gatilhoCashbackExpirandoAntecedenciaValor <= 0
+	) {
+		throw new createHttpError.BadRequest("Informe uma antecedência válida para cashback expirando.");
+	}
+}
+
+async function validateCampaignTemplateTriggerCompatibility(whatsappTemplateId: string | null | undefined, gatilhoTipo: TCampaignTriggerTypeEnum) {
 	if (!whatsappTemplateId) return;
 	const template = await db.query.whatsappTemplates.findFirst({
 		where: (fields, { eq }) => eq(fields.id, whatsappTemplateId),
@@ -80,6 +97,8 @@ async function createCampaign({ input, session }: { input: TCreateCampaignInput;
 
 	// Validate recurrent campaign settings
 	validateRecurrentCampaign(input.campaign as z.infer<typeof CampaignSchema>);
+	validateCashbackExpiringTrigger(input.campaign as z.infer<typeof CampaignSchema>);
+	validateCampaignFrequencyInterval(input.campaign as z.infer<typeof CampaignSchema>);
 
 	// Validate template-trigger compatibility
 	await validateCampaignTemplateTriggerCompatibility(input.campaign.whatsappTemplateId, input.campaign.gatilhoTipo);
@@ -369,6 +388,8 @@ async function updateCampaign({ input, session }: { input: TUpdateCampaignInput;
 
 	// Validate recurrent campaign settings
 	validateRecurrentCampaign(input.campaign as z.infer<typeof CampaignSchema>);
+	validateCashbackExpiringTrigger(input.campaign as z.infer<typeof CampaignSchema>);
+	validateCampaignFrequencyInterval(input.campaign as z.infer<typeof CampaignSchema>);
 
 	// Validate template-trigger compatibility
 	await validateCampaignTemplateTriggerCompatibility(input.campaign.whatsappTemplateId, input.campaign.gatilhoTipo);

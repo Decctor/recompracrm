@@ -32,7 +32,7 @@ export default function CampaignsConfigBlock({ campaign, updateCampaign }: Campa
 								resetOptionLabel="SELECIONE A MEDIDA"
 								options={TimeDurationUnitsOptions}
 								handleChange={(value) => updateCampaign({ frequenciaIntervaloMedida: value as TTimeDurationUnitsEnum })}
-								onReset={() => updateCampaign({ frequenciaIntervaloMedida: null })}
+								onReset={() => updateCampaign({ frequenciaIntervaloMedida: "DIAS" })}
 								width="100%"
 							/>
 						</div>
@@ -45,6 +45,11 @@ export default function CampaignsConfigBlock({ campaign, updateCampaign }: Campa
 								width="100%"
 							/>
 						</div>
+					</div>
+				) : null}
+				{campaign.permitirRecorrencia && (!campaign.frequenciaIntervaloValor || campaign.frequenciaIntervaloValor <= 0) ? (
+					<div className="w-full rounded-md border border-amber-400/50 bg-amber-50 p-3 text-sm text-amber-900">
+						Defina uma frequência de intervalo maior que zero para evitar envios em toda execução da automação.
 					</div>
 				) : null}
 			</div>

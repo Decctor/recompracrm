@@ -60,6 +60,15 @@ export const CampaignSchema = z.object({
 		})
 		.optional()
 		.nullable(),
+	// Specific for "CASHBACK-EXPIRANDO"
+	gatilhoCashbackExpirandoAntecedenciaValor: z
+		.number({
+			required_error: "Valor de antecedência do cashback expirando não informado.",
+			invalid_type_error: "Tipo não válido para o valor de antecedência do cashback expirando.",
+		})
+		.optional()
+		.nullable(),
+	gatilhoCashbackExpirandoAntecedenciaMedida: TimeDurationUnitsEnum.optional().nullable(),
 	// Specific for "QUANTIDADE-TOTAL-COMPRAS"
 	gatilhoQuantidadeTotalCompras: z
 		.number({
@@ -114,9 +123,10 @@ export const CampaignSchema = z.object({
 			required_error: "Valor da frequência de intervalo não informado.",
 			invalid_type_error: "Tipo não válido para o valor da frequência de intervalo.",
 		})
+		.nullable()
 		.optional()
 		.default(0),
-	frequenciaIntervaloMedida: TimeDurationUnitsEnum.optional().default("DIAS"),
+	frequenciaIntervaloMedida: TimeDurationUnitsEnum.optional().nullable().default("DIAS"),
 	// Whatsapp specific
 	whatsappConexaoTelefoneId: z.string({
 		required_error: "ID da conexão do WhatsApp não informado.",
