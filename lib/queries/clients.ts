@@ -33,6 +33,37 @@ async function fetchClients(input: TGetClientsInput) {
 	}
 }
 
+export async function fetchClientById(clientId: string) {
+	try {
+		const searchParams = new URLSearchParams();
+		searchParams.set("id", clientId);
+		searchParams.set("page", "1");
+		const { data } = await axios.get<TGetClientsOutput>(`/api/clients?${searchParams.toString()}`);
+
+		if (!data.data.byId) throw new Error("Cliente não encontrado.");
+		return data.data.byId;
+	} catch (error) {
+		console.log("Error running fetchClientById", error);
+		throw error;
+	}
+}
+
+type UseClientByIdParams = {
+	id: string;
+};
+export function useClientById({ id }: UseClientByIdParams) {
+	const queryKey = ["client-by-id", id] as const;
+
+	return {
+		...useQuery({
+			queryKey,
+			queryFn: () => fetchClientById(id),
+			enabled: !!id,
+		}),
+		queryKey,
+	};
+}
+
 type UseClientsParams = {
 	initialFilters: Partial<TGetClientsInput>;
 };

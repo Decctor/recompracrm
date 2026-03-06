@@ -241,6 +241,6 @@ export function formatLocation({
 	if (location.longitude) addressStr = addressStr + `, LONG ${location.longitude}`;
 	if (includeCEP && location.cep) addressStr = addressStr + `, CEP:${location.cep}`;
 
-	addressStr += ".";
+	if (addressStr) addressStr += ".";
 	return addressStr.toUpperCase();
 }

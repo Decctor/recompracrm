@@ -219,6 +219,7 @@ export async function processSingleInteractionImmediately(params: ImmediateProce
 					.update(interactions)
 					.set({
 						statusEnvio: "ENVIADO",
+						erroEnvio: null,
 						dataExecucao: new Date(),
 						metadados: {
 							...(previousInteraction?.metadados ?? {}),
@@ -238,12 +239,9 @@ export async function processSingleInteractionImmediately(params: ImmediateProce
 					fallbackText: payload.content,
 				});
 				console.log("[IMMEDIATE_PROCESS] Template content", templateContent);
-				sentWhatsappTemplateResponse = await sendMessage(
-					whatsappSessionId,
-					formatPhoneForInternalGateway(client.telefone),
-					templateContent,
-					{ clientMessageId: interactionId },
-				);
+				sentWhatsappTemplateResponse = await sendMessage(whatsappSessionId, formatPhoneForInternalGateway(client.telefone), templateContent, {
+					clientMessageId: interactionId,
+				});
 				console.log("[IMMEDIATE_PROCESS] Sent WHATSAPP TEMPLATE RESPONSE", sentWhatsappTemplateResponse);
 				if (!sentWhatsappTemplateResponse.success) {
 					throw new Error(sentWhatsappTemplateResponse.error || "Falha ao enfileirar mensagem no Gateway Interno");
@@ -264,6 +262,7 @@ export async function processSingleInteractionImmediately(params: ImmediateProce
 					.update(interactions)
 					.set({
 						statusEnvio: "PENDENTE",
+						erroEnvio: null,
 						dataExecucao: new Date(),
 						metadados: {
 							...(previousInteraction?.metadados ?? {}),

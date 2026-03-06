@@ -305,6 +305,7 @@ const processInteractionsHandler: NextApiHandler = async (req, res) => {
 							.update(interactions)
 							.set({
 								statusEnvio: interactionStatusEnvio,
+								erroEnvio: null,
 								dataExecucao: new Date(),
 								metadados: {
 									...(interaction.metadados ?? {}),

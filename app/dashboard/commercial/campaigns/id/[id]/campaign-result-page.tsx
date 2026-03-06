@@ -4,6 +4,7 @@ import type { TGetCampaignInteractionsOutputItems } from "@/app/api/campaigns/in
 import type { TGetConversionQualityOutput } from "@/app/api/campaigns/stats/conversion-quality/route";
 import CampaignInteractionsFilterMenu from "@/components/Campaigns/CampaignInteractionsFilterMenu";
 import CampaignsGraphs from "@/components/Campaigns/CampaignsGraphs";
+import ClientHoverCard from "@/components/Clients/ClientHoverCard";
 import DateIntervalInput from "@/components/Inputs/DateIntervalInput";
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
 import LoadingComponent from "@/components/Layouts/LoadingComponent";
@@ -16,6 +17,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { getErrorMessage } from "@/lib/errors";
 import { formatDateAsLocale, formatDecimalPlaces, formatToMoney } from "@/lib/formatting";
+import { retryCampaignInteraction } from "@/lib/mutations/campaigns";
 import {
 	useCampaignById,
 	useCampaignInteractionsLogs,
@@ -25,6 +27,7 @@ import {
 } from "@/lib/queries/campaigns";
 import { cn } from "@/lib/utils";
 import type { TCampaignTriggerTypeEnum } from "@/schemas/enums";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import dayjs from "dayjs";
 import {
 	ArrowLeft,
@@ -55,6 +58,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { memo, useEffect, useState } from "react";
+import { toast } from "sonner";
 
 type CampaignResultPageProps = {
 	campaignId: string;
@@ -749,6 +753,18 @@ function InteractionsSection({ campaignId }: { campaignId: string }) {
 }
 
 function InteractionLogCard({ interaction }: { interaction: TGetCampaignInteractionsOutputItems[number] }) {
+	const queryClient = useQueryClient();
+	const { mutate: handleRetryInteraction, isPending: retryIsPending } = useMutation({
+		mutationKey: ["retry-campaign-interaction", interaction.id],
+		mutationFn: async () => await retryCampaignInteraction({ interactionId: interaction.id }),
+		onSuccess: async (response) => {
+			toast.success(response.message);
+			await queryClient.invalidateQueries({ queryKey: ["campaign-interactions-logs"] });
+		},
+		onError: (error) => {
+			toast.error(getErrorMessage(error));
+		},
+	});
 	const executionStatus = interaction.dataExecucao ? "EXECUTADA" : "AGENDADA";
 	const scheduleDateText = interaction.agendamentoDataReferencia ? dayjs(interaction.agendamentoDataReferencia).format("DD/MM/YYYY") : "Não definido";
 	const scheduleBlockText = interaction.agendamentoBlocoReferencia ?? "--:--";
@@ -759,10 +775,12 @@ function InteractionLogCard({ interaction }: { interaction: TGetCampaignInteract
 			<div className="w-full flex flex-col gap-0.5">
 				<div className="w-full flex items-center justify-between gap-2">
 					<div className="flex items-center gap-3 flex-wrap">
-						<div className="flex items-center gap-1.5 bg-secondary rounded-xl px-3 py-1.5">
-							<UserRound className="w-4 h-4 min-w-4 min-h-4" />
-							<p className="text-[0.65rem] font-medium tracking-tight uppercase">{interaction.cliente.nome ?? "NÃO INFORMADO"}</p>
-						</div>
+						<ClientHoverCard clientId={interaction.cliente.id}>
+							<div className="flex items-center gap-1.5 bg-secondary rounded-xl px-3 py-1.5 cursor-pointer">
+								<UserRound className="w-4 h-4 min-w-4 min-h-4" />
+								<p className="text-[0.65rem] font-medium tracking-tight uppercase">{interaction.cliente.nome ?? "NÃO INFORMADO"}</p>
+							</div>
+						</ClientHoverCard>
 					</div>
 					<div className="flex items-center gap-3">
 						{interaction.erroEnvio ? (
@@ -789,6 +807,18 @@ function InteractionLogCard({ interaction }: { interaction: TGetCampaignInteract
 							<CircleCheck className="w-4 min-w-4 h-4 min-h-4" />
 							<p className="text-xs font-bold tracking-tight uppercase">{executionStatus}</p>
 						</div>
+						{interaction.erroEnvio && !interaction.dataExecucao ? (
+							<Button
+								size="sm"
+								variant="outline"
+								onClick={() => handleRetryInteraction()}
+								disabled={retryIsPending}
+								className="h-7 text-[0.65rem] font-semibold"
+							>
+								<RefreshCw className={cn("w-3.5 h-3.5 min-w-3.5 min-h-3.5", { "animate-spin": retryIsPending })} />
+								{retryIsPending ? "REENVIANDO..." : "TENTAR NOVAMENTE"}
+							</Button>
+						) : null}
 					</div>
 				</div>
 				{interaction.descricao && <p className="text-xs font-medium tracking-tight text-muted-foreground">{interaction.descricao}</p>}

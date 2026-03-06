@@ -1,6 +1,8 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
+import { processSingleInteractionImmediately } from "@/lib/interactions";
+import type { TInteractionContextMetadados } from "@/lib/whatsapp/template-variables";
 import { db } from "@/services/drizzle";
 import { clients } from "@/services/drizzle/schema/clients";
 import { interactions } from "@/services/drizzle/schema/interactions";
@@ -189,6 +191,118 @@ async function getCampaignInteractions({ input, session }: { input: TGetCampaign
 export type TGetCampaignInteractionsOutput = Awaited<ReturnType<typeof getCampaignInteractions>>;
 export type TGetCampaignInteractionsOutputItems = TGetCampaignInteractionsOutput["data"]["items"];
 
+const RetryCampaignInteractionInputSchema = z.object({
+	interactionId: z.string({
+		required_error: "ID da interação não informado.",
+		invalid_type_error: "Tipo não válido para o ID da interação.",
+	}),
+});
+export type TRetryCampaignInteractionInput = z.infer<typeof RetryCampaignInteractionInputSchema>;
+
+async function retryCampaignInteraction({ input, session }: { input: TRetryCampaignInteractionInput; session: TAuthUserSession }) {
+	const userOrgId = session.membership?.organizacao.id;
+	if (!userOrgId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
+
+	const interaction = await db.query.interactions.findFirst({
+		where: (fields, { and, eq, isNotNull }) =>
+			and(eq(fields.id, input.interactionId), eq(fields.organizacaoId, userOrgId), isNotNull(fields.campanhaId)),
+		columns: {
+			id: true,
+			clienteId: true,
+			metadados: true,
+			dataExecucao: true,
+			statusEnvio: true,
+			erroEnvio: true,
+		},
+		with: {
+			cliente: {
+				columns: {
+					id: true,
+					nome: true,
+					telefone: true,
+					email: true,
+					analiseRFMTitulo: true,
+					metadataProdutoMaisCompradoId: true,
+					metadataGrupoProdutoMaisComprado: true,
+				},
+			},
+			campanha: {
+				columns: {
+					autorId: true,
+					whatsappConexaoTelefoneId: true,
+				},
+				with: {
+					whatsappTemplate: true,
+					whatsappConexaoTelefone: {
+						with: {
+							conexao: {
+								columns: {
+									tipoConexao: true,
+									token: true,
+									gatewaySessaoId: true,
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	});
+
+	if (!interaction) throw new createHttpError.NotFound("Interação não encontrada.");
+	if (!interaction.campanha) throw new createHttpError.BadRequest("Campanha da interação não encontrada.");
+	if (!interaction.campanha.whatsappTemplate) throw new createHttpError.BadRequest("Template do WhatsApp da campanha não encontrado.");
+	const campaignAuthorId = interaction.campanha.autorId;
+	if (!campaignAuthorId) throw new createHttpError.BadRequest("Autor da campanha não encontrado para reenviar essa interação.");
+	const campaignWhatsappConnectionPhoneId = interaction.campanha.whatsappConexaoTelefoneId;
+	if (!campaignWhatsappConnectionPhoneId) {
+		throw new createHttpError.BadRequest("Telefone de conexão do WhatsApp não encontrado para essa campanha.");
+	}
+	if (interaction.dataExecucao) throw new createHttpError.BadRequest("Essa interação já foi executada e não pode ser reenviada manualmente.");
+	if (interaction.statusEnvio !== "FALHOU" && !interaction.erroEnvio) {
+		throw new createHttpError.BadRequest("Apenas interações com falha podem ser reenviadas manualmente.");
+	}
+
+	const whatsappConnection = interaction.campanha.whatsappConexaoTelefone?.conexao;
+	if (!whatsappConnection) {
+		throw new createHttpError.BadRequest("Conexão de WhatsApp não encontrada para essa interação.");
+	}
+
+	const processingResult = await processSingleInteractionImmediately({
+		interactionId: interaction.id,
+		organizationId: userOrgId,
+		client: {
+			id: interaction.cliente.id,
+			nome: interaction.cliente.nome,
+			telefone: interaction.cliente.telefone,
+			email: interaction.cliente.email,
+			analiseRFMTitulo: interaction.cliente.analiseRFMTitulo,
+			metadataProdutoMaisCompradoId: interaction.cliente.metadataProdutoMaisCompradoId,
+			metadataGrupoProdutoMaisComprado: interaction.cliente.metadataGrupoProdutoMaisComprado,
+		},
+		campaign: {
+			autorId: campaignAuthorId,
+			whatsappConexaoTelefoneId: campaignWhatsappConnectionPhoneId,
+			whatsappTemplate: interaction.campanha.whatsappTemplate,
+		},
+		whatsappToken: whatsappConnection.tipoConexao === "META_CLOUD_API" ? (whatsappConnection.token ?? undefined) : undefined,
+		whatsappSessionId: whatsappConnection.tipoConexao === "INTERNAL_GATEWAY" ? (whatsappConnection.gatewaySessaoId ?? undefined) : undefined,
+		contextMetadados: (interaction.metadados ?? undefined) as TInteractionContextMetadados | undefined,
+	});
+
+	if (!processingResult.success) {
+		throw new createHttpError.BadRequest(processingResult.error ?? "Não foi possível reenviar essa interação.");
+	}
+
+	return {
+		data: {
+			interactionId: interaction.id,
+		},
+		message: "Interação reenviada com sucesso.",
+	};
+}
+export type TRetryCampaignInteractionOutput = Awaited<ReturnType<typeof retryCampaignInteraction>>;
+
 const getCampaignInteractionsRoute = async (request: NextRequest) => {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você precisa estar autenticado para acessar esse recurso.");
@@ -206,6 +320,20 @@ const getCampaignInteractionsRoute = async (request: NextRequest) => {
 	return NextResponse.json(result, { status: 200 });
 };
 
+const retryCampaignInteractionRoute = async (request: NextRequest) => {
+	const session = await getCurrentSessionUncached();
+	if (!session) throw new createHttpError.Unauthorized("Você precisa estar autenticado para acessar esse recurso.");
+
+	const body = await request.json();
+	const input = RetryCampaignInteractionInputSchema.parse(body);
+	const result = await retryCampaignInteraction({ input, session });
+	return NextResponse.json(result, { status: 200 });
+};
+
 export const GET = appApiHandler({
 	GET: getCampaignInteractionsRoute,
+});
+
+export const POST = appApiHandler({
+	POST: retryCampaignInteractionRoute,
 });
