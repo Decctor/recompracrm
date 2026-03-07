@@ -2,7 +2,7 @@ import type { TCampaignAudienceState } from "@/schemas/campaign-audiences";
 import type { TFilterTree } from "@/schemas/campaign-audiences";
 import { useCallback, useState } from "react";
 
-type TUseInternalCampaignAudienceStateProps = {
+type TUseCampaignAudienceStateProps = {
 	initialState: Partial<TCampaignAudienceState>;
 };
 
@@ -12,7 +12,7 @@ const DEFAULT_FILTER_TREE: TFilterTree = {
 	grupos: [],
 };
 
-export function useInternalCampaignAudienceState({ initialState }: TUseInternalCampaignAudienceStateProps) {
+export function useCampaignAudienceState({ initialState }: TUseCampaignAudienceStateProps) {
 	const buildInitialState = (): TCampaignAudienceState => ({
 		audience: {
 			titulo: initialState.audience?.titulo ?? "",
@@ -30,7 +30,7 @@ export function useInternalCampaignAudienceState({ initialState }: TUseInternalC
 		}));
 	}, []);
 
-	const setFiltros = useCallback((filtros: TFilterTree) => {
+	const setFilters = useCallback((filtros: TFilterTree) => {
 		setState((prev) => ({
 			...prev,
 			audience: { ...prev.audience, filtros },
@@ -48,9 +48,9 @@ export function useInternalCampaignAudienceState({ initialState }: TUseInternalC
 	return {
 		state,
 		updateAudience,
-		setFiltros,
+		setFilters,
 		redefineState,
 		resetState,
 	};
 }
-export type TUseInternalCampaignAudienceState = ReturnType<typeof useInternalCampaignAudienceState>;
+export type TUseCampaignAudienceState = ReturnType<typeof useCampaignAudienceState>;

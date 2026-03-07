@@ -1,11 +1,11 @@
 import type { TCampaignFlowState } from "@/schemas/campaign-flows";
 import { useCallback, useState } from "react";
 
-type TUseInternalCampaignFlowStateProps = {
+type TUseCampaignFlowStateProps = {
 	initialState: Partial<TCampaignFlowState>;
 };
 
-export function useInternalCampaignFlowState({ initialState }: TUseInternalCampaignFlowStateProps) {
+export function useCampaignFlowState({ initialState }: TUseCampaignFlowStateProps) {
 	const buildInitialState = (): TCampaignFlowState => ({
 		campaignFlow: {
 			titulo: initialState.campaignFlow?.titulo ?? "",
@@ -40,21 +40,21 @@ export function useInternalCampaignFlowState({ initialState }: TUseInternalCampa
 
 	// ── Nodes ──────────────────────────────────────────────────────────────────
 
-	const addNo = useCallback((no: TCampaignFlowState["nos"][number]) => {
+	const addNode = useCallback((node: TCampaignFlowState["nos"][number]) => {
 		setState((prev) => ({
 			...prev,
-			nos: [...prev.nos, no],
+			nos: [...prev.nos, node],
 		}));
 	}, []);
 
-	const updateNo = useCallback(({ index, changes }: { index: number; changes: Partial<TCampaignFlowState["nos"][number]> }) => {
+	const updateNode = useCallback(({ index, changes }: { index: number; changes: Partial<TCampaignFlowState["nos"][number]> }) => {
 		setState((prev) => ({
 			...prev,
 			nos: prev.nos.map((n, i) => (i === index ? { ...n, ...changes } : n)),
 		}));
 	}, []);
 
-	const removeNo = useCallback((index: number) => {
+	const removeNode = useCallback((index: number) => {
 		setState((prev) => {
 			const isExisting = prev.nos.find((n, i) => i === index && !!n.id);
 			if (!isExisting) return { ...prev, nos: prev.nos.filter((_, i) => i !== index) };
@@ -67,21 +67,21 @@ export function useInternalCampaignFlowState({ initialState }: TUseInternalCampa
 
 	// ── Edges ──────────────────────────────────────────────────────────────────
 
-	const addAresta = useCallback((aresta: TCampaignFlowState["arestas"][number]) => {
+	const addEdge = useCallback((edge: TCampaignFlowState["arestas"][number]) => {
 		setState((prev) => ({
 			...prev,
-			arestas: [...prev.arestas, aresta],
+			arestas: [...prev.arestas, edge],
 		}));
 	}, []);
 
-	const updateAresta = useCallback(({ index, changes }: { index: number; changes: Partial<TCampaignFlowState["arestas"][number]> }) => {
+	const updateEdge = useCallback(({ index, changes }: { index: number; changes: Partial<TCampaignFlowState["arestas"][number]> }) => {
 		setState((prev) => ({
 			...prev,
 			arestas: prev.arestas.map((a, i) => (i === index ? { ...a, ...changes } : a)),
 		}));
 	}, []);
 
-	const removeAresta = useCallback((index: number) => {
+	const removeEdge = useCallback((index: number) => {
 		setState((prev) => {
 			const isExisting = prev.arestas.find((a, i) => i === index && !!a.id);
 			if (!isExisting) return { ...prev, arestas: prev.arestas.filter((_, i) => i !== index) };
@@ -114,15 +114,15 @@ export function useInternalCampaignFlowState({ initialState }: TUseInternalCampa
 	return {
 		state,
 		updateCampaignFlow,
-		addNo,
-		updateNo,
-		removeNo,
-		addAresta,
-		updateAresta,
-		removeAresta,
+		addNode,
+		updateNode,
+		removeNode,
+		addEdge,
+		updateEdge,
+		removeEdge,
 		replaceGraph,
 		redefineState,
 		resetState,
 	};
 }
-export type TUseInternalCampaignFlowState = ReturnType<typeof useInternalCampaignFlowState>;
+export type TUseCampaignFlowState = ReturnType<typeof useCampaignFlowState>;
