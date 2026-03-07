@@ -11,12 +11,29 @@ const raleway = Raleway({
 	variable: "--font-raleway",
 });
 export const metadata: Metadata = {
+	metadataBase: new URL("https://recompracrm.com.br"),
 	title: {
 		default: "RecompraCRM",
-		template: "RecompraCRM",
+		template: "%s | RecompraCRM",
 	},
-	description: "Plataforma de otimização de vendas.",
+	description: "Plataforma de otimização de vendas e fidelização de clientes.",
 	icons: [{ rel: "icon", url: "/icon.png" }],
+	robots: { index: true, follow: true },
+	openGraph: {
+		type: "website",
+		siteName: "RecompraCRM",
+		locale: "pt_BR",
+		url: "https://recompracrm.com.br",
+		title: "RecompraCRM",
+		description: "Plataforma de otimização de vendas e fidelização de clientes.",
+		images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "RecompraCRM" }],
+	},
+	twitter: {
+		card: "summary_large_image",
+		title: "RecompraCRM",
+		description: "Plataforma de otimização de vendas e fidelização de clientes.",
+		images: ["/og-image.png"],
+	},
 };
 
 export const viewport: Viewport = {
