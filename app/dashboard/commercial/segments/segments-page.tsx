@@ -5,6 +5,7 @@ import LoadingComponent from "@/components/Layouts/LoadingComponent";
 import RFMAnalysisQueryParamsMenu from "@/components/RFMAnalysis/RFMAnalysisQueryParamsMenu";
 import GeneralPaginationComponent from "@/components/Utils/Pagination";
 import { Button } from "@/components/ui/button";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { getErrorMessage } from "@/lib/errors";
 import { getExcelFromJSON } from "@/lib/excel-utils";
@@ -288,6 +289,16 @@ function SegmentsPageClientCard({ client, period }: SegmentsPageClientCardProps)
 
 function SegmentsPageMatrixRFM() {
 	const { data: rfmStats } = useRFMLabelledStats();
+
+	function formatDecimal(value: number, fractionDigits = 1) {
+		if (!Number.isFinite(value)) return "0";
+
+		return new Intl.NumberFormat("pt-BR", {
+			minimumFractionDigits: fractionDigits,
+			maximumFractionDigits: fractionDigits,
+		}).format(value);
+	}
+
 	return (
 		<div className={cn("bg-card border-primary/20 flex w-full flex-col gap-1 rounded-xl border px-3 py-4 shadow-2xs")}>
 			<div className="flex items-center justify-between gap-2 flex-col lg:flex-row">
@@ -297,27 +308,76 @@ function SegmentsPageMatrixRFM() {
 				</div>
 				<div className="px-2 py-1 flex items-center gap-1 rounded-lg bg-primary/10 text-primary/80 text-[0.65rem] font-medium tracking-tight text-center">
 					<Info className="w-4 h-4 min-w-4 min-h-4" />
-					Os números representam uma análise de matriz RFM nos últimos 12 meses. Os dados são atualizados diariamente.
+					Os números representam uma análise de matriz RFM nos últimos 12 meses. Passe o mouse no bloco para ver os detalhes.
 				</div>
 			</div>
 			<AspectRatio ratio={10 / 10}>
 				<div className="grid grid-cols-5 grid-rows-5 w-full h-full p-1 lg:p-4">
-					{rfmStats?.map((item, index) => (
-						<div
-							key={`${item.rfmLabel}-${index}`}
-							className={`${item.backgroundCollor} flex flex-col gap-2 items-center justify-center p-2 text-primary-foreground font-bold text-center`}
-							style={{ gridArea: item.gridArea }}
-						>
-							{item.rfmLabel !== "PERDIDOS (extensão)" ? <h1 className="text-[0.4rem] lg:text-base">{item.rfmLabel}</h1> : ""}
-							{item.rfmLabel !== "PERDIDOS (extensão)" ? (
-								<div className="bg-primary h-5 w-5 min-h-5 min-w-5 lg:h-16 lg:w-16 lg:min-h-16 lg:min-w-16 p-2 rounded-full flex items-center justify-center">
-									<h1 className="text-[0.4rem] lg:text-sm font-bold text-primary-foreground">{item.clientsQty}</h1>
-								</div>
-							) : (
-								""
-							)}
-						</div>
-					))}
+					{rfmStats?.map((item, index) => {
+						const isLostExtension = item.rfmLabel === "PERDIDOS (extensão)";
+
+						const block = (
+							<div
+								className={cn(
+									`${item.backgroundCollor} flex flex-col gap-2 items-center justify-center p-2 text-primary-foreground font-bold text-center`,
+									!isLostExtension ? "cursor-pointer" : undefined,
+								)}
+								style={{ gridArea: item.gridArea }}
+							>
+								{!isLostExtension ? <h1 className="text-[0.4rem] lg:text-base">{item.rfmLabel}</h1> : null}
+								{!isLostExtension ? (
+									<div className="bg-primary h-5 w-5 min-h-5 min-w-5 lg:h-16 lg:w-16 lg:min-h-16 lg:min-w-16 p-2 rounded-full flex items-center justify-center">
+										<h1 className="text-[0.4rem] lg:text-sm font-bold text-primary-foreground">{item.clientsQty}</h1>
+									</div>
+								) : null}
+								{!isLostExtension ? (
+									<p className="hidden lg:block text-[0.6rem] tracking-tight">Receita: {formatToMoney(item.segmentPeriodStats.totalRevenue)}</p>
+								) : null}
+							</div>
+						);
+
+						if (isLostExtension) {
+							return (
+								<div
+									key={`${item.rfmLabel}-${index}`}
+									className={`${item.backgroundCollor} flex flex-col gap-2 items-center justify-center p-2 text-primary-foreground font-bold text-center`}
+									style={{ gridArea: item.gridArea }}
+								/>
+							);
+						}
+
+						return (
+							<HoverCard key={`${item.rfmLabel}-${index}`} openDelay={150}>
+								<HoverCardTrigger asChild>{block}</HoverCardTrigger>
+								<HoverCardContent className="w-[290px]">
+									<div className="w-full flex flex-col gap-1">
+										<h1 className="text-xs font-bold">{item.rfmLabel}</h1>
+										<p className="text-[0.7rem] text-muted-foreground">Período: últimos 12 meses</p>
+										<div className="w-full flex items-center justify-between gap-3 text-[0.75rem]">
+											<p>Receita total</p>
+											<p className="font-semibold">{formatToMoney(item.segmentPeriodStats.totalRevenue)}</p>
+										</div>
+										<div className="w-full flex items-center justify-between gap-3 text-[0.75rem]">
+											<p>Total de compras</p>
+											<p className="font-semibold">{item.segmentPeriodStats.totalPurchasesQty}</p>
+										</div>
+										<div className="w-full flex items-center justify-between gap-3 text-[0.75rem]">
+											<p>Ticket médio</p>
+											<p className="font-semibold">{formatToMoney(item.segmentPeriodStats.avgTicket)}</p>
+										</div>
+										<div className="w-full flex items-center justify-between gap-3 text-[0.75rem]">
+											<p>Ciclo médio de compra</p>
+											<p className="font-semibold">{formatDecimal(item.segmentPeriodStats.avgPurchaseCycleDays)} dias</p>
+										</div>
+										<div className="w-full flex items-center justify-between gap-3 text-[0.75rem]">
+											<p>Basket médio</p>
+											<p className="font-semibold">{formatDecimal(item.segmentPeriodStats.avgBasketSize, 2)} itens</p>
+										</div>
+									</div>
+								</HoverCardContent>
+							</HoverCard>
+						);
+					})}
 				</div>
 			</AspectRatio>
 		</div>
