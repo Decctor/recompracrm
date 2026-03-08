@@ -171,3 +171,32 @@ export const deliveryModeEnum = pgEnum("delivery_mode", ["PRESENCIAL", "RETIRADA
 export const fiscalProviderEnum = pgEnum("fiscal_provider", ["MANUAL", "NUVEM_FISCAL"]);
 
 export const paymentProviderEnum = pgEnum("payment_provider", ["LOCAL", "MERCADO_PAGO", "STRIPE_CONNECT", "PAGARME"]);
+
+// ============================================================================
+// CAMPAIGN FLOWS
+// ============================================================================
+
+export const campaignFlowStatusEnum = pgEnum("campaign_flow_status", ["RASCUNHO", "ATIVO", "PAUSADO", "ARQUIVADO"]);
+
+export const campaignFlowTypeEnum = pgEnum("campaign_flow_type", ["EVENTO", "RECORRENTE", "UNICA"]);
+
+export const campaignFlowNodeTypeEnum = pgEnum("campaign_flow_node_type", ["GATILHO", "ACAO", "DELAY", "CONDICAO", "FILTRO"]);
+
+export const campaignFlowExecutionStatusEnum = pgEnum("campaign_flow_execution_status", [
+	"PENDENTE",
+	"EM_EXECUCAO",
+	"CONCLUIDA",
+	"FALHOU",
+	"CANCELADA",
+]);
+
+export const campaignFlowExecutionTypeEnum = pgEnum("campaign_flow_execution_type", ["INDIVIDUAL", "LOTE"]);
+
+export const campaignFlowExecutionStepStatusEnum = pgEnum("campaign_flow_execution_step_status", [
+	"PENDENTE",
+	"EM_EXECUCAO",
+	"CONCLUIDO",
+	"FALHOU",
+	"AGUARDANDO_DELAY",
+	"PULADO",
+]);

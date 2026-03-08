@@ -161,3 +161,20 @@ export type TFiscalProviderEnum = z.infer<typeof FiscalProviderEnum>;
 
 export const PaymentProviderEnum = z.enum(["LOCAL", "MERCADO_PAGO", "STRIPE_CONNECT", "PAGARME"]);
 export type TPaymentProviderEnum = z.infer<typeof PaymentProviderEnum>;
+
+// ============================================================================
+// CAMPAIGN FLOWS
+// ============================================================================
+
+export const CampaignFlowStatusEnum = z.enum(["RASCUNHO", "ATIVO", "PAUSADO", "ARQUIVADO"]);
+export type TCampaignFlowStatusEnum = z.infer<typeof CampaignFlowStatusEnum>;
+export const CampaignFlowTypeEnum = z.enum(["EVENTO", "RECORRENTE", "UNICA"]);
+export type TCampaignFlowTypeEnum = z.infer<typeof CampaignFlowTypeEnum>;
+export const CampaignFlowNodeTypeEnum = z.enum(["GATILHO", "ACAO", "DELAY", "CONDICAO", "FILTRO"]);
+export type TCampaignFlowNodeTypeEnum = z.infer<typeof CampaignFlowNodeTypeEnum>;
+export const CampaignFlowExecutionStatusEnum = z.enum(["PENDENTE", "EM_EXECUCAO", "CONCLUIDA", "FALHOU", "CANCELADA"]);
+export type TCampaignFlowExecutionStatusEnum = z.infer<typeof CampaignFlowExecutionStatusEnum>;
+export const CampaignFlowExecutionTypeEnum = z.enum(["INDIVIDUAL", "LOTE"]);
+export type TCampaignFlowExecutionTypeEnum = z.infer<typeof CampaignFlowExecutionTypeEnum>;
+export const CampaignFlowExecutionStepStatusEnum = z.enum(["PENDENTE", "EM_EXECUCAO", "CONCLUIDO", "FALHOU", "AGUARDANDO_DELAY", "PULADO"]);
+export type TCampaignFlowExecutionStepStatusEnum = z.infer<typeof CampaignFlowExecutionStepStatusEnum>;
