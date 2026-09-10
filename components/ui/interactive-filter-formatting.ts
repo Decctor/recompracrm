@@ -1,5 +1,6 @@
 import type { InteractiveFilterOption, InteractiveFilterSortValue } from "./interactive-filter";
-import { formatDateAsLocale, formatToMoney } from "@/lib/formatting";
+import { formatToMoney } from "@/lib/formatting";
+import dayjs from "dayjs";
 
 export function formatInteractiveOptionSummary<T extends string | number>(options: InteractiveFilterOption<T>[], values: T[]) {
 	if (values.length === 0) return "TODOS";
@@ -10,10 +11,20 @@ export function formatInteractiveOptionSummary<T extends string | number>(option
 }
 
 export function formatInteractiveDateRangeSummary(after?: Date | string | null, before?: Date | string | null, emptyLabel = "TODO PERÍODO") {
-	if (!after && !before) return emptyLabel;
-	if (after && before) return `${formatDateAsLocale(after)} a ${formatDateAsLocale(before)}`;
-	if (after) return `A partir de ${formatDateAsLocale(after)}`;
-	return `Até ${formatDateAsLocale(before)}`;
+	const start = after ? dayjs(after) : null;
+	const end = before ? dayjs(before) : null;
+	const validStart = start?.isValid() ? start : null;
+	const validEnd = end?.isValid() ? end : null;
+
+	if (!validStart && !validEnd) return emptyLabel;
+	if (!validStart) return `Até ${validEnd?.format("DD/MM/YYYY")}`;
+	if (!validEnd) return `A partir de ${validStart.format("DD/MM/YYYY")}`;
+
+	if (validStart.isSame(validEnd, "day")) return validStart.format("DD/MM/YYYY");
+	if (validStart.isSame(validEnd, "month")) return `${validStart.format("DD")}–${validEnd.format("DD/MM/YYYY")}`;
+	if (validStart.isSame(validEnd, "year")) return `${validStart.format("DD/MM")}–${validEnd.format("DD/MM/YYYY")}`;
+
+	return `${validStart.format("DD/MM/YYYY")}–${validEnd.format("DD/MM/YYYY")}`;
 }
 
 export function formatInteractiveNumberRangeSummary(min?: number | null, max?: number | null, emptyLabel = "TODOS") {

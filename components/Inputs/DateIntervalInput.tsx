@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { format } from "date-fns";
+import { formatInteractiveDateRangeSummary } from "@/components/ui/interactive-filter-formatting";
 import { ptBR } from "date-fns/locale";
 import { Calendar as CalendarIcon } from "lucide-react";
 import { useId } from "react";
@@ -18,6 +18,7 @@ type DateIntervalInputProps = {
 function DateIntervalInput({ label, labelClassName, className, value, handleChange }: DateIntervalInputProps) {
 	const generatedId = useId();
 	const inputIdentifier = `${label.toLowerCase().replaceAll(" ", "_")}_${generatedId}`;
+	const hasSelectedDate = Boolean(value.after || value.before);
 
 	return (
 		<Field className="gap-1">
@@ -32,22 +33,12 @@ function DateIntervalInput({ label, labelClassName, className, value, handleChan
 							variant={"outline"}
 							className={cn(
 								"w-full justify-start rounded-md border border-border bg-[#fff] text-left text-sm font-normal shadow-xs outline-hidden ease-in-out focus:border-border dark:bg-[#121212]",
-								!value.after && !value.before && "text-muted-foreground",
+								hasSelectedDate ? "tabular-nums" : "text-muted-foreground",
 								className,
 							)}
 						>
 							<CalendarIcon className="mr-2 h-4 w-4" />
-							{value?.after ? (
-								value.before ? (
-									<>
-										{format(value.after, "dd/MM/yyyy", { locale: ptBR })} - {format(value.before, "dd/MM/yyyy", { locale: ptBR })}
-									</>
-								) : (
-									format(value.after, "dd/MM/yyyy", { locale: ptBR })
-								)
-							) : (
-								<span>Escolha uma data</span>
-							)}
+							<span className="whitespace-nowrap">{formatInteractiveDateRangeSummary(value.after, value.before, "Escolha uma data")}</span>
 						</Button>
 					}
 				/>
@@ -59,9 +50,6 @@ function DateIntervalInput({ label, labelClassName, className, value, handleChan
 						selected={{ from: value.after, to: value.before }}
 						onSelect={(value) => handleChange({ after: value?.from, before: value?.to })}
 						numberOfMonths={2}
-						classNames={{
-							weekdays: "flex items-center gap-1.5",
-						}}
 					/>
 				</PopoverContent>
 			</Popover>
