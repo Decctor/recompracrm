@@ -11,7 +11,7 @@ import { parseTemplatePayloadToGatewayContent, sendMessage } from "@/lib/whatsap
 import { formatPhoneForInternalGateway } from "@/lib/whatsapp/utils";
 import { db } from "@/services/drizzle";
 import { chatMessages, chats } from "@/services/drizzle/schema";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { buildInteractionMessageVariables } from "./message-preview";
 import { markInteractionBlocked, markInteractionFailed, updateInteractionDeliveryState } from "./delivery-state";
 import type { ImmediateProcessingData, TSendReservedInteractionResult } from "./types";
@@ -98,12 +98,14 @@ async function resolveOrganizationMessagingContext(organizationId: string) {
 async function getOrCreateChatId({
 	organizationId,
 	clientId,
+	whatsappConnectionId,
 	whatsappConnectionPhoneId,
 	whatsappPhoneId,
 	chatIdCache,
 }: {
 	organizationId: string;
 	clientId: string;
+	whatsappConnectionId: string;
 	whatsappConnectionPhoneId: string;
 	whatsappPhoneId: string | null;
 	chatIdCache?: TChatPromiseCache;
@@ -123,6 +125,7 @@ async function getOrCreateChatId({
 					organizacaoId: organizationId,
 					clienteId: clientId,
 					whatsappTelefoneId: whatsappPhoneId,
+					whatsappConexaoId: whatsappConnectionId,
 					whatsappConexaoTelefoneId: whatsappConnectionPhoneId,
 					ultimaMensagemData: new Date(),
 				})
@@ -134,11 +137,14 @@ async function getOrCreateChatId({
 
 			if (inserted) return inserted.id;
 
-			const existingChat = await db.query.chats.findFirst({
-				where: (fields, { and, eq }) =>
-					and(eq(fields.organizacaoId, organizationId), eq(fields.clienteId, clientId), eq(fields.whatsappTelefoneId, whatsappPhoneId)),
-				columns: { id: true },
-			});
+			const [existingChat] = await db
+				.update(chats)
+				.set({
+					whatsappConexaoId: whatsappConnectionId,
+					whatsappConexaoTelefoneId: whatsappConnectionPhoneId,
+				})
+				.where(and(eq(chats.organizacaoId, organizationId), eq(chats.clienteId, clientId), eq(chats.whatsappTelefoneId, whatsappPhoneId)))
+				.returning({ id: chats.id });
 			return existingChat?.id ?? null;
 		}
 
@@ -147,13 +153,17 @@ async function getOrCreateChatId({
 				and(eq(fields.organizacaoId, organizationId), eq(fields.clienteId, clientId), eq(fields.whatsappConexaoTelefoneId, whatsappConnectionPhoneId)),
 			columns: { id: true },
 		});
-		if (existingChat) return existingChat.id;
+		if (existingChat) {
+			await db.update(chats).set({ whatsappConexaoId: whatsappConnectionId }).where(eq(chats.id, existingChat.id));
+			return existingChat.id;
+		}
 
 		const [newChat] = await db
 			.insert(chats)
 			.values({
 				organizacaoId: organizationId,
 				clienteId: clientId,
+				whatsappConexaoId: whatsappConnectionId,
 				whatsappConexaoTelefoneId: whatsappConnectionPhoneId,
 				ultimaMensagemData: new Date(),
 			})
@@ -330,7 +340,7 @@ export async function sendReservedInteraction(
 			try {
 				const whatsappConnectionPhone = await db.query.whatsappConnectionPhones.findFirst({
 					where: (fields, { eq }) => eq(fields.id, campaign.whatsappConexaoTelefoneId as string),
-					columns: { id: true, whatsappTelefoneId: true },
+					columns: { id: true, conexaoId: true, whatsappTelefoneId: true },
 				});
 				if (!whatsappConnectionPhone) throw new Error("Telefone de conexao do WhatsApp nao encontrado.");
 
@@ -344,6 +354,7 @@ export async function sendReservedInteraction(
 					const chatId = await getOrCreateChatId({
 						organizationId,
 						clientId: client.id,
+						whatsappConnectionId: whatsappConnectionPhone.conexaoId,
 						whatsappConnectionPhoneId: campaign.whatsappConexaoTelefoneId,
 						whatsappPhoneId: whatsappConnectionPhone.whatsappTelefoneId,
 						chatIdCache,
@@ -409,8 +420,7 @@ export async function sendReservedInteraction(
 				}
 			} catch (error) {
 				channelErrors.WHATSAPP = error instanceof Error ? error.message : "Falha desconhecida no WhatsApp.";
-				if (insertedChatMessageId)
-					await db.update(chatMessages).set({ statusEntrega: "FALHA" }).where(eq(chatMessages.id, insertedChatMessageId));
+				if (insertedChatMessageId) await db.update(chatMessages).set({ statusEntrega: "FALHA" }).where(eq(chatMessages.id, insertedChatMessageId));
 			}
 		}
 

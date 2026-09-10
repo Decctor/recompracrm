@@ -65,14 +65,19 @@ export async function resolveIncomingChat(input: {
 
 	if (inserted) return { chatId: inserted.id, isNew: true };
 
-	const existing = await db.query.chats.findFirst({
-		where: and(
-			eq(chats.organizacaoId, input.organizacaoId),
-			eq(chats.clienteId, input.clienteId),
-			eq(chats.whatsappTelefoneId, input.whatsappTelefoneId),
-		),
-		columns: { id: true },
-	});
+	// O chat pode ter nascido por uma campanha antiga sem `whatsappConexaoId`. O webhook atual
+	// é a fonte autoritativa do canal: além de localizar a linha existente, repara/atualiza os
+	// vínculos para que respostas da IA e do hub tenham um adapter de entrega resolvível.
+	const [existing] = await db
+		.update(chats)
+		.set({
+			whatsappConexaoId: input.whatsappConexaoId,
+			whatsappConexaoTelefoneId: input.whatsappConexaoTelefoneId,
+		})
+		.where(
+			and(eq(chats.organizacaoId, input.organizacaoId), eq(chats.clienteId, input.clienteId), eq(chats.whatsappTelefoneId, input.whatsappTelefoneId)),
+		)
+		.returning({ id: chats.id });
 	if (!existing) throw new Error("Não foi possível resolver o chat da mensagem recebida.");
 	return { chatId: existing.id, isNew: false };
 }
