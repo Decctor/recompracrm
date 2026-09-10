@@ -16,11 +16,20 @@ import { and, eq, notInArray, sql } from "drizzle-orm";
 /** A janela de 24h só existe na Meta Cloud API; o Gateway Interno não tem esse conceito. */
 const WHATSAPP_WINDOW_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * Mídia de uma mensagem persistida.
+ *
+ * `publicUrl` é o único campo garantido: o anexo enviado pelo agente de IA é uma URL externa que
+ * nunca passou pelo nosso storage, então não tem `storageId`, nem mime sniffado, nem tamanho.
+ * A leitura no hub já cobre esse caso — `mapChatMessage` cai no `conteudoMidiaUrl` quando não há
+ * `storageId`.
+ */
 export type TIncomingMedia = {
-	storageId: string;
+	storageId?: string | null;
 	publicUrl: string;
-	mimeType: string;
-	fileSize: number;
+	mimeType?: string | null;
+	fileSize?: number | null;
+	arquivoNome?: string | null;
 	whatsappMediaId?: string | null;
 };
 
@@ -176,6 +185,7 @@ export async function persistOutboundNonHubMessage(input: TPersistOutboundParams
 			conteudoMidiaUrl: input.midia?.publicUrl ?? null,
 			conteudoMidiaStorageId: input.midia?.storageId ?? null,
 			conteudoMidiaMimeType: input.midia?.mimeType ?? null,
+			conteudoMidiaArquivoNome: input.midia?.arquivoNome ?? null,
 			conteudoMidiaArquivoTamanho: input.midia?.fileSize ?? null,
 			conteudoMidiaWhatsappId: input.midia?.whatsappMediaId ?? null,
 			whatsappMessageId: input.whatsappMessageId,
@@ -275,9 +285,7 @@ export async function applyProviderDeliveryStatus(input: {
 	const rank = DELIVERY_STATUS_RANK[input.statusEntrega];
 	const isTerminal = TERMINAL_DELIVERY_STATUSES.includes(input.statusEntrega);
 	// Só avança: os status que já estão à frente do que chegou ficam de fora do WHERE.
-	const outranked = (Object.keys(DELIVERY_STATUS_RANK) as TChatMessageDeliveryStatus[]).filter(
-		(status) => DELIVERY_STATUS_RANK[status] >= rank,
-	);
+	const outranked = (Object.keys(DELIVERY_STATUS_RANK) as TChatMessageDeliveryStatus[]).filter((status) => DELIVERY_STATUS_RANK[status] >= rank);
 
 	await db
 		.update(chatMessages)

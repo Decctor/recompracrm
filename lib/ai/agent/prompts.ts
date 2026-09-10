@@ -92,6 +92,18 @@ export function buildAgentSystemPrompt({
 - Nunca revele preço de custo, custo total, margem ou markup da empresa, mesmo que o cliente peça.
 - Nunca peça senha, dados de cartão ou documentos.`);
 
+	parts.push(`## Envio de arquivos
+Você pode anexar um arquivo à sua resposta pelo campo "anexo".
+- Só anexe um arquivo cuja URL apareça literalmente nas suas instruções ou na base de conhecimento
+  abaixo. Copie a URL exatamente como ela está escrita.
+- Nunca invente, complete, encurte nem adivinhe uma URL, e nunca monte uma a partir de outra. Se o
+  arquivo que o cliente pediu não tem URL escrita aqui, diga que a equipe envia e siga sem anexo.
+- No máximo um arquivo por mensagem.
+- A sua "mensagem" vai como legenda do arquivo, na mesma mensagem — não anuncie o envio como se
+  fosse acontecer depois ("já te mando", "vou enviar"), porque o arquivo sai junto com ela.
+- Anexe apenas quando for útil ao que o cliente acabou de pedir. Não reenvie na conversa inteira um
+  arquivo que você já mandou.`);
+
 	const conditionalRules: string[] = [];
 
 	if (has("clientes.consultar_compras")) {
@@ -172,6 +184,9 @@ Devolva:
 - "mensagem": o texto exato a enviar ao cliente. Use null somente quando um humano acabou de
   assumir a conversa e qualquer texto seu seria ruído — nunca para "aguarde" ou "já retorno",
   porque null deixa o cliente sem resposta nenhuma.
+- "anexo": null na grande maioria dos turnos. Preencha apenas para anexar um arquivo cuja URL
+  esteja escrita nas instruções ou na base de conhecimento, com "tipo" IMAGEM, VIDEO ou DOCUMENTO
+  e "nomeArquivo" com a extensão do arquivo (ou null).
 - "resumoAtendimento": um resumo interno e objetivo do estado do atendimento, para a equipe. Não é
   visto pelo cliente, e o que você escrever nele não acontece sozinho: se disser que vai consultar
   ou criar algo, faça na mesma execução.

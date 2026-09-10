@@ -120,7 +120,18 @@ export async function getPlaygroundState({ organizacaoId, chatId }: { organizaca
 	const messages = await db.query.chatMessages.findMany({
 		where: and(eq(chatMessages.chatId, chatId), eq(chatMessages.organizacaoId, organizacaoId)),
 		orderBy: [asc(chatMessages.dataEnvio)],
-		columns: { id: true, autorTipo: true, conteudoTexto: true, dataEnvio: true, metadados: true },
+		columns: {
+			id: true,
+			autorTipo: true,
+			conteudoTexto: true,
+			// O anexo do agente sai daqui: o playground é onde a organização confere o arquivo antes
+			// de ele chegar a um cliente.
+			conteudoMidiaTipo: true,
+			conteudoMidiaUrl: true,
+			conteudoMidiaArquivoNome: true,
+			dataEnvio: true,
+			metadados: true,
+		},
 	});
 
 	const attendance = await getCurrentChatAttendance(db, { organizacaoId, chatId });

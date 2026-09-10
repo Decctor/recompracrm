@@ -1221,6 +1221,14 @@ export const AiAgentToolNameEnum = z.enum([
 ]);
 export type TAiAgentToolNameEnum = z.infer<typeof AiAgentToolNameEnum>;
 
+// Tipos de arquivo que o agente pode anexar à resposta. É um subconjunto de
+// `ChatMessageContentTypeEnum`: AUDIO fica de fora porque o WhatsApp não aceita legenda em
+// áudio, e a mensagem do turno é justamente a legenda do anexo.
+export const AiAgentAttachmentTypeEnum = z.enum(["IMAGEM", "VIDEO", "DOCUMENTO"]);
+export type TAiAgentAttachmentTypeEnum = z.infer<
+  typeof AiAgentAttachmentTypeEnum
+>;
+
 // Operações mutáveis e duráveis iniciadas por ferramentas do agente. Permanecem varchar no
 // banco: novos tipos de operação/recurso não devem exigir ALTER TYPE em produção.
 export const AiAgentOperationStatusEnum = z.enum([

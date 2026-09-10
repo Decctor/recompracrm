@@ -1,5 +1,6 @@
 import z from "zod";
 import {
+	AiAgentAttachmentTypeEnum,
 	AiAgentRunTriggerEnum,
 	AiAgentRunStatusEnum,
 	AiAgentScopeTypeEnum,
@@ -239,9 +240,24 @@ export const AiAgentConfigSnapshotSchema = z.object({
 });
 export type TAiAgentConfigSnapshot = z.infer<typeof AiAgentConfigSnapshotSchema>;
 
+/**
+ * Arquivo anexado à resposta do turno.
+ *
+ * A URL é enviada ao provedor como link — nada é baixado ou hospedado por nós. Ela precisa vir
+ * literalmente das instruções ou da base de conhecimento; o prompt diz isso ao modelo, e a
+ * `mensagem` do turno viaja como legenda do anexo.
+ */
+export const AiAgentTurnAttachmentSchema = z.object({
+	url: z.string().url(),
+	tipo: AiAgentAttachmentTypeEnum,
+	nomeArquivo: z.string().nullable(),
+});
+export type TAiAgentTurnAttachment = z.infer<typeof AiAgentTurnAttachmentSchema>;
+
 /** Saída estruturada de um turno. `mensagem: null` = o agente decidiu não responder. */
 export const AiAgentTurnOutputSchema = z.object({
 	mensagem: z.string().nullable(),
+	anexo: AiAgentTurnAttachmentSchema.nullable(),
 	resumoAtendimento: z.string(),
 });
 export type TAiAgentTurnOutput = z.infer<typeof AiAgentTurnOutputSchema>;
@@ -317,4 +333,12 @@ export const UpdateAiAgentKnowledgeSchema = AiAgentKnowledgeSchema.omit({
 export type TUpdateAiAgentKnowledge = z.infer<typeof UpdateAiAgentKnowledgeSchema>;
 
 // Re-exports de conveniência para quem consome só este módulo.
-export { AiAgentRunTriggerEnum, AiAgentRunStatusEnum, AiAgentScopeTypeEnum, AiAgentStatusEnum, AiAgentToolCallStatusEnum, AiAgentToolNameEnum };
+export {
+	AiAgentAttachmentTypeEnum,
+	AiAgentRunTriggerEnum,
+	AiAgentRunStatusEnum,
+	AiAgentScopeTypeEnum,
+	AiAgentStatusEnum,
+	AiAgentToolCallStatusEnum,
+	AiAgentToolNameEnum,
+};

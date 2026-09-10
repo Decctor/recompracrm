@@ -49,6 +49,21 @@ test("trata turno sem mensagem e sem ferramenta como turno morto", () => {
 	assert.equal(check(null, ["atendimento_transferir_para_humano"]), false);
 });
 
+test("trata o anexo como entrega, igual a uma ferramenta", () => {
+	const anexo = { url: "https://exemplo.com/cardapio.pdf", tipo: "DOCUMENTO" as const, nomeArquivo: "cardapio.pdf" };
+
+	// O arquivo é a resposta inteira: sem texto e sem ferramenta, mas não é turno morto.
+	assert.equal(shouldRetryDeferredAction({ mensagem: null, resumoAtendimento: "", calledTools: [], anexo }), false);
+	assert.equal(shouldRetryDeferredAction({ mensagem: null, resumoAtendimento: "", calledTools: [], anexo: null }), true);
+
+	// "Já te mando" cumprido na mesma mensagem, porque o PDF vai junto como legenda.
+	assert.equal(shouldRetryDeferredAction({ mensagem: "Já te mando o cardápio!", resumoAtendimento: "", calledTools: [], anexo }), false);
+	assert.equal(shouldRetryDeferredAction({ mensagem: "Já te mando o cardápio!", resumoAtendimento: "", calledTools: [] }), true);
+
+	// Orçamento continua exigindo a ferramenta: anexar arquivo não cria venda nenhuma.
+	assert.equal(shouldRetryDeferredAction({ mensagem: "Vou criar o orçamento agora.", resumoAtendimento: "", calledTools: [], anexo }), true);
+});
+
 test("pega a promessa que ficou só no resumo interno", () => {
 	assert.equal(
 		shouldRetryDeferredAction({

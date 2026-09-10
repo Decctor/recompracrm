@@ -6,7 +6,7 @@ import { createPlaygroundChat, sendPlaygroundMessage } from "@/lib/mutations/ai-
 import { AI_AGENT_PLAYGROUND_QUERY_KEY, usePlaygroundState } from "@/lib/queries/ai-agents";
 import { cn } from "@/lib/utils";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { MessageSquarePlus, Send } from "lucide-react";
+import { MessageSquarePlus, Paperclip, Send } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import AgentRunDrawer from "./AgentRunDrawer";
@@ -93,6 +93,17 @@ export default function AgentPlayground() {
 												fromClient ? "rounded-br-sm bg-primary text-primary-foreground" : "rounded-bl-sm border border-border bg-card",
 											)}
 										>
+											{message.conteudoMidiaUrl ? (
+												<a
+													href={message.conteudoMidiaUrl}
+													target="_blank"
+													rel="noopener noreferrer"
+													className="mb-1 flex items-center gap-1.5 text-xs font-medium underline-offset-2 hover:underline"
+												>
+													<Paperclip className="h-3.5 w-3.5 shrink-0" />
+													<span className="truncate">{message.conteudoMidiaArquivoNome || "arquivo anexado"}</span>
+												</a>
+											) : null}
 											{message.conteudoTexto}
 										</div>
 										{runId ? (

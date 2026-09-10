@@ -1,10 +1,12 @@
 import { applyProviderDeliveryStatus, persistOutboundNonHubMessage } from "@/lib/chats/incoming-message";
 import { isWhatsappWindowOpen } from "@/lib/chats/whatsapp-window-status";
-import { sendMessage as sendInternalGatewayMessage } from "@/lib/whatsapp/internal-gateway";
+import { type SendMessageContent, sendMessage as sendInternalGatewayMessage } from "@/lib/whatsapp/internal-gateway";
 import { formatPhoneAsWhatsappId, formatPhoneForInternalGateway } from "@/lib/whatsapp/utils";
+import type { TAiAgentTurnAttachment } from "@/schemas/ai-agents";
 import { db } from "@/services/drizzle";
-import { chats } from "@/services/drizzle/schema";
+import { chatMessages, chats } from "@/services/drizzle/schema";
 import { and, eq } from "drizzle-orm";
+import { toProviderMediaType } from "./attachment";
 import type { TAgentMessageDeliverer } from "./respond-to-chat";
 
 /**
@@ -20,6 +22,63 @@ import type { TAgentMessageDeliverer } from "./respond-to-chat";
 // `runId` e `agenteId` chegam por argumento na entrega — só existem depois que a execução abre.
 type TDelivererParams = { organizacaoId: string; chatId: string };
 
+/**
+ * Como a mensagem persistida descreve o anexo. `enviado: false` significa que o provedor recusou
+ * o arquivo e o cliente recebeu só o texto — a thread não pode mostrar um anexo que não saiu.
+ */
+function attachmentColumns(anexo: TAiAgentTurnAttachment | null, enviado: boolean) {
+	if (!anexo || !enviado) return { conteudoMidiaTipo: "TEXTO" as const, midia: null };
+	return { conteudoMidiaTipo: anexo.tipo, midia: { publicUrl: anexo.url, arquivoNome: anexo.nomeArquivo } };
+}
+
+/**
+ * Envio pela Meta Cloud API com degradê deliberado: o anexo vai como `link` (a Meta busca a URL
+ * sozinha, sem upload do nosso lado) e, se ela recusar o arquivo, a mesma mensagem sai como texto.
+ * Um PDF quebrado não pode custar a resposta ao cliente.
+ */
+async function sendViaMetaCloud({
+	fromPhoneNumberId,
+	toPhoneNumber,
+	whatsappToken,
+	mensagem,
+	anexo,
+}: {
+	fromPhoneNumberId: string;
+	toPhoneNumber: string;
+	whatsappToken: string;
+	mensagem: string;
+	anexo: TAiAgentTurnAttachment | null;
+}): Promise<{ whatsappMessageId: string | null; anexoEnviado: boolean }> {
+	const { sendBasicWhatsappMessage, sendMediaWhatsappMessage } = await import("@/lib/whatsapp");
+
+	if (anexo) {
+		try {
+			const response = await sendMediaWhatsappMessage({
+				fromPhoneNumberId,
+				toPhoneNumber,
+				media: { link: anexo.url },
+				mediaType: toProviderMediaType(anexo.tipo),
+				caption: mensagem || undefined,
+				filename: anexo.nomeArquivo ?? undefined,
+				whatsappToken,
+			});
+			return { whatsappMessageId: response.whatsappMessageId, anexoEnviado: true };
+		} catch (error) {
+			console.error("[AI_AGENT] [DELIVERY] Anexo recusado pela Meta, seguindo só com texto:", anexo.url, error);
+		}
+	}
+
+	if (!mensagem) return { whatsappMessageId: null, anexoEnviado: false };
+
+	try {
+		const response = await sendBasicWhatsappMessage({ fromPhoneNumberId, toPhoneNumber, content: mensagem, whatsappToken });
+		return { whatsappMessageId: response.whatsappMessageId, anexoEnviado: false };
+	} catch (error) {
+		console.error("[AI_AGENT] [DELIVERY] Falha no envio via Meta Cloud API:", error);
+		return { whatsappMessageId: null, anexoEnviado: false };
+	}
+}
+
 async function loadChatForDelivery(organizacaoId: string, chatId: string) {
 	return db.query.chats.findFirst({
 		where: and(eq(chats.id, chatId), eq(chats.organizacaoId, organizacaoId)),
@@ -33,7 +92,7 @@ async function loadChatForDelivery(organizacaoId: string, chatId: string) {
 
 /** Meta Cloud API: envia primeiro, persiste depois — o id do provider volta na resposta. */
 export function createMetaCloudDeliverer({ organizacaoId, chatId }: TDelivererParams): TAgentMessageDeliverer {
-	return async ({ mensagem, runId, agenteId }) => {
+	return async ({ mensagem, anexo, runId, agenteId }) => {
 		const chat = await loadChatForDelivery(organizacaoId, chatId);
 		if (!chat) {
 			console.error("[AI_AGENT] [DELIVERY] Chat não encontrado para entrega:", chatId);
@@ -46,22 +105,16 @@ export function createMetaCloudDeliverer({ organizacaoId, chatId }: TDelivererPa
 			return { messageId: null };
 		}
 
-		const whatsappMessageId = await (async () => {
-			if (!chat.whatsappConexao?.token || !chat.cliente?.telefone || !chat.whatsappTelefoneId) return null;
-			try {
-				const { sendBasicWhatsappMessage } = await import("@/lib/whatsapp");
-				const response = await sendBasicWhatsappMessage({
-					fromPhoneNumberId: chat.whatsappTelefoneId,
-					toPhoneNumber: formatPhoneAsWhatsappId(chat.cliente.telefone),
-					content: mensagem,
-					whatsappToken: chat.whatsappConexao.token,
-				});
-				return response.whatsappMessageId;
-			} catch (error) {
-				console.error("[AI_AGENT] [DELIVERY] Falha no envio via Meta Cloud API:", error);
-				return null;
-			}
-		})();
+		const { whatsappMessageId, anexoEnviado } =
+			chat.whatsappConexao?.token && chat.cliente?.telefone && chat.whatsappTelefoneId
+				? await sendViaMetaCloud({
+						fromPhoneNumberId: chat.whatsappTelefoneId,
+						toPhoneNumber: formatPhoneAsWhatsappId(chat.cliente.telefone),
+						whatsappToken: chat.whatsappConexao.token,
+						mensagem,
+						anexo,
+					})
+				: { whatsappMessageId: null, anexoEnviado: false };
 
 		const inserted = await persistOutboundNonHubMessage({
 			organizacaoId,
@@ -70,8 +123,7 @@ export function createMetaCloudDeliverer({ organizacaoId, chatId }: TDelivererPa
 			origem: "AI",
 			whatsappMessageId,
 			conteudoTexto: mensagem,
-			conteudoMidiaTipo: "TEXTO",
-			midia: null,
+			...attachmentColumns(anexo, anexoEnviado),
 			metadados: { aiAgente: { runId, agenteId } },
 		});
 		// null = wamid já persistido por outra via (o webhook de echo chegou primeiro).
@@ -90,7 +142,7 @@ export function createMetaCloudDeliverer({ organizacaoId, chatId }: TDelivererPa
  * `clientMessageId` é o próprio id da mensagem, que é como o webhook `message.sent` reconcilia.
  */
 export function createInternalGatewayDeliverer({ organizacaoId, chatId, sessaoId }: TDelivererParams & { sessaoId: string }): TAgentMessageDeliverer {
-	return async ({ mensagem, runId, agenteId }) => {
+	return async ({ mensagem, anexo, runId, agenteId }) => {
 		const chat = await loadChatForDelivery(organizacaoId, chatId);
 		if (!chat) {
 			console.error("[AI_AGENT] [DELIVERY] Chat não encontrado para entrega:", chatId);
@@ -104,8 +156,9 @@ export function createInternalGatewayDeliverer({ organizacaoId, chatId, sessaoId
 			origem: "AI",
 			whatsappMessageId: null,
 			conteudoTexto: mensagem,
-			conteudoMidiaTipo: "TEXTO",
-			midia: null,
+			// Otimista: aqui a persistência vem antes do envio, então a linha nasce com o anexo e é
+			// corrigida abaixo se a fila recusar.
+			...attachmentColumns(anexo, true),
 			metadados: { gatewayInterno: { sessaoId }, aiAgente: { runId, agenteId } },
 		});
 		// Sem wamid não há alvo de conflito; o null aqui é impossível, mas o tipo exige o guard.
@@ -117,17 +170,46 @@ export function createInternalGatewayDeliverer({ organizacaoId, chatId, sessaoId
 			return { messageId: inserted.messageId };
 		}
 
-		try {
-			const response = await sendInternalGatewayMessage(
-				chat.whatsappConexao.gatewaySessaoId,
-				formatPhoneForInternalGateway(chat.cliente.telefone),
-				{ type: "text", text: mensagem },
-				{ clientMessageId: inserted.messageId },
-			);
+		const gatewaySessaoId = chat.whatsappConexao.gatewaySessaoId;
+		const destino = formatPhoneForInternalGateway(chat.cliente.telefone);
+		const enqueue = async (content: SendMessageContent) => {
+			const response = await sendInternalGatewayMessage(gatewaySessaoId, destino, content, { clientMessageId: inserted.messageId });
 			if (!response.success) throw new Error(response.error || "Falha ao enfileirar a mensagem da IA no Gateway Interno.");
+		};
+
+		try {
+			await enqueue(
+				anexo
+					? {
+							type: toProviderMediaType(anexo.tipo),
+							text: mensagem || undefined,
+							mediaUrl: anexo.url,
+							mediaFileName: anexo.nomeArquivo ?? undefined,
+						}
+					: { type: "text", text: mensagem },
+			);
 		} catch (error) {
 			console.error("[AI_AGENT] [DELIVERY] Falha ao enfileirar no gateway interno:", error);
-			await applyProviderDeliveryStatus({ statusEntrega: "FALHA", chatMessageId: inserted.messageId });
+
+			// Mesmo degradê da Meta. Reusar o `clientMessageId` é seguro porque a tentativa anterior
+			// não chegou a enfileirar — é justamente o que a falha acima diz.
+			const degradou = await (async () => {
+				if (!anexo || !mensagem) return false;
+				try {
+					await enqueue({ type: "text", text: mensagem });
+					await db
+						.update(chatMessages)
+						.set({ conteudoMidiaTipo: "TEXTO", conteudoMidiaUrl: null, conteudoMidiaArquivoNome: null })
+						.where(eq(chatMessages.id, inserted.messageId));
+					console.warn("[AI_AGENT] [DELIVERY] Anexo recusado pelo gateway, seguindo só com texto:", anexo.url);
+					return true;
+				} catch (retryError) {
+					console.error("[AI_AGENT] [DELIVERY] Falha ao reenfileirar sem o anexo:", retryError);
+					return false;
+				}
+			})();
+
+			if (!degradou) await applyProviderDeliveryStatus({ statusEntrega: "FALHA", chatMessageId: inserted.messageId });
 		}
 
 		return { messageId: inserted.messageId };
@@ -145,10 +227,7 @@ export function createInternalGatewayDeliverer({ organizacaoId, chatId, sessaoId
  * sem sessão. Aí não há turno a executar: gastar tokens numa resposta que não sai é pior do
  * que não responder.
  */
-export async function resolveChatDeliverer({
-	organizacaoId,
-	chatId,
-}: TDelivererParams): Promise<TAgentMessageDeliverer | null> {
+export async function resolveChatDeliverer({ organizacaoId, chatId }: TDelivererParams): Promise<TAgentMessageDeliverer | null> {
 	const chat = await loadChatForDelivery(organizacaoId, chatId);
 	if (!chat?.whatsappConexao) return null;
 
@@ -165,7 +244,7 @@ export async function resolveChatDeliverer({
  * não tem conexão de WhatsApp.
  */
 export function createPlaygroundDeliverer({ organizacaoId, chatId }: TDelivererParams): TAgentMessageDeliverer {
-	return async ({ mensagem, runId, agenteId }) => {
+	return async ({ mensagem, anexo, runId, agenteId }) => {
 		const chat = await loadChatForDelivery(organizacaoId, chatId);
 		if (!chat) return { messageId: null };
 
@@ -176,8 +255,9 @@ export function createPlaygroundDeliverer({ organizacaoId, chatId }: TDelivererP
 			origem: "AI",
 			whatsappMessageId: null,
 			conteudoTexto: mensagem,
-			conteudoMidiaTipo: "TEXTO",
-			midia: null,
+			// Sem provedor não há o que recusar: o anexo é persistido como o agente o produziu, que
+			// é justamente o que a organização precisa conferir antes de soltar o agente.
+			...attachmentColumns(anexo, true),
 			metadados: { aiAgente: { runId, agenteId } },
 		});
 
