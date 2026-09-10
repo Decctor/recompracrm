@@ -1,6 +1,8 @@
 import { instagramCarteirasTemplate } from "./instagram-carteiras";
+import { instagramCampaignResultsAugustTemplate } from "./instagram-campaign-results-august";
 import { instagramIntegracoesTemplate } from "./instagram-integracoes";
 import { meetingBackgroundTemplate } from "./meeting-background";
+import { twitterCampaignResultsAugustTemplate } from "./twitter-campaign-results-august";
 import type { TBrandTemplate } from "./types";
 
 /**
@@ -12,5 +14,7 @@ import type { TBrandTemplate } from "./types";
 export const BRAND_TEMPLATES: Record<string, TBrandTemplate> = {
 	"meeting-background": meetingBackgroundTemplate,
 	"instagram-carteiras": instagramCarteirasTemplate,
+	"instagram-campaign-results-august": instagramCampaignResultsAugustTemplate,
 	"instagram-integracoes": instagramIntegracoesTemplate,
+	"twitter-campaign-results-august": twitterCampaignResultsAugustTemplate,
 };
