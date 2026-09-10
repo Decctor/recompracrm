@@ -138,6 +138,35 @@ export const CONSULTORIA_ADDON = {
 	monthlyPrice: 500,
 	currency: "BRL",
 	stripePriceId: process.env.NEXT_PUBLIC_STRIPE_CONSULTORIA_MONTHLY_PRICE_ID as string,
+	/* O add-on não vende software, vende o resultado: quem contrata não decide quais campanhas
+	   rodar nem escreve mensagem nenhuma. Por isso os itens falam do trabalho que sai da mão do
+	   lojista, não de recurso da plataforma — esses já estão listados no plano-base. */
+	pricingTableFeatures: [
+		{
+			checked: true,
+			label: "Um gestor dedicado operando a plataforma por você",
+		},
+		{
+			checked: true,
+			label: "A gente decide, escreve e ativa as campanhas",
+		},
+		{
+			checked: true,
+			label: "Templates de WhatsApp aprovados na Meta por nós",
+		},
+		{
+			checked: true,
+			label: "Segmentação e ofertas revisadas todo mês",
+		},
+		{
+			checked: true,
+			label: "Cashback e metas ajustados pelo resultado",
+		},
+		{
+			checked: true,
+			label: "Relatório mensal de receita recuperada",
+		},
+	],
 };
 
 export const DEFAULT_ORGANIZATION_CONFIGURATION_RESOURCES: TOrganizationConfiguration["recursos"] = {
@@ -514,15 +543,15 @@ export const AppSubscriptionPlans: {
 		pricingTableFeatures: [
 			{
 				checked: true,
-				label: "Business Intelligence completo (vendas, produtos, vendedores e parceiros)",
+				label: "BI completo de vendas, produtos e equipe",
 			},
 			{
 				checked: true,
-				label: "Integrações com ERPs (sincronização de dados automática)",
+				label: "Integração com ERP e sincronização automática",
 			},
 			{
 				checked: true,
-				label: "Até 10 campanhas/jornadas ativas",
+				label: "Até 10 campanhas e jornadas ativas",
 			},
 			{
 				checked: true,
@@ -530,11 +559,11 @@ export const AppSubscriptionPlans: {
 			},
 			{
 				checked: true,
-				label: "Ponto de Interação personalizado para acumulação de cashback",
+				label: "Ponto de Interação para acúmulo de cashback",
 			},
 			{
 				checked: true,
-				label: "Relatórios de vendas direto no seu WhatsApp",
+				label: "Relatórios de vendas no seu WhatsApp",
 			},
 		],
 		pricing: {

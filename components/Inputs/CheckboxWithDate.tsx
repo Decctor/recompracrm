@@ -48,7 +48,7 @@ function CheckboxWithDate({ date, labelTrue, labelFalse, showDate = true, handle
 						</Button>
 					}
 				/>
-				<PopoverContent className="z-[120] w-auto p-0" align="center">
+				<PopoverContent className="w-auto p-0" align="center">
 					<Calendar
 						mode="single"
 						selected={date ? new Date(date) : undefined}

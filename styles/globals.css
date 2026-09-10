@@ -112,6 +112,13 @@
 	   (fim definitivo). Ver DESIGN.md §2. */
 	--color-success: #16a34a;
 	--color-success-strong: #15803d;
+	/* Verde do WhatsApp. Fica fora da paleta fechada de propósito: é cor de marca de terceiro, não
+	   escolha decorativa — o mesmo `#25D366` estava repetido como hex solto em cinco componentes.
+	   O foreground é tinta escura, não branco: branco sobre este verde dá 1,98:1 e reprova em
+	   qualquer tamanho de texto (a tinta escura dá 10,6:1). É a mesma lógica do `--color-brand`
+	   âmbar, que também carrega texto preto. */
+	--color-whatsapp: #25d366;
+	--color-whatsapp-foreground: #0a0a0a;
 	/* Must exist in @theme so bg-brand-secondary / text-brand-secondary-foreground are generated; OrgColorsProvider overwrites --color-brand-secondary* on :root */
 	--color-brand-secondary: #24549c;
 	--color-brand-secondary-foreground: #ffffff;
@@ -350,6 +357,17 @@
 		--sidebar-border: 220 13% 91%;
 		--sidebar-ring: 217.2 91.2% 59.8%;
 		--font-sans: "Raleway", sans-serif;
+
+		/* Escala semântica de z-index. Antes disso toda camada flutuante era `z-50` e a ordem
+		   dependia da ordem no DOM — o que quebrava assim que alguém inventava um número
+		   ("z-[200]" no paywall deixava o dropdown, portalado em z-50, atrás do scrim).
+		   A ordem aqui é a ordem de empilhamento; use `z-(--z-popover)` e nunca um literal.
+		   Os toasts ficam de fora: o Sonner gerencia o próprio z-index internamente. */
+		--z-sticky: 30;
+		--z-overlay: 50; /* scrims de dialog / drawer / sheet */
+		--z-modal: 55; /* a superfície do modal, acima do próprio scrim */
+		--z-popover: 60; /* dropdown, select, popover, hover-card — precisam vencer o modal que os abriu */
+		--z-tooltip: 80;
 	}
 	.dark {
 		--background: 0 0% 3.9%;
@@ -394,6 +412,19 @@
 	}
 	body {
 		@apply bg-background text-foreground;
+	}
+}
+
+@layer components {
+	/* Superfícies comerciais da RecompraCRM (paywall, seleção de planos). Dentro do dashboard o
+	   OrgColorsProvider reescreve `--color-brand*` no `:root` com as cores da organização, e o
+	   modal de planos é portalado para o body — sem isso a nossa página de preço sairia pintada
+	   com a marca do cliente. Quem vende o plano somos nós, então a marca aqui é fixa. */
+	.brand-recompracrm {
+		--color-brand: #ffb900;
+		--color-brand-foreground: #000000;
+		--color-brand-secondary: #24549c;
+		--color-brand-secondary-foreground: #ffffff;
 	}
 }
 

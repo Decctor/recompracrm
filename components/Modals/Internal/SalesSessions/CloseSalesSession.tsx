@@ -4,13 +4,18 @@ import { useInternalSalesSessionCloseState } from "@/state-hooks/use-internal-sa
 import { SalePaymentMethodsOptions } from "@/utils/select-options";
 import TextareaInput from "@/components/Inputs/TextareaInput";
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
+import { formatSessionDifference, sessionDifferenceClass } from "@/components/Modals/Internal/SalesSessions/Blocks/session-difference";
+import { SessionDrawerComposition } from "@/components/Modals/Internal/SalesSessions/Blocks/SessionDrawerComposition";
+import { SessionFiscalPendingAlert } from "@/components/Modals/Internal/SalesSessions/Blocks/SessionFiscalPendingAlert";
 import { SessionMetaRow } from "@/components/Modals/Internal/SalesSessions/Blocks/SessionMetaRow";
+import { SessionSectionLabel } from "@/components/Modals/Internal/SalesSessions/Blocks/SessionSectionLabel";
 import ResponsiveMenu from "@/components/Utils/ResponsiveMenu";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { getErrorMessage } from "@/lib/errors";
 import { formatDateAsLocale, formatToMoney } from "@/lib/formatting";
 import { closeSalesSession } from "@/lib/mutations/sales-sessions";
 import { useSalesSessionById } from "@/lib/queries/sales-sessions";
+import { isCashDrawerMethod } from "@/lib/sales-sessions/session-method-lines";
 import { summarizeSessionSalesBySeller } from "@/lib/sales-sessions/summarize-session-sales-by-seller";
 import { cn } from "@/lib/utils";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -18,18 +23,6 @@ import { AlertTriangle, ChevronDown } from "lucide-react";
 
 import { toast } from "sonner";
 const paymentLabels = new Map(SalePaymentMethodsOptions.map((option) => [option.value, option.label]));
-function SectionLabel({ children }: { children: string }) {
-	return <span className="font-bold text-[11px] uppercase tracking-[0.08em] text-muted-foreground">{children}</span>;
-}
-function differenceClass(value: number) {
-	if (value === 0) return "text-success";
-	if (value > 0) return "text-warning-surface-foreground";
-	return "text-destructive";
-}
-// Apenas DINHEIRO tem dinheiro físico na gaveta e exige contagem; os demais são resumo de recebível.
-function isCashDrawerMethod(metodo: string): boolean {
-	return metodo === "DINHEIRO";
-}
 type CloseSalesSessionProps = {
 	sessionId: string;
 	closeModal: () => void;
@@ -98,21 +91,10 @@ export default function CloseSalesSession({ sessionId, closeModal, conferenciaCe
 				<ErrorComponent msg="Sessão de venda não encontrada." />
 			) : (
 				<div className="flex w-full flex-col gap-5">
-					{pendenciasFiscais.length > 0 ? (
-						<div className="flex items-start gap-2 rounded-xl border border-warning/40 bg-warning-surface p-3">
-							<AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning-surface-foreground" aria-hidden />
-							<div className="flex flex-col gap-0.5">
-								<span className="font-bold text-xs tracking-wide">
-									{pendenciasFiscais.length > 1
-										? `${pendenciasFiscais.length} DOCUMENTOS FISCAIS PENDENTES`
-										: `${pendenciasFiscais.length} DOCUMENTO FISCAL PENDENTE`}
-								</span>
-								<span className="text-[11px] text-muted-foreground">
-									Notas não autorizadas neste turno. Conforme a configuração, o fechamento pode ser bloqueado até a regularização.
-								</span>
-							</div>
-						</div>
-					) : null}
+					<SessionFiscalPendingAlert
+						quantidade={pendenciasFiscais.length}
+						description="Notas não autorizadas neste turno. Conforme a configuração, o fechamento pode ser bloqueado até a regularização."
+					/>
 					<div className="flex flex-col gap-1 rounded-xl bg-muted/50 p-3">
 						<SessionMetaRow label="POLÍTICA" value={session.politica === "VENDEDOR_UNICO" ? "Vendedor único" : "Vendedores múltiplos"} />
 						<SessionMetaRow label="VENDEDOR PADRÃO" value={session.vendedorPadrao?.nome ?? "—"} />
@@ -121,7 +103,7 @@ export default function CloseSalesSession({ sessionId, closeModal, conferenciaCe
 					</div>
 					{vendasPorVendedor.length > 0 ? (
 						<div className="flex flex-col gap-2">
-							<SectionLabel>VENDAS POR VENDEDOR</SectionLabel>
+							<SessionSectionLabel>VENDAS POR VENDEDOR</SessionSectionLabel>
 							{vendasPorVendedor.map((item) => (
 								<div key={item.vendedorId ?? "sem-vendedor"} className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm">
 									<span>
@@ -137,18 +119,15 @@ export default function CloseSalesSession({ sessionId, closeModal, conferenciaCe
 							<AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning-surface-foreground" aria-hidden />
 							<p className="text-xs leading-relaxed text-muted-foreground">
 								A contagem da gaveta difere do esperado em{" "}
-								<span className={cn("font-bold tabular-nums", differenceClass(diferencaGaveta))}>
-									{diferencaGaveta > 0 ? "+" : ""}
-									{formatToMoney(diferencaGaveta)}
-								</span>
-								. Confirme para registrar o fechamento com essa diferença ou ajuste a contagem.
+								<span className={cn("font-bold tabular-nums", sessionDifferenceClass(diferencaGaveta))}>{formatSessionDifference(diferencaGaveta)}</span>.
+								Confirme para registrar o fechamento com essa diferença ou ajuste a contagem.
 							</p>
 						</div>
 					) : null}
 					<div className="w-full flex flex-col gap-3">
 						{gavetaLinhas.length > 0 ? (
 							<section className="flex flex-col gap-2">
-								<SectionLabel>CONTAGEM FÍSICA DA GAVETA</SectionLabel>
+								<SessionSectionLabel>CONTAGEM FÍSICA DA GAVETA</SessionSectionLabel>
 								<div className="flex flex-col overflow-hidden rounded-xl bg-muted/50">
 									{gavetaLinhas.map((linha, index) => {
 										const informado = valorInformado;
@@ -167,13 +146,16 @@ export default function CloseSalesSession({ sessionId, closeModal, conferenciaCe
 													)}
 												</div>
 												{mostrarEsperado ? (
-													<div className="flex flex-col gap-2 py-2">
-														<SessionMetaRow label="Fundo de troco na abertura" value={formatToMoney(session.saldoInicial)} />
-														<SessionMetaRow label="(+) Entradas em dinheiro" value={formatToMoney(linha.entradas)} />
-														<SessionMetaRow label="(−) Troco entregue" value={formatToMoney(linha.troco)} />
-														<SessionMetaRow label="(−) Outras saídas" value={formatToMoney(linha.outrasSaidas)} />
-														<p className="text-xs text-muted-foreground">Entradas incluem suprimentos. Outras saídas incluem sangrias e estornos.</p>
-													</div>
+													<SessionDrawerComposition
+														composicao={{
+															saldoInicial: session.saldoInicial,
+															entradas: linha.entradas,
+															troco: linha.troco,
+															outrasSaidas: linha.outrasSaidas,
+														}}
+														metodo={linha.metodo}
+														movimentos={session.movimentos}
+													/>
 												) : null}
 												<Field data-invalid={informado !== null && informado < 0}>
 													<FieldLabel htmlFor="session-cash-count">Dinheiro contado (R$)</FieldLabel>
@@ -195,7 +177,7 @@ export default function CloseSalesSession({ sessionId, closeModal, conferenciaCe
 													</FieldDescription>
 												</Field>
 												{mostrarEsperado && hasCount ? (
-													<span className={cn("text-xs font-semibold", differenceClass(diferenca))}>
+													<span className={cn("text-xs font-semibold", sessionDifferenceClass(diferenca))}>
 														{diferenca === 0
 															? "Sem diferença"
 															: diferenca > 0
@@ -220,10 +202,7 @@ export default function CloseSalesSession({ sessionId, closeModal, conferenciaCe
 										{!conferenciaCega && hasCount ? (
 											<div className="flex items-center justify-between pt-1 text-sm" aria-live="polite">
 												<span className="font-bold">DIFERENÇA</span>
-												<span className={cn("font-black tabular-nums", differenceClass(diferencaGaveta))}>
-													{diferencaGaveta > 0 ? "+" : ""}
-													{formatToMoney(diferencaGaveta)}
-												</span>
+												<span className={cn("font-black tabular-nums", sessionDifferenceClass(diferencaGaveta))}>{formatSessionDifference(diferencaGaveta)}</span>
 											</div>
 										) : null}
 									</div>
@@ -232,7 +211,7 @@ export default function CloseSalesSession({ sessionId, closeModal, conferenciaCe
 						) : null}
 						{recebivelLinhas.length > 0 ? (
 							<section className="flex flex-col gap-2">
-								<SectionLabel>RECEBÍVEIS DO TURNO</SectionLabel>
+								<SessionSectionLabel>RECEBÍVEIS DO TURNO</SessionSectionLabel>
 								<p className="text-xs text-muted-foreground">Valores por forma de pagamento. Não entram na contagem de notas e moedas.</p>
 								<div className="flex flex-col gap-0.5 px-1">
 									{recebivelLinhas.map((linha) => (
@@ -252,7 +231,7 @@ export default function CloseSalesSession({ sessionId, closeModal, conferenciaCe
 						<Collapsible className="flex flex-col gap-2">
 							<CollapsibleTrigger className="group flex w-full items-center justify-between rounded-lg px-1 py-1 text-left transition-colors hover:bg-muted/40">
 								<div className="flex flex-col gap-0.5">
-									<SectionLabel>VENDAS DO TURNO</SectionLabel>
+									<SessionSectionLabel>VENDAS DO TURNO</SessionSectionLabel>
 									<span className="text-xs text-muted-foreground">
 										{vendas.length} {vendas.length === 1 ? "venda" : "vendas"} · {formatToMoney(totalVendas)}
 									</span>

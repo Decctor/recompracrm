@@ -79,7 +79,7 @@ function ConnectionPill({ connection }: ConnectionPillProps) {
 									<RecompraCRMIconColorful className="h-4 w-4" />
 								</div>
 							)}
-							<div className="ring-background flex h-6 min-h-6 w-6 min-w-6 items-center justify-center rounded-full bg-[#25D366] text-white ring-2">
+							<div className="ring-background flex h-6 min-h-6 w-6 min-w-6 items-center justify-center rounded-full bg-whatsapp text-white ring-2">
 								<WhatsappIcon className="h-4 w-4 text-white" />
 							</div>
 						</div>

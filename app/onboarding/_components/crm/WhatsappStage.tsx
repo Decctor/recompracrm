@@ -47,7 +47,7 @@ export function WhatsappStage({ whatsapp, onConnectionChanged, onConfirmPayment,
 										<MetaIcon className="size-4 text-[#0869E1]" />
 									</span>
 									<span className="-ml-2 flex size-9 items-center justify-center rounded-full border border-border bg-background">
-										<WhatsappIcon className="size-4 text-[#25D366]" />
+										<WhatsappIcon className="size-4 text-whatsapp" />
 									</span>
 								</span>
 								<div className="flex flex-col gap-0.5">

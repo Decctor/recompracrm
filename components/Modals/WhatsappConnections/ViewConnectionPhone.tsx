@@ -223,7 +223,7 @@ function getConnectionMeta(connectionType: TWhatsappConnection["tipoConexao"]) {
 					<div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#0869E1] text-white">
 						<MetaIcon className="h-4 w-4" />
 					</div>
-					<div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#25D366] text-white">
+					<div className="flex h-8 w-8 items-center justify-center rounded-full bg-whatsapp text-white">
 						<WhatsappIcon className="h-4 w-4" />
 					</div>
 				</div>
@@ -239,7 +239,7 @@ function getConnectionMeta(connectionType: TWhatsappConnection["tipoConexao"]) {
 				<div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#24549C]">
 					<RecompraCRMIconColorful className="h-4 w-4" />
 				</div>
-				<div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#25D366] text-white">
+				<div className="flex h-8 w-8 items-center justify-center rounded-full bg-whatsapp text-white">
 					<WhatsappIcon className="h-4 w-4" />
 				</div>
 			</div>

@@ -141,7 +141,7 @@ function ConnectionPhonePills({ phones, onPhoneClick, tone = "meta" }: Connectio
 					}
 					className={cn(
 						"flex items-center gap-1.5 rounded-lg px-2 py-1 transition-transform hover:scale-[1.01] active:scale-[0.96]",
-						tone === "meta" && "bg-[#25D366]/15 text-[#1a9e4a] hover:bg-[#25D366]/20",
+						tone === "meta" && "bg-whatsapp/15 text-[#1a9e4a] hover:bg-whatsapp/20",
 						tone === "gateway" && "bg-[#24549C]/10 text-[#24549C] hover:bg-[#24549C]/15",
 					)}
 				>
@@ -185,7 +185,7 @@ function IntegrationWithMetaCloud({ connections, onPhoneClick }: IntegrationWith
 					<div className="ring-background z-10 flex h-16 min-h-16 w-16 min-w-16 items-center justify-center rounded-full bg-[#0869E1] ring-2">
 						<MetaIcon className="h-8 w-8 text-white" />
 					</div>
-					<div className="ring-background flex h-16 min-h-16 w-16 min-w-16 items-center justify-center rounded-full bg-[#25D366] ring-2">
+					<div className="ring-background flex h-16 min-h-16 w-16 min-w-16 items-center justify-center rounded-full bg-whatsapp ring-2">
 						<WhatsappIcon className="h-8 w-8 text-white" />
 					</div>
 				</div>
@@ -286,7 +286,7 @@ function IntegrationWithInternalGateway({ connections, onPhoneClick }: Integrati
 						<div className="ring-background z-10 flex h-16 min-h-16 w-16 min-w-16 items-center justify-center rounded-full bg-[#24549C] ring-2">
 							<RecompraCRMIconColorful className="h-8 w-8" />
 						</div>
-						<div className="ring-background flex h-16 min-h-16 w-16 min-w-16 items-center justify-center rounded-full bg-[#25D366] ring-2">
+						<div className="ring-background flex h-16 min-h-16 w-16 min-w-16 items-center justify-center rounded-full bg-whatsapp ring-2">
 							<WhatsappIcon className="h-8 w-8 text-white" />
 						</div>
 					</div>

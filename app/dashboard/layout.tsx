@@ -1,7 +1,6 @@
 import AppHeader from "@/components/Layouts/HeaderApp";
 import LoadingComponent from "@/components/Layouts/LoadingComponent";
 import { ActivationPanel } from "@/components/Onboarding/ActivationPanel";
-import SubscriptionPaywall from "@/components/Paywall/SubscriptionPaywall";
 import { OrgColorsProvider } from "@/components/Providers/OrgColorsProvider";
 import { AppSidebar } from "@/components/Sidebar/AppSidebar";
 import { SidebarInset } from "@/components/ui/sidebar";
@@ -25,6 +24,11 @@ const MainLayout = async ({ children }: { children: ReactNode }) => {
 	if (!user.membership) redirect("/onboarding");
 	// Org exists but the deep onboarding flow was not concluded yet — bounce the user back to finish it.
 	if (!user.membership.organizacao.dataOnboardingConclusao) redirect("/onboarding");
+	// Bloqueio por assinatura acontece aqui, e não num overlay dentro do layout: assim o dashboard
+	// nem monta para quem está suspenso — nenhuma página filha, nenhuma query. `assinaturaAtiva` sai
+	// do mesmo `resolveSubscriptionAccess` que alimenta o endpoint de status, então as duas decisões
+	// nunca divergem.
+	if (!user.membership.organizacao.assinaturaAtiva) redirect("/subscription");
 	return (
 		<SidebarProvider className="font-raleway">
 			<AppSidebar user={user.user} organization={user.membership.organizacao} permissions={user.membership.permissoes} />
@@ -39,7 +43,6 @@ const MainLayout = async ({ children }: { children: ReactNode }) => {
 						>
 							<AppHeader session={{ user: user.user, membership: user.membership }} />
 							{children}
-							<SubscriptionPaywall />
 						</OrgColorsProvider>
 					</div>
 				</SidebarInset>
