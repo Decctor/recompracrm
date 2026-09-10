@@ -4,12 +4,11 @@ import ErrorComponent from "@/components/Layouts/ErrorComponent";
 import LoadingComponent from "@/components/Layouts/LoadingComponent";
 import { Button } from "@/components/ui/button";
 import CashSessionBar from "@/components/CashSessions/CashSessionBar";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import MobileCheckoutBar from "../../_components/mobile-checkout-bar";
 import { DiscountApproval } from "@/components/Modals/Sales/DiscountApproval";
 import { getErrorMessage } from "@/lib/errors";
 import type { TAutoEmissionExceptions } from "@/lib/fiscal/auto-emission-policy";
 import { formatToMoney } from "@/lib/formatting";
-import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { editConfirmedSale } from "@/lib/mutations/pos";
 import { evaluateDiscount } from "@/lib/permissions/discounts";
 import { appRoutes } from "@/lib/navigation/routes";
@@ -103,7 +102,6 @@ export default function EditSalePage({
 }: EditSalePageProps) {
 	const router = useRouter();
 	const queryClient = useQueryClient();
-	const isMobile = useIsMobile();
 	const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
 	const [searchValue, setSearchValue] = useState("");
 	const [viewMode, setViewMode] = useState<ProductViewMode>("list");
@@ -320,7 +318,7 @@ export default function EditSalePage({
 	// Política do servidor manda: rascunhos vão para o checkout; os demais tetos explicam o porquê.
 	if (saleForEdit.editabilidade.nivel !== "TOTAL") {
 		return (
-			<div className="w-full h-[calc(100vh-8rem)] flex items-center justify-center p-4">
+			<div className="flex h-[calc(100dvh-7rem)] w-full items-center justify-center p-4 lg:h-[calc(100dvh-8rem)]">
 				<div className="w-full max-w-lg rounded-2xl border bg-card p-6 flex flex-col gap-4 items-center text-center">
 					<div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center">
 						<PencilLine className="h-6 w-6 text-muted-foreground" />
@@ -355,8 +353,22 @@ export default function EditSalePage({
 		})),
 	};
 
+	// Card do caixa dentro do checkout (coluna e Sheet), não numa barra no topo — ver new-sale-page.
+	const cashSessionCard = cashEnabled ? (
+		<CashSessionBar
+			compact
+			session={activeSession}
+			sessions={openSessions}
+			activeSessionId={activeSessionId}
+			onSessionChange={setActiveSessionId}
+			isLoading={cashLoading}
+			exigirFundoTroco={!!sessoesConfig?.exigirFundoTroco}
+			conferenciaCega={!!sessoesConfig?.conferenciaCega}
+		/>
+	) : null;
+
 	return (
-		<div className="w-full h-[calc(100vh-8rem)] flex flex-col gap-3 p-4">
+		<div className="flex h-[calc(100dvh-7rem)] w-full flex-col gap-3 p-4 lg:h-[calc(100dvh-8rem)]">
 			<div className="flex items-center justify-between">
 				<div className="flex items-center gap-3">
 					<Button variant="ghost" size="icon" onClick={() => router.back()} aria-label="Voltar">
@@ -370,17 +382,6 @@ export default function EditSalePage({
 					</div>
 				</div>
 			</div>
-			{cashEnabled ? (
-				<CashSessionBar
-					session={activeSession}
-					sessions={openSessions}
-					activeSessionId={activeSessionId}
-					onSessionChange={setActiveSessionId}
-					isLoading={cashLoading}
-					exigirFundoTroco={!!sessoesConfig?.exigirFundoTroco}
-					conferenciaCega={!!sessoesConfig?.conferenciaCega}
-				/>
-			) : null}
 			<div className="flex flex-1 min-h-0 gap-3">
 				<div className="flex min-w-0 flex-1 flex-col gap-4 rounded-xl bg-background">
 					<div className="shrink-0 flex flex-col gap-3">
@@ -404,7 +405,7 @@ export default function EditSalePage({
 						/>
 					</div>
 
-					<div className="flex-1 min-h-0 flex flex-col gap-4 overflow-y-auto scrollbar-thin scrollbar-track-primary/10 scrollbar-thumb-primary/30 pr-1 pb-20 lg:pb-0">
+					<div className="flex-1 min-h-0 flex flex-col gap-4 overflow-y-auto scrollbar-thin scrollbar-track-primary/10 scrollbar-thumb-primary/30 pr-1">
 						<ProductsGridBlock
 							productsData={productsData}
 							isLoading={productsLoading}
@@ -442,56 +443,10 @@ export default function EditSalePage({
 							onFinalizeSale={handleSaveEdit}
 							isFinalizingSale={isSavingEdit}
 							edit={editContext}
+							cashSession={cashSessionCard}
 						/>
 					</div>
 				</div>
-
-				{isMobile ? (
-					<div className="fixed bottom-4 right-4 z-50 lg:hidden">
-						<Sheet open={isCheckoutSheetOpen} onOpenChange={setIsCheckoutSheetOpen}>
-							<SheetTrigger
-								render={
-									// No mobile o painel fica fechado por padrão: sem o valor aqui, o total não está
-									// apenas fora do scroll, está invisível o tempo inteiro.
-									<Button
-										className="h-12 rounded-full px-5 shadow-lg"
-										aria-label={`Abrir edição da venda: ${saleState.itemCount} ${saleState.itemCount === 1 ? "item" : "itens"}, total ${formatToMoney(saleState.valorFinal)}`}
-									>
-										<PencilLine className="mr-2 h-4 w-4" />
-										<span className="font-extrabold tabular-nums">{saleState.itemCount}</span>
-										<span aria-hidden className="mx-2.5 h-4 w-px bg-current opacity-30" />
-										<span className="text-base font-extrabold tabular-nums">{formatToMoney(saleState.valorFinal)}</span>
-									</Button>
-								}
-							/>
-							<SheetContent
-								side="bottom"
-								className="flex h-[92dvh] max-h-[92dvh] flex-col gap-0 overflow-hidden rounded-t-2xl p-0 data-[side=bottom]:h-[92dvh]"
-							>
-								<SheetHeader className="shrink-0 border-b p-4 text-left">
-									<SheetTitle className="text-lg font-black">EDITAR VENDA</SheetTitle>
-									<SheetDescription>Revise itens e pagamentos e salve as alterações.</SheetDescription>
-								</SheetHeader>
-								<div className="scrollbar-thin scrollbar-track-primary/10 scrollbar-thumb-primary/30 flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-4 py-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
-									<CheckoutPanel
-										organizationCashbackProgram={organizationCashbackProgram}
-										saleState={saleState}
-										sellerEditable={activeSession?.politica !== "VENDEDOR_UNICO"}
-										organizationAutoFiscalEmission={organizationAutoFiscalEmission}
-										organizationAutoFiscalCapable={organizationAutoFiscalCapable}
-										autoEmissionExceptions={autoEmissionExceptions}
-										canEmitFiscal={canEmitFiscal}
-										discountAuthority={discountAuthority}
-										onCreateDraft={() => {}}
-										onFinalizeSale={handleSaveEdit}
-										isFinalizingSale={isSavingEdit}
-										edit={editContext}
-									/>
-								</div>
-							</SheetContent>
-						</Sheet>
-					</div>
-				) : null}
 
 				{builderProduct ? <ProductBuilderModal product={builderProduct} onAddToCart={saleState.addItem} onClose={() => setBuilderProduct(null)} /> : null}
 
@@ -516,6 +471,32 @@ export default function EditSalePage({
 					/>
 				) : null}
 			</div>
+			<MobileCheckoutBar
+				open={isCheckoutSheetOpen}
+				onOpenChange={setIsCheckoutSheetOpen}
+				itemCount={saleState.itemCount}
+				total={saleState.valorFinal}
+				icon={<PencilLine className="h-4 w-4" />}
+				title="EDITAR VENDA"
+				description="Revise itens e pagamentos e salve as alterações."
+				ariaLabel={`Abrir edição da venda: ${saleState.itemCount} ${saleState.itemCount === 1 ? "item" : "itens"}, total ${formatToMoney(saleState.valorFinal)}`}
+			>
+				<CheckoutPanel
+					organizationCashbackProgram={organizationCashbackProgram}
+					saleState={saleState}
+					sellerEditable={activeSession?.politica !== "VENDEDOR_UNICO"}
+					organizationAutoFiscalEmission={organizationAutoFiscalEmission}
+					organizationAutoFiscalCapable={organizationAutoFiscalCapable}
+					autoEmissionExceptions={autoEmissionExceptions}
+					canEmitFiscal={canEmitFiscal}
+					discountAuthority={discountAuthority}
+					onCreateDraft={() => {}}
+					onFinalizeSale={handleSaveEdit}
+					isFinalizingSale={isSavingEdit}
+					edit={editContext}
+					cashSession={cashSessionCard}
+				/>
+			</MobileCheckoutBar>
 		</div>
 	);
 }

@@ -1,7 +1,5 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import CashSessionBar from "@/components/CashSessions/CashSessionBar";
 import CashSessionGate from "@/components/CashSessions/CashSessionGate";
 import ControlClient from "@/components/Modals/Clients/ControlClient";
@@ -38,6 +36,7 @@ import ProductOrderingSelect from "./components/composition/ProductOrderingSelec
 import ProductsGridBlock from "./components/composition/ProductsGridBlock";
 import SearchBlock from "./components/composition/SearchBlock";
 import ViewModeToggle, { type ProductViewMode } from "./components/composition/ViewModeToggle";
+import MobileCheckoutBar from "../_components/mobile-checkout-bar";
 import ClientContextPanel from "./components/context/ClientContextPanel";
 import ClientContextSheet from "./components/context/ClientContextSheet";
 
@@ -450,7 +449,7 @@ export default function NewSalePage({
 	// Modo obrigatório sem caixa aberto: bloqueia a entrada do fluxo de venda (gate cedo).
 	if (cashEnabled && cashObrigatorio && !cashLoading && !activeSession) {
 		return (
-			<div className="w-full h-[calc(100vh-8rem)] flex flex-col p-4">
+			<div className="flex h-[calc(100dvh-7rem)] w-full flex-col p-4 lg:h-[calc(100dvh-8rem)]">
 				<CashSessionGate
 					sessions={openSessions}
 					activeSessionId={activeSessionId}
@@ -461,19 +460,27 @@ export default function NewSalePage({
 		);
 	}
 
+	// O caixa vive dentro do checkout (coluna no desktop, Sheet no mobile), não numa barra no topo
+	// da página: no mobile a barra empurrava o catálogo para baixo e, no desktop, separava o
+	// caixa da venda que vai cair nele. Um card por instância do painel, cada um com seus modais.
+	const cashSessionCard = cashEnabled ? (
+		<CashSessionBar
+			compact
+			session={activeSession}
+			sessions={openSessions}
+			activeSessionId={activeSessionId}
+			onSessionChange={setActiveSessionId}
+			isLoading={cashLoading}
+			exigirFundoTroco={!!sessoesConfig?.exigirFundoTroco}
+			conferenciaCega={!!sessoesConfig?.conferenciaCega}
+		/>
+	) : null;
+
 	return (
-		<div className="w-full h-[calc(100vh-8rem)] flex flex-col gap-3 p-4">
-			{cashEnabled ? (
-				<CashSessionBar
-					session={activeSession}
-					sessions={openSessions}
-					activeSessionId={activeSessionId}
-					onSessionChange={setActiveSessionId}
-					isLoading={cashLoading}
-					exigirFundoTroco={!!sessoesConfig?.exigirFundoTroco}
-					conferenciaCega={!!sessoesConfig?.conferenciaCega}
-				/>
-			) : null}
+		// Altura em `dvh` e com o recuo do header do mobile (7rem; 8rem no desktop): a página é a
+		// viewport inteira, e a última linha da coluna — a barra do checkout no mobile — fica no
+		// rodapé visível sem depender de `position: fixed` (ver MobileCheckoutBar).
+		<div className="flex h-[calc(100dvh-7rem)] w-full flex-col gap-3 p-4 lg:h-[calc(100dvh-8rem)]">
 			<div className="flex flex-1 min-h-0 gap-3">
 				{/* O clique nas colunas é atalho de conveniência (foco/desfoco), não a única via: toda
 				    interação continua acessível pelos controles internos e o Esc desfaz o foco. */}
@@ -508,7 +515,7 @@ export default function NewSalePage({
 						/>
 					</div>
 
-					<div className="flex-1 min-h-0 flex flex-col gap-4 overflow-y-auto scrollbar-thin scrollbar-track-primary/10 scrollbar-thumb-primary/30 pr-1 pb-20 lg:pb-0">
+					<div className="flex-1 min-h-0 flex flex-col gap-4 overflow-y-auto scrollbar-thin scrollbar-track-primary/10 scrollbar-thumb-primary/30 pr-1">
 						<ProductsGridBlock
 							productsData={productsData}
 							isLoading={productsLoading}
@@ -573,59 +580,10 @@ export default function NewSalePage({
 							isCreatingDraft={isCreatingDraft}
 							isFinalizingSale={isFinalizingSale}
 							onOpenContext={() => setIsContextPanelOpen(true)}
+							cashSession={cashSessionCard}
 							expanded={isCheckoutFocused}
 						/>
 					</div>
-				</div>
-
-				<div className="fixed bottom-4 right-4 z-50 lg:hidden">
-					<Sheet open={isCheckoutSheetOpen} onOpenChange={setIsCheckoutSheetOpen}>
-						<SheetTrigger
-							render={
-								// No mobile o painel fica fechado por padrão: sem o valor aqui, o total do carrinho
-								// não está apenas fora do scroll, está invisível o tempo inteiro.
-								<Button
-									className="h-12 rounded-full px-5 shadow-lg"
-									aria-label={`Abrir checkout: ${saleState.itemCount} ${saleState.itemCount === 1 ? "item" : "itens"}, total ${formatToMoney(saleState.valorFinal)}`}
-								>
-									<ShoppingCart className="mr-2 h-4 w-4" />
-									<span className="font-extrabold tabular-nums">{saleState.itemCount}</span>
-									<span aria-hidden className="mx-2.5 h-4 w-px bg-current opacity-30" />
-									<span className="text-base font-extrabold tabular-nums">{formatToMoney(saleState.valorFinal)}</span>
-								</Button>
-							}
-						/>
-						<SheetContent
-							side="bottom"
-							className="flex h-[92dvh] max-h-[92dvh] flex-col gap-0 overflow-hidden rounded-t-2xl p-0 data-[side=bottom]:h-[92dvh]"
-						>
-							<SheetHeader className="shrink-0 border-b p-4 text-left">
-								<SheetTitle className="text-lg font-black">CHECKOUT</SheetTitle>
-								<SheetDescription>Finalize ou salve como orçamento.</SheetDescription>
-							</SheetHeader>
-							<div className="scrollbar-thin scrollbar-track-primary/10 scrollbar-thumb-primary/30 flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-4 py-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
-								<CheckoutPanel
-									organizationCashbackProgram={organizationCashbackProgram}
-									saleState={saleState}
-									sellerEditable={activeSession?.politica !== "VENDEDOR_UNICO"}
-									organizationAutoFiscalEmission={organizationAutoFiscalEmission}
-									organizationAutoFiscalCapable={organizationAutoFiscalCapable}
-									autoEmissionExceptions={autoEmissionExceptions}
-									canEmitFiscal={canEmitFiscal}
-									canConfigureFiscal={canConfigureFiscal}
-									discountAuthority={discountAuthority}
-									onCreateDraft={handleCreateDraft}
-									onFinalizeSale={handleFinalizeSale}
-									isCreatingDraft={isCreatingDraft}
-									isFinalizingSale={isFinalizingSale}
-									onOpenContext={() => {
-										setIsCheckoutSheetOpen(false);
-										setIsContextSheetOpen(true);
-									}}
-								/>
-							</div>
-						</SheetContent>
-					</Sheet>
 				</div>
 
 				{linkedClient ? (
@@ -680,6 +638,37 @@ export default function NewSalePage({
 					/>
 				) : null}
 			</div>
+			<MobileCheckoutBar
+				open={isCheckoutSheetOpen}
+				onOpenChange={setIsCheckoutSheetOpen}
+				itemCount={saleState.itemCount}
+				total={saleState.valorFinal}
+				icon={<ShoppingCart className="h-4 w-4" />}
+				title="CHECKOUT"
+				description="Finalize ou salve como orçamento."
+				ariaLabel={`Abrir checkout: ${saleState.itemCount} ${saleState.itemCount === 1 ? "item" : "itens"}, total ${formatToMoney(saleState.valorFinal)}`}
+			>
+				<CheckoutPanel
+					organizationCashbackProgram={organizationCashbackProgram}
+					saleState={saleState}
+					sellerEditable={activeSession?.politica !== "VENDEDOR_UNICO"}
+					organizationAutoFiscalEmission={organizationAutoFiscalEmission}
+					organizationAutoFiscalCapable={organizationAutoFiscalCapable}
+					autoEmissionExceptions={autoEmissionExceptions}
+					canEmitFiscal={canEmitFiscal}
+					canConfigureFiscal={canConfigureFiscal}
+					discountAuthority={discountAuthority}
+					onCreateDraft={handleCreateDraft}
+					onFinalizeSale={handleFinalizeSale}
+					isCreatingDraft={isCreatingDraft}
+					isFinalizingSale={isFinalizingSale}
+					onOpenContext={() => {
+						setIsCheckoutSheetOpen(false);
+						setIsContextSheetOpen(true);
+					}}
+					cashSession={cashSessionCard}
+				/>
+			</MobileCheckoutBar>
 		</div>
 	);
 }

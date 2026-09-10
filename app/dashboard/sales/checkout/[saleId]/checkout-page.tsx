@@ -5,12 +5,11 @@ import { ConfirmSaleChange } from "@/components/Modals/Sales/ConfirmSaleChange";
 import { DiscountApproval } from "@/components/Modals/Sales/DiscountApproval";
 import { Button } from "@/components/ui/button";
 import CashSessionBar from "@/components/CashSessions/CashSessionBar";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import MobileCheckoutBar from "../../_components/mobile-checkout-bar";
 import type { TGetPOSProductsOutput } from "@/app/api/pos/products/route";
 import type { TAutoEmissionExceptions } from "@/lib/fiscal/auto-emission-policy";
 import { getErrorMessage } from "@/lib/errors";
 import { formatToMoney } from "@/lib/formatting";
-import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { confirmSale, updateSaleDraft } from "@/lib/mutations/pos";
 import { appRoutes } from "@/lib/navigation/routes";
 import { evaluateDiscount } from "@/lib/permissions/discounts";
@@ -93,7 +92,6 @@ export default function CheckoutPage({
 	canEmitFiscal,
 }: CheckoutPageProps) {
 	const router = useRouter();
-	const isMobile = useIsMobile();
 	const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
 	const [searchValue, setSearchValue] = useState("");
 	const [viewMode, setViewMode] = useState<ProductViewMode>("list");
@@ -364,7 +362,7 @@ export default function CheckoutPage({
 	// A casca aparece antes dos dados: o operador reconhece a tela em vez de encarar um spinner.
 	if (isLoading) {
 		return (
-			<div className="flex h-[calc(100vh-8rem)] w-full flex-col gap-3 p-4">
+			<div className="flex h-[calc(100dvh-7rem)] w-full flex-col gap-3 p-4 lg:h-[calc(100dvh-8rem)]">
 				<div className="flex items-center gap-3">
 					<div className="h-9 w-9 animate-pulse rounded-lg bg-muted" />
 					<div className="flex flex-col gap-1.5">
@@ -390,7 +388,7 @@ export default function CheckoutPage({
 
 	if (draft.statusVenda !== "ORCAMENTO") {
 		return (
-			<div className="flex h-[calc(100vh-8rem)] w-full flex-col items-center justify-center gap-4 p-4 text-center">
+			<div className="flex h-[calc(100dvh-7rem)] w-full flex-col items-center justify-center gap-4 p-4 text-center lg:h-[calc(100dvh-8rem)]">
 				<h2 className="text-lg font-black">ESTA VENDA JÁ FOI FINALIZADA</h2>
 				<p className="text-sm text-muted-foreground">O orçamento #{draft.idExterno} não está mais em rascunho, então não há checkout a fazer.</p>
 				<div className="flex items-center gap-2">
@@ -419,11 +417,26 @@ export default function CheckoutPage({
 			hideDraftAction
 			finalizeBlockedReason={finalizeBlockedReason}
 			beforeActions={pricingDrift ? <PricingDriftBanner pricing={pricingDrift} onReprice={handleReprice} /> : null}
+			cashSession={
+				// Card do caixa dentro do checkout (coluna e Sheet), não numa barra no topo — ver new-sale-page.
+				cashEnabled ? (
+					<CashSessionBar
+						compact
+						session={activeSession}
+						sessions={openSessions}
+						activeSessionId={activeSessionId}
+						onSessionChange={setActiveSessionId}
+						isLoading={cashLoading}
+						exigirFundoTroco={!!sessoesConfig?.exigirFundoTroco}
+						conferenciaCega={!!sessoesConfig?.conferenciaCega}
+					/>
+				) : null
+			}
 		/>
 	);
 
 	return (
-		<div className="flex h-[calc(100vh-8rem)] w-full flex-col gap-3 p-4">
+		<div className="flex h-[calc(100dvh-7rem)] w-full flex-col gap-3 p-4 lg:h-[calc(100dvh-8rem)]">
 			<div className="flex items-center gap-3">
 				<Button variant="ghost" size="icon" onClick={() => router.push(appRoutes.sales.root())} aria-label="Voltar">
 					<ArrowLeft className="h-5 w-5" />
@@ -439,18 +452,6 @@ export default function CheckoutPage({
 					{isCatalogOpen ? "OCULTAR CATÁLOGO" : "ADICIONAR ITENS"}
 				</Button>
 			</div>
-			{cashEnabled ? (
-				<CashSessionBar
-					session={activeSession}
-					sessions={openSessions}
-					activeSessionId={activeSessionId}
-					onSessionChange={setActiveSessionId}
-					isLoading={cashLoading}
-					exigirFundoTroco={!!sessoesConfig?.exigirFundoTroco}
-					conferenciaCega={!!sessoesConfig?.conferenciaCega}
-				/>
-			) : null}
-
 			<div className="flex min-h-0 flex-1 gap-3">
 				{isCatalogOpen ? (
 					<div className="flex min-w-0 flex-1 flex-col gap-4 rounded-xl bg-background">
@@ -474,7 +475,7 @@ export default function CheckoutPage({
 							/>
 						</div>
 
-						<div className="scrollbar-thin scrollbar-track-primary/10 scrollbar-thumb-primary/30 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pr-1 pb-20 lg:pb-0">
+						<div className="scrollbar-thin scrollbar-track-primary/10 scrollbar-thumb-primary/30 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pr-1">
 							<ProductsGridBlock
 								productsData={productsData}
 								isLoading={productsLoading}
@@ -502,40 +503,6 @@ export default function CheckoutPage({
 				>
 					<div className="scrollbar-thin scrollbar-track-primary/10 scrollbar-thumb-primary/30 h-full overflow-y-auto p-3">{checkoutPanel}</div>
 				</div>
-
-				{isMobile ? (
-					<div className="fixed right-4 bottom-4 z-50 lg:hidden">
-						<Sheet open={isCheckoutSheetOpen} onOpenChange={setIsCheckoutSheetOpen}>
-							<SheetTrigger
-								render={
-									// No mobile o painel fica fechado por padrão: sem o valor aqui, o total não está
-									// apenas fora do scroll, está invisível o tempo inteiro.
-									<Button
-										className="h-12 rounded-full px-5 shadow-lg"
-										aria-label={`Abrir checkout: ${saleState.itemCount} ${saleState.itemCount === 1 ? "item" : "itens"}, total ${formatToMoney(saleState.valorFinal)}`}
-									>
-										<ShoppingCart className="mr-2 h-4 w-4" />
-										<span className="font-extrabold tabular-nums">{saleState.itemCount}</span>
-										<span aria-hidden className="mx-2.5 h-4 w-px bg-current opacity-30" />
-										<span className="text-base font-extrabold tabular-nums">{formatToMoney(saleState.valorFinal)}</span>
-									</Button>
-								}
-							/>
-							<SheetContent
-								side="bottom"
-								className="flex h-[92dvh] max-h-[92dvh] flex-col gap-0 overflow-hidden rounded-t-2xl p-0 data-[side=bottom]:h-[92dvh]"
-							>
-								<SheetHeader className="shrink-0 border-b p-4 text-left">
-									<SheetTitle className="text-lg font-black">CHECKOUT</SheetTitle>
-									<SheetDescription>Confira itens e pagamentos e confirme a venda.</SheetDescription>
-								</SheetHeader>
-								<div className="scrollbar-thin scrollbar-track-primary/10 scrollbar-thumb-primary/30 flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-4 py-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
-									{checkoutPanel}
-								</div>
-							</SheetContent>
-						</Sheet>
-					</div>
-				) : null}
 
 				{builderProduct ? <ProductBuilderModal product={builderProduct} onAddToCart={saleState.addItem} onClose={() => setBuilderProduct(null)} /> : null}
 
@@ -571,6 +538,18 @@ export default function CheckoutPage({
 					/>
 				) : null}
 			</div>
+			<MobileCheckoutBar
+				open={isCheckoutSheetOpen}
+				onOpenChange={setIsCheckoutSheetOpen}
+				itemCount={saleState.itemCount}
+				total={saleState.valorFinal}
+				icon={<ShoppingCart className="h-4 w-4" />}
+				title="CHECKOUT"
+				description="Confira itens e pagamentos e confirme a venda."
+				ariaLabel={`Abrir checkout: ${saleState.itemCount} ${saleState.itemCount === 1 ? "item" : "itens"}, total ${formatToMoney(saleState.valorFinal)}`}
+			>
+				{checkoutPanel}
+			</MobileCheckoutBar>
 		</div>
 	);
 }
