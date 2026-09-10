@@ -13,6 +13,7 @@ import dayjs from "dayjs";
 import { Coins, MapPin, Package, PencilLine, Plus, ReceiptText, Sparkles, TriangleAlert } from "lucide-react";
 import Image from "next/image";
 import { useMemo } from "react";
+import RFMBadge from "../RFMBadge";
 
 export type TCrossSellProduct = TGetCrossSellOutput["data"]["products"][number];
 
@@ -80,11 +81,7 @@ export default function ClientContextContent({
 					<div className="min-w-0 flex-1">
 						<div className="flex items-center gap-2">
 							<p className="truncate text-sm font-bold leading-tight text-foreground">{nome}</p>
-							{cliente?.analiseRFMTitulo ? (
-								<span className="shrink-0 rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">
-									{cliente.analiseRFMTitulo}
-								</span>
-							) : null}
+							{cliente?.analiseRFMTitulo ? <RFMBadge titulo={cliente.analiseRFMTitulo} /> : null}
 						</div>
 						<p className="truncate text-xs text-muted-foreground">{telefone ? formatToPhone(telefone) : "Sem telefone"}</p>
 						{cliente?.email ? <p className="truncate text-xs text-muted-foreground">{cliente.email}</p> : null}

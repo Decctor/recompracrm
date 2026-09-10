@@ -9,6 +9,7 @@ import { ConfirmSaleChange } from "@/components/Modals/Sales/ConfirmSaleChange";
 import { DiscountApproval } from "@/components/Modals/Sales/DiscountApproval";
 import { getErrorMessage } from "@/lib/errors";
 import { formatToMoney } from "@/lib/formatting";
+import { cn } from "@/lib/utils";
 import type { TQuotePermissions } from "@/components/Chats/Quotes/config";
 import type { TAutoEmissionExceptions } from "@/lib/fiscal/auto-emission-policy";
 import { createAndConfirmSale, createSaleDraft, updateSaleDraft } from "@/lib/mutations/pos";
@@ -25,7 +26,7 @@ import type { TCashbackProgramEntity } from "@/services/drizzle/schema";
 import { type TSaleFinancialAccountOption, type TUseSaleState, getDefaultSaleState, useSaleState } from "@/state-hooks/use-sale-state";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ShoppingCart } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import CheckoutPanel from "./components/CheckoutPanel";
 import OpenQuotesPill from "./components/OpenQuotesPill";
@@ -103,6 +104,10 @@ export default function NewSalePage({
 	const [viewMode, setViewMode] = useState<ProductViewMode>("list");
 	const [builderProduct, setBuilderProduct] = useState<TGetPOSProductsOutput["data"]["products"][number] | null>(null);
 	const [isCheckoutSheetOpen, setIsCheckoutSheetOpen] = useState(false);
+	// Foco do checkout (desktop): clicar dentro da coluna a expande de 420px para 640px e esmaece o
+	// catálogo; clicar no catálogo ou Esc devolve. O catálogo esmaecido continua interativo — o
+	// clique que desfaz o foco também executa a ação (ex.: adicionar um produto ao carrinho).
+	const [isCheckoutFocused, setIsCheckoutFocused] = useState(false);
 	const [isContextPanelOpen, setIsContextPanelOpen] = useState(false);
 	const [isContextSheetOpen, setIsContextSheetOpen] = useState(false);
 	const [isEditingClient, setIsEditingClient] = useState(false);
@@ -162,19 +167,25 @@ export default function NewSalePage({
 	// Unique product ids in the basket — drives cross-sell, stable against quantity changes.
 	const basketProductIds = useMemo(() => [...new Set(saleState.state.itens.map((item) => item.produtoId))], [saleState.state.itens]);
 
-	// Auto-open the context panel when a client is freshly linked; collapse when unlinked.
-	const previousClientIdRef = useRef<string | null>(null);
+	// O contexto do cliente nasce fechado e só abre pelo card de vínculo: abrir sozinho a cada
+	// vínculo roubava largura do catálogo justamente no momento de bipar os itens. Desvincular
+	// força o fechamento para o painel não reabrir mostrando o cliente errado no próximo vínculo.
 	useEffect(() => {
-		const previousClientId = previousClientIdRef.current;
-		if (linkedClientId && linkedClientId !== previousClientId) {
-			setIsContextPanelOpen(true);
-		}
 		if (!linkedClientId) {
 			setIsContextPanelOpen(false);
 			setIsContextSheetOpen(false);
 		}
-		previousClientIdRef.current = linkedClientId;
 	}, [linkedClientId]);
+
+	// Esc desfaz o foco do checkout; ignora eventos já consumidos (modais Radix fecham com Esc).
+	useEffect(() => {
+		if (!isCheckoutFocused) return;
+		const handleKeyDown = (event: KeyboardEvent) => {
+			if (event.key === "Escape" && !event.defaultPrevented) setIsCheckoutFocused(false);
+		};
+		window.addEventListener("keydown", handleKeyDown);
+		return () => window.removeEventListener("keydown", handleKeyDown);
+	}, [isCheckoutFocused]);
 
 	const queryClient = useQueryClient();
 
@@ -426,6 +437,7 @@ export default function NewSalePage({
 			<SaleSuccessPanel
 				success={saleState.state.success}
 				onStartNewSale={() => {
+					setIsCheckoutFocused(false);
 					saleState.clearSuccess();
 					saleState.resetState(
 						getDefaultSaleState({ vendedorId: activeSession?.vendedorPadrao?.id ?? null, vendedorNome: activeSession?.vendedorPadrao?.nome ?? null }),
@@ -463,7 +475,15 @@ export default function NewSalePage({
 				/>
 			) : null}
 			<div className="flex flex-1 min-h-0 gap-3">
-				<div className="flex min-w-0 flex-1 flex-col gap-4 rounded-xl bg-background">
+				{/* O clique nas colunas é atalho de conveniência (foco/desfoco), não a única via: toda
+				    interação continua acessível pelos controles internos e o Esc desfaz o foco. */}
+				<div
+					onClick={() => setIsCheckoutFocused(false)}
+					className={cn(
+						"flex min-w-0 flex-1 flex-col gap-4 rounded-xl bg-background transition-opacity duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] motion-reduce:transition-none",
+						isCheckoutFocused && "opacity-[0.32]",
+					)}
+				>
 					<div className="shrink-0 flex flex-col gap-3">
 						{/* Em telas estreitas a busca ocupa a linha inteira e os controles quebram para a linha
 						    de baixo: dividir a mesma linha espremia o campo a poucos caracteres visíveis. */}
@@ -525,7 +545,18 @@ export default function NewSalePage({
 					/>
 				) : null}
 
-				<div className="hidden w-[420px] shrink-0 overflow-hidden rounded-xl border border-border/70 bg-muted/45 lg:block">
+				{/* Coluna do checkout — "foco por escala": clicar dentro expande para 640px (limitado a
+				    50vw para não engolir o catálogo em telas menores) e a superfície ganha contraste e
+				    elevação; a largura recolhida continua sendo os 420px de sempre. */}
+				<div
+					onClick={() => setIsCheckoutFocused(true)}
+					className={cn(
+						"hidden shrink-0 overflow-hidden rounded-xl border transition-[width,border-color,background-color,box-shadow] duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] motion-reduce:transition-none lg:block",
+						isCheckoutFocused
+							? "w-[min(640px,50vw)] border-primary/55 bg-card shadow-[0_30px_60px_-24px_rgb(0_0_0/0.35)]"
+							: "w-[420px] border-border/70 bg-muted/45",
+					)}
+				>
 					<div className="h-full overflow-y-auto p-3 scrollbar-thin scrollbar-track-primary/10 scrollbar-thumb-primary/30">
 						<CheckoutPanel
 							organizationCashbackProgram={organizationCashbackProgram}
@@ -542,6 +573,7 @@ export default function NewSalePage({
 							isCreatingDraft={isCreatingDraft}
 							isFinalizingSale={isFinalizingSale}
 							onOpenContext={() => setIsContextPanelOpen(true)}
+							expanded={isCheckoutFocused}
 						/>
 					</div>
 				</div>

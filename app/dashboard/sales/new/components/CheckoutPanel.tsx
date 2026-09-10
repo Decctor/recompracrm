@@ -59,6 +59,8 @@ type CheckoutPanelProps = {
 	// Conteúdo acima das ações — hoje o aviso de preços defasados do checkout.
 	beforeActions?: React.ReactNode;
 	sellerEditable?: boolean;
+	// Coluna em foco no desktop (expandida para 640px): o total do dock escala junto com o espaço.
+	expanded?: boolean;
 };
 
 export default function CheckoutPanel({
@@ -80,6 +82,7 @@ export default function CheckoutPanel({
 	hideDraftAction,
 	beforeActions,
 	sellerEditable = true,
+	expanded,
 }: CheckoutPanelProps) {
 	const [isVinculationMenuOpen, setIsVinculationMenuOpen] = useState(false);
 	const [isNewLocationOpen, setIsNewLocationOpen] = useState(false);
@@ -146,6 +149,7 @@ export default function CheckoutPanel({
 
 				<ClientSection
 					saleState={saleState}
+					organizationCashbackProgram={organizationCashbackProgram}
 					onOpenVinculationMenu={() => setIsVinculationMenuOpen(true)}
 					onPreloadVinculationMenu={preloadClientVinculationMenu}
 					onOpenContext={onOpenContext}
@@ -185,6 +189,7 @@ export default function CheckoutPanel({
 					editMode={!!edit}
 					finalizeBlockedReason={finalizeBlockedReason}
 					hideDraftAction={hideDraftAction}
+					expanded={expanded}
 				/>
 			</div>
 

@@ -21,6 +21,8 @@ type TotalDockProps = {
 	finalizeBlockedReason?: string | null;
 	// Checkout de um rascunho que já existe: o verbo é confirmar, não finalizar.
 	hideDraftAction?: boolean;
+	// Coluna em foco no desktop (640px): há espaço para o número crescer sem empurrar o CTA.
+	expanded?: boolean;
 };
 
 function getActionLabel({ editMode, hideDraftAction, isFinalizingSale }: Pick<TotalDockProps, "editMode" | "hideDraftAction" | "isFinalizingSale">) {
@@ -37,6 +39,7 @@ export default function TotalDock({
 	editMode,
 	finalizeBlockedReason,
 	hideDraftAction,
+	expanded,
 }: TotalDockProps) {
 	const finalizeDisabled = !saleState.isReadyForFinalize || isFinalizingSale || !!finalizeBlockedReason || (!editMode && !!isCreatingDraft);
 	// Carrinho vazio esmaece o número, nunca esconde o dock: a altura da coluna não pode saltar
@@ -78,8 +81,8 @@ export default function TotalDock({
 				</div>
 			) : null}
 
-			{/* flex-wrap + min-w-fit no CTA: em valores de seis dígitos o par não cabe na coluna de 420px,
-			    e o botão desce sozinho para uma segunda linha em vez de espremer o número. */}
+			{/* flex-wrap + min-w-fit no CTA: em valores de seis dígitos o par não cabe na coluna
+			    recolhida (420px), e o botão desce sozinho para uma segunda linha em vez de espremer o número. */}
 			<div className="flex flex-wrap items-center gap-x-3 gap-y-2">
 				{/* Rótulo e valor na mesma linha de base, e não empilhados: colapsa a coluna esquerda para
 				    uma linha só e deixa a altura do dock ser ditada pelo botão. */}
@@ -88,9 +91,17 @@ export default function TotalDock({
 					{/* text-xl é um passo acima do maior tipo do painel (o `text-lg` do cabeçalho): o número
 					    fica sendo o maior elemento da superfície sem sair da escala do resto. O peso `black`
 					    e o isolamento no dock carregam a ênfase que o tamanho sozinho não precisa carregar.
+					    Com a coluna expandida (foco do checkout) o número sobe para 26px — é a hora de falar
+					    o valor para o cliente — e a transição de font-size acompanha a de largura da coluna.
 					    tabular-nums porque o valor muda a cada tecla nos inputs de desconto e acréscimo, e
 					    dígitos de largura variável fazem o número inteiro tremer enquanto o operador digita. */}
-					<span className={cn("text-xl font-black tracking-tight tabular-nums", isEmpty ? "text-muted-foreground" : "text-foreground")}>
+					<span
+						className={cn(
+							"font-black tracking-tight tabular-nums transition-[font-size] duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] motion-reduce:transition-none",
+							expanded ? "text-[26px]" : "text-xl",
+							isEmpty ? "text-muted-foreground" : "text-foreground",
+						)}
+					>
 						{formatToMoney(saleState.valorFinal)}
 					</span>
 				</div>
