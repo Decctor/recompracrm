@@ -9,6 +9,7 @@ import { db } from "@/services/drizzle";
 import { accountingEntries, couponRedemptions, financialTransactions, productStockLots, saleItems, sales } from "@/services/drizzle/schema";
 import { and, eq, sql } from "drizzle-orm";
 import createHttpError from "http-errors";
+import { attendanceStatusValues } from "@/lib/sales/sale-processing/attendance";
 
 export async function processConfirmedSaleCancellation({
 	organizationId,
@@ -182,7 +183,7 @@ export async function processConfirmedSaleCancellation({
 			.update(sales)
 			.set({
 				statusVenda: "CANCELADA",
-				statusAtendimento: "CANCELADO",
+				...attendanceStatusValues("CANCELADO"),
 				observacoes: [sale.observacoes, `Cancelamento: ${reason}`].filter(Boolean).join("\n"),
 			})
 			.where(and(eq(sales.id, saleId), eq(sales.organizacaoId, organizationId)));

@@ -10,6 +10,7 @@ import { processDataCollectingV2Effects } from "./effects";
 import { shouldProcessIntegratedSaleConfirmation } from "./integrated-sale-confirmation-policy";
 import { loadPurchaseEffectCampaigns } from "./purchase-effect-campaigns";
 import type { TDataCollectingV2Executor, TPersistedSaleForEffects } from "./types";
+import { attendanceStatusValues } from "@/lib/sales/sale-processing/attendance";
 
 export async function processIntegratedSaleConfirmation({
 	tx,
@@ -50,7 +51,7 @@ export async function processIntegratedSaleConfirmation({
 	// falharam sem regredir o status comercial da venda.
 	const claimed = await tx
 		.update(sales)
-		.set({ statusVenda: "CONFIRMADA", statusAtendimento: "EM_PREPARO" })
+		.set({ statusVenda: "CONFIRMADA", ...attendanceStatusValues("EM_PREPARO") })
 		.where(and(eq(sales.id, saleId), eq(sales.organizacaoId, organizationId), isNull(sales.statusVenda), eq(sales.statusAtendimento, "NAO_INICIADO")))
 		.returning({ id: sales.id });
 	if (claimed.length === 0) return { processed: false, immediateProcessingDataList: [] };

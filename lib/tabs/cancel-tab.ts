@@ -3,6 +3,7 @@ import type { TOrganizationEntity } from "@/services/drizzle/schema";
 import { saleItems, sales, tabOrders, tabs } from "@/services/drizzle/schema";
 import { and, eq, ne } from "drizzle-orm";
 import createHttpError from "http-errors";
+import { attendanceStatusValues } from "@/lib/sales/sale-processing/attendance";
 
 export type TCancelTabInput = {
 	tabId: string;
@@ -71,7 +72,7 @@ export async function cancelTab({
 
 			const cancelledSaleRows = await tx
 				.update(sales)
-				.set({ statusVenda: "CANCELADA", statusAtendimento: "CANCELADO" })
+				.set({ statusVenda: "CANCELADA", ...attendanceStatusValues("CANCELADO") })
 				.where(and(eq(sales.id, draftSale.id), eq(sales.statusVenda, "ORCAMENTO")))
 				.returning({ id: sales.id });
 			if (cancelledSaleRows.length === 0) {

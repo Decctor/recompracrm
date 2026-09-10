@@ -54,7 +54,7 @@
 		"test:data-collecting-template-vars": "tsx ./scripts/validate-data-collecting-template-variables.ts",
 		"test:goals": "node --import tsx --test lib/goals/pacing.test.ts lib/operation-timezone.test.ts",
 		"test:print-templates": "node --import tsx --test lib/desktop-agent/templates/cupom-venda.test.ts",
-		"test:sale-change": "node --import tsx --test lib/sales/sale-change.test.ts",
+		"test:sale-change": "node --import tsx --test lib/sales/sale-change.test.ts lib/sales/sale-processing/attendance.test.ts",
 		"test:whatsapp-parsing": "node --import tsx --test lib/whatsapp/parsing.test.ts",
 		"test:geo": "node --import tsx --test lib/geo/brazilian-locations.test.ts",
 		"test:sales-channels": "node --import tsx --test lib/products/sales-channels.test.ts",

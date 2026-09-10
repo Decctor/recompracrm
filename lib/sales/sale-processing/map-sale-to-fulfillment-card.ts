@@ -15,6 +15,8 @@ type SaleFulfillmentRow = {
 	clienteId: string | null;
 	observacoes: string | null;
 	dataVenda: Date | null;
+	/** Momento em que o `statusAtendimento` atual passou a valer. Ver schema de `sales`. */
+	statusAtendimentoData?: Date | null;
 	modelo?: string | null;
 	processamentoOrigem?: string | null;
 	tabId?: string | null;
@@ -81,6 +83,9 @@ export function mapSaleRowToFulfillmentCard(sale: SaleFulfillmentRow) {
 		clienteId: sale.clienteId,
 		observacoes: sale.observacoes,
 		dataVenda: sale.dataVenda,
+		// Momento da etapa atual. Numa venda entregue e a hora da entrega (ENTREGUE e terminal), e e
+		// o que o quadro mostra nos concluidos recentes: `dataVenda` ali seria a hora errada.
+		statusAtendimentoData: sale.statusAtendimentoData ?? null,
 		cliente: sale.cliente,
 		financeiro: computeSaleFinancialStatus({
 			transactions: rawTransactions.map((transaction) => ({

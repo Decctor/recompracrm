@@ -25,6 +25,7 @@ import { createAccountingEntry } from "./create-accounting-entry";
 import { processSaleAutomaticFiscalEmissionIfEligible } from "./process-sale-automatic-fiscal-emission";
 import { processStockDeduction } from "./process-stock-deduction";
 import { registerSaleChangeTransaction } from "./register-sale-change";
+import { attendanceStatusValues } from "@/lib/sales/sale-processing/attendance";
 
 export type TProcessSaleConfirmationInput = {
 	organization: TOrganizationEntity;
@@ -117,7 +118,7 @@ export async function processSaleConfirmationInTransaction({ tx, input }: { tx: 
 		.update(sales)
 		.set({
 			statusVenda: "CONFIRMADA",
-			statusAtendimento: initialAttendanceStatus,
+			...attendanceStatusValues(initialAttendanceStatus, { at: confirmedAt }),
 			natureza: "SN01",
 			dataVenda: confirmedAt,
 			sessaoVendaId: input.sessaoVendaId ?? null,

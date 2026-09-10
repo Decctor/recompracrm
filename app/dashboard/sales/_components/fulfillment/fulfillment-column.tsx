@@ -6,7 +6,7 @@ import type { TOrganizationConfiguration } from "@/schemas/organizations";
 import type { TSaleAttendanceStatusEnum } from "@/schemas/enums";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { ChevronLeft, ChevronRight, Maximize2 } from "lucide-react";
-import { ATTENDANCE_COLUMN_META, BOARD_COLUMN_WIDTH_PX, BOARD_RAIL_ACTIVE_WIDTH_PX, BOARD_RAIL_WIDTH_PX, type TBoardStatus } from "./config";
+import { ATTENDANCE_COLUMN_META, BOARD_COLUMN_WIDTH_PX, BOARD_RAIL_ACTIVE_WIDTH_PX, BOARD_RAIL_WIDTH_PX, type TPipelineStatus } from "./config";
 import { FulfillmentCard } from "./fulfillment-card";
 
 // Curva ease-out-quart: sai rapido e assenta devagar, sem overshoot.
@@ -76,7 +76,7 @@ function CollapsedStageRail({
 	onExpand,
 	controlsId,
 }: {
-	status: TBoardStatus;
+	status: TPipelineStatus;
 	count: number;
 	hasOverduePayment: boolean;
 	isDropTarget: boolean;
@@ -149,7 +149,7 @@ export function FulfillmentColumn({
 	onViewDetails,
 	canEditSales,
 }: {
-	status: TBoardStatus;
+	status: TPipelineStatus;
 	cards: TSalesFulfillmentCard[];
 	organizationConfig: TOrganizationConfiguration;
 	pendingCardIds: Set<string>;
@@ -157,8 +157,8 @@ export function FulfillmentColumn({
 	isCollapsed: boolean;
 	hasOverduePayment: boolean;
 	canCompact: boolean;
-	onSetCollapsed: (status: TBoardStatus, collapsed: boolean) => void;
-	onFocus: (status: TBoardStatus) => void;
+	onSetCollapsed: (status: TPipelineStatus, collapsed: boolean) => void;
+	onFocus: (status: TPipelineStatus) => void;
 	onMove: (card: TSalesFulfillmentCard, target: TSaleAttendanceStatusEnum) => void;
 	onPatch: (input: TPatchSalesFulfillmentInput) => void;
 	onViewDetails: (saleId: string) => void;

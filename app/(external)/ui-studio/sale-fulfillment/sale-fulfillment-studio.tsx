@@ -22,6 +22,7 @@ const STUDIO_SALE = {
 	clienteId: "client-studio-1",
 	observacoes: "Entregar no portão lateral. O interfone está com defeito.",
 	dataVenda: new Date("2026-09-04T14:32:00-03:00"),
+	statusAtendimentoData: new Date("2026-09-04T14:41:00-03:00"),
 	canal: "WhatsApp",
 	cliente: {
 		id: "client-studio-1",

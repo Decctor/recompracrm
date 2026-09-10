@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BOARD_STATUSES, type TBoardStatus } from "./config";
+import { PIPELINE_STATUSES, type TPipelineStatus } from "./config";
 
 const STORAGE_PREFIX = "ampmais:fulfillment-board-compaction:v1";
 
@@ -10,7 +10,7 @@ const STORAGE_PREFIX = "ampmais:fulfillment-board-compaction:v1";
  * abre espaco para a semente automatica. Assim que o operador recolhe ou expande uma etapa, ela
  * passa a existir neste mapa e a semente nunca mais decide por ela.
  */
-type TStageCompactionChoices = Partial<Record<TBoardStatus, boolean>>;
+type TStageCompactionChoices = Partial<Record<TPipelineStatus, boolean>>;
 
 function storageKey(organizationId: string) {
 	return `${STORAGE_PREFIX}:${organizationId}`;
@@ -24,7 +24,7 @@ function readStoredChoices(organizationId: string): TStageCompactionChoices {
 		const parsed: unknown = JSON.parse(raw);
 		if (!parsed || typeof parsed !== "object") return {};
 		const choices: TStageCompactionChoices = {};
-		for (const status of BOARD_STATUSES) {
+		for (const status of PIPELINE_STATUSES) {
 			const value = (parsed as Record<string, unknown>)[status];
 			if (typeof value === "boolean") choices[status] = value;
 		}
@@ -44,7 +44,7 @@ function writeStoredChoices(organizationId: string, choices: TStageCompactionCho
 
 type UseFulfillmentBoardCompactionParams = {
 	organizationId: string;
-	stageCounts: Record<TBoardStatus, number>;
+	stageCounts: Record<TPipelineStatus, number>;
 	/** Vira true no primeiro render com dados carregados. E o gatilho da semente automatica. */
 	seedReady: boolean;
 	/**
@@ -91,7 +91,7 @@ export function useFulfillmentBoardCompaction({ organizationId, stageCounts, see
 		if (!isHydrated || !seedReady || seededRef.current) return;
 		seededRef.current = true;
 		const seed: TStageCompactionChoices = {};
-		for (const status of BOARD_STATUSES) {
+		for (const status of PIPELINE_STATUSES) {
 			if (stageCounts[status] === 0) seed[status] = true;
 		}
 		setAutoSeed(seed);
@@ -105,7 +105,7 @@ export function useFulfillmentBoardCompaction({ organizationId, stageCounts, see
 		setAutoSeed((prev) => {
 			const next = { ...prev };
 			let changed = false;
-			for (const status of BOARD_STATUSES) {
+			for (const status of PIPELINE_STATUSES) {
 				if (next[status] && stageCounts[status] > 0) {
 					delete next[status];
 					changed = true;
@@ -117,23 +117,23 @@ export function useFulfillmentBoardCompaction({ organizationId, stageCounts, see
 
 	const collapsedByStage = useMemo(
 		() =>
-			Object.fromEntries(BOARD_STATUSES.map((status) => [status, enabled ? (choices[status] ?? autoSeed[status] ?? false) : false])) as Record<
-				TBoardStatus,
+			Object.fromEntries(PIPELINE_STATUSES.map((status) => [status, enabled ? (choices[status] ?? autoSeed[status] ?? false) : false])) as Record<
+				TPipelineStatus,
 				boolean
 			>,
 		[choices, autoSeed, enabled],
 	);
 
-	const setStageCollapsed = useCallback((status: TBoardStatus, collapsed: boolean) => {
+	const setStageCollapsed = useCallback((status: TPipelineStatus, collapsed: boolean) => {
 		setChoices((prev) => ({ ...prev, [status]: collapsed }));
 	}, []);
 
 	/** Recolhe todas as outras etapas e garante que a escolhida fique aberta. Fixa as cinco de uma vez. */
-	const focusStage = useCallback((status: TBoardStatus) => {
-		setChoices(Object.fromEntries(BOARD_STATUSES.map((item) => [item, item !== status])) as TStageCompactionChoices);
+	const focusStage = useCallback((status: TPipelineStatus) => {
+		setChoices(Object.fromEntries(PIPELINE_STATUSES.map((item) => [item, item !== status])) as TStageCompactionChoices);
 	}, []);
 
-	const allCollapsed = useMemo(() => BOARD_STATUSES.every((status) => collapsedByStage[status]), [collapsedByStage]);
+	const allCollapsed = useMemo(() => PIPELINE_STATUSES.every((status) => collapsedByStage[status]), [collapsedByStage]);
 
 	return { collapsedByStage, setStageCollapsed, focusStage, allCollapsed };
 }
