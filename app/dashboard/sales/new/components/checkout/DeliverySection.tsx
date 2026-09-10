@@ -7,6 +7,7 @@ import { useShopSettings } from "@/lib/queries/shop";
 import { SaleFullfilmentModesOptions } from "@/utils/select-options";
 import { TruckIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
+import { toast } from "sonner";
 
 type DeliverySectionProps = {
 	saleState: TUseSaleState;
@@ -62,7 +63,19 @@ export default function DeliverySection({ saleState, locationOptions, onOpenNewL
 							className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs"
 							variant={saleState.state.entregaModalidade === mode.value ? "brand" : "ghost"}
 							disabled={isEntregaBlocked}
-							onClick={() => saleState.setEntregaModalidade(mode.value)}
+							onClick={() => {
+								// Trocar a modalidade reaplica o default de efetivação dos splits (entrega nasce
+								// "receber depois") — o ajuste é silencioso no state, então avisa aqui.
+								const rederivedCount = saleState.countPaymentsRederivedByModalidade(mode.value);
+								saleState.setEntregaModalidade(mode.value);
+								if (rederivedCount > 0) {
+									toast.info(
+										mode.value === "ENTREGA"
+											? "Pagamentos ajustados para receber na entrega. Se algum já foi recebido, marque RECEBER AGORA no pagamento."
+											: "Efetivação dos pagamentos ajustada ao padrão de cada método.",
+									);
+								}
+							}}
 						>
 							{mode.icon}
 							{mode.label}
