@@ -2,7 +2,7 @@ import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { db } from "@/services/drizzle";
-import { cashbackProgramTransactions, clients } from "@/services/drizzle/schema";
+import { cashbackProgramTransactions, cashbackPrograms, clients } from "@/services/drizzle/schema";
 import dayjs from "dayjs";
 import { and, desc, eq, gt, lte, sql } from "drizzle-orm";
 import createHttpError from "http-errors";
@@ -40,7 +40,7 @@ async function getExpiringCashback({ input, session }: { input: TGetExpiringCash
 		lte(cashbackProgramTransactions.expiracaoData, windowEnd),
 	);
 
-	const [totals, porCliente] = await Promise.all([
+	const [totals, porCliente, program] = await Promise.all([
 		db
 			.select({
 				valor: sql<number>`coalesce(sum(${cashbackProgramTransactions.valorRestante}), 0)`,
@@ -62,11 +62,14 @@ async function getExpiringCashback({ input, session }: { input: TGetExpiringCash
 			.groupBy(clients.id, clients.nome, clients.telefone)
 			.orderBy(desc(sql`sum(${cashbackProgramTransactions.valorRestante})`))
 			.limit(CLIENTS_LIMIT),
+		db.query.cashbackPrograms.findFirst({ where: eq(cashbackPrograms.organizacaoId, organizacaoId), columns: { terminologia: true } }),
 	]);
 
 	return {
 		data: {
 			janelaDias: input.days,
+			// O programa fala em dinheiro ou em pontos; quem exibe formata com `formatCashbackValue`.
+			terminologia: program?.terminologia ?? ("DINHEIRO" as const),
 			total: { valor: Number(totals[0]?.valor ?? 0), clientes: Number(totals[0]?.clientes ?? 0) },
 			clientes: porCliente.map((row) => ({ ...row, valor: Number(row.valor) })),
 		},

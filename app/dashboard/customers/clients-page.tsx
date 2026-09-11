@@ -9,7 +9,12 @@ import LoadingComponent from "@/components/Layouts/LoadingComponent";
 import StatUnitCard from "@/components/Stats/StatUnitCard";
 import GeneralPaginationComponent from "@/components/Utils/Pagination";
 import { Button } from "@/components/ui/button";
-import { InteractiveFilter, type InteractiveFilterOption, type InteractiveFilterSortValue } from "@/components/ui/interactive-filter";
+import {
+	InteractiveFilter,
+	type InteractiveFilterDateRangePreset,
+	type InteractiveFilterOption,
+	type InteractiveFilterSortValue,
+} from "@/components/ui/interactive-filter";
 import { Input } from "@/components/ui/input";
 import { StatBadge } from "@/components/ui/stat-badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -23,7 +28,9 @@ import {
 	formatInteractiveSortFieldSummary,
 	isInteractiveSortActive,
 } from "@/components/ui/interactive-filter-formatting";
-import { useClients, useClientsOverallStats } from "@/lib/queries/clients";
+import { useClientsOverallStats, useClientsQuery } from "@/lib/queries/clients";
+import { clientsDatabaseParsers, toClientsInput, type TClientsDatabaseUrlState } from "@/lib/clients/database-url-state";
+import { useDebounceMemo } from "@/lib/hooks/use-debounce";
 import { useSaleQueryFilterOptions } from "@/lib/queries/stats/utils";
 import { cn } from "@/lib/utils";
 import type { TGetClientsInput, TGetClientsOutputDefault } from "@/app/api/clients/route";
@@ -33,6 +40,7 @@ import {
 	FileSpreadsheet,
 	BadgeDollarSign,
 	BadgePercent,
+	Cake,
 	CirclePlus,
 	Info,
 	ListFilter,
@@ -47,8 +55,8 @@ import {
 	Plus,
 } from "lucide-react";
 import Link from "next/link";
-import { parseAsStringEnum, useQueryState } from "nuqs";
-import { useState } from "react";
+import { parseAsStringEnum, useQueryState, useQueryStates } from "nuqs";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { BsCalendar } from "react-icons/bs";
 import { CustomersAcquisitionChannels } from "@/utils/select-options";
 import { RFMLabels } from "@/utils/rfm";
@@ -96,21 +104,26 @@ function ClientsDatabaseView() {
 	const [newClientModalIsOpen, setNewClientModalIsOpen] = useState<boolean>(false);
 	const [exportClientsModalIsOpen, setExportClientsModalIsOpen] = useState<boolean>(false);
 	const [editingClientId, setEditingClientId] = useState<string | null>(null);
-	const {
-		data: clientsResult,
-		queryKey,
-		isSuccess,
-		isLoading,
-		isError,
-		error,
-		filters,
-		updateFilters,
-	} = useClients({
-		initialFilters: {
-			statsPeriodAfter: dayjs().startOf("month").toDate(),
-			statsPeriodBefore: dayjs().endOf("month").toDate(),
-		},
-	});
+	// Filtros na URL (nuqs): compartilháveis e alvo de links de outras telas (ex.: dashboard) — o
+	// mesmo padrão do histórico de vendas. Ver `lib/clients/database-url-state.ts`.
+	const [urlState, setUrlState] = useQueryStates(clientsDatabaseParsers, { history: "replace" });
+	const filters = useMemo(() => toClientsInput(urlState), [urlState]);
+	const updateFilters = (next: Partial<TClientsDatabaseUrlState>) => void setUrlState(next);
+
+	// O período padrão das estatísticas segue sendo o mês corrente — mas só quando a página abre sem
+	// período na URL. Ele é semeado NA URL (e não aplicado por fora) para que o chip mostre o que
+	// realmente vale; o ref garante que "limpar o período" não seja re-semeado dentro da sessão.
+	const monthSeededRef = useRef(false);
+	useEffect(() => {
+		if (monthSeededRef.current) return;
+		monthSeededRef.current = true;
+		if (!urlState.statsPeriodAfter && !urlState.statsPeriodBefore) {
+			void setUrlState({ statsPeriodAfter: dayjs().startOf("month").toDate(), statsPeriodBefore: dayjs().endOf("month").toDate() });
+		}
+	}, [urlState, setUrlState]);
+
+	const debouncedFilters = useDebounceMemo(filters, 1000);
+	const { data: clientsResult, queryKey, isSuccess, isLoading, isError, error } = useClientsQuery({ params: debouncedFilters });
 	const clients = clientsResult?.clients;
 	const clientsShowing = clients ? clients.length : 0;
 	const clientsMatched = clientsResult?.clientsMatched || 0;
@@ -180,9 +193,30 @@ function ClientsDatabaseView() {
 	);
 }
 
+// Presets de aniversário olham para a frente ("quem faz aniversário em breve"), ao contrário dos
+// presets padrão do DateRange, que recortam o passado.
+const birthdayRangePresets = [
+	{ id: "today", label: "HOJE", getValue: (ref: Date) => ({ from: dayjs(ref).startOf("day").toDate(), to: dayjs(ref).endOf("day").toDate() }) },
+	{
+		id: "next-7-days",
+		label: "PRÓXIMOS 7 DIAS",
+		getValue: (ref: Date) => ({ from: dayjs(ref).startOf("day").toDate(), to: dayjs(ref).add(6, "day").endOf("day").toDate() }),
+	},
+	{
+		id: "this-month",
+		label: "ESTE MÊS",
+		getValue: (ref: Date) => ({ from: dayjs(ref).startOf("month").toDate(), to: dayjs(ref).endOf("month").toDate() }),
+	},
+	{
+		id: "next-month",
+		label: "PRÓXIMO MÊS",
+		getValue: (ref: Date) => ({ from: dayjs(ref).add(1, "month").startOf("month").toDate(), to: dayjs(ref).add(1, "month").endOf("month").toDate() }),
+	},
+] satisfies InteractiveFilterDateRangePreset[];
+
 type ClientsInlineFiltersProps = {
 	filters: TGetClientsInput;
-	updateFilters: (filters: Partial<TGetClientsInput>) => void;
+	updateFilters: (filters: Partial<TClientsDatabaseUrlState>) => void;
 };
 
 function ClientsInlineFilters({ filters, updateFilters }: ClientsInlineFiltersProps) {
@@ -212,6 +246,7 @@ function ClientsInlineFilters({ filters, updateFilters }: ClientsInlineFiltersPr
 	const hasIntegrations = (filters.statsIntegrationsIds ?? []).length > 0;
 	const hasAcquisitionChannels = (filters.acquisitionChannels ?? []).length > 0;
 	const hasSegmentationTitles = (filters.segmentationTitles ?? []).length > 0;
+	const hasBirthdays = !!(filters.birthdaysPeriodAfter || filters.birthdaysPeriodBefore);
 	const hasActiveSort = isInteractiveSortActive(sortValue, defaultSort);
 
 	return (
@@ -263,6 +298,27 @@ function ClientsInlineFilters({ filters, updateFilters }: ClientsInlineFiltersPr
 					onClear={() => updateFilters({ segmentationTitles: [], page: 1 })}
 				/>
 			) : null}
+			{hasBirthdays ? (
+				<InteractiveFilter.Root className="w-fit">
+					<InteractiveFilter.Trigger>
+						<InteractiveFilter.Icon>
+							<Cake className="h-4 w-4" />
+							<InteractiveFilter.Label>ANIVERSARIANTES</InteractiveFilter.Label>
+						</InteractiveFilter.Icon>
+						<InteractiveFilter.Value>
+							{formatInteractiveDateRangeSummary(filters.birthdaysPeriodAfter, filters.birthdaysPeriodBefore)}
+						</InteractiveFilter.Value>
+						<InteractiveFilter.Clear onClear={() => updateFilters({ birthdaysPeriodAfter: null, birthdaysPeriodBefore: null, page: 1 })} />
+					</InteractiveFilter.Trigger>
+					<InteractiveFilter.Content className="w-auto p-0">
+						<InteractiveFilter.DateRangeContent
+							presets={birthdayRangePresets}
+							value={{ from: filters.birthdaysPeriodAfter ?? undefined, to: filters.birthdaysPeriodBefore ?? undefined }}
+							onChange={(period) => updateFilters({ birthdaysPeriodAfter: period.from ?? null, birthdaysPeriodBefore: period.to ?? null, page: 1 })}
+						/>
+					</InteractiveFilter.Content>
+				</InteractiveFilter.Root>
+			) : null}
 			{hasActiveSort ? (
 				<ClientsSortFilter
 					fieldOptions={orderFieldOptions}
@@ -309,6 +365,15 @@ function ClientsInlineFilters({ filters, updateFilters }: ClientsInlineFiltersPr
 									onChange={(segmentationTitles) => updateFilters({ segmentationTitles, page: 1 })}
 									onClear={() => updateFilters({ segmentationTitles: [], page: 1 })}
 									clearLabel="TODOS"
+								/>
+							</InteractiveFilter.AddFilterItem>
+						) : null}
+						{!hasBirthdays ? (
+							<InteractiveFilter.AddFilterItem id="birthdays" label="ANIVERSARIANTES" icon={<Cake className="h-4 w-4" />}>
+								<InteractiveFilter.DateRangeContent
+									presets={birthdayRangePresets}
+									value={{ from: filters.birthdaysPeriodAfter ?? undefined, to: filters.birthdaysPeriodBefore ?? undefined }}
+									onChange={(period) => updateFilters({ birthdaysPeriodAfter: period.from ?? null, birthdaysPeriodBefore: period.to ?? null, page: 1 })}
 								/>
 							</InteractiveFilter.AddFilterItem>
 						) : null}

@@ -25,6 +25,8 @@ export default function ExportClients({ filters, closeModal }: ExportClientsProp
 				statsPeriodBefore: filters.statsPeriodBefore,
 				statsIntegrationsIds: filters.statsIntegrationsIds,
 				statsExcludedSalesIds: filters.statsExcludedSalesIds,
+				birthdaysPeriodAfter: filters.birthdaysPeriodAfter,
+				birthdaysPeriodBefore: filters.birthdaysPeriodBefore,
 				orderByField: filters.orderByField,
 				orderByDirection: filters.orderByDirection,
 			},

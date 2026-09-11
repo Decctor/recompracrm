@@ -2,7 +2,7 @@ import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { db } from "@/services/drizzle";
-import { cashbackProgramTransactions } from "@/services/drizzle/schema";
+import { cashbackProgramTransactions, cashbackPrograms } from "@/services/drizzle/schema";
 import dayjs from "dayjs";
 import { and, eq, gte, lt, sql } from "drizzle-orm";
 import createHttpError from "http-errors";
@@ -62,14 +62,17 @@ async function getCashbackUsage({ input, session }: { input: TGetCashbackUsageIn
 	const windowStart = now.subtract(input.days, "day").toDate();
 	const previousStart = now.subtract(input.days * 2, "day").toDate();
 
-	const [atual, anterior] = await Promise.all([
+	const [atual, anterior, program] = await Promise.all([
 		sumUsageWindow({ organizacaoId, after: windowStart, before: now.toDate() }),
 		sumUsageWindow({ organizacaoId, after: previousStart, before: windowStart }),
+		db.query.cashbackPrograms.findFirst({ where: eq(cashbackPrograms.organizacaoId, organizacaoId), columns: { terminologia: true } }),
 	]);
 
 	return {
 		data: {
 			janelaDias: input.days,
+			// O programa fala em dinheiro ou em pontos; quem exibe formata com `formatCashbackValue`.
+			terminologia: program?.terminologia ?? ("DINHEIRO" as const),
 			resgatado: { valor: atual.resgatadoValor, clientes: atual.resgatadoClientes },
 			gerado: { valor: atual.geradoValor },
 			// Só o resgatado do período anterior: é a referência do delta, e o dashboard não tem

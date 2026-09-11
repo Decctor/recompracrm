@@ -1,6 +1,8 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
+import { INTERACTIONS_CRON_TIMEZONE } from "@/lib/campaigns/time-blocks";
+import dayjs from "dayjs";
 import { getSalesIntegrationCondition } from "@/lib/sales/integration-filter";
 import { formatPhoneAsBase } from "@/lib/formatting";
 import { createSimplifiedEmailSearchCondition, createSimplifiedPhoneSearchCondition, createSimplifiedSearchCondition } from "@/lib/search";
@@ -80,6 +82,23 @@ const GetClientsInputSchema = z.object({
 		.optional()
 		.nullable()
 		.transform((v) => (v ? v.split(",") : [])),
+	// Aniversários dentro de um intervalo de datas do calendário. O ano das datas só define o
+	// tamanho da janela; o casamento é por MM-DD, então o filtro serve tanto para "o mês inteiro"
+	// quanto para "de hoje até tal dia" — inclusive atravessando a virada do ano (28/12 → 05/01).
+	birthdaysPeriodAfter: z
+		.string({
+			invalid_type_error: "Tipo não válido para o início do período de aniversários.",
+		})
+		.optional()
+		.nullable()
+		.transform((val) => (val ? new Date(val) : null)),
+	birthdaysPeriodBefore: z
+		.string({
+			invalid_type_error: "Tipo não válido para o fim do período de aniversários.",
+		})
+		.optional()
+		.nullable()
+		.transform((val) => (val ? new Date(val) : null)),
 	orderByField: z.enum(["nome", "comprasValorTotal", "comprasQtdeTotal", "primeiraCompraData", "ultimaCompraData"]).optional().nullable(),
 	orderByDirection: z.enum(["asc", "desc"]).optional().nullable(),
 });
@@ -132,6 +151,20 @@ async function getClients({ input, session }: { input: TGetClientsInput; session
 	}
 	if (input.segmentationTitles && input.segmentationTitles.length > 0) {
 		clientConditions.push(inArray(clients.analiseRFMTitulo, input.segmentationTitles));
+	}
+	if (input.birthdaysPeriodAfter && input.birthdaysPeriodBefore) {
+		// Enumera os dias do intervalo no fuso do cron de interações — o mesmo "hoje" da rota
+		// `/api/clients/birthdays` e da campanha de aniversário — e casa por MM-DD. É a enumeração
+		// que faz a virada do ano funcionar sem caso especial. Teto de 366 dias: além disso a
+		// janela já cobre o calendário inteiro.
+		const start = dayjs(input.birthdaysPeriodAfter).tz(INTERACTIONS_CRON_TIMEZONE).startOf("day");
+		const end = dayjs(input.birthdaysPeriodBefore).tz(INTERACTIONS_CRON_TIMEZONE).startOf("day");
+		const totalDays = Math.min(Math.max(end.diff(start, "day") + 1, 1), 366);
+		const keys = new Set(Array.from({ length: totalDays }, (_, index) => start.add(index, "day").format("MM-DD")));
+		// Ano não bissexto nunca enumera 29/02, mas quem nasceu nesse dia pertence a qualquer
+		// janela que atravesse o fim de fevereiro.
+		if (keys.has("02-28") && keys.has("03-01")) keys.add("02-29");
+		clientConditions.push(inArray(sql`to_char(${clients.dataNascimento}, 'MM-DD')`, [...keys]));
 	}
 	const PAGE_SIZE = 25;
 	const skip = PAGE_SIZE * (input.page - 1);
@@ -225,9 +258,23 @@ async function getClients({ input, session }: { input: TGetClientsInput; session
 		// piora o plano (merge join por idx_sales_client_id varrendo vendas de outras organizações).
 		const hasSearch = !!input.search && input.search.trim().length > 0;
 		const scopedStatsConditions = hasSearch
-			? [...statsConditions, inArray(sales.clienteId, db.select({ id: clients.id }).from(clients).where(and(...clientConditions)))]
+			? [
+					...statsConditions,
+					inArray(
+						sales.clienteId,
+						db
+							.select({ id: clients.id })
+							.from(clients)
+							.where(and(...clientConditions)),
+					),
+				]
 			: statsConditions;
-		const statsByClientSubquery = db.select(statsSelection).from(sales).where(and(...scopedStatsConditions)).groupBy(sales.clienteId).as("stats_by_client");
+		const statsByClientSubquery = db
+			.select(statsSelection)
+			.from(sales)
+			.where(and(...scopedStatsConditions))
+			.groupBy(sales.clienteId)
+			.as("stats_by_client");
 
 		let orderByClause = asc(clients.nome);
 		switch (orderByField) {
@@ -333,6 +380,8 @@ const getClientsRoute = async (req: NextRequest) => {
 		statsPeriodBefore: searchParams.get("statsPeriodBefore") ?? undefined,
 		statsIntegrationsIds: searchParams.get("statsIntegrationsIds") ?? undefined,
 		statsExcludedSalesIds: searchParams.get("statsExcludedSalesIds") ?? undefined,
+		birthdaysPeriodAfter: searchParams.get("birthdaysPeriodAfter") ?? undefined,
+		birthdaysPeriodBefore: searchParams.get("birthdaysPeriodBefore") ?? undefined,
 		orderByField: searchParams.get("orderByField") ?? undefined,
 		orderByDirection: searchParams.get("orderByDirection") ?? undefined,
 	});

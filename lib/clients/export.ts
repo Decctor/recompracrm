@@ -55,6 +55,8 @@ function buildClientsSearchParams(input: TGetClientsInput) {
 	if (input.statsPeriodBefore) searchParams.set("statsPeriodBefore", input.statsPeriodBefore.toISOString());
 	if (input.statsIntegrationsIds.length > 0) searchParams.set("statsIntegrationsIds", input.statsIntegrationsIds.join(","));
 	if (input.statsExcludedSalesIds.length > 0) searchParams.set("statsExcludedSalesIds", input.statsExcludedSalesIds.join(","));
+	if (input.birthdaysPeriodAfter) searchParams.set("birthdaysPeriodAfter", input.birthdaysPeriodAfter.toISOString());
+	if (input.birthdaysPeriodBefore) searchParams.set("birthdaysPeriodBefore", input.birthdaysPeriodBefore.toISOString());
 	if (input.orderByField) searchParams.set("orderByField", input.orderByField);
 	if (input.orderByDirection) searchParams.set("orderByDirection", input.orderByDirection);
 	searchParams.set("page", input.page.toString());

@@ -21,7 +21,9 @@ import { cn } from "@/lib/utils";
 import { ChatAssignmentStatusEnum, ChatInboxViewEnum, type TChatAssignmentStatus, type TChatInboxView } from "@/schemas/enums";
 import { supabaseClient } from "@/services/supabase";
 import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
+import { chatsInboxParsers } from "@/lib/chats/inbox-url-state";
 import { ChevronDown, Inbox, Search, Sparkles, User, Users, X } from "lucide-react";
+import { useQueryStates } from "nuqs";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { STATUS_META } from "./attendance-meta";
 import { ChatInboxListItem } from "./ChatInboxListItem";
@@ -52,50 +54,66 @@ type ChatSidebarProps = {
 };
 
 /**
- * Filtros persistidos por organização.
+ * Último uso persistido por organização. Não compete com a URL pela posse do estado: `view` e
+ * `status` vivem na URL (nuqs, ver `lib/chats/inbox-url-state.ts`) e o localStorage só a semeia
+ * uma vez, quando ela chega limpa — depois disso ele apenas espelha o que a URL diz.
  *
- * Lidos em efeito, não no inicializador do useState: o servidor não tem localStorage e
- * ler no primeiro render produziria markup diferente do cliente (erro de hidratação). O
- * custo é um render com o padrão antes de aplicar o salvo.
+ * Lido em efeito, não no inicializador do useState: o servidor não tem localStorage e ler no
+ * primeiro render produziria markup diferente do cliente (erro de hidratação).
  */
 const FILTERS_STORAGE_PREFIX = "chat-inbox-filters";
 
 type TPersistedFilters = { view: TChatInboxView; selectedPhoneId: string | null; statusFilter: TChatAssignmentStatus[] };
 
 export function ChatSidebar({ organizationId, selectedChatId, onSelectChat, whatsappConnections, className }: ChatSidebarProps) {
-	const [view, setView] = useState<TChatInboxView>("MINHAS");
+	// A URL é a dona de `view` e `status`: deep-links do dashboard (`?view=TODAS&status=ABERTO`)
+	// e filtros escolhidos aqui são o mesmo estado, compartilhável por definição.
+	const [inboxFilters, setInboxFilters] = useQueryStates(chatsInboxParsers, { history: "replace" });
+	const view = inboxFilters.view;
+	const statusFilter = inboxFilters.status;
 	const [search, setSearch] = useState("");
 	const [selectedPhoneId, setSelectedPhoneId] = useState<string | null>(null);
-	const [statusFilter, setStatusFilter] = useState<TChatAssignmentStatus[]>([]);
 	const [filtersLoaded, setFiltersLoaded] = useState(false);
 	const queryClient = useQueryClient();
 	const initialSubscriptionCompleteRef = useRef(false);
+	const seededRef = useRef(false);
 
 	const phones = useMemo(() => whatsappConnections.flatMap((connection) => connection.telefones ?? []), [whatsappConnections]);
 	const selectedPhone = phones.find((phone) => phone.id === selectedPhoneId) ?? null;
 	const storageKey = `${FILTERS_STORAGE_PREFIX}-${organizationId}`;
 
 	useEffect(() => {
+		// Semeadura única na montagem (o pai só renderiza com as conexões já carregadas).
+		if (seededRef.current) return;
+		seededRef.current = true;
 		try {
 			const raw = window.localStorage.getItem(storageKey);
 			if (raw) {
 				const parsed = JSON.parse(raw) as Partial<TPersistedFilters>;
-				const parsedView = ChatInboxViewEnum.safeParse(parsed.view);
-				if (parsedView.success) setView(parsedView.data);
+				// A URL chegou limpa? Então o último uso vira o estado inicial. Se veio com qualquer
+				// filtro (deep-link), ela já é o estado e o salvo não opina.
+				const urlIsClean = !new URLSearchParams(window.location.search).has("view") && !new URLSearchParams(window.location.search).has("status");
+				if (urlIsClean) {
+					const savedView = ChatInboxViewEnum.safeParse(parsed.view);
+					const savedStatuses = Array.isArray(parsed.statusFilter)
+						? parsed.statusFilter.flatMap((s) => (ChatAssignmentStatusEnum.safeParse(s).success ? [s as TChatAssignmentStatus] : []))
+						: [];
+					void setInboxFilters({
+						...(savedView.success ? { view: savedView.data } : {}),
+						...(savedStatuses.length > 0 ? { status: savedStatuses } : {}),
+					});
+				}
 				// Um telefone salvo pode ter sido removido da organização desde então;
 				// restaurar um filtro inexistente esvaziaria a inbox sem explicação.
 				if (parsed.selectedPhoneId && phones.some((phone) => phone.id === parsed.selectedPhoneId)) {
 					setSelectedPhoneId(parsed.selectedPhoneId);
-				}
-				if (Array.isArray(parsed.statusFilter)) {
-					setStatusFilter(parsed.statusFilter.flatMap((s) => (ChatAssignmentStatusEnum.safeParse(s).success ? [s as TChatAssignmentStatus] : [])));
 				}
 			}
 		} catch {
 			// Storage indisponível ou JSON corrompido: seguir com os padrões.
 		}
 		setFiltersLoaded(true);
-	}, [storageKey, phones]);
+	}, [storageKey, phones, setInboxFilters]);
 
 	useEffect(() => {
 		if (!filtersLoaded) return;
@@ -199,7 +217,7 @@ export function ChatSidebar({ organizationId, selectedChatId, onSelectChat, what
 						<DropdownMenuContent align="start">
 							<DropdownMenuGroup>
 								{INBOX_VIEWS.map((item) => (
-									<DropdownMenuItem key={item.id} onClick={() => setView(item.id)} className="gap-2">
+									<DropdownMenuItem key={item.id} onClick={() => void setInboxFilters({ view: item.id })} className="gap-2">
 										<item.icon className="h-3.5 w-3.5" />
 										{item.label}
 									</DropdownMenuItem>
@@ -263,7 +281,9 @@ export function ChatSidebar({ organizationId, selectedChatId, onSelectChat, what
 										// Sem o preventDefault o menu fecharia a cada clique — inviável
 										// para uma seleção múltipla.
 										onClick={(event) => event.preventDefault()}
-										onCheckedChange={(checked) => setStatusFilter((current) => (checked ? [...current, status] : current.filter((item) => item !== status)))}
+										onCheckedChange={(checked) =>
+											void setInboxFilters((current) => ({ status: checked ? [...current.status, status] : current.status.filter((item) => item !== status) }))
+										}
 									>
 										<span className={cn("h-2 w-2 shrink-0 rounded-full", STATUS_META[status].dot)} />
 										{STATUS_META[status].label}
@@ -272,7 +292,7 @@ export function ChatSidebar({ organizationId, selectedChatId, onSelectChat, what
 								{statusFilter.length > 0 && (
 									<>
 										<DropdownMenuSeparator />
-										<DropdownMenuItem onClick={() => setStatusFilter([])}>Limpar filtro</DropdownMenuItem>
+										<DropdownMenuItem onClick={() => void setInboxFilters({ status: [] })}>Limpar filtro</DropdownMenuItem>
 									</>
 								)}
 							</DropdownMenuGroup>

@@ -1,7 +1,9 @@
 "use client";
 
 import { canAccessDashboardCapability, type TCapabilityContext } from "@/lib/access/capabilities";
-import { formatDecimalPlaces, formatToMoney } from "@/lib/formatting";
+import { buildChatsInboxHref } from "@/lib/chats/inbox-url-state";
+import { buildClientsDatabaseHref } from "@/lib/clients/database-url-state";
+import { formatCashbackValue, formatDecimalPlaces, formatToMoney } from "@/lib/formatting";
 import { appRoutes } from "@/lib/navigation/routes";
 import { useCampaignRanking } from "@/lib/queries/campaigns";
 import { useChatsStatsOverview } from "@/lib/queries/chats-stats";
@@ -138,20 +140,20 @@ function CashbackUsageTile() {
 	const { data, isPending, isError } = useCashbackUsage({ days: WINDOW_DAYS });
 	if (isPending || isError || !data) return <StatTile label="Cashback usado" value={isError ? "—" : "···"} caption="resgates que viraram compras" />;
 
-	const { resgatado, gerado, anterior } = data;
+	const { resgatado, gerado, anterior, terminologia } = data;
 	const usageShare = gerado.valor > 0 ? (resgatado.valor / gerado.valor) * 100 : 0;
 	const change = anterior.valor > 0 ? ((resgatado.valor - anterior.valor) / anterior.valor) * 100 : null;
 	return (
 		<StatTile
-			label="Cashback usado"
-			value={formatToMoney(resgatado.valor)}
+			label={terminologia === "PONTOS" ? "Pontos usados" : "Cashback usado"}
+			value={formatCashbackValue(resgatado.valor, terminologia)}
 			delta={change !== null ? `${change >= 0 ? "+" : ""}${formatDecimalPlaces(change, 0, 0)}%` : undefined}
 			deltaTone={change !== null && change < 0 ? "destructive" : "success"}
 			caption={`${formatDecimalPlaces(resgatado.clientes)} ${resgatado.clientes === 1 ? "cliente resgatou" : "clientes resgataram"} em ${WINDOW_DAYS} dias`}
 		>
 			<div
 				className="flex items-center gap-2"
-				title={`${formatToMoney(resgatado.valor)} resgatados de ${formatToMoney(gerado.valor)} gerados em ${WINDOW_DAYS} dias`}
+				title={`${formatCashbackValue(resgatado.valor, terminologia)} resgatados de ${formatCashbackValue(gerado.valor, terminologia)} gerados em ${WINDOW_DAYS} dias`}
 			>
 				<span className="text-micro shrink-0 font-normal text-muted-foreground">Do gerado</span>
 				{/* Mesmo `h-6` da régua de recompra e da barra mais alta de Base ativa. */}
@@ -215,15 +217,22 @@ function SegmentMovement() {
 						</div>
 						<ul className="grid gap-x-4 gap-y-2 sm:grid-cols-2 xl:grid-cols-4">
 							{segmentos.map((segment) => (
-								<li key={segment.segmento} className="flex min-w-0 items-center gap-2">
-									<span className={cn("size-2.5 shrink-0 rounded-xs", segmentColors(segment.segmento).background)} aria-hidden />
-									<span className="text-micro min-w-0 flex-1 truncate font-bold">{segmentLabel(segment.segmento)}</span>
-									{/* Tamanho forte, chegadas apagadas: os dois números na mesma cor liam como um só
-									    ("585 · 585 novos" parecia bug). Chegada é chegada, nunca saldo — ver a rota. */}
-									<span className="text-micro shrink-0 font-bold">{formatDecimalPlaces(segment.qtde)}</span>
-									{segment.chegaram > 0 ? (
-										<span className="text-micro shrink-0 font-normal text-muted-foreground">· {formatDecimalPlaces(segment.chegaram)} novos</span>
-									) : null}
+								<li key={segment.segmento} className="flex min-w-0">
+									{/* Cada item leva à lista real: o banco de dados de clientes já filtrado pelo
+									    segmento, via query param — a matriz RFM continua no link do cabeçalho. */}
+									<Link
+										href={buildClientsDatabaseHref({ segmentationTitles: [segment.segmento] })}
+										className="-mx-1 flex min-w-0 flex-1 items-center gap-2 rounded-sm px-1 py-0.5 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+									>
+										<span className={cn("size-2.5 shrink-0 rounded-xs", segmentColors(segment.segmento).background)} aria-hidden />
+										<span className="text-micro min-w-0 flex-1 truncate font-bold">{segmentLabel(segment.segmento)}</span>
+										{/* Tamanho forte, chegadas apagadas: os dois números na mesma cor liam como um só
+										    ("585 · 585 novos" parecia bug). Chegada é chegada, nunca saldo — ver a rota. */}
+										<span className="text-micro shrink-0 font-bold">{formatDecimalPlaces(segment.qtde)}</span>
+										{segment.chegaram > 0 ? (
+											<span className="text-micro shrink-0 font-normal text-muted-foreground">· {formatDecimalPlaces(segment.chegaram)} novos</span>
+										) : null}
+									</Link>
 								</li>
 							))}
 						</ul>
@@ -324,6 +333,7 @@ function TalkToTodayRail({ context }: { context: TCapabilityContext }) {
 	const pendentes = canViewPortfolios ? Math.max((routine.data?.previstos ?? 0) - (routine.data?.feitos ?? 0), 0) : 0;
 	const atrasados = canViewPortfolios ? (routine.data?.atrasados ?? 0) : 0;
 	const cashbackTotal = canViewCashback ? (cashback.data?.total ?? { valor: 0, clientes: 0 }) : { valor: 0, clientes: 0 };
+	const cashbackTerminology = cashback.data?.terminologia ?? "DINHEIRO";
 	const aniversariantes = birthdays.data?.clientes ?? [];
 	const esperando = semResposta + pendentes + atrasados + aniversariantes.length;
 
@@ -334,7 +344,7 @@ function TalkToTodayRail({ context }: { context: TCapabilityContext }) {
 			<Panel.Bleed>
 				{canViewChats && semResposta > 0 ? (
 					<Panel.Row
-						href={appRoutes.channels.whatsapp()}
+						href={buildChatsInboxHref({ view: "TODAS", status: ["ABERTO"] })}
 						leading={
 							<Panel.RowIcon tone="destructive">
 								<MessageCircle aria-hidden />
@@ -368,15 +378,23 @@ function TalkToTodayRail({ context }: { context: TCapabilityContext }) {
 								<BadgePercent aria-hidden />
 							</Panel.RowIcon>
 						}
-						primary={`${formatToMoney(cashbackTotal.valor)} de cashback expira`}
+						primary={
+							cashbackTerminology === "PONTOS"
+								? `${formatCashbackValue(cashbackTotal.valor, "PONTOS")} expiram`
+								: `${formatToMoney(cashbackTotal.valor)} de cashback expira`
+						}
 						secondary={`${formatDecimalPlaces(cashbackTotal.clientes)} clientes em ${WINDOW_DAYS} dias`}
 						trailing={<Panel.RowAction icon={<Megaphone aria-hidden />}>AVISAR</Panel.RowAction>}
 					/>
 				) : null}
 
+				{/* O link abre o banco de dados com a mesma janela de 7 dias que a contagem mede (hoje a hoje+6). */}
 				{aniversariantes.length > 0 ? (
 					<Panel.Row
-						href={appRoutes.customers.root()}
+						href={buildClientsDatabaseHref({
+							birthdaysPeriodAfter: today.after.toDate(),
+							birthdaysPeriodBefore: today.after.add(6, "day").endOf("day").toDate(),
+						})}
 						leading={
 							<Panel.RowIcon>
 								<Cake aria-hidden />

@@ -22,6 +22,8 @@ async function fetchClients(input: TGetClientsInput) {
 		if (input.statsPeriodBefore) searchParams.set("statsPeriodBefore", input.statsPeriodBefore.toISOString());
 		if (input.statsIntegrationsIds.length > 0) searchParams.set("statsIntegrationsIds", input.statsIntegrationsIds.join(","));
 		if (input.statsExcludedSalesIds.length > 0) searchParams.set("statsExcludedSalesIds", input.statsExcludedSalesIds.join(","));
+		if (input.birthdaysPeriodAfter) searchParams.set("birthdaysPeriodAfter", input.birthdaysPeriodAfter.toISOString());
+		if (input.birthdaysPeriodBefore) searchParams.set("birthdaysPeriodBefore", input.birthdaysPeriodBefore.toISOString());
 		if (input.orderByField) searchParams.set("orderByField", input.orderByField);
 		if (input.orderByDirection) searchParams.set("orderByDirection", input.orderByDirection);
 		if (input.page) searchParams.set("page", input.page.toString());
@@ -66,6 +68,22 @@ export function useClientById({ id }: UseClientByIdParams) {
 	};
 }
 
+/**
+ * Consulta pura da listagem: o estado dos filtros mora em quem chama. A página do banco de dados
+ * guarda os filtros na URL (`lib/clients/database-url-state.ts`); `useClients` abaixo continua
+ * existindo para telas que preferem estado local.
+ */
+export function useClientsQuery({ params }: { params: TGetClientsInput }) {
+	const queryKey = ["clients", params];
+	return {
+		...useQuery({
+			queryKey,
+			queryFn: async () => await fetchClients(params),
+		}),
+		queryKey,
+	};
+}
+
 type UseClientsParams = {
 	initialFilters: Partial<TGetClientsInput>;
 };
@@ -78,6 +96,8 @@ export function useClients({ initialFilters }: UseClientsParams) {
 		statsPeriodBefore: initialFilters?.statsPeriodBefore || null,
 		statsIntegrationsIds: initialFilters?.statsIntegrationsIds || [],
 		statsExcludedSalesIds: initialFilters?.statsExcludedSalesIds || [],
+		birthdaysPeriodAfter: initialFilters?.birthdaysPeriodAfter || null,
+		birthdaysPeriodBefore: initialFilters?.birthdaysPeriodBefore || null,
 		orderByField: initialFilters?.orderByField || "nome",
 		orderByDirection: initialFilters?.orderByDirection || "asc",
 		page: initialFilters?.page || 1,
@@ -87,11 +107,7 @@ export function useClients({ initialFilters }: UseClientsParams) {
 	}
 	const debouncedFilters = useDebounceMemo(filters, 1000);
 	return {
-		...useQuery({
-			queryKey: ["clients", debouncedFilters],
-			queryFn: async () => await fetchClients(debouncedFilters),
-		}),
-		queryKey: ["clients", debouncedFilters],
+		...useClientsQuery({ params: debouncedFilters }),
 		filters,
 		updateFilters,
 	};
