@@ -330,6 +330,12 @@ Inter e Figtree têm).
 
 **Single voice rule.** Don't introduce a second display font. Don't reach for a monospace for "data" tables — Outfit with `tabular-nums` handles tabular figures.
 
+_A regra já foi violada em silêncio._ `FullScreenWrapper` carregava a Inter e a aplicava no div que
+envolve o app inteiro, então landing, ajuda, blog, auth, ponto de interação, painel do parceiro e
+vitrine renderizavam em Inter — só dashboard, admin e comunidade reafirmavam a fonte e escapavam.
+Ninguém percebeu porque a violação estava num wrapper de layout, não numa tela. Uma fonte só carrega
+uma vez, no `app/layout.tsx`: se aparecer um segundo `next/font` no repositório, é regressão.
+
 _Exceção nomeada:_ código literal — payload JSON, XML, chave de API, trecho de terminal — é
 monoespaçado, porque ali o alinhamento por caractere é a informação. A exceção vive dentro do
 primitive `CodeBlock`; fora dele, mono é violação. Número em tabela não é código.
