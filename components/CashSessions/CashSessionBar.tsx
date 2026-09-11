@@ -19,8 +19,8 @@ type Props = {
 	activeSessionId: string | null;
 	onSessionChange: (id: string | null) => void;
 	isLoading: boolean;
-	exigirFundoTroco: boolean;
-	conferenciaCega: boolean;
+	requireOpeningFloat: boolean;
+	blindCount: boolean;
 	className?: string;
 	// Card compacto para viver dentro do checkout (coluna de 420px / Sheet do mobile): mesmas
 	// ações da barra, empilhadas em duas linhas em vez de espalhadas pela largura da página.
@@ -28,15 +28,13 @@ type Props = {
 };
 type ActiveModal = "open" | "movement" | "close" | null;
 
-function useCashSessionModals({ session, exigirFundoTroco, conferenciaCega }: Pick<Props, "session" | "exigirFundoTroco" | "conferenciaCega">) {
+function useCashSessionModals({ session, requireOpeningFloat, blindCount }: Pick<Props, "session" | "requireOpeningFloat" | "blindCount">) {
 	const [modal, setModal] = useState<ActiveModal>(null);
 	const modals = (
 		<>
-			{modal === "open" ? <OpenSalesSession closeModal={() => setModal(null)} exigirFundoTroco={exigirFundoTroco} /> : null}
+			{modal === "open" ? <OpenSalesSession closeModal={() => setModal(null)} requireOpeningFloat={requireOpeningFloat} /> : null}
 			{modal === "movement" && session ? <RegisterMovement sessionId={session.id} closeModal={() => setModal(null)} /> : null}
-			{modal === "close" && session ? (
-				<CloseSalesSession sessionId={session.id} closeModal={() => setModal(null)} conferenciaCega={conferenciaCega} />
-			) : null}
+			{modal === "close" && session ? <CloseSalesSession sessionId={session.id} closeModal={() => setModal(null)} blindCount={blindCount} /> : null}
 		</>
 	);
 	return { setModal, modals };
@@ -56,11 +54,11 @@ function CompactCashSessionCard({
 	activeSessionId,
 	onSessionChange,
 	isLoading,
-	exigirFundoTroco,
-	conferenciaCega,
+	requireOpeningFloat,
+	blindCount,
 	className,
 }: Props) {
-	const { setModal, modals } = useCashSessionModals({ session, exigirFundoTroco, conferenciaCega });
+	const { setModal, modals } = useCashSessionModals({ session, requireOpeningFloat, blindCount });
 	return (
 		<div
 			className={cn(
@@ -136,8 +134,8 @@ export default function CashSessionBar(props: Props) {
 	return <FullCashSessionBar {...props} />;
 }
 
-function FullCashSessionBar({ session, sessions, activeSessionId, onSessionChange, isLoading, exigirFundoTroco, conferenciaCega, className }: Props) {
-	const { setModal, modals } = useCashSessionModals({ session, exigirFundoTroco, conferenciaCega });
+function FullCashSessionBar({ session, sessions, activeSessionId, onSessionChange, isLoading, requireOpeningFloat, blindCount, className }: Props) {
+	const { setModal, modals } = useCashSessionModals({ session, requireOpeningFloat, blindCount });
 	return (
 		<div
 			className={cn(

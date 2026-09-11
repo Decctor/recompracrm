@@ -115,9 +115,9 @@ export default function NewSalePage({
 	const saleState = useSaleState({ organizationConfig: organizationConfiguration, contasFinanceiras: organizationFinancialAccounts });
 
 	// Sessões de venda (caixa): resolve a sessão aberta do vendedor selecionado (escopo OPERADOR).
-	const sessoesConfig = organizationConfiguration.preferencias.sessoesVenda;
-	const cashEnabled = !!sessoesConfig?.habilitado;
-	const cashObrigatorio = !!sessoesConfig?.obrigatorio;
+	const salesSessionsConfig = organizationConfiguration.preferencias.sessoesVenda;
+	const cashEnabled = !!salesSessionsConfig?.habilitado;
+	const cashRequired = !!salesSessionsConfig?.obrigatorio;
 	const {
 		session: activeSession,
 		sessions: openSessions,
@@ -447,14 +447,14 @@ export default function NewSalePage({
 	}
 
 	// Modo obrigatório sem caixa aberto: bloqueia a entrada do fluxo de venda (gate cedo).
-	if (cashEnabled && cashObrigatorio && !cashLoading && !activeSession) {
+	if (cashEnabled && cashRequired && !cashLoading && !activeSession) {
 		return (
 			<div className="flex h-[calc(100dvh-7rem)] w-full flex-col p-4 lg:h-[calc(100dvh-8rem)]">
 				<CashSessionGate
 					sessions={openSessions}
 					activeSessionId={activeSessionId}
 					onSessionChange={setActiveSessionId}
-					exigirFundoTroco={!!sessoesConfig?.exigirFundoTroco}
+					requireOpeningFloat={!!salesSessionsConfig?.exigirFundoTroco}
 				/>
 			</div>
 		);
@@ -471,8 +471,8 @@ export default function NewSalePage({
 			activeSessionId={activeSessionId}
 			onSessionChange={setActiveSessionId}
 			isLoading={cashLoading}
-			exigirFundoTroco={!!sessoesConfig?.exigirFundoTroco}
-			conferenciaCega={!!sessoesConfig?.conferenciaCega}
+			requireOpeningFloat={!!salesSessionsConfig?.exigirFundoTroco}
+			blindCount={!!salesSessionsConfig?.conferenciaCega}
 		/>
 	) : null;
 

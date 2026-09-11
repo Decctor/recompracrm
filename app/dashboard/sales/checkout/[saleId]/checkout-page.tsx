@@ -173,9 +173,9 @@ export default function CheckoutPage({
 	}, [pricingDrift, saleState]);
 
 	// Turno de caixa: mesma regra do PDV — a venda se liga ao caixa aberto do vendedor.
-	const sessoesConfig = organizationConfiguration.preferencias.sessoesVenda;
-	const cashEnabled = !!sessoesConfig?.habilitado;
-	const cashObrigatorio = !!sessoesConfig?.obrigatorio;
+	const salesSessionsConfig = organizationConfiguration.preferencias.sessoesVenda;
+	const cashEnabled = !!salesSessionsConfig?.habilitado;
+	const cashRequired = !!salesSessionsConfig?.obrigatorio;
 	const {
 		session: activeSession,
 		sessions: openSessions,
@@ -183,7 +183,7 @@ export default function CheckoutPage({
 		setActiveSessionId,
 		isLoading: cashLoading,
 	} = useActiveSalesSession({ organizationId, enabled: cashEnabled });
-	const cashBlockingConfirm = cashEnabled && cashObrigatorio && !activeSession;
+	const cashBlockingConfirm = cashEnabled && cashRequired && !activeSession;
 
 	// Teto de desconto: feedback imediato aqui, enforcement autoritativo na rota.
 	const { data: discountContext } = useSaleDiscountContext({ vendedorId: saleState.state.vendedorId ?? null });
@@ -427,8 +427,8 @@ export default function CheckoutPage({
 						activeSessionId={activeSessionId}
 						onSessionChange={setActiveSessionId}
 						isLoading={cashLoading}
-						exigirFundoTroco={!!sessoesConfig?.exigirFundoTroco}
-						conferenciaCega={!!sessoesConfig?.conferenciaCega}
+						requireOpeningFloat={!!salesSessionsConfig?.exigirFundoTroco}
+						blindCount={!!salesSessionsConfig?.conferenciaCega}
 					/>
 				) : null
 			}

@@ -132,8 +132,8 @@ export default function EditSalePage({
 
 	// Sessão de venda: NÃO bloqueia a edição (diferente da criação); se houver caixa aberto, os
 	// splits IMEDIATA regenerados caem nele.
-	const sessoesConfig = organizationConfiguration.preferencias.sessoesVenda;
-	const cashEnabled = !!sessoesConfig?.habilitado;
+	const salesSessionsConfig = organizationConfiguration.preferencias.sessoesVenda;
+	const cashEnabled = !!salesSessionsConfig?.habilitado;
 	const {
 		session: activeSession,
 		sessions: openSessions,
@@ -362,8 +362,8 @@ export default function EditSalePage({
 			activeSessionId={activeSessionId}
 			onSessionChange={setActiveSessionId}
 			isLoading={cashLoading}
-			exigirFundoTroco={!!sessoesConfig?.exigirFundoTroco}
-			conferenciaCega={!!sessoesConfig?.conferenciaCega}
+			requireOpeningFloat={!!salesSessionsConfig?.exigirFundoTroco}
+			blindCount={!!salesSessionsConfig?.conferenciaCega}
 		/>
 	) : null;
 

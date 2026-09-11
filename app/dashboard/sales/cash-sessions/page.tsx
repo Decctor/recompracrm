@@ -31,7 +31,7 @@ export default async function CashSessions() {
 
 	return (
 		<CashSessionsPage
-			sessoesConfig={{ exigirFundoTroco: !!sessoesVenda.exigirFundoTroco, conferenciaCega: !!sessoesVenda.conferenciaCega }}
+			sessionsConfig={{ requireOpeningFloat: !!sessoesVenda.exigirFundoTroco, blindCount: !!sessoesVenda.conferenciaCega }}
 			canReviewSessions={canReviewSalesSession(sessionUser.membership.permissoes)}
 		/>
 	);
