@@ -83,8 +83,10 @@ async function getSalesPulse({ input, session }: { input: TGetSalesPulseInput; s
 
 	const dayStart = dayjs(input.dayStart);
 	const dayEnd = dayStart.add(1, "day");
-	// Uma semana a mais para trás: o deslocamento -7 é o mesmo dia da semana anterior.
-	const windowStart = dayStart.subtract(7, "day");
+	// A janela cobre o mais fundo dos dois consumidores: a série (`days - 1` para trás) e a
+	// comparação com o mesmo dia da semana anterior (deslocamento -7). Fixar em 7 zerava o começo
+	// da série quando o dashboard pedia 14 dias — o gráfico mostrava dias que a consulta não leu.
+	const windowStart = dayStart.subtract(Math.max(input.days - 1, 7), "day");
 
 	const scopeSellersIds = await resolveResultsScopeSellerIds({ organizacaoId, resultsScope: membership.permissoes.resultados.escopo });
 	const buckets = new Map<number, TDailyBucket>();
