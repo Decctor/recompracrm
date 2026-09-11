@@ -108,7 +108,7 @@ export async function renderCashbackPrizesShareImage({ mode, organization, progr
 					width: "100%",
 					height: "100%",
 					padding: "52px 54px 40px",
-					fontFamily: "Raleway",
+					fontFamily: "Outfit",
 					color: "#17243a",
 					background: "#f4f7fa",
 				}}

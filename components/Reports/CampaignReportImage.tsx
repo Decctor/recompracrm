@@ -39,7 +39,7 @@ export function CampaignReportImage({ payload, logoSrc }: CampaignReportImagePro
 					linear-gradient(180deg, rgba(255,255,255,0.94) 0%, rgba(244,247,251,1) 100%)
 				`,
 				padding: 48,
-				fontFamily: "Raleway",
+				fontFamily: "Outfit",
 				color: "#0F172A",
 				position: "relative",
 				overflow: "hidden",

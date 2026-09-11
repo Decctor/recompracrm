@@ -7,7 +7,7 @@ import { getWatermarkLayout, RECOMPRA_BRAND_BLUE, RECOMPRA_BRAND_YELLOW } from "
 // `lib/brand/watermark-layout` (compartilhada com o cabeçalho satori dos convites).
 export { getWatermarkCanvasSize, getWatermarkLayout, RECOMPRA_BRAND_BLUE, RECOMPRA_BRAND_YELLOW } from "@/lib/brand/watermark-layout";
 
-const FONT_STACK = "var(--font-raleway), ui-sans-serif, system-ui, sans-serif";
+const FONT_STACK = "var(--font-outfit), ui-sans-serif, system-ui, sans-serif";
 
 type OrganizationBrandWatermarkProps = {
 	organizationName: string;

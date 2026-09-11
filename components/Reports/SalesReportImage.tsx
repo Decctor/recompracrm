@@ -131,7 +131,7 @@ export function SalesReportImage({ payload, logoSrc }: SalesReportImageProps) {
 					linear-gradient(180deg, rgba(255,255,255,0.92) 0%, rgba(244,247,251,1) 100%)
 				`,
 				padding: 42,
-				fontFamily: "Raleway",
+				fontFamily: "Outfit",
 				color: "#0F172A",
 				position: "relative",
 				overflow: "hidden",

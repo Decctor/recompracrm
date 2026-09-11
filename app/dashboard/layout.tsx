@@ -27,7 +27,7 @@ const MainLayout = async ({ children }: { children: ReactNode }) => {
 	if (!user.membership.organizacao.dataOnboardingConclusao) redirect("/onboarding");
 	return (
 		// data-app-shell aciona o clamp de scroll do documento em globals.css.
-		<SidebarProvider data-app-shell="" className="font-raleway h-svh overflow-hidden">
+		<SidebarProvider data-app-shell="" className="font-outfit h-svh overflow-hidden">
 			<AppSidebar user={user.user} organization={user.membership.organizacao} permissions={user.membership.permissoes} />
 			<Suspense fallback={<LoadingComponent />}>
 				{/* O respiro do conteúdo fica no wrapper interno, não no scrollport: com o padding no

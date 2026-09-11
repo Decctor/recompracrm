@@ -32,7 +32,7 @@ export async function buildHandoffHeaderElement(payload: THandoffHeaderPayload):
 				width: HANDOFF_HEADER_WIDTH,
 				height: HANDOFF_HEADER_HEIGHT,
 				background: "#F5F8FC",
-				fontFamily: "Raleway",
+				fontFamily: "Outfit",
 				color: "#102747",
 			}}
 		>

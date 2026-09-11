@@ -20,37 +20,37 @@ colors:
  chart-gold-5: "#7a5117"
 typography:
  display:
-  fontFamily: "Raleway, ui-sans-serif, system-ui, sans-serif"
+  fontFamily: "Outfit, ui-sans-serif, system-ui, sans-serif"
   fontSize: "60px"
   fontWeight: 800
   lineHeight: 1.02
   letterSpacing: "-0.025em"
  title:
-  fontFamily: "Raleway, ui-sans-serif, system-ui, sans-serif"
+  fontFamily: "Outfit, ui-sans-serif, system-ui, sans-serif"
   fontSize: "28px"
   fontWeight: 800
   lineHeight: 1.15
   letterSpacing: "-0.015em"
  subtitle:
-  fontFamily: "Raleway, ui-sans-serif, system-ui, sans-serif"
+  fontFamily: "Outfit, ui-sans-serif, system-ui, sans-serif"
   fontSize: "18px"
   fontWeight: 500
   lineHeight: 1.45
   letterSpacing: "-0.005em"
  body:
-  fontFamily: "Raleway, ui-sans-serif, system-ui, sans-serif"
+  fontFamily: "Outfit, ui-sans-serif, system-ui, sans-serif"
   fontSize: "16px"
   fontWeight: 400
   lineHeight: 1.6
  label:
-  fontFamily: "Raleway, ui-sans-serif, system-ui, sans-serif"
+  fontFamily: "Outfit, ui-sans-serif, system-ui, sans-serif"
   fontSize: "12px"
   fontWeight: 800
   lineHeight: 1
   letterSpacing: "0.08em"
   textTransform: "uppercase"
  micro:
-  fontFamily: "Raleway, ui-sans-serif, system-ui, sans-serif"
+  fontFamily: "Outfit, ui-sans-serif, system-ui, sans-serif"
   fontSize: "11px"
   fontWeight: 600
   lineHeight: 1.2
@@ -184,7 +184,7 @@ The mood is closer to Nubank / C6 / Mercado Pago than enterprise B2B: a confiden
 **Key Characteristics:**
 
 - Two committed brand colors used at full strength: blue for structure, amber for loyalty moments
-- Single typeface (Raleway), confident weight contrast (400 → 700 → 800)
+- Single typeface (Outfit), confident weight contrast (400 → 700 → 800)
 - Generous rounding throughout (10–22px the norm, 26px on the roundest standard surfaces, pill-rounded badges)
 - Modern soft elevation: 1px subtle border + small shadow on cards, blue-tinted shadows on hero CTAs
 - Warm gold chart palette derived from the amber brand — distinctive and on-brand for data viz
@@ -285,9 +285,11 @@ Five warm gold steps. Distinctive — most analytics tools default to cold blue/
 
 ## 3. Typography: Confident Brazilian Voice
 
-**Single font: Raleway** (already loaded; weights 400–800 in use).
+**Single font: Outfit** (already loaded; weights 400–800 in use).
 
-Raleway holds personality across weights and reads beautifully in Portuguese — accents and tildes render cleanly. The system uses weight contrast (400 body → 700 title → 800 display) rather than multiple typefaces.
+Outfit is geometric and open, holds personality across weights, and reads beautifully in Portuguese — accents and tildes render cleanly. The system uses weight contrast (400 body → 700 title → 800 display) rather than multiple typefaces.
+
+Outfit replaced Raleway for one concrete reason: **Raleway has no `tnum` feature**, so `font-variant-numeric: tabular-nums` did nothing and the app's figures never aligned (Raleway's "1" is literally half the width of its "0"). Outfit ships `tnum`, and every digit maps to a uniform-width `.tf` variant. Any future typeface change must keep `tnum` — check the font's GSUB table before switching, not just how it looks in a specimen.
 
 ### Hierarchy
 
@@ -308,18 +310,25 @@ Raleway holds personality across weights and reads beautifully in Portuguese —
 `text-micro` (11px/600) de `styles/globals.css`. Escrever `text-[10px] uppercase tracking-[0.08em]`
 à mão foi como o sistema acabou com 113 eyebrows, quase nenhum no tamanho que a spec pede.
 
-**Número é `text-numeric`, no contêiner — nunca `tabular-nums` avulso.** As figuras da Raleway são
-proporcionais e de altura variável: sem ajuste, "R$ 12.480,90" muda de largura a cada refetch e
-coluna de tabela não alinha. O utilitário `text-numeric` (`lining-nums tabular-nums`) resolve os
-dois, e vai no painel ou no cartão — os números herdam.
+**Número é `text-numeric`, no contêiner — nunca `tabular-nums` avulso.** Por padrão os dígitos da
+Outfit têm larguras diferentes (o "1" mede 321 unidades contra 659 do "0"), então "R$ 12.480,90"
+muda de largura a cada refetch e coluna de tabela não alinha. O utilitário `text-numeric` liga
+`tabular-nums`, que troca todo dígito por uma variante `.tf` de 590 unidades. Vai no painel ou no
+cartão — os números herdam.
 
 A classe `tabular-nums` do Tailwind **não** serve para isso e ainda estraga o efeito: ela compõe
 `font-variant-numeric` a partir de variáveis `@property` com `inherits: false`, então um filho com
-`tabular-nums` redeclara a propriedade inteira e descarta o `lining-nums` que herdaria do pai. Um
-contêiner com `text-numeric` e filhos com `tabular-nums` é pior que nenhum dos dois. Dentro de um
-contêiner com `text-numeric`, não escreva `tabular-nums`.
+`tabular-nums` redeclara a propriedade inteira e descarta o que herdaria do pai. Um contêiner com
+`text-numeric` e filhos com `tabular-nums` é pior que nenhum dos dois. Dentro de um contêiner com
+`text-numeric`, não escreva `tabular-nums`.
 
-**Single voice rule.** Don't introduce a second display font. Don't reach for a monospace for "data" tables — Raleway with `tabular-nums` handles tabular figures.
+**A fonte precisa ter `tnum`.** Isto não é detalhe de implementação: é o motivo de a Raleway ter
+saído. Ela não tem a feature, então a mesma declaração era inerte e os números continuavam
+desalinhados — parecia bug de CSS e era a fonte. Antes de trocar de tipografia, confira a tabela
+GSUB do arquivo (Urbanist e Mulish, por exemplo, também não têm `tnum`; Outfit, Jost, Archivo,
+Inter e Figtree têm).
+
+**Single voice rule.** Don't introduce a second display font. Don't reach for a monospace for "data" tables — Outfit with `tabular-nums` handles tabular figures.
 
 _Exceção nomeada:_ código literal — payload JSON, XML, chave de API, trecho de terminal — é
 monoespaçado, porque ali o alinhamento por caractere é a informação. A exceção vive dentro do
@@ -424,7 +433,7 @@ A label (12px uppercase, muted) above a confident number (24–48px, font-extrab
 - **Don't** use gradient text (`background-clip: text` with gradients). A solid color at increased weight communicates emphasis without the cliché.
 - **Don't** use glassmorphism (`backdrop-filter: blur`) decoratively.
 - **Don't** apply `border-left` greater than 1px as a colored accent stripe on cards or alerts.
-- **Don't** introduce a second display font. Raleway carries it.
+- **Don't** introduce a second display font. Outfit carries it.
 - **Don't** lean on the SaaS-template hero metric (big number + supporting stats grid + sparkline). It's the cliché.
 - **Don't** stack `shadow-lg` on static content containers. Heavy shadows belong to floating layers.
 - **Don't** use the ledger / ink-on-paper aesthetic — this brand is friendly Brazilian fintech, not antique accounting.

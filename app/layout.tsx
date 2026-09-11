@@ -5,11 +5,15 @@ import { cn } from "@/lib/utils";
 import { GoogleTagManager } from "@next/third-parties/google";
 import { Analytics } from "@vercel/analytics/next";
 import type { Metadata, Viewport } from "next";
-import { Raleway } from "next/font/google";
+import { Outfit } from "next/font/google";
 import { Toaster } from "sonner";
-const raleway = Raleway({
+// Outfit no lugar da Raleway: a Raleway não tem a feature `tnum`, então `tabular-nums` era letra
+// morta e os dígitos seguiam com larguras diferentes (o "1" da Raleway mede metade do "0"). A
+// Outfit traz `tnum` de verdade — todo dígito vai para uma variante `.tf` de largura igual. Ver o
+// utilitário `text-numeric` em `styles/globals.css` e DESIGN.md §3.
+const outfit = Outfit({
 	subsets: ["latin"],
-	variable: "--font-raleway",
+	variable: "--font-outfit",
 });
 const siteTitle = "RecompraCRM | CRM de Fidelização para Lojas";
 const siteMetaDescription =
@@ -78,7 +82,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 	console.log("Running");
 	return (
 		<html lang="pt-BR" suppressHydrationWarning>
-			<body className={cn(`min-h-screen min-w-screen bg-background text-foreground overflow-x-hidden antialiased font-raleway ${raleway.variable}`)}>
+			<body className={cn(`min-h-screen min-w-screen bg-background text-foreground overflow-x-hidden antialiased font-outfit ${outfit.variable}`)}>
 				{/* JSON-LD — Organization + WebSite (reconhecimento de entidade por IA) */}
 				<script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify([organizationJsonLd, websiteJsonLd]) }} />
 				<ProvidersWrapper>

@@ -59,14 +59,14 @@ async function loadLogoDataUrl(logoUrl: string | null): Promise<string | null> {
 export default async function OpengraphImage({ params }: { params: Promise<{ slug: string }> }) {
 	const { slug } = await params;
 
-	const [organization, ralewayRegular, ralewaySemiBold, ralewayBold] = await Promise.all([
+	const [organization, outfitRegular, outfitSemiBold, outfitBold] = await Promise.all([
 		db.query.organizations.findFirst({
 			where: (fields, { eq }) => eq(fields.slug, slug.trim().toLowerCase()),
 			columns: { nome: true, logoUrl: true, corPrimaria: true, corPrimariaForeground: true },
 		}),
-		readFile(join(process.cwd(), "utils/fonts/Raleway-Regular.ttf")),
-		readFile(join(process.cwd(), "utils/fonts/Raleway-SemiBold.ttf")),
-		readFile(join(process.cwd(), "utils/fonts/Raleway-Bold.ttf")),
+		readFile(join(process.cwd(), "utils/fonts/Outfit-Regular.ttf")),
+		readFile(join(process.cwd(), "utils/fonts/Outfit-SemiBold.ttf")),
+		readFile(join(process.cwd(), "utils/fonts/Outfit-Bold.ttf")),
 	]);
 
 	const nome = organization?.nome ?? "Loja Digital";
@@ -94,7 +94,7 @@ export default async function OpengraphImage({ params }: { params: Promise<{ slu
 				padding: "88px",
 				background: `linear-gradient(135deg, ${lighter} 0%, ${primary} 55%, ${darker} 100%)`,
 				color: primaryForeground,
-				fontFamily: "Raleway",
+				fontFamily: "Outfit",
 			}}
 		>
 			<div style={{ display: "flex", alignItems: "center", gap: "36px" }}>
@@ -148,9 +148,9 @@ export default async function OpengraphImage({ params }: { params: Promise<{ slu
 		{
 			...size,
 			fonts: [
-				{ name: "Raleway", data: ralewayRegular, weight: 400, style: "normal" },
-				{ name: "Raleway", data: ralewaySemiBold, weight: 600, style: "normal" },
-				{ name: "Raleway", data: ralewayBold, weight: 700, style: "normal" },
+				{ name: "Outfit", data: outfitRegular, weight: 400, style: "normal" },
+				{ name: "Outfit", data: outfitSemiBold, weight: 600, style: "normal" },
+				{ name: "Outfit", data: outfitBold, weight: 700, style: "normal" },
 			],
 		},
 	);

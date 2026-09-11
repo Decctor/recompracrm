@@ -65,7 +65,7 @@ export async function buildOrganizationInviteHeaderElement({
 				height: INVITE_HEADER_HEIGHT,
 				backgroundColor: RECOMPRA_BRAND_BLUE,
 				backgroundImage: `linear-gradient(135deg, ${RECOMPRA_BRAND_BLUE} 0%, #183A6B 100%)`,
-				fontFamily: "Raleway",
+				fontFamily: "Outfit",
 			}}
 		>
 			<div style={{ display: "flex", alignItems: "center" }}>

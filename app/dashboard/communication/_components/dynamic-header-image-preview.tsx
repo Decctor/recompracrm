@@ -41,7 +41,7 @@ export function DynamicHeaderImagePreview({
 			style={{
 				...gradientStyle,
 				color: organizationTheme.primaryForeground,
-				fontFamily: "var(--font-raleway, Raleway), ui-sans-serif, system-ui, sans-serif",
+				fontFamily: "var(--font-outfit, Outfit), ui-sans-serif, system-ui, sans-serif",
 			}}
 			aria-label="Prévia da imagem dinâmica do cabeçalho"
 		>

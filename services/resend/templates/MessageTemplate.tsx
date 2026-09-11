@@ -410,7 +410,7 @@ export default function MessageTemplateEmail({ content, variables, organization,
 					padding: "32px 12px",
 					background: `linear-gradient(180deg, ${palette.canvasTint} 0%, ${palette.canvasWash} 100%)`,
 					backgroundColor: palette.canvasTint,
-					fontFamily: 'Raleway, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Ubuntu, sans-serif',
+					fontFamily: 'Outfit, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Ubuntu, sans-serif',
 				}}
 			>
 				<Container

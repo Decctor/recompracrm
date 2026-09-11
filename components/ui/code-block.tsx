@@ -11,7 +11,7 @@ import { createContext, use, useState, type ReactNode } from "react";
  *
  * É a exceção nomeada da regra de voz única do `DESIGN.md §3` — código literal é monoespaçado
  * porque ali o alinhamento por caractere é informação. A exceção mora aqui dentro justamente para
- * não vazar: número em tabela continua em Raleway com `tabular-nums`.
+ * não vazar: número em tabela continua em Outfit com `tabular-nums`.
  *
  * O conteúdo vive na raiz e as partes o leem por contexto, para que copiar e exibir não possam
  * divergir — o botão copia exatamente o que está na tela.

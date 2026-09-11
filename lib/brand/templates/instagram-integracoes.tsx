@@ -147,7 +147,7 @@ async function renderIntegracao(variant: TVariant) {
 				height: HEIGHT,
 				backgroundImage: BACKGROUND,
 				overflow: "hidden",
-				fontFamily: "Raleway",
+				fontFamily: "Outfit",
 			}}
 		>
 			<div

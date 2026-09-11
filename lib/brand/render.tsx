@@ -10,7 +10,7 @@ type RenderBrandAssetOptions = {
 };
 
 export async function renderBrandAssetSvg({ element, width, height }: RenderBrandAssetOptions) {
-	// Reutiliza as fontes Raleway já usadas nas imagens de relatório.
+	// Reutiliza as fontes Outfit já usadas nas imagens de relatório.
 	const fonts = await getReportFonts();
 	return satori(element, { width, height, fonts });
 }

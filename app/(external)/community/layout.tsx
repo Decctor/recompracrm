@@ -24,7 +24,7 @@ export default async function CommunityLayout({ children }: { children: React.Re
 		: null;
 
 	return (
-		<div className="font-raleway min-h-svh bg-background text-foreground">
+		<div className="font-outfit min-h-svh bg-background text-foreground">
 			<main className="min-h-svh overflow-y-auto pb-28">{children}</main>
 			<CommunityDock user={user} />
 		</div>

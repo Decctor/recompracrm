@@ -19,13 +19,13 @@ async function loadFont(fileName: string) {
 export function getReportFonts(): Promise<TSatoriFont[]> {
 	if (!reportFontsPromise) {
 		reportFontsPromise = Promise.all([
-			loadFont("Raleway-Regular.ttf"),
-			loadFont("Raleway-SemiBold.ttf"),
-			loadFont("Raleway-Bold.ttf"),
+			loadFont("Outfit-Regular.ttf"),
+			loadFont("Outfit-SemiBold.ttf"),
+			loadFont("Outfit-Bold.ttf"),
 		]).then(([regular, semiBold, bold]) => [
-			{ name: "Raleway", data: regular, weight: 400, style: "normal" as const },
-			{ name: "Raleway", data: semiBold, weight: 600, style: "normal" as const },
-			{ name: "Raleway", data: bold, weight: 700, style: "normal" as const },
+			{ name: "Outfit", data: regular, weight: 400, style: "normal" as const },
+			{ name: "Outfit", data: semiBold, weight: 600, style: "normal" as const },
+			{ name: "Outfit", data: bold, weight: 700, style: "normal" as const },
 		]);
 	}
 

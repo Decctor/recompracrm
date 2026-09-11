@@ -17,7 +17,7 @@ export default async function AdminDashboardLayout({ children }: AdminDashboardL
 	if (!session.user.admin) return <UnauthorizedPage message="Oops, aparentemente você não possui permissão para acessar essa área." />;
 
 	return (
-		<div className="font-raleway min-h-svh bg-background text-foreground">
+		<div className="font-outfit min-h-svh bg-background text-foreground">
 			<Suspense fallback={<LoadingComponent />}>
 				<main className="flex min-h-svh flex-col gap-3 overflow-y-auto p-6 pb-28">
 					<AppHeader showSidebarTrigger={false} />

@@ -293,7 +293,7 @@ function SlideShell({ children, watermark }: { children: React.ReactNode; waterm
 				height: HEIGHT,
 				backgroundImage: BACKGROUND,
 				overflow: "hidden",
-				fontFamily: "Raleway",
+				fontFamily: "Outfit",
 			}}
 		>
 			<div

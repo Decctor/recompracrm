@@ -53,7 +53,7 @@
 	}
 
 	--font-sans: var(--font-sans), ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
-	--font-raleway: var(--font-raleway);
+	--font-outfit: var(--font-outfit);
 
 	--background-image-gradient-radial: radial-gradient(var(--tw-gradient-stops));
 	--background-image-gradient-conic: conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops));
@@ -175,20 +175,26 @@
 	font-weight: 600;
 }
 
-/* Figuras alinhadas: dígitos de mesma altura (`lining-nums`) e de mesma largura (`tabular-nums`).
-   É o que impede "R$ 12.480,90" de dançar entre um refetch e outro e o que alinha coluna de tabela
-   na vertical. Raleway tem figuras proporcionais por padrão, e o 1 e o 4 dela sentam torto — boa
-   parte do que parece problema da fonte é só isso.
+/* Figuras alinhadas: dígitos de mesma largura, para "R$ 12.480,90" não mudar de tamanho entre um
+   refetch e outro e para coluna de tabela alinhar na vertical.
+
+   Depende da fonte ter a feature `tnum`, e é por isso que o app usa Outfit. Na Outfit os dígitos
+   padrão medem 659, 321, 539, 530, 594, 530, 568, 533, 556 e 568 unidades — o "1" tem metade da
+   largura do "0" —, e `tabular-nums` troca todos por variantes `.tf` de 590. A Raleway, usada antes,
+   simplesmente não tem `tnum`: a mesma declaração não fazia efeito nenhum ali.
 
    Declaração direta, e não as classes `lining-nums tabular-nums` do Tailwind, por um motivo
    concreto: aquelas duas compõem `font-variant-numeric` a partir de variáveis registradas com
    `inherits: false`. Um filho com `tabular-nums` avulso redeclara a propriedade inteira, resolve
-   `--tw-numeric-figure` para o valor inicial e **descarta o `lining-nums` herdado do pai**. Como
-   uma única declaração, `text-numeric` herda inteiro e não tem como ser parcialmente sobrescrito.
+   `--tw-numeric-figure` para o valor inicial e descarta o que herdaria do pai. Como uma única
+   declaração, `text-numeric` herda inteiro e não tem como ser parcialmente sobrescrito.
+
+   `lining-nums` fica por garantia: a Outfit não tem `onum` nem `lnum`, então já desenha figuras de
+   caixa alta e a palavra é inócua aqui — mas mantém o utilitário correto se a fonte mudar de novo.
 
    Aplique no contêiner (o painel, o cartão), não em cada número. E dentro de um contêiner que já
-   tem `text-numeric`, não escreva `tabular-nums` avulso: ele não acrescenta nada e desliga o
-   `lining-nums`. */
+   tem `text-numeric`, não escreva `tabular-nums` avulso: não acrescenta nada e ainda quebra a
+   herança. */
 @utility text-numeric {
 	font-variant-numeric: lining-nums tabular-nums;
 }
@@ -209,7 +215,7 @@
 	}
 
 	body {
-		font-family: var(--font-raleway), system-ui, sans-serif;
+		font-family: var(--font-outfit), system-ui, sans-serif;
 	}
 	/* Scrollbar utilities replacing tailwind-scrollbar plugin */
 	.scrollbar-thin {
@@ -355,7 +361,7 @@
 		--sidebar-accent-foreground: 240 5.9% 10%;
 		--sidebar-border: 220 13% 91%;
 		--sidebar-ring: 217.2 91.2% 59.8%;
-		--font-sans: "Raleway", sans-serif;
+		--font-sans: "Outfit", sans-serif;
 	}
 	.dark {
 		--background: 0 0% 3.9%;
@@ -390,7 +396,7 @@
 		--sidebar-accent-foreground: 240 4.8% 95.9%;
 		--sidebar-border: 240 3.7% 15.9%;
 		--sidebar-ring: 217.2 91.2% 59.8%;
-		--font-sans: "Raleway", sans-serif;
+		--font-sans: "Outfit", sans-serif;
 	}
 }
 
