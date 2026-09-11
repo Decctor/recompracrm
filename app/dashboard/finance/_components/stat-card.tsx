@@ -23,7 +23,13 @@ export function StatCard({ className, icon, iconWrapperClassName, label, value, 
 			{typeof value === "string" || typeof value === "number" ? <h1 className="text-sm font-medium">{value}</h1> : <div>{value}</div>}
 		</div>
 	);
-	const cardClassName = cn("bg-card border-border flex w-full flex-row items-center justify-between gap-1 rounded-xl border px-3 py-4 shadow-2xs", className);
+	// `text-numeric` no cartão inteiro, e não só no `value`: ele também aceita um ReactNode composto
+	// (valor + variação, dois números lado a lado), e a herança cobre esses casos sem que cada
+	// callsite precise lembrar da classe.
+	const cardClassName = cn(
+		"text-numeric bg-card border-border flex w-full flex-row items-center justify-between gap-1 rounded-xl border px-3 py-4 shadow-2xs",
+		className,
+	);
 
 	if (href) {
 		return (

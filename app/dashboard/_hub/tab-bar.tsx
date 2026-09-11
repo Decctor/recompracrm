@@ -68,7 +68,7 @@ export function TabBar({ tabs, active, onSelect, badges, hint }: TabBarProps) {
 							{badge && badge.count > 0 ? (
 								<span
 									className={cn(
-										"flex h-4.5 items-center rounded-full px-1.5 font-extrabold text-[0.6875rem] tabular-nums",
+										"flex h-4.5 items-center rounded-full px-1.5 font-extrabold text-[0.6875rem]",
 										badge.tone === "destructive" ? "bg-destructive-surface text-destructive-surface-foreground" : "bg-muted text-muted-foreground",
 									)}
 								>

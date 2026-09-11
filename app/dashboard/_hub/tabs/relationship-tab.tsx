@@ -125,7 +125,7 @@ function CashbackTile() {
 				<span className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
 					<span className="block h-full bg-warning" style={{ width: `${Math.min(share, 100)}%` }} />
 				</span>
-				<span className="text-micro shrink-0 tabular-nums">{formatToMoney(expirando.valor)}</span>
+				<span className="text-micro shrink-0">{formatToMoney(expirando.valor)}</span>
 			</div>
 		</StatTile>
 	);
@@ -165,7 +165,7 @@ function SegmentMovement() {
 							return (
 								<div
 									key={segment.segmento}
-									className={cn("flex items-center justify-center font-extrabold text-xs tabular-nums", colors.background, colors.text)}
+									className={cn("flex items-center justify-center font-extrabold text-xs", colors.background, colors.text)}
 									style={{ width: `${(segment.qtde / Math.max(data.total, 1)) * 100}%` }}
 									title={`${segmentLabel(segment.segmento)}: ${formatDecimalPlaces(segment.qtde)}`}
 								>
@@ -179,7 +179,7 @@ function SegmentMovement() {
 							<li key={segment.segmento} className="flex min-w-0 items-center gap-2">
 								<span className={cn("size-2.5 shrink-0 rounded-xs", segmentColors(segment.segmento).background)} aria-hidden />
 								<span className="text-micro min-w-0 flex-1 truncate font-bold">{segmentLabel(segment.segmento)}</span>
-								<span className="text-micro shrink-0 font-normal text-muted-foreground tabular-nums">
+								<span className="text-micro shrink-0 font-normal text-muted-foreground">
 									{segment.chegaram > 0 ? `${formatDecimalPlaces(segment.chegaram)} novos` : "—"}
 								</span>
 							</li>
@@ -243,16 +243,13 @@ function CampaignsPanel() {
 							)}
 						>
 							<span className="truncate font-bold text-sm">{campaign.titulo}</span>
-							<span className="text-right font-bold text-sm tabular-nums">{formatDecimalPlaces(campaign.interacoes)}</span>
+							<span className="text-right font-bold text-sm">{formatDecimalPlaces(campaign.interacoes)}</span>
 							<span
-								className={cn(
-									"text-right font-extrabold text-sm tabular-nums",
-									campaign.taxaConversao > 0 ? "text-success-surface-foreground" : "text-muted-foreground",
-								)}
+								className={cn("text-right font-extrabold text-sm", campaign.taxaConversao > 0 ? "text-success-surface-foreground" : "text-muted-foreground")}
 							>
 								{formatDecimalPlaces(campaign.taxaConversao, 0, 1)}%
 							</span>
-							<span className="text-right font-bold text-sm tabular-nums">{formatToMoney(campaign.receita)}</span>
+							<span className="text-right font-bold text-sm">{formatToMoney(campaign.receita)}</span>
 						</Link>
 					))}
 				</>
@@ -372,7 +369,7 @@ function CoolingClients({ query }: { query: ReturnType<typeof useRecentSegmentCh
 						<span className="truncate font-bold text-sm leading-tight">{client.nome}</span>
 						<span className="text-micro truncate font-normal text-muted-foreground">{segmentLabel(client.segmento)}</span>
 					</span>
-					<span className="shrink-0 font-bold text-xs tabular-nums">{formatToMoney(client.valorTotalCompras ?? 0)}</span>
+					<span className="shrink-0 font-bold text-xs">{formatToMoney(client.valorTotalCompras ?? 0)}</span>
 				</Link>
 			))}
 		</div>

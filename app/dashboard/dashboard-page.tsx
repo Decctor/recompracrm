@@ -100,9 +100,9 @@ export function DashboardPage({ user, userOrg, membership, scopeSellersIds }: Da
 	const hasContent = canViewSales || tabs.length > 1 || canAccessDashboardCapability("customers", context);
 
 	return (
-		// `lining-nums tabular-nums` no painel inteiro: é o que mantém "R$ 12.480,90" sem os dígitos
-		// dançando entre um refetch e outro, e as colunas das tabelas alinhadas na vertical.
-		<div className="flex w-full flex-col gap-4 p-1 [font-variant-numeric:lining-nums_tabular-nums]">
+		// `text-numeric` no painel inteiro: todo número daqui para baixo herda figuras alinhadas, sem
+		// precisar repetir a classe em cada célula (ver o utilitário em `styles/globals.css`).
+		<div className="text-numeric flex w-full flex-col gap-4 p-1">
 			<div className="flex flex-wrap items-start justify-between gap-3">
 				<div className="flex flex-col">
 					<h1 className="font-black text-2xl tracking-tight">{firstName ? `Olá, ${firstName}` : "Dashboard"}</h1>

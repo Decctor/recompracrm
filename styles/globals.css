@@ -137,20 +137,20 @@
 	[role="button"]:not(:disabled) {
 		cursor: pointer;
 	}
-  * {
-    @apply border-border outline-ring/50;
+	* {
+		@apply border-border outline-ring/50;
 	}
-  body {
-    @apply bg-background text-foreground;
+	body {
+		@apply bg-background text-foreground;
 	}
-  html {
-    @apply font-sans;
+	html {
+		@apply font-sans;
 	}
-  .maplibregl-popup-content {
-    @apply bg-transparent! shadow-none! p-0! rounded-none!;
+	.maplibregl-popup-content {
+		@apply bg-transparent! shadow-none! p-0! rounded-none!;
 	}
-  .maplibregl-popup-tip {
-    @apply hidden!;
+	.maplibregl-popup-tip {
+		@apply hidden!;
 	}
 }
 
@@ -173,6 +173,24 @@
 	font-size: 0.6875rem;
 	line-height: 1.2;
 	font-weight: 600;
+}
+
+/* Figuras alinhadas: dígitos de mesma altura (`lining-nums`) e de mesma largura (`tabular-nums`).
+   É o que impede "R$ 12.480,90" de dançar entre um refetch e outro e o que alinha coluna de tabela
+   na vertical. Raleway tem figuras proporcionais por padrão, e o 1 e o 4 dela sentam torto — boa
+   parte do que parece problema da fonte é só isso.
+
+   Declaração direta, e não as classes `lining-nums tabular-nums` do Tailwind, por um motivo
+   concreto: aquelas duas compõem `font-variant-numeric` a partir de variáveis registradas com
+   `inherits: false`. Um filho com `tabular-nums` avulso redeclara a propriedade inteira, resolve
+   `--tw-numeric-figure` para o valor inicial e **descarta o `lining-nums` herdado do pai**. Como
+   uma única declaração, `text-numeric` herda inteiro e não tem como ser parcialmente sobrescrito.
+
+   Aplique no contêiner (o painel, o cartão), não em cada número. E dentro de um contêiner que já
+   tem `text-numeric`, não escreva `tabular-nums` avulso: ele não acrescenta nada e desliga o
+   `lining-nums`. */
+@utility text-numeric {
+	font-variant-numeric: lining-nums tabular-nums;
 }
 
 @layer utilities {
@@ -232,7 +250,6 @@
 	.scrollbar-thumb-primary\/5::-webkit-scrollbar-thumb:hover {
 		background-color: hsl(var(--primary) / 0.1);
 		scrollbar-color: hsl(var(--primary) / 0.05) transparent;
-
 	}
 	/* Firefox scrollbar support */
 	.scrollbar-thin.scrollbar-thumb-primary\/5.scrollbar-track-transparent {

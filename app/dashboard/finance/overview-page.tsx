@@ -82,7 +82,7 @@ export default function FinanceOverviewPage() {
 							<h1 className={cn("text-sm font-medium", { "text-red-600 dark:text-red-400": totalResult < 0 })}>{formatToMoney(totalResult)}</h1>
 							{resultMargin !== null ? (
 								<span
-									className={cn("rounded-md px-1.5 py-0.5 text-[0.6rem] font-medium tabular-nums", {
+									className={cn("rounded-md px-1.5 py-0.5 text-[0.6rem] font-medium", {
 										"bg-green-500/10 text-green-700 dark:text-green-400": resultMargin >= 0,
 										"bg-red-500/10 text-red-700 dark:text-red-400": resultMargin < 0,
 									})}

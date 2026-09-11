@@ -308,6 +308,17 @@ Raleway holds personality across weights and reads beautifully in Portuguese —
 `text-micro` (11px/600) de `styles/globals.css`. Escrever `text-[10px] uppercase tracking-[0.08em]`
 à mão foi como o sistema acabou com 113 eyebrows, quase nenhum no tamanho que a spec pede.
 
+**Número é `text-numeric`, no contêiner — nunca `tabular-nums` avulso.** As figuras da Raleway são
+proporcionais e de altura variável: sem ajuste, "R$ 12.480,90" muda de largura a cada refetch e
+coluna de tabela não alinha. O utilitário `text-numeric` (`lining-nums tabular-nums`) resolve os
+dois, e vai no painel ou no cartão — os números herdam.
+
+A classe `tabular-nums` do Tailwind **não** serve para isso e ainda estraga o efeito: ela compõe
+`font-variant-numeric` a partir de variáveis `@property` com `inherits: false`, então um filho com
+`tabular-nums` redeclara a propriedade inteira e descarta o `lining-nums` que herdaria do pai. Um
+contêiner com `text-numeric` e filhos com `tabular-nums` é pior que nenhum dos dois. Dentro de um
+contêiner com `text-numeric`, não escreva `tabular-nums`.
+
 **Single voice rule.** Don't introduce a second display font. Don't reach for a monospace for "data" tables — Raleway with `tabular-nums` handles tabular figures.
 
 _Exceção nomeada:_ código literal — payload JSON, XML, chave de API, trecho de terminal — é

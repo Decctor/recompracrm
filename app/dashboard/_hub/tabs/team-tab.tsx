@@ -69,13 +69,13 @@ function SellerRanking({ scopeSellersIds }: { scopeSellersIds: string[] | null }
 								{index + 1}
 							</span>
 							<span className="min-w-0 flex-1 truncate font-bold text-sm">{row.vendedor.nome}</span>
-							<span className="text-micro hidden w-20 shrink-0 font-normal text-muted-foreground tabular-nums sm:block">
+							<span className="text-micro hidden w-20 shrink-0 font-normal text-muted-foreground sm:block">
 								{formatDecimalPlaces(row.qtde)} {row.qtde === 1 ? "venda" : "vendas"}
 							</span>
 							<span className="hidden h-1.5 w-28 shrink-0 overflow-hidden rounded-full bg-muted md:block">
 								<span className="block h-full rounded-full bg-primary" style={{ width: `${leader > 0 ? (row.total / leader) * 100 : 0}%` }} />
 							</span>
-							<span className="w-24 shrink-0 text-right font-bold text-sm tabular-nums">{formatToMoney(row.total)}</span>
+							<span className="w-24 shrink-0 text-right font-bold text-sm">{formatToMoney(row.total)}</span>
 						</li>
 					))}
 				</ul>
@@ -115,7 +115,7 @@ function RoutineLine({ label, value, tone = "default" }: { label: string; value:
 			<dt className="min-w-0 truncate font-medium text-sm">{label}</dt>
 			<dd
 				className={cn(
-					"shrink-0 font-extrabold text-base tabular-nums",
+					"shrink-0 font-extrabold text-base",
 					tone === "success" && "text-success-surface-foreground",
 					tone === "destructive" && "text-destructive-surface-foreground",
 				)}

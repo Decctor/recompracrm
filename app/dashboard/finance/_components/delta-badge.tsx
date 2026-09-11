@@ -18,7 +18,7 @@ export function DeltaBadge({ current, previous, invert = false }: DeltaBadgeProp
 	return (
 		<span
 			title="Variação em relação ao período imediatamente anterior de mesma duração"
-			className={cn("flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[0.6rem] font-medium tabular-nums", {
+			className={cn("text-numeric flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[0.6rem] font-medium", {
 				"bg-green-500/10 text-green-700 dark:text-green-400": isGood,
 				"bg-red-500/10 text-red-700 dark:text-red-400": !isGood,
 			})}

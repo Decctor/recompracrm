@@ -18,7 +18,7 @@ type SummaryBlockProps = {
 function MetricValue({ atual, anterior, format, invert }: { atual: number | null; anterior: number | null; format: (v: number) => string; invert?: boolean }) {
 	return (
 		<div className="flex items-center gap-2">
-			<h1 className="text-sm font-medium tabular-nums">{atual === null ? "—" : format(atual)}</h1>
+			<h1 className="text-sm font-medium">{atual === null ? "—" : format(atual)}</h1>
 			{atual !== null && anterior !== null ? <DeltaBadge current={atual} previous={anterior} invert={invert} /> : null}
 		</div>
 	);
@@ -82,7 +82,7 @@ export function SummaryBlock({ resumo, canViewSensitive, historyFilters }: Summa
 					label="CANCELADAS"
 					value={
 						<div className="flex items-center gap-2">
-							<h1 className="text-sm font-medium tabular-nums">{formatToMoney(resumo.canceladas.valor)}</h1>
+							<h1 className="text-sm font-medium">{formatToMoney(resumo.canceladas.valor)}</h1>
 							<span className="rounded-md bg-muted px-1.5 py-0.5 text-[0.6rem] font-medium uppercase text-muted-foreground">
 								{resumo.canceladas.qtde} {resumo.canceladas.qtde === 1 ? "venda" : "vendas"}
 							</span>
@@ -98,11 +98,11 @@ export function SummaryBlock({ resumo, canViewSensitive, historyFilters }: Summa
 						label="MARGEM BRUTA"
 						value={
 							<div className="flex items-center gap-2">
-								<h1 className={cn("text-sm font-medium tabular-nums", { "text-red-600 dark:text-red-400": (resumo.margemBruta.atual ?? 0) < 0 })}>
+								<h1 className={cn("text-sm font-medium", { "text-red-600 dark:text-red-400": (resumo.margemBruta.atual ?? 0) < 0 })}>
 									{formatToMoney(resumo.margemBruta.atual ?? 0)}
 								</h1>
 								{margemPercentual !== null ? (
-									<span className="rounded-md bg-muted px-1.5 py-0.5 text-[0.6rem] font-medium tabular-nums text-muted-foreground">
+									<span className="rounded-md bg-muted px-1.5 py-0.5 text-[0.6rem] font-medium text-muted-foreground">
 										{formatDecimalPlaces(margemPercentual, 1, 1)}%
 									</span>
 								) : null}
@@ -120,9 +120,9 @@ export function SummaryBlock({ resumo, canViewSensitive, historyFilters }: Summa
 					value={
 						resumo.meta ? (
 							<div className="flex items-center gap-2">
-								<h1 className="text-sm font-medium tabular-nums">{formatToMoney(resumo.meta.objetivo)}</h1>
+								<h1 className="text-sm font-medium">{formatToMoney(resumo.meta.objetivo)}</h1>
 								<span
-									className={cn("rounded-md px-1.5 py-0.5 text-[0.6rem] font-medium tabular-nums", {
+									className={cn("rounded-md px-1.5 py-0.5 text-[0.6rem] font-medium", {
 										"bg-green-500/10 text-green-700 dark:text-green-400": (resumo.meta.atingidoPercentual ?? 0) >= 100,
 										"bg-amber-500/10 text-amber-700 dark:text-amber-400": (resumo.meta.atingidoPercentual ?? 0) < 100,
 									})}

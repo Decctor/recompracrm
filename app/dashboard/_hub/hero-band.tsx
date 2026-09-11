@@ -100,7 +100,7 @@ function BandContent({ data, accent, band }: { data: TPulse; accent: string; ban
 					<h2 id="hero-band-title" className="text-label text-white/85">
 						Vendas de hoje
 					</h2>
-					<span className="font-black text-[2.75rem] leading-[0.95] tracking-[-0.035em] tabular-nums">{formatToMoney(hoje.faturamento)}</span>
+					<span className="font-black text-[2.75rem] leading-[0.95] tracking-[-0.035em]">{formatToMoney(hoje.faturamento)}</span>
 					<p className="font-medium text-sm text-white/90">
 						{hoje.qtdeVendas === 0
 							? "Nenhuma venda registrada ainda."
@@ -113,7 +113,7 @@ function BandContent({ data, accent, band }: { data: TPulse; accent: string; ban
 					{hoje.recorrentes ? (
 						<div className="flex flex-col gap-0.5">
 							<dt className="text-micro text-white/85 uppercase tracking-[0.06em]">De quem já era cliente</dt>
-							<dd className="font-black text-xl tabular-nums">{formatDecimalPlaces(hoje.recorrentes.percentual, 0, 0)}%</dd>
+							<dd className="font-black text-xl">{formatDecimalPlaces(hoje.recorrentes.percentual, 0, 0)}%</dd>
 						</div>
 					) : null}
 				</dl>
@@ -162,7 +162,7 @@ function Comparison({ current, previous }: { current: number; previous: number }
 	return (
 		<div className="flex flex-col gap-0.5">
 			<dt className="text-micro text-white/85 uppercase tracking-[0.06em]">vs. semana passada</dt>
-			<dd className="flex items-center gap-1 font-black text-xl tabular-nums">
+			<dd className="flex items-center gap-1 font-black text-xl">
 				<Icon className="size-4" aria-hidden />
 				{up ? "+" : ""}
 				{formatDecimalPlaces(delta, 0, 0)}%
@@ -263,12 +263,12 @@ function GoalRing({
 					/>
 				</svg>
 				<span className="absolute inset-0 flex flex-col items-center justify-center">
-					<span className="font-black text-[1.75rem] leading-none tracking-tight tabular-nums">{formatDecimalPlaces(goal.percentualValor, 0, 0)}%</span>
+					<span className="font-black text-[1.75rem] leading-none tracking-tight">{formatDecimalPlaces(goal.percentualValor, 0, 0)}%</span>
 					<span className="text-micro text-muted-foreground uppercase tracking-[0.08em]">Meta do período</span>
 				</span>
 			</div>
 			<div className="flex flex-col items-center gap-1">
-				<span className="font-bold text-xs tabular-nums">
+				<span className="font-bold text-xs">
 					{formatToMoney(goal.realizadoValor)} <span className="font-normal text-muted-foreground">/ {formatToMoney(goal.objetivoValor)}</span>
 				</span>
 				<span className={cn("text-micro flex items-center gap-1 rounded-full px-2.5 py-1 font-bold", pacing.className)}>
@@ -301,7 +301,7 @@ function RiskTile({ risk }: { risk: HeroRisk }) {
 				<TriangleAlert className="size-4" aria-hidden />
 			</span>
 			<span className="flex min-w-0 flex-1 flex-col">
-				<span className="font-black text-destructive-surface-foreground text-base leading-tight tabular-nums">{risk.value}</span>
+				<span className="font-black text-destructive-surface-foreground text-base leading-tight">{risk.value}</span>
 				<span className="text-micro truncate font-normal text-muted-foreground">{risk.label}</span>
 			</span>
 			<ArrowRight className="size-4 shrink-0 text-muted-foreground" aria-hidden />

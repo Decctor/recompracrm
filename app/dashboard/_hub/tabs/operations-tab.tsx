@@ -132,11 +132,9 @@ function PendingByFront({ context }: { context: TCapabilityContext }) {
 							)}
 						>
 							<span className="truncate font-bold text-sm">{front.titulo}</span>
-							<span className="text-right font-extrabold text-sm tabular-nums">{front.itens === null ? "—" : formatDecimalPlaces(front.itens)}</span>
-							<span className="text-right font-bold text-sm tabular-nums">{front.valorParado === null ? "—" : formatToMoney(front.valorParado)}</span>
-							<span
-								className={cn("text-right text-xs tabular-nums", front.urgente ? "font-bold text-destructive-surface-foreground" : "text-muted-foreground")}
-							>
+							<span className="text-right font-extrabold text-sm">{front.itens === null ? "—" : formatDecimalPlaces(front.itens)}</span>
+							<span className="text-right font-bold text-sm">{front.valorParado === null ? "—" : formatToMoney(front.valorParado)}</span>
+							<span className={cn("text-right text-xs", front.urgente ? "font-bold text-destructive-surface-foreground" : "text-muted-foreground")}>
 								{front.maisAntigo ? formatTimeAgo(front.maisAntigo) : front.urgente ? "urgente" : "—"}
 							</span>
 						</Link>

@@ -145,8 +145,8 @@ function StatTile({ label, value, delta, deltaTone = "success", tone = "default"
 		<div className={cn(frameClassName, "gap-2 px-4 py-3.5")}>
 			<span className="text-label text-muted-foreground">{label}</span>
 			<div className="flex items-baseline gap-2">
-				<span className={cn("font-black text-2xl leading-none tracking-tight tabular-nums", toneClassName[tone])}>{value}</span>
-				{delta ? <span className={cn("font-bold text-xs tabular-nums", toneClassName[deltaTone])}>{delta}</span> : null}
+				<span className={cn("font-black text-2xl leading-none tracking-tight", toneClassName[tone])}>{value}</span>
+				{delta ? <span className={cn("font-bold text-xs", toneClassName[deltaTone])}>{delta}</span> : null}
 			</div>
 			{caption ? <span className="text-micro font-normal text-muted-foreground">{caption}</span> : null}
 			{children ? <div className="mt-1.5">{children}</div> : null}
