@@ -137,8 +137,9 @@ async function fetchProductsStock(input: TGetProductsDefaultInput): Promise<TGet
 
 type UseProductsStockParams = {
 	initialFilters?: Partial<TGetProductsDefaultInput>;
+	enabled?: boolean;
 };
-export function useProductsStock({ initialFilters }: UseProductsStockParams = {}) {
+export function useProductsStock({ initialFilters, enabled = true }: UseProductsStockParams = {}) {
 	const [filters, setFilters] = useState<TGetProductsDefaultInput>({
 		page: initialFilters?.page || 1,
 		search: initialFilters?.search || "",
@@ -168,6 +169,7 @@ export function useProductsStock({ initialFilters }: UseProductsStockParams = {}
 		...useQuery({
 			queryKey: ["products-stock", debouncedFilters],
 			queryFn: () => fetchProductsStock(debouncedFilters),
+			enabled,
 		}),
 		queryKey: ["products-stock", debouncedFilters],
 		filters,

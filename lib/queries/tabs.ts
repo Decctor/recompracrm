@@ -63,7 +63,7 @@ async function fetchTabs(params: TUseTabsParams) {
 	return result;
 }
 
-export function useTabs({ initialParams }: { initialParams?: Partial<TUseTabsParams> } = {}) {
+export function useTabs({ initialParams, enabled = true }: { initialParams?: Partial<TUseTabsParams>; enabled?: boolean } = {}) {
 	const [params, setParams] = useState<TUseTabsParams>({
 		status: initialParams?.status ?? ["ABERTA"],
 		servicePointId: initialParams?.servicePointId ?? null,
@@ -77,6 +77,7 @@ export function useTabs({ initialParams }: { initialParams?: Partial<TUseTabsPar
 		...useQuery({
 			queryKey: ["tabs", params],
 			queryFn: () => fetchTabs(params),
+			enabled,
 			refetchInterval: 30_000,
 		}),
 		queryKey: ["tabs", params],

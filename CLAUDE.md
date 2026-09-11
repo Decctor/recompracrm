@@ -298,12 +298,15 @@ export function NewFoo({ closeModal, callbacks }: NewFooProps) {
 **Location**: `/app/dashboard/_hub/`
 
 - `/dashboard` is an attention hub, not an analytics page. Deep analysis lives in each module (Vendas > Resultados, Financeiro > Visão geral, Campanhas > Estatísticas). Never add filters to the hub.
-- Widgets are declared in `registry.tsx` with the `capability` that governs them and are filtered with `filterNavigationItems`, the same function the sidebar and command palette use. A widget the member cannot see must never render, even empty.
-- Two kinds: `pendencia` (something that needs action now) and `pulso` (one number for today or the week). Three sizes: `compacto` (number + two rows, the whole card is a link), `lista` (named items, each row may link to its entity, the header carries "Ver todos") and `largo` (full width, for widgets with two internal columns).
-- The headline (`headline.tsx`) sits above the sections and is not a registry widget. It carries today's revenue and, when a goal is active, the goal's daily target as a reference line over the same bars. One element, one chart: most organizations have no goal, so the goal must never occupy a card of its own.
-- Build every widget from `HubWidget` primitives in `hub-widget.tsx`; each widget owns its own query and its own loading, error and empty states so one failing endpoint blanks only its card.
-- Prefer an existing query hook. When the hub needs a shape no module exposes, add a small GET route under the owning resource (e.g. `/api/clients/birthdays`) and its hook in `lib/queries/dashboard-hub.ts`.
+- **One band, three tabs.** `hero-band.tsx` sits on top and does not change with the tab: today's sales, the active goal as a ring, and the value at risk. Below it, `tab-bar.tsx` switches only the detail area — Relacionamento (default), Operação, Equipe, one file each under `_hub/tabs/`. The band stays put on purpose: splitting the whole dashboard into tabs would make half the users click before seeing any number.
+- **A tab the organization does not have is not rendered** — not disabled, not empty. Operação exists only when `erp.acesso` is true, so a CRM-only organization (most of the base) sees two tabs and no dead space. Relacionamento is the default because it is the only tab every organization has.
+- Inside a tab, every block is governed by its capability through `canAccessDashboardCapability`, the same check the sidebar and command palette use, and the block's query carries `enabled` so an organization without the module never calls the endpoint.
+- Build blocks from the primitives in `panel.tsx`: `Panel` (framed block with header, rows and its own loading/error/empty states), `StatTile` (number + label + a small chart of its own) and `Panel.Row` (named item with an action). Each block owns its query, so one failing endpoint blanks only that block.
+- **A cell with no data prints "—", never 0.** `useOperationsPending` composes the pendências table out of the per-module queries and leaves `null` where the source does not answer (stock has no "valor parado"; the finance totals route has no count). A zero there would be a claim the data cannot make.
+- Same rule for movement between RFM segments: there is no segmentation history, so `/api/segmentations/distribution` reports **arrivals** into a segment, never a net delta. Label it "novos", never "±".
+- Prefer an existing query hook. When the hub needs a shape no module exposes, add a small GET route under the owning resource (e.g. `/api/clients/stats/relationship-pulse`) and its hook in `lib/queries/dashboard-hub.ts`.
 - "Today" comes from `useDayKey()` plus `resolveTodayRange()`, never from module-level date constants: the page stays open all day on a counter tablet.
+- The band paints the organization's own primary, darkened until white text passes 4.5:1 (`darkenUntilReadableWithWhite`). Org colors come from the database with no contrast guarantee and the band's caption line is 13px — without the adjustment a light brand color makes it unreadable.
 
 ## Public Page Conventions
 

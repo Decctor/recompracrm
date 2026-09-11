@@ -59,8 +59,9 @@ async function getFinancesOverallStats(input: TGetFinancesOverallStatsInput) {
 
 type UseFinancesOverallStatsParams = {
 	initialParams: Partial<TGetFinancesOverallStatsInput>;
+	enabled?: boolean;
 };
-export function useFinancesOverallStats({ initialParams }: UseFinancesOverallStatsParams) {
+export function useFinancesOverallStats({ initialParams, enabled = true }: UseFinancesOverallStatsParams) {
 	const monthStart = dayjs().startOf("month").toDate();
 	const monthEnd = dayjs().endOf("month").toDate();
 	const [params, setParams] = useState<TGetFinancesOverallStatsInput>({
@@ -74,6 +75,7 @@ export function useFinancesOverallStats({ initialParams }: UseFinancesOverallSta
 		...useQuery({
 			queryKey: ["finances-overall-stats", params],
 			queryFn: () => getFinancesOverallStats(params),
+			enabled,
 		}),
 		queryKey: ["finances-overall-stats", params],
 		params,

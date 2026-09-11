@@ -1,5 +1,21 @@
 import { formatStringAsOnlyDigits } from "@/lib/formatting";
+import { getRFMConfigByLabel } from "@/utils/rfm";
 import dayjs from "dayjs";
+
+/**
+ * "CAMPEÕES" → "Campeões". Os rótulos RFM são gravados em caixa alta porque assim entram nos chips
+ * da matriz; numa legenda ou numa linha de lista, caixa alta vira ruído.
+ */
+export function segmentLabel(segmento: string | null | undefined) {
+	if (!segmento) return "Sem segmento";
+	return segmento.charAt(0) + segmento.slice(1).toLowerCase();
+}
+
+/** Classes de cor do segmento, direto da paleta real de `utils/rfm.ts`. */
+export function segmentColors(segmento: string | null | undefined) {
+	const config = getRFMConfigByLabel(segmento);
+	return { background: config.backgroundCollor, text: config.textCollor };
+}
 
 /** "há 5 min", "há 3 h", "há 2 d" — curto o bastante para a coluna direita de uma linha de lista. */
 export function formatTimeAgo(value: Date | string | null | undefined) {

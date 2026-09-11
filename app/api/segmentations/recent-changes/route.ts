@@ -40,7 +40,13 @@ async function getRecentSegmentChanges({ input, session }: { input: TGetRecentSe
 
 	const [totals, top] = await Promise.all([
 		db
-			.select({ segmento: clients.analiseRFMTitulo, qtde: sql<number>`count(*)` })
+			.select({
+				segmento: clients.analiseRFMTitulo,
+				qtde: sql<number>`count(*)`,
+				// O histórico de compras de quem esfriou é o que está em jogo — é esse total que a faixa
+				// do topo do dashboard chama de "valor em risco".
+				valor: sql<number>`coalesce(sum(${clients.metadataValorTotalCompras}), 0)`,
+			})
 			.from(clients)
 			.where(conditions)
 			.groupBy(clients.analiseRFMTitulo),
@@ -64,7 +70,8 @@ async function getRecentSegmentChanges({ input, session }: { input: TGetRecentSe
 		data: {
 			janelaDias: input.days,
 			total: totals.reduce((acc, row) => acc + Number(row.qtde), 0),
-			porSegmento: totals.map((row) => ({ segmento: row.segmento ?? "", qtde: Number(row.qtde) })),
+			valorEmRisco: totals.reduce((acc, row) => acc + Number(row.valor), 0),
+			porSegmento: totals.map((row) => ({ segmento: row.segmento ?? "", qtde: Number(row.qtde), valor: Number(row.valor) })),
 			clientes: top,
 		},
 		message: "Mudanças recentes de segmento recuperadas com sucesso.",

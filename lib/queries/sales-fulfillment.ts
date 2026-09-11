@@ -18,11 +18,12 @@ const AUTO_REFRESH_INTERVAL_MS = 30_000;
  * otimista em andamento ou a confirmacao de entrega esta aberta (`paused`), para nao sobrescrever
  * o estado local do quadro. Quando ocioso, reconcilia sozinho a cada 30s e ao focar a aba.
  */
-export function useSalesFulfillment({ paused = false }: { paused?: boolean } = {}) {
+export function useSalesFulfillment({ paused = false, enabled = true }: { paused?: boolean; enabled?: boolean } = {}) {
 	return {
 		...useQuery({
 			queryKey: SALES_FULFILLMENT_QUERY_KEY,
 			queryFn: fetchSalesFulfillment,
+			enabled,
 			refetchInterval: paused ? false : AUTO_REFRESH_INTERVAL_MS,
 			refetchIntervalInBackground: false,
 			refetchOnWindowFocus: paused ? false : true,

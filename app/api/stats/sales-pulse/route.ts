@@ -3,7 +3,7 @@ import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { resolveResultsScopeSellerIds } from "@/lib/permissions/results-scope";
 import { db } from "@/services/drizzle";
-import { sales } from "@/services/drizzle/schema";
+import { clients, sales } from "@/services/drizzle/schema";
 import dayjs from "dayjs";
 import { and, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import createHttpError from "http-errors";
@@ -31,6 +31,49 @@ const GetSalesPulseInputSchema = z.object({
 export type TGetSalesPulseInput = z.infer<typeof GetSalesPulseInputSchema>;
 
 type TDailyBucket = { faturamento: number; qtdeVendas: number };
+
+/**
+ * Quanto do faturamento de hoje veio de quem já era cliente antes de hoje.
+ *
+ * "Já era cliente" é `primeiraCompraData` anterior ao início do dia — venda sem cliente
+ * identificado fica de fora do numerador, e é justamente por isso que o denominador aqui é o
+ * faturamento identificado, não o total: dividir pelo total faria uma loja de balcão, que quase não
+ * identifica, parecer uma loja sem recompra. Devolve null quando nada foi identificado, e o
+ * consumidor omite o número em vez de mostrar 0%.
+ */
+async function getReturningShareToday({
+	organizacaoId,
+	scopeSellersIds,
+	dayStart,
+	dayEnd,
+}: {
+	organizacaoId: string;
+	scopeSellersIds: string[] | null;
+	dayStart: dayjs.Dayjs;
+	dayEnd: dayjs.Dayjs;
+}) {
+	if (scopeSellersIds !== null && scopeSellersIds.length === 0) return null;
+	const conditions = [
+		eq(sales.organizacaoId, organizacaoId),
+		eq(sales.statusVenda, "CONFIRMADA"),
+		gte(sales.dataVenda, dayStart.toDate()),
+		lte(sales.dataVenda, dayEnd.toDate()),
+	];
+	if (scopeSellersIds) conditions.push(inArray(sales.vendedorId, scopeSellersIds));
+
+	const [row] = await db
+		.select({
+			identificado: sql<number>`coalesce(sum(${sales.valorTotal}), 0)`,
+			recorrente: sql<number>`coalesce(sum(${sales.valorTotal}) filter (where ${clients.primeiraCompraData} < ${dayStart.toISOString()}::timestamp), 0)`,
+		})
+		.from(sales)
+		.innerJoin(clients, eq(clients.id, sales.clienteId))
+		.where(and(...conditions));
+
+	const identificado = Number(row?.identificado ?? 0);
+	if (identificado <= 0) return null;
+	return { faturamento: Number(row?.recorrente ?? 0), percentual: (Number(row?.recorrente ?? 0) / identificado) * 100 };
+}
 
 async function getSalesPulse({ input, session }: { input: TGetSalesPulseInput; session: TAuthUserSession }) {
 	const membership = session.membership;
@@ -76,6 +119,7 @@ async function getSalesPulse({ input, session }: { input: TGetSalesPulseInput; s
 
 	const bucketAt = (offset: number): TDailyBucket => buckets.get(offset) ?? { faturamento: 0, qtdeVendas: 0 };
 	const hoje = bucketAt(0);
+	const recorrentes = await getReturningShareToday({ organizacaoId, scopeSellersIds, dayStart, dayEnd });
 	const serie = Array.from({ length: input.days }, (_, index) => {
 		const offset = index - (input.days - 1);
 		const day = dayStart.add(offset, "day");
@@ -84,7 +128,7 @@ async function getSalesPulse({ input, session }: { input: TGetSalesPulseInput; s
 
 	return {
 		data: {
-			hoje: { ...hoje, ticketMedio: hoje.qtdeVendas > 0 ? hoje.faturamento / hoje.qtdeVendas : 0 },
+			hoje: { ...hoje, ticketMedio: hoje.qtdeVendas > 0 ? hoje.faturamento / hoje.qtdeVendas : 0, recorrentes },
 			mesmoDiaSemanaAnterior: bucketAt(-7),
 			serie,
 		},

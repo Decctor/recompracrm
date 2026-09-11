@@ -47,10 +47,10 @@ export function useActionApprovalHistory({ initialFilters }: { initialFilters?: 
 	};
 }
 
-export function useActionApprovals({ status = "PENDENTE" }: { status?: TActionApprovalStatusEnum } = {}) {
+export function useActionApprovals({ status = "PENDENTE", enabled = true }: { status?: TActionApprovalStatusEnum; enabled?: boolean } = {}) {
 	const queryKey = ["action-approvals", status];
 	return {
-		...useQuery({ queryKey, queryFn: () => fetchActionApprovals(status) }),
+		...useQuery({ queryKey, queryFn: () => fetchActionApprovals(status), enabled }),
 		queryKey,
 	};
 }
