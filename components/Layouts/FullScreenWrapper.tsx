@@ -7,7 +7,7 @@ const raleway = Raleway({ subsets: ["latin"] });
 
 function FullScreenWrapper({ children }: PropsWithChildren) {
 	return (
-		<div className={cn("flex min-h-screen w-screen max-w-full flex-col xl:min-h-screen", raleway.className)}>
+		<div className={cn("flex min-h-dvh w-screen max-w-full flex-col", raleway.className)}>
 			<div className="flex min-h-full grow">
 				<div className="flex w-full grow flex-col">{children}</div>
 			</div>
