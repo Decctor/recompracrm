@@ -39,11 +39,12 @@ export function useGoalById({ id }: TGetGoalsByIdInput) {
 	};
 }
 
-export function useGoalsStats() {
+export function useGoalsStats({ enabled = true }: { enabled?: boolean } = {}) {
 	return {
 		...useQuery({
 			queryKey: ["goals-stats"],
 			queryFn: async () => await fetchGoalsStats(),
+			enabled,
 		}),
 		queryKey: ["goals-stats"],
 	};

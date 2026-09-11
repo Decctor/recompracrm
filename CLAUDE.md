@@ -299,7 +299,8 @@ export function NewFoo({ closeModal, callbacks }: NewFooProps) {
 
 - `/dashboard` is an attention hub, not an analytics page. Deep analysis lives in each module (Vendas > Resultados, Financeiro > Visão geral, Campanhas > Estatísticas). Never add filters to the hub.
 - Widgets are declared in `registry.tsx` with the `capability` that governs them and are filtered with `filterNavigationItems`, the same function the sidebar and command palette use. A widget the member cannot see must never render, even empty.
-- Two kinds: `pendencia` (something that needs action now) and `pulso` (one number for today or the week). Two sizes: `compacto` (number + two rows, the whole card is a link) and `lista` (named items, each row may link to its entity, the header carries "Ver todos").
+- Two kinds: `pendencia` (something that needs action now) and `pulso` (one number for today or the week). Three sizes: `compacto` (number + two rows, the whole card is a link), `lista` (named items, each row may link to its entity, the header carries "Ver todos") and `largo` (full width, for widgets with two internal columns).
+- The headline (`headline.tsx`) sits above the sections and is not a registry widget. It carries today's revenue and, when a goal is active, the goal's daily target as a reference line over the same bars. One element, one chart: most organizations have no goal, so the goal must never occupy a card of its own.
 - Build every widget from `HubWidget` primitives in `hub-widget.tsx`; each widget owns its own query and its own loading, error and empty states so one failing endpoint blanks only its card.
 - Prefer an existing query hook. When the hub needs a shape no module exposes, add a small GET route under the owning resource (e.g. `/api/clients/birthdays`) and its hook in `lib/queries/dashboard-hub.ts`.
 - "Today" comes from `useDayKey()` plus `resolveTodayRange()`, never from module-level date constants: the page stays open all day on a counter tablet.

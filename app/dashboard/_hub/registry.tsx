@@ -26,12 +26,16 @@ import { SellerRoutineWidget } from "./widgets/seller-routine-widget";
  * - `pendencia`: algo que exige ação agora (nomes + contexto + link para agir).
  * - `pulso`: um número de hoje/semana com link para a visão geral do módulo. Sem filtros — a análise
  *   profunda vive em cada módulo. Vendas de hoje e a meta ativa têm a faixa de destaque própria
- *   (`hero-strip.tsx`) e não entram aqui.
+ *   (`headline.tsx`) e não entram aqui.
  */
 export type TDashboardWidgetKind = "pendencia" | "pulso";
 
-/** compacto: um número + duas linhas, o card inteiro é link. lista: itens nomeados, ocupa duas linhas da grade. */
-export type TDashboardWidgetSize = "compacto" | "lista";
+/**
+ * compacto: um número + duas linhas, o card inteiro é link.
+ * lista: itens nomeados, ocupa duas linhas da grade.
+ * largo: ocupa a largura toda — para widgets com duas colunas internas.
+ */
+export type TDashboardWidgetSize = "compacto" | "lista" | "largo";
 
 export type TDashboardWidgetProps = {
 	/** Ids de vendedor do escopo de resultados do membro; `null` = organização inteira. */
@@ -75,7 +79,7 @@ export const DashboardWidgetRegistry: readonly TDashboardWidget[] = [
 	// Pulso — relacionamento primeiro (é a alma do produto), depois a operação.
 	{ id: "birthdays", kind: "pulso", capability: "customers", size: "lista", Component: BirthdaysWidget },
 	{ id: "cashback-expiring", kind: "pulso", capability: "cashback", size: "lista", Component: CashbackExpiringWidget },
-	{ id: "campaigns", kind: "pulso", capability: "campaigns", size: "lista", Component: CampaignsWidget },
+	{ id: "campaigns", kind: "pulso", capability: "campaigns", size: "largo", Component: CampaignsWidget },
 	{ id: "open-tabs", kind: "pulso", capability: "serviceAccounts", Component: OpenTabsWidget },
 ];
 

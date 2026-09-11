@@ -7,7 +7,7 @@ import type { TAuthUserSession } from "@/lib/authentication/types";
 import { cn } from "@/lib/utils";
 import { LayoutDashboard } from "lucide-react";
 import { useMemo } from "react";
-import { HeroStrip } from "./_hub/hero-strip";
+import { Headline } from "./_hub/headline";
 import { resolveDashboardWidgets, type TDashboardWidget, type TDashboardWidgetProps } from "./_hub/registry";
 
 type DashboardPageProps = {
@@ -30,9 +30,9 @@ export function DashboardPage({ user, userOrg, membership, scopeSellersIds }: Da
 		() => resolveDashboardWidgets({ ...capabilityContext, sellerId: membership.usuarioVendedorId ?? null }),
 		[capabilityContext, membership.usuarioVendedorId],
 	);
-	const showSalesHero = canAccessDashboardCapability("salesResults", capabilityContext);
-	const showGoalHero = canAccessDashboardCapability("goals", capabilityContext);
-	const hasContent = widgets.length > 0 || showSalesHero || showGoalHero;
+	const canViewSales = canAccessDashboardCapability("salesResults", capabilityContext);
+	const canViewGoals = canAccessDashboardCapability("goals", capabilityContext);
+	const hasContent = widgets.length > 0 || canViewSales;
 	const pendencias = widgets.filter((widget) => widget.kind === "pendencia");
 	const pulso = widgets.filter((widget) => widget.kind === "pulso");
 
@@ -70,7 +70,7 @@ export function DashboardPage({ user, userOrg, membership, scopeSellersIds }: Da
 				</Empty>
 			) : (
 				<>
-					<HeroStrip showSales={showSalesHero} showGoal={showGoalHero} />
+					<Headline canViewSales={canViewSales} canViewGoals={canViewGoals} canCreateGoals={membership.permissoes.resultados.criarMetas} />
 					<WidgetSection title="Pendências" widgets={pendencias} widgetProps={widgetProps} />
 					<WidgetSection title="Resumo do dia" widgets={pulso} widgetProps={widgetProps} />
 				</>
@@ -93,7 +93,7 @@ function WidgetSection({ title, widgets, widgetProps }: WidgetSectionProps) {
 			{/* Linhas de altura fixa + fluxo denso: um widget "lista" ocupa duas linhas e os compactos preenchem ao redor. */}
 			<div className="grid w-full auto-rows-[minmax(9.5rem,auto)] grid-flow-dense grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
 				{widgets.map(({ id, size, Component }) => (
-					<div key={id} className={cn("flex min-w-0", size === "lista" && "md:row-span-2")}>
+					<div key={id} className={cn("flex min-w-0", size === "lista" && "md:row-span-2", size === "largo" && "md:col-span-2 xl:col-span-3")}>
 						<Component {...widgetProps} />
 					</div>
 				))}
