@@ -20,7 +20,7 @@ type SalesSessionRow = TGetSalesSessionsOutputDefault["sessions"][number];
 type StatusFilter = "TODAS" | "ABERTA" | "FECHADA" | "CONFERIDA" | "CANCELADA";
 
 type CashSessionsPageProps = {
-	sessoesConfig: { exigirFundoTroco: boolean; conferenciaCega: boolean };
+	sessionsConfig: { requireOpeningFloat: boolean; blindCount: boolean };
 	canReviewSessions: boolean;
 };
 
@@ -44,7 +44,7 @@ function StatusBadge({ status }: { status: SalesSessionRow["status"] }) {
 
 type ActiveModal = { type: "open" } | { type: "movement" | "close" | "detail"; sessionId: string } | null;
 
-export default function CashSessionsPage({ sessoesConfig, canReviewSessions }: CashSessionsPageProps) {
+export default function CashSessionsPage({ sessionsConfig, canReviewSessions }: CashSessionsPageProps) {
 	const [modal, setModal] = useState<ActiveModal>(null);
 
 	const openSessions = useSalesSessions({ initialParams: { status: "ABERTA" } });
@@ -190,10 +190,10 @@ export default function CashSessionsPage({ sessoesConfig, canReviewSessions }: C
 				) : null}
 			</section>
 
-			{modal?.type === "open" ? <OpenSalesSession closeModal={() => setModal(null)} exigirFundoTroco={sessoesConfig.exigirFundoTroco} /> : null}
+			{modal?.type === "open" ? <OpenSalesSession closeModal={() => setModal(null)} requireOpeningFloat={sessionsConfig.requireOpeningFloat} /> : null}
 			{modal?.type === "movement" ? <RegisterMovement sessionId={modal.sessionId} closeModal={() => setModal(null)} /> : null}
 			{modal?.type === "close" ? (
-				<CloseSalesSession sessionId={modal.sessionId} closeModal={() => setModal(null)} conferenciaCega={sessoesConfig.conferenciaCega} />
+				<CloseSalesSession sessionId={modal.sessionId} closeModal={() => setModal(null)} blindCount={sessionsConfig.blindCount} />
 			) : null}
 			{modal?.type === "detail" ? (
 				<SalesSessionDetail sessionId={modal.sessionId} closeModal={() => setModal(null)} canReview={canReviewSessions} />

@@ -59,6 +59,9 @@ type CheckoutPanelProps = {
 	// Conteúdo acima das ações — hoje o aviso de preços defasados do checkout.
 	beforeActions?: React.ReactNode;
 	sellerEditable?: boolean;
+	// Card do caixa (sessão de venda) logo abaixo do cabeçalho: o operador vê em que caixa a venda
+	// vai cair na mesma superfície em que fecha a venda, no desktop e no Sheet do mobile.
+	cashSession?: React.ReactNode;
 	// Coluna em foco no desktop (expandida para 640px): o total do dock escala junto com o espaço.
 	expanded?: boolean;
 };
@@ -82,6 +85,7 @@ export default function CheckoutPanel({
 	hideDraftAction,
 	beforeActions,
 	sellerEditable = true,
+	cashSession,
 	expanded,
 }: CheckoutPanelProps) {
 	const [isVinculationMenuOpen, setIsVinculationMenuOpen] = useState(false);
@@ -133,6 +137,8 @@ export default function CheckoutPanel({
 						</p>
 					</div>
 				</div>
+
+				{cashSession}
 
 				<SelectInput
 					label="VENDEDOR"
