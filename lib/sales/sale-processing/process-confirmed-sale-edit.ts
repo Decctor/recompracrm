@@ -13,7 +13,15 @@ import { POS_REWARD_SALE_ITEM_ORIGIN } from "@/lib/sales/sale-reward-redemption"
 import { readShopDeliveryFee } from "@/lib/shop/config";
 import type { TDeliveryModeEnum } from "@/schemas/enums";
 import type { DBTransaction } from "@/services/drizzle";
-import { accountingEntries, couponRedemptions, financialTransactions, saleItemModifiers, saleItems, sales, salesSessions } from "@/services/drizzle/schema";
+import {
+	accountingEntries,
+	couponRedemptions,
+	financialTransactions,
+	saleItemModifiers,
+	saleItems,
+	sales,
+	salesSessions,
+} from "@/services/drizzle/schema";
 import type { TOrganizationEntity } from "@/services/drizzle/schema";
 import { and, eq, isNull, ne, notInArray, or } from "drizzle-orm";
 import createHttpError from "http-errors";
@@ -163,7 +171,7 @@ export async function processConfirmedSaleEditInTransaction({ tx, input }: { tx:
 			itens: { with: { adicionais: true } },
 			documentosFiscais: { columns: { id: true, statusInterno: true } },
 			lancamentosContabeis: {
-				columns: { id: true, origemTipo: true, valor: true },
+				columns: { id: true, origemTipo: true, valor: true, titulo: true },
 				with: { transacoesFinanceiras: true },
 			},
 		},
@@ -178,7 +186,8 @@ export async function processConfirmedSaleEditInTransaction({ tx, input }: { tx:
 			.from(salesSessions)
 			.where(and(eq(salesSessions.id, input.sessaoVendaId), eq(salesSessions.organizacaoId, organizationId)))
 			.for("update");
-		if (!lockedSession || lockedSession.status !== "ABERTA") throw new createHttpError.Conflict("A sessao de venda foi fechada. Selecione outro caixa e tente novamente.");
+		if (!lockedSession || lockedSession.status !== "ABERTA")
+			throw new createHttpError.Conflict("A sessao de venda foi fechada. Selecione outro caixa e tente novamente.");
 		validateSalesSessionSeller({ session: lockedSession, vendedorId: input.vendedorId });
 	}
 
@@ -579,11 +588,8 @@ export async function processConfirmedSaleEditInTransaction({ tx, input }: { tx:
 			: null;
 	const resolvedDeliveryMode = input.entregaModalidade ?? sale.entregaModalidade;
 	const previousDeliveryFee =
-		typeof previousDraftMetadata.taxaEntrega === "number"
-			? previousDraftMetadata.taxaEntrega
-			: readShopDeliveryFee(sale.rascunhoMetadados);
-	const deliveryFee =
-		resolvedDeliveryMode === "ENTREGA" ? Math.min(input.taxaEntrega ?? previousDeliveryFee, input.acrescimosTotal ?? 0) : 0;
+		typeof previousDraftMetadata.taxaEntrega === "number" ? previousDraftMetadata.taxaEntrega : readShopDeliveryFee(sale.rascunhoMetadados);
+	const deliveryFee = resolvedDeliveryMode === "ENTREGA" ? Math.min(input.taxaEntrega ?? previousDeliveryFee, input.acrescimosTotal ?? 0) : 0;
 	const editionLogEntry = {
 		data: new Date().toISOString(),
 		autorId: input.saleAuthorId,
@@ -672,6 +678,7 @@ export async function processConfirmedSaleEditInTransaction({ tx, input }: { tx:
 						pagamentos: input.pagamentos,
 						autorId: input.saleAuthorId,
 						sessaoVendaId: input.sessaoVendaId ?? null,
+						saleLabel: vendaEntry.titulo,
 					},
 					tx,
 				)

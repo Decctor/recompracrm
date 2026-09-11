@@ -47,7 +47,7 @@ const chipIconTones: Record<NonNullable<ArtChipProps["tone"]>, string> = {
 	white: "bg-[#24549c]/8 text-[#24549c]",
 	blue: "bg-white/15 text-white",
 	amber: "bg-[#171717]/8 text-[#171717]",
-	green: "bg-[#25d366]/15 text-[#1faa52]",
+	green: "bg-whatsapp/15 text-[#1faa52]",
 };
 
 /** Rótulo de exemplo sobreposto à ilustração. Texto sempre em HTML, nunca dentro do raster. */

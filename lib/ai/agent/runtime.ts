@@ -1,5 +1,5 @@
 import { AiAgentCapabilitiesSchema, AiAgentModelConfigSchema, type TAiAgentTurnOutput } from "@/schemas/ai-agents";
-import type { TAiAgentRunTriggerEnum } from "@/schemas/enums";
+import { AiAgentAttachmentTypeEnum, type TAiAgentRunTriggerEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
 import type { DB, DBTransaction } from "@/services/drizzle";
 import { aiAgents } from "@/services/drizzle/schema";
@@ -14,6 +14,7 @@ import { listActiveProductGroups } from "../shared/product-groups";
 import { isToolEnabled } from "../tools/guards";
 import { toAISdkTools } from "../tools/registry";
 import type { TAgentToolContext } from "../tools/types";
+import { normalizeTurnAttachment } from "./attachment";
 import { buildChatRunContext, formatChatRunContext } from "./context";
 import { formatKnowledgeContext, getActiveKnowledgeBlocks } from "./knowledge";
 import { buildAgentSystemPrompt } from "./prompts";
@@ -37,6 +38,16 @@ const TurnOutputSchema = z.object({
 		.nullable()
 		.describe(
 			"Mensagem a enviar ao cliente no WhatsApp: até 5 frases (listas de produtos com preço não contam), no máximo 1 emoji. null somente quando um humano acabou de assumir a conversa.",
+		),
+	anexo: z
+		.object({
+			url: z.string().describe("URL do arquivo, copiada literalmente das instruções ou da base de conhecimento."),
+			tipo: AiAgentAttachmentTypeEnum.describe("IMAGEM, VIDEO ou DOCUMENTO (PDF e afins)."),
+			nomeArquivo: z.string().nullable().describe("Nome com que o arquivo aparece para o cliente, com extensão. null usa o nome padrão do provedor."),
+		})
+		.nullable()
+		.describe(
+			"Arquivo a enviar junto da mensagem, que vira a legenda dele. null na grande maioria dos turnos: só preencha quando a URL existir literalmente nas instruções ou na base de conhecimento.",
 		),
 	resumoAtendimento: z.string().describe("Resumo interno do estado do atendimento, para a equipe. Não é visto pelo cliente."),
 });
@@ -213,9 +224,14 @@ export async function executeAgentTurn(prepared: TPreparedAgentExecution): Promi
 		const calledToolsOf = (generation: { steps: Array<{ toolCalls: unknown[] }> }) =>
 			generation.steps.flatMap((step) => step.toolCalls.map((toolCall) => (toolCall as { toolName: string }).toolName));
 
+		// Normaliza antes de qualquer decisão: uma URL torta não pode contar como entrega no
+		// backstop de promessa nem chegar ao adapter de canal.
+		const settleAttachment = (raw: z.infer<typeof TurnOutputSchema>) => ({ ...raw, anexo: normalizeTurnAttachment(raw.anexo) });
+
 		let result = await generateWithFallback(prepared.turnPrompt);
 		let output = result.output;
 		if (!output) throw new Error("O agente não produziu uma resposta estruturada.");
+		output = settleAttachment(output);
 
 		if (shouldRetryDeferredAction({ ...output, calledTools: calledToolsOf(result) })) {
 			const rejectedMessage = output.mensagem;
@@ -235,6 +251,7 @@ Execute a ferramenta nesta execução ou pergunte objetivamente o único dado qu
 			);
 			output = result.output;
 			if (!output) throw new Error("O agente não produziu uma resposta estruturada após a correção.");
+			output = settleAttachment(output);
 			if (shouldRetryDeferredAction({ ...output, calledTools: calledToolsOf(result) })) {
 				throw new Error("O agente tentou encerrar novamente com uma promessa de ação sem executar ferramenta.");
 			}

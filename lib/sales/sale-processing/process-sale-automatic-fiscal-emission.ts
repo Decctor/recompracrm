@@ -18,8 +18,10 @@ import { getSaleFinancialState } from "./get-sale-financial-state";
 const MANAGED_CHANNEL_STRICT_AUTO_EMISSION = true;
 
 /**
- * Canal gerenciado (ex.: iFood): recebíveis pagos online ficam AGUARDANDO_REPASSE (a pendência é
- * loja↔canal, não do consumidor) — para o fato gerador fiscal contam como pagos pelo cliente.
+ * Canal gerenciado (ex.: iFood): no modelo clearing os pagamentos online já entram efetivados na
+ * conta do canal, então `dataEfetivacao` basta. O caso AGUARDANDO_REPASSE é LEGADO — vendas
+ * importadas antes do modelo clearing (até o backfill `backfill-settle-managed-channel-receivables`
+ * rodar) — e conta como pago: a pendência era loja↔canal, não do consumidor.
  */
 function isManagedSaleCustomerPaid({
 	financialState,

@@ -26,6 +26,7 @@ export type TTabOrderItemInput = {
 	valorTotalBruto: number;
 	valorDesconto: number;
 	valorTotalLiquido: number;
+	observacoes?: string | null;
 	modificadores: TTabOrderItemModifierInput[];
 };
 
@@ -195,6 +196,7 @@ export async function launchTabOrder({ orgId, userId, input }: { orgId: string; 
 					valorTotalDesconto: item.valorDesconto,
 					valorVendaTotalLiquido: item.valorTotalLiquido,
 					valorCustoTotal: valorCustoUnitario * item.quantidade,
+					observacoes: item.observacoes ?? null,
 					metadados: {
 						nome: item.nome,
 						codigo: item.codigo,

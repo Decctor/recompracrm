@@ -31,6 +31,11 @@ const TabOrderItemInputSchema = z.object({
 	valorTotalBruto: z.number({ required_error: "Valor total bruto nao informado." }),
 	valorDesconto: z.number({ invalid_type_error: "Tipo nao valido para desconto." }).default(0),
 	valorTotalLiquido: z.number({ required_error: "Valor total liquido nao informado." }),
+	observacoes: z
+		.string({ invalid_type_error: "Tipo nao valido para observacoes do item." })
+		.max(500, { message: "Observacao do item deve ter no maximo 500 caracteres." })
+		.optional()
+		.nullable(),
 	modificadores: z.array(TabOrderItemModifierInputSchema),
 });
 

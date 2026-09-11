@@ -20,6 +20,8 @@ export type TProcessPaymentsInput = {
 	autorId: string | null;
 	// Sessão de venda que recortou estes pagamentos (nullable). Carimbada em cada financialTransaction.
 	sessaoVendaId?: string | null;
+	// Título da venda para compor os títulos das transações (ex.: "VENDA - JOÃO - R$ 25,00 - 08/09 18:51").
+	saleLabel?: string | null;
 };
 
 export type TPaymentIntentResult = {

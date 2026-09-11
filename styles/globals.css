@@ -112,6 +112,13 @@
 	   (fim definitivo). Ver DESIGN.md §2. */
 	--color-success: #16a34a;
 	--color-success-strong: #15803d;
+	/* Verde do WhatsApp. Fica fora da paleta fechada de propósito: é cor de marca de terceiro, não
+	   escolha decorativa — o mesmo `#25D366` estava repetido como hex solto em cinco componentes.
+	   O foreground é tinta escura, não branco: branco sobre este verde dá 1,98:1 e reprova em
+	   qualquer tamanho de texto (a tinta escura dá 10,6:1). É a mesma lógica do `--color-brand`
+	   âmbar, que também carrega texto preto. */
+	--color-whatsapp: #25d366;
+	--color-whatsapp-foreground: #0a0a0a;
 	/* Must exist in @theme so bg-brand-secondary / text-brand-secondary-foreground are generated; OrgColorsProvider overwrites --color-brand-secondary* on :root */
 	--color-brand-secondary: #24549c;
 	--color-brand-secondary-foreground: #ffffff;
@@ -217,23 +224,27 @@
 	body {
 		font-family: var(--font-outfit), system-ui, sans-serif;
 	}
-	/* Scrollbar utilities replacing tailwind-scrollbar plugin */
-	.scrollbar-thin {
-		scrollbar-width: thin;
-	}
+	/* Scrollbar utilities replacing tailwind-scrollbar plugin
+	 *
+	 * As props padrão (`scrollbar-width`, `scrollbar-color`) e as pseudo-classes `::-webkit-scrollbar-*`
+	 * NÃO convivem no mesmo elemento: Chrome/Edge 121+ ignoram todas as pseudo-classes webkit quando
+	 * qualquer uma das duas props padrão está presente. Enquanto as duas moravam juntas aqui, o
+	 * `display: none` do `-button` abaixo era código morto e o navegador caía no scrollbar nativo do
+	 * sistema — no Windows, com as setinhas nas pontas. Era por isso que estilizar não surtia efeito.
+	 *
+	 * Então: webkit para Chrome/Edge/Safari (polegar arredondado, sem setas), props padrão só para
+	 * quem não tem o caminho webkit, isolado no `@supports` no fim do bloco. */
 	.scrollbar-thin::-webkit-scrollbar {
 		width: 8px;
 		height: 8px;
-	}
-	.scrollbar-thinner {
-		scrollbar-width: thin;
 	}
 	.scrollbar-thinner::-webkit-scrollbar {
 		width: 4px;
 		height: 4px;
 	}
 	/* Hide scrollbar arrow buttons */
-	.scrollbar-thin::-webkit-scrollbar-button {
+	.scrollbar-thin::-webkit-scrollbar-button,
+	.scrollbar-thinner::-webkit-scrollbar-button {
 		display: none;
 		width: 0;
 		height: 0;
@@ -255,14 +266,19 @@
 	/* Keep thumb transparent on hover */
 	.scrollbar-thumb-primary\/5::-webkit-scrollbar-thumb:hover {
 		background-color: hsl(var(--primary) / 0.1);
-		scrollbar-color: hsl(var(--primary) / 0.05) transparent;
 	}
-	/* Firefox scrollbar support */
-	.scrollbar-thin.scrollbar-thumb-primary\/5.scrollbar-track-transparent {
-		scrollbar-color: hsl(var(--primary) / 0.05) transparent;
-	}
-	.scrollbar-thin.scrollbar-thumb-primary\/30.scrollbar-track-transparent {
-		scrollbar-color: hsl(var(--primary) / 0.3) transparent;
+	/* Navegador sem `::-webkit-scrollbar` (Firefox): o caminho padrão é o único que existe. */
+	@supports not selector(::-webkit-scrollbar) {
+		.scrollbar-thin,
+		.scrollbar-thinner {
+			scrollbar-width: thin;
+		}
+		.scrollbar-thumb-primary\/5 {
+			scrollbar-color: hsl(var(--primary) / 0.05) transparent;
+		}
+		.scrollbar-thumb-primary\/30 {
+			scrollbar-color: hsl(var(--primary) / 0.3) transparent;
+		}
 	}
 
 	/* Shop marquee */
@@ -296,10 +312,13 @@
 		}
 	}
 
-	/* Trilha transparente, polegar fino em tom neutro — ideal para kanban e painéis densos */
-	.scrollbar-subtle {
-		scrollbar-width: thin;
-		scrollbar-color: hsl(var(--muted-foreground) / 0.28) transparent;
+	/* Trilha transparente, polegar fino em tom neutro — ideal para kanban e painéis densos.
+	 * Mesma separação webkit/padrão explicada no topo do bloco de scrollbars. */
+	@supports not selector(::-webkit-scrollbar) {
+		.scrollbar-subtle {
+			scrollbar-width: thin;
+			scrollbar-color: hsl(var(--muted-foreground) / 0.28) transparent;
+		}
 	}
 	.scrollbar-subtle::-webkit-scrollbar {
 		width: 5px;
@@ -362,6 +381,17 @@
 		--sidebar-border: 220 13% 91%;
 		--sidebar-ring: 217.2 91.2% 59.8%;
 		--font-sans: "Outfit", sans-serif;
+
+		/* Escala semântica de z-index. Antes disso toda camada flutuante era `z-50` e a ordem
+		   dependia da ordem no DOM — o que quebrava assim que alguém inventava um número
+		   ("z-[200]" no paywall deixava o dropdown, portalado em z-50, atrás do scrim).
+		   A ordem aqui é a ordem de empilhamento; use `z-(--z-popover)` e nunca um literal.
+		   Os toasts ficam de fora: o Sonner gerencia o próprio z-index internamente. */
+		--z-sticky: 30;
+		--z-overlay: 50; /* scrims de dialog / drawer / sheet */
+		--z-modal: 55; /* a superfície do modal, acima do próprio scrim */
+		--z-popover: 60; /* dropdown, select, popover, hover-card — precisam vencer o modal que os abriu */
+		--z-tooltip: 80;
 	}
 	.dark {
 		--background: 0 0% 3.9%;
@@ -407,32 +437,18 @@
 	body {
 		@apply bg-background text-foreground;
 	}
+}
 
-	/* Shell de app em viewport cheia (ex.: /dashboard, marcado com data-app-shell).
-	   O wrapper do shell já é h-svh + overflow-hidden, mas scripts de marketing
-	   (GTM, pixels) injetam elementos em fluxo no fim do <body>; como o body é
-	   min-h-screen, 1px de sobra já reativa o scroll do documento — e um
-	   scrollIntoView na thread consegue rolá-lo mesmo escondido. Fixar html+body
-	   e usar `clip` (não `hidden`) elimina o overflow inclusive para scroll
-	   programático. `hidden` no html evita que o `clip` do body seja propagado ao
-	   viewport (propagado, `clip` vira `hidden` e o body volta a ser rolável). */
-	html:has([data-app-shell]) {
-		height: 100%;
-		overflow: hidden;
-	}
-	/* O !important vence o overflow-x-hidden utilitário do body no root layout; sem
-	   ele, o eixo x "hidden" rebaixa o clip do eixo y para hidden (regra de computed
-	   value do CSS Overflow 3) e o body volta a ser rolável programaticamente. */
-	body:has([data-app-shell]) {
-		height: 100%;
-		overflow: clip !important;
-	}
-
-	/* O hub de conversas possui scroll próprio em cada painel. Impedir que o
-	   SidebarInset considere o conteúdo dessas áreas na rolagem do shell evita
-	   a página vazia abaixo do hub. */
-	[data-slot="sidebar-inset"]:has([data-chat-page]) {
-		overflow: clip !important;
+@layer components {
+	/* Superfícies comerciais da RecompraCRM (paywall, seleção de planos). Dentro do dashboard o
+	   OrgColorsProvider reescreve `--color-brand*` no `:root` com as cores da organização, e o
+	   modal de planos é portalado para o body — sem isso a nossa página de preço sairia pintada
+	   com a marca do cliente. Quem vende o plano somos nós, então a marca aqui é fixa. */
+	.brand-recompracrm {
+		--color-brand: #ffb900;
+		--color-brand-foreground: #000000;
+		--color-brand-secondary: #24549c;
+		--color-brand-secondary-foreground: #ffffff;
 	}
 }
 

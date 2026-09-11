@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { formatToMoney } from "@/lib/formatting";
+import { resolvePOSProductStock } from "@/lib/pos/product-stock-display";
 import { cn } from "@/lib/utils";
 import type { TGetPOSProductsOutput } from "@/app/api/pos/products/route";
 import { Code, Diamond, Package, PackagePlus, Plus } from "lucide-react";
@@ -10,6 +11,8 @@ type Product = TGetPOSProductsOutput["data"]["products"][number];
 
 type ProductListRowProps = {
 	product: Product;
+	/** `preferencias.rastreamentoEstoque` da organização — sem o módulo, nenhum saldo é exibido. */
+	orgTracksStock: boolean;
 	onSelect: (product: Product) => void;
 };
 
@@ -28,12 +31,12 @@ function getSaldoTone(quantidade: number) {
 	return "bg-green-500 text-white dark:bg-green-600";
 }
 
-function ProductListRow({ product, onSelect }: ProductListRowProps) {
+function ProductListRow({ product, orgTracksStock, onSelect }: ProductListRowProps) {
 	const hasVariants = product.variantes.length > 0;
 	const hasAddOns = product.addOnsReferencias.length > 0;
 	const isComplex = hasVariants || hasAddOns;
 	const displayPrice = getDisplayPrice(product);
-	const hasStock = product.quantidade !== null && product.quantidade !== undefined;
+	const stockQuantity = resolvePOSProductStock({ product, orgTracksStock });
 
 	return (
 		<button
@@ -48,7 +51,7 @@ function ProductListRow({ product, onSelect }: ProductListRowProps) {
 			{/* Identidade do produto */}
 			<div className="relative h-14 w-14 min-h-14 min-w-14 overflow-hidden rounded-lg bg-secondary/40">
 				{product.imagemCapaUrl ? (
-					<Image src={product.imagemCapaUrl} alt={product.nome} fill className="object-cover" />
+					<Image src={product.imagemCapaUrl} alt={product.nome} fill sizes="56px" className="object-cover" />
 				) : (
 					<div className="flex h-full w-full items-center justify-center">
 						<Package className="h-5 w-5 text-muted-foreground/40" />
@@ -81,14 +84,11 @@ function ProductListRow({ product, onSelect }: ProductListRowProps) {
 			</div>
 
 			{/* Saldo */}
-			{hasStock ? (
+			{stockQuantity !== null ? (
 				<span
-					className={cn(
-						"hidden shrink-0 items-center rounded-md px-2 py-0.5 text-xs font-bold tabular-nums sm:inline-flex",
-						getSaldoTone(product.quantidade ?? 0),
-					)}
+					className={cn("hidden shrink-0 items-center rounded-md px-2 py-0.5 text-xs font-bold tabular-nums sm:inline-flex", getSaldoTone(stockQuantity))}
 				>
-					{product.quantidade! > 0 ? `${product.quantidade} un.` : "Sem estoque"}
+					{stockQuantity > 0 ? `${stockQuantity} un.` : "Sem estoque"}
 				</span>
 			) : null}
 

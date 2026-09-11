@@ -1,10 +1,14 @@
 import type { TGetPOSProductsOutput } from "@/app/api/pos/products/route";
 import { Button } from "@/components/ui/button";
-import { formatToMoney } from "@/lib/formatting";
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
+import { Textarea } from "@/components/ui/textarea";
+import { formatToMoney, normalizeForSearch } from "@/lib/formatting";
 import { cn } from "@/lib/utils";
-import { Check, Minus, Plus } from "lucide-react";
+import { Check, Minus, Plus, Search, X } from "lucide-react";
 import Image from "next/image";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useId, useMemo, useState } from "react";
+
+const ADD_ON_SEARCH_THRESHOLD = 8;
 
 // ============================================================================
 // Montagem de produto (variante + adicionais + quantidade) compartilhada entre
@@ -37,6 +41,7 @@ export type TBuiltOrderItem = {
 	valorTotalBruto: number;
 	valorDesconto: number;
 	valorTotalLiquido: number;
+	observacoes: string | null;
 	modificadores: TBuiltOrderItemModifier[];
 };
 
@@ -48,6 +53,7 @@ type SelectedModifier = {
 export function useProductBuilder({ product }: { product: TBuilderProduct }) {
 	const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
 	const [selectedModifiers, setSelectedModifiers] = useState<SelectedModifier[]>([]);
+	const [observacoes, setObservacoes] = useState("");
 	const [quantity, setQuantity] = useState(1);
 
 	const selectedVariant = selectedVariantId ? product.variantes.find((v) => v.id === selectedVariantId) : null;
@@ -58,6 +64,25 @@ export function useProductBuilder({ product }: { product: TBuilderProduct }) {
 
 	const hasVariants = product.variantes.length > 0;
 	const hasAddOns = availableReferences.length > 0;
+	const optionIndex = useMemo(() => {
+		const index = new Map<string, { option: TGrupo["opcoes"][number]; grupo: TGrupo; searchKey: string }>();
+		for (const reference of availableReferences) {
+			for (const option of reference.grupo.opcoes) {
+				index.set(option.id, { option, grupo: reference.grupo, searchKey: normalizeForSearch(option.nome) });
+			}
+		}
+		return index;
+	}, [availableReferences]);
+	const selectedByOptionId = useMemo(() => new Map(selectedModifiers.map((modifier) => [modifier.opcaoId, modifier.quantidade])), [selectedModifiers]);
+	const selectedCountByGroup = useMemo(() => {
+		const counts = new Map<string, number>();
+		for (const selected of selectedModifiers) {
+			const indexedOption = optionIndex.get(selected.opcaoId);
+			if (!indexedOption) continue;
+			counts.set(indexedOption.grupo.id, (counts.get(indexedOption.grupo.id) ?? 0) + selected.quantidade);
+		}
+		return counts;
+	}, [optionIndex, selectedModifiers]);
 
 	// Seleciona automaticamente a única variante existente.
 	useEffect(() => {
@@ -71,22 +96,17 @@ export function useProductBuilder({ product }: { product: TBuilderProduct }) {
 	const modifiersTotal = useMemo(() => {
 		let total = 0;
 		for (const selected of selectedModifiers) {
-			for (const reference of availableReferences) {
-				const option = reference.grupo.opcoes.find((o) => o.id === selected.opcaoId);
-				if (option) total += option.precoDelta * selected.quantidade;
-			}
+			const option = optionIndex.get(selected.opcaoId)?.option;
+			if (option) total += option.precoDelta * selected.quantidade;
 		}
 		return total;
-	}, [selectedModifiers, availableReferences]);
+	}, [selectedModifiers, optionIndex]);
 
 	const unitFinal = basePrice + modifiersTotal;
 	const finalPrice = unitFinal * quantity;
 
 	// Total selecionado por grupo (soma das quantidades das opções escolhidas).
-	const selectedCountForGroup = useCallback(
-		(grupo: TGrupo) => selectedModifiers.filter((sm) => grupo.opcoes.some((o) => o.id === sm.opcaoId)).reduce((sum, sm) => sum + sm.quantidade, 0),
-		[selectedModifiers],
-	);
+	const selectedCountForGroup = useCallback((grupo: TGrupo) => selectedCountByGroup.get(grupo.id) ?? 0, [selectedCountByGroup]);
 
 	// Primeira exigência não atendida — usado no aviso e no toast ao tentar confirmar.
 	const blockReason = useMemo(() => {
@@ -110,21 +130,19 @@ export function useProductBuilder({ product }: { product: TBuilderProduct }) {
 	const toggleModifier = useCallback(
 		(opcaoId: string, groupMaxOpcoes: number) => {
 			setSelectedModifiers((prev) => {
-				const exists = prev.find((m) => m.opcaoId === opcaoId);
-				if (exists) return prev.filter((m) => m.opcaoId !== opcaoId);
+				if (selectedByOptionId.has(opcaoId)) return prev.filter((modifier) => modifier.opcaoId !== opcaoId);
 
 				if (groupMaxOpcoes === 1) {
-					const belongsToGroup = availableReferences.find((ref) => ref.grupo.opcoes.some((o) => o.id === opcaoId));
-					if (belongsToGroup) {
-						const otherOptionsInGroup = belongsToGroup.grupo.opcoes.map((o) => o.id);
-						return [...prev.filter((m) => !otherOptionsInGroup.includes(m.opcaoId)), { opcaoId, quantidade: 1 }];
+					const grupo = optionIndex.get(opcaoId)?.grupo;
+					if (grupo) {
+						return [...prev.filter((modifier) => optionIndex.get(modifier.opcaoId)?.grupo.id !== grupo.id), { opcaoId, quantidade: 1 }];
 					}
 				}
 
 				return [...prev, { opcaoId, quantidade: 1 }];
 			});
 		},
-		[availableReferences],
+		[optionIndex, selectedByOptionId],
 	);
 
 	const updateModifierQuantity = useCallback((opcaoId: string, delta: number) => {
@@ -140,17 +158,15 @@ export function useProductBuilder({ product }: { product: TBuilderProduct }) {
 
 		const modifiers: TBuiltOrderItemModifier[] = [];
 		for (const selected of selectedModifiers) {
-			for (const reference of availableReferences) {
-				const option = reference.grupo.opcoes.find((o) => o.id === selected.opcaoId);
-				if (option) {
-					modifiers.push({
-						opcaoId: option.id,
-						nome: option.nome,
-						quantidade: selected.quantidade,
-						valorUnitario: option.precoDelta,
-						valorTotal: option.precoDelta * selected.quantidade,
-					});
-				}
+			const option = optionIndex.get(selected.opcaoId)?.option;
+			if (option) {
+				modifiers.push({
+					opcaoId: option.id,
+					nome: option.nome,
+					quantidade: selected.quantidade,
+					valorUnitario: option.precoDelta,
+					valorTotal: option.precoDelta * selected.quantidade,
+				});
 			}
 		}
 
@@ -169,9 +185,22 @@ export function useProductBuilder({ product }: { product: TBuilderProduct }) {
 			valorTotalBruto: unitFinal * quantity,
 			valorDesconto: 0,
 			valorTotalLiquido: unitFinal * quantity,
+			observacoes: observacoes.trim() || null,
 			modificadores: modifiers,
 		};
-	}, [blockReason, selectedModifiers, availableReferences, selectedVariant, selectedVariantId, product, quantity, basePrice, modifiersTotal, unitFinal]);
+	}, [
+		blockReason,
+		selectedModifiers,
+		optionIndex,
+		selectedVariant,
+		selectedVariantId,
+		product,
+		quantity,
+		basePrice,
+		modifiersTotal,
+		unitFinal,
+		observacoes,
+	]);
 
 	return {
 		selectedVariantId,
@@ -187,7 +216,11 @@ export function useProductBuilder({ product }: { product: TBuilderProduct }) {
 		quantity,
 		setQuantity,
 		selectedModifiers,
+		selectedByOptionId,
+		optionIndex,
 		selectedCountForGroup,
+		observacoes,
+		setObservacoes,
 		blockReason,
 		canConfirm,
 		toggleModifier,
@@ -197,6 +230,38 @@ export function useProductBuilder({ product }: { product: TBuilderProduct }) {
 }
 
 export type TUseProductBuilder = ReturnType<typeof useProductBuilder>;
+
+type AddOnSearchFieldProps = {
+	value: string;
+	onChange: (value: string) => void;
+	onClear: () => void;
+};
+
+function AddOnSearchField({ value, onChange, onClear }: AddOnSearchFieldProps) {
+	return (
+		<InputGroup className="h-10 rounded-xl bg-popover">
+			<InputGroupInput
+				value={value}
+				onChange={(event) => onChange(event.target.value)}
+				placeholder="Buscar adicional..."
+				aria-label="Buscar adicionais"
+				inputMode="search"
+				enterKeyHint="search"
+				autoComplete="off"
+			/>
+			<InputGroupAddon align="inline-start">
+				<Search />
+			</InputGroupAddon>
+			{value ? (
+				<InputGroupAddon align="inline-end" className="has-[>button]:mr-0">
+					<InputGroupButton size="icon-xs" aria-label="Limpar busca" onClick={onClear}>
+						<X />
+					</InputGroupButton>
+				</InputGroupAddon>
+			) : null}
+		</InputGroup>
+	);
+}
 
 type ProductBuilderFormProps = {
 	product: TBuilderProduct;
@@ -221,21 +286,61 @@ export function ProductBuilderForm({ product, builder, showFooter = true, showIm
 		quantity,
 		setQuantity,
 		selectedModifiers,
+		selectedByOptionId,
+		optionIndex,
 		selectedCountForGroup,
+		observacoes,
+		setObservacoes,
 		blockReason,
 		toggleModifier,
 		updateModifierQuantity,
 	} = builder;
+	const [addOnQuery, setAddOnQuery] = useState("");
+	const deferredQuery = useDeferredValue(addOnQuery);
+	const normalizedQuery = normalizeForSearch(deferredQuery);
+	const isFiltering = normalizedQuery.length > 0;
+	const isStale = addOnQuery !== deferredQuery;
+	const observacoesId = useId();
 
 	const headerImage = selectedVariant?.imagemCapaUrl ?? product.imagemCapaUrl;
+	const totalOptionCount = useMemo(
+		() => availableReferences.reduce((total, reference) => total + reference.grupo.opcoes.length, 0),
+		[availableReferences],
+	);
+	const showSearch = totalOptionCount >= ADD_ON_SEARCH_THRESHOLD;
+	const visibleReferences = useMemo(() => {
+		if (!isFiltering) return availableReferences;
+		return availableReferences.flatMap((reference) => {
+			const visibleOptions = reference.grupo.opcoes.filter(
+				(option) => selectedByOptionId.has(option.id) || optionIndex.get(option.id)?.searchKey.includes(normalizedQuery),
+			);
+			return visibleOptions.length > 0 ? [{ ...reference, grupo: { ...reference.grupo, opcoes: visibleOptions } }] : [];
+		});
+	}, [availableReferences, isFiltering, normalizedQuery, optionIndex, selectedByOptionId]);
 
 	return (
 		<div className="flex flex-col gap-6">
 			{showImage && headerImage ? (
 				<div className="relative h-40 w-full overflow-hidden rounded-2xl bg-secondary/40">
-					<Image src={headerImage} alt={product.nome} fill className="object-cover" />
+					<Image src={headerImage} alt={product.nome} fill sizes="(min-width: 768px) 28rem, 100vw" className="object-cover" />
 				</div>
 			) : null}
+
+			<section className="flex flex-col gap-1.5">
+				<label htmlFor={observacoesId} className="text-micro uppercase tracking-wide text-muted-foreground">
+					Observação do item
+				</label>
+				<Textarea
+					id={observacoesId}
+					rows={1}
+					maxLength={500}
+					value={observacoes}
+					onChange={(event) => setObservacoes(event.target.value)}
+					placeholder="Ex.: sem cebola, ponto mal passado"
+					className="min-h-10 py-2 text-sm"
+				/>
+				{observacoes.length > 400 ? <span className="text-micro self-end tabular-nums text-muted-foreground">{observacoes.length}/500</span> : null}
+			</section>
 
 			{/* Variantes — mesmas linhas compactas dos adicionais */}
 			{hasVariants ? (
@@ -258,8 +363,18 @@ export function ProductBuilderForm({ product, builder, showFooter = true, showIm
 			) : null}
 
 			{/* Adicionais */}
+			{hasAddOns && showSearch ? (
+				<div className="sticky top-0 z-10 flex w-full min-w-0 flex-col gap-1.5 bg-popover py-1 before:absolute before:inset-x-0 before:-top-2 before:h-2 before:bg-popover">
+					<AddOnSearchField value={addOnQuery} onChange={setAddOnQuery} onClear={() => setAddOnQuery("")} />
+					{selectedModifiers.length > 0 ? (
+						<p className="text-micro px-1 text-muted-foreground">
+							{selectedModifiers.length} {selectedModifiers.length === 1 ? "adicional selecionado" : "adicionais selecionados"}
+						</p>
+					) : null}
+				</div>
+			) : null}
 			{hasAddOns
-				? availableReferences.map((reference) => {
+				? visibleReferences.map((reference) => {
 						const grupo = reference.grupo;
 						const isRequired = grupo.minOpcoes > 0;
 						const isSingle = grupo.maxOpcoes === 1;
@@ -272,7 +387,7 @@ export function ProductBuilderForm({ product, builder, showFooter = true, showIm
 						const hint = isSingle ? "Escolha 1" : hasMax ? `Escolha até ${grupo.maxOpcoes}` : "Quantas quiser";
 
 						return (
-							<section key={reference.produtoAddOnId} className="flex flex-col gap-3">
+							<section key={reference.produtoAddOnId} className={cn("flex flex-col gap-3 transition-opacity", isStale && "opacity-70")}>
 								<GroupHeading
 									title={grupo.nome}
 									hint={hint}
@@ -283,7 +398,7 @@ export function ProductBuilderForm({ product, builder, showFooter = true, showIm
 								/>
 								<div className="flex flex-col gap-2">
 									{grupo.opcoes.map((option) => {
-										const selected = selectedModifiers.find((m) => m.opcaoId === option.id);
+										const selectedQuantity = selectedByOptionId.get(option.id);
 										const maxQty = option.maxQtdePorItem ?? 1;
 										const control: OptionControl = isSingle ? "radio" : maxQty > 1 ? "quantity" : "checkbox";
 
@@ -294,12 +409,12 @@ export function ProductBuilderForm({ product, builder, showFooter = true, showIm
 												price={option.precoDelta}
 												priceMode="delta"
 												control={control}
-												selected={!!selected}
+												selected={selectedQuantity !== undefined}
 												groupFull={groupFull}
-												quantity={selected?.quantidade ?? 1}
+												quantity={selectedQuantity ?? 1}
 												maxQty={maxQty}
 												onToggle={() => toggleModifier(option.id, grupo.maxOpcoes)}
-												onIncrement={() => (selected ? updateModifierQuantity(option.id, 1) : toggleModifier(option.id, grupo.maxOpcoes))}
+												onIncrement={() => (selectedQuantity !== undefined ? updateModifierQuantity(option.id, 1) : toggleModifier(option.id, grupo.maxOpcoes))}
 												onDecrement={() => updateModifierQuantity(option.id, -1)}
 											/>
 										);
@@ -309,6 +424,14 @@ export function ProductBuilderForm({ product, builder, showFooter = true, showIm
 						);
 					})
 				: null}
+			{hasAddOns && isFiltering && visibleReferences.length === 0 ? (
+				<div className={cn("flex flex-col items-center gap-3 py-8 text-center transition-opacity", isStale && "opacity-70")}>
+					<p className="text-sm font-semibold">Nenhum adicional encontrado para &quot;{deferredQuery}&quot;.</p>
+					<Button size="sm" variant="outline" onClick={() => setAddOnQuery("")}>
+						LIMPAR BUSCA
+					</Button>
+				</div>
+			) : null}
 
 			{/* Rodapé — quantidade, total e aviso de pendências */}
 			{showFooter ? (
@@ -386,7 +509,19 @@ type OptionRowProps = {
 	onDecrement?: () => void;
 };
 
-function OptionRow({ name, price, priceMode, control, selected, groupFull = false, quantity = 1, maxQty = 1, onToggle, onIncrement, onDecrement }: OptionRowProps) {
+function OptionRow({
+	name,
+	price,
+	priceMode,
+	control,
+	selected,
+	groupFull = false,
+	quantity = 1,
+	maxQty = 1,
+	onToggle,
+	onIncrement,
+	onDecrement,
+}: OptionRowProps) {
 	const quantityActive = control === "quantity" && selected;
 	const showPrice = priceMode === "absolute" || price !== 0;
 	const priceLabel = priceMode === "absolute" ? formatToMoney(price) : `+ ${formatToMoney(price)}`;
@@ -469,7 +604,15 @@ type StepperProps = {
 	className?: string;
 };
 
-export function ProductBuilderStepper({ value, onIncrement, onDecrement, incrementDisabled, decrementDisabled, size = "default", className }: StepperProps) {
+export function ProductBuilderStepper({
+	value,
+	onIncrement,
+	onDecrement,
+	incrementDisabled,
+	decrementDisabled,
+	size = "default",
+	className,
+}: StepperProps) {
 	const btn = size === "sm" ? "size-7 rounded-lg" : "size-9 rounded-lg";
 	const icon = size === "sm" ? "size-3" : "size-4";
 	const valueWidth = size === "sm" ? "w-6 text-sm" : "w-10 text-lg";

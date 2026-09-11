@@ -11,8 +11,9 @@ function resolveDate(value?: string | Date | null, fallback = new Date()) {
 	return Number.isNaN(parsed.getTime()) ? fallback : parsed;
 }
 
-function buildTransactionTitle(method: string, observacoes?: string | null) {
-	return observacoes?.trim() ? `Pagamento via ${method} - ${observacoes.trim()}` : `Pagamento via ${method} - Venda`;
+function buildTransactionTitle(method: string, observacoes?: string | null, saleLabel?: string | null) {
+	const suffix = observacoes?.trim() ? ` (${observacoes.trim()})` : "";
+	return `Pagamento via ${method}${suffix} - ${saleLabel?.trim() || "Venda"}`;
 }
 
 export class LocalPaymentProvider implements IPaymentProvider {
@@ -43,7 +44,7 @@ export class LocalPaymentProvider implements IPaymentProvider {
 							lancamentoContabilId: input.lancamentoContabilId,
 							contaFinanceiraId: pagamento.contaFinanceiraId ?? null,
 							sessaoVendaId: input.sessaoVendaId ?? null,
-							titulo: buildTransactionTitle(pagamento.metodo, pagamento.observacoes),
+							titulo: buildTransactionTitle(pagamento.metodo, pagamento.observacoes, input.saleLabel),
 							tipo: "ENTRADA",
 							...normalizeFinancialTransactionValue({ valor: valorParcela }),
 							metodo: pagamento.metodo,
@@ -80,7 +81,7 @@ export class LocalPaymentProvider implements IPaymentProvider {
 					lancamentoContabilId: input.lancamentoContabilId,
 					contaFinanceiraId: pagamento.contaFinanceiraId ?? null,
 					sessaoVendaId: input.sessaoVendaId ?? null,
-					titulo: buildTransactionTitle(pagamento.metodo, pagamento.observacoes),
+					titulo: buildTransactionTitle(pagamento.metodo, pagamento.observacoes, input.saleLabel),
 					tipo: "ENTRADA",
 					...normalizeFinancialTransactionValue({ valor: pagamento.valor }),
 					metodo: pagamento.metodo,

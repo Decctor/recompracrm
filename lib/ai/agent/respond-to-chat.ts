@@ -1,5 +1,6 @@
 import { confirmAiDeliveryStillValid } from "@/lib/chats/ai-trigger";
 import { updateChatAttendanceSummary } from "@/lib/chats/attendance-state";
+import type { TAiAgentTurnAttachment } from "@/schemas/ai-agents";
 import type { TAiAgentRunTriggerEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
 import type { DB, DBTransaction } from "@/services/drizzle";
@@ -14,11 +15,18 @@ type TDb = DB | DBTransaction;
  * - gateway interno: enfileira no gateway e persiste como PENDENTE;
  * - playground: apenas persiste, sem envio externo.
  */
-export type TAgentMessageDeliverer = (args: { mensagem: string; runId: string; agenteId: string }) => Promise<{ messageId: string | null }>;
+export type TAgentMessageDeliverer = (args: {
+	mensagem: string;
+	/** Já normalizado pelo runtime; o adapter degrada para texto se o provedor recusar. */
+	anexo: TAiAgentTurnAttachment | null;
+	runId: string;
+	agenteId: string;
+}) => Promise<{ messageId: string | null }>;
 
 export type TRespondToChatResult = {
 	runId: string;
 	mensagem: string | null;
+	anexo: TAiAgentTurnAttachment | null;
 	messageId: string | null;
 	resumoAtendimento: string;
 };
@@ -53,7 +61,8 @@ export async function respondToChatWithAgent({
 	const output = await executeAgentTurn(prepared);
 
 	let messageId: string | null = null;
-	if (output.mensagem?.trim()) {
+	// Um anexo sozinho é entrega legítima: o arquivo pode ser a resposta inteira.
+	if (output.mensagem?.trim() || output.anexo) {
 		// A run não é cancelável em andamento; este é o ponto de corte. Se o cliente mandou
 		// outra mensagem durante o turno, a run dela responde — entregar esta produziria uma
 		// resposta gerada sem a última mensagem no contexto, e duas respostas no total.
@@ -68,11 +77,12 @@ export async function respondToChatWithAgent({
 			await markAgentRunCancelled(database, { runId: prepared.run.id, reason: delivery.reason });
 			console.log("[AI_AGENT] Entrega cancelada:", delivery.reason);
 			// O resumo também não grava: veio de um contexto que a conversa já superou.
-			return { runId: prepared.run.id, mensagem: null, messageId: null, resumoAtendimento: "" };
+			return { runId: prepared.run.id, mensagem: null, anexo: null, messageId: null, resumoAtendimento: "" };
 		}
 
 		const delivered = await deliver({
-			mensagem: output.mensagem.trim(),
+			mensagem: output.mensagem?.trim() ?? "",
+			anexo: output.anexo,
 			runId: prepared.run.id,
 			agenteId: prepared.toolContext.agent.id,
 		});
@@ -89,5 +99,5 @@ export async function respondToChatWithAgent({
 		}
 	}
 
-	return { runId: prepared.run.id, mensagem: output.mensagem, messageId, resumoAtendimento: output.resumoAtendimento };
+	return { runId: prepared.run.id, mensagem: output.mensagem, anexo: output.anexo, messageId, resumoAtendimento: output.resumoAtendimento };
 }

@@ -4,13 +4,13 @@ import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { resolveAddOnReferencesRules } from "@/lib/products/add-on-rules";
 import { channelAddOnReferences } from "@/lib/products/sales-channels";
-import { channelNodePrice, channelProductFilter, loadChannelState } from "@/lib/products/sales-channels-store";
+import { buildChannelCatalogConditions, channelNodePrice, loadChannelState } from "@/lib/products/sales-channels-store";
 import { getValidSaleConditions } from "@/lib/sales/valid-sale";
 import { POS_PRODUCT_ORDERING_DEFAULT, POSProductOrderingEnum, type TPOSProductOrderingEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
 import { productAddOnOptions, productAddOnReferences, productAddOns, productVariants, products, saleItems, sales } from "@/services/drizzle/schema";
 import dayjs from "dayjs";
-import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, notInArray, sql, sum, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, sql, sum, type SQL } from "drizzle-orm";
 import { count } from "drizzle-orm";
 import createHttpError from "http-errors";
 import z from "zod";
@@ -134,21 +134,13 @@ async function getPOSProducts({ input, session }: { input: TGetPOSProductsInput;
 	const skip = PAGE_SIZE * (input.page - 1);
 	const limit = PAGE_SIZE;
 
-	const conditions: SQL[] = [eq(products.organizacaoId, userOrgId), eq(products.ativo, true), eq(products.vendavel, true)];
-
-	// Disponibilidade e preço no canal pedido (linhas esparsas da matriz de canais). Canal
-	// ausente = org não materializada ainda — comporta-se como TODOS sem overrides.
+	// Disponibilidade e preço no canal pedido (linhas esparsas da matriz de canais). O mesmo estado
+	// serve de filtro para a grade e para a barra de categorias (/api/pos/groups).
 	const channelState = await loadChannelState({ orgId: userOrgId, canal: input.channel });
-	if (channelState) {
-		const filter = channelProductFilter(channelState);
-		if (filter.includeIds) {
-			if (filter.includeIds.length === 0) {
-				return { data: { products: [], productsMatched: 0, totalPages: 0, currentPage: input.page } };
-			}
-			conditions.push(inArray(products.id, filter.includeIds));
-		}
-		if (filter.excludeIds) conditions.push(notInArray(products.id, filter.excludeIds));
-	}
+	const catalogConditions = buildChannelCatalogConditions({ orgId: userOrgId, channelState });
+	if (!catalogConditions) return { data: { products: [], productsMatched: 0, totalPages: 0, currentPage: input.page } };
+
+	const conditions: SQL[] = [...catalogConditions];
 
 	// Search filter — insensível a acentos: unaccent() em ambos os lados normaliza os diacríticos
 	// (ex.: "acai" encontra "Açaí"). Requer a extensão `unaccent` (migration 0033_unaccent_extension).

@@ -151,7 +151,14 @@ export async function deliverChatMessage({ messageId, chat, texto, midia, templa
 					)
 				: midia
 					? {
-							type: midia.tipo === "IMAGEM" ? ("image" as const) : midia.tipo === "VIDEO" ? ("video" as const) : midia.tipo === "AUDIO" ? ("audio" as const) : ("document" as const),
+							type:
+								midia.tipo === "IMAGEM"
+									? ("image" as const)
+									: midia.tipo === "VIDEO"
+										? ("video" as const)
+										: midia.tipo === "AUDIO"
+											? ("audio" as const)
+											: ("document" as const),
 							text: texto || undefined,
 							mediaUrl: getChatMediaUrl(midia.storageId),
 							mediaFileName: midia.arquivoNome ?? undefined,
@@ -182,9 +189,7 @@ export async function deliverChatMessage({ messageId, chat, texto, midia, templa
 				});
 				whatsappMessageId = response.whatsappMessageId;
 			} else if (midia) {
-				const { data: fileData, error: downloadError } = await supabaseClient.storage
-					.from(SUPABASE_STORAGE_CHAT_MEDIA_BUCKET)
-					.download(midia.storageId);
+				const { data: fileData, error: downloadError } = await supabaseClient.storage.from(SUPABASE_STORAGE_CHAT_MEDIA_BUCKET).download(midia.storageId);
 				if (downloadError || !fileData) throw new createHttpError.InternalServerError("Erro ao baixar o arquivo do storage.");
 
 				const upload = await uploadMediaToWhatsapp({
@@ -198,8 +203,10 @@ export async function deliverChatMessage({ messageId, chat, texto, midia, templa
 				const response = await sendMediaWhatsappMessage({
 					fromPhoneNumberId,
 					toPhoneNumber: formatPhoneAsWhatsappId(telefoneCliente),
-					mediaId: upload.mediaId,
-					mediaType: midia.tipo === "IMAGEM" ? "image" : midia.tipo === "AUDIO" ? "audio" : "document",
+					media: { id: upload.mediaId },
+					// VIDEO caía em "document" antes de o tipo existir na assinatura: o cliente recebia
+					// o vídeo como arquivo para baixar, sem player.
+					mediaType: midia.tipo === "IMAGEM" ? "image" : midia.tipo === "VIDEO" ? "video" : midia.tipo === "AUDIO" ? "audio" : "document",
 					caption: texto || undefined,
 					filename: midia.arquivoNome ?? undefined,
 					whatsappToken,
@@ -224,10 +231,7 @@ export async function deliverChatMessage({ messageId, chat, texto, midia, templa
 		return { whatsappMessageId, statusEntrega };
 	} catch (error) {
 		console.error("[ERROR] [CHAT_OUTGOING_MESSAGE] Falha no envio:", error);
-		await db
-			.update(chatMessages)
-			.set({ statusEntrega: "FALHA", provedorStatusDataAtualizacao: new Date() })
-			.where(eq(chatMessages.id, messageId));
+		await db.update(chatMessages).set({ statusEntrega: "FALHA", provedorStatusDataAtualizacao: new Date() }).where(eq(chatMessages.id, messageId));
 		throw error;
 	}
 }

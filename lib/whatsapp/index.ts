@@ -135,8 +135,13 @@ export async function sendTemplateWhatsappMessage({
 type SendMediaWhatsappMessageParams = {
 	fromPhoneNumberId: string;
 	toPhoneNumber: string;
-	mediaId: string;
-	mediaType: "image" | "document" | "audio";
+	/**
+	 * `id` = mídia já hospedada na Meta por upload prévio; `link` = URL pública que a **Meta**
+	 * busca sozinha. O link dispensa o upload e é o caminho do agente de IA, cujo anexo vem de
+	 * uma URL que nunca passou pelo nosso storage.
+	 */
+	media: { id: string } | { link: string };
+	mediaType: "image" | "video" | "document" | "audio";
 	caption?: string;
 	filename?: string;
 	whatsappToken: string;
@@ -155,38 +160,38 @@ type SendMediaWhatsappMessageResponse = {
 export async function sendMediaWhatsappMessage({
 	fromPhoneNumberId,
 	toPhoneNumber,
-	mediaId,
+	media,
 	mediaType,
 	caption,
 	filename,
 	whatsappToken,
 }: SendMediaWhatsappMessageParams): Promise<SendMediaWhatsappMessageResponse> {
 	try {
-		console.log("[INFO] [WHATSAPP_MEDIA_SEND] Sending media message:", toPhoneNumber, mediaType, mediaId);
+		console.log("[INFO] [WHATSAPP_MEDIA_SEND] Sending media message:", toPhoneNumber, mediaType, "id" in media ? media.id : media.link);
 		if (!whatsappToken) {
 			throw new createHttpError.InternalServerError("WhatsApp auth token não configurado.");
 		}
 
 		const { GRAPH_MESSAGES_API_URL } = getMetaGraphAPIUrl(fromPhoneNumberId);
-		const payload: any = {
-			messaging_product: "whatsapp",
-			recipient_type: "individual",
-			to: toPhoneNumber,
-			type: mediaType,
-			[mediaType]: {
-				id: mediaId,
-			},
-		};
+		const mediaPayload: Record<string, string> = "id" in media ? { id: media.id } : { link: media.link };
 
-		// Add caption for images
-		if (mediaType === "image" && caption) {
-			payload[mediaType].caption = caption;
+		// Áudio é o único tipo sem legenda na API da Meta.
+		if (caption && mediaType !== "audio") {
+			mediaPayload.caption = caption;
 		}
 
 		// Add filename for documents
 		if (mediaType === "document" && filename) {
-			payload[mediaType].filename = filename;
+			mediaPayload.filename = filename;
 		}
+
+		const payload = {
+			messaging_product: "whatsapp",
+			recipient_type: "individual",
+			to: toPhoneNumber,
+			type: mediaType,
+			[mediaType]: mediaPayload,
+		};
 
 		const response = await axios.post(GRAPH_MESSAGES_API_URL, payload, {
 			headers: {

@@ -194,6 +194,29 @@ type UseSaleStateProps = {
 	contasFinanceiras?: TSaleFinancialAccountOption[];
 };
 
+// Reaplica o default de efetivação — função de (método, modalidade) — sobre os splits quando a
+// modalidade muda. Split cuja efetivação resolvida já coincide com a atual fica intacto, o que
+// preserva uma previsão escolhida a dedo (ex.: FIADO com data negociada segue PENDENTE nas duas
+// modalidades). `changed` alimenta o aviso na UI.
+function rederivePaymentsForModalidade({
+	pagamentos,
+	entregaModalidade,
+	organizationConfig,
+}: {
+	pagamentos: TCheckoutPaymentSplit[];
+	entregaModalidade: TDeliveryModeEnum;
+	organizationConfig?: Pick<TOrganizationConfiguration, "defaults"> | null;
+}): { pagamentos: TCheckoutPaymentSplit[]; changed: number } {
+	let changed = 0;
+	const next = pagamentos.map((payment) => {
+		const paymentDefaults = getOrganizationPaymentMethodDefault({ organizationConfig, metodo: payment.metodo, entregaModalidade });
+		if (paymentDefaults.efetivacaoTipo === payment.efetivacaoTipo) return payment;
+		changed += 1;
+		return { ...payment, efetivacaoTipo: paymentDefaults.efetivacaoTipo, dataPrevisao: paymentDefaults.dataPrevisao };
+	});
+	return { pagamentos: changed > 0 ? next : pagamentos, changed };
+}
+
 export function getDefaultSaleState(initialState?: Partial<TSaleState>): TSaleState {
 	return {
 		modoCliente: initialState?.modoCliente ?? "CONSUMIDOR",
@@ -344,17 +367,36 @@ export const useSaleState = ({ initialState, organizationConfig, contasFinanceir
 		setState((prev) => ({ ...prev, observacoes }));
 	}, []);
 
-	const setEntregaModalidade = useCallback((entregaModalidade: TDeliveryModeEnum) => {
-		setState((prev) => {
-			if (entregaModalidade === "ENTREGA" && prev.modoCliente === "CONSUMIDOR") return prev;
-			return {
-				...prev,
-				entregaModalidade,
-				entregaLocalizacaoId: entregaModalidade === "ENTREGA" ? prev.entregaLocalizacaoId : null,
-				comandaNumero: entregaModalidade === "COMANDA" ? prev.comandaNumero : null,
-			};
-		});
-	}, []);
+	const setEntregaModalidade = useCallback(
+		(entregaModalidade: TDeliveryModeEnum) => {
+			setState((prev) => {
+				if (prev.entregaModalidade === entregaModalidade) return prev;
+				if (entregaModalidade === "ENTREGA" && prev.modoCliente === "CONSUMIDOR") return prev;
+				return {
+					...prev,
+					entregaModalidade,
+					// Mudar a modalidade reaplica o default de efetivação (ENTREGA nasce PENDENTE; sair de
+					// ENTREGA devolve ao default do método) — mesma regra da troca de método, que reseta
+					// conta e parcelas. A escolha manual vale até o próximo input upstream mudar.
+					pagamentos: rederivePaymentsForModalidade({ pagamentos: prev.pagamentos, entregaModalidade, organizationConfig }).pagamentos,
+					entregaLocalizacaoId: entregaModalidade === "ENTREGA" ? prev.entregaLocalizacaoId : null,
+					comandaNumero: entregaModalidade === "COMANDA" ? prev.comandaNumero : null,
+				};
+			});
+		},
+		[organizationConfig],
+	);
+
+	// Espelho puro da re-derivação de setEntregaModalidade, para a UI avisar o operador ANTES/AO
+	// trocar a modalidade quantos pagamentos terão a efetivação ajustada.
+	const countPaymentsRederivedByModalidade = useCallback(
+		(entregaModalidade: TDeliveryModeEnum) => {
+			if (state.entregaModalidade === entregaModalidade) return 0;
+			if (entregaModalidade === "ENTREGA" && state.modoCliente === "CONSUMIDOR") return 0;
+			return rederivePaymentsForModalidade({ pagamentos: state.pagamentos, entregaModalidade, organizationConfig }).changed;
+		},
+		[state.entregaModalidade, state.modoCliente, state.pagamentos, organizationConfig],
+	);
 
 	const setEntregaLocalizacaoId = useCallback((entregaLocalizacaoId: string | null) => {
 		setState((prev) => ({ ...prev, entregaLocalizacaoId }));
@@ -380,24 +422,28 @@ export const useSaleState = ({ initialState, organizationConfig, contasFinanceir
 	const addPagamento = useCallback(
 		(pagamento?: Partial<Omit<TCheckoutPaymentSplit, "id">>) => {
 			const metodo = pagamento?.metodo ?? "DINHEIRO";
-			const paymentDefaults = getOrganizationPaymentMethodDefault({
-				organizationConfig,
-				metodo,
+			// Resolvido dentro do setState: o default de efetivação depende da modalidade vigente.
+			setState((prev) => {
+				const paymentDefaults = getOrganizationPaymentMethodDefault({
+					organizationConfig,
+					metodo,
+					entregaModalidade: prev.entregaModalidade,
+				});
+				return {
+					...prev,
+					pagamentos: [
+						...prev.pagamentos,
+						getDefaultCheckoutPaymentSplit({
+							metodo: paymentDefaults.metodo,
+							efetivacaoTipo: paymentDefaults.efetivacaoTipo,
+							dataPrevisao: paymentDefaults.dataPrevisao,
+							totalParcelas: paymentDefaults.totalParcelas,
+							contaFinanceiraId: resolveSeedContaFinanceiraId(paymentDefaults),
+							...pagamento,
+						}),
+					],
+				};
 			});
-			setState((prev) => ({
-				...prev,
-				pagamentos: [
-					...prev.pagamentos,
-					getDefaultCheckoutPaymentSplit({
-						metodo: paymentDefaults.metodo,
-						efetivacaoTipo: paymentDefaults.efetivacaoTipo,
-						dataPrevisao: paymentDefaults.dataPrevisao,
-						totalParcelas: paymentDefaults.totalParcelas,
-						contaFinanceiraId: resolveSeedContaFinanceiraId(paymentDefaults),
-						...pagamento,
-					}),
-				],
-			}));
 		},
 		[organizationConfig, resolveSeedContaFinanceiraId],
 	);
@@ -418,6 +464,7 @@ export const useSaleState = ({ initialState, organizationConfig, contasFinanceir
 							? getOrganizationPaymentMethodDefault({
 									organizationConfig,
 									metodo: updates.metodo,
+									entregaModalidade: prev.entregaModalidade,
 								})
 							: null;
 					return {
@@ -511,7 +558,10 @@ export const useSaleState = ({ initialState, organizationConfig, contasFinanceir
 	const valorRestante = useMemo(() => Math.max(0, valorAposEfetivados - totalPagamentos), [valorAposEfetivados, totalPagamentos]);
 	// Troco: mesmas regras do servidor (lib/sales/sale-change.ts) — excesso só sobre pagamentos
 	// imediatos; excesso fora do dinheiro pede confirmação explícita antes de finalizar.
-	const change = useMemo(() => resolveSaleChange({ payments: state.pagamentos, saleTotal: valorAposEfetivados }), [state.pagamentos, valorAposEfetivados]);
+	const change = useMemo(
+		() => resolveSaleChange({ payments: state.pagamentos, saleTotal: valorAposEfetivados }),
+		[state.pagamentos, valorAposEfetivados],
+	);
 	const troco = change.troco;
 	const trocoBloqueio = change.bloqueio;
 	const trocoCobertoPorDinheiro = change.cobertoPorDinheiro;
@@ -589,6 +639,7 @@ export const useSaleState = ({ initialState, organizationConfig, contasFinanceir
 		setTaxaEntrega,
 		setObservacoes,
 		setEntregaModalidade,
+		countPaymentsRederivedByModalidade,
 		setEntregaLocalizacaoId,
 		setComandaNumero,
 		ensureEntregaLocation,

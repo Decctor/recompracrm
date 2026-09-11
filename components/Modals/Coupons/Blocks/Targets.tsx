@@ -3,7 +3,7 @@ import SelectInput from "@/components/Inputs/SelectInput";
 import SelectProductWithVariants from "@/components/Inputs/SelectProductWithVariants";
 import ResponsiveMenuSection from "@/components/Utils/ResponsiveMenuSection";
 import { Button } from "@/components/ui/button";
-import { usePOSGroups } from "@/lib/queries/pos";
+import { useProductGroups } from "@/lib/queries/products";
 import type { TUseInternalCouponState } from "@/state-hooks/use-internal-coupon-state";
 import { CouponTargetOperatorOptions, CouponTargetRoleOptions } from "@/utils/select-options";
 import { Package, Plus, Trash2, X } from "lucide-react";
@@ -121,8 +121,10 @@ export default function CouponTargetsBlock({
 }
 
 function CouponTargetForm({ addCouponTarget }: { addCouponTarget: TUseInternalCouponState["addCouponTarget"] }) {
-	const { data: groupsResult } = usePOSGroups();
-	const groups = groupsResult?.groups ?? [];
+	// Cadastro inteiro, não o catálogo do PDV: um cupom pode mirar um grupo que hoje não está na
+	// vitrine de nenhum canal.
+	const { data: groupsResult } = useProductGroups();
+	const groups = groupsResult ?? [];
 	const [mode, setMode] = useState<"PRODUTO" | "GRUPO">("PRODUTO");
 	const [selectedProduct, setSelectedProduct] = useState<{
 		produtoId: string;

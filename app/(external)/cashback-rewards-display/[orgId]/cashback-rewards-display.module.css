@@ -1,0 +1,485 @@
+/*
+ * A folha impressa. Toda medida sai do arranjo calculado em `lib/cashback/rewards-display-layout`
+ * e chega aqui como custom property em milímetros — por isso não existe nenhuma regra
+ * `[data-size="A6"]` neste arquivo. A pirâmide de sobrescritas por tamanho de papel que existia
+ * antes era o sintoma de um layout decorado; com o arranjo computado, o CSS só precisa saber
+ * compor duas células.
+ *
+ * As cores vêm da identidade da organização (`--poi-*`), não da RecompraCRM: quem assina o pôster
+ * é a loja. A marca da plataforma aparece uma vez, no rodapé.
+ */
+
+.sheet {
+	--sheet-paper: oklch(0.995 0.002 255);
+	--sheet-ink: oklch(0.22 0.015 255);
+	--sheet-muted: oklch(0.52 0.02 255);
+	--sheet-rule: color-mix(in oklab, var(--poi-primary) 22%, transparent);
+	--sheet-zebra: color-mix(in oklab, var(--poi-primary) 5%, transparent);
+
+	display: flex;
+	flex-direction: column;
+	width: var(--sheet-w);
+	height: var(--sheet-h);
+	overflow: hidden;
+	background: var(--sheet-paper);
+	color: var(--sheet-ink);
+	font-variant-numeric: tabular-nums;
+	print-color-adjust: exact;
+	-webkit-print-color-adjust: exact;
+}
+
+/* ---------------------------------------------------------------- tarja ---- */
+
+.masthead {
+	display: flex;
+	height: var(--band-masthead);
+	flex: none;
+	align-items: center;
+	gap: calc(var(--inset) * 0.7);
+	background: var(--poi-primary);
+	color: var(--poi-primary-foreground);
+	padding-inline: var(--inset);
+}
+
+.mark {
+	display: grid;
+	width: calc(var(--band-masthead) * 0.62);
+	height: calc(var(--band-masthead) * 0.62);
+	flex: none;
+	place-items: center;
+	overflow: hidden;
+	border-radius: calc(var(--band-masthead) * 0.14);
+	background: var(--sheet-paper);
+	color: var(--poi-primary);
+	padding: calc(var(--band-masthead) * 0.06);
+}
+
+.mark img {
+	width: 100%;
+	height: 100%;
+	object-fit: contain;
+}
+
+.markInitials {
+	font-size: calc(var(--band-masthead) * 0.26);
+	font-weight: 800;
+	line-height: 1;
+	letter-spacing: -0.02em;
+}
+
+.identity {
+	display: flex;
+	min-width: 0;
+	flex: 1;
+	flex-direction: column;
+	gap: calc(var(--band-masthead) * 0.045);
+}
+
+.eyebrow {
+	overflow: hidden;
+	color: color-mix(in oklab, var(--poi-primary-foreground) 76%, transparent);
+	font-size: max(calc(var(--band-masthead) * 0.115), 1.9mm);
+	font-weight: 800;
+	letter-spacing: 0.1em;
+	line-height: 1;
+	text-overflow: ellipsis;
+	text-transform: uppercase;
+	white-space: nowrap;
+}
+
+/* Duas linhas, não reticências: "Programa de Cashback Supermercado Ipiranga" é o nome que a loja
+   escolheu e cortar no meio é pior que ocupar a segunda linha. A tarja tem folga para as duas em
+   todos os tamanhos porque a altura dela sai de `sqrt(área)` da folha. */
+.programTitle {
+	display: -webkit-box;
+	overflow: hidden;
+	font-size: max(calc(var(--band-masthead) * 0.3), 3mm);
+	font-weight: 800;
+	letter-spacing: -0.025em;
+	line-height: 1.05;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+}
+
+.programNote {
+	overflow: hidden;
+	color: color-mix(in oklab, var(--poi-primary-foreground) 78%, transparent);
+	font-size: max(calc(var(--band-masthead) * 0.115), 1.8mm);
+	font-weight: 500;
+	line-height: 1.2;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* O único momento de cor secundária da folha: um bloco sólido sobre a tarja primária. Raio baixo
+   de propósito — com o raio de botão da interface, o bloco impresso pede clique. */
+.callout {
+	display: flex;
+	max-width: 32%;
+	flex: none;
+	align-items: center;
+	border-radius: calc(var(--band-masthead) * 0.05);
+	background: var(--poi-accent);
+	color: var(--poi-accent-foreground);
+	padding: calc(var(--band-masthead) * 0.1) calc(var(--band-masthead) * 0.14);
+	text-align: right;
+}
+
+.calloutText {
+	font-size: max(calc(var(--band-masthead) * 0.15), 2.1mm);
+	font-weight: 800;
+	letter-spacing: -0.01em;
+	line-height: 1.15;
+	text-wrap: balance;
+}
+
+/* ------------------------------------------------------ faixa de regras ---- */
+
+.ruleBand {
+	display: flex;
+	height: var(--band-rule);
+	flex: none;
+	align-items: center;
+	gap: calc(var(--inset) * 0.8);
+	background: color-mix(in oklab, var(--poi-accent) 16%, var(--sheet-paper));
+	padding-inline: var(--inset);
+}
+
+.rule {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	gap: calc(var(--band-rule) * 0.06);
+}
+
+.rule:first-child {
+	flex: 1;
+}
+
+.rule + .rule {
+	flex: none;
+	border-left: 0.2mm solid color-mix(in oklab, var(--poi-primary) 24%, transparent);
+	padding-left: calc(var(--inset) * 0.8);
+	text-align: right;
+}
+
+.ruleLabel {
+	color: color-mix(in oklab, var(--poi-primary) 82%, var(--sheet-ink));
+	font-size: max(calc(var(--band-rule) * 0.2), 1.8mm);
+	font-weight: 800;
+	letter-spacing: 0.09em;
+	line-height: 1;
+	text-transform: uppercase;
+}
+
+.ruleValue {
+	overflow: hidden;
+	font-size: max(calc(var(--band-rule) * 0.3), 2.2mm);
+	font-weight: 700;
+	line-height: 1.15;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* ------------------------------------------------------------- a grade ---- */
+
+/*
+ * O espaçamento aqui tem que fechar exatamente com o que o algoritmo reservou — ele calculou o
+ * corpo do texto a partir de `contentHeight - gutter * (linhas - 1)`, então qualquer folga extra
+ * entre linhas devolve um texto dimensionado para uma célula que não existe.
+ */
+.grid {
+	display: flex;
+	min-height: 0;
+	flex: 1;
+	flex-direction: column;
+	padding-block: var(--gutter);
+}
+
+.row {
+	display: flex;
+	min-height: 0;
+	flex: 1;
+	gap: var(--gutter);
+}
+
+.cell {
+	display: flex;
+	width: var(--cell-w);
+	min-width: 0;
+	height: 100%;
+	break-inside: avoid;
+	overflow: hidden;
+}
+
+/*
+ * Vitrine: foto, título, preço. Sem moldura, sem sombra, sem raio — o que separa uma recompensa da
+ * outra é o fio da linha de cima, como numa página de catálogo. Cartões flutuantes aqui virariam
+ * a grade de cartões idênticos que todo material impresso automático tem.
+ */
+.sheet[data-composition="showcase"] .grid {
+	/* Metade da calha vira respiro acima do fio e metade abaixo: o fio fica centrado na calha e a
+	   soma continua sendo exatamente uma calha entre linhas. */
+	gap: calc(var(--gutter) / 2);
+	padding-inline: var(--inset);
+}
+
+.sheet[data-composition="showcase"] .row {
+	/* Linha incompleta fica centrada: uma célula sozinha encostada à esquerda denuncia a grade. */
+	justify-content: center;
+}
+
+.sheet[data-composition="showcase"] .row + .row {
+	border-top: 0.2mm solid var(--sheet-rule);
+	padding-top: calc(var(--gutter) / 2);
+}
+
+/* Ancorada no topo, não centrada: com a pilha de texto de altura fixa, começar todas as células
+   no mesmo ponto é o que alinha as fotos e os preços de uma fileira inteira. */
+.sheet[data-composition="showcase"] .cell {
+	flex-direction: column;
+	justify-content: flex-start;
+	gap: var(--cell-gap);
+	padding: var(--cell-pad-y) var(--cell-pad-x);
+}
+
+/* Cardápio: linhas largas. Aqui a zebra substitui o fio — em linha larga, a faixa de fundo é o que
+   carrega o olho da esquerda até o preço, e o fio sozinho não dá conta. As faixas correm de borda
+   a borda da folha, então a calha lateral migra da grade para a linha. */
+.sheet[data-composition="menu"] .row {
+	padding-inline: var(--inset);
+}
+
+.sheet[data-composition="menu"] .row:nth-child(even) {
+	background: var(--sheet-zebra);
+}
+
+.sheet[data-composition="menu"] .cell {
+	align-items: center;
+	gap: var(--cell-gap);
+	padding: var(--cell-pad-y) var(--cell-pad-x);
+}
+
+.media {
+	display: grid;
+	width: var(--media-w);
+	height: var(--media-h);
+	flex: none;
+	place-items: center;
+	overflow: hidden;
+	background: color-mix(in oklab, var(--poi-primary) 6%, var(--sheet-paper));
+	border-radius: calc(var(--media-h) * 0.06);
+}
+
+/*
+ * `cover` e não `contain`: a caixa da foto é dimensionada pelo algoritmo, e com `contain` toda foto
+ * cuja proporção não batesse com a da caixa deixava faixas do fundo tingido aparecendo em volta —
+ * numa grade, essas faixas viram o elemento mais visível da folha. O preço é cortar as bordas da
+ * foto, o que é aceitável em foto de produto (o assunto fica no centro) e não em foto de banner.
+ */
+.media img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+/* Sem foto, a inicial do prêmio no tom da marca — melhor que um ícone de imagem quebrada, que é o
+   que o lojista vê como "faltou cadastrar alguma coisa". */
+.mediaInitial {
+	color: color-mix(in oklab, var(--poi-primary) 45%, transparent);
+	font-size: calc(var(--media-h) * 0.5);
+	font-weight: 800;
+	line-height: 1;
+}
+
+/*
+ * `min-height` das linhas que o algoritmo reservou, e não a altura do texto que veio. Sem isso,
+ * "Café Coado" (uma linha) e "Pão de Queijo Recheado" (duas) produziam células de alturas
+ * diferentes na mesma fileira, e a caixa da foto de cada uma parava numa altura diferente — a
+ * grade oscilava conforme o olho corria a fileira.
+ */
+.cellTitle {
+	display: -webkit-box;
+	min-height: calc(var(--t-title) * 1.12 * var(--title-lines));
+	overflow: hidden;
+	font-size: var(--t-title);
+	font-weight: 800;
+	letter-spacing: -0.015em;
+	line-height: 1.12;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: var(--title-lines);
+}
+
+.cellDescription {
+	display: -webkit-box;
+	min-height: calc(var(--t-desc) * 1.25 * 2);
+	overflow: hidden;
+	color: var(--sheet-muted);
+	font-size: var(--t-desc);
+	font-weight: 500;
+	line-height: 1.25;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+}
+
+.cellMeta {
+	overflow: hidden;
+	color: var(--sheet-muted);
+	font-size: var(--t-meta);
+	font-weight: 600;
+	line-height: 1.2;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* -------------------------------------------------------------- o preço ---- */
+
+/*
+ * `align-items: flex-start` e não `baseline`: é o gesto de etiqueta de gôndola, com o `R$` e os
+ * centavos alinhados ao topo do número, em corpo menor. O número é o herói da folha.
+ */
+.price {
+	display: flex;
+	flex: none;
+	align-items: flex-start;
+	gap: calc(var(--t-value) * 0.08);
+	color: var(--poi-primary);
+	font-weight: 800;
+	letter-spacing: -0.02em;
+	line-height: 1;
+	white-space: nowrap;
+}
+
+.priceAmount {
+	font-size: var(--t-value);
+	line-height: 0.88;
+}
+
+.pricePrefix,
+.priceCents,
+.priceSuffix {
+	font-size: var(--t-cents);
+	line-height: 1;
+	padding-top: calc(var(--t-value) * 0.04);
+}
+
+.priceSuffix {
+	font-weight: 700;
+	letter-spacing: 0;
+	opacity: 0.72;
+}
+
+/* O condutor pontilhado do cardápio, ligando o título ao preço. Item flex vazio com altura
+   definida: no alinhamento por linha de base o navegador usa a borda inferior dele, então o
+   pontilhado assenta exatamente na base do título. */
+.leader {
+	align-self: baseline;
+	height: calc(var(--t-title) * 0.9);
+	min-width: var(--leader);
+	flex: 1 1 auto;
+	border-bottom: 0.25mm dotted color-mix(in oklab, var(--poi-primary) 40%, transparent);
+}
+
+.menuBody {
+	display: flex;
+	min-width: 0;
+	flex: 1;
+	align-items: baseline;
+	gap: var(--cell-gap);
+}
+
+/*
+ * Ordem de sacrifício na linha do cardápio: o preço nunca cede (é o herói e é o que o algoritmo
+ * dimensionou), o condutor cede até o mínimo, e o título é o último a encolher — cortando com
+ * reticências, que é o único dos três que sobrevive a ser cortado.
+ */
+.menuText {
+	display: flex;
+	min-width: 0;
+	/* Cresce até o texto inteiro (`max-content`) e não além: a sobra depois disso é do condutor,
+	   que é quem deve esticar. Sem o teto, o título tomaria a linha toda e o pontilhado sumiria. */
+	max-width: max-content;
+	flex: 1 1 auto;
+	flex-direction: column;
+	gap: calc(var(--t-title) * 0.16);
+}
+
+/* ------------------------------------------------------------- rodapé ---- */
+
+.footer {
+	display: flex;
+	height: var(--band-footer);
+	flex: none;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--inset);
+	border-top: 0.2mm solid var(--sheet-rule);
+	padding-inline: var(--inset);
+}
+
+.finePrint {
+	overflow: hidden;
+	color: var(--sheet-muted);
+	font-size: max(calc(var(--band-footer) * 0.24), 1.6mm);
+	font-weight: 500;
+	line-height: 1.2;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.footerMark {
+	display: flex;
+	flex: none;
+	align-items: center;
+	gap: calc(var(--band-footer) * 0.28);
+}
+
+.pageNumber {
+	color: var(--sheet-ink);
+	font-size: max(calc(var(--band-footer) * 0.26), 1.7mm);
+	font-weight: 800;
+}
+
+.footerMark img {
+	width: calc(var(--band-footer) * 2.2);
+	height: calc(var(--band-footer) * 0.45);
+	object-fit: contain;
+	object-position: right center;
+}
+
+/* --------------------------------------------------- pré-visualização ---- */
+
+/* Na tela a folha é escalada para caber na largura disponível; na impressão volta a 1:1. */
+.sheetFrame {
+	width: calc(var(--sheet-w) * var(--preview-scale));
+	height: calc(var(--sheet-h) * var(--preview-scale));
+	flex: none;
+	box-shadow:
+		0 22px 60px -22px oklch(0.28 0.055 255 / 0.35),
+		0 2px 6px oklch(0.28 0.055 255 / 0.1);
+}
+
+.sheetFrame .sheet {
+	transform: scale(var(--preview-scale));
+	transform-origin: top left;
+}
+
+@media print {
+	.sheetFrame {
+		width: auto;
+		height: auto;
+		box-shadow: none;
+	}
+
+	.sheetFrame .sheet {
+		transform: none;
+	}
+
+	.sheet {
+		break-after: page;
+	}
+
+	.sheet:last-child {
+		break-after: auto;
+	}
+}

@@ -1,7 +1,7 @@
 import dayjs from "dayjs";
 import type { TPaymentEffectivenessTypeEnum } from "./schemas";
 import type { TOrganizationConfiguration } from "@/schemas/organizations";
-import type { TPaymentMethodEnum } from "@/schemas/enums";
+import type { TDeliveryModeEnum, TPaymentMethodEnum } from "@/schemas/enums";
 
 type TOrganizationPaymentMethodsConfig = TOrganizationConfiguration["defaults"]["pagamentos"]["metodos"];
 type TPaymentMethodDefaultsConfig = TOrganizationPaymentMethodsConfig[TPaymentMethodEnum];
@@ -103,10 +103,16 @@ export function getOrganizationPaymentMethodDefault({
 	organizationConfig,
 	metodo,
 	baseDate,
+	entregaModalidade,
 }: {
 	organizationConfig?: Pick<TOrganizationConfiguration, "defaults"> | null;
 	metodo: TPaymentMethodEnum;
 	baseDate?: string | Date;
+	// Modalidade da venda em curso. ENTREGA muda o default de efetivação para PENDENTE — o dinheiro
+	// só troca de mãos na porta do cliente (previsão = âncora + delay do método; delay 0 cai em
+	// "previsto para hoje"). É default, não invariante: o operador pode voltar para IMEDIATA
+	// (ex.: PIX antecipado numa entrega).
+	entregaModalidade?: TDeliveryModeEnum | null;
 }): TResolvedPaymentMethodDefault {
 	const methods = getOrganizationPaymentMethodsConfig(organizationConfig);
 	const config = methods[metodo] ?? DEFAULT_PAYMENT_METHOD_CONFIG;
@@ -115,7 +121,7 @@ export function getOrganizationPaymentMethodDefault({
 
 	return {
 		metodo,
-		efetivacaoTipo: config.efetivacaoTipoPadrao,
+		efetivacaoTipo: entregaModalidade === "ENTREGA" ? "PENDENTE" : config.efetivacaoTipoPadrao,
 		dataPrevisao,
 		totalParcelas: null,
 		contaFinanceiraPadraoId: config.contaFinanceiraPadraoId,

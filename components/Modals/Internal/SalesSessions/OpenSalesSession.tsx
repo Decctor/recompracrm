@@ -12,11 +12,11 @@ import { toast } from "sonner";
 
 type OpenSalesSessionProps = {
 	closeModal: () => void;
-	exigirFundoTroco?: boolean;
+	requireOpeningFloat?: boolean;
 	callbacks?: { onMutate?: () => void; onSuccess?: () => void; onError?: () => void; onSettled?: () => void };
 };
 
-export default function OpenSalesSession({ closeModal, exigirFundoTroco, callbacks }: OpenSalesSessionProps) {
+export default function OpenSalesSession({ closeModal, requireOpeningFloat, callbacks }: OpenSalesSessionProps) {
 	const queryClient = useQueryClient();
 	const { state, updateOpenInput } = useInternalSalesSessionState();
 	const { data: sellers } = useSellersSimplified();
@@ -46,7 +46,7 @@ export default function OpenSalesSession({ closeModal, exigirFundoTroco, callbac
 
 	function handleSubmit() {
 		if (state.openInput.politica === "VENDEDOR_UNICO" && !state.openInput.vendedorPadraoId) return toast.error("Selecione o vendedor desta sessão.");
-		if (exigirFundoTroco && state.openInput.saldoInicial <= 0) return toast.error("Informe o fundo de troco para abrir o caixa.");
+		if (requireOpeningFloat && state.openInput.saldoInicial <= 0) return toast.error("Informe o fundo de troco para abrir o caixa.");
 		mutate(state.openInput);
 	}
 
@@ -97,7 +97,7 @@ export default function OpenSalesSession({ closeModal, exigirFundoTroco, callbac
 					onReset={() => updateOpenInput({ contaFinanceiraId: null })}
 				/>
 				<NumberInput
-					label={exigirFundoTroco ? "FUNDO DE TROCO (OBRIGATORIO)" : "FUNDO DE TROCO"}
+					label={requireOpeningFloat ? "FUNDO DE TROCO (OBRIGATORIO)" : "FUNDO DE TROCO"}
 					value={state.openInput.saldoInicial}
 					handleChange={(value) => updateOpenInput({ saldoInicial: value })}
 					placeholder="0,00"

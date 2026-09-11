@@ -11,6 +11,8 @@
  * alarme, e um retry que dispare muito é sinal de regressão do prompt, não de tuning a fazer.
  */
 
+import type { TAiAgentTurnAttachment } from "@/schemas/ai-agents";
+
 const DEFERRED_ACTION_PATTERNS = [
 	/\b(?:vou|vamos|irei)\s+(?:j[aá]\s+|agora\s+|logo\s+|ent[aã]o\s+)?(?:consultar|verificar|conferir|checar|criar|gerar|preparar|montar|buscar|procurar|olhar|confirmar|separar|levantar|providenciar|validar|pesquisar|ver)\b/i,
 	// "deixa eu ver", "deixe-me confirmar", "me deixa checar"
@@ -35,18 +37,25 @@ export type TDeferredActionCheck = {
 	resumoAtendimento: string;
 	/** Nomes no formato do AI SDK (`orcamentos_criar`), como vêm dos steps da geração. */
 	calledTools: string[];
+	/** Anexo já normalizado. Ausente = turno sem arquivo. */
+	anexo?: TAiAgentTurnAttachment | null;
 };
 
-export function shouldRetryDeferredAction({ mensagem, resumoAtendimento, calledTools }: TDeferredActionCheck): boolean {
+export function shouldRetryDeferredAction({ mensagem, resumoAtendimento, calledTools, anexo }: TDeferredActionCheck): boolean {
+	// Anexar um arquivo é entregar algo, exatamente como executar uma ferramenta: "já te mando o
+	// cardápio" com o PDF junto cumpriu a promessa na mesma mensagem.
+	const entregou = calledTools.length > 0 || Boolean(anexo);
+
 	// Turno morto: nada para o cliente e nada executado. `mensagem: null` só se justifica quando
-	// alguma ferramenta agiu (tipicamente a transferência para humano).
-	if (!mensagem?.trim()) return calledTools.length === 0;
+	// alguma ferramenta agiu (tipicamente a transferência para humano) ou quando o arquivo é a
+	// resposta inteira.
+	if (!mensagem?.trim()) return !entregou;
 
 	if (QUOTE_PROMISE_PATTERN.test(mensagem)) return !calledTools.includes("orcamentos_criar");
-	if (hasDeferredActionPromise(mensagem)) return calledTools.length === 0;
+	if (hasDeferredActionPromise(mensagem)) return !entregou;
 
 	// Promessa que ficou só no resumo interno enquanto o cliente recebeu texto de espera.
-	if (calledTools.length === 0 && hasDeferredActionPromise(resumoAtendimento)) return true;
+	if (!entregou && hasDeferredActionPromise(resumoAtendimento)) return true;
 
 	return false;
 }

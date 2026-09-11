@@ -86,9 +86,9 @@ export function usePOSTopProducts({ channel = "POS" }: { channel?: "POS" | "COMA
 }
 
 // Fetch POS groups
-async function fetchPOSGroups() {
+async function fetchPOSGroups(channel: "POS" | "COMANDA") {
 	try {
-		const { data } = await axios.get<TGetPOSGroupsOutput>("/api/pos/groups");
+		const { data } = await axios.get<TGetPOSGroupsOutput>(`/api/pos/groups?channel=${channel}`);
 		return data.data;
 	} catch (error) {
 		console.log("Error running fetchPOSGroups", error);
@@ -96,10 +96,14 @@ async function fetchPOSGroups() {
 	}
 }
 
-export function usePOSGroups() {
+/**
+ * Categorias com produto vendável no canal. O canal entra na chave porque a lista é derivada da
+ * vitrine dele: a barra do PDV e a do composer de comanda não são a mesma lista.
+ */
+export function usePOSGroups({ channel = "POS" }: { channel?: "POS" | "COMANDA" } = {}) {
 	return useQuery({
-		queryKey: ["pos-groups"],
-		queryFn: fetchPOSGroups,
+		queryKey: ["pos-groups", channel],
+		queryFn: () => fetchPOSGroups(channel),
 		staleTime: 5 * 60 * 1000, // 5 minutes
 	});
 }

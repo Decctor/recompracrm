@@ -116,7 +116,7 @@ function ConnectionIdentity({ type }: { type: TChatMessagesPage["chat"]["conexao
 				>
 					{isMeta ? <MetaIcon className="h-3 w-3" /> : <RecompraCRMIconColorful className="h-3 w-3" />}
 				</span>
-				<span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#25D366] text-white ring-2 ring-background">
+				<span className="flex h-5 w-5 items-center justify-center rounded-full bg-whatsapp text-white ring-2 ring-background">
 					<WhatsappIcon className="h-3 w-3 text-white" />
 				</span>
 			</span>

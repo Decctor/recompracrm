@@ -29,7 +29,7 @@ export async function processConfirmedSaleCancellation({
 		with: {
 			documentosFiscais: { columns: { id: true, statusInterno: true, documentoOrigemId: true } },
 			lancamentosContabeis: {
-				columns: { id: true, idContaDebito: true, idContaCredito: true, valor: true },
+				columns: { id: true, idContaDebito: true, idContaCredito: true, valor: true, titulo: true },
 				with: { transacoesFinanceiras: true },
 			},
 			movimentacoesEstoque: true,
@@ -83,7 +83,7 @@ export async function processConfirmedSaleCancellation({
 					organizacaoId: organizationId,
 					vendaId: saleId,
 					origemTipo: "ESTORNO",
-					titulo: `ESTORNO VENDA #${saleId}`,
+					titulo: `ESTORNO ${originalEntry.titulo}`,
 					anotacoes: reason,
 					idContaDebito: originalEntry.idContaCredito,
 					idContaCredito: originalEntry.idContaDebito,
@@ -113,7 +113,7 @@ export async function processConfirmedSaleCancellation({
 					valorDinheiro: cashEfetivado,
 					contaFinanceiraId: activeSession.contaFinanceiraId ?? null,
 					autorId: authorId,
-					titulo: `ESTORNO DINHEIRO VENDA #${saleId}`,
+					titulo: `ESTORNO DINHEIRO - ${originalEntry.titulo}`,
 				});
 			}
 		}

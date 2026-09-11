@@ -6,9 +6,17 @@ import type { TBenefitRedemptionSurface } from "@/schemas/enums";
 import { processCouponRedemption } from "@/lib/coupons/redemption";
 import { processSaleCupomAutoPrintIfEligible } from "@/lib/desktop-agent/auto-print";
 import { type TPaymentSplit, getPaymentProvider } from "@/lib/payments";
+import { buildSaleEntryTitle } from "@/lib/sales/entry-titles";
 import { validateSalesSessionSeller } from "@/lib/sales-sessions";
 import { db, type DBTransaction } from "@/services/drizzle";
-import { cashbackProgramBalances, cashbackProgramTransactions, cashbackPrograms, couponRedemptions, sales, salesSessions } from "@/services/drizzle/schema";
+import {
+	cashbackProgramBalances,
+	cashbackProgramTransactions,
+	cashbackPrograms,
+	couponRedemptions,
+	sales,
+	salesSessions,
+} from "@/services/drizzle/schema";
 import type { TOrganizationEntity } from "@/services/drizzle/schema";
 import { and, eq } from "drizzle-orm";
 import createHttpError from "http-errors";
@@ -75,6 +83,7 @@ export async function processSaleConfirmationInTransaction({ tx, input }: { tx: 
 					adicionais: true,
 				},
 			},
+			cliente: { columns: { nome: true } },
 		},
 	});
 
@@ -92,7 +101,8 @@ export async function processSaleConfirmationInTransaction({ tx, input }: { tx: 
 			.from(salesSessions)
 			.where(and(eq(salesSessions.id, input.sessaoVendaId), eq(salesSessions.organizacaoId, input.organization.id)))
 			.for("update");
-		if (!lockedSession || lockedSession.status !== "ABERTA") throw new createHttpError.Conflict("A sessao de venda foi fechada. Selecione outro caixa e tente novamente.");
+		if (!lockedSession || lockedSession.status !== "ABERTA")
+			throw new createHttpError.Conflict("A sessao de venda foi fechada. Selecione outro caixa e tente novamente.");
 		validateSalesSessionSeller({ session: lockedSession, vendedorId: sale.vendedorId });
 	}
 
@@ -102,13 +112,14 @@ export async function processSaleConfirmationInTransaction({ tx, input }: { tx: 
 	// Compare-and-set: o update condicionado ao status e a guarda autoritativa contra confirmacao
 	// concorrente (a checagem acima e apenas mensagem amigavel). Zero linhas = outra transacao
 	// confirmou/cancelou primeiro; abortar antes de criar contabilidade e pagamentos.
+	const confirmedAt = new Date();
 	const confirmedRows = await tx
 		.update(sales)
 		.set({
 			statusVenda: "CONFIRMADA",
 			statusAtendimento: initialAttendanceStatus,
 			natureza: "SN01",
-			dataVenda: new Date(),
+			dataVenda: confirmedAt,
 			sessaoVendaId: input.sessaoVendaId ?? null,
 		})
 		.where(and(eq(sales.id, input.saleId), eq(sales.statusVenda, "ORCAMENTO")))
@@ -118,11 +129,12 @@ export async function processSaleConfirmationInTransaction({ tx, input }: { tx: 
 		throw new createHttpError.Conflict("A venda ja foi confirmada ou alterada por outra operacao. Atualize e tente novamente.");
 	}
 
+	const saleLabel = buildSaleEntryTitle({ clientName: sale.cliente?.nome, totalValue: sale.valorTotal, occurredAt: confirmedAt });
 	const entry = await createAccountingEntry(tx, {
 		organizacaoId: input.organization.id,
 		vendaId: input.saleId,
 		valor: sale.valorTotal,
-		titulo: `VENDA #${sale.id}`,
+		titulo: saleLabel,
 		idContaDebito: input.accountingEntryDebitAccountId,
 		idContaCredito: input.accountingEntryCreditAccountId,
 		autorId: input.saleAuthorId,
@@ -148,6 +160,7 @@ export async function processSaleConfirmationInTransaction({ tx, input }: { tx: 
 			pagamentos: input.salePayments,
 			autorId: input.saleAuthorId,
 			sessaoVendaId: input.sessaoVendaId ?? null,
+			saleLabel,
 		},
 		tx,
 	);

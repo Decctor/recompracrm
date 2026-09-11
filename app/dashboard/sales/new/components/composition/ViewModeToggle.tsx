@@ -11,11 +11,11 @@ type ViewModeToggleProps = {
 export default function ViewModeToggle({ value, onChange }: ViewModeToggleProps) {
 	return (
 		<div className="flex shrink-0 items-center gap-1 rounded-xl border border-border bg-card p-1 shadow-2xs">
-			<ToggleButton active={value === "grid"} label="Ver em grade" onClick={() => onChange("grid")}>
-				<LayoutGrid className="h-4 w-4" />
-			</ToggleButton>
 			<ToggleButton active={value === "list"} label="Ver em lista" onClick={() => onChange("list")}>
 				<List className="h-4 w-4" />
+			</ToggleButton>
+			<ToggleButton active={value === "grid"} label="Ver em grade" onClick={() => onChange("grid")}>
+				<LayoutGrid className="h-4 w-4" />
 			</ToggleButton>
 		</div>
 	);

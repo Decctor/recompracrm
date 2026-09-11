@@ -1,7 +1,7 @@
 import type { TShopSettingsConfiguration } from "@/schemas/shop";
 import { db } from "@/services/drizzle";
 import { productChannelSettings, products, salesChannels, type TSalesChannelEntity } from "@/services/drizzle/schema";
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull, notInArray, type SQL } from "drizzle-orm";
 import { DEFAULT_SALES_CHANNELS, type TChannel } from "./sales-channels";
 
 function findInternalChannel(rows: TSalesChannelEntity[], canal: TChannel["canal"]) {
@@ -138,6 +138,31 @@ export function channelProductFilter(state: TChannelState) {
 	}
 	const excluded = [...state.productOverrides.entries()].filter(([, override]) => override.disponivel === false).map(([id]) => id);
 	return { includeIds: null, excludeIds: excluded.length ? excluded : null };
+}
+
+/**
+ * Condições SQL de "produto vendável neste canal": cadastro ativo, marcado como vendável e presente
+ * no canal (matriz esparsa — ver `channelProductFilter`). Existe para que toda superfície de venda
+ * responda ao MESMO conjunto: derivar a barra de categorias de um filtro mais frouxo do que o da
+ * grade é justamente o que produz a categoria que abre vazia.
+ *
+ * Devolve `null` quando o catálogo do canal é vazio (modo SELECIONADOS sem nenhum produto liberado):
+ * o chamador retorna cedo em vez de montar um `inArray(..., [])`.
+ */
+export function buildChannelCatalogConditions({ orgId, channelState }: { orgId: string; channelState: TChannelState | null }): SQL[] | null {
+	const conditions: SQL[] = [eq(products.organizacaoId, orgId), eq(products.ativo, true), eq(products.vendavel, true)];
+
+	// Canal ausente = organização não materializada ainda — comporta-se como TODOS sem overrides.
+	if (!channelState) return conditions;
+
+	const filter = channelProductFilter(channelState);
+	if (filter.includeIds) {
+		if (filter.includeIds.length === 0) return null;
+		conditions.push(inArray(products.id, filter.includeIds));
+	}
+	if (filter.excludeIds) conditions.push(notInArray(products.id, filter.excludeIds));
+
+	return conditions;
 }
 
 /** Preço resolvido de um nó no canal (node-scoped — ver resolver): override do nó, senão o base. */

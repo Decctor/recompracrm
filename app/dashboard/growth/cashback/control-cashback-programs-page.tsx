@@ -25,16 +25,14 @@ import {
 	Plus,
 	ReceiptText,
 	WalletCards,
-	Download,
-	Loader2,
+	Printer,
 } from "lucide-react";
 import { useState } from "react";
 import CashbackStatsBlock from "./_components/CashbackStatsBlock";
 import CashbackBalancesView from "./_components/CashbackBalancesView";
 import CashbackTransactionsView from "./_components/CashbackTransactionsView";
-import { getCashbackProgramPrizesShareImage, updateCashbackProgram } from "@/lib/mutations/cashback-programs";
+import { updateCashbackProgram } from "@/lib/mutations/cashback-programs";
 import { getErrorMessage } from "@/lib/errors";
-import { handleDownload } from "@/lib/files-storage";
 import { toast } from "sonner";
 import { useMutation } from "@tanstack/react-query";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -191,20 +189,6 @@ function CashbackProgramControlView({ cashbackProgram, user, userOrg }: Cashback
 	const [newCashbackProgramPrizeModalIsOpen, setNewCashbackProgramPrizeModalIsOpen] = useState<boolean>(false);
 	const [editCashbackProgramPrizeId, setEditCashbackProgramPrizeId] = useState<string | null>(null);
 	const activePrizesCount = cashbackProgram.recompensas.filter((prize) => prize.ativo).length;
-	const { mutate: generatePrizesSummary, isPending: prizesSummaryIsPending } = useMutation({
-		mutationKey: ["cashback-program-prizes-share-image", "summary"],
-		mutationFn: () => getCashbackProgramPrizesShareImage({ mode: "summary" }),
-		onSuccess: async ({ data }) => {
-			const [downloadResult, clipboardResult] = await Promise.allSettled([
-				handleDownload({ fileName: data.fileName, fileUrl: data.url }),
-				navigator.clipboard.writeText(data.url),
-			]);
-			if (downloadResult.status === "rejected") return toast.error("Não foi possível baixar o resumo dos prêmios.");
-			if (clipboardResult.status === "rejected") return toast.warning("Resumo baixado, mas não foi possível copiar o link.");
-			return toast.success("Resumo baixado e link copiado.");
-		},
-		onError: (error) => toast.error(getErrorMessage(error)),
-	});
 	return (
 		<div className="w-full flex flex-col gap-3">
 			<div className="w-full flex items-stretch gap-3 flex-col lg:flex-row">
@@ -329,12 +313,12 @@ function CashbackProgramControlView({ cashbackProgram, user, userOrg }: Cashback
 									<Button
 										variant="ghost"
 										size="xs"
-										disabled={prizesSummaryIsPending || activePrizesCount === 0}
-										onClick={() => generatePrizesSummary()}
+										disabled={activePrizesCount === 0}
+										onClick={() => window.open(`/cashback-rewards-display/${userOrg.id}`, "_blank", "noopener,noreferrer")}
 										className="flex items-center gap-1"
 									>
-										{prizesSummaryIsPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-										{prizesSummaryIsPending ? "GERANDO..." : "BAIXAR RESUMO"}
+										<Printer className="h-4 w-4" />
+										IMPRIMIR RESUMO
 									</Button>
 									<Button variant="ghost" size="xs" onClick={() => setNewCashbackProgramPrizeModalIsOpen(true)} className="flex items-center gap-1">
 										<Plus className="w-4 h-4 min-w-4 min-h-4" />

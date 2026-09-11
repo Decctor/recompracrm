@@ -15,10 +15,12 @@ type ProductsGridBlockProps = {
 	isError: boolean;
 	error: unknown;
 	viewMode: ProductViewMode;
+	/** `preferencias.rastreamentoEstoque` da organização — sem o módulo, nenhum saldo é exibido. */
+	orgTracksStock: boolean;
 	onProductClick: (product: Product) => void;
 };
 
-function ProductsGridBlock({ productsData, isLoading, isError, error, viewMode, onProductClick }: ProductsGridBlockProps) {
+function ProductsGridBlock({ productsData, isLoading, isError, error, viewMode, orgTracksStock, onProductClick }: ProductsGridBlockProps) {
 	if (isLoading) return <LoadingComponent />;
 	if (isError) return <ErrorComponent msg={getErrorMessage(error)} />;
 
@@ -27,7 +29,7 @@ function ProductsGridBlock({ productsData, isLoading, isError, error, viewMode, 
 			return (
 				<div className="flex flex-col gap-2 pb-4">
 					{productsData.products.map((product) => (
-						<ProductListRow key={product.id} product={product} onSelect={onProductClick} />
+						<ProductListRow key={product.id} product={product} orgTracksStock={orgTracksStock} onSelect={onProductClick} />
 					))}
 				</div>
 			);
@@ -36,7 +38,7 @@ function ProductsGridBlock({ productsData, isLoading, isError, error, viewMode, 
 		return (
 			<div className="grid grid-cols-2 gap-2.5 pb-4 sm:grid-cols-[repeat(auto-fill,minmax(9.5rem,10.5rem))] sm:justify-start">
 				{productsData.products.map((product) => (
-					<ProductCard key={product.id} product={product} onSelect={onProductClick} />
+					<ProductCard key={product.id} product={product} orgTracksStock={orgTracksStock} onSelect={onProductClick} />
 				))}
 			</div>
 		);

@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { formatToMoney } from "@/lib/formatting";
+import { resolvePOSProductStock } from "@/lib/pos/product-stock-display";
 import { cn } from "@/lib/utils";
 import type { TGetPOSProductsOutput } from "@/app/api/pos/products/route";
 import { Package, PackagePlus } from "lucide-react";
@@ -10,6 +11,8 @@ type Product = TGetPOSProductsOutput["data"]["products"][number];
 
 type ProductCardProps = {
 	product: Product;
+	/** `preferencias.rastreamentoEstoque` da organização — sem o módulo, nenhum saldo é exibido. */
+	orgTracksStock: boolean;
 	onSelect: (product: Product) => void;
 };
 
@@ -21,12 +24,12 @@ function getDisplayPrice(product: Product) {
 	return { type: "fixed" as const, value: product.precoVenda ?? 0 };
 }
 
-function ProductCard({ product, onSelect }: ProductCardProps) {
+function ProductCard({ product, orgTracksStock, onSelect }: ProductCardProps) {
 	const hasVariants = product.variantes.length > 0;
 	const hasAddOns = product.addOnsReferencias.length > 0;
 	const isComplex = hasVariants || hasAddOns;
 	const displayPrice = getDisplayPrice(product);
-	const hasStock = product.quantidade !== null && product.quantidade !== undefined;
+	const stockQuantity = resolvePOSProductStock({ product, orgTracksStock });
 
 	return (
 		<button
@@ -41,7 +44,13 @@ function ProductCard({ product, onSelect }: ProductCardProps) {
 			{/* Imagem — 4:3 reduz altura sem sacrificar a leitura rápida do produto. */}
 			<div className="relative aspect-[4/3] w-full overflow-hidden bg-secondary/40">
 				{product.imagemCapaUrl ? (
-					<Image src={product.imagemCapaUrl} alt={product.nome} fill className="object-cover transition-transform duration-300 group-hover:scale-105" />
+					<Image
+						src={product.imagemCapaUrl}
+						alt={product.nome}
+						fill
+						sizes="(min-width: 1280px) 16vw, (min-width: 768px) 25vw, 50vw"
+						className="object-cover transition-transform duration-300 group-hover:scale-105"
+					/>
 				) : (
 					<div className="flex h-full w-full items-center justify-center">
 						<Package className="h-10 w-10 text-muted-foreground/40" />
@@ -74,16 +83,16 @@ function ProductCard({ product, onSelect }: ProductCardProps) {
 						<p className="truncate text-base font-black tabular-nums text-foreground">{formatToMoney(displayPrice.value)}</p>
 					</div>
 
-					{hasStock ? (
+					{stockQuantity !== null ? (
 						<div className="flex shrink-0 items-center gap-1">
 							<span
 								className={cn("h-1.5 w-1.5 rounded-full", {
-									"bg-red-500": product.quantidade === 0,
-									"bg-yellow-500": product.quantidade! > 0 && product.quantidade! <= 10,
-									"bg-green-500": product.quantidade! > 10,
+									"bg-red-500": stockQuantity <= 0,
+									"bg-yellow-500": stockQuantity > 0 && stockQuantity <= 10,
+									"bg-green-500": stockQuantity > 10,
 								})}
 							/>
-							<span className="text-[0.6rem] font-medium text-muted-foreground">{product.quantidade! > 0 ? `${product.quantidade} un.` : "ESGOTADO"}</span>
+							<span className="text-[0.6rem] font-medium text-muted-foreground">{stockQuantity > 0 ? `${stockQuantity} un.` : "ESGOTADO"}</span>
 						</div>
 					) : null}
 				</div>

@@ -1,15 +1,13 @@
 "use client";
 
 import { BrandLogo } from "@/components/Brand/BrandLogo";
+import { PrintDock, useLocalPrintDock } from "@/components/Print/PrintDock";
 import Image from "next/image";
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
 import { TCashbackProgramEntity, TOrganizationEntity } from "@/services/drizzle/schema";
 import { hexToRgba, useOrgColors } from "@/components/Providers/OrgColorsProvider";
 import { POI_ACCENT_GRADIENT, POI_PRIMARY_GRADIENT } from "@/lib/point-of-interaction/theme";
-import { Camera, Gift, Printer, Scan, Smartphone } from "lucide-react";
+import { Camera, Gift, Scan, Smartphone } from "lucide-react";
 import { getCashbackUnitLabel } from "@/lib/formatting";
-import { SizeIcon } from "@radix-ui/react-icons";
 
 type PointOfInteractionDisplayPageProps = {
 	org: {
@@ -132,12 +130,9 @@ const DISPLAY_MODE_CONFIG: Record<
 
 export default function PointOfInteractionDisplayPage({ org, cashbackProgram }: PointOfInteractionDisplayPageProps) {
 	const { colors } = useOrgColors();
-	const [mode, setMode] = useState<TDisplayMode>("A5");
-	const displayConfig = DISPLAY_MODE_CONFIG[mode];
-
-	const handlePrint = () => {
-		window.print();
-	};
+	const dock = useLocalPrintDock({ title: "Display do ponto de interação", subject: org.nome, defaults: { size: "A5" } });
+	const mode = dock.state.selections.size as TDisplayMode;
+	const displayConfig = DISPLAY_MODE_CONFIG[mode] ?? DISPLAY_MODE_CONFIG.A5;
 
 	const steps = [
 		{
@@ -305,69 +300,33 @@ export default function PointOfInteractionDisplayPage({ org, cashbackProgram }: 
 					</div>
 				</div>
 
-				<aside className="hidden lg:flex lg:flex-col lg:gap-3 fixed right-6 top-1/2 z-20 w-64 -translate-y-1/2 rounded-2xl bg-card p-4 shadow-xl backdrop-blur print:hidden">
-					<div className="flex flex-col gap-0.5">
-						<div className="flex items-center gap-1.5">
-							<SizeIcon className="w-4 h-4" />
-							<p className="text-sm font-semibold text-foreground">FORMATO DO DISPLAY</p>
-						</div>
-						<p className="text-xs text-foreground">Selecione o tamanho que deseja pré-visualizar.</p>
-					</div>
-
-					<div className="flex flex-col gap-3">
-						{DISPLAY_MODES.map((displayMode) => {
-							const isActive = displayMode === mode;
-							const config = DISPLAY_MODE_CONFIG[displayMode];
-
-							return (
-								<Button
+				{/* Uma composição só. As duas cópias anteriores — o painel `lg:` e a cápsula mobile — já
+				    tinham divergido: a de mobile perdeu as dimensões em milímetros e o modo atual. */}
+				<PrintDock.Provider {...dock}>
+					<PrintDock.Frame>
+						<PrintDock.Identity />
+						<PrintDock.Divider />
+						<PrintDock.Options groupId="size" label="Formato do display">
+							{DISPLAY_MODES.map((displayMode) => (
+								<PrintDock.Option
 									key={displayMode}
-									type="button"
-									variant={isActive ? "default" : "outline"}
-									className="h-auto w-full justify-between px-4 py-3"
-									onClick={() => setMode(displayMode)}
+									value={displayMode}
+									label={`${displayMode} · ${DISPLAY_MODE_CONFIG[displayMode].widthMm} × ${DISPLAY_MODE_CONFIG[displayMode].heightMm} mm`}
 								>
-									<span className="font-semibold">{displayMode}</span>
-									<span className="text-xs opacity-80">
-										{config.widthMm} x {config.heightMm} mm
-									</span>
-								</Button>
-							);
-						})}
-					</div>
-
-					<Button type="button" className="w-full gap-2" onClick={handlePrint}>
-						<Printer className="h-4 w-4" />
-						IMPRIMIR
-					</Button>
-
-					<div className="w-full flex items-center justify-between gap-3 rounded-xl bg-brand text-brand-foreground px-3 py-2">
-						<p className="text-xs font-medium">MODO ATUAL</p>
-						<p className="text-sm font-semibold">{mode}</p>
-					</div>
-				</aside>
-
-				<nav className="fixed bottom-4 left-1/2 z-20 flex max-w-[calc(100%-2rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-2 rounded-full bg-card/95 p-2 shadow-xl backdrop-blur lg:hidden print:hidden">
-					{DISPLAY_MODES.map((displayMode) => {
-						const isActive = displayMode === mode;
-
-						return (
-							<Button
-								key={displayMode}
-								type="button"
-								variant={isActive ? "default" : "outline"}
-								className="h-11 min-w-11 rounded-full px-4 text-sm font-semibold"
-								onClick={() => setMode(displayMode)}
-							>
-								{displayMode}
-							</Button>
-						);
-					})}
-					<Button type="button" className="h-11 gap-2 rounded-full px-4 text-sm font-semibold" onClick={handlePrint}>
-						<Printer className="h-4 w-4" />
-						IMPRIMIR
-					</Button>
-				</nav>
+									{displayMode}
+								</PrintDock.Option>
+							))}
+						</PrintDock.Options>
+						<PrintDock.Divider />
+						<PrintDock.Readout>
+							<PrintDock.ReadoutValue>
+								{displayConfig.widthMm} × {displayConfig.heightMm} mm
+							</PrintDock.ReadoutValue>
+							<PrintDock.ReadoutNote>Escolha o formato antes de imprimir</PrintDock.ReadoutNote>
+						</PrintDock.Readout>
+						<PrintDock.Print />
+					</PrintDock.Frame>
+				</PrintDock.Provider>
 			</div>
 		</div>
 	);

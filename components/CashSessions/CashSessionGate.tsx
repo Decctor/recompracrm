@@ -8,9 +8,9 @@ import { Wallet } from "lucide-react";
 import { useState } from "react";
 
 type Session = TGetSalesSessionsOutputDefault["sessions"][number];
-type Props = { sessions: Session[]; activeSessionId: string | null; onSessionChange: (id: string | null) => void; exigirFundoTroco: boolean };
+type Props = { sessions: Session[]; activeSessionId: string | null; onSessionChange: (id: string | null) => void; requireOpeningFloat: boolean };
 
-export default function CashSessionGate({ sessions, activeSessionId, onSessionChange, exigirFundoTroco }: Props) {
+export default function CashSessionGate({ sessions, activeSessionId, onSessionChange, requireOpeningFloat }: Props) {
 	const [isOpening, setIsOpening] = useState(false);
 	const hasOpenSessions = sessions.length > 0;
 	return (
@@ -49,7 +49,7 @@ export default function CashSessionGate({ sessions, activeSessionId, onSessionCh
 					ABRIR OUTRO CAIXA
 				</Button>
 			</div>
-			{isOpening ? <OpenSalesSession closeModal={() => setIsOpening(false)} exigirFundoTroco={exigirFundoTroco} /> : null}
+			{isOpening ? <OpenSalesSession closeModal={() => setIsOpening(false)} requireOpeningFloat={requireOpeningFloat} /> : null}
 		</div>
 	);
 }

@@ -8,11 +8,20 @@ import { type NextRequest, NextResponse } from "next/server";
 
 type TSubscriptionStatusMode = "success" | "warn" | "fail";
 
+/**
+ * O que a superfície de assinatura deve oferecer como ação principal. `ATUALIZAR_PAGAMENTO`
+ * só aparece quando existe uma cobrança em aberto que o portal do Stripe resolve — quem teve
+ * o cartão recusado não precisa escolher plano de novo, precisa trocar o meio de pagamento.
+ * Criar um segundo checkout nesse estado gera assinatura duplicada no Stripe.
+ */
+export type TSubscriptionStatusAction = "ASSINAR" | "ATUALIZAR_PAGAMENTO";
+
 type TSubscriptionStatusData = {
 	ativa: boolean;
 	status: string;
 	modo: TSubscriptionStatusMode;
 	mensagem: string;
+	acao: TSubscriptionStatusAction;
 };
 
 async function getSubscriptionStatus(): Promise<{ data: TSubscriptionStatusData; message: string }> {
@@ -45,6 +54,11 @@ async function getSubscriptionStatus(): Promise<{ data: TSubscriptionStatusData;
 		daysRemaining: access.daysRemaining,
 	});
 
+	// O portal do Stripe exige um customer — sem ele a rota `billing-portal` responde 400, então
+	// o fallback é sempre o checkout.
+	const canUseBillingPortal = !!org.stripeCustomerId;
+	const acaoDeCobrancaPendente: TSubscriptionStatusAction = canUseBillingPortal ? "ATUALIZAR_PAGAMENTO" : "ASSINAR";
+
 	const respond = (data: TSubscriptionStatusData) => ({ data, message: "Status da assinatura obtido com sucesso." });
 	const plural = (days: number) => (days !== 1 ? "s" : "");
 
@@ -54,6 +68,7 @@ async function getSubscriptionStatus(): Promise<{ data: TSubscriptionStatusData;
 			status: "Assinatura ativa",
 			modo: "success",
 			mensagem: "Sua assinatura está ativa.",
+			acao: "ASSINAR",
 		});
 	}
 
@@ -67,6 +82,7 @@ async function getSubscriptionStatus(): Promise<{ data: TSubscriptionStatusData;
 			mensagem: limitDate
 				? `Aguardando a confirmação do seu pagamento. Se você pagou por boleto, a compensação pode levar até 2 dias úteis. Seu acesso está garantido até ${limitDate}.`
 				: "Aguardando a confirmação do seu pagamento. Isso pode levar alguns minutos.",
+			acao: acaoDeCobrancaPendente,
 		});
 	}
 
@@ -77,6 +93,7 @@ async function getSubscriptionStatus(): Promise<{ data: TSubscriptionStatusData;
 			status: "Pagamento pendente",
 			modo: "warn",
 			mensagem: `Pagamento pendente. O acesso será suspenso em ${daysRemaining} dia${plural(daysRemaining)} — regularize sua assinatura.`,
+			acao: acaoDeCobrancaPendente,
 		});
 	}
 
@@ -88,6 +105,7 @@ async function getSubscriptionStatus(): Promise<{ data: TSubscriptionStatusData;
 				status: "Período de teste ativo",
 				modo: "success",
 				mensagem: `Período de teste ativo. Restam ${daysRemaining} dias.`,
+				acao: "ASSINAR",
 			});
 		}
 		return respond({
@@ -95,6 +113,7 @@ async function getSubscriptionStatus(): Promise<{ data: TSubscriptionStatusData;
 			status: `Período de teste encerra em ${daysRemaining} dia${plural(daysRemaining)}`,
 			modo: "warn",
 			mensagem: `Seu período de teste encerra em ${daysRemaining} dia${plural(daysRemaining)}. Adquira um plano para não perder o acesso.`,
+			acao: "ASSINAR",
 		});
 	}
 
@@ -105,6 +124,7 @@ async function getSubscriptionStatus(): Promise<{ data: TSubscriptionStatusData;
 			status: "Teste encerrado",
 			modo: "warn",
 			mensagem: `Seu período de teste encerrou. Regularize em até ${daysRemaining} dia${plural(daysRemaining)} para manter o acesso.`,
+			acao: "ASSINAR",
 		});
 	}
 
@@ -115,15 +135,20 @@ async function getSubscriptionStatus(): Promise<{ data: TSubscriptionStatusData;
 			status: "Acesso suspenso",
 			modo: "fail",
 			mensagem: "Pagamento pendente há mais de 15 dias. Acesso suspenso — regularize sua assinatura.",
+			acao: acaoDeCobrancaPendente,
 		});
 	}
 
 	if (org.stripeSubscriptionStatus === "incomplete" || org.stripeSubscriptionStatus === "incomplete_expired" || org.stripeSubscriptionStatus === "unpaid") {
+		// `incomplete_expired` é terminal: a fatura inicial morreu e o portal não tem o que abrir,
+		// então esse caso volta para o checkout mesmo tendo customer no Stripe.
+		const expirou = org.stripeSubscriptionStatus === "incomplete_expired";
 		return respond({
 			ativa: false,
 			status: "Pagamento não confirmado",
 			modo: "fail",
 			mensagem: "Não conseguimos confirmar o pagamento da sua assinatura. Regularize para continuar utilizando a plataforma.",
+			acao: expirou ? "ASSINAR" : acaoDeCobrancaPendente,
 		});
 	}
 
@@ -133,6 +158,7 @@ async function getSubscriptionStatus(): Promise<{ data: TSubscriptionStatusData;
 			status: "Assinatura cancelada",
 			modo: "fail",
 			mensagem: "Sua assinatura foi cancelada. Adquira um plano para continuar utilizando a plataforma.",
+			acao: "ASSINAR",
 		});
 	}
 
@@ -142,6 +168,7 @@ async function getSubscriptionStatus(): Promise<{ data: TSubscriptionStatusData;
 			status: "Acesso suspenso",
 			modo: "fail",
 			mensagem: "Seu período de teste e o prazo de regularização expiraram. Adquira um plano para continuar.",
+			acao: "ASSINAR",
 		});
 	}
 
@@ -150,6 +177,7 @@ async function getSubscriptionStatus(): Promise<{ data: TSubscriptionStatusData;
 		status: "Sem assinatura",
 		modo: "fail",
 		mensagem: "Nenhuma assinatura encontrada. Adquira um plano para utilizar a plataforma.",
+		acao: "ASSINAR",
 	});
 }
 

@@ -1,6 +1,5 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import type { TUseSaleState } from "@/state-hooks/use-sale-state";
 import { Minus, Package, Plus, ShoppingCart, StickyNote, Trash2 } from "lucide-react";
 import Image from "next/image";
@@ -34,25 +33,26 @@ export default function ItemsSection({ saleState }: ItemsSectionProps) {
 					</Button>
 				) : null}
 			</div>
-			<ScrollArea className="max-h-[240px]">
-				<div className="flex flex-col gap-2 pr-3">
-					{saleState.state.itens.map((item) => (
-						<CartItemRow
-							key={item.tempId}
-							item={item}
-							onUpdateQuantity={saleState.updateItemQuantity}
-							onUpdateObservacoes={saleState.updateItemObservacoes}
-							onRemove={saleState.removeItem}
-						/>
-					))}
-					{itemCount === 0 ? (
-						<div className="flex flex-col items-center gap-1.5 rounded-lg border border-dashed border-border/70 py-6 text-center">
-							<ShoppingCart className="h-5 w-5 text-muted-foreground/50" />
-							<p className="text-xs font-medium text-muted-foreground">Nenhum item no carrinho.</p>
-						</div>
-					) : null}
-				</div>
-			</ScrollArea>
+			{/* Sem scroller interno: o checkout inteiro já rola (coluna no desktop, Sheet no mobile).
+			    Um segundo scroller aqui aninhava rolagens e, sem altura definida, vazava o conteúdo
+			    por cima da seção de entrega. */}
+			<div className="flex flex-col gap-2">
+				{saleState.state.itens.map((item) => (
+					<CartItemRow
+						key={item.tempId}
+						item={item}
+						onUpdateQuantity={saleState.updateItemQuantity}
+						onUpdateObservacoes={saleState.updateItemObservacoes}
+						onRemove={saleState.removeItem}
+					/>
+				))}
+				{itemCount === 0 ? (
+					<div className="flex flex-col items-center gap-1.5 rounded-lg border border-dashed border-border/70 py-6 text-center">
+						<ShoppingCart className="h-5 w-5 text-muted-foreground/50" />
+						<p className="text-xs font-medium text-muted-foreground">Nenhum item no carrinho.</p>
+					</div>
+				) : null}
+			</div>
 		</div>
 	);
 }
@@ -79,7 +79,7 @@ function CartItemRow({ item, onUpdateQuantity, onUpdateObservacoes, onRemove }: 
 			<div className="flex items-start gap-2.5">
 				<div className="relative h-11 w-11 min-h-11 min-w-11 overflow-hidden rounded-lg bg-secondary/40">
 					{item.imagemUrl ? (
-						<Image src={item.imagemUrl} alt={item.nome} fill className="object-cover" />
+						<Image src={item.imagemUrl} alt={item.nome} fill sizes="44px" className="object-cover" />
 					) : (
 						<div className="flex h-full w-full items-center justify-center">
 							<Package className="h-4 w-4 text-muted-foreground/40" />

@@ -40,8 +40,8 @@ function modifierSignature(modifiers: TBuiltOrderItem["modificadores"]) {
 		.join("|");
 }
 
-function cartKeyFor(item: Pick<TBuiltOrderItem, "produtoId" | "produtoVarianteId" | "modificadores">) {
-	return `${item.produtoId}:${item.produtoVarianteId ?? ""}:${modifierSignature(item.modificadores)}`;
+function cartKeyFor(item: Pick<TBuiltOrderItem, "produtoId" | "produtoVarianteId" | "modificadores" | "observacoes">) {
+	return `${item.produtoId}:${item.produtoVarianteId ?? ""}:${modifierSignature(item.modificadores)}:${item.observacoes ?? ""}`;
 }
 
 function withQuantity(item: TCartItem, quantidade: number): TCartItem {
@@ -122,6 +122,7 @@ export function TabOrderComposer({ tabId, contextLabel, onLaunched, onExit, clas
 			valorTotalBruto: product.precoVenda ?? 0,
 			valorDesconto: 0,
 			valorTotalLiquido: product.precoVenda ?? 0,
+			observacoes: null,
 			modificadores: [],
 		});
 	}
@@ -251,7 +252,7 @@ function CatalogStage({
 }: CatalogStageProps) {
 	// Canal COMANDA: o pedido da mesa exibe e cobra o preço do canal, venha do QR ou do operador.
 	const { data: productsResult, filters, updateFilters, isLoading } = usePOSProducts({ initialFilters: { channel: "COMANDA" } });
-	const { data: groupsResult } = usePOSGroups();
+	const { data: groupsResult } = usePOSGroups({ channel: "COMANDA" });
 	const { data: topProductsResult } = usePOSTopProducts({ channel: "COMANDA" });
 
 	const groups = groupsResult?.groups ?? [];
@@ -641,6 +642,7 @@ function ReviewStage({ cart, cartTotal, observacoes, setObservacoes, launchPendi
 											{item.modificadores.map((modifier) => `${modifier.quantidade}x ${modifier.nome}`).join(" · ")}
 										</span>
 									) : null}
+									{item.observacoes ? <span className="text-xs italic text-muted-foreground [overflow-wrap:anywhere]">{item.observacoes}</span> : null}
 									<span className="text-xs font-bold tabular-nums">{formatToMoney(item.valorTotalLiquido)}</span>
 								</div>
 								<ProductBuilderStepper

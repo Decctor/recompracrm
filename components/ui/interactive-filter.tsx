@@ -694,9 +694,6 @@ function InteractiveFilterDateRangeContent({
 				selected={{ from: value.from, to: value.to }}
 				onSelect={(selectedValue) => onChange({ from: selectedValue?.from, to: selectedValue?.to })}
 				numberOfMonths={numberOfMonths}
-				classNames={{
-					weekdays: "flex items-center gap-1.5",
-				}}
 			/>
 		</div>
 	);

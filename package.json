@@ -58,9 +58,10 @@
 		"test:whatsapp-parsing": "node --import tsx --test lib/whatsapp/parsing.test.ts",
 		"test:geo": "node --import tsx --test lib/geo/brazilian-locations.test.ts",
 		"test:sales-channels": "node --import tsx --test lib/products/sales-channels.test.ts",
+		"test:cashback-rewards-display": "node --import tsx --test lib/cashback/rewards-display-layout.test.ts",
 		"test:cashback-redemption": "node --import tsx --test lib/cashback/redemption-policy.test.ts lib/shop/checkout.test.ts",
 		"test:sales-results": "node --import tsx --test lib/sales/results/classify.test.ts lib/sales/results/payment-reconciliation.test.ts lib/access/capabilities.test.ts",
-		"test:sale-payments": "node --import tsx --test lib/sales/payment-grouping.test.ts",
+		"test:sale-payments": "node --import tsx --test lib/sales/payment-grouping.test.ts lib/payments/defaults.test.ts",
 		"test:ifood": "node --import tsx --test lib/data-connectors/ifood/date.test.ts lib/data-connectors/ifood/retry.test.ts lib/data-connectors/ifood/cancellation-request.test.ts lib/data-connectors/ifood/handshake-dispute.test.ts lib/data-connectors/ifood/payment.test.ts lib/data-connectors/ifood/totals.test.ts lib/fiscal/managed-sale-payments.test.ts lib/shop/config.test.ts",
 		"normalize:client-locations": "tsx ./scripts/normalize-client-locations.ts",
 		"test:ai-quotes": "node --import tsx --test lib/ai/operations/hash.test.ts lib/ai/tools/quotes.test.ts lib/ai/tools/product-availability.test.ts lib/products/availability.test.ts lib/sales/resolve-sale-items.test.ts lib/sales/quote-freshness.test.ts lib/payments/resolve-payment-financial-account.test.ts lib/sales/drafts/sync-draft-items.test.ts lib/sales/sale-processing/process-sale-fulfillment-correction.test.ts schemas/ai-agents.test.ts lib/finances/resolve-accounting-default-accounts.test.ts",
@@ -81,7 +82,8 @@
 		"ai:agent-instructions": "tsx ./scripts/update-ai-agent-default-instructions.ts",
 		"ai:agent-conversation": "tsx ./scripts/test-ai-agent-conversation.ts",
 		"test:agent-tools": "node --import tsx --test lib/access/clients-catalog.test.ts lib/access/oauth.test.ts lib/agent-tools/organization-scope.test.ts lib/agent-tools/registry.test.ts lib/agent-tools/serialization.test.ts lib/agent-tools/period.test.ts lib/http/fetch-public-url.test.ts lib/files/files.test.ts lib/message-templates/agent-media.test.ts lib/mcp/json-schema.test.ts lib/mcp/protocol.test.ts lib/mcp/server.test.ts",
-		"test:agent-tools:db": "tsx ./scripts/test-agent-tools.ts"
+		"test:agent-tools:db": "tsx ./scripts/test-agent-tools.ts",
+		"test:ai-agent": "node --import tsx --test lib/ai/agent/attachment.test.ts lib/ai/agent/turn-validation.test.ts lib/ai/agent/run-memory.test.ts lib/ai/agent/context.test.ts lib/ai/agent/provisioning.test.ts"
 	},
 	"dependencies": {
 		"@ai-sdk/react": "^4.0.96",
