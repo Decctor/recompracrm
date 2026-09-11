@@ -189,7 +189,7 @@ function ResolveNowRail({ context }: { context: TCapabilityContext }) {
 							]
 								.filter(Boolean)
 								.join(" · ")}
-							trailing={<Panel.RowAction emphasis>Decidir</Panel.RowAction>}
+							trailing={<Panel.RowAction>Decidir</Panel.RowAction>}
 						/>
 					))}
 					{fiscalCauses.slice(0, RESOLVE_LIMIT - pendingApprovals.length).map((group) => (

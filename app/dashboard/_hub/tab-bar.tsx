@@ -25,9 +25,9 @@ type TabDefinition = {
 };
 
 const TAB_DEFINITIONS: Record<TDashboardTab, TabDefinition> = {
-	relacionamento: { id: "relacionamento", label: "Relacionamento", Icon: UsersRound },
-	operacao: { id: "operacao", label: "Operação", Icon: ClipboardList },
-	equipe: { id: "equipe", label: "Equipe", Icon: UserRound },
+	relacionamento: { id: "relacionamento", label: "RELACIONAMENTO", Icon: UsersRound },
+	operacao: { id: "operacao", label: "OPERAÇÃO", Icon: ClipboardList },
+	equipe: { id: "equipe", label: "EQUIPE", Icon: UserRound },
 };
 
 export type TabBadge = { count: number; tone: "default" | "destructive" };

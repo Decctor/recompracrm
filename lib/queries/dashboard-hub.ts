@@ -1,6 +1,6 @@
 import type { TGetCampaignsHealthOutput } from "@/app/api/campaigns/health/route";
-import type { TGetCirculatingCashbackOutput } from "@/app/api/cashback-programs/circulating/route";
 import type { TGetExpiringCashbackOutput } from "@/app/api/cashback-programs/expiring/route";
+import type { TGetCashbackUsageOutput } from "@/app/api/cashback-programs/usage/route";
 import type { TGetTeamRoutineOutput } from "@/app/api/client-portfolios/team-routine/route";
 import type { TGetClientBirthdaysOutput } from "@/app/api/clients/birthdays/route";
 import type { TGetRelationshipPulseOutput } from "@/app/api/clients/stats/relationship-pulse/route";
@@ -62,14 +62,14 @@ export function useRelationshipPulse({ days = 30 }: { days?: number } = {}) {
 	return { ...useQuery({ queryKey, queryFn: () => fetchRelationshipPulse(days) }), queryKey };
 }
 
-async function fetchCirculatingCashback(days: number) {
-	const { data } = await axios.get<TGetCirculatingCashbackOutput>(`/api/cashback-programs/circulating?days=${days}`);
+async function fetchCashbackUsage(days: number) {
+	const { data } = await axios.get<TGetCashbackUsageOutput>(`/api/cashback-programs/usage?days=${days}`);
 	return data.data;
 }
 
-export function useCirculatingCashback({ days = 30 }: { days?: number } = {}) {
-	const queryKey = ["cashback-circulating", days];
-	return { ...useQuery({ queryKey, queryFn: () => fetchCirculatingCashback(days) }), queryKey };
+export function useCashbackUsage({ days = 30 }: { days?: number } = {}) {
+	const queryKey = ["cashback-usage", days];
+	return { ...useQuery({ queryKey, queryFn: () => fetchCashbackUsage(days) }), queryKey };
 }
 
 async function fetchSegmentDistribution(days: number) {

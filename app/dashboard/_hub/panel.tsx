@@ -99,7 +99,7 @@ function PanelRow({ leading, primary, secondary, trailing, href }: PanelRowProps
 		return (
 			<Link
 				href={href}
-				className={cn(rowClassName, "transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring")}
+				className={cn(rowClassName, "group transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring")}
 			>
 				{content}
 			</Link>
@@ -113,16 +113,17 @@ function PanelRowIcon({ tone = "default", children }: { tone?: PanelTone; childr
 	return <span className={cn("flex size-8 items-center justify-center rounded-lg [&>svg]:size-4", toneSurfaceClassName[tone])}>{children}</span>;
 }
 
-/** Ação à direita de uma linha. Não é um `Link`: a linha inteira já leva ao mesmo lugar. */
-function PanelRowAction({ emphasis = false, children }: { emphasis?: boolean; children: ReactNode }) {
+/**
+ * Ação à direita de uma linha. Não é um `Link`: a linha inteira já leva ao mesmo lugar. Um único
+ * formato para todas — a urgência quem diz é o tom do `RowIcon`, não o tamanho do botão. O ícone
+ * padrão é a mesma seta dos links de cabeçalho (a linha abre uma tela); passe outro quando o verbo
+ * criar algo, como `Megaphone` para disparar uma campanha.
+ */
+function PanelRowAction({ icon, children }: { icon?: ReactNode; children: ReactNode }) {
 	return (
-		<span
-			className={cn(
-				"text-micro flex h-7 items-center rounded-lg px-2.5 font-bold",
-				emphasis ? "bg-primary text-primary-foreground" : "border border-border",
-			)}
-		>
+		<span className="text-micro flex h-7 items-center gap-1 rounded-lg border border-border px-2.5 font-bold transition-colors group-hover:border-primary/40 group-hover:text-primary [&_svg]:size-3.5">
 			{children}
+			{icon ?? <ArrowUpRight aria-hidden />}
 		</span>
 	);
 }
@@ -151,7 +152,9 @@ function StatTile({ label, value, delta, deltaTone = "success", tone = "default"
 				{delta ? <span className={cn("font-bold text-xs", toneClassName[deltaTone])}>{delta}</span> : null}
 			</div>
 			{caption ? <span className="text-micro font-normal text-muted-foreground">{caption}</span> : null}
-			{children ? <div className="mt-1.5">{children}</div> : null}
+			{/* `mt-auto` prega o gráfico na base do cartão: as legendas quebram linha em larguras
+			    diferentes e, sem isso, cada tile terminava o rodapé numa altura própria. */}
+			{children ? <div className="mt-auto pt-2.5">{children}</div> : null}
 		</Section.Root>
 	);
 }

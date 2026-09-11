@@ -264,7 +264,7 @@ function GoalRing({
 				</svg>
 				<span className="absolute inset-0 flex flex-col items-center justify-center">
 					<span className="font-black text-[1.75rem] leading-none tracking-tight">{formatDecimalPlaces(goal.percentualValor, 0, 0)}%</span>
-					<span className="text-micro text-muted-foreground uppercase tracking-[0.08em]">Meta do período</span>
+					<span className="text-micro text-muted-foreground uppercase tracking-[0.08em]">META</span>
 				</span>
 			</div>
 			<div className="flex flex-col items-center gap-1">

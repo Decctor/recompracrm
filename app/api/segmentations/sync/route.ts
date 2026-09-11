@@ -197,10 +197,7 @@ async function syncSegmentations({ input, session }: { input: TSyncSegmentations
 		});
 		const cashbackTerminology = cashbackProgram?.terminologia ?? "DINHEIRO";
 		const runningBalanceByClientId = new Map<string, { available: number; accumulated: number }>();
-		const clientBalanceCache = new Map<
-			string,
-			{ saldoValorDisponivel: number; saldoValorAcumuladoTotal: number; saldoValorResgatadoTotal: number }
-		>();
+		const clientBalanceCache = new Map<string, { saldoValorDisponivel: number; saldoValorAcumuladoTotal: number; saldoValorResgatadoTotal: number }>();
 
 		async function getClientBalance(clientId: string) {
 			const cached = clientBalanceCache.get(clientId);
@@ -224,12 +221,15 @@ async function syncSegmentations({ input, session }: { input: TSyncSegmentations
 		}
 
 		for (const [_index, results] of accumulatedResultsByClient.entries()) {
-			const calculatedRecency = dayjs().diff(dayjs(results.lastPurchaseDate), "days");
+			// `null`, não NaN, quando o cliente não comprou na janela — e o guard abaixo é
+			// `!== null`, não truthiness: recência 0 (comprou hoje) é falsy e derrubava o
+			// cliente para a pior nota, invertendo o rótulo dele a cada sincronização.
+			const calculatedRecency = results.lastPurchaseDate ? dayjs().diff(dayjs(results.lastPurchaseDate), "days") : null;
 			const calculatedFrequency = results.purchaseCount;
 			const calculatedMonetary = results.totalPurchases;
 
 			const configRecency = Object.entries(rfmConfig.recencia).find(
-				([_key, value]) => calculatedRecency && calculatedRecency >= value.min && calculatedRecency <= value.max,
+				([_key, value]) => calculatedRecency !== null && calculatedRecency >= value.min && calculatedRecency <= value.max,
 			);
 			const configFrequency = Object.entries(rfmConfig.frequencia).find(
 				([_key, value]) => calculatedFrequency >= value.min && calculatedFrequency <= value.max,
@@ -326,10 +326,7 @@ async function syncSegmentations({ input, session }: { input: TSyncSegmentations
 						scheduledInteractionsCount += 1;
 
 						// Check for immediate processing (execucaoAgendadaValor === 0)
-						if (
-							campaign.execucaoAgendadaValor === 0 &&
-							campaign.whatsappTemplate
-						) {
+						if (campaign.execucaoAgendadaValor === 0 && campaign.whatsappTemplate) {
 							// Query client data for immediate processing
 							const clientData = await tx.query.clients.findFirst({
 								where: (fields, { eq }) => eq(fields.id, results.clientId),
@@ -370,7 +367,6 @@ async function syncSegmentations({ input, session }: { input: TSyncSegmentations
 								});
 							}
 						}
-
 					}
 				} else {
 					const lastRFMLabelModification = results.clientRFMLastLabelModification;
@@ -478,10 +474,7 @@ async function syncSegmentations({ input, session }: { input: TSyncSegmentations
 						scheduledInteractionsCount += 1;
 
 						// Check for immediate processing (execucaoAgendadaValor === 0)
-						if (
-							campaign.execucaoAgendadaValor === 0 &&
-							campaign.whatsappTemplate
-						) {
+						if (campaign.execucaoAgendadaValor === 0 && campaign.whatsappTemplate) {
 							// Query client data for immediate processing
 							const clientData = await tx.query.clients.findFirst({
 								where: (fields, { eq }) => eq(fields.id, results.clientId),
@@ -522,7 +515,6 @@ async function syncSegmentations({ input, session }: { input: TSyncSegmentations
 								});
 							}
 						}
-
 					}
 				}
 			}
