@@ -19,6 +19,7 @@ import { BadgePercent, Cake, CalendarCheck, MessageCircle } from "lucide-react";
 import Link from "next/link";
 import { useMemo } from "react";
 import { segmentColors, segmentLabel } from "../format";
+import { HubTable, type THubTableColumn } from "../hub-table";
 import { Panel, StatTile } from "../panel";
 import { resolveTodayRange, useDayKey } from "../use-day-key";
 
@@ -151,48 +152,62 @@ function SegmentMovement() {
 				href={appRoutes.customers.segments()}
 				hrefLabel="Abrir matriz RFM"
 			/>
-			{isPending ? (
-				<Panel.Loading rows={4} />
-			) : isError ? (
-				<Panel.Error error={error} />
-			) : segmentos.length === 0 ? (
-				<Panel.Empty message="Nenhum cliente segmentado ainda." />
-			) : (
-				<div className="flex flex-col gap-3.5 px-4 py-4">
-					<div className="flex h-10 gap-0.5 overflow-hidden rounded-lg" role="img" aria-label="Distribuição da base por segmento">
-						{segmentos.map((segment) => {
-							const colors = segmentColors(segment.segmento);
-							return (
-								<div
-									key={segment.segmento}
-									className={cn("flex items-center justify-center font-extrabold text-xs", colors.background, colors.text)}
-									style={{ width: `${(segment.qtde / Math.max(data.total, 1)) * 100}%` }}
-									title={`${segmentLabel(segment.segmento)}: ${formatDecimalPlaces(segment.qtde)}`}
-								>
-									{segment.qtde / Math.max(data.total, 1) > 0.04 ? formatDecimalPlaces(segment.qtde) : null}
-								</div>
-							);
-						})}
-					</div>
-					<ul className="grid gap-x-4 gap-y-2 sm:grid-cols-2 xl:grid-cols-4">
-						{segmentos.map((segment) => (
-							<li key={segment.segmento} className="flex min-w-0 items-center gap-2">
-								<span className={cn("size-2.5 shrink-0 rounded-xs", segmentColors(segment.segmento).background)} aria-hidden />
-								<span className="text-micro min-w-0 flex-1 truncate font-bold">{segmentLabel(segment.segmento)}</span>
-								<span className="text-micro shrink-0 font-normal text-muted-foreground">
-									{segment.chegaram > 0 ? `${formatDecimalPlaces(segment.chegaram)} novos` : "—"}
-								</span>
-							</li>
-						))}
-					</ul>
-				</div>
-			)}
+			<Panel.Body>
+				{isPending ? (
+					<Panel.Loading rows={4} />
+				) : isError ? (
+					<Panel.Error error={error} />
+				) : segmentos.length === 0 ? (
+					<Panel.Empty message="Nenhum cliente segmentado ainda." />
+				) : (
+					<>
+						<div className="flex h-10 gap-0.5 overflow-hidden rounded-lg" role="img" aria-label="Distribuição da base por segmento">
+							{segmentos.map((segment) => {
+								const colors = segmentColors(segment.segmento);
+								const share = segment.qtde / Math.max(data.total, 1);
+								return (
+									<div
+										key={segment.segmento}
+										className={cn("flex items-center justify-center font-extrabold text-xs", colors.background, colors.text)}
+										style={{ width: `${share * 100}%` }}
+										title={`${segmentLabel(segment.segmento)}: ${formatDecimalPlaces(segment.qtde)}`}
+									>
+										{/* O número só cabe dentro da fatia quando há largura para ele: o limiar de 4% foi
+										    medido no painel de 1328px, e numa barra de ~330px a mesma fatia tem 13px e o
+										    número vaza por cima do vizinho. No celular a barra fica só com a proporção e
+										    quem conta é a legenda logo abaixo, que já traz todos os nomes. */}
+										<span className="hidden sm:inline">{share > 0.04 ? formatDecimalPlaces(segment.qtde) : null}</span>
+									</div>
+								);
+							})}
+						</div>
+						<ul className="grid gap-x-4 gap-y-2 sm:grid-cols-2 xl:grid-cols-4">
+							{segmentos.map((segment) => (
+								<li key={segment.segmento} className="flex min-w-0 items-center gap-2">
+									<span className={cn("size-2.5 shrink-0 rounded-xs", segmentColors(segment.segmento).background)} aria-hidden />
+									<span className="text-micro min-w-0 flex-1 truncate font-bold">{segmentLabel(segment.segmento)}</span>
+									<span className="text-micro shrink-0 font-normal text-muted-foreground">
+										{formatDecimalPlaces(segment.qtde)}
+										{segment.chegaram > 0 ? ` · ${formatDecimalPlaces(segment.chegaram)} novos` : ""}
+									</span>
+								</li>
+							))}
+						</ul>
+					</>
+				)}
+			</Panel.Body>
 		</Panel>
 	);
 }
 
 const CAMPAIGN_LIMIT = 4;
-const campaignGrid = "grid grid-cols-[minmax(0,1.6fr)_minmax(0,0.8fr)_minmax(0,0.9fr)_minmax(0,1fr)] gap-2 px-4";
+
+const CAMPAIGN_COLUMNS: THubTableColumn[] = [
+	{ id: "campanha", header: "Campanha", track: "minmax(0,1.6fr)" },
+	{ id: "enviadas", header: "Enviadas", align: "right", track: "minmax(0,0.8fr)" },
+	{ id: "conversao", header: "Conversão", align: "right", track: "minmax(0,0.9fr)" },
+	{ id: "receita", header: "Receita", align: "right", track: "minmax(0,1fr)" },
+];
 
 /**
  * As campanhas que mais renderam na janela.
@@ -219,40 +234,37 @@ function CampaignsPanel() {
 	return (
 		<Panel>
 			<Panel.Header title="Campanhas em curso" hint={`${WINDOW_DAYS} dias`} href={`${appRoutes.growth.campaigns()}?view=stats`} hrefLabel="Ver todas" />
-			{isPending ? (
-				<Panel.Loading rows={3} />
-			) : isError ? (
-				<Panel.Error error={error} />
-			) : campaigns.length === 0 ? (
-				<Panel.Empty message="Nenhuma mensagem enviada nos últimos 30 dias." />
+			{isPending || isError || campaigns.length === 0 ? (
+				<Panel.Body>
+					{isPending ? (
+						<Panel.Loading rows={3} />
+					) : isError ? (
+						<Panel.Error error={error} />
+					) : (
+						<Panel.Empty message="Nenhuma mensagem enviada nos últimos 30 dias." />
+					)}
+				</Panel.Body>
 			) : (
-				<>
-					<div className={cn(campaignGrid, "text-micro border-border/60 border-b py-2 text-muted-foreground uppercase tracking-[0.06em]")}>
-						<span>Campanha</span>
-						<span className="text-right">Enviadas</span>
-						<span className="text-right">Conversão</span>
-						<span className="text-right">Receita</span>
-					</div>
-					{campaigns.map((campaign) => (
-						<Link
-							key={campaign.campanhaId}
-							href={appRoutes.growth.campaign(campaign.campanhaId)}
-							className={cn(
-								campaignGrid,
-								"items-center border-border/60 border-b py-2.5 transition-colors last:border-b-0 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-							)}
-						>
-							<span className="truncate font-bold text-sm">{campaign.titulo}</span>
-							<span className="text-right font-bold text-sm">{formatDecimalPlaces(campaign.interacoes)}</span>
-							<span
-								className={cn("text-right font-extrabold text-sm", campaign.taxaConversao > 0 ? "text-success-surface-foreground" : "text-muted-foreground")}
-							>
-								{formatDecimalPlaces(campaign.taxaConversao, 0, 1)}%
-							</span>
-							<span className="text-right font-bold text-sm">{formatToMoney(campaign.receita)}</span>
-						</Link>
-					))}
-				</>
+				<Panel.Bleed>
+					<HubTable
+						columns={CAMPAIGN_COLUMNS}
+						rows={campaigns.map((campaign) => ({
+							id: campaign.campanhaId,
+							href: appRoutes.growth.campaign(campaign.campanhaId),
+							cells: {
+								campanha: campaign.titulo,
+								enviadas: formatDecimalPlaces(campaign.interacoes),
+								conversao: `${formatDecimalPlaces(campaign.taxaConversao, 0, 1)}%`,
+								receita: formatToMoney(campaign.receita),
+							},
+							cellClassName: {
+								enviadas: "font-bold",
+								conversao: cn("font-extrabold", campaign.taxaConversao > 0 ? "text-success-surface-foreground" : "text-muted-foreground"),
+								receita: "font-bold",
+							},
+						}))}
+					/>
+				</Panel.Bleed>
 			)}
 		</Panel>
 	);
@@ -285,78 +297,96 @@ function TalkToTodayRail({ context }: { context: TCapabilityContext }) {
 		<Panel>
 			<Panel.Header title="Falar com hoje" hint={esperando > 0 ? `${formatDecimalPlaces(esperando)} pessoas` : undefined} hintTone="destructive" />
 
-			{canViewChats && semResposta > 0 ? (
-				<Panel.Row
-					href={appRoutes.channels.whatsapp()}
-					leading={
-						<Panel.RowIcon tone="destructive">
-							<MessageCircle aria-hidden />
-						</Panel.RowIcon>
-					}
-					primary={`${formatDecimalPlaces(semResposta)} ${semResposta === 1 ? "conversa sem resposta" : "conversas sem resposta"}`}
-					secondary={chats.data?.backlog.naFila ? `${formatDecimalPlaces(chats.data.backlog.naFila)} na fila, sem atendente` : "nos últimos 7 dias"}
-					trailing={<Panel.RowAction emphasis>Abrir</Panel.RowAction>}
-				/>
-			) : null}
+			<Panel.Bleed>
+				{canViewChats && semResposta > 0 ? (
+					<Panel.Row
+						href={appRoutes.channels.whatsapp()}
+						leading={
+							<Panel.RowIcon tone="destructive">
+								<MessageCircle aria-hidden />
+							</Panel.RowIcon>
+						}
+						primary={`${formatDecimalPlaces(semResposta)} ${semResposta === 1 ? "conversa sem resposta" : "conversas sem resposta"}`}
+						secondary={chats.data?.backlog.naFila ? `${formatDecimalPlaces(chats.data.backlog.naFila)} na fila, sem atendente` : "nos últimos 7 dias"}
+						trailing={<Panel.RowAction emphasis>Abrir</Panel.RowAction>}
+					/>
+				) : null}
 
-			{canViewPortfolios && pendentes + atrasados > 0 ? (
-				<Panel.Row
-					href={appRoutes.customers.portfolios()}
-					leading={
-						<Panel.RowIcon tone={atrasados > 0 ? "destructive" : "default"}>
-							<CalendarCheck aria-hidden />
-						</Panel.RowIcon>
-					}
-					primary={`${formatDecimalPlaces(pendentes)} ${pendentes === 1 ? "contato da carteira" : "contatos da carteira"}`}
-					secondary={atrasados > 0 ? `${formatDecimalPlaces(atrasados)} atrasados de dias anteriores` : "previstos para hoje"}
-					trailing={<Panel.RowAction>Ver</Panel.RowAction>}
-				/>
-			) : null}
+				{canViewPortfolios && pendentes + atrasados > 0 ? (
+					<Panel.Row
+						href={appRoutes.customers.portfolios()}
+						leading={
+							<Panel.RowIcon tone={atrasados > 0 ? "destructive" : "default"}>
+								<CalendarCheck aria-hidden />
+							</Panel.RowIcon>
+						}
+						primary={`${formatDecimalPlaces(pendentes)} ${pendentes === 1 ? "contato da carteira" : "contatos da carteira"}`}
+						secondary={atrasados > 0 ? `${formatDecimalPlaces(atrasados)} atrasados de dias anteriores` : "previstos para hoje"}
+						trailing={<Panel.RowAction>Ver</Panel.RowAction>}
+					/>
+				) : null}
 
-			{canViewCashback && cashbackTotal.valor > 0 ? (
-				<Panel.Row
-					href={`${appRoutes.growth.newCampaign()}?category=EVENT&stage=trigger`}
-					leading={
-						<Panel.RowIcon tone="warning">
-							<BadgePercent aria-hidden />
-						</Panel.RowIcon>
-					}
-					primary={`${formatToMoney(cashbackTotal.valor)} de cashback expira`}
-					secondary={`${formatDecimalPlaces(cashbackTotal.clientes)} clientes em ${WINDOW_DAYS} dias`}
-					trailing={<Panel.RowAction>Avisar</Panel.RowAction>}
-				/>
-			) : null}
+				{canViewCashback && cashbackTotal.valor > 0 ? (
+					<Panel.Row
+						href={`${appRoutes.growth.newCampaign()}?category=EVENT&stage=trigger`}
+						leading={
+							<Panel.RowIcon tone="warning">
+								<BadgePercent aria-hidden />
+							</Panel.RowIcon>
+						}
+						primary={`${formatToMoney(cashbackTotal.valor)} de cashback expira`}
+						secondary={`${formatDecimalPlaces(cashbackTotal.clientes)} clientes em ${WINDOW_DAYS} dias`}
+						trailing={<Panel.RowAction>Avisar</Panel.RowAction>}
+					/>
+				) : null}
 
-			{aniversariantes.length > 0 ? (
-				<Panel.Row
-					href={appRoutes.customers.root()}
-					leading={
-						<Panel.RowIcon>
-							<Cake aria-hidden />
-						</Panel.RowIcon>
-					}
-					primary={`${formatDecimalPlaces(aniversariantes.length)} ${aniversariantes.length === 1 ? "aniversariante" : "aniversariantes"}`}
-					secondary={aniversariantes
-						.slice(0, 2)
-						.map((client) => client.nome)
-						.join(", ")}
-					trailing={<Panel.RowAction>Ver</Panel.RowAction>}
-				/>
-			) : null}
+				{aniversariantes.length > 0 ? (
+					<Panel.Row
+						href={appRoutes.customers.root()}
+						leading={
+							<Panel.RowIcon>
+								<Cake aria-hidden />
+							</Panel.RowIcon>
+						}
+						primary={`${formatDecimalPlaces(aniversariantes.length)} ${aniversariantes.length === 1 ? "aniversariante" : "aniversariantes"}`}
+						secondary={aniversariantes
+							.slice(0, 2)
+							.map((client) => client.nome)
+							.join(", ")}
+						trailing={<Panel.RowAction>Ver</Panel.RowAction>}
+					/>
+				) : null}
 
-			<CoolingClients query={cooling} />
+				<CoolingClients query={cooling} />
+			</Panel.Bleed>
 		</Panel>
 	);
 }
 
 function CoolingClients({ query }: { query: ReturnType<typeof useRecentSegmentChanges> }) {
 	const { data, isPending, isError, error } = query;
-	if (isPending) return <Panel.Loading rows={3} />;
-	if (isError) return <Panel.Error error={error} />;
-	if (!data || data.clientes.length === 0) return <Panel.Empty message="Nenhum cliente esfriou nesta semana." />;
+	// Dentro do `Bleed` o conteúdo encosta na borda, então os estados curtos recuperam o respiro.
+	if (isPending)
+		return (
+			<div className="px-3 py-3.5">
+				<Panel.Loading rows={3} />
+			</div>
+		);
+	if (isError)
+		return (
+			<div className="px-3 py-3.5">
+				<Panel.Error error={error} />
+			</div>
+		);
+	if (!data || data.clientes.length === 0)
+		return (
+			<div className="px-3 py-3.5">
+				<Panel.Empty message="Nenhum cliente esfriou nesta semana." />
+			</div>
+		);
 
 	return (
-		<div className="flex flex-col gap-2.5 px-4 py-3.5">
+		<div className="flex flex-col gap-2.5 border-border/60 border-t px-3 py-3.5">
 			<span className="text-label text-muted-foreground">Clientes esfriando</span>
 			{data.clientes.map((client) => (
 				<Link

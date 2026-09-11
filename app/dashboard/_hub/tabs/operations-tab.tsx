@@ -8,10 +8,9 @@ import { useFinancesOverallStats } from "@/lib/queries/finances";
 import { useFiscalPending } from "@/lib/queries/fiscal";
 import { useSalesFulfillment } from "@/lib/queries/sales-fulfillment";
 import { useTabs } from "@/lib/queries/tabs";
-import { cn } from "@/lib/utils";
 import { BookText, ClipboardList, ShieldCheck } from "lucide-react";
-import Link from "next/link";
 import { formatTimeAgo } from "../format";
+import { HubTable, type THubTableColumn } from "../hub-table";
 import { Panel, StatTile } from "../panel";
 import { useOperationsPending } from "../use-operations-pending";
 
@@ -93,7 +92,12 @@ function OpenTabsTile() {
 	);
 }
 
-const frontGrid = "grid grid-cols-[minmax(0,1.4fr)_minmax(0,0.7fr)_minmax(0,1fr)_minmax(0,0.9fr)] gap-2 px-4";
+const FRONT_COLUMNS: THubTableColumn[] = [
+	{ id: "frente", header: "Frente", track: "minmax(0,1.4fr)" },
+	{ id: "itens", header: "Itens", align: "right", track: "minmax(0,0.7fr)" },
+	{ id: "valor", header: "Valor parado", align: "right", track: "minmax(0,1fr)" },
+	{ id: "antigo", header: "Mais antigo", align: "right", track: "minmax(0,0.9fr)" },
+];
 
 /** A tabela de frentes. Cada célula sem dado imprime "—" em vez de zero — ver `useOperationsPending`. */
 function PendingByFront({ context }: { context: TCapabilityContext }) {
@@ -108,38 +112,37 @@ function PendingByFront({ context }: { context: TCapabilityContext }) {
 				href={appRoutes.sales.orders()}
 				hrefLabel="Ver tudo"
 			/>
-			{isPending ? (
-				<Panel.Loading rows={4} />
-			) : isError ? (
-				<Panel.Error error={error} />
-			) : frentes.length === 0 ? (
-				<Panel.Empty message="Nenhuma pendência aberta na operação." />
+			{isPending || isError || frentes.length === 0 ? (
+				<Panel.Body>
+					{isPending ? (
+						<Panel.Loading rows={4} />
+					) : isError ? (
+						<Panel.Error error={error} />
+					) : (
+						<Panel.Empty message="Nenhuma pendência aberta na operação." />
+					)}
+				</Panel.Body>
 			) : (
-				<>
-					<div className={cn(frontGrid, "text-micro border-border/60 border-b py-2 text-muted-foreground uppercase tracking-[0.06em]")}>
-						<span>Frente</span>
-						<span className="text-right">Itens</span>
-						<span className="text-right">Valor parado</span>
-						<span className="text-right">Mais antigo</span>
-					</div>
-					{frentes.map((front) => (
-						<Link
-							key={front.id}
-							href={front.href}
-							className={cn(
-								frontGrid,
-								"items-center border-border/60 border-b py-2.5 transition-colors last:border-b-0 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-							)}
-						>
-							<span className="truncate font-bold text-sm">{front.titulo}</span>
-							<span className="text-right font-extrabold text-sm">{front.itens === null ? "—" : formatDecimalPlaces(front.itens)}</span>
-							<span className="text-right font-bold text-sm">{front.valorParado === null ? "—" : formatToMoney(front.valorParado)}</span>
-							<span className={cn("text-right text-xs", front.urgente ? "font-bold text-destructive-surface-foreground" : "text-muted-foreground")}>
-								{front.maisAntigo ? formatTimeAgo(front.maisAntigo) : front.urgente ? "urgente" : "—"}
-							</span>
-						</Link>
-					))}
-				</>
+				<Panel.Bleed>
+					<HubTable
+						columns={FRONT_COLUMNS}
+						rows={frentes.map((front) => ({
+							id: front.id,
+							href: front.href,
+							cells: {
+								frente: front.titulo,
+								itens: front.itens === null ? "—" : formatDecimalPlaces(front.itens),
+								valor: front.valorParado === null ? "—" : formatToMoney(front.valorParado),
+								antigo: front.maisAntigo ? formatTimeAgo(front.maisAntigo) : front.urgente ? "urgente" : "—",
+							},
+							cellClassName: {
+								itens: "font-extrabold",
+								valor: "font-bold",
+								antigo: front.urgente ? "font-bold text-destructive-surface-foreground" : "text-muted-foreground",
+							},
+						}))}
+					/>
+				</Panel.Bleed>
 			)}
 		</Panel>
 	);
@@ -165,12 +168,10 @@ function ResolveNowRail({ context }: { context: TCapabilityContext }) {
 	return (
 		<Panel>
 			<Panel.Header title="Resolver agora" hint={urgentes > 0 ? `${formatDecimalPlaces(urgentes)} urgentes` : undefined} hintTone="destructive" />
-			{isPending ? (
-				<Panel.Loading rows={3} />
-			) : urgentes === 0 ? (
-				<Panel.Empty message="Nada aguardando uma decisão sua." />
+			{isPending || urgentes === 0 ? (
+				<Panel.Body>{isPending ? <Panel.Loading rows={3} /> : <Panel.Empty message="Nada aguardando uma decisão sua." />}</Panel.Body>
 			) : (
-				<>
+				<Panel.Bleed>
 					{pendingApprovals.slice(0, RESOLVE_LIMIT).map((request) => (
 						<Panel.Row
 							key={request.id}
@@ -218,7 +219,7 @@ function ResolveNowRail({ context }: { context: TCapabilityContext }) {
 							trailing={<Panel.RowAction>Abrir</Panel.RowAction>}
 						/>
 					) : null}
-				</>
+				</Panel.Bleed>
 			)}
 		</Panel>
 	);

@@ -1,5 +1,6 @@
 "use client";
 
+import { Section } from "@/components/ui/section";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getErrorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
@@ -8,50 +9,16 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 /**
- * Molduras comuns das abas do dashboard.
+ * Peças das abas do dashboard, montadas sobre `Section` — a moldura de cartão do app.
  *
- * O hub deixou de ser uma grade de cartões independentes e virou um painel com abas, então o que se
- * repete aqui não é mais "um widget" e sim três formas: o bloco emoldurado (`Panel`), o número com
- * contexto (`StatTile`) e a linha de lista com ação (`Panel.Row`). Cada bloco continua dono da sua
- * própria consulta e dos próprios estados de carga, erro e vazio — um endpoint quebrado apaga o
- * bloco dele, nunca a aba inteira.
+ * Este arquivo já foi uma moldura própria (borda, raio, fundo e cabeçalho reimplementados) e isso
+ * custou caro: o cabeçalho numa linha só com `truncate` virava "COMO A ..." no celular, que é
+ * exatamente o problema que a `Section` resolve há tempo — `Section.Header` tem `flex-wrap` e
+ * `Section.Actions` cai para a linha de baixo quando não cabe. A `Section` existe justamente porque
+ * já haviam existido duas cascas concorrentes; não crie uma terceira. O que sobra aqui é o que a
+ * `Section` não tem: o preset de cabeçalho do hub, a linha de lista, o tile de número e os estados
+ * de carga, erro e vazio.
  */
-
-const frameClassName = "bg-card border-border flex min-w-0 flex-col rounded-xl border shadow-2xs";
-
-function PanelRoot({ className, children }: { className?: string; children: ReactNode }) {
-	return <section className={cn(frameClassName, className)}>{children}</section>;
-}
-
-type PanelHeaderProps = {
-	title: string;
-	/** Complemento à direita do título: contagem, janela, urgência. */
-	hint?: ReactNode;
-	/** Tom de atenção para o complemento — pendência que exige ação agora. */
-	hintTone?: PanelTone;
-	href?: string;
-	hrefLabel?: string;
-};
-
-function PanelHeader({ title, hint, hintTone = "default", href, hrefLabel = "Ver todos" }: PanelHeaderProps) {
-	return (
-		<div className="flex w-full items-center justify-between gap-2 border-border border-b px-4 py-3">
-			<h2 className="text-label truncate text-muted-foreground">{title}</h2>
-			<div className="text-micro flex min-w-0 shrink-0 items-center gap-2">
-				{hint ? <span className={cn("truncate", toneClassName[hintTone] || "text-muted-foreground")}>{hint}</span> : null}
-				{href ? (
-					<Link
-						href={href}
-						className="flex shrink-0 items-center gap-0.5 rounded-sm text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-					>
-						{hrefLabel}
-						<ArrowUpRight className="size-3.5" aria-hidden />
-					</Link>
-				) : null}
-			</div>
-		</div>
-	);
-}
 
 export type PanelTone = "default" | "destructive" | "success" | "warning" | "muted";
 
@@ -70,6 +37,40 @@ const toneSurfaceClassName: Record<PanelTone, string> = {
 	warning: "bg-warning-surface text-warning-surface-foreground",
 	muted: "bg-muted text-muted-foreground",
 };
+
+type PanelHeaderProps = {
+	title: string;
+	/** Complemento do título: contagem, janela, urgência. */
+	hint?: ReactNode;
+	hintTone?: PanelTone;
+	href?: string;
+	hrefLabel?: string;
+};
+
+/**
+ * Preset do cabeçalho do hub — não uma moldura nova. Todos os blocos repetem a mesma tríade
+ * (título, complemento, link do módulo), então ela mora aqui em vez de em oito callsites; as peças
+ * são as da `Section`, e é delas que vem a quebra de linha no celular.
+ */
+function PanelHeader({ title, hint, hintTone = "muted", href, hrefLabel = "Ver todos" }: PanelHeaderProps) {
+	return (
+		<Section.Header>
+			<Section.Title className="text-muted-foreground">{title}</Section.Title>
+			{hint ? <Section.Count className={cn("font-normal", toneClassName[hintTone])}>{hint}</Section.Count> : null}
+			{href ? (
+				<Section.Actions>
+					<Link
+						href={href}
+						className="text-micro flex items-center gap-0.5 rounded-sm font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+					>
+						{hrefLabel}
+						<ArrowUpRight className="size-3.5" aria-hidden />
+					</Link>
+				</Section.Actions>
+			) : null}
+		</Section.Header>
+	);
+}
 
 type PanelRowProps = {
 	/** Marcador à esquerda: ícone em quadrado colorido, ponto de segmento, posição no ranking. */
@@ -92,7 +93,8 @@ function PanelRow({ leading, primary, secondary, trailing, href }: PanelRowProps
 			{trailing !== undefined && trailing !== null ? <span className="flex shrink-0 items-center">{trailing}</span> : null}
 		</>
 	);
-	const rowClassName = "flex w-full items-center gap-3 border-border/60 border-b px-4 py-2.5 last:border-b-0";
+	// `px-3` alinha com o padding da `Section.Root` que o `Bleed` cancela.
+	const rowClassName = "flex w-full items-center gap-3 border-border/60 border-b px-3 py-2.5 last:border-b-0";
 	if (href) {
 		return (
 			<Link
@@ -142,7 +144,7 @@ type StatTileProps = {
 
 function StatTile({ label, value, delta, deltaTone = "success", tone = "default", caption, children }: StatTileProps) {
 	return (
-		<div className={cn(frameClassName, "gap-2 px-4 py-3.5")}>
+		<Section.Root className="gap-2 py-3.5">
 			<span className="text-label text-muted-foreground">{label}</span>
 			<div className="flex items-baseline gap-2">
 				<span className={cn("font-black text-2xl leading-none tracking-tight", toneClassName[tone])}>{value}</span>
@@ -150,13 +152,13 @@ function StatTile({ label, value, delta, deltaTone = "success", tone = "default"
 			</div>
 			{caption ? <span className="text-micro font-normal text-muted-foreground">{caption}</span> : null}
 			{children ? <div className="mt-1.5">{children}</div> : null}
-		</div>
+		</Section.Root>
 	);
 }
 
 function PanelEmpty({ message }: { message: string }) {
 	return (
-		<div className="flex items-center gap-2 px-4 py-4 text-muted-foreground text-sm">
+		<div className="flex items-center gap-2 text-muted-foreground text-sm">
 			<CircleCheck className="size-4 shrink-0 text-success" aria-hidden />
 			<span>{message}</span>
 		</div>
@@ -165,7 +167,7 @@ function PanelEmpty({ message }: { message: string }) {
 
 function PanelError({ error }: { error: unknown }) {
 	return (
-		<div className="flex items-start gap-2 px-4 py-4 text-destructive text-xs">
+		<div className="flex items-start gap-2 text-destructive text-xs">
 			<TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
 			<span className="line-clamp-2">{getErrorMessage(error)}</span>
 		</div>
@@ -174,7 +176,7 @@ function PanelError({ error }: { error: unknown }) {
 
 function PanelLoading({ rows = 3 }: { rows?: number }) {
 	return (
-		<div className="flex flex-col gap-2.5 px-4 py-4" aria-busy>
+		<div className="flex flex-col gap-2.5" aria-busy>
 			{Array.from({ length: rows }, (_, index) => (
 				<Skeleton key={index} className={cn("h-4 rounded", index % 2 === 0 ? "w-full" : "w-3/5")} />
 			))}
@@ -182,8 +184,12 @@ function PanelLoading({ rows = 3 }: { rows?: number }) {
 	);
 }
 
-export const Panel = Object.assign(PanelRoot, {
+export const Panel = Object.assign(Section.Root, {
 	Header: PanelHeader,
+	/** Conteúdo com respiro. Estados de carga, erro e vazio moram aqui. */
+	Body: Section.Body,
+	/** Conteúdo que encosta na borda: listas com divisor e tabelas. */
+	Bleed: Section.Bleed,
 	Row: PanelRow,
 	RowIcon: PanelRowIcon,
 	RowAction: PanelRowAction,

@@ -52,34 +52,36 @@ function SellerRanking({ scopeSellersIds }: { scopeSellersIds: string[] | null }
 	return (
 		<Panel>
 			<Panel.Header title="Vendas por vendedor hoje" href={appRoutes.sales.results()} hrefLabel="Ver resultados" />
-			{isPending ? (
-				<Panel.Loading rows={4} />
-			) : isError ? (
-				<Panel.Error error={error} />
-			) : sellers.length === 0 ? (
-				<Panel.Empty message="Nenhuma venda registrada hoje." />
-			) : (
-				<ul className="flex flex-col gap-3 px-4 py-4">
-					{sellers.map((row, index) => (
-						<li key={row.vendedor.id} className="flex items-center gap-3">
-							{/* Ouro só no primeiro lugar: é o momento de celebração que a paleta reserva ao âmbar. */}
-							<span
-								className={cn("w-4 shrink-0 text-center font-extrabold text-xs", index === 0 ? "text-warning-surface-foreground" : "text-muted-foreground")}
-							>
-								{index + 1}
-							</span>
-							<span className="min-w-0 flex-1 truncate font-bold text-sm">{row.vendedor.nome}</span>
-							<span className="text-micro hidden w-20 shrink-0 font-normal text-muted-foreground sm:block">
-								{formatDecimalPlaces(row.qtde)} {row.qtde === 1 ? "venda" : "vendas"}
-							</span>
-							<span className="hidden h-1.5 w-28 shrink-0 overflow-hidden rounded-full bg-muted md:block">
-								<span className="block h-full rounded-full bg-primary" style={{ width: `${leader > 0 ? (row.total / leader) * 100 : 0}%` }} />
-							</span>
-							<span className="w-24 shrink-0 text-right font-bold text-sm">{formatToMoney(row.total)}</span>
-						</li>
-					))}
-				</ul>
-			)}
+			<Panel.Body>
+				{isPending ? (
+					<Panel.Loading rows={4} />
+				) : isError ? (
+					<Panel.Error error={error} />
+				) : sellers.length === 0 ? (
+					<Panel.Empty message="Nenhuma venda registrada hoje." />
+				) : (
+					<ul className="flex flex-col gap-3">
+						{sellers.map((row, index) => (
+							<li key={row.vendedor.id} className="flex items-center gap-3">
+								{/* Ouro só no primeiro lugar: é o momento de celebração que a paleta reserva ao âmbar. */}
+								<span
+									className={cn("w-4 shrink-0 text-center font-extrabold text-xs", index === 0 ? "text-warning-surface-foreground" : "text-muted-foreground")}
+								>
+									{index + 1}
+								</span>
+								<span className="min-w-0 flex-1 truncate font-bold text-sm">{row.vendedor.nome}</span>
+								<span className="text-micro hidden w-20 shrink-0 font-normal text-muted-foreground sm:block">
+									{formatDecimalPlaces(row.qtde)} {row.qtde === 1 ? "venda" : "vendas"}
+								</span>
+								<span className="hidden h-1.5 w-28 shrink-0 overflow-hidden rounded-full bg-muted md:block">
+									<span className="block h-full rounded-full bg-primary" style={{ width: `${leader > 0 ? (row.total / leader) * 100 : 0}%` }} />
+								</span>
+								<span className="w-24 shrink-0 text-right font-bold text-sm">{formatToMoney(row.total)}</span>
+							</li>
+						))}
+					</ul>
+				)}
+			</Panel.Body>
 		</Panel>
 	);
 }
@@ -92,19 +94,21 @@ function PortfolioRoutine() {
 	return (
 		<Panel>
 			<Panel.Header title="Rotina das carteiras" hint="hoje" href={appRoutes.customers.portfolios()} hrefLabel="Ver carteiras" />
-			{isPending ? (
-				<Panel.Loading rows={3} />
-			) : isError ? (
-				<Panel.Error error={error} />
-			) : !data ? (
-				<Panel.Empty message="Nenhum contato planejado." />
-			) : (
-				<dl className="flex flex-col gap-3 px-4 py-4">
-					<RoutineLine label="Contatos previstos hoje" value={data.previstos} />
-					<RoutineLine label="Feitos até agora" value={data.feitos} tone={data.feitos > 0 ? "success" : "default"} />
-					<RoutineLine label="Atrasados de dias anteriores" value={data.atrasados} tone={data.atrasados > 0 ? "destructive" : "default"} />
-				</dl>
-			)}
+			<Panel.Body>
+				{isPending ? (
+					<Panel.Loading rows={3} />
+				) : isError ? (
+					<Panel.Error error={error} />
+				) : !data ? (
+					<Panel.Empty message="Nenhum contato planejado." />
+				) : (
+					<dl className="flex flex-col gap-3">
+						<RoutineLine label="Contatos previstos hoje" value={data.previstos} />
+						<RoutineLine label="Feitos até agora" value={data.feitos} tone={data.feitos > 0 ? "success" : "default"} />
+						<RoutineLine label="Atrasados de dias anteriores" value={data.atrasados} tone={data.atrasados > 0 ? "destructive" : "default"} />
+					</dl>
+				)}
+			</Panel.Body>
 		</Panel>
 	);
 }
