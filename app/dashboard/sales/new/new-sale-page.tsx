@@ -104,8 +104,7 @@ export default function NewSalePage({
 	const [builderProduct, setBuilderProduct] = useState<TGetPOSProductsOutput["data"]["products"][number] | null>(null);
 	const [isCheckoutSheetOpen, setIsCheckoutSheetOpen] = useState(false);
 	// Foco do checkout (desktop): clicar dentro da coluna a expande de 420px para 640px e esmaece o
-	// catálogo; clicar no catálogo ou Esc devolve. O catálogo esmaecido continua interativo — o
-	// clique que desfaz o foco também executa a ação (ex.: adicionar um produto ao carrinho).
+	// catálogo; clicar no scrim do catálogo ou Esc devolve sem acionar um controle por baixo.
 	const [isCheckoutFocused, setIsCheckoutFocused] = useState(false);
 	const [isContextPanelOpen, setIsContextPanelOpen] = useState(false);
 	const [isContextSheetOpen, setIsContextSheetOpen] = useState(false);
@@ -485,12 +484,19 @@ export default function NewSalePage({
 				{/* O clique nas colunas é atalho de conveniência (foco/desfoco), não a única via: toda
 				    interação continua acessível pelos controles internos e o Esc desfaz o foco. */}
 				<div
-					onClick={() => setIsCheckoutFocused(false)}
 					className={cn(
-						"flex min-w-0 flex-1 flex-col gap-4 rounded-xl bg-background transition-opacity duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] motion-reduce:transition-none",
+						"relative flex min-w-0 flex-1 flex-col gap-4 rounded-xl bg-background transition-opacity duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] motion-reduce:transition-none",
 						isCheckoutFocused && "opacity-[0.32]",
 					)}
 				>
+					{isCheckoutFocused ? (
+						<button
+							type="button"
+							aria-label="Sair do foco do checkout"
+							onClick={() => setIsCheckoutFocused(false)}
+							className="absolute inset-0 z-20 cursor-default rounded-xl bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+						/>
+					) : null}
 					<div className="shrink-0 flex flex-col gap-3">
 						{/* Em telas estreitas a busca ocupa a linha inteira e os controles quebram para a linha
 						    de baixo: dividir a mesma linha espremia o campo a poucos caracteres visíveis. */}

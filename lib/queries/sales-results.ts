@@ -8,6 +8,7 @@ export type TSalesResultsParams = {
 	before: Date;
 	sellersIds: string[];
 	channels: string[];
+	excludedFinancialAccountIds: string[];
 };
 
 async function fetchSalesResults(params: TSalesResultsParams) {
@@ -16,6 +17,7 @@ async function fetchSalesResults(params: TSalesResultsParams) {
 	searchParams.set("before", params.before.toISOString());
 	if (params.sellersIds.length > 0) searchParams.set("sellersIds", params.sellersIds.join(","));
 	if (params.channels.length > 0) searchParams.set("channels", params.channels.join(","));
+	if (params.excludedFinancialAccountIds.length > 0) searchParams.set("excludedFinancialAccountIds", params.excludedFinancialAccountIds.join(","));
 	const { data } = await axios.get<TGetSalesResultsOutput>(`/api/sales/results?${searchParams.toString()}`);
 	return data.data;
 }

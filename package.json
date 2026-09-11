@@ -60,7 +60,7 @@
 		"test:sales-channels": "node --import tsx --test lib/products/sales-channels.test.ts",
 		"test:cashback-rewards-display": "node --import tsx --test lib/cashback/rewards-display-layout.test.ts",
 		"test:cashback-redemption": "node --import tsx --test lib/cashback/redemption-policy.test.ts lib/shop/checkout.test.ts",
-		"test:sales-results": "node --import tsx --test lib/sales/results/classify.test.ts lib/sales/results/payment-reconciliation.test.ts lib/access/capabilities.test.ts",
+		"test:sales-results": "node --import tsx --test lib/sales/results/classify.test.ts lib/sales/results/payment-reconciliation.test.ts lib/sales/results/universe.test.ts lib/access/capabilities.test.ts",
 		"test:sale-payments": "node --import tsx --test lib/sales/payment-grouping.test.ts lib/payments/defaults.test.ts",
 		"test:ifood": "node --import tsx --test lib/data-connectors/ifood/date.test.ts lib/data-connectors/ifood/retry.test.ts lib/data-connectors/ifood/cancellation-request.test.ts lib/data-connectors/ifood/handshake-dispute.test.ts lib/data-connectors/ifood/payment.test.ts lib/data-connectors/ifood/totals.test.ts lib/fiscal/managed-sale-payments.test.ts lib/shop/config.test.ts",
 		"normalize:client-locations": "tsx ./scripts/normalize-client-locations.ts",

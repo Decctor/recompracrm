@@ -36,6 +36,7 @@ export function OperationalResultsView({ hasResultsScope, canViewSensitive }: Op
 			before: parseAsIsoDateTime.withDefault(defaultBefore),
 			sellersIds: parseAsArrayOf(parseAsString).withDefault([]),
 			channels: parseAsArrayOf(parseAsString).withDefault([]),
+			excludedFinancialAccountIds: parseAsArrayOf(parseAsString).withDefault([]),
 		},
 		{ history: "replace" },
 	);
@@ -57,6 +58,7 @@ export function OperationalResultsView({ hasResultsScope, canViewSensitive }: Op
 				params={params}
 				updateParams={(next) => setParams(next)}
 				channelOptions={data?.filterOptions.canais ?? []}
+				financialAccountOptions={data?.filterOptions.contasFinanceiras ?? []}
 				showSellersFilter={!hasResultsScope}
 			/>
 

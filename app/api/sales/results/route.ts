@@ -27,6 +27,11 @@ const GetSalesResultsInputSchema = z.object({
 		.optional()
 		.nullable()
 		.transform((v) => (v ? v.split(",").filter(Boolean) : [])),
+	excludedFinancialAccountIds: z
+		.string({ invalid_type_error: "Tipo inválido para os IDs das contas financeiras excluídas." })
+		.optional()
+		.nullable()
+		.transform((v) => (v ? v.split(",").filter(Boolean) : [])),
 });
 export type TGetSalesResultsInput = z.infer<typeof GetSalesResultsInputSchema>;
 
@@ -44,7 +49,14 @@ async function getSalesResultsHandler({ input, session }: { input: TGetSalesResu
 	await assertSellersIdsWithinResultsScope({ organizacaoId, resultsScope, sellersIds });
 
 	const results = await getSalesResults({
-		filters: { organizacaoId, after: input.after, before: input.before, sellersIds, channels: input.channels },
+		filters: {
+			organizacaoId,
+			after: input.after,
+			before: input.before,
+			sellersIds,
+			channels: input.channels,
+			excludedFinancialAccountIds: input.excludedFinancialAccountIds,
+		},
 		includeSensitive: membership.permissoes.resultados.visualizarSensiveis,
 	});
 
@@ -60,6 +72,7 @@ async function getSalesResultsRoute(request: NextRequest) {
 		before: searchParams.get("before"),
 		sellersIds: searchParams.get("sellersIds"),
 		channels: searchParams.get("channels"),
+		excludedFinancialAccountIds: searchParams.get("excludedFinancialAccountIds"),
 	});
 	const result = await getSalesResultsHandler({ input, session });
 	return NextResponse.json(result);
