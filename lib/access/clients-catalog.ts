@@ -30,11 +30,14 @@ export const AGENT_READ_ACCESS_SCOPES: TAccessScopeEnum[] = [
 	"agent:products:read",
 	"agent:campaigns:read",
 	"agent:sales:read",
+	"agent:finances:read",
 	"agent:members:read",
 	"agent:message-templates:read",
 ];
 
 export const AGENT_MUTATION_ACCESS_SCOPES: TAccessScopeEnum[] = [
+	// Só cria sugestões (match SUGERIDO tipo IA) e linhas de extrato; nunca confirma conciliação.
+	"agent:finances:reconcile",
 	"agent:campaigns:write",
 	"agent:campaigns:activate",
 	"agent:message-templates:write",

@@ -31,6 +31,8 @@ import { productPerformanceTool } from "./tools/product-performance";
 import { searchClientsTool } from "./tools/clients";
 import { searchProductsTool } from "./tools/products";
 import { getSalesTool } from "./tools/sales";
+import { getFinancialAccountsTool, getFinancialTransactionsTool, getStatementTransactionsTool } from "./tools/finances";
+import { createStatementImportTool, suggestReconciliationMatchesTool } from "./tools/finances-reconciliation";
 
 /**
  * Registro único das ferramentas expostas via MCP.
@@ -48,6 +50,11 @@ const AGENT_TOOLS = [
 	// Organização — visíveis nos dois modos, com `organizacaoId` obrigatório em PLATAFORMA.
 	commercialResultsTool,
 	getSalesTool,
+	getFinancialAccountsTool,
+	getFinancialTransactionsTool,
+	getStatementTransactionsTool,
+	createStatementImportTool,
+	suggestReconciliationMatchesTool,
 	searchClientsTool,
 	clientContextTool,
 	listSegmentsTool,

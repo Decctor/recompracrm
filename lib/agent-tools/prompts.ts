@@ -80,6 +80,36 @@ const AGENT_PROMPTS: TAgentPromptDefinition[] = [
 				.filter(Boolean)
 				.join("\n"),
 	},
+	{
+		name: "conferencia-de-recebimentos",
+		title: "Conferência de recebimentos contra extrato",
+		description: "Cruza os comprovantes enviados pelo lojista (prints de banco/maquininha) com as transações registradas e aponta as divergências.",
+		modes: ["ORG", "PLATAFORMA"],
+		arguments: [
+			{ name: "periodo", description: "Dia ou período conferido, em linguagem natural ou datas ISO." },
+			{ name: "metodo", description: "Método conferido (ex.: PIX, DINHEIRO). Opcional — sem ele, confere tudo." },
+			{ name: "organizacaoId", description: "Obrigatório em conexões de plataforma: id ou slug da organização." },
+		],
+		build: (args) =>
+			[
+				`Faça a conferência dos recebimentos${args.metodo ? ` de ${args.metodo}` : ""}${args.periodo ? ` do período: ${args.periodo}` : ""} contra os comprovantes enviados pelo usuário.`,
+				args.organizacaoId ? `Organização: ${args.organizacaoId}.` : "",
+				"",
+				"Siga esta ordem:",
+				"1. `get_financial_accounts` para descobrir as contas. Contas com `ehClearingDeCanal` (ex.: iFood) guardam dinheiro em posse do canal — recebimentos ali NUNCA aparecem no extrato da loja e não são divergência.",
+				"2. Transcreva cada comprovante fielmente: valor exato, hora local e o nome do pagador na descrição. Some e confira contra o total impresso no próprio comprovante antes de seguir — linha duplicada por crop de imagem é comum.",
+				"3. `create_statement_import` com as linhas transcritas na conta correspondente (é idempotente; reenviar não duplica).",
+				"4. `get_statement_transactions` (status PENDENTE) e `get_financial_transactions` (com `apenasSemConciliacao`) do mesmo período.",
+				"5. Case por valor + proximidade de horário, EXECUTANDO CÓDIGO: com valores repetidos, atribua globalmente pelo menor delta de horário — parear na ordem do extrato erra o par. O pagador quase nunca é o cliente cadastrado (paga-se pela mesa, pelo cônjuge); nome é confirmação, não critério.",
+				"6. `suggest_reconciliation_matches` só para os pares de que você tem convicção, com `confianca`.",
+				"",
+				"Entregue três blocos: conciliado; registrado sem comprovante; comprovante sem registro. Para cada divergência, uma hipótese:",
+				"transação com `origem: 'TROCO'` contra pagamento em PIX/cartão sugere método digitado errado no PDV; recebimento em conta clearing explica ausência no extrato.",
+				"Lembre o usuário de confirmar as sugestões na tela Financeiro > Conciliação — nada foi conciliado automaticamente.",
+			]
+				.filter(Boolean)
+				.join("\n"),
+	},
 ];
 
 export function listPromptsForActor(actor: TAgentActorContext) {

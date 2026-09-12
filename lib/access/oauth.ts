@@ -36,6 +36,8 @@ export const OAUTH_SUPPORTED_SCOPES: string[] = [
 	"agent:products:read",
 	"agent:campaigns:read",
 	"agent:sales:read",
+	"agent:finances:read",
+	"agent:finances:reconcile",
 	"agent:members:read",
 	"agent:message-templates:read",
 	"agent:campaigns:write",

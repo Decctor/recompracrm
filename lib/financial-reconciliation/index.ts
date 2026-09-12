@@ -3,6 +3,7 @@ export * from "./ingest";
 export * from "./match";
 export * from "./normalize";
 export * from "./rules";
+export * from "./suggest";
 export * from "./sync";
 export { extractStatementFromDocument } from "./parse/document";
 export { looksLikeOfx, parseOfxStatement } from "./parse/ofx";

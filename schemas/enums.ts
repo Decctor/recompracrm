@@ -1447,6 +1447,10 @@ export const AccessScopeEnum = z.enum([
   "agent:products:read",
   "agent:campaigns:read",
   "agent:sales:read",
+  // Financeiro separado de vendas: quem concede "vendas" não está concedendo contas, extratos e
+  // fluxo de caixa. `reconcile` só cria SUGESTÕES de conciliação — a confirmação é sempre humana.
+  "agent:finances:read",
+  "agent:finances:reconcile",
   "agent:members:read",
   "agent:campaigns:write",
   "agent:campaigns:activate",

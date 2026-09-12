@@ -31,6 +31,7 @@ function readFlag(name: string): string | null {
 const ALL_SCOPES = new Set([
 	"agent:results:read",
 	"agent:sales:read",
+	"agent:finances:read",
 	"agent:clients:read",
 	"agent:clients:pii",
 	"agent:products:read",

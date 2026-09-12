@@ -109,6 +109,16 @@ export const ACCESS_SCOPE_CATALOG: Record<TAccessScopeEnum, TAccessScopeDescript
 		description: "Ver vendas individuais do período, com valor, vendedor, canal e cliente.",
 		group: "AGENTE_IA",
 	},
+	"agent:finances:read": {
+		label: "Consultar o financeiro",
+		description: "Ver contas financeiras, transações (entradas e saídas) e linhas de extrato importadas.",
+		group: "AGENTE_IA",
+	},
+	"agent:finances:reconcile": {
+		label: "Sugerir conciliações de extrato",
+		description: "Importar linhas de extrato transcritas e sugerir vínculos com transações. Toda sugestão exige confirmação humana no painel.",
+		group: "AGENTE_IA",
+	},
 	"agent:members:read": {
 		label: "Consultar membros",
 		description: "Listar membros da organização para atribuir responsabilidades de negócio.",
