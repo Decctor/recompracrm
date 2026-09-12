@@ -723,14 +723,33 @@ function SalePaymentGroupRow({
 		if (payment.cancelado) return { label: "Cancelado ou estornado", className: "text-destructive" };
 		if (isInstallment) {
 			const progress = `${payment.parcelasRecebidas} de ${payment.parcelasTotal} recebidas`;
-			if (payment.emAtraso) return { label: `${progress} · parcela em atraso`, className: "text-destructive" };
+			if (payment.emAtraso)
+				return {
+					label: `${progress} · parcela em atraso`,
+					className: "text-destructive",
+				};
 			if (payment.proximoVencimento)
-				return { label: `${progress} · próxima em ${formatDateAsLocale(payment.proximoVencimento)}`, className: "text-muted-foreground" };
+				return {
+					label: `${progress} · próxima em ${formatDateAsLocale(payment.proximoVencimento)}`,
+					className: "text-muted-foreground",
+				};
 			return { label: progress, className: "text-success" };
 		}
-		if (payment.ultimoRecebimento) return { label: `Recebido em ${formatDateAsLocale(payment.ultimoRecebimento)}`, className: "text-success" };
-		if (payment.emAtraso) return { label: `Vencido em ${formatDateAsLocale(payment.proximoVencimento)}`, className: "text-destructive" };
-		if (payment.proximoVencimento) return { label: `Vence em ${formatDateAsLocale(payment.proximoVencimento)}`, className: "text-muted-foreground" };
+		if (payment.ultimoRecebimento)
+			return {
+				label: `Recebido em ${formatDateAsLocale(payment.ultimoRecebimento)}`,
+				className: "text-success",
+			};
+		if (payment.emAtraso)
+			return {
+				label: `Vencido em ${formatDateAsLocale(payment.proximoVencimento)}`,
+				className: "text-destructive",
+			};
+		if (payment.proximoVencimento)
+			return {
+				label: `Vence em ${formatDateAsLocale(payment.proximoVencimento)}`,
+				className: "text-muted-foreground",
+			};
 		return { label: "Pendente", className: "text-muted-foreground" };
 	})();
 
@@ -753,13 +772,24 @@ function SalePaymentGroupRow({
 	}
 
 	return (
-		<Link
-			href={appRoutes.finance.entry(payment.lancamentoContabilId)}
-			title="Abrir lançamento contábil deste pagamento"
-			className="w-full flex items-start justify-between gap-3 rounded-lg bg-secondary/30 px-3 py-2.5 transition-colors hover:bg-secondary/60"
-		>
-			{content}
-		</Link>
+		<div className="flex w-full items-stretch gap-1 rounded-lg bg-secondary/30 p-1">
+			<Link
+				href={appRoutes.finance.transaction(payment.transacaoFinanceiraId)}
+				title="Editar movimentação financeira deste pagamento"
+				className="flex min-w-0 flex-1 items-start justify-between gap-3 rounded-md px-2 py-1.5 transition-colors hover:bg-secondary/60"
+			>
+				{content}
+			</Link>
+			<Link
+				href={appRoutes.finance.entry(payment.lancamentoContabilId)}
+				title="Abrir lançamento contábil da venda"
+				aria-label="Abrir lançamento contábil da venda"
+				className="flex shrink-0 items-center justify-center gap-1 rounded-md px-2 text-muted-foreground transition-colors hover:bg-secondary/60 hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/40"
+			>
+				<FileText className="h-4 w-4" />
+				<span className="hidden text-[11px] font-semibold uppercase sm:inline">Lançamento</span>
+			</Link>
+		</div>
 	);
 }
 
@@ -1160,7 +1190,9 @@ function SaleDeleteButton({ sale, userCanDeleteSales }: { sale: TGetSalesOutputB
 		onSuccess: async (data) => {
 			setDeleteConfirmMenuIsOpen(false);
 			await queryClient.invalidateQueries({ queryKey: ["sales"] });
-			await queryClient.invalidateQueries({ queryKey: ["sales-by-id", sale.id] });
+			await queryClient.invalidateQueries({
+				queryKey: ["sales-by-id", sale.id],
+			});
 			toast.success(data.message);
 			router.push(appRoutes.sales.root());
 		},

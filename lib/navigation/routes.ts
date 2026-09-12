@@ -41,6 +41,8 @@ export const appRoutes = {
 		/** Abre a listagem já com o menu de edição do lançamento aberto (query state via nuqs). */
 		entry: (entryId: string) => `/dashboard/finance/entries?entryId=${encodeURIComponent(entryId)}`,
 		transactions: () => "/dashboard/finance/transactions",
+		/** Abre a listagem com a edição da movimentação financeira indicada. */
+		transaction: (transactionId: string) => `/dashboard/finance/transactions?transactionId=${encodeURIComponent(transactionId)}`,
 		accounts: () => "/dashboard/finance/accounts",
 		creditCards: () => "/dashboard/finance/credit-cards",
 		reconciliation: () => "/dashboard/finance/reconciliation",

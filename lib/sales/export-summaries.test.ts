@@ -12,6 +12,7 @@ import type { TSalePaymentGroup } from "./utils";
 function paymentGroup(overrides: Partial<TSalePaymentGroup> = {}): TSalePaymentGroup {
 	return {
 		id: "grupo-1",
+		transacaoFinanceiraId: "transacao-1",
 		lancamentoContabilId: "lancamento-1",
 		metodo: "PIX",
 		valor: 50,
@@ -28,8 +29,18 @@ function paymentGroup(overrides: Partial<TSalePaymentGroup> = {}): TSalePaymentG
 
 test("composição: quantidade, nome, variante e valor líquido por item", () => {
 	const summary = buildSaleCompositionSummary([
-		{ quantidade: 2, valorVendaTotalLiquido: 59.8, produto: { nome: "Camiseta" }, produtoVariante: { nome: "P" } },
-		{ quantidade: 1.5, valorVendaTotalLiquido: 35, produto: { nome: "Queijo" }, produtoVariante: null },
+		{
+			quantidade: 2,
+			valorVendaTotalLiquido: 59.8,
+			produto: { nome: "Camiseta" },
+			produtoVariante: { nome: "P" },
+		},
+		{
+			quantidade: 1.5,
+			valorVendaTotalLiquido: 35,
+			produto: { nome: "Queijo" },
+			produtoVariante: null,
+		},
 		{ quantidade: 1, valorVendaTotalLiquido: 10, produto: null },
 	]);
 	assert.equal(summary, "2x Camiseta (P) - R$ 59,80; 1,5x Queijo - R$ 35,00; 1x Produto removido - R$ 10,00");
@@ -64,14 +75,26 @@ test("pagamentos: à vista recebido, parcelado em andamento e cancelado", () => 
 			valorRecebido: 200,
 			emAtraso: true,
 		}),
-		paymentGroup({ id: "grupo-3", metodo: "BOLETO", valor: 80, parcelasRecebidas: 0, valorRecebido: 0, cancelado: true }),
+		paymentGroup({
+			id: "grupo-3",
+			metodo: "BOLETO",
+			valor: 80,
+			parcelasRecebidas: 0,
+			valorRecebido: 0,
+			cancelado: true,
+		}),
 	]);
 	assert.equal(summary, "Pix R$ 50,00 (recebido); Cartão de crédito 3x R$ 300,00 (2/3 recebidas, em atraso); Boleto R$ 80,00 (cancelado)");
 });
 
 test("pagamentos: pendente informa o vencimento quando existe", () => {
 	const summary = buildSalePaymentsSummary([
-		paymentGroup({ parcelasRecebidas: 0, valorRecebido: 0, ultimoRecebimento: null, proximoVencimento: new Date("2026-09-20T03:00:00.000Z") }),
+		paymentGroup({
+			parcelasRecebidas: 0,
+			valorRecebido: 0,
+			ultimoRecebimento: null,
+			proximoVencimento: new Date("2026-09-20T03:00:00.000Z"),
+		}),
 	]);
 	assert.equal(summary, "Pix R$ 50,00 (pendente, vence em 20/09/2026)");
 });
@@ -88,7 +111,13 @@ test("pagamentos: sem troco a célula não ganha sufixo", () => {
 
 test("pagamentos: o corte por tamanho nunca come o troco", () => {
 	const grupos = Array.from({ length: 40 }, (_, index) =>
-		paymentGroup({ id: `grupo-${index}`, metodo: "CARTAO_CREDITO", valor: 1234.56, parcelasTotal: 3, parcelasRecebidas: 1 }),
+		paymentGroup({
+			id: `grupo-${index}`,
+			metodo: "CARTAO_CREDITO",
+			valor: 1234.56,
+			parcelasTotal: 3,
+			parcelasRecebidas: 1,
+		}),
 	);
 	const summary = buildSalePaymentsSummary(grupos, [{ metodo: "DINHEIRO", valor: 22 }], 200);
 	assert.ok(summary.endsWith("Troco em dinheiro −R$ 22,00"), summary);

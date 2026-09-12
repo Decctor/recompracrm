@@ -49,7 +49,9 @@ export default function PurchaseAccountingEntryBlock({
 						label="DATA DE COMPETÊNCIA"
 						value={formatDateForInputValue(accountingEntry.dataCompetencia)}
 						handleChange={(value) =>
-							updateAccountingEntry({ dataCompetencia: (formatDateOnInputChange(value, "date") as Date) || accountingEntry.dataCompetencia })
+							updateAccountingEntry({
+								dataCompetencia: (formatDateOnInputChange(value, "date") as Date) || accountingEntry.dataCompetencia,
+							})
 						}
 					/>
 				</div>
@@ -109,7 +111,7 @@ export default function PurchaseAccountingEntryBlock({
 					transactions={accountingEntry.transacoes}
 					addTransaction={addAccountingEntryTransaction}
 					updateTransaction={updateAccountingEntryTransaction}
-					removeTransaction={removeAccountingEntryTransaction}
+					removeTransaction={(index) => removeAccountingEntryTransaction({ index })}
 				/>
 			</div>
 		</ResponsiveMenuSection>

@@ -23,7 +23,7 @@ import {
 	type SpreadsheetGridBounds,
 } from "@/lib/spreadsheet-navigation";
 import { cn } from "@/lib/utils";
-import type { TPurchaseAccountingEntryTransaction, TUsePurchaseState } from "@/state-hooks/use-purchase-state";
+import type { TFinancialTransaction } from "@/schemas/financial";
 import { FinancialTransactionTypeOptions, SalePaymentMethodsOptions } from "@/utils/select-options";
 import dayjs from "dayjs";
 import { ArrowDown, ArrowUp, BadgeDollarSign, CheckCircle2, CircleAlert, Layers3, Plus, TriangleAlert } from "lucide-react";
@@ -54,16 +54,27 @@ const PAYMENT_METHOD_OPTIONS = SalePaymentMethodsOptions.map((option) => ({
 
 type TAccountOption = { id: string; value: string; label: string };
 
+type TNewAccountingEntryTransaction = Omit<TFinancialTransaction, "organizacaoId" | "lancamentoContabilId" | "autorId" | "dataInsercao">;
+
+export type TAccountingEntryTransactionRow = TNewAccountingEntryTransaction & {
+	id?: string | null;
+	deletar?: boolean | null;
+};
+
+type TAccountingEntryTransactionPatch = Partial<Omit<TAccountingEntryTransactionRow, "id" | "deletar">>;
+
 type PurchaseTransactionsTableProps = {
 	entryValue: number;
 	competenceDate: Date;
-	transactions: TUsePurchaseState["state"]["lancamentoContabil"]["transacoes"];
-	addTransaction: TUsePurchaseState["addAccountingEntryTransaction"];
-	updateTransaction: TUsePurchaseState["updateAccountingEntryTransaction"];
-	removeTransaction: TUsePurchaseState["removeAccountingEntryTransaction"];
+	transactions: TAccountingEntryTransactionRow[];
+	addTransaction: (transaction: TNewAccountingEntryTransaction) => void;
+	updateTransaction: (params: { index: number; item: TAccountingEntryTransactionPatch }) => void;
+	removeTransaction: (index: number) => void;
+	defaultTransactionType?: TAccountingEntryTransactionRow["tipo"];
+	editable?: boolean;
 };
 
-function getTransactionValuePatch(valor: number): Partial<TPurchaseAccountingEntryTransaction> {
+function getTransactionValuePatch(valor: number): TAccountingEntryTransactionPatch {
 	return {
 		valor,
 		valorBase: valor,
@@ -87,10 +98,19 @@ export default function PurchaseTransactionsTable({
 	addTransaction,
 	updateTransaction,
 	removeTransaction,
+	defaultTransactionType = "SAIDA",
+	editable = true,
 }: PurchaseTransactionsTableProps) {
-	const { data: financialAccountsData } = useFinancesAccounts({ initialFilters: { activeOnly: true, stats: false } });
+	const { data: financialAccountsData } = useFinancesAccounts({
+		initialFilters: { activeOnly: true, stats: false },
+	});
 	const accountOptions: TAccountOption[] = useMemo(
-		() => (financialAccountsData?.accounts ?? []).map((account) => ({ id: account.id, value: account.id, label: account.nome })),
+		() =>
+			(financialAccountsData?.accounts ?? []).map((account) => ({
+				id: account.id,
+				value: account.id,
+				label: account.nome,
+			})),
 		[financialAccountsData],
 	);
 
@@ -118,15 +138,15 @@ export default function PurchaseTransactionsTable({
 
 	const gridBounds: SpreadsheetGridBounds = useMemo(
 		() => ({
-			rowCount: visibleTransactions.length + (entryValueIsDefined ? 1 : 0),
+			rowCount: visibleTransactions.length + (editable && entryValueIsDefined ? 1 : 0),
 			colCount: TRANSACTION_GRID_COL_COUNT,
 		}),
-		[visibleTransactions.length, entryValueIsDefined],
+		[visibleTransactions.length, entryValueIsDefined, editable],
 	);
 
 	function handleRemove(index: number) {
 		const removed = transactions[index];
-		removeTransaction({ index });
+		removeTransaction(index);
 		if (!removed) return;
 		toast.success(`Transação "${removed.titulo || "sem título"}" removida.`, {
 			action: {
@@ -150,7 +170,7 @@ export default function PurchaseTransactionsTable({
 			addTransaction({
 				contaFinanceiraId: null,
 				titulo: `Parcela ${startingParcel + index + 1}/${startingParcel + config.count}`,
-				tipo: "SAIDA",
+				tipo: defaultTransactionType,
 				valor: amount,
 				metodo: "A_DEFINIR",
 				dataPrevisao: dayjs(config.firstDate)
@@ -215,7 +235,7 @@ export default function PurchaseTransactionsTable({
 										? `FALTAM ${formatToMoney(missingTotal)}`
 										: "PAGAMENTO NÃO PROGRAMADO"}
 						</p>
-						{entryValueIsDefined && missingTotal > ACCOUNTING_ENTRY_BALANCE_TOLERANCE ? (
+						{editable && entryValueIsDefined && missingTotal > ACCOUNTING_ENTRY_BALANCE_TOLERANCE ? (
 							<InstallmentGeneratorPopover remaining={missingTotal} competenceDate={competenceDate} onGenerate={handleGenerateInstallments} />
 						) : null}
 					</div>
@@ -241,7 +261,11 @@ export default function PurchaseTransactionsTable({
 				</div>
 			</div>
 
-			<div {...{ [SPREADSHEET_TABLE_ATTR]: "true" }} className="flex w-full flex-col overflow-hidden rounded-md border border-border bg-background">
+			<div
+				{...{ [SPREADSHEET_TABLE_ATTR]: "true" }}
+				inert={!editable}
+				className={cn("flex w-full flex-col overflow-hidden rounded-md border border-border bg-background", !editable && "opacity-80")}
+			>
 				<div className="hidden min-h-9 w-full items-center border-b border-border bg-muted/60 px-2 py-1.5 text-[0.68rem] font-medium uppercase text-muted-foreground lg:flex">
 					<p className="w-[21%] px-2 text-start">Título</p>
 					<p className="w-[9%] px-2 text-center">Tipo</p>
@@ -263,9 +287,10 @@ export default function PurchaseTransactionsTable({
 							gridBounds={gridBounds}
 							handleUpdate={(item) => updateTransaction({ index, item })}
 							handleRemove={() => handleRemove(index)}
+							editable={editable}
 						/>
 					))}
-					{entryValueIsDefined ? (
+					{editable && entryValueIsDefined ? (
 						<DraftPurchaseTransactionRow
 							accountOptions={accountOptions}
 							suggestedValue={missingTotal > 0 ? missingTotal : 0}
@@ -273,6 +298,7 @@ export default function PurchaseTransactionsTable({
 							gridRow={visibleTransactions.length}
 							gridBounds={gridBounds}
 							addTransaction={addTransaction}
+							defaultTransactionType={defaultTransactionType}
 						/>
 					) : null}
 					{!entryValueIsDefined ? (
@@ -301,12 +327,13 @@ export default function PurchaseTransactionsTable({
 }
 
 type PurchaseTransactionTableRowProps = {
-	transaction: TPurchaseAccountingEntryTransaction;
+	transaction: TAccountingEntryTransactionRow;
 	accountOptions: TAccountOption[];
 	gridRow: number;
 	gridBounds: SpreadsheetGridBounds;
-	handleUpdate: (item: Partial<TPurchaseAccountingEntryTransaction>) => void;
+	handleUpdate: (item: TAccountingEntryTransactionPatch) => void;
 	handleRemove: () => void;
+	editable: boolean;
 };
 
 function PurchaseTransactionTableRow({
@@ -316,6 +343,7 @@ function PurchaseTransactionTableRow({
 	gridBounds,
 	handleUpdate,
 	handleRemove,
+	editable,
 }: PurchaseTransactionTableRowProps) {
 	const installmentLabel = transaction.parcela && transaction.totalParcelas ? `${transaction.parcela}/${transaction.totalParcelas}` : null;
 
@@ -386,7 +414,7 @@ function PurchaseTransactionTableRow({
 					/>
 				</div>
 				<div className="flex w-[5%] justify-center px-1">
-					<DeleteRowButton onRemove={handleRemove} ariaLabel="Remover transação financeira da compra" />
+					{editable ? <DeleteRowButton onRemove={handleRemove} ariaLabel="Remover transação financeira do lançamento" /> : null}
 				</div>
 			</div>
 
@@ -401,7 +429,7 @@ function PurchaseTransactionTableRow({
 						/>
 						{installmentLabel ? <p className="px-2 text-[0.68rem] text-muted-foreground">Parcela {installmentLabel}</p> : null}
 					</div>
-					<DeleteRowButton onRemove={handleRemove} ariaLabel="Remover transação financeira da compra" />
+					{editable ? <DeleteRowButton onRemove={handleRemove} ariaLabel="Remover transação financeira do lançamento" /> : null}
 				</div>
 				<div className="grid w-full grid-cols-2 gap-2">
 					<MobileEditableField label="Tipo">
@@ -453,21 +481,23 @@ function DraftPurchaseTransactionRow({
 	gridRow,
 	gridBounds,
 	addTransaction,
+	defaultTransactionType,
 }: {
 	accountOptions: TAccountOption[];
 	suggestedValue: number;
 	competenceDate: Date;
 	gridRow: number;
 	gridBounds: SpreadsheetGridBounds;
-	addTransaction: (transaction: TPurchaseAccountingEntryTransaction) => void;
+	addTransaction: (transaction: TNewAccountingEntryTransaction) => void;
+	defaultTransactionType: TAccountingEntryTransactionRow["tipo"];
 }) {
-	const [draft, setDraft] = useState<TPurchaseAccountingEntryTransaction>(() => createEmptyPurchaseTransaction(competenceDate));
+	const [draft, setDraft] = useState<TNewAccountingEntryTransaction>(() => createEmptyTransaction(competenceDate, defaultTransactionType));
 	// Enquanto o valor não é confirmado, a célula mostra o restante do lançamento como sugestão e a linha
 	// não se confirma. Nenhum pagamento é programado por um valor que o usuário não aceitou.
 	const [valueIsConfirmed, setValueIsConfirmed] = useState(false);
 	const effectiveValue = valueIsConfirmed ? draft.valor : suggestedValue;
 
-	function commitIfReady(nextDraft: TPurchaseAccountingEntryTransaction, nextValueIsConfirmed: boolean) {
+	function commitIfReady(nextDraft: TNewAccountingEntryTransaction, nextValueIsConfirmed: boolean) {
 		const value = nextValueIsConfirmed ? nextDraft.valor : suggestedValue;
 		if (!nextDraft.titulo.trim() || !nextValueIsConfirmed || value <= 0) {
 			setDraft(nextDraft);
@@ -476,11 +506,11 @@ function DraftPurchaseTransactionRow({
 		}
 
 		addTransaction({ ...nextDraft, valor: value });
-		setDraft(createEmptyPurchaseTransaction(competenceDate));
+		setDraft(createEmptyTransaction(competenceDate, defaultTransactionType));
 		setValueIsConfirmed(false);
 	}
 
-	function updateDraft(item: Partial<TPurchaseAccountingEntryTransaction>) {
+	function updateDraft(item: Partial<TNewAccountingEntryTransaction>) {
 		commitIfReady({ ...draft, ...item }, valueIsConfirmed);
 	}
 
@@ -622,10 +652,10 @@ function DraftValueCell({
 }
 
 type CellProps = {
-	transaction: TPurchaseAccountingEntryTransaction;
+	transaction: TAccountingEntryTransactionRow;
 	gridRow?: number;
 	gridBounds?: SpreadsheetGridBounds;
-	handleUpdate: (item: Partial<TPurchaseAccountingEntryTransaction>) => void;
+	handleUpdate: (item: TAccountingEntryTransactionPatch) => void;
 };
 
 /** Props de navegação por grid para gatilhos que não são células editáveis (selects e o toggle de tipo). */
@@ -653,7 +683,11 @@ function getGridTriggerProps({ gridRow, gridCol, gridBounds }: { gridRow?: numbe
 function TransactionTypeCell({ transaction, gridRow, gridBounds, handleUpdate }: CellProps) {
 	const isInbound = transaction.tipo === "ENTRADA";
 	const option = FinancialTransactionTypeOptions.find((item) => item.value === transaction.tipo);
-	const { hasGridNavigation, triggerProps } = getGridTriggerProps({ gridRow, gridCol: TRANSACTION_GRID_COL.TYPE, gridBounds });
+	const { hasGridNavigation, triggerProps } = getGridTriggerProps({
+		gridRow,
+		gridCol: TRANSACTION_GRID_COL.TYPE,
+		gridBounds,
+	});
 
 	const toggle = (
 		<button
@@ -683,7 +717,11 @@ function TransactionTypeCell({ transaction, gridRow, gridBounds, handleUpdate }:
 }
 
 function TransactionMethodCell({ transaction, gridRow, gridBounds, handleUpdate }: CellProps) {
-	const { hasGridNavigation, triggerProps } = getGridTriggerProps({ gridRow, gridCol: TRANSACTION_GRID_COL.METHOD, gridBounds });
+	const { hasGridNavigation, triggerProps } = getGridTriggerProps({
+		gridRow,
+		gridCol: TRANSACTION_GRID_COL.METHOD,
+		gridBounds,
+	});
 
 	const select = (
 		<SelectInput
@@ -694,7 +732,11 @@ function TransactionMethodCell({ transaction, gridRow, gridBounds, handleUpdate 
 			value={transaction.metodo}
 			holderClassName={CELL_TRIGGER_CLASSNAME}
 			triggerProps={triggerProps}
-			handleChange={(metodo) => handleUpdate({ metodo: metodo as TPurchaseAccountingEntryTransaction["metodo"] })}
+			handleChange={(metodo) =>
+				handleUpdate({
+					metodo: metodo as TAccountingEntryTransactionRow["metodo"],
+				})
+			}
 			onReset={() => handleUpdate({ metodo: "A_DEFINIR" })}
 		/>
 	);
@@ -715,7 +757,11 @@ function TransactionAccountCell({
 	gridBounds,
 	handleUpdate,
 }: CellProps & { accountOptions: TAccountOption[] }) {
-	const { hasGridNavigation, triggerProps } = getGridTriggerProps({ gridRow, gridCol: TRANSACTION_GRID_COL.ACCOUNT, gridBounds });
+	const { hasGridNavigation, triggerProps } = getGridTriggerProps({
+		gridRow,
+		gridCol: TRANSACTION_GRID_COL.ACCOUNT,
+		gridBounds,
+	});
 
 	const select = (
 		<SelectInput
@@ -813,12 +859,14 @@ function InstallmentGeneratorPopover({
 	);
 }
 
-function createEmptyPurchaseTransaction(competenceDate: Date): TPurchaseAccountingEntryTransaction {
+function createEmptyTransaction(
+	competenceDate: Date,
+	defaultTransactionType: TAccountingEntryTransactionRow["tipo"],
+): TNewAccountingEntryTransaction {
 	return {
 		contaFinanceiraId: null,
 		titulo: "",
-		// Uma compra gera pagamentos, então a saída é o padrão.
-		tipo: "SAIDA",
+		tipo: defaultTransactionType,
 		valor: 0,
 		metodo: "A_DEFINIR",
 		dataPrevisao: competenceDate,

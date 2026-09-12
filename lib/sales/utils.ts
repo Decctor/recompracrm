@@ -254,6 +254,8 @@ export function classifySalePaymentTransactions(transactions: SalePaymentTransac
 
 export type TSalePaymentGroup = {
 	id: string;
+	/** Transação mais útil para abrir: a próxima pendente ou, se quitada, a primeira do grupo. */
+	transacaoFinanceiraId: string;
 	/**
 	 * Lançamento contábil que originou as parcelas. Um grupo nunca cruza lançamentos: parcelado
 	 * agrupa por `grupoParcelasId`, que já carrega o lançamento na chave, e à vista agrupa por
@@ -302,9 +304,17 @@ export function groupSalePaymentsByMethod(payments: ClassifiedPayment[], now = n
 			.map((parcela) => toDateOrNull(parcela.dataEfetivacao))
 			.filter((data): data is Date => data != null)
 			.sort((a, b) => b.getTime() - a.getTime());
+		const actionableTransaction =
+			parcelas
+				.filter((parcela) => parcela.dataEfetivacao == null && !NON_EDITABLE_PAYMENT_STATUSES.has(parcela.provedorStatus ?? ""))
+				.sort(
+					(a, b) =>
+						(toDateOrNull(a.dataPrevisao)?.getTime() ?? Number.MAX_SAFE_INTEGER) - (toDateOrNull(b.dataPrevisao)?.getTime() ?? Number.MAX_SAFE_INTEGER),
+				)[0] ?? parcelas[0];
 
 		return {
 			id,
+			transacaoFinanceiraId: actionableTransaction.id,
 			lancamentoContabilId: parcelas[0].lancamentoContabilId,
 			metodo: parcelas[0].metodo,
 			valor: parcelas.reduce((acc, parcela) => acc + parcela.valor, 0),

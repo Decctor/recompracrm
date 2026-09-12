@@ -1,7 +1,7 @@
 import type { TPaymentMethodEnum } from "@/schemas/enums";
 import { SALE_CHANGE_TRANSACTION_ORIGIN } from "@/lib/sales/sale-change";
 import { db } from "@/services/drizzle";
-import { accountingEntries, financialTransactions, sales } from "@/services/drizzle/schema";
+import { accountingEntries, financialAccounts, financialTransactions, sales } from "@/services/drizzle/schema";
 import { and, count, countDistinct, eq, inArray, notExists, sql, sum } from "drizzle-orm";
 import { computeShare } from "./classify";
 import { reconcilePaymentTotals } from "./payment-reconciliation";
@@ -32,6 +32,10 @@ export async function getSalesResultsByPaymentMethod({ filters }: { filters: TSa
 		db
 			.select({
 				metodo: financialTransactions.metodo,
+				contaFinanceiraId: financialTransactions.contaFinanceiraId,
+				contaFinanceiraNome: financialAccounts.nome,
+				contaFinanceiraTipo: financialAccounts.tipo,
+				contaFinanceiraChaveSistema: financialAccounts.chaveSistema,
 				valor: sum(financialTransactions.valor),
 				valorEfetivado: sql<string>`coalesce(sum(case when ${financialTransactions.dataEfetivacao} is not null then ${financialTransactions.valor} else 0 end), 0)`,
 				valorPendente: sql<string>`coalesce(sum(case when ${financialTransactions.dataEfetivacao} is null then ${financialTransactions.valor} else 0 end), 0)`,
@@ -39,6 +43,7 @@ export async function getSalesResultsByPaymentMethod({ filters }: { filters: TSa
 			})
 			.from(financialTransactions)
 			.innerJoin(accountingEntries, eq(financialTransactions.lancamentoContabilId, accountingEntries.id))
+			.leftJoin(financialAccounts, eq(financialTransactions.contaFinanceiraId, financialAccounts.id))
 			.where(
 				and(
 					eq(financialTransactions.organizacaoId, filters.organizacaoId),
@@ -47,7 +52,13 @@ export async function getSalesResultsByPaymentMethod({ filters }: { filters: TSa
 					inArray(accountingEntries.vendaId, universeIds),
 				),
 			)
-			.groupBy(financialTransactions.metodo),
+			.groupBy(
+				financialTransactions.metodo,
+				financialTransactions.contaFinanceiraId,
+				financialAccounts.nome,
+				financialAccounts.tipo,
+				financialAccounts.chaveSistema,
+			),
 		// O que saiu por método: troco devolvido ao cliente (SAÍDA com origem TROCO, sempre em
 		// dinheiro) e taxas retidas pelo canal. É o que explica "entrou X, mas ficou Y" em cada linha.
 		db
@@ -158,11 +169,29 @@ export async function getSalesResultsByPaymentMethod({ filters }: { filters: TSa
 	]);
 	const linhas = Array.from(methods)
 		.map((metodo) => {
-			const row = rows.find((candidate) => candidate.metodo === metodo);
-			const outflow = outflowByMethod.get(metodo) ?? { troco: 0, taxasCanal: 0 };
+			const methodRows = rows.filter((candidate) => candidate.metodo === metodo);
+			const outflow = outflowByMethod.get(metodo) ?? {
+				troco: 0,
+				taxasCanal: 0,
+			};
 			// Troco legado (sem SAÍDA persistida) só existe em dinheiro; entra na linha para o líquido bater com o total.
 			const troco = round2(outflow.troco + (metodo === "DINHEIRO" ? reconciliation.ajustes.trocoInferido : 0));
-			const valor = Number(row?.valor ?? 0);
+			const valor = methodRows.reduce((total, row) => total + Number(row.valor ?? 0), 0);
+			const valorEfetivado = methodRows.reduce((total, row) => total + Number(row.valorEfetivado ?? 0), 0);
+			const valorPendente = methodRows.reduce((total, row) => total + Number(row.valorPendente ?? 0), 0);
+			const valorTaxas = methodRows.reduce((total, row) => total + Number(row.valorTaxas ?? 0), 0);
+			const contas = methodRows
+				.map((row) => ({
+					contaFinanceiraId: row.contaFinanceiraId,
+					contaFinanceiraNome: row.contaFinanceiraNome ?? "Sem conta financeira",
+					contaFinanceiraTipo: row.contaFinanceiraTipo,
+					contaFinanceiraChaveSistema: row.contaFinanceiraChaveSistema,
+					valor: Number(row.valor ?? 0),
+					valorEfetivado: Number(row.valorEfetivado ?? 0),
+					valorPendente: Number(row.valorPendente ?? 0),
+					participacaoPercentual: computeShare(Number(row.valor ?? 0), valor),
+				}))
+				.sort((a, b) => b.valor - a.valor);
 			const saidas = {
 				troco,
 				trocoDeOutrosMetodos: metodo === "DINHEIRO" ? trocoDeOutrosMetodos : 0,
@@ -173,9 +202,10 @@ export async function getSalesResultsByPaymentMethod({ filters }: { filters: TSa
 				metodo,
 				valor,
 				qtdeVendas: countByMethod.get(metodo) ?? 0,
-				valorEfetivado: Number(row?.valorEfetivado ?? 0),
-				valorPendente: Number(row?.valorPendente ?? 0),
-				valorTaxas: Number(row?.valorTaxas ?? 0),
+				valorEfetivado,
+				valorPendente,
+				valorTaxas,
+				contas,
 				saidas,
 				valorLiquido: round2(valor - saidas.total),
 				participacaoPercentual: computeShare(valor, reconciliation.totalBruto),

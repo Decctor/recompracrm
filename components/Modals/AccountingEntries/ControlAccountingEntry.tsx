@@ -41,7 +41,6 @@ export default function ControlAccountingEntry({ entryId, closeModal, callbacks 
 		addFinancialTransaction,
 		updateFinancialTransaction,
 		removeFinancialTransaction,
-		redefineFinancialTransactions,
 		redefineState,
 		resetState,
 	} = useInternalAccountingEntryState({ initialState: { entryId } });
@@ -73,8 +72,18 @@ export default function ControlAccountingEntry({ entryId, closeModal, callbacks 
 							descricao: line.descricao,
 						}))
 					: [
-							{ contaContabilId: entryData.idContaDebito, natureza: "DEBITO", valor: entryData.valor, descricao: null },
-							{ contaContabilId: entryData.idContaCredito, natureza: "CREDITO", valor: entryData.valor, descricao: null },
+							{
+								contaContabilId: entryData.idContaDebito,
+								natureza: "DEBITO",
+								valor: entryData.valor,
+								descricao: null,
+							},
+							{
+								contaContabilId: entryData.idContaCredito,
+								natureza: "CREDITO",
+								valor: entryData.valor,
+								descricao: null,
+							},
 						],
 			entryFinancialTransactions: entryData.transacoesFinanceiras.map((transaction) => ({
 				id: transaction.id,
@@ -114,10 +123,22 @@ export default function ControlAccountingEntry({ entryId, closeModal, callbacks 
 			const result = await updateAccountingEntry(entryPayload);
 			const existingRuleId = entryData?.recorrenciaRegra?.id;
 			if (config) {
-				if (existingRuleId) await updateFinancialRecurringRule({ ruleId: existingRuleId, config, status: "ATIVA" });
-				else await createFinancialRecurringRule({ accountingEntryId: entryId, config });
+				if (existingRuleId)
+					await updateFinancialRecurringRule({
+						ruleId: existingRuleId,
+						config,
+						status: "ATIVA",
+					});
+				else
+					await createFinancialRecurringRule({
+						accountingEntryId: entryId,
+						config,
+					});
 			} else if (existingRuleId) {
-				await updateFinancialRecurringRule({ ruleId: existingRuleId, status: "ENCERRADA" });
+				await updateFinancialRecurringRule({
+					ruleId: existingRuleId,
+					status: "ENCERRADA",
+				});
 			}
 			return result;
 		},
@@ -130,8 +151,12 @@ export default function ControlAccountingEntry({ entryId, closeModal, callbacks 
 			toast.success(data.message);
 			resetState();
 			setRecurrenceConfig(null);
-			void invalidateFinanceQueries(queryClient, { accountingEntryId: entryId });
-			void queryClient.invalidateQueries({ queryKey: ["finances-recurring-rules"] });
+			void invalidateFinanceQueries(queryClient, {
+				accountingEntryId: entryId,
+			});
+			void queryClient.invalidateQueries({
+				queryKey: ["finances-recurring-rules"],
+			});
 			closeModal();
 		},
 		onError: (mutationError) => {
@@ -234,7 +259,6 @@ export default function ControlAccountingEntry({ entryId, closeModal, callbacks 
 				addFinancialTransaction={addFinancialTransaction}
 				updateFinancialTransaction={updateFinancialTransaction}
 				removeFinancialTransaction={removeFinancialTransaction}
-				redefineFinancialTransactions={redefineFinancialTransactions}
 				editable={canEditTransactions}
 			/>
 			{originType === "MANUAL" ? (

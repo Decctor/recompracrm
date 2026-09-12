@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useQueryState } from "nuqs";
 import { AlertCircle, ArrowRight, ArrowRightLeft, CalendarDays, CheckCircle2, Clock, DollarSign, ListFilter, Pencil, Wallet } from "lucide-react";
 import type { TGetFinancialTransactionsOutputDefault } from "@/app/api/finances/financial-transactions/route";
 import FinancialTransactionMenu from "@/components/Modals/Finances/FinancialTransactionMenu";
@@ -21,13 +22,28 @@ import { FinancialAccountTypeOptions, FinancialTransactionTypeOptions, SalePayme
 import { BsCalendar, BsCalendarCheck } from "react-icons/bs";
 
 const TRANSACTION_STATUS_OPTIONS = [
-	{ id: "pendente", value: "pendente", label: "PENDENTE", icon: <Clock className="w-4 h-4 text-blue-600" /> },
-	{ id: "efetivada", value: "efetivada", label: "EFETIVADA", icon: <CheckCircle2 className="w-4 h-4 text-green-600" /> },
-	{ id: "em-atraso", value: "em-atraso", label: "EM ATRASO", icon: <AlertCircle className="w-4 h-4 text-red-600" /> },
+	{
+		id: "pendente",
+		value: "pendente",
+		label: "PENDENTE",
+		icon: <Clock className="w-4 h-4 text-blue-600" />,
+	},
+	{
+		id: "efetivada",
+		value: "efetivada",
+		label: "EFETIVADA",
+		icon: <CheckCircle2 className="w-4 h-4 text-green-600" />,
+	},
+	{
+		id: "em-atraso",
+		value: "em-atraso",
+		label: "EM ATRASO",
+		icon: <AlertCircle className="w-4 h-4 text-red-600" />,
+	},
 ];
 
 export default function FinanceTransactionsPage() {
-	const [viewingTransactionId, setViewingTransactionId] = useState<string | null>(null);
+	const [viewingTransactionId, setViewingTransactionId] = useQueryState("transactionId");
 	const [isCreatingTransfer, setIsCreatingTransfer] = useState(false);
 	const { data, isLoading, isError, isSuccess, error, filters, updateFilters } = useFinancesTransactions({
 		initialFilters: { page: 1, search: "" },
@@ -158,11 +174,22 @@ export default function FinanceTransactionsPage() {
 							<InteractiveFilter.Label>PERÍODO DE PREVISÃO</InteractiveFilter.Label>
 						</InteractiveFilter.Icon>
 						<InteractiveFilter.Value>{selectedForecastPeriodLabel}</InteractiveFilter.Value>
-						<InteractiveFilter.Clear onClear={() => updateFilters({ periodAfter: null, periodBefore: null, page: 1 })} />
+						<InteractiveFilter.Clear
+							onClear={() =>
+								updateFilters({
+									periodAfter: null,
+									periodBefore: null,
+									page: 1,
+								})
+							}
+						/>
 					</InteractiveFilter.Trigger>
 					<InteractiveFilter.Content className="w-auto p-0">
 						<InteractiveFilter.DateRangeContent
-							value={{ from: filters.periodAfter ?? undefined, to: filters.periodBefore ?? undefined }}
+							value={{
+								from: filters.periodAfter ?? undefined,
+								to: filters.periodBefore ?? undefined,
+							}}
 							onChange={(nextPeriod) =>
 								updateFilters({
 									periodAfter: nextPeriod.from ?? null,

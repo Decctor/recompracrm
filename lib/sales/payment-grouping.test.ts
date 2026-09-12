@@ -28,9 +28,27 @@ function group(transactions: SalePaymentTransactionInput[]) {
 
 test("parcelas do mesmo pagamento colapsam numa linha só", () => {
 	const groups = group([
-		transaction({ id: "p1", parcela: 1, totalParcelas: 3, valor: 200, dataEfetivacao: new Date("2026-08-01") }),
-		transaction({ id: "p2", parcela: 2, totalParcelas: 3, valor: 200, dataPrevisao: new Date("2026-09-01") }),
-		transaction({ id: "p3", parcela: 3, totalParcelas: 3, valor: 200, dataPrevisao: new Date("2026-10-01") }),
+		transaction({
+			id: "p1",
+			parcela: 1,
+			totalParcelas: 3,
+			valor: 200,
+			dataEfetivacao: new Date("2026-08-01"),
+		}),
+		transaction({
+			id: "p2",
+			parcela: 2,
+			totalParcelas: 3,
+			valor: 200,
+			dataPrevisao: new Date("2026-09-01"),
+		}),
+		transaction({
+			id: "p3",
+			parcela: 3,
+			totalParcelas: 3,
+			valor: 200,
+			dataPrevisao: new Date("2026-10-01"),
+		}),
 	]);
 
 	assert.equal(groups.length, 1);
@@ -38,6 +56,7 @@ test("parcelas do mesmo pagamento colapsam numa linha só", () => {
 	assert.equal(groups[0].parcelasRecebidas, 1);
 	assert.equal(groups[0].valor, 600);
 	assert.equal(groups[0].valorRecebido, 200);
+	assert.equal(groups[0].transacaoFinanceiraId, "p2");
 	// A parcela em aberto mais próxima, não a primeira da lista.
 	assert.deepEqual(groups[0].proximoVencimento, new Date("2026-09-01"));
 });
@@ -46,8 +65,18 @@ test("pagamento à vista vira um grupo de uma parcela", () => {
 	// `resolveInstallmentGroupId` devolve null quando totalParcelas <= 1: o fallback por `id` é o
 	// que impede dois pagamentos à vista de colidirem num grupo só.
 	const groups = group([
-		transaction({ id: "pix", metodo: "PIX", valor: 150, dataEfetivacao: new Date("2026-09-02") }),
-		transaction({ id: "dinheiro", metodo: "DINHEIRO", valor: 50, dataEfetivacao: new Date("2026-09-02") }),
+		transaction({
+			id: "pix",
+			metodo: "PIX",
+			valor: 150,
+			dataEfetivacao: new Date("2026-09-02"),
+		}),
+		transaction({
+			id: "dinheiro",
+			metodo: "DINHEIRO",
+			valor: 50,
+			dataEfetivacao: new Date("2026-09-02"),
+		}),
 	]);
 
 	assert.equal(groups.length, 2);
@@ -62,8 +91,18 @@ test("pagamento à vista vira um grupo de uma parcela", () => {
 
 test("parcela vencida e não efetivada marca o grupo em atraso", () => {
 	const groups = group([
-		transaction({ id: "p1", parcela: 1, totalParcelas: 2, dataEfetivacao: new Date("2026-07-01") }),
-		transaction({ id: "p2", parcela: 2, totalParcelas: 2, dataPrevisao: new Date("2026-08-01") }),
+		transaction({
+			id: "p1",
+			parcela: 1,
+			totalParcelas: 2,
+			dataEfetivacao: new Date("2026-07-01"),
+		}),
+		transaction({
+			id: "p2",
+			parcela: 2,
+			totalParcelas: 2,
+			dataPrevisao: new Date("2026-08-01"),
+		}),
 	]);
 
 	assert.equal(groups[0].emAtraso, true);
@@ -72,8 +111,18 @@ test("parcela vencida e não efetivada marca o grupo em atraso", () => {
 
 test("grupo inteiramente estornado é marcado como cancelado", () => {
 	const groups = group([
-		transaction({ id: "p1", parcela: 1, totalParcelas: 2, provedorStatus: "ESTORNADO" }),
-		transaction({ id: "p2", parcela: 2, totalParcelas: 2, provedorStatus: "ESTORNADO" }),
+		transaction({
+			id: "p1",
+			parcela: 1,
+			totalParcelas: 2,
+			provedorStatus: "ESTORNADO",
+		}),
+		transaction({
+			id: "p2",
+			parcela: 2,
+			totalParcelas: 2,
+			provedorStatus: "ESTORNADO",
+		}),
 	]);
 
 	assert.equal(groups[0].cancelado, true);
@@ -85,7 +134,12 @@ test("saídas vinculadas à venda não viram recebimento", () => {
 	// Taxa de canal gerenciado (ex.: comissão iFood) é lançada contra a mesma venda. Contá-la aqui
 	// inflaria o total recebido do cliente.
 	const groups = group([
-		transaction({ id: "recebimento", metodo: "PIX", valor: 100, dataEfetivacao: NOW }),
+		transaction({
+			id: "recebimento",
+			metodo: "PIX",
+			valor: 100,
+			dataEfetivacao: NOW,
+		}),
 		transaction({ id: "taxa", tipo: "SAIDA", metodo: "OUTRO", valor: 12 }),
 	]);
 

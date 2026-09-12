@@ -36,7 +36,6 @@ export default function NewAccountingEntry({ closeModal, callbacks }: NewAccount
 		addFinancialTransaction,
 		updateFinancialTransaction,
 		removeFinancialTransaction,
-		redefineFinancialTransactions,
 		resetState,
 		getCreatePayload,
 	} = useInternalAccountingEntryState();
@@ -60,7 +59,9 @@ export default function NewAccountingEntry({ closeModal, callbacks }: NewAccount
 			resetState();
 			setRecurrenceConfig(null);
 			void invalidateFinanceQueries(queryClient);
-			void queryClient.invalidateQueries({ queryKey: ["finances-recurring-rules"] });
+			void queryClient.invalidateQueries({
+				queryKey: ["finances-recurring-rules"],
+			});
 			closeModal();
 		},
 		onError: (error) => {
@@ -106,7 +107,6 @@ export default function NewAccountingEntry({ closeModal, callbacks }: NewAccount
 				addFinancialTransaction={addFinancialTransaction}
 				updateFinancialTransaction={updateFinancialTransaction}
 				removeFinancialTransaction={removeFinancialTransaction}
-				redefineFinancialTransactions={redefineFinancialTransactions}
 			/>
 			<AccountingEntryRecurrenceBlock config={recurrenceConfig} onChange={setRecurrenceConfig} />
 		</ResponsiveMenu>
