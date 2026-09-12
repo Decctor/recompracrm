@@ -1,6 +1,7 @@
 import type { TUserPermissions } from "@/schemas/users";
 import type { TAuthSessionEntity, TIntegrationEntity, TOrganizationEntity, TOrganizationMemberEntity, TUserEntity } from "@/services/drizzle/schema";
 import z from "zod";
+import { normalizeEmail } from "@/lib/formatting";
 
 /**
  * Resumo LEVE e sem segredos das conexões da organização, embutido na sessão. A config completa
@@ -64,13 +65,13 @@ export type TAuthUserSession = {
 };
 
 export const LoginSchema = z.object({
-	email: z.string({ required_error: "Email não informado.", invalid_type_error: "Tipo não válido para o email." }),
+	email: z.string({ required_error: "Email não informado.", invalid_type_error: "Tipo não válido para o email." }).transform(normalizeEmail),
 });
 export type TLogin = z.infer<typeof LoginSchema>;
 
 export const SignUpWithEmailSchema = z.object({
 	nome: z.string({ required_error: "Nome não informado.", invalid_type_error: "Tipo não válido para o nome." }),
-	email: z.string({ required_error: "Email não informado.", invalid_type_error: "Tipo não válido para o email." }),
+	email: z.string({ required_error: "Email não informado.", invalid_type_error: "Tipo não válido para o email." }).transform(normalizeEmail),
 });
 export type TSignUpWithEmailSchema = z.infer<typeof SignUpWithEmailSchema>;
 

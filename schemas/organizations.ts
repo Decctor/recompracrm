@@ -8,6 +8,7 @@ import {
 import { OrganizationFiscalConfigSchema } from "./fiscal";
 import { DataSourceIntegrationConfigSchema } from "./integrations";
 import { ORGANIZATION_SLUG_INVALID_MESSAGE, ORGANIZATION_SLUG_REGEX } from "@/lib/organizations/slug";
+import { normalizeEmail } from "@/lib/formatting";
 import { PaymentEffectivenessTypeEnum } from "@/lib/payments/schemas";
 
 /**
@@ -774,7 +775,8 @@ export const OrganizationMembershipInvitationSchema = z.object({
 		})
 		.email({
 			message: "Email inválido para o convite.",
-		}),
+		})
+		.transform(normalizeEmail),
 	telefone: z
 		.string({
 			invalid_type_error: "Tipo não válido para o telefone da convite de membro da organização.",

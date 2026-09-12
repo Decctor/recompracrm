@@ -6,6 +6,7 @@ import dayjs from "dayjs";
 import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { formatAsSlug } from "../formatting";
+import { createEmailMatchCondition } from "./email";
 import { MAGIC_LINK_EXPIRES_IN_MINUTES, sendMagicLinkVerification } from "./magic-link-delivery";
 import { sanitizeAuthRedirectTo } from "./redirect";
 import { createSession, generateSessionToken, setSetSessionCookie } from "./session";
@@ -43,7 +44,7 @@ export async function login(_: TLoginResult, input: FormData): Promise<TLoginRes
 	const { email } = validationParsed.data;
 
 	const user = await db.query.users.findFirst({
-		where: (fields, { eq }) => eq(fields.email, email),
+		where: (fields) => createEmailMatchCondition(fields.email, email),
 	});
 	if (!user) {
 		console.log("[ERROR] [LOGIN] User not found", email);
@@ -139,7 +140,7 @@ export async function signUpWithEmail(_: TSignUpWithEmailResult, input: FormData
 	const { nome, email } = validationParsed.data;
 
 	const existingUser = await db.query.users.findFirst({
-		where: (fields, { eq }) => eq(fields.email, email),
+		where: (fields) => createEmailMatchCondition(fields.email, email),
 	});
 	if (existingUser) {
 		console.log("[ERROR] [SIGN UP WITH EMAIL] User attempts to sign up with an already existing email", existingUser);

@@ -1,5 +1,6 @@
 import { createSession, deleteSession, deleteSessionTokenCookie, generateSessionToken, setSetSessionCookie } from "@/lib/authentication/session";
-import { formatAsSlug } from "@/lib/formatting";
+import { createEmailMatchCondition } from "@/lib/authentication/email";
+import { formatAsSlug, normalizeEmail } from "@/lib/formatting";
 import { db } from "@/services/drizzle";
 import { organizationMembers, organizationMembershipInvitations, sellers, users } from "@/services/drizzle/schema";
 import dayjs from "dayjs";
@@ -41,8 +42,9 @@ export async function GET(request: NextRequest) {
 	}
 
 	let invitedUserId: string | null = null;
+	const invitedEmail = normalizeEmail(invitation.email);
 	const existingUser = await db.query.users.findFirst({
-		where: (fields, { eq }) => eq(fields.email, invitation.email),
+		where: (fields) => createEmailMatchCondition(fields.email, invitedEmail),
 	});
 	if (!existingUser) {
 		const insertedUserResponse = await db
@@ -50,7 +52,7 @@ export async function GET(request: NextRequest) {
 			.values({
 				admin: false,
 				nome: invitation.nome,
-				email: invitation.email,
+				email: invitedEmail,
 				telefone: invitation.telefone ?? "",
 				usuario: formatAsSlug(invitation.nome),
 				senha: "",

@@ -68,6 +68,15 @@ export function formatAsSlug(string: string) {
 		.replace(/[^\w-]+/g, "");
 }
 
+/**
+ * O email chega do formulário exatamente como foi digitado: o autocomplete do celular cola um
+ * espaço nas pontas e o teclado sobe a primeira letra. Como a caixa postal é a mesma nos dois
+ * casos, guardar as duas grafias cria duas contas para a mesma pessoa.
+ */
+export function normalizeEmail(email: string) {
+	return email.trim().toLowerCase();
+}
+
 /** Nomes de template WhatsApp/Meta: apenas letras minúsculas, números e underscores. */
 export function formatMessageTemplateName(value: string, options?: { trimEdges?: boolean }) {
 	let result = value

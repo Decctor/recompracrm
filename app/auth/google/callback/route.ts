@@ -7,7 +7,8 @@ import {
 } from "@/lib/authentication/oauth-providers";
 import { sanitizeAuthRedirectTo } from "@/lib/authentication/redirect";
 import { createSession, generateSessionToken, setSetSessionCookie } from "@/lib/authentication/session";
-import { formatAsSlug } from "@/lib/formatting";
+import { createEmailMatchCondition } from "@/lib/authentication/email";
+import { formatAsSlug, normalizeEmail } from "@/lib/formatting";
 import { db } from "@/services/drizzle";
 import { type TNewUserEntity, users } from "@/services/drizzle/schema";
 import { geolocation } from "@vercel/functions";
@@ -73,8 +74,12 @@ export async function GET(request: NextRequest): Promise<Response> {
 
 		let clientId: string | null = null;
 
+		// O email do Google é comparado normalizado: contas antigas foram gravadas com espaço ou
+		// caixa alta, e um `eq` cru não as encontra — cria uma segunda conta e o usuário perde a
+		// organização em que já era membro.
+		const googleEmail = normalizeEmail(googleUser.email);
 		const existingUser = await db.query.users.findFirst({
-			where: (fields, { eq, or }) => or(eq(fields.email, googleUser.email), eq(fields.googleId, googleUser.sub)),
+			where: (fields, { or, eq }) => or(createEmailMatchCondition(fields.email, googleEmail), eq(fields.googleId, googleUser.sub)),
 		});
 
 		if (!existingUser) {
@@ -87,7 +92,7 @@ export async function GET(request: NextRequest): Promise<Response> {
 			});
 			const newUser: TNewUserEntity = {
 				nome: googleUser.name,
-				email: googleUser.email,
+				email: googleEmail,
 				telefone: "",
 				localizacaoEstado: userRequestLocation.countryRegion || null,
 				localizacaoCidade: userRequestLocation.city?.toUpperCase() || null,
@@ -123,7 +128,7 @@ export async function GET(request: NextRequest): Promise<Response> {
 				.set({
 					localizacaoEstado: existingUser.localizacaoEstado ? existingUser.localizacaoEstado : userRequestLocation.countryRegion || "",
 					localizacaoCidade: existingUser.localizacaoCidade ? existingUser.localizacaoCidade : userRequestLocation.city?.toUpperCase() || "",
-					email: existingUser.email || googleUser.email,
+					email: normalizeEmail(existingUser.email || googleEmail),
 					avatarUrl: existingUser.avatarUrl || googleUser.picture,
 					googleId: existingUser.googleId || googleUser.sub,
 					googleRefreshToken: existingUser.googleRefreshToken || refreshToken,
