@@ -13,6 +13,7 @@ import { resolveSaleEditability } from "@/lib/sales/sale-editability";
 import { decorateFiscalDocuments, type TFiscalDocumentDecoration } from "@/lib/fiscal/document-actions-loader";
 import { loadFiscalOrganization } from "@/lib/fiscal/settings";
 import { classifySalePaymentTransactions, computeSaleFinancialStatus, computeSaleFiscalStatus, groupSalePaymentsByMethod } from "@/lib/sales/utils";
+import { isSaleChangeTransaction } from "@/lib/sales/sale-change";
 import {
 	SaleFinancialDerivedStatusEnum,
 	SaleFiscalDerivedStatusEnum,
@@ -243,7 +244,8 @@ export type TGetSalesInput = z.infer<typeof GetSalesInputSchema>;
 export type TSaleErpSummary = {
 	financeiro: {
 		status: TSaleFinancialDerivedStatusEnum;
-		metodos: TPaymentMethodEnum[];
+		/** Líquido por método (entradas menos troco devolvido); negativo quando o método só devolveu dinheiro. */
+		metodos: { metodo: TPaymentMethodEnum; valor: number }[];
 		maxParcelas: number | null;
 	};
 	fiscal: {
@@ -277,6 +279,7 @@ async function getSalesErpSummaries({
 						dataEfetivacao: true,
 						dataPrevisao: true,
 						provedorStatus: true,
+						modificadoresMetadata: true,
 					},
 				},
 			},
@@ -308,7 +311,19 @@ async function getSalesErpSummaries({
 		const receipts = transactions.filter(
 			(transaction) => transaction.tipo === "ENTRADA" && !["CANCELADO", "ESTORNADO"].includes(transaction.provedorStatus ?? ""),
 		);
-		const metodos = [...new Set(receipts.map((transaction) => transaction.metodo))];
+		// Líquido por método: entradas somam, troco devolvido (SAÍDA de origem TROCO) subtrai. Taxas de
+		// canal também são SAÍDA, mas são despesa da organização, não pagamento do cliente — ficam fora.
+		// Liquidar mantém a venda em dinheiro com troco como um método só; o valor por método interessa
+		// quando o pagamento cruza instrumentos (ex.: PIX R$ 100 + DINHEIRO −R$ 22 de troco).
+		const valorPorMetodo = new Map<TPaymentMethodEnum, number>();
+		for (const transaction of receipts) {
+			valorPorMetodo.set(transaction.metodo, (valorPorMetodo.get(transaction.metodo) ?? 0) + transaction.valor);
+		}
+		for (const transaction of transactions) {
+			if (!isSaleChangeTransaction(transaction) || ["CANCELADO", "ESTORNADO"].includes(transaction.provedorStatus ?? "")) continue;
+			valorPorMetodo.set(transaction.metodo, (valorPorMetodo.get(transaction.metodo) ?? 0) - transaction.valor);
+		}
+		const metodos = [...valorPorMetodo].map(([metodo, valor]) => ({ metodo, valor: Math.round((valor + Number.EPSILON) * 100) / 100 }));
 		const maxParcelas = receipts.reduce<number | null>(
 			(acc, transaction) => (transaction.totalParcelas && transaction.totalParcelas > (acc ?? 0) ? transaction.totalParcelas : acc),
 			null,

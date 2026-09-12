@@ -445,7 +445,15 @@ function SaleErpSummaryChips({ sale }: { sale: TGetSalesOutputDefault["sales"][n
 
 	const financialMeta = SALE_FINANCIAL_STATUS_PRESENTATION[erp.financeiro.status];
 	const fiscalMeta = SALE_FISCAL_STATUS_PRESENTATION[erp.fiscal.status];
-	const paymentLabel = erp.financeiro.metodos.map((metodo) => PAYMENT_METHOD_CHIP_LABELS[metodo] ?? metodo).join(" + ");
+	// Com um único método o rótulo fica só no nome; com mais de um, cada método carrega seu valor
+	// líquido — o sinal cobre o troco cruzado (pagou PIX, levou troco em espécie: "DINHEIRO −R$ 22,00").
+	const paymentLabel = erp.financeiro.metodos
+		.map((pagamento) => {
+			const label = PAYMENT_METHOD_CHIP_LABELS[pagamento.metodo] ?? pagamento.metodo;
+			if (erp.financeiro.metodos.length <= 1) return label;
+			return `${label} ${pagamento.valor < 0 ? "−" : ""}${formatToMoney(Math.abs(pagamento.valor))}`;
+		})
+		.join(" + ");
 	const installmentsLabel = erp.financeiro.maxParcelas && erp.financeiro.maxParcelas > 1 ? ` ${erp.financeiro.maxParcelas}x` : "";
 	const fiscalNumberLabel = erp.fiscal.documento?.numero ? `${erp.fiscal.documento.tipo} Nº ${erp.fiscal.documento.numero} · ` : "";
 

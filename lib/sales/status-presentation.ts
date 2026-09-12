@@ -13,10 +13,13 @@ import type { TSaleFinancialDerivedStatusEnum, TSaleFiscalDerivedStatusEnum } fr
  * `FileMinus` (nao emitida) sendo os dois neutros. Cada superficie mantem o proprio mapa de
  * icones por status, com a propria geometria (`w-3 h-3` na chip, `size-3.5` no painel).
  */
-export type TSaleStatusTone = "success" | "danger" | "neutral" | "muted";
+export type TSaleStatusTone = "success" | "warning" | "danger" | "neutral" | "muted";
 
 export const SALE_STATUS_TONE_CLASSNAMES: Record<TSaleStatusTone, string> = {
 	success: "border-success/25 bg-success/10 text-success",
+	// `text-warning` (#ffb900) não passa contraste em fundo claro; o par surface-foreground existe
+	// exatamente para texto sobre superfície âmbar clara (e troca sozinho no tema escuro).
+	warning: "border-warning/40 bg-warning/10 text-warning-surface-foreground",
 	danger: "border-destructive/30 bg-destructive/10 text-destructive",
 	neutral: "border-border/60 bg-muted/30 text-foreground/80",
 	muted: "border-border/60 bg-muted/30 text-muted-foreground",
@@ -40,7 +43,9 @@ function presentation(chipLabel: string, label: string, tone: TSaleStatusTone): 
 export const SALE_FINANCIAL_STATUS_PRESENTATION: Record<TSaleFinancialDerivedStatusEnum, TSaleStatusPresentation> = {
 	NAO_GERADO: presentation("SEM RECEBIMENTO", "Pagamento não gerado", "muted"),
 	PENDENTE: presentation("A RECEBER", "Pagamento pendente", "neutral"),
-	PARCIALMENTE_RECEBIDA: presentation("PARCIAL", "Pagamento parcial", "neutral"),
+	// Âmbar, não neutro: meio paga não pode ler igual a não paga (PENDENTE), e fica entre o neutro
+	// e o vermelho de EM_ATRASO. Azul está fora — já significa "orçamento/em aberto" no mesmo card.
+	PARCIALMENTE_RECEBIDA: presentation("PARCIAL", "Pagamento parcial", "warning"),
 	RECEBIDA: presentation("RECEBIDA", "Pagamento recebido", "success"),
 	EM_ATRASO: presentation("EM ATRASO", "Pagamento em atraso", "danger"),
 };

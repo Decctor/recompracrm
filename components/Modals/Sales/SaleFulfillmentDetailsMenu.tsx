@@ -343,7 +343,16 @@ function ContactLink({
 function StatusSummary({ label, value, icon, tone = "neutral" }: { label: string; value: string; icon: ReactNode; tone?: TSaleStatusTone }) {
 	return (
 		<div className="flex items-center gap-2.5 border-b border-border/80 px-4 py-3 last:border-b-0 sm:border-b-0 sm:px-5">
-			<span className={cn("text-muted-foreground", tone === "success" && "text-success", tone === "danger" && "text-destructive")}>{icon}</span>
+			<span
+				className={cn(
+					"text-muted-foreground",
+					tone === "success" && "text-success",
+					tone === "warning" && "text-warning-surface-foreground",
+					tone === "danger" && "text-destructive",
+				)}
+			>
+				{icon}
+			</span>
 			<div className="min-w-0">
 				<p className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-muted-foreground">{label}</p>
 				<p className="truncate text-xs font-bold">{value}</p>
