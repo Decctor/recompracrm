@@ -66,6 +66,19 @@ async function getClientStats({ session, input }: GetClientStatsParams) {
 	const totalPurchasesValue = totalPurchaseResultStats?.total ? Number(totalPurchaseResultStats.total) : 0;
 	const avgPurchaseValue = totalPurchasesCount > 0 ? totalPurchasesValue / totalPurchasesCount : 0;
 
+	// Vida inteira do cliente, ignorando o período: o cabeçalho da página fica visível em todas as
+	// abas, inclusive nas que não têm filtro de data, e "14 compras" não pode virar "3" porque a
+	// aba de estatísticas está olhando setembro.
+	const lifetimePurchasesResult = await db
+		.select({ qtde: count(sales.id), total: sum(sales.valorTotal) })
+		.from(sales)
+		.where(and(...saleWhereConditions));
+	const lifetimePurchasesStats = lifetimePurchasesResult[0];
+
+	const lifetimePurchasesCount = lifetimePurchasesStats?.qtde ?? 0;
+	const lifetimePurchasesValue = lifetimePurchasesStats?.total ? Number(lifetimePurchasesStats.total) : 0;
+	const lifetimeAvgPurchaseValue = lifetimePurchasesCount > 0 ? lifetimePurchasesValue / lifetimePurchasesCount : 0;
+
 	const firstPurchaseResult = await db
 		.select({ data: sales.dataVenda })
 		.from(sales)
@@ -186,6 +199,12 @@ async function getClientStats({ session, input }: GetClientStatsParams) {
 			valorComproGrupoPeriodo: totalPurchasesValuePeriodGroupMap,
 			qtdeCompras: totalPurchasesCount,
 			ticketMedio: avgPurchaseValue,
+			// Mesmas métricas sem recorte de período — o que o cabeçalho persistente mostra.
+			totais: {
+				qtdeCompras: lifetimePurchasesCount,
+				valorComproTotal: lifetimePurchasesValue,
+				ticketMedio: lifetimeAvgPurchaseValue,
+			},
 			resultadosAgrupados: {
 				grupo: byProductGroupRaw.map((row) => ({
 					grupo: row.grupo ?? null,
