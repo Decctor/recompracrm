@@ -539,9 +539,11 @@ function getFiscalStatusCondition({ orgId, statuses }: { orgId: string; statuses
 }
 
 /**
- * Vendas com ao menos um recebimento (ENTRADA não cancelada/estornada) em algum dos métodos.
- * Mesmo critério de recebimento usado em `getSalesErpSummaries` para os chips; dirigido pelos
- * lançamentos (índice de venda_id), como os demais filtros do ERP.
+ * Vendas com ao menos uma movimentação não cancelada/estornada (ENTRADA ou SAÍDA) em algum dos
+ * métodos. As saídas entram para que a venda recebida em outro método mas com troco em dinheiro
+ * seja alcançável pelo filtro DINHEIRO — este é o mesmo predicado das linhas de "Recebimentos por
+ * método" em resultados, que linkam para cá. Dirigido pelos lançamentos (índice de venda_id),
+ * como os demais filtros do ERP.
  */
 function getPaymentMethodCondition({ orgId, methods }: { orgId: string; methods: TPaymentMethodEnum[] }) {
 	const salesWithMethod = db
@@ -555,7 +557,6 @@ function getPaymentMethodCondition({ orgId, methods }: { orgId: string; methods:
 			and(
 				eq(accountingEntries.organizacaoId, orgId),
 				isNotNull(accountingEntries.vendaId),
-				eq(financialTransactions.tipo, "ENTRADA"),
 				or(isNull(financialTransactions.provedorStatus), notInArray(financialTransactions.provedorStatus, ["CANCELADO", "ESTORNADO"])),
 				inArray(financialTransactions.metodo, methods),
 			),

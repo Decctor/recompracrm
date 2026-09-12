@@ -73,7 +73,14 @@ function PaymentMethodRow({ linha, historyFilters }: PaymentMethodRowProps) {
 	const Icon = getPaymentMethodIcon(linha.metodo);
 	const hasOutflow = linha.saidas.total > 0;
 	const outflowParts = [
-		linha.saidas.troco > 0 ? `troco ${formatToMoney(linha.saidas.troco)}` : null,
+		linha.saidas.troco > 0
+			? // O troco que excede o dinheiro recebido nas próprias vendas saiu por vendas pagas em outro
+				// método (pagou PIX, levou troco em espécie) — sem a cláusula, "ficou" parece não fechar
+				// com a soma das vendas em dinheiro.
+				`troco ${formatToMoney(linha.saidas.troco)}${
+					linha.saidas.trocoDeOutrosMetodos > 0 ? ` — ${formatToMoney(linha.saidas.trocoDeOutrosMetodos)} de vendas recebidas em outro método` : ""
+				}`
+			: null,
 		linha.saidas.taxasCanal > 0 ? `taxas do canal ${formatToMoney(linha.saidas.taxasCanal)}` : null,
 	].filter((part): part is string => part !== null);
 
