@@ -23,6 +23,8 @@ type ClientTagsProps = {
 	tags: TUseClientState["state"]["clientTags"];
 	addClientTag: TUseClientState["addClientTag"];
 	removeClientTag: TUseClientState["removeClientTag"];
+	/** Dentro de uma `Section` do cadastro o cabeçalho já existe; aqui só o conteúdo. */
+	embedded?: boolean;
 };
 
 type ClientTagDraft = {
@@ -85,7 +87,7 @@ function getBestClientTagMatch<T extends { titulo: string }>(searchValue: string
 	}, null);
 }
 
-export default function ClientTags({ tags, addClientTag, removeClientTag }: ClientTagsProps) {
+export default function ClientTags({ tags, addClientTag, removeClientTag, embedded = false }: ClientTagsProps) {
 	const queryClient = useQueryClient();
 	const { data: clientTags = [], queryKey } = useClientTags();
 	const [search, setSearch] = useState("");
@@ -191,8 +193,8 @@ export default function ClientTags({ tags, addClientTag, removeClientTag }: Clie
 		handleSubmitSearch();
 	}
 
-	return (
-		<ResponsiveMenuSection title="ETIQUETAS DO CLIENTE" icon={<Tags className="h-4 w-4 min-w-4" />}>
+	const tagsContent = (
+		<div className="w-full">
 			<div className="rounded-md border border-primary/15 bg-linear-to-br from-background via-background to-primary/3 p-3 shadow-xs">
 				<div className="flex flex-col gap-3">
 					<div className="flex flex-wrap items-center gap-2">
@@ -310,6 +312,14 @@ export default function ClientTags({ tags, addClientTag, removeClientTag }: Clie
 					) : null}
 				</div>
 			</div>
+		</div>
+	);
+
+	if (embedded) return tagsContent;
+
+	return (
+		<ResponsiveMenuSection title="ETIQUETAS DO CLIENTE" icon={<Tags className="h-4 w-4 min-w-4" />}>
+			{tagsContent}
 		</ResponsiveMenuSection>
 	);
 }

@@ -48,21 +48,27 @@ export default function ClientCashback({ clientId }: ClientCashbackProps) {
 
 	return (
 		<div className="bg-card border-border flex h-full w-full flex-col gap-3 rounded-xl border px-4 py-4 shadow-2xs">
-			<div className="w-full shrink-0 flex flex-col gap-1.5 rounded-xl border border-brand/30 bg-brand/20 px-3 py-3">
-				<div className="w-full flex items-center gap-1.5">
-					<BadgePercent className="w-4 h-4 text-brand" />
-					<p className="text-xs font-semibold tracking-tight uppercase text-brand">SALDO EM {getCashbackUnitLabel(terminology, { uppercase: true })}</p>
+			{/* O saldo ocupa a largura toda da aba: o aviso de expiração vai para a direita em vez de
+			    virar uma terceira linha sob um bloco estreito. */}
+			<div className="w-full shrink-0 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-brand/30 bg-brand/20 px-4 py-4">
+				<div className="flex min-w-0 flex-col gap-1">
+					<div className="flex items-center gap-1.5">
+						<BadgePercent className="w-4 h-4 text-brand" />
+						<p className="text-xs font-semibold tracking-tight uppercase text-brand">SALDO EM {getCashbackUnitLabel(terminology, { uppercase: true })}</p>
+					</div>
+					<p className="text-3xl font-black tracking-tight text-brand">{isBalanceLoading ? "Carregando..." : formattedBalance}</p>
 				</div>
-				<p className="text-2xl font-black tracking-tight text-brand">{isBalanceLoading ? "Carregando..." : formattedBalance}</p>
 				{expiringSoon ? (
-					<p className="text-xs font-medium leading-tight text-muted-foreground tabular-nums">
+					<p className="max-w-xs text-xs font-medium leading-tight text-muted-foreground text-numeric sm:text-right">
 						{formatCashbackValue(expiringSoon.valor, terminology)} expiram nos próximos {expiringSoon.janelaDias} dias
 						{expiringSoon.proximaExpiracaoData ? ` · primeiro em ${formatDateAsLocale(expiringSoon.proximaExpiracaoData)}` : ""}
 					</p>
 				) : null}
 			</div>
 
-			<div className="scrollbar-thin scrollbar-track-primary/10 scrollbar-thumb-primary/30 w-full min-h-0 flex-1 flex flex-col gap-1.5 overflow-y-auto">
+			{/* `overflow-x-hidden` de propósito: a linha de transação usa `-mx-2` para o lavado de hover
+			    alinhar com o título, e sem travar o eixo esses 8px viram rolagem lateral. */}
+			<div className="scrollbar-thin scrollbar-track-primary/10 scrollbar-thumb-primary/30 w-full min-h-0 flex-1 flex flex-col gap-1.5 overflow-y-auto overflow-x-hidden">
 				<div className="flex items-center justify-between gap-2">
 					<h2 className="text-xs font-bold tracking-tight ">ÚLTIMAS TRANSAÇÕES</h2>
 					<p className="text-xs text-muted-foreground">{transactionsMatched} total</p>
