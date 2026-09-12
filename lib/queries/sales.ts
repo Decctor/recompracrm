@@ -6,7 +6,8 @@ import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import { useState } from "react";
 
-async function fetchSales(input: TGetSalesInput) {
+/** Query string do histórico a partir do input; a exportação reaproveita para mandar os mesmos filtros. */
+export function buildSalesSearchParams(input: Omit<TGetSalesInput, "id">) {
 	const searchParams = new URLSearchParams();
 	if (input.page) searchParams.set("page", input.page.toString());
 	if (input.search) searchParams.set("search", input.search);
@@ -26,6 +27,11 @@ async function fetchSales(input: TGetSalesInput) {
 	if (input.deliveryModes.length > 0) searchParams.set("deliveryModes", input.deliveryModes.join(","));
 	if (input.saleStatuses.length > 0) searchParams.set("saleStatuses", input.saleStatuses.join(","));
 	if (input.hasDiscount !== null && input.hasDiscount !== undefined) searchParams.set("hasDiscount", String(input.hasDiscount));
+	return searchParams;
+}
+
+async function fetchSales(input: TGetSalesInput) {
+	const searchParams = buildSalesSearchParams(input);
 	const { data } = await axios.get<TGetSalesOutput>(`/api/sales?${searchParams.toString()}`);
 	const result = input.clientId ? data.data.byClientId : data.data.default;
 	if (!result) throw new Error("Vendas não encontradas.");

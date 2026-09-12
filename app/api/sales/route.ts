@@ -4,7 +4,10 @@ import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { applyCashbackRedemptionFIFO } from "@/lib/cashback/redemption";
 import { reverseSaleCashback } from "@/lib/cashback/reverse-sale-cashback";
 import type { TAuthUserSession } from "@/lib/authentication/types";
-import { getSalesIntegrationCondition } from "@/lib/sales/integration-filter";
+import { buildSalesHistoryConditions } from "@/lib/sales/history-conditions";
+import { SalesHistoryFiltersSchema } from "@/lib/sales/history-filters";
+import { loadSalesErpData } from "@/lib/sales/erp-data";
+import { resolvePrimarySaleFiscalDocument } from "@/lib/sales/export-summaries";
 import { campaignAudienceHasClient, resolveCampaignAudiencesByCampaignId } from "@/lib/campaigns/filters";
 import { DASTJS_TIME_DURATION_UNITS_MAP, getPostponedDateFromReferenceDate } from "@/lib/dates";
 import { type ImmediateProcessingData, processOrganizationInteractionsBatch, processSingleInteractionImmediately } from "@/lib/interactions";
@@ -13,18 +16,11 @@ import { resolveSaleEditability } from "@/lib/sales/sale-editability";
 import { decorateFiscalDocuments, type TFiscalDocumentDecoration } from "@/lib/fiscal/document-actions-loader";
 import { loadFiscalOrganization } from "@/lib/fiscal/settings";
 import { classifySalePaymentTransactions, computeSaleFinancialStatus, computeSaleFiscalStatus, groupSalePaymentsByMethod } from "@/lib/sales/utils";
-import {
-	SaleFinancialDerivedStatusEnum,
-	SaleFiscalDerivedStatusEnum,
-	DeliveryModeEnum,
-	PaymentMethodEnum,
-	SaleStatusEnum,
-	type TDeliveryModeEnum,
-	type TPaymentMethodEnum,
-	type TSaleFinancialDerivedStatusEnum,
-	type TSaleFiscalDerivedStatusEnum,
-	type TSaleStatusEnum,
-	type TFiscalDocumentLifecycleStatusEnum,
+import type {
+	TPaymentMethodEnum,
+	TSaleFinancialDerivedStatusEnum,
+	TSaleFiscalDerivedStatusEnum,
+	TFiscalDocumentLifecycleStatusEnum,
 } from "@/schemas/enums";
 import { createCampaignWeeklyLimitCache } from "@/lib/interactions/campaign-weekly-limits";
 import type { TFiscalDocumentStatusEnum, TFiscalDocumentTypeEnum, TTimeDurationUnitsEnum } from "@/schemas/enums";
@@ -36,15 +32,10 @@ import {
 	clients,
 	interactions,
 	organizations,
-	products,
-	saleItems,
 	sales,
-	accountingEntries,
-	financialTransactions,
-	fiscalOutboundDocuments,
 } from "@/services/drizzle/schema";
 import dayjs from "dayjs";
-import { and, asc, count, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, lte, notInArray, or, type SQL, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
 import createHttpError from "http-errors";
 import z from "zod";
 
@@ -100,7 +91,7 @@ async function canScheduleCampaignForClient(
 	return true;
 }
 
-const GetSalesInputSchema = z.object({
+const GetSalesInputSchema = SalesHistoryFiltersSchema.extend({
 	id: z
 		.string({
 			invalid_type_error: "Tipo não válido para ID da venda.",
@@ -114,123 +105,6 @@ const GetSalesInputSchema = z.object({
 		})
 		.default("1")
 		.transform((val) => (val ? Number(val) : 1)),
-	search: z
-		.string({
-			required_error: "Busca não informada.",
-			invalid_type_error: "Tipo inválido para busca.",
-		})
-		.optional()
-		.nullable(),
-	periodAfter: z
-		.string({
-			required_error: "Período não informado.",
-			invalid_type_error: "Tipo inválido para período.",
-		})
-		.optional()
-		.nullable()
-		.transform((val) => (val ? new Date(val) : null)),
-	periodBefore: z
-		.string({
-			required_error: "Período não informado.",
-			invalid_type_error: "Tipo inválido para período.",
-		})
-		.optional()
-		.nullable()
-		.transform((val) => (val ? new Date(val) : null)),
-	sellersIds: z
-		.string({
-			invalid_type_error: "Tipo inválido para ID do vendedor.",
-		})
-		.optional()
-		.nullable()
-		.transform((val) => (val ? val.split(",") : [])),
-	partnersIds: z
-		.string({
-			invalid_type_error: "Tipo inválido para ID do parceiro.",
-		})
-		.optional()
-		.nullable()
-		.transform((val) => (val ? val.split(",") : null)),
-	integrationsIds: z
-		.string({
-			invalid_type_error: "Tipo inválido para os IDs de integração.",
-		})
-		.optional()
-		.nullable()
-		.transform((val) => (val ? val.split(",") : [])),
-	clientId: z
-		.string({
-			invalid_type_error: "Tipo inválido para ID do cliente.",
-		})
-		.optional()
-		.nullable(),
-	productGroups: z
-		.string({
-			invalid_type_error: "Tipo inválido para grupos de produto.",
-		})
-		.optional()
-		.nullable()
-		.transform((val) => (val ? val.split(",") : [])),
-	productIds: z
-		.string({
-			invalid_type_error: "Tipo inválido para IDs de produto.",
-		})
-		.optional()
-		.nullable()
-		.transform((val) => (val ? val.split(",") : [])),
-	totalMin: z
-		.string({
-			invalid_type_error: "Tipo inválido para valor mínimo.",
-		})
-		.optional()
-		.nullable()
-		.transform((val) => (val ? Number(val) : null)),
-	totalMax: z
-		.string({
-			invalid_type_error: "Tipo inválido para valor máximo.",
-		})
-		.optional()
-		.nullable()
-		.transform((val) => (val ? Number(val) : null)),
-	financialStatuses: z
-		.string({ invalid_type_error: "Tipo inválido para os status financeiros." })
-		.optional()
-		.nullable()
-		.transform((val) =>
-			val ? val.split(",").filter((status): status is TSaleFinancialDerivedStatusEnum => SaleFinancialDerivedStatusEnum.safeParse(status).success) : [],
-		),
-	fiscalStatuses: z
-		.string({ invalid_type_error: "Tipo inválido para os status fiscais." })
-		.optional()
-		.nullable()
-		.transform((val) =>
-			val ? val.split(",").filter((status): status is TSaleFiscalDerivedStatusEnum => SaleFiscalDerivedStatusEnum.safeParse(status).success) : [],
-		),
-	// Vendas com ao menos um recebimento em algum dos métodos informados (OR entre os métodos).
-	paymentMethods: z
-		.string({ invalid_type_error: "Tipo inválido para os métodos de pagamento." })
-		.optional()
-		.nullable()
-		.transform((val) => (val ? val.split(",").filter((method): method is TPaymentMethodEnum => PaymentMethodEnum.safeParse(method).success) : [])),
-	// Modalidade de atendimento da venda (presencial, retirada, entrega, comanda): qualquer uma das informadas.
-	deliveryModes: z
-		.string({ invalid_type_error: "Tipo inválido para as modalidades de atendimento." })
-		.optional()
-		.nullable()
-		.transform((val) => (val ? val.split(",").filter((mode): mode is TDeliveryModeEnum => DeliveryModeEnum.safeParse(mode).success) : [])),
-	// Status comercial da venda. O histórico mistura orçamento, condicional e venda confirmada de
-	// propósito — quem acabou de criar um orçamento espera achá-lo aqui. O filtro é para triagem.
-	saleStatuses: z
-		.string({ invalid_type_error: "Tipo inválido para os status de venda." })
-		.optional()
-		.nullable()
-		.transform((val) => (val ? val.split(",").filter((status): status is TSaleStatusEnum => SaleStatusEnum.safeParse(status).success) : [])),
-	// Presença de desconto na venda: "true" só as com desconto, "false" só as sem; ausente não filtra.
-	hasDiscount: z
-		.string({ invalid_type_error: "Tipo inválido para o filtro de desconto." })
-		.optional()
-		.nullable()
-		.transform((val) => (val === "true" ? true : val === "false" ? false : null)),
 });
 
 export type TGetSalesInput = z.infer<typeof GetSalesInputSchema>;
@@ -263,44 +137,7 @@ async function getSalesErpSummaries({
 	const summaries = new Map<string, TSaleErpSummary>();
 	if (saleIds.length === 0) return summaries;
 
-	const [entries, fiscalDocs] = await Promise.all([
-		db.query.accountingEntries.findMany({
-			where: (fields, { and, eq, inArray }) => and(eq(fields.organizacaoId, orgId), inArray(fields.vendaId, saleIds)),
-			columns: { id: true, vendaId: true },
-			with: {
-				transacoesFinanceiras: {
-					columns: {
-						valor: true,
-						tipo: true,
-						metodo: true,
-						totalParcelas: true,
-						dataEfetivacao: true,
-						dataPrevisao: true,
-						provedorStatus: true,
-					},
-				},
-			},
-		}),
-		db.query.fiscalOutboundDocuments.findMany({
-			where: (fields, { and, eq, inArray }) => and(eq(fields.organizacaoId, orgId), inArray(fields.vendaId, saleIds)),
-			columns: { vendaId: true, tipo: true, statusInterno: true, numero: true, dataInsercao: true },
-			orderBy: (fields, { asc }) => asc(fields.dataInsercao),
-		}),
-	]);
-
-	const transactionsBySaleId = new Map<string, (typeof entries)[number]["transacoesFinanceiras"]>();
-	for (const entry of entries) {
-		if (!entry.vendaId) continue;
-		const existing = transactionsBySaleId.get(entry.vendaId) ?? [];
-		transactionsBySaleId.set(entry.vendaId, existing.concat(entry.transacoesFinanceiras));
-	}
-	const fiscalDocsBySaleId = new Map<string, typeof fiscalDocs>();
-	for (const doc of fiscalDocs) {
-		if (!doc.vendaId) continue;
-		const existing = fiscalDocsBySaleId.get(doc.vendaId) ?? [];
-		existing.push(doc);
-		fiscalDocsBySaleId.set(doc.vendaId, existing);
-	}
+	const { transactionsBySaleId, fiscalDocsBySaleId } = await loadSalesErpData({ orgId, saleIds });
 
 	const now = new Date();
 	for (const sale of salesPage) {
@@ -315,8 +152,7 @@ async function getSalesErpSummaries({
 		);
 
 		const docs = fiscalDocsBySaleId.get(sale.id) ?? [];
-		// Documento "principal" do chip: o autorizado mais recente; sem autorizado, o mais recente.
-		const primaryDoc = [...docs].reverse().find((doc) => doc.statusInterno === "AUTORIZADO") ?? docs[docs.length - 1] ?? null;
+		const primaryDoc = resolvePrimarySaleFiscalDocument(docs);
 
 		summaries.set(sale.id, {
 			financeiro: {
@@ -436,157 +272,11 @@ function buildSaleErpDetail({
 	};
 }
 
-/**
- * Filtros de status financeiro/fiscal derivado.
- *
- * As agregações partem das tabelas do ERP (lançamentos/documentos, centenas de linhas por
- * organização), nunca de `sales` (dezenas de milhares): agrupar todas as vendas só para derivar
- * o status de cada uma custava ~300-500 ms por consulta. As vendas sem lançamento/documento são
- * resolvidas por anti-join (`NOT IN` sobre o conjunto de `venda_id`, filtrado por `IS NOT NULL`
- * para não anular o `NOT IN`). A condição precisa ser não-correlacionada: a consulta relacional
- * (`db.query.sales.findMany`) apelida a tabela raiz como `sales`, então um `EXISTS` correlacionado
- * a `ampmais_sales` falha.
- */
-function getFinancialStatusCondition({ orgId, statuses, now }: { orgId: string; statuses: TSaleFinancialDerivedStatusEnum[]; now: Date }) {
-	const receiptCount = sql<number>`count(${financialTransactions.id})`;
-	const settledTotal = sql<number>`coalesce(sum(case when ${financialTransactions.dataEfetivacao} is not null then ${financialTransactions.valor} else 0 end), 0)`;
-	const overdueCondition = and(
-		isNotNull(financialTransactions.id),
-		isNull(financialTransactions.dataEfetivacao),
-		lt(financialTransactions.dataPrevisao, now),
-	);
-	const overdueCount = sql<number>`coalesce(sum(case when ${overdueCondition} then 1 else 0 end), 0)`;
-	const derivedStatus = sql<TSaleFinancialDerivedStatusEnum>`case
-		when ${sales.valorTotal} <= 0 then 'RECEBIDA'
-		when ${receiptCount} = 0 then 'NAO_GERADO'
-		when ${settledTotal} >= ${sales.valorTotal} then 'RECEBIDA'
-		when ${settledTotal} > 0 then 'PARCIALMENTE_RECEBIDA'
-		when ${overdueCount} > 0 then 'EM_ATRASO'
-		else 'PENDENTE'
-	end`;
-	// Vendas com ao menos um lançamento: agregação dirigida por `accounting_entries`, com inner join
-	// em `sales` apenas para ler `valor_total` das vendas envolvidas.
-	const salesWithEntries = db
-		.select({ id: sales.id })
-		.from(accountingEntries)
-		.innerJoin(sales, eq(sales.id, accountingEntries.vendaId))
-		.leftJoin(
-			financialTransactions,
-			and(
-				eq(financialTransactions.lancamentoContabilId, accountingEntries.id),
-				eq(financialTransactions.organizacaoId, orgId),
-				eq(financialTransactions.tipo, "ENTRADA"),
-				or(isNull(financialTransactions.provedorStatus), notInArray(financialTransactions.provedorStatus, ["CANCELADO", "ESTORNADO"])),
-			),
-		)
-		.where(and(eq(accountingEntries.organizacaoId, orgId), isNotNull(accountingEntries.vendaId)))
-		.groupBy(sales.id, sales.valorTotal)
-		.having(inArray(derivedStatus, statuses));
-	const conditions: SQL[] = [inArray(sales.id, salesWithEntries)];
-
-	// Vendas sem nenhum lançamento: o status depende só de `valor_total` (mesma ordem do CASE acima).
-	const hasNoEntry = notInArray(
-		sales.id,
-		db
-			.select({ id: accountingEntries.vendaId })
-			.from(accountingEntries)
-			.where(and(eq(accountingEntries.organizacaoId, orgId), isNotNull(accountingEntries.vendaId))),
-	);
-	if (statuses.includes("NAO_GERADO")) conditions.push(and(gt(sales.valorTotal, 0), hasNoEntry)!);
-	if (statuses.includes("RECEBIDA")) conditions.push(and(lte(sales.valorTotal, 0), hasNoEntry)!);
-
-	return or(...conditions)!;
-}
-
-function getFiscalStatusCondition({ orgId, statuses }: { orgId: string; statuses: TSaleFiscalDerivedStatusEnum[] }) {
-	const hasStatus = (...internalStatuses: TFiscalDocumentLifecycleStatusEnum[]) =>
-		sql<boolean>`coalesce(bool_or(${fiscalOutboundDocuments.statusInterno} in (${sql.join(
-			internalStatuses.map((status) => sql`${status}`),
-			sql`, `,
-		)})), false)`;
-	// Só avaliado para vendas com documento; `NAO_EMITIDO` é o anti-join abaixo.
-	const derivedStatus = sql<TSaleFiscalDerivedStatusEnum>`case
-		when ${hasStatus("AUTORIZADO")} then 'AUTORIZADO'
-		when ${hasStatus("EM_PROCESSAMENTO", "CANCELAMENTO_PENDENTE")} then 'EM_PROCESSAMENTO'
-		when ${hasStatus("RASCUNHO", "PRONTO_PARA_ENVIO")} then 'PENDENTE'
-		when ${hasStatus("REJEITADO")} then 'REJEITADO'
-		when ${hasStatus("ERRO")} then 'ERRO'
-		when ${hasStatus("CANCELADO")} then 'CANCELADO'
-		when ${hasStatus("INUTILIZADO")} then 'INUTILIZADO'
-		else 'PENDENTE'
-	end`;
-	const salesWithDocuments = db
-		.select({ id: fiscalOutboundDocuments.vendaId })
-		.from(fiscalOutboundDocuments)
-		.where(and(eq(fiscalOutboundDocuments.organizacaoId, orgId), isNotNull(fiscalOutboundDocuments.vendaId)))
-		.groupBy(fiscalOutboundDocuments.vendaId)
-		.having(inArray(derivedStatus, statuses));
-	const conditions: SQL[] = [inArray(sales.id, salesWithDocuments)];
-
-	if (statuses.includes("NAO_EMITIDO")) {
-		conditions.push(
-			notInArray(
-				sales.id,
-				db
-					.select({ id: fiscalOutboundDocuments.vendaId })
-					.from(fiscalOutboundDocuments)
-					.where(and(eq(fiscalOutboundDocuments.organizacaoId, orgId), isNotNull(fiscalOutboundDocuments.vendaId))),
-			),
-		);
-	}
-
-	return or(...conditions)!;
-}
-
-/**
- * Vendas com ao menos um recebimento (ENTRADA não cancelada/estornada) em algum dos métodos.
- * Mesmo critério de recebimento usado em `getSalesErpSummaries` para os chips; dirigido pelos
- * lançamentos (índice de venda_id), como os demais filtros do ERP.
- */
-function getPaymentMethodCondition({ orgId, methods }: { orgId: string; methods: TPaymentMethodEnum[] }) {
-	const salesWithMethod = db
-		.selectDistinct({ id: accountingEntries.vendaId })
-		.from(accountingEntries)
-		.innerJoin(
-			financialTransactions,
-			and(eq(financialTransactions.lancamentoContabilId, accountingEntries.id), eq(financialTransactions.organizacaoId, orgId)),
-		)
-		.where(
-			and(
-				eq(accountingEntries.organizacaoId, orgId),
-				isNotNull(accountingEntries.vendaId),
-				eq(financialTransactions.tipo, "ENTRADA"),
-				or(isNull(financialTransactions.provedorStatus), notInArray(financialTransactions.provedorStatus, ["CANCELADO", "ESTORNADO"])),
-				inArray(financialTransactions.metodo, methods),
-			),
-		);
-	return inArray(sales.id, salesWithMethod);
-}
-
 async function getSales({ input, sessionUser }: { input: TGetSalesInput; sessionUser: TAuthUserSession }) {
 	const PAGE_SIZE = 25;
 	const userOrgId = sessionUser.membership?.organizacao.id;
 	if (!userOrgId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
-	const {
-		id,
-		search,
-		periodAfter,
-		periodBefore,
-		sellersIds,
-		partnersIds,
-		integrationsIds,
-		clientId,
-		productGroups,
-		productIds,
-		totalMin,
-		totalMax,
-		financialStatuses,
-		fiscalStatuses,
-		paymentMethods,
-		deliveryModes,
-		saleStatuses,
-		hasDiscount,
-	} = input;
+	const { id, clientId } = input;
 
 	// Lido antes do ramo `byId`: o resumo de ERP da venda individual é gateado pelo mesmo módulo
 	// que gateia os chips da listagem.
@@ -822,62 +512,7 @@ async function getSales({ input, sessionUser }: { input: TGetSalesInput; session
 			message: "Venda encontrada com sucesso.",
 		};
 	}
-	const conditions = [eq(sales.organizacaoId, userOrgId)];
-	if (!orgHasERPAccess && (financialStatuses.length > 0 || fiscalStatuses.length > 0 || paymentMethods.length > 0)) {
-		throw new createHttpError.Forbidden("Sua organização não possui acesso aos filtros financeiros e fiscais do ERP.");
-	}
-
-	if (search)
-		conditions.push(
-			inArray(
-				sales.clienteId,
-				db
-					.select({ id: clients.id })
-					.from(clients)
-					.where(
-						sql`to_tsvector('portuguese', ${clients.nome}) @@ plainto_tsquery('portuguese', ${search}) OR ${clients.nome} ILIKE '%' || ${search} || '%'`,
-					),
-			),
-		);
-	if (periodAfter) conditions.push(gte(sales.dataVenda, periodAfter));
-	if (periodBefore) conditions.push(lte(sales.dataVenda, periodBefore));
-	if (sellersIds && sellersIds.length > 0) conditions.push(inArray(sales.vendedorId, sellersIds));
-	if (partnersIds && partnersIds.length > 0) conditions.push(inArray(sales.parceiroId, partnersIds));
-	const integrationCondition = getSalesIntegrationCondition(integrationsIds);
-	if (integrationCondition) conditions.push(integrationCondition);
-	if (clientId) conditions.push(eq(sales.clienteId, clientId));
-	if (totalMin !== null && totalMin !== undefined) conditions.push(gte(sales.valorTotal, totalMin));
-	if (totalMax !== null && totalMax !== undefined) conditions.push(lte(sales.valorTotal, totalMax));
-	if (financialStatuses.length > 0) conditions.push(getFinancialStatusCondition({ orgId: userOrgId, statuses: financialStatuses, now: new Date() })!);
-	if (fiscalStatuses.length > 0) conditions.push(getFiscalStatusCondition({ orgId: userOrgId, statuses: fiscalStatuses })!);
-	if (paymentMethods.length > 0) conditions.push(getPaymentMethodCondition({ orgId: userOrgId, methods: paymentMethods }));
-	if (saleStatuses.length > 0) conditions.push(inArray(sales.statusVenda, saleStatuses));
-	if (deliveryModes.length > 0) conditions.push(inArray(sales.entregaModalidade, deliveryModes));
-	if (hasDiscount === true) conditions.push(gt(sales.descontosTotal, 0));
-	if (hasDiscount === false) conditions.push(or(isNull(sales.descontosTotal), lte(sales.descontosTotal, 0))!);
-	if (productIds && productIds.length > 0) {
-		conditions.push(
-			inArray(
-				sales.id,
-				db
-					.select({ id: saleItems.vendaId })
-					.from(saleItems)
-					.where(and(eq(saleItems.organizacaoId, userOrgId), inArray(saleItems.produtoId, productIds))),
-			),
-		);
-	}
-	if (productGroups && productGroups.length > 0) {
-		conditions.push(
-			inArray(
-				sales.id,
-				db
-					.select({ id: saleItems.vendaId })
-					.from(saleItems)
-					.innerJoin(products, eq(products.id, saleItems.produtoId))
-					.where(and(eq(saleItems.organizacaoId, userOrgId), eq(products.organizacaoId, userOrgId), inArray(products.grupo, productGroups))),
-			),
-		);
-	}
+	const conditions = buildSalesHistoryConditions({ filters: input, orgId: userOrgId, orgHasERPAccess });
 
 	const salesMatchedPromise = db
 		.select({ count: count() })

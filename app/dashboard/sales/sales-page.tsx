@@ -26,7 +26,7 @@ import { organizationHasPrinterForFinalidade, useAgentPrinters } from "@/lib/que
 import { createManualPrintJob } from "@/lib/mutations/desktop-agent";
 import { PAYMENT_METHOD_CHIP_LABELS } from "@/lib/payments/labels";
 import { DeliveryModeEnum, PaymentMethodEnum } from "@/schemas/enums";
-import { SALE_FINANCIAL_STATUS_PRESENTATION, SALE_FISCAL_STATUS_PRESENTATION } from "@/lib/sales/status-presentation";
+import { SALE_FINANCIAL_STATUS_PRESENTATION, SALE_FISCAL_STATUS_PRESENTATION, SALE_STATUS_LABELS } from "@/lib/sales/status-presentation";
 import { useSalesQuery } from "@/lib/queries/sales";
 import { salesHistoryParsers, toSalesHistoryInput } from "@/lib/sales/history-url-state";
 import { useQueryStates } from "nuqs";
@@ -81,6 +81,7 @@ import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { SalesIntegrationPill } from "@/components/Sales/SalesIntegrationPill";
 import ManualFiscalEmission from "@/components/Modals/FiscalDocument/ManualFiscalEmission";
+import ExportSales from "@/components/Modals/Sales/ExportSales";
 
 type SalesPageProps = {
 	organization: NonNullable<TAuthUserSession["membership"]>["organizacao"];
@@ -203,6 +204,7 @@ export function SalesHistoryView({
 		void setUrlState(urlNext);
 	};
 	const { data: salesResult, isLoading, isError, isSuccess, error } = useSalesQuery({ params });
+	const [exportSalesModalIsOpen, setExportSalesModalIsOpen] = useState(false);
 
 	const sales = salesResult?.sales;
 	const salesShowing = sales ? sales.length : 0;
@@ -211,12 +213,18 @@ export function SalesHistoryView({
 
 	return (
 		<div className="flex h-full w-full flex-col gap-3">
-			<Input
-				value={params.search ?? ""}
-				placeholder="Pesquisar venda (nome do cliente)..."
-				onChange={(e) => updateParams({ search: e.target.value })}
-				className="w-full rounded-xl"
-			/>
+			<div className="flex w-full items-center gap-2">
+				<Input
+					value={params.search ?? ""}
+					placeholder="Pesquisar venda (nome do cliente)..."
+					onChange={(e) => updateParams({ search: e.target.value })}
+					className="grow rounded-xl"
+				/>
+				<Button variant="ghost" className="flex items-center gap-2" size="sm" onClick={() => setExportSalesModalIsOpen(true)}>
+					<FileSpreadsheet className="h-4 w-4 min-h-4 min-w-4" />
+					EXPORTAR
+				</Button>
+			</div>
 			<SalesInlineFilters filters={params} updateFilters={updateParams} orgHasERPAccess={orgHasERPAccess} />
 
 			<GeneralPaginationComponent
@@ -246,6 +254,7 @@ export function SalesHistoryView({
 					<p className="w-full tracking-tight text-center">Nenhuma venda encontrada.</p>
 				)
 			) : null}
+			{exportSalesModalIsOpen ? <ExportSales filters={params} closeModal={() => setExportSalesModalIsOpen(false)} /> : null}
 		</div>
 	);
 }
@@ -344,17 +353,17 @@ const FISCAL_STATUS_FILTER_OPTIONS: InteractiveFilterOption<TSaleFiscalDerivedSt
  */
 const SALE_STATUS_CHIP_META: Record<string, { label: string; className: string; icon: ReactNode }> = {
 	ORCAMENTO: {
-		label: "ORÇAMENTO",
+		label: SALE_STATUS_LABELS.ORCAMENTO,
 		className: "border-primary/25 bg-primary/10 text-primary",
 		icon: <FileText className="w-3 h-3" />,
 	},
 	CONDICIONAL: {
-		label: "CONDICIONAL",
+		label: SALE_STATUS_LABELS.CONDICIONAL,
 		className: "border-border/60 bg-muted/30 text-foreground/80",
 		icon: <Info className="w-3 h-3" />,
 	},
 	CANCELADA: {
-		label: "CANCELADA",
+		label: SALE_STATUS_LABELS.CANCELADA,
 		className: "border-destructive/30 bg-destructive/10 text-destructive",
 		icon: <Ban className="w-3 h-3" />,
 	},
