@@ -1,4 +1,4 @@
-import type { TSaleFinancialDerivedStatusEnum, TSaleFiscalDerivedStatusEnum } from "@/schemas/enums";
+import type { TSaleFinancialDerivedStatusEnum, TSaleFiscalDerivedStatusEnum, TSaleStatusEnum } from "@/schemas/enums";
 
 /**
  * Apresentacao dos status DERIVADOS (financeiro/fiscal) de uma venda. Os status em si sao
@@ -59,4 +59,15 @@ export const SALE_FISCAL_STATUS_PRESENTATION: Record<TSaleFiscalDerivedStatusEnu
 	CANCELADO: presentation("NOTA CANCELADA", "Nota fiscal cancelada", "muted"),
 	INUTILIZADO: presentation("NOTA INUTILIZADA", "Numeração fiscal inutilizada", "muted"),
 	ERRO: presentation("ERRO FISCAL", "Erro na emissão fiscal", "danger"),
+};
+
+/**
+ * Rótulos do status comercial da venda. O chip do histórico e a exportação leem daqui; o chip
+ * mantém só a cor e o ícone, que são geometria da tela.
+ */
+export const SALE_STATUS_LABELS: Record<TSaleStatusEnum, string> = {
+	ORCAMENTO: "ORÇAMENTO",
+	CONDICIONAL: "CONDICIONAL",
+	CONFIRMADA: "CONFIRMADA",
+	CANCELADA: "CANCELADA",
 };

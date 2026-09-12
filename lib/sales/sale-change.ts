@@ -94,6 +94,19 @@ export function getSaleChangeTotal(transactions: TSaleChangeTransactionLike[]) {
 }
 
 /**
+ * Troco vivo agrupado por método de devolução. O troco quase sempre sai em dinheiro, mas o método
+ * vem da transação e não de uma suposição: é ele que diz de qual instrumento o valor saiu.
+ */
+export function groupSaleChangeByMethod<T extends TSaleChangeTransactionLike & { metodo: TPaymentMethodEnum }>(transactions: T[]) {
+	const valorPorMetodo = new Map<TPaymentMethodEnum, number>();
+	for (const transaction of transactions) {
+		if (!isSaleChangeTransaction(transaction) || REVERSED_STATUSES.has(transaction.provedorStatus ?? "")) continue;
+		valorPorMetodo.set(transaction.metodo, round2((valorPorMetodo.get(transaction.metodo) ?? 0) + transaction.valor));
+	}
+	return [...valorPorMetodo].map(([metodo, valor]) => ({ metodo, valor }));
+}
+
+/**
  * Visão dos pagamentos SEM o troco, para consumidores que precisam que a soma feche com o total
  * (documento fiscal: a Spedy não expõe vTroco, e pagamentos acima do vNF são a rejeição 866).
  * O troco sai primeiro do dinheiro; se sobrar (troco dado contra cartão), o resto é rateado
