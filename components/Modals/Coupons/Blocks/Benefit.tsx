@@ -1,6 +1,6 @@
 import NumberInput from "@/components/Inputs/NumberInput";
 import SelectInput from "@/components/Inputs/SelectInput";
-import ResponsiveMenuSection from "@/components/Utils/ResponsiveMenuSection";
+import CouponBlockShell from "./BlockShell";
 import type { TUseInternalCouponState } from "@/state-hooks/use-internal-coupon-state";
 import { CouponBenefitScopeOptions, CouponBenefitTypeOptions } from "@/utils/select-options";
 import { BadgePercent } from "lucide-react";
@@ -8,10 +8,11 @@ import { BadgePercent } from "lucide-react";
 type CouponBenefitBlockProps = {
 	coupon: TUseInternalCouponState["state"]["coupon"];
 	updateCoupon: TUseInternalCouponState["updateCoupon"];
+	embedded?: boolean;
 };
-export default function CouponBenefitBlock({ coupon, updateCoupon }: CouponBenefitBlockProps) {
+export default function CouponBenefitBlock({ coupon, updateCoupon, embedded }: CouponBenefitBlockProps) {
 	return (
-		<ResponsiveMenuSection title="BENEFÍCIO" icon={<BadgePercent className="h-4 min-h-4 w-4 min-w-4" />}>
+		<CouponBlockShell embedded={embedded} title="BENEFÍCIO" icon={<BadgePercent className="h-4 min-h-4 w-4 min-w-4" />}>
 			<div className="w-full flex items-center gap-2 flex-col lg:flex-row">
 				<div className="w-full lg:w-1/2">
 					<SelectInput
@@ -81,6 +82,6 @@ export default function CouponBenefitBlock({ coupon, updateCoupon }: CouponBenef
 					) : null}
 				</div>
 			)}
-		</ResponsiveMenuSection>
+		</CouponBlockShell>
 	);
 }

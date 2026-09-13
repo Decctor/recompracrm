@@ -2,7 +2,7 @@ import CheckboxInput from "@/components/Inputs/CheckboxInput";
 import SelectInput from "@/components/Inputs/SelectInput";
 import TextInput from "@/components/Inputs/TextInput";
 import TextareaInput from "@/components/Inputs/TextareaInput";
-import ResponsiveMenuSection from "@/components/Utils/ResponsiveMenuSection";
+import CouponBlockShell from "./BlockShell";
 import type { TUseInternalCouponState } from "@/state-hooks/use-internal-coupon-state";
 import { CouponScopeOptions, CouponValidationModeOptions } from "@/utils/select-options";
 import { LayoutGrid } from "lucide-react";
@@ -10,10 +10,11 @@ import { LayoutGrid } from "lucide-react";
 type CouponGeneralBlockProps = {
 	coupon: TUseInternalCouponState["state"]["coupon"];
 	updateCoupon: TUseInternalCouponState["updateCoupon"];
+	embedded?: boolean;
 };
-export default function CouponGeneralBlock({ coupon, updateCoupon }: CouponGeneralBlockProps) {
+export default function CouponGeneralBlock({ coupon, updateCoupon, embedded }: CouponGeneralBlockProps) {
 	return (
-		<ResponsiveMenuSection title="INFORMAÇÕES GERAIS" icon={<LayoutGrid className="h-4 min-h-4 w-4 min-w-4" />}>
+		<CouponBlockShell embedded={embedded} title="INFORMAÇÕES GERAIS" icon={<LayoutGrid className="h-4 min-h-4 w-4 min-w-4" />}>
 			<div className="w-full flex items-center justify-center">
 				<CheckboxInput
 					checked={coupon.ativo}
@@ -77,6 +78,6 @@ export default function CouponGeneralBlock({ coupon, updateCoupon }: CouponGener
 					handleChange={(value) => updateCoupon({ condicoesTexto: value })}
 				/>
 			) : null}
-		</ResponsiveMenuSection>
+		</CouponBlockShell>
 	);
 }

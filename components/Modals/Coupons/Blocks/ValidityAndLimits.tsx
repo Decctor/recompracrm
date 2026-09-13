@@ -1,7 +1,7 @@
 import CheckboxInput from "@/components/Inputs/CheckboxInput";
 import DateTimeInput from "@/components/Inputs/DateTimeInput";
 import NumberInput from "@/components/Inputs/NumberInput";
-import ResponsiveMenuSection from "@/components/Utils/ResponsiveMenuSection";
+import CouponBlockShell from "./BlockShell";
 import { formatDateForInputValue } from "@/lib/formatting";
 import type { TUseInternalCouponState } from "@/state-hooks/use-internal-coupon-state";
 import { CalendarClock } from "lucide-react";
@@ -9,10 +9,11 @@ import { CalendarClock } from "lucide-react";
 type CouponValidityAndLimitsBlockProps = {
 	coupon: TUseInternalCouponState["state"]["coupon"];
 	updateCoupon: TUseInternalCouponState["updateCoupon"];
+	embedded?: boolean;
 };
-export default function CouponValidityAndLimitsBlock({ coupon, updateCoupon }: CouponValidityAndLimitsBlockProps) {
+export default function CouponValidityAndLimitsBlock({ coupon, updateCoupon, embedded }: CouponValidityAndLimitsBlockProps) {
 	return (
-		<ResponsiveMenuSection title="VIGÊNCIA, LIMITES E RESGATE" icon={<CalendarClock className="h-4 min-h-4 w-4 min-w-4" />}>
+		<CouponBlockShell embedded={embedded} title="VIGÊNCIA, LIMITES E RESGATE" icon={<CalendarClock className="h-4 min-h-4 w-4 min-w-4" />}>
 			<div className="w-full flex items-center gap-2 flex-col lg:flex-row">
 				<div className="w-full lg:w-1/2">
 					<DateTimeInput
@@ -81,6 +82,6 @@ export default function CouponValidityAndLimitsBlock({ coupon, updateCoupon }: C
 					A loja digital é autoatendimento: cupons de validação manual aparecem nela apenas como aviso, com resgate no balcão.
 				</p>
 			) : null}
-		</ResponsiveMenuSection>
+		</CouponBlockShell>
 	);
 }
