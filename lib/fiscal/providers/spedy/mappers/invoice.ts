@@ -107,7 +107,7 @@ export function mapSaleContextToSpedyInvoicePayload(context: TFiscalSaleContext,
 		isFinalCustomer: context.operacao.consumidorFinal,
 		environmentType: ambienteSpedy,
 		receiver: mapReceiver(context.destinatarioSnapshot, ambienteSpedy === "development"),
-		items: taxation.itens.map(({ item, result, valorFrete }, index) => {
+		items: taxation.itens.map(({ item, result, valorFrete, valorDesconto }, index) => {
 			const perfil = context.perfisProdutos.find((profile) => profile.produtoId === item.produtoId);
 			return {
 				code: item.produtoId,
@@ -123,7 +123,9 @@ export function mapSaleContextToSpedyInvoicePayload(context: TFiscalSaleContext,
 				unitTax: perfil?.unidadeComercial ?? "UN",
 				quantityTax: item.quantidade,
 				unitTaxAmount: item.valorVendaUnitario,
-				discountAmount: item.valorTotalDesconto > 0 ? item.valorTotalDesconto : undefined,
+				// Desconto efetivo (item + rateio do desconto de cabecalho): tem que casar com o vDesc
+				// dos totais, senao a soma dos itens nao fecha com o total da nota.
+				discountAmount: valorDesconto > 0 ? valorDesconto : undefined,
 				freightAmount: valorFrete > 0 ? valorFrete : undefined,
 				makeupTotal: true,
 				taxBenefitCode: perfil?.codigoBeneficioFiscal ?? undefined,

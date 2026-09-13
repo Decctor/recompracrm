@@ -12,6 +12,7 @@ import {
 	type TItemTaxResult,
 } from "./engine";
 import { allocateFiscalFreight } from "./freight-allocation";
+import { allocateFiscalHeaderDiscount, resolveFiscalHeaderDiscount } from "./header-discount";
 import { resolveFiscalShopDeliveryFee } from "@/lib/shop/config";
 import type { TFiscalSaleContext } from "./types";
 
@@ -81,6 +82,9 @@ export type TSaleItemTaxation = {
 	item: TFiscalSaleContext["venda"]["itens"][number];
 	result: TItemTaxResult;
 	valorFrete: number;
+	// Desconto fiscal efetivo do item: o desconto do proprio item + a fatia rateada do desconto
+	// de cabecalho da venda. E este valor (nao item.valorTotalDesconto) que os mappers devem emitir.
+	valorDesconto: number;
 };
 
 export type TSaleTaxation = {
@@ -112,8 +116,26 @@ export function computeSaleTaxation(context: TFiscalSaleContext): TSaleTaxation 
 		})),
 	});
 
+	// Desconto de cabecalho (desconto geral, cupom, cashback) rateado nos itens para compor o
+	// vDesc: sem isso a nota sai pelo bruto e os pagamentos (liquidos) nao fecham — rejeicao 865.
+	// Canal gerenciado fica fora: descontos de canal ja chegam nos itens e os pagamentos fiscais
+	// sao reconstruidos para somar o vNF (buildFiscalPaymentsForManagedSale).
+	const discountableItems = context.venda.itens.map((item) => ({
+		valorBruto: item.valorVendaTotalBruto,
+		valorDesconto: item.valorTotalDesconto,
+	}));
+	const headerDiscount = integracaoMetadados
+		? 0
+		: resolveFiscalHeaderDiscount({
+				itens: discountableItems,
+				valorTotal: context.venda.valorTotal,
+				acrescimosTotal: context.venda.acrescimosTotal,
+				descontosTotal: context.venda.descontosTotal,
+			});
+	const headerDiscountByItem = allocateFiscalHeaderDiscount({ valorDesconto: headerDiscount, itens: discountableItems });
+
 	const itens = context.venda.itens.map((item, index) => {
-		console.log("[COMPUTE SALE TAXATION] Item", item);
+		const valorDesconto = item.valorTotalDesconto + headerDiscountByItem[index];
 		const perfil = context.perfisProdutos.find((profile) => profile.produtoId === item.produtoId);
 		const grupo = perfil?.grupoTributarioId ? context.gruposTributarios.find((g) => g.id === perfil.grupoTributarioId) : undefined;
 
@@ -141,7 +163,7 @@ export function computeSaleTaxation(context: TFiscalSaleContext): TSaleTaxation 
 		const vTotTrib = computeVTotTrib({
 			rate: ibptRate,
 			origem: origemMercadoria,
-			baseValue: item.valorVendaTotalBruto - item.valorTotalDesconto + freightByItem[index],
+			baseValue: item.valorVendaTotalBruto - valorDesconto + freightByItem[index],
 		});
 
 		const result = computeItemTaxation({
@@ -154,17 +176,17 @@ export function computeSaleTaxation(context: TFiscalSaleContext): TSaleTaxation 
 				cest: perfil?.cest ?? null,
 				quantidade: item.quantidade,
 				valorBruto: item.valorVendaTotalBruto,
-				valorDesconto: item.valorTotalDesconto,
+				valorDesconto,
 				valorFrete: freightByItem[index],
 			},
 			vTotTrib,
 		});
 
-		return { item, result, valorFrete: freightByItem[index] };
+		return { item, result, valorFrete: freightByItem[index], valorDesconto };
 	});
 
 	const totais = computeDocumentTotals(
-		itens.map(({ result, item }) => ({ result, valorBruto: item.valorVendaTotalBruto, valorDesconto: item.valorTotalDesconto })),
+		itens.map(({ result, item, valorDesconto }) => ({ result, valorBruto: item.valorVendaTotalBruto, valorDesconto })),
 		{ vFrete },
 	);
 	const erros = [...extraErrors, ...aggregateItemErrors(itens.map(({ result }) => result))];

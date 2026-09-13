@@ -120,3 +120,107 @@ test("envia o frete da loja nos itens e mantem pagamentos iguais ao total da NFC
 		35,
 	);
 });
+
+test("desconto geral da venda entra como vDesc e a nota fecha com os pagamentos (rejeicao 865)", () => {
+	// Regressao da venda 9f785668 (Congelatte): item de R$ 33, desconto geral de R$ 20 no
+	// cabecalho, pagamento liquido de R$ 13. Sem o rateio do desconto, a nota saia por R$ 33
+	// com pagamentos de R$ 13 — rejeicao SEFAZ 865.
+	const context = {
+		venda: {
+			integracaoMetadados: null,
+			rascunhoMetadados: { descontoGeral: 20, troco: 20 },
+			entregaModalidade: "PRESENCIAL",
+			valorTotal: 13,
+			descontosTotal: 20,
+			acrescimosTotal: 0,
+			itens: [
+				{
+					produtoId: "petit-gateau",
+					quantidade: 1,
+					valorVendaUnitario: 33,
+					valorVendaTotalBruto: 33,
+					valorTotalDesconto: 0,
+					metadados: { nome: "Petit Gateau" },
+				},
+			],
+		},
+		organizacao: {
+			id: "org",
+			fiscalConfiguracao: {
+				ambiente: "PRODUCAO",
+				regimeTributario: 1,
+				endereco: { uf: "MG" },
+			},
+		},
+		serie: { serie: "3", proximoNumero: 1187 },
+		operacao: {
+			tipoDocumento: "NFCE",
+			finalidade: "NORMAL",
+			presencaConsumidor: "OPERACAO_PRESENCIAL",
+			consumidorFinal: true,
+			cfopPadrao: "5102",
+			naturezaOperacao: "Venda de mercadorias",
+		},
+		perfisProdutos: [
+			{
+				produtoId: "petit-gateau",
+				grupoTributarioId: "grupo",
+				origemMercadoria: "NACIONAL",
+				ncm: "21050010",
+				cest: null,
+				cfopPadrao: "5102",
+				unidadeComercial: "UN",
+			},
+		],
+		gruposTributarios: [
+			{
+				id: "grupo",
+				csosn: "102",
+				aliquotaIcms: 0,
+				percentualReducaoBc: 0,
+				modalidadeBc: 3,
+				percentualCreditoSn: null,
+				temSubstituicaoTributaria: false,
+				mvaSt: null,
+				aliquotaIcmsSt: null,
+				aliquotaInternaDestino: null,
+				percentualReducaoBcSt: null,
+				aliquotaFcp: 0,
+				aliquotaFcpSt: 0,
+				cstPis: "49",
+				aliquotaPis: 0,
+				cstCofins: "49",
+				aliquotaCofins: 0,
+				regras: [],
+			},
+		],
+		ibptRates: [],
+		destinatarioSnapshot: { nome: "Cliente", cpfCnpj: "12345678909" },
+		pagamentos: [{ metodo: "CARTAO_CREDITO", valor: 13 }],
+	} as unknown as TFiscalSaleContext;
+	const document = {
+		tipo: "NFCE",
+		referencia: "VENDA:desconto-geral",
+		numero: "1187",
+		tentativasEnvio: 1,
+		chaveAcessoReferencia: null,
+	} as unknown as TFiscalDocument;
+
+	const payload = mapSaleContextToSpedyInvoicePayload(context, document) as {
+		items: { totalAmount: number; discountAmount?: number }[];
+		total: { invoiceAmount: number; productAmount: number; discountAmount: number };
+		payments: { amount: number }[];
+	};
+
+	assert.deepEqual(
+		payload.items.map((item) => item.discountAmount ?? 0),
+		[20],
+	);
+	assert.equal(payload.total.productAmount, 33);
+	assert.equal(payload.total.discountAmount, 20);
+	assert.equal(payload.total.invoiceAmount, 13);
+	assert.equal(
+		payload.payments.reduce((sum, payment) => sum + payment.amount, 0),
+		13,
+	);
+});
