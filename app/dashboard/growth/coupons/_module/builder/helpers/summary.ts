@@ -34,6 +34,11 @@ export function buildCouponSummary(state: TState): string {
 
 	if (coupon.condicaoValorMinimoVenda) parts.push(`em compras a partir de ${formatToMoney(coupon.condicaoValorMinimoVenda)}`);
 	if (coupon.condicaoQuantidadeMinimaItens) parts.push(`com pelo menos ${coupon.condicaoQuantidadeMinimaItens} itens`);
+	if (coupon.condicaoPrimeiraCompra) parts.push("somente na primeira compra");
+	if (coupon.condicaoModalidadesEntrega?.length) {
+		const labels = { PRESENCIAL: "presencial", RETIRADA: "retirada", ENTREGA: "entrega", COMANDA: "comanda" } as const;
+		parts.push(`nas modalidades ${coupon.condicaoModalidadesEntrega.map((mode) => labels[mode]).join(", ")}`);
+	}
 
 	if (coupon.escopo === "INDIVIDUAL") {
 		parts.push("para clientes específicos");

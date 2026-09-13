@@ -4,9 +4,13 @@ import type { TAuthUserSession } from "@/lib/authentication/types";
 import { getAvailableCouponsForClient } from "@/lib/coupons/availability";
 import { type TCouponCartItem, evaluateCouponAgainstCart } from "@/lib/coupons/engine";
 import { db } from "@/services/drizzle";
+import { sales } from "@/services/drizzle/schema";
+import { and, count, eq } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import z from "zod";
+import { DeliveryModeEnum } from "@/schemas/enums";
+import { getCouponCheckoutConditionIssue } from "@/lib/coupons/conditions";
 
 const CartItemInputSchema = z.object({
 	produtoId: z.string({ required_error: "ID do produto não informado." }),
@@ -22,6 +26,7 @@ const GetAvailableCouponsInputSchema = z.object({
 	}),
 	// Carrinho atual (opcional): quando presente, cupons AUTOMATICA são avaliados e retornam o desconto computado.
 	itens: z.array(CartItemInputSchema).optional().nullable(),
+	entregaModalidade: DeliveryModeEnum.optional().nullable(),
 });
 export type TGetAvailablePosCouponsInput = z.infer<typeof GetAvailableCouponsInputSchema>;
 
@@ -34,6 +39,10 @@ async function getAvailablePosCoupons({ input, session }: { input: TGetAvailable
 		clienteId: input.clienteId,
 		surface: "POS",
 	});
+	const [purchaseHistory] = await db
+		.select({ total: count() })
+		.from(sales)
+		.where(and(eq(sales.clienteId, input.clienteId), eq(sales.organizacaoId, organizationId), eq(sales.statusVenda, "CONFIRMADA")));
 
 	// Enriquecimento do carrinho com o grupo dos produtos (alvos por grupo casam com products.grupo).
 	const cartItems: TCouponCartItem[] = [];
@@ -57,8 +66,20 @@ async function getAvailablePosCoupons({ input, session }: { input: TGetAvailable
 	}
 
 	const coupons = availableCoupons.map((coupon) => {
-		const evaluation =
-			coupon.validacaoModo === "AUTOMATICA" && cartItems.length > 0 ? evaluateCouponAgainstCart({ coupon, targets: coupon.alvos, cartItems }) : null;
+		const conditionIssue = getCouponCheckoutConditionIssue(coupon, {
+			entregaModalidade: input.entregaModalidade ?? null,
+			comprasAnterioresConfirmadas: purchaseHistory?.total ?? 0,
+		});
+		const evaluation = conditionIssue
+			? { elegivel: false as const, motivo: conditionIssue }
+			: coupon.validacaoModo === "AUTOMATICA" && cartItems.length > 0
+				? evaluateCouponAgainstCart({
+						coupon,
+						targets: coupon.alvos,
+						cartItems,
+						context: { entregaModalidade: input.entregaModalidade ?? null, comprasAnterioresConfirmadas: purchaseHistory?.total ?? 0 },
+					})
+				: null;
 		return {
 			id: coupon.id,
 			titulo: coupon.titulo,
@@ -74,6 +95,8 @@ async function getAvailablePosCoupons({ input, session }: { input: TGetAvailable
 			beneficioAplicacao: coupon.beneficioAplicacao,
 			beneficioCompreQuantidade: coupon.beneficioCompreQuantidade,
 			beneficioLeveQuantidade: coupon.beneficioLeveQuantidade,
+			condicaoModalidadesEntrega: coupon.condicaoModalidadesEntrega,
+			condicaoPrimeiraCompra: coupon.condicaoPrimeiraCompra,
 			vigenciaFim: coupon.vigenciaFim,
 			atribuicaoVigente: coupon.atribuicaoVigente ? { id: coupon.atribuicaoVigente.id, expiracaoData: coupon.atribuicaoVigente.expiracaoData } : null,
 			avaliacao: evaluation,

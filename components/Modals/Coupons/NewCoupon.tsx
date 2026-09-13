@@ -9,6 +9,7 @@ import CouponAudienceBlock from "./Blocks/Audience";
 import CouponBenefitBlock from "./Blocks/Benefit";
 import CouponGeneralBlock from "./Blocks/General";
 import CouponTargetsBlock from "./Blocks/Targets";
+import CouponCheckoutConditionsBlock from "./Blocks/CheckoutConditions";
 import CouponValidityAndLimitsBlock from "./Blocks/ValidityAndLimits";
 
 type NewCouponProps = {
@@ -71,7 +72,9 @@ export default function NewCoupon({ closeModal, callbacks }: NewCouponProps) {
 					updateCouponTarget={updateCouponTarget}
 					removeCouponTarget={removeCouponTarget}
 				/>
-			) : null}
+			) : (
+				<CouponCheckoutConditionsBlock coupon={state.coupon} updateCoupon={updateCoupon} />
+			)}
 			{state.coupon.escopo === "GLOBAL" ? (
 				<CouponAudienceBlock couponAudiences={state.couponAudiences} addCouponAudience={addCouponAudience} removeCouponAudience={removeCouponAudience} />
 			) : null}

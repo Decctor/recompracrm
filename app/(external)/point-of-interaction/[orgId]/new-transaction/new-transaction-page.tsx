@@ -15,7 +15,7 @@ import {
 import { useClientByLookup } from "@/lib/queries/clients";
 import { type TPoiAvailableCoupon, usePoiAvailableCoupons } from "@/lib/queries/coupons";
 import { cn } from "@/lib/utils";
-import type { TCashbackProgramTerminologyEnum } from "@/schemas/enums";
+import { DeliveryModeEnum, type TCashbackProgramTerminologyEnum } from "@/schemas/enums";
 import type { TOrganizationEntity } from "@/services/drizzle/schema";
 import {
 	usePointOfInteractionNewSaleState,
@@ -175,6 +175,7 @@ export default function NewSaleContent({ org, clientId, prizes, initialOperatorP
 		orgId: org.id,
 		clienteId: clientId,
 		valorVenda: state.sale.valor,
+		entregaModalidade: state.sale.entregaModalidade,
 	});
 	const couponDiscount = useMemo(() => {
 		if (!state.sale.coupon) return 0;
@@ -194,13 +195,14 @@ export default function NewSaleContent({ org, clientId, prizes, initialOperatorP
 	// Mantém o desconto do cupom AUTOMATICA em sincronia com o valor da venda (o servidor é o autoritativo);
 	// remove a seleção quando o cupom deixa de ser elegível.
 	useEffect(() => {
-		if (!selectedCoupon || selectedCoupon.validacaoModo !== "AUTOMATICA" || !availableCoupons) return;
+		if (!selectedCoupon || !availableCoupons) return;
 		const freshCoupon = availableCoupons.find((coupon) => coupon.id === selectedCoupon.id);
-		if (!freshCoupon || !freshCoupon.avaliacao || !freshCoupon.avaliacao.elegivel) {
+		if (!freshCoupon || freshCoupon.avaliacao?.elegivel === false || (freshCoupon.validacaoModo === "AUTOMATICA" && !freshCoupon.avaliacao)) {
 			setSelectedCoupon(null);
 			updateCoupon(null);
 			return;
 		}
+		if (!freshCoupon.avaliacao?.elegivel || freshCoupon.validacaoModo !== "AUTOMATICA") return;
 		const freshDiscountValue = freshCoupon.avaliacao.valorDesconto;
 		if (Math.abs((state.sale.coupon?.valorDesconto ?? 0) - freshDiscountValue) > 0.01) {
 			updateCoupon({ cupomId: freshCoupon.id, valorDesconto: freshDiscountValue });
@@ -250,6 +252,9 @@ export default function NewSaleContent({ org, clientId, prizes, initialOperatorP
 		// Discount: step 1 = sale value
 		if (!isPrizeMode && currentStep === 1 && state.sale.valor <= 0) {
 			return toast.error("Digite o valor da venda.");
+		}
+		if ((!isPrizeMode && currentStep === 1) || (isPrizeSaleOnlyFlow && currentStep === 2)) {
+			if (!state.sale.entregaModalidade) return toast.error("Selecione a modalidade de atendimento.");
 		}
 		// Prize sale-only: step 2 = sale value
 		if (isPrizeSaleOnlyFlow && currentStep === 2 && state.sale.valor <= 0) {
@@ -475,7 +480,26 @@ export default function NewSaleContent({ org, clientId, prizes, initialOperatorP
 						{/* Discount mode steps */}
 						{/* Step 1: Sale Value */}
 						{!showModeSelection && !isPrizeMode && currentStep === 1 && (
-							<SaleValueStep value={state.sale.valor} onChange={(v) => updateSale({ valor: v })} onSubmit={handleNextStep} mode={mode} />
+							<div className="flex flex-col gap-4">
+								<label className="flex flex-col gap-2 text-sm font-semibold">
+									Modalidade de atendimento
+									<select
+										className="rounded-lg border border-input bg-background p-3 text-foreground"
+										value={state.sale.entregaModalidade ?? ""}
+										onChange={(event) => {
+											updateSale({ entregaModalidade: event.target.value ? DeliveryModeEnum.parse(event.target.value) : null });
+											handleClearCoupon();
+										}}
+									>
+										<option value="">Selecione a modalidade</option>
+										<option value="PRESENCIAL">Presencial</option>
+										<option value="RETIRADA">Retirada</option>
+										<option value="ENTREGA">Entrega</option>
+										<option value="COMANDA">Comanda</option>
+									</select>
+								</label>
+								<SaleValueStep value={state.sale.valor} onChange={(v) => updateSale({ valor: v })} onSubmit={handleNextStep} mode={mode} />
+							</div>
 						)}
 						{/* Step 2: Cashback (+ cupons disponíveis) */}
 						{!showModeSelection && !isPrizeMode && currentStep === 2 && (
@@ -512,6 +536,7 @@ export default function NewSaleContent({ org, clientId, prizes, initialOperatorP
 						{/* Step 3: Confirmation (totem apenas; no mobile a solicitação é enviada no último passo de dados) */}
 						{!showModeSelection && !isPrizeMode && currentStep === 3 && !isMobileMode && (
 							<KioskConfirmationStep
+								entregaModalidade={state.sale.entregaModalidade}
 								clientName={state.client.nome || client?.nome || ""}
 								finalValue={finalValue}
 								operatorIdentifier={state.operatorIdentifier}
@@ -552,7 +577,23 @@ export default function NewSaleContent({ org, clientId, prizes, initialOperatorP
 						)}
 						{/* Prize sale-only: Step 2 = Sale Value */}
 						{!showModeSelection && isPrizeSaleOnlyFlow && currentStep === 2 && (
-							<SaleValueStep value={state.sale.valor} onChange={(v) => updateSale({ valor: v })} onSubmit={handleNextStep} mode={mode} />
+							<div className="flex flex-col gap-4">
+								<label className="flex flex-col gap-2 text-sm font-semibold">
+									Modalidade de atendimento
+									<select
+										className="rounded-lg border border-input bg-background p-3 text-foreground"
+										value={state.sale.entregaModalidade ?? ""}
+										onChange={(event) => updateSale({ entregaModalidade: event.target.value ? DeliveryModeEnum.parse(event.target.value) : null })}
+									>
+										<option value="">Selecione a modalidade</option>
+										<option value="PRESENCIAL">Presencial</option>
+										<option value="RETIRADA">Retirada</option>
+										<option value="ENTREGA">Entrega</option>
+										<option value="COMANDA">Comanda</option>
+									</select>
+								</label>
+								<SaleValueStep value={state.sale.valor} onChange={(v) => updateSale({ valor: v })} onSubmit={handleNextStep} mode={mode} />
+							</div>
 						)}
 						{/* Prize redeem: Step 2 = Confirmation (totem apenas) */}
 						{!showModeSelection && isPrizeMode && currentStep === 2 && !isPrizeSaleOnlyFlow && !isMobileMode && (

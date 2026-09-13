@@ -30,7 +30,7 @@ function formatCouponBenefit(coupon: TShopAvailableCoupon) {
 
 export default function CashbackStep({ onNext }: CashbackStepProps) {
 	const { orgId, catalog, orderState } = useShop();
-	const { customer, cashback, cart, coupon, reward } = orderState.state;
+	const { customer, cashback, cart, coupon, reward, delivery } = orderState.state;
 
 	const { data: lookupData } = useShopClientLookup({
 		orgId,
@@ -55,6 +55,7 @@ export default function CashbackStep({ onNext }: CashbackStepProps) {
 		orgId,
 		clienteId: customer.id ?? null,
 		itens: cartItemsForCoupon,
+		entregaModalidade: delivery.modalidade,
 	});
 	const program = catalog.cashbackProgram;
 	const { descontoCashback: supportsCashbackDiscount, recompensas: supportsRewards } = getShopCashbackCapabilities(program);

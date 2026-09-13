@@ -1,4 +1,5 @@
 import NumberInput from "@/components/Inputs/NumberInput";
+import CouponCheckoutConditionsBlock from "./CheckoutConditions";
 import SelectInput from "@/components/Inputs/SelectInput";
 import SelectProductWithVariants from "@/components/Inputs/SelectProductWithVariants";
 import ResponsiveMenuSection from "@/components/Utils/ResponsiveMenuSection";
@@ -81,6 +82,7 @@ export default function CouponTargetsBlock({
 					/>
 				</div>
 			</div>
+			<CouponCheckoutConditionsBlock coupon={coupon} updateCoupon={updateCoupon} />
 			<CouponTargetForm addCouponTarget={addCouponTarget} />
 			<div className="w-full flex flex-col gap-1.5">
 				{couponTargets.map((target, index) =>

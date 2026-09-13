@@ -35,21 +35,25 @@ export default function CouponRedemptionSection({ saleState, clientId }: CouponR
 		[saleState.state.itens],
 	);
 
-	const { data: availableCoupons, isLoading } = usePosAvailableCoupons({ clienteId: clientId, itens: cartItemsForEvaluation });
+	const { data: availableCoupons, isLoading } = usePosAvailableCoupons({
+		clienteId: clientId,
+		itens: cartItemsForEvaluation,
+		entregaModalidade: saleState.state.entregaModalidade,
+	});
 
 	const appliedCoupon = saleState.state.cupomResgate;
 
 	// Mantém o cupom AUTOMATICA aplicado em sincronia com o carrinho: o desconto do servidor
 	// é o autoritativo; se o cupom deixa de ser elegível, é removido com aviso ao operador.
 	useEffect(() => {
-		if (!appliedCoupon || appliedCoupon.validacaoModo !== "AUTOMATICA" || !availableCoupons) return;
+		if (!appliedCoupon || !availableCoupons) return;
 		const freshCoupon = availableCoupons.find((coupon) => coupon.id === appliedCoupon.cupomId);
-		if (!freshCoupon || !freshCoupon.avaliacao || !freshCoupon.avaliacao.elegivel) {
+		if (!freshCoupon || freshCoupon.avaliacao?.elegivel === false || (appliedCoupon.validacaoModo === "AUTOMATICA" && !freshCoupon.avaliacao)) {
 			saleState.setCupomResgate(null);
 			toast.warning("O cupom aplicado deixou de ser elegível para o carrinho atual e foi removido.");
 			return;
 		}
-		if (Math.abs(freshCoupon.avaliacao.valorDesconto - appliedCoupon.valorDesconto) > 0.01) {
+		if (freshCoupon.avaliacao?.elegivel && Math.abs(freshCoupon.avaliacao.valorDesconto - appliedCoupon.valorDesconto) > 0.01) {
 			saleState.setCupomResgate({ ...appliedCoupon, valorDesconto: freshCoupon.avaliacao.valorDesconto });
 		}
 	}, [appliedCoupon, availableCoupons, saleState.setCupomResgate]);
@@ -107,7 +111,7 @@ function AvailableCouponCard({ coupon, saleState, onApplied }: { coupon: TPosAva
 
 	const isAutomatic = coupon.validacaoModo === "AUTOMATICA";
 	const evaluation = coupon.avaliacao;
-	const isEligible = isAutomatic ? !!evaluation?.elegivel : true;
+	const isEligible = isAutomatic ? !!evaluation?.elegivel : evaluation?.elegivel !== false;
 	const manualMaxDiscount = saleState.valorAntesCupom;
 
 	function handleApply() {
@@ -151,7 +155,7 @@ function AvailableCouponCard({ coupon, saleState, onApplied }: { coupon: TPosAva
 				</div>
 				{isAutomatic && evaluation?.elegivel ? <span className="text-xs font-bold text-primary">-{formatToMoney(evaluation.valorDesconto)}</span> : null}
 			</div>
-			{isAutomatic && evaluation && !evaluation.elegivel ? <p className="text-[11px] text-muted-foreground">{evaluation.motivo}</p> : null}
+			{evaluation && !evaluation.elegivel ? <p className="text-[11px] text-muted-foreground">{evaluation.motivo}</p> : null}
 			{!isAutomatic ? (
 				<div className="flex flex-col gap-1">
 					{coupon.condicoesTexto ? <p className="text-[11px] text-muted-foreground">CONDIÇÕES: {coupon.condicoesTexto}</p> : null}

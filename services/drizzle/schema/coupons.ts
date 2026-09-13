@@ -13,6 +13,7 @@ import {
 	couponTargetOperatorEnum,
 	couponTargetRoleEnum,
 	couponValidationModeEnum,
+	deliveryModeEnum,
 } from "./enums";
 import { organizations } from "./organizations";
 import { productVariants, products } from "./products";
@@ -55,9 +56,11 @@ export const coupons = newTable(
 		beneficioCompreQuantidade: integer("beneficio_compre_quantidade"), // COMPRE_X_LEVE_Y: X (pago)
 		beneficioLeveQuantidade: integer("beneficio_leve_quantidade"), // COMPRE_X_LEVE_Y: Y (levado)
 
-		// Condições estruturadas (validação AUTOMATICA)
+		// Condições de carrinho (AUTOMATICA); modalidade e primeira compra valem também em MANUAL.
 		condicaoValorMinimoVenda: doublePrecision("condicao_valor_minimo_venda"),
 		condicaoQuantidadeMinimaItens: integer("condicao_quantidade_minima_itens"),
+		condicaoModalidadesEntrega: deliveryModeEnum("condicao_modalidades_entrega").array(),
+		condicaoPrimeiraCompra: boolean("condicao_primeira_compra").notNull().default(false),
 		condicaoAlvosOperador: couponTargetOperatorEnum("condicao_alvos_operador").notNull().default("QUALQUER"),
 
 		// Vigência

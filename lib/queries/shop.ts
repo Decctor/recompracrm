@@ -231,14 +231,16 @@ export function useShopAvailableCoupons({
   orgId,
   clienteId,
   itens,
+  entregaModalidade,
   enabled = true,
 }: {
   orgId: string;
   clienteId: string | null;
   itens: TGetAvailableShopCouponsInput["itens"];
+  entregaModalidade?: TGetAvailableShopCouponsInput["entregaModalidade"];
   enabled?: boolean;
 }) {
-  const debouncedInput = useDebounceMemo({ orgId, clienteId, itens }, 500);
+  const debouncedInput = useDebounceMemo({ orgId, clienteId, itens, entregaModalidade }, 500);
   const queryKey = ["shop-available-coupons", debouncedInput] as const;
   return {
     ...useQuery({
@@ -249,6 +251,7 @@ export function useShopAvailableCoupons({
           input: {
             clienteId: debouncedInput.clienteId as string,
             itens: debouncedInput.itens,
+            entregaModalidade: debouncedInput.entregaModalidade,
           },
         }),
       enabled:

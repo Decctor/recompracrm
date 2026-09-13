@@ -19,6 +19,7 @@ import {
 } from "@/services/drizzle/schema";
 import type { TOrganizationEntity } from "@/services/drizzle/schema";
 import { and, eq } from "drizzle-orm";
+import { countPreviousConfirmedPurchases, lockClientPurchaseHistory } from "@/lib/coupons/purchase-history";
 import createHttpError from "http-errors";
 import { resolveInitialAttendanceStatus } from "./attendance";
 import { createAccountingEntry } from "./create-accounting-entry";
@@ -94,6 +95,8 @@ export async function processSaleConfirmationInTransaction({ tx, input }: { tx: 
 	if (sale.statusVenda !== "ORCAMENTO") {
 		throw new createHttpError.BadRequest(`Venda nao pode ser confirmada no status atual: ${sale.statusVenda}`);
 	}
+
+	if (sale.clienteId) await lockClientPurchaseHistory(tx, input.organization.id, sale.clienteId);
 
 	if (input.sessaoVendaId) {
 		const [lockedSession] = await tx
@@ -381,6 +384,12 @@ export async function processSaleConfirmationInTransaction({ tx, input }: { tx: 
 			let discountValue = declaredDiscountValue;
 
 			if (coupon.validacaoModo === "AUTOMATICA") {
+				const previousConfirmedPurchases = await countPreviousConfirmedPurchases({
+					trx: tx,
+					organizacaoId: input.organization.id,
+					clienteId: clientId,
+					vendaId: input.saleId,
+				});
 				// Reavalia o carrinho no servidor: o valor do motor e o autoritativo.
 				const productIds = [...new Set(sale.itens.map((item) => item.produtoId))];
 				const productsResult =
@@ -400,7 +409,15 @@ export async function processSaleConfirmationInTransaction({ tx, input }: { tx: 
 					valorVendaUnitario: item.valorVendaUnitario,
 				}));
 
-				const evaluation = evaluateCouponAgainstCart({ coupon, targets: coupon.alvos, cartItems });
+				const evaluation = evaluateCouponAgainstCart({
+					coupon,
+					targets: coupon.alvos,
+					cartItems,
+					context: {
+						entregaModalidade: sale.entregaModalidade,
+						comprasAnterioresConfirmadas: previousConfirmedPurchases,
+					},
+				});
 				if (!evaluation.elegivel) throw new createHttpError.BadRequest(`Cupom nao elegivel para essa venda: ${evaluation.motivo}`);
 				if (declaredDiscountValue > 0 && Math.abs(evaluation.valorDesconto - declaredDiscountValue) > 0.01) {
 					throw new createHttpError.BadRequest("O desconto do cupom esta desatualizado para o carrinho atual. Reaplique o cupom e tente novamente.");
@@ -426,6 +443,7 @@ export async function processSaleConfirmationInTransaction({ tx, input }: { tx: 
 				vendaValor: sale.valorTotal,
 				operadorId: input.saleAuthorId,
 				operadorVendedorId: sale.vendedorId,
+				entregaModalidade: sale.entregaModalidade,
 			});
 
 			return { redemptionId: redemption.redemptionId, valorDesconto: discountValue };

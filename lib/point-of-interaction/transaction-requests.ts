@@ -2,7 +2,7 @@ import type {
 	TCreatePointOfInteractionTransactionOutput,
 	TCreatePointOfInteractionTransactionRequestInput,
 } from "@/app/api/point-of-interaction/new-transaction/route";
-import type { TPoiTransactionRequestStatusEnum } from "@/schemas/enums";
+import type { TDeliveryModeEnum, TPoiTransactionRequestStatusEnum } from "@/schemas/enums";
 
 export type TPoiTransactionRequestSummary = {
 	cliente: {
@@ -11,6 +11,7 @@ export type TPoiTransactionRequestSummary = {
 		telefone: string;
 	};
 	venda: {
+		entregaModalidade?: TDeliveryModeEnum | null;
 		valorBruto: number;
 		valorResgate: number;
 		valorFinal: number;
@@ -48,6 +49,7 @@ export function buildPoiTransactionRequestSummary(
 			telefone: input.client.telefone,
 		},
 		venda: {
+			entregaModalidade: input.sale.entregaModalidade ?? null,
 			valorBruto: input.sale.prizeRedemption?.prizeSaleValue ?? input.sale.valor,
 			valorResgate: input.sale.prizeRedemption?.prizeValue ?? (input.sale.cashback.aplicar ? input.sale.cashback.valor : 0),
 			// Cupons MANUAL podem chegar sem valor definido (o operador informa na aprovação); nesse caso o valorFinal não o inclui.

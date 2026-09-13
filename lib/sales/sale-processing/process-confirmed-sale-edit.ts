@@ -1,6 +1,7 @@
 import { resyncSaleCashbackAccumulation } from "@/lib/cashback/resync-sale-accumulation";
 import { type TCouponCartItem, evaluateCouponAgainstCart } from "@/lib/coupons/engine";
 import { cancelCouponRedemption } from "@/lib/coupons/redemption";
+import { getCouponCheckoutConditionIssue, readCouponCheckoutConditions } from "@/lib/coupons/conditions";
 import { ACCOUNTING_ENTRY_BALANCE_TOLERANCE, getAccountingEntryBalanceError } from "@/lib/finances/accounting-entry-balance";
 import { type TPaymentSplit, getPaymentProvider } from "@/lib/payments";
 import { validateSalesSessionSeller } from "@/lib/sales-sessions";
@@ -311,6 +312,13 @@ export async function processConfirmedSaleEditInTransaction({ tx, input }: { tx:
 				where: (fields, { and, eq }) => and(eq(fields.id, couponRedemption.cupomId), eq(fields.organizacaoId, organizationId)),
 				with: { alvos: true },
 			});
+			const checkoutConditions = readCouponCheckoutConditions(couponRedemption.beneficioSnapshot);
+			const conditionIssue = getCouponCheckoutConditionIssue(checkoutConditions, {
+				entregaModalidade: input.entregaModalidade ?? sale.entregaModalidade,
+				// Eligibility was established at redemption, before any later purchases.
+				comprasAnterioresConfirmadas: 0,
+			});
+			if (conditionIssue) throw new createHttpError.BadRequest(`${conditionIssue} Remova o cupom para salvar.`);
 
 			if (coupon?.validacaoModo === "AUTOMATICA") {
 				const productIds = [...new Set(activeItems.map((item) => item.produtoId))];
@@ -330,7 +338,17 @@ export async function processConfirmedSaleEditInTransaction({ tx, input }: { tx:
 					quantidade: item.quantidade,
 					valorVendaUnitario: item.valorUnitarioFinal,
 				}));
-				const evaluation = evaluateCouponAgainstCart({ coupon, targets: coupon.alvos, cartItems });
+				const evaluation = evaluateCouponAgainstCart({
+					coupon: { ...coupon, condicaoModalidadesEntrega: checkoutConditions.condicaoModalidadesEntrega ?? null, condicaoPrimeiraCompra: false },
+					targets: coupon.alvos,
+					cartItems,
+					context: {
+						entregaModalidade: input.entregaModalidade ?? sale.entregaModalidade,
+						// O resgate desta própria venda já provou a condição; uma edição não deve
+						// transformar a primeira compra em uma compra anterior a si mesma.
+						comprasAnterioresConfirmadas: 0,
+					},
+				});
 				if (!evaluation.elegivel) {
 					throw new createHttpError.BadRequest(
 						`O cupom aplicado não é mais elegível para o carrinho editado (${evaluation.motivo}). Remova o cupom para salvar.`,

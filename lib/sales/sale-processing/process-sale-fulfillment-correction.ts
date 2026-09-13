@@ -1,4 +1,5 @@
 import { resolvePaymentFinancialAccounts } from "@/lib/payments";
+import { getCouponCheckoutConditionIssue, readCouponCheckoutConditions } from "@/lib/coupons/conditions";
 import { saleHasLiveFiscalDocument } from "@/lib/sales/sale-editability";
 import {
 	buildPaymentTransactionTitle,
@@ -116,14 +117,31 @@ async function patchDelivery({
 
 	const modalidadeChanged = sale.entregaModalidade !== entrega.modalidade;
 
-	await db
-		.update(sales)
-		.set({
-			entregaModalidade: entrega.modalidade,
-			comandaNumero,
-			entregaLocalizacaoId: entrega.modalidade === "ENTREGA" ? sale.entregaLocalizacaoId : null,
-		})
-		.where(eq(sales.id, saleId));
+	await db.transaction(async (tx) => {
+		await tx
+			.select({ id: sales.id })
+			.from(sales)
+			.where(and(eq(sales.id, saleId), eq(sales.organizacaoId, organization.id)))
+			.for("update");
+		const redemptions = await tx.query.couponRedemptions.findMany({
+			where: (fields, { and, eq }) => and(eq(fields.vendaId, saleId), eq(fields.organizacaoId, organization.id), eq(fields.status, "UTILIZADO")),
+		});
+		for (const redemption of redemptions) {
+			const issue = getCouponCheckoutConditionIssue(readCouponCheckoutConditions(redemption.beneficioSnapshot), {
+				entregaModalidade: entrega.modalidade,
+				comprasAnterioresConfirmadas: 0,
+			});
+			if (issue) throw new createHttpError.BadRequest(`${issue} Remova o cupom na edição da venda antes de alterar a modalidade.`);
+		}
+		await tx
+			.update(sales)
+			.set({
+				entregaModalidade: entrega.modalidade,
+				comandaNumero,
+				entregaLocalizacaoId: entrega.modalidade === "ENTREGA" ? sale.entregaLocalizacaoId : null,
+			})
+			.where(eq(sales.id, saleId));
+	});
 
 	const updated = await loadCorrectableSale(organization.id, saleId);
 	return {

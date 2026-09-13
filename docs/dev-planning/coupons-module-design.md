@@ -18,7 +18,7 @@ Um mesmo cupom precisa servir a dois consumidores com capacidades muito diferent
 | Empilhamento | **Fase 1: 1 cupom por venda** (validação no serviço, não no schema) | O ledger já suporta N resgates por venda; liberar empilhamento depois é remover a trava + definir ordem de aplicação, sem migração. |
 | BRINDE | **Fora da fase 1** | `COMPRE_X_LEVE_Y` cobre item grátis do próprio carrinho; brinde como item injetado fica para fase posterior. |
 | Snapshot de uso | **`beneficioSnapshot` (JSONB) é suficiente** | Sem tabela-filha de itens do resgate; auditoria via snapshot + `valorDesconto`. |
-| Dois modos de validação | **`validacaoModo: AUTOMATICA \| MANUAL`** no cupom | `AUTOMATICA`: motor avalia o carrinho no POS/ERP. `MANUAL`: `condicoesTexto` é exibido a cliente e operador no ponto de interação; o operador é o validador. |
+| Dois modos de validação | **`validacaoModo: AUTOMATICA \| MANUAL`** no cupom | `AUTOMATICA`: motor avalia o carrinho no POS/ERP. `MANUAL`: `condicoesTexto` é exibido a cliente e operador no ponto de interação; o operador valida as regras manuais. Modalidade e primeira compra continuam sendo condições estruturadas autoritativas nos dois modos. |
 | Integração com venda | Desconto do cupom entra em `sales.descontosTotal` / `saleItems.valorTotalDesconto` (mesmo caminho do cashback) | Nenhuma mudança no cálculo de totais; o cupom é mais uma fonte de desconto, rastreada pelo ledger. |
 
 ---
@@ -66,7 +66,7 @@ export const coupons = newTable("coupons", {
 	beneficioCompreQuantidade: integer("beneficio_compre_quantidade"), // COMPRE_X_LEVE_Y: X
 	beneficioLeveQuantidade: integer("beneficio_leve_quantidade"),     // COMPRE_X_LEVE_Y: Y (Y - X sai grátis)
 
-	// Condições estruturadas (validação AUTOMATICA)
+	// Condições estruturadas (modalidade e primeira compra também valem em MANUAL)
 	condicaoValorMinimoVenda: doublePrecision("condicao_valor_minimo_venda"),
 	condicaoQuantidadeMinimaItens: integer("condicao_quantidade_minima_itens"),
 	condicaoAlvosOperador: couponTargetOperatorEnum("condicao_alvos_operador").default("QUALQUER"),

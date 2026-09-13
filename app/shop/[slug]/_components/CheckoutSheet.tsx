@@ -74,9 +74,21 @@ export default function CheckoutSheet() {
 		orgId,
 		clienteId: customer.id ?? null,
 		itens: couponItems,
+		entregaModalidade: orderState.state.delivery.modalidade,
 		enabled: isCheckoutOpen,
 	});
 	const program = catalog.cashbackProgram;
+	const appliedCoupon = orderState.state.coupon.resgate;
+	useEffect(() => {
+		if (!appliedCoupon || !availableCoupons) return;
+		const freshCoupon = availableCoupons.find((coupon) => coupon.id === appliedCoupon.cupomId);
+		if (!freshCoupon?.avaliacao?.elegivel) {
+			orderState.updateCoupon(null);
+			toast.warning("O cupom deixou de valer para este pedido e foi removido.");
+		} else if (Math.abs(freshCoupon.avaliacao.valorDesconto - appliedCoupon.valorDesconto) > 0.01) {
+			orderState.updateCoupon({ ...appliedCoupon, valorDesconto: freshCoupon.avaliacao.valorDesconto });
+		}
+	}, [appliedCoupon, availableCoupons, orderState.updateCoupon]);
 	const hasCouponBenefit = !!customer.id && (isLoadingCoupons || (availableCoupons?.length ?? 0) > 0 || !!orderState.state.coupon.resgate);
 	const { descontoCashback: supportsCashbackDiscount, recompensas: supportsRewards } = getShopCashbackCapabilities(program);
 	const benefitCapabilities = {

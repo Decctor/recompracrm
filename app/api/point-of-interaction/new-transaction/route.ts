@@ -15,6 +15,8 @@ import { type ImmediateProcessingData, processOrganizationInteractionsBatch, pro
 import { createCampaignWeeklyLimitCache } from "@/lib/interactions/campaign-weekly-limits";
 import { evaluateCouponAgainstSaleValue } from "@/lib/coupons/engine";
 import { processCouponRedemption } from "@/lib/coupons/redemption";
+import { countPreviousConfirmedPurchases, lockClientPurchaseHistory } from "@/lib/coupons/purchase-history";
+import { DeliveryModeEnum } from "@/schemas/enums";
 import { resolvePoiActorContext } from "@/lib/access/poi-actor";
 import { organizationHasActiveDataSource } from "@/lib/integrations/data-sources";
 import { linkPartnerToClient } from "@/lib/partners/link-partner-to-client";
@@ -116,6 +118,7 @@ export const CreatePointOfInteractionTransactionInputSchema = z.object({
 		})
 		.describe("O cliente que realizou a transação."),
 	sale: z.object({
+		entregaModalidade: DeliveryModeEnum.optional().nullable(),
 		valor: z
 			.number({
 				required_error: "Valor da transação não informado.",
@@ -405,6 +408,7 @@ async function preparePointOfInteractionTransaction({ input, operatorContext, tx
 				where: (fields, { and, eq }) => and(eq(fields.id, clientId as string), eq(fields.organizacaoId, input.orgId)),
 			});
 			if (!client) throw new createHttpError.NotFound("Cliente não encontrado.");
+			await lockClientPurchaseHistory(tx, input.orgId, client.id);
 
 			const ensuredBalance = await ensureCashbackBalanceForClient({
 				tx,
@@ -524,7 +528,14 @@ async function preparePointOfInteractionTransaction({ input, operatorContext, tx
 			if (!coupon) throw new createHttpError.NotFound("Cupom não encontrado.");
 
 			if (coupon.validacaoModo === "AUTOMATICA") {
-				const evaluation = evaluateCouponAgainstSaleValue({ coupon, targets: coupon.alvos, saleValue: effectiveSaleValue });
+				await lockClientPurchaseHistory(tx, input.orgId, clientId as string);
+				const previousConfirmedPurchases = await countPreviousConfirmedPurchases({ trx: tx, organizacaoId: input.orgId, clienteId: clientId as string });
+				const evaluation = evaluateCouponAgainstSaleValue({
+					coupon,
+					targets: coupon.alvos,
+					saleValue: effectiveSaleValue,
+					context: { entregaModalidade: input.sale.entregaModalidade ?? null, comprasAnterioresConfirmadas: previousConfirmedPurchases },
+				});
 				if (!evaluation.elegivel) throw new createHttpError.BadRequest(`Cupom não elegível: ${evaluation.motivo}`);
 				couponDiscountValue = evaluation.valorDesconto;
 			} else {
@@ -548,6 +559,7 @@ async function preparePointOfInteractionTransaction({ input, operatorContext, tx
 				vendaValor: effectiveSaleValue,
 				operadorId: operatorMembershipUser?.id ?? null,
 				operadorVendedorId: operator.id,
+				entregaModalidade: input.sale.entregaModalidade ?? null,
 			});
 			transactionCouponRedemptionId = couponRedemptionOutcome.redemptionId;
 		}
@@ -728,6 +740,7 @@ async function preparePointOfInteractionTransaction({ input, operatorContext, tx
 					// Venda de balcão já concluída: sem CONFIRMADA ela fica invisível para
 					// getValidSaleConditions e o cron enrich-clients zera os contadores do cliente.
 					statusVenda: "CONFIRMADA",
+					entregaModalidade: input.sale.entregaModalidade ?? null,
 					statusAtendimento: "ENTREGUE",
 					dataVenda: saleDate,
 				})

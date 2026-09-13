@@ -9,6 +9,7 @@ import { usePoiTransactionRequestsRealtime } from "@/lib/hooks/use-supabase-real
 import { rejectPoiTransactionRequest } from "@/lib/mutations/poi-transaction-requests";
 import { usePoiTransactionRequests } from "@/lib/queries/poi-transaction-requests";
 import { cn } from "@/lib/utils";
+import type { TDeliveryModeEnum } from "@/schemas/enums";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { BadgeDollarSign, BadgePercent, CheckCheck, Gift, GitPullRequestArrow, Phone, RefreshCcw, X } from "lucide-react";
 import { BsCalendarPlus } from "react-icons/bs";
@@ -143,7 +144,7 @@ function PoiTransactionRequestCard({
 }) {
 	const resumo = request.resumoSolicitacao as {
 		cliente?: { nome?: string; telefone?: string };
-		venda?: { valorBruto?: number; valorResgate?: number; valorFinal?: number; modo?: string };
+		venda?: { valorBruto?: number; valorResgate?: number; valorFinal?: number; modo?: string; entregaModalidade?: TDeliveryModeEnum | null };
 		recompensa?: { prizeValue?: number; prizeSaleValue?: number; prizeTitulo?: string | null; prizeImageUrl?: string | null } | null;
 		cupom?: TApprovalCoupon | null;
 	};
@@ -226,6 +227,7 @@ function PoiTransactionRequestCard({
 				<div className="flex items-center gap-3 flex-wrap">
 					<div className={cn("flex items-center gap-1.5 text-[0.65rem] font-bold text-foreground")}>
 						<BadgeDollarSign className="w-4 min-w-4 h-4 min-h-4" />
+						<p className="text-xs font-medium tracking-tight uppercase">MODALIDADE: {resumo?.venda?.entregaModalidade ?? "NÃO INFORMADA"}</p>
 						<p className="text-xs font-medium tracking-tight uppercase">BRUTO: {formatToMoney(resumo?.venda?.valorBruto ?? 0)}</p>
 					</div>
 					<div className={cn("flex items-center gap-1.5 text-[0.65rem] font-bold text-foreground")}>

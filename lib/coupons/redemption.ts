@@ -1,6 +1,9 @@
 import type { TCouponBenefitSnapshot } from "@/schemas/coupons";
 import type { DBTransaction } from "@/services/drizzle";
+import type { TDeliveryModeEnum } from "@/schemas/enums";
 import { couponGrants, couponRedemptions } from "@/services/drizzle/schema";
+import { getCouponCheckoutConditionIssue } from "./conditions";
+import { countPreviousConfirmedPurchases, lockClientPurchaseHistory } from "./purchase-history";
 import { and, count, eq, sql } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type TCouponRedemptionSurface, clientMatchesCouponAudience, getCouponAvailabilityIssue } from "./engine";
@@ -12,7 +15,8 @@ import { type TCouponRedemptionSurface, clientMatchesCouponAudience, getCouponAv
  * grava a linha imutável em couponRedemptions com snapshot do benefício e decrementa a
  * quantidade disponível da atribuição quando o cupom é INDIVIDUAL.
  *
- * A elegibilidade de carrinho (alvos/condições) NÃO é revalidada aqui: cupons AUTOMATICA devem
+ * Modalidade e primeira compra são revalidadas aqui nos dois modos de validação.
+ * A elegibilidade de carrinho (alvos/condições de itens) NÃO é revalidada aqui: cupons AUTOMATICA devem
  * ser avaliados pelo motor (evaluateCouponAgainstCart) pelo chamador antes do resgate; em cupons
  * MANUAL a validação é do operador.
  */
@@ -28,6 +32,7 @@ export async function processCouponRedemption({
 	operadorId,
 	operadorVendedorId,
 	metadados,
+	entregaModalidade,
 	now = new Date(),
 }: {
 	trx: DBTransaction;
@@ -41,6 +46,7 @@ export async function processCouponRedemption({
 	operadorId?: string | null;
 	operadorVendedorId?: string | null;
 	metadados?: Record<string, unknown> | null;
+	entregaModalidade?: TDeliveryModeEnum | null;
 	now?: Date;
 }) {
 	if (valorDesconto <= 0) throw new createHttpError.BadRequest("O valor de desconto do cupom deve ser maior que zero.");
@@ -56,6 +62,14 @@ export async function processCouponRedemption({
 		},
 	});
 	if (!coupon) throw new createHttpError.NotFound("Cupom não encontrado.");
+
+	if (coupon.condicaoPrimeiraCompra) await lockClientPurchaseHistory(trx, organizacaoId, clienteId);
+	const previousConfirmedPurchases = await countPreviousConfirmedPurchases({ trx, organizacaoId, clienteId, vendaId });
+	const conditionIssue = getCouponCheckoutConditionIssue(coupon, {
+		entregaModalidade: entregaModalidade ?? null,
+		comprasAnterioresConfirmadas: previousConfirmedPurchases,
+	});
+	if (conditionIssue) throw new createHttpError.BadRequest(conditionIssue);
 
 	const validGrant =
 		coupon.atribuicoes
@@ -107,6 +121,12 @@ export async function processCouponRedemption({
 		beneficioLeveQuantidade: coupon.beneficioLeveQuantidade,
 		validacaoModo: coupon.validacaoModo,
 		condicoesTexto: coupon.condicoesTexto,
+		condicaoModalidadesEntrega: coupon.condicaoModalidadesEntrega,
+		condicaoPrimeiraCompra: coupon.condicaoPrimeiraCompra,
+		contextoAplicacao: {
+			entregaModalidade: entregaModalidade ?? null,
+			comprasAnterioresConfirmadas: previousConfirmedPurchases,
+		},
 		alvos: coupon.alvos.map((target) => ({
 			papel: target.papel,
 			produtoId: target.produtoId,

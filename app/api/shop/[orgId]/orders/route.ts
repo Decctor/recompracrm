@@ -39,7 +39,7 @@ import {
   sales,
   shopOrderRequests,
 } from "@/services/drizzle/schema";
-import { and, eq } from "drizzle-orm";
+import { and, count, eq } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import { createHash } from "node:crypto";
@@ -431,11 +431,15 @@ async function validateCouponRequest({
   clientId,
   appliedCoupon,
   calculatedItems,
+  entregaModalidade,
+  comprasAnterioresConfirmadas,
 }: {
   orgId: string;
   clientId: string;
   appliedCoupon: TAppliedCoupon | null | undefined;
   calculatedItems: CalculatedItem[];
+  entregaModalidade: "RETIRADA" | "ENTREGA";
+  comprasAnterioresConfirmadas: number;
 }): Promise<TAppliedCoupon | null> {
   if (!appliedCoupon) return null;
 
@@ -468,6 +472,7 @@ async function validateCouponRequest({
     coupon,
     targets: coupon.alvos,
     cartItems,
+    context: { entregaModalidade, comprasAnterioresConfirmadas },
   });
   if (!evaluation.elegivel)
     throw new createHttpError.BadRequest(
@@ -670,11 +675,18 @@ async function createShopOrder(request: NextRequest) {
         })
       : null;
 
+  const [purchaseHistory] = await db
+    .select({ total: count() })
+    .from(sales)
+    .where(and(eq(sales.clienteId, client.id), eq(sales.organizacaoId, orgId), eq(sales.statusVenda, "CONFIRMADA")));
+
   const appliedCoupon = await validateCouponRequest({
     orgId,
     clientId: client.id,
     appliedCoupon: input.cupomResgate,
     calculatedItems,
+    entregaModalidade: input.entrega.modalidade,
+    comprasAnterioresConfirmadas: purchaseHistory?.total ?? 0,
   });
   const couponDiscount = appliedCoupon?.valorDesconto ?? 0;
   const saleValueBeforeCashback = Math.max(0, subtotal - couponDiscount);

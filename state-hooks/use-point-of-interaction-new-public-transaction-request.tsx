@@ -1,5 +1,5 @@
 import { ClientSchema } from "@/schemas/clients";
-import { PoiTransactionRequestStatusEnum } from "@/schemas/enums";
+import { DeliveryModeEnum, PoiTransactionRequestStatusEnum } from "@/schemas/enums";
 import { SaleSchema } from "@/schemas/sales";
 import { useCallback, useState } from "react";
 import z from "zod";
@@ -28,6 +28,7 @@ export const PointOfInteractionNewSaleStateSchema = z.object({
 		valor: true,
 	})
 		.extend({
+			entregaModalidade: DeliveryModeEnum.optional().nullable(),
 			cashback: z.object({
 				aplicar: z
 					.boolean({

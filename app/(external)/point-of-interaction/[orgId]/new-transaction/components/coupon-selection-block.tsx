@@ -41,7 +41,7 @@ export function CouponSelectionBlock({ coupons, isLoading, selectedCouponId, onS
 					const isSelected = selectedCouponId === coupon.id;
 					const isAutomatic = coupon.validacaoModo === "AUTOMATICA";
 					const evaluation = coupon.avaliacao;
-					const isSelectable = !isAutomatic || !!evaluation?.elegivel;
+					const isSelectable = isAutomatic ? !!evaluation?.elegivel : evaluation?.elegivel !== false;
 					return (
 						<button
 							key={coupon.id}
@@ -65,7 +65,7 @@ export function CouponSelectionBlock({ coupons, isLoading, selectedCouponId, onS
 								{coupon.validacaoModo === "MANUAL" ? (
 									<span className="text-[0.65rem] short:text-[0.6rem] font-bold text-amber-600 uppercase">Validação com o operador no balcão</span>
 								) : null}
-								{isAutomatic && evaluation && !evaluation.elegivel ? (
+								{evaluation && !evaluation.elegivel ? (
 									<span className="text-xs short:text-[0.65rem] text-muted-foreground italic">{evaluation.motivo}</span>
 								) : null}
 							</div>

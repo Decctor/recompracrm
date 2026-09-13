@@ -1,4 +1,6 @@
 import type { TBenefitRedemptionSurface } from "@/schemas/enums";
+import { getCouponCheckoutConditionIssue, type TCouponEvaluationContext } from "./conditions";
+export type { TCouponEvaluationContext } from "./conditions";
 import type { TCouponAudienceEntity, TCouponEntity, TCouponGrantEntity, TCouponTargetEntity } from "@/services/drizzle/schema";
 
 /**
@@ -124,14 +126,25 @@ export function evaluateCouponAgainstSaleValue({
 	coupon,
 	targets,
 	saleValue,
+	context,
 }: {
 	coupon: Pick<
 		TCouponEntity,
-		"validacaoModo" | "beneficioTipo" | "beneficioValor" | "beneficioDescontoMaximo" | "beneficioAplicacao" | "condicaoValorMinimoVenda"
+		| "validacaoModo"
+		| "beneficioTipo"
+		| "beneficioValor"
+		| "beneficioDescontoMaximo"
+		| "beneficioAplicacao"
+		| "condicaoValorMinimoVenda"
+		| "condicaoModalidadesEntrega"
+		| "condicaoPrimeiraCompra"
 	>;
 	targets: Array<Pick<TCouponTargetEntity, "papel">>;
 	saleValue: number;
+	context: TCouponEvaluationContext;
 }): TCouponEvaluationResult {
+	const conditionIssue = getCouponCheckoutConditionIssue(coupon, context);
+	if (conditionIssue) return { elegivel: false, motivo: conditionIssue };
 	if (coupon.validacaoModo !== "AUTOMATICA") {
 		return { elegivel: false, motivo: "Cupom de validação manual: a elegibilidade deve ser confirmada pelo operador." };
 	}
@@ -189,6 +202,7 @@ export function evaluateCouponAgainstCart({
 	coupon,
 	targets,
 	cartItems,
+	context,
 }: {
 	coupon: Pick<
 		TCouponEntity,
@@ -201,10 +215,13 @@ export function evaluateCouponAgainstCart({
 		| "beneficioLeveQuantidade"
 		| "condicaoValorMinimoVenda"
 		| "condicaoQuantidadeMinimaItens"
+		| "condicaoModalidadesEntrega"
+		| "condicaoPrimeiraCompra"
 		| "condicaoAlvosOperador"
 	>;
 	targets: Array<Pick<TCouponTargetEntity, "papel" | "produtoId" | "produtoVarianteId" | "grupo" | "quantidadeMinima">>;
 	cartItems: TCouponCartItem[];
+	context: TCouponEvaluationContext;
 }): TCouponEvaluationResult {
 	if (coupon.validacaoModo !== "AUTOMATICA") {
 		return { elegivel: false, motivo: "Cupom de validação manual: a elegibilidade deve ser confirmada pelo operador." };
@@ -213,6 +230,8 @@ export function evaluateCouponAgainstCart({
 		return { elegivel: false, motivo: "Cupons de brinde ainda não são suportados." };
 	}
 	if (cartItems.length === 0) return { elegivel: false, motivo: "Carrinho vazio." };
+	const conditionIssue = getCouponCheckoutConditionIssue(coupon, context);
+	if (conditionIssue) return { elegivel: false, motivo: conditionIssue };
 
 	const cartGrossTotal = cartItems.reduce((sum, item) => sum + item.quantidade * item.valorVendaUnitario, 0);
 	const cartTotalQuantity = cartItems.reduce((sum, item) => sum + item.quantidade, 0);

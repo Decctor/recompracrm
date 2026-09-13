@@ -47,6 +47,8 @@ export function useInternalCouponState({ initialState }: TUseInternalCouponState
 				beneficioLeveQuantidade: initialState?.coupon?.beneficioLeveQuantidade ?? null,
 				condicaoValorMinimoVenda: initialState?.coupon?.condicaoValorMinimoVenda ?? null,
 				condicaoQuantidadeMinimaItens: initialState?.coupon?.condicaoQuantidadeMinimaItens ?? null,
+				condicaoModalidadesEntrega: initialState?.coupon?.condicaoModalidadesEntrega ?? [],
+				condicaoPrimeiraCompra: initialState?.coupon?.condicaoPrimeiraCompra ?? false,
 				condicaoAlvosOperador: initialState?.coupon?.condicaoAlvosOperador ?? "QUALQUER",
 				vigenciaInicio: initialState?.coupon?.vigenciaInicio ?? null,
 				vigenciaFim: initialState?.coupon?.vigenciaFim ?? null,

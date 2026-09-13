@@ -2,6 +2,7 @@
 
 import TextareaInput from "@/components/Inputs/TextareaInput";
 import CouponTargetsBlock from "@/components/Modals/Coupons/Blocks/Targets";
+import CouponCheckoutConditionsBlock from "@/components/Modals/Coupons/Blocks/CheckoutConditions";
 import type { TCouponBenefitScopeEnum, TCouponValidationModeEnum } from "@/schemas/enums";
 import { ClipboardCheck, Package, Plus, ShoppingCart, SlidersHorizontal, Sparkles } from "lucide-react";
 import { useState } from "react";
@@ -26,6 +27,8 @@ export default function StageRules() {
 	const hasConditions =
 		coupon.condicaoValorMinimoVenda != null ||
 		coupon.condicaoQuantidadeMinimaItens != null ||
+		(coupon.condicaoModalidadesEntrega?.length ?? 0) > 0 ||
+		coupon.condicaoPrimeiraCompra ||
 		coupon.condicaoAlvosOperador !== "QUALQUER" ||
 		hasActiveTargets;
 	const [conditionsOpened, setConditionsOpened] = useState(false);
@@ -35,7 +38,13 @@ export default function StageRules() {
 	// remove os alvos (soft-delete para os já persistidos). Um item escondido nunca
 	// deve continuar valendo silenciosamente — a prévia e a revisão leem do estado.
 	function clearConditions() {
-		updateCoupon({ condicaoValorMinimoVenda: null, condicaoQuantidadeMinimaItens: null, condicaoAlvosOperador: "QUALQUER" });
+		updateCoupon({
+			condicaoValorMinimoVenda: null,
+			condicaoQuantidadeMinimaItens: null,
+			condicaoModalidadesEntrega: [],
+			condicaoPrimeiraCompra: false,
+			condicaoAlvosOperador: "QUALQUER",
+		});
 		for (let index = couponTargets.length - 1; index >= 0; index--) {
 			if (!couponTargets[index].deletar) removeCouponTarget(index);
 		}
@@ -55,12 +64,15 @@ export default function StageRules() {
 			/>
 
 			{coupon.validacaoModo === "MANUAL" ? (
-				<TextareaInput
-					value={coupon.condicoesTexto ?? ""}
-					label="CONDIÇÕES DE RESGATE"
-					placeholder="Ex: Desconto válido apenas em calças. O operador deve conferir se há uma calça na compra..."
-					handleChange={(value) => updateCoupon({ condicoesTexto: value })}
-				/>
+				<>
+					<CouponCheckoutConditionsBlock coupon={coupon} updateCoupon={updateCoupon} />
+					<TextareaInput
+						value={coupon.condicoesTexto ?? ""}
+						label="CONDIÇÕES DE RESGATE"
+						placeholder="Ex: Desconto válido apenas em calças. O operador deve conferir se há uma calça na compra..."
+						handleChange={(value) => updateCoupon({ condicoesTexto: value })}
+					/>
+				</>
 			) : (
 				<>
 					{itemScoped ? (
@@ -72,7 +84,12 @@ export default function StageRules() {
 							onChange={(value) => updateCoupon({ beneficioAplicacao: value })}
 							options={[
 								{ value: "VENDA_TOTAL", label: "Na compra toda", description: "O desconto incide sobre o valor total da venda.", icon: ShoppingCart },
-								{ value: "ITENS_ELEGIVEIS", label: "Em produtos específicos", description: "O desconto incide só sobre os produtos que você escolher.", icon: Package },
+								{
+									value: "ITENS_ELEGIVEIS",
+									label: "Em produtos específicos",
+									description: "O desconto incide só sobre os produtos que você escolher.",
+									icon: Package,
+								},
 							]}
 						/>
 					)}

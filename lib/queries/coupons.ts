@@ -2,6 +2,7 @@ import type { TGetCouponGrantsInput, TGetCouponGrantsOutput } from "@/app/api/co
 import type { TGetPoiAvailableCouponsOutput } from "@/app/api/point-of-interaction/coupons/available/route";
 import type { TGetAvailablePosCouponsInput, TGetAvailablePosCouponsOutput } from "@/app/api/pos/coupons/available/route";
 import type { TGetCouponsInput, TGetCouponsOutput } from "@/app/api/coupons/route";
+import type { TDeliveryModeEnum } from "@/schemas/enums";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import { useState } from "react";
@@ -95,13 +96,26 @@ async function fetchPosAvailableCoupons(input: TGetAvailablePosCouponsInput) {
  * Cupons disponíveis para o cliente vinculado no PDV, avaliados contra o carrinho atual
  * (cupons AUTOMATICA retornam `avaliacao` com o desconto computado pelo servidor).
  */
-export function usePosAvailableCoupons({ clienteId, itens }: { clienteId: string | null; itens: TGetAvailablePosCouponsInput["itens"] }) {
-	const debouncedInput = useDebounceMemo({ clienteId, itens }, 500);
+export function usePosAvailableCoupons({
+	clienteId,
+	itens,
+	entregaModalidade,
+}: {
+	clienteId: string | null;
+	itens: TGetAvailablePosCouponsInput["itens"];
+	entregaModalidade?: TGetAvailablePosCouponsInput["entregaModalidade"];
+}) {
+	const debouncedInput = useDebounceMemo({ clienteId, itens, entregaModalidade }, 500);
 	const queryKey = ["pos-available-coupons", debouncedInput];
 	return {
 		...useQuery({
 			queryKey,
-			queryFn: () => fetchPosAvailableCoupons({ clienteId: debouncedInput.clienteId as string, itens: debouncedInput.itens }),
+			queryFn: () =>
+				fetchPosAvailableCoupons({
+					clienteId: debouncedInput.clienteId as string,
+					itens: debouncedInput.itens,
+					entregaModalidade: debouncedInput.entregaModalidade,
+				}),
 			enabled: !!debouncedInput.clienteId,
 		}),
 		queryKey,
@@ -109,11 +123,17 @@ export function usePosAvailableCoupons({ clienteId, itens }: { clienteId: string
 }
 export type TPosAvailableCoupon = Awaited<ReturnType<typeof fetchPosAvailableCoupons>>[number];
 
-async function fetchPoiAvailableCoupons(input: { orgId: string; clienteId: string; valorVenda?: number | null }) {
+async function fetchPoiAvailableCoupons(input: {
+	orgId: string;
+	clienteId: string;
+	valorVenda?: number | null;
+	entregaModalidade?: TDeliveryModeEnum | null;
+}) {
 	const searchParams = new URLSearchParams();
 	searchParams.set("orgId", input.orgId);
 	searchParams.set("clienteId", input.clienteId);
 	if (input.valorVenda) searchParams.set("valorVenda", input.valorVenda.toString());
+	if (input.entregaModalidade) searchParams.set("entregaModalidade", input.entregaModalidade);
 	const { data } = await axios.get<TGetPoiAvailableCouponsOutput>(`/api/point-of-interaction/coupons/available?${searchParams.toString()}`);
 	return data.data.coupons;
 }
@@ -122,14 +142,23 @@ async function fetchPoiAvailableCoupons(input: { orgId: string; clienteId: strin
  * Cupons disponíveis para o cliente identificado no ponto de interação (endpoint público).
  * Quando `valorVenda` é informado, cupons AUTOMATICA de venda total retornam o desconto estimado.
  */
-export function usePoiAvailableCoupons({ orgId, clienteId, valorVenda }: { orgId: string; clienteId: string | null; valorVenda?: number | null }) {
-	const debouncedInput = useDebounceMemo({ orgId, clienteId, valorVenda: valorVenda ?? null }, 500);
+export function usePoiAvailableCoupons({
+	orgId,
+	clienteId,
+	valorVenda,
+	entregaModalidade,
+}: {
+	orgId: string;
+	clienteId: string | null;
+	valorVenda?: number | null;
+	entregaModalidade?: TDeliveryModeEnum | null;
+}) {
+	const debouncedInput = useDebounceMemo({ orgId, clienteId, valorVenda: valorVenda ?? null, entregaModalidade }, 500);
 	const queryKey = ["poi-available-coupons", debouncedInput];
 	return {
 		...useQuery({
 			queryKey,
-			queryFn: () =>
-				fetchPoiAvailableCoupons({ orgId: debouncedInput.orgId, clienteId: debouncedInput.clienteId as string, valorVenda: debouncedInput.valorVenda }),
+			queryFn: () => fetchPoiAvailableCoupons({ ...debouncedInput, clienteId: debouncedInput.clienteId as string }),
 			enabled: !!debouncedInput.clienteId,
 		}),
 		queryKey,

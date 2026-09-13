@@ -11,6 +11,7 @@ import CouponAudienceBlock from "./Blocks/Audience";
 import CouponBenefitBlock from "./Blocks/Benefit";
 import CouponGeneralBlock from "./Blocks/General";
 import CouponTargetsBlock from "./Blocks/Targets";
+import CouponCheckoutConditionsBlock from "./Blocks/CheckoutConditions";
 import CouponValidityAndLimitsBlock from "./Blocks/ValidityAndLimits";
 
 type ControlCouponProps = {
@@ -49,6 +50,8 @@ export default function ControlCoupon({ couponId, closeModal, callbacks }: Contr
 					beneficioLeveQuantidade: coupon.beneficioLeveQuantidade,
 					condicaoValorMinimoVenda: coupon.condicaoValorMinimoVenda,
 					condicaoQuantidadeMinimaItens: coupon.condicaoQuantidadeMinimaItens,
+					condicaoModalidadesEntrega: coupon.condicaoModalidadesEntrega,
+					condicaoPrimeiraCompra: coupon.condicaoPrimeiraCompra,
 					condicaoAlvosOperador: coupon.condicaoAlvosOperador,
 					vigenciaInicio: coupon.vigenciaInicio ? new Date(coupon.vigenciaInicio) : null,
 					vigenciaFim: coupon.vigenciaFim ? new Date(coupon.vigenciaFim) : null,
@@ -126,7 +129,9 @@ export default function ControlCoupon({ couponId, closeModal, callbacks }: Contr
 					updateCouponTarget={updateCouponTarget}
 					removeCouponTarget={removeCouponTarget}
 				/>
-			) : null}
+			) : (
+				<CouponCheckoutConditionsBlock coupon={state.coupon} updateCoupon={updateCoupon} />
+			)}
 			{state.coupon.escopo === "GLOBAL" ? (
 				<CouponAudienceBlock couponAudiences={state.couponAudiences} addCouponAudience={addCouponAudience} removeCouponAudience={removeCouponAudience} />
 			) : null}

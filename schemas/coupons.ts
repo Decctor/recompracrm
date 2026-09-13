@@ -1,4 +1,5 @@
 import z from "zod";
+import type { TDeliveryModeEnum } from "./enums";
 import {
 	CouponBenefitScopeEnum,
 	CouponBenefitTypeEnum,
@@ -9,6 +10,7 @@ import {
 	CouponTargetOperatorEnum,
 	CouponTargetRoleEnum,
 	CouponValidationModeEnum,
+	DeliveryModeEnum,
 } from "./enums";
 
 export const CouponSchema = z.object({
@@ -99,6 +101,19 @@ export const CouponSchema = z.object({
 		.int("A quantidade mínima de itens deve ser um número inteiro.")
 		.optional()
 		.nullable(),
+	condicaoModalidadesEntrega: z
+		.array(DeliveryModeEnum, {
+			required_error: "Modalidades de atendimento do cupom não informadas.",
+			invalid_type_error: "Tipo não válido para as modalidades de atendimento do cupom.",
+		})
+		.optional()
+		.nullable(),
+	condicaoPrimeiraCompra: z
+		.boolean({
+			required_error: "Condição de primeira compra do cupom não informada.",
+			invalid_type_error: "Tipo não válido para a condição de primeira compra do cupom.",
+		})
+		.default(false),
 	condicaoAlvosOperador: CouponTargetOperatorEnum.default("QUALQUER"),
 	vigenciaInicio: z
 		.string({
@@ -377,6 +392,12 @@ export type TCouponBenefitSnapshot = {
 	beneficioLeveQuantidade: number | null;
 	validacaoModo: TCoupon["validacaoModo"];
 	condicoesTexto: string | null;
+	condicaoModalidadesEntrega?: TCoupon["condicaoModalidadesEntrega"];
+	condicaoPrimeiraCompra?: boolean;
+	contextoAplicacao?: {
+		entregaModalidade: TDeliveryModeEnum | null;
+		comprasAnterioresConfirmadas: number;
+	};
 	alvos: Array<{
 		papel: TCouponTarget["papel"];
 		produtoId: string | null;
