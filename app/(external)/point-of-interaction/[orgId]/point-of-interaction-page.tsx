@@ -156,6 +156,9 @@ export default function PointOfInteractionContent({
 		// flow=profile sempre avança (o destino é o próprio clube). flow=transaction só avança quando
 		// existe pelo menos uma ação — senão o cliente cairia num wizard que não pode concluir nada.
 		shouldStart: isSuccessClient && !!client && isPhoneComplete && (isProfileFlow || hasPoiActions),
+		// Mesma duração da carteirinha pós-cadastro: em 3s o cliente mal termina de ler o próprio
+		// saldo, que é justamente o que ele veio conferir.
+		countdownSeconds: 6,
 		onAdvance: handleAdvance,
 	});
 
