@@ -90,7 +90,7 @@ export function usePointOfInteractionNewSaleState(initialOrgId: string, initialI
 	const [state, setState] = useState<TPointOfInteractionNewSaleState>({
 		orgId: initialOrgId,
 		client: { id: null, nome: "", cpfCnpj: null, telefone: "" },
-		sale: { valor: 0, cashback: { aplicar: false, valor: 0 }, partnerCode: null, prizeRedemption: null, coupon: null },
+		sale: { valor: 0, entregaModalidade: "PRESENCIAL", cashback: { aplicar: false, valor: 0 }, partnerCode: null, prizeRedemption: null, coupon: null },
 		operatorIdentifier: "",
 		operatorConfirmedSaleValue: null,
 		interfaceMode: initialInterfaceMode,
@@ -163,7 +163,7 @@ export function usePointOfInteractionNewSaleState(initialOrgId: string, initialI
 		setState({
 			orgId: initialOrgId,
 			client: { id: null, nome: "", cpfCnpj: null, telefone: "" },
-			sale: { valor: 0, cashback: { aplicar: false, valor: 0 }, partnerCode: null, prizeRedemption: null, coupon: null },
+			sale: { valor: 0, entregaModalidade: "PRESENCIAL", cashback: { aplicar: false, valor: 0 }, partnerCode: null, prizeRedemption: null, coupon: null },
 			operatorIdentifier: "",
 			operatorConfirmedSaleValue: null,
 			interfaceMode: initialInterfaceMode,

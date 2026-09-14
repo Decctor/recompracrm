@@ -3,7 +3,6 @@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatToMoney } from "@/lib/formatting";
-import type { TDeliveryModeEnum } from "@/schemas/enums";
 import { OperatorConfirmationInput } from "../../_shared/components/operator-confirmation-input";
 import { SaleValueConfirmationInput } from "../../_shared/components/sale-value-confirmation-input";
 
@@ -16,7 +15,6 @@ export type TConfirmationStepAppliedCoupon = {
 };
 
 type ConfirmationStepProps = {
-	entregaModalidade?: TDeliveryModeEnum | null;
 	clientName: string;
 	finalValue: number;
 	operatorIdentifier: string;
@@ -30,7 +28,6 @@ type ConfirmationStepProps = {
 };
 
 export function ConfirmationStep({
-	entregaModalidade,
 	clientName,
 	finalValue,
 	operatorIdentifier,
@@ -56,10 +53,6 @@ export function ConfirmationStep({
 			</div>
 
 			<div className="bg-brand/5 rounded-3xl short:rounded-xl p-6 short:p-2.5 space-y-3 short:space-y-1.5 border border-brand/20">
-				<div className="flex justify-between gap-2">
-					<span className="text-muted-foreground font-bold text-xs uppercase">Modalidade</span>
-					<span className="font-bold text-sm">{entregaModalidade ?? "Não informada"}</span>
-				</div>
 				<div className="flex justify-between">
 					<span className="text-muted-foreground font-bold text-xs short:text-[0.7rem] uppercase">Cliente</span>
 					<span className="font-black text-brand short:text-xs">{clientName}</span>
