@@ -14,6 +14,7 @@ test("builds canonical finance routes", () => {
 	assert.equal(appRoutes.finance.entries(), "/dashboard/finance/entries");
 	assert.equal(appRoutes.finance.transactions(), "/dashboard/finance/transactions");
 	assert.equal(appRoutes.finance.accounts(), "/dashboard/finance/accounts");
+	assert.equal(appRoutes.finance.storeCredit(), "/dashboard/finance/store-credit");
 	assert.equal(appRoutes.finance.creditCards(), "/dashboard/finance/credit-cards");
 	assert.equal(appRoutes.finance.reconciliation(), "/dashboard/finance/reconciliation");
 	assert.equal(appRoutes.finance.reports.incomeStatement(), "/dashboard/finance/reports/income-statement");

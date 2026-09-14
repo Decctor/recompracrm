@@ -6,6 +6,7 @@
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { appRoutes } from "@/lib/navigation/routes";
 import type { TDashboardCapability } from "@/lib/access/capabilities";
+import { StoreCreditOverdueSidebarBadge } from "@/components/Finances/StoreCreditOverdueSidebarBadge";
 import { FiscalPendingSidebarBadge } from "@/components/Fiscal/FiscalPendingSidebarBadge";
 import { filterNavigationItems } from "@/lib/access/navigation";
 import {
@@ -16,6 +17,7 @@ import {
 	Boxes,
 	CalendarCheck,
 	ChartNoAxesColumnIncreasing,
+	CircleHelp,
 	CirclePlay,
 	ClipboardList,
 	CreditCard,
@@ -24,13 +26,13 @@ import {
 	Goal,
 	Grid3X3,
 	Handshake,
-	CircleHelp,
 	Home,
 	Kanban,
 	Layers,
 	List,
 	Megaphone,
 	MessageCircle,
+	NotebookPen,
 	Package,
 	Plug,
 	ReceiptText,
@@ -344,6 +346,15 @@ export const AppSidebarConfig: TSidebarConfigItemWithAccess[] = [
 						title: "Movimentações",
 						url: appRoutes.finance.transactions(),
 						icon: <ArrowRightLeft className="size-4" />,
+						items: null,
+					},
+					{
+						id: "finance-store-credit",
+						capability: "finance",
+						title: "Fiados",
+						url: appRoutes.finance.storeCredit(),
+						icon: <NotebookPen className="size-4" />,
+						badge: <StoreCreditOverdueSidebarBadge />,
 						items: null,
 					},
 					{

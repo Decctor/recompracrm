@@ -1,3 +1,4 @@
+import { getSalePaymentAttributionMethod } from "@/lib/finances/store-credit/attribution";
 import { getSalesIntegrationCondition } from "@/lib/sales/integration-filter";
 import type {
 	TDeliveryModeEnum,
@@ -147,6 +148,8 @@ function getFiscalStatusCondition({ orgId, statuses }: { orgId: string; statuses
  * como os demais filtros do ERP.
  */
 function getPaymentMethodCondition({ orgId, methods }: { orgId: string; methods: TPaymentMethodEnum[] }) {
+	// Atribuição, não `metodo` cru: um fiado quitado em dinheiro é alcançável pelo filtro FIADO, que
+	// é a linha em que ele aparece no relatório que linka para cá.
 	const salesWithMethod = db
 		.selectDistinct({ id: accountingEntries.vendaId })
 		.from(accountingEntries)
@@ -159,7 +162,7 @@ function getPaymentMethodCondition({ orgId, methods }: { orgId: string; methods:
 				eq(accountingEntries.organizacaoId, orgId),
 				isNotNull(accountingEntries.vendaId),
 				or(isNull(financialTransactions.provedorStatus), notInArray(financialTransactions.provedorStatus, ["CANCELADO", "ESTORNADO"])),
-				inArray(financialTransactions.metodo, methods),
+				inArray(getSalePaymentAttributionMethod(), methods),
 			),
 		);
 	return inArray(sales.id, salesWithMethod);

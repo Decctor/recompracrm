@@ -897,6 +897,11 @@ export const AppRoutes = [
 		description: "Contas financeiras do seu negócio e seus saldos.",
 	},
 	{
+		path: "/dashboard/finance/store-credit",
+		title: "Fiados",
+		description: "Acompanhamento e recebimento das vendas a prazo por cliente.",
+	},
+	{
 		path: "/dashboard/finance/credit-cards",
 		title: "Faturas de Cartão",
 		description: "Faturas dos cartões de crédito do seu negócio.",

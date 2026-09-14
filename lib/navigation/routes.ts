@@ -44,6 +44,8 @@ export const appRoutes = {
 		/** Abre a listagem com a edição da movimentação financeira indicada. */
 		transaction: (transactionId: string) => `/dashboard/finance/transactions?transactionId=${encodeURIComponent(transactionId)}`,
 		accounts: () => "/dashboard/finance/accounts",
+		/** Fiados: acompanhamento e recebimento das vendas a prazo, agregadas por cliente. */
+		storeCredit: () => "/dashboard/finance/store-credit",
 		creditCards: () => "/dashboard/finance/credit-cards",
 		reconciliation: () => "/dashboard/finance/reconciliation",
 		reports: {

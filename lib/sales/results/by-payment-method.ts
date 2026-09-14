@@ -1,4 +1,5 @@
 import type { TPaymentMethodEnum } from "@/schemas/enums";
+import { getSalePaymentAttributionMethod } from "@/lib/finances/store-credit/attribution";
 import { SALE_CHANGE_TRANSACTION_ORIGIN } from "@/lib/sales/sale-change";
 import { db } from "@/services/drizzle";
 import { accountingEntries, financialAccounts, financialTransactions, sales } from "@/services/drizzle/schema";
@@ -27,11 +28,14 @@ function round2(value: number) {
 
 export async function getSalesResultsByPaymentMethod({ filters }: { filters: TSalesResultsFilters }) {
 	const universeIds = buildSalesUniverseIdsSubquery(filters, "CONFIRMADA");
+	// Fiado quitado volta para a linha FIADO: a venda foi vendida a prazo, mesmo que o dinheiro
+	// tenha entrado em espécie meses depois. Ver `getSalePaymentAttributionMethod`.
+	const attributionMethod = getSalePaymentAttributionMethod();
 
 	const [rows, outflowRows, movementCountRows, reconciliationRows, [coverageRow], [universeRow]] = await Promise.all([
 		db
 			.select({
-				metodo: financialTransactions.metodo,
+				metodo: attributionMethod,
 				contaFinanceiraId: financialTransactions.contaFinanceiraId,
 				contaFinanceiraNome: financialAccounts.nome,
 				contaFinanceiraTipo: financialAccounts.tipo,
@@ -53,7 +57,7 @@ export async function getSalesResultsByPaymentMethod({ filters }: { filters: TSa
 				),
 			)
 			.groupBy(
-				financialTransactions.metodo,
+				attributionMethod,
 				financialTransactions.contaFinanceiraId,
 				financialAccounts.nome,
 				financialAccounts.tipo,
@@ -83,7 +87,7 @@ export async function getSalesResultsByPaymentMethod({ filters }: { filters: TSa
 		// histórico, para a contagem da linha e o resultado do clique serem o mesmo conjunto.
 		db
 			.select({
-				metodo: financialTransactions.metodo,
+				metodo: attributionMethod,
 				qtdeVendas: countDistinct(accountingEntries.vendaId),
 			})
 			.from(financialTransactions)
@@ -96,7 +100,7 @@ export async function getSalesResultsByPaymentMethod({ filters }: { filters: TSa
 					sql`coalesce(${financialTransactions.provedorStatus}, '') not in ('CANCELADO', 'ESTORNADO')`,
 				),
 			)
-			.groupBy(financialTransactions.metodo),
+			.groupBy(attributionMethod),
 		db
 			.select({
 				valorVenda: sales.valorTotal,
