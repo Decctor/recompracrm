@@ -59,6 +59,30 @@ function toSqlTimestamp(date: Date) {
 const isOpenTitle = sql`${financialTransactions.dataEfetivacao} is null`;
 
 /**
+ * Quando a dívida nasceu — o eixo do fechamento mensal ("o que o cliente pendurou em setembro"),
+ * que é independente do vencimento.
+ *
+ * Ancorada na venda de propósito. `dataInsercao` da movimentação seria errado: numa baixa parcial o
+ * saldo remanescente é uma linha NOVA, criada na data do recebimento, e o resto de uma nota de
+ * agosto apareceria dentro de setembro. O remanescente herda o lançamento contábil, logo a venda,
+ * logo esta data. `dataCompetencia` cobre o lançamento manual sem venda; `dataInsercao` é o último
+ * recurso, para nenhum título ficar invisível a um recorte.
+ *
+ * Sem parâmetro nenhum, então pode ser repetida entre cláusulas sem esbarrar na renumeração do
+ * drizzle (ver `clientKeyProjection`).
+ */
+const storeCreditOriginDate = sql`coalesce(${sales.dataVenda}, ${accountingEntries.dataCompetencia}, ${financialTransactions.dataInsercao})`;
+
+export type TStoreCreditOriginPeriod = { originAfter?: Date | null; originBefore?: Date | null };
+
+function buildStoreCreditOriginConditions({ originAfter, originBefore }: TStoreCreditOriginPeriod): SQL<unknown>[] {
+	const conditions: SQL<unknown>[] = [];
+	if (originAfter) conditions.push(sql`${storeCreditOriginDate} >= ${toSqlTimestamp(originAfter)}`);
+	if (originBefore) conditions.push(sql`${storeCreditOriginDate} <= ${toSqlTimestamp(originBefore)}`);
+	return conditions;
+}
+
+/**
  * Projeção da chave do cliente: o id da venda, ou o balde de órfãos quando a venda perdeu o cliente.
  *
  * O `GROUP BY` agrupa por `sales.clienteId` cru, NÃO por esta expressão. O drizzle serializa o mesmo
@@ -72,7 +96,7 @@ const clientKeyProjection = sql<string>`coalesce(${sales.clienteId}, ${STORE_CRE
 const saldoAbertoExpression = sql<number>`coalesce(sum(case when ${financialTransactions.dataEfetivacao} is null then ${financialTransactions.valor} else 0 end), 0)`;
 const previsaoMaisAntigaExpression = sql<Date | null>`min(${financialTransactions.dataPrevisao}) filter (where ${isOpenTitle})`;
 
-export type TStoreCreditClientsFilters = {
+export type TStoreCreditClientsFilters = TStoreCreditOriginPeriod & {
 	organizacaoId: string;
 	search?: string | null;
 	statuses?: TStoreCreditStatus[];
@@ -132,6 +156,10 @@ export async function getStoreCreditClients(filters: TStoreCreditClientsFilters)
 	const referenceDate = new Date();
 
 	const whereConditions = buildStoreCreditUniverseConditions(organizacaoId);
+	// O recorte de origem entra no WHERE, e não no HAVING: ele escolhe QUAIS títulos entram na conta
+	// do cliente. Por isso o saldo agregado que sai daqui já é o saldo do período — e é o que obriga
+	// a tela a trocar o rótulo de "em aberto" para "em aberto no período".
+	whereConditions.push(...buildStoreCreditOriginConditions(filters));
 	const trimmedSearch = search?.trim();
 	if (trimmedSearch) {
 		const searchCondition = or(
@@ -144,11 +172,24 @@ export async function getStoreCreditClients(filters: TStoreCreditClientsFilters)
 
 	const havingConditions = buildStoreCreditHavingConditions({ statuses, agingBuckets, referenceDate });
 
-	/** Só a chave, para o `count` sobre a subconsulta: projetar os agregados ali dentro produziria
-	 *  nomes de coluna repetidos (`max`, `count`, `coalesce`...), que o Postgres recusa num FROM. */
+	/**
+	 * A chave mais o que o resumo do recorte precisa somar. Só isso: projetar os agregados todos aqui
+	 * produziria nomes de coluna repetidos (`max`, `count`, `coalesce`...), que o Postgres recusa
+	 * num FROM.
+	 */
 	function buildMatchedSubquery() {
 		return db
-			.select({ clienteId: sales.clienteId })
+			.select({
+				clienteId: sales.clienteId,
+				// Alias explícito e expressão nova, não a constante do módulo: o drizzle recusa
+				// referenciar campo `sql` cru de uma subconsulta sem `.as()`, e `.as()` numa expressão
+				// compartilhada com o HAVING e o ORDER BY é pedir para o alias vazar para lá.
+				saldoAberto:
+					sql<number>`coalesce(sum(case when ${financialTransactions.dataEfetivacao} is null then ${financialTransactions.valor} else 0 end), 0)`.as(
+						"saldo_aberto",
+					),
+				titulosAbertos: sql<number>`count(*) filter (where ${isOpenTitle})`.as("titulos_abertos"),
+			})
 			.from(financialTransactions)
 			.innerJoin(accountingEntries, eq(financialTransactions.lancamentoContabilId, accountingEntries.id))
 			.leftJoin(sales, eq(accountingEntries.vendaId, sales.id))
@@ -190,8 +231,17 @@ export async function getStoreCreditClients(filters: TStoreCreditClientsFilters)
 					sql`${previsaoMaisAntigaExpression} ${direction} nulls last`
 				: sql`${saldoAbertoExpression} ${direction}`;
 
+	// O resumo soma o conjunto inteiro do filtro, não a página: com 25 clientes por página, somar o
+	// que veio daria um total menor que o da própria lista logo abaixo.
+	const matchedSubquery = buildMatchedSubquery().as("store_credit_clients");
 	const [matchedRows, rows] = await Promise.all([
-		db.select({ count: count() }).from(buildMatchedSubquery().as("store_credit_clients")),
+		db
+			.select({
+				count: count(),
+				saldoAberto: sql<number>`coalesce(sum(${matchedSubquery.saldoAberto}), 0)`,
+				titulosAbertos: sql<number>`coalesce(sum(${matchedSubquery.titulosAbertos}), 0)`,
+			})
+			.from(matchedSubquery),
 		buildGroupedQuery()
 			.orderBy(orderByExpression)
 			.limit(STORE_CREDIT_PAGE_SIZE)
@@ -218,6 +268,12 @@ export async function getStoreCreditClients(filters: TStoreCreditClientsFilters)
 		}),
 		clientesMatched,
 		totalPages: Math.ceil(clientesMatched / STORE_CREDIT_PAGE_SIZE),
+		/** Totais do recorte inteiro — o que a linha de resumo acima da lista mostra. */
+		resumo: {
+			clientes: clientesMatched,
+			saldoAberto: formatAsNumber(matchedRows[0]?.saldoAberto ?? 0),
+			titulosAbertos: formatAsNumber(matchedRows[0]?.titulosAbertos ?? 0),
+		},
 	};
 }
 
@@ -234,7 +290,9 @@ export async function getStoreCreditClientTitles({
 	organizacaoId,
 	clienteId,
 	includeSettled = false,
-}: {
+	originAfter,
+	originBefore,
+}: TStoreCreditOriginPeriod & {
 	organizacaoId: string;
 	clienteId: string;
 	includeSettled?: boolean;
@@ -242,6 +300,9 @@ export async function getStoreCreditClientTitles({
 	const conditions = buildStoreCreditUniverseConditions(organizacaoId);
 	conditions.push(clienteId === STORE_CREDIT_UNLINKED_CLIENT_ID ? isNull(sales.clienteId) : eq(sales.clienteId, clienteId));
 	if (!includeSettled) conditions.push(isNull(financialTransactions.dataEfetivacao));
+	// Mesmo recorte da listagem: sem isto, a expansão e o menu de baixa mostrariam títulos que a
+	// linha do cliente não contou, e o operador veria dois saldos diferentes na mesma tela.
+	conditions.push(...buildStoreCreditOriginConditions({ originAfter, originBefore }));
 
 	const rows = await db
 		.select({

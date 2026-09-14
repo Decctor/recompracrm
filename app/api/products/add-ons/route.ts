@@ -6,7 +6,8 @@ import { ProductAddOnOptionSchema, ProductAddOnSchema } from "@/schemas/products
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { appApiHandler } from "@/lib/app-api";
-import { productAddOnOptions, productAddOnReferences, productAddOns, productVariants, products } from "@/services/drizzle/schema";
+import { productAddOnReferences, productAddOns, products } from "@/services/drizzle/schema";
+import { upsertProductAddOnOptions } from "@/lib/products/add-on-options";
 import { and, eq, ilike, isNull, or } from "drizzle-orm";
 
 const GetProductAddOnsInputSchema = z.object({
@@ -83,7 +84,9 @@ async function getProductAddOns({ input, session }: { input: TGetProductAddOnsIn
 			where: (fields, { and, eq }) => and(eq(fields.id, input.productAddOnId!), eq(fields.organizacaoId, userOrgId)),
 			with: {
 				opcoes: {
-					where: (fields, { eq }) => eq(fields.ativo, true),
+					// Management read: inactive options stay visible (and reactivatable);
+					// only tombstoned ones are hidden. Consumption reads filter "ativo".
+					where: (fields, { isNull }) => isNull(fields.dataExclusao),
 					orderBy: (fields, { asc }) => asc(fields.nome),
 					with: {
 						produto: true,
@@ -119,7 +122,7 @@ async function getProductAddOns({ input, session }: { input: TGetProductAddOnsIn
 		),
 		with: {
 			opcoes: {
-				where: (fields, { eq }) => eq(fields.ativo, true),
+				where: (fields, { isNull }) => isNull(fields.dataExclusao),
 				orderBy: (fields, { asc }) => asc(fields.nome),
 				with: {
 					produto: true,
@@ -220,158 +223,6 @@ export const UpdateProductAddOnInputSchema = z.object({
 	addOn: ProductAddOnInputSchema,
 });
 export type TUpdateProductAddOnInput = z.infer<typeof UpdateProductAddOnInputSchema>;
-
-type TProductAddOnOptionInput = z.infer<typeof ProductAddOnOptionInputSchema>;
-
-function normalizeAddOnOptionLink<
-	T extends {
-		produtoConsumo?: string | null;
-		produtoId?: string | null;
-		produtoVarianteId?: string | null;
-		quantidadeConsumo?: number | null;
-	},
->(option: T) {
-	if (!option.produtoConsumo) {
-		return {
-			...option,
-			produtoId: null,
-			produtoVarianteId: null,
-			quantidadeConsumo: 1,
-		};
-	}
-
-	if (option.produtoVarianteId) {
-		return {
-			...option,
-			produtoId: option.produtoId ?? null,
-			produtoVarianteId: option.produtoVarianteId,
-			quantidadeConsumo: option.quantidadeConsumo ?? 1,
-		};
-	}
-
-	return {
-		...option,
-		produtoId: option.produtoId ?? null,
-		produtoVarianteId: null,
-		quantidadeConsumo: option.quantidadeConsumo ?? 1,
-	};
-}
-
-async function validateAndResolveAddOnOptionLink({
-	tx,
-	userOrgId,
-	option,
-}: {
-	tx: DBTransaction;
-	userOrgId: string;
-	option: TProductAddOnOptionInput;
-}) {
-	const normalizedOption = normalizeAddOnOptionLink(option);
-
-	if (!normalizedOption.produtoConsumo) {
-		return normalizedOption;
-	}
-
-	if (normalizedOption.produtoVarianteId) {
-		const variant = await tx.query.productVariants.findFirst({
-			where: and(eq(productVariants.id, normalizedOption.produtoVarianteId), eq(productVariants.organizacaoId, userOrgId)),
-			columns: {
-				id: true,
-				produtoId: true,
-			},
-		});
-
-		if (!variant) {
-			throw new createHttpError.BadRequest("A variante vinculada ao item de consumo não foi encontrada.");
-		}
-
-		if (normalizedOption.produtoId && normalizedOption.produtoId !== variant.produtoId) {
-			throw new createHttpError.BadRequest("A variante vinculada ao item de consumo não pertence ao produto informado.");
-		}
-
-		return {
-			...normalizedOption,
-			produtoId: variant.produtoId,
-			produtoVarianteId: variant.id,
-		};
-	}
-
-	if (normalizedOption.produtoId) {
-		const product = await tx.query.products.findFirst({
-			where: and(eq(products.id, normalizedOption.produtoId), eq(products.organizacaoId, userOrgId)),
-			columns: {
-				id: true,
-			},
-		});
-
-		if (!product) {
-			throw new createHttpError.BadRequest("O produto vinculado ao item de consumo não foi encontrado.");
-		}
-	}
-
-	return normalizedOption;
-}
-
-async function upsertProductAddOnOptions({
-	tx,
-	userOrgId,
-	addOnId,
-	options,
-}: {
-	tx: DBTransaction;
-	userOrgId: string;
-	addOnId: string;
-	options: TProductAddOnOptionInput[];
-}) {
-	for (const option of options) {
-		if (option.id && option.deletar) {
-			await tx
-				.update(productAddOnOptions)
-				.set({ ativo: false })
-				.where(
-					and(eq(productAddOnOptions.id, option.id), eq(productAddOnOptions.produtoAddOnId, addOnId), eq(productAddOnOptions.organizacaoId, userOrgId)),
-				);
-			continue;
-		}
-
-		const normalizedOption = await validateAndResolveAddOnOptionLink({
-			tx,
-			userOrgId,
-			option,
-		});
-
-		const optionValues = {
-			nome: normalizedOption.nome,
-			codigo: normalizedOption.codigo,
-			precoDelta: normalizedOption.precoDelta,
-			maxQtdePorItem: normalizedOption.maxQtdePorItem,
-			ativo: normalizedOption.ativo,
-			produtoId: normalizedOption.produtoId ?? null,
-			produtoVarianteId: normalizedOption.produtoVarianteId ?? null,
-			quantidadeConsumo: normalizedOption.quantidadeConsumo ?? 1,
-		};
-
-		if (normalizedOption.id) {
-			await tx
-				.update(productAddOnOptions)
-				.set(optionValues)
-				.where(
-					and(
-						eq(productAddOnOptions.id, normalizedOption.id),
-						eq(productAddOnOptions.produtoAddOnId, addOnId),
-						eq(productAddOnOptions.organizacaoId, userOrgId),
-					),
-				);
-			continue;
-		}
-
-		await tx.insert(productAddOnOptions).values({
-			organizacaoId: userOrgId,
-			produtoAddOnId: addOnId,
-			...optionValues,
-		});
-	}
-}
 
 async function getNextProductAddOnOrder({ tx, productId }: { tx: DBTransaction; productId: string }) {
 	const references = await tx.query.productAddOnReferences.findMany({

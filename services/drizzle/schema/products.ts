@@ -304,7 +304,10 @@ export const productAddOnOptions = newTable("product_add_on_options", {
 	precoDelta: doublePrecision("preco_delta").default(0.0).notNull(),
 	maxQtdePorItem: integer("max_qtde_por_item").default(1), // Can I select "Bacon" 3 times?
 
+	// "ativo" is availability (pausable/reactivatable in management screens);
+	// "dataExclusao" is the tombstone (removed from the registry, hidden everywhere).
 	ativo: boolean("ativo").default(true),
+	dataExclusao: timestamp("data_exclusao"),
 });
 export const productAddOnOptionsRelations = relations(productAddOnOptions, ({ one }) => ({
 	produtoAddOn: one(productAddOns, {

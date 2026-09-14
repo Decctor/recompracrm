@@ -1,6 +1,19 @@
 "use client";
 
-import { AlertCircle, CalendarDays, CheckCircle2, Clock, HandCoins, ListFilter, NotebookPen, Timer, TrendingUp, Users, Wallet } from "lucide-react";
+import {
+	AlertCircle,
+	CalendarDays,
+	CalendarRange,
+	CheckCircle2,
+	Clock,
+	HandCoins,
+	ListFilter,
+	NotebookPen,
+	Timer,
+	TrendingUp,
+	Users,
+	Wallet,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import type { TGetStoreCreditOutputDefault } from "@/app/api/finances/store-credit/route";
 import { DeltaBadge } from "@/app/dashboard/finance/_components/delta-badge";
@@ -15,7 +28,7 @@ import { getErrorMessage } from "@/lib/errors";
 import { STORE_CREDIT_AGING_BUCKETS, type TStoreCreditAgingBucket } from "@/lib/finances/store-credit/aging";
 import type { TStoreCreditSortField, TStoreCreditStatus } from "@/lib/finances/store-credit/constants";
 import { formatDateAsLocale, formatDecimalPlaces, formatToMoney } from "@/lib/formatting";
-import { useStoreCreditClients, useStoreCreditStats } from "@/lib/queries/store-credit";
+import { hasStoreCreditOriginScope, type TStoreCreditOriginScope, useStoreCreditClients, useStoreCreditStats } from "@/lib/queries/store-credit";
 import { ReceiveStoreCreditMenu } from "@/components/Modals/Finances/ReceiveStoreCreditMenu";
 import { StoreCreditAging } from "./_components/store-credit-aging";
 import { StoreCreditClientCard } from "./_components/store-credit-client-card";
@@ -69,7 +82,25 @@ export default function StoreCreditPage({ organizationId, canReceive }: { organi
 		[params.periodAfter, params.periodBefore],
 	);
 
-	const hasActiveFilters = filters.search.trim().length > 0 || filters.statuses.length > 0 || filters.agingBuckets.length > 0;
+	/**
+	 * O recorte de origem atravessa a tela inteira: a linha do cliente, a expansão e o menu de baixa
+	 * precisam falar do mesmo conjunto de títulos. Um filtro que muda só a lista e deixa o menu
+	 * recebendo tudo não fecha mês nenhum — só dá a impressão de que fechou.
+	 */
+	const originScope: TStoreCreditOriginScope = useMemo(
+		() => ({ originAfter: filters.originAfter, originBefore: filters.originBefore }),
+		[filters.originAfter, filters.originBefore],
+	);
+	const isScoped = hasStoreCreditOriginScope(originScope);
+	const selectedOriginLabel = useMemo(() => {
+		if (!isScoped) return "TODO O PERÍODO";
+		const inicio = filters.originAfter ? formatDateAsLocale(filters.originAfter) : "início";
+		const fim = filters.originBefore ? formatDateAsLocale(filters.originBefore) : "hoje";
+		return `${inicio} - ${fim}`;
+	}, [filters.originAfter, filters.originBefore, isScoped]);
+
+	const resumo = data?.resumo;
+	const hasActiveFilters = filters.search.trim().length > 0 || filters.statuses.length > 0 || filters.agingBuckets.length > 0 || isScoped;
 
 	return (
 		<div className="flex w-full flex-col gap-3">
@@ -218,6 +249,24 @@ export default function StoreCreditPage({ organizationId, canReceive }: { organi
 				<InteractiveFilter.Root className="w-fit">
 					<InteractiveFilter.Trigger>
 						<InteractiveFilter.Icon>
+							<CalendarRange className="h-4 w-4 min-h-4 min-w-4" />
+							{/* Quando o fiado foi GERADO. O vencimento tem os filtros de status e faixa. */}
+							<InteractiveFilter.Label>PERÍODO DE ORIGEM</InteractiveFilter.Label>
+						</InteractiveFilter.Icon>
+						<InteractiveFilter.Value>{selectedOriginLabel}</InteractiveFilter.Value>
+						<InteractiveFilter.Clear onClear={() => updateFilters({ originAfter: null, originBefore: null, page: 1 })} />
+					</InteractiveFilter.Trigger>
+					<InteractiveFilter.Content className="w-auto p-0">
+						<InteractiveFilter.DateRangeContent
+							value={{ from: filters.originAfter ?? undefined, to: filters.originBefore ?? undefined }}
+							onChange={(nextPeriod) => updateFilters({ originAfter: nextPeriod.from ?? null, originBefore: nextPeriod.to ?? null, page: 1 })}
+						/>
+					</InteractiveFilter.Content>
+				</InteractiveFilter.Root>
+
+				<InteractiveFilter.Root className="w-fit">
+					<InteractiveFilter.Trigger>
+						<InteractiveFilter.Icon>
 							<Users className="h-4 w-4 min-h-4 min-w-4" />
 							<InteractiveFilter.Label>ORDENAR POR</InteractiveFilter.Label>
 						</InteractiveFilter.Icon>
@@ -233,6 +282,22 @@ export default function StoreCreditPage({ organizationId, canReceive }: { organi
 					</InteractiveFilter.Content>
 				</InteractiveFilter.Root>
 			</div>
+
+			{/* A faixa de indicadores no topo continua sendo a exposição da organização inteira, de
+			    propósito: sem ela o usuário perde a referência de quanto é o total. O recorte ganha o
+			    próprio total aqui, colado na lista que ele governa. */}
+			{isScoped && resumo ? (
+				<div className="text-numeric bg-primary/5 border-primary/20 flex w-full flex-col items-start justify-between gap-1 rounded-xl border px-3 py-2.5 sm:flex-row sm:items-center">
+					<div className="flex items-center gap-2">
+						<CalendarRange className="h-4 w-4 min-h-4 min-w-4" />
+						<span className="text-xs font-medium tracking-tight">Fiados gerados entre {selectedOriginLabel.toLowerCase()}</span>
+					</div>
+					<span className="text-xs font-medium">
+						{formatToMoney(resumo.saldoAberto)} em aberto · {resumo.titulosAbertos} {resumo.titulosAbertos === 1 ? "venda" : "vendas"} · {resumo.clientes}{" "}
+						{resumo.clientes === 1 ? "cliente" : "clientes"}
+					</span>
+				</div>
+			) : null}
 
 			<GeneralPaginationComponent
 				activePage={filters.page}
@@ -253,6 +318,7 @@ export default function StoreCreditPage({ organizationId, canReceive }: { organi
 								key={cliente.clienteId}
 								cliente={cliente}
 								canReceive={canReceive}
+								originScope={isScoped ? originScope : null}
 								onReceiveClient={(target) => setReceiveTarget({ cliente: target, transacaoId: null })}
 								onReceiveTitle={(target, transacaoId) => setReceiveTarget({ cliente: target, transacaoId })}
 							/>
@@ -266,9 +332,11 @@ export default function StoreCreditPage({ organizationId, canReceive }: { organi
 							</EmptyMedia>
 							<EmptyTitle>{hasActiveFilters ? "Nenhum cliente para estes filtros" : "Nenhum fiado registrado"}</EmptyTitle>
 							<EmptyDescription>
-								{hasActiveFilters
-									? "Ajuste a pesquisa ou os filtros para encontrar o cliente que você procura."
-									: "Quando uma venda for fechada com o método Fiado / nota, o saldo do cliente aparece aqui."}
+								{isScoped
+									? "Nenhum fiado foi gerado neste período. Amplie o período de origem ou limpe o filtro."
+									: hasActiveFilters
+										? "Ajuste a pesquisa ou os filtros para encontrar o cliente que você procura."
+										: "Quando uma venda for fechada com o método Fiado / nota, o saldo do cliente aparece aqui."}
 							</EmptyDescription>
 						</EmptyHeader>
 						<EmptyContent />
@@ -281,6 +349,7 @@ export default function StoreCreditPage({ organizationId, canReceive }: { organi
 					organizationId={organizationId}
 					cliente={receiveTarget.cliente}
 					initialTransacaoId={receiveTarget.transacaoId}
+					originScope={isScoped ? originScope : null}
 					closeMenu={() => setReceiveTarget(null)}
 				/>
 			) : null}

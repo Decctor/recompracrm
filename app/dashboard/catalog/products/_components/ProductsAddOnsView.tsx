@@ -85,6 +85,9 @@ function AddOnGroupCard({ addOn, onEdit }: AddOnGroupCardProps) {
 	const linkedProductNames = addOn.produtos.map((reference) =>
 		reference.produtoVariante ? `${reference.produto.nome} — ${reference.produtoVariante.nome}` : reference.produto.nome,
 	);
+	const activeOptionsCount = addOn.opcoes.filter((opcao) => opcao.ativo).length;
+	const inactiveOptionsCount = addOn.opcoes.length - activeOptionsCount;
+	const optionsCountLabel = activeOptionsCount === 1 ? "1 opção" : `${activeOptionsCount} opções`;
 
 	return (
 		<div className="flex w-full flex-col gap-2 rounded-lg border border-border bg-background px-3 py-2.5 shadow-xs">
@@ -118,7 +121,11 @@ function AddOnGroupCard({ addOn, onEdit }: AddOnGroupCardProps) {
 					<Chip.Icon>
 						<ListChecks />
 					</Chip.Icon>
-					<Chip.Label>{addOn.opcoes.length === 1 ? "1 opção" : `${addOn.opcoes.length} opções`}</Chip.Label>
+					<Chip.Label>
+						{inactiveOptionsCount > 0
+							? `${optionsCountLabel} · ${inactiveOptionsCount} inativa${inactiveOptionsCount === 1 ? "" : "s"}`
+							: optionsCountLabel}
+					</Chip.Label>
 				</Chip.Root>
 				<Chip.Root
 					variant={addOn.produtos.length > 0 ? "secondary" : "muted"}

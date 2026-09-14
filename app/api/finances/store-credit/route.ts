@@ -25,6 +25,20 @@ const GetStoreCreditInputSchema = z.object({
 		.nullable()
 		.transform((value) => (value ? Number(value) : 1)),
 	search: z.string({ invalid_type_error: "Tipo inválido para pesquisa." }).optional().nullable(),
+	// Recorte por quando o fiado foi gerado (a venda), não por quando vence — é o eixo do
+	// fechamento mensal de quem fecha a conta do mês independente do vencimento.
+	originAfter: z
+		.string({ invalid_type_error: "Tipo inválido para o período de origem." })
+		.datetime({ message: "Tipo inválido para o período de origem." })
+		.optional()
+		.nullable()
+		.transform((value) => (value ? new Date(value) : null)),
+	originBefore: z
+		.string({ invalid_type_error: "Tipo inválido para o período de origem." })
+		.datetime({ message: "Tipo inválido para o período de origem." })
+		.optional()
+		.nullable()
+		.transform((value) => (value ? new Date(value) : null)),
 	statuses: z
 		.string({ invalid_type_error: "Tipo inválido para status." })
 		.optional()
@@ -63,6 +77,8 @@ async function getStoreCredit({ input, session }: { input: TGetStoreCreditInput;
 			organizacaoId,
 			clienteId: input.clientId,
 			includeSettled: input.includeSettled,
+			originAfter: input.originAfter,
+			originBefore: input.originBefore,
 		});
 		return {
 			data: { byClient: { clienteId: input.clientId, titulos }, default: null },
@@ -78,6 +94,8 @@ async function getStoreCredit({ input, session }: { input: TGetStoreCreditInput;
 		sortField: input.sortField,
 		sortDirection: input.sortDirection,
 		page: input.page,
+		originAfter: input.originAfter,
+		originBefore: input.originBefore,
 	});
 
 	return { data: { byClient: null, default: result }, message: "Fiados listados com sucesso." };
@@ -102,6 +120,8 @@ async function getStoreCreditRoute(request: NextRequest) {
 		agingBuckets: searchParams.get("agingBuckets"),
 		sortField: searchParams.get("sortField"),
 		sortDirection: searchParams.get("sortDirection"),
+		originAfter: searchParams.get("originAfter"),
+		originBefore: searchParams.get("originBefore"),
 	});
 
 	const result = await getStoreCredit({ input, session });

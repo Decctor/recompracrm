@@ -109,6 +109,7 @@ export default function ClientStoreCredit({ clientId, clientName, organizationId
 					organizationId={organizationId}
 					cliente={{ clienteId: clientId, nome: clientName, saldoAberto }}
 					initialTransacaoId={null}
+					originScope={null}
 					closeMenu={() => setIsReceiving(false)}
 				/>
 			) : null}

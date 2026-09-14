@@ -471,7 +471,10 @@ type AddOnOptionTableRowProps = {
 
 function AddOnOptionTableRow({ option, gridRow, gridBounds, onUpdate, onRemove }: AddOnOptionTableRowProps) {
 	return (
-		<div className={cn("border-t border-border", gridRow % 2 === 1 && "bg-muted/10")}>
+		<div
+			title={!option.ativo ? "Opção inativa — não aparece nos canais de venda. Reative pela coluna ATIVO." : undefined}
+			className={cn("border-t border-border", gridRow % 2 === 1 && "bg-muted/10", !option.ativo && "bg-muted/40 opacity-60")}
+		>
 			<div className={cn(ADDON_OPTION_DESKTOP_ROW, "min-h-11 py-1 text-xs transition-colors hover:bg-muted/40")}>
 				<div className="min-w-0 px-1">
 					<EditableTextCell

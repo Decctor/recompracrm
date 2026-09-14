@@ -15,7 +15,17 @@ export type TStoreCreditClientsFilters = {
 	agingBuckets: TStoreCreditAgingBucket[];
 	sortField: TStoreCreditSortField;
 	sortDirection: TStoreCreditSortDirection;
+	/** Quando o fiado foi gerado (a venda). Nulo dos dois lados = sem recorte, que é o padrão. */
+	originAfter: Date | null;
+	originBefore: Date | null;
 };
+
+/** O recorte de origem viaja junto para a expansão e o menu de baixa concordarem com a listagem. */
+export type TStoreCreditOriginScope = { originAfter: Date | null; originBefore: Date | null };
+
+export function hasStoreCreditOriginScope(scope: TStoreCreditOriginScope | null | undefined) {
+	return !!scope && (!!scope.originAfter || !!scope.originBefore);
+}
 
 async function fetchStoreCreditClients(filters: TStoreCreditClientsFilters): Promise<TGetStoreCreditOutputDefault> {
 	const searchParams = new URLSearchParams();
@@ -23,6 +33,8 @@ async function fetchStoreCreditClients(filters: TStoreCreditClientsFilters): Pro
 	if (filters.search.trim()) searchParams.set("search", filters.search.trim());
 	if (filters.statuses.length > 0) searchParams.set("statuses", filters.statuses.join(","));
 	if (filters.agingBuckets.length > 0) searchParams.set("agingBuckets", filters.agingBuckets.join(","));
+	if (filters.originAfter) searchParams.set("originAfter", filters.originAfter.toISOString());
+	if (filters.originBefore) searchParams.set("originBefore", filters.originBefore.toISOString());
 	searchParams.set("sortField", filters.sortField);
 	searchParams.set("sortDirection", filters.sortDirection);
 
@@ -44,6 +56,8 @@ export function useStoreCreditClients({ initialFilters }: { initialFilters?: Par
 		agingBuckets: initialFilters?.agingBuckets ?? [],
 		sortField: initialFilters?.sortField ?? "saldo",
 		sortDirection: initialFilters?.sortDirection ?? "desc",
+		originAfter: initialFilters?.originAfter ?? null,
+		originBefore: initialFilters?.originBefore ?? null,
 	});
 
 	function updateFilters(newFilters: Partial<TStoreCreditClientsFilters>) {
@@ -65,13 +79,17 @@ export function useStoreCreditClients({ initialFilters }: { initialFilters?: Par
 async function fetchStoreCreditClientTitles({
 	clientId,
 	includeSettled,
+	scope,
 }: {
 	clientId: string;
 	includeSettled: boolean;
+	scope: TStoreCreditOriginScope | null;
 }): Promise<TGetStoreCreditOutputByClient> {
 	const searchParams = new URLSearchParams();
 	searchParams.set("clientId", clientId);
 	if (includeSettled) searchParams.set("includeSettled", "true");
+	if (scope?.originAfter) searchParams.set("originAfter", scope.originAfter.toISOString());
+	if (scope?.originBefore) searchParams.set("originBefore", scope.originBefore.toISOString());
 
 	const { data } = await axios.get<TGetStoreCreditOutput>(`/api/finances/store-credit?${searchParams.toString()}`);
 	const result = data.data.byClient;
@@ -83,14 +101,18 @@ export function useStoreCreditClientTitles({
 	clientId,
 	includeSettled = false,
 	enabled = true,
+	scope = null,
 }: {
 	clientId: string;
 	includeSettled?: boolean;
 	enabled?: boolean;
+	scope?: TStoreCreditOriginScope | null;
 }) {
-	const queryKey = ["store-credit-client-titles", clientId, includeSettled];
+	// O recorte entra na chave: sem ele, abrir a expansão sob o filtro de setembro serviria o cache
+	// da consulta sem filtro, e a tela mostraria títulos que a linha do cliente não contou.
+	const queryKey = ["store-credit-client-titles", clientId, includeSettled, scope?.originAfter ?? null, scope?.originBefore ?? null];
 	return {
-		...useQuery({ queryKey, queryFn: () => fetchStoreCreditClientTitles({ clientId, includeSettled }), enabled: enabled && !!clientId }),
+		...useQuery({ queryKey, queryFn: () => fetchStoreCreditClientTitles({ clientId, includeSettled, scope }), enabled: enabled && !!clientId }),
 		queryKey,
 	};
 }

@@ -13,7 +13,7 @@ import { getStoreCreditDaysOverdue } from "@/lib/finances/store-credit/aging";
 import { STORE_CREDIT_RECEIPT_ORIGIN } from "@/lib/finances/store-credit/constants";
 import { formatDateAsLocale, formatNameAsInitials, formatToMoney } from "@/lib/formatting";
 import { PAYMENT_METHOD_CHIP_LABELS } from "@/lib/payments/labels";
-import { useStoreCreditClientTitles } from "@/lib/queries/store-credit";
+import { type TStoreCreditOriginScope, useStoreCreditClientTitles } from "@/lib/queries/store-credit";
 import type { TPaymentMethodEnum } from "@/schemas/enums";
 import { cn } from "@/lib/utils";
 
@@ -22,6 +22,8 @@ type StoreCreditClient = TGetStoreCreditOutputDefault["clientes"][number];
 type StoreCreditClientCardProps = {
 	cliente: StoreCreditClient;
 	canReceive: boolean;
+	/** Recorte de origem ativo na listagem, ou `null`. Governa o rótulo do saldo e a expansão. */
+	originScope: TStoreCreditOriginScope | null;
 	onReceiveClient: (cliente: StoreCreditClient) => void;
 	onReceiveTitle: (cliente: StoreCreditClient, transacaoId: string) => void;
 };
@@ -33,12 +35,17 @@ function formatOverdueLabel(previsao: Date | string | null) {
 	return `Em atraso há ${dias} ${dias === 1 ? "dia" : "dias"}`;
 }
 
-export function StoreCreditClientCard({ cliente, canReceive, onReceiveClient, onReceiveTitle }: StoreCreditClientCardProps) {
+export function StoreCreditClientCard({ cliente, canReceive, originScope, onReceiveClient, onReceiveTitle }: StoreCreditClientCardProps) {
 	const [isExpanded, setIsExpanded] = useState(false);
 	const [showSettled, setShowSettled] = useState(false);
 	const shouldReduceMotion = useReducedMotion();
 
-	const titlesQuery = useStoreCreditClientTitles({ clientId: cliente.clienteId, includeSettled: showSettled, enabled: isExpanded });
+	const titlesQuery = useStoreCreditClientTitles({
+		clientId: cliente.clienteId,
+		includeSettled: showSettled,
+		enabled: isExpanded,
+		scope: originScope,
+	});
 	const titulos = titlesQuery.data?.titulos ?? [];
 
 	const diasAtraso = cliente.previsaoMaisAntiga ? getStoreCreditDaysOverdue(cliente.previsaoMaisAntiga) : 0;
@@ -94,14 +101,20 @@ export function StoreCreditClientCard({ cliente, canReceive, onReceiveClient, on
 					</span>
 					<span className="text-[0.65rem] text-muted-foreground">
 						{cliente.totalRecebido > 0
-							? `${formatToMoney(cliente.totalRecebido)} já recebidos${cliente.ultimoRecebimento ? ` · último em ${formatDateAsLocale(cliente.ultimoRecebimento)}` : ""}`
-							: "Nenhum recebimento registrado"}
+							? `${formatToMoney(cliente.totalRecebido)} já recebidos${originScope ? " no período" : ""}${cliente.ultimoRecebimento ? ` · último em ${formatDateAsLocale(cliente.ultimoRecebimento)}` : ""}`
+							: originScope
+								? "Nenhum recebimento das vendas deste período"
+								: "Nenhum recebimento registrado"}
 					</span>
 				</div>
 
 				<div className="flex w-full flex-col items-stretch gap-2 lg:w-auto lg:flex-row lg:items-center">
 					<div className="flex flex-col lg:items-end">
-						<span className="text-[0.6rem] font-medium tracking-tight text-muted-foreground uppercase">Em aberto</span>
+						{/* Sob recorte, o saldo é o do período — o rótulo precisa dizer isso. Um número que
+						    não muda quando o filtro muda é pior do que não ter filtro. */}
+						<span className="text-[0.6rem] font-medium tracking-tight text-muted-foreground uppercase">
+							{originScope ? "Em aberto no período" : "Em aberto"}
+						</span>
 						<span className={cn("text-lg font-bold tracking-tight", isSettled ? "text-muted-foreground" : "text-foreground")}>
 							{formatToMoney(cliente.saldoAberto)}
 						</span>
@@ -140,7 +153,9 @@ export function StoreCreditClientCard({ cliente, canReceive, onReceiveClient, on
 					>
 						<div className="flex w-full flex-col gap-2 border-t border-border pt-3">
 							<div className="flex w-full items-center justify-between gap-2">
-								<h2 className="text-[0.6rem] font-medium tracking-tight text-muted-foreground uppercase">Vendas do cliente</h2>
+								<h2 className="text-[0.6rem] font-medium tracking-tight text-muted-foreground uppercase">
+									{originScope ? "Vendas do período" : "Vendas do cliente"}
+								</h2>
 								<button
 									type="button"
 									onClick={() => setShowSettled((previous) => !previous)}
@@ -159,7 +174,13 @@ export function StoreCreditClientCard({ cliente, canReceive, onReceiveClient, on
 								<ErrorComponent msg={getErrorMessage(titlesQuery.error)} />
 							) : titulos.length === 0 ? (
 								<p className="py-2 text-center text-xs text-muted-foreground">
-									{showSettled ? "Nenhuma venda a prazo registrada." : "Nenhuma venda em aberto."}
+									{showSettled
+										? originScope
+											? "Nenhuma venda a prazo neste período."
+											: "Nenhuma venda a prazo registrada."
+										: originScope
+											? "Nenhuma venda em aberto neste período."
+											: "Nenhuma venda em aberto."}
 								</p>
 							) : (
 								<div className="flex w-full flex-col divide-y divide-border">

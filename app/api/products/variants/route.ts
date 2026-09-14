@@ -16,6 +16,7 @@ import {
 	products,
 } from "@/services/drizzle/schema";
 import { and, eq } from "drizzle-orm";
+import { upsertProductAddOnOptions, validateAndResolveAddOnOptionLink } from "@/lib/products/add-on-options";
 
 const GetProductVariantsInputSchema = z.object({
 	productId: z
@@ -59,7 +60,10 @@ async function getProductVariants({ input, session }: { input: TGetProductVarian
 					with: {
 						grupo: {
 							with: {
-								opcoes: true,
+								opcoes: {
+									where: (fields, { isNull }) => isNull(fields.dataExclusao),
+									orderBy: (fields, { asc }) => asc(fields.nome),
+								},
 							},
 						},
 					},
@@ -181,157 +185,6 @@ export const UpdateProductVariantInputSchema = z.object({
 export type TUpdateProductVariantInput = z.infer<typeof UpdateProductVariantInputSchema>;
 
 type TUpdateProductVariantAddOnInput = TUpdateProductVariantInput["addOns"][number];
-type TUpdateProductVariantAddOnOptionInput = TUpdateProductVariantAddOnInput["opcoes"][number];
-function normalizeAddOnOptionLink<
-	T extends {
-		produtoConsumo?: string | null;
-		produtoId?: string | null;
-		produtoVarianteId?: string | null;
-		quantidadeConsumo?: number | null;
-	},
->(option: T) {
-	if (!option.produtoConsumo) {
-		return {
-			...option,
-			produtoId: null,
-			produtoVarianteId: null,
-			quantidadeConsumo: 1,
-		};
-	}
-
-	if (option.produtoVarianteId) {
-		return {
-			...option,
-			produtoId: option.produtoId ?? null,
-			produtoVarianteId: option.produtoVarianteId,
-			quantidadeConsumo: option.quantidadeConsumo ?? 1,
-		};
-	}
-
-	return {
-		...option,
-		produtoId: option.produtoId ?? null,
-		produtoVarianteId: null,
-		quantidadeConsumo: option.quantidadeConsumo ?? 1,
-	};
-}
-
-async function validateAndResolveAddOnOptionLink({
-	tx,
-	userOrgId,
-	option,
-}: {
-	tx: DBTransaction;
-	userOrgId: string;
-	option: TUpdateProductVariantAddOnOptionInput;
-}) {
-	const normalizedOption = normalizeAddOnOptionLink(option);
-
-	if (!normalizedOption.produtoConsumo) {
-		return normalizedOption;
-	}
-
-	if (normalizedOption.produtoVarianteId) {
-		const variant = await tx.query.productVariants.findFirst({
-			where: and(eq(productVariants.id, normalizedOption.produtoVarianteId), eq(productVariants.organizacaoId, userOrgId)),
-			columns: {
-				id: true,
-				produtoId: true,
-			},
-		});
-
-		if (!variant) {
-			throw new createHttpError.BadRequest("A variante vinculada ao item de consumo não foi encontrada.");
-		}
-
-		if (normalizedOption.produtoId && normalizedOption.produtoId !== variant.produtoId) {
-			throw new createHttpError.BadRequest("A variante vinculada ao item de consumo não pertence ao produto informado.");
-		}
-
-		return {
-			...normalizedOption,
-			produtoId: variant.produtoId,
-			produtoVarianteId: variant.id,
-		};
-	}
-
-	if (normalizedOption.produtoId) {
-		const product = await tx.query.products.findFirst({
-			where: and(eq(products.id, normalizedOption.produtoId), eq(products.organizacaoId, userOrgId)),
-			columns: {
-				id: true,
-			},
-		});
-
-		if (!product) {
-			throw new createHttpError.BadRequest("O produto vinculado ao item de consumo não foi encontrado.");
-		}
-	}
-
-	return normalizedOption;
-}
-
-async function upsertProductAddOnOptions({
-	tx,
-	userOrgId,
-	addOnId,
-	options,
-}: {
-	tx: DBTransaction;
-	userOrgId: string;
-	addOnId: string;
-	options: TUpdateProductVariantAddOnOptionInput[];
-}) {
-	for (const option of options) {
-		if (option.id && option.deletar) {
-			await tx
-				.update(productAddOnOptions)
-				.set({ ativo: false })
-				.where(
-					and(eq(productAddOnOptions.id, option.id), eq(productAddOnOptions.produtoAddOnId, addOnId), eq(productAddOnOptions.organizacaoId, userOrgId)),
-				);
-			continue;
-		}
-
-		const normalizedOption = await validateAndResolveAddOnOptionLink({
-			tx,
-			userOrgId,
-			option,
-		});
-
-		const optionValues = {
-			nome: normalizedOption.nome,
-			codigo: normalizedOption.codigo,
-			precoDelta: normalizedOption.precoDelta,
-			maxQtdePorItem: normalizedOption.maxQtdePorItem,
-			ativo: normalizedOption.ativo,
-			produtoId: normalizedOption.produtoId ?? null,
-			produtoVarianteId: normalizedOption.produtoVarianteId ?? null,
-			quantidadeConsumo: normalizedOption.quantidadeConsumo ?? 1,
-		};
-
-		if (normalizedOption.id) {
-			await tx
-				.update(productAddOnOptions)
-				.set(optionValues)
-				.where(
-					and(
-						eq(productAddOnOptions.id, normalizedOption.id),
-						eq(productAddOnOptions.produtoAddOnId, addOnId),
-						eq(productAddOnOptions.organizacaoId, userOrgId),
-					),
-				);
-			continue;
-		}
-
-		await tx.insert(productAddOnOptions).values({
-			organizacaoId: userOrgId,
-			produtoAddOnId: addOnId,
-			...optionValues,
-		});
-	}
-}
-
 async function upsertScopedProductAddOn({
 	tx,
 	userOrgId,
@@ -348,14 +201,17 @@ async function upsertScopedProductAddOn({
 	addOn: TUpdateProductVariantAddOnInput;
 }) {
 	if (addOn.id && addOn.deletar) {
+		// Groups can be shared across products/variants: removing one from a variant only
+		// detaches the reference; the group (and its options) stays available in the registry.
 		await tx
-			.update(productAddOns)
-			.set({ ativo: false })
-			.where(and(eq(productAddOns.id, addOn.id), eq(productAddOns.organizacaoId, userOrgId)));
-		await tx
-			.update(productAddOnOptions)
-			.set({ ativo: false })
-			.where(and(eq(productAddOnOptions.produtoAddOnId, addOn.id), eq(productAddOnOptions.organizacaoId, userOrgId)));
+			.delete(productAddOnReferences)
+			.where(
+				and(
+					eq(productAddOnReferences.produtoId, productId),
+					eq(productAddOnReferences.produtoAddOnId, addOn.id),
+					eq(productAddOnReferences.produtoVarianteId, variantId),
+				),
+			);
 		return addOn.id;
 	}
 

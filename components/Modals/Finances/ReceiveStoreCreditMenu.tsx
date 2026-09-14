@@ -11,11 +11,11 @@ import ResponsiveMenu from "@/components/Utils/ResponsiveMenu";
 import { getErrorMessage } from "@/lib/errors";
 import { getStoreCreditAllocationError } from "@/lib/finances/store-credit/allocate";
 import { invalidateFinanceQueries } from "@/lib/finances/invalidate-finance-queries";
-import { formatDateOnInputChange, formatToMoney } from "@/lib/formatting";
+import { formatDateAsLocale, formatDateOnInputChange, formatToMoney } from "@/lib/formatting";
 import { receiveStoreCredit } from "@/lib/mutations/store-credit";
 import { useFinancesAccounts } from "@/lib/queries/finances";
 import { useActiveSalesSession } from "@/lib/queries/sales-sessions";
-import { STORE_CREDIT_QUERY_PREFIXES, useStoreCreditClientTitles } from "@/lib/queries/store-credit";
+import { STORE_CREDIT_QUERY_PREFIXES, type TStoreCreditOriginScope, useStoreCreditClientTitles } from "@/lib/queries/store-credit";
 import { useInternalStoreCreditReceiptState } from "@/state-hooks/use-internal-store-credit-receipt-state";
 
 type StoreCreditClient = { clienteId: string; nome: string; saldoAberto: number };
@@ -25,6 +25,12 @@ type ReceiveStoreCreditMenuProps = {
 	cliente: StoreCreditClient;
 	/** Quando vem preenchido, o menu abre apontando só para aquela venda (baixa por título). */
 	initialTransacaoId: string | null;
+	/**
+	 * Recorte de origem herdado da listagem. Com ele, o FIFO só distribui entre as vendas do período
+	 * — é o que transforma o filtro num fechamento mensal de verdade, em vez de uma lista bonita que
+	 * abre um menu quitando agosto.
+	 */
+	originScope: TStoreCreditOriginScope | null;
 	closeMenu: () => void;
 };
 
@@ -33,8 +39,12 @@ type ReceiveStoreCreditMenuProps = {
  * "quita esta venda aqui" —, porque são a mesma operação com o mesmo resultado contábil; separá-los
  * em dois menus só produziria duas implementações que divergem com o tempo.
  */
-export function ReceiveStoreCreditMenu({ organizationId, cliente, initialTransacaoId, closeMenu }: ReceiveStoreCreditMenuProps) {
-	const titlesQuery = useStoreCreditClientTitles({ clientId: cliente.clienteId });
+export function ReceiveStoreCreditMenu({ organizationId, cliente, initialTransacaoId, originScope, closeMenu }: ReceiveStoreCreditMenuProps) {
+	const titlesQuery = useStoreCreditClientTitles({ clientId: cliente.clienteId, scope: originScope });
+	// Sob recorte, também buscamos o conjunto completo — não para alocar nele, mas para poder dizer
+	// em números quanto do cliente ficou de fora. Omitir isso deixaria o operador achando que quitou
+	// o cliente quando quitou só o mês. É a mesma rota, então a resposta fica em cache.
+	const fullTitlesQuery = useStoreCreditClientTitles({ clientId: cliente.clienteId, enabled: !!originScope });
 	const accountsQuery = useFinancesAccounts({ initialFilters: { activeOnly: true, stats: false } });
 	const sessionQuery = useActiveSalesSession({ organizationId });
 
@@ -64,7 +74,10 @@ export function ReceiveStoreCreditMenu({ organizationId, cliente, initialTransac
 		<LoadedReceiveStoreCreditMenu
 			cliente={cliente}
 			titulos={titlesQuery.data}
+			todosOsTitulos={fullTitlesQuery.data ?? null}
+			foraDoRecorteCarregando={!!originScope && fullTitlesQuery.isLoading}
 			initialTransacaoId={initialTransacaoId}
+			originScope={originScope}
 			financialAccounts={accountsQuery.data.accounts}
 			activeSession={sessionQuery.session ?? null}
 			closeMenu={closeMenu}
@@ -75,7 +88,11 @@ export function ReceiveStoreCreditMenu({ organizationId, cliente, initialTransac
 type LoadedReceiveStoreCreditMenuProps = {
 	cliente: StoreCreditClient;
 	titulos: TGetStoreCreditOutputByClient;
+	/** Conjunto sem recorte, só para medir o que ficou de fora. `null` quando não há recorte. */
+	todosOsTitulos: TGetStoreCreditOutputByClient | null;
+	foraDoRecorteCarregando: boolean;
 	initialTransacaoId: string | null;
+	originScope: TStoreCreditOriginScope | null;
 	financialAccounts: TGetFinancialAccountsOutputDefault["accounts"];
 	activeSession: { id: string; dataAbertura: Date | string; contaFinanceiraId: string | null } | null;
 	closeMenu: () => void;
@@ -84,7 +101,10 @@ type LoadedReceiveStoreCreditMenuProps = {
 function LoadedReceiveStoreCreditMenu({
 	cliente,
 	titulos,
+	todosOsTitulos,
+	foraDoRecorteCarregando,
 	initialTransacaoId,
+	originScope,
 	financialAccounts,
 	activeSession,
 	closeMenu,
@@ -145,6 +165,14 @@ function LoadedReceiveStoreCreditMenu({
 		return !!titulo && titulo.saldo - item.valor > 0.005;
 	});
 
+	// Quanto do cliente o recorte deixou de fora. Calculado com os mesmos centavos do saldo do
+	// menu para os dois números da tela somarem exatamente o total do cliente.
+	const saldoForaDoRecorte = (() => {
+		if (!originScope || !todosOsTitulos) return 0;
+		const totalGeral = todosOsTitulos.titulos.filter((titulo) => titulo.emAberto).reduce((acc, titulo) => acc + titulo.valor, 0);
+		return Math.max(0, Math.round((totalGeral - saldoTotal) * 100) / 100);
+	})();
+
 	const allocationError = getStoreCreditAllocationError({ titles: openTitles, valorRecebido: state.valor, allocations: alocacao });
 	const missingDestination = !state.sessaoVendaId && !state.contaFinanceiraId;
 	const missingDate = !state.dataRecebimento;
@@ -178,8 +206,10 @@ function LoadedReceiveStoreCreditMenu({
 			menuTitle={`RECEBER DE ${cliente.nome.toUpperCase()}`}
 			menuDescription={
 				openTitles.length === 0
-					? "Este cliente não tem vendas a prazo em aberto."
-					: `${openTitles.length} ${openTitles.length === 1 ? "venda em aberto" : "vendas em aberto"}, somando ${formatToMoney(saldoTotal)}.`
+					? originScope
+						? "Este cliente não tem vendas a prazo em aberto no período selecionado."
+						: "Este cliente não tem vendas a prazo em aberto."
+					: `${openTitles.length} ${openTitles.length === 1 ? "venda em aberto" : "vendas em aberto"}${originScope ? " no período" : ""}, somando ${formatToMoney(saldoTotal)}.`
 			}
 			menuActionButtonText="REGISTRAR RECEBIMENTO"
 			menuCancelButtonText="CANCELAR"
@@ -191,6 +221,24 @@ function LoadedReceiveStoreCreditMenu({
 			dialogVariant="md"
 			drawerVariant="lg"
 		>
+			{originScope ? (
+				<div className="text-numeric bg-primary/5 border-primary/20 flex w-full flex-col gap-1 rounded-lg border px-3 py-2">
+					<span className="text-xs font-medium tracking-tight">
+						Recebendo apenas as vendas de {originScope.originAfter ? formatDateAsLocale(originScope.originAfter) : "o início"} a{" "}
+						{originScope.originBefore ? formatDateAsLocale(originScope.originBefore) : "hoje"}.
+					</span>
+					{/* Enquanto o conjunto completo carrega não dá para afirmar nada: dizer "não há nada
+					    fora do período" sem saber é a mesma mentira que o filtro veio evitar. */}
+					<span className="text-[0.65rem] text-muted-foreground">
+						{foraDoRecorteCarregando
+							? "Verificando se este cliente tem vendas fora do período..."
+							: saldoForaDoRecorte > 0
+								? `Este cliente tem mais ${formatToMoney(saldoForaDoRecorte)} em aberto fora deste período, que não entram neste recebimento.`
+								: "Não há nada em aberto fora deste período — este recebimento cobre o cliente inteiro."}
+					</span>
+				</div>
+			) : null}
+
 			<StoreCreditReceiptBlock
 				state={state}
 				saldoTotal={saldoTotal}

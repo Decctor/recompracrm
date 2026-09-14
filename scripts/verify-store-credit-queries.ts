@@ -49,6 +49,27 @@ async function main() {
 	const searched = await getStoreCreditClients({ organizacaoId, search: "a", statuses: [] });
 	console.log(`  pesquisa "a": ${searched.clientesMatched} clientes`);
 
+	console.log("\n[2b] recorte por período de ORIGEM (fechamento mensal) — e o resumo do recorte");
+	const semRecorte = await getStoreCreditClients({ organizacaoId, statuses: ["EM_ABERTO"] });
+	console.log(`  sem recorte: ${semRecorte.clientesMatched} clientes, resumo`, semRecorte.resumo);
+	for (const mesesAtras of [0, 1, 2]) {
+		const inicio = dayjs().subtract(mesesAtras, "month").startOf("month");
+		const recorte = await getStoreCreditClients({
+			organizacaoId,
+			statuses: ["EM_ABERTO"],
+			originAfter: inicio.toDate(),
+			originBefore: inicio.endOf("month").toDate(),
+		});
+		console.log(`  origem em ${inicio.format("MM/YYYY")}: ${recorte.clientesMatched} clientes,`, recorte.resumo);
+	}
+	// Um recorte só com limite inferior, para exercitar o lado aberto do intervalo.
+	const apenasDesde = await getStoreCreditClients({
+		organizacaoId,
+		statuses: ["EM_ABERTO"],
+		originAfter: dayjs().subtract(45, "day").toDate(),
+	});
+	console.log(`  origem nos últimos 45 dias: ${apenasDesde.clientesMatched} clientes,`, apenasDesde.resumo);
+
 	const listagem = await getStoreCreditClients({ organizacaoId, statuses: [] });
 	console.log("\n  primeiros clientes:", listagem.clientes.slice(0, 5));
 
@@ -58,6 +79,20 @@ async function main() {
 		const abertos = await getStoreCreditClientTitles({ organizacaoId, clienteId: primeiro.clienteId });
 		const comHistorico = await getStoreCreditClientTitles({ organizacaoId, clienteId: primeiro.clienteId, includeSettled: true });
 		console.log(`  ${primeiro.nome}: ${abertos.length} em aberto, ${comHistorico.length} com histórico`);
+
+		// O recorte precisa valer também aqui: a expansão e o menu de baixa leem esta função, e se
+		// ela ignorasse o período o operador veria dois saldos diferentes na mesma tela.
+		const inicioDoMes = dayjs().startOf("month");
+		const recortados = await getStoreCreditClientTitles({
+			organizacaoId,
+			clienteId: primeiro.clienteId,
+			originAfter: inicioDoMes.toDate(),
+			originBefore: inicioDoMes.endOf("month").toDate(),
+		});
+		const somaTotal = abertos.reduce((acc, titulo) => acc + titulo.valor, 0);
+		const somaRecorte = recortados.reduce((acc, titulo) => acc + titulo.valor, 0);
+		console.log(`  recorte ${inicioDoMes.format("MM/YYYY")}: ${recortados.length} de ${abertos.length} títulos, R$ ${somaRecorte} de R$ ${somaTotal}`);
+		if (recortados.length > abertos.length) throw new Error("O recorte devolveu mais títulos que o conjunto completo.");
 		console.log("  títulos:", comHistorico.slice(0, 5));
 	} else {
 		console.log("  nenhum cliente com fiado nesta organização — a listagem voltou vazia (sem erro).");
