@@ -217,7 +217,10 @@ function SelectClientContent({
 		meta: { value, isDesktop, resetOptionLabel, triggerRef },
 	} = useSelectClientContext();
 
-	const dialogContainer = (triggerRef.current?.closest("[data-dialog-container]") as HTMLElement) || null;
+	// `undefined`, nunca `null`: o FloatingPortal do Base UI trata `container === null` como "container
+	// ainda não resolvido" e desiste de criar o portal, então o popup não renderiza. Só com `undefined`
+	// ele cai no fallback `document.body` — que é o caso de toda tela que não é modal.
+	const dialogContainer = (triggerRef.current?.closest("[data-dialog-container]") as HTMLElement | null) ?? undefined;
 
 	const command = (
 		<Command shouldFilter={false} className="flex w-full flex-col overflow-hidden">

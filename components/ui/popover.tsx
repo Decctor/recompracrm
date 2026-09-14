@@ -24,8 +24,11 @@ function PopoverContent({
 		PopoverPrimitive.Positioner.Props,
 		"align" | "alignOffset" | "side" | "sideOffset"
 	>) {
+	// `container ?? undefined`: no Base UI, `container={null}` significa "container ainda não resolvido"
+	// e o portal nunca é criado — o popup não renderiza. Um `closest(...)` que não encontra nada devolve
+	// `null`, então normalizamos aqui para o fallback `document.body` valer para todo chamador.
 	return (
-		<PopoverPrimitive.Portal container={container}>
+		<PopoverPrimitive.Portal container={container ?? undefined}>
 			<PopoverPrimitive.Positioner align={align} alignOffset={alignOffset} side={side} sideOffset={sideOffset} className="isolate z-(--z-popover)">
 				<PopoverPrimitive.Popup
 					data-slot="popover-content"

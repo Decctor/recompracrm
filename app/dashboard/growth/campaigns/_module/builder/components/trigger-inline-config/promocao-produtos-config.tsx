@@ -279,7 +279,7 @@ function DraftPromotionProductRow({
 								selectedLabel="NOVO PRODUTO"
 								resetOptionLabel="SELECIONE UM PRODUTO"
 								holderClassName="h-auto min-h-8 rounded-md border-transparent bg-transparent px-2 py-1 text-left shadow-none hover:border-border hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/40"
-								popoverContentClassName="w-[var(--radix-popover-trigger-width)] min-w-[410px] max-w-[520px]"
+								popoverContentClassName="w-[var(--anchor-width)] min-w-[410px] max-w-[520px]"
 								commandListClassName="max-h-[360px]"
 								handleChange={handleChange}
 								onReset={() => undefined}
