@@ -30,6 +30,18 @@ export function getTriggerConfigSummary(campaign: TGetCampaignsOutputById): stri
 					: "Data de disparo não definida",
 			);
 			break;
+		case "PROMOCAO-PRODUTOS": {
+			lines.push(
+				campaign.gatilhoPromocaoDataReferencia
+					? `Disparo em ${dayjs(campaign.gatilhoPromocaoDataReferencia).format("DD/MM/YYYY")}`
+					: "Data de disparo não definida",
+			);
+			const promotionProducts = campaign.gatilhoPromocaoProdutos ?? [];
+			lines.push(promotionProducts.length > 0 ? `${promotionProducts.length} produto(s) na promoção` : "Nenhum produto selecionado");
+			const withOverride = promotionProducts.filter((promotionProduct) => promotionProduct.precoPromocional != null).length;
+			if (withOverride > 0) lines.push(`${withOverride} com preço promocional definido`);
+			break;
+		}
 		case "RECORRENTE": {
 			const freqLabel =
 				RecurrenceFrequencyOptions.find((option) => option.value === campaign.recorrenciaTipo)?.label ?? campaign.recorrenciaTipo ?? "Não definida";

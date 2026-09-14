@@ -1,6 +1,8 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { loadPromotionProductCandidates, resolvePromotionMetadataByClientId } from "@/lib/campaigns/promotion-suggestion";
 import { processSingleInteractionImmediately } from "@/lib/interactions/process-single-interaction";
+import type { TInteractionContextMetadados } from "@/lib/message-templates";
 import { db } from "@/services/drizzle";
 import { clients, interactions } from "@/services/drizzle/schema";
 import { and, eq, inArray } from "drizzle-orm";
@@ -72,6 +74,24 @@ async function testCampaign({
 
 	if (selectedClients.length === 0) throw new createHttpError.BadRequest("Nenhum cliente válido encontrado.");
 
+	// Campanhas de promoção resolvem o produto sugerido por cliente com o mesmo helper do cron,
+	// para que o teste renderize exatamente o que o disparo real renderizaria.
+	let promotionMetadataByClientId = new Map<string, TInteractionContextMetadados>();
+	if (campaign.gatilhoTipo === "PROMOCAO-PRODUTOS") {
+		const promotionCandidates = await loadPromotionProductCandidates({
+			organizationId: userOrgId,
+			promotionProducts: campaign.gatilhoPromocaoProdutos ?? [],
+		});
+		if (promotionCandidates.length === 0) {
+			throw new createHttpError.BadRequest("Nenhum produto disponível na lista da promoção (produtos removidos ou inativados).");
+		}
+		promotionMetadataByClientId = await resolvePromotionMetadataByClientId({
+			organizationId: userOrgId,
+			clientIds: selectedClients.map((client) => client.id),
+			candidates: promotionCandidates,
+		});
+	}
+
 	const results: { clientId: string; clientName: string; success: boolean; error?: string; channelsAttempted: string[]; channelsSkipped: string[]; channelsSent: string[]; channelErrors: Record<string, string> }[] = [];
 
 	for (const client of selectedClients) {
@@ -92,6 +112,7 @@ async function testCampaign({
 				autorId: userId,
 				agendamentoDataReferencia: new Date().toISOString(),
 				agendamentoBlocoReferencia: "09:00",
+				metadados: promotionMetadataByClientId.get(client.id) ?? null,
 			})
 			.returning({ id: interactions.id });
 
@@ -120,6 +141,7 @@ async function testCampaign({
 			},
 			whatsappToken: whatsappConnection?.tipoConexao === "META_CLOUD_API" ? (whatsappConnection.token ?? undefined) : undefined,
 			whatsappSessionId: whatsappConnection?.tipoConexao === "INTERNAL_GATEWAY" ? (whatsappConnection.gatewaySessaoId ?? undefined) : undefined,
+			contextMetadados: promotionMetadataByClientId.get(client.id),
 			weeklyLimitMode: "skip",
 		});
 

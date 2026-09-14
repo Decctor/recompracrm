@@ -1,6 +1,8 @@
 import { appApiHandler } from "@/lib/app-api";
 import { resolveCampaignAudienceClientIdsForCampaign } from "@/lib/campaigns/filters";
+import { applyCampaignBatchEffectsToInteractionMetadata } from "@/lib/campaigns/interaction-metadata";
 import { ENQUEUE_CHUNK_SIZE, MAX_ENQUEUE_ATTEMPTS, chunkArray, enqueueChunkWithRetries, processEnqueuedChunkImmediateInteractions } from "@/lib/campaigns/shared";
+import type { TInteractionContextMetadados } from "@/lib/message-templates";
 import { INTERACTIONS_CRON_TIMEZONE, getCurrentTimeBlock, type TInteractionCronTimeBlock } from "@/lib/campaigns/time-blocks";
 import { assertCronAuthorized } from "@/lib/cron/assert-cron-authorized";
 import { notifyCampaignEnqueueFailure } from "@/lib/cron/notify-campaign-enqueue-failure";
@@ -98,7 +100,11 @@ async function enqueueRecurrentCampaignChunk({
 	clientIds: string[];
 	currentDate: string;
 	currentTimeBlock: TInteractionCronTimeBlock;
-}): Promise<{ inserted: { id: string; clienteId: string }[] }> {
+}): Promise<{
+	inserted: { id: string; clienteId: string }[];
+	cashbackGenerated: number;
+	metadadosByClientId: Map<string, TInteractionContextMetadados>;
+}> {
 	return db.transaction(async (tx) => {
 		let eligibleClientIds = clientIds;
 
@@ -135,13 +141,28 @@ async function enqueueRecurrentCampaignChunk({
 		}
 
 		if (eligibleClientIds.length === 0) {
-			return { inserted: [] };
+			return { inserted: [], cashbackGenerated: 0, metadadosByClientId: new Map<string, TInteractionContextMetadados>() };
 		}
+
+		// Efeitos de cashback/cupom da campanha, aplicados por recorrência (antes desta chamada eles
+		// simplesmente nunca rodavam neste cron). IDs pré-gerados pelo mesmo motivo do cron de uso
+		// único: o contexto dos efeitos precisa estar no metadados da interação, e as transações de
+		// cashback gravam metadados.interacaoId para permitir estorno em bloqueio de envio.
+		const interactionIdByClientId = new Map(eligibleClientIds.map((clientId) => [clientId, crypto.randomUUID()]));
+
+		const { cashbackGenerated, metadadosByClientId } = await applyCampaignBatchEffectsToInteractionMetadata({
+			tx,
+			organizationId,
+			campaign,
+			clientIds: eligibleClientIds,
+			interactionIdByClientId,
+		});
 
 		const inserted = await tx
 			.insert(interactions)
 			.values(
 				eligibleClientIds.map((clientId) => ({
+					id: interactionIdByClientId.get(clientId),
 					clienteId: clientId,
 					campanhaId: campaign.id,
 					organizacaoId: organizationId,
@@ -150,11 +171,12 @@ async function enqueueRecurrentCampaignChunk({
 					descricao: campaign.descricao ?? `Campanha recorrente: ${campaign.titulo}`,
 					agendamentoDataReferencia: currentDate,
 					agendamentoBlocoReferencia: currentTimeBlock as TInteractionEntity["agendamentoBlocoReferencia"],
+					metadados: metadadosByClientId.get(clientId) ?? null,
 				})),
 			)
 			.returning({ id: interactions.id, clienteId: interactions.clienteId });
 
-		return { inserted };
+		return { inserted, cashbackGenerated, metadadosByClientId };
 	});
 }
 
@@ -184,6 +206,7 @@ async function processRecurrentCampaign({
 	const hasDeliveryConfig = !!campaign.whatsappTemplate;
 
 	let campaignEnqueuedCount = 0;
+	let campaignCashbacksGenerated = 0;
 	const failedClientIds: string[] = [];
 	const enqueueErrors: string[] = [];
 
@@ -207,8 +230,9 @@ async function processRecurrentCampaign({
 			continue;
 		}
 
-		const { inserted } = enqueueResult.result;
+		const { inserted, cashbackGenerated, metadadosByClientId } = enqueueResult.result;
 		campaignEnqueuedCount += inserted.length;
+		campaignCashbacksGenerated += cashbackGenerated;
 
 		if (hasDeliveryConfig && inserted.length > 0) {
 			try {
@@ -224,12 +248,17 @@ async function processRecurrentCampaign({
 					whatsappSessionId: campaign.whatsappConexaoTelefone?.conexao?.gatewaySessaoId ?? undefined,
 					weeklyLimitCache,
 					logTag: "RECURRENT_CAMPAIGNS",
+					contextMetadadosByClientId: metadadosByClientId,
 				});
 			} catch (error) {
 				// The enqueued interactions stay pending and will be drained by the process-interactions cron.
 				console.error(`[ORG: ${organizationId}] [CAMPAIGN: ${campaign.id}] [RECURRENT_CAMPAIGNS] Post-enqueue processing failed for chunk:`, error);
 			}
 		}
+	}
+
+	if (campaignCashbacksGenerated > 0) {
+		console.log(`[ORG: ${organizationId}] [CAMPAIGN: ${campaign.id}] Generated ${campaignCashbacksGenerated} campaign cashbacks for this recurrence.`);
 	}
 
 	if (failedClientIds.length > 0) {

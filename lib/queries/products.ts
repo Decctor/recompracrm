@@ -282,6 +282,33 @@ export function useProductsBySearch({ initialParams }: UseProductsBySearchParams
 	};
 }
 
+async function fetchProductsByIds(ids: string[]) {
+	const urlParams = new URLSearchParams();
+	urlParams.set("search", "");
+	urlParams.set("page", "1");
+	urlParams.set("ids", ids.join(","));
+	const { data } = await axios.get<TGetProductsBySearchOutput>(`/api/products/search?${urlParams.toString()}`);
+	return data.data.products;
+}
+
+/**
+ * Hidrata uma lista de produtos a partir de IDs — para telas que persistem apenas os IDs e ainda
+ * precisam exibir nome, preço e imagem (ex.: produtos de uma campanha de promoção).
+ */
+export function useProductsByIds({ ids }: { ids: string[] }) {
+	// Ordenado para que a mesma lista em ordens diferentes reaproveite o cache.
+	const sortedIds = [...ids].sort();
+	const queryKey = ["products-by-ids", sortedIds];
+	return {
+		...useQuery({
+			queryKey,
+			queryFn: () => fetchProductsByIds(sortedIds),
+			enabled: sortedIds.length > 0,
+		}),
+		queryKey,
+	};
+}
+
 type TProductsBySearchProduct = TGetProductsBySearchOutput["data"]["products"][number];
 type UseProductsBySearchInfiniteQueryParams = {
 	initialSearch?: string;

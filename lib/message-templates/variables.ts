@@ -1,6 +1,6 @@
 import type { TCampaignTriggerTypeEnum, TCashbackProgramTerminologyEnum } from "@/schemas/enums";
 
-export type TMessageTemplateVariableContextGroup = "CLIENTE" | "COMPRA" | "CASHBACK" | "CASHBACK_EXPIRANDO" | "CUPOM";
+export type TMessageTemplateVariableContextGroup = "CLIENTE" | "COMPRA" | "CASHBACK" | "CASHBACK_EXPIRANDO" | "CUPOM" | "PROMOCAO";
 
 // CUPOM está disponível em todos os gatilhos: qualquer campanha pode atribuir um cupom ao disparar.
 export const MESSAGE_TEMPLATE_TRIGGER_CONTEXT_MAP: Record<TCampaignTriggerTypeEnum, TMessageTemplateVariableContextGroup[]> = {
@@ -16,6 +16,8 @@ export const MESSAGE_TEMPLATE_TRIGGER_CONTEXT_MAP: Record<TCampaignTriggerTypeEn
 	RECORRENTE: ["CLIENTE", "CASHBACK", "CUPOM"],
 	"PIOR-DIA-VENDAS": ["CLIENTE", "CASHBACK", "CUPOM"],
 	"USO-UNICO": ["CLIENTE", "CASHBACK", "CUPOM"],
+	// PROMOCAO é exclusivo deste gatilho: só ele resolve um produto sugerido da lista promovida.
+	"PROMOCAO-PRODUTOS": ["CLIENTE", "PROMOCAO", "CASHBACK", "CUPOM"],
 };
 
 export type TMessageTemplateVariables = {
@@ -39,6 +41,9 @@ export type TMessageTemplateVariables = {
 	couponCode: string;
 	couponTitle: string;
 	couponExpirationDate: string;
+	promotionProductName: string;
+	promotionProductPrice: string;
+	promotionProductOriginalPrice: string;
 };
 
 export type TMessageTemplateVariable = {
@@ -190,6 +195,27 @@ export const MessageTemplateVariables: TMessageTemplateVariable[] = [
 		description: "Data em que a atribuição do cupom expira.",
 		contexto: "CUPOM",
 	},
+	{
+		id: "promotion_product_name",
+		label: "Nome do Produto da Promoção",
+		value: "promotionProductName",
+		description: "Nome do produto da promoção sugerido para o cliente, escolhido entre os produtos promovidos pela campanha.",
+		contexto: "PROMOCAO",
+	},
+	{
+		id: "promotion_product_price",
+		label: "Preço Promocional do Produto",
+		value: "promotionProductPrice",
+		description: "Preço do produto sugerido na promoção: o preço promocional definido na campanha ou, na ausência dele, o preço de venda.",
+		contexto: "PROMOCAO",
+	},
+	{
+		id: "promotion_product_original_price",
+		label: "Preço Original do Produto",
+		value: "promotionProductOriginalPrice",
+		description: "Preço de venda do produto sugerido antes do desconto da promoção.",
+		contexto: "PROMOCAO",
+	},
 ];
 
 export type TInteractionContextMetadados = {
@@ -210,6 +236,14 @@ export type TInteractionContextMetadados = {
 	cupomCodigo?: string;
 	cupomTitulo?: string;
 	cupomExpiracaoData?: string;
+	// Snapshot do produto sugerido da promoção, resolvido por cliente no enfileiramento
+	// (ver lib/campaigns/promotion-suggestion.ts). Congelar aqui mantém a mensagem estável
+	// mesmo que o catálogo mude entre o enfileiramento e o envio.
+	promocaoProdutoId?: string;
+	promocaoProdutoNome?: string;
+	promocaoProdutoPrecoOriginal?: number;
+	promocaoProdutoPrecoPromocional?: number; // preço efetivo (sobrescrita ?? preço de venda)
+	promocaoProdutoImagemUrl?: string; // sem uso na v1; habilita o cabeçalho dinâmico da v2
 };
 
 export const MESSAGE_TEMPLATE_VARIABLE_CONTEXT_GROUP_LABELS: Record<TMessageTemplateVariableContextGroup, string> = {
@@ -218,6 +252,7 @@ export const MESSAGE_TEMPLATE_VARIABLE_CONTEXT_GROUP_LABELS: Record<TMessageTemp
 	CASHBACK: "Dados de Cashback",
 	CASHBACK_EXPIRANDO: "Cashback Expirando",
 	CUPOM: "Dados de Cupom",
+	PROMOCAO: "Produto Sugerido da Promoção",
 };
 
 export function getVariablesForTrigger(triggerType: TCampaignTriggerTypeEnum): TMessageTemplateVariable[] {
@@ -280,6 +315,9 @@ export const MessageTemplateVariableExampleValues: Record<string, string> = {
 	cashbackExpiringAmount: "R$ 10,00",
 	cashbackExpiringDate: "27/05/2026",
 	cashbackExpiringWindow: "nos próximos 7 dias",
+	promotionProductName: "Cappuccino",
+	promotionProductPrice: "R$ 9,90",
+	promotionProductOriginalPrice: "R$ 12,90",
 };
 
 export function isAllowedMessageTemplateVariable(identifier: string) {

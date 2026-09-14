@@ -3,6 +3,7 @@ import type {
 	TCampaignFilterLogicOperatorEnum,
 	TCampaignFilterTreeNode,
 	TCampaignFiltersTree,
+	TCampaignPromotionProduct,
 	TCampaignState,
 } from "@/schemas/campaigns";
 import { RFMLabels } from "@/utils/rfm";
@@ -75,6 +76,8 @@ export function useCampaignState() {
 			recorrenciaDiasSemana: null,
 			recorrenciaDiasMes: null,
 			gatilhoUsoUnicoDataReferencia: null,
+			gatilhoPromocaoDataReferencia: null,
+			gatilhoPromocaoProdutos: null,
 			execucaoAgendadaMedida: "DIAS",
 			execucaoAgendadaValor: 0,
 			execucaoAgendadaDirecao: "DEPOIS",
@@ -134,6 +137,42 @@ export function useCampaignState() {
 		},
 		[state.segmentations],
 	);
+
+	// ------- Promotion products helpers (gatilho "PROMOCAO-PRODUTOS") -------
+	// A lista é um jsonb substituído por inteiro: sem `deletar`, remover é filtrar o array.
+	// A ordem importa — é a prioridade de fallback quando o cliente não tem afinidade.
+
+	const addPromotionProduct = useCallback((promotionProduct: TCampaignPromotionProduct) => {
+		setState((prev) => ({
+			...prev,
+			campaign: {
+				...prev.campaign,
+				gatilhoPromocaoProdutos: [...(prev.campaign.gatilhoPromocaoProdutos ?? []), promotionProduct],
+			},
+		}));
+	}, []);
+
+	const updatePromotionProduct = useCallback((index: number, promotionProduct: Partial<TCampaignPromotionProduct>) => {
+		setState((prev) => ({
+			...prev,
+			campaign: {
+				...prev.campaign,
+				gatilhoPromocaoProdutos: (prev.campaign.gatilhoPromocaoProdutos ?? []).map((item, itemIndex) =>
+					itemIndex === index ? { ...item, ...promotionProduct } : item,
+				),
+			},
+		}));
+	}, []);
+
+	const removePromotionProduct = useCallback((index: number) => {
+		setState((prev) => ({
+			...prev,
+			campaign: {
+				...prev.campaign,
+				gatilhoPromocaoProdutos: (prev.campaign.gatilhoPromocaoProdutos ?? []).filter((_, itemIndex) => itemIndex !== index),
+			},
+		}));
+	}, []);
 
 	// ------- Filters tree helpers -------
 
@@ -213,6 +252,9 @@ export function useCampaignState() {
 		addSegmentation,
 		updateSegmentation,
 		deleteSegmentation,
+		addPromotionProduct,
+		updatePromotionProduct,
+		removePromotionProduct,
 		updateFiltersRoot,
 		addFilterCondition,
 		updateFilterCondition,

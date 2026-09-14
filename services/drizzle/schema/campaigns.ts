@@ -11,7 +11,7 @@ import {
 	timeDurationUnitsEnum,
 } from "./enums";
 import { organizations } from "./organizations";
-import type { TCampaignFilters } from "@/schemas/campaigns";
+import type { TCampaignFilters, TCampaignPromotionProduct } from "@/schemas/campaigns";
 
 export const campaigns = newTable("campaigns", {
 	id: varchar("id", { length: 255 })
@@ -50,6 +50,15 @@ export const campaigns = newTable("campaigns", {
 	gatilhoValorTotalCompras: doublePrecision("gatilho_valor_total_compras"), // defines the minimum required all-time total purchase value for trigger to fire
 	// specific for "USO-UNICO"
 	gatilhoUsoUnicoDataReferencia: text("gatilho_uso_unico_data_referencia"), // YYYY-MM-DD in the interactions cron timezone
+
+	// specific for "PROMOCAO-PRODUTOS"
+	gatilhoPromocaoDataReferencia: text("gatilho_promocao_data_referencia"), // YYYY-MM-DD in the interactions cron timezone
+	// Lista curada (até 10) de produtos promovidos. jsonb em vez de tabela filha: a estrutura é
+	// pequena, limitada e sempre lida/escrita por inteiro. A ORDEM DO ARRAY é a prioridade de
+	// fallback quando o cliente não tem sinal de afinidade (ver lib/campaigns/promotion-suggestion.ts).
+	// Guarda apenas configuração: nome/preço/imagem são resolvidos no enfileiramento, para que um
+	// produto renomeado ou reprecificado nunca deixe a campanha desatualizada.
+	gatilhoPromocaoProdutos: jsonb("gatilho_promocao_produtos").$type<TCampaignPromotionProduct[]>(),
 
 	execucaoAgendadaMedida: timeDurationUnitsEnum("execucao_agendada_medida").notNull().default("DIAS"),
 	execucaoAgendadaValor: integer("execucao_agendada_valor").notNull().default(0),

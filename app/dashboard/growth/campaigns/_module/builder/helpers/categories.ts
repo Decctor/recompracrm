@@ -35,7 +35,7 @@ export const BUILDER_CATEGORIES: TBuilderCategory[] = [
 		tagline: "Dispare numa data ou em uma cadência fixa",
 		description:
 			"Campanhas que rodam em horários ou datas pré-definidas — recorrentes (diário/semanal/mensal) ou disparo único.",
-		triggers: ["RECORRENTE", "USO-UNICO"],
+		triggers: ["RECORRENTE", "USO-UNICO", "PROMOCAO-PRODUTOS"],
 	},
 	{
 		id: "RFM",

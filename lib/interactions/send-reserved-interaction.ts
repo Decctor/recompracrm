@@ -4,6 +4,7 @@ import {
 	buildWhatsappTemplateSendPayload,
 	convertHtmlToWhatsappText,
 	replaceMessageTemplateVariables,
+	type TInteractionContextMetadados,
 	type TMessageTemplateRuntimeContext,
 } from "@/lib/message-templates";
 import { sendTemplateWhatsappMessage } from "@/lib/whatsapp";
@@ -270,12 +271,18 @@ export async function sendReservedInteraction(
 	try {
 		const interaction = await db.query.interactions.findFirst({
 			where: (fields, { and, eq }) => and(eq(fields.id, interactionId), eq(fields.organizacaoId, organizationId)),
-			columns: { id: true },
+			columns: { id: true, metadados: true },
 		});
 
 		if (!interaction) {
 			return { success: false, status: "FAILED", error: "Interação não encontrada para processamento." };
 		}
+
+		// Guarda estrutural: o metadados persistido na interação é a fonte autoritativa do contexto.
+		// Chamadores do caminho imediato deveriam repassar `contextMetadados` em memória, mas um
+		// chamador que esqueça (já aconteceu — crons de campanha) não pode custar variáveis vazias
+		// ou "R$ 0,00" na mensagem: sem contexto em memória, caímos no que foi congelado no banco.
+		const effectiveContextMetadados = contextMetadados ?? (interaction.metadados as TInteractionContextMetadados | null) ?? undefined;
 
 		const organizationContext = await resolveOrganizationMessagingContext(organizationId);
 		const hasHubAccess = params.hasHubAccess ?? organizationContext.hasHubAccess;
@@ -291,7 +298,7 @@ export async function sendReservedInteraction(
 		const clientFavoriteProduct = client.metadataProdutoMaisCompradoId ? (productNameById.get(client.metadataProdutoMaisCompradoId) ?? "") : "";
 		const clientSuggestedProduct = client.metadataProdutoSugeridoId ? (productNameById.get(client.metadataProdutoSugeridoId) ?? "") : "";
 
-		const cashbackTerminology = contextMetadados?.terminologia ?? organizationContext.organizationCashbackTerminology;
+		const cashbackTerminology = effectiveContextMetadados?.terminologia ?? organizationContext.organizationCashbackTerminology;
 		const messageTemplateVariablesValuesMap = buildInteractionMessageVariables({
 			client: {
 				nome: client.nome,
@@ -302,7 +309,7 @@ export async function sendReservedInteraction(
 				metadataProdutoMaisCompradoNome: clientFavoriteProduct,
 				metadataProdutoSugeridoNome: clientSuggestedProduct,
 			},
-			contextMetadados,
+			contextMetadados: effectiveContextMetadados,
 			terminology: cashbackTerminology,
 		});
 		const runtimeContext: TMessageTemplateRuntimeContext = {

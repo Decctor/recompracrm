@@ -33,6 +33,7 @@ import {
 	Archive,
 	ArrowDown,
 	ArrowUp,
+	BadgePercent,
 	Ban,
 	Banknote,
 	BookOpen,
@@ -244,6 +245,13 @@ export const CampaignTriggerTypeOptions: {
 		value: "USO-UNICO",
 		icon: <ShoppingCart className="w-4 h-4" />,
 		description: "A campanha será disparada uma única vez na data selecionada e no bloco de horário configurado.",
+	},
+	{
+		id: 13,
+		label: "PROMOÇÃO DE PRODUTOS",
+		value: "PROMOCAO-PRODUTOS",
+		icon: <BadgePercent className="w-4 h-4" />,
+		description: "Divulga uma lista de produtos numa data única — cada cliente recebe o produto com mais chance de recompra.",
 	},
 ];
 

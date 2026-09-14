@@ -1,5 +1,6 @@
 import type { TCampaignTriggerTypeEnum } from "@/schemas/enums";
 import {
+	BadgePercent,
 	CalendarClock,
 	CalendarHeart,
 	Cake,
@@ -82,6 +83,12 @@ export const TRIGGER_META: Record<TCampaignTriggerTypeEnum, TTriggerMeta> = {
 		label: "Uso único",
 		description: "Disparada uma única vez na data selecionada e no bloco de horário configurado.",
 		icon: CalendarClock,
+	},
+	"PROMOCAO-PRODUTOS": {
+		value: "PROMOCAO-PRODUTOS",
+		label: "Promoção de produtos",
+		description: "Divulga uma lista de produtos numa data única — cada cliente recebe o produto com mais chance de recompra.",
+		icon: BadgePercent,
 	},
 	"ENTRADA-SEGMENTAÇÃO": {
 		value: "ENTRADA-SEGMENTAÇÃO",

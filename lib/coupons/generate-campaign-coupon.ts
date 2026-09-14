@@ -111,17 +111,22 @@ export async function generateCouponGrantsForCampaignBatch({
 	couponId,
 	expirationMeasure,
 	expirationValue,
-}: GenerateCouponGrantsForCampaignBatchParams): Promise<{ generatedCount: number; couponCode: string | null }> {
+}: GenerateCouponGrantsForCampaignBatchParams): Promise<{
+	generatedCount: number;
+	couponCode: string | null;
+	couponTitle: string | null;
+	expirationDate: Date | null;
+}> {
 	const uniqueClientIds = Array.from(new Set(clientIds));
-	if (uniqueClientIds.length === 0) return { generatedCount: 0, couponCode: null };
+	if (uniqueClientIds.length === 0) return { generatedCount: 0, couponCode: null, couponTitle: null, expirationDate: null };
 
 	const coupon = await tx.query.coupons.findFirst({
 		where: (fields, { and, eq }) => and(eq(fields.id, couponId), eq(fields.organizacaoId, organizationId)),
-		columns: { id: true, codigo: true, ativo: true, escopo: true, vigenciaFim: true },
+		columns: { id: true, codigo: true, titulo: true, ativo: true, escopo: true, vigenciaFim: true },
 	});
 	if (!coupon || !coupon.ativo || coupon.escopo !== "INDIVIDUAL" || (coupon.vigenciaFim && coupon.vigenciaFim < new Date())) {
 		console.error(`[CAMPAIGN_COUPON] Coupon ${couponId} is unavailable for batch grant generation. Skipping batch.`);
-		return { generatedCount: 0, couponCode: null };
+		return { generatedCount: 0, couponCode: null, couponTitle: null, expirationDate: null };
 	}
 
 	const expirationDate =
@@ -143,5 +148,5 @@ export async function generateCouponGrantsForCampaignBatch({
 
 	console.log(`[CAMPAIGN_COUPON] Granted coupon ${coupon.codigo} to ${uniqueClientIds.length} clients from campaign ${campaignId}.`);
 
-	return { generatedCount: uniqueClientIds.length, couponCode: coupon.codigo };
+	return { generatedCount: uniqueClientIds.length, couponCode: coupon.codigo, couponTitle: coupon.titulo, expirationDate };
 }

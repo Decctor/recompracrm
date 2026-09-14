@@ -9,6 +9,7 @@ import NovaCompraConfig from "./nova-compra-config";
 import PermanenciaSegmentacaoConfig from "./permanencia-segmentacao-config";
 import PiorDiaVendasConfig from "./pior-dia-vendas-config";
 import PrimeiraCompraConfig from "./primeira-compra-config";
+import PromocaoProdutosConfig from "./promocao-produtos-config";
 import QuantidadeTotalComprasConfig from "./quantidade-total-compras-config";
 import RecorrenteConfig from "./recorrente-config";
 import UsoUnicoConfig from "./uso-unico-config";
@@ -25,6 +26,7 @@ export const triggerInlineConfigByType: Record<TCampaignTriggerTypeEnum, Compone
 	"PIOR-DIA-VENDAS": PiorDiaVendasConfig,
 	RECORRENTE: RecorrenteConfig,
 	"USO-UNICO": UsoUnicoConfig,
+	"PROMOCAO-PRODUTOS": PromocaoProdutosConfig,
 	"ENTRADA-SEGMENTAÇÃO": EntradaSegmentacaoConfig,
 	"PERMANÊNCIA-SEGMENTAÇÃO": PermanenciaSegmentacaoConfig,
 };

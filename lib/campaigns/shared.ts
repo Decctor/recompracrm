@@ -65,6 +65,11 @@ type TProcessEnqueuedChunkImmediateInteractionsParams = {
 	weeklyLimitCache: TCampaignWeeklyLimitCache;
 	logTag: string;
 	sendConcurrency?: number;
+	// Metadados de contexto por cliente, gravados na interação no enfileiramento. O caminho de
+	// drenagem (cron process-interactions) lê `interactions.metadados` do banco, mas o envio
+	// imediato roda em memória logo após o insert — sem repassar aqui, as variáveis de contexto
+	// renderizariam vazias justamente nos disparos imediatos.
+	contextMetadadosByClientId?: Map<string, ImmediateProcessingData["contextMetadados"]>;
 };
 
 export type TProcessEnqueuedChunkImmediateInteractionsResult = {
@@ -84,6 +89,7 @@ export async function processEnqueuedChunkImmediateInteractions({
 	weeklyLimitCache,
 	logTag,
 	sendConcurrency = IMMEDIATE_PROCESSING_CONCURRENCY,
+	contextMetadadosByClientId,
 }: TProcessEnqueuedChunkImmediateInteractionsParams): Promise<TProcessEnqueuedChunkImmediateInteractionsResult> {
 	const clientIds = inserted.map((row) => row.clienteId);
 	const clientsData = await db.query.clients.findMany({
@@ -126,6 +132,7 @@ export async function processEnqueuedChunkImmediateInteractions({
 			campaign,
 			whatsappToken,
 			whatsappSessionId,
+			contextMetadados: contextMetadadosByClientId?.get(row.clienteId),
 		});
 	}
 

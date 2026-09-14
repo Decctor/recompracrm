@@ -41,6 +41,11 @@ export function buildContextVariablesMap(
 		couponCode: ctx?.cupomCodigo ?? "",
 		couponTitle: ctx?.cupomTitulo ?? "",
 		couponExpirationDate: ctx?.cupomExpiracaoData ?? "",
+		promotionProductName: ctx?.promocaoProdutoNome ?? "",
+		// Preço ausente vira string vazia, como as demais variáveis de contexto: "R$ 0,00" seria uma
+		// afirmação de preço que o dado não sustenta.
+		promotionProductPrice: ctx?.promocaoProdutoPrecoPromocional != null ? formatToMoney(ctx.promocaoProdutoPrecoPromocional) : "",
+		promotionProductOriginalPrice: ctx?.promocaoProdutoPrecoOriginal != null ? formatToMoney(ctx.promocaoProdutoPrecoOriginal) : "",
 	};
 }
 

@@ -1,4 +1,4 @@
-import type { TCampaignState } from "@/schemas/campaigns";
+import { CAMPAIGN_PROMOTION_PRODUCTS_LIMIT, type TCampaignState } from "@/schemas/campaigns";
 import type { TBuilderStageId } from "./stages";
 
 export type TStageValidationResult = {
@@ -19,6 +19,23 @@ function validateTriggerStage(campaign: TCampaign, segmentations: TSegmentations
 		case "USO-UNICO":
 			if (!campaign.gatilhoUsoUnicoDataReferencia) return { valid: false, reason: "Selecione a data de disparo." };
 			return { valid: true };
+		case "PROMOCAO-PRODUTOS": {
+			if (!campaign.gatilhoPromocaoDataReferencia) return { valid: false, reason: "Selecione a data de disparo." };
+			const promotionProducts = campaign.gatilhoPromocaoProdutos ?? [];
+			if (promotionProducts.length === 0) return { valid: false, reason: "Selecione ao menos um produto para a promoção." };
+			if (promotionProducts.length > CAMPAIGN_PROMOTION_PRODUCTS_LIMIT) {
+				return { valid: false, reason: `A promoção suporta no máximo ${CAMPAIGN_PROMOTION_PRODUCTS_LIMIT} produtos.` };
+			}
+			if (promotionProducts.some((promotionProduct) => !promotionProduct.produtoId)) {
+				return { valid: false, reason: "Há linhas sem produto selecionado." };
+			}
+			const productIds = promotionProducts.map((promotionProduct) => promotionProduct.produtoId);
+			if (new Set(productIds).size !== productIds.length) return { valid: false, reason: "Há produtos repetidos na lista." };
+			if (promotionProducts.some((promotionProduct) => promotionProduct.precoPromocional != null && promotionProduct.precoPromocional <= 0)) {
+				return { valid: false, reason: "O preço promocional deve ser maior que zero." };
+			}
+			return { valid: true };
+		}
 		case "RECORRENTE":
 			if (!campaign.recorrenciaTipo) return { valid: false, reason: "Selecione a frequência da recorrência." };
 			if (!campaign.recorrenciaIntervalo || campaign.recorrenciaIntervalo < 1) {
@@ -84,7 +101,8 @@ function validateTriggerStage(campaign: TCampaign, segmentations: TSegmentations
 function validateSendStage(campaign: TCampaign): TStageValidationResult {
 	if (!campaign.whatsappTemplateId) return { valid: false, reason: "Selecione um template de mensagem." };
 	if (!campaign.execucaoAgendadaBloco) return { valid: false, reason: "Selecione o bloco de horário." };
-	const requiresDelay = campaign.gatilhoTipo !== "RECORRENTE" && campaign.gatilhoTipo !== "USO-UNICO";
+	const requiresDelay =
+		campaign.gatilhoTipo !== "RECORRENTE" && campaign.gatilhoTipo !== "USO-UNICO" && campaign.gatilhoTipo !== "PROMOCAO-PRODUTOS";
 	if (requiresDelay && (campaign.execucaoAgendadaValor === null || campaign.execucaoAgendadaValor === undefined)) {
 		return { valid: false, reason: "Defina o valor do atraso de execução." };
 	}

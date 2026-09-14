@@ -20,7 +20,34 @@ export function getTriggerDefaultsPatch(value: TCampaignTriggerTypeEnum, current
 		return {
 			gatilhoTipo: value,
 			gatilhoUsoUnicoDataReferencia: current.gatilhoUsoUnicoDataReferencia ?? dayjs().format("YYYY-MM-DD"),
+			gatilhoPromocaoDataReferencia: null,
+			gatilhoPromocaoProdutos: null,
 			// clear unrelated trigger fields
+			gatilhoNovaCompraValorMinimo: null,
+			gatilhoTempoPermanenciaMedida: null,
+			gatilhoTempoPermanenciaValor: null,
+			gatilhoNovoCashbackAcumuladoValorMinimo: null,
+			gatilhoTotalCashbackAcumuladoValorMinimo: null,
+			gatilhoCashbackExpirandoAntecedenciaValor: null,
+			gatilhoCashbackExpirandoAntecedenciaMedida: null,
+			gatilhoCashbackExpirandoValorMinimo: null,
+			gatilhoQuantidadeTotalCompras: null,
+			gatilhoValorTotalCompras: null,
+			recorrenciaTipo: null,
+			recorrenciaIntervalo: 1,
+			recorrenciaDiasSemana: null,
+			recorrenciaDiasMes: null,
+		};
+	}
+
+	// PROMOCAO-PRODUTOS: seed today's date and an empty product list, clear other trigger fields.
+	if (value === "PROMOCAO-PRODUTOS") {
+		return {
+			gatilhoTipo: value,
+			gatilhoPromocaoDataReferencia: current.gatilhoPromocaoDataReferencia ?? dayjs().format("YYYY-MM-DD"),
+			gatilhoPromocaoProdutos: current.gatilhoPromocaoProdutos ?? [],
+			// clear unrelated trigger fields
+			gatilhoUsoUnicoDataReferencia: null,
 			gatilhoNovaCompraValorMinimo: null,
 			gatilhoTempoPermanenciaMedida: null,
 			gatilhoTempoPermanenciaValor: null,
@@ -46,6 +73,8 @@ export function getTriggerDefaultsPatch(value: TCampaignTriggerTypeEnum, current
 		return {
 			gatilhoTipo: value,
 			gatilhoUsoUnicoDataReferencia: null,
+			gatilhoPromocaoDataReferencia: null,
+			gatilhoPromocaoProdutos: null,
 			...(shouldPrefillValor ? { gatilhoCashbackExpirandoAntecedenciaValor: 3 } : {}),
 			...(shouldPrefillMedida ? { gatilhoCashbackExpirandoAntecedenciaMedida: "DIAS" as const } : {}),
 			// clear unrelated trigger fields
@@ -69,6 +98,8 @@ export function getTriggerDefaultsPatch(value: TCampaignTriggerTypeEnum, current
 		return {
 			gatilhoTipo: value,
 			gatilhoUsoUnicoDataReferencia: null,
+			gatilhoPromocaoDataReferencia: null,
+			gatilhoPromocaoProdutos: null,
 			recorrenciaTipo: current.recorrenciaTipo ?? "SEMANAL",
 			recorrenciaIntervalo: current.recorrenciaIntervalo ?? 1,
 			// clear unrelated trigger fields

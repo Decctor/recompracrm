@@ -3,7 +3,7 @@ import { runPagesRouteHandler, type PagesRouteHandler, type PagesRouteRequest, t
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { db } from "@/services/drizzle";
 import { products } from "@/services/drizzle/schema";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { count } from "drizzle-orm";
 import createHttpError from "http-errors";
 import z from "zod";
@@ -19,6 +19,12 @@ const GetProductsBySearchInputSchema = z.object({
 			invalid_type_error: "Tipo inválido para página.",
 		})
 		.transform((val) => Number(val)),
+	// Hidratação de listas que persistem apenas IDs (ex.: produtos de uma campanha de promoção):
+	// quando informado, a busca textual e a paginação são ignoradas e só os IDs pedidos retornam.
+	ids: z
+		.string({ invalid_type_error: "Tipo inválido para IDs." })
+		.transform((val) => val.split(",").filter(Boolean))
+		.optional(),
 });
 export type TGetProductsBySearchInput = z.infer<typeof GetProductsBySearchInputSchema>;
 
@@ -29,6 +35,27 @@ async function getProductsBySearch({ input, userOrgId }: { input: TGetProductsBy
 	const limit = PAGE_SIZE;
 
 	const conditions = [eq(products.organizacaoId, userOrgId)];
+
+	// Modo hidratação por IDs: retorna exatamente os produtos pedidos, sem paginar.
+	const requestedIds = input.ids ?? [];
+	if (requestedIds.length > 0) {
+		const productsByIdsResult = await db.query.products.findMany({
+			where: and(eq(products.organizacaoId, userOrgId), inArray(products.id, requestedIds)),
+			with: {
+				variantes: {
+					where: (variant, { eq }) => eq(variant.ativo, true),
+				},
+			},
+		});
+
+		return {
+			data: {
+				products: productsByIdsResult,
+				productsMatched: productsByIdsResult.length,
+				totalPages: 1,
+			},
+		};
+	}
 
 	if (input.search.length > 0) {
 		// Insensível a acentos via unaccent() em ambos os lados (requer extensão `unaccent`, migration 0033).

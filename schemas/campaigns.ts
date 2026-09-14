@@ -218,6 +218,27 @@ export type TCampaignFiltersTree = {
 	itens: TCampaignFilterTreeNode[];
 };
 
+// Item da lista curada de produtos promovidos (gatilho "PROMOCAO-PRODUTOS").
+// Só configuração: o preço promocional é a fonte da verdade do desconto — o percentual existe
+// apenas como auxiliar de UI e não é persistido.
+export const CampaignPromotionProductSchema = z.object({
+	produtoId: z.string({
+		required_error: "Produto da promoção não informado.",
+		invalid_type_error: "Tipo não válido para o produto da promoção.",
+	}),
+	// null/ausente = sem sobrescrita; o preço efetivo passa a ser o preço de venda do produto.
+	precoPromocional: z
+		.number({
+			invalid_type_error: "Tipo não válido para o preço promocional.",
+		})
+		.positive("O preço promocional deve ser maior que zero.")
+		.optional()
+		.nullable(),
+});
+export type TCampaignPromotionProduct = z.infer<typeof CampaignPromotionProductSchema>;
+
+export const CAMPAIGN_PROMOTION_PRODUCTS_LIMIT = 10;
+
 export const CampaignSchema = z.object({
 	ativo: z
 		.boolean({
@@ -313,6 +334,21 @@ export const CampaignSchema = z.object({
 			invalid_type_error: "Tipo não válido para a data de referência do uso único.",
 		})
 		.regex(/^\d{4}-\d{2}-\d{2}$/, "Data de referência do uso único inválida.")
+		.optional()
+		.nullable(),
+	// Specific for "PROMOCAO-PRODUTOS"
+	gatilhoPromocaoDataReferencia: z
+		.string({
+			required_error: "Data de referência da promoção não informada.",
+			invalid_type_error: "Tipo não válido para a data de referência da promoção.",
+		})
+		.regex(/^\d{4}-\d{2}-\d{2}$/, "Data de referência da promoção inválida.")
+		.optional()
+		.nullable(),
+	gatilhoPromocaoProdutos: z
+		.array(CampaignPromotionProductSchema, {
+			invalid_type_error: "Tipo não válido para os produtos da promoção.",
+		})
 		.optional()
 		.nullable(),
 

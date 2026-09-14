@@ -1,7 +1,7 @@
 import { validateTemplateForTrigger } from "@/lib/message-templates";
 import { db } from "@/services/drizzle";
 import { type TCampaignTriggerTypeEnum } from "@/schemas/enums";
-import { CampaignSchema } from "@/schemas/campaigns";
+import { CAMPAIGN_PROMOTION_PRODUCTS_LIMIT, CampaignSchema } from "@/schemas/campaigns";
 import createHttpError from "http-errors";
 import dayjs from "dayjs";
 import z from "zod";
@@ -37,7 +37,8 @@ export function validateRecurrentCampaign(campaign: z.infer<typeof CampaignSchem
 }
 
 export function validateCampaignFrequencyInterval(campaign: z.infer<typeof CampaignSchema>) {
-	if (campaign.gatilhoTipo === "USO-UNICO") return;
+	// Campanhas de disparo único não têm intervalo de recorrência a respeitar.
+	if (campaign.gatilhoTipo === "USO-UNICO" || campaign.gatilhoTipo === "PROMOCAO-PRODUTOS") return;
 	if (!campaign.permitirRecorrencia) return;
 
 	if (!campaign.frequenciaIntervaloMedida || !campaign.frequenciaIntervaloValor || campaign.frequenciaIntervaloValor <= 0) {
@@ -73,6 +74,74 @@ export function validateSingleUseCampaign(campaign: z.infer<typeof CampaignSchem
 	const date = dayjs(campaign.gatilhoUsoUnicoDataReferencia);
 	if (!date.isValid() || date.format("YYYY-MM-DD") !== campaign.gatilhoUsoUnicoDataReferencia) {
 		throw new createHttpError.BadRequest("Data de referência do uso único inválida.");
+	}
+}
+
+/**
+ * Valida a configuração do gatilho "PROMOCAO-PRODUTOS": data de referência (mesma semântica do
+ * uso único) e a lista curada de produtos promovidos.
+ *
+ * O preço promocional é a fonte da verdade do desconto — não existe percentual persistido.
+ * A checagem de existência/atividade/posse dos produtos é assíncrona porque depende do banco.
+ */
+export async function validateProductPromotionCampaign(campaign: z.infer<typeof CampaignSchema>, organizationId: string) {
+	if (campaign.gatilhoTipo !== "PROMOCAO-PRODUTOS") return;
+
+	if (!campaign.gatilhoPromocaoDataReferencia) {
+		throw new createHttpError.BadRequest("Data de referência da promoção não informada.");
+	}
+
+	const date = dayjs(campaign.gatilhoPromocaoDataReferencia);
+	if (!date.isValid() || date.format("YYYY-MM-DD") !== campaign.gatilhoPromocaoDataReferencia) {
+		throw new createHttpError.BadRequest("Data de referência da promoção inválida.");
+	}
+
+	const promotionProducts = campaign.gatilhoPromocaoProdutos ?? [];
+	if (promotionProducts.length === 0) {
+		throw new createHttpError.BadRequest("Selecione ao menos um produto para a promoção.");
+	}
+	if (promotionProducts.length > CAMPAIGN_PROMOTION_PRODUCTS_LIMIT) {
+		throw new createHttpError.BadRequest(`A promoção suporta no máximo ${CAMPAIGN_PROMOTION_PRODUCTS_LIMIT} produtos.`);
+	}
+
+	const productIds = promotionProducts.map((promotionProduct) => promotionProduct.produtoId);
+	if (new Set(productIds).size !== productIds.length) {
+		throw new createHttpError.BadRequest("Há produtos repetidos na lista da promoção.");
+	}
+
+	for (const promotionProduct of promotionProducts) {
+		if (promotionProduct.precoPromocional != null && promotionProduct.precoPromocional <= 0) {
+			throw new createHttpError.BadRequest("O preço promocional deve ser maior que zero.");
+		}
+	}
+
+	const existingProducts = await db.query.products.findMany({
+		where: (fields, { and, eq, inArray }) => and(eq(fields.organizacaoId, organizationId), inArray(fields.id, productIds)),
+		columns: { id: true, nome: true, ativo: true, precoVenda: true },
+	});
+	const existingProductById = new Map(existingProducts.map((product) => [product.id, product]));
+
+	const missingProductIds = productIds.filter((productId) => !existingProductById.has(productId));
+	if (missingProductIds.length > 0) {
+		throw new createHttpError.BadRequest("Há produtos da promoção que não foram encontrados na sua organização.");
+	}
+
+	const inactiveProducts = existingProducts.filter((product) => !product.ativo);
+	if (inactiveProducts.length > 0) {
+		throw new createHttpError.BadRequest(`Há produtos inativos na promoção: ${inactiveProducts.map((product) => product.nome).join(", ")}.`);
+	}
+
+	// Sem preço de venda no cadastro (produtos cujo preço vive nas variantes, que o gatilho não
+	// resolve), o preço promocional deixa de ser opcional: é o único número que a mensagem tem.
+	// Sem ele, promotion_product_price renderizaria "R$ 0,00" para o cliente.
+	const productsMissingPrice = promotionProducts.filter((promotionProduct) => {
+		if (promotionProduct.precoPromocional != null) return false;
+		const catalogProduct = existingProductById.get(promotionProduct.produtoId);
+		return !catalogProduct?.precoVenda || catalogProduct.precoVenda <= 0;
+	});
+	if (productsMissingPrice.length > 0) {
+		const names = productsMissingPrice.map((p) => existingProductById.get(p.produtoId)?.nome ?? p.produtoId).join(", ");
+		throw new createHttpError.BadRequest(`Defina um preço promocional para produtos sem preço de venda no cadastro: ${names}.`);
 	}
 }
 

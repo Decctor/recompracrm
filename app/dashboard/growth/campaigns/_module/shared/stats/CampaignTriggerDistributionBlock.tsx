@@ -22,6 +22,7 @@ const TRIGGER_LABELS: Record<string, string> = {
 	"QUANTIDADE-TOTAL-COMPRAS": "Marco de compras",
 	"VALOR-TOTAL-COMPRAS": "Marco de valor",
 	"USO-UNICO": "Uso único",
+	"PROMOCAO-PRODUTOS": "Promoção de produtos",
 	RECORRENTE: "Recorrente",
 	ANIVERSARIO_CLIENTE: "Aniversário",
 	"PIOR-DIA-VENDAS": "Pior dia de vendas",
