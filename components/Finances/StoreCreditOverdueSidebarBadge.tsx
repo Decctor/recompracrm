@@ -1,5 +1,6 @@
 "use client";
 
+import { SidebarCountBadge } from "@/components/Sidebar/SidebarCountBadge";
 import { useStoreCreditStats } from "@/lib/queries/store-credit";
 
 /**
@@ -11,11 +12,5 @@ import { useStoreCreditStats } from "@/lib/queries/store-credit";
  */
 export function StoreCreditOverdueSidebarBadge() {
 	const { data } = useStoreCreditStats({ staleTime: 120_000, refetchInterval: 300_000 });
-	const total = data?.clientesVencidos ?? 0;
-	if (total === 0) return null;
-	return (
-		<span className="ml-auto rounded-full bg-destructive px-1.5 py-px text-[10px] font-bold tabular-nums text-destructive-foreground group-data-[collapsible=icon]:hidden">
-			{total > 99 ? "99+" : total}
-		</span>
-	);
+	return <SidebarCountBadge count={data?.clientesVencidos ?? 0} />;
 }

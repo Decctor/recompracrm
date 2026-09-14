@@ -1,12 +1,13 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { getChannelErpPolicy, type TChannelErpPolicy } from "@/lib/sales/fulfillment-channels";
+import { ACTIVE_ATTENDANCE_STATUSES, buildFulfillmentOriginFilter } from "@/lib/sales/fulfillment-scope";
 import { mapSaleRowToFulfillmentCard } from "@/lib/sales/sale-processing/map-sale-to-fulfillment-card";
 import { processSaleFulfillmentCorrection } from "@/lib/sales/sale-processing/process-sale-fulfillment-correction";
 import { DeliveryModeEnum, PaymentMethodEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
 import { sales } from "@/services/drizzle/schema";
-import { and, count, desc, eq, gte, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import z from "zod";
@@ -14,8 +15,6 @@ import z from "zod";
 // ============================================================================
 // CONSTANTS
 // ============================================================================
-
-const ACTIVE_ATTENDANCE_STATUSES = ["NAO_INICIADO", "EM_PREPARO", "PRONTO", "EM_ENTREGA"] as const;
 
 /**
  * ENTREGUE e terminal (nenhuma transicao sai dele), entao a etapa nunca foi uma fila de trabalho —
@@ -223,9 +222,7 @@ async function getSalesFulfillment({ input, orgId, policy }: { input: TGetSalesF
 
 	// Vendas internas sempre; vendas de canais gerenciados (ex.: iFood) quando a política de
 	// fulfillment de integrações está ligada.
-	const processingOriginFilter = policy.fulfillment
-		? or(eq(sales.processamentoOrigem, "INTERNO"), and(eq(sales.processamentoOrigem, "EXTERNO"), eq(sales.modelo, "IFOOD")))
-		: eq(sales.processamentoOrigem, "INTERNO");
+	const processingOriginFilter = buildFulfillmentOriginFilter(policy);
 
 	const deliveredCutoff = new Date(Date.now() - DELIVERED_BUFFER_WINDOW_HOURS * 60 * 60 * 1000);
 	const deliveredWhere = and(

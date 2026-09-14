@@ -8,6 +8,7 @@ import { appRoutes } from "@/lib/navigation/routes";
 import type { TDashboardCapability } from "@/lib/access/capabilities";
 import { StoreCreditOverdueSidebarBadge } from "@/components/Finances/StoreCreditOverdueSidebarBadge";
 import { FiscalPendingSidebarBadge } from "@/components/Fiscal/FiscalPendingSidebarBadge";
+import { SalesOrdersPendingSidebarBadge } from "@/components/Sales/SalesOrdersPendingSidebarBadge";
 import { filterNavigationItems } from "@/lib/access/navigation";
 import {
 	ArrowRightLeft,
@@ -101,6 +102,10 @@ export const AppSidebarConfig: TSidebarConfigItemWithAccess[] = [
 				// Ownership path keeps the group active for details, creation, import, edit, and checkout routes.
 				url: appRoutes.sales.root(),
 				icon: <ShoppingCart className="size-4" />,
+				// Repete a contagem de "Pedidos" enquanto o grupo esta fechado — que e como ele comeca
+				// em toda pagina fora de Vendas. Uma badge que so aparece depois do clique que ja a
+				// revelaria nao avisa nada; com o grupo aberto o proprio item exibe o numero.
+				badge: <SalesOrdersPendingSidebarBadge className="group-data-[state=open]/collapsible:hidden" />,
 				items: [
 					{
 						id: "new-sale",
@@ -133,6 +138,7 @@ export const AppSidebarConfig: TSidebarConfigItemWithAccess[] = [
 						title: "Pedidos",
 						url: appRoutes.sales.orders(),
 						icon: <Kanban className="size-4" />,
+						badge: <SalesOrdersPendingSidebarBadge />,
 						items: null,
 					},
 					{

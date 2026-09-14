@@ -66,7 +66,13 @@ function AppSidebarContentGroupItem({ item }: { item: TSidebarItem }) {
 						>
 							{item.icon}
 							<span>{item.title}</span>
-							<ChevronRight className="ml-auto transition-transform duration-200 ease-out group-data-[state=open]/collapsible:rotate-90" />
+							{/* A badge do pai e a do filho escondido: dois `ml-auto` irmaos dividiriam o espaco
+							    livre entre si e jogariam a badge para o meio da linha, entao o empurrao para a
+							    direita e do invólucro e nao de cada um. */}
+							<div className="ml-auto flex shrink-0 items-center gap-1">
+								{item.badge}
+								<ChevronRight className="transition-transform duration-200 ease-out group-data-[state=open]/collapsible:rotate-90" />
+							</div>
 						</SidebarMenuButton>
 					</CollapsibleTrigger>
 					<CollapsibleContent>
@@ -74,7 +80,14 @@ function AppSidebarContentGroupItem({ item }: { item: TSidebarItem }) {
 							{item.items.map((subItem) => (
 								<SidebarMenuSubItem key={subItem.id}>
 									<SidebarMenuSubButton asChild isActive={isPathActive(pathname, subItem.url, subItem.activeMatch)}>
-										{subItem.url ? <Link href={subItem.url}>{subItem.title}</Link> : <span>{subItem.title}</span>}
+										{subItem.url ? (
+											<Link href={subItem.url}>
+												<span className="truncate">{subItem.title}</span>
+												{subItem.badge}
+											</Link>
+										) : (
+											<span>{subItem.title}</span>
+										)}
 									</SidebarMenuSubButton>
 								</SidebarMenuSubItem>
 							))}

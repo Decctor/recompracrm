@@ -1,4 +1,5 @@
 import type { TGetFulfillmentOrderConfirmationOutput } from "@/app/api/sales/fulfillment/order-confirmation/route";
+import type { TGetSalesFulfillmentPendingOutput } from "@/app/api/sales/fulfillment/pending/route";
 import type { TGetSalesFulfillmentOutput } from "@/app/api/sales/fulfillment/route";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
@@ -29,6 +30,43 @@ export function useSalesFulfillment({ paused = false, enabled = true }: { paused
 			refetchOnWindowFocus: paused ? false : true,
 		}),
 		queryKey: SALES_FULFILLMENT_QUERY_KEY,
+	};
+}
+
+/**
+ * Prefixada pela chave do quadro de proposito: toda invalidacao ja existente de
+ * `SALES_FULFILLMENT_QUERY_KEY` (transicoes de etapa, edicao de venda) atinge esta por prefixo e
+ * atualiza a badge junto, sem nenhum ponto de invalidacao novo para manter em dia.
+ */
+export const SALES_FULFILLMENT_PENDING_QUERY_KEY = [...SALES_FULFILLMENT_QUERY_KEY, "pending"] as const;
+
+async function fetchSalesFulfillmentPending() {
+	const { data } = await axios.get<TGetSalesFulfillmentPendingOutput>("/api/sales/fulfillment/pending");
+	return data.data;
+}
+
+const PENDING_REFRESH_INTERVAL_MS = 120_000;
+
+/**
+ * Contagem de pedidos em atendimento para a badge da sidebar. Montada em toda pagina do dashboard,
+ * entao repolla devagar e nunca com a aba em segundo plano.
+ *
+ * A badge fica pendurada no item "Vendas", que existe para qualquer organizacao, mas a rota exige
+ * ERP + `vendas.visualizar`. Para quem nao tem, o erro e permanente: `retry: false` evita o loop
+ * imediato e o intervalo se desliga apos a falha, senao toda organizacao so-CRM ficaria disparando
+ * um 403 a cada dois minutos, em toda aba aberta, para sempre.
+ */
+export function useSalesFulfillmentPending({ enabled = true }: { enabled?: boolean } = {}) {
+	return {
+		...useQuery({
+			queryKey: SALES_FULFILLMENT_PENDING_QUERY_KEY,
+			queryFn: fetchSalesFulfillmentPending,
+			enabled,
+			refetchInterval: (query) => (query.state.status === "error" ? false : PENDING_REFRESH_INTERVAL_MS),
+			refetchIntervalInBackground: false,
+			retry: false,
+		}),
+		queryKey: SALES_FULFILLMENT_PENDING_QUERY_KEY,
 	};
 }
 

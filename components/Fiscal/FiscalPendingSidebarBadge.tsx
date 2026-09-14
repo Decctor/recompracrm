@@ -1,5 +1,6 @@
 "use client";
 
+import { SidebarCountBadge } from "@/components/Sidebar/SidebarCountBadge";
 import { useFiscalPending } from "@/lib/queries/fiscal";
 
 /**
@@ -8,11 +9,5 @@ import { useFiscalPending } from "@/lib/queries/fiscal";
  */
 export function FiscalPendingSidebarBadge() {
 	const { data } = useFiscalPending({ refetchInterval: 120_000 });
-	const total = data?.resumo.total ?? 0;
-	if (total === 0) return null;
-	return (
-		<span className="ml-auto rounded-full bg-destructive px-1.5 py-px text-[10px] font-bold tabular-nums text-destructive-foreground group-data-[collapsible=icon]:hidden">
-			{total > 99 ? "99+" : total}
-		</span>
-	);
+	return <SidebarCountBadge count={data?.resumo.total ?? 0} />;
 }
