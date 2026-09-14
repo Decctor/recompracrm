@@ -80,6 +80,14 @@ export const sales = newTable(
 		statusVenda: saleStatusEnum("status_venda"),
 		// ERP: status operacional de atendimento/fulfillment da venda
 		statusAtendimento: saleAttendanceStatusEnum("status_atendimento").notNull().default("NAO_INICIADO"),
+		// Momento em que o `statusAtendimento` ATUAL passou a valer. Reescrito a cada transicao —
+		// e so quando o status muda de fato: um re-sync que reafirma o mesmo status nao pode
+		// remarcar a venda como recem-concluida. Como ENTREGUE e terminal, numa venda entregue este
+		// campo e permanentemente a hora da entrega, e e por ele (nunca por `dataVenda`) que o
+		// quadro de atendimento recorta os concluidos recentes. Nas etapas ativas, e a idade do
+		// pedido na etapa. Escreva sempre via os helpers de `lib/sales/sale-processing/attendance`.
+		// null = venda anterior a coluna e nunca transicionada desde entao (backfill: `data_venda`).
+		statusAtendimentoData: timestamp("status_atendimento_data"),
 		// ERP: override por venda da emissão fiscal automática. null = herda organizacao.fiscalEmissaoAutomatica;
 		// true/false = decisão explícita da venda (respeitada tanto no confirm quanto na entrega).
 		emissaoFiscalAutomatica: boolean("emissao_fiscal_automatica"),
@@ -111,6 +119,9 @@ export const sales = newTable(
 			.on(table.organizacaoId, table.integracaoId, table.idExterno)
 			.where(sql`integracao_id IS NOT NULL`),
 		tabIdx: index("idx_sales_tab").on(table.tabId),
+		// Recorte do quadro de atendimento: por organizacao, por etapa, ordenado pelo momento da
+		// etapa. Cobre tanto a janela dos concluidos recentes quanto a varredura das etapas ativas.
+		orgAtendimentoDataIdx: index("idx_sales_org_atendimento_data").on(table.organizacaoId, table.statusAtendimento, table.statusAtendimentoData),
 		// Uma unica venda em rascunho por conta de atendimento.
 		tabRascunhoIdx: uniqueIndex("idx_sales_tab_rascunho")
 			.on(table.tabId)

@@ -9,6 +9,7 @@ import { getSaleFinancialState } from "./get-sale-financial-state";
 import { processSaleAutomaticFiscalEmissionIfEligible } from "./process-sale-automatic-fiscal-emission";
 import { processSaleCashbackAccumulationIfEligible } from "./process-sale-cashback-accumulation";
 import { processStockDeduction } from "./process-stock-deduction";
+import { attendanceStatusValues } from "@/lib/sales/sale-processing/attendance";
 
 type ProcessSaleAttendanceStatusChangeInput = {
 	organization: TOrganizationEntity;
@@ -113,7 +114,7 @@ export async function processSaleAttendanceStatusChange(input: ProcessSaleAttend
 			});
 		}
 
-		await tx.update(sales).set({ statusAtendimento: input.targetStatus }).where(eq(sales.id, input.saleId));
+		await tx.update(sales).set(attendanceStatusValues(input.targetStatus)).where(eq(sales.id, input.saleId));
 
 		// Ao entregar totalmente, registra a quantidade entregue de cada item.
 		if (input.targetStatus === "ENTREGUE") {

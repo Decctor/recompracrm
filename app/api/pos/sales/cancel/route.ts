@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { attendanceStatusValues } from "@/lib/sales/sale-processing/attendance";
 import { processConfirmedSaleCancellation } from "@/lib/sales/sale-processing";
 import { db } from "@/services/drizzle";
 import { sales } from "@/services/drizzle/schema";
@@ -76,7 +77,7 @@ async function cancelSale(request: NextRequest) {
 		throw new createHttpError.Forbidden("Você não possui permissão para cancelar orçamentos.");
 	}
 
-	await db.update(sales).set({ statusVenda: "CANCELADA", statusAtendimento: "CANCELADO" }).where(eq(sales.id, input.id));
+	await db.update(sales).set({ statusVenda: "CANCELADA", ...attendanceStatusValues("CANCELADO") }).where(eq(sales.id, input.id));
 
 	return NextResponse.json({
 		data: { saleId: input.id },

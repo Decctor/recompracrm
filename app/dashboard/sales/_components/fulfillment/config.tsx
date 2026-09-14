@@ -2,9 +2,21 @@ import type { TSaleAttendanceStatusEnum, TSaleFinancialDerivedStatusEnum, TSaleF
 import { isValidAttendanceTransition } from "@/lib/sales/sale-processing/attendance";
 import { CircleCheck, ClipboardList, type LucideIcon, Inbox, Clock, Package, PackageCheck, PackageOpen, Store, Truck, File } from "lucide-react";
 
-// Colunas do quadro de atendimento, na ordem do fluxo operacional.
+// Etapas do fluxo operacional: as unicas que sao, de fato, fila de trabalho. Sao elas que viram
+// coluna, aceitam recolhimento e contam como "em atendimento".
 // CANCELADO e acao (nao coluna); PARCIALMENTE_ENTREGUE e sub-estado exibido dentro de ENTREGUE.
-export const BOARD_STATUSES = ["NAO_INICIADO", "EM_PREPARO", "PRONTO", "EM_ENTREGA", "ENTREGUE"] as const;
+export const PIPELINE_STATUSES = ["NAO_INICIADO", "EM_PREPARO", "PRONTO", "EM_ENTREGA"] as const;
+export type TPipelineStatus = (typeof PIPELINE_STATUSES)[number];
+
+/**
+ * ENTREGUE nao e uma etapa do fluxo: e terminal (`ALLOWED_ATTENDANCE_TRANSITIONS.ENTREGUE` e vazio),
+ * entao recebe cards e nunca devolve nenhum. Continua sendo alvo de arraste e de menu de mover, mas
+ * o quadro o apresenta como comprovante (ver `delivered-buffer.tsx`), nao como coluna de trabalho.
+ */
+export const DELIVERED_STATUS = "ENTREGUE" as const;
+
+// Conjunto completo para rotulos e alvos de transicao — inclui a etapa terminal.
+export const BOARD_STATUSES = [...PIPELINE_STATUSES, DELIVERED_STATUS] as const;
 export type TBoardStatus = (typeof BOARD_STATUSES)[number];
 
 // Geometria das colunas. A trilha recolhida tem a largura de um alvo de toque do sistema (44px), e a

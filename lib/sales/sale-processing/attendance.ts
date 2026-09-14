@@ -52,3 +52,27 @@ export function isValidAttendanceTransition(from: TSaleAttendanceStatusEnum, to:
 export function attendanceStatusRequiresPhysicalOut(status: TSaleAttendanceStatusEnum): boolean {
 	return status === "ENTREGUE" || status === "PARCIALMENTE_ENTREGUE";
 }
+
+/**
+ * Valores de escrita do eixo de atendimento. Todo caminho que grava `statusAtendimento` deve passar
+ * por aqui: o carimbo de `statusAtendimentoData` e o que sustenta a janela de concluidos recentes do
+ * quadro, e um writer que grave o status sem o carimbo reintroduz silenciosamente o bug que a coluna
+ * existe para corrigir (pedido entregue hoje some do quadro por ter `dataVenda` antiga).
+ */
+export function attendanceStatusValues(status: TSaleAttendanceStatusEnum, options?: { at?: Date }) {
+	return { statusAtendimento: status, statusAtendimentoData: options?.at ?? new Date() };
+}
+
+/**
+ * Igual a `attendanceStatusValues`, mas so carimba quando o status muda de fato. E a forma correta
+ * para caminhos de upsert que reafirmam o status a cada execucao (sync de integracao): carimbar ali
+ * incondicionalmente faria um re-sync ressuscitar vendas antigas na janela de concluidos recentes.
+ */
+export function attendanceStatusValuesIfChanged(
+	previous: TSaleAttendanceStatusEnum | null | undefined,
+	next: TSaleAttendanceStatusEnum,
+	options?: { at?: Date },
+) {
+	if (previous === next) return { statusAtendimento: next };
+	return attendanceStatusValues(next, options);
+}

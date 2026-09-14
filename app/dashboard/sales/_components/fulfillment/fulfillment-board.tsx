@@ -35,10 +35,13 @@ import {
 	ATTENDANCE_STATUS_LABEL,
 	BOARD_COLUMN_WIDTH_PX,
 	BOARD_RAIL_WIDTH_PX,
-	BOARD_STATUSES,
+	DELIVERED_STATUS,
+	PIPELINE_STATUSES,
 	type TBoardStatus,
+	type TPipelineStatus,
 	transitionNeedsConfirmation,
 } from "./config";
+import { DeliveredBuffer } from "./delivered-buffer";
 import { FulfillmentCard } from "./fulfillment-card";
 import { FulfillmentColumn } from "./fulfillment-column";
 import { PendingConfirmationPill } from "./pending-confirmation";
@@ -96,28 +99,53 @@ export default function FulfillmentBoard({ organizationId, organizationConfig, c
 
 	const cards = useMemo(() => data?.cards ?? [], [data]);
 	const grouped = useMemo(() => {
-		const map = Object.fromEntries(BOARD_STATUSES.map((status) => [status, [] as TSalesFulfillmentCard[]])) as Record<
-			TBoardStatus,
+		const map = Object.fromEntries(PIPELINE_STATUSES.map((status) => [status, [] as TSalesFulfillmentCard[]])) as Record<
+			TPipelineStatus,
 			TSalesFulfillmentCard[]
 		>;
 		for (const card of cards) {
-			if ((BOARD_STATUSES as readonly string[]).includes(card.statusAtendimento)) {
-				map[card.statusAtendimento as TBoardStatus].push(card);
+			if ((PIPELINE_STATUSES as readonly string[]).includes(card.statusAtendimento)) {
+				map[card.statusAtendimento as TPipelineStatus].push(card);
 			}
 		}
 		return map;
 	}, [cards]);
 
+	/**
+	 * Um card concluido nesta sessao continua em `cards` (marcado ENTREGUE) ate o refetch chegar.
+	 * Projeta-lo aqui e o que faz o pedido aparecer no comprovante no mesmo gesto, em vez de sumir do
+	 * quadro e reaparecer segundos depois. O carimbo local mantem a linha honesta enquanto isso: o
+	 * que esta sendo concluido agora le "agora", e some de novo se o operador cancelar.
+	 */
+	const delivered = useMemo(() => {
+		const base = data?.delivered ?? { cards: [] as TSalesFulfillmentCard[], total: 0, windowHours: 2, limit: 15 };
+		const settledAt = new Date();
+		const optimistic = cards
+			.filter((card) => card.statusAtendimento === DELIVERED_STATUS)
+			.map((card) => ({ ...card, statusAtendimentoData: settledAt }));
+		if (optimistic.length === 0) return base;
+		const optimisticIds = new Set(optimistic.map((card) => card.id));
+		const remaining = base.cards.filter((card) => !optimisticIds.has(card.id));
+		// Os que o servidor ja contou nao podem ser contados de novo quando o refetch e a projecao
+		// local se sobrepoem por um instante.
+		const alreadyCounted = base.cards.length - remaining.length;
+		return {
+			...base,
+			cards: [...optimistic, ...remaining].slice(0, base.limit),
+			total: base.total + optimistic.length - alreadyCounted,
+		};
+	}, [cards, data]);
+
 	const stageCounts = useMemo(
-		() => Object.fromEntries(BOARD_STATUSES.map((status) => [status, grouped[status].length])) as Record<TBoardStatus, number>,
+		() => Object.fromEntries(PIPELINE_STATUSES.map((status) => [status, grouped[status].length])) as Record<TPipelineStatus, number>,
 		[grouped],
 	);
 
 	// Unico sinal que sobrevive ao recolhimento. E ele que decide se da para confiar numa trilha
 	// fechada: sem isso, recolher uma etapa seria uma forma silenciosa de perder um pedido em atraso.
 	const stagesWithOverduePayment = useMemo(() => {
-		const stages = new Set<TBoardStatus>();
-		for (const status of BOARD_STATUSES) {
+		const stages = new Set<TPipelineStatus>();
+		for (const status of PIPELINE_STATUSES) {
 			if (grouped[status].some((card) => card.financeiro === "EM_ATRASO")) stages.add(status);
 		}
 		return stages;
@@ -314,7 +342,7 @@ export default function FulfillmentBoard({ organizationId, organizationConfig, c
 			<div className={cn("flex min-h-0 flex-1 flex-col gap-3", BOARD_DESKTOP_MAX_HEIGHT)}>
 				<Skeleton className="h-9 w-full max-w-md shrink-0" />
 				<div className={cn(KANBAN_SCROLL_CLASS, "flex min-h-[50vh] flex-1 gap-3 overflow-x-auto pb-2 md:min-h-0 md:overflow-y-hidden")}>
-					{BOARD_STATUSES.map((status) => (
+					{PIPELINE_STATUSES.map((status) => (
 						<div
 							key={status}
 							style={{ width: collapsedByStage[status] ? BOARD_RAIL_WIDTH_PX : BOARD_COLUMN_WIDTH_PX }}
@@ -334,6 +362,8 @@ export default function FulfillmentBoard({ organizationId, organizationConfig, c
 	return (
 		<div className={cn("flex min-h-0 flex-1 flex-col gap-3", BOARD_DESKTOP_MAX_HEIGHT)}>
 			<div className="flex shrink-0 items-center justify-between gap-2">
+				{/* Conta so as etapas do fluxo. Somar os concluidos aqui fazia o quadro anunciar 162
+				    pedidos "em atendimento" quando havia um unico pedido em aberto. */}
 				<p className="text-xs text-muted-foreground">
 					{cards.length > 0 ? `${cards.length} pedido(s) em atendimento` : "Nenhum pedido em atendimento no momento"}
 				</p>
@@ -354,7 +384,7 @@ export default function FulfillmentBoard({ organizationId, organizationConfig, c
 				</div>
 			</div>
 
-			{cards.length === 0 ? (
+			{cards.length === 0 && delivered.cards.length === 0 ? (
 				<div className="flex min-h-[40vh] flex-1 flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-border py-16 text-center md:min-h-0">
 					<p className="text-sm font-bold tracking-tight">Nenhum pedido em atendimento</p>
 					<p className="max-w-md text-xs text-muted-foreground">
@@ -371,7 +401,7 @@ export default function FulfillmentBoard({ organizationId, organizationConfig, c
 					onDragCancel={() => setActiveId(null)}
 				>
 					<div className={cn(KANBAN_SCROLL_CLASS, "flex min-h-[50vh] flex-1 snap-x gap-3 overflow-x-auto pb-2 md:min-h-0 md:overflow-y-hidden")}>
-						{BOARD_STATUSES.map((status) => (
+						{PIPELINE_STATUSES.map((status) => (
 							<FulfillmentColumn
 								key={status}
 								status={status}
@@ -394,7 +424,10 @@ export default function FulfillmentBoard({ organizationId, organizationConfig, c
 							<div className="flex min-w-[220px] flex-1 items-center justify-center rounded-xl border border-dashed border-border/60 px-4 text-center text-[11px] text-muted-foreground">
 								Todas as etapas recolhidas. Clique em uma etapa para abrir.
 							</div>
-						) : null}
+						) : (
+							<div className="hidden flex-1 md:block" />
+						)}
+						<DeliveredBuffer delivered={delivered} onViewDetails={onViewDetails} />
 					</div>
 
 					<DragOverlay dropAnimation={null}>

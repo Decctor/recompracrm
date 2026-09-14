@@ -45,6 +45,7 @@ import { and, eq } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import z from "zod";
+import { attendanceStatusValues } from "@/lib/sales/sale-processing/attendance";
 
 /**
  * Helper function to check if a campaign can be scheduled for a client based on frequency rules
@@ -741,7 +742,7 @@ async function preparePointOfInteractionTransaction({ input, operatorContext, tx
 					// getValidSaleConditions e o cron enrich-clients zera os contadores do cliente.
 					statusVenda: "CONFIRMADA",
 					entregaModalidade: input.sale.entregaModalidade ?? null,
-					statusAtendimento: "ENTREGUE",
+					...attendanceStatusValues("ENTREGUE", { at: saleDate }),
 					dataVenda: saleDate,
 				})
 				.returning({ id: sales.id });

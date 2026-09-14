@@ -1,6 +1,6 @@
 import type { TCanonicalImportBatch, TCanonicalSale, TCanonicalSaleItem } from "@/lib/data-connectors";
 import { mapCanonicalSaleAttendanceStatus, mapCanonicalSaleCommercialStatus } from "@/lib/data-connectors";
-import { attendanceStatusRequiresPhysicalOut, isValidAttendanceTransition } from "@/lib/sales/sale-processing/attendance";
+import { attendanceStatusRequiresPhysicalOut, attendanceStatusValuesIfChanged, isValidAttendanceTransition } from "@/lib/sales/sale-processing/attendance";
 import {
 	cancelManagedSaleFinancials,
 	processManagedSaleFinancials,
@@ -405,7 +405,7 @@ export async function syncSales({
 			console.log(`[SYNC_SALES] Creating new sale of ${sale.sourceSaleId} (${sale.occurredAt.toISOString()})...`);
 			const inserted = await tx
 				.insert(sales)
-				.values({ ...saleValues, assinaturaExterna: externalSignature })
+				.values({ ...saleValues, assinaturaExterna: externalSignature, statusAtendimentoData: sale.occurredAt })
 				.returning({ id: sales.id });
 			saleId = inserted[0].id;
 			existingSalesBySourceId.set(sale.sourceSaleId, {
@@ -441,6 +441,18 @@ export async function syncSales({
 				}
 				effectiveAttendanceStatus = updateValues.statusAtendimento;
 			}
+
+			// Carimbo do momento da etapa. Condicional por necessidade: este caminho reafirma o
+			// status a cada sync, e carimbar incondicionalmente faria um re-sync ressuscitar vendas
+			// antigas na janela de concluidos do quadro. Canal gerenciado carimba "agora" (o evento
+			// e ao vivo); importacao de ERP carimba `occurredAt`, que mantem lote historico fora da
+			// janela. Sem mudanca de status, a chave nem entra no update e o valor atual sobrevive.
+			Object.assign(
+				updateValues,
+				attendanceStatusValuesIfChanged(existingSale.statusAtendimento, updateValues.statusAtendimento, {
+					at: saleIsManaged ? undefined : sale.occurredAt,
+				}),
+			);
 
 			await tx.update(sales).set(updateValues).where(eq(sales.id, existingSale.id));
 			if (batch.policies.saleItemRewritePolicy === "REPLACE_ON_EVERY_SYNC") {

@@ -6,7 +6,7 @@ import { processSaleFulfillmentCorrection } from "@/lib/sales/sale-processing/pr
 import { DeliveryModeEnum, PaymentMethodEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
 import { sales } from "@/services/drizzle/schema";
-import { and, desc, eq, gte, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, isNull, or, sql } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import z from "zod";
@@ -16,7 +16,41 @@ import z from "zod";
 // ============================================================================
 
 const ACTIVE_ATTENDANCE_STATUSES = ["NAO_INICIADO", "EM_PREPARO", "PRONTO", "EM_ENTREGA"] as const;
-const DELIVERED_VISIBILITY_DAYS = 2;
+
+/**
+ * ENTREGUE e terminal (nenhuma transicao sai dele), entao a etapa nunca foi uma fila de trabalho —
+ * e um comprovante. O quadro guarda dela apenas uma janela curta de confirmacao ("o que acabou de
+ * sair daqui?"); o historico completo e o modulo de Vendas.
+ *
+ * A janela e recortada por `statusAtendimentoData`, nunca por `dataVenda`: um pedido vendido segunda
+ * e entregue quarta tem `dataVenda` velha e sumiria do quadro no exato instante em que foi
+ * concluido — justamente o card que o operador precisa ver.
+ *
+ * O teto de itens nao e redundante com a janela. A janela define o que e recente; o teto garante que
+ * um pico (balcao movimentado, onde toda venda PRESENCIAL nasce ENTREGUE) nao transforme o
+ * comprovante em lista infinita nem o payload em algo ilimitado. Os dois valem no SQL.
+ */
+const DELIVERED_BUFFER_WINDOW_HOURS = 2;
+const DELIVERED_BUFFER_LIMIT = 15;
+
+// Colunas que alimentam o card do quadro. Compartilhadas pelas duas consultas da listagem (etapas
+// ativas e concluidos recentes), que diferem no recorte e na ordem, nunca no formato do card.
+const FULFILLMENT_CARD_COLUMNS = {
+	id: true,
+	idExterno: true,
+	valorTotal: true,
+	statusVenda: true,
+	statusAtendimento: true,
+	entregaModalidade: true,
+	comandaNumero: true,
+	clienteId: true,
+	observacoes: true,
+	dataVenda: true,
+	statusAtendimentoData: true,
+	modelo: true,
+	processamentoOrigem: true,
+	tabId: true,
+} as const;
 
 const SALE_FULFILLMENT_WITH = {
 	integracao: { columns: { tipo: true, apelido: true } },
@@ -187,43 +221,50 @@ async function getSalesFulfillment({ input, orgId, policy }: { input: TGetSalesF
 		};
 	}
 
-	const deliveredCutoff = new Date(Date.now() - DELIVERED_VISIBILITY_DAYS * 24 * 60 * 60 * 1000);
-	const attendanceVisibilityFilter = or(
-		inArray(sales.statusAtendimento, [...ACTIVE_ATTENDANCE_STATUSES]),
-		and(eq(sales.statusAtendimento, "ENTREGUE"), gte(sales.dataVenda, deliveredCutoff)),
+	// Vendas internas sempre; vendas de canais gerenciados (ex.: iFood) quando a política de
+	// fulfillment de integrações está ligada.
+	const processingOriginFilter = policy.fulfillment
+		? or(eq(sales.processamentoOrigem, "INTERNO"), and(eq(sales.processamentoOrigem, "EXTERNO"), eq(sales.modelo, "IFOOD")))
+		: eq(sales.processamentoOrigem, "INTERNO");
+
+	const deliveredCutoff = new Date(Date.now() - DELIVERED_BUFFER_WINDOW_HOURS * 60 * 60 * 1000);
+	const deliveredWhere = and(
+		eq(sales.organizacaoId, orgId),
+		eq(sales.statusVenda, "CONFIRMADA"),
+		eq(sales.statusAtendimento, "ENTREGUE"),
+		gte(sales.statusAtendimentoData, deliveredCutoff),
+		processingOriginFilter,
 	);
 
-	const result = await db.query.sales.findMany({
-		where: and(
-			eq(sales.organizacaoId, orgId),
-			eq(sales.statusVenda, "CONFIRMADA"),
-			attendanceVisibilityFilter,
-			// Vendas internas sempre; vendas de canais gerenciados (ex.: iFood) quando a política
-			// de fulfillment de integrações está ligada.
-			policy.fulfillment
-				? or(eq(sales.processamentoOrigem, "INTERNO"), and(eq(sales.processamentoOrigem, "EXTERNO"), eq(sales.modelo, "IFOOD")))
-				: eq(sales.processamentoOrigem, "INTERNO"),
-		),
-		columns: {
-			id: true,
-			idExterno: true,
-			valorTotal: true,
-			statusVenda: true,
-			statusAtendimento: true,
-			entregaModalidade: true,
-			comandaNumero: true,
-			clienteId: true,
-			observacoes: true,
-			dataVenda: true,
-			modelo: true,
-			processamentoOrigem: true,
-			tabId: true,
-		},
-		with: SALE_FULFILLMENT_WITH,
-		orderBy: (fields, { asc }) => asc(fields.dataVenda),
-	});
+	// Etapas ativas e concluidos recentes sao populacoes com regras opostas de recorte e de ordem, e
+	// por isso duas consultas em vez de um OR com ordenacao unica. As ativas sao a fila de trabalho:
+	// vem inteiras e em FIFO, porque o pedido mais velho e o mais urgente. Os concluidos sao
+	// comprovante: vem limitados e do mais novo para o mais velho, porque so o topo importa.
+	const [activeRows, deliveredRows, deliveredCount] = await Promise.all([
+		db.query.sales.findMany({
+			where: and(
+				eq(sales.organizacaoId, orgId),
+				eq(sales.statusVenda, "CONFIRMADA"),
+				inArray(sales.statusAtendimento, [...ACTIVE_ATTENDANCE_STATUSES]),
+				processingOriginFilter,
+			),
+			columns: FULFILLMENT_CARD_COLUMNS,
+			with: SALE_FULFILLMENT_WITH,
+			orderBy: (fields, { asc }) => asc(fields.dataVenda),
+		}),
+		db.query.sales.findMany({
+			where: deliveredWhere,
+			columns: FULFILLMENT_CARD_COLUMNS,
+			with: SALE_FULFILLMENT_WITH,
+			orderBy: (fields, { desc }) => desc(fields.statusAtendimentoData),
+			limit: DELIVERED_BUFFER_LIMIT,
+		}),
+		db.select({ value: count() }).from(sales).where(deliveredWhere),
+	]);
 
-	const cards = result.map((sale) => mapSaleRowToFulfillmentCard(sale));
+	const cards = activeRows.map((sale) => mapSaleRowToFulfillmentCard(sale));
+	const deliveredCards = deliveredRows.map((sale) => mapSaleRowToFulfillmentCard(sale));
+	const deliveredTotal = deliveredCount[0]?.value ?? deliveredCards.length;
 
 	// Fila de pedidos a confirmar: pedidos de canal gerenciado ainda não confirmados no canal
 	// (iFood PLACED: statusVenda nulo + atendimento NAO_INICIADO). SLA de confirmação: 8 minutos.
@@ -327,7 +368,22 @@ async function getSalesFulfillment({ input, orgId, policy }: { input: TGetSalesF
 		: [];
 
 	return {
-		data: { default: { cards, pendingConfirmation, pendingDisputes }, byId: null },
+		data: {
+			default: {
+				cards,
+				// `total` conta a janela inteira, nao a pagina: e o que permite ao quadro dizer
+				// quantos concluidos ficaram de fora em vez de fingir que o teto e o total.
+				delivered: {
+					cards: deliveredCards,
+					total: deliveredTotal,
+					windowHours: DELIVERED_BUFFER_WINDOW_HOURS,
+					limit: DELIVERED_BUFFER_LIMIT,
+				},
+				pendingConfirmation,
+				pendingDisputes,
+			},
+			byId: null,
+		},
 		message: "Pedidos de atendimento carregados com sucesso.",
 	};
 }
