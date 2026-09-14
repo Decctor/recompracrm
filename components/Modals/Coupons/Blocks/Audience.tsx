@@ -1,5 +1,5 @@
 import SelectInput from "@/components/Inputs/SelectInput";
-import ResponsiveMenuSection from "@/components/Utils/ResponsiveMenuSection";
+import CouponBlockShell from "./BlockShell";
 import { Button } from "@/components/ui/button";
 import { useClientTags } from "@/lib/queries/clients";
 import { cn } from "@/lib/utils";
@@ -14,13 +14,14 @@ type CouponAudienceBlockProps = {
 	couponAudiences: TUseInternalCouponState["state"]["couponAudiences"];
 	addCouponAudience: TUseInternalCouponState["addCouponAudience"];
 	removeCouponAudience: TUseInternalCouponState["removeCouponAudience"];
+	embedded?: boolean;
 };
-export default function CouponAudienceBlock({ couponAudiences, addCouponAudience, removeCouponAudience }: CouponAudienceBlockProps) {
+export default function CouponAudienceBlock({ couponAudiences, addCouponAudience, removeCouponAudience, embedded }: CouponAudienceBlockProps) {
 	// Preserva o índice original: removeCouponAudience opera sobre o array completo (com soft-deletes).
 	const visibleAudiences = couponAudiences.map((audience, index) => ({ audience, index })).filter(({ audience }) => !audience.deletar);
 
 	return (
-		<ResponsiveMenuSection title="RESTRINGIR POR PÚBLICO" icon={<Users className="h-4 min-h-4 w-4 min-w-4" />}>
+		<CouponBlockShell embedded={embedded} title="RESTRINGIR POR PÚBLICO" icon={<Users className="h-4 min-h-4 w-4 min-w-4" />}>
 			<p className="text-sm font-medium text-muted-foreground">
 				Sem restrição, o cupom vale para qualquer cliente identificado. Ao restringir, o cliente precisa ter uma das tags ou estar em um dos segmentos
 				escolhidos.
@@ -58,7 +59,7 @@ export default function CouponAudienceBlock({ couponAudiences, addCouponAudience
 
 				<DraftAudienceRow couponAudiences={couponAudiences} addCouponAudience={addCouponAudience} />
 			</div>
-		</ResponsiveMenuSection>
+		</CouponBlockShell>
 	);
 }
 

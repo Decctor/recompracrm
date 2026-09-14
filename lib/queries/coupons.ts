@@ -1,4 +1,6 @@
 import type { TGetCouponGrantsInput, TGetCouponGrantsOutput } from "@/app/api/coupons/grants/route";
+import type { TGetCouponRedemptionsInput, TGetCouponRedemptionsOutput } from "@/app/api/coupons/redemptions/route";
+import type { TGetCouponStatsInput, TGetCouponStatsOutput } from "@/app/api/coupons/stats/route";
 import type { TGetPoiAvailableCouponsOutput } from "@/app/api/point-of-interaction/coupons/available/route";
 import type { TGetAvailablePosCouponsInput, TGetAvailablePosCouponsOutput } from "@/app/api/pos/coupons/available/route";
 import type { TGetCouponsInput, TGetCouponsOutput } from "@/app/api/coupons/route";
@@ -59,6 +61,86 @@ export function useCouponById({ couponId }: { couponId: string }) {
 			queryFn: () => fetchCouponById(couponId),
 		}),
 		queryKey: ["coupon-by-id", couponId],
+	};
+}
+
+async function fetchCouponStats(input: TGetCouponStatsInput) {
+	const searchParams = new URLSearchParams();
+	searchParams.set("couponId", input.couponId);
+	if (input.periodAfter) searchParams.set("periodAfter", input.periodAfter.toISOString());
+	if (input.periodBefore) searchParams.set("periodBefore", input.periodBefore.toISOString());
+	if (input.comparingPeriodAfter) searchParams.set("comparingPeriodAfter", input.comparingPeriodAfter.toISOString());
+	if (input.comparingPeriodBefore) searchParams.set("comparingPeriodBefore", input.comparingPeriodBefore.toISOString());
+	const { data } = await axios.get<TGetCouponStatsOutput>(`/api/coupons/stats?${searchParams.toString()}`);
+	return data.data;
+}
+
+export function useCouponStats({
+	couponId,
+	periodAfter,
+	periodBefore,
+	comparingPeriodAfter,
+	comparingPeriodBefore,
+	enabled = true,
+}: {
+	couponId: string;
+	periodAfter: Date | null;
+	periodBefore: Date | null;
+	comparingPeriodAfter: Date | null;
+	comparingPeriodBefore: Date | null;
+	enabled?: boolean;
+}) {
+	const queryKey = ["coupon-stats", couponId, periodAfter, periodBefore, comparingPeriodAfter, comparingPeriodBefore];
+	return {
+		...useQuery({
+			queryKey,
+			queryFn: () => fetchCouponStats({ couponId, periodAfter, periodBefore, comparingPeriodAfter, comparingPeriodBefore }),
+			enabled,
+		}),
+		queryKey,
+	};
+}
+
+async function fetchCouponRedemptions(input: TGetCouponRedemptionsInput) {
+	const searchParams = new URLSearchParams();
+	searchParams.set("couponId", input.couponId);
+	if (input.page) searchParams.set("page", input.page.toString());
+	if (input.search) searchParams.set("search", input.search);
+	if (input.statuses.length > 0) searchParams.set("statuses", input.statuses.join(","));
+	if (input.sources.length > 0) searchParams.set("sources", input.sources.join(","));
+	const { data } = await axios.get<TGetCouponRedemptionsOutput>(`/api/coupons/redemptions?${searchParams.toString()}`);
+	return data.data;
+}
+
+/**
+ * Resgates do cupom com busca, filtros de status/origem e paginação. A busca passa pelo debounce
+ * compartilhado: a lista recarrega ao parar de digitar, não a cada tecla.
+ */
+export function useCouponRedemptions({ couponId, enabled = true }: { couponId: string; enabled?: boolean }) {
+	const [queryParams, setQueryParams] = useState<TGetCouponRedemptionsInput>({
+		couponId,
+		page: 1,
+		search: "",
+		statuses: [],
+		sources: [],
+		periodAfter: null,
+		periodBefore: null,
+	});
+
+	function updateQueryParams(newParams: Partial<TGetCouponRedemptionsInput>) {
+		setQueryParams((prevParams) => ({ ...prevParams, ...newParams }));
+	}
+	const debouncedQueryParams = useDebounceMemo(queryParams, 500);
+	const queryKey = ["coupon-redemptions", debouncedQueryParams];
+	return {
+		...useQuery({
+			queryKey,
+			queryFn: () => fetchCouponRedemptions(debouncedQueryParams),
+			enabled,
+		}),
+		queryKey,
+		queryParams,
+		updateQueryParams,
 	};
 }
 

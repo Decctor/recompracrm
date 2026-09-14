@@ -2,7 +2,7 @@ import NumberInput from "@/components/Inputs/NumberInput";
 import CouponCheckoutConditionsBlock from "./CheckoutConditions";
 import SelectInput from "@/components/Inputs/SelectInput";
 import SelectProductWithVariants from "@/components/Inputs/SelectProductWithVariants";
-import ResponsiveMenuSection from "@/components/Utils/ResponsiveMenuSection";
+import CouponBlockShell from "./BlockShell";
 import { Button } from "@/components/ui/button";
 import { useProductGroups } from "@/lib/queries/products";
 import type { TUseInternalCouponState } from "@/state-hooks/use-internal-coupon-state";
@@ -20,6 +20,7 @@ type CouponTargetsBlockProps = {
 	// Quando fornecido, a seção ganha um controle para recolher/remover as condições
 	// (usado no builder guiado, onde produtos e condições são opcionais).
 	onRemoveConditions?: () => void;
+	embedded?: boolean;
 };
 export default function CouponTargetsBlock({
 	coupon,
@@ -29,9 +30,11 @@ export default function CouponTargetsBlock({
 	updateCouponTarget,
 	removeCouponTarget,
 	onRemoveConditions,
+	embedded,
 }: CouponTargetsBlockProps) {
 	return (
-		<ResponsiveMenuSection
+		<CouponBlockShell
+			embedded={embedded}
 			title="PRODUTOS E CONDIÇÕES"
 			icon={<Package className="h-4 min-h-4 w-4 min-w-4" />}
 			action={
@@ -118,7 +121,7 @@ export default function CouponTargetsBlock({
 					),
 				)}
 			</div>
-		</ResponsiveMenuSection>
+		</CouponBlockShell>
 	);
 }
 
