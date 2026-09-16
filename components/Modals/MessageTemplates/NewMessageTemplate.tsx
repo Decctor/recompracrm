@@ -2,6 +2,7 @@
 
 import ResponsiveMenu from "@/components/Utils/ResponsiveMenu";
 import { MessageTemplateComposer } from "@/components/MessageTemplates";
+import type { TCreateMessageTemplateOutput } from "@/app/api/message-templates/route";
 import { getErrorMessage } from "@/lib/errors";
 import { createMessageTemplate } from "@/lib/mutations/message-templates";
 import { useMessageTemplateState } from "@/state-hooks/use-message-template-state";
@@ -13,9 +14,15 @@ type NewMessageTemplateProps = {
 	organizationId: string;
 	organizationName: string;
 	organizationLogoUrl: string | null;
+	/**
+	 * Conteúdo inicial do formulário. Usado para clonar um modelo da biblioteca — o construtor
+	 * abre já preenchido, e o usuário edita antes de mandar para aprovação.
+	 */
+	initialState?: Parameters<typeof useMessageTemplateState>[0]["initialState"];
 	callbacks?: {
 		onMutate?: () => void;
-		onSuccess?: () => void;
+		/** Recebe a resposta da criação para que quem abriu o modal possa já selecionar o template novo. */
+		onSuccess?: (response: TCreateMessageTemplateOutput) => void;
 		onError?: () => void;
 		onSettled?: () => void;
 	};
@@ -26,9 +33,10 @@ function NewMessageTemplate({
 	organizationId,
 	organizationName,
 	organizationLogoUrl,
+	initialState,
 	callbacks,
 }: NewMessageTemplateProps) {
-	const messageTemplateState = useMessageTemplateState({ organizationName });
+	const messageTemplateState = useMessageTemplateState({ organizationName, initialState });
 	const { state, resetState, unknownVariables } = messageTemplateState;
 
 	const { mutate: handleCreateMessageTemplate, isPending } = useMutation({
@@ -39,7 +47,7 @@ function NewMessageTemplate({
 			return;
 		},
 		onSuccess: async (response) => {
-			if (callbacks?.onSuccess) callbacks.onSuccess();
+			if (callbacks?.onSuccess) callbacks.onSuccess(response);
 			toast.success(response.message);
 			resetState();
 			closeModal();

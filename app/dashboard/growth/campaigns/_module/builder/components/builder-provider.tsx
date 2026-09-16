@@ -1,5 +1,6 @@
 "use client";
 
+import type { TCampaignInlineCouponInput } from "@/schemas/coupons";
 import type { TCampaignTriggerTypeEnum } from "@/schemas/enums";
 import { useCampaignState, type TUseCampaignState } from "@/state-hooks/use-campaign-state";
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
@@ -31,8 +32,23 @@ type BuilderUiActions = {
 
 type BuilderUiContextValue = BuilderUiState & BuilderUiActions;
 
+/**
+ * Rascunho do cupom criado dentro da etapa Efeitos. Fica FORA de `useCampaignState` de propósito:
+ * não é campo da campanha, é um recurso irmão que só existe no momento do salvamento, quando vai
+ * junto no payload como `couponToCreate` e nasce na mesma transação da campanha.
+ *
+ * `null` significa "usar um cupom existente" — aí quem vale é `campaign.cupomGeracaoCupomId`.
+ */
+export type TBuilderCouponDraft = TCampaignInlineCouponInput;
+
+type BuilderCouponDraftContextValue = {
+	couponDraft: TBuilderCouponDraft | null;
+	setCouponDraft: (draft: TBuilderCouponDraft | null) => void;
+};
+
 const BuilderUiContext = createContext<BuilderUiContextValue | null>(null);
 const BuilderCampaignContext = createContext<TUseCampaignState | null>(null);
+const BuilderCouponDraftContext = createContext<BuilderCouponDraftContextValue | null>(null);
 
 export type BuilderProviderProps = {
 	mode: TBuilderMode;
@@ -55,6 +71,7 @@ export function BuilderProvider({ mode, initialCategory, initialStage, children 
 	const [dirty, setDirty] = useState(false);
 	const dirtyRef = useRef(dirty);
 	dirtyRef.current = dirty;
+	const [couponDraft, setCouponDraftState] = useState<TBuilderCouponDraft | null>(null);
 
 	const markDirty = useCallback(() => {
 		if (!dirtyRef.current) setDirty(true);
@@ -182,9 +199,21 @@ export function BuilderProvider({ mode, initialCategory, initialStage, children 
 		],
 	);
 
+	const setCouponDraft = useCallback(
+		(draft: TBuilderCouponDraft | null) => {
+			setCouponDraftState(draft);
+			markDirty();
+		},
+		[markDirty],
+	);
+
+	const couponDraftValue = useMemo<BuilderCouponDraftContextValue>(() => ({ couponDraft, setCouponDraft }), [couponDraft, setCouponDraft]);
+
 	return (
 		<BuilderCampaignContext.Provider value={wrappedCampaignState}>
-			<BuilderUiContext.Provider value={ui}>{children}</BuilderUiContext.Provider>
+			<BuilderCouponDraftContext.Provider value={couponDraftValue}>
+				<BuilderUiContext.Provider value={ui}>{children}</BuilderUiContext.Provider>
+			</BuilderCouponDraftContext.Provider>
 		</BuilderCampaignContext.Provider>
 	);
 }
@@ -198,5 +227,11 @@ export function useBuilderUi() {
 export function useBuilderCampaign() {
 	const ctx = useContext(BuilderCampaignContext);
 	if (!ctx) throw new Error("useBuilderCampaign must be used within BuilderProvider");
+	return ctx;
+}
+
+export function useBuilderCouponDraft() {
+	const ctx = useContext(BuilderCouponDraftContext);
+	if (!ctx) throw new Error("useBuilderCouponDraft must be used within BuilderProvider");
 	return ctx;
 }

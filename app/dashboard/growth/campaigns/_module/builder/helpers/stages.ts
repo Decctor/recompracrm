@@ -1,7 +1,7 @@
-import { CalendarRange, Filter, ListChecks, Send, Settings2, Sparkles } from "lucide-react";
+import { CalendarRange, Filter, ListChecks, MessageSquare, Send, Settings2, Sparkles } from "lucide-react";
 import type { ComponentType } from "react";
 
-export const BUILDER_STAGE_IDS = ["trigger", "send", "audience", "effects", "settings", "review"] as const;
+export const BUILDER_STAGE_IDS = ["trigger", "send", "message", "audience", "effects", "settings", "review"] as const;
 export type TBuilderStageId = (typeof BUILDER_STAGE_IDS)[number];
 
 export type TBuilderStageMeta = {
@@ -21,8 +21,14 @@ export const BUILDER_STAGES: Record<TBuilderStageId, TBuilderStageMeta> = {
 	send: {
 		id: "send",
 		label: "Envio",
-		description: "Quando e como a mensagem é enviada.",
+		description: "Quando a mensagem é enviada.",
 		icon: Send,
+	},
+	message: {
+		id: "message",
+		label: "Mensagem",
+		description: "Remetente do WhatsApp e template enviado.",
+		icon: MessageSquare,
 	},
 	audience: {
 		id: "audience",
@@ -50,7 +56,7 @@ export const BUILDER_STAGES: Record<TBuilderStageId, TBuilderStageMeta> = {
 	},
 };
 
-// All categories share the same 6 stages today. Category-specific behavior is
+// All categories share the same 7 stages today. Category-specific behavior is
 // applied INSIDE each stage component (e.g., audience hides segmentations panel
 // for RFM, send collapses for RECORRENTE/USO-UNICO).
 export const STAGE_ORDER: TBuilderStageId[] = [...BUILDER_STAGE_IDS];

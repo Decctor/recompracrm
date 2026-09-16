@@ -5,7 +5,7 @@ import { lockConnectedWhatsappPhone, mergeMessageTemplatePhoneMetadataSql } from
 import { MessageTemplateSchema } from "@/schemas/message-templates";
 import { db } from "@/services/drizzle";
 import { messageTemplates } from "@/services/drizzle/schema";
-import { and, count, eq, type SQL } from "drizzle-orm";
+import { and, count, eq, or, type SQL, sql } from "drizzle-orm";
 import createHttpError from "http-errors";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
@@ -300,6 +300,10 @@ async function deleteMessageTemplateRoute(request: NextRequest) {
 	return NextResponse.json(result, { status: 200 });
 }
 
+const DEFAULT_PAGE_SIZE = 25;
+/** Teto da janela que um consumidor pode pedir de uma vez. Existe para a etapa Mensagem do construtor. */
+const MAX_PAGE_SIZE = 100;
+
 export const GetMessageTemplatesInputSchema = z.object({
 	id: z
 		.string({
@@ -318,6 +322,20 @@ export const GetMessageTemplatesInputSchema = z.object({
 		})
 		.optional()
 		.nullable(),
+	// A etapa Mensagem do construtor de campanhas renderiza os templates como cartões e filtra a
+	// compatibilidade com o gatilho no cliente, então precisa de uma janela maior que a listagem
+	// paginada padrão. Continua limitado — não existe modo "traga tudo".
+	pageSize: z
+		.union([z.string(), z.number()])
+		.nullable()
+		.transform((value) => {
+			const parsed = value === null || value === "" ? DEFAULT_PAGE_SIZE : Number(value);
+			if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_PAGE_SIZE;
+			return Math.min(Math.trunc(parsed), MAX_PAGE_SIZE);
+		})
+		// `.optional()` por último mantém a CHAVE opcional no tipo inferido — com o `.transform()`
+		// por fora, todo consumidor existente passaria a ser obrigado a informar `pageSize`.
+		.optional(),
 });
 export type TGetMessageTemplatesInput = z.infer<typeof GetMessageTemplatesInputSchema>;
 
@@ -337,11 +355,19 @@ export async function getMessageTemplates({ input, organizationId }: { input: TG
 		};
 	}
 
-	const PAGE_SIZE = 25;
+	const PAGE_SIZE = input.pageSize ?? DEFAULT_PAGE_SIZE;
 	const page = input.page || 1;
 	const conditions: SQL[] = [eq(messageTemplates.organizacaoId, organizationId)];
 	if (input.search?.trim()) {
-		conditions.push(createSimplifiedSearchCondition(messageTemplates.nome, input.search));
+		// Busca por nome OU pelo corpo da mensagem. O corpo guarda as variáveis como `{{clientName}}`,
+		// então procurar pelo identificador de uma variável também cai aqui.
+		const term = input.search;
+		conditions.push(
+			or(
+				createSimplifiedSearchCondition(messageTemplates.nome, term),
+				createSimplifiedSearchCondition(sql`${messageTemplates.conteudo}->'corpo'->>'conteudo'`, term),
+			) as SQL,
+		);
 	}
 
 	const [templatesMatchedResult, templates, connectedPhoneIds] = await Promise.all([
@@ -383,6 +409,7 @@ async function getMessageTemplatesRoute(request: NextRequest) {
 		id: request.nextUrl.searchParams.get("id") ?? undefined,
 		search: request.nextUrl.searchParams.get("search") ?? undefined,
 		page: request.nextUrl.searchParams.get("page") ?? undefined,
+		pageSize: request.nextUrl.searchParams.get("pageSize") ?? undefined,
 	});
 	const organizationId = session.membership?.organizacao.id;
 	if (!organizationId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");

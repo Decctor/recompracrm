@@ -1,10 +1,11 @@
 "use client";
 
 import CampaignsCashbackGenerationBlock from "@/app/dashboard/growth/campaigns/_module/shared/form/Blocks/CashbackGeneration";
-import CampaignsCouponGenerationBlock from "@/app/dashboard/growth/campaigns/_module/shared/form/Blocks/CouponGeneration";
 import { CalendarRange } from "lucide-react";
 import type { TStageValidationResult } from "../../helpers/validation";
 import { useBuilderCampaign, useBuilderUi } from "../builder-provider";
+import BuilderCouponGenerationBlock from "../coupon/coupon-generation-block";
+import CouponTemplateVariableNotice from "../coupon/coupon-template-variable-notice";
 import { StageShell } from "../stage-shell";
 
 type StageEffectsProps = {
@@ -24,7 +25,8 @@ export default function StageEffects({ validation }: StageEffectsProps) {
 			/>
 			<StageShell.Body>
 				<CampaignsCashbackGenerationBlock campaign={state.campaign} updateCampaign={updateCampaign} />
-				<CampaignsCouponGenerationBlock campaign={state.campaign} updateCampaign={updateCampaign} />
+				<BuilderCouponGenerationBlock campaign={state.campaign} updateCampaign={updateCampaign} />
+				<CouponTemplateVariableNotice campaign={state.campaign} />
 			</StageShell.Body>
 			<StageShell.Footer onBack={back} onNext={next} nextDisabled={!validation.valid} nextDisabledReason={validation.reason} />
 		</StageShell>

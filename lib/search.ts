@@ -1,8 +1,12 @@
-import { sql } from "drizzle-orm";
+import { type SQL, sql } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import { formatPhoneAsBase } from "./formatting";
 
-export function createSimplifiedSearchCondition(column: PgColumn, term: string) {
+/**
+ * Aceita uma coluna ou uma expressão SQL — buscar dentro de um campo jsonb
+ * (`conteudo->'corpo'->>'conteudo'`, por exemplo) usa exatamente a mesma normalização.
+ */
+export function createSimplifiedSearchCondition(column: PgColumn | SQL, term: string) {
 	const lowerTerm = term.toLowerCase();
 	return sql`unaccent_immutable(lower(${column})) LIKE '%' || unaccent_immutable(${lowerTerm}) || '%'`;
 }

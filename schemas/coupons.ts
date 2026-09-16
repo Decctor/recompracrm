@@ -198,6 +198,67 @@ export const CouponSchema = z.object({
 });
 export type TCoupon = z.infer<typeof CouponSchema>;
 
+/**
+ * Cupom criado DE DENTRO do construtor de campanhas ("criar cupom para esta campanha").
+ *
+ * É deliberadamente um subconjunto de `CouponSchema`, não o schema inteiro. A campanha materializa
+ * atribuições individuais, então escopo, modo de validação, aplicação e limite de resgate não são
+ * escolha do formulário rápido — o servidor os fixa em `CAMPAIGN_INLINE_COUPON_DEFAULTS`. Aceitar o
+ * `CouponSchema` completo aqui deixaria a rota de campanhas criar cupons GLOBAIS ou por item, que
+ * ela recusaria logo em seguida, e transformaria os "padrões aplicados" que a UI promete em algo
+ * que qualquer requisição montada à mão poderia contradizer.
+ *
+ * Preço fixo e "leve X pague Y" ficam de fora porque ambos exigem alvos de produto — para esses,
+ * o caminho continua sendo o construtor de cupons completo.
+ *
+ * A vigência do cupom também fica de fora: o prazo que o formulário rápido oferece é o da
+ * ATRIBUIÇÃO (`cupomGeracaoExpiracaoMedida`/`Valor`, campos da campanha), não o do cupom em si.
+ */
+export const CampaignInlineCouponSchema = CouponSchema.pick({
+	codigo: true,
+	titulo: true,
+	beneficioTipo: true,
+	beneficioValor: true,
+	beneficioDescontoMaximo: true,
+}).extend({
+	beneficioTipo: z.enum(["DESCONTO_PERCENTUAL", "DESCONTO_FIXO"], {
+		required_error: "Tipo do benefício do cupom não informado.",
+		invalid_type_error: "O cupom criado pela campanha aceita apenas desconto percentual ou desconto em reais.",
+	}),
+	titulo: z
+		.string({
+			required_error: "Título do cupom não informado.",
+			invalid_type_error: "Tipo não válido para o título do cupom.",
+		})
+		.min(1, "O título do cupom não pode ser vazio."),
+});
+export type TCampaignInlineCoupon = z.infer<typeof CampaignInlineCouponSchema>;
+/**
+ * Forma do lado do cliente: é o que trafega em JSON, antes das transformações do Zod
+ * (`vigenciaFim` ainda é string ISO, `codigo` ainda não foi normalizado para caixa alta).
+ */
+export type TCampaignInlineCouponInput = z.input<typeof CampaignInlineCouponSchema>;
+
+/** Fixados pelo servidor ao materializar o cupom inline — refletem os "padrões aplicados" da UI. */
+export const CAMPAIGN_INLINE_COUPON_DEFAULTS = {
+	ativo: true,
+	// Cupom sem janela de vigência própria: quem limita o prazo é a expiração da atribuição,
+	// configurada na própria campanha.
+	vigenciaInicio: null,
+	vigenciaFim: null,
+	// A campanha materializa atribuições por cliente, então só cupons INDIVIDUAIS fazem sentido.
+	escopo: "INDIVIDUAL",
+	validacaoModo: "AUTOMATICA",
+	beneficioAplicacao: "VENDA_TOTAL",
+	condicaoPrimeiraCompra: false,
+	condicaoAlvosOperador: "QUALQUER",
+	limiteResgatesPorCliente: 1,
+	acumulavel: false,
+	resgatePermitirViaPos: true,
+	resgatePermitirViaPontoInteracao: true,
+	resgatePermitirViaLojaDigital: true,
+} as const satisfies Partial<TCoupon>;
+
 export const CouponTargetSchema = z
 	.object({
 		papel: CouponTargetRoleEnum.default("ELEGIVEL"),

@@ -16,9 +16,10 @@ import { validateStage } from "../helpers/validation";
 import { useQueryState } from "nuqs";
 import BuilderHeader from "./builder-header";
 import BuilderStepper from "./builder-stepper";
-import { BuilderProvider, useBuilderCampaign, useBuilderUi } from "./builder-provider";
+import { BuilderProvider, useBuilderCampaign, useBuilderCouponDraft, useBuilderUi } from "./builder-provider";
 import StageAudience from "./stages/stage-audience";
 import StageEffects from "./stages/stage-effects";
+import StageMessage from "./stages/stage-message";
 import StageReview from "./stages/stage-review";
 import StageSend from "./stages/stage-send";
 import StageSettings from "./stages/stage-settings";
@@ -50,6 +51,7 @@ function BuilderShellContent({ membership }: BuilderShellProps) {
 
 	const { currentStage, selectedCategory, setCurrentStage, markClean } = useBuilderUi();
 	const campaignState = useBuilderCampaign();
+	const { couponDraft } = useBuilderCouponDraft();
 	const { state } = campaignState;
 
 	useEffect(() => {
@@ -96,9 +98,23 @@ function BuilderShellContent({ membership }: BuilderShellProps) {
 			return;
 		}
 
+		// O cupom inline não tem id até o servidor criá-lo, então a validação por estágio não
+		// consegue cobri-lo — checamos aqui, antes de gastar a requisição.
+		if (state.campaign.cupomGeracaoAtivo && !state.campaign.cupomGeracaoCupomId && !couponDraft) {
+			setCurrentStage("effects");
+			toast.error("Selecione um cupom existente ou crie um para esta campanha.");
+			return;
+		}
+		if (couponDraft && (!couponDraft.codigo?.trim() || !couponDraft.titulo?.trim() || !couponDraft.beneficioValor)) {
+			setCurrentStage("effects");
+			toast.error("Preencha código, título e valor do benefício do cupom.");
+			return;
+		}
+
 		createCampaignMutation({
 			campaign: { ...state.campaign, filtros: normalizeFiltersForSubmit(state.filtros) },
 			segmentations: state.segmentations,
+			couponToCreate: couponDraft,
 		});
 	}
 
@@ -108,8 +124,9 @@ function BuilderShellContent({ membership }: BuilderShellProps) {
 			<BuilderStepper />
 			<div className="rounded-xl border border-border bg-background p-3 shadow-sm lg:p-5">
 				{currentStage === "trigger" ? <StageTrigger validation={activeValidation} /> : null}
-				{currentStage === "send" ? (
-					<StageSend
+				{currentStage === "send" ? <StageSend validation={activeValidation} /> : null}
+				{currentStage === "message" ? (
+					<StageMessage
 						organizationId={membership.organizacao.id}
 						organizationName={membership.organizacao.nome}
 						organizationLogoUrl={membership.organizacao.logoUrl}

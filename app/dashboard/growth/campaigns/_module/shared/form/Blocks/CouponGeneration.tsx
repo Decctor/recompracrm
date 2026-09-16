@@ -23,7 +23,7 @@ export default function CampaignsCouponGenerationBlock({ campaign, updateCampaig
 			<div className="w-full flex flex-col gap-1">
 				<p className="text-center text-sm tracking-tight text-muted-foreground">
 					Configure a atribuição automática de um cupom individual para clientes que ativarem esta campanha. Use as variáveis de template
-					{" {{coupon_code}}"} e {"{{coupon_expiration_date}}"} para comunicar o cupom na mensagem.
+					{" {{couponCode}}"} e {"{{couponExpirationDate}}"} para comunicar o cupom na mensagem.
 				</p>
 				<CheckboxInput
 					checked={!!campaign.cupomGeracaoAtivo}
