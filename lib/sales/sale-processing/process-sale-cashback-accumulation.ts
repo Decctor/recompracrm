@@ -1,4 +1,4 @@
-import { accumulateCashbackForClient } from "@/lib/cashback/accumulation";
+import { accumulateCashbackForClient, notReversedByClientReassignment } from "@/lib/cashback/accumulation";
 import { db } from "@/services/drizzle";
 import { cashbackProgramTransactions, cashbackPrograms } from "@/services/drizzle/schema";
 import { and, eq } from "drizzle-orm";
@@ -32,13 +32,18 @@ export async function processSaleCashbackAccumulationIfEligible({
 
 	if (!sale) throw new createHttpError.NotFound("Venda não encontrada.");
 	if (!sale.clienteId || sale.statusVenda !== "CONFIRMADA" || !financialState.isFullyPaid) return null;
+	const clientId = sale.clienteId;
 
 	return db.transaction(async (tx) => {
+		// Do cliente ATUAL da venda: um acúmulo revertido por reatribuição (cliente anterior) não
+		// conta — o novo dono ainda precisa acumular quando o pagamento se completar.
 		const existing = await tx.query.cashbackProgramTransactions.findFirst({
 			where: and(
 				eq(cashbackProgramTransactions.organizacaoId, organizationId),
 				eq(cashbackProgramTransactions.vendaId, saleId),
+				eq(cashbackProgramTransactions.clienteId, clientId),
 				eq(cashbackProgramTransactions.tipo, "ACÚMULO"),
+				notReversedByClientReassignment(),
 			),
 			columns: { id: true },
 		});
@@ -52,7 +57,7 @@ export async function processSaleCashbackAccumulationIfEligible({
 		const result = await accumulateCashbackForClient({
 			tx,
 			orgId: organizationId,
-			clientId: sale.clienteId!,
+			clientId,
 			saleId,
 			saleValue: sale.valorTotal,
 			operatorId: authorId ?? null,

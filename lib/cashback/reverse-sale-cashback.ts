@@ -76,6 +76,9 @@ export async function reverseSaleCashback({
 }: ReverseSaleCashbackParams): Promise<{
 	reversedTransactionsCount: number;
 	totalReversedAmount: number;
+	// Soma do `valor` original dos acúmulos encontrados (revertidos ou não): o que o cliente já
+	// tinha consumido é a diferença para `totalReversedAmount`.
+	totalOriginalAccumulatedAmount: number;
 	reversedAccumulationsCount: number;
 	reversedRedemptionsCount: number;
 	totalRestoredRedemptionAmount: number;
@@ -118,6 +121,7 @@ export async function reverseSaleCashback({
 		return {
 			reversedTransactionsCount: 0,
 			totalReversedAmount: 0,
+			totalOriginalAccumulatedAmount: 0,
 			reversedAccumulationsCount: 0,
 			reversedRedemptionsCount: 0,
 			totalRestoredRedemptionAmount: 0,
@@ -381,6 +385,7 @@ export async function reverseSaleCashback({
 	return {
 		reversedTransactionsCount: reversedAccumulationsCount + reversedRedemptionsCount,
 		totalReversedAmount,
+		totalOriginalAccumulatedAmount: relatedAccumulations.reduce((sum, transaction) => sum + transaction.valor, 0),
 		reversedAccumulationsCount,
 		reversedRedemptionsCount,
 		totalRestoredRedemptionAmount,

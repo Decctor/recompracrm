@@ -8,7 +8,10 @@ import { saleFiscalDocumentsAllowCancellation } from "@/lib/sales/sale-editabili
  * Plano: docs/dev-planning/sale-client-reassignment-plan.md.
  */
 
-const DEAD_FISCAL_STATUSES = new Set(["CANCELADO", "INUTILIZADO"]);
+// Estados em que o documento carrega (ou está prestes a carregar) um destinatário real na SEFAZ.
+// Rascunho, pronto para envio, rejeitado e erro nunca foram autorizados: o próximo envio
+// reconstrói o payload a partir da venda e sai em nome do novo cliente — não há o que corrigir.
+const FISCAL_STATUSES_WITH_DESTINATARIO = new Set(["AUTORIZADO", "CANCELAMENTO_PENDENTE", "EM_PROCESSAMENTO"]);
 
 export type TSaleClientReassignmentDocument = {
 	id: string;
@@ -60,7 +63,7 @@ export function resolveSaleClientReassignmentPolicy(sale: TSaleClientReassignmen
 	const hasCouponRedemption = sale.cuponsResgatados.some((redemption) => redemption.status === "UTILIZADO");
 	if (hasCouponRedemption) motivos.push("Esta venda usou um cupom do cliente atual. Cancele a venda e refaça com o cliente correto.");
 
-	const liveDocuments = sale.documentosFiscais.filter((document) => !DEAD_FISCAL_STATUSES.has(document.statusInterno ?? ""));
+	const liveDocuments = sale.documentosFiscais.filter((document) => FISCAL_STATUSES_WITH_DESTINATARIO.has(document.statusInterno ?? ""));
 	// NF-e (e qualquer modelo que não seja NFC-e): o destinatário é parte do documento e não há
 	// evento de correção para ele. Uma devolução autorizada encerra a original, como no cancelamento.
 	const blockingDocuments = liveDocuments.filter((document) => document.tipo !== "NFCE");
@@ -73,8 +76,11 @@ export function resolveSaleClientReassignmentPolicy(sale: TSaleClientReassignmen
 		? null
 		: (blockingDocuments.find((document) => !document.documentoOrigemId && !returnedOriginIds.has(document.id)) ?? blockingDocuments[0] ?? null);
 	if (blockingDocument) {
+		const label = `${blockingDocument.tipo === "NFE" ? "NF-e" : blockingDocument.tipo}${blockingDocument.numero ? ` nº ${blockingDocument.numero}` : ""}`;
 		motivos.push(
-			`A ${blockingDocument.tipo === "NFE" ? "NF-e" : blockingDocument.tipo}${blockingDocument.numero ? ` nº ${blockingDocument.numero}` : ""} foi emitida em nome do cliente atual. Cancele ou gere a devolução da nota antes de trocar o cliente.`,
+			blockingDocument.statusInterno === "EM_PROCESSAMENTO"
+				? `A ${label} está em processamento na SEFAZ em nome do cliente atual. Aguarde o desfecho antes de trocar o cliente.`
+				: `A ${label} foi emitida em nome do cliente atual. Cancele ou gere a devolução da nota antes de trocar o cliente.`,
 		);
 	}
 

@@ -1,4 +1,4 @@
-import { previewSaleCashbackTransfer, transferSaleCashbackAccumulation } from "@/lib/cashback/transfer-sale-accumulation";
+import { previewSaleCashbackTransfer, saleHasBuyerAccumulation, transferSaleCashbackAccumulation } from "@/lib/cashback/transfer-sale-accumulation";
 import { recomputeClientDerivedDataSafely } from "@/lib/clients/recompute";
 import { lockClientPurchaseHistory } from "@/lib/coupons/purchase-history";
 import { buildSaleEntryTitle } from "@/lib/sales/entry-titles";
@@ -40,6 +40,23 @@ const SALE_CONTEXT_WITH = {
 	lancamentosContabeis: { columns: { id: true, origemTipo: true, titulo: true } },
 } as const;
 
+type TSaleContextRow = {
+	id: string;
+	statusVenda: string | null;
+	processamentoOrigem: string | null;
+	tabId: string | null;
+	clienteId: string | null;
+	documentosFiscais: {
+		id: string;
+		tipo: string;
+		numero: string | null;
+		statusInterno: string | null;
+		documentoOrigemId: string | null;
+		snapshotOrigemVenda: string | null;
+	}[];
+	transacoesCashback: { tipo: string; status: string }[];
+};
+
 function readDestinatarioCpfCnpj(snapshot: string | null): string | null {
 	if (!snapshot) return null;
 	try {
@@ -51,16 +68,7 @@ function readDestinatarioCpfCnpj(snapshot: string | null): string | null {
 	}
 }
 
-function toPolicyDocuments(
-	documents: {
-		id: string;
-		tipo: string;
-		numero: string | null;
-		statusInterno: string | null;
-		documentoOrigemId: string | null;
-		snapshotOrigemVenda: string | null;
-	}[],
-): TSaleClientReassignmentDocument[] {
+function toPolicyDocuments(documents: TSaleContextRow["documentosFiscais"]): TSaleClientReassignmentDocument[] {
 	return documents.map((document) => ({
 		id: document.id,
 		tipo: document.tipo,
@@ -69,6 +77,55 @@ function toPolicyDocuments(
 		documentoOrigemId: document.documentoOrigemId,
 		destinatarioCpfCnpj: readDestinatarioCpfCnpj(document.snapshotOrigemVenda),
 	}));
+}
+
+/**
+ * Único ponto que monta a entrada da política: a prévia (GET) e a execução sob lock (PATCH) leem
+ * exatamente os mesmos sinais, para o diálogo nunca mostrar "elegível" e o servidor recusar.
+ */
+async function resolvePolicyForSale({
+	tx,
+	organizationId,
+	sale,
+}: {
+	tx: Pick<DBTransaction, "query">;
+	organizationId: string;
+	sale: TSaleContextRow;
+}) {
+	const cuponsResgatados = await tx.query.couponRedemptions.findMany({
+		where: and(eq(couponRedemptions.vendaId, sale.id), eq(couponRedemptions.organizacaoId, organizationId)),
+		columns: { status: true },
+	});
+	return resolveSaleClientReassignmentPolicy({
+		statusVenda: sale.statusVenda,
+		processamentoOrigem: sale.processamentoOrigem,
+		tabId: sale.tabId,
+		clienteId: sale.clienteId,
+		documentosFiscais: toPolicyDocuments(sale.documentosFiscais),
+		transacoesCashback: sale.transacoesCashback,
+		cuponsResgatados,
+	});
+}
+
+/**
+ * O novo cliente acumula agora quando a venda já acumulava para o anterior (o PDV acumula na
+ * confirmação, sem esperar o pagamento) ou quando está totalmente paga (regra do caminho
+ * diferido). Fora disso, o acúmulo fica para quando o pagamento se completar — a guarda desse
+ * caminho ignora a linha revertida por reatribuição.
+ */
+async function resolveNextClientAccumulationEligibility({
+	tx,
+	organizationId,
+	sale,
+}: {
+	tx: Pick<DBTransaction, "query">;
+	organizationId: string;
+	sale: Pick<TSaleContextRow, "id" | "statusVenda" | "clienteId">;
+}) {
+	if (sale.statusVenda !== "CONFIRMADA") return false;
+	if (sale.clienteId && (await saleHasBuyerAccumulation({ tx, organizationId, saleId: sale.id, clientId: sale.clienteId }))) return true;
+	const financialState = await getSaleFinancialState({ organizationId, saleId: sale.id });
+	return financialState.isFullyPaid;
 }
 
 /**
@@ -100,21 +157,7 @@ export async function loadSaleClientReassignmentContext({
 	});
 	if (!sale) throw new createHttpError.NotFound("Venda não encontrada.");
 
-	const cuponsResgatados = await db.query.couponRedemptions.findMany({
-		where: and(eq(couponRedemptions.vendaId, sale.id), eq(couponRedemptions.organizacaoId, organizationId)),
-		columns: { status: true },
-	});
-	const politica = resolveSaleClientReassignmentPolicy({
-		statusVenda: sale.statusVenda,
-		processamentoOrigem: sale.processamentoOrigem,
-		tabId: sale.tabId,
-		clienteId: sale.clienteId,
-		documentosFiscais: toPolicyDocuments(sale.documentosFiscais),
-		transacoesCashback: sale.transacoesCashback,
-		cuponsResgatados,
-	});
-
-	const financialState = await getSaleFinancialState({ organizationId, saleId: sale.id });
+	const politica = await resolvePolicyForSale({ tx: db, organizationId, sale });
 	const cashback = await previewSaleCashbackTransfer({
 		tx: db,
 		organizationId,
@@ -122,7 +165,7 @@ export async function loadSaleClientReassignmentContext({
 		saleValue: sale.valorTotal,
 		currentClientId: sale.clienteId,
 		nextClientId: nextClientId ?? null,
-		nextClientAccumulationEligible: sale.statusVenda === "CONFIRMADA" && financialState.isFullyPaid,
+		nextClientAccumulationEligible: await resolveNextClientAccumulationEligibility({ tx: db, organizationId, sale }),
 	});
 
 	return {
@@ -162,19 +205,7 @@ export async function processSaleClientReassignmentInTransaction({ tx, input }: 
 	if (previousClientId) await lockClientPurchaseHistory(tx, organizationId, previousClientId);
 	if (nextClient) await lockClientPurchaseHistory(tx, organizationId, nextClient.id);
 
-	const cuponsResgatados = await tx.query.couponRedemptions.findMany({
-		where: and(eq(couponRedemptions.vendaId, sale.id), eq(couponRedemptions.organizacaoId, organizationId)),
-		columns: { status: true },
-	});
-	const politica = resolveSaleClientReassignmentPolicy({
-		statusVenda: sale.statusVenda,
-		processamentoOrigem: sale.processamentoOrigem,
-		tabId: sale.tabId,
-		clienteId: sale.clienteId,
-		documentosFiscais: toPolicyDocuments(sale.documentosFiscais),
-		transacoesCashback: sale.transacoesCashback,
-		cuponsResgatados,
-	});
+	const politica = await resolvePolicyForSale({ tx, organizationId, sale });
 	if (!politica.elegivel) throw new createHttpError.BadRequest(politica.motivos[0] ?? "A venda não permite alteração de cliente.");
 	if (politica.confirmacaoFiscalExigida && !input.fiscalConfirmed) {
 		throw new createHttpError.BadRequest(
@@ -182,7 +213,8 @@ export async function processSaleClientReassignmentInTransaction({ tx, input }: 
 		);
 	}
 
-	const financialState = await getSaleFinancialState({ organizationId, saleId: sale.id });
+	// Decidido ANTES da reversão: depois dela o acúmulo do cliente anterior já está expirado.
+	const nextClientAccumulationEligible = await resolveNextClientAccumulationEligibility({ tx, organizationId, sale });
 	const cashback = await transferSaleCashbackAccumulation({
 		tx,
 		organizationId,
@@ -191,7 +223,7 @@ export async function processSaleClientReassignmentInTransaction({ tx, input }: 
 		saleDate: sale.dataVenda,
 		currentClientId: previousClientId,
 		nextClientId: nextClient?.id ?? null,
-		nextClientAccumulationEligible: financialState.isFullyPaid,
+		nextClientAccumulationEligible,
 		operatorId: input.saleAuthorId,
 		operatorSellerId: sale.vendedorId,
 	});
@@ -264,8 +296,11 @@ export async function processSaleClientReassignmentPostCommit({
 	saleAuthorId,
 	clientIds,
 }: Pick<TProcessSaleClientReassignmentInput, "organization" | "saleId" | "saleAuthorId"> & { clientIds: (string | null)[] }) {
-	for (const clienteId of clientIds) {
-		if (clienteId) await recomputeClientDerivedDataSafely({ organizacaoId: organization.id, clienteId });
-	}
+	// Cada recomputação abre a própria transação e engole os próprios erros: sem dependência entre os dois clientes.
+	await Promise.all(
+		clientIds
+			.filter((clienteId): clienteId is string => !!clienteId)
+			.map((clienteId) => recomputeClientDerivedDataSafely({ organizacaoId: organization.id, clienteId })),
+	);
 	return processSaleAutomaticFiscalEmissionIfEligible({ organization, saleId, authorId: saleAuthorId });
 }

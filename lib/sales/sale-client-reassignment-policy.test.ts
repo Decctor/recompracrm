@@ -68,9 +68,42 @@ describe("resolveSaleClientReassignmentPolicy", () => {
 		assert.deepEqual(policy.documentoFiscal, { id: "doc-1", tipo: "NFE", numero: "12" });
 	});
 
-	it("NF-e em processamento também recusa", () => {
+	it("NF-e em processamento também recusa, com pedido de espera", () => {
 		const policy = resolveSaleClientReassignmentPolicy(row({ documentosFiscais: [{ id: "doc-1", tipo: "NFE", statusInterno: "EM_PROCESSAMENTO" }] }));
 		assert.equal(policy.elegivel, false);
+		assert.match(policy.motivos[0]!, /Aguarde o desfecho/);
+	});
+
+	it("NF-e com cancelamento pendente ainda está em nome do cliente atual", () => {
+		const policy = resolveSaleClientReassignmentPolicy(
+			row({ documentosFiscais: [{ id: "doc-1", tipo: "NFE", statusInterno: "CANCELAMENTO_PENDENTE" }] }),
+		);
+		assert.equal(policy.elegivel, false);
+	});
+
+	it("NF-e nunca autorizada (rascunho, pronta, rejeitada, erro) não bloqueia: o reenvio sai em nome do novo cliente", () => {
+		for (const statusInterno of ["RASCUNHO", "PRONTO_PARA_ENVIO", "REJEITADO", "ERRO"]) {
+			const policy = resolveSaleClientReassignmentPolicy(
+				row({ documentosFiscais: [{ id: "doc-1", tipo: "NFE", statusInterno, destinatarioCpfCnpj: "12345678000199" }] }),
+			);
+			assert.equal(policy.elegivel, true, statusInterno);
+			assert.equal(policy.documentoFiscal, null, statusInterno);
+		}
+	});
+
+	it("NFC-e rejeitada com CPF não exige confirmação: o reenvio sai com o novo cliente", () => {
+		const policy = resolveSaleClientReassignmentPolicy(
+			row({ documentosFiscais: [{ id: "doc-1", tipo: "NFCE", statusInterno: "REJEITADO", destinatarioCpfCnpj: "12345678909" }] }),
+		);
+		assert.equal(policy.confirmacaoFiscalExigida, false);
+	});
+
+	it("NFC-e em processamento com CPF exige confirmação: pode ser autorizada com o CPF atual", () => {
+		const policy = resolveSaleClientReassignmentPolicy(
+			row({ documentosFiscais: [{ id: "doc-1", tipo: "NFCE", statusInterno: "EM_PROCESSAMENTO", destinatarioCpfCnpj: "12345678909" }] }),
+		);
+		assert.equal(policy.elegivel, true);
+		assert.equal(policy.confirmacaoFiscalExigida, true);
 	});
 
 	it("NF-e com devolução autorizada libera", () => {

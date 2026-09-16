@@ -1,7 +1,12 @@
 import type { DBTransaction } from "@/services/drizzle";
 import { cashbackProgramBalances, cashbackProgramTransactions, cashbackPrograms } from "@/services/drizzle/schema";
 import { and, eq, inArray } from "drizzle-orm";
-import { accumulateCashbackForClient, calculateAccumulatedCashbackValue } from "./accumulation";
+import {
+	SALE_CLIENT_REASSIGNMENT_CASHBACK_REASON,
+	accumulateCashbackForClient,
+	calculateAccumulatedCashbackValue,
+	notReversedByClientReassignment,
+} from "./accumulation";
 import { reverseSaleCashback } from "./reverse-sale-cashback";
 
 /**
@@ -13,23 +18,55 @@ import { reverseSaleCashback } from "./reverse-sale-cashback";
  * regra do cancelamento.
  *
  * Entrada: acumula para o novo cliente com a data da venda, para a validade não se estender por
- * causa da troca. A elegibilidade (venda totalmente paga, programa ativo) é do chamador.
+ * causa da troca. A elegibilidade (venda que já acumulava ou está totalmente paga) é do chamador;
+ * o que fica aqui é a mesma guarda de idempotência do acúmulo, que ignora linhas revertidas por
+ * reatribuição (vai-e-volta A → B → A acumula de novo para A).
  *
  * Plano: docs/dev-planning/sale-client-reassignment-plan.md.
  */
 
-export const SALE_CLIENT_REASSIGNMENT_CASHBACK_REASON = "VENDA_REATRIBUIDA";
+export { SALE_CLIENT_REASSIGNMENT_CASHBACK_REASON };
 
 export type TSaleCashbackTransferPreview = {
 	// Quanto do acúmulo do cliente atual ainda pode ser estornado (valor restante dos ACÚMULOs vivos).
 	estornavel: number;
 	// Quanto o cliente atual já consumiu e por isso não será cobrado de volta.
 	naoEstornavel: number;
-	// Quanto o novo cliente acumularia (0 quando a venda não acumula: programa inativo, valor abaixo do mínimo).
+	// Quanto o novo cliente acumularia (0 quando a venda não acumula: programa inativo, valor abaixo
+	// do mínimo, ou o novo cliente já tem acúmulo vivo nesta venda).
 	acumuloPrevisto: number;
 };
 
 const normalizeValue = (value: number) => Math.round((value + Number.EPSILON) * 1_000_000) / 1_000_000;
+
+function buyerAccumulationsWhere({ organizationId, saleId, clientId }: { organizationId: string; saleId: string; clientId: string }) {
+	return and(
+		eq(cashbackProgramTransactions.organizacaoId, organizationId),
+		eq(cashbackProgramTransactions.vendaId, saleId),
+		eq(cashbackProgramTransactions.clienteId, clientId),
+		eq(cashbackProgramTransactions.tipo, "ACÚMULO"),
+		inArray(cashbackProgramTransactions.status, ["ATIVO", "CONSUMIDO"]),
+	);
+}
+
+/** A venda já acumulou para este cliente (vivo ou consumido)? Decide se o novo cliente acumula agora. */
+export async function saleHasBuyerAccumulation({
+	tx,
+	organizationId,
+	saleId,
+	clientId,
+}: {
+	tx: Pick<DBTransaction, "query">;
+	organizationId: string;
+	saleId: string;
+	clientId: string;
+}) {
+	const existing = await tx.query.cashbackProgramTransactions.findFirst({
+		where: buyerAccumulationsWhere({ organizationId, saleId, clientId }),
+		columns: { id: true },
+	});
+	return !!existing;
+}
 
 export async function previewSaleCashbackTransfer({
 	tx,
@@ -50,13 +87,7 @@ export async function previewSaleCashbackTransfer({
 }): Promise<TSaleCashbackTransferPreview> {
 	const accumulations = currentClientId
 		? await tx.query.cashbackProgramTransactions.findMany({
-				where: and(
-					eq(cashbackProgramTransactions.organizacaoId, organizationId),
-					eq(cashbackProgramTransactions.vendaId, saleId),
-					eq(cashbackProgramTransactions.clienteId, currentClientId),
-					eq(cashbackProgramTransactions.tipo, "ACÚMULO"),
-					inArray(cashbackProgramTransactions.status, ["ATIVO", "CONSUMIDO"]),
-				),
+				where: buyerAccumulationsWhere({ organizationId, saleId, clientId: currentClientId }),
 				columns: { valor: true, valorRestante: true, programaId: true },
 			})
 		: [];
@@ -80,10 +111,24 @@ export async function previewSaleCashbackTransfer({
 
 	let acumuloPrevisto = 0;
 	if (nextClientId && nextClientAccumulationEligible) {
-		const program = await tx.query.cashbackPrograms.findFirst({
-			where: and(eq(cashbackPrograms.organizacaoId, organizationId), eq(cashbackPrograms.ativo, true)),
-			columns: { acumuloTipo: true, acumuloValor: true, acumuloRegraValorMinimo: true },
+		// Mesma guarda do acúmulo: o novo cliente já tem linha nesta venda que não foi revertida por
+		// reatribuição (ex.: expirou naturalmente) → não acumula de novo.
+		const guardingRow = await tx.query.cashbackProgramTransactions.findFirst({
+			where: and(
+				eq(cashbackProgramTransactions.organizacaoId, organizationId),
+				eq(cashbackProgramTransactions.vendaId, saleId),
+				eq(cashbackProgramTransactions.clienteId, nextClientId),
+				eq(cashbackProgramTransactions.tipo, "ACÚMULO"),
+				notReversedByClientReassignment(),
+			),
+			columns: { id: true },
 		});
+		const program = guardingRow
+			? null
+			: await tx.query.cashbackPrograms.findFirst({
+					where: and(eq(cashbackPrograms.organizacaoId, organizationId), eq(cashbackPrograms.ativo, true)),
+					columns: { acumuloTipo: true, acumuloValor: true, acumuloRegraValorMinimo: true },
+				});
 		if (program) {
 			acumuloPrevisto = calculateAccumulatedCashbackValue({
 				accumulationType: program.acumuloTipo,
@@ -120,21 +165,6 @@ export async function transferSaleCashbackAccumulation({
 	operatorId?: string | null;
 	operatorSellerId?: string | null;
 }) {
-	// Quanto o cliente atual tinha acumulado nesta venda, antes da reversão (para o log).
-	const previousAccumulations = currentClientId
-		? await tx.query.cashbackProgramTransactions.findMany({
-				where: and(
-					eq(cashbackProgramTransactions.organizacaoId, organizationId),
-					eq(cashbackProgramTransactions.vendaId, saleId),
-					eq(cashbackProgramTransactions.clienteId, currentClientId),
-					eq(cashbackProgramTransactions.tipo, "ACÚMULO"),
-					inArray(cashbackProgramTransactions.status, ["ATIVO", "CONSUMIDO"]),
-				),
-				columns: { valor: true },
-			})
-		: [];
-	const previousAccumulatedTotal = previousAccumulations.reduce((sum, accumulation) => sum + accumulation.valor, 0);
-
 	const reversal = currentClientId
 		? await reverseSaleCashback({
 				tx,
@@ -146,7 +176,7 @@ export async function transferSaleCashbackAccumulation({
 			})
 		: null;
 	const estornado = normalizeValue(reversal?.totalReversedAmount ?? 0);
-	const naoEstornado = normalizeValue(Math.max(0, previousAccumulatedTotal - estornado));
+	const naoEstornado = normalizeValue(Math.max(0, (reversal?.totalOriginalAccumulatedAmount ?? 0) - estornado));
 
 	let acumulado = 0;
 	if (nextClientId && nextClientAccumulationEligible) {
