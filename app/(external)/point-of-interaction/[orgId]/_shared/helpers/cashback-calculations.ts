@@ -11,12 +11,19 @@ type TClientLookUp = {
 		acumuloPermitirViaIntegracao: boolean;
 	} | null;
 };
-export function getCashbackAccumulationConfig(saldos: TClientLookUp[] | undefined | null): {
+export function getCashbackAccumulationConfig(
+	saldos: TClientLookUp[] | undefined | null,
+	// Regra do programa ativo da organização, para o cliente que ainda não tem linha de saldo.
+	orgProgramAllowsAccumulationViaPoi = false,
+): {
 	acumuloPermitirViaPontoIntegracao: boolean;
 	acumuloPermitirViaIntegracao: boolean;
 } {
 	return {
-		acumuloPermitirViaPontoIntegracao: saldos?.[0]?.programa?.acumuloPermitirViaPontoIntegracao ?? false,
+		// Cliente sem linha de saldo (nunca acumulou) herda a regra do programa da organização,
+		// espelhando o fallback `clientProgram ?? cashbackProgram` do hub — sem isso o botão
+		// "apenas pontuar" some exatamente para quem mais precisa dele: o cliente que nunca pontuou.
+		acumuloPermitirViaPontoIntegracao: saldos?.[0]?.programa?.acumuloPermitirViaPontoIntegracao ?? orgProgramAllowsAccumulationViaPoi,
 		acumuloPermitirViaIntegracao: saldos?.[0]?.programa?.acumuloPermitirViaIntegracao ?? false,
 	};
 }

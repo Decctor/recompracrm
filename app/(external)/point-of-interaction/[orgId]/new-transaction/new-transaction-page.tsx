@@ -88,6 +88,7 @@ type NewSaleContentProps = {
 		terminologia: TCashbackProgramTerminologyEnum;
 		modalidadeDescontosPermitida: boolean;
 		modalidadeRecompensasPermitida: boolean;
+		acumuloPermitirViaPontoIntegracao: boolean;
 		resgatePermitirViaPontoIntegracao: boolean;
 		poiConfirmacaoValorObrigatoria: boolean;
 	};
@@ -113,7 +114,23 @@ export default function NewSaleContent({ org, clientId, prizes, initialOperatorP
 		redefineState,
 	} = usePointOfInteractionNewSaleState(org.id, mode);
 
-	const [currentStep, setCurrentStep] = React.useState<number>(1);
+	const hasPrizes = prizes.length > 0;
+	// Gate de resgate pelo POI. O caminho mobile cria uma SOLICITAÇÃO (não passa pelo 403 da API de
+	// transação na hora do envio), então a UI precisa ser a barreira: sem resgate liberado não existe
+	// modo recompensa nem opção de aplicar saldo — resta o caminho de puro acúmulo.
+	const isRedemptionAllowedViaPoi = org.resgatePermitirViaPontoIntegracao;
+	const isDiscountModeAllowed = org.modalidadeDescontosPermitida;
+	const isPrizeModeAllowed = org.modalidadeRecompensasPermitida && hasPrizes && isRedemptionAllowedViaPoi;
+	const shouldShowFlowModeSelection = isDiscountModeAllowed && isPrizeModeAllowed;
+
+	// Programa só de recompensas (descontos desligados): `effectiveFlowMode` força o modo prêmio e
+	// ignoraria o `intent=pontuar` do hub — o cliente cairia na vitrine de recompensas quando pediu
+	// para registrar uma venda. O acúmulo puro vive no ramo "apenas pontuar" do fluxo de prêmio, então
+	// a intenção nasce nele, já no passo VENDA. Condicionado ao acúmulo via POI: a intenção nunca
+	// destrava algo que as flags do programa não permitam.
+	const startsInPrizeSaleOnly = intent === "pontuar" && !isDiscountModeAllowed && isPrizeModeAllowed && org.acumuloPermitirViaPontoIntegracao;
+
+	const [currentStep, setCurrentStep] = React.useState<number>(startsInPrizeSaleOnly ? 2 : 1);
 	const [successData, setSuccessData] = React.useState<TCreatePointOfInteractionTransactionOutput["data"] | null>(null);
 
 	// Prize flow state — a intenção do hub já nasce escolhida, pulando a tela de seleção de modo.
@@ -126,19 +143,11 @@ export default function NewSaleContent({ org, clientId, prizes, initialOperatorP
 	});
 	const [showModeSelection, setShowModeSelection] = React.useState(false);
 	const [selectedPrize, setSelectedPrize] = React.useState<TPrize | null>(null);
-	const [prizeFlowIntent, setPrizeFlowIntent] = React.useState<"redeem" | "sale-only" | null>(null);
+	const [prizeFlowIntent, setPrizeFlowIntent] = React.useState<"redeem" | "sale-only" | null>(startsInPrizeSaleOnly ? "sale-only" : null);
 
 	// Coupon flow state (display info; the payload holds only cupomId + valorDesconto)
 	const [selectedCoupon, setSelectedCoupon] = React.useState<TPoiAvailableCoupon | null>(null);
 
-	const hasPrizes = prizes.length > 0;
-	// Gate de resgate pelo POI. O caminho mobile cria uma SOLICITAÇÃO (não passa pelo 403 da API de
-	// transação na hora do envio), então a UI precisa ser a barreira: sem resgate liberado não existe
-	// modo recompensa nem opção de aplicar saldo — resta o caminho de puro acúmulo.
-	const isRedemptionAllowedViaPoi = org.resgatePermitirViaPontoIntegracao;
-	const isDiscountModeAllowed = org.modalidadeDescontosPermitida;
-	const isPrizeModeAllowed = org.modalidadeRecompensasPermitida && hasPrizes && isRedemptionAllowedViaPoi;
-	const shouldShowFlowModeSelection = isDiscountModeAllowed && isPrizeModeAllowed;
 	const effectiveFlowMode: "discount" | "prize" = shouldShowFlowModeSelection ? (flowMode ?? "discount") : isPrizeModeAllowed ? "prize" : "discount";
 	const isPrizeMode = effectiveFlowMode === "prize";
 	const isPrizeSaleOnlyFlow = isPrizeMode && prizeFlowIntent === "sale-only";
@@ -168,7 +177,10 @@ export default function NewSaleContent({ org, clientId, prizes, initialOperatorP
 
 	// Memoized cashback calculations
 	const availableCashback = useMemo(() => getAvailableCashback(client?.saldos), [client?.saldos]);
-	const cashbackAccumulationConfig = useMemo(() => getCashbackAccumulationConfig(client?.saldos), [client?.saldos]);
+	const cashbackAccumulationConfig = useMemo(
+		() => getCashbackAccumulationConfig(client?.saldos, org.acumuloPermitirViaPontoIntegracao),
+		[client?.saldos, org.acumuloPermitirViaPontoIntegracao],
+	);
 	const redemptionLimitConfig = useMemo(() => getRedemptionLimitConfig(client?.saldos), [client?.saldos]);
 	// Coupons available for the identified client (discount flow only; evaluated against the informed sale value)
 	const { data: availableCoupons, isLoading: isLoadingCoupons } = usePoiAvailableCoupons({
