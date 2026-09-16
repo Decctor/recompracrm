@@ -39,12 +39,14 @@ import {
 	Store,
 	TriangleAlert,
 	Truck,
+	UserRoundPen,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { FaWhatsapp } from "react-icons/fa6";
 import { CancelConfirmedSaleDialog } from "./CancelConfirmedSaleDialog";
+import { ReassignSaleClientDialog } from "./ReassignSaleClientDialog";
 
 type SaleFulfillmentDetailsMenuProps = {
 	saleId: string;
@@ -561,10 +563,14 @@ function SaleActionsFooter({
 	canDeleteSales?: boolean;
 }) {
 	const [cancelDialogIsOpen, setCancelDialogIsOpen] = useState(false);
+	const [clientDialogIsOpen, setClientDialogIsOpen] = useState(false);
 	const editability = sale.editabilidade;
 	const showEdit = !!canEditSales && (editability.nivel === "TOTAL" || editability.rascunho || editability.motivos.length > 0);
 	const showCancel = !!canDeleteSales && editability.cancelamentoDisponivel;
-	if (!showEdit && !showCancel) return null;
+	// Trocar/definir cliente segue a política do servidor (prévia no diálogo); aqui só o recorte
+	// grosso: venda interna confirmada fora de conta de atendimento.
+	const showClient = !!canEditSales && sale.processamentoOrigem === "INTERNO" && sale.statusVenda === "CONFIRMADA" && !sale.tabId;
+	if (!showEdit && !showCancel && !showClient) return null;
 	const editHref = editability.rascunho ? appRoutes.sales.checkout(sale.id) : appRoutes.sales.edit(sale.id);
 	const editIsEnabled = editability.nivel === "TOTAL" || editability.rascunho;
 	return (
@@ -575,6 +581,12 @@ function SaleActionsFooter({
 					<Button variant="ghost-destructive" onClick={() => setCancelDialogIsOpen(true)}>
 						<CircleX className="size-4" />
 						Cancelar venda
+					</Button>
+				) : null}
+				{showClient ? (
+					<Button variant="outline" onClick={() => setClientDialogIsOpen(true)}>
+						<UserRoundPen className="size-4" />
+						{sale.cliente ? "Trocar cliente" : "Definir cliente"}
 					</Button>
 				) : null}
 				{showEdit ? (
@@ -603,6 +615,7 @@ function SaleActionsFooter({
 					closeModal={() => setCancelDialogIsOpen(false)}
 				/>
 			) : null}
+			{clientDialogIsOpen ? <ReassignSaleClientDialog saleId={sale.id} cliente={sale.cliente} closeModal={() => setClientDialogIsOpen(false)} /> : null}
 		</section>
 	);
 }

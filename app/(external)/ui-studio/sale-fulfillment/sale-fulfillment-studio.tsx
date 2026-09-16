@@ -24,6 +24,8 @@ const STUDIO_SALE = {
 	dataVenda: new Date("2026-09-04T14:32:00-03:00"),
 	statusAtendimentoData: new Date("2026-09-04T14:41:00-03:00"),
 	canal: "WhatsApp",
+	processamentoOrigem: "INTERNO",
+	tabId: null,
 	cliente: {
 		id: "client-studio-1",
 		nome: "Mariana Oliveira",

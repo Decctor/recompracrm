@@ -1,3 +1,4 @@
+import type { TGetSaleClientReassignmentOutput } from "@/app/api/sales/client/route";
 import type { TGetQuotesOutput } from "@/app/api/sales/quotes/route";
 import type { TGetSalesInput, TGetSalesOutput } from "@/app/api/sales/route";
 import type { TSalesSimplifiedSearchResult } from "@/app/api/sales/simplified-search/route";
@@ -166,6 +167,38 @@ export function useOrganizationOpenQuotes({ enabled = true }: { enabled?: boolea
 			queryFn: () => fetchOpenQuotes(null),
 			enabled,
 			staleTime: 30 * 1000,
+		}),
+		queryKey,
+	};
+}
+
+async function fetchSaleClientReassignmentPreview({ saleId, clienteId }: { saleId: string; clienteId: string | null }) {
+	const searchParams = new URLSearchParams();
+	searchParams.set("saleId", saleId);
+	if (clienteId) searchParams.set("clienteId", clienteId);
+	const { data } = await axios.get<TGetSaleClientReassignmentOutput>(`/api/sales/client?${searchParams.toString()}`);
+	return data.data;
+}
+
+/**
+ * Prévia da troca/definição de cliente da venda: política (motivos de recusa, confirmação fiscal)
+ * e cashback estornável/previsto. `clienteId` é o candidato; só afeta o acúmulo previsto.
+ */
+export function useSaleClientReassignmentPreview({
+	saleId,
+	clienteId,
+	enabled = true,
+}: {
+	saleId: string;
+	clienteId: string | null;
+	enabled?: boolean;
+}) {
+	const queryKey = ["sale-client-reassignment-preview", saleId, clienteId] as const;
+	return {
+		...useQuery({
+			queryKey,
+			queryFn: () => fetchSaleClientReassignmentPreview({ saleId, clienteId }),
+			enabled,
 		}),
 		queryKey,
 	};

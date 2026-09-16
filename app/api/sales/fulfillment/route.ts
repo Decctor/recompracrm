@@ -209,6 +209,8 @@ async function getSalesFulfillment({ input, orgId, policy }: { input: TGetSalesF
 					...card,
 					documento: sale.documento,
 					canal: sale.canal,
+					processamentoOrigem: sale.processamentoOrigem,
+					tabId: sale.tabId,
 					descontosTotal: sale.descontosTotal,
 					acrescimosTotal: sale.acrescimosTotal,
 					entregaLocalizacao: sale.entregaLocalizacao,

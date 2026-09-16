@@ -10,6 +10,10 @@ type ReverseSaleCashbackParams = {
 	organizationId: string;
 	reason: string; // e.g., "VENDA_CANCELADA", "VENDA_CANCELADA_RETROATIVA"
 	mode?: "cancel" | "delete";
+	// Reatribuição de cliente: reverte SOMENTE os ACÚMULOs de `clientId` (o comprador). O acúmulo do
+	// parceiro pertence à venda (`parceiroId`), não ao comprador, e fica intacto; resgates nunca
+	// chegam aqui porque a política de reatribuição os recusa antes.
+	scope?: "sale" | "buyer-accumulations";
 };
 
 const EPSILON = 1e-6;
@@ -61,7 +65,15 @@ function getConsumedFromAccumulations(metadata: unknown) {
  * @param reason - Reason for cancellation (for audit trail)
  * @returns Object with reversal statistics
  */
-export async function reverseSaleCashback({ tx, saleId, clientId, organizationId, reason, mode = "cancel" }: ReverseSaleCashbackParams): Promise<{
+export async function reverseSaleCashback({
+	tx,
+	saleId,
+	clientId,
+	organizationId,
+	reason,
+	mode = "cancel",
+	scope = "sale",
+}: ReverseSaleCashbackParams): Promise<{
 	reversedTransactionsCount: number;
 	totalReversedAmount: number;
 	reversedAccumulationsCount: number;
@@ -74,13 +86,21 @@ export async function reverseSaleCashback({ tx, saleId, clientId, organizationId
 
 	const now = new Date();
 
+	const buyerOnly = scope === "buyer-accumulations";
 	const relatedAccumulations = await tx.query.cashbackProgramTransactions.findMany({
 		where: (fields, { and, eq, or }) =>
-			and(eq(fields.vendaId, saleId), eq(fields.tipo, "ACÚMULO"), or(eq(fields.status, "ATIVO"), eq(fields.status, "CONSUMIDO"))),
+			and(
+				eq(fields.vendaId, saleId),
+				eq(fields.tipo, "ACÚMULO"),
+				buyerOnly ? eq(fields.clienteId, clientId) : undefined,
+				or(eq(fields.status, "ATIVO"), eq(fields.status, "CONSUMIDO")),
+			),
 	});
-	const relatedRedemptions = await tx.query.cashbackProgramTransactions.findMany({
-		where: (fields, { and, eq }) => and(eq(fields.vendaId, saleId), eq(fields.tipo, "RESGATE"), eq(fields.status, "ATIVO")),
-	});
+	const relatedRedemptions = buyerOnly
+		? []
+		: await tx.query.cashbackProgramTransactions.findMany({
+				where: (fields, { and, eq }) => and(eq(fields.vendaId, saleId), eq(fields.tipo, "RESGATE"), eq(fields.status, "ATIVO")),
+			});
 
 	if (relatedAccumulations.length === 0 && relatedRedemptions.length === 0) {
 		console.log(`[CASHBACK_REVERSAL] No active cashback transactions found for sale ${saleId}. Nothing to reverse.`);
