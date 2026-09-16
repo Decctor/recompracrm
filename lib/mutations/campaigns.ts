@@ -1,9 +1,11 @@
 import type { TRetryCampaignInteractionInput, TRetryCampaignInteractionOutput } from "@/app/api/campaigns/interactions/route";
 import type { TCreateCampaignInput, TCreateCampaignOutput, TUpdateCampaignInput, TUpdateCampaignOutput } from "@/app/api/campaigns/route";
 import type { TTestCampaignInput, TTestCampaignOutput } from "@/app/api/campaigns/test/route";
+import type { TCampaignInlineCouponInput } from "@/schemas/coupons";
 import axios from "axios";
 
-export async function createCampaign(input: TCreateCampaignInput) {
+/** `couponToCreate` é opcional: só o construtor, no modo "criar cupom para esta campanha", envia. */
+export async function createCampaign(input: TCreateCampaignInput & { couponToCreate?: TCampaignInlineCouponInput | null }) {
 	try {
 		const { data } = await axios.post<TCreateCampaignOutput>("/api/campaigns", input);
 		return data;

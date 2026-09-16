@@ -3,9 +3,11 @@ import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { CAMPAIGN_SENT_INTERACTION_STATUSES } from "@/lib/campaigns/utils";
 import { getOrganizationWeeklyCampaignLimit, validateCampaignWeeklyLimit, validateProductPromotionCampaign } from "@/lib/campaigns/validation";
+import { assertCouponCoherence, insertCouponWithinTransaction } from "@/lib/coupons/creation";
 import { handleSimpleChildRowsProcessing } from "@/lib/db-utils";
 import { validateTemplateForTrigger } from "@/lib/message-templates";
 import { CampaignSchema, CampaignSegmentationSchema } from "@/schemas/campaigns";
+import { CAMPAIGN_INLINE_COUPON_DEFAULTS, CampaignInlineCouponSchema } from "@/schemas/coupons";
 import { CampaignTriggerTypeEnum, type TCampaignTriggerTypeEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
 import { campaignConversions, interactions } from "@/services/drizzle/schema";
@@ -166,18 +168,49 @@ export async function validateCampaignConfiguration({
 	await validateCampaignCouponGenerationSettings(campaign, organizationId);
 }
 
+// Continua um ZodObject puro: as ferramentas de agente fazem `.merge()` em cima dele, e `.merge()`
+// não existe num ZodEffects. É também por isso que `couponToCreate` NÃO entra aqui — criação
+// aninhada de recurso é um caminho da UI do construtor, não da superfície de agente.
 export const CreateCampaignInputSchema = z.object({
 	campaign: CampaignSchema.omit({ dataInsercao: true, autorId: true }),
 	segmentations: z.array(CampaignSegmentationSchema.omit({ campanhaId: true })),
 });
 export type TCreateCampaignInput = z.infer<typeof CreateCampaignInputSchema>;
 
+/**
+ * Payload da rota HTTP: a campanha mais, opcionalmente, um cupom criado junto com ela, na mesma
+ * transação ("criar cupom para esta campanha"). Quando `couponToCreate` vem preenchido,
+ * `campaign.cupomGeracaoCupomId` é definido pelo servidor com o id do cupom recém-inserido — o
+ * cliente não conhece esse id na hora de enviar.
+ */
+export const CreateCampaignWithInlineCouponInputSchema = CreateCampaignInputSchema.extend({
+	couponToCreate: CampaignInlineCouponSchema.optional().nullable(),
+}).superRefine((input, ctx) => {
+	if (!input.couponToCreate) return;
+
+	if (!input.campaign.cupomGeracaoAtivo) {
+		ctx.addIssue({
+			code: z.ZodIssueCode.custom,
+			path: ["couponToCreate"],
+			message: "Para criar um cupom junto com a campanha, a atribuição de cupom precisa estar ativa.",
+		});
+	}
+	if (input.campaign.cupomGeracaoCupomId) {
+		ctx.addIssue({
+			code: z.ZodIssueCode.custom,
+			path: ["couponToCreate"],
+			message: "Escolha entre usar um cupom existente ou criar um novo — não os dois.",
+		});
+	}
+});
+export type TCreateCampaignWithInlineCouponInput = z.infer<typeof CreateCampaignWithInlineCouponInputSchema>;
+
 export async function createCampaign({
 	input,
 	organizationId: userOrgId,
 	authorId,
 }: {
-	input: TCreateCampaignInput;
+	input: TCreateCampaignWithInlineCouponInput;
 	organizationId: string;
 	authorId: string;
 }) {
@@ -223,12 +256,27 @@ export async function createCampaign({
 		}
 	}
 
-	await validateCampaignCouponGenerationSettings(input.campaign, userOrgId);
+	// Com `couponToCreate` o cupom ainda não existe, então não há id para validar aqui — a coerência
+	// dele é checada dentro da transação, na hora de inserir.
+	if (!input.couponToCreate) await validateCampaignCouponGenerationSettings(input.campaign, userOrgId);
 
 	const insertedCampaignId = await db.transaction(async (trx) => {
+		let cupomGeracaoCupomId = input.campaign.cupomGeracaoCupomId ?? null;
+
+		if (input.couponToCreate) {
+			const coupon = { ...CAMPAIGN_INLINE_COUPON_DEFAULTS, ...input.couponToCreate };
+			assertCouponCoherence({ coupon, targets: [], audiences: [] });
+			cupomGeracaoCupomId = await insertCouponWithinTransaction({
+				tx: trx,
+				organizationId: userOrgId,
+				authorId,
+				coupon,
+			});
+		}
+
 		const insertedCampaignResponse = await trx
 			.insert(campaigns)
-			.values({ ...input.campaign, organizacaoId: userOrgId, autorId: authorId })
+			.values({ ...input.campaign, cupomGeracaoCupomId, organizacaoId: userOrgId, autorId: authorId })
 			.returning({ id: campaigns.id });
 		const campaignId = insertedCampaignResponse[0]?.id;
 		if (!campaignId) throw new createHttpError.InternalServerError("Oops, houve um erro desconhecido ao criar campanha.");
@@ -257,7 +305,7 @@ const createCampaignRoute = async (request: NextRequest) => {
 	if (!session) throw new createHttpError.Unauthorized("Você precisa estar autenticado para acessar esse recurso.");
 
 	const input = await request.json();
-	const parsedInput = CreateCampaignInputSchema.parse(input);
+	const parsedInput = CreateCampaignWithInlineCouponInputSchema.parse(input);
 	const organizationId = session.membership?.organizacao.id;
 	if (!organizationId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
 	const result = await createCampaign({ input: parsedInput, organizationId, authorId: session.user.id });
