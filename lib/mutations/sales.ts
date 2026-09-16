@@ -8,6 +8,7 @@ import type {
 	TPostFulfillmentOrderConfirmationOutput,
 } from "@/app/api/sales/fulfillment/order-confirmation/route";
 import type { TPatchSalesFulfillmentInput, TPatchSalesFulfillmentOutput } from "@/app/api/sales/fulfillment/route";
+import type { TReassignSaleClientInput, TReassignSaleClientOutput } from "@/app/api/sales/client/route";
 import type { TCreateQuoteInput, TCreateQuoteOutput } from "@/app/api/sales/quotes/route";
 import type { TUpdateSaleAttendanceStatusInput, TUpdateSaleAttendanceStatusOutput } from "@/app/api/pos/sales/attendance-status/route";
 import type { TCreateSaleInput, TCreateSaleOutput, TDeleteSaleOutput } from "@/app/api/sales/route";
@@ -100,6 +101,12 @@ export async function bulkCreateSales(input: TBulkCreateSalesInput, onUploadProg
 
 export async function createQuote(input: TCreateQuoteInput) {
 	const { data } = await axios.post<TCreateQuoteOutput>("/api/sales/quotes", input);
+	return data;
+}
+
+// Define, troca ou desvincula (clienteId null) o cliente de uma venda confirmada.
+export async function reassignSaleClient(input: TReassignSaleClientInput) {
+	const { data } = await axios.patch<TReassignSaleClientOutput>("/api/sales/client", input);
 	return data;
 }
 

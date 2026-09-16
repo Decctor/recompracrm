@@ -1,7 +1,18 @@
 import type { DBTransaction } from "@/services/drizzle";
 import { cashbackProgramBalances, cashbackProgramTransactions } from "@/services/drizzle/schema";
 import dayjs from "dayjs";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
+
+/**
+ * Motivo gravado em `metadados.motivoExpiracao` dos ACÚMULOs revertidos por reatribuição de
+ * cliente da venda. As guardas de idempotência ignoram essas linhas: a venda mudou de dono, e o
+ * novo cliente (ou o antigo, num vai-e-volta) precisa poder acumular de novo. Expiração natural
+ * e cancelamento de venda não carregam este motivo e continuam bloqueando.
+ */
+export const SALE_CLIENT_REASSIGNMENT_CASHBACK_REASON = "VENDA_REATRIBUIDA";
+
+export const notReversedByClientReassignment = () =>
+	sql`coalesce(${cashbackProgramTransactions.metadados}->>'motivoExpiracao', '') <> ${SALE_CLIENT_REASSIGNMENT_CASHBACK_REASON}`;
 
 type TProgramSnapshot = {
 	id: string;
@@ -102,6 +113,7 @@ export async function accumulateCashbackForClient({
 				eq(cashbackProgramTransactions.vendaId, saleId),
 				eq(cashbackProgramTransactions.clienteId, clientId),
 				eq(cashbackProgramTransactions.tipo, "ACÚMULO"),
+				notReversedByClientReassignment(),
 			),
 			columns: { id: true },
 		});

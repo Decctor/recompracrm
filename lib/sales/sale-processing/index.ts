@@ -14,6 +14,12 @@ export { processSaleCashbackAccumulationIfEligible } from "./process-sale-cashba
 export { processSaleAutomaticFiscalEmissionIfEligible } from "./process-sale-automatic-fiscal-emission";
 export { processConfirmedSaleCancellation } from "./process-confirmed-sale-cancellation";
 export {
+	loadSaleClientReassignmentContext,
+	processSaleClientReassignmentInTransaction,
+	processSaleClientReassignmentPostCommit,
+	type TProcessSaleClientReassignmentInput,
+} from "./process-sale-client-reassignment";
+export {
 	processConfirmedSaleEditInTransaction,
 	processConfirmedSaleEditPostCommit,
 	type TEditSaleItemInput,
