@@ -83,7 +83,15 @@ async function main() {
 		).map((profile) => profile.produto_id as string),
 	);
 
-	const planned: Array<{ produtoId: string; nome: string; ncm: string; cfop: string; grupoTributarioId: string; origem: string }> = [];
+	const planned: Array<{
+		produtoId: string;
+		nome: string;
+		ncm: string;
+		cfop: string;
+		cest: string;
+		grupoTributarioId: string;
+		origem: string;
+	}> = [];
 	const skipped: string[] = [];
 
 	for (const row of rows) {
@@ -110,6 +118,14 @@ async function main() {
 			skipped.push(`${nome}: CFOP "${cfop}" nao tem 4 digitos`);
 			continue;
 		}
+		// CEST vem da planilha, nunca do resto da organizacao: a SEFAZ cruza NCM x CEST e recusa a
+		// combinacao invalida (rejeicao 815), assim como recusa CEST em produto fora da ST. Copiar o
+		// CEST mais comum da org carimbava 23.001.00 (sorvete) em qualquer NCM novo.
+		const cest = (row.cest ?? "").replace(/\D/g, "");
+		if (cest && cest.length !== 7) {
+			skipped.push(`${nome}: CEST "${cest}" nao tem 7 digitos`);
+			continue;
+		}
 		if (!grupoTributarioId || !gruposValidos.has(grupoTributarioId)) {
 			skipped.push(`${nome}: grupo tributario "${grupoTributarioId}" inexistente na organizacao`);
 			continue;
@@ -119,11 +135,12 @@ async function main() {
 			continue;
 		}
 
-		planned.push({ produtoId: row.produto_id, nome, ncm, cfop, grupoTributarioId, origem: usingSuggestion ? "SUGESTAO" : "CONFIRMADO" });
+		planned.push({ produtoId: row.produto_id, nome, ncm, cfop, cest, grupoTributarioId, origem: usingSuggestion ? "SUGESTAO" : "CONFIRMADO" });
 	}
 
 	console.log(`=== ${commit ? "APLICANDO" : "DRY-RUN (use --commit para gravar)"} ===`);
-	for (const item of planned) console.log(`  + ${item.nome} -> NCM ${item.ncm} / CFOP ${item.cfop || "-"} [${item.origem}]`);
+	for (const item of planned)
+		console.log(`  + ${item.nome} -> NCM ${item.ncm} / CFOP ${item.cfop || "-"} / CEST ${item.cest || "-"} [${item.origem}]`);
 	if (skipped.length > 0) {
 		console.log(`\n=== PULADOS (${skipped.length}) ===`);
 		for (const reason of skipped) console.log(`  - ${reason}`);
@@ -135,9 +152,8 @@ async function main() {
 		return;
 	}
 
-	const [{ cest, unidade_comercial, origem_mercadoria }] = await connection`
-		select mode() within group (order by cest) as cest,
-			mode() within group (order by unidade_comercial) as unidade_comercial,
+	const [{ unidade_comercial, origem_mercadoria }] = await connection`
+		select mode() within group (order by unidade_comercial) as unidade_comercial,
 			mode() within group (order by origem_mercadoria) as origem_mercadoria
 		from ampmais_product_fiscal_profiles where organizacao_id = ${orgId} and produto_variante_id is null and ativo`;
 
@@ -148,7 +164,7 @@ async function main() {
 				(id, organizacao_id, produto_id, produto_variante_id, grupo_tributario_id, origem_mercadoria,
 				 ncm, cest, cfop_padrao, unidade_comercial, ativo)
 			values (gen_random_uuid(), ${orgId}, ${item.produtoId}, null, ${item.grupoTributarioId}, ${origem_mercadoria},
-				${item.ncm}, ${cest}, ${item.cfop || null}, ${unidade_comercial}, true)
+				${item.ncm}, ${item.cest || null}, ${item.cfop || null}, ${unidade_comercial}, true)
 			on conflict do nothing`;
 		created++;
 	}

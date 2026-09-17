@@ -1335,3 +1335,40 @@ export async function syncPendingFiscalDocuments({ organizationId, limit = 20 }:
 	}
 	return results;
 }
+
+/**
+ * Pre-verificacao read-only de uma venda: roda as MESMAS portas da emissao (prontidao + motor
+ * tributario) sem criar rascunho, sem reservar numeracao e sem chamar o provedor.
+ *
+ * Existe para responder "essa venda seria autorizada?" antes de gastar numeracao — emitir para
+ * descobrir e caro: numero consumido, rejeicao registrada e, quando passa, uma nota real na SEFAZ.
+ * Reaproveita `buildSaleFiscalContext` de proposito: uma copia das regras divergiria na primeira
+ * mudanca e a verificacao passaria a mentir.
+ *
+ * O que ela NAO cobre: rejeicao da propria SEFAZ (cadastro do destinatario, ST, numeracao). Um
+ * `pronto: true` significa "passou em tudo que conseguimos checar localmente".
+ */
+export async function checkSaleFiscalReadiness(input: TEmitirDocumentoInput): Promise<{
+	pronto: boolean;
+	problemas: TFiscalProblem[];
+	contexto: { tipo: string; presencaConsumidor: string; serie: string; vNF: number | null } | null;
+}> {
+	try {
+		const context = await buildSaleFiscalContext(input);
+		assertFiscalReadiness(context);
+		assertFiscalTaxationValid(context);
+		return {
+			pronto: true,
+			problemas: [],
+			contexto: {
+				tipo: input.tipo,
+				presencaConsumidor: context.operacao.presencaConsumidor,
+				serie: context.serie.serie,
+				vNF: computeSaleTaxation(context).totais.vNF,
+			},
+		};
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		return { pronto: false, problemas: toFiscalProblemsFromError(error, message), contexto: null };
+	}
+}

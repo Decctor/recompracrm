@@ -6,6 +6,7 @@ import { mapFiscalEnvironmentToSpedy } from "../status";
 import type { TSpedyCreateInvoicePayload } from "../types";
 import { buildSpedyItemTaxes } from "./imposto";
 import { mapSalePaymentsToSpedy } from "./pagamento";
+import { buildSpedyTransport } from "./transporte";
 import {
 	buildSpedyIntegrationId,
 	formatCest,
@@ -47,15 +48,18 @@ function mapReceiver(snapshot: TFiscalSaleContext["destinatarioSnapshot"], isHom
 		federalTaxNumber: onlyDigits(String(snapshot.cpfCnpj ?? "")),
 		stateTaxNumber: mapTaxRegistration(typeof snapshot.inscricaoEstadual === "string" ? snapshot.inscricaoEstadual : null),
 		email: nonEmptyString(typeof snapshot.email === "string" ? snapshot.email : null),
+		// O XSD da NF-e recusa espaco no inicio ou no fim de campo String (rejeicao de schema em
+		// xLgr/xBairro/xCpl). Endereco digitado pelo cliente chega com espaco sobrando e com
+		// caractere fora do Latin-1, entao passa pelo mesmo saneamento do nome.
 		address: address
 			? {
-					street: address.logradouro ?? undefined,
-					district: address.bairro ?? undefined,
+					street: sanitizeNfeText(address.logradouro, 60),
+					district: sanitizeNfeText(address.bairro, 60),
 					postalCode: onlyDigits(address.cep ?? undefined),
-					number: address.numero ?? undefined,
-					additionalInformation: address.complemento ?? undefined,
+					number: sanitizeNfeText(address.numero, 60),
+					additionalInformation: sanitizeNfeText(address.complemento, 60),
 					city: {
-						name: address.cidade ?? undefined,
+						name: sanitizeNfeText(address.cidade, 60),
 						state: address.estado?.toLowerCase(),
 					},
 					country: "BRA",
@@ -82,6 +86,7 @@ export function mapSaleContextToSpedyInvoicePayload(context: TFiscalSaleContext,
 	// transmitida; a data do fato gerador e informacao de negocio, nao dhEmi.
 	const emissaoAgora = new Date().toISOString();
 	const ambienteSpedy = mapFiscalEnvironmentToSpedy(context.organizacao.fiscalConfiguracao?.ambiente);
+	const presenceType = mapPresenceType(context.operacao.presencaConsumidor);
 
 	return {
 		// Escopo de idempotencia na Spedy: (referencia, numero, tentativa). Criar com um integrationId
@@ -103,10 +108,11 @@ export function mapSaleContextToSpedyInvoicePayload(context: TFiscalSaleContext,
 		operationNature: context.operacao.naturezaOperacao,
 		operationDate: emissaoAgora,
 		destination: isNfce ? "internal" : mapDestinationType(taxation.scenario.escopo),
-		presenceType: mapPresenceType(context.operacao.presencaConsumidor),
+		presenceType,
 		isFinalCustomer: context.operacao.consumidorFinal,
 		environmentType: ambienteSpedy,
 		receiver: mapReceiver(context.destinatarioSnapshot, ambienteSpedy === "development"),
+		transport: buildSpedyTransport({ presenceType, fiscalConfiguracao: context.organizacao.fiscalConfiguracao }),
 		items: taxation.itens.map(({ item, result, valorFrete, valorDesconto }, index) => {
 			const perfil = context.perfisProdutos.find((profile) => profile.produtoId === item.produtoId);
 			return {
