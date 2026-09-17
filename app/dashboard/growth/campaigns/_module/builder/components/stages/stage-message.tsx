@@ -132,13 +132,13 @@ export default function StageMessage({ organizationId, organizationName, organiz
 		const variant: TOnboardingTemplateVariant = cashbackAtivo ? "COM_CASHBACK" : "SEM_CASHBACK";
 		const entries = getMessageTemplateLibraryEntries(variant);
 		if (!campaign.gatilhoTipo) return entries;
-		return entries.filter(
-			(entry) =>
-				validateTemplateForTrigger(
-					entry.variables.map((variable) => ({ nome: variable, identificador: variable })),
-					campaign.gatilhoTipo,
-				).valid,
-		);
+		return entries.filter((entry) => {
+			if (!entry.intendedTriggers.includes(campaign.gatilhoTipo!)) return false;
+			return validateTemplateForTrigger(
+				entry.variables.map((variable) => ({ nome: variable, identificador: variable })),
+				campaign.gatilhoTipo!,
+			).valid;
+		});
 	}, [cashbackAtivo, campaign.gatilhoTipo]);
 
 	// Mesma guarda do bloco antigo: trocar o gatilho pode invalidar o template já escolhido.

@@ -46,9 +46,9 @@ export default function TemplateLibraryPanel({ entries, onBack, onClone, onCreat
 					<div key={entry.key} className="flex h-full flex-col overflow-hidden rounded-xl border border-border bg-card">
 						<div className="flex items-start justify-between gap-2 p-2.5">
 							<div className="flex min-w-0 flex-col gap-0.5">
-								<p className="line-clamp-2 break-words text-[13px] font-semibold tracking-tight">{entry.nome}</p>
+								<p className="line-clamp-2 break-words text-[13px] font-semibold tracking-tight">{entry.titulo}</p>
 								<p className="text-[11px] text-muted-foreground">
-									{entry.titulo} · {entry.variables.join(", ")}
+									{entry.nome} · {entry.variables.join(", ")}
 								</p>
 							</div>
 							<span className="flex shrink-0 items-center gap-1.5 rounded-lg bg-primary/10 px-2 py-1">
@@ -60,8 +60,8 @@ export default function TemplateLibraryPanel({ entries, onBack, onClone, onCreat
 						<div className="flex min-h-0 flex-1 flex-col justify-center border-y border-border px-2 py-2">
 							<TemplatePreviewClip
 								content={entry.conteudo}
-								title={entry.nome}
-								subtitle={`${entry.titulo} · ${entry.variables.join(", ")}`}
+								title={entry.titulo}
+								subtitle={`${entry.nome} · ${entry.variables.join(", ")}`}
 							/>
 						</div>
 
