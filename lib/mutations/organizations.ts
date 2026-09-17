@@ -2,7 +2,12 @@ import type {
 	TCreateOrganizationMembershipInvitationInput,
 	TCreateOrganizationMembershipInvitationOutput,
 } from "@/app/api/organizations/memberships/invitations/route";
-import type { TUpdateOrganizationMembershipInput, TUpdateOrganizationMembershipOutput } from "@/app/api/organizations/memberships/route";
+import type {
+	TDeleteOrganizationMembershipInput,
+	TDeleteOrganizationMembershipOutput,
+	TUpdateOrganizationMembershipInput,
+	TUpdateOrganizationMembershipOutput,
+} from "@/app/api/organizations/memberships/route";
 import type {
 	TCreateOrganizationInputSchema,
 	TCreateOrganizationOutput,
@@ -33,5 +38,10 @@ export async function createOrganizationMembershipInvitation(input: TCreateOrgan
 
 export async function updateOrganizationMembership(input: TUpdateOrganizationMembershipInput) {
 	const { data } = await axios.put<TUpdateOrganizationMembershipOutput>("/api/organizations/memberships", input);
+	return data;
+}
+
+export async function deleteOrganizationMembership(input: TDeleteOrganizationMembershipInput) {
+	const { data } = await axios.delete<TDeleteOrganizationMembershipOutput>("/api/organizations/memberships", { data: input });
 	return data;
 }

@@ -17,104 +17,24 @@ import { useMutation } from "@tanstack/react-query";
 import { useCashbackProgram } from "@/lib/queries/cashback-programs";
 import { useCustomFields } from "@/lib/queries/custom-fields";
 import { AlertTriangle, Calendar, CheckCircle2, ChevronDown, ChevronUp, LinkIcon, Plus, RefreshCcw, Settings2, Unlink, X } from "lucide-react";
-import Image, { type StaticImageData } from "next/image";
+import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 
-import type { TDataSourceIntegrationTipoEnum, TPoiRegistrationFlowEnum } from "@/schemas/enums";
-import { CUSTOM_FIELD_TYPE_LABELS, DataSourceIntegrationTipoEnum, POI_REGISTRATION_FLOW_LABELS, PoiRegistrationFlowEnum } from "@/schemas/enums";
+import type { TPoiRegistrationFlowEnum } from "@/schemas/enums";
+import { CUSTOM_FIELD_TYPE_LABELS, POI_REGISTRATION_FLOW_LABELS, PoiRegistrationFlowEnum } from "@/schemas/enums";
 import type { TStoredPoiRegistrationConfig } from "@/schemas/organizations";
 import { formatDateAsLocale } from "@/lib/formatting";
+import { DATA_SOURCE_INTEGRATION_PROVIDERS, type TDataSourceIntegrationProvider } from "@/lib/integrations/data-source-providers";
+import {
+	isDataSourceIntegrationSummary,
+	useDataSourceIntegrationConnect,
+} from "@/lib/integrations/use-data-source-integration-connect";
 import { cn } from "@/lib/utils";
-import CardapioWebLogo from "@/utils/images/integrations/cardapio-web.png";
-import NuvemshopLogo from "@/utils/images/integrations/nuvemshop-logo.png";
-import OnlineSoftwareLogo from "@/utils/images/integrations/online-software-logo.png";
-import IfoodLogo from "@/utils/images/integrations/ifood-logo.png";
-import BlingLogo from "@/utils/images/integrations/bling-logo.png";
-import ErpFlexLogo from "@/utils/images/integrations/erpflex.png";
 import { Chip } from "../ui/chip";
-import ConfigureIntegration from "../Modals/Integrations/ConfigureIntegration";
-// SANDBOX: remover import e voltar IfoodIntegrationMenu ao deletar fluxo sandbox
-import { IfoodSandboxIntegrationMenu } from "./IfoodSandboxIntegrationMenu";
 
-type TIntegrationDefinition = {
-	id: TDataSourceIntegrationTipoEnum;
-	name: string;
-	logo?: StaticImageData;
-	description: string;
-	buttonText: string;
-	brandColor: string;
-	brandClassName: string;
-	authUrl?: string;
-};
-
-const INTEGRATIONS: TIntegrationDefinition[] = [
-	{
-		id: "ONLINE-SOFTWARE",
-		name: "Online Software",
-		logo: OnlineSoftwareLogo,
-		description:
-			"Líder regional no Triângulo Mineiro, este ERP é a escolha certa para materiais de construção, conveniência e vestuário. Sincronize vendas, produtos, clientes e parcerios com total eficiência.",
-		buttonText: "CONECTAR COM ONLINE SOFTWARE",
-		brandColor: "#145c99",
-		brandClassName: "bg-[#145c99] text-white hover:bg-[#145c99]/80",
-	},
-	{
-		id: "CARDAPIO-WEB",
-		name: "Cardápio Web",
-		logo: CardapioWebLogo,
-		description:
-			"A solução completa para Food Service. Perfeito para restaurantes, sorveterias e delivery. Integre sua gestão de pedidos e cardápios para escalar sua operação gastronômica (com suporte a iFood).",
-		buttonText: "CONECTAR COM CARDÁPIO WEB",
-		brandColor: "#a543fb",
-		brandClassName: "bg-[#a543fb] text-white hover:bg-[#a543fb]/80",
-	},
-	{
-		id: "NUVEM-SHOP",
-		name: "Nuvem Shop",
-		logo: NuvemshopLogo,
-		description:
-			"Conecte sua loja Nuvem Shop para sincronizar pedidos, clientes e produtos com o Recompra CRM através da autorização segura da plataforma.",
-		buttonText: "CONECTAR COM NUVEM SHOP",
-		brandColor: "#2d2e6f",
-		brandClassName: "bg-[#2d2e6f] text-white hover:bg-[#2d2e6f]/80",
-		authUrl: "/api/integrations/nuvemshop/auth",
-	},
-	{
-		id: "IFOOD",
-		name: "iFood",
-		logo: IfoodLogo,
-		description:
-			"Conecte sua loja iFood para receber eventos e pedidos no Recompra CRM, alimentando vendas, clientes, campanhas e cashback automaticamente.",
-		buttonText: "CONECTAR COM IFOOD",
-		brandColor: "#EA1D2C",
-		brandClassName: "bg-[#EA1D2C] text-white hover:bg-[#EA1D2C]/80",
-	},
-	{
-		id: "BLING",
-		name: "Bling",
-		logo: BlingLogo,
-		description: "Conecte sua conta Bling para sincronizar pedidos de venda, clientes e produtos com o Recompra CRM em modo somente leitura.",
-		buttonText: "CONECTAR COM BLING",
-		brandColor: "#34AD61",
-		brandClassName: "bg-[#34AD61] text-white hover:bg-[#34AD61]/80",
-		authUrl: "/api/integrations/bling/auth",
-	},
-	{
-		id: "ERP-FLEX",
-		name: "ERPFlex",
-		logo: ErpFlexLogo,
-		description: "Conecte sua conta ERPFlex para importar faturamentos, clientes e produtos com as credenciais de API fornecidas pelo time do ERPFlex.",
-		buttonText: "CONECTAR COM ERPFLEX",
-		brandColor: "#1B5FAA",
-		brandClassName: "bg-[#1B5FAA] text-white hover:bg-[#1B5FAA]/80",
-	},
-];
-
-function isDataSourceSummary(integration: TAuthSessionIntegrationSummary) {
-	return DataSourceIntegrationTipoEnum.options.includes(integration.tipo as TDataSourceIntegrationTipoEnum);
-}
+const INTEGRATIONS = DATA_SOURCE_INTEGRATION_PROVIDERS;
 
 type SettingsIntegrationProps = {
 	user: TAuthUserSession["user"];
@@ -126,16 +46,11 @@ export default function SettingsIntegration({ membership }: SettingsIntegrationP
 	const permissions = membership.permissoes.empresa;
 	const canEdit = permissions.editar;
 
-	// Menu State
-	const [isMenuOpen, setIsMenuOpen] = useState(false);
-	const [selectedIntegrationId, setSelectedIntegrationId] = useState<"ONLINE-SOFTWARE" | "CARDAPIO-WEB" | "ERP-FLEX" | null>(null);
-	const [ifoodMenuIsOpen, setIfoodMenuIsOpen] = useState(false);
-	// Reconexão explícita (D9): a linha desativada a reativar com as credenciais novas — preserva
-	// o `integrationId` e a proveniência das vendas históricas.
-	const [reconnectIntegrationId, setReconnectIntegrationId] = useState<string | null>(null);
+	const { connect, reconnect, canManage, activeConnections, connectDialogs } = useDataSourceIntegrationConnect({ membership });
 
-	const activeConnections = membership.organizacao.integracoes.filter((integration) => integration.ativo && isDataSourceSummary(integration));
-	const inactiveConnections = membership.organizacao.integracoes.filter((integration) => !integration.ativo && isDataSourceSummary(integration));
+	const inactiveConnections = membership.organizacao.integracoes.filter(
+		(integration) => !integration.ativo && isDataSourceIntegrationSummary(integration),
+	);
 	const poiSalesRegistrationEnabled = membership.organizacao.poiConfiguracao?.vendas.registroAtivo ?? activeConnections.length === 0;
 	// Espelho somente-leitura da permissão de resgate pelo POI: ela pertence ao programa de cashback
 	// (a atualização exige o payload inteiro do programa + recompensas), então aqui só informamos e
@@ -188,55 +103,6 @@ export default function SettingsIntegration({ membership }: SettingsIntegrationP
 		}
 	};
 
-	const handleIntegrationSelect = (integrationId: TDataSourceIntegrationTipoEnum) => {
-		if (!canEdit) return;
-		const integration = INTEGRATIONS.find((item) => item.id === integrationId);
-		if (integration?.authUrl) {
-			window.location.href = integration.authUrl;
-			return;
-		}
-		if (integrationId === "IFOOD") {
-			setReconnectIntegrationId(null);
-			setIfoodMenuIsOpen(true);
-			return;
-		}
-		if (integrationId === "NUVEM-SHOP") return;
-		if (integrationId === "BLING") return;
-		setReconnectIntegrationId(null);
-		setSelectedIntegrationId(integrationId);
-		setIsMenuOpen(true);
-	};
-
-	// Reconectar aponta EXPLICITAMENTE para a linha desativada (D9) — autorizar de novo pela
-	// entrada genérica criaria outra linha e as vendas históricas ficariam presas à antiga
-	// (colisão fail-closed de idExterno). Nuvemshop/Cardápio Web também casam pela identidade
-	// externa (storeId/merchantId); Bling e iFood dependem do alvo explícito.
-	const handleReconnect = (connection: TAuthSessionIntegrationSummary) => {
-		if (!canEdit) return;
-		if (connection.tipo === "BLING") {
-			window.location.href = `/api/integrations/bling/auth?reconnectIntegrationId=${connection.id}`;
-			return;
-		}
-		if (connection.tipo === "NUVEM-SHOP") {
-			window.location.href = "/api/integrations/nuvemshop/auth";
-			return;
-		}
-		if (connection.tipo === "IFOOD") {
-			setReconnectIntegrationId(connection.id);
-			setIfoodMenuIsOpen(true);
-			return;
-		}
-		if (connection.tipo === "ONLINE-SOFTWARE" || connection.tipo === "CARDAPIO-WEB" || connection.tipo === "ERP-FLEX") {
-			setReconnectIntegrationId(connection.id);
-			setSelectedIntegrationId(connection.tipo);
-			setIsMenuOpen(true);
-		}
-	};
-
-	const selectedTypeHasActiveConnection = selectedIntegrationId
-		? activeConnections.some((integration) => integration.tipo === selectedIntegrationId)
-		: false;
-
 	return (
 		<div className="flex w-full flex-col gap-3">
 			{onboardingReadiness ? <ImportProgress integrations={onboardingReadiness.fonteDados.integracoes} /> : null}
@@ -286,21 +152,21 @@ export default function SettingsIntegration({ membership }: SettingsIntegrationP
 							role="button"
 							tabIndex={0}
 							className="w-[450px] cursor-pointer bg-card border border-border flex flex-col gap-3 px-3 py-4 rounded-xl shadow-2xs"
-							onClick={() => handleIntegrationSelect(integration.id)}
+							onClick={() => connect(integration.id)}
 							onKeyDown={(e) => {
 								if (e.key === "Enter" || e.key === " ") {
 									e.preventDefault();
-									handleIntegrationSelect(integration.id);
+									connect(integration.id);
 								}
 							}}
 						>
 							<div className="mb-6 flex items-start justify-between">
 								<div className="relative h-12 w-32">
 									{integration.logo ? (
-										<Image src={integration.logo} alt={integration.name} fill className="object-contain object-left" />
+										<Image src={integration.logo} alt={integration.nome} fill className="object-contain object-left" />
 									) : (
 										<div className="flex h-12 w-12 items-center justify-center rounded-lg text-lg font-bold text-white" style={{ backgroundColor: brandColor }}>
-											{integration.name.slice(0, 2)}
+											{integration.nome.slice(0, 2)}
 										</div>
 									)}
 								</div>
@@ -311,15 +177,15 @@ export default function SettingsIntegration({ membership }: SettingsIntegrationP
 								) : null}
 							</div>
 							<div className="w-full flex flex-col gap-1.5">
-								<h3 className="w-full text-start font-semibold text-lg">{integration.name}</h3>
-								<p className="text-sm text-muted-foreground leading-relaxed">{integration.description}</p>
+								<h3 className="w-full text-start font-semibold text-lg">{integration.nome}</h3>
+								<p className="text-sm text-muted-foreground leading-relaxed">{integration.descricao}</p>
 								<Button
 									variant="default"
 									size="fit"
 									className={cn("flex items-center gap-1.5 px-3 py-2 rounded-xl self-end font-bold", integration.brandClassName)}
 									onClick={(e) => {
 										e.stopPropagation();
-										handleIntegrationSelect(integration.id);
+										connect(integration.id);
 									}}
 								>
 									<LinkIcon className="h-4 w-4" />
@@ -341,10 +207,10 @@ export default function SettingsIntegration({ membership }: SettingsIntegrationP
 						return (
 							<div key={connection.id} className="flex w-full items-center justify-between gap-3 rounded-xl border border-border bg-muted/30 px-3 py-2">
 								<div className="flex items-center gap-2">
-									<span className="text-sm font-semibold">{integrationDetails.name}</span>
+									<span className="text-sm font-semibold">{integrationDetails.nome}</span>
 									{connectionLabel ? <span className="text-sm text-muted-foreground">— {connectionLabel}</span> : null}
 								</div>
-								<Button variant="outline" size="sm" disabled={!canEdit} onClick={() => handleReconnect(connection)}>
+								<Button variant="outline" size="sm" disabled={!canManage} onClick={() => reconnect(connection)}>
 									<RefreshCcw className="h-4 w-4 min-h-4 min-w-4" />
 									RECONECTAR
 								</Button>
@@ -401,27 +267,7 @@ export default function SettingsIntegration({ membership }: SettingsIntegrationP
 				<PoiRegistrationSettings storedConfig={poiRegistrationConfig} salesRegistrationEnabled={poiSalesRegistrationEnabled} canEdit={canEdit} />
 			</div>
 
-			{isMenuOpen && selectedIntegrationId ? (
-				<ConfigureIntegration
-					integrationType={selectedIntegrationId}
-					requireApelido={!reconnectIntegrationId && selectedTypeHasActiveConnection}
-					reconnectIntegrationId={reconnectIntegrationId}
-					closeMenu={() => {
-						setIsMenuOpen(false);
-						setReconnectIntegrationId(null);
-					}}
-				/>
-			) : null}
-			{/* SANDBOX: trocar de volta para IfoodIntegrationMenu (passando reconnectIntegrationId) ao
-			remover o fluxo sandbox. O sandbox reativa a mesma linha por auto-match de merchants. */}
-			{ifoodMenuIsOpen ? (
-				<IfoodSandboxIntegrationMenu
-					closeMenu={() => {
-						setIfoodMenuIsOpen(false);
-						setReconnectIntegrationId(null);
-					}}
-				/>
-			) : null}
+			{connectDialogs}
 		</div>
 	);
 }
@@ -688,7 +534,7 @@ function PoiRegistrationSettings({ storedConfig, salesRegistrationEnabled, canEd
 
 type ActiveIntegrationCardProps = {
 	connection: TAuthSessionIntegrationSummary;
-	integrationDetails: TIntegrationDefinition;
+	integrationDetails: TDataSourceIntegrationProvider;
 	handleDisconnect: () => void;
 	disconnectIsLoading: boolean;
 };
@@ -699,13 +545,13 @@ function ActiveIntegrationCard({ connection, integrationDetails, handleDisconnec
 			<div className="flex items-center justify-center">
 				<div className="relative w-20 h-20 lg:h-20 lg:w-20 lg:min-h-20 lg:min-w-20 overflow-hidden rounded-lg">
 					{integrationDetails.logo ? (
-						<Image src={integrationDetails.logo} alt={integrationDetails.name} fill={true} objectFit="contain" />
+						<Image src={integrationDetails.logo} alt={integrationDetails.nome} fill={true} objectFit="contain" />
 					) : (
 						<div
 							className="flex h-full w-full items-center justify-center rounded-lg text-lg font-bold text-white"
 							style={{ backgroundColor: integrationDetails.brandColor }}
 						>
-							{integrationDetails.name.slice(0, 2)}
+							{integrationDetails.nome.slice(0, 2)}
 						</div>
 					)}
 				</div>
@@ -713,7 +559,7 @@ function ActiveIntegrationCard({ connection, integrationDetails, handleDisconnec
 			<div className="flex h-full grow flex-col gap-1.5">
 				<div className="w-full flex items-center justify-between gap-2 flex-col lg:flex-row">
 					<div className="flex items-center gap-2">
-						<h1 className="text-sm font-bold">{integrationDetails.name}</h1>
+						<h1 className="text-sm font-bold">{integrationDetails.nome}</h1>
 						{connectionLabel ? <span className="text-sm text-muted-foreground">— {connectionLabel}</span> : null}
 					</div>
 					<div className="flex items-center gap-3">
@@ -739,7 +585,7 @@ function ActiveIntegrationCard({ connection, integrationDetails, handleDisconnec
 					</div>
 				</div>
 				<div className="grow w-full flex flex-col gap-1.5">
-					<p className="text-sm text-foreground/80">{integrationDetails.description}</p>
+					<p className="text-sm text-foreground/80">{integrationDetails.descricao}</p>
 				</div>
 				<div className="w-full flex items-center justify-end gap-2 flex-col lg:flex-row">
 					<div className="flex items-center gap-1.5">

@@ -1,20 +1,23 @@
 "use client";
 
 import type { TAuthUserSession } from "@/lib/authentication/types";
-import IfoodLogo from "@/utils/images/integrations/ifood-logo.png";
-import { IntegrationProviderCard, type TIntegrationProviderDefinition } from "./_components/IntegrationProviderCard";
+import { DATA_SOURCE_INTEGRATION_PROVIDERS } from "@/lib/integrations/data-source-providers";
+import { useDataSourceIntegrationConnect } from "@/lib/integrations/use-data-source-integration-connect";
+import { IntegrationProviderCard, type TIntegrationProviderCardModel } from "./_components/IntegrationProviderCard";
 
-const PROVIDERS: TIntegrationProviderDefinition[] = [
-	{
-		id: "IFOOD",
-		nome: "iFood",
-		descricao:
-			"Sincronize pedidos e clientes automaticamente e gerencie sua loja no iFood: status, pausas, horários de funcionamento e catálogo de produtos.",
-		logo: IfoodLogo,
-		href: "/dashboard/integrations/ifood",
-		brandColor: "#EA1D2C",
-	},
-];
+const PROVIDERS: TIntegrationProviderCardModel[] = DATA_SOURCE_INTEGRATION_PROVIDERS.map((provider) => ({
+	id: provider.id,
+	nome: provider.nome,
+	descricao:
+		provider.id === "IFOOD"
+			? "Sincronize pedidos e clientes automaticamente e gerencie sua loja no iFood: status, pausas, horários de funcionamento e catálogo de produtos."
+			: provider.descricao,
+	logo: provider.logo,
+	brandColor: provider.brandColor,
+	buttonText: provider.buttonText,
+	brandClassName: provider.brandClassName,
+	hubHref: provider.hubHref,
+}));
 
 type IntegrationsPageProps = {
 	sessionUser: TAuthUserSession["user"];
@@ -22,7 +25,7 @@ type IntegrationsPageProps = {
 };
 
 export default function IntegrationsPage({ sessionUser: _sessionUser, membership }: IntegrationsPageProps) {
-	const activeIntegrations = membership.organizacao.integracoes.filter((integration) => integration.ativo);
+	const { connect, canManage, connectDialogs } = useDataSourceIntegrationConnect({ membership });
 
 	return (
 		<div className="flex h-full w-full flex-col gap-3 p-2 lg:p-4">
@@ -32,16 +35,24 @@ export default function IntegrationsPage({ sessionUser: _sessionUser, membership
 			</div>
 
 			<div className="flex w-full flex-wrap items-stretch gap-x-6 gap-y-4">
-				{PROVIDERS.map((provider) => (
-					<IntegrationProviderCard
-						key={provider.id}
-						provider={provider}
-						isConnected={activeIntegrations.some((integration) => integration.tipo === provider.id)}
-					/>
-				))}
+				{PROVIDERS.map((provider) => {
+					const isConnected = membership.organizacao.integracoes.some(
+						(integration) => integration.ativo && integration.tipo === provider.id,
+					);
+
+					return (
+						<IntegrationProviderCard
+							key={provider.id}
+							provider={provider}
+							isConnected={isConnected}
+							canManage={canManage}
+							onConnect={() => connect(provider.id)}
+						/>
+					);
+				})}
 			</div>
 
-			<p className="text-xs text-muted-foreground">Novas integrações serão adicionadas em breve.</p>
+			{connectDialogs}
 		</div>
 	);
 }

@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import UsersCredentialsBlock from "./Blocks/Credentials";
 import UsersGeneralBlock from "./Blocks/General";
 import UsersPermissionsBlock from "./Blocks/Permissions";
+import RemoveOrganizationMember from "./Blocks/RemoveOrganizationMember";
 import UsersSellerBlock from "./Blocks/Seller";
 type EditUserProps = {
 	userId: string;
@@ -64,13 +65,34 @@ function EditUser({ userId, session, sessionUserMembership, closeModal, callback
 	useEffect(() => {
 		if (user) redefineState({ user: user, membership: user.associacao, avatarHolder: { file: null, previewUrl: null } });
 	}, [user, redefineState]);
-	console.log(state);
+
+	const sessionUserCanRemoveMembers = sessionUserMembership.permissoes.usuarios.excluir;
+
+	const removeMemberCallbacks = {
+		onMutate: async () => {
+			await queryClient.cancelQueries({ queryKey });
+			if (callbacks?.onMutate) callbacks.onMutate();
+		},
+		onSuccess: () => {
+			if (callbacks?.onSuccess) callbacks.onSuccess();
+		},
+		onError: () => {
+			if (callbacks?.onError) callbacks.onError();
+		},
+		onSettled: async () => {
+			if (callbacks?.onSettled) await callbacks.onSettled();
+			await queryClient.invalidateQueries({ queryKey });
+		},
+	};
+
 	return (
 		<ResponsiveMenu
 			menuTitle="EDITAR USUÁRIO"
 			menuDescription="Preencha os campos abaixo para atualizar o usuário"
 			menuActionButtonText="ATUALIZAR USUÁRIO"
 			menuCancelButtonText="CANCELAR"
+			dialogVariant="lg"
+			drawerVariant="lg"
 			actionFunction={() => mutate(state)}
 			actionIsLoading={isPending}
 			stateIsLoading={isLoading}
@@ -89,6 +111,14 @@ function EditUser({ userId, session, sessionUserMembership, closeModal, callback
 				permissionsHolder={state.membership.permissoes}
 				updateUserPermissions={updateMembershipPermissions}
 				organizationHasERPAccess={organizationHasERPAccess}
+			/>
+			<RemoveOrganizationMember
+				userId={userId}
+				userName={state.user.nome || user?.nome || "Usuário"}
+				sessionUserId={session.id}
+				sessionUserCanRemove={sessionUserCanRemoveMembers}
+				closeModal={closeModal}
+				callbacks={removeMemberCallbacks}
 			/>
 		</ResponsiveMenu>
 	);

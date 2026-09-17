@@ -2,26 +2,28 @@
 
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
-import { CheckCircle2, CircleDashed, Settings2 } from "lucide-react";
-import Image, { type StaticImageData } from "next/image";
+import type { TDataSourceIntegrationProvider } from "@/lib/integrations/data-source-providers";
+import { CheckCircle2, CircleDashed, LinkIcon, Settings2 } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 
-export type TIntegrationProviderDefinition = {
-	id: string;
-	nome: string;
-	descricao: string;
-	logo?: StaticImageData;
-	href: string;
-	brandColor: string;
-};
+export type TIntegrationProviderCardModel = Pick<
+	TDataSourceIntegrationProvider,
+	"id" | "nome" | "descricao" | "logo" | "brandColor" | "buttonText" | "brandClassName" | "hubHref"
+>;
 
 type IntegrationProviderCardProps = {
-	provider: TIntegrationProviderDefinition;
+	provider: TIntegrationProviderCardModel;
 	isConnected: boolean;
+	canManage: boolean;
+	onConnect: () => void;
 };
 
-/** Card de um provedor na galeria de integrações, com estado de conexão e CTA para a subpágina. */
-export function IntegrationProviderCard({ provider, isConnected }: IntegrationProviderCardProps) {
+/** Card de um provedor na galeria de integrações, com estado de conexão e CTA nativo de conexão. */
+export function IntegrationProviderCard({ provider, isConnected, canManage, onConnect }: IntegrationProviderCardProps) {
+	const manageHref = isConnected ? provider.hubHref : undefined;
+	const ctaLabel = manageHref ? "GERENCIAR" : isConnected ? "CONECTAR OUTRA CONTA" : "CONECTAR";
+
 	return (
 		<div className="bg-card border-border flex w-full max-w-[450px] flex-col gap-3 rounded-xl border px-3 py-4 shadow-2xs">
 			<div className="flex w-full items-start justify-between gap-2">
@@ -56,12 +58,25 @@ export function IntegrationProviderCard({ provider, isConnected }: IntegrationPr
 			<div className="flex w-full flex-col gap-1.5">
 				<h3 className="w-full text-start text-lg font-semibold">{provider.nome}</h3>
 				<p className="text-sm leading-relaxed text-muted-foreground">{provider.descricao}</p>
-				<Button asChild variant="default" size="fit" className="flex items-center gap-1.5 self-end rounded-xl px-3 py-2 font-bold">
-					<Link href={provider.href}>
-						<Settings2 className="h-4 w-4" />
-						{isConnected ? "GERENCIAR" : "CONECTAR"}
-					</Link>
-				</Button>
+				{manageHref ? (
+					<Button asChild variant="default" size="fit" className="flex items-center gap-1.5 self-end rounded-xl px-3 py-2 font-bold">
+						<Link href={manageHref}>
+							<Settings2 className="h-4 w-4" />
+							{ctaLabel}
+						</Link>
+					</Button>
+				) : (
+					<Button
+						variant="default"
+						size="fit"
+						disabled={!canManage}
+						className="flex items-center gap-1.5 self-end rounded-xl px-3 py-2 font-bold"
+						onClick={onConnect}
+					>
+						<LinkIcon className="h-4 w-4" />
+						{ctaLabel}
+					</Button>
+				)}
 			</div>
 		</div>
 	);
