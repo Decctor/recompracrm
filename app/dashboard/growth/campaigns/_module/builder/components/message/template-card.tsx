@@ -1,9 +1,9 @@
 "use client";
 
-import TemplatePreview from "@/components/MessageTemplates/TemplatePreview";
 import { cn } from "@/lib/utils";
 import type { TMessageTemplateContent, TMessageTemplateMetadata } from "@/schemas/message-templates";
 import { Check, Pencil } from "lucide-react";
+import TemplatePreviewClip from "./template-preview-clip";
 import TemplateStatusBadge from "./template-status-badge";
 
 export type TCampaignTemplateCardData = {
@@ -44,7 +44,7 @@ export default function TemplateCard({ template, selectedPhoneId, isSelected, on
 				}
 			}}
 			className={cn(
-				"relative flex cursor-pointer flex-col overflow-hidden rounded-xl border border-border bg-card text-left transition-colors hover:border-primary/40",
+				"relative flex h-full cursor-pointer flex-col overflow-hidden rounded-xl border border-border bg-card text-left transition-colors hover:border-primary/40",
 				isSelected && "ring-2 ring-primary ring-inset",
 			)}
 		>
@@ -58,8 +58,13 @@ export default function TemplateCard({ template, selectedPhoneId, isSelected, on
 				<TemplateStatusBadge metadata={template.metadados} selectedPhoneId={selectedPhoneId} />
 			</div>
 
-			<div className="border-y border-border px-2 py-2">
-				<TemplatePreview content={template.conteudo} compact />
+			<div className="flex min-h-0 flex-1 flex-col justify-center border-y border-border px-2 py-2">
+				<TemplatePreviewClip
+					content={template.conteudo}
+					title={template.nome}
+					subtitle={`${template.categoria} · ${template.linguagem}`}
+					dialogExtra={<TemplateStatusBadge metadata={template.metadados} selectedPhoneId={selectedPhoneId} />}
+				/>
 			</div>
 
 			<div className="flex items-center justify-between gap-2 p-2">

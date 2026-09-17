@@ -1,8 +1,8 @@
 import { TGetMessageTemplatesInput, TGetMessageTemplatesOutput } from "@/app/api/message-templates/route";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import { useState } from "react";
 import { useDebounceMemo } from "../hooks/use-debounce";
-import { useQuery } from "@tanstack/react-query";
 
 async function fetchMessageTemplates(input: Exclude<TGetMessageTemplatesInput, "id">) {
 	const searchParams = new URLSearchParams();
@@ -39,6 +39,7 @@ export function useMessageTemplates({ initialParams, searchDebounceMs = 1200 }: 
 		...useQuery({
 			queryKey: ["message-templates", finalParams],
 			queryFn: async () => await fetchMessageTemplates(finalParams),
+			placeholderData: keepPreviousData,
 		}),
 		queryKey: ["message-templates", finalParams],
 		params,

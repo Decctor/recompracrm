@@ -1,9 +1,9 @@
 "use client";
 
-import TemplatePreview from "@/components/MessageTemplates/TemplatePreview";
 import { Button } from "@/components/ui/button";
 import type { getMessageTemplateLibraryEntries } from "@/config/message-template-library";
 import { ArrowLeft, Copy, Library, PenLine } from "lucide-react";
+import TemplatePreviewClip from "./template-preview-clip";
 
 export type TMessageTemplateLibraryEntry = ReturnType<typeof getMessageTemplateLibraryEntries>[number];
 
@@ -43,10 +43,10 @@ export default function TemplateLibraryPanel({ entries, onBack, onClone, onCreat
 
 			<div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
 				{entries.map((entry) => (
-					<div key={entry.key} className="flex flex-col overflow-hidden rounded-xl border border-border bg-card">
+					<div key={entry.key} className="flex h-full flex-col overflow-hidden rounded-xl border border-border bg-card">
 						<div className="flex items-start justify-between gap-2 p-2.5">
 							<div className="flex min-w-0 flex-col gap-0.5">
-								<p className="break-words text-[13px] font-semibold tracking-tight">{entry.nome}</p>
+								<p className="line-clamp-2 break-words text-[13px] font-semibold tracking-tight">{entry.nome}</p>
 								<p className="text-[11px] text-muted-foreground">
 									{entry.titulo} · {entry.variables.join(", ")}
 								</p>
@@ -57,8 +57,12 @@ export default function TemplateLibraryPanel({ entries, onBack, onClone, onCreat
 							</span>
 						</div>
 
-						<div className="border-y border-border px-2 py-2">
-							<TemplatePreview content={entry.conteudo} compact />
+						<div className="flex min-h-0 flex-1 flex-col justify-center border-y border-border px-2 py-2">
+							<TemplatePreviewClip
+								content={entry.conteudo}
+								title={entry.nome}
+								subtitle={`${entry.titulo} · ${entry.variables.join(", ")}`}
+							/>
 						</div>
 
 						<div className="flex items-center justify-between gap-2 p-2">
@@ -74,7 +78,7 @@ export default function TemplateLibraryPanel({ entries, onBack, onClone, onCreat
 				<button
 					type="button"
 					onClick={onCreateBlank}
-					className="flex flex-col items-start justify-center gap-2.5 rounded-xl border border-dashed border-primary/45 bg-primary/[0.04] p-4 text-left transition-colors hover:bg-primary/10"
+					className="flex h-full min-h-[240px] flex-col items-start justify-center gap-2.5 rounded-xl border border-dashed border-primary/45 bg-primary/[0.04] p-4 text-left transition-colors hover:bg-primary/10"
 				>
 					<span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
 						<PenLine className="h-4 w-4" />

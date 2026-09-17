@@ -7,6 +7,7 @@ type GeneralPaginationComponentProps = {
 	itemsMatchedText?: string;
 	itemsShowingText?: string;
 	showSteppersText?: boolean;
+	showExplanation?: boolean;
 	selectPage: (page: number) => void;
 	queryLoading: boolean;
 	pageIconSize?: "default" | "sm" | "xs";
@@ -19,16 +20,19 @@ function GeneralPaginationComponent({
 	itemsShowingText,
 	queryLoading,
 	showSteppersText = true,
+	showExplanation = true,
 	pageIconSize = "default",
 }: GeneralPaginationComponentProps) {
 	return (
 		<div className="my-2 flex w-full flex-col items-center gap-3">
 			{totalPages > 1 ? (
 				<>
-					<p className="w-full text-center text-sm leading-none tracking-tight text-foreground/80">
-						Um número grande de resultados foi encontrado, separamos em páginas para facilitar a visualização. Clique na página desejada para visualizar os
-						demais resultados.
-					</p>
+					{showExplanation ? (
+						<p className="w-full text-center text-sm leading-none tracking-tight text-foreground/80">
+							Um número grande de resultados foi encontrado, separamos em páginas para facilitar a visualização. Clique na página desejada para visualizar os
+							demais resultados.
+						</p>
+					) : null}
 					<div className="flex flex-col flex-wrap items-center justify-center gap-1 lg:flex-row lg:gap-4">
 						<button
 							disabled={queryLoading}

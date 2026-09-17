@@ -3,20 +3,23 @@
 import ControlMessageTemplate from "@/components/Modals/MessageTemplates/ControlMessageTemplate";
 import NewMessageTemplate from "@/components/Modals/MessageTemplates/NewMessageTemplate";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import GeneralPaginationComponent from "@/components/Utils/Pagination";
 import {
 	buildClonedMessageTemplateName,
 	getMessageTemplateLibraryEntries,
 	type TOnboardingTemplateVariant,
 } from "@/config/message-template-library";
 import { validateTemplateForTrigger } from "@/lib/message-templates";
+import { cn } from "@/lib/utils";
 import { useCashbackProgram } from "@/lib/queries/cashback-programs";
 import { useMessageTemplates } from "@/lib/queries/message-templates";
 import { useWhatsappConnections } from "@/lib/queries/whatsapp-connections";
 import type { useMessageTemplateState } from "@/state-hooks/use-message-template-state";
 import { useQueryClient } from "@tanstack/react-query";
 import { FileText, Info, Library, MessageSquare, Plus, Search, Sparkles } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { getTriggerMeta } from "../../helpers/triggers";
 import type { TStageValidationResult } from "../../helpers/validation";
@@ -27,8 +30,7 @@ import TemplateCard from "../message/template-card";
 import TemplateLibraryPanel, { type TMessageTemplateLibraryEntry } from "../message/template-library-panel";
 import { StageShell } from "../stage-shell";
 
-/** Janela pedida ao servidor. Acima disso a busca é o caminho — ver comentário em `hasMoreThanLoaded`. */
-const TEMPLATES_PAGE_SIZE = 100;
+const TEMPLATES_PAGE_SIZE = 10;
 
 type TCreateDraftInitialState = NonNullable<Parameters<typeof useMessageTemplateState>[0]["initialState"]>;
 
@@ -57,6 +59,8 @@ export default function StageMessage({ organizationId, organizationName, organiz
 	const [showLibrary, setShowLibrary] = useState(false);
 	const [createDraft, setCreateDraft] = useState<{ initialState?: TCreateDraftInitialState } | null>(null);
 	const [editTemplateId, setEditTemplateId] = useState<string | null>(null);
+	const templatesSectionRef = useRef<HTMLDivElement>(null);
+	const pendingPageScrollRef = useRef(false);
 	const queryClient = useQueryClient();
 
 	const { data: whatsappConnections } = useWhatsappConnections();
@@ -66,6 +70,9 @@ export default function StageMessage({ organizationId, organizationName, organiz
 	const cashbackAtivo = !!cashbackProgram?.ativo;
 	const {
 		data: messageTemplatesResult,
+		isLoading,
+		isFetching,
+		isPlaceholderData,
 		queryKey,
 		params,
 		updateParams,
@@ -86,9 +93,22 @@ export default function StageMessage({ organizationId, organizationName, organiz
 
 	const allTemplates = useMemo(() => messageTemplatesResult?.messageTemplates ?? [], [messageTemplatesResult]);
 	const matchedCount = messageTemplatesResult?.messageTemplatesMatched ?? 0;
-	// A compatibilidade com o gatilho é avaliada no cliente (depende das variáveis de cada corpo),
-	// então só sabemos classificar o que foi carregado. Acima da janela, avisamos em vez de mentir.
-	const hasMoreThanLoaded = matchedCount > allTemplates.length;
+	const totalPages = messageTemplatesResult?.totalPages ?? 0;
+	const currentPage = params.page ?? 1;
+
+	useEffect(() => {
+		if (totalPages > 0 && currentPage > totalPages) {
+			updateParams({ page: totalPages });
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [totalPages, currentPage]);
+
+	useEffect(() => {
+		if (!pendingPageScrollRef.current || isPlaceholderData || isFetching) return;
+		pendingPageScrollRef.current = false;
+		const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+		templatesSectionRef.current?.scrollIntoView({ behavior: prefersReducedMotion ? "auto" : "smooth", block: "start" });
+	}, [isPlaceholderData, isFetching, currentPage]);
 
 	const { compatibleTemplates, hiddenTemplates } = useMemo(() => {
 		if (!campaign.gatilhoTipo) return { compatibleTemplates: allTemplates, hiddenTemplates: [] };
@@ -159,8 +179,13 @@ export default function StageMessage({ organizationId, organizationName, organiz
 		setShowLibrary(false);
 	}
 
+	function handleSelectPage(page: number) {
+		pendingPageScrollRef.current = true;
+		updateParams({ page });
+	}
+
 	const templateListPane = (
-		<div className="flex w-full flex-col gap-3">
+		<div ref={templatesSectionRef} className="flex w-full scroll-mt-24 flex-col gap-3">
 			<div className="flex flex-wrap items-center justify-between gap-3">
 				<div className="flex w-fit items-center gap-2 rounded bg-primary/20 px-2 py-1">
 					<FileText className="h-4 w-4" />
@@ -168,7 +193,7 @@ export default function StageMessage({ organizationId, organizationName, organiz
 				</div>
 				<div className="flex items-center gap-2">
 					<span className="text-xs text-muted-foreground">
-						{compatibleTemplates.length === 1 ? "1 compatível com este gatilho" : `${compatibleTemplates.length} compatíveis com este gatilho`}
+						{compatibleTemplates.length === 1 ? "1 compatível nesta página" : `${compatibleTemplates.length} compatíveis nesta página`}
 					</span>
 					<Button type="button" size="sm" onClick={() => setCreateDraft({})} className="flex items-center gap-1.5 rounded-full">
 						<Plus className="h-3.5 w-3.5" />
@@ -181,41 +206,72 @@ export default function StageMessage({ organizationId, organizationName, organiz
 				<Search className="h-[15px] w-[15px] shrink-0 text-muted-foreground" />
 				<input
 					value={params.search ?? ""}
-					onChange={(event) => updateParams({ search: event.target.value })}
+					onChange={(event) => updateParams({ search: event.target.value, page: 1 })}
 					placeholder="Buscar por nome, texto da mensagem ou variável..."
 					className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none placeholder:text-muted-foreground"
 				/>
 			</label>
 
-			<div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-				{compatibleTemplates.map((template) => (
-					<TemplateCard
-						key={template.id}
-						template={template}
-						selectedPhoneId={campaign.whatsappConexaoTelefoneId ?? ""}
-						isSelected={campaign.whatsappTemplateId === template.id}
-						onSelect={() => updateCampaign({ whatsappTemplateId: template.id })}
-						onEdit={() => setEditTemplateId(template.id)}
-					/>
-				))}
+			{isLoading && !messageTemplatesResult ? (
+				<div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+					{Array.from({ length: 6 }, (_, index) => (
+						<Skeleton key={index} className="h-82 w-full rounded-xl" />
+					))}
+				</div>
+			) : (
+				<>
+					<div
+						className={cn(
+							"grid grid-cols-1 gap-3 motion-safe:transition-opacity motion-safe:duration-150 md:grid-cols-2 xl:grid-cols-3",
+							isPlaceholderData && "opacity-60",
+						)}
+					>
+					{compatibleTemplates.map((template) => (
+						<TemplateCard
+							key={template.id}
+							template={template}
+							selectedPhoneId={campaign.whatsappConexaoTelefoneId ?? ""}
+							isSelected={campaign.whatsappTemplateId === template.id}
+							onSelect={() => updateCampaign({ whatsappTemplateId: template.id })}
+							onEdit={() => setEditTemplateId(template.id)}
+						/>
+					))}
 
-				<button
-					type="button"
-					onClick={() => setCreateDraft({})}
-					className="flex min-h-[240px] flex-col items-start justify-center gap-2.5 rounded-xl border border-dashed border-primary/45 bg-primary/[0.04] p-4 text-left transition-colors hover:bg-primary/10"
-				>
-					<span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-						<Plus className="h-4 w-4" />
-					</span>
-					<span className="flex flex-col gap-1">
-						<span className="text-sm font-semibold tracking-tight">Criar template para esta campanha</span>
-						<span className="text-xs leading-relaxed text-muted-foreground">
-							Abre o construtor de templates, já com as variáveis que este gatilho preenche. Ao salvar, o template entra para aprovação da Meta e
-							fica selecionado aqui.
+					<button
+						type="button"
+						onClick={() => setCreateDraft({})}
+						className="flex h-full min-h-[240px] flex-col items-start justify-center gap-2.5 rounded-xl border border-dashed border-primary/45 bg-primary/[0.04] p-4 text-left transition-colors hover:bg-primary/10"
+					>
+						<span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+							<Plus className="h-4 w-4" />
 						</span>
-					</span>
-				</button>
-			</div>
+						<span className="flex flex-col gap-1">
+							<span className="text-sm font-semibold tracking-tight">Criar template para esta campanha</span>
+							<span className="text-xs leading-relaxed text-muted-foreground">
+								Abre o construtor de templates, já com as variáveis que este gatilho preenche. Ao salvar, o template entra para aprovação da Meta e
+								fica selecionado aqui.
+							</span>
+						</span>
+					</button>
+					</div>
+
+					<GeneralPaginationComponent
+						activePage={currentPage}
+						totalPages={totalPages}
+						selectPage={handleSelectPage}
+						queryLoading={isFetching}
+						pageIconSize="sm"
+						showSteppersText={false}
+						showExplanation={false}
+						itemsMatchedText={`${matchedCount} ${matchedCount === 1 ? "template encontrado." : "templates encontrados."}`}
+						itemsShowingText={
+							compatibleTemplates.length === 1
+								? "1 compatível com o gatilho nesta página."
+								: `${compatibleTemplates.length} compatíveis com o gatilho nesta página.`
+						}
+					/>
+				</>
+			)}
 
 			<div className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-muted px-3 py-2.5">
 				<span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-background text-primary">
@@ -250,8 +306,8 @@ export default function StageMessage({ organizationId, organizationName, organiz
 									<Info className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
 									<span>
 										{hiddenTemplates.length === 1
-											? "Mais um template não aparece aqui porque usa variáveis que este tipo de gatilho não fornece."
-											: `Mais ${hiddenTemplates.length} templates não aparecem aqui porque usam variáveis que este tipo de gatilho não fornece.`}{" "}
+											? "Mais um template nesta página não aparece aqui porque usa variáveis que este tipo de gatilho não fornece."
+											: `Mais ${hiddenTemplates.length} templates nesta página não aparecem aqui porque usam variáveis que este tipo de gatilho não fornece.`}{" "}
 										Passe o cursor para ver o nome de cada um e quais variáveis são.
 									</span>
 								</div>
@@ -276,11 +332,6 @@ export default function StageMessage({ organizationId, organizationName, organiz
 				</TooltipProvider>
 			) : null}
 
-			{hasMoreThanLoaded ? (
-				<p className="text-xs leading-snug text-muted-foreground">
-					Mostrando {allTemplates.length} de {matchedCount} templates da organização. Use a busca para encontrar os demais.
-				</p>
-			) : null}
 		</div>
 	);
 

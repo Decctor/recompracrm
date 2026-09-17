@@ -301,7 +301,7 @@ async function deleteMessageTemplateRoute(request: NextRequest) {
 }
 
 const DEFAULT_PAGE_SIZE = 25;
-/** Teto da janela que um consumidor pode pedir de uma vez. Existe para a etapa Mensagem do construtor. */
+/** Teto da janela que um consumidor pode pedir de uma vez. */
 const MAX_PAGE_SIZE = 100;
 
 export const GetMessageTemplatesInputSchema = z.object({
@@ -322,9 +322,6 @@ export const GetMessageTemplatesInputSchema = z.object({
 		})
 		.optional()
 		.nullable(),
-	// A etapa Mensagem do construtor de campanhas renderiza os templates como cartões e filtra a
-	// compatibilidade com o gatilho no cliente, então precisa de uma janela maior que a listagem
-	// paginada padrão. Continua limitado — não existe modo "traga tudo".
 	pageSize: z
 		.union([z.string(), z.number()])
 		.nullable()
