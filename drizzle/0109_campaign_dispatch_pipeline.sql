@@ -45,16 +45,10 @@ ALTER TABLE "ampmais_send_counters" DROP CONSTRAINT IF EXISTS "uq_weekly_send_co
 ALTER TABLE "ampmais_send_counters"
 	ADD CONSTRAINT "uq_send_counters_org_campanha_tipo_periodo"
 	UNIQUE NULLS NOT DISTINCT ("organizacao_id", "campanha_id", "tipo", "periodo_chave");
--- Os nomes das FKs dependem de como a tabela foi criada (0041 à mão ou db:push); renomeia só se existirem.
-DO $
-BEGIN
-	IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ampmais_weekly_send_counters_organizacao_id_ampmais_organizations_id_fk') THEN
-		ALTER TABLE "ampmais_send_counters" RENAME CONSTRAINT "ampmais_weekly_send_counters_organizacao_id_ampmais_organizations_id_fk" TO "ampmais_send_counters_organizacao_id_ampmais_organizations_id_fk";
-	END IF;
-	IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ampmais_weekly_send_counters_campanha_id_ampmais_campaigns_id_fk') THEN
-		ALTER TABLE "ampmais_send_counters" RENAME CONSTRAINT "ampmais_weekly_send_counters_campanha_id_ampmais_campaigns_id_fk" TO "ampmais_send_counters_campanha_id_ampmais_campaigns_id_fk";
-	END IF;
-END $;
+-- Nomes reais das FKs em produção (truncados a 63 chars pelo Postgres quando a 0041 foi aplicada).
+ALTER TABLE "ampmais_send_counters" RENAME CONSTRAINT "ampmais_weekly_send_counters_organizacao_id_ampmais_organizatio" TO "ampmais_send_counters_organizacao_id_ampmais_organizations_id_fk";
+ALTER TABLE "ampmais_send_counters" RENAME CONSTRAINT "ampmais_weekly_send_counters_campanha_id_ampmais_campaigns_id_f" TO "ampmais_send_counters_campanha_id_ampmais_campaigns_id_fk";
+ALTER TABLE "ampmais_send_counters" RENAME CONSTRAINT "ampmais_weekly_send_counters_pkey" TO "ampmais_send_counters_pkey";
 
 -- =====================================================================================
 -- C. Journal de disparos
