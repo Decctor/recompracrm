@@ -1,14 +1,17 @@
 import { appApiHandler } from "@/lib/app-api";
-import { applyCampaignBonusToInteractionMetadata } from "@/lib/campaigns/interaction-metadata";
+import {
+	createEventCampaignDispatch,
+	filterClientIdsByFrequencyCap,
+	publishEventDispatches,
+	type TEventDispatchResult,
+} from "@/lib/campaigns/engine";
 import { resolveCampaignAudienceClientIdsForCampaign } from "@/lib/campaigns/filters";
+import { INTERACTIONS_CRON_TIMEZONE } from "@/lib/campaigns/time-blocks";
 import { assertCronAuthorized } from "@/lib/cron/assert-cron-authorized";
-import { DASTJS_TIME_DURATION_UNITS_MAP, getPostponedDateFromReferenceDate } from "@/lib/dates";
+import { DASTJS_TIME_DURATION_UNITS_MAP } from "@/lib/dates";
 import { formatDateAsLocale } from "@/lib/formatting";
-import { type ImmediateProcessingData, processOrganizationInteractionsBatch } from "@/lib/interactions";
-import { createCampaignWeeklyLimitCache } from "@/lib/interactions/campaign-weekly-limits";
 import type { TTimeDurationUnitsEnum } from "@/schemas/enums";
-import { type DBTransaction, db } from "@/services/drizzle";
-import { interactions } from "@/services/drizzle/schema";
+import { db } from "@/services/drizzle";
 import dayjs from "dayjs";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -29,61 +32,21 @@ function formatCashbackExpiringWindow(value: number, measure: TTimeDurationUnits
 }
 
 /**
- * Helper function to check if a campaign can be scheduled for a client based on frequency rules
+ * Cashback expirando: um disparo por (campanha, dia) com os clientes que têm saldo expirando na
+ * janela de antecedência. O atraso configurado na campanha vale como nos demais gatilhos de evento.
  */
-async function canScheduleCampaignForClient(
-	tx: DBTransaction,
-	clienteId: string,
-	campanhaId: string,
-	permitirRecorrencia: boolean,
-	frequenciaIntervaloValor: number | null,
-	frequenciaIntervaloMedida: string | null,
-): Promise<boolean> {
-	// Check if campaign allows recurrence
-	if (!permitirRecorrencia) {
-		const previousInteraction = await tx.query.interactions.findFirst({
-			where: (fields, { and, eq }) => and(eq(fields.clienteId, clienteId), eq(fields.campanhaId, campanhaId)),
-		});
-		if (previousInteraction) {
-			return false;
-		}
-	}
-
-	// Check for time interval (Frequency Cap)
-	if (permitirRecorrencia && frequenciaIntervaloValor && frequenciaIntervaloValor > 0 && frequenciaIntervaloMedida) {
-		// Map the enum to dayjs units
-		const dayjsUnit = DASTJS_TIME_DURATION_UNITS_MAP[frequenciaIntervaloMedida as TTimeDurationUnitsEnum] || "day";
-
-		// Calculate the cutoff date based on the campaign's interval settings
-		const cutoffDate = dayjs().subtract(frequenciaIntervaloValor, dayjsUnit).toDate();
-
-		const recentInteraction = await tx.query.interactions.findFirst({
-			where: (fields, { and, eq, gt }) => and(eq(fields.clienteId, clienteId), eq(fields.campanhaId, campanhaId), gt(fields.dataInsercao, cutoffDate)),
-		});
-
-		if (recentInteraction) {
-			return false;
-		}
-	}
-
-	return true;
-}
-
 async function getCashbackExpiringNotifyRoute(_req: NextRequest) {
 	console.log("[INFO] [CASHBACK_EXPIRING_NOTIFY] Starting cashback expiring notification cron job");
 
 	try {
-		const organizationsList = await db.query.organizations.findMany({
-			columns: { id: true },
-		});
-
-		const today = dayjs().startOf("day").toDate();
+		const organizationsList = await db.query.organizations.findMany({ columns: { id: true } });
+		const now = new Date();
+		const today = dayjs(now).startOf("day").toDate();
+		const todayKey = dayjs(now).tz(INTERACTIONS_CRON_TIMEZONE).format("YYYY-MM-DD");
 
 		for (const organization of organizationsList) {
 			console.log(`[ORG: ${organization.id}] Processing organization...`);
-
-			// Collect data for immediate processing
-			const immediateProcessingDataList: ImmediateProcessingData[] = [];
+			const eventDispatches: TEventDispatchResult[] = [];
 
 			await db.transaction(async (tx) => {
 				const cashbackProgram = await tx.query.cashbackPrograms.findFirst({
@@ -92,24 +55,11 @@ async function getCashbackExpiringNotifyRoute(_req: NextRequest) {
 				});
 				const cashbackTerminology = cashbackProgram?.terminologia ?? "DINHEIRO";
 
-				// Get active campaigns for expiring cashback notifications
 				const campaignsForExpiration = await tx.query.campaigns.findMany({
 					where: (fields, { and, eq }) =>
 						and(eq(fields.organizacaoId, organization.id), eq(fields.ativo, true), eq(fields.gatilhoTipo, "CASHBACK-EXPIRANDO")),
-					with: {
-						segmentacoes: true,
-						whatsappTemplate: true,
-						whatsappConexaoTelefone: {
-							columns: {
-								id: true,
-							},
-							with: {
-								conexao: { columns: { token: true, gatewaySessaoId: true } },
-							},
-						},
-					},
+					with: { segmentacoes: true },
 				});
-
 				if (campaignsForExpiration.length === 0) {
 					console.log(`[ORG: ${organization.id}] No active CASHBACK-EXPIRANDO campaigns found. Skipping.`);
 					return;
@@ -122,14 +72,8 @@ async function getCashbackExpiringNotifyRoute(_req: NextRequest) {
 							: DEFAULT_CASHBACK_EXPIRING_ANTECEDENCIA_VALOR;
 					const effectiveAntecedenciaMedida = campaign.gatilhoCashbackExpirandoAntecedenciaMedida ?? DEFAULT_CASHBACK_EXPIRING_ANTECEDENCIA_MEDIDA;
 
-					if (!campaign.gatilhoCashbackExpirandoAntecedenciaValor || campaign.gatilhoCashbackExpirandoAntecedenciaValor <= 0) {
-						console.log(
-							`[ORG: ${organization.id}] [CAMPAIGN: ${campaign.id}] Antecedência não configurada. Aplicando fallback para ${DEFAULT_CASHBACK_EXPIRING_ANTECEDENCIA_VALOR} ${DEFAULT_CASHBACK_EXPIRING_ANTECEDENCIA_MEDIDA}.`,
-						);
-					}
-
 					const dayjsUnit = DASTJS_TIME_DURATION_UNITS_MAP[effectiveAntecedenciaMedida] || "day";
-					const windowEndDate = dayjs().add(effectiveAntecedenciaValor, dayjsUnit).endOf("day").toDate();
+					const windowEndDate = dayjs(now).add(effectiveAntecedenciaValor, dayjsUnit).endOf("day").toDate();
 					const cashbackExpiringWindow = formatCashbackExpiringWindow(effectiveAntecedenciaValor, effectiveAntecedenciaMedida);
 
 					const expiringSoonTransactions = await tx.query.cashbackProgramTransactions.findMany({
@@ -142,164 +86,53 @@ async function getCashbackExpiringNotifyRoute(_req: NextRequest) {
 								gt(fields.expiracaoData, today),
 								lte(fields.expiracaoData, windowEndDate),
 							),
+						columns: { clienteId: true, valorRestante: true },
 					});
 
-					console.log(
-						`[ORG: ${organization.id}] [CAMPAIGN: ${campaign.id}] Found ${expiringSoonTransactions.length} transactions expiring within ${effectiveAntecedenciaValor} ${effectiveAntecedenciaMedida}.`,
-					);
-
-					const cashbackByClient = new Map<string, { totalExpiring: number; windowEndDate: Date }>();
-
+					const totalExpiringByClientId = new Map<string, number>();
 					for (const transaction of expiringSoonTransactions) {
-						const current = cashbackByClient.get(transaction.clienteId);
-
-						if (!current) {
-							cashbackByClient.set(transaction.clienteId, {
-								totalExpiring: transaction.valorRestante,
-								windowEndDate,
-							});
-							continue;
-						}
-
-						cashbackByClient.set(transaction.clienteId, {
-							totalExpiring: current.totalExpiring + transaction.valorRestante,
-							windowEndDate,
-						});
+						totalExpiringByClientId.set(transaction.clienteId, (totalExpiringByClientId.get(transaction.clienteId) ?? 0) + transaction.valorRestante);
 					}
 
 					const audienceClientIds = new Set(
-						await resolveCampaignAudienceClientIdsForCampaign({
-							executor: tx,
-							organizationId: organization.id,
-							campaign,
-						}),
+						await resolveCampaignAudienceClientIdsForCampaign({ executor: tx, organizationId: organization.id, campaign }),
 					);
-					for (const clienteId of Array.from(cashbackByClient.keys())) {
-						if (!audienceClientIds.has(clienteId)) cashbackByClient.delete(clienteId);
-					}
+					const minimumExpiringValue = campaign.gatilhoCashbackExpirandoValorMinimo ?? 0;
+					const eligibleClientIds = Array.from(totalExpiringByClientId.entries())
+						.filter(([clientId, totalExpiring]) => audienceClientIds.has(clientId) && (minimumExpiringValue <= 0 || totalExpiring >= minimumExpiringValue))
+						.map(([clientId]) => clientId);
+					console.log(`[ORG: ${organization.id}] [CAMPAIGN: ${campaign.id}] Found ${eligibleClientIds.length} clients with expiring cashback.`);
+					if (eligibleClientIds.length === 0) continue;
 
-					console.log(`[ORG: ${organization.id}] [CAMPAIGN: ${campaign.id}] Found ${cashbackByClient.size} clients with expiring cashback.`);
-
-					const clientIds = Array.from(cashbackByClient.keys());
-					const clientBalances =
-						clientIds.length > 0
-							? await tx.query.cashbackProgramBalances.findMany({
-									where: (fields, { and, eq, inArray }) => and(eq(fields.organizacaoId, organization.id), inArray(fields.clienteId, clientIds)),
-									columns: { clienteId: true, saldoValorDisponivel: true, saldoValorAcumuladoTotal: true, saldoValorResgatadoTotal: true },
-								})
-							: [];
-					const clientBalanceMap = new Map(clientBalances.map((b) => [b.clienteId, b]));
-
-					for (const [clienteId, cashbackInfo] of cashbackByClient.entries()) {
-						const minimumExpiringValue = campaign.gatilhoCashbackExpirandoValorMinimo ?? 0;
-						if (minimumExpiringValue > 0 && cashbackInfo.totalExpiring < minimumExpiringValue) continue;
-
-						const canSchedule = await canScheduleCampaignForClient(
-							tx,
-							clienteId,
-							campaign.id,
-							campaign.permitirRecorrencia,
-							campaign.frequenciaIntervaloValor,
-							campaign.frequenciaIntervaloMedida,
-						);
-
-						if (!canSchedule) continue;
-
-						const interactionScheduleDate = getPostponedDateFromReferenceDate({
-							date: dayjs().toDate(),
-							unit: campaign.execucaoAgendadaMedida,
-							value: campaign.execucaoAgendadaValor,
-						});
-
-						const clientBalance = clientBalanceMap.get(clienteId);
-						const interactionId = crypto.randomUUID();
-						const bonusResult = await applyCampaignBonusToInteractionMetadata({
-							tx,
-							baseMetadata: {
-								terminologia: cashbackTerminology,
-								cashbackExpirandoValor: cashbackInfo.totalExpiring,
-								cashbackExpirandoData: formatDateAsLocale(cashbackInfo.windowEndDate) ?? undefined,
-								cashbackExpirandoJanela: cashbackExpiringWindow,
-								cashbackSaldoDisponivel: clientBalance?.saldoValorDisponivel ?? 0,
-								cashbackTotalAcumuladoVida: clientBalance?.saldoValorAcumuladoTotal ?? 0,
-								cashbackTotalResgatadoVida: clientBalance?.saldoValorResgatadoTotal ?? 0,
-							},
-							campaign,
-							organizationId: organization.id,
-							clientId: clienteId,
-							saleId: null,
-							saleValue: null,
-							interactionId,
-							enabled: campaign.cashbackGeracaoTipo === "FIXO",
-						});
-						const interactionContextMetadados = bonusResult.metadata;
-
-						const [insertedInteraction] = await tx
-							.insert(interactions)
-							.values({
-								id: interactionId,
-								clienteId: clienteId,
-								campanhaId: campaign.id,
-								organizacaoId: organization.id,
-								titulo: `Cashback Expirando: ${campaign.titulo}`,
-								tipo: "ENVIO-MENSAGEM",
-								descricao: `Você tem R$ ${(cashbackInfo.totalExpiring / 100).toFixed(2)} em cashback expirando nos próximos ${effectiveAntecedenciaValor} ${effectiveAntecedenciaMedida.toLowerCase()}.`,
-								agendamentoDataReferencia: dayjs(interactionScheduleDate).format("YYYY-MM-DD"),
-								agendamentoBlocoReferencia: campaign.execucaoAgendadaBloco,
-								metadados: interactionContextMetadados,
-							})
-							.returning({ id: interactions.id });
-
-						if (campaign.execucaoAgendadaValor === 0 && campaign.whatsappTemplate) {
-							const clientData = await tx.query.clients.findFirst({
-								where: (fields, { eq }) => eq(fields.id, clienteId),
-								columns: {
-									id: true,
-									nome: true,
-									telefone: true,
-									email: true,
-									analiseRFMTitulo: true,
-									metadataProdutoMaisCompradoId: true,
-									metadataGrupoProdutoMaisComprado: true,
-									metadataProdutoSugeridoId: true,
-								},
-							});
-
-							if (clientData) {
-								immediateProcessingDataList.push({
-									interactionId: insertedInteraction.id,
-									organizationId: organization.id,
-									client: clientData,
-									campaign: {
-										autorId: campaign.autorId,
-										whatsappConexaoTelefoneId: campaign.whatsappConexaoTelefoneId,
-										whatsappTemplate: campaign.whatsappTemplate,
+					const frequency = await filterClientIdsByFrequencyCap({ executor: tx, campaign, clientIds: eligibleClientIds, now });
+					const dispatch = await createEventCampaignDispatch({
+						tx,
+						organizationId: organization.id,
+						campaign,
+						janelaReferencia: `cashback-expirando:${todayKey}`,
+						recipients: [
+							...frequency.allowed.map((clientId) => {
+								const totalExpiring = totalExpiringByClientId.get(clientId) ?? 0;
+								return {
+									clienteId: clientId,
+									contexto: {
+										terminologia: cashbackTerminology,
+										cashbackExpirandoValor: totalExpiring,
+										cashbackExpirandoData: formatDateAsLocale(windowEndDate) ?? undefined,
+										cashbackExpirandoJanela: cashbackExpiringWindow,
 									},
-									whatsappToken: campaign.whatsappConexaoTelefone?.conexao?.token ?? undefined,
-									whatsappSessionId: campaign.whatsappConexaoTelefone?.conexao?.gatewaySessaoId ?? undefined,
-									contextMetadados: interactionContextMetadados,
-								});
-							}
-						}
-
-					}
+									descricao: `Você tem R$ ${(totalExpiring / 100).toFixed(2)} em cashback expirando nos próximos ${effectiveAntecedenciaValor} ${effectiveAntecedenciaMedida.toLowerCase()}.`,
+								};
+							}),
+							...frequency.blocked.map((clientId) => ({ clienteId: clientId, motivoPulo: "FREQUENCIA" as const })),
+						],
+						now,
+					});
+					if (dispatch.created) eventDispatches.push(dispatch);
 				}
 			});
 
-			// Process interactions immediately after transaction (with delay to avoid rate limiting)
-			if (immediateProcessingDataList.length > 0) {
-				console.log(`[ORG: ${organization.id}] [INFO] Processing ${immediateProcessingDataList.length} immediate interactions`);
-				const processingSummary = await processOrganizationInteractionsBatch({
-					organizationId: organization.id,
-					interactions: immediateProcessingDataList,
-					weeklyLimitCache: createCampaignWeeklyLimitCache(),
-				});
-				if (processingSummary.failed > 0 || processingSummary.blocked > 0) {
-					for (const failedResult of processingSummary.results.filter((itemResult) => !itemResult.success)) {
-						console.error(`[IMMEDIATE_PROCESS] Failed to process interaction ${failedResult.interactionId}:`, failedResult.error);
-					}
-				}
-			}
+			await publishEventDispatches(eventDispatches);
 		}
 
 		console.log("[INFO] [CASHBACK_EXPIRING_NOTIFY] All organizations processed successfully");

@@ -13,6 +13,7 @@ export * from "./enums";
 export * from "./campaigns";
 export * from "./campaign-conversions";
 export * from "./interactions";
+export * from "./campaign-dispatches";
 export * from "./segment-cadences";
 export * from "./client-duplicates";
 export * from "./client-seller-references";

@@ -1,4 +1,5 @@
 import type { TGetCampaignConversionsInput, TGetCampaignConversionsOutput } from "@/app/api/campaigns/conversions/route";
+import type { TGetCampaignDispatchesInput, TGetCampaignDispatchesOutput } from "@/app/api/campaigns/dispatches/route";
 import type { TGetCampaignInteractionsInput, TGetCampaignInteractionsOutput } from "@/app/api/campaigns/interactions/route";
 import type { TGetCampaignsInput, TGetCampaignsOutput } from "@/app/api/campaigns/route";
 import type { TGetCampaignStatsInput, TGetCampaignStatsOutput } from "@/app/api/campaigns/stats/by-campaign/route";
@@ -368,4 +369,25 @@ export function useCampaignUtilPreviewAudience(input: TPreviewAudienceInput) {
 		queryFn: async () => await fetchCampaignUtilPreviewAudience(input),
 		staleTime: 30_000,
 	});
+}
+
+async function fetchCampaignDispatches(input: TGetCampaignDispatchesInput) {
+	try {
+		const searchParams = new URLSearchParams();
+		searchParams.set("campaignId", input.campaignId);
+		if (input.page) searchParams.set("page", input.page.toString());
+		const { data } = await axios.get<TGetCampaignDispatchesOutput>(`/api/campaigns/dispatches?${searchParams.toString()}`);
+		return data.data;
+	} catch (error) {
+		console.log("Error running fetchCampaignDispatches", error);
+		throw error;
+	}
+}
+
+export function useCampaignDispatches(input: TGetCampaignDispatchesInput) {
+	const queryKey = ["campaign-dispatches", input] as const;
+	return {
+		...useQuery({ queryKey, queryFn: async () => await fetchCampaignDispatches(input), refetchInterval: 30_000 }),
+		queryKey,
+	};
 }

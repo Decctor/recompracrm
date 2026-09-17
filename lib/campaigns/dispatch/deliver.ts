@@ -1,5 +1,5 @@
-import { reverseCampaignCashbackForBlockedInteractions } from "@/lib/cashback/reverse-campaign-cashback";
 import { EmailTemplate, sendEmailWithResend } from "@/lib/email";
+import { buildInteractionMessageVariables } from "@/lib/interactions/message-preview";
 import {
 	buildWhatsappTemplateSendPayload,
 	convertHtmlToWhatsappText,
@@ -10,70 +10,83 @@ import {
 import { sendTemplateWhatsappMessage } from "@/lib/whatsapp";
 import { parseTemplatePayloadToGatewayContent, sendMessage } from "@/lib/whatsapp/internal-gateway";
 import { formatPhoneForInternalGateway } from "@/lib/whatsapp/utils";
+import type { TInteractionsStatusEnum } from "@/schemas/interactions";
 import { db } from "@/services/drizzle";
+import type { TClientEntity, TMessageTemplate } from "@/services/drizzle/schema";
 import { chatMessages, chats } from "@/services/drizzle/schema";
 import { and, eq, sql } from "drizzle-orm";
-import { buildInteractionMessageVariables } from "./message-preview";
-import { markInteractionBlocked, markInteractionFailed, updateInteractionDeliveryState } from "./delivery-state";
-import type { ImmediateProcessingData, TSendReservedInteractionResult } from "./types";
+
+/**
+ * Entrega de uma mensagem de campanha aos provedores (WhatsApp Cloud API / gateway interno e
+ * e-mail). NÃO toca em `interactions` nem em quota: recebe tudo o que precisa, chama os provedores
+ * e devolve o que aconteceu. Quem registra (lib/campaigns/dispatch/send.ts) decide o que persistir.
+ * O único efeito colateral no banco é a mensagem do chat (Hub de atendimentos), que é registro do
+ * canal e não da campanha.
+ */
 
 export type TChatPromiseCache = Map<string, Promise<string | null>>;
 
-export { buildContextVariablesMap } from "./message-preview";
+export type TCampaignDeliveryClient = {
+	id: string;
+	nome: string;
+	telefone: string;
+	email: string | null;
+	analiseRFMTitulo: string | null;
+	metadataProdutoMaisCompradoId: TClientEntity["metadataProdutoMaisCompradoId"];
+	metadataGrupoProdutoMaisComprado: TClientEntity["metadataGrupoProdutoMaisComprado"];
+	metadataProdutoSugeridoId: TClientEntity["metadataProdutoSugeridoId"];
+};
 
-async function failInteractionSend({
-	interactionId,
-	organizationId,
-	errorMessage,
-	insertedChatMessageId,
-}: {
-	interactionId: string;
+export type TCampaignDeliveryCampaign = {
+	autorId: string;
+	whatsappConexaoTelefoneId: string | null;
+	whatsappTemplate: TMessageTemplate;
+};
+
+export type TCampaignDeliveryInput = {
 	organizationId: string;
-	errorMessage: string;
-	insertedChatMessageId?: string | null;
-}) {
-	if (insertedChatMessageId) {
-		await db.update(chatMessages).set({ statusEntrega: "FALHA" }).where(eq(chatMessages.id, insertedChatMessageId));
-	}
+	client: TCampaignDeliveryClient;
+	campaign: TCampaignDeliveryCampaign;
+	whatsappToken?: string;
+	whatsappSessionId?: string;
+	contextMetadados?: TInteractionContextMetadados;
+	// Id da interação que será registrada se o envio sair. Vai ao gateway como clientMessageId
+	// (deduplicação no provedor) e aos links de rastreio do template.
+	messageKey: string;
+	hasHubAccess?: boolean;
+	chatIdCache?: TChatPromiseCache;
+	testing?: {
+		overridePhoneNumber?: string;
+		disableWhatsappCloudApi?: boolean;
+		disableInternalGateway?: boolean;
+	};
+};
 
-	await markInteractionFailed({
-		interactionId,
-		organizationId,
-		erroEnvio: errorMessage,
-	});
-}
+export type TCampaignDeliveryOutcome = "SENT" | "QUEUED" | "FAILED" | "NO_CONTACT";
 
-async function blockInteractionSend({
-	interactionId,
-	organizationId,
-	errorMessage,
-}: {
-	interactionId: string;
-	organizationId: string;
-	errorMessage: string;
-}) {
-	await markInteractionBlocked({
-		interactionId,
-		organizationId,
-		erroEnvio: errorMessage,
-	});
-
-	// Bloqueio terminal: a mensagem nunca será enviada, então o bônus de campanha concedido
-	// na criação da interação é estornado.
-	await db.transaction((tx) =>
-		reverseCampaignCashbackForBlockedInteractions({
-			tx,
-			organizationId,
-			interactionIds: [interactionId],
-			reason: "ENVIO_BLOQUEADO_SEM_CONTATO",
-		}),
-	);
-}
+export type TCampaignDeliveryResult = {
+	outcome: TCampaignDeliveryOutcome;
+	// Status de entrega inicial da interação: ENVIADO (Cloud API/e-mail) ou PENDENTE (gateway
+	// interno enfileirou; o webhook confirma depois).
+	statusEnvio: Extract<TInteractionsStatusEnum, "ENVIADO" | "PENDENTE">;
+	error: string | null;
+	channelsAttempted: string[];
+	channelsSkipped: string[];
+	channelsSent: string[];
+	channelErrors: Record<string, string>;
+	whatsappMessageId?: string;
+	emailMessageId?: string;
+	jobId?: string;
+	clientMessageId?: string;
+	chatMessageId: string | null;
+	whatsappStatus: string | null;
+	emailStatus: string | null;
+};
 
 async function resolveOrganizationMessagingContext(organizationId: string) {
 	const [organization, cashbackProgram] = await Promise.all([
 		db.query.organizations.findFirst({
-			where: (fields, { eq }) => eq(fields.id, organizationId),
+			where: (fields, { eq: eqFilter }) => eqFilter(fields.id, organizationId),
 			columns: {
 				id: true,
 				nome: true,
@@ -84,7 +97,7 @@ async function resolveOrganizationMessagingContext(organizationId: string) {
 			},
 		}),
 		db.query.cashbackPrograms.findFirst({
-			where: (fields, { eq }) => eq(fields.organizacaoId, organizationId),
+			where: (fields, { eq: eqFilter }) => eqFilter(fields.organizacaoId, organizationId),
 			columns: { terminologia: true },
 		}),
 	]);
@@ -94,6 +107,14 @@ async function resolveOrganizationMessagingContext(organizationId: string) {
 		hasHubAccess: organization?.configuracao?.recursos?.hubAtendimentos?.acesso ?? false,
 		organizationCashbackTerminology: cashbackProgram?.terminologia ?? "DINHEIRO",
 	};
+}
+
+export async function resolveOrganizationHubAccess(organizationId: string) {
+	const organization = await db.query.organizations.findFirst({
+		where: (fields, { eq: eqFilter }) => eqFilter(fields.id, organizationId),
+		columns: { configuracao: true },
+	});
+	return organization?.configuracao?.recursos?.hubAtendimentos?.acesso ?? false;
 }
 
 async function getOrCreateChatId({
@@ -150,8 +171,12 @@ async function getOrCreateChatId({
 		}
 
 		const existingChat = await db.query.chats.findFirst({
-			where: (fields, { and, eq }) =>
-				and(eq(fields.organizacaoId, organizationId), eq(fields.clienteId, clientId), eq(fields.whatsappConexaoTelefoneId, whatsappConnectionPhoneId)),
+			where: (fields, { and: andFilter, eq: eqFilter }) =>
+				andFilter(
+					eqFilter(fields.organizacaoId, organizationId),
+					eqFilter(fields.clienteId, clientId),
+					eqFilter(fields.whatsappConexaoTelefoneId, whatsappConnectionPhoneId),
+				),
 			columns: { id: true },
 		});
 		if (existingChat) {
@@ -184,71 +209,7 @@ async function getOrCreateChatId({
 	}
 }
 
-async function persistInteractionDeliveryState({
-	interactionId,
-	organizationId,
-	statusEnvio,
-	erroEnvio,
-	chatMessageId,
-	whatsappMessageId,
-	emailMessageId,
-	clientMessageId,
-	jobId,
-	messageTemplateId,
-	channelsAttempted,
-	channelsSkipped,
-	channelsSent,
-	channelErrors,
-	whatsappStatus,
-	emailStatus,
-}: {
-	interactionId: string;
-	organizationId: string;
-	statusEnvio: "BLOQUEADA" | "FALHOU" | "PENDENTE" | "ENVIADO";
-	erroEnvio: string | null;
-	chatMessageId?: string | null;
-	whatsappMessageId?: string;
-	emailMessageId?: string;
-	clientMessageId?: string;
-	jobId?: string;
-	messageTemplateId: string;
-	channelsAttempted: string[];
-	channelsSkipped: string[];
-	channelsSent: string[];
-	channelErrors: Record<string, string>;
-	whatsappStatus?: string | null;
-	emailStatus?: string | null;
-}) {
-	await updateInteractionDeliveryState({
-		interactionId,
-		organizationId,
-		statusEnvio,
-		erroEnvio,
-		metadataPatch: {
-			...(clientMessageId ? { clientMessageId } : {}),
-			...(jobId ? { jobId } : {}),
-			...(chatMessageId ? { chatMessageId } : {}),
-			...(whatsappMessageId ? { whatsappMessageId } : {}),
-			...(emailMessageId ? { emailMessageId } : {}),
-			...(whatsappStatus ? { whatsappStatus } : {}),
-			...(emailStatus ? { emailStatus } : {}),
-			whatsappTemplateId: messageTemplateId,
-			messageTemplateId,
-			channelsAttempted,
-			channelsSkipped,
-			channelsSent,
-			channelErrors,
-		},
-	});
-}
-
-function buildWhatsappPlainContent({
-	template,
-	variables,
-}: {
-	template: ImmediateProcessingData["campaign"]["whatsappTemplate"];
-	variables: TMessageTemplateRuntimeContext["variaveis"];
-}) {
+function buildWhatsappPlainContent({ template, variables }: { template: TMessageTemplate; variables: TMessageTemplateRuntimeContext["variaveis"] }) {
 	const header =
 		template.conteudo.cabecalho?.tipo === "TEXTO" && template.conteudo.cabecalho.conteudoTexto
 			? convertHtmlToWhatsappText(replaceMessageTemplateVariables(template.conteudo.cabecalho.conteudoTexto, variables))
@@ -258,32 +219,16 @@ function buildWhatsappPlainContent({
 	return [header, body, footer].filter(Boolean).join("\n\n");
 }
 
-export async function sendReservedInteraction(
-	params: ImmediateProcessingData & {
-		hasHubAccess?: boolean;
-		chatIdCache?: TChatPromiseCache;
-	},
-): Promise<TSendReservedInteractionResult> {
-	const { interactionId, organizationId, client, campaign, whatsappToken, whatsappSessionId, contextMetadados, testing, chatIdCache } = params;
+export async function deliverCampaignMessage(params: TCampaignDeliveryInput): Promise<TCampaignDeliveryResult> {
+	const { organizationId, client, campaign, whatsappToken, whatsappSessionId, contextMetadados, messageKey, testing, chatIdCache } = params;
 	const effectivePhoneNumber = testing?.overridePhoneNumber ?? client.telefone;
 	let insertedChatMessageId: string | null = null;
 
+	const channelErrors: Record<string, string> = {};
+	const channelsAttempted: string[] = [];
+	const channelsSkipped: string[] = [];
+
 	try {
-		const interaction = await db.query.interactions.findFirst({
-			where: (fields, { and, eq }) => and(eq(fields.id, interactionId), eq(fields.organizacaoId, organizationId)),
-			columns: { id: true, metadados: true },
-		});
-
-		if (!interaction) {
-			return { success: false, status: "FAILED", error: "Interação não encontrada para processamento." };
-		}
-
-		// Guarda estrutural: o metadados persistido na interação é a fonte autoritativa do contexto.
-		// Chamadores do caminho imediato deveriam repassar `contextMetadados` em memória, mas um
-		// chamador que esqueça (já aconteceu — crons de campanha) não pode custar variáveis vazias
-		// ou "R$ 0,00" na mensagem: sem contexto em memória, caímos no que foi congelado no banco.
-		const effectiveContextMetadados = contextMetadados ?? (interaction.metadados as TInteractionContextMetadados | null) ?? undefined;
-
 		const organizationContext = await resolveOrganizationMessagingContext(organizationId);
 		const hasHubAccess = params.hasHubAccess ?? organizationContext.hasHubAccess;
 		// Resolve favorite and suggested product names in a single indexed lookup to avoid an extra round-trip on the hot path.
@@ -298,7 +243,7 @@ export async function sendReservedInteraction(
 		const clientFavoriteProduct = client.metadataProdutoMaisCompradoId ? (productNameById.get(client.metadataProdutoMaisCompradoId) ?? "") : "";
 		const clientSuggestedProduct = client.metadataProdutoSugeridoId ? (productNameById.get(client.metadataProdutoSugeridoId) ?? "") : "";
 
-		const cashbackTerminology = effectiveContextMetadados?.terminologia ?? organizationContext.organizationCashbackTerminology;
+		const cashbackTerminology = contextMetadados?.terminologia ?? organizationContext.organizationCashbackTerminology;
 		const messageTemplateVariablesValuesMap = buildInteractionMessageVariables({
 			client: {
 				nome: client.nome,
@@ -309,14 +254,14 @@ export async function sendReservedInteraction(
 				metadataProdutoMaisCompradoNome: clientFavoriteProduct,
 				metadataProdutoSugeridoNome: clientSuggestedProduct,
 			},
-			contextMetadados: effectiveContextMetadados,
+			contextMetadados,
 			terminology: cashbackTerminology,
 		});
 		const runtimeContext: TMessageTemplateRuntimeContext = {
 			origin: process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_URL || "",
 			organizacaoId: organizationId,
 			clienteId: client.id,
-			interactionId,
+			interactionId: messageKey,
 			variaveis: messageTemplateVariablesValuesMap,
 			cabecalhoMidiaUrl:
 				campaign.whatsappTemplate.conteudo.cabecalho?.tipo === "IMAGEM_DINAMICA"
@@ -324,19 +269,13 @@ export async function sendReservedInteraction(
 					: campaign.whatsappTemplate.conteudo.cabecalho?.conteudoMidiaUrl,
 		};
 
-		const renderedWhatsappContent = buildWhatsappPlainContent({
-			template: campaign.whatsappTemplate,
-			variables: runtimeContext.variaveis,
-		});
+		const renderedWhatsappContent = buildWhatsappPlainContent({ template: campaign.whatsappTemplate, variables: runtimeContext.variaveis });
 
-		const channelErrors: Record<string, string> = {};
-		const channelsAttempted: string[] = [];
-		const channelsSkipped: string[] = [];
 		let whatsappMessageId: string | undefined;
 		let emailMessageId: string | undefined;
-		let interactionStatusEnvio: "PENDENTE" | "ENVIADO" = "ENVIADO";
-		let interactionClientMessageId: string | undefined;
-		let interactionJobId: string | undefined;
+		let statusEnvio: TCampaignDeliveryResult["statusEnvio"] = "ENVIADO";
+		let clientMessageId: string | undefined;
+		let jobId: string | undefined;
 
 		if (!effectivePhoneNumber) {
 			channelsSkipped.push("WHATSAPP: cliente sem telefone");
@@ -346,7 +285,7 @@ export async function sendReservedInteraction(
 			channelsAttempted.push("WHATSAPP");
 			try {
 				const whatsappConnectionPhone = await db.query.whatsappConnectionPhones.findFirst({
-					where: (fields, { eq }) => eq(fields.id, campaign.whatsappConexaoTelefoneId as string),
+					where: (fields, { eq: eqFilter }) => eqFilter(fields.id, campaign.whatsappConexaoTelefoneId as string),
 					columns: { id: true, conexaoId: true, whatsappTelefoneId: true },
 				});
 				if (!whatsappConnectionPhone) throw new Error("Telefone de conexao do WhatsApp nao encontrado.");
@@ -389,14 +328,13 @@ export async function sendReservedInteraction(
 
 				if (whatsappToken && whatsappConnectionPhone.whatsappTelefoneId) {
 					if (testing?.disableWhatsappCloudApi) {
-						whatsappMessageId = `test-whatsapp-message-${interactionId}`;
+						whatsappMessageId = `test-whatsapp-message-${messageKey}`;
 					} else {
 						const sentWhatsappTemplateResponse = await sendTemplateWhatsappMessage({
 							fromPhoneNumberId: whatsappConnectionPhone.whatsappTelefoneId,
 							templatePayload: payload,
 							whatsappToken,
 						});
-						// console.log("[SEND_RESERVED_INTERACTION] WhatsApp template sent successfully:", sentWhatsappTemplateResponse);
 						whatsappMessageId = sentWhatsappTemplateResponse.whatsappMessageId;
 					}
 				} else if (whatsappSessionId) {
@@ -404,24 +342,24 @@ export async function sendReservedInteraction(
 					const templateContent = parseTemplatePayloadToGatewayContent(gatewayPayload, { fallbackText: renderedWhatsappContent });
 
 					if (testing?.disableInternalGateway) {
-						interactionJobId = `test-gateway-job-${interactionId}`;
+						jobId = `test-gateway-job-${messageKey}`;
 					} else {
 						const sentWhatsappTemplateResponse = await sendMessage(
 							whatsappSessionId,
 							formatPhoneForInternalGateway(effectivePhoneNumber),
 							templateContent,
 							{
-								clientMessageId: interactionId,
+								clientMessageId: messageKey,
 							},
 						);
 						if (!sentWhatsappTemplateResponse.success) {
 							throw new Error(sentWhatsappTemplateResponse.error || "Falha ao enfileirar mensagem no Gateway Interno.");
 						}
-						interactionJobId = sentWhatsappTemplateResponse.jobId;
+						jobId = sentWhatsappTemplateResponse.jobId;
 					}
 
-					interactionStatusEnvio = "PENDENTE";
-					interactionClientMessageId = interactionId;
+					statusEnvio = "PENDENTE";
+					clientMessageId = messageKey;
 				} else {
 					throw new Error("WhatsApp token or session ID is required.");
 				}
@@ -436,7 +374,7 @@ export async function sendReservedInteraction(
 				.update(chatMessages)
 				.set({
 					...(whatsappMessageId ? { whatsappMessageId } : {}),
-					statusEntrega: interactionStatusEnvio === "PENDENTE" ? "PENDENTE" : "ENVIADA",
+					statusEntrega: statusEnvio === "PENDENTE" ? "PENDENTE" : "ENVIADA",
 				})
 				.where(eq(chatMessages.id, insertedChatMessageId));
 		}
@@ -475,104 +413,66 @@ export async function sendReservedInteraction(
 						},
 					},
 				);
-				// console.log("[SEND_RESERVED_INTERACTION] Email sent successfully:", emailResult);
 				emailMessageId = (emailResult.data as { id?: string } | null | undefined)?.id;
 			} catch (error) {
 				channelErrors.EMAIL = error instanceof Error ? error.message : "Falha desconhecida no e-mail.";
 			}
 		}
 
-		const successfulChannels = [whatsappMessageId || interactionJobId ? "WHATSAPP" : null, emailMessageId ? "EMAIL" : null].filter(
-			(channel): channel is string => Boolean(channel),
+		const channelsSent = [whatsappMessageId || jobId ? "WHATSAPP" : null, emailMessageId ? "EMAIL" : null].filter((channel): channel is string =>
+			Boolean(channel),
 		);
-		const whatsappStatus = whatsappMessageId || interactionJobId ? interactionStatusEnvio : channelErrors.WHATSAPP ? "FALHOU" : null;
+		const whatsappStatus = whatsappMessageId || jobId ? statusEnvio : channelErrors.WHATSAPP ? "FALHOU" : null;
 		const emailStatus = emailMessageId ? "ENVIADO" : channelErrors.EMAIL ? "FALHOU" : null;
 
-		if (channelsAttempted.length === 0) {
-			const errorMessage = "Cliente nao possui telefone nem e-mail para envio.";
-			await blockInteractionSend({
-				interactionId,
-				organizationId,
-				errorMessage,
-			});
-			await persistInteractionDeliveryState({
-				interactionId,
-				organizationId,
-				statusEnvio: "BLOQUEADA",
-				erroEnvio: errorMessage,
-				messageTemplateId: campaign.whatsappTemplate.id,
-				channelsAttempted,
-				channelsSkipped,
-				channelsSent: [],
-				channelErrors,
-			});
-			return {
-				success: false,
-				status: "FAILED",
-				error: errorMessage,
-				channelsAttempted,
-				channelsSkipped,
-				channelsSent: [],
-				channelErrors,
-			};
-		}
-
-		if (successfulChannels.length === 0) {
-			const errorMessage = Object.values(channelErrors).join(" | ") || "Houve uma falha ao enviar a mensagem.";
-			await failInteractionSend({ interactionId, organizationId, errorMessage, insertedChatMessageId });
-			await persistInteractionDeliveryState({
-				interactionId,
-				organizationId,
-				statusEnvio: "FALHOU",
-				erroEnvio: errorMessage,
-				chatMessageId: insertedChatMessageId,
-				messageTemplateId: campaign.whatsappTemplate.id,
-				channelsAttempted,
-				channelsSkipped,
-				channelsSent: [],
-				channelErrors,
-				whatsappStatus,
-				emailStatus,
-			});
-			return { success: false, status: "FAILED", error: errorMessage, channelsAttempted, channelsSkipped, channelsSent: [], channelErrors };
-		}
-
-		await persistInteractionDeliveryState({
-			interactionId,
-			organizationId,
-			statusEnvio: interactionStatusEnvio,
-			erroEnvio: Object.keys(channelErrors).length > 0 ? Object.values(channelErrors).join(" | ") : null,
-			chatMessageId: insertedChatMessageId,
+		const base = {
+			statusEnvio,
+			channelsAttempted,
+			channelsSkipped,
+			channelsSent,
+			channelErrors,
 			whatsappMessageId,
 			emailMessageId,
-			clientMessageId: interactionClientMessageId,
-			jobId: interactionJobId,
-			messageTemplateId: campaign.whatsappTemplate.id,
-			channelsAttempted,
-			channelsSkipped,
-			channelsSent: successfulChannels,
-			channelErrors,
+			jobId,
+			clientMessageId,
+			chatMessageId: insertedChatMessageId,
 			whatsappStatus,
 			emailStatus,
-		});
+		};
+
+		if (channelsAttempted.length === 0) {
+			return { ...base, outcome: "NO_CONTACT", error: "Cliente nao possui telefone nem e-mail para envio." };
+		}
+
+		if (channelsSent.length === 0) {
+			return { ...base, outcome: "FAILED", error: Object.values(channelErrors).join(" | ") || "Houve uma falha ao enviar a mensagem." };
+		}
 
 		return {
-			success: true,
-			status: interactionStatusEnvio === "PENDENTE" ? "QUEUED" : "SENT",
-			channelsAttempted,
-			channelsSkipped,
-			channelsSent: successfulChannels,
-			channelErrors,
+			...base,
+			outcome: statusEnvio === "PENDENTE" ? "QUEUED" : "SENT",
+			error: Object.keys(channelErrors).length > 0 ? Object.values(channelErrors).join(" | ") : null,
 		};
 	} catch (error) {
-		console.error(`[INTERACTIONS] Failed to send interaction ${interactionId}:`, error);
-		await failInteractionSend({
-			interactionId,
-			organizationId,
-			errorMessage: "Houve uma falha ao enviar a mensagem.",
-			insertedChatMessageId,
-		});
-
-		return { success: false, status: "FAILED", error: error instanceof Error ? error.message : "Unknown error" };
+		console.error(`[CAMPAIGN_DELIVERY] Falha inesperada ao entregar a mensagem ${messageKey}:`, error);
+		if (insertedChatMessageId) {
+			await db
+				.update(chatMessages)
+				.set({ statusEntrega: "FALHA" })
+				.where(eq(chatMessages.id, insertedChatMessageId))
+				.catch(() => undefined);
+		}
+		return {
+			outcome: "FAILED",
+			statusEnvio: "ENVIADO",
+			error: error instanceof Error ? error.message : "Houve uma falha ao enviar a mensagem.",
+			channelsAttempted,
+			channelsSkipped,
+			channelsSent: [],
+			channelErrors,
+			chatMessageId: insertedChatMessageId,
+			whatsappStatus: null,
+			emailStatus: null,
+		};
 	}
 }

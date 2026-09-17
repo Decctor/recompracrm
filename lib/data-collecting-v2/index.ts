@@ -5,7 +5,7 @@ import { resolveIfoodManagementContext } from "@/lib/integrations/ifood/context"
 import { confirmIfoodOrder } from "@/lib/integrations/ifood/orders";
 import { getChannelErpPolicy } from "@/lib/sales/fulfillment-channels/policy";
 import { processSaleAutomaticFiscalEmissionIfEligible } from "@/lib/sales/sale-processing/process-sale-automatic-fiscal-emission";
-import { processOrganizationInteractionsBatch, type ImmediateProcessingData } from "@/lib/interactions";
+import { publishEventDispatches, type TEventDispatchResult } from "@/lib/campaigns/engine";
 import { db } from "@/services/drizzle";
 import { integrations, organizations } from "@/services/drizzle/schema";
 import { isAxiosError } from "axios";
@@ -128,24 +128,42 @@ async function processIntegration({
 	window,
 	effects,
 	includeRawInResult,
+	publishDispatches,
 }: {
 	integration: TDataSourceIntegration;
 	organizationConfiguration: (typeof organizations.$inferSelect)["configuracao"] | null;
 	window: TCanonicalImportWindow;
 	effects: TDataCollectingV2EffectsOptions;
 	includeRawInResult?: boolean;
+	publishDispatches?: boolean;
 }) {
-	const batch = await fetchConnectorImportBatch({ organizationId: integration.organizacaoId, integrationId: integration.id, config: integration.configuracao, window });
-	return persistCanonicalBatch({ integration, organizationConfiguration, batch, effects, includeRawInResult, mode: "CONTINUA" });
+	const batch = await fetchConnectorImportBatch({
+		organizationId: integration.organizacaoId,
+		integrationId: integration.id,
+		config: integration.configuracao,
+		window,
+	});
+	return persistCanonicalBatch({ integration, organizationConfiguration, batch, effects, includeRawInResult, publishDispatches, mode: "CONTINUA" });
 }
 
-export async function persistCanonicalBatch({ integration, organizationConfiguration, batch, effects: requestedEffects, mode, includeRawInResult = false, onPersist }: {
+export async function persistCanonicalBatch({
+	integration,
+	organizationConfiguration,
+	batch,
+	effects: requestedEffects,
+	mode,
+	includeRawInResult = false,
+	publishDispatches = true,
+	onPersist,
+}: {
 	integration: TDataSourceIntegration;
 	organizationConfiguration: (typeof organizations.$inferSelect)["configuracao"] | null;
 	batch: TCanonicalImportBatch;
 	effects: TDataCollectingV2EffectsOptions;
 	mode: "HISTORICO" | "CONTINUA";
 	includeRawInResult?: boolean;
+	// false = cria os disparos mas não publica (scripts de sincronização manual sem envio).
+	publishDispatches?: boolean;
 	onPersist?: (tx: import("@/services/drizzle").DBTransaction, summary: TDataCollectingV2RunSummary) => Promise<void>;
 }) {
 	const effects = mode === "HISTORICO" ? { processCashback: false, processCampaigns: false, processConversionAttribution: false } : requestedEffects;
@@ -156,7 +174,7 @@ export async function persistCanonicalBatch({ integration, organizationConfigura
 		organizationConfiguration,
 	};
 	const campaignsForOrganization = effects.processCampaigns ? await loadPurchaseEffectCampaigns(db, organizationId) : [];
-	let immediateProcessingDataList: ImmediateProcessingData[] = [];
+	let eventDispatches: TEventDispatchResult[] = [];
 	let fiscalEmissionCandidateSaleIds: string[] = [];
 	// Hoisted para os hooks pós-commit (aceite automático iFood + cupom automático no becameValid).
 	let persistedSalesForPostCommit: TPersistedSaleForEffects[] = [];
@@ -184,7 +202,7 @@ export async function persistCanonicalBatch({ integration, organizationConfigura
 			options: effects,
 		});
 
-		immediateProcessingDataList = effectsResult.immediateProcessingDataList;
+		eventDispatches = effectsResult.eventDispatches;
 
 		const result: TDataCollectingV2RunSummary = {
 			organizationId,
@@ -200,19 +218,26 @@ export async function persistCanonicalBatch({ integration, organizationConfigura
 			createdSellersCount: auxiliaryContext.createdSellersCount,
 			createdPartnersCount: auxiliaryContext.createdPartnersCount,
 			resolvedCampaignAudiencesCount: audiencesByCampaignId.size,
-			createdInteractionsCount: effectsResult.createdInteractionsCount,
-			immediateInteractionsCount: effectsResult.immediateInteractionsCount,
+			// Contagens de disparos de campanha (uma mensagem por disparo de evento).
+			createdInteractionsCount: effectsResult.createdDispatchesCount,
+			immediateInteractionsCount: effectsResult.immediateDispatchesCount,
 			cashbackTransactionsCount: effectsResult.cashbackTransactionsCount,
 			cashbackAccumulatedValue: effectsResult.cashbackAccumulatedValue,
-			firstPurchaseInteractionsCount: effectsResult.firstPurchaseInteractionsCount,
-			cashbackAccumulationInteractionsCount: effectsResult.cashbackAccumulationInteractionsCount,
+			firstPurchaseInteractionsCount: effectsResult.firstPurchaseDispatchesCount,
+			cashbackAccumulationInteractionsCount: effectsResult.cashbackAccumulationDispatchesCount,
 		};
 		await onPersist?.(tx, result);
 		return result;
 	});
 
-	if (mode === "HISTORICO") return { summary, immediateProcessingDataList: [], raw: undefined };
+	if (mode === "HISTORICO") return { summary, eventDispatches: [], raw: undefined };
 	await batch.postProcess?.();
+
+	// Disparos de campanha imediatos: publicados só depois do commit (a fila não pode receber
+	// trabalho que ainda pode dar rollback). Os com atraso ficam para o relógio.
+	if (publishDispatches && eventDispatches.length > 0) {
+		await publishEventDispatches(eventDispatches);
+	}
 
 	// Aceite automático iFood (pós-commit): pedidos ainda não válidos e não cancelados = PLACED
 	// (único estado pré-confirmação do ciclo). `skipped` NÃO filtra de propósito: um confirm que
@@ -300,7 +325,7 @@ export async function persistCanonicalBatch({ integration, organizationConfigura
 
 	return {
 		summary,
-		immediateProcessingDataList,
+		eventDispatches,
 		raw: includeRawInResult ? batch.raw : undefined,
 	};
 }
@@ -323,17 +348,18 @@ export async function runDataCollectingV2({
 	);
 	const summaries: TDataCollectingV2RunSummary[] = [];
 	const rawBatches: TDataCollectingV2RawBatch[] = [];
-	const allImmediateProcessingData: ImmediateProcessingData[] = [];
+	const allEventDispatches: TEventDispatchResult[] = [];
 	const errors: TDataCollectingV2RunError[] = [];
 
 	for (const integration of integrationsForImport) {
 		try {
-			const { summary, immediateProcessingDataList, raw } = await processIntegration({
+			const { summary, eventDispatches, raw } = await processIntegration({
 				integration,
 				organizationConfiguration: organizationConfigurationsById.get(integration.organizacaoId)?.configuracao ?? null,
 				window,
 				effects,
 				includeRawInResult,
+				publishDispatches: processImmediateInteractions,
 			});
 			console.log(`[DATA_COLLECTING_V2] [ORG: ${integration.organizacaoId}] [INTEGRATION: ${integration.id}] Summary`, summary);
 			summaries.push(summary);
@@ -354,7 +380,7 @@ export async function runDataCollectingV2({
 					raw,
 				});
 			}
-			allImmediateProcessingData.push(...immediateProcessingDataList);
+			allEventDispatches.push(...eventDispatches);
 
 			// "Última sincronização" finalmente mantida: a linha da conexão registra o fim de cada
 			// run bem-sucedido. Colisões fail-closed não derrubam o status (a conexão funciona),
@@ -391,50 +417,9 @@ export async function runDataCollectingV2({
 		}
 	}
 
-	if (processImmediateInteractions && allImmediateProcessingData.length > 0) {
-		const interactionsByOrganizationId = new Map<string, ImmediateProcessingData[]>();
-		for (const interaction of allImmediateProcessingData) {
-			const interactions = interactionsByOrganizationId.get(interaction.organizationId) ?? [];
-			interactions.push(interaction);
-			interactionsByOrganizationId.set(interaction.organizationId, interactions);
-		}
-
-		for (const [organizationId, interactions] of interactionsByOrganizationId) {
-			try {
-				const processingSummary = await processOrganizationInteractionsBatch({ organizationId, interactions });
-				const failedResults = processingSummary.results.filter((result) => !result.success);
-
-				if (failedResults.length > 0) {
-					for (const failedResult of failedResults) {
-						console.error(
-							`[DATA_COLLECTING_V2] [ORG: ${organizationId}] Immediate interaction ${failedResult.interactionId} finished with status ${failedResult.status}`,
-							serializeDataCollectingError(failedResult.error),
-						);
-					}
-
-					errors.push({
-						organizationId,
-						integrationId: null,
-						integrationType: null,
-						message: `${failedResults.length} de ${processingSummary.total} interações imediatas não foram processadas com sucesso.`,
-					});
-				}
-			} catch (error) {
-				const message = error instanceof Error ? error.message : "Erro desconhecido ao processar interações imediatas.";
-				console.error(`[DATA_COLLECTING_V2] [ORG: ${organizationId}] Immediate interactions processing failed`, serializeDataCollectingError(error));
-				errors.push({
-					organizationId,
-					integrationId: null,
-					integrationType: null,
-					message,
-				});
-			}
-		}
-	}
-
 	return {
 		summaries,
-		immediateProcessingDataList: allImmediateProcessingData,
+		eventDispatches: allEventDispatches,
 		errors,
 		...(includeRawInResult ? { rawBatches } : {}),
 	};

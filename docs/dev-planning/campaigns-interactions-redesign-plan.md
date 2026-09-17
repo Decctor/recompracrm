@@ -7,6 +7,35 @@
 
 ---
 
+## Implementação (2026-09-17)
+
+**As Fases 0–5 estão implementadas no código**; falta aplicar o schema no banco e rodar o cutover.
+
+| Peça | Onde |
+|---|---|
+| Ledger por janela (`send_counters`, DIARIO + SEMANAL, claim em ordem fixa, release nas chaves da reserva) | `lib/interactions/send-counters.ts` (+ `.test.ts`) |
+| Journal de disparos (`campaign_dispatches`, `campaign_dispatch_recipients`) | `services/drizzle/schema/campaign-dispatches.ts` |
+| Relógio (cron `*/10`) + consumers Queues `campaign-dispatch-expand` / `campaign-dispatch-send` | `lib/campaigns/dispatch/{clock,expand,send}.ts`, `app/api/cron/campaign-dispatches`, `app/api/queues/campaign-dispatch-*` |
+| Entrega ao provedor sem tocar em `interactions` | `lib/campaigns/dispatch/deliver.ts` |
+| Bônus no envio (projeção antes, concessão na transação do registro; estorno apagado) | `lib/campaigns/dispatch/bonus.ts` |
+| Motor único de gatilhos + cap de frequência único + disparos de evento + segmentação | `lib/campaigns/engine/` (+ `triggers.test.ts`) |
+| Webhooks unificados (`applyProviderStatusUpdate`) | `lib/interactions/delivery-state.ts` |
+| Painel de disparos (status, totais, pulos por motivo, reexecutar) | `app/api/campaigns/dispatches`, `campaign-dispatches-section.tsx` |
+| Limite diário da organização (`limiteMensagensDiariasViaCampanhas`) | `schemas/organizations.ts`, `SettingsOutbound.tsx` |
+| Migração (3 passos) | `drizzle/0109_campaign_dispatch_pipeline.sql` → `npm run migrate:pending-interactions-to-dispatches -- --apply` → `drizzle/0110_interactions_shed_queue_columns.sql` |
+
+Apagados: os três crons horários, `campaign-weekly-limits.ts`, `weekly-send-counters.ts`, `send-reserved-interaction.ts`, `process-*-interaction(s).ts`, `reverse-campaign-cashback.ts`, `purchase-trigger-priority.ts` (absorvido pelo engine), `recover-single-use-campaign.ts`, `backfill-campaign-interaction-delivery-dates.ts`, os dois scripts de teste de quota.
+
+Decisões tomadas na implementação (além da Parte 4):
+- `NOVA-COMPRA` dispara numa primeira compra quando nenhuma `PRIMEIRA-COMPRA` se aplica (comportamento do POI; integrações antes suprimiam).
+- Campanha de disparo único é desativada quando o disparo **conclui** (nunca antes); audiência vazia deixa a campanha ativa com o disparo `CONCLUIDA` + erro visível.
+- Quota esgotada no meio de um disparo marca todos os destinatários restantes como `PULADA/QUOTA_*` (o painel permite reenviá-los na janela seguinte).
+- Reserva parada (queda entre envio e registro) volta à fila após 15 min com a mesma chave de idempotência; Meta Cloud pode duplicar nesse caso (gateway interno deduplica por `clientMessageId`).
+- `dataExecucao` permanece em `interactions` como instante do envio (âncora de atribuição e de quota); `interactions.metadados` e `recipients.contexto` usam o mesmo Zod (`schemas/interactions.ts`).
+- Envio de teste do construtor grava a interação com `metadados.teste = true` e fica fora de quota/estatísticas.
+
+---
+
 ## Current state (2026-09-17) — what the July audit got wrong
 
 The **target architecture is still the work**. What changed is that Phase 0 is mostly done and the weekly ledger already exists, so Part 1's line numbers and a few "root cause" mechanisms are stale. The four-roles problem, the three-cron 300s pump, bonus-at-enqueue, and the missing outbox are not.

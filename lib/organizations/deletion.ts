@@ -12,8 +12,11 @@ import {
 	audienceDestinations,
 	audiences,
 	campaignConversions,
+	campaignDispatchRecipients,
+	campaignDispatches,
 	campaignSegmentations,
 	campaigns,
+	sendCounters,
 	cashbackProgramBalances,
 	cashbackProgramPrizes,
 	cashbackProgramTransactions,
@@ -174,6 +177,10 @@ export async function deleteAllOrganizationData({
 	// --- Marketing / campanhas (vínculos) ---
 	await trx.delete(campaignConversions).where(eq(campaignConversions.organizacaoId, organizationId));
 	await trx.delete(campaignSegmentations).where(eq(campaignSegmentations.organizacaoId, organizationId));
+	// Pipeline de disparos: destinatários antes dos disparos (FK); contadores de quota por último.
+	await trx.delete(campaignDispatchRecipients).where(eq(campaignDispatchRecipients.organizacaoId, organizationId));
+	await trx.delete(campaignDispatches).where(eq(campaignDispatches.organizacaoId, organizationId));
+	await trx.delete(sendCounters).where(eq(sendCounters.organizacaoId, organizationId));
 
 	// --- Cashback (movimentações) ---
 	await trx.delete(cashbackProgramTransactions).where(eq(cashbackProgramTransactions.organizacaoId, organizationId));

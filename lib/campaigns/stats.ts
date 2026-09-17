@@ -1,6 +1,6 @@
 import { CAMPAIGN_SENT_INTERACTION_STATUSES } from "@/lib/campaigns/utils";
 import { countIncrementalConversionsExpr, sumIncrementalRevenueExpr } from "@/lib/conversions/incremental";
-import { checkCampaignWeeklyInteractionLimit } from "@/lib/interactions/campaign-weekly-limits";
+import { getSendQuotaStatus } from "@/lib/interactions/send-counters";
 import { db } from "@/services/drizzle";
 import { campaignConversions, campaigns, interactions } from "@/services/drizzle/schema";
 import dayjs from "dayjs";
@@ -43,7 +43,6 @@ export const GetCampaignStatsInputSchema = z.object({
 export type TGetCampaignStatsInput = z.infer<typeof GetCampaignStatsInputSchema>;
 
 export async function getCampaignStats({ input, organizacaoId }: { input: TGetCampaignStatsInput; organizacaoId: string }) {
-
 	// Verify campaign exists and belongs to the organization
 	const campaign = await db.query.campaigns.findFirst({
 		where: and(eq(campaigns.id, input.campaignId), eq(campaigns.organizacaoId, organizacaoId)),
@@ -95,10 +94,7 @@ export async function getCampaignStats({ input, organizacaoId }: { input: TGetCa
 					lte(campaignConversions.dataConversao, input.endDate),
 				),
 			),
-		checkCampaignWeeklyInteractionLimit({
-			organizationId: organizacaoId,
-			campaignId: input.campaignId,
-		}),
+		getSendQuotaStatus({ organizationId: organizacaoId, campaignId: input.campaignId }),
 	]);
 
 	const interacoesEnviadas = interactionsResult[0]?.total ?? 0;
@@ -138,16 +134,15 @@ export async function getCampaignStats({ input, organizacaoId }: { input: TGetCa
 			receitaIncremental: Math.round(receitaIncremental * 100) / 100,
 			tempoMedioConversaoHoras: Math.round(tempoMedioConversaoHoras * 100) / 100,
 			ticketMedioConversao: Math.round(ticketMedioConversao * 100) / 100,
+			// Quota por janela (dia e semana), organização e campanha, lida do ledger de contadores.
+			quota: weeklyLimitResult,
 			limiteSemanal: {
-				...weeklyLimitResult,
-				campaignRemainingThisWeek:
-					weeklyLimitResult.campaignEffectiveWeeklyLimit == null
-						? null
-						: Math.max(weeklyLimitResult.campaignEffectiveWeeklyLimit - weeklyLimitResult.campaignUsedThisWeek, 0),
-				organizationRemainingThisWeek:
-					weeklyLimitResult.organizationWeeklyLimit == null
-						? null
-						: Math.max(weeklyLimitResult.organizationWeeklyLimit - weeklyLimitResult.organizationUsedThisWeek, 0),
+				campaignEffectiveWeeklyLimit: weeklyLimitResult.find((w) => w.tipo === "SEMANAL")?.campanha.limite ?? null,
+				campaignUsedThisWeek: weeklyLimitResult.find((w) => w.tipo === "SEMANAL")?.campanha.usados ?? 0,
+				campaignRemainingThisWeek: weeklyLimitResult.find((w) => w.tipo === "SEMANAL")?.campanha.restante ?? null,
+				organizationWeeklyLimit: weeklyLimitResult.find((w) => w.tipo === "SEMANAL")?.organizacao.limite ?? null,
+				organizationUsedThisWeek: weeklyLimitResult.find((w) => w.tipo === "SEMANAL")?.organizacao.usados ?? 0,
+				organizationRemainingThisWeek: weeklyLimitResult.find((w) => w.tipo === "SEMANAL")?.organizacao.restante ?? null,
 			},
 			periodoInicio: input.startDate,
 			periodoFim: input.endDate,

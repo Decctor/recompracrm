@@ -1,3 +1,4 @@
+import type { TInteractionContextMetadata } from "@/schemas/interactions";
 import type { TCampaignTriggerTypeEnum, TCashbackProgramTerminologyEnum } from "@/schemas/enums";
 
 export type TMessageTemplateVariableContextGroup = "CLIENTE" | "COMPRA" | "CASHBACK" | "CASHBACK_EXPIRANDO" | "CUPOM" | "PROMOCAO";
@@ -218,33 +219,9 @@ export const MessageTemplateVariables: TMessageTemplateVariable[] = [
 	},
 ];
 
-export type TInteractionContextMetadados = {
-	terminologia?: TCashbackProgramTerminologyEnum;
-	compraValor?: number;
-	compraCashbackAcumulado?: number;
-	compraCashbackNovoSaldo?: number;
-	compraVendedorNome?: string;
-	compraQuantidadeTotal?: number;
-	compraValorTotalAcumulado?: number;
-	cashbackAcumuladoValor?: number;
-	cashbackSaldoDisponivel?: number;
-	cashbackTotalAcumuladoVida?: number;
-	cashbackTotalResgatadoVida?: number;
-	cashbackExpirandoValor?: number;
-	cashbackExpirandoData?: string;
-	cashbackExpirandoJanela?: string;
-	cupomCodigo?: string;
-	cupomTitulo?: string;
-	cupomExpiracaoData?: string;
-	// Snapshot do produto sugerido da promoção, resolvido por cliente no enfileiramento
-	// (ver lib/campaigns/promotion-suggestion.ts). Congelar aqui mantém a mensagem estável
-	// mesmo que o catálogo mude entre o enfileiramento e o envio.
-	promocaoProdutoId?: string;
-	promocaoProdutoNome?: string;
-	promocaoProdutoPrecoOriginal?: number;
-	promocaoProdutoPrecoPromocional?: number; // preço efetivo (sobrescrita ?? preço de venda)
-	promocaoProdutoImagemUrl?: string; // sem uso na v1; habilita o cabeçalho dinâmico da v2
-};
+// Forma única do contexto de variáveis (schemas/interactions.ts): o mesmo schema vale para
+// interactions.metadados e para campaign_dispatch_recipients.contexto.
+export type TInteractionContextMetadados = TInteractionContextMetadata;
 
 export const MESSAGE_TEMPLATE_VARIABLE_CONTEXT_GROUP_LABELS: Record<TMessageTemplateVariableContextGroup, string> = {
 	CLIENTE: "Dados do Cliente",

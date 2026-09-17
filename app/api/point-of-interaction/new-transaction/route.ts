@@ -4,15 +4,18 @@ import { recomputeClientDuplicatesSafely } from "@/lib/clients/duplicates";
 import { accumulateCashbackForClient, calculateAccumulatedCashbackValue, ensureCashbackBalanceForClient } from "@/lib/cashback/accumulation";
 import { type TValidatedPrizeForRedemption, validatePrizeForRedemption } from "@/lib/cashback/prizes";
 import { applyCashbackRedemptionFIFO } from "@/lib/cashback/redemption";
-import { campaignAudienceHasClient, resolveCampaignAudiencesByCampaignId } from "@/lib/campaigns/filters";
-import { applyCampaignBonusToInteractionMetadata, buildBasePurchaseInteractionMetadata } from "@/lib/campaigns/interaction-metadata";
-import { resolveExclusivePurchaseTriggerCampaigns } from "@/lib/campaigns/purchase-trigger-priority";
+import {
+	canScheduleCampaignForClient,
+	createEventCampaignDispatch,
+	publishEventDispatches,
+	resolveTriggeredCampaigns,
+	type TEventDispatchResult,
+} from "@/lib/campaigns/engine";
+import { resolveCampaignAudiencesByCampaignId } from "@/lib/campaigns/filters";
+import { buildBasePurchaseInteractionMetadata } from "@/lib/campaigns/interaction-metadata";
 import { processConversionAttribution } from "@/lib/conversions/attribution";
-import { DASTJS_TIME_DURATION_UNITS_MAP, getPostponedDateFromReferenceDate } from "@/lib/dates";
 import { formatCashbackValue, formatPhoneAsBase } from "@/lib/formatting";
 import { isValidCpfCnpj } from "@/lib/validation";
-import { type ImmediateProcessingData, processOrganizationInteractionsBatch, processSingleInteractionImmediately } from "@/lib/interactions";
-import { createCampaignWeeklyLimitCache } from "@/lib/interactions/campaign-weekly-limits";
 import { evaluateCouponAgainstSaleValue } from "@/lib/coupons/engine";
 import { processCouponRedemption } from "@/lib/coupons/redemption";
 import { countPreviousConfirmedPurchases, lockClientPurchaseHistory } from "@/lib/coupons/purchase-history";
@@ -26,66 +29,14 @@ import {
 	poiSaleRequiresValueConfirmation,
 	saleValuesMatch,
 } from "@/lib/point-of-interaction/sale-value-confirmation";
-import type { TInteractionContextMetadados } from "@/lib/message-templates";
-import type { TCashbackProgramTerminologyEnum, TTimeDurationUnitsEnum } from "@/schemas/enums";
 import { type DBTransaction, db } from "@/services/drizzle";
-import {
-	cashbackProgramTransactions,
-	cashbackPrograms,
-	clients,
-	couponRedemptions,
-	interactions,
-	partners,
-	saleItems,
-	sales,
-} from "@/services/drizzle/schema";
+import { cashbackProgramTransactions, cashbackPrograms, clients, couponRedemptions, partners, saleItems, sales } from "@/services/drizzle/schema";
 import { waitUntil } from "@vercel/functions";
-import dayjs from "dayjs";
 import { and, eq } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import z from "zod";
 import { attendanceStatusValues } from "@/lib/sales/sale-processing/attendance";
-
-/**
- * Helper function to check if a campaign can be scheduled for a client based on frequency rules
- */
-async function canScheduleCampaignForClient(
-	tx: DBTransaction,
-	clienteId: string,
-	campanhaId: string,
-	permitirRecorrencia: boolean,
-	frequenciaIntervaloValor: number | null,
-	frequenciaIntervaloMedida: string | null,
-): Promise<boolean> {
-	if (!permitirRecorrencia) {
-		const previousInteraction = await tx.query.interactions.findFirst({
-			where: (fields, { and, eq }) => and(eq(fields.clienteId, clienteId), eq(fields.campanhaId, campanhaId)),
-		});
-		if (previousInteraction) {
-			console.log(`[CAMPAIGN_FREQUENCY] Campaign ${campanhaId} does not allow recurrence. Skipping for client ${clienteId}.`);
-			return false;
-		}
-	}
-
-	if (permitirRecorrencia && frequenciaIntervaloValor && frequenciaIntervaloValor > 0 && frequenciaIntervaloMedida) {
-		const dayjsUnit = DASTJS_TIME_DURATION_UNITS_MAP[frequenciaIntervaloMedida as TTimeDurationUnitsEnum] || "day";
-		const cutoffDate = dayjs().subtract(frequenciaIntervaloValor, dayjsUnit).toDate();
-
-		const recentInteraction = await tx.query.interactions.findFirst({
-			where: (fields, { and, eq, gt }) => and(eq(fields.clienteId, clienteId), eq(fields.campanhaId, campanhaId), gt(fields.dataInsercao, cutoffDate)),
-		});
-
-		if (recentInteraction) {
-			console.log(
-				`[CAMPAIGN_FREQUENCY] Campaign ${campanhaId} frequency limit reached for client ${clienteId}. Last interaction was at ${recentInteraction.dataInsercao}.`,
-			);
-			return false;
-		}
-	}
-
-	return true;
-}
 
 export const CreatePointOfInteractionTransactionInputSchema = z.object({
 	// Opcional para dispositivos autenticados (a organização deriva do principal); obrigatório no modo legado.
@@ -335,7 +286,7 @@ async function preparePointOfInteractionTransaction({ input, operatorContext, tx
 		});
 		const operatorMembershipUser = operatorMembership?.usuario;
 
-		const immediateProcessingDataList: ImmediateProcessingData[] = [];
+		const eventDispatches: TEventDispatchResult[] = [];
 
 		let transactionSaleId: string | null = null;
 		let transactionAccumulationId: string | null = null;
@@ -442,24 +393,8 @@ async function preparePointOfInteractionTransaction({ input, operatorContext, tx
 			clientCurrentPurchaseCount,
 			clientCurrentPurchaseValue,
 		});
-		const {
-			campaignsForNewPurchase,
-			campaignsForFirstPurchase,
-			campaignsForCashbackAccumulation,
-			campaignsForTotalPurchaseCount,
-			campaignsForTotalPurchaseValue,
-			audiencesByCampaignId,
-		} = await getOrganizationCampaigns({
-			tx,
-			orgId: input.orgId,
-		});
-		console.log(`[POI ${input.orgId}] [CAMPAIGNS APPLICABLE]`, {
-			"CAMPAIGNS FOR NEW PURCHASE": campaignsForNewPurchase.length,
-			"CAMPAIGNS FOR FIRST PURCHASE": campaignsForFirstPurchase.length,
-			"CAMPAIGNS FOR CASHBACK ACCUMULATION": campaignsForCashbackAccumulation.length,
-			"CAMPAIGNS FOR TOTAL PURCHASE COUNT": campaignsForTotalPurchaseCount.length,
-			"CAMPAIGNS FOR TOTAL PURCHASE VALUE": campaignsForTotalPurchaseValue.length,
-		});
+		const { organizationCampaigns, audiencesByCampaignId } = await getOrganizationCampaigns({ tx, orgId: input.orgId });
+		console.log(`[POI ${input.orgId}] [CAMPAIGNS APPLICABLE]`, organizationCampaigns.length);
 		let salePartnerId: string | null = null;
 		let salePartnerClientId: string | null = null;
 		const normalizedPartnerCode = input.sale.partnerCode?.trim().toUpperCase() || null;
@@ -694,23 +629,6 @@ async function preparePointOfInteractionTransaction({ input, operatorContext, tx
 					},
 				});
 			}
-
-			// TODO: Handle campaign proccesing for CASHBACK-ACUMULADO
-			await handleCampaignProcessingForCashbackAccumulation({
-				tx,
-				orgId: input.orgId,
-				cashbackAccumulationCampaigns: campaignsForCashbackAccumulation,
-				audiencesByCampaignId,
-				addToImmediateProcessingDataList: (data: ImmediateProcessingData) => immediateProcessingDataList.push(data),
-				clientId: clientId,
-				clientCashbackToAccumulate: clientNewAccumulatedCashbackValue,
-				clientCashbackAvailableBalance: clientCashbackAvailableBalance,
-				saleValue: effectiveSaleValue,
-				sellerName: operator.nome,
-				clientCashbackAccumulatedBalance: clientCashbackAccumulatedBalance ?? 0,
-				clientCashbackRedeemedBalanceTotal: clientCashbackRedeemedBalanceTotal ?? 0,
-				organizationCashbackTerminology: program.terminologia,
-			});
 		}
 
 		// FIFTH STEP: Processing sale processing (if applicable)
@@ -847,115 +765,68 @@ async function preparePointOfInteractionTransaction({ input, operatorContext, tx
 				clientId,
 			});
 
-			const exclusivePurchaseCampaigns = resolveExclusivePurchaseTriggerCampaigns({
-				campaigns: [
-					...campaignsForFirstPurchase,
-					...(transactionRequiresSaleProcessing ? campaignsForTotalPurchaseCount : []),
-					...campaignsForNewPurchase,
-				],
+			// Motor único de gatilhos (lib/campaigns/engine): a mesma decisão das integrações.
+			const triggered = resolveTriggeredCampaigns({
+				campaigns: organizationCampaigns,
 				audiencesByCampaignId,
-				clientId,
-				isFirstPurchase: clientIsNew,
-				saleValue: effectiveSaleValue,
-				// clientCurrentPurchaseCount was already incremented by this transaction's sale.
-				totalPurchaseCount: transactionRequiresSaleProcessing ? clientCurrentPurchaseCount : null,
-				previousTotalPurchaseCount: transactionRequiresSaleProcessing ? clientCurrentPurchaseCount - 1 : null,
-				allowNewPurchaseOnFirstPurchase: true,
-			});
-			const exclusivePurchaseTrigger = exclusivePurchaseCampaigns[0]?.gatilhoTipo ?? null;
-
-			console.log(`[POI ${input.orgId}] [CAMPAIGNS] Gatilho exclusivo de compra selecionado`, {
-				exclusivePurchaseTrigger,
-				exclusiveCampaignsCount: exclusivePurchaseCampaigns.length,
-			});
-
-			// Processing PRIMEIRA-COMPRA campaign for new clients
-			if (exclusivePurchaseTrigger === "PRIMEIRA-COMPRA")
-				await handleCampaignProcessingForFirstPurchase({
-					tx,
-					orgId: input.orgId,
-					campaignsForFirstPurchase: exclusivePurchaseCampaigns,
-					audiencesByCampaignId,
-					addToImmediateProcessingDataList: (data: ImmediateProcessingData) => immediateProcessingDataList.push(data),
-					saleId: transactionSaleId,
+				sale: {
+					clientId,
+					isFirstPurchase: clientIsNew,
 					saleValue: effectiveSaleValue,
-					clientId: clientId,
-					sellerName: operator.nome,
-					transactionAccumulatedCashback: clientNewAccumulatedCashbackValue,
-					clientCashbackAvailableBalance: clientCashbackAvailableBalance ?? 0,
-					clientCashbackAccumulatedBalance: clientCashbackAccumulatedBalance ?? 0,
-					clientCashbackRedeemedBalanceTotal: clientCashbackRedeemedBalanceTotal ?? 0,
-					organizationCashbackTerminology: program.terminologia,
-				});
+					// clientCurrentPurchaseCount/Value já incluem a venda desta transação.
+					newTotalPurchaseCount: transactionRequiresSaleProcessing ? clientCurrentPurchaseCount : null,
+					previousTotalPurchaseCount: transactionRequiresSaleProcessing ? clientCurrentPurchaseCount - 1 : null,
+					newTotalPurchaseValue: transactionRequiresSaleProcessing ? clientCurrentPurchaseValue : null,
+					previousTotalPurchaseValue: transactionRequiresSaleProcessing ? clientCurrentPurchaseValue - effectiveSaleValue : null,
+					cashbackAccumulatedValue: clientNewAccumulatedCashbackValue > 0 ? clientNewAccumulatedCashbackValue : null,
+					cashbackAvailableBalance: clientCashbackAvailableBalance ?? 0,
+				},
+			});
+			console.log(
+				`[POI ${input.orgId}] [CAMPAIGNS] Campanhas disparadas`,
+				triggered.map(({ campaign, grupo }) => `${grupo}:${campaign.titulo}`),
+			);
 
-			const wouldCauseDoubleInteraction = clientIsNew && campaignsForFirstPurchase.length > 0 && campaignsForNewPurchase.length > 0;
-			if (wouldCauseDoubleInteraction && exclusivePurchaseTrigger === "PRIMEIRA-COMPRA") {
-				console.log(`[POI ${input.orgId}] [NOVA-COMPRA] Pulando campanhas de nova compra para evitar interação duplicada com primeira compra`);
-			}
-
-			// Processing NOVA-COMPRA campaign for existing clients or new clients (if no double interaction would occur)
-			if (exclusivePurchaseTrigger === "NOVA-COMPRA")
-				await handleCampaignProcessingForNewPurchase({
-					tx,
-					orgId: input.orgId,
-					campaignsForNewPurchase: exclusivePurchaseCampaigns,
-					audiencesByCampaignId,
-					addToImmediateProcessingDataList: (data: ImmediateProcessingData) => immediateProcessingDataList.push(data),
-					saleId: transactionSaleId,
-					saleValue: effectiveSaleValue,
-					clientId: clientId,
-					clientRFMTitle: clientRfmTitle,
-					sellerName: operator.nome,
-					transactionAccumulatedCashback: clientNewAccumulatedCashbackValue,
-					clientCashbackAvailableBalance: clientCashbackAvailableBalance ?? 0,
-					clientCashbackAccumulatedBalance: clientCashbackAccumulatedBalance ?? 0,
-					clientCashbackRedeemedBalanceTotal: clientCashbackRedeemedBalanceTotal ?? 0,
-					terminologia: program.terminologia,
-				});
-
-			// QUANTIDADE/VALOR dependem de metadata de compra atualizada — só quando a venda é criada internamente
-			if (transactionRequiresSaleProcessing) {
-				if (exclusivePurchaseTrigger === "QUANTIDADE-TOTAL-COMPRAS") {
-					await handleCampaignProcessingForTotalPurchaseCount({
-						tx,
-						orgId: input.orgId,
-						campaignsForTotalPurchaseCount: exclusivePurchaseCampaigns,
-						audiencesByCampaignId,
-						addToImmediateProcessingDataList: (data: ImmediateProcessingData) => immediateProcessingDataList.push(data),
-						saleId: transactionSaleId,
-						saleValue: effectiveSaleValue,
-						clientId: clientId,
-						clientNewTotalPurchaseCount: clientCurrentPurchaseCount,
-						sellerName: operator.nome,
-						transactionAccumulatedCashback: clientNewAccumulatedCashbackValue,
-						clientCashbackAvailableBalance: clientCashbackAvailableBalance ?? 0,
-						clientCashbackAccumulatedBalance: clientCashbackAccumulatedBalance ?? 0,
-						clientCashbackRedeemedBalanceTotal: clientCashbackRedeemedBalanceTotal ?? 0,
-						organizationCashbackTerminology: program.terminologia,
-					});
+			for (const { campaign, grupo } of triggered) {
+				if (!(await canScheduleCampaignForClient({ executor: tx, campaign, clientId }))) {
+					console.log(`[POI ${input.orgId}] [CAMPAIGN_FREQUENCY] Pulando campanha ${campaign.titulo} para o cliente ${clientId} por frequência.`);
+					continue;
 				}
 
-				await handleCampaignProcessingForTotalPurchaseValue({
+				const contexto = {
+					...buildBasePurchaseInteractionMetadata({
+						terminologia: program.terminologia,
+						saleValue: effectiveSaleValue,
+						transactionAccumulatedCashback: clientNewAccumulatedCashbackValue,
+						availableBalance: clientCashbackAvailableBalance ?? 0,
+						accumulatedTotal: clientCashbackAccumulatedBalance ?? 0,
+						redeemedTotal: clientCashbackRedeemedBalanceTotal ?? 0,
+						sellerName: operator.nome,
+						totalPurchaseCount: transactionRequiresSaleProcessing ? clientCurrentPurchaseCount : undefined,
+						totalPurchaseValue: transactionRequiresSaleProcessing ? clientCurrentPurchaseValue : undefined,
+					}),
+					...(grupo === "CASHBACK" ? { cashbackAcumuladoValor: clientNewAccumulatedCashbackValue } : {}),
+				};
+				const descricao =
+					campaign.gatilhoTipo === "PRIMEIRA-COMPRA"
+						? "Cliente realizou sua primeira compra."
+						: campaign.gatilhoTipo === "NOVA-COMPRA"
+							? `Cliente se enquadrou no parâmetro de nova compra ${clientRfmTitle}.`
+							: campaign.gatilhoTipo === "QUANTIDADE-TOTAL-COMPRAS"
+								? `Cliente atingiu ${clientCurrentPurchaseCount} compras totais (gatilho: ${campaign.gatilhoQuantidadeTotalCompras}).`
+								: campaign.gatilhoTipo === "VALOR-TOTAL-COMPRAS"
+									? `Cliente atingiu R$ ${clientCurrentPurchaseValue.toFixed(2)} em compras totais (gatilho: R$ ${campaign.gatilhoValorTotalCompras?.toFixed(2)}).`
+									: `Cliente acumulou R$ ${clientNewAccumulatedCashbackValue.toFixed(2)} em cashback. Total acumulado: R$ ${(clientCashbackAvailableBalance ?? 0).toFixed(2)}.`;
+
+				// Um disparo por (campanha, transação): o reprocessamento idempotente do POI não duplica.
+				const dispatch = await createEventCampaignDispatch({
 					tx,
-					orgId: input.orgId,
-					campaignsForTotalPurchaseValue: campaignsForTotalPurchaseValue,
-					audiencesByCampaignId,
-					addToImmediateProcessingDataList: (data: ImmediateProcessingData) => immediateProcessingDataList.push(data),
-					saleId: transactionSaleId,
-					saleValue: effectiveSaleValue,
-					clientId: clientId,
-					clientNewTotalPurchaseValue: clientCurrentPurchaseValue,
-					sellerName: operator.nome,
-					transactionAccumulatedCashback: clientNewAccumulatedCashbackValue,
-					clientCashbackAvailableBalance: clientCashbackAvailableBalance ?? 0,
-					clientCashbackAccumulatedBalance: clientCashbackAccumulatedBalance ?? 0,
-					clientCashbackRedeemedBalanceTotal: clientCashbackRedeemedBalanceTotal ?? 0,
-					organizationCashbackTerminology: program.terminologia,
+					organizationId: input.orgId,
+					campaign,
+					janelaReferencia: `poi:${transactionSaleId ?? transactionAccumulationId ?? transactionRedemptionId ?? crypto.randomUUID()}`,
+					recipients: [{ clienteId: clientId, contexto, vendaId: transactionSaleId, descricao }],
 				});
-			} else {
-				console.log(
-					`[POI ${input.orgId}] [CAMPAIGNS] Pulando campanhas de quantidade/valor total — venda não criada internamente (registro de vendas do POI desativado)`,
-				);
+				if (dispatch.created) eventDispatches.push(dispatch);
 			}
 		} else {
 			console.log(`[POI ${input.orgId}] [CAMPAIGNS] Nenhuma campanha de compra processada — transação sem acúmulo, resgate ou venda interna`);
@@ -970,7 +841,7 @@ async function preparePointOfInteractionTransaction({ input, operatorContext, tx
 			clientNewOverallAvailableBalance: clientCashbackAvailableBalance,
 			visualClientAccumulatedCashbackValue,
 			visualClientNewOverallAvailableBalance,
-			immediateProcessingDataList,
+			eventDispatches,
 			createdClienteId: clientIsNew && clientId ? clientId : null,
 		};
 	})();
@@ -980,40 +851,11 @@ async function preparePointOfInteractionTransaction({ input, operatorContext, tx
 		if (result.createdClienteId) {
 			void recomputeClientDuplicatesSafely({ organizacaoId: input.orgId, clienteId: result.createdClienteId });
 		}
-		if (result.immediateProcessingDataList && result.immediateProcessingDataList.length > 0) {
-			const weeklyLimitCache = createCampaignWeeklyLimitCache();
-
-			const processingPromises =
-				result.immediateProcessingDataList.length === 1
-					? result.immediateProcessingDataList.map(async (processingData) => {
-							try {
-								await processSingleInteractionImmediately({
-									...processingData,
-									weeklyLimitCache,
-								});
-							} catch (err) {
-								console.error(`[IMMEDIATE_PROCESS] Failed to process interaction ${processingData.interactionId}:`, err);
-							}
-						})
-					: [
-							processOrganizationInteractionsBatch({
-								organizationId: input.orgId,
-								interactions: result.immediateProcessingDataList,
-								weeklyLimitCache,
-							}).then((batchResult) => {
-								if (batchResult.failed > 0) {
-									for (const failedResult of batchResult.results.filter((itemResult) => !itemResult.success)) {
-										console.error(`[IMMEDIATE_PROCESS] Failed to process interaction ${failedResult.interactionId}:`, failedResult.error);
-									}
-								}
-							}),
-						];
-
-			// Use waitUntil to keep the function alive until all processing is complete
-			// This allows us to return the response immediately while ensuring the background work finishes
-			waitUntil(Promise.all(processingPromises));
+		if (result.eventDispatches.length > 0) {
+			// Publica os disparos imediatos depois do commit; a função só encerra quando a fila aceitou.
+			waitUntil(publishEventDispatches(result.eventDispatches));
 		} else {
-			console.log("[POI] [IMMEDIATE_PROCESS] Nenhuma interação para processar imediatamente");
+			console.log("[POI] [CAMPAIGNS] Nenhum disparo de campanha para publicar");
 		}
 	};
 
@@ -1072,11 +914,7 @@ export const POST = appApiHandler({
 	POST: handleNewTransaction,
 });
 
-type TGetOrganizationCampaignsParams = {
-	tx: DBTransaction;
-	orgId: string;
-};
-async function getOrganizationCampaigns({ tx, orgId }: TGetOrganizationCampaignsParams) {
+async function getOrganizationCampaigns({ tx, orgId }: { tx: DBTransaction; orgId: string }) {
 	const organizationCampaigns = await tx.query.campaigns.findMany({
 		where: (fields, { and, or, eq }) =>
 			and(
@@ -1090,843 +928,8 @@ async function getOrganizationCampaigns({ tx, orgId }: TGetOrganizationCampaigns
 					eq(fields.gatilhoTipo, "VALOR-TOTAL-COMPRAS"),
 				),
 			),
-		with: {
-			segmentacoes: true,
-			whatsappTemplate: true,
-			whatsappConexaoTelefone: {
-				columns: {
-					id: true,
-				},
-				with: {
-					conexao: { columns: { token: true, gatewaySessaoId: true } },
-				},
-			},
-		},
+		with: { segmentacoes: true },
 	});
-
-	const campaignsForNewPurchase = organizationCampaigns.filter((campaign) => campaign.gatilhoTipo === "NOVA-COMPRA");
-	const campaignsForFirstPurchase = organizationCampaigns.filter((campaign) => campaign.gatilhoTipo === "PRIMEIRA-COMPRA");
-	const campaignsForCashbackAccumulation = organizationCampaigns.filter((campaign) => campaign.gatilhoTipo === "CASHBACK-ACUMULADO");
-	const campaignsForTotalPurchaseCount = organizationCampaigns.filter((campaign) => campaign.gatilhoTipo === "QUANTIDADE-TOTAL-COMPRAS");
-	const campaignsForTotalPurchaseValue = organizationCampaigns.filter((campaign) => campaign.gatilhoTipo === "VALOR-TOTAL-COMPRAS");
-	const audiencesByCampaignId = await resolveCampaignAudiencesByCampaignId({
-		executor: tx,
-		organizationId: orgId,
-		campaigns: organizationCampaigns,
-	});
-
-	return {
-		campaignsForNewPurchase,
-		campaignsForFirstPurchase,
-		campaignsForCashbackAccumulation,
-		campaignsForTotalPurchaseCount,
-		campaignsForTotalPurchaseValue,
-		audiencesByCampaignId,
-	};
-}
-type TGetOrganizationCampaignsOutput = Awaited<ReturnType<typeof getOrganizationCampaigns>>;
-
-type THandleCampaignProcessingForNewPurchaseParams = {
-	tx: DBTransaction;
-	orgId: string;
-	campaignsForNewPurchase: TGetOrganizationCampaignsOutput["campaignsForNewPurchase"];
-	audiencesByCampaignId: TGetOrganizationCampaignsOutput["audiencesByCampaignId"];
-	addToImmediateProcessingDataList: (data: ImmediateProcessingData) => void;
-	saleId: string | null;
-	saleValue: number;
-	clientId: string;
-	clientRFMTitle: string;
-	sellerName: string;
-	transactionAccumulatedCashback: number;
-	clientCashbackAvailableBalance: number;
-	clientCashbackAccumulatedBalance: number;
-	clientCashbackRedeemedBalanceTotal: number;
-	terminologia: TCashbackProgramTerminologyEnum;
-};
-
-async function handleCampaignProcessingForNewPurchase({
-	tx,
-	orgId,
-	campaignsForNewPurchase,
-	audiencesByCampaignId,
-	addToImmediateProcessingDataList,
-	saleId,
-	saleValue,
-	clientId,
-	clientRFMTitle,
-	sellerName,
-	transactionAccumulatedCashback,
-	clientCashbackAvailableBalance,
-	clientCashbackAccumulatedBalance,
-	clientCashbackRedeemedBalanceTotal,
-	terminologia,
-}: THandleCampaignProcessingForNewPurchaseParams) {
-	console.log("");
-	if (campaignsForNewPurchase.length === 0) {
-		console.log(`[POI] [ORG: ${orgId}] [NOVA-COMPRA] Nenhuma campanha ativa com gatilho NOVA-COMPRA`);
-		return;
-	}
-
-	console.log(
-		`[POI] [ORG: ${orgId}] [NOVA-COMPRA] Avaliando ${campaignsForNewPurchase.length} campanha(s) para cliente ${clientId} com saleValue=${saleValue}`,
-	);
-
-	const applicableCampaigns = campaignsForNewPurchase.filter((campaign) => {
-		// Validate campaign trigger for new purchase
-		const meetsNewPurchaseValueTrigger =
-			campaign.gatilhoNovaCompraValorMinimo === null ||
-			campaign.gatilhoNovaCompraValorMinimo === undefined ||
-			saleValue >= campaign.gatilhoNovaCompraValorMinimo;
-
-		const meetsSegmentationTrigger = campaignAudienceHasClient(audiencesByCampaignId, campaign.id, clientId);
-		const audienceSize = audiencesByCampaignId.get(campaign.id)?.size ?? 0;
-
-		console.log(`[POI] [ORG: ${orgId}] [NOVA-COMPRA] Campanha "${campaign.titulo}" (${campaign.id}):`, {
-			meetsNewPurchaseValueTrigger,
-			meetsSegmentationTrigger,
-			gatilhoNovaCompraValorMinimo: campaign.gatilhoNovaCompraValorMinimo,
-			saleValue,
-			audienceSize,
-			execucaoAgendadaValor: campaign.execucaoAgendadaValor,
-			hasWhatsappTemplate: !!campaign.whatsappTemplate,
-			hasWhatsappConnection: !!campaign.whatsappConexaoTelefone?.conexao,
-		});
-
-		return meetsNewPurchaseValueTrigger && meetsSegmentationTrigger;
-	});
-
-	console.log(`[POI] [ORG: ${orgId}] [NOVA-COMPRA] ${applicableCampaigns.length} campanha(s) aplicável(is) após filtros`);
-
-	if (applicableCampaigns.length > 0) {
-		console.log(`[ORG: ${orgId}] ${applicableCampaigns.length} campanhas de nova compra aplicáveis encontradas para o cliente ${clientId}.`);
-
-		// Query client data for immediate processing
-		const clientData = await tx.query.clients.findFirst({
-			where: (fields, { eq }) => eq(fields.id, clientId),
-			columns: {
-				id: true,
-				nome: true,
-				telefone: true,
-				email: true,
-				analiseRFMTitulo: true,
-				metadataProdutoMaisCompradoId: true,
-				metadataGrupoProdutoMaisComprado: true,
-				metadataProdutoSugeridoId: true,
-			},
-		});
-
-		if (!clientData) {
-			throw new createHttpError.NotFound("Cliente não encontrado.");
-		}
-
-		console.log(
-			`[POI] [ORG: ${orgId}] [NOVA-COMPRA] Client data for immediate processing: ${clientData ? `found (telefone: ${clientData.telefone})` : "NOT FOUND"}`,
-		);
-
-		let runningAvailableBalance = clientCashbackAvailableBalance;
-		let runningAccumulatedTotal = clientCashbackAccumulatedBalance;
-
-		for (const campaign of applicableCampaigns) {
-			console.log(`[POI] [ORG: ${orgId}] [NOVA-COMPRA] Processing campaign "${campaign.titulo}"`);
-
-			// Validate campaign frequency before scheduling
-			const canSchedule = await canScheduleCampaignForClient(
-				tx,
-				clientId,
-				campaign.id,
-				campaign.permitirRecorrencia,
-				campaign.frequenciaIntervaloValor,
-				campaign.frequenciaIntervaloMedida,
-			);
-
-			if (!canSchedule) {
-				console.log(`[ORG: ${orgId}] [CAMPAIGN_FREQUENCY] Skipping campaign ${campaign.titulo} for client ${clientId} due to frequency limits.`);
-				continue;
-			}
-
-			const interactionId = crypto.randomUUID();
-			const bonusResult = await applyCampaignBonusToInteractionMetadata({
-				tx,
-				baseMetadata: buildBasePurchaseInteractionMetadata({
-					terminologia,
-					saleValue,
-					transactionAccumulatedCashback,
-					availableBalance: runningAvailableBalance,
-					accumulatedTotal: runningAccumulatedTotal,
-					redeemedTotal: clientCashbackRedeemedBalanceTotal,
-					sellerName,
-				}),
-				campaign,
-				organizationId: orgId,
-				clientId,
-				saleId,
-				saleValue,
-				interactionId,
-			});
-			const interactionContextMetadados = bonusResult.metadata;
-			runningAvailableBalance = bonusResult.runningAvailableBalance;
-			runningAccumulatedTotal = bonusResult.runningAccumulatedTotal;
-
-			const interactionScheduleDate = getPostponedDateFromReferenceDate({
-				date: dayjs().toDate(),
-				unit: campaign.execucaoAgendadaMedida,
-				value: campaign.execucaoAgendadaValor,
-			});
-
-			console.log(`[POI] [ORG: ${orgId}] [NOVA-COMPRA] Creating interaction with schedule date: ${dayjs(interactionScheduleDate).format("YYYY-MM-DD")}`);
-
-			const [insertedInteraction] = await tx
-				.insert(interactions)
-				.values({
-					id: interactionId,
-					clienteId: clientId,
-					campanhaId: campaign.id,
-					organizacaoId: orgId,
-					titulo: `Envio de mensagem automática via campanha ${campaign.titulo}`,
-					tipo: "ENVIO-MENSAGEM",
-					descricao: `Cliente se enquadrou no parâmetro de nova compra ${clientRFMTitle}.`,
-					agendamentoDataReferencia: dayjs(interactionScheduleDate).format("YYYY-MM-DD"),
-					agendamentoBlocoReferencia: campaign.execucaoAgendadaBloco,
-					metadados: interactionContextMetadados,
-				})
-				.returning({ id: interactions.id });
-
-			console.log(`[POI] [ORG: ${orgId}] [NOVA-COMPRA] Interaction created: ${insertedInteraction.id}`);
-
-			// Check for immediate processing (execucaoAgendadaValor === 0 or null/undefined means immediate)
-			const shouldProcessImmediately =
-				campaign.execucaoAgendadaValor === 0 || campaign.execucaoAgendadaValor === null || campaign.execucaoAgendadaValor === undefined;
-
-			console.log(`[POI] [ORG: ${orgId}] [NOVA-COMPRA] SHOULD PROCESS IMMEDIATELY PARAMS:`, {
-				SHOULD_PROCESS_IMMEDIATELY: shouldProcessImmediately,
-				HAS_MESSAGE_TEMPLATE: !!campaign.whatsappTemplate,
-				HAS_WHATSAPP_CONNECTION: !!campaign.whatsappConexaoTelefone?.conexao,
-				HAS_CLIENT_DATA: !!clientData,
-			});
-			if (shouldProcessImmediately && campaign.whatsappTemplate && clientData) {
-				addToImmediateProcessingDataList({
-					interactionId: insertedInteraction.id,
-					organizationId: orgId,
-					client: clientData,
-					campaign: {
-						autorId: campaign.autorId,
-						whatsappConexaoTelefoneId: campaign.whatsappConexaoTelefoneId,
-						whatsappTemplate: campaign.whatsappTemplate,
-					},
-					whatsappToken: campaign.whatsappConexaoTelefone?.conexao?.token ?? undefined,
-					whatsappSessionId: campaign.whatsappConexaoTelefone?.conexao?.gatewaySessaoId ?? undefined,
-					contextMetadados: interactionContextMetadados,
-				});
-			} else {
-				console.log(`[POI] [ORG: ${orgId}] [NOVA-COMPRA] NOT adding to immediate processing - conditions not met`);
-			}
-		}
-	} else {
-		console.log(`[POI] [ORG: ${orgId}] [NOVA-COMPRA] No applicable campaigns found after filtering`);
-	}
-}
-
-type THandleCampaignProcessingForFirstPurchaseParams = {
-	tx: DBTransaction;
-	orgId: string;
-	campaignsForFirstPurchase: TGetOrganizationCampaignsOutput["campaignsForFirstPurchase"];
-	audiencesByCampaignId: TGetOrganizationCampaignsOutput["audiencesByCampaignId"];
-	addToImmediateProcessingDataList: (data: ImmediateProcessingData) => void;
-	saleId: string | null;
-	saleValue: number;
-	clientId: string;
-	sellerName: string;
-	transactionAccumulatedCashback: number;
-	clientCashbackAvailableBalance: number;
-	clientCashbackAccumulatedBalance: number;
-	clientCashbackRedeemedBalanceTotal: number;
-	organizationCashbackTerminology: TCashbackProgramTerminologyEnum;
-};
-async function handleCampaignProcessingForFirstPurchase({
-	tx,
-	orgId,
-	campaignsForFirstPurchase,
-	audiencesByCampaignId,
-	addToImmediateProcessingDataList,
-	saleId,
-	saleValue,
-	clientId,
-	sellerName,
-	transactionAccumulatedCashback,
-	clientCashbackAvailableBalance,
-	clientCashbackAccumulatedBalance,
-	clientCashbackRedeemedBalanceTotal,
-	organizationCashbackTerminology,
-}: THandleCampaignProcessingForFirstPurchaseParams) {
-	if (campaignsForFirstPurchase.length === 0) return;
-	console.log("[INFO] Campaigns for first purchase:", campaignsForFirstPurchase);
-	const applicableCampaigns = campaignsForFirstPurchase.filter((campaign) => campaignAudienceHasClient(audiencesByCampaignId, campaign.id, clientId));
-
-	console.log(`[POI] [ORG: ${orgId}] [PRIMEIRA-COMPRA] ${applicableCampaigns.length} applicable campaigns after filtering`);
-
-	if (applicableCampaigns.length > 0) {
-		console.log(`[ORG: ${orgId}] ${applicableCampaigns.length} campanhas de primeira compra aplicáveis encontradas para o cliente ${clientId}.`);
-
-		let runningAvailableBalance = clientCashbackAvailableBalance;
-		let runningAccumulatedTotal = clientCashbackAccumulatedBalance;
-
-		for (const campaign of applicableCampaigns) {
-			console.log(`[POI] [ORG: ${orgId}] [PRIMEIRA-COMPRA] Processing campaign "${campaign.titulo}"`);
-
-			// Validate campaign frequency before scheduling
-			const canSchedule = await canScheduleCampaignForClient(
-				tx,
-				clientId,
-				campaign.id,
-				campaign.permitirRecorrencia,
-				campaign.frequenciaIntervaloValor,
-				campaign.frequenciaIntervaloMedida,
-			);
-
-			if (!canSchedule) {
-				console.log(`[ORG: ${orgId}] [CAMPAIGN_FREQUENCY] Skipping campaign ${campaign.titulo} for client ${clientId} due to frequency limits.`);
-				continue;
-			}
-
-			const interactionId = crypto.randomUUID();
-			const bonusResult = await applyCampaignBonusToInteractionMetadata({
-				tx,
-				baseMetadata: buildBasePurchaseInteractionMetadata({
-					terminologia: organizationCashbackTerminology,
-					saleValue,
-					transactionAccumulatedCashback,
-					availableBalance: runningAvailableBalance,
-					accumulatedTotal: runningAccumulatedTotal,
-					redeemedTotal: clientCashbackRedeemedBalanceTotal,
-					sellerName,
-				}),
-				campaign,
-				organizationId: orgId,
-				clientId,
-				saleId,
-				saleValue,
-				interactionId,
-			});
-			const interactionContextMetadados = bonusResult.metadata;
-			runningAvailableBalance = bonusResult.runningAvailableBalance;
-			runningAccumulatedTotal = bonusResult.runningAccumulatedTotal;
-
-			const interactionScheduleDate = getPostponedDateFromReferenceDate({
-				date: dayjs().toDate(),
-				unit: campaign.execucaoAgendadaMedida,
-				value: campaign.execucaoAgendadaValor,
-			});
-
-			const [insertedInteraction] = await tx
-				.insert(interactions)
-				.values({
-					id: interactionId,
-					clienteId: clientId,
-					campanhaId: campaign.id,
-					organizacaoId: orgId,
-					titulo: `Envio de mensagem automática via campanha ${campaign.titulo}`,
-					tipo: "ENVIO-MENSAGEM",
-					descricao: "Cliente realizou sua primeira compra.",
-					agendamentoDataReferencia: dayjs(interactionScheduleDate).format("YYYY-MM-DD"),
-					agendamentoBlocoReferencia: campaign.execucaoAgendadaBloco,
-					metadados: interactionContextMetadados,
-				})
-				.returning({ id: interactions.id });
-
-			console.log(`[POI] [ORG: ${orgId}] [PRIMEIRA-COMPRA] Interaction created: ${insertedInteraction.id}`);
-
-			// Check for immediate processing (execucaoAgendadaValor === 0 or null/undefined means immediate)
-			const shouldProcessImmediately =
-				campaign.execucaoAgendadaValor === 0 || campaign.execucaoAgendadaValor === null || campaign.execucaoAgendadaValor === undefined;
-			console.log(`[POI] [ORG: ${orgId}] [PRIMEIRA-COMPRA] SHOULD PROCESS IMMEDIATELY PARAMS:`, {
-				SHOULD_PROCESS_IMMEDIATELY: shouldProcessImmediately,
-				HAS_MESSAGE_TEMPLATE: !!campaign.whatsappTemplate,
-				HAS_WHATSAPP_CONNECTION: !!campaign.whatsappConexaoTelefone?.conexao,
-			});
-			if (shouldProcessImmediately && campaign.whatsappTemplate) {
-				const clientData = await tx.query.clients.findFirst({
-					where: (fields, { eq }) => eq(fields.id, clientId),
-					columns: {
-						id: true,
-						nome: true,
-						telefone: true,
-						email: true,
-						analiseRFMTitulo: true,
-						metadataProdutoMaisCompradoId: true,
-						metadataGrupoProdutoMaisComprado: true,
-						metadataProdutoSugeridoId: true,
-					},
-				});
-
-				if (!clientData) {
-					throw new createHttpError.NotFound("Cliente não encontrado.");
-				}
-				console.log(`[POI] [ORG: ${orgId}] [PRIMEIRA-COMPRA] Adding to immediate processing list`);
-				addToImmediateProcessingDataList({
-					interactionId: insertedInteraction.id,
-					organizationId: orgId,
-					client: clientData,
-					campaign: {
-						autorId: campaign.autorId,
-						whatsappConexaoTelefoneId: campaign.whatsappConexaoTelefoneId,
-						whatsappTemplate: campaign.whatsappTemplate,
-					},
-					whatsappToken: campaign.whatsappConexaoTelefone?.conexao?.token ?? undefined,
-					whatsappSessionId: campaign.whatsappConexaoTelefone?.conexao?.gatewaySessaoId ?? undefined,
-					contextMetadados: interactionContextMetadados,
-				});
-			} else {
-				console.log(`[POI] [ORG: ${orgId}] [PRIMEIRA-COMPRA] NOT adding to immediate processing - conditions not met`);
-			}
-		}
-	}
-}
-
-type THandleCampaignProcessingForCashbackAccumulationParams = {
-	tx: DBTransaction;
-	orgId: string;
-	cashbackAccumulationCampaigns: TGetOrganizationCampaignsOutput["campaignsForCashbackAccumulation"];
-	audiencesByCampaignId: TGetOrganizationCampaignsOutput["audiencesByCampaignId"];
-	addToImmediateProcessingDataList: (data: ImmediateProcessingData) => void;
-	clientId: string;
-	clientCashbackToAccumulate: number;
-	clientCashbackAvailableBalance: number;
-	saleValue: number;
-	sellerName: string;
-	clientCashbackAccumulatedBalance: number;
-	clientCashbackRedeemedBalanceTotal: number;
-	organizationCashbackTerminology: TCashbackProgramTerminologyEnum;
-};
-async function handleCampaignProcessingForCashbackAccumulation({
-	tx,
-	orgId,
-	cashbackAccumulationCampaigns,
-	audiencesByCampaignId,
-	addToImmediateProcessingDataList,
-	clientId,
-	clientCashbackToAccumulate,
-	clientCashbackAvailableBalance,
-	saleValue,
-	sellerName,
-	clientCashbackAccumulatedBalance,
-	clientCashbackRedeemedBalanceTotal,
-	organizationCashbackTerminology,
-}: THandleCampaignProcessingForCashbackAccumulationParams) {
-	if (cashbackAccumulationCampaigns.length === 0) return;
-	if (clientCashbackToAccumulate <= 0) return;
-
-	const applicableCampaigns = cashbackAccumulationCampaigns.filter((campaign) => {
-		if (!campaignAudienceHasClient(audiencesByCampaignId, campaign.id, clientId)) return false;
-
-		const meetsNewCashbackThreshold =
-			campaign.gatilhoNovoCashbackAcumuladoValorMinimo === null ||
-			campaign.gatilhoNovoCashbackAcumuladoValorMinimo === undefined ||
-			clientCashbackToAccumulate >= campaign.gatilhoNovoCashbackAcumuladoValorMinimo;
-
-		const meetsTotalCashbackThreshold =
-			campaign.gatilhoTotalCashbackAcumuladoValorMinimo === null ||
-			campaign.gatilhoTotalCashbackAcumuladoValorMinimo === undefined ||
-			clientCashbackAvailableBalance >= campaign.gatilhoTotalCashbackAcumuladoValorMinimo;
-
-		return meetsNewCashbackThreshold && meetsTotalCashbackThreshold;
-	});
-
-	if (applicableCampaigns.length > 0) {
-		console.log(`[ORG: ${orgId}] ${applicableCampaigns.length} campanhas de cashback acumulado aplicáveis encontradas para o cliente.`);
-	}
-
-	const interactionContextMetadados: TInteractionContextMetadados = {
-		terminologia: organizationCashbackTerminology,
-		compraValor: saleValue,
-		compraCashbackAcumulado: clientCashbackToAccumulate,
-		compraCashbackNovoSaldo: clientCashbackAvailableBalance,
-		compraVendedorNome: sellerName,
-		cashbackSaldoDisponivel: clientCashbackAvailableBalance,
-		cashbackTotalAcumuladoVida: clientCashbackAccumulatedBalance,
-		cashbackTotalResgatadoVida: clientCashbackRedeemedBalanceTotal,
-	};
-
-	// Query client data for immediate processing
-	const clientData = await tx.query.clients.findFirst({
-		where: (fields, { eq }) => eq(fields.id, clientId),
-		columns: {
-			id: true,
-			nome: true,
-			telefone: true,
-			email: true,
-			analiseRFMTitulo: true,
-			metadataProdutoMaisCompradoId: true,
-			metadataGrupoProdutoMaisComprado: true,
-			metadataProdutoSugeridoId: true,
-		},
-	});
-
-	for (const campaign of applicableCampaigns) {
-		const canSchedule = await canScheduleCampaignForClient(
-			tx,
-			clientId,
-			campaign.id,
-			campaign.permitirRecorrencia,
-			campaign.frequenciaIntervaloValor,
-			campaign.frequenciaIntervaloMedida,
-		);
-
-		if (!canSchedule) {
-			console.log(`[ORG: ${orgId}] [CAMPAIGN_FREQUENCY] Skipping campaign ${campaign.titulo} for client ${clientId} due to frequency limits.`);
-			continue;
-		}
-
-		const interactionScheduleDate = getPostponedDateFromReferenceDate({
-			date: dayjs().toDate(),
-			unit: campaign.execucaoAgendadaMedida,
-			value: campaign.execucaoAgendadaValor,
-		});
-
-		const [insertedInteraction] = await tx
-			.insert(interactions)
-			.values({
-				clienteId: clientId,
-				campanhaId: campaign.id,
-				organizacaoId: orgId,
-				titulo: `Envio de mensagem automática via campanha ${campaign.titulo}`,
-				tipo: "ENVIO-MENSAGEM",
-				descricao: `Cliente acumulou R$ ${clientCashbackToAccumulate.toFixed(2)} em cashback. Total acumulado: R$ ${clientCashbackAvailableBalance.toFixed(2)}.`,
-				agendamentoDataReferencia: dayjs(interactionScheduleDate).format("YYYY-MM-DD"),
-				agendamentoBlocoReferencia: campaign.execucaoAgendadaBloco,
-				metadados: interactionContextMetadados,
-			})
-			.returning({ id: interactions.id });
-
-		// Check for immediate processing (execucaoAgendadaValor === 0 or null/undefined means immediate)
-		const shouldProcessImmediately =
-			campaign.execucaoAgendadaValor === 0 || campaign.execucaoAgendadaValor === null || campaign.execucaoAgendadaValor === undefined;
-
-		console.log(`[POI] [ORG: ${orgId}] [CASHBACK-ACUMULADO] SHOULD PROCESS IMMEDIATELY PARAMS:`, {
-			SHOULD_PROCESS_IMMEDIATELY: shouldProcessImmediately,
-			HAS_MESSAGE_TEMPLATE: !!campaign.whatsappTemplate,
-			HAS_WHATSAPP_CONNECTION: !!campaign.whatsappConexaoTelefone?.conexao,
-			HAS_CLIENT_DATA: !!clientData,
-		});
-		if (shouldProcessImmediately && campaign.whatsappTemplate && clientData) {
-			console.log(`[POI] [ORG: ${orgId}] [CASHBACK-ACUMULADO] Adding to immediate processing list`);
-			addToImmediateProcessingDataList({
-				interactionId: insertedInteraction.id,
-				organizationId: orgId,
-				client: clientData,
-				campaign: {
-					autorId: campaign.autorId,
-					whatsappConexaoTelefoneId: campaign.whatsappConexaoTelefoneId,
-					whatsappTemplate: campaign.whatsappTemplate,
-				},
-				whatsappToken: campaign.whatsappConexaoTelefone?.conexao?.token ?? undefined,
-				whatsappSessionId: campaign.whatsappConexaoTelefone?.conexao?.gatewaySessaoId ?? undefined,
-				contextMetadados: interactionContextMetadados,
-			});
-		}
-	}
-}
-
-type THandleCampaignProcessingForTotalPurchaseCountParams = {
-	tx: DBTransaction;
-	orgId: string;
-	campaignsForTotalPurchaseCount: TGetOrganizationCampaignsOutput["campaignsForTotalPurchaseCount"];
-	audiencesByCampaignId: TGetOrganizationCampaignsOutput["audiencesByCampaignId"];
-	addToImmediateProcessingDataList: (data: ImmediateProcessingData) => void;
-	saleId: string | null;
-	saleValue: number;
-	clientId: string;
-	clientNewTotalPurchaseCount: number;
-	sellerName: string;
-	transactionAccumulatedCashback: number;
-	clientCashbackAvailableBalance: number;
-	clientCashbackAccumulatedBalance: number;
-	clientCashbackRedeemedBalanceTotal: number;
-	organizationCashbackTerminology: TCashbackProgramTerminologyEnum;
-};
-async function handleCampaignProcessingForTotalPurchaseCount({
-	tx,
-	orgId,
-	campaignsForTotalPurchaseCount,
-	audiencesByCampaignId,
-	addToImmediateProcessingDataList,
-	saleId,
-	saleValue,
-	clientId,
-	clientNewTotalPurchaseCount,
-	sellerName,
-	transactionAccumulatedCashback,
-	clientCashbackAvailableBalance,
-	clientCashbackAccumulatedBalance,
-	clientCashbackRedeemedBalanceTotal,
-	organizationCashbackTerminology,
-}: THandleCampaignProcessingForTotalPurchaseCountParams) {
-	if (campaignsForTotalPurchaseCount.length === 0) return;
-	const applicableCampaigns = campaignsForTotalPurchaseCount.filter((campaign) => {
-		// Crossing semantics: fires when this sale makes the client cross the threshold.
-		const meetsThreshold =
-			campaign.gatilhoQuantidadeTotalCompras !== null &&
-			campaign.gatilhoQuantidadeTotalCompras !== undefined &&
-			clientNewTotalPurchaseCount >= campaign.gatilhoQuantidadeTotalCompras &&
-			clientNewTotalPurchaseCount - 1 < campaign.gatilhoQuantidadeTotalCompras;
-
-		// Check segmentation match
-		const meetsSegmentation = campaignAudienceHasClient(audiencesByCampaignId, campaign.id, clientId);
-
-		return meetsThreshold && meetsSegmentation;
-	});
-
-	if (applicableCampaigns.length > 0) {
-		console.log(`[ORG: ${orgId}] [QUANTIDADE-TOTAL-COMPRAS] ${applicableCampaigns.length} applicable campaigns found for client ${clientId}.`);
-
-		const clientData = await tx.query.clients.findFirst({
-			where: (fields, { eq }) => eq(fields.id, clientId),
-			columns: {
-				id: true,
-				nome: true,
-				telefone: true,
-				email: true,
-				analiseRFMTitulo: true,
-				metadataProdutoMaisCompradoId: true,
-				metadataGrupoProdutoMaisComprado: true,
-				metadataProdutoSugeridoId: true,
-			},
-		});
-
-		let runningAvailableBalance = clientCashbackAvailableBalance;
-		let runningAccumulatedTotal = clientCashbackAccumulatedBalance;
-
-		for (const campaign of applicableCampaigns) {
-			const canSchedule = await canScheduleCampaignForClient(
-				tx,
-				clientId,
-				campaign.id,
-				campaign.permitirRecorrencia,
-				campaign.frequenciaIntervaloValor,
-				campaign.frequenciaIntervaloMedida,
-			);
-
-			if (!canSchedule) {
-				console.log(`[ORG: ${orgId}] [CAMPAIGN_FREQUENCY] Skipping campaign ${campaign.titulo} for client ${clientId} due to frequency limits.`);
-				continue;
-			}
-
-			const interactionId = crypto.randomUUID();
-			const bonusResult = await applyCampaignBonusToInteractionMetadata({
-				tx,
-				baseMetadata: buildBasePurchaseInteractionMetadata({
-					terminologia: organizationCashbackTerminology,
-					saleValue,
-					transactionAccumulatedCashback,
-					availableBalance: runningAvailableBalance,
-					accumulatedTotal: runningAccumulatedTotal,
-					redeemedTotal: clientCashbackRedeemedBalanceTotal,
-					sellerName,
-				}),
-				campaign,
-				organizationId: orgId,
-				clientId,
-				saleId,
-				saleValue,
-				interactionId,
-			});
-			const interactionContextMetadados = bonusResult.metadata;
-			runningAvailableBalance = bonusResult.runningAvailableBalance;
-			runningAccumulatedTotal = bonusResult.runningAccumulatedTotal;
-
-			const interactionScheduleDate = getPostponedDateFromReferenceDate({
-				date: dayjs().toDate(),
-				unit: campaign.execucaoAgendadaMedida,
-				value: campaign.execucaoAgendadaValor,
-			});
-
-			const [insertedInteraction] = await tx
-				.insert(interactions)
-				.values({
-					id: interactionId,
-					clienteId: clientId,
-					campanhaId: campaign.id,
-					organizacaoId: orgId,
-					titulo: `Envio de mensagem automática via campanha ${campaign.titulo}`,
-					tipo: "ENVIO-MENSAGEM",
-					descricao: `Cliente atingiu ${clientNewTotalPurchaseCount} compras totais (gatilho: ${campaign.gatilhoQuantidadeTotalCompras}).`,
-					agendamentoDataReferencia: dayjs(interactionScheduleDate).format("YYYY-MM-DD"),
-					agendamentoBlocoReferencia: campaign.execucaoAgendadaBloco,
-					metadados: interactionContextMetadados,
-				})
-				.returning({ id: interactions.id });
-
-			const shouldProcessImmediately =
-				campaign.execucaoAgendadaValor === 0 || campaign.execucaoAgendadaValor === null || campaign.execucaoAgendadaValor === undefined;
-
-			if (shouldProcessImmediately && campaign.whatsappTemplate && clientData) {
-				addToImmediateProcessingDataList({
-					interactionId: insertedInteraction.id,
-					organizationId: orgId,
-					client: clientData,
-					campaign: {
-						autorId: campaign.autorId,
-						whatsappConexaoTelefoneId: campaign.whatsappConexaoTelefoneId,
-						whatsappTemplate: campaign.whatsappTemplate,
-					},
-					whatsappToken: campaign.whatsappConexaoTelefone?.conexao?.token ?? undefined,
-					whatsappSessionId: campaign.whatsappConexaoTelefone?.conexao?.gatewaySessaoId ?? undefined,
-					contextMetadados: interactionContextMetadados,
-				});
-			}
-		}
-	}
-}
-
-type THandleCampaignProcessingForTotalPurchaseValueParams = {
-	tx: DBTransaction;
-	orgId: string;
-	campaignsForTotalPurchaseValue: TGetOrganizationCampaignsOutput["campaignsForTotalPurchaseValue"];
-	audiencesByCampaignId: TGetOrganizationCampaignsOutput["audiencesByCampaignId"];
-	addToImmediateProcessingDataList: (data: ImmediateProcessingData) => void;
-	saleId: string | null;
-	saleValue: number;
-	clientId: string;
-	clientNewTotalPurchaseValue: number;
-	sellerName: string;
-	transactionAccumulatedCashback: number;
-	clientCashbackAvailableBalance: number;
-	clientCashbackAccumulatedBalance: number;
-	clientCashbackRedeemedBalanceTotal: number;
-	organizationCashbackTerminology: TCashbackProgramTerminologyEnum;
-};
-
-async function handleCampaignProcessingForTotalPurchaseValue({
-	tx,
-	orgId,
-	campaignsForTotalPurchaseValue,
-	audiencesByCampaignId,
-	addToImmediateProcessingDataList,
-	saleId,
-	saleValue,
-	clientId,
-	clientNewTotalPurchaseValue,
-	sellerName,
-	transactionAccumulatedCashback,
-	clientCashbackAvailableBalance,
-	clientCashbackAccumulatedBalance,
-	clientCashbackRedeemedBalanceTotal,
-	organizationCashbackTerminology,
-}: THandleCampaignProcessingForTotalPurchaseValueParams) {
-	if (campaignsForTotalPurchaseValue.length === 0) return;
-
-	const applicableCampaigns = campaignsForTotalPurchaseValue.filter((campaign) => {
-		// Crossing semantics: fires when this sale crosses the threshold, instead of the old float
-		// equality that missed any sale jumping past the exact configured value.
-		const meetsThreshold =
-			campaign.gatilhoValorTotalCompras !== null &&
-			campaign.gatilhoValorTotalCompras !== undefined &&
-			clientNewTotalPurchaseValue >= campaign.gatilhoValorTotalCompras &&
-			clientNewTotalPurchaseValue - saleValue < campaign.gatilhoValorTotalCompras;
-
-		// Check segmentation match
-		const meetsSegmentation = campaignAudienceHasClient(audiencesByCampaignId, campaign.id, clientId);
-
-		return meetsThreshold && meetsSegmentation;
-	});
-
-	if (applicableCampaigns.length > 0) {
-		console.log(`[ORG: ${orgId}] [VALOR-TOTAL-COMPRAS] ${applicableCampaigns.length} applicable campaigns found for client ${clientId}.`);
-
-		const clientData = await tx.query.clients.findFirst({
-			where: (fields, { eq }) => eq(fields.id, clientId),
-			columns: {
-				id: true,
-				nome: true,
-				telefone: true,
-				email: true,
-				analiseRFMTitulo: true,
-				metadataProdutoMaisCompradoId: true,
-				metadataGrupoProdutoMaisComprado: true,
-				metadataProdutoSugeridoId: true,
-			},
-		});
-
-		let runningAvailableBalance = clientCashbackAvailableBalance;
-		let runningAccumulatedTotal = clientCashbackAccumulatedBalance;
-
-		for (const campaign of applicableCampaigns) {
-			const canSchedule = await canScheduleCampaignForClient(
-				tx,
-				clientId,
-				campaign.id,
-				campaign.permitirRecorrencia,
-				campaign.frequenciaIntervaloValor,
-				campaign.frequenciaIntervaloMedida,
-			);
-
-			if (!canSchedule) {
-				console.log(`[ORG: ${orgId}] [CAMPAIGN_FREQUENCY] Skipping campaign ${campaign.titulo} for client ${clientId} due to frequency limits.`);
-				continue;
-			}
-
-			const interactionId = crypto.randomUUID();
-			const bonusResult = await applyCampaignBonusToInteractionMetadata({
-				tx,
-				baseMetadata: buildBasePurchaseInteractionMetadata({
-					terminologia: organizationCashbackTerminology,
-					saleValue,
-					transactionAccumulatedCashback,
-					availableBalance: runningAvailableBalance,
-					accumulatedTotal: runningAccumulatedTotal,
-					redeemedTotal: clientCashbackRedeemedBalanceTotal,
-					sellerName,
-				}),
-				campaign,
-				organizationId: orgId,
-				clientId,
-				saleId,
-				saleValue,
-				interactionId,
-			});
-			const interactionContextMetadados = bonusResult.metadata;
-			runningAvailableBalance = bonusResult.runningAvailableBalance;
-			runningAccumulatedTotal = bonusResult.runningAccumulatedTotal;
-
-			const interactionScheduleDate = getPostponedDateFromReferenceDate({
-				date: dayjs().toDate(),
-				unit: campaign.execucaoAgendadaMedida,
-				value: campaign.execucaoAgendadaValor,
-			});
-
-			const [insertedInteraction] = await tx
-				.insert(interactions)
-				.values({
-					id: interactionId,
-					clienteId: clientId,
-					campanhaId: campaign.id,
-					organizacaoId: orgId,
-					titulo: `Envio de mensagem automática via campanha ${campaign.titulo}`,
-					tipo: "ENVIO-MENSAGEM",
-					descricao: `Cliente atingiu R$ ${clientNewTotalPurchaseValue.toFixed(2)} em compras totais (gatilho: R$ ${campaign.gatilhoValorTotalCompras?.toFixed(2)}).`,
-					agendamentoDataReferencia: dayjs(interactionScheduleDate).format("YYYY-MM-DD"),
-					agendamentoBlocoReferencia: campaign.execucaoAgendadaBloco,
-					metadados: interactionContextMetadados,
-				})
-				.returning({ id: interactions.id });
-
-			const shouldProcessImmediately =
-				campaign.execucaoAgendadaValor === 0 || campaign.execucaoAgendadaValor === null || campaign.execucaoAgendadaValor === undefined;
-
-			if (shouldProcessImmediately && campaign.whatsappTemplate && clientData) {
-				addToImmediateProcessingDataList({
-					interactionId: insertedInteraction.id,
-					organizationId: orgId,
-					client: clientData,
-					campaign: {
-						autorId: campaign.autorId,
-						whatsappConexaoTelefoneId: campaign.whatsappConexaoTelefoneId,
-						whatsappTemplate: campaign.whatsappTemplate,
-					},
-					whatsappToken: campaign.whatsappConexaoTelefone?.conexao?.token ?? undefined,
-					whatsappSessionId: campaign.whatsappConexaoTelefone?.conexao?.gatewaySessaoId ?? undefined,
-					contextMetadados: interactionContextMetadados,
-				});
-			}
-		}
-	}
+	const audiencesByCampaignId = await resolveCampaignAudiencesByCampaignId({ executor: tx, organizationId: orgId, campaigns: organizationCampaigns });
+	return { organizationCampaigns, audiencesByCampaignId };
 }

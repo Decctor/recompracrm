@@ -37,6 +37,7 @@
 		"access:grant-platform-agent": "tsx ./scripts/grant-platform-agent-access.ts",
 		"access:configure-agent-mutations": "tsx ./scripts/configure-agent-mutations.ts",
 		"backfill:interactions-relationship": "tsx ./scripts/backfill-interactions-relationship-fields.ts",
+		"migrate:pending-interactions-to-dispatches": "tsx ./scripts/migrate-pending-interactions-to-dispatches.ts",
 		"backfill:whatsapp-webhook-logs": "tsx --conditions=react-server ./scripts/backfill-whatsapp-webhook-logs.ts",
 		"replay:external-events": "tsx --conditions=react-server ./scripts/replay-external-events.ts",
 		"knip": "knip",

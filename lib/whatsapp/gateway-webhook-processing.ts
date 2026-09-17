@@ -10,13 +10,11 @@ import {
 } from "@/lib/chats/incoming-message";
 import { lockConnectedWhatsappPhone, mergeMessageTemplatePhoneMetadataSql, missingMessageTemplatePhoneMetadataCondition } from "@/lib/db-utils";
 import { uploadChatMedia } from "@/lib/files-storage/chat-media";
-import { updateInteractionDeliveryState } from "@/lib/interactions/delivery-state";
+import { applyProviderStatusUpdate } from "@/lib/interactions/delivery-state";
 import { downloadMedia } from "@/lib/whatsapp/internal-gateway";
-import { type AppWhatsappStatus, mapWhatsAppStatusToAppStatus } from "@/lib/whatsapp/parsing";
 import { resolveWhatsappClient } from "@/lib/whatsapp/contact-identity";
 import { STICKER_PROCESSED_TEXT } from "@/lib/chats/sticker";
 import type { TChatMessageContentTypeEnum } from "@/schemas/enums";
-import type { TInteractionsStatusEnum } from "@/schemas/interactions";
 import { db } from "@/services/drizzle";
 import { chatMessages } from "@/services/drizzle/schema/chats";
 import { interactions } from "@/services/drizzle/schema/interactions";
@@ -373,14 +371,6 @@ async function handleIncomingMessage(body: Extract<TGatewayWebhookBody, { event:
 	);
 }
 
-const INTERACTION_STATUS_MAPPING: Record<AppWhatsappStatus, TInteractionsStatusEnum> = {
-	PENDENTE: "PENDENTE",
-	ENVIADO: "ENVIADO",
-	ENTREGUE: "ENTREGUE",
-	LIDO: "LIDO",
-	FALHOU: "FALHOU",
-};
-
 function getRecord(value: unknown): Record<string, unknown> {
 	return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
@@ -459,7 +449,6 @@ async function handleMessageSent(body: Extract<TGatewayWebhookBody, { event: "me
 		return;
 	}
 
-	const { whatsappStatus } = mapWhatsAppStatusToAppStatus(data.status ?? "sent");
 	const targets = await resolveMessageTargets({
 		clientMessageId: data.clientMessageId,
 		whatsappMessageId: data.whatsappMessageId,
@@ -479,14 +468,10 @@ async function handleMessageSent(body: Extract<TGatewayWebhookBody, { event: "me
 	}
 
 	if (targets.interactionId) {
-		await updateInteractionDeliveryState({
-			interactionId: targets.interactionId,
-			organizationId: targets.interactionOrganizationId ?? undefined,
-			statusEnvio: INTERACTION_STATUS_MAPPING[whatsappStatus],
-			metadataPatch: {
-				clientMessageId: data.clientMessageId ?? targets.interactionMetadados.clientMessageId,
-				whatsappMessageId: data.whatsappMessageId,
-			},
+		await applyProviderStatusUpdate({
+			clientMessageId: data.clientMessageId ?? targets.interactionId,
+			whatsappMessageId: data.whatsappMessageId,
+			status: data.status ?? "sent",
 		});
 	}
 
@@ -504,7 +489,6 @@ async function handleMessageUpdated(body: Extract<TGatewayWebhookBody, { event: 
 		return;
 	}
 
-	const { whatsappStatus } = mapWhatsAppStatusToAppStatus(data.status);
 	const targets = await resolveMessageTargets({
 		clientMessageId: data.clientMessageId,
 		whatsappMessageId: data.whatsappMessageId,
@@ -524,14 +508,10 @@ async function handleMessageUpdated(body: Extract<TGatewayWebhookBody, { event: 
 	}
 
 	if (targets.interactionId) {
-		await updateInteractionDeliveryState({
-			interactionId: targets.interactionId,
-			organizationId: targets.interactionOrganizationId ?? undefined,
-			statusEnvio: INTERACTION_STATUS_MAPPING[whatsappStatus],
-			metadataPatch: {
-				clientMessageId: data.clientMessageId ?? targets.interactionMetadados.clientMessageId,
-				whatsappMessageId: data.whatsappMessageId ?? targets.interactionMetadados.whatsappMessageId,
-			},
+		await applyProviderStatusUpdate({
+			clientMessageId: data.clientMessageId ?? targets.interactionId,
+			whatsappMessageId: data.whatsappMessageId,
+			status: data.status,
 		});
 	}
 

@@ -1,7 +1,7 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { loadPromotionProductCandidates, resolvePromotionMetadataByClientId } from "@/lib/campaigns/promotion-suggestion";
-import { processSingleInteractionImmediately } from "@/lib/interactions/process-single-interaction";
+import { deliverCampaignMessage } from "@/lib/campaigns/dispatch/deliver";
 import type { TInteractionContextMetadados } from "@/lib/message-templates";
 import { db } from "@/services/drizzle";
 import { clients, interactions } from "@/services/drizzle/schema";
@@ -26,15 +26,7 @@ const TestCampaignInputSchema = z.object({
 });
 export type TTestCampaignInput = z.infer<typeof TestCampaignInputSchema>;
 
-async function testCampaign({
-	input,
-	userOrgId,
-	userId,
-}: {
-	input: TTestCampaignInput;
-	userOrgId: string;
-	userId: string;
-}) {
+async function testCampaign({ input, userOrgId, userId }: { input: TTestCampaignInput; userOrgId: string; userId: string }) {
 	const campaign = await db.query.campaigns.findFirst({
 		where: (fields, { and, eq }) => and(eq(fields.id, input.campaignId), eq(fields.organizacaoId, userOrgId)),
 		with: {
@@ -92,37 +84,36 @@ async function testCampaign({
 		});
 	}
 
-	const results: { clientId: string; clientName: string; success: boolean; error?: string; channelsAttempted: string[]; channelsSkipped: string[]; channelsSent: string[]; channelErrors: Record<string, string> }[] = [];
+	const results: {
+		clientId: string;
+		clientName: string;
+		success: boolean;
+		error?: string;
+		channelsAttempted: string[];
+		channelsSkipped: string[];
+		channelsSent: string[];
+		channelErrors: Record<string, string>;
+	}[] = [];
 
 	for (const client of selectedClients) {
 		if (!client.telefone && !client.email) {
-			results.push({ clientId: client.id, clientName: client.nome, success: false, error: "Cliente não possui telefone nem e-mail.", channelsAttempted: [], channelsSkipped: ["WHATSAPP: cliente sem telefone", "EMAIL: cliente sem email"], channelsSent: [], channelErrors: {} });
+			results.push({
+				clientId: client.id,
+				clientName: client.nome,
+				success: false,
+				error: "Cliente não possui telefone nem e-mail.",
+				channelsAttempted: [],
+				channelsSkipped: ["WHATSAPP: cliente sem telefone", "EMAIL: cliente sem email"],
+				channelsSent: [],
+				channelErrors: {},
+			});
 			continue;
 		}
 
-		const [insertedInteraction] = await db
-			.insert(interactions)
-			.values({
-				organizacaoId: userOrgId,
-				clienteId: client.id,
-				campanhaId: campaign.id,
-				titulo: `[TESTE] ${campaign.titulo}`,
-				descricao: `Envio de teste da campanha "${campaign.titulo}"`,
-				tipo: "ENVIO-MENSAGEM",
-				autorId: userId,
-				agendamentoDataReferencia: new Date().toISOString(),
-				agendamentoBlocoReferencia: "09:00",
-				metadados: promotionMetadataByClientId.get(client.id) ?? null,
-			})
-			.returning({ id: interactions.id });
-
-		if (!insertedInteraction) {
-			results.push({ clientId: client.id, clientName: client.nome, success: false, error: "Falha ao criar interação de teste.", channelsAttempted: [], channelsSkipped: [], channelsSent: [], channelErrors: {} });
-			continue;
-		}
-
-		const processingResult = await processSingleInteractionImmediately({
-			interactionId: insertedInteraction.id,
+		// Envio de teste: entrega direta ao provedor, fora do pipeline de disparos (sem quota, sem
+		// bônus), e um registro na timeline marcado como teste para não contar nas estatísticas.
+		const interactionId = crypto.randomUUID();
+		const delivery = await deliverCampaignMessage({
 			organizationId: userOrgId,
 			client: {
 				id: client.id,
@@ -142,18 +133,56 @@ async function testCampaign({
 			whatsappToken: whatsappConnection?.tipoConexao === "META_CLOUD_API" ? (whatsappConnection.token ?? undefined) : undefined,
 			whatsappSessionId: whatsappConnection?.tipoConexao === "INTERNAL_GATEWAY" ? (whatsappConnection.gatewaySessaoId ?? undefined) : undefined,
 			contextMetadados: promotionMetadataByClientId.get(client.id),
-			weeklyLimitMode: "skip",
+			messageKey: interactionId,
 		});
+
+		if (delivery.outcome === "SENT" || delivery.outcome === "QUEUED") {
+			const now = new Date();
+			await db.insert(interactions).values({
+				id: interactionId,
+				organizacaoId: userOrgId,
+				clienteId: client.id,
+				campanhaId: campaign.id,
+				titulo: `[TESTE] ${campaign.titulo}`,
+				descricao: `Envio de teste da campanha "${campaign.titulo}"`,
+				tipo: "ENVIO-MENSAGEM",
+				autorId: userId,
+				canal: delivery.channelsSent.includes("WHATSAPP") ? "WHATSAPP" : "EMAIL",
+				direcao: "SAIDA",
+				iniciadoPor: "USUARIO",
+				dataInteracao: now,
+				status: "REALIZADA",
+				dataExecucao: now,
+				dataEnvio: now,
+				statusEnvio: delivery.statusEnvio,
+				erroEnvio: delivery.error,
+				metadados: {
+					...promotionMetadataByClientId.get(client.id),
+					teste: true,
+					whatsappTemplateId: campaign.whatsappTemplate.id,
+					messageTemplateId: campaign.whatsappTemplate.id,
+					channelsAttempted: delivery.channelsAttempted as ("WHATSAPP" | "EMAIL")[],
+					channelsSkipped: delivery.channelsSkipped,
+					channelsSent: delivery.channelsSent as ("WHATSAPP" | "EMAIL")[],
+					channelErrors: delivery.channelErrors,
+					...(delivery.whatsappMessageId ? { whatsappMessageId: delivery.whatsappMessageId } : {}),
+					...(delivery.emailMessageId ? { emailMessageId: delivery.emailMessageId } : {}),
+					...(delivery.jobId ? { jobId: delivery.jobId } : {}),
+					...(delivery.clientMessageId ? { clientMessageId: delivery.clientMessageId } : {}),
+					...(delivery.chatMessageId ? { chatMessageId: delivery.chatMessageId } : {}),
+				},
+			});
+		}
 
 		results.push({
 			clientId: client.id,
 			clientName: client.nome,
-			success: processingResult.success,
-			error: processingResult.error,
-			channelsAttempted: processingResult.channelsAttempted ?? [],
-			channelsSkipped: processingResult.channelsSkipped ?? [],
-			channelsSent: processingResult.channelsSent ?? [],
-			channelErrors: processingResult.channelErrors ?? {},
+			success: delivery.outcome === "SENT" || delivery.outcome === "QUEUED",
+			error: delivery.error ?? undefined,
+			channelsAttempted: delivery.channelsAttempted,
+			channelsSkipped: delivery.channelsSkipped,
+			channelsSent: delivery.channelsSent,
+			channelErrors: delivery.channelErrors,
 		});
 	}
 
@@ -162,10 +191,7 @@ async function testCampaign({
 
 	return {
 		data: { results },
-		message:
-			failCount === 0
-				? `Teste enviado com sucesso para ${successCount} cliente(s).`
-				: `${successCount} enviado(s), ${failCount} falha(s).`,
+		message: failCount === 0 ? `Teste enviado com sucesso para ${successCount} cliente(s).` : `${successCount} enviado(s), ${failCount} falha(s).`,
 	};
 }
 export type TTestCampaignOutput = Awaited<ReturnType<typeof testCampaign>>;

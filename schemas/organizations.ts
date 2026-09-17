@@ -1,10 +1,5 @@
 import z from "zod";
-import {
-	DefaultDataSourceEnum,
-	DiscountLimitTypeEnum,
-	OrganizationIntegrationTypeEnum,
-	PoiRegistrationFlowEnum,
-} from "./enums";
+import { DefaultDataSourceEnum, DiscountLimitTypeEnum, OrganizationIntegrationTypeEnum, PoiRegistrationFlowEnum } from "./enums";
 import { OrganizationFiscalConfigSchema } from "./fiscal";
 import { DataSourceIntegrationConfigSchema } from "./integrations";
 import { ORGANIZATION_SLUG_INVALID_MESSAGE, ORGANIZATION_SLUG_REGEX } from "@/lib/organizations/slug";
@@ -307,6 +302,17 @@ export const OrganizationConfigurationSchema = z.object({
 			.number({
 				invalid_type_error: "Tipo não válido para o limite semanal de mensagens enviadas via campanhas.",
 			})
+			.nullable()
+			.optional()
+			.default(null),
+		// Teto diário de envios via campanhas. Existe para aquecer números novos no WhatsApp (a Meta
+		// limita duro nas primeiras 24h); o semanal segue sendo o ritmo de campanha.
+		limiteMensagensDiariasViaCampanhas: z
+			.number({
+				invalid_type_error: "Tipo não válido para o limite diário de mensagens enviadas via campanhas.",
+			})
+			.int("O limite diário de mensagens deve ser um número inteiro.")
+			.positive("O limite diário de mensagens deve ser maior que zero.")
 			.nullable()
 			.optional()
 			.default(null),

@@ -1,4 +1,10 @@
-import { AppSubscriptionPlans, BOLETO_EXPIRES_AFTER_DAYS, CONSULTORIA_ADDON, PIX_MANDATE_MAX_AMOUNT_CENTS, type TAppSubscriptionPlanKey } from "@/config";
+import {
+	AppSubscriptionPlans,
+	BOLETO_EXPIRES_AFTER_DAYS,
+	CONSULTORIA_ADDON,
+	PIX_MANDATE_MAX_AMOUNT_CENTS,
+	type TAppSubscriptionPlanKey,
+} from "@/config";
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { db } from "@/services/drizzle";
@@ -123,6 +129,7 @@ async function generateCheckoutRoute(request: NextRequest) {
 				preferencias: {
 					rastreamentoEstoque: plan.capabilities.erp.acesso === true,
 					limiteMensagensSemanaisViaCampanhas: null,
+					limiteMensagensDiariasViaCampanhas: null,
 					sessoesVenda: {
 						habilitado: false,
 						obrigatorio: false,

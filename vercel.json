@@ -17,6 +17,24 @@
 					"topic": "integration-import-batches"
 				}
 			]
+		},
+		"app/api/queues/campaign-dispatch-expand/route.ts": {
+			"experimentalTriggers": [
+				{
+					"retryAfterSeconds": 60,
+					"type": "queue/v2beta",
+					"topic": "campaign-dispatch-expand"
+				}
+			]
+		},
+		"app/api/queues/campaign-dispatch-send/route.ts": {
+			"experimentalTriggers": [
+				{
+					"retryAfterSeconds": 30,
+					"type": "queue/v2beta",
+					"topic": "campaign-dispatch-send"
+				}
+			]
 		}
 	},
 	"crons": [
@@ -69,8 +87,8 @@
 			"schedule": "0 11 16 * *"
 		},
 		{
-			"path": "/api/cron/process-interactions",
-			"schedule": "0 * * * *"
+			"path": "/api/cron/campaign-dispatches",
+			"schedule": "*/10 * * * *"
 		},
 		{
 			"path": "/api/cron/cashback-expire",
@@ -83,14 +101,6 @@
 		{
 			"path": "/api/cron/birthday-notify",
 			"schedule": "0 3 * * *"
-		},
-		{
-			"path": "/api/cron/process-recurrent-campaigns",
-			"schedule": "0 * * * *"
-		},
-		{
-			"path": "/api/cron/process-single-use-campaigns",
-			"schedule": "0 * * * *"
 		},
 		{
 			"path": "/api/cron/enrich-clients",

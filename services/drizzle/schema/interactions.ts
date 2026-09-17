@@ -1,4 +1,4 @@
-import type { TInteractionsStatusEnum } from "@/schemas/interactions";
+import type { TInteractionMetadata } from "@/schemas/interactions";
 import { relations } from "drizzle-orm";
 import { index, jsonb, text, timestamp, varchar } from "drizzle-orm/pg-core";
 import { campaigns } from "./campaigns";
@@ -9,8 +9,8 @@ import {
 	interactionDirectionEnum,
 	interactionInitiatorEnum,
 	interactionLifecycleStatusEnum,
+	interactionDeliveryStatusEnum,
 	interactionTypeEnum,
-	interactionsCronJobTimeBlocksEnum,
 } from "./enums";
 import { organizations } from "./organizations";
 import { sellers } from "./sellers";
@@ -45,34 +45,32 @@ export const interactions = newTable(
 		// Ciclo de vida de interações manuais/planejadas. `statusEnvio` segue sendo só entrega.
 		status: interactionLifecycleStatusEnum("status"),
 
-		// Scheduling specific
-		agendamentoDataReferencia: text("agendamento_data_referencia"), // ISO 8601 format YYYY-MM-DDTHH:MM:SSZ
-		agendamentoBlocoReferencia: interactionsCronJobTimeBlocksEnum("agendamento_bloco_referencia"),
 		dataInsercao: timestamp("data_insercao").defaultNow().notNull(),
+		// Envios de campanha: momento do envio (âncora de quota e de atribuição). A fila que antes
+		// vivia aqui (agendamento*, dataExecucao como claim) mora em campaign_dispatch_recipients;
+		// uma interação de campanha só nasce quando a mensagem sai.
 		dataExecucao: timestamp("data_execucao"),
-		metadados: jsonb("metadados"),
+		metadados: jsonb("metadados").$type<TInteractionMetadata>(),
 
-		// Delivery status tracking
-		dataEnvio: timestamp("data_envio"), // When message was actually sent
-		statusEnvio: text("status_envio").$type<TInteractionsStatusEnum>(), // PENDING, SENT, DELIVERED, READ, FAILED
-		erroEnvio: text("erro_envio"), // Error message if status is FALHOU
+		// Rastreio de entrega (ENVIADO -> ENTREGUE -> LIDO via webhooks; FALHOU quando o provedor
+		// reporta falha após o envio). Bloqueios e falhas pré-provedor nunca chegam aqui.
+		dataEnvio: timestamp("data_envio"),
+		statusEnvio: interactionDeliveryStatusEnum("status_envio"),
+		erroEnvio: text("erro_envio"),
 	},
 	(table) => ({
-		pendingProcessingIdx: index("idx_interactions_pending_processing").on(
-			table.organizacaoId,
-			table.agendamentoDataReferencia,
-			table.agendamentoBlocoReferencia,
-			table.dataExecucao,
-			table.dataInsercao,
-			table.id,
-		),
-		orgWeeklyQuotaIdx: index("idx_interactions_org_weekly_quota").on(table.organizacaoId, table.tipo, table.dataExecucao),
-		campaignWeeklyQuotaIdx: index("idx_interactions_campaign_weekly_quota").on(
+		// Backfill preguiçoso dos contadores de quota e atribuição de conversão (por cliente).
+		orgQuotaIdx: index("idx_interactions_org_weekly_quota").on(table.organizacaoId, table.tipo, table.dataExecucao),
+		campaignQuotaIdx: index("idx_interactions_campaign_weekly_quota").on(table.organizacaoId, table.campanhaId, table.tipo, table.dataExecucao),
+		// Estatísticas de campanha: status por período.
+		campaignStatsIdx: index("idx_interactions_org_campanha_status_data").on(
 			table.organizacaoId,
 			table.campanhaId,
-			table.tipo,
-			table.dataExecucao,
+			table.statusEnvio,
+			table.dataInsercao,
 		),
+		// Frequência (cap por cliente/campanha).
+		campaignClientIdx: index("idx_interactions_campanha_cliente_data").on(table.campanhaId, table.clienteId, table.dataInsercao),
 		// Cadência/timeline: última interação por cliente.
 		clientRelationshipIdx: index("idx_interactions_org_cliente_data_interacao").on(table.organizacaoId, table.clienteId, table.dataInteracao),
 		// Carteira do vendedor: interações e follow-ups (PLANEJADA) do dia.

@@ -71,6 +71,18 @@ export default function AdminOrganizationPreferencesBlock({
 				) : null}
 			</div>
 
+			<div className="flex w-full min-w-0 flex-col gap-3 rounded-lg border border-border bg-muted/20 px-4 py-3">
+				<span className="text-sm font-medium tracking-tight">Limite diário de mensagens via campanhas</span>
+				<span className="text-xs text-muted-foreground">Teto por dia para aquecer números novos no WhatsApp. Vazio = sem limite diário.</span>
+				<NumberInput
+					label="LIMITE DE ENVIOS POR DIA"
+					showLabel={false}
+					value={preferencias.limiteMensagensDiariasViaCampanhas ?? null}
+					placeholder="Preencha o limite diário de envios (opcional)..."
+					handleChange={(value) => updatePreferencias({ limiteMensagensDiariasViaCampanhas: value || null })}
+				/>
+			</div>
+
 			{hasErpAccess ? (
 				<div className="flex items-center justify-between rounded-lg border border-border bg-muted/20 px-4 py-3">
 					<div className="flex flex-col gap-0.5">

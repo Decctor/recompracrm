@@ -1,25 +1,49 @@
 import z from "zod";
-import { CashbackProgramTerminologyEnum, InteractionTypeEnum, InteractionsCronJobTimeBlocksEnum } from "./enums";
+import { CashbackProgramTerminologyEnum, InteractionTypeEnum } from "./enums";
 
-export const InteractionsStatusEnum = z.enum(["PENDENTE", "ENVIADO", "ENTREGUE", "LIDO", "FALHOU", "BLOQUEADA"]);
+// Estado de entrega de uma interação de campanha (espelho de interactionDeliveryStatusEnum).
+// Só existe depois do envio: bloqueios de quota/contato e falhas antes do provedor vivem em
+// campaign_dispatch_recipients (PULADA/FALHOU), nunca aqui.
+export const InteractionsStatusEnum = z.enum(["PENDENTE", "ENVIADO", "ENTREGUE", "LIDO", "FALHOU"]);
 export type TInteractionsStatusEnum = z.infer<typeof InteractionsStatusEnum>;
 export const InteractionDeliveryChannelEnum = z.enum(["WHATSAPP", "EMAIL"]);
 export type TInteractionDeliveryChannelEnum = z.infer<typeof InteractionDeliveryChannelEnum>;
 
-export const InteractionMetadataSchema = z.object({
+// Contexto de variáveis de template congelado no enfileiramento/envio (valor da compra, saldos,
+// cupom, produto sugerido). É o único schema desse contexto: lib/message-templates re-exporta o
+// tipo daqui, e campaign_dispatch_recipients.contexto usa a mesma forma.
+export const InteractionContextMetadataSchema = z.object({
 	terminologia: CashbackProgramTerminologyEnum.optional(),
 	cashbackAcumuladoValor: z.number().optional().nullable(),
 	compraValor: z.number().optional(),
 	compraCashbackAcumulado: z.number().optional(),
 	compraCashbackNovoSaldo: z.number().optional(),
 	compraVendedorNome: z.string().optional(),
+	compraQuantidadeTotal: z.number().optional(),
+	compraValorTotalAcumulado: z.number().optional(),
 	cashbackSaldoDisponivel: z.number().optional(),
 	cashbackTotalAcumuladoVida: z.number().optional(),
 	cashbackTotalResgatadoVida: z.number().optional(),
 	cashbackExpirandoValor: z.number().optional(),
 	cashbackExpirandoData: z.string().optional(),
 	cashbackExpirandoJanela: z.string().optional(),
-	whatsappMensagemId: z.string().optional().nullable(),
+	cupomCodigo: z.string().optional(),
+	cupomTitulo: z.string().optional(),
+	cupomExpiracaoData: z.string().optional(),
+	// Snapshot do produto sugerido da promoção, resolvido por cliente no enfileiramento
+	// (ver lib/campaigns/promotion-suggestion.ts). Congelar aqui mantém a mensagem estável
+	// mesmo que o catálogo mude entre o enfileiramento e o envio.
+	promocaoProdutoId: z.string().optional(),
+	promocaoProdutoNome: z.string().optional(),
+	promocaoProdutoPrecoOriginal: z.number().optional(),
+	promocaoProdutoPrecoPromocional: z.number().optional(), // preço efetivo (sobrescrita ?? preço de venda)
+	promocaoProdutoImagemUrl: z.string().optional(), // sem uso na v1; habilita o cabeçalho dinâmico da v2
+});
+export type TInteractionContextMetadata = z.infer<typeof InteractionContextMetadataSchema>;
+
+// Metadados persistidos em interactions.metadados: contexto acima + rastreio de entrega por canal
+// + snapshots de interações manuais.
+export const InteractionMetadataSchema = InteractionContextMetadataSchema.extend({
 	whatsappMessageId: z.string().optional().nullable(),
 	whatsappTemplateId: z.string().optional().nullable(),
 	messageTemplateId: z.string().optional().nullable(),
@@ -28,11 +52,18 @@ export const InteractionMetadataSchema = z.object({
 	jobId: z.string().optional().nullable(),
 	chatMessageId: z.string().optional().nullable(),
 	whatsappStatus: z.string().optional().nullable(),
+	whatsappErrors: z.array(z.unknown()).optional().nullable(),
 	emailStatus: z.string().optional().nullable(),
 	channelsAttempted: z.array(InteractionDeliveryChannelEnum).optional(),
 	channelsSkipped: z.array(z.string()).optional(),
 	channelsSent: z.array(InteractionDeliveryChannelEnum).optional(),
 	channelErrors: z.record(z.string()).optional(),
+	// Disparo que originou o envio (campaign_dispatch_recipients): permite navegar do registro
+	// para a fila que o produziu.
+	dispatchId: z.string().optional().nullable(),
+	dispatchRecipientId: z.string().optional().nullable(),
+	// Envio de teste do construtor de campanhas (não entra em quota nem em estatísticas de envio).
+	teste: z.boolean().optional().nullable(),
 
 	// Interações manuais (carteira do vendedor) — snapshots do contexto no momento do contato,
 	// para analytics por segmento sem reprocessar histórico.
@@ -76,15 +107,6 @@ export const InteractionSchema = z.object({
 		.optional()
 		.nullable(),
 
-	// Scheduling specific
-	agendamentoDataReferencia: z
-		.string({
-			required_error: "Data de referência da agendamento não informada.",
-			invalid_type_error: "Tipo não válido para a data de referência da agendamento.",
-		})
-		.optional()
-		.nullable(),
-	agendamentoBlocoReferencia: InteractionsCronJobTimeBlocksEnum,
 	dataInsercao: z
 		.string({
 			required_error: "Data de inserção da interação não informada.",

@@ -131,7 +131,7 @@ async function main() {
 	console.log(`[${SCRIPT_NAME}] Resultado`, {
 		summaries: result.summaries,
 		errors: result.errors,
-		immediateInteractions: result.immediateProcessingDataList.length,
+		eventDispatches: result.eventDispatches.length,
 	});
 
 	if (result.errors.length > 0) {

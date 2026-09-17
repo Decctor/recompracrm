@@ -18,9 +18,12 @@ import { SettingsFormCard, SettingsFormSection } from "./SettingsFormCard";
 import SettingsSectionActions from "./SettingsSectionActions";
 
 type TPreferences = TOrganizationConfiguration["preferencias"];
-type TOutboundDraft = Pick<TPreferences, "relatoriosDestinatariosIds" | "limiteMensagensSemanaisViaCampanhas">;
+type TOutboundDraft = Pick<TPreferences, "relatoriosDestinatariosIds" | "limiteMensagensSemanaisViaCampanhas" | "limiteMensagensDiariasViaCampanhas">;
 
 const WEEKLY_LIMIT_PRESETS = [300, 500, 1000];
+/** Valores típicos de aquecimento de um número novo no WhatsApp (a Meta limita duro nas primeiras 24h). */
+const DAILY_LIMIT_PRESETS = [50, 250, 1000];
+const CUSTOM_DAILY_LIMIT_SEED = 100;
 /** Ponto de partida quando o usuário escolhe "personalizado", fora dos presets acima. */
 const CUSTOM_WEEKLY_LIMIT_SEED = 1500;
 
@@ -28,6 +31,7 @@ function toOutboundDraft(preferencias: TPreferences): TOutboundDraft {
 	return {
 		relatoriosDestinatariosIds: preferencias.relatoriosDestinatariosIds ?? null,
 		limiteMensagensSemanaisViaCampanhas: preferencias.limiteMensagensSemanaisViaCampanhas ?? null,
+		limiteMensagensDiariasViaCampanhas: preferencias.limiteMensagensDiariasViaCampanhas ?? null,
 	};
 }
 
@@ -51,6 +55,8 @@ export default function SettingsOutbound({ membership }: SettingsOutboundProps) 
 	const canEdit = membership.permissoes.empresa.editar;
 	const weeklyLimit = draft.limiteMensagensSemanaisViaCampanhas;
 	const isCustomWeeklyLimit = !!weeklyLimit && !WEEKLY_LIMIT_PRESETS.includes(weeklyLimit);
+	const dailyLimit = draft.limiteMensagensDiariasViaCampanhas;
+	const isCustomDailyLimit = !!dailyLimit && !DAILY_LIMIT_PRESETS.includes(dailyLimit);
 
 	function updateDraft(partial: Partial<TOutboundDraft>) {
 		setDraft((current) => (current ? { ...current, ...partial } : current));
@@ -134,6 +140,55 @@ export default function SettingsOutbound({ membership }: SettingsOutboundProps) 
 							value={weeklyLimit}
 							placeholder="Preencha aqui o valor do limite de envios por semana..."
 							handleChange={(value) => updateDraft({ limiteMensagensSemanaisViaCampanhas: value })}
+							editable={canEdit}
+						/>
+					) : null}
+				</div>
+				<div className="flex w-full flex-col gap-1">
+					<h3 className="text-foreground/80 text-sm font-medium tracking-tight">LIMITE DE ENVIOS DE MENSAGEM VIA CAMPANHA (POR DIA)</h3>
+					<p className="text-xs text-muted-foreground">
+						Para números novos no WhatsApp: a Meta limita quantas conversas um número recém-conectado abre por dia até ele aquecer. Não é um segundo
+						orçamento semanal — o semanal continua sendo o ritmo das campanhas.
+					</p>
+					<div className="flex w-full flex-wrap items-center justify-start gap-x-2 gap-y-1">
+						<Button
+							variant={!dailyLimit ? "default" : "ghost"}
+							size="fit"
+							className={cn("rounded-lg px-2 py-1 text-xs", !dailyLimit ? "opacity-100" : "opacity-50")}
+							onClick={() => canEdit && updateDraft({ limiteMensagensDiariasViaCampanhas: null })}
+							disabled={!canEdit}
+						>
+							SEM LIMITE
+						</Button>
+						{DAILY_LIMIT_PRESETS.map((limit) => (
+							<Button
+								key={limit}
+								variant={dailyLimit === limit ? "default" : "ghost"}
+								size="fit"
+								className={cn("rounded-lg px-2 py-1 text-xs", dailyLimit === limit ? "opacity-100" : "opacity-50")}
+								onClick={() => canEdit && updateDraft({ limiteMensagensDiariasViaCampanhas: limit })}
+								disabled={!canEdit}
+							>
+								{limit}
+							</Button>
+						))}
+						<Button
+							variant={isCustomDailyLimit ? "default" : "ghost"}
+							size="fit"
+							className={cn("rounded-lg px-2 py-1 text-xs", isCustomDailyLimit ? "opacity-100" : "opacity-50")}
+							onClick={() => canEdit && updateDraft({ limiteMensagensDiariasViaCampanhas: CUSTOM_DAILY_LIMIT_SEED })}
+							disabled={!canEdit}
+						>
+							PERSONALIZADO
+						</Button>
+					</div>
+					{isCustomDailyLimit ? (
+						<NumberInput
+							label="LIMITE DE ENVIOS POR DIA"
+							showLabel={false}
+							value={dailyLimit}
+							placeholder="Preencha aqui o valor do limite de envios por dia..."
+							handleChange={(value) => updateDraft({ limiteMensagensDiariasViaCampanhas: value })}
 							editable={canEdit}
 						/>
 					) : null}

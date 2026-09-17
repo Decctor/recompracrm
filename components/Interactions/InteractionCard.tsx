@@ -17,7 +17,6 @@ import { cn } from "@/lib/utils";
 import { InteractionMetadataSchema, type TInteractionDeliveryChannelEnum, type TInteractionMetadata } from "@/schemas/interactions";
 import { InteractionsSentStatusOptions } from "@/utils/select-options";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import dayjs from "dayjs";
 import { Calendar, CalendarCheck, Code, Eye, Mail, RefreshCw, UserRound } from "lucide-react";
 import { cloneElement, createContext, isValidElement, use, useMemo, type ReactNode } from "react";
 import { BsCalendarPlus } from "react-icons/bs";
@@ -102,28 +101,20 @@ function InteractionCardClientSubtitle() {
 
 function InteractionCardMetaPanel() {
 	const { interaction } = useInteractionCard();
-	const scheduleDateText = interaction.agendamentoDataReferencia ? dayjs(interaction.agendamentoDataReferencia).format("DD/MM/YYYY") : "—";
-	const scheduleBlockText = interaction.agendamentoBlocoReferencia ?? "—";
 	const createdAtText = formatDateAsLocale(interaction.dataInsercao, true);
-	const executionDateText = interaction.dataExecucao ? formatDateAsLocale(interaction.dataExecucao, true) : null;
+	const sentAtText =
+		(interaction.dataEnvio ?? interaction.dataExecucao) ? formatDateAsLocale(interaction.dataEnvio ?? interaction.dataExecucao, true) : null;
 
 	return (
 		<dl className="border-border/70 grid grid-cols-[minmax(0,auto)_1fr] gap-x-4 gap-y-2 border-t pt-2.5 text-xs">
-			<dt className="font-medium text-muted-foreground">Criado</dt>
+			<dt className="font-medium text-muted-foreground">Registrado</dt>
 			<dd className="text-right font-medium tabular-nums">{createdAtText}</dd>
-			{executionDateText ? (
+			{sentAtText ? (
 				<>
-					<dt className="font-medium text-green-600 dark:text-green-500">Executado</dt>
-					<dd className="text-right font-medium text-green-600 tabular-nums dark:text-green-500">{executionDateText}</dd>
+					<dt className="font-medium text-green-600 dark:text-green-500">Enviado</dt>
+					<dd className="text-right font-medium text-green-600 tabular-nums dark:text-green-500">{sentAtText}</dd>
 				</>
-			) : (
-				<>
-					<dt className="font-medium text-muted-foreground">Agendado</dt>
-					<dd className="text-right font-medium tabular-nums">
-						{scheduleDateText} · {scheduleBlockText}
-					</dd>
-				</>
-			)}
+			) : null}
 		</dl>
 	);
 }
@@ -231,7 +222,7 @@ function channelWasTouched(metadata: TInteractionMetadata | null, channel: TInte
 function getChannelStatusTone(status: string | null) {
 	if (!status) return "muted" as const;
 	const normalized = status.toUpperCase();
-	if (normalized === "FALHOU" || normalized === "BLOQUEADA") return "destructive" as const;
+	if (normalized === "FALHOU") return "destructive" as const;
 	if (normalized === "ENVIADO" || normalized === "ENTREGUE" || normalized === "LIDO") return "success" as const;
 	if (normalized === "PENDENTE") return "secondary" as const;
 	return "outline" as const;
@@ -240,7 +231,7 @@ function getChannelStatusTone(status: string | null) {
 function buildWhatsappBlock(metadata: TInteractionMetadata | null): NerdsChannelBlock | null {
 	if (!metadata) return null;
 
-	const whatsappMessageId = metadata.whatsappMessageId ?? metadata.whatsappMensagemId;
+	const whatsappMessageId = metadata.whatsappMessageId;
 	const hasWhatsappData =
 		channelWasTouched(metadata, "WHATSAPP") ||
 		!!whatsappMessageId ||
@@ -407,28 +398,28 @@ function InteractionCardDataForNerds({ className }: { className?: string }) {
 			}
 		>
 			<div className="border-border bg-secondary/40 border-b px-4 py-3">
-					<div className="flex items-center gap-2">
-						<div className="bg-background flex h-7 w-7 items-center justify-center rounded-lg border border-border/70 shadow-xs">
-							<Code className="h-3.5 w-3.5 text-muted-foreground" />
-						</div>
-						<div className="flex flex-col">
-							<span className="text-[0.6rem] font-extrabold tracking-[0.08em] text-muted-foreground uppercase">Debug</span>
-							<span className="text-sm leading-tight font-bold tracking-tight">Data for nerds</span>
-						</div>
+				<div className="flex items-center gap-2">
+					<div className="bg-background flex h-7 w-7 items-center justify-center rounded-lg border border-border/70 shadow-xs">
+						<Code className="h-3.5 w-3.5 text-muted-foreground" />
+					</div>
+					<div className="flex flex-col">
+						<span className="text-[0.6rem] font-extrabold tracking-[0.08em] text-muted-foreground uppercase">Debug</span>
+						<span className="text-sm leading-tight font-bold tracking-tight">Data for nerds</span>
 					</div>
 				</div>
+			</div>
 
-				<div className="flex flex-col gap-3 p-3">
-					<NerdsFieldItem label="Interação" value={interaction.id} />
+			<div className="flex flex-col gap-3 p-3">
+				<NerdsFieldItem label="Interação" value={interaction.id} />
 
-					{channelBlocks.length > 0 ? (
-						channelBlocks.map((block) => <NerdsChannelCard key={block.key} block={block} />)
-					) : (
-						<div className="border-border/70 bg-secondary/30 rounded-xl border px-3 py-4 text-center">
-							<p className="text-[0.7rem] text-muted-foreground">Nenhum dado de canal disponível para esta interação.</p>
-						</div>
-					)}
-				</div>
+				{channelBlocks.length > 0 ? (
+					channelBlocks.map((block) => <NerdsChannelCard key={block.key} block={block} />)
+				) : (
+					<div className="border-border/70 bg-secondary/30 rounded-xl border px-3 py-4 text-center">
+						<p className="text-[0.7rem] text-muted-foreground">Nenhum dado de canal disponível para esta interação.</p>
+					</div>
+				)}
+			</div>
 		</HoverOrPopover>
 	);
 }
@@ -487,7 +478,7 @@ function InteractionCardRetryButton({ layout = "inline" }: { layout?: "inline" |
 		},
 	});
 
-	if (interaction.statusEnvio !== "FALHOU" && interaction.statusEnvio !== "BLOQUEADA") return null;
+	if (interaction.statusEnvio !== "FALHOU") return null;
 
 	return (
 		<Button
@@ -497,10 +488,7 @@ function InteractionCardRetryButton({ layout = "inline" }: { layout?: "inline" |
 			onClick={() => handleRetryInteraction()}
 			disabled={retryIsPending}
 			aria-label={retryIsPending ? "Reenviando interação" : "Reenviar interação"}
-			className={cn(
-				"text-muted-foreground hover:text-foreground",
-				layout === "toolbar" ? "size-10 shrink-0" : "h-7 gap-1.5 px-2.5 text-xs font-bold",
-			)}
+			className={cn("text-muted-foreground hover:text-foreground", layout === "toolbar" ? "size-10 shrink-0" : "h-7 gap-1.5 px-2.5 text-xs font-bold")}
 		>
 			<RefreshCw
 				className={cn("size-4 shrink-0", {
@@ -528,11 +516,10 @@ function InteractionCardCreatedAt() {
 
 function InteractionCardScheduleStatus() {
 	const { interaction } = useInteractionCard();
-	const scheduleDateText = interaction.agendamentoDataReferencia ? dayjs(interaction.agendamentoDataReferencia).format("DD/MM/YYYY") : "Não definido";
-	const scheduleBlockText = interaction.agendamentoBlocoReferencia ?? "--:--";
-	const executionDateText = interaction.dataExecucao ? formatDateAsLocale(interaction.dataExecucao, true) : "Não executada";
+	const sentAt = interaction.dataEnvio ?? interaction.dataExecucao;
+	const executionDateText = sentAt ? formatDateAsLocale(sentAt, true) : "Não enviada";
 
-	if (interaction.dataExecucao) {
+	if (sentAt) {
 		return (
 			<Chip.Root variant="success" size="sm" shape="pill" className="max-w-full min-w-0 shrink whitespace-normal sm:whitespace-nowrap">
 				<Chip.Icon>
@@ -553,9 +540,7 @@ function InteractionCardScheduleStatus() {
 			<Chip.Icon>
 				<Calendar className="w-4 h-4 min-w-4 min-h-4" />
 			</Chip.Icon>
-			<Chip.Label className="block py-0.5 text-left text-xs leading-tight font-medium italic sm:text-center">
-				AGENDADO PARA: {scheduleDateText} ({scheduleBlockText})
-			</Chip.Label>
+			<Chip.Label className="block py-0.5 text-left text-xs leading-tight font-medium italic sm:text-center">{executionDateText}</Chip.Label>
 		</Chip.Root>
 	);
 }

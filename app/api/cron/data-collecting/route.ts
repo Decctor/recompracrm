@@ -10,7 +10,7 @@ async function getDataCollectingRoute(_req: NextRequest) {
 
 	console.log("[INFO] [DATA_COLLECTING_V2] Processing concluded", {
 		summaries: result.summaries.length,
-		immediateInteractions: result.immediateProcessingDataList.length,
+		eventDispatches: result.eventDispatches.length,
 		errors: result.errors.length,
 	});
 

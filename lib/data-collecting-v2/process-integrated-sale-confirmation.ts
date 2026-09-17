@@ -42,7 +42,7 @@ export async function processIntegratedSaleConfirmation({
 	});
 	if (!existingSale) throw new Error(`Venda ${saleId} não encontrada para confirmação.`);
 	if (!shouldProcessIntegratedSaleConfirmation(existingSale)) {
-		return { processed: false, immediateProcessingDataList: [] };
+		return { processed: false, eventDispatches: [] };
 	}
 
 	// Idempotência temporária: CONFIRMADA representa tanto a transição comercial quanto a
@@ -54,7 +54,7 @@ export async function processIntegratedSaleConfirmation({
 		.set({ statusVenda: "CONFIRMADA", ...attendanceStatusValues("EM_PREPARO") })
 		.where(and(eq(sales.id, saleId), eq(sales.organizacaoId, organizationId), isNull(sales.statusVenda), eq(sales.statusAtendimento, "NAO_INICIADO")))
 		.returning({ id: sales.id });
-	if (claimed.length === 0) return { processed: false, immediateProcessingDataList: [] };
+	if (claimed.length === 0) return { processed: false, eventDispatches: [] };
 
 	const client = existingSale.cliente;
 	const previousTotalPurchaseCount = client?.metadataTotalCompras ?? 0;
@@ -123,5 +123,5 @@ export async function processIntegratedSaleConfirmation({
 		});
 	}
 
-	return { processed: true, immediateProcessingDataList: effectsResult.immediateProcessingDataList };
+	return { processed: true, eventDispatches: effectsResult.eventDispatches };
 }

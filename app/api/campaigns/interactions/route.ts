@@ -1,19 +1,18 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
-import { processSingleInteractionImmediately } from "@/lib/interactions";
-import type { TInteractionContextMetadados } from "@/lib/message-templates";
-import { InteractionsStatusEnum } from "@/schemas/interactions";
+import { createEventCampaignDispatch, publishEventDispatches } from "@/lib/campaigns/engine";
+import { InteractionContextMetadataSchema, InteractionsStatusEnum } from "@/schemas/interactions";
 import { db } from "@/services/drizzle";
 import { clients } from "@/services/drizzle/schema/clients";
 import { interactions } from "@/services/drizzle/schema/interactions";
 import { products } from "@/services/drizzle/schema/products";
-import { and, asc, count, desc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import z from "zod";
 
-const orderByFieldSchema = z.enum(["agendamentoData", "dataExecucao", "dataEnvio"]);
+const orderByFieldSchema = z.enum(["dataExecucao", "dataEnvio"]);
 const orderByDirectionSchema = z.enum(["asc", "desc"]);
 
 const GetCampaignInteractionsInputSchema = z.object({
@@ -101,11 +100,6 @@ async function getCampaignInteractions({ input, session }: { input: TGetCampaign
 	const direction = input.orderByDirection === "asc" ? asc : desc;
 	let orderByClause = desc(interactions.dataInsercao);
 	switch (input.orderByField) {
-		case "agendamentoData":
-			orderByClause = direction(
-				sql`COALESCE((${interactions.agendamentoDataReferencia} || ' ' || COALESCE(${interactions.agendamentoBlocoReferencia}::text, '00:00')), '1900-01-01 00:00')`,
-			);
-			break;
 		case "dataExecucao":
 			orderByClause = direction(sql`COALESCE(${interactions.dataExecucao}, '1900-01-01'::timestamp)`);
 			break;
@@ -144,8 +138,6 @@ async function getCampaignInteractions({ input, session }: { input: TGetCampaign
 			campanhaId: true,
 			titulo: true,
 			descricao: true,
-			agendamentoDataReferencia: true,
-			agendamentoBlocoReferencia: true,
 			dataInsercao: true,
 			dataExecucao: true,
 			dataEnvio: true,
@@ -205,9 +197,7 @@ async function getCampaignInteractions({ input, session }: { input: TGetCampaign
 			...interaction,
 			cliente: {
 				...clientColumns,
-				metadataProdutoMaisCompradoNome: metadataProdutoMaisCompradoId
-					? (productNameById.get(metadataProdutoMaisCompradoId) ?? null)
-					: null,
+				metadataProdutoMaisCompradoNome: metadataProdutoMaisCompradoId ? (productNameById.get(metadataProdutoMaisCompradoId) ?? null) : null,
 				metadataProdutoSugeridoNome: metadataProdutoSugeridoId ? (productNameById.get(metadataProdutoSugeridoId) ?? null) : null,
 			},
 		};
@@ -243,120 +233,37 @@ async function retryCampaignInteraction({ input, session }: { input: TRetryCampa
 	if (!userOrgId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
 
 	const interaction = await db.query.interactions.findFirst({
-		where: (fields, { and, eq, isNotNull }) =>
-			and(eq(fields.id, input.interactionId), eq(fields.organizacaoId, userOrgId), isNotNull(fields.campanhaId)),
-		columns: {
-			id: true,
-			clienteId: true,
-			metadados: true,
-			dataExecucao: true,
-			statusEnvio: true,
-			erroEnvio: true,
-		},
-		with: {
-			cliente: {
-				columns: {
-					id: true,
-					nome: true,
-					telefone: true,
-					email: true,
-					analiseRFMTitulo: true,
-					metadataProdutoMaisCompradoId: true,
-					metadataGrupoProdutoMaisComprado: true,
-					metadataProdutoSugeridoId: true,
-				},
-			},
-			campanha: {
-				columns: {
-					autorId: true,
-					whatsappConexaoTelefoneId: true,
-				},
-				with: {
-					whatsappTemplate: true,
-					whatsappConexaoTelefone: {
-						with: {
-							conexao: {
-								columns: {
-									tipoConexao: true,
-									token: true,
-									gatewaySessaoId: true,
-								},
-							},
-						},
-					},
-				},
-			},
-		},
+		where: (fields, { and: andFilter, eq: eqFilter, isNotNull: isNotNullFilter }) =>
+			andFilter(eqFilter(fields.id, input.interactionId), eqFilter(fields.organizacaoId, userOrgId), isNotNullFilter(fields.campanhaId)),
+		columns: { id: true, clienteId: true, campanhaId: true, metadados: true, statusEnvio: true, descricao: true },
+		with: { campanha: true },
 	});
 
 	if (!interaction) throw new createHttpError.NotFound("Interação não encontrada.");
 	if (!interaction.campanha) throw new createHttpError.BadRequest("Campanha da interação não encontrada.");
-	if (!interaction.campanha.whatsappTemplate) throw new createHttpError.BadRequest("Template do WhatsApp da campanha não encontrado.");
-	const campaignAuthorId = interaction.campanha.autorId;
-	if (!campaignAuthorId) throw new createHttpError.BadRequest("Autor da campanha não encontrado para reenviar essa interação.");
-	const campaignWhatsappConnectionPhoneId = interaction.campanha.whatsappConexaoTelefoneId;
-	if (!campaignWhatsappConnectionPhoneId) {
-		throw new createHttpError.BadRequest("Telefone de conexão do WhatsApp não encontrado para essa campanha.");
-	}
-	if (interaction.statusEnvio === "ENVIADO" || interaction.statusEnvio === "ENTREGUE" || interaction.statusEnvio === "LIDO") {
-		throw new createHttpError.BadRequest("Essa interação já foi enviada e não pode ser reenviada manualmente.");
-	}
-	if (interaction.statusEnvio !== "FALHOU" && interaction.statusEnvio !== "BLOQUEADA") {
-		throw new createHttpError.BadRequest("Apenas interações com falha de envio podem ser reenviadas manualmente.");
+	if (!interaction.campanha.ativo) throw new createHttpError.BadRequest("Ative a campanha antes de reenviar essa interação.");
+	if (interaction.statusEnvio !== "FALHOU") {
+		throw new createHttpError.BadRequest("Apenas interações cujo envio falhou podem ser reenviadas manualmente.");
 	}
 
-	const whatsappConnection = interaction.campanha.whatsappConexaoTelefone?.conexao;
-	if (!whatsappConnection) {
-		throw new createHttpError.BadRequest("Conexão de WhatsApp não encontrada para essa interação.");
-	}
-
-	const processingResult = await processSingleInteractionImmediately({
-		interactionId: interaction.id,
-		organizationId: userOrgId,
-		client: {
-			id: interaction.cliente.id,
-			nome: interaction.cliente.nome,
-			telefone: interaction.cliente.telefone,
-			email: interaction.cliente.email,
-			analiseRFMTitulo: interaction.cliente.analiseRFMTitulo,
-			metadataProdutoMaisCompradoId: interaction.cliente.metadataProdutoMaisCompradoId,
-			metadataGrupoProdutoMaisComprado: interaction.cliente.metadataGrupoProdutoMaisComprado,
-			metadataProdutoSugeridoId: interaction.cliente.metadataProdutoSugeridoId,
-		},
-		campaign: {
-			autorId: campaignAuthorId,
-			whatsappConexaoTelefoneId: campaignWhatsappConnectionPhoneId,
-			whatsappTemplate: interaction.campanha.whatsappTemplate,
-		},
-		whatsappToken: whatsappConnection.tipoConexao === "META_CLOUD_API" ? (whatsappConnection.token ?? undefined) : undefined,
-		whatsappSessionId: whatsappConnection.tipoConexao === "INTERNAL_GATEWAY" ? (whatsappConnection.gatewaySessaoId ?? undefined) : undefined,
-		contextMetadados: (interaction.metadados ?? undefined) as TInteractionContextMetadados | undefined,
-		// Falha após reserva mantém dataExecucao preenchido (a quota semanal já foi consumida por essa
-		// interação) — re-reservar retornaria ALREADY_RESERVED. Sem reserva prévia, o limite é reavaliado.
-		weeklyLimitMode: interaction.dataExecucao ? "skip" : "enforce",
-	});
-
-	if (!processingResult.success) {
-		console.warn("[WARN] [RETRY_CAMPAIGN_INTERACTION] Reenvio não executado.", {
-			interactionId: interaction.id,
+	// O reenvio é um novo disparo de evento com o mesmo contexto congelado na interação original:
+	// passa pelo mesmo pipeline (quota, registro, bônus) que qualquer envio.
+	const contexto = InteractionContextMetadataSchema.safeParse(interaction.metadados ?? {});
+	const dispatch = await db.transaction((tx) =>
+		createEventCampaignDispatch({
+			tx,
 			organizationId: userOrgId,
-			reason: processingResult.error,
-		});
-		return {
-			data: {
-				interactionId: interaction.id,
-				reenviada: false,
-			},
-			message: processingResult.error ?? "Não foi possível reenviar essa interação.",
-		};
-	}
+			campaign: interaction.campanha!,
+			janelaReferencia: `reenvio:${interaction.id}:${Date.now()}`,
+			scheduledAt: null,
+			recipients: [{ clienteId: interaction.clienteId, contexto: contexto.success ? contexto.data : null, descricao: interaction.descricao }],
+		}),
+	);
+	await publishEventDispatches([dispatch]);
 
 	return {
-		data: {
-			interactionId: interaction.id,
-			reenviada: true,
-		},
-		message: "Interação reenviada com sucesso.",
+		data: { interactionId: interaction.id, dispatchId: dispatch.dispatchId, reenviada: dispatch.inserted > 0 },
+		message: dispatch.inserted > 0 ? "Reenvio enfileirado com sucesso." : "Não foi possível enfileirar o reenvio dessa interação.",
 	};
 }
 export type TRetryCampaignInteractionOutput = Awaited<ReturnType<typeof retryCampaignInteraction>>;

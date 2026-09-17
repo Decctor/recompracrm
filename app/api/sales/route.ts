@@ -8,9 +8,14 @@ import { buildSalesHistoryConditions } from "@/lib/sales/history-conditions";
 import { SalesHistoryFiltersSchema } from "@/lib/sales/history-filters";
 import { loadSalesErpData } from "@/lib/sales/erp-data";
 import { resolvePrimarySaleFiscalDocument } from "@/lib/sales/export-summaries";
-import { campaignAudienceHasClient, resolveCampaignAudiencesByCampaignId } from "@/lib/campaigns/filters";
-import { DASTJS_TIME_DURATION_UNITS_MAP, getPostponedDateFromReferenceDate } from "@/lib/dates";
-import { type ImmediateProcessingData, processOrganizationInteractionsBatch, processSingleInteractionImmediately } from "@/lib/interactions";
+import {
+	canScheduleCampaignForClient,
+	createEventCampaignDispatch,
+	publishEventDispatches,
+	resolveTriggeredCampaigns,
+	type TEventDispatchResult,
+} from "@/lib/campaigns/engine";
+import { resolveCampaignAudiencesByCampaignId } from "@/lib/campaigns/filters";
 import { getValidClientSaleWhere } from "@/lib/sales/valid-sale";
 import { resolveSaleEditability } from "@/lib/sales/sale-editability";
 import { decorateFiscalDocuments, type TFiscalDocumentDecoration } from "@/lib/fiscal/document-actions-loader";
@@ -23,74 +28,13 @@ import type {
 	TSaleFiscalDerivedStatusEnum,
 	TFiscalDocumentLifecycleStatusEnum,
 } from "@/schemas/enums";
-import { createCampaignWeeklyLimitCache } from "@/lib/interactions/campaign-weekly-limits";
-import type { TFiscalDocumentStatusEnum, TFiscalDocumentTypeEnum, TTimeDurationUnitsEnum } from "@/schemas/enums";
+import type { TFiscalDocumentStatusEnum, TFiscalDocumentTypeEnum } from "@/schemas/enums";
 import { type DBTransaction, db } from "@/services/drizzle";
-import {
-	cashbackProgramBalances,
-	cashbackProgramTransactions,
-	cashbackPrograms,
-	clients,
-	interactions,
-	organizations,
-	sales,
-} from "@/services/drizzle/schema";
+import { cashbackProgramBalances, cashbackProgramTransactions, cashbackPrograms, clients, organizations, sales } from "@/services/drizzle/schema";
 import dayjs from "dayjs";
 import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
 import createHttpError from "http-errors";
 import z from "zod";
-
-/**
- * Helper function to check if a campaign can be scheduled for a client based on frequency rules
- * @param tx - Database transaction instance
- * @param clienteId - Client ID
- * @param campanhaId - Campaign ID
- * @param permitirRecorrencia - Whether the campaign allows recurrence
- * @param frequenciaIntervaloValor - Frequency interval value
- * @param frequenciaIntervaloMedida - Frequency interval unit (DIAS, HORAS, etc.)
- * @returns true if the campaign can be scheduled, false otherwise
- */
-async function canScheduleCampaignForClient(
-	tx: DBTransaction,
-	clienteId: string,
-	campanhaId: string,
-	permitirRecorrencia: boolean,
-	frequenciaIntervaloValor: number | null,
-	frequenciaIntervaloMedida: string | null,
-): Promise<boolean> {
-	// Check if campaign allows recurrence
-	if (!permitirRecorrencia) {
-		const previousInteraction = await tx.query.interactions.findFirst({
-			where: (fields, { and, eq }) => and(eq(fields.clienteId, clienteId), eq(fields.campanhaId, campanhaId)),
-		});
-		if (previousInteraction) {
-			console.log(`[CAMPAIGN_FREQUENCY] Campaign ${campanhaId} does not allow recurrence. Skipping for client ${clienteId}.`);
-			return false;
-		}
-	}
-
-	// Check for time interval (Frequency Cap)
-	if (permitirRecorrencia && frequenciaIntervaloValor && frequenciaIntervaloValor > 0 && frequenciaIntervaloMedida) {
-		// Map the enum to dayjs units
-		const dayjsUnit = DASTJS_TIME_DURATION_UNITS_MAP[frequenciaIntervaloMedida as TTimeDurationUnitsEnum] || "day";
-
-		// Calculate the cutoff date based on the campaign's interval settings
-		const cutoffDate = dayjs().subtract(frequenciaIntervaloValor, dayjsUnit).toDate();
-
-		const recentInteraction = await tx.query.interactions.findFirst({
-			where: (fields, { and, eq, gt }) => and(eq(fields.clienteId, clienteId), eq(fields.campanhaId, campanhaId), gt(fields.dataInsercao, cutoffDate)),
-		});
-
-		if (recentInteraction) {
-			console.log(
-				`[CAMPAIGN_FREQUENCY] Campaign ${campanhaId} frequency limit reached for client ${clienteId}. Last interaction was at ${recentInteraction.dataInsercao}.`,
-			);
-			return false;
-		}
-	}
-
-	return true;
-}
 
 const GetSalesInputSchema = SalesHistoryFiltersSchema.extend({
 	id: z
@@ -777,21 +721,10 @@ const createSaleRoute: PagesRouteHandler<TCreateSaleOutput> = async (req, res) =
 			throw new createHttpError.BadRequest("Programa de cashback inativo. Resgates não estão disponíveis.");
 		}
 
-		// 2.1. Query campaigns for cashback accumulation trigger
+		// 2.1. Campanhas de cashback acumulado (motor único de gatilhos: lib/campaigns/engine)
 		const campaignsForCashbackAccumulation = await tx.query.campaigns.findMany({
 			where: (fields, { and, eq }) => and(eq(fields.organizacaoId, input.orgId), eq(fields.ativo, true), eq(fields.gatilhoTipo, "CASHBACK-ACUMULADO")),
-			with: {
-				segmentacoes: true,
-				whatsappTemplate: true,
-				whatsappConexaoTelefone: {
-					columns: {
-						id: true,
-					},
-					with: {
-						conexao: { columns: { token: true, gatewaySessaoId: true } },
-					},
-				},
-			},
+			with: { segmentacoes: true },
 		});
 		const audiencesByCampaignId = await resolveCampaignAudiencesByCampaignId({
 			executor: tx,
@@ -907,8 +840,7 @@ const createSaleRoute: PagesRouteHandler<TCreateSaleOutput> = async (req, res) =
 		const newOverallAvailableBalance = previousOverallAvailableBalance + accumulatedBalance;
 		const newOverallAccumulatedBalance = previousOverallAccumulatedBalance + accumulatedBalance;
 
-		// Collect data for immediate processing
-		const immediateProcessingDataList: ImmediateProcessingData[] = [];
+		const eventDispatches: TEventDispatchResult[] = [];
 
 		if (accumulatedBalance > 0 && balance) {
 			// Update balance (credit)
@@ -937,127 +869,54 @@ const createSaleRoute: PagesRouteHandler<TCreateSaleOutput> = async (req, res) =
 				dataInsercao: saleDate,
 			});
 
-			// 6.1. Check for applicable cashback accumulation campaigns
-			if (campaignsForCashbackAccumulation.length > 0) {
-				const applicableCampaigns = campaignsForCashbackAccumulation.filter((campaign) => {
-					if (!campaignAudienceHasClient(audiencesByCampaignId, campaign.id, input.clientId)) return false;
-
-					// Check if the new accumulated cashback meets the minimum threshold (if defined)
-					const meetsNewCashbackThreshold =
-						campaign.gatilhoNovoCashbackAcumuladoValorMinimo === null ||
-						campaign.gatilhoNovoCashbackAcumuladoValorMinimo === undefined ||
-						accumulatedBalance >= campaign.gatilhoNovoCashbackAcumuladoValorMinimo;
-
-					// Check if the total accumulated cashback meets the minimum threshold (if defined)
-					const meetsTotalCashbackThreshold =
-						campaign.gatilhoTotalCashbackAcumuladoValorMinimo === null ||
-						campaign.gatilhoTotalCashbackAcumuladoValorMinimo === undefined ||
-						newOverallAvailableBalance >= campaign.gatilhoTotalCashbackAcumuladoValorMinimo;
-
-					// Both conditions must be met (if defined)
-					return meetsNewCashbackThreshold && meetsTotalCashbackThreshold;
-				});
-
-				if (applicableCampaigns.length > 0) {
+			// 6.1. Campanhas de cashback acumulado: um disparo por (campanha, venda).
+			const triggered = resolveTriggeredCampaigns({
+				campaigns: campaignsForCashbackAccumulation,
+				audiencesByCampaignId,
+				sale: {
+					clientId: input.clientId,
+					isFirstPurchase: false,
+					saleValue: input.saleValue,
+					newTotalPurchaseCount: null,
+					previousTotalPurchaseCount: null,
+					newTotalPurchaseValue: null,
+					previousTotalPurchaseValue: null,
+					cashbackAccumulatedValue: accumulatedBalance,
+					cashbackAvailableBalance: newOverallAvailableBalance,
+				},
+			});
+			for (const { campaign } of triggered) {
+				if (!(await canScheduleCampaignForClient({ executor: tx, campaign, clientId: input.clientId }))) {
 					console.log(
-						`[ORG: ${input.orgId}] ${applicableCampaigns.length} campanhas de cashback acumulado aplicáveis encontradas para o cliente ${input.clientId}.`,
+						`[ORG: ${input.orgId}] [CAMPAIGN_FREQUENCY] Skipping campaign ${campaign.titulo} for client ${input.clientId} due to frequency limits.`,
 					);
+					continue;
 				}
-
-				// Query client data for immediate processing
-				const clientData = await tx.query.clients.findFirst({
-					where: (fields, { eq }) => eq(fields.id, input.clientId),
-					columns: {
-						id: true,
-						nome: true,
-						telefone: true,
-						email: true,
-						analiseRFMTitulo: true,
-						metadataProdutoMaisCompradoId: true,
-						metadataGrupoProdutoMaisComprado: true,
-						metadataProdutoSugeridoId: true,
-					},
-				});
-
-				for (const campaign of applicableCampaigns) {
-					// Validate campaign frequency before scheduling
-					const canSchedule = await canScheduleCampaignForClient(
-						tx,
-						input.clientId,
-						campaign.id,
-						campaign.permitirRecorrencia,
-						campaign.frequenciaIntervaloValor,
-						campaign.frequenciaIntervaloMedida,
-					);
-
-					if (!canSchedule) {
-						console.log(
-							`[ORG: ${input.orgId}] [CAMPAIGN_FREQUENCY] Skipping campaign ${campaign.titulo} for client ${input.clientId} due to frequency limits.`,
-						);
-						continue;
-					}
-
-					const interactionScheduleDate = getPostponedDateFromReferenceDate({
-						date: dayjs().toDate(),
-						unit: campaign.execucaoAgendadaMedida,
-						value: campaign.execucaoAgendadaValor,
-					});
-
-					const interactionContextMetadados = {
-						terminologia: program.terminologia,
-						cashbackAcumuladoValor: accumulatedBalance,
-						whatsappMensagemId: null,
-						whatsappTemplateId: null,
-						compraValor: input.saleValue,
-						compraCashbackAcumulado: accumulatedBalance,
-						compraCashbackNovoSaldo: newOverallAvailableBalance,
-						compraVendedorNome: "PONTO DE INTERAÇÃO",
-						cashbackSaldoDisponivel: newOverallAvailableBalance,
-						cashbackTotalAcumuladoVida: newOverallAccumulatedBalance,
-						cashbackTotalResgatadoVida: balance.saldoValorResgatadoTotal,
-					};
-
-					const [insertedInteraction] = await tx
-						.insert(interactions)
-						.values({
+				const dispatch = await createEventCampaignDispatch({
+					tx,
+					organizationId: input.orgId,
+					campaign,
+					janelaReferencia: `venda:${saleId}`,
+					recipients: [
+						{
 							clienteId: input.clientId,
-							campanhaId: campaign.id,
-							organizacaoId: input.orgId,
-							titulo: `Envio de mensagem automática via campanha ${campaign.titulo}`,
-							tipo: "ENVIO-MENSAGEM",
+							vendaId: saleId,
 							descricao: `Cliente acumulou R$ ${(accumulatedBalance / 100).toFixed(2)} em cashback. Total acumulado: R$ ${(newOverallAccumulatedBalance / 100).toFixed(2)}.`,
-							agendamentoDataReferencia: dayjs(interactionScheduleDate).format("YYYY-MM-DD"),
-							agendamentoBlocoReferencia: campaign.execucaoAgendadaBloco,
-							metadados: interactionContextMetadados,
-						})
-						.returning({ id: interactions.id });
-
-					// Check for immediate processing (execucaoAgendadaValor === 0)
-					if (campaign.execucaoAgendadaValor === 0 && campaign.whatsappTemplate && clientData) {
-						immediateProcessingDataList.push({
-							interactionId: insertedInteraction.id,
-							organizationId: input.orgId,
-							client: {
-								id: clientData.id,
-								nome: clientData.nome,
-								telefone: clientData.telefone,
-								email: clientData.email,
-								analiseRFMTitulo: clientData.analiseRFMTitulo,
-								metadataProdutoMaisCompradoId: clientData.metadataProdutoMaisCompradoId,
-								metadataGrupoProdutoMaisComprado: clientData.metadataGrupoProdutoMaisComprado,
-								metadataProdutoSugeridoId: clientData.metadataProdutoSugeridoId,
+							contexto: {
+								terminologia: program.terminologia,
+								cashbackAcumuladoValor: accumulatedBalance,
+								compraValor: input.saleValue,
+								compraCashbackAcumulado: accumulatedBalance,
+								compraCashbackNovoSaldo: newOverallAvailableBalance,
+								compraVendedorNome: "PONTO DE INTERAÇÃO",
+								cashbackSaldoDisponivel: newOverallAvailableBalance,
+								cashbackTotalAcumuladoVida: newOverallAccumulatedBalance,
+								cashbackTotalResgatadoVida: balance.saldoValorResgatadoTotal,
 							},
-							campaign: {
-								autorId: campaign.autorId,
-								whatsappConexaoTelefoneId: campaign.whatsappConexaoTelefoneId,
-								whatsappTemplate: campaign.whatsappTemplate,
-							},
-							whatsappToken: campaign.whatsappConexaoTelefone?.conexao?.token ?? undefined,
-							whatsappSessionId: campaign.whatsappConexaoTelefone?.conexao?.gatewaySessaoId ?? undefined,
-							contextMetadados: interactionContextMetadados,
-						});
-					}
-				}
+						},
+					],
+				});
+				if (dispatch.created) eventDispatches.push(dispatch);
 			}
 		}
 
@@ -1074,33 +933,12 @@ const createSaleRoute: PagesRouteHandler<TCreateSaleOutput> = async (req, res) =
 			saleId,
 			cashbackAcumulado: accumulatedBalance,
 			newBalance: newOverallAvailableBalance,
-			immediateProcessingDataList,
+			eventDispatches,
 		};
 	});
 
-	// Process interactions immediately after transaction (fire-and-forget)
-	if (result.immediateProcessingDataList && result.immediateProcessingDataList.length > 0) {
-		const weeklyLimitCache = createCampaignWeeklyLimitCache();
-		if (result.immediateProcessingDataList.length === 1) {
-			for (const processingData of result.immediateProcessingDataList) {
-				processSingleInteractionImmediately({ ...processingData, weeklyLimitCache }).catch((err) =>
-					console.error(`[IMMEDIATE_PROCESS] Failed to process interaction ${processingData.interactionId}:`, err),
-				);
-			}
-		} else {
-			processOrganizationInteractionsBatch({
-				organizationId: input.orgId,
-				interactions: result.immediateProcessingDataList,
-				weeklyLimitCache,
-			}).then((processingSummary) => {
-				if (processingSummary.failed > 0 || processingSummary.blocked > 0) {
-					for (const failedResult of processingSummary.results.filter((itemResult) => !itemResult.success)) {
-						console.error(`[IMMEDIATE_PROCESS] Failed to process interaction ${failedResult.interactionId}:`, failedResult.error);
-					}
-				}
-			});
-		}
-	}
+	// Disparos de campanha imediatos: publicados depois do commit (best-effort).
+	if (result.eventDispatches.length > 0) await publishEventDispatches(result.eventDispatches);
 
 	return res.status(201).json({
 		data: {

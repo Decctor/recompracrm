@@ -69,6 +69,7 @@ export async function readResourceForActor(actor: TAgentActorContext, uri: strin
 		preferencias: {
 			rastreamentoEstoque: preferencias.rastreamentoEstoque,
 			limiteMensagensSemanaisViaCampanhas: preferencias.limiteMensagensSemanaisViaCampanhas,
+			limiteMensagensDiariasViaCampanhas: preferencias.limiteMensagensDiariasViaCampanhas,
 		},
 	};
 }

@@ -1,3 +1,4 @@
+import type { TRetryCampaignDispatchInput, TRetryCampaignDispatchOutput } from "@/app/api/campaigns/dispatches/route";
 import type { TRetryCampaignInteractionInput, TRetryCampaignInteractionOutput } from "@/app/api/campaigns/interactions/route";
 import type { TCreateCampaignInput, TCreateCampaignOutput, TUpdateCampaignInput, TUpdateCampaignOutput } from "@/app/api/campaigns/route";
 import type { TTestCampaignInput, TTestCampaignOutput } from "@/app/api/campaigns/test/route";
@@ -41,6 +42,16 @@ export async function testCampaign(input: TTestCampaignInput) {
 		return data;
 	} catch (error) {
 		console.log("Error running testCampaign", error);
+		throw error;
+	}
+}
+
+export async function retryCampaignDispatch(input: TRetryCampaignDispatchInput) {
+	try {
+		const { data } = await axios.post<TRetryCampaignDispatchOutput>("/api/campaigns/dispatches", input);
+		return data;
+	} catch (error) {
+		console.log("Error running retryCampaignDispatch", error);
 		throw error;
 	}
 }

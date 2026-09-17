@@ -1,9 +1,9 @@
 import { relations } from "drizzle-orm";
-import { boolean, doublePrecision, index, integer, text, timestamp, varchar } from "drizzle-orm/pg-core";
+import { boolean, doublePrecision, index, integer, timestamp, varchar } from "drizzle-orm/pg-core";
 import { campaigns } from "./campaigns";
 import { clients } from "./clients";
 import { newTable } from "./common";
-import { conversionTypeEnum } from "./enums";
+import { attributionModelEnum, conversionTypeEnum } from "./enums";
 import { interactions } from "./interactions";
 import { organizations } from "./organizations";
 import { sales } from "./sales";
@@ -29,7 +29,7 @@ export const campaignConversions = newTable(
 			.notNull(),
 
 		// Attribution
-		atribuicaoModelo: text("atribuicao_modelo").notNull().default("LAST_TOUCH"), // LAST_TOUCH, FIRST_TOUCH, LINEAR
+		atribuicaoModelo: attributionModelEnum("atribuicao_modelo").notNull().default("LAST_TOUCH"),
 		atribuicaoPeso: doublePrecision("atribuicao_peso").notNull().default(1.0),
 		atribuicaoReceita: doublePrecision("atribuicao_receita").notNull(),
 
@@ -65,6 +65,8 @@ export const campaignConversions = newTable(
 		campanhaIdIdx: index("idx_campaign_conversions_campanha_id").on(table.campanhaId),
 		clienteIdIdx: index("idx_campaign_conversions_cliente_id").on(table.clienteId),
 		dataConversaoIdx: index("idx_campaign_conversions_data_conversao").on(table.dataConversao),
+		// Estatísticas por campanha no período (a organização entra sempre no WHERE).
+		orgCampanhaDataIdx: index("idx_campaign_conversions_org_campanha_data").on(table.organizacaoId, table.campanhaId, table.dataConversao),
 	}),
 );
 

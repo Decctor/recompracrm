@@ -1,8 +1,8 @@
 import type { TInteractionsStatusEnum } from "@/schemas/interactions";
 import { db } from "@/services/drizzle";
 import { interactions } from "@/services/drizzle/schema";
-import { and, eq } from "drizzle-orm";
-import { adjustWeeklySendQuota } from "./weekly-send-counters";
+import { and, eq, sql } from "drizzle-orm";
+import { adjustSendQuota } from "./send-counters";
 
 const PROGRESSIVE_DELIVERY_STATUS_RANK: Partial<Record<TInteractionsStatusEnum, number>> = {
 	PENDENTE: 0,
@@ -12,7 +12,6 @@ const PROGRESSIVE_DELIVERY_STATUS_RANK: Partial<Record<TInteractionsStatusEnum, 
 };
 
 const QUOTA_CONSUMING_STATUSES: TInteractionsStatusEnum[] = ["PENDENTE", "ENVIADO", "ENTREGUE", "LIDO"];
-const QUOTA_RELEASING_STATUSES: TInteractionsStatusEnum[] = ["FALHOU", "BLOQUEADA"];
 
 function resolveNextDeliveryStatus({
 	current,
@@ -24,7 +23,6 @@ function resolveNextDeliveryStatus({
 	preventStatusDowngrade: boolean;
 }) {
 	if (!preventStatusDowngrade || current == null) return incoming;
-	if (current === "BLOQUEADA" && incoming !== "BLOQUEADA") return current;
 
 	const currentRank = PROGRESSIVE_DELIVERY_STATUS_RANK[current];
 	const incomingRank = PROGRESSIVE_DELIVERY_STATUS_RANK[incoming];
@@ -60,12 +58,14 @@ type TUpdateInteractionDeliveryStateOutput = {
 // eventual delta de quota são confirmados na mesma transação, evitando liberação duplicada por
 // webhooks repetidos ou concorrentes.
 //
-// A regra de status espelha a antiga resolveNextStatus() quando preventStatusDowngrade está ativo:
-//   - status atual nulo OU prevenção desligada  -> aplica o incoming
-//   - atual = BLOQUEADA e incoming != BLOQUEADA -> mantém o atual
-//   - rank(atual) > rank(incoming)              -> mantém o atual (PENDENTE<ENVIADO<ENTREGUE<LIDO)
+// Regra de status com preventStatusDowngrade ativo:
+//   - status atual nulo OU prevenção desligada    -> aplica o incoming
+//   - rank(atual) > rank(incoming)                -> mantém o atual (PENDENTE<ENVIADO<ENTREGUE<LIDO)
 //   - atual em (ENTREGUE, LIDO) e incoming FALHOU -> mantém o atual
-//   - caso contrário                            -> aplica o incoming
+//   - caso contrário                              -> aplica o incoming
+//
+// Quota: FALHOU reportado pelo provedor devolve todas as janelas que o envio consumiu (nas chaves
+// da reserva); a volta para um status entregue reconsome.
 export async function updateInteractionDeliveryState({
 	interactionId,
 	organizationId,
@@ -103,15 +103,17 @@ export async function updateInteractionDeliveryState({
 		const statusChanged = previousStatus !== nextStatus;
 		const previouslyConsumedQuota = previousStatus != null && QUOTA_CONSUMING_STATUSES.includes(previousStatus);
 		const nextConsumesQuota = QUOTA_CONSUMING_STATUSES.includes(nextStatus);
+		const isTestSend = asMetadataRecord(currentInteraction.metadados).teste === true;
 
 		if (
 			statusChanged &&
 			previouslyConsumedQuota !== nextConsumesQuota &&
+			!isTestSend &&
 			currentInteraction.tipo === "ENVIO-MENSAGEM" &&
 			currentInteraction.campanhaId != null &&
 			currentInteraction.organizacaoId != null
 		) {
-			await adjustWeeklySendQuota({
+			await adjustSendQuota({
 				tx,
 				organizationId: currentInteraction.organizacaoId,
 				campaignId: currentInteraction.campanhaId,
@@ -124,7 +126,7 @@ export async function updateInteractionDeliveryState({
 		const nextError = incomingWasApplied
 			? erroEnvio !== undefined
 				? erroEnvio
-				: QUOTA_RELEASING_STATUSES.includes(nextStatus)
+				: nextStatus === "FALHOU"
 					? currentInteraction.erroEnvio
 					: null
 			: currentInteraction.erroEnvio;
@@ -175,6 +177,78 @@ export function markInteractionFailed(params: Omit<TUpdateInteractionDeliverySta
 	return updateInteractionDeliveryState({ ...params, statusEnvio: "FALHOU" });
 }
 
-export function markInteractionBlocked(params: Omit<TUpdateInteractionDeliveryStateInput, "statusEnvio">) {
-	return updateInteractionDeliveryState({ ...params, statusEnvio: "BLOQUEADA" });
+export type TProviderMessageStatus = "pending" | "sent" | "delivered" | "read" | "failed";
+
+const PROVIDER_STATUS_TO_DELIVERY_STATUS: Record<TProviderMessageStatus, TInteractionsStatusEnum> = {
+	pending: "PENDENTE",
+	sent: "ENVIADO",
+	delivered: "ENTREGUE",
+	read: "LIDO",
+	failed: "FALHOU",
+};
+
+export function mapProviderStatusToInteractionStatus(status: TProviderMessageStatus): TInteractionsStatusEnum {
+	return PROVIDER_STATUS_TO_DELIVERY_STATUS[status] ?? "PENDENTE";
+}
+
+type TApplyProviderStatusUpdateInput = {
+	// Um dos dois identifica a interação: o wamid gravado em metadados.whatsappMessageId, ou o
+	// clientMessageId (gateway interno), que é o próprio id da interação.
+	whatsappMessageId?: string | null;
+	clientMessageId?: string | null;
+	status: TProviderMessageStatus;
+	errorMessage?: string | null;
+	metadataPatch?: Record<string, unknown>;
+};
+
+/**
+ * Ponto único de aplicação de status de entrega vindos de um provedor (Meta Cloud API e
+ * gateway interno). Resolve a interação, mapeia o status e delega a transição (com quota) a
+ * updateInteractionDeliveryState. Devolve null quando nenhuma interação corresponde — mensagens
+ * de chat comuns também geram esses webhooks e não têm interação.
+ */
+export async function applyProviderStatusUpdate({
+	whatsappMessageId,
+	clientMessageId,
+	status,
+	errorMessage,
+	metadataPatch,
+}: TApplyProviderStatusUpdateInput): Promise<TUpdateInteractionDeliveryStateOutput | null> {
+	let interaction: { id: string; organizacaoId: string | null } | undefined;
+
+	if (clientMessageId) {
+		interaction = await db.query.interactions.findFirst({
+			where: (fields, { eq: eqFilter }) => eqFilter(fields.id, clientMessageId),
+			columns: { id: true, organizacaoId: true },
+		});
+	}
+	if (!interaction && whatsappMessageId) {
+		interaction = await db.query.interactions.findFirst({
+			where: sql`${interactions.metadados}->>'whatsappMessageId' = ${whatsappMessageId}`,
+			columns: { id: true, organizacaoId: true },
+		});
+	}
+	if (!interaction) return null;
+
+	if (!interaction.organizacaoId) {
+		console.warn("[INTERACTIONS] Interação sem organizacaoId; atualizando estado de entrega apenas por id:", {
+			interactionId: interaction.id,
+			whatsappMessageId,
+			clientMessageId,
+		});
+	}
+
+	const statusEnvio = mapProviderStatusToInteractionStatus(status);
+	return updateInteractionDeliveryState({
+		interactionId: interaction.id,
+		organizationId: interaction.organizacaoId ?? undefined,
+		statusEnvio,
+		erroEnvio: statusEnvio === "FALHOU" ? (errorMessage ?? "Mensagem não entregue pelo WhatsApp.") : null,
+		metadataPatch: {
+			...(whatsappMessageId ? { whatsappMessageId } : {}),
+			...(clientMessageId ? { clientMessageId } : {}),
+			whatsappStatus: statusEnvio,
+			...metadataPatch,
+		},
+	});
 }

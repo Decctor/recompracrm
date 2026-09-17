@@ -4,6 +4,7 @@ import type { TGetCampaignInteractionsOutputItems } from "@/app/api/campaigns/in
 import type { TGetConversionQualityOutput } from "@/app/api/campaigns/stats/conversion-quality/route";
 import { CampaignConversionCard, CONVERSION_TYPE_CONFIG } from "@/components/Campaigns/Conversions/CampaignConversionCard";
 import CampaignsGraphs from "@/app/dashboard/growth/campaigns/_module/shared/stats/CampaignsGraphs";
+import CampaignDispatchesSection from "@/app/dashboard/growth/campaigns/_module/detail/components/campaign-dispatches-section";
 import ClientHoverCard from "@/components/Clients/ClientHoverCard";
 import { InteractionCard } from "@/components/Interactions/InteractionCard";
 import DateIntervalInput from "@/components/Inputs/DateIntervalInput";
@@ -252,6 +253,8 @@ export default function CampaignStatsView({ campaignId }: CampaignStatsViewProps
 				</div>
 			)}
 
+			<CampaignDispatchesSection campaignId={campaignId} />
+
 			<div className="w-full flex flex-col lg:flex-row gap-3">
 				<div className="w-full lg:w-1/2">
 					<InteractionsSection campaignId={campaignId} />
@@ -370,43 +373,42 @@ function ImpactRow({ label, value, positive }: { label: string; value: string; p
 }
 
 function WeeklyLimitSection({ performance }: { performance: TGetCampaignStatsOutput["data"] | undefined }) {
-	const weeklyLimit = performance?.limiteSemanal;
-	if (!weeklyLimit) return null;
+	const quota = performance?.quota;
+	if (!quota) return null;
+	const weekly = quota.find((window) => window.tipo === "SEMANAL");
+	const daily = quota.find((window) => window.tipo === "DIARIO");
+	if (!weekly || !daily) return null;
+
+	// Um envio só sai quando TODAS as janelas têm saldo: o saldo efetivo é o menor entre elas.
+	const remainingCandidates = [weekly.campanha.restante, weekly.organizacao.restante, daily.organizacao.restante].filter(
+		(value): value is number => value != null,
+	);
+	const effectiveRemaining = remainingCandidates.length > 0 ? Math.min(...remainingCandidates) : null;
 
 	return (
 		<div className="w-full flex flex-col gap-3">
 			<div className="w-full flex items-start flex-col lg:flex-row gap-3">
 				<StatUnitCard
-					title="LIMITE SEMANAL EFETIVO"
+					title="LIMITE SEMANAL DA CAMPANHA"
 					icon={<CalendarClock className="w-4 h-4 min-w-4 min-h-4" />}
-					current={{
-						value: weeklyLimit.campaignEffectiveWeeklyLimit ?? 0,
-						format: () => formatWeeklyLimitValue(weeklyLimit.campaignEffectiveWeeklyLimit),
-					}}
+					current={{ value: weekly.campanha.limite ?? 0, format: () => formatWeeklyLimitValue(weekly.campanha.limite) }}
 				/>
 				<StatUnitCard
 					title="USADO NESTA SEMANA"
 					icon={<Send className="w-4 h-4 min-w-4 min-h-4" />}
-					current={{
-						value: weeklyLimit.campaignUsedThisWeek,
-						format: (n) => formatDecimalPlaces(n),
-					}}
+					current={{ value: weekly.campanha.usados, format: (n) => formatDecimalPlaces(n) }}
 				/>
 				<StatUnitCard
-					title="SALDO SEMANAL"
+					title="SALDO DISPONÍVEL AGORA"
+					subtitle="menor saldo entre os limites da campanha (semana) e da organização (dia e semana)"
 					icon={<Clock className="w-4 h-4 min-w-4 min-h-4" />}
-					current={{
-						value: weeklyLimit.campaignRemainingThisWeek ?? 0,
-						format: () => formatWeeklyLimitValue(weeklyLimit.campaignRemainingThisWeek),
-					}}
+					current={{ value: effectiveRemaining ?? 0, format: () => formatWeeklyLimitValue(effectiveRemaining) }}
 				/>
 				<StatUnitCard
-					title="LIMITE SEMANAL DA ORGANIZAÇÃO"
+					title="ORGANIZAÇÃO: SEMANA / DIA"
+					subtitle={`usados ${formatDecimalPlaces(weekly.organizacao.usados)} de ${formatWeeklyLimitValue(weekly.organizacao.limite)} na semana · ${formatDecimalPlaces(daily.organizacao.usados)} de ${formatWeeklyLimitValue(daily.organizacao.limite)} hoje`}
 					icon={<ShieldAlert className="w-4 h-4 min-w-4 min-h-4" />}
-					current={{
-						value: weeklyLimit.organizationWeeklyLimit ?? 0,
-						format: () => formatWeeklyLimitValue(weeklyLimit.organizationWeeklyLimit),
-					}}
+					current={{ value: weekly.organizacao.restante ?? 0, format: () => formatWeeklyLimitValue(weekly.organizacao.restante) }}
 				/>
 			</div>
 		</div>
@@ -561,7 +563,7 @@ function InteractionsSection({ campaignId }: { campaignId: string }) {
 			page: 1,
 			search: "",
 			status: [],
-			orderByField: "agendamentoData",
+			orderByField: "dataExecucao",
 			orderByDirection: "desc",
 			campanhaId: campaignId,
 		},
@@ -650,10 +652,9 @@ function InteractionLogCard({ interaction }: { interaction: TGetCampaignInteract
 			toast.error(getErrorMessage(error));
 		},
 	});
-	const executionStatus = interaction.dataExecucao ? "EXECUTADA" : "AGENDADA";
-	const scheduleDateText = interaction.agendamentoDataReferencia ? dayjs(interaction.agendamentoDataReferencia).format("DD/MM/YYYY") : "Não definido";
-	const scheduleBlockText = interaction.agendamentoBlocoReferencia ?? "--:--";
-	const executionDateText = interaction.dataExecucao ? formatDateAsLocale(interaction.dataExecucao, true) : "Não executada";
+	const sentAt = interaction.dataEnvio ?? interaction.dataExecucao;
+	const executionStatus = interaction.statusEnvio === "FALHOU" ? "FALHOU" : "ENVIADA";
+	const executionDateText = sentAt ? formatDateAsLocale(sentAt, true) : "Não enviada";
 
 	return (
 		<InteractionCard.Provider interaction={interaction}>
@@ -690,14 +691,14 @@ function InteractionLogCard({ interaction }: { interaction: TGetCampaignInteract
 							) : null}
 							<div
 								className={cn("flex items-center gap-1.5 rounded-md px-1.5 py-1.5 text-[0.65rem] font-bold", {
-									"bg-blue-500 text-white": executionStatus === "AGENDADA",
-									"bg-green-500 text-white": executionStatus === "EXECUTADA",
+									"bg-red-500 text-white": executionStatus === "FALHOU",
+									"bg-green-500 text-white": executionStatus === "ENVIADA",
 								})}
 							>
 								<CircleCheck className="w-4 min-w-4 h-4 min-h-4" />
 								<p className="text-xs font-bold tracking-tight uppercase">{executionStatus}</p>
 							</div>
-							{interaction.erroEnvio && !interaction.dataExecucao ? (
+							{interaction.statusEnvio === "FALHOU" ? (
 								<Button
 									size="sm"
 									variant="outline"
@@ -714,23 +715,9 @@ function InteractionLogCard({ interaction }: { interaction: TGetCampaignInteract
 					{interaction.descricao && <p className="text-xs font-medium tracking-tight text-muted-foreground">{interaction.descricao}</p>}
 				</div>
 				<div className="w-full flex items-center justify-end gap-2 flex-wrap">
-					<div className="flex items-center gap-2">
-						<div className="flex items-center gap-1">
-							<CalendarClock className="w-4 h-4 min-w-4 min-h-4" />
-							<h1 className="py-0.5 text-center text-[0.65rem] font-medium italic">
-								AGENDADO PARA: {scheduleDateText} ({scheduleBlockText})
-							</h1>
-						</div>
-						{interaction.dataExecucao ? (
-							<div
-								className={cn("flex items-center gap-1", {
-									"text-green-500 dark:text-green-400": !!interaction.dataExecucao,
-								})}
-							>
-								<CalendarCheck className="w-4 h-4 min-w-4 min-h-4" />
-								<h1 className="py-0.5 text-center text-[0.65rem] font-medium italic">{executionDateText}</h1>
-							</div>
-						) : null}
+					<div className="flex items-center gap-1 text-green-500 dark:text-green-400">
+						<CalendarCheck className="w-4 h-4 min-w-4 min-h-4" />
+						<h1 className="py-0.5 text-center text-[0.65rem] font-medium italic">{executionDateText}</h1>
 					</div>
 				</div>
 			</div>

@@ -5,7 +5,11 @@ import ErrorComponent from "@/components/Layouts/ErrorComponent";
 import LoadingComponent from "@/components/Layouts/LoadingComponent";
 import GeneralPaginationComponent from "@/components/Utils/Pagination";
 import { InteractiveFilter, type InteractiveFilterOption, type InteractiveFilterSortValue } from "@/components/ui/interactive-filter";
-import { formatInteractiveOptionSummary, formatInteractiveSortFieldSummary, isInteractiveSortActive } from "@/components/ui/interactive-filter-formatting";
+import {
+	formatInteractiveOptionSummary,
+	formatInteractiveSortFieldSummary,
+	isInteractiveSortActive,
+} from "@/components/ui/interactive-filter-formatting";
 import { Input } from "@/components/ui/input";
 import { getErrorMessage } from "@/lib/errors";
 import { useCampaignInteractionsLogs } from "@/lib/queries/campaigns";
@@ -26,7 +30,7 @@ export function CampaignsInteractionsView() {
 			page: 1,
 			search: "",
 			status: [],
-			orderByField: "agendamentoData",
+			orderByField: "dataExecucao",
 			orderByDirection: "desc",
 		},
 	});
@@ -90,12 +94,11 @@ function CampaignInteractionsInlineFilters({
 }) {
 	const statusOptions = InteractionsSentStatusOptions as InteractiveFilterOption<(typeof filters.status)[number]>[];
 	const orderFieldOptions = [
-		{ id: "agendamentoData", label: "DATA DE AGENDAMENTO", value: "agendamentoData" },
 		{ id: "dataExecucao", label: "DATA DE EXECUÇÃO", value: "dataExecucao" },
 		{ id: "dataEnvio", label: "DATA DE ENVIO", value: "dataEnvio" },
 	] as const satisfies InteractiveFilterOption<NonNullable<typeof filters.orderByField>>[];
 	const defaultSort = {
-		field: "agendamentoData",
+		field: "dataExecucao",
 		direction: "desc",
 	} satisfies InteractiveFilterSortValue<NonNullable<typeof filters.orderByField>>;
 	const sortValue = {

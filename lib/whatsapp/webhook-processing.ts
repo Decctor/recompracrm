@@ -12,7 +12,7 @@ import {
 } from "@/lib/chats/incoming-message";
 import { lockConnectedWhatsappPhone, mergeMessageTemplatePhoneMetadataSql } from "@/lib/db-utils";
 import { downloadAndStoreWhatsappMedia } from "@/lib/files-storage/chat-media";
-import { updateInteractionDeliveryState } from "@/lib/interactions/delivery-state";
+import { applyProviderStatusUpdate } from "@/lib/interactions/delivery-state";
 import {
 	buildWhatsappTemplateSyncPatch,
 	getMetaWhatsappTemplate,
@@ -23,12 +23,10 @@ import {
 } from "@/lib/message-templates";
 import { resolveWhatsappClient } from "@/lib/whatsapp/contact-identity";
 import {
-	type AppWhatsappStatus,
 	isMessageEchoEvent,
 	isMessageEvent,
 	isStatusUpdate,
 	isTemplateEvent,
-	mapWhatsAppStatusToAppStatus,
 	parseTemplateCategoryUpdate,
 	parseTemplateQualityUpdate,
 	parseTemplateStatusUpdate,
@@ -49,11 +47,9 @@ import {
 } from "@/lib/whatsapp/smb-message-history-sync";
 import type { TChatMessageMetadata } from "@/schemas/chats";
 import type { TChatMessageContentTypeEnum } from "@/schemas/enums";
-import type { TInteractionsStatusEnum } from "@/schemas/interactions";
 import type { TMessageTemplateMetadata } from "@/schemas/message-templates";
 import { db } from "@/services/drizzle";
 import { chatMessages } from "@/services/drizzle/schema/chats";
-import { interactions } from "@/services/drizzle/schema/interactions";
 import { messageTemplates } from "@/services/drizzle/schema/message-templates";
 import { whatsappConnectionPhones } from "@/services/drizzle/schema/whatsapp-connections";
 import { supabaseClient } from "@/services/supabase";
@@ -333,13 +329,6 @@ async function syncUniversalTemplateComponentsFromMeta(messageTemplateId: string
 	}
 }
 
-const INTERACTION_STATUS_MAPPING: Record<AppWhatsappStatus, TInteractionsStatusEnum> = {
-	PENDENTE: "PENDENTE",
-	ENVIADO: "ENVIADO",
-	ENTREGUE: "ENTREGUE",
-	LIDO: "LIDO",
-	FALHOU: "FALHOU",
-};
 /**
  * Handle message status updates (sent, delivered, read, failed)
  */
@@ -351,15 +340,7 @@ async function handleStatusUpdates(body: TMetaWebhookBody): Promise<void> {
 
 async function handleStatusUpdate(statusUpdate: ReturnType<typeof parseWebhookStatusUpdates>[number]): Promise<void> {
 	await observeWhatsappPayment(statusUpdate);
-	const { whatsappStatus } = mapWhatsAppStatusToAppStatus(statusUpdate.status);
 
-	const previousInteraction = await db.query.interactions.findFirst({
-		where: sql`${interactions.metadados}->>'whatsappMessageId' = ${statusUpdate.whatsappMessageId}`,
-		columns: {
-			id: true,
-			organizacaoId: true,
-		},
-	});
 	const statusEntrega = mapProviderStatusToDeliveryStatus(statusUpdate.status);
 	if (statusEntrega) {
 		// Sem regressão: a Meta entrega eventos fora de ordem, e um "sent" atrasado não
@@ -367,25 +348,13 @@ async function handleStatusUpdate(statusUpdate: ReturnType<typeof parseWebhookSt
 		await applyProviderDeliveryStatus({ statusEntrega, whatsappMessageId: statusUpdate.whatsappMessageId });
 	}
 
-	if (previousInteraction) {
-		if (!previousInteraction.organizacaoId) {
-			console.warn("[WHATSAPP_WEBHOOK] Interação sem organizacaoId; atualizando estado de entrega apenas por id:", {
-				interactionId: previousInteraction.id,
-				whatsappMessageId: statusUpdate.whatsappMessageId,
-			});
-		}
-
-		await updateInteractionDeliveryState({
-			interactionId: previousInteraction.id,
-			organizationId: previousInteraction.organizacaoId ?? undefined,
-			statusEnvio: INTERACTION_STATUS_MAPPING[whatsappStatus],
-			erroEnvio: whatsappStatus === "FALHOU" ? (statusUpdate.errorMessage ?? "Mensagem não entregue pelo WhatsApp.") : null,
-			metadataPatch: {
-				whatsappMessageId: statusUpdate.whatsappMessageId,
-				...(statusUpdate.errors && statusUpdate.errors.length > 0 ? { whatsappErrors: statusUpdate.errors } : {}),
-			},
-		});
-	}
+	// Interações de campanha: mesmo ponto de aplicação do gateway interno (quota inclusa).
+	await applyProviderStatusUpdate({
+		whatsappMessageId: statusUpdate.whatsappMessageId,
+		status: statusUpdate.status,
+		errorMessage: statusUpdate.errorMessage,
+		metadataPatch: statusUpdate.errors && statusUpdate.errors.length > 0 ? { whatsappErrors: statusUpdate.errors } : undefined,
+	});
 	console.log("[WHATSAPP_WEBHOOK] Status updated for message:", statusUpdate.whatsappMessageId);
 }
 
@@ -596,10 +565,7 @@ async function attachWhatsappReaction(input: {
 	date: Date;
 }): Promise<void> {
 	const targetMessage = await db.query.chatMessages.findFirst({
-		where: and(
-			eq(chatMessages.organizacaoId, input.organizacaoId),
-			eq(chatMessages.whatsappMessageId, input.reaction.targetWhatsappMessageId),
-		),
+		where: and(eq(chatMessages.organizacaoId, input.organizacaoId), eq(chatMessages.whatsappMessageId, input.reaction.targetWhatsappMessageId)),
 		columns: { id: true, metadados: true },
 	});
 	if (!targetMessage) {

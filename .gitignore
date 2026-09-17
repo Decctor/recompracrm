@@ -58,3 +58,4 @@ output/
 
 # generated image studies (landing assets)
 .generated/
+.env*

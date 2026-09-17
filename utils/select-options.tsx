@@ -334,14 +334,6 @@ export const InteractionsSentStatusOptions: {
 		icon: <X className="w-4 h-4" />,
 		className: "bg-red-200 text-red-600 border border-red-600 hover:bg-red-100 hover:text-red-500 hover:border-red-600",
 	},
-	{
-		id: 6,
-		label: "BLOQUEADA",
-		value: "BLOQUEADA",
-		message: (overwrite) => overwrite ?? "Interação bloqueada — envio não realizado.",
-		icon: <Ban className="w-4 h-4" />,
-		className: "bg-amber-200 text-amber-700 border border-amber-600 hover:bg-amber-100 hover:text-amber-600 hover:border-amber-600",
-	},
 ];
 
 export const CashbackProgramAccumulationTypeOptions: { id: number; label: string; value: TCashbackProgramAccumulationTypeEnum }[] = [
