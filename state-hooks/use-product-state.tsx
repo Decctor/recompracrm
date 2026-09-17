@@ -494,6 +494,26 @@ export const useProductState = ({ initialState }: UseProductStateProps = {}) => 
 		});
 	}, []);
 
+	const moveProductAddOn = useCallback((index: number, direction: "up" | "down") => {
+		setState((prev) => {
+			const visible = prev.productAddOns
+				.map((addOn, originalIndex) => ({ addOn, originalIndex }))
+				.filter(({ addOn }) => !addOn.deletar);
+			const position = visible.findIndex(({ originalIndex }) => originalIndex === index);
+			const target = direction === "up" ? position - 1 : position + 1;
+			if (position < 0 || target < 0 || target >= visible.length) return prev;
+
+			const reorderedVisible = visible.map(({ addOn }) => addOn);
+			const [moved] = reorderedVisible.splice(position, 1);
+			reorderedVisible.splice(target, 0, moved);
+
+			return {
+				...prev,
+				productAddOns: [...reorderedVisible, ...prev.productAddOns.filter((addOn) => addOn.deletar)],
+			};
+		});
+	}, []);
+
 	// ===== OPÇÕES DE ADD-ON DO PRODUTO =====
 
 	const addProductAddOnOption = useCallback((addOnIndex: number, option: TProductAddOnOptionState) => {
@@ -789,6 +809,7 @@ export const useProductState = ({ initialState }: UseProductStateProps = {}) => 
 		addProductAddOn,
 		updateProductAddOn,
 		removeProductAddOn,
+		moveProductAddOn,
 		// Opções de add-on do produto
 		addProductAddOnOption,
 		updateProductAddOnOption,

@@ -10,7 +10,7 @@ import { formatToMoney } from "@/lib/formatting";
 import { SPREADSHEET_TABLE_ATTR, type SpreadsheetGridBounds } from "@/lib/spreadsheet-navigation";
 import { cn } from "@/lib/utils";
 import type { TProductAddOnOptionState, TProductAddOnState, TUseProductState } from "@/state-hooks/use-product-state";
-import { Check, Layers, LinkIcon, Plus, RotateCcw, Share2, Unplug } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Layers, LinkIcon, Plus, RotateCcw, Share2, Unplug } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import ProductVinculation from "../ProductVinculation";
@@ -44,6 +44,43 @@ function AddOnGroupIndexBadge({ index, draft }: { index?: number; draft?: boolea
 		<span className="inline-flex h-7 min-w-7 shrink-0 items-center justify-center rounded-md border border-border bg-background px-1.5 text-[0.65rem] font-semibold tabular-nums tracking-tight text-muted-foreground">
 			{String(index).padStart(2, "0")}
 		</span>
+	);
+}
+
+function AddOnGroupOrderControls({
+	groupName,
+	canMoveUp,
+	canMoveDown,
+	onMove,
+}: {
+	groupName: string;
+	canMoveUp: boolean;
+	canMoveDown: boolean;
+	onMove: (direction: "up" | "down") => void;
+}) {
+	return (
+		<div className="flex shrink-0 items-center">
+			<Button
+				type="button"
+				variant="ghost"
+				size="icon-sm"
+				disabled={!canMoveUp}
+				aria-label={`Mover o grupo ${groupName} para cima`}
+				onClick={() => onMove("up")}
+			>
+				<ChevronUp className="h-4 w-4" />
+			</Button>
+			<Button
+				type="button"
+				variant="ghost"
+				size="icon-sm"
+				disabled={!canMoveDown}
+				aria-label={`Mover o grupo ${groupName} para baixo`}
+				onClick={() => onMove("down")}
+			>
+				<ChevronDown className="h-4 w-4" />
+			</Button>
+		</div>
 	);
 }
 
@@ -92,6 +129,7 @@ type ProductStateAddOnsBlockProps = {
 	addProductAddOn: TUseProductState["addProductAddOn"];
 	updateProductAddOn: TUseProductState["updateProductAddOn"];
 	removeProductAddOn: TUseProductState["removeProductAddOn"];
+	moveProductAddOn: TUseProductState["moveProductAddOn"];
 	addProductAddOnOption: TUseProductState["addProductAddOnOption"];
 	updateProductAddOnOption: TUseProductState["updateProductAddOnOption"];
 	removeProductAddOnOption: TUseProductState["removeProductAddOnOption"];
@@ -106,6 +144,7 @@ export default function ProductStateAddOnsBlock({
 	addProductAddOn,
 	updateProductAddOn,
 	removeProductAddOn,
+	moveProductAddOn,
 	addProductAddOnOption,
 	updateProductAddOnOption,
 	removeProductAddOnOption,
@@ -123,6 +162,7 @@ export default function ProductStateAddOnsBlock({
 			addProductAddOn={addProductAddOn}
 			updateProductAddOn={updateProductAddOn}
 			removeProductAddOn={removeProductAddOn}
+			moveProductAddOn={moveProductAddOn}
 			addProductAddOnOption={addProductAddOnOption}
 			updateProductAddOnOption={updateProductAddOnOption}
 			removeProductAddOnOption={removeProductAddOnOption}
@@ -144,6 +184,7 @@ type AddOnGroupsListProps = {
 	addProductAddOn: TUseProductState["addProductAddOn"];
 	updateProductAddOn: TUseProductState["updateProductAddOn"];
 	removeProductAddOn: TUseProductState["removeProductAddOn"];
+	moveProductAddOn: TUseProductState["moveProductAddOn"];
 	addProductAddOnOption: TUseProductState["addProductAddOnOption"];
 	updateProductAddOnOption: TUseProductState["updateProductAddOnOption"];
 	removeProductAddOnOption: TUseProductState["removeProductAddOnOption"];
@@ -155,6 +196,7 @@ function AddOnGroupsList({
 	addProductAddOn,
 	updateProductAddOn,
 	removeProductAddOn,
+	moveProductAddOn,
 	addProductAddOnOption,
 	updateProductAddOnOption,
 	removeProductAddOnOption,
@@ -173,6 +215,9 @@ function AddOnGroupsList({
 					groupIndex={groupIndex + 1}
 					addOn={addOn}
 					usageCount={addOn.id ? usageByAddOnId?.[addOn.id] : undefined}
+					canMoveUp={groupIndex > 0}
+					canMoveDown={groupIndex < validAddOns.length - 1}
+					onMove={(direction) => moveProductAddOn(addOn.originalIndex, direction)}
 					onUpdate={(partial) => updateProductAddOn(addOn.originalIndex, partial)}
 					onRemove={() => removeProductAddOn(addOn.originalIndex)}
 					addOption={(option) => addProductAddOnOption(addOn.originalIndex, option)}
@@ -190,6 +235,9 @@ type AddOnGroupPanelProps = {
 	groupIndex: number;
 	addOn: ValidAddOnRow;
 	usageCount?: number;
+	canMoveUp: boolean;
+	canMoveDown: boolean;
+	onMove: (direction: "up" | "down") => void;
 	onUpdate: (partial: Partial<Omit<TProductAddOnState, "opcoes">>) => void;
 	onRemove: () => void;
 	addOption: (option: TProductAddOnOptionState) => void;
@@ -197,7 +245,19 @@ type AddOnGroupPanelProps = {
 	removeOption: (optionIndex: number) => void;
 };
 
-function AddOnGroupPanel({ groupIndex, addOn, usageCount, onUpdate, onRemove, addOption, updateOption, removeOption }: AddOnGroupPanelProps) {
+function AddOnGroupPanel({
+	groupIndex,
+	addOn,
+	usageCount,
+	canMoveUp,
+	canMoveDown,
+	onMove,
+	onUpdate,
+	onRemove,
+	addOption,
+	updateOption,
+	removeOption,
+}: AddOnGroupPanelProps) {
 	const validOptions = useMemo(
 		() => addOn.opcoes.map((option, index) => ({ ...option, originalIndex: index })).filter((option) => !option.deletar),
 		[addOn.opcoes],
@@ -219,7 +279,16 @@ function AddOnGroupPanel({ groupIndex, addOn, usageCount, onUpdate, onRemove, ad
 
 	return (
 		<div className="flex w-full flex-col overflow-hidden rounded-lg border border-border bg-background shadow-xs">
-			<AddOnGroupHeader groupIndex={groupIndex} addOn={addOn} usageCount={usageCount} onUpdate={handleGroupUpdate} onRemove={onRemove} />
+			<AddOnGroupHeader
+				groupIndex={groupIndex}
+				addOn={addOn}
+				usageCount={usageCount}
+				canMoveUp={canMoveUp}
+				canMoveDown={canMoveDown}
+				onMove={onMove}
+				onUpdate={handleGroupUpdate}
+				onRemove={onRemove}
+			/>
 
 			<AddOnOptionTable
 				validOptions={validOptions}
@@ -236,6 +305,9 @@ type AddOnGroupHeaderProps = {
 	groupIndex: number;
 	addOn: ValidAddOnRow;
 	usageCount?: number;
+	canMoveUp: boolean;
+	canMoveDown: boolean;
+	onMove: (direction: "up" | "down") => void;
 	onUpdate: (partial: Partial<Omit<TProductAddOnState, "opcoes">>) => void;
 	onRemove: () => void;
 };
@@ -254,13 +326,20 @@ function AddOnGroupSharedBadge({ usageCount }: { usageCount?: number }) {
 	);
 }
 
-function AddOnGroupHeader({ groupIndex, addOn, usageCount, onUpdate, onRemove }: AddOnGroupHeaderProps) {
+function AddOnGroupHeader({ groupIndex, addOn, usageCount, canMoveUp, canMoveDown, onMove, onUpdate, onRemove }: AddOnGroupHeaderProps) {
+	const orderControls = (
+		<AddOnGroupOrderControls groupName={addOn.nome || `grupo ${groupIndex}`} canMoveUp={canMoveUp} canMoveDown={canMoveDown} onMove={onMove} />
+	);
+
 	return (
 		<div className="border-b border-border bg-muted">
 			<div className="hidden flex-col gap-2 px-3 py-2.5 lg:flex">
 				<div className="flex items-start justify-between gap-3">
 					<div className="flex min-w-0 flex-1 items-start gap-2.5">
-						<AddOnGroupIndexBadge index={groupIndex} />
+						<div className="flex shrink-0 items-center gap-0.5">
+							<AddOnGroupIndexBadge index={groupIndex} />
+							{orderControls}
+						</div>
 						<div className="min-w-0 flex-1 space-y-1">
 							<div className="min-w-0 [&_button]:h-9 [&_button]:text-sm [&_button]:font-semibold [&_button]:text-foreground [&_input]:h-9 [&_input]:text-sm [&_input]:font-semibold">
 								<EditableTextCell
@@ -360,7 +439,10 @@ function AddOnGroupHeader({ groupIndex, addOn, usageCount, onUpdate, onRemove }:
 								/>
 							</MobileEditableField>
 						</div>
-						<DeleteRowButton onRemove={onRemove} ariaLabel="Remover grupo de adicionais" />
+						<div className="flex shrink-0 items-center">
+							{orderControls}
+							<DeleteRowButton onRemove={onRemove} ariaLabel="Remover grupo de adicionais" />
+						</div>
 					</div>
 				</div>
 				<AddOnGroupSharedBadge usageCount={usageCount} />

@@ -37,7 +37,7 @@ export function CampaignsInteractionsView() {
 	const totalPages = interactionsResult?.totalPages ?? 0;
 
 	return (
-		<div className="w-full flex flex-col gap-3">
+		<div className="flex w-full min-w-0 flex-col gap-3">
 			<div className="w-full flex items-center gap-2 flex-col-reverse lg:flex-row">
 				<Input
 					value={filters.search ?? ""}
@@ -65,31 +65,11 @@ export function CampaignsInteractionsView() {
 			{isLoading ? <LoadingComponent /> : null}
 			{isError ? <ErrorComponent msg={getErrorMessage(error)} /> : null}
 			{isSuccess ? (
-				<div className="w-full flex flex-col gap-1.5">
+				<div className="flex w-full min-w-0 flex-col gap-2">
 					{interactionsItems.length > 0 ? (
 						interactionsItems.map((interaction) => (
 							<InteractionCard.Provider key={interaction.id} interaction={interaction}>
-								<InteractionCard.Frame>
-									<InteractionCard.Body>
-										<InteractionCard.Header>
-											<InteractionCard.Leading>
-												<InteractionCard.CampaignTitle />
-												<InteractionCard.ClientChip />
-											</InteractionCard.Leading>
-											<InteractionCard.Actions>
-												<InteractionCard.MessagePreview />
-												<InteractionCard.DataForNerds />
-												<InteractionCard.RetryButton />
-												<InteractionCard.SentStatus />
-											</InteractionCard.Actions>
-										</InteractionCard.Header>
-										<InteractionCard.Description />
-									</InteractionCard.Body>
-									<InteractionCard.Footer>
-										<InteractionCard.CreatedAt />
-										<InteractionCard.ScheduleStatus />
-									</InteractionCard.Footer>
-								</InteractionCard.Frame>
+								<InteractionCard.ListItem />
 							</InteractionCard.Provider>
 						))
 					) : (

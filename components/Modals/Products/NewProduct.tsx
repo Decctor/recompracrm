@@ -49,6 +49,7 @@ export default function NewProduct({ user, userMembership, closeModal, callbacks
 		addProductAddOn,
 		updateProductAddOn,
 		removeProductAddOn,
+		moveProductAddOn,
 		addProductAddOnOption,
 		updateProductAddOnOption,
 		removeProductAddOnOption,
@@ -244,6 +245,7 @@ export default function NewProduct({ user, userMembership, closeModal, callbacks
 				addProductAddOnOption={addProductAddOnOption}
 				updateProductAddOnOption={updateProductAddOnOption}
 				removeProductAddOnOption={removeProductAddOnOption}
+				{...{ moveProductAddOn }}
 			/>
 			<ProductFiscalBlock
 				userHasFiscalViewPermission={userHasFiscalViewPermission}

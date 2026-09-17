@@ -193,6 +193,7 @@ export function useProductAddOnsSectionEditor({
 			addProductAddOn: wrapWithDirty(productState.addProductAddOn, markDirty),
 			updateProductAddOn: wrapWithDirty(productState.updateProductAddOn, markDirty),
 			removeProductAddOn: wrapWithDirty(productState.removeProductAddOn, markDirty),
+			moveProductAddOn: wrapWithDirty(productState.moveProductAddOn, markDirty),
 			addProductAddOnOption: wrapWithDirty(productState.addProductAddOnOption, markDirty),
 			updateProductAddOnOption: wrapWithDirty(productState.updateProductAddOnOption, markDirty),
 			removeProductAddOnOption: wrapWithDirty(productState.removeProductAddOnOption, markDirty),

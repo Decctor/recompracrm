@@ -1,6 +1,6 @@
 "use client";
 
-import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
+import { HoverOrPopover } from "@/components/ui/hover-or-popover";
 import { formatLocation } from "@/lib/formatting";
 import { useClientById } from "@/lib/queries/clients";
 import { appRoutes } from "@/lib/navigation/routes";
@@ -18,10 +18,8 @@ export default function ClientHoverCard({ clientId, children }: ClientHoverCardP
 	const { data: client, isLoading, isError } = useClientById({ id: clientId });
 
 	return (
-		<HoverCard>
-			<HoverCardTrigger render={children} />
-			<HoverCardContent className="w-80 p-0 overflow-hidden" align="start">
-				<div className="w-full flex flex-col gap-3 p-4">
+		<HoverOrPopover trigger={children} nativeButton={false} align="start" className="w-80 max-w-[calc(100vw-2rem)] overflow-hidden p-0">
+			<div className="w-full flex flex-col gap-3 p-4">
 					{isLoading ? <p className="text-xs text-muted-foreground animate-pulse">Carregando cliente...</p> : null}
 					{isError ? <p className="text-xs text-red-500">Não foi possível carregar os dados do cliente.</p> : null}
 					{client ? (
@@ -94,7 +92,6 @@ export default function ClientHoverCard({ clientId, children }: ClientHoverCardP
 						</>
 					) : null}
 				</div>
-			</HoverCardContent>
-		</HoverCard>
+		</HoverOrPopover>
 	);
 }

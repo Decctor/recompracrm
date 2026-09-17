@@ -6,7 +6,7 @@ import TemplatePreview from "@/components/MessageTemplates/TemplatePreview";
 import { WhatsappIcon } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
-import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
+import { HoverOrPopover } from "@/components/ui/hover-or-popover";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { getErrorMessage } from "@/lib/errors";
 import { formatDateAsLocale } from "@/lib/formatting";
@@ -44,19 +44,23 @@ function InteractionCardProvider({ interaction, children }: { interaction: TInte
 }
 
 function InteractionCardFrame({ children, className }: { children: ReactNode; className?: string }) {
-	return <div className={cn("bg-card border-border flex w-full flex-col gap-2 rounded-xl border px-3 py-4 shadow-2xs", className)}>{children}</div>;
+	return (
+		<div className={cn("bg-card border-border flex w-full min-w-0 flex-col gap-2 overflow-hidden rounded-xl border px-3 py-4 shadow-2xs", className)}>
+			{children}
+		</div>
+	);
 }
 
 function InteractionCardHeader({ children }: { children: ReactNode }) {
-	return <div className="w-full flex items-center justify-between gap-2">{children}</div>;
+	return <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">{children}</div>;
 }
 
 function InteractionCardLeading({ children, className }: { children: ReactNode; className?: string }) {
-	return <div className={cn("flex items-center gap-3", className)}>{children}</div>;
+	return <div className={cn("flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3", className)}>{children}</div>;
 }
 
 function InteractionCardActions({ children, className }: { children: ReactNode; className?: string }) {
-	return <div className={cn("flex items-center gap-3", className)}>{children}</div>;
+	return <div className={cn("flex shrink-0 items-center gap-1 self-end sm:gap-3 sm:self-auto", className)}>{children}</div>;
 }
 
 function InteractionCardBody({ children }: { children: ReactNode }) {
@@ -65,23 +69,125 @@ function InteractionCardBody({ children }: { children: ReactNode }) {
 
 function InteractionCardDescription() {
 	const { interaction } = useInteractionCard();
-	return <p className="text-xs font-medium tracking-tight text-muted-foreground">{interaction.descricao}</p>;
+	if (!interaction.descricao) return null;
+	return <p className="text-xs leading-relaxed font-medium tracking-tight text-muted-foreground">{interaction.descricao}</p>;
 }
 
 function InteractionCardFooter({ children }: { children: ReactNode }) {
-	return <div className="w-full flex items-center justify-between gap-2 flex-wrap">{children}</div>;
+	return <div className="flex w-full min-w-0 flex-wrap items-center justify-between gap-2">{children}</div>;
 }
 
-function InteractionCardCampaignTitle() {
+function InteractionCardCampaignTitle({ className }: { className?: string }) {
 	const { interaction } = useInteractionCard();
-	return <h1 className="text-xs font-bold tracking-tight lg:text-sm">{interaction.campanha?.titulo ?? "CAMPANHA NÃO ENCONTRADA"}</h1>;
+	return (
+		<h1 className={cn("min-w-0 text-xs font-bold tracking-tight break-words lg:text-sm", className)}>
+			{interaction.campanha?.titulo ?? "CAMPANHA NÃO ENCONTRADA"}
+		</h1>
+	);
+}
+
+function InteractionCardClientSubtitle() {
+	const { interaction } = useInteractionCard();
+	const clientName = interaction.cliente.nome ?? "Não informado";
+
+	return (
+		<ClientHoverCard clientId={interaction.cliente.id}>
+			<span className="text-primary flex min-w-0 cursor-pointer items-center gap-1.5 text-left text-sm font-medium tracking-tight">
+				<UserRound className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+				<span className="truncate">{clientName}</span>
+			</span>
+		</ClientHoverCard>
+	);
+}
+
+function InteractionCardMetaPanel() {
+	const { interaction } = useInteractionCard();
+	const scheduleDateText = interaction.agendamentoDataReferencia ? dayjs(interaction.agendamentoDataReferencia).format("DD/MM/YYYY") : "—";
+	const scheduleBlockText = interaction.agendamentoBlocoReferencia ?? "—";
+	const createdAtText = formatDateAsLocale(interaction.dataInsercao, true);
+	const executionDateText = interaction.dataExecucao ? formatDateAsLocale(interaction.dataExecucao, true) : null;
+
+	return (
+		<dl className="border-border/70 grid grid-cols-[minmax(0,auto)_1fr] gap-x-4 gap-y-2 border-t pt-2.5 text-xs">
+			<dt className="font-medium text-muted-foreground">Criado</dt>
+			<dd className="text-right font-medium tabular-nums">{createdAtText}</dd>
+			{executionDateText ? (
+				<>
+					<dt className="font-medium text-green-600 dark:text-green-500">Executado</dt>
+					<dd className="text-right font-medium text-green-600 tabular-nums dark:text-green-500">{executionDateText}</dd>
+				</>
+			) : (
+				<>
+					<dt className="font-medium text-muted-foreground">Agendado</dt>
+					<dd className="text-right font-medium tabular-nums">
+						{scheduleDateText} · {scheduleBlockText}
+					</dd>
+				</>
+			)}
+		</dl>
+	);
+}
+
+function InteractionCardActionBar() {
+	return (
+		<div
+			className="border-border bg-muted/30 -mx-3 -mb-4 mt-0.5 flex items-center justify-end gap-0.5 border-t px-1 py-0.5 sm:hidden [&_button]:size-10"
+			role="toolbar"
+			aria-label="Ações da interação"
+		>
+			<InteractionCardMessagePreview />
+			<InteractionCardDataForNerds />
+			<InteractionCardRetryButton layout="toolbar" />
+		</div>
+	);
+}
+
+function InteractionCardListItem() {
+	return (
+		<InteractionCard.Frame className="gap-0 sm:gap-2">
+			<div className="flex min-w-0 flex-col gap-2.5 sm:hidden">
+				<div className="flex items-start justify-between gap-3">
+					<InteractionCardCampaignTitle className="line-clamp-3 text-sm leading-snug" />
+					<div className="shrink-0 pt-0.5">
+						<InteractionCardSentStatus />
+					</div>
+				</div>
+				<InteractionCardClientSubtitle />
+				<InteractionCardDescription />
+				<InteractionCardMetaPanel />
+				<InteractionCardActionBar />
+			</div>
+
+			<div className="hidden w-full min-w-0 flex-col gap-2 sm:flex">
+				<InteractionCardBody>
+					<InteractionCardHeader>
+						<InteractionCardLeading>
+							<InteractionCardCampaignTitle />
+							<InteractionCardClientChip />
+						</InteractionCardLeading>
+						<InteractionCardActions>
+							<InteractionCardMessagePreview />
+							<InteractionCardDataForNerds />
+							<InteractionCardRetryButton layout="inline" />
+							<InteractionCardSentStatus />
+						</InteractionCardActions>
+					</InteractionCardHeader>
+					<InteractionCardDescription />
+				</InteractionCardBody>
+				<InteractionCardFooter>
+					<InteractionCardCreatedAt />
+					<InteractionCardScheduleStatus />
+				</InteractionCardFooter>
+			</div>
+		</InteractionCard.Frame>
+	);
 }
 
 function InteractionCardClientChip() {
 	const { interaction } = useInteractionCard();
 	return (
 		<ClientHoverCard clientId={interaction.cliente.id}>
-			<Chip.Root variant="secondary" size="md" shape="xl" className="cursor-pointer">
+			<Chip.Root variant="secondary" size="md" shape="xl" className="max-w-full min-w-0 shrink cursor-pointer">
 				<Chip.Icon>
 					<UserRound className="w-4 h-4 min-w-4 min-h-4" />
 				</Chip.Icon>
@@ -253,30 +359,26 @@ function InteractionCardMessagePreview({ className }: { className?: string }) {
 	if (!templateContent) return null;
 
 	return (
-		<HoverCard>
-			<HoverCardTrigger
-				delay={200}
-				closeDelay={100}
-				render={
-					<Button
-						type="button"
-						size="icon"
-						variant="ghost"
-						className={cn("h-7 w-7 text-muted-foreground hover:text-foreground", className)}
-						aria-label="Preview da mensagem"
-					>
-						<Eye className="h-4 w-4" />
-					</Button>
-				}
-			/>
-			<HoverCardContent
-				className="w-[360px] overflow-auto p-2 max-h-[70vh] scrollbar-thin scrollbar-track-primary/10 scrollbar-thumb-primary/30"
-				align="end"
-				side="bottom"
-			>
-				<TemplatePreview content={templateContent} variables={variables} compact />
-			</HoverCardContent>
-		</HoverCard>
+		<HoverOrPopover
+			align="end"
+			side="bottom"
+			hoverOpenDelay={200}
+			hoverCloseDelay={100}
+			className="max-h-[70vh] w-[min(360px,calc(100vw-2rem))] overflow-auto p-2 scrollbar-thin scrollbar-track-primary/10 scrollbar-thumb-primary/30"
+			trigger={
+				<Button
+					type="button"
+					size="icon"
+					variant="ghost"
+					className={cn("h-7 w-7 text-muted-foreground hover:text-foreground", className)}
+					aria-label="Preview da mensagem"
+				>
+					<Eye className="h-4 w-4" />
+				</Button>
+			}
+		>
+			<TemplatePreview content={templateContent} variables={variables} compact />
+		</HoverOrPopover>
 	);
 }
 
@@ -286,24 +388,25 @@ function InteractionCardDataForNerds({ className }: { className?: string }) {
 	const channelBlocks = [buildWhatsappBlock(metadata), buildEmailBlock(metadata)].filter((block): block is NerdsChannelBlock => block !== null);
 
 	return (
-		<HoverCard>
-			<HoverCardTrigger
-				delay={200}
-				closeDelay={100}
-				render={
-					<Button
-						type="button"
-						size="icon"
-						variant="ghost"
-						className={cn("h-7 w-7 text-muted-foreground hover:text-foreground", className)}
-						aria-label="Data for nerds"
-					>
-						<Code className="h-4 w-4" />
-					</Button>
-				}
-			/>
-			<HoverCardContent className="max-h-[70vh] w-88 overflow-auto p-0" align="end" side="bottom">
-				<div className="border-border bg-secondary/40 border-b px-4 py-3">
+		<HoverOrPopover
+			align="end"
+			side="bottom"
+			hoverOpenDelay={200}
+			hoverCloseDelay={100}
+			className="max-h-[70vh] w-[min(22rem,calc(100vw-2rem))] overflow-auto p-0"
+			trigger={
+				<Button
+					type="button"
+					size="icon"
+					variant="ghost"
+					className={cn("h-7 w-7 text-muted-foreground hover:text-foreground", className)}
+					aria-label="Data for nerds"
+				>
+					<Code className="h-4 w-4" />
+				</Button>
+			}
+		>
+			<div className="border-border bg-secondary/40 border-b px-4 py-3">
 					<div className="flex items-center gap-2">
 						<div className="bg-background flex h-7 w-7 items-center justify-center rounded-lg border border-border/70 shadow-xs">
 							<Code className="h-3.5 w-3.5 text-muted-foreground" />
@@ -326,8 +429,7 @@ function InteractionCardDataForNerds({ className }: { className?: string }) {
 						</div>
 					)}
 				</div>
-			</HoverCardContent>
-		</HoverCard>
+		</HoverOrPopover>
 	);
 }
 
@@ -368,7 +470,7 @@ function InteractionCardSentStatus() {
 	);
 }
 
-function InteractionCardRetryButton() {
+function InteractionCardRetryButton({ layout = "inline" }: { layout?: "inline" | "toolbar" }) {
 	const { interaction } = useInteractionCard();
 	const queryClient = useQueryClient();
 	const { mutate: handleRetryInteraction, isPending: retryIsPending } = useMutation({
@@ -390,19 +492,22 @@ function InteractionCardRetryButton() {
 	return (
 		<Button
 			type="button"
-			size="sm"
+			size={layout === "toolbar" ? "icon" : "sm"}
 			variant="ghost"
 			onClick={() => handleRetryInteraction()}
 			disabled={retryIsPending}
-			aria-label="Reenviar interação"
-			className="h-7 gap-1.5 px-2.5 text-xs font-bold text-muted-foreground hover:text-foreground"
+			aria-label={retryIsPending ? "Reenviando interação" : "Reenviar interação"}
+			className={cn(
+				"text-muted-foreground hover:text-foreground",
+				layout === "toolbar" ? "size-10 shrink-0" : "h-7 gap-1.5 px-2.5 text-xs font-bold",
+			)}
 		>
 			<RefreshCw
-				className={cn("w-4 h-4 min-w-4 min-h-4", {
+				className={cn("size-4 shrink-0", {
 					"animate-spin": retryIsPending,
 				})}
 			/>
-			<span className="hidden sm:inline">{retryIsPending ? "REENVIANDO..." : "REENVIAR"}</span>
+			{layout === "inline" ? <span className="hidden sm:inline">{retryIsPending ? "REENVIANDO..." : "REENVIAR"}</span> : null}
 		</Button>
 	);
 }
@@ -410,10 +515,12 @@ function InteractionCardRetryButton() {
 function InteractionCardCreatedAt() {
 	const { interaction } = useInteractionCard();
 	return (
-		<div className="flex items-center gap-2">
-			<div className="flex items-center gap-1.5">
-				<BsCalendarPlus className="w-4 h-4 min-w-4 min-h-4" />
-				<h2 className="py-0.5 text-center text-[0.65rem] font-medium italic">DATA DE CRIAÇÃO: {formatDateAsLocale(interaction.dataInsercao, true)}</h2>
+		<div className="flex min-w-0 items-center gap-2">
+			<div className="flex min-w-0 items-center gap-1.5">
+				<BsCalendarPlus className="h-4 w-4 min-h-4 min-w-4 shrink-0" />
+				<h2 className="min-w-0 py-0.5 text-left text-[0.65rem] font-medium break-words italic">
+					DATA DE CRIAÇÃO: {formatDateAsLocale(interaction.dataInsercao, true)}
+				</h2>
 			</div>
 		</div>
 	);
@@ -427,21 +534,26 @@ function InteractionCardScheduleStatus() {
 
 	if (interaction.dataExecucao) {
 		return (
-			<Chip.Root variant="success" size="sm" shape="pill">
+			<Chip.Root variant="success" size="sm" shape="pill" className="max-w-full min-w-0 shrink whitespace-normal sm:whitespace-nowrap">
 				<Chip.Icon>
 					<CalendarCheck className="w-4 h-4 min-w-4 min-h-4" />
 				</Chip.Icon>
-				<Chip.Label className="text-xs block py-0.5 text-center italic font-medium leading-tight">{executionDateText}</Chip.Label>
+				<Chip.Label className="block py-0.5 text-left text-xs leading-tight font-medium italic sm:text-center">{executionDateText}</Chip.Label>
 			</Chip.Root>
 		);
 	}
 
 	return (
-		<Chip.Root variant="secondary" size="sm" shape="pill" className="px-2 py-1 sm:px-3 sm:py-1.5">
+		<Chip.Root
+			variant="secondary"
+			size="sm"
+			shape="pill"
+			className="max-w-full min-w-0 shrink px-2 py-1 whitespace-normal sm:px-3 sm:py-1.5 sm:whitespace-nowrap"
+		>
 			<Chip.Icon>
 				<Calendar className="w-4 h-4 min-w-4 min-h-4" />
 			</Chip.Icon>
-			<Chip.Label className="text-xs block py-0.5 text-center italic font-medium leading-tight">
+			<Chip.Label className="block py-0.5 text-left text-xs leading-tight font-medium italic sm:text-center">
 				AGENDADO PARA: {scheduleDateText} ({scheduleBlockText})
 			</Chip.Label>
 		</Chip.Root>
@@ -459,6 +571,10 @@ export const InteractionCard = {
 	Footer: InteractionCardFooter,
 	CampaignTitle: InteractionCardCampaignTitle,
 	ClientChip: InteractionCardClientChip,
+	ClientSubtitle: InteractionCardClientSubtitle,
+	MetaPanel: InteractionCardMetaPanel,
+	ActionBar: InteractionCardActionBar,
+	ListItem: InteractionCardListItem,
 	MessagePreview: InteractionCardMessagePreview,
 	DataForNerds: InteractionCardDataForNerds,
 	SentStatus: InteractionCardSentStatus,

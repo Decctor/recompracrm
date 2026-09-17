@@ -2,9 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
-import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { useIsMobile } from "@/hooks/use-mobile";
+import { HoverOrPopover } from "@/components/ui/hover-or-popover";
 import { formatCashbackValue, formatDateAsLocale, formatToMoney } from "@/lib/formatting";
 import { appRoutes } from "@/lib/navigation/routes";
 import { cn } from "@/lib/utils";
@@ -423,27 +421,11 @@ function DetailsSheet() {
  * não existe lá, e o detalhe era inalcançável). A linha filha vira o gatilho.
  */
 function Details({ children }: { children: ReactElement }) {
-	const isMobile = useIsMobile();
-	if (isMobile) {
-		return (
-			<InteractiveContext value>
-				<Popover>
-					<PopoverTrigger nativeButton={false} render={children} />
-					<PopoverContent align="start" className="w-80 p-4">
-						<DetailsSheet />
-					</PopoverContent>
-				</Popover>
-			</InteractiveContext>
-		);
-	}
 	return (
 		<InteractiveContext value>
-			<HoverCard>
-				<HoverCardTrigger delay={250} closeDelay={100} render={children} />
-				<HoverCardContent align="start" className="w-80 p-4">
-					<DetailsSheet />
-				</HoverCardContent>
-			</HoverCard>
+			<HoverOrPopover trigger={children} nativeButton={false} align="start" className="w-80 max-w-[calc(100vw-2rem)] p-4" hoverOpenDelay={250}>
+				<DetailsSheet />
+			</HoverOrPopover>
 		</InteractiveContext>
 	);
 }

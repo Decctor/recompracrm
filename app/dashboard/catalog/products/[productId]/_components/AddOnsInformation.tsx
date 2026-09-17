@@ -54,6 +54,7 @@ export default function ProductAddOnsInformation({ product, sectionWrapperClassN
 					addProductAddOn={editor.addProductAddOn}
 					updateProductAddOn={editor.updateProductAddOn}
 					removeProductAddOn={editor.removeProductAddOn}
+					moveProductAddOn={editor.moveProductAddOn}
 					addProductAddOnOption={editor.addProductAddOnOption}
 					updateProductAddOnOption={editor.updateProductAddOnOption}
 					removeProductAddOnOption={editor.removeProductAddOnOption}
