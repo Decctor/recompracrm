@@ -94,3 +94,13 @@ export function resolveSaleClientReassignmentPolicy(sale: TSaleClientReassignmen
 		documentoFiscal: documentoFiscal ? { id: documentoFiscal.id, tipo: documentoFiscal.tipo, numero: documentoFiscal.numero ?? null } : null,
 	};
 }
+
+/**
+ * Recorte grosso para a UI decidir se OFERECE a ação, sem buscar a prévia: venda interna
+ * confirmada fora de conta de atendimento. A recusa real, com motivo legível, continua vindo de
+ * `resolveSaleClientReassignmentPolicy` no servidor — esta função só evita renderizar um botão
+ * que abriria um diálogo inteiramente bloqueado.
+ */
+export function saleOffersClientReassignment(sale: Pick<TSaleClientReassignmentRow, "statusVenda" | "processamentoOrigem" | "tabId">) {
+	return sale.processamentoOrigem === "INTERNO" && sale.statusVenda === "CONFIRMADA" && !sale.tabId;
+}
