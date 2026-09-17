@@ -107,6 +107,8 @@ export const sales = newTable(
 	},
 	(table) => ({
 		clientIdIdx: index("idx_sales_client_id").on(table.clienteId),
+		// FK ON DELETE SET NULL: sem este índice, apagar interações varre a tabela de vendas inteira.
+		atribuicaoInteracaoIdx: index("idx_sales_atribuicao_interacao_id").on(table.atribuicaoInteracaoId),
 		parceiroIdx: index("idx_sales_parceiro").on(table.parceiro),
 		dataVendaIdx: index("idx_sales_data_venda").on(table.dataVenda),
 		vendedorIdx: index("idx_sales_vendedor").on(table.vendedorNome),

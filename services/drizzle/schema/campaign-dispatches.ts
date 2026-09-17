@@ -119,6 +119,8 @@ export const campaignDispatchRecipients = newTable(
 		index("idx_campaign_dispatch_recipients_org_campanha_cliente").on(table.organizacaoId, table.campanhaId, table.clienteId, table.dataInsercao),
 		// Saúde do dia (dashboard) e varredura de reservas paradas.
 		index("idx_campaign_dispatch_recipients_org_status_data").on(table.organizacaoId, table.status, table.dataInsercao),
+		// FK ON DELETE SET NULL para interactions.
+		index("idx_campaign_dispatch_recipients_interacao_id").on(table.interacaoId),
 	],
 );
 export const campaignDispatchRecipientRelations = relations(campaignDispatchRecipients, ({ one }) => ({

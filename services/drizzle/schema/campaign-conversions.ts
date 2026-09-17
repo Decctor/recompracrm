@@ -62,6 +62,7 @@ export const campaignConversions = newTable(
 	},
 	(table) => ({
 		vendaIdIdx: index("idx_campaign_conversions_venda_id").on(table.vendaId),
+		interacaoIdIdx: index("idx_campaign_conversions_interacao_id").on(table.interacaoId),
 		campanhaIdIdx: index("idx_campaign_conversions_campanha_id").on(table.campanhaId),
 		clienteIdIdx: index("idx_campaign_conversions_cliente_id").on(table.clienteId),
 		dataConversaoIdx: index("idx_campaign_conversions_data_conversao").on(table.dataConversao),
