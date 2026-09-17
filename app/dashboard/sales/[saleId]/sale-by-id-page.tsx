@@ -5,6 +5,7 @@ import { ClientDuplicatePill } from "@/components/Clients/duplicates/ClientDupli
 import LoadingComponent from "@/components/Layouts/LoadingComponent";
 import { PageHeader } from "@/components/Layouts/PageHeader";
 import { CancelConfirmedSaleDialog } from "@/components/Modals/Sales/CancelConfirmedSaleDialog";
+import { ReassignSaleClientDialog } from "@/components/Modals/Sales/ReassignSaleClientDialog";
 import { LoadingButton } from "@/components/loading-button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +26,7 @@ import {
 } from "@/components/Fiscal/fiscal-problem-presentation";
 import { PAYMENT_METHOD_LABELS } from "@/lib/payments/labels";
 import { SALE_FINANCIAL_STATUS_PRESENTATION, SALE_FISCAL_STATUS_PRESENTATION } from "@/lib/sales/status-presentation";
+import { saleOffersClientReassignment } from "@/lib/sales/sale-client-reassignment-policy";
 import { mapInternalFiscalStatus } from "@/lib/sales/utils";
 import { useSalesById } from "@/lib/queries/sales";
 import { cn } from "@/lib/utils";
@@ -58,6 +60,7 @@ import {
 	TrendingDown,
 	TrendingUp,
 	Truck,
+	UserRoundPen,
 	Wallet,
 	SquareArrowOutUpRight,
 } from "lucide-react";
@@ -148,7 +151,7 @@ export default function SaleByIdPage({
 					<SaleOverviewSection sale={sale} />
 				</div>
 				<div className="w-full lg:w-1/2 flex">
-					<ClientSection client={sale.cliente} canReconcile={userCanReconcileClients} />
+					<ClientSection sale={sale} canReconcile={userCanReconcileClients} canEditSales={userCanEditSales} />
 				</div>
 			</div>
 			<div className="w-full flex flex-col lg:flex-row gap-4 lg:items-stretch">
@@ -269,7 +272,17 @@ function SaleOverviewSection({ sale }: { sale: TGetSalesOutputById }) {
 	);
 }
 
-function ClientSection({ client, canReconcile }: { client: TGetSalesOutputById["cliente"]; canReconcile: boolean }) {
+function ClientSection({ sale, canReconcile, canEditSales }: { sale: TGetSalesOutputById; canReconcile: boolean; canEditSales: boolean }) {
+	const client = sale.cliente;
+	const [reassignIsOpen, setReassignIsOpen] = useState(false);
+	// A ação mora no painel do CLIENTE porque é ele que ela muda — e é aqui que o estado vazio
+	// ("cliente não atribuído") já pede a definição. O recorte é o mesmo do quadro de atendimento;
+	// a recusa com motivo vem da prévia, dentro do diálogo.
+	const offersReassignment = canEditSales && saleOffersClientReassignment(sale);
+	const reassignDialog = reassignIsOpen ? (
+		<ReassignSaleClientDialog saleId={sale.id} cliente={client} closeModal={() => setReassignIsOpen(false)} />
+	) : null;
+
 	if (!client)
 		return (
 			<Section.Root>
@@ -282,8 +295,15 @@ function ClientSection({ client, canReconcile }: { client: TGetSalesOutputById["
 				<Section.Body>
 					<div className="w-full flex flex-col items-center justify-center gap-3">
 						<span className="text-sm font-medium text-muted-foreground">CLIENTE NÃO ATRIBUÍDO</span>
+						{offersReassignment ? (
+							<Button variant="outline" size="sm" onClick={() => setReassignIsOpen(true)}>
+								<UserRoundPen className="w-4 h-4" />
+								DEFINIR CLIENTE
+							</Button>
+						) : null}
 					</div>
 				</Section.Body>
+				{reassignDialog}
 			</Section.Root>
 		);
 	return (
@@ -294,6 +314,12 @@ function ClientSection({ client, canReconcile }: { client: TGetSalesOutputById["
 				</Section.Icon>
 				<Section.Title>CLIENTE</Section.Title>
 				<Section.Actions>
+					{offersReassignment ? (
+						<Button variant="ghost" size="xs" onClick={() => setReassignIsOpen(true)}>
+							<UserRoundPen className="w-3 h-3 mr-1" />
+							TROCAR
+						</Button>
+					) : null}
 					<Button variant="ghost" size="xs" asChild>
 						<Link href={`${appRoutes.customers.root()}/${client.id}`}>
 							VER PERFIL
@@ -302,6 +328,7 @@ function ClientSection({ client, canReconcile }: { client: TGetSalesOutputById["
 					</Button>
 				</Section.Actions>
 			</Section.Header>
+			{reassignDialog}
 			<Section.Body>
 				<div className="w-full flex flex-col gap-3">
 					{/* Name */}

@@ -9,6 +9,7 @@ import { formatDateAsLocale, formatToMoney, formatToPhone } from "@/lib/formatti
 import { appRoutes } from "@/lib/navigation/routes";
 import { PAYMENT_METHOD_LABELS } from "@/lib/payments/labels";
 import { useSalesFulfillmentById } from "@/lib/queries/sales-fulfillment";
+import { saleOffersClientReassignment } from "@/lib/sales/sale-client-reassignment-policy";
 import { SALE_FINANCIAL_STATUS_PRESENTATION, SALE_FISCAL_STATUS_PRESENTATION, type TSaleStatusTone } from "@/lib/sales/status-presentation";
 import { cn } from "@/lib/utils";
 import type { TSaleFinancialDerivedStatusEnum, TSaleFiscalDerivedStatusEnum } from "@/schemas/enums";
@@ -568,8 +569,8 @@ function SaleActionsFooter({
 	const showEdit = !!canEditSales && (editability.nivel === "TOTAL" || editability.rascunho || editability.motivos.length > 0);
 	const showCancel = !!canDeleteSales && editability.cancelamentoDisponivel;
 	// Trocar/definir cliente segue a política do servidor (prévia no diálogo); aqui só o recorte
-	// grosso: venda interna confirmada fora de conta de atendimento.
-	const showClient = !!canEditSales && sale.processamentoOrigem === "INTERNO" && sale.statusVenda === "CONFIRMADA" && !sale.tabId;
+	// grosso, o mesmo que o painel CLIENTE da página da venda usa.
+	const showClient = !!canEditSales && saleOffersClientReassignment(sale);
 	if (!showEdit && !showCancel && !showClient) return null;
 	const editHref = editability.rascunho ? appRoutes.sales.checkout(sale.id) : appRoutes.sales.edit(sale.id);
 	const editIsEnabled = editability.nivel === "TOTAL" || editability.rascunho;
