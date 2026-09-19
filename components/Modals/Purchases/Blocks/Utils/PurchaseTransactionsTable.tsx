@@ -61,7 +61,10 @@ export type TAccountingEntryTransactionRow = TNewAccountingEntryTransaction & {
 	deletar?: boolean | null;
 };
 
-type TAccountingEntryTransactionPatch = Partial<Omit<TAccountingEntryTransactionRow, "id" | "deletar">>;
+// `deletar` entra no patch de propósito: desfazer a remoção de uma transação já persistida é
+// limpar a flag de soft-delete. Só o `id` é intocável. A flag é `boolean` estrito (sem `null`)
+// porque o estado da compra a tipa assim, e o patch precisa servir aos dois estados que o consomem.
+type TAccountingEntryTransactionPatch = Partial<Omit<TAccountingEntryTransactionRow, "id" | "deletar">> & { deletar?: boolean };
 
 type PurchaseTransactionsTableProps = {
 	entryValue: number;
