@@ -9,6 +9,7 @@ import { getShopAvailability } from "@/lib/shop/availability";
 import { copyToClipboard } from "@/lib/utils";
 import { useShopSettings } from "@/lib/queries/shop";
 import { Clock3, Copy, ExternalLink, QrCode } from "lucide-react";
+import ShopSettingsEmptyState from "./components/ShopSettingsEmptyState";
 import ShopSettingsPanel from "./components/ShopSettingsPanel";
 
 export default function ShopPage({ slug }: { slug: string | null }) {
@@ -16,7 +17,8 @@ export default function ShopPage({ slug }: { slug: string | null }) {
 
 	if (isLoading) return <LoadingComponent />;
 	if (isError) return <ErrorComponent msg={getErrorMessage(error)} />;
-	if (!settings) return <ErrorComponent msg="Configurações da loja digital não encontradas." />;
+	// Org sem loja ainda: em vez de um erro sem saída, oferecemos a criação da configuração inicial.
+	if (!settings) return <ShopSettingsEmptyState />;
 
 	const availability = getShopAvailability({ ativo: settings.ativo, configuracoes: settings.configuracoes });
 	// Org sem slug não deveria existir após o backfill; ainda assim não montamos link quebrado.
