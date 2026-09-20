@@ -6,11 +6,12 @@ import EditableTextCell from "@/components/Spreadsheet/EditableTextCell";
 import MobileEditableField from "@/components/Spreadsheet/MobileEditableField";
 import ResponsiveMenuSection from "@/components/Utils/ResponsiveMenuSection";
 import { Button } from "@/components/ui/button";
+import { Chip, chipVariants } from "@/components/ui/chip";
 import { formatToMoney } from "@/lib/formatting";
 import { SPREADSHEET_TABLE_ATTR, type SpreadsheetGridBounds } from "@/lib/spreadsheet-navigation";
 import { cn } from "@/lib/utils";
 import type { TProductAddOnOptionState, TProductAddOnState, TUseProductState } from "@/state-hooks/use-product-state";
-import { Check, ChevronDown, ChevronUp, Layers, LinkIcon, Plus, RotateCcw, Share2, Unplug } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Layers, LinkIcon, Pause, Plus, RotateCcw, Share2, Unplug } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import ProductVinculation from "../ProductVinculation";
@@ -27,7 +28,7 @@ const ADDON_OPTION_GRID_COL = {
 const ADDON_OPTION_GRID_COL_COUNT = 6;
 
 const ADDON_OPTION_TABLE_GRID =
-	"grid-cols-[minmax(0,28fr)_minmax(0,12fr)_minmax(0,12fr)_minmax(0,10fr)_minmax(0,18fr)_minmax(2.5rem,6fr)_minmax(2.5rem,5fr)]";
+	"grid-cols-[minmax(0,28fr)_minmax(0,12fr)_minmax(0,12fr)_minmax(0,10fr)_minmax(0,18fr)_minmax(6rem,8fr)_minmax(2.5rem,5fr)]";
 
 const ADDON_OPTION_DESKTOP_ROW = cn("hidden w-full lg:grid", ADDON_OPTION_TABLE_GRID, "items-center gap-x-1 px-2");
 
@@ -105,7 +106,9 @@ function AddOnGroupMetaChip({
 				overridden ? "border-blue-500/40 bg-blue-500/10" : "border-border bg-background/80",
 			)}
 		>
-			<span className={cn("text-[0.62rem] font-medium uppercase tracking-wide", overridden ? "text-blue-600 dark:text-blue-400" : "text-muted-foreground")}>
+			<span
+				className={cn("text-[0.62rem] font-medium uppercase tracking-wide", overridden ? "text-blue-600 dark:text-blue-400" : "text-muted-foreground")}
+			>
 				{label}
 			</span>
 			{children}
@@ -150,10 +153,7 @@ export default function ProductStateAddOnsBlock({
 	removeProductAddOnOption,
 	embedded = false,
 }: ProductStateAddOnsBlockProps) {
-	const validAddOns = useMemo(
-		() => addOns.map((addOn, index) => ({ ...addOn, originalIndex: index })).filter((addOn) => !addOn.deletar),
-		[addOns],
-	);
+	const validAddOns = useMemo(() => addOns.map((addOn, index) => ({ ...addOn, originalIndex: index })).filter((addOn) => !addOn.deletar), [addOns]);
 
 	const content = (
 		<AddOnGroupsList
@@ -425,18 +425,10 @@ function AddOnGroupHeader({ groupIndex, addOn, usageCount, canMoveUp, canMoveDow
 					<div className="flex min-w-0 flex-1 items-start justify-between gap-2">
 						<div className="grid min-w-0 flex-1 grid-cols-1 gap-2">
 							<MobileEditableField label="Nome (cliente)">
-								<EditableTextCell
-									value={addOn.nome}
-									ariaLabel="Nome do grupo para o cliente"
-									onCommit={(nome) => onUpdate({ nome })}
-								/>
+								<EditableTextCell value={addOn.nome} ariaLabel="Nome do grupo para o cliente" onCommit={(nome) => onUpdate({ nome })} />
 							</MobileEditableField>
 							<MobileEditableField label="Nome interno">
-								<EditableTextCell
-									value={addOn.internoNome ?? ""}
-									ariaLabel="Nome interno do grupo"
-									onCommit={(internoNome) => onUpdate({ internoNome })}
-								/>
+								<EditableTextCell value={addOn.internoNome ?? ""} ariaLabel="Nome interno do grupo" onCommit={(internoNome) => onUpdate({ internoNome })} />
 							</MobileEditableField>
 						</div>
 						<div className="flex shrink-0 items-center">
@@ -497,6 +489,34 @@ function AddOnActiveToggle({ active, onToggle }: { active: boolean; onToggle: ()
 	);
 }
 
+/**
+ * Estado da opção como chip clicável com rótulo. O check verde/apagado que existia aqui não
+ * deixava varrer uma lista de 40 sabores e dizer o que está à venda: sem texto, "inativo" era só
+ * um ícone mais claro. Verde é reservado a ATIVO; INATIVO é pausa deliberada, não alerta, então
+ * fica no cinza `muted` e não no ouro de aviso (DESIGN.md §2).
+ */
+export function AddOnOptionStatusChip({ active, onToggle, className }: { active: boolean; onToggle: () => void; className?: string }) {
+	return (
+		<button
+			type="button"
+			onClick={onToggle}
+			aria-pressed={active}
+			title={active ? "Opção à venda. Clique para pausar." : "Opção inativa: não aparece no PDV nem na loja. Clique para reativar."}
+			className={cn(
+				chipVariants({ variant: active ? "success" : "muted", size: "sm", shape: "pill" }),
+				"h-7 w-[5.75rem] cursor-pointer justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+				active ? "hover:bg-green-300/80 dark:hover:bg-green-200/35" : "hover:bg-muted-foreground/20",
+				className,
+			)}
+		>
+			<Chip.Icon>{active ? <Check /> : <Pause />}</Chip.Icon>
+			<Chip.Label caps weight="bold">
+				{active ? "Ativo" : "Inativo"}
+			</Chip.Label>
+		</button>
+	);
+}
+
 export type ValidOptionRow = TProductAddOnOptionState & { originalIndex: number };
 
 type AddOnOptionTableProps = {
@@ -505,9 +525,11 @@ type AddOnOptionTableProps = {
 	addOption: (option: TProductAddOnOptionState) => void;
 	updateOption: (optionIndex: number, partial: Partial<TProductAddOnOptionState>) => void;
 	removeOption: (optionIndex: number) => void;
+	/** Mensagem quando um filtro esconde todas as linhas; sem filtro a lista vazia não precisa de aviso. */
+	emptyLabel?: string | null;
 };
 
-export function AddOnOptionTable({ validOptions, gridBounds, addOption, updateOption, removeOption }: AddOnOptionTableProps) {
+export function AddOnOptionTable({ validOptions, gridBounds, addOption, updateOption, removeOption, emptyLabel }: AddOnOptionTableProps) {
 	return (
 		<div {...{ [SPREADSHEET_TABLE_ATTR]: "true" }} className="flex w-full flex-col">
 			<div
@@ -521,11 +543,14 @@ export function AddOnOptionTable({ validOptions, gridBounds, addOption, updateOp
 				<p className="min-w-0 px-1 text-center">Δ Preço</p>
 				<p className="min-w-0 px-1 text-center">Máx qtd</p>
 				<p className="min-w-0 px-1 text-center">Estoque</p>
-				<p className="min-w-0 px-1 text-center">Ativo</p>
+				<p className="min-w-0 px-1 text-center">Status</p>
 				<p className="min-w-0 px-1 text-center">Ações</p>
 			</div>
 
 			<div className="flex w-full flex-col bg-background">
+				{emptyLabel && validOptions.length === 0 ? (
+					<p className="border-t border-border px-3 py-4 text-center text-xs text-muted-foreground">{emptyLabel}</p>
+				) : null}
 				{validOptions.map((option, rowIndex) => (
 					<AddOnOptionTableRow
 						key={option.id || `temp-opt-${option.originalIndex}`}
@@ -554,8 +579,8 @@ type AddOnOptionTableRowProps = {
 function AddOnOptionTableRow({ option, gridRow, gridBounds, onUpdate, onRemove }: AddOnOptionTableRowProps) {
 	return (
 		<div
-			title={!option.ativo ? "Opção inativa — não aparece nos canais de venda. Reative pela coluna ATIVO." : undefined}
-			className={cn("border-t border-border", gridRow % 2 === 1 && "bg-muted/10", !option.ativo && "bg-muted/40 opacity-60")}
+			data-inactive={!option.ativo || undefined}
+			className={cn("border-t border-border", gridRow % 2 === 1 && "bg-muted/10", !option.ativo && "bg-muted/40")}
 		>
 			<div className={cn(ADDON_OPTION_DESKTOP_ROW, "min-h-11 py-1 text-xs transition-colors hover:bg-muted/40")}>
 				<div className="min-w-0 px-1">
@@ -608,7 +633,7 @@ function AddOnOptionTableRow({ option, gridRow, gridBounds, onUpdate, onRemove }
 					<AddOnStockCell option={option} onUpdate={onUpdate} />
 				</div>
 				<div className="flex min-w-0 justify-center px-1">
-					<AddOnActiveToggle active={option.ativo} onToggle={() => onUpdate({ ativo: !option.ativo })} />
+					<AddOnOptionStatusChip active={option.ativo} onToggle={() => onUpdate({ ativo: !option.ativo })} />
 				</div>
 				<div className="flex min-w-0 justify-center px-1">
 					<DeleteRowButton onRemove={onRemove} ariaLabel="Remover opção" />
@@ -619,23 +644,17 @@ function AddOnOptionTableRow({ option, gridRow, gridBounds, onUpdate, onRemove }
 				<div className="flex items-start justify-between gap-2">
 					<div className="min-w-0 flex-1">
 						<MobileEditableField label="Opção">
-							<EditableTextCell
-								value={option.nome}
-								ariaLabel="Editar nome da opção"
-								onCommit={(nome) => onUpdate({ nome })}
-							/>
+							<EditableTextCell value={option.nome} ariaLabel="Editar nome da opção" onCommit={(nome) => onUpdate({ nome })} />
 						</MobileEditableField>
 					</div>
-					<DeleteRowButton onRemove={onRemove} ariaLabel="Remover opção" />
+					<div className="flex shrink-0 items-center gap-1 pt-4">
+						<AddOnOptionStatusChip active={option.ativo} onToggle={() => onUpdate({ ativo: !option.ativo })} />
+						<DeleteRowButton onRemove={onRemove} ariaLabel="Remover opção" />
+					</div>
 				</div>
 				<div className="grid grid-cols-2 gap-2">
 					<MobileEditableField label="Código">
-						<EditableTextCell
-							value={option.codigo ?? ""}
-							ariaLabel="Editar código da opção"
-							align="center"
-							onCommit={(codigo) => onUpdate({ codigo })}
-						/>
+						<EditableTextCell value={option.codigo ?? ""} ariaLabel="Editar código da opção" align="center" onCommit={(codigo) => onUpdate({ codigo })} />
 					</MobileEditableField>
 					<MobileEditableField label="Máx qtd">
 						<EditableNumberCell
@@ -654,11 +673,6 @@ function AddOnOptionTableRow({ option, gridRow, gridBounds, onUpdate, onRemove }
 							format={(value) => (value > 0 ? formatToMoney(value) : "-")}
 							onCommit={(precoDelta) => onUpdate({ precoDelta })}
 						/>
-					</MobileEditableField>
-					<MobileEditableField label="Ativo">
-						<div className="flex h-8 items-center">
-							<AddOnActiveToggle active={option.ativo} onToggle={() => onUpdate({ ativo: !option.ativo })} />
-						</div>
 					</MobileEditableField>
 				</div>
 				<MobileEditableField label="Estoque">
@@ -848,11 +862,7 @@ function DraftAddOnOptionRow({ addOption, gridRow, gridBounds }: DraftAddOnOptio
 					<Plus className="mt-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
 					<div className="min-w-0 flex-1">
 						<MobileEditableField label="Opção">
-							<EditableTextCell
-								value={draftOption.nome}
-								ariaLabel="Nome da nova opção"
-								onCommit={(nome) => updateDraft({ nome })}
-							/>
+							<EditableTextCell value={draftOption.nome} ariaLabel="Nome da nova opção" onCommit={(nome) => updateDraft({ nome })} />
 						</MobileEditableField>
 					</div>
 				</div>
@@ -1024,11 +1034,7 @@ function DraftAddOnGroupPanel({ addProductAddOn }: DraftAddOnGroupPanelProps) {
 					<AddOnGroupIndexBadge draft />
 					<div className="grid min-w-0 flex-1 grid-cols-1 gap-2">
 						<MobileEditableField label="Nome (cliente)">
-							<EditableTextCell
-								value={draftAddOn.nome}
-								ariaLabel="Nome do novo grupo para o cliente"
-								onCommit={(nome) => updateDraft({ nome })}
-							/>
+							<EditableTextCell value={draftAddOn.nome} ariaLabel="Nome do novo grupo para o cliente" onCommit={(nome) => updateDraft({ nome })} />
 						</MobileEditableField>
 						<MobileEditableField label="Nome interno">
 							<EditableTextCell
