@@ -19,6 +19,7 @@ import {
 	productAddOnOptions,
 	productAddOnReferences,
 	productAddOns,
+	productChannelSettings,
 	productFiscalProfiles,
 	productOptionValues,
 	productOptions,
@@ -29,9 +30,11 @@ import {
 	products,
 	saleItems,
 	sales,
+	salesChannels,
 } from "@/services/drizzle/schema";
 import { and, asc, count, desc, eq, gt, gte, inArray, isNull, lt, lte, max, min, notInArray, or, type SQL, sql } from "drizzle-orm";
 import { upsertProductAddOnOptions } from "@/lib/products/add-on-options";
+import { splitChannelSettingNodes, validateChannelSettingNodes } from "@/lib/products/sales-channels";
 import createHttpError from "http-errors";
 import { z } from "zod";
 
@@ -1481,10 +1484,43 @@ const CreateProductVariantInputSchema = ProductVariantSchema.omit({
 	organizacaoId: true,
 	produtoId: true,
 }).extend({
+	// Chave local da variante, para que outros blocos do payload (canais) apontem para ela antes
+	// de existir um id. Opcional: quem não configura canais não precisa dela.
+	referenciaId: z.string({ invalid_type_error: "Tipo não válido para referência da variante." }).optional(),
 	imagemCapaUrl: z.string().optional().nullable(),
 	addOns: z.array(CreateProductAddOnInputSchema),
 	perfisFiscais: z.array(ProductFiscalProfileSchema.omit({ organizacaoId: true, produtoId: true, produtoVarianteId: true })),
 	opcoesValores: z.array(CreateProductVariantOptionValueInputSchema).default([]),
+});
+
+// Override de canal para um nó (canal × produto | variante) do produto novo. Mesmo contrato do
+// PUT /api/products/channel-settings, com a variante apontada pela referência local.
+const CreateProductChannelSettingInputSchema = z.object({
+	canalVendaId: z
+		.string({
+			required_error: "ID do canal de venda não informado.",
+			invalid_type_error: "Tipo não válido para ID do canal de venda.",
+		})
+		.min(1, { message: "ID do canal de venda não informado." }),
+	produtoVarianteReferenciaId: z
+		.string({
+			invalid_type_error: "Tipo não válido para referência da variante.",
+		})
+		.optional()
+		.nullable(),
+	disponivel: z
+		.boolean({
+			invalid_type_error: "Tipo não válido para disponibilidade no canal.",
+		})
+		.optional()
+		.nullable(),
+	precoVenda: z
+		.number({
+			invalid_type_error: "Tipo não válido para preço de venda no canal.",
+		})
+		.nonnegative({ message: "O preço de venda no canal não pode ser negativo." })
+		.optional()
+		.nullable(),
 });
 
 const CreateProductInputSchema = z.object({
@@ -1493,6 +1529,8 @@ const CreateProductInputSchema = z.object({
 	productOptions: z.array(CreateProductOptionInputSchema).default([]),
 	productAddOns: z.array(CreateProductAddOnInputSchema),
 	productFiscalProfiles: z.array(ProductFiscalProfileSchema.omit({ organizacaoId: true, produtoId: true, produtoVarianteId: true })),
+	// Opcional para os chamadores que não montam a matriz de canais (importação de compra, etc.).
+	productChannelSettings: z.array(CreateProductChannelSettingInputSchema).optional(),
 });
 
 export type TCreateProductInput = z.infer<typeof CreateProductInputSchema>;
@@ -1504,6 +1542,33 @@ async function createProduct({ session, input }: { session: TAuthUserSession; in
 	const userHasFiscalConfigurePermission = userMembership.permissoes.fiscal.configurar;
 
 	console.log("[INFO] [CREATE PRODUCT] Input:", JSON.stringify(input, null, 2));
+
+	// 0. Channel overrides are validated before the transaction opens: the rules are the same the
+	//    PUT of channel settings applies, over the variants' local references instead of real ids.
+	const channelSettingsInput = input.productChannelSettings ?? [];
+	const channelSettingNodes = channelSettingsInput.map((setting) => ({
+		canalVendaId: setting.canalVendaId,
+		produtoVarianteId: setting.produtoVarianteReferenciaId ?? null,
+		disponivel: setting.disponivel ?? null,
+		precoVenda: setting.precoVenda ?? null,
+	}));
+	if (channelSettingNodes.length > 0) {
+		if (!userMembership.organizacao.configuracao.recursos.erp.acesso) {
+			throw new createHttpError.Forbidden("Sua organização não possui acesso ao módulo de ERP.");
+		}
+		const channelIds = [...new Set(channelSettingNodes.map((setting) => setting.canalVendaId))];
+		const ownedChannels = await db
+			.select({ id: salesChannels.id })
+			.from(salesChannels)
+			.where(and(eq(salesChannels.organizacaoId, userOrgId), inArray(salesChannels.id, channelIds)));
+		const validationError = validateChannelSettingNodes({
+			settings: channelSettingNodes,
+			ownedChannelIds: new Set(ownedChannels.map((channel) => channel.id)),
+			variantIds: new Set(input.productVariants.flatMap((variant) => (variant.referenciaId ? [variant.referenciaId] : []))),
+			hasVariants: input.productVariants.length > 0,
+		});
+		if (validationError) throw new createHttpError.BadRequest(validationError);
+	}
 
 	const transactionReturn = await db.transaction(async (tx) => {
 		// 1. Create the main product
@@ -1593,6 +1658,8 @@ async function createProduct({ session, input }: { session: TAuthUserSession; in
 
 		const insertedProductVariantIds = [];
 		const insertedProductAddOnIds = [];
+		// Local reference -> real id, so the channel overrides can point at the variants just created.
+		const variantRefToId = new Map<string, string>();
 		// 2. Create product variants (if any)
 		for (const variant of input.productVariants) {
 			const [createdVariant] = await tx
@@ -1614,6 +1681,7 @@ async function createProduct({ session, input }: { session: TAuthUserSession; in
 			if (!createdVariant?.id) throw new createHttpError.InternalServerError("Erro ao criar variante do produto.");
 
 			insertedProductVariantIds.push(createdVariant.id);
+			if (variant.referenciaId) variantRefToId.set(variant.referenciaId, createdVariant.id);
 
 			// 2.0 Link the variant to its option-value combination (Cor: Preto, Tamanho: G).
 			for (const ref of variant.opcoesValores) {
@@ -1728,6 +1796,23 @@ async function createProduct({ session, input }: { session: TAuthUserSession; in
 				produtoAddOnId: createdAddOn.id,
 				ordem: addOnIndex,
 			});
+		}
+
+		// 4. Channel overrides. The row is sparse: a node with neither availability nor price
+		//    inherits and is simply not written (the PUT would delete it; here there is nothing yet).
+		const { upserts: channelUpserts } = splitChannelSettingNodes(channelSettingNodes);
+		if (channelUpserts.length > 0) {
+			await tx.insert(productChannelSettings).values(
+				channelUpserts.map((setting) => ({
+					organizacaoId: userOrgId,
+					produtoId: productId,
+					canalVendaId: setting.canalVendaId,
+					// The reference was validated against the payload's variants, so it always resolves.
+					produtoVarianteId: setting.produtoVarianteId ? (variantRefToId.get(setting.produtoVarianteId) ?? null) : null,
+					disponivel: setting.disponivel,
+					precoVenda: setting.precoVenda,
+				})),
+			);
 		}
 
 		return {

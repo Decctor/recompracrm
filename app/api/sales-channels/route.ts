@@ -73,10 +73,10 @@ async function updateSalesChannel({ input, orgId }: { input: TUpdateSalesChannel
 export type TUpdateSalesChannelOutput = Awaited<ReturnType<typeof updateSalesChannel>>;
 
 async function getSalesChannelsRoute() {
+	// Só o módulo ERP: a lista de canais já chega a qualquer usuário ERP pelo GET de
+	// /api/products/channel-settings, e o cadastro de produto (que não pede permissão de empresa)
+	// precisa dela para montar a matriz de canais antes de o produto existir.
 	const session = requireERPSession(await getCurrentSessionUncached());
-	if (!session.membership!.permissoes.empresa.visualizar) {
-		throw new createHttpError.Forbidden("Você não tem permissão para visualizar os canais de venda.");
-	}
 	const orgId = session.membership!.organizacao.id;
 
 	const result = await getSalesChannels({ orgId });
