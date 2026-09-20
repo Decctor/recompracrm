@@ -28,6 +28,7 @@ export function mergeProductStateFromHydration(partial: Partial<TProductState>):
 		productVariants: partial.productVariants ?? [],
 		productOptions: partial.productOptions ?? [],
 		productAddOns: partial.productAddOns ?? [],
+		productChannelSettings: partial.productChannelSettings ?? [],
 	};
 }
 
@@ -49,6 +50,7 @@ export function hydrateVariationsState(product: TGetProductsOutputById): Partial
 			})),
 		})),
 		productVariants: product.variantes.map((variant) => ({
+			referenciaId: variant.id,
 			id: variant.id,
 			nome: variant.nome,
 			codigo: variant.codigo ?? "",

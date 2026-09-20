@@ -13,6 +13,7 @@ import ProductStateOptionsBlock from "./Blocks/Options";
 import ProductVariantsBlock from "./Blocks/Variants";
 import ProductStockBlock from "./Blocks/Stock";
 import ProductFiscalBlock from "./Blocks/Fiscal";
+import ProductSalesChannelsBlock from "./Blocks/SalesChannels";
 
 type NewProductProps = {
 	user: TAuthUserSession["user"];
@@ -28,6 +29,8 @@ type NewProductProps = {
 export default function NewProduct({ user, userMembership, closeModal, callbacks }: NewProductProps) {
 	const userHasFiscalViewPermission = userMembership.permissoes.fiscal.visualizar;
 	const userHasFiscalConfigurePermission = userMembership.permissoes.fiscal.configurar;
+	// Sem o módulo de ERP não há canais de venda: o bloco não é montado e o payload segue sem a matriz.
+	const orgHasERPAccess = userMembership.organizacao.configuracao.recursos.erp.acesso;
 	const {
 		state,
 		updateProduct,
@@ -56,6 +59,7 @@ export default function NewProduct({ user, userMembership, closeModal, callbacks
 		addProductFiscalProfile,
 		updateProductFiscalProfile,
 		removeProductFiscalProfile,
+		updateProductChannelSetting,
 		resetState,
 	} = useProductState({});
 
@@ -96,6 +100,7 @@ export default function NewProduct({ user, userMembership, closeModal, callbacks
 				}));
 
 			processedVariants.push({
+				referenciaId: variant.referenciaId,
 				nome: variant.nome,
 				codigo: variant.codigo,
 				imagemCapaUrl: variantImageUrl,
@@ -139,6 +144,22 @@ export default function NewProduct({ user, userMembership, closeModal, callbacks
 				opcoes: addOn.opcoes.filter((opt) => !opt.deletar),
 			}));
 
+		// 3.1 Channel overrides: only nodes that still point at a live variant, and only for ERP
+		// organizations. With variants, a product-level price is ambiguous (server rule), so it is
+		// dropped here in case one was typed before the first variant was added.
+		const liveVariantRefs = new Set(processedVariants.map((variant) => variant.referenciaId));
+		const processedChannelSettings: TCreateProductInput["productChannelSettings"] = orgHasERPAccess
+			? state.productChannelSettings
+					.filter((setting) => setting.produtoVarianteReferenciaId === null || liveVariantRefs.has(setting.produtoVarianteReferenciaId))
+					.map((setting) => ({
+						canalVendaId: setting.canalVendaId,
+						produtoVarianteReferenciaId: setting.produtoVarianteReferenciaId,
+						disponivel: setting.disponivel,
+						precoVenda: setting.produtoVarianteReferenciaId === null && liveVariantRefs.size > 0 ? null : setting.precoVenda,
+					}))
+					.filter((setting) => setting.disponivel != null || setting.precoVenda != null)
+			: [];
+
 		// 4. Build the input for the API
 		const input: TCreateProductInput = {
 			product: {
@@ -159,6 +180,7 @@ export default function NewProduct({ user, userMembership, closeModal, callbacks
 			productOptions: processedOptions,
 			productAddOns: processedAddOns,
 			productFiscalProfiles: [],
+			productChannelSettings: processedChannelSettings,
 		};
 
 		return await createProduct(input);
@@ -189,6 +211,7 @@ export default function NewProduct({ user, userMembership, closeModal, callbacks
 				productOptions: [],
 				productAddOns: [],
 				productFiscalProfiles: [],
+				productChannelSettings: [],
 			});
 			toast.success(data.message);
 			return closeModal();
@@ -237,6 +260,14 @@ export default function NewProduct({ user, userMembership, closeModal, callbacks
 				removeVariant={removeProductVariant}
 				updateVariantImageHolder={updateProductVariantImageHolder}
 			/>
+			{orgHasERPAccess ? (
+				<ProductSalesChannelsBlock
+					product={state.product}
+					variants={state.productVariants}
+					channelSettings={state.productChannelSettings}
+					updateProductChannelSetting={updateProductChannelSetting}
+				/>
+			) : null}
 			<ProductAddOnsBlock
 				addOns={state.productAddOns}
 				addProductAddOn={addProductAddOn}

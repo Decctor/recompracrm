@@ -2,6 +2,7 @@ import { appApiHandler } from "@/lib/app-api";
 import { requireERPSession } from "@/lib/authentication/erp-session";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { schedulePushForProduct } from "@/lib/integrations/ifood/sync/push";
+import { splitChannelSettingNodes, validateChannelSettingNodes } from "@/lib/products/sales-channels";
 import { ensureSalesChannels } from "@/lib/products/sales-channels-store";
 import { db } from "@/services/drizzle";
 import { productChannelSettings, products, salesChannels } from "@/services/drizzle/schema";
@@ -59,10 +60,6 @@ const UpdateProductChannelSettingsInputSchema = z.object({
 });
 export type TUpdateProductChannelSettingsInput = z.infer<typeof UpdateProductChannelSettingsInputSchema>;
 
-function settingNodeKey(setting: { canalVendaId: string; produtoVarianteId?: string | null }) {
-	return `${setting.canalVendaId}:${setting.produtoVarianteId ?? ""}`;
-}
-
 async function findProductInOrg({ orgId, produtoId }: { orgId: string; produtoId: string }) {
 	return db.query.products.findFirst({
 		where: and(eq(products.id, produtoId), eq(products.organizacaoId, orgId)),
@@ -90,12 +87,6 @@ async function getProductChannelSettings({ orgId, produtoId }: { orgId: string; 
 export type TGetProductChannelSettingsOutput = Awaited<ReturnType<typeof getProductChannelSettings>>;
 
 async function updateProductChannelSettings({ orgId, input }: { orgId: string; input: TUpdateProductChannelSettingsInput }) {
-	// Um nó (canal + variante) só pode aparecer uma vez: duas linhas para o mesmo nó violariam
-	// unq_product_channel_settings_node no insert e virariam 500 no lugar de um erro de payload.
-	if (input.settings.length !== new Set(input.settings.map(settingNodeKey)).size) {
-		throw new createHttpError.BadRequest("Há configurações repetidas para o mesmo canal e variante.");
-	}
-
 	const channelIds = [...new Set(input.settings.map((setting) => setting.canalVendaId))];
 	const [product, ownedChannels] = await Promise.all([
 		findProductInOrg({ orgId, produtoId: input.produtoId }),
@@ -107,21 +98,19 @@ async function updateProductChannelSettings({ orgId, input }: { orgId: string; i
 			: Promise.resolve([] as { id: string }[]),
 	]);
 	if (!product) throw new createHttpError.NotFound("Produto não encontrado.");
-	if (ownedChannels.length !== channelIds.length) throw new createHttpError.BadRequest("Um canal de venda não pertence à organização.");
 
-	const variantIds = new Set(product.variantes.map((variant) => variant.id));
-	if (input.settings.some((setting) => setting.produtoVarianteId && !variantIds.has(setting.produtoVarianteId))) {
-		throw new createHttpError.BadRequest("Uma variante não pertence ao produto.");
-	}
-	if (product.variantes.length && input.settings.some((setting) => !setting.produtoVarianteId && setting.precoVenda != null)) {
-		throw new createHttpError.BadRequest("Defina o preço por canal em cada variante deste produto.");
-	}
+	// As mesmas regras do POST /api/products, que grava a matriz junto com o produto novo.
+	const validationError = validateChannelSettingNodes({
+		settings: input.settings,
+		ownedChannelIds: new Set(ownedChannels.map((channel) => channel.id)),
+		variantIds: new Set(product.variantes.map((variant) => variant.id)),
+	});
+	if (validationError) throw new createHttpError.BadRequest(validationError);
 
 	// Patch esparso: só os nós enviados mudam. Nó com os dois campos nulos volta a herdar (linha
 	// removida); nós ausentes do payload ficam intactos, para que uma tela por canal não apague
 	// os overrides dos outros canais do mesmo produto.
-	const upserts = input.settings.filter((setting) => setting.disponivel != null || setting.precoVenda != null);
-	const clears = input.settings.filter((setting) => setting.disponivel == null && setting.precoVenda == null);
+	const { upserts, clears } = splitChannelSettingNodes(input.settings);
 
 	await db.transaction(async (tx) => {
 		if (clears.length) {

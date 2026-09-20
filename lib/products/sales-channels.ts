@@ -102,6 +102,73 @@ export function toSalesChannelType(canal: string | null | undefined): TSalesChan
 	return (SALES_CHANNEL_TYPES as readonly string[]).includes(canal ?? "") ? (canal as TSalesChannelTypeEnum) : undefined;
 }
 
+/** Um nó da matriz canal × (produto | variante), como o PUT de configurações e o POST de produto recebem. */
+export type TChannelSettingNode = {
+	canalVendaId: string;
+	produtoVarianteId?: string | null;
+	disponivel?: boolean | null;
+	precoVenda?: number | null;
+};
+
+export function channelSettingNodeKey(node: Pick<TChannelSettingNode, "canalVendaId" | "produtoVarianteId">) {
+	return `${node.canalVendaId}:${node.produtoVarianteId ?? ""}`;
+}
+
+/**
+ * Regras de escrita das configurações por canal, compartilhadas entre o PUT do produto já
+ * cadastrado e o POST que cria o produto com a matriz junto. As duas rotas precisam recusar o
+ * mesmo payload pelo mesmo motivo, senão o que a criação aceita a edição rejeita depois.
+ *
+ * `variantIds` são os ids reais no PUT e as referências locais (referenciaId) no POST — para as
+ * regras tanto faz, desde que os nós usem o mesmo espaço de ids. `hasVariants` existe porque no
+ * POST uma variante pode vir sem referência (chamador que não configura canais) e ainda assim
+ * tornar o preço nível-produto ambíguo; por padrão deriva do próprio conjunto. Devolve a mensagem
+ * do erro, ou null quando o conjunto é válido.
+ */
+export function validateChannelSettingNodes({
+	settings,
+	ownedChannelIds,
+	variantIds,
+	hasVariants = variantIds.size > 0,
+}: {
+	settings: TChannelSettingNode[];
+	ownedChannelIds: Set<string>;
+	variantIds: Set<string>;
+	hasVariants?: boolean;
+}): string | null {
+	// Um nó só pode aparecer uma vez: duas linhas para o mesmo nó violariam
+	// unq_product_channel_settings_node no insert e virariam 500 no lugar de um erro de payload.
+	if (settings.length !== new Set(settings.map(channelSettingNodeKey)).size) {
+		return "Há configurações repetidas para o mesmo canal e variante.";
+	}
+	if (settings.some((setting) => !ownedChannelIds.has(setting.canalVendaId))) {
+		return "Um canal de venda não pertence à organização.";
+	}
+	if (settings.some((setting) => setting.produtoVarianteId && !variantIds.has(setting.produtoVarianteId))) {
+		return "Uma variante não pertence ao produto.";
+	}
+	// Preço nível-produto com variantes é ambíguo (ver resolveChannelPrice): qual variante ele vale?
+	if (hasVariants && settings.some((setting) => !setting.produtoVarianteId && setting.precoVenda != null)) {
+		return "Defina o preço por canal em cada variante deste produto.";
+	}
+	return null;
+}
+
+/**
+ * Separa os nós que viram linha dos que voltam a herdar. A linha é esparsa: sem disponibilidade
+ * nem preço não há o que guardar, então o nó com os dois campos nulos é uma remoção no PUT e
+ * simplesmente não é inserido no POST.
+ */
+export function splitChannelSettingNodes<TNode extends TChannelSettingNode>(settings: TNode[]) {
+	const upserts: TNode[] = [];
+	const clears: TNode[] = [];
+	for (const setting of settings) {
+		if (setting.disponivel != null || setting.precoVenda != null) upserts.push(setting);
+		else clears.push(setting);
+	}
+	return { upserts, clears };
+}
+
 // Preço é node-scoped: o override da variante vale para a variante, o do produto só para produto
 // sem variante. Sem fallback cruzado — produto-com-variantes + override nível-produto é ambíguo
 // e é rejeitado na escrita (PUT /api/products/channel-settings).
