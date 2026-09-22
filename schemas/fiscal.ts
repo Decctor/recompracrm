@@ -1,3 +1,4 @@
+import { AUTO_EMISSION_MAX_DELAY_MINUTES } from "@/lib/fiscal/constants";
 import { z } from "zod";
 import {
   FiscalClientTaxIndicatorEnum,
@@ -271,6 +272,20 @@ export const OrganizationFiscalConfigSchema = z.object({
     .default({ habilitado: false, dataInicio: null, autoCiencia: true }),
   emissaoAutomatica: z
     .object({
+      // Espera entre a venda ficar elegível e a emissão acontecer (0 = imediato). A elegibilidade
+      // é reavaliada no fim da espera, então a venda pode ser corrigida ou cancelada na janela.
+      // Teto do schema = limite do delay da fila (7 dias); a interface limita a 24 h.
+      atrasoMinutos: z
+        .number({
+          invalid_type_error:
+            "Tipo não valido para o atraso da emissão automática.",
+        })
+        .int({ message: "O atraso da emissão automática deve ser em minutos inteiros." })
+        .min(0, { message: "O atraso da emissão automática não pode ser negativo." })
+        .max(AUTO_EMISSION_MAX_DELAY_MINUTES, {
+          message: "O atraso da emissão automática não pode passar de 7 dias.",
+        })
+        .default(0),
       // Exceções combinadas por OR: qualquer condição que casar suprime a emissão automática
       // (a emissão manual e o override explícito por venda continuam disponíveis).
       excecoes: z
@@ -285,7 +300,7 @@ export const OrganizationFiscalConfigSchema = z.object({
         })
         .default({ pagamentoExclusivo: [] }),
     })
-    .default({ excecoes: { pagamentoExclusivo: [] } }),
+    .default({ atrasoMinutos: 0, excecoes: { pagamentoExclusivo: [] } }),
   emissaoManual: z
     .object({
       classificacaoPresencialExcepcional: z

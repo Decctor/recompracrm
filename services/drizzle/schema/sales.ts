@@ -91,6 +91,12 @@ export const sales = newTable(
 		// ERP: override por venda da emissão fiscal automática. null = herda organizacao.fiscalEmissaoAutomatica;
 		// true/false = decisão explícita da venda (respeitada tanto no confirm quanto na entrega).
 		emissaoFiscalAutomatica: boolean("emissao_fiscal_automatica"),
+		// ERP: horário PARA O QUAL a emissão fiscal automática foi agendada (atraso configurado em
+		// fiscalConfiguracao.emissaoAutomatica.atrasoMinutos) — não o momento em que o agendamento
+		// foi feito. Não nulo = agendamento vigente: o gatilho não publica de novo, e o consumer da
+		// fila (ou o cron fiscal-queue, como rede de segurança) limpa a coluna ao executar.
+		// Gerenciada pelo servidor; fora do SaleSchema e dos inputs de create/update.
+		emissaoFiscalDataAgendamento: timestamp("emissao_fiscal_data_agendamento"),
 		// Sessão de venda que recortou esta venda (nullable). Denormalização p/ relatório/atribuição.
 		sessaoVendaId: varchar("sessao_venda_id", { length: 255 }).references(() => salesSessions.id, { onDelete: "set null" }),
 		// Estado do envio de conversão (Purchase) ao Conversions API da Meta (dedup/observabilidade/
@@ -119,6 +125,10 @@ export const sales = newTable(
 			.on(table.organizacaoId, table.integracaoId, table.idExterno)
 			.where(sql`integracao_id IS NOT NULL`),
 		tabIdx: index("idx_sales_tab").on(table.tabId),
+		// Varredura do cron fiscal-queue por agendamentos vencidos: parcial porque quase toda venda tem null.
+		emissaoFiscalAgendadaIdx: index("idx_sales_emissao_fiscal_data_agendamento")
+			.on(table.emissaoFiscalDataAgendamento)
+			.where(sql`emissao_fiscal_data_agendamento IS NOT NULL`),
 		// Recorte do quadro de atendimento: por organizacao, por etapa, ordenado pelo momento da
 		// etapa. Cobre tanto a janela dos concluidos recentes quanto a varredura das etapas ativas.
 		orgAtendimentoDataIdx: index("idx_sales_org_atendimento_data").on(table.organizacaoId, table.statusAtendimento, table.statusAtendimentoData),
