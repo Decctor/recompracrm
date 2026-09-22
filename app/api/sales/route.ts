@@ -240,7 +240,7 @@ function buildSaleErpDetail({
 	userCanViewFiscal,
 	now = new Date(),
 }: {
-	sale: { valorTotal: number };
+	sale: { valorTotal: number; emissaoFiscalDataAgendamento: Date | null };
 	transacoes: Parameters<typeof classifySalePaymentTransactions>[0];
 	documentosFiscais: (SaleErpDetailDocument & TFiscalDocumentDecoration)[];
 	userCanViewFiscal: boolean;
@@ -273,6 +273,10 @@ function buildSaleErpDetail({
 		fiscal: userCanViewFiscal
 			? {
 					status: computeSaleFiscalStatus({ documents: documentos }),
+					// Emissão automática em espera (atraso da organização): horário para o qual foi agendada.
+					// A página só mostra enquanto não existe documento vivo — a emissão manual na janela
+					// torna o agendamento inócuo antes de a coluna ser limpa pelo consumer.
+					emissaoAutomaticaAgendadaPara: sale.emissaoFiscalDataAgendamento,
 					documentos: documentos.map((documento) => ({
 						...documento,
 						// O encadeamento (cancelamento/devolução) referencia o documento de origem por id.

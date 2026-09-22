@@ -12,7 +12,7 @@ async function main() {
 
 	const [sale] = await connection`
 		select s.id, s.organizacao_id, s.status_venda, s.status_atendimento, s.canal, s.modelo,
-			s.processamento_origem, s.emissao_fiscal_automatica, s.valor_total, s.descontos_total,
+			s.processamento_origem, s.emissao_fiscal_automatica, s.emissao_fiscal_data_agendamento, s.valor_total, s.descontos_total,
 			s.acrescimos_total, s.entrega_modalidade, s.data_venda,
 			s.integracao_metadados, s.rascunho_metadados is not null as tem_rascunho_metadados,
 			c.cpf_cnpj as cliente_cpf_cnpj,
@@ -29,6 +29,12 @@ async function main() {
 
 	console.log("=== VENDA ===");
 	console.log(JSON.stringify(sale, null, 2));
+
+	// Atraso da emissao automatica: com atraso > 0 e sem agendamento, o gatilho ainda nao viu a venda
+	// elegivel; com agendamento vigente, a emissao esta em espera (consumer da fila ou cron fiscal-queue).
+	const atrasoMinutos = sale.fiscal_configuracao?.emissaoAutomatica?.atrasoMinutos ?? 0;
+	console.log("=== ATRASO DA EMISSAO AUTOMATICA ===");
+	console.log(JSON.stringify({ atrasoMinutos, emissaoFiscalDataAgendamento: sale.emissao_fiscal_data_agendamento ?? null }, null, 2));
 
 	const documentos = await connection`
 		select id, tipo, status_interno, provedor_status, numero, serie, codigo_rejeicao, mensagens, tentativas_envio,

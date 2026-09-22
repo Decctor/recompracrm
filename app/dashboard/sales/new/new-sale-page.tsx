@@ -279,6 +279,8 @@ export default function NewSalePage({
 				fiscal: {
 					status: data.data.confirmation.fiscal.status,
 					error: data.data.confirmation.fiscal.status === "ERRO" ? data.data.confirmation.fiscal.error : null,
+					// Atravessa JSON como string ISO, embora o tipo da rota diga Date.
+					agendadaPara: data.data.confirmation.fiscal.status === "AGENDADO" ? new Date(data.data.confirmation.fiscal.agendadaPara).toISOString() : null,
 				},
 			});
 		},
