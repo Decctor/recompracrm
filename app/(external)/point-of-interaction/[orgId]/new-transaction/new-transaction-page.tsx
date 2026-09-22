@@ -7,6 +7,7 @@ import { getErrorMessage } from "@/lib/errors";
 import { formatCashbackValue } from "@/lib/formatting";
 import { createPoiTransactionRequest } from "@/lib/mutations/poi-transaction-requests";
 import { createPointOfInteractionSale } from "@/lib/mutations/sales";
+import { sumPoiPrizeSaleValue, sumPoiPrizeValue } from "@/lib/point-of-interaction/prize-lines";
 import {
 	getPoiSaleValueForConfirmation,
 	poiSaleRequiresValueConfirmation,
@@ -38,7 +39,7 @@ import {
 	getMaxCashbackToUse,
 	getRedemptionLimitConfig,
 } from "../_shared/helpers/cashback-calculations";
-import type { TPrize, TStepDefinition } from "../_shared/types";
+import type { TPrize, TSelectedPrize, TStepDefinition } from "../_shared/types";
 import { CouponSelectionBlock } from "./components/coupon-selection-block";
 import { CashbackStep } from "./components/kiosk/cashback-step";
 import { ConfirmationStep as KioskConfirmationStep } from "./components/kiosk/confirmation-step";
@@ -46,6 +47,7 @@ import { ModeSelectionStep } from "./components/kiosk/mode-selection-step";
 import { PrizeConfirmationStep as KioskPrizeConfirmationStep } from "./components/kiosk/prize-confirmation-step";
 import { PrizeSelectionStep } from "./components/kiosk/prize-selection-step";
 import { SaleValueStep } from "./components/kiosk/sale-value-step";
+import { MobilePrizeConfirmationStep } from "./components/mobile/prize-confirmation-step";
 import { MobileWaitingStep } from "./components/mobile/waiting-step";
 
 // Steps without the CLIENT step - client is now identified on the hub
@@ -61,22 +63,29 @@ const DISCOUNT_STEPS_MOBILE: TStepDefinition[] = [
 ];
 
 const PRIZE_STEPS: TStepDefinition[] = [
-	{ id: 1, label: "RECOMPENSA", icon: Gift },
+	{ id: 1, label: "RECOMPENSAS", icon: Gift },
 	{ id: 2, label: "CONFIRMAÇÃO", icon: Lock },
 ];
 
-const PRIZE_STEPS_MOBILE: TStepDefinition[] = [{ id: 1, label: "RECOMPENSA", icon: Gift }];
+// Mobile: a cesta é montada no passo 1 e revisada no passo 2 antes de virar solicitação.
+const PRIZE_STEPS_MOBILE: TStepDefinition[] = [
+	{ id: 1, label: "RECOMPENSAS", icon: Gift },
+	{ id: 2, label: "CONFIRMAR", icon: Check },
+];
 
 const PRIZE_SALE_ONLY_STEPS: TStepDefinition[] = [
-	{ id: 1, label: "RECOMPENSA", icon: Gift },
+	{ id: 1, label: "RECOMPENSAS", icon: Gift },
 	{ id: 2, label: "VENDA", icon: Tag },
 	{ id: 3, label: "CONFIRMAÇÃO", icon: Lock },
 ];
 
 const PRIZE_SALE_ONLY_STEPS_MOBILE: TStepDefinition[] = [
-	{ id: 1, label: "RECOMPENSA", icon: Gift },
+	{ id: 1, label: "RECOMPENSAS", icon: Gift },
 	{ id: 2, label: "VENDA", icon: Tag },
 ];
+
+// Tolerância de ponto flutuante ao comparar o valor da recompensa com o saldo restante.
+const BALANCE_EPSILON = 0.0001;
 
 type NewSaleContentProps = {
 	org: {
@@ -106,7 +115,9 @@ export default function NewSaleContent({ org, clientId, prizes, initialOperatorP
 		updateClient,
 		updateSale,
 		updateCashback,
-		updatePrizeRedemption,
+		updatePrizeRedemptions,
+		addPrizeRedemption,
+		setPrizeRedemptionQuantity,
 		updateCoupon,
 		updateOperatorIdentifier,
 		updateOperatorConfirmedSaleValue,
@@ -142,7 +153,6 @@ export default function NewSaleContent({ org, clientId, prizes, initialOperatorP
 		return null;
 	});
 	const [showModeSelection, setShowModeSelection] = React.useState(false);
-	const [selectedPrize, setSelectedPrize] = React.useState<TPrize | null>(null);
 	const [prizeFlowIntent, setPrizeFlowIntent] = React.useState<"redeem" | "sale-only" | null>(startsInPrizeSaleOnly ? "sale-only" : null);
 
 	// Coupon flow state (display info; the payload holds only cupomId + valorDesconto)
@@ -151,9 +161,13 @@ export default function NewSaleContent({ org, clientId, prizes, initialOperatorP
 	const effectiveFlowMode: "discount" | "prize" = shouldShowFlowModeSelection ? (flowMode ?? "discount") : isPrizeModeAllowed ? "prize" : "discount";
 	const isPrizeMode = effectiveFlowMode === "prize";
 	const isPrizeSaleOnlyFlow = isPrizeMode && prizeFlowIntent === "sale-only";
+	const isPrizeRedeemFlow = isPrizeMode && !isPrizeSaleOnlyFlow;
 	const isMobileMode = mode === "mobile";
 	const baseTotalSteps = isPrizeMode ? (isPrizeSaleOnlyFlow ? 3 : 2) : 3;
-	const totalSteps = isMobileMode ? baseTotalSteps - 1 : baseTotalSteps;
+	// No mobile o passo de confirmação do operador não existe (a solicitação vai para a fila da loja),
+	// exceto no resgate de recompensas: o passo 2 é a revisão da cesta antes do envio.
+	const totalSteps = isMobileMode && !isPrizeRedeemFlow ? baseTotalSteps - 1 : baseTotalSteps;
+	const isMobilePrizeReviewStep = isMobileMode && isPrizeRedeemFlow && currentStep === 2;
 	const successStep = totalSteps + 1;
 	const waitingStep = totalSteps + 1;
 	const finalSuccessStep = mode === "mobile" ? waitingStep + 1 : successStep;
@@ -177,6 +191,23 @@ export default function NewSaleContent({ org, clientId, prizes, initialOperatorP
 
 	// Memoized cashback calculations
 	const availableCashback = useMemo(() => getAvailableCashback(client?.saldos), [client?.saldos]);
+
+	// Cesta de recompensas: as linhas vivem no estado (uma por recompensa distinta, com quantidade);
+	// a UI resolve cada linha contra o catálogo recebido pela página.
+	const prizeLines = state.sale.prizeRedemptions;
+	const prizesById = useMemo(() => new Map(prizes.map((prize) => [prize.id, prize])), [prizes]);
+	const selectedPrizes = useMemo<TSelectedPrize[]>(
+		() =>
+			prizeLines.flatMap((line) => {
+				const prize = prizesById.get(line.prizeId);
+				return prize ? [{ prize, quantity: line.quantity }] : [];
+			}),
+		[prizeLines, prizesById],
+	);
+	const selectedPrizeDebit = useMemo(() => sumPoiPrizeValue(prizeLines), [prizeLines]);
+	// A elegibilidade de "mais uma" é sempre contra o saldo RESTANTE, nunca contra o saldo cheio.
+	const remainingCashback = availableCashback - selectedPrizeDebit;
+
 	const cashbackAccumulationConfig = useMemo(
 		() => getCashbackAccumulationConfig(client?.saldos, org.acumuloPermitirViaPontoIntegracao),
 		[client?.saldos, org.acumuloPermitirViaPontoIntegracao],
@@ -235,6 +266,21 @@ export default function NewSaleContent({ org, clientId, prizes, initialOperatorP
 		updateCoupon(null);
 	};
 
+	// Espelha os totais da cesta em `valor` (soma comercial) e `cashback` (soma dos débitos) a cada
+	// mudança. O servidor deriva a verdade a partir das linhas, mas `getPoiSaleValueForConfirmation`/
+	// `saleValuesMatch` e a tela de sucesso leem esses campos. Só no ramo de resgate: no "apenas
+	// pontuar" o `valor` é digitado pelo cliente e não pode ser sobrescrito.
+	useEffect(() => {
+		if (prizeFlowIntent !== "redeem") return;
+		const nextSaleValue = sumPoiPrizeSaleValue(prizeLines);
+		const nextDebit = sumPoiPrizeValue(prizeLines);
+		const nextApply = prizeLines.length > 0;
+		if (!saleValuesMatch(state.sale.valor, nextSaleValue)) updateSale({ valor: nextSaleValue });
+		if (state.sale.cashback.aplicar !== nextApply || !saleValuesMatch(state.sale.cashback.valor, nextDebit)) {
+			updateCashback({ aplicar: nextApply, valor: nextDebit });
+		}
+	}, [prizeFlowIntent, prizeLines, state.sale.valor, state.sale.cashback.aplicar, state.sale.cashback.valor, updateSale, updateCashback]);
+
 	// Auto-populate client state when data loads
 	useEffect(() => {
 		if (client) {
@@ -279,7 +325,7 @@ export default function NewSaleContent({ org, clientId, prizes, initialOperatorP
 		// Prize sale-only after sale value step
 		if (isPrizeSaleOnlyFlow && currentStep === 2) {
 			updateCashback({ aplicar: false, valor: 0 });
-			updatePrizeRedemption(null);
+			updatePrizeRedemptions([]);
 		}
 		playAction();
 		if (isMobileMode && currentStep === totalSteps) {
@@ -289,7 +335,7 @@ export default function NewSaleContent({ org, clientId, prizes, initialOperatorP
 					sale: {
 						...state.sale,
 						cashback: { aplicar: false, valor: 0 },
-						prizeRedemption: null,
+						prizeRedemptions: [],
 					},
 				};
 				submitTransaction(payload);
@@ -315,8 +361,7 @@ export default function NewSaleContent({ org, clientId, prizes, initialOperatorP
 
 		setFlowMode(mode);
 		setPrizeFlowIntent(null);
-		setSelectedPrize(null);
-		updatePrizeRedemption(null);
+		updatePrizeRedemptions([]);
 		updateCashback({ aplicar: false, valor: 0 });
 		updateSale({ valor: 0 });
 		setSelectedCoupon(null);
@@ -326,34 +371,40 @@ export default function NewSaleContent({ org, clientId, prizes, initialOperatorP
 		setCurrentStep(1);
 	};
 
-	const handleSelectPrize = (prize: TPrize) => {
-		if (availableCashback < prize.valor) return;
+	// Toque numa recompensa = mais uma unidade na cesta (a mesma recompensa repetida é UMA linha com
+	// quantidade). Recusa quando o saldo restante não cobre mais uma unidade.
+	const handleAddPrize = (prize: TPrize) => {
+		if (prize.valor > remainingCashback + BALANCE_EPSILON) return;
 		setPrizeFlowIntent("redeem");
-		setSelectedPrize(prize);
+		addPrizeRedemption({ id: prize.id, valor: prize.valor, valorVenda: prize.valorVenda });
 		playAction();
-		const nextState: TPointOfInteractionNewSaleState = {
-			...state,
-			sale: {
-				...state.sale,
-				valor: prize.valorVenda,
-				cashback: { aplicar: true, valor: prize.valor },
-				prizeRedemption: { prizeId: prize.id, prizeValue: prize.valor, prizeSaleValue: prize.valorVenda },
-			},
-		};
-		if (isMobileMode) {
-			submitTransaction(nextState);
-			return;
+	};
+
+	const handleSetPrizeQuantity = (prizeId: string, quantity: number) => {
+		const currentLine = prizeLines.find((line) => line.prizeId === prizeId);
+		const currentQuantity = currentLine?.quantity ?? 0;
+		if (quantity > currentQuantity) {
+			const prize = prizesById.get(prizeId);
+			if (!prize) return;
+			const additionalDebit = prize.valor * (quantity - currentQuantity);
+			if (additionalDebit > remainingCashback + BALANCE_EPSILON) return;
 		}
-		updateSale({ valor: prize.valorVenda });
-		updateCashback({ aplicar: true, valor: prize.valor });
-		updatePrizeRedemption({ prizeId: prize.id, prizeValue: prize.valor, prizeSaleValue: prize.valorVenda });
+		setPrizeFlowIntent("redeem");
+		setPrizeRedemptionQuantity(prizeId, quantity);
+	};
+
+	// Cesta fechada: totem vai para a confirmação do operador; mobile vai para a revisão antes do envio.
+	const handleContinueWithPrizes = () => {
+		if (selectedPrizes.length === 0) return toast.error("Selecione ao menos uma recompensa.");
+		if (remainingCashback < -BALANCE_EPSILON) return toast.error("O saldo disponível não cobre as recompensas selecionadas.");
+		setPrizeFlowIntent("redeem");
+		playAction();
 		setCurrentStep(2);
 	};
 
 	const handleContinueWithoutPrize = () => {
 		setPrizeFlowIntent("sale-only");
-		setSelectedPrize(null);
-		updatePrizeRedemption(null);
+		updatePrizeRedemptions([]);
 		updateCashback({ aplicar: false, valor: 0 });
 		updateSale({ valor: 0 });
 		playAction();
@@ -478,8 +529,9 @@ export default function NewSaleContent({ org, clientId, prizes, initialOperatorP
 					</div>
 				</div>
 
-				{/* Wrapper de Estágios */}
-				<div className="bg-card rounded-3xl short:rounded-xl shadow-sm overflow-hidden border border-brand/20">
+				{/* Wrapper de Estágios — `overflow-clip` (não `hidden`): recorta os cantos sem virar contexto de
+				    rolagem, senão o rodapé `sticky` da cesta de recompensas não gruda na base da tela. */}
+				<div className="bg-card rounded-3xl short:rounded-xl shadow-sm overflow-clip border border-brand/20">
 					{currentStep <= confirmationStep && !showModeSelection && <StepProgressHeader steps={headerSteps} currentStep={currentStep} />}
 
 					<div className="p-6 md:p-10 short:p-3">
@@ -558,9 +610,12 @@ export default function NewSaleContent({ org, clientId, prizes, initialOperatorP
 							<PrizeSelectionStep
 								programAllowsAccumulationViaPOI={cashbackAccumulationConfig.acumuloPermitirViaPontoIntegracao}
 								prizes={prizes}
+								selectedLines={prizeLines}
 								availableBalance={availableCashback}
 								terminology={org.terminologia}
-								onSelectPrize={handleSelectPrize}
+								onAddPrize={handleAddPrize}
+								onSetQuantity={handleSetPrizeQuantity}
+								onContinue={handleContinueWithPrizes}
 								onContinueWithoutPrize={handleContinueWithoutPrize}
 							/>
 						)}
@@ -568,11 +623,11 @@ export default function NewSaleContent({ org, clientId, prizes, initialOperatorP
 						{!showModeSelection && isPrizeSaleOnlyFlow && currentStep === 2 && (
 							<SaleValueStep value={state.sale.valor} onChange={(v) => updateSale({ valor: v })} onSubmit={handleNextStep} mode={mode} />
 						)}
-						{/* Prize redeem: Step 2 = Confirmation (totem apenas) */}
-						{!showModeSelection && isPrizeMode && currentStep === 2 && !isPrizeSaleOnlyFlow && !isMobileMode && (
+						{/* Prize redeem: Step 2 = Confirmation (totem) */}
+						{!showModeSelection && isPrizeRedeemFlow && currentStep === 2 && !isMobileMode && (
 							<KioskPrizeConfirmationStep
 								clientName={state.client.nome || client?.nome || ""}
-								selectedPrize={selectedPrize}
+								selectedPrizes={selectedPrizes}
 								availableBalance={availableCashback}
 								terminology={org.terminologia}
 								operatorIdentifier={state.operatorIdentifier}
@@ -581,6 +636,17 @@ export default function NewSaleContent({ org, clientId, prizes, initialOperatorP
 								operatorConfirmedSaleValue={state.operatorConfirmedSaleValue}
 								onOperatorConfirmedSaleValueChange={updateOperatorConfirmedSaleValue}
 								onSubmit={submitTransaction}
+							/>
+						)}
+						{/* Prize redeem: Step 2 = Revisão da cesta (mobile); o envio vira solicitação para o operador */}
+						{!showModeSelection && isMobilePrizeReviewStep && (
+							<MobilePrizeConfirmationStep
+								clientName={state.client.nome || client?.nome || ""}
+								selectedPrizes={selectedPrizes}
+								availableBalance={availableCashback}
+								terminology={org.terminologia}
+								isSubmitting={isSubmitting}
+								onSubmit={() => submitTransaction()}
 							/>
 						)}
 						{/* Prize sale-only: Step 3 = Confirmation (totem apenas) */}
@@ -675,8 +741,14 @@ export default function NewSaleContent({ org, clientId, prizes, initialOperatorP
 						{/* Prize mode success */}
 						{!showModeSelection && isPrizeMode && currentStep === finalSuccessStep && successData && (
 							<SuccessCelebration
-								title={selectedPrize ? "Resgate realizado!" : "Venda registrada!"}
-								subtitle={selectedPrize ? "A recompensa foi resgatada com sucesso." : "A venda foi registrada com sucesso para pontuação."}
+								title={selectedPrizes.length > 0 ? "Resgate realizado!" : "Venda registrada!"}
+								subtitle={
+									selectedPrizes.length > 0
+										? selectedPrizes.length === 1 && selectedPrizes[0].quantity === 1
+											? "A recompensa foi resgatada com sucesso."
+											: "As recompensas foram resgatadas com sucesso."
+										: "A venda foi registrada com sucesso para pontuação."
+								}
 								stats={[
 									{
 										label: "CASHBACK GERADO",
@@ -690,7 +762,7 @@ export default function NewSaleContent({ org, clientId, prizes, initialOperatorP
 										variant: "brand",
 										formatValue: (value) => formatCashbackValue(value, org.terminologia),
 									},
-									...(selectedPrize
+									...(selectedPrizes.length > 0
 										? []
 										: [
 												{
@@ -706,23 +778,38 @@ export default function NewSaleContent({ org, clientId, prizes, initialOperatorP
 									onClick: handleGoToHub,
 								}}
 							>
-								{selectedPrize && (
-									<div className="bg-brand-secondary/5 border border-brand-secondary/20 rounded-2xl short:rounded-xl p-4 short:p-2 flex items-center gap-4 short:gap-2 w-full max-w-xl">
-										<div className="relative w-14 h-14 short:w-10 short:h-10 min-w-14 short:min-w-10 rounded-xl short:rounded-lg overflow-hidden">
-											{selectedPrize.imagemCapaUrl ? (
-												<Image src={selectedPrize.imagemCapaUrl} alt={selectedPrize.titulo} fill className="object-cover" />
-											) : (
-												<div className="flex h-full w-full items-center justify-center bg-brand-secondary text-brand-secondary-foreground">
-													<Gift className="w-6 h-6 short:w-4 short:h-4" />
+								{selectedPrizes.length > 0 && (
+									<div className="bg-brand-secondary/5 border border-brand-secondary/20 rounded-2xl short:rounded-xl w-full max-w-xl divide-y divide-brand-secondary/15">
+										{selectedPrizes.map(({ prize, quantity }) => (
+											<div key={prize.id} className="p-4 short:p-2 flex items-center gap-4 short:gap-2">
+												<div className="relative w-14 h-14 short:w-10 short:h-10 min-w-14 short:min-w-10 rounded-xl short:rounded-lg overflow-hidden">
+													{prize.imagemCapaUrl ? (
+														<Image src={prize.imagemCapaUrl} alt={prize.titulo} fill className="object-cover" />
+													) : (
+														<div className="flex h-full w-full items-center justify-center bg-brand-secondary text-brand-secondary-foreground">
+															<Gift className="w-6 h-6 short:w-4 short:h-4" />
+														</div>
+													)}
 												</div>
-											)}
-										</div>
-										<div className="flex-1 min-w-0 text-left">
-											<h3 className="font-bold text-sm short:text-xs tracking-tight truncate">{selectedPrize.titulo}</h3>
-											<p className="font-black text-lg short:text-base text-brand-secondary">{formatCashbackValue(selectedPrize.valor, org.terminologia)}</p>
-											<p className="text-xs short:text-[0.65rem] text-muted-foreground">
-												Valor comercial: {selectedPrize.valorVenda.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-											</p>
+												<div className="flex-1 min-w-0 text-left">
+													<h3 className="font-bold text-sm short:text-xs tracking-tight truncate">
+														{prize.titulo}
+														{quantity > 1 && <span className="ml-2 text-brand-secondary font-black">×{quantity}</span>}
+													</h3>
+													<p className="font-black text-lg short:text-base text-brand-secondary">
+														{formatCashbackValue(prize.valor * quantity, org.terminologia)}
+													</p>
+													<p className="text-xs short:text-[0.65rem] text-muted-foreground">
+														Valor comercial: {(prize.valorVenda * quantity).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+													</p>
+												</div>
+											</div>
+										))}
+										<div className="p-4 short:p-2 flex items-center justify-between gap-4 short:gap-2">
+											<span className="text-[0.7rem] short:text-[0.6rem] font-black uppercase tracking-widest text-muted-foreground">Total resgatado</span>
+											<span className="font-black text-lg short:text-base text-brand-secondary">
+												{formatCashbackValue(sumPoiPrizeValue(prizeLines), org.terminologia)}
+											</span>
 										</div>
 									</div>
 								)}
@@ -735,16 +822,11 @@ export default function NewSaleContent({ org, clientId, prizes, initialOperatorP
 								{currentStep > 1 && (
 									<Button
 										onClick={() => {
-											if (isPrizeMode && currentStep === 2 && !isPrizeSaleOnlyFlow) {
-												setSelectedPrize(null);
-												setPrizeFlowIntent(null);
-												updatePrizeRedemption(null);
-												updateSale({ valor: 0 });
-												updateCashback({ aplicar: false, valor: 0 });
-											}
+											// Voltar da confirmação do resgate mantém a cesta: o cliente volta para ajustar
+											// quantidades, não para começar do zero (a seleção tem seu próprio −/+).
 											if (isPrizeSaleOnlyFlow && currentStep === 3) {
 												updateCashback({ aplicar: false, valor: 0 });
-												updatePrizeRedemption(null);
+												updatePrizeRedemptions([]);
 											}
 											if (isPrizeSaleOnlyFlow && currentStep === 2) {
 												setPrizeFlowIntent(null);
@@ -759,7 +841,8 @@ export default function NewSaleContent({ org, clientId, prizes, initialOperatorP
 										Voltar
 									</Button>
 								)}
-								{!(isPrizeMode && currentStep === 1) && (
+								{/* Passo 1 do prêmio tem o CONTINUAR no rodapé da cesta; a revisão mobile tem o próprio botão de envio. */}
+								{!(isPrizeMode && currentStep === 1) && !isMobilePrizeReviewStep && (
 									<Button
 										onClick={currentStep === confirmationStep ? (isMobileMode ? handleNextStep : () => submitTransaction()) : handleNextStep}
 										size="lg"
