@@ -41,7 +41,7 @@ chama de novo `processSaleAutomaticFiscalEmissionIfEligible`, que reavalia todas
 então monta o payload. Edição, cancelamento, estorno ou desligamento da emissão automática durante
 a janela são respeitados sem código novo.
 
-### 2. Estado do agendamento vive na venda: `sales.emissaoFiscalAgendadaPara`
+### 2. Estado do agendamento vive na venda: `sales.emissaoFiscalDataAgendamento`
 
 O gatilho dispara várias vezes para a mesma venda (confirmação, entrega, efetivação de pagamento,
 edição confirmada, data-collecting, crédito em loja). Hoje a deduplicação acontece em
@@ -57,7 +57,7 @@ Opções consideradas:
   documento vivo antes da hora contamina tudo que lê "existe documento": a trava
   `DOCUMENTO_EXISTENTE`, a listagem da venda, os sinais de `sale-fiscal-signals`, o digest de
   pendências. Muito raio de ação para um marcador. Rejeitada.
-- **Coluna na venda** (`emissao_fiscal_agendada_para timestamp null`). Só o gatilho, o consumer, o
+- **Coluna na venda** (`emissao_fiscal_data_agendamento timestamp null`). Só o gatilho, o consumer, o
   cron e a página da venda leem. Mesmo lugar do override tri-state `emissaoFiscalAutomatica`.
   **Escolhida.**
 
@@ -72,13 +72,13 @@ Um novo agendamento (depois de a coluna ter sido limpa) gera chave nova.
 ### 3. Vercel Queues é o caminho principal; o cron é o reconciliador
 
 `delaySeconds` aceita até 7 dias (limitado ao `retentionSeconds`, também máximo 7 dias). A entrega
-é at-least-once, sem ordem. Ambos são inócuos: o consumer confere `emissaoFiscalAgendadaPara ===
+é at-least-once, sem ordem. Ambos são inócuos: o consumer confere `emissaoFiscalDataAgendamento ===
 agendadaPara` da mensagem antes de agir (mensagem velha ou repetida recua), e o lock de envio
 (`bloqueadoEm` → 409) já protege contra dois processos emitindo o mesmo documento.
 
 O que a fila não cobre: `send` falhando (rede, credenciais ausentes em `next dev`), mensagem
 descartada após as retentativas, ou TTL. Para isso, `processFiscalQueueUnlocked` ganha um terceiro
-passo: vendas com `emissaoFiscalAgendadaPara <= now - 5 min` (graça para a fila entregar primeiro)
+passo: vendas com `emissaoFiscalDataAgendamento <= now - 5 min` (graça para a fila entregar primeiro)
 executam pelo mesmo caminho do consumer. Com isso o comportamento local sem fila é "atraso + até
 2 min", e produção é "atraso exato".
 
@@ -131,15 +131,15 @@ gatilho (confirm/entrega/pagamento/edição/data-collecting)
        ├─ resolveAutoEmissionSchedule
        │    ├─ EMITIR       → enqueueFiscalDocument (fluxo atual) → { status: "SOLICITADO" }
        │    ├─ JA_AGENDADA  → { status: "AGENDADO", agendadaPara }
-       │    └─ AGENDAR      → update sales.emissaoFiscalAgendadaPara
+       │    └─ AGENDAR      → update sales.emissaoFiscalDataAgendamento
        │                      send("fiscal-auto-emissions", msg, { delaySeconds, retentionSeconds, idempotencyKey })
        │                      (send falhou → log; a coluna fica e o cron executa)
        │                      → { status: "AGENDADO", agendadaPara }
        └─ ...
 consumer /api/queues/fiscal-auto-emission  ──┐
 cron fiscal-queue (agendamentos vencidos) ───┴─ executeScheduledAutoEmission({ organizacaoId, vendaId, autorId, agendadaPara })
-       ├─ venda.emissaoFiscalAgendadaPara !== agendadaPara → recua (mensagem velha/duplicada)
-       ├─ limpa a coluna (UPDATE ... WHERE emissao_fiscal_agendada_para = agendadaPara RETURNING) → 0 linhas = outro processo já executou
+       ├─ venda.emissaoFiscalDataAgendamento !== agendadaPara → recua (mensagem velha/duplicada)
+       ├─ limpa a coluna (UPDATE ... WHERE emissao_fiscal_data_agendamento = agendadaPara RETURNING) → 0 linhas = outro processo já executou
        └─ processSaleAutomaticFiscalEmissionIfEligible({ ..., modo: "EXECUTAR_AGENDAMENTO" })
             (mesmas travas; resolveAutoEmissionSchedule é pulada; ERRO já notifica por e-mail)
 ```
@@ -157,8 +157,8 @@ não foi limpa, o cron pega.
 
 ### Banco
 
-- `services/drizzle/schema/sales.ts`: `emissaoFiscalAgendadaPara: timestamp("emissao_fiscal_agendada_para")`
-  + índice parcial `where emissao_fiscal_agendada_para is not null` (a varredura do cron é
+- `services/drizzle/schema/sales.ts`: `emissaoFiscalDataAgendamento: timestamp("emissao_fiscal_data_agendamento")`
+  + índice parcial `where emissao_fiscal_data_agendamento is not null` (a varredura do cron é
   `organizacao_id`-agnóstica e a tabela é grande).
 - `npm run db:generate` → migration em `drizzle/`.
 
@@ -166,7 +166,7 @@ não foi limpa, o cron pega.
 
 - `schemas/fiscal.ts`: `emissaoAutomatica.atrasoMinutos` (acima). Ajustar o `.default(...)` do
   objeto pai para incluir `atrasoMinutos: 0`.
-- `lib/fiscal/constants.ts`: `AUTO_EMISSION_MAX_DELAY_MINUTES = 7 * 24 * 60`.
+- `lib/fiscal/constants.ts`: `AUTO_EMISSION_MAX_DELAY_MINUTES = 7 * 24 * 60` (teto do schema, limite da fila) e `AUTO_EMISSION_UI_MAX_DELAY_MINUTES = 24 * 60` (teto da interface).
 
 ### Política e fila
 
@@ -178,7 +178,7 @@ não foi limpa, o cron pega.
   - novo parâmetro `modo?: "GATILHO" | "EXECUTAR_AGENDAMENTO"` (default `GATILHO`);
   - após as travas e antes de `enqueueFiscalDocument`, o bloco de agendamento;
   - novo retorno `{ status: "AGENDADO", agendadaPara: Date }`;
-  - `select` da venda passa a incluir `emissaoFiscalAgendadaPara`.
+  - `select` da venda passa a incluir `emissaoFiscalDataAgendamento`.
 - `lib/sales/sale-processing/execute-scheduled-auto-emission.ts`:
   `executeScheduledAutoEmission` (claim + delegação), usado por consumer e cron. Exportar em
   `sale-processing/index.ts`.
@@ -187,7 +187,7 @@ não foi limpa, o cron pega.
   outros consumers.
 - `vercel.json`: `experimentalTriggers` para a rota nova (`retryAfterSeconds: 60`).
 - `lib/fiscal/worker.ts`: passo 3 em `processFiscalQueueUnlocked` — vendas com agendamento vencido
-  há mais de 5 min (limite 25, ordenado por `emissaoFiscalAgendadaPara`), carregando a organização
+  há mais de 5 min (limite 25, ordenado por `emissaoFiscalDataAgendamento`), carregando a organização
   uma vez por `organizacaoId`; resultado ganha `agendadosExecutados`.
 
 ### Configuração (API e UI)
@@ -197,7 +197,8 @@ não foi limpa, o cron pega.
   limita o intervalo.
 - `app/dashboard/fiscal/_module/configuration/components/auto-emission-delay-settings.tsx`: bloco
   "ATRASO DA EMISSÃO AUTOMÁTICA" com presets (Imediato, 15 min, 30 min, 1 h, 2 h, 24 h) e campo em
-  minutos para valor livre; texto explicando que a venda pode ser corrigida ou cancelada na janela e
+  minutos para valor livre, limitado a **1440 min (24 h)** na interface
+  (`AUTO_EMISSION_UI_MAX_DELAY_MINUTES`); texto explicando que a venda pode ser corrigida ou cancelada na janela e
   que a emissão manual continua imediata. Props `fiscalConfig`/`updateFiscalConfig`, como
   `AutoEmissionPaymentMethodExceptions`.
 - `fiscal-configuration-view.tsx`: renderizar o bloco novo dentro do `if
@@ -208,11 +209,11 @@ não foi limpa, o cron pega.
 - `SaleSuccessPanel.tsx`, `new-sale-page.tsx`, `checkout-page.tsx`, `edit-sale-page.tsx`: ramo
   `status === "AGENDADO"` → "Emissão fiscal agendada para {formatDateTimeInOperationTimezone}".
   O tipo do resultado muda, então o `tsc` aponta os pontos.
-- `sale-by-id-page.tsx`: quando `emissaoFiscalAgendadaPara` não é nulo e não há documento vivo,
+- `sale-by-id-page.tsx`: quando `emissaoFiscalDataAgendamento` não é nulo e não há documento vivo,
   linha "Emissão automática agendada para …" no bloco fiscal. Conferir que o GET da venda por id
   devolve a coluna (o `db.query.sales.findFirst` sem `columns` já devolve).
 - `scripts/diagnose-sale-fiscal-emission.ts`: imprimir `atrasoMinutos` da org e
-  `emissao_fiscal_agendada_para` da venda.
+  `emissao_fiscal_data_agendamento` da venda.
 
 ### Testes
 
@@ -250,9 +251,12 @@ não foi limpa, o cron pega.
 
 Cada fase é um commit (`feat:`) e o sistema fica consistente entre elas.
 
-## Perguntas em aberto
+## Decisões fechadas
 
-- Presets e teto exibido na UI: sugestão de teto prático de **24 h** na interface, mantendo 7 dias
-  no schema. Confirmar.
-- O atraso deve aparecer no preview do PDV ("esta venda emitirá em X min")? Fica fora do v1 salvo
-  pedido.
+- **Teto na UI: 24 h** (presets até "24 h"; campo livre limitado a 1440 min). O schema mantém o
+  teto de 7 dias da fila, para não invalidar um valor maior que venha a ser gravado por outra via.
+- **Sem preview no PDV** ("esta venda emitirá em X min"). O feedback fica só no resultado da
+  confirmação/entrega (`AGENDADO`) e na página da venda.
+- **Nome da coluna: `emissaoFiscalDataAgendamento`** (`emissao_fiscal_data_agendamento`). Guarda o
+  horário **para o qual** a emissão foi agendada, não o momento em que o agendamento foi feito —
+  registrar isso no comentário da coluna em `sales.ts`, porque o nome admite as duas leituras.
