@@ -5,7 +5,7 @@ import ResponsiveMenu from "@/components/Utils/ResponsiveMenu";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { clientVinculationFlowReducer, INITIAL_CLIENT_VINCULATION_FLOW_STATE } from "@/lib/clients/client-vinculation-flow";
-import { parseClientSearchIntent } from "@/lib/clients/parse-client-search-intent";
+import { isClientSearchIntentComplete, parseClientSearchIntent } from "@/lib/clients/parse-client-search-intent";
 import { getErrorMessage } from "@/lib/errors";
 import { createClient } from "@/lib/mutations/clients";
 import { useClientsBySearch } from "@/lib/queries/clients";
@@ -103,12 +103,17 @@ export default function ClientVinculationMenu({ closeModal, onSelectClient, auth
 		[resetState, updateClient],
 	);
 
+	// Sem resultado só abre o cadastro sozinho quando a busca é um identificador completo:
+	// um telefone pela metade não é "cliente inexistente", é digitação em andamento — trocar de
+	// modo aqui tirava o campo do operador antes de ele terminar o número.
+	const isSearchIntentComplete = isClientSearchIntentComplete(normalizedDebouncedSearch);
 	useEffect(() => {
 		if (flowState.mode !== "search" || !isSearchSettled || isError || hasResults) return;
+		if (!isSearchIntentComplete) return;
 		if (flowState.suppressAutomaticCreationFor === normalizedDebouncedSearch) return;
 
 		startCreation({ searchToApply: normalizedDebouncedSearch, source: "no_results" });
-	}, [flowState, hasResults, isError, isSearchSettled, normalizedDebouncedSearch, startCreation]);
+	}, [flowState, hasResults, isError, isSearchSettled, isSearchIntentComplete, normalizedDebouncedSearch, startCreation]);
 
 	function handleSearchChange(value: string) {
 		dispatchFlow({ type: "SEARCH_CHANGED", search: value });
@@ -227,7 +232,9 @@ export default function ClientVinculationMenu({ closeModal, onSelectClient, auth
 						<div className="flex flex-col items-center gap-3 py-8 text-center">
 							<div className="space-y-1">
 								<p className="text-sm font-semibold">Nenhum cliente encontrado.</p>
-								<p className="text-xs text-muted-foreground">Tente outra busca ou cadastre um novo cliente.</p>
+								<p className="text-xs text-muted-foreground">
+									{isSearchIntentComplete ? "Tente outra busca ou cadastre um novo cliente." : "Continue digitando o telefone ou cadastre um novo cliente."}
+								</p>
 							</div>
 							<Button
 								type="button"

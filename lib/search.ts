@@ -1,6 +1,6 @@
 import { type SQL, sql } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
-import { formatPhoneAsBase } from "./formatting";
+import { buildPhoneSearchPatterns } from "./formatting";
 
 /**
  * Aceita uma coluna ou uma expressão SQL — buscar dentro de um campo jsonb
@@ -46,17 +46,20 @@ export function createWordSimilarityExpression(column: PgColumn, term: string) {
 	return sql`word_similarity(unaccent_immutable(${term.toLowerCase()}), unaccent_immutable(lower(${column})))`;
 }
 
+/**
+ * Telefone digitado total ou parcialmente. Casa cada padrão de `buildPhoneSearchPatterns` (dígitos
+ * como vieram, variante sem o nono dígito de celular e a base normalizada) contra a coluna, além
+ * do termo original para colunas que guardam o número com máscara.
+ */
 export function createSimplifiedPhoneSearchCondition(column: PgColumn, term: string) {
-	const phoneBase = formatPhoneAsBase(term);
-	if (phoneBase) {
-		return sql`(
-            ${column} LIKE '%' || ${phoneBase} || '%'
-            OR
-            -- Caso o banco tenha guardado com máscara, tentamos o termo original
-            ${column} LIKE '%' || ${term} || '%'
-        )`;
-	}
-	return sql`${column} LIKE '%' || ${term} || '%'`;
+	const patterns = buildPhoneSearchPatterns(term);
+	if (patterns.length === 0) return sql`${column} LIKE '%' || ${term} || '%'`;
+	const conditions = [
+		...patterns.map((pattern) => sql`${column} LIKE '%' || ${pattern} || '%'`),
+		// Caso o banco tenha guardado com máscara, tentamos o termo original
+		sql`${column} LIKE '%' || ${term} || '%'`,
+	];
+	return sql`(${sql.join(conditions, sql` OR `)})`;
 }
 
 export function createSimplifiedEmailSearchCondition(column: PgColumn, term: string) {
