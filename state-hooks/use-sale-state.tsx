@@ -131,8 +131,10 @@ const SaleSuccessSchema = z
 		cashbackAcumulado: z.number().optional().nullable(),
 		fiscal: z
 			.object({
-				status: z.enum(["NAO_SOLICITADO", "SOLICITADO", "ERRO"]),
+				status: z.enum(["NAO_SOLICITADO", "SOLICITADO", "AGENDADO", "ERRO"]),
 				error: z.string().optional().nullable(),
+				// Só com status AGENDADO: horário para o qual a emissão automática foi agendada (ISO).
+				agendadaPara: z.string().optional().nullable(),
 			})
 			.optional()
 			.nullable(),

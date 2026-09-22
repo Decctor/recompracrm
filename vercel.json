@@ -17,6 +17,15 @@
 					"topic": "integration-import-batches"
 				}
 			]
+		},
+		"app/api/queues/fiscal-auto-emission/route.ts": {
+			"experimentalTriggers": [
+				{
+					"retryAfterSeconds": 60,
+					"type": "queue/v2beta",
+					"topic": "fiscal-auto-emissions"
+				}
+			]
 		}
 	},
 	"crons": [

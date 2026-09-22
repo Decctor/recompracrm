@@ -1,8 +1,10 @@
+import { executeScheduledAutoEmission } from "@/lib/sales/sale-processing/execute-scheduled-auto-emission";
 import { connection, db } from "@/services/drizzle";
 import { fiscalOutboundDocuments } from "@/services/drizzle/schema";
 import { eq } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { getErrorMessage } from "../errors";
+import { AUTO_EMISSION_SCHEDULE_GRACE_MINUTES } from "./constants";
 import { emitFiscalDocument, syncFiscalDocument } from "./documents";
 
 const MAX_ATTEMPTS = 6;
@@ -25,9 +27,11 @@ async function scheduleNextAttempt(documentId: string, proximaTentativaEm: Date 
 // Processa a fila de emissao fiscal (outbox). Executado por cron.
 // 1) Envia documentos prontos / com erro retentavel cuja proxima tentativa venceu.
 // 2) Sincroniza documentos em processamento / cancelamento pendente.
+// 3) Rede de seguranca do atraso da emissao automatica: executa agendamentos vencidos que a fila
+//    `fiscal-auto-emissions` nao entregou (send falhou, mensagem descartada, ambiente sem fila).
 async function processFiscalQueueUnlocked({ limit = 25 }: { limit?: number } = {}) {
 	const now = new Date();
-	const results = { enviados: 0, falhas: 0, sincronizados: 0 };
+	const results = { enviados: 0, falhas: 0, sincronizados: 0, agendamentosExecutados: 0 };
 
 	const toSend = await db.query.fiscalOutboundDocuments.findMany({
 		where: (fields, operators) =>
@@ -98,6 +102,36 @@ async function processFiscalQueueUnlocked({ limit = 25 }: { limit?: number } = {
 		}
 	}
 
+	// A graca da a fila a chance de entregar primeiro; se consumer e cron colidirem mesmo assim, o
+	// claim em executeScheduledAutoEmission deixa passar um so. Indice parcial em
+	// emissao_fiscal_data_agendamento mantem esta varredura barata.
+	const scheduleCutoff = new Date(now.getTime() - AUTO_EMISSION_SCHEDULE_GRACE_MINUTES * 60_000);
+	const overdueSchedules = await db.query.sales.findMany({
+		where: (fields, operators) =>
+			operators.and(operators.isNotNull(fields.emissaoFiscalDataAgendamento), operators.lte(fields.emissaoFiscalDataAgendamento, scheduleCutoff)),
+		columns: { id: true, organizacaoId: true, emissaoFiscalDataAgendamento: true },
+		orderBy: (fields, operators) => operators.asc(fields.emissaoFiscalDataAgendamento),
+		limit,
+	});
+
+	for (const sale of overdueSchedules) {
+		// organizacao_id e nullable no schema legado; sem org nao ha configuracao fiscal para emitir.
+		if (!sale.emissaoFiscalDataAgendamento || !sale.organizacaoId) continue;
+		try {
+			const result = await executeScheduledAutoEmission({
+				organizationId: sale.organizacaoId,
+				saleId: sale.id,
+				// O autor do gatilho so viaja na mensagem da fila; pelo cron a emissao e do sistema.
+				authorId: null,
+				scheduledFor: sale.emissaoFiscalDataAgendamento,
+				source: "CRON",
+			});
+			if (result.status !== "IGNORADO") results.agendamentosExecutados++;
+		} catch (error) {
+			console.error(`[FISCAL_WORKER] Falha ao executar agendamento da venda ${sale.id}: ${getErrorMessage(error)}`);
+		}
+	}
+
 	return results;
 }
 
@@ -108,7 +142,7 @@ export async function processFiscalQueue({ limit = 25 }: { limit?: number } = {}
     `;
 		if (!lock?.acquired) {
 			console.warn("[FISCAL_WORKER] Ciclo ignorado porque outra invocacao ainda possui o lock.");
-			return { enviados: 0, falhas: 0, sincronizados: 0 };
+			return { enviados: 0, falhas: 0, sincronizados: 0, agendamentosExecutados: 0 };
 		}
 
 		return processFiscalQueueUnlocked({ limit });
