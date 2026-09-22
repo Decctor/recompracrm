@@ -15,6 +15,7 @@ import { BadgeCheck, RefreshCcw, Save } from "lucide-react";
 import { useQueryState } from "nuqs";
 import { useEffect } from "react";
 import { toast } from "sonner";
+import { AutoEmissionDelaySettings } from "./components/auto-emission-delay-settings";
 import { AutoEmissionPaymentMethodExceptions } from "./components/auto-emission-payment-method-exceptions";
 import { CompanyBasicInformation } from "./components/company-basic-information";
 import { CompanyFiscalOperationProfiles } from "./components/company-fiscal-operation-profiles";
@@ -126,7 +127,10 @@ export function FiscalConfigurationView({ canEdit }: FiscalConfigurationViewProp
 						/>
 					</div>
 					{state.fiscalEmissaoAutomatica ? (
-						<AutoEmissionPaymentMethodExceptions fiscalConfig={state.fiscalConfiguracao} updateFiscalConfig={updateFiscalConfig} />
+						<>
+							<AutoEmissionDelaySettings fiscalConfig={state.fiscalConfiguracao} updateFiscalConfig={updateFiscalConfig} disabled={!canEdit} />
+							<AutoEmissionPaymentMethodExceptions fiscalConfig={state.fiscalConfiguracao} updateFiscalConfig={updateFiscalConfig} />
+						</>
 					) : null}
 					<InboundDfeSettings fiscalConfig={state.fiscalConfiguracao} updateFiscalConfig={updateFiscalConfig} />
 					<ExceptionalPresenceClassificationSettings fiscalConfig={state.fiscalConfiguracao} updateFiscalConfig={updateFiscalConfig} disabled={!canEdit} />
