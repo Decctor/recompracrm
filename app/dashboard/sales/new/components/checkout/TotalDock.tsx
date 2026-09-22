@@ -44,7 +44,7 @@ export default function TotalDock({
 	const finalizeDisabled = !saleState.isReadyForFinalize || isFinalizingSale || !!finalizeBlockedReason || (!editMode && !!isCreatingDraft);
 	// Carrinho vazio esmaece o número, nunca esconde o dock: a altura da coluna não pode saltar
 	// quando o operador bipa o primeiro item.
-	const isEmpty = saleState.itemCount === 0 && !saleState.state.recompensaResgate;
+	const isEmpty = saleState.itemCount === 0 && saleState.state.recompensasResgate.length === 0;
 
 	const jaRecebido = saleState.state.pagamentosEfetivadosTotal;
 	// Restante só aparece quando diz algo que o total já não diz: sem nenhum pagamento lançado ele é

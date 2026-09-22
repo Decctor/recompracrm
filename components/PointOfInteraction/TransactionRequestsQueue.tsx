@@ -7,9 +7,9 @@ import { getErrorMessage } from "@/lib/errors";
 import { formatDateAsLocale, formatToMoney } from "@/lib/formatting";
 import { usePoiTransactionRequestsRealtime } from "@/lib/hooks/use-supabase-realtime";
 import { rejectPoiTransactionRequest } from "@/lib/mutations/poi-transaction-requests";
+import { readPoiSummaryPrizes, type TPoiTransactionRequestSummary } from "@/lib/point-of-interaction/transaction-requests";
 import { usePoiTransactionRequests } from "@/lib/queries/poi-transaction-requests";
 import { cn } from "@/lib/utils";
-import type { TDeliveryModeEnum } from "@/schemas/enums";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { BadgeDollarSign, BadgePercent, CheckCheck, Gift, GitPullRequestArrow, Phone, RefreshCcw, X } from "lucide-react";
 import { BsCalendarPlus } from "react-icons/bs";
@@ -142,18 +142,36 @@ function PoiTransactionRequestCard({
 	onReject: () => void;
 	disabled: boolean;
 }) {
-	const resumo = request.resumoSolicitacao as {
-		cliente?: { nome?: string; telefone?: string };
-		venda?: { valorBruto?: number; valorResgate?: number; valorFinal?: number; modo?: string; entregaModalidade?: TDeliveryModeEnum | null };
-		recompensa?: { prizeValue?: number; prizeSaleValue?: number; prizeTitulo?: string | null; prizeImageUrl?: string | null } | null;
-		cupom?: TApprovalCoupon | null;
-	};
-	const requestCoupon = resumo?.cupom ?? null;
+	// `resumoSolicitacao` é jsonb sem tipo no Drizzle; o formato persistido é o do builder.
+	const resumo = request.resumoSolicitacao as Partial<TPoiTransactionRequestSummary> | null;
+	const requestCoupon: TApprovalCoupon | null = resumo?.cupom
+		? {
+				cupomId: resumo.cupom.cupomId,
+				valorDesconto: resumo.cupom.valorDesconto ?? null,
+				titulo: resumo.cupom.titulo ?? null,
+				codigo: resumo.cupom.codigo ?? null,
+				validacaoModo: resumo.cupom.validacaoModo ?? null,
+				condicoesTexto: resumo.cupom.condicoesTexto ?? null,
+			}
+		: null;
 	const isRewardMode = resumo?.venda?.modo === "RECOMPENSA";
 
-	// Prize info: prefer data from approved transaction, fallback to summary
-	const prizeDescricao = request.transacaoResgate?.resgateRecompensa?.descricao ?? resumo?.recompensa?.prizeTitulo ?? null;
-	const prizeImageUrl = request.transacaoResgate?.resgateRecompensa?.imagemCapaUrl ?? resumo?.recompensa?.prizeImageUrl ?? null;
+	// Uma linha por recompensa (formato atual ou legado singular, via helper). `transacaoResgate`
+	// aponta para UMA recompensa (FK única): serve só de fallback para a primeira linha quando o
+	// resumo não gravou título/imagem.
+	const summaryPrizes = readPoiSummaryPrizes(resumo ? { recompensas: resumo.recompensas ?? [], recompensa: resumo.recompensa } : null);
+	const linkedPrize = request.transacaoResgate?.resgateRecompensa ?? null;
+	const prizeRows = summaryPrizes.map((prize, index) => ({
+		prizeId: prize.prizeId,
+		quantity: prize.quantity,
+		titulo: prize.prizeTitulo ?? (index === 0 ? (linkedPrize?.descricao ?? null) : null),
+		imageUrl: prize.prizeImageUrl ?? (index === 0 ? (linkedPrize?.imagemCapaUrl ?? null) : null),
+	}));
+	// Solicitação antiga sem recompensas no resumo mas com a transação de resgate vinculada.
+	if (prizeRows.length === 0 && linkedPrize && (linkedPrize.descricao || linkedPrize.imagemCapaUrl)) {
+		prizeRows.push({ prizeId: linkedPrize.id, quantity: 1, titulo: linkedPrize.descricao ?? null, imageUrl: linkedPrize.imagemCapaUrl ?? null });
+	}
+	const totalPrizeUnits = prizeRows.reduce((sum, row) => sum + row.quantity, 0);
 
 	return (
 		<div className="bg-card border border-border flex w-full flex-col gap-1 rounded-xl px-3 py-4 shadow-2xs h-fit">
@@ -208,18 +226,28 @@ function PoiTransactionRequestCard({
 				</div>
 			) : null}
 
-			{isRewardMode && (prizeDescricao || prizeImageUrl) && (
-				<div className="flex items-center gap-2.5 rounded-lg border border-purple-200 bg-purple-50 px-3 py-2 dark:border-purple-800/40 dark:bg-purple-900/10">
-					{prizeImageUrl && <img src={prizeImageUrl} alt={prizeDescricao ?? "Prêmio"} className="h-10 w-10 min-h-10 min-w-10 rounded-md object-cover" />}
-					{!prizeImageUrl && (
-						<div className="flex h-10 w-10 min-h-10 min-w-10 items-center justify-center rounded-md bg-purple-100 dark:bg-purple-900/30">
-							<Gift className="h-5 w-5 text-purple-500" />
+			{isRewardMode && prizeRows.length > 0 && (
+				<div className="flex flex-col gap-2 rounded-lg border border-purple-200 bg-purple-50 px-3 py-2 dark:border-purple-800/40 dark:bg-purple-900/10">
+					<p className="text-[0.65rem] font-semibold uppercase tracking-tight text-purple-700 dark:text-purple-300">
+						{totalPrizeUnits === 1 ? "Prêmio resgatado" : `Prêmios resgatados (${totalPrizeUnits})`}
+					</p>
+					{prizeRows.map((row) => (
+						<div key={row.prizeId} className="flex items-center gap-2.5">
+							{row.imageUrl ? (
+								<img src={row.imageUrl} alt={row.titulo ?? "Prêmio"} className="h-10 w-10 min-h-10 min-w-10 rounded-md object-cover" />
+							) : (
+								<div className="flex h-10 w-10 min-h-10 min-w-10 items-center justify-center rounded-md bg-purple-100 dark:bg-purple-900/30">
+									<Gift className="h-5 w-5 text-purple-500" />
+								</div>
+							)}
+							<p className="min-w-0 flex-1 truncate text-xs font-bold text-purple-900 dark:text-purple-100">{row.titulo ?? "Recompensa"}</p>
+							{row.quantity > 1 ? (
+								<span className="rounded-full bg-purple-200 px-2 py-0.5 text-[0.65rem] font-black tabular-nums text-purple-900 dark:bg-purple-800/40 dark:text-purple-100">
+									×{row.quantity}
+								</span>
+							) : null}
 						</div>
-					)}
-					<div className="flex flex-col gap-0.5">
-						<p className="text-[0.65rem] font-semibold uppercase tracking-tight text-purple-700 dark:text-purple-300">Prêmio resgatado</p>
-						<p className="text-xs font-bold text-purple-900 dark:text-purple-100">{prizeDescricao}</p>
-					</div>
+					))}
 				</div>
 			)}
 
@@ -234,7 +262,7 @@ function PoiTransactionRequestCard({
 						<BadgePercent className="w-4 min-w-4 h-4 min-h-4" />
 						<p className="text-xs font-medium tracking-tight uppercase">
 							{isRewardMode
-								? `RESGATE: ${resumo?.recompensa?.prizeValue ?? resumo?.venda?.valorResgate ?? 0} créditos`
+								? `RESGATE: ${resumo?.venda?.valorResgate ?? 0} créditos`
 								: `RESGATE: ${formatToMoney(resumo?.venda?.valorResgate ?? 0)}`}
 						</p>
 					</div>

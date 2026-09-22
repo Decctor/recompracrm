@@ -27,6 +27,21 @@ export function parseClientSearchIntent(search: string): TClientSearchIntent {
 	return { kind: "name", nome: normalizedSearch };
 }
 
+/**
+ * Se a busca já é um identificador COMPLETO — o que decide se "nenhum resultado" significa
+ * "cliente não existe" (pode abrir o cadastro automaticamente) ou apenas "ainda digitando".
+ * Nome: sempre completo (não há como saber). Telefone: 10 ou 11 dígitos. CPF/CNPJ: válido.
+ * Sem esta régua, nove dígitos de um celular cadastrado viravam modo de criação no meio da
+ * digitação, e o operador perdia o campo.
+ */
+export function isClientSearchIntentComplete(search: string): boolean {
+	const intent = parseClientSearchIntent(search);
+	if (intent.kind === "name") return true;
+	if (intent.kind === "cpf_cnpj") return true;
+	const digits = formatStringAsOnlyDigits(search);
+	return digits.length === 10 || digits.length === 11;
+}
+
 export function getClientSearchIntentLabel(kind: TClientSearchIntent["kind"]): string {
 	switch (kind) {
 		case "name":

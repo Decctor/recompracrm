@@ -274,6 +274,26 @@ export function formatPhoneAsBase(phone: string) {
 	return d.slice(0, 2) + d.slice(-8);
 }
 
+/**
+ * Padrões de substring para buscar um telefone digitado PARCIALMENTE contra `telefoneBase`.
+ *
+ * `telefoneBase` guarda o número sem o nono dígito de celular ("34 99662-6855" vira
+ * "3496626855"), mas quem digita o número progressivamente inclui esse 9. Comparar o prefixo
+ * bruto com a base não casa até o último dígito — e a busca "não encontra" um cliente
+ * cadastrado durante quase toda a digitação. Por isso, além dos dígitos como vieram, devolve a
+ * variante sem o 9 logo após o DDD (quando há ao menos 3 dígitos e o terceiro é 9). Com 10+
+ * dígitos a base normalizada (`formatPhoneAsBase`) entra também, como antes.
+ */
+export function buildPhoneSearchPatterns(term: string): string[] {
+	const digits = formatStringAsOnlyDigits(term);
+	if (!digits) return [];
+	const patterns = new Set<string>([digits]);
+	if (digits.length >= 3 && digits[2] === "9") patterns.add(digits.slice(0, 2) + digits.slice(3));
+	const base = formatPhoneAsBase(digits);
+	if (base) patterns.add(base);
+	return [...patterns];
+}
+
 export function formatToPhone(value: string): string {
 	if (!value) return "";
 	let digits = normalizeBrazilianPhoneDigitsForDisplay(value);

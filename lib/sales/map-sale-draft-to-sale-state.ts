@@ -1,5 +1,5 @@
 import type { TGetSaleDraftOutput } from "@/app/api/pos/sales/route";
-import type { TSaleRewardDraftSnapshot } from "@/lib/sales/sale-reward-snapshot";
+import { parseSaleRewardDraftSnapshots } from "@/lib/sales/sale-reward-snapshot";
 import { readShopDeliveryFee } from "@/lib/shop/config";
 import type { TSaleState } from "@/state-hooks/use-sale-state";
 import { mapItemToCartItem } from "./map-sale-to-sale-state";
@@ -20,7 +20,6 @@ type TSaleDraftMetadataSnapshot = {
 	taxaEntrega?: number;
 	cashbackResgate?: number;
 	cupom?: { cupomId: string; valorDesconto: number; codigo?: string; titulo?: string } | null;
-	recompensa?: TSaleRewardDraftSnapshot | null;
 };
 
 function readDraftMetadata(rascunhoMetadados: unknown): TSaleDraftMetadataSnapshot | null {
@@ -62,6 +61,7 @@ export function mapSaleDraftToSaleState(sale: TSaleDraft): Partial<TSaleState> {
 					titulo: metadata.cupom.titulo ?? "",
 				}
 			: null,
-		recompensaResgate: metadata?.recompensa ?? null,
+		// Snapshots carimbados pelo servidor (formato atual ou legado); a imagem não vive no snapshot.
+		recompensasResgate: parseSaleRewardDraftSnapshots(sale.rascunhoMetadados).map((snapshot) => ({ ...snapshot, imagemCapaUrl: null })),
 	};
 }

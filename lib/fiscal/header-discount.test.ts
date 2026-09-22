@@ -106,6 +106,20 @@ test("item totalmente descontado nao recebe rateio", () => {
 	assert.deepEqual(shares, [5, 0]);
 });
 
+test("varias recompensas: nenhum item integralmente descontado recebe rateio nem realoca desconto", () => {
+	// Venda com duas recompensas (uma com quantidade 2): descontosTotal soma os tres premios,
+	// mas cada item ja carrega o proprio desconto — o cabecalho nao ganha nada e o rateio de um
+	// desconto geral cai inteiro no item pago.
+	const itens = [
+		{ valorBruto: 28, valorDesconto: 0 },
+		{ valorBruto: 16, valorDesconto: 16 }, // premio A x2 (8 cada)
+		{ valorBruto: 15, valorDesconto: 15 }, // premio B
+	];
+	assert.equal(resolveFiscalHeaderDiscount({ itens, valorTotal: 28, acrescimosTotal: 0, descontosTotal: 31 }), 0);
+	assert.equal(resolveFiscalHeaderDiscount({ itens, valorTotal: 23, acrescimosTotal: 0, descontosTotal: 36 }), 5);
+	assert.deepEqual(allocateFiscalHeaderDiscount({ valorDesconto: 5, itens }), [5, 0, 0]);
+});
+
 test("nenhum item recebe desconto acima do proprio liquido", () => {
 	const shares = allocateFiscalHeaderDiscount({
 		valorDesconto: 30,

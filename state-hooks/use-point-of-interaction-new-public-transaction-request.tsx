@@ -1,6 +1,7 @@
 import { ClientSchema } from "@/schemas/clients";
 import { DeliveryModeEnum, PoiTransactionRequestStatusEnum } from "@/schemas/enums";
 import { SaleSchema } from "@/schemas/sales";
+import { addPoiPrizeLine, setPoiPrizeLineQuantity } from "@/lib/point-of-interaction/prize-lines";
 import { useCallback, useState } from "react";
 import z from "zod";
 
@@ -50,14 +51,15 @@ export const PointOfInteractionNewSaleStateSchema = z.object({
 				})
 				.optional()
 				.nullable(),
-			prizeRedemption: z
-				.object({
+			// Uma linha por recompensa distinta, com quantidade (valores por unidade, informativos).
+			prizeRedemptions: z.array(
+				z.object({
 					prizeId: z.string(),
 					prizeValue: z.number(),
 					prizeSaleValue: z.number(),
-				})
-				.optional()
-				.nullable(),
+					quantity: z.number().int().min(1),
+				}),
+			),
 			// Cupom selecionado: em cupons AUTOMATICA o valorDesconto vem do servidor;
 			// em cupons MANUAL ele é informado pelo operador (na confirmação do totem ou na aprovação da solicitação).
 			coupon: z
@@ -90,7 +92,7 @@ export function usePointOfInteractionNewSaleState(initialOrgId: string, initialI
 	const [state, setState] = useState<TPointOfInteractionNewSaleState>({
 		orgId: initialOrgId,
 		client: { id: null, nome: "", cpfCnpj: null, telefone: "" },
-		sale: { valor: 0, entregaModalidade: "PRESENCIAL", cashback: { aplicar: false, valor: 0 }, partnerCode: null, prizeRedemption: null, coupon: null },
+		sale: { valor: 0, entregaModalidade: "PRESENCIAL", cashback: { aplicar: false, valor: 0 }, partnerCode: null, prizeRedemptions: [], coupon: null },
 		operatorIdentifier: "",
 		operatorConfirmedSaleValue: null,
 		interfaceMode: initialInterfaceMode,
@@ -120,10 +122,26 @@ export function usePointOfInteractionNewSaleState(initialOrgId: string, initialI
 		}));
 	}, []);
 
-	const updatePrizeRedemption = useCallback((prizeRedemption: TPointOfInteractionNewSaleState["sale"]["prizeRedemption"]) => {
+	const updatePrizeRedemptions = useCallback((prizeRedemptions: TPointOfInteractionNewSaleState["sale"]["prizeRedemptions"]) => {
 		setState((prev) => ({
 			...prev,
-			sale: { ...prev.sale, prizeRedemption },
+			sale: { ...prev.sale, prizeRedemptions },
+		}));
+	}, []);
+
+	/** Adiciona uma unidade da recompensa (incrementa a linha existente ou cria uma nova). */
+	const addPrizeRedemption = useCallback((prize: { id: string; valor: number; valorVenda: number }) => {
+		setState((prev) => ({
+			...prev,
+			sale: { ...prev.sale, prizeRedemptions: addPoiPrizeLine(prev.sale.prizeRedemptions, prize) },
+		}));
+	}, []);
+
+	/** Quantidade < 1 remove a linha. */
+	const setPrizeRedemptionQuantity = useCallback((prizeId: string, quantity: number) => {
+		setState((prev) => ({
+			...prev,
+			sale: { ...prev.sale, prizeRedemptions: setPoiPrizeLineQuantity(prev.sale.prizeRedemptions, prizeId, quantity) },
 		}));
 	}, []);
 
@@ -163,7 +181,7 @@ export function usePointOfInteractionNewSaleState(initialOrgId: string, initialI
 		setState({
 			orgId: initialOrgId,
 			client: { id: null, nome: "", cpfCnpj: null, telefone: "" },
-			sale: { valor: 0, entregaModalidade: "PRESENCIAL", cashback: { aplicar: false, valor: 0 }, partnerCode: null, prizeRedemption: null, coupon: null },
+			sale: { valor: 0, entregaModalidade: "PRESENCIAL", cashback: { aplicar: false, valor: 0 }, partnerCode: null, prizeRedemptions: [], coupon: null },
 			operatorIdentifier: "",
 			operatorConfirmedSaleValue: null,
 			interfaceMode: initialInterfaceMode,
@@ -181,7 +199,9 @@ export function usePointOfInteractionNewSaleState(initialOrgId: string, initialI
 		updateClient,
 		updateSale,
 		updateCashback,
-		updatePrizeRedemption,
+		updatePrizeRedemptions,
+		addPrizeRedemption,
+		setPrizeRedemptionQuantity,
 		updateCoupon,
 		updateOperatorIdentifier,
 		updateOperatorConfirmedSaleValue,
