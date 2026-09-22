@@ -1,5 +1,6 @@
 import type { DBTransaction } from "@/services/drizzle";
 import { saleItemModifiers, saleItems } from "@/services/drizzle/schema";
+import { POS_REWARD_SALE_ITEM_ORIGIN } from "@/lib/sales/sale-reward-snapshot";
 import { and, eq, inArray } from "drizzle-orm";
 
 export type TDraftItemModifierInput = {
@@ -90,7 +91,7 @@ export async function syncDraftItems({
 	const productIds = [...new Set(itens.map((item) => item.produtoId))];
 	const variantIds = [...new Set(itens.map((item) => item.produtoVarianteId).filter((id): id is string => !!id))];
 
-	const [produtos, variantes, existentes] = await Promise.all([
+	const [produtos, variantes, todosExistentes] = await Promise.all([
 		productIds.length > 0
 			? tx.query.products.findMany({
 					where: (fields, { and: andWhere, eq: eqWhere, inArray: inArrayWhere }) =>
@@ -107,10 +108,14 @@ export async function syncDraftItems({
 			: [],
 		tx.query.saleItems.findMany({
 			where: (fields, { and: andWhere, eq: eqWhere }) => andWhere(eqWhere(fields.vendaId, saleId), eqWhere(fields.organizacaoId, orgId)),
-			columns: { id: true },
+			columns: { id: true, metadados: true },
 			with: { adicionais: { columns: { opcaoId: true, quantidade: true } } },
 		}),
 	]);
+	// Itens de recompensa (construídos pelo servidor a partir do snapshot do rascunho) não são do
+	// checkout: um PUT que reenvia o carrinho sem eles não pode apagá-los — o rascunho da loja
+	// digital já nasce com esses itens gravados.
+	const existentes = todosExistentes.filter((item) => (item.metadados as { origem?: string } | null)?.origem !== POS_REWARD_SALE_ITEM_ORIGIN);
 
 	const productCostMap = new Map(produtos.map((p) => [p.id, p.precoCusto ?? 0]));
 	const variantCostMap = new Map(variantes.map((v) => [v.id, v.precoCusto ?? 0]));

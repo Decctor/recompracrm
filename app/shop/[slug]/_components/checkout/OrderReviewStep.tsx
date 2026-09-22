@@ -340,16 +340,17 @@ export default function OrderReviewStep({
         </div>
       </motion.div>
 
-      {reward.resgate ? (
+      {reward.resgates.map((line, index) => (
         <motion.div
-          {...fadeUp(0.36, reduced)}
+          key={line.recompensaId}
+          {...fadeUp(0.36 + index * 0.02, reduced)}
           className="flex items-center gap-3 rounded-2xl border border-brand/30 bg-brand/5 p-3.5"
         >
-          {reward.resgate.imagemCapaUrl ? (
+          {line.imagemCapaUrl ? (
             <div className="relative size-14 shrink-0 overflow-hidden rounded-xl bg-muted">
               <Image
-                src={reward.resgate.imagemCapaUrl}
-                alt={reward.resgate.titulo}
+                src={line.imagemCapaUrl}
+                alt={line.titulo}
                 fill
                 className="object-cover"
                 sizes="56px"
@@ -364,17 +365,20 @@ export default function OrderReviewStep({
             <p className="text-xs font-black uppercase tracking-wide text-brand">
               Recompensa resgatada
             </p>
-            <p className="text-sm font-bold">{reward.resgate.titulo}</p>
+            <p className="text-sm font-bold">
+              {line.titulo}
+              {line.quantidade > 1 ? ` ×${line.quantidade}` : ""}
+            </p>
             <p className="text-xs text-muted-foreground">
               {formatCashbackValue(
-                reward.resgate.valor,
+                line.valor * line.quantidade,
                 catalog.cashbackProgram?.terminologia ?? "DINHEIRO",
               )}{" "}
-              · {formatToMoney(reward.resgate.valorVenda)} grátis
+              · {formatToMoney(line.valorVenda * line.quantidade)} grátis
             </p>
           </div>
         </motion.div>
-      ) : null}
+      ))}
 
       <motion.div
         {...fadeUp(0.38, reduced)}

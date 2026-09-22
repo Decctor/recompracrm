@@ -3,10 +3,11 @@ import {
 	type TCreatePointOfInteractionTransactionOutput,
 } from "@/app/api/point-of-interaction/new-transaction/route";
 import { appApiHandler } from "@/lib/app-api";
-import { buildPoiTransactionRequestSummary } from "@/lib/point-of-interaction/transaction-requests";
+import { resolvePoiPrizeLines } from "@/lib/point-of-interaction/prize-lines";
+import { type TPoiPrizeInfoById, buildPoiTransactionRequestSummary } from "@/lib/point-of-interaction/transaction-requests";
 import { db } from "@/services/drizzle";
 import { cashbackProgramPrizes, coupons, poiTransactionRequests } from "@/services/drizzle/schema";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { NextRequest, NextResponse } from "next/server";
 import z from "zod";
@@ -19,13 +20,15 @@ export type TCreatePoiTransactionRequestInput = z.infer<typeof CreatePoiTransact
 async function createPoiTransactionRequest({ input }: { input: TCreatePoiTransactionRequestInput }) {
 	const tokenPublico = crypto.randomUUID();
 
-	let prizeInfo: { titulo?: string | null; imagemCapaUrl?: string | null } | null = null;
-	if (input.payload.sale.prizeRedemption?.prizeId) {
-		const prize = await db.query.cashbackProgramPrizes.findFirst({
-			where: eq(cashbackProgramPrizes.id, input.payload.sale.prizeRedemption.prizeId),
-			columns: { titulo: true, imagemCapaUrl: true },
+	// Título/imagem de cada recompensa para o resumo, org-scoped (o payload é público).
+	const prizeIds = [...new Set(resolvePoiPrizeLines(input.payload.sale).map((line) => line.prizeId))];
+	const prizeInfo: TPoiPrizeInfoById = {};
+	if (prizeIds.length > 0) {
+		const prizes = await db.query.cashbackProgramPrizes.findMany({
+			where: and(inArray(cashbackProgramPrizes.id, prizeIds), eq(cashbackProgramPrizes.organizacaoId, input.payload.orgId)),
+			columns: { id: true, titulo: true, imagemCapaUrl: true },
 		});
-		prizeInfo = prize ?? null;
+		for (const prize of prizes) prizeInfo[prize.id] = { titulo: prize.titulo, imagemCapaUrl: prize.imagemCapaUrl };
 	}
 
 	let couponInfo: { titulo?: string | null; codigo?: string | null; validacaoModo?: string | null; condicoesTexto?: string | null } | null = null;

@@ -23,6 +23,8 @@ type TShopDraftMetadata = {
 		subtotalItens?: number;
 		cashbackResgateSolicitado?: number;
 		cupom?: TAppliedCoupon | null;
+		recompensas?: TShopRewardSnapshot[] | null;
+		// Formato anterior a múltiplas recompensas (pedidos antigos).
 		recompensa?: TShopRewardSnapshot | null;
 		pagamento?: {
 			metodo?: string;
@@ -203,14 +205,13 @@ async function getPublicShopOrder({ input }: { input: TGetPublicShopOrderInput }
 							discount: shopMetadata.cupom.valorDesconto,
 						}
 					: null,
-				reward: shopMetadata?.recompensa
-					? {
-							title: shopMetadata.recompensa.titulo,
-							points: shopMetadata.recompensa.valor,
-							commercialValue: shopMetadata.recompensa.valorVenda,
-							imageUrl: shopMetadata.recompensa.imagemCapaUrl,
-						}
-					: null,
+				rewards: (shopMetadata?.recompensas ?? (shopMetadata?.recompensa ? [shopMetadata.recompensa] : [])).map((reward) => ({
+					title: reward.titulo,
+					points: reward.valor,
+					commercialValue: reward.valorVenda,
+					quantity: reward.quantidade ?? 1,
+					imageUrl: reward.imagemCapaUrl,
+				})),
 				additions: sale.acrescimosTotal ?? 0,
 				total: sale.valorTotal,
 				payment: {

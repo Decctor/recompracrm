@@ -1,7 +1,7 @@
 # Múltiplas recompensas por venda — plano
 
 Data: 2026-09-22
-Status: **Proposta** (mapeamento de impacto concluído; decisões a validar antes de implementar)
+Status: **Implementado** (Fases 0–4 entregues em 2026-09-22; Fase 5 — limpeza do formato legado — fica para a release seguinte)
 
 Antecessor: `docs/dev-planning/pos-reward-redemption-plan.md`, que entregou o resgate de recompensa no PDV e
 deixou "múltiplas recompensas por venda" explicitamente na Fase 4 (backlog). Este documento fecha essa fase.
@@ -397,3 +397,43 @@ script do `header-discount`.
 | Recibo | `lib/desktop-agent/cupom-venda-data.ts`, `templates/cupom-venda.ts` |
 | Estatísticas | `app/api/cashback-programs/stats/route.ts:244-271,428-450` |
 | Fiscal (não muda; testar) | `lib/fiscal/header-discount.ts`, `taxation-context.ts:111-138` |
+
+## Ajustes feitos durante a implementação
+
+- **Contrato de entrada compartilhado.** `saleRewardRedemptionInputFields` (`schemas/cashback-programs.ts`) é
+  espalhado nos schemas do PDV (rascunho, confirmação direta) e da loja: `recompensasResgate[]` com
+  `{ recompensaId, programaId?, quantidade }` e o singular `recompensaResgate` aceito por compatibilidade.
+  O tri-estado é resolvido por `resolveRewardRedemptionLinesInput` (`undefined` mantém, `[]`/`null` limpa,
+  lista substitui) — o `PUT /api/pos/sales` preservou exatamente a semântica anterior.
+- **`resgateRecompensaValor` é o total da linha** (`== abs(valor)`); unitário e quantidade vão em
+  `metadados.recompensa`. O item da venda também guarda `metadados.quantidade` e `valorResgate`/`valorComercial`
+  por unidade. Leitores que dividem por `quantidade` do item: `map-sale-to-sale-state.ts`.
+- **Idempotência da confirmação** (`process-sale-confirmation.ts`): a busca de `RESGATE` existentes filtra
+  `isNotNull(resgateRecompensaId)`, compara o CONJUNTO de `recompensaId` com o pedido e lança `Conflict` em
+  divergência; o ramo de resgate-desconto ganhou `isNull(resgateRecompensaId)`. O retorno virou
+  `cashbackResgate: { transactionIds: string[], newBalance }` — não havia consumidor externo do campo.
+- **`sync-draft-items.ts`** passou a ignorar itens com `origem = POS-RESGATE-RECOMPENSA` ao reconciliar o
+  carrinho reenviado: o rascunho da loja já nasce com esses itens, e um `PUT` do checkout tardio os apagaria.
+- **Estatísticas** (`stats/route.ts`): "vendas com resgate" e "valor das vendas com resgate" contam por
+  `coalesce(vendaId, id)` distinto (subquery por venda), no período atual e no anterior.
+- **Recibo impresso**: `cupom-venda-data.ts` devolve `recompensas[]` e o template imprime uma linha por
+  recompensa com `xN`; o "Desconto" geral subtrai todas.
+- **POI**: `sale.prizeRedemptions[]` (por unidade + `quantity`) com o singular `prizeRedemption` aceito;
+  helpers puros em `lib/point-of-interaction/prize-lines.ts`; um `RESGATE` por linha, `transactionRedemptionId`
+  continua sendo a primeira linha (compat com `poiTransactionRequests.transacaoResgateId`) e
+  `transactionRedemptionIds[]` carrega todas (decisão de schema **(a)**, sem migração). O resumo da
+  solicitação grava `recompensas[]` e `recompensa: null`; `readPoiSummaryPrizes` lê os dois formatos. A busca
+  de prêmios da rota pública passou a ser org-scoped. A regra de desconto do item do POI
+  (`min(valorVenda, valor)`) foi mantida por linha — divergência pré-existente, fora deste escopo.
+- **Loja digital**: `SHOP_CART_STORAGE_VERSION` subiu para 5 (`reward.resgates[]`); o hash de idempotência
+  do pedido ordena as recompensas por id antes de hashear; o status público devolve `rewards[]` com
+  `quantity`.
+- **Estado do PDV**: `recompensasResgate[]` com `addRecompensaResgate` (incrementa a linha existente),
+  `setRecompensaQuantidade`, `updateRecompensaResgate`, `removeRecompensaResgate`, `clearRecompensasResgate`
+  e o derivado `recompensasResgateTotal`; a seção de resgate mostra "saldo restante" e o "cabe mais uma" é
+  contra ele.
+- **Testes** adicionados: `lib/sales/sale-reward-snapshot.test.ts` (parser, tri-estado, normalização de
+  linhas), `lib/point-of-interaction/{sale-value-confirmation,transaction-requests}.test.ts`, dois casos
+  com duas recompensas em `lib/fiscal/header-discount.test.ts` e uma impressão com duas recompensas em
+  `cupom-venda.test.ts`. Todos rodam em `npm run test:cashback-redemption` (que agora inclui o
+  `header-discount`, antes fora de qualquer script) e `npm run test:print-templates`.
