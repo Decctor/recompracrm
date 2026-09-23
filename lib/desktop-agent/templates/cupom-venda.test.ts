@@ -28,6 +28,28 @@ test("destaca pagamento que deve ser cobrado na entrega", () => {
 		buildData([{ metodo: "DINHEIRO", valor: 27, parcelas: null, pago: false, descricao: "CASH", situacao: "COBRAR" }]),
 	);
 	assert.match(html, /Dinheiro · CASH \(COBRAR NA ENTREGA\)/);
+	assert.match(html, /class="pagamento-destaque">VALOR A COBRAR: R\$ 27,00<\/div>/);
+});
+
+test("soma apenas os pagamentos a cobrar, sem incluir patrocínio do iFood ou taxa no total da venda", () => {
+	const html = renderCupomVendaHtml(buildData([
+		{ metodo: "CARTAO_CREDITO", valor: 45.43, pago: false, descricao: "MASTERCARD", situacao: "COBRAR" },
+		{ metodo: "VALE", valor: 5.56, pago: true, descricao: "Patrocínio IFOOD", situacao: "PAGO_CANAL" },
+	]));
+	assert.match(html, /VALOR A COBRAR: R\$ 45,43/);
+	assert.doesNotMatch(html, /VALOR A COBRAR: R\$ 50,99/);
+	assert.doesNotMatch(html, /JÁ PAGO · NADA A COBRAR/);
+});
+
+test("destaca que não há cobrança quando todos os pagamentos foram feitos pelo canal", () => {
+	const html = renderCupomVendaHtml(buildData([{ metodo: "PIX", valor: 27, pago: true, situacao: "PAGO_CANAL" }]));
+	assert.doesNotMatch(html, /VALOR A COBRAR/);
+	assert.match(html, /class="pagamento-destaque">JÁ PAGO · NADA A COBRAR<\/div>/);
+});
+
+test("não marca como já pago quando não há pagamentos do canal", () => {
+	const html = renderCupomVendaHtml(buildData([{ metodo: "DINHEIRO", valor: 27, pago: true, situacao: "PAGO" }]));
+	assert.doesNotMatch(html, /JÁ PAGO · NADA A COBRAR/);
 });
 
 test("reforça a legibilidade dos textos operacionais na impressão térmica", () => {

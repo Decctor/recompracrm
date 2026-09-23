@@ -304,6 +304,14 @@ export function renderCupomVendaHtml(dados: TCupomVendaDados) {
 			${venda.troco && venda.troco > 0 ? renderLinha("TROCO", formatToMoney(venda.troco), { destaque: true }) : ""}
 		</div>`
 		: "";
+	const valorACobrar = venda.pagamentos?.reduce((total, pagamento) => total + (pagamento.situacao === "COBRAR" ? pagamento.valor : 0), 0) ?? 0;
+	const jaPagoPeloCanal = !!venda.pagamentos?.length && venda.pagamentos.every((pagamento) => pagamento.situacao === "PAGO_CANAL");
+	const valorACobrarHtml =
+		valorACobrar > 0
+			? `<div class="pagamento-destaque">VALOR A COBRAR: ${formatToMoney(valorACobrar)}</div>`
+			: jaPagoPeloCanal
+				? `<div class="pagamento-destaque">JÁ PAGO · NADA A COBRAR</div>`
+				: "";
 
 	// Uma linha só: o que esta compra rendeu. Saldo em carteira e validade saíram — eram duas linhas
 	// a mais para uma informação que o cliente consulta no app, não na bobina.
@@ -350,7 +358,9 @@ p { margin: 0; }
 .sep { border-top: 1px dashed #000; margin: 2mm 0; }
 .sep.fina { margin: 1mm 0; }
 .linha { display: flex; justify-content: space-between; gap: 2mm; }
+.linha span:last-child { white-space: nowrap; }
 .linha.destaque { font-weight: 700; font-size: 12pt; }
+.pagamento-destaque { margin-top: 1mm; padding: 1.5mm 1mm; background: #000; color: #fff; text-align: center; font-size: 11pt; font-weight: 700; }
 .itens { width: 100%; border-collapse: collapse; font-weight: 700; }
 .itens td { padding: 0.6mm 0; vertical-align: top; }
 .itens .qtd { width: 8mm; }
@@ -368,6 +378,7 @@ ${modalidadeHtml}
 ${itensHtml}
 ${totaisHtml}
 ${pagamentosHtml}
+${valorACobrarHtml}
 ${cashbackHtml}
 ${observacoesHtml}
 <div class="sep"></div>
