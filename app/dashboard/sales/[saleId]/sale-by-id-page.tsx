@@ -1132,7 +1132,7 @@ function SaleItemCard({ item }: { item: TGetSalesOutputById["itens"][number] }) 
 						{item.adicionais.map((adicional) => (
 							<div key={adicional.id} className="flex items-center justify-between text-xs">
 								<span className="text-muted-foreground">
-									{adicional.opcao?.nome || "Adicional"} x{adicional.quantidade}
+									{adicional.nome || adicional.opcao?.nome || "Adicional"} x{adicional.quantidade}
 								</span>
 								<span className="font-medium">{formatToMoney(adicional.valorTotal)}</span>
 							</div>

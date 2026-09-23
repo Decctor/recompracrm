@@ -408,7 +408,7 @@ function SaleItemRow({ item, reveal }: { item: TGetSalesFulfillmentOutputById["i
 							<li key={additional.id} className="flex items-start justify-between gap-3">
 								<span className="min-w-0">
 									+ {additional.quantidade > 1 ? `${additional.quantidade}x ` : ""}
-									{additional.opcao?.nome ?? "Adicional"}
+									{additional.nome || additional.opcao?.nome || "Adicional"}
 								</span>
 								<span className="shrink-0 tabular-nums">{additional.valorTotal ? formatToMoney(additional.valorTotal) : "Incluso"}</span>
 							</li>

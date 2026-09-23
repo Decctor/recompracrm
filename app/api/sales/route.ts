@@ -408,6 +408,7 @@ async function getSales({ input, sessionUser }: { input: TGetSalesInput; session
 						adicionais: {
 							columns: {
 								id: true,
+								nome: true,
 								quantidade: true,
 								valorUnitario: true,
 								valorTotal: true,
