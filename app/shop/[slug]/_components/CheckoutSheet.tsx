@@ -102,21 +102,22 @@ export default function CheckoutSheet() {
 		if (!supportsCashbackDiscount && orderState.state.cashback.resgateSolicitado > 0) {
 			orderState.updateCashback({ resgateSolicitado: 0 });
 		}
-		// Só descarta a recompensa quando a regra é do programa dela: numa org com mais de um
+		// Só descarta as recompensas cuja regra é do programa delas: numa org com mais de um
 		// programa, o do catálogo (findFirst ativo) pode não ser o do saldo do cliente — nesse caso
 		// quem valida é a revalidação da etapa de benefícios e a admissão no servidor.
-		const appliedReward = orderState.state.reward.resgate;
-		if (!supportsRewards && appliedReward && (!program || appliedReward.programaId === program.id)) {
-			orderState.updateReward(null);
+		if (!supportsRewards) {
+			for (const applied of orderState.state.reward.resgates) {
+				if (!program || applied.programaId === program.id) orderState.removeReward(applied.recompensaId);
+			}
 		}
 	}, [
 		program,
 		supportsCashbackDiscount,
 		supportsRewards,
 		orderState.state.cashback.resgateSolicitado,
-		orderState.state.reward.resgate,
+		orderState.state.reward.resgates,
 		orderState.updateCashback,
-		orderState.updateReward,
+		orderState.removeReward,
 	]);
 	const visibleSteps = getShopCheckoutSteps(benefitCapabilities);
 	// "CARRINHO" nao e um passo do checkout: indexOf devolve -1 e o progresso fica em zero.

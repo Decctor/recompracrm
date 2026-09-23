@@ -5,11 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
+import { MAX_REWARD_REDEMPTION_QUANTITY_PER_LINE } from "@/lib/sales/sale-reward-snapshot";
 import { formatCashbackValue, formatToMoney } from "@/lib/formatting";
 import { type TShopAvailableCoupon, useShopAvailableCoupons, useShopAvailableRewards, useShopClientLookup } from "@/lib/queries/shop";
 import { buildShopCartLines } from "@/lib/shop/cart";
 import { HAPTICS, triggerHaptic } from "@/lib/shop/haptics";
-import { ArrowRight, BadgePercent, Gift, Info, Loader2, Ticket, X } from "lucide-react";
+import { ArrowRight, BadgePercent, Gift, Info, Loader2, Minus, Plus, Ticket, X } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useMemo } from "react";
 import { toast } from "sonner";
@@ -84,21 +85,39 @@ export default function CashbackStep({ onNext }: CashbackStepProps) {
 		return Math.min(limit, valueBeforeCashback);
 	}, [program, supportsCashbackDiscount, balance, valueBeforeCashback]);
 
+	// Débito total das recompensas selecionadas e saldo restante: "cabe mais uma?" é sempre
+	// contra o restante — o `elegivel` do servidor só sabe do saldo cheio.
+	const rewardsTotal = useMemo(() => reward.resgates.reduce((sum, line) => sum + line.valor * line.quantidade, 0), [reward.resgates]);
+	const rewardsBalance = rewardsData?.saldoValorDisponivel ?? 0;
+	const rewardsRemaining = rewardsBalance - rewardsTotal;
+
+	const { updateRewardValues, removeReward, clearRewards } = orderState;
 	useEffect(() => {
-		const appliedReward = reward.resgate;
-		if (!appliedReward || !rewardsData) return;
-		const freshReward = rewardsData.rewards.find((item) => item.id === appliedReward.recompensaId);
-		if (!freshReward?.elegivel) {
-			orderState.updateReward(null);
-			toast.warning("A recompensa selecionada deixou de estar disponível e foi removida.");
+		if (reward.resgates.length === 0 || !rewardsData) return;
+		let removed = false;
+		for (const applied of reward.resgates) {
+			const freshReward = rewardsData.rewards.find((item) => item.id === applied.recompensaId);
+			if (!freshReward) {
+				removeReward(applied.recompensaId);
+				removed = true;
+				continue;
+			}
+			// Tolerância de centavo (mesma régua do PDV): !== estrito em float re-dispararia a
+			// atualização a cada refetch.
+			if (Math.abs(freshReward.valor - applied.valor) > 0.01 || Math.abs(freshReward.valorVenda - applied.valorVenda) > 0.01) {
+				updateRewardValues(applied.recompensaId, { valor: freshReward.valor, valorVenda: freshReward.valorVenda });
+			}
+		}
+		if (removed) {
+			toast.warning("Uma recompensa selecionada deixou de estar disponível e foi removida.");
 			return;
 		}
-		// Tolerância de centavo (mesma régua do PDV): !== estrito em float re-dispararia o
-		// updateReward — que rotaciona a identidade do pedido — a cada refetch.
-		if (Math.abs(freshReward.valor - appliedReward.valor) > 0.01 || Math.abs(freshReward.valorVenda - appliedReward.valorVenda) > 0.01) {
-			orderState.updateReward({ ...appliedReward, valor: freshReward.valor, valorVenda: freshReward.valorVenda });
+		const total = reward.resgates.reduce((sum, line) => sum + line.valor * line.quantidade, 0);
+		if (total > rewardsData.saldoValorDisponivel + 0.01) {
+			clearRewards();
+			toast.warning("Seu saldo não cobre mais as recompensas selecionadas; a seleção foi removida.");
 		}
-	}, [reward.resgate, rewardsData, orderState.updateReward]);
+	}, [reward.resgates, rewardsData, updateRewardValues, removeReward, clearRewards]);
 
 	useEffect(() => {
 		if (cashback.resgateSolicitado > maxRedemption) {
@@ -122,7 +141,7 @@ export default function CashbackStep({ onNext }: CashbackStepProps) {
 	// Benefícios são mutuamente exclusivos (o estado limpa os irmãos ao aplicar um) — sem o aviso,
 	// o cliente perderia uma recompensa de R$ 60 ao tocar num cupom de R$ 5 sem entender por quê.
 	const notifyRewardReplaced = () => {
-		if (reward.resgate) toast.info("O resgate de recompensa foi removido: ele não pode ser combinado com outros benefícios.");
+		if (reward.resgates.length > 0) toast.info("O resgate de recompensas foi removido: ele não pode ser combinado com outros benefícios.");
 	};
 
 	const handleSliderChange = (value: number[]) => {
@@ -140,7 +159,7 @@ export default function CashbackStep({ onNext }: CashbackStepProps) {
 
 	const couponsCount = availableCoupons?.length ?? 0;
 	const hasCashback = supportsCashbackDiscount && balance > 0 && maxRedemption > 0;
-	const hasAnyBenefit = couponsCount > 0 || hasCashback || !!appliedCoupon || !!reward.resgate;
+	const hasAnyBenefit = couponsCount > 0 || hasCashback || !!appliedCoupon || reward.resgates.length > 0;
 
 	return (
 		<div className="flex flex-col gap-5">
@@ -169,7 +188,8 @@ export default function CashbackStep({ onNext }: CashbackStepProps) {
 					<div className="flex items-center justify-between gap-3">
 						<Label className="text-sm font-black uppercase tracking-wide">Recompensas</Label>
 						<span className="text-xs font-bold text-brand">
-							Saldo: {formatCashbackValue(rewardsData?.saldoValorDisponivel ?? 0, rewardsData?.program?.terminologia ?? "DINHEIRO")}
+							{reward.resgates.length > 0 ? "Saldo restante" : "Saldo"}:{" "}
+							{formatCashbackValue(Math.max(0, rewardsRemaining), rewardsData?.program?.terminologia ?? "DINHEIRO")}
 						</span>
 					</div>
 					{isLoadingRewards ? (
@@ -179,7 +199,25 @@ export default function CashbackStep({ onNext }: CashbackStepProps) {
 					) : rewardsData?.rewards.length ? (
 						<div className="grid gap-2 sm:grid-cols-2">
 							{rewardsData.rewards.map((item) => {
-								const selected = reward.resgate?.recompensaId === item.id;
+								const appliedLine = reward.resgates.find((line) => line.recompensaId === item.id) ?? null;
+								const selected = !!appliedLine;
+								const fitsRemaining = item.valor <= rewardsRemaining + 0.0001;
+								const canAdd = fitsRemaining && (appliedLine?.quantidade ?? 0) < MAX_REWARD_REDEMPTION_QUANTITY_PER_LINE;
+								const reason = !item.elegivel && item.motivo ? item.motivo : !fitsRemaining && !selected ? "Saldo restante insuficiente." : null;
+								const addReward = () => {
+									if (!canAdd) return;
+									if (!selected && (coupon.resgate || cashback.resgateSolicitado > 0)) {
+										toast.info("Cupom e cashback foram removidos: a recompensa não pode ser combinada com outros benefícios.");
+									}
+									orderState.addReward({
+										recompensaId: item.id,
+										programaId: rewardsData.program!.id,
+										titulo: item.titulo,
+										valor: item.valor,
+										valorVenda: item.valorVenda,
+										imagemCapaUrl: item.imagemCapaUrl,
+									});
+								};
 								return (
 									<div key={item.id} className={`flex flex-col gap-3 rounded-2xl border bg-card p-3 ${selected ? "border-brand ring-1 ring-brand" : ""}`}>
 										<div className="flex gap-3">
@@ -198,32 +236,42 @@ export default function CashbackStep({ onNext }: CashbackStepProps) {
 												<p className="text-xs text-muted-foreground">Valor: {formatToMoney(item.valorVenda)}</p>
 											</div>
 										</div>
-										{!item.elegivel && item.motivo ? <p className="text-xs text-muted-foreground">{item.motivo}</p> : null}
-										<Button
-											type="button"
-											size="sm"
-											variant={selected ? "outline" : "brand"}
-											disabled={!item.elegivel}
-											onClick={() => {
-												if (!selected && (coupon.resgate || cashback.resgateSolicitado > 0)) {
-													toast.info("Cupom e cashback foram removidos: a recompensa não pode ser combinada com outros benefícios.");
-												}
-												orderState.updateReward(
-													selected
-														? null
-														: {
-																recompensaId: item.id,
-																programaId: rewardsData.program!.id,
-																titulo: item.titulo,
-																valor: item.valor,
-																valorVenda: item.valorVenda,
-																imagemCapaUrl: item.imagemCapaUrl,
-															},
-												);
-											}}
-										>
-											{selected ? "REMOVER" : "RESGATAR"}
-										</Button>
+										{reason ? <p className="text-xs text-muted-foreground">{reason}</p> : null}
+										{appliedLine ? (
+											<div className="flex items-center justify-between gap-2">
+												<div className="flex items-center gap-1">
+													<Button
+														type="button"
+														size="icon"
+														variant="outline"
+														className="size-8"
+														aria-label="Diminuir quantidade"
+														onClick={() => orderState.setRewardQuantity(item.id, appliedLine.quantidade - 1)}
+													>
+														<Minus className="size-3.5" />
+													</Button>
+													<span className="w-6 text-center text-sm font-bold tabular-nums">{appliedLine.quantidade}</span>
+													<Button
+														type="button"
+														size="icon"
+														variant="outline"
+														className="size-8"
+														aria-label="Aumentar quantidade"
+														disabled={!canAdd}
+														onClick={addReward}
+													>
+														<Plus className="size-3.5" />
+													</Button>
+												</div>
+												<Button type="button" size="sm" variant="outline" onClick={() => orderState.removeReward(item.id)}>
+													REMOVER
+												</Button>
+											</div>
+										) : (
+											<Button type="button" size="sm" variant="brand" disabled={!canAdd} onClick={addReward}>
+												RESGATAR
+											</Button>
+										)}
 									</div>
 								);
 							})}
@@ -354,13 +402,16 @@ export default function CashbackStep({ onNext }: CashbackStepProps) {
 								<span className="text-sm font-semibold tabular-nums">-{formatToMoney(cashback.resgateSolicitado)}</span>
 							</div>
 						) : null}
-						{reward.resgate ? (
-							// A recompensa não abate o total a pagar: é um item grátis somado ao pedido.
-							<div className="flex items-center justify-between gap-3 text-primary">
-								<span className="min-w-0 truncate text-sm">Recompensa: {reward.resgate.titulo}</span>
+						{reward.resgates.map((line) => (
+							// As recompensas não abatem o total a pagar: são itens grátis somados ao pedido.
+							<div key={line.recompensaId} className="flex items-center justify-between gap-3 text-primary">
+								<span className="min-w-0 truncate text-sm">
+									Recompensa: {line.titulo}
+									{line.quantidade > 1 ? ` ×${line.quantidade}` : ""}
+								</span>
 								<span className="shrink-0 text-sm font-semibold">Grátis</span>
 							</div>
-						) : null}
+						))}
 						<div className="flex items-end justify-between gap-3 border-t border-primary/15 pt-3">
 							<span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Total após descontos</span>
 							<span className="text-2xl font-black tabular-nums text-primary">

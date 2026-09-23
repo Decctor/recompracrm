@@ -318,7 +318,9 @@ function OrderItems({ order }: { order: PublicOrder }) {
 function PriceSummary({ order }: { order: PublicOrder }) {
 	const couponDiscount = order.coupon?.discount ?? 0;
 	const cashbackDiscount = order.cashback.redeemed;
-	const rewardDiscount = order.reward?.commercialValue ?? 0;
+	// Cada recompensa é um item grátis; o "outros descontos" subtrai TODAS, senão o valor das demais
+	// apareceria como desconto avulso.
+	const rewardDiscount = order.rewards.reduce((sum, reward) => sum + reward.commercialValue * reward.quantity, 0);
 	const otherDiscount = Math.max(0, order.discount - couponDiscount - cashbackDiscount - rewardDiscount);
 
 	return (
@@ -347,15 +349,18 @@ function PriceSummary({ order }: { order: PublicOrder }) {
 						<span className="tabular-nums">- {formatToMoney(cashbackDiscount)}</span>
 					</div>
 				) : null}
-				{order.reward ? (
-					<div className="flex justify-between gap-3 text-muted-foreground">
+				{order.rewards.map((reward, index) => (
+					<div key={`${reward.title}-${index}`} className="flex justify-between gap-3 text-muted-foreground">
 						<span className="inline-flex min-w-0 items-center gap-1.5">
 							<Gift className="size-3.5 shrink-0" />
-							<span className="truncate">Recompensa: {order.reward.title}</span>
+							<span className="truncate">
+								Recompensa: {reward.title}
+								{reward.quantity > 1 ? ` ×${reward.quantity}` : ""}
+							</span>
 						</span>
-						<span className="tabular-nums">- {formatToMoney(rewardDiscount)}</span>
+						<span className="tabular-nums">- {formatToMoney(reward.commercialValue * reward.quantity)}</span>
 					</div>
-				) : null}
+				))}
 				{otherDiscount > 0 ? (
 					<div className="flex justify-between gap-3 text-muted-foreground">
 						<span>Descontos</span>

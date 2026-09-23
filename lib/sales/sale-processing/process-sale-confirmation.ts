@@ -18,7 +18,7 @@ import {
 	salesSessions,
 } from "@/services/drizzle/schema";
 import type { TOrganizationEntity } from "@/services/drizzle/schema";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNotNull, isNull } from "drizzle-orm";
 import { countPreviousConfirmedPurchases, lockClientPurchaseHistory } from "@/lib/coupons/purchase-history";
 import createHttpError from "http-errors";
 import { resolveInitialAttendanceStatus } from "./attendance";
@@ -43,16 +43,17 @@ export type TProcessSaleConfirmationInput = {
 	// (`resgatePermitirVia*`) via lib/cashback/redemption-policy. Default POS = operador no balcão.
 	saleCashbackRedemptionSurface?: TBenefitRedemptionSurface;
 
-	// Resgate de recompensa (prêmio) do programa de cashback. Mutuamente exclusivo com
-	// saleCashbackRedemptionValue e com cupom: a idempotência do ledger é "existe RESGATE
-	// para a venda", e duas linhas RESGATE quebrariam reconfirmação e reversão.
-	// valorResgate está em moeda cashback (R$ ou pontos); o desconto comercial do prêmio
-	// já deve estar refletido no item da venda (item com 100% de desconto).
-	saleRewardRedemption?: {
+	// Resgate de recompensas (prêmios) do programa de cashback: uma linha por recompensa
+	// distinta, com quantidade; cada linha vira um RESGATE próprio no ledger (o FK
+	// resgateRecompensaId é escalar). Mutuamente exclusivo com saleCashbackRedemptionValue e com
+	// cupom. valorResgate é POR UNIDADE, em moeda cashback (R$ ou pontos); o desconto comercial
+	// dos prêmios já deve estar refletido nos itens da venda (itens com 100% de desconto).
+	saleRewardRedemptions?: Array<{
 		recompensaId: string;
 		programaId: string;
 		valorResgate: number;
-	} | null;
+		quantidade: number;
+	}> | null;
 
 	// Cupom aplicado à venda (fase 1: no máximo 1 cupom por venda).
 	// O desconto já deve estar refletido nos totais da venda (como o cashbackResgate);
@@ -182,48 +183,59 @@ export async function processSaleConfirmationInTransaction({ tx, input }: { tx: 
 	});
 
 	let cashbackRedemptionResult: {
-		transactionId: string;
+		transactionIds: string[];
 		newBalance: number;
 	} | null = null;
 
 	const clientId = input.saleClientId ?? sale.clienteId;
 	const redemptionValue = input.saleCashbackRedemptionValue ?? 0;
-	const rewardRedemption = input.saleRewardRedemption ?? null;
+	const rewardRedemptions = input.saleRewardRedemptions ?? [];
 
-	if (rewardRedemption && redemptionValue > 0) {
+	if (rewardRedemptions.length > 0 && redemptionValue > 0) {
 		throw new createHttpError.BadRequest("Resgate de recompensa nao pode ser combinado com desconto em cashback.");
 	}
-	if (rewardRedemption && input.saleCouponId) {
+	if (rewardRedemptions.length > 0 && input.saleCouponId) {
 		throw new createHttpError.BadRequest("Cupons nao podem ser combinados com resgate de recompensa.");
 	}
 
-	if (rewardRedemption) {
+	if (rewardRedemptions.length > 0) {
 		if (!clientId) throw new createHttpError.BadRequest("Cliente nao informado para resgate de recompensa.");
 
 		cashbackRedemptionResult = await (async () => {
-			// Idempotencia identica ao resgate-desconto: uma venda tem no maximo 1 RESGATE;
-			// reconfirmacoes reaproveitam a transacao existente.
-			const existingRedemption = await tx.query.cashbackProgramTransactions.findFirst({
+			// Idempotencia "tudo ou nada": as N linhas RESGATE nascem nesta mesma transacao de
+			// banco, entao uma reconfirmacao encontra todas (e as reaproveita) ou nenhuma (e insere
+			// todas) — nunca "algumas". Avaliada UMA vez, antes do loop. Se o conjunto gravado nao
+			// for o pedido, algo mudou o rascunho depois do debito: falhar alto em vez de reaproveitar.
+			const existingRedemptions = await tx.query.cashbackProgramTransactions.findMany({
 				where: and(
 					eq(cashbackProgramTransactions.organizacaoId, input.organization.id),
 					eq(cashbackProgramTransactions.vendaId, input.saleId),
 					eq(cashbackProgramTransactions.tipo, "RESGATE"),
+					isNotNull(cashbackProgramTransactions.resgateRecompensaId),
 				),
-				columns: { id: true, saldoValorPosterior: true },
+				columns: { id: true, saldoValorPosterior: true, resgateRecompensaId: true, dataInsercao: true },
+				orderBy: (fields, { asc }) => asc(fields.dataInsercao),
 			});
-			if (existingRedemption) {
+			if (existingRedemptions.length > 0) {
+				const existingIds = new Set(existingRedemptions.map((transaction) => transaction.resgateRecompensaId));
+				const requestedIds = new Set(rewardRedemptions.map((reward) => reward.recompensaId));
+				const sameSet = existingIds.size === requestedIds.size && [...requestedIds].every((id) => existingIds.has(id));
+				if (!sameSet) {
+					throw new createHttpError.Conflict("As recompensas desta venda ja foram debitadas com outra composicao. Atualize e tente novamente.");
+				}
 				return {
-					transactionId: existingRedemption.id,
-					newBalance: existingRedemption.saldoValorPosterior,
+					transactionIds: existingRedemptions.map((transaction) => transaction.id),
+					newBalance: existingRedemptions[existingRedemptions.length - 1]!.saldoValorPosterior,
 				};
 			}
 
+			const programIds = new Set(rewardRedemptions.map((reward) => reward.programaId));
+			if (programIds.size !== 1) {
+				throw new createHttpError.BadRequest("Todas as recompensas de uma venda precisam ser do mesmo programa de cashback.");
+			}
+			const [programId] = [...programIds];
 			const program = await tx.query.cashbackPrograms.findFirst({
-				where: and(
-					eq(cashbackPrograms.id, rewardRedemption.programaId),
-					eq(cashbackPrograms.organizacaoId, input.organization.id),
-					eq(cashbackPrograms.ativo, true),
-				),
+				where: and(eq(cashbackPrograms.id, programId!), eq(cashbackPrograms.organizacaoId, input.organization.id), eq(cashbackPrograms.ativo, true)),
 			});
 			if (!program) throw new createHttpError.NotFound("Programa de cashback nao encontrado.");
 			if (!program.modalidadeRecompensasPermitida) throw new createHttpError.BadRequest("Resgate de recompensas nao permitido para esta venda.");
@@ -232,62 +244,73 @@ export async function processSaleConfirmationInTransaction({ tx, input }: { tx: 
 			// Sem checagem de resgateLimite*: o teto e da modalidade desconto. O "preco" da
 			// recompensa e o proprio valor do premio, validado contra o catalogo pelo caller.
 
-			const redemptionResult = await applyCashbackRedemptionFIFO({
-				tx,
-				orgId: input.organization.id,
-				clientId,
-				programId: program.id,
-				redemptionValue: rewardRedemption.valorResgate,
-			});
+			// Um debito FIFO por linha, em sequencia: applyCashbackRedemptionFIFO rele e persiste o
+			// saldo a cada chamada, e cada linha guarda o proprio consumoFifo para a reversao.
+			const transactionIds: string[] = [];
+			let newBalance = 0;
+			for (const reward of rewardRedemptions) {
+				const lineRedemptionValue = reward.valorResgate * reward.quantidade;
+				const redemptionResult = await applyCashbackRedemptionFIFO({
+					tx,
+					orgId: input.organization.id,
+					clientId,
+					programId: program.id,
+					redemptionValue: lineRedemptionValue,
+				});
 
-			const insertedTransaction = await tx
-				.insert(cashbackProgramTransactions)
-				.values({
-					organizacaoId: input.organization.id,
-					clienteId: clientId,
-					vendaId: input.saleId,
-					vendaValor: sale.valorTotal,
-					programaId: program.id,
-					status: "ATIVO",
-					tipo: "RESGATE",
-					valor: -rewardRedemption.valorResgate,
-					valorRestante: 0,
-					saldoValorAnterior: redemptionResult.previousBalance,
-					saldoValorPosterior: redemptionResult.newBalance,
-					expiracaoData: null,
-					operadorId: input.saleAuthorId,
-					operadorVendedorId: sale.vendedorId,
-					resgateRecompensaId: rewardRedemption.recompensaId,
-					resgateRecompensaValor: rewardRedemption.valorResgate,
-					metadados: {
-						consumoFifo: redemptionResult.consumedFromAccumulations,
-					},
-				})
-				.returning({ id: cashbackProgramTransactions.id });
+				const insertedTransaction = await tx
+					.insert(cashbackProgramTransactions)
+					.values({
+						organizacaoId: input.organization.id,
+						clienteId: clientId,
+						vendaId: input.saleId,
+						vendaValor: sale.valorTotal,
+						programaId: program.id,
+						status: "ATIVO",
+						tipo: "RESGATE",
+						valor: -lineRedemptionValue,
+						valorRestante: 0,
+						saldoValorAnterior: redemptionResult.previousBalance,
+						saldoValorPosterior: redemptionResult.newBalance,
+						expiracaoData: null,
+						operadorId: input.saleAuthorId,
+						operadorVendedorId: sale.vendedorId,
+						resgateRecompensaId: reward.recompensaId,
+						// Total da linha (== abs(valor)); o unitario e a quantidade vao em metadados.
+						resgateRecompensaValor: lineRedemptionValue,
+						metadados: {
+							consumoFifo: redemptionResult.consumedFromAccumulations,
+							recompensa: { quantidade: reward.quantidade, valorUnitario: reward.valorResgate },
+						},
+					})
+					.returning({ id: cashbackProgramTransactions.id });
 
-			const transactionId = insertedTransaction[0]?.id;
-			if (!transactionId) throw new createHttpError.InternalServerError("Erro ao registrar transacao de resgate de recompensa.");
+				const transactionId = insertedTransaction[0]?.id;
+				if (!transactionId) throw new createHttpError.InternalServerError("Erro ao registrar transacao de resgate de recompensa.");
+				transactionIds.push(transactionId);
+				newBalance = redemptionResult.newBalance;
+			}
 
-			return {
-				transactionId,
-				newBalance: redemptionResult.newBalance,
-			};
+			return { transactionIds, newBalance };
 		})();
 	} else if (redemptionValue > 0) {
 		if (!clientId) throw new createHttpError.BadRequest("Cliente nao informado para resgate de cashback.");
 
 		cashbackRedemptionResult = await (async () => {
+			// So resgates-desconto (sem recompensa): hoje as duas modalidades sao exclusivas, mas
+			// sem o filtro uma futura relaxacao faria este ramo reaproveitar um RESGATE de premio.
 			const existingRedemption = await tx.query.cashbackProgramTransactions.findFirst({
 				where: and(
 					eq(cashbackProgramTransactions.organizacaoId, input.organization.id),
 					eq(cashbackProgramTransactions.vendaId, input.saleId),
 					eq(cashbackProgramTransactions.tipo, "RESGATE"),
+					isNull(cashbackProgramTransactions.resgateRecompensaId),
 				),
 				columns: { id: true, saldoValorPosterior: true },
 			});
 			if (existingRedemption) {
 				return {
-					transactionId: existingRedemption.id,
+					transactionIds: [existingRedemption.id],
 					newBalance: existingRedemption.saldoValorPosterior,
 				};
 			}
@@ -352,7 +375,7 @@ export async function processSaleConfirmationInTransaction({ tx, input }: { tx: 
 			if (!transactionId) throw new createHttpError.InternalServerError("Erro ao registrar transacao de resgate de cashback.");
 
 			return {
-				transactionId,
+				transactionIds: [transactionId],
 				newBalance: redemptionResult.newBalance,
 			};
 		})();

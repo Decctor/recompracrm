@@ -235,9 +235,11 @@ export default function NewSalePage({
 					acrescimosTotal: saleState.acrescimosTotal,
 					cashbackResgate: saleState.state.cashbackResgate,
 					cupomResgate: saleState.state.cupomResgate,
-					recompensaResgate: saleState.state.recompensaResgate
-						? { recompensaId: saleState.state.recompensaResgate.recompensaId, programaId: saleState.state.recompensaResgate.programaId }
-						: null,
+					recompensasResgate: saleState.state.recompensasResgate.map((recompensa) => ({
+						recompensaId: recompensa.recompensaId,
+						programaId: recompensa.programaId,
+						quantidade: recompensa.quantidade,
+					})),
 					rascunhoMetadados: saleState.getDraftMetadata(),
 					emissaoFiscalAutomatica: saleState.state.emissaoFiscalAutomatica,
 				});
@@ -366,9 +368,11 @@ export default function NewSalePage({
 			acrescimosTotal: saleState.acrescimosTotal,
 			cashbackResgate: saleState.state.cashbackResgate,
 			cupomResgate: saleState.state.cupomResgate,
-			recompensaResgate: saleState.state.recompensaResgate
-				? { recompensaId: saleState.state.recompensaResgate.recompensaId, programaId: saleState.state.recompensaResgate.programaId }
-				: null,
+			recompensasResgate: saleState.state.recompensasResgate.map((recompensa) => ({
+				recompensaId: recompensa.recompensaId,
+				programaId: recompensa.programaId,
+				quantidade: recompensa.quantidade,
+			})),
 			rascunhoMetadados: saleState.getDraftMetadata(),
 			emissaoFiscalAutomatica: saleState.state.emissaoFiscalAutomatica,
 			itens: mapItemsToApi(saleState),
@@ -399,9 +403,11 @@ export default function NewSalePage({
 			})),
 			cashbackResgate: saleState.state.cashbackResgate,
 			cupomResgate: saleState.state.cupomResgate,
-			recompensaResgate: saleState.state.recompensaResgate
-				? { recompensaId: saleState.state.recompensaResgate.recompensaId, programaId: saleState.state.recompensaResgate.programaId }
-				: null,
+			recompensasResgate: saleState.state.recompensasResgate.map((recompensa) => ({
+				recompensaId: recompensa.recompensaId,
+				programaId: recompensa.programaId,
+				quantidade: recompensa.quantidade,
+			})),
 			emissaoFiscalAutomatica: saleState.state.emissaoFiscalAutomatica,
 			itens: mapItemsToApi(saleState),
 		});

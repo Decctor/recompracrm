@@ -75,9 +75,10 @@ export const CartItemSchema = z.object({
 		.nullable(),
 });
 
-// Recompensa (prêmio) selecionada para resgate via saldo de cashback. `valor` é o débito de
-// saldo (moeda cashback — R$ ou pontos); `valorVenda` é o valor comercial do prêmio (sempre R$).
-// O item da recompensa não entra em `itens` — o servidor o constrói a partir do catálogo.
+// Recompensa (prêmio) selecionada para resgate via saldo de cashback — uma linha por recompensa
+// distinta, com `quantidade` para a mesma repetida. `valor` é o débito de saldo POR UNIDADE
+// (moeda cashback — R$ ou pontos); `valorVenda` é o valor comercial POR UNIDADE (sempre R$).
+// Os itens das recompensas não entram em `itens` — o servidor os constrói a partir do catálogo.
 export const SaleRewardRedemptionSchema = z.object({
 	recompensaId: z.string({ required_error: "ID da recompensa não informado.", invalid_type_error: "Tipo não válido para ID da recompensa." }),
 	programaId: z.string({ required_error: "ID do programa não informado.", invalid_type_error: "Tipo não válido para ID do programa." }),
@@ -88,6 +89,7 @@ export const SaleRewardRedemptionSchema = z.object({
 		invalid_type_error: "Tipo não válido para valor comercial da recompensa.",
 	}),
 	imagemCapaUrl: z.string({ invalid_type_error: "Tipo não válido para URL da imagem da recompensa." }).optional().nullable(),
+	quantidade: z.number({ invalid_type_error: "Tipo não válido para quantidade da recompensa." }).int().min(1).default(1),
 });
 export type TSaleRewardRedemption = z.infer<typeof SaleRewardRedemptionSchema>;
 
@@ -109,7 +111,7 @@ export const SaleDraftMetadataSchema = z.object({
 	taxaEntrega: z.number({ invalid_type_error: "Tipo não válido para taxa de entrega." }).default(0),
 	cashbackResgate: z.number({ invalid_type_error: "Tipo não válido para resgate de cashback." }),
 	cashbackProgramaId: z.string({ invalid_type_error: "Tipo não válido para ID do programa de cashback." }).optional().nullable(),
-	recompensaResgate: SaleRewardRedemptionSchema.optional().nullable(),
+	recompensasResgate: z.array(SaleRewardRedemptionSchema).default([]),
 	valorFinal: z.number({ invalid_type_error: "Tipo não válido para valor final." }),
 	valorRestante: z.number({ invalid_type_error: "Tipo não válido para valor restante." }),
 	troco: z.number({ invalid_type_error: "Tipo não válido para troco." }),
@@ -175,7 +177,7 @@ export const SaleStateSchema = z.object({
 	pagamentosEfetivadosTotal: z.number({ invalid_type_error: "Tipo não válido para total de pagamentos efetivados." }).default(0),
 	cashbackResgate: z.number({ invalid_type_error: "Tipo não válido para resgate de cashback." }).default(0),
 	cupomResgate: SaleAppliedCouponSchema.optional().nullable(),
-	recompensaResgate: SaleRewardRedemptionSchema.optional().nullable(),
+	recompensasResgate: z.array(SaleRewardRedemptionSchema).default([]),
 	// Override tri-state da emissão fiscal automática. null = herda a preferência da organização.
 	emissaoFiscalAutomatica: z.boolean({ invalid_type_error: "Tipo não válido para emissão fiscal automática." }).nullable().default(null),
 	success: SaleSuccessSchema,
@@ -237,7 +239,7 @@ export function getDefaultSaleState(initialState?: Partial<TSaleState>): TSaleSt
 		pagamentosEfetivadosTotal: initialState?.pagamentosEfetivadosTotal ?? 0,
 		cashbackResgate: initialState?.cashbackResgate ?? 0,
 		cupomResgate: initialState?.cupomResgate ?? null,
-		recompensaResgate: initialState?.recompensaResgate ?? null,
+		recompensasResgate: initialState?.recompensasResgate ?? [],
 		emissaoFiscalAutomatica: initialState?.emissaoFiscalAutomatica ?? null,
 		success: initialState?.success ?? null,
 	};
@@ -252,7 +254,7 @@ export const useSaleState = ({ initialState, organizationConfig, contasFinanceir
 	}, []);
 
 	const clearCliente = useCallback(() => {
-		setState((prev) => ({ ...prev, cliente: null, entregaLocalizacaoId: null, cashbackResgate: 0, cupomResgate: null, recompensaResgate: null }));
+		setState((prev) => ({ ...prev, cliente: null, entregaLocalizacaoId: null, cashbackResgate: 0, cupomResgate: null, recompensasResgate: [] }));
 	}, []);
 
 	const setModoCliente = useCallback((modoCliente: TSaleState["modoCliente"]) => {
@@ -264,7 +266,7 @@ export const useSaleState = ({ initialState, organizationConfig, contasFinanceir
 			entregaLocalizacaoId: modoCliente === "CONSUMIDOR" ? null : prev.entregaLocalizacaoId,
 			cashbackResgate: modoCliente === "CONSUMIDOR" ? 0 : prev.cashbackResgate,
 			cupomResgate: modoCliente === "CONSUMIDOR" ? null : prev.cupomResgate,
-			recompensaResgate: modoCliente === "CONSUMIDOR" ? null : prev.recompensaResgate,
+			recompensasResgate: modoCliente === "CONSUMIDOR" ? [] : prev.recompensasResgate,
 		}));
 	}, []);
 
@@ -341,13 +343,14 @@ export const useSaleState = ({ initialState, organizationConfig, contasFinanceir
 			// materializada como item). Esvaziar o carrinho não pode desfazer um resgate — a válvula
 			// é o cancelamento da venda. Na criação não há item de recompensa e tudo é limpo.
 			const itensRecompensa = prev.itens.filter((item) => !!item.recompensaId);
+			const idsRecompensaMaterializada = new Set(itensRecompensa.map((item) => item.recompensaId));
 			return {
 				...prev,
 				itens: itensRecompensa,
 				pagamentos: [],
 				cashbackResgate: 0,
 				cupomResgate: null,
-				recompensaResgate: itensRecompensa.length > 0 ? prev.recompensaResgate : null,
+				recompensasResgate: prev.recompensasResgate.filter((reward) => idsRecompensaMaterializada.has(reward.recompensaId)),
 			};
 		});
 	}, []);
@@ -491,7 +494,7 @@ export const useSaleState = ({ initialState, organizationConfig, contasFinanceir
 	);
 
 	const setCupomResgate = useCallback((cupomResgate: TSaleAppliedCoupon | null) => {
-		setState((prev) => ({ ...prev, cupomResgate, recompensaResgate: cupomResgate ? null : prev.recompensaResgate }));
+		setState((prev) => ({ ...prev, cupomResgate, recompensasResgate: cupomResgate ? [] : prev.recompensasResgate }));
 	}, []);
 
 	const setEmissaoFiscalAutomatica = useCallback((emissaoFiscalAutomatica: boolean | null) => {
@@ -502,18 +505,60 @@ export const useSaleState = ({ initialState, organizationConfig, contasFinanceir
 		setState((prev) => {
 			const nextValue = Math.max(0, cashbackResgate || 0);
 			if (prev.cashbackResgate === nextValue) return prev;
-			return { ...prev, cashbackResgate: nextValue, recompensaResgate: nextValue > 0 ? null : prev.recompensaResgate };
+			return { ...prev, cashbackResgate: nextValue, recompensasResgate: nextValue > 0 ? [] : prev.recompensasResgate };
 		});
 	}, []);
 
-	// Recompensa é exclusiva com cupom e com resgate-desconto (invariante do ledger: 1 RESGATE
-	// por venda; cupom não combinável espelha o POI) — selecionar uma zera os outros.
-	const setRecompensaResgate = useCallback((recompensaResgate: TSaleRewardRedemption | null) => {
+	// Recompensas são exclusivas com cupom e com resgate-desconto (cupom não combinável espelha o
+	// POI) — aplicar uma zera os outros. Uma linha por recompensa distinta: aplicar a mesma de novo
+	// incrementa a quantidade, nunca duplica a linha (`recompensaId` é a chave da linha).
+	const addRecompensaResgate = useCallback((recompensa: Omit<TSaleRewardRedemption, "quantidade"> & { quantidade?: number }) => {
 		setState((prev) => {
-			if (!recompensaResgate) return { ...prev, recompensaResgate: null };
-			return { ...prev, recompensaResgate, cashbackResgate: 0, cupomResgate: null };
+			const existing = prev.recompensasResgate.find((reward) => reward.recompensaId === recompensa.recompensaId);
+			const recompensasResgate = existing
+				? prev.recompensasResgate.map((reward) =>
+						reward.recompensaId === recompensa.recompensaId ? { ...reward, quantidade: reward.quantidade + (recompensa.quantidade ?? 1) } : reward,
+					)
+				: [...prev.recompensasResgate, { ...recompensa, quantidade: recompensa.quantidade ?? 1 }];
+			return { ...prev, recompensasResgate, cashbackResgate: 0, cupomResgate: null };
 		});
 	}, []);
+
+	const setRecompensaQuantidade = useCallback((recompensaId: string, quantidade: number) => {
+		setState((prev) => ({
+			...prev,
+			recompensasResgate:
+				quantidade < 1
+					? prev.recompensasResgate.filter((reward) => reward.recompensaId !== recompensaId)
+					: prev.recompensasResgate.map((reward) => (reward.recompensaId === recompensaId ? { ...reward, quantidade: Math.floor(quantidade) } : reward)),
+		}));
+	}, []);
+
+	/** Atualiza valores de uma linha (revalidação contra o catálogo) sem mexer na quantidade. */
+	const updateRecompensaResgate = useCallback(
+		(recompensaId: string, updates: Partial<Pick<TSaleRewardRedemption, "valor" | "valorVenda" | "titulo">>) => {
+			setState((prev) => ({
+				...prev,
+				recompensasResgate: prev.recompensasResgate.map((reward) => (reward.recompensaId === recompensaId ? { ...reward, ...updates } : reward)),
+			}));
+		},
+		[],
+	);
+
+	const removeRecompensaResgate = useCallback((recompensaId: string) => {
+		setState((prev) => ({ ...prev, recompensasResgate: prev.recompensasResgate.filter((reward) => reward.recompensaId !== recompensaId) }));
+	}, []);
+
+	const clearRecompensasResgate = useCallback(() => {
+		setState((prev) => (prev.recompensasResgate.length === 0 ? prev : { ...prev, recompensasResgate: [] }));
+	}, []);
+
+	// Débito total de saldo das recompensas selecionadas (moeda cashback) — o que a UI mostra como
+	// "saldo restante" e usa para decidir o que ainda cabe.
+	const recompensasResgateTotal = useMemo(
+		() => state.recompensasResgate.reduce((sum, reward) => sum + reward.valor * reward.quantidade, 0),
+		[state.recompensasResgate],
+	);
 
 	const clearSuccess = useCallback(() => {
 		setState((prev) => ({ ...prev, success: null }));
@@ -570,11 +615,11 @@ export const useSaleState = ({ initialState, organizationConfig, contasFinanceir
 	const pagamentoCompleto = useMemo(() => valorRestante <= 0.01, [valorRestante]);
 
 	const isReadyForDraft = useMemo(() => {
-		// Venda só-recompensa é válida: o item do prêmio é construído pelo servidor.
-		if (state.itens.length === 0 && !state.recompensaResgate) return false;
+		// Venda só-recompensas é válida: os itens dos prêmios são construídos pelo servidor.
+		if (state.itens.length === 0 && state.recompensasResgate.length === 0) return false;
 		if (state.modoCliente === "VINCULADO" && !state.cliente) return false;
 		return true;
-	}, [state.itens.length, state.recompensaResgate, state.modoCliente, state.cliente]);
+	}, [state.itens.length, state.recompensasResgate.length, state.modoCliente, state.cliente]);
 
 	const isReadyForFinalize = useMemo(() => {
 		if (!isReadyForDraft) return false;
@@ -613,12 +658,12 @@ export const useSaleState = ({ initialState, organizationConfig, contasFinanceir
 			descontoGeral: state.descontoGeral,
 			taxaEntrega: state.taxaEntrega,
 			cashbackResgate: state.cashbackResgate,
-			recompensaResgate: state.recompensaResgate,
+			recompensasResgate: state.recompensasResgate,
 			valorFinal,
 			valorRestante,
 			troco,
 		};
-	}, [state.pagamentos, state.descontoGeral, state.taxaEntrega, state.cashbackResgate, state.recompensaResgate, valorFinal, valorRestante, troco]);
+	}, [state.pagamentos, state.descontoGeral, state.taxaEntrega, state.cashbackResgate, state.recompensasResgate, valorFinal, valorRestante, troco]);
 
 	const resetState = useCallback((newState?: Partial<TSaleState>) => {
 		setState(getDefaultSaleState(newState));
@@ -649,7 +694,12 @@ export const useSaleState = ({ initialState, organizationConfig, contasFinanceir
 		removePagamento,
 		updatePagamento,
 		setCashbackResgate,
-		setRecompensaResgate,
+		addRecompensaResgate,
+		setRecompensaQuantidade,
+		updateRecompensaResgate,
+		removeRecompensaResgate,
+		clearRecompensasResgate,
+		recompensasResgateTotal,
 		setCupomResgate,
 		setEmissaoFiscalAutomatica,
 		setSuccess,

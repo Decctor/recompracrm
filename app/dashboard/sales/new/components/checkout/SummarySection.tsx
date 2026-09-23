@@ -35,13 +35,14 @@ function CashbackRedemptionBlock({ saleState, clientId, organizationCashbackProg
 	const cashbackResgateMaximo = Math.max(0, Math.min(cashbackSaldoDisponivel, cashbackMaxByRule, saleState.valorAntesCashback));
 	// Programa ausente/inativo e modalidade de desconto desabilitada não chegam aqui: o bloco
 	// inteiro não é montado nesses casos (ver SummarySection).
-	const cashbackDisabledReason = saleState.state.recompensaResgate
-		? "Remova a recompensa para aplicar desconto em cashback."
-		: cashbackSaldoDisponivel <= 0
-			? "Cliente sem saldo de cashback disponível."
-			: cashbackResgateMaximo <= 0
-				? "Não há valor disponível para resgate nesta venda."
-				: null;
+	const cashbackDisabledReason =
+		saleState.state.recompensasResgate.length > 0
+			? "Remova as recompensas para aplicar desconto em cashback."
+			: cashbackSaldoDisponivel <= 0
+				? "Cliente sem saldo de cashback disponível."
+				: cashbackResgateMaximo <= 0
+					? "Não há valor disponível para resgate nesta venda."
+					: null;
 	const isCashbackDisabled = isCashbackBalanceLoading || !!cashbackDisabledReason;
 
 	useEffect(() => {
@@ -205,15 +206,16 @@ export default function SummarySection({ saleState, organizationCashbackProgram,
 					<span>-{formatToMoney(saleState.state.cashbackResgate)}</span>
 				</div>
 			) : null}
-			{saleState.state.recompensaResgate ? (
-				<div className="flex items-center justify-between text-sm text-amber-600">
+			{saleState.state.recompensasResgate.map((recompensa) => (
+				<div key={recompensa.recompensaId} className="flex items-center justify-between text-sm text-amber-600">
 					<span>
-						Recompensa: {saleState.state.recompensaResgate.titulo}
+						Recompensa: {recompensa.titulo}
+						{recompensa.quantidade > 1 ? ` ×${recompensa.quantidade}` : ""}
 						{editMode ? <span className="text-[11px] text-muted-foreground"> (aplicada na venda)</span> : null}
 					</span>
-					<span>GRÁTIS ({formatToMoney(saleState.state.recompensaResgate.valorVenda)})</span>
+					<span>GRÁTIS ({formatToMoney(recompensa.valorVenda * recompensa.quantidade)})</span>
 				</div>
-			) : null}
+			))}
 			{saleState.state.taxaEntrega > 0 ? (
 				<div className="flex items-center justify-between text-sm text-muted-foreground">
 					<span>Taxa de entrega</span>

@@ -13,10 +13,22 @@ function buildData(pagamentos: TCupomVendaDados["venda"]["pagamentos"]): TCupomV
 		},
 		cliente: null,
 		cupom: null,
-		recompensa: null,
+		recompensas: [],
 		cashback: null,
 	};
 }
+
+test("imprime uma linha por recompensa resgatada, com a quantidade quando repetida", () => {
+	const dados = buildData([]);
+	dados.recompensas = [
+		{ nome: "Café", quantidade: 2, valorDesconto: 16 },
+		{ nome: "Bolo", quantidade: 1, valorDesconto: 15 },
+	];
+	const html = renderCupomVendaHtml(dados);
+	assert.match(html, /Recompensa: Café x2/);
+	assert.match(html, /Recompensa: Bolo</);
+	assert.doesNotMatch(html, /Bolo x1/);
+});
 
 test("destaca pagamento online do iFood no cupom", () => {
 	const html = renderCupomVendaHtml(buildData([{ metodo: "PIX", valor: 27, parcelas: null, pago: true, descricao: null, situacao: "PAGO_CANAL" }]));

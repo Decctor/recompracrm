@@ -12,6 +12,12 @@ export type TPrize = {
 	produto: { grupo: string } | null;
 };
 
+/** Uma recompensa da cesta do resgate: a mesma recompensa repetida é UMA entrada com `quantity`. */
+export type TSelectedPrize = {
+	prize: TPrize;
+	quantity: number;
+};
+
 export type TStepDefinition = {
 	id: number;
 	label: string;
