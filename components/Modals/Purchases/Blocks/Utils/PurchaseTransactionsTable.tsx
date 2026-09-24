@@ -61,7 +61,7 @@ export type TAccountingEntryTransactionRow = TNewAccountingEntryTransaction & {
 	deletar?: boolean | null;
 };
 
-type TAccountingEntryTransactionPatch = Partial<Omit<TAccountingEntryTransactionRow, "id" | "deletar">>;
+type TAccountingEntryTransactionPatch = Partial<Omit<TAccountingEntryTransactionRow, "id" | "deletar">> & { deletar?: boolean };
 
 type PurchaseTransactionsTableProps = {
 	entryValue: number;

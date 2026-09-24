@@ -111,7 +111,7 @@ const STUDIO_SALE = {
 			produto: { id: "product-studio-2", nome: "Tábua de corte em bambu", codigo: "TAB-042", unidade: "UN", imagemCapaUrl: null },
 			produtoVariante: null,
 			adicionais: [
-				{ id: "addon-studio-1", quantidade: 1, valorUnitario: 12, valorTotal: 12, opcao: { id: "option-studio-1", nome: "Gravação personalizada" } },
+				{ id: "addon-studio-1", nome: "Gravação personalizada", quantidade: 1, valorUnitario: 12, valorTotal: 12, opcao: { id: "option-studio-1", nome: "Gravação personalizada" } },
 			],
 		},
 		{
