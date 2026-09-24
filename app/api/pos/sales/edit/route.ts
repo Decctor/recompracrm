@@ -192,7 +192,13 @@ async function getSaleForEdit({ input, session }: { input: TGetSaleForEditInput;
 	const cashbackResgate = resgatesAtivos
 		.filter((transaction) => !transaction.resgateRecompensaId)
 		.reduce((sum, transaction) => sum + Math.abs(transaction.valor), 0);
-	const recompensaResgatada = resgatesAtivos.find((transaction) => !!transaction.resgateRecompensaId) ?? null;
+	// Uma linha do ledger por recompensa resgatada; `valor` é o débito TOTAL da linha (unitário × quantidade).
+	const recompensasResgatadas = resgatesAtivos
+		.filter((transaction) => !!transaction.resgateRecompensaId)
+		.map((transaction) => ({
+			recompensaId: transaction.resgateRecompensaId as string,
+			valor: transaction.resgateRecompensaValor ?? Math.abs(transaction.valor),
+		}));
 
 	return {
 		data: {
@@ -201,12 +207,7 @@ async function getSaleForEdit({ input, session }: { input: TGetSaleForEditInput;
 			editabilidade,
 			cupomResgatado: cupomResgatado ?? null,
 			cashbackResgate,
-			recompensaResgatada: recompensaResgatada
-				? {
-						recompensaId: recompensaResgatada.resgateRecompensaId as string,
-						valor: recompensaResgatada.resgateRecompensaValor ?? Math.abs(recompensaResgatada.valor),
-					}
-				: null,
+			recompensasResgatadas,
 		},
 		message: "Venda carregada para edição.",
 	};

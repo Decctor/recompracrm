@@ -162,12 +162,16 @@ export async function buildCupomVendaDados({ organizacaoId, vendaId }: { organiz
 	const cashbackResgate = resgatesAtivos
 		.filter((transaction) => !transaction.resgateRecompensaId)
 		.reduce((sum, transaction) => sum + Math.abs(transaction.valor), 0);
-	const recompensaResgatada = resgatesAtivos.find((transaction) => !!transaction.resgateRecompensaId) ?? null;
+	const temRecompensaResgatada = resgatesAtivos.some((transaction) => !!transaction.resgateRecompensaId);
 
 	const cupomDesconto = cupomResgatado?.valorDesconto ?? 0;
-	const rewardItem = sale.itens.find((item) => readItemSnapshot(item.metadados)?.origem === POS_REWARD_SALE_ITEM_ORIGIN) ?? null;
-	const descontoRecompensa = recompensaResgatada ? (rewardItem?.valorTotalDesconto ?? 0) : 0;
-	const descontoGeral = Math.max(0, descontosTotal - cupomDesconto - cashbackResgate - descontoRecompensa);
+	// Uma linha impressa por recompensa; o "Desconto" geral subtrai TODAS — subtrair só a primeira
+	// imprimiria o valor das demais como desconto do operador.
+	const rewardItems = temRecompensaResgatada
+		? sale.itens.filter((item) => readItemSnapshot(item.metadados)?.origem === POS_REWARD_SALE_ITEM_ORIGIN)
+		: [];
+	const descontoRecompensas = rewardItems.reduce((sum, item) => sum + (item.valorTotalDesconto ?? 0), 0);
+	const descontoGeral = Math.max(0, descontosTotal - cupomDesconto - cashbackResgate - descontoRecompensas);
 
 	// O subtotal impresso é o que reconcilia com o TOTAL (Subtotal - descontos + acréscimos = TOTAL).
 	// A soma dos itens só é usada quando as duas concordam: vendas de canal externo chegam com totais
@@ -283,13 +287,13 @@ export async function buildCupomVendaDados({ organizacaoId, vendaId }: { organiz
 		cupom: cupomResgatado
 			? { codigo: cupomResgatado.cupomCodigo, titulo: cupomResgatado.cupomTitulo, valorDesconto: cupomResgatado.valorDesconto }
 			: null,
-		recompensa:
-			recompensaResgatada && descontoRecompensa > 0
-				? {
-						nome: [rewardItem?.produto?.nome, rewardItem?.produtoVariante?.nome].filter(Boolean).join(" - ") || null,
-						valorDesconto: descontoRecompensa,
-					}
-				: null,
+		recompensas: rewardItems
+			.filter((item) => (item.valorTotalDesconto ?? 0) > 0)
+			.map((item) => ({
+				nome: [item.produto?.nome, item.produtoVariante?.nome].filter(Boolean).join(" - ") || null,
+				quantidade: item.quantidade,
+				valorDesconto: item.valorTotalDesconto ?? 0,
+			})),
 		cashback: cashbackDados,
 	};
 }

@@ -92,6 +92,44 @@ async function getShopSettingsRoute() {
 }
 export type TGetShopSettingsOutput = Awaited<ReturnType<typeof getShopSettingsRoute>> extends NextResponse<infer T> ? T : never;
 
+async function createShopSettingsService({ session }: { session: TAuthUserSession }) {
+	const orgId = session.membership!.organizacao.id;
+	if (!orgId) throw new createHttpError.Unauthorized("Você não está autenticado.");
+
+	// Uma organização tem no máximo uma loja digital. A checagem prévia devolve uma mensagem clara;
+	// o `onConflictDoNothing` (unique em organizacao_id) cobre a corrida entre duas requisições.
+	const existing = await db.query.shopSettings.findFirst({
+		where: (fields, { eq }) => eq(fields.organizacaoId, orgId),
+		columns: { id: true },
+	});
+	if (existing) throw new createHttpError.Conflict("A organização já possui configurações da loja digital.");
+
+	const [settings] = await db
+		.insert(shopSettings)
+		.values({
+			organizacaoId: orgId,
+			ativo: false,
+			modo: "CARDAPIO",
+			configuracoes: DEFAULT_SHOP_SETTINGS_CONFIGURATION,
+			dataAtualizacao: new Date(),
+		})
+		.onConflictDoNothing({ target: shopSettings.organizacaoId })
+		.returning();
+	if (!settings) throw new createHttpError.Conflict("A organização já possui configurações da loja digital.");
+
+	return {
+		data: { settings },
+		message: "Configurações da loja digital criadas com sucesso.",
+	};
+}
+
+async function createShopSettingsRoute() {
+	const session = getSessionWithOrg(await getCurrentSessionUncached());
+	const result = await createShopSettingsService({ session });
+	return NextResponse.json(result);
+}
+export type TCreateShopSettingsOutput = Awaited<ReturnType<typeof createShopSettingsService>>;
+
 async function updateShopSettingsRoute(request: NextRequest) {
 	const session = getSessionWithOrg(await getCurrentSessionUncached());
 	const orgId = session.membership!.organizacao.id;
@@ -141,4 +179,5 @@ async function updateShopSettingsRoute(request: NextRequest) {
 export type TUpdateShopSettingsOutput = Awaited<ReturnType<typeof updateShopSettingsRoute>> extends NextResponse<infer T> ? T : never;
 
 export const GET = appApiHandler({ GET: getShopSettingsRoute });
+export const POST = appApiHandler({ POST: createShopSettingsRoute });
 export const PUT = appApiHandler({ PUT: updateShopSettingsRoute });

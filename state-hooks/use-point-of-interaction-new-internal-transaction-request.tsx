@@ -1,5 +1,6 @@
 import { ClientSchema } from "@/schemas/clients";
 import { SaleSchema } from "@/schemas/sales";
+import { addPoiPrizeLine, setPoiPrizeLineQuantity } from "@/lib/point-of-interaction/prize-lines";
 import { useCallback, useState } from "react";
 import z from "zod";
 
@@ -44,14 +45,15 @@ export const PointOfInteractionNewInternalTransactionRequestStateSchema = z.obje
 				})
 				.optional()
 				.nullable(),
-			prizeRedemption: z
-				.object({
+			// Uma linha por recompensa distinta, com quantidade (valores por unidade, informativos).
+			prizeRedemptions: z.array(
+				z.object({
 					prizeId: z.string(),
 					prizeValue: z.number(),
 					prizeSaleValue: z.number(),
-				})
-				.optional()
-				.nullable(),
+					quantity: z.number().int().min(1),
+				}),
+			),
 		})
 		.refine((data) => data.valor >= 0, {
 			message: "Valor da venda deve ser positivo.",
@@ -68,7 +70,7 @@ export type TPointOfInteractionNewInternalTransactionRequestState = z.infer<type
 export function usePointOfInteractionNewInternalTransactionRequestState() {
 	const [state, setState] = useState<TPointOfInteractionNewInternalTransactionRequestState>({
 		client: { id: null, nome: "", cpfCnpj: null, telefone: "" },
-		sale: { valor: 0, cashback: { aplicar: false, valor: 0 }, partnerCode: null, prizeRedemption: null },
+		sale: { valor: 0, cashback: { aplicar: false, valor: 0 }, partnerCode: null, prizeRedemptions: [] },
 		operatorIdentifier: "",
 		operatorConfirmedSaleValue: null,
 	});
@@ -95,10 +97,26 @@ export function usePointOfInteractionNewInternalTransactionRequestState() {
 		}));
 	}, []);
 
-	const updatePrizeRedemption = useCallback((prizeRedemption: TPointOfInteractionNewInternalTransactionRequestState["sale"]["prizeRedemption"]) => {
+	const updatePrizeRedemptions = useCallback((prizeRedemptions: TPointOfInteractionNewInternalTransactionRequestState["sale"]["prizeRedemptions"]) => {
 		setState((prev) => ({
 			...prev,
-			sale: { ...prev.sale, prizeRedemption },
+			sale: { ...prev.sale, prizeRedemptions },
+		}));
+	}, []);
+
+	/** Adiciona uma unidade da recompensa (incrementa a linha existente ou cria uma nova). */
+	const addPrizeRedemption = useCallback((prize: { id: string; valor: number; valorVenda: number }) => {
+		setState((prev) => ({
+			...prev,
+			sale: { ...prev.sale, prizeRedemptions: addPoiPrizeLine(prev.sale.prizeRedemptions, prize) },
+		}));
+	}, []);
+
+	/** Quantidade < 1 remove a linha. */
+	const setPrizeRedemptionQuantity = useCallback((prizeId: string, quantity: number) => {
+		setState((prev) => ({
+			...prev,
+			sale: { ...prev.sale, prizeRedemptions: setPoiPrizeLineQuantity(prev.sale.prizeRedemptions, prizeId, quantity) },
 		}));
 	}, []);
 
@@ -116,7 +134,7 @@ export function usePointOfInteractionNewInternalTransactionRequestState() {
 	const resetState = useCallback(() => {
 		setState({
 			client: { id: null, nome: "", cpfCnpj: null, telefone: "" },
-			sale: { valor: 0, cashback: { aplicar: false, valor: 0 }, partnerCode: null, prizeRedemption: null },
+			sale: { valor: 0, cashback: { aplicar: false, valor: 0 }, partnerCode: null, prizeRedemptions: [] },
 			operatorIdentifier: "",
 			operatorConfirmedSaleValue: null,
 		});
@@ -131,7 +149,9 @@ export function usePointOfInteractionNewInternalTransactionRequestState() {
 		updateClient,
 		updateSale,
 		updateCashback,
-		updatePrizeRedemption,
+		updatePrizeRedemptions,
+		addPrizeRedemption,
+		setPrizeRedemptionQuantity,
 		updateOperatorIdentifier,
 		updateOperatorConfirmedSaleValue,
 		resetState,

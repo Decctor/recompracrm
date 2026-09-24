@@ -42,6 +42,46 @@ export const ProductOptionStateSchema = ProductOptionSchema.omit({ organizacaoId
 });
 export type TProductOptionState = z.infer<typeof ProductOptionStateSchema>;
 
+// Override de canal para um nó (canal × produto | variante) do produto sendo montado. A variante é
+// referenciada pela chave local (referenciaId) porque na criação ela ainda não tem id — o servidor
+// resolve a referência para o id real depois do insert, como faz com os eixos de variação.
+export const ProductChannelSettingStateSchema = z.object({
+	canalVendaId: z.string({
+		required_error: "ID do canal de venda não informado.",
+		invalid_type_error: "Tipo não válido para ID do canal de venda.",
+	}),
+	produtoVarianteReferenciaId: z
+		.string({
+			invalid_type_error: "Tipo não válido para referência da variante.",
+		})
+		.nullable(),
+	// Nulo = herda o padrão do canal.
+	disponivel: z
+		.boolean({
+			invalid_type_error: "Tipo não válido para disponibilidade no canal.",
+		})
+		.nullable(),
+	// Nulo = herda o preço base do produto/variante.
+	precoVenda: z
+		.number({
+			invalid_type_error: "Tipo não válido para preço de venda no canal.",
+		})
+		.nullable(),
+});
+export type TProductChannelSettingState = z.infer<typeof ProductChannelSettingStateSchema>;
+export type TProductChannelSettingNodeRef = Pick<TProductChannelSettingState, "canalVendaId" | "produtoVarianteReferenciaId">;
+
+function isSameChannelSettingNode(a: TProductChannelSettingNodeRef, b: TProductChannelSettingNodeRef) {
+	return a.canalVendaId === b.canalVendaId && (a.produtoVarianteReferenciaId ?? null) === (b.produtoVarianteReferenciaId ?? null);
+}
+
+// Variante que saiu do formulário leva junto seus overrides de canal: sem isso o payload de
+// criação apontaria para uma referência que o servidor não conhece.
+function pruneChannelSettingsToVariants(settings: TProductChannelSettingState[], variants: { referenciaId: string; deletar?: boolean }[]) {
+	const liveRefs = new Set(variants.filter((variant) => !variant.deletar).map((variant) => variant.referenciaId));
+	return settings.filter((setting) => setting.produtoVarianteReferenciaId === null || liveRefs.has(setting.produtoVarianteReferenciaId));
+}
+
 export const ProductStateSchema = z.object({
 	product: ProductSchema.omit({ organizacaoId: true }).extend({
 		// Sempre definido no estado do formulário (o hook aplica o default), embora opcional no payload.
@@ -126,6 +166,11 @@ export const ProductStateSchema = z.object({
 				}),
 			),
 			opcoesValores: z.array(VariantOptionValueRefStateSchema).optional(),
+			// Chave local estável (o id real só existe depois de salvar). Na hidratação vale o próprio id.
+			referenciaId: z.string({
+				required_error: "Referência da variante não informada.",
+				invalid_type_error: "Tipo não válido para referência da variante.",
+			}),
 			id: z
 				.string({
 					required_error: "ID da variante não informado.",
@@ -209,6 +254,8 @@ export const ProductStateSchema = z.object({
 				.optional(),
 		}),
 	),
+	// Esparso: só os nós com algum override têm entrada; nó ausente herda.
+	productChannelSettings: z.array(ProductChannelSettingStateSchema),
 });
 
 export type TProductState = z.infer<typeof ProductStateSchema>;
@@ -240,6 +287,7 @@ export const useProductState = ({ initialState }: UseProductStateProps = {}) => 
 		productVariants: initialState?.productVariants ?? [],
 		productOptions: initialState?.productOptions ?? [],
 		productAddOns: initialState?.productAddOns ?? [],
+		productChannelSettings: initialState?.productChannelSettings ?? [],
 	});
 
 	// ===== PRODUTO PRINCIPAL =====
@@ -311,9 +359,11 @@ export const useProductState = ({ initialState }: UseProductStateProps = {}) => 
 				};
 			}
 			// Se é nova (sem id), remove da lista
+			const productVariants = prev.productVariants.filter((_, i) => i !== index);
 			return {
 				...prev,
-				productVariants: prev.productVariants.filter((_, i) => i !== index),
+				productVariants,
+				productChannelSettings: pruneChannelSettingsToVariants(prev.productChannelSettings, productVariants),
 			};
 		});
 	}, []);
@@ -436,6 +486,7 @@ export const useProductState = ({ initialState }: UseProductStateProps = {}) => 
 					return { ...existing, deletar: undefined };
 				}
 				const newVariant: TProductState["productVariants"][number] = {
+					referenciaId: crypto.randomUUID(),
 					nome: combo.map((ref) => ref.valorNome).join(" / "),
 					codigo: "",
 					precoCusto: defaults?.precoCusto ?? 0,
@@ -456,9 +507,32 @@ export const useProductState = ({ initialState }: UseProductStateProps = {}) => 
 				if (variant.id) removed.push({ ...variant, deletar: true });
 			}
 
-			return { ...prev, productVariants: [...flatVariants, ...kept, ...removed] };
+			const productVariants = [...flatVariants, ...kept, ...removed];
+			return { ...prev, productVariants, productChannelSettings: pruneChannelSettingsToVariants(prev.productChannelSettings, productVariants) };
 		});
 	}, []);
+
+	// ===== CANAIS DE VENDA =====
+
+	// Upsert esparso do nó: quando disponibilidade e preço voltam a nulo o nó some (= herdar).
+	const updateProductChannelSetting = useCallback(
+		(node: TProductChannelSettingNodeRef, updates: Partial<Pick<TProductChannelSettingState, "disponivel" | "precoVenda">>) => {
+			setState((prev) => {
+				const current = prev.productChannelSettings.find((setting) => isSameChannelSettingNode(setting, node));
+				const next: TProductChannelSettingState = {
+					canalVendaId: node.canalVendaId,
+					produtoVarianteReferenciaId: node.produtoVarianteReferenciaId ?? null,
+					disponivel: current?.disponivel ?? null,
+					precoVenda: current?.precoVenda ?? null,
+					...updates,
+				};
+				const others = prev.productChannelSettings.filter((setting) => !isSameChannelSettingNode(setting, node));
+				const isInherit = next.disponivel === null && next.precoVenda === null;
+				return { ...prev, productChannelSettings: isInherit ? others : [...others, next] };
+			});
+		},
+		[],
+	);
 
 	// ===== ADD-ONS DO PRODUTO PRINCIPAL =====
 
@@ -830,6 +904,8 @@ export const useProductState = ({ initialState }: UseProductStateProps = {}) => 
 		addVariantFiscalProfile,
 		updateVariantFiscalProfile,
 		removeVariantFiscalProfile,
+		// Canais de venda
+		updateProductChannelSetting,
 		// Utilitários
 		resetState,
 		redefineState,
@@ -904,6 +980,10 @@ export const ProductVariantStateSchema = ProductVariantSchema.omit({ organizacao
 		}),
 	),
 	opcoesValores: z.array(VariantOptionValueRefStateSchema).optional(),
+	referenciaId: z.string({
+		required_error: "Referência da variante não informada.",
+		invalid_type_error: "Tipo não válido para referência da variante.",
+	}),
 });
 export type TProductVariantState = z.infer<typeof ProductVariantStateSchema>;
 
@@ -914,6 +994,7 @@ type UseProductVariantStateProps = {
 export function useProductVariantState({ initialState }: UseProductVariantStateProps) {
 	const initialStateComplete = useMemo(
 		() => ({
+			referenciaId: initialState?.referenciaId ?? crypto.randomUUID(),
 			nome: initialState?.nome ?? "",
 			codigo: initialState?.codigo ?? "",
 			precoCusto: initialState?.precoCusto ?? 0,

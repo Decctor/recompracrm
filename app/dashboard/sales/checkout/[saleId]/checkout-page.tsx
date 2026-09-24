@@ -273,6 +273,8 @@ export default function CheckoutPage({
 				fiscal: {
 					status: data.data.fiscal.status,
 					error: data.data.fiscal.status === "ERRO" ? data.data.fiscal.error : null,
+					// Atravessa JSON como string ISO, embora o tipo da rota diga Date.
+					agendadaPara: data.data.fiscal.status === "AGENDADO" ? new Date(data.data.fiscal.agendadaPara).toISOString() : null,
 				},
 			});
 		},

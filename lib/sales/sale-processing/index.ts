@@ -11,7 +11,8 @@ export { processSaleFulfillmentCorrection } from "./process-sale-fulfillment-cor
 export { mapSaleRowToFulfillmentCard } from "./map-sale-to-fulfillment-card";
 export { getSaleFinancialState } from "./get-sale-financial-state";
 export { processSaleCashbackAccumulationIfEligible } from "./process-sale-cashback-accumulation";
-export { processSaleAutomaticFiscalEmissionIfEligible } from "./process-sale-automatic-fiscal-emission";
+export { processSaleAutomaticFiscalEmissionIfEligible, type TProcessSaleAutomaticFiscalEmissionMode } from "./process-sale-automatic-fiscal-emission";
+export { executeScheduledAutoEmission, type TExecuteScheduledAutoEmissionInput } from "./execute-scheduled-auto-emission";
 export { processConfirmedSaleCancellation } from "./process-confirmed-sale-cancellation";
 export {
 	loadSaleClientReassignmentContext,

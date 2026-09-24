@@ -155,7 +155,7 @@ export async function listAvailableCashbackRewards({
 	surface: TBenefitRedemptionSurface;
 	channelState?: TChannelState | null;
 }) {
-	// Mesma resolução do resgate (`admitSaleRewardRedemption`): o programa do cliente é o do seu
+	// Mesma resolução do resgate (`admitSaleRewardRedemptions`): o programa do cliente é o do seu
 	// saldo. Só quando o cliente não tem saldo em nenhum programa é que se cai no programa ativo da
 	// organização — do contrário, uma org com mais de um programa listaria prêmios de um e
 	// debitaria o saldo de outro.

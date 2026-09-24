@@ -308,3 +308,34 @@ export const CashbackProgramTransactionSchema = z.object({
 		.default(new Date().toISOString())
 		.transform((val) => new Date(val)),
 });
+
+// ---------------------------------------------------------------------------
+// Resgate de recompensas em uma venda (PDV, loja digital): o cliente informa apenas ids e
+// quantidade; tudo que vira item/ledger é resolvido pelo servidor
+// (lib/sales/sale-reward-redemption.ts). Uma linha por recompensa distinta.
+// ---------------------------------------------------------------------------
+export const SaleRewardRedemptionLineInputSchema = z.object({
+	recompensaId: z.string({
+		required_error: "ID da recompensa não informado.",
+		invalid_type_error: "Tipo não válido para o ID da recompensa.",
+	}),
+	programaId: z.string({ invalid_type_error: "Tipo não válido para o ID do programa de cashback." }).optional().nullable(),
+	quantidade: z
+		.number({ invalid_type_error: "Tipo não válido para a quantidade da recompensa." })
+		.int("Quantidade da recompensa precisa ser inteira.")
+		.min(1, "Quantidade da recompensa precisa ser ao menos 1.")
+		.optional()
+		.nullable(),
+});
+export type TSaleRewardRedemptionLineInput = z.infer<typeof SaleRewardRedemptionLineInputSchema>;
+
+/**
+ * Campos de entrada do resgate de recompensas, para espalhar nos schemas de rota. O plural é o
+ * contrato atual; o singular `recompensaResgate` é aceito por uma release para bundles do PDV e
+ * carrinhos da loja gravados antes de múltiplas recompensas. Resolução do tri-estado em
+ * `resolveRewardRedemptionLinesInput` (lib/sales/sale-reward-snapshot.ts).
+ */
+export const saleRewardRedemptionInputFields = {
+	recompensasResgate: z.array(SaleRewardRedemptionLineInputSchema).optional().nullable(),
+	recompensaResgate: SaleRewardRedemptionLineInputSchema.optional().nullable(),
+};

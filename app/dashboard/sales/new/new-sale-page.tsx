@@ -235,9 +235,11 @@ export default function NewSalePage({
 					acrescimosTotal: saleState.acrescimosTotal,
 					cashbackResgate: saleState.state.cashbackResgate,
 					cupomResgate: saleState.state.cupomResgate,
-					recompensaResgate: saleState.state.recompensaResgate
-						? { recompensaId: saleState.state.recompensaResgate.recompensaId, programaId: saleState.state.recompensaResgate.programaId }
-						: null,
+					recompensasResgate: saleState.state.recompensasResgate.map((recompensa) => ({
+						recompensaId: recompensa.recompensaId,
+						programaId: recompensa.programaId,
+						quantidade: recompensa.quantidade,
+					})),
 					rascunhoMetadados: saleState.getDraftMetadata(),
 					emissaoFiscalAutomatica: saleState.state.emissaoFiscalAutomatica,
 				});
@@ -279,6 +281,8 @@ export default function NewSalePage({
 				fiscal: {
 					status: data.data.confirmation.fiscal.status,
 					error: data.data.confirmation.fiscal.status === "ERRO" ? data.data.confirmation.fiscal.error : null,
+					// Atravessa JSON como string ISO, embora o tipo da rota diga Date.
+					agendadaPara: data.data.confirmation.fiscal.status === "AGENDADO" ? new Date(data.data.confirmation.fiscal.agendadaPara).toISOString() : null,
 				},
 			});
 		},
@@ -364,9 +368,11 @@ export default function NewSalePage({
 			acrescimosTotal: saleState.acrescimosTotal,
 			cashbackResgate: saleState.state.cashbackResgate,
 			cupomResgate: saleState.state.cupomResgate,
-			recompensaResgate: saleState.state.recompensaResgate
-				? { recompensaId: saleState.state.recompensaResgate.recompensaId, programaId: saleState.state.recompensaResgate.programaId }
-				: null,
+			recompensasResgate: saleState.state.recompensasResgate.map((recompensa) => ({
+				recompensaId: recompensa.recompensaId,
+				programaId: recompensa.programaId,
+				quantidade: recompensa.quantidade,
+			})),
 			rascunhoMetadados: saleState.getDraftMetadata(),
 			emissaoFiscalAutomatica: saleState.state.emissaoFiscalAutomatica,
 			itens: mapItemsToApi(saleState),
@@ -397,9 +403,11 @@ export default function NewSalePage({
 			})),
 			cashbackResgate: saleState.state.cashbackResgate,
 			cupomResgate: saleState.state.cupomResgate,
-			recompensaResgate: saleState.state.recompensaResgate
-				? { recompensaId: saleState.state.recompensaResgate.recompensaId, programaId: saleState.state.recompensaResgate.programaId }
-				: null,
+			recompensasResgate: saleState.state.recompensasResgate.map((recompensa) => ({
+				recompensaId: recompensa.recompensaId,
+				programaId: recompensa.programaId,
+				quantidade: recompensa.quantidade,
+			})),
 			emissaoFiscalAutomatica: saleState.state.emissaoFiscalAutomatica,
 			itens: mapItemsToApi(saleState),
 		});

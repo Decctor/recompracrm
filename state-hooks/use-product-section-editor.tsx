@@ -2,6 +2,7 @@
 
 import type { TGetProductChannelSettingsOutput } from "@/app/api/products/channel-settings/route";
 import type { TGetProductsOutputById } from "@/app/api/products/route";
+import { cycleAvailabilityChoice } from "@/components/SalesChannels/ProductChannelControls";
 import { getErrorMessage } from "@/lib/errors";
 import { uploadFile } from "@/lib/files-storage";
 import { updateProductChannelSettings } from "@/lib/mutations/product-channel-settings";
@@ -358,9 +359,7 @@ export function useProductPricingSectionEditor({
 			markChannelsDirty();
 			setChoices((previous) => {
 				const next = new Map(previous);
-				const current = next.get(key) ?? null;
-				// herdar → disponível → indisponível → herdar
-				next.set(key, current === null ? true : current === true ? false : null);
+				next.set(key, cycleAvailabilityChoice(next.get(key) ?? null));
 				return next;
 			});
 		},

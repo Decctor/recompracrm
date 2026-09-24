@@ -46,8 +46,10 @@ export function AutoEmissionPaymentMethodExceptions({ fiscalConfig, updateFiscal
 
 	const toggleMethod = (metodo: TPaymentMethodEnum, emitir: boolean) => {
 		const next = emitir ? pagamentoExclusivo.filter((item) => item !== metodo) : [...new Set([...pagamentoExclusivo, metodo])];
+		// Espalha o objeto atual: `normalizeFiscalConfig` substitui `emissaoAutomatica` inteiro pelo
+		// patch, e sem isto o atraso configurado voltaria ao padrão a cada toggle.
 		updateFiscalConfig({
-			emissaoAutomatica: { excecoes: { pagamentoExclusivo: next } },
+			emissaoAutomatica: { ...fiscalConfig.emissaoAutomatica, excecoes: { ...fiscalConfig.emissaoAutomatica.excecoes, pagamentoExclusivo: next } },
 		});
 	};
 

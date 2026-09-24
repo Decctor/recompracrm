@@ -127,14 +127,18 @@ export const CupomVendaDadosSchema = z.object({
 		})
 		.optional()
 		.nullable(),
-	recompensa: z
-		.object({
-			nome: z.string({ invalid_type_error: "Tipo não válido para o nome da recompensa." }).optional().nullable(),
-			valorDesconto: z.number({
-				required_error: "Valor de desconto da recompensa não informado.",
-				invalid_type_error: "Tipo não válido para o desconto da recompensa.",
+	// Uma entrada por recompensa resgatada (a mesma recompensa repetida vem com quantidade > 1).
+	recompensas: z
+		.array(
+			z.object({
+				nome: z.string({ invalid_type_error: "Tipo não válido para o nome da recompensa." }).optional().nullable(),
+				quantidade: z.number({ invalid_type_error: "Tipo não válido para a quantidade da recompensa." }).optional().nullable(),
+				valorDesconto: z.number({
+					required_error: "Valor de desconto da recompensa não informado.",
+					invalid_type_error: "Tipo não válido para o desconto da recompensa.",
+				}),
 			}),
-		})
+		)
 		.optional()
 		.nullable(),
 	cashback: z
@@ -183,7 +187,7 @@ function renderLinha(label: string, valor: string, { destaque, negativo }: { des
 }
 
 export function renderCupomVendaHtml(dados: TCupomVendaDados) {
-	const { organizacao, venda, cliente, cupom, recompensa, cashback } = dados;
+	const { organizacao, venda, cliente, cupom, recompensas, cashback } = dados;
 
 	const cabecalhoHtml = `<div class="centro cabecalho">
 		${organizacao.logoDataUrl ? `<img class="logo" src="${escapeHtml(organizacao.logoDataUrl)}" alt="" />` : ""}
@@ -278,7 +282,16 @@ export function renderCupomVendaHtml(dados: TCupomVendaDados) {
 		${renderLinha("Subtotal", formatToMoney(venda.subtotal))}
 		${cupom && cupom.valorDesconto > 0 ? renderLinha(`Cupom ${cupom.codigo ?? cupom.titulo ?? ""}`.trim(), formatToMoney(cupom.valorDesconto), { negativo: true }) : ""}
 		${cashback?.valorResgatado ? renderLinha("Resgate de cashback", formatToMoney(cashback.valorResgatado), { negativo: true }) : ""}
-		${recompensa && recompensa.valorDesconto > 0 ? renderLinha(`Recompensa${recompensa.nome ? `: ${recompensa.nome}` : ""}`, formatToMoney(recompensa.valorDesconto), { negativo: true }) : ""}
+		${(recompensas ?? [])
+			.filter((recompensa) => recompensa.valorDesconto > 0)
+			.map((recompensa) =>
+				renderLinha(
+					`Recompensa${recompensa.nome ? `: ${recompensa.nome}` : ""}${(recompensa.quantidade ?? 1) > 1 ? ` x${recompensa.quantidade}` : ""}`,
+					formatToMoney(recompensa.valorDesconto),
+					{ negativo: true },
+				),
+			)
+			.join("")}
 		${descontoGeral > 0 ? renderLinha("Desconto", formatToMoney(descontoGeral), { negativo: true }) : ""}
 		${taxaEntrega > 0 ? renderLinha("Taxa de entrega", formatToMoney(taxaEntrega)) : ""}
 		${acrescimos > 0 ? renderLinha("Acréscimo", formatToMoney(acrescimos)) : ""}

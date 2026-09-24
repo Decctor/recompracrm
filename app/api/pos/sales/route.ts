@@ -4,7 +4,14 @@ import type { TAuthUserSession } from "@/lib/authentication/types";
 import { resolveSaleFiscalEmissionOverride } from "@/lib/sales/sale-fiscal-emission-override";
 import { toSalesChannelType } from "@/lib/products/sales-channels";
 import { computeSaleItemsPricingDrift, validateSaleItemsPricing } from "@/lib/sales/sale-pricing-validation";
-import { admitSaleRewardRedemption, buildSaleRewardDraftSnapshot, parseSaleRewardDraftSnapshot } from "@/lib/sales/sale-reward-redemption";
+import {
+	admitSaleRewardRedemptions,
+	buildRewardSnapshotsMetadataKeys,
+	buildSaleRewardDraftSnapshots,
+	parseSaleRewardDraftSnapshots,
+	resolveRewardRedemptionLinesInput,
+} from "@/lib/sales/sale-reward-redemption";
+import { saleRewardRedemptionInputFields } from "@/schemas/cashback-programs";
 import { syncDraftItems } from "@/lib/sales/drafts/sync-draft-items";
 import { AppliedCouponSchema } from "@/schemas/coupons";
 import { db } from "@/services/drizzle";
@@ -55,19 +62,14 @@ const CreateSaleDraftInputSchema = z.object({
 	acrescimosTotal: z.number({ invalid_type_error: "Tipo não válido para acréscimo." }).optional().nullable(),
 	cashbackResgate: z.number({ invalid_type_error: "Tipo não válido para resgate de cashback." }).default(0),
 	cupomResgate: AppliedCouponSchema.optional().nullable(),
-	// Resgate de recompensa (prêmio): no rascunho vive só como snapshot em rascunhoMetadados —
-	// item e débito de saldo nascem na confirmação (não se reserva saldo/estoque de orçamento).
-	recompensaResgate: z
-		.object({
-			recompensaId: z.string({ required_error: "ID da recompensa não informado." }),
-			programaId: z.string({ invalid_type_error: "Tipo não válido para ID do programa de cashback." }).optional().nullable(),
-		})
-		.optional()
-		.nullable(),
+	// Resgate de recompensas (prêmios): no rascunho vive só como snapshot em rascunhoMetadados —
+	// itens e débito de saldo nascem na confirmação (não se reserva saldo/estoque de orçamento).
+	// Uma linha por recompensa distinta, com quantidade.
+	...saleRewardRedemptionInputFields,
 	rascunhoMetadados: z.unknown().optional().nullable(),
 	// Override tri-state da emissão fiscal automática. null/ausente = herda a preferência da organização.
 	emissaoFiscalAutomatica: z.boolean({ invalid_type_error: "Tipo não válido para emissão fiscal automática." }).optional().nullable(),
-	// Rascunho só-recompensa é permitido (carrinho vazio + recompensaResgate); a exigência de
+	// Rascunho só-recompensas é permitido (carrinho vazio + recompensasResgate); a exigência de
 	// pelo menos um item quando não há recompensa é validada no service.
 	itens: z.array(CartItemInputSchema),
 });
@@ -89,13 +91,8 @@ const UpdateSaleDraftInputSchema = z.object({
 	acrescimosTotal: z.number({ invalid_type_error: "Tipo não válido para acréscimo." }).optional().nullable(),
 	cashbackResgate: z.number({ invalid_type_error: "Tipo não válido para resgate de cashback." }).default(0),
 	cupomResgate: AppliedCouponSchema.optional().nullable(),
-	recompensaResgate: z
-		.object({
-			recompensaId: z.string({ required_error: "ID da recompensa não informado." }),
-			programaId: z.string({ invalid_type_error: "Tipo não válido para ID do programa de cashback." }).optional().nullable(),
-		})
-		.optional()
-		.nullable(),
+	// Ausente = não altera as recompensas do rascunho; [] = remove todas; lista = substitui.
+	...saleRewardRedemptionInputFields,
 	rascunhoMetadados: z.unknown().optional().nullable(),
 	// Override tri-state da emissão fiscal automática. Ausente = não altera; null = herda a organização.
 	emissaoFiscalAutomatica: z.boolean({ invalid_type_error: "Tipo não válido para emissão fiscal automática." }).optional().nullable(),
@@ -124,27 +121,25 @@ function getSessionWithOrg(session: TAuthUserSession | null) {
 async function createSaleDraft({ input, session }: { input: TCreateSaleDraftInput; session: TAuthUserSession }) {
 	const orgId = session.membership!.organizacao.id;
 
-	if (input.itens.length === 0 && !input.recompensaResgate) {
+	const rewardLines = resolveRewardRedemptionLinesInput(input) ?? [];
+	if (input.itens.length === 0 && rewardLines.length === 0) {
 		throw new createHttpError.BadRequest("Pelo menos um item é obrigatório.");
 	}
 
 	// Nunca confie nos valores do cliente: recalcula os itens contra o catálogo antes de qualquer uso.
 	await validateSaleItemsPricing({ orgId, itens: input.itens, canal: "POS" });
 
-	// Recompensa no rascunho: valida e carimba o snapshot autoritativo em rascunhoMetadados.
-	// Item e débito de saldo só nascem na confirmação, que revalida tudo (preços podem mudar).
-	const admittedReward = input.recompensaResgate
-		? await admitSaleRewardRedemption({
-				tx: db,
-				organizacaoId: orgId,
-				clienteId: input.clienteId,
-				recompensaId: input.recompensaResgate.recompensaId,
-				programaId: input.recompensaResgate.programaId,
-				hasCoupon: !!input.cupomResgate,
-				cashbackResgate: input.cashbackResgate,
-				surface: "POS",
-			})
-		: null;
+	// Recompensas no rascunho: valida e carimba os snapshots autoritativos em rascunhoMetadados.
+	// Itens e débito de saldo só nascem na confirmação, que revalida tudo (preços podem mudar).
+	const admittedRewards = await admitSaleRewardRedemptions({
+		tx: db,
+		organizacaoId: orgId,
+		clienteId: input.clienteId,
+		recompensas: rewardLines,
+		hasCoupon: !!input.cupomResgate,
+		cashbackResgate: input.cashbackResgate,
+		surface: "POS",
+	});
 
 	// Override fiscal por venda: valida permissão simétrica e resolve o valor a persistir (null = herda org).
 	const emissaoFiscalAutomatica = resolveSaleFiscalEmissionOverride({
@@ -219,7 +214,7 @@ async function createSaleDraft({ input, session }: { input: TCreateSaleDraftInpu
 				rascunhoMetadados: {
 					...((input.rascunhoMetadados as Record<string, unknown> | null) ?? {}),
 					cupom: input.cupomResgate ?? null,
-					recompensa: admittedReward ? buildSaleRewardDraftSnapshot(admittedReward) : null,
+					...buildRewardSnapshotsMetadataKeys(buildSaleRewardDraftSnapshots(admittedRewards)),
 				},
 				parceiro: "",
 				chave: "",
@@ -399,8 +394,13 @@ async function updateSaleDraft({ input, session }: { input: TUpdateSaleDraftInpu
 
 	// Itens reenviados são recalculados contra o catálogo antes de virarem verdade do rascunho —
 	// mesma régua da criação, para que o líquido enviado nunca contorne o teto de desconto.
+	// Recompensas: ausente = não altera (o checkout multi-etapas atualiza o rascunho sem
+	// conhecê-las); [] = remove todas; lista = valida e recarimba os snapshots.
+	const rewardLinesInput = resolveRewardRedemptionLinesInput(input);
+	const recompensasSnapshotAtual = parseSaleRewardDraftSnapshots(existing.rascunhoMetadados);
+	const recompensasResultantes = rewardLinesInput === undefined ? recompensasSnapshotAtual.length : rewardLinesInput.length;
 	if (input.itens) {
-		if (input.itens.length === 0 && !parseSaleRewardDraftSnapshot(existing.rascunhoMetadados) && !input.recompensaResgate) {
+		if (input.itens.length === 0 && recompensasResultantes === 0) {
 			throw new createHttpError.BadRequest("O rascunho precisa de pelo menos um item.");
 		}
 		await validateSaleItemsPricing({ orgId, itens: input.itens, canal: "POS" });
@@ -422,33 +422,26 @@ async function updateSaleDraft({ input, session }: { input: TUpdateSaleDraftInpu
 		throw new createHttpError.BadRequest("O resgate de cashback não pode superar o valor da venda.");
 	}
 
-	// Recompensa no rascunho: ausente = não altera (o checkout multi-etapas atualiza o rascunho
-	// sem conhecer a recompensa); null = remove; objeto = valida e recarimba o snapshot.
-	// O item e o débito de saldo só nascem na confirmação.
-	const recompensaSnapshotAtual = parseSaleRewardDraftSnapshot(existing.rascunhoMetadados);
-	const admittedReward =
-		input.recompensaResgate !== undefined && input.recompensaResgate !== null
-			? await admitSaleRewardRedemption({
+	// Os itens e o débito de saldo só nascem na confirmação.
+	const admittedRewards =
+		rewardLinesInput && rewardLinesInput.length > 0
+			? await admitSaleRewardRedemptions({
 					tx: db,
 					organizacaoId: orgId,
 					clienteId: existing.clienteId,
-					recompensaId: input.recompensaResgate.recompensaId,
-					programaId: input.recompensaResgate.programaId,
+					recompensas: rewardLinesInput,
 					hasCoupon: !!input.cupomResgate,
 					cashbackResgate: input.cashbackResgate,
 					surface: "POS",
 				})
-			: null;
-	const recompensaPersistida = admittedReward
-		? buildSaleRewardDraftSnapshot(admittedReward)
-		: input.recompensaResgate === undefined
-			? recompensaSnapshotAtual
-			: null;
+			: [];
+	const recompensasPersistidas =
+		rewardLinesInput === undefined ? recompensasSnapshotAtual : rewardLinesInput.length > 0 ? buildSaleRewardDraftSnapshots(admittedRewards) : [];
 
-	// Exclusividade também vale para o snapshot preservado: sem esta checagem, um PUT com cupom
-	// (ou cashback) omitindo `recompensaResgate` gravaria os dois lado a lado e o rascunho ficaria
+	// Exclusividade também vale para os snapshots preservados: sem esta checagem, um PUT com cupom
+	// (ou cashback) omitindo as recompensas gravaria os dois lado a lado e o rascunho ficaria
 	// inconfirmável para sempre — a confirmação recusa a combinação.
-	if (recompensaPersistida) {
+	if (recompensasPersistidas.length > 0) {
 		if (input.cupomResgate) {
 			throw new createHttpError.BadRequest("Cupons não podem ser combinados com resgate de recompensa. Remova a recompensa para aplicar o cupom.");
 		}
@@ -480,7 +473,7 @@ async function updateSaleDraft({ input, session }: { input: TUpdateSaleDraftInpu
 				rascunhoMetadados: {
 					...((input.rascunhoMetadados as Record<string, unknown> | null) ?? {}),
 					cupom: input.cupomResgate ?? null,
-					recompensa: recompensaPersistida,
+					...buildRewardSnapshotsMetadataKeys(recompensasPersistidas),
 				},
 				emissaoFiscalAutomatica,
 			})

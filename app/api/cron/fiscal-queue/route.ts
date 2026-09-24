@@ -8,7 +8,7 @@ async function processFiscalQueueRoute(_req: NextRequest) {
 	return NextResponse.json(
 		{
 			data: result,
-			message: `Fila fiscal processada: ${result.enviados} enviados, ${result.falhas} falhas, ${result.sincronizados} sincronizados.`,
+			message: `Fila fiscal processada: ${result.enviados} enviados, ${result.falhas} falhas, ${result.sincronizados} sincronizados, ${result.agendamentosExecutados} agendamentos executados.`,
 		},
 		{ status: 200 },
 	);

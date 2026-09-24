@@ -12,10 +12,18 @@ import { getErrorMessage } from "@/lib/errors";
 import { formatCashbackValue, formatToCPForCNPJ, formatToMoney, formatToPhone } from "@/lib/formatting";
 import { createPointOfInteractionSale } from "@/lib/mutations/sales";
 import {
+	addPoiPrizeLine,
+	setPoiPrizeLineQuantity,
+	sumPoiPrizeSaleValue,
+	sumPoiPrizeValue,
+	type TPoiPrizeLine,
+} from "@/lib/point-of-interaction/prize-lines";
+import {
 	getPoiSaleValueForConfirmation,
 	poiSaleRequiresValueConfirmation,
 	saleValuesMatch,
 } from "@/lib/point-of-interaction/sale-value-confirmation";
+import { MAX_REWARD_REDEMPTION_QUANTITY_PER_LINE } from "@/lib/sales/sale-reward-snapshot";
 import { useCashbackProgram } from "@/lib/queries/cashback-programs";
 import { useClientByLookup } from "@/lib/queries/clients";
 import { Input } from "@/components/ui/input";
@@ -31,7 +39,7 @@ import {
 	usePointOfInteractionNewInternalTransactionRequestState,
 } from "@/state-hooks/use-point-of-interaction-new-internal-transaction-request";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { BadgePercent, CheckCircle2, Gift, LockKeyhole, ShoppingCart, UserRound } from "lucide-react";
+import { BadgePercent, CheckCircle2, Gift, LockKeyhole, Minus, Plus, ShoppingCart, UserRound } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -69,7 +77,9 @@ export function NewTransaction({ sessionOrgId, sessionUser, poiConfirmacaoValorO
 		updateClient,
 		updateSale,
 		updateCashback,
-		updatePrizeRedemption,
+		updatePrizeRedemptions,
+		addPrizeRedemption,
+		setPrizeRedemptionQuantity,
 		updateOperatorIdentifier,
 		updateOperatorConfirmedSaleValue,
 		resetState,
@@ -81,7 +91,9 @@ export function NewTransaction({ sessionOrgId, sessionUser, poiConfirmacaoValorO
 		queryKey: cashbackProgramQueryKey,
 	} = useCashbackProgram();
 	const [flowMode, setFlowMode] = useState<TNewTransactionFlowMode>("discount");
-	const [selectedPrize, setSelectedPrize] = useState<TInternalPrize | null>(null);
+	// Cesta de recompensas: uma linha por recompensa distinta, com quantidade. A fonte da verdade é
+	// o estado do hook; `sale.valor` e `sale.cashback` são espelhos das somas das linhas.
+	const selectedLines = state.sale.prizeRedemptions;
 
 	const prizes = useMemo<TInternalPrize[]>(() => {
 		return (
@@ -107,6 +119,8 @@ export function NewTransaction({ sessionOrgId, sessionUser, poiConfirmacaoValorO
 		initialParams: { orgId: sessionOrgId, phone: state.client.telefone },
 	});
 	const availableCashback = useMemo(() => getAvailableCashback(clientData?.saldos), [clientData?.saldos]);
+	const selectedPrizeValue = useMemo(() => sumPoiPrizeValue(selectedLines), [selectedLines]);
+	const remainingCashback = availableCashback - selectedPrizeValue;
 	const redemptionLimitConfig = useMemo(() => getRedemptionLimitConfig(clientData?.saldos), [clientData?.saldos]);
 	const maximumCashbackAllowed = useMemo(
 		() => getMaxCashbackToUse(availableCashback, state.sale.valor, redemptionLimitConfig),
@@ -159,20 +173,46 @@ export function NewTransaction({ sessionOrgId, sessionUser, poiConfirmacaoValorO
 		if (mode === "prize" && !isPrizeModeAllowed) return toast.error("A modalidade de recompensas não está disponível.");
 
 		setFlowMode(mode);
-		setSelectedPrize(null);
-		updatePrizeRedemption(null);
-		updateCashback({ aplicar: false, valor: 0 });
-		updateSale({ valor: 0 });
+		updatePrizeRedemptions([]);
+		mirrorPrizeLines([]);
 	}
 
-	function handleSelectPrize(prize: TInternalPrize) {
-		if (availableCashback < prize.valor) return toast.error("Saldo insuficiente para resgatar esta recompensa.");
-		if (prize.valorVenda <= 0) return toast.error("Esta recompensa não possui valor comercial configurado.");
+	// Espelha as somas das linhas em `sale.valor` (valor comercial total) e `sale.cashback` (débito
+	// total de saldo). `next` é calculado localmente com os mesmos helpers do hook para o espelho
+	// ser exato, sem depender de um re-render intermediário.
+	function mirrorPrizeLines(next: TPoiPrizeLine[]) {
+		updateSale({ valor: sumPoiPrizeSaleValue(next) });
+		updateCashback({ aplicar: next.length > 0, valor: sumPoiPrizeValue(next) });
+	}
 
-		setSelectedPrize(prize);
-		updateSale({ valor: prize.valorVenda });
-		updateCashback({ aplicar: true, valor: prize.valor });
-		updatePrizeRedemption({ prizeId: prize.id, prizeValue: prize.valor, prizeSaleValue: prize.valorVenda });
+	function handleAddPrize(prize: TInternalPrize) {
+		if (prize.valorVenda <= 0) return toast.error("Esta recompensa não possui valor comercial configurado.");
+		const currentLine = selectedLines.find((line) => line.prizeId === prize.id);
+		if (currentLine && currentLine.quantity >= MAX_REWARD_REDEMPTION_QUANTITY_PER_LINE) {
+			return toast.error(`Quantidade máxima por recompensa é ${MAX_REWARD_REDEMPTION_QUANTITY_PER_LINE}.`);
+		}
+		if (remainingCashback < prize.valor) return toast.error("Saldo restante insuficiente para adicionar esta recompensa.");
+
+		const next = addPoiPrizeLine(selectedLines, prize);
+		addPrizeRedemption(prize);
+		mirrorPrizeLines(next);
+	}
+
+	function handleSetPrizeQuantity(prizeId: string, quantity: number) {
+		const prize = prizes.find((item) => item.id === prizeId);
+		const currentLine = selectedLines.find((line) => line.prizeId === prizeId);
+		if (!prize || !currentLine) return;
+		if (quantity > MAX_REWARD_REDEMPTION_QUANTITY_PER_LINE) {
+			return toast.error(`Quantidade máxima por recompensa é ${MAX_REWARD_REDEMPTION_QUANTITY_PER_LINE}.`);
+		}
+		// Ao aumentar, o incremento é validado contra o saldo RESTANTE (disponível − já selecionado).
+		if (quantity > currentLine.quantity && remainingCashback < prize.valor * (quantity - currentLine.quantity)) {
+			return toast.error("Saldo restante insuficiente para adicionar esta recompensa.");
+		}
+
+		const next = setPoiPrizeLineQuantity(selectedLines, prizeId, quantity);
+		setPrizeRedemptionQuantity(prizeId, quantity);
+		mirrorPrizeLines(next);
 	}
 
 	function handleSubmit() {
@@ -181,7 +221,7 @@ export function NewTransaction({ sessionOrgId, sessionUser, poiConfirmacaoValorO
 		if (state.sale.valor <= 0) return toast.error("Informe um valor de venda positivo.");
 		if (state.sale.cashback.aplicar && state.sale.cashback.valor <= 0) return toast.error("Informe o valor do cashback.");
 		if (isAttemptingToUseMoreCashbackThanAllowed) return toast.error("O cashback aplicado excede o limite disponível para esta venda.");
-		if (flowMode === "prize" && !selectedPrize) return toast.error("Selecione uma recompensa.");
+		if (flowMode === "prize" && selectedLines.length === 0) return toast.error("Selecione ao menos uma recompensa.");
 		if (state.operatorIdentifier.length !== OPERATOR_PASSWORD_LENGTH) return toast.error("Informe os 5 dígitos da senha do operador.");
 		if (requiresSaleValueConfirmation && state.operatorConfirmedSaleValue == null) return toast.error("Confirme o valor final da venda.");
 		if (
@@ -233,10 +273,11 @@ export function NewTransaction({ sessionOrgId, sessionUser, poiConfirmacaoValorO
 				{flowMode === "prize" ? (
 					<NewTransactionPrizeFlow
 						prizes={prizes}
-						selectedPrize={selectedPrize}
-						availableCashback={availableCashback}
+						selectedLines={selectedLines}
+						remainingCashback={remainingCashback}
 						terminology={terminology}
-						onSelectPrize={handleSelectPrize}
+						onAddPrize={handleAddPrize}
+						onSetPrizeQuantity={handleSetPrizeQuantity}
 					/>
 				) : (
 					<NewTransactionDiscountFlow
@@ -249,7 +290,13 @@ export function NewTransaction({ sessionOrgId, sessionUser, poiConfirmacaoValorO
 						terminology={terminology}
 					/>
 				)}
-				<NewTransactionSummaryBlock state={state} finalValue={finalValue} terminology={terminology} selectedPrize={selectedPrize} />
+				<NewTransactionSummaryBlock
+					state={state}
+					finalValue={finalValue}
+					terminology={terminology}
+					selectedPrizes={flowMode === "prize" ? selectedLines : []}
+					prizes={prizes}
+				/>
 				<ResponsiveMenuSection title="OPERADOR" icon={<LockKeyhole className="h-4 min-h-4 w-4 min-w-4" />}>
 					{requiresSaleValueConfirmation ? (
 						<SaleValueConfirmationInput value={state.operatorConfirmedSaleValue} onChange={updateOperatorConfirmedSaleValue} compact />
@@ -387,52 +434,123 @@ function NewTransactionFlowSelector({ flowMode, isDiscountModeAllowed, isPrizeMo
 
 type NewTransactionPrizeFlowProps = {
 	prizes: TInternalPrize[];
-	selectedPrize: TInternalPrize | null;
-	availableCashback: number;
+	selectedLines: TPoiPrizeLine[];
+	remainingCashback: number;
 	terminology: TCashbackProgramTerminologyEnum;
-	onSelectPrize: (prize: TInternalPrize) => void;
+	onAddPrize: (prize: TInternalPrize) => void;
+	onSetPrizeQuantity: (prizeId: string, quantity: number) => void;
 };
-function NewTransactionPrizeFlow({ prizes, selectedPrize, availableCashback, terminology, onSelectPrize }: NewTransactionPrizeFlowProps) {
+function NewTransactionPrizeFlow({ prizes, selectedLines, remainingCashback, terminology, onAddPrize, onSetPrizeQuantity }: NewTransactionPrizeFlowProps) {
 	const [searchQuery, setSearchQuery] = useState("");
-	const prizesSortedByValue = prizes.sort((a, b) => a.valor - b.valor);
+	const prizesSortedByValue = [...prizes].sort((a, b) => a.valor - b.valor);
 	const prizesFiltered = prizesSortedByValue.filter((prize) => prize.titulo.toLowerCase().includes(searchQuery.toLowerCase()));
+	const selectedQuantityByPrizeId = new Map(selectedLines.map((line) => [line.prizeId, line.quantity]));
+	const selectedUnits = selectedLines.reduce((sum, line) => sum + line.quantity, 0);
 	return (
-		<ResponsiveMenuSection title="RECOMPENSA" icon={<Gift className="h-4 min-h-4 w-4 min-w-4" />}>
+		<ResponsiveMenuSection title="RECOMPENSAS" icon={<Gift className="h-4 min-h-4 w-4 min-w-4" />}>
 			<div className="flex flex-col gap-3">
+				<div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-secondary/60 px-3 py-2">
+					<div>
+						<p className="text-xs text-muted-foreground">SALDO RESTANTE</p>
+						<p className={`text-sm font-black ${remainingCashback < 0 ? "text-red-600" : "text-brand"}`}>
+							{formatCashbackValue(Math.max(remainingCashback, 0), terminology)}
+						</p>
+					</div>
+					<p className="text-xs font-medium text-muted-foreground">
+						{selectedUnits === 0
+							? "Nenhuma recompensa selecionada"
+							: `${selectedUnits} ${selectedUnits === 1 ? "unidade selecionada" : "unidades selecionadas"}`}
+					</p>
+				</div>
 				<Input placeholder="Pesquisar recompensa..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
 				{prizesFiltered.length === 0 ? (
 					<p className="text-sm text-muted-foreground">Nenhuma recompensa ativa encontrada.</p>
 				) : (
 					<div className="grid gap-3 sm:grid-cols-2">
 						{prizesFiltered.map((prize) => {
-							const isSelected = selectedPrize?.id === prize.id;
-							const isDisabled = availableCashback < prize.valor || prize.valorVenda <= 0;
+							const quantity = selectedQuantityByPrizeId.get(prize.id) ?? 0;
+							const isSelected = quantity > 0;
+							const hasNoSaleValue = prize.valorVenda <= 0;
+							// "Cabe mais uma?" é sempre contra o saldo restante, nunca contra o saldo total.
+							const fitsRemainingBalance = remainingCashback >= prize.valor;
+							const reachedQuantityCap = quantity >= MAX_REWARD_REDEMPTION_QUANTITY_PER_LINE;
+							const canAddOneMore = !hasNoSaleValue && fitsRemainingBalance && !reachedQuantityCap;
+							const isDisabled = !isSelected && !canAddOneMore;
 							return (
-								<button
+								<div
 									key={prize.id}
-									type="button"
-									disabled={isDisabled}
-									onClick={() => onSelectPrize(prize)}
-									className={`flex min-h-28 w-full items-center gap-3 rounded-2xl border p-3 text-left transition ${
-										isSelected ? "border-brand bg-brand/10" : "border-border/15 bg-card hover:border-brand/50"
-									} ${isDisabled ? "cursor-not-allowed opacity-50" : ""}`}
+									className={`flex min-h-28 w-full flex-col gap-3 rounded-2xl border p-3 text-left transition ${
+										isSelected ? "border-brand bg-brand/10" : "border-border/15 bg-card"
+									} ${isDisabled ? "opacity-50" : ""}`}
 								>
-									<div className="relative h-16 w-16 min-w-16 overflow-hidden rounded-xl bg-secondary">
-										{prize.imagemCapaUrl ? (
-											<Image src={prize.imagemCapaUrl} alt={prize.titulo} fill className="object-cover" />
-										) : (
-											<div className="flex h-full w-full items-center justify-center">
-												<Gift className="h-6 w-6 text-muted-foreground" />
+									<div className="flex items-center gap-3">
+										<div className="relative h-16 w-16 min-w-16 overflow-hidden rounded-xl bg-secondary">
+											{prize.imagemCapaUrl ? (
+												<Image src={prize.imagemCapaUrl} alt={prize.titulo} fill className="object-cover" />
+											) : (
+												<div className="flex h-full w-full items-center justify-center">
+													<Gift className="h-6 w-6 text-muted-foreground" />
+												</div>
+											)}
+										</div>
+										<div className="flex min-w-0 flex-1 flex-col gap-1">
+											<p className="truncate text-sm font-black uppercase tracking-tight">{prize.titulo}</p>
+											<p className="text-xs font-bold text-brand">{formatCashbackValue(prize.valor, terminology)}</p>
+											<p className="text-xs text-muted-foreground">Valor comercial: {formatToMoney(prize.valorVenda)}</p>
+										</div>
+										{isSelected ? <CheckCircle2 className="h-5 w-5 min-w-5 text-brand" /> : null}
+									</div>
+									{isSelected ? (
+										<div className="flex items-center justify-between gap-2">
+											<div className="flex items-center gap-1">
+												<Button
+													type="button"
+													variant="outline"
+													size="icon-sm"
+													aria-label={`Remover uma unidade de ${prize.titulo}`}
+													onClick={() => onSetPrizeQuantity(prize.id, quantity - 1)}
+												>
+													<Minus className="h-4 w-4" />
+												</Button>
+												<span className="min-w-8 text-center text-sm font-black tabular-nums">{quantity}</span>
+												<Button
+													type="button"
+													variant="outline"
+													size="icon-sm"
+													disabled={!canAddOneMore}
+													aria-label={`Adicionar uma unidade de ${prize.titulo}`}
+													onClick={() => onAddPrize(prize)}
+												>
+													<Plus className="h-4 w-4" />
+												</Button>
 											</div>
-										)}
-									</div>
-									<div className="flex min-w-0 flex-1 flex-col gap-1">
-										<p className="truncate text-sm font-black uppercase tracking-tight">{prize.titulo}</p>
-										<p className="text-xs font-bold text-brand">{formatCashbackValue(prize.valor, terminology)}</p>
-										<p className="text-xs text-muted-foreground">Valor comercial: {formatToMoney(prize.valorVenda)}</p>
-									</div>
-									{isSelected ? <CheckCircle2 className="h-5 w-5 min-w-5 text-brand" /> : null}
-								</button>
+											{!canAddOneMore ? (
+												<p className="text-right text-[0.65rem] font-medium text-muted-foreground">
+													{reachedQuantityCap ? "Quantidade máxima atingida" : "Saldo restante insuficiente"}
+												</p>
+											) : null}
+										</div>
+									) : (
+										<div className="flex items-center justify-between gap-2">
+											<Button
+												type="button"
+												variant={canAddOneMore ? "brand" : "outline"}
+												size="sm"
+												disabled={!canAddOneMore}
+												className="flex items-center gap-1.5"
+												onClick={() => onAddPrize(prize)}
+											>
+												<Plus className="h-4 w-4" />
+												ADICIONAR
+											</Button>
+											{!canAddOneMore ? (
+												<p className="text-right text-[0.65rem] font-medium text-muted-foreground">
+													{hasNoSaleValue ? "Sem valor comercial configurado" : "Saldo restante insuficiente"}
+												</p>
+											) : null}
+										</div>
+									)}
+								</div>
 							);
 						})}
 					</div>
@@ -504,9 +622,13 @@ type NewTransactionSummaryBlockProps = {
 	state: TPointOfInteractionNewInternalTransactionRequestState;
 	finalValue: number;
 	terminology: TCashbackProgramTerminologyEnum;
-	selectedPrize: TInternalPrize | null;
+	selectedPrizes: TPoiPrizeLine[];
+	prizes: TInternalPrize[];
 };
-function NewTransactionSummaryBlock({ state, finalValue, terminology, selectedPrize }: NewTransactionSummaryBlockProps) {
+function NewTransactionSummaryBlock({ state, finalValue, terminology, selectedPrizes, prizes }: NewTransactionSummaryBlockProps) {
+	const prizeById = new Map(prizes.map((prize) => [prize.id, prize]));
+	const totalPrizeValue = sumPoiPrizeValue(selectedPrizes);
+	const totalPrizeSaleValue = sumPoiPrizeSaleValue(selectedPrizes);
 	return (
 		<ResponsiveMenuSection title="RESUMO" icon={<CheckCircle2 className="h-4 min-h-4 w-4 min-w-4" />}>
 			<div className="grid gap-2 text-xs sm:grid-cols-2">
@@ -526,10 +648,31 @@ function NewTransactionSummaryBlock({ state, finalValue, terminology, selectedPr
 					<p className="text-xs text-muted-foreground">VALOR FINAL</p>
 					<p className="font-bold">{formatToMoney(finalValue)}</p>
 				</div>
-				{selectedPrize ? (
-					<div className="rounded-xl bg-amber-50 px-3 py-2 text-amber-900 sm:col-span-2">
-						<p className="text-amber-700">RECOMPENSA SELECIONADA</p>
-						<p className="font-bold">{selectedPrize.titulo}</p>
+				{selectedPrizes.length > 0 ? (
+					<div className="flex flex-col gap-1.5 rounded-xl bg-amber-50 px-3 py-2 text-amber-900 sm:col-span-2">
+						<p className="text-amber-700">{selectedPrizes.length === 1 ? "RECOMPENSA SELECIONADA" : "RECOMPENSAS SELECIONADAS"}</p>
+						<ul className="flex flex-col gap-1">
+							{selectedPrizes.map((line) => {
+								const prize = prizeById.get(line.prizeId);
+								return (
+									<li key={line.prizeId} className="flex items-center justify-between gap-2">
+										<span className="min-w-0 truncate font-bold">
+											{prize?.titulo ?? "Recompensa"}
+											<span className="ml-1 font-black tabular-nums">×{line.quantity}</span>
+										</span>
+										<span className="whitespace-nowrap text-amber-700 tabular-nums">{formatCashbackValue(line.prizeValue * line.quantity, terminology)}</span>
+									</li>
+								);
+							})}
+						</ul>
+						<div className="flex flex-wrap items-center justify-between gap-2 border-t border-amber-200 pt-1.5">
+							<span>
+								Débito total: <strong>{formatCashbackValue(totalPrizeValue, terminology)}</strong>
+							</span>
+							<span>
+								Valor comercial total: <strong>{formatToMoney(totalPrizeSaleValue)}</strong>
+							</span>
+						</div>
 					</div>
 				) : null}
 			</div>

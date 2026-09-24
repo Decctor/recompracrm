@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { channelAddOnReferences, resolveChannelAvailability, resolveChannelPrice } from "./sales-channels";
+import {
+	channelAddOnReferences,
+	resolveChannelAvailability,
+	resolveChannelPrice,
+	splitChannelSettingNodes,
+	validateChannelSettingNodes,
+} from "./sales-channels";
 
 const product = { ativo: true, vendavel: true, precoVenda: 20, rastreamentoEstoqueAtivo: false, quantidade: 0 };
 
@@ -136,4 +142,118 @@ test("canal que dispensa mínimos zera minOpcoes e preserva o resto do grupo", (
 	);
 	// A projeção é uma cópia: o catálogo em memória do chamador não é mutado.
 	assert.equal(REFERENCIAS[0].grupo.minOpcoes, 1);
+});
+
+// ---------------------------------------------------------------------------
+// validateChannelSettingNodes / splitChannelSettingNodes
+// ---------------------------------------------------------------------------
+
+const CANAIS = new Set(["pos", "shop"]);
+
+test("matriz válida de produto sem variantes passa, com preço nível-produto", () => {
+	const erro = validateChannelSettingNodes({
+		settings: [
+			{ canalVendaId: "pos", produtoVarianteId: null, disponivel: null, precoVenda: 12 },
+			{ canalVendaId: "shop", produtoVarianteId: null, disponivel: false, precoVenda: null },
+		],
+		ownedChannelIds: CANAIS,
+		variantIds: new Set(),
+	});
+	assert.equal(erro, null);
+});
+
+test("nó repetido (canal + variante) é recusado antes de virar violação de unique", () => {
+	const erro = validateChannelSettingNodes({
+		settings: [
+			{ canalVendaId: "pos", produtoVarianteId: "v1", disponivel: true },
+			{ canalVendaId: "pos", produtoVarianteId: "v1", precoVenda: 10 },
+		],
+		ownedChannelIds: CANAIS,
+		variantIds: new Set(["v1"]),
+	});
+	assert.equal(erro, "Há configurações repetidas para o mesmo canal e variante.");
+	// Nível-produto (nulo) e nível-variante são nós diferentes do mesmo canal.
+	assert.equal(
+		validateChannelSettingNodes({
+			settings: [
+				{ canalVendaId: "pos", produtoVarianteId: null, disponivel: true },
+				{ canalVendaId: "pos", produtoVarianteId: "v1", disponivel: false },
+			],
+			ownedChannelIds: CANAIS,
+			variantIds: new Set(["v1"]),
+		}),
+		null,
+	);
+});
+
+test("canal de outra organização e variante de outro produto são recusados", () => {
+	assert.equal(
+		validateChannelSettingNodes({
+			settings: [{ canalVendaId: "ifood-da-outra-org", disponivel: true }],
+			ownedChannelIds: CANAIS,
+			variantIds: new Set(),
+		}),
+		"Um canal de venda não pertence à organização.",
+	);
+	assert.equal(
+		validateChannelSettingNodes({
+			settings: [{ canalVendaId: "pos", produtoVarianteId: "v-alheia", disponivel: true }],
+			ownedChannelIds: CANAIS,
+			variantIds: new Set(["v1"]),
+		}),
+		"Uma variante não pertence ao produto.",
+	);
+});
+
+test("produto com variantes não aceita preço nível-produto, mas aceita disponibilidade", () => {
+	const variantes = new Set(["v1"]);
+	assert.equal(
+		validateChannelSettingNodes({
+			settings: [{ canalVendaId: "pos", produtoVarianteId: null, precoVenda: 10 }],
+			ownedChannelIds: CANAIS,
+			variantIds: variantes,
+		}),
+		"Defina o preço por canal em cada variante deste produto.",
+	);
+	assert.equal(
+		validateChannelSettingNodes({
+			settings: [
+				{ canalVendaId: "pos", produtoVarianteId: null, disponivel: false },
+				{ canalVendaId: "pos", produtoVarianteId: "v1", precoVenda: 10 },
+			],
+			ownedChannelIds: CANAIS,
+			variantIds: variantes,
+		}),
+		null,
+	);
+});
+
+test("hasVariants explícito recusa preço nível-produto mesmo sem referências de variante", () => {
+	// POST com variantes sem referenciaId: o conjunto de refs é vazio, mas o produto TEM variantes.
+	assert.equal(
+		validateChannelSettingNodes({
+			settings: [{ canalVendaId: "pos", produtoVarianteId: null, precoVenda: 10 }],
+			ownedChannelIds: CANAIS,
+			variantIds: new Set(),
+			hasVariants: true,
+		}),
+		"Defina o preço por canal em cada variante deste produto.",
+	);
+});
+
+test("nó com os dois campos nulos volta a herdar; qualquer um preenchido vira linha", () => {
+	const { upserts, clears } = splitChannelSettingNodes([
+		{ canalVendaId: "pos", produtoVarianteId: null, disponivel: null, precoVenda: null },
+		{ canalVendaId: "pos", produtoVarianteId: "v1", disponivel: false, precoVenda: null },
+		{ canalVendaId: "shop", produtoVarianteId: "v1", disponivel: null, precoVenda: 0 },
+	]);
+	assert.deepEqual(
+		clears.map((node) => node.canalVendaId + ":" + (node.produtoVarianteId ?? "")),
+		["pos:"],
+	);
+	// Preço zero é um override (não é "sem preço"), então entra nas linhas.
+	assert.deepEqual(
+		upserts.map((node) => node.canalVendaId + ":" + node.produtoVarianteId),
+		["pos:v1", "shop:v1"],
+	);
 });

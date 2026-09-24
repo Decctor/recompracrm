@@ -5,7 +5,7 @@ import { PeriodQueryParamSchema } from "@/schemas/query-params-utils";
 import { db } from "@/services/drizzle";
 import { cashbackProgramBalances, cashbackProgramTransactions, clients, sales } from "@/services/drizzle/schema";
 import dayjs from "dayjs";
-import { and, count, countDistinct, eq, gte, isNull, lt, lte, sum } from "drizzle-orm";
+import { and, count, countDistinct, eq, gte, isNull, lt, lte, sql, sum } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import z from "zod";
@@ -92,6 +92,36 @@ type TCashbackProgramStats = {
 type GetResponse = {
 	data: TCashbackProgramStats;
 };
+
+// Chave de "venda" de um RESGATE: o vendaId quando existe; resgates sem venda (POI sem registro
+// de venda) contam pela própria linha, como antes.
+const redemptionSaleKey = sql<string>`coalesce(${cashbackProgramTransactions.vendaId}, ${cashbackProgramTransactions.id})`;
+
+function redemptionPeriodConditions({ orgId, after, before }: { orgId: string; after: Date; before: Date }) {
+	return and(
+		eq(cashbackProgramTransactions.organizacaoId, orgId),
+		eq(cashbackProgramTransactions.tipo, "RESGATE"),
+		gte(cashbackProgramTransactions.dataInsercao, after),
+		lte(cashbackProgramTransactions.dataInsercao, before),
+	);
+}
+
+function countSalesWithRedemption(params: { orgId: string; after: Date; before: Date }) {
+	return db
+		.select({ count: sql<number>`count(distinct ${redemptionSaleKey})`.mapWith(Number) })
+		.from(cashbackProgramTransactions)
+		.where(redemptionPeriodConditions(params));
+}
+
+function sumSalesWithRedemptionValue(params: { orgId: string; after: Date; before: Date }) {
+	const perSale = db
+		.select({ vendaValor: sql<number>`max(${cashbackProgramTransactions.vendaValor})`.as("venda_valor") })
+		.from(cashbackProgramTransactions)
+		.where(redemptionPeriodConditions(params))
+		.groupBy(redemptionSaleKey)
+		.as("resgates_por_venda");
+	return db.select({ total: sum(perSale.vendaValor) }).from(perSale);
+}
 
 async function getCashbackProgramStats({
 	input,
@@ -245,30 +275,11 @@ async function getCashbackProgramStats({
 			.select({ count: count() })
 			.from(sales)
 			.where(and(...saleConditions, gte(sales.dataVenda, ajustedAfter), lte(sales.dataVenda, ajustedBefore))),
-		// Sales with cashback count (RESGATE transactions)
-		db
-			.select({ count: count() })
-			.from(cashbackProgramTransactions)
-			.where(
-				and(
-					eq(cashbackProgramTransactions.organizacaoId, userOrgId),
-					eq(cashbackProgramTransactions.tipo, "RESGATE"),
-					gte(cashbackProgramTransactions.dataInsercao, ajustedAfter),
-					lte(cashbackProgramTransactions.dataInsercao, ajustedBefore),
-				),
-			),
-		// Sales with cashback value (sum vendaValor from RESGATE transactions)
-		db
-			.select({ total: sum(cashbackProgramTransactions.vendaValor) })
-			.from(cashbackProgramTransactions)
-			.where(
-				and(
-					eq(cashbackProgramTransactions.organizacaoId, userOrgId),
-					eq(cashbackProgramTransactions.tipo, "RESGATE"),
-					gte(cashbackProgramTransactions.dataInsercao, ajustedAfter),
-					lte(cashbackProgramTransactions.dataInsercao, ajustedBefore),
-				),
-			),
+		// Sales with cashback count: vendas distintas com RESGATE. Uma venda com várias recompensas
+		// tem várias linhas RESGATE — contar linhas contaria a mesma venda N vezes.
+		countSalesWithRedemption({ orgId: userOrgId, after: ajustedAfter, before: ajustedBefore }),
+		// Sales with cashback value: vendaValor uma vez por venda, pelo mesmo motivo.
+		sumSalesWithRedemptionValue({ orgId: userOrgId, after: ajustedAfter, before: ajustedBefore }),
 	]);
 
 	const currentTotalClients = totalClientsResult[0]?.count ?? 0;
@@ -424,30 +435,9 @@ async function getCashbackProgramStats({
 			.select({ count: count() })
 			.from(sales)
 			.where(and(...saleConditions, gte(sales.dataVenda, previousPeriodAfter), lte(sales.dataVenda, previousPeriodBefore))),
-		// Previous sales with cashback count
-		db
-			.select({ count: count() })
-			.from(cashbackProgramTransactions)
-			.where(
-				and(
-					eq(cashbackProgramTransactions.organizacaoId, userOrgId),
-					eq(cashbackProgramTransactions.tipo, "RESGATE"),
-					gte(cashbackProgramTransactions.dataInsercao, previousPeriodAfter),
-					lte(cashbackProgramTransactions.dataInsercao, previousPeriodBefore),
-				),
-			),
-		// Previous sales with cashback value
-		db
-			.select({ total: sum(cashbackProgramTransactions.vendaValor) })
-			.from(cashbackProgramTransactions)
-			.where(
-				and(
-					eq(cashbackProgramTransactions.organizacaoId, userOrgId),
-					eq(cashbackProgramTransactions.tipo, "RESGATE"),
-					gte(cashbackProgramTransactions.dataInsercao, previousPeriodAfter),
-					lte(cashbackProgramTransactions.dataInsercao, previousPeriodBefore),
-				),
-			),
+		// Previous sales with cashback count / value (mesma régua: uma vez por venda)
+		countSalesWithRedemption({ orgId: userOrgId, after: previousPeriodAfter, before: previousPeriodBefore }),
+		sumSalesWithRedemptionValue({ orgId: userOrgId, after: previousPeriodAfter, before: previousPeriodBefore }),
 	]);
 
 	const previousTotalClients = prevTotalClientsResult[0]?.count ?? 0;

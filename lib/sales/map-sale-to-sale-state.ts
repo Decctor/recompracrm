@@ -1,5 +1,5 @@
 import type { TGetSaleForEditOutput } from "@/app/api/pos/sales/edit/route";
-import { POS_REWARD_SALE_ITEM_ORIGIN, parseSaleRewardDraftSnapshot } from "@/lib/sales/sale-reward-snapshot";
+import { POS_REWARD_SALE_ITEM_ORIGIN, parseSaleRewardDraftSnapshots } from "@/lib/sales/sale-reward-snapshot";
 import { readShopDeliveryFee } from "@/lib/shop/config";
 import type { TCartItem, TCartItemModifier, TSaleState } from "@/state-hooks/use-sale-state";
 import type { TCheckoutPaymentSplit } from "@/lib/payments/schemas";
@@ -159,13 +159,15 @@ export function mapSaleForEditToSaleState(
 	const cashbackResgate = data.cashbackResgate;
 	const cupomDesconto = data.cupomResgatado?.valorDesconto ?? 0;
 	const itens = venda.itens.map(mapItemToCartItem);
-	// Recompensa resgatada: o item dá o valor comercial e a identidade visual; o débito de saldo
-	// vem do ledger (`recompensaResgatada`), nunca do snapshot do rascunho, que pode estar velho.
-	const rewardItem = itens.find((item) => !!item.recompensaId);
-	const recompensaSnapshot = parseSaleRewardDraftSnapshot(venda.rascunhoMetadados);
-	const descontoRecompensa = rewardItem?.valorDesconto ?? 0;
+	// Recompensas resgatadas: cada item dá o valor comercial e a identidade visual; o débito de
+	// saldo vem do ledger (`recompensasResgatadas`), nunca do snapshot do rascunho, que pode estar
+	// velho. `descontoGeral` derivado subtrai TODAS as recompensas — subtrair só uma inventaria um
+	// desconto geral igual ao valor comercial das outras, e salvar a tela persistiria isso.
+	const rewardItems = itens.filter((item): item is TCartItem & { recompensaId: string } => !!item.recompensaId);
+	const recompensaSnapshots = parseSaleRewardDraftSnapshots(venda.rascunhoMetadados);
+	const descontoRecompensas = rewardItems.reduce((sum, item) => sum + item.valorDesconto, 0);
 	const descontoGeral =
-		draftMetadata?.descontoGeral ?? Math.max(0, (venda.descontosTotal ?? 0) - cupomDesconto - cashbackResgate - descontoRecompensa);
+		draftMetadata?.descontoGeral ?? Math.max(0, (venda.descontosTotal ?? 0) - cupomDesconto - cashbackResgate - descontoRecompensas);
 	const taxaEntrega = Math.min(draftMetadata?.taxaEntrega ?? readShopDeliveryFee(venda.rascunhoMetadados), venda.acrescimosTotal ?? 0);
 
 	return {
@@ -192,17 +194,21 @@ export function mapSaleForEditToSaleState(
 					titulo: data.cupomResgatado.cupomTitulo,
 				}
 			: null,
-		recompensaResgate:
-			rewardItem && rewardItem.recompensaId
-				? {
-						recompensaId: rewardItem.recompensaId,
-						programaId: recompensaSnapshot?.programaId ?? "",
-						titulo: recompensaSnapshot?.titulo || rewardItem.nome,
-						valor: data.recompensaResgatada?.valor ?? recompensaSnapshot?.valor ?? 0,
-						valorVenda: rewardItem.valorTotalBruto,
-						imagemCapaUrl: rewardItem.imagemUrl ?? null,
-					}
-				: null,
+		recompensasResgate: rewardItems.map((rewardItem) => {
+			const snapshot = recompensaSnapshots.find((entry) => entry.recompensaId === rewardItem.recompensaId) ?? null;
+			const ledger = data.recompensasResgatadas.find((entry) => entry.recompensaId === rewardItem.recompensaId) ?? null;
+			const quantidade = Math.max(1, rewardItem.quantidade);
+			return {
+				recompensaId: rewardItem.recompensaId,
+				programaId: snapshot?.programaId ?? "",
+				titulo: snapshot?.titulo || rewardItem.nome,
+				// Por unidade: o ledger guarda o total da linha.
+				valor: ledger ? ledger.valor / quantidade : (snapshot?.valor ?? 0),
+				valorVenda: rewardItem.valorUnitarioFinal,
+				imagemCapaUrl: rewardItem.imagemUrl ?? null,
+				quantidade,
+			};
+		}),
 		emissaoFiscalAutomatica: venda.emissaoFiscalAutomatica ?? null,
 	};
 }

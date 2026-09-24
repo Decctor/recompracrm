@@ -1,11 +1,23 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { formatToMoney } from "@/lib/formatting";
+import { formatDateAsLocale, formatToMoney } from "@/lib/formatting";
 import { appRoutes } from "@/lib/navigation/routes";
 import type { TSaleSuccess } from "@/state-hooks/use-sale-state";
 import { SalePaymentMethodsOptions } from "@/utils/select-options";
-import { ArrowRight, Check, CircleAlert, PackageCheck, ReceiptText, RotateCcw, ShoppingBag, Sparkles, UserRound, WalletCards } from "lucide-react";
+import {
+	ArrowRight,
+	Check,
+	CircleAlert,
+	Clock,
+	PackageCheck,
+	ReceiptText,
+	RotateCcw,
+	ShoppingBag,
+	Sparkles,
+	UserRound,
+	WalletCards,
+} from "lucide-react";
 import Link from "next/link";
 
 const DELIVERY_LABELS: Record<TSaleSuccess["entregaModalidade"], string> = {
@@ -126,6 +138,22 @@ export default function SaleSuccessPanel({ success, onStartNewSale }: SaleSucces
 						<div className="flex items-center gap-2.5 border-t border-border pt-3 text-sm">
 							<Check className="h-4 w-4 shrink-0 text-green-600 dark:text-green-400" aria-hidden="true" />
 							<p>Emissão fiscal solicitada com sucesso.</p>
+						</div>
+					) : null}
+
+					{success.fiscal?.status === "AGENDADO" ? (
+						<div className="flex items-center gap-2.5 border-t border-border pt-3 text-sm">
+							<Clock className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+							<p>
+								Emissão fiscal agendada
+								{success.fiscal.agendadaPara ? (
+									<>
+										{" "}
+										para <strong>{formatDateAsLocale(success.fiscal.agendadaPara, true)}</strong>
+									</>
+								) : null}
+								.
+							</p>
 						</div>
 					) : null}
 

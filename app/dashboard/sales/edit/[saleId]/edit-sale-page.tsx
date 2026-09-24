@@ -8,7 +8,7 @@ import MobileCheckoutBar from "../../_components/mobile-checkout-bar";
 import { DiscountApproval } from "@/components/Modals/Sales/DiscountApproval";
 import { getErrorMessage } from "@/lib/errors";
 import type { TAutoEmissionExceptions } from "@/lib/fiscal/auto-emission-policy";
-import { formatToMoney } from "@/lib/formatting";
+import { formatToMoney, formatDateAsLocale } from "@/lib/formatting";
 import { editConfirmedSale } from "@/lib/mutations/pos";
 import { evaluateDiscount } from "@/lib/permissions/discounts";
 import { appRoutes } from "@/lib/navigation/routes";
@@ -185,6 +185,9 @@ export default function EditSalePage({
 			toast.success(data.message);
 			if (data.data.fiscal?.status === "ERRO") {
 				toast.warning(`Venda atualizada, mas a emissão fiscal falhou: ${data.data.fiscal.error}`);
+			}
+			if (data.data.fiscal?.status === "AGENDADO") {
+				toast.info(`Emissão fiscal agendada para ${formatDateAsLocale(data.data.fiscal.agendadaPara, true)}.`);
 			}
 			router.push(appRoutes.sales.root());
 		},

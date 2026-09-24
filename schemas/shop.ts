@@ -1,4 +1,5 @@
 import type { TSaleRewardDraftSnapshot } from "@/lib/sales/sale-reward-snapshot";
+import { saleRewardRedemptionInputFields } from "@/schemas/cashback-programs";
 import { isValidCpfCnpj } from "@/lib/validation";
 import { z } from "zod";
 import { AppliedCouponSchema, type TAppliedCoupon } from "./coupons";
@@ -560,20 +561,9 @@ export const CreateShopOrderInputSchema = z.object({
     .nonnegative("Valor de cashback não pode ser negativo.")
     .default(0),
   cupomResgate: AppliedCouponSchema.optional().nullable(),
-  recompensaResgate: z
-    .object({
-      recompensaId: z.string({
-        required_error: "ID da recompensa não informado.",
-        invalid_type_error: "Tipo não válido para o ID da recompensa.",
-      }),
-      programaId: z.string({
-        required_error: "ID do programa de cashback não informado.",
-        invalid_type_error:
-          "Tipo não válido para o ID do programa de cashback.",
-      }),
-    })
-    .optional()
-    .nullable(),
+  // Uma linha por recompensa distinta, com quantidade. O singular `recompensaResgate` é aceito
+  // por uma release para carrinhos gravados antes de múltiplas recompensas.
+  ...saleRewardRedemptionInputFields,
   observacoes: z
     .string({ invalid_type_error: "Tipo não válido para observações." })
     .optional()
@@ -581,7 +571,7 @@ export const CreateShopOrderInputSchema = z.object({
 });
 export type TCreateShopOrderInput = z.infer<typeof CreateShopOrderInputSchema>;
 
-// Snapshot autoritativo do resgate (lido por parseSaleRewardDraftSnapshot na confirmação),
+// Snapshot autoritativo do resgate (lido por parseSaleRewardDraftSnapshots na confirmação),
 // acrescido da imagem que só a vitrine da loja exibe.
 export type TShopRewardSnapshot = TSaleRewardDraftSnapshot & {
   imagemCapaUrl: string | null;
@@ -594,7 +584,9 @@ export type TShopDraftMetadata = {
   cashbackResgateSolicitado: number;
   cashbackProgramaId: string | null;
   cupom: TAppliedCoupon | null;
-  recompensa: TShopRewardSnapshot | null;
+  // Formato atual; a chave singular `recompensa` é sempre gravada como null para apagar o legado.
+  recompensas: TShopRewardSnapshot[];
+  recompensa: null;
   pagamento: {
     tipo: "NO_LOCAL";
     metodo: TShopPaymentMethod;

@@ -3,6 +3,8 @@ import { appApiHandler } from "@/lib/app-api";
 import { recomputeClientDuplicatesSafely } from "@/lib/clients/duplicates";
 import { accumulateCashbackForClient, calculateAccumulatedCashbackValue, ensureCashbackBalanceForClient } from "@/lib/cashback/accumulation";
 import { type TValidatedPrizeForRedemption, validatePrizeForRedemption } from "@/lib/cashback/prizes";
+import { resolvePoiPrizeLines } from "@/lib/point-of-interaction/prize-lines";
+import { normalizeRewardRedemptionLines } from "@/lib/sales/sale-reward-snapshot";
 import { applyCashbackRedemptionFIFO } from "@/lib/cashback/redemption";
 import {
 	canScheduleCampaignForClient,
@@ -32,7 +34,7 @@ import {
 import { type DBTransaction, db } from "@/services/drizzle";
 import { cashbackProgramTransactions, cashbackPrograms, clients, couponRedemptions, partners, saleItems, sales } from "@/services/drizzle/schema";
 import { waitUntil } from "@vercel/functions";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import z from "zod";
@@ -104,6 +106,20 @@ export const CreatePointOfInteractionTransactionInputSchema = z.object({
 			})
 			.optional()
 			.nullable(),
+		// Recompensas: uma linha por recompensa distinta, com quantidade. `prizeValue`/`prizeSaleValue`
+		// são por unidade e apenas informativos — o servidor os sobrescreve pelo catálogo.
+		prizeRedemptions: z
+			.array(
+				z.object({
+					prizeId: z.string({ required_error: "ID da recompensa não informado." }),
+					prizeValue: z.number({ invalid_type_error: "Tipo não válido para o valor da recompensa." }).optional().nullable(),
+					prizeSaleValue: z.number({ invalid_type_error: "Tipo não válido para o valor comercial da recompensa." }).optional().nullable(),
+					quantity: z.number({ invalid_type_error: "Tipo não válido para a quantidade da recompensa." }).int().min(1).optional().nullable(),
+				}),
+			)
+			.optional()
+			.nullable(),
+		// Formato anterior a múltiplas recompensas (app mobile, solicitações pendentes antigas).
 		prizeRedemption: z
 			.object({
 				prizeId: z.string(),
@@ -163,7 +179,9 @@ export type TCreatePointOfInteractionTransactionOutput = {
 	data: {
 		saleId: string | null;
 		transactionAccumulationId?: string | null;
+		// Primeira linha RESGATE (compat com poiTransactionRequests.transacaoResgateId); todas em `transactionRedemptionIds`.
 		transactionRedemptionId?: string | null;
+		transactionRedemptionIds?: string[];
 		transactionCouponRedemptionId?: string | null;
 		clientAccumulatedCashbackValue: number;
 		clientNewOverallAvailableBalance: number | null;
@@ -223,8 +241,13 @@ async function preparePointOfInteractionTransaction({ input, operatorContext, tx
 		}
 
 		const cashbackProgramIsActive = program.ativo;
-		const prizeRedemption = input.sale.prizeRedemption;
-		const isPrizeRedemption = !!prizeRedemption;
+		const prizeLines = resolvePoiPrizeLines(input.sale);
+		const isPrizeRedemption = prizeLines.length > 0;
+		if (isPrizeRedemption) {
+			// Forma das linhas (ids únicos, quantidade inteira ≥ 1); o conteúdo é validado contra o catálogo abaixo.
+			const normalizedLines = normalizeRewardRedemptionLines(prizeLines.map((line) => ({ recompensaId: line.prizeId, quantidade: line.quantity })));
+			if (normalizedLines.erro !== null) throw new createHttpError.BadRequest(normalizedLines.erro);
+		}
 		// Prize redemptions do not generate cashback, even when accumulation via POI is enabled.
 		const transactionRequiresAccumulationProcessing = cashbackProgramIsActive && program.acumuloPermitirViaPontoIntegracao && !isPrizeRedemption;
 		// Registro de vendas do POI é config EXPLÍCITA (D8), não derivação do estado das
@@ -236,7 +259,7 @@ async function preparePointOfInteractionTransaction({ input, operatorContext, tx
 			!(await organizationHasActiveDataSource({ executor: tx, organizationId: input.orgId }));
 		// Transactions only require redemption processing when cashback is applied and has a positive value
 		const requestedCashbackRedemption = input.sale.cashback.aplicar && input.sale.cashback.valor > 0;
-		if (!cashbackProgramIsActive && requestedCashbackRedemption) {
+		if (!cashbackProgramIsActive && (requestedCashbackRedemption || isPrizeRedemption)) {
 			throw new createHttpError.BadRequest("Programa de cashback inativo. Resgates não estão disponíveis.");
 		}
 		// Resgate pelo POI é config explícita do programa (superfície PONTO_INTERACAO da política
@@ -247,7 +270,10 @@ async function preparePointOfInteractionTransaction({ input, operatorContext, tx
 		if (redemptionSurfaceBlockReason && (requestedCashbackRedemption || isPrizeRedemption)) {
 			throw new createHttpError.Forbidden(redemptionSurfaceBlockReason);
 		}
-		const transactionRequiresRedemptionProcessing = cashbackProgramIsActive && program.resgatePermitirViaPontoIntegracao && requestedCashbackRedemption;
+		// Recompensa dirige o resgate explicitamente (o kiosk também espelha o débito em `cashback`,
+		// mas a regra não pode depender desse espelho).
+		const transactionRequiresRedemptionProcessing =
+			cashbackProgramIsActive && program.resgatePermitirViaPontoIntegracao && (requestedCashbackRedemption || isPrizeRedemption);
 		console.log("[POI] [TRANSACTION_FLAGS]", {
 			transactionRequiresAccumulationProcessing,
 			transactionRequiresSaleProcessing,
@@ -291,6 +317,7 @@ async function preparePointOfInteractionTransaction({ input, operatorContext, tx
 		let transactionSaleId: string | null = null;
 		let transactionAccumulationId: string | null = null;
 		let transactionRedemptionId: string | null = null;
+		const transactionRedemptionIds: string[] = [];
 
 		// SECOND STEP: Identifying the transaction client
 		let clientId = input.client.id;
@@ -435,19 +462,23 @@ async function preparePointOfInteractionTransaction({ input, operatorContext, tx
 			}
 		}
 
-		// PRIZE VALIDATION (if prize redemption is requested)
-		let validatedPrize: TValidatedPrizeForRedemption | null = null;
-		if (isPrizeRedemption && prizeRedemption) {
-			validatedPrize = await validatePrizeForRedemption({
+		// PRIZE VALIDATION (if prize redemption is requested): uma linha por recompensa, valores do catálogo.
+		const validatedPrizes: Array<{ prize: TValidatedPrizeForRedemption; quantity: number }> = [];
+		for (const line of prizeLines) {
+			const prize = await validatePrizeForRedemption({
 				tx,
 				organizacaoId: input.orgId,
 				programaId: program.id,
-				recompensaId: prizeRedemption.prizeId,
+				recompensaId: line.prizeId,
 			});
+			validatedPrizes.push({ prize, quantity: line.quantity });
 		}
+		const prizesSaleValue = validatedPrizes.reduce((sum, entry) => sum + entry.prize.valorVenda * entry.quantity, 0);
+		const prizesRedemptionValue = validatedPrizes.reduce((sum, entry) => sum + entry.prize.valor * entry.quantity, 0);
+		const prizesCost = validatedPrizes.reduce((sum, entry) => sum + entry.prize.precoCusto * entry.quantity, 0);
 
-		const effectiveSaleValue = validatedPrize?.valorVenda ?? input.sale.valor;
-		const effectiveRedemptionValue = validatedPrize?.valor ?? (input.sale.cashback.aplicar ? input.sale.cashback.valor : 0);
+		const effectiveSaleValue = isPrizeRedemption ? prizesSaleValue : input.sale.valor;
+		const effectiveRedemptionValue = isPrizeRedemption ? prizesRedemptionValue : input.sale.cashback.aplicar ? input.sale.cashback.valor : 0;
 
 		// COUPON VALIDATION + REDEMPTION (if requested)
 		// Fase 1: 1 cupom por transação, não combinável com resgate de recompensa.
@@ -543,48 +574,57 @@ async function preparePointOfInteractionTransaction({ input, operatorContext, tx
 				throw new createHttpError.BadRequest("Saldo insuficiente.");
 			}
 
-			const redemptionResult = await applyCashbackRedemptionFIFO({
-				tx,
-				orgId: input.orgId,
-				clientId: clientId as string,
-				programId: program.id,
-				redemptionValue: effectiveRedemptionValue,
-			});
+			// Um RESGATE por linha (recompensa) ou um único para o desconto em cashback. O FIFO relê e
+			// persiste o saldo a cada chamada; cada linha guarda o próprio consumoFifo para a reversão.
+			const redemptionLines: Array<{ value: number; prize: TValidatedPrizeForRedemption | null; quantity: number }> = isPrizeRedemption
+				? validatedPrizes.map((entry) => ({ value: entry.prize.valor * entry.quantity, prize: entry.prize, quantity: entry.quantity }))
+				: [{ value: effectiveRedemptionValue, prize: null, quantity: 1 }];
+			for (const line of redemptionLines) {
+				const redemptionResult = await applyCashbackRedemptionFIFO({
+					tx,
+					orgId: input.orgId,
+					clientId: clientId as string,
+					programId: program.id,
+					redemptionValue: line.value,
+				});
 
-			const previousBalance = redemptionResult.previousBalance;
-			const newBalanceAfterRedemption = redemptionResult.newBalance;
-			clientCashbackAvailableBalance = newBalanceAfterRedemption;
-			clientCashbackRedeemedBalanceTotal = redemptionResult.newResgatadoTotal;
+				const previousBalance = redemptionResult.previousBalance;
+				const newBalanceAfterRedemption = redemptionResult.newBalance;
+				clientCashbackAvailableBalance = newBalanceAfterRedemption;
+				clientCashbackRedeemedBalanceTotal = redemptionResult.newResgatadoTotal;
 
-			// Inserting a new transaction for RESGATE
-			const insertedRedemptionTransactionResponse = await tx
-				.insert(cashbackProgramTransactions)
-				.values({
-					organizacaoId: input.orgId,
-					clienteId: clientId,
-					vendaId: null, // No associated sale (yet ?)
-					vendaValor: effectiveSaleValue,
-					programaId: program.id,
-					tipo: "RESGATE",
-					status: "ATIVO",
-					valor: -effectiveRedemptionValue,
-					valorRestante: 0, // RESGATE transactions are fully consumed
-					saldoValorAnterior: previousBalance,
-					saldoValorPosterior: newBalanceAfterRedemption,
-					expiracaoData: null, // RESGATE transactions do not have expiration date
-					operadorId: operatorMembershipUser?.id,
-					operadorVendedorId: operator.id,
-					// Prize redemption fields
-					resgateRecompensaId: validatedPrize?.id ?? null,
-					resgateRecompensaValor: validatedPrize?.valor ?? null,
-					metadados: {
-						consumoFifo: redemptionResult.consumedFromAccumulations,
-					},
-				})
-				.returning({ id: cashbackProgramTransactions.id });
-			const insertedRedemptionTransactionId = insertedRedemptionTransactionResponse[0]?.id;
-			if (!insertedRedemptionTransactionId) throw new createHttpError.InternalServerError("Oops, um erro ocorreu ao criar transação de resgate.");
-			transactionRedemptionId = insertedRedemptionTransactionId;
+				// Inserting a new transaction for RESGATE
+				const insertedRedemptionTransactionResponse = await tx
+					.insert(cashbackProgramTransactions)
+					.values({
+						organizacaoId: input.orgId,
+						clienteId: clientId,
+						vendaId: null, // No associated sale (yet ?)
+						vendaValor: effectiveSaleValue,
+						programaId: program.id,
+						tipo: "RESGATE",
+						status: "ATIVO",
+						valor: -line.value,
+						valorRestante: 0, // RESGATE transactions are fully consumed
+						saldoValorAnterior: previousBalance,
+						saldoValorPosterior: newBalanceAfterRedemption,
+						expiracaoData: null, // RESGATE transactions do not have expiration date
+						operadorId: operatorMembershipUser?.id,
+						operadorVendedorId: operator.id,
+						// Prize redemption fields: total da linha; unitário e quantidade em metadados.
+						resgateRecompensaId: line.prize?.id ?? null,
+						resgateRecompensaValor: line.prize ? line.value : null,
+						metadados: {
+							consumoFifo: redemptionResult.consumedFromAccumulations,
+							...(line.prize ? { recompensa: { quantidade: line.quantity, valorUnitario: line.prize.valor } } : {}),
+						},
+					})
+					.returning({ id: cashbackProgramTransactions.id });
+				const insertedRedemptionTransactionId = insertedRedemptionTransactionResponse[0]?.id;
+				if (!insertedRedemptionTransactionId) throw new createHttpError.InternalServerError("Oops, um erro ocorreu ao criar transação de resgate.");
+				transactionRedemptionIds.push(insertedRedemptionTransactionId);
+			}
+			transactionRedemptionId = transactionRedemptionIds[0] ?? null;
 		}
 		// FOURTH STEP: Processing cashback accumulation (if applicable)
 		if (transactionRequiresAccumulationProcessing) {
@@ -642,7 +682,7 @@ async function preparePointOfInteractionTransaction({ input, operatorContext, tx
 					idExterno: `POI-${Date.now()}-${Math.random().toString(36).substring(7)}`,
 					valorTotal: effectiveSaleFinalValue,
 					descontosTotal: (transactionRequiresRedemptionProcessing ? Math.min(effectiveSaleValue, effectiveRedemptionValue) : 0) + couponDiscountValue,
-					custoTotal: validatedPrize?.precoCusto ?? 0,
+					custoTotal: prizesCost,
 					vendedorNome: operator.nome,
 					vendedorId: operator.id,
 					parceiro: normalizedPartnerCode ?? "N/A",
@@ -709,13 +749,13 @@ async function preparePointOfInteractionTransaction({ input, operatorContext, tx
 					})
 					.where(eq(cashbackProgramTransactions.id, transactionAccumulationId));
 			}
-			if (transactionRedemptionId) {
+			if (transactionRedemptionIds.length > 0) {
 				await tx
 					.update(cashbackProgramTransactions)
 					.set({
 						vendaId: transactionSaleId,
 					})
-					.where(eq(cashbackProgramTransactions.id, transactionRedemptionId));
+					.where(inArray(cashbackProgramTransactions.id, transactionRedemptionIds));
 			}
 			if (transactionCouponRedemptionId) {
 				await tx
@@ -728,27 +768,35 @@ async function preparePointOfInteractionTransaction({ input, operatorContext, tx
 
 			// Insert saleItem if this is a prize redemption (produtoId sempre resolvido pelo validador,
 			// inclusive para prêmios vinculados apenas a variante).
-			if (isPrizeRedemption && validatedPrize && transactionSaleId) {
-				const saleItemDiscountValue = Math.min(validatedPrize.valorVenda, validatedPrize.valor);
-				await tx.insert(saleItems).values({
-					organizacaoId: input.orgId,
-					vendaId: transactionSaleId,
-					clienteId: clientId,
-					produtoId: validatedPrize.produtoId,
-					produtoVarianteId: validatedPrize.produtoVarianteId ?? null,
-					quantidade: 1,
-					valorVendaUnitario: validatedPrize.valorVenda,
-					valorCustoUnitario: validatedPrize.precoCusto,
-					valorVendaTotalBruto: validatedPrize.valorVenda,
-					valorTotalDesconto: saleItemDiscountValue,
-					valorVendaTotalLiquido: Math.max(0, validatedPrize.valorVenda - saleItemDiscountValue),
-					valorCustoTotal: validatedPrize.precoCusto,
-					metadados: {
-						origem: "POI-RESGATE-RECOMPENSA",
-						valorResgate: validatedPrize.valor,
-						valorComercial: validatedPrize.valorVenda,
-					},
-				});
+			if (isPrizeRedemption && validatedPrizes.length > 0 && transactionSaleId) {
+				// Um item por recompensa, na quantidade da linha (regra de desconto do POI preservada).
+				await tx.insert(saleItems).values(
+					validatedPrizes.map(({ prize, quantity }) => {
+						const grossValue = prize.valorVenda * quantity;
+						const saleItemDiscountValue = Math.min(grossValue, prize.valor * quantity);
+						return {
+							organizacaoId: input.orgId,
+							vendaId: transactionSaleId as string,
+							clienteId: clientId,
+							produtoId: prize.produtoId,
+							produtoVarianteId: prize.produtoVarianteId ?? null,
+							quantidade: quantity,
+							valorVendaUnitario: prize.valorVenda,
+							valorCustoUnitario: prize.precoCusto,
+							valorVendaTotalBruto: grossValue,
+							valorTotalDesconto: saleItemDiscountValue,
+							valorVendaTotalLiquido: Math.max(0, grossValue - saleItemDiscountValue),
+							valorCustoTotal: prize.precoCusto * quantity,
+							metadados: {
+								origem: "POI-RESGATE-RECOMPENSA",
+								recompensaId: prize.id,
+								quantidade: quantity,
+								valorResgate: prize.valor,
+								valorComercial: prize.valorVenda,
+							},
+						};
+					}),
+				);
 			}
 		}
 
@@ -836,6 +884,7 @@ async function preparePointOfInteractionTransaction({ input, operatorContext, tx
 			transactionSaleId,
 			transactionAccumulationId,
 			transactionRedemptionId,
+			transactionRedemptionIds,
 			transactionCouponRedemptionId,
 			clientAccumulatedCashbackValue: clientNewAccumulatedCashbackValue,
 			clientNewOverallAvailableBalance: clientCashbackAvailableBalance,
@@ -864,6 +913,7 @@ async function preparePointOfInteractionTransaction({ input, operatorContext, tx
 			saleId: result.transactionSaleId,
 			transactionAccumulationId: result.transactionAccumulationId,
 			transactionRedemptionId: result.transactionRedemptionId,
+			transactionRedemptionIds: result.transactionRedemptionIds,
 			transactionCouponRedemptionId: result.transactionCouponRedemptionId,
 			clientAccumulatedCashbackValue: result.clientAccumulatedCashbackValue,
 			clientNewOverallAvailableBalance: result.clientNewOverallAvailableBalance,

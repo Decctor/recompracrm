@@ -2,14 +2,14 @@
 
 import type { TGetProductsOutputById } from "@/app/api/products/route";
 import NumberInput from "@/components/Inputs/NumberInput";
+import { AvailabilityCycleButton, ChannelPriceInput } from "@/components/SalesChannels/ProductChannelControls";
 import { SALES_CHANNEL_LABELS, SalesChannelMark } from "@/components/SalesChannels/SalesChannelMark";
 import SectionApplyBar from "@/components/Utils/SectionApplyBar";
 import { Section } from "@/components/ui/section";
 import { DataList } from "@/components/ui/data-list";
 import { formatDecimalPlaces } from "@/lib/formatting";
-import { type TProductChannelAvailabilityChoice, productChannelNodeKey } from "@/lib/products/product-registry-state";
+import { productChannelNodeKey } from "@/lib/products/product-registry-state";
 import { useProductChannelSettings } from "@/lib/queries/product-channel-settings";
-import { cn } from "@/lib/utils";
 import { useProductPricingSectionEditor } from "@/state-hooks/use-product-section-editor";
 import { BadgeDollarSign, Percent } from "lucide-react";
 
@@ -156,68 +156,5 @@ export default function PricesAndChannelsSection({ product, orgHasERPAccess, cal
 				<SectionApplyBar isDirty={editor.isDirty} isPending={editor.isPending} onApply={editor.apply} onDiscard={editor.discard} />
 			</Section.Body>
 		</Section.Root>
-	);
-}
-
-function AvailabilityCycleButton({
-	choice,
-	inheritedVisible,
-	variantLevel = false,
-	onCycle,
-}: {
-	choice: TProductChannelAvailabilityChoice;
-	inheritedVisible: boolean;
-	variantLevel?: boolean;
-	onCycle: () => void;
-}) {
-	const label =
-		choice === true
-			? "DISPONÍVEL"
-			: choice === false
-				? "INDISPONÍVEL"
-				: variantLevel
-					? "HERDAR DO PRODUTO"
-					: `HERDAR (${inheritedVisible ? "VISÍVEL" : "OCULTO"})`;
-	return (
-		<button
-			type="button"
-			onClick={onCycle}
-			className={cn(
-				"rounded-full px-2.5 py-1 text-[0.6rem] font-semibold tracking-wide transition-colors",
-				choice === true && "bg-emerald-500/15 text-emerald-600",
-				choice === false && "bg-red-500/15 text-red-600",
-				choice === null && "bg-primary/10 text-primary/70",
-			)}
-		>
-			{label}
-		</button>
-	);
-}
-
-// Campo de preço do canal: vazio = herda o preço base (mostrado no placeholder, já refletindo o
-// rascunho aberto na seção — o usuário vê o efeito antes de aplicar).
-function ChannelPriceInput({
-	value,
-	basePrice,
-	onChange,
-}: {
-	value: number | null;
-	basePrice: number | null;
-	onChange: (value: number | null) => void;
-}) {
-	return (
-		<input
-			type="number"
-			min={0}
-			step="0.01"
-			inputMode="decimal"
-			value={value ?? ""}
-			placeholder={basePrice != null ? `R$ ${basePrice.toFixed(2)}` : "R$ —"}
-			onChange={(event) => {
-				const raw = event.target.value;
-				onChange(raw === "" ? null : Math.max(0, Number(raw)));
-			}}
-			className="w-24 rounded-md border border-border bg-transparent px-2 py-1 text-right text-[0.65rem] tabular-nums outline-none placeholder:text-primary/40 focus:border-primary/40"
-		/>
 	);
 }

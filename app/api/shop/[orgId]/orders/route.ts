@@ -10,9 +10,13 @@ import { formatPhoneAsBase } from "@/lib/formatting";
 import { getOrganizationPaymentMethodsConfig } from "@/lib/payments";
 import { processSaleConfirmation } from "@/lib/sales/sale-processing";
 import {
-  admitSaleRewardRedemption,
-  buildRewardSaleItemValues,
+  admitSaleRewardRedemptions,
+  buildRewardSaleItemsValues,
   buildSaleRewardDraftSnapshot,
+  resolveRewardRedemptionLinesInput,
+  sumAdmittedRewardsCost,
+  sumAdmittedRewardsSaleValue,
+  toSaleRewardRedemptionInputs,
 } from "@/lib/sales/sale-reward-redemption";
 import {
   getShopCatalogProducts,
@@ -51,7 +55,18 @@ function extractOrgId(pathname: string) {
 function hashShopOrderPayload(
   input: ReturnType<typeof CreateShopOrderInputSchema.parse>,
 ) {
-  return createHash("sha256").update(JSON.stringify(input)).digest("hex");
+  // A mesma cesta de recompensas em ordem diferente é o mesmo pedido: normaliza antes de hashear.
+  const recompensas = resolveRewardRedemptionLinesInput(input);
+  const normalized = {
+    ...input,
+    recompensaResgate: undefined,
+    recompensasResgate: recompensas
+      ? [...recompensas]
+          .map((line) => ({ recompensaId: line.recompensaId, programaId: line.programaId ?? null, quantidade: line.quantidade ?? 1 }))
+          .sort((a, b) => a.recompensaId.localeCompare(b.recompensaId))
+      : undefined,
+  };
+  return createHash("sha256").update(JSON.stringify(normalized)).digest("hex");
 }
 
 function hashPublicAccessToken(token: string) {
@@ -700,21 +715,18 @@ async function createShopOrder(request: NextRequest) {
     saleSubtotal: saleValueBeforeCashback,
     requestedValue: requestedCashback,
   });
-  const admittedReward = input.recompensaResgate
-    ? await admitSaleRewardRedemption({
-        tx: db,
-        organizacaoId: orgId,
-        clienteId: client.id,
-        recompensaId: input.recompensaResgate.recompensaId,
-        programaId: input.recompensaResgate.programaId,
-        hasCoupon: !!appliedCoupon,
-        cashbackResgate: requestedCashback,
-        surface: "LOJA_DIGITAL",
-        // Preço comercial resolvido no canal SHOP — o mesmo que a listagem de recompensas exibe.
-        canal: "SHOP",
-      })
-    : null;
-  const rewardDiscount = admittedReward?.prize.valorVenda ?? 0;
+  const admittedRewards = await admitSaleRewardRedemptions({
+    tx: db,
+    organizacaoId: orgId,
+    clienteId: client.id,
+    recompensas: resolveRewardRedemptionLinesInput(input) ?? [],
+    hasCoupon: !!appliedCoupon,
+    cashbackResgate: requestedCashback,
+    surface: "LOJA_DIGITAL",
+    // Preço comercial resolvido no canal SHOP — o mesmo que a listagem de recompensas exibe.
+    canal: "SHOP",
+  });
+  const rewardDiscount = sumAdmittedRewardsSaleValue(admittedRewards);
   const discountsTotal = couponDiscount + requestedCashback + rewardDiscount;
   // Taxa somada após os descontos: cupom e cashback incidem apenas sobre os itens, nunca sobre a entrega.
   const deliveryFee = resolveShopDeliveryFee({
@@ -769,14 +781,12 @@ async function createShopOrder(request: NextRequest) {
     cashbackResgateSolicitado: requestedCashback,
     cashbackProgramaId: programId,
     cupom: appliedCoupon,
-    recompensa: admittedReward
-      ? {
-          ...buildSaleRewardDraftSnapshot(admittedReward),
-          imagemCapaUrl:
-            admittedReward.prize.imagemCapaUrl ??
-            admittedReward.prize.produtoImagemUrl,
-        }
-      : null,
+    recompensas: admittedRewards.map((reward) => ({
+      ...buildSaleRewardDraftSnapshot(reward),
+      imagemCapaUrl:
+        reward.prize.imagemCapaUrl ?? reward.prize.produtoImagemUrl,
+    })),
+    recompensa: null,
     pagamento: {
       tipo: "NO_LOCAL",
       metodo: input.pagamento.metodo,
@@ -816,7 +826,7 @@ async function createShopOrder(request: NextRequest) {
               calculatedItems.reduce(
                 (sum, item) => sum + item.valorCustoTotal,
                 0,
-              ) + (admittedReward?.prize.precoCusto ?? 0),
+              ) + sumAdmittedRewardsCost(admittedRewards),
             vendedorNome: "",
             vendedorId: null,
             entregaModalidade: input.entrega.modalidade,
@@ -892,17 +902,15 @@ async function createShopOrder(request: NextRequest) {
           }
         }
 
-        if (admittedReward) {
-          await tx
-            .insert(saleItems)
-            .values(
-              buildRewardSaleItemValues({
-                organizacaoId: orgId,
-                vendaId: insertedSale.id,
-                clienteId: client.id,
-                prize: admittedReward.prize,
-              }),
-            );
+        if (admittedRewards.length > 0) {
+          await tx.insert(saleItems).values(
+            buildRewardSaleItemsValues({
+              organizacaoId: orgId,
+              vendaId: insertedSale.id,
+              clienteId: client.id,
+              rewards: admittedRewards,
+            }),
+          );
         }
 
         await tx
@@ -950,13 +958,7 @@ async function createShopOrder(request: NextRequest) {
       saleCashbackProgramId: programId,
       saleCashbackRedemptionValue: requestedCashback,
       saleCashbackRedemptionSurface: "LOJA_DIGITAL",
-      saleRewardRedemption: admittedReward
-        ? {
-            recompensaId: admittedReward.prize.id,
-            programaId: admittedReward.programaId,
-            valorResgate: admittedReward.prize.valor,
-          }
-        : null,
+      saleRewardRedemptions: toSaleRewardRedemptionInputs(admittedRewards),
       saleCouponId: appliedCoupon?.cupomId ?? null,
       saleCouponDeclaredDiscountValue: appliedCoupon?.valorDesconto ?? null,
       saleCouponRedemptionSurface: appliedCoupon ? "LOJA_DIGITAL" : undefined,

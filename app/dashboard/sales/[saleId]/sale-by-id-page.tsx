@@ -827,6 +827,11 @@ const FISCAL_STATUSES_WITH_ASSETS = new Set(["AUTORIZADO", "CANCELADO"]);
 
 function SaleFiscalSection({ fiscal, canConfigureFiscal }: { fiscal: NonNullable<SaleErpDetail["fiscal"]>; canConfigureFiscal: boolean }) {
 	const presentation = SALE_FISCAL_STATUS_PRESENTATION[fiscal.status];
+	// Agendamento só interessa enquanto nenhum documento vivo existe: com nota emitida (manual ou
+	// não) na janela, o consumer vai recuar e a linha seria ruído.
+	const hasLiveDocument = fiscal.documentos.some((document) => !["CANCELADO", "INUTILIZADO"].includes(document.statusInterno ?? ""));
+	const scheduledFor =
+		!hasLiveDocument && fiscal.emissaoAutomaticaAgendadaPara ? formatDateAsLocale(fiscal.emissaoAutomaticaAgendadaPara, true) : null;
 
 	return (
 		<Section.Root>
@@ -840,9 +845,20 @@ function SaleFiscalSection({ fiscal, canConfigureFiscal }: { fiscal: NonNullable
 				</Section.Actions>
 			</Section.Header>
 			<Section.Body>
+				{scheduledFor ? (
+					<div className="flex items-center gap-2.5 rounded-lg border border-border bg-secondary/30 px-3 py-2.5 text-sm">
+						<Clock className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+						<p>
+							Emissão automática agendada para <strong>{scheduledFor}</strong>. Até lá a venda pode ser corrigida ou cancelada; a nota sai com o estado
+							final.
+						</p>
+					</div>
+				) : null}
 				{fiscal.documentos.length === 0 ? (
 					<div className="w-full flex flex-col items-center justify-center gap-1 rounded-lg bg-secondary/30 px-3 py-6 text-center">
-						<span className="text-sm font-semibold text-muted-foreground">NENHUM DOCUMENTO FISCAL EMITIDO</span>
+						<span className="text-sm font-semibold text-muted-foreground">
+							{scheduledFor ? "NENHUM DOCUMENTO FISCAL EMITIDO AINDA" : "NENHUM DOCUMENTO FISCAL EMITIDO"}
+						</span>
 						<span className="text-xs text-muted-foreground">As notas emitidas para esta venda aparecerão aqui.</span>
 					</div>
 				) : (
@@ -1116,7 +1132,7 @@ function SaleItemCard({ item }: { item: TGetSalesOutputById["itens"][number] }) 
 						{item.adicionais.map((adicional) => (
 							<div key={adicional.id} className="flex items-center justify-between text-xs">
 								<span className="text-muted-foreground">
-									{adicional.opcao?.nome || "Adicional"} x{adicional.quantidade}
+									{adicional.nome || adicional.opcao?.nome || "Adicional"} x{adicional.quantidade}
 								</span>
 								<span className="font-medium">{formatToMoney(adicional.valorTotal)}</span>
 							</div>

@@ -146,7 +146,7 @@ function VariantTable({
 			<div className="flex w-full flex-col bg-background">
 				{validVariants.map((variant, rowIndex) => (
 					<VariantTableRow
-						key={variant.id || `temp-variant-${variant.originalIndex}`}
+						key={variant.referenciaId}
 						variant={variant}
 						tags={resolveTags(variant)}
 						gridRow={rowIndex}
@@ -395,6 +395,7 @@ function VariantThumbnail({
 
 function createEmptyVariant(): TProductVariantState {
 	return {
+		referenciaId: crypto.randomUUID(),
 		nome: "",
 		codigo: "",
 		precoCusto: 0,

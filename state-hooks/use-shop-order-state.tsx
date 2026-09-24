@@ -11,7 +11,8 @@ import type {
 } from "@/schemas/shop";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-const SHOP_CART_STORAGE_VERSION = 4;
+// v5: `reward.resgates` (lista, com quantidade) no lugar de `reward.resgate`.
+const SHOP_CART_STORAGE_VERSION = 5;
 
 type TShopOrderState = {
   orgId: string;
@@ -28,7 +29,8 @@ type TShopOrderState = {
     resgate: TAppliedCoupon | null;
   };
   reward: {
-    resgate: TShopRewardSnapshot | null;
+    // Uma linha por recompensa distinta, com quantidade (`recompensaId` é a chave da linha).
+    resgates: TShopRewardSnapshot[];
   };
   payment: {
     metodo: TShopPaymentMethod;
@@ -92,7 +94,7 @@ function getDefaultState(
     delivery: { modalidade: "RETIRADA", endereco: null },
     cashback: { resgateSolicitado: 0 },
     coupon: { resgate: null },
-    reward: { resgate: null },
+    reward: { resgates: [] },
     payment: {
       metodo: "DINHEIRO",
       observacoes: "",
@@ -251,7 +253,7 @@ export function useShopOrderState({
       customer: { ...prev.customer, cpfCnpj: null },
       cashback: { resgateSolicitado: 0 },
       coupon: { resgate: null },
-      reward: { resgate: null },
+      reward: { resgates: [] },
       ...createOrderIdentity(),
     }));
     if (typeof window !== "undefined")
@@ -270,7 +272,7 @@ export function useShopOrderState({
           ? { resgateSolicitado: 0 }
           : prev.cashback,
         coupon: shouldClearBenefits ? { resgate: null } : prev.coupon,
-        reward: shouldClearBenefits ? { resgate: null } : prev.reward,
+        reward: shouldClearBenefits ? { resgates: [] } : prev.reward,
         ...createOrderIdentity(),
       };
     });
@@ -291,7 +293,7 @@ export function useShopOrderState({
         cashback: { ...prev.cashback, ...cashback },
         reward:
           (cashback.resgateSolicitado ?? 0) > 0
-            ? { resgate: null }
+            ? { resgates: [] }
             : prev.reward,
         ...createOrderIdentity(),
       }));
@@ -304,25 +306,95 @@ export function useShopOrderState({
       setState((prev) => ({
         ...prev,
         coupon: { resgate: coupon },
-        reward: coupon ? { resgate: null } : prev.reward,
+        reward: coupon ? { resgates: [] } : prev.reward,
         ...createOrderIdentity(),
       }));
     },
     [],
   );
 
-  const updateReward = useCallback(
-    (reward: TShopOrderState["reward"]["resgate"]) => {
+  // Recompensas são exclusivas com cupom e cashback: adicionar uma zera os irmãos. A mesma
+  // recompensa de novo incrementa a quantidade da linha, nunca duplica a linha.
+  const addReward = useCallback(
+    (reward: Omit<TShopRewardSnapshot, "quantidade"> & { quantidade?: number }) => {
+      setState((prev) => {
+        const existing = prev.reward.resgates.find(
+          (line) => line.recompensaId === reward.recompensaId,
+        );
+        const resgates = existing
+          ? prev.reward.resgates.map((line) =>
+              line.recompensaId === reward.recompensaId
+                ? { ...line, quantidade: line.quantidade + (reward.quantidade ?? 1) }
+                : line,
+            )
+          : [...prev.reward.resgates, { ...reward, quantidade: reward.quantidade ?? 1 }];
+        return {
+          ...prev,
+          reward: { resgates },
+          coupon: { resgate: null },
+          cashback: { resgateSolicitado: 0 },
+          ...createOrderIdentity(),
+        };
+      });
+    },
+    [],
+  );
+
+  const setRewardQuantity = useCallback(
+    (recompensaId: string, quantidade: number) => {
       setState((prev) => ({
         ...prev,
-        reward: { resgate: reward },
-        coupon: reward ? { resgate: null } : prev.coupon,
-        cashback: reward ? { resgateSolicitado: 0 } : prev.cashback,
+        reward: {
+          resgates:
+            quantidade < 1
+              ? prev.reward.resgates.filter((line) => line.recompensaId !== recompensaId)
+              : prev.reward.resgates.map((line) =>
+                  line.recompensaId === recompensaId
+                    ? { ...line, quantidade: Math.floor(quantidade) }
+                    : line,
+                ),
+        },
         ...createOrderIdentity(),
       }));
     },
     [],
   );
+
+  /** Atualiza valores de uma linha (revalidação) sem mexer na quantidade nem na identidade do pedido. */
+  const updateRewardValues = useCallback(
+    (
+      recompensaId: string,
+      updates: Partial<Pick<TShopRewardSnapshot, "valor" | "valorVenda" | "titulo" | "imagemCapaUrl">>,
+    ) => {
+      setState((prev) => ({
+        ...prev,
+        reward: {
+          resgates: prev.reward.resgates.map((line) =>
+            line.recompensaId === recompensaId ? { ...line, ...updates } : line,
+          ),
+        },
+      }));
+    },
+    [],
+  );
+
+  const removeReward = useCallback((recompensaId: string) => {
+    setState((prev) => ({
+      ...prev,
+      reward: {
+        resgates: prev.reward.resgates.filter((line) => line.recompensaId !== recompensaId),
+      },
+      ...createOrderIdentity(),
+    }));
+  }, []);
+
+  const clearRewards = useCallback(() => {
+    setState((prev) =>
+      prev.reward.resgates.length === 0
+        ? prev
+        : { ...prev, reward: { resgates: [] }, ...createOrderIdentity() },
+    );
+  }, []);
 
   const updatePayment = useCallback(
     (payment: Partial<TShopOrderState["payment"]>) => {
@@ -400,12 +472,11 @@ export function useShopOrderState({
       },
       cashbackResgateSolicitado: state.cashback.resgateSolicitado,
       cupomResgate: state.coupon.resgate,
-      recompensaResgate: state.reward.resgate
-        ? {
-            recompensaId: state.reward.resgate.recompensaId,
-            programaId: state.reward.resgate.programaId,
-          }
-        : null,
+      recompensasResgate: state.reward.resgates.map((line) => ({
+        recompensaId: line.recompensaId,
+        programaId: line.programaId,
+        quantidade: line.quantidade,
+      })),
       observacoes: null,
     }),
     [
@@ -417,7 +488,7 @@ export function useShopOrderState({
       state.payment,
       state.cashback.resgateSolicitado,
       state.coupon.resgate,
-      state.reward.resgate,
+      state.reward.resgates,
     ],
   );
 
@@ -433,7 +504,11 @@ export function useShopOrderState({
     updateDelivery,
     updateCashback,
     updateCoupon,
-    updateReward,
+    addReward,
+    setRewardQuantity,
+    updateRewardValues,
+    removeReward,
+    clearRewards,
     updatePayment,
     setCheckoutStep,
     nextStep,
