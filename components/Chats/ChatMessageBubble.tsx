@@ -149,7 +149,9 @@ export function ChatMessageBubble({ message, showAuthor, onRetry, isRetrying }: 
 							: isFailed
 								? "bg-destructive text-destructive-foreground"
 								: isAutomated
-									? "bg-muted text-muted-foreground"
+									? // Texto em foreground: muted-foreground sobre muted não passa 4.5:1, e a
+										// mensagem do telefone/IA é tão legível quanto qualquer outra.
+										"bg-muted text-foreground"
 									: "bg-primary text-primary-foreground",
 					message.optimistic && "opacity-70",
 				)}

@@ -129,6 +129,20 @@ export const ChatInboxViewEnum = z.enum(["MINHAS", "NAO_ATRIBUIDAS", "COM_AGENTE
 });
 export type TChatInboxView = z.infer<typeof ChatInboxViewEnum>;
 
+/** Atalhos da inbox: cortes de um toque, excludentes entre si, sobre a visão e os filtros. */
+export const ChatInboxQuickFilterEnum = z.enum(["TODAS", "NAO_LIDAS", "AGUARDANDO_RESPOSTA", "JANELA_ABERTA", "PRIORITARIAS"], {
+	required_error: "Atalho da caixa de entrada não informado.",
+	invalid_type_error: "Tipo não válido para o atalho da caixa de entrada.",
+});
+export type TChatInboxQuickFilter = z.infer<typeof ChatInboxQuickFilterEnum>;
+
+/** Prioridade como filtro: os níveis do atendimento mais "sem prioridade", que não é valor de coluna. */
+export const ChatInboxPriorityFilterEnum = z.enum(["BAIXA", "MEDIA", "ALTA", "URGENTE", "SEM_PRIORIDADE"], {
+	required_error: "Filtro de prioridade não informado.",
+	invalid_type_error: "Tipo não válido para o filtro de prioridade.",
+});
+export type TChatInboxPriorityFilter = z.infer<typeof ChatInboxPriorityFilterEnum>;
+
 export const ChatMessageDeliveryStatusEnum = z.enum(["PENDENTE", "ENVIADA", "ENTREGUE", "LIDA", "FALHA", "CANCELADA"], {
 	required_error: "Status de entrega da mensagem não informado.",
 	invalid_type_error: "Tipo não válido para o status de entrega da mensagem.",

@@ -2,18 +2,17 @@ import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { assertChatAccess } from "@/lib/chats/access";
-import { ChatAssignmentStatusEnum, ChatInboxViewEnum } from "@/schemas/enums";
+import { buildChatInboxFilterConditions, buildChatInboxQuickFilterCondition, currentChatAssignmentJoin } from "@/lib/chats/inbox-filters";
+import { ChatAssignmentStatusEnum, ChatInboxPriorityFilterEnum, ChatInboxQuickFilterEnum, ChatInboxViewEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
 import { chatAssignments, chatMessages, chats } from "@/services/drizzle/schema/chats";
 import { clients } from "@/services/drizzle/schema/clients";
 import { users } from "@/services/drizzle/schema/users";
 import { whatsappConnectionPhones, whatsappConnections } from "@/services/drizzle/schema/whatsapp-connections";
-import { and, desc, eq, ilike, inArray, isNull, lt, notInArray, or, sql } from "drizzle-orm";
+import { and, desc, eq, lt, or, sql } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-
-const CLOSED_ASSIGNMENT_STATUSES = ["ENCERRADO", "CANCELADO"] as const;
 
 // ============= GET - Inbox (lista) ou chat único (?id=) =============
 
@@ -40,6 +39,23 @@ const GetChatsInputSchema = z.object({
 						.flatMap((r) => (r.success ? [r.data] : []))
 				: [],
 		),
+	priority: z
+		.string({ invalid_type_error: "Tipo inválido para o filtro de prioridade." })
+		.optional()
+		.nullable()
+		.transform((v) =>
+			v
+				? v
+						.split(",")
+						.map((s) => ChatInboxPriorityFilterEnum.safeParse(s))
+						.flatMap((r) => (r.success ? [r.data] : []))
+				: [],
+		),
+	quickFilter: z
+		.string({ invalid_type_error: "Tipo inválido para o atalho da caixa de entrada." })
+		.optional()
+		.nullable()
+		.transform((v) => ChatInboxQuickFilterEnum.catch("TODAS").parse(v ?? "TODAS")),
 	cursor: z.string({ invalid_type_error: "Tipo inválido para o cursor." }).optional().nullable(),
 	limit: z
 		.string({ invalid_type_error: "Tipo inválido para o limite." })
@@ -105,7 +121,7 @@ function buildChatInboxQuery() {
 		.from(chats)
 		.leftJoin(clients, eq(chats.clienteId, clients.id))
 		.leftJoin(chatMessages, eq(chats.ultimaMensagemId, chatMessages.id))
-		.leftJoin(chatAssignments, and(eq(chatAssignments.chatId, chats.id), notInArray(chatAssignments.status, [...CLOSED_ASSIGNMENT_STATUSES])))
+		.leftJoin(chatAssignments, currentChatAssignmentJoin)
 		.leftJoin(users, eq(chatAssignments.responsavelUsuarioId, users.id))
 		.leftJoin(whatsappConnections, eq(chats.whatsappConexaoId, whatsappConnections.id))
 		.leftJoin(whatsappConnectionPhones, eq(chats.whatsappConexaoTelefoneId, whatsappConnectionPhones.id));
@@ -162,36 +178,12 @@ async function getChats({ session, input }: { session: TAuthUserSession; input: 
 
 	// A view entra no SQL. O módulo equivalente do Control carrega todos os chats do
 	// parceiro e filtra em memória, sem limit — inviável com paginação por cursor.
-	const viewCondition =
-		input.view === "MINHAS"
-			? eq(chatAssignments.responsavelUsuarioId, session.user.id)
-			: input.view === "NAO_ATRIBUIDAS"
-				? or(isNull(chatAssignments.id), eq(chatAssignments.responsavelTipo, "NAO_ATRIBUIDO"))
-				: input.view === "COM_AGENTE"
-					? eq(chatAssignments.responsavelTipo, "AGENTE")
-					: undefined;
-
-	// O join só traz atendimentos não-terminais, então o filtro opera sobre o atendimento
-	// corrente; chats sem atendimento ativo ficam de fora quando há status selecionado
-	// (eles não têm status a comparar).
-	const statusCondition = input.status.length > 0 ? inArray(chatAssignments.status, input.status) : undefined;
-
-	const searchTerm = input.search?.trim();
-	const searchCondition = searchTerm
-		? or(ilike(clients.nome, `%${searchTerm}%`), ilike(clients.telefone, `%${searchTerm}%`), ilike(chatMessages.conteudoTexto, `%${searchTerm}%`))
-		: undefined;
-
 	const rows = await buildChatInboxQuery()
 		.where(
 			and(
-				eq(chats.organizacaoId, organizacaoId),
-				// Chats de teste do agente de IA não são atendimento real.
-				eq(chats.origem, "WHATSAPP"),
-				input.whatsappConexaoTelefoneId ? eq(chats.whatsappConexaoTelefoneId, input.whatsappConexaoTelefoneId) : undefined,
+				...buildChatInboxFilterConditions({ ...input, userId: session.user.id, organizacaoId }),
+				buildChatInboxQuickFilterCondition(input.quickFilter),
 				cursor ? or(lt(chats.ultimaMensagemData, cursor.data), and(eq(chats.ultimaMensagemData, cursor.data), lt(chats.id, cursor.id))) : undefined,
-				viewCondition,
-				statusCondition,
-				searchCondition,
 			),
 		)
 		.orderBy(desc(chats.ultimaMensagemData), desc(chats.id))
@@ -224,6 +216,8 @@ async function getChatsRoute(req: NextRequest) {
 		view: searchParams.get("view"),
 		search: searchParams.get("search"),
 		status: searchParams.get("status"),
+		priority: searchParams.get("priority"),
+		quickFilter: searchParams.get("quickFilter"),
 		cursor: searchParams.get("cursor"),
 		limit: searchParams.get("limit"),
 	});

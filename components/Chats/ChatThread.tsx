@@ -7,11 +7,18 @@ import { mapRealtimeMessageRow, type TRealtimeChatMessageRow } from "@/lib/chats
 import { getWhatsappWindowDisplay } from "@/lib/chats/whatsapp-window-status";
 import { getErrorMessage } from "@/lib/errors";
 import { markChatRead, retryChatMessage, sendChatMessage, updateChatAssignment } from "@/lib/mutations/chats";
-import { getChatMessagesQueryKey, useChatMessages, type TChatInboxItem, type TChatMessagesPage, type TChatThreadMessage } from "@/lib/queries/chats";
+import {
+	getChatMessagesQueryKey,
+	useChatMessages,
+	type TChatAttendance,
+	type TChatInboxItem,
+	type TChatMessagesPage,
+	type TChatThreadMessage,
+} from "@/lib/queries/chats";
 import { cn } from "@/lib/utils";
 import { supabaseClient } from "@/services/supabase";
 import { useMutation, useQueryClient, type InfiniteData } from "@tanstack/react-query";
-import { ChevronDown, PanelRightOpen } from "lucide-react";
+import { ChevronDown, PanelRightOpen, Smartphone, Sparkles, UserRound, UserRoundPlus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -61,6 +68,23 @@ function markChatReadInInboxCache(data: InfiniteData<TInboxPage> | undefined, ch
 	}));
 
 	return changed ? { ...data, pages } : data;
+}
+
+/** Ponto da janela de 24h: verde quando aberta (é o que libera texto livre aqui), cor de alerta perto do fim. */
+const WINDOW_DOT_CLASS = {
+	aberta: "bg-success",
+	gateway: "bg-muted-foreground/40",
+	expirando: "bg-brand",
+	expirada: "bg-destructive",
+} as const;
+
+function describeResponsible(atendimento: TChatAttendance, isOwner: boolean) {
+	if (atendimento?.responsavelTipo === "USUARIO") {
+		return { icon: UserRound, label: isOwner ? "Com você" : `Com ${atendimento.responsavelUsuario?.nome ?? "outro atendente"}` };
+	}
+	if (atendimento?.responsavelTipo === "AGENTE") return { icon: Sparkles, label: "Com a IA" };
+	if (atendimento?.responsavelTipo === "EXTERNO") return { icon: Smartphone, label: "Atendido pelo telefone" };
+	return { icon: UserRoundPlus, label: "Sem responsável" };
 }
 
 function formatDaySeparator(date: Date) {
@@ -260,6 +284,7 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 	if (!chat) return <ErrorComponent msg="Chat não encontrado." />;
 
 	const janela = getWhatsappWindowDisplay({ expiracao: chat.whatsappJanelaDataExpiracao, tipoConexao: chat.conexaoTipo });
+	const { icon: ResponsibleIcon, label: responsibleLabel } = describeResponsible(atendimento, isOwner);
 
 	/**
 	 * Inserir o orçamento na conversa só faz sentido quando a conversa aceita texto livre agora: sem
@@ -273,54 +298,67 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 	return (
 		<div className="flex h-full min-h-0 w-full min-w-0 overflow-hidden">
 			<div className="flex min-h-0 min-w-0 flex-1 flex-col">
-				<header className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2">
-					<div className="flex min-w-0 flex-col">
-						<span className="truncate text-sm font-semibold">{chat.cliente?.nome ?? "Cliente sem nome"}</span>
+				<header className="flex shrink-0 flex-col gap-0.5 border-b border-border px-4 py-2">
+					<div className="flex items-center gap-2">
+						<h2 className="min-w-0 flex-1 truncate text-sm font-semibold tracking-tight">{chat.cliente?.nome ?? "Cliente sem nome"}</h2>
+						{/* Tudo na faixa de ações usa a mesma altura (h-8): botões, chip de orçamento e ícones. */}
+						<div className="flex shrink-0 items-center gap-1.5">
+							{/* Orçamento em aberto é pendência comercial: aparece no header, que é a única
+							    faixa sempre visível da thread. */}
+							<ChatQuotesHeaderActions
+								chatId={chatId}
+								clientId={chat.clienteId}
+								clientName={chat.cliente?.nome ?? "este cliente"}
+								permissions={quotePermissions}
+								onInsertInConversation={insertQuoteInConversation}
+							/>
+
+							{/* Header carrega só posse e roteamento; status e prioridade vivem no painel. */}
+							<ChatAssignmentActions chatId={chatId} atendimento={atendimento} atendimentoIa={chat.atendimentoIa} currentUserId={currentUser.id} compact />
+
+							{/* Abaixo de xl o painel não cabe como coluna; vira gaveta sob demanda. */}
+							<Sheet>
+								<SheetTrigger
+									render={
+										<Button variant="ghost" size="icon-sm" className="shrink-0 xl:hidden" aria-label="Abrir contexto do atendimento">
+											<PanelRightOpen className="h-4 w-4" />
+										</Button>
+									}
+								/>
+								<SheetContent side="right" className="w-[min(22rem,90vw)] p-0">
+									<SheetTitle className="sr-only">Contexto do atendimento</SheetTitle>
+									<ChatContextPanel
+										chatId={chatId}
+										chat={chat}
+										currentUserId={currentUser.id}
+										quotePermissions={quotePermissions}
+										onInsertQuoteInConversation={insertQuoteInConversation}
+									/>
+								</SheetContent>
+							</Sheet>
+						</div>
+					</div>
+
+					{/* Metadados numa linha só: telefone, janela e quem responde. O responsável sai dos
+					    botões (que ficam só com o verbo) e vem para cá. */}
+					<p className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-[11px] text-muted-foreground">
+						{chat.cliente?.telefone && <span className="tabular-nums">{chat.cliente.telefone}</span>}
+						{chat.cliente?.telefone && <span aria-hidden>·</span>}
 						<span
 							className={cn(
-								"text-[11px]",
-								janela.variant === "expirada" ? "text-destructive" : janela.variant === "expirando" ? "text-brand" : "text-muted-foreground",
+								"flex items-center gap-1",
+								janela.variant === "expirada" ? "text-destructive" : janela.variant === "expirando" ? "text-brand" : undefined,
 							)}
 						>
-							{chat.cliente?.telefone} · {janela.label}
+							<span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", WINDOW_DOT_CLASS[janela.variant])} aria-hidden />
+							{janela.label}
 						</span>
-					</div>
-					<div className="flex items-center gap-1.5">
-						{/* Orçamento em aberto é pendência comercial: aparece no header, que é a única
-						    faixa sempre visível da thread. O `flex-wrap` do header cuida da quebra em
-						    telas estreitas. */}
-						<ChatQuotesHeaderActions
-							chatId={chatId}
-							clientId={chat.clienteId}
-							clientName={chat.cliente?.nome ?? "este cliente"}
-							permissions={quotePermissions}
-							onInsertInConversation={insertQuoteInConversation}
-						/>
-
-						{/* Header carrega só posse e roteamento; status e prioridade vivem no painel. */}
-						<ChatAssignmentActions chatId={chatId} atendimento={atendimento} atendimentoIa={chat.atendimentoIa} currentUserId={currentUser.id} compact />
-
-						{/* Abaixo de xl o painel não cabe como coluna; vira gaveta sob demanda. */}
-						<Sheet>
-							<SheetTrigger
-								render={
-									<Button variant="ghost" size="icon" className="shrink-0 xl:hidden" aria-label="Abrir contexto do atendimento">
-										<PanelRightOpen className="h-4 w-4" />
-									</Button>
-								}
-							/>
-							<SheetContent side="right" className="w-[min(22rem,90vw)] p-0">
-								<SheetTitle className="sr-only">Contexto do atendimento</SheetTitle>
-								<ChatContextPanel
-									chatId={chatId}
-									chat={chat}
-									currentUserId={currentUser.id}
-									quotePermissions={quotePermissions}
-									onInsertQuoteInConversation={insertQuoteInConversation}
-								/>
-							</SheetContent>
-						</Sheet>
-					</div>
+						<span aria-hidden>·</span>
+						<span className="flex min-w-0 items-center gap-1">
+							<ResponsibleIcon className="h-3 w-3 shrink-0" aria-hidden />
+							<span className={cn("truncate", isOwner && "font-medium text-foreground")}>{responsibleLabel}</span>
+						</span>
+					</p>
 				</header>
 
 				<div
@@ -331,22 +369,19 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 						isAtBottomRef.current = element.scrollTop > -40;
 						if (isAtBottomRef.current) setUnseenCount(0);
 					}}
-					className="relative flex flex-1 flex-col-reverse gap-1 overflow-y-auto px-4 py-3"
+					className="relative flex flex-1 flex-col-reverse gap-1 overflow-y-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-foreground/15 px-4 py-3"
 				>
 					{threadMessages.map((message, index) => {
 						const anterior = threadMessages[index + 1];
-						const showAuthor = !anterior || anterior.autorTipo !== message.autorTipo;
 						const currentDate = new Date(message.dataEnvio);
 						const showDaySeparator = !anterior || new Date(anterior.dataEnvio).toDateString() !== currentDate.toDateString();
+						const showAuthor = showDaySeparator || anterior.autorTipo !== message.autorTipo;
 
 						return (
-							<div key={message.clientTempId ?? message.id} className="flex flex-col gap-1">
-								<ChatMessageBubble
-									message={message}
-									showAuthor={showAuthor}
-									onRetry={(messageId) => retryMutation.mutate({ messageId })}
-									isRetrying={retryMutation.isPending}
-								/>
+							// Respiro maior entre turnos do que dentro de um turno: a troca de autor fica
+							// legível sem depender só do rótulo.
+							<div key={message.clientTempId ?? message.id} className={cn("flex flex-col gap-1", showAuthor && !showDaySeparator && "pt-2")}>
+								{/* O separador abre o dia: vem antes da primeira mensagem dele. */}
 								{showDaySeparator && (
 									<div className="my-2 flex items-center gap-2">
 										<span className="h-px flex-1 bg-border" />
@@ -354,6 +389,12 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 										<span className="h-px flex-1 bg-border" />
 									</div>
 								)}
+								<ChatMessageBubble
+									message={message}
+									showAuthor={showAuthor}
+									onRetry={(messageId) => retryMutation.mutate({ messageId })}
+									isRetrying={retryMutation.isPending}
+								/>
 							</div>
 						);
 					})}

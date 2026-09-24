@@ -111,7 +111,7 @@ export default GroupedStatsBlock;
 /// [TODO   ] VIRTUALIZE LIST OF PRODUCTS
 function ResultsByItemGraph({ data }: { data: TGroupedSalesStats["porItem"] }) {
 	const [type, setType] = useState<"qtde" | "total">("total");
-	const dataSorted = data.sort((a, b) => (type === "total" ? b.total - a.total : b.qtde - a.qtde));
+	const dataSorted = [...data].sort((a, b) => (type === "total" ? b.total - a.total : b.qtde - a.qtde));
 
 	const maxValue = useMemo(() => {
 		if (data.length === 0) return 0;
@@ -124,7 +124,8 @@ function ResultsByItemGraph({ data }: { data: TGroupedSalesStats["porItem"] }) {
 			const exportationJSON = data.map((item) => ({
 				ITEM: item.titulo,
 				"VALOR VENDIDO": item.total,
-				"Nº DE VENDAS": item.qtde,
+				"QUANTIDADE VENDIDA": item.qtde,
+				"Nº DE VENDAS": item.vendas,
 			}));
 			getExcelFromJSON(exportationJSON, "RESULTADOS_POR_ITEM.xlsx");
 			return toast.success("Dados exportados com sucesso");
@@ -177,16 +178,20 @@ function ResultsByItemGraph({ data }: { data: TGroupedSalesStats["porItem"] }) {
 								</div>
 								<div className="w-full flex flex-col gap-1">
 									<div className="w-full flex items-center gap-2 justify-between">
+										<p className="text-xs text-muted-foreground">QUANTIDADE VENDIDA</p>
+										<p className="text-xs font-medium">{formatDecimalPlaces(list[index].qtde)}</p>
+									</div>
+									<div className="w-full flex items-center gap-2 justify-between">
 										<p className="text-xs text-muted-foreground">Nº DE VENDAS</p>
-										<p className="text-xs font-medium">{list[index].qtde}</p>
+										<p className="text-xs font-medium">{list[index].vendas}</p>
 									</div>
 									<div className="w-full flex items-center gap-2 justify-between">
 										<p className="text-xs text-muted-foreground">VALOR VENDIDO</p>
 										<p className="text-xs font-medium">{formatToMoney(list[index].total)}</p>
 									</div>
 									<div className="w-full flex items-center gap-2 justify-between">
-										<p className="text-xs text-muted-foreground">TICKET MÉDIO</p>
-										<p className="text-xs font-medium">{formatToMoney(list[index].total / list[index].qtde)}</p>
+										<p className="text-xs text-muted-foreground">PREÇO MÉDIO POR UNIDADE</p>
+										<p className="text-xs font-medium">{formatToMoney(list[index].qtde ? list[index].total / list[index].qtde : 0)}</p>
 									</div>
 								</div>
 							</HoverCardContent>
@@ -236,7 +241,7 @@ function ResultsByItemGraph({ data }: { data: TGroupedSalesStats["porItem"] }) {
 								}
 							/>
 							<TooltipContent>
-								<p>Quantidade de Vendas</p>
+								<p>Quantidade Vendida</p>
 							</TooltipContent>
 						</Tooltip>
 					</TooltipProvider>
@@ -259,7 +264,7 @@ function ResultsByProductGroupGraph({ data }: { data: TGroupedSalesStats["porGru
 			const exportationJSON = data.map((item) => ({
 				GRUPO: item.titulo,
 				"VALOR VENDIDO": item.total,
-				"Nº DE VENDAS": item.qtde,
+				"QUANTIDADE VENDIDA": item.qtde,
 			}));
 			getExcelFromJSON(exportationJSON, "RESULTADOS_POR_GRUPO.xlsx");
 			return toast.success("Dados exportados com sucesso");
@@ -318,7 +323,7 @@ function ResultsByProductGroupGraph({ data }: { data: TGroupedSalesStats["porGru
 								}
 							/>
 							<TooltipContent>
-								<p>Quantidade de Vendas</p>
+								<p>Quantidade Vendida</p>
 							</TooltipContent>
 						</Tooltip>
 					</TooltipProvider>

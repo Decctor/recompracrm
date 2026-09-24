@@ -1,10 +1,12 @@
 "use client";
 
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { chipVariants } from "@/components/ui/chip";
 import { getChatListMessagePreview } from "@/lib/chats/chat-list-preview";
 import { getWhatsappWindowDisplay } from "@/lib/chats/whatsapp-window-status";
 import type { TChatInboxItem } from "@/lib/queries/chats";
 import { cn } from "@/lib/utils";
-import { FileText, Image as ImageIcon, MapPin, Mic, Smartphone, Sparkles, Sticker, Video } from "lucide-react";
+import { FileText, Image as ImageIcon, MapPin, Mic, Smartphone, Sparkles, Sticker, UserRound, Video } from "lucide-react";
 import { PRIORITY_META, STATUS_META } from "./attendance-meta";
 
 type ChatInboxListItemProps = {
@@ -42,6 +44,67 @@ function formatRelative(date: Date | string | null) {
 	return value.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
 }
 
+function getInitials(name: string) {
+	return name
+		.split(" ")
+		.filter(Boolean)
+		.slice(0, 2)
+		.map((word) => word[0]?.toUpperCase() ?? "")
+		.join("");
+}
+
+/**
+ * Quem responde por esta conversa, em uma linha com avatar. É a informação que o atendente
+ * procura ao varrer a lista — por isso ocupa uma linha própria em vez de disputar espaço com
+ * status e prioridade.
+ */
+function ResponsibleLine({ atendimento }: { atendimento: TChatInboxItem["atendimentoAtivo"] }) {
+	const avatarClass = "flex size-5 shrink-0 items-center justify-center rounded-full";
+
+	if (atendimento?.responsavelTipo === "USUARIO") {
+		const nome = atendimento.responsavelUsuario?.nome ?? "Atribuído";
+		return (
+			<span className="flex min-w-0 items-center gap-1.5">
+				<Avatar size="sm" className="size-5">
+					{atendimento.responsavelUsuario?.avatarUrl ? <AvatarImage src={atendimento.responsavelUsuario.avatarUrl} alt={nome} /> : null}
+					<AvatarFallback className="text-[9px] font-semibold">{getInitials(nome)}</AvatarFallback>
+				</Avatar>
+				<span className="truncate text-xs text-muted-foreground">{nome}</span>
+			</span>
+		);
+	}
+	if (atendimento?.responsavelTipo === "AGENTE") {
+		return (
+			<span className="flex min-w-0 items-center gap-1.5">
+				<span className={cn(avatarClass, "bg-primary/10 text-primary")}>
+					<Sparkles className="h-3 w-3" aria-hidden />
+				</span>
+				<span className="truncate text-xs font-medium text-foreground">Automação</span>
+			</span>
+		);
+	}
+	if (atendimento?.responsavelTipo === "EXTERNO") {
+		return (
+			<span className="flex min-w-0 items-center gap-1.5">
+				<span className={cn(avatarClass, "bg-muted text-muted-foreground")}>
+					<Smartphone className="h-3 w-3" aria-hidden />
+				</span>
+				<span className="truncate text-xs text-muted-foreground">Telefone</span>
+			</span>
+		);
+	}
+	// "Livre" é disponibilidade, não alerta. O âmbar já significa "janela expirando";
+	// duplicar a cor apagaria os dois sentidos.
+	return (
+		<span className="flex min-w-0 items-center gap-1.5">
+			<span className={cn(avatarClass, "border border-dashed border-muted-foreground/40 text-muted-foreground")}>
+				<UserRound className="h-3 w-3 opacity-60" aria-hidden />
+			</span>
+			<span className="truncate text-xs italic text-muted-foreground/80">Sem responsável</span>
+		</span>
+	);
+}
+
 export function ChatInboxListItem({ chat, isSelected, showPhoneBadge, onSelect }: ChatInboxListItemProps) {
 	const preview = getChatListMessagePreview(chat.ultimaMensagem);
 	const janela = getWhatsappWindowDisplay({ expiracao: chat.whatsappJanelaDataExpiracao, tipoConexao: chat.conexaoTipo });
@@ -49,6 +112,9 @@ export function ChatInboxListItem({ chat, isSelected, showPhoneBadge, onSelect }
 	const atendimento = chat.atendimentoAtivo;
 	const naoLidas = chat.mensagensNaoLidas ?? 0;
 	const numeroConexao = chat.conexaoTelefone?.numero || chat.conexaoTelefone?.nome;
+	// Só as prioridades que pedem ação aparecem na lista; baixa/média seriam ruído em toda linha.
+	const prioridade = atendimento?.prioridade === "ALTA" || atendimento?.prioridade === "URGENTE" ? atendimento.prioridade : null;
+	const PriorityIcon = prioridade ? PRIORITY_META[prioridade].icon : null;
 
 	return (
 		<button
@@ -56,79 +122,66 @@ export function ChatInboxListItem({ chat, isSelected, showPhoneBadge, onSelect }
 			onClick={() => onSelect(chat.id)}
 			aria-current={isSelected ? "true" : undefined}
 			className={cn(
-				"flex w-full flex-col gap-1 border-b border-border/60 px-3 py-2.5 text-left transition-colors",
-				"hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
-				isSelected && "bg-muted",
+				"relative flex w-full flex-col gap-1 border-b border-border/60 px-4 py-2.5 text-left transition-colors",
+				"focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/50",
+				isSelected ? "bg-muted/70" : "hover:bg-muted/40",
 			)}
 		>
-			<div className="flex items-center justify-between gap-2">
-				<span className="flex min-w-0 items-center gap-1.5">
-					{/* O ponto perdeu o avatar como âncora e passou a marcar o nome. Cor
-					    sozinha não passa em 1.4.1, então o rótulo vai em sr-only. */}
-					<span className={cn("h-2 w-2 shrink-0 rounded-full", WINDOW_DOT_CLASS[janela.variant])} />
-					<span className="sr-only">{janela.label}</span>
-					<span className="truncate text-sm font-semibold">{chat.cliente?.nome ?? "Cliente sem nome"}</span>
+			{isSelected ? <span className="absolute inset-y-2 left-0 w-0.5 rounded-full bg-primary" aria-hidden /> : null}
+
+			<div className="flex items-center gap-2">
+				<span className={cn("min-w-0 flex-1 truncate text-sm", naoLidas > 0 ? "font-semibold text-foreground" : "font-medium text-foreground")}>
+					{chat.cliente?.nome ?? "Cliente sem nome"}
 				</span>
-				<span className="shrink-0 text-[11px] text-muted-foreground">{formatRelative(chat.ultimaMensagemData)}</span>
+				<span className="flex shrink-0 items-center gap-1.5">
+					{/* Cor sozinha não passa em 1.4.1, então o rótulo da janela vai em sr-only. */}
+					<span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", WINDOW_DOT_CLASS[janela.variant])} />
+					<span className="sr-only">{janela.label}</span>
+					<span className={cn("text-[11px] tabular-nums", naoLidas > 0 ? "font-semibold text-foreground" : "text-muted-foreground")}>
+						{formatRelative(chat.ultimaMensagemData)}
+					</span>
+				</span>
 			</div>
 
-			<div className="flex items-center justify-between gap-2 pl-3.5">
-				<span className={cn("flex min-w-0 items-center gap-1 truncate text-xs text-muted-foreground", preview.isEmpty && "italic")}>
-					{preview.isOutgoing && !preview.isEmpty && <span className="shrink-0 font-medium">Você:</span>}
+			<div className="flex items-center gap-2">
+				<span
+					className={cn(
+						"flex min-w-0 flex-1 items-center gap-1 truncate text-xs",
+						preview.isEmpty ? "italic text-muted-foreground/70" : naoLidas > 0 ? "text-foreground/80" : "text-muted-foreground",
+					)}
+				>
+					{preview.isOutgoing && !preview.isEmpty && <span className="shrink-0 font-medium text-muted-foreground">Você:</span>}
 					{MediaIcon && <MediaIcon className="h-3 w-3 shrink-0" />}
 					<span className="truncate">{preview.body}</span>
 				</span>
 				{naoLidas > 0 && (
-					<span className="shrink-0 rounded-full bg-primary px-1.5 py-0.5 text-[11px] font-bold text-primary-foreground">
+					<span className="flex h-4.5 min-w-4.5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-bold tabular-nums text-primary-foreground">
 						{naoLidas > 99 ? "99+" : naoLidas}
 					</span>
 				)}
 			</div>
 
-			<div className="flex flex-wrap items-center gap-1.5 pl-3.5 text-[11px] text-muted-foreground">
-				{/* Estado do atendimento: mesmo vocabulário do select, para a cor significar
-				    a mesma coisa nas duas superfícies. */}
-				{atendimento && (
-					<span className="flex items-center gap-1">
-						<span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", STATUS_META[atendimento.status].dot)} />
-						{STATUS_META[atendimento.status].label}
-					</span>
-				)}
-
-				{/* Prioridade só aparece quando foi atribuída: um pill em toda conversa
-				    "média" tornaria a urgência invisível justamente onde ela importa. */}
-				{atendimento?.prioridade && (
-					<span className={cn("flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 font-bold", PRIORITY_META[atendimento.prioridade].pill)}>
-						{(() => {
-							const PriorityIcon = PRIORITY_META[atendimento.prioridade].icon;
-							return PriorityIcon ? <PriorityIcon className="h-3 w-3" /> : null;
-						})()}
-						{PRIORITY_META[atendimento.prioridade].label}
-					</span>
-				)}
-
-				{/* "Livre" é disponibilidade, não alerta. O âmbar já significa "janela
-				    expirando"; duplicar a cor apagaria os dois sentidos. */}
-				{(!atendimento || atendimento.responsavelTipo === "NAO_ATRIBUIDO") && (
-					<span className="rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 font-bold text-primary">Livre</span>
-				)}
-				{atendimento?.responsavelTipo === "USUARIO" && (
-					<span className="truncate font-medium">{atendimento.responsavelUsuario?.nome ?? "Atribuído"}</span>
-				)}
-				{atendimento?.responsavelTipo === "AGENTE" && (
-					<span className="flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5">
-						<Sparkles className="h-3 w-3" /> Automação
-					</span>
-				)}
-				{atendimento?.responsavelTipo === "EXTERNO" && (
-					<span className="flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5">
-						<Smartphone className="h-3 w-3" /> Telefone
-					</span>
-				)}
-
-				{showPhoneBadge && numeroConexao && (
-					<span className="ml-auto shrink-0 truncate rounded-full border border-border px-1.5 py-0.5 font-medium">{numeroConexao}</span>
-				)}
+			<div className="flex min-w-0 items-center gap-2 pt-0.5">
+				<ResponsibleLine atendimento={atendimento} />
+				<span className="ml-auto flex shrink-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+					{prioridade && (
+						<span className={cn(chipVariants({ variant: "outline", size: "xs", shape: "pill" }), "py-0.5 font-bold", PRIORITY_META[prioridade].pill)}>
+							{PriorityIcon ? <PriorityIcon className="h-3 w-3" /> : null}
+							{PRIORITY_META[prioridade].label}
+						</span>
+					)}
+					{/* Estado do atendimento: mesmo vocabulário do select, para a cor significar
+					    a mesma coisa nas duas superfícies. */}
+					{atendimento && (
+						<span className="flex items-center gap-1">
+							<span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", STATUS_META[atendimento.status].dot)} />
+							{STATUS_META[atendimento.status].label}
+						</span>
+					)}
+					{showPhoneBadge && numeroConexao && (
+						<span className="max-w-24 truncate rounded-full border border-border px-1.5 py-0.5 font-medium">{numeroConexao}</span>
+					)}
+				</span>
 			</div>
 		</button>
 	);

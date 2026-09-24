@@ -6,7 +6,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { getWhatsappWindowDisplay } from "@/lib/chats/whatsapp-window-status";
 import { cn } from "@/lib/utils";
-import { Lock, Paperclip, Send, X } from "lucide-react";
+import { Lock, Paperclip, Send, UserPlus, X } from "lucide-react";
 import { ChatVoiceRecorder } from "./ChatVoiceRecorder";
 import { forwardRef, useCallback, useEffect, useId, useImperativeHandle, useRef, useState } from "react";
 
@@ -135,8 +135,9 @@ export const ChatInputArea = forwardRef<TChatInputAreaHandle, ChatInputAreaProps
 		return (
 			<div className="flex items-center justify-between gap-3 border-t border-border bg-muted/40 px-4 py-3">
 				<p className="text-xs text-muted-foreground">Assuma este atendimento para enviar mensagens.</p>
-				<Button size="sm" className="text-[11px] font-extrabold uppercase tracking-[0.08em]" onClick={onAssume}>
-					ASSUMIR ATENDIMENTO
+				<Button size="sm" className="shrink-0 gap-1 text-[11px] font-extrabold uppercase tracking-[0.08em]" onClick={onAssume}>
+					<UserPlus className="h-3 w-3" />
+					ASSUMIR
 				</Button>
 			</div>
 		);

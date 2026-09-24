@@ -17,7 +17,7 @@ import { updateChatAssignment } from "@/lib/mutations/chats";
 import { useChatTransferTargets, type TChatAttendance, type TChatMessagesPage } from "@/lib/queries/chats";
 import type { TChatAssignmentPriority, TChatAssignmentStatus } from "@/schemas/enums";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, LogOut, Smartphone, Sparkles, UserPlus } from "lucide-react";
+import { ArrowRightLeft, ChevronDown, LogOut, Smartphone, Sparkles, UserPlus } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -29,7 +29,8 @@ type ChatAssignmentActionsProps = {
 	/**
 	 * Header da thread: só posse e roteamento (assumir/liberar/transferir). Status e
 	 * prioridade vivem no painel de contexto — são decisões, não reflexos, e no header
-	 * competiriam com o nome do cliente por atenção.
+	 * competiriam com o nome do cliente por atenção. Quem é o responsável também sai daqui:
+	 * a linha de metadados do header já diz, e o rótulo do botão pode ser só o verbo.
 	 */
 	compact?: boolean;
 };
@@ -62,17 +63,21 @@ export function ChatAssignmentActions({ chatId, atendimento, atendimentoIa, curr
 	});
 
 	// O rótulo diz de quem se está assumindo: "assumir" de uma fila vazia e "tomar da IA"
-	// são ações com consequências diferentes para quem clica.
-	const assumeLabel = isFree
+	// são ações com consequências diferentes para quem clica. No header o verbo basta — o
+	// responsável atual está escrito logo abaixo do nome — e o detalhe vai para o title.
+	const assumeDetail = isFree
 		? "ASSUMIR"
 		: atendimento?.responsavelTipo === "AGENTE"
 			? "ASSUMIR DA IA"
 			: atendimento?.responsavelTipo === "EXTERNO"
 				? "ASSUMIR DO TELEFONE"
 				: "ASSUMIR";
+	const assumeLabel = compact ? "ASSUMIR" : assumeDetail;
+	// Uma única escala para tudo que divide a faixa do header: mesma altura, mesmo peso.
+	const actionTypography = "text-[11px] font-extrabold uppercase tracking-[0.08em]";
 
 	return (
-		<div className={cn(compact ? "flex flex-wrap items-center gap-1.5" : "flex flex-col gap-2")}>
+		<div className={cn(compact ? "flex items-center gap-1.5" : "flex flex-col gap-2")}>
 			{!isOwner && (
 				<Button
 					size="sm"
@@ -104,10 +109,13 @@ export function ChatAssignmentActions({ chatId, atendimento, atendimentoIa, curr
 						<Button
 							size="sm"
 							variant="outline"
-							className={cn("gap-1 text-[11px] font-extrabold uppercase tracking-[0.08em]", !compact && "col-span-2 w-full")}
+							className={cn("gap-1", actionTypography, !compact && "col-span-2 w-full")}
 							disabled={isPending}
+							aria-label="Transferir atendimento"
 						>
-							TRANSFERIR
+							{compact && <ArrowRightLeft className="h-3 w-3 sm:hidden" />}
+							{/* Abaixo de sm o header divide 360px com o nome do cliente: fica o ícone. */}
+							<span className={cn(compact && "hidden sm:inline")}>TRANSFERIR</span>
 							<ChevronDown className="h-3 w-3 opacity-60" />
 						</Button>
 					}
@@ -209,14 +217,14 @@ export function ChatAssignmentActions({ chatId, atendimento, atendimentoIa, curr
 				</DropdownMenu>
 			)}
 
-			{atendimento?.responsavelTipo === "AGENTE" && (
+			{!compact && atendimento?.responsavelTipo === "AGENTE" && (
 				<span
 					className={cn("flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground", !compact && "col-span-2 w-fit")}
 				>
 					<Sparkles className="h-3 w-3" /> AUTOMAÇÃO
 				</span>
 			)}
-			{atendimento?.responsavelTipo === "EXTERNO" && (
+			{!compact && atendimento?.responsavelTipo === "EXTERNO" && (
 				<span
 					className={cn("flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground", !compact && "col-span-2 w-fit")}
 				>

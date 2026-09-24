@@ -9,7 +9,7 @@ import { SalesGeneralStatsFiltersSchema, type TSaleStatsGeneralQueryParams } fro
 import { db } from "@/services/drizzle";
 import { clients, partners, products, saleItems, sales, sellers } from "@/services/drizzle/schema";
 import dayjs from "dayjs";
-import { and, count, eq, exists, gte, inArray, isNotNull, lte, max, min, notInArray, sql, sum } from "drizzle-orm";
+import { and, count, countDistinct, eq, exists, gte, inArray, isNotNull, lte, max, min, notInArray, sql, sum } from "drizzle-orm";
 import createHttpError from "http-errors";
 
 export type TGroupedSalesStats = {
@@ -17,6 +17,7 @@ export type TGroupedSalesStats = {
 		id: string;
 		titulo: string;
 		qtde: number;
+		vendas: number;
 		total: number;
 	}[];
 	porGrupo: {
@@ -104,8 +105,14 @@ const getSalesGroupedStatsRoute: PagesRouteHandler<GetResponse> = async (req, re
 
 	return res.status(200).json({
 		data: {
-			porItem: stats.porItem.map((item) => ({ id: item.id, titulo: item.titulo, qtde: item.qtde, total: item.total ? Number(item.total) : 0 })),
-			porGrupo: stats.porGrupo.map((item) => ({ titulo: item.titulo, qtde: item.qtde, total: item.total ? Number(item.total) : 0 })),
+			porItem: stats.porItem.map((item) => ({
+				id: item.id,
+				titulo: item.titulo,
+				qtde: Number(item.qtde ?? 0),
+				vendas: item.vendas,
+				total: item.total ? Number(item.total) : 0,
+			})),
+			porGrupo: stats.porGrupo.map((item) => ({ titulo: item.titulo, qtde: Number(item.qtde ?? 0), total: item.total ? Number(item.total) : 0 })),
 			porVendedor: stats.porVendedor.map((item) => ({
 				vendedor: {
 					id: item.vendedorId as string,
@@ -299,7 +306,8 @@ async function getSalesGroupedStats({ filters, organizacaoId }: GetSalesParams) 
 		.select({
 			id: products.id,
 			titulo: products.nome,
-			qtde: count(saleItems.id),
+			qtde: sum(saleItems.quantidade),
+			vendas: countDistinct(saleItems.vendaId),
 			total: sum(saleItems.valorVendaTotalLiquido),
 		})
 		.from(saleItems)
@@ -320,7 +328,7 @@ async function getSalesGroupedStats({ filters, organizacaoId }: GetSalesParams) 
 	const resultsByItemGroup = await db
 		.select({
 			titulo: products.grupo,
-			qtde: count(saleItems.id),
+			qtde: sum(saleItems.quantidade),
 			total: sum(saleItems.valorVendaTotalLiquido),
 		})
 		.from(saleItems)

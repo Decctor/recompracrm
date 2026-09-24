@@ -64,7 +64,7 @@ export function ChatQuotesHeaderActions({ chatId, clientId, clientName, permissi
 												<button
 													type="button"
 													aria-label={`${summary} em aberto. Ver detalhes.`}
-													className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-[11px] font-bold text-primary transition-colors hover:bg-primary/15 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:zoom-in-95"
+													className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-2.5 text-[11px] font-bold text-primary transition-colors hover:bg-primary/15 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:zoom-in-95"
 												>
 													<FileText className="size-3 shrink-0" />
 													<span className="tabular-nums">{total}</span>
@@ -111,7 +111,7 @@ export function ChatQuotesHeaderActions({ chatId, clientId, clientName, permissi
 						<Tooltip>
 							<TooltipTrigger
 								render={
-									<Button variant="ghost" size="icon" className="shrink-0" aria-label="Novo orçamento" onClick={() => setIsBuilderOpen(true)}>
+									<Button variant="ghost" size="icon-sm" className="shrink-0" aria-label="Novo orçamento" onClick={() => setIsBuilderOpen(true)}>
 										<Plus className="size-4" />
 									</Button>
 								}
