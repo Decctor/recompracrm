@@ -18,7 +18,7 @@ import {
 import { cn } from "@/lib/utils";
 import { supabaseClient } from "@/services/supabase";
 import { useMutation, useQueryClient, type InfiniteData } from "@tanstack/react-query";
-import { ChevronDown, PanelRightOpen, Smartphone, Sparkles, UserRound, UserRoundPlus } from "lucide-react";
+import { ChevronDown, Loader2, PanelRightClose, PanelRightOpen, Smartphone, Sparkles, UserRound, UserRoundPlus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -70,6 +70,35 @@ function markChatReadInInboxCache(data: InfiniteData<TInboxPage> | undefined, ch
 	return changed ? { ...data, pages } : data;
 }
 
+const CONTEXT_PANEL_STORAGE_KEY = "chat-context-panel-open";
+
+/**
+ * Coluna de contexto recolhível em telas largas, lembrada entre sessões: quem atende em notebook
+ * prefere a conversa larga, quem tem monitor grande quer o contexto sempre à vista.
+ *
+ * Lido em efeito, não no inicializador: o servidor não tem localStorage e o primeiro render
+ * precisa bater com o do cliente. Aberto por padrão — é o comportamento de antes.
+ */
+function useContextPanelPreference() {
+	const [open, setOpen] = useState(true);
+	useEffect(() => {
+		try {
+			if (window.localStorage.getItem(CONTEXT_PANEL_STORAGE_KEY) === "false") setOpen(false);
+		} catch {
+			// Storage indisponível: segue aberto.
+		}
+	}, []);
+	const update = useCallback((next: boolean) => {
+		setOpen(next);
+		try {
+			window.localStorage.setItem(CONTEXT_PANEL_STORAGE_KEY, String(next));
+		} catch {
+			// Modo privado / quota estourada: a preferência só não persiste.
+		}
+	}, []);
+	return [open, update] as const;
+}
+
 /** Ponto da janela de 24h: verde quando aberta (é o que libera texto livre aqui), cor de alerta perto do fim. */
 const WINDOW_DOT_CLASS = {
 	aberta: "bg-success",
@@ -119,6 +148,22 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 		const pendentes = optimisticMessages.filter((message) => !persistedClientIds.has(message.clienteMensagemId));
 		return [...pendentes, ...messages];
 	}, [messages, optimisticMessages]);
+
+	const loadOlderRef = useRef<HTMLDivElement>(null);
+	useEffect(() => {
+		const sentinel = loadOlderRef.current;
+		if (!sentinel || !hasNextPage) return;
+		const observer = new IntersectionObserver(
+			(entries) => {
+				if (entries.some((entry) => entry.isIntersecting) && !isFetchingNextPage) void fetchNextPage();
+			},
+			{ root: scrollRef.current, rootMargin: "300px 0px 0px 0px" },
+		);
+		observer.observe(sentinel);
+		return () => observer.disconnect();
+	}, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+	const [contextPanelOpen, setContextPanelOpen] = useContextPanelPreference();
 
 	const markRead = useMutation({
 		mutationFn: markChatRead,
@@ -316,6 +361,17 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 							{/* Header carrega só posse e roteamento; status e prioridade vivem no painel. */}
 							<ChatAssignmentActions chatId={chatId} atendimento={atendimento} atendimentoIa={chat.atendimentoIa} currentUserId={currentUser.id} compact />
 
+							<Button
+								variant="ghost"
+								size="icon-sm"
+								className="hidden shrink-0 xl:inline-flex"
+								aria-label={contextPanelOpen ? "Ocultar contexto do atendimento" : "Mostrar contexto do atendimento"}
+								aria-pressed={contextPanelOpen}
+								onClick={() => setContextPanelOpen(!contextPanelOpen)}
+							>
+								{contextPanelOpen ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
+							</Button>
+
 							{/* Abaixo de xl o painel não cabe como coluna; vira gaveta sob demanda. */}
 							<Sheet>
 								<SheetTrigger
@@ -399,11 +455,19 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 						);
 					})}
 
+					{/* Sentinela no topo visual (fim do DOM, por causa do flex-col-reverse): rolar para
+				    cima carrega o histórico sozinho. No col-reverse o scrollTop é medido a partir do
+				    fundo, então as mensagens antigas entram acima sem deslocar o que está na tela. */}
 					{hasNextPage && (
-						<div className="flex justify-center py-2">
-							<Button variant="ghost" size="sm" className="text-xs" disabled={isFetchingNextPage} onClick={() => fetchNextPage()}>
-								{isFetchingNextPage ? "Carregando..." : "Carregar mensagens anteriores"}
-							</Button>
+						<div ref={loadOlderRef} className="flex justify-center py-2 text-[11px] text-muted-foreground">
+							{isFetchingNextPage ? (
+								<span className="flex items-center gap-1.5">
+									<Loader2 className="h-3 w-3 animate-spin" />
+									Carregando mensagens anteriores
+								</span>
+							) : (
+								<span className="h-3" />
+							)}
 						</div>
 					)}
 				</div>
@@ -440,7 +504,7 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 				/>
 			</div>
 
-			<aside className="hidden min-h-0 w-80 shrink-0 overflow-hidden border-l border-border xl:block">
+			<aside className={cn("hidden min-h-0 w-80 shrink-0 overflow-hidden border-l border-border", contextPanelOpen && "xl:block")}>
 				<ChatContextPanel
 					chatId={chatId}
 					chat={chat}

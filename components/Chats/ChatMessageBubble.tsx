@@ -123,10 +123,27 @@ export function ChatMessageBubble({ message, showAuthor, onRetry, isRetrying }: 
 		return [...lastBySender.values()].filter((reaction) => reaction.action === "react").map((reaction) => reaction.emoji ?? "❤️");
 	})();
 
+	// O texto de localização repete o que o cartão já mostra — só serve a prévias e agentes.
+	const showsText =
+		!message.metadados?.whatsappUnsupported &&
+		!!message.conteudoTexto &&
+		!(message.conteudoMidiaTipo === "LOCALIZACAO" && message.metadados?.whatsappLocation);
+	// Hora na mesma linha do texto, como no WhatsApp: metade da altura numa mensagem curta. Só
+	// quando o texto é o último elemento da bolha — com a análise da IA abaixo, o carimbo fecha a bolha.
+	const metaInline = showsText && !(hasMedia && !isSticker && aiContext);
+	const meta = (
+		<>
+			<span>{formatTime(message.dataEnvio)}</span>
+			{!isIncoming && <DeliveryTicks status={message.statusEntrega} />}
+		</>
+	);
+
 	return (
 		<div className={cn("flex w-full flex-col gap-0.5", isIncoming ? "items-start" : "items-end")}>
 			{showAuthor && (
-				<span className="flex items-center gap-1 px-1 text-[11px] font-extrabold uppercase tracking-[0.08em] text-muted-foreground">
+				// Rótulo discreto: quem fala é contexto, a mensagem é o conteúdo. Caixa alta em negrito
+				// fazia o nome pesar mais que o texto da bolha.
+				<span className="flex items-center gap-1 px-1 text-[11px] font-semibold text-muted-foreground">
 					{message.autorTipo === "AI" && <Sparkles className="h-3 w-3" />}
 					{message.autorTipo === "BUSINESS-APP" && <Smartphone className="h-3 w-3" />}
 					{resolveAuthorLabel(message)}
@@ -193,10 +210,21 @@ export function ChatMessageBubble({ message, showAuthor, onRetry, isRetrying }: 
 						{message.metadados.whatsappUnsupported.code ? ` (código ${message.metadados.whatsappUnsupported.code})` : ""}
 					</p>
 				) : (
-					// O texto de localização repete o que o cartão já mostra — só serve a prévias e agentes.
-					message.conteudoTexto &&
-					!(message.conteudoMidiaTipo === "LOCALIZACAO" && message.metadados?.whatsappLocation) && (
-						<WhatsAppMessageText text={message.conteudoTexto} onColoredSurface={onColoredSurface} />
+					showsText && (
+						<p className="relative">
+							<WhatsAppMessageText text={message.conteudoTexto ?? ""} onColoredSurface={onColoredSurface} />
+							{metaInline && (
+								<>
+									{/* Reserva invisível do tamanho do carimbo no fim da última linha: se couber,
+									    a hora divide a linha com o texto; se não, a reserva quebra e abre uma
+									    linha só para ela. O carimbo real fica ancorado no canto. */}
+									<span aria-hidden className="invisible ml-2 inline-flex items-center gap-1 text-[11px]">
+										{meta}
+									</span>
+									<span className="absolute right-0 bottom-0 inline-flex translate-y-0.5 items-center gap-1 text-[11px] leading-none opacity-80">{meta}</span>
+								</>
+							)}
+						</p>
 					)
 				)}
 
@@ -210,17 +238,17 @@ export function ChatMessageBubble({ message, showAuthor, onRetry, isRetrying }: 
 					</Collapsible>
 				)}
 
-				<div
-					className={cn(
-						"mt-1 flex items-center gap-1 text-[11px] opacity-80",
-						isIncoming ? "justify-start" : "justify-end",
-						// Fora da bolha colorida não há cor herdada para o carimbo de hora.
-						isSticker && "text-muted-foreground",
-					)}
-				>
-					<span>{formatTime(message.dataEnvio)}</span>
-					{!isIncoming && <DeliveryTicks status={message.statusEntrega} />}
-				</div>
+				{!metaInline && (
+					<div
+						className={cn(
+							"mt-1 flex items-center justify-end gap-1 text-[11px] opacity-80",
+							// Fora da bolha colorida não há cor herdada para o carimbo de hora.
+							isSticker && "text-muted-foreground",
+						)}
+					>
+						{meta}
+					</div>
+				)}
 			</div>
 
 			{activeReactions.length > 0 && (
