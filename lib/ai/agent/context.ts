@@ -35,6 +35,9 @@ function describeAuthor(autorTipo: string): string {
 	if (autorTipo === "CLIENTE") return "Cliente";
 	if (autorTipo === "AI") return "Você (assistente)";
 	if (autorTipo === "USUÁRIO") return "Atendente humano";
+	// Eco do WhatsApp Business no celular da loja: é gente da equipe respondendo por fora da
+	// plataforma. Rotulado como "Sistema", o modelo lia a conversa como ruído automático.
+	if (autorTipo === "BUSINESS-APP") return "Atendente humano (celular da loja)";
 	return "Sistema";
 }
 

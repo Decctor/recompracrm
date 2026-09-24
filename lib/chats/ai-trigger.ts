@@ -106,6 +106,28 @@ export async function claimChatForAi({
 }
 
 /**
+ * O atendimento ainda autoriza a IA a falar.
+ *
+ * Um handoff feito pela própria run conta como posse: o atendimento passou a ser do humano, mas
+ * a mensagem desta run é justamente o aviso ao cliente (e muitas vezes a resposta ao que ele
+ * pediu). Sem essa exceção, o agente que transferia descartava a própria resposta e o cliente
+ * ficava sem retorno até o atendente aparecer.
+ */
+async function isAttendanceStillAgentOwned({
+	organizationId,
+	chatId,
+	ownHandoffAttendanceId,
+}: {
+	organizationId: string;
+	chatId: string;
+	ownHandoffAttendanceId: string | null;
+}): Promise<boolean> {
+	const atual = await getCurrentChatAttendance(db, { organizacaoId: organizationId, chatId });
+	if (atual?.responsavelTipo === "AGENTE") return true;
+	return Boolean(ownHandoffAttendanceId && atual?.id === ownHandoffAttendanceId);
+}
+
+/**
  * Reconfirma que responder ainda faz sentido, sobre os fatos da conversa.
  *
  * Aborta se o cliente mandou outra mensagem depois da que disparou (a mais nova dispara o
@@ -121,11 +143,13 @@ export async function confirmAiResponseStillValid({
 	chatId,
 	messageId,
 	messageDate,
+	ownHandoffAttendanceId = null,
 }: {
 	organizationId: string;
 	chatId: string;
 	messageId: string;
 	messageDate: Date;
+	ownHandoffAttendanceId?: string | null;
 }): Promise<TAiTriggerDecision> {
 	const ultimaDoCliente = await db.query.chatMessages.findFirst({
 		where: and(eq(chatMessages.chatId, chatId), eq(chatMessages.autorTipo, "CLIENTE")),
@@ -145,8 +169,9 @@ export async function confirmAiResponseStillValid({
 	if (respostaPosterior) return { shouldRespond: false, reason: "A conversa já foi respondida." };
 
 	// Reconfirma a posse antes de gastar tokens: o humano pode ter assumido no intervalo.
-	const atual = await getCurrentChatAttendance(db, { organizacaoId: organizationId, chatId });
-	if (atual?.responsavelTipo !== "AGENTE") return { shouldRespond: false, reason: "O atendimento deixou de ser da IA." };
+	if (!(await isAttendanceStillAgentOwned({ organizationId, chatId, ownHandoffAttendanceId }))) {
+		return { shouldRespond: false, reason: "O atendimento deixou de ser da IA." };
+	}
 
 	return { shouldRespond: true };
 }
@@ -168,12 +193,15 @@ export async function confirmAiDeliveryStillValid({
 	trigger,
 	triggerMessageId,
 	runStartedAt,
+	ownHandoffAttendanceId = null,
 }: {
 	organizationId: string;
 	chatId: string;
 	trigger: TAiAgentRunTriggerEnum;
 	triggerMessageId: string | null;
 	runStartedAt: Date;
+	/** Atendimento que esta run transferiu para um humano, se transferiu. */
+	ownHandoffAttendanceId?: string | null;
 }): Promise<TAiTriggerDecision> {
 	if (trigger === "PLAYGROUND") return { shouldRespond: true };
 
@@ -183,7 +211,13 @@ export async function confirmAiDeliveryStillValid({
 			columns: { id: true, dataEnvio: true },
 		});
 		if (!triggerMessage) return { shouldRespond: false, reason: "Mensagem gatilho não encontrada." };
-		return confirmAiResponseStillValid({ organizationId, chatId, messageId: triggerMessage.id, messageDate: triggerMessage.dataEnvio });
+		return confirmAiResponseStillValid({
+			organizationId,
+			chatId,
+			messageId: triggerMessage.id,
+			messageDate: triggerMessage.dataEnvio,
+			ownHandoffAttendanceId,
+		});
 	}
 
 	const entradaPosterior = await db.query.chatMessages.findFirst({
@@ -202,8 +236,9 @@ export async function confirmAiDeliveryStillValid({
 	});
 	if (respostaPosterior) return { shouldRespond: false, reason: "A conversa já foi respondida durante a run." };
 
-	const atual = await getCurrentChatAttendance(db, { organizacaoId: organizationId, chatId });
-	if (atual?.responsavelTipo !== "AGENTE") return { shouldRespond: false, reason: "O atendimento deixou de ser da IA." };
+	if (!(await isAttendanceStillAgentOwned({ organizationId, chatId, ownHandoffAttendanceId }))) {
+		return { shouldRespond: false, reason: "O atendimento deixou de ser da IA." };
+	}
 
 	return { shouldRespond: true };
 }

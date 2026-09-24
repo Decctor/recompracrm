@@ -35,6 +35,17 @@ além de avisá-lo de que um atendente vai continuar.`,
 			};
 		}
 
+		// O modelo às vezes repete a chamada no mesmo turno (a run b937da03 transferiu três vezes).
+		// A conversa já é de um humano: repetir sortearia outro atendente e dispararia outra
+		// notificação.
+		if (context.effects.handoffAttendanceId) {
+			return {
+				success: true,
+				message: "O atendimento já foi transferido nesta execução. Não transfira de novo: apenas responda ao cliente.",
+				result: { atendimentoId: context.effects.handoffAttendanceId },
+			};
+		}
+
 		const { atendimentoId, usuarioDestinoNome } = await transferChatToHuman({
 			db: context.db,
 			organizacaoId: context.organizacaoId,
@@ -42,6 +53,7 @@ além de avisá-lo de que um atendente vai continuar.`,
 			motivo: input.motivo,
 			resumoConversa: input.resumoConversa,
 		});
+		if (atendimentoId) context.effects.handoffAttendanceId = atendimentoId;
 
 		return {
 			success: true,

@@ -22,6 +22,13 @@ export type TAgentToolContext = {
 	 * reais" → "quais são?") — ver `normalizeProductQueryInput`.
 	 */
 	turn: { mensagensRecentesCliente: string[] };
+	/**
+	 * O que as ferramentas mudaram na conversa durante este turno. Mutável de propósito: é o
+	 * único canal de volta das ferramentas para quem entrega a resposta. Hoje carrega o handoff —
+	 * o atendimento que a própria run transferiu não pode barrar a entrega do aviso ao cliente,
+	 * e uma segunda chamada de transferência na mesma run não pode sortear outro atendente.
+	 */
+	effects: { handoffAttendanceId: string | null };
 	capacidades: TAiAgentCapabilities;
 	toolCall?: { id: string };
 	operation?: { id: string; tipo: TAiAgentOperationTypeEnum };

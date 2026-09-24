@@ -72,6 +72,7 @@ export async function respondToChatWithAgent({
 			trigger: gatilho,
 			triggerMessageId: mensagemGatilhoId ?? null,
 			runStartedAt,
+			ownHandoffAttendanceId: prepared.toolContext.effects.handoffAttendanceId,
 		});
 		if (!delivery.shouldRespond) {
 			await markAgentRunCancelled(database, { runId: prepared.run.id, reason: delivery.reason });
