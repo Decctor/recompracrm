@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { resolveDateForWindow } from "@/lib/campaigns/dispatch/schedule";
+import { resolveDateForWindow, resolveScheduledWindowsForNow } from "@/lib/campaigns/dispatch/schedule";
 import type { TInteractionCronTimeBlock } from "@/lib/campaigns/time-blocks";
 import { InteractionContextMetadataSchema } from "@/schemas/interactions";
 import { connection, db } from "@/services/drizzle";
@@ -22,8 +22,6 @@ import { eq, sql } from "drizzle-orm";
  * Lê as colunas `agendamento_*` por SQL cru (o schema Drizzle já não as declara). Rode ANTES do
  * passo 3 da migration (drop das colunas). Dry-run por padrão; `--apply` persiste.
  */
-
-const STALE_AFTER_HOURS = 48;
 
 type TLegacyPendingRow = {
 	id: string;
@@ -56,12 +54,11 @@ async function main() {
 		total: number;
 	}[];
 
-	// Pendência é só o que ainda faria sentido enviar: linhas cuja janela passou há mais de
-	// STALE_AFTER_HOURS são restos de runs antigos que nunca saíram (o cron só drenava o dia
-	// corrente). Convertê-las dispararia meses de "primeira compra" atrasados de uma vez.
+	// O cutover só preserva agendamentos de hoje em diante, no mesmo fuso do relógio de campanhas.
+	// Linhas de datas anteriores não devem ser disparadas retroativamente.
 	const now = new Date();
-	const staleBefore = new Date(now.getTime() - STALE_AFTER_HOURS * 60 * 60_000);
-	const classify = (row: TLegacyPendingRow): { kind: "CONVERT" | "INACTIVE" | "STALE"; scheduledAt: Date | null } => {
+	const todayKey = resolveScheduledWindowsForNow(now).dateKey;
+	const classify = (row: TLegacyPendingRow): { kind: "CONVERT" | "INACTIVE" | "PAST_DATE"; scheduledAt: Date | null } => {
 		const scheduledAt =
 			row.agendamento_data_referencia && row.agendamento_bloco_referencia
 				? resolveDateForWindow({
@@ -70,19 +67,20 @@ async function main() {
 					})
 				: null;
 		if (!row.campanha_ativa) return { kind: "INACTIVE", scheduledAt };
-		if (scheduledAt && scheduledAt < staleBefore) return { kind: "STALE", scheduledAt };
+		if (row.agendamento_data_referencia && row.agendamento_data_referencia.slice(0, 10) < todayKey)
+			return { kind: "PAST_DATE", scheduledAt };
 		return { kind: "CONVERT", scheduledAt };
 	};
 	const classified = pending.map((row) => ({ row, ...classify(row) }));
 	const counts = {
 		convert: classified.filter((item) => item.kind === "CONVERT").length,
 		inactive: classified.filter((item) => item.kind === "INACTIVE").length,
-		stale: classified.filter((item) => item.kind === "STALE").length,
+		pastDate: classified.filter((item) => item.kind === "PAST_DATE").length,
 	};
 
 	console.log(`${pending.length} interação(ões) de campanha ainda não enviadas:`);
-	console.log(`  ${counts.convert} viram disparos (campanha ativa, janela nas últimas ${STALE_AFTER_HOURS}h ou futura);`);
-	console.log(`  ${counts.stale} descartadas por janela vencida há mais de ${STALE_AFTER_HOURS}h;`);
+	console.log(`  ${counts.convert} viram disparos (campanha ativa, agendados de ${todayKey} em diante);`);
+	console.log(`  ${counts.pastDate} descartadas por data anterior a ${todayKey};`);
 	console.log(`  ${counts.inactive} descartadas por campanha pausada.`);
 	console.log(`${blocked?.total ?? 0} interação(ões) BLOQUEADA (serão apagadas).`);
 
