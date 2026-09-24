@@ -52,9 +52,21 @@ describe("parseWebhookIncomingMessages", () => {
 
 	it("mapeia os tipos de mídia para o enum da aplicação", () => {
 		const payload = buildMessagesPayload([
-			{ id: "wamid.img", from: "5534999991111", timestamp: "1755000000", type: "image", image: { id: "media-1", mime_type: "image/jpeg", caption: "foto" } },
+			{
+				id: "wamid.img",
+				from: "5534999991111",
+				timestamp: "1755000000",
+				type: "image",
+				image: { id: "media-1", mime_type: "image/jpeg", caption: "foto" },
+			},
 			{ id: "wamid.aud", from: "5534999991111", timestamp: "1755000000", type: "audio", audio: { id: "media-2", mime_type: "audio/ogg" } },
-			{ id: "wamid.doc", from: "5534999991111", timestamp: "1755000000", type: "document", document: { id: "media-3", mime_type: "application/pdf", filename: "nota.pdf" } },
+			{
+				id: "wamid.doc",
+				from: "5534999991111",
+				timestamp: "1755000000",
+				type: "document",
+				document: { id: "media-3", mime_type: "application/pdf", filename: "nota.pdf" },
+			},
 		]);
 
 		const [image, audio, document] = parseWebhookIncomingMessages(payload);
@@ -92,7 +104,13 @@ describe("parseWebhookIncomingMessages", () => {
 
 		const [location, broken] = parseWebhookIncomingMessages(payload);
 		assert.equal(location.messageType, "LOCALIZACAO");
-		assert.deepEqual(location.location, { latitude: -18.9186, longitude: -48.2772, name: "Mercado Central", address: "Av. Afonso Pena, 500", url: null });
+		assert.deepEqual(location.location, {
+			latitude: -18.9186,
+			longitude: -48.2772,
+			name: "Mercado Central",
+			address: "Av. Afonso Pena, 500",
+			url: null,
+		});
 		assert.equal(location.textContent, "Mercado Central — Av. Afonso Pena, 500");
 		// Coordenadas inválidas não têm o que plotar: degrada para texto.
 		assert.equal(broken.messageType, "TEXTO");
@@ -154,7 +172,13 @@ describe("parseWebhookIncomingMessages", () => {
 
 	it("classifica mensagem de sistema e tipo não suportado com os dados do erro", () => {
 		const payload = buildMessagesPayload([
-			{ id: "wamid.sys", from: "5534999991111", timestamp: "1755000000", type: "system", system: { type: "user_changed_number", body: "trocou de número", wa_id: "5534988880000" } },
+			{
+				id: "wamid.sys",
+				from: "5534999991111",
+				timestamp: "1755000000",
+				type: "system",
+				system: { type: "user_changed_number", body: "trocou de número", wa_id: "5534988880000" },
+			},
 			{
 				id: "wamid.unsup",
 				from: "5534999991111",
@@ -181,7 +205,14 @@ describe("parseWebhookIncomingMessages", () => {
 							value: {
 								metadata: { phone_number_id: "phone-echo" },
 								message_echoes: [
-									{ id: "wamid.echo-react", from: "5534999990000", to: "5534999991111", timestamp: "1755000000", type: "reaction", reaction: { message_id: "wamid.x", emoji: "❤" } },
+									{
+										id: "wamid.echo-react",
+										from: "5534999990000",
+										to: "5534999991111",
+										timestamp: "1755000000",
+										type: "reaction",
+										reaction: { message_id: "wamid.x", emoji: "❤" },
+									},
 									{ id: "wamid.echo-text", from: "5534999990000", to: "5534999991111", timestamp: "1755000001", type: "text", text: { body: "segue o link" } },
 								],
 							},
@@ -194,6 +225,66 @@ describe("parseWebhookIncomingMessages", () => {
 		const parsed = parseWebhookMessageEchoes(payload);
 		assert.equal(parsed.length, 1);
 		assert.equal(parsed[0].whatsappMessageId, "wamid.echo-text");
+	});
+
+	it("classifica edição como kind próprio, com a mensagem-alvo e o texto novo", () => {
+		// Formato real recebido da Meta (2026-09-24).
+		const payload = buildMessagesPayload([
+			{
+				id: "wamid.edit",
+				from: "5534999991111",
+				timestamp: "1755000000",
+				type: "edit",
+				edit: { original_message_id: "wamid.original", message: { type: "text", text: { body: "troco pra 50, por favor" } } },
+			},
+			{
+				id: "wamid.edit-broken",
+				from: "5534999991111",
+				timestamp: "1755000001",
+				type: "edit",
+				edit: { message: { type: "text", text: { body: "sem alvo" } } },
+			},
+		]);
+
+		const [edit, broken] = parseWebhookIncomingMessages(payload);
+		assert.equal(edit.kind, "edit");
+		assert.deepEqual(edit.edit, { originalWhatsappMessageId: "wamid.original", textContent: "troco pra 50, por favor" });
+		// O texto também vai no textContent: se a original não estiver na base, a edição entra como mensagem.
+		assert.equal(edit.textContent, "troco pra 50, por favor");
+		// Sem alvo não há o que aplicar: cai no placeholder, como qualquer tipo sem tratamento.
+		assert.equal(broken.kind, "message");
+		assert.match(broken.textContent ?? "", /não suportado/);
+	});
+
+	it("aceita edição ecoada pelo app do celular", () => {
+		const payload = {
+			entry: [
+				{
+					changes: [
+						{
+							field: "smb_message_echoes",
+							value: {
+								metadata: { phone_number_id: "phone-echo" },
+								message_echoes: [
+									{
+										id: "wamid.echo-edit",
+										from: "5534999990000",
+										to: "5534999991111",
+										timestamp: "1755000000",
+										type: "edit",
+										edit: { original_message_id: "wamid.echo-original", message: { type: "text", text: { body: "Oque gostaria de pedir ?" } } },
+									},
+								],
+							},
+						},
+					],
+				},
+			],
+		};
+
+		const [echo] = parseWebhookMessageEchoes(payload);
+		assert.equal(echo.kind, "edit");
+		assert.deepEqual(echo.edit, { originalWhatsappMessageId: "wamid.echo-original", textContent: "Oque gostaria de pedir ?" });
 	});
 
 	it("persiste tipos desconhecidos como placeholder de texto em vez de descartar", () => {

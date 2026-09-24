@@ -411,6 +411,13 @@ async function handleIncomingMessage(incomingMessage: ReturnType<typeof parseWeb
 		return;
 	}
 
+	// Edição do cliente: reescreve a mensagem original. Sem a original na base, segue como
+	// mensagem nova com o texto editado — melhor que perder o que o cliente escreveu.
+	if (incomingMessage.kind === "edit" && incomingMessage.edit) {
+		const applied = await applyWhatsappEdit({ organizacaoId, edit: incomingMessage.edit, date: new Date(incomingMessage.timestamp) });
+		if (applied) return;
+	}
+
 	// Mensagem de sistema (ex.: troca de número): registrada sem criar mensagem vazia no chat.
 	if (incomingMessage.kind === "system" && incomingMessage.system) {
 		console.log("[WHATSAPP_WEBHOOK] [SYSTEM] Mensagem de sistema recebida:", {
@@ -589,6 +596,38 @@ async function attachWhatsappReaction(input: {
 }
 
 /**
+ * Aplica a edição de uma mensagem feita no WhatsApp: o texto novo substitui `conteudoTexto` e o
+ * anterior vai para `metadados.whatsappEdits`. Antes, cada edição virava uma mensagem-placeholder
+ * "[Mensagem do tipo "edit" recebida]", que poluía o histórico do hub e o contexto da IA.
+ *
+ * Devolve `false` quando a mensagem original não está na base (enviada antes da conexão, ou
+ * fora do hub), para o chamador persistir o texto como mensagem nova.
+ */
+async function applyWhatsappEdit(input: {
+	organizacaoId: string;
+	edit: { originalWhatsappMessageId: string; textContent: string };
+	date: Date;
+}): Promise<boolean> {
+	const targetMessage = await db.query.chatMessages.findFirst({
+		where: and(eq(chatMessages.organizacaoId, input.organizacaoId), eq(chatMessages.whatsappMessageId, input.edit.originalWhatsappMessageId)),
+		columns: { id: true, conteudoTexto: true, metadados: true },
+	});
+	if (!targetMessage) {
+		console.warn("[WHATSAPP_WEBHOOK] [EDIT] Mensagem original da edição não encontrada:", input.edit.originalWhatsappMessageId);
+		return false;
+	}
+
+	const metadados = targetMessage.metadados ?? {};
+	const edits = [...(metadados.whatsappEdits ?? []), { previousText: targetMessage.conteudoTexto, date: input.date.toISOString() }];
+
+	await db
+		.update(chatMessages)
+		.set({ conteudoTexto: input.edit.textContent, metadados: { ...metadados, whatsappEdits: edits } })
+		.where(eq(chatMessages.id, targetMessage.id));
+	return true;
+}
+
+/**
  * Handle message echoes from WhatsApp Business phone app (Coexistence)
  */
 async function handleMessageEchoes(body: TMetaWebhookBody): Promise<void> {
@@ -626,6 +665,13 @@ async function handleMessageEcho(messageEcho: ReturnType<typeof parseWebhookMess
 	const whatsappToken = connectionPhone.conexao.token!; // Meta Cloud API connections always have token
 	const whatsappConexaoId = connectionPhone.conexaoId;
 	const whatsappConexaoTelefoneId = connectionPhone.id;
+
+	// Edição feita no celular da loja: reescreve a mensagem ecoada antes. Não é resposta nova,
+	// então também não mexe no atendimento.
+	if (messageEcho.kind === "edit" && messageEcho.edit) {
+		const applied = await applyWhatsappEdit({ organizacaoId, edit: messageEcho.edit, date: new Date(messageEcho.timestamp) });
+		if (applied) return;
+	}
 
 	// ESTÁGIO 1 — IDENTIDADE, sem gate: o destinatário de um echo também é contato da base.
 	const resolvedClient = await resolveWhatsappClient({

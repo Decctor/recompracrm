@@ -197,10 +197,10 @@ export function parseStatusUpdate(statusPayload: unknown): ParsedStatusUpdate | 
 
 /**
  * O que o item do webhook representa: uma mensagem de conversa, uma reação a uma mensagem
- * existente, uma mensagem de sistema (troca de número) ou um tipo que a Cloud API não
- * renderiza (enquete, edição, gif…).
+ * existente, a edição de uma mensagem existente, uma mensagem de sistema (troca de número) ou
+ * um tipo que a Cloud API não renderiza (enquete, gif…).
  */
-export type TWhatsappIncomingKind = "message" | "reaction" | "system" | "unsupported";
+export type TWhatsappIncomingKind = "message" | "reaction" | "edit" | "system" | "unsupported";
 
 /**
  * Conteúdo de uma mensagem da Cloud API, compartilhado entre a entrada (`messages`) e o eco
@@ -221,6 +221,11 @@ type TParsedMessageContent = {
 	button?: { text: string; payload: string | null };
 	/** Só em reações: a mensagem-alvo e o emoji (ausente quando é um "unreact"). */
 	reaction?: { targetWhatsappMessageId: string; emoji: string | null };
+	/**
+	 * Só em edições: a mensagem-alvo e o novo texto. `textContent` também recebe o texto, para
+	 * que uma edição cuja original não está na base ainda entre como mensagem legível.
+	 */
+	edit?: { originalWhatsappMessageId: string; textContent: string };
 	/** Só em mensagens de sistema (ex.: troca de número). */
 	system?: { type: string; body: string | null; newWaId: string | null };
 	/** Só em tipos não suportados: o erro informado pela Meta. */
@@ -378,6 +383,19 @@ function parseMessageContent(message: Record<string, unknown>): TParsedMessageCo
 			};
 		}
 
+		// Edição de uma mensagem já enviada — pelo cliente ou pelo app do celular da loja. O
+		// payload traz a mensagem nova inteira em "edit.message", no mesmo formato de uma entrada.
+		// Sem alvo ou sem texto, cai no placeholder: não há o que aplicar.
+		case "edit": {
+			const editObj = message.edit as Record<string, unknown> | undefined;
+			const originalWhatsappMessageId = editObj?.original_message_id as string | undefined;
+			const editedMessage = editObj?.message as Record<string, unknown> | undefined;
+			const editedContent = editedMessage ? parseMessageContent(editedMessage) : null;
+			const textContent = editedContent?.textContent || editedContent?.caption;
+			if (!originalWhatsappMessageId || !textContent) break;
+			return { kind: "edit", messageType: "TEXTO", textContent, edit: { originalWhatsappMessageId, textContent } };
+		}
+
 		// Mensagem de sistema — ex.: troca de número do cliente. Registrada sem criar mensagem.
 		case "system": {
 			const systemObj = message.system as Record<string, unknown> | undefined;
@@ -410,16 +428,18 @@ function parseMessageContent(message: Record<string, unknown>): TParsedMessageCo
 		}
 
 		default:
-			// Tipos ainda sem tratamento próprio viram um placeholder de texto: descartar a
-			// mensagem inteira, como antes, perdia o registro da conversa, o incremento de não
-			// lidas e a renovação da janela de 24h — para o operador a mensagem nunca existiu.
-			console.log("[WHATSAPP_WEBHOOK] Unsupported message type received; persisting placeholder:", messageType);
-			return {
-				kind: "message",
-				messageType: "TEXTO",
-				textContent: `[Mensagem do tipo "${messageType}" recebida — conteúdo não suportado]`,
-			};
+			break;
 	}
+
+	// Tipos ainda sem tratamento próprio viram um placeholder de texto: descartar a mensagem
+	// inteira, como antes, perdia o registro da conversa, o incremento de não lidas e a
+	// renovação da janela de 24h — para o operador a mensagem nunca existiu.
+	console.log("[WHATSAPP_WEBHOOK] Unsupported message type received; persisting placeholder:", messageType);
+	return {
+		kind: "message",
+		messageType: "TEXTO",
+		textContent: `[Mensagem do tipo "${messageType}" recebida — conteúdo não suportado]`,
+	};
 }
 
 /** Referral de anúncio Meta (Click-to-WhatsApp), no shape do `ChatMessageMetadataSchema`. */
@@ -745,7 +765,7 @@ function parseSingleEcho(message: Record<string, unknown>, value: Record<string,
 
 	const content = parseMessageContent(message);
 	// Reação/sistema/não-suportado ecoados pelo app do celular não viram mensagem do hub.
-	if (!content || content.kind !== "message") {
+	if (!content || (content.kind !== "message" && content.kind !== "edit")) {
 		if (content) console.log("[WHATSAPP_WEBHOOK] Ignoring non-message echo kind:", content.kind);
 		return null;
 	}

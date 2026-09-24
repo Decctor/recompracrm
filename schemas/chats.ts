@@ -276,7 +276,20 @@ export const ChatMessageMetadataSchema = z.object({
 		)
 		.optional()
 		.nullable(),
-	/** Mensagem que a Cloud API não sabe renderizar (enquete, edição, gif…). Guarda o erro informado. */
+	/**
+	 * Edições da mensagem feitas no WhatsApp (pelo cliente ou pelo app do celular). O texto
+	 * vigente fica em `conteudoTexto`; aqui fica o que ele era antes de cada edição.
+	 */
+	whatsappEdits: z
+		.array(
+			z.object({
+				previousText: z.string().optional().nullable(),
+				date: z.string().optional().nullable(),
+			}),
+		)
+		.optional()
+		.nullable(),
+	/** Mensagem que a Cloud API não sabe renderizar (enquete, gif…). Guarda o erro informado. */
 	whatsappUnsupported: z
 		.object({
 			code: z.number().optional().nullable(),
