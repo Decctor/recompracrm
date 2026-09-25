@@ -152,11 +152,8 @@ async function fetchFollowUpStats({ filters, startDate, endDate }: { filters: TC
 				eq(aiAgentFollowUps.organizacaoId, filters.organizacaoId),
 				filters.whatsappConexaoTelefoneId ? eq(chats.whatsappConexaoTelefoneId, filters.whatsappConexaoTelefoneId) : undefined,
 				inArray(aiAgentFollowUps.status, ["EXECUTADA", "EXPIRADA"]),
-				between(
-					sql`coalesce(${aiAgentFollowUps.dataExecucao}, ${aiAgentFollowUps.dataAtualizacao}, ${aiAgentFollowUps.dataInsercao})`,
-					startDate,
-					endDate,
-				),
+				// Expressão crua não tem coluna para mapear o Date: `naiveUtcParam`, como o resto do módulo.
+				sql`coalesce(${aiAgentFollowUps.dataExecucao}, ${aiAgentFollowUps.dataAtualizacao}, ${aiAgentFollowUps.dataInsercao}) between ${naiveUtcParam(startDate)} and ${naiveUtcParam(endDate)}`,
 			),
 		);
 	return row;
