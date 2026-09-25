@@ -128,9 +128,6 @@ async function processImage(fileBuffer: Buffer, mimeType: string): Promise<{ des
 	console.log("[AI_MEDIA] Processing image file");
 
 	try {
-		const base64Image = fileBuffer.toString("base64");
-		const dataUrl = `data:${mimeType};base64,${base64Image}`;
-
 		const descriptionResult = await generateText({
 			// Descrição de foto é o passo caro do pipeline: o gpt-4o cobrava ~US$0,005 por imagem.
 			// O Gemini 2.5 Flash-Lite custa ~25x menos, é servido pelo Google/Vertex, não raciocina
@@ -145,9 +142,12 @@ async function processImage(fileBuffer: Buffer, mimeType: string): Promise<{ des
 							text:
 								"Descreva esta imagem em português de forma detalhada, incluindo todos os elementos visuais relevantes, texto visível (se houver), e contexto geral.",
 						},
+						// AI SDK 7 depreciou a parte "image"; a parte "file" recebe os bytes e o SDK
+						// codifica em base64 e confirma o tipo real da imagem pelos magic bytes.
 						{
-							type: "image",
-							image: dataUrl,
+							type: "file",
+							data: fileBuffer,
+							mediaType: mimeType,
 						},
 					],
 				},
