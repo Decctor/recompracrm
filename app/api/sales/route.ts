@@ -735,6 +735,8 @@ const createSaleRoute: PagesRouteHandler<TCreateSaleOutput> = async (req, res) =
 			executor: tx,
 			organizationId: input.orgId,
 			campaigns: campaignsForCashbackAccumulation,
+			// Só o pertencimento do cliente da venda é consultado pelos gatilhos.
+			restrictToClientIds: [input.clientId],
 		});
 
 		// 3. If using cashback: validate balance and create redemption

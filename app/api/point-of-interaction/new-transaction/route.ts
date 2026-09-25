@@ -420,7 +420,7 @@ async function preparePointOfInteractionTransaction({ input, operatorContext, tx
 			clientCurrentPurchaseCount,
 			clientCurrentPurchaseValue,
 		});
-		const { organizationCampaigns, audiencesByCampaignId } = await getOrganizationCampaigns({ tx, orgId: input.orgId });
+		const { organizationCampaigns, audiencesByCampaignId } = await getOrganizationCampaigns({ tx, orgId: input.orgId, clientId });
 		console.log(`[POI ${input.orgId}] [CAMPAIGNS APPLICABLE]`, organizationCampaigns.length);
 		let salePartnerId: string | null = null;
 		let salePartnerClientId: string | null = null;
@@ -964,7 +964,9 @@ export const POST = appApiHandler({
 	POST: handleNewTransaction,
 });
 
-async function getOrganizationCampaigns({ tx, orgId }: { tx: DBTransaction; orgId: string }) {
+// Audiências restritas ao cliente da transação: os gatilhos só perguntam se ELE pertence a cada
+// campanha, e materializar a org inteira por campanha a cada transação era egress puro.
+async function getOrganizationCampaigns({ tx, orgId, clientId }: { tx: DBTransaction; orgId: string; clientId: string | null | undefined }) {
 	const organizationCampaigns = await tx.query.campaigns.findMany({
 		where: (fields, { and, or, eq }) =>
 			and(
@@ -980,6 +982,11 @@ async function getOrganizationCampaigns({ tx, orgId }: { tx: DBTransaction; orgI
 			),
 		with: { segmentacoes: true },
 	});
-	const audiencesByCampaignId = await resolveCampaignAudiencesByCampaignId({ executor: tx, organizationId: orgId, campaigns: organizationCampaigns });
+	const audiencesByCampaignId = await resolveCampaignAudiencesByCampaignId({
+		executor: tx,
+		organizationId: orgId,
+		campaigns: organizationCampaigns,
+		restrictToClientIds: clientId ? [clientId] : [],
+	});
 	return { organizationCampaigns, audiencesByCampaignId };
 }

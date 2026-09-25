@@ -103,6 +103,7 @@ export async function processIntegratedSaleConfirmation({
 		tx,
 		organizationId,
 		campaigns: purchaseCampaigns,
+		restrictToClientIds: existingSale.clienteId ? [existingSale.clienteId] : [],
 	});
 	const effectsResult = await processDataCollectingV2Effects({
 		tx,

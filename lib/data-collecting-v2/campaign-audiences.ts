@@ -6,17 +6,21 @@ export async function resolveCampaignAudiences({
 	organizationId,
 	campaigns,
 	concurrency = 5,
+	restrictToClientIds,
 }: {
 	tx: TDataCollectingV2Executor;
 	organizationId: string;
 	campaigns: TCampaignWithAudienceRelations[];
 	concurrency?: number;
+	// Clientes do lote: só o pertencimento deles é consultado pelos gatilhos de venda.
+	restrictToClientIds: string[];
 }) {
 	return resolveCampaignAudiencesByCampaignId({
 		executor: tx,
 		organizationId,
 		campaigns,
 		concurrency,
+		restrictToClientIds,
 	});
 }
 

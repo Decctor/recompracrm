@@ -10,6 +10,16 @@ type TResolveCampaignAudienceClientIdsParams = {
 	organizationId: string;
 	segmentations?: string[] | null;
 	filters?: TCampaignFilters | null;
+	/**
+	 * Restringe a resolução a estes clientes. Quem só precisa saber se UM cliente pertence à
+	 * audiência (gatilhos de venda no POI e na ingestão) não deve materializar a organização
+	 * inteira — antes, cada venda baixava todos os ids da org uma vez por campanha, e isso era a
+	 * maior fonte de egress do banco. Toda folha da árvore é interseccionada com este conjunto;
+	 * como ∩, ∪ e "universo menos filho" distribuem sobre a interseção, o resultado é exatamente
+	 * `audiência completa ∩ restrição` — pertencimento idêntico para qualquer cliente restrito.
+	 * Ausente = audiência completa (expansão de disparo, preview, públicos da Meta).
+	 */
+	restrictToClientIds?: string[] | null;
 };
 
 type TCampaignAudiencePreview = {
@@ -28,8 +38,14 @@ type TCampaignAudienceSource = {
 type TCampaignAudienceResolutionContext = {
 	executor: TCampaignAudienceExecutor;
 	organizationId: string;
+	// Null = sem restrição. Nunca vazio aqui: o chamador curto-circuita antes de consultar.
+	restrictToClientIds: string[] | null;
 	allOrganizationClientIdsPromise?: Promise<string[]>;
 };
+
+function clientIdRestriction(context: Pick<TCampaignAudienceResolutionContext, "restrictToClientIds">) {
+	return context.restrictToClientIds ? [inArray(clients.id, context.restrictToClientIds)] : [];
+}
 
 function uniqueNonEmptyStrings(values: Array<string | null | undefined>) {
 	return Array.from(new Set(values.map((value) => value?.trim()).filter((value): value is string => !!value)));
@@ -65,35 +81,27 @@ async function getAllOrganizationClientIds(context: TCampaignAudienceResolutionC
 		context.allOrganizationClientIdsPromise = context.executor
 			.select({ id: clients.id })
 			.from(clients)
-			.where(eq(clients.organizacaoId, context.organizationId))
+			.where(and(eq(clients.organizacaoId, context.organizationId), ...clientIdRestriction(context)))
 			.then((rows) => rows.map((row) => row.id));
 	}
 
 	return context.allOrganizationClientIdsPromise;
 }
 
-async function getSegmentedClientIds({
-	executor,
-	organizationId,
-	segmentations,
-}: {
-	executor: TCampaignAudienceExecutor;
-	organizationId: string;
-	segmentations: string[];
-}) {
-	if (segmentations.length === 0) return await executor.select({ id: clients.id }).from(clients).where(eq(clients.organizacaoId, organizationId)).then((rows) => rows.map((row) => row.id));
+async function getSegmentedClientIds({ segmentations, context }: { segmentations: string[]; context: TCampaignAudienceResolutionContext }) {
+	if (segmentations.length === 0) return getAllOrganizationClientIds(context);
 
-	const rows = await executor
+	const rows = await context.executor
 		.select({ id: clients.id })
 		.from(clients)
-		.where(and(eq(clients.organizacaoId, organizationId), inArray(clients.analiseRFMTitulo, segmentations)));
+		.where(and(eq(clients.organizacaoId, context.organizationId), inArray(clients.analiseRFMTitulo, segmentations), ...clientIdRestriction(context)));
 
 	return rows.map((row) => row.id);
 }
 
 async function resolveConditionClientIds(condition: TCampaignFilterCondition, context: TCampaignAudienceResolutionContext) {
 	if (condition.tipo === "LOCALIZAÇÃO") {
-		const conditions = [eq(clients.organizacaoId, context.organizationId)];
+		const conditions = [eq(clients.organizacaoId, context.organizationId), ...clientIdRestriction(context)];
 		if (condition.configuracao.estados?.length) conditions.push(inArray(clients.localizacaoEstado, condition.configuracao.estados));
 		if (condition.configuracao.cidades?.length) conditions.push(inArray(clients.localizacaoCidade, condition.configuracao.cidades));
 		if (condition.configuracao.bairros?.length) conditions.push(inArray(clients.localizacaoBairro, condition.configuracao.bairros));
@@ -116,13 +124,17 @@ async function resolveConditionClientIds(condition: TCampaignFilterCondition, co
 				eq(productClientReferences.janela, condition.configuracao.janela),
 				gt(productClientReferences.rankingValor, 0),
 				lte(productClientReferences.rankingValor, condition.configuracao.top),
+				...(context.restrictToClientIds ? [inArray(productClientReferences.clienteId, context.restrictToClientIds)] : []),
 			),
 		);
 
 	return new Set(rows.map((row) => row.clientId));
 }
 
-async function resolveFilterNodeClientIds(node: TCampaignFilters | TCampaignFilterTreeNode, context: TCampaignAudienceResolutionContext): Promise<Set<string>> {
+async function resolveFilterNodeClientIds(
+	node: TCampaignFilters | TCampaignFilterTreeNode,
+	context: TCampaignAudienceResolutionContext,
+): Promise<Set<string>> {
 	if (node.tipo === "CONDICAO") {
 		return resolveConditionClientIds(node.condicao, context);
 	}
@@ -159,20 +171,28 @@ export async function resolveCampaignAudienceClientIds({
 	organizationId,
 	segmentations,
 	filters,
+	restrictToClientIds,
 }: TResolveCampaignAudienceClientIdsParams) {
+	// Restrição vazia = audiência vazia por construção; não vale nenhuma consulta.
+	if (restrictToClientIds && restrictToClientIds.length === 0) return [];
+
 	const normalizedSegmentations = uniqueNonEmptyStrings(segmentations ?? []);
 	const context: TCampaignAudienceResolutionContext = {
 		executor,
 		organizationId,
+		restrictToClientIds: restrictToClientIds ?? null,
 	};
 
-	const [segmentationClientIds, filterClientIds, allOrganizationClientIds] = await Promise.all([
-		normalizedSegmentations.length > 0 ? getSegmentedClientIds({ executor, organizationId, segmentations: normalizedSegmentations }) : Promise.resolve<string[] | null>(null),
+	// O universo só é materializado quando é a base (sem segmentação) ou quando a árvore de
+	// filtros o exige (nó vazio / NOT) — com segmentação e sem filtros ele era baixado e descartado.
+	const [segmentationClientIds, filterClientIds] = await Promise.all([
+		normalizedSegmentations.length > 0
+			? getSegmentedClientIds({ segmentations: normalizedSegmentations, context })
+			: Promise.resolve<string[] | null>(null),
 		isEffectivelyEmptyFilters(filters) ? Promise.resolve<Set<string> | null>(null) : resolveFilterNodeClientIds(filters as TCampaignFilters, context),
-		getAllOrganizationClientIds(context),
 	]);
 
-	const baseSet = segmentationClientIds ? new Set(segmentationClientIds) : new Set(allOrganizationClientIds);
+	const baseSet = segmentationClientIds ? new Set(segmentationClientIds) : new Set(await getAllOrganizationClientIds(context));
 	if (!filterClientIds) return Array.from(baseSet);
 
 	return Array.from(intersectSets(baseSet, filterClientIds));
@@ -216,38 +236,50 @@ export async function resolveCampaignAudienceClientIdsForCampaign({
 	executor = db,
 	organizationId,
 	campaign,
+	restrictToClientIds,
 }: {
 	executor?: TCampaignAudienceExecutor;
 	organizationId: string;
 	campaign: TCampaignAudienceSource;
+	restrictToClientIds?: string[] | null;
 }) {
 	const clientIds = await resolveCampaignAudienceClientIds({
 		executor,
 		organizationId,
-		segmentations: campaign.segmentacoes?.map((segmentation) => segmentation.segmentacao).filter((segmentacao): segmentacao is string => !!segmentacao) ?? [],
+		segmentations:
+			campaign.segmentacoes?.map((segmentation) => segmentation.segmentacao).filter((segmentacao): segmentacao is string => !!segmentacao) ?? [],
 		filters: campaign.filtros,
+		restrictToClientIds,
 	});
 
 	// Enqueue de campanha nunca alcança clientes com comunicação pausada.
 	return filterCommunicationPausedClientIds({ executor, organizationId, clientIds });
 }
 
+/**
+ * Audiências por campanha. Para gatilhos de venda passe `restrictToClientIds` com os clientes da
+ * venda/lote: os conjuntos passam a conter só esses clientes, e é só isso que
+ * `campaignAudienceIncludesClient` consulta.
+ */
 export async function resolveCampaignAudiencesByCampaignId({
 	executor = db,
 	organizationId,
 	campaigns,
 	concurrency = 5,
+	restrictToClientIds,
 }: {
 	executor?: TCampaignAudienceExecutor;
 	organizationId: string;
 	campaigns: TCampaignAudienceSource[];
 	concurrency?: number;
+	restrictToClientIds?: string[] | null;
 }) {
 	const entries = await mapWithConcurrency(campaigns, concurrency, async (campaign) => {
 		const clientIds = await resolveCampaignAudienceClientIdsForCampaign({
 			executor,
 			organizationId,
 			campaign,
+			restrictToClientIds,
 		});
 
 		return [campaign.id, new Set(clientIds)] as const;

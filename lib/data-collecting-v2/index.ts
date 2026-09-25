@@ -186,11 +186,14 @@ export async function persistCanonicalBatch({
 		fiscalEmissionCandidateSaleIds = persistedSales.filter((sale) => sale.managedFiscalEmissionCandidate).map((sale) => sale.id);
 		// Audiences are resolved once from the post-sync state. Keep audience filters independent
 		// from client metrics mutated by this batch; per-sale trigger counters live in persistedSales.
+		// Restritas aos clientes do lote (superconjunto do que os efeitos consultam): a org inteira
+		// era materializada por campanha a cada lote, e a maioria dos lotes tem 0–5 vendas.
 		const audiencesByCampaignId = effects.processCampaigns
 			? await resolveCampaignAudiences({
 					tx,
 					organizationId,
 					campaigns: campaignsForOrganization,
+					restrictToClientIds: Array.from(new Set(persistedSales.map((sale) => sale.clientId).filter((clientId): clientId is string => !!clientId))),
 				})
 			: new Map<string, Set<string>>();
 		const effectsResult = await processDataCollectingV2Effects({
