@@ -64,11 +64,14 @@ export function buildAgentSystemPrompt({
 	capacidades,
 	knowledgeContext,
 	productGroups = [],
+	modo = "ATENDIMENTO",
 }: {
 	instrucoes: string;
 	capacidades: TAiAgentCapabilities;
 	knowledgeContext: string;
 	productGroups?: TProductGroupSummary[];
+	/** ASSISTENCIA: a IA rascunha para o humano que atende; nunca envia, transfere ou cria orçamento. */
+	modo?: "ATENDIMENTO" | "ASSISTENCIA";
 }): string {
 	const has = (name: TAiAgentToolNameEnum) => capacidades.ferramentas[name]?.habilitada === true;
 	const parts: string[] = [instrucoes.trim()];
@@ -190,6 +193,11 @@ resolvidas, reclamações, nem quando o cliente disse que não quer contato. Uma
 
 	if (knowledgeContext.trim()) {
 		parts.push(`## Base de conhecimento da empresa\nUse estas informações como verdade sobre a empresa.\n\n${knowledgeContext.trim()}`);
+	}
+
+	if (modo === "ASSISTENCIA") {
+		parts.push(`## Modo assistência
+Nesta execução você não é quem atende: um atendente humano conduz a conversa e pediu sua ajuda. Você não envia nada, não transfere e não cria orçamento — só rascunha. Escreva como ele escreveria, na primeira pessoa dele, e nunca se apresente como assistente virtual. As regras de veracidade continuam valendo: nunca afirme preço, saldo ou disponibilidade sem ferramenta ou base de conhecimento.`);
 	}
 
 	parts.push(`## Formato da resposta

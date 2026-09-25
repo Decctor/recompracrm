@@ -12,7 +12,7 @@ import { AiAgentCapabilitiesSchema } from "@/schemas/ai-agents";
 import { db } from "@/services/drizzle";
 import { aiAgentRuns, aiAgents } from "@/services/drizzle/schema/ai-agents";
 import { chatAssignments, chatMessages, chats } from "@/services/drizzle/schema/chats";
-import { and, eq, lt, notInArray, or } from "drizzle-orm";
+import { and, eq, lt, ne, notInArray, or } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
@@ -129,7 +129,8 @@ async function getChatMessages({ session, input }: { session: TAuthUserSession; 
 	// mantém `aiRun` atualizado sem refetch.
 	const [aiRun, agent, retomadaAgendada] = await Promise.all([
 		db.query.aiAgentRuns.findFirst({
-			where: and(eq(aiAgentRuns.chatId, input.chatId), eq(aiAgentRuns.organizacaoId, organizacaoId)),
+			// Runs de assistência são a IA ajudando o humano: não são "a IA respondendo".
+			where: and(eq(aiAgentRuns.chatId, input.chatId), eq(aiAgentRuns.organizacaoId, organizacaoId), ne(aiAgentRuns.gatilho, "SUGESTAO_HUB")),
 			orderBy: (fields, { desc: orderDesc }) => [orderDesc(fields.dataInsercao)],
 			columns: { id: true, status: true, gatilho: true, erro: true, dataInicio: true, dataFim: true, dataInsercao: true },
 		}),

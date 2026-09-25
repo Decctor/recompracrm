@@ -116,7 +116,7 @@ const chatInboxProjection = {
 	responsavelUsuario: { id: users.id, nome: users.nome, avatarUrl: users.avatarUrl },
 	// "IA respondendo" na lista: existe run em curso para o chat. Subquery correlacionada e
 	// indexada (`idx_ai_agent_runs_chat`); a sidebar mantém o valor por realtime em `ai_agent_runs`.
-	aiRunAtiva: sql<boolean>`exists (select 1 from ${aiAgentRuns} where ${aiAgentRuns.chatId} = ${chats.id} and ${aiAgentRuns.status} in ('PENDENTE', 'RODANDO'))`,
+	aiRunAtiva: sql<boolean>`exists (select 1 from ${aiAgentRuns} where ${aiAgentRuns.chatId} = ${chats.id} and ${aiAgentRuns.status} in ('PENDENTE', 'RODANDO') and ${aiAgentRuns.gatilho} <> 'SUGESTAO_HUB')`,
 	// Retomada agendada pela IA para este chat (no máximo uma, pelo índice parcial).
 	retomadaAgendadaPara: sql<
 		string | null

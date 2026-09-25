@@ -17,6 +17,7 @@ const TRIGGER_FILTERS: Array<{ value: TAiAgentRunTriggerEnum | null; label: stri
 	{ value: "CHAT_MENSAGEM", label: "MENSAGENS" },
 	{ value: "ATRIBUICAO_HUB", label: "ENTREGUES PELO HUB" },
 	{ value: "RETOMADA", label: "RETOMADAS" },
+	{ value: "SUGESTAO_HUB", label: "ASSISTÊNCIA" },
 	{ value: "PLAYGROUND", label: "TESTES" },
 ];
 

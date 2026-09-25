@@ -15,6 +15,7 @@ import {
 	releaseChatAttendance,
 	type TCurrentChatAttendance,
 	transferChatAttendance,
+	updateChatAttendanceSummary,
 } from "@/lib/chats/attendance-state";
 import { ChatAssignmentPriorityEnum, ChatAssignmentStatusEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
@@ -53,6 +54,11 @@ const UpdateChatAssignmentInputSchema = z.discriminatedUnion("acao", [
 	z.object({ acao: z.literal("liberar"), chatId: chatIdField, motivo: motivoField }),
 	z.object({ acao: z.literal("alterar_status"), chatId: chatIdField, status: ChatAssignmentStatusEnum }),
 	z.object({ acao: z.literal("alterar_prioridade"), chatId: chatIdField, prioridade: ChatAssignmentPriorityEnum.nullable() }),
+	z.object({
+		acao: z.literal("alterar_resumo"),
+		chatId: chatIdField,
+		resumo: z.string({ required_error: "Resumo não informado.", invalid_type_error: "Tipo inválido para o resumo." }).trim().max(4000),
+	}),
 	z.object({ acao: z.literal("atribuir"), chatId: chatIdField, usuarioDestinoId: z.string({ required_error: "Usuário de destino não informado." }) }),
 ]);
 export type TUpdateChatAssignmentInput = z.infer<typeof UpdateChatAssignmentInputSchema>;
@@ -64,6 +70,7 @@ const ACTION_PERMISSION = {
 	liberar: "receberTransferencias",
 	alterar_status: "responder",
 	alterar_prioridade: "responder",
+	alterar_resumo: "responder",
 	atribuir: "finalizar",
 } as const;
 
@@ -110,9 +117,7 @@ async function assignAttendanceToAgent({
 	input: Extract<TUpdateChatAssignmentInput, { acao: "transferir" }>;
 }) {
 	if (atual.responsavelTipo === "EXTERNO") {
-		throw new createHttpError.Conflict(
-			"Este atendimento está sendo conduzido pelo telefone. Assuma o atendimento antes de direcioná-lo ao agente.",
-		);
+		throw new createHttpError.Conflict("Este atendimento está sendo conduzido pelo telefone. Assuma o atendimento antes de direcioná-lo ao agente.");
 	}
 	if (atual.responsavelTipo === "AGENTE") {
 		return { data: { chatId: input.chatId, atendimentoId: atual.id }, message: "Este atendimento já está com o agente de IA." };
@@ -220,6 +225,14 @@ async function updateChatAssignment({ session, input }: { session: TAuthUserSess
 			usuarioId: session.user.id,
 		});
 		return { data: { chatId: input.chatId, atendimentoId: updated?.id ?? null }, message: "Status do atendimento atualizado." };
+	}
+
+	if (input.acao === "alterar_resumo") {
+		if (atual && !mayManageAssignment({ session, assignment: atual })) {
+			throw new createHttpError.Forbidden("Somente o responsável ou um gestor pode alterar este atendimento.");
+		}
+		const updated = await updateChatAttendanceSummary(db, { organizacaoId, chatId: input.chatId, resumo: input.resumo });
+		return { data: { chatId: input.chatId, atendimentoId: updated?.id ?? null }, message: "Resumo do atendimento atualizado." };
 	}
 
 	if (atual && !mayManageAssignment({ session, assignment: atual })) {

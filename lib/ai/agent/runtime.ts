@@ -1,5 +1,5 @@
-import { AiAgentCapabilitiesSchema, AiAgentModelConfigSchema, type TAiAgentTurnOutput } from "@/schemas/ai-agents";
-import { AiAgentAttachmentTypeEnum, type TAiAgentRunTriggerEnum } from "@/schemas/enums";
+import { AiAgentCapabilitiesSchema, AiAgentModelConfigSchema, type TAiAgentCapabilities, type TAiAgentTurnOutput } from "@/schemas/ai-agents";
+import { AiAgentAttachmentTypeEnum, type TAiAgentRunTriggerEnum, type TAiAgentToolNameEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
 import type { DB, DBTransaction } from "@/services/drizzle";
 import { aiAgents, organizations } from "@/services/drizzle/schema";
@@ -17,7 +17,7 @@ import { isToolEnabled } from "../tools/guards";
 import { toAISdkTools } from "../tools/registry";
 import type { TAgentToolContext } from "../tools/types";
 import { normalizeTurnAttachment } from "./attachment";
-import { buildChatRunContext, formatChatRunContext } from "./context";
+import { buildChatRunContext, formatChatRunContext, type TChatRunAssistOptions } from "./context";
 import { formatKnowledgeContext, getActiveKnowledgeBlocks } from "./knowledge";
 import { buildAgentSystemPrompt } from "./prompts";
 import { mergeRunSummary } from "./run-memory";
@@ -38,6 +38,27 @@ const RECENT_CLIENT_MESSAGES_WINDOW = 5;
 
 /** Mensagens que entram no turno de retomada: o resumo acumulado carrega o resto. */
 const FOLLOW_UP_HISTORY_MESSAGE_LIMIT = 12;
+
+/** Assistência: rascunho para o humano, que tem a conversa inteira na tela. */
+const ASSIST_HISTORY_MESSAGE_LIMIT = 30;
+const ASSIST_MAX_TOOL_CALLS = 4;
+const ASSIST_DEFAULT_MODEL = "agent-fast";
+const ASSIST_READ_ONLY_TOOLS: TAiAgentToolNameEnum[] = ["clientes.consultar_compras", "produtos.consultar", "cashback.consultar", "cupons.consultar"];
+
+function narrowCapabilitiesForAssist(capacidades: TAiAgentCapabilities): TAiAgentCapabilities {
+	const ferramentas = Object.fromEntries(
+		ASSIST_READ_ONLY_TOOLS.filter((name) => capacidades.ferramentas[name]?.habilitada).map((name) => [name, { habilitada: true }]),
+	) as TAiAgentCapabilities["ferramentas"];
+	return {
+		...capacidades,
+		ferramentas,
+		limites: {
+			...capacidades.limites,
+			maxChamadasFerramentasPorRun: Math.min(capacidades.limites.maxChamadasFerramentasPorRun, ASSIST_MAX_TOOL_CALLS),
+		},
+		retomadas: { ...capacidades.retomadas, habilitadas: false },
+	};
+}
 
 const TurnOutputSchema = z.object({
 	mensagem: z
@@ -91,6 +112,7 @@ function resolveTurnOutputSchema({ gatilho, retomadasHabilitadas }: { gatilho: T
 export type TPreparedAgentExecution = {
 	run: { id: string };
 	gatilho: TAiAgentRunTriggerEnum;
+	modo: "ATENDIMENTO" | "ASSISTENCIA";
 	toolContext: TAgentToolContext;
 	systemPrompt: string;
 	turnPrompt: string;
@@ -120,6 +142,7 @@ export async function prepareAgentExecution({
 	gatilho,
 	mensagemGatilhoId,
 	retomada = null,
+	assistencia = null,
 	database = db,
 }: {
 	organizacaoId: string;
@@ -128,14 +151,22 @@ export async function prepareAgentExecution({
 	mensagemGatilhoId?: string | null;
 	/** Turno de retomada: troca o fecho do prompt e usa o contexto compacto. */
 	retomada?: { objetivo: string; horasSilencio: number | null } | null;
+	/** Modo assistência: ferramentas só de leitura, modelo rápido, poucos passos, nunca envia. */
+	assistencia?: TChatRunAssistOptions | null;
 	database?: TDb;
 }): Promise<TPreparedAgentExecution> {
 	const agent = await database.query.aiAgents.findFirst({ where: eq(aiAgents.organizacaoId, organizacaoId) });
 	if (!agent) throw new AgentInactiveError("A organização não possui um agente de IA configurado.");
 	if (agent.status !== "ATIVO") throw new AgentInactiveError("O agente de IA da organização está pausado.");
 
-	const modeloConfig = parseJsonbWithFallback(AiAgentModelConfigSchema, agent.modeloConfig);
-	const capacidades = parseJsonbWithFallback(AiAgentCapabilitiesSchema, agent.capacidades);
+	const modo = assistencia ? "ASSISTENCIA" : "ATENDIMENTO";
+	const baseModelConfig = parseJsonbWithFallback(AiAgentModelConfigSchema, agent.modeloConfig);
+	const baseCapabilities = parseJsonbWithFallback(AiAgentCapabilitiesSchema, agent.capacidades);
+	// Assistência estreita a configuração em vez de ter uma própria: mesmas ferramentas de
+	// leitura e políticas comerciais, sem as ferramentas que agem (orçamento, transferência), com
+	// teto baixo de passos e o modelo rápido. O snapshot da run grava o que de fato valeu.
+	const modeloConfig = assistencia ? { ...baseModelConfig, modelo: baseModelConfig.modeloAssistencia ?? ASSIST_DEFAULT_MODEL } : baseModelConfig;
+	const capacidades = assistencia ? narrowCapabilitiesForAssist(baseCapabilities) : baseCapabilities;
 
 	const runsToday = await countAgentRunsToday(database, organizacaoId);
 	if (runsToday >= capacidades.limites.maxRunsDiarios) {
@@ -149,7 +180,11 @@ export async function prepareAgentExecution({
 	const [{ contexto: chatContext, clienteId }, knowledge, productGroups] = await Promise.all([
 		// A retomada lê o resumo acumulado mais as últimas mensagens: ela precisa lembrar do que
 		// ficou pendente, não reler a conversa inteira.
-		buildChatRunContext(database, { organizacaoId, chatId, historyLimit: retomada ? FOLLOW_UP_HISTORY_MESSAGE_LIMIT : undefined }),
+		buildChatRunContext(database, {
+			organizacaoId,
+			chatId,
+			historyLimit: retomada ? FOLLOW_UP_HISTORY_MESSAGE_LIMIT : assistencia ? ASSIST_HISTORY_MESSAGE_LIMIT : undefined,
+		}),
 		getActiveKnowledgeBlocks(database, agent.id),
 		// A grafia dos grupos entra no system prompt para o agente não filtrar por categoria
 		// inexistente nem gastar uma tool call para descobrir o que a empresa vende.
@@ -182,6 +217,7 @@ export async function prepareAgentExecution({
 	return {
 		run,
 		gatilho,
+		modo,
 		toolContext: {
 			db: database,
 			organizacaoId,
@@ -199,8 +235,9 @@ export async function prepareAgentExecution({
 			capacidades,
 			knowledgeContext: formatKnowledgeContext(knowledge),
 			productGroups,
+			modo,
 		}),
-		turnPrompt: formatChatRunContext(chatContext, { retomada }),
+		turnPrompt: formatChatRunContext(chatContext, { retomada, assistencia }),
 		modeloConfig,
 		// A saída estruturada ocupa uma etapa adicional depois do último resultado de ferramenta.
 		// O limite real de chamadas é aplicado no adapter das ferramentas.
@@ -282,7 +319,9 @@ export async function executeAgentTurn(
 		if (!output) throw new Error("O agente não produziu uma resposta estruturada.");
 		output = settleAttachment(output);
 
-		if (shouldRetryDeferredAction({ ...output, calledTools: calledToolsOf(result) })) {
+		// Na assistência a "promessa" é do humano, não da IA: "vou verificar e te retorno" num rascunho
+		// é uma frase que o atendente pode legitimamente enviar.
+		if (prepared.modo === "ATENDIMENTO" && shouldRetryDeferredAction({ ...output, calledTools: calledToolsOf(result) })) {
 			const rejectedMessage = output.mensagem;
 			// Alarme de regressão do prompt: as regras do canal já dizem que não há segundo momento.
 			console.warn(

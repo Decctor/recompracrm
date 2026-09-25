@@ -268,7 +268,7 @@ export function ChatSidebar({ organizationId, selectedChatId, onSelectChat, what
 				{ event: "*", schema: "public", table: "ampmais_ai_agent_runs", filter: `organizacao_id=eq.${organizationId}` },
 				(payload) => {
 					const row = payload.new as TRealtimeAiRunRow | undefined;
-					if (!row?.chat_id) return;
+					if (!row?.chat_id || row.gatilho === "SUGESTAO_HUB") return;
 					const aiRunAtiva = isActiveAiRunStatus(row.status);
 					queryClient.setQueryData<InfiniteData<TInboxPage>>(queryKeyRef.current, (current) =>
 						current

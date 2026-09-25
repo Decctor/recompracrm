@@ -9,6 +9,7 @@ export const AI_RUN_TRIGGER_LABELS: Record<TAiAgentRunTriggerEnum, string> = {
 	ATRIBUICAO_HUB: "Entregue pelo hub",
 	PLAYGROUND: "Teste",
 	RETOMADA: "Retomada",
+	SUGESTAO_HUB: "Assistência",
 };
 
 export const AI_RUN_STATUS_META: Record<TAiAgentRunStatusEnum, { label: string; tone: string }> = {

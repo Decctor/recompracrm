@@ -44,6 +44,9 @@ export const AiAgentModelConfigSchema = z
 			.min(0, "O top P mínimo é 0.")
 			.max(1, "O top P máximo é 1.")
 			.optional(),
+		// Modo assistência (sugestão/reescrita/resumo para o atendente). Ausente = alias `agent-fast`:
+		// é rascunho, o humano corrige, e o modelo rápido custa uma fração.
+		modeloAssistencia: z.string({ invalid_type_error: "Tipo não válido para o modelo de assistência." }).optional(),
 	})
 	.default({});
 export type TAiAgentModelConfig = z.infer<typeof AiAgentModelConfigSchema>;

@@ -609,7 +609,9 @@ export type TAiAgentRunStatusEnum = z.infer<typeof AiAgentRunStatusEnum>;
 // hub — separa, na análise de runs, o que a IA pegou da fila do que lhe foi passado de mão.
 // RETOMADA é a execução programada que retoma uma conversa em que o cliente silenciou
 // (`lib/ai/agent/follow-ups.ts`): não tem mensagem gatilho e ancora em `runStartedAt`.
-export const AiAgentRunTriggerEnum = z.enum(["CHAT_MENSAGEM", "PLAYGROUND", "ATRIBUICAO_HUB", "RETOMADA"]);
+// SUGESTAO_HUB é o modo assistência: a IA ajuda o humano que detém o atendimento (sugere,
+// reescreve, resume) e nunca envia nada.
+export const AiAgentRunTriggerEnum = z.enum(["CHAT_MENSAGEM", "PLAYGROUND", "ATRIBUICAO_HUB", "RETOMADA", "SUGESTAO_HUB"]);
 export type TAiAgentRunTriggerEnum = z.infer<typeof AiAgentRunTriggerEnum>;
 
 /**

@@ -6,7 +6,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { getWhatsappWindowDisplay } from "@/lib/chats/whatsapp-window-status";
 import { cn } from "@/lib/utils";
-import { Lock, Paperclip, Send, UserPlus, X } from "lucide-react";
+import { Loader2, Lock, Paperclip, Send, Sparkles, UserPlus, X } from "lucide-react";
 import { ChatVoiceRecorder } from "./ChatVoiceRecorder";
 import { forwardRef, useCallback, useEffect, useId, useImperativeHandle, useRef, useState } from "react";
 
@@ -21,7 +21,12 @@ export type TOutgoingAttachment = { tipo: "IMAGEM" | "VIDEO" | "AUDIO" | "DOCUME
  */
 export type TChatInputAreaHandle = {
 	appendText: (texto: string) => void;
+	/** Substitui o rascunho: é o que a sugestão da IA faz — o atendente pediu um texto novo. */
+	replaceText: (texto: string) => void;
+	getText: () => string;
 };
+
+export type TChatAssistAction = "SUGERIR_RESPOSTA" | "RESUMIR" | "REESCREVER";
 
 type ChatInputAreaProps = {
 	userName: string;
@@ -34,6 +39,11 @@ type ChatInputAreaProps = {
 	onAssume: () => void;
 	templates: { id: string; nome: string }[];
 	onSendTemplate: (messageTemplateId: string) => void;
+	/**
+	 * Modo assistência. Ausente quando a organização não tem IA. `SUGERIR_RESPOSTA` usa o rascunho
+	 * atual como orientação ("diz que o frete é grátis") e o substitui pela sugestão.
+	 */
+	assist?: { onRequest: (input: { acao: TChatAssistAction; texto: string }) => void; pendingAction: TChatAssistAction | null };
 };
 
 function resolveMediaType(mimeType: string): TOutgoingAttachment["tipo"] {
@@ -44,7 +54,7 @@ function resolveMediaType(mimeType: string): TOutgoingAttachment["tipo"] {
 }
 
 export const ChatInputArea = forwardRef<TChatInputAreaHandle, ChatInputAreaProps>(function ChatInputArea(
-	{ userName, organizationId, isOwner, janelaExpiracao, conexaoTipo, isSending, onSend, onAssume, templates, onSendTemplate },
+	{ userName, organizationId, isOwner, janelaExpiracao, conexaoTipo, isSending, onSend, onAssume, templates, onSendTemplate, assist },
 	ref,
 ) {
 	const [texto, setTexto] = useState("");
@@ -72,23 +82,32 @@ export const ChatInputArea = forwardRef<TChatInputAreaHandle, ChatInputAreaProps
 		resizeTextarea();
 	}, [resizeTextarea]);
 
+	const focusEnd = useCallback(() => {
+		// O foco vai para o fim do texto, pronto para revisar e enviar.
+		requestAnimationFrame(() => {
+			const element = textareaRef.current;
+			if (!element) return;
+			element.focus();
+			element.setSelectionRange(element.value.length, element.value.length);
+			resizeTextarea();
+		});
+	}, [resizeTextarea]);
+
 	useImperativeHandle(
 		ref,
 		() => ({
 			appendText: (novoTexto: string) => {
 				// Anexa em vez de sobrescrever: o atendente pode já ter escrito uma introdução.
 				setTexto((current) => (current.trim() ? `${current.trimEnd()}\n\n${novoTexto}` : novoTexto));
-				// O foco vai para o fim do texto, pronto para revisar e enviar.
-				requestAnimationFrame(() => {
-					const element = textareaRef.current;
-					if (!element) return;
-					element.focus();
-					element.setSelectionRange(element.value.length, element.value.length);
-					resizeTextarea();
-				});
+				focusEnd();
 			},
+			replaceText: (novoTexto: string) => {
+				setTexto(novoTexto);
+				focusEnd();
+			},
+			getText: () => textareaRef.current?.value ?? "",
 		}),
-		[resizeTextarea],
+		[focusEnd],
 	);
 
 	const janela = getWhatsappWindowDisplay({ expiracao: janelaExpiracao, tipoConexao: conexaoTipo });
@@ -209,6 +228,39 @@ export const ChatInputArea = forwardRef<TChatInputAreaHandle, ChatInputAreaProps
 				)}
 
 				<ChatVoiceRecorder disabled={isSending} onRecorded={(input) => void handleVoiceRecorded(input)} onActiveChange={setIsRecordingVoice} />
+
+				{/* Assistência: a IA rascunha, o atendente envia. O rascunho atual vira orientação da
+				    sugestão ("diz que o frete é grátis") — é o jeito natural de pedir algo específico. */}
+				{assist && !isRecordingVoice && (
+					<DropdownMenu>
+						<DropdownMenuTrigger
+							render={
+								<Button
+									variant="ghost"
+									size="icon"
+									className="shrink-0 text-primary"
+									aria-label="Pedir ajuda à IA"
+									title="Pedir ajuda à IA"
+									disabled={isSending || assist.pendingAction !== null}
+								>
+									{assist.pendingAction ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+								</Button>
+							}
+						/>
+						<DropdownMenuContent align="start">
+							<DropdownMenuGroup>
+								<DropdownMenuItem onClick={() => assist.onRequest({ acao: "SUGERIR_RESPOSTA", texto: texto.trim() })}>
+									<Sparkles className="h-4 w-4" />
+									{texto.trim() ? "Sugerir resposta com esta orientação" : "Sugerir resposta"}
+								</DropdownMenuItem>
+								<DropdownMenuItem disabled={!texto.trim()} onClick={() => assist.onRequest({ acao: "REESCREVER", texto: texto.trim() })}>
+									Reescrever rascunho
+								</DropdownMenuItem>
+								<DropdownMenuItem onClick={() => assist.onRequest({ acao: "RESUMIR", texto: "" })}>Resumir atendimento</DropdownMenuItem>
+							</DropdownMenuGroup>
+						</DropdownMenuContent>
+					</DropdownMenu>
+				)}
 
 				{!isRecordingVoice && (
 					<Textarea

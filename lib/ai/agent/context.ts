@@ -173,12 +173,45 @@ export async function buildChatRunContext(
 	};
 }
 
+export type TChatRunAssistOptions = {
+	acao: "SUGERIR_RESPOSTA" | "RESUMIR" | "REESCREVER";
+	atendenteNome: string;
+	orientacao: string | null;
+	texto: string | null;
+};
+
 export type TChatRunContextOptions = {
 	/** Turno de retomada: o cliente silenciou e o fecho do prompt pede o lembrete, não uma resposta. */
 	retomada?: { objetivo: string; horasSilencio: number | null } | null;
+	/** Modo assistência: o fecho pede um rascunho para o atendente, não uma resposta ao cliente. */
+	assistencia?: TChatRunAssistOptions | null;
 };
 
+function formatAssistClosing(assistencia: TChatRunAssistOptions): string {
+	const base = `## Assistência ao atendente
+Você está ajudando ${assistencia.atendenteNome}, o atendente humano que conduz esta conversa. Você NÃO envia nada ao cliente: o que você escrever em "mensagem" vai para o rascunho dele, e ele revisa antes de enviar.`;
+	if (assistencia.acao === "RESUMIR") {
+		return `${base}
+Nesta execução, deixe "mensagem" null e escreva em "resumoAtendimento" um resumo objetivo do atendimento para a equipe: o que o cliente quer, o que já foi tratado, o que está pendente e o próximo passo.`;
+	}
+	if (assistencia.acao === "REESCREVER") {
+		return `${base}
+Reescreva o rascunho abaixo mantendo exatamente o sentido e as informações, no tom das suas instruções e no formato do canal. Não acrescente promessas nem dados que o rascunho não tem. Devolva o texto reescrito em "mensagem".
+
+Rascunho do atendente:
+${assistencia.texto ?? ""}`;
+	}
+	return `${base}
+Escreva em "mensagem" a resposta que ${assistencia.atendenteNome} deve enviar agora, na primeira pessoa dele, no tom das suas instruções. Consulte as ferramentas se precisar de dados (catálogo, compras, cashback, cupons). Se faltar informação que só ele tem, escreva a resposta com um marcador entre colchetes no lugar, como [prazo de entrega].${
+		assistencia.orientacao
+			? `
+Orientação do atendente para esta resposta: "${assistencia.orientacao}".`
+			: ""
+	}`;
+}
+
 function formatTurnClosing(options: TChatRunContextOptions): string {
+	if (options.assistencia) return formatAssistClosing(options.assistencia);
 	if (!options.retomada) return "Responda à última mensagem do cliente.";
 	const silencio = options.retomada.horasSilencio ? `há cerca de ${options.retomada.horasSilencio} hora(s)` : "há algum tempo";
 	return `## Retomada

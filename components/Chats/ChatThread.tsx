@@ -8,7 +8,7 @@ import { mapRealtimeAiRunRow, mapRealtimeMessageRow, type TRealtimeAiRunRow, typ
 import { AI_AGENT_RUNS_QUERY_KEY_ROOT } from "@/lib/queries/ai-agents";
 import { getWhatsappWindowDisplay } from "@/lib/chats/whatsapp-window-status";
 import { getErrorMessage } from "@/lib/errors";
-import { cancelChatFollowUp, markChatRead, retryChatMessage, sendChatMessage, updateChatAssignment } from "@/lib/mutations/chats";
+import { cancelChatFollowUp, markChatRead, requestChatAssist, retryChatMessage, sendChatMessage, updateChatAssignment } from "@/lib/mutations/chats";
 import {
 	getChatMessagesQueryKey,
 	useChatMessages,
@@ -32,7 +32,7 @@ import { AttendanceSummaryCard } from "./AttendanceSummaryCard";
 import { FollowUpNotice } from "./FollowUpNotice";
 import { ChatAssignmentActions } from "./ChatAssignmentActions";
 import { ChatContextPanel } from "./ChatContextPanel";
-import { ChatInputArea, type TChatInputAreaHandle, type TOutgoingAttachment } from "./ChatInputArea";
+import { ChatInputArea, type TChatAssistAction, type TChatInputAreaHandle, type TOutgoingAttachment } from "./ChatInputArea";
 import { ChatMessageBubble, type TOptimisticFields } from "./ChatMessageBubble";
 import { ChatQuotesHeaderActions } from "./Quotes/ChatQuotesHeaderActions";
 import type { TQuotePermissions } from "./Quotes/config";
@@ -272,6 +272,9 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 			.on("postgres_changes", { event: "*", schema: "public", table: "ampmais_ai_agent_runs", filter: `chat_id=eq.${chatId}` }, (payload) => {
 				const row = payload.new as TRealtimeAiRunRow | undefined;
 				if (!row?.id) return;
+				void queryClient.invalidateQueries({ queryKey: [AI_AGENT_RUNS_QUERY_KEY_ROOT] });
+				// Assistência é a IA ajudando quem atende, não a IA respondendo: não entra na presença.
+				if (row.gatilho === "SUGESTAO_HUB") return;
 				const aiRun = mapRealtimeAiRunRow(row);
 				queryClient.setQueryData<InfiniteData<TChatMessagesPage>>(queryKey, (current) => {
 					// Só a run mais recente importa; uma atualização tardia de run antiga não regride o estado.
@@ -279,7 +282,6 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 					if (atual && atual.id !== aiRun.id && new Date(atual.dataInsercao) > aiRun.dataInsercao) return current;
 					return patchChatInCache(current, { aiRun });
 				});
-				void queryClient.invalidateQueries({ queryKey: [AI_AGENT_RUNS_QUERY_KEY_ROOT] });
 			})
 			// Retomada agendada/cancelada: a faixa acima do composer precisa refletir na hora.
 			.on("postgres_changes", { event: "*", schema: "public", table: "ampmais_ai_agent_follow_ups", filter: `chat_id=eq.${chatId}` }, () => {
@@ -318,6 +320,55 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 	const retryMutation = useMutation({
 		mutationFn: retryChatMessage,
 		onSuccess: () => void refetch(),
+		onError: (error) => toast.error(getErrorMessage(error)),
+	});
+
+	// Assistência: uma sugestão por (chat, última mensagem, ação, orientação). Dois cliques, uma cobrança.
+	const assistCacheRef = useRef(new Map<string, string>());
+	const [pendingAssist, setPendingAssist] = useState<TChatAssistAction | null>(null);
+	const assistMutation = useMutation({
+		mutationFn: requestChatAssist,
+		onMutate: (variables) => setPendingAssist(variables.acao),
+		onSuccess: (data, variables) => {
+			if (variables.acao === "RESUMIR") {
+				toast.success(data.message);
+				void refetch();
+				return;
+			}
+			if (!data.data.sugestao) {
+				toast.info(data.message);
+				return;
+			}
+			assistCacheRef.current.set(
+				`${variables.chatId}:${newestMessageId}:${variables.acao}:${variables.orientacao ?? variables.texto ?? ""}`,
+				data.data.sugestao,
+			);
+			inputAreaRef.current?.replaceText(data.data.sugestao);
+		},
+		onError: (error) => toast.error(getErrorMessage(error)),
+		onSettled: () => setPendingAssist(null),
+	});
+	const requestAssist = useCallback(
+		({ acao, texto }: { acao: TChatAssistAction; texto: string }) => {
+			const orientacao = acao === "SUGERIR_RESPOSTA" ? texto || null : null;
+			const rascunho = acao === "REESCREVER" ? texto : null;
+			const cacheKey = `${chatId}:${newestMessageId}:${acao}:${orientacao ?? rascunho ?? ""}`;
+			const cached = acao !== "RESUMIR" ? assistCacheRef.current.get(cacheKey) : undefined;
+			if (cached) {
+				inputAreaRef.current?.replaceText(cached);
+				return;
+			}
+			assistMutation.mutate({ chatId, acao, orientacao, texto: rascunho });
+		},
+		[assistMutation, chatId, newestMessageId],
+	);
+
+	const updateSummaryMutation = useMutation({
+		mutationFn: updateChatAssignment,
+		onSuccess: (data) => {
+			toast.success(data.message);
+			void refetch();
+		},
 		onError: (error) => toast.error(getErrorMessage(error)),
 	});
 
@@ -398,6 +449,9 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 	});
 	// Quem acabou de receber a conversa (handoff da IA ou de um colega) precisa do resumo aberto.
 	const summaryOpenByDefault = !!atendimento?.transferenciaMotivo && isOwner;
+	// Assistência exige o recurso de IA no plano (aqui o agente ajuda o humano, não atende o
+	// cliente: escopo e habilitação por número não se aplicam) e crédito no mês.
+	const canAssist = chat.atendimentoIa.motivo !== "RECURSO_INDISPONIVEL" && chat.atendimentoIa.motivo !== "LIMITE_CREDITOS";
 
 	/**
 	 * Inserir o orçamento na conversa só faz sentido quando a conversa aceita texto livre agora: sem
@@ -526,7 +580,15 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 					</p>
 				</header>
 
-				<AttendanceSummaryCard resumo={atendimento?.resumo} transferenciaMotivo={atendimento?.transferenciaMotivo} defaultOpen={summaryOpenByDefault} />
+				<AttendanceSummaryCard
+					resumo={atendimento?.resumo}
+					transferenciaMotivo={atendimento?.transferenciaMotivo}
+					defaultOpen={summaryOpenByDefault}
+					onSave={isOwner ? (resumo) => updateSummaryMutation.mutate({ acao: "alterar_resumo", chatId, resumo }) : undefined}
+					onRegenerate={isOwner && canAssist ? () => requestAssist({ acao: "RESUMIR", texto: "" }) : undefined}
+					isSaving={updateSummaryMutation.isPending}
+					isRegenerating={pendingAssist === "RESUMIR"}
+				/>
 
 				<div
 					ref={scrollRef}
@@ -630,6 +692,7 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 					onAssume={() => assumeMutation.mutate({ acao: "assumir", chatId })}
 					templates={[]}
 					onSendTemplate={(messageTemplateId) => sendMutation.mutate({ chatId, messageTemplateId, assinaturaAtiva: false })}
+					assist={canAssist ? { onRequest: requestAssist, pendingAction: pendingAssist } : undefined}
 				/>
 			</div>
 
