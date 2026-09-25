@@ -2,11 +2,178 @@ import type { TCanonicalClient, TCanonicalImportBatch } from "@/lib/data-connect
 import { normalizeLocation } from "@/lib/geo/brazilian-locations";
 import { linkPartnerToClient } from "@/lib/partners/link-partner-to-client";
 import { catalogLinks, clients, partners, productAddOnOptions, productAddOns, productVariants, products, sellers } from "@/services/drizzle/schema";
-import { and, eq, ne } from "drizzle-orm";
+import { and, asc, eq, inArray, ne, or, sql } from "drizzle-orm";
+import { collectBatchLookupKeys, normalizeClientName as normalizeName, type TBatchLookupKeys } from "./batch-lookup-keys";
 import type { TDataCollectingV2Executor, TResolvedAuxiliaryEntities, TResolvedClientForImport } from "./types";
 
-function normalizeName(value?: string | null) {
-	return (value ?? "").trim().toUpperCase();
+/**
+ * Como as entidades existentes são carregadas para o contexto do lote:
+ * - FULL: a organização inteira, a cada lote (comportamento histórico — a maior fonte de egress
+ *   do banco depois das audiências de campanha).
+ * - TARGETED: só as linhas que casam com as chaves do lote (`collectBatchLookupKeys`).
+ * - SHADOW: carrega das duas formas, usa FULL e registra qualquer chave cujo lookup divirja.
+ *   É o modo de validação em produção antes do corte; troca-se por env sem deploy.
+ */
+type TAuxiliaryLoadMode = "FULL" | "SHADOW" | "TARGETED";
+
+function resolveAuxiliaryLoadMode(): TAuxiliaryLoadMode {
+	const value = process.env.DATA_COLLECTING_AUX_LOAD_MODE;
+	return value === "FULL" || value === "TARGETED" ? value : "SHADOW";
+}
+
+// Os mapas do contexto são "última linha vence" quando duas entidades compartilham a chave (dois
+// clientes "Bruno", dois produtos com o mesmo código). Sem ORDER BY a vencedora era a ordem física
+// do heap — arbitrária e diferente entre o carregamento completo e o direcionado. A ordem explícita
+// (mais antigo → mais novo, id como desempate) torna a escolha determinística e igual nos dois.
+const NEWEST_WINS_CLIENTS = [asc(clients.dataInsercao), asc(clients.id)];
+
+type TShadowAudit = {
+	compared: number;
+	mismatches: Array<{ entity: string; key: string; full: string | null; targeted: string | null }>;
+};
+
+async function loadRows<TRow>(
+	mode: TAuxiliaryLoadMode,
+	keys: TBatchLookupKeys,
+	load: (keys: TBatchLookupKeys | null) => Promise<TRow[]>,
+): Promise<{ rows: TRow[]; shadowRows: TRow[] | null }> {
+	if (mode === "FULL") return { rows: await load(null), shadowRows: null };
+	if (mode === "TARGETED") return { rows: await load(keys), shadowRows: null };
+	const rows = await load(null);
+	const shadowRows = await load(keys);
+	return { rows, shadowRows };
+}
+
+// Compara, chave a chave, o que o lote enxergaria em cada mapa do contexto.
+function auditLookups<TValue>(
+	audit: TShadowAudit,
+	entity: string,
+	keys: string[],
+	full: Map<string, TValue>,
+	targeted: Map<string, TValue>,
+	pick: (value: TValue) => string | null,
+) {
+	for (const key of keys) {
+		const fullValue = full.has(key) ? pick(full.get(key) as TValue) : null;
+		const targetedValue = targeted.has(key) ? pick(targeted.get(key) as TValue) : null;
+		audit.compared += 1;
+		if (fullValue !== targetedValue) audit.mismatches.push({ entity, key, full: fullValue, targeted: targetedValue });
+	}
+}
+
+function createEmptyContext(): TResolvedAuxiliaryEntities {
+	return {
+		clientsByExternalId: new Map(),
+		clientsByName: new Map(),
+		clientsByBasePhone: new Map(),
+		productsByCode: new Map(),
+		productsByExternalItemId: new Map(),
+		variantsByCode: new Map(),
+		sellersByIdentifier: new Map(),
+		partnersByIdentifier: new Map(),
+		productAddOnsByExternalId: new Map(),
+		productAddOnOptionsByExternalId: new Map(),
+		createdClientsCount: 0,
+		createdProductsCount: 0,
+		createdSellersCount: 0,
+		createdPartnersCount: 0,
+	};
+}
+
+function loadExistingClients(tx: TDataCollectingV2Executor, organizationId: string, keys: TBatchLookupKeys | null) {
+	const conditions = [eq(clients.organizacaoId, organizationId)];
+	if (keys) {
+		const matchers = [];
+		if (keys.clientExternalIds.length > 0) matchers.push(inArray(clients.idExterno, keys.clientExternalIds));
+		if (keys.clientBasePhones.length > 0) matchers.push(inArray(clients.telefoneBase, keys.clientBasePhones));
+		// Mesma normalização de `clientsByName` (trim + upper), aplicada do lado do banco.
+		if (keys.clientNames.length > 0) matchers.push(inArray(sql`upper(btrim(${clients.nome}))`, keys.clientNames));
+		if (matchers.length === 0) return Promise.resolve([]);
+		conditions.push(or(...matchers)!);
+	}
+	return tx.query.clients.findMany({
+		where: and(...conditions),
+		orderBy: NEWEST_WINS_CLIENTS,
+		columns: {
+			id: true,
+			idExterno: true,
+			nome: true,
+			telefoneBase: true,
+			analiseRFMTitulo: true,
+			metadataTotalCompras: true,
+			metadataValorTotalCompras: true,
+		},
+	});
+}
+
+function indexExistingClients(context: TResolvedAuxiliaryEntities, rows: Awaited<ReturnType<typeof loadExistingClients>>) {
+	for (const client of rows) {
+		const resolvedClient = buildResolvedClient(client, false);
+		if (client.idExterno) context.clientsByExternalId.set(client.idExterno, resolvedClient);
+		indexClient(context, resolvedClient);
+	}
+}
+
+function loadExistingProducts(tx: TDataCollectingV2Executor, organizationId: string, keys: TBatchLookupKeys | null) {
+	if (keys && keys.productCodes.length === 0) return Promise.resolve([]);
+	return tx.query.products.findMany({
+		where: and(eq(products.organizacaoId, organizationId), ...(keys ? [inArray(products.codigo, keys.productCodes)] : [])),
+		// Sem data_insercao na tabela: o id é a única ordem estável disponível.
+		orderBy: [asc(products.id)],
+		columns: { id: true, codigo: true },
+	});
+}
+
+function loadExistingVariants(tx: TDataCollectingV2Executor, organizationId: string, keys: TBatchLookupKeys | null) {
+	if (keys && keys.productCodes.length === 0) return Promise.resolve([]);
+	return tx.query.productVariants.findMany({
+		where: and(eq(productVariants.organizacaoId, organizationId), ...(keys ? [inArray(productVariants.codigo, keys.productCodes)] : [])),
+		orderBy: [asc(productVariants.id)],
+		columns: { id: true, produtoId: true, codigo: true },
+		with: {
+			valoresOpcoes: {
+				with: {
+					opcao: { columns: { nome: true } },
+					valor: { columns: { nome: true } },
+				},
+			},
+		},
+	});
+}
+
+function loadCatalogLinks(tx: TDataCollectingV2Executor, organizationId: string, keys: TBatchLookupKeys | null) {
+	if (keys && keys.productExternalItemIds.length === 0) return Promise.resolve([]);
+	return tx.query.catalogLinks.findMany({
+		where: and(
+			eq(catalogLinks.organizacaoId, organizationId),
+			ne(catalogLinks.status, "DESVINCULADO"),
+			...(keys ? [inArray(catalogLinks.externoItemId, keys.productExternalItemIds)] : []),
+		),
+		orderBy: [asc(catalogLinks.dataInsercao), asc(catalogLinks.id)],
+		columns: { produtoId: true, produtoVarianteId: true, externoItemId: true },
+	});
+}
+
+function loadExistingSellers(tx: TDataCollectingV2Executor, organizationId: string, keys: TBatchLookupKeys | null) {
+	if (keys && keys.sellerIdentifiers.length === 0) return Promise.resolve([]);
+	return tx.query.sellers.findMany({
+		where: and(
+			eq(sellers.organizacaoId, organizationId),
+			// A chave do mapa é `identificador || nome`: um superconjunto pelas duas colunas é seguro.
+			...(keys ? [or(inArray(sellers.identificador, keys.sellerIdentifiers), inArray(sellers.nome, keys.sellerIdentifiers))!] : []),
+		),
+		orderBy: [asc(sellers.dataInsercao), asc(sellers.id)],
+		columns: { id: true, identificador: true, nome: true },
+	});
+}
+
+function loadExistingPartners(tx: TDataCollectingV2Executor, organizationId: string, keys: TBatchLookupKeys | null) {
+	if (keys && keys.partnerIdentifiers.length === 0) return Promise.resolve([]);
+	return tx.query.partners.findMany({
+		where: and(eq(partners.organizacaoId, organizationId), ...(keys ? [inArray(partners.identificador, keys.partnerIdentifiers)] : [])),
+		orderBy: [asc(partners.dataInsercao), asc(partners.id)],
+		columns: { id: true, identificador: true, clienteId: true },
+	});
 }
 
 export function getCanonicalClientResolutionKey(batch: TCanonicalImportBatch, client: TCanonicalClient | null): string | null {
@@ -118,49 +285,31 @@ export async function syncAuxiliaryEntities({
 	tx: TDataCollectingV2Executor;
 	batch: TCanonicalImportBatch;
 }): Promise<TResolvedAuxiliaryEntities> {
-	const context: TResolvedAuxiliaryEntities = {
-		clientsByExternalId: new Map(),
-		clientsByName: new Map(),
-		clientsByBasePhone: new Map(),
-		productsByCode: new Map(),
-		productsByExternalItemId: new Map(),
-		variantsByCode: new Map(),
-		sellersByIdentifier: new Map(),
-		partnersByIdentifier: new Map(),
-		productAddOnsByExternalId: new Map(),
-		productAddOnOptionsByExternalId: new Map(),
-		createdClientsCount: 0,
-		createdProductsCount: 0,
-		createdSellersCount: 0,
-		createdPartnersCount: 0,
-	};
+	const context = createEmptyContext();
+	const mode = resolveAuxiliaryLoadMode();
+	const keys = collectBatchLookupKeys(batch);
+	const audit: TShadowAudit | null = mode === "SHADOW" ? { compared: 0, mismatches: [] } : null;
+	const organizationId = batch.organizationId;
 
-	const existingClients = await tx.query.clients.findMany({
-		where: eq(clients.organizacaoId, batch.organizationId),
-		columns: {
-			id: true,
-			idExterno: true,
-			nome: true,
-			telefoneBase: true,
-			analiseRFMTitulo: true,
-			metadataTotalCompras: true,
-			metadataValorTotalCompras: true,
-		},
-	});
-
-	for (const client of existingClients) {
-		const resolvedClient = buildResolvedClient(client, false);
-		if (client.idExterno) context.clientsByExternalId.set(client.idExterno, resolvedClient);
-		indexClient(context, resolvedClient);
+	const existingClients = await loadRows(mode, keys, (scope) => loadExistingClients(tx, organizationId, scope));
+	indexExistingClients(context, existingClients.rows);
+	if (audit && existingClients.shadowRows) {
+		const shadow = createEmptyContext();
+		indexExistingClients(shadow, existingClients.shadowRows);
+		auditLookups(audit, "clientsByExternalId", keys.clientExternalIds, context.clientsByExternalId, shadow.clientsByExternalId, (client) => client.id);
+		auditLookups(audit, "clientsByBasePhone", keys.clientBasePhones, context.clientsByBasePhone, shadow.clientsByBasePhone, (client) => client.id);
+		auditLookups(audit, "clientsByName", keys.clientNames, context.clientsByName, shadow.clientsByName, (client) => client.id);
 	}
 
 	// Sellers sincronizam ANTES dos clientes: o autorVendedorId do cliente novo referencia o
 	// vendedor da primeira venda, que pode estar sendo criado neste mesmo batch.
-	const existingSellers = await tx.query.sellers.findMany({
-		where: eq(sellers.organizacaoId, batch.organizationId),
-		columns: { id: true, identificador: true, nome: true },
-	});
-	for (const seller of existingSellers) context.sellersByIdentifier.set(seller.identificador || seller.nome, seller.id);
+	const existingSellers = await loadRows(mode, keys, (scope) => loadExistingSellers(tx, organizationId, scope));
+	for (const seller of existingSellers.rows) context.sellersByIdentifier.set(seller.identificador || seller.nome, seller.id);
+	if (audit && existingSellers.shadowRows) {
+		const shadow = new Map<string, string>();
+		for (const seller of existingSellers.shadowRows) shadow.set(seller.identificador || seller.nome, seller.id);
+		auditLookups(audit, "sellersByIdentifier", keys.sellerIdentifiers, context.sellersByIdentifier, shadow, (id) => id);
+	}
 
 	for (const seller of uniqueBy(batch.sellers, (value) => value.identifier)) {
 		if (context.sellersByIdentifier.has(seller.identifier)) continue;
@@ -237,49 +386,59 @@ export async function syncAuxiliaryEntities({
 		context.createdClientsCount += 1;
 	}
 
-	const existingProducts = await tx.query.products.findMany({
-		where: eq(products.organizacaoId, batch.organizationId),
-		columns: { id: true, codigo: true },
-	});
-	for (const product of existingProducts) context.productsByCode.set(product.codigo, product.id);
+	const existingProducts = await loadRows(mode, keys, (scope) => loadExistingProducts(tx, organizationId, scope));
+	for (const product of existingProducts.rows) context.productsByCode.set(product.codigo, product.id);
+	if (audit && existingProducts.shadowRows) {
+		const shadow = new Map(existingProducts.shadowRows.map((product) => [product.codigo, product.id]));
+		auditLookups(audit, "productsByCode", keys.productCodes, context.productsByCode, shadow, (id) => id);
+	}
 
 	// Variantes estruturadas: indexadas pelo código (SKU) para que itens de venda liguem à variante
 	// certa em vez de criar um produto plano duplicado.
-	const existingVariants = await tx.query.productVariants.findMany({
-		where: eq(productVariants.organizacaoId, batch.organizationId),
-		columns: { id: true, produtoId: true, codigo: true },
-		with: {
-			valoresOpcoes: {
-				with: {
-					opcao: { columns: { nome: true } },
-					valor: { columns: { nome: true } },
-				},
-			},
-		},
-	});
-	for (const variant of existingVariants) {
-		if (!variant.codigo) continue;
-		context.variantsByCode.set(variant.codigo, {
-			produtoId: variant.produtoId,
-			produtoVarianteId: variant.id,
-			opcoes: variant.valoresOpcoes.map((assignment) => ({ eixo: assignment.opcao.nome, valor: assignment.valor.nome })),
-		});
+	const existingVariants = await loadRows(mode, keys, (scope) => loadExistingVariants(tx, organizationId, scope));
+	const indexVariants = (target: TResolvedAuxiliaryEntities["variantsByCode"], rows: typeof existingVariants.rows) => {
+		for (const variant of rows) {
+			if (!variant.codigo) continue;
+			target.set(variant.codigo, {
+				produtoId: variant.produtoId,
+				produtoVarianteId: variant.id,
+				opcoes: variant.valoresOpcoes.map((assignment) => ({ eixo: assignment.opcao.nome, valor: assignment.valor.nome })),
+			});
+		}
+	};
+	indexVariants(context.variantsByCode, existingVariants.rows);
+	if (audit && existingVariants.shadowRows) {
+		const shadow: TResolvedAuxiliaryEntities["variantsByCode"] = new Map();
+		indexVariants(shadow, existingVariants.shadowRows);
+		auditLookups(audit, "variantsByCode", keys.productCodes, context.variantsByCode, shadow, (variant) => variant.produtoVarianteId);
 	}
 
 	// Vínculos de catálogo: um item remoto já mapeado dispensa qualquer heurística de código, e
 	// impede a criação de produto duplicado quando o `externalCode` do provedor não bate com o
 	// `codigo` interno — origem do lixo "grupo iFood, preço nulo" no cadastro.
-	const links = await tx.query.catalogLinks.findMany({
-		where: and(eq(catalogLinks.organizacaoId, batch.organizationId), ne(catalogLinks.status, "DESVINCULADO")),
-		columns: { produtoId: true, produtoVarianteId: true, externoItemId: true },
-	});
-	for (const link of links) {
-		if (!link.externoItemId || !link.produtoId) continue;
-		context.productsByExternalItemId.set(link.externoItemId, {
-			produtoId: link.produtoId,
-			produtoVarianteId: link.produtoVarianteId,
-			opcoes: [],
-		});
+	const links = await loadRows(mode, keys, (scope) => loadCatalogLinks(tx, organizationId, scope));
+	const indexLinks = (target: TResolvedAuxiliaryEntities["productsByExternalItemId"], rows: typeof links.rows) => {
+		for (const link of rows) {
+			if (!link.externoItemId || !link.produtoId) continue;
+			target.set(link.externoItemId, {
+				produtoId: link.produtoId,
+				produtoVarianteId: link.produtoVarianteId,
+				opcoes: [],
+			});
+		}
+	};
+	indexLinks(context.productsByExternalItemId, links.rows);
+	if (audit && links.shadowRows) {
+		const shadow: TResolvedAuxiliaryEntities["productsByExternalItemId"] = new Map();
+		indexLinks(shadow, links.shadowRows);
+		auditLookups(
+			audit,
+			"productsByExternalItemId",
+			keys.productExternalItemIds,
+			context.productsByExternalItemId,
+			shadow,
+			(link) => `${link.produtoId}:${link.produtoVarianteId ?? ""}`,
+		);
 	}
 
 	for (const product of uniqueBy(batch.products, (value) => value.code)) {
@@ -305,11 +464,21 @@ export async function syncAuxiliaryEntities({
 		context.createdProductsCount += 1;
 	}
 
-	const existingPartners = await tx.query.partners.findMany({
-		where: eq(partners.organizacaoId, batch.organizationId),
-		columns: { id: true, identificador: true, clienteId: true },
-	});
-	for (const partner of existingPartners) context.partnersByIdentifier.set(partner.identificador, { id: partner.id, clientId: partner.clienteId });
+	const existingPartners = await loadRows(mode, keys, (scope) => loadExistingPartners(tx, organizationId, scope));
+	for (const partner of existingPartners.rows)
+		context.partnersByIdentifier.set(partner.identificador, { id: partner.id, clientId: partner.clienteId });
+	if (audit && existingPartners.shadowRows) {
+		const shadow = new Map(existingPartners.shadowRows.map((partner) => [partner.identificador, { id: partner.id, clientId: partner.clienteId }]));
+		auditLookups(audit, "partnersByIdentifier", keys.partnerIdentifiers, context.partnersByIdentifier, shadow, (partner) => partner.id);
+	}
+
+	// Resumo do modo sombra: uma linha por lote, visível no log do cron/webhook. Zero divergências
+	// ao longo de alguns dias de lotes reais é o critério para trocar o env para TARGETED.
+	if (audit) {
+		const summary = `[DATA_COLLECTING_V2] [AUX_SHADOW] [ORG: ${organizationId}] [INTEGRATION: ${batch.integrationId}] ${audit.compared} chave(s) comparada(s), ${audit.mismatches.length} divergência(s).`;
+		if (audit.mismatches.length > 0) console.warn(summary, { mismatches: audit.mismatches.slice(0, 50) });
+		else console.log(summary);
+	}
 
 	for (const partner of uniqueBy(batch.partners, (value) => value.identifier)) {
 		if (context.partnersByIdentifier.has(partner.identifier)) continue;
