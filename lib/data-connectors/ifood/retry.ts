@@ -40,10 +40,23 @@ export function parseRetryAfterMs(retryAfter: unknown): number | null {
 	return Math.max(date.diff(dayjs(), "milliseconds"), 0);
 }
 
-/** Backoff exponencial: 1s, 2s, 4s... limitado a `IFOOD_RETRY_MAX_DELAY_MS`. */
-export function getIfoodBackoffMs(attempt: number) {
-	return Math.min(IFOOD_RETRY_BASE_DELAY_MS * 2 ** (attempt - 1), IFOOD_RETRY_MAX_DELAY_MS);
+/** Backoff exponencial: 1s, 2s, 4s... limitado a `maxDelayMs` (`IFOOD_RETRY_MAX_DELAY_MS` por padrão). */
+export function getIfoodBackoffMs(attempt: number, maxDelayMs: number = IFOOD_RETRY_MAX_DELAY_MS) {
+	return Math.min(IFOOD_RETRY_BASE_DELAY_MS * 2 ** (attempt - 1), maxDelayMs);
 }
+
+/**
+ * Orçamento de retentativas. O padrão atende rotas do app (homologação: 3 tentativas, `Retry-After`
+ * até 30s). O polling do cron, que roda a cada 30s dentro de uma função com `maxDuration` de 25s,
+ * usa um orçamento menor: uma pausa de 30s ali é uma invocação inteira cobrada e depois abortada,
+ * enquanto o próximo ciclo repete a chamada de graça.
+ */
+export type TIfoodRetryOptions = {
+	/** Tentativas extras após a original. */
+	maxRetries?: number;
+	/** Teto de espera por tentativa, inclusive para o `Retry-After` do 429. */
+	maxDelayMs?: number;
+};
 
 export function shouldRetryIfoodRequest({ status, method, code }: { status: number | null; method: string; code?: string }) {
 	// Cancelamento é decisão de quem chamou, não falha do iFood.
@@ -56,7 +69,9 @@ export function shouldRetryIfoodRequest({ status, method, code }: { status: numb
 }
 
 /** Instala o interceptor de retry no client autenticado. Devolve o mesmo client, para encadear. */
-export function attachIfoodRetry(client: AxiosInstance): AxiosInstance {
+export function attachIfoodRetry(client: AxiosInstance, options: TIfoodRetryOptions = {}): AxiosInstance {
+	const maxRetries = options.maxRetries ?? IFOOD_MAX_RETRIES;
+	const maxDelayMs = options.maxDelayMs ?? IFOOD_RETRY_MAX_DELAY_MS;
 	client.interceptors.response.use(undefined, async (error: AxiosError) => {
 		const config = error.config as TIfoodRetryRequestConfig | undefined;
 		if (!config) throw error;
@@ -66,14 +81,14 @@ export function attachIfoodRetry(client: AxiosInstance): AxiosInstance {
 		if (!shouldRetryIfoodRequest({ status, method, code: error.code })) throw error;
 
 		const attempt = (config.ifoodRetryAttempt ?? 0) + 1;
-		if (attempt > IFOOD_MAX_RETRIES) throw error;
+		if (attempt > maxRetries) throw error;
 		config.ifoodRetryAttempt = attempt;
 
 		const retryAfterMs = status === 429 ? parseRetryAfterMs(error.response?.headers?.["retry-after"]) : null;
-		const waitMs = Math.min(retryAfterMs ?? getIfoodBackoffMs(attempt), IFOOD_RETRY_MAX_DELAY_MS);
+		const waitMs = Math.min(retryAfterMs ?? getIfoodBackoffMs(attempt, maxDelayMs), maxDelayMs);
 
 		console.warn(
-			`[IFOOD] ${status ?? error.code ?? "sem resposta"} em ${method.toUpperCase()} ${config.url ?? ""} — retentativa ${attempt}/${IFOOD_MAX_RETRIES} em ${waitMs}ms.`,
+			`[IFOOD] ${status ?? error.code ?? "sem resposta"} em ${method.toUpperCase()} ${config.url ?? ""} — retentativa ${attempt}/${maxRetries} em ${waitMs}ms.`,
 		);
 		await sleep(waitMs);
 		return client.request(config);

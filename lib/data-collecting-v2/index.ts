@@ -17,6 +17,13 @@ import { z } from "zod";
 import { resolveCampaignAudiences } from "./campaign-audiences";
 import { processDataCollectingV2Effects } from "./effects";
 import { loadPurchaseEffectCampaigns } from "./purchase-effect-campaigns";
+import {
+	createEmptyRunSummary,
+	groupIntegrationsByOrganization,
+	isEmptyCanonicalBatch,
+	mapWithConcurrency,
+	resolveIntegrationStatusUpdate,
+} from "./run-plan";
 import { syncAuxiliaryEntities } from "./sync-auxiliary-entities";
 import { syncSales, type TSyncSalesErpOptions } from "./sync-sales";
 import type {
@@ -37,6 +44,16 @@ export type TRunDataCollectingV2Params = {
 	 * Sem isso, um evento de uma loja iFood dispararia polling/refresh de TODAS as fontes da org.
 	 */
 	integrationIds?: string[];
+	/**
+	 * Linhas já carregadas pelo chamador (o cron do iFood as lê sob o advisory lock). Evita reler a
+	 * tabela inteira de fontes de dados; os filtros de `organizationIds`/`integrationIds` ainda valem.
+	 */
+	integrations?: TDataSourceIntegration[];
+	/**
+	 * Organizações processadas em paralelo. Integrações da MESMA organização seguem em série (ver
+	 * `groupIntegrationsByOrganization`). Default 1 = comportamento histórico, sequencial.
+	 */
+	organizationConcurrency?: number;
 	window?: TCanonicalImportWindow;
 	processImmediateInteractions?: boolean;
 	effects?: Partial<TDataCollectingV2EffectsOptions>;
@@ -102,8 +119,8 @@ function serializeDataCollectingError(error: unknown) {
 	};
 }
 
-async function loadDataSourceIntegrations(organizationIds?: string[], integrationIds?: string[]) {
-	const rows = await getActiveDataSourceIntegrations({ executor: db });
+async function loadDataSourceIntegrations(organizationIds?: string[], integrationIds?: string[], preloaded?: TDataSourceIntegration[]) {
+	const rows = preloaded ?? (await getActiveDataSourceIntegrations({ executor: db }));
 	const organizationIdSet = organizationIds?.length ? new Set(organizationIds) : null;
 	const integrationIdSet = integrationIds?.length ? new Set(integrationIds) : null;
 	return rows.filter(
@@ -137,14 +154,50 @@ async function processIntegration({
 	includeRawInResult?: boolean;
 	publishDispatches?: boolean;
 }) {
+	const fetchStartedAt = Date.now();
 	const batch = await fetchConnectorImportBatch({
 		organizationId: integration.organizacaoId,
 		integrationId: integration.id,
 		config: integration.configuracao,
 		window,
 	});
-	return persistCanonicalBatch({ integration, organizationConfiguration, batch, effects, includeRawInResult, publishDispatches, mode: "CONTINUA" });
+	const fetchMs = Date.now() - fetchStartedAt;
+
+	// Lote vazio (o caso de ~99% dos ciclos de polling do iFood): nada a sincronizar, nenhum efeito
+	// a disparar. Pular a transação evita carregar campanhas, abrir/commitar e consultar cashback
+	// só para não escrever nada.
+	if (isEmptyCanonicalBatch(batch)) {
+		return {
+			summary: createEmptyRunSummary({ organizationId: integration.organizacaoId, integrationId: integration.id, source: batch.source }),
+			eventDispatches: [] as TEventDispatchResult[],
+			raw: includeRawInResult ? batch.raw : undefined,
+			timing: { fetchMs, persistMs: 0, skippedPersistence: true },
+		};
+	}
+
+	const persistStartedAt = Date.now();
+	const persisted = await persistCanonicalBatch({
+		integration,
+		organizationConfiguration,
+		batch,
+		effects,
+		includeRawInResult,
+		publishDispatches,
+		mode: "CONTINUA",
+	});
+	return { ...persisted, timing: { fetchMs, persistMs: Date.now() - persistStartedAt, skippedPersistence: false } };
 }
+
+export type TDataCollectingV2IntegrationTiming = {
+	organizationId: string;
+	integrationId: string;
+	/** Busca no conector (rede). Numa integração que falhou, é o tempo total até a falha. */
+	fetchMs: number;
+	/** Transação de persistência + efeitos pós-commit. 0 quando o lote veio vazio ou a integração falhou. */
+	persistMs: number;
+	skippedPersistence: boolean;
+	failed: boolean;
+};
 
 export async function persistCanonicalBatch({
 	integration,
@@ -336,6 +389,8 @@ export async function persistCanonicalBatch({
 export async function runDataCollectingV2({
 	organizationIds,
 	integrationIds,
+	integrations: preloadedIntegrations,
+	organizationConcurrency = 1,
 	window = getDefaultImportWindow(),
 	processImmediateInteractions = true,
 	effects: effectsOverrides,
@@ -345,18 +400,25 @@ export async function runDataCollectingV2({
 	// Loop POR INTEGRAÇÃO, não por org: uma organização com N fontes ativas roda N batches (uma
 	// linha só tem um tipo — o gate antigo de coerência tipo↔config.tipo vive no filtro de
 	// getActiveDataSourceIntegrations).
-	const integrationsForImport = await loadDataSourceIntegrations(organizationIds, integrationIds);
+	const integrationsForImport = await loadDataSourceIntegrations(organizationIds, integrationIds, preloadedIntegrations);
 	const organizationConfigurationsById = await loadOrganizationConfigurations(
 		Array.from(new Set(integrationsForImport.map((integration) => integration.organizacaoId))),
 	);
-	const summaries: TDataCollectingV2RunSummary[] = [];
-	const rawBatches: TDataCollectingV2RawBatch[] = [];
-	const allEventDispatches: TEventDispatchResult[] = [];
-	const errors: TDataCollectingV2RunError[] = [];
 
-	for (const integration of integrationsForImport) {
+	type TIntegrationOutcome =
+		| {
+				ok: true;
+				summary: TDataCollectingV2RunSummary;
+				eventDispatches: TEventDispatchResult[];
+				raw: unknown;
+				timing: TDataCollectingV2IntegrationTiming;
+		  }
+		| { ok: false; error: TDataCollectingV2RunError; timing: TDataCollectingV2IntegrationTiming };
+
+	async function processIntegrationOutcome(integration: TDataSourceIntegration): Promise<TIntegrationOutcome> {
+		const startedAt = Date.now();
 		try {
-			const { summary, eventDispatches, raw } = await processIntegration({
+			const { summary, eventDispatches, raw, timing } = await processIntegration({
 				integration,
 				organizationConfiguration: organizationConfigurationsById.get(integration.organizacaoId)?.configuracao ?? null,
 				window,
@@ -365,65 +427,100 @@ export async function runDataCollectingV2({
 				publishDispatches: processImmediateInteractions,
 			});
 			console.log(`[DATA_COLLECTING_V2] [ORG: ${integration.organizacaoId}] [INTEGRATION: ${integration.id}] Summary`, summary);
-			summaries.push(summary);
-			if (summary.saleIdCollisionsCount > 0) {
-				errors.push({
-					organizationId: integration.organizacaoId,
-					integrationId: integration.id,
-					integrationType: integration.tipo,
-					message: `${summary.saleIdCollisionsCount} colisão(ões) de idExterno com vendas de outra origem — itens ignorados (fail-closed).`,
-				});
-			}
-			if (raw !== undefined) {
-				rawBatches.push({
-					organizationId: integration.organizacaoId,
-					integrationId: integration.id,
-					source: summary.source,
-					window,
-					raw,
-				});
-			}
-			allEventDispatches.push(...eventDispatches);
 
 			// "Última sincronização" finalmente mantida: a linha da conexão registra o fim de cada
 			// run bem-sucedido. Colisões fail-closed não derrubam o status (a conexão funciona),
 			// mas ficam visíveis em `ultimoErro` até um run limpo — senão a ocorrência só existiria
-			// no log do cron.
-			await db
-				.update(integrations)
-				.set({
-					dataUltimaSincronizacao: new Date(),
-					status: "CONECTADO",
-					ultimoErro:
-						summary.saleIdCollisionsCount > 0
-							? `${summary.saleIdCollisionsCount} colisão(ões) de idExterno com vendas de outra origem no último run — itens ignorados (fail-closed).`
-							: null,
-				})
-				.where(eq(integrations.id, integration.id));
+			// no log do cron. Um run vazio numa conexão saudável só regrava a linha quando a data
+			// envelheceu (ver `resolveIntegrationStatusUpdate`).
+			const statusUpdate = resolveIntegrationStatusUpdate({ integration, summary, now: new Date() });
+			if (statusUpdate) await db.update(integrations).set(statusUpdate).where(eq(integrations.id, integration.id));
+
+			return {
+				ok: true,
+				summary,
+				eventDispatches,
+				raw,
+				timing: { organizationId: integration.organizacaoId, integrationId: integration.id, ...timing, failed: false },
+			};
 		} catch (error) {
 			const message = error instanceof Error ? error.message : "Erro desconhecido ao processar integração.";
 			console.error(
 				`[DATA_COLLECTING_V2] [ORG: ${integration.organizacaoId}] [INTEGRATION: ${integration.id}] Integration ${integration.tipo} failed`,
 				serializeDataCollectingError(error),
 			);
-			errors.push({
-				organizationId: integration.organizacaoId,
-				integrationId: integration.id,
-				integrationType: integration.tipo,
-				message,
-			});
 			// EXPIRADO (gravado pelo refresh de token que falhou) não é rebaixado para ERRO.
 			await db
 				.update(integrations)
 				.set({ status: "ERRO", ultimoErro: message })
 				.where(and(eq(integrations.id, integration.id), ne(integrations.status, "EXPIRADO")));
+			return {
+				ok: false,
+				error: { organizationId: integration.organizacaoId, integrationId: integration.id, integrationType: integration.tipo, message },
+				timing: {
+					organizationId: integration.organizacaoId,
+					integrationId: integration.id,
+					fetchMs: Date.now() - startedAt,
+					persistMs: 0,
+					skippedPersistence: false,
+					failed: true,
+				},
+			};
 		}
+	}
+
+	// Organizações distintas correm em paralelo (limite `organizationConcurrency`); dentro da
+	// mesma organização as integrações seguem em série. Cada integração já é isolada em try/catch,
+	// então uma falha não derruba as demais do grupo.
+	const outcomesByIntegrationId = new Map<string, TIntegrationOutcome>();
+	await mapWithConcurrency(groupIntegrationsByOrganization(integrationsForImport), organizationConcurrency, async (group) => {
+		for (const integration of group) {
+			outcomesByIntegrationId.set(integration.id, await processIntegrationOutcome(integration));
+		}
+	});
+
+	const summaries: TDataCollectingV2RunSummary[] = [];
+	const rawBatches: TDataCollectingV2RawBatch[] = [];
+	const allEventDispatches: TEventDispatchResult[] = [];
+	const errors: TDataCollectingV2RunError[] = [];
+	const timings: TDataCollectingV2IntegrationTiming[] = [];
+
+	// Resultados na ordem de entrada das integrações, independentemente de qual grupo terminou antes.
+	for (const integration of integrationsForImport) {
+		const outcome = outcomesByIntegrationId.get(integration.id);
+		if (!outcome) continue;
+		timings.push(outcome.timing);
+		if (!outcome.ok) {
+			errors.push(outcome.error);
+			continue;
+		}
+		const { summary, eventDispatches, raw } = outcome;
+		summaries.push(summary);
+		if (summary.saleIdCollisionsCount > 0) {
+			errors.push({
+				organizationId: integration.organizacaoId,
+				integrationId: integration.id,
+				integrationType: integration.tipo,
+				message: `${summary.saleIdCollisionsCount} colisão(ões) de idExterno com vendas de outra origem — itens ignorados (fail-closed).`,
+			});
+		}
+		if (raw !== undefined) {
+			rawBatches.push({
+				organizationId: integration.organizacaoId,
+				integrationId: integration.id,
+				source: summary.source,
+				window,
+				raw,
+			});
+		}
+		allEventDispatches.push(...eventDispatches);
 	}
 
 	return {
 		summaries,
 		eventDispatches: allEventDispatches,
 		errors,
+		timings,
 		...(includeRawInResult ? { rawBatches } : {}),
 	};
 }
