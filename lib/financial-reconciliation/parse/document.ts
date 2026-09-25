@@ -41,10 +41,8 @@ Regras:
 - Se o documento não for um extrato bancário ou estiver ilegível, retorne linhas: [].`;
 
 export async function extractStatementFromDocument({ buffer, mimeType }: { buffer: Buffer; mimeType: string }): Promise<TParsedStatement> {
-	const filePart =
-		mimeType === "application/pdf"
-			? ({ type: "file", data: buffer, mediaType: "application/pdf" } as const)
-			: ({ type: "image", image: buffer, mediaType: mimeType } as const);
+	// PDF e imagem entram como parte "file" (a parte "image" foi depreciada no AI SDK 7).
+	const filePart = { type: "file", data: buffer, mediaType: mimeType } as const;
 
 	const { output } = await generateText({
 		model: gateway(STATEMENT_EXTRACTION_MODEL),

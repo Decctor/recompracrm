@@ -100,10 +100,8 @@ const EXTRACTION_MODEL = "anthropic/claude-sonnet-4.5";
 export async function extractCompositionFromFile({ dataBase64, mimeType }: { dataBase64: string; mimeType: TImportCompositionMimeType }) {
 	const buffer = Buffer.from(dataBase64, "base64");
 
-	const filePart =
-		mimeType === "application/pdf"
-			? ({ type: "file", data: buffer, mediaType: "application/pdf" } as const)
-			: ({ type: "image", image: buffer, mediaType: mimeType } as const);
+	// PDF e imagem entram como parte "file" (a parte "image" foi depreciada no AI SDK 7).
+	const filePart = { type: "file", data: buffer, mediaType: mimeType } as const;
 
 	const { output } = await generateText({
 		model: gateway(EXTRACTION_MODEL),
