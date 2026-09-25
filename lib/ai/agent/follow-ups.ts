@@ -1,3 +1,4 @@
+import { naiveUtcParam } from "@/lib/chats/analytics";
 import { changeChatAttendanceStatus, getCurrentChatAttendance } from "@/lib/chats/attendance-state";
 import { AI_AGENT_FOLLOW_UP_CANCEL_REASONS, type TAiAgentCapabilities, type TAiAgentTurnFollowUp } from "@/schemas/ai-agents";
 import type { DB, DBTransaction } from "@/services/drizzle";
@@ -127,7 +128,7 @@ export async function claimDueFollowUps(db: TDb, input: { now?: Date; limit?: nu
 			and(
 				eq(aiAgentFollowUps.status, "AGENDADA"),
 				sql`${aiAgentFollowUps.tentativa} >= ${FOLLOW_UP_MAX_ATTEMPTS}`,
-				sql`(${aiAgentFollowUps.leaseAte} is null or ${aiAgentFollowUps.leaseAte} < ${now})`,
+				sql`(${aiAgentFollowUps.leaseAte} is null or ${aiAgentFollowUps.leaseAte} < ${naiveUtcParam(now)})`,
 			),
 		);
 
@@ -138,8 +139,8 @@ export async function claimDueFollowUps(db: TDb, input: { now?: Date; limit?: nu
 			sql`${aiAgentFollowUps.id} in (
 				select ${aiAgentFollowUps.id} from ${aiAgentFollowUps}
 				where ${aiAgentFollowUps.status} = 'AGENDADA'
-					and ${aiAgentFollowUps.agendadaPara} <= ${now}
-					and (${aiAgentFollowUps.leaseAte} is null or ${aiAgentFollowUps.leaseAte} < ${now})
+					and ${aiAgentFollowUps.agendadaPara} <= ${naiveUtcParam(now)}
+					and (${aiAgentFollowUps.leaseAte} is null or ${aiAgentFollowUps.leaseAte} < ${naiveUtcParam(now)})
 				order by ${aiAgentFollowUps.agendadaPara} asc
 				limit ${limit}
 				for update skip locked
