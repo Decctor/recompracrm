@@ -12,20 +12,25 @@ import type { TDataCollectingV2Executor, TResolvedAuxiliaryEntities, TResolvedCl
  *   do banco depois das audiências de campanha).
  * - TARGETED: só as linhas que casam com as chaves do lote (`collectBatchLookupKeys`).
  * - SHADOW: carrega das duas formas, usa FULL e registra qualquer chave cujo lookup divirja.
- *   É o modo de validação em produção antes do corte; troca-se por env sem deploy.
+ *   Modo de validação; troca-se por env sem deploy.
+ * TARGETED é o padrão: validado em ensaio diferencial com rollback contra o commit anterior
+ * (scripts/diff-data-collecting-rollback.ts) — as únicas diferenças foram escolhas entre registros
+ * duplicados, que antes dependiam da ordem física das linhas. FULL e SHADOW ficam como kill switch.
  */
 type TAuxiliaryLoadMode = "FULL" | "SHADOW" | "TARGETED";
 
 function resolveAuxiliaryLoadMode(): TAuxiliaryLoadMode {
 	const value = process.env.DATA_COLLECTING_AUX_LOAD_MODE;
-	return value === "FULL" || value === "TARGETED" ? value : "SHADOW";
+	return value === "FULL" || value === "SHADOW" ? value : "TARGETED";
 }
 
 // Os mapas do contexto são "última linha vence" quando duas entidades compartilham a chave (dois
 // clientes "Bruno", dois produtos com o mesmo código). Sem ORDER BY a vencedora era a ordem física
-// do heap — arbitrária e diferente entre o carregamento completo e o direcionado. A ordem explícita
-// (mais antigo → mais novo, id como desempate) torna a escolha determinística e igual nos dois.
-const NEWEST_WINS_CLIENTS = [asc(clients.dataInsercao), asc(clients.id)];
+// do heap — arbitrária e diferente entre o carregamento completo e o direcionado. Para clientes a
+// ordem física tinha um efeito consistente: a linha atualizada por último (a duplicata que recebeu
+// a venda mais recente) ia para o fim e seguia vencendo. A ordem explícita reproduz essa regra —
+// a duplicata com a compra mais recente vence — e desempata por data de cadastro e id.
+const LAST_PURCHASE_WINS_CLIENTS = [sql`${clients.ultimaCompraData} asc nulls first`, asc(clients.dataInsercao), asc(clients.id)];
 
 type TShadowAudit = {
 	compared: number;
@@ -93,7 +98,7 @@ function loadExistingClients(tx: TDataCollectingV2Executor, organizationId: stri
 	}
 	return tx.query.clients.findMany({
 		where: and(...conditions),
-		orderBy: NEWEST_WINS_CLIENTS,
+		orderBy: LAST_PURCHASE_WINS_CLIENTS,
 		columns: {
 			id: true,
 			idExterno: true,
@@ -118,8 +123,10 @@ function loadExistingProducts(tx: TDataCollectingV2Executor, organizationId: str
 	if (keys && keys.productCodes.length === 0) return Promise.resolve([]);
 	return tx.query.products.findMany({
 		where: and(eq(products.organizacaoId, organizationId), ...(keys ? [inArray(products.codigo, keys.productCodes)] : [])),
-		// Sem data_insercao na tabela: o id é a única ordem estável disponível.
-		orderBy: [asc(products.id)],
+		// Códigos duplicados existem (cadastro manual + criação pelo conector). Vence o produto que a
+		// integração sincronizou por último — o registro que ela mesma mantém; nulls first deixa o
+		// cadastro manual perder o desempate. A tabela não tem data_insercao; o id fecha a ordem.
+		orderBy: [sql`${products.dataUltimaSincronizacao} asc nulls first`, asc(products.id)],
 		columns: { id: true, codigo: true },
 	});
 }
