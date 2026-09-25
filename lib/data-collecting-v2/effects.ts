@@ -9,7 +9,7 @@ import {
 import { buildBasePurchaseInteractionMetadata } from "@/lib/campaigns/interaction-metadata";
 import { processConversionAttribution } from "@/lib/conversions/attribution";
 import { cashbackProgramBalances, cashbackPrograms } from "@/services/drizzle/schema";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type { TCampaignWithAudienceRelations, TDataCollectingV2EffectsOptions, TDataCollectingV2Executor, TPersistedSaleForEffects } from "./types";
 
 type TProcessEffectsResult = {
@@ -111,17 +111,28 @@ export async function processDataCollectingV2Effects({
 				},
 			})
 		: undefined;
-	const existingBalances = cashbackProgram
-		? await tx.query.cashbackProgramBalances.findMany({
-				where: and(eq(cashbackProgramBalances.organizacaoId, organizationId), eq(cashbackProgramBalances.programaId, cashbackProgram.id)),
-				columns: {
-					programaId: true,
-					clienteId: true,
-					saldoValorDisponivel: true,
-					saldoValorAcumuladoTotal: true,
-				},
-			})
-		: [];
+	// O cache de saldos só é lido para o comprador de cada venda (contexto da interação) e escrito
+	// para comprador e parceiro — carregar os saldos da organização inteira a cada lote era a
+	// segunda maior fonte de egress do banco.
+	const balanceClientIds = Array.from(
+		new Set(persistedSales.flatMap((sale) => [sale.clientId, sale.partnerClientId]).filter((clientId): clientId is string => !!clientId)),
+	);
+	const existingBalances =
+		cashbackProgram && balanceClientIds.length > 0
+			? await tx.query.cashbackProgramBalances.findMany({
+					where: and(
+						eq(cashbackProgramBalances.organizacaoId, organizationId),
+						eq(cashbackProgramBalances.programaId, cashbackProgram.id),
+						inArray(cashbackProgramBalances.clienteId, balanceClientIds),
+					),
+					columns: {
+						programaId: true,
+						clienteId: true,
+						saldoValorDisponivel: true,
+						saldoValorAcumuladoTotal: true,
+					},
+				})
+			: [];
 	const balancesByClientId = new Map(existingBalances.map((balance) => [balance.clienteId, balance]));
 
 	for (const persistedSale of persistedSales) {
