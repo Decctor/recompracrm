@@ -1,7 +1,8 @@
 import { type TExternalActorContext, authenticateExternalRequest } from "@/lib/access/authentication";
 import { appApiHandler } from "@/lib/app-api";
+import { getDesktopAgentInstallerUrl } from "@/lib/files-storage/desktop-agent";
 import { db } from "@/services/drizzle";
-import { accessPrincipals } from "@/services/drizzle/schema";
+import { accessPrincipals, agentVersions } from "@/services/drizzle/schema";
 import { eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 
@@ -31,6 +32,13 @@ async function registerHeartbeat({ actor, versaoApp, plataforma }: THeartbeatPar
 		})
 		.where(eq(accessPrincipals.id, actor.principalId));
 
+	const publishedVersion = actor.scopes.has("desktop-agent:configuration:read")
+		? await db.query.agentVersions.findFirst({
+				where: eq(agentVersions.publicada, true),
+				columns: { versao: true, sha256: true, tamanhoBytes: true, storagePath: true },
+			})
+		: null;
+
 	return {
 		data: {
 			principalId: actor.principalId,
@@ -39,6 +47,14 @@ async function registerHeartbeat({ actor, versaoApp, plataforma }: THeartbeatPar
 			clientCode: actor.clientCode,
 			scopes: Array.from(actor.scopes),
 			dataContato: now,
+			atualizacao: publishedVersion
+				? {
+						versao: publishedVersion.versao,
+						sha256: publishedVersion.sha256,
+						tamanhoBytes: publishedVersion.tamanhoBytes,
+						downloadUrl: getDesktopAgentInstallerUrl(publishedVersion.storagePath),
+					}
+				: null,
 		},
 		message: "Contato registrado com sucesso.",
 	};
