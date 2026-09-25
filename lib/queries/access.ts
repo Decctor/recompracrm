@@ -20,10 +20,13 @@ async function fetchAccessPrincipals(types: readonly string[]) {
 	return data.data.default ?? [];
 }
 
-export function useAccessPrincipals({ types = DEVICE_PRINCIPAL_TYPES }: { types?: readonly string[] } = {}) {
+export function useAccessPrincipals({
+	types = DEVICE_PRINCIPAL_TYPES,
+	refetchInterval = false,
+}: { types?: readonly string[]; refetchInterval?: number | false } = {}) {
 	const queryKey = useMemo(() => ["access-principals", types.join(",")] as const, [types]);
 	return {
-		...useQuery({ queryKey, queryFn: () => fetchAccessPrincipals(types) }),
+		...useQuery({ queryKey, queryFn: () => fetchAccessPrincipals(types), refetchInterval }),
 		queryKey,
 	};
 }

@@ -1,6 +1,6 @@
 import { formatDateAsLocale } from "@/lib/formatting";
 import { useCurrentAgentVersion } from "@/lib/queries/desktop-agent";
-import { Download, MonitorDown } from "lucide-react";
+import { Download, MonitorDown, Plus } from "lucide-react";
 import { Button } from "../ui/button";
 import SettingsPanelSection from "./SettingsPanelSection";
 
@@ -11,7 +11,7 @@ import SettingsPanelSection from "./SettingsPanelSection";
 //
 // O link aponta direto para o Supabase Storage, e não para uma rota daqui:
 // funções da Vercel têm limite de ~4,5 MB de resposta e o instalador tem ~49 MB.
-export default function DesktopAgentDownload() {
+export default function DesktopAgentDownload({ onActivateAgent }: { onActivateAgent?: () => void }) {
 	const { data: version, isLoading } = useCurrentAgentVersion();
 
 	// Nenhuma versão publicada ainda é estado legítimo (antes do primeiro
@@ -44,14 +44,21 @@ export default function DesktopAgentDownload() {
 						</p>
 					</div>
 				</div>
-				<Button asChild size="sm" className="flex items-center gap-2 whitespace-nowrap">
-					{/* Sem target=_blank: é um download, não uma navegação — abrir aba
+				<div className="flex flex-wrap gap-2">
+					{onActivateAgent ? (
+						<Button variant="outline" size="sm" className="flex items-center gap-2 whitespace-nowrap" onClick={onActivateAgent}>
+							<Plus className="h-4 w-4 min-h-4 min-w-4" /> ATIVAR ESTE AGENTE
+						</Button>
+					) : null}
+					<Button asChild size="sm" className="flex items-center gap-2 whitespace-nowrap">
+						{/* Sem target=_blank: é um download, não uma navegação — abrir aba
 					    em branco que fecha sozinha assusta quem está na loja. */}
-					<a href={version.downloadUrl} download>
-						<Download className="h-4 w-4 min-h-4 min-w-4" />
-						BAIXAR INSTALADOR
-					</a>
-				</Button>
+						<a href={version.downloadUrl} download>
+							<Download className="h-4 w-4 min-h-4 min-w-4" />
+							BAIXAR INSTALADOR
+						</a>
+					</Button>
+				</div>
 			</div>
 		</SettingsPanelSection>
 	);

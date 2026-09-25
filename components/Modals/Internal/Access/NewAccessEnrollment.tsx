@@ -3,6 +3,7 @@ import TextInput from "@/components/Inputs/TextInput";
 import ResponsiveMenu from "@/components/Utils/ResponsiveMenu";
 import { getErrorMessage } from "@/lib/errors";
 import { createAccessEnrollmentChallenge } from "@/lib/mutations/access";
+import type { TAccessPrincipalListItem } from "@/lib/queries/access";
 import { copyToClipboard } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { useMutation } from "@tanstack/react-query";
@@ -38,6 +39,8 @@ const ENROLLABLE_CLIENTS = [
 
 type NewAccessEnrollmentProps = {
 	closeModal: () => void;
+	principals: TAccessPrincipalListItem[];
+	initialAccessClientCodigo: string;
 	callbacks?: {
 		onMutate?: (variables: TCreateEnrollmentChallengeInput) => void;
 		onSuccess?: () => void;
@@ -46,16 +49,25 @@ type NewAccessEnrollmentProps = {
 	};
 };
 
-export function NewAccessEnrollment({ closeModal, callbacks }: NewAccessEnrollmentProps) {
-	const [accessClientCodigo, setAccessClientCodigo] = useState<string>("RECOMPRA_POI_MOBILE");
+export function NewAccessEnrollment({ closeModal, principals, initialAccessClientCodigo, callbacks }: NewAccessEnrollmentProps) {
+	const [accessClientCodigo, setAccessClientCodigo] = useState(initialAccessClientCodigo);
 	const [nomeSugerido, setNomeSugerido] = useState("");
 	const [challenge, setChallenge] = useState<TCreateEnrollmentChallengeOutput["data"] | null>(null);
+	const [existingPrincipalIds, setExistingPrincipalIds] = useState<string[]>([]);
+	const connectedPrincipal = challenge
+		? principals.find(
+				(principal) =>
+					!existingPrincipalIds.includes(principal.id) &&
+					principal.tipo === (challenge.accessClientCodigo === "RECOMPRA_LOCAL_AGENT" ? "AGENTE_DESKTOP" : "DISPOSITIVO"),
+			)
+		: null;
 
 	const { mutate, isPending } = useMutation({
 		mutationKey: ["create-access-enrollment-challenge"],
 		mutationFn: createAccessEnrollmentChallenge,
 		onMutate: (variables) => callbacks?.onMutate?.(variables),
 		onSuccess: (data) => {
+			setExistingPrincipalIds(principals.map((principal) => principal.id));
 			callbacks?.onSuccess?.();
 			toast.success(data.message);
 			setChallenge(data.data);
@@ -70,8 +82,10 @@ export function NewAccessEnrollment({ closeModal, callbacks }: NewAccessEnrollme
 	if (challenge) {
 		return (
 			<ResponsiveMenu
-				menuTitle="CÓDIGO DE ATIVAÇÃO"
-				menuDescription="Digite este código no dispositivo para concluir a ativação."
+				menuTitle={connectedPrincipal ? "DISPOSITIVO ATIVADO" : "CÓDIGO DE ATIVAÇÃO"}
+				menuDescription={
+					connectedPrincipal ? "O dispositivo já aparece na sua organização." : "Digite este código no dispositivo para concluir a ativação."
+				}
 				mode="read-only"
 				menuCancelButtonText="FECHAR"
 				stateIsLoading={false}
@@ -79,29 +93,29 @@ export function NewAccessEnrollment({ closeModal, callbacks }: NewAccessEnrollme
 				closeMenu={closeModal}
 			>
 				<div className="flex w-full flex-col items-center gap-4 py-4">
-					<div className="flex w-full flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-primary/30 bg-primary/5 px-4 py-8">
-						<span className="text-xs font-bold uppercase tracking-[0.08em] text-muted-foreground">Código de ativação</span>
-						<span className="select-all text-center text-3xl font-extrabold tracking-[0.18em] text-primary lg:text-4xl">{challenge.code}</span>
-						<Button
-							variant="outline"
-							size="sm"
-							className="flex items-center gap-2"
-							onClick={() => copyToClipboard(challenge.code)}
-						>
-							<Copy className="h-4 w-4 min-h-4 min-w-4" />
-							COPIAR CÓDIGO
-						</Button>
-					</div>
-					<div className="flex w-full flex-col gap-1.5 text-center">
-						<p className="text-sm text-muted-foreground">
-							Válido até <span className="font-semibold text-foreground">{dayjs(challenge.expiraEm).format("HH:mm")}</span>. Abra o dispositivo,
-							acesse a tela de ativação e informe o código.
-						</p>
-						<p className="flex items-center justify-center gap-1.5 text-xs font-semibold text-muted-foreground">
-							<TriangleAlert className="h-3.5 w-3.5 min-h-3.5 min-w-3.5" />
-							Este código não será exibido novamente.
-						</p>
-					</div>
+					{connectedPrincipal ? <p className="text-sm font-semibold text-primary">{connectedPrincipal.nome} ativado com sucesso.</p> : null}
+					{!connectedPrincipal ? (
+						<div className="flex w-full flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-primary/30 bg-primary/5 px-4 py-8">
+							<span className="text-xs font-bold uppercase tracking-[0.08em] text-muted-foreground">Código de ativação</span>
+							<span className="select-all text-center text-3xl font-extrabold tracking-[0.18em] text-primary lg:text-4xl">{challenge.code}</span>
+							<Button variant="outline" size="sm" className="flex items-center gap-2" onClick={() => copyToClipboard(challenge.code)}>
+								<Copy className="h-4 w-4 min-h-4 min-w-4" />
+								COPIAR CÓDIGO
+							</Button>
+						</div>
+					) : null}
+					{!connectedPrincipal ? (
+						<div className="flex w-full flex-col gap-1.5 text-center">
+							<p className="text-sm text-muted-foreground">
+								Válido até <span className="font-semibold text-foreground">{dayjs(challenge.expiraEm).format("HH:mm")}</span>. Abra o dispositivo, acesse a
+								tela de ativação e informe o código.
+							</p>
+							<p className="flex items-center justify-center gap-1.5 text-xs font-semibold text-muted-foreground">
+								<TriangleAlert className="h-3.5 w-3.5 min-h-3.5 min-w-3.5" />
+								Este código não será exibido novamente.
+							</p>
+						</div>
+					) : null}
 				</div>
 			</ResponsiveMenu>
 		);

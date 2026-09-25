@@ -26,11 +26,27 @@ type SettingsDevicesProps = {
 
 export default function SettingsDevices({ user: _user, membership }: SettingsDevicesProps) {
 	const queryClient = useQueryClient();
-	const { data: principals, queryKey, isLoading, isError, isSuccess, error } = useAccessPrincipals();
 	const [newEnrollmentModalIsOpen, setNewEnrollmentModalIsOpen] = useState(false);
+	const [enrollmentClientCodigo, setEnrollmentClientCodigo] = useState("RECOMPRA_POI_MOBILE");
+	const {
+		data: principals,
+		queryKey,
+		isLoading,
+		isError,
+		isSuccess,
+		error,
+		refetch,
+		isRefetching,
+	} = useAccessPrincipals({
+		refetchInterval: newEnrollmentModalIsOpen ? 3000 : false,
+	});
 	const [controlPrincipalId, setControlPrincipalId] = useState<string | null>(null);
 
 	const canManage = membership.permissoes.empresa.editar;
+	const openEnrollment = (clientCodigo: string) => {
+		setEnrollmentClientCodigo(clientCodigo);
+		setNewEnrollmentModalIsOpen(true);
+	};
 	const handleOnMutate = async () => await queryClient.cancelQueries({ queryKey });
 	const handleOnSettled = async () => await queryClient.invalidateQueries({ queryKey });
 
@@ -39,7 +55,7 @@ export default function SettingsDevices({ user: _user, membership }: SettingsDev
 		// irmão depois do primeiro ganha o filete. Sem isso os quatro grupos empilhados liam como
 		// um bloco contínuo, e o card de download parecia cabeçalho da lista de dispositivos.
 		<div className="flex w-full flex-col gap-6 [&>section+section]:border-t [&>section+section]:border-border [&>section+section]:pt-6">
-			<DesktopAgentDownload />
+			<DesktopAgentDownload onActivateAgent={canManage ? () => openEnrollment("RECOMPRA_LOCAL_AGENT") : undefined} />
 
 			<SettingsPanelSection
 				title="DISPOSITIVOS VINCULADOS"
@@ -57,11 +73,14 @@ export default function SettingsDevices({ user: _user, membership }: SettingsDev
 							COPIAR LINK DO PONTO
 						</Button>
 						{canManage ? (
-							<Button size="sm" className="flex items-center gap-2 whitespace-nowrap" onClick={() => setNewEnrollmentModalIsOpen(true)}>
+							<Button size="sm" className="flex items-center gap-2 whitespace-nowrap" onClick={() => openEnrollment("RECOMPRA_POI_MOBILE")}>
 								<Plus className="h-4 w-4 min-h-4 min-w-4" />
 								ATIVAR DISPOSITIVO
 							</Button>
 						) : null}
+						<Button variant="ghost" size="icon" aria-label="Atualizar dispositivos" disabled={isRefetching} onClick={() => refetch()}>
+							<RefreshCw className={cn("h-4 w-4", isRefetching && "animate-spin")} />
+						</Button>
 					</>
 				}
 			>
@@ -75,12 +94,12 @@ export default function SettingsDevices({ user: _user, membership }: SettingsDev
 						<div className="flex flex-col gap-1">
 							<h3 className="text-base font-bold tracking-tight">Nenhum dispositivo ativado</h3>
 							<p className="max-w-md text-sm text-muted-foreground">
-								Gere um código de ativação, digite-o no tablet ou kiosk e o dispositivo passa a operar o Ponto de Interação com credencial própria, que
-								você pode revogar a qualquer momento.
+								Gere um código de ativação e digite-o no aplicativo do dispositivo. Ele aparecerá aqui após a conexão, com uma credencial que você pode
+								revogar.
 							</p>
 						</div>
 						{canManage ? (
-							<Button size="sm" className="flex items-center gap-2" onClick={() => setNewEnrollmentModalIsOpen(true)}>
+							<Button size="sm" className="flex items-center gap-2" onClick={() => openEnrollment("RECOMPRA_POI_MOBILE")}>
 								<Plus className="h-4 w-4 min-h-4 min-w-4" />
 								ATIVAR PRIMEIRO DISPOSITIVO
 							</Button>
@@ -105,7 +124,15 @@ export default function SettingsDevices({ user: _user, membership }: SettingsDev
 			) : null}
 
 			{newEnrollmentModalIsOpen ? (
-				<NewAccessEnrollment closeModal={() => setNewEnrollmentModalIsOpen(false)} callbacks={{ onMutate: handleOnMutate, onSettled: handleOnSettled }} />
+				<NewAccessEnrollment
+					closeModal={() => {
+						setNewEnrollmentModalIsOpen(false);
+						void queryClient.invalidateQueries({ queryKey });
+					}}
+					principals={principals ?? []}
+					initialAccessClientCodigo={enrollmentClientCodigo}
+					callbacks={{ onMutate: handleOnMutate, onSettled: handleOnSettled }}
+				/>
 			) : null}
 			{controlPrincipalId ? (
 				<ControlAccessPrincipal
@@ -161,8 +188,8 @@ function DeviceCard({ principal, handleClick }: DeviceCardProps) {
 					) : null}
 				</div>
 			</div>
-			<Button variant="ghost" size="icon" aria-label="Gerenciar dispositivo" onClick={() => handleClick(principal.id)}>
-				<Pencil className="h-4 w-4 min-h-4 min-w-4" />
+			<Button variant="outline" size="sm" className="gap-2" onClick={() => handleClick(principal.id)}>
+				<Pencil className="h-4 w-4 min-h-4 min-w-4" /> GERENCIAR
 			</Button>
 		</div>
 	);

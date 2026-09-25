@@ -211,6 +211,7 @@ export async function consumeEnrollmentChallenge(params: TConsumeEnrollmentChall
 		principal: {
 			id: result.principal.id,
 			nome: result.principal.nome,
+			tipo: result.principal.tipo,
 			organizacaoId: challenge.organizacaoId,
 			organizacaoNome: challenge.organizacao.nome,
 		},
