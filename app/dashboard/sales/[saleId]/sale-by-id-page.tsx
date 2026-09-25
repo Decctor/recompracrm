@@ -1265,7 +1265,7 @@ function SaleDeleteButton({ sale, userCanDeleteSales }: { sale: TGetSalesOutputB
 							<DialogTitle>Excluir venda?</DialogTitle>
 						</div>
 						<DialogDescription>
-							Essa ação exclui a venda permanentemente, reverte os efeitos de cashback vinculados e remove conversões de campanha associadas à venda.
+							Essa ação exclui a venda permanentemente, reverte os efeitos de cashback vinculados e remove conversões de campanha associadas à venda. Em vendas canceladas, os lançamentos contábeis e movimentos de caixa estornados também podem ser excluídos; a conferência da sessão será recalculada.
 						</DialogDescription>
 					</DialogHeader>
 
@@ -1285,7 +1285,7 @@ function SaleDeleteButton({ sale, userCanDeleteSales }: { sale: TGetSalesOutputB
 					</div>
 
 					<div className="flex flex-col gap-2 text-sm text-muted-foreground">
-						<p>Antes de excluir, o sistema validará se não há efeitos fiscais, contábeis, de estoque ou atendimento que impedem a exclusão.</p>
+						<p>Antes de excluir, o sistema validará se não há efeitos fiscais, financeiros, de estoque ou atendimento que impedem a exclusão.</p>
 						{saleIsConfirmed ? <p className="font-medium text-destructive">Vendas confirmadas devem ser canceladas pelo fluxo de cancelamento.</p> : null}
 						{hasFiscalDocuments ? (
 							<p className="font-medium text-destructive">Esta venda possui documento fiscal vinculado e não pode ser excluída.</p>

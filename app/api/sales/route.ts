@@ -18,6 +18,7 @@ import {
 import { resolveCampaignAudiencesByCampaignId } from "@/lib/campaigns/filters";
 import { getValidClientSaleWhere } from "@/lib/sales/valid-sale";
 import { resolveSaleEditability } from "@/lib/sales/sale-editability";
+import { recalculateSessionAfterSaleDeletion } from "@/lib/sales-sessions/recalculate-after-sale-deletion";
 import { decorateFiscalDocuments, type TFiscalDocumentDecoration } from "@/lib/fiscal/document-actions-loader";
 import { loadFiscalOrganization } from "@/lib/fiscal/settings";
 import { classifySalePaymentTransactions, computeSaleFinancialStatus, computeSaleFiscalStatus, groupSalePaymentsByMethod } from "@/lib/sales/utils";
@@ -30,7 +31,7 @@ import type {
 } from "@/schemas/enums";
 import type { TFiscalDocumentStatusEnum, TFiscalDocumentTypeEnum } from "@/schemas/enums";
 import { type DBTransaction, db } from "@/services/drizzle";
-import { cashbackProgramBalances, cashbackProgramTransactions, cashbackPrograms, clients, organizations, sales } from "@/services/drizzle/schema";
+import { accountingEntries, cashbackProgramBalances, cashbackProgramTransactions, cashbackPrograms, clients, financialAccounts, financialReconciliationMatches, financialRecurringRules, fiscalOutboundDocuments, organizations, purchases, sales } from "@/services/drizzle/schema";
 import dayjs from "dayjs";
 import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
 import createHttpError from "http-errors";
@@ -1015,7 +1016,14 @@ const deleteSaleRoute: PagesRouteHandler<TDeleteSaleOutput> = async (req, res) =
 			where: (fields, { and, eq }) => and(eq(fields.id, input.id), eq(fields.organizacaoId, orgId)),
 			with: {
 				documentosFiscais: { columns: { id: true } },
-				lancamentosContabeis: { columns: { id: true } },
+				lancamentosContabeis: {
+					columns: { id: true, origemTipo: true },
+					with: {
+						transacoesFinanceiras: {
+							columns: { id: true, metodo: true, tipo: true, valor: true, dataEfetivacao: true, sessaoVendaId: true, provedorReferencia: true, provedorStatus: true, contaFinanceiraId: true },
+						},
+					},
+				},
 				movimentacoesEstoque: { columns: { id: true } },
 				itens: {
 					columns: {
@@ -1039,8 +1047,63 @@ const deleteSaleRoute: PagesRouteHandler<TDeleteSaleOutput> = async (req, res) =
 		if (sale.documentosFiscais.length > 0) {
 			throw new createHttpError.BadRequest("Não é possível excluir venda com documento fiscal vinculado.");
 		}
+		const saleTransactions = sale.lancamentosContabeis.flatMap((entry) => entry.transacoesFinanceiras);
 		if (sale.lancamentosContabeis.length > 0) {
-			throw new createHttpError.BadRequest("Não é possível excluir venda com lançamento contábil vinculado.");
+			// A exclusão de movimentos de caixa exige recalcular o snapshot da sessão na mesma transação.
+			const entriesCanBeDeleted =
+				sale.statusVenda === "CANCELADA" &&
+				sale.lancamentosContabeis.every(
+					(entry) =>
+						(entry.origemTipo === "VENDA" || entry.origemTipo === "ESTORNO") &&
+						entry.transacoesFinanceiras.every(
+							(transaction) =>
+								!transaction.provedorReferencia &&
+								(!transaction.provedorStatus || ["CANCELADO", "ESTORNADO"].includes(transaction.provedorStatus)) &&
+								(!transaction.contaFinanceiraId || !!transaction.sessaoVendaId) &&
+								(transaction.dataEfetivacao
+									? transaction.provedorStatus === "ESTORNADO"
+									: !transaction.sessaoVendaId || ["CANCELADO", "ESTORNADO"].includes(transaction.provedorStatus ?? "")) &&
+								(transaction.sessaoVendaId ? transaction.sessaoVendaId === sale.sessaoVendaId && transaction.metodo === "DINHEIRO" : !transaction.dataEfetivacao),
+						),
+				);
+			if (!entriesCanBeDeleted) {
+				throw new createHttpError.BadRequest(
+					"Não é possível excluir venda com movimentação financeira ou lançamento contábil externo vinculado.",
+				);
+			}
+			const entryIds = sale.lancamentosContabeis.map((entry) => entry.id);
+			const linkedFiscalDocuments = await tx
+				.select({ id: fiscalOutboundDocuments.id })
+				.from(fiscalOutboundDocuments)
+				.where(inArray(fiscalOutboundDocuments.lancamentoContabilId, entryIds))
+				.limit(1);
+			const linkedPurchases = await tx.select({ id: purchases.id }).from(purchases).where(inArray(purchases.lancamentoContabilId, entryIds)).limit(1);
+			const linkedRecurringRules = await tx
+				.select({ id: financialRecurringRules.id })
+				.from(financialRecurringRules)
+				.where(inArray(financialRecurringRules.lancamentoContabilOrigemId, entryIds))
+				.limit(1);
+			if (linkedFiscalDocuments.length || linkedPurchases.length || linkedRecurringRules.length) {
+				throw new createHttpError.BadRequest("Não é possível excluir venda com documento, compra ou recorrência vinculada ao lançamento contábil.");
+			}
+			const accountIds = [...new Set(saleTransactions.map((transaction) => transaction.contaFinanceiraId).filter((id): id is string => !!id))];
+			if (accountIds.length > 0) {
+				const accounts = await tx
+					.select({ id: financialAccounts.id, tipo: financialAccounts.tipo })
+					.from(financialAccounts)
+					.where(and(inArray(financialAccounts.id, accountIds), eq(financialAccounts.organizacaoId, orgId)));
+				if (accounts.length !== accountIds.length || accounts.some((account) => account.tipo !== "CAIXA")) {
+					throw new createHttpError.BadRequest("Não é possível excluir venda com conta financeira externa vinculada.");
+				}
+			}
+			if (saleTransactions.length > 0) {
+				const bankMatches = await tx
+					.select({ id: financialReconciliationMatches.id })
+					.from(financialReconciliationMatches)
+					.where(inArray(financialReconciliationMatches.transacaoFinanceiraId, saleTransactions.map((transaction) => transaction.id)))
+					.limit(1);
+				if (bankMatches.length > 0) throw new createHttpError.BadRequest("Não é possível excluir venda com conciliação bancária vinculada.");
+			}
 		}
 		if (sale.movimentacoesEstoque.length > 0) {
 			throw new createHttpError.BadRequest("Não é possível excluir venda com movimentação de estoque vinculada.");
@@ -1065,12 +1128,27 @@ const deleteSaleRoute: PagesRouteHandler<TDeleteSaleOutput> = async (req, res) =
 		console.log("[INFO] Cashback effects on sale deletion:", cashbackReversal);
 
 		console.log("[INFO] Deleting sale:", sale.id);
+		if (sale.lancamentosContabeis.length > 0) {
+			await tx
+				.delete(accountingEntries)
+				.where(and(inArray(accountingEntries.id, sale.lancamentosContabeis.map((entry) => entry.id)), eq(accountingEntries.organizacaoId, orgId)));
+		}
 		const deletedSale = await tx
 			.delete(sales)
 			.where(and(eq(sales.id, sale.id), eq(sales.organizacaoId, orgId)))
 			.returning({ id: sales.id });
 		if (!deletedSale[0]) throw new createHttpError.InternalServerError("Erro ao excluir venda.");
 		console.log("[INFO] Sale deleted:", deletedSale[0].id);
+		if (sale.sessaoVendaId && saleTransactions.some((transaction) => transaction.sessaoVendaId === sale.sessaoVendaId)) {
+			await recalculateSessionAfterSaleDeletion({
+				tx,
+				orgId,
+				sessionId: sale.sessaoVendaId,
+				saleId: sale.id,
+				authorId: sessionUser.user.id,
+				removedTransactions: saleTransactions.filter((transaction) => transaction.sessaoVendaId === sale.sessaoVendaId),
+			});
+		}
 		try {
 			if (sale.clienteId) {
 				console.log("[INFO] Recalculating client purchase metadata:", sale.clienteId);
