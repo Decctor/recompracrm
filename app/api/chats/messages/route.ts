@@ -1,3 +1,4 @@
+import { parseJsonbWithFallback } from "@/lib/ai/shared/json";
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
@@ -6,7 +7,9 @@ import { AI_ASSIGNMENT_BLOCK_MESSAGES, resolveAiAssignmentAvailability } from "@
 import { markChatAnswered } from "@/lib/chats/attendance-state";
 import { deliverChatMessage, loadChatForSending, renderTemplatePlainContent, resolveApprovedTemplate } from "@/lib/chats/outgoing-message";
 import { getChatMediaUrl, uploadChatMedia } from "@/lib/files-storage/chat-media";
+import { AiAgentCapabilitiesSchema } from "@/schemas/ai-agents";
 import { db } from "@/services/drizzle";
+import { aiAgentRuns, aiAgents } from "@/services/drizzle/schema/ai-agents";
 import { chatAssignments, chatMessages, chats } from "@/services/drizzle/schema/chats";
 import { and, eq, lt, notInArray, or } from "drizzle-orm";
 import createHttpError from "http-errors";
@@ -112,12 +115,31 @@ async function getChatMessages({ session, input }: { session: TAuthUserSession; 
 		configuracao: session.membership?.organizacao.configuracao,
 	});
 	const atendimentoIa = disponibilidadeIa.disponivel
-		? { disponivel: true as const, agenteNome: disponibilidadeIa.agenteNome, motivoIndisponivel: null }
+		? { disponivel: true as const, agenteNome: disponibilidadeIa.agenteNome, motivo: null, motivoIndisponivel: null }
 		: {
 				disponivel: false as const,
 				agenteNome: null,
+				motivo: disponibilidadeIa.motivo,
 				motivoIndisponivel: AI_ASSIGNMENT_BLOCK_MESSAGES[disponibilidadeIa.motivo],
 			};
+
+	// Presença da IA na thread (`lib/chats/ai-presence.ts`): a run mais recente do chat e o
+	// tempo que o agente espera antes de responder. A thread assina `ai_agent_runs` por chat e
+	// mantém `aiRun` atualizado sem refetch.
+	const [aiRun, agent] = await Promise.all([
+		db.query.aiAgentRuns.findFirst({
+			where: and(eq(aiAgentRuns.chatId, input.chatId), eq(aiAgentRuns.organizacaoId, organizacaoId)),
+			orderBy: (fields, { desc: orderDesc }) => [orderDesc(fields.dataInsercao)],
+			columns: { id: true, status: true, gatilho: true, erro: true, dataInicio: true, dataFim: true, dataInsercao: true },
+		}),
+		db.query.aiAgents.findFirst({ where: eq(aiAgents.organizacaoId, organizacaoId), columns: { capacidades: true } }),
+	]);
+	const aiCapacidades = agent
+		? (() => {
+				const { atendimento } = parseJsonbWithFallback(AiAgentCapabilitiesSchema, agent.capacidades);
+				return { modo: atendimento.modo, atrasoRespostaMs: atendimento.atrasoRespostaMs, esperaHumanoMs: atendimento.esperaHumanoMs };
+			})()
+		: null;
 
 	const cursorDate = input.cursorDataEnvio ? new Date(input.cursorDataEnvio) : null;
 	const messages = await db.query.chatMessages.findMany({
@@ -146,6 +168,8 @@ async function getChatMessages({ session, input }: { session: TAuthUserSession; 
 				conexaoTipo: chat.whatsappConexao?.tipoConexao ?? null,
 				atendimentoAtivo: atendimentoAtivo ?? null,
 				atendimentoIa,
+				aiRun: aiRun ?? null,
+				aiCapacidades,
 			},
 			items,
 			nextCursor: hasMoreOlder && oldest ? { dataEnvio: oldest.dataEnvio.toISOString(), id: oldest.id } : null,
@@ -283,7 +307,12 @@ async function createChatMessage({ session, input }: { session: TAuthUserSession
 		chat,
 		texto,
 		midia: midiaStorageId
-			? { tipo: input.midia?.tipo ?? "DOCUMENTO", storageId: midiaStorageId, mimeType: input.midia?.mimeType ?? "application/octet-stream", arquivoNome: input.midia?.arquivoNome ?? null }
+			? {
+					tipo: input.midia?.tipo ?? "DOCUMENTO",
+					storageId: midiaStorageId,
+					mimeType: input.midia?.mimeType ?? "application/octet-stream",
+					arquivoNome: input.midia?.arquivoNome ?? null,
+				}
 			: null,
 		template,
 	});

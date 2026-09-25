@@ -53,6 +53,8 @@ export type TAiAgentRunsFilters = {
 	page: number;
 	gatilho: TAiAgentRunTriggerEnum | null;
 	status: TAiAgentRunStatusEnum | null;
+	/** Histórico por atendimento: só as runs deste chat. */
+	chatId?: string | null;
 };
 
 async function fetchAiAgentRuns(filters: TAiAgentRunsFilters) {
@@ -60,6 +62,7 @@ async function fetchAiAgentRuns(filters: TAiAgentRunsFilters) {
 	searchParams.set("page", String(filters.page));
 	if (filters.gatilho) searchParams.set("gatilho", filters.gatilho);
 	if (filters.status) searchParams.set("status", filters.status);
+	if (filters.chatId) searchParams.set("chatId", filters.chatId);
 
 	const { data } = await axios.get<TGetAiAgentRunsOutput>(`/api/ai-agents/runs?${searchParams.toString()}`);
 	const result = data.data.default;
@@ -67,14 +70,16 @@ async function fetchAiAgentRuns(filters: TAiAgentRunsFilters) {
 	return result;
 }
 
+export const AI_AGENT_RUNS_QUERY_KEY_ROOT = "ai-agent-runs";
+
 export function getAiAgentRunsQueryKey(filters: TAiAgentRunsFilters) {
-	return ["ai-agent-runs", filters.page, filters.gatilho, filters.status] as const;
+	return [AI_AGENT_RUNS_QUERY_KEY_ROOT, filters.page, filters.gatilho, filters.status, filters.chatId ?? null] as const;
 }
 
-export function useAiAgentRuns({ filters, enabled = true }: { filters: TAiAgentRunsFilters; enabled?: boolean }) {
+export function useAiAgentRuns({ filters, enabled = true, staleTime }: { filters: TAiAgentRunsFilters; enabled?: boolean; staleTime?: number }) {
 	const queryKey = getAiAgentRunsQueryKey(filters);
 	return {
-		...useQuery({ queryKey, queryFn: () => fetchAiAgentRuns(filters), enabled }),
+		...useQuery({ queryKey, queryFn: () => fetchAiAgentRuns(filters), enabled, staleTime }),
 		queryKey,
 	};
 }

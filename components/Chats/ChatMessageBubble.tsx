@@ -18,6 +18,8 @@ type ChatMessageBubbleProps = {
 	showAuthor: boolean;
 	onRetry?: (messageId: string) => void;
 	isRetrying?: boolean;
+	/** Mensagem do agente: abre a execução que a produziu (`metadados.aiAgente.runId`). */
+	onOpenAiRun?: (runId: string) => void;
 };
 
 function formatTime(date: Date | string) {
@@ -96,7 +98,7 @@ function resolveAuthorLabel(message: TChatThreadMessage) {
 	return message.autorUsuario?.nome ?? "Você";
 }
 
-export function ChatMessageBubble({ message, showAuthor, onRetry, isRetrying }: ChatMessageBubbleProps) {
+export function ChatMessageBubble({ message, showAuthor, onRetry, isRetrying, onOpenAiRun }: ChatMessageBubbleProps) {
 	const isIncoming = message.autorTipo === "CLIENTE";
 	const isFailed = message.statusEntrega === "FALHA";
 	const isAutomated = message.autorTipo === "AI" || message.autorTipo === "BUSINESS-APP" || message.whatsappEcho;
@@ -255,6 +257,18 @@ export function ChatMessageBubble({ message, showAuthor, onRetry, isRetrying }: 
 					</div>
 				)}
 			</div>
+
+			{/* Vínculo mensagem → execução, que o playground já tinha e o hub ignorava: "por que a IA
+			    disse isso?" deixa de exigir uma ida a Configurações. */}
+			{message.autorTipo === "AI" && message.metadados?.aiAgente?.runId && onOpenAiRun && (
+				<button
+					type="button"
+					onClick={() => onOpenAiRun(message.metadados?.aiAgente?.runId as string)}
+					className="px-1 text-[11px] text-muted-foreground underline-offset-2 hover:underline"
+				>
+					ver o que a IA consultou
+				</button>
+			)}
 
 			{activeReactions.length > 0 && (
 				// O chip sobrepõe a borda inferior da bolha (-mt) e precisa de z próprio para

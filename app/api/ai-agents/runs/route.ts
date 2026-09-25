@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { hasChatPermission } from "@/lib/chats/access";
 import { AiAgentRunTriggerEnum, AiAgentRunStatusEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
 import { aiAgentRuns, aiAgentToolCalls } from "@/services/drizzle/schema";
@@ -31,6 +32,8 @@ const GetAiAgentRunsInputSchema = z.object({
 		.optional()
 		.nullable()
 		.transform((v) => (v ? AiAgentRunStatusEnum.parse(v) : null)),
+	// Histórico por atendimento no hub: só as runs de um chat.
+	chatId: z.string({ invalid_type_error: "Tipo inválido para o ID do chat." }).optional().nullable(),
 });
 export type TGetAiAgentRunsInput = z.infer<typeof GetAiAgentRunsInputSchema>;
 
@@ -79,6 +82,7 @@ async function getAiAgentRuns({ input, organizacaoId }: { input: TGetAiAgentRuns
 	}
 
 	const conditions = [eq(aiAgentRuns.organizacaoId, organizacaoId)];
+	if (input.chatId) conditions.push(eq(aiAgentRuns.chatId, input.chatId));
 	if (input.gatilho) conditions.push(eq(aiAgentRuns.gatilho, input.gatilho));
 	if (input.status) conditions.push(eq(aiAgentRuns.status, input.status));
 	const where = and(...conditions);
@@ -126,7 +130,10 @@ export type TGetAiAgentRunsOutput = Awaited<ReturnType<typeof getAiAgentRuns>>;
 async function getAiAgentRunsRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session?.membership) throw new createHttpError.Unauthorized("Sessão não encontrada.");
-	if (!session.membership.permissoes.empresa.visualizar) {
+	// Quem atende no hub vê o que a IA fez nas conversas (o drawer abre a partir da thread); a
+	// configuração da empresa continua bastando para a lista geral em Configurações.
+	const canViewFromHub = hasChatPermission({ session, permission: "visualizar" });
+	if (!session.membership.permissoes.empresa.visualizar && !canViewFromHub) {
 		throw new createHttpError.Forbidden("Você não tem permissão para visualizar as execuções do agente de IA.");
 	}
 
@@ -136,6 +143,7 @@ async function getAiAgentRunsRoute(request: NextRequest) {
 		page: searchParams.get("page"),
 		gatilho: searchParams.get("gatilho"),
 		status: searchParams.get("status"),
+		chatId: searchParams.get("chatId"),
 	});
 
 	const result = await getAiAgentRuns({ input, organizacaoId: session.membership.organizacao.id });

@@ -1,6 +1,12 @@
 import type { TChatThreadMessage } from "@/lib/queries/chats";
 import type { TChatMessageMetadata } from "@/schemas/chats";
-import type { TChatMessageAuthorTypeEnum, TChatMessageContentTypeEnum, TChatMessageDeliveryStatus } from "@/schemas/enums";
+import type {
+	TAiAgentRunStatusEnum,
+	TAiAgentRunTriggerEnum,
+	TChatMessageAuthorTypeEnum,
+	TChatMessageContentTypeEnum,
+	TChatMessageDeliveryStatus,
+} from "@/schemas/enums";
 
 /**
  * Fronteira entre o snake_case do Postgres (que chega cru pelo realtime do Supabase) e o
@@ -45,6 +51,43 @@ export type TRealtimeChatRow = {
 	whatsapp_janela_data_expiracao: string | null;
 	ultima_leitura_data: string | null;
 };
+
+/** Linha de `ai_agent_runs` como chega pelo realtime. Só o que a presença da IA consome. */
+export type TRealtimeAiRunRow = {
+	id: string;
+	chat_id: string;
+	organizacao_id: string;
+	status: TAiAgentRunStatusEnum;
+	gatilho: TAiAgentRunTriggerEnum;
+	erro: string | null;
+	data_inicio: string | null;
+	data_fim: string | null;
+	data_insercao: string;
+};
+
+export type TRealtimeAiRun = {
+	id: string;
+	chatId: string;
+	status: TAiAgentRunStatusEnum;
+	gatilho: TAiAgentRunTriggerEnum;
+	erro: string | null;
+	dataInicio: Date | null;
+	dataFim: Date | null;
+	dataInsercao: Date;
+};
+
+export function mapRealtimeAiRunRow(row: TRealtimeAiRunRow): TRealtimeAiRun {
+	return {
+		id: row.id,
+		chatId: row.chat_id,
+		status: row.status,
+		gatilho: row.gatilho,
+		erro: row.erro,
+		dataInicio: row.data_inicio ? new Date(row.data_inicio) : null,
+		dataFim: row.data_fim ? new Date(row.data_fim) : null,
+		dataInsercao: new Date(row.data_insercao),
+	};
+}
 
 /**
  * O payload do realtime não traz os joins de autor. Para mensagens do próprio usuário

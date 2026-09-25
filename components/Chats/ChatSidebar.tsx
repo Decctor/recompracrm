@@ -6,7 +6,8 @@ import { chipVariants } from "@/components/ui/chip";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { chatsInboxParsers } from "@/lib/chats/inbox-url-state";
-import { mapRealtimeChatRow, type TRealtimeChatRow } from "@/lib/chats/realtime-mappers";
+import { isActiveAiRunStatus } from "@/lib/chats/ai-presence";
+import { mapRealtimeChatRow, type TRealtimeAiRunRow, type TRealtimeChatRow } from "@/lib/chats/realtime-mappers";
 import { getErrorMessage } from "@/lib/errors";
 import { CHAT_INBOX_COUNTS_QUERY_KEY_ROOT, useChatInboxCounts, useChats, type TChatInboxItem } from "@/lib/queries/chats";
 import { cn } from "@/lib/utils";
@@ -260,6 +261,28 @@ export function ChatSidebar({ organizationId, selectedChatId, onSelectChat, what
 				void queryClient.invalidateQueries({ queryKey: queryKeyRef.current });
 				scheduleCountsRefresh();
 			})
+			// "IA respondendo" na linha da conversa: patch no lugar, sem invalidar — a run diz o chat e
+			// o status, e é tudo de que a lista precisa.
+			.on(
+				"postgres_changes",
+				{ event: "*", schema: "public", table: "ampmais_ai_agent_runs", filter: `organizacao_id=eq.${organizationId}` },
+				(payload) => {
+					const row = payload.new as TRealtimeAiRunRow | undefined;
+					if (!row?.chat_id) return;
+					const aiRunAtiva = isActiveAiRunStatus(row.status);
+					queryClient.setQueryData<InfiniteData<TInboxPage>>(queryKeyRef.current, (current) =>
+						current
+							? {
+									...current,
+									pages: current.pages.map((page) => ({
+										...page,
+										items: page.items.map((item) => (item.id === row.chat_id && item.aiRunAtiva !== aiRunAtiva ? { ...item, aiRunAtiva } : item)),
+									})),
+								}
+							: current,
+					);
+				},
+			)
 			.subscribe((status) => {
 				if (status !== "SUBSCRIBED") return;
 				// A primeira inscrição não precisa invalidar (a query acabou de rodar); as
