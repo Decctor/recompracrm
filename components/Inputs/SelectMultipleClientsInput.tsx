@@ -160,9 +160,7 @@ function SelectMultipleClientsInput({
 
 				{isSearching && isSuccess && searchClients && (
 					<CommandGroup>
-						{searchClients.length === 0 && (
-							<div className="p-2 text-center text-sm italic text-foreground">Nenhum cliente encontrado.</div>
-						)}
+						{searchClients.length === 0 && <div className="p-2 text-center text-sm italic text-foreground">Nenhum cliente encontrado.</div>}
 						{searchClients.map((client) => (
 							<CommandItem
 								key={client.id}
@@ -196,7 +194,10 @@ function SelectMultipleClientsInput({
 	// Chips rolam depois de ~5 linhas para uma lista de exclusão longa não empurrar o formulário.
 	const renderSelectedChips = () =>
 		selectedClients.length > 0 ? (
-			<ul className="flex max-h-32 flex-wrap gap-1.5 overflow-y-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-muted-foreground/30" aria-label={`${label}: selecionados`}>
+			<ul
+				className="flex max-h-32 flex-wrap gap-1.5 overflow-y-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-muted-foreground/30"
+				aria-label={`${label}: selecionados`}
+			>
 				{selectedClients.map(({ id, client }) => (
 					<li key={id} className={cn(chipVariants({ variant: "muted", size: "sm", shape: "pill" }), "max-w-full gap-1 py-1 pr-1")}>
 						<span className="truncate">{client?.nome ?? "Carregando..."}</span>
