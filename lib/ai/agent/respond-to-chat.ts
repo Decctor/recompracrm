@@ -5,6 +5,7 @@ import type { TAiAgentRunTriggerEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
 import type { DB, DBTransaction } from "@/services/drizzle";
 import { isAgentError } from "../shared/errors";
+import type { TMessageTriage } from "../triage/message-triage";
 import { scheduleFollowUpFromTurn } from "./follow-ups";
 import { linkAgentRunMessage, markAgentRunCancelled } from "./runs";
 import { executeAgentTurn, prepareAgentExecution } from "./runtime";
@@ -87,6 +88,8 @@ export async function respondToChatWithAgent({
 	mensagemGatilhoId,
 	deliver,
 	retomada = null,
+	modeloOverride = null,
+	triagem = null,
 	database = db,
 }: {
 	organizacaoId: string;
@@ -95,12 +98,15 @@ export async function respondToChatWithAgent({
 	mensagemGatilhoId?: string | null;
 	deliver: TAgentMessageDeliverer;
 	retomada?: TRespondToChatFollowUp | null;
+	/** Decisões da triagem pré-run (`lib/ai/triage`): modelo do turno e o registro no snapshot. */
+	modeloOverride?: string | null;
+	triagem?: TMessageTriage | null;
 	database?: TDb;
 }): Promise<TRespondToChatResult> {
 	// Antes do prepare: uma mensagem que chegue durante a montagem do contexto pode ficar de
 	// fora dele — a âncora precisa cobrir essa janela também.
 	const runStartedAt = new Date();
-	const prepared = await prepareAgentExecution({ organizacaoId, chatId, gatilho, mensagemGatilhoId, retomada, database });
+	const prepared = await prepareAgentExecution({ organizacaoId, chatId, gatilho, mensagemGatilhoId, retomada, modeloOverride, triagem, database });
 
 	// A mesma revalidação da entrega, só que durante a geração. O playground é síncrono e sem
 	// concorrência: não há o que observar.

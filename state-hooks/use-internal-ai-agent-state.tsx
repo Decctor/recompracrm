@@ -70,6 +70,16 @@ export function useInternalAiAgentState() {
 		}));
 	}, []);
 
+	const updateTriageSettings = useCallback((triagem: Partial<TAiAgentCapabilities["triagem"]>) => {
+		setState((prev) => ({
+			...prev,
+			agente: {
+				...prev.agente,
+				capacidades: { ...prev.agente.capacidades, triagem: { ...prev.agente.capacidades.triagem, ...triagem } },
+			},
+		}));
+	}, []);
+
 	const updateFollowUpSettings = useCallback((retomadas: Partial<TAiAgentCapabilities["retomadas"]>) => {
 		setState((prev) => ({
 			...prev,
@@ -231,6 +241,7 @@ export function useInternalAiAgentState() {
 		updateLimits,
 		updateAttendanceSettings,
 		updateFollowUpSettings,
+		updateTriageSettings,
 		updateScope,
 		toggleScopeClient,
 		updatePrices,

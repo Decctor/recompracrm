@@ -509,6 +509,14 @@ export async function updateChatAttendanceSummary(db: TAttendanceDb, input: { or
 	return updated ?? null;
 }
 
+/** Categoria do atendimento, preenchida pela triagem a partir da intenção do cliente. */
+export async function updateChatAttendanceCategory(db: TAttendanceDb, input: { organizacaoId: string; chatId: string; categoria: string }) {
+	const current = await getCurrentChatAttendance(db, input);
+	if (!current) return null;
+	const [updated] = await db.update(chatAssignments).set({ categoria: input.categoria }).where(eq(chatAssignments.id, current.id)).returning();
+	return updated ?? null;
+}
+
 export async function changeChatAttendancePriority(
 	db: TAttendanceDb,
 	input: { organizacaoId: string; chatId: string; prioridade: TChatAssignmentPriority | null; now?: Date },

@@ -17,6 +17,7 @@ import { isToolEnabled } from "../tools/guards";
 import { toAISdkTools } from "../tools/registry";
 import type { TAgentToolContext } from "../tools/types";
 import { normalizeTurnAttachment } from "./attachment";
+import type { TMessageTriage } from "../triage/message-triage";
 import { buildChatRunContext, formatChatRunContext, type TChatRunAssistOptions } from "./context";
 import { formatKnowledgeContext, getActiveKnowledgeBlocks } from "./knowledge";
 import { buildAgentSystemPrompt } from "./prompts";
@@ -113,6 +114,8 @@ export type TPreparedAgentExecution = {
 	run: { id: string };
 	gatilho: TAiAgentRunTriggerEnum;
 	modo: "ATENDIMENTO" | "ASSISTENCIA";
+	/** Custo da triagem que antecedeu esta run, somado ao `uso` no fechamento. */
+	triagemCustoUsd: number | null;
 	toolContext: TAgentToolContext;
 	systemPrompt: string;
 	turnPrompt: string;
@@ -143,6 +146,8 @@ export async function prepareAgentExecution({
 	mensagemGatilhoId,
 	retomada = null,
 	assistencia = null,
+	modeloOverride = null,
+	triagem = null,
 	database = db,
 }: {
 	organizacaoId: string;
@@ -153,6 +158,10 @@ export async function prepareAgentExecution({
 	retomada?: { objetivo: string; horasSilencio: number | null } | null;
 	/** Modo assistência: ferramentas só de leitura, modelo rápido, poucos passos, nunca envia. */
 	assistencia?: TChatRunAssistOptions | null;
+	/** Modelo decidido pela triagem (econômico) para este turno. */
+	modeloOverride?: string | null;
+	/** Resultado da triagem, gravado no snapshot da run e somado ao custo. */
+	triagem?: TMessageTriage | null;
 	database?: TDb;
 }): Promise<TPreparedAgentExecution> {
 	const agent = await database.query.aiAgents.findFirst({ where: eq(aiAgents.organizacaoId, organizacaoId) });
@@ -165,7 +174,11 @@ export async function prepareAgentExecution({
 	// Assistência estreita a configuração em vez de ter uma própria: mesmas ferramentas de
 	// leitura e políticas comerciais, sem as ferramentas que agem (orçamento, transferência), com
 	// teto baixo de passos e o modelo rápido. O snapshot da run grava o que de fato valeu.
-	const modeloConfig = assistencia ? { ...baseModelConfig, modelo: baseModelConfig.modeloAssistencia ?? ASSIST_DEFAULT_MODEL } : baseModelConfig;
+	const modeloConfig = assistencia
+		? { ...baseModelConfig, modelo: baseModelConfig.modeloAssistencia ?? ASSIST_DEFAULT_MODEL }
+		: modeloOverride
+			? { ...baseModelConfig, modelo: modeloOverride }
+			: baseModelConfig;
 	const capacidades = assistencia ? narrowCapabilitiesForAssist(baseCapabilities) : baseCapabilities;
 
 	const runsToday = await countAgentRunsToday(database, organizacaoId);
@@ -205,7 +218,7 @@ export async function prepareAgentExecution({
 			capacidades,
 			conhecimento: knowledge.map((block) => ({ id: block.id, titulo: block.titulo })),
 		},
-		contextoEntradaSnapshot: chatContext,
+		contextoEntradaSnapshot: triagem ? { ...chatContext, triagem } : chatContext,
 	});
 	const recentClientMessages = chatContext.conversa
 		.slice()
@@ -218,6 +231,7 @@ export async function prepareAgentExecution({
 		run,
 		gatilho,
 		modo,
+		triagemCustoUsd: triagem?.custoUsd ?? null,
 		toolContext: {
 			db: database,
 			organizacaoId,
@@ -278,7 +292,10 @@ export async function executeAgentTurn(
 			usageSegments.push(segment);
 			const loopAgent = new ToolLoopAgent({
 				model: resolveLanguageModel(modelConfig),
-				instructions: prepared.systemPrompt,
+				// O system prompt (instruções + regras + base de conhecimento) é o mesmo em todo turno da
+				// organização: é o prefixo que o provedor pode servir do cache. A marcação é da Anthropic
+				// (outros provedores a ignoram; a OpenAI cacheia prefixos iguais sozinha).
+				instructions: [{ role: "system", content: prepared.systemPrompt, providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } } }],
 				tools,
 				temperature: modelConfig.temperatura,
 				maxOutputTokens: modelConfig.maxTokensSaida,
@@ -356,10 +373,12 @@ Execute a ferramenta nesta execução ou pergunte objetivamente o único dado qu
 			}),
 		};
 
+		const uso = normalizeAiUsage(usageSegments);
 		await completeAgentRun(toolContext.db, {
 			runId: run.id,
 			outputResumo: finalOutput.resumoAtendimento,
-			uso: normalizeAiUsage(usageSegments),
+			// A triagem custou centavos de centavo, mas custou: entra no mesmo número.
+			uso: uso && prepared.triagemCustoUsd !== null ? { ...uso, custoUsd: (uso.custoUsd ?? 0) + prepared.triagemCustoUsd } : uso,
 		});
 		// Acessório e nunca lança: o custo desta run pode ter cruzado 80% do limite mensal.
 		await notifyAiSpendThresholdIfReached({ organizacaoId: toolContext.organizacaoId });

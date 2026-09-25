@@ -1,6 +1,7 @@
 import { resolveChatDeliverer } from "@/lib/ai/agent/delivery";
 import { ensureOrganizationAgent } from "@/lib/ai/agent/provisioning";
 import { respondToChatWithAgent } from "@/lib/ai/agent/respond-to-chat";
+import { runTriageGate } from "@/lib/ai/triage/triage-gate";
 import { claimChatForAi, confirmAiResponseStillValid, confirmClientInAgentScope } from "@/lib/chats/ai-trigger";
 import { db } from "@/services/drizzle";
 
@@ -70,6 +71,19 @@ export async function runAiTurnForMessage(payload: TAiTurnPayload): Promise<void
 		return;
 	}
 
+	// Triagem: depois de tudo que é grátis (claim, confirmação, canal) e antes do que custa.
+	const gate = await runTriageGate(db, {
+		organizacaoId: payload.organizationId,
+		chatId: payload.chatId,
+		agent,
+		triggerMessageId: payload.triggerMessageId,
+		deliver,
+	});
+	if (gate.acao === "PULAR" || gate.acao === "HANDOFF") {
+		console.log(`[AI_TURN] Triagem decidiu ${gate.acao} (run ${gate.runId}).`);
+		return;
+	}
+
 	try {
 		const result = await respondToChatWithAgent({
 			organizacaoId: payload.organizationId,
@@ -77,6 +91,8 @@ export async function runAiTurnForMessage(payload: TAiTurnPayload): Promise<void
 			gatilho: "CHAT_MENSAGEM",
 			mensagemGatilhoId: payload.triggerMessageId,
 			deliver,
+			modeloOverride: gate.acao === "MODELO_ECONOMICO" ? gate.modelo : null,
+			triagem: gate.triagem,
 		});
 		console.log("[AI_TURN] Execução do agente concluída:", result.runId);
 	} catch (error) {

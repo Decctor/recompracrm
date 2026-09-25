@@ -47,6 +47,8 @@ export const AiAgentModelConfigSchema = z
 		// Modo assistência (sugestão/reescrita/resumo para o atendente). Ausente = alias `agent-fast`:
 		// é rascunho, o humano corrige, e o modelo rápido custa uma fração.
 		modeloAssistencia: z.string({ invalid_type_error: "Tipo não válido para o modelo de assistência." }).optional(),
+		// Modelo dos turnos que a triagem classificou como simples (saudação, status, cashback).
+		modeloEconomico: z.string({ invalid_type_error: "Tipo não válido para o modelo econômico." }).optional(),
 	})
 	.default({});
 export type TAiAgentModelConfig = z.infer<typeof AiAgentModelConfigSchema>;
@@ -140,6 +142,19 @@ export const AiAgentCapabilitiesSchema = z
 					.int("O limite diário de execuções deve ser inteiro.")
 					.min(1, "O limite diário mínimo de execuções é 1.")
 					.default(500),
+			})
+			.default({}),
+		/**
+		 * Triagem pré-run com Jev (`lib/ai/triage`): classifica a última mensagem antes do turno e
+		 * decide se ele acontece (e em que modelo). Ligada por padrão; cada gate tem a sua chave porque
+		 * cada um tem um risco: pular uma resposta é irreversível, o modelo econômico ainda responde.
+		 */
+		triagem: z
+			.object({
+				habilitada: z.boolean({ invalid_type_error: "Tipo não válido para a habilitação da triagem." }).default(true),
+				pularSemResposta: z.boolean({ invalid_type_error: "Tipo não válido para a chave de pular resposta." }).default(true),
+				handoffDireto: z.boolean({ invalid_type_error: "Tipo não válido para a chave de handoff direto." }).default(true),
+				modeloEconomico: z.boolean({ invalid_type_error: "Tipo não válido para a chave de modelo econômico." }).default(true),
 			})
 			.default({}),
 		/**

@@ -6,8 +6,14 @@ import { and, desc, eq } from "drizzle-orm";
 
 type TDb = DB | DBTransaction;
 
-/** Quantas mensagens do histórico entram no contexto do turno. */
-const HISTORY_MESSAGE_LIMIT = 100;
+/**
+ * Quantas mensagens do histórico entram no contexto do turno.
+ *
+ * Era 100. O resumo acumulado (`resumoAtendimento`, reescrito a cada turno) é a memória de longo
+ * prazo — inclusive o catálogo consultado, via `run-memory.ts` — então o turno precisa das
+ * últimas mensagens, não da conversa inteira. O snapshot gravado na run encolhe junto.
+ */
+const HISTORY_MESSAGE_LIMIT = 30;
 
 export type TChatRunContext = {
 	chatId: string;

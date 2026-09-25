@@ -186,8 +186,11 @@ resolvidas, reclamações, nem quando o cliente disse que não quer contato. Uma
 	}
 
 	if (has("produtos.consultar") && productGroups.length > 0) {
+		// Ordem alfabética, não por tamanho: o system prompt é o prefixo que o provedor cacheia, e
+		// uma lista que se reordena a cada venda invalida o cache a cada turno.
+		const stableGroups = productGroups.slice().sort((a, b) => a.grupo.localeCompare(b.grupo, "pt-BR"));
 		parts.push(
-			`## Grupos de produtos do catálogo\nEstas são as categorias que existem hoje, com a quantidade de produtos ativos em cada uma. Use esta grafia exata no filtro "grupo" da consulta de catálogo. Para saber o que a empresa vende, parta desta lista — só consulte o catálogo para detalhar produtos.\n\n${productGroups.map((group) => `- ${group.grupo} (${group.quantidadeProdutos} produto(s))`).join("\n")}`,
+			`## Grupos de produtos do catálogo\nEstas são as categorias que existem hoje, com a quantidade de produtos ativos em cada uma. Use esta grafia exata no filtro "grupo" da consulta de catálogo. Para saber o que a empresa vende, parta desta lista — só consulte o catálogo para detalhar produtos.\n\n${stableGroups.map((group) => `- ${group.grupo} (${group.quantidadeProdutos} produto(s))`).join("\n")}`,
 		);
 	}
 
