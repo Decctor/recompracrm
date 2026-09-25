@@ -55,6 +55,17 @@ function getRelevantOrderEvents(events: TIfoodEvent[]) {
 	});
 }
 
+/**
+ * Orçamento de rede do polling. O ciclo roda a cada 30s numa função com `maxDuration` de 25s: uma
+ * chamada pendurada nos 30s padrão (ou uma pausa de `Retry-After` de 30s) consumiria a invocação
+ * inteira para depois ser abortada — e o ciclo seguinte repetiria a chamada de qualquer forma.
+ * Pior caso por integração: 8s + 2s de espera + 8s = 18s, dentro do limite da função.
+ */
+const IFOOD_POLLING_CLIENT_OPTIONS = {
+	timeoutMs: 8_000,
+	retry: { maxRetries: 1, maxDelayMs: 2_000 },
+} as const;
+
 function uniqueOrderIds(events: TIfoodEvent[]) {
 	return Array.from(new Set(events.map((event) => event.orderId).filter((orderId): orderId is string => !!orderId)));
 }
@@ -72,7 +83,7 @@ export async function fetchIfoodImportBatch({
 }) {
 	const parsedConfig = IfoodConfigSchema.parse(config);
 	const validConfig = await getValidIfoodConfig({ integrationId, config: parsedConfig });
-	const client = createIfoodClient(validConfig);
+	const client = createIfoodClient(validConfig, IFOOD_POLLING_CLIENT_OPTIONS);
 	const events = await pollIfoodEvents(client, { merchantIds: validConfig.merchantIds });
 	const relevantEvents = getRelevantOrderEvents(events);
 	// Sem isto o polling fica cego: os codigos crus sao a unica forma de distinguir um cancelamento
@@ -84,12 +95,8 @@ export async function fetchIfoodImportBatch({
 	if (events.length)
 		console.log("[IFOOD_EVENTS]", {
 			organizationId,
-			received: events.map(
-				(event) => `${event.fullCode ?? event.code}${event.orderId ? `:${event.orderId.slice(0, 8)}` : ""} id=${event.id}`,
-			),
-			ignored: events
-				.filter((event) => !relevantEvents.includes(event))
-				.map((event) => `${event.fullCode ?? event.code} id=${event.id}`),
+			received: events.map((event) => `${event.fullCode ?? event.code}${event.orderId ? `:${event.orderId.slice(0, 8)}` : ""} id=${event.id}`),
+			ignored: events.filter((event) => !relevantEvents.includes(event)).map((event) => `${event.fullCode ?? event.code} id=${event.id}`),
 		});
 
 	await appendIfoodHomologationAudit({

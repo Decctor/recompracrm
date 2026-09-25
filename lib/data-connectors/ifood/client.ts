@@ -19,7 +19,7 @@ import {
 	type TIfoodOrder,
 	type TIfoodUserCodeResponse,
 } from "./types";
-import { attachIfoodRetry } from "./retry";
+import { attachIfoodRetry, type TIfoodRetryOptions } from "./retry";
 // SANDBOX: remover import e bloco em getValidIfoodConfig ao deletar ifood/sandbox
 import { getValidIfoodSandboxConfig, isIfoodSandboxConfig } from "./sandbox";
 
@@ -154,15 +154,24 @@ export async function getValidIfoodConfig({ integrationId, config }: { integrati
 	return refreshedConfig;
 }
 
-export function createIfoodClient(config: TIfoodConfig): AxiosInstance {
+const IFOOD_CLIENT_DEFAULT_TIMEOUT_MS = 30000;
+
+export type TIfoodClientOptions = {
+	/** Timeout por requisição (padrão 30s). */
+	timeoutMs?: number;
+	retry?: TIfoodRetryOptions;
+};
+
+export function createIfoodClient(config: TIfoodConfig, options: TIfoodClientOptions = {}): AxiosInstance {
 	return attachIfoodRetry(
 		axios.create({
 			headers: {
 				Authorization: `Bearer ${config.accessToken}`,
 				"Content-Type": "application/json",
 			},
-			timeout: 30000,
+			timeout: options.timeoutMs ?? IFOOD_CLIENT_DEFAULT_TIMEOUT_MS,
 		}),
+		options.retry,
 	);
 }
 

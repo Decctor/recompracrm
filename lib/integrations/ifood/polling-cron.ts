@@ -1,9 +1,15 @@
 import { runDataCollectingV2 } from "@/lib/data-collecting-v2";
-import { getActiveDataSourceIntegrations } from "@/lib/integrations/data-sources";
+import { getActiveDataSourceIntegrations, type TDataSourceIntegration } from "@/lib/integrations/data-sources";
 import { connection, db } from "@/services/drizzle";
 
 const IFOOD_POLLING_LOCK_NAMESPACE = 746_663; // "IFOOD" em um namespace privado da aplicacao.
 const IFOOD_POLLING_LOCK_KEY = 1;
+/**
+ * Organizacoes consultadas no iFood em paralelo. O ciclo custa o poll mais lento, nao a soma: com
+ * duas conexoes o tempo de rede caiu pela metade, e uma nova loja nao alonga o ciclo. Conexoes da
+ * mesma organizacao seguem em serie (ver `groupIntegrationsByOrganization`).
+ */
+const IFOOD_POLLING_ORGANIZATION_CONCURRENCY = 4;
 
 type TIfoodPollingCollectionResult = Awaited<ReturnType<typeof runDataCollectingV2>>;
 
@@ -23,9 +29,15 @@ export type TIfoodPollingResult = {
 	durationMs: number;
 };
 
-async function collectIfoodIntegrations(integrationIds: string[]): Promise<TIfoodPollingCycle> {
+async function collectIfoodIntegrations(integrations: TDataSourceIntegration[]): Promise<TIfoodPollingCycle> {
 	const startedAt = new Date();
-	const result = await runDataCollectingV2({ integrationIds });
+	// As linhas ja foram lidas sob o lock: passa-las adiante evita reler TODAS as fontes de dados
+	// ativas (de todos os tipos e organizacoes, com config e tokens) a cada 30s.
+	const result = await runDataCollectingV2({
+		integrations,
+		integrationIds: integrations.map((integration) => integration.id),
+		organizationConcurrency: IFOOD_POLLING_ORGANIZATION_CONCURRENCY,
+	});
 	const finishedAt = new Date();
 
 	return {
@@ -60,7 +72,7 @@ export async function runIfoodPollingCycle(): Promise<TIfoodPollingResult> {
 			return { state: "NO_ACTIVE_INTEGRATIONS", integrationIds, cycles: [], durationMs: Date.now() - cycleStartedAt };
 		}
 
-		const cycle = await collectIfoodIntegrations(integrationIds);
+		const cycle = await collectIfoodIntegrations(integrations);
 
 		return {
 			state: "COMPLETED",
