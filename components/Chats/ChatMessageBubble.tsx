@@ -131,8 +131,13 @@ export function ChatMessageBubble({ message, showAuthor, onRetry, isRetrying }: 
 	// Hora na mesma linha do texto, como no WhatsApp: metade da altura numa mensagem curta. Só
 	// quando o texto é o último elemento da bolha — com a análise da IA abaixo, o carimbo fecha a bolha.
 	const metaInline = showsText && !(hasMedia && !isSticker && aiContext);
+	// Como no WhatsApp: "Editada" ao lado da hora. O texto anterior fica no title, para quem
+	// precisar saber o que mudou sem poluir a bolha.
+	const edits = message.metadados?.whatsappEdits ?? [];
+	const previousText = edits[edits.length - 1]?.previousText;
 	const meta = (
 		<>
+			{edits.length > 0 && <span title={previousText ? `Antes: ${previousText}` : undefined}>Editada</span>}
 			<span>{formatTime(message.dataEnvio)}</span>
 			{!isIncoming && <DeliveryTicks status={message.statusEntrega} />}
 		</>
