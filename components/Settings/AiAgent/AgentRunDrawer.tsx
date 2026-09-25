@@ -1,6 +1,7 @@
 import ResponsiveMenu from "@/components/Utils/ResponsiveMenu";
 import { CodeBlock } from "@/components/ui/code-block";
 import { Timeline } from "@/components/ui/timeline";
+import { formatUsd } from "@/lib/ai/providers/pricing";
 import { getErrorMessage } from "@/lib/errors";
 import { useAiAgentRunById } from "@/lib/queries/ai-agents";
 import { cn } from "@/lib/utils";
@@ -86,6 +87,11 @@ export default function AgentRunDrawer({ runId, closeModal }: AgentRunDrawerProp
 							<SectionLabel>TOKENS</SectionLabel>
 							<span className="text-sm font-bold">{run.uso?.tokensTotal ?? "—"}</span>
 						</div>
+						<div className="flex flex-col">
+							<SectionLabel>CUSTO ESTIMADO</SectionLabel>
+							<span className="text-sm font-bold">{formatUsd(run.uso?.custoUsd)}</span>
+							{run.uso?.modelo ? <span className="text-xs text-muted-foreground">{run.uso.modelo}</span> : null}
+						</div>
 					</div>
 
 					{run.erro ? (
@@ -134,8 +140,7 @@ export default function AgentRunDrawer({ runId, closeModal }: AgentRunDrawerProp
 												{toolCall.operacao ? (
 													<div className="flex flex-col gap-1 rounded-md bg-muted px-3 py-2 text-xs">
 														<span>
-															Operação: <strong>{toolCall.operacao.tipo}</strong> · {toolCall.operacao.status} · {toolCall.operacao.chamadas.length}{" "}
-															tentativa(s)
+															Operação: <strong>{toolCall.operacao.tipo}</strong> · {toolCall.operacao.status} · {toolCall.operacao.chamadas.length} tentativa(s)
 														</span>
 														{toolCall.operacao.recursoTipo === "VENDA" && toolCall.operacao.recursoId ? (
 															<Link

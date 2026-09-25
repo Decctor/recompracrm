@@ -19,6 +19,14 @@ export class AgentDailyRunLimitError extends Error {
 	}
 }
 
+/** Freio de custo: a organização atingiu `recursos.iaAtendimento.limiteCreditos` no mês. */
+export class AgentSpendLimitError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = "AgentSpendLimitError";
+	}
+}
+
 /** O modelo tentou uma ferramenta que as capacidades do agente não permitem. */
 export class AgentToolNotEnabledError extends Error {
 	constructor(message: string) {

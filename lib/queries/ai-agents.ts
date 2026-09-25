@@ -2,6 +2,7 @@ import type { TGetAiAgentModelsOutput } from "@/app/api/ai-agents/models/route";
 import type { TGetAiAgentOutput } from "@/app/api/ai-agents/route";
 import type { TGetPlaygroundOutput } from "@/app/api/ai-agents/playground/route";
 import type { TGetAiAgentRunsOutput } from "@/app/api/ai-agents/runs/route";
+import type { TGetAiAgentSpendOutput } from "@/app/api/ai-agents/spend/route";
 import type { TAiAgentRunTriggerEnum, TAiAgentRunStatusEnum } from "@/schemas/enums";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
@@ -90,6 +91,25 @@ export function useAiAgentRunById({ runId, enabled = true }: { runId: string | n
 	return {
 		...useQuery({ queryKey, queryFn: () => fetchAiAgentRunById(runId as string), enabled: enabled && !!runId }),
 		queryKey,
+	};
+}
+
+// ============================================================================
+// GASTO
+// ============================================================================
+
+async function fetchAiAgentSpend() {
+	const { data } = await axios.get<TGetAiAgentSpendOutput>("/api/ai-agents/spend");
+	return data.data;
+}
+
+export const AI_AGENT_SPEND_QUERY_KEY = ["ai-agent-spend"] as const;
+
+/** Gasto estimado do mês e limite. Muda a cada run; a lista de execuções o invalida ao recarregar. */
+export function useAiAgentSpend({ enabled = true }: { enabled?: boolean } = {}) {
+	return {
+		...useQuery({ queryKey: AI_AGENT_SPEND_QUERY_KEY, queryFn: fetchAiAgentSpend, enabled, staleTime: 1000 * 60 }),
+		queryKey: AI_AGENT_SPEND_QUERY_KEY,
 	};
 }
 

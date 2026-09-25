@@ -230,7 +230,15 @@ export const AiAgentUsageSchema = z.object({
 	tokensEntrada: z.number({ invalid_type_error: "Tipo não válido para os tokens de entrada." }).optional(),
 	tokensSaida: z.number({ invalid_type_error: "Tipo não válido para os tokens de saída." }).optional(),
 	tokensTotal: z.number({ invalid_type_error: "Tipo não válido para o total de tokens." }).optional(),
+	// Tokens de entrada servidos do cache de prefixo do provedor (subconjunto de `tokensEntrada`).
+	tokensEntradaCache: z.number({ invalid_type_error: "Tipo não válido para os tokens de entrada em cache." }).optional(),
+	// "modelo-a -> modelo-b" quando a run passou por fallback. `modelos` é a lista tipada.
 	modelo: z.string({ invalid_type_error: "Tipo não válido para o modelo utilizado." }).optional(),
+	modelos: z.array(z.string({ invalid_type_error: "Tipo não válido para o modelo utilizado." })).optional(),
+	// Estimativa em USD pelo preço de referência do catálogo (`lib/ai/providers/pricing.ts`).
+	// A cobrança real é a do AI Gateway. `custoParcial` = algum trecho da run sem preço conhecido.
+	custoUsd: z.number({ invalid_type_error: "Tipo não válido para o custo estimado." }).optional(),
+	custoParcial: z.boolean({ invalid_type_error: "Tipo não válido para a marcação de custo parcial." }).optional(),
 });
 export type TAiAgentUsage = z.infer<typeof AiAgentUsageSchema>;
 

@@ -2,12 +2,13 @@ import { AiAgentCapabilitiesSchema, AiAgentModelConfigSchema, type TAiAgentTurnO
 import { AiAgentAttachmentTypeEnum, type TAiAgentRunTriggerEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
 import type { DB, DBTransaction } from "@/services/drizzle";
-import { aiAgents } from "@/services/drizzle/schema";
-import { NoObjectGeneratedError, Output, ToolLoopAgent, stepCountIs, type LanguageModelUsage } from "ai";
+import { aiAgents, organizations } from "@/services/drizzle/schema";
+import { NoObjectGeneratedError, Output, ToolLoopAgent, stepCountIs } from "ai";
 import { eq } from "drizzle-orm";
 import z from "zod";
 import { resolveLanguageModel } from "../providers/language";
-import { normalizeAiUsage } from "../providers/usage";
+import { resolveLanguageModelId } from "../providers/models";
+import { normalizeAiUsage, type TAiUsageSegment } from "../providers/usage";
 import { isAiGatewayCreditError, notifyAiGatewayCreditExhausted } from "../providers/credit-alert";
 import { AgentDailyRunLimitError, AgentInactiveError, AgentRunAbortedError, formatAgentErrorChain } from "../shared/errors";
 import { parseJsonbWithFallback } from "../shared/json";
@@ -20,6 +21,8 @@ import { buildChatRunContext, formatChatRunContext } from "./context";
 import { formatKnowledgeContext, getActiveKnowledgeBlocks } from "./knowledge";
 import { buildAgentSystemPrompt } from "./prompts";
 import { mergeRunSummary } from "./run-memory";
+import { assertAiSpendWithinLimit } from "./spend";
+import { notifyAiSpendThresholdIfReached } from "./spend-alert";
 import { completeAgentRun, countAgentRunsToday, createAgentRun, failAgentRun, markAgentRunCancelled, markAgentRunRunning } from "./runs";
 import { shouldRetryDeferredAction } from "./turn-validation";
 
@@ -63,16 +66,6 @@ export type TPreparedAgentExecution = {
 	previousSummary: string | null;
 };
 
-function combineUsage(usages: Array<Partial<LanguageModelUsage> | undefined>): Partial<LanguageModelUsage> | undefined {
-	const defined = usages.filter((usage): usage is Partial<LanguageModelUsage> => usage !== undefined);
-	if (defined.length === 0) return undefined;
-	const sum = (key: "inputTokens" | "outputTokens" | "totalTokens") => {
-		const values = defined.map((usage) => usage[key]).filter((value): value is number => typeof value === "number");
-		return values.length > 0 ? values.reduce((total, value) => total + value, 0) : undefined;
-	};
-	return { inputTokens: sum("inputTokens"), outputTokens: sum("outputTokens"), totalTokens: sum("totalTokens") };
-}
-
 function formatRunError(error: unknown): string {
 	if (!NoObjectGeneratedError.isInstance(error)) return formatAgentErrorChain(error);
 	const cause = error.cause instanceof Error ? error.cause.message : error.cause ? String(error.cause) : null;
@@ -112,6 +105,10 @@ export async function prepareAgentExecution({
 	if (runsToday >= capacidades.limites.maxRunsDiarios) {
 		throw new AgentDailyRunLimitError(`Limite diário de ${capacidades.limites.maxRunsDiarios} execuções do agente atingido.`);
 	}
+
+	// Segundo freio, em moeda: `recursos.iaAtendimento.limiteCreditos` como teto mensal estimado.
+	const organization = await database.query.organizations.findFirst({ where: eq(organizations.id, organizacaoId), columns: { configuracao: true } });
+	await assertAiSpendWithinLimit(database, { organizacaoId, configuracao: organization?.configuracao });
 
 	const [{ contexto: chatContext, clienteId }, knowledge, productGroups] = await Promise.all([
 		buildChatRunContext(database, { organizacaoId, chatId }),
@@ -195,11 +192,13 @@ export async function executeAgentTurn(
 	try {
 		const tools = toAISdkTools(toolContext);
 		const results: Array<{ steps: Array<{ toolCalls: unknown[]; toolResults: Array<{ toolName: string; output: unknown }> }> }> = [];
-		const usages: Array<Partial<LanguageModelUsage> | undefined> = [];
-		const usedModels: string[] = [];
+		// Um trecho por chamada de modelo, na ordem: o custo é estimado por trecho com o preço do
+		// modelo que o executou (o fallback de saída estruturada troca de modelo no meio da run).
+		const usageSegments: TAiUsageSegment[] = [];
 
 		const generate = async ({ modelConfig, prompt }: { modelConfig: ReturnType<typeof AiAgentModelConfigSchema.parse>; prompt: string }) => {
-			usedModels.push(modelConfig.modelo);
+			const segment: TAiUsageSegment = { modelo: resolveLanguageModelId(modelConfig.modelo), usage: undefined };
+			usageSegments.push(segment);
 			const loopAgent = new ToolLoopAgent({
 				model: resolveLanguageModel(modelConfig),
 				instructions: prepared.systemPrompt,
@@ -211,7 +210,7 @@ export async function executeAgentTurn(
 				output: Output.object({ schema: TurnOutputSchema }),
 			});
 			const result = await loopAgent.generate({ prompt, abortSignal });
-			usages.push(result.totalUsage);
+			segment.usage = result.totalUsage;
 			results.push(result);
 			return result;
 		};
@@ -221,7 +220,8 @@ export async function executeAgentTurn(
 				return await generate({ modelConfig: preferredConfig, prompt });
 			} catch (error) {
 				if (!NoObjectGeneratedError.isInstance(error) || preferredConfig.modelo === STRUCTURED_OUTPUT_FALLBACK_MODEL) throw error;
-				usages.push(error.usage);
+				// A tentativa falha também custou tokens: o trecho já está na lista, só recebe o uso.
+				usageSegments[usageSegments.length - 1]!.usage = error.usage;
 				console.warn(`[AI_AGENT] Saída estruturada inválida no modelo ${preferredConfig.modelo}; repetindo com ${STRUCTURED_OUTPUT_FALLBACK_MODEL}.`);
 				return generate({
 					modelConfig: { ...preferredConfig, modelo: STRUCTURED_OUTPUT_FALLBACK_MODEL },
@@ -279,8 +279,10 @@ Execute a ferramenta nesta execução ou pergunte objetivamente o único dado qu
 		await completeAgentRun(toolContext.db, {
 			runId: run.id,
 			outputResumo: finalOutput.resumoAtendimento,
-			uso: normalizeAiUsage(combineUsage(usages), [...new Set(usedModels)].join(" -> ")),
+			uso: normalizeAiUsage(usageSegments),
 		});
+		// Acessório e nunca lança: o custo desta run pode ter cruzado 80% do limite mensal.
+		await notifyAiSpendThresholdIfReached({ organizacaoId: toolContext.organizacaoId });
 
 		return finalOutput;
 	} catch (error) {
