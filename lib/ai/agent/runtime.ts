@@ -1,13 +1,14 @@
-import { AiAgentCapabilitiesSchema, AiAgentModelConfigSchema, type TAiAgentTurnOutput } from "@/schemas/ai-agents";
-import { AiAgentAttachmentTypeEnum, type TAiAgentRunTriggerEnum } from "@/schemas/enums";
+import { AiAgentCapabilitiesSchema, AiAgentModelConfigSchema, type TAiAgentCapabilities, type TAiAgentTurnOutput } from "@/schemas/ai-agents";
+import { AiAgentAttachmentTypeEnum, type TAiAgentRunTriggerEnum, type TAiAgentToolNameEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
 import type { DB, DBTransaction } from "@/services/drizzle";
-import { aiAgents } from "@/services/drizzle/schema";
-import { NoObjectGeneratedError, Output, ToolLoopAgent, stepCountIs, type LanguageModelUsage } from "ai";
+import { aiAgents, organizations } from "@/services/drizzle/schema";
+import { NoObjectGeneratedError, Output, ToolLoopAgent, stepCountIs } from "ai";
 import { eq } from "drizzle-orm";
 import z from "zod";
 import { resolveLanguageModel } from "../providers/language";
-import { normalizeAiUsage } from "../providers/usage";
+import { resolveLanguageModelId } from "../providers/models";
+import { normalizeAiUsage, type TAiUsageSegment } from "../providers/usage";
 import { isAiGatewayCreditError, notifyAiGatewayCreditExhausted } from "../providers/credit-alert";
 import { AgentDailyRunLimitError, AgentInactiveError, AgentRunAbortedError, formatAgentErrorChain } from "../shared/errors";
 import { parseJsonbWithFallback } from "../shared/json";
@@ -16,10 +17,13 @@ import { isToolEnabled } from "../tools/guards";
 import { toAISdkTools } from "../tools/registry";
 import type { TAgentToolContext } from "../tools/types";
 import { normalizeTurnAttachment } from "./attachment";
-import { buildChatRunContext, formatChatRunContext } from "./context";
+import type { TMessageTriage } from "../triage/message-triage";
+import { buildChatRunContext, formatChatRunContext, type TChatRunAssistOptions } from "./context";
 import { formatKnowledgeContext, getActiveKnowledgeBlocks } from "./knowledge";
 import { buildAgentSystemPrompt } from "./prompts";
 import { mergeRunSummary } from "./run-memory";
+import { assertAiSpendWithinLimit } from "./spend";
+import { notifyAiSpendThresholdIfReached } from "./spend-alert";
 import { completeAgentRun, countAgentRunsToday, createAgentRun, failAgentRun, markAgentRunCancelled, markAgentRunRunning } from "./runs";
 import { shouldRetryDeferredAction } from "./turn-validation";
 
@@ -32,6 +36,30 @@ const STRUCTURED_OUTPUT_FALLBACK_MODEL = "openai/gpt-5-mini";
  * o cliente já abandonou.
  */
 const RECENT_CLIENT_MESSAGES_WINDOW = 5;
+
+/** Mensagens que entram no turno de retomada: o resumo acumulado carrega o resto. */
+const FOLLOW_UP_HISTORY_MESSAGE_LIMIT = 12;
+
+/** Assistência: rascunho para o humano, que tem a conversa inteira na tela. */
+const ASSIST_HISTORY_MESSAGE_LIMIT = 30;
+const ASSIST_MAX_TOOL_CALLS = 4;
+const ASSIST_DEFAULT_MODEL = "agent-fast";
+const ASSIST_READ_ONLY_TOOLS: TAiAgentToolNameEnum[] = ["clientes.consultar_compras", "produtos.consultar", "cashback.consultar", "cupons.consultar"];
+
+function narrowCapabilitiesForAssist(capacidades: TAiAgentCapabilities): TAiAgentCapabilities {
+	const ferramentas = Object.fromEntries(
+		ASSIST_READ_ONLY_TOOLS.filter((name) => capacidades.ferramentas[name]?.habilitada).map((name) => [name, { habilitada: true }]),
+	) as TAiAgentCapabilities["ferramentas"];
+	return {
+		...capacidades,
+		ferramentas,
+		limites: {
+			...capacidades.limites,
+			maxChamadasFerramentasPorRun: Math.min(capacidades.limites.maxChamadasFerramentasPorRun, ASSIST_MAX_TOOL_CALLS),
+		},
+		retomadas: { ...capacidades.retomadas, habilitadas: false },
+	};
+}
 
 const TurnOutputSchema = z.object({
 	mensagem: z
@@ -53,8 +81,41 @@ const TurnOutputSchema = z.object({
 	resumoAtendimento: z.string().describe("Resumo interno do estado do atendimento, para a equipe. Não é visto pelo cliente."),
 });
 
+/**
+ * O pedido de retomada só existe no schema quando a organização habilitou retomadas: o modelo
+ * não recebe um campo que não pode usar, e não gasta tokens descrevendo-o.
+ */
+const TurnOutputWithFollowUpSchema = TurnOutputSchema.extend({
+	retomada: z
+		.object({
+			aguardarHoras: z.number().int().min(1).max(72).describe("Quantas horas de silêncio do cliente esperar antes de retomar."),
+			objetivo: z
+				.string()
+				.min(3)
+				.max(500)
+				.describe(
+					"O que a retomada deve conseguir, em uma frase. Ex.: 'Perguntar se decidiu sobre os 3 rolos de cabo 2,5mm e oferecer fechar o orçamento.'",
+				),
+		})
+		.nullable()
+		.describe(
+			"null na maioria dos turnos. Preencha só quando a conversa tem uma pendência comercial concreta que vale um lembrete se o cliente sumir: preço informado, orçamento criado, produto sugerido. Nunca para saudação, dúvida já respondida, reclamação, ou quando o cliente disse que não quer.",
+		),
+});
+type TTurnOutput = z.infer<typeof TurnOutputSchema> & Partial<Pick<z.infer<typeof TurnOutputWithFollowUpSchema>, "retomada">>;
+
+function resolveTurnOutputSchema({ gatilho, retomadasHabilitadas }: { gatilho: TAiAgentRunTriggerEnum; retomadasHabilitadas: boolean }) {
+	// Uma retomada nunca agenda outra; o playground não tem cliente para esperar.
+	const podeAgendar = retomadasHabilitadas && (gatilho === "CHAT_MENSAGEM" || gatilho === "ATRIBUICAO_HUB");
+	return podeAgendar ? TurnOutputWithFollowUpSchema : TurnOutputSchema;
+}
+
 export type TPreparedAgentExecution = {
 	run: { id: string };
+	gatilho: TAiAgentRunTriggerEnum;
+	modo: "ATENDIMENTO" | "ASSISTENCIA";
+	/** Custo da triagem que antecedeu esta run, somado ao `uso` no fechamento. */
+	triagemCustoUsd: number | null;
 	toolContext: TAgentToolContext;
 	systemPrompt: string;
 	turnPrompt: string;
@@ -62,16 +123,6 @@ export type TPreparedAgentExecution = {
 	maxSteps: number;
 	previousSummary: string | null;
 };
-
-function combineUsage(usages: Array<Partial<LanguageModelUsage> | undefined>): Partial<LanguageModelUsage> | undefined {
-	const defined = usages.filter((usage): usage is Partial<LanguageModelUsage> => usage !== undefined);
-	if (defined.length === 0) return undefined;
-	const sum = (key: "inputTokens" | "outputTokens" | "totalTokens") => {
-		const values = defined.map((usage) => usage[key]).filter((value): value is number => typeof value === "number");
-		return values.length > 0 ? values.reduce((total, value) => total + value, 0) : undefined;
-	};
-	return { inputTokens: sum("inputTokens"), outputTokens: sum("outputTokens"), totalTokens: sum("totalTokens") };
-}
 
 function formatRunError(error: unknown): string {
 	if (!NoObjectGeneratedError.isInstance(error)) return formatAgentErrorChain(error);
@@ -93,28 +144,60 @@ export async function prepareAgentExecution({
 	chatId,
 	gatilho,
 	mensagemGatilhoId,
+	retomada = null,
+	assistencia = null,
+	modeloOverride = null,
+	triagem = null,
 	database = db,
 }: {
 	organizacaoId: string;
 	chatId: string;
 	gatilho: TAiAgentRunTriggerEnum;
 	mensagemGatilhoId?: string | null;
+	/** Turno de retomada: troca o fecho do prompt e usa o contexto compacto. */
+	retomada?: { objetivo: string; horasSilencio: number | null } | null;
+	/** Modo assistência: ferramentas só de leitura, modelo rápido, poucos passos, nunca envia. */
+	assistencia?: TChatRunAssistOptions | null;
+	/** Modelo decidido pela triagem (econômico) para este turno. */
+	modeloOverride?: string | null;
+	/** Resultado da triagem, gravado no snapshot da run e somado ao custo. */
+	triagem?: TMessageTriage | null;
 	database?: TDb;
 }): Promise<TPreparedAgentExecution> {
 	const agent = await database.query.aiAgents.findFirst({ where: eq(aiAgents.organizacaoId, organizacaoId) });
 	if (!agent) throw new AgentInactiveError("A organização não possui um agente de IA configurado.");
 	if (agent.status !== "ATIVO") throw new AgentInactiveError("O agente de IA da organização está pausado.");
 
-	const modeloConfig = parseJsonbWithFallback(AiAgentModelConfigSchema, agent.modeloConfig);
-	const capacidades = parseJsonbWithFallback(AiAgentCapabilitiesSchema, agent.capacidades);
+	const modo = assistencia ? "ASSISTENCIA" : "ATENDIMENTO";
+	const baseModelConfig = parseJsonbWithFallback(AiAgentModelConfigSchema, agent.modeloConfig);
+	const baseCapabilities = parseJsonbWithFallback(AiAgentCapabilitiesSchema, agent.capacidades);
+	// Assistência estreita a configuração em vez de ter uma própria: mesmas ferramentas de
+	// leitura e políticas comerciais, sem as ferramentas que agem (orçamento, transferência), com
+	// teto baixo de passos e o modelo rápido. O snapshot da run grava o que de fato valeu.
+	const modeloConfig = assistencia
+		? { ...baseModelConfig, modelo: baseModelConfig.modeloAssistencia ?? ASSIST_DEFAULT_MODEL }
+		: modeloOverride
+			? { ...baseModelConfig, modelo: modeloOverride }
+			: baseModelConfig;
+	const capacidades = assistencia ? narrowCapabilitiesForAssist(baseCapabilities) : baseCapabilities;
 
 	const runsToday = await countAgentRunsToday(database, organizacaoId);
 	if (runsToday >= capacidades.limites.maxRunsDiarios) {
 		throw new AgentDailyRunLimitError(`Limite diário de ${capacidades.limites.maxRunsDiarios} execuções do agente atingido.`);
 	}
 
+	// Segundo freio, em moeda: `recursos.iaAtendimento.limiteCreditos` como teto mensal estimado.
+	const organization = await database.query.organizations.findFirst({ where: eq(organizations.id, organizacaoId), columns: { configuracao: true } });
+	await assertAiSpendWithinLimit(database, { organizacaoId, configuracao: organization?.configuracao });
+
 	const [{ contexto: chatContext, clienteId }, knowledge, productGroups] = await Promise.all([
-		buildChatRunContext(database, { organizacaoId, chatId }),
+		// A retomada lê o resumo acumulado mais as últimas mensagens: ela precisa lembrar do que
+		// ficou pendente, não reler a conversa inteira.
+		buildChatRunContext(database, {
+			organizacaoId,
+			chatId,
+			historyLimit: retomada ? FOLLOW_UP_HISTORY_MESSAGE_LIMIT : assistencia ? ASSIST_HISTORY_MESSAGE_LIMIT : undefined,
+		}),
 		getActiveKnowledgeBlocks(database, agent.id),
 		// A grafia dos grupos entra no system prompt para o agente não filtrar por categoria
 		// inexistente nem gastar uma tool call para descobrir o que a empresa vende.
@@ -135,7 +218,7 @@ export async function prepareAgentExecution({
 			capacidades,
 			conhecimento: knowledge.map((block) => ({ id: block.id, titulo: block.titulo })),
 		},
-		contextoEntradaSnapshot: chatContext,
+		contextoEntradaSnapshot: triagem ? { ...chatContext, triagem } : chatContext,
 	});
 	const recentClientMessages = chatContext.conversa
 		.slice()
@@ -146,6 +229,9 @@ export async function prepareAgentExecution({
 
 	return {
 		run,
+		gatilho,
+		modo,
+		triagemCustoUsd: triagem?.custoUsd ?? null,
 		toolContext: {
 			db: database,
 			organizacaoId,
@@ -163,8 +249,9 @@ export async function prepareAgentExecution({
 			capacidades,
 			knowledgeContext: formatKnowledgeContext(knowledge),
 			productGroups,
+			modo,
 		}),
-		turnPrompt: formatChatRunContext(chatContext),
+		turnPrompt: formatChatRunContext(chatContext, { retomada, assistencia }),
 		modeloConfig,
 		// A saída estruturada ocupa uma etapa adicional depois do último resultado de ferramenta.
 		// O limite real de chamadas é aplicado no adapter das ferramentas.
@@ -191,27 +278,33 @@ export async function executeAgentTurn(
 	const { toolContext, run, modeloConfig } = prepared;
 
 	await markAgentRunRunning(toolContext.db, run.id);
+	const outputSchema = resolveTurnOutputSchema({ gatilho: prepared.gatilho, retomadasHabilitadas: toolContext.capacidades.retomadas.habilitadas });
 
 	try {
 		const tools = toAISdkTools(toolContext);
 		const results: Array<{ steps: Array<{ toolCalls: unknown[]; toolResults: Array<{ toolName: string; output: unknown }> }> }> = [];
-		const usages: Array<Partial<LanguageModelUsage> | undefined> = [];
-		const usedModels: string[] = [];
+		// Um trecho por chamada de modelo, na ordem: o custo é estimado por trecho com o preço do
+		// modelo que o executou (o fallback de saída estruturada troca de modelo no meio da run).
+		const usageSegments: TAiUsageSegment[] = [];
 
 		const generate = async ({ modelConfig, prompt }: { modelConfig: ReturnType<typeof AiAgentModelConfigSchema.parse>; prompt: string }) => {
-			usedModels.push(modelConfig.modelo);
+			const segment: TAiUsageSegment = { modelo: resolveLanguageModelId(modelConfig.modelo), usage: undefined };
+			usageSegments.push(segment);
 			const loopAgent = new ToolLoopAgent({
 				model: resolveLanguageModel(modelConfig),
-				instructions: prepared.systemPrompt,
+				// O system prompt (instruções + regras + base de conhecimento) é o mesmo em todo turno da
+				// organização: é o prefixo que o provedor pode servir do cache. A marcação é da Anthropic
+				// (outros provedores a ignoram; a OpenAI cacheia prefixos iguais sozinha).
+				instructions: [{ role: "system", content: prepared.systemPrompt, providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } } }],
 				tools,
 				temperature: modelConfig.temperatura,
 				maxOutputTokens: modelConfig.maxTokensSaida,
 				topP: modelConfig.topP,
 				stopWhen: stepCountIs(prepared.maxSteps),
-				output: Output.object({ schema: TurnOutputSchema }),
+				output: Output.object({ schema: outputSchema }),
 			});
 			const result = await loopAgent.generate({ prompt, abortSignal });
-			usages.push(result.totalUsage);
+			segment.usage = result.totalUsage;
 			results.push(result);
 			return result;
 		};
@@ -221,7 +314,8 @@ export async function executeAgentTurn(
 				return await generate({ modelConfig: preferredConfig, prompt });
 			} catch (error) {
 				if (!NoObjectGeneratedError.isInstance(error) || preferredConfig.modelo === STRUCTURED_OUTPUT_FALLBACK_MODEL) throw error;
-				usages.push(error.usage);
+				// A tentativa falha também custou tokens: o trecho já está na lista, só recebe o uso.
+				usageSegments[usageSegments.length - 1]!.usage = error.usage;
 				console.warn(`[AI_AGENT] Saída estruturada inválida no modelo ${preferredConfig.modelo}; repetindo com ${STRUCTURED_OUTPUT_FALLBACK_MODEL}.`);
 				return generate({
 					modelConfig: { ...preferredConfig, modelo: STRUCTURED_OUTPUT_FALLBACK_MODEL },
@@ -235,14 +329,16 @@ export async function executeAgentTurn(
 
 		// Normaliza antes de qualquer decisão: uma URL torta não pode contar como entrega no
 		// backstop de promessa nem chegar ao adapter de canal.
-		const settleAttachment = (raw: z.infer<typeof TurnOutputSchema>) => ({ ...raw, anexo: normalizeTurnAttachment(raw.anexo) });
+		const settleAttachment = (raw: TTurnOutput) => ({ ...raw, anexo: normalizeTurnAttachment(raw.anexo) });
 
 		let result = await generateWithFallback(prepared.turnPrompt);
 		let output = result.output;
 		if (!output) throw new Error("O agente não produziu uma resposta estruturada.");
 		output = settleAttachment(output);
 
-		if (shouldRetryDeferredAction({ ...output, calledTools: calledToolsOf(result) })) {
+		// Na assistência a "promessa" é do humano, não da IA: "vou verificar e te retorno" num rascunho
+		// é uma frase que o atendente pode legitimamente enviar.
+		if (prepared.modo === "ATENDIMENTO" && shouldRetryDeferredAction({ ...output, calledTools: calledToolsOf(result) })) {
 			const rejectedMessage = output.mensagem;
 			// Alarme de regressão do prompt: as regras do canal já dizem que não há segundo momento.
 			console.warn(
@@ -269,6 +365,7 @@ Execute a ferramenta nesta execução ou pergunte objetivamente o único dado qu
 		const toolResults = results.flatMap((generation) => generation.steps.flatMap((step) => step.toolResults));
 		const finalOutput: TAiAgentTurnOutput = {
 			...output,
+			retomada: (output as TTurnOutput).retomada ?? null,
 			resumoAtendimento: mergeRunSummary({
 				modelSummary: output.resumoAtendimento,
 				previousSummary: prepared.previousSummary,
@@ -276,11 +373,15 @@ Execute a ferramenta nesta execução ou pergunte objetivamente o único dado qu
 			}),
 		};
 
+		const uso = normalizeAiUsage(usageSegments);
 		await completeAgentRun(toolContext.db, {
 			runId: run.id,
 			outputResumo: finalOutput.resumoAtendimento,
-			uso: normalizeAiUsage(combineUsage(usages), [...new Set(usedModels)].join(" -> ")),
+			// A triagem custou centavos de centavo, mas custou: entra no mesmo número.
+			uso: uso && prepared.triagemCustoUsd !== null ? { ...uso, custoUsd: (uso.custoUsd ?? 0) + prepared.triagemCustoUsd } : uso,
 		});
+		// Acessório e nunca lança: o custo desta run pode ter cruzado 80% do limite mensal.
+		await notifyAiSpendThresholdIfReached({ organizacaoId: toolContext.organizacaoId });
 
 		return finalOutput;
 	} catch (error) {

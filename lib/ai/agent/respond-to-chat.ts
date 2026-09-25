@@ -5,6 +5,8 @@ import type { TAiAgentRunTriggerEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
 import type { DB, DBTransaction } from "@/services/drizzle";
 import { isAgentError } from "../shared/errors";
+import type { TMessageTriage } from "../triage/message-triage";
+import { scheduleFollowUpFromTurn } from "./follow-ups";
 import { linkAgentRunMessage, markAgentRunCancelled } from "./runs";
 import { executeAgentTurn, prepareAgentExecution } from "./runtime";
 
@@ -54,7 +56,12 @@ export type TAgentMessageDeliverer = (args: {
 	anexo: TAiAgentTurnAttachment | null;
 	runId: string;
 	agenteId: string;
+	/** Preenchido quando a mensagem é uma retomada programada: a bolha do hub a rotula. */
+	retomadaId?: string | null;
 }) => Promise<{ messageId: string | null }>;
+
+/** Turno de retomada: o que o agente pediu ao agendar, para o prompt do turno. */
+export type TRespondToChatFollowUp = { id: string; objetivo: string; horasSilencio: number | null };
 
 export type TRespondToChatResult = {
 	runId: string;
@@ -62,6 +69,8 @@ export type TRespondToChatResult = {
 	anexo: TAiAgentTurnAttachment | null;
 	messageId: string | null;
 	resumoAtendimento: string;
+	/** Retomada agendada por este turno, quando o agente pediu e as guardas deixaram. */
+	retomadaAgendada: { id: string; para: Date } | null;
 };
 
 /**
@@ -78,6 +87,9 @@ export async function respondToChatWithAgent({
 	gatilho,
 	mensagemGatilhoId,
 	deliver,
+	retomada = null,
+	modeloOverride = null,
+	triagem = null,
 	database = db,
 }: {
 	organizacaoId: string;
@@ -85,12 +97,16 @@ export async function respondToChatWithAgent({
 	gatilho: TAiAgentRunTriggerEnum;
 	mensagemGatilhoId?: string | null;
 	deliver: TAgentMessageDeliverer;
+	retomada?: TRespondToChatFollowUp | null;
+	/** Decisões da triagem pré-run (`lib/ai/triage`): modelo do turno e o registro no snapshot. */
+	modeloOverride?: string | null;
+	triagem?: TMessageTriage | null;
 	database?: TDb;
 }): Promise<TRespondToChatResult> {
 	// Antes do prepare: uma mensagem que chegue durante a montagem do contexto pode ficar de
 	// fora dele — a âncora precisa cobrir essa janela também.
 	const runStartedAt = new Date();
-	const prepared = await prepareAgentExecution({ organizacaoId, chatId, gatilho, mensagemGatilhoId, database });
+	const prepared = await prepareAgentExecution({ organizacaoId, chatId, gatilho, mensagemGatilhoId, retomada, modeloOverride, triagem, database });
 
 	// A mesma revalidação da entrega, só que durante a geração. O playground é síncrono e sem
 	// concorrência: não há o que observar.
@@ -113,7 +129,7 @@ export async function respondToChatWithAgent({
 	} catch (error) {
 		if (isAgentError(error, "AgentRunAbortedError")) {
 			console.log("[AI_AGENT] Run abortada durante a geração:", (error as Error).message);
-			return { runId: prepared.run.id, mensagem: null, anexo: null, messageId: null, resumoAtendimento: "" };
+			return { runId: prepared.run.id, mensagem: null, anexo: null, messageId: null, resumoAtendimento: "", retomadaAgendada: null };
 		}
 		throw error;
 	} finally {
@@ -131,7 +147,7 @@ export async function respondToChatWithAgent({
 			await markAgentRunCancelled(database, { runId: prepared.run.id, reason: delivery.reason });
 			console.log("[AI_AGENT] Entrega cancelada:", delivery.reason);
 			// O resumo também não grava: veio de um contexto que a conversa já superou.
-			return { runId: prepared.run.id, mensagem: null, anexo: null, messageId: null, resumoAtendimento: "" };
+			return { runId: prepared.run.id, mensagem: null, anexo: null, messageId: null, resumoAtendimento: "", retomadaAgendada: null };
 		}
 
 		const delivered = await deliver({
@@ -139,6 +155,7 @@ export async function respondToChatWithAgent({
 			anexo: output.anexo,
 			runId: prepared.run.id,
 			agenteId: prepared.toolContext.agent.id,
+			retomadaId: retomada?.id ?? null,
 		});
 		messageId = delivered.messageId;
 		if (messageId) await linkAgentRunMessage(database, { runId: prepared.run.id, mensagemId: messageId });
@@ -153,5 +170,33 @@ export async function respondToChatWithAgent({
 		}
 	}
 
-	return { runId: prepared.run.id, mensagem: output.mensagem, anexo: output.anexo, messageId, resumoAtendimento: output.resumoAtendimento };
+	// Retomada: decidida pelo agente na saída do turno (zero chamadas extras); aqui só as guardas.
+	// Acessória como o resumo, e só em turnos que respondem ao cliente — uma retomada nunca
+	// agenda outra retomada, e o playground não tem cliente para esperar.
+	let retomadaAgendada: TRespondToChatResult["retomadaAgendada"] = null;
+	if (output.retomada && messageId && (gatilho === "CHAT_MENSAGEM" || gatilho === "ATRIBUICAO_HUB")) {
+		try {
+			const scheduled = await scheduleFollowUpFromTurn(database, {
+				organizacaoId,
+				chatId,
+				agenteId: prepared.toolContext.agent.id,
+				runId: prepared.run.id,
+				retomada: output.retomada,
+				capacidades: prepared.toolContext.capacidades,
+			});
+			if (scheduled.agendada) retomadaAgendada = { id: scheduled.id, para: scheduled.para };
+			else console.log("[AI_AGENT] Retomada não agendada:", scheduled.motivo);
+		} catch (error) {
+			console.error("[ERROR] [AI_AGENT] Falha ao agendar a retomada:", error);
+		}
+	}
+
+	return {
+		runId: prepared.run.id,
+		mensagem: output.mensagem,
+		anexo: output.anexo,
+		messageId,
+		resumoAtendimento: output.resumoAtendimento,
+		retomadaAgendada,
+	};
 }

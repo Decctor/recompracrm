@@ -12,8 +12,10 @@ import { toast } from "sonner";
 import GeneralBlock from "./Blocks/GeneralBlock";
 import InstructionsBlock from "./Blocks/InstructionsBlock";
 import KnowledgeBlock from "./Blocks/KnowledgeBlock";
+import FollowUpsBlock from "./Blocks/FollowUpsBlock";
 import ScopeBlock from "./Blocks/ScopeBlock";
 import ToolsBlock from "./Blocks/ToolsBlock";
+import TriageBlock from "./Blocks/TriageBlock";
 
 /**
  * Formulário do agente. Registro singleton por organização, então é uma tela de edição direta
@@ -28,6 +30,8 @@ export default function AgentConfigForm() {
 		updateModelConfig,
 		updateLimits,
 		updateAttendanceSettings,
+		updateFollowUpSettings,
+		updateTriageSettings,
 		updateScope,
 		updatePrices,
 		updateQuotes,
@@ -96,6 +100,16 @@ export default function AgentConfigForm() {
 					updateQuotes={updateQuotes}
 					updateStock={updateStock}
 				/>
+			</div>
+
+			<div className="flex w-full flex-col gap-4 border-t pt-6">
+				<h2 className="text-sm font-bold uppercase tracking-tight">TRIAGEM</h2>
+				<TriageBlock state={state} updateTriageSettings={updateTriageSettings} />
+			</div>
+
+			<div className="flex w-full flex-col gap-4 border-t pt-6">
+				<h2 className="text-sm font-bold uppercase tracking-tight">RETOMADAS</h2>
+				<FollowUpsBlock state={state} updateFollowUpSettings={updateFollowUpSettings} />
 			</div>
 
 			<div className="flex w-full flex-col gap-4 border-t pt-6">

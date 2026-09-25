@@ -2,6 +2,7 @@ import z from "zod";
 import {
 	AiAgentAttachmentTypeEnum,
 	AiAgentAttendanceModeEnum,
+	AiAgentFollowUpStatusEnum,
 	AiAgentRunStatusEnum,
 	AiAgentRunTriggerEnum,
 	AiAgentScopeTypeEnum,
@@ -43,6 +44,11 @@ export const AiAgentModelConfigSchema = z
 			.min(0, "O top P mínimo é 0.")
 			.max(1, "O top P máximo é 1.")
 			.optional(),
+		// Modo assistência (sugestão/reescrita/resumo para o atendente). Ausente = alias `agent-fast`:
+		// é rascunho, o humano corrige, e o modelo rápido custa uma fração.
+		modeloAssistencia: z.string({ invalid_type_error: "Tipo não válido para o modelo de assistência." }).optional(),
+		// Modelo dos turnos que a triagem classificou como simples (saudação, status, cashback).
+		modeloEconomico: z.string({ invalid_type_error: "Tipo não válido para o modelo econômico." }).optional(),
 	})
 	.default({});
 export type TAiAgentModelConfig = z.infer<typeof AiAgentModelConfigSchema>;
@@ -138,6 +144,51 @@ export const AiAgentCapabilitiesSchema = z
 					.default(500),
 			})
 			.default({}),
+		/**
+		 * Triagem pré-run com Jev (`lib/ai/triage`): classifica a última mensagem antes do turno e
+		 * decide se ele acontece (e em que modelo). Ligada por padrão; cada gate tem a sua chave porque
+		 * cada um tem um risco: pular uma resposta é irreversível, o modelo econômico ainda responde.
+		 */
+		triagem: z
+			.object({
+				habilitada: z.boolean({ invalid_type_error: "Tipo não válido para a habilitação da triagem." }).default(true),
+				pularSemResposta: z.boolean({ invalid_type_error: "Tipo não válido para a chave de pular resposta." }).default(true),
+				handoffDireto: z.boolean({ invalid_type_error: "Tipo não válido para a chave de handoff direto." }).default(true),
+				modeloEconomico: z.boolean({ invalid_type_error: "Tipo não válido para a chave de modelo econômico." }).default(true),
+			})
+			.default({}),
+		/**
+		 * Retomadas: o agente decide, no turno em que responde, se vale um lembrete caso o cliente
+		 * suma; o código só aplica as guardas (janela de 24h, horário, limite, pausa). Desabilitadas
+		 * por padrão porque é uma mensagem proativa — a organização precisa optar.
+		 */
+		retomadas: z
+			.object({
+				habilitadas: z.boolean({ invalid_type_error: "Tipo não válido para a habilitação das retomadas." }).default(false),
+				maxPorAtendimento: z
+					.number({ invalid_type_error: "Tipo não válido para o máximo de retomadas." })
+					.int("O máximo de retomadas deve ser inteiro.")
+					.min(1, "O mínimo é 1 retomada por atendimento.")
+					.max(3, "O máximo é 3 retomadas por atendimento.")
+					.default(1),
+				// Faixa de horário (São Paulo) em que uma retomada pode sair; fora dela é adiada.
+				horarioInicio: z
+					.string({ invalid_type_error: "Tipo não válido para o horário inicial." })
+					.regex(/^\d{2}:\d{2}$/, "Horário inicial inválido (HH:MM).")
+					.default("08:00"),
+				horarioFim: z
+					.string({ invalid_type_error: "Tipo não válido para o horário final." })
+					.regex(/^\d{2}:\d{2}$/, "Horário final inválido (HH:MM).")
+					.default("20:00"),
+				// Teto do que o agente pode pedir; a janela de 24h ainda clampa por cima.
+				maxAguardarHoras: z
+					.number({ invalid_type_error: "Tipo não válido para o máximo de horas de espera." })
+					.int("O máximo de horas deve ser inteiro.")
+					.min(1, "O mínimo é 1 hora.")
+					.max(72, "O máximo é 72 horas.")
+					.default(24),
+			})
+			.default({}),
 		atendimento: z
 			.object({
 				// Debounce antes de responder: agrupa mensagens enviadas em sequência pelo cliente.
@@ -230,7 +281,15 @@ export const AiAgentUsageSchema = z.object({
 	tokensEntrada: z.number({ invalid_type_error: "Tipo não válido para os tokens de entrada." }).optional(),
 	tokensSaida: z.number({ invalid_type_error: "Tipo não válido para os tokens de saída." }).optional(),
 	tokensTotal: z.number({ invalid_type_error: "Tipo não válido para o total de tokens." }).optional(),
+	// Tokens de entrada servidos do cache de prefixo do provedor (subconjunto de `tokensEntrada`).
+	tokensEntradaCache: z.number({ invalid_type_error: "Tipo não válido para os tokens de entrada em cache." }).optional(),
+	// "modelo-a -> modelo-b" quando a run passou por fallback. `modelos` é a lista tipada.
 	modelo: z.string({ invalid_type_error: "Tipo não válido para o modelo utilizado." }).optional(),
+	modelos: z.array(z.string({ invalid_type_error: "Tipo não válido para o modelo utilizado." })).optional(),
+	// Estimativa em USD pelo preço de referência do catálogo (`lib/ai/providers/pricing.ts`).
+	// A cobrança real é a do AI Gateway. `custoParcial` = algum trecho da run sem preço conhecido.
+	custoUsd: z.number({ invalid_type_error: "Tipo não válido para o custo estimado." }).optional(),
+	custoParcial: z.boolean({ invalid_type_error: "Tipo não válido para a marcação de custo parcial." }).optional(),
 });
 export type TAiAgentUsage = z.infer<typeof AiAgentUsageSchema>;
 
@@ -265,13 +324,41 @@ export const AiAgentTurnAttachmentSchema = z.object({
 });
 export type TAiAgentTurnAttachment = z.infer<typeof AiAgentTurnAttachmentSchema>;
 
+/**
+ * Pedido de retomada feito pelo agente na saída do turno: quantas horas de silêncio do cliente
+ * esperar e o que o lembrete deve conseguir. Só entra no schema do turno quando as retomadas
+ * estão habilitadas — o modelo não recebe um campo que não pode usar.
+ */
+export const AiAgentTurnFollowUpSchema = z.object({
+	aguardarHoras: z.number().int().min(1).max(72),
+	objetivo: z.string().min(3).max(500),
+});
+export type TAiAgentTurnFollowUp = z.infer<typeof AiAgentTurnFollowUpSchema>;
+
 /** Saída estruturada de um turno. `mensagem: null` = o agente decidiu não responder. */
 export const AiAgentTurnOutputSchema = z.object({
 	mensagem: z.string().nullable(),
 	anexo: AiAgentTurnAttachmentSchema.nullable(),
 	resumoAtendimento: z.string(),
+	retomada: AiAgentTurnFollowUpSchema.nullable().optional(),
 });
 export type TAiAgentTurnOutput = z.infer<typeof AiAgentTurnOutputSchema>;
+
+/** Por que uma retomada agendada deixou de valer. Constantes, não enum: são texto de auditoria. */
+export const AI_AGENT_FOLLOW_UP_CANCEL_REASONS = {
+	CLIENTE_RESPONDEU: "CLIENTE_RESPONDEU",
+	HUMANO_ASSUMIU: "HUMANO_ASSUMIU",
+	ATENDIMENTO_ENCERRADO: "ATENDIMENTO_ENCERRADO",
+	COMUNICACAO_PAUSADA: "COMUNICACAO_PAUSADA",
+	JANELA_FECHADA: "JANELA_FECHADA",
+	CANCELADA_PELO_HUB: "CANCELADA_PELO_HUB",
+	SUBSTITUIDA: "SUBSTITUIDA",
+	DESABILITADAS: "DESABILITADAS",
+	FORA_DO_ESCOPO: "FORA_DO_ESCOPO",
+	CONVERSA_MUDOU: "CONVERSA_MUDOU",
+	FALHA_EXECUCAO: "FALHA_EXECUCAO",
+} as const;
+export type TAiAgentFollowUpCancelReason = (typeof AI_AGENT_FOLLOW_UP_CANCEL_REASONS)[keyof typeof AI_AGENT_FOLLOW_UP_CANCEL_REASONS];
 
 // ============================================================================
 // ENTIDADES
@@ -346,6 +433,7 @@ export type TUpdateAiAgentKnowledge = z.infer<typeof UpdateAiAgentKnowledgeSchem
 // Re-exports de conveniência para quem consome só este módulo.
 export {
 	AiAgentAttachmentTypeEnum,
+	AiAgentFollowUpStatusEnum,
 	AiAgentRunTriggerEnum,
 	AiAgentRunStatusEnum,
 	AiAgentScopeTypeEnum,

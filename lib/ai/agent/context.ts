@@ -6,8 +6,14 @@ import { and, desc, eq } from "drizzle-orm";
 
 type TDb = DB | DBTransaction;
 
-/** Quantas mensagens do histórico entram no contexto do turno. */
-const HISTORY_MESSAGE_LIMIT = 100;
+/**
+ * Quantas mensagens do histórico entram no contexto do turno.
+ *
+ * Era 100. O resumo acumulado (`resumoAtendimento`, reescrito a cada turno) é a memória de longo
+ * prazo — inclusive o catálogo consultado, via `run-memory.ts` — então o turno precisa das
+ * últimas mensagens, não da conversa inteira. O snapshot gravado na run encolhe junto.
+ */
+const HISTORY_MESSAGE_LIMIT = 30;
 
 export type TChatRunContext = {
 	chatId: string;
@@ -73,7 +79,7 @@ function formatSaoPauloMoment(instant: string): string {
  */
 export async function buildChatRunContext(
 	db: TDb,
-	input: { organizacaoId: string; chatId: string },
+	input: { organizacaoId: string; chatId: string; historyLimit?: number },
 ): Promise<{ contexto: TChatRunContext; clienteId: string }> {
 	const chat = await db.query.chats.findFirst({
 		where: and(eq(chats.id, input.chatId), eq(chats.organizacaoId, input.organizacaoId)),
@@ -105,7 +111,7 @@ export async function buildChatRunContext(
 	const messages = await db.query.chatMessages.findMany({
 		where: and(eq(chatMessages.chatId, chat.id), eq(chatMessages.organizacaoId, input.organizacaoId)),
 		orderBy: [desc(chatMessages.dataEnvio)],
-		limit: HISTORY_MESSAGE_LIMIT,
+		limit: input.historyLimit ?? HISTORY_MESSAGE_LIMIT,
 		columns: {
 			autorTipo: true,
 			conteudoTexto: true,
@@ -173,8 +179,55 @@ export async function buildChatRunContext(
 	};
 }
 
+export type TChatRunAssistOptions = {
+	acao: "SUGERIR_RESPOSTA" | "RESUMIR" | "REESCREVER";
+	atendenteNome: string;
+	orientacao: string | null;
+	texto: string | null;
+};
+
+export type TChatRunContextOptions = {
+	/** Turno de retomada: o cliente silenciou e o fecho do prompt pede o lembrete, não uma resposta. */
+	retomada?: { objetivo: string; horasSilencio: number | null } | null;
+	/** Modo assistência: o fecho pede um rascunho para o atendente, não uma resposta ao cliente. */
+	assistencia?: TChatRunAssistOptions | null;
+};
+
+function formatAssistClosing(assistencia: TChatRunAssistOptions): string {
+	const base = `## Assistência ao atendente
+Você está ajudando ${assistencia.atendenteNome}, o atendente humano que conduz esta conversa. Você NÃO envia nada ao cliente: o que você escrever em "mensagem" vai para o rascunho dele, e ele revisa antes de enviar.`;
+	if (assistencia.acao === "RESUMIR") {
+		return `${base}
+Nesta execução, deixe "mensagem" null e escreva em "resumoAtendimento" um resumo objetivo do atendimento para a equipe: o que o cliente quer, o que já foi tratado, o que está pendente e o próximo passo.`;
+	}
+	if (assistencia.acao === "REESCREVER") {
+		return `${base}
+Reescreva o rascunho abaixo mantendo exatamente o sentido e as informações, no tom das suas instruções e no formato do canal. Não acrescente promessas nem dados que o rascunho não tem. Devolva o texto reescrito em "mensagem".
+
+Rascunho do atendente:
+${assistencia.texto ?? ""}`;
+	}
+	return `${base}
+Escreva em "mensagem" a resposta que ${assistencia.atendenteNome} deve enviar agora, na primeira pessoa dele, no tom das suas instruções. Consulte as ferramentas se precisar de dados (catálogo, compras, cashback, cupons). Se faltar informação que só ele tem, escreva a resposta com um marcador entre colchetes no lugar, como [prazo de entrega].${
+		assistencia.orientacao
+			? `
+Orientação do atendente para esta resposta: "${assistencia.orientacao}".`
+			: ""
+	}`;
+}
+
+function formatTurnClosing(options: TChatRunContextOptions): string {
+	if (options.assistencia) return formatAssistClosing(options.assistencia);
+	if (!options.retomada) return "Responda à última mensagem do cliente.";
+	const silencio = options.retomada.horasSilencio ? `há cerca de ${options.retomada.horasSilencio} hora(s)` : "há algum tempo";
+	return `## Retomada
+O cliente está em silêncio ${silencio} e a última palavra foi sua. Esta execução é uma retomada programada por você mesmo, com o objetivo: "${options.retomada.objetivo}".
+Escreva uma única mensagem curta e natural que retome a conversa sem pressionar, retomando do ponto em que parou. Não cumprimente de novo nem repita tudo o que já foi dito.
+Se, relendo a conversa, retomar não fizer sentido (o cliente já comprou, já recusou, reclamou, ou disse que não quer contato), devolva "mensagem" null e explique no "resumoAtendimento".`;
+}
+
 /** Serializa o contexto para o prompt do turno. */
-export function formatChatRunContext(context: TChatRunContext): string {
+export function formatChatRunContext(context: TChatRunContext, options: TChatRunContextOptions = {}): string {
 	const client = context.cliente;
 	const clientLines = [
 		`- Nome: ${client.nome}`,
@@ -204,5 +257,5 @@ ${attendanceBlock}
 ## Conversa até aqui
 ${conversation || "(sem mensagens anteriores)"}
 
-Responda à última mensagem do cliente.`;
+${formatTurnClosing(options)}`;
 }

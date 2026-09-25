@@ -607,7 +607,11 @@ export type TAiAgentRunStatusEnum = z.infer<typeof AiAgentRunStatusEnum>;
 // O que originou a execução. PLAYGROUND roda o mesmo pipeline, sem envio externo.
 // ATRIBUICAO_HUB é a execução disparada por um humano que entregou a conversa ao agente pelo
 // hub — separa, na análise de runs, o que a IA pegou da fila do que lhe foi passado de mão.
-export const AiAgentRunTriggerEnum = z.enum(["CHAT_MENSAGEM", "PLAYGROUND", "ATRIBUICAO_HUB"]);
+// RETOMADA é a execução programada que retoma uma conversa em que o cliente silenciou
+// (`lib/ai/agent/follow-ups.ts`): não tem mensagem gatilho e ancora em `runStartedAt`.
+// SUGESTAO_HUB é o modo assistência: a IA ajuda o humano que detém o atendimento (sugere,
+// reescreve, resume) e nunca envia nada.
+export const AiAgentRunTriggerEnum = z.enum(["CHAT_MENSAGEM", "PLAYGROUND", "ATRIBUICAO_HUB", "RETOMADA", "SUGESTAO_HUB"]);
 export type TAiAgentRunTriggerEnum = z.infer<typeof AiAgentRunTriggerEnum>;
 
 /**
@@ -616,6 +620,14 @@ export type TAiAgentRunTriggerEnum = z.infer<typeof AiAgentRunTriggerEnum>;
  */
 export const AiAgentAttendanceModeEnum = z.enum(["IMEDIATO", "RESERVA"]);
 export type TAiAgentAttendanceModeEnum = z.infer<typeof AiAgentAttendanceModeEnum>;
+
+/**
+ * Ciclo de vida de uma retomada de conversa agendada pelo agente. AGENDADA é o único estado
+ * vivo; EXECUTADA cobre tanto o envio quanto a decisão de não enviar (o turno devolveu null);
+ * EXPIRADA é a janela de 24h fechada no momento de executar.
+ */
+export const AiAgentFollowUpStatusEnum = z.enum(["AGENDADA", "EXECUTADA", "CANCELADA", "EXPIRADA"]);
+export type TAiAgentFollowUpStatusEnum = z.infer<typeof AiAgentFollowUpStatusEnum>;
 
 // Ciclo de vida de uma chamada de ferramenta dentro de uma execução.
 export const AiAgentToolCallStatusEnum = z.enum(["EXECUTANDO", "CONCLUIDO", "FALHA"]);

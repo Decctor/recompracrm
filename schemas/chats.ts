@@ -345,6 +345,8 @@ export const ChatMessageMetadataSchema = z.object({
 		.object({
 			runId: z.string(),
 			agenteId: z.string(),
+			// Mensagem produzida por uma retomada programada (`ai_agent_follow_ups`).
+			retomadaId: z.string().optional().nullable(),
 		})
 		.optional()
 		.nullable(),

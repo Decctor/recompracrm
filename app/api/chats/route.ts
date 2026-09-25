@@ -5,6 +5,7 @@ import { assertChatAccess } from "@/lib/chats/access";
 import { buildChatInboxFilterConditions, buildChatInboxQuickFilterCondition, currentChatAssignmentJoin } from "@/lib/chats/inbox-filters";
 import { ChatAssignmentStatusEnum, ChatInboxPriorityFilterEnum, ChatInboxQuickFilterEnum, ChatInboxViewEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
+import { aiAgentFollowUps, aiAgentRuns } from "@/services/drizzle/schema/ai-agents";
 import { chatAssignments, chatMessages, chats } from "@/services/drizzle/schema/chats";
 import { clients } from "@/services/drizzle/schema/clients";
 import { users } from "@/services/drizzle/schema/users";
@@ -113,6 +114,13 @@ const chatInboxProjection = {
 		transferenciaMotivo: chatAssignments.transferenciaMotivo,
 	},
 	responsavelUsuario: { id: users.id, nome: users.nome, avatarUrl: users.avatarUrl },
+	// "IA respondendo" na lista: existe run em curso para o chat. Subquery correlacionada e
+	// indexada (`idx_ai_agent_runs_chat`); a sidebar mantém o valor por realtime em `ai_agent_runs`.
+	aiRunAtiva: sql<boolean>`exists (select 1 from ${aiAgentRuns} where ${aiAgentRuns.chatId} = ${chats.id} and ${aiAgentRuns.status} in ('PENDENTE', 'RODANDO') and ${aiAgentRuns.gatilho} <> 'SUGESTAO_HUB')`,
+	// Retomada agendada pela IA para este chat (no máximo uma, pelo índice parcial).
+	retomadaAgendadaPara: sql<
+		string | null
+	>`(select ${aiAgentFollowUps.agendadaPara} from ${aiAgentFollowUps} where ${aiAgentFollowUps.chatId} = ${chats.id} and ${aiAgentFollowUps.status} = 'AGENDADA' limit 1)`,
 };
 
 function buildChatInboxQuery() {

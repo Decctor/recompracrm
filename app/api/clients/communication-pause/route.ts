@@ -2,7 +2,9 @@ import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { db } from "@/services/drizzle";
-import { clients } from "@/services/drizzle/schema";
+import { cancelScheduledFollowUpsForChats } from "@/lib/ai/agent/follow-up-cancel";
+import { AI_AGENT_FOLLOW_UP_CANCEL_REASONS } from "@/schemas/ai-agents";
+import { chats, clients } from "@/services/drizzle/schema";
 import dayjs from "dayjs";
 import { and, eq } from "drizzle-orm";
 import createHttpError from "http-errors";
@@ -47,6 +49,18 @@ async function updateCommunicationPause({ input, session }: { input: TUpdateComm
 		.update(clients)
 		.set({ comunicacaoPausadaAte: pausadaAte })
 		.where(and(eq(clients.id, input.clienteId), eq(clients.organizacaoId, organizacaoId)));
+
+	// Pausa vale para a IA também: retomadas agendadas nas conversas deste cliente morrem aqui.
+	if (pausadaAte) {
+		const clientChats = await db.query.chats.findMany({
+			where: and(eq(chats.clienteId, input.clienteId), eq(chats.organizacaoId, organizacaoId)),
+			columns: { id: true },
+		});
+		await cancelScheduledFollowUpsForChats(db, {
+			chatIds: clientChats.map((chat) => chat.id),
+			motivo: AI_AGENT_FOLLOW_UP_CANCEL_REASONS.COMUNICACAO_PAUSADA,
+		});
+	}
 
 	return {
 		data: { clienteId: client.id, pausadaAte },

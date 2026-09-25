@@ -1,5 +1,6 @@
 import type { TAiAgentCapabilities, TAiAgentConfigSnapshot, TAiAgentModelConfig, TAiAgentScope, TAiAgentUsage } from "@/schemas/ai-agents";
 import type {
+	TAiAgentFollowUpStatusEnum,
 	TAiAgentRunTriggerEnum,
 	TAiAgentRunStatusEnum,
 	TAiAgentStatusEnum,
@@ -9,9 +10,9 @@ import type {
 	TAiAgentToolCallStatusEnum,
 	TAiAgentToolNameEnum,
 } from "@/schemas/enums";
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import { boolean, index, integer, jsonb, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/pg-core";
-import { chatMessages, chats } from "./chats";
+import { chatAssignments, chatMessages, chats } from "./chats";
 import { newTable } from "./common";
 import { organizations } from "./organizations";
 
@@ -68,6 +69,7 @@ export const aiAgentsRelations = relations(aiAgents, ({ one, many }) => ({
 	conhecimento: many(aiAgentKnowledge),
 	execucoes: many(aiAgentRuns),
 	operacoes: many(aiAgentOperations),
+	retomadas: many(aiAgentFollowUps),
 }));
 export type TAiAgentEntity = typeof aiAgents.$inferSelect;
 export type TNewAiAgentEntity = typeof aiAgents.$inferInsert;
@@ -297,3 +299,87 @@ export const aiAgentToolCallsRelations = relations(aiAgentToolCalls, ({ one }) =
 }));
 export type TAiAgentToolCallEntity = typeof aiAgentToolCalls.$inferSelect;
 export type TNewAiAgentToolCallEntity = typeof aiAgentToolCalls.$inferInsert;
+
+// ============================================================================
+// RETOMADAS
+// ============================================================================
+
+/**
+ * Retomada de conversa decidida pelo agente (`retomada` na saída do turno) e executada por
+ * cron quando o cliente fica em silêncio até `agendadaPara`.
+ *
+ * Amarrada ao episódio de atendimento (`atendimentoId`, cascade): se o ticket encerra, a
+ * retomada morre com ele. Um chat tem no máximo uma retomada AGENDADA (índice parcial) — o turno
+ * mais novo sabe mais e substitui a anterior.
+ */
+export const aiAgentFollowUps = newTable(
+	"ai_agent_follow_ups",
+	{
+		id: varchar("id", { length: 255 })
+			.primaryKey()
+			.$defaultFn(() => crypto.randomUUID()),
+		organizacaoId: varchar("organizacao_id", { length: 255 })
+			.references(() => organizations.id, { onDelete: "cascade" })
+			.notNull(),
+		agenteId: varchar("agente_id", { length: 255 })
+			.references(() => aiAgents.id, { onDelete: "cascade" })
+			.notNull(),
+		chatId: varchar("chat_id", { length: 255 })
+			.references(() => chats.id, { onDelete: "cascade" })
+			.notNull(),
+		atendimentoId: varchar("atendimento_id", { length: 255 })
+			.references(() => chatAssignments.id, { onDelete: "cascade" })
+			.notNull(),
+		// Run que decidiu retomar e run que executou a retomada.
+		runOrigemId: varchar("run_origem_id", { length: 255 }).references(() => aiAgentRuns.id, { onDelete: "set null" }),
+		runExecucaoId: varchar("run_execucao_id", { length: 255 }).references(() => aiAgentRuns.id, { onDelete: "set null" }),
+		status: varchar("status", { length: 32 }).$type<TAiAgentFollowUpStatusEnum>().notNull().default("AGENDADA"),
+		// O que o agente quer conseguir com o lembrete. Vira o prompt do turno de retomada.
+		objetivo: text("objetivo").notNull(),
+		agendadaPara: timestamp("agendada_para").notNull(),
+		// O que o agente pediu, antes das guardas de janela e horário. Auditoria.
+		solicitadaPara: timestamp("solicitada_para").notNull(),
+		// Quantas vezes o executor reivindicou esta retomada; três falhas a cancelam.
+		tentativa: integer("tentativa").notNull().default(0),
+		motivoCancelamento: varchar("motivo_cancelamento", { length: 64 }),
+		leaseAte: timestamp("lease_ate"),
+		dataExecucao: timestamp("data_execucao"),
+		dataInsercao: timestamp("data_insercao").defaultNow().notNull(),
+		dataAtualizacao: timestamp("data_atualizacao").$onUpdate(() => new Date()),
+	},
+	(table) => [
+		uniqueIndex("ai_agent_follow_ups_chat_agendada_idx")
+			.on(table.chatId)
+			.where(sql`${table.status} = 'AGENDADA'`),
+		index("idx_ai_agent_follow_ups_due").on(table.status, table.agendadaPara),
+		index("idx_ai_agent_follow_ups_atendimento").on(table.atendimentoId),
+	],
+);
+export const aiAgentFollowUpsRelations = relations(aiAgentFollowUps, ({ one }) => ({
+	organizacao: one(organizations, {
+		fields: [aiAgentFollowUps.organizacaoId],
+		references: [organizations.id],
+	}),
+	agente: one(aiAgents, {
+		fields: [aiAgentFollowUps.agenteId],
+		references: [aiAgents.id],
+	}),
+	chat: one(chats, {
+		fields: [aiAgentFollowUps.chatId],
+		references: [chats.id],
+	}),
+	atendimento: one(chatAssignments, {
+		fields: [aiAgentFollowUps.atendimentoId],
+		references: [chatAssignments.id],
+	}),
+	runOrigem: one(aiAgentRuns, {
+		fields: [aiAgentFollowUps.runOrigemId],
+		references: [aiAgentRuns.id],
+	}),
+	runExecucao: one(aiAgentRuns, {
+		fields: [aiAgentFollowUps.runExecucaoId],
+		references: [aiAgentRuns.id],
+	}),
+}));
+export type TAiAgentFollowUpEntity = typeof aiAgentFollowUps.$inferSelect;
+export type TNewAiAgentFollowUpEntity = typeof aiAgentFollowUps.$inferInsert;

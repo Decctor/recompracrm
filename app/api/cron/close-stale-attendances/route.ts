@@ -1,6 +1,7 @@
 import { appApiHandler } from "@/lib/app-api";
-import { assertCronAuthorized } from "@/lib/cron/assert-cron-authorized";
 import { closeStaleChatAttendances } from "@/lib/chats/attendance-state";
+import { assertCronAuthorized } from "@/lib/cron/assert-cron-authorized";
+import { handOffAbandonedAttendancesToSellers } from "@/lib/ai/triage/abandoned-attendances";
 import { db } from "@/services/drizzle";
 import { type NextRequest, NextResponse } from "next/server";
 
@@ -10,7 +11,13 @@ import { type NextRequest, NextResponse } from "next/server";
  * O caso motivador: atendimentos feitos pelo telefone (EXTERNO) nunca são encerrados pelo
  * hub e ficariam ativos para sempre. O UPDATE em lote dispara realtime — o quadro reflete
  * sem refetch, como no cron de janelas de 24h.
+ *
+ * Depois do encerramento, os atendimentos que a IA (ou ninguém) conduzia passam por uma
+ * classificação barata: "o cliente sumiu com pendência?". Os que sim viram um follow-up na agenda
+ * do vendedor da carteira — a IA entregando a pendência a quem pode ligar.
  */
+
+export const maxDuration = 300;
 
 /**
  * 36h sem qualquer mensagem no chat: o atendimento não está mais em curso. Curto o bastante
@@ -29,7 +36,12 @@ async function closeStaleAttendances() {
 
 	console.log(`[INFO] [CLOSE_STALE_ATTENDANCES] ${closed.length} atendimento(s) encerrado(s) por inatividade.`);
 
-	return { data: { atendimentosEncerrados: closed.length }, message: "Atendimentos inativos encerrados com sucesso." };
+	const handedOff = await handOffAbandonedAttendancesToSellers(db, { closed, now });
+
+	return {
+		data: { atendimentosEncerrados: closed.length, pendenciasParaVendedores: handedOff },
+		message: "Atendimentos inativos encerrados com sucesso.",
+	};
 }
 export type TCloseStaleAttendancesOutput = Awaited<ReturnType<typeof closeStaleAttendances>>;
 

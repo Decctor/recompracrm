@@ -70,6 +70,26 @@ export function useInternalAiAgentState() {
 		}));
 	}, []);
 
+	const updateTriageSettings = useCallback((triagem: Partial<TAiAgentCapabilities["triagem"]>) => {
+		setState((prev) => ({
+			...prev,
+			agente: {
+				...prev.agente,
+				capacidades: { ...prev.agente.capacidades, triagem: { ...prev.agente.capacidades.triagem, ...triagem } },
+			},
+		}));
+	}, []);
+
+	const updateFollowUpSettings = useCallback((retomadas: Partial<TAiAgentCapabilities["retomadas"]>) => {
+		setState((prev) => ({
+			...prev,
+			agente: {
+				...prev.agente,
+				capacidades: { ...prev.agente.capacidades, retomadas: { ...prev.agente.capacidades.retomadas, ...retomadas } },
+			},
+		}));
+	}, []);
+
 	const updatePrices = useCallback((precos: Partial<TAiAgentCapabilities["comercial"]["precos"]>) => {
 		setState((prev) => {
 			const nextVisible = precos.visiveis ?? prev.agente.capacidades.comercial.precos.visiveis;
@@ -220,6 +240,8 @@ export function useInternalAiAgentState() {
 		updateModelConfig,
 		updateLimits,
 		updateAttendanceSettings,
+		updateFollowUpSettings,
+		updateTriageSettings,
 		updateScope,
 		toggleScopeClient,
 		updatePrices,

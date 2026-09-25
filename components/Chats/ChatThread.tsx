@@ -3,10 +3,12 @@
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
 import LoadingComponent from "@/components/Layouts/LoadingComponent";
 import { Button } from "@/components/ui/button";
-import { mapRealtimeMessageRow, type TRealtimeChatMessageRow } from "@/lib/chats/realtime-mappers";
+import { resolveAiPresence } from "@/lib/chats/ai-presence";
+import { mapRealtimeAiRunRow, mapRealtimeMessageRow, type TRealtimeAiRunRow, type TRealtimeChatMessageRow } from "@/lib/chats/realtime-mappers";
+import { AI_AGENT_RUNS_QUERY_KEY_ROOT } from "@/lib/queries/ai-agents";
 import { getWhatsappWindowDisplay } from "@/lib/chats/whatsapp-window-status";
 import { getErrorMessage } from "@/lib/errors";
-import { markChatRead, retryChatMessage, sendChatMessage, updateChatAssignment } from "@/lib/mutations/chats";
+import { cancelChatFollowUp, markChatRead, requestChatAssist, retryChatMessage, sendChatMessage, updateChatAssignment } from "@/lib/mutations/chats";
 import {
 	getChatMessagesQueryKey,
 	useChatMessages,
@@ -24,9 +26,13 @@ import { toast } from "sonner";
 import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { useMediaQuery } from "@/lib/hooks/use-media-query";
+import AgentRunDrawer from "@/components/Settings/AiAgent/AgentRunDrawer";
+import { AiPresenceBar } from "./AiPresenceBar";
+import { AttendanceSummaryCard } from "./AttendanceSummaryCard";
+import { FollowUpNotice } from "./FollowUpNotice";
 import { ChatAssignmentActions } from "./ChatAssignmentActions";
 import { ChatContextPanel } from "./ChatContextPanel";
-import { ChatInputArea, type TChatInputAreaHandle, type TOutgoingAttachment } from "./ChatInputArea";
+import { ChatInputArea, type TChatAssistAction, type TChatInputAreaHandle, type TOutgoingAttachment } from "./ChatInputArea";
 import { ChatMessageBubble, type TOptimisticFields } from "./ChatMessageBubble";
 import { ChatQuotesHeaderActions } from "./Quotes/ChatQuotesHeaderActions";
 import type { TQuotePermissions } from "./Quotes/config";
@@ -56,6 +62,12 @@ function patchMessageInCache(data: InfiniteData<TChatMessagesPage> | undefined, 
 		...data,
 		pages: data.pages.map((page) => ({ ...page, items: page.items.map((item) => (item.id === messageId ? { ...item, ...patch } : item)) })),
 	};
+}
+
+/** O `chat` vive em todas as páginas; a thread lê o da primeira, mas o patch cobre todas por coerência. */
+function patchChatInCache(data: InfiniteData<TChatMessagesPage> | undefined, patch: Partial<TChatMessagesPage["chat"]>) {
+	if (!data?.pages.length) return data;
+	return { ...data, pages: data.pages.map((page) => ({ ...page, chat: { ...page.chat, ...patch } })) };
 }
 
 function markChatReadInInboxCache(data: InfiniteData<TInboxPage> | undefined, chatId: string) {
@@ -136,6 +148,14 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 
 	const [optimisticMessages, setOptimisticMessages] = useState<TThreadMessage[]>([]);
 	const [unseenCount, setUnseenCount] = useState(0);
+	const [openRunId, setOpenRunId] = useState<string | null>(null);
+	// A presença da IA depende do relógio ("responde em instantes" vira "ausente" quando a
+	// previsão passa sem run). Um tique de 5s é o bastante e custa nada.
+	const [now, setNow] = useState(() => new Date());
+	useEffect(() => {
+		const timer = setInterval(() => setNow(new Date()), 5000);
+		return () => clearInterval(timer);
+	}, []);
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const inputAreaRef = useRef<TChatInputAreaHandle>(null);
 	const isAtBottomRef = useRef(true);
@@ -247,6 +267,26 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 			.on("postgres_changes", { event: "UPDATE", schema: "public", table: "ampmais_chats", filter: `id=eq.${chatId}` }, () => {
 				void refetchRef.current();
 			})
+			// Presença da IA: a linha da run traz status, erro e datas — tudo que `resolveAiPresence`
+			// precisa — então é patch no cache, sem refetch. O histórico no painel é invalidado.
+			.on("postgres_changes", { event: "*", schema: "public", table: "ampmais_ai_agent_runs", filter: `chat_id=eq.${chatId}` }, (payload) => {
+				const row = payload.new as TRealtimeAiRunRow | undefined;
+				if (!row?.id) return;
+				void queryClient.invalidateQueries({ queryKey: [AI_AGENT_RUNS_QUERY_KEY_ROOT] });
+				// Assistência é a IA ajudando quem atende, não a IA respondendo: não entra na presença.
+				if (row.gatilho === "SUGESTAO_HUB") return;
+				const aiRun = mapRealtimeAiRunRow(row);
+				queryClient.setQueryData<InfiniteData<TChatMessagesPage>>(queryKey, (current) => {
+					// Só a run mais recente importa; uma atualização tardia de run antiga não regride o estado.
+					const atual = current?.pages[0]?.chat.aiRun;
+					if (atual && atual.id !== aiRun.id && new Date(atual.dataInsercao) > aiRun.dataInsercao) return current;
+					return patchChatInCache(current, { aiRun });
+				});
+			})
+			// Retomada agendada/cancelada: a faixa acima do composer precisa refletir na hora.
+			.on("postgres_changes", { event: "*", schema: "public", table: "ampmais_ai_agent_follow_ups", filter: `chat_id=eq.${chatId}` }, () => {
+				void refetchRef.current();
+			})
 			.subscribe((status) => {
 				if (status !== "SUBSCRIBED") return;
 				if (!initialSubscriptionCompleteRef.current) {
@@ -280,6 +320,65 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 	const retryMutation = useMutation({
 		mutationFn: retryChatMessage,
 		onSuccess: () => void refetch(),
+		onError: (error) => toast.error(getErrorMessage(error)),
+	});
+
+	// Assistência: uma sugestão por (chat, última mensagem, ação, orientação). Dois cliques, uma cobrança.
+	const assistCacheRef = useRef(new Map<string, string>());
+	const [pendingAssist, setPendingAssist] = useState<TChatAssistAction | null>(null);
+	const assistMutation = useMutation({
+		mutationFn: requestChatAssist,
+		onMutate: (variables) => setPendingAssist(variables.acao),
+		onSuccess: (data, variables) => {
+			if (variables.acao === "RESUMIR") {
+				toast.success(data.message);
+				void refetch();
+				return;
+			}
+			if (!data.data.sugestao) {
+				toast.info(data.message);
+				return;
+			}
+			assistCacheRef.current.set(
+				`${variables.chatId}:${newestMessageId}:${variables.acao}:${variables.orientacao ?? variables.texto ?? ""}`,
+				data.data.sugestao,
+			);
+			inputAreaRef.current?.replaceText(data.data.sugestao);
+		},
+		onError: (error) => toast.error(getErrorMessage(error)),
+		onSettled: () => setPendingAssist(null),
+	});
+	const requestAssist = useCallback(
+		({ acao, texto }: { acao: TChatAssistAction; texto: string }) => {
+			const orientacao = acao === "SUGERIR_RESPOSTA" ? texto || null : null;
+			const rascunho = acao === "REESCREVER" ? texto : null;
+			const cacheKey = `${chatId}:${newestMessageId}:${acao}:${orientacao ?? rascunho ?? ""}`;
+			const cached = acao !== "RESUMIR" ? assistCacheRef.current.get(cacheKey) : undefined;
+			if (cached) {
+				inputAreaRef.current?.replaceText(cached);
+				return;
+			}
+			assistMutation.mutate({ chatId, acao, orientacao, texto: rascunho });
+		},
+		[assistMutation, chatId, newestMessageId],
+	);
+
+	const updateSummaryMutation = useMutation({
+		mutationFn: updateChatAssignment,
+		onSuccess: (data) => {
+			toast.success(data.message);
+			void refetch();
+		},
+		onError: (error) => toast.error(getErrorMessage(error)),
+	});
+
+	const cancelFollowUpMutation = useMutation({
+		mutationFn: cancelChatFollowUp,
+		onSuccess: (data) => {
+			toast.success(data.message);
+			void refetch();
+			void queryClient.invalidateQueries({ queryKey: ["chats"] });
+		},
 		onError: (error) => toast.error(getErrorMessage(error)),
 	});
 
@@ -339,6 +438,20 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 
 	const janela = getWhatsappWindowDisplay({ expiracao: chat.whatsappJanelaDataExpiracao, tipoConexao: chat.conexaoTipo });
 	const { icon: ResponsibleIcon, label: responsibleLabel } = describeResponsible(atendimento, isOwner);
+	const aiPresence = resolveAiPresence({
+		atendimento,
+		atendimentoIa: { disponivel: chat.atendimentoIa.disponivel, motivo: chat.atendimentoIa.motivo },
+		ultimaEntradaEm: chat.ultimaMensagemEntradaData,
+		ultimaSaidaEm: chat.ultimaMensagemSaidaData,
+		capacidades: chat.aiCapacidades,
+		run: chat.aiRun,
+		now,
+	});
+	// Quem acabou de receber a conversa (handoff da IA ou de um colega) precisa do resumo aberto.
+	const summaryOpenByDefault = !!atendimento?.transferenciaMotivo && isOwner;
+	// Assistência exige o recurso de IA no plano (aqui o agente ajuda o humano, não atende o
+	// cliente: escopo e habilitação por número não se aplicam) e crédito no mês.
+	const canAssist = chat.atendimentoIa.motivo !== "RECURSO_INDISPONIVEL" && chat.atendimentoIa.motivo !== "LIMITE_CREDITOS";
 
 	/**
 	 * Inserir o orçamento na conversa só faz sentido quando a conversa aceita texto livre agora: sem
@@ -467,6 +580,16 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 					</p>
 				</header>
 
+				<AttendanceSummaryCard
+					resumo={atendimento?.resumo}
+					transferenciaMotivo={atendimento?.transferenciaMotivo}
+					defaultOpen={summaryOpenByDefault}
+					onSave={isOwner ? (resumo) => updateSummaryMutation.mutate({ acao: "alterar_resumo", chatId, resumo }) : undefined}
+					onRegenerate={isOwner && canAssist ? () => requestAssist({ acao: "RESUMIR", texto: "" }) : undefined}
+					isSaving={updateSummaryMutation.isPending}
+					isRegenerating={pendingAssist === "RESUMIR"}
+				/>
+
 				<div
 					ref={scrollRef}
 					onScroll={(event) => {
@@ -500,6 +623,7 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 									showAuthor={showAuthor}
 									onRetry={(messageId) => retryMutation.mutate({ messageId })}
 									isRetrying={retryMutation.isPending}
+									onOpenAiRun={setOpenRunId}
 								/>
 							</div>
 						);
@@ -539,6 +663,23 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 					</button>
 				)}
 
+				<AiPresenceBar
+					presence={aiPresence}
+					agentName={chat.atendimentoIa.agenteNome}
+					onAssume={isOwner ? undefined : () => assumeMutation.mutate({ acao: "assumir", chatId })}
+					isAssuming={assumeMutation.isPending}
+					onOpenRun={setOpenRunId}
+				/>
+				{/* A retomada só faz sentido enquanto a IA está quieta esperando o cliente. */}
+				{chat.retomadaAgendada && aiPresence.estado === "ausente" && (
+					<FollowUpNotice
+						retomada={chat.retomadaAgendada}
+						agentName={chat.atendimentoIa.agenteNome}
+						onCancel={() => cancelFollowUpMutation.mutate({ id: chat.retomadaAgendada?.id as string })}
+						isCancelling={cancelFollowUpMutation.isPending}
+					/>
+				)}
+
 				<ChatInputArea
 					ref={inputAreaRef}
 					organizationId={organizationId}
@@ -551,8 +692,11 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 					onAssume={() => assumeMutation.mutate({ acao: "assumir", chatId })}
 					templates={[]}
 					onSendTemplate={(messageTemplateId) => sendMutation.mutate({ chatId, messageTemplateId, assinaturaAtiva: false })}
+					assist={canAssist ? { onRequest: requestAssist, pendingAction: pendingAssist } : undefined}
 				/>
 			</div>
+
+			{openRunId ? <AgentRunDrawer runId={openRunId} closeModal={() => setOpenRunId(null)} /> : null}
 
 			<aside className={cn("hidden min-h-0 w-80 shrink-0 overflow-hidden border-l border-border", contextPanelOpen && "xl:block")}>
 				<ChatContextPanel

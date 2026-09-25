@@ -108,7 +108,7 @@ export default function AdminOrganizationResourcesBlock({ recursos, updateResour
 				description="Assistente de IA nos fluxos de atendimento."
 				access={recursos.iaAtendimento.acesso}
 				onAccessChange={(checked) => updateResource("iaAtendimento", { acesso: checked })}
-				limitLabel="LIMITE DE CRÉDITOS DE IA"
+				limitLabel="LIMITE MENSAL DE CRÉDITOS DE IA (US$ ESTIMADOS)"
 				limitValue={recursos.iaAtendimento.limiteCreditos}
 				onLimitChange={(value) => updateResource("iaAtendimento", { limiteCreditos: value })}
 			/>

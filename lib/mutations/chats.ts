@@ -1,4 +1,6 @@
+import type { TChatAssistInput, TChatAssistOutput } from "@/app/api/chats/assist/route";
 import type { TUpdateChatAssignmentInput, TUpdateChatAssignmentOutput } from "@/app/api/chats/assignments/route";
+import type { TDeleteChatFollowUpInput, TDeleteChatFollowUpOutput } from "@/app/api/chats/follow-ups/route";
 import type { TRetryChatMessageInput, TRetryChatMessageOutput } from "@/app/api/chats/messages/retry/route";
 import type { TCreateChatMessageInput, TCreateChatMessageOutput } from "@/app/api/chats/messages/route";
 import type { TCreateChatInput, TCreateChatOutput, TUpdateChatInput, TUpdateChatOutput } from "@/app/api/chats/route";
@@ -32,5 +34,15 @@ export async function retryChatMessage(input: TRetryChatMessageInput) {
 
 export async function updateChatAssignment(input: TUpdateChatAssignmentInput) {
 	const { data } = await axios.patch<TUpdateChatAssignmentOutput>("/api/chats/assignments", input);
+	return data;
+}
+
+export async function cancelChatFollowUp(input: TDeleteChatFollowUpInput) {
+	const { data } = await axios.delete<TDeleteChatFollowUpOutput>(`/api/chats/follow-ups?id=${input.id}`);
+	return data;
+}
+
+export async function requestChatAssist(input: TChatAssistInput) {
+	const { data } = await axios.post<TChatAssistOutput>("/api/chats/assist", input);
 	return data;
 }

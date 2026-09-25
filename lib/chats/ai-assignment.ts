@@ -1,3 +1,4 @@
+import { isAiSpendLimitReached } from "@/lib/ai/agent/spend";
 import { parseJsonbWithFallback } from "@/lib/ai/shared/json";
 import { AiAgentScopeSchema, isClientInAgentScope } from "@/schemas/ai-agents";
 import type { TOrganizationConfiguration } from "@/schemas/organizations";
@@ -22,7 +23,7 @@ import { and, eq } from "drizzle-orm";
 
 type TDb = DB | DBTransaction;
 
-export type TAiAssignmentBlockReason = "RECURSO_INDISPONIVEL" | "TELEFONE_SEM_IA" | "AGENTE_PAUSADO" | "CLIENTE_FORA_DO_ESCOPO";
+export type TAiAssignmentBlockReason = "RECURSO_INDISPONIVEL" | "TELEFONE_SEM_IA" | "AGENTE_PAUSADO" | "CLIENTE_FORA_DO_ESCOPO" | "LIMITE_CREDITOS";
 
 export type TAiAssignmentAvailability =
 	| { disponivel: true; agenteId: string | null; agenteNome: string | null }
@@ -33,6 +34,7 @@ export const AI_ASSIGNMENT_BLOCK_MESSAGES: Record<TAiAssignmentBlockReason, stri
 	TELEFONE_SEM_IA: "O atendimento com IA não está habilitado para o número desta conversa.",
 	AGENTE_PAUSADO: "O agente de IA da organização está pausado.",
 	CLIENTE_FORA_DO_ESCOPO: "O cliente desta conversa está fora do escopo de atendimento do agente de IA.",
+	LIMITE_CREDITOS: "A organização atingiu o limite mensal de créditos de IA.",
 };
 
 export async function resolveAiAssignmentAvailability(
@@ -40,6 +42,11 @@ export async function resolveAiAssignmentAvailability(
 	input: { organizacaoId: string; chatId: string; configuracao: TOrganizationConfiguration | null | undefined },
 ): Promise<TAiAssignmentAvailability> {
 	if (!input.configuracao?.recursos?.iaAtendimento?.acesso) return { disponivel: false, motivo: "RECURSO_INDISPONIVEL" };
+	// Mesmo freio que o runtime aplica em `prepareAgentExecution`: entregar a conversa a um agente
+	// que vai recusar por limite deixaria o cliente esperando uma resposta que nunca vem.
+	if (await isAiSpendLimitReached(db, { organizacaoId: input.organizacaoId, configuracao: input.configuracao })) {
+		return { disponivel: false, motivo: "LIMITE_CREDITOS" };
+	}
 
 	const chat = await db.query.chats.findFirst({
 		where: and(eq(chats.id, input.chatId), eq(chats.organizacaoId, input.organizacaoId)),

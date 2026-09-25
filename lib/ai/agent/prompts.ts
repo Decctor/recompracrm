@@ -64,11 +64,14 @@ export function buildAgentSystemPrompt({
 	capacidades,
 	knowledgeContext,
 	productGroups = [],
+	modo = "ATENDIMENTO",
 }: {
 	instrucoes: string;
 	capacidades: TAiAgentCapabilities;
 	knowledgeContext: string;
 	productGroups?: TProductGroupSummary[];
+	/** ASSISTENCIA: a IA rascunha para o humano que atende; nunca envia, transfere ou cria orçamento. */
+	modo?: "ATENDIMENTO" | "ASSISTENCIA";
 }): string {
 	const has = (name: TAiAgentToolNameEnum) => capacidades.ferramentas[name]?.habilitada === true;
 	const parts: string[] = [instrucoes.trim()];
@@ -166,6 +169,15 @@ Você pode anexar um arquivo à sua resposta pelo campo "anexo".
 
 	parts.push(`## Como usar suas ferramentas\n${conditionalRules.join("\n")}`);
 
+	if (capacidades.retomadas.habilitadas) {
+		parts.push(`## Retomadas
+Se esta conversa tiver uma pendência comercial concreta (você informou preços, criou um orçamento, sugeriu
+produtos) e o cliente puder sumir sem decidir, preencha "retomada" com quantas horas esperar (entre 1 e
+${capacidades.retomadas.maxAguardarHoras}) e o objetivo do lembrete. A retomada só acontece se o cliente ficar em
+silêncio; se ele responder antes, ela é cancelada sozinha. Não preencha para saudações, dúvidas já
+resolvidas, reclamações, nem quando o cliente disse que não quer contato. Uma retomada por atendimento.`);
+	}
+
 	const enabledTools = getEnabledAgentTools(capacidades);
 	if (enabledTools.length > 0) {
 		parts.push(`## Ferramentas disponíveis\n${enabledTools.map((tool) => `- ${tool.name}`).join("\n")}`);
@@ -174,13 +186,21 @@ Você pode anexar um arquivo à sua resposta pelo campo "anexo".
 	}
 
 	if (has("produtos.consultar") && productGroups.length > 0) {
+		// Ordem alfabética, não por tamanho: o system prompt é o prefixo que o provedor cacheia, e
+		// uma lista que se reordena a cada venda invalida o cache a cada turno.
+		const stableGroups = productGroups.slice().sort((a, b) => a.grupo.localeCompare(b.grupo, "pt-BR"));
 		parts.push(
-			`## Grupos de produtos do catálogo\nEstas são as categorias que existem hoje, com a quantidade de produtos ativos em cada uma. Use esta grafia exata no filtro "grupo" da consulta de catálogo. Para saber o que a empresa vende, parta desta lista — só consulte o catálogo para detalhar produtos.\n\n${productGroups.map((group) => `- ${group.grupo} (${group.quantidadeProdutos} produto(s))`).join("\n")}`,
+			`## Grupos de produtos do catálogo\nEstas são as categorias que existem hoje, com a quantidade de produtos ativos em cada uma. Use esta grafia exata no filtro "grupo" da consulta de catálogo. Para saber o que a empresa vende, parta desta lista — só consulte o catálogo para detalhar produtos.\n\n${stableGroups.map((group) => `- ${group.grupo} (${group.quantidadeProdutos} produto(s))`).join("\n")}`,
 		);
 	}
 
 	if (knowledgeContext.trim()) {
 		parts.push(`## Base de conhecimento da empresa\nUse estas informações como verdade sobre a empresa.\n\n${knowledgeContext.trim()}`);
+	}
+
+	if (modo === "ASSISTENCIA") {
+		parts.push(`## Modo assistência
+Nesta execução você não é quem atende: um atendente humano conduz a conversa e pediu sua ajuda. Você não envia nada, não transfere e não cria orçamento — só rascunha. Escreva como ele escreveria, na primeira pessoa dele, e nunca se apresente como assistente virtual. As regras de veracidade continuam valendo: nunca afirme preço, saldo ou disponibilidade sem ferramenta ou base de conhecimento.`);
 	}
 
 	parts.push(`## Formato da resposta

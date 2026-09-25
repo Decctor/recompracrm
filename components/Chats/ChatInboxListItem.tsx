@@ -6,8 +6,10 @@ import { getChatListMessagePreview } from "@/lib/chats/chat-list-preview";
 import { getWhatsappWindowDisplay } from "@/lib/chats/whatsapp-window-status";
 import type { TChatInboxItem } from "@/lib/queries/chats";
 import { cn } from "@/lib/utils";
-import { FileText, Image as ImageIcon, MapPin, Mic, Smartphone, Sparkles, Sticker, UserRound, Video } from "lucide-react";
+import { CalendarClock, FileText, Image as ImageIcon, MapPin, Mic, Smartphone, Sparkles, Sticker, UserRound, Video } from "lucide-react";
+import { formatFollowUpMoment } from "./FollowUpNotice";
 import { PRIORITY_META, STATUS_META } from "./attendance-meta";
+import { TypingIndicator } from "./TypingIndicator";
 
 type ChatInboxListItemProps = {
 	chat: TChatInboxItem;
@@ -58,7 +60,7 @@ function getInitials(name: string) {
  * procura ao varrer a lista — por isso ocupa uma linha própria em vez de disputar espaço com
  * status e prioridade.
  */
-function ResponsibleLine({ atendimento }: { atendimento: TChatInboxItem["atendimentoAtivo"] }) {
+function ResponsibleLine({ atendimento, aiRunAtiva }: { atendimento: TChatInboxItem["atendimentoAtivo"]; aiRunAtiva: boolean }) {
 	const avatarClass = "flex size-5 shrink-0 items-center justify-center rounded-full";
 
 	if (atendimento?.responsavelTipo === "USUARIO") {
@@ -80,6 +82,13 @@ function ResponsibleLine({ atendimento }: { atendimento: TChatInboxItem["atendim
 					<Sparkles className="h-3 w-3" aria-hidden />
 				</span>
 				<span className="truncate text-xs font-medium text-foreground">Automação</span>
+				{/* Run em curso: a IA está escrevendo agora. Quem varre a lista sabe que não precisa entrar. */}
+				{aiRunAtiva && (
+					<span className="flex items-center gap-1 text-[11px] text-primary">
+						<TypingIndicator />
+						<span className="sr-only">respondendo</span>
+					</span>
+				)}
 			</span>
 		);
 	}
@@ -162,12 +171,19 @@ export function ChatInboxListItem({ chat, isSelected, showPhoneBadge, onSelect }
 			</div>
 
 			<div className="flex min-w-0 items-center gap-2 pt-0.5">
-				<ResponsibleLine atendimento={atendimento} />
+				<ResponsibleLine atendimento={atendimento} aiRunAtiva={!!chat.aiRunAtiva} />
 				<span className="ml-auto flex shrink-0 items-center gap-1.5 text-[11px] text-muted-foreground">
 					{prioridade && (
 						<span className={cn(chipVariants({ variant: "outline", size: "xs", shape: "pill" }), "py-0.5 font-bold", PRIORITY_META[prioridade].pill)}>
 							{PriorityIcon ? <PriorityIcon className="h-3 w-3" /> : null}
 							{PRIORITY_META[prioridade].label}
+						</span>
+					)}
+					{/* Retomada agendada pela IA: a conversa não morreu, só está esperando o cliente. */}
+					{chat.retomadaAgendadaPara && (
+						<span className="flex items-center gap-1 text-primary" title="Retomada agendada pela IA">
+							<CalendarClock className="h-3 w-3" aria-hidden />
+							{formatFollowUpMoment(chat.retomadaAgendadaPara)}
 						</span>
 					)}
 					{/* Estado do atendimento: mesmo vocabulário do select, para a cor significar

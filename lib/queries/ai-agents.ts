@@ -2,6 +2,7 @@ import type { TGetAiAgentModelsOutput } from "@/app/api/ai-agents/models/route";
 import type { TGetAiAgentOutput } from "@/app/api/ai-agents/route";
 import type { TGetPlaygroundOutput } from "@/app/api/ai-agents/playground/route";
 import type { TGetAiAgentRunsOutput } from "@/app/api/ai-agents/runs/route";
+import type { TGetAiAgentSpendOutput } from "@/app/api/ai-agents/spend/route";
 import type { TAiAgentRunTriggerEnum, TAiAgentRunStatusEnum } from "@/schemas/enums";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
@@ -52,6 +53,8 @@ export type TAiAgentRunsFilters = {
 	page: number;
 	gatilho: TAiAgentRunTriggerEnum | null;
 	status: TAiAgentRunStatusEnum | null;
+	/** Histórico por atendimento: só as runs deste chat. */
+	chatId?: string | null;
 };
 
 async function fetchAiAgentRuns(filters: TAiAgentRunsFilters) {
@@ -59,6 +62,7 @@ async function fetchAiAgentRuns(filters: TAiAgentRunsFilters) {
 	searchParams.set("page", String(filters.page));
 	if (filters.gatilho) searchParams.set("gatilho", filters.gatilho);
 	if (filters.status) searchParams.set("status", filters.status);
+	if (filters.chatId) searchParams.set("chatId", filters.chatId);
 
 	const { data } = await axios.get<TGetAiAgentRunsOutput>(`/api/ai-agents/runs?${searchParams.toString()}`);
 	const result = data.data.default;
@@ -66,14 +70,16 @@ async function fetchAiAgentRuns(filters: TAiAgentRunsFilters) {
 	return result;
 }
 
+export const AI_AGENT_RUNS_QUERY_KEY_ROOT = "ai-agent-runs";
+
 export function getAiAgentRunsQueryKey(filters: TAiAgentRunsFilters) {
-	return ["ai-agent-runs", filters.page, filters.gatilho, filters.status] as const;
+	return [AI_AGENT_RUNS_QUERY_KEY_ROOT, filters.page, filters.gatilho, filters.status, filters.chatId ?? null] as const;
 }
 
-export function useAiAgentRuns({ filters, enabled = true }: { filters: TAiAgentRunsFilters; enabled?: boolean }) {
+export function useAiAgentRuns({ filters, enabled = true, staleTime }: { filters: TAiAgentRunsFilters; enabled?: boolean; staleTime?: number }) {
 	const queryKey = getAiAgentRunsQueryKey(filters);
 	return {
-		...useQuery({ queryKey, queryFn: () => fetchAiAgentRuns(filters), enabled }),
+		...useQuery({ queryKey, queryFn: () => fetchAiAgentRuns(filters), enabled, staleTime }),
 		queryKey,
 	};
 }
@@ -90,6 +96,25 @@ export function useAiAgentRunById({ runId, enabled = true }: { runId: string | n
 	return {
 		...useQuery({ queryKey, queryFn: () => fetchAiAgentRunById(runId as string), enabled: enabled && !!runId }),
 		queryKey,
+	};
+}
+
+// ============================================================================
+// GASTO
+// ============================================================================
+
+async function fetchAiAgentSpend() {
+	const { data } = await axios.get<TGetAiAgentSpendOutput>("/api/ai-agents/spend");
+	return data.data;
+}
+
+export const AI_AGENT_SPEND_QUERY_KEY = ["ai-agent-spend"] as const;
+
+/** Gasto estimado do mês e limite. Muda a cada run; a lista de execuções o invalida ao recarregar. */
+export function useAiAgentSpend({ enabled = true }: { enabled?: boolean } = {}) {
+	return {
+		...useQuery({ queryKey: AI_AGENT_SPEND_QUERY_KEY, queryFn: fetchAiAgentSpend, enabled, staleTime: 1000 * 60 }),
+		queryKey: AI_AGENT_SPEND_QUERY_KEY,
 	};
 }
 

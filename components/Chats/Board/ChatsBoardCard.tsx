@@ -10,6 +10,8 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { formatFollowUpMoment } from "@/components/Chats/FollowUpNotice";
+import { stripCatalogMemory } from "@/lib/ai/agent/run-memory";
 import { CHAT_BOARD_STATUSES, canCancelChatBoardAttendance, isValidChatBoardTransition } from "@/lib/chats/board";
 import { getChatListMessagePreview } from "@/lib/chats/chat-list-preview";
 import { getWhatsappWindowDisplay } from "@/lib/chats/whatsapp-window-status";
@@ -31,6 +33,7 @@ import {
 	Sticker,
 	Video,
 	XCircle,
+	CalendarClock,
 } from "lucide-react";
 import { forwardRef, type CSSProperties } from "react";
 import { CHAT_ASSIGNMENT_STATUS_LABEL, CHAT_PRIORITY_LABEL, CHAT_PRIORITY_PILL_CLASS, CHAT_WINDOW_DOT_CLASS } from "./config";
@@ -210,7 +213,9 @@ export const ChatsBoardCard = forwardRef<HTMLDivElement, ChatsBoardCardProps>(fu
 				</div>
 			</div>
 
-			{card.resumo && <p className="line-clamp-2 rounded-lg bg-muted/60 px-2 py-1 text-[11px] leading-snug text-muted-foreground">{card.resumo}</p>}
+			{card.resumo && (
+				<p className="line-clamp-2 rounded-lg bg-muted/60 px-2 py-1 text-[11px] leading-snug text-muted-foreground">{stripCatalogMemory(card.resumo)}</p>
+			)}
 
 			<div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
 				{card.responsavelTipo === "USUARIO" && (
@@ -241,6 +246,12 @@ export const ChatsBoardCard = forwardRef<HTMLDivElement, ChatsBoardCardProps>(fu
 				)}
 
 				{card.categoria && <span className="truncate rounded-full bg-muted px-2 py-0.5">{card.categoria}</span>}
+
+				{card.retomadaAgendadaPara && (
+					<span className="flex items-center gap-1 text-primary" title="Retomada agendada pela IA">
+						<CalendarClock className="h-3 w-3" /> retoma {formatFollowUpMoment(card.retomadaAgendadaPara)}
+					</span>
+				)}
 
 				<span className="ml-auto flex items-center gap-1.5">
 					{card.aguardandoResposta && <span className="font-bold text-destructive">Aguardando resposta</span>}

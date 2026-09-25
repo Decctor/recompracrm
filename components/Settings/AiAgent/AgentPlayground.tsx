@@ -10,6 +10,7 @@ import { MessageSquarePlus, Paperclip, Send } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import AgentRunDrawer from "./AgentRunDrawer";
+import { TypingIndicator } from "@/components/Chats/TypingIndicator";
 
 /**
  * Conversa de teste com o agente.
@@ -118,7 +119,9 @@ export default function AgentPlayground() {
 
 						{isSending || data?.estado?.execucaoAtiva ? (
 							<div className="flex w-full justify-start">
-								<div className="rounded-2xl rounded-bl-sm border border-border bg-card px-3 py-2 text-sm text-muted-foreground">digitando...</div>
+								<div className="flex items-center rounded-2xl rounded-bl-sm border border-border bg-card px-3 py-2.5 text-sm text-muted-foreground">
+									<TypingIndicator />
+								</div>
 							</div>
 						) : null}
 
