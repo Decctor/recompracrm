@@ -132,7 +132,10 @@ async function processImage(fileBuffer: Buffer, mimeType: string): Promise<{ des
 		const dataUrl = `data:${mimeType};base64,${base64Image}`;
 
 		const descriptionResult = await generateText({
-			model: gateway("openai/gpt-4o"),
+			// Descrição de foto é o passo caro do pipeline: o gpt-4o cobrava ~US$0,005 por imagem.
+			// O Gemini 2.5 Flash-Lite custa ~25x menos, é servido pelo Google/Vertex, não raciocina
+			// por padrão e lê bem português e texto em imagem (recibos, prints, etiquetas).
+			model: gateway("google/gemini-2.5-flash-lite"),
 			messages: [
 				{
 					role: "user",
