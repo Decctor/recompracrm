@@ -11,11 +11,12 @@ import {
 } from "@/lib/chats/board";
 import { ChatAssignmentPriorityEnum, ChatInboxViewEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
+import { aiAgentFollowUps } from "@/services/drizzle/schema/ai-agents";
 import { chatAssignments, chatMessages, chats } from "@/services/drizzle/schema/chats";
 import { clients } from "@/services/drizzle/schema/clients";
 import { users } from "@/services/drizzle/schema/users";
 import { whatsappConnections } from "@/services/drizzle/schema/whatsapp-connections";
-import { and, count, desc, eq, gte, ilike, or } from "drizzle-orm";
+import { and, count, desc, eq, gte, ilike, or, sql } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -85,6 +86,10 @@ const chatBoardProjection = {
 		conteudoMidiaArquivoNome: chatMessages.conteudoMidiaArquivoNome,
 	},
 	responsavelUsuario: { id: users.id, nome: users.nome, avatarUrl: users.avatarUrl },
+	// Retomada agendada pela IA para este atendimento: o card mostra "retoma 14:00".
+	retomadaAgendadaPara: sql<
+		string | null
+	>`(select ${aiAgentFollowUps.agendadaPara} from ${aiAgentFollowUps} where ${aiAgentFollowUps.atendimentoId} = ${chatAssignments.id} and ${aiAgentFollowUps.status} = 'AGENDADA' limit 1)`,
 };
 
 function buildChatBoardQuery() {

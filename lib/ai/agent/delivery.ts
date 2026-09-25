@@ -92,7 +92,7 @@ async function loadChatForDelivery(organizacaoId: string, chatId: string) {
 
 /** Meta Cloud API: envia primeiro, persiste depois — o id do provider volta na resposta. */
 export function createMetaCloudDeliverer({ organizacaoId, chatId }: TDelivererParams): TAgentMessageDeliverer {
-	return async ({ mensagem, anexo, runId, agenteId }) => {
+	return async ({ mensagem, anexo, runId, agenteId, retomadaId = null }) => {
 		const chat = await loadChatForDelivery(organizacaoId, chatId);
 		if (!chat) {
 			console.error("[AI_AGENT] [DELIVERY] Chat não encontrado para entrega:", chatId);
@@ -124,7 +124,7 @@ export function createMetaCloudDeliverer({ organizacaoId, chatId }: TDelivererPa
 			whatsappMessageId,
 			conteudoTexto: mensagem,
 			...attachmentColumns(anexo, anexoEnviado),
-			metadados: { aiAgente: { runId, agenteId } },
+			metadados: { aiAgente: { runId, agenteId, retomadaId } },
 		});
 		// null = wamid já persistido por outra via (o webhook de echo chegou primeiro).
 		if (!inserted) return { messageId: null };
@@ -142,7 +142,7 @@ export function createMetaCloudDeliverer({ organizacaoId, chatId }: TDelivererPa
  * `clientMessageId` é o próprio id da mensagem, que é como o webhook `message.sent` reconcilia.
  */
 export function createInternalGatewayDeliverer({ organizacaoId, chatId, sessaoId }: TDelivererParams & { sessaoId: string }): TAgentMessageDeliverer {
-	return async ({ mensagem, anexo, runId, agenteId }) => {
+	return async ({ mensagem, anexo, runId, agenteId, retomadaId = null }) => {
 		const chat = await loadChatForDelivery(organizacaoId, chatId);
 		if (!chat) {
 			console.error("[AI_AGENT] [DELIVERY] Chat não encontrado para entrega:", chatId);
@@ -159,7 +159,7 @@ export function createInternalGatewayDeliverer({ organizacaoId, chatId, sessaoId
 			// Otimista: aqui a persistência vem antes do envio, então a linha nasce com o anexo e é
 			// corrigida abaixo se a fila recusar.
 			...attachmentColumns(anexo, true),
-			metadados: { gatewayInterno: { sessaoId }, aiAgente: { runId, agenteId } },
+			metadados: { gatewayInterno: { sessaoId }, aiAgente: { runId, agenteId, retomadaId } },
 		});
 		// Sem wamid não há alvo de conflito; o null aqui é impossível, mas o tipo exige o guard.
 		if (!inserted) return { messageId: null };
@@ -244,7 +244,7 @@ export async function resolveChatDeliverer({ organizacaoId, chatId }: TDeliverer
  * não tem conexão de WhatsApp.
  */
 export function createPlaygroundDeliverer({ organizacaoId, chatId }: TDelivererParams): TAgentMessageDeliverer {
-	return async ({ mensagem, anexo, runId, agenteId }) => {
+	return async ({ mensagem, anexo, runId, agenteId, retomadaId = null }) => {
 		const chat = await loadChatForDelivery(organizacaoId, chatId);
 		if (!chat) return { messageId: null };
 
@@ -258,7 +258,7 @@ export function createPlaygroundDeliverer({ organizacaoId, chatId }: TDelivererP
 			// Sem provedor não há o que recusar: o anexo é persistido como o agente o produziu, que
 			// é justamente o que a organização precisa conferir antes de soltar o agente.
 			...attachmentColumns(anexo, true),
-			metadados: { aiAgente: { runId, agenteId } },
+			metadados: { aiAgente: { runId, agenteId, retomadaId } },
 		});
 
 		return { messageId: inserted?.messageId ?? null };

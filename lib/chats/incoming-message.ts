@@ -1,4 +1,6 @@
+import { cancelScheduledFollowUp } from "@/lib/ai/agent/follow-up-cancel";
 import { markChatAnswered, markChatAttendedExternally, markChatNeedsResponse } from "@/lib/chats/attendance-state";
+import { AI_AGENT_FOLLOW_UP_CANCEL_REASONS } from "@/schemas/ai-agents";
 import type { TChatMessageMetadata } from "@/schemas/chats";
 import type { TChatMessageContentTypeEnum, TChatMessageDeliveryStatus } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
@@ -154,6 +156,9 @@ export async function persistIncomingClientMessage(input: TPersistIncomingParams
 		messageDate: inserted.dataEnvio,
 		now,
 	});
+
+	// O cliente falou: uma retomada agendada perdeu o motivo (o turno desta mensagem pode agendar outra).
+	await cancelScheduledFollowUp(db, { chatId: input.chatId, motivo: AI_AGENT_FOLLOW_UP_CANCEL_REASONS.CLIENTE_RESPONDEU });
 
 	return { messageId: inserted.id, dataEnvio: inserted.dataEnvio };
 }

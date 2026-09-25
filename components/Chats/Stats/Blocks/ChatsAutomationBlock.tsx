@@ -2,7 +2,7 @@
 
 import { formatDecimalPlaces } from "@/lib/formatting";
 import type { TChatsStatsOverview } from "@/lib/queries/chats-stats";
-import { ArrowRightLeft, Bot, MessagesSquare } from "lucide-react";
+import { ArrowRightLeft, Bot, CalendarClock, MessagesSquare } from "lucide-react";
 import { CHAT_MESSAGE_AUTHOR_LABEL, CHAT_RESPONSIBLE_TYPE_LABEL } from "../config";
 
 type ChatsAutomationBlockProps = {
@@ -51,6 +51,17 @@ export function ChatsAutomationBlock({ overview, isLoading }: ChatsAutomationBlo
 				</div>
 				<div className="flex min-w-0 flex-1 flex-col gap-1 rounded-xl border border-border p-3">
 					<span className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-[0.08em] text-muted-foreground">
+						<CalendarClock className="h-3.5 w-3.5" /> Retomadas
+					</span>
+					<span className="text-xl font-bold tabular-nums tracking-tight">{formatDecimalPlaces(atendimento?.retomadas?.enviadas ?? 0, 0, 0)}</span>
+					<span className="text-[11px] text-muted-foreground">
+						{formatDecimalPlaces(atendimento?.retomadas?.respondidas ?? 0, 0, 0)} responderam (
+						{formatDecimalPlaces((atendimento?.retomadas?.taxaResposta ?? 0) * 100)}%)
+						{atendimento?.retomadas?.expiradas ? ` · ${formatDecimalPlaces(atendimento.retomadas.expiradas, 0, 0)} fora da janela` : ""}
+					</span>
+				</div>
+				<div className="flex min-w-0 flex-1 flex-col gap-1 rounded-xl border border-border p-3">
+					<span className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-[0.08em] text-muted-foreground">
 						<MessagesSquare className="h-3.5 w-3.5" /> Mensagens por atendimento
 					</span>
 					<span className="text-xl font-bold tabular-nums tracking-tight">{formatDecimalPlaces(mensagens?.mediaPorAtendimento ?? 0)}</span>
@@ -89,9 +100,7 @@ export function ChatsAutomationBlock({ overview, isLoading }: ChatsAutomationBlo
 								<div className="h-3 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
 									<div className="h-full rounded-full bg-brand" style={{ width: `${(item.quantidade / totalMensagens) * 100}%` }} />
 								</div>
-								<span className="w-14 shrink-0 text-right text-[11px] font-bold tabular-nums">
-									{formatDecimalPlaces(item.quantidade, 0, 0)}
-								</span>
+								<span className="w-14 shrink-0 text-right text-[11px] font-bold tabular-nums">{formatDecimalPlaces(item.quantidade, 0, 0)}</span>
 							</div>
 						))
 					)}

@@ -93,7 +93,7 @@ function LocationCard({ location }: { location: NonNullable<TChatMessageMetadata
 
 function resolveAuthorLabel(message: TChatThreadMessage) {
 	if (message.autorTipo === "CLIENTE") return message.autorCliente?.nome ?? "Cliente";
-	if (message.autorTipo === "AI") return "Assistente IA";
+	if (message.autorTipo === "AI") return message.metadados?.aiAgente?.retomadaId ? "Assistente IA · retomada" : "Assistente IA";
 	if (message.autorTipo === "BUSINESS-APP") return "Telefone";
 	return message.autorUsuario?.nome ?? "Você";
 }

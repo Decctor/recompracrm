@@ -8,6 +8,7 @@ export const AI_RUN_TRIGGER_LABELS: Record<TAiAgentRunTriggerEnum, string> = {
 	CHAT_MENSAGEM: "Mensagem do cliente",
 	ATRIBUICAO_HUB: "Entregue pelo hub",
 	PLAYGROUND: "Teste",
+	RETOMADA: "Retomada",
 };
 
 export const AI_RUN_STATUS_META: Record<TAiAgentRunStatusEnum, { label: string; tone: string }> = {

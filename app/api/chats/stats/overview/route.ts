@@ -15,9 +15,10 @@ import { assertChatAccess } from "@/lib/chats/access";
 import { db } from "@/services/drizzle";
 import { chatAssignments, chatMessages, chats } from "@/services/drizzle/schema/chats";
 import { whatsappConnections } from "@/services/drizzle/schema/whatsapp-connections";
-import { and, between, eq, isNotNull, notInArray, sql } from "drizzle-orm";
+import { and, between, eq, isNotNull, notInArray, sql, inArray } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { aiAgentFollowUps, aiAgentRuns } from "@/services/drizzle/schema/ai-agents";
 
 // ============= GET - Visão geral das estatísticas de atendimento =============
 
@@ -126,6 +127,41 @@ async function fetchClosingCohort({ filters, startDate, endDate }: { filters: TC
 	return row;
 }
 
+/**
+ * Retomadas executadas no período e quantas trouxeram o cliente de volta (mensagem dele no
+ * mesmo chat até 48h depois). A taxa é o número que diz se a retomada vale a pena para a loja.
+ */
+async function fetchFollowUpStats({ filters, startDate, endDate }: { filters: TCohortFilters; startDate: Date; endDate: Date }) {
+	const respondida = sql`exists (
+		select 1 from ${chatMessages}
+		where ${chatMessages.chatId} = ${aiAgentFollowUps.chatId}
+			and ${chatMessages.autorTipo} = 'CLIENTE'
+			and ${chatMessages.dataEnvio} > ${aiAgentFollowUps.dataExecucao}
+			and ${chatMessages.dataEnvio} <= ${aiAgentFollowUps.dataExecucao} + interval '48 hours'
+	)`;
+	const [row] = await db
+		.select({
+			enviadas: sql<number>`count(*) filter (where ${aiAgentFollowUps.runExecucaoId} is not null and exists (select 1 from ${aiAgentRuns} where ${aiAgentRuns.id} = ${aiAgentFollowUps.runExecucaoId} and ${aiAgentRuns.mensagemEnviadaId} is not null))::int`,
+			respondidas: sql<number>`count(*) filter (where ${respondida})::int`,
+			expiradas: sql<number>`count(*) filter (where ${aiAgentFollowUps.status} = 'EXPIRADA')::int`,
+		})
+		.from(aiAgentFollowUps)
+		.innerJoin(chats, eq(aiAgentFollowUps.chatId, chats.id))
+		.where(
+			and(
+				eq(aiAgentFollowUps.organizacaoId, filters.organizacaoId),
+				filters.whatsappConexaoTelefoneId ? eq(chats.whatsappConexaoTelefoneId, filters.whatsappConexaoTelefoneId) : undefined,
+				inArray(aiAgentFollowUps.status, ["EXECUTADA", "EXPIRADA"]),
+				between(
+					sql`coalesce(${aiAgentFollowUps.dataExecucao}, ${aiAgentFollowUps.dataAtualizacao}, ${aiAgentFollowUps.dataInsercao})`,
+					startDate,
+					endDate,
+				),
+			),
+		);
+	return row;
+}
+
 /** Coorte de **resolução**: o tempo de resolução só existe para quem foi resolvido. */
 async function fetchResolutionCohort({ filters, startDate, endDate }: { filters: TCohortFilters; startDate: Date; endDate: Date }) {
 	const [row] = await db
@@ -222,9 +258,10 @@ async function getChatsStatsOverview({ session, input }: { session: TAuthUserSes
 	const startDate = input.startDate ?? new Date(endDate.getTime() - 30 * 24 * 60 * 60 * 1000);
 	const filters: TCohortFilters = { organizacaoId, whatsappConexaoTelefoneId: input.whatsappConexaoTelefoneId };
 
-	const comparing = input.comparingStartDate && input.comparingEndDate ? { startDate: input.comparingStartDate, endDate: input.comparingEndDate } : null;
+	const comparing =
+		input.comparingStartDate && input.comparingEndDate ? { startDate: input.comparingStartDate, endDate: input.comparingEndDate } : null;
 
-	const [opening, buckets, closing, resolution, messages, backlog, categorias, comparingOpening, comparingClosing, comparingResolution] =
+	const [opening, buckets, closing, resolution, messages, backlog, categorias, followUps, comparingOpening, comparingClosing, comparingResolution] =
 		await Promise.all([
 			fetchOpeningCohort({ filters, startDate, endDate }),
 			fetchFirstResponseBuckets({ filters, startDate, endDate }),
@@ -233,6 +270,7 @@ async function getChatsStatsOverview({ session, input }: { session: TAuthUserSes
 			fetchMessages({ filters, startDate, endDate }),
 			fetchBacklog({ filters }),
 			fetchCategories({ filters, startDate, endDate }),
+			fetchFollowUpStats({ filters, startDate, endDate }),
 			comparing ? fetchOpeningCohort({ filters, ...comparing }) : null,
 			comparing ? fetchClosingCohort({ filters, ...comparing }) : null,
 			comparing ? fetchResolutionCohort({ filters, ...comparing }) : null,
@@ -287,6 +325,12 @@ async function getChatsStatsOverview({ session, input }: { session: TAuthUserSes
 				handoffs: closing?.handoffs ?? 0,
 				// Contenção: dos atendimentos que a IA está segurando, quantos ela fechou sozinha.
 				contencaoIA: safeRatio(closing?.encerradosPelaIA ?? 0, tocadosPelaIA),
+				retomadas: {
+					enviadas: followUps?.enviadas ?? 0,
+					respondidas: followUps?.respondidas ?? 0,
+					expiradas: followUps?.expiradas ?? 0,
+					taxaResposta: safeRatio(followUps?.respondidas ?? 0, followUps?.enviadas ?? 0),
+				},
 			},
 			mensagens: {
 				recebidas: mensagensRecebidas,

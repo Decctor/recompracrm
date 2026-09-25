@@ -6,10 +6,19 @@ import { formatDateAsLocale } from "@/lib/formatting";
 import { formatUsd } from "@/lib/ai/providers/pricing";
 import { type TAiAgentRunsFilters, useAiAgentRuns, useAiAgentSpend } from "@/lib/queries/ai-agents";
 import { cn } from "@/lib/utils";
-import type { TAiAgentRunStatusEnum } from "@/schemas/enums";
+import type { TAiAgentRunStatusEnum, TAiAgentRunTriggerEnum } from "@/schemas/enums";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useState } from "react";
+import { AI_RUN_TRIGGER_LABELS } from "@/components/Chats/ai-run-meta";
 import AgentRunDrawer from "./AgentRunDrawer";
+
+const TRIGGER_FILTERS: Array<{ value: TAiAgentRunTriggerEnum | null; label: string }> = [
+	{ value: null, label: "TODAS AS ORIGENS" },
+	{ value: "CHAT_MENSAGEM", label: "MENSAGENS" },
+	{ value: "ATRIBUICAO_HUB", label: "ENTREGUES PELO HUB" },
+	{ value: "RETOMADA", label: "RETOMADAS" },
+	{ value: "PLAYGROUND", label: "TESTES" },
+];
 
 const STATUS_FILTERS: Array<{ value: TAiAgentRunStatusEnum | null; label: string }> = [
 	{ value: null, label: "TODAS" },
@@ -27,6 +36,18 @@ export default function AgentRunsList() {
 	return (
 		<div className="flex w-full flex-col gap-4">
 			{spend ? <AgentSpendSummary mes={spend.mes} /> : null}
+			<div className="flex flex-wrap items-center gap-2">
+				{TRIGGER_FILTERS.map((filter) => (
+					<Button
+						key={filter.label}
+						size="sm"
+						variant={filters.gatilho === filter.value ? "secondary" : "ghost"}
+						onClick={() => setFilters((prev) => ({ ...prev, gatilho: filter.value, page: 1 }))}
+					>
+						{filter.label}
+					</Button>
+				))}
+			</div>
 			<div className="flex items-center gap-2">
 				{STATUS_FILTERS.map((filter) => (
 					<Button
@@ -74,7 +95,7 @@ export default function AgentRunsList() {
 									>
 										{run.status}
 									</span>
-									<span className="text-xs text-muted-foreground">{run.gatilho === "PLAYGROUND" ? "TESTE" : "WHATSAPP"}</span>
+									<span className="text-xs text-muted-foreground">{AI_RUN_TRIGGER_LABELS[run.gatilho]}</span>
 								</div>
 								<p className="truncate text-sm">{run.erro ?? run.outputResumo ?? "—"}</p>
 							</div>

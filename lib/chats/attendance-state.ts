@@ -1,6 +1,8 @@
 import type { TChatAssignmentPriority, TChatAssignmentStatus } from "@/schemas/enums";
 import type { DB, DBTransaction } from "@/services/drizzle";
 import { chatAssignments, chats } from "@/services/drizzle/schema";
+import { AI_AGENT_FOLLOW_UP_CANCEL_REASONS } from "@/schemas/ai-agents";
+import { cancelScheduledFollowUp, cancelScheduledFollowUpsForChats } from "@/lib/ai/agent/follow-up-cancel";
 import { and, eq, inArray, isNull, lt, notInArray, or, sql } from "drizzle-orm";
 
 /**
@@ -41,8 +43,7 @@ async function getChatPendingState(db: TAttendanceDb, input: { chatId: string; o
 
 	return {
 		...chat,
-		needsResponse:
-			!!chat.ultimaMensagemEntradaData && (!chat.ultimaMensagemSaidaData || chat.ultimaMensagemEntradaData > chat.ultimaMensagemSaidaData),
+		needsResponse: !!chat.ultimaMensagemEntradaData && (!chat.ultimaMensagemSaidaData || chat.ultimaMensagemEntradaData > chat.ultimaMensagemSaidaData),
 	};
 }
 
@@ -91,10 +92,7 @@ async function ensureCurrentAttendance(
 }
 
 /** Mensagem recebida do cliente: reabre a pendência do atendimento. */
-export async function markChatNeedsResponse(
-	db: TAttendanceDb,
-	input: { organizacaoId: string; chatId: string; messageDate: Date; now?: Date },
-) {
+export async function markChatNeedsResponse(db: TAttendanceDb, input: { organizacaoId: string; chatId: string; messageDate: Date; now?: Date }) {
 	const now = input.now ?? new Date();
 	const current = await ensureCurrentAttendance(db, { ...input, now, status: "ABERTO" });
 	if (!current) return null;
@@ -161,6 +159,9 @@ export async function markChatAttendedExternally(
 	const ensured = await ensureCurrentAttendance(db, { ...input, now, status: "EM_ATENDIMENTO" });
 	if (!ensured) return null;
 
+	// Alguém da equipe respondeu pelo celular: a IA sai, e um lembrete dela seria uma segunda voz.
+	await cancelScheduledFollowUp(db, { chatId: input.chatId, motivo: AI_AGENT_FOLLOW_UP_CANCEL_REASONS.HUMANO_ASSUMIU });
+
 	const [updated] = await db
 		.update(chatAssignments)
 		.set({
@@ -198,6 +199,7 @@ export async function assumeChatAttendanceForUser(
 	if (!ensured) return null;
 
 	const pending = await getChatPendingState(db, input);
+	await cancelScheduledFollowUp(db, { chatId: input.chatId, motivo: AI_AGENT_FOLLOW_UP_CANCEL_REASONS.HUMANO_ASSUMIU });
 
 	const [assumed] = await db
 		.update(chatAssignments)
@@ -372,6 +374,8 @@ export async function transferChatAttendance(
 	const current = await ensureCurrentAttendance(db, { ...input, now, status: "EM_ATENDIMENTO" });
 	if (!current) return null;
 
+	await cancelScheduledFollowUp(db, { chatId: input.chatId, motivo: AI_AGENT_FOLLOW_UP_CANCEL_REASONS.HUMANO_ASSUMIU });
+
 	const [updated] = await db
 		.update(chatAssignments)
 		.set({
@@ -392,15 +396,14 @@ export async function transferChatAttendance(
 }
 
 /** Devolve o atendimento para a fila do hub. Se há pendência do cliente, volta a `ABERTO`. */
-export async function releaseChatAttendance(
-	db: TAttendanceDb,
-	input: { organizacaoId: string; chatId: string; motivo?: string | null; now?: Date },
-) {
+export async function releaseChatAttendance(db: TAttendanceDb, input: { organizacaoId: string; chatId: string; motivo?: string | null; now?: Date }) {
 	const now = input.now ?? new Date();
 	const current = await getCurrentChatAttendance(db, input);
 	if (!current) return null;
 
 	const pending = await getChatPendingState(db, input);
+	// Sem dono não há quem retome: a próxima mensagem do cliente decide quem entra.
+	await cancelScheduledFollowUp(db, { chatId: input.chatId, motivo: AI_AGENT_FOLLOW_UP_CANCEL_REASONS.HUMANO_ASSUMIU });
 	const [updated] = await db
 		.update(chatAssignments)
 		.set({
@@ -429,6 +432,7 @@ export async function changeChatAttendanceStatus(
 	if (!current) return null;
 
 	const isTerminal = input.status === "ENCERRADO" || input.status === "CANCELADO";
+	if (isTerminal) await cancelScheduledFollowUp(db, { chatId: input.chatId, motivo: AI_AGENT_FOLLOW_UP_CANCEL_REASONS.ATENDIMENTO_ENCERRADO });
 	const [updated] = await db
 		.update(chatAssignments)
 		.set({
@@ -463,7 +467,7 @@ export async function closeStaleChatAttendances(db: TAttendanceDb, input: { inac
 
 	const staleChats = db.select({ id: chats.id }).from(chats).where(lt(chats.ultimaMensagemData, input.inactiveSince));
 
-	return db
+	const closed = await db
 		.update(chatAssignments)
 		.set({
 			status: "ENCERRADO",
@@ -479,6 +483,15 @@ export async function closeStaleChatAttendances(db: TAttendanceDb, input: { inac
 			organizacaoId: chatAssignments.organizacaoId,
 			responsavelTipo: chatAssignments.responsavelTipo,
 		});
+
+	// O cascade da FK já apagaria a retomada se o ticket fosse deletado; encerrado ele fica, e a
+	// retomada precisa morrer com o episódio explicitamente.
+	await cancelScheduledFollowUpsForChats(db, {
+		chatIds: closed.map((row) => row.chatId),
+		motivo: AI_AGENT_FOLLOW_UP_CANCEL_REASONS.ATENDIMENTO_ENCERRADO,
+	});
+
+	return closed;
 }
 
 /**
@@ -486,10 +499,7 @@ export async function closeStaleChatAttendances(db: TAttendanceDb, input: { inac
  * o campo que no modelo antigo era a `descricao` do serviço, quase sempre preenchida com
  * o placeholder "NÃO ESPECIFICADO".
  */
-export async function updateChatAttendanceSummary(
-	db: TAttendanceDb,
-	input: { organizacaoId: string; chatId: string; resumo: string; now?: Date },
-) {
+export async function updateChatAttendanceSummary(db: TAttendanceDb, input: { organizacaoId: string; chatId: string; resumo: string; now?: Date }) {
 	const now = input.now ?? new Date();
 	const current = await ensureCurrentAttendance(db, { ...input, now });
 	if (!current) return null;
@@ -507,11 +517,7 @@ export async function changeChatAttendancePriority(
 	const current = await ensureCurrentAttendance(db, { ...input, now, status: "ABERTO" });
 	if (!current) return null;
 
-	const [updated] = await db
-		.update(chatAssignments)
-		.set({ prioridade: input.prioridade })
-		.where(eq(chatAssignments.id, current.id))
-		.returning();
+	const [updated] = await db.update(chatAssignments).set({ prioridade: input.prioridade }).where(eq(chatAssignments.id, current.id)).returning();
 
 	return updated ?? null;
 }
@@ -535,6 +541,9 @@ export async function closeChatAttendance(
 	const status = input.status ?? "ENCERRADO";
 	const current = await ensureCurrentAttendance(db, { ...input, now, status });
 	if (!current) return null;
+
+	if (status === "ENCERRADO")
+		await cancelScheduledFollowUp(db, { chatId: input.chatId, motivo: AI_AGENT_FOLLOW_UP_CANCEL_REASONS.ATENDIMENTO_ENCERRADO });
 
 	const [updated] = await db
 		.update(chatAssignments)

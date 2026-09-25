@@ -8,7 +8,7 @@ import { mapRealtimeAiRunRow, mapRealtimeMessageRow, type TRealtimeAiRunRow, typ
 import { AI_AGENT_RUNS_QUERY_KEY_ROOT } from "@/lib/queries/ai-agents";
 import { getWhatsappWindowDisplay } from "@/lib/chats/whatsapp-window-status";
 import { getErrorMessage } from "@/lib/errors";
-import { markChatRead, retryChatMessage, sendChatMessage, updateChatAssignment } from "@/lib/mutations/chats";
+import { cancelChatFollowUp, markChatRead, retryChatMessage, sendChatMessage, updateChatAssignment } from "@/lib/mutations/chats";
 import {
 	getChatMessagesQueryKey,
 	useChatMessages,
@@ -29,6 +29,7 @@ import { useMediaQuery } from "@/lib/hooks/use-media-query";
 import AgentRunDrawer from "@/components/Settings/AiAgent/AgentRunDrawer";
 import { AiPresenceBar } from "./AiPresenceBar";
 import { AttendanceSummaryCard } from "./AttendanceSummaryCard";
+import { FollowUpNotice } from "./FollowUpNotice";
 import { ChatAssignmentActions } from "./ChatAssignmentActions";
 import { ChatContextPanel } from "./ChatContextPanel";
 import { ChatInputArea, type TChatInputAreaHandle, type TOutgoingAttachment } from "./ChatInputArea";
@@ -280,6 +281,10 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 				});
 				void queryClient.invalidateQueries({ queryKey: [AI_AGENT_RUNS_QUERY_KEY_ROOT] });
 			})
+			// Retomada agendada/cancelada: a faixa acima do composer precisa refletir na hora.
+			.on("postgres_changes", { event: "*", schema: "public", table: "ampmais_ai_agent_follow_ups", filter: `chat_id=eq.${chatId}` }, () => {
+				void refetchRef.current();
+			})
 			.subscribe((status) => {
 				if (status !== "SUBSCRIBED") return;
 				if (!initialSubscriptionCompleteRef.current) {
@@ -313,6 +318,16 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 	const retryMutation = useMutation({
 		mutationFn: retryChatMessage,
 		onSuccess: () => void refetch(),
+		onError: (error) => toast.error(getErrorMessage(error)),
+	});
+
+	const cancelFollowUpMutation = useMutation({
+		mutationFn: cancelChatFollowUp,
+		onSuccess: (data) => {
+			toast.success(data.message);
+			void refetch();
+			void queryClient.invalidateQueries({ queryKey: ["chats"] });
+		},
 		onError: (error) => toast.error(getErrorMessage(error)),
 	});
 
@@ -593,6 +608,15 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 					isAssuming={assumeMutation.isPending}
 					onOpenRun={setOpenRunId}
 				/>
+				{/* A retomada só faz sentido enquanto a IA está quieta esperando o cliente. */}
+				{chat.retomadaAgendada && aiPresence.estado === "ausente" && (
+					<FollowUpNotice
+						retomada={chat.retomadaAgendada}
+						agentName={chat.atendimentoIa.agenteNome}
+						onCancel={() => cancelFollowUpMutation.mutate({ id: chat.retomadaAgendada?.id as string })}
+						isCancelling={cancelFollowUpMutation.isPending}
+					/>
+				)}
 
 				<ChatInputArea
 					ref={inputAreaRef}

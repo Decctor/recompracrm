@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { stripCatalogMemory } from "@/lib/ai/agent/run-memory";
 import { AiRunsHistory } from "./AiRunsHistory";
+import { formatFollowUpMoment } from "./FollowUpNotice";
 import { ChatAssignmentActions } from "./ChatAssignmentActions";
 import { ChatQuotesBlock } from "./Quotes/ChatQuotesBlock";
 import type { TQuotePermissions } from "./Quotes/config";
@@ -181,6 +182,11 @@ function AttendanceTab({ chatId, chat, currentUserId }: Pick<ChatContextPanelPro
 				</InfoRow>
 				<InfoRow label="Desde">{formatRelative(atendimento?.dataAtribuicao)}</InfoRow>
 				{atendimento?.transferenciaMotivo && <InfoRow label="Motivo">{atendimento.transferenciaMotivo}</InfoRow>}
+				{chat.retomadaAgendada && (
+					<InfoRow label="Retomada">
+						<span title={chat.retomadaAgendada.objetivo}>IA retoma {formatFollowUpMoment(chat.retomadaAgendada.agendadaPara)}</span>
+					</InfoRow>
+				)}
 				{atendimento?.resumo && (
 					<div className="mt-1 whitespace-pre-wrap rounded-lg bg-muted/60 p-2 text-xs leading-snug">{stripCatalogMemory(atendimento.resumo)}</div>
 				)}

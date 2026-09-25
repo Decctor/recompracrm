@@ -1,3 +1,4 @@
+import { getScheduledFollowUp } from "@/lib/ai/agent/follow-ups";
 import { parseJsonbWithFallback } from "@/lib/ai/shared/json";
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
@@ -126,13 +127,14 @@ async function getChatMessages({ session, input }: { session: TAuthUserSession; 
 	// Presença da IA na thread (`lib/chats/ai-presence.ts`): a run mais recente do chat e o
 	// tempo que o agente espera antes de responder. A thread assina `ai_agent_runs` por chat e
 	// mantém `aiRun` atualizado sem refetch.
-	const [aiRun, agent] = await Promise.all([
+	const [aiRun, agent, retomadaAgendada] = await Promise.all([
 		db.query.aiAgentRuns.findFirst({
 			where: and(eq(aiAgentRuns.chatId, input.chatId), eq(aiAgentRuns.organizacaoId, organizacaoId)),
 			orderBy: (fields, { desc: orderDesc }) => [orderDesc(fields.dataInsercao)],
 			columns: { id: true, status: true, gatilho: true, erro: true, dataInicio: true, dataFim: true, dataInsercao: true },
 		}),
 		db.query.aiAgents.findFirst({ where: eq(aiAgents.organizacaoId, organizacaoId), columns: { capacidades: true } }),
+		getScheduledFollowUp(db, { organizacaoId, chatId: input.chatId }),
 	]);
 	const aiCapacidades = agent
 		? (() => {
@@ -170,6 +172,7 @@ async function getChatMessages({ session, input }: { session: TAuthUserSession; 
 				atendimentoIa,
 				aiRun: aiRun ?? null,
 				aiCapacidades,
+				retomadaAgendada: retomadaAgendada ?? null,
 			},
 			items,
 			nextCursor: hasMoreOlder && oldest ? { dataEnvio: oldest.dataEnvio.toISOString(), id: oldest.id } : null,

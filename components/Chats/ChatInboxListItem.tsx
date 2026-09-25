@@ -6,7 +6,8 @@ import { getChatListMessagePreview } from "@/lib/chats/chat-list-preview";
 import { getWhatsappWindowDisplay } from "@/lib/chats/whatsapp-window-status";
 import type { TChatInboxItem } from "@/lib/queries/chats";
 import { cn } from "@/lib/utils";
-import { FileText, Image as ImageIcon, MapPin, Mic, Smartphone, Sparkles, Sticker, UserRound, Video } from "lucide-react";
+import { CalendarClock, FileText, Image as ImageIcon, MapPin, Mic, Smartphone, Sparkles, Sticker, UserRound, Video } from "lucide-react";
+import { formatFollowUpMoment } from "./FollowUpNotice";
 import { PRIORITY_META, STATUS_META } from "./attendance-meta";
 import { TypingIndicator } from "./TypingIndicator";
 
@@ -176,6 +177,13 @@ export function ChatInboxListItem({ chat, isSelected, showPhoneBadge, onSelect }
 						<span className={cn(chipVariants({ variant: "outline", size: "xs", shape: "pill" }), "py-0.5 font-bold", PRIORITY_META[prioridade].pill)}>
 							{PriorityIcon ? <PriorityIcon className="h-3 w-3" /> : null}
 							{PRIORITY_META[prioridade].label}
+						</span>
+					)}
+					{/* Retomada agendada pela IA: a conversa não morreu, só está esperando o cliente. */}
+					{chat.retomadaAgendadaPara && (
+						<span className="flex items-center gap-1 text-primary" title="Retomada agendada pela IA">
+							<CalendarClock className="h-3 w-3" aria-hidden />
+							{formatFollowUpMoment(chat.retomadaAgendadaPara)}
 						</span>
 					)}
 					{/* Estado do atendimento: mesmo vocabulário do select, para a cor significar

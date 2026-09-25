@@ -9,6 +9,15 @@
 				}
 			]
 		},
+		"app/api/queues/ai-chat-follow-up/route.ts": {
+			"experimentalTriggers": [
+				{
+					"type": "queue/v2beta",
+					"topic": "ai-chat-follow-ups",
+					"retryAfterSeconds": 60
+				}
+			]
+		},
 		"app/api/queues/integration-import-batch/route.ts": {
 			"experimentalTriggers": [
 				{
@@ -138,6 +147,10 @@
 		{
 			"path": "/api/cron/close-stale-attendances",
 			"schedule": "0 * * * *"
+		},
+		{
+			"path": "/api/cron/ai-follow-ups",
+			"schedule": "*/5 * * * *"
 		},
 		{
 			"path": "/api/cron/generate-recurring-entries",

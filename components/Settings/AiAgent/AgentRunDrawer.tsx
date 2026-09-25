@@ -1,3 +1,4 @@
+import { AI_RUN_TRIGGER_LABELS } from "@/components/Chats/ai-run-meta";
 import ResponsiveMenu from "@/components/Utils/ResponsiveMenu";
 import { CodeBlock } from "@/components/ui/code-block";
 import { Timeline } from "@/components/ui/timeline";
@@ -77,7 +78,7 @@ export default function AgentRunDrawer({ runId, closeModal }: AgentRunDrawerProp
 						</div>
 						<div className="flex flex-col">
 							<SectionLabel>ORIGEM</SectionLabel>
-							<span className="text-sm font-bold">{run.gatilho === "PLAYGROUND" ? "TESTE" : "WHATSAPP"}</span>
+							<span className="text-sm font-bold">{AI_RUN_TRIGGER_LABELS[run.gatilho]}</span>
 						</div>
 						<div className="flex flex-col">
 							<SectionLabel>QUANDO</SectionLabel>

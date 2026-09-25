@@ -36,6 +36,9 @@ const STRUCTURED_OUTPUT_FALLBACK_MODEL = "openai/gpt-5-mini";
  */
 const RECENT_CLIENT_MESSAGES_WINDOW = 5;
 
+/** Mensagens que entram no turno de retomada: o resumo acumulado carrega o resto. */
+const FOLLOW_UP_HISTORY_MESSAGE_LIMIT = 12;
+
 const TurnOutputSchema = z.object({
 	mensagem: z
 		.string()
@@ -56,8 +59,38 @@ const TurnOutputSchema = z.object({
 	resumoAtendimento: z.string().describe("Resumo interno do estado do atendimento, para a equipe. Não é visto pelo cliente."),
 });
 
+/**
+ * O pedido de retomada só existe no schema quando a organização habilitou retomadas: o modelo
+ * não recebe um campo que não pode usar, e não gasta tokens descrevendo-o.
+ */
+const TurnOutputWithFollowUpSchema = TurnOutputSchema.extend({
+	retomada: z
+		.object({
+			aguardarHoras: z.number().int().min(1).max(72).describe("Quantas horas de silêncio do cliente esperar antes de retomar."),
+			objetivo: z
+				.string()
+				.min(3)
+				.max(500)
+				.describe(
+					"O que a retomada deve conseguir, em uma frase. Ex.: 'Perguntar se decidiu sobre os 3 rolos de cabo 2,5mm e oferecer fechar o orçamento.'",
+				),
+		})
+		.nullable()
+		.describe(
+			"null na maioria dos turnos. Preencha só quando a conversa tem uma pendência comercial concreta que vale um lembrete se o cliente sumir: preço informado, orçamento criado, produto sugerido. Nunca para saudação, dúvida já respondida, reclamação, ou quando o cliente disse que não quer.",
+		),
+});
+type TTurnOutput = z.infer<typeof TurnOutputSchema> & Partial<Pick<z.infer<typeof TurnOutputWithFollowUpSchema>, "retomada">>;
+
+function resolveTurnOutputSchema({ gatilho, retomadasHabilitadas }: { gatilho: TAiAgentRunTriggerEnum; retomadasHabilitadas: boolean }) {
+	// Uma retomada nunca agenda outra; o playground não tem cliente para esperar.
+	const podeAgendar = retomadasHabilitadas && (gatilho === "CHAT_MENSAGEM" || gatilho === "ATRIBUICAO_HUB");
+	return podeAgendar ? TurnOutputWithFollowUpSchema : TurnOutputSchema;
+}
+
 export type TPreparedAgentExecution = {
 	run: { id: string };
+	gatilho: TAiAgentRunTriggerEnum;
 	toolContext: TAgentToolContext;
 	systemPrompt: string;
 	turnPrompt: string;
@@ -86,12 +119,15 @@ export async function prepareAgentExecution({
 	chatId,
 	gatilho,
 	mensagemGatilhoId,
+	retomada = null,
 	database = db,
 }: {
 	organizacaoId: string;
 	chatId: string;
 	gatilho: TAiAgentRunTriggerEnum;
 	mensagemGatilhoId?: string | null;
+	/** Turno de retomada: troca o fecho do prompt e usa o contexto compacto. */
+	retomada?: { objetivo: string; horasSilencio: number | null } | null;
 	database?: TDb;
 }): Promise<TPreparedAgentExecution> {
 	const agent = await database.query.aiAgents.findFirst({ where: eq(aiAgents.organizacaoId, organizacaoId) });
@@ -111,7 +147,9 @@ export async function prepareAgentExecution({
 	await assertAiSpendWithinLimit(database, { organizacaoId, configuracao: organization?.configuracao });
 
 	const [{ contexto: chatContext, clienteId }, knowledge, productGroups] = await Promise.all([
-		buildChatRunContext(database, { organizacaoId, chatId }),
+		// A retomada lê o resumo acumulado mais as últimas mensagens: ela precisa lembrar do que
+		// ficou pendente, não reler a conversa inteira.
+		buildChatRunContext(database, { organizacaoId, chatId, historyLimit: retomada ? FOLLOW_UP_HISTORY_MESSAGE_LIMIT : undefined }),
 		getActiveKnowledgeBlocks(database, agent.id),
 		// A grafia dos grupos entra no system prompt para o agente não filtrar por categoria
 		// inexistente nem gastar uma tool call para descobrir o que a empresa vende.
@@ -143,6 +181,7 @@ export async function prepareAgentExecution({
 
 	return {
 		run,
+		gatilho,
 		toolContext: {
 			db: database,
 			organizacaoId,
@@ -161,7 +200,7 @@ export async function prepareAgentExecution({
 			knowledgeContext: formatKnowledgeContext(knowledge),
 			productGroups,
 		}),
-		turnPrompt: formatChatRunContext(chatContext),
+		turnPrompt: formatChatRunContext(chatContext, { retomada }),
 		modeloConfig,
 		// A saída estruturada ocupa uma etapa adicional depois do último resultado de ferramenta.
 		// O limite real de chamadas é aplicado no adapter das ferramentas.
@@ -188,6 +227,7 @@ export async function executeAgentTurn(
 	const { toolContext, run, modeloConfig } = prepared;
 
 	await markAgentRunRunning(toolContext.db, run.id);
+	const outputSchema = resolveTurnOutputSchema({ gatilho: prepared.gatilho, retomadasHabilitadas: toolContext.capacidades.retomadas.habilitadas });
 
 	try {
 		const tools = toAISdkTools(toolContext);
@@ -207,7 +247,7 @@ export async function executeAgentTurn(
 				maxOutputTokens: modelConfig.maxTokensSaida,
 				topP: modelConfig.topP,
 				stopWhen: stepCountIs(prepared.maxSteps),
-				output: Output.object({ schema: TurnOutputSchema }),
+				output: Output.object({ schema: outputSchema }),
 			});
 			const result = await loopAgent.generate({ prompt, abortSignal });
 			segment.usage = result.totalUsage;
@@ -235,7 +275,7 @@ export async function executeAgentTurn(
 
 		// Normaliza antes de qualquer decisão: uma URL torta não pode contar como entrega no
 		// backstop de promessa nem chegar ao adapter de canal.
-		const settleAttachment = (raw: z.infer<typeof TurnOutputSchema>) => ({ ...raw, anexo: normalizeTurnAttachment(raw.anexo) });
+		const settleAttachment = (raw: TTurnOutput) => ({ ...raw, anexo: normalizeTurnAttachment(raw.anexo) });
 
 		let result = await generateWithFallback(prepared.turnPrompt);
 		let output = result.output;
@@ -269,6 +309,7 @@ Execute a ferramenta nesta execução ou pergunte objetivamente o único dado qu
 		const toolResults = results.flatMap((generation) => generation.steps.flatMap((step) => step.toolResults));
 		const finalOutput: TAiAgentTurnOutput = {
 			...output,
+			retomada: (output as TTurnOutput).retomada ?? null,
 			resumoAtendimento: mergeRunSummary({
 				modelSummary: output.resumoAtendimento,
 				previousSummary: prepared.previousSummary,

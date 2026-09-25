@@ -73,7 +73,7 @@ function formatSaoPauloMoment(instant: string): string {
  */
 export async function buildChatRunContext(
 	db: TDb,
-	input: { organizacaoId: string; chatId: string },
+	input: { organizacaoId: string; chatId: string; historyLimit?: number },
 ): Promise<{ contexto: TChatRunContext; clienteId: string }> {
 	const chat = await db.query.chats.findFirst({
 		where: and(eq(chats.id, input.chatId), eq(chats.organizacaoId, input.organizacaoId)),
@@ -105,7 +105,7 @@ export async function buildChatRunContext(
 	const messages = await db.query.chatMessages.findMany({
 		where: and(eq(chatMessages.chatId, chat.id), eq(chatMessages.organizacaoId, input.organizacaoId)),
 		orderBy: [desc(chatMessages.dataEnvio)],
-		limit: HISTORY_MESSAGE_LIMIT,
+		limit: input.historyLimit ?? HISTORY_MESSAGE_LIMIT,
 		columns: {
 			autorTipo: true,
 			conteudoTexto: true,
@@ -173,8 +173,22 @@ export async function buildChatRunContext(
 	};
 }
 
+export type TChatRunContextOptions = {
+	/** Turno de retomada: o cliente silenciou e o fecho do prompt pede o lembrete, não uma resposta. */
+	retomada?: { objetivo: string; horasSilencio: number | null } | null;
+};
+
+function formatTurnClosing(options: TChatRunContextOptions): string {
+	if (!options.retomada) return "Responda à última mensagem do cliente.";
+	const silencio = options.retomada.horasSilencio ? `há cerca de ${options.retomada.horasSilencio} hora(s)` : "há algum tempo";
+	return `## Retomada
+O cliente está em silêncio ${silencio} e a última palavra foi sua. Esta execução é uma retomada programada por você mesmo, com o objetivo: "${options.retomada.objetivo}".
+Escreva uma única mensagem curta e natural que retome a conversa sem pressionar, retomando do ponto em que parou. Não cumprimente de novo nem repita tudo o que já foi dito.
+Se, relendo a conversa, retomar não fizer sentido (o cliente já comprou, já recusou, reclamou, ou disse que não quer contato), devolva "mensagem" null e explique no "resumoAtendimento".`;
+}
+
 /** Serializa o contexto para o prompt do turno. */
-export function formatChatRunContext(context: TChatRunContext): string {
+export function formatChatRunContext(context: TChatRunContext, options: TChatRunContextOptions = {}): string {
 	const client = context.cliente;
 	const clientLines = [
 		`- Nome: ${client.nome}`,
@@ -204,5 +218,5 @@ ${attendanceBlock}
 ## Conversa até aqui
 ${conversation || "(sem mensagens anteriores)"}
 
-Responda à última mensagem do cliente.`;
+${formatTurnClosing(options)}`;
 }
