@@ -1,8 +1,9 @@
 import z from "zod";
 import {
 	AiAgentAttachmentTypeEnum,
-	AiAgentRunTriggerEnum,
+	AiAgentAttendanceModeEnum,
 	AiAgentRunStatusEnum,
+	AiAgentRunTriggerEnum,
 	AiAgentScopeTypeEnum,
 	AiAgentStatusEnum,
 	AiAgentToolCallStatusEnum,
@@ -146,6 +147,16 @@ export const AiAgentCapabilitiesSchema = z
 					.min(0, "O atraso de resposta mínimo é 0ms.")
 					.max(60000, "O atraso de resposta máximo é 60000ms.")
 					.default(5000),
+				// IMEDIATO responde após o debounce. RESERVA dá `esperaHumanoMs` à equipe: se alguém
+				// responder nesse intervalo, o agente não entra. Para lojas com atendente ativo no
+				// celular, onde a IA competia com o humano e perdia a maioria das corridas.
+				modo: AiAgentAttendanceModeEnum.default("IMEDIATO"),
+				esperaHumanoMs: z
+					.number({ invalid_type_error: "Tipo não válido para a espera pela equipe." })
+					.int("A espera pela equipe deve ser inteira.")
+					.min(30000, "A espera pela equipe mínima é 30 segundos.")
+					.max(300000, "A espera pela equipe máxima é 5 minutos.")
+					.default(180000),
 			})
 			.default({}),
 	})

@@ -6,7 +6,6 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { formatToMoney } from "@/lib/formatting";
 import { useClientOpenQuotes } from "@/lib/queries/sales";
 import { FileText, Plus } from "lucide-react";
-import { useState } from "react";
 import { ChatQuoteBuilder } from "./ChatQuoteBuilder";
 import { ChatQuotesList } from "./ChatQuotesList";
 import type { TQuotePermissions } from "./config";
@@ -31,10 +30,26 @@ type ChatQuotesHeaderActionsProps = {
 	permissions: TQuotePermissions;
 	/** Ausente quando a conversa não aceita mensagem agora (sem posse ou fora da janela de 24h). */
 	onInsertInConversation?: (texto: string) => void;
+	/**
+	 * O construtor é controlado pela thread: no header estreito o "novo orçamento" mora no menu de
+	 * overflow, fora deste componente, e precisa abrir o mesmo construtor.
+	 */
+	builderOpen: boolean;
+	onBuilderOpenChange: (open: boolean) => void;
+	/** Header estreito: a pill de orçamentos em aberto fica (é informação), o botão de criar sai. */
+	showNewQuoteButton?: boolean;
 };
 
-export function ChatQuotesHeaderActions({ chatId, clientId, clientName, permissions, onInsertInConversation }: ChatQuotesHeaderActionsProps) {
-	const [isBuilderOpen, setIsBuilderOpen] = useState(false);
+export function ChatQuotesHeaderActions({
+	chatId,
+	clientId,
+	clientName,
+	permissions,
+	onInsertInConversation,
+	builderOpen: isBuilderOpen,
+	onBuilderOpenChange: setIsBuilderOpen,
+	showNewQuoteButton = true,
+}: ChatQuotesHeaderActionsProps) {
 	const { data } = useClientOpenQuotes({ clientId });
 
 	// Sem cliente vinculado não há a quem orçar: o recurso inteiro sai do header em vez de aparecer
@@ -106,7 +121,7 @@ export function ChatQuotesHeaderActions({ chatId, clientId, clientName, permissi
 					</TooltipProvider>
 				)}
 
-				{permissions.criar && (
+				{permissions.criar && showNewQuoteButton && (
 					<TooltipProvider delay={300}>
 						<Tooltip>
 							<TooltipTrigger

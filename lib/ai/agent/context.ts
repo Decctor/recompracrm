@@ -112,6 +112,7 @@ export async function buildChatRunContext(
 			conteudoMidiaTipo: true,
 			conteudoMidiaTextoProcessado: true,
 			conteudoMidiaTextoProcessadoResumo: true,
+			metadados: true,
 			dataEnvio: true,
 		},
 	});
@@ -145,12 +146,18 @@ export async function buildChatRunContext(
 				.map((message) => ({
 					autor: describeAuthor(message.autorTipo),
 					// Mídia processada (áudio transcrito, imagem descrita) entra como texto — para o
-					// modelo, uma nota de voz e uma mensagem escrita valem o mesmo.
+					// modelo, uma nota de voz e uma mensagem escrita valem o mesmo. Quando o
+					// processamento falhou, o modelo precisa saber que houve conteúdo que ele não viu:
+					// "[AUDIO]" seco levava a respostas que ignoravam a mensagem.
 					texto:
 						message.conteudoTexto ||
 						message.conteudoMidiaTextoProcessado ||
 						message.conteudoMidiaTextoProcessadoResumo ||
-						(message.conteudoMidiaTipo ? `[${message.conteudoMidiaTipo}]` : ""),
+						(message.conteudoMidiaTipo
+							? message.metadados?.whatsappMidia?.processingStatus === "failed"
+								? `[${message.conteudoMidiaTipo} recebido — não foi possível processar o conteúdo; peça ao cliente para escrever]`
+								: `[${message.conteudoMidiaTipo}]`
+							: ""),
 					dataEnvio: message.dataEnvio,
 				}))
 				.filter((message) => message.texto.length > 0),

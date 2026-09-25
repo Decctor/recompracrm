@@ -1,7 +1,7 @@
 import { ensureOrganizationAgent } from "@/lib/ai/agent/provisioning";
-import { handleAIAudioProcessing, handleAIDocumentProcessing, handleAIImageProcessing, handleAIVideoProcessing } from "@/lib/ai/ai-media-processing";
-import { AI_RESPONSE_DELAY_MS } from "@/lib/chats/ai-trigger";
+import { resolveAiResponseDelayMs } from "@/lib/chats/ai-trigger";
 import { dispatchAiTurn } from "@/lib/chats/ai-turn-dispatch";
+import { processChatMessageMedia } from "@/lib/chats/media-processing";
 import {
 	applyProviderDeliveryStatus,
 	mapProviderStatusToDeliveryStatus,
@@ -13,13 +13,11 @@ import { uploadChatMedia } from "@/lib/files-storage/chat-media";
 import { applyProviderStatusUpdate } from "@/lib/interactions/delivery-state";
 import { downloadMedia } from "@/lib/whatsapp/internal-gateway";
 import { resolveWhatsappClient } from "@/lib/whatsapp/contact-identity";
-import { STICKER_PROCESSED_TEXT } from "@/lib/chats/sticker";
 import type { TChatMessageContentTypeEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
 import { chatMessages } from "@/services/drizzle/schema/chats";
 import { interactions } from "@/services/drizzle/schema/interactions";
 import { messageTemplates } from "@/services/drizzle/schema/message-templates";
-import { supabaseClient } from "@/services/supabase";
 import { and, eq, sql } from "drizzle-orm";
 
 /**
@@ -338,7 +336,14 @@ async function handleIncomingMessage(body: Extract<TGatewayWebhookBody, { event:
 	console.log("[INTERNAL_WHATSAPP_WEBHOOK] Message created from:", data.author.phoneNumber);
 
 	if (mediaData && midiaTipo !== "TEXTO") {
-		await handleAIMediaProcessing(insertedMessage.messageId, mediaData.storageId, mediaData.mimeType, midiaTipo);
+		await processChatMessageMedia({
+			messageId: insertedMessage.messageId,
+			organizacaoId,
+			storageId: mediaData.storageId,
+			mimeType: mediaData.mimeType,
+			mediaType: midiaTipo,
+			log: "[INTERNAL_WHATSAPP_WEBHOOK]",
+		});
 	}
 
 	if (!allowsAIService) return;
@@ -367,7 +372,7 @@ async function handleIncomingMessage(body: Extract<TGatewayWebhookBody, { event:
 			triggerMessageId: insertedMessage.messageId,
 			triggerMessageSentAt: insertedMessage.dataEnvio.toISOString(),
 		},
-		{ delayMs: agent.capacidades?.atendimento?.atrasoRespostaMs ?? AI_RESPONSE_DELAY_MS },
+		{ delayMs: resolveAiResponseDelayMs(agent.capacidades) },
 	);
 }
 
@@ -522,76 +527,4 @@ async function handleMessageUpdated(body: Extract<TGatewayWebhookBody, { event: 
 	});
 }
 
-async function handleAIMediaProcessing(
-	messageId: string,
-	storageId: string,
-	mimeType: string,
-	mediaType: Exclude<TChatMessageContentTypeEnum, "TEXTO">,
-) {
-	// Figurinha é conteúdo expressivo, não informativo: pular o modelo de visão — um webp
-	// por reação seria custo puro. O texto fixo é o que agentes e prévias leem.
-	if (mediaType === "FIGURINHA") {
-		await db.update(chatMessages).set({ conteudoMidiaTextoProcessado: STICKER_PROCESSED_TEXT }).where(eq(chatMessages.id, messageId));
-		return;
-	}
-
-	try {
-		// Download file from Supabase Storage
-		const { data: fileData, error: downloadError } = await supabaseClient.storage.from("files").download(storageId);
-
-		if (downloadError || !fileData) {
-			console.error("[INTERNAL_WHATSAPP_WEBHOOK] Download error:", downloadError);
-			throw new Error("Erro ao baixar arquivo do storage");
-		}
-		const fileBuffer = Buffer.from(await fileData.arrayBuffer());
-		let processedText = "";
-		let summary = "";
-
-		switch (mediaType) {
-			case "AUDIO": {
-				const result = await handleAIAudioProcessing(fileBuffer, mimeType);
-				processedText = result.transcription;
-				summary = result.summary;
-				break;
-			}
-			case "IMAGEM": {
-				const result = await handleAIImageProcessing(fileBuffer, mimeType);
-				processedText = result.description;
-				summary = result.summary;
-				break;
-			}
-			case "VIDEO": {
-				const result = await handleAIVideoProcessing(fileBuffer, mimeType);
-				processedText = result.analysis;
-				summary = result.summary;
-				break;
-			}
-			case "DOCUMENTO": {
-				const result = await handleAIDocumentProcessing(fileBuffer, mimeType);
-				processedText = result.extraction;
-				summary = result.summary;
-				break;
-			}
-		}
-
-		await db
-			.update(chatMessages)
-			.set({
-				conteudoMidiaTextoProcessado: processedText,
-				conteudoMidiaTextoProcessadoResumo: summary,
-			})
-			.where(eq(chatMessages.id, messageId));
-
-		console.log("[INTERNAL_WHATSAPP_WEBHOOK] Media processing completed for:", messageId);
-
-		return {
-			success: true,
-			processedText,
-			summary,
-		};
-	} catch (error) {
-		console.error("[INTERNAL_WHATSAPP_WEBHOOK] Media processing error:", error);
-		throw error;
-	}
-}
 import { reconcileOnboardingCampaigns } from "@/lib/onboarding/reconcile";

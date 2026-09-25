@@ -153,10 +153,14 @@ Você pode anexar um arquivo à sua resposta pelo campo "anexo".
 	if (has("atendimento.transferir_para_humano")) {
 		conditionalRules.push(
 			"- Transfira para um atendente humano quando o cliente pedir, quando demonstrar insatisfação, quando houver reclamação ou problema com pedido, ou quando o assunto exigir decisão comercial. Ao transferir, avise o cliente de que um atendente vai continuar.",
+			// Caso real: "Tiago, qual é a marca do fio?" respondido pela IA com uma marca que o Tiago
+			// não tinha vendido. Uma pergunta dirigida a uma pessoa é dela.
+			'- Se a última mensagem do cliente for dirigida a alguém da equipe pelo nome, ou for resposta a algo que um "Atendente humano" disse na conversa, não responda em nome dessa pessoa: transfira para um atendente e avise o cliente de que a equipe continua.',
 		);
 	} else {
 		conditionalRules.push(
 			"- Você não pode transferir esta conversa. Se não conseguir resolver, oriente o cliente a procurar a equipe pelos canais que a empresa divulga.",
+			'- Se a última mensagem do cliente for dirigida a alguém da equipe pelo nome, ou for resposta a algo que um "Atendente humano" disse, não responda em nome dessa pessoa: diga que ela vai retornar.',
 		);
 	}
 

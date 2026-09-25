@@ -35,6 +35,17 @@ export class AgentToolExecutionError extends Error {
 	}
 }
 
+/**
+ * A run foi abortada no meio porque a conversa a superou (nova mensagem do cliente, resposta de
+ * um humano, atendimento tomado). Não é falha: o run fica CANCELADO com o motivo.
+ */
+export class AgentRunAbortedError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = "AgentRunAbortedError";
+	}
+}
+
 export function isAgentError(error: unknown, name: string): boolean {
 	return error instanceof Error && error.name === name;
 }

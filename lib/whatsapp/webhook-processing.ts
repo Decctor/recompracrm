@@ -1,8 +1,7 @@
 import { ensureOrganizationAgent } from "@/lib/ai/agent/provisioning";
-import { handleAIAudioProcessing, handleAIDocumentProcessing, handleAIImageProcessing, handleAIVideoProcessing } from "@/lib/ai/ai-media-processing";
-import { AI_RESPONSE_DELAY_MS } from "@/lib/chats/ai-trigger";
+import { resolveAiResponseDelayMs } from "@/lib/chats/ai-trigger";
 import { dispatchAiTurn } from "@/lib/chats/ai-turn-dispatch";
-import { STICKER_PROCESSED_TEXT } from "@/lib/chats/sticker";
+import { processChatMessageMedia } from "@/lib/chats/media-processing";
 import {
 	applyProviderDeliveryStatus,
 	mapProviderStatusToDeliveryStatus,
@@ -46,13 +45,11 @@ import {
 	type TWhatsappMessageHistoryEvent,
 } from "@/lib/whatsapp/smb-message-history-sync";
 import type { TChatMessageMetadata } from "@/schemas/chats";
-import type { TChatMessageContentTypeEnum } from "@/schemas/enums";
 import type { TMessageTemplateMetadata } from "@/schemas/message-templates";
 import { db } from "@/services/drizzle";
 import { chatMessages } from "@/services/drizzle/schema/chats";
 import { messageTemplates } from "@/services/drizzle/schema/message-templates";
 import { whatsappConnectionPhones } from "@/services/drizzle/schema/whatsapp-connections";
-import { supabaseClient } from "@/services/supabase";
 import { and, eq, sql } from "drizzle-orm";
 
 /**
@@ -529,7 +526,14 @@ async function handleIncomingMessage(incomingMessage: ReturnType<typeof parseWeb
 	// A transcrição/OCR de mídia é independente do atendimento: roda mesmo que a IA não
 	// vá responder, porque o texto processado alimenta a busca e o contexto do humano.
 	if (mediaData && midiaTipo !== "TEXTO") {
-		await handleAIMediaProcessing(insertedMessage.messageId, mediaData.storageId, mediaData.mimeType, midiaTipo);
+		await processChatMessageMedia({
+			messageId: insertedMessage.messageId,
+			organizacaoId,
+			storageId: mediaData.storageId,
+			mimeType: mediaData.mimeType,
+			mediaType: midiaTipo,
+			log: "[WHATSAPP_WEBHOOK]",
+		});
 	}
 
 	if (!allowsAIService) return;
@@ -557,7 +561,7 @@ async function handleIncomingMessage(incomingMessage: ReturnType<typeof parseWeb
 			triggerMessageId: insertedMessage.messageId,
 			triggerMessageSentAt: insertedMessage.dataEnvio.toISOString(),
 		},
-		{ delayMs: agent.capacidades?.atendimento?.atrasoRespostaMs ?? AI_RESPONSE_DELAY_MS },
+		{ delayMs: resolveAiResponseDelayMs(agent.capacidades) },
 	);
 }
 
@@ -747,80 +751,5 @@ async function handleMessageEcho(messageEcho: ReturnType<typeof parseWebhookMess
 	console.log("[WHATSAPP_WEBHOOK] [ECHO] Message echo created to:", messageEcho.toPhoneNumber);
 }
 
-/**
- * Process media with AI (transcription, image analysis, etc.)
- */
-async function handleAIMediaProcessing(
-	messageId: string,
-	storageId: string,
-	mimeType: string,
-	mediaType: Exclude<TChatMessageContentTypeEnum, "TEXTO">,
-) {
-	// Figurinha é conteúdo expressivo, não informativo: pular o modelo de visão — um webp
-	// por reação seria custo puro. O texto fixo é o que agentes e prévias leem.
-	if (mediaType === "FIGURINHA") {
-		await db.update(chatMessages).set({ conteudoMidiaTextoProcessado: STICKER_PROCESSED_TEXT }).where(eq(chatMessages.id, messageId));
-		return;
-	}
-
-	try {
-		// Download file from Supabase Storage
-		const { data: fileData, error: downloadError } = await supabaseClient.storage.from("files").download(storageId);
-
-		if (downloadError || !fileData) {
-			console.error("[PROCESS_MEDIA] Download error:", downloadError);
-			throw new Error("Erro ao baixar arquivo do storage");
-		}
-		const fileBuffer = Buffer.from(await fileData.arrayBuffer());
-		let processedText = "";
-		let summary = "";
-
-		switch (mediaType) {
-			case "AUDIO": {
-				const result = await handleAIAudioProcessing(fileBuffer, mimeType);
-				processedText = result.transcription;
-				summary = result.summary;
-				break;
-			}
-			case "IMAGEM": {
-				const result = await handleAIImageProcessing(fileBuffer, mimeType);
-				processedText = result.description;
-				summary = result.summary;
-				break;
-			}
-			case "VIDEO": {
-				const result = await handleAIVideoProcessing(fileBuffer, mimeType);
-				processedText = result.analysis;
-				summary = result.summary;
-				break;
-			}
-			case "DOCUMENTO": {
-				const result = await handleAIDocumentProcessing(fileBuffer, mimeType);
-				processedText = result.extraction;
-				summary = result.summary;
-				break;
-			}
-		}
-
-		await db
-			.update(chatMessages)
-			.set({
-				conteudoMidiaTextoProcessado: processedText,
-				conteudoMidiaTextoProcessadoResumo: summary,
-			})
-			.where(eq(chatMessages.id, messageId));
-
-		console.log("[MEDIA_PROCESSING] Completed for message:", messageId);
-
-		return {
-			sucess: true,
-			processedText,
-			summary,
-		};
-	} catch (error) {
-		console.error("[MEDIA_PROCESSING] Error:", error);
-		throw error;
-	}
-}
 import { observeWhatsappPayment } from "@/lib/onboarding/whatsapp-payment";
 import { reconcileOnboardingCampaigns } from "@/lib/onboarding/reconcile";

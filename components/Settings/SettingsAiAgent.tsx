@@ -1,5 +1,5 @@
 "use client";
-import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { Bot, ListChecks, MessageSquare } from "lucide-react";
 import { parseAsStringLiteral, useQueryState } from "nuqs";
@@ -15,9 +15,9 @@ const AI_AGENT_TABS = ["configuracao", "execucoes", "playground"] as const;
 type TAiAgentTab = (typeof AI_AGENT_TABS)[number];
 
 const TABS: Array<{ value: TAiAgentTab; label: string; icon: typeof Bot }> = [
-	{ value: "configuracao", label: "CONFIGURAÇÃO", icon: Bot },
-	{ value: "execucoes", label: "EXECUÇÕES", icon: ListChecks },
-	{ value: "playground", label: "TESTAR", icon: MessageSquare },
+	{ value: "configuracao", label: "Configuração", icon: Bot },
+	{ value: "execucoes", label: "Execuções", icon: ListChecks },
+	{ value: "playground", label: "Testar", icon: MessageSquare },
 ];
 
 export default function SettingsAiAgent({ membership }: SettingsAiAgentProps) {
@@ -42,24 +42,24 @@ export default function SettingsAiAgent({ membership }: SettingsAiAgentProps) {
 
 	// A permissão de visualização é checada no shell de configurações, que também trava o item no rail.
 	return (
-		<div className="flex w-full flex-col gap-6">
-			<div className="flex items-center gap-2 border-b pb-3">
-				{TABS.map((item) => {
-					const Icon = item.icon;
-					return (
-						<Button
-							key={item.value}
-							size="sm"
-							variant={tab === item.value ? "secondary" : "ghost"}
-							className="flex items-center gap-2"
-							onClick={() => setTab(item.value)}
-						>
-							<Icon className="h-4 w-4" />
-							{item.label}
-						</Button>
-					);
-				})}
-			</div>
+		<div className="flex w-full min-w-0 flex-col gap-6">
+			{/* Mesma barra de abas das páginas de módulo (campanhas, atendimentos): o `TabsList` já
+			    vem num contêiner que rola na horizontal, então em 360px a barra rola sozinha em vez
+			    de empurrar a página inteira para além da viewport — os botões soltos de antes eram
+			    `shrink-0` e alargavam o formulário todo. */}
+			<Tabs value={tab} onValueChange={(value) => setTab(value as TAiAgentTab)} className="w-full">
+				<TabsList variant="page">
+					{TABS.map((item) => {
+						const Icon = item.icon;
+						return (
+							<TabsTrigger key={item.value} value={item.value}>
+								<Icon className="h-4 min-h-4 w-4 min-w-4" />
+								{item.label}
+							</TabsTrigger>
+						);
+					})}
+				</TabsList>
+			</Tabs>
 
 			{tab === "configuracao" ? <AgentConfigForm /> : null}
 			{tab === "execucoes" ? <AgentRunsList /> : null}

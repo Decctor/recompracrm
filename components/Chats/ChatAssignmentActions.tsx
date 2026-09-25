@@ -8,6 +8,9 @@ import {
 	DropdownMenuItem,
 	DropdownMenuLabel,
 	DropdownMenuSeparator,
+	DropdownMenuSub,
+	DropdownMenuSubContent,
+	DropdownMenuSubTrigger,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { getErrorMessage } from "@/lib/errors";
@@ -18,13 +21,15 @@ import { useChatTransferTargets, type TChatAttendance, type TChatMessagesPage } 
 import type { TChatAssignmentPriority, TChatAssignmentStatus } from "@/schemas/enums";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowRightLeft, ChevronDown, LogOut, Smartphone, Sparkles, UserPlus } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
+
+type TAtendimentoIa = TChatMessagesPage["chat"]["atendimentoIa"];
 
 type ChatAssignmentActionsProps = {
 	chatId: string;
 	atendimento: TChatAttendance;
-	atendimentoIa: TChatMessagesPage["chat"]["atendimentoIa"];
+	atendimentoIa: TAtendimentoIa;
 	currentUserId: string;
 	/**
 	 * Header da thread: só posse e roteamento (assumir/liberar/transferir). Status e
@@ -33,15 +38,40 @@ type ChatAssignmentActionsProps = {
 	 * a linha de metadados do header já diz, e o rótulo do botão pode ser só o verbo.
 	 */
 	compact?: boolean;
+	/**
+	 * Header estreito (celular e tablet): fica só o verbo de posse e um menu de overflow,
+	 * no mesmo desenho do `ActionToolbar` das páginas. Transferir vira submenu, e o header
+	 * encaixa itens próprios no mesmo menu via `overflowItems` — um botão a mais por ação
+	 * era o que comia o nome do cliente em 360px.
+	 */
+	collapsed?: boolean;
+	overflowItems?: ReactNode;
 };
 
-export function ChatAssignmentActions({ chatId, atendimento, atendimentoIa, currentUserId, compact = false }: ChatAssignmentActionsProps) {
+function useChatAssignmentMutation(chatId: string) {
 	const queryClient = useQueryClient();
-	const [transferMenuOpen, setTransferMenuOpen] = useState(false);
-	const { data: transferTargets } = useChatTransferTargets({ enabled: transferMenuOpen });
+	return useMutation({
+		mutationFn: updateChatAssignment,
+		onSuccess: (data) => {
+			toast.success(data.message);
+			void queryClient.invalidateQueries({ queryKey: ["chat-messages", chatId] });
+			void queryClient.invalidateQueries({ queryKey: ["chats"] });
+		},
+		onError: (error) => toast.error(getErrorMessage(error)),
+	});
+}
 
-	const isOwner = atendimento?.responsavelTipo === "USUARIO" && atendimento.responsavelUsuarioId === currentUserId;
-	const isFree = !atendimento || atendimento.responsavelTipo === "NAO_ATRIBUIDO";
+type ChatTransferMenuItemsProps = {
+	atendimento: TChatAttendance;
+	atendimentoIa: TAtendimentoIa;
+	/** Só busca os destinos quando o menu abre: a lista de atendentes não precisa ficar quente. */
+	enabled: boolean;
+	onTransfer: (destino: { tipo: "AGENTE" } | { tipo: "USUARIO"; usuarioDestinoId: string }) => void;
+};
+
+/** Conteúdo do menu de transferência: o mesmo no dropdown do header largo e no submenu do overflow. */
+function ChatTransferMenuItems({ atendimento, atendimentoIa, enabled, onTransfer }: ChatTransferMenuItemsProps) {
+	const { data: transferTargets } = useChatTransferTargets({ enabled });
 
 	// O telefone não é um destino: aquele estado só nasce do echo do WhatsApp Business, e a IA
 	// não deve responder em paralelo com quem está no celular. Sai do telefone assumindo.
@@ -52,15 +82,50 @@ export function ChatAssignmentActions({ chatId, atendimento, atendimentoIa, curr
 		: (atendimentoIa.motivoIndisponivel ?? null);
 	const canAssignToAgent = atendimentoIa.disponivel && !agentBlockedByPhone && !agentIsCurrent;
 
-	const { mutate, isPending } = useMutation({
-		mutationFn: updateChatAssignment,
-		onSuccess: (data) => {
-			toast.success(data.message);
-			void queryClient.invalidateQueries({ queryKey: ["chat-messages", chatId] });
-			void queryClient.invalidateQueries({ queryKey: ["chats"] });
-		},
-		onError: (error) => toast.error(getErrorMessage(error)),
-	});
+	return (
+		<>
+			<DropdownMenuGroup>
+				{/* O agente vem primeiro e é irmão das pessoas: transferir é escolher um
+				    responsável, e a IA é um dos responsáveis possíveis. */}
+				<DropdownMenuLabel className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground">Agente de IA</DropdownMenuLabel>
+				<DropdownMenuItem className="gap-2" disabled={!canAssignToAgent} onClick={() => onTransfer({ tipo: "AGENTE" })}>
+					<Sparkles className="h-3.5 w-3.5 shrink-0" />
+					<span className="flex min-w-0 flex-col">
+						<span className="truncate">{atendimentoIa.agenteNome ?? "Agente de atendimento"}</span>
+						{agentIsCurrent && <span className="text-[10px] text-muted-foreground">Já é o responsável</span>}
+						{!agentIsCurrent && agentReason && <span className="text-[10px] text-muted-foreground">{agentReason}</span>}
+					</span>
+				</DropdownMenuItem>
+			</DropdownMenuGroup>
+
+			<DropdownMenuSeparator />
+			<DropdownMenuGroup>
+				<DropdownMenuLabel className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground">Atendentes</DropdownMenuLabel>
+				{(transferTargets ?? []).length === 0 && <DropdownMenuItem disabled>Nenhum usuário disponível</DropdownMenuItem>}
+				{(transferTargets ?? []).map((target) => (
+					<DropdownMenuItem key={target.id} onClick={() => onTransfer({ tipo: "USUARIO", usuarioDestinoId: target.id })}>
+						{target.nome}
+					</DropdownMenuItem>
+				))}
+			</DropdownMenuGroup>
+		</>
+	);
+}
+
+export function ChatAssignmentActions({
+	chatId,
+	atendimento,
+	atendimentoIa,
+	currentUserId,
+	compact = false,
+	collapsed = false,
+	overflowItems,
+}: ChatAssignmentActionsProps) {
+	const [transferMenuOpen, setTransferMenuOpen] = useState(false);
+	const { mutate, isPending } = useChatAssignmentMutation(chatId);
+
+	const isOwner = atendimento?.responsavelTipo === "USUARIO" && atendimento.responsavelUsuarioId === currentUserId;
+	const isFree = !atendimento || atendimento.responsavelTipo === "NAO_ATRIBUIDO";
 
 	// O rótulo diz de quem se está assumindo: "assumir" de uma fila vazia e "tomar da IA"
 	// são ações com consequências diferentes para quem clica. No header o verbo basta — o
@@ -76,12 +141,22 @@ export function ChatAssignmentActions({ chatId, atendimento, atendimentoIa, curr
 	// Uma única escala para tudo que divide a faixa do header: mesma altura, mesmo peso.
 	const actionTypography = "text-[11px] font-extrabold uppercase tracking-[0.08em]";
 
+	const transferItems = (
+		<ChatTransferMenuItems
+			atendimento={atendimento}
+			atendimentoIa={atendimentoIa}
+			enabled={transferMenuOpen}
+			onTransfer={(destino) => mutate({ acao: "transferir", chatId, destino })}
+		/>
+	);
+
 	return (
 		<div className={cn(compact ? "flex items-center gap-1.5" : "flex flex-col gap-2")}>
 			{!isOwner && (
 				<Button
 					size="sm"
-					className={cn("gap-1 text-[11px] font-extrabold uppercase tracking-[0.08em]", !compact && "col-span-2 w-full")}
+					className={cn("gap-1", actionTypography, !compact && "col-span-2 w-full")}
+					title={assumeDetail !== assumeLabel ? assumeDetail : undefined}
 					disabled={isPending}
 					onClick={() => mutate({ acao: "assumir", chatId })}
 				>
@@ -103,57 +178,47 @@ export function ChatAssignmentActions({ chatId, atendimento, atendimentoIa, curr
 				</Button>
 			)}
 
-			<DropdownMenu open={transferMenuOpen} onOpenChange={setTransferMenuOpen}>
-				<DropdownMenuTrigger
-					render={
-						<Button
-							size="sm"
-							variant="outline"
-							className={cn("gap-1", actionTypography, !compact && "col-span-2 w-full")}
-							disabled={isPending}
-							aria-label="Transferir atendimento"
-						>
-							{compact && <ArrowRightLeft className="h-3 w-3 sm:hidden" />}
-							{/* Abaixo de sm o header divide 360px com o nome do cliente: fica o ícone. */}
-							<span className={cn(compact && "hidden sm:inline")}>TRANSFERIR</span>
-							<ChevronDown className="h-3 w-3 opacity-60" />
-						</Button>
-					}
-				/>
-				<DropdownMenuContent align="end" className="max-h-64 overflow-y-auto">
-					<DropdownMenuGroup>
-						{/* O agente vem primeiro e é irmão das pessoas: transferir é escolher um
-					    responsável, e a IA é um dos responsáveis possíveis. */}
-						<DropdownMenuLabel className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground">Agente de IA</DropdownMenuLabel>
-						<DropdownMenuItem
-							className="gap-2"
-							disabled={!canAssignToAgent}
-							onClick={() => mutate({ acao: "transferir", chatId, destino: { tipo: "AGENTE" } })}
-						>
-							<Sparkles className="h-3.5 w-3.5 shrink-0" />
-							<span className="flex min-w-0 flex-col">
-								<span className="truncate">{atendimentoIa.agenteNome ?? "Agente de atendimento"}</span>
-								{agentIsCurrent && <span className="text-[10px] text-muted-foreground">Já é o responsável</span>}
-								{!agentIsCurrent && agentReason && <span className="text-[10px] text-muted-foreground">{agentReason}</span>}
-							</span>
-						</DropdownMenuItem>
-					</DropdownMenuGroup>
-
-					<DropdownMenuSeparator />
-					<DropdownMenuGroup>
-						<DropdownMenuLabel className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground">Atendentes</DropdownMenuLabel>
-						{(transferTargets ?? []).length === 0 && <DropdownMenuItem disabled>Nenhum usuário disponível</DropdownMenuItem>}
-						{(transferTargets ?? []).map((target) => (
-							<DropdownMenuItem
-								key={target.id}
-								onClick={() => mutate({ acao: "transferir", chatId, destino: { tipo: "USUARIO", usuarioDestinoId: target.id } })}
+			{collapsed ? (
+				<DropdownMenu>
+					<DropdownMenuTrigger
+						render={
+							<Button size="icon-sm" variant="outline" disabled={isPending} aria-label="Mais ações">
+								<ChevronDown className="h-4 w-4" />
+							</Button>
+						}
+					/>
+					<DropdownMenuContent align="end">
+						<DropdownMenuSub onOpenChange={setTransferMenuOpen}>
+							<DropdownMenuSubTrigger>
+								<ArrowRightLeft className="h-4 w-4" />
+								Transferir
+							</DropdownMenuSubTrigger>
+							<DropdownMenuSubContent className="max-h-64 overflow-y-auto">{transferItems}</DropdownMenuSubContent>
+						</DropdownMenuSub>
+						{overflowItems}
+					</DropdownMenuContent>
+				</DropdownMenu>
+			) : (
+				<DropdownMenu open={transferMenuOpen} onOpenChange={setTransferMenuOpen}>
+					<DropdownMenuTrigger
+						render={
+							<Button
+								size="sm"
+								variant="outline"
+								className={cn("gap-1", actionTypography, !compact && "col-span-2 w-full")}
+								disabled={isPending}
+								aria-label="Transferir atendimento"
 							>
-								{target.nome}
-							</DropdownMenuItem>
-						))}
-					</DropdownMenuGroup>
-				</DropdownMenuContent>
-			</DropdownMenu>
+								TRANSFERIR
+								<ChevronDown className="h-3 w-3 opacity-60" />
+							</Button>
+						}
+					/>
+					<DropdownMenuContent align="end" className="max-h-64 overflow-y-auto">
+						{transferItems}
+					</DropdownMenuContent>
+				</DropdownMenu>
+			)}
 
 			{!compact && (
 				<div className="col-span-2 mt-1 border-t border-border pt-3">

@@ -18,10 +18,12 @@ import {
 import { cn } from "@/lib/utils";
 import { supabaseClient } from "@/services/supabase";
 import { useMutation, useQueryClient, type InfiniteData } from "@tanstack/react-query";
-import { ChevronDown, Loader2, PanelRightClose, PanelRightOpen, Smartphone, Sparkles, UserRound, UserRoundPlus } from "lucide-react";
+import { ArrowLeft, ChevronDown, Loader2, PanelRightClose, PanelRightOpen, Plus, Smartphone, Sparkles, UserRound, UserRoundPlus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { useMediaQuery } from "@/lib/hooks/use-media-query";
 import { ChatAssignmentActions } from "./ChatAssignmentActions";
 import { ChatContextPanel } from "./ChatContextPanel";
 import { ChatInputArea, type TChatInputAreaHandle, type TOutgoingAttachment } from "./ChatInputArea";
@@ -37,6 +39,8 @@ type ChatThreadProps = {
 	organizationId: string;
 	currentUser: { id: string; nome: string; avatarUrl: string | null };
 	quotePermissions: TQuotePermissions;
+	/** Celular: a lista fica escondida enquanto a conversa está aberta, e este é o caminho de volta. */
+	onBack?: () => void;
 };
 
 function insertMessageIntoCache(data: InfiniteData<TChatMessagesPage> | undefined, message: TChatThreadMessage) {
@@ -125,7 +129,7 @@ function formatDaySeparator(date: Date) {
 	return date.toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" });
 }
 
-export function ChatThread({ chatId, organizationId, currentUser, quotePermissions }: ChatThreadProps) {
+export function ChatThread({ chatId, organizationId, currentUser, quotePermissions, onBack }: ChatThreadProps) {
 	const queryClient = useQueryClient();
 	const queryKey = getChatMessagesQueryKey(chatId);
 	const { messages, chat, isPending, isError, error, hasNextPage, fetchNextPage, isFetchingNextPage, refetch } = useChatMessages(chatId);
@@ -164,6 +168,11 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 	}, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
 	const [contextPanelOpen, setContextPanelOpen] = useContextPanelPreference();
+	const [contextSheetOpen, setContextSheetOpen] = useState(false);
+	const [quoteBuilderOpen, setQuoteBuilderOpen] = useState(false);
+	// Mesmo corte do `ActionToolbar`: a partir de lg a coluna da thread tem ≥ 640px e cabe a
+	// faixa inteira de ações; abaixo disso ela divide o espaço com o nome do cliente.
+	const isWideHeader = useMediaQuery("(min-width: 1024px)");
 
 	const markRead = useMutation({
 		mutationFn: markChatRead,
@@ -339,14 +348,25 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 	 */
 	const canWriteInConversation = isOwner && janela.variant !== "expirada";
 	const insertQuoteInConversation = canWriteInConversation ? (texto: string) => inputAreaRef.current?.appendText(texto) : undefined;
+	// Sem cliente vinculado não há a quem orçar: a mesma regra que esconde o recurso no header largo.
+	const canCreateQuote = !!chat.clienteId && quotePermissions.criar;
 
 	return (
 		<div className="flex h-full min-h-0 w-full min-w-0 overflow-hidden">
 			<div className="flex min-h-0 min-w-0 flex-1 flex-col">
 				<header className="flex shrink-0 flex-col gap-0.5 border-b border-border px-4 py-2">
 					<div className="flex items-center gap-2">
+						{/* No celular a lista some quando a conversa abre (ChatHub): sem este botão não há
+						    caminho de volta — a aba "Hub" já está selecionada e não faz nada. */}
+						{onBack && (
+							<Button variant="ghost" size="icon-sm" className="-ml-2 shrink-0 md:hidden" aria-label="Voltar para a lista de conversas" onClick={onBack}>
+								<ArrowLeft className="h-4 w-4" />
+							</Button>
+						)}
 						<h2 className="min-w-0 flex-1 truncate text-sm font-semibold tracking-tight">{chat.cliente?.nome ?? "Cliente sem nome"}</h2>
-						{/* Tudo na faixa de ações usa a mesma altura (h-8): botões, chip de orçamento e ícones. */}
+						{/* Tudo na faixa de ações usa a mesma altura (h-8): botões, chip de orçamento e ícones.
+						    Abaixo de lg a faixa segue o `ActionToolbar` das páginas: fica o verbo de posse e
+						    o resto vai para um menu de overflow, em vez de quebrar linha ou engolir o nome. */}
 						<div className="flex shrink-0 items-center gap-1.5">
 							{/* Orçamento em aberto é pendência comercial: aparece no header, que é a única
 							    faixa sempre visível da thread. */}
@@ -356,31 +376,61 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 								clientName={chat.cliente?.nome ?? "este cliente"}
 								permissions={quotePermissions}
 								onInsertInConversation={insertQuoteInConversation}
+								builderOpen={quoteBuilderOpen}
+								onBuilderOpenChange={setQuoteBuilderOpen}
+								showNewQuoteButton={isWideHeader}
 							/>
 
 							{/* Header carrega só posse e roteamento; status e prioridade vivem no painel. */}
-							<ChatAssignmentActions chatId={chatId} atendimento={atendimento} atendimentoIa={chat.atendimentoIa} currentUserId={currentUser.id} compact />
-
-							<Button
-								variant="ghost"
-								size="icon-sm"
-								className="hidden shrink-0 xl:inline-flex"
-								aria-label={contextPanelOpen ? "Ocultar contexto do atendimento" : "Mostrar contexto do atendimento"}
-								aria-pressed={contextPanelOpen}
-								onClick={() => setContextPanelOpen(!contextPanelOpen)}
-							>
-								{contextPanelOpen ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
-							</Button>
-
-							{/* Abaixo de xl o painel não cabe como coluna; vira gaveta sob demanda. */}
-							<Sheet>
-								<SheetTrigger
-									render={
-										<Button variant="ghost" size="icon-sm" className="shrink-0 xl:hidden" aria-label="Abrir contexto do atendimento">
+							<ChatAssignmentActions
+								chatId={chatId}
+								atendimento={atendimento}
+								atendimentoIa={chat.atendimentoIa}
+								currentUserId={currentUser.id}
+								compact
+								collapsed={!isWideHeader}
+								overflowItems={
+									<>
+										{canCreateQuote && (
+											<DropdownMenuItem onClick={() => setQuoteBuilderOpen(true)}>
+												<Plus className="h-4 w-4" />
+												Novo orçamento
+											</DropdownMenuItem>
+										)}
+										<DropdownMenuSeparator />
+										<DropdownMenuItem onClick={() => setContextSheetOpen(true)}>
 											<PanelRightOpen className="h-4 w-4" />
-										</Button>
-									}
-								/>
+											Contexto do atendimento
+										</DropdownMenuItem>
+									</>
+								}
+							/>
+
+							{isWideHeader && (
+								<Button
+									variant="ghost"
+									size="icon-sm"
+									className="hidden shrink-0 xl:inline-flex"
+									aria-label={contextPanelOpen ? "Ocultar contexto do atendimento" : "Mostrar contexto do atendimento"}
+									aria-pressed={contextPanelOpen}
+									onClick={() => setContextPanelOpen(!contextPanelOpen)}
+								>
+									{contextPanelOpen ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
+								</Button>
+							)}
+
+							{/* Abaixo de xl o painel não cabe como coluna; vira gaveta sob demanda. Controlada
+							    porque no header estreito quem a abre é um item do menu de overflow. */}
+							<Sheet open={contextSheetOpen} onOpenChange={setContextSheetOpen}>
+								{isWideHeader && (
+									<SheetTrigger
+										render={
+											<Button variant="ghost" size="icon-sm" className="shrink-0 xl:hidden" aria-label="Abrir contexto do atendimento">
+												<PanelRightOpen className="h-4 w-4" />
+											</Button>
+										}
+									/>
+								)}
 								<SheetContent side="right" className="w-[min(22rem,90vw)] p-0">
 									<SheetTitle className="sr-only">Contexto do atendimento</SheetTitle>
 									<ChatContextPanel

@@ -8,7 +8,8 @@ import { eq } from "drizzle-orm";
 import z from "zod";
 import { resolveLanguageModel } from "../providers/language";
 import { normalizeAiUsage } from "../providers/usage";
-import { AgentDailyRunLimitError, AgentInactiveError, formatAgentErrorChain } from "../shared/errors";
+import { isAiGatewayCreditError, notifyAiGatewayCreditExhausted } from "../providers/credit-alert";
+import { AgentDailyRunLimitError, AgentInactiveError, AgentRunAbortedError, formatAgentErrorChain } from "../shared/errors";
 import { parseJsonbWithFallback } from "../shared/json";
 import { listActiveProductGroups } from "../shared/product-groups";
 import { isToolEnabled } from "../tools/guards";
@@ -19,7 +20,7 @@ import { buildChatRunContext, formatChatRunContext } from "./context";
 import { formatKnowledgeContext, getActiveKnowledgeBlocks } from "./knowledge";
 import { buildAgentSystemPrompt } from "./prompts";
 import { mergeRunSummary } from "./run-memory";
-import { completeAgentRun, countAgentRunsToday, createAgentRun, failAgentRun, markAgentRunRunning } from "./runs";
+import { completeAgentRun, countAgentRunsToday, createAgentRun, failAgentRun, markAgentRunCancelled, markAgentRunRunning } from "./runs";
 import { shouldRetryDeferredAction } from "./turn-validation";
 
 type TDb = DB | DBTransaction;
@@ -178,8 +179,15 @@ export async function prepareAgentExecution({
  * Não há fallback de texto: uma falha marca o run como FALHA e sobe o erro. O caminho antigo
  * respondia "estou com dificuldades técnicas" ao cliente, o que escondia o problema e gastava
  * a janela de conversa com uma mensagem inútil.
+ *
+ * `abortSignal` corta a geração no meio quando a conversa supera a run (ver
+ * `respondToChatWithAgent`). Um turno leva dezenas de segundos e chegava ao fim para ser
+ * descartado na revalidação pré-entrega — em duas semanas, 19 runs e ~500k tokens de entrada.
  */
-export async function executeAgentTurn(prepared: TPreparedAgentExecution): Promise<TAiAgentTurnOutput> {
+export async function executeAgentTurn(
+	prepared: TPreparedAgentExecution,
+	{ abortSignal }: { abortSignal?: AbortSignal } = {},
+): Promise<TAiAgentTurnOutput> {
 	const { toolContext, run, modeloConfig } = prepared;
 
 	await markAgentRunRunning(toolContext.db, run.id);
@@ -202,7 +210,7 @@ export async function executeAgentTurn(prepared: TPreparedAgentExecution): Promi
 				stopWhen: stepCountIs(prepared.maxSteps),
 				output: Output.object({ schema: TurnOutputSchema }),
 			});
-			const result = await loopAgent.generate({ prompt });
+			const result = await loopAgent.generate({ prompt, abortSignal });
 			usages.push(result.totalUsage);
 			results.push(result);
 			return result;
@@ -276,7 +284,19 @@ Execute a ferramenta nesta execução ou pergunte objetivamente o único dado qu
 
 		return finalOutput;
 	} catch (error) {
-		await failAgentRun(toolContext.db, { runId: run.id, erro: formatRunError(error) });
+		// Abortada de fora: a conversa seguiu sem esta run. Não é falha do agente.
+		if (abortSignal?.aborted) {
+			const reason = typeof abortSignal.reason === "string" ? abortSignal.reason : "Execução abortada.";
+			await markAgentRunCancelled(toolContext.db, { runId: run.id, reason });
+			throw new AgentRunAbortedError(reason);
+		}
+
+		const erro = formatRunError(error);
+		await failAgentRun(toolContext.db, { runId: run.id, erro });
+		// Crédito do gateway é global: esta run é só a primeira de muitas a falhar.
+		if (isAiGatewayCreditError(error)) {
+			await notifyAiGatewayCreditExhausted({ source: "AGENTE", organizacaoId: toolContext.organizacaoId, detail: erro });
+		}
 		throw error;
 	}
 }

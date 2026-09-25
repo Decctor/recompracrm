@@ -610,6 +610,13 @@ export type TAiAgentRunStatusEnum = z.infer<typeof AiAgentRunStatusEnum>;
 export const AiAgentRunTriggerEnum = z.enum(["CHAT_MENSAGEM", "PLAYGROUND", "ATRIBUICAO_HUB"]);
 export type TAiAgentRunTriggerEnum = z.infer<typeof AiAgentRunTriggerEnum>;
 
+/**
+ * Quando o agente entra na conversa. IMEDIATO responde após o debounce; RESERVA só responde se
+ * ninguém da equipe (hub ou celular da loja) tiver respondido dentro da espera configurada.
+ */
+export const AiAgentAttendanceModeEnum = z.enum(["IMEDIATO", "RESERVA"]);
+export type TAiAgentAttendanceModeEnum = z.infer<typeof AiAgentAttendanceModeEnum>;
+
 // Ciclo de vida de uma chamada de ferramenta dentro de uma execução.
 export const AiAgentToolCallStatusEnum = z.enum(["EXECUTANDO", "CONCLUIDO", "FALHA"]);
 export type TAiAgentToolCallStatusEnum = z.infer<typeof AiAgentToolCallStatusEnum>;

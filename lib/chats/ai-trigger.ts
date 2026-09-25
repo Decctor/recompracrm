@@ -1,9 +1,10 @@
-import { claimChatAttendanceForAgent, getCurrentChatAttendance, releaseChatAttendance } from "@/lib/chats/attendance-state";
 import { parseJsonbWithFallback } from "@/lib/ai/shared/json";
-import { AiAgentScopeSchema, isClientInAgentScope } from "@/schemas/ai-agents";
+import { claimChatAttendanceForAgent, getCurrentChatAttendance, releaseChatAttendance } from "@/lib/chats/attendance-state";
+import { formatPhoneAsBase } from "@/lib/formatting";
+import { AiAgentCapabilitiesSchema, AiAgentScopeSchema, isClientInAgentScope } from "@/schemas/ai-agents";
 import type { TAiAgentRunTriggerEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
-import { chatMessages, chats } from "@/services/drizzle/schema";
+import { chatMessages, chats, organizationMembers, sellers, users } from "@/services/drizzle/schema";
 import { and, desc, eq, gt, inArray } from "drizzle-orm";
 
 /**
@@ -29,6 +30,45 @@ const AI_RESPONSE_DELAY_MS = 5000;
 export type TAiTriggerDecision = { shouldRespond: true } | { shouldRespond: false; reason: string };
 
 const OUT_OF_SCOPE_RELEASE_REASON = "CLIENTE_FORA_DO_ESCOPO";
+const STAFF_PHONE_RELEASE_REASON = "NUMERO_DA_EQUIPE";
+
+/**
+ * Quanto esperar antes de a IA responder a uma mensagem.
+ *
+ * No modo RESERVA a espera é o tempo dado à equipe: se alguém responder (hub ou celular da loja)
+ * nesse intervalo, as reconfirmações do runner veem a resposta e a IA recua sozinha — não há
+ * lógica nova, só uma espera maior antes das mesmas checagens. Com o transporte inline a espera
+ * consome duração da função do webhook; para esperas de minutos, use `AI_TURN_TRANSPORT=queue`.
+ */
+export function resolveAiResponseDelayMs(capacidades: unknown): number {
+	const parsed = parseJsonbWithFallback(AiAgentCapabilitiesSchema, capacidades);
+	const debounce = parsed.atendimento.atrasoRespostaMs ?? AI_RESPONSE_DELAY_MS;
+	if (parsed.atendimento.modo !== "RESERVA") return debounce;
+	return Math.max(debounce, parsed.atendimento.esperaHumanoMs);
+}
+
+/**
+ * O número é de alguém da equipe da organização (membro do hub ou vendedor)?
+ *
+ * Um vendedor que manda o endereço da obra pelo número da loja não é um cliente, e a IA
+ * respondendo a ele ("quer que eu registre no CRM?") é ruído para todo mundo. A comparação é
+ * pela base do telefone (DDD + 8 dígitos), a mesma da deduplicação de clientes.
+ */
+async function isOrganizationStaffPhone({ organizationId, telefoneBase }: { organizationId: string; telefoneBase: string }): Promise<boolean> {
+	if (!telefoneBase) return false;
+	const [members, orgSellers] = await Promise.all([
+		db
+			.select({ telefone: users.telefone })
+			.from(organizationMembers)
+			.innerJoin(users, eq(users.id, organizationMembers.usuarioId))
+			.where(eq(organizationMembers.organizacaoId, organizationId)),
+		db
+			.select({ telefone: sellers.telefone })
+			.from(sellers)
+			.where(and(eq(sellers.organizacaoId, organizationId), eq(sellers.ativo, true))),
+	]);
+	return [...members, ...orgSellers].some((row) => row.telefone && formatPhoneAsBase(row.telefone) === telefoneBase);
+}
 
 /**
  * Decide se o cliente da conversa está no escopo de atendimento do agente.
@@ -59,21 +99,35 @@ export async function confirmClientInAgentScope({
 	escopo: unknown;
 }): Promise<TAiTriggerDecision> {
 	const scope = parseJsonbWithFallback(AiAgentScopeSchema, escopo);
-	// O default é TODOS, então o caso comum não custa nem a leitura do chat.
-	if (scope.tipo === "TODOS") return { shouldRespond: true };
 
 	const chat = await db.query.chats.findFirst({
 		where: and(eq(chats.id, chatId), eq(chats.organizacaoId, organizationId)),
 		columns: { clienteId: true },
+		with: { cliente: { columns: { telefone: true, telefoneBase: true } } },
 	});
 	if (!chat) return { shouldRespond: false, reason: "Chat não encontrado." };
-	if (isClientInAgentScope(scope, chat.clienteId)) return { shouldRespond: true };
 
-	const atual = await getCurrentChatAttendance(db, { organizacaoId: organizationId, chatId });
-	if (atual?.responsavelTipo === "AGENTE" && atual.responsavelAgenteId === agentId) {
-		await releaseChatAttendance(db, { organizacaoId: organizationId, chatId, motivo: OUT_OF_SCOPE_RELEASE_REASON });
+	const releaseIfOwnedByAgent = async (motivo: string) => {
+		const atual = await getCurrentChatAttendance(db, { organizacaoId: organizationId, chatId });
+		if (atual?.responsavelTipo === "AGENTE" && atual.responsavelAgenteId === agentId) {
+			await releaseChatAttendance(db, { organizacaoId: organizationId, chatId, motivo });
+		}
+	};
+
+	// Lista explícita de inclusão vence a regra da equipe: é assim que a loja testa o agente no
+	// próprio número antes de liberá-lo para todo mundo.
+	const explicitlyIncluded = scope.tipo === "INCLUIR" && isClientInAgentScope(scope, chat.clienteId);
+	if (!explicitlyIncluded) {
+		const telefoneBase = chat.cliente?.telefoneBase || (chat.cliente?.telefone ? formatPhoneAsBase(chat.cliente.telefone) : "");
+		if (await isOrganizationStaffPhone({ organizationId, telefoneBase })) {
+			await releaseIfOwnedByAgent(STAFF_PHONE_RELEASE_REASON);
+			return { shouldRespond: false, reason: "Número de alguém da equipe da organização." };
+		}
 	}
 
+	if (scope.tipo === "TODOS" || isClientInAgentScope(scope, chat.clienteId)) return { shouldRespond: true };
+
+	await releaseIfOwnedByAgent(OUT_OF_SCOPE_RELEASE_REASON);
 	return { shouldRespond: false, reason: "Cliente fora do escopo de atendimento do agente." };
 }
 

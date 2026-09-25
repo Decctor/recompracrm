@@ -181,6 +181,39 @@ export default function ToolsBlock({
 			<div className="flex w-full flex-col gap-4 border-t pt-4">
 				<h3 className="text-xs font-medium uppercase tracking-tight text-muted-foreground">LIMITES</h3>
 
+				<div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+					<div className="flex flex-col gap-1">
+						<SelectInput
+							label="QUANDO O AGENTE RESPONDE"
+							value={atendimento.modo}
+							resetOptionLabel="Selecione"
+							options={[
+								{ id: "IMEDIATO", value: "IMEDIATO", label: "Na hora" },
+								{ id: "RESERVA", value: "RESERVA", label: "Só se a equipe não responder" },
+							]}
+							handleChange={(value) => updateAttendanceSettings({ modo: value as "IMEDIATO" | "RESERVA" })}
+							onReset={() => updateAttendanceSettings({ modo: "IMEDIATO" })}
+						/>
+						<p className="text-xs text-muted-foreground">
+							{atendimento.modo === "RESERVA"
+								? "O agente espera a equipe. Se alguém responder pelo hub ou pelo celular da loja dentro da espera, ele não entra."
+								: "O agente responde assim que a espera abaixo termina, mesmo com a equipe online."}
+						</p>
+					</div>
+
+					{atendimento.modo === "RESERVA" ? (
+						<div className="flex flex-col gap-1">
+							<NumberInput
+								label="ESPERA PELA EQUIPE (MINUTOS)"
+								placeholder="3"
+								value={Math.round(atendimento.esperaHumanoMs / 60000)}
+								handleChange={(value) => updateAttendanceSettings({ esperaHumanoMs: Math.min(5, Math.max(1, Math.round(value))) * 60000 })}
+							/>
+							<p className="text-xs text-muted-foreground">Entre 1 e 5 minutos sem resposta da equipe antes de o agente assumir.</p>
+						</div>
+					) : null}
+				</div>
+
 				<div className="grid grid-cols-1 gap-4 md:grid-cols-3">
 					<div className="flex flex-col gap-1">
 						<NumberInput

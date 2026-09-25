@@ -1,9 +1,10 @@
 import { useClientsByIds, useClientsBySearch } from "@/lib/queries/clients";
 import { cn } from "@/lib/utils";
-import { Check, ChevronsUpDown, UserRound } from "lucide-react";
+import { Check, ChevronsUpDown, UserRound, X } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useMediaQuery } from "@/lib/hooks/use-media-query";
 import { Button } from "../ui/button";
+import { chipVariants } from "../ui/chip";
 import { Command, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from "../ui/command";
 import { Drawer, DrawerContent, DrawerTrigger } from "../ui/drawer";
 import { Field, FieldLabel } from "../ui/field";
@@ -75,6 +76,11 @@ function SelectMultipleClientsInput({
 	}
 
 	const namedSelection = selected.map((id) => selectedClientsById.get(id)?.nome).filter((nome): nome is string => Boolean(nome));
+	// Quem já está na lista, com nome quando a hidratação por ID chegou. Alimenta os chips abaixo
+	// do gatilho e o grupo "selecionados" do menu — antes, ver ou tirar alguém exigia lembrar o
+	// nome e pesquisar de novo.
+	const selectedClients = selected.map((id) => ({ id, client: selectedClientsById.get(id) ?? null }));
+	const isSearching = search.trim().length >= 2;
 	const triggerLabel =
 		selected.length === 0
 			? "NENHUM SELECIONADO"
@@ -113,16 +119,48 @@ function SelectMultipleClientsInput({
 
 				<CommandSeparator />
 
+				{/* Sem busca digitada o menu mostra quem já está na lista, cada um desmarcável no
+				    lugar. Com busca, a lista de resultados assume — o item já marcado aparece lá
+				    com o check. */}
+				{!isSearching && selectedClients.length > 0 && (
+					<>
+						<CommandGroup heading={`SELECIONADOS (${selectedClients.length})`}>
+							{selectedClients.map(({ id, client }) => (
+								<CommandItem
+									key={id}
+									value={`selected-${id}`}
+									onSelect={() => {
+										if (editable) handleSelect(id);
+									}}
+									className="cursor-pointer"
+								>
+									<div className="flex grow items-center gap-2 justify-between min-w-0">
+										<div className="flex items-center gap-1.5 flex-1 min-w-0">
+											<UserRound className="w-3.5 h-3.5 min-w-3.5 min-h-3.5 text-muted-foreground" />
+											<p className="text-sm font-medium truncate">{client?.nome ?? "Carregando..."}</p>
+										</div>
+										{client?.telefone ? <p className="text-xs text-muted-foreground shrink-0">{client.telefone}</p> : null}
+									</div>
+									<Check className="ml-auto h-4 w-4 opacity-100" />
+								</CommandItem>
+							))}
+						</CommandGroup>
+						<CommandSeparator />
+					</>
+				)}
+
 				{isLoading && <div className="p-2 text-center text-xs text-foreground/80">Carregando...</div>}
 				{isError && <div className="p-2 text-center text-xs text-destructive">Erro ao buscar clientes.</div>}
 
-				{search.trim().length < 2 && !isLoading && (
-					<div className="p-2 text-center text-xs text-muted-foreground italic">Digite pelo menos 2 caracteres para buscar.</div>
+				{!isSearching && !isLoading && (
+					<div className="p-2 text-center text-xs text-muted-foreground italic">
+						{selectedClients.length > 0 ? "Digite pelo menos 2 caracteres para adicionar mais clientes." : "Digite pelo menos 2 caracteres para buscar."}
+					</div>
 				)}
 
-				{isSuccess && searchClients && (
+				{isSearching && isSuccess && searchClients && (
 					<CommandGroup>
-						{searchClients.length === 0 && search.trim().length >= 2 && (
+						{searchClients.length === 0 && (
 							<div className="p-2 text-center text-sm italic text-foreground">Nenhum cliente encontrado.</div>
 						)}
 						{searchClients.map((client) => (
@@ -154,6 +192,29 @@ function SelectMultipleClientsInput({
 		</Command>
 	);
 
+	// A seleção fica visível sem abrir nada: um chip por cliente, com o X que tira dali mesmo.
+	// Chips rolam depois de ~5 linhas para uma lista de exclusão longa não empurrar o formulário.
+	const renderSelectedChips = () =>
+		selectedClients.length > 0 ? (
+			<ul className="flex max-h-32 flex-wrap gap-1.5 overflow-y-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-muted-foreground/30" aria-label={`${label}: selecionados`}>
+				{selectedClients.map(({ id, client }) => (
+					<li key={id} className={cn(chipVariants({ variant: "muted", size: "sm", shape: "pill" }), "max-w-full gap-1 py-1 pr-1")}>
+						<span className="truncate">{client?.nome ?? "Carregando..."}</span>
+						{editable && (
+							<button
+								type="button"
+								aria-label={`Remover ${client?.nome ?? "cliente"}`}
+								className="flex size-4 shrink-0 items-center justify-center rounded-full hover:bg-foreground/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+								onClick={() => handleSelect(id)}
+							>
+								<X className="size-3" />
+							</button>
+						)}
+					</li>
+				))}
+			</ul>
+		) : null;
+
 	if (isDesktop) {
 		return (
 			<Field className="gap-1" data-disabled={!editable}>
@@ -168,6 +229,7 @@ function SelectMultipleClientsInput({
 						{renderContent()}
 					</PopoverContent>
 				</Popover>
+				{renderSelectedChips()}
 			</Field>
 		);
 	}
@@ -185,6 +247,7 @@ function SelectMultipleClientsInput({
 					<div className="mt-4 border-t p-2 pb-8">{renderContent()}</div>
 				</DrawerContent>
 			</Drawer>
+			{renderSelectedChips()}
 		</Field>
 	);
 }

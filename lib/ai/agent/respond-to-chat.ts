@@ -1,13 +1,46 @@
-import { confirmAiDeliveryStillValid } from "@/lib/chats/ai-trigger";
+import { confirmAiDeliveryStillValid, type TAiTriggerDecision } from "@/lib/chats/ai-trigger";
 import { updateChatAttendanceSummary } from "@/lib/chats/attendance-state";
 import type { TAiAgentTurnAttachment } from "@/schemas/ai-agents";
 import type { TAiAgentRunTriggerEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
 import type { DB, DBTransaction } from "@/services/drizzle";
+import { isAgentError } from "../shared/errors";
 import { linkAgentRunMessage, markAgentRunCancelled } from "./runs";
 import { executeAgentTurn, prepareAgentExecution } from "./runtime";
 
 type TDb = DB | DBTransaction;
+
+/** Intervalo entre checagens de que a run ainda faz sentido. Três consultas leves por tique. */
+const STALE_RUN_CHECK_INTERVAL_MS = 3000;
+
+/**
+ * Observa a conversa enquanto o modelo gera e aborta a run assim que ela fica velha — o cliente
+ * mandou outra mensagem, um humano respondeu, o atendimento mudou de mão. Antes disso a run só
+ * era descartada depois de pronta, com todo o custo já gasto.
+ *
+ * Um tique nunca sobrepõe o anterior: se o banco demorar, o próximo espera.
+ */
+function watchForStaleRun({ check, onStale }: { check: () => Promise<TAiTriggerDecision>; onStale: (reason: string) => void }): () => void {
+	let stopped = false;
+	let inFlight = false;
+	const timer = setInterval(async () => {
+		if (stopped || inFlight) return;
+		inFlight = true;
+		try {
+			const decision = await check();
+			if (!decision.shouldRespond && !stopped) onStale(decision.reason);
+		} catch (error) {
+			console.error("[AI_AGENT] Falha na checagem de run obsoleta:", error);
+		} finally {
+			inFlight = false;
+		}
+	}, STALE_RUN_CHECK_INTERVAL_MS);
+
+	return () => {
+		stopped = true;
+		clearInterval(timer);
+	};
+}
 
 /**
  * Como a mensagem produzida chega ao cliente. Cada canal fornece a sua:
@@ -58,15 +91,12 @@ export async function respondToChatWithAgent({
 	// fora dele — a âncora precisa cobrir essa janela também.
 	const runStartedAt = new Date();
 	const prepared = await prepareAgentExecution({ organizacaoId, chatId, gatilho, mensagemGatilhoId, database });
-	const output = await executeAgentTurn(prepared);
 
-	let messageId: string | null = null;
-	// Um anexo sozinho é entrega legítima: o arquivo pode ser a resposta inteira.
-	if (output.mensagem?.trim() || output.anexo) {
-		// A run não é cancelável em andamento; este é o ponto de corte. Se o cliente mandou
-		// outra mensagem durante o turno, a run dela responde — entregar esta produziria uma
-		// resposta gerada sem a última mensagem no contexto, e duas respostas no total.
-		const delivery = await confirmAiDeliveryStillValid({
+	// A mesma revalidação da entrega, só que durante a geração. O playground é síncrono e sem
+	// concorrência: não há o que observar.
+	const abortController = new AbortController();
+	const checkStillValid = () =>
+		confirmAiDeliveryStillValid({
 			organizationId: organizacaoId,
 			chatId,
 			trigger: gatilho,
@@ -74,6 +104,29 @@ export async function respondToChatWithAgent({
 			runStartedAt,
 			ownHandoffAttendanceId: prepared.toolContext.effects.handoffAttendanceId,
 		});
+	const stopWatching =
+		gatilho === "PLAYGROUND" ? () => {} : watchForStaleRun({ check: checkStillValid, onStale: (reason) => abortController.abort(reason) });
+
+	let output: Awaited<ReturnType<typeof executeAgentTurn>>;
+	try {
+		output = await executeAgentTurn(prepared, { abortSignal: abortController.signal });
+	} catch (error) {
+		if (isAgentError(error, "AgentRunAbortedError")) {
+			console.log("[AI_AGENT] Run abortada durante a geração:", (error as Error).message);
+			return { runId: prepared.run.id, mensagem: null, anexo: null, messageId: null, resumoAtendimento: "" };
+		}
+		throw error;
+	} finally {
+		stopWatching();
+	}
+
+	let messageId: string | null = null;
+	// Um anexo sozinho é entrega legítima: o arquivo pode ser a resposta inteira.
+	if (output.mensagem?.trim() || output.anexo) {
+		// A run não é cancelável em andamento; este é o ponto de corte. Se o cliente mandou
+		// outra mensagem durante o turno, a run dela responde — entregar esta produziria uma
+		// resposta gerada sem a última mensagem no contexto, e duas respostas no total.
+		const delivery = await checkStillValid();
 		if (!delivery.shouldRespond) {
 			await markAgentRunCancelled(database, { runId: prepared.run.id, reason: delivery.reason });
 			console.log("[AI_AGENT] Entrega cancelada:", delivery.reason);
