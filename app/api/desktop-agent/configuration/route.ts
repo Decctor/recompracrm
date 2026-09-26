@@ -1,5 +1,6 @@
 import { type TExternalActorContext, authenticateExternalRequest, requireExternalScope } from "@/lib/access/authentication";
 import { appApiHandler } from "@/lib/app-api";
+import { isDesktopAgentWebSocketEnabled } from "@/lib/desktop-agent/websocket-channel";
 import { db } from "@/services/drizzle";
 import { accessPrincipals, agentPrinters, organizations } from "@/services/drizzle/schema";
 import { eq } from "drizzle-orm";
@@ -81,6 +82,9 @@ async function getDesktopAgentConfiguration({ actor }: { actor: TExternalActorCo
 			impressoras: printers,
 			scopes: Array.from(actor.scopes),
 			polling: resolvePollingCadence(),
+			// O agent só abre o canal WebSocket quando o CRM diz que ele existe; caso contrário opera
+			// só com o polling acima, sem bater numa rota que responde 501.
+			realtime: { websocket: isDesktopAgentWebSocketEnabled() },
 		},
 		message: "Configuração carregada com sucesso.",
 	};
