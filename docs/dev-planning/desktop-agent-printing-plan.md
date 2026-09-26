@@ -162,6 +162,7 @@ A fila durável. Lease espelha o padrão de `poi_transaction_idempotency_request
 - Ping do agent pelo socket alimenta `ultimo_acesso` do principal (substitui o heartbeat HTTP enquanto conectado).
 - A rota fica **fora do `appApiHandler`** (retorna a response de upgrade, não `NextResponse.json`) — desvio consciente do padrão, documentado no código.
 - Fechamentos periódicos (limite de duração da function, deploys) são rotina: o agent reconecta com backoff exponencial. Não usamos `maxDuration` explícito — as functions já usam o teto do plano por padrão.
+- **Desligado por padrão desde 2026-09** (`DESKTOP_AGENT_WS_ENABLED=true` religa). A premissa "Fluid cobra CPU ativa; barato" da tabela de riscos estava errada para memória: a function fica provisionada (2 GB) enquanto o socket está aberto, e o agent reabre assim que a Vercel fecha aos 300 s — a rota respondia por ~75% das GB-hora do projeto. Sem o socket, a latência é a cadência de polling servida por `/configuration` (5 s por padrão, `DESKTOP_AGENT_POLLING_SEGUNDOS`). O substituto de baixa latência fora da Vercel (Supabase Realtime via protocolo Phoenix no `websocket.zig` do agent, ou polling adaptativo) é decisão pendente.
 
 ## Fases de implementação
 
