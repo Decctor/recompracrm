@@ -6,9 +6,22 @@ import { eq } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 
-// Cadência sugerida ao agent (fallback por polling; o canal WS de nudge é a Fase 3 do plano).
-const POLLING_INTERVALO_SEGUNDOS = 15;
+// Cadência sugerida ao agent. Com o canal WebSocket desligado por padrão (ver
+// `app/api/desktop-agent/ws/route.ts`), este intervalo É a latência máxima entre a criação de um
+// job e o claim, então fica curto. O claim é barato (mediana ~0 ms, ~10 ms de CPU) e a instância já
+// está quente pelo resto do tráfego; 5 s por agent custa centavos por dia. O agent aceita 5–300 s e
+// troca o timer em vigor na próxima leitura desta rota, sem release. `DESKTOP_AGENT_POLLING_SEGUNDOS`
+// ajusta sem deploy.
+const POLLING_INTERVALO_SEGUNDOS_PADRAO = 5;
+const POLLING_INTERVALO_SEGUNDOS_MIN = 5;
+const POLLING_INTERVALO_SEGUNDOS_MAX = 300;
 const CLAIM_LIMITE_PADRAO = 5;
+
+function resolvePollingIntervalSeconds() {
+	const raw = Number(process.env.DESKTOP_AGENT_POLLING_SEGUNDOS);
+	if (!Number.isInteger(raw)) return POLLING_INTERVALO_SEGUNDOS_PADRAO;
+	return Math.min(POLLING_INTERVALO_SEGUNDOS_MAX, Math.max(POLLING_INTERVALO_SEGUNDOS_MIN, raw));
+}
 
 // Bootstrap do agente desktop após a ativação: identidade da organização, estado das
 // impressoras vinculadas e parâmetros de operação.
@@ -46,7 +59,7 @@ async function getDesktopAgentConfiguration({ actor }: { actor: TExternalActorCo
 			principal,
 			impressoras: printers,
 			scopes: Array.from(actor.scopes),
-			polling: { intervaloSegundos: POLLING_INTERVALO_SEGUNDOS, claimLimite: CLAIM_LIMITE_PADRAO },
+			polling: { intervaloSegundos: resolvePollingIntervalSeconds(), claimLimite: CLAIM_LIMITE_PADRAO },
 		},
 		message: "Configuração carregada com sucesso.",
 	};
