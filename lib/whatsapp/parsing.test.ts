@@ -354,6 +354,39 @@ describe("parseWebhookIncomingMessages", () => {
 		assert.deepEqual(echo.reaction, { targetWhatsappMessageId: "wamid.alvo", emoji: "🙏" });
 	});
 
+	it("resposta a uma mensagem carrega o wamid e o remetente da original (context)", () => {
+		const payload = buildMessagesPayload([
+			{
+				id: "wamid.reply",
+				from: "5534999991111",
+				timestamp: "1755000000",
+				type: "text",
+				text: { body: "esse mesmo" },
+				context: { from: "5534999990000", id: "wamid.original" },
+			},
+			{ id: "wamid.fwd", from: "5534999991111", timestamp: "1755000001", type: "text", text: { body: "olha isso" }, context: { forwarded: true } },
+			{
+				id: "wamid.fwd-freq",
+				from: "5534999991111",
+				timestamp: "1755000002",
+				type: "image",
+				image: { id: "9" },
+				context: { frequently_forwarded: true },
+			},
+			{ id: "wamid.plain", from: "5534999991111", timestamp: "1755000003", type: "text", text: { body: "oi" } },
+		]);
+
+		const [reply, forwarded, frequently, plain] = parseWebhookIncomingMessages(payload);
+		assert.equal(reply.context?.quotedWhatsappMessageId, "wamid.original");
+		assert.ok(reply.context?.quotedFrom);
+		assert.equal(reply.context?.forwarded, false);
+		assert.equal(forwarded.context?.forwarded, true);
+		assert.equal(forwarded.context?.quotedWhatsappMessageId, null);
+		assert.equal(frequently.context?.forwarded, true);
+		assert.equal(frequently.context?.frequentlyForwarded, true);
+		assert.equal(plain.context, undefined);
+	});
+
 	it("persiste tipos desconhecidos como placeholder de texto em vez de descartar", () => {
 		const payload = buildMessagesPayload([{ id: "wamid.order", from: "5534999991111", timestamp: "1755000000", type: "order", order: {} }]);
 

@@ -465,6 +465,32 @@ function parseMessageContent(message: Record<string, unknown>): TParsedMessageCo
 	};
 }
 
+/**
+ * O `context` de uma mensagem: a que mensagem ela responde (citação) e se foi encaminhada.
+ * Encaminhamento chega sem id; citação chega com o wamid e o remetente da original.
+ */
+export type TWhatsappMessageContextParsed = {
+	quotedWhatsappMessageId: string | null;
+	quotedFrom: string | null;
+	forwarded: boolean;
+	frequentlyForwarded: boolean;
+};
+
+function parseMessageContextField(message: Record<string, unknown>): TWhatsappMessageContextParsed | undefined {
+	const contextObj = message.context as Record<string, unknown> | undefined;
+	if (!contextObj || typeof contextObj !== "object") return undefined;
+	const quotedWhatsappMessageId = (contextObj.id as string | undefined) ?? null;
+	const forwarded = contextObj.forwarded === true;
+	const frequentlyForwarded = contextObj.frequently_forwarded === true;
+	if (!quotedWhatsappMessageId && !forwarded && !frequentlyForwarded) return undefined;
+	return {
+		quotedWhatsappMessageId,
+		quotedFrom: quotedWhatsappMessageId && contextObj.from ? formatWhatsappIdAsPhone(contextObj.from as string) : null,
+		forwarded: forwarded || frequentlyForwarded,
+		frequentlyForwarded,
+	};
+}
+
 /** Referral de anúncio Meta (Click-to-WhatsApp), no shape do `ChatMessageMetadataSchema`. */
 function parseMessageReferral(message: Record<string, unknown>): TWhatsappReferral | null {
 	const referral = message.referral as Record<string, unknown> | undefined;
@@ -494,6 +520,8 @@ type ParsedIncomingMessage = TParsedMessageContent & {
 	/** O `type` cru da Meta — `messageType` é o enum da aplicação. */
 	messageTypeRaw: string;
 	referral: TWhatsappReferral | null;
+	/** Citação/encaminhamento, quando o cliente responde a uma mensagem ou encaminha uma. */
+	context?: TWhatsappMessageContextParsed;
 	timestamp: number;
 };
 
@@ -519,6 +547,7 @@ function parseSingleIncomingMessage(message: Record<string, unknown>, value: Rec
 		profileName: (profile?.name as string) || "Cliente",
 		messageTypeRaw: message.type as string,
 		referral: parseMessageReferral(message),
+		context: parseMessageContextField(message),
 		timestamp: message.timestamp ? Number.parseInt(message.timestamp as string) * 1000 : Date.now(),
 	};
 }
@@ -771,6 +800,8 @@ type ParsedMessageEcho = TParsedMessageContent & {
 	toUserId: string | null;
 	/** O `type` cru da Meta — `messageType` é o enum da aplicação. */
 	messageTypeRaw: string;
+	/** Citação/encaminhamento, quando o eco responde a uma mensagem. */
+	context?: TWhatsappMessageContextParsed;
 	timestamp: number;
 };
 
@@ -804,6 +835,7 @@ function parseSingleEcho(message: Record<string, unknown>, value: Record<string,
 		toPhoneNumber: to ? formatWhatsappIdAsPhone(to) : null,
 		toUserId: (message.to_user_id as string | undefined) || null,
 		messageTypeRaw: message.type as string,
+		context: parseMessageContextField(message),
 		timestamp: message.timestamp ? Number.parseInt(message.timestamp as string) * 1000 : Date.now(),
 	};
 }

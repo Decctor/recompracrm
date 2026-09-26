@@ -6,9 +6,11 @@ import type { TAuthUserSession } from "@/lib/authentication/types";
 import { assertChatAccess } from "@/lib/chats/access";
 import { AI_ASSIGNMENT_BLOCK_MESSAGES, resolveAiAssignmentAvailability } from "@/lib/chats/ai-assignment";
 import { markChatAnswered } from "@/lib/chats/attendance-state";
+import { buildQuotedMessageSnapshot } from "@/lib/chats/quoted-message";
 import { deliverChatMessage, loadChatForSending, renderTemplatePlainContent, resolveApprovedTemplate } from "@/lib/chats/outgoing-message";
 import { getChatMediaUrl, uploadChatMedia } from "@/lib/files-storage/chat-media";
 import { AiAgentCapabilitiesSchema } from "@/schemas/ai-agents";
+import type { TChatMessageMetadata } from "@/schemas/chats";
 import { db } from "@/services/drizzle";
 import { aiAgentRuns, aiAgents } from "@/services/drizzle/schema/ai-agents";
 import { chatAssignments, chatMessages, chats } from "@/services/drizzle/schema/chats";
@@ -219,6 +221,8 @@ const CreateChatMessageInputSchema = z
 			.optional()
 			.nullable(),
 		messageTemplateId: z.string({ invalid_type_error: "Tipo inválido para o ID do template." }).optional().nullable(),
+		/** Mensagem deste chat que a nova responde (citação, como no WhatsApp). */
+		replyToMessageId: z.string({ invalid_type_error: "Tipo inválido para o ID da mensagem citada." }).optional().nullable(),
 	})
 	.superRefine((input, ctx) => {
 		if (!input.texto?.trim() && !input.midia && !input.messageTemplateId) {
@@ -279,6 +283,30 @@ async function createChatMessage({ session, input }: { session: TAuthUserSession
 	const texto =
 		input.midia?.tipo === "AUDIO" ? "" : !template && input.assinaturaAtiva && textoBruto ? `${session.user.nome}:\n${textoBruto}` : textoBruto;
 
+	// Citação: a mensagem-alvo precisa ser deste chat e ter wamid, senão o cliente não veria a
+	// citação no aparelho. Só a Meta Cloud API leva o `context`; o Gateway Interno não.
+	const quotedMessage = input.replyToMessageId
+		? await db.query.chatMessages.findFirst({
+				where: and(eq(chatMessages.id, input.replyToMessageId), eq(chatMessages.organizacaoId, organizacaoId), eq(chatMessages.chatId, input.chatId)),
+				with: MESSAGE_AUTHOR_WITH,
+			})
+		: null;
+	if (input.replyToMessageId) {
+		if (!quotedMessage) throw new createHttpError.BadRequest("Mensagem citada não encontrada nesta conversa.");
+		if (chat.whatsappConexao?.tipoConexao !== "META_CLOUD_API")
+			throw new createHttpError.BadRequest("Este canal não suporta responder citando uma mensagem.");
+		if (!quotedMessage.whatsappMessageId) throw new createHttpError.BadRequest("A mensagem citada ainda não foi confirmada pelo WhatsApp.");
+	}
+	const quoteMetadata: TChatMessageMetadata | null = quotedMessage
+		? {
+				whatsappContext: { quotedWhatsappMessageId: quotedMessage.whatsappMessageId },
+				quotedMessage: buildQuotedMessageSnapshot({
+					...quotedMessage,
+					conteudoMidiaUrl: quotedMessage.conteudoMidiaStorageId ? getChatMediaUrl(quotedMessage.conteudoMidiaStorageId) : quotedMessage.conteudoMidiaUrl,
+				}),
+			}
+		: null;
+
 	const now = new Date();
 	const [inserted] = await db
 		.insert(chatMessages)
@@ -300,6 +328,7 @@ async function createChatMessage({ session, input }: { session: TAuthUserSession
 			// Nasce PENDENTE antes do envio: uma falha do provedor deixa rastro em vez de
 			// sumir, e o retry tem uma mensagem concreta para reprocessar.
 			statusEntrega: "PENDENTE",
+			metadados: quoteMetadata,
 			dataEnvio: now,
 		})
 		.returning({ id: chatMessages.id });
@@ -310,6 +339,7 @@ async function createChatMessage({ session, input }: { session: TAuthUserSession
 		messageId: inserted.id,
 		chat,
 		texto,
+		replyToWhatsappMessageId: quotedMessage?.whatsappMessageId ?? null,
 		midia: midiaStorageId
 			? {
 					tipo: input.midia?.tipo ?? "DOCUMENTO",

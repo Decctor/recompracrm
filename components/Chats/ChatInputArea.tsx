@@ -4,10 +4,12 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenuGroup, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import type { TQuotedMessageSnapshot } from "@/lib/chats/quoted-message";
 import { getWhatsappWindowDisplay } from "@/lib/chats/whatsapp-window-status";
 import { cn } from "@/lib/utils";
 import { Loader2, Lock, Paperclip, Send, Sparkles, UserPlus, X } from "lucide-react";
 import { ChatVoiceRecorder } from "./ChatVoiceRecorder";
+import { QuotedMessagePreview } from "./QuotedMessagePreview";
 import { forwardRef, useCallback, useEffect, useId, useImperativeHandle, useRef, useState } from "react";
 
 export type TOutgoingAttachment = { tipo: "IMAGEM" | "VIDEO" | "AUDIO" | "DOCUMENTO"; base64: string; mimeType: string; arquivoNome: string };
@@ -28,6 +30,12 @@ export type TChatInputAreaHandle = {
 
 export type TChatAssistAction = "SUGERIR_RESPOSTA" | "RESUMIR" | "REESCREVER";
 
+/** Mensagem escolhida com "Responder": vai no envio como citação e aparece na bolha otimista. */
+export type TChatReplyTarget = {
+	messageId: string;
+	quote: TQuotedMessageSnapshot;
+};
+
 type ChatInputAreaProps = {
 	userName: string;
 	organizationId: string;
@@ -35,7 +43,11 @@ type ChatInputAreaProps = {
 	janelaExpiracao: Date | string | null;
 	conexaoTipo: "META_CLOUD_API" | "INTERNAL_GATEWAY" | null;
 	isSending: boolean;
-	onSend: (input: { texto: string; assinaturaAtiva: boolean; midia: TOutgoingAttachment | null }) => void;
+	onSend: (input: { texto: string; assinaturaAtiva: boolean; midia: TOutgoingAttachment | null; replyToMessageId: string | null }) => void;
+	/** Nome do cliente, para rotular a citação de uma mensagem dele no painel de resposta. */
+	clientName?: string;
+	replyTarget?: TChatReplyTarget | null;
+	onCancelReply?: () => void;
 	onAssume: () => void;
 	templates: { id: string; nome: string }[];
 	onSendTemplate: (messageTemplateId: string) => void;
@@ -54,7 +66,22 @@ function resolveMediaType(mimeType: string): TOutgoingAttachment["tipo"] {
 }
 
 export const ChatInputArea = forwardRef<TChatInputAreaHandle, ChatInputAreaProps>(function ChatInputArea(
-	{ userName, organizationId, isOwner, janelaExpiracao, conexaoTipo, isSending, onSend, onAssume, templates, onSendTemplate, assist },
+	{
+		userName,
+		organizationId,
+		isOwner,
+		janelaExpiracao,
+		conexaoTipo,
+		isSending,
+		onSend,
+		onAssume,
+		templates,
+		onSendTemplate,
+		assist,
+		clientName = "Cliente",
+		replyTarget = null,
+		onCancelReply,
+	},
 	ref,
 ) {
 	const [texto, setTexto] = useState("");
@@ -110,6 +137,11 @@ export const ChatInputArea = forwardRef<TChatInputAreaHandle, ChatInputAreaProps
 		[focusEnd],
 	);
 
+	// Escolher "Responder" leva o foco ao compositor, como no WhatsApp.
+	useEffect(() => {
+		if (replyTarget) focusEnd();
+	}, [replyTarget, focusEnd]);
+
 	const janela = getWhatsappWindowDisplay({ expiracao: janelaExpiracao, tipoConexao: conexaoTipo });
 
 	function handleSignatureChange(checked: boolean) {
@@ -143,9 +175,11 @@ export const ChatInputArea = forwardRef<TChatInputAreaHandle, ChatInputAreaProps
 	function handleSubmit() {
 		if (isSending) return;
 		if (!texto.trim() && !attachment) return;
-		onSend({ texto: texto.trim(), assinaturaAtiva, midia: attachment });
+		onSend({ texto: texto.trim(), assinaturaAtiva, midia: attachment, replyToMessageId: replyTarget?.messageId ?? null });
 		setTexto("");
 		setAttachment(null);
+		// A citação some do compositor já no envio: a bolha otimista a carrega dali em diante.
+		onCancelReply?.();
 	}
 
 	// Sem posse, o envio seria recusado com 403 pela rota. Bloquear aqui transforma um
@@ -194,6 +228,14 @@ export const ChatInputArea = forwardRef<TChatInputAreaHandle, ChatInputAreaProps
 
 	return (
 		<div className="flex flex-col gap-2 border-t border-border bg-background px-3 py-2">
+			{replyTarget && (
+				<div className="flex items-center gap-2 rounded-lg border border-border bg-muted/50 py-1 pr-1 pl-1.5">
+					<QuotedMessagePreview quote={replyTarget.quote} clientName={clientName} className="min-w-0 flex-1 bg-transparent" />
+					<Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" aria-label="Cancelar resposta" onClick={onCancelReply}>
+						<X className="h-3 w-3" />
+					</Button>
+				</div>
+			)}
 			{attachment && (
 				<div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-muted/50 px-2 py-1.5 text-xs">
 					<span className="truncate">{attachment.arquivoNome}</span>
@@ -276,6 +318,10 @@ export const ChatInputArea = forwardRef<TChatInputAreaHandle, ChatInputAreaProps
 							if (event.key === "Enter" && !event.shiftKey) {
 								event.preventDefault();
 								handleSubmit();
+							}
+							if (event.key === "Escape" && replyTarget) {
+								event.preventDefault();
+								onCancelReply?.();
 							}
 						}}
 						aria-label="Mensagem"

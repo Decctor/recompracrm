@@ -5,8 +5,10 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import type { TChatThreadMessage } from "@/lib/queries/chats";
 import { cn } from "@/lib/utils";
 import type { TChatMessageMetadata } from "@/schemas/chats";
-import { AlertCircle, Check, CheckCheck, ChevronDown, Clock, MapPin, RotateCw, Smartphone, Sparkles } from "lucide-react";
+import { AlertCircle, Check, CheckCheck, ChevronDown, Clock, CornerUpRight, MapPin, Reply, RotateCw, Smartphone, Sparkles } from "lucide-react";
+import { useState } from "react";
 import { ChatMediaAttachment } from "./ChatMediaAttachment";
+import { QuotedMessagePreview } from "./QuotedMessagePreview";
 import { WhatsAppMessageText } from "./WhatsAppMessageText";
 
 /** Mensagem otimista: existe no cliente antes de a rota confirmar a persistência. */
@@ -20,6 +22,14 @@ type ChatMessageBubbleProps = {
 	isRetrying?: boolean;
 	/** Mensagem do agente: abre a execução que a produziu (`metadados.aiAgente.runId`). */
 	onOpenAiRun?: (runId: string) => void;
+	/** Nome do cliente da conversa, para rotular citações de mensagens dele. */
+	clientName?: string;
+	/** Pula até a mensagem citada (quando está no histórico carregado). */
+	onQuoteClick?: (chatMessageId: string) => void;
+	/** Presente = a bolha ganha a ação "Responder" (hover no desktop, toque na bolha no touch). */
+	onReply?: () => void;
+	/** Destaque momentâneo ao chegar por um pulo de citação. */
+	highlighted?: boolean;
 };
 
 function formatTime(date: Date | string) {
@@ -98,8 +108,23 @@ function resolveAuthorLabel(message: TChatThreadMessage) {
 	return message.autorUsuario?.nome ?? "Você";
 }
 
-export function ChatMessageBubble({ message, showAuthor, onRetry, isRetrying, onOpenAiRun }: ChatMessageBubbleProps) {
+export function ChatMessageBubble({
+	message,
+	showAuthor,
+	onRetry,
+	isRetrying,
+	onOpenAiRun,
+	clientName = "Cliente",
+	onQuoteClick,
+	onReply,
+	highlighted = false,
+}: ChatMessageBubbleProps) {
+	// No touch não há hover: um toque na bolha revela a ação, outro esconde.
+	const [actionsRevealed, setActionsRevealed] = useState(false);
 	const isIncoming = message.autorTipo === "CLIENTE";
+	const quotedMessage = message.metadados?.quotedMessage ?? null;
+	const forwarded = message.metadados?.whatsappContext?.forwarded === true;
+	const frequentlyForwarded = message.metadados?.whatsappContext?.frequentlyForwarded === true;
 	const isFailed = message.statusEntrega === "FALHA";
 	const isAutomated = message.autorTipo === "AI" || message.autorTipo === "BUSINESS-APP" || message.whatsappEcho;
 	const hasMedia = message.conteudoMidiaTipo !== "TEXTO";
@@ -158,9 +183,13 @@ export function ChatMessageBubble({ message, showAuthor, onRetry, isRetrying, on
 			)}
 
 			<div
+				onClick={onReply ? () => setActionsRevealed((revealed) => !revealed) : undefined}
 				className={cn(
-					"max-w-[72%] rounded-2xl text-sm",
+					"group/bubble relative max-w-[72%] rounded-2xl text-sm",
 					!isSticker && "px-3 py-2 shadow-sm",
+					// Chegou aqui por uma citação: um anel que some sozinho, como o flash do WhatsApp.
+					"transition-shadow duration-700",
+					highlighted && "ring-2 ring-primary/60 ring-offset-2 ring-offset-background duration-150",
 					// Como no WhatsApp, mensagens com mídia têm uma coluna estável: a
 					// legenda quebra dentro dela em vez de alargar a bubble sozinha.
 					hasMedia && !isSticker && "w-[20rem]",
@@ -180,6 +209,48 @@ export function ChatMessageBubble({ message, showAuthor, onRetry, isRetrying, on
 					message.optimistic && "opacity-70",
 				)}
 			>
+				{onReply && (
+					// No canto superior da bolha, como o chevron do WhatsApp Web. Invisível até o hover
+					// (mouse) ou até um toque na bolha (touch); sempre alcançável por teclado.
+					<Button
+						type="button"
+						variant="ghost"
+						size="icon"
+						aria-label="Responder"
+						data-revealed={actionsRevealed ? "true" : "false"}
+						className={cn(
+							"absolute top-0.5 right-0.5 z-10 h-6 w-6 rounded-full opacity-0 transition-opacity focus-visible:opacity-100 group-hover/bubble:opacity-100 data-[revealed=true]:opacity-100",
+							onColoredSurface
+								? "bg-primary/80 text-primary-foreground hover:bg-primary hover:text-primary-foreground"
+								: "bg-card/90 text-muted-foreground hover:text-foreground",
+						)}
+						onClick={(event) => {
+							event.stopPropagation();
+							setActionsRevealed(false);
+							onReply();
+						}}
+					>
+						<Reply className="h-3 w-3" />
+					</Button>
+				)}
+
+				{forwarded && (
+					<p className="mb-1 flex items-center gap-1 text-[11px] italic opacity-80">
+						<CornerUpRight className="h-3 w-3 shrink-0" />
+						{frequentlyForwarded ? "Encaminhada muitas vezes" : "Encaminhada"}
+					</p>
+				)}
+
+				{quotedMessage && (
+					<QuotedMessagePreview
+						quote={quotedMessage}
+						clientName={clientName}
+						onPrimary={onColoredSurface}
+						onClick={quotedMessage.chatMessageId && onQuoteClick ? () => onQuoteClick(quotedMessage.chatMessageId as string) : undefined}
+						className="mb-1.5"
+					/>
+				)}
+
 				{referral && (
 					<div className="mb-2 rounded-lg border border-current/20 bg-current/5 p-2 text-xs">
 						<p className="font-semibold">Veio de um anúncio</p>

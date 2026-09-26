@@ -10,7 +10,7 @@ import { db } from "@/services/drizzle";
 import { SUPABASE_STORAGE_CHAT_MEDIA_BUCKET } from "@/lib/files-storage/chat-media";
 import { chatAssignments, chatMessages, chats, messageTemplates } from "@/services/drizzle/schema";
 import { supabaseClient } from "@/services/supabase";
-import { and, eq, notInArray } from "drizzle-orm";
+import { and, eq, notInArray, sql } from "drizzle-orm";
 import createHttpError from "http-errors";
 
 /**
@@ -117,6 +117,8 @@ type TDeliverChatMessageParams = {
 	texto: string;
 	midia: TOutgoingMedia | null;
 	template: TApprovedTemplate | null;
+	/** wamid da mensagem citada (resposta). Só a Meta Cloud API leva a citação ao aparelho. */
+	replyToWhatsappMessageId?: string | null;
 };
 
 /**
@@ -125,7 +127,7 @@ type TDeliverChatMessageParams = {
  * Meta Cloud API responde de forma síncrona com o `whatsappMessageId` → `ENVIADA`.
  * O Gateway Interno enfileira e confirma por webhook → segue `PENDENTE`.
  */
-export async function deliverChatMessage({ messageId, chat, texto, midia, template }: TDeliverChatMessageParams) {
+export async function deliverChatMessage({ messageId, chat, texto, midia, template, replyToWhatsappMessageId }: TDeliverChatMessageParams) {
 	const conexao = chat.whatsappConexao;
 	if (!conexao) throw new createHttpError.BadRequest("Conexão WhatsApp não configurada para este chat.");
 	const telefoneCliente = chat.cliente?.telefone;
@@ -210,6 +212,7 @@ export async function deliverChatMessage({ messageId, chat, texto, midia, templa
 					caption: texto || undefined,
 					filename: midia.arquivoNome ?? undefined,
 					whatsappToken,
+					replyToMessageId: replyToWhatsappMessageId ?? null,
 				});
 				whatsappMessageId = response.whatsappMessageId;
 			} else {
@@ -218,6 +221,7 @@ export async function deliverChatMessage({ messageId, chat, texto, midia, templa
 					toPhoneNumber: formatPhoneAsWhatsappId(telefoneCliente),
 					content: texto,
 					whatsappToken,
+					replyToMessageId: replyToWhatsappMessageId ?? null,
 				});
 				whatsappMessageId = response.whatsappMessageId;
 			}
@@ -225,7 +229,13 @@ export async function deliverChatMessage({ messageId, chat, texto, midia, templa
 
 		await db
 			.update(chatMessages)
-			.set({ whatsappMessageId, statusEntrega, provedorStatusDataAtualizacao: new Date(), metadados })
+			// Mescla em vez de sobrescrever: a mensagem pode ter nascido com metadata própria (citação).
+			.set({
+				whatsappMessageId,
+				statusEntrega,
+				provedorStatusDataAtualizacao: new Date(),
+				...(metadados ? { metadados: sql`coalesce(${chatMessages.metadados}, '{}'::jsonb) || ${JSON.stringify(metadados)}::jsonb` } : {}),
+			})
 			.where(eq(chatMessages.id, messageId));
 
 		return { whatsappMessageId, statusEntrega };

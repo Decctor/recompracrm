@@ -164,6 +164,15 @@ export async function buildChatRunContext(
 								? `[${message.conteudoMidiaTipo} recebido — não foi possível processar o conteúdo; peça ao cliente para escrever]`
 								: `[${message.conteudoMidiaTipo}]`
 							: ""),
+					// Citação e encaminhamento: sem isso o modelo lê "sim, pode ser" sem saber a que se refere.
+					emRespostaA: message.metadados?.quotedMessage
+						? {
+								autor: message.metadados.quotedMessage.authorType ? describeAuthor(message.metadados.quotedMessage.authorType) : null,
+								texto: message.metadados.quotedMessage.text ?? null,
+								midiaTipo: message.metadados.quotedMessage.mediaType ?? null,
+							}
+						: null,
+					encaminhada: message.metadados?.whatsappContext?.forwarded === true,
 					dataEnvio: message.dataEnvio,
 				}))
 				.filter((message) => message.texto.length > 0),

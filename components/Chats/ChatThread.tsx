@@ -32,7 +32,8 @@ import { AttendanceSummaryCard } from "./AttendanceSummaryCard";
 import { FollowUpNotice } from "./FollowUpNotice";
 import { ChatAssignmentActions } from "./ChatAssignmentActions";
 import { ChatContextPanel } from "./ChatContextPanel";
-import { ChatInputArea, type TChatAssistAction, type TChatInputAreaHandle, type TOutgoingAttachment } from "./ChatInputArea";
+import { buildQuotedMessageSnapshot } from "@/lib/chats/quoted-message";
+import { ChatInputArea, type TChatAssistAction, type TChatInputAreaHandle, type TChatReplyTarget, type TOutgoingAttachment } from "./ChatInputArea";
 import { ChatMessageBubble, type TOptimisticFields } from "./ChatMessageBubble";
 import { ChatQuotesHeaderActions } from "./Quotes/ChatQuotesHeaderActions";
 import type { TQuotePermissions } from "./Quotes/config";
@@ -149,6 +150,13 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 	const [optimisticMessages, setOptimisticMessages] = useState<TThreadMessage[]>([]);
 	const [unseenCount, setUnseenCount] = useState(0);
 	const [openRunId, setOpenRunId] = useState<string | null>(null);
+	const [replyTarget, setReplyTarget] = useState<TChatReplyTarget | null>(null);
+	const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+	// Trocar de conversa descarta a resposta em andamento: ela pertence ao chat anterior.
+	useEffect(() => {
+		setReplyTarget(null);
+		setHighlightedMessageId(null);
+	}, [chatId]);
 	// A presença da IA depende do relógio ("responde em instantes" vira "ausente" quando a
 	// previsão passa sem run). Um tique de 5s é o bastante e custa nada.
 	const [now, setNow] = useState(() => new Date());
@@ -158,6 +166,8 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 	}, []);
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const inputAreaRef = useRef<TChatInputAreaHandle>(null);
+	// Snapshot da citação escolhida, para a bolha otimista (o handleSend só recebe o id).
+	const optimisticQuoteRef = useRef(new Map<string, ReturnType<typeof buildQuotedMessageSnapshot>>());
 	const isAtBottomRef = useRef(true);
 	const initialSubscriptionCompleteRef = useRef(false);
 	const refetchRef = useRef(refetch);
@@ -392,9 +402,22 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 		onError: (error) => toast.error(getErrorMessage(error)),
 	});
 
+	const handleQuoteClick = useCallback((chatMessageId: string) => {
+		const element = document.getElementById(`chat-message-${chatMessageId}`);
+		if (!element) {
+			toast.info("A mensagem citada está fora do histórico carregado.");
+			return;
+		}
+		element.scrollIntoView({ behavior: "smooth", block: "center" });
+		setHighlightedMessageId(chatMessageId);
+		window.setTimeout(() => setHighlightedMessageId((current) => (current === chatMessageId ? null : current)), 1600);
+	}, []);
+
 	const handleSend = useCallback(
-		(input: { texto: string; assinaturaAtiva: boolean; midia: TOutgoingAttachment | null }) => {
+		(input: { texto: string; assinaturaAtiva: boolean; midia: TOutgoingAttachment | null; replyToMessageId: string | null }) => {
 			const clienteMensagemId = crypto.randomUUID();
+			// A bolha otimista já desenha o painel de citação enquanto o envio confirma.
+			const quotedMessage = input.replyToMessageId ? (optimisticQuoteRef.current.get(input.replyToMessageId) ?? null) : null;
 			setOptimisticMessages((current) => [
 				{
 					id: `optimistic-${clienteMensagemId}`,
@@ -416,7 +439,7 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 					whatsappMessageId: null,
 					whatsappEcho: false,
 					clienteMensagemId,
-					metadados: null,
+					metadados: quotedMessage ? { quotedMessage } : null,
 					optimistic: true,
 				},
 				...current,
@@ -427,6 +450,7 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 				texto: input.texto || null,
 				assinaturaAtiva: input.assinaturaAtiva,
 				midia: input.midia,
+				replyToMessageId: input.replyToMessageId,
 			});
 		},
 		[chatId, currentUser, sendMutation],
@@ -437,6 +461,10 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 	if (!chat) return <ErrorComponent msg="Chat não encontrado." />;
 
 	const janela = getWhatsappWindowDisplay({ expiracao: chat.whatsappJanelaDataExpiracao, tipoConexao: chat.conexaoTipo });
+	// "Responder" só faz sentido onde o envio já é possível e o canal leva a citação ao aparelho
+	// (Meta Cloud API; o Gateway Interno não expõe citação).
+	const canReply = !!isOwner && janela.canSendFreeform && chat.conexaoTipo === "META_CLOUD_API";
+	const clientName = chat.cliente?.nome ?? "Cliente";
 	const { icon: ResponsibleIcon, label: responsibleLabel } = describeResponsible(atendimento, isOwner);
 	const aiPresence = resolveAiPresence({
 		atendimento,
@@ -609,7 +637,11 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 						return (
 							// Respiro maior entre turnos do que dentro de um turno: a troca de autor fica
 							// legível sem depender só do rótulo.
-							<div key={message.clientTempId ?? message.id} className={cn("flex flex-col gap-1", showAuthor && !showDaySeparator && "pt-2")}>
+							<div
+								key={message.clientTempId ?? message.id}
+								id={message.optimistic ? undefined : `chat-message-${message.id}`}
+								className={cn("flex flex-col gap-1", showAuthor && !showDaySeparator && "pt-2")}
+							>
 								{/* O separador abre o dia: vem antes da primeira mensagem dele. */}
 								{showDaySeparator && (
 									<div className="my-2 flex items-center gap-2">
@@ -624,6 +656,18 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 									onRetry={(messageId) => retryMutation.mutate({ messageId })}
 									isRetrying={retryMutation.isPending}
 									onOpenAiRun={setOpenRunId}
+									clientName={clientName}
+									onQuoteClick={handleQuoteClick}
+									onReply={
+										canReply && !message.optimistic && message.whatsappMessageId
+											? () => {
+													const quote = buildQuotedMessageSnapshot(message);
+													optimisticQuoteRef.current.set(message.id, quote);
+													setReplyTarget({ messageId: message.id, quote });
+												}
+											: undefined
+									}
+									highlighted={highlightedMessageId === message.id}
 								/>
 							</div>
 						);
@@ -689,6 +733,9 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 					conexaoTipo={chat.conexaoTipo}
 					isSending={sendMutation.isPending}
 					onSend={handleSend}
+					clientName={clientName}
+					replyTarget={replyTarget}
+					onCancelReply={() => setReplyTarget(null)}
 					onAssume={() => assumeMutation.mutate({ acao: "assumir", chatId })}
 					templates={[]}
 					onSendTemplate={(messageTemplateId) => sendMutation.mutate({ chatId, messageTemplateId, assinaturaAtiva: false })}
