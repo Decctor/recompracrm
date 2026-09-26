@@ -7,20 +7,41 @@ import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 
 // Cadência sugerida ao agent. Com o canal WebSocket desligado por padrão (ver
-// `app/api/desktop-agent/ws/route.ts`), este intervalo É a latência máxima entre a criação de um
-// job e o claim, então fica curto. O claim é barato (mediana ~0 ms, ~10 ms de CPU) e a instância já
-// está quente pelo resto do tráfego; 5 s por agent custa centavos por dia. O agent aceita 5–300 s e
-// troca o timer em vigor na próxima leitura desta rota, sem release. `DESKTOP_AGENT_POLLING_SEGUNDOS`
-// ajusta sem deploy.
+// `app/api/desktop-agent/ws/route.ts`), o polling É a latência entre a criação de um job e o claim.
+// O agent alterna entre duas cadências: `ativoMs` enquanto houve impressão recente (a loja está em
+// atendimento) e `ociosoMs` depois de uma janela quieta — assim a latência fica baixa quando
+// importa e a carga no banco cai fora do expediente. O claim é barato (mediana ~0 ms, ~10 ms de CPU)
+// numa instância já quente; 2,5 s por agent ativo custa centavos por dia.
+//
+// `intervaloSegundos` continua sendo servido para agents antigos, que só conhecem uma cadência
+// inteira em segundos (aceitam 5–300 s). Os três valores têm override por env, sem deploy:
+// DESKTOP_AGENT_POLLING_ATIVO_MS, DESKTOP_AGENT_POLLING_OCIOSO_MS, DESKTOP_AGENT_POLLING_SEGUNDOS.
+const POLLING_ATIVO_MS_PADRAO = 2_500;
+const POLLING_OCIOSO_MS_PADRAO = 15_000;
+const POLLING_MS_MIN = 1_000;
+const POLLING_MS_MAX = 300_000;
 const POLLING_INTERVALO_SEGUNDOS_PADRAO = 5;
 const POLLING_INTERVALO_SEGUNDOS_MIN = 5;
 const POLLING_INTERVALO_SEGUNDOS_MAX = 300;
 const CLAIM_LIMITE_PADRAO = 5;
 
-function resolvePollingIntervalSeconds() {
-	const raw = Number(process.env.DESKTOP_AGENT_POLLING_SEGUNDOS);
-	if (!Number.isInteger(raw)) return POLLING_INTERVALO_SEGUNDOS_PADRAO;
-	return Math.min(POLLING_INTERVALO_SEGUNDOS_MAX, Math.max(POLLING_INTERVALO_SEGUNDOS_MIN, raw));
+function resolveIntegerEnv({ name, fallback, min, max }: { name: string; fallback: number; min: number; max: number }) {
+	const raw = Number(process.env[name]);
+	if (!Number.isInteger(raw)) return fallback;
+	return Math.min(max, Math.max(min, raw));
+}
+
+function resolvePollingCadence() {
+	const ativoMs = resolveIntegerEnv({ name: "DESKTOP_AGENT_POLLING_ATIVO_MS", fallback: POLLING_ATIVO_MS_PADRAO, min: POLLING_MS_MIN, max: POLLING_MS_MAX });
+	const ociosoMs = resolveIntegerEnv({ name: "DESKTOP_AGENT_POLLING_OCIOSO_MS", fallback: POLLING_OCIOSO_MS_PADRAO, min: POLLING_MS_MIN, max: POLLING_MS_MAX });
+	const intervaloSegundos = resolveIntegerEnv({
+		name: "DESKTOP_AGENT_POLLING_SEGUNDOS",
+		fallback: POLLING_INTERVALO_SEGUNDOS_PADRAO,
+		min: POLLING_INTERVALO_SEGUNDOS_MIN,
+		max: POLLING_INTERVALO_SEGUNDOS_MAX,
+	});
+	// O ocioso nunca fica mais rápido que o ativo: a janela quieta é para desacelerar.
+	return { intervaloSegundos, ativoMs, ociosoMs: Math.max(ativoMs, ociosoMs), claimLimite: CLAIM_LIMITE_PADRAO };
 }
 
 // Bootstrap do agente desktop após a ativação: identidade da organização, estado das
@@ -59,7 +80,7 @@ async function getDesktopAgentConfiguration({ actor }: { actor: TExternalActorCo
 			principal,
 			impressoras: printers,
 			scopes: Array.from(actor.scopes),
-			polling: { intervaloSegundos: resolvePollingIntervalSeconds(), claimLimite: CLAIM_LIMITE_PADRAO },
+			polling: resolvePollingCadence(),
 		},
 		message: "Configuração carregada com sucesso.",
 	};
