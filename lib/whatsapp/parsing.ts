@@ -370,6 +370,29 @@ function parseMessageContent(message: Record<string, unknown>): TParsedMessageCo
 			};
 		}
 
+		// Resposta a uma mensagem interativa (botões ou lista): o cliente tocou numa opção. Mesmo
+		// tratamento do botão de template — o rótulo vira o texto e o id da opção vai no payload.
+		case "interactive": {
+			const interactiveObj = message.interactive as Record<string, unknown> | undefined;
+			const interactiveType = interactiveObj?.type as string | undefined;
+			const reply = (interactiveType ? interactiveObj?.[interactiveType] : undefined) as Record<string, unknown> | undefined;
+			const replyTitle = reply?.title as string | undefined;
+			if (!replyTitle) break;
+			const replyDescription = reply?.description as string | undefined;
+			return {
+				kind: "message",
+				messageType: "TEXTO",
+				textContent: replyDescription ? `${replyTitle}\n${replyDescription}` : replyTitle,
+				button: { text: replyTitle, payload: (reply?.id as string | undefined) ?? null },
+			};
+		}
+
+		// O cliente abriu a conversa (anúncio com mensagem de boas-vindas, busca de empresas) sem
+		// escrever nada: a Meta avisa para a loja dar as boas-vindas. Entra como mensagem do cliente
+		// para criar o chat, guardar o referral e acionar o agente, com um texto honesto.
+		case "request_welcome":
+			return { kind: "message", messageType: "TEXTO", textContent: "Cliente abriu a conversa." };
+
 		// Reação a uma mensagem existente. Não é uma mensagem de conversa: anexa o emoji na
 		// mensagem-alvo. Um "unreact" chega sem `emoji`.
 		case "reaction": {
@@ -764,8 +787,9 @@ function parseSingleEcho(message: Record<string, unknown>, value: Record<string,
 	const whatsappPhoneNumberId = metadata?.phone_number_id as string;
 
 	const content = parseMessageContent(message);
-	// Reação/sistema/não-suportado ecoados pelo app do celular não viram mensagem do hub.
-	if (!content || (content.kind !== "message" && content.kind !== "edit")) {
+	// Sistema/não-suportado ecoados pelo app do celular não têm conteúdo para espelhar. Reação e
+	// edição seguem: vão para a mensagem-alvo, como as do cliente.
+	if (!content || content.kind === "system" || content.kind === "unsupported") {
 		if (content) console.log("[WHATSAPP_WEBHOOK] Ignoring non-message echo kind:", content.kind);
 		return null;
 	}

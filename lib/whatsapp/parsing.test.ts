@@ -195,7 +195,7 @@ describe("parseWebhookIncomingMessages", () => {
 		assert.deepEqual(unsupported.unsupported, { code: 131051, title: "Message type unknown", details: "Message type is currently not supported." });
 	});
 
-	it("descarta ecos que não são mensagens de conversa", () => {
+	it("descarta ecos sem conteúdo para espelhar (sistema, não suportado)", () => {
 		const payload = {
 			entry: [
 				{
@@ -206,13 +206,14 @@ describe("parseWebhookIncomingMessages", () => {
 								metadata: { phone_number_id: "phone-echo" },
 								message_echoes: [
 									{
-										id: "wamid.echo-react",
+										id: "wamid.echo-system",
 										from: "5534999990000",
 										to: "5534999991111",
 										timestamp: "1755000000",
-										type: "reaction",
-										reaction: { message_id: "wamid.x", emoji: "❤" },
+										type: "system",
+										system: { type: "user_changed_number", body: "trocou de número" },
 									},
+									{ id: "wamid.echo-unsupported", from: "5534999990000", to: "5534999991111", timestamp: "1755000000", type: "unsupported", errors: [] },
 									{ id: "wamid.echo-text", from: "5534999990000", to: "5534999991111", timestamp: "1755000001", type: "text", text: { body: "segue o link" } },
 								],
 							},
@@ -285,6 +286,72 @@ describe("parseWebhookIncomingMessages", () => {
 		const [echo] = parseWebhookMessageEchoes(payload);
 		assert.equal(echo.kind, "edit");
 		assert.deepEqual(echo.edit, { originalWhatsappMessageId: "wamid.echo-original", textContent: "Oque gostaria de pedir ?" });
+	});
+
+	it("resposta a mensagem interativa (botão ou lista) vira texto com o rótulo e guarda o id", () => {
+		const payload = buildMessagesPayload([
+			{
+				id: "wamid.btn",
+				from: "5534999991111",
+				timestamp: "1755000000",
+				type: "interactive",
+				interactive: { type: "button_reply", button_reply: { id: "opt-1", title: "Quero orçamento" } },
+			},
+			{
+				id: "wamid.list",
+				from: "5534999991111",
+				timestamp: "1755000001",
+				type: "interactive",
+				interactive: { type: "list_reply", list_reply: { id: "plano-pro", title: "Plano Pro", description: "R$ 99/mês" } },
+			},
+		]);
+
+		const [button, list] = parseWebhookIncomingMessages(payload);
+		assert.equal(button.kind, "message");
+		assert.equal(button.textContent, "Quero orçamento");
+		assert.deepEqual(button.button, { text: "Quero orçamento", payload: "opt-1" });
+		assert.equal(list.textContent, "Plano Pro\nR$ 99/mês");
+		assert.deepEqual(list.button, { text: "Plano Pro", payload: "plano-pro" });
+	});
+
+	it("request_welcome entra como mensagem do cliente com texto honesto, não como placeholder", () => {
+		const payload = buildMessagesPayload([{ id: "wamid.welcome", from: "5534999991111", timestamp: "1755000000", type: "request_welcome" }]);
+
+		const [parsed] = parseWebhookIncomingMessages(payload);
+		assert.equal(parsed.kind, "message");
+		assert.equal(parsed.messageTypeRaw, "request_welcome");
+		assert.doesNotMatch(parsed.textContent ?? "", /não suportado/);
+	});
+
+	it("reação ecoada pelo app do celular carrega a mensagem-alvo", () => {
+		const payload = {
+			entry: [
+				{
+					changes: [
+						{
+							field: "smb_message_echoes",
+							value: {
+								metadata: { phone_number_id: "phone-echo" },
+								message_echoes: [
+									{
+										id: "wamid.echo-reaction",
+										from: "5534999990000",
+										to: "5534999991111",
+										timestamp: "1755000000",
+										type: "reaction",
+										reaction: { message_id: "wamid.alvo", emoji: "🙏" },
+									},
+								],
+							},
+						},
+					],
+				},
+			],
+		};
+
+		const [echo] = parseWebhookMessageEchoes(payload);
+		assert.equal(echo.kind, "reaction");
+		assert.deepEqual(echo.reaction, { targetWhatsappMessageId: "wamid.alvo", emoji: "🙏" });
 	});
 
 	it("persiste tipos desconhecidos como placeholder de texto em vez de descartar", () => {
