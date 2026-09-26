@@ -12,6 +12,15 @@ import { WebSocket } from "ws";
 // o socket nunca carrega jobs — apenas avisa "tem trabalho" e o agent faz o claim HTTP normal.
 // Toda a correção mora no caminho HTTP; perder este canal degrada latência, nunca correção.
 //
+// DESLIGADO POR PADRÃO. No Fluid Compute a function fica provisionada (2 GB) enquanto o socket
+// estiver aberto, e o agent reabre o socket assim que a Vercel o fecha aos 300 s: uma loja com
+// impressão ao longo do dia mantém uma instância presa o expediente inteiro. Em setembro/2026
+// esta rota respondia por ~75% das GB-hora do projeto (25–30 GB-h/dia) para avisar algo que o
+// polling HTTP de 5 s descobre sozinho. `DESKTOP_AGENT_WS_ENABLED=true` religa; sem ela o
+// handshake recebe 501, que o agent já trata como "sem canal em tempo real": recua 1s→2s→4s e,
+// após três recusas, tenta de novo só a cada 5 min. O caminho de correção (claim/report) não
+// passa por aqui.
+//
 // Fora do appApiHandler de propósito: o handler devolve a Response de upgrade do
 // experimental_upgradeWebSocket, não um NextResponse.json — desvio consciente do padrão.
 //
@@ -124,7 +133,19 @@ function registerAgentConnection(ws: WebSocket, actor: TExternalActorContext) {
 	ws.send(JSON.stringify({ type: "connection.ready", principalId: actor.principalId }));
 }
 
+function isWebSocketChannelEnabled() {
+	return process.env.DESKTOP_AGENT_WS_ENABLED === "true";
+}
+
 export async function GET(request: NextRequest) {
+	// Antes da autenticação de propósito: a recusa não deve custar nem a consulta da credencial.
+	if (!isWebSocketChannelEnabled()) {
+		return NextResponse.json(
+			{ data: null, message: "Canal WebSocket desativado neste ambiente. Utilize o polling HTTP." },
+			{ status: 501 },
+		);
+	}
+
 	// Autenticação no handshake: o upgrade é um GET normal e o Bearer rcm_ viaja no header.
 	let actor: TExternalActorContext;
 	try {
