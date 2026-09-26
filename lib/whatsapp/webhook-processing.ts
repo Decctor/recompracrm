@@ -2,6 +2,7 @@ import { ensureOrganizationAgent } from "@/lib/ai/agent/provisioning";
 import { resolveAiResponseDelayMs } from "@/lib/chats/ai-trigger";
 import { dispatchAiTurn } from "@/lib/chats/ai-turn-dispatch";
 import { processChatMessageMedia } from "@/lib/chats/media-processing";
+import { resolveQuotedMessageByWhatsappId } from "@/lib/chats/resolve-quoted-message";
 import {
 	applyProviderDeliveryStatus,
 	mapProviderStatusToDeliveryStatus,
@@ -485,6 +486,12 @@ async function handleIncomingMessage(incomingMessage: ReturnType<typeof parseWeb
 
 	const midiaTipo = incomingMessage.messageType;
 
+	// Resposta a uma mensagem: o snapshot da citada é resolvido agora, para o painel continuar
+	// legível quando a original sair do histórico carregado.
+	const quotedMessage = incomingMessage.context?.quotedWhatsappMessageId
+		? await resolveQuotedMessageByWhatsappId({ organizacaoId, whatsappMessageId: incomingMessage.context.quotedWhatsappMessageId })
+		: null;
+
 	const metadados: TChatMessageMetadata = {
 		...(incomingMessage.referral ? { whatsappReferral: incomingMessage.referral } : {}),
 		...(midiaTipo === "FIGURINHA" ? { whatsappMidia: { animated: incomingMessage.stickerAnimated ?? false } } : {}),
@@ -492,6 +499,8 @@ async function handleIncomingMessage(incomingMessage: ReturnType<typeof parseWeb
 		...(incomingMessage.unsupported ? { whatsappUnsupported: incomingMessage.unsupported } : {}),
 		...(incomingMessage.location ? { whatsappLocation: incomingMessage.location } : {}),
 		...(incomingMessage.contacts && incomingMessage.contacts.length > 0 ? { whatsappContacts: incomingMessage.contacts } : {}),
+		...(incomingMessage.context ? { whatsappContext: incomingMessage.context } : {}),
+		...(quotedMessage ? { quotedMessage } : {}),
 	};
 
 	// Tipo não suportado não tem texto próprio: entra como nota honesta, em vez de um
@@ -670,6 +679,18 @@ async function handleMessageEcho(messageEcho: ReturnType<typeof parseWebhookMess
 	const whatsappConexaoId = connectionPhone.conexaoId;
 	const whatsappConexaoTelefoneId = connectionPhone.id;
 
+	// Reação feita pelo celular da loja: vai para a mensagem-alvo, como a do cliente. Antes caía
+	// na persistência e virava uma mensagem vazia no chat.
+	if (messageEcho.kind === "reaction" && messageEcho.reaction) {
+		await attachWhatsappReaction({
+			organizacaoId,
+			reaction: messageEcho.reaction,
+			senderPhoneNumber: messageEcho.fromPhoneNumber,
+			date: new Date(messageEcho.timestamp),
+		});
+		return;
+	}
+
 	// Edição feita no celular da loja: reescreve a mensagem ecoada antes. Não é resposta nova,
 	// então também não mexe no atendimento.
 	if (messageEcho.kind === "edit" && messageEcho.edit) {
@@ -728,6 +749,19 @@ async function handleMessageEcho(messageEcho: ReturnType<typeof parseWebhookMess
 	}
 
 	const midiaTipo = messageEcho.messageType;
+	const echoMetadados: TChatMessageMetadata = {};
+	if (midiaTipo === "FIGURINHA") echoMetadados.whatsappMidia = { animated: messageEcho.stickerAnimated ?? false };
+	if (messageEcho.location) echoMetadados.whatsappLocation = messageEcho.location;
+	if (messageEcho.contacts && messageEcho.contacts.length > 0) echoMetadados.whatsappContacts = messageEcho.contacts;
+	if (messageEcho.context) {
+		echoMetadados.whatsappContext = messageEcho.context;
+		if (messageEcho.context.quotedWhatsappMessageId) {
+			echoMetadados.quotedMessage = await resolveQuotedMessageByWhatsappId({
+				organizacaoId,
+				whatsappMessageId: messageEcho.context.quotedWhatsappMessageId,
+			});
+		}
+	}
 
 	// O echo marca o atendimento como EXTERNO ("atendido pelo telefone") — mas apenas se
 	// nenhum humano do hub já for o dono, o que markChatAttendedExternally garante.
@@ -740,7 +774,7 @@ async function handleMessageEcho(messageEcho: ReturnType<typeof parseWebhookMess
 		conteudoTexto: messageEcho.textContent || messageEcho.caption || null,
 		conteudoMidiaTipo: midiaTipo,
 		midia: mediaData ? { ...mediaData, whatsappMediaId: messageEcho.mediaId } : null,
-		metadados: midiaTipo === "FIGURINHA" ? { whatsappMidia: { animated: messageEcho.stickerAnimated ?? false } } : null,
+		metadados: Object.keys(echoMetadados).length > 0 ? echoMetadados : null,
 		now: new Date(messageEcho.timestamp),
 	});
 	if (!insertedEcho) {

@@ -15,6 +15,8 @@ type SendBasicWhatsappMessageParams = {
 	toPhoneNumber: string;
 	content: string;
 	whatsappToken: string;
+	/** wamid da mensagem citada — a Cloud API renderiza a citação no aparelho do cliente. */
+	replyToMessageId?: string | null;
 };
 
 type SendBasicWhatsappMessageResponse = {
@@ -32,6 +34,7 @@ export async function sendBasicWhatsappMessage({
 	toPhoneNumber,
 	content,
 	whatsappToken,
+	replyToMessageId,
 }: SendBasicWhatsappMessageParams): Promise<SendBasicWhatsappMessageResponse> {
 	try {
 		console.log("[INFO] [WHATSAPP_BASIC_SEND] Sending message:", toPhoneNumber, content);
@@ -47,6 +50,7 @@ export async function sendBasicWhatsappMessage({
 				recipient_type: "individual",
 				to: toPhoneNumber,
 				type: "text",
+				...(replyToMessageId ? { context: { message_id: replyToMessageId } } : {}),
 				text: {
 					preview_url: false,
 					body: content,
@@ -145,6 +149,7 @@ type SendMediaWhatsappMessageParams = {
 	caption?: string;
 	filename?: string;
 	whatsappToken: string;
+	replyToMessageId?: string | null;
 };
 
 type SendMediaWhatsappMessageResponse = {
@@ -165,6 +170,7 @@ export async function sendMediaWhatsappMessage({
 	caption,
 	filename,
 	whatsappToken,
+	replyToMessageId,
 }: SendMediaWhatsappMessageParams): Promise<SendMediaWhatsappMessageResponse> {
 	try {
 		console.log("[INFO] [WHATSAPP_MEDIA_SEND] Sending media message:", toPhoneNumber, mediaType, "id" in media ? media.id : media.link);
@@ -190,6 +196,7 @@ export async function sendMediaWhatsappMessage({
 			recipient_type: "individual",
 			to: toPhoneNumber,
 			type: mediaType,
+			...(replyToMessageId ? { context: { message_id: replyToMessageId } } : {}),
 			[mediaType]: mediaPayload,
 		};
 

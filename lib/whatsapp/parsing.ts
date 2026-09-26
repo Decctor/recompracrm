@@ -370,6 +370,29 @@ function parseMessageContent(message: Record<string, unknown>): TParsedMessageCo
 			};
 		}
 
+		// Resposta a uma mensagem interativa (botões ou lista): o cliente tocou numa opção. Mesmo
+		// tratamento do botão de template — o rótulo vira o texto e o id da opção vai no payload.
+		case "interactive": {
+			const interactiveObj = message.interactive as Record<string, unknown> | undefined;
+			const interactiveType = interactiveObj?.type as string | undefined;
+			const reply = (interactiveType ? interactiveObj?.[interactiveType] : undefined) as Record<string, unknown> | undefined;
+			const replyTitle = reply?.title as string | undefined;
+			if (!replyTitle) break;
+			const replyDescription = reply?.description as string | undefined;
+			return {
+				kind: "message",
+				messageType: "TEXTO",
+				textContent: replyDescription ? `${replyTitle}\n${replyDescription}` : replyTitle,
+				button: { text: replyTitle, payload: (reply?.id as string | undefined) ?? null },
+			};
+		}
+
+		// O cliente abriu a conversa (anúncio com mensagem de boas-vindas, busca de empresas) sem
+		// escrever nada: a Meta avisa para a loja dar as boas-vindas. Entra como mensagem do cliente
+		// para criar o chat, guardar o referral e acionar o agente, com um texto honesto.
+		case "request_welcome":
+			return { kind: "message", messageType: "TEXTO", textContent: "Cliente abriu a conversa." };
+
 		// Reação a uma mensagem existente. Não é uma mensagem de conversa: anexa o emoji na
 		// mensagem-alvo. Um "unreact" chega sem `emoji`.
 		case "reaction": {
@@ -442,6 +465,32 @@ function parseMessageContent(message: Record<string, unknown>): TParsedMessageCo
 	};
 }
 
+/**
+ * O `context` de uma mensagem: a que mensagem ela responde (citação) e se foi encaminhada.
+ * Encaminhamento chega sem id; citação chega com o wamid e o remetente da original.
+ */
+export type TWhatsappMessageContextParsed = {
+	quotedWhatsappMessageId: string | null;
+	quotedFrom: string | null;
+	forwarded: boolean;
+	frequentlyForwarded: boolean;
+};
+
+function parseMessageContextField(message: Record<string, unknown>): TWhatsappMessageContextParsed | undefined {
+	const contextObj = message.context as Record<string, unknown> | undefined;
+	if (!contextObj || typeof contextObj !== "object") return undefined;
+	const quotedWhatsappMessageId = (contextObj.id as string | undefined) ?? null;
+	const forwarded = contextObj.forwarded === true;
+	const frequentlyForwarded = contextObj.frequently_forwarded === true;
+	if (!quotedWhatsappMessageId && !forwarded && !frequentlyForwarded) return undefined;
+	return {
+		quotedWhatsappMessageId,
+		quotedFrom: quotedWhatsappMessageId && contextObj.from ? formatWhatsappIdAsPhone(contextObj.from as string) : null,
+		forwarded: forwarded || frequentlyForwarded,
+		frequentlyForwarded,
+	};
+}
+
 /** Referral de anúncio Meta (Click-to-WhatsApp), no shape do `ChatMessageMetadataSchema`. */
 function parseMessageReferral(message: Record<string, unknown>): TWhatsappReferral | null {
 	const referral = message.referral as Record<string, unknown> | undefined;
@@ -471,6 +520,8 @@ type ParsedIncomingMessage = TParsedMessageContent & {
 	/** O `type` cru da Meta — `messageType` é o enum da aplicação. */
 	messageTypeRaw: string;
 	referral: TWhatsappReferral | null;
+	/** Citação/encaminhamento, quando o cliente responde a uma mensagem ou encaminha uma. */
+	context?: TWhatsappMessageContextParsed;
 	timestamp: number;
 };
 
@@ -496,6 +547,7 @@ function parseSingleIncomingMessage(message: Record<string, unknown>, value: Rec
 		profileName: (profile?.name as string) || "Cliente",
 		messageTypeRaw: message.type as string,
 		referral: parseMessageReferral(message),
+		context: parseMessageContextField(message),
 		timestamp: message.timestamp ? Number.parseInt(message.timestamp as string) * 1000 : Date.now(),
 	};
 }
@@ -748,6 +800,8 @@ type ParsedMessageEcho = TParsedMessageContent & {
 	toUserId: string | null;
 	/** O `type` cru da Meta — `messageType` é o enum da aplicação. */
 	messageTypeRaw: string;
+	/** Citação/encaminhamento, quando o eco responde a uma mensagem. */
+	context?: TWhatsappMessageContextParsed;
 	timestamp: number;
 };
 
@@ -764,8 +818,9 @@ function parseSingleEcho(message: Record<string, unknown>, value: Record<string,
 	const whatsappPhoneNumberId = metadata?.phone_number_id as string;
 
 	const content = parseMessageContent(message);
-	// Reação/sistema/não-suportado ecoados pelo app do celular não viram mensagem do hub.
-	if (!content || (content.kind !== "message" && content.kind !== "edit")) {
+	// Sistema/não-suportado ecoados pelo app do celular não têm conteúdo para espelhar. Reação e
+	// edição seguem: vão para a mensagem-alvo, como as do cliente.
+	if (!content || content.kind === "system" || content.kind === "unsupported") {
 		if (content) console.log("[WHATSAPP_WEBHOOK] Ignoring non-message echo kind:", content.kind);
 		return null;
 	}
@@ -780,6 +835,7 @@ function parseSingleEcho(message: Record<string, unknown>, value: Record<string,
 		toPhoneNumber: to ? formatWhatsappIdAsPhone(to) : null,
 		toUserId: (message.to_user_id as string | undefined) || null,
 		messageTypeRaw: message.type as string,
+		context: parseMessageContextField(message),
 		timestamp: message.timestamp ? Number.parseInt(message.timestamp as string) * 1000 : Date.now(),
 	};
 }

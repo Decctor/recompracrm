@@ -309,6 +309,36 @@ export const ChatMessageMetadataSchema = z.object({
 		})
 		.optional()
 		.nullable(),
+	/**
+	 * O `context` da Cloud API: a que mensagem esta responde e se foi encaminhada. O conteúdo da
+	 * citada fica em `quotedMessage`.
+	 */
+	whatsappContext: z
+		.object({
+			quotedWhatsappMessageId: z.string().optional().nullable(),
+			quotedFrom: z.string().optional().nullable(),
+			forwarded: z.boolean().optional(),
+			frequentlyForwarded: z.boolean().optional(),
+		})
+		.optional()
+		.nullable(),
+	/**
+	 * Snapshot da mensagem citada (resposta no WhatsApp), resolvido na entrada. `chatMessageId`
+	 * nulo = a original não está na base; o painel mostra "não disponível".
+	 */
+	quotedMessage: z
+		.object({
+			chatMessageId: z.string().optional().nullable(),
+			providerMessageId: z.string().optional().nullable(),
+			authorType: z.enum(["CLIENTE", "USUÁRIO", "AI", "BUSINESS-APP"]).optional().nullable(),
+			authorName: z.string().optional().nullable(),
+			text: z.string().optional().nullable(),
+			mediaType: z.enum(["TEXTO", "IMAGEM", "VIDEO", "AUDIO", "DOCUMENTO", "FIGURINHA", "LOCALIZACAO"]).optional().nullable(),
+			mediaUrl: z.string().optional().nullable(),
+			fileName: z.string().optional().nullable(),
+		})
+		.optional()
+		.nullable(),
 	/** Cartões de contato (vCard) compartilhados pelo cliente. */
 	whatsappContacts: z
 		.array(
