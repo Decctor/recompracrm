@@ -98,6 +98,16 @@ async function getSalesChannelMatrix({ orgId }: { orgId: string }) {
 				columns: { id: true, nome: true, codigo: true, precoVenda: true, ativo: true, rastreamentoEstoqueAtivo: true, quantidade: true },
 				orderBy: (fields, { asc }) => asc(fields.nome),
 			},
+			// Só o suficiente para o chip "Adicionais" da grade (contagem e nomes). A edição abre o
+			// diálogo, que carrega o produto completo por conta própria — adicionais não são por
+			// canal, então não entram no rascunho da matriz. Referências nível produto, como a
+			// página do produto (o fluxo por variante ainda não carrega as regras próprias).
+			addOnsReferencias: {
+				where: (fields, { isNull: isNullOp }) => isNullOp(fields.produtoVarianteId),
+				columns: { id: true, ordem: true },
+				with: { grupo: { columns: { id: true, nome: true, internoNome: true, ativo: true } } },
+				orderBy: (fields, { asc }) => asc(fields.ordem),
+			},
 		},
 		orderBy: (fields, { asc }) => asc(fields.nome),
 	});

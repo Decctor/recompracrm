@@ -19,6 +19,7 @@ import Link from "next/link";
 import { type CSSProperties, type ReactNode, useMemo } from "react";
 import ChannelHeaderMenu from "./ChannelHeaderMenu";
 import IfoodNodeMenu from "./IfoodNodeMenu";
+import { ProductAddOnsChip } from "./ProductAddOnsDialog";
 import { MatrixAvailabilityCell, MatrixPriceCell, MatrixStatusCell, type TMatrixNodeView } from "./ChannelMatrixCells";
 
 /**
@@ -56,7 +57,7 @@ export function matrixLinkKey(merchantId: string, produtoId: string, produtoVari
 
 const EMPTY_SET = new Set<string>();
 
-const FIXED_COLUMNS = "minmax(0,28fr) minmax(0,10fr)";
+const FIXED_COLUMNS = "minmax(0,28fr) minmax(0,10fr) minmax(0,9fr)";
 const CHANNEL_COLUMNS = "minmax(0,15fr) minmax(0,14fr) minmax(0,12fr)";
 
 function gridStyle(channelCount: number): CSSProperties {
@@ -64,7 +65,7 @@ function gridStyle(channelCount: number): CSSProperties {
 		gridTemplateColumns: `${FIXED_COLUMNS} ${Array.from({ length: channelCount }, () => CHANNEL_COLUMNS).join(" ")}`,
 		// Abaixo disso as pílulas de disponibilidade colidem com o preço; a partir daqui a grade
 		// rola horizontalmente em vez de espremer as colunas.
-		minWidth: `${28 + channelCount * 18}rem`,
+		minWidth: `${34 + channelCount * 18}rem`,
 	};
 }
 
@@ -256,6 +257,7 @@ export default function ChannelMatrixTable({ produtos, columns, focusedColumn, a
 				>
 					<p className="min-w-0 px-1 text-start">Produto</p>
 					<p className="min-w-0 px-1 text-center">Preço base</p>
+					<p className="min-w-0 px-1 text-center">Adicionais</p>
 					{columns.map((column) => (
 						<div key={column.channel.id} className="col-span-3 min-w-0 border-l border-border/60">
 							<ChannelHeaderMenu
@@ -273,6 +275,7 @@ export default function ChannelMatrixTable({ produtos, columns, focusedColumn, a
 					className="grid items-center gap-x-1 border-b border-border bg-muted/30 px-2 py-1 text-[0.6rem] font-medium uppercase tracking-wide text-muted-foreground"
 					style={style}
 				>
+					<span />
 					<span />
 					<span />
 					{columns.map((column) => (
@@ -295,6 +298,7 @@ export default function ChannelMatrixTable({ produtos, columns, focusedColumn, a
 								{row.variant ? null : <ProductRegistryLink produto={row.product} />}
 							</div>
 							<p className="min-w-0 px-1 text-center tabular-nums text-muted-foreground">{basePriceOf(row)}</p>
+							<div className="flex min-w-0 justify-center px-1">{row.variant ? null : <ProductAddOnsChip product={row.product} />}</div>
 							{columns.map((column, columnIndex) => (
 								<ChannelCells
 									key={column.channel.id}
@@ -319,6 +323,7 @@ export default function ChannelMatrixTable({ produtos, columns, focusedColumn, a
 							<RowIdentity row={row} compact={false} />
 							<div className="flex shrink-0 items-center gap-2">
 								<span className="text-xs tabular-nums text-muted-foreground">{basePriceOf(row)}</span>
+								{row.variant ? null : <ProductAddOnsChip product={row.product} />}
 								{row.variant ? null : <ProductRegistryLink produto={row.product} />}
 							</div>
 						</div>
