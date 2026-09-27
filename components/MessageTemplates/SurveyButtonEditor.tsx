@@ -1,6 +1,7 @@
 "use client";
 
 import type { TGetCustomFieldsOutputDefault } from "@/app/api/custom-fields/route";
+import NewCustomField from "@/components/Modals/Internal/CustomFields/NewCustomField";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -9,7 +10,7 @@ import type { TMessageTemplateSurveyButton } from "@/lib/message-templates/surve
 import { useCustomFields } from "@/lib/queries/custom-fields";
 import type { TMessageTemplateContent } from "@/schemas/message-templates";
 import { ListChecks, Plus, Trash2 } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 type TCustomField = TGetCustomFieldsOutputDefault["customFields"][number];
 type TButton = TMessageTemplateContent["botoes"][number];
@@ -58,6 +59,7 @@ export function SurveyButtonEditor({
 	typeSelect: React.ReactNode;
 }) {
 	const { fields, isLoading } = useSurveyCustomFields();
+	const [creatingField, setCreatingField] = useState(false);
 	const field = fields.find((candidate) => candidate.id === button.campoId) ?? null;
 	const usedOptionValues = useMemo(
 		() =>
@@ -87,6 +89,13 @@ export function SurveyButtonEditor({
 
 	return (
 		<div className="grid gap-2 rounded-lg bg-background p-2">
+			{creatingField ? (
+				<NewCustomField
+					choiceTypesOnly
+					closeModal={() => setCreatingField(false)}
+					callbacks={{ onSuccess: (response) => onChange({ ...button, campoId: response.data.insertedId, opcaoValor: "", texto: "" }) }}
+				/>
+			) : null}
 			<div className="grid gap-2 md:grid-cols-[140px_1fr_1fr_auto]">
 				{typeSelect}
 				<Select
@@ -101,7 +110,7 @@ export function SurveyButtonEditor({
 					<SelectContent>
 						<SelectGroup>
 							{fields.length === 0 ? (
-								<p className="px-3 py-2 text-xs text-muted-foreground">Nenhum campo de escolha ativo. Crie um em Configurações → Campos personalizados.</p>
+								<p className="px-3 py-2 text-xs text-muted-foreground">Nenhum campo de escolha ativo. Use "novo campo" ao lado para criar um.</p>
 							) : null}
 							{fields.map((candidate) => (
 								<SelectItem key={candidate.id} value={candidate.id}>
@@ -156,12 +165,18 @@ export function SurveyButtonEditor({
 					</Button>
 				) : null}
 			</div>
-			<p className="flex items-center gap-1 text-[11px] text-muted-foreground">
-				<ListChecks className="h-3 w-3" />
-				{field
-					? `O toque grava "${button.opcaoValor || "…"}" em "${field.titulo}" (${field.tipo === "ESCOLHA_MULTIPLA" ? "escolha múltipla" : "escolha única"}).`
-					: "O toque do cliente grava a opção escolhida no campo personalizado."}
-			</p>
+			<div className="flex flex-wrap items-center justify-between gap-2">
+				<p className="flex items-center gap-1 text-[11px] text-muted-foreground">
+					<ListChecks className="h-3 w-3" />
+					{field
+						? `O toque grava "${button.opcaoValor || "…"}" em "${field.titulo}" (${field.tipo === "ESCOLHA_MULTIPLA" ? "escolha múltipla" : "escolha única"}).`
+						: "O toque do cliente grava a opção escolhida no campo personalizado."}
+				</p>
+				<Button type="button" variant="ghost" size="xs" className="gap-1" onClick={() => setCreatingField(true)}>
+					<Plus className="h-3 w-3" />
+					novo campo
+				</Button>
+			</div>
 		</div>
 	);
 }

@@ -548,9 +548,14 @@ doing while touching both, but it is a refactor, not a requirement of this featu
 - **Survey templates are rejected outside `PESQUISA` campaigns** (`validateSurveyCampaign`), and the
   message stage hides them for other triggers, with the reason on hover. Lifting this is the v2
   "post-purchase survey" change.
-- **Inline field creation** lives in the trigger config (`pesquisa-config.tsx`): there was no CRM
-  surface to create a choice field outside the POI settings, and the builder should not send the
-  user away. Option values are derived from titles (`lib/custom-fields/option-values.ts`).
+- **Custom fields got their own interfaces.** `components/Modals/Internal/CustomFields`
+  (`NewCustomField`, `ControlCustomField`, state hook `use-internal-custom-field-state`) and the
+  settings section "Campos personalizados" (`components/Settings/SettingsCustomFields.tsx`,
+  `?view=custom-fields`). The campaign builder and the template's survey button row open the same
+  modals inline, same pattern as the inline coupon — with one difference: the field is created
+  immediately, not at campaign submit, because the survey template needs the field id before it
+  goes to Meta for approval. Option values are derived from titles on first save and then frozen
+  (`lib/custom-fields/option-values.ts`).
 - **The Meta library test list was left alone.** `config/message-template-library.test.ts` asserts
   every trigger has a library model; a survey template cannot live in the library because its
   buttons point at an organization's field. `PESQUISA` is intentionally absent from that list; the

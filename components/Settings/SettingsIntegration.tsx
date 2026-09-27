@@ -517,8 +517,12 @@ function PoiRegistrationSettings({ storedConfig, salesRegistrationEnabled, canEd
 
 			<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
 				<p className="text-xs text-muted-foreground">
-					Os campos prontos já são entendidos pela plataforma (segmentação e aniversariantes saem de graça). Campos próprios da organização, se existirem,
-					aparecem na lista acima.
+					Os campos prontos já são entendidos pela plataforma (segmentação e aniversariantes saem de graça). Campos próprios da organização são
+					criados e editados em{" "}
+					<Link href="/dashboard/settings?view=custom-fields" className="font-semibold text-primary hover:underline">
+						Campos personalizados
+					</Link>{" "}
+					e aparecem na lista acima.
 				</p>
 				<Button size="sm" disabled={!canEdit || saveRegistrationConfigMutation.isPending} onClick={() => saveRegistrationConfigMutation.mutate()}>
 					SALVAR CADASTRO

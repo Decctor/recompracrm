@@ -5,6 +5,7 @@ import {
 	Grid3x3,
 	Key,
 	Landmark,
+	ListChecks,
 	type LucideIcon,
 	MessageCircle,
 	Plug,
@@ -38,6 +39,7 @@ export const SETTINGS_VIEWS = [
 	"integration",
 	"finances",
 	"segments",
+	"custom-fields",
 ] as const;
 
 export type TSettingsView = (typeof SETTINGS_VIEWS)[number];
@@ -192,6 +194,14 @@ export const SETTINGS_GROUPS: TSettingsGroup[] = [
 				label: "Segmentações",
 				description: "A matriz RFM que classifica seus clientes e alimenta o gatilho das campanhas.",
 				icon: Grid3x3,
+			},
+			{
+				view: "custom-fields",
+				label: "Campos personalizados",
+				description: "O que você coleta sobre cada cliente além do cadastro básico — no ponto de interação, em pesquisas e como filtro de público.",
+				icon: ListChecks,
+				canAccess: canViewCompany,
+				restrictedReason: COMPANY_RESTRICTED_REASON,
 			},
 		],
 	},
