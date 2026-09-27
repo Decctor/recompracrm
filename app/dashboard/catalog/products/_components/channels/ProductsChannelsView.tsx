@@ -178,7 +178,12 @@ function ChannelMatrixEditor({ matrix }: { matrix: TSalesChannelMatrix }) {
 					/>
 				</div>
 				{focusedChannel ? (
-					<Select value={focusedChannel.id} onValueChange={(value) => value && focusChannel(value)}>
+					<Select
+						// O Select renderiza o rótulo do valor a partir de `items`; sem isso mostra o id.
+						items={channels.map((channel) => ({ value: channel.id, label: `Foco: ${salesChannelLabel(channel, merchantNames)}` }))}
+						value={focusedChannel.id}
+						onValueChange={(value) => value && focusChannel(value)}
+					>
 						<SelectTrigger className="h-9 w-full rounded-xl lg:w-64" aria-label="Canal em foco">
 							<SelectValue />
 						</SelectTrigger>

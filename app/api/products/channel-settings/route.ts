@@ -3,7 +3,7 @@ import { requireERPSession } from "@/lib/authentication/erp-session";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { schedulePushForProduct } from "@/lib/integrations/ifood/sync/push";
 import { splitChannelSettingNodes, validateChannelSettingNodes } from "@/lib/products/sales-channels";
-import { ensureSalesChannels } from "@/lib/products/sales-channels-store";
+import { ensureSalesChannelsWithIntegrations } from "@/lib/integrations/ifood/sales-channels";
 import { db } from "@/services/drizzle";
 import { productChannelSettings, products, salesChannels } from "@/services/drizzle/schema";
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
@@ -75,7 +75,7 @@ async function getProductChannelSettings({ orgId, produtoId }: { orgId: string; 
 			where: and(eq(products.id, produtoId), eq(products.organizacaoId, orgId)),
 			columns: { id: true },
 		}),
-		ensureSalesChannels({ orgId }),
+		ensureSalesChannelsWithIntegrations({ orgId }),
 		db.query.productChannelSettings.findMany({
 			where: and(eq(productChannelSettings.organizacaoId, orgId), eq(productChannelSettings.produtoId, produtoId)),
 		}),

@@ -1,7 +1,7 @@
 import { appApiHandler } from "@/lib/app-api";
 import { requireERPSession } from "@/lib/authentication/erp-session";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
-import { ensureSalesChannels } from "@/lib/products/sales-channels-store";
+import { ensureSalesChannelsWithIntegrations } from "@/lib/integrations/ifood/sales-channels";
 import { SalesChannelCatalogModeEnum, SalesChannelTypeEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
 import { integrations, salesChannels } from "@/services/drizzle/schema";
@@ -34,7 +34,7 @@ const UpdateSalesChannelInputSchema = z.object({
 export type TUpdateSalesChannelInput = z.infer<typeof UpdateSalesChannelInputSchema>;
 
 async function getSalesChannels({ orgId }: { orgId: string }) {
-	const channels = await ensureSalesChannels({ orgId });
+	const channels = await ensureSalesChannelsWithIntegrations({ orgId });
 
 	return { data: { channels }, message: "Canais de venda carregados com sucesso." };
 }

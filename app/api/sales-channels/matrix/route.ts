@@ -4,7 +4,7 @@ import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { schedulePushForProduct } from "@/lib/integrations/ifood/sync/push";
 import { splitChannelSettingNodes, validateChannelSettingNodes } from "@/lib/products/sales-channels";
 import { productsTouchingChannels } from "@/lib/products/sales-channels-matrix";
-import { ensureSalesChannels } from "@/lib/products/sales-channels-store";
+import { ensureSalesChannelsWithIntegrations } from "@/lib/integrations/ifood/sales-channels";
 import { SalesChannelCatalogModeEnum } from "@/schemas/enums";
 import { ProductChannelSettingSchema } from "@/schemas/sales-channels";
 import { db } from "@/services/drizzle";
@@ -74,7 +74,7 @@ async function getSalesChannelMatrix({ orgId }: { orgId: string }) {
 	// `ensureSalesChannels` materializa os internos que faltarem e devolve TODOS os canais da org,
 	// inclusive os do iFood (um por merchant): um canal configurado precisa aparecer na gestão,
 	// senão vira override invisível.
-	const channels = await ensureSalesChannels({ orgId });
+	const channels = await ensureSalesChannelsWithIntegrations({ orgId });
 	const channelIds = channels.map((channel) => channel.id);
 
 	// Sem os portões de preço e estoque de propósito (mesma decisão da vitrine): quem monta o

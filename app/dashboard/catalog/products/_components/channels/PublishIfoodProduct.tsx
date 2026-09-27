@@ -90,7 +90,11 @@ export default function PublishIfoodProduct({ merchantId, merchantLabel, produto
 					<>
 						<div className="flex flex-col gap-1.5">
 							<span className="text-[0.65rem] font-medium uppercase tracking-wide text-muted-foreground">Categoria no iFood</span>
-							<Select value={categoriaId ?? ""} onValueChange={(value) => setCategoriaId(value || null)}>
+							<Select
+								items={categorias.map((categoria) => ({ value: categoria.id, label: categoria.nome ?? categoria.id }))}
+								value={categoriaId ?? ""}
+								onValueChange={(value) => setCategoriaId(value || null)}
+							>
 								<SelectTrigger className="w-full" aria-label="Categoria no iFood">
 									<SelectValue placeholder="Escolha a categoria" />
 								</SelectTrigger>
