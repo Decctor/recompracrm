@@ -13,6 +13,7 @@ type IfoodConnectionGateProps = {
 	/** Erro da query base (lojas). 401 → conexão expirada; 404 → não conectado. */
 	error?: unknown;
 	canManage: boolean;
+	reconnectIntegrationId?: string | null;
 	children: ReactNode;
 };
 
@@ -21,7 +22,7 @@ type IfoodConnectionGateProps = {
  * saudável. Caso contrário exibe o estado adequado (conectar / reconectar / erro) com o fluxo de
  * autorização embutido.
  */
-export function IfoodConnectionGate({ isConnected, error, canManage, children }: IfoodConnectionGateProps) {
+export function IfoodConnectionGate({ isConnected, error, canManage, reconnectIntegrationId, children }: IfoodConnectionGateProps) {
 	const [connectMenuIsOpen, setConnectMenuIsOpen] = useState(false);
 
 	const errorStatus = isAxiosError(error) ? (error.response?.status ?? null) : null;
@@ -52,7 +53,9 @@ export function IfoodConnectionGate({ isConnected, error, canManage, children }:
 						<p className="text-xs text-muted-foreground">Você não possui permissão para gerenciar integrações.</p>
 					)}
 				</div>
-				{connectMenuIsOpen ? <IfoodConnectMenu closeMenu={() => setConnectMenuIsOpen(false)} /> : null}
+				{connectMenuIsOpen ? (
+					<IfoodConnectMenu reconnectIntegrationId={reconnectIntegrationId} closeMenu={() => setConnectMenuIsOpen(false)} />
+				) : null}
 			</>
 		);
 	}

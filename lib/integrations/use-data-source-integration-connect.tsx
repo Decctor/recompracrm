@@ -1,7 +1,7 @@
 "use client";
 
 import ConfigureIntegration from "@/components/Modals/Integrations/ConfigureIntegration";
-import { IfoodSandboxIntegrationMenu } from "@/components/Settings/IfoodSandboxIntegrationMenu";
+import { IfoodConnectMenu } from "@/app/dashboard/integrations/ifood/_module/connect/IfoodConnectMenu";
 import type { TAuthSessionIntegrationSummary, TAuthUserSession } from "@/lib/authentication/types";
 import { canManageIntegrations } from "@/lib/integrations/mask";
 import { DATA_SOURCE_INTEGRATION_PROVIDERS } from "@/lib/integrations/data-source-providers";
@@ -102,7 +102,7 @@ export function useDataSourceIntegrationConnect({ membership }: UseDataSourceInt
 					closeMenu={closeCredentialMenu}
 				/>
 			) : null}
-			{ifoodMenuIsOpen ? <IfoodSandboxIntegrationMenu closeMenu={closeIfoodMenu} /> : null}
+			{ifoodMenuIsOpen ? <IfoodConnectMenu reconnectIntegrationId={reconnectIntegrationId} closeMenu={closeIfoodMenu} /> : null}
 		</>
 	);
 

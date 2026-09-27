@@ -7,10 +7,11 @@ import type { TAuthUserSession } from "@/lib/authentication/types";
 import { canManageIntegrations, canViewIntegrations } from "@/lib/integrations/mask";
 import { useIfoodMerchants } from "@/lib/queries/ifood";
 import IfoodLogo from "@/utils/images/integrations/ifood-logo.png";
-import { SlidersHorizontal } from "lucide-react";
+import { RefreshCcw, SlidersHorizontal } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import { IfoodCatalogEntrySection } from "./_module/catalog/IfoodCatalogEntrySection";
+import { IfoodConnectMenu } from "./_module/connect/IfoodConnectMenu";
 import { IfoodOrdersSection } from "./_module/orders/IfoodOrdersSection";
 import { IfoodStoreSection } from "./_module/overview/IfoodStoreSection";
 import { IfoodConnectionGate } from "./_module/shared/IfoodConnectionGate";
@@ -24,7 +25,8 @@ type IntegrationsIFoodPageProps = {
 };
 
 export default function IntegrationsIFoodPage({ sessionUser: _sessionUser, membership }: IntegrationsIFoodPageProps) {
-	const isConnected = membership.organizacao.integracoes.some((integration) => integration.tipo === "IFOOD" && integration.ativo);
+	const activeIfoodConnections = membership.organizacao.integracoes.filter((integration) => integration.tipo === "IFOOD" && integration.ativo);
+	const isConnected = activeIfoodConnections.length > 0;
 	const canManage = canManageIntegrations(membership.permissoes);
 
 	const canView = canViewIntegrations(membership.permissoes);
@@ -32,6 +34,7 @@ export default function IntegrationsIFoodPage({ sessionUser: _sessionUser, membe
 	const merchants = merchantsQuery.data ?? [];
 	const [selectedMerchantId, setSelectedMerchantId] = useState<string | null>(null);
 	const [settingsIsOpen, setSettingsIsOpen] = useState(false);
+	const [reconnectIntegrationId, setReconnectIntegrationId] = useState<string | null>(null);
 
 	useEffect(() => {
 		if (!selectedMerchantId && merchants.length > 0) setSelectedMerchantId(merchants[0].id);
@@ -49,7 +52,15 @@ export default function IntegrationsIFoodPage({ sessionUser: _sessionUser, membe
 						<p className="text-sm text-muted-foreground">Gerencie o status, os horários e o catálogo da sua loja no iFood.</p>
 					</div>
 				</div>
-				<div className="flex items-center gap-2">
+				<div className="flex flex-wrap items-center gap-2">
+					{canManage
+						? activeIfoodConnections.map((connection, index) => (
+								<Button key={connection.id} variant="outline" size="sm" onClick={() => setReconnectIntegrationId(connection.id)}>
+									<RefreshCcw className="h-4 w-4" />
+									{activeIfoodConnections.length === 1 ? "RECONECTAR IFOOD" : `RECONECTAR ${connection.apelido ?? `CONEXÃO ${index + 1}`}`}
+								</Button>
+							))
+						: null}
 					{isConnected && canView ? (
 						<Button variant="outline" size="sm" onClick={() => setSettingsIsOpen(true)}>
 							<SlidersHorizontal className="h-4 w-4" />
@@ -61,8 +72,16 @@ export default function IntegrationsIFoodPage({ sessionUser: _sessionUser, membe
 			</div>
 
 			{settingsIsOpen ? <IntegrationErpSettings canManage={canManage} closeMenu={() => setSettingsIsOpen(false)} /> : null}
+			{reconnectIntegrationId ? (
+				<IfoodConnectMenu reconnectIntegrationId={reconnectIntegrationId} closeMenu={() => setReconnectIntegrationId(null)} />
+			) : null}
 
-			<IfoodConnectionGate isConnected={isConnected} error={merchantsQuery.error} canManage={canManage}>
+			<IfoodConnectionGate
+				isConnected={isConnected}
+				error={merchantsQuery.error}
+				canManage={canManage}
+				reconnectIntegrationId={activeIfoodConnections.length === 1 ? activeIfoodConnections[0].id : null}
+			>
 				{merchantsQuery.isLoading ? (
 					<LoadingComponent />
 				) : (

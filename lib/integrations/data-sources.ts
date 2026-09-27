@@ -249,6 +249,9 @@ export async function connectDataSourceIntegration({
 				explicitTarget.configuracao.merchantIds.length > 0 &&
 				config.merchantIds.length > 0 &&
 				!configsShareIfoodMerchants(explicitTarget.configuracao, config));
+		if (identityMismatchProven && config.tipo === "IFOOD") {
+			throw new Error("A conta iFood autorizada não corresponde à conexão selecionada. Autorize a mesma conta para preservar esta conexão.");
+		}
 		if (!identityMismatchProven) target = explicitTarget;
 	}
 
@@ -259,12 +262,16 @@ export async function connectDataSourceIntegration({
 	await assertDataSourceIdentityAvailable({ executor, organizationId, config, ignoreIntegrationId: target?.id });
 
 	if (target) {
+		const updatedConfig =
+			config.tipo === "IFOOD" && target.configuracao?.tipo === "IFOOD"
+				? { ...config, aceiteAutomaticoPedidos: target.configuracao.aceiteAutomaticoPedidos }
+				: config;
 		const [updated] = await executor
 			.update(integrations)
 			.set({
 				ativo: true,
 				dataDesativacao: null,
-				configuracao: config,
+				configuracao: updatedConfig,
 				refExterno: deriveDataSourceRefExterno(config),
 				status: "CONECTADO",
 				ultimoErro: null,

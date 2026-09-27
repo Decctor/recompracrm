@@ -30,6 +30,7 @@ export function IfoodConnectMenu({ reconnectIntegrationId, closeMenu }: IfoodCon
 	const [linkCopied, setLinkCopied] = useState(false);
 
 	const verificationLink = authorization?.verificationUrlComplete ?? authorization?.verificationUrl ?? null;
+	const isReconnect = !!reconnectIntegrationId;
 
 	async function handleCopyVerificationLink() {
 		if (!verificationLink) return;
@@ -65,8 +66,8 @@ export function IfoodConnectMenu({ reconnectIntegrationId, closeMenu }: IfoodCon
 			if (!response.ok) throw new Error(data.error ?? "Não foi possível conectar o iFood.");
 			return data;
 		},
-		onSuccess: () => {
-			toast.success("Integração iFood conectada com sucesso.");
+			onSuccess: () => {
+			toast.success(isReconnect ? "Integração iFood reconectada com sucesso." : "Integração iFood conectada com sucesso.");
 			window.location.reload();
 		},
 		onError: (error) => {
@@ -83,9 +84,11 @@ export function IfoodConnectMenu({ reconnectIntegrationId, closeMenu }: IfoodCon
 		>
 			<ResponsiveMenu.Content drawerClassName="max-h-[70dvh]">
 				<ResponsiveMenu.Header>
-					<ResponsiveMenu.Title>CONECTAR IFOOD</ResponsiveMenu.Title>
+					<ResponsiveMenu.Title>{isReconnect ? "RECONECTAR IFOOD" : "CONECTAR IFOOD"}</ResponsiveMenu.Title>
 					<ResponsiveMenu.Description>
-						Gere o código, autorize o aplicativo no portal do iFood e cole o código de autorização para concluir.
+						{isReconnect
+								? "Autorize novamente a mesma conta no portal do iFood. As novas credenciais serão salvas na conexão atual."
+							: "Gere o código, autorize o aplicativo no portal do iFood e cole o código de autorização para concluir."}
 					</ResponsiveMenu.Description>
 				</ResponsiveMenu.Header>
 				<ResponsiveMenuAnimatedBody stateKey="content" className="overflow-x-hidden overflow-y-auto">
