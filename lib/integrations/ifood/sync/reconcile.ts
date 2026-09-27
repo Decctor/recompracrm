@@ -8,6 +8,8 @@ import { catalogLinks, productChannelSettings, type TCatalogLinkEntity } from "@
 import { and, eq, inArray, ne } from "drizzle-orm";
 import {
 	type TAddOnGroupNode,
+	allGroupLinks,
+	allOptionLinks,
 	associationSnapshot,
 	listAllIfoodOptionGroups,
 	loadAddOnLinks,
@@ -124,7 +126,7 @@ export async function reconcileMerchantCatalog({ orgId, merchantId }: { orgId: s
 		),
 	});
 	const addOnLinks = await loadAddOnLinks({ orgId, merchantId });
-	if (links.length === 0 && addOnLinks.groups.size === 0) return { verificados: 0, sincronizados: 0, divergentes: 0, ausentes: 0, propagando: 0 };
+	if (links.length === 0 && addOnLinks.groups.size === 0 && addOnLinks.options.size === 0) return { verificados: 0, sincronizados: 0, divergentes: 0, ausentes: 0, propagando: 0 };
 
 	const context = await resolveIfoodManagementContext({ organizacaoId: orgId, merchantId });
 	const channelState = await loadChannelState({ orgId, canal: "IFOOD", refExterno: merchantId });
@@ -193,9 +195,11 @@ export async function reconcileMerchantCatalog({ orgId, merchantId }: { orgId: s
 			if (desejada.length > 0 || (link.ultimoSnapshot?.gruposComplementos?.length ?? 0) > 0) {
 				const flat: TIfoodItemFlatDTO | null = await getIfoodItemFlat(context.client, merchantId, link.externoItemId).catch(() => null);
 				if (flat) {
-					const knownGroupIds = new Set([...addOnLinks.groups.values()].map((groupLink) => groupLink.externoOptionGroupId).filter(Boolean));
+					const knownGroupIds = new Set(allGroupLinks(addOnLinks).map((groupLink) => groupLink.externoOptionGroupId).filter(Boolean));
+					const flatGroupIds = new Set(flat.gruposComplementos.map((grupo) => grupo.id).filter((id): id is string => !!id));
 					association = {
-						desejada,
+						// Com cópias por item, o desejado é a cópia que ESTE item usa (ids do flat).
+						desejada: associationSnapshot({ nodes: await addOnNodesFor(link.produtoId), links: addOnLinks, remoteGroupIds: flatGroupIds }),
 						// Grupos que o iFood associou ao item sem vínculo aqui não contam: podem ter sido
 						// montados no Portal de propósito (política desligada, gestão local).
 						observada: flat.gruposComplementos
@@ -266,7 +270,8 @@ export async function reconcileMerchantCatalog({ orgId, merchantId }: { orgId: s
 				else sincronizados += 1;
 			};
 
-			for (const [produtoAddOnId, groupLink] of addOnLinks.groups) {
+			for (const groupLink of allGroupLinks(addOnLinks)) {
+				const produtoAddOnId = groupLink.produtoAddOnId as string;
 				const remote = groupLink.externoOptionGroupId ? remoteById.get(groupLink.externoOptionGroupId) : undefined;
 				if (!remote) {
 					await markMissing(groupLink.id, "O grupo de complementos não existe mais no iFood.");
@@ -293,7 +298,8 @@ export async function reconcileMerchantCatalog({ orgId, merchantId }: { orgId: s
 				await settle(groupLink, divergences);
 			}
 
-			for (const [opcaoId, optionLink] of addOnLinks.options) {
+			for (const optionLink of allOptionLinks(addOnLinks)) {
+				const opcaoId = optionLink.produtoAddOnOpcaoId as string;
 				const remoteGroup = optionLink.externoOptionGroupId ? remoteById.get(optionLink.externoOptionGroupId) : undefined;
 				const remote = remoteGroup?.opcoes.find((opcao) => opcao.id === optionLink.externoOptionId);
 				if (!remote) {
@@ -327,7 +333,7 @@ export async function reconcileMerchantCatalog({ orgId, merchantId }: { orgId: s
 		}
 	}
 
-	return { verificados: links.length + addOnLinks.groups.size + addOnLinks.options.size, sincronizados, divergentes, ausentes, propagando };
+	return { verificados: links.length + allGroupLinks(addOnLinks).length + allOptionLinks(addOnLinks).length, sincronizados, divergentes, ausentes, propagando };
 }
 
 /**

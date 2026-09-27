@@ -552,6 +552,27 @@ export async function syncAuxiliaryEntities({
 		if (addOnExternalId) context.productAddOnOptionsByExternalId.set(`${addOnExternalId}:${option.idExterno}`, option.id);
 	}
 
+	// Vínculos de complemento (muitos-para-um: cada cópia do grupo no iFood tem ids próprios) têm
+	// precedência sobre o `idExterno`, como os vínculos de item. Valem mesmo para opção local
+	// INATIVA: um pedido que chega antes da pausa propagar ainda precisa saber qual sabor foi.
+	const modifierOptionIds = [
+		...new Set(batch.sales.flatMap((sale) => sale.items.flatMap((item) => (item.modifiers ?? []).map((modifier) => modifier.optionExternalId)))),
+	];
+	if (modifierOptionIds.length) {
+		const optionLinks = await tx.query.catalogLinks.findMany({
+			where: and(
+				eq(catalogLinks.organizacaoId, batch.organizationId),
+				eq(catalogLinks.tipo, "ADD_ON_OPCAO"),
+				ne(catalogLinks.status, "DESVINCULADO"),
+				inArray(catalogLinks.externoOptionId, modifierOptionIds),
+			),
+			columns: { externoOptionId: true, produtoAddOnOpcaoId: true },
+		});
+		for (const link of optionLinks) {
+			if (link.externoOptionId && link.produtoAddOnOpcaoId) context.productAddOnOptionsByExternalId.set(link.externoOptionId, link.produtoAddOnOpcaoId);
+		}
+	}
+
 	for (const option of uniqueBy(batch.productAddOnOptions, (value) => value.externalId)) {
 		if (context.productAddOnOptionsByExternalId.has(option.externalId)) continue;
 		const addOnId = context.productAddOnsByExternalId.get(option.addOnExternalId);

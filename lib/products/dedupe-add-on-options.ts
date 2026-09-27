@@ -183,6 +183,10 @@ export function planAddOnOptionDedupe({
 }
 
 function catalogLinkOptionIdentityKey(link: typeof catalogLinks.$inferSelect, optionId: string) {
+	// Vínculos de complemento são muitos-para-um (identidade = registro remoto, drizzle/0116): várias
+	// options do iFood apontando para o sobrevivente é o estado esperado, não duplicata a apagar.
+	if (link.tipo === "ADD_ON_OPCAO") return `${link.organizacaoId}|${link.provider}|${link.merchantId}|ADD_ON_OPCAO|${link.externoOptionId ?? ""}`;
+	if (link.tipo === "ADD_ON") return `${link.organizacaoId}|${link.provider}|${link.merchantId}|ADD_ON|${link.externoOptionGroupId ?? ""}`;
 	return [
 		link.organizacaoId,
 		link.provider,

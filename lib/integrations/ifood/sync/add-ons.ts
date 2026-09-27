@@ -11,12 +11,13 @@ import type { TIfoodItemFlatDTO, TIfoodOptionGroupDTO } from "@/lib/integrations
 import { resolveIfoodManagementContext } from "@/lib/integrations/ifood/context";
 import { resolveAddOnReferencesRules } from "@/lib/products/add-on-rules";
 import { channelAddOnReferences } from "@/lib/products/sales-channels";
-import type { TCatalogLinkOptionGroupAssociation, TCatalogLinkSnapshot } from "@/schemas/catalog-links";
+import { createsMissingOptions, type TCatalogLinkOptionGroupAssociation, type TCatalogLinkSnapshot, type TCatalogLinkSyncPolicy } from "@/schemas/catalog-links";
 import type { TIfoodOptionGroupTypeEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
 import { catalogLinks, productAddOnReferences, productAddOns, type TCatalogLinkEntity } from "@/services/drizzle/schema";
 import type { AxiosInstance } from "axios";
-import { and, eq, inArray, isNull, ne } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, ne } from "drizzle-orm";
+import { isHttpError } from "http-errors";
 import { markCatalogLinkError, upsertCatalogLink } from "./links";
 
 /**
@@ -134,12 +135,23 @@ export async function resolveAddOnGroupNode({ orgId, produtoAddOnId }: { orgId: 
 	};
 }
 
+/**
+ * Vínculos de complemento de uma loja. Muitos-para-um (drizzle/0116): um grupo interno pode estar
+ * vinculado a N optionGroups (cópias por item) e uma opção interna a N options — por isso listas.
+ * Em loja com grupos compartilhados (o que o publish daqui cria) cada lista tem um elemento.
+ */
 export type TAddOnLinks = {
-	groups: Map<string, TCatalogLinkEntity>; // produtoAddOnId → vínculo ADD_ON
-	options: Map<string, TCatalogLinkEntity>; // produtoAddOnOpcaoId → vínculo ADD_ON_OPCAO
+	groups: Map<string, TCatalogLinkEntity[]>; // produtoAddOnId → vínculos ADD_ON
+	options: Map<string, TCatalogLinkEntity[]>; // produtoAddOnOpcaoId → vínculos ADD_ON_OPCAO
 };
 
-/** Vínculos ativos de grupos/opções de uma loja, indexados pelo id interno. */
+function pushTo(map: Map<string, TCatalogLinkEntity[]>, key: string, link: TCatalogLinkEntity) {
+	const list = map.get(key);
+	if (list) list.push(link);
+	else map.set(key, [link]);
+}
+
+/** Vínculos ativos de grupos/opções de uma loja, indexados pelo id interno (ordem de criação). */
 export async function loadAddOnLinks({ orgId, merchantId }: { orgId: string; merchantId: string }): Promise<TAddOnLinks> {
 	const rows = await db.query.catalogLinks.findMany({
 		where: and(
@@ -149,14 +161,51 @@ export async function loadAddOnLinks({ orgId, merchantId }: { orgId: string; mer
 			inArray(catalogLinks.tipo, ["ADD_ON", "ADD_ON_OPCAO"]),
 			ne(catalogLinks.status, "DESVINCULADO"),
 		),
+		orderBy: [asc(catalogLinks.dataInsercao), asc(catalogLinks.id)],
 	});
-	const groups = new Map<string, TCatalogLinkEntity>();
-	const options = new Map<string, TCatalogLinkEntity>();
+	const groups = new Map<string, TCatalogLinkEntity[]>();
+	const options = new Map<string, TCatalogLinkEntity[]>();
 	for (const row of rows) {
-		if (row.tipo === "ADD_ON" && row.produtoAddOnId) groups.set(row.produtoAddOnId, row);
-		if (row.tipo === "ADD_ON_OPCAO" && row.produtoAddOnOpcaoId) options.set(row.produtoAddOnOpcaoId, row);
+		if (row.tipo === "ADD_ON" && row.produtoAddOnId) pushTo(groups, row.produtoAddOnId, row);
+		if (row.tipo === "ADD_ON_OPCAO" && row.produtoAddOnOpcaoId) pushTo(options, row.produtoAddOnOpcaoId, row);
 	}
 	return { groups, options };
+}
+
+export function allGroupLinks(links: TAddOnLinks) {
+	return [...links.groups.values()].flat();
+}
+
+export function allOptionLinks(links: TAddOnLinks) {
+	return [...links.options.values()].flat();
+}
+
+/**
+ * O vínculo de grupo que vale para UM item: a cópia que o item já usa no iFood (ids do `flat`)
+ * quando conhecida; senão o primeiro vínculo — o único, em loja com grupos compartilhados.
+ */
+export function groupLinkForItem(links: TAddOnLinks, grupoId: string, remoteGroupIds?: ReadonlySet<string> | null) {
+	const candidates = links.groups.get(grupoId) ?? [];
+	if (remoteGroupIds) {
+		const inItem = candidates.find((link) => link.externoOptionGroupId && remoteGroupIds.has(link.externoOptionGroupId));
+		if (inItem) return inItem;
+	}
+	return candidates[0];
+}
+
+/** O vínculo da opção DENTRO de um optionGroup específico (a opção pode ter um vínculo por cópia). */
+export function optionLinkInGroup(links: TAddOnLinks, opcaoId: string, externoOptionGroupId: string | null | undefined) {
+	if (!externoOptionGroupId) return undefined;
+	return (links.options.get(opcaoId) ?? []).find((link) => link.externoOptionGroupId === externoOptionGroupId);
+}
+
+/**
+ * Algum grupo do produto tem mais de um optionGroup vinculado nesta loja? Então o catálogo é de
+ * cópias por item e o PUT composto do item não sabe, sem o `flat`, qual cópia é a dele — o push do
+ * item não reescreve a associação nesse caso (a disponibilidade das opções vai pelo push do grupo).
+ */
+export function hasAmbiguousGroups({ nodes, links }: { nodes: TAddOnGroupNode[]; links: TAddOnLinks }) {
+	return nodes.some((node) => (links.groups.get(node.grupoId)?.length ?? 0) > 1);
 }
 
 /**
@@ -173,8 +222,9 @@ export function buildItemOptionGroupsPayload({
 	links: TAddOnLinks;
 	remote: TIfoodItemFlatDTO | null;
 }): TIfoodItemOptionGroupPayload[] {
+	const remoteGroupIds = remote ? new Set(remote.gruposComplementos.map((grupo) => grupo.id).filter((id): id is string => !!id)) : null;
 	return nodes.map((node) => {
-		const groupLink = links.groups.get(node.grupoId);
+		const groupLink = groupLinkForItem(links, node.grupoId, remoteGroupIds);
 		const remoteGroup = groupLink?.externoOptionGroupId
 			? remote?.gruposComplementos.find((grupo) => grupo.id === groupLink.externoOptionGroupId)
 			: undefined;
@@ -187,7 +237,7 @@ export function buildItemOptionGroupsPayload({
 			status: node.disponivel ? "AVAILABLE" : "UNAVAILABLE",
 			indice: node.indice,
 			opcoes: node.opcoes.map((opcao) => {
-				const optionLink = links.options.get(opcao.opcaoId);
+				const optionLink = optionLinkInGroup(links, opcao.opcaoId, groupLink?.externoOptionGroupId);
 				return {
 					id: optionLink?.externoOptionId ?? undefined,
 					produtoId: optionLink?.externoProdutoId ?? undefined,
@@ -202,10 +252,21 @@ export function buildItemOptionGroupsPayload({
 	});
 }
 
-/** A associação item → grupos como o snapshot do item guarda. Só grupos já vinculados têm chave. */
-export function associationSnapshot({ nodes, links }: { nodes: TAddOnGroupNode[]; links: TAddOnLinks }): TCatalogLinkOptionGroupAssociation[] {
+/**
+ * A associação item → grupos como o snapshot do item guarda. Só grupos já vinculados têm chave.
+ * `remoteGroupIds` (grupos do `flat` do item) escolhe a cópia certa quando o grupo tem várias.
+ */
+export function associationSnapshot({
+	nodes,
+	links,
+	remoteGroupIds,
+}: {
+	nodes: TAddOnGroupNode[];
+	links: TAddOnLinks;
+	remoteGroupIds?: ReadonlySet<string> | null;
+}): TCatalogLinkOptionGroupAssociation[] {
 	return nodes.flatMap((node) => {
-		const externoOptionGroupId = links.groups.get(node.grupoId)?.externoOptionGroupId;
+		const externoOptionGroupId = groupLinkForItem(links, node.grupoId, remoteGroupIds)?.externoOptionGroupId;
 		if (!externoOptionGroupId) return [];
 		return [{ externoOptionGroupId, min: node.minOpcoes, max: node.maxOpcoes, indice: node.indice }];
 	});
@@ -225,7 +286,10 @@ export function associationsDiffer(
 
 /** Há grupo do produto ainda sem vínculo nesta loja? Então o push precisa do PUT composto para criá-lo. */
 export function hasUnlinkedGroups({ nodes, links }: { nodes: TAddOnGroupNode[]; links: TAddOnLinks }) {
-	return nodes.some((node) => !links.groups.has(node.grupoId) || node.opcoes.some((opcao) => !links.options.has(opcao.opcaoId)));
+	return nodes.some((node) => {
+		const groupLink = groupLinkForItem(links, node.grupoId);
+		return !groupLink || node.opcoes.some((opcao) => !optionLinkInGroup(links, opcao.opcaoId, groupLink.externoOptionGroupId));
+	});
 }
 
 function groupSnapshot(node: TAddOnGroupNode): TCatalogLinkSnapshot {
@@ -263,11 +327,18 @@ export async function recordAddOnLinksFromFlatItem({
 	flat: TIfoodItemFlatDTO;
 	autorId?: string | null;
 }): Promise<TAddOnLinks> {
-	const next: TAddOnLinks = { groups: new Map(links.groups), options: new Map(links.options) };
+	const clone = (map: Map<string, TCatalogLinkEntity[]>) => new Map([...map].map(([key, list]) => [key, [...list]]));
+	const next: TAddOnLinks = { groups: clone(links.groups), options: clone(links.options) };
+	// Substitui o vínculo de mesma identidade remota na lista, ou acrescenta.
+	const record = (map: Map<string, TCatalogLinkEntity[]>, key: string, link: TCatalogLinkEntity) => {
+		const list = (map.get(key) ?? []).filter((candidate) => candidate.id !== link.id);
+		map.set(key, [...list, link]);
+	};
 	const usedGroupIds = new Set<string>();
+	const flatGroupIds = new Set(flat.gruposComplementos.map((grupo) => grupo.id).filter((id): id is string => !!id));
 
 	for (const node of nodes) {
-		const existing = links.groups.get(node.grupoId);
+		const existing = groupLinkForItem(links, node.grupoId, flatGroupIds);
 		const remoteGroup =
 			(existing?.externoOptionGroupId ? flat.gruposComplementos.find((grupo) => grupo.id === existing.externoOptionGroupId) : undefined) ??
 			flat.gruposComplementos.find((grupo) => grupo.id && !usedGroupIds.has(grupo.id) && normalizeName(grupo.nome) === normalizeName(node.nome));
@@ -283,11 +354,11 @@ export async function recordAddOnLinksFromFlatItem({
 			autorId,
 		});
 		await markSynchronized({ orgId, linkId: groupLink.id, snapshot: groupSnapshot(node) });
-		next.groups.set(node.grupoId, { ...groupLink, status: "SINCRONIZADO" });
+		record(next.groups, node.grupoId, { ...groupLink, status: "SINCRONIZADO" });
 
 		const usedOptionIds = new Set<string>();
 		for (const opcao of node.opcoes) {
-			const existingOption = links.options.get(opcao.opcaoId);
+			const existingOption = optionLinkInGroup(links, opcao.opcaoId, remoteGroup.id);
 			const remoteOption =
 				(existingOption?.externoOptionId ? remoteGroup.opcoes.find((option) => option.id === existingOption.externoOptionId) : undefined) ??
 				remoteGroup.opcoes.find((option) => option.id && !usedOptionIds.has(option.id) && normalizeName(option.nome) === normalizeName(opcao.nome));
@@ -303,7 +374,7 @@ export async function recordAddOnLinksFromFlatItem({
 				autorId,
 			});
 			await markSynchronized({ orgId, linkId: optionLink.id, snapshot: optionSnapshot(opcao) });
-			next.options.set(opcao.opcaoId, { ...optionLink, status: "SINCRONIZADO" });
+			record(next.options, opcao.opcaoId, { ...optionLink, status: "SINCRONIZADO" });
 		}
 	}
 	return next;
@@ -320,6 +391,8 @@ export async function linkAddOnGroup({
 	merchantId,
 	produtoAddOnId,
 	externoOptionGroupId,
+	sincronizar,
+	sincronizarOpcoes,
 	autorId,
 }: {
 	client: AxiosInstance;
@@ -327,6 +400,10 @@ export async function linkAddOnGroup({
 	merchantId: string;
 	produtoAddOnId: string;
 	externoOptionGroupId: string;
+	/** Política do vínculo de grupo. Cópia parcial de um grupo interno: `criarOpcoes: false`. */
+	sincronizar?: Partial<TCatalogLinkSyncPolicy>;
+	/** Política dos vínculos de opção casados. */
+	sincronizarOpcoes?: Partial<TCatalogLinkSyncPolicy>;
 	autorId?: string | null;
 }) {
 	const node = await resolveAddOnGroupNode({ orgId, produtoAddOnId });
@@ -338,6 +415,7 @@ export async function linkAddOnGroup({
 		merchantId,
 		node: { tipo: "ADD_ON", produtoAddOnId },
 		externalRefs: { externoOptionGroupId },
+		sincronizar,
 		autorId,
 	});
 
@@ -351,102 +429,179 @@ export async function linkAddOnGroup({
 			byCode ?? remote.opcoes.find((option) => option.id && !used.has(option.id) && normalizeName(option.nome) === normalizeName(opcao.nome));
 		if (!byName?.id) continue;
 		used.add(byName.id);
-		const optionLink = await upsertCatalogLink({
-			orgId,
-			merchantId,
-			node: { tipo: "ADD_ON_OPCAO", produtoAddOnId, produtoAddOnOpcaoId: opcao.opcaoId },
-			externalRefs: { externoOptionGroupId, externoOptionId: byName.id, externoProdutoId: byName.produtoId ?? null },
-			autorId,
-		});
-		// PENDENTE de propósito: o preço/status remoto pode divergir do interno; a reconciliação diz.
-		void optionLink;
+		try {
+			// PENDENTE de propósito: o preço/status remoto pode divergir do interno; a reconciliação diz.
+			await upsertCatalogLink({
+				orgId,
+				merchantId,
+				node: { tipo: "ADD_ON_OPCAO", produtoAddOnId, produtoAddOnOpcaoId: opcao.opcaoId },
+				externalRefs: { externoOptionGroupId, externoOptionId: byName.id, externoProdutoId: byName.produtoId ?? null },
+				sincronizar: sincronizarOpcoes,
+				autorId,
+			});
+		} catch (error) {
+			// A option já está vinculada a outra opção interna (curadoria manual): mantém a escolha
+			// feita e segue com as demais em vez de abortar o grupo inteiro.
+			if (isHttpError(error) && error.status === 409) continue;
+			throw error;
+		}
 		matched += 1;
 	}
 
 	return { link: groupLink, opcoesCasadas: matched, opcoesInternas: node.opcoes.length, opcoesRemotas: remote.opcoes.length };
 }
 
+/** Tamanho de lote dos PATCH de opções — a doc não declara limite; 50 mantém o corpo pequeno. */
+const OPTION_PATCH_CHUNK = 50;
+
+function chunks<T>(list: T[], size: number) {
+	const out: T[][] = [];
+	for (let start = 0; start < list.length; start += size) out.push(list.slice(start, start + size));
+	return out;
+}
+
 /**
  * Empurra o conteúdo de um grupo (nome, status, opções) para todas as lojas onde ele está
  * vinculado. Pelos endpoints de patch, não pelo `PUT /items`: o grupo é da loja, não de um item.
  * Best-effort por vínculo, nunca lança — o chamador é o save do grupo.
+ *
+ * Muitos-para-um (drizzle/0116): o trabalho de OPÇÃO é conduzido pelos vínculos de opção, não pelo
+ * vínculo do grupo — cada opção interna pode ter um vínculo por cópia do grupo no iFood, e pode até
+ * estar vinculada dentro de um optionGroup que corresponde a OUTRO grupo interno (o sabor "Pistache"
+ * de "Escolha o sabor:" dentro das cópias de "Escolha seu gelato:"). Pausar a opção aqui pausa
+ * todas as cópias. O trabalho de GRUPO (nome, status, criar opções sem par) segue por vínculo de
+ * grupo, e criar opções respeita `criarOpcoes` — cópias parciais não são completadas.
  */
 export async function pushAddOnGroupToLinkedMerchants({ orgId, produtoAddOnId }: { orgId: string; produtoAddOnId: string }) {
-	const groupLinks = await db.query.catalogLinks.findMany({
+	const rows = await db.query.catalogLinks.findMany({
 		where: and(
 			eq(catalogLinks.organizacaoId, orgId),
 			eq(catalogLinks.provider, "IFOOD"),
-			eq(catalogLinks.tipo, "ADD_ON"),
+			inArray(catalogLinks.tipo, ["ADD_ON", "ADD_ON_OPCAO"]),
 			eq(catalogLinks.produtoAddOnId, produtoAddOnId),
 			ne(catalogLinks.status, "DESVINCULADO"),
 		),
+		orderBy: [asc(catalogLinks.dataInsercao), asc(catalogLinks.id)],
 	});
-	if (groupLinks.length === 0) return { enviados: 0, erros: 0 };
+	if (rows.length === 0) return { enviados: 0, erros: 0 };
 
 	const node = await resolveAddOnGroupNode({ orgId, produtoAddOnId });
+	const optionById = new Map((node?.opcoes ?? []).map((opcao) => [opcao.opcaoId, opcao]));
 	let enviados = 0;
 	let erros = 0;
 
-	for (const groupLink of groupLinks) {
-		if (!node || !groupLink.externoOptionGroupId) {
-			await markCatalogLinkError({ linkId: groupLink.id, erro: "O grupo interno deste vínculo não existe mais." });
-			erros += 1;
+	const merchantIds = [...new Set(rows.map((row) => row.merchantId))];
+	for (const merchantId of merchantIds) {
+		const groupLinks = rows.filter((row) => row.merchantId === merchantId && row.tipo === "ADD_ON");
+		const optionLinks = rows.filter((row) => row.merchantId === merchantId && row.tipo === "ADD_ON_OPCAO" && row.externoOptionId);
+
+		if (!node) {
+			for (const link of [...groupLinks, ...optionLinks]) await markCatalogLinkError({ linkId: link.id, erro: "O grupo interno deste vínculo não existe mais." });
+			erros += groupLinks.length + optionLinks.length;
 			continue;
 		}
+
+		let client: AxiosInstance;
 		try {
-			const context = await resolveIfoodManagementContext({ organizacaoId: orgId, merchantId: groupLink.merchantId });
-			const links = await loadAddOnLinks({ orgId, merchantId: groupLink.merchantId });
-			const previous = groupLink.ultimoSnapshot ?? {};
+			client = (await resolveIfoodManagementContext({ organizacaoId: orgId, merchantId })).client;
+		} catch (error) {
+			const erro = error instanceof Error ? error.message : "Falha ao resolver a conexão do iFood.";
+			for (const link of [...groupLinks, ...optionLinks]) await markCatalogLinkError({ linkId: link.id, erro });
+			erros += groupLinks.length + optionLinks.length;
+			continue;
+		}
 
-			if (groupLink.sincronizar.nome && previous.nome !== node.nome) {
-				await updateIfoodOptionGroup(context.client, groupLink.merchantId, groupLink.externoOptionGroupId, { nome: node.nome });
-			}
-			if (groupLink.sincronizar.disponibilidade && previous.disponivel !== node.disponivel) {
-				await patchIfoodOptionGroupStatus(
-					context.client,
-					groupLink.merchantId,
-					groupLink.externoOptionGroupId,
-					node.disponivel ? "AVAILABLE" : "UNAVAILABLE",
-				);
-			}
-
-			// Opções já vinculadas: cada campo pelo seu endpoint.
-			const priceUpdates: { optionId: string; preco: number }[] = [];
-			const statusUpdates: { optionId: string; status: "AVAILABLE" | "UNAVAILABLE" }[] = [];
-			const newOptions: TAddOnOptionNode[] = [];
-			for (const opcao of node.opcoes) {
-				const optionLink = links.options.get(opcao.opcaoId);
-				if (!optionLink?.externoOptionId) {
-					newOptions.push(opcao);
-					continue;
+		// 1. Grupo: nome e status, por cópia vinculada.
+		for (const groupLink of groupLinks) {
+			if (!groupLink.externoOptionGroupId) continue;
+			try {
+				const previous = groupLink.ultimoSnapshot ?? {};
+				if (groupLink.sincronizar.nome && previous.nome !== node.nome) {
+					await updateIfoodOptionGroup(client, merchantId, groupLink.externoOptionGroupId, { nome: node.nome });
 				}
-				const before = optionLink.ultimoSnapshot ?? {};
+				if (groupLink.sincronizar.disponibilidade && previous.disponivel !== node.disponivel) {
+					await patchIfoodOptionGroupStatus(client, merchantId, groupLink.externoOptionGroupId, node.disponivel ? "AVAILABLE" : "UNAVAILABLE");
+				}
+				await markSynchronized({ orgId, linkId: groupLink.id, snapshot: groupSnapshot(node) });
+				enviados += 1;
+			} catch (error) {
+				await markCatalogLinkError({ linkId: groupLink.id, erro: error instanceof Error ? error.message : "Falha desconhecida ao sincronizar o grupo." });
+				erros += 1;
+			}
+		}
+
+		// 2. Opções vinculadas — todas as cópias, cada campo pelo seu endpoint, em lote. Opção
+		// removida/tombstone pausa no iFood, nunca apaga (D3).
+		const priceUpdates: { link: TCatalogLinkEntity; optionId: string; preco: number }[] = [];
+		const statusUpdates: { link: TCatalogLinkEntity; optionId: string; status: "AVAILABLE" | "UNAVAILABLE" }[] = [];
+		const settled = new Map<string, TCatalogLinkSnapshot>();
+		for (const optionLink of optionLinks) {
+			const externoOptionId = optionLink.externoOptionId as string;
+			const opcao = optionLink.produtoAddOnOpcaoId ? optionById.get(optionLink.produtoAddOnOpcaoId) : undefined;
+			const before = optionLink.ultimoSnapshot ?? {};
+			if (!opcao) {
+				if (before.disponivel !== false) {
+					statusUpdates.push({ link: optionLink, optionId: externoOptionId, status: "UNAVAILABLE" });
+					settled.set(optionLink.id, { ...before, disponivel: false });
+				}
+				continue;
+			}
+			try {
 				if (optionLink.sincronizar.nome && before.nome !== opcao.nome && optionLink.externoProdutoId) {
-					await updateIfoodProduct(context.client, groupLink.merchantId, optionLink.externoProdutoId, { nome: opcao.nome, codigoExterno: opcao.codigo });
+					await updateIfoodProduct(client, merchantId, optionLink.externoProdutoId, { nome: opcao.nome, codigoExterno: opcao.codigo });
 				}
-				if (optionLink.sincronizar.preco && before.preco !== opcao.precoDelta)
-					priceUpdates.push({ optionId: optionLink.externoOptionId, preco: opcao.precoDelta });
-				if (optionLink.sincronizar.disponibilidade && before.disponivel !== opcao.disponivel) {
-					statusUpdates.push({ optionId: optionLink.externoOptionId, status: opcao.disponivel ? "AVAILABLE" : "UNAVAILABLE" });
-				}
-				await markSynchronized({ orgId, linkId: optionLink.id, snapshot: optionSnapshot(opcao) });
+			} catch (error) {
+				await markCatalogLinkError({ linkId: optionLink.id, erro: error instanceof Error ? error.message : "Falha ao renomear a opção." });
+				erros += 1;
+				continue;
 			}
-			// Opção removida/tombstone: pausa no iFood, nunca apaga (D3).
-			const nodeOptionIds = new Set(node.opcoes.map((opcao) => opcao.opcaoId));
-			for (const [opcaoId, optionLink] of links.options) {
-				if (optionLink.produtoAddOnId !== produtoAddOnId || nodeOptionIds.has(opcaoId) || !optionLink.externoOptionId) continue;
-				if (optionLink.ultimoSnapshot?.disponivel !== false) {
-					statusUpdates.push({ optionId: optionLink.externoOptionId, status: "UNAVAILABLE" });
-					await markSynchronized({ orgId, linkId: optionLink.id, snapshot: { ...optionLink.ultimoSnapshot, disponivel: false } });
-				}
+			if (optionLink.sincronizar.preco && before.preco !== opcao.precoDelta) {
+				priceUpdates.push({ link: optionLink, optionId: externoOptionId, preco: opcao.precoDelta });
 			}
-			if (priceUpdates.length) await patchIfoodOptionsPrice(context.client, groupLink.merchantId, priceUpdates);
-			if (statusUpdates.length) await patchIfoodOptionsStatus(context.client, groupLink.merchantId, statusUpdates);
+			if (optionLink.sincronizar.disponibilidade && before.disponivel !== opcao.disponivel) {
+				statusUpdates.push({ link: optionLink, optionId: externoOptionId, status: opcao.disponivel ? "AVAILABLE" : "UNAVAILABLE" });
+			}
+			settled.set(optionLink.id, optionSnapshot(opcao));
+		}
 
-			if (newOptions.length) {
+		const failed = new Set<string>();
+		for (const batch of chunks(priceUpdates, OPTION_PATCH_CHUNK)) {
+			try {
+				await patchIfoodOptionsPrice(client, merchantId, batch.map(({ optionId, preco }) => ({ optionId, preco })));
+			} catch (error) {
+				for (const entry of batch) failed.add(entry.link.id);
+				for (const entry of batch) await markCatalogLinkError({ linkId: entry.link.id, erro: error instanceof Error ? error.message : "Falha ao enviar preço." });
+			}
+		}
+		for (const batch of chunks(statusUpdates, OPTION_PATCH_CHUNK)) {
+			try {
+				await patchIfoodOptionsStatus(client, merchantId, batch.map(({ optionId, status }) => ({ optionId, status })));
+			} catch (error) {
+				for (const entry of batch) failed.add(entry.link.id);
+				for (const entry of batch) await markCatalogLinkError({ linkId: entry.link.id, erro: error instanceof Error ? error.message : "Falha ao enviar status." });
+			}
+		}
+		for (const [linkId, snapshot] of settled) {
+			if (failed.has(linkId)) {
+				erros += 1;
+				continue;
+			}
+			await markSynchronized({ orgId, linkId, snapshot });
+			enviados += 1;
+		}
+
+		// 3. Opções internas sem par numa cópia: criadas nela — só onde a política do grupo permite.
+		for (const groupLink of groupLinks) {
+			if (!groupLink.externoOptionGroupId || !createsMissingOptions(groupLink.sincronizar)) continue;
+			const linkedHere = new Set(
+				optionLinks.filter((link) => link.externoOptionGroupId === groupLink.externoOptionGroupId).map((link) => link.produtoAddOnOpcaoId),
+			);
+			const newOptions = node.opcoes.filter((opcao) => !linkedHere.has(opcao.opcaoId));
+			if (!newOptions.length) continue;
+			try {
 				await addIfoodOptions(
-					context.client,
-					groupLink.merchantId,
+					client,
+					merchantId,
 					groupLink.externoOptionGroupId,
 					newOptions.map((opcao) => ({
 						nome: opcao.nome,
@@ -456,8 +611,8 @@ export async function pushAddOnGroupToLinkedMerchants({ orgId, produtoAddOnId }:
 					})),
 				);
 				// Releitura para gravar os ids que o iFood atribuiu às opções novas.
-				const remote = await getIfoodOptionGroup(context.client, groupLink.merchantId, groupLink.externoOptionGroupId);
-				const used = new Set([...links.options.values()].map((link) => link.externoOptionId).filter(Boolean) as string[]);
+				const remote = await getIfoodOptionGroup(client, merchantId, groupLink.externoOptionGroupId);
+				const used = new Set(optionLinks.map((link) => link.externoOptionId).filter(Boolean) as string[]);
 				for (const opcao of newOptions) {
 					const remoteOption = remote.opcoes.find(
 						(option) => option.id && !used.has(option.id) && normalizeName(option.nome) === normalizeName(opcao.nome),
@@ -466,7 +621,7 @@ export async function pushAddOnGroupToLinkedMerchants({ orgId, produtoAddOnId }:
 					used.add(remoteOption.id);
 					const optionLink = await upsertCatalogLink({
 						orgId,
-						merchantId: groupLink.merchantId,
+						merchantId,
 						node: { tipo: "ADD_ON_OPCAO", produtoAddOnId, produtoAddOnOpcaoId: opcao.opcaoId },
 						externalRefs: {
 							externoOptionGroupId: groupLink.externoOptionGroupId,
@@ -476,13 +631,10 @@ export async function pushAddOnGroupToLinkedMerchants({ orgId, produtoAddOnId }:
 					});
 					await markSynchronized({ orgId, linkId: optionLink.id, snapshot: optionSnapshot(opcao) });
 				}
+			} catch (error) {
+				await markCatalogLinkError({ linkId: groupLink.id, erro: error instanceof Error ? error.message : "Falha ao criar opções no grupo." });
+				erros += 1;
 			}
-
-			await markSynchronized({ orgId, linkId: groupLink.id, snapshot: groupSnapshot(node) });
-			enviados += 1;
-		} catch (error) {
-			await markCatalogLinkError({ linkId: groupLink.id, erro: error instanceof Error ? error.message : "Falha desconhecida ao sincronizar o grupo." });
-			erros += 1;
 		}
 	}
 	return { enviados, erros };

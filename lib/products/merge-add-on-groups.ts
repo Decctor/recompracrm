@@ -145,7 +145,13 @@ function catalogLinkGroupIdentityKey(link: {
 	produtoVarianteId: string | null;
 	produtoAddOnId: string | null;
 	produtoAddOnOpcaoId: string | null;
+	externoOptionGroupId: string | null;
+	externoOptionId: string | null;
 }) {
+	// Vínculos de complemento são muitos-para-um (identidade = registro remoto, drizzle/0116): o
+	// sobrevivente pode legitimamente ter várias cópias vinculadas — re-apontar nunca colide.
+	if (link.tipo === "ADD_ON_OPCAO") return `${link.organizacaoId}|${link.provider}|${link.merchantId}|ADD_ON_OPCAO|${link.externoOptionId ?? ""}`;
+	if (link.tipo === "ADD_ON") return `${link.organizacaoId}|${link.provider}|${link.merchantId}|ADD_ON|${link.externoOptionGroupId ?? ""}`;
 	return [
 		link.organizacaoId,
 		link.provider,
