@@ -150,7 +150,10 @@ export async function mergeProducts(input: TMergeProductsInput): Promise<TMergeP
 		registrosMovidos.productFiscalProfiles = fiscalMoved;
 		registrosMovidos.productFiscalProfilesDuplicadosRemovidos = fiscalDeleted;
 
-		// Canal de venda: único por (canal, produto, variante).
+		// Canal de venda: único por (canal, produto, variante). A matriz do sobrevivente manda; da
+		// origem só migra o que ACRESCENTA — inclusão (disponivel=true) e preço de canal. Uma exclusão
+		// da origem não pode esconder o sobrevivente: a duplicata típica (criada pela ingestão e
+		// ocultada da Loja) fundida num produto visível o tiraria da Loja.
 		const keeperChannel = await tx.query.productChannelSettings.findMany({
 			where: and(eq(productChannelSettings.organizacaoId, input.organizacaoId), eq(productChannelSettings.produtoId, input.keeperId)),
 		});
@@ -162,11 +165,12 @@ export async function mergeProducts(input: TMergeProductsInput): Promise<TMergeP
 		let channelDeleted = 0;
 		for (const row of sourceChannel) {
 			const key = `${row.canalVendaId}|${scopeKey(input.keeperId, row.produtoVarianteId)}`;
-			if (keeperChannelScopes.has(key)) {
+			const disponivel = row.disponivel === false ? null : row.disponivel;
+			if (keeperChannelScopes.has(key) || (disponivel == null && row.precoVenda == null)) {
 				await tx.delete(productChannelSettings).where(eq(productChannelSettings.id, row.id));
 				channelDeleted += 1;
 			} else {
-				await tx.update(productChannelSettings).set({ produtoId: input.keeperId }).where(eq(productChannelSettings.id, row.id));
+				await tx.update(productChannelSettings).set({ produtoId: input.keeperId, disponivel }).where(eq(productChannelSettings.id, row.id));
 				keeperChannelScopes.add(key);
 				channelMoved += 1;
 			}
