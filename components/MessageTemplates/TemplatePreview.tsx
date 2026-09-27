@@ -33,6 +33,7 @@ function renderPreviewText(text: string, parameters: TMessageTemplateContent["co
 
 function getButtonIcon(tipo: TMessageTemplateContent["botoes"][number]["tipo"]) {
 	if (tipo === "RESPOSTA RÁPIDA") return "↩️ ";
+	if (tipo === "RESPOSTA_PESQUISA") return "☑️ ";
 	if (tipo === "TELEFONE") return "📞 ";
 	if (tipo === "URL" || tipo === "URL_PRESET") return "🔗 ";
 	return "";

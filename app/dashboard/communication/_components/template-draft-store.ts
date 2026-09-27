@@ -17,6 +17,7 @@ export type TTemplateButtonDraft =
 	| { tipo: "URL"; texto: string; url: string }
 	| { tipo: "URL_PRESET"; preset: "CLIENT_POI_PROFILE"; texto: string; exemplo: string }
 	| { tipo: "RESPOSTA RÁPIDA"; texto: string }
+	| { tipo: "RESPOSTA_PESQUISA"; texto: string; campoId: string; opcaoValor: string }
 	| { tipo: "TELEFONE"; texto: string; telefone: string };
 
 export type TMessageTemplateDraft = {

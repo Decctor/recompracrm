@@ -21,6 +21,7 @@ import { WhatsappIcon } from "@/components/icons";
 import { TGetBuilderMessageTemplateById } from "../_lib";
 import { TUseMessageTemplateState, useMessageTemplateState } from "@/state-hooks/use-message-template-state";
 import { MessageTemplateBodyEditor } from "@/components/MessageTemplates/MessageTemplateBodyEditor";
+import { EMPTY_SURVEY_BUTTON, MessageTemplateButtonEditor } from "@/components/MessageTemplates/MessageTemplateButtonsEditor";
 import { renderResolvedTemplateWithHighlights } from "@/components/MessageTemplates/message-template-utils";
 import { useMutation } from "@tanstack/react-query";
 import { getErrorMessage } from "@/lib/errors";
@@ -70,6 +71,7 @@ export default function MessageTemplateBuilder({
 		updateTemplateContentBodyParameter,
 		addContentButton,
 		addContentPresetButton,
+		appendContentButtons,
 		updateContentButton,
 		removeContentButton,
 		unknownVariables,
@@ -309,10 +311,21 @@ export default function MessageTemplateBuilder({
 										<Plus className="h-3.5 w-3.5" /> {preset.label}
 									</Button>
 								))}
+								<Button type="button" variant="outline" size="xs" className="gap-1" onClick={() => appendContentButtons([EMPTY_SURVEY_BUTTON])}>
+									<Plus className="h-3.5 w-3.5" /> Pesquisa
+								</Button>
 							</div>
 							{state.messageTemplate.conteudo.botoes.length > 0 ? (
 								state.messageTemplate.conteudo.botoes.map((button, index) => (
-									<ButtonEditor key={index} button={button} index={index} updateButton={updateContentButton} removeButton={removeContentButton} />
+									<MessageTemplateButtonEditor
+										key={index}
+										button={button}
+										index={index}
+										allButtons={state.messageTemplate.conteudo.botoes}
+										updateButton={updateContentButton}
+										removeButton={removeContentButton}
+										appendButtons={appendContentButtons}
+									/>
 								))
 							) : (
 								<p className="text-muted-foreground text-xs">Nenhum botão configurado.</p>
@@ -498,98 +511,6 @@ function DynamicHeaderPresetPicker({
 					<p>{selectedPreset?.description}</p>
 				</div>
 			</div>
-		</div>
-	);
-}
-function ButtonEditor({
-	button,
-	index,
-	updateButton,
-	removeButton,
-}: {
-	button: TTemplateButtonDraft;
-	index: number;
-	updateButton: (index: number, button: TTemplateButtonDraft) => void;
-	removeButton: (index: number) => void;
-}) {
-	if (button.tipo === "URL_PRESET") {
-		const preset = getMessageTemplateButtonPreset(button.preset);
-		return (
-			<div className="grid gap-2 rounded-lg bg-background p-2">
-				<div className="flex flex-wrap items-start justify-between gap-2">
-					<div className="min-w-0">
-						<p className="text-xs font-bold uppercase">{preset?.label ?? button.preset}</p>
-						<p className="text-muted-foreground text-xs">{preset?.description}</p>
-					</div>
-					<Button type="button" variant="ghost-destructive" size="icon-sm" onClick={() => removeButton(index)}>
-						<Trash2 className="h-4 w-4" />
-					</Button>
-				</div>
-				<Input value={button.texto} onChange={(event) => updateButton(index, { ...button, texto: event.target.value })} placeholder="Texto do botão" />
-			</div>
-		);
-	}
-	return (
-		<div className="grid gap-2 rounded-lg bg-background p-2 md:grid-cols-[140px_1fr_1fr_auto]">
-			<Select
-				items={[
-					{ value: "URL", label: "URL" },
-					{ value: "RESPOSTA RÁPIDA", label: "RESPOSTA RÁPIDA" },
-					{ value: "TELEFONE", label: "TELEFONE" },
-				]}
-				value={button.tipo}
-				onValueChange={(value) => {
-					if (value === null) return;
-					if (value === "URL")
-						updateButton(index, {
-							tipo: "URL",
-							texto: button.texto,
-							url: "url" in button ? button.url : "https://",
-						});
-					if (value === "RESPOSTA RÁPIDA")
-						updateButton(index, {
-							tipo: "RESPOSTA RÁPIDA",
-							texto: button.texto,
-						});
-					if (value === "TELEFONE")
-						updateButton(index, {
-							tipo: "TELEFONE",
-							texto: button.texto,
-							telefone: "telefone" in button ? button.telefone : "",
-						});
-				}}
-			>
-				<SelectTrigger className="w-full">
-					<SelectValue />
-				</SelectTrigger>
-				<SelectContent>
-					<SelectGroup>
-						<SelectItem value="URL">URL</SelectItem>
-						<SelectItem value="RESPOSTA RÁPIDA">RESPOSTA RÁPIDA</SelectItem>
-						<SelectItem value="TELEFONE">TELEFONE</SelectItem>
-					</SelectGroup>
-				</SelectContent>
-			</Select>
-			<Input
-				value={button.texto}
-				onChange={(event) =>
-					updateButton(index, {
-						...button,
-						texto: event.target.value,
-					} as TTemplateButtonDraft)
-				}
-				placeholder="Texto"
-			/>
-			{"url" in button ? (
-				<Input value={button.url} onChange={(event) => updateButton(index, { ...button, url: event.target.value })} placeholder="https://" />
-			) : "telefone" in button ? (
-				<Input value={button.telefone} onChange={(event) => updateButton(index, { ...button, telefone: event.target.value })} placeholder="+55..." />
-			) : (
-				<div />
-			)}
-			<Button type="button" variant="ghost-destructive" size="icon-sm" onClick={() => removeButton(index)}>
-				<Trash2 className="h-4 w-4" />
-			</Button>
 		</div>
 	);
 }

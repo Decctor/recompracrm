@@ -76,7 +76,7 @@ export function extractWhatsappContentFromMetaWithLocalContext({
 			}
 		}
 		if (component.type === "FOOTER") content.rodape = component.text ?? null;
-		if (component.type === "BUTTONS") content.botoes = extractButtonsFromMetaComponent(component);
+		if (component.type === "BUTTONS") content.botoes = extractButtonsFromMetaComponent(component, currentContent?.botoes ?? null);
 	}
 
 	if (!content.corpo.conteudo && currentContent?.corpo) content.corpo = currentContent.corpo;
@@ -228,8 +228,15 @@ function extractLegacyBodyFromMetaComponent(component: TMetaTemplateComponent): 
 	};
 }
 
-function extractButtonsFromMetaComponent(component: TMetaTemplateComponent): TMessageTemplateContent["botoes"] {
-	return (component.buttons ?? []).map((button) => extractButtonFromMetaButton(button));
+// A Meta devolve um botão de pesquisa como QUICK_REPLY comum: o vínculo campo/opção só existe
+// localmente. Um sync que reescrevesse `botoes` a partir da Meta apagaria a pesquisa — então o
+// botão local sobrevive quando a Meta confirma um quick reply com o mesmo texto na mesma posição.
+function extractButtonsFromMetaComponent(component: TMetaTemplateComponent, currentButtons: TMessageTemplateContent["botoes"] | null): TMessageTemplateContent["botoes"] {
+	return (component.buttons ?? []).map((button, index) => {
+		const localButton = currentButtons?.[index];
+		if (button.type === "QUICK_REPLY" && localButton?.tipo === "RESPOSTA_PESQUISA" && localButton.texto === button.text) return localButton;
+		return extractButtonFromMetaButton(button);
+	});
 }
 
 function extractButtonFromMetaButton(button: TMetaTemplateButton): TMessageTemplateContent["botoes"][number] {

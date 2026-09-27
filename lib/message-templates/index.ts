@@ -7,6 +7,7 @@ export * from "./validation";
 export * from "./variables";
 
 export * from "./buttons/presets";
+export * from "./surveys";
 export * from "./headers/approval-samples";
 export * from "./headers/dynamic-presets";
 

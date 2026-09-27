@@ -175,6 +175,18 @@ export function useMessageTemplateState({ organizationName, initialState }: TUse
 		}));
 	}, []);
 
+	// Botões de pesquisa entram em lote (uma opção do campo por botão), então o append é genérico.
+	const appendContentButtons = useCallback((buttons: TMessageTemplateContent["botoes"]) => {
+		if (buttons.length === 0) return;
+		setState((current) => ({
+			...current,
+			messageTemplate: {
+				...current.messageTemplate,
+				conteudo: { ...current.messageTemplate.conteudo, botoes: [...current.messageTemplate.conteudo.botoes, ...buttons] },
+			},
+		}));
+	}, []);
+
 	const updateContentButton = useCallback((index: number, button: TMessageTemplateContent["botoes"][number]) => {
 		setState((current) => ({
 			...current,
@@ -262,6 +274,7 @@ export function useMessageTemplateState({ organizationName, initialState }: TUse
 		updateTemplateContentBodyParameter,
 		addContentButton,
 		addContentPresetButton,
+		appendContentButtons,
 		updateContentButton,
 		removeContentButton,
 		resetState,

@@ -123,6 +123,13 @@ export function validateMessageTemplateForm({
 		toast.error("Preencha o texto dos botões de preset.");
 		return false;
 	}
+	const incompleteSurveyButton = messageTemplate.conteudo.botoes.find(
+		(button) => button.tipo === "RESPOSTA_PESQUISA" && (!button.campoId || !button.opcaoValor || !button.texto.trim()),
+	);
+	if (incompleteSurveyButton) {
+		toast.error("Preencha o campo, a opção e o texto de todos os botões de pesquisa.");
+		return false;
+	}
 	if (!messageTemplate.conteudo.assunto.trim()) {
 		toast.error("Informe o assunto do e-mail.");
 		return false;

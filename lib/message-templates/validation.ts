@@ -8,6 +8,7 @@ import {
 } from "./constants";
 import { convertHtmlToWhatsappText } from "./formatting";
 import { extractUnknownMessageTemplateVariables, getMessageTemplateVariableSources } from "./parsing";
+import { validateSurveyButtonsShape } from "./surveys";
 import type { TMessageTemplateValidationIssue, TMessageTemplateValidationResult } from "./types";
 
 function buildResult(issues: TMessageTemplateValidationIssue[]): TMessageTemplateValidationResult {
@@ -80,6 +81,8 @@ export function validateMessageTemplateForWhatsapp(content: TMessageTemplateCont
 			});
 		}
 	}
+
+	issues.push(...validateSurveyButtonsShape(content));
 
 	return buildResult(issues);
 }
