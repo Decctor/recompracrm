@@ -360,16 +360,18 @@ export async function addIfoodOptions(
 	optionGroupId: string,
 	opcoes: TIfoodOptionCreatePayload[],
 ): Promise<void> {
+	// Validado ao vivo (2026-09-27): UM objeto por chamada — o array é lido como o próprio DTO e
+	// recusado —, `price` obrigatório, e o nome mora no PRODUTO da opção: sem `product`/`productId` a
+	// API responde "Either product or productId must be provided". `{ status, price, product: { name } }`
+	// responde 201 com `{ id, productId }`. O `externalCode` no produto não foi exercitado ao vivo.
 	try {
-		await client.post(
-			catalogUrl(merchantId, `/optionGroups/${optionGroupId}/options`),
-			opcoes.map((opcao) => ({
-				name: opcao.nome,
-				externalCode: opcao.codigoExterno ?? undefined,
+		for (const opcao of opcoes) {
+			await client.post(catalogUrl(merchantId, `/optionGroups/${optionGroupId}/options`), {
 				status: opcao.status ?? "AVAILABLE",
-				price: opcao.preco !== undefined && opcao.preco !== null ? { value: opcao.preco } : undefined,
-			})),
-		);
+				price: { value: opcao.preco ?? 0 },
+				product: { name: opcao.nome, externalCode: opcao.codigoExterno ?? undefined },
+			});
+		}
 	} catch (error) {
 		mapIfoodError("addIfoodOptions", error);
 	}
