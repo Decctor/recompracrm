@@ -223,7 +223,9 @@ export function useAdminFooById({ fooId }: { fooId: string }) {
 
 ## Modal Conventions
 
-**Location**: `/components/Modals/Internal/{Domain}/`
+**Location**: `/components/Modals/{Domain}/` for everything the organization's users see (e.g.
+`Modals/CustomFields`, `Modals/Coupons`). `/components/Modals/Internal/` is reserved for admin and
+platform-internal UI; do not put organization-facing modals there.
 
 ### Naming
 

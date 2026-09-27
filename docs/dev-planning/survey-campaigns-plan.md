@@ -548,7 +548,7 @@ doing while touching both, but it is a refactor, not a requirement of this featu
 - **Survey templates are rejected outside `PESQUISA` campaigns** (`validateSurveyCampaign`), and the
   message stage hides them for other triggers, with the reason on hover. Lifting this is the v2
   "post-purchase survey" change.
-- **Custom fields got their own interfaces.** `components/Modals/Internal/CustomFields`
+- **Custom fields got their own interfaces.** `components/Modals/CustomFields`
   (`NewCustomField`, `ControlCustomField`, state hook `use-internal-custom-field-state`) and the
   settings section "Campos personalizados" (`components/Settings/SettingsCustomFields.tsx`,
   `?view=custom-fields`). The campaign builder and the template's survey button row open the same

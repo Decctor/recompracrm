@@ -2,8 +2,8 @@
 
 import DateInput from "@/components/Inputs/DateInput";
 import { useSurveyCustomFields } from "@/components/MessageTemplates/SurveyButtonEditor";
-import ControlCustomField from "@/components/Modals/Internal/CustomFields/ControlCustomField";
-import NewCustomField from "@/components/Modals/Internal/CustomFields/NewCustomField";
+import ControlCustomField from "@/components/Modals/CustomFields/ControlCustomField";
+import NewCustomField from "@/components/Modals/CustomFields/NewCustomField";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { appRoutes } from "@/lib/navigation/routes";

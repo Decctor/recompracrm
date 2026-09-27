@@ -1,7 +1,7 @@
 "use client";
 
 import type { TGetCustomFieldsOutputDefault } from "@/app/api/custom-fields/route";
-import NewCustomField from "@/components/Modals/Internal/CustomFields/NewCustomField";
+import NewCustomField from "@/components/Modals/CustomFields/NewCustomField";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";

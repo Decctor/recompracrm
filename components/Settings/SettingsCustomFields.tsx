@@ -3,8 +3,8 @@
 import type { TGetCustomFieldsOutputDefault } from "@/app/api/custom-fields/route";
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
 import LoadingComponent from "@/components/Layouts/LoadingComponent";
-import ControlCustomField from "@/components/Modals/Internal/CustomFields/ControlCustomField";
-import NewCustomField from "@/components/Modals/Internal/CustomFields/NewCustomField";
+import ControlCustomField from "@/components/Modals/CustomFields/ControlCustomField";
+import NewCustomField from "@/components/Modals/CustomFields/NewCustomField";
 import SettingsPanelSection from "@/components/Settings/SettingsPanelSection";
 import { Button } from "@/components/ui/button";
 import type { TAuthUserSession } from "@/lib/authentication/types";
