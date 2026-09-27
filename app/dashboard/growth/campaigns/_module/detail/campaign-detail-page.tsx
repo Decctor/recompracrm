@@ -3,6 +3,7 @@
 import CampaignStatsView from "@/app/dashboard/growth/campaigns/_module/detail/campaign-stats-view";
 import { appRoutes } from "@/lib/navigation/routes";
 import CampaignConfigView from "@/app/dashboard/growth/campaigns/_module/detail/campaign-config-view";
+import CampaignSurveyResultsView from "@/app/dashboard/growth/campaigns/_module/detail/campaign-survey-results-view";
 import PauseCampaignDialog from "@/app/dashboard/growth/campaigns/_module/detail/components/pause-campaign-dialog";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -14,7 +15,7 @@ import { updateCampaign } from "@/lib/mutations/campaigns";
 import { useCampaignById } from "@/lib/queries/campaigns";
 import { cn } from "@/lib/utils";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Check, Database, Pause, PlayIcon, TrendingUp } from "lucide-react";
+import { ArrowLeft, Check, Database, ListChecks, Pause, PlayIcon, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { parseAsStringEnum, useQueryState } from "nuqs";
 import { useState } from "react";
@@ -28,7 +29,7 @@ type CampaignResultPageProps = {
 
 export default function CampaignResultPage({ campaignId, sessionUser, sessionUserOrg }: CampaignResultPageProps) {
 	const queryClient = useQueryClient();
-	const [viewMode, setViewMode] = useQueryState("view", parseAsStringEnum(["stats", "config"]));
+	const [viewMode, setViewMode] = useQueryState("view", parseAsStringEnum(["stats", "config", "survey"]));
 	const [pauseDialogOpen, setPauseDialogOpen] = useState(false);
 
 	const { data: campaign, isLoading, isError, error } = useCampaignById({ id: campaignId });
@@ -47,6 +48,10 @@ export default function CampaignResultPage({ campaignId, sessionUser, sessionUse
 
 	if (isLoading) return <LoadingComponent />;
 	if (isError || !campaign) return <ErrorComponent msg={getErrorMessage(error) ?? "Campanha não encontrada."} />;
+
+	// Pesquisas abrem nas respostas: é o que o usuário veio ver.
+	const isSurvey = campaign.gatilhoTipo === "PESQUISA";
+	const activeView = viewMode ?? (isSurvey ? "survey" : "stats");
 
 	return (
 		<div className="flex h-full w-full flex-col gap-3">
@@ -90,8 +95,14 @@ export default function CampaignResultPage({ campaignId, sessionUser, sessionUse
 				</div>
 			</div>
 
-			<Tabs value={viewMode ?? "stats"} onValueChange={(value) => setViewMode(value as "stats" | "config")}>
+			<Tabs value={activeView} onValueChange={(value) => setViewMode(value as "stats" | "config" | "survey")}>
 				<TabsList variant="page">
+					{isSurvey ? (
+						<TabsTrigger value="survey">
+							<ListChecks className="h-4 w-4 min-h-4 min-w-4" />
+							Respostas
+						</TabsTrigger>
+					) : null}
 					<TabsTrigger value="stats">
 						<TrendingUp className="h-4 w-4 min-h-4 min-w-4" />
 						Estatísticas
@@ -101,6 +112,11 @@ export default function CampaignResultPage({ campaignId, sessionUser, sessionUse
 						Minha campanha
 					</TabsTrigger>
 				</TabsList>
+				{isSurvey ? (
+					<TabsContent value="survey" className="flex flex-col gap-3">
+						<CampaignSurveyResultsView campaignId={campaignId} />
+					</TabsContent>
+				) : null}
 				<TabsContent value="stats" className="flex flex-col gap-3">
 					<CampaignStatsView campaignId={campaignId} />
 				</TabsContent>

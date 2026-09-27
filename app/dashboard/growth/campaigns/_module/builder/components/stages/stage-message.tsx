@@ -12,7 +12,7 @@ import {
 	type TOnboardingTemplateVariant,
 } from "@/config/message-template-library";
 import { validateTemplateForTrigger } from "@/lib/message-templates";
-import { getSurveyFieldId, isSurveyTemplateContent } from "@/lib/message-templates/surveys";
+import { getSurveyFieldId } from "@/lib/message-templates/surveys";
 import { buildSurveyButtonsForField, useSurveyCustomFields } from "@/components/MessageTemplates/SurveyButtonEditor";
 import { getDefaultMessageTemplateVariableExample } from "@/lib/message-templates/variables";
 import { cn } from "@/lib/utils";

@@ -17,6 +17,8 @@ import AudienceSegmentationsBlock from "./Blocks/Segmentations";
 
 type NewAudienceProps = {
 	closeModal: () => void;
+	/** Estado inicial: os resultados de uma pesquisa abrem o modal já com o filtro da opção escolhida. */
+	initialState?: Parameters<typeof useInternalAudienceState>[0]["initialState"];
 	callbacks?: {
 		onMutate?: (variables: TCreateAudienceInput) => void;
 		onSuccess?: () => void;
@@ -24,7 +26,7 @@ type NewAudienceProps = {
 		onSettled?: () => void;
 	};
 };
-export function NewAudience({ closeModal, callbacks }: NewAudienceProps) {
+export function NewAudience({ closeModal, initialState, callbacks }: NewAudienceProps) {
 	const {
 		state,
 		updateAudience,
@@ -34,7 +36,7 @@ export function NewAudience({ closeModal, callbacks }: NewAudienceProps) {
 		addFilterGroup,
 		updateFilterGroupOperator,
 		removeFilterNode,
-	} = useInternalAudienceState({ initialState: {} });
+	} = useInternalAudienceState({ initialState: initialState ?? {} });
 
 	async function handleCreateAudience(state: TUseInternalAudienceState["state"]) {
 		const nome = state.audience.nome.trim();
