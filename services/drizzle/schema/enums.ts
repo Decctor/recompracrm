@@ -25,6 +25,7 @@ export const campaignTriggerTypeEnum = pgEnum("campaign_trigger_type", [
 	"PIOR-DIA-VENDAS",
 	"USO-UNICO",
 	"PROMOCAO-PRODUTOS",
+	"PESQUISA",
 ]);
 
 export const campaignExecutionDelayDirectionEnum = pgEnum("campaign_execution_delay_direction", ["ANTES", "DEPOIS"]);

@@ -1,5 +1,21 @@
 import z from "zod";
-import { CashbackProgramTerminologyEnum, InteractionTypeEnum } from "./enums";
+import { CashbackProgramTerminologyEnum, InteractionTypeEnum, SurveyReplySourceEnum } from "./enums";
+
+// Uma resposta a um botão de pesquisa (RESPOSTA_PESQUISA) dada ao envio. Vive em
+// interactions.metadados.pesquisaRespostas — a resposta é o próximo evento da mesma mensagem, ao
+// lado de ENVIADO → ENTREGUE → LIDO (docs/dev-planning/survey-campaigns-plan.md §2.4).
+export const InteractionSurveyReplySchema = z.object({
+	opcaoValor: z.string(),
+	// Snapshot do rótulo no momento da resposta: o resultado continua legível se a opção for
+	// renomeada depois que o congelamento da pesquisa for liberado.
+	opcaoTitulo: z.string(),
+	origem: SurveyReplySourceEnum,
+	// wamid da mensagem do cliente: chave de idempotência (a Meta reentrega webhooks).
+	whatsappMessageId: z.string().optional().nullable(),
+	chatMessageId: z.string().optional().nullable(),
+	data: z.string(), // ISO
+});
+export type TInteractionSurveyReply = z.infer<typeof InteractionSurveyReplySchema>;
 
 // Estado de entrega de uma interação de campanha (espelho de interactionDeliveryStatusEnum).
 // Só existe depois do envio: bloqueios de quota/contato e falhas antes do provedor vivem em
@@ -64,6 +80,9 @@ export const InteractionMetadataSchema = InteractionContextMetadataSchema.extend
 	dispatchRecipientId: z.string().optional().nullable(),
 	// Envio de teste do construtor de campanhas (não entra em quota nem em estatísticas de envio).
 	teste: z.boolean().optional().nullable(),
+	// Respostas a botões de pesquisa dadas a este envio, em ordem de chegada. A resposta vigente é
+	// derivada (última para ESCOLHA_UNICA, união para ESCOLHA_MULTIPLA), nunca gravada.
+	pesquisaRespostas: z.array(InteractionSurveyReplySchema).optional().nullable(),
 
 	// Interações manuais (carteira do vendedor) — snapshots do contexto no momento do contato,
 	// para analytics por segmento sem reprocessar histórico.

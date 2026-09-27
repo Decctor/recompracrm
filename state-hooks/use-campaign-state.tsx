@@ -78,6 +78,8 @@ export function useCampaignState() {
 			gatilhoUsoUnicoDataReferencia: null,
 			gatilhoPromocaoDataReferencia: null,
 			gatilhoPromocaoProdutos: null,
+			gatilhoPesquisaDataReferencia: null,
+			gatilhoPesquisaCampoId: null,
 			execucaoAgendadaMedida: "DIAS",
 			execucaoAgendadaValor: 0,
 			execucaoAgendadaDirecao: "DEPOIS",

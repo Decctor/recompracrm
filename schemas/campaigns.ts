@@ -351,6 +351,22 @@ export const CampaignSchema = z.object({
 		})
 		.optional()
 		.nullable(),
+	// Specific for "PESQUISA"
+	gatilhoPesquisaDataReferencia: z
+		.string({
+			required_error: "Data de referência da pesquisa não informada.",
+			invalid_type_error: "Tipo não válido para a data de referência da pesquisa.",
+		})
+		.regex(/^\d{4}-\d{2}-\d{2}$/, "Data de referência da pesquisa inválida.")
+		.optional()
+		.nullable(),
+	gatilhoPesquisaCampoId: z
+		.string({
+			required_error: "Campo personalizado da pesquisa não informado.",
+			invalid_type_error: "Tipo não válido para o campo personalizado da pesquisa.",
+		})
+		.optional()
+		.nullable(),
 
 	// Recurrent campaign schedule configuration (only used when gatilhoTipo === "RECORRENTE")
 	recorrenciaTipo: RecurrenceFrequencyEnum.optional().nullable(),

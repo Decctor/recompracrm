@@ -1,6 +1,6 @@
 import { relations, sql } from "drizzle-orm";
 import { boolean, doublePrecision, index, integer, jsonb, text, timestamp, varchar } from "drizzle-orm/pg-core";
-import { messageTemplates, newTable, users, whatsappConnectionPhones } from ".";
+import { customFields, messageTemplates, newTable, users, whatsappConnectionPhones } from ".";
 import {
 	attributionModelEnum,
 	campaignExecutionDelayDirectionEnum,
@@ -61,6 +61,14 @@ export const campaigns = newTable(
 		// Guarda apenas configuração: nome/preço/imagem são resolvidos no enfileiramento, para que um
 		// produto renomeado ou reprecificado nunca deixe a campanha desatualizada.
 		gatilhoPromocaoProdutos: jsonb("gatilho_promocao_produtos").$type<TCampaignPromotionProduct[]>(),
+
+		// specific for "PESQUISA" (docs/dev-planning/survey-campaigns-plan.md)
+		gatilhoPesquisaDataReferencia: text("gatilho_pesquisa_data_referencia"), // YYYY-MM-DD in the interactions cron timezone
+		// Campo que recebe as respostas. Denormalizado do template (todo botão RESPOSTA_PESQUISA aponta
+		// para o mesmo campo): a validação de salvamento garante a igualdade, e ter a coluna aqui deixa
+		// lista, resultados e filtros responderem "qual pergunta" sem abrir o template. RESTRICT: um
+		// campo com pesquisa apontando para ele não pode ser apagado.
+		gatilhoPesquisaCampoId: varchar("gatilho_pesquisa_campo_id", { length: 255 }).references(() => customFields.id, { onDelete: "restrict" }),
 
 		execucaoAgendadaMedida: timeDurationUnitsEnum("execucao_agendada_medida").notNull().default("DIAS"),
 		execucaoAgendadaValor: integer("execucao_agendada_valor").notNull().default(0),
@@ -133,6 +141,10 @@ export const campaignRelations = relations(campaigns, ({ many, one }) => ({
 	whatsappConexaoTelefone: one(whatsappConnectionPhones, {
 		fields: [campaigns.whatsappConexaoTelefoneId],
 		references: [whatsappConnectionPhones.id],
+	}),
+	pesquisaCampo: one(customFields, {
+		fields: [campaigns.gatilhoPesquisaCampoId],
+		references: [customFields.id],
 	}),
 	autor: one(users, {
 		fields: [campaigns.autorId],
