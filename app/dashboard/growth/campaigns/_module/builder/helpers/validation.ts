@@ -36,6 +36,10 @@ function validateTriggerStage(campaign: TCampaign, segmentations: TSegmentations
 			}
 			return { valid: true };
 		}
+		case "PESQUISA":
+			if (!campaign.gatilhoPesquisaDataReferencia) return { valid: false, reason: "Selecione a data de disparo." };
+			if (!campaign.gatilhoPesquisaCampoId) return { valid: false, reason: "Selecione o campo que receberá as respostas." };
+			return { valid: true };
 		case "RECORRENTE":
 			if (!campaign.recorrenciaTipo) return { valid: false, reason: "Selecione a frequência da recorrência." };
 			if (!campaign.recorrenciaIntervalo || campaign.recorrenciaIntervalo < 1) {
@@ -101,7 +105,10 @@ function validateTriggerStage(campaign: TCampaign, segmentations: TSegmentations
 function validateSendStage(campaign: TCampaign): TStageValidationResult {
 	if (!campaign.execucaoAgendadaBloco) return { valid: false, reason: "Selecione o bloco de horário." };
 	const requiresDelay =
-		campaign.gatilhoTipo !== "RECORRENTE" && campaign.gatilhoTipo !== "USO-UNICO" && campaign.gatilhoTipo !== "PROMOCAO-PRODUTOS";
+		campaign.gatilhoTipo !== "RECORRENTE" &&
+		campaign.gatilhoTipo !== "USO-UNICO" &&
+		campaign.gatilhoTipo !== "PROMOCAO-PRODUTOS" &&
+		campaign.gatilhoTipo !== "PESQUISA";
 	if (requiresDelay && (campaign.execucaoAgendadaValor === null || campaign.execucaoAgendadaValor === undefined)) {
 		return { valid: false, reason: "Defina o valor do atraso de execução." };
 	}

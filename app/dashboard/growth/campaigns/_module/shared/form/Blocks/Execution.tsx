@@ -19,7 +19,7 @@ export default function CampaignsExecutionBlock({
 }: CampaignsExecutionBlockProps) {
 	const isRecorrente = campaign.gatilhoTipo === "RECORRENTE";
 	// Disparo único: a data vem do gatilho, então não há atraso de execução a configurar.
-	const isUsoUnico = campaign.gatilhoTipo === "USO-UNICO" || campaign.gatilhoTipo === "PROMOCAO-PRODUTOS";
+	const isUsoUnico = campaign.gatilhoTipo === "USO-UNICO" || campaign.gatilhoTipo === "PROMOCAO-PRODUTOS" || campaign.gatilhoTipo === "PESQUISA";
 	const supportsAntes = (TRIGGERS_SUPPORTING_ANTES as readonly string[]).includes(campaign.gatilhoTipo);
 
 	const intervalDescription =

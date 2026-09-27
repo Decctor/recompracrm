@@ -79,6 +79,7 @@ import {
 	Mail,
 	Users,
 	PackageX,
+	ListChecks,
 } from "lucide-react";
 
 export const CommunityCourseStatusOptions: {
@@ -252,6 +253,13 @@ export const CampaignTriggerTypeOptions: {
 		value: "PROMOCAO-PRODUTOS",
 		icon: <BadgePercent className="w-4 h-4" />,
 		description: "Divulga uma lista de produtos numa data única — cada cliente recebe o produto com mais chance de recompra.",
+	},
+	{
+		id: 14,
+		label: "PESQUISA",
+		value: "PESQUISA",
+		icon: <ListChecks className="w-4 h-4" />,
+		description: "Envia uma pergunta com botões de resposta numa data única — cada toque vira um campo personalizado do cliente.",
 	},
 ];
 

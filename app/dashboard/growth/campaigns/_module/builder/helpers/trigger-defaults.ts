@@ -22,7 +22,36 @@ export function getTriggerDefaultsPatch(value: TCampaignTriggerTypeEnum, current
 			gatilhoUsoUnicoDataReferencia: current.gatilhoUsoUnicoDataReferencia ?? dayjs().format("YYYY-MM-DD"),
 			gatilhoPromocaoDataReferencia: null,
 			gatilhoPromocaoProdutos: null,
+			gatilhoPesquisaDataReferencia: null,
+			gatilhoPesquisaCampoId: null,
 			// clear unrelated trigger fields
+			gatilhoNovaCompraValorMinimo: null,
+			gatilhoTempoPermanenciaMedida: null,
+			gatilhoTempoPermanenciaValor: null,
+			gatilhoNovoCashbackAcumuladoValorMinimo: null,
+			gatilhoTotalCashbackAcumuladoValorMinimo: null,
+			gatilhoCashbackExpirandoAntecedenciaValor: null,
+			gatilhoCashbackExpirandoAntecedenciaMedida: null,
+			gatilhoCashbackExpirandoValorMinimo: null,
+			gatilhoQuantidadeTotalCompras: null,
+			gatilhoValorTotalCompras: null,
+			recorrenciaTipo: null,
+			recorrenciaIntervalo: 1,
+			recorrenciaDiasSemana: null,
+			recorrenciaDiasMes: null,
+		};
+	}
+
+	// PESQUISA: seed today's date, keep the chosen field, clear other trigger fields.
+	if (value === "PESQUISA") {
+		return {
+			gatilhoTipo: value,
+			gatilhoPesquisaDataReferencia: current.gatilhoPesquisaDataReferencia ?? dayjs().format("YYYY-MM-DD"),
+			gatilhoPesquisaCampoId: current.gatilhoPesquisaCampoId ?? null,
+			// clear unrelated trigger fields
+			gatilhoUsoUnicoDataReferencia: null,
+			gatilhoPromocaoDataReferencia: null,
+			gatilhoPromocaoProdutos: null,
 			gatilhoNovaCompraValorMinimo: null,
 			gatilhoTempoPermanenciaMedida: null,
 			gatilhoTempoPermanenciaValor: null,
@@ -48,6 +77,8 @@ export function getTriggerDefaultsPatch(value: TCampaignTriggerTypeEnum, current
 			gatilhoPromocaoProdutos: current.gatilhoPromocaoProdutos ?? [],
 			// clear unrelated trigger fields
 			gatilhoUsoUnicoDataReferencia: null,
+			gatilhoPesquisaDataReferencia: null,
+			gatilhoPesquisaCampoId: null,
 			gatilhoNovaCompraValorMinimo: null,
 			gatilhoTempoPermanenciaMedida: null,
 			gatilhoTempoPermanenciaValor: null,
@@ -75,6 +106,8 @@ export function getTriggerDefaultsPatch(value: TCampaignTriggerTypeEnum, current
 			gatilhoUsoUnicoDataReferencia: null,
 			gatilhoPromocaoDataReferencia: null,
 			gatilhoPromocaoProdutos: null,
+			gatilhoPesquisaDataReferencia: null,
+			gatilhoPesquisaCampoId: null,
 			...(shouldPrefillValor ? { gatilhoCashbackExpirandoAntecedenciaValor: 3 } : {}),
 			...(shouldPrefillMedida ? { gatilhoCashbackExpirandoAntecedenciaMedida: "DIAS" as const } : {}),
 			// clear unrelated trigger fields
@@ -100,6 +133,8 @@ export function getTriggerDefaultsPatch(value: TCampaignTriggerTypeEnum, current
 			gatilhoUsoUnicoDataReferencia: null,
 			gatilhoPromocaoDataReferencia: null,
 			gatilhoPromocaoProdutos: null,
+			gatilhoPesquisaDataReferencia: null,
+			gatilhoPesquisaCampoId: null,
 			recorrenciaTipo: current.recorrenciaTipo ?? "SEMANAL",
 			recorrenciaIntervalo: current.recorrenciaIntervalo ?? 1,
 			// clear unrelated trigger fields
@@ -120,6 +155,10 @@ export function getTriggerDefaultsPatch(value: TCampaignTriggerTypeEnum, current
 	return {
 		gatilhoTipo: value,
 		gatilhoUsoUnicoDataReferencia: null,
+		gatilhoPromocaoDataReferencia: null,
+		gatilhoPromocaoProdutos: null,
+		gatilhoPesquisaDataReferencia: null,
+		gatilhoPesquisaCampoId: null,
 		recorrenciaTipo: null,
 		recorrenciaIntervalo: 1,
 		recorrenciaDiasSemana: null,

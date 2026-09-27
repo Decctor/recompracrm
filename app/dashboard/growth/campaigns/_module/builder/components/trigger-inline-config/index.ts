@@ -7,6 +7,7 @@ import CashbackExpirandoConfig from "./cashback-expirando-config";
 import EntradaSegmentacaoConfig from "./entrada-segmentacao-config";
 import NovaCompraConfig from "./nova-compra-config";
 import PermanenciaSegmentacaoConfig from "./permanencia-segmentacao-config";
+import PesquisaConfig from "./pesquisa-config";
 import PiorDiaVendasConfig from "./pior-dia-vendas-config";
 import PrimeiraCompraConfig from "./primeira-compra-config";
 import PromocaoProdutosConfig from "./promocao-produtos-config";
@@ -27,6 +28,7 @@ export const triggerInlineConfigByType: Record<TCampaignTriggerTypeEnum, Compone
 	RECORRENTE: RecorrenteConfig,
 	"USO-UNICO": UsoUnicoConfig,
 	"PROMOCAO-PRODUTOS": PromocaoProdutosConfig,
+	PESQUISA: PesquisaConfig,
 	"ENTRADA-SEGMENTAÇÃO": EntradaSegmentacaoConfig,
 	"PERMANÊNCIA-SEGMENTAÇÃO": PermanenciaSegmentacaoConfig,
 };

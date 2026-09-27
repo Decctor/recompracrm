@@ -77,7 +77,10 @@ export default function CampaignConfigView({ campaign, sessionUser, sessionUserO
 
 	const activeSegmentations = campaign.segmentacoes ?? [];
 	const isRecurrentLike =
-		campaign.gatilhoTipo === "RECORRENTE" || campaign.gatilhoTipo === "USO-UNICO" || campaign.gatilhoTipo === "PROMOCAO-PRODUTOS";
+		campaign.gatilhoTipo === "RECORRENTE" ||
+		campaign.gatilhoTipo === "USO-UNICO" ||
+		campaign.gatilhoTipo === "PROMOCAO-PRODUTOS" ||
+		campaign.gatilhoTipo === "PESQUISA";
 
 	const templateName = campaign.whatsappTemplate?.nome ?? null;
 	const templateContent = campaign.whatsappTemplate?.conteudo ?? null;

@@ -78,7 +78,10 @@ export function buildDispatchInteractionTitle({
 	campaign: { titulo: string; gatilhoTipo: string };
 }) {
 	if (origem === "RECORRENTE") return `Recorrente: ${campaign.titulo}`;
-	if (origem === "AGENDADA") return `${campaign.gatilhoTipo === "PROMOCAO-PRODUTOS" ? "Promoção de produtos" : "Uso único"}: ${campaign.titulo}`;
+	if (origem === "AGENDADA") {
+		const prefix = campaign.gatilhoTipo === "PROMOCAO-PRODUTOS" ? "Promoção de produtos" : campaign.gatilhoTipo === "PESQUISA" ? "Pesquisa" : "Uso único";
+		return `${prefix}: ${campaign.titulo}`;
+	}
 	return `Envio de mensagem automática via campanha ${campaign.titulo}`;
 }
 

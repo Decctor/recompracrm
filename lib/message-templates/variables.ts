@@ -19,6 +19,7 @@ export const MESSAGE_TEMPLATE_TRIGGER_CONTEXT_MAP: Record<TCampaignTriggerTypeEn
 	"USO-UNICO": ["CLIENTE", "CASHBACK", "CUPOM"],
 	// PROMOCAO é exclusivo deste gatilho: só ele resolve um produto sugerido da lista promovida.
 	"PROMOCAO-PRODUTOS": ["CLIENTE", "PROMOCAO", "CASHBACK", "CUPOM"],
+	PESQUISA: ["CLIENTE", "CASHBACK", "CUPOM"],
 };
 
 export type TMessageTemplateVariables = {

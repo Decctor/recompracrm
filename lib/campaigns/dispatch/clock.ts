@@ -37,6 +37,7 @@ async function createScheduledDispatches(now: Date, summary: TCampaignDispatchCl
 			or(
 				and(eq(campaigns.gatilhoTipo, "USO-UNICO"), eq(campaigns.gatilhoUsoUnicoDataReferencia, dateKey)),
 				and(eq(campaigns.gatilhoTipo, "PROMOCAO-PRODUTOS"), eq(campaigns.gatilhoPromocaoDataReferencia, dateKey)),
+				and(eq(campaigns.gatilhoTipo, "PESQUISA"), eq(campaigns.gatilhoPesquisaDataReferencia, dateKey)),
 				eq(campaigns.gatilhoTipo, "RECORRENTE"),
 			),
 		),
