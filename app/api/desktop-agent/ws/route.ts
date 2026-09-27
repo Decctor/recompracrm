@@ -1,5 +1,6 @@
 import { type TExternalActorContext, authenticateExternalRequest } from "@/lib/access/authentication";
 import { claimablePrintJobsCondition } from "@/lib/desktop-agent/print-jobs";
+import { isDesktopAgentWebSocketEnabled } from "@/lib/desktop-agent/websocket-channel";
 import { db } from "@/services/drizzle";
 import { accessPrincipals, printJobs } from "@/services/drizzle/schema";
 import { experimental_upgradeWebSocket } from "@vercel/functions";
@@ -133,13 +134,9 @@ function registerAgentConnection(ws: WebSocket, actor: TExternalActorContext) {
 	ws.send(JSON.stringify({ type: "connection.ready", principalId: actor.principalId }));
 }
 
-function isWebSocketChannelEnabled() {
-	return process.env.DESKTOP_AGENT_WS_ENABLED === "true";
-}
-
 export async function GET(request: NextRequest) {
 	// Antes da autenticação de propósito: a recusa não deve custar nem a consulta da credencial.
-	if (!isWebSocketChannelEnabled()) {
+	if (!isDesktopAgentWebSocketEnabled()) {
 		return NextResponse.json(
 			{ data: null, message: "Canal WebSocket desativado neste ambiente. Utilize o polling HTTP." },
 			{ status: 501 },
