@@ -1,4 +1,4 @@
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import { index, jsonb, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/pg-core";
 import type { TCatalogLinkDivergence, TCatalogLinkSnapshot, TCatalogLinkSyncPolicy } from "@/schemas/catalog-links";
 import { newTable } from "./common";
@@ -20,6 +20,15 @@ import { users } from "./users";
 // `unq_catalog_links_externo_option` (0115) para grupos e opções de complemento. Predicado de índice
 // também não é expressável neste drizzle-orm; um `drizzle-kit generate` pode propor derrubá-los. Não
 // aceite. `upsertCatalogLink` faz a pré-checagem com mensagem amigável; os índices fecham a corrida.
+//
+// Grupo e opção de complemento são MUITOS-PARA-UM (0116): o iFood pode ter N cópias do mesmo grupo
+// interno (catálogo montado com um grupo por item), então para ADD_ON / ADD_ON_OPCAO a identidade é
+// o registro remoto e o unique de identidade não se aplica (predicado parcial). Os upserts repetem o
+// predicado do índice em `targetWhere` — o Postgres só infere índice parcial assim. Os textos abaixo
+// são os MESMOS do SQL de drizzle/0116: mudar um exige mudar o outro.
+export const CATALOG_LINK_IDENTITY_WHERE = sql`tipo NOT IN ('ADD_ON', 'ADD_ON_OPCAO')`;
+export const CATALOG_LINK_OPTION_GROUP_WHERE = sql`tipo = 'ADD_ON' AND externo_option_group_id IS NOT NULL AND status <> 'DESVINCULADO'`;
+export const CATALOG_LINK_OPTION_WHERE = sql`externo_option_id IS NOT NULL AND status <> 'DESVINCULADO'`;
 
 /**
  * Um vínculo entre uma entidade interna e sua contraparte no catálogo remoto, POR MERCHANT

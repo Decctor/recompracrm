@@ -15,6 +15,7 @@ import {
 	associationSnapshot,
 	associationsDiffer,
 	buildItemOptionGroupsPayload,
+	hasAmbiguousGroups,
 	hasUnlinkedGroups,
 	loadAddOnLinks,
 	recordAddOnLinksFromFlatItem,
@@ -163,9 +164,13 @@ async function pushLink({
 	// "sem vínculo" nos detalhes do item, e a aba Adicionais vincula à mão.
 	const desiredAssociation = associationSnapshot({ nodes: addOns.nodes, links: addOns.links });
 	const neverAssociated = link.ultimoSnapshot?.gruposComplementos == null;
+	// Catálogo com cópias do grupo por item (um grupo interno ↔ N optionGroups): o composto não sabe,
+	// sem o flat, qual cópia é a deste item — reescrever poderia trocar a cópia ou criar outra. Nesses
+	// catálogos a associação é gerida no Portal e só a disponibilidade das opções vem daqui.
 	const associationChanged =
 		syncsComplementos(link.sincronizar) &&
 		!!link.externoItemId &&
+		!hasAmbiguousGroups({ nodes: addOns.nodes, links: addOns.links }) &&
 		(associationsDiffer(link.ultimoSnapshot?.gruposComplementos, desiredAssociation) ||
 			(neverAssociated && hasUnlinkedGroups({ nodes: addOns.nodes, links: addOns.links })));
 	if (associationChanged) changes.push({ campo: "gruposComplementos", de: link.ultimoSnapshot?.gruposComplementos ?? null, para: desiredAssociation });

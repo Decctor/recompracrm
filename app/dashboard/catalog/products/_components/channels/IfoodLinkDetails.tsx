@@ -103,13 +103,16 @@ export default function IfoodLinkDetails({ merchantId, merchantLabel, nodeLabel,
 		onSettled: invalidate,
 	});
 
-	// Os vínculos de grupo são da loja, não do item: vêm da listagem completa do merchant.
+	// Os vínculos de grupo são da loja, não do item: vêm da listagem completa do merchant. Um grupo
+	// pode ter várias cópias vinculadas (catálogo com um grupo por item) — mostra a primeira e a
+	// contagem; o detalhe por cópia fica na aba Adicionais.
 	const { data: merchantLinks } = useCatalogLinks({ merchantId });
-	const groupLinkByAddOnId = new Map(
-		(merchantLinks ?? [])
-			.filter((entry) => entry.tipo === "ADD_ON" && entry.status !== "DESVINCULADO" && entry.produtoAddOnId)
-			.map((entry) => [entry.produtoAddOnId as string, entry]),
-	);
+	const groupLinksByAddOnId = new Map<string, NonNullable<typeof merchantLinks>>();
+	for (const entry of merchantLinks ?? []) {
+		if (entry.tipo !== "ADD_ON" || entry.status === "DESVINCULADO" || !entry.produtoAddOnId) continue;
+		groupLinksByAddOnId.set(entry.produtoAddOnId, [...(groupLinksByAddOnId.get(entry.produtoAddOnId) ?? []), entry]);
+	}
+	const groupLinkFor = (addOnId: string) => groupLinksByAddOnId.get(addOnId)?.[0];
 	const productGroups = product.addOnsReferencias.map((reference) => reference.grupo);
 
 	const anyPending = policyMutation.isPending || resolveMutation.isPending || unlinkMutation.isPending;
@@ -225,12 +228,16 @@ export default function IfoodLinkDetails({ merchantId, merchantLabel, nodeLabel,
 						<span className="text-[0.65rem] font-medium uppercase tracking-wide text-muted-foreground">Complementos do produto</span>
 						<div className="flex flex-col rounded-xl border border-border">
 							{productGroups.map((group) => {
-								const groupLink = groupLinkByAddOnId.get(group.id);
+								const groupLink = groupLinkFor(group.id);
+								const copies = groupLinksByAddOnId.get(group.id)?.length ?? 0;
 								return (
 									<div key={group.id} className="flex items-center justify-between gap-3 border-b border-border px-3 py-2 last:border-b-0">
 										<span className="flex min-w-0 flex-col">
 											<span className="truncate text-sm font-medium">{group.internoNome || group.nome}</span>
-											<span className="text-[0.65rem] text-muted-foreground">{group.ativo === false ? "grupo inativo" : "grupo ativo"}</span>
+											<span className="text-[0.65rem] text-muted-foreground">
+												{group.ativo === false ? "grupo inativo" : "grupo ativo"}
+												{copies > 1 ? ` · ${copies} cópias vinculadas nesta loja` : null}
+											</span>
 										</span>
 										<span
 											className={cn(

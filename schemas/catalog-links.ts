@@ -21,6 +21,13 @@ export const CatalogLinkSyncPolicySchema = z.object({
 	 * nome/preço/disponibilidade. Linhas gravadas antes deste campo leem como `true`.
 	 */
 	complementos: z.boolean({ invalid_type_error: "Tipo não válido para sincronização de complementos." }).default(true),
+	/**
+	 * Vínculo de GRUPO: se opções internas sem par NESTE optionGroup são criadas nele no push. Desligado
+	 * quando o optionGroup é uma cópia que carrega só parte das opções do grupo interno (catálogo com
+	 * um grupo por item, ex.: "gelato no açaí" com 35 dos 67 sabores) — ligado, o push o completaria.
+	 * Linhas gravadas antes deste campo leem como `true`.
+	 */
+	criarOpcoes: z.boolean({ invalid_type_error: "Tipo não válido para criação de opções." }).default(true),
 });
 export type TCatalogLinkSyncPolicy = z.infer<typeof CatalogLinkSyncPolicySchema>;
 
@@ -31,11 +38,17 @@ export const DEFAULT_CATALOG_LINK_SYNC_POLICY: TCatalogLinkSyncPolicy = {
 	preco: true,
 	disponibilidade: true,
 	complementos: true,
+	criarOpcoes: true,
 };
 
 /** Leitura tolerante: vínculos anteriores ao campo não têm `complementos` no jsonb. */
 export function syncsComplementos(policy: Partial<TCatalogLinkSyncPolicy> | null | undefined) {
 	return policy?.complementos ?? true;
+}
+
+/** Leitura tolerante: vínculos anteriores ao campo não têm `criarOpcoes` no jsonb. */
+export function createsMissingOptions(policy: Partial<TCatalogLinkSyncPolicy> | null | undefined) {
+	return policy?.criarOpcoes ?? true;
 }
 
 /** Um grupo associado ao item, como foi enviado no último push — a chave é o id REMOTO do grupo. */

@@ -69,11 +69,13 @@ async function createCatalogLink({ orgId, userId, input }: { orgId: string; user
 			merchantId: input.merchantId,
 			produtoAddOnId: input.produtoAddOnId,
 			externoOptionGroupId: input.externoOptionGroupId,
+			sincronizar: input.sincronizar,
 			autorId: userId,
 		});
+		const createsMissing = input.sincronizar?.criarOpcoes ?? true;
 		return {
 			data: { link: result.link, opcoesCasadas: result.opcoesCasadas, opcoesInternas: result.opcoesInternas },
-			message: `Grupo vinculado: ${result.opcoesCasadas} de ${result.opcoesInternas} opções casadas. As demais entram no próximo envio.`,
+			message: `Grupo vinculado: ${result.opcoesCasadas} de ${result.opcoesInternas} opções casadas.${createsMissing ? " As demais entram no próximo envio." : ""}`,
 		};
 	}
 

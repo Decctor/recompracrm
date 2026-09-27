@@ -1,7 +1,17 @@
 import { DEFAULT_CATALOG_LINK_SYNC_POLICY, type TCatalogLinkSyncPolicy } from "@/schemas/catalog-links";
 import type { TCatalogLinkTypeEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
-import { catalogLinks, productAddOnOptions, productAddOns, products, productVariants, type TCatalogLinkEntity } from "@/services/drizzle/schema";
+import {
+	CATALOG_LINK_IDENTITY_WHERE,
+	CATALOG_LINK_OPTION_GROUP_WHERE,
+	CATALOG_LINK_OPTION_WHERE,
+	catalogLinks,
+	productAddOnOptions,
+	productAddOns,
+	products,
+	productVariants,
+	type TCatalogLinkEntity,
+} from "@/services/drizzle/schema";
 import { and, eq, inArray, ne } from "drizzle-orm";
 import createHttpError from "http-errors";
 
@@ -170,23 +180,51 @@ export async function upsertCatalogLink({
 	await assertExternalItemIsFree({ orgId, merchantId, node, externalRefs });
 
 	const policy: TCatalogLinkSyncPolicy = { ...DEFAULT_CATALOG_LINK_SYNC_POLICY, ...sincronizar };
+	const values = {
+		organizacaoId: orgId,
+		provider: "IFOOD" as const,
+		merchantId,
+		tipo: node.tipo,
+		produtoId: node.produtoId ?? null,
+		produtoVarianteId: node.produtoVarianteId ?? null,
+		produtoAddOnId: node.produtoAddOnId ?? null,
+		produtoAddOnOpcaoId: node.produtoAddOnOpcaoId ?? null,
+		grupoInterno: node.grupoInterno ?? null,
+		...externalRefs,
+		sincronizar: policy,
+		status: "PENDENTE" as const,
+		autorId: autorId ?? null,
+	};
+	const set = { ...externalRefs, sincronizar: policy, status: "PENDENTE" as const, ultimoErro: null, dataAtualizacao: new Date() };
+
+	// Grupo e opção de complemento são muitos-para-um (drizzle/0116): o iFood pode ter N cópias do
+	// mesmo grupo interno (catálogo com um grupo por item), então a identidade é o registro REMOTO e o
+	// mesmo nó interno pode ter vários vínculos na loja. O pré-check acima garante que o registro
+	// remoto está livre ou já é deste nó, então o conflito só re-grava a mesma linha.
+	if (isAddOnLinkType(node.tipo)) {
+		const [link] = await db
+			.insert(catalogLinks)
+			.values(values)
+			.onConflictDoUpdate(
+				node.tipo === "ADD_ON"
+					? {
+							target: [catalogLinks.organizacaoId, catalogLinks.provider, catalogLinks.merchantId, catalogLinks.externoOptionGroupId],
+							targetWhere: CATALOG_LINK_OPTION_GROUP_WHERE,
+							set,
+						}
+					: {
+							target: [catalogLinks.organizacaoId, catalogLinks.provider, catalogLinks.merchantId, catalogLinks.externoOptionId],
+							targetWhere: CATALOG_LINK_OPTION_WHERE,
+							set,
+						},
+			)
+			.returning();
+		return link;
+	}
+
 	const [link] = await db
 		.insert(catalogLinks)
-		.values({
-			organizacaoId: orgId,
-			provider: "IFOOD",
-			merchantId,
-			tipo: node.tipo,
-			produtoId: node.produtoId ?? null,
-			produtoVarianteId: node.produtoVarianteId ?? null,
-			produtoAddOnId: node.produtoAddOnId ?? null,
-			produtoAddOnOpcaoId: node.produtoAddOnOpcaoId ?? null,
-			grupoInterno: node.grupoInterno ?? null,
-			...externalRefs,
-			sincronizar: policy,
-			status: "PENDENTE",
-			autorId: autorId ?? null,
-		})
+		.values(values)
 		.onConflictDoUpdate({
 			target: [
 				catalogLinks.organizacaoId,
@@ -198,16 +236,15 @@ export async function upsertCatalogLink({
 				catalogLinks.produtoAddOnId,
 				catalogLinks.produtoAddOnOpcaoId,
 			],
-			set: {
-				...externalRefs,
-				sincronizar: policy,
-				status: "PENDENTE",
-				ultimoErro: null,
-				dataAtualizacao: new Date(),
-			},
+			targetWhere: CATALOG_LINK_IDENTITY_WHERE,
+			set,
 		})
 		.returning();
 	return link;
+}
+
+export function isAddOnLinkType(tipo: TCatalogLinkTypeEnum) {
+	return tipo === "ADD_ON" || tipo === "ADD_ON_OPCAO";
 }
 
 export async function updateCatalogLinkPolicy({
@@ -244,9 +281,11 @@ export async function unlinkCatalogLink({ orgId, linkId }: { orgId: string; link
 		.where(eq(catalogLinks.id, linkId))
 		.returning();
 
-	// Desvincular um grupo desvincula as opções dele nesta loja: uma opção presa a um optionGroup
-	// que não é mais gerido daqui seria um vínculo órfão que o push tentaria honrar.
-	if (existing.tipo === "ADD_ON" && existing.produtoAddOnId) {
+	// Desvincular um grupo desvincula as opções DAQUELE optionGroup nesta loja: uma opção presa a um
+	// optionGroup que não é mais gerido daqui seria um vínculo órfão que o push tentaria honrar. O
+	// escopo é o optionGroup remoto, não o grupo interno — o mesmo grupo interno pode estar vinculado
+	// a outras cópias, que continuam geridas.
+	if (existing.tipo === "ADD_ON" && existing.externoOptionGroupId) {
 		await db
 			.update(catalogLinks)
 			.set({ status: "DESVINCULADO", divergencias: null, ultimoErro: null, dataAtualizacao: new Date() })
@@ -255,7 +294,7 @@ export async function unlinkCatalogLink({ orgId, linkId }: { orgId: string; link
 					eq(catalogLinks.organizacaoId, orgId),
 					eq(catalogLinks.merchantId, existing.merchantId),
 					eq(catalogLinks.tipo, "ADD_ON_OPCAO"),
-					eq(catalogLinks.produtoAddOnId, existing.produtoAddOnId),
+					eq(catalogLinks.externoOptionGroupId, existing.externoOptionGroupId),
 				),
 			);
 	}
