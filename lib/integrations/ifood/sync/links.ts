@@ -2,7 +2,7 @@ import { DEFAULT_CATALOG_LINK_SYNC_POLICY, type TCatalogLinkSyncPolicy } from "@
 import type { TCatalogLinkTypeEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
 import { catalogLinks, products, productVariants, type TCatalogLinkEntity } from "@/services/drizzle/schema";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, ne } from "drizzle-orm";
 import createHttpError from "http-errors";
 
 export type TCatalogLinkNode = {
@@ -72,6 +72,47 @@ async function assertNodeIsLinkable({ orgId, node }: { orgId: string; node: TCat
 }
 
 /**
+ * Dupla atribuição: um item do iFood pertence a no máximo um vínculo ATIVO por loja. O índice
+ * parcial `unq_catalog_links_externo_item` fecha a corrida, mas uma violação dele chega ao cliente
+ * como 500 genérico — esta checagem dá o 409 com o nome de quem já segura o item. O próprio nó
+ * (revincular / trocar de política) não conta como conflito.
+ */
+async function assertExternalItemIsFree({
+	orgId,
+	merchantId,
+	node,
+	externoItemId,
+}: {
+	orgId: string;
+	merchantId: string;
+	node: TCatalogLinkNode;
+	externoItemId: string | null | undefined;
+}) {
+	if (!externoItemId) return;
+	const holder = await db.query.catalogLinks.findFirst({
+		where: and(
+			eq(catalogLinks.organizacaoId, orgId),
+			eq(catalogLinks.provider, "IFOOD"),
+			eq(catalogLinks.merchantId, merchantId),
+			eq(catalogLinks.externoItemId, externoItemId),
+			ne(catalogLinks.status, "DESVINCULADO"),
+		),
+		with: { produto: { columns: { nome: true } }, produtoVariante: { columns: { nome: true } } },
+	});
+	if (!holder) return;
+	const sameNode =
+		holder.tipo === node.tipo &&
+		(holder.produtoId ?? null) === (node.produtoId ?? null) &&
+		(holder.produtoVarianteId ?? null) === (node.produtoVarianteId ?? null) &&
+		(holder.produtoAddOnId ?? null) === (node.produtoAddOnId ?? null) &&
+		(holder.produtoAddOnOpcaoId ?? null) === (node.produtoAddOnOpcaoId ?? null);
+	if (sameNode) return;
+
+	const holderName = [holder.produto?.nome, holder.produtoVariante?.nome].filter(Boolean).join(" · ") || "outro cadastro";
+	throw new createHttpError.Conflict(`Este item do iFood já está vinculado a ${holderName}. Desvincule-o antes de vincular a outro produto.`);
+}
+
+/**
  * Cria (ou revive) um vínculo. O unique de identidade é NULLS NOT DISTINCT, então o mesmo nó na
  * mesma loja nunca duplica — uma segunda tentativa reaproveita a linha, o que também é o caminho
  * de "revincular" algo que estava DESVINCULADO.
@@ -92,6 +133,7 @@ export async function upsertCatalogLink({
 	autorId?: string | null;
 }): Promise<TCatalogLinkEntity> {
 	await assertNodeIsLinkable({ orgId, node });
+	await assertExternalItemIsFree({ orgId, merchantId, node, externoItemId: externalRefs.externoItemId });
 
 	const policy: TCatalogLinkSyncPolicy = { ...DEFAULT_CATALOG_LINK_SYNC_POLICY, ...sincronizar };
 	const [link] = await db

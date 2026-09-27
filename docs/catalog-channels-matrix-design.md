@@ -1,8 +1,13 @@
 # Matriz de Canais — Cardápio centralizado em Produtos
 
-> Design doc — **Fase 1 implementada** (2026-09-27): rota `GET/PUT /api/sales-channels/matrix`, aba "Canais"
-> em Produtos com a grade de canais internos editável, iFood somente leitura (badge do vínculo), vitrine da
-> loja virou link. Fases 2–4 pendentes.
+> Design doc — **Fases 1 e 2 implementadas** (2026-09-27). Fase 1: rota `GET/PUT /api/sales-channels/matrix`,
+> aba "Canais" em Produtos com a grade de canais internos editável, vitrine da loja virou link. Fase 2:
+> coluna iFood editável com menu por nó (vincular a item existente, publicar como novo, ver vínculo com
+> divergências e política por campo, desvincular), "Reconciliar agora" no cabeçalho do merchant, badge
+> "Vinculado" na aba Catálogo do iFood, e as correções de backend do §4.1 (409 na dupla atribuição, índice
+> parcial ignorando DESVINCULADO — migração `drizzle/0114_catalog_links_externo_item_active.sql`, aplicar
+> manualmente —, cron de reconciliação registrado, guardas de permissão nas rotas `sync/*`). Fases 3–4
+> pendentes.
 > Documentos irmãos: `docs/product-sales-channels-design.md` (a primitiva `sales_channels` +
 > `product_channel_settings`, fases 1–4 implementadas) e `docs/ifood-catalog-linking-sync-design.md`
 > (`catalog_links`, publish/import/push/reconcile — backend implementado, **UI nunca construída**).
@@ -246,9 +251,11 @@ lib/products/sales-channels-matrix.ts                  puro: diff do rascunho �
 lib/products/sales-channels-matrix.test.ts
 lib/queries/sales-channels.ts                          + useSalesChannelMatrix()  (key ["sales-channel-matrix"])
 lib/mutations/sales-channels.ts                        + updateSalesChannelMatrix()
-lib/queries/catalog-links.ts                           NOVO: useCatalogLinks, useCatalogLinkSuggestions   (não existem hoje)
-lib/mutations/catalog-links.ts                         NOVO: createCatalogLink, updateCatalogLinkPolicy, deleteCatalogLink,
-                                                             publishProductToIfood, reconcileMerchant, resolveDivergence
+lib/queries/catalog-links.ts                           useCatalogLinks, useCatalogLinkSuggestions
+lib/mutations/catalog-links.ts                         createCatalogLink, updateCatalogLinkPolicy, deleteCatalogLink,
+                                                       publishProductToIfood, importIfoodItem, reconcileIfoodMerchant,
+                                                       resolveCatalogLinkDivergence
+lib/integrations/ifood/sync/guards.ts                  requireIntegrationViewSession / requireIntegrationManageSession
 state-hooks/use-sales-channel-matrix-state.tsx         rascunho: choices/prices por nodeKey (reusa productChannelNodeKey),
                                                        channels (modo/ordem), dirty, redefine/reset
 app/dashboard/catalog/products/_components/channels/
@@ -257,9 +264,10 @@ app/dashboard/catalog/products/_components/channels/
 ├── ChannelMatrixTable.tsx                             grid CSS + navegação de planilha; linhas de produto e variante
 ├── ChannelMatrixCells.tsx                             célula de disponibilidade, preço, status (SHOP/iFood)
 ├── ChannelHeaderMenu.tsx                              modo do catálogo (fase 2: reconciliar)
+├── IfoodNodeMenu.tsx                                  fase 2: menu do nó na coluna do merchant
 ├── LinkIfoodItem.tsx                                  fase 2: vincular a item existente
 ├── PublishIfoodProduct.tsx                            fase 2: publicar como novo (simular → confirmar)
-├── IfoodLinkDivergences.tsx                           fase 2: painel de divergências
+├── IfoodLinkDetails.tsx                               fase 2: estado, divergências, política por campo, desvincular
 └── ProductAddOnsDialog.tsx                            fase 3: adicionais do produto (reusa ProductStateAddOnsBlock)
 components/SalesChannels/SalesChannelMark.tsx          rótulo por merchant (refExterno → nome) — corrige a página do produto também
 ```

@@ -1,6 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
-import { requireERPSession } from "@/lib/authentication/erp-session";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { requireIntegrationManageSession } from "@/lib/integrations/ifood/sync/guards";
 import { resolveIfoodManagementContext } from "@/lib/integrations/ifood/context";
 import { publishProductToIfood, resolvePublishNodes } from "@/lib/integrations/ifood/sync/publish";
 import { ensureIfoodSalesChannel } from "@/lib/products/sales-channels-store";
@@ -38,7 +38,7 @@ async function publishProduct({ orgId, userId, input }: { orgId: string; userId:
 export type TPublishProductOutput = Awaited<ReturnType<typeof publishProduct>>;
 
 async function publishProductRoute(request: NextRequest) {
-	const session = requireERPSession(await getCurrentSessionUncached());
+	const session = requireIntegrationManageSession(await getCurrentSessionUncached());
 	const orgId = session.membership!.organizacao.id;
 
 	const input = PublishProductInputSchema.parse(await request.json());

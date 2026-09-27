@@ -1,6 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
-import { requireERPSession } from "@/lib/authentication/erp-session";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { requireIntegrationManageSession } from "@/lib/integrations/ifood/sync/guards";
 import { adoptRemotePrice, reconcileMerchantCatalog } from "@/lib/integrations/ifood/sync/reconcile";
 import { pushProductToLinkedMerchants } from "@/lib/integrations/ifood/sync/push";
 import { db } from "@/services/drizzle";
@@ -44,7 +44,7 @@ async function resolveDivergence({ orgId, input }: { orgId: string; input: TReso
 export type TResolveDivergenceOutput = Awaited<ReturnType<typeof resolveDivergence>>;
 
 async function reconcileRoute(request: NextRequest) {
-	const session = requireERPSession(await getCurrentSessionUncached());
+	const session = requireIntegrationManageSession(await getCurrentSessionUncached());
 	const orgId = session.membership!.organizacao.id;
 
 	const input = ReconcileInputSchema.parse(await request.json());
@@ -53,7 +53,7 @@ async function reconcileRoute(request: NextRequest) {
 }
 
 async function resolveDivergenceRoute(request: NextRequest) {
-	const session = requireERPSession(await getCurrentSessionUncached());
+	const session = requireIntegrationManageSession(await getCurrentSessionUncached());
 	const orgId = session.membership!.organizacao.id;
 
 	const input = ResolveDivergenceInputSchema.parse(await request.json());

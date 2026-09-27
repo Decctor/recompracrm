@@ -7,15 +7,16 @@ import MobileEditableField from "@/components/Spreadsheet/MobileEditableField";
 import { Button } from "@/components/ui/button";
 import { formatToMoney } from "@/lib/formatting";
 import type { TIfoodCategoryDTO, TIfoodItemDTO } from "@/lib/integrations/ifood/catalog-types";
+import type { TCatalogLink } from "@/lib/queries/catalog-links";
 import { SPREADSHEET_TABLE_ATTR, type SpreadsheetGridBounds } from "@/lib/spreadsheet-navigation";
 import { cn } from "@/lib/utils";
 import type { TIfoodCatalogStatusEnum } from "@/schemas/enums";
 import type { useIfoodCatalogEditor } from "@/state-hooks/use-ifood-catalog-editor";
-import { ImageIcon, Pencil, Plus } from "lucide-react";
+import { ImageIcon, Link2, Pencil, Plus } from "lucide-react";
 import Link from "next/link";
 
 const ITEM_GRID_COL = { PRICE: 0 } as const;
-const ITEM_TABLE_GRID = "grid-cols-[minmax(0,34fr)_minmax(0,18fr)_minmax(0,16fr)_minmax(0,16fr)_minmax(2.5rem,8fr)]";
+const ITEM_TABLE_GRID = "grid-cols-[minmax(0,30fr)_minmax(0,14fr)_minmax(0,16fr)_minmax(0,14fr)_minmax(0,14fr)_minmax(2.5rem,8fr)]";
 const ITEM_DESKTOP_ROW = cn("hidden w-full lg:grid", ITEM_TABLE_GRID, "items-center gap-x-1 px-2");
 
 function StatusToggle({
@@ -52,11 +53,41 @@ type CategoryItemsTableProps = {
 	category: TIfoodCategoryDTO;
 	canManage: boolean;
 	editor: ReturnType<typeof useIfoodCatalogEditor>;
+	/** Vínculo ativo por id de item do iFood — vazio quando a org não usa a matriz de canais. */
+	linksByItemId: Map<string, TCatalogLink>;
 	onAddProduct: () => void;
 };
 
+/**
+ * A que produto interno o item está preso. O vínculo nasce e se desfaz na aba Canais de
+ * Produtos; aqui ele só é mostrado, com atalho para o cadastro.
+ */
+function LinkBadge({ link }: { link: TCatalogLink | undefined }) {
+	if (!link || !link.produtoId) return <span className="text-[0.65rem] text-muted-foreground">—</span>;
+	const pending = link.status === "DIVERGENTE" || link.status === "ERRO";
+	return (
+		<Link
+			href={`/dashboard/catalog/products/${link.produtoId}?tab=cadastro`}
+			title={
+				pending
+					? `Vinculado, com pendência (${link.status.toLowerCase()}). Resolva na aba Canais de Produtos.`
+					: "Vinculado ao cadastro interno. Abrir o produto."
+			}
+			className={cn(
+				"inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[0.6rem] font-medium uppercase tracking-wide transition-opacity hover:opacity-80",
+				pending
+					? "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-500"
+					: "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+			)}
+		>
+			<Link2 className="size-3" />
+			Vinculado
+		</Link>
+	);
+}
+
 /** Itens de uma categoria em tabela editável. Preço e status entram no rascunho; o resto vai no detalhe. */
-export function CategoryItemsTable({ merchantId, category, canManage, editor, onAddProduct }: CategoryItemsTableProps) {
+export function CategoryItemsTable({ merchantId, category, canManage, editor, linksByItemId, onAddProduct }: CategoryItemsTableProps) {
 	const gridBounds: SpreadsheetGridBounds = { rowCount: category.itens.length, colCount: 1 };
 
 	if (category.itens.length === 0) {
@@ -85,6 +116,7 @@ export function CategoryItemsTable({ merchantId, category, canManage, editor, on
 			>
 				<p className="min-w-0 px-1 text-start">Item</p>
 				<p className="min-w-0 px-1 text-center">Código (PDV)</p>
+				<p className="min-w-0 px-1 text-center">Vínculo</p>
 				<p className="min-w-0 px-1 text-center">Preço</p>
 				<p className="min-w-0 px-1 text-center">Status</p>
 				<p className="min-w-0 px-1 text-center">Ações</p>
@@ -114,6 +146,9 @@ export function CategoryItemsTable({ merchantId, category, canManage, editor, on
 									</div>
 								</div>
 								<p className="min-w-0 truncate px-1 text-center text-muted-foreground">{item.codigoExterno ?? "—"}</p>
+								<div className="flex min-w-0 items-center justify-center px-1">
+									<LinkBadge link={item.id ? linksByItemId.get(item.id) : undefined} />
+								</div>
 								<div className="min-w-0 px-1">
 									{canManage && item.id ? (
 										<EditableNumberCell
@@ -157,6 +192,7 @@ export function CategoryItemsTable({ merchantId, category, canManage, editor, on
 											<img src={item.imagemUrl} alt="" className="h-9 w-9 shrink-0 rounded-md object-cover ring-1 ring-border" />
 										) : null}
 										<span className="truncate text-sm font-medium">{item.nome ?? "Item sem nome"}</span>
+										<LinkBadge link={item.id ? linksByItemId.get(item.id) : undefined} />
 									</div>
 									{item.id ? (
 										<Button variant="ghost" size="icon-sm" asChild>

@@ -18,6 +18,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { type CSSProperties, type ReactNode, useMemo } from "react";
 import ChannelHeaderMenu from "./ChannelHeaderMenu";
+import IfoodNodeMenu from "./IfoodNodeMenu";
 import { MatrixAvailabilityCell, MatrixPriceCell, MatrixStatusCell, type TMatrixNodeView } from "./ChannelMatrixCells";
 
 /**
@@ -34,11 +35,16 @@ export type TMatrixChannelColumn = {
 	label: string;
 	catalogoModo: TSalesChannelCatalogModeEnum;
 	linkedCount: number;
+	divergentCount: number;
 };
+
+/** O que a coluna de um merchant iFood precisa saber além das células: quem já está preso a quê. */
+export type TMatrixMerchantLinks = { linkedItemIds: Set<string>; linkedProductIds: Set<string> };
 
 export type TMatrixCellAccessors = {
 	cells: Map<string, TMatrixCell>;
 	links: Map<string, TSalesChannelMatrixLink>;
+	merchantLinks: Map<string, TMatrixMerchantLinks>;
 	cycleAvailability: (key: string) => void;
 	updatePrice: (key: string, precoVenda: number | null) => void;
 	setChannelCatalogMode: (canalVendaId: string, catalogoModo: TSalesChannelCatalogModeEnum) => void;
@@ -47,6 +53,8 @@ export type TMatrixCellAccessors = {
 export function matrixLinkKey(merchantId: string, produtoId: string, produtoVarianteId: string | null) {
 	return `${merchantId}:${produtoId}:${produtoVarianteId ?? ""}`;
 }
+
+const EMPTY_SET = new Set<string>();
 
 const FIXED_COLUMNS = "minmax(0,28fr) minmax(0,10fr)";
 const CHANNEL_COLUMNS = "minmax(0,15fr) minmax(0,14fr) minmax(0,12fr)";
@@ -156,7 +164,23 @@ function ChannelCells({
 			onChange={(precoVenda) => accessors.updatePrice(key, precoVenda)}
 		/>
 	);
-	const status = <MatrixStatusCell node={node} channel={channel} catalogoModo={column.catalogoModo} link={link} />;
+	const merchantLinks = channel.refExterno ? accessors.merchantLinks.get(channel.refExterno) : undefined;
+	const status = (
+		<div className="flex min-w-0 items-center justify-center gap-0.5">
+			<MatrixStatusCell node={node} channel={channel} catalogoModo={column.catalogoModo} link={link} />
+			{channel.canal === "IFOOD" && channel.refExterno ? (
+				<IfoodNodeMenu
+					merchantId={channel.refExterno}
+					merchantLabel={column.label}
+					product={row.product}
+					variant={row.variant}
+					link={link}
+					linkedItemIds={merchantLinks?.linkedItemIds ?? EMPTY_SET}
+					productHasLink={merchantLinks?.linkedProductIds.has(row.product.id) ?? false}
+				/>
+			) : null}
+		</div>
+	);
 
 	if (layout === "desktop") {
 		return (
@@ -239,6 +263,7 @@ export default function ChannelMatrixTable({ produtos, columns, focusedColumn, a
 								label={column.label}
 								catalogoModo={column.catalogoModo}
 								linkedCount={column.linkedCount}
+								divergentCount={column.divergentCount}
 								onCatalogModeChange={(catalogoModo) => accessors.setChannelCatalogMode(column.channel.id, catalogoModo)}
 							/>
 						</div>

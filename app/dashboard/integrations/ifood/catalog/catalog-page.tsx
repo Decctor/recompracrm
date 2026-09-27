@@ -9,13 +9,14 @@ import type { TAuthUserSession } from "@/lib/authentication/types";
 import { getErrorMessage } from "@/lib/errors";
 import { canManageIntegrations } from "@/lib/integrations/mask";
 import { deleteIfoodCategory, upgradeIfoodCatalog } from "@/lib/mutations/ifood";
+import { type TCatalogLink, useCatalogLinks } from "@/lib/queries/catalog-links";
 import { useIfoodCatalogs, useIfoodCategories, useIfoodMerchants } from "@/lib/queries/ifood";
 import { useIfoodCatalogEditor } from "@/state-hooks/use-ifood-catalog-editor";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, BookOpen, Plus, Store, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { IfoodSectionEmpty } from "../_module/shared/IfoodSectionEmpty";
 import { IfoodSectionLoading } from "../_module/shared/IfoodSectionLoading";
@@ -52,6 +53,17 @@ export default function IfoodCatalogPage({ membership, initialMerchantId }: Ifoo
 			router.replace(`/dashboard/integrations/ifood/catalog?merchantId=${merchantId}`);
 		}
 	}, [merchantId, initialMerchantId, router]);
+
+	// Vínculos com o cadastro interno: a tabela mostra a que produto cada item está preso. Os
+	// DESVINCULADO saem — um item solto não é "vinculado a" nada.
+	const linksQuery = useCatalogLinks({ merchantId });
+	const linksByItemId = useMemo(() => {
+		const map = new Map<string, TCatalogLink>();
+		for (const link of linksQuery.data ?? []) {
+			if (link.externoItemId && link.status !== "DESVINCULADO") map.set(link.externoItemId, link);
+		}
+		return map;
+	}, [linksQuery.data]);
 
 	const catalogsQuery = useIfoodCatalogs({ merchantId });
 	const catalogos = catalogsQuery.data?.catalogos ?? [];
@@ -274,6 +286,7 @@ export default function IfoodCatalogPage({ membership, initialMerchantId }: Ifoo
 												category={categoria}
 												canManage={canManage}
 												editor={editor}
+												linksByItemId={linksByItemId}
 												onAddProduct={() => {
 													setNewProductCategoryId(categoria.id);
 													setNewProductIsOpen(true);

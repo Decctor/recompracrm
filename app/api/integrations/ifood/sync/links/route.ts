@@ -1,6 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
-import { requireERPSession } from "@/lib/authentication/erp-session";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { requireIntegrationManageSession, requireIntegrationViewSession } from "@/lib/integrations/ifood/sync/guards";
 import { resolveIfoodManagementContext } from "@/lib/integrations/ifood/context";
 import { listCatalogLinks, unlinkCatalogLink, updateCatalogLinkPolicy, upsertCatalogLink } from "@/lib/integrations/ifood/sync/links";
 import { ensureIfoodSalesChannel } from "@/lib/products/sales-channels-store";
@@ -83,7 +83,7 @@ async function deleteCatalogLink({ orgId, linkId }: { orgId: string; linkId: str
 export type TDeleteCatalogLinkOutput = Awaited<ReturnType<typeof deleteCatalogLink>>;
 
 async function getCatalogLinksRoute(request: NextRequest) {
-	const session = requireERPSession(await getCurrentSessionUncached());
+	const session = requireIntegrationViewSession(await getCurrentSessionUncached());
 	const orgId = session.membership!.organizacao.id;
 
 	const input = GetCatalogLinksInputSchema.parse({
@@ -95,7 +95,7 @@ async function getCatalogLinksRoute(request: NextRequest) {
 }
 
 async function createCatalogLinkRoute(request: NextRequest) {
-	const session = requireERPSession(await getCurrentSessionUncached());
+	const session = requireIntegrationManageSession(await getCurrentSessionUncached());
 	const orgId = session.membership!.organizacao.id;
 
 	const input = CreateCatalogLinkInputSchema.parse(await request.json());
@@ -104,7 +104,7 @@ async function createCatalogLinkRoute(request: NextRequest) {
 }
 
 async function updateCatalogLinkRoute(request: NextRequest) {
-	const session = requireERPSession(await getCurrentSessionUncached());
+	const session = requireIntegrationManageSession(await getCurrentSessionUncached());
 	const orgId = session.membership!.organizacao.id;
 
 	const input = UpdateCatalogLinkInputSchema.parse(await request.json());
@@ -113,7 +113,7 @@ async function updateCatalogLinkRoute(request: NextRequest) {
 }
 
 async function deleteCatalogLinkRoute(request: NextRequest) {
-	const session = requireERPSession(await getCurrentSessionUncached());
+	const session = requireIntegrationManageSession(await getCurrentSessionUncached());
 	const orgId = session.membership!.organizacao.id;
 
 	const input = DeleteCatalogLinkInputSchema.parse({ linkId: request.nextUrl.searchParams.get("linkId") });

@@ -5,15 +5,20 @@ import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuGroup,
+	DropdownMenuItem,
 	DropdownMenuLabel,
 	DropdownMenuRadioGroup,
 	DropdownMenuRadioItem,
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { getErrorMessage } from "@/lib/errors";
+import { reconcileIfoodMerchant } from "@/lib/mutations/catalog-links";
 import type { TSalesChannelMatrixChannel } from "@/lib/queries/sales-channels";
 import type { TSalesChannelCatalogModeEnum } from "@/schemas/enums";
-import { Settings2 } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { RefreshCw, Settings2 } from "lucide-react";
+import { toast } from "sonner";
 
 const CATALOG_MODES: { value: TSalesChannelCatalogModeEnum; title: string; description: string }[] = [
 	{
@@ -38,6 +43,7 @@ export default function ChannelHeaderMenu({
 	label,
 	catalogoModo,
 	linkedCount,
+	divergentCount,
 	onCatalogModeChange,
 }: {
 	channel: TSalesChannelMatrixChannel;
@@ -45,14 +51,27 @@ export default function ChannelHeaderMenu({
 	catalogoModo: TSalesChannelCatalogModeEnum;
 	/** Nós vinculados a itens do iFood neste merchant; só faz sentido para o canal IFOOD. */
 	linkedCount: number;
+	/** Vínculos DIVERGENTE ou ERRO neste merchant. */
+	divergentCount: number;
 	onCatalogModeChange: (catalogoModo: TSalesChannelCatalogModeEnum) => void;
 }) {
 	const isIfood = channel.canal === "IFOOD";
-	const modeLabel = isIfood
-		? `${linkedCount} ${linkedCount === 1 ? "vínculo" : "vínculos"}`
-		: catalogoModo === "TODOS"
-			? "todos por padrão"
-			: "só selecionados";
+	const linksLabel = `${linkedCount} ${linkedCount === 1 ? "vínculo" : "vínculos"}${divergentCount > 0 ? ` · ${divergentCount} com pendência` : ""}`;
+	const modeLabel = isIfood ? linksLabel : catalogoModo === "TODOS" ? "todos por padrão" : "só selecionados";
+
+	const queryClient = useQueryClient();
+	// Reconciliar lê o catálogo remoto inteiro e marca cada vínculo como sincronizado/divergente;
+	// não empurra nada — quem decide o que fazer com a divergência é o usuário, no vínculo.
+	const reconcile = useMutation({
+		mutationKey: ["reconcile-ifood-merchant", channel.refExterno],
+		mutationFn: () => reconcileIfoodMerchant({ merchantId: channel.refExterno as string }),
+		onSuccess: (data) => toast.success(data.message),
+		onError: (error) => toast.error(getErrorMessage(error)),
+		onSettled: () => {
+			queryClient.invalidateQueries({ queryKey: ["sales-channel-matrix"] });
+			queryClient.invalidateQueries({ queryKey: ["catalog-links", channel.refExterno] });
+		},
+	});
 
 	return (
 		<div className="flex min-w-0 items-center justify-between gap-2 px-1">
@@ -76,8 +95,16 @@ export default function ChannelHeaderMenu({
 							<DropdownMenuLabel>Cardápio do iFood</DropdownMenuLabel>
 							<p className="px-3 pb-2 text-xs normal-case tracking-normal text-muted-foreground">
 								O que aparece no iFood é o que está vinculado a um item de lá. Disponibilidade e preço definidos aqui são enviados ao iFood pelo vínculo; sem
-								vínculo, ficam como estado desejado.
+								vínculo, ficam como estado desejado. Use o menu de cada linha para vincular ou publicar.
 							</p>
+							<DropdownMenuSeparator />
+							<DropdownMenuItem disabled={reconcile.isPending || !channel.refExterno} onClick={() => reconcile.mutate()}>
+								<RefreshCw className={reconcile.isPending ? "animate-spin" : undefined} />
+								<span className="flex flex-col gap-0.5">
+									<span className="text-sm font-medium normal-case tracking-normal">Reconciliar agora</span>
+									<span className="text-xs normal-case tracking-normal text-muted-foreground">Compara cada vínculo com o iFood e marca divergências.</span>
+								</span>
+							</DropdownMenuItem>
 						</DropdownMenuGroup>
 					) : (
 						<>

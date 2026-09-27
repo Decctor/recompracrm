@@ -21,7 +21,7 @@ import { AlertCircle, Search } from "lucide-react";
 import { parseAsString, useQueryState } from "nuqs";
 import { useMemo, useState } from "react";
 import ChannelMatrixGroupPanel from "./ChannelMatrixGroupPanel";
-import { type TMatrixCellAccessors, type TMatrixChannelColumn, matrixLinkKey } from "./ChannelMatrixTable";
+import { type TMatrixCellAccessors, type TMatrixChannelColumn, type TMatrixMerchantLinks, matrixLinkKey } from "./ChannelMatrixTable";
 
 /**
  * Aba "Canais" de Produtos: o cardápio de todos os canais numa grade só. Ver
@@ -111,6 +111,17 @@ function ChannelMatrixEditor({ matrix }: { matrix: TSalesChannelMatrix }) {
 		return map;
 	}, [matrix.links]);
 
+	const merchantLinks = useMemo(() => {
+		const map = new Map<string, TMatrixMerchantLinks>();
+		for (const link of matrix.links) {
+			const entry = map.get(link.merchantId) ?? { linkedItemIds: new Set<string>(), linkedProductIds: new Set<string>() };
+			if (link.externoItemId) entry.linkedItemIds.add(link.externoItemId);
+			if (link.produtoId) entry.linkedProductIds.add(link.produtoId);
+			map.set(link.merchantId, entry);
+		}
+		return map;
+	}, [matrix.links]);
+
 	const columns: TMatrixChannelColumn[] = useMemo(
 		() =>
 			channels
@@ -120,6 +131,9 @@ function ChannelMatrixEditor({ matrix }: { matrix: TSalesChannelMatrix }) {
 					label: salesChannelLabel(channel, merchantNames),
 					catalogoModo: editor.state.channels.get(channel.id)?.catalogoModo ?? channel.catalogoModo,
 					linkedCount: channel.refExterno ? matrix.links.filter((link) => link.merchantId === channel.refExterno).length : 0,
+					divergentCount: channel.refExterno
+						? matrix.links.filter((link) => link.merchantId === channel.refExterno && (link.status === "DIVERGENTE" || link.status === "ERRO")).length
+						: 0,
 				})),
 		[channels, editor.state.channels, hiddenChannelIds, matrix.links, merchantNames],
 	);
@@ -137,6 +151,7 @@ function ChannelMatrixEditor({ matrix }: { matrix: TSalesChannelMatrix }) {
 	const accessors: TMatrixCellAccessors = {
 		cells: editor.state.cells,
 		links,
+		merchantLinks,
 		cycleAvailability: editor.cycleAvailability,
 		updatePrice: editor.updatePrice,
 		setChannelCatalogMode: editor.setChannelCatalogMode,
