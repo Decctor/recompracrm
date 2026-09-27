@@ -1,6 +1,6 @@
 import type { TCampaignTriggerTypeEnum } from "@/schemas/enums";
 
-export const BUILDER_CATEGORY_IDS = ["EVENT", "SCHEDULE", "RFM"] as const;
+export const BUILDER_CATEGORY_IDS = ["EVENT", "SCHEDULE", "RFM", "SURVEY"] as const;
 export type TBuilderCategoryId = (typeof BUILDER_CATEGORY_IDS)[number];
 
 export type TBuilderCategory = {
@@ -44,6 +44,14 @@ export const BUILDER_CATEGORIES: TBuilderCategory[] = [
 		description:
 			"As segmentações são o gatilho: a campanha dispara quando um cliente entra ou permanece em uma das segmentações escolhidas.",
 		triggers: ["ENTRADA-SEGMENTAÇÃO", "PERMANÊNCIA-SEGMENTAÇÃO"],
+	},
+	{
+		id: "SURVEY",
+		label: "Pesquisas",
+		tagline: "Pergunte e segmente pela resposta",
+		description:
+			"Envia uma pergunta com botões de resposta. Cada toque do cliente vira um campo personalizado, pronto para filtrar públicos depois.",
+		triggers: ["PESQUISA"],
 	},
 ];
 

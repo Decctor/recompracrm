@@ -2,7 +2,12 @@ import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { CAMPAIGN_SENT_INTERACTION_STATUSES } from "@/lib/campaigns/utils";
-import { getOrganizationWeeklyCampaignLimit, validateCampaignWeeklyLimit, validateProductPromotionCampaign } from "@/lib/campaigns/validation";
+import {
+	getOrganizationWeeklyCampaignLimit,
+	validateCampaignWeeklyLimit,
+	validateProductPromotionCampaign,
+	validateSurveyCampaign,
+} from "@/lib/campaigns/validation";
 import { assertCouponCoherence, insertCouponWithinTransaction } from "@/lib/coupons/creation";
 import { handleSimpleChildRowsProcessing } from "@/lib/db-utils";
 import { validateTemplateForTrigger } from "@/lib/message-templates";
@@ -48,7 +53,7 @@ function validateRecurrentCampaign(campaign: z.infer<typeof CampaignSchema>) {
 
 function validateCampaignFrequencyInterval(campaign: z.infer<typeof CampaignSchema>) {
 	// Campanhas de disparo único não têm intervalo de recorrência a respeitar.
-	if (campaign.gatilhoTipo === "USO-UNICO" || campaign.gatilhoTipo === "PROMOCAO-PRODUTOS") return;
+	if (campaign.gatilhoTipo === "USO-UNICO" || campaign.gatilhoTipo === "PROMOCAO-PRODUTOS" || campaign.gatilhoTipo === "PESQUISA") return;
 	if (!campaign.permitirRecorrencia) return;
 
 	if (!campaign.frequenciaIntervaloMedida || !campaign.frequenciaIntervaloValor || campaign.frequenciaIntervaloValor <= 0) {
@@ -151,6 +156,7 @@ export async function validateCampaignConfiguration({
 	// Mesma checagem que createCampaign/updateCampaign fazem: sem ela o dry-run de
 	// `validate_campaign_draft` aprovaria uma promoção que a criação depois recusa.
 	await validateProductPromotionCampaign(campaign, organizationId);
+	await validateSurveyCampaign(campaign, organizationId);
 	await validateCampaignTemplateTriggerCompatibility(campaign.whatsappTemplateId, campaign.gatilhoTipo, organizationId);
 	validateCampaignWeeklyLimit({
 		campaignWeeklyLimit: campaign.limiteEnviosSemanais,
@@ -230,6 +236,7 @@ export async function createCampaign({
 	validateExecutionDelayDirection(input.campaign as z.infer<typeof CampaignSchema>);
 
 	await validateProductPromotionCampaign(input.campaign as z.infer<typeof CampaignSchema>, userOrgId);
+	await validateSurveyCampaign(input.campaign as z.infer<typeof CampaignSchema>, userOrgId);
 
 	// Validate template-trigger compatibility
 	await validateCampaignTemplateTriggerCompatibility(input.campaign.whatsappTemplateId, input.campaign.gatilhoTipo, userOrgId);
@@ -396,6 +403,9 @@ async function getCampaigns({ input, session }: { input: TGetCampaignsInput; ses
 						nome: true,
 						conteudo: true,
 					},
+				},
+				pesquisaCampo: {
+					columns: { id: true, titulo: true, tipo: true, opcoes: true, ativo: true },
 				},
 				whatsappConexaoTelefone: {
 					columns: {
@@ -608,6 +618,7 @@ export async function updateCampaign({ input, organizationId: userOrgId }: { inp
 	validateExecutionDelayDirection(input.campaign as z.infer<typeof CampaignSchema>);
 
 	await validateProductPromotionCampaign(input.campaign as z.infer<typeof CampaignSchema>, userOrgId);
+	await validateSurveyCampaign(input.campaign as z.infer<typeof CampaignSchema>, userOrgId);
 
 	// Validate template-trigger compatibility
 	await validateCampaignTemplateTriggerCompatibility(input.campaign.whatsappTemplateId, input.campaign.gatilhoTipo, userOrgId);

@@ -6,6 +6,7 @@ import {
 	Cake,
 	Coins,
 	Hourglass,
+	ListChecks,
 	Receipt,
 	RefreshCcw,
 	ShoppingCart,
@@ -89,6 +90,12 @@ export const TRIGGER_META: Record<TCampaignTriggerTypeEnum, TTriggerMeta> = {
 		label: "Promoção de produtos",
 		description: "Divulga uma lista de produtos numa data única — cada cliente recebe o produto com mais chance de recompra.",
 		icon: BadgePercent,
+	},
+	PESQUISA: {
+		value: "PESQUISA",
+		label: "Pesquisa",
+		description: "Envia uma pergunta com botões numa data única — cada toque grava a resposta num campo personalizado do cliente.",
+		icon: ListChecks,
 	},
 	"ENTRADA-SEGMENTAÇÃO": {
 		value: "ENTRADA-SEGMENTAÇÃO",

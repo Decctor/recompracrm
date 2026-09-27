@@ -121,6 +121,7 @@ export function MessageTemplateContentSection({
 	updateTemplateContentBodyParameter,
 	addContentButton,
 	addContentPresetButton,
+	appendContentButtons,
 	updateContentButton,
 	removeContentButton,
 }: {
@@ -133,6 +134,7 @@ export function MessageTemplateContentSection({
 	updateTemplateContentBodyParameter: TUseMessageTemplateState["updateTemplateContentBodyParameter"];
 	addContentButton: TUseMessageTemplateState["addContentButton"];
 	addContentPresetButton: TUseMessageTemplateState["addContentPresetButton"];
+	appendContentButtons: TUseMessageTemplateState["appendContentButtons"];
 	updateContentButton: TUseMessageTemplateState["updateContentButton"];
 	removeContentButton: TUseMessageTemplateState["removeContentButton"];
 }) {
@@ -166,6 +168,7 @@ export function MessageTemplateContentSection({
 				buttons={state.messageTemplate.conteudo.botoes}
 				addContentButton={addContentButton}
 				addContentPresetButton={addContentPresetButton}
+				appendContentButtons={appendContentButtons}
 				updateContentButton={updateContentButton}
 				removeContentButton={removeContentButton}
 			/>

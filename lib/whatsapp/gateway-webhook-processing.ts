@@ -1,4 +1,5 @@
 import { ensureOrganizationAgent } from "@/lib/ai/agent/provisioning";
+import { captureSurveyReplySafely } from "@/lib/campaigns/surveys/capture";
 import { resolveAiResponseDelayMs } from "@/lib/chats/ai-trigger";
 import { dispatchAiTurn } from "@/lib/chats/ai-turn-dispatch";
 import { processChatMessageMedia } from "@/lib/chats/media-processing";
@@ -258,6 +259,25 @@ async function handleIncomingMessage(body: Extract<TGatewayWebhookBody, { event:
 	if (resolvedClient.isNew) console.log("[INTERNAL_WHATSAPP_WEBHOOK] New client created:", resolvedClient.clientId);
 	const clientId = resolvedClient.clientId;
 
+	// Ainda no estágio 1: o gateway não devolve o id do botão, só o texto — a captura casa o rótulo
+	// com o último envio de pesquisa ao cliente (fallback TEXTO), antes do gate do hub.
+	const incomingText = data.content.text?.trim() ?? "";
+	const surveyReply =
+		incomingText && !data.content.mediaUrl
+			? await captureSurveyReplySafely(
+					{
+						organizacaoId,
+						clienteId: clientId,
+						whatsappMessageId: data.whatsappMessageId,
+						buttonText: incomingText,
+						buttonPayload: null,
+						quotedWhatsappMessageId: null,
+						date: data.date ? new Date(data.date) : new Date(),
+					},
+					"[INTERNAL_WHATSAPP_WEBHOOK]",
+				)
+			: ({ captured: false } as const);
+
 	// ESTÁGIO 2 — CONVERSA (gate do hub).
 	const hasHubAccess = connection.organizacao?.configuracao?.recursos?.hubAtendimentos?.acesso ?? false;
 	if (!hasHubAccess) {
@@ -324,7 +344,12 @@ async function handleIncomingMessage(body: Extract<TGatewayWebhookBody, { event:
 		conteudoTexto: data.content.text || null,
 		conteudoMidiaTipo: midiaTipo,
 		midia: mediaData ? { ...mediaData, fileSize: mediaData.fileSize ?? data.content.mediaSize, whatsappMediaId: data.content.mediaId } : null,
-		metadados: { gatewayInterno: { sessaoId: sessionId } },
+		metadados: {
+			gatewayInterno: { sessaoId: sessionId },
+			...(surveyReply.captured
+				? { pesquisaResposta: { campanhaId: surveyReply.campanhaId, campoId: surveyReply.campoId, opcaoValor: surveyReply.opcaoValor, opcaoTitulo: surveyReply.opcaoTitulo } }
+				: {}),
+		},
 	});
 
 	// Reentrega do gateway: a mensagem já existe e todo o downstream já rodou na primeira entrega.
@@ -347,6 +372,9 @@ async function handleIncomingMessage(body: Extract<TGatewayWebhookBody, { event:
 	}
 
 	if (!allowsAIService) return;
+
+	// O cliente respondeu a uma pergunta, não abriu uma conversa: sem turno do agente.
+	if (surveyReply.captured) return;
 
 	// Capability de plano. Antes só `hubAtendimentos.acesso` era checado, e o atendimento por
 	// IA rodava para qualquer organização com um número habilitado.

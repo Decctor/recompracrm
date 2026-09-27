@@ -31,6 +31,7 @@ export function MessageTemplateComposer({
 		updateTemplateContentBodyParameter,
 		addContentButton,
 		addContentPresetButton,
+		appendContentButtons,
 		updateContentButton,
 		removeContentButton,
 		unknownVariables,
@@ -69,6 +70,7 @@ export function MessageTemplateComposer({
 					updateTemplateContentBodyParameter={updateTemplateContentBodyParameter}
 					addContentButton={addContentButton}
 					addContentPresetButton={addContentPresetButton}
+					appendContentButtons={appendContentButtons}
 					updateContentButton={updateContentButton}
 					removeContentButton={removeContentButton}
 				/>

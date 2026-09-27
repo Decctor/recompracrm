@@ -110,7 +110,7 @@ type GatewayTemplatePayload = {
 
 export function parseTemplatePayloadToGatewayContent(
 	templatePayload: GatewayTemplatePayload,
-	options?: { fallbackText?: string },
+	options?: { fallbackText?: string; buttons?: SendMessageButton[] },
 ): SendMessageContent {
 	const components = templatePayload.template.components ?? [];
 	let media:
@@ -164,6 +164,8 @@ export function parseTemplatePayloadToGatewayContent(
 	return {
 		type: "text",
 		text,
+		// Botões de pesquisa (quick reply com payload como id). Mídia não aceita botões no gateway.
+		...(options?.buttons && options.buttons.length > 0 ? { buttons: options.buttons } : {}),
 	};
 }
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { useSurveyCustomFields } from "@/components/MessageTemplates/SurveyButtonEditor";
 import { formatToMoney } from "@/lib/formatting";
 import { CircleCheck, CircleDashed, ListChecks } from "lucide-react";
 import type { ReactNode } from "react";
@@ -38,6 +39,8 @@ export default function StageReview({ validation, finalLoading, onSubmit }: Stag
 	const trigger = getTriggerMeta(campaign.gatilhoTipo);
 	const activeSegmentations = state.segmentations.filter((item) => !item.deletar);
 	const filterCount = state.filtros.itens.length;
+	const { fields: surveyFields } = useSurveyCustomFields();
+	const surveyField = campaign.gatilhoTipo === "PESQUISA" ? (surveyFields.find((field) => field.id === campaign.gatilhoPesquisaCampoId) ?? null) : null;
 
 	return (
 		<StageShell>
@@ -63,6 +66,18 @@ export default function StageReview({ validation, finalLoading, onSubmit }: Stag
 					</ReviewItem>
 					<ReviewItem label="Categoria">{category?.label ?? "Não definida"}</ReviewItem>
 					<ReviewItem label="Gatilho">{trigger?.label ?? campaign.gatilhoTipo}</ReviewItem>
+					{campaign.gatilhoTipo === "PESQUISA" ? (
+						<ReviewItem label="Pesquisa">
+							<div className="flex flex-col gap-1">
+								<span>{surveyField ? surveyField.titulo : "Campo da pergunta não definido"}</span>
+								<span className="text-xs font-normal text-muted-foreground">
+									{surveyField
+										? `${(surveyField.opcoes ?? []).length} opções: ${(surveyField.opcoes ?? []).map((option) => option.titulo).join(", ")}`
+										: "Volte à etapa de Gatilho para escolher o campo."}
+								</span>
+							</div>
+						</ReviewItem>
+					) : null}
 					<ReviewItem label="Envio">
 						<div className="flex flex-col gap-1">
 							<span>Bloco {campaign.execucaoAgendadaBloco ?? "não definido"}</span>

@@ -12,14 +12,17 @@ import type {
 	TCampaignFiltersTree,
 	TCampaignLocationFilterConfig,
 	TCampaignTopBuyersProductFilterConfig,
+	TCampaignCustomFieldFilterConfig,
 } from "@/schemas/campaigns";
 import type { TUseCampaignState } from "@/state-hooks/use-campaign-state";
-import { Building2, Crown, Filter, FolderPlus, MapPin, MapPinned, Pencil, Plus, Trash2 } from "lucide-react";
+import { Building2, Crown, Filter, FolderPlus, MapPin, MapPinned, Pencil, Plus, Trash2, ListChecks } from "lucide-react";
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { normalizeFiltersForSubmit } from "../utils";
 import LocationEditor from "./FilterEditors/LocationEditor";
 import TopBuyersProductEditor from "./FilterEditors/TopBuyersProductEditor";
+import CustomFieldEditor, { CUSTOM_FIELD_FILTER_OPERATOR_LABELS } from "./FilterEditors/CustomFieldEditor";
+import { useCustomFieldById } from "@/lib/queries/custom-fields";
 import { AnimatedSpinner } from "@/components/icons";
 
 type CampaignsFiltersBlockProps = {
@@ -53,7 +56,14 @@ type TopBuyersEditorState = {
 	initialValue?: TCampaignTopBuyersProductFilterConfig;
 	conditionId?: string;
 };
-type EditorState = LocationEditorState | TopBuyersEditorState | null;
+type CustomFieldEditorState = {
+	kind: "customField";
+	mode: "add" | "edit";
+	targetPath: number[];
+	initialValue?: TCampaignCustomFieldFilterConfig;
+	conditionId?: string;
+};
+type EditorState = LocationEditorState | TopBuyersEditorState | CustomFieldEditorState | null;
 
 export default function CampaignsFiltersBlock({
 	filtros,
@@ -82,6 +92,9 @@ export default function CampaignsFiltersBlock({
 	function openTopBuyersAddAt(path: number[]) {
 		setEditor({ kind: "topBuyers", mode: "add", targetPath: path });
 	}
+	function openCustomFieldAddAt(path: number[]) {
+		setEditor({ kind: "customField", mode: "add", targetPath: path });
+	}
 	function openEdit(path: number[], condicao: TCampaignFilterCondition) {
 		if (condicao.tipo === "LOCALIZAÇÃO") {
 			setEditor({
@@ -91,6 +104,8 @@ export default function CampaignsFiltersBlock({
 				initialValue: condicao.configuracao,
 				conditionId: condicao.id,
 			});
+		} else if (condicao.tipo === "CAMPO_PERSONALIZADO") {
+			setEditor({ kind: "customField", mode: "edit", targetPath: path, initialValue: condicao.configuracao, conditionId: condicao.id });
 		} else {
 			setEditor({
 				kind: "topBuyers",
@@ -123,6 +138,17 @@ export default function CampaignsFiltersBlock({
 		else updateFilterCondition(editor.targetPath, condicao);
 	}
 
+	function handleCustomFieldConfirm(config: TCampaignCustomFieldFilterConfig) {
+		if (!editor || editor.kind !== "customField") return;
+		const condicao: TCampaignFilterCondition = {
+			tipo: "CAMPO_PERSONALIZADO",
+			configuracao: config,
+			...(editor.conditionId ? { id: editor.conditionId } : {}),
+		};
+		if (editor.mode === "add") addFilterCondition(editor.targetPath, condicao);
+		else updateFilterCondition(editor.targetPath, condicao);
+	}
+
 	const rootIsFullNot = filtros.operador === "NOT" && filtros.itens.length >= 1;
 
 	return (
@@ -141,6 +167,7 @@ export default function CampaignsFiltersBlock({
 				onEditCondition={openEdit}
 				onOpenLocationAdd={openLocationAddAt}
 				onOpenTopBuyersAdd={openTopBuyersAddAt}
+				onOpenCustomFieldAdd={openCustomFieldAddAt}
 			/>
 
 			<div className="flex w-full flex-wrap items-center gap-2 border-t border-border pt-3">
@@ -167,6 +194,12 @@ export default function CampaignsFiltersBlock({
 					label="ADICIONAR TOP COMPRADORES DE PRODUTO"
 					disabled={rootIsFullNot}
 					onClick={() => openTopBuyersAddAt([])}
+				/>
+				<FastAddButton
+					icon={<ListChecks className="h-3.5 w-3.5" />}
+					label="ADICIONAR CAMPO PERSONALIZADO"
+					disabled={rootIsFullNot}
+					onClick={() => openCustomFieldAddAt([])}
 				/>
 				{/* <FastAddButton
 					icon={<FolderPlus className="h-3.5 w-3.5" />}
@@ -201,6 +234,9 @@ export default function CampaignsFiltersBlock({
 			) : null}
 			{editor?.kind === "topBuyers" ? (
 				<TopBuyersProductEditor initialValue={editor.initialValue} onConfirm={handleTopBuyersConfirm} closeModal={() => setEditor(null)} />
+			) : null}
+			{editor?.kind === "customField" ? (
+				<CustomFieldEditor initialValue={editor.initialValue} onConfirm={handleCustomFieldConfirm} closeModal={() => setEditor(null)} />
 			) : null}
 		</ResponsiveMenuSection>
 	);
@@ -261,6 +297,7 @@ type FilterGroupBodyProps = {
 	onEditCondition: (path: number[], condicao: TCampaignFilterCondition) => void;
 	onOpenLocationAdd: (path: number[], focusLevel: "estados" | "cidades" | "bairros") => void;
 	onOpenTopBuyersAdd: (path: number[]) => void;
+	onOpenCustomFieldAdd: (path: number[]) => void;
 };
 function FilterGroupBody({
 	node,
@@ -272,6 +309,7 @@ function FilterGroupBody({
 	onEditCondition,
 	onOpenLocationAdd,
 	onOpenTopBuyersAdd,
+	onOpenCustomFieldAdd,
 }: FilterGroupBodyProps) {
 	if (isRoot && node.itens.length === 0) {
 		return (
@@ -308,6 +346,7 @@ function FilterGroupBody({
 							onEditCondition={onEditCondition}
 							onOpenLocationAdd={onOpenLocationAdd}
 							onOpenTopBuyersAdd={onOpenTopBuyersAdd}
+							onOpenCustomFieldAdd={onOpenCustomFieldAdd}
 						/>
 					);
 				}
@@ -334,6 +373,12 @@ function FilterGroupBody({
 						label="TOP COMPRADORES"
 						disabled={groupIsFullNot}
 						onClick={() => onOpenTopBuyersAdd(path)}
+					/>
+					<FastAddButton
+						icon={<ListChecks className="h-3.5 w-3.5" />}
+						label="CAMPO"
+						disabled={groupIsFullNot}
+						onClick={() => onOpenCustomFieldAdd(path)}
 					/>
 					<FastAddButton
 						icon={<FolderPlus className="h-3.5 w-3.5" />}
@@ -400,6 +445,8 @@ function FilterConditionCard({ condicao, onEdit, onRemove }: { condicao: TCampai
 			<div className="flex min-w-0 flex-1 items-start gap-2">
 				{condicao.tipo === "LOCALIZAÇÃO" ? (
 					<MapPin className="h-4 min-h-4 w-4 min-w-4 text-foreground/70" />
+				) : condicao.tipo === "CAMPO_PERSONALIZADO" ? (
+					<ListChecks className="h-4 min-h-4 w-4 min-w-4 text-foreground/70" />
 				) : (
 					<Crown className="h-4 min-h-4 w-4 min-w-4 text-foreground/70" />
 				)}
@@ -436,11 +483,33 @@ function ConditionSummary({ condicao }: { condicao: TCampaignFilterCondition }) 
 			</div>
 		);
 	}
+	if (condicao.tipo === "CAMPO_PERSONALIZADO") {
+		return (
+			<div className="flex min-w-0 flex-col">
+				<span className="text-xs font-semibold uppercase tracking-wide text-foreground/80">Campo personalizado</span>
+				<CustomFieldDetails condicao={condicao} />
+			</div>
+		);
+	}
 	return (
 		<div className="flex min-w-0 flex-col">
 			<span className="text-xs font-semibold uppercase tracking-wide text-foreground/80">Top compradores de produto</span>
 			<TopBuyersDetails condicao={condicao} />
 		</div>
+	);
+}
+
+function CustomFieldDetails({ condicao }: { condicao: Extract<TCampaignFilterCondition, { tipo: "CAMPO_PERSONALIZADO" }> }) {
+	const { campoId, operador, valores } = condicao.configuracao;
+	const { data: field, isLoading } = useCustomFieldById({ fieldId: campoId });
+	const titlesByValue = new Map((field?.opcoes ?? []).map((option) => [option.valor, option.titulo]));
+	const usesValues = operador === "IGUAL" || operador === "DIFERENTE";
+	return (
+		<span className="truncate text-sm">
+			<strong>{isLoading ? "carregando..." : (field?.titulo ?? "campo não encontrado")}</strong>{" "}
+			<span className="text-muted-foreground">{CUSTOM_FIELD_FILTER_OPERATOR_LABELS[operador].toLowerCase()}</span>
+			{usesValues ? <> {valores.map((valor) => titlesByValue.get(valor) ?? valor).join(", ")}</> : null}
+		</span>
 	);
 }
 

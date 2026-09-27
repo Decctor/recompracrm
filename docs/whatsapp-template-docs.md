@@ -358,3 +358,39 @@ Exemplo de resposta:
   "message_template_namespace": "ba30dd89_2ebd_41e4_b805_f2c05ae04cc9",
   "id": "102290129340398"
 }
+
+---
+
+## Payload em botões de resposta rápida (envio)
+
+No envio de um template, cada botão `QUICK_REPLY` aceita um payload próprio, devolvido intacto quando o
+cliente toca no botão. É o que os botões de pesquisa (`RESPOSTA_PESQUISA`) usam para que a resposta
+chegue sabendo a que envio responde (docs/dev-planning/survey-campaigns-plan.md §5.1).
+
+Componente no payload de envio (`lib/message-templates/channels/whatsapp/send-payload.ts`):
+
+```json
+{
+  "type": "button",
+  "sub_type": "quick_reply",
+  "index": "0",
+  "parameters": [{ "type": "payload", "payload": "psq:<interactionId>:<opcaoValor>" }]
+}
+```
+
+- `index` é a posição do botão no template (0-based), contando todos os botões.
+- O payload tem no máximo 128 caracteres; o nosso fica em ≤105 (`psq:` + uuid + `:` + valor ≤64).
+- Botões `QUICK_REPLY` sem componente no envio voltam com `payload` igual ao texto do botão.
+
+O toque chega no webhook como mensagem `type: "button"`:
+
+```json
+{
+  "type": "button",
+  "button": { "text": "Morango", "payload": "psq:0f3c2a1e-…:MORANGO" },
+  "context": { "from": "5511999999999", "id": "wamid.HBgN…" }
+}
+```
+
+`context.id` é o wamid da mensagem de template respondida — é o fallback da captura quando o payload
+não vem (`lib/campaigns/surveys/capture.ts`).

@@ -150,6 +150,27 @@ export const MessageTemplateContentSchema = z.object({
 					invalid_type_error: "Tipo não válido para o texto do botão.",
 				}),
 			}),
+			// Botão de pesquisa: uma resposta rápida que a plataforma entende. O toque do cliente grava
+			// `opcaoValor` no campo personalizado `campoId` (docs/dev-planning/survey-campaigns-plan.md §2.3).
+			// Para a Meta é um QUICK_REPLY comum; o vínculo com o campo fica só aqui.
+			z.object({
+				tipo: z.literal("RESPOSTA_PESQUISA", {
+					required_error: "Tipo de botão não informado.",
+					invalid_type_error: "Tipo não válido para o tipo de botão.",
+				}),
+				texto: z.string({
+					required_error: "Texto do botão não informado.",
+					invalid_type_error: "Tipo não válido para o texto do botão.",
+				}),
+				campoId: z.string({
+					required_error: "Campo personalizado do botão de pesquisa não informado.",
+					invalid_type_error: "Tipo não válido para o campo personalizado do botão de pesquisa.",
+				}),
+				opcaoValor: z.string({
+					required_error: "Opção do botão de pesquisa não informada.",
+					invalid_type_error: "Tipo não válido para a opção do botão de pesquisa.",
+				}),
+			}),
 			z.object({
 				tipo: z.literal("TELEFONE", {
 					required_error: "Tipo de botão não informado.",

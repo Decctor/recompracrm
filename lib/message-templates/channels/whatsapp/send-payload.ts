@@ -1,4 +1,5 @@
 import type { TMessageTemplateContent } from "@/schemas/message-templates";
+import { buildSurveyReplyPayload } from "@/lib/campaigns/surveys/payload";
 import { getMessageTemplateButtonPreset } from "../../buttons/presets";
 import { formatPhoneAsWhatsappId, sanitizeMessageTemplateParameter } from "../../formatting";
 import type { TMessageTemplateEntityLike, TMessageTemplateRuntimeContext } from "../../types";
@@ -51,6 +52,19 @@ function buildButtonSendComponents(content: TMessageTemplateContent, runtimeCont
 	const components: TWhatsappTemplateSendComponent[] = [];
 
 	for (const [index, button] of content.botoes.entries()) {
+		// Botão de pesquisa: o payload leva a interação e a opção, e volta intacto no toque do cliente.
+		// Sem interação (preview sem envio) o botão sai sem payload e a captura cai no fallback do wamid.
+		if (button.tipo === "RESPOSTA_PESQUISA") {
+			if (!runtimeContext.interactionId) continue;
+			components.push({
+				type: "button",
+				sub_type: "quick_reply",
+				index: String(index),
+				parameters: [{ type: "payload", payload: buildSurveyReplyPayload({ interactionId: runtimeContext.interactionId, opcaoValor: button.opcaoValor }) }],
+			});
+			continue;
+		}
+
 		if (button.tipo !== "URL_PRESET") continue;
 		const preset = getMessageTemplateButtonPreset(button.preset);
 		if (!preset) continue;

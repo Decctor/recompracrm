@@ -16,8 +16,17 @@ export const CampaignTriggerTypeEnum = z.enum([
 	"PIOR-DIA-VENDAS",
 	"USO-UNICO",
 	"PROMOCAO-PRODUTOS",
+	"PESQUISA",
 ]);
 export type TCampaignTriggerTypeEnum = z.infer<typeof CampaignTriggerTypeEnum>;
+// Operadores do filtro de audiência sobre campos personalizados de escolha
+// (docs/dev-planning/survey-campaigns-plan.md §9). IGUAL em ESCOLHA_MULTIPLA = "contém ao menos um".
+export const CustomFieldFilterOperatorEnum = z.enum(["IGUAL", "DIFERENTE", "PREENCHIDO", "NAO_PREENCHIDO"]);
+export type TCustomFieldFilterOperatorEnum = z.infer<typeof CustomFieldFilterOperatorEnum>;
+// Como uma resposta de pesquisa foi correlacionada ao envio: PAYLOAD (Meta, exato), CONTEXTO
+// (wamid citado), TEXTO (gateway interno: rótulo do botão contra o último envio ao cliente).
+export const SurveyReplySourceEnum = z.enum(["PAYLOAD", "CONTEXTO", "TEXTO"]);
+export type TSurveyReplySourceEnum = z.infer<typeof SurveyReplySourceEnum>;
 export const CampaignExecutionDelayDirectionEnum = z.enum(["ANTES", "DEPOIS"]);
 export type TCampaignExecutionDelayDirectionEnum = z.infer<typeof CampaignExecutionDelayDirectionEnum>;
 export const RecurrenceFrequencyEnum = z.enum(["DIARIO", "SEMANAL", "MENSAL"]);

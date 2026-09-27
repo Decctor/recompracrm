@@ -70,7 +70,8 @@ export function buildWhatsappMetaButtonsComponent({ content, origin, organizatio
 	const buttons: TMetaTemplateButton[] = [];
 
 	for (const button of content.botoes) {
-		if (button.tipo === "RESPOSTA RÁPIDA") {
+		// A Meta nunca vê o vínculo campo/opção do botão de pesquisa: para ela é uma resposta rápida.
+		if (button.tipo === "RESPOSTA RÁPIDA" || button.tipo === "RESPOSTA_PESQUISA") {
 			buttons.push({ type: "QUICK_REPLY", text: button.texto });
 			continue;
 		}

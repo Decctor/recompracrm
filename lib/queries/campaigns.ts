@@ -8,6 +8,7 @@ import type { TGetConversionQualityInput, TGetConversionQualityOutput } from "@/
 import type { TGetCampaignFunnelInput, TGetCampaignFunnelOutput } from "@/app/api/campaigns/stats/funnel/route";
 import type { TGetCampaignGraphInput, TGetCampaignGraphOutput } from "@/app/api/campaigns/stats/graph/route";
 import type { TGetCampaignStatsOverallInput, TGetCampaignStatsOverallOutput } from "@/app/api/campaigns/stats/overall/route";
+import type { TGetCampaignSurveyResultsOutput } from "@/app/api/campaigns/surveys/results/route";
 import type { TGetCampaignRankingInput, TGetCampaignRankingOutput } from "@/app/api/campaigns/stats/ranking/route";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
@@ -388,6 +389,23 @@ export function useCampaignDispatches(input: TGetCampaignDispatchesInput) {
 	const queryKey = ["campaign-dispatches", input] as const;
 	return {
 		...useQuery({ queryKey, queryFn: async () => await fetchCampaignDispatches(input), refetchInterval: 30_000 }),
+		queryKey,
+	};
+}
+
+async function fetchCampaignSurveyResults(campaignId: string) {
+	const { data } = await axios.get<TGetCampaignSurveyResultsOutput>(`/api/campaigns/surveys/results?campaignId=${campaignId}`);
+	return data.data;
+}
+
+export function useCampaignSurveyResults({ campaignId, enabled = true }: { campaignId: string; enabled?: boolean }) {
+	const queryKey = ["campaign-survey-results", campaignId] as const;
+	return {
+		...useQuery({
+			queryKey,
+			queryFn: async () => await fetchCampaignSurveyResults(campaignId),
+			enabled,
+		}),
 		queryKey,
 	};
 }

@@ -21,6 +21,8 @@ import {
 	withComputedMessageTemplateStatus,
 } from "@/lib/message-templates";
 import { getOrganizationWhatsappPhoneIds, getOrganizationWhatsappPhones } from "@/lib/whatsapp/organization-phones";
+import { validateSurveyButtons } from "@/lib/message-templates/survey-validation";
+import { assertTemplateButtonsNotFrozen } from "@/lib/message-templates/survey-guards";
 import { createSimplifiedSearchCondition } from "@/lib/search";
 
 // `metadados` é derivado das submissões à Meta e dos webhooks, nunca do cliente: aceitá-lo no payload
@@ -73,6 +75,7 @@ export async function createMessageTemplate({
 }) {
 	const content = normalizeMessageTemplateContentParameters(input.messageTemplate.conteudo);
 	assertMessageTemplateValidForWhatsapp(content);
+	await validateSurveyButtons({ organizationId, content });
 
 	const [insertedTemplate] = await db
 		.insert(messageTemplates)
@@ -180,6 +183,10 @@ export async function updateMessageTemplate({ input, organizationId }: { input: 
 		? normalizeMessageTemplateContentParameters(input.messageTemplate.conteudo)
 		: existingTemplate.conteudo;
 	assertMessageTemplateValidForWhatsapp(content);
+	if (input.messageTemplate.conteudo) {
+		await validateSurveyButtons({ organizationId, content });
+		await assertTemplateButtonsNotFrozen({ organizationId, templateId: existingTemplate.id, currentContent: existingTemplate.conteudo, nextContent: content });
+	}
 	console.log("[UPDATE_MESSAGE_TEMPLATE] Content post-normalization:", JSON.stringify(content, null, 2));
 
 	const updateSet = {

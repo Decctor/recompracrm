@@ -42,6 +42,15 @@ export function getTriggerConfigSummary(campaign: TGetCampaignsOutputById): stri
 			if (withOverride > 0) lines.push(`${withOverride} com preço promocional definido`);
 			break;
 		}
+		case "PESQUISA": {
+			lines.push(
+				campaign.gatilhoPesquisaDataReferencia
+					? `Disparo em ${dayjs(campaign.gatilhoPesquisaDataReferencia).format("DD/MM/YYYY")}`
+					: "Data de disparo não definida",
+			);
+			lines.push(campaign.pesquisaCampo ? `Pergunta: ${campaign.pesquisaCampo.titulo}` : "Campo da pesquisa não definido");
+			break;
+		}
 		case "RECORRENTE": {
 			const freqLabel =
 				RecurrenceFrequencyOptions.find((option) => option.value === campaign.recorrenciaTipo)?.label ?? campaign.recorrenciaTipo ?? "Não definida";

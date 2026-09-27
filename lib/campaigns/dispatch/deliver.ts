@@ -9,6 +9,7 @@ import {
 } from "@/lib/message-templates";
 import { sendTemplateWhatsappMessage } from "@/lib/whatsapp";
 import { parseTemplatePayloadToGatewayContent, sendMessage } from "@/lib/whatsapp/internal-gateway";
+import { buildSurveyGatewayButtons } from "@/lib/campaigns/surveys/payload";
 import { formatPhoneForInternalGateway } from "@/lib/whatsapp/utils";
 import type { TInteractionsStatusEnum } from "@/schemas/interactions";
 import { db } from "@/services/drizzle";
@@ -339,7 +340,10 @@ export async function deliverCampaignMessage(params: TCampaignDeliveryInput): Pr
 					}
 				} else if (whatsappSessionId) {
 					const gatewayPayload = { ...payload, to: formatPhoneForInternalGateway(effectivePhoneNumber) };
-					const templateContent = parseTemplatePayloadToGatewayContent(gatewayPayload, { fallbackText: renderedWhatsappContent });
+					const templateContent = parseTemplatePayloadToGatewayContent(gatewayPayload, {
+						fallbackText: renderedWhatsappContent,
+						buttons: buildSurveyGatewayButtons({ content: campaign.whatsappTemplate.conteudo, interactionId: messageKey }),
+					});
 
 					if (testing?.disableInternalGateway) {
 						jobId = `test-gateway-job-${messageKey}`;

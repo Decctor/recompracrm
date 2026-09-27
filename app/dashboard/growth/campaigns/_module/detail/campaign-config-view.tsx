@@ -9,6 +9,7 @@ import TemplatePreview from "@/components/MessageTemplates/TemplatePreview";
 import { buildOrganizationTemplateTheme } from "@/components/MessageTemplates/message-template-utils";
 import { Button } from "@/components/ui/button";
 import { Section } from "@/components/ui/section";
+import { getSurveyButtons } from "@/lib/message-templates/surveys";
 import { DataList } from "@/components/ui/data-list";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { formatToMoney } from "@/lib/formatting";
@@ -59,6 +60,34 @@ function SegmentationPill({ label }: { label: string }) {
 	);
 }
 
+// Pergunta → respostas como o cliente vê: cada botão do template e a opção que ele grava no campo.
+function SurveyAnswersMapping({
+	content,
+	field,
+}: {
+	content: NonNullable<TGetCampaignsOutputById["whatsappTemplate"]>["conteudo"];
+	field: TGetCampaignsOutputById["pesquisaCampo"];
+}) {
+	const surveyButtons = getSurveyButtons(content);
+	if (surveyButtons.length === 0) return null;
+	const titlesByValue = new Map((field?.opcoes ?? []).map((option) => [option.valor, option.titulo]));
+	return (
+		<div className="flex w-full flex-col gap-1">
+			<h3 className="text-sm font-semibold tracking-tighter text-foreground/80">RESPOSTAS</h3>
+			<ul className="flex flex-col gap-1">
+				{surveyButtons.map((button) => (
+					<li key={button.opcaoValor} className="flex items-center justify-between gap-2 rounded-md border border-border bg-muted/30 px-2.5 py-1.5 text-xs">
+						<span className="font-medium">{button.texto}</span>
+						<span className="text-muted-foreground">
+							grava <strong className="text-foreground">{titlesByValue.get(button.opcaoValor) ?? button.opcaoValor}</strong>
+						</span>
+					</li>
+				))}
+			</ul>
+		</div>
+	);
+}
+
 function EditAction({ onClick }: { onClick: () => void }) {
 	return (
 		<Button variant="ghost" size="xs" onClick={onClick} className="flex items-center gap-1">
@@ -77,7 +106,10 @@ export default function CampaignConfigView({ campaign, sessionUser, sessionUserO
 
 	const activeSegmentations = campaign.segmentacoes ?? [];
 	const isRecurrentLike =
-		campaign.gatilhoTipo === "RECORRENTE" || campaign.gatilhoTipo === "USO-UNICO" || campaign.gatilhoTipo === "PROMOCAO-PRODUTOS";
+		campaign.gatilhoTipo === "RECORRENTE" ||
+		campaign.gatilhoTipo === "USO-UNICO" ||
+		campaign.gatilhoTipo === "PROMOCAO-PRODUTOS" ||
+		campaign.gatilhoTipo === "PESQUISA";
 
 	const templateName = campaign.whatsappTemplate?.nome ?? null;
 	const templateContent = campaign.whatsappTemplate?.conteudo ?? null;
@@ -145,6 +177,7 @@ export default function CampaignConfigView({ campaign, sessionUser, sessionUserO
 									</div>
 								) : null}
 								{trigger?.description ? <p className="text-xs leading-snug text-muted-foreground">{trigger.description}</p> : null}
+								{campaign.gatilhoTipo === "PESQUISA" && templateContent ? <SurveyAnswersMapping content={templateContent} field={campaign.pesquisaCampo ?? null} /> : null}
 							</div>
 							<div className="flex items-start gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2">
 								<Lock className="mt-0.5 h-3.5 w-3.5 min-h-3.5 min-w-3.5 text-muted-foreground" />

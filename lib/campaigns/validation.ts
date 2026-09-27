@@ -1,4 +1,6 @@
 import { validateTemplateForTrigger } from "@/lib/message-templates";
+import { getSurveyButtons, SURVEY_MIN_BUTTONS } from "@/lib/message-templates/surveys";
+import { validateSurveyButtons } from "@/lib/message-templates/survey-validation";
 import { db } from "@/services/drizzle";
 import { type TCampaignTriggerTypeEnum } from "@/schemas/enums";
 import { CAMPAIGN_PROMOTION_PRODUCTS_LIMIT, CampaignSchema } from "@/schemas/campaigns";
@@ -38,7 +40,7 @@ export function validateRecurrentCampaign(campaign: z.infer<typeof CampaignSchem
 
 export function validateCampaignFrequencyInterval(campaign: z.infer<typeof CampaignSchema>) {
 	// Campanhas de disparo único não têm intervalo de recorrência a respeitar.
-	if (campaign.gatilhoTipo === "USO-UNICO" || campaign.gatilhoTipo === "PROMOCAO-PRODUTOS") return;
+	if (campaign.gatilhoTipo === "USO-UNICO" || campaign.gatilhoTipo === "PROMOCAO-PRODUTOS" || campaign.gatilhoTipo === "PESQUISA") return;
 	if (!campaign.permitirRecorrencia) return;
 
 	if (!campaign.frequenciaIntervaloMedida || !campaign.frequenciaIntervaloValor || campaign.frequenciaIntervaloValor <= 0) {
@@ -143,6 +145,52 @@ export async function validateProductPromotionCampaign(campaign: z.infer<typeof 
 		const names = productsMissingPrice.map((p) => existingProductById.get(p.produtoId)?.nome ?? p.produtoId).join(", ");
 		throw new createHttpError.BadRequest(`Defina um preço promocional para produtos sem preço de venda no cadastro: ${names}.`);
 	}
+}
+
+/**
+ * Valida a configuração do gatilho "PESQUISA" (docs/dev-planning/survey-campaigns-plan.md §4.2):
+ * data de referência (mesma semântica do uso único), campo escolhido, template com botões de
+ * pesquisa apontando para esse campo, e o campo ativo/de escolha com todas as opções dos botões.
+ *
+ * Também vale no sentido inverso: um template com botões de pesquisa só entra em campanha de
+ * pesquisa. A captura já é agnóstica de gatilho; liberar outros gatilhos é relaxar esta checagem.
+ */
+export async function validateSurveyCampaign(campaign: z.infer<typeof CampaignSchema>, organizationId: string) {
+	const template = campaign.whatsappTemplateId
+		? await db.query.messageTemplates.findFirst({
+				where: (fields, { and, eq }) => and(eq(fields.id, campaign.whatsappTemplateId), eq(fields.organizacaoId, organizationId)),
+				columns: { nome: true, conteudo: true },
+			})
+		: null;
+	const surveyButtons = template ? getSurveyButtons(template.conteudo) : [];
+
+	if (campaign.gatilhoTipo !== "PESQUISA") {
+		if (surveyButtons.length > 0) {
+			throw new createHttpError.BadRequest(`O template "${template?.nome}" tem botões de pesquisa e só pode ser usado em campanhas de pesquisa.`);
+		}
+		return;
+	}
+
+	if (!campaign.gatilhoPesquisaDataReferencia) {
+		throw new createHttpError.BadRequest("Data de referência da pesquisa não informada.");
+	}
+	const date = dayjs(campaign.gatilhoPesquisaDataReferencia);
+	if (!date.isValid() || date.format("YYYY-MM-DD") !== campaign.gatilhoPesquisaDataReferencia) {
+		throw new createHttpError.BadRequest("Data de referência da pesquisa inválida.");
+	}
+	if (!campaign.gatilhoPesquisaCampoId) {
+		throw new createHttpError.BadRequest("Selecione o campo personalizado que receberá as respostas da pesquisa.");
+	}
+	if (!template) throw new createHttpError.BadRequest("Selecione o template da pesquisa.");
+	if (surveyButtons.length < SURVEY_MIN_BUTTONS) {
+		throw new createHttpError.BadRequest(`O template "${template.nome}" precisa de ao menos ${SURVEY_MIN_BUTTONS} botões de pesquisa.`);
+	}
+	if (surveyButtons.some((button) => button.campoId !== campaign.gatilhoPesquisaCampoId)) {
+		throw new createHttpError.BadRequest(`Os botões de pesquisa do template "${template.nome}" apontam para outro campo personalizado.`);
+	}
+	// Re-checa contra o banco: o campo pode ter sido desativado ou perdido opções depois que o
+	// template foi salvo.
+	await validateSurveyButtons({ organizationId, content: template.conteudo });
 }
 
 export async function validateCampaignTemplateTriggerCompatibility(

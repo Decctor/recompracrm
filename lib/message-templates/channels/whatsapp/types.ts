@@ -50,6 +50,8 @@ export type TMetaCreateTemplatePayload = {
 
 export type TWhatsappTemplateSendParameter =
 	| { type: "text"; text: string }
+	// Botão de resposta rápida: payload devolvido no toque (docs/dev-planning/survey-campaigns-plan.md §5.1).
+	| { type: "payload"; payload: string }
 	| { type: "image"; image: { link: string } }
 	| { type: "video"; video: { link: string } }
 	| { type: "document"; document: { link: string; filename?: string } };

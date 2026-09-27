@@ -1,6 +1,6 @@
 "use client";
 
-import { Sparkles, CalendarRange, Layers } from "lucide-react";
+import { Sparkles, CalendarRange, Layers, ListChecks } from "lucide-react";
 import { BUILDER_CATEGORIES, type TBuilderCategoryId } from "../helpers/categories";
 import { useBuilderUi } from "./builder-provider";
 import CategoryCard from "./category-card";
@@ -9,6 +9,7 @@ const CATEGORY_ICONS: Record<TBuilderCategoryId, typeof Sparkles> = {
 	EVENT: Sparkles,
 	SCHEDULE: CalendarRange,
 	RFM: Layers,
+	SURVEY: ListChecks,
 };
 
 export default function CategoryPicker() {
@@ -22,7 +23,7 @@ export default function CategoryPicker() {
 					Cada categoria tem um fluxo otimizado. Você poderá voltar e mudar a qualquer momento.
 				</p>
 			</div>
-			<div className="grid w-full grid-cols-1 gap-3 md:grid-cols-3">
+			<div className="grid w-full grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
 				{BUILDER_CATEGORIES.map((category) => (
 					<CategoryCard
 						key={category.id}

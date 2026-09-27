@@ -2,6 +2,7 @@
 import CommunicationTemplatesPage from "@/app/dashboard/communication/_components/communication-templates-page";
 import SettingsAiAgent from "@/components/Settings/SettingsAiAgent";
 import SettingsAiConnections from "@/components/Settings/SettingsAiConnections";
+import SettingsCustomFields from "@/components/Settings/SettingsCustomFields";
 import SettingsDevices from "@/components/Settings/SettingsDevices";
 import SettingsFinances from "@/components/Settings/SettingsFinances";
 import SettingsIntegration from "@/components/Settings/SettingsIntegration";
@@ -64,6 +65,7 @@ export default function SettingsPage({ user, membership }: SettingsPageProps) {
 						{view === "integration" ? <SettingsIntegration user={user} membership={membership} /> : null}
 						{view === "finances" ? <SettingsFinances membership={membership} /> : null}
 						{view === "segments" ? <SettingsSegments user={user} /> : null}
+						{view === "custom-fields" ? <SettingsCustomFields membership={membership} /> : null}
 					</>
 				) : (
 					<SettingsRestrictedState reason={section.restrictedReason} />

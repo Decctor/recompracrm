@@ -12,6 +12,9 @@ import {
 	type TOnboardingTemplateVariant,
 } from "@/config/message-template-library";
 import { validateTemplateForTrigger } from "@/lib/message-templates";
+import { getSurveyFieldId } from "@/lib/message-templates/surveys";
+import { buildSurveyButtonsForField, useSurveyCustomFields } from "@/components/MessageTemplates/SurveyButtonEditor";
+import { getDefaultMessageTemplateVariableExample } from "@/lib/message-templates/variables";
 import { cn } from "@/lib/utils";
 import { useCashbackProgram } from "@/lib/queries/cashback-programs";
 import { useMessageTemplates } from "@/lib/queries/message-templates";
@@ -110,23 +113,48 @@ export default function StageMessage({ organizationId, organizationName, organiz
 		templatesSectionRef.current?.scrollIntoView({ behavior: prefersReducedMotion ? "auto" : "smooth", block: "start" });
 	}, [isPlaceholderData, isFetching, currentPage]);
 
+	// Pesquisa: o template é a pergunta, então só entram os que têm botões de pesquisa apontando
+	// para o campo escolhido no gatilho. Nos demais gatilhos, templates de pesquisa ficam de fora
+	// (o servidor os recusa fora de campanhas de pesquisa).
+	const isSurveyCampaign = campaign.gatilhoTipo === "PESQUISA";
+	const { fields: surveyFields } = useSurveyCustomFields();
+	const surveyField = isSurveyCampaign ? (surveyFields.find((field) => field.id === campaign.gatilhoPesquisaCampoId) ?? null) : null;
+
 	const { compatibleTemplates, hiddenTemplates } = useMemo(() => {
 		if (!campaign.gatilhoTipo) return { compatibleTemplates: allTemplates, hiddenTemplates: [] };
 
 		const compatible: TMessageTemplateListItem[] = [];
-		const hidden: { id: string; nome: string; incompatibleVariables: string[] }[] = [];
+		const hidden: { id: string; nome: string; reason: string }[] = [];
 
 		for (const template of allTemplates) {
 			const templateValidation = validateTemplateForTrigger(getTemplateTriggerValidationParameters(template), campaign.gatilhoTipo);
-			if (templateValidation.valid) {
-				compatible.push(template);
+			if (!templateValidation.valid) {
+				hidden.push({
+					id: template.id,
+					nome: template.nome,
+					reason: `Variáveis que este gatilho não preenche: ${templateValidation.incompatibleVariables.join(", ")}.`,
+				});
 				continue;
 			}
-			hidden.push({ id: template.id, nome: template.nome, incompatibleVariables: templateValidation.incompatibleVariables });
+			const surveyFieldId = getSurveyFieldId(template.conteudo);
+			if (isSurveyCampaign) {
+				if (!surveyFieldId) {
+					hidden.push({ id: template.id, nome: template.nome, reason: "Não tem botões de pesquisa." });
+					continue;
+				}
+				if (surveyFieldId !== campaign.gatilhoPesquisaCampoId) {
+					hidden.push({ id: template.id, nome: template.nome, reason: "Os botões de pesquisa apontam para outro campo personalizado." });
+					continue;
+				}
+			} else if (surveyFieldId) {
+				hidden.push({ id: template.id, nome: template.nome, reason: "Tem botões de pesquisa: só pode ser usado em campanhas de pesquisa." });
+				continue;
+			}
+			compatible.push(template);
 		}
 
 		return { compatibleTemplates: compatible, hiddenTemplates: hidden };
-	}, [allTemplates, campaign.gatilhoTipo]);
+	}, [allTemplates, campaign.gatilhoTipo, campaign.gatilhoPesquisaCampoId, isSurveyCampaign]);
 
 	const libraryEntries = useMemo(() => {
 		const variant: TOnboardingTemplateVariant = cashbackAtivo ? "COM_CASHBACK" : "SEM_CASHBACK";
@@ -141,7 +169,8 @@ export default function StageMessage({ organizationId, organizationName, organiz
 		});
 	}, [cashbackAtivo, campaign.gatilhoTipo]);
 
-	// Mesma guarda do bloco antigo: trocar o gatilho pode invalidar o template já escolhido.
+	// Mesma guarda do bloco antigo: trocar o gatilho (ou o campo da pesquisa) pode invalidar o
+	// template já escolhido.
 	useEffect(() => {
 		if (!campaign.whatsappTemplateId || !campaign.gatilhoTipo || allTemplates.length === 0) return;
 		const selectedTemplate = allTemplates.find((template) => template.id === campaign.whatsappTemplateId);
@@ -150,9 +179,51 @@ export default function StageMessage({ organizationId, organizationName, organiz
 		if (!templateValidation.valid) {
 			updateCampaign({ whatsappTemplateId: "" });
 			toast.warning("Template desmarcado: as variáveis dele não são compatíveis com o novo tipo de gatilho.");
+			return;
+		}
+		const surveyFieldId = getSurveyFieldId(selectedTemplate.conteudo);
+		if (isSurveyCampaign ? surveyFieldId !== campaign.gatilhoPesquisaCampoId : !!surveyFieldId) {
+			updateCampaign({ whatsappTemplateId: "" });
+			toast.warning(
+				isSurveyCampaign
+					? "Template desmarcado: os botões de pesquisa dele não apontam para o campo escolhido."
+					: "Template desmarcado: templates com botões de pesquisa só valem em campanhas de pesquisa.",
+			);
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [campaign.gatilhoTipo]);
+	}, [campaign.gatilhoTipo, campaign.gatilhoPesquisaCampoId]);
+
+	// Pesquisa: o construtor de templates abre com um botão por opção do campo e a pergunta no
+	// corpo — o usuário ajusta o texto e manda para aprovação da Meta.
+	function openCreateDraft() {
+		if (!isSurveyCampaign || !surveyField) return setCreateDraft({});
+		const nome = buildClonedMessageTemplateName(
+			`pesquisa ${surveyField.titulo}`,
+			allTemplates.map((template) => template.nome),
+		);
+		setCreateDraft({
+			initialState: {
+				messageTemplate: {
+					nome,
+					status: "RASCUNHO",
+					linguagem: "pt_BR",
+					categoria: "MARKETING",
+					metadados: { porNumeroTelefone: {} },
+					conteudo: {
+						assunto: surveyField.titulo,
+						preheader: "",
+						cabecalho: null,
+						corpo: {
+							conteudo: `Olá {{clientName}}, queremos a sua opinião: ${surveyField.titulo.toLowerCase()}? Toque na opção abaixo.`,
+							parametros: [{ identificadorInterno: "clientName", identificadorExterno: "1", exemplo: getDefaultMessageTemplateVariableExample("clientName") }],
+						},
+						rodape: null,
+						botoes: buildSurveyButtonsForField(surveyField).slice(0, 10),
+					},
+				},
+			},
+		});
+	}
 
 	const handleOnMutate = async () => await queryClient.cancelQueries({ queryKey });
 	const handleOnSettled = async () => await queryClient.invalidateQueries({ queryKey });
@@ -195,7 +266,7 @@ export default function StageMessage({ organizationId, organizationName, organiz
 					<span className="text-xs text-muted-foreground">
 						{compatibleTemplates.length === 1 ? "1 compatível nesta página" : `${compatibleTemplates.length} compatíveis nesta página`}
 					</span>
-					<Button type="button" size="sm" onClick={() => setCreateDraft({})} className="flex items-center gap-1.5 rounded-full">
+					<Button type="button" size="sm" onClick={openCreateDraft} className="flex items-center gap-1.5 rounded-full">
 						<Plus className="h-3.5 w-3.5" />
 						CRIAR TEMPLATE
 					</Button>
@@ -239,17 +310,22 @@ export default function StageMessage({ organizationId, organizationName, organiz
 
 					<button
 						type="button"
-						onClick={() => setCreateDraft({})}
+						onClick={openCreateDraft}
 						className="flex h-full min-h-[240px] flex-col items-start justify-center gap-2.5 rounded-xl border border-dashed border-primary/45 bg-primary/[0.04] p-4 text-left transition-colors hover:bg-primary/10"
 					>
 						<span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
 							<Plus className="h-4 w-4" />
 						</span>
 						<span className="flex flex-col gap-1">
-							<span className="text-sm font-semibold tracking-tight">Criar template para esta campanha</span>
+							<span className="text-sm font-semibold tracking-tight">
+								{isSurveyCampaign ? "Criar template da pesquisa" : "Criar template para esta campanha"}
+							</span>
 							<span className="text-xs leading-relaxed text-muted-foreground">
-								Abre o construtor de templates, já com as variáveis que este gatilho preenche. Ao salvar, o template entra para aprovação da Meta e
-								fica selecionado aqui.
+								{isSurveyCampaign
+									? surveyField
+										? `Abre o construtor com um botão para cada opção de "${surveyField.titulo}". Ao salvar, o template entra para aprovação da Meta e fica selecionado aqui.`
+										: "Volte à etapa de Gatilho e escolha o campo da pergunta para gerar os botões automaticamente."
+									: "Abre o construtor de templates, já com as variáveis que este gatilho preenche. Ao salvar, o template entra para aprovação da Meta e fica selecionado aqui."}
 							</span>
 						</span>
 					</button>
@@ -306,9 +382,9 @@ export default function StageMessage({ organizationId, organizationName, organiz
 									<Info className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
 									<span>
 										{hiddenTemplates.length === 1
-											? "Mais um template nesta página não aparece aqui porque usa variáveis que este tipo de gatilho não fornece."
-											: `Mais ${hiddenTemplates.length} templates nesta página não aparecem aqui porque usam variáveis que este tipo de gatilho não fornece.`}{" "}
-										Passe o cursor para ver o nome de cada um e quais variáveis são.
+											? "Mais um template nesta página não aparece aqui porque não serve para este gatilho."
+											: `Mais ${hiddenTemplates.length} templates nesta página não aparecem aqui porque não servem para este gatilho.`}{" "}
+										Passe o cursor para ver o nome de cada um e o motivo.
 									</span>
 								</div>
 							}
@@ -320,9 +396,7 @@ export default function StageMessage({ organizationId, organizationName, organiz
 									{hiddenTemplates.map((template) => (
 										<div key={template.id} className="rounded-lg border border-border/60 bg-muted/35 px-2.5 py-2">
 											<p className="text-xs font-semibold text-foreground">{template.nome}</p>
-											<p className="mt-1 text-xs leading-snug text-muted-foreground">
-												Variáveis que este gatilho não preenche: {template.incompatibleVariables.join(", ")}.
-											</p>
+											<p className="mt-1 text-xs leading-snug text-muted-foreground">{template.reason}</p>
 										</div>
 									))}
 								</div>

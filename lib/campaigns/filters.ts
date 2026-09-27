@@ -1,5 +1,5 @@
 import { type DBTransaction, db } from "@/services/drizzle";
-import { clients, productClientReferences } from "@/services/drizzle/schema";
+import { clientCustomFieldValues, clients, customFields, productClientReferences } from "@/services/drizzle/schema";
 import type { TCampaignFilterCondition, TCampaignFilterTreeNode, TCampaignFilters } from "@/schemas/campaigns";
 import { and, count, eq, gt, inArray, isNotNull, lte, sql } from "drizzle-orm";
 
@@ -114,6 +114,10 @@ async function resolveConditionClientIds(condition: TCampaignFilterCondition, co
 		return new Set(rows.map((row) => row.id));
 	}
 
+	if (condition.tipo === "CAMPO_PERSONALIZADO") {
+		return resolveCustomFieldConditionClientIds(condition.configuracao, context);
+	}
+
 	const rows = await context.executor
 		.select({ clientId: productClientReferences.clienteId })
 		.from(productClientReferences)
@@ -128,6 +132,59 @@ async function resolveConditionClientIds(condition: TCampaignFilterCondition, co
 			),
 		);
 
+	return new Set(rows.map((row) => row.clientId));
+}
+
+/**
+ * Campo personalizado de escolha (docs/dev-planning/survey-campaigns-plan.md §9.1). O tipo do
+ * campo decide o SQL sobre o jsonb `valor`: string em ESCOLHA_UNICA, array em ESCOLHA_MULTIPLA.
+ * PREENCHIDO = existe linha; NAO_PREENCHIDO = universo menos quem tem linha (como o grupo NOT).
+ */
+async function resolveCustomFieldConditionClientIds(
+	configuracao: Extract<TCampaignFilterCondition, { tipo: "CAMPO_PERSONALIZADO" }>["configuracao"],
+	context: TCampaignAudienceResolutionContext,
+) {
+	const field = await context.executor.query.customFields.findFirst({
+		where: and(eq(customFields.id, configuracao.campoId), eq(customFields.organizacaoId, context.organizationId)),
+		columns: { id: true, tipo: true },
+	});
+	// Campo apagado/de outra organização: ninguém satisfaz, e a negação vale para todos.
+	if (!field) {
+		return configuracao.operador === "NAO_PREENCHIDO" ? new Set(await getAllOrganizationClientIds(context)) : new Set<string>();
+	}
+
+	const baseConditions = [
+		eq(clientCustomFieldValues.organizacaoId, context.organizationId),
+		eq(clientCustomFieldValues.campoId, field.id),
+		...(context.restrictToClientIds ? [inArray(clientCustomFieldValues.clienteId, context.restrictToClientIds)] : []),
+	];
+
+	if (configuracao.operador === "PREENCHIDO" || configuracao.operador === "NAO_PREENCHIDO") {
+		const rows = await context.executor
+			.select({ clientId: clientCustomFieldValues.clienteId })
+			.from(clientCustomFieldValues)
+			.where(and(...baseConditions));
+		const filled = new Set(rows.map((row) => row.clientId));
+		if (configuracao.operador === "PREENCHIDO") return filled;
+		const universe = new Set(await getAllOrganizationClientIds(context));
+		for (const clientId of filled) universe.delete(clientId);
+		return universe;
+	}
+
+	const valores = configuracao.valores.map((valor) => valor.trim()).filter(Boolean);
+	if (valores.length === 0) return new Set<string>();
+	const matchesValues =
+		field.tipo === "ESCOLHA_MULTIPLA"
+			? sql`${clientCustomFieldValues.valor} ?| ${valores}::text[]`
+			: sql`(${clientCustomFieldValues.valor} #>> '{}') IN (${sql.join(
+					valores.map((valor) => sql`${valor}`),
+					sql`, `,
+				)})`;
+
+	const rows = await context.executor
+		.select({ clientId: clientCustomFieldValues.clienteId })
+		.from(clientCustomFieldValues)
+		.where(and(...baseConditions, configuracao.operador === "IGUAL" ? matchesValues : sql`NOT (${matchesValues})`));
 	return new Set(rows.map((row) => row.clientId));
 }
 

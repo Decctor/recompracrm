@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 import { InteractionMetadataSchema, type TInteractionDeliveryChannelEnum, type TInteractionMetadata } from "@/schemas/interactions";
 import { InteractionsSentStatusOptions } from "@/utils/select-options";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Calendar, CalendarCheck, Code, Eye, Mail, RefreshCw, UserRound } from "lucide-react";
+import { Calendar, CalendarCheck, Code, Eye, Mail, MessageSquareReply, RefreshCw, UserRound } from "lucide-react";
 import { cloneElement, createContext, isValidElement, use, useMemo, type ReactNode } from "react";
 import { BsCalendarPlus } from "react-icons/bs";
 import { toast } from "sonner";
@@ -70,6 +70,31 @@ function InteractionCardDescription() {
 	const { interaction } = useInteractionCard();
 	if (!interaction.descricao) return null;
 	return <p className="text-xs leading-relaxed font-medium tracking-tight text-muted-foreground">{interaction.descricao}</p>;
+}
+
+/**
+ * Resposta de pesquisa dada a este envio (metadados.pesquisaRespostas). O envio é a linha da
+ * timeline; a resposta é o que aconteceu com ele — por isso aparece aqui, não numa interação nova.
+ */
+function InteractionCardSurveyReply() {
+	const { interaction } = useInteractionCard();
+	const metadata = parseInteractionMetadata(interaction.metadados);
+	const replies = metadata?.pesquisaRespostas ?? [];
+	if (replies.length === 0) return null;
+	const latest = replies[replies.length - 1];
+	const distinctTitles = Array.from(new Set(replies.map((reply) => reply.opcaoTitulo)));
+	return (
+		<div className="flex flex-wrap items-center gap-1.5 text-xs">
+			<MessageSquareReply className="h-3.5 w-3.5 text-primary" />
+			<span className="text-muted-foreground">Respondeu:</span>
+			{distinctTitles.map((title) => (
+				<span key={title} className="rounded-full bg-primary/10 px-2 py-0.5 font-semibold text-primary">
+					{title}
+				</span>
+			))}
+			<span className="text-muted-foreground">em {formatDateAsLocale(latest.data, true)}</span>
+		</div>
+	);
 }
 
 function InteractionCardFooter({ children }: { children: ReactNode }) {
@@ -145,6 +170,7 @@ function InteractionCardListItem() {
 				</div>
 				<InteractionCardClientSubtitle />
 				<InteractionCardDescription />
+				<InteractionCardSurveyReply />
 				<InteractionCardMetaPanel />
 				<InteractionCardActionBar />
 			</div>
@@ -164,6 +190,7 @@ function InteractionCardListItem() {
 						</InteractionCardActions>
 					</InteractionCardHeader>
 					<InteractionCardDescription />
+					<InteractionCardSurveyReply />
 				</InteractionCardBody>
 				<InteractionCardFooter>
 					<InteractionCardCreatedAt />
@@ -553,6 +580,7 @@ export const InteractionCard = {
 	Leading: InteractionCardLeading,
 	Actions: InteractionCardActions,
 	Description: InteractionCardDescription,
+	SurveyReply: InteractionCardSurveyReply,
 	Footer: InteractionCardFooter,
 	CampaignTitle: InteractionCardCampaignTitle,
 	ClientChip: InteractionCardClientChip,
