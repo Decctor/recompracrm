@@ -7,6 +7,7 @@ import {
 	InteractionsCronJobTimeBlocksEnum,
 	RecurrenceFrequencyEnum,
 	TimeDurationUnitsEnum,
+	CustomFieldFilterOperatorEnum,
 } from "./enums";
 
 export const CampaignFilterLogicOperatorEnum = z.enum(["AND", "OR", "NOT"], {
@@ -97,6 +98,36 @@ export const CampaignTopBuyersProductFilterConfigSchema = z.object({
 });
 export type TCampaignTopBuyersProductFilterConfig = z.infer<typeof CampaignTopBuyersProductFilterConfigSchema>;
 
+// Filtro sobre um campo personalizado de escolha (docs/dev-planning/survey-campaigns-plan.md §9).
+// IGUAL/DIFERENTE usam `valores`; em ESCOLHA_MULTIPLA, IGUAL significa "contém ao menos um".
+export const CampaignCustomFieldFilterConfigSchema = z
+	.object({
+		campoId: z
+			.string({
+				required_error: "Campo personalizado do filtro não informado.",
+				invalid_type_error: "Tipo não válido para o campo personalizado do filtro.",
+			})
+			.min(1, "Campo personalizado do filtro não informado."),
+		operador: CustomFieldFilterOperatorEnum,
+		valores: z
+			.array(
+				z.string({
+					required_error: "Valor do filtro não informado.",
+					invalid_type_error: "Tipo não válido para o valor do filtro.",
+				}),
+				{
+					required_error: "Valores do filtro não informados.",
+					invalid_type_error: "Tipo não válido para os valores do filtro.",
+				},
+			)
+			.default([]),
+	})
+	.refine((config) => (config.operador === "IGUAL" || config.operador === "DIFERENTE" ? config.valores.length > 0 : true), {
+		message: "Selecione ao menos uma opção para o filtro.",
+		path: ["valores"],
+	});
+export type TCampaignCustomFieldFilterConfig = z.infer<typeof CampaignCustomFieldFilterConfigSchema>;
+
 export const CampaignFilterConditionSchema = z.discriminatedUnion("tipo", [
 	z.object({
 		id: z
@@ -117,6 +148,16 @@ export const CampaignFilterConditionSchema = z.discriminatedUnion("tipo", [
 			.optional(),
 		tipo: z.literal("TOP_COMPRADORES_PRODUTO"),
 		configuracao: CampaignTopBuyersProductFilterConfigSchema,
+	}),
+	z.object({
+		id: z
+			.string({
+				required_error: "ID da condição do filtro não informado.",
+				invalid_type_error: "Tipo não válido para o ID da condição do filtro.",
+			})
+			.optional(),
+		tipo: z.literal("CAMPO_PERSONALIZADO"),
+		configuracao: CampaignCustomFieldFilterConfigSchema,
 	}),
 ]);
 export type TCampaignFilterCondition = z.infer<typeof CampaignFilterConditionSchema>;
