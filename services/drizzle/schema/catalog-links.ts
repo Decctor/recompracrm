@@ -16,9 +16,10 @@ import { users } from "./users";
 // Há ainda um SEGUNDO índice único que existe só em SQL (0083 + 0114), sem declaração aqui:
 // `unq_catalog_links_externo_item` em (organizacao_id, provider, merchant_id, externo_item_id)
 // WHERE externo_item_id IS NOT NULL AND status <> 'DESVINCULADO' — um item remoto pertence a no
-// máximo um vínculo ATIVO por loja. Predicado de índice também não é expressável neste drizzle-orm;
-// um `drizzle-kit generate` pode propor derrubá-lo. Não aceite. `upsertCatalogLink` faz a
-// pré-checagem com mensagem amigável; o índice fecha a corrida.
+// máximo um vínculo ATIVO por loja. Idem `unq_catalog_links_externo_option_group` e
+// `unq_catalog_links_externo_option` (0115) para grupos e opções de complemento. Predicado de índice
+// também não é expressável neste drizzle-orm; um `drizzle-kit generate` pode propor derrubá-los. Não
+// aceite. `upsertCatalogLink` faz a pré-checagem com mensagem amigável; os índices fecham a corrida.
 
 /**
  * Um vínculo entre uma entidade interna e sua contraparte no catálogo remoto, POR MERCHANT

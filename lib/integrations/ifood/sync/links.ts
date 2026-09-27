@@ -1,7 +1,7 @@
 import { DEFAULT_CATALOG_LINK_SYNC_POLICY, type TCatalogLinkSyncPolicy } from "@/schemas/catalog-links";
 import type { TCatalogLinkTypeEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
-import { catalogLinks, products, productVariants, type TCatalogLinkEntity } from "@/services/drizzle/schema";
+import { catalogLinks, productAddOnOptions, productAddOns, products, productVariants, type TCatalogLinkEntity } from "@/services/drizzle/schema";
 import { and, eq, inArray, ne } from "drizzle-orm";
 import createHttpError from "http-errors";
 
@@ -68,6 +68,25 @@ async function assertNodeIsLinkable({ orgId, node }: { orgId: string; node: TCat
 			});
 			if (!variant || variant.produtoId !== node.produtoId) throw new createHttpError.BadRequest("A variante não pertence ao produto informado.");
 		}
+		return;
+	}
+
+	if (node.tipo === "ADD_ON" || node.tipo === "ADD_ON_OPCAO") {
+		if (!node.produtoAddOnId) throw new createHttpError.BadRequest("Grupo de adicionais do vínculo não informado.");
+		const group = await db.query.productAddOns.findFirst({
+			where: and(eq(productAddOns.id, node.produtoAddOnId), eq(productAddOns.organizacaoId, orgId)),
+			columns: { id: true },
+		});
+		if (!group) throw new createHttpError.NotFound("Grupo de adicionais não encontrado.");
+
+		if (node.tipo === "ADD_ON_OPCAO") {
+			if (!node.produtoAddOnOpcaoId) throw new createHttpError.BadRequest("Opção de adicional do vínculo não informada.");
+			const option = await db.query.productAddOnOptions.findFirst({
+				where: and(eq(productAddOnOptions.id, node.produtoAddOnOpcaoId), eq(productAddOnOptions.organizacaoId, orgId)),
+				columns: { id: true, produtoAddOnId: true },
+			});
+			if (!option || option.produtoAddOnId !== node.produtoAddOnId) throw new createHttpError.BadRequest("A opção não pertence ao grupo informado.");
+		}
 	}
 }
 
@@ -81,23 +100,36 @@ async function assertExternalItemIsFree({
 	orgId,
 	merchantId,
 	node,
-	externoItemId,
+	externalRefs,
 }: {
 	orgId: string;
 	merchantId: string;
 	node: TCatalogLinkNode;
-	externoItemId: string | null | undefined;
+	externalRefs: TCatalogLinkExternalRefs;
 }) {
-	if (!externoItemId) return;
+	// A identidade remota que este tipo de vínculo reivindica com exclusividade.
+	const claim =
+		node.tipo === "ADD_ON"
+			? externalRefs.externoOptionGroupId && eq(catalogLinks.externoOptionGroupId, externalRefs.externoOptionGroupId)
+			: node.tipo === "ADD_ON_OPCAO"
+				? externalRefs.externoOptionId && eq(catalogLinks.externoOptionId, externalRefs.externoOptionId)
+				: externalRefs.externoItemId && eq(catalogLinks.externoItemId, externalRefs.externoItemId);
+	if (!claim) return;
 	const holder = await db.query.catalogLinks.findFirst({
 		where: and(
 			eq(catalogLinks.organizacaoId, orgId),
 			eq(catalogLinks.provider, "IFOOD"),
 			eq(catalogLinks.merchantId, merchantId),
-			eq(catalogLinks.externoItemId, externoItemId),
+			eq(catalogLinks.tipo, node.tipo),
+			claim,
 			ne(catalogLinks.status, "DESVINCULADO"),
 		),
-		with: { produto: { columns: { nome: true } }, produtoVariante: { columns: { nome: true } } },
+		with: {
+			produto: { columns: { nome: true } },
+			produtoVariante: { columns: { nome: true } },
+			produtoAddOn: { columns: { nome: true } },
+			produtoAddOnOpcao: { columns: { nome: true } },
+		},
 	});
 	if (!holder) return;
 	const sameNode =
@@ -108,8 +140,10 @@ async function assertExternalItemIsFree({
 		(holder.produtoAddOnOpcaoId ?? null) === (node.produtoAddOnOpcaoId ?? null);
 	if (sameNode) return;
 
-	const holderName = [holder.produto?.nome, holder.produtoVariante?.nome].filter(Boolean).join(" · ") || "outro cadastro";
-	throw new createHttpError.Conflict(`Este item do iFood já está vinculado a ${holderName}. Desvincule-o antes de vincular a outro produto.`);
+	const holderName =
+		[holder.produto?.nome, holder.produtoVariante?.nome, holder.produtoAddOn?.nome, holder.produtoAddOnOpcao?.nome].filter(Boolean).join(" · ") ||
+		"outro cadastro";
+	throw new createHttpError.Conflict(`Este registro do iFood já está vinculado a ${holderName}. Desvincule-o antes de vincular a outro.`);
 }
 
 /**
@@ -133,7 +167,7 @@ export async function upsertCatalogLink({
 	autorId?: string | null;
 }): Promise<TCatalogLinkEntity> {
 	await assertNodeIsLinkable({ orgId, node });
-	await assertExternalItemIsFree({ orgId, merchantId, node, externoItemId: externalRefs.externoItemId });
+	await assertExternalItemIsFree({ orgId, merchantId, node, externalRefs });
 
 	const policy: TCatalogLinkSyncPolicy = { ...DEFAULT_CATALOG_LINK_SYNC_POLICY, ...sincronizar };
 	const [link] = await db
@@ -209,6 +243,22 @@ export async function unlinkCatalogLink({ orgId, linkId }: { orgId: string; link
 		.set({ status: "DESVINCULADO", divergencias: null, ultimoErro: null, dataAtualizacao: new Date() })
 		.where(eq(catalogLinks.id, linkId))
 		.returning();
+
+	// Desvincular um grupo desvincula as opções dele nesta loja: uma opção presa a um optionGroup
+	// que não é mais gerido daqui seria um vínculo órfão que o push tentaria honrar.
+	if (existing.tipo === "ADD_ON" && existing.produtoAddOnId) {
+		await db
+			.update(catalogLinks)
+			.set({ status: "DESVINCULADO", divergencias: null, ultimoErro: null, dataAtualizacao: new Date() })
+			.where(
+				and(
+					eq(catalogLinks.organizacaoId, orgId),
+					eq(catalogLinks.merchantId, existing.merchantId),
+					eq(catalogLinks.tipo, "ADD_ON_OPCAO"),
+					eq(catalogLinks.produtoAddOnId, existing.produtoAddOnId),
+				),
+			);
+	}
 	return link;
 }
 

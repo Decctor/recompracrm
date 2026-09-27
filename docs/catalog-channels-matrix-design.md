@@ -341,3 +341,82 @@ Cada fase é um PR; a 1 já entrega a centralização para POS/SHOP/COMANDA.
   de queries (§5.2) reduz a janela.
 - **R5 — Índice parcial fora do Drizzle.** Um `drizzle-kit generate` futuro pode propor derrubar
   `unq_catalog_links_externo_item`. Mesma mitigação já em uso: comentário no schema + revisão do SQL gerado.
+
+---
+
+## 10. Fase 5 — Adicionais sincronizados com o iFood
+
+> **IMPLEMENTADA** (2026-09-27). Migração `drizzle/0115_catalog_links_add_on_indexes.sql`, aplicar manualmente.
+
+### 10.1 A decisão: linhas em `catalog_links`, não tabela nova nem jsonb no vínculo do produto
+
+O cliente do iFood já fixa a forma do problema. No `FullItemDto` (`lib/integrations/ifood/catalog-items.ts`), grupos
+e opções são listas de primeiro nível com ids próprios, e **min/max não pertencem ao grupo: pertencem ao vínculo
+produto → grupo** (`products[].optionGroups[]`). Isso mapeia um-a-um no que já existe internamente:
+
+| Interno | iFood | Natureza |
+|---|---|---|
+| `product_add_ons` (grupo da org, compartilhado por N produtos) | optionGroup (da loja, compartilhado por N itens) | entidade com identidade remota |
+| `product_add_on_options` (`precoDelta`, produto de estoque) | option + o produto que carrega o nome dela | entidade com identidade remota e preço |
+| `product_add_on_references` (produto ↔ grupo, com min/max por produto) | `products[].optionGroups[]` com min/max/index | associação sem identidade própria |
+
+- **Linhas, não jsonb no vínculo do produto.** Um grupo é compartilhado: com o id do iFood dentro do jsonb de cada
+  vínculo de produto, renomear o grupo ou reprecificar uma opção espalha por N vínculos, dois produtos podem discordar
+  de qual optionGroup é "o" mapeamento, e não há como impor dupla atribuição num array jsonb. Uma opção carrega preço e
+  precisa de snapshot/status/erro próprios — a mesma máquina que o vínculo de item já tem.
+- **Não uma tabela nova.** `catalog_links` nasceu para isso e nunca foi usada: `tipo` ADD_ON/ADD_ON_OPCAO,
+  `produtoAddOnId`, `produtoAddOnOpcaoId`, `externoOptionGroupId`, `externoOptionId` existem, e o unique de identidade
+  já inclui as colunas de adicional. Reconciliação, push e listagem por merchant funcionam sobre eles de graça.
+- **Onde o jsonb é certo:** a associação item → grupos não tem identidade remota e só faz sentido por item, então vive
+  no `ultimoSnapshot` do vínculo do ITEM como `gruposComplementos: [{ externoOptionGroupId, min, max, indice }]`.
+
+### 10.2 Modelo
+
+- `sincronizar.complementos: boolean` (default true) no vínculo do item: se o item empurra sua associação com os grupos.
+  Vínculos de grupo usam `nome`/`disponibilidade`; de opção usam `nome`/`preco`/`disponibilidade`. Linhas antigas sem
+  o campo leem como `true`.
+- `ultimoSnapshot.gruposComplementos` no vínculo do item; `divergencias[].campo` ganha `"complementos"`.
+- Dois índices parciais únicos, como o de item: `(org, provider, merchant, externo_option_group_id)` e
+  `(org, provider, merchant, externo_option_id)`, ambos `WHERE ... IS NOT NULL AND status <> 'DESVINCULADO'`.
+
+### 10.3 Fluxos (`lib/integrations/ifood/sync/add-ons.ts`)
+
+- **Publicar item** (`publish.ts`) agora monta `gruposComplementos` a partir de `resolveProductAddOnNodes` (referências
+  nível produto → `resolveAddOnReferencesRules` → `channelAddOnReferences` do canal IFOOD). Grupos/opções já vinculados
+  vão com os ids remotos (o iFood atualiza em vez de duplicar); os demais vão sem id e são criados **na mesma chamada**.
+  Depois, o `flat` do item é relido e `recordAddOnLinksFromFlatItem` grava os vínculos ADD_ON/ADD_ON_OPCAO casando por
+  nome normalizado — o iFood não garante os ids que enviamos (mesmo motivo do `productId`).
+- **Push do item** (`push.ts`): além de nome/descrição/preço/status, compara a associação com o snapshot quando
+  `complementos` está ligado. Mudou (grupo entrou/saiu, min/max/ordem) ou há grupo do produto ainda sem vínculo →
+  re-`PUT /items` composto, **ecoando `horarios` e `contextModifiers` lidos do `flat`** (o PUT reescreve o item inteiro
+  e omitir a agenda apagaria o que o lojista configurou). Conteúdo de grupo/opção muda pelos endpoints de patch, não
+  pelo composto. **Guarda contra duplicação**: grupos sem vínculo só disparam o composto enquanto o item nunca teve
+  associação gravada; se a releitura não reconhecer um grupo criado, ele não é recriado a cada push — fica "sem
+  vínculo" nos detalhes do item e a aba Adicionais vincula à mão.
+- **Push do grupo** (`pushAddOnGroupToLinkedMerchants`, disparado por `PUT /api/products/add-ons`): por vínculo ADD_ON,
+  nome → `PATCH /optionGroups/{id}`, status → `PATCH /optionGroups/status`; por opção vinculada, nome →
+  `PUT /products/{id}` (o nome mora no produto da opção), preço → `PATCH /options/price`, status →
+  `PATCH /options/status`; opção nova → `POST /optionGroups/{id}/options` + releitura do grupo para gravar o vínculo;
+  opção removida/tombstone → status UNAVAILABLE, **nunca delete** (D3).
+- **Reconciliar** (`reconcile.ts`): o loop de itens passa a filtrar `tipo IN (PRODUTO, VARIANTE)` (antes, um vínculo
+  ADD_ON cairia em "item não existe"). Grupos e opções são conferidos com UMA leitura de `GET /optionGroups` por loja;
+  a associação do item com `complementos` ligado exige o `flat` do item (uma leitura por vínculo — só existe lá).
+- **Vincular grupo existente** (`linkAddOnGroup`): cria o vínculo ADD_ON e casa as opções por `codigo ↔ externalCode`
+  (forte) ou nome normalizado (fraco); opções internas sem par ganham vínculo no primeiro push (`addIfoodOptions`);
+  opções remotas sem par são deixadas em paz.
+
+### 10.4 UI
+
+- Aba Adicionais › card do grupo: um chip por merchant iFood — "Vincular" ou o status do vínculo. Abre
+  `AddOnIfoodLinkDialog`: sem vínculo, lista os optionGroups da loja (ordenados por semelhança de nome) e vincula; com
+  vínculo, mostra status, política (nome/disponibilidade), opções com o status de cada vínculo e "Desvincular".
+- Detalhes do vínculo do item (`IfoodLinkDetails`): switch "Complementos" e seção listando os grupos do produto com o
+  status do vínculo de cada um neste merchant. "Reenviar o nosso" cria os que faltam.
+
+### 10.5 Fora desta fase
+
+- Ingestão de pedidos continua casando adicionais por `idExterno` (`sync-auxiliary-entities.ts`); migrar para
+  `catalog_links` é um passo próprio.
+- Tipo do optionGroup: grupos novos nascem `SPECIFICATION`; grupos já existentes no iFood preservam o tipo que têm.
+  Um seletor de tipo por grupo interno fica para quando houver demanda (pizza/combos têm regras próprias).
+- `precoDelta` por canal segue adiado (D3 do doc de canais): o preço da opção empurrado é o interno.

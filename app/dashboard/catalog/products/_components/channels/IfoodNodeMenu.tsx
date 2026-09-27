@@ -88,7 +88,14 @@ export default function IfoodNodeMenu({ merchantId, merchantLabel, product, vari
 				/>
 			) : null}
 			{open === "details" && link ? (
-				<IfoodLinkDetails merchantId={merchantId} merchantLabel={merchantLabel} nodeLabel={nodeLabel} link={link} closeModal={() => setOpen(null)} />
+				<IfoodLinkDetails
+					merchantId={merchantId}
+					merchantLabel={merchantLabel}
+					nodeLabel={nodeLabel}
+					link={link}
+					product={product}
+					closeModal={() => setOpen(null)}
+				/>
 			) : null}
 		</>
 	);

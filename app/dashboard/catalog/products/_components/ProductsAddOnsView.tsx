@@ -2,6 +2,7 @@
 
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
 import LoadingComponent from "@/components/Layouts/LoadingComponent";
+import AddOnIfoodLinks from "@/app/dashboard/catalog/products/_components/AddOnIfoodLinks";
 import ControlProductAddOn from "@/components/Modals/Products/AddOns/ControlProductAddOn";
 import NewProductAddOn from "@/components/Modals/Products/AddOns/NewProductAddOn";
 import { Button } from "@/components/ui/button";
@@ -60,10 +61,7 @@ export default function ProductsAddOnsView() {
 				)
 			) : null}
 			{newAddOnModalIsOpen ? (
-				<NewProductAddOn
-					closeModal={() => setNewAddOnModalIsOpen(false)}
-					callbacks={{ onMutate: handleOnMutate, onSettled: handleOnSettled }}
-				/>
+				<NewProductAddOn closeModal={() => setNewAddOnModalIsOpen(false)} callbacks={{ onMutate: handleOnMutate, onSettled: handleOnSettled }} />
 			) : null}
 			{editingAddOnId ? (
 				<ControlProductAddOn
@@ -98,9 +96,7 @@ function AddOnGroupCard({ addOn, onEdit }: AddOnGroupCardProps) {
 					</span>
 					<div className="min-w-0 flex-1">
 						<h2 className="truncate text-sm font-semibold tracking-tight text-foreground">{addOn.nome}</h2>
-						{addOn.internoNome ? (
-							<p className="truncate text-xs font-medium tracking-tight text-muted-foreground">{addOn.internoNome}</p>
-						) : null}
+						{addOn.internoNome ? <p className="truncate text-xs font-medium tracking-tight text-muted-foreground">{addOn.internoNome}</p> : null}
 					</div>
 				</div>
 				<div className="flex shrink-0 items-center gap-1.5">
@@ -143,6 +139,8 @@ function AddOnGroupCard({ addOn, onEdit }: AddOnGroupCardProps) {
 								: `Usado em ${addOn.produtos.length} produtos`}
 					</Chip.Label>
 				</Chip.Root>
+				{/* Um chip por loja do iFood: o grupo é da organização, então o vínculo dele mora aqui. */}
+				<AddOnIfoodLinks addOn={addOn} />
 			</div>
 		</div>
 	);

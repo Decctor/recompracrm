@@ -2,10 +2,12 @@ import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { requireIntegrationManageSession, requireIntegrationViewSession } from "@/lib/integrations/ifood/sync/guards";
 import { resolveIfoodManagementContext } from "@/lib/integrations/ifood/context";
+import { linkAddOnGroup } from "@/lib/integrations/ifood/sync/add-ons";
 import { listCatalogLinks, unlinkCatalogLink, updateCatalogLinkPolicy, upsertCatalogLink } from "@/lib/integrations/ifood/sync/links";
 import { ensureIfoodSalesChannel } from "@/lib/products/sales-channels-store";
 import { CatalogLinkSyncPolicySchema } from "@/schemas/catalog-links";
 import { CatalogLinkTypeEnum } from "@/schemas/enums";
+import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -24,9 +26,13 @@ const CreateCatalogLinkInputSchema = z.object({
 	tipo: CatalogLinkTypeEnum,
 	produtoId: z.string({ invalid_type_error: "Tipo não válido para ID do produto." }).optional().nullable(),
 	produtoVarianteId: z.string({ invalid_type_error: "Tipo não válido para ID da variante." }).optional().nullable(),
+	produtoAddOnId: z.string({ invalid_type_error: "Tipo não válido para ID do grupo de adicionais." }).optional().nullable(),
+	produtoAddOnOpcaoId: z.string({ invalid_type_error: "Tipo não válido para ID da opção de adicional." }).optional().nullable(),
 	externoItemId: z.string({ invalid_type_error: "Tipo não válido para ID do item no iFood." }).optional().nullable(),
 	externoProdutoId: z.string({ invalid_type_error: "Tipo não válido para ID do produto no iFood." }).optional().nullable(),
 	externoCategoriaId: z.string({ invalid_type_error: "Tipo não válido para ID da categoria no iFood." }).optional().nullable(),
+	externoOptionGroupId: z.string({ invalid_type_error: "Tipo não válido para ID do grupo de complementos no iFood." }).optional().nullable(),
+	externoOptionId: z.string({ invalid_type_error: "Tipo não válido para ID da opção no iFood." }).optional().nullable(),
 	sincronizar: CatalogLinkSyncPolicySchema.partial().optional(),
 });
 export type TCreateCatalogLinkInput = z.infer<typeof CreateCatalogLinkInputSchema>;
@@ -54,19 +60,44 @@ async function createCatalogLink({ orgId, userId, input }: { orgId: string; user
 	// produto grava disponibilidade e preço para este merchant.
 	await ensureIfoodSalesChannel({ orgId, integracaoId: context.integrationId, merchantId: input.merchantId });
 
+	// Grupo de adicionais: além do vínculo, casa as opções internas com as do optionGroup remoto.
+	if (input.tipo === "ADD_ON") {
+		if (!input.produtoAddOnId || !input.externoOptionGroupId) throw new createHttpError.BadRequest("Informe o grupo interno e o grupo do iFood.");
+		const result = await linkAddOnGroup({
+			client: context.client,
+			orgId,
+			merchantId: input.merchantId,
+			produtoAddOnId: input.produtoAddOnId,
+			externoOptionGroupId: input.externoOptionGroupId,
+			autorId: userId,
+		});
+		return {
+			data: { link: result.link, opcoesCasadas: result.opcoesCasadas, opcoesInternas: result.opcoesInternas },
+			message: `Grupo vinculado: ${result.opcoesCasadas} de ${result.opcoesInternas} opções casadas. As demais entram no próximo envio.`,
+		};
+	}
+
 	const link = await upsertCatalogLink({
 		orgId,
 		merchantId: input.merchantId,
-		node: { tipo: input.tipo, produtoId: input.produtoId, produtoVarianteId: input.produtoVarianteId },
+		node: {
+			tipo: input.tipo,
+			produtoId: input.produtoId,
+			produtoVarianteId: input.produtoVarianteId,
+			produtoAddOnId: input.produtoAddOnId,
+			produtoAddOnOpcaoId: input.produtoAddOnOpcaoId,
+		},
 		externalRefs: {
 			externoItemId: input.externoItemId ?? null,
 			externoProdutoId: input.externoProdutoId ?? null,
 			externoCategoriaId: input.externoCategoriaId ?? null,
+			externoOptionGroupId: input.externoOptionGroupId ?? null,
+			externoOptionId: input.externoOptionId ?? null,
 		},
 		sincronizar: input.sincronizar,
 		autorId: userId,
 	});
-	return { data: { link }, message: "Vínculo criado com sucesso." };
+	return { data: { link, opcoesCasadas: null, opcoesInternas: null }, message: "Vínculo criado com sucesso." };
 }
 export type TCreateCatalogLinkOutput = Awaited<ReturnType<typeof createCatalogLink>>;
 

@@ -10,6 +10,7 @@ import { catalogLinks, products } from "@/services/drizzle/schema";
 import type { AxiosInstance } from "axios";
 import { and, eq } from "drizzle-orm";
 import createHttpError from "http-errors";
+import { associationSnapshot, buildItemOptionGroupsPayload, loadAddOnLinks, recordAddOnLinksFromFlatItem, resolveProductAddOnNodes } from "./add-ons";
 import { upsertCatalogLink } from "./links";
 
 /** Nó publicável: um produto sem variantes, ou uma variante (que vira um item próprio no iFood). */
@@ -130,27 +131,28 @@ async function uploadNodeImage({
 }
 
 /**
- * Lê de volta o item recém-publicado para descobrir o productId que o iFood realmente usou.
- * Falha na leitura cai no id enviado — melhor um vínculo com id possivelmente errado (detectável
- * na reconciliação) do que perder a publicação inteira.
+ * Lê de volta o item recém-publicado para descobrir o productId que o iFood realmente usou — e os
+ * ids dos grupos/opções de complemento criados na mesma chamada. Falha na leitura cai no id
+ * enviado — melhor um vínculo com id possivelmente errado (detectável na reconciliação) do que
+ * perder a publicação inteira.
  */
-async function resolveAuthoritativeProductId({
+export async function readBackPublishedItem({
 	client,
 	merchantId,
 	itemId,
-	fallback,
+	fallbackProductId,
 }: {
 	client: AxiosInstance;
 	merchantId: string;
 	itemId: string;
-	fallback: string;
-}): Promise<string> {
+	fallbackProductId: string;
+}) {
 	try {
 		const flat = await getIfoodItemFlat(client, merchantId, itemId);
-		return flat.produtoId ?? fallback;
+		return { produtoId: flat.produtoId ?? fallbackProductId, flat };
 	} catch (error) {
 		console.warn("[IFOOD_PUBLISH] Não foi possível reler o item para confirmar o productId.", { itemId, error });
-		return fallback;
+		return { produtoId: fallbackProductId, flat: null };
 	}
 }
 
@@ -178,6 +180,13 @@ export async function publishProductToIfood({
 	const nodes = await resolvePublishNodes({ orgId, merchantId, produtoId });
 	const published: { produtoVarianteId: string | null; itemId: string; externoProdutoId: string }[] = [];
 
+	// Complementos vão na mesma chamada: grupos/opções já vinculados com os ids remotos, os demais
+	// nascem aqui e ganham vínculo na releitura. Um produto com variantes publica N itens que
+	// compartilham os mesmos grupos — o iFood reusa o optionGroup pelo id a partir do segundo.
+	const channelState = await loadChannelState({ orgId, canal: "IFOOD", refExterno: merchantId });
+	const addOnNodes = await resolveProductAddOnNodes({ orgId, produtoId, channel: channelState?.channel ?? null });
+	let addOnLinks = await loadAddOnLinks({ orgId, merchantId });
+
 	for (const node of nodes) {
 		// Imagem é acessório: um item sem foto ainda vende. Falhar a publicação inteira por causa
 		// dela seria pior do que publicar sem — por isso o erro é engolido com aviso.
@@ -189,13 +198,18 @@ export async function publishProductToIfood({
 			preco: node.preco,
 			codigoExterno: node.codigo,
 			produto: { nome: node.nome, descricao: node.descricao, imagemPath },
+			gruposComplementos: addOnNodes.length ? buildItemOptionGroupsPayload({ nodes: addOnNodes, links: addOnLinks, remote: null }) : undefined,
 		});
 
 		// O iFood NÃO garante o productId que enviamos: medido ao vivo, um item publicado com
 		// productId gerado por nós apareceu depois sob outro id, e o `PUT /products/{id}` com o id
 		// enviado respondia 404 — o que quebraria o push de nome/descrição. Relemos o item para
-		// gravar o id autoritativo. O itemId, esse sim, é respeitado.
-		const externoProdutoId = await resolveAuthoritativeProductId({ client, merchantId, itemId, fallback: enviadoProdutoId });
+		// gravar o id autoritativo. O itemId, esse sim, é respeitado. A mesma leitura traz os ids
+		// dos grupos/opções recém-criados.
+		const { produtoId: externoProdutoId, flat } = await readBackPublishedItem({ client, merchantId, itemId, fallbackProductId: enviadoProdutoId });
+		if (flat && addOnNodes.length) {
+			addOnLinks = await recordAddOnLinksFromFlatItem({ orgId, merchantId, nodes: addOnNodes, links: addOnLinks, flat, autorId });
+		}
 
 		await upsertCatalogLink({
 			orgId,
@@ -212,7 +226,12 @@ export async function publishProductToIfood({
 		// O snapshot é o que permite ao push seguinte saber que nada mudou e não chamar a API.
 		await db
 			.update(catalogLinks)
-			.set({ status: "SINCRONIZADO", ultimoSnapshot: snapshotOf(node), dataUltimaSincronizacao: new Date(), ultimoErro: null })
+			.set({
+				status: "SINCRONIZADO",
+				ultimoSnapshot: { ...snapshotOf(node), gruposComplementos: associationSnapshot({ nodes: addOnNodes, links: addOnLinks }) },
+				dataUltimaSincronizacao: new Date(),
+				ultimoErro: null,
+			})
 			.where(and(eq(catalogLinks.organizacaoId, orgId), eq(catalogLinks.merchantId, merchantId), eq(catalogLinks.externoItemId, itemId)));
 
 		published.push({ produtoVarianteId: node.produtoVarianteId, itemId, externoProdutoId });

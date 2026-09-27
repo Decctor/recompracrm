@@ -1,10 +1,19 @@
-import { getIfoodCatalogs, listIfoodCategories } from "@/lib/integrations/ifood/catalog";
+import { getIfoodCatalogs, getIfoodItemFlat, listIfoodCategories } from "@/lib/integrations/ifood/catalog";
 import { resolveIfoodManagementContext } from "@/lib/integrations/ifood/context";
-import type { TIfoodItemDTO } from "@/lib/integrations/ifood/catalog-types";
-import type { TCatalogLinkDivergence } from "@/schemas/catalog-links";
+import type { TIfoodItemDTO, TIfoodItemFlatDTO } from "@/lib/integrations/ifood/catalog-types";
+import { loadChannelState } from "@/lib/products/sales-channels-store";
+import { type TCatalogLinkDivergence, type TCatalogLinkOptionGroupAssociation, syncsComplementos } from "@/schemas/catalog-links";
 import { db } from "@/services/drizzle";
 import { catalogLinks, productChannelSettings, type TCatalogLinkEntity } from "@/services/drizzle/schema";
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq, inArray, ne } from "drizzle-orm";
+import {
+	type TAddOnGroupNode,
+	associationSnapshot,
+	listAllIfoodOptionGroups,
+	loadAddOnLinks,
+	resolveAddOnGroupNode,
+	resolveProductAddOnNodes,
+} from "./add-ons";
 import { resolvePublishNodes, type TPublishNode } from "./publish";
 
 /** Tolerância de centavos: serialização de float não pode virar divergência falsa. */
@@ -45,12 +54,33 @@ export function computeDivergences({
 	link,
 	node,
 	remote,
+	association,
 }: {
 	link: TCatalogLinkEntity;
 	node: TPublishNode;
 	remote: TIfoodItemDTO;
+	/** Associação item → grupos: a desejada (vínculos conhecidos) e a observada no `flat`. */
+	association?: { desejada: TCatalogLinkOptionGroupAssociation[]; observada: TCatalogLinkOptionGroupAssociation[] } | null;
 }): TCatalogLinkDivergence[] {
 	const divergences: TCatalogLinkDivergence[] = [];
+
+	if (association) {
+		// Ordem fora da comparação de propósito: o iFood reindexa grupos por conta própria e um
+		// `index` diferente não muda o que o cliente pode escolher.
+		const describe = (list: TCatalogLinkOptionGroupAssociation[]) =>
+			list
+				.map((entry) => `${entry.externoOptionGroupId}:${entry.min}-${entry.max}`)
+				.toSorted()
+				.join("|");
+		if (describe(association.desejada) !== describe(association.observada)) {
+			divergences.push({
+				campo: "complementos",
+				valorInterno: `${association.desejada.length} grupo(s)`,
+				valorExterno: `${association.observada.length} grupo(s)`,
+				sincronizado: syncsComplementos(link.sincronizar),
+			});
+		}
+	}
 
 	if (textDiverges(remote.nome, node.nome)) {
 		divergences.push({ campo: "nome", valorInterno: node.nome, valorExterno: remote.nome, sincronizado: link.sincronizar.nome });
@@ -82,17 +112,22 @@ export function computeDivergences({
  * briga silenciosa entre os dois sistemas.
  */
 export async function reconcileMerchantCatalog({ orgId, merchantId }: { orgId: string; merchantId: string }) {
+	// Só vínculos de ITEM neste loop: grupos e opções de complemento têm reconciliação própria
+	// abaixo — antes, um vínculo ADD_ON aqui cairia em "o item não existe mais".
 	const links = await db.query.catalogLinks.findMany({
 		where: and(
 			eq(catalogLinks.organizacaoId, orgId),
 			eq(catalogLinks.provider, "IFOOD"),
 			eq(catalogLinks.merchantId, merchantId),
+			inArray(catalogLinks.tipo, ["PRODUTO", "VARIANTE"]),
 			ne(catalogLinks.status, "DESVINCULADO"),
 		),
 	});
-	if (links.length === 0) return { verificados: 0, sincronizados: 0, divergentes: 0, ausentes: 0, propagando: 0 };
+	const addOnLinks = await loadAddOnLinks({ orgId, merchantId });
+	if (links.length === 0 && addOnLinks.groups.size === 0) return { verificados: 0, sincronizados: 0, divergentes: 0, ausentes: 0, propagando: 0 };
 
 	const context = await resolveIfoodManagementContext({ organizacaoId: orgId, merchantId });
+	const channelState = await loadChannelState({ orgId, canal: "IFOOD", refExterno: merchantId });
 	const catalogs = await getIfoodCatalogs(context.client, merchantId);
 	const remoteItems = new Map<string, TIfoodItemDTO>();
 	for (const catalog of catalogs) {
@@ -103,6 +138,14 @@ export async function reconcileMerchantCatalog({ orgId, merchantId }: { orgId: s
 	}
 
 	// Um resolve por produto, reaproveitado pelos vínculos de suas variantes.
+	const addOnNodesByProduct = new Map<string, TAddOnGroupNode[]>();
+	async function addOnNodesFor(produtoId: string) {
+		const cached = addOnNodesByProduct.get(produtoId);
+		if (cached) return cached;
+		const nodes = await resolveProductAddOnNodes({ orgId, produtoId, channel: channelState?.channel ?? null }).catch(() => [] as TAddOnGroupNode[]);
+		addOnNodesByProduct.set(produtoId, nodes);
+		return nodes;
+	}
 	const nodesByProduct = new Map<string, TPublishNode[]>();
 	async function nodesFor(produtoId: string) {
 		const cached = nodesByProduct.get(produtoId);
@@ -141,7 +184,29 @@ export async function reconcileMerchantCatalog({ orgId, merchantId }: { orgId: s
 			continue;
 		}
 
-		const divergences = computeDivergences({ link, node, remote });
+		// A associação com os grupos só existe no `flat` (uma leitura por item). Só quando a
+		// política pede e o produto tem grupos vinculados nesta loja — senão a comparação seria
+		// entre listas vazias.
+		let association: { desejada: TCatalogLinkOptionGroupAssociation[]; observada: TCatalogLinkOptionGroupAssociation[] } | null = null;
+		if (syncsComplementos(link.sincronizar) && link.produtoId && link.externoItemId) {
+			const desejada = associationSnapshot({ nodes: await addOnNodesFor(link.produtoId), links: addOnLinks });
+			if (desejada.length > 0 || (link.ultimoSnapshot?.gruposComplementos?.length ?? 0) > 0) {
+				const flat: TIfoodItemFlatDTO | null = await getIfoodItemFlat(context.client, merchantId, link.externoItemId).catch(() => null);
+				if (flat) {
+					const knownGroupIds = new Set([...addOnLinks.groups.values()].map((groupLink) => groupLink.externoOptionGroupId).filter(Boolean));
+					association = {
+						desejada,
+						// Grupos que o iFood associou ao item sem vínculo aqui não contam: podem ter sido
+						// montados no Portal de propósito (política desligada, gestão local).
+						observada: flat.gruposComplementos
+							.filter((grupo): grupo is typeof grupo & { id: string } => !!grupo.id && knownGroupIds.has(grupo.id))
+							.map((grupo, indice) => ({ externoOptionGroupId: grupo.id, min: grupo.min ?? 0, max: grupo.max ?? 1, indice })),
+					};
+				}
+			}
+		}
+
+		const divergences = computeDivergences({ link, node, remote, association });
 		// Push recente: o remoto pode simplesmente ainda não ter propagado. Não marca divergência
 		// (nem limpa a anterior) — a próxima passada decide com dado estável.
 		const pushRecente = link.dataUltimaSincronizacao != null && Date.now() - link.dataUltimaSincronizacao.getTime() < PROPAGATION_GRACE_MS;
@@ -165,7 +230,104 @@ export async function reconcileMerchantCatalog({ orgId, merchantId }: { orgId: s
 		}
 	}
 
-	return { verificados: links.length, sincronizados, divergentes, ausentes, propagando };
+	// Grupos e opções: UMA leitura de `GET /optionGroups` por loja cobre todos os vínculos.
+	if (addOnLinks.groups.size > 0 || addOnLinks.options.size > 0) {
+		const remoteGroups = await listAllIfoodOptionGroups(context.client, merchantId).catch(() => null);
+		if (remoteGroups) {
+			const remoteById = new Map(remoteGroups.map((grupo) => [grupo.id, grupo]));
+			const groupNodes = new Map<string, TAddOnGroupNode | null>();
+			async function groupNodeFor(produtoAddOnId: string) {
+				if (groupNodes.has(produtoAddOnId)) return groupNodes.get(produtoAddOnId) ?? null;
+				const node = await resolveAddOnGroupNode({ orgId, produtoAddOnId }).catch(() => null);
+				groupNodes.set(produtoAddOnId, node);
+				return node;
+			}
+
+			const markMissing = async (linkId: string, erro: string) => {
+				await db.update(catalogLinks).set({ status: "ERRO", ultimoErro: erro, dataAtualizacao: new Date() }).where(eq(catalogLinks.id, linkId));
+				ausentes += 1;
+			};
+			const settle = async (link: TCatalogLinkEntity, divergences: TCatalogLinkDivergence[]) => {
+				const pushRecente = link.dataUltimaSincronizacao != null && Date.now() - link.dataUltimaSincronizacao.getTime() < PROPAGATION_GRACE_MS;
+				if (pushRecente && divergences.some((divergence) => divergence.sincronizado)) {
+					propagando += 1;
+					return;
+				}
+				const acionaveis = divergences.filter((divergence) => divergence.sincronizado);
+				await db
+					.update(catalogLinks)
+					.set({
+						status: acionaveis.length ? "DIVERGENTE" : "SINCRONIZADO",
+						divergencias: divergences.length ? divergences : null,
+						dataAtualizacao: new Date(),
+					})
+					.where(eq(catalogLinks.id, link.id));
+				if (acionaveis.length) divergentes += 1;
+				else sincronizados += 1;
+			};
+
+			for (const [produtoAddOnId, groupLink] of addOnLinks.groups) {
+				const remote = groupLink.externoOptionGroupId ? remoteById.get(groupLink.externoOptionGroupId) : undefined;
+				if (!remote) {
+					await markMissing(groupLink.id, "O grupo de complementos não existe mais no iFood.");
+					continue;
+				}
+				const node = await groupNodeFor(produtoAddOnId);
+				if (!node) {
+					await markMissing(groupLink.id, "O grupo de adicionais interno não existe mais.");
+					continue;
+				}
+				const divergences: TCatalogLinkDivergence[] = [];
+				if (textDiverges(remote.nome, node.nome)) {
+					divergences.push({ campo: "nome", valorInterno: node.nome, valorExterno: remote.nome, sincronizado: groupLink.sincronizar.nome });
+				}
+				const remoteDisponivel = remote.status?.toUpperCase() !== "UNAVAILABLE";
+				if (remoteDisponivel !== node.disponivel) {
+					divergences.push({
+						campo: "disponibilidade",
+						valorInterno: node.disponivel,
+						valorExterno: remoteDisponivel,
+						sincronizado: groupLink.sincronizar.disponibilidade,
+					});
+				}
+				await settle(groupLink, divergences);
+			}
+
+			for (const [opcaoId, optionLink] of addOnLinks.options) {
+				const remoteGroup = optionLink.externoOptionGroupId ? remoteById.get(optionLink.externoOptionGroupId) : undefined;
+				const remote = remoteGroup?.opcoes.find((opcao) => opcao.id === optionLink.externoOptionId);
+				if (!remote) {
+					await markMissing(optionLink.id, "A opção não existe mais no grupo de complementos do iFood.");
+					continue;
+				}
+				const node = optionLink.produtoAddOnId ? await groupNodeFor(optionLink.produtoAddOnId) : null;
+				const opcao = node?.opcoes.find((candidate) => candidate.opcaoId === opcaoId);
+				if (!opcao) {
+					await markMissing(optionLink.id, "A opção de adicional interna não existe mais.");
+					continue;
+				}
+				const divergences: TCatalogLinkDivergence[] = [];
+				if (textDiverges(remote.nome, opcao.nome)) {
+					divergences.push({ campo: "nome", valorInterno: opcao.nome, valorExterno: remote.nome, sincronizado: optionLink.sincronizar.nome });
+				}
+				if (priceDiverges(remote.preco, opcao.precoDelta)) {
+					divergences.push({ campo: "preco", valorInterno: opcao.precoDelta, valorExterno: remote.preco, sincronizado: optionLink.sincronizar.preco });
+				}
+				const remoteDisponivel = remote.status?.toUpperCase() !== "UNAVAILABLE";
+				if (remoteDisponivel !== opcao.disponivel) {
+					divergences.push({
+						campo: "disponibilidade",
+						valorInterno: opcao.disponivel,
+						valorExterno: remoteDisponivel,
+						sincronizado: optionLink.sincronizar.disponibilidade,
+					});
+				}
+				await settle(optionLink, divergences);
+			}
+		}
+	}
+
+	return { verificados: links.length + addOnLinks.groups.size + addOnLinks.options.size, sincronizados, divergentes, ausentes, propagando };
 }
 
 /**

@@ -15,6 +15,12 @@ export const CatalogLinkSyncPolicySchema = z.object({
 	imagem: z.boolean({ invalid_type_error: "Tipo não válido para sincronização de imagem." }).default(true),
 	preco: z.boolean({ invalid_type_error: "Tipo não válido para sincronização de preço." }).default(true),
 	disponibilidade: z.boolean({ invalid_type_error: "Tipo não válido para sincronização de disponibilidade." }).default(true),
+	/**
+	 * Vínculo de ITEM: se a associação item → grupos de complementos (quais grupos, min/max, ordem) é
+	 * empurrada. Grupos e opções têm vínculo próprio (tipo ADD_ON / ADD_ON_OPCAO) com as políticas de
+	 * nome/preço/disponibilidade. Linhas gravadas antes deste campo leem como `true`.
+	 */
+	complementos: z.boolean({ invalid_type_error: "Tipo não válido para sincronização de complementos." }).default(true),
 });
 export type TCatalogLinkSyncPolicy = z.infer<typeof CatalogLinkSyncPolicySchema>;
 
@@ -24,7 +30,22 @@ export const DEFAULT_CATALOG_LINK_SYNC_POLICY: TCatalogLinkSyncPolicy = {
 	imagem: true,
 	preco: true,
 	disponibilidade: true,
+	complementos: true,
 };
+
+/** Leitura tolerante: vínculos anteriores ao campo não têm `complementos` no jsonb. */
+export function syncsComplementos(policy: Partial<TCatalogLinkSyncPolicy> | null | undefined) {
+	return policy?.complementos ?? true;
+}
+
+/** Um grupo associado ao item, como foi enviado no último push — a chave é o id REMOTO do grupo. */
+export const CatalogLinkOptionGroupAssociationSchema = z.object({
+	externoOptionGroupId: z.string(),
+	min: z.number(),
+	max: z.number(),
+	indice: z.number(),
+});
+export type TCatalogLinkOptionGroupAssociation = z.infer<typeof CatalogLinkOptionGroupAssociationSchema>;
 
 /** Valores enviados no último push OK — comparados no push seguinte para evitar chamadas inúteis. */
 export const CatalogLinkSnapshotSchema = z.object({
@@ -33,12 +54,14 @@ export const CatalogLinkSnapshotSchema = z.object({
 	imagemUrl: z.string().optional().nullable(),
 	preco: z.number().optional().nullable(),
 	disponivel: z.boolean().optional().nullable(),
+	/** Só no vínculo de ITEM: a associação com os grupos no último push. */
+	gruposComplementos: z.array(CatalogLinkOptionGroupAssociationSchema).optional().nullable(),
 });
 export type TCatalogLinkSnapshot = z.infer<typeof CatalogLinkSnapshotSchema>;
 
 /** Uma diferença observada entre o estado desejado (interno) e o remoto, na reconciliação. */
 export const CatalogLinkDivergenceSchema = z.object({
-	campo: z.enum(["nome", "descricao", "imagem", "preco", "disponibilidade"]),
+	campo: z.enum(["nome", "descricao", "imagem", "preco", "disponibilidade", "complementos"]),
 	valorInterno: z.union([z.string(), z.number(), z.boolean()]).optional().nullable(),
 	valorExterno: z.union([z.string(), z.number(), z.boolean()]).optional().nullable(),
 	/** Falso quando o campo não é sincronizado: informativo, sem ação de push. */
