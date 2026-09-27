@@ -369,6 +369,20 @@ export const ChatMessageMetadataSchema = z.object({
 		})
 		.optional()
 		.nullable(),
+	/**
+	 * A mensagem é a resposta a um botão de pesquisa de campanha, já gravada no campo do cliente
+	 * (lib/campaigns/surveys/capture.ts). O hub mostra "Respondeu à pesquisa: <opção>" e o agente
+	 * de IA não abre turno para ela.
+	 */
+	pesquisaResposta: z
+		.object({
+			campanhaId: z.string(),
+			campoId: z.string(),
+			opcaoValor: z.string(),
+			opcaoTitulo: z.string(),
+		})
+		.optional()
+		.nullable(),
 	// Vínculo denormalizado mensagem → execução do agente. O canônico é
 	// `ai_agent_runs.mensagemEnviadaId`; este espelho evita join no hub.
 	aiAgente: z

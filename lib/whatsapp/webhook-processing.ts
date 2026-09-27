@@ -1,4 +1,5 @@
 import { ensureOrganizationAgent } from "@/lib/ai/agent/provisioning";
+import { captureSurveyReplySafely } from "@/lib/campaigns/surveys/capture";
 import { resolveAiResponseDelayMs } from "@/lib/chats/ai-trigger";
 import { dispatchAiTurn } from "@/lib/chats/ai-turn-dispatch";
 import { processChatMessageMedia } from "@/lib/chats/media-processing";
@@ -442,6 +443,23 @@ async function handleIncomingMessage(incomingMessage: ReturnType<typeof parseWeb
 	if (resolvedClient.isNew) console.log("[WHATSAPP_WEBHOOK] New client created:", resolvedClient.clientId);
 	const clientId = resolvedClient.clientId;
 
+	// Ainda no estágio 1: um toque em botão de pesquisa grava a resposta no campo do cliente antes
+	// do gate do hub — o valor da pesquisa não depende da organização ter o hub de atendimentos.
+	const surveyReply = incomingMessage.button
+		? await captureSurveyReplySafely(
+				{
+					organizacaoId,
+					clienteId: clientId,
+					whatsappMessageId: incomingMessage.whatsappMessageId,
+					buttonText: incomingMessage.button.text,
+					buttonPayload: incomingMessage.button.payload,
+					quotedWhatsappMessageId: incomingMessage.context?.quotedWhatsappMessageId ?? null,
+					date: new Date(incomingMessage.timestamp),
+				},
+				"[WHATSAPP_WEBHOOK]",
+			)
+		: ({ captured: false } as const);
+
 	// ESTÁGIO 2 — CONVERSA: daqui em diante é acompanhamento de mensagens, o que o hub gate
 	// de fato governa.
 	const hasHubAccess = connectionPhone.conexao.organizacao?.configuracao?.recursos?.hubAtendimentos?.acesso ?? false;
@@ -496,6 +514,9 @@ async function handleIncomingMessage(incomingMessage: ReturnType<typeof parseWeb
 		...(incomingMessage.referral ? { whatsappReferral: incomingMessage.referral } : {}),
 		...(midiaTipo === "FIGURINHA" ? { whatsappMidia: { animated: incomingMessage.stickerAnimated ?? false } } : {}),
 		...(incomingMessage.button ? { whatsappButton: incomingMessage.button } : {}),
+		...(surveyReply.captured
+			? { pesquisaResposta: { campanhaId: surveyReply.campanhaId, campoId: surveyReply.campoId, opcaoValor: surveyReply.opcaoValor, opcaoTitulo: surveyReply.opcaoTitulo } }
+			: {}),
 		...(incomingMessage.unsupported ? { whatsappUnsupported: incomingMessage.unsupported } : {}),
 		...(incomingMessage.location ? { whatsappLocation: incomingMessage.location } : {}),
 		...(incomingMessage.contacts && incomingMessage.contacts.length > 0 ? { whatsappContacts: incomingMessage.contacts } : {}),
@@ -546,6 +567,10 @@ async function handleIncomingMessage(incomingMessage: ReturnType<typeof parseWeb
 	}
 
 	if (!allowsAIService) return;
+
+	// O cliente respondeu a uma pergunta, não abriu uma conversa: a resposta de pesquisa não
+	// inicia um turno do agente (docs/dev-planning/survey-campaigns-plan.md §1).
+	if (surveyReply.captured) return;
 
 	// Capability de plano. Antes só `hubAtendimentos.acesso` era checado, e o atendimento por
 	// IA rodava para qualquer organização com um número habilitado.
