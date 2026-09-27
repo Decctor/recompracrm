@@ -1,6 +1,6 @@
 # Survey campaigns (`PESQUISA`) — Design & implementation plan
 
-> Status: proposta · Última atualização: 2026-09-27
+> Status: implementado (v1) · Última atualização: 2026-09-27 · Ver §13 para o que mudou na implementação
 
 A **survey campaign** sends a WhatsApp template whose quick-reply buttons are the answer options of
 a question. Each tap is written to a **custom field** of the client, so the answer becomes a
@@ -256,15 +256,15 @@ like any other (the interaction is flagged `teste`, so the results view excludes
 
 ### 5.1 Payload (`lib/message-templates/channels/whatsapp/send-payload.ts`)
 
-`TMessageTemplateRuntimeContext` gains `pesquisa?: { destinatarioId: string }`. For each
-`RESPOSTA_PESQUISA` button:
+For each `RESPOSTA_PESQUISA` button, using the `interactionId` the runtime context already carries
+(it is the id the interaction row is created with at send success, `recipient.chaveIdempotencia`):
 
 ```typescript
 components.push({
 	type: "button",
 	sub_type: "quick_reply",
 	index: String(index),
-	parameters: [{ type: "payload", payload: buildSurveyReplyPayload({ destinatarioId, opcaoValor }) }],
+	parameters: [{ type: "payload", payload: buildSurveyReplyPayload({ interactionId, opcaoValor }) }],
 });
 ```
 
@@ -273,13 +273,13 @@ components.push({
 Payload format, in `lib/campaigns/surveys/payload.ts`:
 
 ```
-psq:<dispatchRecipientId>:<opcaoValor>
+psq:<interactionId>:<opcaoValor>
 ```
 
-4 + 36 + 1 + ≤64 = ≤105 chars, under Meta's 128. The recipient id resolves campaign, client and
-interaction in one row (`campaign_dispatch_recipients`), and the interaction already stores
-`dispatchRecipientId` in its metadata. `parseSurveyReplyPayload` returns `null` for anything that
-does not match; nothing else in the platform emits `psq:` payloads.
+4 + 36 + 1 + ≤64 = ≤105 chars, under Meta's 128. The interaction is what the reply annotates
+(§2.4), so carrying its id skips the recipient hop entirely. A preview without interaction sends the
+button without payload and the capture falls back to the quoted wamid. `parseSurveyReplyPayload`
+returns `null` for anything that does not match; nothing else in the platform emits `psq:` payloads.
 
 ### 5.2 Internal gateway
 
@@ -308,16 +308,17 @@ export async function captureSurveyReply(input: {
 
 Resolution order, first match wins:
 
-1. **PAYLOAD** — `parseSurveyReplyPayload(buttonPayload)` → recipient row (must belong to
-   `organizacaoId` and `clienteId`) → campaign → template button with that `opcaoValor`.
+1. **PAYLOAD** — `parseSurveyReplyPayload(buttonPayload)` → interaction by id (must belong to
+   `organizacaoId` and `clienteId` and carry a `campanhaId`) → campaign template → survey button
+   with that `opcaoValor`.
 2. **CONTEXTO** — `quotedWhatsappMessageId` → interaction via `metadados->>'whatsappMessageId'`
    (the lookup `applyProviderStatusUpdate` already does) → campaign is `PESQUISA` → survey button
    whose `texto` equals `buttonText`.
 3. **TEXTO** (gateway only, see 6.3) — most recent `PESQUISA` recipient `ENVIADA` to this client in
    the last 7 days whose template has a survey button with `texto === buttonText`.
 
-Each strategy ends on the outbound interaction (strategy 1 through the recipient's `interacaoId`,
-strategy 2 directly, strategy 3 through the recipient). Then, in one transaction:
+Each strategy ends on the outbound interaction (`lib/campaigns/surveys/capture.ts`). Then, in one
+transaction:
 
 - append the entry atomically, guarded by the client's wamid so a Meta redelivery is a no-op:
 
@@ -516,7 +517,7 @@ doing while touching both, but it is a refactor, not a requirement of this featu
 2. **Template button `RESPOSTA_PESQUISA`** — schema, Meta component mapping, plain render,
    `validateSurveyButtons`, editor + preview. Templates become self-describing surveys even before
    campaigns know about them.
-3. **Send payload** — runtime context `pesquisa.destinatarioId`, `payload` parameter type,
+3. **Send payload** — payload built from the runtime context's `interactionId`, `payload` parameter type,
    `buildSurveyReplyPayload`/`parseSurveyReplyPayload` with unit tests, gateway buttons.
 4. **Capture** — `captureSurveyReply` with the three strategies, the atomic append and the
    `ESCOLHA_MULTIPLA` merge;
@@ -532,3 +533,28 @@ doing while touching both, but it is a refactor, not a requirement of this featu
    action, list-row summary, client timeline entry.
 9. **Docs** — `docs/whatsapp-template-docs.md` gains the quick-reply payload section; this file
    moves from "proposta" to "implementado" with the gaps found on the way, as the promotion doc did.
+
+---
+
+## 13. Implementation notes (what changed from the proposal)
+
+- **Payload carries the interaction id, not the recipient id.** Every capture strategy ends on the
+  interaction, and the runtime context already had it (`messageKey`), so the recipient hop was
+  dead weight. No new runtime field.
+- **Meta sync preserves survey buttons.** `extractWhatsappContentFromMetaWithLocalContext` rewrote
+  `botoes` from Meta on every sync, which would have downgraded survey buttons to plain quick
+  replies. A QUICK_REPLY that matches a local `RESPOSTA_PESQUISA` by index and text keeps the local
+  button (`meta-status.ts`).
+- **Survey templates are rejected outside `PESQUISA` campaigns** (`validateSurveyCampaign`), and the
+  message stage hides them for other triggers, with the reason on hover. Lifting this is the v2
+  "post-purchase survey" change.
+- **Inline field creation** lives in the trigger config (`pesquisa-config.tsx`): there was no CRM
+  surface to create a choice field outside the POI settings, and the builder should not send the
+  user away. Option values are derived from titles (`lib/custom-fields/option-values.ts`).
+- **The Meta library test list was left alone.** `config/message-template-library.test.ts` asserts
+  every trigger has a library model; a survey template cannot live in the library because its
+  buttons point at an organization's field. `PESQUISA` is intentionally absent from that list; the
+  message stage offers "Criar template da pesquisa" prefilled from the field instead.
+- **Results exclude test sends** through `metadados.teste`, and the "Respostas" tab is the default
+  tab of a survey campaign.
+- **Docs:** `docs/whatsapp-template-docs.md` gained the quick-reply payload section.
