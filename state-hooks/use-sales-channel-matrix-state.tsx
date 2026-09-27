@@ -155,8 +155,7 @@ export function useSalesChannelMatrixEditor({ matrix, callbacks }: { matrix: TSa
 		onSettled: () => {
 			queryClient.invalidateQueries({ queryKey: ["sales-channel-matrix"] });
 			queryClient.invalidateQueries({ queryKey: ["sales-channels"] });
-			// A vitrine da loja e a matriz da página do produto leem as mesmas linhas.
-			queryClient.invalidateQueries({ queryKey: ["sales-channel-showcase"] });
+			// A matriz da página do produto lê as mesmas linhas.
 			queryClient.invalidateQueries({ queryKey: ["product-channel-settings"] });
 		},
 	});
@@ -171,7 +170,6 @@ export function useSalesChannelMatrixEditor({ matrix, callbacks }: { matrix: TSa
 		(grupoAtual: string, grupoNovo: string) => {
 			matrixState.syncRenamedGroup(grupoAtual, grupoNovo);
 			queryClient.invalidateQueries({ queryKey: ["sales-channel-matrix"] });
-			queryClient.invalidateQueries({ queryKey: ["sales-channel-showcase"] });
 			queryClient.invalidateQueries({ queryKey: ["products"] });
 			queryClient.invalidateQueries({ queryKey: ["product-groups"] });
 		},

@@ -1,6 +1,6 @@
 # Matriz de Canais — Cardápio centralizado em Produtos
 
-> Design doc — **Fases 1, 2 e 3 implementadas** (2026-09-27). Fase 1: rota `GET/PUT /api/sales-channels/matrix`,
+> Design doc — **Fases 1 a 4 implementadas** (2026-09-27). Fase 1: rota `GET/PUT /api/sales-channels/matrix`,
 > aba "Canais" em Produtos com a grade de canais internos editável, vitrine da loja virou link. Fase 2:
 > coluna iFood editável com menu por nó (vincular a item existente, publicar como novo, ver vínculo com
 > divergências e política por campo, desvincular), "Reconciliar agora" no cabeçalho do merchant, badge
@@ -8,7 +8,9 @@
 > parcial ignorando DESVINCULADO — migração `drizzle/0114_catalog_links_externo_item_active.sql`, aplicar
 > manualmente —, cron de reconciliação registrado, guardas de permissão nas rotas `sync/*`). Fase 3: coluna
 > "Adicionais" com chip de contagem e diálogo que reusa o bloco e o editor da página do produto, com save
-> próprio. Fase 4 (aposentar a vitrine) pendente.
+> próprio. Fase 4: vitrine da loja aposentada — `ShopShowcaseSection`, os blocos `Showcase*`,
+> `use-sales-channel-showcase-state` e `PUT /api/sales-channels/showcase` removidos junto com
+> `resolveShowcaseChannelRows`; o card em Loja digital › Produtos aponta para a matriz.
 > Documentos irmãos: `docs/product-sales-channels-design.md` (a primitiva `sales_channels` +
 > `product_channel_settings`, fases 1–4 implementadas) e `docs/ifood-catalog-linking-sync-design.md`
 > (`catalog_links`, publish/import/push/reconcile — backend implementado, **UI nunca construída**).
@@ -239,8 +241,8 @@ Uma leitura, tudo que a grade precisa:
 
 ### 5.3 O que NÃO muda
 
-- `PUT /api/products/channel-settings` e `PUT /api/sales-channels/showcase` continuam existindo (página do
-  produto; compatibilidade até a vitrine virar link). Nenhuma mudança de schema além do predicado do índice.
+- `PUT /api/products/channel-settings` continua existindo (página do produto). `PUT /api/sales-channels/showcase`
+  sobreviveu até a fase 4 e foi removido. Nenhuma mudança de schema além do predicado do índice.
 
 ---
 
@@ -290,8 +292,9 @@ Convenções que se aplicam: hooks expõem `queryKey`; mutations são wrappers A
    editáveis, badge de status, Vincular a existente, Publicar como novo, Desvincular, painel de divergências,
    Reconciliar agora. Badge "Vinculado" na aba Catálogo do iFood.
 3. **Adicionais.** Coluna de contagem + diálogo com o bloco de adicionais e save próprio.
-4. **Aposentadoria.** Remover `ShopShowcaseSection`/`ShowcaseProductTable`/`ShowcaseDraftRow` e
-   `use-sales-channel-showcase-state`; `PUT /api/sales-channels/showcase` sai quando nenhum cliente restar.
+4. **Aposentadoria.** Removidos `ShopShowcaseSection`, `ShowcaseProductTable`, `ShowcaseGroupPanel`,
+   `ShowcaseDraftRow`, `use-sales-channel-showcase-state`, `useSalesChannelShowcase`, `updateSalesChannelShowcase`,
+   `resolveShowcaseChannelRows` e `PUT /api/sales-channels/showcase`.
 
 Cada fase é um PR; a 1 já entrega a centralização para POS/SHOP/COMANDA.
 

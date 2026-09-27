@@ -49,54 +49,6 @@ export function sortGroupsByChannelOrder(groups: string[], ordemGrupos: string[]
 	});
 }
 
-export type TShowcaseExistingRow = { id: string; disponivel: boolean | null; precoVenda: number | null };
-export type TShowcaseResolvedNode = { produtoId: string; disponivel: boolean | null; precoVenda: number | null };
-
-/**
- * Traduz a vitrine declarada (modo + lista de produtos) para as linhas esparsas do canal.
- *
- * SELECIONADOS: a presença é opt-in, então o produto listado vira linha `disponivel=true` e o que
- * saiu volta a herdar (= fora do catálogo). TODOS: a presença é o padrão, então quem saiu da
- * vitrine vira linha `disponivel=false` e o listado volta a herdar. Trocar de modo, por isso,
- * preserva o que está visível hoje — muda só o destino dos produtos FUTUROS.
- *
- * Um override de preço não é disponibilidade: quem sai da vitrine mantém o `precoVenda` guardado,
- * e a linha só é apagada quando não sobra nem preço nem disponibilidade para gravar.
- */
-export function resolveShowcaseChannelRows({
-	catalogoModo,
-	listed,
-	touchedIds,
-	existing,
-}: {
-	catalogoModo: TSalesChannelCatalogModeEnum;
-	/** Produtos na vitrine, com o preço do canal (nulo = herda o preço base). */
-	listed: Map<string, number | null>;
-	/** Produtos elegíveis ao canal somados aos listados — só eles entram no diff. */
-	touchedIds: Iterable<string>;
-	existing: Map<string, TShowcaseExistingRow>;
-}) {
-	const rowIdsToDelete: string[] = [];
-	const nodesToUpsert: TShowcaseResolvedNode[] = [];
-
-	for (const produtoId of touchedIds) {
-		const isListed = listed.has(produtoId);
-		const row = existing.get(produtoId);
-		const disponivel = catalogoModo === "SELECIONADOS" ? (isListed ? true : null) : isListed ? null : false;
-		const precoVenda = isListed ? (listed.get(produtoId) ?? null) : (row?.precoVenda ?? null);
-
-		if (disponivel === null && precoVenda === null) {
-			if (row) rowIdsToDelete.push(row.id);
-			continue;
-		}
-		if (!row || row.disponivel !== disponivel || row.precoVenda !== precoVenda) {
-			nodesToUpsert.push({ produtoId, disponivel, precoVenda });
-		}
-	}
-
-	return { rowIdsToDelete, nodesToUpsert };
-}
-
 /** Converte o `sales.canal` (texto livre) para o tipo do registro de canais, quando reconhecido. */
 export function toSalesChannelType(canal: string | null | undefined): TSalesChannelTypeEnum | undefined {
 	return (SALES_CHANNEL_TYPES as readonly string[]).includes(canal ?? "") ? (canal as TSalesChannelTypeEnum) : undefined;

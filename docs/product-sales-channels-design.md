@@ -174,8 +174,9 @@ Edição de venda existente: filtros valem para **adicionar** itens; itens já l
 - **`destaqueIds` fica em `shop_settings`** (decidido): é merchandising/apresentação, não disponibilidade, e não generaliza para outros canais.
 - **IMPLEMENTADO (dual-read; dual-write APOSENTADO)**: `getShopCatalogProducts` lê o canal SHOP quando a linha existe e
   cai no jsonb quando não (proteção para organizações ainda não materializadas). O PUT de `/api/shop/settings` **não**
-  sincroniza mais o canal: a vitrine do painel edita o canal diretamente (`PUT /api/sales-channels/showcase`), e um sync
-  a cada save apagaria essa curadoria. `syncShopSalesChannel` sobrevive apenas como tradução única, chamada por
+  sincroniza mais o canal: a curadoria edita o canal diretamente (hoje pela matriz de canais em Produtos,
+  `PUT /api/sales-channels/matrix` — ver `docs/catalog-channels-matrix-design.md`; a vitrine da loja e seu
+  `PUT /api/sales-channels/showcase` foram aposentados), e um sync a cada save apagaria essa curadoria. `syncShopSalesChannel` sobrevive apenas como tradução única, chamada por
   `ensureSalesChannels` ao materializar o canal de uma organização antiga — o provisionamento continua shop-aware, nunca
   com default cego. O bloco `modo/produtoIds` do jsonb virou legado tolerado (ninguém escreve, só essa migração lê);
   `destaqueIds` continua ativo. Backfill/verificação `npm run backfill:shop-sales-channels` compara jsonb × canal e, por
