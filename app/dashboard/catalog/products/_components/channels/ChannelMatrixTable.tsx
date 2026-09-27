@@ -152,9 +152,24 @@ function ChannelCells({
 	const node = nodeView(row, channel.id, accessors.cells);
 	const key = matrixNodeKey(row.product.id, channel.id, row.variant?.id ?? null);
 	const link = channel.refExterno ? (accessors.links.get(matrixLinkKey(channel.refExterno, row.product.id, row.variant?.id ?? null)) ?? null) : null;
+	const merchantLinks = channel.refExterno ? accessors.merchantLinks.get(channel.refExterno) : undefined;
+
+	// iFood sem vínculo: a célula não edita. O override gravado aqui não chegaria à loja, e editar
+	// um valor que "não vale" confunde mais do que ajuda — o menu da linha vincula ou publica, e a
+	// partir daí o push leva preço e disponibilidade. A linha-pai com variantes libera quando
+	// qualquer variante está vinculada (a presença do produto no canal é o que ela edita).
+	const hasActiveVariants = row.variant === null && row.product.variantes.some((variant) => variant.ativo);
+	const ifoodUnlinked = channel.canal === "IFOOD" && (hasActiveVariants ? !(merchantLinks?.linkedProductIds.has(row.product.id) ?? false) : !link);
+	const readOnlyReason = ifoodUnlinked ? "Sem vínculo com o iFood: vincule ou publique pelo menu da linha para editar." : null;
 
 	const availability = (
-		<MatrixAvailabilityCell node={node} channel={channel} catalogoModo={column.catalogoModo} onCycle={() => accessors.cycleAvailability(key)} />
+		<MatrixAvailabilityCell
+			node={node}
+			channel={channel}
+			catalogoModo={column.catalogoModo}
+			onCycle={() => accessors.cycleAvailability(key)}
+			readOnlyReason={readOnlyReason}
+		/>
 	);
 	const price = (
 		<MatrixPriceCell
@@ -163,9 +178,9 @@ function ChannelCells({
 			gridCol={columnIndex}
 			gridBounds={gridBounds}
 			onChange={(precoVenda) => accessors.updatePrice(key, precoVenda)}
+			readOnlyReason={readOnlyReason}
 		/>
 	);
-	const merchantLinks = channel.refExterno ? accessors.merchantLinks.get(channel.refExterno) : undefined;
 	const status = (
 		<div className="flex min-w-0 items-center justify-center gap-0.5">
 			<MatrixStatusCell node={node} channel={channel} catalogoModo={column.catalogoModo} link={link} />

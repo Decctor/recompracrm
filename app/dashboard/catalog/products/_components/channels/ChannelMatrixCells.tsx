@@ -63,11 +63,14 @@ export function MatrixAvailabilityCell({
 	channel,
 	catalogoModo,
 	onCycle,
+	readOnlyReason,
 }: {
 	node: TMatrixNodeView;
 	channel: TSalesChannelMatrixChannel;
 	catalogoModo: TSalesChannelMatrixChannel["catalogoModo"];
 	onCycle: () => void;
+	/** Motivo de bloqueio; presente, a pílula é mostrada mas não cicla. */
+	readOnlyReason?: string | null;
 }) {
 	const isVariant = node.variant !== null;
 	const choice = isVariant ? (node.variantCell?.disponivel ?? null) : (node.productCell?.disponivel ?? null);
@@ -76,6 +79,13 @@ export function MatrixAvailabilityCell({
 	const inheritedVisible = isVariant
 		? resolveMatrixNodeAvailability({ ...node, variant: null, variantCell: null }, channel, catalogoModo)
 		: catalogoModo === "TODOS";
+	if (readOnlyReason) {
+		return (
+			<div className="flex justify-center px-1 opacity-50" title={readOnlyReason}>
+				<AvailabilityCycleButton choice={choice} inheritedVisible={inheritedVisible} variantLevel={isVariant} onCycle={() => {}} />
+			</div>
+		);
+	}
 	return (
 		<div className="flex justify-center px-1">
 			<AvailabilityCycleButton choice={choice} inheritedVisible={inheritedVisible} variantLevel={isVariant} onCycle={onCycle} />
@@ -89,6 +99,7 @@ export function MatrixPriceCell({
 	gridCol,
 	gridBounds,
 	onChange,
+	readOnlyReason,
 }: {
 	node: TMatrixNodeView;
 	/** Ausente quando o nó não precifica (produto com variantes: preço é por variante). */
@@ -96,7 +107,18 @@ export function MatrixPriceCell({
 	gridCol: number;
 	gridBounds: SpreadsheetGridBounds;
 	onChange: (precoVenda: number | null) => void;
+	/** Motivo de bloqueio; presente, a célula vira leitura. */
+	readOnlyReason?: string | null;
 }) {
+	if (readOnlyReason && gridRow !== null) {
+		const current = (node.variant ? node.variantCell : node.productCell)?.precoVenda ?? null;
+		const base = node.variant ? node.variant.precoVenda : node.product.precoVenda;
+		return (
+			<span className="block px-1 text-center text-[0.65rem] text-muted-foreground" title={readOnlyReason}>
+				{current != null ? formatToMoney(current) : base && base > 0 ? `Herda ${formatToMoney(base)}` : "—"}
+			</span>
+		);
+	}
 	if (gridRow === null) {
 		return (
 			<span

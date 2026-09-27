@@ -108,7 +108,10 @@ export default function ChannelHeaderMenu({
 						</DropdownMenuGroup>
 					) : (
 						<>
-							<DropdownMenuLabel>Modo do catálogo</DropdownMenuLabel>
+							{/* GroupLabel do base-ui só existe dentro de um Group: fora dele o menu quebra ao abrir. */}
+							<DropdownMenuGroup>
+								<DropdownMenuLabel>Modo do catálogo</DropdownMenuLabel>
+							</DropdownMenuGroup>
 							<DropdownMenuRadioGroup value={catalogoModo} onValueChange={(value) => onCatalogModeChange(value as TSalesChannelCatalogModeEnum)}>
 								{CATALOG_MODES.map((mode) => (
 									<DropdownMenuRadioItem key={mode.value} value={mode.value}>
