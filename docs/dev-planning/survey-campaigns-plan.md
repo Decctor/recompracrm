@@ -22,7 +22,7 @@ webhooks that does not depend on the chat hub, and an audience filter over custo
 | --- | --- | --- |
 | Template buttons (`schemas/message-templates.ts`) | `RESPOSTA RÁPIDA` exists, is submitted to Meta as `QUICK_REPLY` and imported back from Meta. | At send time `buildButtonSendComponents` (`lib/message-templates/channels/whatsapp/send-payload.ts`) only emits `URL_PRESET` components; quick replies carry no payload, so a tap is only identifiable by its text. |
 | Inbound tap (`lib/whatsapp/parsing.ts`) | Meta `button` / `interactive` messages are parsed into `{ text, payload }` and `context.quotedWhatsappMessageId` (the wamid of the template message) is kept. | The tap is persisted only as `metadados.whatsappButton` on a chat message, **after the `hubAtendimentos` gate** in `lib/whatsapp/webhook-processing.ts`. A CRM-only organization loses the tap entirely. |
-| Internal gateway inbound (`lib/whatsapp/gateway-webhook-processing.ts`) | `message.received` carries only `content.text`. | No button id comes back, even though the gateway send API accepts `quick_reply` buttons with an `id`. |
+| Internal gateway inbound (`lib/whatsapp/gateway-webhook-processing.ts`) | `message.received` carries only `content.text`. Confirmed: the gateway cannot echo a button id. | Gateway replies are text-matched (§6.3), by design. |
 | Outbound correlation | `interactions.metadados.whatsappMessageId` stores the wamid; `applyProviderStatusUpdate` already resolves an interaction from a wamid. | Nothing links an inbound message back to the interaction it answers. |
 | Custom fields (`lib/custom-fields/values.ts`) | Choice fields (`ESCOLHA_UNICA` / `ESCOLHA_MULTIPLA`) with `opcoes[{ valor, titulo }]`; `saveClientCustomFieldValues` is the single write point with cross-validation; index `(organizacao_id, campo_id)` exists "for segmentation". | No audience filter reads custom-field values yet: `CampaignFilterConditionSchema` knows only `LOCALIZAÇÃO` and `TOP_COMPRADORES_PRODUTO`. |
 | Campaign ↔ template coupling | FK `whatsappTemplateId` + `validateTemplateForTrigger` (variables compatible with the trigger) at save. | A template can be edited freely after a campaign points at it; buttons can be reordered, removed or renamed and the campaign would not notice. |
@@ -37,7 +37,7 @@ webhooks that does not depend on the chat hub, and an audience filter over custo
 | Where the button ↔ option link lives | **On the template button**, as a new typed button `RESPOSTA_PESQUISA { texto, campoId, opcaoValor }`. | Mirrors `URL_PRESET`: a button type the platform understands semantically. The question is the message text and the answers are the buttons, so the template *is* the survey; a campaign only picks it. Validation happens once, at template save. |
 | Survey as a trigger or as a property | **New trigger `PESQUISA`** (scheduled one-shot, same clock as `USO-UNICO`) in v1. Capture is **trigger-agnostic** by construction (it keys on the button type and the send payload), so v2 can allow survey templates on event triggers (post-purchase "how was it?") by relaxing one validation. | The product asked for is "a new type of campaign" with its own results view; a new trigger is the established pattern (`PROMOCAO-PRODUTOS`). Building capture on the template keeps that door open at zero cost. |
 | How a reply finds its campaign | **Per-send quick-reply payload** (Meta lets each send set `sub_type: "quick_reply"` + `{ type: "payload", payload }`, ≤128 chars). Fallback: `context.quotedWhatsappMessageId` → `interactions.metadados.whatsappMessageId`. | The reply becomes self-routing; no text matching, no guessing which of the client's recent sends it answers. The wamid fallback covers clients on old app versions and any provider that drops the payload. |
-| Where responses are stored | **New table `campaign_survey_responses`** (one row per tap) **and** the client's custom-field value (through `saveClientCustomFieldValues`). | The field value is what audiences filter on, but it is mutable (a later survey or a manual edit overwrites it). The log is the immutable record the results view aggregates and the reason a tap counted "for this campaign". |
+| Where responses are stored | **On the outbound interaction**, as `interactions.metadados.pesquisaRespostas[]` (one entry per tap), **and** on the client's custom-field value (through `saveClientCustomFieldValues`). No new table. | Every resolution strategy (§6.1) lands on the send that was answered, and that send is already an `interactions` row that carries delivery state (`ENVIADO → ENTREGUE → LIDO`). "Answered with X at T" is the next thing that happened to that message. The field value is what audiences filter on but it is mutable (a later survey or a manual edit overwrites it); the entries on the interaction are the immutable record the results view aggregates. A separate table would duplicate `campanhaId`/`clienteId`/`interacaoId` for nothing. |
 | Capture placement | In **stage 1 of both webhooks** (right after `resolveWhatsappClient`, before the hub gate). | The value of a survey is the field write; it cannot depend on the organization paying for the chat hub. |
 | Coupling guard | **Freeze, do not snapshot.** While an active `PESQUISA` campaign references a template, that template's buttons cannot change; while a template with survey buttons is not `ARQUIVADO`, the referenced field options cannot be removed or renamed. The response log snapshots `opcaoTitulo` so history stays readable after the freeze lifts. | A snapshot on the campaign would be a second source of truth for the same buttons. The freeze makes the coupling explicit and visible to the user editing the template ("em uso pela pesquisa X"). |
 | Audience filter | **New condition `CAMPO_PERSONALIZADO`** on the filter tree (`{ campoId, operador, valores }`), resolved from `client_custom_field_values`. | General: it also serves fields collected at the point of interaction (gender, has-children…). The "send to who voted X" flow is a one-click audience prefilled with this condition from the results view. |
@@ -103,43 +103,48 @@ z.object({
 - Plain text render (`buildWhatsappPlainContent`, internal gateway, previews): same as a quick
   reply.
 
-### 2.4 Response log (`services/drizzle/schema/campaign-survey-responses.ts`)
+### 2.4 Responses on the interaction (`schemas/interactions.ts`)
+
+No new table. `InteractionMetadataSchema` gains one typed key, on the **outbound** interaction the
+tap answers:
 
 ```typescript
-export const campaignSurveyResponses = newTable(
-	"campaign_survey_responses",
-	{
-		id: varchar("id", { length: 255 }).primaryKey().$defaultFn(() => crypto.randomUUID()),
-		organizacaoId: varchar("organizacao_id", { length: 255 }).references(() => organizations.id, { onDelete: "cascade" }).notNull(),
-		campanhaId: varchar("campanha_id", { length: 255 }).references(() => campaigns.id, { onDelete: "cascade" }).notNull(),
-		clienteId: varchar("cliente_id", { length: 255 }).references(() => clients.id, { onDelete: "cascade" }).notNull(),
-		campoId: varchar("campo_id", { length: 255 }).references(() => customFields.id, { onDelete: "cascade" }).notNull(),
-		// Envio que a resposta responde. Null quando só o fallback por texto resolveu (gateway).
-		dispatchRecipientId: varchar("dispatch_recipient_id", { length: 255 }).references(() => campaignDispatchRecipients.id, { onDelete: "set null" }),
-		interacaoId: varchar("interacao_id", { length: 255 }).references(() => interactions.id, { onDelete: "set null" }),
-		opcaoValor: text("opcao_valor").notNull(),
-		// Snapshot do rótulo no momento da resposta: o resultado continua legível se a opção for
-		// renomeada depois que a campanha encerrar e o congelamento for liberado.
-		opcaoTitulo: text("opcao_titulo").notNull(),
-		// Como a resposta foi correlacionada: PAYLOAD (Meta, exato), CONTEXTO (wamid citado),
-		// TEXTO (gateway: rótulo do botão contra o último envio da pesquisa ao cliente).
-		origemCorrelacao: campaignSurveyResponseSourceEnum("origem_correlacao").notNull(),
-		whatsappMessageId: varchar("whatsapp_message_id", { length: 255 }),
-		chatMessageId: varchar("chat_message_id", { length: 255 }),
-		dataResposta: timestamp("data_resposta").notNull(),
-		dataInsercao: timestamp("data_insercao").defaultNow().notNull(),
-	},
-	(table) => [
-		// Idempotência: a Meta reentrega webhooks; um toque = uma linha.
-		uniqueIndex("uq_campaign_survey_responses_whatsapp_message").on(table.whatsappMessageId).where(sql`${table.whatsappMessageId} is not null`),
-		// Resultados por campanha e "quem respondeu X".
-		index("idx_campaign_survey_responses_campanha_opcao").on(table.campanhaId, table.opcaoValor, table.dataResposta),
-		index("idx_campaign_survey_responses_org_cliente").on(table.organizacaoId, table.clienteId),
-	],
-);
+// Respostas a botões de pesquisa (RESPOSTA_PESQUISA) dadas a este envio. Uma entrada por toque, em
+// ordem de chegada; a resposta "vigente" é derivada (última para ESCOLHA_UNICA, união para
+// ESCOLHA_MULTIPLA) por `resolveSurveyAnswer`, nunca gravada. `opcaoTitulo` é snapshot: o
+// resultado continua legível se a opção for renomeada depois que o congelamento (§7) for liberado.
+pesquisaRespostas: z
+	.array(
+		z.object({
+			opcaoValor: z.string(),
+			opcaoTitulo: z.string(),
+			// Como a resposta foi correlacionada: PAYLOAD (Meta, exato), CONTEXTO (wamid citado),
+			// TEXTO (gateway: rótulo do botão contra o último envio da pesquisa ao cliente).
+			origem: z.enum(["PAYLOAD", "CONTEXTO", "TEXTO"]),
+			// wamid da mensagem do cliente: chave de idempotência (a Meta reentrega webhooks).
+			whatsappMessageId: z.string().optional().nullable(),
+			chatMessageId: z.string().optional().nullable(),
+			data: z.string(), // ISO
+		}),
+	)
+	.optional()
+	.nullable(),
 ```
 
-`campaignSurveyResponseSourceEnum = pgEnum("campaign_survey_response_source", ["PAYLOAD", "CONTEXTO", "TEXTO"])`.
+Why the interaction and not a table: every strategy in §6.1 resolves the tap to the send it
+answers, and that send is already a row that carries what happened to the message (`statusEnvio`,
+`dataEnvio`, `whatsappMessageId`). A reply is the next event on the same message. Everything a
+table would index (`campanhaId`, `clienteId`, `interacaoId`, `teste`) is already on the row, and the
+campaign stats queries already scan a campaign's interactions through
+`idx_interactions_org_campanha_status_data`, which is the same scan the results view needs.
+
+What it costs: appends are a jsonb read-modify-write, so they must be a single atomic `UPDATE`
+(§6.1) rather than a select-then-set; and aggregation is over a jsonb array. A survey has thousands
+of interactions, not millions, so no extra index in v1; `metadados->>'whatsappMessageId'` lookups
+already run without one.
+
+`statusEnvio` stays pure delivery state (the redesign plan §2.6 closed that): "respondida" is
+`metadados ? 'pesquisaRespostas'`, not a new enum value.
 
 ### 2.5 Filter condition (`schemas/campaigns.ts`)
 
@@ -311,13 +316,29 @@ Resolution order, first match wins:
 3. **TEXTO** (gateway only, see 6.3) — most recent `PESQUISA` recipient `ENVIADA` to this client in
    the last 7 days whose template has a survey button with `texto === buttonText`.
 
-Then, in one transaction:
+Each strategy ends on the outbound interaction (strategy 1 through the recipient's `interacaoId`,
+strategy 2 directly, strategy 3 through the recipient). Then, in one transaction:
 
-- insert `campaign_survey_responses` (`ON CONFLICT (whatsapp_message_id) DO NOTHING` → return
-  `captured: true` without re-writing the field on a Meta redelivery);
+- append the entry atomically, guarded by the client's wamid so a Meta redelivery is a no-op:
+
+  ```sql
+  UPDATE interactions
+  SET metadados = jsonb_set(
+        COALESCE(metadados, '{}'::jsonb), '{pesquisaRespostas}',
+        COALESCE(metadados->'pesquisaRespostas', '[]'::jsonb) || $entry::jsonb)
+  WHERE id = $interacaoId
+    AND NOT COALESCE(metadados->'pesquisaRespostas', '[]'::jsonb) @> $probe::jsonb
+  RETURNING id
+  ```
+
+  where `$probe` is `[{"whatsappMessageId": "<wamid>"}]`. Zero rows returned = duplicate: return
+  `captured: true` and skip the field write. One statement, no row lock, safe under two taps
+  arriving within milliseconds.
 - write the field through `saveClientCustomFieldValues`: `ESCOLHA_UNICA` → `valor = opcaoValor`;
-  `ESCOLHA_MULTIPLA` → union of the current array and `opcaoValor` (read current row first);
-- if the field is inactive by then, log the response and skip the field write (the results view
+  `ESCOLHA_MULTIPLA` → union of the current array and `opcaoValor` (read the current
+  `client_custom_field_values` row `FOR UPDATE` inside the transaction, since the field aggregates
+  across surveys);
+- if the field is inactive by then, keep the entry and skip the field write (the results view
   still counts it; the audience filter cannot see it, which is what "inactive" means).
 
 Never throws for a non-survey tap: `captured: false` costs one payload parse and, without a
@@ -347,13 +368,13 @@ and only when the text equals a button label exactly. This is best-effort and do
 in the results view ("respostas por texto"). Ask the gateway team whether the reply can carry the
 button `id`; when it does, strategy 1 lights up with no change here.
 
-### 6.4 Not an interaction row
+### 6.4 No inbound interaction row
 
-A response is **not** inserted into `interactions`. Campaign statistics count interactions by
-`campanhaId` (`idx_interactions_org_campanha_status_data`); an inbound row there would inflate
-sends. The client timeline (`/api/clients/context`) reads `campaign_survey_responses` and renders
-"Respondeu à pesquisa X: Y" in place. If the seller-routine primitive later wants an
-`ENTRADA`/`CLIENTE` interaction for every tap, it can be derived from the log then.
+A tap does **not** insert a new `interactions` row; it annotates the outbound one. Campaign
+statistics count interactions by `campanhaId`, so an inbound row there would inflate sends. The
+client timeline (`/api/clients/context`) already renders the send; it gains a "Respondeu: Morango"
+line under it from `pesquisaRespostas`. If the seller-routine primitive later wants an
+`ENTRADA`/`CLIENTE` interaction per tap, it can be derived from these entries then.
 
 ---
 
@@ -372,7 +393,7 @@ point of the side that changes:
 "Active" means `ativo = true` **or** a dispatch in `PENDENTE / RESOLVENDO / ENFILEIRADA / ENVIANDO`.
 After the one-shot completes and the campaign auto-deactivates, both template and field become
 editable again; late taps still resolve through the payload (`opcaoValor` is in the payload, not
-looked up by button index) and the log keeps `opcaoTitulo`.
+looked up by button index) and each entry keeps its `opcaoTitulo` snapshot.
 
 ---
 
@@ -395,8 +416,21 @@ looked up by button index) and the log keeps `opcaoTitulo`.
 ```
 
 `enviados`/`entregues` come from the dispatch recipients and interactions the campaign already
-has; `respondentes` is `COUNT(DISTINCT cliente_id)` on the log, excluding responses whose recipient
-interaction is flagged `teste`. For `ESCOLHA_MULTIPLA` the per-option percentages do not sum to 100.
+has. Responses aggregate over the same rows:
+
+```sql
+SELECT r->>'opcaoValor' AS valor, COUNT(DISTINCT i.cliente_id) AS respondentes
+FROM interactions i
+CROSS JOIN LATERAL jsonb_array_elements(i.metadados->'pesquisaRespostas') AS r
+WHERE i.organizacao_id = $org AND i.campanha_id = $campanha
+  AND (i.metadados->>'teste') IS DISTINCT FROM 'true'
+GROUP BY 1
+```
+
+For `ESCOLHA_UNICA` only the last entry per interaction counts (`metadados->'pesquisaRespostas'->-1`
+instead of the lateral join), so a client who changed their mind is counted once, on their final
+answer. For `ESCOLHA_MULTIPLA` the per-option percentages do not sum to 100. `respondentes` is
+`COUNT(DISTINCT cliente_id) FILTER (WHERE metadados ? 'pesquisaRespostas')`.
 
 ### 8.2 UI (`app/dashboard/growth/campaigns/_module/detail/`)
 
@@ -462,31 +496,30 @@ doing while touching both, but it is a refactor, not a requirement of this featu
 
 ---
 
-## 11. Open questions
+## 11. Closed questions
 
-1. **Trigger vs. property.** v1 ships `PESQUISA` as a scheduled one-shot trigger (recommended).
-   If post-purchase surveys are wanted in the first release, the plan flips to "any trigger + survey
-   template" and the builder category becomes a template kind instead.
-2. **Internal gateway.** Is button `id` echo on `message.received` feasible on the gateway side?
-   Without it, gateway surveys are text-matched (§6.3).
-3. **AI attendant.** Skip the AI turn on a captured tap (recommended), or let the agent see it
-   with `pesquisaResposta` in the metadata and answer in context?
-4. **Timeline.** Render responses from the log on the client timeline (recommended), or also
-   create an `ENTRADA`/`CLIENTE` interaction per tap? The latter needs the campaign stats queries to
-   exclude inbound rows first.
+1. **Trigger vs. property.** `PESQUISA` ships as a scheduled one-shot trigger. Capture stays
+   trigger-agnostic so post-purchase surveys are a later validation change (§10).
+2. **Internal gateway.** The gateway cannot echo a button id; gateway replies are text-matched
+   (§6.3) and labelled as such in the results.
+3. **AI attendant.** A captured tap does not start an AI turn.
+4. **Timeline.** No inbound interaction row; the answer is rendered from the outbound interaction's
+   `pesquisaRespostas` (§6.4).
+5. **Storage.** Responses live on the outbound interaction's metadata, not in a new table (§2.4).
 
 ---
 
 ## 12. Implementation checklist (ordered; each step ships alone)
 
-1. **Schema + enums** — `PESQUISA` trigger, `gatilhoPesquisa*` columns, `campaign_survey_responses`,
-   response-source enum, Zod mirrors, migration.
+1. **Schema + enums** — `PESQUISA` trigger, `gatilhoPesquisa*` columns, `pesquisaRespostas` on
+   `InteractionMetadataSchema`, Zod mirrors, migration.
 2. **Template button `RESPOSTA_PESQUISA`** — schema, Meta component mapping, plain render,
    `validateSurveyButtons`, editor + preview. Templates become self-describing surveys even before
    campaigns know about them.
 3. **Send payload** — runtime context `pesquisa.destinatarioId`, `payload` parameter type,
    `buildSurveyReplyPayload`/`parseSurveyReplyPayload` with unit tests, gateway buttons.
-4. **Capture** — `captureSurveyReply` with the three strategies and `ESCOLHA_MULTIPLA` merge;
+4. **Capture** — `captureSurveyReply` with the three strategies, the atomic append and the
+   `ESCOLHA_MULTIPLA` merge;
    wire into both webhooks in stage 1; chat-message metadata + AI skip in stage 2. Unit tests for
    the resolver on fixtures; one replay test through the archived-webhook path.
 5. **Campaign trigger** — validation, clock, builder category/trigger/inline config, message stage
