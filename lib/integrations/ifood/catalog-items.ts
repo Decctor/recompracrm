@@ -375,6 +375,12 @@ export async function addIfoodOptions(
 	}
 }
 
+/**
+ * ⚠️ NÃO VALIDADO AO VIVO. O corpo em array é suspeito: o `/options/status` irmão, com o mesmo
+ * formato, é recusado (ver abaixo) e só aceita um objeto por chamada. Não foi sondado porque o
+ * listing devolve preço 0 para opções cujo preço real vive em outro lugar — uma sonda poderia zerar
+ * um preço real. Valide com uma opção de teste antes de ligar `preco` em vínculo de opção.
+ */
 export async function patchIfoodOptionsPrice(
 	client: AxiosInstance,
 	merchantId: string,
@@ -390,16 +396,20 @@ export async function patchIfoodOptionsPrice(
 	}
 }
 
+/**
+ * `PATCH /options/status` recebe UM objeto `{ optionId, status }` por chamada — validado ao vivo
+ * (2026-09-27). Um array é recusado com 400 `PatchOptionStatusDto.optionId must be a UUID` (o iFood
+ * lê o array como o próprio DTO). Por isso uma chamada por opção, em série.
+ */
 export async function patchIfoodOptionsStatus(
 	client: AxiosInstance,
 	merchantId: string,
 	opcoes: { optionId: string; status: TIfoodCatalogStatusEnum }[],
 ): Promise<void> {
 	try {
-		await client.patch(
-			catalogUrl(merchantId, "/options/status"),
-			opcoes.map((opcao) => ({ optionId: opcao.optionId, status: opcao.status })),
-		);
+		for (const opcao of opcoes) {
+			await client.patch(catalogUrl(merchantId, "/options/status"), { optionId: opcao.optionId, status: opcao.status });
+		}
 	} catch (error) {
 		mapIfoodError("patchIfoodOptionsStatus", error);
 	}
