@@ -3,12 +3,13 @@
 import type { TGetProductsOutputById } from "@/app/api/products/route";
 import NumberInput from "@/components/Inputs/NumberInput";
 import { AvailabilityCycleButton, ChannelPriceInput } from "@/components/SalesChannels/ProductChannelControls";
-import { SALES_CHANNEL_LABELS, SalesChannelMark } from "@/components/SalesChannels/SalesChannelMark";
+import { SalesChannelMark, salesChannelLabel } from "@/components/SalesChannels/SalesChannelMark";
 import SectionApplyBar from "@/components/Utils/SectionApplyBar";
 import { Section } from "@/components/ui/section";
 import { DataList } from "@/components/ui/data-list";
 import { formatDecimalPlaces } from "@/lib/formatting";
 import { productChannelNodeKey } from "@/lib/products/product-registry-state";
+import { useIfoodMerchantNames } from "@/lib/queries/ifood";
 import { useProductChannelSettings } from "@/lib/queries/product-channel-settings";
 import { useProductPricingSectionEditor } from "@/state-hooks/use-product-section-editor";
 import { BadgeDollarSign, Percent } from "lucide-react";
@@ -34,6 +35,7 @@ type PricesAndChannelsSectionProps = {
  */
 export default function PricesAndChannelsSection({ product, orgHasERPAccess, callbacks }: PricesAndChannelsSectionProps) {
 	const { data, isLoading, isError } = useProductChannelSettings({ produtoId: product.id, enabled: orgHasERPAccess });
+	const merchantNames = useIfoodMerchantNames({ enabled: !!data?.channels.some((channel) => channel.canal === "IFOOD") });
 	const editor = useProductPricingSectionEditor({ product, channelData: data, callbacks });
 
 	const activeVariants = product.variantes.filter((variant) => variant.ativo);
@@ -101,7 +103,7 @@ export default function PricesAndChannelsSection({ product, orgHasERPAccess, cal
 												<div className="flex items-center gap-2">
 													<SalesChannelMark canal={channel.canal} />
 													<div className="flex flex-col gap-0.5">
-														<span className="text-xs font-semibold leading-none">{SALES_CHANNEL_LABELS[channel.canal] ?? channel.canal}</span>
+														<span className="text-xs font-semibold leading-none">{salesChannelLabel(channel, merchantNames)}</span>
 														<span className="text-[0.6rem] leading-none text-muted-foreground">padrão do canal: {inheritedVisible ? "visível" : "oculto"}</span>
 													</div>
 												</div>

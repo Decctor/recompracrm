@@ -1,8 +1,9 @@
 "use client";
 
 import { AvailabilityCycleButton, ChannelPriceInput, cycleAvailabilityChoice } from "@/components/SalesChannels/ProductChannelControls";
-import { SALES_CHANNEL_LABELS, SalesChannelMark } from "@/components/SalesChannels/SalesChannelMark";
+import { SalesChannelMark, salesChannelLabel } from "@/components/SalesChannels/SalesChannelMark";
 import ResponsiveMenuSection from "@/components/Utils/ResponsiveMenuSection";
+import { useIfoodMerchantNames } from "@/lib/queries/ifood";
 import { useSalesChannels } from "@/lib/queries/sales-channels";
 import type { TProductChannelSettingNodeRef, TProductState, TUseProductState } from "@/state-hooks/use-product-state";
 import { Store } from "lucide-react";
@@ -29,6 +30,7 @@ export default function ProductSalesChannelsBlock({
 	updateProductChannelSetting,
 }: ProductSalesChannelsBlockProps) {
 	const { data: channels, isLoading, isError } = useSalesChannels();
+	const merchantNames = useIfoodMerchantNames({ enabled: !!channels?.some((channel) => channel.canal === "IFOOD") });
 
 	// Variantes vivas do formulário: a ordem é a do estado, e a chave local é o que amarra o override.
 	// O preço nível-produto só existe sem variantes (regra do servidor); as linhas mostram só as ativas.
@@ -73,7 +75,7 @@ export default function ProductSalesChannelsBlock({
 										<div className="flex items-center gap-2">
 											<SalesChannelMark canal={channel.canal} />
 											<div className="flex flex-col gap-0.5">
-												<span className="text-xs font-semibold leading-none">{SALES_CHANNEL_LABELS[channel.canal] ?? channel.canal}</span>
+												<span className="text-xs font-semibold leading-none">{salesChannelLabel(channel, merchantNames)}</span>
 												<span className="text-[0.6rem] leading-none text-muted-foreground">padrão do canal: {inheritedVisible ? "visível" : "oculto"}</span>
 											</div>
 										</div>

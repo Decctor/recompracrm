@@ -6,6 +6,7 @@ import PlanRestrictionComponent from "@/components/Layouts/PlanRestrictionCompon
 import NewProduct from "@/components/Modals/Products/NewProduct";
 import RecountProduct from "@/components/Modals/Internal/StockRecount/RecountProduct";
 import ProductsAddOnsView from "@/app/dashboard/catalog/products/_components/ProductsAddOnsView";
+import ProductsChannelsView from "@/app/dashboard/catalog/products/_components/channels/ProductsChannelsView";
 import ProductsGraphs from "@/app/dashboard/catalog/products/_components/ProductsGraphs";
 import ProductsInlineFilters from "@/app/dashboard/catalog/products/_components/ProductsInlineFilters";
 import ProductsRanking from "@/app/dashboard/catalog/products/_components/ProductsRanking";
@@ -45,6 +46,7 @@ import {
 	Plus,
 	RefreshCw,
 	ShoppingCart,
+	Store,
 	TrendingUp,
 	Users,
 } from "lucide-react";
@@ -60,7 +62,7 @@ type ProductsPageProps = {
 };
 
 export default function ProductsPage({ user, userOrg, userMembership }: ProductsPageProps) {
-	const [viewMode, setViewMode] = useQueryState("view", parseAsStringEnum(["stats", "database", "add-ons"]));
+	const [viewMode, setViewMode] = useQueryState("view", parseAsStringEnum(["stats", "database", "add-ons", "channels"]));
 
 	if (userOrg?.assinaturaPlano === "ESSENCIAL") {
 		return (
@@ -73,7 +75,7 @@ export default function ProductsPage({ user, userOrg, userMembership }: Products
 
 	return (
 		<div className="w-full h-full flex flex-col gap-3">
-			<Tabs value={viewMode ?? "stats"} onValueChange={(v: string) => setViewMode(v as "stats" | "database" | "add-ons")}>
+			<Tabs value={viewMode ?? "stats"} onValueChange={(v: string) => setViewMode(v as "stats" | "database" | "add-ons" | "channels")}>
 				<TabsList variant="page">
 					<TabsTrigger value="stats">
 						<TrendingUp className="w-4 h-4 min-w-4 min-h-4" />
@@ -87,6 +89,10 @@ export default function ProductsPage({ user, userOrg, userMembership }: Products
 						<Layers className="w-4 h-4 min-w-4 min-h-4" />
 						Adicionais
 					</TabsTrigger>
+					<TabsTrigger value="channels">
+						<Store className="w-4 h-4 min-w-4 min-h-4" />
+						Canais
+					</TabsTrigger>
 				</TabsList>
 				<TabsContent value="stats">
 					<ProductsStatsView />
@@ -96,6 +102,9 @@ export default function ProductsPage({ user, userOrg, userMembership }: Products
 				</TabsContent>
 				<TabsContent value="add-ons">
 					<ProductsAddOnsView />
+				</TabsContent>
+				<TabsContent value="channels">
+					<ProductsChannelsView />
 				</TabsContent>
 			</Tabs>
 		</div>

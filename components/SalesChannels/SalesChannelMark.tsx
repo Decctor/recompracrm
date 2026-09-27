@@ -23,6 +23,18 @@ export const SALES_CHANNEL_LABELS: Record<TSalesChannelTypeEnum, string> = {
 	IFOOD: "iFood",
 };
 
+/**
+ * Rótulo de uma linha do registro. O iFood tem um canal POR MERCHANT (`refExterno` = merchantId), e
+ * uma organização com duas lojas não pode ver duas colunas chamadas só "iFood": o nome da loja
+ * entra quando o chamador o tem (`useIfoodMerchants`), senão o prefixo do id serve de desempate.
+ */
+export function salesChannelLabel(channel: { canal: TSalesChannelTypeEnum; refExterno?: string | null }, merchantNames?: Map<string, string>) {
+	const base = SALES_CHANNEL_LABELS[channel.canal] ?? channel.canal;
+	if (channel.canal !== "IFOOD" || !channel.refExterno) return base;
+	const nome = merchantNames?.get(channel.refExterno);
+	return `${base} · ${nome ?? channel.refExterno.slice(0, 8)}`;
+}
+
 const CHANNEL_CHIP_CLASSNAME: Record<TSalesChannelTypeEnum, string> = {
 	POS: "bg-sky-500/10 text-sky-600 dark:text-sky-400",
 	SHOP: "bg-violet-500/10 text-violet-600 dark:text-violet-400",

@@ -1,6 +1,8 @@
 # Matriz de Canais — Cardápio centralizado em Produtos
 
-> Design doc — **PLANEJADO** (2026-09-27). Nenhuma fase implementada ainda.
+> Design doc — **Fase 1 implementada** (2026-09-27): rota `GET/PUT /api/sales-channels/matrix`, aba "Canais"
+> em Produtos com a grade de canais internos editável, iFood somente leitura (badge do vínculo), vitrine da
+> loja virou link. Fases 2–4 pendentes.
 > Documentos irmãos: `docs/product-sales-channels-design.md` (a primitiva `sales_channels` +
 > `product_channel_settings`, fases 1–4 implementadas) e `docs/ifood-catalog-linking-sync-design.md`
 > (`catalog_links`, publish/import/push/reconcile — backend implementado, **UI nunca construída**).
@@ -102,8 +104,8 @@ nome do merchant, obtido de `useIfoodMerchants`; fallback "iFood · {refExterno}
 | Preço no canal | `ChannelPriceInput` (mesmo arquivo) dentro de `EditableNumberCell` (`components/Spreadsheet/`) | vazio = herda; placeholder = preço efetivo; destaque azul + reset quando há override (igual `ShowcasePriceCell`) |
 | Status | badge | SHOP: "Na loja" / "Sem preço" / "Sem estoque" (`resolveChannelAvailability` com os gates do SHOP). iFood: badge do vínculo (— / PENDENTE / SINCRONIZADO / DIVERGENTE / ERRO) com `divergencias` no tooltip |
 
-**Chips de canal** acima da grade mostram/ocultam coluna-grupos (persistido em `localStorage`; o chip do canal
-em `?channel=` nasce ligado). Com 3 internos + N merchants a grade passa de 10 colunas; o chip é o que mantém
+**Chips de canal** acima da grade mostram/ocultam coluna-grupos (sem persistência: chegando por `?channel=` só
+esse canal nasce visível, sem parâmetro nascem todos; o canal em foco não se oculta). Com 3 internos + N merchants a grade passa de 10 colunas; o chip é o que mantém
 o caso comum (focar um canal) tão simples quanto a vitrine de hoje.
 
 Navegação por teclado: `SPREADSHEET_TABLE_ATTR` + `SpreadsheetGridBounds` (`lib/spreadsheet-navigation`),
@@ -118,10 +120,12 @@ Cada coluna-grupo tem um menu (ícone de engrenagem):
 
 - **Modo do catálogo** (todos / selecionados) — `PUT /api/sales-channels` (já existe; faz parte do apply, não
   grava na hora, para o rascunho ser consistente com as células).
-- **Ordenar grupos** — diálogo com a lista de grupos e setas, gravando `ordemGrupos` do canal. Continua POR
-  CANAL (decisão): só o SHOP consome hoje (`getShopCatalogData`), mas o modelo já é por canal e um PDV que
-  ordenar categorias amanhã não precisa de migração. A grade em si ordena os grupos pela ordem do canal
-  **focado** (`?channel=`), alfabético quando não há.
+- **Ordem dos grupos** — as setas no cabeçalho de cada painel de grupo (o mesmo controle da vitrine) movem
+  o grupo na ordem do canal **em foco** (`?channel=` + seletor "Foco"); a grade se organiza por essa ordem.
+  Continua POR CANAL (decisão): só o SHOP consome hoje (`getShopCatalogData`), mas o modelo já é por canal e
+  um PDV que ordenar categorias amanhã não precisa de migração. *Desvio da versão planejada*: o diálogo
+  "Ordenar grupos" no menu do canal foi trocado pelas setas no painel — mesmo gesto da vitrine, sem uma
+  tela a mais.
 - iFood: **Reconciliar agora** (`POST /sync/reconcile`) e contadores por status do merchant.
 
 `exigirAdicionaisMinimos` fica onde está (Configurações › Canais de venda): é regra de operação, não de
@@ -177,7 +181,8 @@ grava igual (estado desejado) e o status mostra "sem vínculo": o mesmo aviso qu
 
 ## 5. API
 
-Padrão de 4 partes, `appApiHandler`, `requireERPSession` (a matriz é recurso ERP como a matriz do produto).
+Padrão de 4 partes, `appApiHandler`, `requireOrgSession` — o mesmo guarda da vitrine que a matriz substitui: uma
+organização com loja digital e sem ERP continua curando o cardápio dela aqui.
 
 ### 5.1 `GET /api/sales-channels/matrix`
 
@@ -251,8 +256,7 @@ app/dashboard/catalog/products/_components/channels/
 ├── ChannelMatrixGroupPanel.tsx                        cabeçalho do grupo (badge de posição, contagem)
 ├── ChannelMatrixTable.tsx                             grid CSS + navegação de planilha; linhas de produto e variante
 ├── ChannelMatrixCells.tsx                             célula de disponibilidade, preço, status (SHOP/iFood)
-├── ChannelHeaderMenu.tsx                              modo, ordenar grupos, reconciliar
-├── ReorderChannelGroups.tsx                           diálogo de ordem (ResponsiveMenu)
+├── ChannelHeaderMenu.tsx                              modo do catálogo (fase 2: reconciliar)
 ├── LinkIfoodItem.tsx                                  fase 2: vincular a item existente
 ├── PublishIfoodProduct.tsx                            fase 2: publicar como novo (simular → confirmar)
 ├── IfoodLinkDivergences.tsx                           fase 2: painel de divergências

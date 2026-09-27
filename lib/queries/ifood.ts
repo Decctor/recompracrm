@@ -13,6 +13,7 @@ import type { TGetIfoodOrderDetailsOutput } from "@/app/api/integrations/ifood/o
 import type { TGetIfoodOrdersOutput } from "@/app/api/integrations/ifood/orders/route";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
+import { useMemo } from "react";
 
 /**
  * Queries da GESTÃO do iFood. Erros 404 dessas rotas significam "iFood não conectado" — a UI usa
@@ -24,6 +25,15 @@ async function fetchIfoodMerchants() {
 	const result = data.data.default;
 	if (!result) throw new Error("Lojas do iFood não encontradas.");
 	return result;
+}
+
+/**
+ * Nome por merchantId, para rotular os canais iFood do registro (`sales_channels.refExterno`).
+ * Só consulta quando há canal iFood a rotular; sem resposta, os chamadores caem no id.
+ */
+export function useIfoodMerchantNames({ enabled }: { enabled: boolean }) {
+	const { data } = useIfoodMerchants({ enabled });
+	return useMemo(() => new Map((data ?? []).map((merchant) => [merchant.id, merchant.nome ?? merchant.razaoSocial ?? merchant.id])), [data]);
 }
 
 export function useIfoodMerchants({ enabled = true }: { enabled?: boolean } = {}) {
