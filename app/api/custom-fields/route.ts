@@ -2,6 +2,7 @@ import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { resolveNativeCustomField } from "@/lib/custom-fields/native-catalog";
+import { assertCustomFieldNotUsedByActiveSurvey, assertCustomFieldOptionsNotFrozen } from "@/lib/message-templates/survey-guards";
 import { CustomFieldSchema } from "@/schemas/custom-fields";
 import { CustomFieldEntityEnum, CustomFieldTypeEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
@@ -199,6 +200,18 @@ async function updateCustomField({ input, session }: { input: TUpdateCustomField
 	const opcoes = CHOICE_FIELD_TYPES.includes(tipo) ? (customField.opcoes ?? []) : null;
 	if (opcoes && opcoes.length === 0) throw new createHttpError.BadRequest("Campos de escolha precisam de ao menos uma opção.");
 
+	// Guardas das pesquisas: opções que são botões de template não somem, e um campo que recebe
+	// respostas de uma pesquisa ativa não é desativado (lib/message-templates/survey-guards.ts).
+	await assertCustomFieldOptionsNotFrozen({
+		organizationId,
+		fieldId: existingCustomField.id,
+		currentOptions: existingCustomField.opcoes,
+		nextOptions: opcoes,
+	});
+	if (existingCustomField.ativo && !customField.ativo) {
+		await assertCustomFieldNotUsedByActiveSurvey({ organizationId, fieldId: existingCustomField.id });
+	}
+
 	const updatedCustomFields = await db
 		.update(customFields)
 		.set({
@@ -244,6 +257,7 @@ export type TDeleteCustomFieldInput = z.infer<typeof DeleteCustomFieldInputSchem
  */
 async function deleteCustomField({ input, session }: { input: TDeleteCustomFieldInput; session: TAuthUserSession }) {
 	const organizationId = getSessionOrganizationId(session);
+	await assertCustomFieldNotUsedByActiveSurvey({ organizationId, fieldId: input.id });
 
 	const deactivatedCustomFields = await db
 		.update(customFields)
