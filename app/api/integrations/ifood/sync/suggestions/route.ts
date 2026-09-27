@@ -1,6 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
-import { requireERPSession } from "@/lib/authentication/erp-session";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { requireIntegrationViewSession } from "@/lib/integrations/ifood/sync/guards";
 import { listIfoodCategories } from "@/lib/integrations/ifood/catalog";
 import { resolveIfoodManagementContext } from "@/lib/integrations/ifood/context";
 import { listCatalogLinks } from "@/lib/integrations/ifood/sync/links";
@@ -66,7 +66,7 @@ async function getCatalogSuggestions({ orgId, input }: { orgId: string; input: T
 export type TGetCatalogSuggestionsOutput = Awaited<ReturnType<typeof getCatalogSuggestions>>;
 
 async function getCatalogSuggestionsRoute(request: NextRequest) {
-	const session = requireERPSession(await getCurrentSessionUncached());
+	const session = requireIntegrationViewSession(await getCurrentSessionUncached());
 	const orgId = session.membership!.organizacao.id;
 
 	const input = GetCatalogSuggestionsInputSchema.parse({

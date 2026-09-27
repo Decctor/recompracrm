@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { getErrorMessage } from "@/lib/errors";
+import { appRoutes } from "@/lib/navigation/routes";
 import { uploadFile } from "@/lib/files-storage";
 import { updateShopSettings } from "@/lib/mutations/shop";
 import { getShopAvailability } from "@/lib/shop/availability";
@@ -14,8 +15,10 @@ import type { TGetShopSettingsOutput } from "@/app/api/shop/settings/route";
 import type { TShopPaymentMethod, TShopScheduleException, TShopSettingsConfiguration, TShopTimeRange } from "@/schemas/shop";
 import type { TShopWeekdayEnum } from "@/schemas/enums";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
 import {
 	AlertCircle,
+	ArrowRight,
 	Banknote,
 	CalendarDays,
 	CreditCard,
@@ -36,7 +39,6 @@ import {
 import { useEffect, useId, useRef, useState } from "react";
 import { toast } from "sonner";
 import z from "zod";
-import ShopShowcaseSection from "./ShopShowcaseSection";
 
 type TSettings = NonNullable<TGetShopSettingsOutput["data"]>;
 type TSection = "visao-geral" | "atendimento" | "pagamento" | "horarios" | "operacao" | "aparencia" | "produtos";
@@ -693,10 +695,22 @@ function ProductsSection({ modo, setModo }: { modo: "CARDAPIO" | "CATALOGO"; set
 				))}
 			</div>
 
-			{/* A vitrine tem rascunho e barra de aplicar próprios: ela edita o canal de venda, não o
-			    jsonb das configurações, e misturar os dois salvamentos esconderia essa fronteira. */}
+			{/* A vitrine mudou de casa: a matriz de canais em Produtos edita a loja e os demais canais
+			    numa grade só (docs/catalog-channels-matrix-design.md). O card aponta para lá já com a
+			    loja em foco, para que quem chegava aqui continue encontrando a mesma curadoria. */}
 			<div className="border-t pt-6">
-				<ShopShowcaseSection />
+				<Link
+					href={`${appRoutes.catalog.products()}?view=channels&channel=SHOP`}
+					className="flex items-center justify-between gap-3 rounded-xl border border-border p-4 transition-colors hover:bg-muted/40"
+				>
+					<div className="flex min-w-0 flex-col gap-1">
+						<span className="text-sm font-black tracking-[0.08em] uppercase">Vitrine</span>
+						<span className="text-sm text-muted-foreground">
+							Quais produtos aparecem na loja, o preço na loja e a ordem dos grupos agora ficam na aba Canais de Produtos, junto dos demais canais.
+						</span>
+					</div>
+					<ArrowRight className="size-5 shrink-0 text-muted-foreground" />
+				</Link>
 			</div>
 		</SectionIntro>
 	);

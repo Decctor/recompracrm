@@ -26,8 +26,8 @@ export function mapShopProductsConfigToChannelState(produtos: TShopSettingsConfi
 /**
  * Traduz o bloco legado de produtos do jsonb da loja para o canal SHOP. É uma migração de uma vez
  * só: hoje o único chamador é `ensureSalesChannels`, quando materializa o canal de uma organização
- * que ainda não o tinha. O painel NÃO chama mais isto — a vitrine edita o canal direto
- * (PUT /api/sales-channels/showcase), e um sync a cada save apagaria a curadoria.
+ * que ainda não o tinha. O painel NÃO chama mais isto — a aba Canais de Produtos edita o canal
+ * direto (PUT /api/sales-channels/matrix), e um sync a cada save apagaria a curadoria.
  *
  * Reescreve `disponivel` das linhas nível-produto mas PRESERVA `preco_venda`: um override de preço
  * não é disponibilidade. Não toca em `ordem_grupos`.

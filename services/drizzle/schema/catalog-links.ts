@@ -12,6 +12,14 @@ import { users } from "./users";
 // (só uma é preenchida por tipo), então sem a cláusula o Postgres trataria cada NULL como
 // distinto e permitiria vínculos duplicados. Esta versão do drizzle-orm não expressa NULLS NOT
 // DISTINCT no schema: revise o SQL de qualquer `drizzle-kit generate` que toque este índice.
+//
+// Há ainda um SEGUNDO índice único que existe só em SQL (0083 + 0114), sem declaração aqui:
+// `unq_catalog_links_externo_item` em (organizacao_id, provider, merchant_id, externo_item_id)
+// WHERE externo_item_id IS NOT NULL AND status <> 'DESVINCULADO' — um item remoto pertence a no
+// máximo um vínculo ATIVO por loja. Idem `unq_catalog_links_externo_option_group` e
+// `unq_catalog_links_externo_option` (0115) para grupos e opções de complemento. Predicado de índice
+// também não é expressável neste drizzle-orm; um `drizzle-kit generate` pode propor derrubá-los. Não
+// aceite. `upsertCatalogLink` faz a pré-checagem com mensagem amigável; os índices fecham a corrida.
 
 /**
  * Um vínculo entre uma entidade interna e sua contraparte no catálogo remoto, POR MERCHANT

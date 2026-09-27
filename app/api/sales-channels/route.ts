@@ -1,7 +1,7 @@
 import { appApiHandler } from "@/lib/app-api";
 import { requireERPSession } from "@/lib/authentication/erp-session";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
-import { ensureSalesChannels } from "@/lib/products/sales-channels-store";
+import { ensureSalesChannelsWithIntegrations } from "@/lib/integrations/ifood/sales-channels";
 import { SalesChannelCatalogModeEnum, SalesChannelTypeEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
 import { integrations, salesChannels } from "@/services/drizzle/schema";
@@ -25,8 +25,8 @@ const UpdateSalesChannelInputSchema = z.object({
 		.optional()
 		.nullable(),
 	// Atualização parcial: o cliente manda só o que está mudando. Reenviar o estado inteiro fazia o
-	// toggle de adicionais carimbar de volta um `catalogoModo` possivelmente velho — a vitrine da
-	// loja reescreve esse campo por fora (PUT /api/sales-channels/showcase), então o eco revertia a
+	// toggle de adicionais carimbar de volta um `catalogoModo` possivelmente velho — a matriz de
+	// canais reescreve esse campo por fora (PUT /api/sales-channels/matrix), então o eco revertia a
 	// curadoria.
 	catalogoModo: SalesChannelCatalogModeEnum.optional(),
 	exigirAdicionaisMinimos: z.boolean({ invalid_type_error: "Tipo não válido para exigência de adicionais obrigatórios." }).optional(),
@@ -34,7 +34,7 @@ const UpdateSalesChannelInputSchema = z.object({
 export type TUpdateSalesChannelInput = z.infer<typeof UpdateSalesChannelInputSchema>;
 
 async function getSalesChannels({ orgId }: { orgId: string }) {
-	const channels = await ensureSalesChannels({ orgId });
+	const channels = await ensureSalesChannelsWithIntegrations({ orgId });
 
 	return { data: { channels }, message: "Canais de venda carregados com sucesso." };
 }

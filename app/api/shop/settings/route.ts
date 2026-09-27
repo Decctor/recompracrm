@@ -165,8 +165,8 @@ async function updateShopSettingsRoute(request: NextRequest) {
 		})
 		.returning();
 
-	// Sem dual-write: a curadoria da loja é editada direto no canal SHOP (PUT /api/sales-channels/
-	// showcase). Sincronizar aqui a partir do jsonb apagaria as linhas do canal a cada salvamento
+	// Sem dual-write: a curadoria da loja é editada direto no canal SHOP (matriz de canais em
+	// Produtos, PUT /api/sales-channels/matrix). Sincronizar aqui a partir do jsonb apagaria as linhas do canal a cada salvamento
 	// do painel — o bloco `produtos.modo/produtoIds` é legado e só sobrevive como origem da
 	// migração feita uma única vez por `ensureSalesChannels`.
 	return NextResponse.json({

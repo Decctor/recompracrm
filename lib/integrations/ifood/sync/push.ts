@@ -1,11 +1,25 @@
-import { updateIfoodProduct } from "@/lib/integrations/ifood/catalog";
-import { patchIfoodItem } from "@/lib/integrations/ifood/catalog-items";
+import { getIfoodItemFlat, updateIfoodProduct } from "@/lib/integrations/ifood/catalog";
+import { patchIfoodItem, upsertIfoodItem } from "@/lib/integrations/ifood/catalog-items";
+import type { TIfoodItemFlatDTO } from "@/lib/integrations/ifood/catalog-types";
 import { resolveIfoodManagementContext } from "@/lib/integrations/ifood/context";
-import type { TCatalogLinkSnapshot } from "@/schemas/catalog-links";
+import { loadChannelState } from "@/lib/products/sales-channels-store";
+import { type TCatalogLinkSnapshot, syncsComplementos } from "@/schemas/catalog-links";
+import type { TIfoodCatalogContextEnum, TIfoodCatalogStatusEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
 import { catalogLinks, type TCatalogLinkEntity } from "@/services/drizzle/schema";
 import type { AxiosInstance } from "axios";
 import { and, eq, inArray, ne } from "drizzle-orm";
+import {
+	type TAddOnGroupNode,
+	type TAddOnLinks,
+	associationSnapshot,
+	associationsDiffer,
+	buildItemOptionGroupsPayload,
+	hasUnlinkedGroups,
+	loadAddOnLinks,
+	recordAddOnLinksFromFlatItem,
+	resolveProductAddOnNodes,
+} from "./add-ons";
 import { markCatalogLinkError } from "./links";
 import { resolvePublishNodes, type TPublishNode } from "./publish";
 
@@ -31,7 +45,7 @@ export function diffAgainstSnapshot(link: TCatalogLinkEntity, node: TPublishNode
 	return changes;
 }
 
-function snapshotOf(link: TCatalogLinkEntity, node: TPublishNode): TCatalogLinkSnapshot {
+function snapshotOf(link: TCatalogLinkEntity, node: TPublishNode, association: TCatalogLinkSnapshot["gruposComplementos"]): TCatalogLinkSnapshot {
 	// O snapshot guarda só o que este vínculo sincroniza: um campo com política desligada não
 	// pode "congelar" um valor e depois parecer divergente quando a política for religada.
 	const previous = link.ultimoSnapshot ?? {};
@@ -41,53 +55,167 @@ function snapshotOf(link: TCatalogLinkEntity, node: TPublishNode): TCatalogLinkS
 		imagemUrl: link.sincronizar.imagem ? node.imagemCapaUrl : previous.imagemUrl,
 		preco: link.sincronizar.preco ? node.preco : previous.preco,
 		disponivel: link.sincronizar.disponibilidade ? node.disponivel : previous.disponivel,
+		gruposComplementos: syncsComplementos(link.sincronizar) ? association : previous.gruposComplementos,
 	};
 }
 
-async function pushLink({
+/** Os complementos do produto como este merchant os vê: nós resolvidos + vínculos ativos. */
+export type TMerchantAddOnContext = { nodes: TAddOnGroupNode[]; links: TAddOnLinks };
+
+async function loadMerchantAddOnContext({
+	orgId,
+	merchantId,
+	produtoId,
+}: {
+	orgId: string;
+	merchantId: string;
+	produtoId: string;
+}): Promise<TMerchantAddOnContext> {
+	const channelState = await loadChannelState({ orgId, canal: "IFOOD", refExterno: merchantId });
+	const [nodes, links] = await Promise.all([
+		resolveProductAddOnNodes({ orgId, produtoId, channel: channelState?.channel ?? null }),
+		loadAddOnLinks({ orgId, merchantId }),
+	]);
+	return { nodes, links };
+}
+
+/**
+ * Re-`PUT /items` composto: o único caminho para mudar a associação item → grupos ou criar grupos
+ * que ainda não existem na loja. O PUT reescreve o item inteiro, então `horarios` e
+ * `contextModifiers` lidos do `flat` são ecoados — omiti-los apagaria a agenda e os preços por
+ * canal que o lojista configurou no Portal.
+ */
+async function rewriteItemWithAddOns({
 	client,
 	link,
 	node,
+	flat,
+	addOns,
 }: {
 	client: AxiosInstance;
 	link: TCatalogLinkEntity;
 	node: TPublishNode;
-}): Promise<{ linkId: string; mudancas: TPushFieldChange[]; enviado: boolean }> {
+	flat: TIfoodItemFlatDTO;
+	addOns: TMerchantAddOnContext;
+}) {
+	if (!link.externoItemId) throw new Error("Vínculo sem item remoto.");
+	await upsertIfoodItem(client, link.merchantId, {
+		itemId: link.externoItemId,
+		produtoId: link.externoProdutoId ?? flat.produtoId ?? undefined,
+		categoriaId: link.externoCategoriaId ?? flat.categoriaId ?? undefined,
+		status: link.sincronizar.disponibilidade
+			? node.disponivel
+				? "AVAILABLE"
+				: "UNAVAILABLE"
+			: ((flat.status?.toUpperCase() as TIfoodCatalogStatusEnum | undefined) ?? "AVAILABLE"),
+		preco: link.sincronizar.preco ? node.preco : (flat.preco ?? node.preco),
+		precoOriginal: flat.precoOriginal,
+		codigoExterno: node.codigo,
+		produto: {
+			nome: link.sincronizar.nome ? node.nome : (flat.nome ?? node.nome),
+			descricao: link.sincronizar.descricao ? node.descricao : flat.descricao,
+			imagemPath: flat.imagemPath,
+		},
+		gruposComplementos: buildItemOptionGroupsPayload({ nodes: addOns.nodes, links: addOns.links, remote: flat }),
+		contextModifiers: flat.canais
+			.filter((canal) => !!canal.contexto)
+			.map((canal) => ({
+				contexto: canal.contexto as TIfoodCatalogContextEnum,
+				preco: canal.preco,
+				status: (canal.status?.toUpperCase() as TIfoodCatalogStatusEnum | undefined) ?? null,
+				codigoExterno: canal.codigoExterno,
+			})),
+		horarios: flat.horarios
+			.filter((horario) => !!horario.inicio && !!horario.fim)
+			.map((horario) => ({
+				inicio: horario.inicio as string,
+				fim: horario.fim as string,
+				segunda: horario.segunda,
+				terca: horario.terca,
+				quarta: horario.quarta,
+				quinta: horario.quinta,
+				sexta: horario.sexta,
+				sabado: horario.sabado,
+				domingo: horario.domingo,
+			})),
+	});
+}
+
+async function pushLink({
+	client,
+	orgId,
+	link,
+	node,
+	addOns,
+}: {
+	client: AxiosInstance;
+	orgId: string;
+	link: TCatalogLinkEntity;
+	node: TPublishNode;
+	addOns: TMerchantAddOnContext;
+}): Promise<{ linkId: string; mudancas: TPushFieldChange[]; enviado: boolean; addOns: TMerchantAddOnContext }> {
 	const changes = diffAgainstSnapshot(link, node);
-	if (changes.length === 0) return { linkId: link.id, mudancas: [], enviado: false };
 
-	const touched = new Set(changes.map((change) => change.campo));
+	// A associação com os grupos muda quando um grupo entra/sai ou min/max/ordem mudam. Grupos do
+	// produto ainda sem vínculo nesta loja só disparam o PUT composto (que os cria) enquanto o item
+	// nunca teve a associação gravada: se a releitura não reconhecer um grupo criado, repetir a
+	// criação a cada push duplicaria optionGroups na loja. O que ficou sem vínculo aparece como
+	// "sem vínculo" nos detalhes do item, e a aba Adicionais vincula à mão.
+	const desiredAssociation = associationSnapshot({ nodes: addOns.nodes, links: addOns.links });
+	const neverAssociated = link.ultimoSnapshot?.gruposComplementos == null;
+	const associationChanged =
+		syncsComplementos(link.sincronizar) &&
+		!!link.externoItemId &&
+		(associationsDiffer(link.ultimoSnapshot?.gruposComplementos, desiredAssociation) ||
+			(neverAssociated && hasUnlinkedGroups({ nodes: addOns.nodes, links: addOns.links })));
+	if (associationChanged) changes.push({ campo: "gruposComplementos", de: link.ultimoSnapshot?.gruposComplementos ?? null, para: desiredAssociation });
 
-	// Preço e status vivem no ITEM; nome/descrição/imagem vivem no PRODUTO base. São dois
-	// endpoints distintos — daí a separação abaixo.
-	if ((touched.has("preco") || touched.has("disponivel")) && link.externoItemId) {
-		await patchIfoodItem(client, link.merchantId, link.externoItemId, {
-			preco: touched.has("preco") ? node.preco : undefined,
-			status: touched.has("disponivel") ? (node.disponivel ? "AVAILABLE" : "UNAVAILABLE") : undefined,
-		});
-	}
-	if ((touched.has("nome") || touched.has("descricao")) && link.externoProdutoId) {
-		// A imagem não é reenviada aqui: exigiria novo upload a cada push, e o `imagePath` do
-		// iFood não é derivável da URL interna. Trocar a foto é uma ação explícita (republicar).
-		await updateIfoodProduct(client, link.merchantId, link.externoProdutoId, {
-			nome: node.nome,
-			descricao: node.descricao,
-			codigoExterno: node.codigo,
-		});
+	if (changes.length === 0) return { linkId: link.id, mudancas: [], enviado: false, addOns };
+
+	let nextAddOns = addOns;
+	if (associationChanged && link.externoItemId) {
+		// O composto já leva preço/status/nome: não há por que repetir os patches abaixo.
+		const before = await getIfoodItemFlat(client, link.merchantId, link.externoItemId);
+		await rewriteItemWithAddOns({ client, link, node, flat: before, addOns });
+		const after = await getIfoodItemFlat(client, link.merchantId, link.externoItemId);
+		nextAddOns = {
+			nodes: addOns.nodes,
+			links: await recordAddOnLinksFromFlatItem({ orgId, merchantId: link.merchantId, nodes: addOns.nodes, links: addOns.links, flat: after }),
+		};
+	} else {
+		const touched = new Set(changes.map((change) => change.campo));
+
+		// Preço e status vivem no ITEM; nome/descrição/imagem vivem no PRODUTO base. São dois
+		// endpoints distintos — daí a separação abaixo.
+		if ((touched.has("preco") || touched.has("disponivel")) && link.externoItemId) {
+			await patchIfoodItem(client, link.merchantId, link.externoItemId, {
+				preco: touched.has("preco") ? node.preco : undefined,
+				status: touched.has("disponivel") ? (node.disponivel ? "AVAILABLE" : "UNAVAILABLE") : undefined,
+			});
+		}
+		if ((touched.has("nome") || touched.has("descricao")) && link.externoProdutoId) {
+			// A imagem não é reenviada aqui: exigiria novo upload a cada push, e o `imagePath` do
+			// iFood não é derivável da URL interna. Trocar a foto é uma ação explícita (republicar).
+			await updateIfoodProduct(client, link.merchantId, link.externoProdutoId, {
+				nome: node.nome,
+				descricao: node.descricao,
+				codigoExterno: node.codigo,
+			});
+		}
 	}
 
 	await db
 		.update(catalogLinks)
 		.set({
 			status: "SINCRONIZADO",
-			ultimoSnapshot: snapshotOf(link, node),
+			ultimoSnapshot: snapshotOf(link, node, associationSnapshot({ nodes: nextAddOns.nodes, links: nextAddOns.links })),
 			dataUltimaSincronizacao: new Date(),
 			ultimoErro: null,
 			divergencias: null,
 		})
 		.where(eq(catalogLinks.id, link.id));
 
-	return { linkId: link.id, mudancas: changes, enviado: true };
+	return { linkId: link.id, mudancas: changes, enviado: true, addOns: nextAddOns };
 }
 
 /**
@@ -109,6 +237,7 @@ export async function pushProductToLinkedMerchants({
 			eq(catalogLinks.organizacaoId, orgId),
 			eq(catalogLinks.provider, "IFOOD"),
 			eq(catalogLinks.produtoId, produtoId),
+			inArray(catalogLinks.tipo, ["PRODUTO", "VARIANTE"]),
 			ne(catalogLinks.status, "DESVINCULADO"),
 		),
 	});
@@ -124,6 +253,9 @@ export async function pushProductToLinkedMerchants({
 		try {
 			const context = await resolveIfoodManagementContext({ organizacaoId: orgId, merchantId });
 			const nodes = await resolvePublishNodes({ orgId, merchantId, produtoId });
+			// Um contexto de complementos por loja: os vínculos de grupo criados pelo primeiro item
+			// (variante) valem para os seguintes, que passam a mandar os ids em vez de criar de novo.
+			let addOns = await loadMerchantAddOnContext({ orgId, merchantId, produtoId });
 
 			for (const link of merchantLinks) {
 				const node = nodes.find((candidate) => candidate.produtoVarianteId === (link.produtoVarianteId ?? null));
@@ -135,7 +267,8 @@ export async function pushProductToLinkedMerchants({
 					continue;
 				}
 				try {
-					const result = await pushLink({ client: context.client, link, node });
+					const result = await pushLink({ client: context.client, orgId, link, node, addOns });
+					addOns = result.addOns;
 					if (result.enviado) enviados += 1;
 					else semMudanca += 1;
 				} catch (error) {

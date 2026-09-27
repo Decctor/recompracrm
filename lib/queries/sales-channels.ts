@@ -1,5 +1,5 @@
+import type { TGetSalesChannelMatrixOutput } from "@/app/api/sales-channels/matrix/route";
 import type { TGetSalesChannelsOutput } from "@/app/api/sales-channels/route";
-import type { TGetSalesChannelShowcaseInput, TGetSalesChannelShowcaseOutput } from "@/app/api/sales-channels/showcase/route";
 import type { TGetSalesChannelsStatusOutput } from "@/app/api/sales-channels/status/route";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
@@ -48,23 +48,25 @@ export function useSalesChannels({ enabled = true }: { enabled?: boolean } = {})
 	};
 }
 
-async function fetchSalesChannelShowcase(channel: TGetSalesChannelShowcaseInput["channel"]) {
-	const searchParams = new URLSearchParams({ channel });
-	const { data } = await axios.get<TGetSalesChannelShowcaseOutput>(`/api/sales-channels/showcase?${searchParams.toString()}`);
+async function fetchSalesChannelMatrix() {
+	const { data } = await axios.get<TGetSalesChannelMatrixOutput>("/api/sales-channels/matrix");
 	return data.data;
 }
 
 /**
- * A curadoria de um canal interno: o modo do catálogo, a ordem dos grupos e os produtos que estão
- * na vitrine hoje — incluindo os que a loja esconde por falta de preço ou estoque, que precisam
- * aparecer para quem monta a vitrine.
+ * A matriz inteira da aba "Canais" de Produtos: todos os canais da organização (internos e um por
+ * merchant iFood), todos os produtos vendáveis com suas variantes, as linhas esparsas de override e
+ * os vínculos iFood. Uma leitura só — a grade filtra e agrupa no cliente.
  */
-export function useSalesChannelShowcase({ channel }: { channel: TGetSalesChannelShowcaseInput["channel"] }) {
-	const queryKey = ["sales-channel-showcase", channel];
+export function useSalesChannelMatrix({ enabled = true }: { enabled?: boolean } = {}) {
+	const queryKey = ["sales-channel-matrix"];
 	return {
-		...useQuery({ queryKey, queryFn: () => fetchSalesChannelShowcase(channel) }),
+		...useQuery({ queryKey, queryFn: fetchSalesChannelMatrix, enabled }),
 		queryKey,
 	};
 }
-export type TSalesChannelShowcase = Awaited<ReturnType<typeof fetchSalesChannelShowcase>>;
-export type TSalesChannelShowcaseProduct = TSalesChannelShowcase["products"][number];
+export type TSalesChannelMatrix = Awaited<ReturnType<typeof fetchSalesChannelMatrix>>;
+export type TSalesChannelMatrixChannel = TSalesChannelMatrix["channels"][number];
+export type TSalesChannelMatrixProduct = TSalesChannelMatrix["products"][number];
+export type TSalesChannelMatrixVariant = TSalesChannelMatrixProduct["variantes"][number];
+export type TSalesChannelMatrixLink = TSalesChannelMatrix["links"][number];

@@ -1,6 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
-import { requireERPSession } from "@/lib/authentication/erp-session";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { requireIntegrationManageSession } from "@/lib/integrations/ifood/sync/guards";
 import { resolveIfoodManagementContext } from "@/lib/integrations/ifood/context";
 import { importIfoodItem } from "@/lib/integrations/ifood/sync/import";
 import { type NextRequest, NextResponse } from "next/server";
@@ -30,7 +30,7 @@ async function importItem({ orgId, userId, input }: { orgId: string; userId: str
 export type TImportIfoodItemOutput = Awaited<ReturnType<typeof importItem>>;
 
 async function importItemRoute(request: NextRequest) {
-	const session = requireERPSession(await getCurrentSessionUncached());
+	const session = requireIntegrationManageSession(await getCurrentSessionUncached());
 	const orgId = session.membership!.organizacao.id;
 
 	const input = ImportIfoodItemInputSchema.parse(await request.json());
