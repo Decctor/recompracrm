@@ -157,6 +157,13 @@ export const ErpFlexIntegrationConfigSchema = z.object({
 });
 export type TErpFlexIntegrationConfig = z.infer<typeof ErpFlexIntegrationConfigSchema>;
 
+/** Origem histórica local. Não possui credenciais nem polling. */
+export const PhiboIntegrationConfigSchema = z.object({
+	tipo: z.literal("PHIBO"),
+	modo: z.literal("HISTORICO"),
+});
+export type TPhiboIntegrationConfig = z.infer<typeof PhiboIntegrationConfigSchema>;
+
 export const DataSourceIntegrationConfigSchema = z.discriminatedUnion("tipo", [
 	OnlineSoftwareIntegrationConfigSchema,
 	CardapioWebIntegrationConfigSchema,
@@ -164,6 +171,7 @@ export const DataSourceIntegrationConfigSchema = z.discriminatedUnion("tipo", [
 	IfoodIntegrationConfigSchema,
 	BlingIntegrationConfigSchema,
 	ErpFlexIntegrationConfigSchema,
+	PhiboIntegrationConfigSchema,
 ]);
 export type TDataSourceIntegrationConfig = z.infer<typeof DataSourceIntegrationConfigSchema>;
 
@@ -176,5 +184,6 @@ export const IntegrationConfigSchema = z.discriminatedUnion("tipo", [
 	IfoodIntegrationConfigSchema,
 	BlingIntegrationConfigSchema,
 	ErpFlexIntegrationConfigSchema,
+	PhiboIntegrationConfigSchema,
 ]);
 export type TIntegrationConfig = z.infer<typeof IntegrationConfigSchema>;

@@ -17,7 +17,7 @@ import { and, desc, eq, inArray } from "drizzle-orm";
  *     INTEGRAÇÃO, não por org; N conexões do mesmo tipo são suportadas, D5).
  */
 
-export const DATA_SOURCE_INTEGRATION_TYPES = ["ONLINE-SOFTWARE", "CARDAPIO-WEB", "NUVEM-SHOP", "IFOOD", "BLING", "ERP-FLEX"] as const;
+export const DATA_SOURCE_INTEGRATION_TYPES = ["ONLINE-SOFTWARE", "CARDAPIO-WEB", "NUVEM-SHOP", "IFOOD", "BLING", "ERP-FLEX", "PHIBO"] as const;
 export type TDataSourceIntegrationType = (typeof DATA_SOURCE_INTEGRATION_TYPES)[number];
 
 export type TDataSourceExecutor = DB | DBTransaction;

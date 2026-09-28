@@ -4,6 +4,10 @@
 	"private": true,
 	"scripts": {
 		"dev": "next dev",
+		"extract:phibo-sales": "node ./scripts/extract-phibo-sales-internal.mjs",
+		"extract:phibo-sales:ui": "node ./scripts/extract-phibo-sales.mjs",
+		"preview:phibo-import": "node --env-file=.env --import tsx ./scripts/preview-phibo-import.ts",
+		"import:phibo-history": "node --env-file=.env --conditions=react-server --import tsx ./scripts/import-phibo-history.ts",
 		"build": "next build",
 		"start": "next start",
 		"sync:org-sales-history": "tsx ./sync-org-sales-history.ts",
@@ -215,6 +219,7 @@
 		"oxfmt": "^0.40.0",
 		"oxlint": "^1.55.0",
 		"pdfjs-dist": "^6.1.200",
+		"playwright": "^1.63.0",
 		"postcss": "^8",
 		"server-only": "^0.0.1",
 		"tailwindcss": "^4.1.16",

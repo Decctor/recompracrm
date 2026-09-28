@@ -117,6 +117,27 @@ export const SaleIntegrationMetadataSchema = z.object({
 			),
 		})
 		.optional(),
+	/** Pagamentos e referência fiscal já concluídos no Phibo; apenas histórico, sem lançamento financeiro. */
+	phibo: z
+		.object({
+			cupomTrocaId: z.number({ invalid_type_error: "Tipo não válido para o cupom Phibo." }).nullable(),
+			nfeNumero: z.number({ invalid_type_error: "Tipo não válido para o número da NFC-e Phibo." }),
+			formasPagamento: z.array(
+				z.object({
+					descricao: z.string({ invalid_type_error: "Tipo não válido para a forma de pagamento Phibo." }),
+					parcelas: z.array(
+						z.object({
+							parcelaNumero: z.number({ invalid_type_error: "Tipo não válido para a parcela Phibo." }),
+							dataVencto: z.string({ invalid_type_error: "Tipo não válido para o vencimento Phibo." }),
+							valorParcela: z.number({ invalid_type_error: "Tipo não válido para o valor da parcela Phibo." }),
+							valorRecebido: z.number({ invalid_type_error: "Tipo não válido para o valor recebido Phibo." }),
+							situacao: z.string({ invalid_type_error: "Tipo não válido para a situação da parcela Phibo." }),
+						}),
+					),
+				}),
+			),
+		})
+		.optional(),
 	/** Rota temporária de contato do iFood. Nunca deve virar telefone cadastral do cliente. */
 	contatoTemporario: z
 		.object({

@@ -560,9 +560,10 @@ export const IntegrationTipoEnum = z.enum([
 	"IFOOD",
 	"BLING",
 	"ERP-FLEX",
+	"PHIBO",
 ]);
 // Subconjunto de fonte de dados — espelha DATA_SOURCE_INTEGRATION_TYPES em lib/integrations/data-sources.ts.
-export const DataSourceIntegrationTipoEnum = z.enum(["ONLINE-SOFTWARE", "CARDAPIO-WEB", "NUVEM-SHOP", "IFOOD", "BLING", "ERP-FLEX"]);
+export const DataSourceIntegrationTipoEnum = z.enum(["ONLINE-SOFTWARE", "CARDAPIO-WEB", "NUVEM-SHOP", "IFOOD", "BLING", "ERP-FLEX", "PHIBO"]);
 export type TDataSourceIntegrationTipoEnum = z.infer<typeof DataSourceIntegrationTipoEnum>;
 export type TIntegrationTipoEnum = z.infer<typeof IntegrationTipoEnum>;
 

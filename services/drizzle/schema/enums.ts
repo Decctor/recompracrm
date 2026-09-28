@@ -108,6 +108,7 @@ export const integrationTypeEnum = pgEnum("integration_type", [
 	"IFOOD",
 	"BLING",
 	"ERP-FLEX",
+	"PHIBO",
 ]);
 export const integrationStatusEnum = pgEnum("integration_status", ["CONECTADO", "EXPIRADO", "ERRO"]);
 
