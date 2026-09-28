@@ -164,6 +164,7 @@ export default function NewProduct({ user, userMembership, closeModal, callbacks
 		const input: TCreateProductInput = {
 			product: {
 				vendavel: state.product.vendavel,
+				ativo: state.product.ativo,
 				nome: state.product.nome,
 				descricao: state.product.descricao,
 				codigo: state.product.codigo,
@@ -197,6 +198,7 @@ export default function NewProduct({ user, userMembership, closeModal, callbacks
 			resetState({
 				product: {
 					vendavel: true,
+					ativo: true,
 					codigo: "",
 					nome: "",
 					descricao: null,

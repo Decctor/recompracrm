@@ -1,5 +1,6 @@
 "use client";
 
+import { ProductInactiveChannelsCallout } from "@/components/Products/Shared/ProductActiveStatus";
 import { AvailabilityCycleButton, ChannelPriceInput, cycleAvailabilityChoice } from "@/components/SalesChannels/ProductChannelControls";
 import { SalesChannelMark, salesChannelLabel } from "@/components/SalesChannels/SalesChannelMark";
 import ResponsiveMenuSection from "@/components/Utils/ResponsiveMenuSection";
@@ -49,7 +50,9 @@ export default function ProductSalesChannelsBlock({
 					Defina onde o produto fica disponível e por quanto. Sem ajuste, cada canal segue o próprio padrão e o preço base.
 				</p>
 
-				{product.vendavel === false ? (
+				{!product.ativo ? (
+					<ProductInactiveChannelsCallout />
+				) : product.vendavel === false ? (
 					<p className="text-xs text-muted-foreground">
 						Produto marcado como <span className="font-semibold">não vendável</span> — ele não aparece em nenhum canal, independentemente das configurações
 						abaixo.

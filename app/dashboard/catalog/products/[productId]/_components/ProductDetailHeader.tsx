@@ -1,6 +1,7 @@
 import type { TGetProductsOutputById } from "@/app/api/products/route";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Code } from "lucide-react";
+import { Chip } from "@/components/ui/chip";
+import { ArrowLeft, CircleOff, Code } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { appRoutes } from "@/lib/navigation/routes";
@@ -31,6 +32,14 @@ export default function ProductDetailHeader({ product }: ProductDetailHeaderProp
 							<p>{product.codigo}</p>
 						</div>
 						<h1 className="text-xl font-extrabold leading-none tracking-tight md:text-2xl">{product.nome}</h1>
+						{product.ativo === false ? (
+							<Chip.Root variant="muted" size="md" shape="pill" className="text-foreground/70">
+								<Chip.Icon>
+									<CircleOff />
+								</Chip.Icon>
+								<Chip.Label>INATIVO</Chip.Label>
+							</Chip.Root>
+						) : null}
 					</div>
 					{product.grupo ? (
 						<p className="text-sm text-muted-foreground">

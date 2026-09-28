@@ -16,6 +16,15 @@ export const ProductSchema = z.object({
 			invalid_type_error: "Tipo não válido para status de venda do produto.",
 		})
 		.optional(),
+	// Falso tira o produto de todos os canais de venda, acima de `vendavel` e da disponibilidade por
+	// canal — é o interruptor que os catálogos checam primeiro. Mesma regra do `vendavel`: opcional
+	// SEM default, para que um payload sem o campo não reative um produto pausado.
+	ativo: z
+		.boolean({
+			required_error: "Status de ativação do produto não informado.",
+			invalid_type_error: "Tipo não válido para status de ativação do produto.",
+		})
+		.optional(),
 	nome: z.string({
 		required_error: "Nome do produto não informado.",
 		invalid_type_error: "Tipo não válido para nome do produto.",

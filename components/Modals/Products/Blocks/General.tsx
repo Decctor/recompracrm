@@ -4,6 +4,7 @@ import SelectInput from "@/components/Inputs/SelectInput";
 import SelectProductGroup from "@/components/Inputs/SelectProductGroup";
 import TextInput from "@/components/Inputs/TextInput";
 import TextareaInput from "@/components/Inputs/TextareaInput";
+import { ProductActiveToggle, ProductInactiveHint } from "@/components/Products/Shared/ProductActiveStatus";
 import ResponsiveMenuSection from "@/components/Utils/ResponsiveMenuSection";
 import type { TProductCoreState, TUseProductCoreState } from "@/state-hooks/use-product-state";
 import { UnitsOfMeasurementOptions } from "@/utils/select-options";
@@ -36,6 +37,10 @@ export default function ProductStateGeneralBlock({
 				inputId={imageInputId}
 			/>
 			<div className="h-full w-full lg:grow flex flex-col items-center gap-2">
+				<div className="w-full flex flex-col items-center gap-2 pb-1">
+					<ProductActiveToggle ativo={product.ativo} onChange={(ativo) => updateProduct({ ativo })} />
+					{product.ativo ? null : <ProductInactiveHint />}
+				</div>
 				<TextInput
 					label="NOME"
 					value={product.nome}

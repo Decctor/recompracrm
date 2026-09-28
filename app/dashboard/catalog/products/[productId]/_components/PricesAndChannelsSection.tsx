@@ -2,6 +2,7 @@
 
 import type { TGetProductsOutputById } from "@/app/api/products/route";
 import NumberInput from "@/components/Inputs/NumberInput";
+import { ProductInactiveChannelsCallout } from "@/components/Products/Shared/ProductActiveStatus";
 import { AvailabilityCycleButton, ChannelPriceInput } from "@/components/SalesChannels/ProductChannelControls";
 import { SalesChannelMark, salesChannelLabel } from "@/components/SalesChannels/SalesChannelMark";
 import SectionApplyBar from "@/components/Utils/SectionApplyBar";
@@ -80,7 +81,9 @@ export default function PricesAndChannelsSection({ product, orgHasERPAccess, cal
 					<div className="flex w-full flex-col gap-3">
 						<h2 className="text-xs leading-none tracking-tight">CANAIS DE VENDA</h2>
 
-						{product.vendavel === false ? (
+						{product.ativo === false ? (
+							<ProductInactiveChannelsCallout />
+						) : product.vendavel === false ? (
 							<p className="text-xs text-muted-foreground">
 								Produto marcado como <span className="font-semibold">não vendável</span> — ele não aparece em nenhum canal, independentemente das
 								configurações abaixo.

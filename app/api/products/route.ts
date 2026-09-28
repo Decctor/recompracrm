@@ -1221,6 +1221,7 @@ async function updateProduct({ session, input }: { session: TAuthUserSession; in
 			.update(products)
 			.set({
 				vendavel: input.product.vendavel,
+				ativo: input.product.ativo,
 				nome: input.product.nome,
 				descricao: input.product.descricao,
 				codigo: input.product.codigo,
@@ -1593,6 +1594,7 @@ async function createProduct({ session, input }: { session: TAuthUserSession; in
 			.values({
 				organizacaoId: userOrgId,
 				vendavel: input.product.vendavel,
+				ativo: input.product.ativo,
 				nome: input.product.nome,
 				descricao: input.product.descricao,
 				codigo: input.product.codigo,

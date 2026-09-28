@@ -7,6 +7,7 @@ export function mergeProductStateFromHydration(partial: Partial<TProductState>):
 	return {
 		product: {
 			vendavel: partial.product?.vendavel ?? true,
+			ativo: partial.product?.ativo ?? true,
 			codigo: partial.product?.codigo ?? "",
 			nome: partial.product?.nome ?? "",
 			descricao: partial.product?.descricao ?? null,
@@ -104,6 +105,7 @@ export function hydrateAddOnsState(product: TGetProductsOutputById): Partial<TPr
 export function buildProductMetadata(product: TGetProductsOutputById): TUpdateProductInput["product"] {
 	return {
 		vendavel: product.vendavel,
+		ativo: product.ativo ?? true,
 		nome: product.nome,
 		descricao: product.descricao,
 		imagemCapaUrl: product.imagemCapaUrl,
@@ -267,6 +269,7 @@ export function validateAddOnsState(state: Pick<TProductState, "productAddOns">)
 export function mapProductToCoreState(product: TGetProductsOutputById): TProductCoreState {
 	return {
 		vendavel: product.vendavel,
+		ativo: product.ativo ?? true,
 		nome: product.nome,
 		descricao: product.descricao,
 		codigo: product.codigo,
@@ -304,6 +307,7 @@ export function buildCoreGeneralUpdateInput(
 		productId: product.id,
 		product: {
 			vendavel: state.vendavel,
+			ativo: state.ativo,
 			nome: state.nome,
 			descricao: state.descricao,
 			imagemCapaUrl,
