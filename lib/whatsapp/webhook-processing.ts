@@ -22,6 +22,8 @@ import {
 	type TMessageTemplateCategory,
 	type TMessageTemplateQuality,
 } from "@/lib/message-templates";
+import { handleWhatsappAccountHealthEvents, resolveOrganizationIdByWhatsappBusinessAccountId } from "@/lib/whatsapp/connection-health";
+import { parseWhatsappAccountHealthWebhook, WHATSAPP_ACCOUNT_HEALTH_WEBHOOK_FIELDS } from "@/lib/whatsapp/connection-health-policy";
 import { resolveWhatsappClient } from "@/lib/whatsapp/contact-identity";
 import {
 	isMessageEchoEvent,
@@ -91,6 +93,9 @@ export type TMetaWebhookBody = {
 /** Classificação rasa do body para a coluna `tipo` do inbox — consulta, não decisão. */
 export function classifyMetaWebhookBody(body: TMetaWebhookBody): string {
 	const kinds: string[] = [];
+	for (const campo of new Set(parseWhatsappAccountHealthWebhook(body).map((event) => event.campo))) {
+		kinds.push(WHATSAPP_ACCOUNT_HEALTH_WEBHOOK_FIELDS[campo]);
+	}
 	if (parseSmbAppStateSyncWebhook(body).length > 0) kinds.push("SMB-APP-STATE");
 	if (parseWhatsappMessageHistoryWebhook(body).length > 0) kinds.push("HISTORY");
 	if (isTemplateEvent(body)) kinds.push("TEMPLATE");
@@ -112,11 +117,20 @@ export async function resolveMetaWebhookOrganizationId(body: TMetaWebhookBody): 
 			if (phoneNumberId) phoneNumberIds.add(phoneNumberId);
 		}
 	}
-	if (phoneNumberIds.size !== 1) return null;
-	return resolveOrganizationIdByWhatsappPhoneNumberId([...phoneNumberIds][0]);
+	if (phoneNumberIds.size === 1) return resolveOrganizationIdByWhatsappPhoneNumberId([...phoneNumberIds][0]);
+	if (phoneNumberIds.size > 1) return null;
+	// Eventos de conta/número (account_update, phone_number_quality_update) não trazem
+	// phone_number_id: o dono sai do WABA (entry.id).
+	const accountIds = new Set(parseWhatsappAccountHealthWebhook(body).map((event) => event.whatsappBusinessAccountId));
+	if (accountIds.size !== 1) return null;
+	return resolveOrganizationIdByWhatsappBusinessAccountId([...accountIds][0]);
 }
 
 export async function processMetaWebhookBody(body: TMetaWebhookBody): Promise<void> {
+	const accountHealthEvents = parseWhatsappAccountHealthWebhook(body);
+	if (accountHealthEvents.length > 0) {
+		await handleWhatsappAccountHealthEvents(accountHealthEvents);
+	}
 	const contactsSyncEvents = parseSmbAppStateSyncWebhook(body);
 	if (contactsSyncEvents.length > 0) {
 		await handleSmbAppStateSync(contactsSyncEvents);

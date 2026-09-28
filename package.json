@@ -63,7 +63,7 @@
 		"test:fiscal-auto-emission": "node --import tsx --test lib/fiscal/auto-emission-policy.test.ts lib/fiscal/auto-emission-delay.test.ts",
 		"test:sale-change": "node --import tsx --test lib/sales/sale-change.test.ts lib/sales/sale-processing/attendance.test.ts",
 		"test:sale-client-reassignment": "node --import tsx --test lib/sales/sale-client-reassignment-policy.test.ts",
-		"test:whatsapp-parsing": "node --import tsx --test lib/whatsapp/parsing.test.ts",
+		"test:whatsapp-parsing": "node --import tsx --test lib/whatsapp/parsing.test.ts lib/whatsapp/connection-health-policy.test.ts",
 		"test:geo": "node --import tsx --test lib/geo/brazilian-locations.test.ts",
 		"test:sales-channels": "node --import tsx --test lib/products/sales-channels.test.ts",
 		"test:cashback-rewards-display": "node --import tsx --test lib/cashback/rewards-display-layout.test.ts",
