@@ -2,7 +2,7 @@ import "@/styles/globals.css";
 import { MarketingTrackingScript } from "@/components/Marketing/MarketingTrackingScript";
 import ProvidersWrapper from "@/components/Providers/Wrapper";
 import { cn } from "@/lib/utils";
-import { GoogleTagManager } from "@next/third-parties/google";
+import { GoogleAnalytics, GoogleTagManager } from "@next/third-parties/google";
 import { Analytics } from "@vercel/analytics/next";
 import type { Metadata, Viewport } from "next";
 import { Outfit } from "next/font/google";
@@ -92,6 +92,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 				<MarketingTrackingScript />
 				<Analytics />
 				<GoogleTagManager gtmId="GTM-KHTDGQL4" />
+				<GoogleAnalytics gaId="AW-18481218774" />
 			</body>
 		</html>
 	);
