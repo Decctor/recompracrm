@@ -40,14 +40,7 @@ type InteractiveInputRootProps = {
 	disabled?: boolean;
 };
 
-function InteractiveInputRoot({
-	children,
-	mode = "auto",
-	open,
-	defaultOpen = false,
-	onOpenChange,
-	disabled = false,
-}: InteractiveInputRootProps) {
+function InteractiveInputRoot({ children, mode = "auto", open, defaultOpen = false, onOpenChange, disabled = false }: InteractiveInputRootProps) {
 	const isDesktop = useMediaQuery("(min-width: 768px)");
 	const resolvedMode: Exclude<InteractiveInputMode, "auto"> = mode === "auto" ? (isDesktop ? "popover" : "drawer") : mode;
 	const [internalOpen, setInternalOpen] = React.useState(defaultOpen);
@@ -84,9 +77,10 @@ type InteractiveInputTriggerProps = {
 
 function InteractiveInputTrigger({ children }: InteractiveInputTriggerProps) {
 	const { mode } = useInteractiveInputContext();
-	const TriggerPrimitive = mode === "popover" ? PopoverTrigger : DrawerTrigger;
 
-	return <TriggerPrimitive asChild>{children}</TriggerPrimitive>;
+	// Base UI (popover) compõe via `render`; vaul/Radix (drawer) via `asChild`.
+	if (mode === "popover") return <PopoverTrigger render={children} />;
+	return <DrawerTrigger asChild>{children}</DrawerTrigger>;
 }
 
 type InteractiveInputContentProps = {
@@ -198,13 +192,7 @@ type InteractiveInputDateContentProps = {
 	className?: string;
 };
 
-function InteractiveInputDateContent({
-	value,
-	onChange,
-	locale = ptBR,
-	closeOnSelect = true,
-	className,
-}: InteractiveInputDateContentProps) {
+function InteractiveInputDateContent({ value, onChange, locale = ptBR, closeOnSelect = true, className }: InteractiveInputDateContentProps) {
 	const { setOpen } = useInteractiveInputContext();
 
 	function handleSelect(nextDate: Date | undefined) {
@@ -214,14 +202,7 @@ function InteractiveInputDateContent({
 
 	return (
 		<div className={cn("w-auto p-0", className)}>
-			<Calendar
-				autoFocus
-				mode="single"
-				locale={locale}
-				selected={value}
-				defaultMonth={value}
-				onSelect={handleSelect}
-			/>
+			<Calendar autoFocus mode="single" locale={locale} selected={value} defaultMonth={value} onSelect={handleSelect} />
 		</div>
 	);
 }

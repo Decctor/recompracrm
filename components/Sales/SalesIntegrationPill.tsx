@@ -10,7 +10,8 @@ import { cn } from "@/lib/utils";
 
 type TSalesIntegrationPillMeta = {
 	nome: string;
-	logo: StaticImageData;
+	/** Sem logo no repositório ainda (Phibo): a pílula mostra só o rótulo. */
+	logo: StaticImageData | null;
 };
 
 export const SALES_INTEGRATION_META: Record<TDataSourceIntegrationTipoEnum, TSalesIntegrationPillMeta> = {
@@ -20,6 +21,7 @@ export const SALES_INTEGRATION_META: Record<TDataSourceIntegrationTipoEnum, TSal
 	IFOOD: { nome: "iFood", logo: IfoodLogo },
 	BLING: { nome: "Bling", logo: BlingLogo },
 	"ERP-FLEX": { nome: "ERPFlex", logo: ErpFlexLogo },
+	PHIBO: { nome: "Phibo", logo: null },
 };
 
 /** Rótulo legível da conexão: apelido quando existe, senão o nome do provedor. */
@@ -64,9 +66,11 @@ export function SalesIntegrationPill({ integracao, className }: SalesIntegration
 				className,
 			)}
 		>
-			<span className="inline-flex h-4 w-5 shrink-0 items-center justify-center">
-				<Image src={meta.logo} alt="" width={24} height={16} className="h-3.5 w-5 object-contain" />
-			</span>
+			{meta.logo ? (
+				<span className="inline-flex h-4 w-5 shrink-0 items-center justify-center">
+					<Image src={meta.logo} alt="" width={24} height={16} className="h-3.5 w-5 object-contain" />
+				</span>
+			) : null}
 			<span className="truncate">{label}</span>
 		</span>
 	);

@@ -157,43 +157,54 @@ type InteractiveFilterTriggerProps = {
 	className?: string;
 };
 
+// O popover é Base UI (compõe via `render`) e o drawer é vaul/Radix (compõe via `asChild`). Passar
+// `asChild` ao trigger do Base UI não compõe nada: ele renderiza o próprio <button> em volta do nosso.
+function InteractiveFilterTriggerSlot({ mode, button }: { mode: InteractiveFilterContextValue["mode"]; button: React.ReactElement }) {
+	if (mode === "popover") return <PopoverTrigger render={button} />;
+	return <DrawerTrigger asChild>{button}</DrawerTrigger>;
+}
+
 function InteractiveFilterTrigger({ children, className }: InteractiveFilterTriggerProps) {
 	const { mode, disabled, open } = useInteractiveFilterContext();
-	const TriggerPrimitive = mode === "popover" ? PopoverTrigger : DrawerTrigger;
 
 	return (
-		<TriggerPrimitive asChild>
-			<Button
-				type="button"
-				variant="ghost"
-				disabled={disabled}
-				aria-haspopup="dialog"
-				aria-expanded={open}
-				className={cn("h-auto w-fit items-center gap-3 px-3 py-2", className)}
-			>
-				{children}
-			</Button>
-		</TriggerPrimitive>
+		<InteractiveFilterTriggerSlot
+			mode={mode}
+			button={
+				<Button
+					type="button"
+					variant="ghost"
+					disabled={disabled}
+					aria-haspopup="dialog"
+					aria-expanded={open}
+					className={cn("h-auto w-fit items-center gap-3 px-3 py-2", className)}
+				>
+					{children}
+				</Button>
+			}
+		/>
 	);
 }
 
 function InteractiveFilterAddFilterTrigger({ children, className }: InteractiveFilterTriggerProps) {
 	const { mode, disabled, open } = useInteractiveAddFilterContext();
-	const TriggerPrimitive = mode === "popover" ? PopoverTrigger : DrawerTrigger;
 
 	return (
-		<TriggerPrimitive asChild>
-			<Button
-				type="button"
-				variant="secondary"
-				disabled={disabled}
-				aria-haspopup="dialog"
-				aria-expanded={open}
-				className={cn("h-auto w-fit items-center gap-3 px-3 py-2", className)}
-			>
-				{children}
-			</Button>
-		</TriggerPrimitive>
+		<InteractiveFilterTriggerSlot
+			mode={mode}
+			button={
+				<Button
+					type="button"
+					variant="secondary"
+					disabled={disabled}
+					aria-haspopup="dialog"
+					aria-expanded={open}
+					className={cn("h-auto w-fit items-center gap-3 px-3 py-2", className)}
+				>
+					{children}
+				</Button>
+			}
+		/>
 	);
 }
 

@@ -188,7 +188,9 @@ async function main() {
 		return true;
 	});
 
-	console.log(`=== ${apply ? "APLICACAO" : "DRY-RUN"} | modo=${mode} | origem=${withoutDocument ? "sem-documento" : "erros"} | org=${organizationId} ===`);
+	console.log(
+		`=== ${apply ? "APLICACAO" : "DRY-RUN"} | modo=${mode} | origem=${withoutDocument ? "sem-documento" : "erros"} | org=${organizationId} ===`,
+	);
 	console.log(`Candidatos do modo: ${candidates.length}`);
 	for (const line of skipped) console.log(`  [PULADO] ${line}`);
 
@@ -223,7 +225,7 @@ async function main() {
 		const readiness = await checkSaleFiscalReadiness(input);
 		const address = sale.entregaLocalizacao ?? sale.cliente;
 		const addressComplete = hasText(address?.localizacaoLogradouro) && hasText(address?.localizacaoCidade) && hasText(address?.localizacaoEstado);
-		const header = `${target.label} | venda=${sale.id} ${sale.dataVenda.toISOString().slice(0, 10)} | ${sale.canal ?? "-"} | ${tipo} | R$ ${sale.valorTotal} | ${target.status}`;
+		const header = `${target.label} | venda=${sale.id} ${sale.dataVenda?.toISOString().slice(0, 10) ?? "sem-data"} | ${sale.canal ?? "-"} | ${tipo} | R$ ${sale.valorTotal} | ${target.status}`;
 		if (!readiness.pronto) {
 			console.log(`  [REPROVADO] ${header}`);
 			for (const problem of readiness.problemas) console.log(`      - ${problem.codigo}: ${problem.mensagem}`);
@@ -236,7 +238,9 @@ async function main() {
 	}
 
 	const batch = limit ? ready.slice(0, limit) : ready;
-	console.log(`\nResumo: prontos=${ready.length} | reprovados=${candidates.length - ready.length} | pulados=${skipped.length} | neste lote=${batch.length}`);
+	console.log(
+		`\nResumo: prontos=${ready.length} | reprovados=${candidates.length - ready.length} | pulados=${skipped.length} | neste lote=${batch.length}`,
+	);
 	if (!apply) {
 		console.log("DRY-RUN: nada foi emitido. Repita com --apply (comece com --limit=1).");
 		return;

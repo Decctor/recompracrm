@@ -22,11 +22,12 @@ export function buildSalesIntegrationFilterOptions(
 		},
 		...(integrations ?? []).map((integration) => {
 			const label = getSalesIntegrationLabel({ tipo: integration.tipo, apelido: integration.apelido });
+			const logo = SALES_INTEGRATION_META[integration.tipo].logo;
 			return {
 				id: integration.id,
 				value: integration.value,
 				label: integration.ativo ? label : `${label} (inativa)`,
-				startContent: <Image src={SALES_INTEGRATION_META[integration.tipo].logo} alt="" width={20} height={14} className="h-3.5 w-5 object-contain" />,
+				startContent: logo ? <Image src={logo} alt="" width={20} height={14} className="h-3.5 w-5 object-contain" /> : undefined,
 			};
 		}),
 	];
