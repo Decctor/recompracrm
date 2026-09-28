@@ -70,6 +70,13 @@ function decide(ifoodName: string, localGroup: string | null): TTarget | null {
 		// Sabor Pistache = a opção de "Escolha o sabor:"; Pistache de cobertura é outra coisa.
 		return localGroup === COBERTURA ? { kind: "create", grupo: COBERTURA, nome: "Pistache" } : { kind: "existing", grupo: "Escolha o sabor:", opcao: "Pistache" };
 	}
+	if (name === "morango" || name === "leite ninho") {
+		// Sabor ≠ fruta/cobertura: só nos grupos de SABOR vira opção nova de "Escolha seu gelato:". Em
+		// qualquer outro grupo (ex.: "Escolha seus adicionais:" do açaí) vale o casamento da curadoria
+		// com a opção do próprio grupo — aplicar a regra pelo nome, sem olhar o grupo, vinculou a fruta
+		// do açaí ao sabor (2026-09-28).
+		return localGroup === GELATO ? { kind: "create", grupo: GELATO, nome: name === "morango" ? "Morango" : "Leite Ninho" } : null;
+	}
 	const table: Record<string, TTarget> = {
 		"kinder bueno com avela": { kind: "existing", grupo: GELATO, opcao: "Kinder Bueno" },
 		"acai zero": { kind: "existing", grupo: GELATO, opcao: "Açaí (Zero adição de açúcar e Zero Lactose)" },
@@ -80,9 +87,6 @@ function decide(ifoodName: string, localGroup: string | null): TTarget | null {
 		banoffee: { kind: "existing", grupo: GELATO, opcao: "Banoffe" },
 		"cheesecake pistache": { kind: "create", grupo: GELATO, nome: "Cheesecake de Pistache" },
 		"cheesecake de pistache": { kind: "create", grupo: GELATO, nome: "Cheesecake de Pistache" },
-		// Sabor ≠ cobertura: opção nova no grupo de sabores, separada das de "adicionais".
-		morango: { kind: "create", grupo: GELATO, nome: "Morango" },
-		"leite ninho": { kind: "create", grupo: GELATO, nome: "Leite Ninho" },
 		// A bebida do upsell já existe localmente com o rótulo "310ml" (o iFood diz 350ml): mesma
 		// opção — criar outra duplicaria o Guaraná no grupo.
 		"guarana antartica 350ml": { kind: "existing", grupo: "Que tal uma bebida?", opcao: "Guaraná Antartica - 310ml" },
