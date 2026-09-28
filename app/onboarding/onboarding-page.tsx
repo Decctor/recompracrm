@@ -34,6 +34,7 @@ import type { TOnboardingProductEnum } from "@/schemas/enums";
 import type { TOrganizationEntity, TOrganizationOnboardingEntity } from "@/services/drizzle/schema";
 import { useInternalOnboardingNavigationState } from "@/state-hooks/use-internal-onboarding-navigation-state";
 import { useOrganizationOnboardingState } from "@/state-hooks/use-organization-onboarding-state";
+import { sendGAEvent } from "@next/third-parties/google";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -268,6 +269,13 @@ export function OnboardingPage({
 		});
 		setOrgCreatedThisSession(true);
 		captureClientEvent({ event: "onboarding_organization_created", properties: { niche: state.organization.atuacaoNicho, produto: activeProduct } });
+		if (!membership) {
+			sendGAEvent("event", "conversion", {
+				send_to: "AW-18481218774/D0p8CMae04kdENaJxOxE",
+				value: 1,
+				currency: "BRL",
+			});
+		}
 
 		const created = await createOnboardingJourney({ produto: activeProduct, origemIntencao: intent?.origem ?? "PERGUNTA" });
 		setJourney(created.data.journey);
