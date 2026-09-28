@@ -1,3 +1,4 @@
+import { useProductSearchFilters } from "@/lib/hooks/use-product-search-filters";
 import type { TGetSaleForEditOutput } from "@/app/api/pos/sales/edit/route";
 import type { TGetSaleDraftOutput } from "@/app/api/pos/sales/route";
 import type { TGetPOSGroupsOutput } from "@/app/api/pos/groups/route";
@@ -7,22 +8,21 @@ import type { TGetCrossSellOutput } from "@/app/api/pos/cross-sell/route";
 import type { TGetPOSFinancialAccountsOutput } from "@/app/api/pos/financial-accounts/route";
 import { POS_PRODUCT_ORDERING_DEFAULT } from "@/schemas/enums";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { useCallback } from "react";
 import axios from "axios";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useDebounceMemo } from "../hooks/use-debounce";
 
 // Fetch POS products
-async function fetchPOSProducts(input: TGetPOSProductsInput) {
+async function fetchPOSProducts(input: TGetPOSProductsInput, signal?: AbortSignal) {
 	try {
 		const searchParams = new URLSearchParams();
 		if (input.page) searchParams.set("page", input.page.toString());
-		if (input.search) searchParams.set("search", input.search);
+		if (input.search.length) searchParams.set("search", input.search.join(","));
 		if (input.group) searchParams.set("group", input.group);
 		if (input.channel) searchParams.set("channel", input.channel);
 		if (input.ordering) searchParams.set("ordering", input.ordering);
 
-		const { data } = await axios.get<TGetPOSProductsOutput>(`/api/pos/products?${searchParams.toString()}`);
+		const { data } = await axios.get<TGetPOSProductsOutput>(`/api/pos/products?${searchParams.toString()}`, { signal });
 		return data.data;
 	} catch (error) {
 		console.log("Error running fetchPOSProducts", error);
@@ -35,25 +35,19 @@ type UsePOSProductsParams = {
 };
 
 export function usePOSProducts({ initialFilters }: UsePOSProductsParams = {}) {
-	const [filters, setFilters] = useState<TGetPOSProductsInput>({
+	const { filters, updateFilters, debouncedFilters } = useProductSearchFilters<TGetPOSProductsInput>({
 		page: initialFilters?.page || 1,
-		search: initialFilters?.search || "",
+		search: initialFilters?.search || [],
 		group: initialFilters?.group || null,
 		channel: initialFilters?.channel || "POS",
 		// Padrão do PDV: o que mais fatura na frente, para o operador achar o corriqueiro sem buscar.
 		ordering: initialFilters?.ordering || POS_PRODUCT_ORDERING_DEFAULT,
 	});
 
-	const updateFilters = useCallback((newParams: Partial<TGetPOSProductsInput>) => {
-		setFilters((prevFilters) => ({ ...prevFilters, ...newParams, page: newParams.page ?? 1 }));
-	}, []);
-
-	const debouncedFilters = useDebounceMemo(filters, 300);
-
 	return {
 		...useQuery({
 			queryKey: ["pos-products", debouncedFilters],
-			queryFn: () => fetchPOSProducts(debouncedFilters),
+			queryFn: ({ signal }) => fetchPOSProducts(debouncedFilters, signal),
 			// Mantém a grade anterior visível durante busca/paginação (evita desmontar para o loader a cada tecla).
 			placeholderData: keepPreviousData,
 		}),

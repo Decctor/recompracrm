@@ -198,7 +198,7 @@ export function ChatQuoteBuilder({ open, onOpenChange, clientId, chatId, clientN
 
 	function handleSearchChange(value: string) {
 		setSearch(value);
-		updateFilters({ search: value, page: 1 });
+		updateFilters({ search: value ? [value] : [], page: 1 });
 	}
 
 	function handleClose(nextOpen: boolean) {

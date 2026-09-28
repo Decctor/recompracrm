@@ -103,7 +103,7 @@ export default function EditSalePage({
 	const router = useRouter();
 	const queryClient = useQueryClient();
 	const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
-	const [searchValue, setSearchValue] = useState("");
+	const [searchValue, setSearchValue] = useState<string[]>([]);
 	const [viewMode, setViewMode] = useState<ProductViewMode>("list");
 	const [builderProduct, setBuilderProduct] = useState<TGetPOSProductsOutput["data"]["products"][number] | null>(null);
 	const [isCheckoutSheetOpen, setIsCheckoutSheetOpen] = useState(false);
@@ -274,9 +274,9 @@ export default function EditSalePage({
 		updateFilters({ group, page: 1 });
 	};
 
-	const handleSearchChange = (value: string) => {
+	const handleSearchChange = (value: string[], immediate?: boolean) => {
 		setSearchValue(value);
-		updateFilters({ search: value, page: 1 });
+		updateFilters({ search: value, page: 1 }, immediate);
 	};
 
 	const handleOrderingChange = (ordering: TPOSProductOrderingEnum) => {

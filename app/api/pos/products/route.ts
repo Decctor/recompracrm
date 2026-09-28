@@ -1,5 +1,7 @@
+import { buildProductSearch, withProductSearch, type ProductSearchDatabase } from "@/lib/products/search";
+import { ProductSearchQuerySchema } from "@/schemas/product-search";
+import { NextResponse, type NextRequest } from "next/server";
 import { appApiHandler } from "@/lib/app-api";
-import { runPagesRouteHandler, type PagesRouteHandler, type PagesRouteRequest, type PagesRouteResponse } from "@/lib/pages-route-compat";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { resolveAddOnReferencesRules } from "@/lib/products/add-on-rules";
@@ -8,7 +10,7 @@ import { buildChannelCatalogConditions, channelNodePrice, loadChannelState } fro
 import { getValidSaleConditions } from "@/lib/sales/valid-sale";
 import { POS_PRODUCT_ORDERING_DEFAULT, POSProductOrderingEnum, type TPOSProductOrderingEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
-import { productAddOnOptions, productAddOnReferences, productAddOns, productVariants, products, saleItems, sales } from "@/services/drizzle/schema";
+import { products, saleItems, sales } from "@/services/drizzle/schema";
 import dayjs from "dayjs";
 import { and, asc, desc, eq, gte, inArray, isNotNull, sql, sum, type SQL } from "drizzle-orm";
 import { count } from "drizzle-orm";
@@ -20,12 +22,7 @@ import z from "zod";
 const POS_ORDERING_WINDOW_DAYS = 90;
 
 const GetPOSProductsInputSchema = z.object({
-	search: z
-		.string({
-			invalid_type_error: "Tipo inválido para busca.",
-		})
-		.optional()
-		.nullable(),
+	search: ProductSearchQuerySchema,
 	group: z
 		.string({
 			invalid_type_error: "Tipo inválido para grupo.",
@@ -87,45 +84,54 @@ function buildSalesMetricsSubquery({ orgId }: { orgId: string }) {
  * IDs da página já na ordem pedida. Produto sem venda na janela entra com zero (LEFT JOIN +
  * coalesce) e cai para o fim; o nome desempata para a paginação não embaralhar entre páginas.
  */
-async function selectPOSProductPageIds({
+async function selectPOSProductPage({
+	db,
+	searchTerms,
 	orgId,
 	conditions,
 	ordering,
 	skip,
 	limit,
 }: {
+	db: ProductSearchDatabase;
+	searchTerms: string[];
 	orgId: string;
 	conditions: SQL[];
 	ordering: TPOSProductOrderingEnum;
 	skip: number;
 	limit: number;
 }) {
-	if (ordering === "NOME") {
+	const relevanceOrder = searchTerms.length ? [desc(buildProductSearch(searchTerms, products).relevance)] : [];
+	if (ordering === "NOME" || searchTerms.length > 0) {
 		const rows = await db
-			.select({ id: products.id })
+			.select({ id: products.id, total: sql<number>`count(*) over ()`.mapWith(Number) })
 			.from(products)
 			.where(and(...conditions))
-			.orderBy(asc(products.nome))
+			.orderBy(...relevanceOrder, asc(products.nome), asc(products.id))
 			.offset(skip)
 			.limit(limit);
-		return rows.map((row) => row.id);
+		return rows;
 	}
 
 	const salesMetrics = buildSalesMetricsSubquery({ orgId });
 	const metricColumn = ordering === "QUANTIDADE_VENDIDA" ? salesMetrics.quantidadeVendida : salesMetrics.valorVendido;
 
 	const rows = await db
-		.select({ id: products.id })
+		.select({ id: products.id, total: sql<number>`count(*) over ()`.mapWith(Number) })
 		.from(products)
 		.leftJoin(salesMetrics, eq(salesMetrics.produtoId, products.id))
 		.where(and(...conditions))
 		.orderBy(desc(sql`coalesce(${metricColumn}, 0)`), asc(products.nome))
 		.offset(skip)
 		.limit(limit);
-	return rows.map((row) => row.id);
+	return rows;
 }
 
 async function getPOSProducts({ input, session }: { input: TGetPOSProductsInput; session: TAuthUserSession }) {
+	return withProductSearch(db, input.search, (database) => queryProducts({ input, session }, database));
+}
+
+async function queryProducts({ input, session }: { input: TGetPOSProductsInput; session: TAuthUserSession }, db: ProductSearchDatabase) {
 	const userOrgId = session.membership?.organizacao.id;
 	if (!userOrgId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
 
@@ -144,28 +150,29 @@ async function getPOSProducts({ input, session }: { input: TGetPOSProductsInput;
 
 	// Search filter — insensível a acentos: unaccent() em ambos os lados normaliza os diacríticos
 	// (ex.: "acai" encontra "Açaí"). Requer a extensão `unaccent` (migration 0033_unaccent_extension).
-	if (input.search && input.search.length > 0) {
-		conditions.push(
-			sql`(unaccent(${products.nome}) ILIKE unaccent('%' || ${input.search} || '%') OR unaccent(${products.codigo}) ILIKE unaccent('%' || ${input.search} || '%'))`,
-		);
-	}
+	const search = buildProductSearch(input.search, products);
+	if (search.condition) conditions.push(search.condition);
 
 	// Group filter
 	if (input.group && input.group.length > 0) {
 		conditions.push(eq(products.grupo, input.group));
 	}
 
-	// Count total matching products
-	const productsMatched = await db
-		.select({ count: count(products.id) })
-		.from(products)
-		.where(and(...conditions));
-
-	const productsMatchedCount = productsMatched[0]?.count || 0;
+	// Count with the page to avoid another round trip. Only an out-of-range page needs a separate count.
+	const pageRows = await selectPOSProductPage({ db, searchTerms: input.search, orgId: userOrgId, conditions, ordering: input.ordering, skip, limit });
+	const pageProductIds = pageRows.map((row) => row.id);
+	const productsMatchedCount =
+		pageRows[0]?.total ??
+		(skip > 0
+			? ((
+					await db
+						.select({ count: count(products.id) })
+						.from(products)
+						.where(and(...conditions))
+				)[0]?.count ?? 0)
+			: 0);
 	const totalPages = Math.ceil(productsMatchedCount / PAGE_SIZE);
 
-	// A ordenação decide a página; a hidratação só carrega os produtos dela.
-	const pageProductIds = await selectPOSProductPageIds({ orgId: userOrgId, conditions, ordering: input.ordering, skip, limit });
 	if (pageProductIds.length === 0) {
 		return { data: { products: [], productsMatched: productsMatchedCount, totalPages, currentPage: input.page } };
 	}
@@ -250,22 +257,16 @@ async function getPOSProducts({ input, session }: { input: TGetPOSProductsInput;
 
 export type TGetPOSProductsOutput = Awaited<ReturnType<typeof getPOSProducts>>;
 
-const getPOSProductsHandler: PagesRouteHandler<TGetPOSProductsOutput> = async (req, res) => {
+async function getPOSProductsRoute(request: NextRequest) {
 	const sessionUser = await getCurrentSessionUncached();
 	if (!sessionUser) throw new createHttpError.Unauthorized("Você não está autenticado.");
 
 	const userOrgId = sessionUser.membership?.organizacao.id;
 	if (!userOrgId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
 
-	const input = GetPOSProductsInputSchema.parse(req.query);
+	const input = GetPOSProductsInputSchema.parse(Object.fromEntries(request.nextUrl.searchParams));
 	const data = await getPOSProducts({ input, session: sessionUser });
-	return res.status(200).json(data);
-};
+	return NextResponse.json(data);
+}
 
-const routeHandlers = {
-	GET: getPOSProductsHandler,
-} satisfies Partial<Record<"GET" | "POST" | "PUT" | "PATCH" | "DELETE", PagesRouteHandler<any>>>;
-
-export const GET = appApiHandler({
-	GET: (request) => runPagesRouteHandler({ request, handler: routeHandlers.GET! }),
-});
+export const GET = appApiHandler({ GET: getPOSProductsRoute });

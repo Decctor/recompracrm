@@ -1,3 +1,4 @@
+import { useProductSearchFilters } from "@/lib/hooks/use-product-search-filters";
 import type { TGetProductsByIdInput, TGetProductsDefaultInput, TGetProductsOutput, TGetProductsOutputStock } from "@/app/api/products/route";
 import type { TGetProductVariantsOutput } from "@/app/api/products/variants/route";
 import type { TGetProductAddOnsOutput } from "@/app/api/products/add-ons/route";
@@ -16,11 +17,11 @@ import { useEffect, useMemo, useState } from "react";
 import { useDebounceMemo } from "../hooks/use-debounce";
 import type { TGetProductsPortfolioAnalysisInput, TGetProductsPortfolioAnalysisOutput } from "@/app/api/products/stats/portfolio-analysis/route";
 
-async function fetchProducts(input: TGetProductsDefaultInput) {
+async function fetchProducts(input: TGetProductsDefaultInput, signal?: AbortSignal) {
 	try {
 		const searchParams = new URLSearchParams();
 		if (input.page) searchParams.set("page", input.page.toString());
-		if (input.search) searchParams.set("search", input.search);
+		if (input.search.length) searchParams.set("search", input.search.join(","));
 		if (input.groups) searchParams.set("groups", input.groups.join(","));
 		if (input.statsPeriodBefore) searchParams.set("statsPeriodBefore", input.statsPeriodBefore.toISOString());
 		if (input.statsPeriodAfter) searchParams.set("statsPeriodAfter", input.statsPeriodAfter.toISOString());
@@ -37,7 +38,7 @@ async function fetchProducts(input: TGetProductsDefaultInput) {
 		if (input.abcClasses && input.abcClasses.length > 0) searchParams.set("abcClasses", input.abcClasses.join(","));
 		if (input.resultLimit) searchParams.set("resultLimit", input.resultLimit.toString());
 		if (input.statsSellerIds) searchParams.set("statsSellerIds", input.statsSellerIds.join(","));
-		const { data } = await axios.get<TGetProductsOutput>(`/api/products?${searchParams.toString()}`);
+		const { data } = await axios.get<TGetProductsOutput>(`/api/products?${searchParams.toString()}`, { signal });
 		const result = data.data.default;
 		if (!result) throw new Error("Produtos não encontrados.");
 		return result;
@@ -73,9 +74,9 @@ type UseProductsParams = {
 	initialFilters?: Partial<TGetProductsDefaultInput>;
 };
 export function useProducts({ initialFilters }: UseProductsParams) {
-	const [filters, setFilters] = useState<TGetProductsDefaultInput>({
+	const { filters, updateFilters, debouncedFilters } = useProductSearchFilters<TGetProductsDefaultInput>({
 		page: initialFilters?.page || 1,
-		search: initialFilters?.search || "",
+		search: initialFilters?.search || [],
 		groups: initialFilters?.groups || [],
 		statsSellerIds: initialFilters?.statsSellerIds || [],
 		statsPeriodBefore: initialFilters?.statsPeriodBefore || null,
@@ -93,15 +94,10 @@ export function useProducts({ initialFilters }: UseProductsParams) {
 		orderByField: initialFilters?.orderByField || "nome",
 		orderByDirection: initialFilters?.orderByDirection || "asc",
 	});
-	function updateFilters(newParams: Partial<TGetProductsDefaultInput>) {
-		setFilters((prevFilters) => ({ ...prevFilters, ...newParams }));
-	}
-
-	const debouncedFilters = useDebounceMemo(filters, 500);
 	return {
 		...useQuery({
 			queryKey: ["products", debouncedFilters],
-			queryFn: () => fetchProducts(debouncedFilters),
+			queryFn: ({ signal }) => fetchProducts(debouncedFilters, signal),
 		}),
 		queryKey: ["products", debouncedFilters],
 		filters,
@@ -110,12 +106,12 @@ export function useProducts({ initialFilters }: UseProductsParams) {
 }
 
 // Stock view (mode=stock): visão operacional de estoque por produto.
-async function fetchProductsStock(input: TGetProductsDefaultInput): Promise<TGetProductsOutputStock> {
+async function fetchProductsStock(input: TGetProductsDefaultInput, signal?: AbortSignal): Promise<TGetProductsOutputStock> {
 	try {
 		const searchParams = new URLSearchParams();
 		searchParams.set("mode", "stock");
 		if (input.page) searchParams.set("page", input.page.toString());
-		if (input.search) searchParams.set("search", input.search);
+		if (input.search.length) searchParams.set("search", input.search.join(","));
 		if (input.groups && input.groups.length > 0) searchParams.set("groups", input.groups.join(","));
 		if (input.statsPeriodAfter) searchParams.set("statsPeriodAfter", input.statsPeriodAfter.toISOString());
 		if (input.statsPeriodBefore) searchParams.set("statsPeriodBefore", input.statsPeriodBefore.toISOString());
@@ -125,7 +121,7 @@ async function fetchProductsStock(input: TGetProductsDefaultInput): Promise<TGet
 		if (input.priceMax) searchParams.set("priceMax", input.priceMax.toString());
 		if (input.orderByField) searchParams.set("orderByField", input.orderByField);
 		if (input.orderByDirection) searchParams.set("orderByDirection", input.orderByDirection);
-		const { data } = await axios.get<TGetProductsOutput>(`/api/products?${searchParams.toString()}`);
+		const { data } = await axios.get<TGetProductsOutput>(`/api/products?${searchParams.toString()}`, { signal });
 		const result = data.data.stock;
 		if (!result) throw new Error("Visão de estoque não encontrada.");
 		return result;
@@ -140,9 +136,9 @@ type UseProductsStockParams = {
 	enabled?: boolean;
 };
 export function useProductsStock({ initialFilters, enabled = true }: UseProductsStockParams = {}) {
-	const [filters, setFilters] = useState<TGetProductsDefaultInput>({
+	const { filters, updateFilters, debouncedFilters } = useProductSearchFilters<TGetProductsDefaultInput>({
 		page: initialFilters?.page || 1,
-		search: initialFilters?.search || "",
+		search: initialFilters?.search || [],
 		groups: initialFilters?.groups || [],
 		statsSellerIds: [],
 		statsPeriodBefore: initialFilters?.statsPeriodBefore || null,
@@ -160,15 +156,10 @@ export function useProductsStock({ initialFilters, enabled = true }: UseProducts
 		orderByField: initialFilters?.orderByField || "nome",
 		orderByDirection: initialFilters?.orderByDirection || "asc",
 	});
-	function updateFilters(newParams: Partial<TGetProductsDefaultInput>) {
-		setFilters((prevFilters) => ({ ...prevFilters, ...newParams }));
-	}
-
-	const debouncedFilters = useDebounceMemo(filters, 500);
 	return {
 		...useQuery({
 			queryKey: ["products-stock", debouncedFilters],
-			queryFn: () => fetchProductsStock(debouncedFilters),
+			queryFn: ({ signal }) => fetchProductsStock(debouncedFilters, signal),
 			enabled,
 		}),
 		queryKey: ["products-stock", debouncedFilters],
@@ -251,30 +242,32 @@ export function useProductGraph(input: TGetProductGraphInput) {
 	});
 }
 
-async function fetchProductsBySearch(input: TGetProductsBySearchInput) {
+async function fetchProductsBySearch(input: TGetProductsBySearchInput, signal?: AbortSignal) {
 	const urlParams = new URLSearchParams();
-	urlParams.set("search", input.search);
+	if (input.search.length) urlParams.set("search", input.search.join(","));
 	urlParams.set("page", input.page.toString());
-	const { data } = await axios.get<TGetProductsBySearchOutput>(`/api/products/search?${urlParams.toString()}`);
+	const { data } = await axios.get<TGetProductsBySearchOutput>(`/api/products/search?${urlParams.toString()}`, { signal });
 	return data.data;
 }
 
+type ProductPickerInput = Omit<TGetProductsBySearchInput, "search"> & { search: string };
+
 type UseProductsBySearchParams = {
-	initialParams?: Partial<TGetProductsBySearchInput>;
+	initialParams?: Partial<ProductPickerInput>;
 };
 export function useProductsBySearch({ initialParams }: UseProductsBySearchParams) {
-	const [params, setParams] = useState<TGetProductsBySearchInput>({
+	const [params, setParams] = useState<ProductPickerInput>({
 		search: initialParams?.search || "",
 		page: initialParams?.page || 1,
 	});
-	function updateParams(newParams: Partial<TGetProductsBySearchInput>) {
+	function updateParams(newParams: Partial<ProductPickerInput>) {
 		setParams((prevParams) => ({ ...prevParams, ...newParams }));
 	}
 	const debouncedParams = useDebounceMemo(params, 1000);
 	return {
 		...useQuery({
 			queryKey: ["products-by-search", debouncedParams],
-			queryFn: () => fetchProductsBySearch(debouncedParams),
+			queryFn: () => fetchProductsBySearch({ ...debouncedParams, search: debouncedParams.search ? [debouncedParams.search] : [] }),
 		}),
 		queryKey: ["products-by-search", debouncedParams],
 		params,
@@ -325,7 +318,7 @@ export function useProductsBySearchInfiniteQuery({ initialSearch = "" }: UseProd
 
 	const query = useInfiniteQuery({
 		queryKey: ["products-by-search-infinite-query", debouncedSearch.search],
-		queryFn: ({ pageParam }) => fetchProductsBySearch({ search: debouncedSearch.search, page: pageParam }),
+		queryFn: ({ pageParam }) => fetchProductsBySearch({ search: debouncedSearch.search ? [debouncedSearch.search] : [], page: pageParam }),
 		initialPageParam: 1,
 		getNextPageParam: (lastPage, allPages) => {
 			const nextPage = allPages.length + 1;

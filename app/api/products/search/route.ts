@@ -1,18 +1,17 @@
+import { buildProductSearch, withProductSearch, type ProductSearchDatabase } from "@/lib/products/search";
+import { ProductSearchQuerySchema } from "@/schemas/product-search";
+import { NextResponse, type NextRequest } from "next/server";
 import { appApiHandler } from "@/lib/app-api";
-import { runPagesRouteHandler, type PagesRouteHandler, type PagesRouteRequest, type PagesRouteResponse } from "@/lib/pages-route-compat";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { db } from "@/services/drizzle";
 import { products } from "@/services/drizzle/schema";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { count } from "drizzle-orm";
 import createHttpError from "http-errors";
 import z from "zod";
 
 const GetProductsBySearchInputSchema = z.object({
-	search: z.string({
-		required_error: "Busca não informada.",
-		invalid_type_error: "Tipo inválido para busca.",
-	}),
+	search: ProductSearchQuerySchema,
 	page: z
 		.string({
 			required_error: "Página não informada.",
@@ -29,6 +28,10 @@ const GetProductsBySearchInputSchema = z.object({
 export type TGetProductsBySearchInput = z.infer<typeof GetProductsBySearchInputSchema>;
 
 async function getProductsBySearch({ input, userOrgId }: { input: TGetProductsBySearchInput; userOrgId: string }) {
+	return withProductSearch(db, input.ids?.length ? [] : input.search, (database) => queryProducts({ input, userOrgId }, database));
+}
+
+async function queryProducts({ input, userOrgId }: { input: TGetProductsBySearchInput; userOrgId: string }, db: ProductSearchDatabase) {
 	const PAGE_SIZE = 25;
 
 	const skip = PAGE_SIZE * (input.page - 1);
@@ -57,12 +60,8 @@ async function getProductsBySearch({ input, userOrgId }: { input: TGetProductsBy
 		};
 	}
 
-	if (input.search.length > 0) {
-		// Insensível a acentos via unaccent() em ambos os lados (requer extensão `unaccent`, migration 0033).
-		conditions.push(
-			sql`(unaccent(${products.nome}) ILIKE unaccent('%' || ${input.search} || '%') OR unaccent(${products.codigo}) ILIKE unaccent('%' || ${input.search} || '%'))`,
-		);
-	}
+	const search = buildProductSearch(input.search, products);
+	if (search.condition) conditions.push(search.condition);
 	const productsMatched = await db
 		.select({ count: count(products.id) })
 		.from(products)
@@ -80,7 +79,7 @@ async function getProductsBySearch({ input, userOrgId }: { input: TGetProductsBy
 		},
 		offset: skip,
 		limit: limit,
-		orderBy: (fields, { desc }) => desc(fields.nome),
+		orderBy: [...(input.search.length ? [desc(search.relevance), asc(products.nome)] : [desc(products.nome)]), asc(products.id)],
 	});
 
 	return {
@@ -93,22 +92,16 @@ async function getProductsBySearch({ input, userOrgId }: { input: TGetProductsBy
 }
 export type TGetProductsBySearchOutput = Awaited<ReturnType<typeof getProductsBySearch>>;
 
-const getProductsBySearchHandler: PagesRouteHandler<TGetProductsBySearchOutput> = async (req, res) => {
+async function getProductsBySearchRoute(request: NextRequest) {
 	const sessionUser = await getCurrentSessionUncached();
 	if (!sessionUser) throw new createHttpError.Unauthorized("Você não está autenticado.");
 
 	const userOrgId = sessionUser.membership?.organizacao.id;
 	if (!userOrgId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
 
-	const input = GetProductsBySearchInputSchema.parse(req.query);
+	const input = GetProductsBySearchInputSchema.parse(Object.fromEntries(request.nextUrl.searchParams));
 	const data = await getProductsBySearch({ input, userOrgId });
-	return res.status(200).json(data);
-};
+	return NextResponse.json(data);
+}
 
-const routeHandlers = {
-	GET: getProductsBySearchHandler,
-} satisfies Partial<Record<"GET" | "POST" | "PUT" | "PATCH" | "DELETE", PagesRouteHandler<any>>>;
-
-export const GET = appApiHandler({
-	GET: (request) => runPagesRouteHandler({ request, handler: routeHandlers.GET! }),
-});
+export const GET = appApiHandler({ GET: getProductsBySearchRoute });

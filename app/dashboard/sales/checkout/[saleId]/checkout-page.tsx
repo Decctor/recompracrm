@@ -93,7 +93,7 @@ export default function CheckoutPage({
 }: CheckoutPageProps) {
 	const router = useRouter();
 	const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
-	const [searchValue, setSearchValue] = useState("");
+	const [searchValue, setSearchValue] = useState<string[]>([]);
 	const [viewMode, setViewMode] = useState<ProductViewMode>("list");
 	const [builderProduct, setBuilderProduct] = useState<TGetPOSProductsOutput["data"]["products"][number] | null>(null);
 	const [isCheckoutSheetOpen, setIsCheckoutSheetOpen] = useState(false);
@@ -316,9 +316,9 @@ export default function CheckoutPage({
 	};
 
 	const handleSearchChange = useCallback(
-		(value: string) => {
+		(value: string[], immediate?: boolean) => {
 			setSearchValue(value);
-			updateFilters({ search: value, page: 1 });
+			updateFilters({ search: value, page: 1 }, immediate);
 		},
 		[updateFilters],
 	);

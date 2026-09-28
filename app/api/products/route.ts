@@ -1,3 +1,6 @@
+import { buildProductSearch, withProductSearch, type ProductSearchDatabase } from "@/lib/products/search";
+import { ProductSearchQuerySchema } from "@/schemas/product-search";
+import { NextResponse, type NextRequest } from "next/server";
 import { appApiHandler } from "@/lib/app-api";
 import { runPagesRouteHandler, type PagesRouteHandler } from "@/lib/pages-route-compat";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
@@ -47,13 +50,7 @@ const GetProductsDefaultInputSchema = z.object({
 		})
 		.transform((val) => Number(val)),
 
-	search: z
-		.string({
-			required_error: "Busca não informada.",
-			invalid_type_error: "Tipo inválido para busca.",
-		})
-		.optional()
-		.nullable(),
+	search: ProductSearchQuerySchema,
 	groups: z
 		.string({
 			required_error: "Grupos não informados.",
@@ -182,12 +179,8 @@ const STOCK_OUTBOUND_MOVEMENT_TYPES = ["SAIDA", "SAIDA_PRODUCAO", "DESCARTE"] as
 function buildProductFilterConditions(input: TGetProductsDefaultInput, userOrgId: string) {
 	const conditions = [eq(products.organizacaoId, userOrgId)];
 
-	if (input.search) {
-		// Insensível a acentos via unaccent() em ambos os lados (requer extensão `unaccent`, migration 0033).
-		conditions.push(
-			sql`(unaccent(${products.nome}) ILIKE unaccent('%' || ${input.search} || '%') OR unaccent(${products.codigo}) ILIKE unaccent('%' || ${input.search} || '%'))`,
-		);
-	}
+	const search = buildProductSearch(input.search, products);
+	if (search.condition) conditions.push(search.condition);
 	if (input.groups.length > 0) {
 		conditions.push(inArray(products.grupo, input.groups));
 	}
@@ -210,7 +203,7 @@ function buildProductFilterConditions(input: TGetProductsDefaultInput, userOrgId
 
 // Modo "stock": visão operacional de estoque. Retorna, por produto, o saldo atual, o preço unitário, a movimentação
 // (entradas/saídas) dentro do período filtrado e o lote ativo prioritário (FEFO — vence primeiro) com a contagem de lotes ativos.
-async function getProductsStockView({ input, userOrgId }: { input: TGetProductsDefaultInput; userOrgId: string }) {
+async function getProductsStockView({ input, userOrgId }: { input: TGetProductsDefaultInput; userOrgId: string }, db: ProductSearchDatabase) {
 	const now = new Date();
 	const PAGE_SIZE = 25;
 	const skip = PAGE_SIZE * (input.page - 1);
@@ -249,7 +242,7 @@ async function getProductsStockView({ input, userOrgId }: { input: TGetProductsD
 			})
 			.from(products)
 			.where(and(...conditions))
-			.orderBy(orderByClause)
+			.orderBy(...(input.search.length ? [desc(buildProductSearch(input.search, products).relevance)] : []), orderByClause, asc(products.id))
 			.offset(skip)
 			.limit(PAGE_SIZE),
 		db
@@ -418,6 +411,10 @@ async function getProductsStockView({ input, userOrgId }: { input: TGetProductsD
 }
 
 async function getProducts({ input, session }: GetProductsParams) {
+	return withProductSearch(db, "search" in input ? input.search : [], (database) => queryProducts({ input, session }, database));
+}
+
+async function queryProducts({ input, session }: GetProductsParams, db: ProductSearchDatabase) {
 	const userOrgId = session.membership?.organizacao.id;
 	if (!userOrgId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
 
@@ -504,17 +501,13 @@ async function getProducts({ input, session }: GetProductsParams) {
 
 	// Modo "stock": visão operacional de estoque (delega para o helper dedicado).
 	if (input.mode === "stock") {
-		return getProductsStockView({ input, userOrgId });
+		return getProductsStockView({ input, userOrgId }, db);
 	}
 
 	const productQueryConditions = [eq(products.organizacaoId, userOrgId)];
 
-	if (input.search) {
-		// Insensível a acentos via unaccent() em ambos os lados (requer extensão `unaccent`, migration 0033).
-		productQueryConditions.push(
-			sql`(unaccent(${products.nome}) ILIKE unaccent('%' || ${input.search} || '%') OR unaccent(${products.codigo}) ILIKE unaccent('%' || ${input.search} || '%'))`,
-		);
-	}
+	const search = buildProductSearch(input.search, products);
+	if (search.condition) productQueryConditions.push(search.condition);
 	if (input.groups.length > 0) {
 		productQueryConditions.push(inArray(products.grupo, input.groups));
 	}
@@ -666,6 +659,7 @@ async function getProducts({ input, session }: GetProductsParams) {
 	const productsWithABCSubquery = productsWithABCQuery.as("products_with_abc");
 	const direction = input.orderByDirection === "desc" ? desc : asc;
 	const orderByField = input.orderByField;
+	const searchTerms = input.search;
 
 	function buildOrderByClause<T extends Record<string, any>>(source: T) {
 		switch (orderByField) {
@@ -686,16 +680,29 @@ async function getProducts({ input, session }: GetProductsParams) {
 		}
 	}
 
+	function buildSearchOrder<T extends Record<string, any>>(source: T) {
+		return [
+			...(searchTerms.length ? [desc(buildProductSearch(searchTerms, { nome: source.nome, codigo: source.codigo }).relevance)] : []),
+			buildOrderByClause(source),
+			asc(source.productId),
+		];
+	}
+
 	// resultLimit: corta os top N após ordenação e filtro de curva ABC, antes da paginação
 	const paginationSource = input.resultLimit
-		? db.select().from(productsWithABCSubquery).orderBy(buildOrderByClause(productsWithABCSubquery)).limit(input.resultLimit).as("products_capped")
+		? db
+				.select()
+				.from(productsWithABCSubquery)
+				.orderBy(...buildSearchOrder(productsWithABCSubquery))
+				.limit(input.resultLimit)
+				.as("products_capped")
 		: productsWithABCSubquery;
 
 	// Total via window function na própria página: evita recomputar a agregação só para contar.
 	const productsWithStatsResult = await db
 		.select({ ...pickProductFields(paginationSource), curvaABC: paginationSource.curvaABC, productsMatched: sql<number>`count(*) over ()` })
 		.from(paginationSource)
-		.orderBy(buildOrderByClause(paginationSource))
+		.orderBy(...buildSearchOrder(paginationSource))
 		.offset(skip)
 		.limit(PAGE_SIZE);
 	// Página vazia além do fim não traz o total: só nesse caso paga a contagem separada.
@@ -753,36 +760,35 @@ export type TGetProductsOutputDefault = Exclude<TGetProductsOutput["data"]["defa
 export type TGetProductsOutputById = Exclude<TGetProductsOutput["data"]["byId"], undefined>;
 export type TGetProductsOutputStock = Exclude<TGetProductsOutput["data"]["stock"], undefined>;
 
-const getProductsHandler: PagesRouteHandler<TGetProductsOutput> = async (req, res) => {
+async function getProductsRoute(request: NextRequest) {
 	const sessionUser = await getCurrentSessionUncached();
 	if (!sessionUser) throw new createHttpError.Unauthorized("Você não está autenticado.");
 
-	console.log("[INFO] [GET PRODUCTS] Query params:", req.query);
 	const input = GetProductsInputSchema.parse({
-		page: req.query.page as string | undefined,
-		id: req.query.id as string | undefined,
-		search: req.query.search as string | undefined,
-		groups: req.query.groups as string | undefined,
-		statsPeriodAfter: req.query.statsPeriodAfter as string | undefined,
-		statsPeriodBefore: req.query.statsPeriodBefore as string | undefined,
-		statsSellerIds: req.query.statsSellerIds as string | undefined,
-		statsIntegrationsIds: req.query.statsIntegrationsIds as string | undefined,
-		statsExcludedSalesIds: req.query.statsExcludedSalesIds as string | undefined,
-		statsTotalMin: req.query.statsTotalMin as string | undefined,
-		statsTotalMax: req.query.statsTotalMax as string | undefined,
-		stockStatus: req.query.stockStatus as string | undefined,
-		trackedOnly: req.query.trackedOnly as string | undefined,
-		abcClasses: req.query.abcClasses as string | undefined,
-		priceMin: req.query.priceMin as string | undefined,
-		priceMax: req.query.priceMax as string | undefined,
-		orderByField: req.query.orderByField as string | undefined,
-		orderByDirection: req.query.orderByDirection as string | undefined,
-		mode: req.query.mode as string | undefined,
-		resultLimit: req.query.resultLimit as string | undefined,
+		page: request.nextUrl.searchParams.get("page") ?? undefined,
+		id: request.nextUrl.searchParams.get("id") ?? undefined,
+		search: request.nextUrl.searchParams.get("search") ?? undefined,
+		groups: request.nextUrl.searchParams.get("groups") ?? undefined,
+		statsPeriodAfter: request.nextUrl.searchParams.get("statsPeriodAfter") ?? undefined,
+		statsPeriodBefore: request.nextUrl.searchParams.get("statsPeriodBefore") ?? undefined,
+		statsSellerIds: request.nextUrl.searchParams.get("statsSellerIds") ?? undefined,
+		statsIntegrationsIds: request.nextUrl.searchParams.get("statsIntegrationsIds") ?? undefined,
+		statsExcludedSalesIds: request.nextUrl.searchParams.get("statsExcludedSalesIds") ?? undefined,
+		statsTotalMin: request.nextUrl.searchParams.get("statsTotalMin") ?? undefined,
+		statsTotalMax: request.nextUrl.searchParams.get("statsTotalMax") ?? undefined,
+		stockStatus: request.nextUrl.searchParams.get("stockStatus") ?? undefined,
+		trackedOnly: request.nextUrl.searchParams.get("trackedOnly") ?? undefined,
+		abcClasses: request.nextUrl.searchParams.get("abcClasses") ?? undefined,
+		priceMin: request.nextUrl.searchParams.get("priceMin") ?? undefined,
+		priceMax: request.nextUrl.searchParams.get("priceMax") ?? undefined,
+		orderByField: request.nextUrl.searchParams.get("orderByField") ?? undefined,
+		orderByDirection: request.nextUrl.searchParams.get("orderByDirection") ?? undefined,
+		mode: request.nextUrl.searchParams.get("mode") ?? undefined,
+		resultLimit: request.nextUrl.searchParams.get("resultLimit") ?? undefined,
 	});
 	const data = await getProducts({ input, session: sessionUser });
-	return res.status(200).json(data);
-};
+	return NextResponse.json(data);
+}
 
 const UpdateProductAddOnOptionInputSchema = ProductAddOnOptionSchema.omit({
 	organizacaoId: true,
@@ -1861,13 +1867,12 @@ const createProductHandler: PagesRouteHandler<TCreateProductOutput> = async (req
 };
 
 const routeHandlers = {
-	GET: getProductsHandler,
 	PUT: updateProductHandler,
 	POST: createProductHandler,
 } satisfies Partial<Record<"GET" | "POST" | "PUT" | "PATCH" | "DELETE", PagesRouteHandler<any>>>;
 
 export const GET = appApiHandler({
-	GET: (request) => runPagesRouteHandler({ request, handler: routeHandlers.GET! }),
+	GET: getProductsRoute,
 });
 export const PUT = appApiHandler({
 	PUT: (request) => runPagesRouteHandler({ request, handler: routeHandlers.PUT! }),

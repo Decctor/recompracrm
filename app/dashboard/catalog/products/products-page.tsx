@@ -15,7 +15,7 @@ import StatUnitCard from "@/components/Stats/StatUnitCard";
 import GeneralPaginationComponent from "@/components/Utils/Pagination";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
-import { Input } from "@/components/ui/input";
+import ProductSearchInput from "@/components/Inputs/ProductSearchInput";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { TAuthUserSession } from "@/lib/authentication/types";
@@ -132,7 +132,7 @@ function ProductsDatabaseView({ user, userMembership, organization }: ProductsDa
 		updateFilters,
 	} = useProducts({
 		initialFilters: {
-			search: "",
+			search: [],
 			groups: [],
 			statsPeriodAfter: dayjs().startOf("month").toDate(),
 			statsPeriodBefore: dayjs().endOf("month").toDate(),
@@ -163,12 +163,7 @@ function ProductsDatabaseView({ user, userMembership, organization }: ProductsDa
 	return (
 		<div className="w-full flex flex-col gap-3">
 			<div className="w-full flex items-center gap-2 flex-col-reverse lg:flex-row">
-				<Input
-					value={filters.search ?? ""}
-					placeholder="Pesquisar produto..."
-					onChange={(e) => updateFilters({ search: e.target.value })}
-					className="grow rounded-xl"
-				/>
+				<ProductSearchInput value={filters.search} onChange={(search, immediate) => updateFilters({ search }, immediate)} className="grow" />
 				<Button className="flex items-center gap-2" size="sm" onClick={() => setNewProductModalIsOpen(true)}>
 					<Plus className="w-4 h-4 min-w-4 min-h-4" />
 					NOVO PRODUTO

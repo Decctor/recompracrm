@@ -1,23 +1,10 @@
-import { Input } from "@/components/ui/input";
-import { Search } from "lucide-react";
+import ProductSearchInput from "@/components/Inputs/ProductSearchInput";
 
 type SearchBlockProps = {
-	searchValue: string;
-	onSearchChange: (value: string) => void;
+	searchValue: string[];
+	onSearchChange: (value: string[], immediate?: boolean) => void;
 	isLoading?: boolean;
 };
-
 export default function SearchBlock({ searchValue, onSearchChange, isLoading }: SearchBlockProps) {
-	return (
-		<div className="relative">
-			<Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-			<Input
-				value={searchValue}
-				onChange={(event) => onSearchChange(event.target.value)}
-				placeholder="Buscar produto..."
-				className="pl-10 py-3 rounded-xl"
-				disabled={isLoading}
-			/>
-		</div>
-	);
+	return <ProductSearchInput value={searchValue} onChange={onSearchChange} isLoading={isLoading} />;
 }

@@ -1,4 +1,5 @@
 "use client";
+import ProductSearchInput from "@/components/Inputs/ProductSearchInput";
 
 import type { TGetProductsOutputStock } from "@/app/api/products/route";
 import DateIntervalInput from "@/components/Inputs/DateIntervalInput";
@@ -8,7 +9,6 @@ import StatUnitCard from "@/components/Stats/StatUnitCard";
 import GeneralPaginationComponent from "@/components/Utils/Pagination";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getErrorMessage } from "@/lib/errors";
 import { formatDateAsLocale, formatDecimalPlaces, formatToMoney } from "@/lib/formatting";
@@ -99,12 +99,7 @@ export default function StocksPage() {
 
 			{/* Toolbar — busca, período da movimentação e atalho para lotes */}
 			<div className="flex w-full flex-col-reverse items-stretch gap-2 lg:flex-row lg:items-center">
-				<Input
-					value={filters.search ?? ""}
-					placeholder="Pesquisar produto por nome ou código..."
-					onChange={(e) => updateFilters({ search: e.target.value, page: 1 })}
-					className="grow rounded-xl"
-				/>
+				<ProductSearchInput value={filters.search} onChange={(search, immediate) => updateFilters({ search }, immediate)} className="grow" />
 				<DateIntervalInput
 					label="Movimentação no período"
 					labelClassName="hidden"

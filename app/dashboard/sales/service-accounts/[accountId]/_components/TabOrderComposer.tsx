@@ -1,4 +1,6 @@
 "use client";
+import ProductSearchInput from "@/components/Inputs/ProductSearchInput";
+import { normalizeProductSearchTerms } from "@/lib/products/search-terms";
 import type { TCreateTabOrderInput } from "@/app/api/tabs/orders/route";
 import TextInput from "@/components/Inputs/TextInput";
 import {
@@ -9,7 +11,6 @@ import {
 	useProductBuilder,
 } from "@/components/Products/ProductBuilderForm";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getErrorMessage } from "@/lib/errors";
 import { formatToMoney } from "@/lib/formatting";
@@ -17,7 +18,7 @@ import { createTabOrder } from "@/lib/mutations/tabs";
 import { usePOSGroups, usePOSProducts, usePOSTopProducts } from "@/lib/queries/pos";
 import { cn } from "@/lib/utils";
 import { useMutation } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, Flame, Minus, Plus, Search, SendHorizonal, ShoppingBasket, SlidersHorizontal, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Flame, Minus, Plus, Search, SendHorizonal, ShoppingBasket, SlidersHorizontal } from "lucide-react";
 import Image from "next/image";
 import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -259,7 +260,8 @@ function CatalogStage({
 	const products = productsResult?.products ?? [];
 	const totalPages = productsResult?.totalPages ?? 1;
 	const currentPage = productsResult?.currentPage ?? 1;
-	const showTopStrip = !filters.search && !filters.group && currentPage === 1 && (topProductsResult?.products?.length ?? 0) > 0;
+	const hasSearch = normalizeProductSearchTerms(filters.search).length > 0;
+	const showTopStrip = !hasSearch && !filters.group && currentPage === 1 && (topProductsResult?.products?.length ?? 0) > 0;
 
 	// Linha de item simples já no carrinho (sem variante/modificador) — vira stepper inline.
 	function simpleCartItemFor(productId: string) {
@@ -287,25 +289,7 @@ function CatalogStage({
 
 			{/* Busca fixa: continua à mão com a lista longa */}
 			<div className="sticky top-2 z-10">
-				<div className="relative">
-					<Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-					<Input
-						value={filters.search ?? ""}
-						placeholder="Buscar produto ou código..."
-						onChange={(event) => updateFilters({ search: event.target.value })}
-						className="h-11 rounded-xl border-border bg-background pl-9 pr-9 shadow-sm"
-					/>
-					{filters.search ? (
-						<button
-							type="button"
-							aria-label="Limpar busca"
-							className="absolute right-2 top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-							onClick={() => updateFilters({ search: "" })}
-						>
-							<X className="size-4" />
-						</button>
-					) : null}
-				</div>
+				<ProductSearchInput value={filters.search} onChange={(search, immediate) => updateFilters({ search }, immediate)} isLoading={isLoading} />
 			</div>
 
 			{/* Grupos */}
@@ -372,9 +356,11 @@ function CatalogStage({
 				{!isLoading && products.length === 0 ? (
 					<div className="flex flex-col items-center gap-2 py-10 text-center">
 						<Search className="size-6 text-muted-foreground" />
-						<p className="text-sm font-semibold">Nenhum produto encontrado{filters.search ? ` para "${filters.search}"` : ""}.</p>
-						{filters.search || filters.group ? (
-							<Button size="sm" variant="outline" onClick={() => updateFilters({ search: "", group: null })}>
+						<p className="text-sm font-semibold">
+							Nenhum produto encontrado{hasSearch ? ` para "${normalizeProductSearchTerms(filters.search).join(", ")}"` : ""}.
+						</p>
+						{hasSearch || filters.group ? (
+							<Button size="sm" variant="outline" onClick={() => updateFilters({ search: [], group: null })}>
 								LIMPAR FILTROS
 							</Button>
 						) : (
