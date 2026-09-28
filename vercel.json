@@ -171,6 +171,10 @@
 		{
 			"path": "/api/cron/import-jobs",
 			"schedule": "*/2 * * * *"
+		},
+		{
+			"path": "/api/cron/whatsapp-connections-health",
+			"schedule": "15 */6 * * *"
 		}
 	]
 }

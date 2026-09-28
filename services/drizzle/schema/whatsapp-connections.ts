@@ -40,7 +40,21 @@ export type TNewWhatsappConnection = typeof whatsappConnections.$inferInsert;
 
 export type TWhatsappConnectionPhonePaymentStatus = "DESCONHECIDO" | "CONFIRMADO_PELO_USUARIO" | "VERIFICADO" | "PENDENTE";
 
+export type TWhatsappConnectionPhoneHealthStatus = "SAUDAVEL" | "FALHA";
+
 export type TWhatsappConnectionPhoneMetadados = {
+	// Saúde do acesso ao telefone na Meta (lib/whatsapp/connection-health.ts). Gravada pelo cron
+	// `whatsapp-connections-health` e por webhooks `account_update`; ausência = nunca verificado.
+	saude?: {
+		status: TWhatsappConnectionPhoneHealthStatus;
+		verificadoEm: string;
+		// Primeira verificação que falhou na sequência atual; null quando saudável.
+		falhandoDesde?: string | null;
+		motivo?: string | null;
+		mensagem?: string | null;
+		// Último aviso por e-mail da sequência atual de falha — base do silêncio de lembretes.
+		notificadoEm?: string | null;
+	};
 	// Estado de pagamento da conta Cloud API (ver WhatsappPaymentStatusEnum em schemas/enums.ts).
 	// A Meta não expõe isso de forma confiável: o usuário confirma no onboarding, a primeira
 	// entrega verifica, e o erro 131042 em webhooks de status rebaixa para PENDENTE.
