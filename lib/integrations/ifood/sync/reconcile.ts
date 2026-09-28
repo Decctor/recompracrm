@@ -4,8 +4,8 @@ import type { TIfoodItemDTO, TIfoodItemFlatDTO } from "@/lib/integrations/ifood/
 import { loadChannelState } from "@/lib/products/sales-channels-store";
 import { type TCatalogLinkDivergence, type TCatalogLinkOptionGroupAssociation, syncsComplementos } from "@/schemas/catalog-links";
 import { db } from "@/services/drizzle";
-import { catalogLinks, productChannelSettings, type TCatalogLinkEntity } from "@/services/drizzle/schema";
-import { and, eq, inArray, ne } from "drizzle-orm";
+import { catalogLinks, productAddOnOptions, productChannelSettings, type TCatalogLinkEntity } from "@/services/drizzle/schema";
+import { and, eq, inArray, isNotNull, ne } from "drizzle-orm";
 import {
 	type TAddOnGroupNode,
 	allGroupLinks,
@@ -298,6 +298,25 @@ export async function reconcileMerchantCatalog({ orgId, merchantId }: { orgId: s
 				await settle(groupLink, divergences);
 			}
 
+			// Opções locais excluídas que ainda têm vínculo: o nó do grupo não as carrega (filtra tombstones).
+			const linkedOptionIds = allOptionLinks(addOnLinks)
+				.map((link) => link.produtoAddOnOpcaoId)
+				.filter((id): id is string => !!id);
+			const tombstonedOptionIds = new Set(
+				linkedOptionIds.length
+					? (
+							await db.query.productAddOnOptions.findMany({
+								where: and(
+									eq(productAddOnOptions.organizacaoId, orgId),
+									inArray(productAddOnOptions.id, linkedOptionIds),
+									isNotNull(productAddOnOptions.dataExclusao),
+								),
+								columns: { id: true },
+							})
+						).map((option) => option.id)
+					: [],
+			);
+
 			for (const optionLink of allOptionLinks(addOnLinks)) {
 				const opcaoId = optionLink.produtoAddOnOpcaoId as string;
 				const remoteGroup = optionLink.externoOptionGroupId ? remoteById.get(optionLink.externoOptionGroupId) : undefined;
@@ -309,6 +328,19 @@ export async function reconcileMerchantCatalog({ orgId, merchantId }: { orgId: s
 				const node = optionLink.produtoAddOnId ? await groupNodeFor(optionLink.produtoAddOnId) : null;
 				const opcao = node?.opcoes.find((candidate) => candidate.opcaoId === opcaoId);
 				if (!opcao) {
+					// Opção excluída (tombstone) fica fora do nó, mas o vínculo segue válido: o push a pausa
+					// no iFood (D3, nunca apaga). O estado desejado é "indisponível" — só é divergência se o
+					// iFood a mostrar à venda; não é erro.
+					if (tombstonedOptionIds.has(opcaoId)) {
+						const remoteDisponivel = remote.status?.toUpperCase() !== "UNAVAILABLE";
+						await settle(
+							optionLink,
+							remoteDisponivel
+								? [{ campo: "disponibilidade", valorInterno: false, valorExterno: true, sincronizado: optionLink.sincronizar.disponibilidade }]
+								: [],
+						);
+						continue;
+					}
 					await markMissing(optionLink.id, "A opção de adicional interna não existe mais.");
 					continue;
 				}
