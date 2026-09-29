@@ -1,5 +1,6 @@
 import { calculateAccumulatedCashbackValue } from "@/lib/cashback/accumulation";
 import { getSaleChangeTotal } from "@/lib/sales/sale-change";
+import { formatModifierGroupName } from "@/lib/sales/sale-item-modifier-groups";
 import { POS_REWARD_SALE_ITEM_ORIGIN } from "@/lib/sales/sale-reward-redemption";
 import { classifySalePaymentTransactions } from "@/lib/sales/utils";
 import { readShopDeliveryFee } from "@/lib/shop/config";
@@ -95,7 +96,10 @@ export async function buildCupomVendaDados({ organizacaoId, vendaId }: { organiz
 				with: {
 					produto: { columns: { nome: true } },
 					produtoVariante: { columns: { nome: true } },
-					adicionais: { columns: { nome: true, quantidade: true, valorTotal: true } },
+					adicionais: {
+						columns: { nome: true, quantidade: true, valorTotal: true },
+						with: { opcao: { columns: { id: true }, with: { produtoAddOn: { columns: { nome: true } } } } },
+					},
 				},
 			},
 			lancamentosContabeis: {
@@ -269,6 +273,7 @@ export async function buildCupomVendaDados({ organizacaoId, vendaId }: { organiz
 					valorTotal: item.valorVendaTotalBruto ?? 0,
 					observacoes: item.observacoes,
 					adicionais: item.adicionais.map((adicional) => ({
+						grupo: formatModifierGroupName(adicional.opcao?.produtoAddOn?.nome),
 						nome: adicional.nome,
 						quantidade: adicional.quantidade,
 						valorTotal: adicional.valorTotal,

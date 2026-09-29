@@ -27,6 +27,7 @@ import {
 import { PAYMENT_METHOD_LABELS } from "@/lib/payments/labels";
 import { SALE_FINANCIAL_STATUS_PRESENTATION, SALE_FISCAL_STATUS_PRESENTATION } from "@/lib/sales/status-presentation";
 import { saleOffersClientReassignment } from "@/lib/sales/sale-client-reassignment-policy";
+import { groupSaleItemModifiers } from "@/lib/sales/sale-item-modifier-groups";
 import { mapInternalFiscalStatus } from "@/lib/sales/utils";
 import { useSalesById } from "@/lib/queries/sales";
 import { cn } from "@/lib/utils";
@@ -1127,18 +1128,30 @@ function SaleItemCard({ item }: { item: TGetSalesOutputById["itens"][number] }) 
 
 				{/* Adicionais */}
 				{item.adicionais && item.adicionais.length > 0 && (
-					<div className="flex flex-col gap-1 pt-2 border-t border-border/30">
-						<span className="text-[0.65rem] font-semibold text-muted-foreground uppercase">ADICIONAIS</span>
-						{item.adicionais.map((adicional) => (
-							<div key={adicional.id} className="flex items-center justify-between text-xs">
-								<span className="text-muted-foreground">
-									{adicional.nome || adicional.opcao?.nome || "Adicional"} x{adicional.quantidade}
-								</span>
-								<span className="font-medium">{formatToMoney(adicional.valorTotal)}</span>
+					<div className="flex flex-col gap-2 pt-2 border-t border-border/30">
+						{groupSaleItemModifiers(item.adicionais, (adicional) => adicional.opcao?.produtoAddOn?.nome).map((group) => (
+							<div key={group.grupo ?? "sem-grupo"} className="flex flex-col gap-1">
+								<span className="text-[0.65rem] font-semibold text-muted-foreground uppercase">{group.grupo ?? "ADICIONAIS"}</span>
+								{group.adicionais.map((adicional) => (
+									<div key={adicional.id} className="flex items-center justify-between text-xs">
+										<span className="text-muted-foreground">
+											{adicional.nome || adicional.opcao?.nome || "Adicional"} x{adicional.quantidade}
+										</span>
+										<span className="font-medium">{formatToMoney(adicional.valorTotal)}</span>
+									</div>
+								))}
 							</div>
 						))}
 					</div>
 				)}
+
+				{/* Observação do item */}
+				{item.observacoes ? (
+					<div className="flex flex-col gap-1 pt-2 border-t border-border/30">
+						<span className="text-[0.65rem] font-semibold text-muted-foreground uppercase">OBSERVAÇÃO</span>
+						<p className="text-xs whitespace-pre-wrap">{item.observacoes}</p>
+					</div>
+				) : null}
 			</div>
 		</div>
 	);

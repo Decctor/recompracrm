@@ -202,6 +202,9 @@ function buildSaleItemRows({
 				valorTotalDesconto: item.discountValue,
 				valorVendaTotalLiquido: item.netSaleValue,
 				valorCustoTotal: item.totalCostValue,
+				// `undefined` (e não null) sem observação: a assinatura omite chaves undefined, então
+				// só as vendas que de fato têm observação no item são reprocessadas uma vez.
+				observacoes: item.notes?.trim() || undefined,
 				metadados,
 			},
 			modificadores: (item.modifiers ?? []).map((modifier) => ({

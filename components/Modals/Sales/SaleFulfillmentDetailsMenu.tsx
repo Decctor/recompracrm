@@ -10,6 +10,7 @@ import { appRoutes } from "@/lib/navigation/routes";
 import { PAYMENT_METHOD_LABELS } from "@/lib/payments/labels";
 import { useSalesFulfillmentById } from "@/lib/queries/sales-fulfillment";
 import { saleOffersClientReassignment } from "@/lib/sales/sale-client-reassignment-policy";
+import { groupSaleItemModifiers } from "@/lib/sales/sale-item-modifier-groups";
 import { SALE_FINANCIAL_STATUS_PRESENTATION, SALE_FISCAL_STATUS_PRESENTATION, type TSaleStatusTone } from "@/lib/sales/status-presentation";
 import { cn } from "@/lib/utils";
 import type { TSaleFinancialDerivedStatusEnum, TSaleFiscalDerivedStatusEnum } from "@/schemas/enums";
@@ -403,17 +404,30 @@ function SaleItemRow({ item, reveal }: { item: TGetSalesFulfillmentOutputById["i
 					</div>
 				</div>
 				{item.adicionais.length > 0 ? (
-					<ul className="mt-2 space-y-1 text-xs text-muted-foreground">
-						{item.adicionais.map((additional) => (
-							<li key={additional.id} className="flex items-start justify-between gap-3">
-								<span className="min-w-0">
-									+ {additional.quantidade > 1 ? `${additional.quantidade}x ` : ""}
-									{additional.nome || additional.opcao?.nome || "Adicional"}
-								</span>
-								<span className="shrink-0 tabular-nums">{additional.valorTotal ? formatToMoney(additional.valorTotal) : "Incluso"}</span>
-							</li>
+					<div className="mt-2 space-y-2 text-xs text-muted-foreground">
+						{groupSaleItemModifiers(item.adicionais, (additional) => additional.opcao?.produtoAddOn?.nome).map((group) => (
+							<div key={group.grupo ?? "sem-grupo"}>
+								{group.grupo ? <p className="mb-0.5 text-[10px] font-extrabold uppercase tracking-[0.08em]">{group.grupo}</p> : null}
+								<ul className="space-y-1">
+									{group.adicionais.map((additional) => (
+										<li key={additional.id} className="flex items-start justify-between gap-3">
+											<span className="min-w-0">
+												+ {additional.quantidade > 1 ? `${additional.quantidade}x ` : ""}
+												{additional.nome || additional.opcao?.nome || "Adicional"}
+											</span>
+											<span className="shrink-0 tabular-nums">{additional.valorTotal ? formatToMoney(additional.valorTotal) : "Incluso"}</span>
+										</li>
+									))}
+								</ul>
+							</div>
 						))}
-					</ul>
+					</div>
+				) : null}
+				{item.observacoes ? (
+					<p className="mt-2 whitespace-pre-wrap rounded-lg bg-secondary px-2.5 py-1.5 text-xs">
+						<span className="font-bold">Obs.: </span>
+						{item.observacoes}
+					</p>
 				) : null}
 			</div>
 		</div>

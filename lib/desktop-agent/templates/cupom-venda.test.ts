@@ -118,3 +118,26 @@ test("nao imprime linha de troco quando nao houve troco", () => {
 	const html = renderCupomVendaHtml(buildData([{ metodo: "DINHEIRO", valor: 27, parcelas: null, pago: true, descricao: null, situacao: "PAGO" }]));
 	assert.doesNotMatch(html, /TROCO/);
 });
+
+test("agrupa os adicionais pelo grupo, com o nome do grupo à esquerda, e imprime a observação do item", () => {
+	const dados = buildData([]);
+	dados.venda.itens = [
+		{
+			descricao: "Açaí - 500ml",
+			quantidade: 1,
+			valorTotal: 42,
+			observacoes: "Quero leite ninho além dos selecionados",
+			adicionais: [
+				{ grupo: "Escolha até 3 adicionais", nome: "Nutella", quantidade: 1, valorTotal: 0 },
+				{ grupo: "Escolha seu gelato", nome: "Pistache Supremo", quantidade: 1, valorTotal: 0 },
+				{ grupo: "Escolha até 3 adicionais", nome: "Morango", quantidade: 2, valorTotal: 4 },
+				{ grupo: null, nome: "Colher extra", quantidade: 1, valorTotal: 0 },
+			],
+		},
+	];
+	const html = renderCupomVendaHtml(dados);
+	assert.match(html, /<span class="grupo">Escolha até 3 adicionais:<\/span> Nutella, 2x Morango \(R\$ 4,00\)<\/span>/);
+	assert.match(html, /<span class="grupo">Escolha seu gelato:<\/span> Pistache Supremo<\/span>/);
+	assert.match(html, /<span class="adicional">\+ Colher extra<\/span>/);
+	assert.match(html, /Obs\.: Quero leite ninho além dos selecionados/);
+});

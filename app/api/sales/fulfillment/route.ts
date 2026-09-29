@@ -102,13 +102,14 @@ const SALE_FULFILLMENT_DETAILS_WITH = {
 			valorVendaTotalBruto: true,
 			valorTotalDesconto: true,
 			valorVendaTotalLiquido: true,
+			observacoes: true,
 		},
 		with: {
 			produto: { columns: { id: true, nome: true, codigo: true, unidade: true, imagemCapaUrl: true } },
 			produtoVariante: { columns: { id: true, nome: true, codigo: true, imagemCapaUrl: true } },
 			adicionais: {
 				columns: { id: true, nome: true, quantidade: true, valorUnitario: true, valorTotal: true },
-				with: { opcao: { columns: { id: true, nome: true } } },
+				with: { opcao: { columns: { id: true, nome: true }, with: { produtoAddOn: { columns: { nome: true } } } } },
 			},
 		},
 	},

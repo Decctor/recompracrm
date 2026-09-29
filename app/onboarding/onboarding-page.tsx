@@ -270,7 +270,7 @@ export function OnboardingPage({
 		setOrgCreatedThisSession(true);
 		captureClientEvent({ event: "onboarding_organization_created", properties: { niche: state.organization.atuacaoNicho, produto: activeProduct } });
 		if (!membership) {
-			sendGTMEvent({ event: "organization_created" });
+			sendGTMEvent({ event: "organization_created", produto: activeProduct });
 		}
 
 		const created = await createOnboardingJourney({ produto: activeProduct, origemIntencao: intent?.origem ?? "PERGUNTA" });

@@ -330,6 +330,7 @@ async function getSales({ input, sessionUser }: { input: TGetSalesInput; session
 						valorVendaTotalBruto: true,
 						valorTotalDesconto: true,
 						valorVendaTotalLiquido: true,
+						observacoes: true,
 					},
 					with: {
 						produto: {
@@ -364,6 +365,7 @@ async function getSales({ input, sessionUser }: { input: TGetSalesInput; session
 										id: true,
 										nome: true,
 									},
+									with: { produtoAddOn: { columns: { nome: true } } },
 								},
 							},
 						},

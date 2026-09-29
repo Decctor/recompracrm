@@ -1,5 +1,6 @@
 import { formatCashbackValue, formatToCNPJ, formatToMoney, formatToPhone, getCashbackUnitLabel } from "@/lib/formatting";
 import { formatDateTimeInOperationTimezone } from "@/lib/operation-timezone";
+import { groupSaleItemModifiers } from "@/lib/sales/sale-item-modifier-groups";
 import { z } from "zod";
 
 // Cupom não fiscal de venda (finalidade CUPOM_VENDA) — layout v2 para térmica de 80mm via
@@ -62,6 +63,7 @@ export const CupomVendaDadosSchema = z.object({
 					adicionais: z
 						.array(
 							z.object({
+								grupo: z.string({ invalid_type_error: "Tipo não válido para o grupo do adicional." }).optional().nullable(),
 								nome: z.string({
 									required_error: "Nome do adicional não informado.",
 									invalid_type_error: "Tipo não válido para o nome do adicional.",
@@ -186,6 +188,26 @@ function renderLinha(label: string, valor: string, { destaque, negativo }: { des
 	return `<div class="linha${destaque ? " destaque" : ""}"><span>${escapeHtml(label)}</span><span>${negativo ? "-" : ""}${escapeHtml(valor)}</span></div>`;
 }
 
+type TCupomVendaAdicional = NonNullable<NonNullable<TCupomVendaDados["venda"]["itens"]>[number]["adicionais"]>[number];
+
+function renderAdicionalLabel(adicional: TCupomVendaAdicional) {
+	return `${adicional.quantidade && adicional.quantidade > 1 ? `${adicional.quantidade}x ` : ""}${escapeHtml(adicional.nome)}${
+		adicional.valorTotal ? ` (${formatToMoney(adicional.valorTotal)})` : ""
+	}`;
+}
+
+// Uma linha por grupo, com o nome do grupo à esquerda ("Escolha seu gelato: Pistache"): sem ele,
+// um açaí com três perguntas vira uma lista solta. Adicional sem grupo mantém o "+ nome" de antes.
+function renderAdicionaisHtml(adicionais: TCupomVendaAdicional[]) {
+	return groupSaleItemModifiers(adicionais, (adicional) => adicional.grupo)
+		.map(({ grupo, adicionais: doGrupo }) =>
+			grupo
+				? `<span class="adicional"><span class="grupo">${escapeHtml(grupo)}:</span> ${doGrupo.map(renderAdicionalLabel).join(", ")}</span>`
+				: doGrupo.map((adicional) => `<span class="adicional">+ ${renderAdicionalLabel(adicional)}</span>`).join(""),
+		)
+		.join("");
+}
+
 export function renderCupomVendaHtml(dados: TCupomVendaDados) {
 	const { organizacao, venda, cliente, cupom, recompensas, cashback } = dados;
 
@@ -256,16 +278,7 @@ export function renderCupomVendaHtml(dados: TCupomVendaDados) {
 				<td class="desc">${escapeHtml(item.descricao)}${
 					item.valorUnitario != null && item.quantidade > 1 ? `<span class="mini fraco"> (${formatToMoney(item.valorUnitario)} un.)</span>` : ""
 				}${
-					item.adicionais?.length
-						? item.adicionais
-								.map(
-									(adicional) =>
-										`<span class="adicional">+ ${adicional.quantidade && adicional.quantidade > 1 ? `${adicional.quantidade}x ` : ""}${escapeHtml(adicional.nome)}${
-											adicional.valorTotal ? ` (${formatToMoney(adicional.valorTotal)})` : ""
-										}</span>`,
-								)
-								.join("")
-						: ""
+					item.adicionais?.length ? renderAdicionaisHtml(item.adicionais) : ""
 				}${item.observacoes ? `<span class="observacao">Obs.: ${escapeHtml(item.observacoes)}</span>` : ""}</td>
 				<td class="val">${formatToMoney(item.valorTotal)}</td>
 			</tr>`,
@@ -380,6 +393,7 @@ p { margin: 0; }
 .itens .desc { padding-right: 1.5mm; word-break: break-word; }
 .itens .val { text-align: right; white-space: nowrap; }
 .adicional { display: block; font-size: 7.5pt; padding-left: 2mm; }
+.adicional .grupo { font-weight: 400; }
 /* Observação em negrito: é a linha que a cozinha erra quando passa despercebida. */
 .observacao { display: block; font-size: 8pt; font-weight: 700; padding-left: 2mm; }
 .rodape { margin-top: 3mm; font-size: 7.5pt; font-weight: 700; }
