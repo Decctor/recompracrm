@@ -196,15 +196,18 @@ function renderAdicionalLabel(adicional: TCupomVendaAdicional) {
 	}`;
 }
 
-// Uma linha por grupo, com o nome do grupo à esquerda ("Escolha seu gelato: Pistache"): sem ele,
-// um açaí com três perguntas vira uma lista solta. Adicional sem grupo mantém o "+ nome" de antes.
+// Nome do grupo numa linha própria, em caixa alta, e as opções recuadas abaixo: sem o grupo, um
+// açaí com três perguntas vira uma lista solta. Na mesma linha, a coluna estreita da descrição
+// quebrava grupo e opções juntos e, na térmica de 1 bit, os dois ficavam indistinguíveis.
+// Adicional sem grupo mantém o "+ nome" sem recuo extra.
 function renderAdicionaisHtml(adicionais: TCupomVendaAdicional[]) {
 	return groupSaleItemModifiers(adicionais, (adicional) => adicional.grupo)
-		.map(({ grupo, adicionais: doGrupo }) =>
-			grupo
-				? `<span class="adicional"><span class="grupo">${escapeHtml(grupo)}:</span> ${doGrupo.map(renderAdicionalLabel).join(", ")}</span>`
-				: doGrupo.map((adicional) => `<span class="adicional">+ ${renderAdicionalLabel(adicional)}</span>`).join(""),
-		)
+		.map(({ grupo, adicionais: doGrupo }) => {
+			const opcoesHtml = doGrupo
+				.map((adicional) => `<span class="adicional${grupo ? " agrupado" : ""}">+ ${renderAdicionalLabel(adicional)}</span>`)
+				.join("");
+			return grupo ? `<span class="grupo-adicionais">${escapeHtml(grupo)}</span>${opcoesHtml}` : opcoesHtml;
+		})
 		.join("");
 }
 
@@ -393,7 +396,8 @@ p { margin: 0; }
 .itens .desc { padding-right: 1.5mm; word-break: break-word; }
 .itens .val { text-align: right; white-space: nowrap; }
 .adicional { display: block; font-size: 7.5pt; padding-left: 2mm; }
-.adicional .grupo { font-weight: 400; }
+.adicional.agrupado { padding-left: 4mm; }
+.grupo-adicionais { display: block; margin-top: 0.8mm; padding-left: 2mm; font-size: 7pt; text-transform: uppercase; letter-spacing: 0.1mm; }
 /* Observação em negrito: é a linha que a cozinha erra quando passa despercebida. */
 .observacao { display: block; font-size: 8pt; font-weight: 700; padding-left: 2mm; }
 .rodape { margin-top: 3mm; font-size: 7.5pt; font-weight: 700; }

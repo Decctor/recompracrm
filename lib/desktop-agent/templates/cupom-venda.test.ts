@@ -119,7 +119,7 @@ test("nao imprime linha de troco quando nao houve troco", () => {
 	assert.doesNotMatch(html, /TROCO/);
 });
 
-test("agrupa os adicionais pelo grupo, com o nome do grupo à esquerda, e imprime a observação do item", () => {
+test("agrupa os adicionais sob o nome do grupo e imprime a observação do item", () => {
 	const dados = buildData([]);
 	dados.venda.itens = [
 		{
@@ -136,8 +136,12 @@ test("agrupa os adicionais pelo grupo, com o nome do grupo à esquerda, e imprim
 		},
 	];
 	const html = renderCupomVendaHtml(dados);
-	assert.match(html, /<span class="grupo">Escolha até 3 adicionais:<\/span> Nutella, 2x Morango \(R\$ 4,00\)<\/span>/);
-	assert.match(html, /<span class="grupo">Escolha seu gelato:<\/span> Pistache Supremo<\/span>/);
-	assert.match(html, /<span class="adicional">\+ Colher extra<\/span>/);
+	assert.match(
+		html,
+		/<span class="grupo-adicionais">Escolha até 3 adicionais<\/span><span class="adicional agrupado">\+ Nutella<\/span><span class="adicional agrupado">\+ 2x Morango \(R\$ 4,00\)<\/span>/,
+	);
+	assert.match(html, /<span class="grupo-adicionais">Escolha seu gelato<\/span><span class="adicional agrupado">\+ Pistache Supremo<\/span>/);
+	// Sem grupo: sem cabeçalho, sem recuo extra, e sempre depois dos agrupados.
+	assert.match(html, /Pistache Supremo<\/span><span class="adicional">\+ Colher extra<\/span>/);
 	assert.match(html, /Obs\.: Quero leite ninho além dos selecionados/);
 });
