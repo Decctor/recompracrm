@@ -8,7 +8,8 @@ import { getClientLocationAddressByCEP } from "@/lib/clients/locations";
 import { getErrorMessage } from "@/lib/errors";
 import { formatToCEP } from "@/lib/formatting";
 import { createClientLocation } from "@/lib/mutations/clients/locations";
-import type { TCreateClientLocationInput } from "@/app/api/clients/locations/route";
+import type { TCreateClientLocationInput, TCreateClientLocationOutput } from "@/app/api/clients/locations/route";
+import { CLIENT_LOCATION_STREET_REQUIRED_MESSAGE, hasClientLocationStreet } from "@/schemas/clients";
 import { useClientLocationState } from "@/state-hooks/use-client-location-state";
 import { BrazilianCitiesOptionsFromUF, BrazilianStatesOptions } from "@/utils/states-cities";
 import { useMutation } from "@tanstack/react-query";
@@ -20,7 +21,7 @@ type NewClientLocationProps = {
 	closeModal: () => void;
 	callbacks?: {
 		onMutate?: (variables: TCreateClientLocationInput) => void;
-		onSuccess?: () => void;
+		onSuccess?: (location: TCreateClientLocationOutput["data"]["location"]) => void;
 		onError?: (error: Error) => void;
 		onSettled?: () => void;
 	};
@@ -36,7 +37,7 @@ export function NewClientLocation({ clienteId, closeModal, callbacks }: NewClien
 			if (callbacks?.onMutate) callbacks.onMutate(variables);
 		},
 		onSuccess: async (data) => {
-			if (callbacks?.onSuccess) callbacks.onSuccess();
+			if (callbacks?.onSuccess) callbacks.onSuccess(data.data.location);
 			toast.success(data.message);
 			resetState();
 			closeModal();
@@ -62,7 +63,13 @@ export function NewClientLocation({ clienteId, closeModal, callbacks }: NewClien
 			menuDescription="Preencha os campos abaixo para cadastrar um novo endereço."
 			menuActionButtonText="SALVAR LOCALIZAÇÃO"
 			menuCancelButtonText="CANCELAR"
-			actionFunction={() => handleCreateClientLocation({ clienteId, ...state })}
+			actionFunction={() => {
+				if (!hasClientLocationStreet(state)) {
+					toast.error(CLIENT_LOCATION_STREET_REQUIRED_MESSAGE);
+					return;
+				}
+				handleCreateClientLocation({ clienteId, ...state });
+			}}
 			actionIsLoading={isPending}
 			stateIsLoading={false}
 			stateError={null}

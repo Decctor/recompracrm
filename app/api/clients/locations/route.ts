@@ -2,7 +2,7 @@ import { appApiHandler } from "@/lib/app-api";
 import { runPagesRouteHandler, type PagesRouteHandler, type PagesRouteRequest, type PagesRouteResponse } from "@/lib/pages-route-compat";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
-import { ClientLocationSchema } from "@/schemas/clients";
+import { CLIENT_LOCATION_STREET_REQUIRED_MESSAGE, ClientLocationSchema, hasClientLocationStreet } from "@/schemas/clients";
 import { db } from "@/services/drizzle";
 import { clientLocations, clients } from "@/services/drizzle/schema";
 import { and, eq } from "drizzle-orm";
@@ -25,7 +25,7 @@ const GetClientLocationByIdInputSchema = z.object({
 });
 export type TGetClientLocationByIdInput = z.infer<typeof GetClientLocationByIdInputSchema>;
 
-const CreateClientLocationInputSchema = ClientLocationSchema.omit({
+const ClientLocationInputSchema = ClientLocationSchema.omit({
 	dataInsercao: true,
 	organizacaoId: true,
 	clienteId: true,
@@ -35,9 +35,14 @@ const CreateClientLocationInputSchema = ClientLocationSchema.omit({
 		invalid_type_error: "Tipo não válido para ID do cliente.",
 	}),
 });
+
+const CreateClientLocationInputSchema = ClientLocationInputSchema.refine(hasClientLocationStreet, {
+	message: CLIENT_LOCATION_STREET_REQUIRED_MESSAGE,
+	path: ["localizacaoLogradouro"],
+});
 export type TCreateClientLocationInput = z.infer<typeof CreateClientLocationInputSchema>;
 
-const UpdateClientLocationInputSchema = CreateClientLocationInputSchema.extend({
+const UpdateClientLocationInputSchema = ClientLocationInputSchema.extend({
 	id: z.string({
 		required_error: "ID da localização não informado.",
 		invalid_type_error: "Tipo não válido para ID da localização.",

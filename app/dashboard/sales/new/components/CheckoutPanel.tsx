@@ -216,10 +216,11 @@ export default function CheckoutPanel({
 					clienteId={saleState.state.cliente.id}
 					closeModal={() => setIsNewLocationOpen(false)}
 					callbacks={{
-						onSuccess: async () => {
-							const response = await refetchClientLocations();
-							const firstLocationId = response.data?.[0]?.id ?? null;
-							saleState.ensureEntregaLocation(firstLocationId);
+						// O endereço recém-cadastrado é o da entrega, mesmo com outro já selecionado. O refetch
+						// vem antes para a opção já existir no select quando o valor mudar.
+						onSuccess: async (location) => {
+							await refetchClientLocations();
+							saleState.setEntregaLocalizacaoId(location.id);
 						},
 					}}
 				/>

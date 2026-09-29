@@ -234,6 +234,14 @@ export const ClientLocationSchema = z.object({
 		.default(new Date().toISOString()),
 });
 
+// O cupom de entrega imprime rua/número/bairro/cidade, nunca o título: um endereço cadastrado só
+// com título sai em branco na mão do entregador. A regra vale para endereços NOVOS — os antigos sem
+// rua continuam editáveis, senão o cadastro do cliente travaria até alguém corrigi-los.
+export const CLIENT_LOCATION_STREET_REQUIRED_MESSAGE = "Informe o logradouro da localização.";
+export function hasClientLocationStreet(location: { localizacaoLogradouro?: string | null }) {
+	return Boolean(location.localizacaoLogradouro?.trim());
+}
+
 export type TClient = z.infer<typeof ClientSchema>;
 export type TClientDTO = TClient & { _id: string };
 

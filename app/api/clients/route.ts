@@ -6,7 +6,13 @@ import dayjs from "dayjs";
 import { getSalesIntegrationCondition } from "@/lib/sales/integration-filter";
 import { formatPhoneAsBase } from "@/lib/formatting";
 import { createSimplifiedEmailSearchCondition, createSimplifiedPhoneSearchCondition, createSimplifiedSearchCondition } from "@/lib/search";
-import { ClientLocationSchema, ClientSchema, ClientTagReferenceSchema } from "@/schemas/clients";
+import {
+	CLIENT_LOCATION_STREET_REQUIRED_MESSAGE,
+	ClientLocationSchema,
+	ClientSchema,
+	ClientTagReferenceSchema,
+	hasClientLocationStreet,
+} from "@/schemas/clients";
 import { db } from "@/services/drizzle";
 import { clients, sales } from "@/services/drizzle/schema";
 import { clientLocations, clientTagReferences } from "@/services/drizzle/schema/clients";
@@ -434,7 +440,7 @@ const CreateClientInputSchema = z.object({
 			organizacaoId: true,
 			clienteId: true,
 			dataInsercao: true,
-		}),
+		}).refine(hasClientLocationStreet, { message: CLIENT_LOCATION_STREET_REQUIRED_MESSAGE, path: ["localizacaoLogradouro"] }),
 	),
 	clientTags: z.array(
 		ClientTagReferenceSchema.omit({ clienteId: true, organizacaoId: true }).extend({
@@ -557,20 +563,25 @@ const UpdateClientInputSchema = z.object({
 			organizacaoId: true,
 			clienteId: true,
 			dataInsercao: true,
-		}).extend({
-			id: z
-				.string({
-					required_error: "ID da localização não informado.",
-					invalid_type_error: "Tipo não válido para ID da localização.",
-				})
-				.optional(),
-			deletar: z
-				.boolean({
-					invalid_type_error: "Tipo não válido para marcador de exclusão.",
-				})
-				.optional()
-				.nullable(),
-		}),
+		})
+			.extend({
+				id: z
+					.string({
+						required_error: "ID da localização não informado.",
+						invalid_type_error: "Tipo não válido para ID da localização.",
+					})
+					.optional(),
+				deletar: z
+					.boolean({
+						invalid_type_error: "Tipo não válido para marcador de exclusão.",
+					})
+					.optional()
+					.nullable(),
+			})
+			.refine((location) => !!location.id || !!location.deletar || hasClientLocationStreet(location), {
+				message: CLIENT_LOCATION_STREET_REQUIRED_MESSAGE,
+				path: ["localizacaoLogradouro"],
+			}),
 	),
 	clientTags: z.array(
 		ClientTagReferenceSchema.omit({ clienteId: true, organizacaoId: true }).extend({
