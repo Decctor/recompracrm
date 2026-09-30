@@ -224,6 +224,19 @@ export function groupLinkForItem(links: TAddOnLinks, grupoId: string, remoteGrou
 	return candidates[0];
 }
 
+/**
+ * O vínculo de grupo que vale para um item, lido do DOCUMENTO do item: primeiro as cópias associadas
+ * ao produto base, depois qualquer grupo do documento. A ordem importa: um item pode carregar outras
+ * cópias do mesmo grupo aninhadas em produtos de opção (3º nível), e escolher uma delas trocaria a
+ * cópia que o item mostra por outra.
+ */
+export function groupLinkForDocument(links: TAddOnLinks, grupoId: string, doc: TIfoodItemDocument) {
+	const candidates = links.groups.get(grupoId) ?? [];
+	const inSet = (ids: ReadonlySet<string>) => candidates.find((link) => link.externoOptionGroupId && ids.has(link.externoOptionGroupId));
+	const baseIds = new Set((baseProductOf(doc).optionGroups ?? []).map((association) => association.id));
+	return inSet(baseIds) ?? inSet(new Set(doc.optionGroups.map((group) => group.id))) ?? candidates[0];
+}
+
 /** O vínculo da opção DENTRO de um optionGroup específico (a opção pode ter um vínculo por cópia). */
 export function optionLinkInGroup(links: TAddOnLinks, opcaoId: string, externoOptionGroupId: string | null | undefined) {
 	if (!externoOptionGroupId) return undefined;
@@ -311,7 +324,7 @@ export function associationsDiffer(
  *
  * - grupo vinculado entra só pelo id, com min/max/ordem do nó — o iFood liga o optionGroup que já
  *   existe na loja com as opções e preços dele, então a definição não é reenviada (validado ao vivo);
- *   a cópia escolhida é a que o item já usa, quando o grupo interno tem várias (ids do documento);
+ *   a cópia escolhida é a que o item já usa, quando o grupo interno tem várias (`groupLinkForDocument`);
  * - grupo do app sem vínculo nasce no documento (grupo + opções + produtos das opções, ids novos),
  *   só com `createUnlinked` — o chamador liga isso apenas enquanto o item nunca teve a associação
  *   gravada, senão uma releitura que não reconhecesse o grupo o recriaria a cada push;
@@ -334,13 +347,12 @@ export function applyAddOnAssociationToDocument({
 	newId?: () => string;
 }) {
 	const base = baseProductOf(doc);
-	const docGroupIds = new Set(doc.optionGroups.map((group) => group.id));
 	const current = new Map((base.optionGroups ?? []).map((association) => [association.id, association]));
 	const next: TIfoodDocumentAssociation[] = [];
 	let created = 0;
 
 	for (const node of nodes) {
-		const groupLink = groupLinkForItem(links, node.grupoId, docGroupIds);
+		const groupLink = groupLinkForDocument(links, node.grupoId, doc);
 		if (groupLink?.externoOptionGroupId) {
 			const id = groupLink.externoOptionGroupId;
 			next.push({ ...current.get(id), id, min: node.minOpcoes, max: node.maxOpcoes, index: node.indice });

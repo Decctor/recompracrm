@@ -169,3 +169,25 @@ test("grupo sem vínculo só nasce com createUnlinked, com opções, produtos e 
 	assert.equal(doc.options.find((option) => option.id === group.optionIds?.[1])?.status, "UNAVAILABLE");
 	assert.ok(doc.products.some((product) => product.id === granola?.productId && product.name === "Granola"));
 });
+
+test("cópia aninhada num produto de opção não toma o lugar da cópia associada ao produto", () => {
+	const doc = makeDoc();
+	// O cookie (produto de opção da oferta) carrega outra cópia da oferta — como no cardápio real.
+	doc.optionGroups.push({ id: "g-oferta-aninhada", name: "Leve mais cookie", status: "AVAILABLE", optionIds: [] });
+	doc.products.find((product) => product.id === "p-cookie")?.optionGroups?.push({ id: "g-oferta-aninhada", min: 0, max: 2, index: 1 });
+	const oferta: TAddOnGroupNode = { ...sabores, grupoId: "int-oferta", nome: "Leve mais cookie", minOpcoes: 0, maxOpcoes: 4, indice: 1 };
+	applyAddOnAssociationToDocument({
+		doc,
+		nodes: [sabores, oferta],
+		// A cópia aninhada vem PRIMEIRO na lista de vínculos (ordem de criação).
+		links: linksWith([
+			["int-sabores", ["g-sabores"]],
+			["int-oferta", ["g-oferta-aninhada", "g-oferta"]],
+		]),
+		createUnlinked: false,
+	});
+	assert.deepEqual(
+		doc.products.find((product) => product.id === "base")?.optionGroups?.map((association) => association.id),
+		["g-sabores", "g-oferta"],
+	);
+});

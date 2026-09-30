@@ -549,6 +549,25 @@ export function mapIfoodItemFlat(payload: z.infer<typeof IfoodItemFlatResponseSc
 		};
 	});
 
+	// Os grupos DO ITEM são os associados ao produto base, com min/max/ordem da associação. O `flat`
+	// também traz grupos aninhados em produtos de opção (3º nível — ex.: outra cópia de uma oferta
+	// dentro de cada cookie da oferta); listá-los como grupos do item duplicava grupos na tela e fazia
+	// a reconciliação comparar a associação contra cópias que o cliente não vê no nível do item.
+	// Sem a lista de associações no payload, mantém todos (comportamento anterior).
+	const associacoes = (produtoBase as { optionGroups?: unknown } | null)?.optionGroups;
+	const gruposDoItem = Array.isArray(associacoes)
+		? (associacoes as { id?: string | null; min?: number | null; max?: number | null; index?: number | null }[])
+				.map((associacao, posicao) => {
+					const grupo = grupos.find((candidato) => candidato.id && candidato.id === associacao.id);
+					return grupo
+						? { grupo: { ...grupo, min: associacao.min ?? grupo.min, max: associacao.max ?? grupo.max }, ordem: associacao.index ?? posicao }
+						: null;
+				})
+				.filter((entrada): entrada is NonNullable<typeof entrada> => !!entrada)
+				.sort((a, b) => a.ordem - b.ordem)
+				.map((entrada) => entrada.grupo)
+		: grupos;
+
 	const imagePath = produtoBase?.imagePath ?? produtoBase?.image ?? payload.imagePath ?? item.imagePath ?? null;
 
 	return {
@@ -565,7 +584,7 @@ export function mapIfoodItemFlat(payload: z.infer<typeof IfoodItemFlatResponseSc
 		precoOriginal: item.price?.originalValue ?? payload.price?.originalValue ?? null,
 		imagemPath: imagePath,
 		imagemUrl: buildIfoodCatalogImageUrl(imagePath),
-		gruposComplementos: grupos,
+		gruposComplementos: gruposDoItem,
 		canais: (item.contextModifiers ?? []).map(mapIfoodContextModifier),
 		horarios: (item.shifts ?? []).map(mapIfoodItemShift),
 	};
