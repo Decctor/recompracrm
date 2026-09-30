@@ -12,7 +12,7 @@ import { isAxiosError } from "axios";
 import dayjs from "dayjs";
 import timezone from "dayjs/plugin/timezone";
 import utc from "dayjs/plugin/utc";
-import { and, eq, inArray, ne } from "drizzle-orm";
+import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { resolveCampaignAudiences } from "./campaign-audiences";
 import { processDataCollectingV2Effects } from "./effects";
@@ -233,6 +233,11 @@ export async function persistCanonicalBatch({
 	let persistedSalesForPostCommit: TPersistedSaleForEffects[] = [];
 
 	const summary = await db.transaction(async (tx): Promise<TDataCollectingV2RunSummary> => {
+		// Serializa a persistência por conexão: polling, webhook e os runs disparados por ações
+		// (confirmação, disputa) podem trazer o mesmo pedido ao mesmo tempo. Sem o lock, os dois
+		// "procura por idExterno → não acha → insere" correm em paralelo e duplicam venda e cliente
+		// (pedido iFood #3501 da Congelatte, 2026-09-30). O segundo run espera e cai no update.
+		await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`data-collecting:${integration.id}`}))`);
 		const auxiliaryContext = await syncAuxiliaryEntities({ tx, batch });
 		const { persistedSales, saleIdCollisions } = await syncSales({ tx, batch, context: auxiliaryContext, erp });
 		persistedSalesForPostCommit = persistedSales;
