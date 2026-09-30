@@ -167,7 +167,7 @@ export type TIfoodCategoryWritePayload = {
 function toIfoodCategoryBody(payload: TIfoodCategoryWritePayload) {
 	return {
 		name: payload.nome,
-		externalCode: payload.codigoExterno ?? undefined,
+		externalCode: payload.codigoExterno || undefined,
 		status: payload.status ?? "AVAILABLE",
 		index: payload.indice ?? undefined,
 		template: payload.template ?? "DEFAULT",
@@ -238,7 +238,7 @@ function toIfoodProductBody(payload: TIfoodProductWritePayload) {
 	return {
 		name: payload.nome,
 		description: payload.descricao ?? undefined,
-		externalCode: payload.codigoExterno ?? undefined,
+		externalCode: payload.codigoExterno || undefined,
 		image: payload.imagemPath ?? undefined,
 		serving: payload.serving ?? "NOT_APPLICABLE",
 	};

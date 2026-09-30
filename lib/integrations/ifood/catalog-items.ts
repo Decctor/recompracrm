@@ -198,7 +198,7 @@ export async function upsertIfoodItem(
 				// aceita no máximo uma).
 				categoryId: payload.categoriaId ?? undefined,
 				status: payload.status,
-				externalCode: payload.codigoExterno ?? undefined,
+				externalCode: payload.codigoExterno || undefined,
 				index: payload.indice ?? undefined,
 				price: {
 					value: payload.preco,
@@ -260,7 +260,8 @@ export async function upsertIfoodItem(
 				id: opcao.id,
 				productId: opcao.produtoId,
 				status: opcao.status ?? "AVAILABLE",
-				externalCode: opcao.codigoExterno ?? undefined,
+				// Código vazio NÃO vai: o iFood trata "" como código e reaproveita o produto que já o tem.
+				externalCode: opcao.codigoExterno || undefined,
 				index: opcao.indice ?? indiceOpcao,
 				price: { value: opcao.preco ?? 0 },
 				// Pizza: divisões permitidas do tamanho e preço de sabor amarrado a um tamanho.
@@ -289,7 +290,7 @@ export async function patchIfoodItem(client: AxiosInstance, merchantId: string, 
 			body.price = { value: patch.preco, originalValue: patch.precoOriginal ?? undefined };
 		}
 		if (patch.status !== undefined && patch.status !== null) body.status = patch.status;
-		if (patch.codigoExterno !== undefined && patch.codigoExterno !== null) body.externalCode = patch.codigoExterno;
+		if (patch.codigoExterno) body.externalCode = patch.codigoExterno;
 		await client.patch(catalogUrl(merchantId, `/items/${itemId}`), body);
 	} catch (error) {
 		mapIfoodError("patchIfoodItem", error);
@@ -364,7 +365,11 @@ export async function addIfoodOptions(
 	// próprio DTO e recusado —, `price` obrigatório, e o nome mora no PRODUTO da opção: sem
 	// `product`/`productId` a API responde "Either product or productId must be provided". A resposta
 	// (201) já traz `{ id, productId }` — é dela que saem os ids, porque `GET /optionGroups/{id}` não
-	// existe para reler o grupo. O `externalCode` no produto não foi exercitado ao vivo.
+	// existe para reler o grupo.
+	//
+	// `externalCode` vazio NÃO pode ir: o iFood trata "" como um código válido e liga a opção nova ao
+	// produto que já tem esse código — medido em 2026-09-30, "Bala Baiana" nasceu como "Crumble de
+	// Casquinha" (o primeiro produto criado com código vazio) e outras opções nem entraram no grupo.
 	const created: { nome: string; optionId: string | null; productId: string | null }[] = [];
 	try {
 		for (const opcao of opcoes) {
@@ -373,7 +378,7 @@ export async function addIfoodOptions(
 				{
 					status: opcao.status ?? "AVAILABLE",
 					price: { value: opcao.preco ?? 0 },
-					product: { name: opcao.nome, externalCode: opcao.codigoExterno ?? undefined },
+					product: { name: opcao.nome, externalCode: opcao.codigoExterno || undefined },
 				},
 			);
 			created.push({ nome: opcao.nome, optionId: response.data?.id ?? null, productId: response.data?.productId ?? null });

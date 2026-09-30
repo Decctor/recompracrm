@@ -330,7 +330,9 @@ export function applyAddOnAssociationToDocument({
 		if (!createUnlinked) continue;
 
 		const groupId = newId();
-		const options = node.opcoes.map((opcao) => ({ opcao, optionId: newId(), productId: newId() }));
+		// Só opções ativas nascem no iFood: uma opção inativa é criada quando for ativada (o save do
+		// grupo dispara o push, que completa as cópias).
+		const options = node.opcoes.filter((opcao) => opcao.disponivel).map((opcao) => ({ opcao, optionId: newId(), productId: newId() }));
 		doc.products.push(...options.map(({ opcao, productId }) => ({ id: productId, name: opcao.nome })));
 		doc.options.push(
 			...options.map(({ opcao, optionId, productId }) => ({
@@ -770,7 +772,9 @@ export async function pushAddOnGroupToLinkedMerchants({ orgId, produtoAddOnId }:
 			const linkedHere = new Set(
 				optionLinks.filter((link) => link.externoOptionGroupId === groupLink.externoOptionGroupId).map((link) => link.produtoAddOnOpcaoId),
 			);
-			const newOptions = node.opcoes.filter((opcao) => !linkedHere.has(opcao.opcaoId));
+			// Só as ativas: criar as inativas encheria cada cópia de opções pausadas (o grupo de gelato
+			// tem dezenas de sabores fora de linha). Ativar depois dispara o push, que as cria.
+			const newOptions = node.opcoes.filter((opcao) => opcao.disponivel && !linkedHere.has(opcao.opcaoId));
 			if (!newOptions.length) continue;
 			try {
 				// Uma opção por vez, vinculada logo em seguida com os ids da própria resposta: se a

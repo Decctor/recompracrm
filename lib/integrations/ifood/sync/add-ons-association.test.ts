@@ -137,7 +137,7 @@ test("com cópias do grupo, usa a cópia que o item já tem", () => {
 	);
 });
 
-test("grupo sem vínculo só nasce com createUnlinked, com opções, produtos e status do app", () => {
+test("grupo sem vínculo só nasce com createUnlinked, com as opções ativas e os produtos delas", () => {
 	const skipped = makeDoc();
 	const first = applyAddOnAssociationToDocument({
 		doc: skipped,
@@ -160,13 +160,12 @@ test("grupo sem vínculo só nasce com createUnlinked, com opções, produtos e 
 	assert.equal(created, 1);
 	const group = doc.optionGroups.find((candidate) => candidate.name === "Turbine seu pedido:");
 	assert.ok(group);
-	assert.equal(group.optionIds?.length, 2);
+	assert.equal(group.optionIds?.length, 1, "a opção inativa (Mel) não nasce no iFood");
 	const association = doc.products.find((product) => product.id === "base")?.optionGroups?.find((candidate) => candidate.id === group.id);
 	assert.deepEqual({ min: association?.min, max: association?.max, index: association?.index }, { min: 0, max: 5, index: 1 });
 	const granola = doc.options.find((option) => option.id === group.optionIds?.[0]);
 	assert.equal(granola?.price?.value, 3);
 	assert.equal(granola?.externalCode, "GRA");
-	assert.equal(doc.options.find((option) => option.id === group.optionIds?.[1])?.status, "UNAVAILABLE");
 	assert.ok(doc.products.some((product) => product.id === granola?.productId && product.name === "Granola"));
 });
 
