@@ -1,7 +1,9 @@
+import { resolveChannelOptionPrice } from "@/lib/products/sales-channels";
 import { channelNodePrice, channelProductFilter, loadChannelState } from "@/lib/products/sales-channels-store";
 import type { TSalesChannelTypeEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
 import createHttpError from "http-errors";
+import { modifierPricesDiverge, resolveCurrentModifierPrices, type TSaleItemRepricing } from "./sale-item-repricing";
 
 /**
  * Tolerância de centavos única para o recálculo server-side de valores de venda e para a
@@ -47,7 +49,8 @@ type TCatalogPrices = {
  * Com `canal`, os preços e a presença passam pelo canal de venda: produtos fora do canal (ou não
  * vendáveis/inativos) saem dos mapas — o chamador os trata como "não encontrado no catálogo" — e
  * os overrides de preço do canal substituem o preço base, node-scoped (ver resolver). Modificadores
- * não têm preço por canal (D3 adiado). Sem `canal`, comportamento histórico: preço base, sem gates.
+ * seguem a mesma regra: preço da opção no canal, e opção pausada no canal sai do mapa. Sem `canal`,
+ * comportamento histórico: preço base, sem gates.
  */
 async function loadCatalogPrices({
 	orgId,
@@ -113,7 +116,11 @@ async function loadCatalogPrices({
 				{ ...v, precoVenda: channelNodePrice(channelState, { produtoId: v.produtoId, produtoVarianteId: v.id, precoVenda: v.precoVenda }) ?? 0 },
 			]),
 		),
-		optionPriceMap: new Map(opcoes.map((o) => [o.id, o.precoDelta])),
+		optionPriceMap: new Map(
+			opcoes
+				.filter((opcao) => channelState?.optionOverrides.get(opcao.id)?.disponivel !== false)
+				.map((opcao) => [opcao.id, resolveChannelOptionPrice(opcao, channelState?.optionOverrides)]),
+		),
 	};
 }
 
@@ -199,7 +206,7 @@ type TSaleItemDriftInput = {
 	quantidade: number;
 	valorVendaUnitario: number;
 	valorVendaTotalBruto: number;
-	modificadores: { opcaoId: string | null; quantidade: number }[];
+	modificadores: { opcaoId: string | null; quantidade: number; valorUnitario?: number; valorTotal?: number }[];
 };
 
 /** Viaja como dado para a interface, então os campos seguem a língua do payload. */
@@ -213,6 +220,7 @@ export type TSaleItemPricingDrift = {
 	/** Decomposição do unitário atual, para o carrinho se atualizar sem recalcular o catálogo. */
 	valorUnitarioBaseAtual: number | null;
 	valorModificadoresAtual: number | null;
+	modificadoresAtuais: TSaleItemRepricing["modificadores"] | null;
 	valorTotalBrutoSalvo: number;
 	valorTotalBrutoAtual: number | null;
 	divergente: boolean;
@@ -256,6 +264,8 @@ export async function computeSaleItemsPricingDrift({
 		const precoProduto = productPriceMap.get(item.produtoId);
 		const variante = item.produtoVarianteId ? variantMap.get(item.produtoVarianteId) : null;
 		const varianteInvalida = !!item.produtoVarianteId && (!variante || variante.produtoId !== item.produtoId);
+		const modificadoresAtuais = resolveCurrentModifierPrices(item.modificadores, optionPriceMap);
+		const modificadoresDivergem = modifierPricesDiverge(item.modificadores, optionPriceMap);
 
 		let modificadoresIndisponivel = false;
 		let valorModificadores = 0;
@@ -278,6 +288,7 @@ export async function computeSaleItemsPricingDrift({
 				valorUnitarioAtual: null,
 				valorUnitarioBaseAtual: null,
 				valorModificadoresAtual: null,
+				modificadoresAtuais: null,
 				valorTotalBrutoSalvo: item.valorVendaTotalBruto,
 				valorTotalBrutoAtual: null,
 				divergente: true,
@@ -297,9 +308,13 @@ export async function computeSaleItemsPricingDrift({
 			valorUnitarioAtual,
 			valorUnitarioBaseAtual: precoBase,
 			valorModificadoresAtual: valorModificadores,
+			modificadoresAtuais,
 			valorTotalBrutoSalvo: item.valorVendaTotalBruto,
 			valorTotalBrutoAtual,
-			divergente: saleValuesDiverge(item.valorVendaUnitario, valorUnitarioAtual) || saleValuesDiverge(item.valorVendaTotalBruto, valorTotalBrutoAtual),
+			divergente:
+				modificadoresDivergem ||
+				saleValuesDiverge(item.valorVendaUnitario, valorUnitarioAtual) ||
+				saleValuesDiverge(item.valorVendaTotalBruto, valorTotalBrutoAtual),
 			indisponivel: false,
 		};
 	});

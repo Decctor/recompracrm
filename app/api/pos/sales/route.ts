@@ -345,7 +345,12 @@ async function getSaleDraft({ input, session }: { input: { id: string }; session
 			quantidade: item.quantidade,
 			valorVendaUnitario: item.valorVendaUnitario,
 			valorVendaTotalBruto: item.valorVendaTotalBruto,
-			modificadores: item.adicionais.map((mod) => ({ opcaoId: mod.opcaoId, quantidade: mod.quantidade })),
+			modificadores: item.adicionais.map((mod) => ({
+				opcaoId: mod.opcaoId,
+				quantidade: mod.quantidade,
+				valorUnitario: mod.valorUnitario,
+				valorTotal: mod.valorTotal,
+			})),
 		})),
 	});
 

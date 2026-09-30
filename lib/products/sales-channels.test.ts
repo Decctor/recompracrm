@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+	channelAddOnOptions,
 	channelAddOnReferences,
+	projectAddOnReferencesToChannel,
 	resolveChannelAvailability,
+	resolveChannelOptionAvailability,
+	resolveChannelOptionPrice,
 	resolveChannelPrice,
 	splitChannelSettingNodes,
 	validateChannelSettingNodes,
@@ -256,4 +260,70 @@ test("nó com os dois campos nulos volta a herdar; qualquer um preenchido vira l
 		upserts.map((node) => node.canalVendaId + ":" + node.produtoVarianteId),
 		["pos:v1", "shop:v1"],
 	);
+});
+
+// ---------------------------------------------------------------------------
+// Opções de adicional por canal
+// ---------------------------------------------------------------------------
+
+const coca = { id: "coca", nome: "Coca-Cola", precoDelta: 5, ativo: true };
+const guarana = { id: "guarana", nome: "Guaraná", precoDelta: 5, ativo: true };
+const bebidas = { minOpcoes: 0, maxOpcoes: 1, opcoes: [coca, guarana] };
+
+test("preço da opção: o do canal vence, zero incluso; sem linha herda o da opção", () => {
+	const overrides = new Map([
+		["coca", { precoDelta: 8, disponivel: null }],
+		["guarana", { precoDelta: 0, disponivel: null }],
+	]);
+	assert.equal(resolveChannelOptionPrice(coca, overrides), 8);
+	// Zero é um preço (brinde no canal), não ausência de override.
+	assert.equal(resolveChannelOptionPrice(guarana, overrides), 0);
+	assert.equal(resolveChannelOptionPrice({ id: "outra", precoDelta: 3 }, overrides), 3);
+	assert.equal(resolveChannelOptionPrice(coca, null), 5);
+});
+
+test("disponibilidade da opção no canal só restringe", () => {
+	const overrides = new Map([["coca", { precoDelta: null, disponivel: false }]]);
+	assert.equal(resolveChannelOptionAvailability(coca, overrides), false);
+	assert.equal(resolveChannelOptionAvailability(guarana, overrides), true);
+	// Uma linha `true` não reativa a opção desligada no cadastro.
+	const reativar = new Map([["coca", { precoDelta: null, disponivel: true }]]);
+	assert.equal(resolveChannelOptionAvailability({ ...coca, ativo: false }, reativar), false);
+});
+
+test("projeção das opções troca o preço, tira a pausada e derruba grupo que esvazia", () => {
+	const references = [{ grupo: bebidas }, { grupo: { minOpcoes: 1, maxOpcoes: 1, opcoes: [coca] } }];
+	const overrides = new Map([
+		["coca", { precoDelta: null, disponivel: false }],
+		["guarana", { precoDelta: 8, disponivel: null }],
+	]);
+	const projected = channelAddOnOptions(overrides, references);
+	assert.equal(projected.length, 1, "o grupo só com a opção pausada sai do produto");
+	assert.deepEqual(
+		projected[0].grupo.opcoes.map((opcao) => [opcao.id, opcao.precoDelta]),
+		[["guarana", 8]],
+	);
+	assert.equal(guarana.precoDelta, 5, "a opção compartilhada entre produtos não é mutada");
+});
+
+test("sem overrides a projeção devolve as mesmas referências", () => {
+	const references = [{ grupo: bebidas }];
+	assert.equal(channelAddOnOptions(new Map(), references), references);
+	assert.equal(channelAddOnOptions(null, references), references);
+});
+
+test("projeção completa: regra do vínculo, mínimos do canal e opções do canal", () => {
+	const [projected] = projectAddOnReferencesToChannel(
+		{ channel: { exigirAdicionaisMinimos: false }, optionOverrides: new Map([["coca", { precoDelta: 8, disponivel: null }]]) },
+		[{ minOpcoes: 1, maxOpcoes: 3, grupo: { ...bebidas, minOpcoes: 1 } }],
+	);
+	assert.equal(projected.grupo.maxOpcoes, 3, "o máximo do vínculo sobrevive");
+	assert.equal(projected.grupo.minOpcoes, 0, "o canal que não exige mínimos zera o do vínculo");
+	assert.equal(projected.grupo.opcoes.find((opcao) => opcao.id === "coca")?.precoDelta, 8);
+});
+
+test("sem canal materializado, só a regra do vínculo vale", () => {
+	const [projected] = projectAddOnReferencesToChannel(null, [{ minOpcoes: null, maxOpcoes: 2, grupo: bebidas }]);
+	assert.equal(projected.grupo.maxOpcoes, 2);
+	assert.equal(projected.grupo.opcoes.find((opcao) => opcao.id === "coca")?.precoDelta, 5);
 });

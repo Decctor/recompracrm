@@ -76,7 +76,7 @@ async function confirmSale({ input, session }: { input: TConfirmSaleInput; sessi
 						metadados: true,
 					},
 					with: {
-						adicionais: { columns: { opcaoId: true, quantidade: true } },
+						adicionais: { columns: { opcaoId: true, quantidade: true, valorUnitario: true, valorTotal: true } },
 						produto: { columns: { nome: true } },
 						produtoVariante: { columns: { nome: true } },
 					},
@@ -115,7 +115,12 @@ async function confirmSale({ input, session }: { input: TConfirmSaleInput; sessi
 			quantidade: item.quantidade,
 			valorVendaUnitario: item.valorVendaUnitario,
 			valorVendaTotalBruto: item.valorVendaTotalBruto,
-			modificadores: item.adicionais.map((mod) => ({ opcaoId: mod.opcaoId, quantidade: mod.quantidade })),
+			modificadores: item.adicionais.map((mod) => ({
+				opcaoId: mod.opcaoId,
+				quantidade: mod.quantidade,
+				valorUnitario: mod.valorUnitario,
+				valorTotal: mod.valorTotal,
+			})),
 		})),
 	});
 	if (pricing.algumIndisponivel) {

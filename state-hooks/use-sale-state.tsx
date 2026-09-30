@@ -1,3 +1,4 @@
+import { repriceSaleItem, type TSaleItemRepricing } from "@/lib/sales/sale-item-repricing";
 import {
 	CheckoutPaymentSplitSchema,
 	type TCheckoutPaymentSplit,
@@ -313,7 +314,7 @@ export const useSaleState = ({ initialState, organizationConfig, contasFinanceir
 	 * limitado ao novo bruto — um preço que caiu não pode deixar o líquido negativo. Itens de
 	 * recompensa ficam de fora: o preço deles é o do resgate, não o do catálogo.
 	 */
-	const repriceItems = useCallback((precos: { itemId: string; valorUnitarioBase: number; valorModificadores: number }[]) => {
+	const repriceItems = useCallback((precos: TSaleItemRepricing[]) => {
 		const precoPorItemId = new Map(precos.map((preco) => [preco.itemId, preco]));
 		setState((prev) => ({
 			...prev,
@@ -321,18 +322,7 @@ export const useSaleState = ({ initialState, organizationConfig, contasFinanceir
 				if (item.recompensaId) return item;
 				const preco = item.itemId ? precoPorItemId.get(item.itemId) : undefined;
 				if (!preco) return item;
-				const valorUnitarioFinal = preco.valorUnitarioBase + preco.valorModificadores;
-				const valorTotalBruto = valorUnitarioFinal * item.quantidade;
-				const valorDesconto = Math.min(item.valorDesconto, valorTotalBruto);
-				return {
-					...item,
-					valorUnitarioBase: preco.valorUnitarioBase,
-					valorModificadores: preco.valorModificadores,
-					valorUnitarioFinal,
-					valorTotalBruto,
-					valorDesconto,
-					valorTotalLiquido: valorTotalBruto - valorDesconto,
-				};
+				return repriceSaleItem(item, preco);
 			}),
 		}));
 	}, []);

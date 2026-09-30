@@ -1,8 +1,7 @@
 import { db } from "@/services/drizzle";
 import { productAddOnReferences, products, saleItems, sales } from "@/services/drizzle/schema";
 import { and, desc, eq, gt, inArray, notInArray, sql } from "drizzle-orm";
-import { resolveAddOnReferencesRules } from "@/lib/products/add-on-rules";
-import { channelAddOnReferences } from "@/lib/products/sales-channels";
+import { projectAddOnReferencesToChannel } from "@/lib/products/sales-channels";
 import { type TChannelState, channelNodePrice, channelProductFilter, loadChannelState } from "@/lib/products/sales-channels-store";
 import type { TShopSettingsConfiguration } from "@/schemas/shop";
 
@@ -116,11 +115,12 @@ export async function getShopCatalogProducts({
 				// Preço resolvido do canal: exibição e cobrança mudam juntas — o pedido precifica a
 				// partir deste mesmo catálogo (catalogProductMap na rota de orders).
 				precoVenda: channelNodePrice(channelState, { produtoId: product.id, precoVenda: product.precoVenda }),
-				// Grupos sob as regras do canal SHOP. Como a rota de pedidos valida contra ESTE mesmo
-				// catálogo, a exigência que a sacola mostra é a que o servidor cobra — sem segunda leitura.
-				addOnsReferencias: channelAddOnReferences(
-					channelState?.channel,
-					resolveAddOnReferencesRules(product.addOnsReferencias.filter((reference) => reference.grupo.ativo && reference.grupo.opcoes.length > 0)),
+				// Grupos sob as regras do canal SHOP (mínimos, preço e disponibilidade das opções). Como a
+				// rota de pedidos valida contra ESTE mesmo catálogo, a exigência e o preço que a sacola
+				// mostra são os que o servidor cobra — sem segunda leitura.
+				addOnsReferencias: projectAddOnReferencesToChannel(
+					channelState,
+					product.addOnsReferencias.filter((reference) => reference.grupo.ativo && reference.grupo.opcoes.length > 0),
 				),
 				variantes: product.variantes
 					.filter(variantIsAvailableForShop)
@@ -129,9 +129,9 @@ export async function getShopCatalogProducts({
 					.map((variant) => ({
 						...variant,
 						precoVenda: channelNodePrice(channelState, { produtoId: product.id, produtoVarianteId: variant.id, precoVenda: variant.precoVenda }) ?? 0,
-						addOnsReferencias: channelAddOnReferences(
-							channelState?.channel,
-							resolveAddOnReferencesRules(variant.addOnsReferencias.filter((reference) => reference.grupo.ativo && reference.grupo.opcoes.length > 0)),
+						addOnsReferencias: projectAddOnReferencesToChannel(
+							channelState,
+							variant.addOnsReferencias.filter((reference) => reference.grupo.ativo && reference.grupo.opcoes.length > 0),
 						),
 					}))
 					.filter((variant) => variant.precoVenda > 0),

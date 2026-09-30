@@ -1,8 +1,14 @@
 import type { TShopSettingsConfiguration } from "@/schemas/shop";
 import { db } from "@/services/drizzle";
-import { productChannelSettings, products, salesChannels, type TSalesChannelEntity } from "@/services/drizzle/schema";
+import {
+	productAddOnOptionChannelSettings,
+	productChannelSettings,
+	products,
+	salesChannels,
+	type TSalesChannelEntity,
+} from "@/services/drizzle/schema";
 import { and, eq, inArray, isNull, notInArray, type SQL } from "drizzle-orm";
-import { DEFAULT_SALES_CHANNELS, type TChannel } from "./sales-channels";
+import { DEFAULT_SALES_CHANNELS, type TChannel, type TChannelOptionOverride } from "./sales-channels";
 
 function findInternalChannel(rows: TSalesChannelEntity[], canal: TChannel["canal"]) {
 	return rows.find((row) => row.canal === canal && !row.integracaoId && !row.refExterno);
@@ -87,10 +93,9 @@ export async function syncShopSalesChannel({ orgId, produtos }: { orgId: string;
 }
 
 /**
- * Estado de um canal interno para leitura de catálogo: a linha do canal + mapas esparsos de
- * disponibilidade por produto e por variante. Nulo quando a organização ainda não tem a linha
- * (migração não aplicada / org não materializada) — o chamador decide o fallback.
- * Nesta fase só a DISPONIBILIDADE é consumida; preço por canal entra na fase 3.
+ * Estado de um canal para leitura de catálogo: a linha do canal + mapas esparsos de disponibilidade
+ * e preço por produto, por variante e por opção de adicional. Nulo quando a organização ainda não
+ * tem a linha (migração não aplicada / org não materializada) — o chamador decide o fallback.
  */
 export async function loadChannelState({ orgId, canal, refExterno }: { orgId: string; canal: TChannel["canal"]; refExterno?: string | null }) {
 	// Canais internos são identificados pela ausência de integração/ref; canais de integração
@@ -107,10 +112,16 @@ export async function loadChannelState({ orgId, canal, refExterno }: { orgId: st
 	});
 	if (!channel) return null;
 
-	const overrides = await db.query.productChannelSettings.findMany({
-		where: eq(productChannelSettings.canalVendaId, channel.id),
-		columns: { produtoId: true, produtoVarianteId: true, disponivel: true, precoVenda: true },
-	});
+	const [overrides, optionRows] = await Promise.all([
+		db.query.productChannelSettings.findMany({
+			where: eq(productChannelSettings.canalVendaId, channel.id),
+			columns: { produtoId: true, produtoVarianteId: true, disponivel: true, precoVenda: true },
+		}),
+		db.query.productAddOnOptionChannelSettings.findMany({
+			where: eq(productAddOnOptionChannelSettings.canalVendaId, channel.id),
+			columns: { produtoAddOnOpcaoId: true, disponivel: true, precoDelta: true },
+		}),
+	]);
 
 	const productOverrides = new Map<string, { disponivel: boolean | null; precoVenda: number | null }>();
 	const variantOverrides = new Map<string, { disponivel: boolean | null; precoVenda: number | null }>();
@@ -120,7 +131,11 @@ export async function loadChannelState({ orgId, canal, refExterno }: { orgId: st
 		else productOverrides.set(override.produtoId, entry);
 	}
 
-	return { channel, productOverrides, variantOverrides };
+	const optionOverrides = new Map<string, TChannelOptionOverride>(
+		optionRows.map((row) => [row.produtoAddOnOpcaoId, { disponivel: row.disponivel, precoDelta: row.precoDelta }]),
+	);
+
+	return { channel, productOverrides, variantOverrides, optionOverrides };
 }
 export type TChannelState = NonNullable<Awaited<ReturnType<typeof loadChannelState>>>;
 

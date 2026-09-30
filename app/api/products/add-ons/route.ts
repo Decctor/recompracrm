@@ -1,3 +1,6 @@
+import { AddOnOptionChannelSettingInputSchema } from "@/schemas/product-add-on-channel-settings";
+import { applyAddOnChannelSettings } from "@/lib/products/add-on-channel-settings";
+import { requireERPSession } from "@/lib/authentication/erp-session";
 import z from "zod";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { db, type DBTransaction } from "@/services/drizzle";
@@ -217,6 +220,7 @@ export const UpdateProductAddOnInputSchema = z.object({
 		})
 		.optional()
 		.nullable(),
+	channelSettings: z.array(AddOnOptionChannelSettingInputSchema).optional(),
 	productAddOnId: z.string({
 		required_error: "ID do adicional não informado.",
 		invalid_type_error: "Tipo não válido para ID do adicional.",
@@ -310,6 +314,8 @@ async function updateProductAddOn({ input, session }: { input: TUpdateProductAdd
 	const userOrgId = session.membership?.organizacao.id;
 	if (!userOrgId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
 
+	if (input.channelSettings?.length) requireERPSession(session);
+
 	if (input.productId) {
 		const product = await db.query.products.findFirst({
 			where: and(eq(products.id, input.productId), eq(products.organizacaoId, userOrgId)),
@@ -361,6 +367,10 @@ async function updateProductAddOn({ input, session }: { input: TUpdateProductAdd
 			addOnId: input.productAddOnId,
 			options: input.addOn.opcoes,
 		});
+
+		if (input.channelSettings?.length) {
+			await applyAddOnChannelSettings({ tx, orgId: userOrgId, produtoAddOnId: updatedAddOn.id, settings: input.channelSettings });
+		}
 
 		return updatedAddOn.id;
 	});

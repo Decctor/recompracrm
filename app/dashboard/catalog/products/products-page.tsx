@@ -101,7 +101,7 @@ export default function ProductsPage({ user, userOrg, userMembership }: Products
 					<ProductsDatabaseView user={user} userMembership={userMembership} organization={userOrg} />
 				</TabsContent>
 				<TabsContent value="add-ons">
-					<ProductsAddOnsView />
+					<ProductsAddOnsView orgHasERPAccess={userMembership.organizacao.configuracao.recursos.erp.acesso} />
 				</TabsContent>
 				<TabsContent value="channels">
 					<ProductsChannelsView />

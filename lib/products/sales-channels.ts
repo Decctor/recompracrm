@@ -1,4 +1,5 @@
 import type { TSalesChannelCatalogModeEnum, TSalesChannelTypeEnum } from "@/schemas/enums";
+import { resolveAddOnReferencesRules } from "./add-on-rules";
 
 export type TChannel = { canal: TSalesChannelTypeEnum; catalogoModo: TSalesChannelCatalogModeEnum };
 export type TChannelOverride = { disponivel?: boolean | null; precoVenda?: number | null } | null;
@@ -175,4 +176,57 @@ export function channelAddOnReferences<TReference extends { grupo: { minOpcoes: 
 	// A cópia só sobrescreve `minOpcoes`; o resto do grupo (opções, máximos, ordem) segue intacto,
 	// então a asserção devolve o mesmo shape que entrou — o genérico é que não consegue provar isso.
 	return references.map((reference) => ({ ...reference, grupo: { ...reference.grupo, minOpcoes: 0 } }) as TReference);
+}
+
+/** Linha esparsa de `product_add_on_option_channel_settings`: nulo = herda da opção. */
+export type TChannelOptionOverride = { disponivel: boolean | null; precoDelta: number | null };
+export type TChannelOptionOverrides = ReadonlyMap<string, TChannelOptionOverride>;
+
+// Preço da opção no canal: o do canal, senão o da opção. Mesma herança do preço de produto.
+export function resolveChannelOptionPrice(option: { id: string; precoDelta: number }, overrides?: TChannelOptionOverrides | null) {
+	return overrides?.get(option.id)?.precoDelta ?? option.precoDelta;
+}
+
+// A linha do canal só RESTRINGE: `disponivel: true` não reativa uma opção inativa no cadastro,
+// assim como a linha de variante não ressuscita um produto fora do canal.
+export function resolveChannelOptionAvailability(option: { id: string; ativo?: boolean | null }, overrides?: TChannelOptionOverrides | null) {
+	return option.ativo !== false && overrides?.get(option.id)?.disponivel !== false;
+}
+
+/**
+ * Projeta as OPÇÕES dos grupos para o canal: preço do canal no lugar do base e fora as opções
+ * pausadas no canal. Um grupo que fica sem opção sai do produto — é a mesma regra que as leituras
+ * de catálogo já aplicam a grupo vazio no cadastro (um grupo obrigatório sem opção travaria a venda).
+ */
+export function channelAddOnOptions<TReference extends { grupo: { opcoes: { id: string; precoDelta: number }[] } }>(
+	overrides: TChannelOptionOverrides | null | undefined,
+	references: TReference[],
+): TReference[] {
+	if (!overrides || overrides.size === 0) return references;
+	return references.flatMap((reference) => {
+		const opcoes = reference.grupo.opcoes
+			.filter((opcao) => overrides.get(opcao.id)?.disponivel !== false)
+			.map((opcao) => {
+				const precoDelta = overrides.get(opcao.id)?.precoDelta;
+				return precoDelta == null ? opcao : { ...opcao, precoDelta };
+			});
+		if (opcoes.length === 0) return [];
+		// Mesma razão da asserção em `channelAddOnReferences`: só `opcoes` muda.
+		return [{ ...reference, grupo: { ...reference.grupo, opcoes } } as TReference];
+	});
+}
+
+/**
+ * Os grupos de um produto como um canal de venda os vê, na ordem que as superfícies de venda
+ * precisam: regra do vínculo produto↔grupo, depois a exigência de mínimos do canal, depois preço e
+ * disponibilidade das opções no canal. Canal ausente = só a regra do vínculo (comportamento legado).
+ */
+export function projectAddOnReferencesToChannel<
+	TReference extends {
+		minOpcoes?: number | null;
+		maxOpcoes?: number | null;
+		grupo: { minOpcoes: number; maxOpcoes: number; opcoes: { id: string; precoDelta: number }[] };
+	},
+>(state: { channel: { exigirAdicionaisMinimos: boolean }; optionOverrides: TChannelOptionOverrides } | null | undefined, references: TReference[]) {
+	return channelAddOnOptions(state?.optionOverrides, channelAddOnReferences(state?.channel, resolveAddOnReferencesRules(references)));
 }

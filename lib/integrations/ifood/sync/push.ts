@@ -73,10 +73,7 @@ async function loadMerchantAddOnContext({
 	produtoId: string;
 }): Promise<TMerchantAddOnContext> {
 	const channelState = await loadChannelState({ orgId, canal: "IFOOD", refExterno: merchantId });
-	const [nodes, links] = await Promise.all([
-		resolveProductAddOnNodes({ orgId, produtoId, channel: channelState?.channel ?? null }),
-		loadAddOnLinks({ orgId, merchantId }),
-	]);
+	const [nodes, links] = await Promise.all([resolveProductAddOnNodes({ orgId, produtoId, channelState }), loadAddOnLinks({ orgId, merchantId })]);
 	return { nodes, links };
 }
 

@@ -4,8 +4,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
-import { resolveAddOnReferencesRules } from "@/lib/products/add-on-rules";
-import { channelAddOnReferences } from "@/lib/products/sales-channels";
+import { projectAddOnReferencesToChannel } from "@/lib/products/sales-channels";
 import { buildChannelCatalogConditions, channelNodePrice, loadChannelState } from "@/lib/products/sales-channels-store";
 import { getValidSaleConditions } from "@/lib/sales/valid-sale";
 import { POS_PRODUCT_ORDERING_DEFAULT, POSProductOrderingEnum, type TPOSProductOrderingEnum } from "@/schemas/enums";
@@ -227,10 +226,11 @@ async function queryProducts({ input, session }: { input: TGetPOSProductsInput; 
 		// validação (validateSaleItemsPricing com canal) vai recalcular.
 		precoVenda: channelNodePrice(channelState, { produtoId: product.id, precoVenda: product.precoVenda }),
 		// Grupos já sob as regras do canal: os mínimos do cadastro só continuam obrigatórios
-		// onde o canal os exige (o balcão pode dispensar; ver channelAddOnReferences).
-		addOnsReferencias: channelAddOnReferences(
-			channelState?.channel,
-			resolveAddOnReferencesRules(product.addOnsReferencias.filter((reference) => reference.grupo.ativo && reference.grupo.opcoes.length > 0)),
+		// onde o canal os exige (o balcão pode dispensar), e as opções vêm com o preço e a
+		// disponibilidade do canal — os mesmos que a validação da venda recalcula.
+		addOnsReferencias: projectAddOnReferencesToChannel(
+			channelState,
+			product.addOnsReferencias.filter((reference) => reference.grupo.ativo && reference.grupo.opcoes.length > 0),
 		),
 		variantes: product.variantes
 			// Linha de variante só restringe dentro de um produto visível (mesma regra do resolver).
@@ -238,9 +238,9 @@ async function queryProducts({ input, session }: { input: TGetPOSProductsInput; 
 			.map((variant) => ({
 				...variant,
 				precoVenda: channelNodePrice(channelState, { produtoId: product.id, produtoVarianteId: variant.id, precoVenda: variant.precoVenda }) ?? 0,
-				addOnsReferencias: channelAddOnReferences(
-					channelState?.channel,
-					resolveAddOnReferencesRules(variant.addOnsReferencias.filter((reference) => reference.grupo.ativo && reference.grupo.opcoes.length > 0)),
+				addOnsReferencias: projectAddOnReferencesToChannel(
+					channelState,
+					variant.addOnsReferencias.filter((reference) => reference.grupo.ativo && reference.grupo.opcoes.length > 0),
 				),
 			})),
 	}));

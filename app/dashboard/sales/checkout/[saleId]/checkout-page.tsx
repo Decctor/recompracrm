@@ -1,5 +1,7 @@
 "use client";
 
+import { modifierPricesDiverge } from "@/lib/sales/sale-item-repricing";
+
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
 import { ConfirmSaleChange } from "@/components/Modals/Sales/ConfirmSaleChange";
 import { DiscountApproval } from "@/components/Modals/Sales/DiscountApproval";
@@ -142,7 +144,9 @@ export default function CheckoutPage({
 				const drift = cartItem.itemId ? driftPorItemId.get(cartItem.itemId) : undefined;
 				if (!drift) return null;
 				if (drift.indisponivel) return drift;
-				const aindaDivergente = Math.abs(cartItem.valorUnitarioFinal - (drift.valorUnitarioAtual ?? 0)) > 0.01;
+				const currentModifierPrices = new Map((drift.modificadoresAtuais ?? []).map((modifier) => [modifier.opcaoId, modifier.valorUnitario]));
+				const modifiersDiverge = modifierPricesDiverge(cartItem.modificadores, currentModifierPrices);
+				const aindaDivergente = modifiersDiverge || Math.abs(cartItem.valorUnitarioFinal - (drift.valorUnitarioAtual ?? 0)) > 0.01;
 				return aindaDivergente ? { ...drift, valorUnitarioSalvo: cartItem.valorUnitarioFinal } : null;
 			})
 			.filter((linha): linha is NonNullable<typeof linha> => linha !== null);
@@ -166,7 +170,7 @@ export default function CheckoutPage({
 				.map((item) => ({
 					itemId: item.itemId,
 					valorUnitarioBase: item.valorUnitarioBaseAtual ?? 0,
-					valorModificadores: item.valorModificadoresAtual ?? 0,
+					modificadores: item.modificadoresAtuais ?? [],
 				})),
 		);
 		toast.success("Preços atualizados com o catálogo.");

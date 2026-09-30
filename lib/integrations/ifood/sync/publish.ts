@@ -184,7 +184,7 @@ export async function publishProductToIfood({
 	// nascem aqui e ganham vínculo na releitura. Um produto com variantes publica N itens que
 	// compartilham os mesmos grupos — o iFood reusa o optionGroup pelo id a partir do segundo.
 	const channelState = await loadChannelState({ orgId, canal: "IFOOD", refExterno: merchantId });
-	const addOnNodes = await resolveProductAddOnNodes({ orgId, produtoId, channel: channelState?.channel ?? null });
+	const addOnNodes = await resolveProductAddOnNodes({ orgId, produtoId, channelState });
 	let addOnLinks = await loadAddOnLinks({ orgId, merchantId });
 
 	for (const node of nodes) {

@@ -1,5 +1,6 @@
 "use client";
 
+import AddOnChannelPrices from "@/components/Modals/Products/AddOns/AddOnChannelPrices";
 import AddOnGroupForm from "@/components/Modals/Products/AddOns/AddOnGroupForm";
 import { validateAddOnGroupFields } from "@/components/Modals/Products/Blocks/AddOns";
 import ResponsiveMenu from "@/components/Utils/ResponsiveMenu";
@@ -9,6 +10,7 @@ import { getErrorMessage } from "@/lib/errors";
 import { deleteProductAddOnReference, updateProductAddOn } from "@/lib/mutations/products";
 import { useProductAddOnById } from "@/lib/queries/products";
 import type { TGetProductAddOnsOutputById, TUpdateProductAddOnInput } from "@/app/api/products/add-ons/route";
+import { useAddOnChannelSettingsState } from "@/state-hooks/use-add-on-channel-settings-state";
 import { useProductAddOnState } from "@/state-hooks/use-product-state";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Package, Unplug } from "lucide-react";
@@ -17,6 +19,8 @@ import { toast } from "sonner";
 
 type ControlProductAddOnProps = {
 	productAddOnId: string;
+	/** Preço por canal é recurso do ERP (a rota exige o módulo); sem ele a seção não aparece. */
+	orgHasERPAccess?: boolean;
 	closeModal: () => void;
 	callbacks?: {
 		onMutate?: (variables: TUpdateProductAddOnInput) => void;
@@ -26,10 +30,11 @@ type ControlProductAddOnProps = {
 	};
 };
 
-export default function ControlProductAddOn({ productAddOnId, closeModal, callbacks }: ControlProductAddOnProps) {
+export default function ControlProductAddOn({ productAddOnId, orgHasERPAccess = false, closeModal, callbacks }: ControlProductAddOnProps) {
 	const queryClient = useQueryClient();
 	const { data: productAddOn, isLoading, error, queryKey } = useProductAddOnById({ productAddOnId });
 	const { state, updateAddOn, addOption, updateOption, removeOption, redefineState } = useProductAddOnState({});
+	const channelSettings = useAddOnChannelSettingsState({ produtoAddOnId: productAddOnId, enabled: orgHasERPAccess });
 
 	useEffect(() => {
 		if (productAddOn) {
@@ -64,6 +69,7 @@ export default function ControlProductAddOn({ productAddOnId, closeModal, callba
 			callbacks?.onSuccess?.();
 			toast.success(data.message);
 			queryClient.invalidateQueries({ queryKey: queryKey });
+			queryClient.invalidateQueries({ queryKey: channelSettings.queryKey });
 			// Shared groups feed every product page that references them.
 			queryClient.invalidateQueries({ queryKey: ["product-by-id"] });
 			closeModal();
@@ -81,7 +87,8 @@ export default function ControlProductAddOn({ productAddOnId, closeModal, callba
 			toast.error("Informe o nome de todas as opções do grupo.");
 			return;
 		}
-		mutate({ productAddOnId, addOn: state });
+		const liveOptionIds = new Set(state.opcoes.filter((opcao) => !opcao.deletar && opcao.id).map((opcao) => opcao.id as string));
+		mutate({ productAddOnId, addOn: state, channelSettings: orgHasERPAccess ? channelSettings.buildPatch(liveOptionIds) : undefined });
 	}
 
 	return (
@@ -100,6 +107,7 @@ export default function ControlProductAddOn({ productAddOnId, closeModal, callba
 		>
 			<div className="flex w-full flex-col gap-3">
 				<AddOnGroupForm state={state} updateAddOn={updateAddOn} addOption={addOption} updateOption={updateOption} removeOption={removeOption} />
+				{orgHasERPAccess ? <AddOnChannelPrices options={state.opcoes} channelSettings={channelSettings} /> : null}
 				{productAddOn ? <LinkedProductsSection productAddOn={productAddOn} addOnQueryKey={queryKey} callbacks={callbacks} /> : null}
 			</div>
 		</ResponsiveMenu>

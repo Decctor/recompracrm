@@ -10,8 +10,19 @@ import {
 import type { TIfoodItemFlatDTO, TIfoodOptionGroupDTO } from "@/lib/integrations/ifood/catalog-types";
 import { resolveIfoodManagementContext } from "@/lib/integrations/ifood/context";
 import { resolveAddOnReferencesRules } from "@/lib/products/add-on-rules";
-import { channelAddOnReferences } from "@/lib/products/sales-channels";
-import { createsMissingOptions, type TCatalogLinkOptionGroupAssociation, type TCatalogLinkSnapshot, type TCatalogLinkSyncPolicy } from "@/schemas/catalog-links";
+import { loadChannelState } from "@/lib/products/sales-channels-store";
+import {
+	channelAddOnReferences,
+	resolveChannelOptionAvailability,
+	resolveChannelOptionPrice,
+	type TChannelOptionOverrides,
+} from "@/lib/products/sales-channels";
+import {
+	createsMissingOptions,
+	type TCatalogLinkOptionGroupAssociation,
+	type TCatalogLinkSnapshot,
+	type TCatalogLinkSyncPolicy,
+} from "@/schemas/catalog-links";
 import type { TIfoodOptionGroupTypeEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
 import { catalogLinks, productAddOnReferences, productAddOns, type TCatalogLinkEntity } from "@/services/drizzle/schema";
@@ -47,6 +58,28 @@ export type TAddOnGroupNode = {
 	opcoes: TAddOnOptionNode[];
 };
 
+/** O que do canal iFood da loja pesa nos complementos: exigência de mínimos e overrides das opções. */
+export type TAddOnChannelState = { channel: { exigirAdicionaisMinimos: boolean }; optionOverrides: TChannelOptionOverrides } | null;
+
+/**
+ * Uma opção como a loja do iFood a vê: preço e disponibilidade do canal. Opção pausada no canal
+ * continua no nó (com `disponivel: false`) — o push a pausa lá em vez de sumir com o vínculo.
+ */
+function toOptionNode(
+	opcao: { id: string; nome: string; codigo: string | null; precoDelta: number; ativo: boolean | null },
+	indice: number,
+	overrides: TChannelOptionOverrides | null | undefined,
+): TAddOnOptionNode {
+	return {
+		opcaoId: opcao.id,
+		nome: opcao.nome,
+		codigo: opcao.codigo,
+		precoDelta: resolveChannelOptionPrice(opcao, overrides),
+		disponivel: resolveChannelOptionAvailability(opcao, overrides),
+		indice,
+	};
+}
+
 /** Tipo de grupo para os que nascem daqui; grupos já existentes no iFood preservam o que têm. */
 const DEFAULT_OPTION_GROUP_TYPE: TIfoodOptionGroupTypeEnum = "SPECIFICATION";
 
@@ -61,18 +94,18 @@ export function normalizeName(value: string | null | undefined) {
 
 /**
  * Os grupos que o produto leva ao iFood, com as regras já resolvidas: override min/max do vínculo
- * produto↔grupo primeiro, política do canal IFOOD depois (`exigirAdicionaisMinimos`). Só referências
- * nível produto — o fluxo por variante ainda não carrega regras próprias — e só grupos com ao menos
- * uma opção viva: o iFood rejeita grupo vazio.
+ * produto↔grupo primeiro, política do canal IFOOD depois (`exigirAdicionaisMinimos`), e as opções com
+ * preço e disponibilidade do canal. Só referências nível produto — o fluxo por variante ainda não
+ * carrega regras próprias — e só grupos com ao menos uma opção viva: o iFood rejeita grupo vazio.
  */
 export async function resolveProductAddOnNodes({
 	orgId,
 	produtoId,
-	channel,
+	channelState,
 }: {
 	orgId: string;
 	produtoId: string;
-	channel: { exigirAdicionaisMinimos: boolean } | null;
+	channelState: TAddOnChannelState;
 }) {
 	const references = await db.query.productAddOnReferences.findMany({
 		where: and(eq(productAddOnReferences.produtoId, produtoId), isNull(productAddOnReferences.produtoVarianteId)),
@@ -85,7 +118,7 @@ export async function resolveProductAddOnNodes({
 	});
 
 	const scoped = references.filter((reference) => reference.grupo.organizacaoId === orgId);
-	const resolved = channelAddOnReferences(channel, resolveAddOnReferencesRules(scoped));
+	const resolved = channelAddOnReferences(channelState?.channel, resolveAddOnReferencesRules(scoped));
 
 	const nodes: TAddOnGroupNode[] = [];
 	resolved.forEach((reference, indice) => {
@@ -97,21 +130,25 @@ export async function resolveProductAddOnNodes({
 			minOpcoes: reference.grupo.minOpcoes,
 			maxOpcoes: Math.max(reference.grupo.maxOpcoes, 1),
 			indice,
-			opcoes: reference.grupo.opcoes.map((opcao, indiceOpcao) => ({
-				opcaoId: opcao.id,
-				nome: opcao.nome,
-				codigo: opcao.codigo,
-				precoDelta: opcao.precoDelta,
-				disponivel: opcao.ativo !== false,
-				indice: indiceOpcao,
-			})),
+			opcoes: reference.grupo.opcoes.map((opcao, indiceOpcao) => toOptionNode(opcao, indiceOpcao, channelState?.optionOverrides)),
 		});
 	});
 	return nodes;
 }
 
-/** Um grupo da org visto sem produto: regras do próprio grupo, sem canal. Para o push do grupo. */
-export async function resolveAddOnGroupNode({ orgId, produtoAddOnId }: { orgId: string; produtoAddOnId: string }): Promise<TAddOnGroupNode | null> {
+/**
+ * Um grupo da org visto sem produto: regras do próprio grupo. Para o push do grupo. Com o estado do
+ * canal da loja, as opções vêm com o preço e a disponibilidade de lá; sem ele, os valores do cadastro.
+ */
+export async function resolveAddOnGroupNode({
+	orgId,
+	produtoAddOnId,
+	channelState = null,
+}: {
+	orgId: string;
+	produtoAddOnId: string;
+	channelState?: TAddOnChannelState;
+}): Promise<TAddOnGroupNode | null> {
 	const group = await db.query.productAddOns.findFirst({
 		where: and(eq(productAddOns.id, produtoAddOnId), eq(productAddOns.organizacaoId, orgId)),
 		with: { opcoes: { where: (fields, { isNull: isNullOp }) => isNullOp(fields.dataExclusao), orderBy: (fields, { asc }) => asc(fields.nome) } },
@@ -124,14 +161,7 @@ export async function resolveAddOnGroupNode({ orgId, produtoAddOnId }: { orgId: 
 		minOpcoes: group.minOpcoes,
 		maxOpcoes: Math.max(group.maxOpcoes, 1),
 		indice: 0,
-		opcoes: group.opcoes.map((opcao, indice) => ({
-			opcaoId: opcao.id,
-			nome: opcao.nome,
-			codigo: opcao.codigo,
-			precoDelta: opcao.precoDelta,
-			disponivel: opcao.ativo !== false,
-			indice,
-		})),
+		opcoes: group.opcoes.map((opcao, indice) => toOptionNode(opcao, indice, channelState?.optionOverrides)),
 	};
 }
 
@@ -485,8 +515,6 @@ export async function pushAddOnGroupToLinkedMerchants({ orgId, produtoAddOnId }:
 	});
 	if (rows.length === 0) return { enviados: 0, erros: 0 };
 
-	const node = await resolveAddOnGroupNode({ orgId, produtoAddOnId });
-	const optionById = new Map((node?.opcoes ?? []).map((opcao) => [opcao.opcaoId, opcao]));
 	let enviados = 0;
 	let erros = 0;
 
@@ -494,9 +522,14 @@ export async function pushAddOnGroupToLinkedMerchants({ orgId, produtoAddOnId }:
 	for (const merchantId of merchantIds) {
 		const groupLinks = rows.filter((row) => row.merchantId === merchantId && row.tipo === "ADD_ON");
 		const optionLinks = rows.filter((row) => row.merchantId === merchantId && row.tipo === "ADD_ON_OPCAO" && row.externoOptionId);
+		// Um nó por loja: preço e disponibilidade das opções vêm do canal iFood DESTA loja.
+		const channelState = await loadChannelState({ orgId, canal: "IFOOD", refExterno: merchantId });
+		const node = await resolveAddOnGroupNode({ orgId, produtoAddOnId, channelState });
+		const optionById = new Map((node?.opcoes ?? []).map((opcao) => [opcao.opcaoId, opcao]));
 
 		if (!node) {
-			for (const link of [...groupLinks, ...optionLinks]) await markCatalogLinkError({ linkId: link.id, erro: "O grupo interno deste vínculo não existe mais." });
+			for (const link of [...groupLinks, ...optionLinks])
+				await markCatalogLinkError({ linkId: link.id, erro: "O grupo interno deste vínculo não existe mais." });
 			erros += groupLinks.length + optionLinks.length;
 			continue;
 		}
@@ -567,18 +600,28 @@ export async function pushAddOnGroupToLinkedMerchants({ orgId, produtoAddOnId }:
 		const failed = new Set<string>();
 		for (const batch of chunks(priceUpdates, OPTION_PATCH_CHUNK)) {
 			try {
-				await patchIfoodOptionsPrice(client, merchantId, batch.map(({ optionId, preco }) => ({ optionId, preco })));
+				await patchIfoodOptionsPrice(
+					client,
+					merchantId,
+					batch.map(({ optionId, preco }) => ({ optionId, preco })),
+				);
 			} catch (error) {
 				for (const entry of batch) failed.add(entry.link.id);
-				for (const entry of batch) await markCatalogLinkError({ linkId: entry.link.id, erro: error instanceof Error ? error.message : "Falha ao enviar preço." });
+				for (const entry of batch)
+					await markCatalogLinkError({ linkId: entry.link.id, erro: error instanceof Error ? error.message : "Falha ao enviar preço." });
 			}
 		}
 		for (const batch of chunks(statusUpdates, OPTION_PATCH_CHUNK)) {
 			try {
-				await patchIfoodOptionsStatus(client, merchantId, batch.map(({ optionId, status }) => ({ optionId, status })));
+				await patchIfoodOptionsStatus(
+					client,
+					merchantId,
+					batch.map(({ optionId, status }) => ({ optionId, status })),
+				);
 			} catch (error) {
 				for (const entry of batch) failed.add(entry.link.id);
-				for (const entry of batch) await markCatalogLinkError({ linkId: entry.link.id, erro: error instanceof Error ? error.message : "Falha ao enviar status." });
+				for (const entry of batch)
+					await markCatalogLinkError({ linkId: entry.link.id, erro: error instanceof Error ? error.message : "Falha ao enviar status." });
 			}
 		}
 		for (const [linkId, snapshot] of settled) {

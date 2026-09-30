@@ -16,7 +16,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Check, Layers, ListChecks, Package, PencilIcon, Plus, X } from "lucide-react";
 import { useState } from "react";
 
-export default function ProductsAddOnsView() {
+export default function ProductsAddOnsView({ orgHasERPAccess }: { orgHasERPAccess: boolean }) {
 	const queryClient = useQueryClient();
 	const [newAddOnModalIsOpen, setNewAddOnModalIsOpen] = useState<boolean>(false);
 	const [editingAddOnId, setEditingAddOnId] = useState<string | null>(null);
@@ -66,6 +66,7 @@ export default function ProductsAddOnsView() {
 			{editingAddOnId ? (
 				<ControlProductAddOn
 					productAddOnId={editingAddOnId}
+					orgHasERPAccess={orgHasERPAccess}
 					closeModal={() => setEditingAddOnId(null)}
 					callbacks={{ onMutate: handleOnMutate, onSettled: handleOnSettled }}
 				/>

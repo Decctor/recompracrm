@@ -126,7 +126,8 @@ export async function reconcileMerchantCatalog({ orgId, merchantId }: { orgId: s
 		),
 	});
 	const addOnLinks = await loadAddOnLinks({ orgId, merchantId });
-	if (links.length === 0 && addOnLinks.groups.size === 0 && addOnLinks.options.size === 0) return { verificados: 0, sincronizados: 0, divergentes: 0, ausentes: 0, propagando: 0 };
+	if (links.length === 0 && addOnLinks.groups.size === 0 && addOnLinks.options.size === 0)
+		return { verificados: 0, sincronizados: 0, divergentes: 0, ausentes: 0, propagando: 0 };
 
 	const context = await resolveIfoodManagementContext({ organizacaoId: orgId, merchantId });
 	const channelState = await loadChannelState({ orgId, canal: "IFOOD", refExterno: merchantId });
@@ -144,7 +145,7 @@ export async function reconcileMerchantCatalog({ orgId, merchantId }: { orgId: s
 	async function addOnNodesFor(produtoId: string) {
 		const cached = addOnNodesByProduct.get(produtoId);
 		if (cached) return cached;
-		const nodes = await resolveProductAddOnNodes({ orgId, produtoId, channel: channelState?.channel ?? null }).catch(() => [] as TAddOnGroupNode[]);
+		const nodes = await resolveProductAddOnNodes({ orgId, produtoId, channelState }).catch(() => [] as TAddOnGroupNode[]);
 		addOnNodesByProduct.set(produtoId, nodes);
 		return nodes;
 	}
@@ -195,7 +196,11 @@ export async function reconcileMerchantCatalog({ orgId, merchantId }: { orgId: s
 			if (desejada.length > 0 || (link.ultimoSnapshot?.gruposComplementos?.length ?? 0) > 0) {
 				const flat: TIfoodItemFlatDTO | null = await getIfoodItemFlat(context.client, merchantId, link.externoItemId).catch(() => null);
 				if (flat) {
-					const knownGroupIds = new Set(allGroupLinks(addOnLinks).map((groupLink) => groupLink.externoOptionGroupId).filter(Boolean));
+					const knownGroupIds = new Set(
+						allGroupLinks(addOnLinks)
+							.map((groupLink) => groupLink.externoOptionGroupId)
+							.filter(Boolean),
+					);
 					const flatGroupIds = new Set(flat.gruposComplementos.map((grupo) => grupo.id).filter((id): id is string => !!id));
 					association = {
 						// Com cópias por item, o desejado é a cópia que ESTE item usa (ids do flat).
@@ -242,7 +247,7 @@ export async function reconcileMerchantCatalog({ orgId, merchantId }: { orgId: s
 			const groupNodes = new Map<string, TAddOnGroupNode | null>();
 			async function groupNodeFor(produtoAddOnId: string) {
 				if (groupNodes.has(produtoAddOnId)) return groupNodes.get(produtoAddOnId) ?? null;
-				const node = await resolveAddOnGroupNode({ orgId, produtoAddOnId }).catch(() => null);
+				const node = await resolveAddOnGroupNode({ orgId, produtoAddOnId, channelState }).catch(() => null);
 				groupNodes.set(produtoAddOnId, node);
 				return node;
 			}
@@ -365,7 +370,13 @@ export async function reconcileMerchantCatalog({ orgId, merchantId }: { orgId: s
 		}
 	}
 
-	return { verificados: links.length + allGroupLinks(addOnLinks).length + allOptionLinks(addOnLinks).length, sincronizados, divergentes, ausentes, propagando };
+	return {
+		verificados: links.length + allGroupLinks(addOnLinks).length + allOptionLinks(addOnLinks).length,
+		sincronizados,
+		divergentes,
+		ausentes,
+		propagando,
+	};
 }
 
 /**
