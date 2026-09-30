@@ -12,5 +12,5 @@ export default async function PartnerDashboardLayout({ children }: { children: R
 	const session = await getCurrentSession();
 	if (!session) redirect(`/auth/signin?redirectTo=${encodeURIComponent("/partner-dashboard")}`);
 
-	return <main className="w-full h-full flex flex-col p-6">{children}</main>;
+	return <div className="flex min-h-dvh w-full flex-col">{children}</div>;
 }
