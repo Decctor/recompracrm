@@ -14,6 +14,10 @@ import type {
 	TUpdateAdminPlatformPartnerInput,
 	TUpdateAdminPlatformPartnerOutput,
 } from "@/app/api/admin/platform-partners/route";
+import type {
+	TCreateAdminPlatformPartnerPayoutReceiptInput,
+	TCreateAdminPlatformPartnerPayoutReceiptOutput,
+} from "@/app/api/admin/platform-partners/payouts/receipt/route";
 import type { TCreatePlatformPartnerDocumentInput, TCreatePlatformPartnerDocumentOutput } from "@/app/api/platform-partner/documents/route";
 import type { TUpdatePlatformPartnerMeInput, TUpdatePlatformPartnerMeOutput } from "@/app/api/platform-partner/me/route";
 import type { TCreatePlatformPartnerOnboardingInput, TCreatePlatformPartnerOnboardingOutput } from "@/app/api/platform-partner/onboarding/route";
@@ -65,5 +69,13 @@ export async function createAdminPlatformPartnerPayout(input: TCreateAdminPlatfo
 
 export async function updateAdminPlatformPartnerPayout(input: TUpdateAdminPlatformPartnerPayoutInput) {
 	const { data } = await axios.put<TUpdateAdminPlatformPartnerPayoutOutput>("/api/admin/platform-partners/payouts", input);
+	return data;
+}
+
+export async function createAdminPlatformPartnerPayoutReceipt(input: TCreateAdminPlatformPartnerPayoutReceiptInput) {
+	const formData = new FormData();
+	formData.set("payoutId", input.payoutId);
+	formData.set("file", input.file);
+	const { data } = await axios.post<TCreateAdminPlatformPartnerPayoutReceiptOutput>("/api/admin/platform-partners/payouts/receipt", formData);
 	return data;
 }

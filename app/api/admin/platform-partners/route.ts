@@ -130,6 +130,7 @@ const UpdateAdminPlatformPartnerInputSchema = z.object({
 			codigo: z.string({ invalid_type_error: "Tipo invalido para codigo do parceiro." }).optional(),
 			status: z.enum(["PENDENTE_APROVACAO", "ATIVO", "SUSPENSO", "REJEITADO"]).optional(),
 			observacoesInternas: z.string({ invalid_type_error: "Tipo invalido para observacoes internas." }).optional().nullable(),
+			motivoRejeicao: z.string({ invalid_type_error: "Tipo inválido para o motivo da rejeição." }).trim().max(1000).optional().nullable(),
 		})
 		.optional(),
 });
@@ -142,6 +143,8 @@ async function updateAdminPlatformPartner({ input, adminUserId }: { input: TUpda
 	if (!existingPartner) throw new createHttpError.NotFound("Parceiro nao encontrado.");
 
 	const status = input.partner?.status;
+	// O parceiro lê o motivo na tela de cadastro não aprovado: rejeitar sem dizer o que corrigir trava o reenvio.
+	if (status === "REJEITADO" && !input.partner?.motivoRejeicao) throw new createHttpError.BadRequest("Informe o motivo da rejeição para o parceiro.");
 	const [updatedPartner] = await db
 		.update(platformPartners)
 		.set({
@@ -149,6 +152,7 @@ async function updateAdminPlatformPartner({ input, adminUserId }: { input: TUpda
 			codigo: input.partner?.codigo ? input.partner.codigo.trim().toUpperCase() : undefined,
 			dataAprovacao: status === "ATIVO" && existingPartner.status !== "ATIVO" ? new Date() : existingPartner.dataAprovacao,
 			aprovadoPorId: status === "ATIVO" && existingPartner.status !== "ATIVO" ? adminUserId : existingPartner.aprovadoPorId,
+			motivoRejeicao: status === "REJEITADO" ? input.partner?.motivoRejeicao : status ? null : undefined,
 			dataAtualizacao: new Date(),
 		})
 		.where(eq(platformPartners.id, input.partnerId))

@@ -17,6 +17,7 @@ import {
 } from "@/lib/mutations/platform-partnerships";
 import {
 	fetchAdminPlatformPartnerDocumentUrl,
+	fetchAdminPlatformPartnerPayoutReceiptUrl,
 	useAdminPlatformPartnerCommissions,
 	useAdminPlatformPartnerPayouts,
 	useAdminPlatformPartnerReferrals,
@@ -25,6 +26,10 @@ import {
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Banknote, Building2, CheckCircle2, FileText, Handshake, ReceiptText, Search, ShieldCheck, ShieldX, Users } from "lucide-react";
 import type React from "react";
+import { useState } from "react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ControlAdminPlatformPartnerPayout } from "@/components/Modals/Internal/PlatformPartners/ControlAdminPlatformPartnerPayout";
+import { RejectAdminPlatformPartner } from "@/components/Modals/Internal/PlatformPartners/RejectAdminPlatformPartner";
 import { toast } from "sonner";
 
 function centsToMoney(value: number) {
@@ -33,11 +38,11 @@ function centsToMoney(value: number) {
 
 const PERSON_TYPE_LABEL: Record<string, string> = { PESSOA_FISICA: "PF", PESSOA_JURIDICA: "PJ" };
 
-async function openPartnerDocument(partnerId: string, tipo: "cpf" | "cnpj") {
+async function openSignedUrl(getUrl: () => Promise<string>) {
 	// Abre a aba no clique (antes do await) para o navegador não bloquear o pop-up.
 	const tab = window.open("", "_blank");
 	try {
-		const url = await fetchAdminPlatformPartnerDocumentUrl({ partnerId, tipo });
+		const url = await getUrl();
 		if (tab) tab.location.href = url;
 		else window.location.href = url;
 	} catch (error) {
@@ -48,6 +53,10 @@ async function openPartnerDocument(partnerId: string, tipo: "cpf" | "cnpj") {
 
 export default function PlatformPartnershipsAdminPage() {
 	const queryClient = useQueryClient();
+	const [rejectingPartner, setRejectingPartner] = useState<{ id: string; nome: string } | null>(null);
+	const [controlledPayoutId, setControlledPayoutId] = useState<string | null>(null);
+	const [commissionFilter, setCommissionFilter] = useState<"PENDENTE" | "APROVADA" | "TODAS">("PENDENTE");
+	const [selectedCommissionIds, setSelectedCommissionIds] = useState<string[]>([]);
 	const partnersQuery = useAdminPlatformPartners({ initialParams: { page: 1, search: "", status: null } });
 	const referralsQuery = useAdminPlatformPartnerReferrals({});
 	const commissionsQuery = useAdminPlatformPartnerCommissions({});
@@ -73,6 +82,7 @@ export default function PlatformPartnershipsAdminPage() {
 		mutationFn: updateAdminPlatformPartnerCommission,
 		onSuccess: async (data) => {
 			toast.success(data.message);
+			setSelectedCommissionIds([]);
 			await invalidateAll();
 		},
 		onError: (error) => toast.error(getErrorMessage(error)),
@@ -181,6 +191,9 @@ export default function PlatformPartnershipsAdminPage() {
 												{partner.chavePix}
 												{partner.dataConfirmacaoTitularPix ? ` · titular confirmado em ${formatDateAsLocale(partner.dataConfirmacaoTitularPix)}` : ""}
 											</p>
+											{partner.status === "REJEITADO" && partner.motivoRejeicao ? (
+												<p className="text-xs text-destructive">Motivo enviado ao parceiro: {partner.motivoRejeicao}</p>
+											) : null}
 											<p className="text-xs text-muted-foreground">
 												{partner.referrals.length} organizacoes, {partner.commissions.length} comissoes, {partner.payouts.length} payouts
 											</p>
@@ -190,7 +203,13 @@ export default function PlatformPartnershipsAdminPage() {
 										{(["cpf", "cnpj"] as const)
 											.filter((tipo) => partner.arquivos[tipo])
 											.map((tipo) => (
-												<Button key={tipo} size="sm" variant="outline" className="gap-2" onClick={() => openPartnerDocument(partner.id, tipo)}>
+												<Button
+													key={tipo}
+													size="sm"
+													variant="outline"
+													className="gap-2"
+													onClick={() => openSignedUrl(() => fetchAdminPlatformPartnerDocumentUrl({ partnerId: partner.id, tipo }))}
+												>
 													<FileText className="h-4 w-4" />
 													Documento {tipo.toUpperCase()}
 												</Button>
@@ -202,12 +221,7 @@ export default function PlatformPartnershipsAdminPage() {
 											</Button>
 										) : null}
 										{partner.status === "PENDENTE_APROVACAO" ? (
-											<Button
-												size="sm"
-												variant="outline"
-												className="gap-2"
-												onClick={() => updatePartnerMutation.mutate({ partnerId: partner.id, partner: { status: "REJEITADO" } })}
-											>
+											<Button size="sm" variant="outline" className="gap-2" onClick={() => setRejectingPartner({ id: partner.id, nome: partner.nome })}>
 												<ShieldX className="h-4 w-4" />
 												Rejeitar
 											</Button>
@@ -246,39 +260,105 @@ export default function PlatformPartnershipsAdminPage() {
 					</ListShell>
 				</TabsContent>
 
-				<TabsContent value="commissions" className="mt-4">
-					<ListShell empty={commissions.length === 0} emptyText="Nenhuma comissao.">
-						{commissions.map((commission) => (
-							<Row key={commission.id}>
-								<div>
-									<p className="font-medium">{commission.partner.nome}</p>
-									<p className="text-xs text-muted-foreground">
-										{commission.organizacao?.nome ?? "Organizacao excluida"} - invoice #{commission.numeroInvoiceAssinatura}
-									</p>
-								</div>
-								<Badge variant="outline">{commission.status}</Badge>
-								<p className="text-sm font-semibold">{centsToMoney(commission.valorComissaoCentavos)}</p>
-								<div className="flex justify-end gap-2">
-									{commission.status === "PENDENTE" ? (
-										<Button
-											size="sm"
-											variant="outline"
-											className="gap-2"
-											onClick={() => updateCommissionMutation.mutate({ commissionId: commission.id, status: "APROVADA" })}
-										>
-											<CheckCircle2 className="h-4 w-4" />
-											Aprovar
-										</Button>
-									) : null}
-									{commission.status !== "PAGA" ? (
-										<Button size="sm" variant="ghost" onClick={() => updateCommissionMutation.mutate({ commissionId: commission.id, status: "CANCELADA" })}>
-											Cancelar
-										</Button>
-									) : null}
-								</div>
-							</Row>
+				<TabsContent value="commissions" className="mt-4 flex flex-col gap-3">
+					<div className="flex flex-wrap items-center gap-2">
+						{(["PENDENTE", "APROVADA", "TODAS"] as const).map((filter) => (
+							<Button
+								key={filter}
+								size="sm"
+								variant={commissionFilter === filter ? "default" : "outline"}
+								onClick={() => {
+									setCommissionFilter(filter);
+									setSelectedCommissionIds([]);
+								}}
+							>
+								{filter === "PENDENTE" ? "Pendentes" : filter === "APROVADA" ? "Aprovadas" : "Todas"} (
+								{filter === "TODAS" ? commissions.length : commissions.filter((commission) => commission.status === filter).length})
+							</Button>
 						))}
-					</ListShell>
+						{selectedCommissionIds.length > 0 ? (
+							<div className="ml-auto flex gap-2">
+								<Button
+									size="sm"
+									className="gap-2"
+									disabled={updateCommissionMutation.isPending}
+									onClick={() => updateCommissionMutation.mutate({ commissionIds: selectedCommissionIds, status: "APROVADA" })}
+								>
+									<CheckCircle2 className="h-4 w-4" />
+									Aprovar {selectedCommissionIds.length}
+								</Button>
+								<Button size="sm" variant="ghost" onClick={() => setSelectedCommissionIds([])}>
+									Limpar seleção
+								</Button>
+							</div>
+						) : null}
+					</div>
+					{(() => {
+						const visibleCommissions = commissions.filter((commission) => commissionFilter === "TODAS" || commission.status === commissionFilter);
+						const selectable = visibleCommissions.filter((commission) => commission.status === "PENDENTE");
+						const allSelected = selectable.length > 0 && selectable.every((commission) => selectedCommissionIds.includes(commission.id));
+						return (
+							<ListShell empty={visibleCommissions.length === 0} emptyText="Nenhuma comissao neste filtro.">
+								{selectable.length > 0 ? (
+									<label className="flex items-center gap-3 border-b bg-muted/40 px-4 py-2 text-xs font-semibold text-muted-foreground">
+										<Checkbox
+											checked={allSelected}
+											onCheckedChange={(checked) => setSelectedCommissionIds(checked === true ? selectable.map((commission) => commission.id) : [])}
+										/>
+										Selecionar todas as pendentes ({selectable.length})
+									</label>
+								) : null}
+								{visibleCommissions.map((commission) => (
+									<Row key={commission.id}>
+										<div className="flex items-start gap-3">
+											{commission.status === "PENDENTE" ? (
+												<Checkbox
+													className="mt-1"
+													checked={selectedCommissionIds.includes(commission.id)}
+													onCheckedChange={(checked) =>
+														setSelectedCommissionIds((previous) =>
+															checked === true ? [...previous, commission.id] : previous.filter((id) => id !== commission.id),
+														)
+													}
+												/>
+											) : null}
+											<div>
+												<p className="font-medium">{commission.partner.nome}</p>
+												<p className="text-xs text-muted-foreground">
+													{commission.organizacao?.nome ?? "Organizacao excluida"} - invoice #{commission.numeroInvoiceAssinatura} - elegível em{" "}
+													{formatDateAsLocale(commission.dataElegibilidade)}
+												</p>
+											</div>
+										</div>
+										<Badge variant="outline">{commission.status}</Badge>
+										<p className="text-sm font-semibold">{centsToMoney(commission.valorComissaoCentavos)}</p>
+										<div className="flex justify-end gap-2">
+											{commission.status === "PENDENTE" ? (
+												<Button
+													size="sm"
+													variant="outline"
+													className="gap-2"
+													onClick={() => updateCommissionMutation.mutate({ commissionIds: [commission.id], status: "APROVADA" })}
+												>
+													<CheckCircle2 className="h-4 w-4" />
+													Aprovar
+												</Button>
+											) : null}
+											{commission.status !== "PAGA" && commission.status !== "CANCELADA" ? (
+												<Button
+													size="sm"
+													variant="ghost"
+													onClick={() => updateCommissionMutation.mutate({ commissionIds: [commission.id], status: "CANCELADA" })}
+												>
+													Cancelar
+												</Button>
+											) : null}
+										</div>
+									</Row>
+								))}
+							</ListShell>
+						);
+					})()}
 				</TabsContent>
 
 				<TabsContent value="payouts" className="mt-4">
@@ -289,16 +369,51 @@ export default function PlatformPartnershipsAdminPage() {
 									<p className="font-medium">{payout.partner.nome}</p>
 									<p className="text-xs text-muted-foreground">
 										{formatDateAsLocale(payout.competenciaInicio)} - {formatDateAsLocale(payout.competenciaFim)}
+										{payout.dataPrevista ? ` · previsto ${formatDateAsLocale(payout.dataPrevista)}` : ""}
+										{payout.dataPagamento ? ` · pago ${formatDateAsLocale(payout.dataPagamento)}` : ""}
 									</p>
+									<p className="text-xs text-muted-foreground">PIX {payout.chavePixSnapshot ?? "—"}</p>
 								</div>
 								<Badge variant="outline">{payout.status}</Badge>
 								<p className="text-sm font-semibold">{centsToMoney(payout.valorTotalCentavos)}</p>
-								<p className="text-sm text-muted-foreground">{payout.chavePixSnapshot}</p>
+								<div className="flex flex-wrap justify-end gap-2">
+									{payout.comprovanteUrl ? (
+										<Button
+											size="sm"
+											variant="outline"
+											className="gap-2"
+											onClick={() => openSignedUrl(() => fetchAdminPlatformPartnerPayoutReceiptUrl({ payoutId: payout.id }))}
+										>
+											<FileText className="h-4 w-4" />
+											Ver comprovante
+										</Button>
+									) : null}
+									{payout.status === "APROVADO" ? (
+										<Button size="sm" className="gap-2" onClick={() => setControlledPayoutId(payout.id)}>
+											<Banknote className="h-4 w-4" />
+											Marcar como pago
+										</Button>
+									) : payout.status === "PAGO" ? (
+										<Button size="sm" variant="ghost" onClick={() => setControlledPayoutId(payout.id)}>
+											{payout.comprovanteUrl ? "Trocar comprovante" : "Anexar comprovante"}
+										</Button>
+									) : null}
+								</div>
 							</Row>
 						))}
 					</ListShell>
 				</TabsContent>
 			</Tabs>
+
+			{rejectingPartner ? (
+				<RejectAdminPlatformPartner partner={rejectingPartner} closeModal={() => setRejectingPartner(null)} callbacks={{ onSuccess: invalidateAll }} />
+			) : null}
+			{(() => {
+				const payout = payouts.find((item) => item.id === controlledPayoutId);
+				return payout ? (
+					<ControlAdminPlatformPartnerPayout payout={payout} closeModal={() => setControlledPayoutId(null)} callbacks={{ onSuccess: invalidateAll }} />
+				) : null;
+			})()}
 		</div>
 	);
 }

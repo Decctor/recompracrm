@@ -34,6 +34,9 @@ export async function getPartnerByUserId(userId: string) {
 			chavePixTipo: true,
 			mensagemDivulgacao: true,
 			dataCartaoVisualizado: true,
+			motivoRejeicao: true,
+			alteracaoSolicitada: true,
+			dataSolicitacaoAlteracao: true,
 			dataAprovacao: true,
 			dataInsercao: true,
 		},
@@ -205,10 +208,12 @@ export async function getPartnerPayoutDetail({ partnerId, payoutId }: { partnerI
 		columns: { nome: true, cpfCnpj: true, chavePix: true, chavePixTipo: true },
 	});
 
-	const { chavePixSnapshot, commissions, ...rest } = payout;
+	const { chavePixSnapshot, commissions, comprovanteUrl, ...rest } = payout;
 	const chavePix = chavePixSnapshot ?? partner?.chavePix ?? null;
 	return {
 		...rest,
+		// O caminho do comprovante não sai daqui: o parceiro abre por /api/platform-partner/payouts/receipt.
+		temComprovante: !!comprovanteUrl,
 		parceiroNome: partner?.nome ?? null,
 		// O snapshot pode ser uma chave antiga: o tipo cadastrado só vale se for a mesma chave.
 		chavePixMascarada: chavePix

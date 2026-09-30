@@ -63,6 +63,7 @@ async function createPlatformPartnerOnboarding({ input, userId }: { input: TCrea
 			.set({
 				...partnerData,
 				status: existingPartner.status === "REJEITADO" ? "PENDENTE_APROVACAO" : existingPartner.status,
+				motivoRejeicao: null,
 				dataAtualizacao: now,
 			})
 			.where(eq(platformPartners.id, existingPartner.id))

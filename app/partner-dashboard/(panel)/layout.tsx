@@ -15,7 +15,7 @@ export default async function PartnerPanelLayout({ children }: { children: React
 
 	const partner = await getPartnerByUserId(session.user.id);
 	if (!partner) redirect("/partner-dashboard/onboarding");
-	if (partner.status !== "ATIVO") return <PartnerStatusScreen status={partner.status} nome={partner.nome} />;
+	if (partner.status !== "ATIVO") return <PartnerStatusScreen status={partner.status} nome={partner.nome} motivoRejeicao={partner.motivoRejeicao} />;
 	if (!partner.dataCartaoVisualizado) {
 		return (
 			<CardIssuedScreen

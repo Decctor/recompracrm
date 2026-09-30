@@ -1,3 +1,4 @@
+import type { TGetAdminPlatformPartnerPayoutReceiptOutput } from "@/app/api/admin/platform-partners/payouts/receipt/route";
 import type { TGetAdminPlatformPartnerDocumentOutput } from "@/app/api/admin/platform-partners/documents/route";
 import type { TGetAdminPlatformPartnerCommissionsOutput } from "@/app/api/admin/platform-partners/commissions/route";
 import type { TGetAdminPlatformPartnerPayoutsOutput } from "@/app/api/admin/platform-partners/payouts/route";
@@ -182,4 +183,13 @@ export function usePlatformPartnerCodeValidation({ codigo }: { codigo: string })
 		queryKey,
 		isDebouncing: debounced.codigo !== codigo.trim().toUpperCase(),
 	};
+}
+
+/** URL assinada (curta) do comprovante de um payout, para o admin conferir. */
+export async function fetchAdminPlatformPartnerPayoutReceiptUrl({ payoutId }: { payoutId: string }) {
+	const searchParams = new URLSearchParams({ payoutId });
+	const { data } = await axios.get<TGetAdminPlatformPartnerPayoutReceiptOutput>(
+		`/api/admin/platform-partners/payouts/receipt?${searchParams.toString()}`,
+	);
+	return data.data.url;
 }

@@ -157,9 +157,9 @@ export default function PartnerPayoutPage({ payoutId }: { payoutId: string }) {
 				</PanelCard>
 
 				<div className="grid grid-cols-2 gap-2">
-					{payout.comprovanteUrl ? (
+					{payout.temComprovante ? (
 						<a
-							href={payout.comprovanteUrl}
+							href={`/api/platform-partner/payouts/receipt?id=${encodeURIComponent(payout.id)}`}
 							target="_blank"
 							rel="noreferrer"
 							className="flex h-11 items-center justify-center gap-2 rounded-[18px] bg-primary text-sm font-extrabold text-primary-foreground shadow-[0_4px_12px_rgba(0,0,0,0.06),0_1px_2px_rgba(0,0,0,0.04)] transition-colors hover:bg-primary/90"

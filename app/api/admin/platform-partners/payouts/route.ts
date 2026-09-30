@@ -156,6 +156,10 @@ async function updateAdminPlatformPartnerPayout({ input }: { input: TUpdateAdmin
 		},
 	});
 	if (!payout) throw new createHttpError.NotFound("Payout nao encontrado.");
+	if (payout.status === "PAGO" && input.status !== "PAGO") throw new createHttpError.BadRequest("Payout já pago não volta de status.");
+	if (input.status === "PAGO" && payout.status !== "APROVADO" && payout.status !== "PAGO") {
+		throw new createHttpError.BadRequest("Só um payout aprovado pode ser marcado como pago.");
+	}
 
 	await db.transaction(async (tx) => {
 		await tx

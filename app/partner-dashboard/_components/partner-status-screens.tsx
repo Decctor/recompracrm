@@ -56,7 +56,7 @@ const STATUS_CONTENT: Record<
 };
 
 /** Telas de quem ainda não tem painel: em análise, suspenso ou não aprovado. */
-export function PartnerStatusScreen({ status, nome }: { status: string; nome: string }) {
+export function PartnerStatusScreen({ status, nome, motivoRejeicao = null }: { status: string; nome: string; motivoRejeicao?: string | null }) {
 	const content = STATUS_CONTENT[status] ?? {
 		tone: "neutral" as const,
 		label: status,
@@ -87,6 +87,12 @@ export function PartnerStatusScreen({ status, nome }: { status: string; nome: st
 					<Pill tone={content.tone}>{content.label}</Pill>
 					<h1 className="text-[28px] leading-[1.15] font-extrabold tracking-[-0.015em]">{content.title}</h1>
 					<p className="text-[15px] leading-relaxed text-muted-foreground">{content.text}</p>
+					{status === "REJEITADO" && motivoRejeicao ? (
+						<div className="flex flex-col gap-1 rounded-[18px] bg-destructive-surface px-4 py-3.5 text-destructive-surface-foreground">
+							<span className="text-[11px] font-extrabold tracking-[0.08em] uppercase">O que corrigir</span>
+							<p className="text-sm leading-normal">{motivoRejeicao}</p>
+						</div>
+					) : null}
 				</div>
 				{content.action ? (
 					<Link

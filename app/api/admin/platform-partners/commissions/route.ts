@@ -2,7 +2,7 @@ import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { db } from "@/services/drizzle";
 import { platformPartnerCommissions } from "@/services/drizzle/schema";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray, ne } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import z from "zod";
@@ -51,8 +51,11 @@ async function getAdminPlatformPartnerCommissions({ input }: { input: TGetAdminP
 export type TGetAdminPlatformPartnerCommissionsOutput = Awaited<ReturnType<typeof getAdminPlatformPartnerCommissions>>;
 
 const UpdateAdminPlatformPartnerCommissionInputSchema = z.object({
-	commissionId: z.string({ required_error: "ID da comissao nao informado.", invalid_type_error: "Tipo invalido para ID da comissao." }),
-	status: z.enum(["PENDENTE", "APROVADA", "CANCELADA", "PAGA"]),
+	commissionIds: z
+		.array(z.string({ invalid_type_error: "Tipo invalido para ID da comissao." }), { required_error: "Comissões não informadas." })
+		.min(1, "Selecione ao menos uma comissão."),
+	// PAGA só acontece pelo payout; aqui o admin aprova, cancela ou volta para pendente.
+	status: z.enum(["PENDENTE", "APROVADA", "CANCELADA"]),
 });
 export type TUpdateAdminPlatformPartnerCommissionInput = z.infer<typeof UpdateAdminPlatformPartnerCommissionInputSchema>;
 
@@ -63,22 +66,23 @@ async function updateAdminPlatformPartnerCommission({
 	input: TUpdateAdminPlatformPartnerCommissionInput;
 	adminUserId: string;
 }) {
-	const [updatedCommission] = await db
+	// Comissão paga não muda de status por aqui: já saiu no PIX.
+	const updated = await db
 		.update(platformPartnerCommissions)
 		.set({
 			status: input.status,
 			dataAprovacao: input.status === "APROVADA" ? new Date() : undefined,
 			aprovadoPorId: input.status === "APROVADA" ? adminUserId : undefined,
 		})
-		.where(eq(platformPartnerCommissions.id, input.commissionId))
+		.where(and(inArray(platformPartnerCommissions.id, input.commissionIds), ne(platformPartnerCommissions.status, "PAGA")))
 		.returning({ id: platformPartnerCommissions.id });
-	if (!updatedCommission) throw new createHttpError.NotFound("Comissao nao encontrada.");
+	if (updated.length === 0) throw new createHttpError.NotFound("Nenhuma comissão elegível encontrada.");
 
 	return {
 		data: {
-			commissionId: updatedCommission.id,
+			commissionIds: updated.map((commission) => commission.id),
 		},
-		message: "Comissao atualizada com sucesso.",
+		message: updated.length === 1 ? "Comissão atualizada com sucesso." : `${updated.length} comissões atualizadas com sucesso.`,
 	};
 }
 export type TUpdateAdminPlatformPartnerCommissionOutput = Awaited<ReturnType<typeof updateAdminPlatformPartnerCommission>>;

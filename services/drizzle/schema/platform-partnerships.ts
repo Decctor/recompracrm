@@ -17,6 +17,17 @@ export type TPlatformPartnerFiles = {
 	cnpj?: string;
 };
 
+/** Pedido de alteração de dados de um parceiro ativo; só os campos que mudam. */
+export type TPlatformPartnerChangeRequest = {
+	email?: string;
+	telefone?: string;
+	chavePix?: string;
+	chavePixTipo?: "CPF" | "CNPJ" | "EMAIL" | "TELEFONE" | "ALEATORIA";
+	arquivos?: TPlatformPartnerFiles;
+	motivo?: string;
+	motivoRecusa?: string;
+};
+
 export type TPlatformPartnerReferralMetadata = Record<string, unknown>;
 export type TPlatformPartnerRuleSnapshot = Record<string, unknown>;
 export type TPlatformPartnerInvoiceSnapshot = Record<string, unknown>;
@@ -47,6 +58,11 @@ export const platformPartners = newTable(
 		mensagemDivulgacao: text("mensagem_divulgacao"),
 		// Primeira vez que o parceiro viu o cartão emitido após a aprovação — a animação roda uma vez só.
 		dataCartaoVisualizado: timestamp("data_cartao_visualizado"),
+		// Lido pelo parceiro na tela de cadastro não aprovado; observacoesInternas continua interno.
+		motivoRejeicao: text("motivo_rejeicao"),
+		// Pedido de troca de dados de parceiro ativo, aprovado pelo financeiro. Um por vez.
+		alteracaoSolicitada: jsonb("alteracao_solicitada").$type<TPlatformPartnerChangeRequest>(),
+		dataSolicitacaoAlteracao: timestamp("data_solicitacao_alteracao"),
 		observacoesInternas: text("observacoes_internas"),
 		dataAprovacao: timestamp("data_aprovacao"),
 		aprovadoPorId: varchar("aprovado_por_id", { length: 255 }).references(() => users.id, { onDelete: "set null" }),
