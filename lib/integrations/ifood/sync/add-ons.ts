@@ -1,6 +1,5 @@
-import { getIfoodOptionGroup, listIfoodOptionGroups, updateIfoodProduct } from "@/lib/integrations/ifood/catalog";
+import { getIfoodItemFlat, getIfoodOptionGroup, listIfoodOptionGroups, updateIfoodProduct } from "@/lib/integrations/ifood/catalog";
 import {
-	type TIfoodItemOptionGroupPayload,
 	addIfoodOptions,
 	patchIfoodOptionGroupStatus,
 	patchIfoodOptionsPrice,
@@ -234,57 +233,27 @@ export function groupLinkForDocument(links: TAddOnLinks, grupoId: string, doc: T
 	const candidates = links.groups.get(grupoId) ?? [];
 	const inSet = (ids: ReadonlySet<string>) => candidates.find((link) => link.externoOptionGroupId && ids.has(link.externoOptionGroupId));
 	const baseIds = new Set((baseProductOf(doc).optionGroups ?? []).map((association) => association.id));
-	return inSet(baseIds) ?? inSet(new Set(doc.optionGroups.map((group) => group.id))) ?? candidates[0];
+	return inSet(baseIds) ?? inSet(new Set(doc.optionGroups.map((group) => group.id))) ?? fullestCopy(links, candidates);
+}
+
+/**
+ * Item que ainda não tem nenhuma cópia (recém-publicado, ou ganhando o grupo agora): usa a cópia com
+ * mais opções vinculadas. Em catálogos com cópias parciais (o gelato do açaí com 35 dos 73 sabores),
+ * a mais completa é a que representa o grupo; a primeira criada podia ser justamente a parcial.
+ */
+function fullestCopy(links: TAddOnLinks, candidates: TCatalogLinkEntity[]) {
+	const optionCount = (externoOptionGroupId: string | null) =>
+		externoOptionGroupId ? [...links.options.values()].flat().filter((link) => link.externoOptionGroupId === externoOptionGroupId).length : 0;
+	return candidates.reduce<TCatalogLinkEntity | undefined>(
+		(best, candidate) => (!best || optionCount(candidate.externoOptionGroupId) > optionCount(best.externoOptionGroupId) ? candidate : best),
+		undefined,
+	);
 }
 
 /** O vínculo da opção DENTRO de um optionGroup específico (a opção pode ter um vínculo por cópia). */
 export function optionLinkInGroup(links: TAddOnLinks, opcaoId: string, externoOptionGroupId: string | null | undefined) {
 	if (!externoOptionGroupId) return undefined;
 	return (links.options.get(opcaoId) ?? []).find((link) => link.externoOptionGroupId === externoOptionGroupId);
-}
-
-/**
- * O bloco `gruposComplementos` do `PUT /items`. Grupos/opções já vinculados vão com os ids remotos
- * (o iFood atualiza em vez de duplicar); os demais vão sem id e nascem na mesma chamada. O tipo de um
- * grupo existente vem do `flat` (preservado); grupo novo nasce SPECIFICATION.
- */
-export function buildItemOptionGroupsPayload({
-	nodes,
-	links,
-	remote,
-}: {
-	nodes: TAddOnGroupNode[];
-	links: TAddOnLinks;
-	remote: TIfoodItemFlatDTO | null;
-}): TIfoodItemOptionGroupPayload[] {
-	const remoteGroupIds = remote ? new Set(remote.gruposComplementos.map((grupo) => grupo.id).filter((id): id is string => !!id)) : null;
-	return nodes.map((node) => {
-		const groupLink = groupLinkForItem(links, node.grupoId, remoteGroupIds);
-		const remoteGroup = groupLink?.externoOptionGroupId
-			? remote?.gruposComplementos.find((grupo) => grupo.id === groupLink.externoOptionGroupId)
-			: undefined;
-		return {
-			id: groupLink?.externoOptionGroupId ?? undefined,
-			nome: node.nome,
-			tipo: (remoteGroup?.tipo as TIfoodOptionGroupTypeEnum | null) ?? DEFAULT_OPTION_GROUP_TYPE,
-			min: node.minOpcoes,
-			max: node.maxOpcoes,
-			status: node.disponivel ? "AVAILABLE" : "UNAVAILABLE",
-			indice: node.indice,
-			opcoes: node.opcoes.map((opcao) => {
-				const optionLink = optionLinkInGroup(links, opcao.opcaoId, groupLink?.externoOptionGroupId);
-				return {
-					id: optionLink?.externoOptionId ?? undefined,
-					produtoId: optionLink?.externoProdutoId ?? undefined,
-					nome: opcao.nome,
-					preco: opcao.precoDelta,
-					codigoExterno: opcao.codigo,
-					status: opcao.disponivel ? "AVAILABLE" : "UNAVAILABLE",
-					indice: opcao.indice,
-				};
-			}),
-		};
-	});
 }
 
 /**
@@ -422,6 +391,33 @@ function pruneUnreferenced(doc: TIfoodItemDocument) {
 	doc.products = doc.products.filter((product) => keptProducts.has(product.id));
 	doc.optionGroups = doc.optionGroups.filter((group) => keptGroups.has(group.id));
 	doc.options = doc.options.filter((option) => keptOptions.has(option.id));
+}
+
+/**
+ * Relê o item até os grupos recém-criados aparecerem: a leitura do iFood é eventualmente consistente
+ * (o PUT responde antes de a leitura refletir), e gravar vínculos a partir de uma leitura velha
+ * deixaria os grupos novos sem vínculo — e o push seguinte os criaria de novo.
+ */
+export async function readFlatWithGroups({
+	client,
+	merchantId,
+	itemId,
+	groupNames,
+}: {
+	client: AxiosInstance;
+	merchantId: string;
+	itemId: string;
+	groupNames: string[];
+}) {
+	const wanted = groupNames.map(normalizeName);
+	let flat = await getIfoodItemFlat(client, merchantId, itemId);
+	for (let attempt = 0; attempt < 5; attempt += 1) {
+		const present = new Set(flat.gruposComplementos.map((grupo) => normalizeName(grupo.nome)));
+		if (wanted.every((name) => present.has(name))) break;
+		await new Promise((resolve) => setTimeout(resolve, 3000));
+		flat = await getIfoodItemFlat(client, merchantId, itemId);
+	}
+	return flat;
 }
 
 /** Há grupo do produto ainda sem vínculo nesta loja? Então o push precisa do PUT composto para criá-lo. */

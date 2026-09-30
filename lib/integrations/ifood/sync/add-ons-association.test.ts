@@ -191,3 +191,25 @@ test("cópia aninhada num produto de opção não toma o lugar da cópia associa
 		["g-sabores", "g-oferta"],
 	);
 });
+
+test("item sem nenhuma cópia do grupo usa a cópia com mais opções vinculadas", () => {
+	const doc = makeDoc();
+	const optionLink = (group: string, n: number) => link({ tipo: "ADD_ON_OPCAO", externoOptionGroupId: group, externoOptionId: `${group}-${n}` });
+	const links: TAddOnLinks = {
+		groups: new Map([
+			["int-sabores", [link({ produtoAddOnId: "int-sabores", externoOptionGroupId: "g-sabores" })]],
+			// A parcial foi vinculada primeiro; a completa tem mais opções.
+			["int-gelato", ["g-gelato-parcial", "g-gelato-completo"].map((id) => link({ produtoAddOnId: "int-gelato", externoOptionGroupId: id }))],
+		]),
+		options: new Map([
+			["o1", [optionLink("g-gelato-parcial", 1), optionLink("g-gelato-completo", 1)]],
+			["o2", [optionLink("g-gelato-completo", 2)]],
+		]),
+	};
+	const gelato: TAddOnGroupNode = { ...sabores, grupoId: "int-gelato", nome: "Escolha seu gelato:", indice: 1 };
+	applyAddOnAssociationToDocument({ doc, nodes: [sabores, gelato], links, createUnlinked: false });
+	assert.deepEqual(
+		doc.products.find((product) => product.id === "base")?.optionGroups?.map((association) => association.id),
+		["g-sabores", "g-gelato-completo"],
+	);
+});

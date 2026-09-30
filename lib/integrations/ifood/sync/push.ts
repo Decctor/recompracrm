@@ -1,4 +1,4 @@
-import { getIfoodItemFlat, updateIfoodProduct } from "@/lib/integrations/ifood/catalog";
+import { updateIfoodProduct } from "@/lib/integrations/ifood/catalog";
 import { patchIfoodItem } from "@/lib/integrations/ifood/catalog-items";
 import { resolveIfoodManagementContext } from "@/lib/integrations/ifood/context";
 import { readIfoodItemDocument, writeIfoodItemDocument } from "@/lib/integrations/ifood/item-document";
@@ -17,7 +17,7 @@ import {
 	groupLinkForItem,
 	hasUnlinkedGroups,
 	loadAddOnLinks,
-	normalizeName,
+	readFlatWithGroups,
 	recordAddOnLinksFromFlatItem,
 	resolveProductAddOnNodes,
 } from "./add-ons";
@@ -75,33 +75,6 @@ async function loadMerchantAddOnContext({
 	const channelState = await loadChannelState({ orgId, canal: "IFOOD", refExterno: merchantId });
 	const [nodes, links] = await Promise.all([resolveProductAddOnNodes({ orgId, produtoId, channelState }), loadAddOnLinks({ orgId, merchantId })]);
 	return { nodes, links };
-}
-
-/**
- * Relê o item até os grupos recém-criados aparecerem: a leitura do iFood é eventualmente consistente
- * (o PUT responde antes de a leitura refletir), e gravar vínculos a partir de uma leitura velha
- * deixaria os grupos novos sem vínculo — e o push seguinte os criaria de novo.
- */
-async function readFlatWithGroups({
-	client,
-	merchantId,
-	itemId,
-	groupNames,
-}: {
-	client: AxiosInstance;
-	merchantId: string;
-	itemId: string;
-	groupNames: string[];
-}) {
-	const wanted = groupNames.map(normalizeName);
-	let flat = await getIfoodItemFlat(client, merchantId, itemId);
-	for (let attempt = 0; attempt < 5; attempt += 1) {
-		const present = new Set(flat.gruposComplementos.map((grupo) => normalizeName(grupo.nome)));
-		if (wanted.every((name) => present.has(name))) break;
-		await new Promise((resolve) => setTimeout(resolve, 3000));
-		flat = await getIfoodItemFlat(client, merchantId, itemId);
-	}
-	return flat;
 }
 
 async function pushLink({

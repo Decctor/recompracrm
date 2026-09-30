@@ -1,7 +1,7 @@
-import { getIfoodItemFlat } from "@/lib/integrations/ifood/catalog";
 import { IFOOD_IMAGE_ALLOWED_TYPES } from "@/lib/integrations/ifood/catalog-types";
 import { uploadIfoodImage } from "@/lib/integrations/ifood/image";
 import { upsertIfoodItem } from "@/lib/integrations/ifood/catalog-items";
+import { readIfoodItemDocument, writeIfoodItemDocument } from "@/lib/integrations/ifood/item-document";
 import { resolveChannelAvailability, resolveChannelPrice, type TChannel } from "@/lib/products/sales-channels";
 import { loadChannelState } from "@/lib/products/sales-channels-store";
 import type { TCatalogLinkSnapshot } from "@/schemas/catalog-links";
@@ -10,7 +10,15 @@ import { catalogLinks, products } from "@/services/drizzle/schema";
 import type { AxiosInstance } from "axios";
 import { and, eq } from "drizzle-orm";
 import createHttpError from "http-errors";
-import { associationSnapshot, buildItemOptionGroupsPayload, loadAddOnLinks, recordAddOnLinksFromFlatItem, resolveProductAddOnNodes } from "./add-ons";
+import {
+	applyAddOnAssociationToDocument,
+	associationSnapshot,
+	groupLinkForItem,
+	loadAddOnLinks,
+	readFlatWithGroups,
+	recordAddOnLinksFromFlatItem,
+	resolveProductAddOnNodes,
+} from "./add-ons";
 import { upsertCatalogLink } from "./links";
 
 /** Nó publicável: um produto sem variantes, ou uma variante (que vira um item próprio no iFood). */
@@ -140,32 +148,6 @@ async function uploadNodeImage({
 }
 
 /**
- * Lê de volta o item recém-publicado para descobrir o productId que o iFood realmente usou — e os
- * ids dos grupos/opções de complemento criados na mesma chamada. Falha na leitura cai no id
- * enviado — melhor um vínculo com id possivelmente errado (detectável na reconciliação) do que
- * perder a publicação inteira.
- */
-export async function readBackPublishedItem({
-	client,
-	merchantId,
-	itemId,
-	fallbackProductId,
-}: {
-	client: AxiosInstance;
-	merchantId: string;
-	itemId: string;
-	fallbackProductId: string;
-}) {
-	try {
-		const flat = await getIfoodItemFlat(client, merchantId, itemId);
-		return { produtoId: flat.produtoId ?? fallbackProductId, flat };
-	} catch (error) {
-		console.warn("[IFOOD_PUBLISH] Não foi possível reler o item para confirmar o productId.", { itemId, error });
-		return { produtoId: fallbackProductId, flat: null };
-	}
-}
-
-/**
  * Publica um produto interno no iFood: cria `product` + `item` por nó e grava os vínculos.
  *
  * A imagem só sobe quando a política pede — o upload é a chamada mais cara do fluxo e o
@@ -189,9 +171,10 @@ export async function publishProductToIfood({
 	const nodes = await resolvePublishNodes({ orgId, merchantId, produtoId });
 	const published: { produtoVarianteId: string | null; itemId: string; externoProdutoId: string }[] = [];
 
-	// Complementos vão na mesma chamada: grupos/opções já vinculados com os ids remotos, os demais
-	// nascem aqui e ganham vínculo na releitura. Um produto com variantes publica N itens que
-	// compartilham os mesmos grupos — o iFood reusa o optionGroup pelo id a partir do segundo.
+	// Complementos NÃO vão no PUT que cria o item: mandar ali a definição de um grupo já vinculado
+	// reescreveria as opções dele (preço por canal inclusive) para TODOS os itens que o usam. O item
+	// nasce sem grupos e a associação entra pela ida-e-volta do documento — grupo vinculado só pelo
+	// id, grupo sem vínculo nasce e ganha vínculo na releitura (o mesmo caminho do push).
 	const channelState = await loadChannelState({ orgId, canal: "IFOOD", refExterno: merchantId });
 	const addOnNodes = await resolveProductAddOnNodes({ orgId, produtoId, channelState });
 	let addOnLinks = await loadAddOnLinks({ orgId, merchantId });
@@ -201,21 +184,39 @@ export async function publishProductToIfood({
 		// dela seria pior do que publicar sem — por isso o erro é engolido com aviso.
 		const imagemPath = node.imagemCapaUrl ? await uploadNodeImage({ client, merchantId, imagemUrl: node.imagemCapaUrl, produtoId }) : null;
 
+		const status = node.disponivel ? "AVAILABLE" : "UNAVAILABLE";
 		const { itemId, productId: enviadoProdutoId } = await upsertIfoodItem(client, merchantId, {
 			categoriaId,
-			status: node.disponivel ? "AVAILABLE" : "UNAVAILABLE",
+			status,
 			preco: node.preco,
 			codigoExterno: node.codigo,
 			produto: { nome: node.nome, descricao: node.descricao, imagemPath },
-			gruposComplementos: addOnNodes.length ? buildItemOptionGroupsPayload({ nodes: addOnNodes, links: addOnLinks, remote: null }) : undefined,
+			// O que vale na loja é o canal DEFAULT: sem ele, o iFood cria o contexto DISPONÍVEL mesmo com
+			// o item em UNAVAILABLE (medido em 2026-09-30 — um produto publicado pausado entrou à venda).
+			contextModifiers: [{ contexto: "DEFAULT", preco: node.preco, status }],
 		});
 
+		if (addOnNodes.length) {
+			// A leitura é eventualmente consistente: o item recém-criado pode demorar a aparecer.
+			let doc = await readIfoodItemDocument(client, merchantId, itemId).catch(() => null);
+			for (let attempt = 0; !doc && attempt < 5; attempt += 1) {
+				await new Promise((resolve) => setTimeout(resolve, 3000));
+				doc = await readIfoodItemDocument(client, merchantId, itemId).catch(() => null);
+			}
+			if (!doc) throw new Error("O item foi criado no iFood, mas não pôde ser relido para associar os complementos.");
+			applyAddOnAssociationToDocument({ doc, nodes: addOnNodes, links: addOnLinks, createUnlinked: true });
+			await writeIfoodItemDocument(client, merchantId, doc);
+		}
+
 		// O iFood NÃO garante o productId que enviamos: medido ao vivo, um item publicado com
-		// productId gerado por nós apareceu depois sob outro id, e o `PUT /products/{id}` com o id
-		// enviado respondia 404 — o que quebraria o push de nome/descrição. Relemos o item para
-		// gravar o id autoritativo. O itemId, esse sim, é respeitado. A mesma leitura traz os ids
-		// dos grupos/opções recém-criados.
-		const { produtoId: externoProdutoId, flat } = await readBackPublishedItem({ client, merchantId, itemId, fallbackProductId: enviadoProdutoId });
+		// productId gerado por nós apareceu depois sob outro id. Relemos o item para gravar o id
+		// autoritativo (o itemId, esse sim, é respeitado) e os ids dos grupos que nasceram agora.
+		const unlinkedNames = addOnNodes.filter((addOnNode) => !groupLinkForItem(addOnLinks, addOnNode.grupoId)).map((addOnNode) => addOnNode.nome);
+		const flat = await readFlatWithGroups({ client, merchantId, itemId, groupNames: unlinkedNames }).catch((error) => {
+			console.warn("[IFOOD_PUBLISH] Não foi possível reler o item para confirmar o productId.", { itemId, error });
+			return null;
+		});
+		const externoProdutoId = flat?.produtoId ?? enviadoProdutoId;
 		if (flat && addOnNodes.length) {
 			addOnLinks = await recordAddOnLinksFromFlatItem({ orgId, merchantId, nodes: addOnNodes, links: addOnLinks, flat, autorId });
 		}
