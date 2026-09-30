@@ -24,7 +24,7 @@ import { BrazilStatesAndCities } from "@/utils/states-cities";
 type TBrazilianState = { codigo_uf: number; uf: string; nome: string; regiao: string };
 
 /** Remove acentos, colapsa espaços e sobe para caixa alta — forma comparável, não a forma final. */
-function toComparable(value: string): string {
+export function toComparable(value: string): string {
 	return value
 		.normalize("NFD")
 		.replace(/[̀-ͯ]/g, "")

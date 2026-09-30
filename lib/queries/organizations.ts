@@ -6,6 +6,8 @@ import type { TGetUserMembershipsOutput } from "@/app/api/organizations/membersh
 import type { TGetOrganizationOutput } from "@/app/api/organizations/route";
 import type { TGetOrganizationSlugAvailabilityOutput } from "@/app/api/organizations/slug-availability/route";
 import type { TGetSubscriptionStatusOutput } from "@/app/api/organizations/subscription-status/route";
+import type { TAddressRegion } from "@/lib/geo/address-parsing";
+import { isKnownCityForUf, normalizeLocation } from "@/lib/geo/brazilian-locations";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import { useDebounceMemo } from "../hooks/use-debounce";
@@ -19,6 +21,28 @@ export function useOrganization() {
 		...useQuery({
 			queryKey: ["organization"],
 			queryFn: fetchOrganization,
+		}),
+		queryKey: ["organization"],
+	};
+}
+
+function selectOrganizationRegion(organization: TGetOrganizationOutput["data"]): TAddressRegion | null {
+	const { estado, cidade } = normalizeLocation({ estado: organization.localizacaoEstado, cidade: organization.localizacaoCidade });
+	if (!estado) return null;
+	return { localizacaoEstado: estado, localizacaoCidade: cidade && isKnownCityForUf(cidade, estado) ? cidade : null };
+}
+
+/**
+ * Estado e cidade da organização, normalizados. É o ponto de partida dos formulários de endereço
+ * de cliente: a maior parte da clientela de uma loja mora na cidade dela. Compartilha o cache de
+ * `useOrganization`.
+ */
+export function useOrganizationRegion() {
+	return {
+		...useQuery({
+			queryKey: ["organization"],
+			queryFn: fetchOrganization,
+			select: selectOrganizationRegion,
 		}),
 		queryKey: ["organization"],
 	};

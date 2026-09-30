@@ -1,9 +1,11 @@
+import ClientLocationAddressPaste from "@/components/Clients/ClientLocationAddressPaste";
 import SelectInput from "@/components/Inputs/SelectInput";
 import TextInput from "@/components/Inputs/TextInput";
 import ResponsiveMenuSection from "@/components/Utils/ResponsiveMenuSection";
 import { Button } from "@/components/ui/button";
-import { getClientLocationAddressByCEP } from "@/lib/clients/locations";
-import { formatToCEP } from "@/lib/formatting";
+import type { TAddressRegion } from "@/lib/geo/address-parsing";
+import { useClientLocationAutofill } from "@/lib/hooks/use-client-location-autofill";
+import { useOrganizationRegion } from "@/lib/queries/organizations";
 import type { TUseClientState } from "@/state-hooks/use-client-state";
 import { BrazilianCitiesOptionsFromUF, BrazilianStatesOptions } from "@/utils/states-cities";
 import { MapPin, Plus, Trash2 } from "lucide-react";
@@ -22,6 +24,7 @@ export default function ClientLocationsBlock({
 	removeClientLocation,
 }: ClientLocationsBlockProps) {
 	const activeLocations = locations.filter((location) => !location.deletar);
+	const { data: organizationRegion = null } = useOrganizationRegion();
 
 	return (
 		<ResponsiveMenuSection title="LOCALIZAÇÕES" icon={<MapPin className="h-4 min-h-4 w-4 min-w-4" />}>
@@ -35,6 +38,8 @@ export default function ClientLocationsBlock({
 					onClick={() =>
 						addClientLocation({
 							titulo: locations.length > 0 ? `Localização ${locations.length + 1}` : "Localização Principal",
+							// A maior parte da clientela mora na cidade da loja: o endereço já nasce nela.
+							...organizationRegion,
 						})
 					}
 				>
@@ -56,6 +61,7 @@ export default function ClientLocationsBlock({
 								key={location.id ?? `new-location-${index}`}
 								location={location}
 								isPrimary={isPrimary}
+								defaultRegion={organizationRegion}
 								updateClientLocation={(changes) => updateClientLocation(index, changes)}
 								removeClientLocation={() => removeClientLocation(index)}
 							/>
@@ -70,15 +76,12 @@ export default function ClientLocationsBlock({
 type ClientLocationBlockCardProps = {
 	location: TUseClientState["state"]["clientLocations"][number];
 	isPrimary: boolean;
+	defaultRegion: TAddressRegion | null;
 	updateClientLocation: (info: Parameters<TUseClientState["updateClientLocation"]>[1]) => void;
 	removeClientLocation: () => void;
 };
-function ClientLocationBlockCard({ location, isPrimary, updateClientLocation, removeClientLocation }: ClientLocationBlockCardProps) {
-	async function setAddressDataByCEP(cep: string) {
-		const addressInfo = await getClientLocationAddressByCEP(cep);
-		if (!addressInfo) return;
-		updateClientLocation(addressInfo);
-	}
+function ClientLocationBlockCard({ location, isPrimary, defaultRegion, updateClientLocation, removeClientLocation }: ClientLocationBlockCardProps) {
+	const autofill = useClientLocationAutofill({ location, updateLocation: updateClientLocation, defaultRegion });
 	return (
 		<div className="w-full rounded-lg border p-3 flex flex-col gap-2">
 			<div className="w-full flex items-center justify-between gap-2">
@@ -95,24 +98,15 @@ function ClientLocationBlockCard({ location, isPrimary, updateClientLocation, re
 				handleChange={(value) => updateClientLocation({ titulo: value })}
 			/>
 
+			<ClientLocationAddressPaste autofill={autofill} />
+
 			<div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-				<TextInput
-					label="CEP"
-					placeholder="Digite o CEP"
-					value={location.localizacaoCep ?? ""}
-					handleChange={(value) => {
-						const formattedCep = formatToCEP(value);
-						if (formattedCep.length === 9) setAddressDataByCEP(formattedCep);
-						updateClientLocation({ localizacaoCep: formattedCep || null });
-					}}
-				/>
+				<TextInput label="CEP" placeholder="Digite o CEP" value={location.localizacaoCep ?? ""} handleChange={autofill.handleCepChange} />
 				<SelectInput
 					label="ESTADO"
 					value={location.localizacaoEstado ?? null}
 					options={BrazilianStatesOptions}
-					handleChange={(value) =>
-						updateClientLocation({ localizacaoEstado: value || null, localizacaoCidade: BrazilianCitiesOptionsFromUF(value)[0]?.value ?? null })
-					}
+					handleChange={autofill.handleStateChange}
 					onReset={() => updateClientLocation({ localizacaoEstado: null, localizacaoCidade: null })}
 					resetOptionLabel="NÃO DEFINIDO"
 				/>
@@ -137,6 +131,7 @@ function ClientLocationBlockCard({ location, isPrimary, updateClientLocation, re
 					handleChange={(value) => updateClientLocation({ localizacaoLogradouro: value || null })}
 				/>
 				<TextInput
+					id={autofill.numberInputId}
 					label="NÚMERO"
 					placeholder="Digite o número"
 					value={location.localizacaoNumero ?? ""}

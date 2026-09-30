@@ -1,6 +1,7 @@
 "use client";
 
 import { MISSING_ESSENTIAL_FIELD_CLASS, MissingEssentialsChip } from "./registry-shared";
+import ClientLocationAddressPaste from "@/components/Clients/ClientLocationAddressPaste";
 import SelectInput from "@/components/Inputs/SelectInput";
 import TextInput from "@/components/Inputs/TextInput";
 import SectionApplyBar from "@/components/Utils/SectionApplyBar";
@@ -8,8 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { Section } from "@/components/ui/section";
 import type { TClientEssentialField } from "@/lib/clients/client-registry-state";
-import { getClientLocationAddressByCEP } from "@/lib/clients/locations";
-import { formatToCEP } from "@/lib/formatting";
+import type { TAddressRegion } from "@/lib/geo/address-parsing";
+import { useClientLocationAutofill } from "@/lib/hooks/use-client-location-autofill";
+import { useOrganizationRegion } from "@/lib/queries/organizations";
 import type { TClientLocationState } from "@/state-hooks/use-client-state";
 import type { TUseClientSectionEditor } from "@/state-hooks/use-client-section-editor";
 import { BrazilianCitiesOptionsFromUF, BrazilianStatesOptions } from "@/utils/states-cities";
@@ -28,6 +30,7 @@ export default function ClientAddressesSection({ editor, missingFields }: Client
 	const { state, addClientLocation, updateClientLocation, removeClientLocation } = editor;
 	const activeLocations = state.clientLocations.filter((location) => !location.deletar);
 	const addressIsMissing = missingFields.has("endereco");
+	const { data: organizationRegion = null } = useOrganizationRegion();
 
 	return (
 		<Section.Root>
@@ -47,6 +50,8 @@ export default function ClientAddressesSection({ editor, missingFields }: Client
 						onClick={() =>
 							addClientLocation({
 								titulo: state.clientLocations.length > 0 ? `Localização ${state.clientLocations.length + 1}` : "Localização Principal",
+								// A maior parte da clientela mora na cidade da loja: o endereço já nasce nela.
+								...organizationRegion,
 							})
 						}
 					>
@@ -76,6 +81,7 @@ export default function ClientAddressesSection({ editor, missingFields }: Client
 									location={location}
 									isPrimary={activeLocations[0] === location}
 									highlightMissing={addressIsMissing}
+									defaultRegion={organizationRegion}
 									updateClientLocation={(changes) => updateClientLocation(index, changes)}
 									removeClientLocation={() => removeClientLocation(index)}
 								/>
@@ -96,16 +102,20 @@ type ClientAddressCardProps = {
 	location: TClientLocationState;
 	isPrimary: boolean;
 	highlightMissing: boolean;
+	defaultRegion: TAddressRegion | null;
 	updateClientLocation: (changes: Partial<TClientLocationState>) => void;
 	removeClientLocation: () => void;
 };
 
-function ClientAddressCard({ location, isPrimary, highlightMissing, updateClientLocation, removeClientLocation }: ClientAddressCardProps) {
-	async function setAddressDataByCEP(cep: string) {
-		const addressInfo = await getClientLocationAddressByCEP(cep);
-		if (!addressInfo) return;
-		updateClientLocation(addressInfo);
-	}
+function ClientAddressCard({
+	location,
+	isPrimary,
+	highlightMissing,
+	defaultRegion,
+	updateClientLocation,
+	removeClientLocation,
+}: ClientAddressCardProps) {
+	const autofill = useClientLocationAutofill({ location, updateLocation: updateClientLocation, defaultRegion });
 
 	// Só o endereço principal carrega o destaque de pendência: é ele que vira o endereço do cliente.
 	const missingClassName = highlightMissing && isPrimary ? MISSING_ESSENTIAL_FIELD_CLASS : undefined;
@@ -136,25 +146,21 @@ function ClientAddressCard({ location, isPrimary, highlightMissing, updateClient
 				</Button>
 			</div>
 
+			<ClientLocationAddressPaste autofill={autofill} />
+
 			<div className="grid w-full grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
 				<TextInput
 					label="CEP"
 					placeholder="00000-000"
 					value={location.localizacaoCep ?? ""}
 					className={missingClassName}
-					handleChange={(value) => {
-						const formattedCep = formatToCEP(value);
-						if (formattedCep.length === 9) setAddressDataByCEP(formattedCep);
-						updateClientLocation({ localizacaoCep: formattedCep || null });
-					}}
+					handleChange={autofill.handleCepChange}
 				/>
 				<SelectInput
 					label="ESTADO"
 					value={location.localizacaoEstado ?? null}
 					options={BrazilianStatesOptions}
-					handleChange={(value) =>
-						updateClientLocation({ localizacaoEstado: value || null, localizacaoCidade: BrazilianCitiesOptionsFromUF(value)[0]?.value ?? null })
-					}
+					handleChange={autofill.handleStateChange}
 					onReset={() => updateClientLocation({ localizacaoEstado: null, localizacaoCidade: null })}
 					resetOptionLabel="NÃO DEFINIDO"
 				/>
@@ -185,6 +191,7 @@ function ClientAddressCard({ location, isPrimary, highlightMissing, updateClient
 					/>
 				</div>
 				<TextInput
+					id={autofill.numberInputId}
 					label="NÚMERO"
 					placeholder="Nº"
 					value={location.localizacaoNumero ?? ""}

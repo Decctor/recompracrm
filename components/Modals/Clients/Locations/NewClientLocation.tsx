@@ -1,19 +1,21 @@
 "use client";
 
+import ClientLocationAddressPaste from "@/components/Clients/ClientLocationAddressPaste";
 import SelectInput from "@/components/Inputs/SelectInput";
 import TextInput from "@/components/Inputs/TextInput";
 import ResponsiveMenu from "@/components/Utils/ResponsiveMenu";
 import ResponsiveMenuSection from "@/components/Utils/ResponsiveMenuSection";
-import { getClientLocationAddressByCEP } from "@/lib/clients/locations";
 import { getErrorMessage } from "@/lib/errors";
-import { formatToCEP } from "@/lib/formatting";
+import { useClientLocationAutofill } from "@/lib/hooks/use-client-location-autofill";
 import { createClientLocation } from "@/lib/mutations/clients/locations";
+import { useOrganizationRegion } from "@/lib/queries/organizations";
 import type { TCreateClientLocationInput, TCreateClientLocationOutput } from "@/app/api/clients/locations/route";
 import { CLIENT_LOCATION_STREET_REQUIRED_MESSAGE, hasClientLocationStreet } from "@/schemas/clients";
 import { useClientLocationState } from "@/state-hooks/use-client-location-state";
 import { BrazilianCitiesOptionsFromUF, BrazilianStatesOptions } from "@/utils/states-cities";
 import { useMutation } from "@tanstack/react-query";
 import { MapPin } from "lucide-react";
+import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 
 type NewClientLocationProps = {
@@ -29,6 +31,18 @@ type NewClientLocationProps = {
 
 export function NewClientLocation({ clienteId, closeModal, callbacks }: NewClientLocationProps) {
 	const { state, updateClientLocation, resetState } = useClientLocationState({ initialState: {} });
+	const { data: organizationRegion } = useOrganizationRegion();
+	const autofill = useClientLocationAutofill({ location: state, updateLocation: updateClientLocation, defaultRegion: organizationRegion });
+
+	// O endereço começa na cidade da organização. A região pode chegar depois da abertura do modal,
+	// então entra uma vez só, e só se o operador ainda não definiu estado (por CEP ou colando).
+	const regionAppliedRef = useRef(false);
+	useEffect(() => {
+		if (!organizationRegion || regionAppliedRef.current) return;
+		regionAppliedRef.current = true;
+		if (state.localizacaoEstado) return;
+		updateClientLocation(organizationRegion);
+	}, [organizationRegion, state.localizacaoEstado, updateClientLocation]);
 
 	const { mutate: handleCreateClientLocation, isPending } = useMutation({
 		mutationKey: ["create-client-location", clienteId],
@@ -51,12 +65,6 @@ export function NewClientLocation({ clienteId, closeModal, callbacks }: NewClien
 		},
 	});
 
-	async function setAddressDataByCEP(cep: string) {
-		const addressInfo = await getClientLocationAddressByCEP(cep);
-		if (!addressInfo) return;
-		updateClientLocation(addressInfo);
-	}
-
 	return (
 		<ResponsiveMenu
 			menuTitle="NOVA LOCALIZAÇÃO"
@@ -76,6 +84,7 @@ export function NewClientLocation({ clienteId, closeModal, callbacks }: NewClien
 			closeMenu={closeModal}
 		>
 			<ResponsiveMenuSection title="ENDEREÇO" icon={<MapPin className="h-4 w-4" />}>
+				<ClientLocationAddressPaste autofill={autofill} />
 				<TextInput
 					label="Título"
 					placeholder="Ex: Casa, Trabalho"
@@ -83,23 +92,12 @@ export function NewClientLocation({ clienteId, closeModal, callbacks }: NewClien
 					handleChange={(value) => updateClientLocation({ titulo: value })}
 				/>
 				<div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-					<TextInput
-						label="CEP"
-						placeholder="Digite o CEP"
-						value={state.localizacaoCep ?? ""}
-						handleChange={(value) => {
-							const formattedCep = formatToCEP(value);
-							if (formattedCep.length === 9) setAddressDataByCEP(formattedCep);
-							updateClientLocation({ localizacaoCep: formattedCep || null });
-						}}
-					/>
+					<TextInput label="CEP" placeholder="Digite o CEP" value={state.localizacaoCep ?? ""} handleChange={autofill.handleCepChange} />
 					<SelectInput
 						label="Estado"
 						value={state.localizacaoEstado ?? null}
 						options={BrazilianStatesOptions}
-						handleChange={(value) =>
-							updateClientLocation({ localizacaoEstado: value || null, localizacaoCidade: BrazilianCitiesOptionsFromUF(value)[0]?.value ?? null })
-						}
+						handleChange={autofill.handleStateChange}
 						onReset={() => updateClientLocation({ localizacaoEstado: null, localizacaoCidade: null })}
 						resetOptionLabel="NÃO DEFINIDO"
 					/>
@@ -124,6 +122,7 @@ export function NewClientLocation({ clienteId, closeModal, callbacks }: NewClien
 						handleChange={(value) => updateClientLocation({ localizacaoLogradouro: value || null })}
 					/>
 					<TextInput
+						id={autofill.numberInputId}
 						label="Número"
 						placeholder="Digite o número"
 						value={state.localizacaoNumero ?? ""}

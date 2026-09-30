@@ -68,7 +68,7 @@
 		"test:sale-change": "node --import tsx --test lib/sales/sale-change.test.ts lib/sales/sale-processing/attendance.test.ts",
 		"test:sale-client-reassignment": "node --import tsx --test lib/sales/sale-client-reassignment-policy.test.ts",
 		"test:whatsapp-parsing": "node --import tsx --test lib/whatsapp/parsing.test.ts lib/whatsapp/connection-health-policy.test.ts",
-		"test:geo": "node --import tsx --test lib/geo/brazilian-locations.test.ts",
+		"test:geo": "node --import tsx --test lib/geo/brazilian-locations.test.ts lib/geo/address-parsing.test.ts lib/geo/viacep.test.ts",
 		"test:sales-channels": "node --import tsx --test lib/products/sales-channels.test.ts",
 		"test:cashback-rewards-display": "node --import tsx --test lib/cashback/rewards-display-layout.test.ts",
 		"test:client-vinculation": "node --import tsx --test lib/clients/client-vinculation-flow.test.ts lib/clients/parse-client-search-intent.test.ts lib/phone-search-patterns.test.ts",
