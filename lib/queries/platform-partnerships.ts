@@ -7,6 +7,7 @@ import type { TGetPlatformPartnerDashboardOutput } from "@/app/api/platform-part
 import type { TGetPlatformPartnerMeOutput } from "@/app/api/platform-partner/me/route";
 import type { TGetPlatformPartnerPayoutsOutput } from "@/app/api/platform-partner/payouts/route";
 import type { TGetPlatformPartnerReferralsOutput } from "@/app/api/platform-partner/referrals/route";
+import type { TValidatePlatformPartnerCodeOutput } from "@/app/api/platform-partners/validate-code/route";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import { useState } from "react";
@@ -159,4 +160,26 @@ export async function fetchAdminPlatformPartnerDocumentUrl({ partnerId, tipo }: 
 	const searchParams = new URLSearchParams({ partnerId, tipo });
 	const { data } = await axios.get<TGetAdminPlatformPartnerDocumentOutput>(`/api/admin/platform-partners/documents?${searchParams.toString()}`);
 	return data.data.url;
+}
+
+/** Valida um código de indicação digitado pelo lojista. Pública: não exige sessão de parceiro. */
+export async function fetchPlatformPartnerCodeValidation(codigo: string) {
+	const searchParams = new URLSearchParams({ codigo });
+	const { data } = await axios.get<TValidatePlatformPartnerCodeOutput>(`/api/platform-partners/validate-code?${searchParams.toString()}`);
+	return data.data;
+}
+
+export function usePlatformPartnerCodeValidation({ codigo }: { codigo: string }) {
+	const debounced = useDebounceMemo({ codigo: codigo.trim().toUpperCase() }, 400);
+	const queryKey = ["platform-partner-code-validation", debounced.codigo];
+	return {
+		...useQuery({
+			queryKey,
+			queryFn: () => fetchPlatformPartnerCodeValidation(debounced.codigo),
+			enabled: debounced.codigo.length >= 3,
+			staleTime: 60_000,
+		}),
+		queryKey,
+		isDebouncing: debounced.codigo !== codigo.trim().toUpperCase(),
+	};
 }

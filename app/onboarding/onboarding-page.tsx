@@ -29,6 +29,7 @@ import type { TResolvedOnboardingIntent } from "@/lib/onboarding/intent";
 import { isValidOrganizationSlug, slugifyOrganizationName } from "@/lib/organizations/slug";
 import { PLATFORM_PARTNER_COOKIE_NAME } from "@/lib/platform-partnerships/constants";
 import { ONBOARDING_READINESS_QUERY_KEY, useOnboardingReadiness } from "@/lib/queries/onboarding";
+import { fetchPlatformPartnerCodeValidation } from "@/lib/queries/platform-partnerships";
 import { isValidCNPJ } from "@/lib/validation";
 import type { TOnboardingProductEnum } from "@/schemas/enums";
 import type { TOrganizationEntity, TOrganizationOnboardingEntity } from "@/services/drizzle/schema";
@@ -147,16 +148,19 @@ export function OnboardingPage({
 		setDataSourceMode,
 	} = form;
 
-	// Código de indicação do cookie de parceiro (comportamento anterior preservado).
+	// Código do link de indicação (cookie). Fica fora do payload de propósito: o servidor já usa o
+	// cookie como fallback e registra a origem como BACKEND_COOKIE. Só o código digitado vai no
+	// payload — e aí a origem é MANUAL, com prioridade sobre o link.
+	const [referralCookieCode, setReferralCookieCode] = useState<string | null>(null);
 	useEffect(() => {
 		const cookieCode = document.cookie
 			.split("; ")
 			.find((row) => row.startsWith(`${PLATFORM_PARTNER_COOKIE_NAME}=`))
 			?.split("=")[1];
 		if (!cookieCode) return;
-		updateOnboarding({ indicadorCodigo: decodeURIComponent(cookieCode).trim().toUpperCase() });
+		setReferralCookieCode(decodeURIComponent(cookieCode).trim().toUpperCase());
 		updateOrganizationState({ origemLead: "INDICAÇÃO" });
-	}, [updateOnboarding, updateOrganizationState]);
+	}, [updateOrganizationState]);
 
 	// Jornada ausente com organização existente (fluxo antigo em curso): cria uma vez, na etapa
 	// em que o usuário parou.
@@ -238,6 +242,14 @@ export function OnboardingPage({
 		if (!state.organization.atuacaoNicho) {
 			toast.error("Escolha o segmento da sua empresa.");
 			return false;
+		}
+		const typedReferralCode = state.indicadorCodigo?.trim();
+		if (!hasOrganization && typedReferralCode) {
+			const validation = await fetchPlatformPartnerCodeValidation(typedReferralCode);
+			if (!validation.valid) {
+				toast.error("Código de indicação não encontrado. Confira o código ou deixe o campo em branco.");
+				return false;
+			}
 		}
 
 		let logoUrl: string | null = state.organization.logoUrl ?? null;
@@ -493,6 +505,7 @@ export function OnboardingPage({
 						updateOrganizationLogoHolder={updateOrganizationLogoHolder}
 						updateOnboarding={updateOnboarding}
 						isEditing={hasOrganization}
+						referralCookieCode={referralCookieCode}
 					/>
 				);
 			case "fonte-dados":

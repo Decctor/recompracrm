@@ -1,6 +1,7 @@
 import { buildFAQPageJsonLd } from "@/components/Content/ArticleFAQ";
 import "./_components/ledger/ledger.css";
 import LandingAnalyticsTracker from "./_components/LandingAnalyticsTracker";
+import ReferralLinkNotice from "./_components/ReferralLinkNotice";
 import { LedgerCases } from "./_components/ledger/cases/Cases";
 import { LANDING_FAQS, LedgerFAQ } from "./_components/ledger/FAQ";
 import { LedgerClosingCTA, LedgerFooter } from "./_components/ledger/Footer";
@@ -29,6 +30,7 @@ export default function LandingPage() {
 			{/* JSON-LD FAQPage */}
 			<script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }} />
 			<LandingAnalyticsTracker />
+			<ReferralLinkNotice />
 			<LedgerNavbar />
 			<main>
 				<LedgerHero />
