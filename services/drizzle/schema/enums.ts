@@ -430,6 +430,10 @@ export const platformPartnerCommissionStatusEnum = pgEnum("platform_partner_comm
 
 export const platformPartnerPayoutStatusEnum = pgEnum("platform_partner_payout_status", ["RASCUNHO", "APROVADO", "PAGO", "CANCELADO"]);
 
+export const platformPartnerPersonTypeEnum = pgEnum("platform_partner_person_type", ["PESSOA_FISICA", "PESSOA_JURIDICA"]);
+
+export const platformPartnerPixKeyTypeEnum = pgEnum("platform_partner_pix_key_type", ["CPF", "CNPJ", "EMAIL", "TELEFONE", "ALEATORIA"]);
+
 // ============================================================================
 // COUPONS
 // ============================================================================

@@ -1,6 +1,7 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { formatAsSlug } from "@/lib/formatting";
+import { isPlatformPartnerDocumentPathOwnedBy } from "@/lib/platform-partnerships/documents";
 import { PlatformPartnerOnboardingSchema } from "@/schemas/platform-partnerships";
 import { db } from "@/services/drizzle";
 import { platformPartners } from "@/services/drizzle/schema";
@@ -29,24 +30,40 @@ async function generateUniquePartnerCode(nome: string) {
 }
 
 async function createPlatformPartnerOnboarding({ input, userId }: { input: TCreatePlatformPartnerOnboardingInput; userId: string }) {
+	// Documentos só do prefixo do próprio usuário: sem isso, dava para apontar o cadastro para o arquivo de outra pessoa.
+	for (const path of Object.values(input.partner.arquivos)) {
+		if (path && !isPlatformPartnerDocumentPathOwnedBy({ path, userId }))
+			throw new createHttpError.BadRequest("Documento inválido. Envie o arquivo novamente.");
+	}
+
 	const existingPartner = await db.query.platformPartners.findFirst({
 		where: eq(platformPartners.usuarioId, userId),
 	});
+	// Parceiro ativo não troca chave PIX nem documento por aqui: isso passa pelo financeiro.
+	if (existingPartner?.status === "ATIVO") throw new createHttpError.Conflict("Seu cadastro de parceiro já está ativo.");
+
+	const now = new Date();
+	const partnerData = {
+		nome: input.partner.nome,
+		email: input.partner.email,
+		telefone: input.partner.telefone,
+		tipoPessoa: input.partner.tipoPessoa,
+		cpfCnpj: input.partner.cpfCnpj,
+		chavePix: input.partner.chavePix,
+		chavePixTipo: input.partner.chavePixTipo,
+		dataConfirmacaoTitularPix: now,
+		arquivos: input.partner.arquivos,
+		aceiteTermos: input.partner.aceiteTermos,
+		dataAceiteTermos: now,
+	};
 
 	if (existingPartner) {
 		const [updatedPartner] = await db
 			.update(platformPartners)
 			.set({
-				nome: input.partner.nome,
-				email: input.partner.email,
-				telefone: input.partner.telefone,
-				cpfCnpj: input.partner.cpfCnpj,
-				chavePix: input.partner.chavePix,
-				arquivos: input.partner.arquivos,
-				aceiteTermos: input.partner.aceiteTermos,
-				dataAceiteTermos: input.partner.aceiteTermos ? new Date() : existingPartner.dataAceiteTermos,
+				...partnerData,
 				status: existingPartner.status === "REJEITADO" ? "PENDENTE_APROVACAO" : existingPartner.status,
-				dataAtualizacao: new Date(),
+				dataAtualizacao: now,
 			})
 			.where(eq(platformPartners.id, existingPartner.id))
 			.returning({ id: platformPartners.id });
@@ -66,14 +83,7 @@ async function createPlatformPartnerOnboarding({ input, userId }: { input: TCrea
 			usuarioId: userId,
 			status: "PENDENTE_APROVACAO",
 			codigo,
-			nome: input.partner.nome,
-			email: input.partner.email,
-			telefone: input.partner.telefone,
-			cpfCnpj: input.partner.cpfCnpj,
-			chavePix: input.partner.chavePix,
-			arquivos: input.partner.arquivos,
-			aceiteTermos: input.partner.aceiteTermos,
-			dataAceiteTermos: new Date(),
+			...partnerData,
 		})
 		.returning({ id: platformPartners.id });
 
@@ -83,14 +93,14 @@ async function createPlatformPartnerOnboarding({ input, userId }: { input: TCrea
 		data: {
 			partnerId: createdPartner.id,
 		},
-		message: "Cadastro de parceiro enviado para aprovacao.",
+		message: "Cadastro de parceiro enviado para aprovação.",
 	};
 }
 export type TCreatePlatformPartnerOnboardingOutput = Awaited<ReturnType<typeof createPlatformPartnerOnboarding>>;
 
 async function createPlatformPartnerOnboardingRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
-	if (!session) throw new createHttpError.Unauthorized("Voce nao esta autenticado.");
+	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
 
 	const payload = await request.json();
 	const input = CreatePlatformPartnerOnboardingInputSchema.parse(payload);

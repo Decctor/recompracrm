@@ -4,6 +4,8 @@ import { newTable } from "./common";
 import {
 	platformPartnerCommissionStatusEnum,
 	platformPartnerPayoutStatusEnum,
+	platformPartnerPersonTypeEnum,
+	platformPartnerPixKeyTypeEnum,
 	platformPartnerReferralStatusEnum,
 	platformPartnerStatusEnum,
 } from "./enums";
@@ -31,11 +33,20 @@ export const platformPartners = newTable(
 		nome: text("nome").notNull(),
 		email: text("email").notNull(),
 		telefone: text("telefone").notNull(),
+		tipoPessoa: platformPartnerPersonTypeEnum("tipo_pessoa"),
 		cpfCnpj: text("cpf_cnpj").notNull(),
 		chavePix: text("chave_pix").notNull(),
+		chavePixTipo: platformPartnerPixKeyTypeEnum("chave_pix_tipo"),
+		// Autodeclaração: não há consulta ao DICT — o parceiro confirma que a chave está no próprio CPF/CNPJ.
+		dataConfirmacaoTitularPix: timestamp("data_confirmacao_titular_pix"),
+		// Caminhos no bucket privado (nunca URL pública); o admin lê por URL assinada.
 		arquivos: jsonb("arquivos").$type<TPlatformPartnerFiles>().notNull().default({}),
 		aceiteTermos: boolean("aceite_termos").notNull().default(false),
 		dataAceiteTermos: timestamp("data_aceite_termos"),
+		// Mensagem do kit de divulgação editada pelo parceiro; nulo usa o modelo padrão.
+		mensagemDivulgacao: text("mensagem_divulgacao"),
+		// Primeira vez que o parceiro viu o cartão emitido após a aprovação — a animação roda uma vez só.
+		dataCartaoVisualizado: timestamp("data_cartao_visualizado"),
 		observacoesInternas: text("observacoes_internas"),
 		dataAprovacao: timestamp("data_aprovacao"),
 		aprovadoPorId: varchar("aprovado_por_id", { length: 255 }).references(() => users.id, { onDelete: "set null" }),

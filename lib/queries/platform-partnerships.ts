@@ -1,3 +1,4 @@
+import type { TGetAdminPlatformPartnerDocumentOutput } from "@/app/api/admin/platform-partners/documents/route";
 import type { TGetAdminPlatformPartnerCommissionsOutput } from "@/app/api/admin/platform-partners/commissions/route";
 import type { TGetAdminPlatformPartnerPayoutsOutput } from "@/app/api/admin/platform-partners/payouts/route";
 import type { TGetAdminPlatformPartnerReferralsOutput } from "@/app/api/admin/platform-partners/referrals/route";
@@ -5,6 +6,7 @@ import type { TGetAdminPlatformPartnersInput, TGetAdminPlatformPartnersOutput } 
 import type { TGetPlatformPartnerDashboardOutput } from "@/app/api/platform-partner/dashboard/route";
 import type { TGetPlatformPartnerMeOutput } from "@/app/api/platform-partner/me/route";
 import type { TGetPlatformPartnerPayoutsOutput } from "@/app/api/platform-partner/payouts/route";
+import type { TGetPlatformPartnerReferralsOutput } from "@/app/api/platform-partner/referrals/route";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import { useState } from "react";
@@ -36,15 +38,30 @@ export function usePlatformPartnerDashboard() {
 	};
 }
 
-async function fetchPlatformPartnerPayouts() {
-	const { data } = await axios.get<TGetPlatformPartnerPayoutsOutput>("/api/platform-partner/payouts");
-	return data.data.payouts;
+async function fetchPlatformPartnerPayoutById(id: string) {
+	const searchParams = new URLSearchParams({ id });
+	const { data } = await axios.get<TGetPlatformPartnerPayoutsOutput>(`/api/platform-partner/payouts?${searchParams.toString()}`);
+	return data.data.byId;
 }
 
-export function usePlatformPartnerPayouts() {
-	const queryKey = ["platform-partner-payouts"];
+export function usePlatformPartnerPayoutById({ payoutId }: { payoutId: string }) {
+	const queryKey = ["platform-partner-payout-by-id", payoutId];
 	return {
-		...useQuery({ queryKey, queryFn: fetchPlatformPartnerPayouts }),
+		...useQuery({ queryKey, queryFn: () => fetchPlatformPartnerPayoutById(payoutId) }),
+		queryKey,
+	};
+}
+
+async function fetchPlatformPartnerStoreById(id: string) {
+	const searchParams = new URLSearchParams({ id });
+	const { data } = await axios.get<TGetPlatformPartnerReferralsOutput>(`/api/platform-partner/referrals?${searchParams.toString()}`);
+	return data.data.byId;
+}
+
+export function usePlatformPartnerStoreById({ storeId }: { storeId: string }) {
+	const queryKey = ["platform-partner-store-by-id", storeId];
+	return {
+		...useQuery({ queryKey, queryFn: () => fetchPlatformPartnerStoreById(storeId) }),
 		queryKey,
 	};
 }
@@ -135,4 +152,11 @@ export function useAdminPlatformPartnerPayouts(params: { partnerId?: string | nu
 		...useQuery({ queryKey, queryFn: () => fetchAdminPlatformPartnerPayouts(params) }),
 		queryKey,
 	};
+}
+
+/** URL assinada (curta) do documento do parceiro. Busca sob demanda, no clique do admin. */
+export async function fetchAdminPlatformPartnerDocumentUrl({ partnerId, tipo }: { partnerId: string; tipo: "cpf" | "cnpj" }) {
+	const searchParams = new URLSearchParams({ partnerId, tipo });
+	const { data } = await axios.get<TGetAdminPlatformPartnerDocumentOutput>(`/api/admin/platform-partners/documents?${searchParams.toString()}`);
+	return data.data.url;
 }

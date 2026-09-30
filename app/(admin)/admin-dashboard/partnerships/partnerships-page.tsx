@@ -16,18 +16,34 @@ import {
 	updateAdminPlatformPartnerCommission,
 } from "@/lib/mutations/platform-partnerships";
 import {
+	fetchAdminPlatformPartnerDocumentUrl,
 	useAdminPlatformPartnerCommissions,
 	useAdminPlatformPartnerPayouts,
 	useAdminPlatformPartnerReferrals,
 	useAdminPlatformPartners,
 } from "@/lib/queries/platform-partnerships";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Banknote, Building2, CheckCircle2, Handshake, ReceiptText, Search, ShieldCheck, Users } from "lucide-react";
+import { Banknote, Building2, CheckCircle2, FileText, Handshake, ReceiptText, Search, ShieldCheck, ShieldX, Users } from "lucide-react";
 import type React from "react";
 import { toast } from "sonner";
 
 function centsToMoney(value: number) {
 	return formatToMoney(value / 100);
+}
+
+const PERSON_TYPE_LABEL: Record<string, string> = { PESSOA_FISICA: "PF", PESSOA_JURIDICA: "PJ" };
+
+async function openPartnerDocument(partnerId: string, tipo: "cpf" | "cnpj") {
+	// Abre a aba no clique (antes do await) para o navegador não bloquear o pop-up.
+	const tab = window.open("", "_blank");
+	try {
+		const url = await fetchAdminPlatformPartnerDocumentUrl({ partnerId, tipo });
+		if (tab) tab.location.href = url;
+		else window.location.href = url;
+	} catch (error) {
+		tab?.close();
+		toast.error(getErrorMessage(error));
+	}
 }
 
 export default function PlatformPartnershipsAdminPage() {
@@ -159,16 +175,41 @@ export default function PlatformPartnershipsAdminPage() {
 											<p className="text-sm text-muted-foreground">
 												{partner.codigo} - {partner.email} - {partner.telefone}
 											</p>
+											<p className="text-sm text-muted-foreground">
+												{partner.tipoPessoa ? `${PERSON_TYPE_LABEL[partner.tipoPessoa]} · ` : ""}
+												{partner.cpfCnpj} - PIX {partner.chavePixTipo ? `(${partner.chavePixTipo}) ` : ""}
+												{partner.chavePix}
+												{partner.dataConfirmacaoTitularPix ? ` · titular confirmado em ${formatDateAsLocale(partner.dataConfirmacaoTitularPix)}` : ""}
+											</p>
 											<p className="text-xs text-muted-foreground">
 												{partner.referrals.length} organizacoes, {partner.commissions.length} comissoes, {partner.payouts.length} payouts
 											</p>
 										</div>
 									</div>
 									<div className="flex flex-wrap gap-2">
+										{(["cpf", "cnpj"] as const)
+											.filter((tipo) => partner.arquivos[tipo])
+											.map((tipo) => (
+												<Button key={tipo} size="sm" variant="outline" className="gap-2" onClick={() => openPartnerDocument(partner.id, tipo)}>
+													<FileText className="h-4 w-4" />
+													Documento {tipo.toUpperCase()}
+												</Button>
+											))}
 										{partner.status !== "ATIVO" ? (
 											<Button size="sm" className="gap-2" onClick={() => updatePartnerMutation.mutate({ partnerId: partner.id, partner: { status: "ATIVO" } })}>
 												<ShieldCheck className="h-4 w-4" />
 												Aprovar
+											</Button>
+										) : null}
+										{partner.status === "PENDENTE_APROVACAO" ? (
+											<Button
+												size="sm"
+												variant="outline"
+												className="gap-2"
+												onClick={() => updatePartnerMutation.mutate({ partnerId: partner.id, partner: { status: "REJEITADO" } })}
+											>
+												<ShieldX className="h-4 w-4" />
+												Rejeitar
 											</Button>
 										) : null}
 										<Button

@@ -4,11 +4,8 @@ import { archiveExternalEvent, runArchivedEventProcessing } from "@/lib/external
 import { consolidatePaidAccess, grantProvisionalAccess } from "@/lib/subscriptions/access";
 import {
 	PLATFORM_PARTNER_COMMISSION_RULE_VERSION,
-	PLATFORM_PARTNER_MONTHLY_FIRST_INVOICE_BPS,
-	PLATFORM_PARTNER_MONTHLY_SUBSEQUENT_INVOICE_BPS,
-	PLATFORM_PARTNER_MONTHLY_THIRD_INVOICE_BPS,
 	PLATFORM_PARTNER_RULE_SNAPSHOT,
-	PLATFORM_PARTNER_YEARLY_INVOICE_BPS,
+	getPlatformPartnerCommissionBps,
 } from "@/lib/platform-partnerships/constants";
 import { db } from "@/services/drizzle";
 import { organizations, platformPartnerCommissions, platformPartnerReferrals } from "@/services/drizzle/schema";
@@ -420,13 +417,7 @@ async function handleInvoicePaid(invoice: Stripe.Invoice) {
 			),
 		);
 	const numeroInvoiceAssinatura = (previousCommissionsResult[0]?.count ?? 0) + 1;
-	const percentualComissaoBps = hasYearlyLine
-		? PLATFORM_PARTNER_YEARLY_INVOICE_BPS
-		: numeroInvoiceAssinatura === 1
-			? PLATFORM_PARTNER_MONTHLY_FIRST_INVOICE_BPS
-			: numeroInvoiceAssinatura === 3
-				? PLATFORM_PARTNER_MONTHLY_THIRD_INVOICE_BPS
-				: PLATFORM_PARTNER_MONTHLY_SUBSEQUENT_INVOICE_BPS;
+	const percentualComissaoBps = getPlatformPartnerCommissionBps({ numeroInvoiceAssinatura, anual: hasYearlyLine });
 	const valorComissaoCentavos = Math.round((valorBaseComissionavelCentavos * percentualComissaoBps) / 10000);
 	const now = new Date();
 

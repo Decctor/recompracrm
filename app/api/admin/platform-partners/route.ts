@@ -1,7 +1,7 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { createSimplifiedSearchCondition } from "@/lib/search";
-import { PlatformPartnerOnboardingSchema } from "@/schemas/platform-partnerships";
+import { PlatformPartnerRegistrationSchema } from "@/schemas/platform-partnerships";
 import { db } from "@/services/drizzle";
 import { platformPartners } from "@/services/drizzle/schema";
 import { and, count, eq } from "drizzle-orm";
@@ -96,7 +96,7 @@ export type TGetAdminPlatformPartnersOutputDefault = Exclude<TGetAdminPlatformPa
 export type TGetAdminPlatformPartnersOutputById = Exclude<TGetAdminPlatformPartnersOutput["data"]["byId"], null | undefined>;
 
 const CreateAdminPlatformPartnerInputSchema = z.object({
-	partner: PlatformPartnerOnboardingSchema.extend({
+	partner: PlatformPartnerRegistrationSchema.extend({
 		codigo: z.string({ required_error: "Codigo do parceiro nao informado.", invalid_type_error: "Tipo invalido para codigo do parceiro." }),
 	}),
 });
@@ -125,7 +125,7 @@ export type TCreateAdminPlatformPartnerOutput = Awaited<ReturnType<typeof create
 
 const UpdateAdminPlatformPartnerInputSchema = z.object({
 	partnerId: z.string({ required_error: "ID do parceiro nao informado.", invalid_type_error: "Tipo invalido para ID do parceiro." }),
-	partner: PlatformPartnerOnboardingSchema.partial()
+	partner: PlatformPartnerRegistrationSchema.partial()
 		.extend({
 			codigo: z.string({ invalid_type_error: "Tipo invalido para codigo do parceiro." }).optional(),
 			status: z.enum(["PENDENTE_APROVACAO", "ATIVO", "SUSPENSO", "REJEITADO"]).optional(),

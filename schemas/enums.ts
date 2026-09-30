@@ -491,6 +491,12 @@ export type TPlatformPartnerCommissionStatusEnum = z.infer<typeof PlatformPartne
 export const PlatformPartnerPayoutStatusEnum = z.enum(["RASCUNHO", "APROVADO", "PAGO", "CANCELADO"]);
 export type TPlatformPartnerPayoutStatusEnum = z.infer<typeof PlatformPartnerPayoutStatusEnum>;
 
+export const PlatformPartnerPersonTypeEnum = z.enum(["PESSOA_FISICA", "PESSOA_JURIDICA"]);
+export type TPlatformPartnerPersonTypeEnum = z.infer<typeof PlatformPartnerPersonTypeEnum>;
+
+export const PlatformPartnerPixKeyTypeEnum = z.enum(["CPF", "CNPJ", "EMAIL", "TELEFONE", "ALEATORIA"]);
+export type TPlatformPartnerPixKeyTypeEnum = z.infer<typeof PlatformPartnerPixKeyTypeEnum>;
+
 export const ClientTagIconEnum = z.enum([
 	"Tag",
 	"Tags",

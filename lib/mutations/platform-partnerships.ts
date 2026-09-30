@@ -14,6 +14,8 @@ import type {
 	TUpdateAdminPlatformPartnerInput,
 	TUpdateAdminPlatformPartnerOutput,
 } from "@/app/api/admin/platform-partners/route";
+import type { TCreatePlatformPartnerDocumentInput, TCreatePlatformPartnerDocumentOutput } from "@/app/api/platform-partner/documents/route";
+import type { TUpdatePlatformPartnerMeInput, TUpdatePlatformPartnerMeOutput } from "@/app/api/platform-partner/me/route";
 import type { TCreatePlatformPartnerOnboardingInput, TCreatePlatformPartnerOnboardingOutput } from "@/app/api/platform-partner/onboarding/route";
 import type { TTrackPlatformPartnerInput, TTrackPlatformPartnerOutput } from "@/app/api/platform-partners/track/route";
 import axios from "axios";
@@ -25,6 +27,19 @@ export async function trackPlatformPartner(input: TTrackPlatformPartnerInput) {
 
 export async function createPlatformPartnerOnboarding(input: TCreatePlatformPartnerOnboardingInput) {
 	const { data } = await axios.post<TCreatePlatformPartnerOnboardingOutput>("/api/platform-partner/onboarding", input);
+	return data;
+}
+
+export async function updatePlatformPartnerMe(input: TUpdatePlatformPartnerMeInput) {
+	const { data } = await axios.put<TUpdatePlatformPartnerMeOutput>("/api/platform-partner/me", input);
+	return data;
+}
+
+export async function createPlatformPartnerDocument(input: TCreatePlatformPartnerDocumentInput) {
+	const formData = new FormData();
+	formData.set("tipo", input.tipo);
+	formData.set("file", input.file);
+	const { data } = await axios.post<TCreatePlatformPartnerDocumentOutput>("/api/platform-partner/documents", formData);
 	return data;
 }
 
