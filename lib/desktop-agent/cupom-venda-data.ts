@@ -214,6 +214,7 @@ export async function buildCupomVendaDados({ organizacaoId, vendaId }: { organiz
 					pago: pagamento.pagoOnline,
 					descricao: pagamento.descricao,
 					situacao: pagamento.pagoOnline ? ("PAGO_CANAL" as const) : ("COBRAR" as const),
+					trocoPara: pagamento.trocoPara ?? null,
 				}))
 			: [...pagamentosAgrupados.values()].map((pagamento) => ({ ...pagamento, situacao: pagamento.pago ? ("PAGO" as const) : ("EM_ABERTO" as const) }));
 
@@ -255,7 +256,14 @@ export async function buildCupomVendaDados({ organizacaoId, vendaId }: { organiz
 			comandaNumero: sale.comandaNumero,
 			vendedorNome: sale.vendedorNome,
 			observacoes: sale.observacoes,
-			enderecoEntrega: sale.entregaModalidade === "ENTREGA" && sale.entregaLocalizacao ? buildAddressLines(sale.entregaLocalizacao) : null,
+			enderecoEntrega:
+				sale.entregaModalidade === "ENTREGA" && sale.entregaLocalizacao
+					? [
+							...buildAddressLines(sale.entregaLocalizacao),
+							// Referência é do pedido (canal), não do cadastro do endereço.
+							...(sale.integracaoMetadados?.entrega?.referencia ? [`Ref.: ${sale.integracaoMetadados.entrega.referencia}`] : []),
+						]
+					: null,
 			contatoTemporario:
 				sale.entregaModalidade === "ENTREGA" && sale.integracaoMetadados?.contatoTemporario
 					? {

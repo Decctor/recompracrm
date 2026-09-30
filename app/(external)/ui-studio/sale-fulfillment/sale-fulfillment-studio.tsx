@@ -89,6 +89,8 @@ const STUDIO_SALE = {
 		localizacaoNumero: "312",
 		localizacaoComplemento: "Fundos",
 	},
+	entregaReferencia: "Portão verde ao lado da padaria",
+	entregaTroco: { pagaCom: 300, valor: 18.2 },
 	itens: [
 		{
 			id: "item-studio-1",

@@ -91,6 +91,8 @@ export const SaleIntegrationMetadataSchema = z.object({
 		/** LOJA = entrega própria (frete é receita da loja, entra na NF); CANAL = entregador do canal. */
 		realizadaPor: z.enum(["LOJA", "CANAL"], { invalid_type_error: "Tipo não válido para o responsável pela entrega." }).nullable(),
 		valorFrete: z.number({ invalid_type_error: "Tipo não válido para o valor do frete." }),
+		/** Ponto de referência do endereço informado no pedido. Opcional: linhas antigas não têm. */
+		referencia: z.string({ invalid_type_error: "Tipo não válido para o ponto de referência." }).nullable().optional(),
 	}),
 	descontos: z.object({
 		/** Desconto bancado pela loja (sponsorship MERCHANT) — reduz a NF (rateado nos itens). */
@@ -113,6 +115,8 @@ export const SaleIntegrationMetadataSchema = z.object({
 					valor: z.number({ invalid_type_error: "Tipo não válido para o valor do pagamento do canal." }),
 					pagoOnline: z.boolean({ invalid_type_error: "Tipo não válido para o indicador de pagamento online." }),
 					descricao: z.string({ invalid_type_error: "Tipo não válido para a descrição do pagamento do canal." }).nullable(),
+					/** Dinheiro na entrega: nota com que o cliente vai pagar (troco = trocoPara − valor). */
+					trocoPara: z.number({ invalid_type_error: "Tipo não válido para o valor do troco." }).nullable().optional(),
 				}),
 			),
 		})

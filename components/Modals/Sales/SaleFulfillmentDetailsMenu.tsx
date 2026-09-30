@@ -447,6 +447,12 @@ function OrderDetails({ sale }: { sale: TGetSalesFulfillmentOutputById }) {
 					{sale.entregaModalidade === "ENTREGA" && !sale.entregaLocalizacao ? (
 						<p className="text-sm text-muted-foreground">Endereço não informado.</p>
 					) : null}
+					{sale.entregaReferencia ? (
+						<p className="mt-1 text-sm text-muted-foreground">
+							<span className="font-semibold text-foreground">Referência: </span>
+							{sale.entregaReferencia}
+						</p>
+					) : null}
 				</DetailGroup>
 				<DetailGroup icon={<Banknote className="size-4" />} title="Pagamento">
 					{sale.pagamentos.length > 0 ? (
@@ -467,6 +473,15 @@ function OrderDetails({ sale }: { sale: TGetSalesFulfillmentOutputById }) {
 					) : (
 						<p className="text-sm text-muted-foreground">Nenhum recebimento gerado.</p>
 					)}
+					{sale.entregaTroco ? (
+						<div className="mt-2.5 flex items-start justify-between gap-4 rounded-lg bg-amber-500/10 px-2.5 py-2 text-amber-700 dark:text-amber-300">
+							<div className="min-w-0">
+								<p className="text-sm font-bold">Levar troco</p>
+								<p className="mt-0.5 text-xs">Cliente paga com {formatToMoney(sale.entregaTroco.pagaCom)}</p>
+							</div>
+							<p className="shrink-0 text-sm font-extrabold tabular-nums">{formatToMoney(sale.entregaTroco.valor)}</p>
+						</div>
+					) : null}
 				</DetailGroup>
 				<DetailGroup icon={<ReceiptText className="size-4" />} title="Fiscal">
 					{sale.documentosFiscais.length > 0 ? (

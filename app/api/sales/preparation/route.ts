@@ -1,6 +1,7 @@
 import { appApiHandler } from "@/lib/app-api";
 import { requireERPSession } from "@/lib/authentication/erp-session";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { groupSaleItemModifiers } from "@/lib/sales/sale-item-modifier-groups";
 import type { TSaleAttendanceStatusEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
 import { sales, tabOrders } from "@/services/drizzle/schema";
@@ -21,7 +22,10 @@ type TPreparationTicketItem = {
 	id: string;
 	nome: string;
 	quantidade: number;
-	modificadores: { nome: string; quantidade: number }[];
+	// "sem cebola", "leite ninho além dos selecionados": é aqui que a cozinha precisa ler.
+	observacoes: string | null;
+	// Adicionais agrupados pelo grupo de origem ("Escolha seu gelato") — ver groupSaleItemModifiers.
+	gruposAdicionais: { grupo: string | null; adicionais: { nome: string; quantidade: number }[] }[];
 };
 
 export type TPreparationTicket = {
@@ -45,10 +49,11 @@ type TItemRow = {
 	id: string;
 	quantidade: number;
 	quantidadeCancelada: number;
+	observacoes: string | null;
 	metadados: unknown;
 	produto: { nome: string } | null;
 	produtoVariante: { nome: string } | null;
-	adicionais: { id: string; nome: string; quantidade: number }[];
+	adicionais: { id: string; nome: string; quantidade: number; opcao: { produtoAddOn: { nome: string } } | null }[];
 };
 
 function mapTicketItems(items: TItemRow[]): TPreparationTicketItem[] {
@@ -61,17 +66,24 @@ function mapTicketItems(items: TItemRow[]): TPreparationTicketItem[] {
 				id: item.id,
 				nome: metadata.nome ?? `${item.produto?.nome ?? "Item"}${variantSuffix}`,
 				quantidade: item.quantidade,
-				modificadores: item.adicionais.map((modifier) => ({ nome: modifier.nome, quantidade: modifier.quantidade })),
+				observacoes: item.observacoes?.trim() || null,
+				gruposAdicionais: groupSaleItemModifiers(item.adicionais, (modifier) => modifier.opcao?.produtoAddOn.nome).map(({ grupo, adicionais }) => ({
+					grupo,
+					adicionais: adicionais.map((modifier) => ({ nome: modifier.nome, quantidade: modifier.quantidade })),
+				})),
 			};
 		});
 }
 
 const ITEMS_WITH = {
-	columns: { id: true, quantidade: true, quantidadeCancelada: true, metadados: true },
+	columns: { id: true, quantidade: true, quantidadeCancelada: true, observacoes: true, metadados: true },
 	with: {
 		produto: { columns: { nome: true } },
 		produtoVariante: { columns: { nome: true } },
-		adicionais: { columns: { id: true, nome: true, quantidade: true } },
+		adicionais: {
+			columns: { id: true, nome: true, quantidade: true },
+			with: { opcao: { columns: { id: true }, with: { produtoAddOn: { columns: { nome: true } } } } },
+		},
 	},
 } as const;
 

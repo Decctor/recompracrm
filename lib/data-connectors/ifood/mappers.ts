@@ -592,13 +592,17 @@ function buildIfoodIntegrationMetadata(
 	const { merchantItemAndCartDiscount, merchantDeliveryFeeDiscount, sponsoredTotals } = splitIfoodBenefits(order);
 	const entrega = resolveIfoodDelivery(order, merchantDeliveryFeeDiscount);
 	const taxasCanal = resolveIfoodChannelFees(order, entrega.channelDeliveryFee);
+	const referencia = order.delivery?.deliveryAddress?.reference?.trim();
 
+	// Campos opcionais entram só quando têm valor: a assinatura de importação omite chaves
+	// ausentes, então pedidos sem referência/troco não são regravados por causa deles.
 	return {
 		versao: 1,
 		canal: "IFOOD",
 		entrega: {
 			realizadaPor: entrega.realizadaPor,
 			valorFrete: entrega.netDeliveryFee,
+			...(referencia ? { referencia } : {}),
 		},
 		descontos: {
 			loja: round2(merchantItemAndCartDiscount + merchantDeliveryFeeDiscount),
@@ -607,7 +611,13 @@ function buildIfoodIntegrationMetadata(
 		pagamentos: {
 			prePago: round2(order.payments?.prepaid ?? 0),
 			pendente: round2(order.payments?.pending ?? 0),
-			metodos: (payments ?? []).map(({ metodo, valor, pagoOnline, descricao }) => ({ metodo, valor, pagoOnline, descricao: descricao ?? null })),
+			metodos: (payments ?? []).map(({ metodo, valor, pagoOnline, descricao, trocoPara }) => ({
+				metodo,
+				valor,
+				pagoOnline,
+				descricao: descricao ?? null,
+				...(trocoPara ? { trocoPara } : {}),
+			})),
 		},
 		contatoTemporario: order.customer?.phone?.localizer
 			? {
@@ -651,11 +661,14 @@ function mapIfoodSalePayments(order: TIfoodOrder): TCanonicalSalePayment[] | nul
 			const methodKey = method.method?.toUpperCase() ?? "";
 			const mappedMethod = IFOOD_PAYMENT_METHOD_MAP[methodKey] ?? "OUTRO";
 			const description = method.card?.brand ?? (mappedMethod === "OUTRO" ? method.method : null);
+			// `changeFor` igual ou abaixo do valor = cliente tem o valor exato; só há troco a levar acima.
+			const changeFor = method.cash?.changeFor ?? 0;
 			return {
 				metodo: mappedMethod,
 				valor: method.value,
 				pagoOnline: method.type?.toUpperCase() === "ONLINE" || method.prepaid === true,
 				descricao: description,
+				...(changeFor > method.value ? { trocoPara: round2(changeFor) } : {}),
 			};
 		});
 	}
@@ -721,6 +734,9 @@ export function mapIfoodSale(order: TIfoodOrder, events: TIfoodEvent[] = []): TC
 		series: "N/A",
 		statusText,
 		type: "VENDA",
+		// Instrução de entrega do cliente vira a observação da venda (atendimento, preparo e cupom já
+		// a exibem). `undefined` quando vazia, pelo mesmo motivo dos opcionais dos metadados.
+		notes: order.delivery?.observations?.trim() || undefined,
 		occurredAt: pickOrderDate(order),
 		client: mapIfoodClient(order),
 		seller: null,

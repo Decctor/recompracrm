@@ -102,9 +102,16 @@ function PreparationTicketCard({ ticket }: { ticket: TPreparationTicket }) {
 							<span className="font-bold min-w-6 text-center bg-secondary rounded-md px-1">{item.quantidade}x</span>
 							<span className="font-medium tracking-tight">{item.nome}</span>
 						</div>
-						{item.modificadores.length > 0 ? (
-							<p className="text-[0.7rem] text-muted-foreground pl-8">
-								{item.modificadores.map((modifier) => `+ ${modifier.quantidade}x ${modifier.nome}`).join(" · ")}
+						{item.gruposAdicionais.map((group) => (
+							<p key={group.grupo ?? "sem-grupo"} className="text-[0.7rem] text-muted-foreground pl-8">
+								{group.grupo ? <span className="font-semibold uppercase tracking-tight">{group.grupo}: </span> : null}
+								{group.adicionais.map((modifier) => `+ ${modifier.quantidade}x ${modifier.nome}`).join(" · ")}
+							</p>
+						))}
+						{item.observacoes ? (
+							<p className="ml-8 flex items-start gap-1 rounded-md bg-amber-500/10 px-1.5 py-1 text-xs font-medium text-amber-700 dark:text-amber-300">
+								<NotebookPen className="w-3 h-3 mt-0.5 min-w-3" />
+								<span className="whitespace-pre-wrap">{item.observacoes}</span>
 							</p>
 						) : null}
 					</div>

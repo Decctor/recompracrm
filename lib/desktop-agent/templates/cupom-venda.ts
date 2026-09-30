@@ -104,6 +104,8 @@ export const CupomVendaDadosSchema = z.object({
 					pago: z.boolean({ invalid_type_error: "Tipo não válido para o status de pagamento." }),
 					descricao: z.string({ invalid_type_error: "Tipo não válido para a descrição do pagamento." }).optional().nullable(),
 					situacao: z.enum(["PAGO", "PAGO_CANAL", "COBRAR", "EM_ABERTO"], { invalid_type_error: "Situação do pagamento não válida." }).optional(),
+					// Dinheiro na entrega (canal): nota com que o cliente vai pagar. Troco = trocoPara − valor.
+					trocoPara: z.number({ invalid_type_error: "Tipo não válido para o valor do troco." }).optional().nullable(),
 				}),
 			)
 			.optional()
@@ -327,7 +329,12 @@ export function renderCupomVendaHtml(dados: TCupomVendaDados) {
 					const situacaoLabel =
 						situacao === "COBRAR" ? "COBRAR NA ENTREGA" : situacao === "PAGO_CANAL" ? "PAGO PELO IFOOD" : situacao === "PAGO" ? "PAGO" : "EM ABERTO";
 					const descricao = pagamento.descricao ? ` · ${pagamento.descricao}` : "";
-					return renderLinha(`${label}${parcelas}${descricao} (${situacaoLabel})`, formatToMoney(pagamento.valor));
+					const linha = renderLinha(`${label}${parcelas}${descricao} (${situacaoLabel})`, formatToMoney(pagamento.valor));
+					// Quem entrega precisa sair com o troco: em destaque, logo abaixo do pagamento.
+					const troco = pagamento.trocoPara ? pagamento.trocoPara - pagamento.valor : 0;
+					return troco > 0
+						? `${linha}${renderLinha(`LEVAR TROCO (paga com ${formatToMoney(pagamento.trocoPara ?? 0)})`, formatToMoney(troco), { destaque: true })}`
+						: linha;
 				})
 				.join("")}
 			${venda.troco && venda.troco > 0 ? renderLinha("TROCO", formatToMoney(venda.troco), { destaque: true }) : ""}

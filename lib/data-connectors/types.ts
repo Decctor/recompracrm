@@ -103,6 +103,11 @@ export type TCanonicalSalePayment = {
 	 */
 	pagoOnline: boolean;
 	descricao?: string | null;
+	/**
+	 * Dinheiro na entrega: nota com que o cliente vai pagar (troco = trocoPara − valor). Informativo
+	 * para quem entrega — não gera transação de troco. Ausente quando não há troco a levar.
+	 */
+	trocoPara?: number | null;
 };
 
 export type TCanonicalSaleItem = {

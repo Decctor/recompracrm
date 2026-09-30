@@ -169,6 +169,8 @@ export const IfoodOrderDeliveryAddressSchema = z
 		streetName: NullableStringSchema,
 		streetNumber: NullableStringSchema,
 		complement: NullableStringSchema,
+		// Ponto de referência ("próximo ao mercado") — por pedido, não vai para o cadastro do cliente.
+		reference: NullableStringSchema,
 		coordinates: z
 			.object({
 				latitude: NullableStringSchema,
@@ -186,6 +188,8 @@ export const IfoodOrderDeliverySchema = z
 		deliveryAddress: IfoodOrderDeliveryAddressSchema.optional().nullable(),
 		deliveryDateTime: NullableStringSchema,
 		mode: NullableStringSchema,
+		// Instrução do cliente para a entrega ("tocar a campainha", "deixar na portaria").
+		observations: NullableStringSchema,
 	})
 	.passthrough();
 
@@ -279,6 +283,15 @@ export const IfoodOrderPaymentMethodSchema = z
 			.passthrough()
 			.optional()
 			.nullable(),
+		/** Pagamento em dinheiro na entrega: `changeFor` = nota com que o cliente vai pagar. */
+		cash: z
+			.object({
+				changeFor: MoneySchema,
+			})
+			.passthrough()
+			.optional()
+			.nullable()
+			.catch(null),
 	})
 	.passthrough();
 export type TIfoodOrderPaymentMethod = z.infer<typeof IfoodOrderPaymentMethodSchema>;

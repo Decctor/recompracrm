@@ -145,3 +145,16 @@ test("agrupa os adicionais sob o nome do grupo e imprime a observação do item"
 	assert.match(html, /Pistache Supremo<\/span><span class="adicional">\+ Colher extra<\/span>/);
 	assert.match(html, /Obs\.: Quero leite ninho além dos selecionados/);
 });
+
+test("destaca o troco a levar abaixo do pagamento em dinheiro na entrega", () => {
+	const html = renderCupomVendaHtml(
+		buildData([{ metodo: "DINHEIRO", valor: 86, pago: false, descricao: null, situacao: "COBRAR", trocoPara: 100 }]),
+	);
+	assert.match(html, /Dinheiro \(COBRAR NA ENTREGA\)/);
+	assert.match(html, /LEVAR TROCO \(paga com R\$ 100,00\)<\/span><span>R\$ 14,00/);
+});
+
+test("não imprime troco quando o pagamento não tem nota maior que o valor", () => {
+	const html = renderCupomVendaHtml(buildData([{ metodo: "DINHEIRO", valor: 86, pago: false, situacao: "COBRAR", trocoPara: null }]));
+	assert.doesNotMatch(html, /LEVAR TROCO/);
+});

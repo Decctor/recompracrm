@@ -196,6 +196,7 @@ async function getSalesFulfillment({ input, orgId, policy }: { input: TGetSalesF
 				modelo: true,
 				processamentoOrigem: true,
 				tabId: true,
+				integracaoMetadados: true,
 			},
 			with: SALE_FULFILLMENT_DETAILS_WITH,
 		});
@@ -203,6 +204,11 @@ async function getSalesFulfillment({ input, orgId, policy }: { input: TGetSalesF
 		if (!sale) throw new createHttpError.NotFound("Venda não encontrada.");
 
 		const card = mapSaleRowToFulfillmentCard(sale);
+		// Dinheiro na entrega com troco a levar (canal). Os pagamentos do card vêm das transações
+		// financeiras, que não guardam a nota com que o cliente vai pagar.
+		const cashChange = (sale.integracaoMetadados?.pagamentos?.metodos ?? []).find(
+			(method) => method.trocoPara != null && method.trocoPara > method.valor,
+		);
 		return {
 			data: {
 				default: null,
@@ -215,6 +221,8 @@ async function getSalesFulfillment({ input, orgId, policy }: { input: TGetSalesF
 					descontosTotal: sale.descontosTotal,
 					acrescimosTotal: sale.acrescimosTotal,
 					entregaLocalizacao: sale.entregaLocalizacao,
+					entregaReferencia: sale.integracaoMetadados?.entrega?.referencia ?? null,
+					entregaTroco: cashChange?.trocoPara ? { pagaCom: cashChange.trocoPara, valor: Math.round((cashChange.trocoPara - cashChange.valor) * 100) / 100 } : null,
 					itens: sale.itens,
 					documentosFiscais: sale.documentosFiscais,
 				},
