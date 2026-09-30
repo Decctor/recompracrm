@@ -7,6 +7,7 @@ import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import z from "zod";
 import { getPayoutDateForEligibility, getPreviousLocalMonthRange } from "@/lib/platform-partnerships/earnings";
+import { notifyPlatformPartnerPixPaid } from "@/lib/platform-partnerships/notifications";
 
 const GetAdminPlatformPartnerPayoutsInputSchema = z.object({
 	partnerId: z.string({ invalid_type_error: "Tipo invalido para ID do parceiro." }).optional().nullable(),
@@ -153,6 +154,7 @@ async function updateAdminPlatformPartnerPayout({ input }: { input: TUpdateAdmin
 		where: eq(platformPartnerPayouts.id, input.payoutId),
 		with: {
 			commissions: true,
+			partner: { columns: { nome: true, email: true } },
 		},
 	});
 	if (!payout) throw new createHttpError.NotFound("Payout nao encontrado.");
@@ -179,6 +181,14 @@ async function updateAdminPlatformPartnerPayout({ input }: { input: TUpdateAdmin
 			}
 		}
 	});
+
+	if (input.status === "PAGO" && payout.status !== "PAGO") {
+		notifyPlatformPartnerPixPaid(payout.partner, {
+			id: payout.id,
+			valorTotalCentavos: payout.valorTotalCentavos,
+			dataPagamento: input.dataPagamento ?? new Date(),
+		});
+	}
 
 	return {
 		data: {

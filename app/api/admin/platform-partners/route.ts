@@ -8,6 +8,7 @@ import { and, count, eq } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import z from "zod";
+import { notifyPlatformPartnerApproved, notifyPlatformPartnerRejected } from "@/lib/platform-partnerships/notifications";
 
 const GetAdminPlatformPartnersInputSchema = z.object({
 	id: z.string({ invalid_type_error: "Tipo invalido para ID do parceiro." }).optional().nullable(),
@@ -158,6 +159,13 @@ async function updateAdminPlatformPartner({ input, adminUserId }: { input: TUpda
 		.where(eq(platformPartners.id, input.partnerId))
 		.returning({ id: platformPartners.id });
 	if (!updatedPartner) throw new createHttpError.InternalServerError("Erro ao atualizar parceiro.");
+
+	if (status && status !== existingPartner.status) {
+		const recipient = { nome: input.partner?.nome ?? existingPartner.nome, email: input.partner?.email ?? existingPartner.email };
+		if (status === "ATIVO")
+			notifyPlatformPartnerApproved({ ...recipient, codigo: input.partner?.codigo?.trim().toUpperCase() || existingPartner.codigo });
+		if (status === "REJEITADO" && input.partner?.motivoRejeicao) notifyPlatformPartnerRejected(recipient, input.partner.motivoRejeicao);
+	}
 
 	return {
 		data: {

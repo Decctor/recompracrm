@@ -2,18 +2,21 @@ import { resend } from "@/services/resend";
 import MagicLinkTemplate from "@/services/resend/templates/MagicLink";
 import MessageTemplateEmail from "@/services/resend/templates/MessageTemplate";
 import OrganizationInviteTemplate from "@/services/resend/templates/OrganizationInvite";
+import PlatformPartnerNotificationTemplate from "@/services/resend/templates/PlatformPartnerNotification";
 import type { ComponentProps } from "react";
 
 export enum EmailTemplate {
 	AuthMagicLink = "AuthMagicLink",
 	OrganizationInvite = "OrganizationInvite",
 	MessageTemplate = "MessageTemplate",
+	PlatformPartnerNotification = "PlatformPartnerNotification",
 }
 
 export type PropsMap = {
 	[EmailTemplate.AuthMagicLink]: ComponentProps<typeof MagicLinkTemplate>;
 	[EmailTemplate.OrganizationInvite]: ComponentProps<typeof OrganizationInviteTemplate>;
 	[EmailTemplate.MessageTemplate]: ComponentProps<typeof MessageTemplateEmail>;
+	[EmailTemplate.PlatformPartnerNotification]: ComponentProps<typeof PlatformPartnerNotificationTemplate>;
 	// [EmailTemplate.PasswordReset]: ComponentProps<typeof ResetPasswordTemplate>;
 };
 
@@ -64,6 +67,13 @@ function getReactEmailTemplateAndSubject<T extends EmailTemplate>(template: T, p
 			return {
 				templateComponent: <MessageTemplateEmail {...messageTemplateProps} />,
 				subject: messageTemplateProps.content.assunto,
+			};
+		}
+		case EmailTemplate.PlatformPartnerNotification: {
+			const partnerProps = props as PropsMap[EmailTemplate.PlatformPartnerNotification];
+			return {
+				templateComponent: <PlatformPartnerNotificationTemplate {...partnerProps} />,
+				subject: partnerProps.subject,
 			};
 		}
 		default:

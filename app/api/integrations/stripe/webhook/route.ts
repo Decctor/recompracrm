@@ -7,6 +7,8 @@ import {
 	PLATFORM_PARTNER_RULE_SNAPSHOT,
 	getPlatformPartnerCommissionBps,
 } from "@/lib/platform-partnerships/constants";
+import { getPayoutDateForEligibility } from "@/lib/platform-partnerships/earnings";
+import { notifyPlatformPartnerNewCommission } from "@/lib/platform-partnerships/notifications";
 import { db } from "@/services/drizzle";
 import { organizations, platformPartnerCommissions, platformPartnerReferrals } from "@/services/drizzle/schema";
 import { stripe } from "@/services/stripe";
@@ -449,5 +451,13 @@ async function handleInvoicePaid(invoice: Stripe.Invoice) {
 				dataPrimeiroPagamento: referral.dataPrimeiroPagamento ?? now,
 			})
 			.where(eq(platformPartnerReferrals.id, referral.id));
+	});
+
+	notifyPlatformPartnerNewCommission(referral.partner, {
+		lojaNome: organization.nome,
+		numeroInvoiceAssinatura,
+		percentualComissaoBps,
+		valorComissaoCentavos,
+		dataPix: getPayoutDateForEligibility(addDays(now, 30)),
 	});
 }
