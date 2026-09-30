@@ -1,6 +1,7 @@
 import type { TIfoodCatalogContextEnum, TIfoodCatalogStatusEnum, TIfoodItemTypeEnum, TIfoodOptionGroupTypeEnum } from "@/schemas/enums";
 import type { AxiosInstance } from "axios";
 import { mapIfoodError } from "./errors";
+import { setIfoodOptionGroupStatus } from "./item-document";
 import { IFOOD_CATALOG_BASE_URL, mapIfoodOptionGroup, IfoodOptionGroupDetailResponseSchema } from "./catalog-types";
 
 /**
@@ -317,8 +318,10 @@ export async function updateIfoodOptionGroup(client: AxiosInstance, merchantId: 
 }
 
 /**
- * PATCH /optionGroups/status — pausa/reativa um grupo inteiro. O id vai no CORPO, não no caminho
- * (`/optionGroups/{id}/status` não é o endpoint documentado).
+ * Pausa/reativa um grupo inteiro. `PATCH /optionGroups/status` NÃO existe (404, medido em
+ * 2026-09-30); o status só muda pela ida-e-volta de um item que carrega o grupo — ver
+ * `setIfoodOptionGroupStatus`. `preferredItemIds` evita varrer o cardápio quando o chamador já sabe
+ * onde o grupo está.
  *
  * Prefira pausar opções individuais quando o grupo ainda deve aparecer com as demais disponíveis.
  */
@@ -327,12 +330,9 @@ export async function patchIfoodOptionGroupStatus(
 	merchantId: string,
 	optionGroupId: string,
 	status: TIfoodCatalogStatusEnum,
+	preferredItemIds?: string[],
 ): Promise<void> {
-	try {
-		await client.patch(catalogUrl(merchantId, "/optionGroups/status"), { optionGroupId, status });
-	} catch (error) {
-		mapIfoodError("patchIfoodOptionGroupStatus", error);
-	}
+	await setIfoodOptionGroupStatus(client, merchantId, { optionGroupId, status, preferredItemIds });
 }
 
 export async function deleteIfoodOptionGroup(client: AxiosInstance, merchantId: string, optionGroupId: string): Promise<void> {
@@ -359,29 +359,35 @@ export async function addIfoodOptions(
 	merchantId: string,
 	optionGroupId: string,
 	opcoes: TIfoodOptionCreatePayload[],
-): Promise<void> {
-	// Validado ao vivo (2026-09-27): UM objeto por chamada — o array é lido como o próprio DTO e
-	// recusado —, `price` obrigatório, e o nome mora no PRODUTO da opção: sem `product`/`productId` a
-	// API responde "Either product or productId must be provided". `{ status, price, product: { name } }`
-	// responde 201 com `{ id, productId }`. O `externalCode` no produto não foi exercitado ao vivo.
+): Promise<{ nome: string; optionId: string | null; productId: string | null }[]> {
+	// Validado ao vivo (2026-09-27 e 2026-09-30): UM objeto por chamada — o array é lido como o
+	// próprio DTO e recusado —, `price` obrigatório, e o nome mora no PRODUTO da opção: sem
+	// `product`/`productId` a API responde "Either product or productId must be provided". A resposta
+	// (201) já traz `{ id, productId }` — é dela que saem os ids, porque `GET /optionGroups/{id}` não
+	// existe para reler o grupo. O `externalCode` no produto não foi exercitado ao vivo.
+	const created: { nome: string; optionId: string | null; productId: string | null }[] = [];
 	try {
 		for (const opcao of opcoes) {
-			await client.post(catalogUrl(merchantId, `/optionGroups/${optionGroupId}/options`), {
-				status: opcao.status ?? "AVAILABLE",
-				price: { value: opcao.preco ?? 0 },
-				product: { name: opcao.nome, externalCode: opcao.codigoExterno ?? undefined },
-			});
+			const response = await client.post<{ id?: string | null; productId?: string | null }>(
+				catalogUrl(merchantId, `/optionGroups/${optionGroupId}/options`),
+				{
+					status: opcao.status ?? "AVAILABLE",
+					price: { value: opcao.preco ?? 0 },
+					product: { name: opcao.nome, externalCode: opcao.codigoExterno ?? undefined },
+				},
+			);
+			created.push({ nome: opcao.nome, optionId: response.data?.id ?? null, productId: response.data?.productId ?? null });
 		}
+		return created;
 	} catch (error) {
 		mapIfoodError("addIfoodOptions", error);
 	}
 }
 
 /**
- * ⚠️ NÃO VALIDADO AO VIVO. O corpo em array é suspeito: o `/options/status` irmão, com o mesmo
- * formato, é recusado (ver abaixo) e só aceita um objeto por chamada. Não foi sondado porque o
- * listing devolve preço 0 para opções cujo preço real vive em outro lugar — uma sonda poderia zerar
- * um preço real. Valide com uma opção de teste antes de ligar `preco` em vínculo de opção.
+ * `PATCH /options/price` recebe UM objeto `{ optionId, price: { value } }` por chamada — validado ao
+ * vivo (2026-09-30): o array é recusado com 400 `PatchOptionPriceDto.optionId must be a UUID`. Grava
+ * o preço raiz E o do canal DEFAULT (onde o Portal guarda o preço efetivo).
  */
 export async function patchIfoodOptionsPrice(
 	client: AxiosInstance,
@@ -389,10 +395,9 @@ export async function patchIfoodOptionsPrice(
 	opcoes: { optionId: string; preco: number }[],
 ): Promise<void> {
 	try {
-		await client.patch(
-			catalogUrl(merchantId, "/options/price"),
-			opcoes.map((opcao) => ({ optionId: opcao.optionId, price: { value: opcao.preco } })),
-		);
+		for (const opcao of opcoes) {
+			await client.patch(catalogUrl(merchantId, "/options/price"), { optionId: opcao.optionId, price: { value: opcao.preco } });
+		}
 	} catch (error) {
 		mapIfoodError("patchIfoodOptionsPrice", error);
 	}

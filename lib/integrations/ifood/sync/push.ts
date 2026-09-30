@@ -1,10 +1,9 @@
 import { getIfoodItemFlat, updateIfoodProduct } from "@/lib/integrations/ifood/catalog";
-import { patchIfoodItem, upsertIfoodItem } from "@/lib/integrations/ifood/catalog-items";
-import type { TIfoodItemFlatDTO } from "@/lib/integrations/ifood/catalog-types";
+import { patchIfoodItem } from "@/lib/integrations/ifood/catalog-items";
 import { resolveIfoodManagementContext } from "@/lib/integrations/ifood/context";
+import { readIfoodItemDocument, writeIfoodItemDocument } from "@/lib/integrations/ifood/item-document";
 import { loadChannelState } from "@/lib/products/sales-channels-store";
 import { type TCatalogLinkSnapshot, syncsComplementos } from "@/schemas/catalog-links";
-import type { TIfoodCatalogContextEnum, TIfoodCatalogStatusEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
 import { catalogLinks, type TCatalogLinkEntity } from "@/services/drizzle/schema";
 import type { AxiosInstance } from "axios";
@@ -13,16 +12,17 @@ import {
 	type TAddOnGroupNode,
 	type TAddOnLinks,
 	associationSnapshot,
+	applyAddOnAssociationToDocument,
 	associationsDiffer,
-	buildItemOptionGroupsPayload,
-	hasAmbiguousGroups,
+	groupLinkForItem,
 	hasUnlinkedGroups,
 	loadAddOnLinks,
+	normalizeName,
 	recordAddOnLinksFromFlatItem,
 	resolveProductAddOnNodes,
 } from "./add-ons";
 import { markCatalogLinkError } from "./links";
-import { resolvePublishNodes, type TPublishNode } from "./publish";
+import { resolvePublishNodes, type TPublishNode, uploadIfoodImageFromUrl } from "./publish";
 
 export type TPushFieldChange = { campo: keyof TCatalogLinkSnapshot; de: unknown; para: unknown };
 
@@ -78,65 +78,30 @@ async function loadMerchantAddOnContext({
 }
 
 /**
- * Re-`PUT /items` composto: o único caminho para mudar a associação item → grupos ou criar grupos
- * que ainda não existem na loja. O PUT reescreve o item inteiro, então `horarios` e
- * `contextModifiers` lidos do `flat` são ecoados — omiti-los apagaria a agenda e os preços por
- * canal que o lojista configurou no Portal.
+ * Relê o item até os grupos recém-criados aparecerem: a leitura do iFood é eventualmente consistente
+ * (o PUT responde antes de a leitura refletir), e gravar vínculos a partir de uma leitura velha
+ * deixaria os grupos novos sem vínculo — e o push seguinte os criaria de novo.
  */
-async function rewriteItemWithAddOns({
+async function readFlatWithGroups({
 	client,
-	link,
-	node,
-	flat,
-	addOns,
+	merchantId,
+	itemId,
+	groupNames,
 }: {
 	client: AxiosInstance;
-	link: TCatalogLinkEntity;
-	node: TPublishNode;
-	flat: TIfoodItemFlatDTO;
-	addOns: TMerchantAddOnContext;
+	merchantId: string;
+	itemId: string;
+	groupNames: string[];
 }) {
-	if (!link.externoItemId) throw new Error("Vínculo sem item remoto.");
-	await upsertIfoodItem(client, link.merchantId, {
-		itemId: link.externoItemId,
-		produtoId: link.externoProdutoId ?? flat.produtoId ?? undefined,
-		categoriaId: link.externoCategoriaId ?? flat.categoriaId ?? undefined,
-		status: link.sincronizar.disponibilidade
-			? node.disponivel
-				? "AVAILABLE"
-				: "UNAVAILABLE"
-			: ((flat.status?.toUpperCase() as TIfoodCatalogStatusEnum | undefined) ?? "AVAILABLE"),
-		preco: link.sincronizar.preco ? node.preco : (flat.preco ?? node.preco),
-		precoOriginal: flat.precoOriginal,
-		codigoExterno: node.codigo,
-		produto: {
-			nome: link.sincronizar.nome ? node.nome : (flat.nome ?? node.nome),
-			descricao: link.sincronizar.descricao ? node.descricao : flat.descricao,
-			imagemPath: flat.imagemPath,
-		},
-		gruposComplementos: buildItemOptionGroupsPayload({ nodes: addOns.nodes, links: addOns.links, remote: flat }),
-		contextModifiers: flat.canais
-			.filter((canal) => !!canal.contexto)
-			.map((canal) => ({
-				contexto: canal.contexto as TIfoodCatalogContextEnum,
-				preco: canal.preco,
-				status: (canal.status?.toUpperCase() as TIfoodCatalogStatusEnum | undefined) ?? null,
-				codigoExterno: canal.codigoExterno,
-			})),
-		horarios: flat.horarios
-			.filter((horario) => !!horario.inicio && !!horario.fim)
-			.map((horario) => ({
-				inicio: horario.inicio as string,
-				fim: horario.fim as string,
-				segunda: horario.segunda,
-				terca: horario.terca,
-				quarta: horario.quarta,
-				quinta: horario.quinta,
-				sexta: horario.sexta,
-				sabado: horario.sabado,
-				domingo: horario.domingo,
-			})),
-	});
+	const wanted = groupNames.map(normalizeName);
+	let flat = await getIfoodItemFlat(client, merchantId, itemId);
+	for (let attempt = 0; attempt < 5; attempt += 1) {
+		const present = new Set(flat.gruposComplementos.map((grupo) => normalizeName(grupo.nome)));
+		if (wanted.every((name) => present.has(name))) break;
+		await new Promise((resolve) => setTimeout(resolve, 3000));
+		flat = await getIfoodItemFlat(client, merchantId, itemId);
+	}
+	return flat;
 }
 
 async function pushLink({
@@ -155,54 +120,60 @@ async function pushLink({
 	const changes = diffAgainstSnapshot(link, node);
 
 	// A associação com os grupos muda quando um grupo entra/sai ou min/max/ordem mudam. Grupos do
-	// produto ainda sem vínculo nesta loja só disparam o PUT composto (que os cria) enquanto o item
-	// nunca teve a associação gravada: se a releitura não reconhecer um grupo criado, repetir a
-	// criação a cada push duplicaria optionGroups na loja. O que ficou sem vínculo aparece como
-	// "sem vínculo" nos detalhes do item, e a aba Adicionais vincula à mão.
+	// produto ainda sem vínculo nesta loja só nascem no iFood enquanto o item nunca teve a associação
+	// gravada: se a releitura não reconhecer um grupo criado, repetir a criação a cada push duplicaria
+	// optionGroups na loja. O que ficou sem vínculo aparece como "sem vínculo" nos detalhes do item, e
+	// a aba Adicionais vincula à mão. Catálogos com uma cópia do grupo por item deixaram de ser
+	// ambíguos: a ida-e-volta lê o item e usa a cópia que ele já tem.
 	const desiredAssociation = associationSnapshot({ nodes: addOns.nodes, links: addOns.links });
 	const neverAssociated = link.ultimoSnapshot?.gruposComplementos == null;
-	// Catálogo com cópias do grupo por item (um grupo interno ↔ N optionGroups): o composto não sabe,
-	// sem o flat, qual cópia é a deste item — reescrever poderia trocar a cópia ou criar outra. Nesses
-	// catálogos a associação é gerida no Portal e só a disponibilidade das opções vem daqui.
 	const associationChanged =
 		syncsComplementos(link.sincronizar) &&
 		!!link.externoItemId &&
-		!hasAmbiguousGroups({ nodes: addOns.nodes, links: addOns.links }) &&
 		(associationsDiffer(link.ultimoSnapshot?.gruposComplementos, desiredAssociation) ||
 			(neverAssociated && hasUnlinkedGroups({ nodes: addOns.nodes, links: addOns.links })));
 	if (associationChanged) changes.push({ campo: "gruposComplementos", de: link.ultimoSnapshot?.gruposComplementos ?? null, para: desiredAssociation });
 
 	if (changes.length === 0) return { linkId: link.id, mudancas: [], enviado: false, addOns };
 
+	const touched = new Set(changes.map((change) => change.campo));
 	let nextAddOns = addOns;
-	if (associationChanged && link.externoItemId) {
-		// O composto já leva preço/status/nome: não há por que repetir os patches abaixo.
-		const before = await getIfoodItemFlat(client, link.merchantId, link.externoItemId);
-		await rewriteItemWithAddOns({ client, link, node, flat: before, addOns });
-		const after = await getIfoodItemFlat(client, link.merchantId, link.externoItemId);
-		nextAddOns = {
-			nodes: addOns.nodes,
-			links: await recordAddOnLinksFromFlatItem({ orgId, merchantId: link.merchantId, nodes: addOns.nodes, links: addOns.links, flat: after }),
-		};
-	} else {
-		const touched = new Set(changes.map((change) => change.campo));
 
-		// Preço e status vivem no ITEM; nome/descrição/imagem vivem no PRODUTO base. São dois
-		// endpoints distintos — daí a separação abaixo.
-		if ((touched.has("preco") || touched.has("disponivel")) && link.externoItemId) {
-			await patchIfoodItem(client, link.merchantId, link.externoItemId, {
-				preco: touched.has("preco") ? node.preco : undefined,
-				status: touched.has("disponivel") ? (node.disponivel ? "AVAILABLE" : "UNAVAILABLE") : undefined,
-			});
-		}
-		if ((touched.has("nome") || touched.has("descricao")) && link.externoProdutoId) {
-			// A imagem não é reenviada aqui: exigiria novo upload a cada push, e o `imagePath` do
-			// iFood não é derivável da URL interna. Trocar a foto é uma ação explícita (republicar).
-			await updateIfoodProduct(client, link.merchantId, link.externoProdutoId, {
-				nome: node.nome,
-				descricao: node.descricao,
-				codigoExterno: node.codigo,
-			});
+	// Preço e status vivem no ITEM.
+	if ((touched.has("preco") || touched.has("disponivel")) && link.externoItemId) {
+		await patchIfoodItem(client, link.merchantId, link.externoItemId, {
+			preco: touched.has("preco") ? node.preco : undefined,
+			status: touched.has("disponivel") ? (node.disponivel ? "AVAILABLE" : "UNAVAILABLE") : undefined,
+		});
+	}
+
+	// Nome, descrição e foto vivem no PRODUTO base, por PATCH (merge: só o que mudou). Campo vazio no
+	// cadastro não apaga o do iFood — o PATCH não envia o que está vazio.
+	if ((touched.has("nome") || touched.has("descricao") || touched.has("imagemUrl")) && link.externoProdutoId) {
+		const imagemPath =
+			touched.has("imagemUrl") && node.imagemCapaUrl
+				? await uploadIfoodImageFromUrl({ client, merchantId: link.merchantId, imagemUrl: node.imagemCapaUrl })
+				: null;
+		await updateIfoodProduct(client, link.merchantId, link.externoProdutoId, {
+			nome: touched.has("nome") ? node.nome : null,
+			descricao: touched.has("descricao") ? node.descricao : null,
+			imagemPath,
+		});
+	}
+
+	// Associação item → grupos: ida-e-volta do documento do item — o PUT reescreve o item inteiro,
+	// então só o que o documento lido traz (agenda, preços por canal, peso) sobrevive.
+	if (associationChanged && link.externoItemId) {
+		const doc = await readIfoodItemDocument(client, link.merchantId, link.externoItemId);
+		const { created } = applyAddOnAssociationToDocument({ doc, nodes: addOns.nodes, links: addOns.links, createUnlinked: neverAssociated });
+		await writeIfoodItemDocument(client, link.merchantId, doc);
+		if (created > 0) {
+			const unlinkedNames = addOns.nodes.filter((addOnNode) => !groupLinkForItem(addOns.links, addOnNode.grupoId)).map((addOnNode) => addOnNode.nome);
+			const after = await readFlatWithGroups({ client, merchantId: link.merchantId, itemId: link.externoItemId, groupNames: unlinkedNames });
+			nextAddOns = {
+				nodes: addOns.nodes,
+				links: await recordAddOnLinksFromFlatItem({ orgId, merchantId: link.merchantId, nodes: addOns.nodes, links: addOns.links, flat: after }),
+			};
 		}
 	}
 

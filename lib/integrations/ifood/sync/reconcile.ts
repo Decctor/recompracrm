@@ -1,5 +1,6 @@
 import { getIfoodCatalogs, getIfoodItemFlat, listIfoodCategories } from "@/lib/integrations/ifood/catalog";
 import { resolveIfoodManagementContext } from "@/lib/integrations/ifood/context";
+import { collectEffectiveOptionPrices } from "@/lib/integrations/ifood/item-document";
 import type { TIfoodItemDTO, TIfoodItemFlatDTO } from "@/lib/integrations/ifood/catalog-types";
 import { loadChannelState } from "@/lib/products/sales-channels-store";
 import { type TCatalogLinkDivergence, type TCatalogLinkOptionGroupAssociation, syncsComplementos } from "@/schemas/catalog-links";
@@ -303,6 +304,15 @@ export async function reconcileMerchantCatalog({ orgId, merchantId }: { orgId: s
 				await settle(groupLink, divergences);
 			}
 
+			// Preço efetivo das opções vem dos itens (canal DEFAULT), não da listagem, que só traz o raiz.
+			const effectivePrices = allOptionLinks(addOnLinks).length
+				? await collectEffectiveOptionPrices(
+						context.client,
+						merchantId,
+						links.map((link) => link.externoItemId).filter((id): id is string => !!id),
+					)
+				: new Map<string, number | null>();
+
 			// Opções locais excluídas que ainda têm vínculo: o nó do grupo não as carrega (filtra tombstones).
 			const linkedOptionIds = allOptionLinks(addOnLinks)
 				.map((link) => link.produtoAddOnOpcaoId)
@@ -353,8 +363,9 @@ export async function reconcileMerchantCatalog({ orgId, merchantId }: { orgId: s
 				if (textDiverges(remote.nome, opcao.nome)) {
 					divergences.push({ campo: "nome", valorInterno: opcao.nome, valorExterno: remote.nome, sincronizado: optionLink.sincronizar.nome });
 				}
-				if (priceDiverges(remote.preco, opcao.precoDelta)) {
-					divergences.push({ campo: "preco", valorInterno: opcao.precoDelta, valorExterno: remote.preco, sincronizado: optionLink.sincronizar.preco });
+				const remotePrice = (remote.id ? effectivePrices.get(remote.id) : undefined) ?? remote.preco;
+				if (priceDiverges(remotePrice, opcao.precoDelta)) {
+					divergences.push({ campo: "preco", valorInterno: opcao.precoDelta, valorExterno: remotePrice, sincronizado: optionLink.sincronizar.preco });
 				}
 				const remoteDisponivel = remote.status?.toUpperCase() !== "UNAVAILABLE";
 				if (remoteDisponivel !== opcao.disponivel) {

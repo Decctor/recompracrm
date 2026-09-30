@@ -1,5 +1,6 @@
 import type { TIfoodCatalogContextEnum, TIfoodCatalogStatusEnum } from "@/schemas/enums";
 import type { AxiosInstance } from "axios";
+import createHttpError from "http-errors";
 import { mapIfoodError } from "./errors";
 import {
 	IFOOD_CATALOG_BASE_URL,
@@ -9,7 +10,6 @@ import {
 	IfoodCategoriesListResponseSchema,
 	IfoodCategoryDetailResponseSchema,
 	IfoodItemFlatResponseSchema,
-	IfoodOptionGroupDetailResponseSchema,
 	IfoodOptionGroupsListResponseSchema,
 	IfoodProductDetailResponseSchema,
 	IfoodProductsListResponseSchema,
@@ -18,7 +18,6 @@ import {
 	mapIfoodCatalogVersion,
 	mapIfoodCategory,
 	mapIfoodItemFlat,
-	mapIfoodOptionGroup,
 	mapIfoodOptionGroupsList,
 	mapIfoodProduct,
 	mapIfoodProductsPage,
@@ -115,17 +114,20 @@ export async function listIfoodOptionGroups(
 	}
 }
 
+/**
+ * Um grupo de complementos pelo id. `GET /optionGroups/{id}` NÃO existe no iFood (404 "no Route
+ * matched", medido em 2026-09-30), então a leitura é pela listagem paginada. Atenção: a listagem
+ * traz o preço RAIZ das opções; o efetivo pode estar no canal (ver `effectiveOptionPrice`).
+ */
 export async function getIfoodOptionGroup(client: AxiosInstance, merchantId: string, optionGroupId: string): Promise<TIfoodOptionGroupDTO> {
-	try {
-		const response = await client.get<unknown>(catalogUrl(merchantId, `/optionGroups/${optionGroupId}`), {
-			params: { includeOptions: true },
-		});
-		const group = mapIfoodOptionGroup(IfoodOptionGroupDetailResponseSchema.parse(response.data));
-		if (!group) throw new Error("Grupo de complementos do iFood não encontrado.");
-		return group;
-	} catch (error) {
-		mapIfoodError("getIfoodOptionGroup", error);
+	const limit = 100;
+	for (let page = 1; page <= 50; page += 1) {
+		const batch = await listIfoodOptionGroups(client, merchantId, { page, limit });
+		const found = batch.find((group) => group.id === optionGroupId);
+		if (found) return found;
+		if (batch.length < limit) break;
 	}
+	throw new createHttpError.NotFound("Grupo de complementos do iFood não encontrado.");
 }
 
 /**
@@ -251,10 +253,33 @@ export async function createIfoodProduct(client: AxiosInstance, merchantId: stri
 	}
 }
 
-export async function updateIfoodProduct(client: AxiosInstance, merchantId: string, productId: string, produto: TIfoodProductWritePayload) {
+export type TIfoodProductPatchPayload = {
+	nome?: string | null;
+	descricao?: string | null;
+	codigoExterno?: string | null;
+	imagemPath?: string | null;
+	serving?: TIfoodProductServing | null;
+};
+
+/**
+ * `PATCH /products/{id}` — merge: só os campos enviados mudam. Validado ao vivo (2026-09-30) para
+ * `name`, `description` e `imagePath` (o campo `image` é IGNORADO aqui). NÃO use `PUT`: ele
+ * reescreve o produto e apaga a foto, zera o peso e volta a porção para NOT_APPLICABLE.
+ *
+ * Campo vazio não é enviado: um produto sem descrição ou sem foto no cadastro interno não apaga o
+ * que o iFood já tem. `externalCode` via PATCH não foi exercitado ao vivo.
+ */
+export async function updateIfoodProduct(client: AxiosInstance, merchantId: string, productId: string, produto: TIfoodProductPatchPayload) {
+	const body: Record<string, unknown> = {};
+	if (produto.nome) body.name = produto.nome;
+	if (produto.descricao) body.description = produto.descricao;
+	if (produto.codigoExterno) body.externalCode = produto.codigoExterno;
+	if (produto.imagemPath) body.imagePath = produto.imagemPath;
+	if (produto.serving) body.serving = produto.serving;
+	if (Object.keys(body).length === 0) return null;
 	try {
-		const response = await client.put<unknown>(catalogUrl(merchantId, `/products/${productId}`), { id: productId, ...toIfoodProductBody(produto) });
-		return mapIfoodProduct(IfoodProductDetailResponseSchema.parse(response.data));
+		const response = await client.patch<unknown>(catalogUrl(merchantId, `/products/${productId}`), body);
+		return mapIfoodProduct(IfoodProductDetailResponseSchema.parse({ id: productId, ...(response.data as object) }));
 	} catch (error) {
 		mapIfoodError("updateIfoodProduct", error);
 	}

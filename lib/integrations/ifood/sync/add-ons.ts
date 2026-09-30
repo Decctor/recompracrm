@@ -9,6 +9,7 @@ import {
 } from "@/lib/integrations/ifood/catalog-items";
 import type { TIfoodItemFlatDTO, TIfoodOptionGroupDTO } from "@/lib/integrations/ifood/catalog-types";
 import { resolveIfoodManagementContext } from "@/lib/integrations/ifood/context";
+import { baseProductOf, type TIfoodDocumentAssociation, type TIfoodItemDocument } from "@/lib/integrations/ifood/item-document";
 import { resolveAddOnReferencesRules } from "@/lib/products/add-on-rules";
 import { loadChannelState } from "@/lib/products/sales-channels-store";
 import {
@@ -230,15 +231,6 @@ export function optionLinkInGroup(links: TAddOnLinks, opcaoId: string, externoOp
 }
 
 /**
- * Algum grupo do produto tem mais de um optionGroup vinculado nesta loja? Então o catálogo é de
- * cópias por item e o PUT composto do item não sabe, sem o `flat`, qual cópia é a dele — o push do
- * item não reescreve a associação nesse caso (a disponibilidade das opções vai pelo push do grupo).
- */
-export function hasAmbiguousGroups({ nodes, links }: { nodes: TAddOnGroupNode[]; links: TAddOnLinks }) {
-	return nodes.some((node) => (links.groups.get(node.grupoId)?.length ?? 0) > 1);
-}
-
-/**
  * O bloco `gruposComplementos` do `PUT /items`. Grupos/opções já vinculados vão com os ids remotos
  * (o iFood atualiza em vez de duplicar); os demais vão sem id e nascem na mesma chamada. O tipo de um
  * grupo existente vem do `flat` (preservado); grupo novo nasce SPECIFICATION.
@@ -312,6 +304,112 @@ export function associationsDiffer(
 			.toSorted()
 			.join("|");
 	return key(a) !== key(b);
+}
+
+/**
+ * Reescreve, NO DOCUMENTO do item, a associação produto → grupos para o que o app manda:
+ *
+ * - grupo vinculado entra só pelo id, com min/max/ordem do nó — o iFood liga o optionGroup que já
+ *   existe na loja com as opções e preços dele, então a definição não é reenviada (validado ao vivo);
+ *   a cópia escolhida é a que o item já usa, quando o grupo interno tem várias (ids do documento);
+ * - grupo do app sem vínculo nasce no documento (grupo + opções + produtos das opções, ids novos),
+ *   só com `createUnlinked` — o chamador liga isso apenas enquanto o item nunca teve a associação
+ *   gravada, senão uma releitura que não reconhecesse o grupo o recriaria a cada push;
+ * - associação que o app não tem sai, e o que ficou sem referência (grupos, opções e produtos de
+ *   opção que só ela usava) sai do documento junto — um recurso solto faz o PUT responder 400.
+ *
+ * Muta `doc`. Devolve quantos grupos nasceram, para o chamador reler e gravar os vínculos novos.
+ */
+export function applyAddOnAssociationToDocument({
+	doc,
+	nodes,
+	links,
+	createUnlinked,
+	newId = () => crypto.randomUUID(),
+}: {
+	doc: TIfoodItemDocument;
+	nodes: TAddOnGroupNode[];
+	links: TAddOnLinks;
+	createUnlinked: boolean;
+	newId?: () => string;
+}) {
+	const base = baseProductOf(doc);
+	const docGroupIds = new Set(doc.optionGroups.map((group) => group.id));
+	const current = new Map((base.optionGroups ?? []).map((association) => [association.id, association]));
+	const next: TIfoodDocumentAssociation[] = [];
+	let created = 0;
+
+	for (const node of nodes) {
+		const groupLink = groupLinkForItem(links, node.grupoId, docGroupIds);
+		if (groupLink?.externoOptionGroupId) {
+			const id = groupLink.externoOptionGroupId;
+			next.push({ ...current.get(id), id, min: node.minOpcoes, max: node.maxOpcoes, index: node.indice });
+			continue;
+		}
+		if (!createUnlinked) continue;
+
+		const groupId = newId();
+		const options = node.opcoes.map((opcao) => ({ opcao, optionId: newId(), productId: newId() }));
+		doc.products.push(...options.map(({ opcao, productId }) => ({ id: productId, name: opcao.nome })));
+		doc.options.push(
+			...options.map(({ opcao, optionId, productId }) => ({
+				id: optionId,
+				productId,
+				status: opcao.disponivel ? "AVAILABLE" : "UNAVAILABLE",
+				index: opcao.indice,
+				price: { value: opcao.precoDelta },
+				...(opcao.codigo ? { externalCode: opcao.codigo } : {}),
+			})),
+		);
+		doc.optionGroups.push({
+			id: groupId,
+			name: node.nome,
+			optionGroupType: DEFAULT_OPTION_GROUP_TYPE,
+			status: node.disponivel ? "AVAILABLE" : "UNAVAILABLE",
+			optionIds: options.map(({ optionId }) => optionId),
+		});
+		next.push({ id: groupId, min: node.minOpcoes, max: node.maxOpcoes, index: node.indice });
+		created += 1;
+	}
+
+	base.optionGroups = next;
+	pruneUnreferenced(doc);
+	return { created };
+}
+
+/**
+ * Mantém no documento só o que o produto base alcança: grupos associados a um produto mantido,
+ * opções desses grupos e os produtos dessas opções — até estabilizar, porque um produto de opção
+ * pode ter grupos próprios (3º nível dos combos).
+ */
+function pruneUnreferenced(doc: TIfoodItemDocument) {
+	const base = baseProductOf(doc);
+	const productById = new Map(doc.products.map((product) => [product.id, product]));
+	const optionById = new Map(doc.options.map((option) => [option.id, option]));
+	const groupById = new Map(doc.optionGroups.map((group) => [group.id, group]));
+	const keptProducts = new Set([base.id]);
+	const keptGroups = new Set<string>();
+	const keptOptions = new Set<string>();
+	const pending = [base.id];
+	while (pending.length) {
+		const product = productById.get(pending.pop() as string);
+		for (const association of product?.optionGroups ?? []) {
+			if (keptGroups.has(association.id)) continue;
+			keptGroups.add(association.id);
+			for (const optionId of groupById.get(association.id)?.optionIds ?? []) {
+				const option = optionById.get(optionId);
+				if (!option || keptOptions.has(optionId)) continue;
+				keptOptions.add(optionId);
+				if (!keptProducts.has(option.productId)) {
+					keptProducts.add(option.productId);
+					pending.push(option.productId);
+				}
+			}
+		}
+	}
+	doc.products = doc.products.filter((product) => keptProducts.has(product.id));
+	doc.optionGroups = doc.optionGroups.filter((group) => keptGroups.has(group.id));
+	doc.options = doc.options.filter((option) => keptOptions.has(option.id));
 }
 
 /** Há grupo do produto ainda sem vínculo nesta loja? Então o push precisa do PUT composto para criá-lo. */
@@ -544,6 +642,23 @@ export async function pushAddOnGroupToLinkedMerchants({ orgId, produtoAddOnId }:
 			continue;
 		}
 
+		// Itens vinculados desta loja: pausar um grupo só é possível pela ida-e-volta de um item que o
+		// carregue, e começar pelos itens conhecidos evita varrer o cardápio inteiro.
+		const linkedItemIds = (
+			await db.query.catalogLinks.findMany({
+				where: and(
+					eq(catalogLinks.organizacaoId, orgId),
+					eq(catalogLinks.provider, "IFOOD"),
+					eq(catalogLinks.merchantId, merchantId),
+					inArray(catalogLinks.tipo, ["PRODUTO", "VARIANTE"]),
+					ne(catalogLinks.status, "DESVINCULADO"),
+				),
+				columns: { externoItemId: true },
+			})
+		)
+			.map((link) => link.externoItemId)
+			.filter((id): id is string => !!id);
+
 		// 1. Grupo: nome e status, por cópia vinculada.
 		for (const groupLink of groupLinks) {
 			if (!groupLink.externoOptionGroupId) continue;
@@ -553,7 +668,13 @@ export async function pushAddOnGroupToLinkedMerchants({ orgId, produtoAddOnId }:
 					await updateIfoodOptionGroup(client, merchantId, groupLink.externoOptionGroupId, { nome: node.nome });
 				}
 				if (groupLink.sincronizar.disponibilidade && previous.disponivel !== node.disponivel) {
-					await patchIfoodOptionGroupStatus(client, merchantId, groupLink.externoOptionGroupId, node.disponivel ? "AVAILABLE" : "UNAVAILABLE");
+					await patchIfoodOptionGroupStatus(
+						client,
+						merchantId,
+						groupLink.externoOptionGroupId,
+						node.disponivel ? "AVAILABLE" : "UNAVAILABLE",
+						linkedItemIds,
+					);
 				}
 				await markSynchronized({ orgId, linkId: groupLink.id, snapshot: groupSnapshot(node) });
 				enviados += 1;
@@ -580,8 +701,10 @@ export async function pushAddOnGroupToLinkedMerchants({ orgId, produtoAddOnId }:
 				continue;
 			}
 			try {
+				// O nome mora no PRODUTO da opção, e um produto pode servir a opções de várias cópias do
+				// grupo: renomear vale para todas — é o que se quer, já que todas são a mesma opção interna.
 				if (optionLink.sincronizar.nome && before.nome !== opcao.nome && optionLink.externoProdutoId) {
-					await updateIfoodProduct(client, merchantId, optionLink.externoProdutoId, { nome: opcao.nome, codigoExterno: opcao.codigo });
+					await updateIfoodProduct(client, merchantId, optionLink.externoProdutoId, { nome: opcao.nome });
 				}
 			} catch (error) {
 				await markCatalogLinkError({ linkId: optionLink.id, erro: error instanceof Error ? error.message : "Falha ao renomear a opção." });
@@ -642,35 +765,18 @@ export async function pushAddOnGroupToLinkedMerchants({ orgId, produtoAddOnId }:
 			const newOptions = node.opcoes.filter((opcao) => !linkedHere.has(opcao.opcaoId));
 			if (!newOptions.length) continue;
 			try {
-				await addIfoodOptions(
-					client,
-					merchantId,
-					groupLink.externoOptionGroupId,
-					newOptions.map((opcao) => ({
-						nome: opcao.nome,
-						preco: opcao.precoDelta,
-						codigoExterno: opcao.codigo,
-						status: opcao.disponivel ? "AVAILABLE" : "UNAVAILABLE",
-					})),
-				);
-				// Releitura para gravar os ids que o iFood atribuiu às opções novas.
-				const remote = await getIfoodOptionGroup(client, merchantId, groupLink.externoOptionGroupId);
-				const used = new Set(optionLinks.map((link) => link.externoOptionId).filter(Boolean) as string[]);
+				// Uma opção por vez, vinculada logo em seguida com os ids da própria resposta: se a
+				// terceira falhar, as duas primeiras já têm vínculo e o próximo push não as recria.
 				for (const opcao of newOptions) {
-					const remoteOption = remote.opcoes.find(
-						(option) => option.id && !used.has(option.id) && normalizeName(option.nome) === normalizeName(opcao.nome),
-					);
-					if (!remoteOption?.id) continue;
-					used.add(remoteOption.id);
+					const [created] = await addIfoodOptions(client, merchantId, groupLink.externoOptionGroupId, [
+						{ nome: opcao.nome, preco: opcao.precoDelta, codigoExterno: opcao.codigo, status: opcao.disponivel ? "AVAILABLE" : "UNAVAILABLE" },
+					]);
+					if (!created?.optionId) throw new Error(`O iFood não devolveu o id da opção "${opcao.nome}".`);
 					const optionLink = await upsertCatalogLink({
 						orgId,
 						merchantId,
 						node: { tipo: "ADD_ON_OPCAO", produtoAddOnId, produtoAddOnOpcaoId: opcao.opcaoId },
-						externalRefs: {
-							externoOptionGroupId: groupLink.externoOptionGroupId,
-							externoOptionId: remoteOption.id,
-							externoProdutoId: remoteOption.produtoId ?? null,
-						},
+						externalRefs: { externoOptionGroupId: groupLink.externoOptionGroupId, externoOptionId: created.optionId, externoProdutoId: created.productId },
 					});
 					await markSynchronized({ orgId, linkId: optionLink.id, snapshot: optionSnapshot(opcao) });
 				}

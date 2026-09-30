@@ -99,7 +99,27 @@ function snapshotOf(node: TPublishNode): TCatalogLinkSnapshot {
 	return { nome: node.nome, descricao: node.descricao, imagemUrl: node.imagemCapaUrl, preco: node.preco, disponivel: node.disponivel };
 }
 
-/** Busca a imagem publicada no storage e repassa como Blob — o iFood aceita upload, não URL. */
+/**
+ * Busca a imagem do storage e sobe para o iFood (que aceita upload, não URL). Devolve o `imagePath`
+ * a gravar no produto. Lança: quem chama decide se a foto é acessória (publicação) ou é a mudança
+ * sendo enviada (push), caso em que o vínculo precisa ficar em ERRO para tentar de novo.
+ */
+export async function uploadIfoodImageFromUrl({ client, merchantId, imagemUrl }: { client: AxiosInstance; merchantId: string; imagemUrl: string }) {
+	const response = await fetch(imagemUrl);
+	if (!response.ok) throw new Error(`Falha ao baixar a imagem do produto (HTTP ${response.status}).`);
+	const file = await response.blob();
+	// Uma URL que responde 200 com HTML (página de bloqueio, login, 404 "bonito") passaria no
+	// `ok` e subiria lixo como se fosse imagem — o iFood devolveria "NotABase64" sem dizer que o
+	// problema era a origem. Checar o content-type transforma isso num aviso claro aqui.
+	if (!IFOOD_IMAGE_ALLOWED_TYPES.includes(file.type)) {
+		throw new Error(`A imagem do produto não é PNG/JPEG (content-type: ${file.type || "desconhecido"}, ${file.size} bytes).`);
+	}
+	const fileName = imagemUrl.split("/").pop() || "produto.png";
+	const { path } = await uploadIfoodImage(client, merchantId, { file, fileName });
+	return path;
+}
+
+/** Na publicação a foto é acessória: sem ela o item ainda vende, então a falha vira aviso. */
 async function uploadNodeImage({
 	client,
 	merchantId,
@@ -112,18 +132,7 @@ async function uploadNodeImage({
 	produtoId: string;
 }): Promise<string | null> {
 	try {
-		const response = await fetch(imagemUrl);
-		if (!response.ok) throw new Error(`HTTP ${response.status}`);
-		const file = await response.blob();
-		// Uma URL que responde 200 com HTML (página de bloqueio, login, 404 "bonito") passaria no
-		// `ok` e subiria lixo como se fosse imagem — o iFood devolveria "NotABase64" sem dizer que o
-		// problema era a origem. Checar o content-type transforma isso num aviso claro aqui.
-		if (!IFOOD_IMAGE_ALLOWED_TYPES.includes(file.type)) {
-			throw new Error(`Conteúdo não é imagem PNG/JPEG (content-type: ${file.type || "desconhecido"}, ${file.size} bytes)`);
-		}
-		const fileName = imagemUrl.split("/").pop() || "produto.png";
-		const { path } = await uploadIfoodImage(client, merchantId, { file, fileName });
-		return path;
+		return await uploadIfoodImageFromUrl({ client, merchantId, imagemUrl });
 	} catch (error) {
 		console.warn("[IFOOD_PUBLISH] Falha ao subir imagem, publicando sem ela.", { produtoId, imagemUrl, error });
 		return null;
