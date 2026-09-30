@@ -1,5 +1,6 @@
 import { authenticateExternalRequest, requireExternalScope } from "@/lib/access/authentication";
 import { appApiHandler } from "@/lib/app-api";
+import { type TDesktopAgentPollingCadence, resolveDesktopAgentPollingCadence } from "@/lib/desktop-agent/polling";
 import { claimPrintJobs } from "@/lib/desktop-agent/print-jobs";
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
@@ -27,14 +28,16 @@ async function claimPrintJobsRoute(request: NextRequest) {
 
 	return NextResponse.json(
 		{
-			data: result,
+			// A cadência viaja em todo claim para que um agent que perdeu o `/configuration` no boot
+			// (rede ainda subindo) se corrija no primeiro claim bem-sucedido.
+			data: { ...result, polling: resolveDesktopAgentPollingCadence() },
 			message: result.jobs.length > 0 ? "Jobs de impressão reservados com sucesso." : "Nenhum job de impressão pendente.",
 		},
 		{ status: 200 },
 	);
 }
 export type TClaimPrintJobsRouteOutput = {
-	data: Awaited<ReturnType<typeof claimPrintJobs>>;
+	data: Awaited<ReturnType<typeof claimPrintJobs>> & { polling: TDesktopAgentPollingCadence };
 	message: string;
 };
 
