@@ -25,11 +25,12 @@ import {
 	useAdminPlatformPartners,
 } from "@/lib/queries/platform-partnerships";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Banknote, Building2, CheckCircle2, FileText, Handshake, ReceiptText, Search, ShieldCheck, ShieldX, Users } from "lucide-react";
+import { Banknote, Building2, CheckCircle2, FileText, ReceiptText, Search, Users } from "lucide-react";
 import type React from "react";
 import { useState } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ControlAdminPlatformPartnerPayout } from "@/components/Modals/Internal/PlatformPartners/ControlAdminPlatformPartnerPayout";
+import { AdminPartnerCard } from "./_components/admin-partner-card";
 import { RejectAdminPlatformPartner } from "@/components/Modals/Internal/PlatformPartners/RejectAdminPlatformPartner";
 import { RefuseAdminPlatformPartnerChangeRequest } from "@/components/Modals/Internal/PlatformPartners/RefuseAdminPlatformPartnerChangeRequest";
 import { toast } from "sonner";
@@ -37,8 +38,6 @@ import { toast } from "sonner";
 function centsToMoney(value: number) {
 	return formatToMoney(value / 100);
 }
-
-const PERSON_TYPE_LABEL: Record<string, string> = { PESSOA_FISICA: "PF", PESSOA_JURIDICA: "PJ" };
 
 async function openSignedUrl(getUrl: () => Promise<string>) {
 	// Abre a aba no clique (antes do await) para o navegador não bloquear o pop-up.
@@ -183,127 +182,21 @@ export default function PlatformPartnershipsAdminPage() {
 					/>
 					<div className="flex flex-col gap-2">
 						{partners.map((partner) => (
-							<div key={partner.id} className="rounded-lg border bg-card p-4">
-								<div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-									<div className="flex items-start gap-3">
-										<div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10 text-primary">
-											<Handshake className="h-5 w-5" />
-										</div>
-										<div>
-											<div className="flex items-center gap-2">
-												<p className="font-semibold">{partner.nome}</p>
-												<Badge variant="outline">{partner.status}</Badge>
-											</div>
-											<p className="text-sm text-muted-foreground">
-												{partner.codigo} - {partner.email} - {partner.telefone}
-											</p>
-											<p className="text-sm text-muted-foreground">
-												{partner.tipoPessoa ? `${PERSON_TYPE_LABEL[partner.tipoPessoa]} · ` : ""}
-												{partner.cpfCnpj} - PIX {partner.chavePixTipo ? `(${partner.chavePixTipo}) ` : ""}
-												{partner.chavePix}
-												{partner.dataConfirmacaoTitularPix ? ` · titular confirmado em ${formatDateAsLocale(partner.dataConfirmacaoTitularPix)}` : ""}
-											</p>
-											{partner.alteracaoSolicitada && !partner.alteracaoSolicitada.motivoRecusa ? (
-												<div className="mt-2 flex flex-col gap-2 rounded-md border border-warning/40 bg-warning-surface p-3 text-xs text-warning-surface-foreground">
-													<p className="font-bold">
-														Pedido de alteração de dados
-														{partner.dataSolicitacaoAlteracao ? ` · ${formatDateAsLocale(partner.dataSolicitacaoAlteracao)}` : ""}
-													</p>
-													<ul className="flex flex-col gap-0.5">
-														{partner.alteracaoSolicitada.email ? (
-															<li>
-																Email: {partner.email} → {partner.alteracaoSolicitada.email}
-															</li>
-														) : null}
-														{partner.alteracaoSolicitada.telefone ? (
-															<li>
-																Telefone: {partner.telefone} → {partner.alteracaoSolicitada.telefone}
-															</li>
-														) : null}
-														{partner.alteracaoSolicitada.chavePix ? (
-															<li>
-																Chave PIX: {partner.chavePix} → {partner.alteracaoSolicitada.chavePix} ({partner.alteracaoSolicitada.chavePixTipo}) · titular
-																autodeclarado
-															</li>
-														) : null}
-														{partner.alteracaoSolicitada.arquivos ? <li>Novo documento enviado</li> : null}
-														{partner.alteracaoSolicitada.motivo ? <li>Motivo do parceiro: {partner.alteracaoSolicitada.motivo}</li> : null}
-													</ul>
-													<div className="flex flex-wrap gap-2">
-														{(["cpf", "cnpj"] as const)
-															.filter((tipo) => partner.alteracaoSolicitada?.arquivos?.[tipo])
-															.map((tipo) => (
-																<Button
-																	key={tipo}
-																	size="sm"
-																	variant="outline"
-																	className="gap-2"
-																	onClick={() => openSignedUrl(() => fetchAdminPlatformPartnerDocumentUrl({ partnerId: partner.id, tipo, pedido: true }))}
-																>
-																	<FileText className="h-4 w-4" />
-																	Novo documento
-																</Button>
-															))}
-														<Button
-															size="sm"
-															className="gap-2"
-															disabled={approveChangeRequestMutation.isPending}
-															onClick={() => approveChangeRequestMutation.mutate({ partnerId: partner.id, aprovar: true })}
-														>
-															<ShieldCheck className="h-4 w-4" />
-															Aprovar alteração
-														</Button>
-														<Button size="sm" variant="outline" onClick={() => setRefusingChangePartner({ id: partner.id, nome: partner.nome })}>
-															Recusar
-														</Button>
-													</div>
-												</div>
-											) : null}
-											{partner.status === "REJEITADO" && partner.motivoRejeicao ? (
-												<p className="text-xs text-destructive">Motivo enviado ao parceiro: {partner.motivoRejeicao}</p>
-											) : null}
-											<p className="text-xs text-muted-foreground">
-												{partner.referrals.length} organizacoes, {partner.commissions.length} comissoes, {partner.payouts.length} payouts
-											</p>
-										</div>
-									</div>
-									<div className="flex flex-wrap gap-2">
-										{(["cpf", "cnpj"] as const)
-											.filter((tipo) => partner.arquivos[tipo])
-											.map((tipo) => (
-												<Button
-													key={tipo}
-													size="sm"
-													variant="outline"
-													className="gap-2"
-													onClick={() => openSignedUrl(() => fetchAdminPlatformPartnerDocumentUrl({ partnerId: partner.id, tipo }))}
-												>
-													<FileText className="h-4 w-4" />
-													Documento {tipo.toUpperCase()}
-												</Button>
-											))}
-										{partner.status !== "ATIVO" ? (
-											<Button size="sm" className="gap-2" onClick={() => updatePartnerMutation.mutate({ partnerId: partner.id, partner: { status: "ATIVO" } })}>
-												<ShieldCheck className="h-4 w-4" />
-												Aprovar
-											</Button>
-										) : null}
-										{partner.status === "PENDENTE_APROVACAO" ? (
-											<Button size="sm" variant="outline" className="gap-2" onClick={() => setRejectingPartner({ id: partner.id, nome: partner.nome })}>
-												<ShieldX className="h-4 w-4" />
-												Rejeitar
-											</Button>
-										) : null}
-										<Button
-											size="sm"
-											variant="outline"
-											onClick={() => createPayoutMutation.mutate({ partnerId: partner.id, competenciaInicio: null, competenciaFim: null, dataPrevista: null })}
-										>
-											Gerar payout
-										</Button>
-									</div>
-								</div>
-							</div>
+							<AdminPartnerCard
+								key={partner.id}
+								partner={partner}
+								onApprove={() => updatePartnerMutation.mutate({ partnerId: partner.id, partner: { status: "ATIVO" } })}
+								isApproving={updatePartnerMutation.isPending && updatePartnerMutation.variables?.partnerId === partner.id}
+								onReject={() => setRejectingPartner({ id: partner.id, nome: partner.nome })}
+								onGeneratePayout={() =>
+									createPayoutMutation.mutate({ partnerId: partner.id, competenciaInicio: null, competenciaFim: null, dataPrevista: null })
+								}
+								isGeneratingPayout={createPayoutMutation.isPending && createPayoutMutation.variables?.partnerId === partner.id}
+								onApproveChange={() => approveChangeRequestMutation.mutate({ partnerId: partner.id, aprovar: true })}
+								isApprovingChange={approveChangeRequestMutation.isPending && approveChangeRequestMutation.variables?.partnerId === partner.id}
+								onRefuseChange={() => setRefusingChangePartner({ id: partner.id, nome: partner.nome })}
+								onOpenDocument={(tipo, pedido) => openSignedUrl(() => fetchAdminPlatformPartnerDocumentUrl({ partnerId: partner.id, tipo, pedido }))}
+							/>
 						))}
 					</div>
 				</TabsContent>
