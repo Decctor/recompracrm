@@ -2,7 +2,7 @@
 
 import { BrandLogo } from "@/components/Brand/BrandLogo";
 import { cn } from "@/lib/utils";
-import { Building2, Eye, EyeOff, House, ReceiptText, Share2 } from "lucide-react";
+import { Building2, Eye, EyeOff, House, ReceiptText, Share2, UserRound } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
@@ -35,6 +35,26 @@ export function HideValuesButton({ className }: { className?: string }) {
 		>
 			{hidden ? <EyeOff className="h-[18px] w-[18px]" /> : <Eye className="h-[18px] w-[18px]" />}
 		</button>
+	);
+}
+
+/** Atalho para "Meus dados" (fica fora das abas: é consulta eventual, não navegação do dia a dia). */
+export function ProfileButton({ className }: { className?: string }) {
+	const pathname = usePathname();
+	const active = pathname.startsWith("/partner-dashboard/meus-dados");
+	return (
+		<Link
+			href="/partner-dashboard/meus-dados"
+			aria-label="Meus dados"
+			aria-current={active ? "page" : undefined}
+			className={cn(
+				"flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] border border-border bg-card transition-colors hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-primary/30 focus-visible:outline-none",
+				active && "border-primary/30 bg-info-surface text-primary",
+				className,
+			)}
+		>
+			<UserRound className="h-[18px] w-[18px]" />
+		</Link>
 	);
 }
 
@@ -72,7 +92,10 @@ export function PartnerShell({ children }: { children: ReactNode }) {
 								);
 							})}
 						</nav>
-						<HideValuesButton />
+						<div className="flex items-center gap-2">
+							<HideValuesButton />
+							<ProfileButton />
+						</div>
 					</div>
 				</header>
 

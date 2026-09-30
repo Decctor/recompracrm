@@ -157,8 +157,17 @@ export function useAdminPlatformPartnerPayouts(params: { partnerId?: string | nu
 }
 
 /** URL assinada (curta) do documento do parceiro. Busca sob demanda, no clique do admin. */
-export async function fetchAdminPlatformPartnerDocumentUrl({ partnerId, tipo }: { partnerId: string; tipo: "cpf" | "cnpj" }) {
+export async function fetchAdminPlatformPartnerDocumentUrl({
+	partnerId,
+	tipo,
+	pedido = false,
+}: {
+	partnerId: string;
+	tipo: "cpf" | "cnpj";
+	pedido?: boolean;
+}) {
 	const searchParams = new URLSearchParams({ partnerId, tipo });
+	if (pedido) searchParams.set("pedido", "true");
 	const { data } = await axios.get<TGetAdminPlatformPartnerDocumentOutput>(`/api/admin/platform-partners/documents?${searchParams.toString()}`);
 	return data.data.url;
 }

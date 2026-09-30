@@ -11,7 +11,7 @@ import { MessageCircle } from "lucide-react";
 import Link from "next/link";
 import { EarningsChart } from "../_components/earnings-chart";
 import { PartnerCard, StaticPartnerCard } from "../_components/partner-card";
-import { HideValuesButton, PanelBody, TopSheet } from "../_components/partner-shell";
+import { HideValuesButton, PanelBody, ProfileButton, TopSheet } from "../_components/partner-shell";
 import { EmptyNote, Money, PanelCard, PanelCardHeader, PanelLink, PanelSkeleton, StatTile } from "../_components/partner-ui";
 import { StatementFeed } from "../_components/statement-feed";
 import { StoreRow } from "../_components/store-row";
@@ -29,7 +29,10 @@ function Greeting({ nome }: { nome: string }) {
 					<span className="text-xl leading-tight font-extrabold tracking-[-0.015em]">Olá, {nome.split(" ")[0]}</span>
 				</div>
 			</div>
-			<HideValuesButton className="md:hidden" />
+			<div className="flex items-center gap-2 md:hidden">
+				<HideValuesButton />
+				<ProfileButton />
+			</div>
 		</div>
 	);
 }

@@ -12,6 +12,7 @@ import { getErrorMessage } from "@/lib/errors";
 import { formatDateAsLocale, formatToMoney } from "@/lib/formatting";
 import {
 	createAdminPlatformPartnerPayout,
+	resolveAdminPlatformPartnerChangeRequest,
 	updateAdminPlatformPartner,
 	updateAdminPlatformPartnerCommission,
 } from "@/lib/mutations/platform-partnerships";
@@ -30,6 +31,7 @@ import { useState } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ControlAdminPlatformPartnerPayout } from "@/components/Modals/Internal/PlatformPartners/ControlAdminPlatformPartnerPayout";
 import { RejectAdminPlatformPartner } from "@/components/Modals/Internal/PlatformPartners/RejectAdminPlatformPartner";
+import { RefuseAdminPlatformPartnerChangeRequest } from "@/components/Modals/Internal/PlatformPartners/RefuseAdminPlatformPartnerChangeRequest";
 import { toast } from "sonner";
 
 function centsToMoney(value: number) {
@@ -55,6 +57,7 @@ export default function PlatformPartnershipsAdminPage() {
 	const queryClient = useQueryClient();
 	const [rejectingPartner, setRejectingPartner] = useState<{ id: string; nome: string } | null>(null);
 	const [controlledPayoutId, setControlledPayoutId] = useState<string | null>(null);
+	const [refusingChangePartner, setRefusingChangePartner] = useState<{ id: string; nome: string } | null>(null);
 	const [commissionFilter, setCommissionFilter] = useState<"PENDENTE" | "APROVADA" | "TODAS">("PENDENTE");
 	const [selectedCommissionIds, setSelectedCommissionIds] = useState<string[]>([]);
 	const partnersQuery = useAdminPlatformPartners({ initialParams: { page: 1, search: "", status: null } });
@@ -71,6 +74,15 @@ export default function PlatformPartnershipsAdminPage() {
 
 	const updatePartnerMutation = useMutation({
 		mutationFn: updateAdminPlatformPartner,
+		onSuccess: async (data) => {
+			toast.success(data.message);
+			await invalidateAll();
+		},
+		onError: (error) => toast.error(getErrorMessage(error)),
+	});
+
+	const approveChangeRequestMutation = useMutation({
+		mutationFn: resolveAdminPlatformPartnerChangeRequest,
 		onSuccess: async (data) => {
 			toast.success(data.message);
 			await invalidateAll();
@@ -191,6 +203,62 @@ export default function PlatformPartnershipsAdminPage() {
 												{partner.chavePix}
 												{partner.dataConfirmacaoTitularPix ? ` · titular confirmado em ${formatDateAsLocale(partner.dataConfirmacaoTitularPix)}` : ""}
 											</p>
+											{partner.alteracaoSolicitada && !partner.alteracaoSolicitada.motivoRecusa ? (
+												<div className="mt-2 flex flex-col gap-2 rounded-md border border-warning/40 bg-warning-surface p-3 text-xs text-warning-surface-foreground">
+													<p className="font-bold">
+														Pedido de alteração de dados
+														{partner.dataSolicitacaoAlteracao ? ` · ${formatDateAsLocale(partner.dataSolicitacaoAlteracao)}` : ""}
+													</p>
+													<ul className="flex flex-col gap-0.5">
+														{partner.alteracaoSolicitada.email ? (
+															<li>
+																Email: {partner.email} → {partner.alteracaoSolicitada.email}
+															</li>
+														) : null}
+														{partner.alteracaoSolicitada.telefone ? (
+															<li>
+																Telefone: {partner.telefone} → {partner.alteracaoSolicitada.telefone}
+															</li>
+														) : null}
+														{partner.alteracaoSolicitada.chavePix ? (
+															<li>
+																Chave PIX: {partner.chavePix} → {partner.alteracaoSolicitada.chavePix} ({partner.alteracaoSolicitada.chavePixTipo}) · titular
+																autodeclarado
+															</li>
+														) : null}
+														{partner.alteracaoSolicitada.arquivos ? <li>Novo documento enviado</li> : null}
+														{partner.alteracaoSolicitada.motivo ? <li>Motivo do parceiro: {partner.alteracaoSolicitada.motivo}</li> : null}
+													</ul>
+													<div className="flex flex-wrap gap-2">
+														{(["cpf", "cnpj"] as const)
+															.filter((tipo) => partner.alteracaoSolicitada?.arquivos?.[tipo])
+															.map((tipo) => (
+																<Button
+																	key={tipo}
+																	size="sm"
+																	variant="outline"
+																	className="gap-2"
+																	onClick={() => openSignedUrl(() => fetchAdminPlatformPartnerDocumentUrl({ partnerId: partner.id, tipo, pedido: true }))}
+																>
+																	<FileText className="h-4 w-4" />
+																	Novo documento
+																</Button>
+															))}
+														<Button
+															size="sm"
+															className="gap-2"
+															disabled={approveChangeRequestMutation.isPending}
+															onClick={() => approveChangeRequestMutation.mutate({ partnerId: partner.id, aprovar: true })}
+														>
+															<ShieldCheck className="h-4 w-4" />
+															Aprovar alteração
+														</Button>
+														<Button size="sm" variant="outline" onClick={() => setRefusingChangePartner({ id: partner.id, nome: partner.nome })}>
+															Recusar
+														</Button>
+													</div>
+												</div>
+											) : null}
 											{partner.status === "REJEITADO" && partner.motivoRejeicao ? (
 												<p className="text-xs text-destructive">Motivo enviado ao parceiro: {partner.motivoRejeicao}</p>
 											) : null}
@@ -405,6 +473,13 @@ export default function PlatformPartnershipsAdminPage() {
 				</TabsContent>
 			</Tabs>
 
+			{refusingChangePartner ? (
+				<RefuseAdminPlatformPartnerChangeRequest
+					partner={refusingChangePartner}
+					closeModal={() => setRefusingChangePartner(null)}
+					callbacks={{ onSuccess: invalidateAll }}
+				/>
+			) : null}
 			{rejectingPartner ? (
 				<RejectAdminPlatformPartner partner={rejectingPartner} closeModal={() => setRejectingPartner(null)} callbacks={{ onSuccess: invalidateAll }} />
 			) : null}

@@ -27,6 +27,8 @@ async function getPlatformPartnerMe({ userId }: { userId: string }) {
 			dataAceiteTermos: true,
 			mensagemDivulgacao: true,
 			dataCartaoVisualizado: true,
+			alteracaoSolicitada: true,
+			dataSolicitacaoAlteracao: true,
 			dataAprovacao: true,
 			dataInsercao: true,
 		},

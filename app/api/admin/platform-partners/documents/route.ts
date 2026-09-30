@@ -11,16 +11,22 @@ import z from "zod";
 const GetAdminPlatformPartnerDocumentInputSchema = z.object({
 	partnerId: z.string({ required_error: "ID do parceiro não informado.", invalid_type_error: "Tipo inválido para o ID do parceiro." }),
 	tipo: z.enum(["cpf", "cnpj"], { required_error: "Tipo do documento não informado.", invalid_type_error: "Tipo do documento inválido." }),
+	// true: documento do pedido de alteração em análise, e não o do cadastro.
+	pedido: z
+		.string({ invalid_type_error: "Tipo inválido para pedido." })
+		.optional()
+		.nullable()
+		.transform((value) => value === "true"),
 });
 export type TGetAdminPlatformPartnerDocumentInput = z.infer<typeof GetAdminPlatformPartnerDocumentInputSchema>;
 
 async function getAdminPlatformPartnerDocument({ input }: { input: TGetAdminPlatformPartnerDocumentInput }) {
 	const partner = await db.query.platformPartners.findFirst({
 		where: eq(platformPartners.id, input.partnerId),
-		columns: { arquivos: true },
+		columns: { arquivos: true, alteracaoSolicitada: true },
 	});
 	if (!partner) throw new createHttpError.NotFound("Parceiro não encontrado.");
-	const path = partner.arquivos[input.tipo];
+	const path = input.pedido ? partner.alteracaoSolicitada?.arquivos?.[input.tipo] : partner.arquivos[input.tipo];
 	if (!path) throw new createHttpError.NotFound("Documento não enviado.");
 
 	// Validade curta: o link é aberto na hora pelo admin, não compartilhado.
@@ -40,6 +46,7 @@ async function getAdminPlatformPartnerDocumentRoute(request: NextRequest) {
 	const input = GetAdminPlatformPartnerDocumentInputSchema.parse({
 		partnerId: request.nextUrl.searchParams.get("partnerId"),
 		tipo: request.nextUrl.searchParams.get("tipo"),
+		pedido: request.nextUrl.searchParams.get("pedido"),
 	});
 	const result = await getAdminPlatformPartnerDocument({ input });
 	return NextResponse.json(result);

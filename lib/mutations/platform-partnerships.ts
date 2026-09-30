@@ -18,6 +18,15 @@ import type {
 	TCreateAdminPlatformPartnerPayoutReceiptInput,
 	TCreateAdminPlatformPartnerPayoutReceiptOutput,
 } from "@/app/api/admin/platform-partners/payouts/receipt/route";
+import type {
+	TResolveAdminPlatformPartnerChangeRequestInput,
+	TResolveAdminPlatformPartnerChangeRequestOutput,
+} from "@/app/api/admin/platform-partners/change-requests/route";
+import type {
+	TCreatePlatformPartnerChangeRequestInput,
+	TCreatePlatformPartnerChangeRequestOutput,
+	TDeletePlatformPartnerChangeRequestOutput,
+} from "@/app/api/platform-partner/change-requests/route";
 import type { TCreatePlatformPartnerDocumentInput, TCreatePlatformPartnerDocumentOutput } from "@/app/api/platform-partner/documents/route";
 import type { TUpdatePlatformPartnerMeInput, TUpdatePlatformPartnerMeOutput } from "@/app/api/platform-partner/me/route";
 import type { TCreatePlatformPartnerOnboardingInput, TCreatePlatformPartnerOnboardingOutput } from "@/app/api/platform-partner/onboarding/route";
@@ -77,5 +86,20 @@ export async function createAdminPlatformPartnerPayoutReceipt(input: TCreateAdmi
 	formData.set("payoutId", input.payoutId);
 	formData.set("file", input.file);
 	const { data } = await axios.post<TCreateAdminPlatformPartnerPayoutReceiptOutput>("/api/admin/platform-partners/payouts/receipt", formData);
+	return data;
+}
+
+export async function createPlatformPartnerChangeRequest(input: TCreatePlatformPartnerChangeRequestInput) {
+	const { data } = await axios.post<TCreatePlatformPartnerChangeRequestOutput>("/api/platform-partner/change-requests", input);
+	return data;
+}
+
+export async function deletePlatformPartnerChangeRequest() {
+	const { data } = await axios.delete<TDeletePlatformPartnerChangeRequestOutput>("/api/platform-partner/change-requests");
+	return data;
+}
+
+export async function resolveAdminPlatformPartnerChangeRequest(input: TResolveAdminPlatformPartnerChangeRequestInput) {
+	const { data } = await axios.put<TResolveAdminPlatformPartnerChangeRequestOutput>("/api/admin/platform-partners/change-requests", input);
 	return data;
 }
