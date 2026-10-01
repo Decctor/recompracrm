@@ -205,7 +205,7 @@ export default function PartnerStorePage({ storeId }: { storeId: string }) {
 	return (
 		<div className="mx-auto flex w-full max-w-[720px] flex-col md:gap-4">
 			<TopSheet className="gap-[18px]">
-				<BackHeader href="/partner-dashboard/lojas" title="Loja indicada" />
+				<BackHeader href="/partner-dashboard/stores" title="Loja indicada" />
 				<div className="flex items-center gap-3.5">
 					<Initials className="h-14 w-14 rounded-[18px] text-xl">{store.iniciais}</Initials>
 					<div className="flex min-w-0 flex-col gap-1.5">

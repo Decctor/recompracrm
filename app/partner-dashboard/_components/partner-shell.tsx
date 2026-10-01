@@ -13,11 +13,16 @@ const NAV_ITEMS = [
 		href: "/partner-dashboard",
 		label: "Início",
 		icon: House,
-		match: (path: string) => path === "/partner-dashboard" || path.startsWith("/partner-dashboard/pagamentos"),
+		match: (path: string) => path === "/partner-dashboard" || path.startsWith("/partner-dashboard/payouts"),
 	},
-	{ href: "/partner-dashboard/lojas", label: "Lojas", icon: Building2, match: (path: string) => path.startsWith("/partner-dashboard/lojas") },
-	{ href: "/partner-dashboard/divulgar", label: "Divulgar", icon: Share2, match: (path: string) => path.startsWith("/partner-dashboard/divulgar") },
-	{ href: "/partner-dashboard/extrato", label: "Extrato", icon: ReceiptText, match: (path: string) => path.startsWith("/partner-dashboard/extrato") },
+	{ href: "/partner-dashboard/stores", label: "Lojas", icon: Building2, match: (path: string) => path.startsWith("/partner-dashboard/stores") },
+	{ href: "/partner-dashboard/share", label: "Divulgar", icon: Share2, match: (path: string) => path.startsWith("/partner-dashboard/share") },
+	{
+		href: "/partner-dashboard/statement",
+		label: "Extrato",
+		icon: ReceiptText,
+		match: (path: string) => path.startsWith("/partner-dashboard/statement"),
+	},
 ];
 
 export function HideValuesButton({ className }: { className?: string }) {
@@ -41,10 +46,10 @@ export function HideValuesButton({ className }: { className?: string }) {
 /** Atalho para "Meus dados" (fica fora das abas: é consulta eventual, não navegação do dia a dia). */
 export function ProfileButton({ className }: { className?: string }) {
 	const pathname = usePathname();
-	const active = pathname.startsWith("/partner-dashboard/meus-dados");
+	const active = pathname.startsWith("/partner-dashboard/profile");
 	return (
 		<Link
-			href="/partner-dashboard/meus-dados"
+			href="/partner-dashboard/profile"
 			aria-label="Meus dados"
 			aria-current={active ? "page" : undefined}
 			className={cn(

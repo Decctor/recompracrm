@@ -77,7 +77,7 @@ export function StatementFeed({ items }: { items: TPartnerStatementItem[] }) {
 					return (
 						<Row
 							key={item.id}
-							href={`/partner-dashboard/pagamentos/${item.payoutId}`}
+							href={`/partner-dashboard/payouts/${item.payoutId}`}
 							highlighted
 							icon={
 								<Initials tone="success" className="h-8 w-8 rounded-xl text-[11px]">
@@ -99,7 +99,7 @@ export function StatementFeed({ items }: { items: TPartnerStatementItem[] }) {
 					return (
 						<Row
 							key={item.id}
-							href={`/partner-dashboard/lojas/${item.lojaId}`}
+							href={`/partner-dashboard/stores/${item.lojaId}`}
 							icon={
 								<Initials tone="neutral" className="h-8 w-8 rounded-xl text-[11px]">
 									{item.lojaIniciais}
@@ -117,7 +117,7 @@ export function StatementFeed({ items }: { items: TPartnerStatementItem[] }) {
 				return (
 					<Row
 						key={item.id}
-						href={`/partner-dashboard/lojas/${item.lojaId}`}
+						href={`/partner-dashboard/stores/${item.lojaId}`}
 						icon={
 							<Initials tone={bonus ? "bonus" : "info"} className="h-8 w-8 rounded-xl text-[11px]">
 								{item.lojaIniciais}

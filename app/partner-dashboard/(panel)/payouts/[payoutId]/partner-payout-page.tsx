@@ -56,7 +56,7 @@ export default function PartnerPayoutPage({ payoutId }: { payoutId: string }) {
 	return (
 		<div className="mx-auto flex w-full max-w-[640px] flex-col md:gap-4">
 			<TopSheet className="gap-[22px]">
-				<BackHeader href="/partner-dashboard/extrato" title="Pagamento" />
+				<BackHeader href="/partner-dashboard/statement" title="Pagamento" />
 				<div className="flex flex-col items-center gap-2.5 text-center">
 					<span
 						className={cn(

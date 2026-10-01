@@ -64,7 +64,7 @@ export function notifyPlatformPartnerNewCommission(
 			value: formatCentavos(commission.valorComissaoCentavos),
 			note: `Prevista para o PIX de ${formatPartnerDate(commission.dataPix)}`,
 		},
-		cta: { label: "Ver extrato", href: `${appUrl()}/partner-dashboard/extrato` },
+		cta: { label: "Ver extrato", href: `${appUrl()}/partner-dashboard/statement` },
 	});
 }
 
@@ -74,7 +74,7 @@ export function notifyPlatformPartnerPixPaid(partner: TPartnerRecipient, payout:
 		heading: "Seu PIX foi enviado",
 		paragraphs: ["O pagamento das suas comissões foi feito na chave PIX cadastrada. O detalhe e o comprovante ficam no painel."],
 		highlight: { label: "PIX RECEBIDO", value: formatCentavos(payout.valorTotalCentavos), note: `Pago em ${formatPartnerDate(payout.dataPagamento)}` },
-		cta: { label: "Ver pagamento", href: `${appUrl()}/partner-dashboard/pagamentos/${payout.id}` },
+		cta: { label: "Ver pagamento", href: `${appUrl()}/partner-dashboard/payouts/${payout.id}` },
 	});
 }
 
@@ -88,6 +88,6 @@ export function notifyPlatformPartnerChangeRequestResolved(partner: TPartnerReci
 				: "O financeiro não aprovou a alteração dos seus dados. Seus dados anteriores continuam valendo.",
 		],
 		callout: !result.aprovada && result.motivoRecusa ? { label: "MOTIVO", text: result.motivoRecusa } : null,
-		cta: { label: "Ver meus dados", href: `${appUrl()}/partner-dashboard/meus-dados` },
+		cta: { label: "Ver meus dados", href: `${appUrl()}/partner-dashboard/profile` },
 	});
 }

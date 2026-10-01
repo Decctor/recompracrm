@@ -72,7 +72,7 @@ export default function PartnerStoresPage() {
 					) : data.lojas.length === 0 ? (
 						<EmptyNote>
 							Nenhuma loja indicada ainda.{" "}
-							<Link href="/partner-dashboard/divulgar" className="font-bold text-primary">
+							<Link href="/partner-dashboard/share" className="font-bold text-primary">
 								Compartilhe seu link
 							</Link>{" "}
 							e as lojas aparecem aqui assim que criarem a conta.

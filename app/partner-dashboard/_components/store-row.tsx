@@ -84,7 +84,7 @@ export function StoreRow({ store, first }: { store: TPartnerStoreSummary; first?
 	const note = describeStore(store);
 	return (
 		<Link
-			href={`/partner-dashboard/lojas/${store.id}`}
+			href={`/partner-dashboard/stores/${store.id}`}
 			className={cn("flex items-center gap-3 px-5 py-3 transition-colors hover:bg-muted/60", !first && "border-t border-border")}
 		>
 			<Initials>{store.iniciais}</Initials>

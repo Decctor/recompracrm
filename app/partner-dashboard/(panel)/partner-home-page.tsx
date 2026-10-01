@@ -134,7 +134,7 @@ function FirstReferralCard({ link, mensagem }: { link: string; mensagem: string 
 				Enviar no WhatsApp
 			</a>
 			<Link
-				href="/partner-dashboard/divulgar"
+				href="/partner-dashboard/share"
 				className="flex h-11 items-center justify-center rounded-[18px] border border-border bg-card text-sm font-bold transition-colors hover:bg-muted"
 			>
 				Mostrar QR code
@@ -209,14 +209,14 @@ export default function PartnerHomePage() {
 				<EarningsChart months={resumo.ganhosPorMes} totalCentavos={resumo.valorTotalCentavos} firstMonth={resumo.primeiroMes} />
 
 				<PanelCard className="py-2">
-					<PanelCardHeader title="Suas lojas" action={lojas.length > 5 ? <PanelLink href="/partner-dashboard/lojas">Ver todas</PanelLink> : null} />
+					<PanelCardHeader title="Suas lojas" action={lojas.length > 5 ? <PanelLink href="/partner-dashboard/stores">Ver todas</PanelLink> : null} />
 					{lojas.slice(0, 5).map((store, index) => (
 						<StoreRow key={store.id} store={store} first={index === 0} />
 					))}
 				</PanelCard>
 
 				<PanelCard className="py-2">
-					<PanelCardHeader title="Extrato" action={extrato.length > 6 ? <PanelLink href="/partner-dashboard/extrato">Ver completo</PanelLink> : null} />
+					<PanelCardHeader title="Extrato" action={extrato.length > 6 ? <PanelLink href="/partner-dashboard/statement">Ver completo</PanelLink> : null} />
 					{extrato.length > 0 ? <StatementFeed items={extrato.slice(0, 6)} /> : <EmptyNote>Nada por aqui ainda.</EmptyNote>}
 				</PanelCard>
 			</div>
