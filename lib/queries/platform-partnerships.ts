@@ -19,10 +19,10 @@ async function fetchPlatformPartnerMe() {
 	return data.data.partner;
 }
 
-export function usePlatformPartnerMe() {
+export function usePlatformPartnerMe({ enabled = true }: { enabled?: boolean } = {}) {
 	const queryKey = ["platform-partner-me"];
 	return {
-		...useQuery({ queryKey, queryFn: fetchPlatformPartnerMe }),
+		...useQuery({ queryKey, queryFn: fetchPlatformPartnerMe, enabled, staleTime: 5 * 60 * 1000 }),
 		queryKey,
 	};
 }

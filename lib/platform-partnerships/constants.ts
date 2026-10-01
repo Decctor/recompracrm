@@ -1,3 +1,5 @@
+import { appRoutes } from "@/lib/navigation/routes";
+
 export const PLATFORM_PARTNER_COOKIE_NAME = "recompra_partner_indicator";
 export const PLATFORM_PARTNER_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 
@@ -58,3 +60,7 @@ export function buildPlatformPartnerShareMessage({ mensagem, link }: { mensagem:
 	const template = mensagem?.trim() ? mensagem : PLATFORM_PARTNER_DEFAULT_SHARE_MESSAGE;
 	return template.includes("{link}") ? template.replaceAll("{link}", link) : `${template} ${link}`;
 }
+
+// Caminho de volta do painel do parceiro para o app principal (só para quem também é usuário de uma loja).
+// Fica aqui, e não no componente cliente, porque os layouts do servidor também leem.
+export const PLATFORM_PARTNER_MAIN_APP_HREF = appRoutes.dashboard();

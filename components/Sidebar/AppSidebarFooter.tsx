@@ -14,8 +14,10 @@ import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "@/c
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { formatNameAsInitials } from "@/lib/formatting";
 import { appRoutes } from "@/lib/navigation/routes";
-import { ChevronsUpDown, LogOut, UserRound } from "lucide-react";
+import { usePlatformPartnerMe } from "@/lib/queries/platform-partnerships";
+import { ChevronsUpDown, Handshake, LogOut, UserRound } from "lucide-react";
 import Link from "next/link";
+import { useState } from "react";
 import SubscriptionBadge from "./SubscriptionBadge";
 
 export default function AppSidebarFooter({
@@ -26,6 +28,17 @@ export default function AppSidebarFooter({
 	organization: NonNullable<TAuthUserSession["membership"]>["organizacao"];
 }) {
 	const { isMobile } = useSidebar();
+	// Situação no programa de parcerias só quando o menu abre: o rótulo depende dela, mas não vale
+	// uma requisição a cada página do app.
+	const [menuOpen, setMenuOpen] = useState(false);
+	const { data: partner, isLoading: partnerLoading } = usePlatformPartnerMe({ enabled: menuOpen });
+	const partnerLabel = partnerLoading
+		? "Programa de Parcerias"
+		: partner?.status === "ATIVO"
+			? "Painel do parceiro"
+			: partner
+				? "Programa de Parcerias"
+				: "Indique e ganhe";
 
 	return (
 		<SidebarMenu>
@@ -36,7 +49,7 @@ export default function AppSidebarFooter({
 			</SidebarMenuItem>
 
 			<SidebarMenuItem>
-				<DropdownMenu>
+				<DropdownMenu onOpenChange={setMenuOpen}>
 					<DropdownMenuTrigger
 						render={
 							<SidebarMenuButton
@@ -76,6 +89,15 @@ export default function AppSidebarFooter({
 										<Link href={appRoutes.settings()}>
 											<UserRound />
 											Configurações
+										</Link>
+									</SidebarMenuButton>
+								</DropdownMenuItem>
+								{/* Para todos: quem ainda não é parceiro cai no cadastro do programa (o painel redireciona). */}
+								<DropdownMenuItem>
+									<SidebarMenuButton asChild>
+										<Link href="/partner-dashboard">
+											<Handshake />
+											{partnerLabel}
 										</Link>
 									</SidebarMenuButton>
 								</DropdownMenuItem>

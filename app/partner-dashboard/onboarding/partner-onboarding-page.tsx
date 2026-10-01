@@ -13,11 +13,13 @@ import type { TPlatformPartnerPixKeyTypeEnum } from "@/schemas/enums";
 import { usePlatformPartnerOnboardingState } from "@/state-hooks/use-platform-partner-onboarding-state";
 import { useMutation } from "@tanstack/react-query";
 import { ArrowRight, Camera, Check, ChevronLeft, ExternalLink, FileText, Landmark, Link2, Loader2, Repeat, ScanLine } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type ReactNode, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { CardLogo } from "../_components/partner-card";
 import { PARTNER_CARD_SURFACE } from "../_components/partner-ui";
+import { MainAppLink } from "../_components/partner-shell";
 import { StatusFrame } from "../_components/partner-status-screens";
 
 type TExistingPartner = {
@@ -102,7 +104,7 @@ function PrimaryButton({ ready, children, className, ...props }: React.ButtonHTM
 	);
 }
 
-function StepHeader({ step, onBack }: { step: number; onBack: (() => void) | null }) {
+function StepHeader({ step, onBack, mainAppHref }: { step: number; onBack: (() => void) | null; mainAppHref: string | null }) {
 	return (
 		<>
 			<div className="flex items-center justify-between px-5 pt-[max(16px,env(safe-area-inset-top))]">
@@ -115,6 +117,15 @@ function StepHeader({ step, onBack }: { step: number; onBack: (() => void) | nul
 					>
 						<ChevronLeft className="h-[18px] w-[18px]" />
 					</button>
+				) : mainAppHref ? (
+					// Sem etapa anterior (quem volta para revisar começa aqui): o voltar leva ao app principal.
+					<Link
+						href={mainAppHref}
+						aria-label="Voltar ao RecompraCRM"
+						className="flex h-10 w-10 items-center justify-center rounded-[14px] border border-border transition-colors hover:bg-muted"
+					>
+						<ChevronLeft className="h-[18px] w-[18px]" />
+					</Link>
 				) : (
 					<span className="w-10" />
 				)}
@@ -150,9 +161,12 @@ function StepFooter({ children }: { children: ReactNode }) {
 export default function PartnerOnboardingPage({
 	user,
 	existingPartner,
+	mainAppHref = null,
 }: {
 	user: TAuthUserSession["user"];
 	existingPartner: TExistingPartner | null;
+	/** Usuário de loja que abriu "Indique e ganhe": precisa de um caminho de volta ao app. */
+	mainAppHref?: string | null;
 }) {
 	const router = useRouter();
 	const initialState = useMemo(
@@ -297,6 +311,7 @@ export default function PartnerOnboardingPage({
 					<BrandLogo lockup="icon-badge" tone="color" width={32} height={32} className="rounded-full" />
 					<span className="text-[11px] font-extrabold tracking-[0.16em] text-primary uppercase">Programa de Parcerias</span>
 				</div>
+				{mainAppHref ? <MainAppLink href={mainAppHref} className="self-start px-5 pt-3" /> : null}
 				<div className="flex flex-col gap-3 px-5 pt-[22px]">
 					<h1 className="text-[34px] leading-[1.05] font-extrabold tracking-[-0.02em]">
 						Indique lojas.
@@ -372,7 +387,7 @@ export default function PartnerOnboardingPage({
 
 	return (
 		<StatusFrame>
-			<StepHeader step={step} onBack={step > 1 || !existingPartner ? () => setStep(step - 1) : null} />
+			<StepHeader step={step} onBack={step > 1 || !existingPartner ? () => setStep(step - 1) : null} mainAppHref={mainAppHref} />
 
 			{step === 1 ? (
 				<>

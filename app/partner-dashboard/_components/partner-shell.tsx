@@ -2,10 +2,10 @@
 
 import { BrandLogo } from "@/components/Brand/BrandLogo";
 import { cn } from "@/lib/utils";
-import { Building2, Eye, EyeOff, House, ReceiptText, Share2, UserRound } from "lucide-react";
+import { ArrowLeft, Building2, Eye, EyeOff, House, ReceiptText, Share2, UserRound } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { createContext, type ReactNode, useContext } from "react";
 import { HideValuesProvider, useHideValues } from "./partner-ui";
 
 const NAV_ITEMS = [
@@ -24,6 +24,26 @@ const NAV_ITEMS = [
 		match: (path: string) => path.startsWith("/partner-dashboard/statement"),
 	},
 ];
+
+// Rota do app principal quando o parceiro também é usuário de uma loja; `null` para parceiro só parceiro.
+const MainAppLinkContext = createContext<string | null>(null);
+export function useMainAppHref() {
+	return useContext(MainAppLinkContext);
+}
+
+/** Volta para o RecompraCRM. Só aparece para quem tem loja: parceiro sem loja não tem para onde voltar. */
+export function MainAppLink({ href, className }: { href: string | null; className?: string }) {
+	if (!href) return null;
+	return (
+		<Link
+			href={href}
+			className={cn("inline-flex items-center gap-1.5 text-[13px] font-bold text-muted-foreground transition-colors hover:text-foreground", className)}
+		>
+			<ArrowLeft className="h-4 w-4" />
+			Voltar ao RecompraCRM
+		</Link>
+	);
+}
 
 export function HideValuesButton({ className }: { className?: string }) {
 	const { hidden, toggle } = useHideValues();
@@ -67,68 +87,71 @@ export function ProfileButton({ className }: { className?: string }) {
  * Moldura do painel: barra superior com navegação no desktop, barra de abas fixa embaixo no
  * celular (o protótipo é mobile e a navegação por polegar é o que o parceiro usa na rua).
  */
-export function PartnerShell({ children }: { children: ReactNode }) {
+export function PartnerShell({ children, mainAppHref = null }: { children: ReactNode; mainAppHref?: string | null }) {
 	const pathname = usePathname();
 	return (
-		<HideValuesProvider>
-			<div className="flex min-h-dvh w-full flex-col bg-muted">
-				<header className="sticky top-0 z-30 hidden border-b border-border bg-card/95 md:block">
-					<div className="mx-auto flex h-16 w-full max-w-[1120px] items-center gap-6 px-6">
-						<Link href="/partner-dashboard" className="flex items-center gap-3">
-							<BrandLogo lockup="icon-badge" tone="color" width={32} height={32} className="rounded-full" />
-							<span className="text-label text-primary">Programa de Parcerias</span>
-						</Link>
-						<nav className="flex flex-1 items-center gap-1" aria-label="Painel do parceiro">
-							{NAV_ITEMS.map((item) => {
-								const active = item.match(pathname);
-								return (
-									<Link
-										key={item.href}
-										href={item.href}
-										aria-current={active ? "page" : undefined}
-										className={cn(
-											"flex h-10 items-center gap-2 rounded-[14px] px-4 text-sm font-bold transition-colors",
-											active ? "bg-info-surface text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground",
-										)}
-									>
-										<item.icon className="h-4 w-4" />
-										{item.label}
-									</Link>
-								);
-							})}
-						</nav>
-						<div className="flex items-center gap-2">
-							<HideValuesButton />
-							<ProfileButton />
-						</div>
-					</div>
-				</header>
-
-				<main className="mx-auto flex w-full max-w-[1120px] flex-1 flex-col pb-[calc(88px+env(safe-area-inset-bottom))] md:px-6 md:pt-6 md:pb-12">
-					{children}
-				</main>
-
-				<nav
-					aria-label="Painel do parceiro"
-					className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-border bg-card px-3 pt-2.5 pb-[calc(8px+env(safe-area-inset-bottom))] md:hidden"
-				>
-					{NAV_ITEMS.map((item) => {
-						const active = item.match(pathname);
-						return (
-							<Link
-								key={item.href}
-								href={item.href}
-								aria-current={active ? "page" : undefined}
-								className={cn("flex flex-col items-center gap-1 text-[11px]", active ? "font-bold text-primary" : "font-semibold text-muted-foreground")}
-							>
-								<item.icon className="h-[22px] w-[22px]" />
-								{item.label}
+		<MainAppLinkContext value={mainAppHref}>
+			<HideValuesProvider>
+				<div className="flex min-h-dvh w-full flex-col bg-muted">
+					<header className="sticky top-0 z-30 hidden border-b border-border bg-card/95 md:block">
+						<div className="mx-auto flex h-16 w-full max-w-[1120px] items-center gap-6 px-6">
+							<Link href="/partner-dashboard" className="flex items-center gap-3">
+								<BrandLogo lockup="icon-badge" tone="color" width={32} height={32} className="rounded-full" />
+								<span className="text-label text-primary">Programa de Parcerias</span>
 							</Link>
-						);
-					})}
-				</nav>
-			</div>
-		</HideValuesProvider>
+							<nav className="flex flex-1 items-center gap-1" aria-label="Painel do parceiro">
+								{NAV_ITEMS.map((item) => {
+									const active = item.match(pathname);
+									return (
+										<Link
+											key={item.href}
+											href={item.href}
+											aria-current={active ? "page" : undefined}
+											className={cn(
+												"flex h-10 items-center gap-2 rounded-[14px] px-4 text-sm font-bold transition-colors",
+												active ? "bg-info-surface text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground",
+											)}
+										>
+											<item.icon className="h-4 w-4" />
+											{item.label}
+										</Link>
+									);
+								})}
+							</nav>
+							<div className="flex items-center gap-2">
+								<MainAppLink href={mainAppHref} className="mr-2" />
+								<HideValuesButton />
+								<ProfileButton />
+							</div>
+						</div>
+					</header>
+
+					<main className="mx-auto flex w-full max-w-[1120px] flex-1 flex-col pb-[calc(88px+env(safe-area-inset-bottom))] md:px-6 md:pt-6 md:pb-12">
+						{children}
+					</main>
+
+					<nav
+						aria-label="Painel do parceiro"
+						className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-border bg-card px-3 pt-2.5 pb-[calc(8px+env(safe-area-inset-bottom))] md:hidden"
+					>
+						{NAV_ITEMS.map((item) => {
+							const active = item.match(pathname);
+							return (
+								<Link
+									key={item.href}
+									href={item.href}
+									aria-current={active ? "page" : undefined}
+									className={cn("flex flex-col items-center gap-1 text-[11px]", active ? "font-bold text-primary" : "font-semibold text-muted-foreground")}
+								>
+									<item.icon className="h-[22px] w-[22px]" />
+									{item.label}
+								</Link>
+							);
+						})}
+					</nav>
+				</div>
+			</HideValuesProvider>
+		</MainAppLinkContext>
 	);
 }
 

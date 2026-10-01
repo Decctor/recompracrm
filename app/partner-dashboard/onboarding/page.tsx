@@ -3,6 +3,7 @@ import { db } from "@/services/drizzle";
 import { platformPartners } from "@/services/drizzle/schema";
 import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
+import { PLATFORM_PARTNER_MAIN_APP_HREF } from "@/lib/platform-partnerships/constants";
 import PartnerOnboardingPage from "./partner-onboarding-page";
 
 export default async function PartnerOnboarding() {
@@ -26,5 +27,11 @@ export default async function PartnerOnboarding() {
 	});
 	if (partner?.status === "ATIVO") redirect("/partner-dashboard");
 
-	return <PartnerOnboardingPage user={session.user} existingPartner={partner ?? null} />;
+	return (
+		<PartnerOnboardingPage
+			user={session.user}
+			existingPartner={partner ?? null}
+			mainAppHref={session.membership ? PLATFORM_PARTNER_MAIN_APP_HREF : null}
+		/>
+	);
 }

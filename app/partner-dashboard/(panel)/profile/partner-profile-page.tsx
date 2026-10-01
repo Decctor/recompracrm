@@ -11,7 +11,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Clock3, ShieldAlert } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { PanelBody, TopSheet } from "../../_components/partner-shell";
+import { MainAppLink, PanelBody, TopSheet, useMainAppHref } from "../../_components/partner-shell";
 import { BackHeader, PanelCard, PanelCardHeader, PanelSkeleton } from "../../_components/partner-ui";
 
 const PIX_TYPE_LABEL: Record<string, string> = { CPF: "CPF", CNPJ: "CNPJ", EMAIL: "Email", TELEFONE: "Telefone", ALEATORIA: "Aleatória" };
@@ -33,6 +33,7 @@ export default function PartnerProfilePage() {
 	const queryClient = useQueryClient();
 	const { data: partner, isLoading, isError, error, queryKey } = usePlatformPartnerMe();
 	const [editing, setEditing] = useState(false);
+	const mainAppHref = useMainAppHref();
 
 	const cancelMutation = useMutation({
 		mutationKey: ["delete-platform-partner-change-request"],
@@ -152,6 +153,8 @@ export default function PartnerProfilePage() {
 					{pending ? "Alteração em análise" : "Solicitar alteração"}
 				</button>
 				<p className="text-center text-xs text-muted-foreground">Trocas de chave PIX e de contato passam pelo financeiro antes de valer.</p>
+				{/* No celular a barra de abas não tem o atalho do cabeçalho do desktop: o caminho de volta fica aqui. */}
+				<MainAppLink href={mainAppHref} className="mt-3 self-center md:hidden" />
 			</PanelBody>
 
 			{editing ? (

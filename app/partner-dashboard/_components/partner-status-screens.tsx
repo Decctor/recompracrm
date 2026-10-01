@@ -13,6 +13,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { CardLogo } from "./partner-card";
+import { MainAppLink } from "./partner-shell";
 import { PARTNER_CARD_SURFACE, type TPillTone, Pill } from "./partner-ui";
 
 export function StatusFrame({ children }: { children: React.ReactNode }) {
@@ -56,7 +57,17 @@ const STATUS_CONTENT: Record<
 };
 
 /** Telas de quem ainda não tem painel: em análise, suspenso ou não aprovado. */
-export function PartnerStatusScreen({ status, nome, motivoRejeicao = null }: { status: string; nome: string; motivoRejeicao?: string | null }) {
+export function PartnerStatusScreen({
+	status,
+	nome,
+	motivoRejeicao = null,
+	mainAppHref = null,
+}: {
+	status: string;
+	nome: string;
+	motivoRejeicao?: string | null;
+	mainAppHref?: string | null;
+}) {
 	const content = STATUS_CONTENT[status] ?? {
 		tone: "neutral" as const,
 		label: status,
@@ -102,6 +113,7 @@ export function PartnerStatusScreen({ status, nome, motivoRejeicao = null }: { s
 						{content.action.label}
 					</Link>
 				) : null}
+				<MainAppLink href={mainAppHref} className={cn("self-center", !content.action && "mt-auto")} />
 			</div>
 		</StatusFrame>
 	);
