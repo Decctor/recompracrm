@@ -13,6 +13,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 import { ChoiceList } from "../shared/ChoiceList";
+import { ReferralCodeField } from "./ReferralCodeField";
 
 type CompanyStageProps = {
 	state: TUseOrganizationOnboardingState["state"];
@@ -21,13 +22,15 @@ type CompanyStageProps = {
 	updateOnboarding: TUseOrganizationOnboardingState["updateOnboarding"];
 	/** Organização já existe: a etapa vira edição e os termos já foram aceitos. */
 	isEditing: boolean;
+	/** Código do link de indicação (cookie), para mostrar quem indicou. */
+	referralCookieCode?: string | null;
 };
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
 	return <p className="text-[11px] font-extrabold tracking-[0.08em] text-muted-foreground uppercase">{children}</p>;
 }
 
-export function CompanyStage({ state, updateOrganization, updateOrganizationLogoHolder, updateOnboarding, isEditing }: CompanyStageProps) {
+export function CompanyStage({ state, updateOrganization, updateOrganizationLogoHolder, updateOnboarding, isEditing, referralCookieCode = null }: CompanyStageProps) {
 	// Licença de deal (venda B2B multi-licença): org ativada sem trial e sem checkout.
 	const { data: dealLicense } = useAvailableDealLicense();
 	// O endereço acompanha o nome até o usuário mexer nele.
@@ -147,6 +150,17 @@ export function CompanyStage({ state, updateOrganization, updateOrganizationLogo
 					options={OrganizationNicheOptions.map((niche) => ({ value: niche.value, titulo: niche.label, icon: niche.renderIcon("size-4") }))}
 				/>
 			</section>
+
+			{!isEditing && !dealLicense?.available ? (
+				<ReferralCodeField
+					cookieCode={referralCookieCode}
+					value={state.indicadorCodigo ?? ""}
+					onChange={(value) => {
+						updateOnboarding({ indicadorCodigo: value || null });
+						if (value) updateOrganization({ origemLead: "INDICAÇÃO" });
+					}}
+				/>
+			) : null}
 
 			{!isEditing ? (
 				<div className="flex items-start gap-2">

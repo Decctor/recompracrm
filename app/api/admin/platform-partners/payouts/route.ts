@@ -6,6 +6,8 @@ import { and, eq, isNull, lte } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import z from "zod";
+import { getPayoutDateForEligibility, getPreviousLocalMonthRange } from "@/lib/platform-partnerships/earnings";
+import { notifyPlatformPartnerPixPaid } from "@/lib/platform-partnerships/notifications";
 
 const GetAdminPlatformPartnerPayoutsInputSchema = z.object({
 	partnerId: z.string({ invalid_type_error: "Tipo invalido para ID do parceiro." }).optional().nullable(),
@@ -51,11 +53,9 @@ async function getAdminPlatformPartnerPayouts({ input }: { input: TGetAdminPlatf
 }
 export type TGetAdminPlatformPartnerPayoutsOutput = Awaited<ReturnType<typeof getAdminPlatformPartnerPayouts>>;
 
+// Mês anterior no calendário de São Paulo: o mesmo corte que o painel do parceiro usa para o "próximo PIX".
 function getPreviousMonthRange() {
-	const now = new Date();
-	const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-	const end = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
-	return { start, end };
+	return getPreviousLocalMonthRange(new Date());
 }
 
 const CreateAdminPlatformPartnerPayoutInputSchema = z.object({
@@ -111,7 +111,8 @@ async function createAdminPlatformPartnerPayout({ input, adminUserId }: { input:
 				valorTotalCentavos,
 				metodo: "PIX",
 				chavePixSnapshot: partner.chavePix,
-				dataPrevista: input.dataPrevista ?? null,
+				// Padrão: o dia de PIX que paga a competência (dia 10 do mês seguinte) — o mesmo que o painel do parceiro mostra.
+				dataPrevista: input.dataPrevista ?? getPayoutDateForEligibility(competenciaFim),
 				autorId: adminUserId,
 			})
 			.returning({ id: platformPartnerPayouts.id });
@@ -153,9 +154,14 @@ async function updateAdminPlatformPartnerPayout({ input }: { input: TUpdateAdmin
 		where: eq(platformPartnerPayouts.id, input.payoutId),
 		with: {
 			commissions: true,
+			partner: { columns: { nome: true, email: true } },
 		},
 	});
 	if (!payout) throw new createHttpError.NotFound("Payout nao encontrado.");
+	if (payout.status === "PAGO" && input.status !== "PAGO") throw new createHttpError.BadRequest("Payout já pago não volta de status.");
+	if (input.status === "PAGO" && payout.status !== "APROVADO" && payout.status !== "PAGO") {
+		throw new createHttpError.BadRequest("Só um payout aprovado pode ser marcado como pago.");
+	}
 
 	await db.transaction(async (tx) => {
 		await tx
@@ -175,6 +181,14 @@ async function updateAdminPlatformPartnerPayout({ input }: { input: TUpdateAdmin
 			}
 		}
 	});
+
+	if (input.status === "PAGO" && payout.status !== "PAGO") {
+		notifyPlatformPartnerPixPaid(payout.partner, {
+			id: payout.id,
+			valorTotalCentavos: payout.valorTotalCentavos,
+			dataPagamento: input.dataPagamento ?? new Date(),
+		});
+	}
 
 	return {
 		data: {

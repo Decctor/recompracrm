@@ -2,6 +2,8 @@ import z from "zod";
 import {
 	PlatformPartnerCommissionStatusEnum,
 	PlatformPartnerPayoutStatusEnum,
+	PlatformPartnerPersonTypeEnum,
+	PlatformPartnerPixKeyTypeEnum,
 	PlatformPartnerReferralStatusEnum,
 	PlatformPartnerStatusEnum,
 } from "./enums";
@@ -35,6 +37,7 @@ export const PlatformPartnerSchema = z.object({
 		required_error: "Telefone do parceiro nao informado.",
 		invalid_type_error: "Tipo nao valido para o telefone do parceiro.",
 	}),
+	tipoPessoa: PlatformPartnerPersonTypeEnum.optional().nullable(),
 	cpfCnpj: z.string({
 		required_error: "CPF ou CNPJ do parceiro nao informado.",
 		invalid_type_error: "Tipo nao valido para o CPF ou CNPJ do parceiro.",
@@ -43,6 +46,13 @@ export const PlatformPartnerSchema = z.object({
 		required_error: "Chave PIX do parceiro nao informada.",
 		invalid_type_error: "Tipo nao valido para a chave PIX do parceiro.",
 	}),
+	chavePixTipo: PlatformPartnerPixKeyTypeEnum.optional().nullable(),
+	dataConfirmacaoTitularPix: z
+		.string({ invalid_type_error: "Tipo nao valido para a data de confirmacao do titular da chave PIX." })
+		.datetime({ message: "Tipo nao valido para a data de confirmacao do titular da chave PIX." })
+		.optional()
+		.nullable()
+		.transform((val) => (val ? new Date(val) : null)),
 	arquivos: PlatformPartnerFilesSchema,
 	aceiteTermos: z.boolean({
 		required_error: "Aceite dos termos nao informado.",
@@ -51,6 +61,13 @@ export const PlatformPartnerSchema = z.object({
 	dataAceiteTermos: z
 		.string({ invalid_type_error: "Tipo nao valido para a data de aceite dos termos." })
 		.datetime({ message: "Tipo nao valido para a data de aceite dos termos." })
+		.optional()
+		.nullable()
+		.transform((val) => (val ? new Date(val) : null)),
+	mensagemDivulgacao: z.string({ invalid_type_error: "Tipo nao valido para a mensagem de divulgacao." }).optional().nullable(),
+	dataCartaoVisualizado: z
+		.string({ invalid_type_error: "Tipo nao valido para a data de visualizacao do cartao." })
+		.datetime({ message: "Tipo nao valido para a data de visualizacao do cartao." })
 		.optional()
 		.nullable()
 		.transform((val) => (val ? new Date(val) : null)),
@@ -227,12 +244,17 @@ export const PlatformPartnerPayoutSchema = z.object({
 });
 export type TPlatformPartnerPayout = z.infer<typeof PlatformPartnerPayoutSchema>;
 
-export const PlatformPartnerOnboardingSchema = z.object({
+// Dados cadastrais que o admin também edita. O onboarding (abaixo) é a versão estrita: exige tipo de
+// pessoa, tipo de chave, confirmação do titular e o documento — o admin cadastra parceiros antigos
+// que não passaram por esse fluxo.
+export const PlatformPartnerRegistrationSchema = z.object({
 	nome: PlatformPartnerSchema.shape.nome,
 	email: PlatformPartnerSchema.shape.email,
 	telefone: PlatformPartnerSchema.shape.telefone,
+	tipoPessoa: PlatformPartnerSchema.shape.tipoPessoa,
 	cpfCnpj: PlatformPartnerSchema.shape.cpfCnpj,
 	chavePix: PlatformPartnerSchema.shape.chavePix,
+	chavePixTipo: PlatformPartnerSchema.shape.chavePixTipo,
 	arquivos: PlatformPartnerFilesSchema,
 	aceiteTermos: z
 		.boolean({
@@ -241,4 +263,44 @@ export const PlatformPartnerOnboardingSchema = z.object({
 		})
 		.refine((value) => value === true, "Aceite os termos para continuar."),
 });
+export type TPlatformPartnerRegistration = z.infer<typeof PlatformPartnerRegistrationSchema>;
+
+export const PlatformPartnerOnboardingSchema = z
+	.object({
+		nome: PlatformPartnerSchema.shape.nome.trim().min(3, "Informe seu nome completo."),
+		email: PlatformPartnerSchema.shape.email,
+		telefone: PlatformPartnerSchema.shape.telefone.min(14, "Informe um telefone com DDD."),
+		tipoPessoa: PlatformPartnerPersonTypeEnum,
+		cpfCnpj: PlatformPartnerSchema.shape.cpfCnpj,
+		chavePix: PlatformPartnerSchema.shape.chavePix.trim().min(1, "Chave PIX do parceiro nao informada."),
+		chavePixTipo: PlatformPartnerPixKeyTypeEnum,
+		// Autodeclaração de titularidade: não há consulta ao DICT, o parceiro confirma que a chave é dele.
+		titularPixConfirmado: z
+			.boolean({
+				required_error: "Confirmacao do titular da chave PIX nao informada.",
+				invalid_type_error: "Tipo nao valido para a confirmacao do titular da chave PIX.",
+			})
+			.refine((value) => value === true, "Confirme que a chave PIX está no seu nome."),
+		arquivos: PlatformPartnerFilesSchema,
+		aceiteTermos: z
+			.boolean({
+				required_error: "Aceite dos termos nao informado.",
+				invalid_type_error: "Tipo nao valido para o aceite dos termos.",
+			})
+			.refine((value) => value === true, "Aceite os termos para continuar."),
+	})
+	.superRefine((partner, ctx) => {
+		const documentDigits = partner.cpfCnpj.replace(/\D/g, "");
+		const pessoaFisica = partner.tipoPessoa === "PESSOA_FISICA";
+		if (documentDigits.length !== (pessoaFisica ? 11 : 14)) {
+			ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["cpfCnpj"], message: pessoaFisica ? "Informe um CPF válido." : "Informe um CNPJ válido." });
+		}
+		if (!(pessoaFisica ? partner.arquivos.cpf : partner.arquivos.cnpj)) {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				path: ["arquivos"],
+				message: pessoaFisica ? "Envie um documento com o seu CPF." : "Envie o cartão CNPJ ou o contrato social.",
+			});
+		}
+	});
 export type TPlatformPartnerOnboarding = z.infer<typeof PlatformPartnerOnboardingSchema>;

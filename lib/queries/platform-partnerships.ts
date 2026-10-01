@@ -1,3 +1,5 @@
+import type { TGetAdminPlatformPartnerPayoutReceiptOutput } from "@/app/api/admin/platform-partners/payouts/receipt/route";
+import type { TGetAdminPlatformPartnerDocumentOutput } from "@/app/api/admin/platform-partners/documents/route";
 import type { TGetAdminPlatformPartnerCommissionsOutput } from "@/app/api/admin/platform-partners/commissions/route";
 import type { TGetAdminPlatformPartnerPayoutsOutput } from "@/app/api/admin/platform-partners/payouts/route";
 import type { TGetAdminPlatformPartnerReferralsOutput } from "@/app/api/admin/platform-partners/referrals/route";
@@ -5,6 +7,8 @@ import type { TGetAdminPlatformPartnersInput, TGetAdminPlatformPartnersOutput } 
 import type { TGetPlatformPartnerDashboardOutput } from "@/app/api/platform-partner/dashboard/route";
 import type { TGetPlatformPartnerMeOutput } from "@/app/api/platform-partner/me/route";
 import type { TGetPlatformPartnerPayoutsOutput } from "@/app/api/platform-partner/payouts/route";
+import type { TGetPlatformPartnerReferralsOutput } from "@/app/api/platform-partner/referrals/route";
+import type { TValidatePlatformPartnerCodeOutput } from "@/app/api/platform-partners/validate-code/route";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import { useState } from "react";
@@ -15,10 +19,10 @@ async function fetchPlatformPartnerMe() {
 	return data.data.partner;
 }
 
-export function usePlatformPartnerMe() {
+export function usePlatformPartnerMe({ enabled = true }: { enabled?: boolean } = {}) {
 	const queryKey = ["platform-partner-me"];
 	return {
-		...useQuery({ queryKey, queryFn: fetchPlatformPartnerMe }),
+		...useQuery({ queryKey, queryFn: fetchPlatformPartnerMe, enabled, staleTime: 5 * 60 * 1000 }),
 		queryKey,
 	};
 }
@@ -36,15 +40,30 @@ export function usePlatformPartnerDashboard() {
 	};
 }
 
-async function fetchPlatformPartnerPayouts() {
-	const { data } = await axios.get<TGetPlatformPartnerPayoutsOutput>("/api/platform-partner/payouts");
-	return data.data.payouts;
+async function fetchPlatformPartnerPayoutById(id: string) {
+	const searchParams = new URLSearchParams({ id });
+	const { data } = await axios.get<TGetPlatformPartnerPayoutsOutput>(`/api/platform-partner/payouts?${searchParams.toString()}`);
+	return data.data.byId;
 }
 
-export function usePlatformPartnerPayouts() {
-	const queryKey = ["platform-partner-payouts"];
+export function usePlatformPartnerPayoutById({ payoutId }: { payoutId: string }) {
+	const queryKey = ["platform-partner-payout-by-id", payoutId];
 	return {
-		...useQuery({ queryKey, queryFn: fetchPlatformPartnerPayouts }),
+		...useQuery({ queryKey, queryFn: () => fetchPlatformPartnerPayoutById(payoutId) }),
+		queryKey,
+	};
+}
+
+async function fetchPlatformPartnerStoreById(id: string) {
+	const searchParams = new URLSearchParams({ id });
+	const { data } = await axios.get<TGetPlatformPartnerReferralsOutput>(`/api/platform-partner/referrals?${searchParams.toString()}`);
+	return data.data.byId;
+}
+
+export function usePlatformPartnerStoreById({ storeId }: { storeId: string }) {
+	const queryKey = ["platform-partner-store-by-id", storeId];
+	return {
+		...useQuery({ queryKey, queryFn: () => fetchPlatformPartnerStoreById(storeId) }),
 		queryKey,
 	};
 }
@@ -135,4 +154,51 @@ export function useAdminPlatformPartnerPayouts(params: { partnerId?: string | nu
 		...useQuery({ queryKey, queryFn: () => fetchAdminPlatformPartnerPayouts(params) }),
 		queryKey,
 	};
+}
+
+/** URL assinada (curta) do documento do parceiro. Busca sob demanda, no clique do admin. */
+export async function fetchAdminPlatformPartnerDocumentUrl({
+	partnerId,
+	tipo,
+	pedido = false,
+}: {
+	partnerId: string;
+	tipo: "cpf" | "cnpj";
+	pedido?: boolean;
+}) {
+	const searchParams = new URLSearchParams({ partnerId, tipo });
+	if (pedido) searchParams.set("pedido", "true");
+	const { data } = await axios.get<TGetAdminPlatformPartnerDocumentOutput>(`/api/admin/platform-partners/documents?${searchParams.toString()}`);
+	return data.data.url;
+}
+
+/** Valida um código de indicação digitado pelo lojista. Pública: não exige sessão de parceiro. */
+export async function fetchPlatformPartnerCodeValidation(codigo: string) {
+	const searchParams = new URLSearchParams({ codigo });
+	const { data } = await axios.get<TValidatePlatformPartnerCodeOutput>(`/api/platform-partners/validate-code?${searchParams.toString()}`);
+	return data.data;
+}
+
+export function usePlatformPartnerCodeValidation({ codigo }: { codigo: string }) {
+	const debounced = useDebounceMemo({ codigo: codigo.trim().toUpperCase() }, 400);
+	const queryKey = ["platform-partner-code-validation", debounced.codigo];
+	return {
+		...useQuery({
+			queryKey,
+			queryFn: () => fetchPlatformPartnerCodeValidation(debounced.codigo),
+			enabled: debounced.codigo.length >= 3,
+			staleTime: 60_000,
+		}),
+		queryKey,
+		isDebouncing: debounced.codigo !== codigo.trim().toUpperCase(),
+	};
+}
+
+/** URL assinada (curta) do comprovante de um payout, para o admin conferir. */
+export async function fetchAdminPlatformPartnerPayoutReceiptUrl({ payoutId }: { payoutId: string }) {
+	const searchParams = new URLSearchParams({ payoutId });
+	const { data } = await axios.get<TGetAdminPlatformPartnerPayoutReceiptOutput>(
+		`/api/admin/platform-partners/payouts/receipt?${searchParams.toString()}`,
+	);
+	return data.data.url;
 }

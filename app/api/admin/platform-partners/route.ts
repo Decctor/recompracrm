@@ -1,13 +1,14 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { createSimplifiedSearchCondition } from "@/lib/search";
-import { PlatformPartnerOnboardingSchema } from "@/schemas/platform-partnerships";
+import { PlatformPartnerRegistrationSchema } from "@/schemas/platform-partnerships";
 import { db } from "@/services/drizzle";
 import { platformPartners } from "@/services/drizzle/schema";
 import { and, count, eq } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import z from "zod";
+import { notifyPlatformPartnerApproved, notifyPlatformPartnerRejected } from "@/lib/platform-partnerships/notifications";
 
 const GetAdminPlatformPartnersInputSchema = z.object({
 	id: z.string({ invalid_type_error: "Tipo invalido para ID do parceiro." }).optional().nullable(),
@@ -96,7 +97,7 @@ export type TGetAdminPlatformPartnersOutputDefault = Exclude<TGetAdminPlatformPa
 export type TGetAdminPlatformPartnersOutputById = Exclude<TGetAdminPlatformPartnersOutput["data"]["byId"], null | undefined>;
 
 const CreateAdminPlatformPartnerInputSchema = z.object({
-	partner: PlatformPartnerOnboardingSchema.extend({
+	partner: PlatformPartnerRegistrationSchema.extend({
 		codigo: z.string({ required_error: "Codigo do parceiro nao informado.", invalid_type_error: "Tipo invalido para codigo do parceiro." }),
 	}),
 });
@@ -125,11 +126,12 @@ export type TCreateAdminPlatformPartnerOutput = Awaited<ReturnType<typeof create
 
 const UpdateAdminPlatformPartnerInputSchema = z.object({
 	partnerId: z.string({ required_error: "ID do parceiro nao informado.", invalid_type_error: "Tipo invalido para ID do parceiro." }),
-	partner: PlatformPartnerOnboardingSchema.partial()
+	partner: PlatformPartnerRegistrationSchema.partial()
 		.extend({
 			codigo: z.string({ invalid_type_error: "Tipo invalido para codigo do parceiro." }).optional(),
 			status: z.enum(["PENDENTE_APROVACAO", "ATIVO", "SUSPENSO", "REJEITADO"]).optional(),
 			observacoesInternas: z.string({ invalid_type_error: "Tipo invalido para observacoes internas." }).optional().nullable(),
+			motivoRejeicao: z.string({ invalid_type_error: "Tipo inválido para o motivo da rejeição." }).trim().max(1000).optional().nullable(),
 		})
 		.optional(),
 });
@@ -142,6 +144,8 @@ async function updateAdminPlatformPartner({ input, adminUserId }: { input: TUpda
 	if (!existingPartner) throw new createHttpError.NotFound("Parceiro nao encontrado.");
 
 	const status = input.partner?.status;
+	// O parceiro lê o motivo na tela de cadastro não aprovado: rejeitar sem dizer o que corrigir trava o reenvio.
+	if (status === "REJEITADO" && !input.partner?.motivoRejeicao) throw new createHttpError.BadRequest("Informe o motivo da rejeição para o parceiro.");
 	const [updatedPartner] = await db
 		.update(platformPartners)
 		.set({
@@ -149,11 +153,19 @@ async function updateAdminPlatformPartner({ input, adminUserId }: { input: TUpda
 			codigo: input.partner?.codigo ? input.partner.codigo.trim().toUpperCase() : undefined,
 			dataAprovacao: status === "ATIVO" && existingPartner.status !== "ATIVO" ? new Date() : existingPartner.dataAprovacao,
 			aprovadoPorId: status === "ATIVO" && existingPartner.status !== "ATIVO" ? adminUserId : existingPartner.aprovadoPorId,
+			motivoRejeicao: status === "REJEITADO" ? input.partner?.motivoRejeicao : status ? null : undefined,
 			dataAtualizacao: new Date(),
 		})
 		.where(eq(platformPartners.id, input.partnerId))
 		.returning({ id: platformPartners.id });
 	if (!updatedPartner) throw new createHttpError.InternalServerError("Erro ao atualizar parceiro.");
+
+	if (status && status !== existingPartner.status) {
+		const recipient = { nome: input.partner?.nome ?? existingPartner.nome, email: input.partner?.email ?? existingPartner.email };
+		if (status === "ATIVO")
+			notifyPlatformPartnerApproved({ ...recipient, codigo: input.partner?.codigo?.trim().toUpperCase() || existingPartner.codigo });
+		if (status === "REJEITADO" && input.partner?.motivoRejeicao) notifyPlatformPartnerRejected(recipient, input.partner.motivoRejeicao);
+	}
 
 	return {
 		data: {

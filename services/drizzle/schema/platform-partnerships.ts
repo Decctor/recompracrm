@@ -4,6 +4,8 @@ import { newTable } from "./common";
 import {
 	platformPartnerCommissionStatusEnum,
 	platformPartnerPayoutStatusEnum,
+	platformPartnerPersonTypeEnum,
+	platformPartnerPixKeyTypeEnum,
 	platformPartnerReferralStatusEnum,
 	platformPartnerStatusEnum,
 } from "./enums";
@@ -13,6 +15,17 @@ import { users } from "./users";
 export type TPlatformPartnerFiles = {
 	cpf?: string;
 	cnpj?: string;
+};
+
+/** Pedido de alteração de dados de um parceiro ativo; só os campos que mudam. */
+export type TPlatformPartnerChangeRequest = {
+	email?: string;
+	telefone?: string;
+	chavePix?: string;
+	chavePixTipo?: "CPF" | "CNPJ" | "EMAIL" | "TELEFONE" | "ALEATORIA";
+	arquivos?: TPlatformPartnerFiles;
+	motivo?: string;
+	motivoRecusa?: string;
 };
 
 export type TPlatformPartnerReferralMetadata = Record<string, unknown>;
@@ -31,11 +44,25 @@ export const platformPartners = newTable(
 		nome: text("nome").notNull(),
 		email: text("email").notNull(),
 		telefone: text("telefone").notNull(),
+		tipoPessoa: platformPartnerPersonTypeEnum("tipo_pessoa"),
 		cpfCnpj: text("cpf_cnpj").notNull(),
 		chavePix: text("chave_pix").notNull(),
+		chavePixTipo: platformPartnerPixKeyTypeEnum("chave_pix_tipo"),
+		// Autodeclaração: não há consulta ao DICT — o parceiro confirma que a chave está no próprio CPF/CNPJ.
+		dataConfirmacaoTitularPix: timestamp("data_confirmacao_titular_pix"),
+		// Caminhos no bucket privado (nunca URL pública); o admin lê por URL assinada.
 		arquivos: jsonb("arquivos").$type<TPlatformPartnerFiles>().notNull().default({}),
 		aceiteTermos: boolean("aceite_termos").notNull().default(false),
 		dataAceiteTermos: timestamp("data_aceite_termos"),
+		// Mensagem do kit de divulgação editada pelo parceiro; nulo usa o modelo padrão.
+		mensagemDivulgacao: text("mensagem_divulgacao"),
+		// Primeira vez que o parceiro viu o cartão emitido após a aprovação — a animação roda uma vez só.
+		dataCartaoVisualizado: timestamp("data_cartao_visualizado"),
+		// Lido pelo parceiro na tela de cadastro não aprovado; observacoesInternas continua interno.
+		motivoRejeicao: text("motivo_rejeicao"),
+		// Pedido de troca de dados de parceiro ativo, aprovado pelo financeiro. Um por vez.
+		alteracaoSolicitada: jsonb("alteracao_solicitada").$type<TPlatformPartnerChangeRequest>(),
+		dataSolicitacaoAlteracao: timestamp("data_solicitacao_alteracao"),
 		observacoesInternas: text("observacoes_internas"),
 		dataAprovacao: timestamp("data_aprovacao"),
 		aprovadoPorId: varchar("aprovado_por_id", { length: 255 }).references(() => users.id, { onDelete: "set null" }),
