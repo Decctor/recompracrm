@@ -92,12 +92,7 @@ export function AdminPartnerCard({
 	const documents = (["cpf", "cnpj"] as const).filter((tipo) => partner.arquivos[tipo]);
 
 	return (
-		<article
-			className={cn(
-				"flex flex-col gap-4 rounded-lg border bg-card p-4 text-numeric",
-				(partner.status === "PENDENTE_APROVACAO" || change) && "border-warning/50",
-			)}
-		>
+		<article className="flex flex-col gap-4 rounded-lg border bg-card p-4 text-numeric">
 			<header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
 				<div className="flex min-w-0 items-center gap-3">
 					<span aria-hidden className="flex size-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-sm font-bold text-primary">
