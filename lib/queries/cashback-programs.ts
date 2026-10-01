@@ -1,5 +1,5 @@
 import type { TGetCashbackBalancesInput, TGetCashbackBalancesOutput } from "@/app/api/cashback-programs/clients/balance/route";
-import { TGetCashbackProgramPrizesInput, TGetCashbackProgramPrizesOutput } from "@/app/api/cashback-programs/prizes/route";
+import type { TGetCashbackProgramPrizesOutput } from "@/app/api/cashback-programs/prizes/route";
 import type { TGetCashbackProgramOutput } from "@/app/api/cashback-programs/route";
 import type { TGetAvailablePosRewardsOutput } from "@/app/api/pos/cashback-rewards/available/route";
 import type { TCashbackProgramsGraphInput, TCashbackProgramsGraphOutput } from "@/app/api/cashback-programs/stats/graph/route";
@@ -20,11 +20,13 @@ async function fetchCashbackProgram() {
 	}
 }
 
-export function useCashbackProgram() {
+/** `initialData` vem da página servidora: a primeira pintura não espera a consulta. */
+export function useCashbackProgram({ initialData }: { initialData?: TGetCashbackProgramOutput["data"] } = {}) {
 	return {
 		...useQuery({
 			queryKey: ["cashback-program"],
 			queryFn: fetchCashbackProgram,
+			initialData,
 		}),
 		queryKey: ["cashback-program"],
 	};
@@ -204,42 +206,26 @@ export function useCashbackBalances({ initialFilters }: TUseCashbackBalancesPara
  *
  * PRIZES
  */
-async function fetchCashbackProgramPrizes(input: TGetCashbackProgramPrizesInput) {
-	const searchParams = new URLSearchParams();
-	searchParams.set("programId", input.programId as string);
-	if (input.search) searchParams.set("search", input.search);
-	searchParams.set("page", input.page.toString());
+async function fetchCashbackProgramPrizes(programId: string) {
+	const searchParams = new URLSearchParams({ programId });
 	const { data } = await axios.get<TGetCashbackProgramPrizesOutput>(`/api/cashback-programs/prizes?${searchParams.toString()}`);
 	const defaultData = data.data.default;
 	if (!defaultData) throw new Error("Prêmios do programa de cashback não encontrados.");
 	return defaultData;
 }
-type TUseCashbackProgramPrizesInput = {
-	initialFilters: TGetCashbackProgramPrizesInput;
-};
-export function useCashbackProgramPrizes({ initialFilters }: TUseCashbackProgramPrizesInput) {
-	const [filters, setFilters] = useState<TGetCashbackProgramPrizesInput>({
-		programId: initialFilters.programId,
-		search: initialFilters.search,
-		page: initialFilters.page,
-	});
 
-	function updateFilters(newFilters: Partial<TGetCashbackProgramPrizesInput>) {
-		setFilters((prev) => ({ ...prev, ...newFilters }));
-	}
-
-	const debouncedSearch = useDebounceMemo({ search: filters.search }, 1000);
-	const finalFilters = { ...filters, ...debouncedSearch };
-
-	const queryKey = ["cashback-program-prizes", finalFilters];
+/**
+ * Todas as recompensas do programa, arquivadas inclusive, com a contagem de resgates. Sem filtros
+ * no servidor: a tela de gestão busca, filtra por status e ordena localmente.
+ */
+export function useCashbackProgramPrizes({ programId }: { programId: string }) {
+	const queryKey = ["cashback-program-prizes", programId];
 	return {
 		...useQuery({
 			queryKey,
-			queryFn: () => fetchCashbackProgramPrizes(finalFilters),
+			queryFn: () => fetchCashbackProgramPrizes(programId),
 		}),
 		queryKey,
-		filters,
-		updateFilters,
 	};
 }
 

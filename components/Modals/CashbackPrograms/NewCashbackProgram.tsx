@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import CashbackProgramsAccumulationBlock from "./Blocks/Accumulation";
 import CashbackProgramsExpirationBlock from "./Blocks/Expiration";
 import CashbackProgramsGeneralBlock from "./Blocks/General";
-import CashbackProgramsRedemptionLimitBlock from "./Blocks/RedemptionLimit";
+import CashbackProgramsRedemptionBlock from "./Blocks/Redemption";
 import CashbackProgramsRedemptionSurfacesBlock from "./Blocks/RedemptionSurfaces";
 
 type NewCashbackProgramProps = {
@@ -102,7 +102,7 @@ export default function NewCashbackProgram({ user, userOrg, closeModal, callback
 				updateCashbackProgram={updateCashbackProgram}
 			/>
 			<CashbackProgramsExpirationBlock cashbackProgram={state.cashbackProgram} updateCashbackProgram={updateCashbackProgram} />
-			<CashbackProgramsRedemptionLimitBlock cashbackProgram={state.cashbackProgram} updateCashbackProgram={updateCashbackProgram} />
+			<CashbackProgramsRedemptionBlock cashbackProgram={state.cashbackProgram} updateCashbackProgram={updateCashbackProgram} />
 			<CashbackProgramsRedemptionSurfacesBlock cashbackProgram={state.cashbackProgram} updateCashbackProgram={updateCashbackProgram} />
 		</ResponsiveMenu>
 	);

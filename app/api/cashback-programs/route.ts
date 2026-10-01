@@ -2,7 +2,6 @@ import { NO_CASHBACK_REDEMPTION_SURFACE_MESSAGE, hasAnyCashbackRedemptionSurface
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
-import { handleSimpleChildRowsProcessing } from "@/lib/db-utils";
 import { CashbackProgramPrizeSchema, CashbackProgramSchema } from "@/schemas/cashback-programs";
 import { db } from "@/services/drizzle";
 import { cashbackProgramBalances, cashbackProgramPrizes, cashbackPrograms } from "@/services/drizzle/schema";
@@ -156,63 +155,30 @@ const UpdateCashbackProgramInputSchema = z.object({
 		required_error: "ID do programa de cashback não informado.",
 		invalid_type_error: "Tipo não válido para o ID do programa de cashback.",
 	}),
+	// Sem recompensas: elas têm rota própria (/api/cashback-programs/prizes). Carregá-las aqui fazia
+	// todo salvamento do programa (até o ATIVAR) regravar a lista inteira a partir de uma cópia
+	// possivelmente velha, e o `deletar` batia na FK dos resgates.
 	cashbackProgram: CashbackProgramSchema.omit({ dataInsercao: true, dataAtualizacao: true }),
-	cashbackProgramPrizes: z.array(
-		CashbackProgramPrizeSchema.omit({ dataInsercao: true, dataAtualizacao: true, organizacaoId: true, programaId: true }).extend({
-			id: z
-				.string({
-					required_error: "ID do prêmio do programa de cashback não informado.",
-					invalid_type_error: "Tipo não válido para o ID do prêmio do programa de cashback.",
-				})
-				.optional()
-				.nullable(),
-			deletar: z
-				.boolean({
-					required_error: "Deletar prêmio do programa de cashback não informado.",
-					invalid_type_error: "Tipo não válido para deletar prêmio do programa de cashback.",
-				})
-				.optional()
-				.nullable(),
-		}),
-	),
 });
 export type TUpdateCashbackProgramInput = z.infer<typeof UpdateCashbackProgramInputSchema>;
 
 async function updateCashbackProgram({ input, session }: { input: TUpdateCashbackProgramInput; session: TAuthUserSession }) {
 	const userOrgId = session.membership?.organizacao.id;
 	if (!userOrgId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
-	if (input.cashbackProgramPrizes.some((prize) => !prize.deletar && !prize.produtoId)) {
-		throw new createHttpError.BadRequest("Toda recompensa deve estar vinculada a um produto.");
-	}
 	if (!hasAnyCashbackRedemptionSurface(input.cashbackProgram)) {
 		throw new createHttpError.BadRequest(NO_CASHBACK_REDEMPTION_SURFACE_MESSAGE);
 	}
 
-	const transactionReturn = await db.transaction(async (tx) => {
-		const updatedCashbackProgram = await tx
-			.update(cashbackPrograms)
-			.set({ ...input.cashbackProgram, organizacaoId: userOrgId, dataAtualizacao: new Date() })
-			.where(and(eq(cashbackPrograms.id, input.cashbackProgramId), eq(cashbackPrograms.organizacaoId, userOrgId)))
-			.returning({ id: cashbackPrograms.id });
-		const updatedCashbackProgramId = updatedCashbackProgram[0]?.id;
-		if (!updatedCashbackProgramId) throw new createHttpError.InternalServerError("Oops, houve um erro desconhecido ao atualizar programa de cashback.");
-
-		await handleSimpleChildRowsProcessing({
-			trx: tx,
-			table: cashbackProgramPrizes,
-			entities: input.cashbackProgramPrizes,
-			fatherEntityKey: "programaId",
-			fatherEntityId: updatedCashbackProgramId,
-			organizacaoId: userOrgId,
-		});
-		return {
-			updatedCashbackProgramId,
-		};
-	});
+	const [updatedCashbackProgram] = await db
+		.update(cashbackPrograms)
+		.set({ ...input.cashbackProgram, organizacaoId: userOrgId, dataAtualizacao: new Date() })
+		.where(and(eq(cashbackPrograms.id, input.cashbackProgramId), eq(cashbackPrograms.organizacaoId, userOrgId)))
+		.returning({ id: cashbackPrograms.id });
+	if (!updatedCashbackProgram) throw new createHttpError.InternalServerError("Oops, houve um erro desconhecido ao atualizar programa de cashback.");
 
 	return {
 		data: {
-			updatedId: transactionReturn.updatedCashbackProgramId,
+			updatedId: updatedCashbackProgram.id,
 		},
 		message: "Programa de cashback atualizado com sucesso.",
 	};

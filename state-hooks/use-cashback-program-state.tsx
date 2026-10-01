@@ -1,5 +1,4 @@
 import { CashbackProgramPrizeSchema, CashbackProgramSchema } from "@/schemas/cashback-programs";
-import { ProductSchema } from "@/schemas/products";
 import { useCallback, useMemo, useState } from "react";
 import z from "zod";
 
@@ -124,21 +123,39 @@ const CashbackProgramPrizeStateSchema = CashbackProgramPrizeSchema.omit({
 	organizacaoId: true,
 	programaId: true,
 }).extend({
+	// Item do catálogo vinculado, só para exibição: o preço ancora o valor em pontos e a imagem é a
+	// capa padrão da recompensa (ver `imagemCapaHolder`).
 	produto: z
 		.object({
-			id: z.string({
-				required_error: "ID do produto não informado.",
-				invalid_type_error: "Tipo não válido para ID do produto.",
-			}),
 			nome: z.string({
 				required_error: "Nome do produto não informado.",
 				invalid_type_error: "Tipo não válido para nome do produto.",
 			}),
+			precoVenda: z
+				.number({
+					invalid_type_error: "Tipo não válido para o preço de venda do produto.",
+				})
+				.optional()
+				.nullable(),
+			imagemCapaUrl: z
+				.string({
+					invalid_type_error: "Tipo não válido para a imagem do produto.",
+				})
+				.optional()
+				.nullable(),
 		})
 		.optional()
 		.nullable(),
+	imagemCapaHolder: z.object({
+		file: z.instanceof(File).nullable(),
+		previewUrl: z
+			.string({
+				invalid_type_error: "Tipo não válido para a pré-visualização da imagem.",
+			})
+			.nullable(),
+	}),
 });
-type TCashbackProgramPrizeState = z.infer<typeof CashbackProgramPrizeStateSchema>;
+export type TCashbackProgramPrizeState = z.infer<typeof CashbackProgramPrizeStateSchema>;
 
 type TUseCashbackProgramPrizeStateProps = {
 	initialState?: Partial<TCashbackProgramPrizeState>;
@@ -154,6 +171,7 @@ export function useCashbackProgramPrizeState({ initialState }: TUseCashbackProgr
 			imagemCapaUrl: initialState?.imagemCapaUrl ?? null,
 			valor: initialState?.valor ?? 0,
 			produto: initialState?.produto ?? null,
+			imagemCapaHolder: initialState?.imagemCapaHolder ?? { file: null, previewUrl: null },
 		};
 	}, []);
 
@@ -166,6 +184,10 @@ export function useCashbackProgramPrizeState({ initialState }: TUseCashbackProgr
 		}));
 	}, []);
 
+	const updateImageHolder = useCallback((imagemCapaHolder: TCashbackProgramPrizeState["imagemCapaHolder"]) => {
+		setState((prev) => ({ ...prev, imagemCapaHolder }));
+	}, []);
+
 	const resetState = useCallback(() => {
 		setState(initialStateHolder);
 	}, [initialStateHolder]);
@@ -175,7 +197,9 @@ export function useCashbackProgramPrizeState({ initialState }: TUseCashbackProgr
 	}, []);
 	return {
 		state,
+		initialState: initialStateHolder,
 		updateCashbackProgramPrize,
+		updateImageHolder,
 		resetState,
 		redefineState,
 	};

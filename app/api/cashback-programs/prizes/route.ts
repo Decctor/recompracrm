@@ -1,11 +1,10 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { TAuthUserSession } from "@/lib/authentication/types";
-import { createSimplifiedSearchCondition } from "@/lib/search";
 import { CashbackProgramPrizeSchema } from "@/schemas/cashback-programs";
 import { db } from "@/services/drizzle";
-import { cashbackProgramPrizes } from "@/services/drizzle/schema";
-import { eq, and, count } from "drizzle-orm";
+import { cashbackProgramPrizes, cashbackProgramTransactions } from "@/services/drizzle/schema";
+import { eq, and, count, isNotNull } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { NextRequest, NextResponse } from "next/server";
 import z from "zod";
@@ -27,17 +26,6 @@ const GetCashbackProgramPrizesInputSchema = z.object({
 		})
 		.optional()
 		.nullable(),
-	search: z
-		.string({
-			invalid_type_error: "Tipo não válido para a busca.",
-		})
-		.optional()
-		.nullable(),
-	page: z
-		.string()
-		.optional()
-		.nullable()
-		.transform((value) => (value ? Number(value) : 1)),
 });
 export type TGetCashbackProgramPrizesInput = z.infer<typeof GetCashbackProgramPrizesInputSchema>;
 
@@ -87,9 +75,10 @@ async function getCashbackProgramPrizes({ input, session }: { input: TGetCashbac
 	const userOrgId = session.membership?.organizacao.id;
 	if (!userOrgId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
 
-	if ("id" in input) {
-		const inputId = input.id;
-		if (!inputId) throw new createHttpError.BadRequest("ID do prêmio do programa de cashback não informado.");
+	// `input.id`, não `"id" in input`: a rota sempre repassa a chave (com `undefined` quando ausente),
+	// então o teste de presença mandava toda listagem para o ramo por ID.
+	const inputId = input.id;
+	if (inputId) {
 		const cashbackProgramPrize = await db.query.cashbackProgramPrizes.findFirst({
 			where: (fields, operators) => operators.and(operators.eq(fields.organizacaoId, userOrgId), operators.eq(fields.id, inputId)),
 
@@ -130,47 +119,49 @@ async function getCashbackProgramPrizes({ input, session }: { input: TGetCashbac
 		};
 	}
 
-	const PAGE_SIZE = 25;
 	const programId = input.programId;
 	if (!programId) throw new createHttpError.BadRequest("ID do programa de cashback não informado.");
 
-	const conditions = [eq(cashbackProgramPrizes.organizacaoId, userOrgId), eq(cashbackProgramPrizes.programaId, programId)];
-
-	if (input.search) {
-		conditions.push(createSimplifiedSearchCondition(cashbackProgramPrizes.titulo, input.search));
-	}
-
-	const cashbackProgramPrizesMatchedResult = await db
-		.select({ count: count() })
-		.from(cashbackProgramPrizes)
-		.where(and(...conditions));
-
-	const cashbackProgramPrizesMatchedCount = cashbackProgramPrizesMatchedResult[0].count as number;
-	const totalPages = Math.ceil(cashbackProgramPrizesMatchedCount / PAGE_SIZE);
-
-	const limit = PAGE_SIZE;
-	const skip = PAGE_SIZE * (input.page - 1);
-	const cashbackProgramPrizesResult = await db.query.cashbackProgramPrizes.findMany({
-		where: and(...conditions),
-		orderBy: (fields, { desc }) => desc(fields.dataInsercao),
-		offset: skip,
-		limit: limit,
+	// Sem paginação: um programa tem dezenas de recompensas, e a tela de gestão filtra, ordena e
+	// conta por status no cliente. Arquivadas vêm junto — o filtro "Arquivadas" é dessa tela.
+	const prizes = await db.query.cashbackProgramPrizes.findMany({
+		where: (fields, { and, eq }) => and(eq(fields.organizacaoId, userOrgId), eq(fields.programaId, programId)),
+		orderBy: (fields, { asc }) => [asc(fields.valor), asc(fields.titulo)],
+		with: {
+			produto: { columns: { id: true, nome: true, precoVenda: true, imagemCapaUrl: true } },
+			produtoVariante: { columns: { id: true, nome: true, precoVenda: true, imagemCapaUrl: true } },
+		},
 	});
+
+	// Só `RESGATE` conta como resgate; o `CANCELAMENTO` do estorno também aponta para a recompensa
+	// e pesa na decisão excluir-ou-arquivar, não aqui.
+	const redemptionCounts = await db
+		.select({ recompensaId: cashbackProgramTransactions.resgateRecompensaId, quantidade: count() })
+		.from(cashbackProgramTransactions)
+		.where(
+			and(
+				eq(cashbackProgramTransactions.organizacaoId, userOrgId),
+				eq(cashbackProgramTransactions.programaId, programId),
+				eq(cashbackProgramTransactions.tipo, "RESGATE"),
+				isNotNull(cashbackProgramTransactions.resgateRecompensaId),
+			),
+		)
+		.groupBy(cashbackProgramTransactions.resgateRecompensaId);
+	const redemptionCountByPrizeId = new Map(redemptionCounts.map((row) => [row.recompensaId as string, Number(row.quantidade)]));
 
 	return {
 		data: {
-			default: {
-				prizes: cashbackProgramPrizesResult,
-				prizesMatched: cashbackProgramPrizesMatchedCount,
-				totalPages: totalPages,
-			},
+			default: prizes.map((prize) => ({
+				...prize,
+				resgatesQuantidade: redemptionCountByPrizeId.get(prize.id) ?? 0,
+			})),
 			byId: null,
 		},
 		message: "Prêmios do programa de cashback recuperados com sucesso.",
 	};
 }
 export type TGetCashbackProgramPrizesOutput = Awaited<ReturnType<typeof getCashbackProgramPrizes>>;
-export type TGetCashbackProgramPrizesOutputDefault = Exclude<TGetCashbackProgramPrizesOutput["data"], null>["default"];
+export type TGetCashbackProgramPrizesOutputDefault = Exclude<Exclude<TGetCashbackProgramPrizesOutput["data"], null>["default"], null>;
 export type TGetCashbackProgramPrizesOutputById = Exclude<TGetCashbackProgramPrizesOutput["data"], null>["byId"];
 
 const getCashbackProgramPrizesRoute = async (request: NextRequest) => {
@@ -181,8 +172,6 @@ const getCashbackProgramPrizesRoute = async (request: NextRequest) => {
 	const input = GetCashbackProgramPrizesInputSchema.parse({
 		id: searchParams.get("id") ?? undefined,
 		programId: searchParams.get("programId") ?? undefined,
-		search: searchParams.get("search") ?? undefined,
-		page: searchParams.get("page") ?? undefined,
 	});
 	const response = await getCashbackProgramPrizes({ input, session });
 	return NextResponse.json(response);
@@ -209,6 +198,7 @@ async function createCashbackProgramPrize({ input, session }: { input: TCreateCa
 	const userOrgId = session.membership?.organizacao.id;
 	if (!userOrgId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
 
+	if (!input.cashbackProgramPrize.produtoId) throw new createHttpError.BadRequest("Toda recompensa deve estar vinculada a um produto.");
 	await assertPrizeLinksBelongToOrganization({ organizacaoId: userOrgId, programaId: input.cashbackProgramId, prize: input.cashbackProgramPrize });
 
 	const [insertedCashbackProgramPrize] = await db
@@ -263,13 +253,24 @@ async function updateCashbackProgramPrize({ input, session }: { input: TUpdateCa
 	const userOrgId = session.membership?.organizacao.id;
 	if (!userOrgId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
 
+	if (!input.cashbackProgramPrize.produtoId) throw new createHttpError.BadRequest("Toda recompensa deve estar vinculada a um produto.");
 	await assertPrizeLinksBelongToOrganization({ organizacaoId: userOrgId, prize: input.cashbackProgramPrize });
+
+	const currentPrize = await db.query.cashbackProgramPrizes.findFirst({
+		where: (fields, { and, eq }) => and(eq(fields.id, input.cashbackProgramPrizeId), eq(fields.organizacaoId, userOrgId)),
+		columns: { id: true, dataArquivamento: true },
+	});
+	if (!currentPrize) throw new createHttpError.NotFound("Prêmio do programa de cashback não encontrado.");
+	// Arquivada fica fora de toda superfície por `ativo = false`; reativar pela edição a traria de
+	// volta sem passar pela restauração.
+	if (currentPrize.dataArquivamento) throw new createHttpError.BadRequest("Restaure a recompensa antes de editá-la.");
 
 	const [updatedCashbackProgramPrize] = await db
 		.update(cashbackProgramPrizes)
 		.set({
 			...input.cashbackProgramPrize,
 			organizacaoId: userOrgId,
+			dataAtualizacao: new Date(),
 		})
 		.where(and(eq(cashbackProgramPrizes.id, input.cashbackProgramPrizeId), eq(cashbackProgramPrizes.organizacaoId, userOrgId)))
 		.returning({ id: cashbackProgramPrizes.id });
@@ -296,3 +297,69 @@ const updateCashbackProgramPrizeRoute = async (request: NextRequest) => {
 	return NextResponse.json(response);
 };
 export const PUT = appApiHandler({ PUT: updateCashbackProgramPrizeRoute });
+
+const DeleteCashbackProgramPrizeInputSchema = z.object({
+	id: z.string({
+		required_error: "ID do prêmio do programa de cashback não informado.",
+		invalid_type_error: "Tipo não válido para o ID do prêmio do programa de cashback.",
+	}),
+});
+export type TDeleteCashbackProgramPrizeInput = z.infer<typeof DeleteCashbackProgramPrizeInputSchema>;
+
+/**
+ * Exclui ou arquiva, conforme o histórico. A transação de resgate referencia a recompensa sem
+ * cascade (e o estorno preserva o vínculo), então uma recompensa com qualquer transação apontando
+ * para ela não pode sair do banco: é arquivada (`ativo = false` + `dataArquivamento`), o que a tira
+ * do PDV, do ponto de interação e da loja, e mantém o histórico resolvendo o prêmio.
+ */
+async function deleteCashbackProgramPrize({ input, session }: { input: TDeleteCashbackProgramPrizeInput; session: TAuthUserSession }) {
+	const userOrgId = session.membership?.organizacao.id;
+	if (!userOrgId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
+
+	const prize = await db.query.cashbackProgramPrizes.findFirst({
+		where: (fields, { and, eq }) => and(eq(fields.id, input.id), eq(fields.organizacaoId, userOrgId)),
+		columns: { id: true, dataArquivamento: true },
+	});
+	if (!prize) throw new createHttpError.NotFound("Prêmio do programa de cashback não encontrado.");
+	if (prize.dataArquivamento) throw new createHttpError.BadRequest("Esta recompensa já está arquivada.");
+
+	const prizeCondition = and(eq(cashbackProgramPrizes.id, prize.id), eq(cashbackProgramPrizes.organizacaoId, userOrgId));
+	const archive = async () => {
+		await db.update(cashbackProgramPrizes).set({ ativo: false, dataArquivamento: new Date(), dataAtualizacao: new Date() }).where(prizeCondition);
+		return {
+			data: { deletedId: prize.id, outcome: "ARQUIVADA" as const },
+			message: "Recompensa arquivada: ela já foi resgatada e continua no histórico.",
+		};
+	};
+
+	const [reference] = await db
+		.select({ id: cashbackProgramTransactions.id })
+		.from(cashbackProgramTransactions)
+		.where(eq(cashbackProgramTransactions.resgateRecompensaId, prize.id))
+		.limit(1);
+	if (reference) return await archive();
+
+	try {
+		await db.delete(cashbackProgramPrizes).where(prizeCondition);
+	} catch (error) {
+		// Um resgate gravado entre a checagem e o DELETE viola a FK (23503): arquiva em vez de falhar.
+		const code = (error as { code?: string; cause?: { code?: string } })?.code ?? (error as { cause?: { code?: string } })?.cause?.code;
+		if (code === "23503") return await archive();
+		throw error;
+	}
+	return {
+		data: { deletedId: prize.id, outcome: "EXCLUIDA" as const },
+		message: "Recompensa excluída com sucesso.",
+	};
+}
+export type TDeleteCashbackProgramPrizeOutput = Awaited<ReturnType<typeof deleteCashbackProgramPrize>>;
+
+const deleteCashbackProgramPrizeRoute = async (request: NextRequest) => {
+	const session = await getCurrentSessionUncached();
+	if (!session) throw new createHttpError.Unauthorized("Você precisa estar autenticado para acessar esse recurso.");
+
+	const input = DeleteCashbackProgramPrizeInputSchema.parse({ id: request.nextUrl.searchParams.get("id") ?? undefined });
+	const response = await deleteCashbackProgramPrize({ input, session });
+	return NextResponse.json(response);
+};
+export const DELETE = appApiHandler({ DELETE: deleteCashbackProgramPrizeRoute });

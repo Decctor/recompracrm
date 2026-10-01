@@ -1,24 +1,26 @@
 import CheckboxInput from "@/components/Inputs/CheckboxInput";
 import NumberInput from "@/components/Inputs/NumberInput";
 import SelectInput from "@/components/Inputs/SelectInput";
-import ResponsiveMenuSection from "@/components/Utils/ResponsiveMenuSection";
 import { getCashbackUnitLabel } from "@/lib/formatting";
 import type { TUseCashbackProgramState } from "@/state-hooks/use-cashback-program-state";
 import { CashbackProgramAccumulationTypeOptions } from "@/utils/select-options";
-import { LayoutGrid, PiggyBank } from "lucide-react";
+import { PiggyBank } from "lucide-react";
+import CashbackProgramBlockShell from "./BlockShell";
 
 type CashbackProgramsAccumulationBlockProps = {
 	userOrgHasIntegration: boolean;
 	cashbackProgram: TUseCashbackProgramState["state"]["cashbackProgram"];
 	updateCashbackProgram: TUseCashbackProgramState["updateCashbackProgram"];
+	embedded?: boolean;
 };
 export default function CashbackProgramsAccumulationBlock({
 	userOrgHasIntegration,
 	cashbackProgram,
 	updateCashbackProgram,
+	embedded,
 }: CashbackProgramsAccumulationBlockProps) {
 	return (
-		<ResponsiveMenuSection title="ACUMULAÇÃO" icon={<PiggyBank className="h-4 min-h-4 w-4 min-w-4" />}>
+		<CashbackProgramBlockShell embedded={embedded} title="ACUMULAÇÃO" icon={<PiggyBank className="h-4 min-h-4 w-4 min-w-4" />}>
 			<div className="w-full flex items-center justify-center gap-2">
 				<div className="w-full lg:w-1/3">
 					<SelectInput
@@ -83,6 +85,6 @@ export default function CashbackProgramsAccumulationBlock({
 					</div>
 				</div>
 			) : null}
-		</ResponsiveMenuSection>
+		</CashbackProgramBlockShell>
 	);
 }

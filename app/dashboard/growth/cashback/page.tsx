@@ -34,5 +34,5 @@ export default async function CashbackPrograms() {
 		},
 	});
 	if (!cashbackProgram) return <NewCashbackProgramsPage user={sessionUser.user} userOrg={userOrg} />;
-	return <CashbackProgramsPage user={sessionUser.user} userOrg={userOrg} cashbackProgram={cashbackProgram} />;
+	return <CashbackProgramsPage userOrg={userOrg} cashbackProgram={cashbackProgram} />;
 }

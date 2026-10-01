@@ -1,4 +1,4 @@
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import { doublePrecision, index, jsonb, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { boolean, text, varchar } from "drizzle-orm/pg-core";
 import { campaigns } from "./campaigns";
@@ -78,6 +78,9 @@ export const cashbackProgramPrizes = newTable("cashback_program_prizes", {
 	descricao: text("descricao"),
 	imagemCapaUrl: text("imagem_capa_url"),
 	valor: doublePrecision("valor").notNull(), // defines the prize value in cashback "currency"
+	// Recompensa já resgatada não pode ser excluída (o resgate a referencia): é arquivada. Arquivada
+	// implica `ativo = false`, então toda superfície que já filtra por `ativo` a esconde sem mudança.
+	dataArquivamento: timestamp("data_arquivamento"),
 	dataInsercao: timestamp("data_insercao").defaultNow().notNull(),
 	dataAtualizacao: timestamp("data_atualizacao").$defaultFn(() => new Date()),
 });
@@ -181,6 +184,11 @@ export const cashbackProgramTransactions = newTable(
 		// FK sem índice: a listagem de vendas hidrata `transacoesCashback` por venda (LATERAL) e cada
 		// lookup era um seq scan da tabela inteira.
 		vendaIdIdx: index("idx_cashback_program_transactions_venda_id").on(table.vendaId),
+		// Parcial: só resgates de recompensa. Serve a contagem de resgates por recompensa e a decisão
+		// excluir-ou-arquivar.
+		resgateRecompensaIdIdx: index("idx_cashback_program_transactions_resgate_recompensa_id")
+			.on(table.resgateRecompensaId)
+			.where(sql`${table.resgateRecompensaId} IS NOT NULL`),
 	}),
 );
 export const cashbackProgramTransactionRelations = relations(cashbackProgramTransactions, ({ one }) => ({
