@@ -171,7 +171,12 @@ export default function CategoriesBar({ groups, selectedGroup, onGroupSelect, is
 	);
 
 	return (
-		<div ref={containerRef} className="relative h-9 w-full min-w-0">
+		// A linha espelho é `w-max` e absoluta: sai do fluxo, mas a caixa dela entra no overflow
+		// rolável do documento se ninguém a recortar. No celular o `scrollWidth` passa da viewport
+		// e o navegador reduz o zoom, espremendo a venda inteira à esquerda. `overflow-clip`
+		// recorta o espelho sem criar scroll container, então as larguras medidas — e o `+N` —
+		// continuam iguais no desktop e no mobile.
+		<div ref={containerRef} className="relative h-9 w-full min-w-0 overflow-clip">
 			{/* Linha espelho: mede as larguras reais (truncagem inclusa) sem nunca ser vista nem
 			    focada. `visibility: hidden` mantém a caixa de layout, ao contrário de `display: none`. */}
 			<div aria-hidden ref={mirrorRef} className="pointer-events-none invisible absolute top-0 left-0 flex w-max items-center gap-1.5">
