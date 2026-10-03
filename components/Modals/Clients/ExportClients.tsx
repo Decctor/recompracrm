@@ -30,6 +30,8 @@ export default function ExportClients({ filters, closeModal }: ExportClientsProp
 			title="Exportar clientes"
 			description="Exporte os clientes filtrados em um arquivo XLSX."
 			exporter={exporter}
+			download={{ label: "BAIXAR XLSX", onClick: () => exporter.downloadXlsx() }}
+			completedMessage={`${exporter.exportData.length} linhas prontas para download.`}
 			closeModal={closeModal}
 		/>
 	);

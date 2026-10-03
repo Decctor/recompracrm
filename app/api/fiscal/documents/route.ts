@@ -2,6 +2,7 @@ import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { emitFiscalDocument, getFiscalDocumentDetailsById, listFiscalDocumentEvents, listFiscalDocuments } from "@/lib/fiscal/documents";
 import { decorateFiscalDocuments } from "@/lib/fiscal/document-actions-loader";
+import { FiscalDocumentsFiltersSchema } from "@/lib/fiscal/document-filters";
 import { resolveEmissionDocumentType } from "@/lib/fiscal/document-type";
 import {
 	EXCEPTIONAL_PRESENCE_JUSTIFICATION_MAX_LENGTH,
@@ -24,15 +25,14 @@ async function requireOrgSession() {
 	return { session, orgId };
 }
 
-const GetFiscalDocumentsInputSchema = z.object({
-	documentId: z.string().optional().nullable(),
-	page: z.coerce.number().min(1).default(1),
-	search: z.string().optional().nullable(),
-	statusInterno: z
-		.string()
+const GetFiscalDocumentsInputSchema = FiscalDocumentsFiltersSchema.extend({
+	documentId: z
+		.string({
+			invalid_type_error: "Tipo não válido para o ID do documento fiscal.",
+		})
 		.optional()
-		.nullable()
-		.transform((value) => (value ? value.split(",").filter(Boolean) : [])),
+		.nullable(),
+	page: z.coerce.number().min(1).default(1),
 });
 export type TGetFiscalDocumentsInput = z.infer<typeof GetFiscalDocumentsInputSchema>;
 
@@ -75,8 +75,7 @@ async function getFiscalDocuments({ input }: { input: TGetFiscalDocumentsInput }
 		listFiscalDocuments({
 			organizacaoId: orgId,
 			page: input.page,
-			search: input.search,
-			statusInterno: input.statusInterno,
+			filters: input,
 		}),
 		loadFiscalOrganization(orgId),
 	]);
@@ -103,6 +102,10 @@ async function getFiscalDocumentsRoute(request: NextRequest) {
 		page: searchParams.get("page") ?? 1,
 		search: searchParams.get("search") ?? undefined,
 		statusInterno: searchParams.get("statusInterno") ?? undefined,
+		tipos: searchParams.get("tipos") ?? undefined,
+		ambiente: searchParams.get("ambiente") ?? undefined,
+		periodAfter: searchParams.get("periodAfter") ?? undefined,
+		periodBefore: searchParams.get("periodBefore") ?? undefined,
 	});
 	const result = await getFiscalDocuments({ input });
 	return NextResponse.json(result);

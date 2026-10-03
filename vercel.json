@@ -77,6 +77,10 @@
 			"schedule": "30 8 * * *"
 		},
 		{
+			"path": "/api/cron/fiscal-assets-backfill",
+			"schedule": "40 * * * *"
+		},
+		{
 			"path": "/api/cron/fiscal-pending-digest",
 			"schedule": "0 11 * * 1-5"
 		},

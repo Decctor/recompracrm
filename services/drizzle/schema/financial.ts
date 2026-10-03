@@ -538,6 +538,14 @@ export const fiscalOutboundDocuments = newTable(
     vendaIdIdx: index("idx_fiscal_outbound_documents_venda_id").on(
       table.vendaId,
     ),
+    // Filtro de período da lista e das exportações. A expressão é `fiscalDocumentReferenceDate`
+    // (lib/fiscal/document-list-conditions.ts): mude as duas juntas.
+    orgDataReferenciaIdx: index(
+      "idx_fiscal_outbound_documents_org_data_ref",
+    ).on(
+      table.organizacaoId,
+      sql`coalesce(${table.dataEmissao}, ${table.dataInsercao})`,
+    ),
     chaveAcessoIdx: index("idx_fiscal_outbound_documents_chave_acesso").on(
       table.chaveAcesso,
     ),

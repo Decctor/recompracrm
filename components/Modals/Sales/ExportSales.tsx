@@ -22,6 +22,8 @@ export default function ExportSales({ filters, closeModal }: ExportSalesProps) {
 			title="Exportar vendas"
 			description="Exporte as vendas filtradas em um arquivo XLSX."
 			exporter={exporter}
+			download={{ label: "BAIXAR XLSX", onClick: () => exporter.downloadXlsx() }}
+			completedMessage={`${exporter.exportData.length} linhas prontas para download.`}
 			closeModal={closeModal}
 		/>
 	);

@@ -1,5 +1,5 @@
 import "server-only";
-import { createSignedPrivateFileUrl, downloadPrivateFile, storePrivateFile } from "@/lib/files-storage/private";
+import { createSignedPrivateFileUrl, createSignedPrivateFileUrls, downloadPrivateFile, storePrivateFile } from "@/lib/files-storage/private";
 import { FISCAL_STORAGE_PREFIX } from "./constants";
 
 export type TFiscalAssetType = "xml" | "pdf";
@@ -37,4 +37,8 @@ export async function downloadStoredFiscalAsset(path: string) {
 // sessão de usuário — a rota /api/fiscal/document-assets não serve). Assinada na hora do enqueue.
 export async function createSignedFiscalAssetUrl({ storagePath, expiresInSeconds }: { storagePath: string; expiresInSeconds: number }) {
 	return createSignedPrivateFileUrl({ path: storagePath, expiresInSeconds });
+}
+
+export async function createSignedFiscalAssetUrls({ storagePaths, expiresInSeconds }: { storagePaths: string[]; expiresInSeconds: number }) {
+	return createSignedPrivateFileUrls({ paths: storagePaths, expiresInSeconds });
 }

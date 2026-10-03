@@ -29,6 +29,8 @@ import { SpedyFiscalProvider } from "./providers/spedy";
 import { findActiveFiscalSeries, loadFiscalOrganization, reserveFiscalSeriesNumber } from "./settings";
 import { resolveOperationProfileForSale } from "./operation-profile";
 import { downloadStoredFiscalAsset, getFiscalAssetContentType, storeFiscalAsset, type TFiscalAssetType } from "./storage";
+import type { TFiscalDocumentsFilters } from "./document-filters";
+import { buildFiscalDocumentsConditions } from "./document-list-conditions";
 import type {
 	IFiscalProvider,
 	TCancelDocumentInput,
@@ -108,27 +110,15 @@ export async function getFiscalDocumentDetailsById({ documentId, organizationId 
 export async function listFiscalDocuments({
 	organizacaoId,
 	page = 1,
-	search,
-	statusInterno,
+	filters,
 }: {
 	organizacaoId: string;
 	page?: number;
-	search?: string | null;
-	statusInterno?: string[] | null;
+	filters: Partial<TFiscalDocumentsFilters>;
 }) {
 	const PAGE_SIZE = 25;
 	const offset = (page - 1) * PAGE_SIZE;
-	const searchLike = search?.trim() ? `%${search.trim()}%` : null;
-
-	const conditions = [eq(fiscalOutboundDocuments.organizacaoId, organizacaoId)];
-	if (searchLike)
-		conditions.push(sql`(${fiscalOutboundDocuments.referencia} ilike ${searchLike} or ${fiscalOutboundDocuments.chaveAcesso} ilike ${searchLike})`);
-	if (statusInterno && statusInterno.length > 0) {
-		conditions.push(
-			inArray(fiscalOutboundDocuments.statusInterno, statusInterno as (typeof fiscalOutboundDocuments.statusInterno.enumValues)[number][]),
-		);
-	}
-	const whereClause = and(...conditions);
+	const whereClause = and(...buildFiscalDocumentsConditions({ organizationId: organizacaoId, filters }));
 
 	const [documents, [{ count }]] = await Promise.all([
 		db.query.fiscalOutboundDocuments.findMany({
@@ -1255,7 +1245,7 @@ export async function createReturnFiscalDocument({
  * no Brasil — e o que os sistemas de contabilidade esperam receber. Sem chave (nota ainda nao
  * autorizada), cai para tipo/serie/numero e, em ultimo caso, para o id.
  */
-function buildFiscalAssetFileName(
+export function buildFiscalAssetFileName(
 	document: { id: string; tipo: string; serie: string | null; numero: string | null; chaveAcesso: string | null },
 	asset: TFiscalAssetType,
 ) {
@@ -1289,6 +1279,29 @@ export async function getFiscalDocumentAsset({ documentId, organizationId, asset
 	const organization = await loadFiscalOrganization(document.organizacaoId);
 	if (!organization) throw new createHttpError.NotFound("Organizacao nao encontrada.");
 
+	const { buffer } = await fetchAndStoreFiscalDocumentAsset({ document, organization, asset });
+	return {
+		buffer,
+		contentType: getFiscalAssetContentType(asset),
+		fileName,
+	};
+}
+
+/**
+ * Baixa o XML/DANFE do provedor, guarda no storage privado e grava o caminho no documento. Usado
+ * quando o arquivo nao foi persistido na autorizacao (documento antigo, falha transitoria do
+ * provedor): download avulso, exportacao em lote e o cron de backfill. A organizacao vem de fora
+ * para que o lote a carregue uma vez, nao uma por documento.
+ */
+export async function fetchAndStoreFiscalDocumentAsset({
+	document,
+	organization,
+	asset,
+}: {
+	document: typeof fiscalOutboundDocuments.$inferSelect;
+	organization: NonNullable<Awaited<ReturnType<typeof loadFiscalOrganization>>>;
+	asset: TFiscalAssetType;
+}) {
 	const provider = resolveFiscalProvider(organization.fiscalProvedor);
 	const buffer = asset === "xml" ? await provider.baixarXml(document, organization) : await provider.baixarPdf(document, organization);
 	if (!buffer) throw new createHttpError.NotFound("Arquivo fiscal nao encontrado.");
@@ -1300,12 +1313,7 @@ export async function getFiscalDocumentAsset({ documentId, organizationId, asset
 		buffer,
 	});
 	await patchFiscalDocument(document.id, asset === "xml" ? { xmlStoragePath: storedPath } : { pdfStoragePath: storedPath });
-
-	return {
-		buffer,
-		contentType: getFiscalAssetContentType(asset),
-		fileName,
-	};
+	return { buffer, storedPath };
 }
 
 type SyncPendingFiscalDocumentsParams = {

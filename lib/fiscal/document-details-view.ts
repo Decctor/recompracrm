@@ -94,29 +94,94 @@ export function parseFiscalDocumentProviderResponse(value: string | null | undef
 	return parseStoredJson(value);
 }
 
-export function extractTaxTotalsFromPayload(payload: JsonRecord | null): TFiscalDocumentTaxTotalsView | null {
-	const icmsTot = payload?.infNFe && typeof payload.infNFe === "object" ? (payload.infNFe as JsonRecord).total : null;
-	const icmsTotRecord = icmsTot && typeof icmsTot === "object" ? ((icmsTot as JsonRecord).ICMSTot as JsonRecord | undefined) : undefined;
-	if (!icmsTotRecord) return null;
+function readRecord(value: unknown): JsonRecord | null {
+	return value && typeof value === "object" && !Array.isArray(value) ? (value as JsonRecord) : null;
+}
 
+/*
+ * O payload guardado é o que foi enviado ao provedor, então o formato depende de quem emitiu: o
+ * da Spedy (`total`, `receiver`, `items`) ou o espelho do XML (`infNFe`), de documentos emitidos
+ * pelo provedor anterior. Os extratores entendem os dois.
+ */
+
+export function extractTaxTotalsFromPayload(payload: JsonRecord | null): TFiscalDocumentTaxTotalsView | null {
+	const infNFe = readRecord(payload?.infNFe);
+	if (infNFe) {
+		const icmsTotRecord = readRecord(readRecord(infNFe.total)?.ICMSTot);
+		if (!icmsTotRecord) return null;
+		return {
+			vBC: readNumber(icmsTotRecord.vBC),
+			vICMS: readNumber(icmsTotRecord.vICMS),
+			vST: readNumber(icmsTotRecord.vST),
+			vFCP: readNumber(icmsTotRecord.vFCP),
+			vProd: readNumber(icmsTotRecord.vProd),
+			vDesc: readNumber(icmsTotRecord.vDesc),
+			vPIS: readNumber(icmsTotRecord.vPIS),
+			vCOFINS: readNumber(icmsTotRecord.vCOFINS),
+			vTotTrib: readNumber(icmsTotRecord.vTotTrib),
+			vNF: readNumber(icmsTotRecord.vNF),
+		};
+	}
+
+	const spedyTotal = readRecord(payload?.total);
+	if (!spedyTotal) return null;
 	return {
-		vBC: readNumber(icmsTotRecord.vBC),
-		vICMS: readNumber(icmsTotRecord.vICMS),
-		vST: readNumber(icmsTotRecord.vST),
-		vFCP: readNumber(icmsTotRecord.vFCP),
-		vProd: readNumber(icmsTotRecord.vProd),
-		vDesc: readNumber(icmsTotRecord.vDesc),
-		vPIS: readNumber(icmsTotRecord.vPIS),
-		vCOFINS: readNumber(icmsTotRecord.vCOFINS),
-		vTotTrib: readNumber(icmsTotRecord.vTotTrib),
-		vNF: readNumber(icmsTotRecord.vNF),
+		vBC: readNumber(spedyTotal.icmsBaseTax),
+		vICMS: readNumber(spedyTotal.icmsAmount),
+		vST: readNumber(spedyTotal.icmsStAmount),
+		vFCP: readNumber(spedyTotal.fcpAmount),
+		vProd: readNumber(spedyTotal.productAmount),
+		vDesc: readNumber(spedyTotal.discountAmount),
+		vPIS: readNumber(spedyTotal.pisAmount),
+		vCOFINS: readNumber(spedyTotal.cofinsAmount),
+		vTotTrib: readNumber(spedyTotal.totalTax),
+		vNF: readNumber(spedyTotal.invoiceAmount),
 	};
 }
 
+export type TFiscalDocumentRecipientView = {
+	nome: string | null;
+	cpfCnpj: string | null;
+};
+
+/** Destinatário declarado na nota — pode diferir do cliente da venda. */
+export function extractRecipientFromPayload(payload: JsonRecord | null): TFiscalDocumentRecipientView | null {
+	const infNFe = readRecord(payload?.infNFe);
+	const dest = infNFe ? readRecord(infNFe.dest) : null;
+	const receiver = infNFe ? null : readRecord(payload?.receiver);
+	const recipient = dest
+		? { nome: readString(dest.xNome), cpfCnpj: readString(dest.CNPJ) ?? readString(dest.CPF) }
+		: receiver
+			? { nome: readString(receiver.name), cpfCnpj: readString(receiver.federalTaxNumber) }
+			: null;
+	return recipient && (recipient.nome || recipient.cpfCnpj) ? recipient : null;
+}
+
+function readCode(value: unknown): string | null {
+	return typeof value === "number" && Number.isFinite(value) ? String(value) : readString(value);
+}
+
 export function extractPayloadItems(payload: JsonRecord | null): TFiscalDocumentPayloadItemView[] {
-	const infNFe = payload?.infNFe;
-	if (!infNFe || typeof infNFe !== "object") return [];
-	const det = (infNFe as JsonRecord).det;
+	const infNFe = readRecord(payload?.infNFe);
+	if (!infNFe) {
+		const items = payload?.items;
+		if (!Array.isArray(items)) return [];
+		return items.map((entry, index) => {
+			const record = readRecord(entry) ?? {};
+			return {
+				numero: index + 1,
+				descricao: readString(record.description) ?? `Item ${index + 1}`,
+				ncm: readCode(record.ncm),
+				// A Spedy recebe CFOP e CSOSN como número.
+				cfop: readCode(record.cfop),
+				quantidade: readNumber(record.quantity),
+				valorUnitario: readNumber(record.unitAmount),
+				valorTotal: readNumber(record.totalAmount),
+				csosn: readCode(readRecord(readRecord(record.taxes)?.icms)?.csosn),
+			};
+		});
+	}
+	const det = infNFe.det;
 	if (!Array.isArray(det)) return [];
 
 	return det.map((entry, index) => {

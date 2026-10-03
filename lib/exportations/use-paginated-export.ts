@@ -4,32 +4,18 @@ import dayjs from "dayjs";
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
+import { type TPaginatedExportPage, usePaginatedLoop, type UsePaginatedLoopReturn } from "./use-paginated-loop";
 
 /**
- * Laço de exportação paginada: busca a primeira página, descobre o total, percorre as demais e
- * acumula as linhas já no formato da planilha. Uma implementação para clientes e vendas — cada
- * entidade só diz como buscar uma página e como cada registro vira linha.
+ * Exportação paginada para planilha: o laço de `usePaginatedLoop` com um destino que acumula as
+ * linhas já no formato da planilha. Cada entidade só diz como buscar uma página e como cada
+ * registro vira linha.
  */
 
-export type TPaginatedExportPage<TRow> = {
-	rows: TRow[];
-	/** Total de páginas; `null` quando a página não informa (só a primeira precisa informar). */
-	totalPages: number | null;
-	/** Total de registros do recorte; `null` quando a página não informa. */
-	totalMatched: number | null;
-};
+export type { TPaginatedExportPage };
 
-export type UsePaginatedExportReturn<TRow> = {
+export type UsePaginatedExportReturn<TRow> = UsePaginatedLoopReturn & {
 	exportData: TRow[];
-	isExporting: boolean;
-	isCanceled: boolean;
-	progress: number;
-	currentPage: number;
-	totalPages: number;
-	totalMatched: number;
-	start: () => Promise<void>;
-	cancel: () => void;
-	reset: () => void;
 	downloadXlsx: (fileName?: string) => void;
 };
 
@@ -50,70 +36,26 @@ export function usePaginatedExport<TRow extends object>({
 	errorMessage,
 }: UsePaginatedExportParams<TRow>): UsePaginatedExportReturn<TRow> {
 	const [exportData, setExportData] = useState<TRow[]>([]);
-	const [isExporting, setIsExporting] = useState(false);
-	const [isCanceled, setIsCanceled] = useState(false);
-	const [progress, setProgress] = useState(0);
-	const [currentPage, setCurrentPage] = useState(0);
-	const [totalPages, setTotalPages] = useState(0);
-	const [totalMatched, setTotalMatched] = useState(0);
+	// O laço lê daqui; o estado só existe para a tela re-renderizar.
+	const rowsRef = useRef<TRow[]>([]);
 
-	const cancelRef = useRef(false);
+	const onStart = useCallback(() => {
+		rowsRef.current = [];
+		setExportData([]);
+	}, []);
+	const onPage = useCallback((rows: TRow[]) => {
+		rowsRef.current = [...rowsRef.current, ...rows];
+		setExportData(rowsRef.current);
+	}, []);
+
+	const loop = usePaginatedLoop({ fetchPage, onStart, onPage, errorMessage });
+	const { reset: resetLoop } = loop;
 
 	const reset = useCallback(() => {
-		cancelRef.current = false;
+		rowsRef.current = [];
 		setExportData([]);
-		setIsExporting(false);
-		setIsCanceled(false);
-		setProgress(0);
-		setCurrentPage(0);
-		setTotalPages(0);
-		setTotalMatched(0);
-	}, []);
-
-	const cancel = useCallback(() => {
-		cancelRef.current = true;
-		setIsCanceled(true);
-		toast.info("Exportação cancelada.");
-	}, []);
-
-	const start = useCallback(async () => {
-		if (isExporting) return;
-
-		setIsExporting(true);
-		setIsCanceled(false);
-		cancelRef.current = false;
-		setExportData([]);
-		setProgress(0);
-		setCurrentPage(0);
-		setTotalPages(0);
-		setTotalMatched(0);
-
-		try {
-			const firstPage = await fetchPage(1);
-			const discoveredTotalPages = firstPage.totalPages ?? 0;
-			const matched = firstPage.totalMatched ?? 0;
-
-			setExportData(firstPage.rows);
-			setTotalPages(discoveredTotalPages);
-			setTotalMatched(matched);
-			setCurrentPage(discoveredTotalPages > 0 ? 1 : 0);
-			setProgress(discoveredTotalPages > 0 ? Math.round((1 / discoveredTotalPages) * 100) : 100);
-
-			for (let page = 2; page <= discoveredTotalPages; page++) {
-				if (cancelRef.current) break;
-				const pageResult = await fetchPage(page);
-				setExportData((prev) => [...prev, ...pageResult.rows]);
-				setCurrentPage(page);
-				setProgress(Math.round((page / discoveredTotalPages) * 100));
-			}
-
-			if (!cancelRef.current) toast.success("Exportação concluída.");
-		} catch (error) {
-			toast.error(error instanceof Error ? error.message : errorMessage);
-		} finally {
-			setIsExporting(false);
-		}
-	}, [isExporting, fetchPage, errorMessage]);
+		resetLoop();
+	}, [resetLoop]);
 
 	const downloadXlsx = useCallback(
 		(fileName?: string) => {
@@ -132,17 +74,5 @@ export function usePaginatedExport<TRow extends object>({
 		[exportData, fileNamePrefix, sheetName],
 	);
 
-	return {
-		exportData,
-		isExporting,
-		isCanceled,
-		progress,
-		currentPage,
-		totalPages,
-		totalMatched,
-		start,
-		cancel,
-		reset,
-		downloadXlsx,
-	};
+	return { ...loop, reset, exportData, downloadXlsx };
 }

@@ -1,4 +1,4 @@
-import type { TGetFiscalDocumentsInput, TGetFiscalDocumentsOutput } from "@/app/api/fiscal/documents/route";
+import type { TGetFiscalDocumentsOutput } from "@/app/api/fiscal/documents/route";
 import type { TGetFiscalOperationProfilesOutput } from "@/app/api/fiscal/operation-profiles/route";
 import type { TGetFiscalSeriesOutput } from "@/app/api/fiscal/series/route";
 import type { TGetFiscalSettingsOutput } from "@/app/api/fiscal/settings/route";
@@ -8,6 +8,7 @@ import type { TGetFiscalTaxGroupsOutput } from "@/app/api/fiscal/tax-groups/rout
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import { useState } from "react";
+import { buildFiscalDocumentsSearchParams, type TFiscalDocumentsFiltersState } from "../fiscal/document-filters";
 import { useDebounceMemo } from "../hooks/use-debounce";
 
 async function fetchFiscalSettings() {
@@ -27,17 +28,13 @@ export function useFiscalSettings({ enabled = true }: { enabled?: boolean } = {}
 	};
 }
 
-type FiscalDocumentsFilters = {
+type FiscalDocumentsFilters = TFiscalDocumentsFiltersState & {
 	page: number;
-	search: string;
-	statusInterno: string[];
 };
 
-async function fetchFiscalDocuments({ page, search, statusInterno }: FiscalDocumentsFilters) {
-	const searchParams = new URLSearchParams();
+async function fetchFiscalDocuments({ page, ...filters }: FiscalDocumentsFilters) {
+	const searchParams = buildFiscalDocumentsSearchParams(filters);
 	if (page) searchParams.set("page", page.toString());
-	if (search) searchParams.set("search", search);
-	if (statusInterno && statusInterno.length > 0) searchParams.set("statusInterno", statusInterno.join(","));
 	const { data } = await axios.get<TGetFiscalDocumentsOutput>(`/api/fiscal/documents?${searchParams.toString()}`);
 	const result = data.data.default;
 	if (!result) throw new Error("Oops, houve um erro ao buscar os documentos fiscais.");
@@ -57,6 +54,10 @@ export function useFiscalDocuments() {
 		page: 1,
 		search: "",
 		statusInterno: [],
+		tipos: [],
+		ambiente: null,
+		periodAfter: null,
+		periodBefore: null,
 	});
 	function updateFilters(next: Partial<FiscalDocumentsFilters>) {
 		setFilters((prev) => ({ ...prev, ...next }));
