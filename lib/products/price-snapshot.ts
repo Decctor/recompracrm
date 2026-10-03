@@ -27,6 +27,10 @@ export type TSalePriceUpdate<TPreco extends number | null> = {
 /**
  * Campos a gravar quando `precoVenda` pode mudar.
  *
+ * - `next.precoVenda` ausente (`undefined`): o chamador não pretende mexer no preço — nem `precoVenda`
+ *   nem o snapshot automático são gravados. Seções do cadastro que não editam preço omitem o campo;
+ *   reenviar o valor lido no carregamento da página reverteria uma mudança feita nesse meio-tempo
+ *   (sincronização, outro usuário) e o snapshot inventaria uma promoção "De / Por".
  * - Preço igual ao atual (escritas repetidas de sincronização): só `precoVenda`, sem snapshot.
  * - Preço diferente: o atual vira `precoVendaAnterior` e `dataAlteracaoPrecoVenda` = agora.
  * - `next.precoVendaAnterior` (formulário do produto) vence quando difere do anterior gravado:
@@ -35,20 +39,33 @@ export type TSalePriceUpdate<TPreco extends number | null> = {
  *   Igual ao gravado = o formulário só reenviou o que leu, e a regra automática segue valendo.
  *   Ausente (`undefined`) = só a regra automática.
  */
+export function buildSalePriceUpdate<TPreco extends number | null>(args: {
+	current: TSalePriceState;
+	next: { precoVenda: TPreco; precoVendaAnterior?: number | null };
+	now?: Date;
+}): TSalePriceUpdate<TPreco>;
+export function buildSalePriceUpdate<TPreco extends number | null>(args: {
+	current: TSalePriceState;
+	next: { precoVenda?: TPreco; precoVendaAnterior?: number | null };
+	now?: Date;
+}): Partial<TSalePriceUpdate<TPreco>>;
 export function buildSalePriceUpdate<TPreco extends number | null>({
 	current,
 	next,
 	now = new Date(),
 }: {
 	current: TSalePriceState;
-	next: { precoVenda: TPreco; precoVendaAnterior?: number | null };
+	next: { precoVenda?: TPreco; precoVendaAnterior?: number | null };
 	now?: Date;
-}): TSalePriceUpdate<TPreco> {
-	const update: TSalePriceUpdate<TPreco> = { precoVenda: next.precoVenda };
+}): Partial<TSalePriceUpdate<TPreco>> {
+	const update: Partial<TSalePriceUpdate<TPreco>> = {};
 
-	if (!isSamePrice(next.precoVenda, current.precoVenda)) {
-		update.precoVendaAnterior = current.precoVenda;
-		update.dataAlteracaoPrecoVenda = now;
+	if (next.precoVenda !== undefined) {
+		update.precoVenda = next.precoVenda;
+		if (!isSamePrice(next.precoVenda, current.precoVenda)) {
+			update.precoVendaAnterior = current.precoVenda;
+			update.dataAlteracaoPrecoVenda = now;
+		}
 	}
 
 	if (next.precoVendaAnterior !== undefined && !isSamePrice(next.precoVendaAnterior, current.precoVendaAnterior)) {

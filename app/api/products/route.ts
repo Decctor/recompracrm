@@ -889,6 +889,14 @@ const UpdateProductVariantInputSchema = ProductVariantSchema.omit({
 	produtoId: true,
 }).extend({
 	imagemCapaUrl: z.string().optional().nullable(),
+	// Opcional na edição: ausente = não mexer no preço da variante existente (o cliente só envia o que
+	// o usuário alterou, para não reverter um preço trocado depois do carregamento da página).
+	// Variante nova exige o preço — validado no insert.
+	precoVenda: z
+		.number({
+			invalid_type_error: "Tipo não válido para preço de venda da variante.",
+		})
+		.optional(),
 	addOns: z.array(UpdateProductAddOnInputSchema),
 	perfisFiscais: z.array(UpdateProductFiscalProfileInputSchema),
 	opcoesValores: z.array(UpdateProductVariantOptionValueInputSchema).default([]),
@@ -1240,7 +1248,8 @@ async function updateProduct({ session, input }: { session: TAuthUserSession; in
 				// Preço atual lido sob a mesma trava: o snapshot não pode usar um preço que outra escrita já trocou.
 				...buildSalePriceUpdate({
 					current: currentProductState,
-					next: { precoVenda: input.product.precoVenda ?? null, precoVendaAnterior: input.product.precoVendaAnterior },
+					// `undefined` = a seção não edita preço: nada de reverter para o valor lido nem de snapshot.
+					next: { precoVenda: input.product.precoVenda, precoVendaAnterior: input.product.precoVendaAnterior },
 				}),
 				precoCusto: input.product.precoCusto,
 				codigoBarras: input.product.codigoBarras,
@@ -1378,6 +1387,7 @@ async function updateProduct({ session, input }: { session: TAuthUserSession; in
 						.where(and(eq(productVariants.id, variantId), eq(productVariants.produtoId, input.productId), eq(productVariants.organizacaoId, userOrgId)));
 				}
 			} else {
+				if (variant.precoVenda === undefined) throw new createHttpError.BadRequest("Preço de venda da variante não informado.");
 				const [createdVariant] = await tx
 					.insert(productVariants)
 					.values({

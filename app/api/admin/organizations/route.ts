@@ -1,6 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
-import { deleteAllOrganizationData, organizationHasBlockingSubscription } from "@/lib/organizations/deletion";
+import { deleteAllOrganizationData, organizationHasBlockingSubscription, removeOrganizationStoredObjects } from "@/lib/organizations/deletion";
 import { isValidOrganizationSlug, ORGANIZATION_SLUG_INVALID_MESSAGE } from "@/lib/organizations/slug";
 import { getUniqueOrganizationSlug, isOrganizationSlugTaken } from "@/lib/organizations/slug-server";
 import { createSimplifiedSearchCondition } from "@/lib/search";
@@ -336,9 +336,11 @@ async function deleteOrganization({ input }: { input: TDeleteOrganizationInput }
 		}
 	}
 
-	await db.transaction(async (tx) => {
-		await deleteAllOrganizationData({ trx: tx, organizationId, organizationName: organization.nome });
+	const { storedObjects } = await db.transaction(async (tx) => {
+		return await deleteAllOrganizationData({ trx: tx, organizationId, organizationName: organization.nome });
 	});
+	// Bytes dos arquivos só depois do commit (best-effort; falhas são logadas e viram órfãos varríveis).
+	await removeOrganizationStoredObjects(storedObjects);
 
 	return {
 		data: { deletedId: organizationId },

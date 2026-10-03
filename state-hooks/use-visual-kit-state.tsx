@@ -98,19 +98,24 @@ export function useVisualKitState(initialState: TVisualKitState = EMPTY_VISUAL_K
 
 	const itemKeys = useMemo(() => state.itens.map(visualKitItemKey), [state.itens]);
 
-	return {
-		state,
-		itemKeys,
-		updateKit,
-		updateConfig,
-		togglePiece,
-		setPieces,
-		updatePiece,
-		toggleItem,
-		addItems,
-		clearItems,
-		redefineState,
-		resetState,
-	};
+	// Objeto estável entre renders: quem depende dele (contexto do construtor, salvamento automático)
+	// só re-executa quando o estado muda de verdade.
+	return useMemo(
+		() => ({
+			state,
+			itemKeys,
+			updateKit,
+			updateConfig,
+			togglePiece,
+			setPieces,
+			updatePiece,
+			toggleItem,
+			addItems,
+			clearItems,
+			redefineState,
+			resetState,
+		}),
+		[state, itemKeys, updateKit, updateConfig, togglePiece, setPieces, updatePiece, toggleItem, addItems, clearItems, redefineState, resetState],
+	);
 }
 export type TUseVisualKitState = ReturnType<typeof useVisualKitState>;

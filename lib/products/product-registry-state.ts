@@ -1,6 +1,7 @@
 import type { TGetProductChannelSettingsOutput, TUpdateProductChannelSettingsInput } from "@/app/api/products/channel-settings/route";
 import type { TGetProductsOutputById, TUpdateProductInput } from "@/app/api/products/route";
 import { uploadFile } from "@/lib/files-storage";
+import { isSamePrice } from "@/lib/products/price-snapshot";
 import type { TProductCoreState, TProductState } from "@/state-hooks/use-product-state";
 
 export function mergeProductStateFromHydration(partial: Partial<TProductState>): TProductState {
@@ -118,8 +119,9 @@ export function buildProductMetadata(product: TGetProductsOutputById): TUpdatePr
 		grupo: product.grupo,
 		rastreamentoEstoqueAtivo: product.rastreamentoEstoqueAtivo ?? false,
 		quantidade: product.quantidade,
-		precoVenda: product.precoVenda,
-		precoCusto: product.precoCusto,
+		// Preços ficam de fora (ausente = a rota não toca): reenviar o valor lido no carregamento
+		// reverteria uma mudança feita depois (sincronização, outro usuário) e o snapshot de
+		// `buildSalePriceUpdate` anunciaria um "De / Por" que ninguém criou. Só a seção de preços os envia.
 	};
 }
 
@@ -151,6 +153,7 @@ export function buildVariationsUpdateInput(
 	product: TGetProductsOutputById,
 	state: Pick<TProductState, "productOptions" | "productVariants">,
 ): TUpdateProductInput {
+	const loadedVariantPrices = new Map(product.variantes.map((variant) => [variant.id, variant.precoVenda]));
 	return {
 		productId: product.id,
 		product: buildProductMetadata(product),
@@ -176,7 +179,9 @@ export function buildVariationsUpdateInput(
 			nome: variant.nome,
 			codigo: variant.codigo,
 			imagemCapaUrl: variant.imagemCapaUrl ?? null,
-			precoVenda: variant.precoVenda,
+			// Variante existente só envia o preço que o usuário alterou nesta seção: reenviar o valor
+			// lido reverteria uma mudança posterior e o snapshot inventaria uma promoção.
+			precoVenda: variant.id && isSamePrice(variant.precoVenda, loadedVariantPrices.get(variant.id)) ? undefined : variant.precoVenda,
 			precoCusto: variant.precoCusto,
 			codigoBarras: variant.codigoBarras ?? null,
 			conteudoQuantidade: variant.conteudoQuantidade ?? null,
@@ -327,10 +332,8 @@ export function buildCoreGeneralUpdateInput(
 			conteudoQuantidade: state.conteudoQuantidade ?? null,
 			conteudoUnidade: state.conteudoUnidade ?? null,
 			rastreamentoEstoqueAtivo: state.rastreamentoEstoqueAtivo,
-			// Preços vivem na seção "PREÇOS E CANAIS DE VENDA": reenviamos o valor do servidor para
-			// que esta seção nunca sobrescreva um rascunho de preço aberto na outra.
-			precoVenda: product.precoVenda,
-			precoCusto: product.precoCusto,
+			// Preços vivem na seção "PREÇOS E CANAIS DE VENDA" e ficam fora deste payload: ausente = a
+			// rota não toca no preço (nem reverte um valor trocado depois do carregamento, nem gera snapshot).
 			// Com rastreamento ativo o saldo só se move por movimentação/recontagem — `null` diz à
 			// rota "não alterar", preservando o livro-razão. Sem rastreamento não há livro a
 			// proteger, então o valor digitado vai direto para a coluna.

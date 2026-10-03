@@ -30,6 +30,10 @@ type KitBuilderContextValue = TUseVisualKitState & {
 	saveStatus: TKitSaveStatus;
 	// Cria o rascunho (se ainda não existe) e grava o que estiver pendente.
 	saveNow: () => Promise<string | null>;
+	// Geração em andamento (fica na revisão): enquanto verdadeiro, etapas e "Voltar" ficam travados,
+	// porque sair da revisão desmonta a geração e a aborta no meio.
+	isGenerating: boolean;
+	setIsGenerating: (isGenerating: boolean) => void;
 };
 
 const KitBuilderContext = createContext<KitBuilderContextValue | null>(null);
@@ -48,7 +52,7 @@ type KitBuilderProviderProps = {
 export function KitBuilderProvider({ kitId: initialKitId, initialState, initialStage, brand, orgHasERPAccess, children }: KitBuilderProviderProps) {
 	const queryClient = useQueryClient();
 	const kitState = useVisualKitState(initialState);
-	const { state, itemKeys } = kitState;
+	const { state, itemKeys, updateKit } = kitState;
 
 	const [kitId, setKitId] = useState<string | null>(initialKitId);
 	const [stage, setStageState] = useState<TKitStageId>(initialStage);
@@ -61,6 +65,12 @@ export function KitBuilderProvider({ kitId: initialKitId, initialState, initialS
 	const stateRef = useRef(state);
 	stateRef.current = state;
 	const inFlightRef = useRef<Promise<string | null> | null>(null);
+	// Payload da última tentativa que falhou: o salvamento automático não insiste nele sozinho.
+	const failedJsonRef = useRef<string | null>(null);
+	// Geração em andamento: navegar entre etapas desmontaria a revisão e abortaria a geração.
+	const [isGenerating, setIsGenerating] = useState(false);
+	const isGeneratingRef = useRef(isGenerating);
+	isGeneratingRef.current = isGenerating;
 
 	// URL acompanha o kit e a etapa sem remontar a página (o construtor já tem o estado).
 	useEffect(() => {
@@ -74,7 +84,7 @@ export function KitBuilderProvider({ kitId: initialKitId, initialState, initialS
 
 		const current = stateRef.current;
 		const withName = current.kit.nome.trim() ? current : { ...current, kit: { ...current.kit, nome: `Kit de ${dayjs().format("DD/MM")}` } };
-		if (withName !== current) kitState.updateKit({ nome: withName.kit.nome });
+		if (withName !== current) updateKit({ nome: withName.kit.nome });
 		const payload = buildVisualKitPayload(withName);
 		const json = JSON.stringify(payload);
 		const currentKitId = kitIdRef.current;
@@ -92,10 +102,12 @@ export function KitBuilderProvider({ kitId: initialKitId, initialState, initialS
 					setKitId(savedId);
 				}
 				lastSavedJsonRef.current = json;
+				failedJsonRef.current = null;
 				setSaveStatus("SAVED");
 				await queryClient.invalidateQueries({ queryKey: ["visual-kits"] });
 				return savedId;
 			} catch (error) {
+				failedJsonRef.current = json;
 				setSaveStatus("ERROR");
 				toast.error(getErrorMessage(error));
 				return null;
@@ -107,16 +119,21 @@ export function KitBuilderProvider({ kitId: initialKitId, initialState, initialS
 		} finally {
 			if (inFlightRef.current === run) inFlightRef.current = null;
 		}
-	}, [kitState, queryClient]);
+	}, [updateKit, queryClient]);
 
 	// Salvamento automático: só depois que o rascunho existe (criado ao sair da etapa Peças).
+	// Durante um salvamento não reagenda (ao terminar, `saveStatus` muda e o efeito confere de novo se
+	// sobrou alteração). Depois de um erro só volta a tentar sozinho quando o conteúdo muda; repetir o
+	// mesmo payload é com o botão "Erro ao salvar" do cabeçalho — senão vira um laço de toasts.
 	useEffect(() => {
 		if (!kitId) return;
+		if (saveStatus === "SAVING") return;
 		if (payloadJson === lastSavedJsonRef.current) return;
+		if (saveStatus === "ERROR" && payloadJson === failedJsonRef.current) return;
 		setSaveStatus("PENDING");
 		const timeout = window.setTimeout(() => void persist(), AUTOSAVE_DELAY_MS);
 		return () => window.clearTimeout(timeout);
-	}, [kitId, payloadJson, persist]);
+	}, [kitId, payloadJson, persist, saveStatus]);
 
 	// Alteração ainda não gravada ao fechar a aba: o navegador pergunta antes de sair.
 	useEffect(() => {
@@ -127,6 +144,7 @@ export function KitBuilderProvider({ kitId: initialKitId, initialState, initialS
 	}, [saveStatus]);
 
 	const setStage = useCallback((next: TKitStageId) => {
+		if (isGeneratingRef.current) return;
 		setStageState(next);
 		window.scrollTo({ top: 0, behavior: "smooth" });
 	}, []);
@@ -171,6 +189,8 @@ export function KitBuilderProvider({ kitId: initialKitId, initialState, initialS
 			pieceItems,
 			saveStatus,
 			saveNow: persist,
+			isGenerating,
+			setIsGenerating,
 		}),
 		[
 			kitState,
@@ -187,6 +207,7 @@ export function KitBuilderProvider({ kitId: initialKitId, initialState, initialS
 			pieceItems,
 			saveStatus,
 			persist,
+			isGenerating,
 		],
 	);
 

@@ -30,13 +30,18 @@ const UPLOAD_CONCURRENCY = 4;
  */
 export function useKitGeneration() {
 	const queryClient = useQueryClient();
-	const { state, itemKeys, brand, saveNow } = useKitBuilder();
+	const { state, itemKeys, brand, saveNow, setIsGenerating } = useKitBuilder();
 	const [generation, setGeneration] = useState<TKitGenerationState>({ phase: "IDLE" });
 	const abortRef = useRef<AbortController | null>(null);
 
 	useEffect(() => () => abortRef.current?.abort(), []);
 
 	const isRunning = generation.phase === "RUNNING";
+	// O construtor trava etapas e "Voltar" enquanto a geração roda (sair daqui a abortaria).
+	useEffect(() => {
+		setIsGenerating(isRunning);
+		return () => setIsGenerating(false);
+	}, [isRunning, setIsGenerating]);
 	useEffect(() => {
 		if (!isRunning) return;
 		const handler = (event: BeforeUnloadEvent) => event.preventDefault();
@@ -103,6 +108,9 @@ export function useKitGeneration() {
 				step(3, `${sent} de ${files.length} arquivos enviados`, 0.76 + (sent / files.length) * 0.2, generated.length);
 			});
 
+			// Arquivos já no armazenamento: a conclusão no servidor não é mais cancelável. Desliga o
+			// controlador para que desmontar ou reiniciar não descarte o resultado nem o erro dela.
+			if (abortRef.current === controller) abortRef.current = null;
 			const uploadIdByFile = new Map(files.map(({ file }, index) => [file, data.uploads[index].uploadId]));
 			await completeVisualKitGeneration({
 				kitId,

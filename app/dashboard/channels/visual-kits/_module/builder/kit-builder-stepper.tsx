@@ -7,32 +7,38 @@ import { KIT_STAGE_IDS, KIT_STAGES, type TKitStageId } from "./stages";
 
 /**
  * Etapas do construtor. Sem rascunho salvo só se volta (fluxo linear); com o kit já criado, todas as
- * etapas ficam livres — os dados já existem e salvam sozinhos.
+ * etapas ficam livres — os dados já existem e salvam sozinhos. Durante a geração tudo trava: sair da
+ * revisão abortaria a geração no meio.
  */
+const GENERATING_HINT = "Aguarde a geração terminar para trocar de etapa.";
+
 export default function KitBuilderStepper() {
-	const { kitId, stage, setStage, state } = useKitBuilder();
+	const { kitId, stage, setStage, state, isGenerating } = useKitBuilder();
 	const currentIndex = KIT_STAGE_IDS.indexOf(stage);
 	const canNavigateFreely = !!kitId && state.pecas.length > 0;
+	const canNavigateTo = (index: number) => !isGenerating && (index <= currentIndex || canNavigateFreely);
 
 	function handleClick(target: TKitStageId, index: number) {
-		if (index <= currentIndex || canNavigateFreely) setStage(target);
+		if (canNavigateTo(index)) setStage(target);
 	}
 
 	return (
-		<nav aria-label="Progresso do kit" className="w-full">
+		<nav aria-label="Progresso do kit" aria-busy={isGenerating || undefined} title={isGenerating ? GENERATING_HINT : undefined} className="w-full">
 			<ol className="flex w-full items-center gap-1 overflow-x-auto scrollbar-thin scrollbar-track-primary/10 scrollbar-thumb-primary/30">
 				{KIT_STAGE_IDS.map((stageId, index) => {
 					const meta = KIT_STAGES[stageId];
 					const Icon = meta.icon;
 					const isActive = stageId === stage;
 					const isComplete = index < currentIndex;
-					const isClickable = index <= currentIndex || canNavigateFreely;
+					const isClickable = canNavigateTo(index);
 					return (
 						<li key={stageId} className="flex min-w-[120px] flex-1 items-center">
 							<button
 								type="button"
 								onClick={() => handleClick(stageId, index)}
 								disabled={!isClickable}
+								aria-current={isActive ? "step" : undefined}
+								aria-label={isGenerating ? `${meta.label}: ${GENERATING_HINT}` : undefined}
 								className={cn(
 									"flex w-full items-center gap-2 rounded-md px-2 py-2 text-left transition-colors",
 									isActive && "bg-brand/10",

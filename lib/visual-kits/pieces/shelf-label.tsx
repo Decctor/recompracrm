@@ -1,7 +1,7 @@
 import type { TVisualKitConfig } from "@/schemas/visual-kits";
 import { A4_PAGE, mmToPx } from "../formats";
 import type { TVisualKitBrand, TVisualKitPieceItem } from "../types";
-import { EanBarcode } from "./ean";
+import { EanBarcode, eanViewHeight, normalizeEanCode } from "./ean";
 import {
 	barcodeFor,
 	clampLines,
@@ -26,12 +26,22 @@ const LABEL_WIDTH = mmToPx(100);
 const LABEL_HEIGHT = mmToPx(40);
 const SHEET_TOP = mmToPx(6);
 const SHEET_LEFT = mmToPx(5);
+const FOOTER_STRIP_HEIGHT = 20;
+
+// Código de barras para leitura na gôndola. Módulo (X) de 0,28 mm ≈ 85% da nominal GS1 (0,33 mm; o
+// mínimo é 80%) e barras de 58 módulos ≈ 16 mm — a GS1 pede ~18 mm a 80%; abaixo de ~15 mm o leitor
+// do caixa começa a falhar. A altura é fixada (e não a largura) para EAN-8 manter o mesmo módulo.
+// Cabe na coluna: 151 px de etiqueta − 20 da faixa − 15 de respiro − 2 linhas de nome (~36) ≥ 74.
+const BARCODE_MODULE = mmToPx(0.28);
+const BARCODE_BAR_MODULES = 58;
+const BARCODE_HEIGHT = eanViewHeight(BARCODE_BAR_MODULES) * BARCODE_MODULE;
 
 type TShelfLabelProps = { item: TVisualKitPieceItem; brand: TVisualKitBrand; configuracao: TVisualKitConfig; validity: string | null };
 
 function ShelfLabel({ item, brand, configuracao, validity }: TShelfLabelProps) {
 	const display = resolveItemDisplay(item, configuracao);
 	const barcode = barcodeFor(item, configuracao);
+	const hasBarcode = normalizeEanCode(barcode) !== null;
 	return (
 		<div
 			style={{
@@ -47,27 +57,35 @@ function ShelfLabel({ item, brand, configuracao, validity }: TShelfLabelProps) {
 			}}
 		>
 			<div style={{ flex: 1, display: "flex", minHeight: 0 }}>
-				<div style={{ flex: 1, minWidth: 0, padding: "11px 11px 8px 15px", display: "flex", flexDirection: "column" }}>
-					<span style={{ fontSize: 19, fontWeight: 700, lineHeight: 1.05, letterSpacing: "-0.01em", color: INK, ...clampLines(2) }}>{item.nome}</span>
-					{item.detalhe ? <span style={{ fontSize: 12, color: "#5c5c5c", marginTop: 4 }}>{item.detalhe}</span> : null}
+				<div style={{ flex: 1, minWidth: 0, padding: "9px 11px 6px 15px", display: "flex", flexDirection: "column" }}>
+					<span style={{ fontSize: 17, fontWeight: 700, lineHeight: 1.05, letterSpacing: "-0.01em", color: INK, ...clampLines(2) }}>{item.nome}</span>
+					{item.detalhe && !hasBarcode ? <span style={{ fontSize: 12, color: "#5c5c5c", marginTop: 4, ...clampLines(2) }}>{item.detalhe}</span> : null}
 					<div style={{ flex: 1 }} />
 					<div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 8 }}>
-						<EanBarcode code={barcode} width={113} />
-						{display.precoUnidade ? (
+						<EanBarcode code={barcode} height={BARCODE_HEIGHT} barHeight={BARCODE_BAR_MODULES} />
+						{(item.detalhe && hasBarcode) || display.precoUnidade ? (
 							<span
 								style={{
-									marginLeft: "auto",
+									flex: 1,
+									minWidth: 0,
 									display: "flex",
 									flexDirection: "column",
 									alignItems: "flex-end",
+									gap: 4,
 									fontSize: 10.5,
 									lineHeight: 1.25,
 									color: "#333333",
 									textAlign: "right",
 								}}
 							>
-								<span style={{ fontWeight: 700 }}>{display.precoUnidade.valor}</span>
-								<span>{display.precoUnidade.rotulo}</span>
+								{/* Com código de barras o detalhe desce para cá: a altura da etiqueta vai para as barras. */}
+								{item.detalhe && hasBarcode ? <span style={{ color: "#5c5c5c", ...clampLines(3) }}>{item.detalhe}</span> : null}
+								{display.precoUnidade ? (
+									<span style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
+										<span style={{ fontWeight: 700 }}>{display.precoUnidade.valor}</span>
+										<span>{display.precoUnidade.rotulo}</span>
+									</span>
+								) : null}
 							</span>
 						) : null}
 					</div>
@@ -113,7 +131,7 @@ function ShelfLabel({ item, brand, configuracao, validity }: TShelfLabelProps) {
 			</div>
 			<div
 				style={{
-					height: 23,
+					height: FOOTER_STRIP_HEIGHT,
 					flexShrink: 0,
 					background: brand.corPrimaria,
 					color: brand.corPrimariaForeground,

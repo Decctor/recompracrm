@@ -17,7 +17,7 @@ const SAVE_STATUS: Record<TKitSaveStatus, { label: string; className: string; ic
 };
 
 export default function KitBuilderHeader() {
-	const { kitId, state, updateKit, saveStatus, saveNow } = useKitBuilder();
+	const { kitId, state, updateKit, saveStatus, saveNow, isGenerating } = useKitBuilder();
 	const status = SAVE_STATUS[saveStatus];
 	const StatusIcon = status.icon;
 
@@ -25,12 +25,29 @@ export default function KitBuilderHeader() {
 		<header className="flex w-full flex-col gap-3 rounded-2xl border border-border bg-card px-4 py-3 shadow-sm">
 			<div className="flex w-full flex-col items-start justify-between gap-3 lg:flex-row">
 				<div className="flex items-center gap-2">
-					<Button type="button" variant="ghost" size="sm" className="flex items-center gap-1.5" asChild>
-						<Link href={appRoutes.channels.visualKits()}>
-							<ArrowLeft className="h-3.5 w-3.5" />
-							VOLTAR
-						</Link>
-					</Button>
+					{isGenerating ? (
+						// Sair da página no meio da geração a abortaria: o botão fica travado até ela terminar.
+						<span title="Aguarde a geração terminar para sair." className="inline-flex">
+							<Button
+								type="button"
+								variant="ghost"
+								size="sm"
+								className="flex items-center gap-1.5"
+								disabled
+								aria-label="Voltar indisponível: aguarde a geração terminar"
+							>
+								<ArrowLeft className="h-3.5 w-3.5" />
+								VOLTAR
+							</Button>
+						</span>
+					) : (
+						<Button type="button" variant="ghost" size="sm" className="flex items-center gap-1.5" asChild>
+							<Link href={appRoutes.channels.visualKits()}>
+								<ArrowLeft className="h-3.5 w-3.5" />
+								VOLTAR
+							</Link>
+						</Button>
+					)}
 					<div className="flex flex-col">
 						<p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{kitId ? "Kit" : "Novo kit"}</p>
 						<h1 className="text-sm font-semibold tracking-tight">CONSTRUTOR DE KITS</h1>

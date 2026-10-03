@@ -64,6 +64,18 @@ test("anterior reenviado sem alteração não bloqueia o snapshot automático", 
 	);
 });
 
+test("precoVenda ausente não toca no preço nem no snapshot (seção que não edita preço)", () => {
+	// Página aberta antes de uma sincronização: reenviar o preço lido reverteria o preço e inventaria um "De / Por".
+	assert.deepEqual(buildSalePriceUpdate({ current: { precoVenda: 12.9, precoVendaAnterior: 14.9 }, next: {}, now }), {});
+	assert.deepEqual(buildSalePriceUpdate({ current: { precoVenda: 12.9, precoVendaAnterior: null }, next: { precoVenda: undefined }, now }), {});
+	// Ausente é diferente de null: null limpa o preço explicitamente (e registra o anterior).
+	assert.deepEqual(buildSalePriceUpdate({ current: { precoVenda: 12.9, precoVendaAnterior: null }, next: { precoVenda: null }, now }), {
+		precoVenda: null,
+		precoVendaAnterior: 12.9,
+		dataAlteracaoPrecoVenda: now,
+	});
+});
+
 // -----------------------------------------------------------------------------
 // GUARDA: todo arquivo que atualiza products/productVariants e grava `precoVenda` usa o helper.
 // -----------------------------------------------------------------------------

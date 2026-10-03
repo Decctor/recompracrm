@@ -1,5 +1,5 @@
 import { appApiHandler } from "@/lib/app-api";
-import { mapWithConcurrency } from "@/lib/async/map-with-concurrency";
+import { mapWithConcurrencySettled } from "@/lib/async/map-with-concurrency";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { completeDirectUpload, consumeUpload } from "@/lib/files/intake";
@@ -88,7 +88,13 @@ async function completeVisualKitGeneration({ input, session }: { input: TComplet
 	if (!kit) throw new createHttpError.NotFound("Kit não encontrado.");
 
 	const pieceByFormat = new Map(kit.pecas.map((piece) => [piece.formato, piece.id]));
-	if (input.pieces.length !== kit.pecas.length || input.pieces.some((piece) => !pieceByFormat.has(piece.formato))) {
+	// Formato repetido passaria na contagem e deixaria outra peça do kit sem arquivos.
+	const inputFormats = new Set(input.pieces.map((piece) => piece.formato));
+	if (
+		inputFormats.size !== input.pieces.length ||
+		input.pieces.length !== kit.pecas.length ||
+		input.pieces.some((piece) => !pieceByFormat.has(piece.formato))
+	) {
 		throw new createHttpError.BadRequest("As peças geradas não correspondem às peças do kit. Atualize a página e gere de novo.");
 	}
 	if (input.pieces.some((piece) => piece.arquivos.length === 0)) throw new createHttpError.BadRequest("Alguma peça foi gerada sem arquivos.");
@@ -96,69 +102,85 @@ async function completeVisualKitGeneration({ input, session }: { input: TComplet
 	// 1. Conferência dos bytes (fora da transação: lê o armazenamento).
 	const generatedFiles = input.pieces.flatMap((piece) => piece.arquivos.map((arquivo) => ({ ...arquivo, formato: piece.formato })));
 	const fileByUpload = new Map<string, TFileEntity>();
+	// Geração incompleta não troca nada: tudo o que entrou no catálogo sai de novo (linha e bytes).
+	const discardRegisteredFiles = () =>
+		Promise.all(
+			[...fileByUpload.values()].map((file) =>
+				deleteStoredFile(file).catch((error) => console.error("[VISUAL KIT GENERATION] Falha ao descartar arquivo:", file.id, error)),
+			),
+		);
 	try {
-		await mapWithConcurrency(generatedFiles, 4, async (arquivo) => {
-			await completeDirectUpload({ uploadId: arquivo.uploadId, organizacaoId: organizationId, mimeType: arquivo.mimeType });
-			const { arquivo: file } = await consumeUpload({
+		// `Settled`: após uma falha, os workers em voo terminam ANTES da limpeza — senão um arquivo
+		// conferido depois do `catch` ficaria órfão no catálogo e no armazenamento.
+		await mapWithConcurrencySettled(generatedFiles, 4, async (arquivo) => {
+			const { arquivo: file } = await completeDirectUpload({ uploadId: arquivo.uploadId, organizacaoId: organizationId, mimeType: arquivo.mimeType });
+			// Registrado já na conferência: se o consumo falhar, o arquivo também é descartado.
+			fileByUpload.set(arquivo.uploadId, file);
+			await consumeUpload({
 				uploadId: arquivo.uploadId,
 				organizacaoId: organizationId,
 				proposito: "ARQUIVO_KIT_VISUAL",
 				consumo: { visualKitId: kit.id, formato: arquivo.formato },
 			});
-			fileByUpload.set(arquivo.uploadId, file);
 		});
 	} catch (error) {
-		// Geração incompleta não troca nada: o que já entrou no catálogo sai de novo.
-		await Promise.all([...fileByUpload.values()].map(deleteStoredFile));
+		await discardRegisteredFiles();
 		throw error;
 	}
 
 	// 2. Troca dos arquivos e registro dos preços, atomicamente.
 	const now = new Date();
-	const previousFileIds = await db.transaction(async (tx) => {
-		const pieceIds = kit.pecas.map((piece) => piece.id);
-		const previous = await tx
-			.select({ arquivoId: visualKitPieceFiles.arquivoId })
-			.from(visualKitPieceFiles)
-			.where(inArray(visualKitPieceFiles.pecaId, pieceIds));
-		await tx.delete(visualKitPieceFiles).where(inArray(visualKitPieceFiles.pecaId, pieceIds));
+	let previousFileIds: string[];
+	try {
+		previousFileIds = await db.transaction(async (tx) => {
+			const pieceIds = kit.pecas.map((piece) => piece.id);
+			const previous = await tx
+				.select({ arquivoId: visualKitPieceFiles.arquivoId })
+				.from(visualKitPieceFiles)
+				.where(inArray(visualKitPieceFiles.pecaId, pieceIds));
+			await tx.delete(visualKitPieceFiles).where(inArray(visualKitPieceFiles.pecaId, pieceIds));
 
-		for (const piece of input.pieces) {
-			const pecaId = pieceByFormat.get(piece.formato) as string;
-			await tx.insert(visualKitPieceFiles).values(
-				piece.arquivos.map((arquivo) => {
-					const file = fileByUpload.get(arquivo.uploadId);
-					if (!file) throw new createHttpError.InternalServerError("Arquivo conferido não encontrado.");
-					return {
-						organizacaoId: organizationId,
-						pecaId,
-						arquivoId: file.id,
-						nome: arquivo.nome,
-						produtoId: arquivo.produtoId,
-						produtoVarianteId: arquivo.produtoVarianteId,
-						ordem: arquivo.ordem,
-					};
-				}),
-			);
-			await tx.update(visualKitPieces).set({ saida: piece.saida, dataGeracao: now }).where(eq(visualKitPieces.id, pecaId));
-		}
+			for (const piece of input.pieces) {
+				const pecaId = pieceByFormat.get(piece.formato) as string;
+				await tx.insert(visualKitPieceFiles).values(
+					piece.arquivos.map((arquivo) => {
+						const file = fileByUpload.get(arquivo.uploadId);
+						if (!file) throw new createHttpError.InternalServerError("Arquivo conferido não encontrado.");
+						return {
+							organizacaoId: organizationId,
+							pecaId,
+							arquivoId: file.id,
+							nome: arquivo.nome,
+							produtoId: arquivo.produtoId,
+							produtoVarianteId: arquivo.produtoVarianteId,
+							ordem: arquivo.ordem,
+						};
+					}),
+				);
+				await tx.update(visualKitPieces).set({ saida: piece.saida, dataGeracao: now }).where(eq(visualKitPieces.id, pecaId));
+			}
 
-		const priceByKey = new Map(input.prices.map((price) => [visualKitItemKey(price), price]));
-		const items = await tx
-			.select({ id: visualKitItems.id, produtoId: visualKitItems.produtoId, produtoVarianteId: visualKitItems.produtoVarianteId })
-			.from(visualKitItems)
-			.where(eq(visualKitItems.kitId, kit.id));
-		for (const item of items) {
-			const price = priceByKey.get(visualKitItemKey(item));
-			await tx
-				.update(visualKitItems)
-				.set({ precoGerado: price?.preco ?? null, precoDeGerado: price?.precoDe ?? null })
-				.where(eq(visualKitItems.id, item.id));
-		}
+			const priceByKey = new Map(input.prices.map((price) => [visualKitItemKey(price), price]));
+			const items = await tx
+				.select({ id: visualKitItems.id, produtoId: visualKitItems.produtoId, produtoVarianteId: visualKitItems.produtoVarianteId })
+				.from(visualKitItems)
+				.where(eq(visualKitItems.kitId, kit.id));
+			for (const item of items) {
+				const price = priceByKey.get(visualKitItemKey(item));
+				await tx
+					.update(visualKitItems)
+					.set({ precoGerado: price?.preco ?? null, precoDeGerado: price?.precoDe ?? null })
+					.where(eq(visualKitItems.id, item.id));
+			}
 
-		await tx.update(visualKits).set({ status: "GERADO", dataUltimaGeracao: now, dataAtualizacao: now }).where(eq(visualKits.id, kit.id));
-		return previous.map((row) => row.arquivoId);
-	});
+			await tx.update(visualKits).set({ status: "GERADO", dataUltimaGeracao: now, dataAtualizacao: now }).where(eq(visualKits.id, kit.id));
+			return previous.map((row) => row.arquivoId);
+		});
+	} catch (error) {
+		// Transação revertida: os arquivos novos não ficaram ligados a nenhuma peça.
+		await discardRegisteredFiles();
+		throw error;
+	}
 
 	// 3. Arquivos da geração anterior: fora do catálogo e do armazenamento.
 	if (previousFileIds.length) {

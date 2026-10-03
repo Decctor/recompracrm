@@ -22,7 +22,7 @@ export function downloadBlob(blob: Blob, fileName: string) {
 export type TVisualKitZipEntry = {
 	folder: string;
 	name: string;
-	/** Blob já gerado ou URL de um arquivo salvo (baixado com os cookies da sessão). */
+	/** Blob já gerado ou URL same-origin de um arquivo salvo (os cookies da sessão vão por padrão). */
 	source: Blob | string;
 };
 
@@ -30,7 +30,11 @@ export type TVisualKitZipProgress = { done: number; total: number };
 
 async function readSource(source: Blob | string): Promise<Uint8Array> {
 	if (typeof source !== "string") return new Uint8Array(await source.arrayBuffer());
-	const response = await fetch(source, { credentials: "include" });
+	// Sem `credentials: "include"`: o padrão ("same-origin") já manda os cookies da sessão para
+	// `/api/files/:id`, que responde 302 para o Supabase Storage. O Storage devolve
+	// `Access-Control-Allow-Origin: *`, que o navegador recusa em requisição com credenciais — com
+	// "include" o redirecionamento falharia. A URL assinada do Storage não precisa de cookie.
+	const response = await fetch(source);
 	if (!response.ok) throw new Error(`Não foi possível baixar um arquivo do kit (HTTP ${response.status}).`);
 	return new Uint8Array(await response.arrayBuffer());
 }
