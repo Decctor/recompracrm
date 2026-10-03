@@ -25,40 +25,40 @@ import {
 	accentOnPaper,
 } from "./shared";
 
-const PAGE = VISUAL_KIT_FORMATS.CARROSSEL.pagina;
+const PAGE = VISUAL_KIT_FORMATS.CARROSSEL.page;
 
 function paginate(props: TVisualKitPieceProps): TVisualKitPage[] {
-	const items = props.itens.slice(0, visualKitPieceItemCount("CARROSSEL", props.itens.length));
-	if (!items.length) return [{ indice: 0, tipo: "PRODUTO", itens: [], rotulo: "Sem produtos" }];
+	const items = props.items.slice(0, visualKitPieceItemCount("CARROSSEL", props.items.length));
+	if (!items.length) return [{ index: 0, kind: "PRODUCT", items: [], label: "Sem produtos" }];
 	return [
-		{ indice: 0, tipo: "CAPA", itens: [], rotulo: "Capa" },
-		...items.map((item, index): TVisualKitPage => ({ indice: index + 1, tipo: "PRODUTO", itens: [item], rotulo: item.nome })),
-		{ indice: items.length + 1, tipo: "FECHAMENTO", itens: [], rotulo: "Fechamento" },
+		{ index: 0, kind: "COVER", items: [], label: "Capa" },
+		...items.map((item, index): TVisualKitPage => ({ index: index + 1, kind: "PRODUCT", items: [item], label: item.nome })),
+		{ index: items.length + 1, kind: "CLOSING", items: [], label: "Fechamento" },
 	];
 }
 
 function pageNumber(props: TVisualKitPieceProps, page: TVisualKitPage) {
-	const total = visualKitPieceItemCount("CARROSSEL", props.itens.length) + 2;
-	return `${page.indice + 1}/${total}`;
+	const total = visualKitPieceItemCount("CARROSSEL", props.items.length) + 2;
+	return `${page.index + 1}/${total}`;
 }
 
 const pageNumberStyle = { fontSize: 35, fontWeight: 700, letterSpacing: "0.02em" } as const;
 
 function CoverPage({ props, page }: TVisualKitPageArgs) {
-	const { marca } = props;
-	const validade = formatValidity(props.validadeFim);
-	const count = visualKitPieceItemCount("CARROSSEL", props.itens.length);
+	const { brand } = props;
+	const validity = formatValidity(props.validadeFim);
+	const count = visualKitPieceItemCount("CARROSSEL", props.items.length);
 	const countLabel = count === 1 ? "1 oferta" : `${count} ofertas`;
-	const ring = hexToRgba(marca.corPrimariaForeground, 0.35);
+	const ring = hexToRgba(brand.corPrimariaForeground, 0.35);
 	return (
 		<PageFrame
 			size={PAGE}
-			background={marca.corPrimaria}
-			color={marca.corPrimariaForeground}
+			background={brand.corPrimaria}
+			color={brand.corPrimariaForeground}
 			style={{ padding: 90, display: "flex", flexDirection: "column" }}
 		>
 			<div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 24 }}>
-				<BrandLogo marca={marca} size={150} radius={35} wordmarkSize={60} />
+				<BrandLogo brand={brand} size={150} radius={35} wordmarkSize={60} />
 				<span style={{ ...pageNumberStyle, opacity: 0.7 }}>{pageNumber(props, page)}</span>
 			</div>
 			<div style={{ flex: 1 }} />
@@ -68,10 +68,10 @@ function CoverPage({ props, page }: TVisualKitPageArgs) {
 					fontWeight: 700,
 					letterSpacing: "0.22em",
 					textTransform: "uppercase",
-					color: readableOn(marca.corPrimaria, marca.corSecundaria, marca.corPrimariaForeground),
+					color: readableOn(brand.corPrimaria, brand.corSecundaria, brand.corPrimariaForeground),
 				}}
 			>
-				{marca.nome}
+				{brand.nome}
 			</span>
 			<span
 				style={{
@@ -86,7 +86,7 @@ function CoverPage({ props, page }: TVisualKitPageArgs) {
 			>
 				{props.chamada}
 			</span>
-			<span style={{ fontSize: 42.5, opacity: 0.8, marginTop: 40 }}>{validade ? `${countLabel} · válidas até ${validade}` : countLabel}</span>
+			<span style={{ fontSize: 42.5, opacity: 0.8, marginTop: 40 }}>{validity ? `${countLabel} · válidas até ${validity}` : countLabel}</span>
 			<div
 				style={{
 					marginTop: 80,
@@ -109,8 +109,8 @@ function CoverPage({ props, page }: TVisualKitPageArgs) {
 }
 
 function ProductPage({ props, page }: TVisualKitPageArgs) {
-	const { marca } = props;
-	const item = page.itens[0];
+	const { brand } = props;
+	const item = page.items[0];
 	if (!item) {
 		return (
 			<PageFrame size={PAGE} background={PAPER}>
@@ -118,7 +118,7 @@ function ProductPage({ props, page }: TVisualKitPageArgs) {
 			</PageFrame>
 		);
 	}
-	const display = resolveItemDisplay(item, props.opcoes);
+	const display = resolveItemDisplay(item, props.configuracao);
 	return (
 		<PageFrame size={PAGE} background={PAPER} color={INK} style={{ padding: 70, display: "flex", flexDirection: "column", gap: 40 }}>
 			<div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 40 }}>
@@ -129,7 +129,7 @@ function ProductPage({ props, page }: TVisualKitPageArgs) {
 						fontWeight: 700,
 						letterSpacing: "0.16em",
 						textTransform: "uppercase",
-						color: accentOnPaper(marca),
+						color: accentOnPaper(brand),
 						whiteSpace: "nowrap",
 						overflow: "hidden",
 						textOverflow: "ellipsis",
@@ -140,15 +140,15 @@ function ProductPage({ props, page }: TVisualKitPageArgs) {
 				<span style={{ ...pageNumberStyle, color: "#8a8a8a" }}>{pageNumber(props, page)}</span>
 			</div>
 			<div style={{ position: "relative", flex: 1, minHeight: 0 }}>
-				<ProductImage item={item} marca={marca} radius={40} padding={40} style={{ position: "absolute", inset: 0 }} />
-				{display.percentual != null ? (
+				<ProductImage item={item} brand={brand} radius={40} padding={40} style={{ position: "absolute", inset: 0 }} />
+				{display.percentualDesconto != null ? (
 					<span
 						style={{
 							position: "absolute",
 							left: 40,
 							top: 40,
-							background: marca.corSecundaria,
-							color: marca.corSecundariaForeground,
+							background: brand.corSecundaria,
+							color: brand.corSecundariaForeground,
 							fontSize: 55,
 							fontWeight: 800,
 							letterSpacing: "-0.03em",
@@ -156,7 +156,7 @@ function ProductPage({ props, page }: TVisualKitPageArgs) {
 							borderRadius: 9999,
 						}}
 					>
-						{discountLabel(display.percentual)}
+						{discountLabel(display.percentualDesconto)}
 					</span>
 				) : null}
 			</div>
@@ -168,8 +168,8 @@ function ProductPage({ props, page }: TVisualKitPageArgs) {
 				<div
 					style={{
 						flexShrink: 0,
-						background: marca.corPrimaria,
-						color: marca.corPrimariaForeground,
+						background: brand.corPrimaria,
+						color: brand.corPrimariaForeground,
 						borderRadius: 40,
 						padding: "25px 40px 30px 40px",
 						display: "flex",
@@ -178,7 +178,7 @@ function ProductPage({ props, page }: TVisualKitPageArgs) {
 						gap: 10,
 					}}
 				>
-					{display.precoDe != null ? <FromPrice value={display.precoDe} withPor={false} style={{ fontSize: 32.5, opacity: 0.8 }} /> : null}
+					{display.precoDe != null ? <FromPrice value={display.precoDe} withSuffix={false} style={{ fontSize: 32.5, opacity: 0.8 }} /> : null}
 					<PriceValue value={item.preco} size={130} />
 				</div>
 			</div>
@@ -187,33 +187,33 @@ function ProductPage({ props, page }: TVisualKitPageArgs) {
 }
 
 function ClosingPage({ props, page }: TVisualKitPageArgs) {
-	const { marca } = props;
-	const validade = formatValidity(props.validadeFim);
+	const { brand } = props;
+	const validity = formatValidity(props.validadeFim);
 	return (
 		<PageFrame
 			size={PAGE}
-			background={marca.corSecundaria}
-			color={marca.corSecundariaForeground}
+			background={brand.corSecundaria}
+			color={brand.corSecundariaForeground}
 			style={{ padding: 90, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 50, textAlign: "center" }}
 		>
-			{marca.logoUrl ? <LogoImage src={marca.logoUrl} alt={marca.nome} size={220} radius={50} /> : null}
+			{brand.logoUrl ? <LogoImage src={brand.logoUrl} alt={brand.nome} size={220} radius={50} /> : null}
 			<span style={{ fontSize: 100, fontWeight: 800, lineHeight: 1, letterSpacing: "-0.03em", textTransform: "uppercase", ...clampLines(3) }}>
-				{marca.nome}
+				{brand.nome}
 			</span>
-			<span style={{ fontSize: 40, lineHeight: 1.4, maxWidth: 750, opacity: 0.85 }}>{offersDisclaimer(validade)}</span>
+			<span style={{ fontSize: 40, lineHeight: 1.4, maxWidth: 750, opacity: 0.85 }}>{offersDisclaimer(validity)}</span>
 			<span style={{ ...pageNumberStyle, opacity: 0.7 }}>{pageNumber(props, page)}</span>
 		</PageFrame>
 	);
 }
 
-function CarrosselPage(args: TVisualKitPageArgs) {
-	if (args.page.tipo === "CAPA") return <CoverPage {...args} />;
-	if (args.page.tipo === "FECHAMENTO") return <ClosingPage {...args} />;
+function CarouselPage(args: TVisualKitPageArgs) {
+	if (args.page.kind === "COVER") return <CoverPage {...args} />;
+	if (args.page.kind === "CLOSING") return <ClosingPage {...args} />;
 	return <ProductPage {...args} />;
 }
 
-export const carrosselRenderer: TVisualKitPieceRenderer = {
+export const carouselRenderer: TVisualKitPieceRenderer = {
 	paginate,
 	pageSize: () => PAGE,
-	Page: CarrosselPage,
+	Page: CarouselPage,
 };

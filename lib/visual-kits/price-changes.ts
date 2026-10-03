@@ -15,10 +15,10 @@ type TGeneratedKitItem = {
  * saiu do catálogo. É o que alimenta o aviso "Preço mudou" de Meus kits — sem cron, sempre atual.
  */
 export async function countVisualKitPriceChanges({
-	orgId,
+	organizationId,
 	kits,
 }: {
-	orgId: string;
+	organizationId: string;
 	kits: { id: string; canalVendaId: string | null; itens: TGeneratedKitItem[] }[];
 }): Promise<Map<string, number>> {
 	const changes = new Map<string, number>();
@@ -27,8 +27,8 @@ export async function countVisualKitPriceChanges({
 
 	for (const [canalVendaId, channelKits] of kitsByChannel) {
 		const keys = [...new Set(channelKits.flatMap((kit) => kit.itens.map(visualKitItemKey)))];
-		const { itens } = await loadVisualKitCatalog({ orgId, canalVendaId, modo: "CHAVES", chaves: keys });
-		const current = new Map(itens.map((item) => [item.chave, item]));
+		const { items } = await loadVisualKitCatalog({ organizationId, salesChannelId: canalVendaId, mode: "KEYS", keys });
+		const current = new Map(items.map((item) => [item.chave, item]));
 		for (const kit of channelKits) {
 			const changed = kit.itens.filter((item) => {
 				const now = current.get(visualKitItemKey(item));

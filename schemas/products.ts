@@ -23,7 +23,7 @@ const ProductContentQuantitySchema = z
 	.nullable()
 	.optional();
 
-// Preço "De" manual (formulário do produto). Ausente = regra automática de `buildPrecoVendaUpdate`.
+// Preço "De" manual (formulário do produto). Ausente = regra automática de `buildSalePriceUpdate`.
 const ProductPreviousPriceSchema = z
 	.number({
 		invalid_type_error: "Tipo não válido para preço anterior.",

@@ -11,44 +11,44 @@ export const VISUAL_KIT_CATALOG_PAGE_SIZE = 60;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 type TLoadVisualKitCatalogParams = {
-	orgId: string;
-	canalVendaId: string | null;
-	agora?: Date;
-} & ({ modo: "BUSCA"; busca: string[]; somentePromocao: boolean; limite?: number } | { modo: "CHAVES"; chaves: string[] });
+	organizationId: string;
+	salesChannelId: string | null;
+	now?: Date;
+} & ({ mode: "SEARCH"; search: string[]; promotionsOnly: boolean; limit?: number } | { mode: "KEYS"; keys: string[] });
 
 /**
  * Catálogo para o construtor de kits e para a renderização das peças: preço efetivo do canal do kit
  * (override do nó, senão o base), promoção resolvida contra o anterior do preço base e textos do
  * cadastro (conteúdo, preço por unidade, GTIN). Produtos com variantes ativas entram por variante.
  */
-export async function loadVisualKitCatalog(params: TLoadVisualKitCatalogParams): Promise<{ itens: TVisualKitCatalogItem[]; limitado: boolean }> {
-	const terms = params.modo === "BUSCA" ? params.busca : [];
+export async function loadVisualKitCatalog(params: TLoadVisualKitCatalogParams): Promise<{ items: TVisualKitCatalogItem[]; truncated: boolean }> {
+	const terms = params.mode === "SEARCH" ? params.search : [];
 	return withProductSearch(db, terms, (database) => queryCatalog(database, params));
 }
 
 async function queryCatalog(database: ProductSearchDatabase, params: TLoadVisualKitCatalogParams) {
-	const agora = params.agora ?? new Date();
-	const conditions: SQL[] = [eq(products.organizacaoId, params.orgId), eq(products.ativo, true), eq(products.vendavel, true)];
+	const now = params.now ?? new Date();
+	const conditions: SQL[] = [eq(products.organizacaoId, params.organizationId), eq(products.ativo, true), eq(products.vendavel, true)];
 
 	let requestedKeys: Set<string> | null = null;
 	let orderBy: SQL[] = [asc(products.nome)];
 	let limit: number | undefined;
 
-	if (params.modo === "CHAVES") {
-		const parsed = params.chaves.map(parseVisualKitItemKey).filter((key) => key !== null);
-		if (parsed.length === 0) return { itens: [], limitado: false };
+	if (params.mode === "KEYS") {
+		const parsed = params.keys.map(parseVisualKitItemKey).filter((key) => key !== null);
+		if (parsed.length === 0) return { items: [], truncated: false };
 		requestedKeys = new Set(parsed.map(visualKitItemKey));
 		conditions.push(inArray(products.id, [...new Set(parsed.map((key) => key.produtoId))]));
 	} else {
-		const search = buildProductSearch(params.busca, products);
+		const search = buildProductSearch(params.search, products);
 		if (search.condition) {
 			conditions.push(search.condition);
 			orderBy = [desc(search.relevance), asc(products.nome)];
 		}
-		if (params.somentePromocao) {
+		if (params.promotionsOnly) {
 			// Pré-filtro necessário (não suficiente): só há promoção com anterior registrado dentro da
 			// janela. A comparação exata com o preço do canal acontece depois, em `resolvePromotion`.
-			const cutoff = new Date(agora.getTime() - PROMOTION_PREVIOUS_PRICE_WINDOW_DAYS * DAY_MS);
+			const cutoff = new Date(now.getTime() - PROMOTION_PREVIOUS_PRICE_WINDOW_DAYS * DAY_MS);
 			const recentPrevious = or(
 				and(isNotNull(products.precoVendaAnterior), gte(products.dataAlteracaoPrecoVenda, cutoff)),
 				exists(
@@ -67,7 +67,7 @@ async function queryCatalog(database: ProductSearchDatabase, params: TLoadVisual
 			);
 			if (recentPrevious) conditions.push(recentPrevious);
 		}
-		limit = (params.limite ?? VISUAL_KIT_CATALOG_PAGE_SIZE) + 1;
+		limit = (params.limit ?? VISUAL_KIT_CATALOG_PAGE_SIZE) + 1;
 	}
 
 	const rows = await database.query.products.findMany({
@@ -106,16 +106,16 @@ async function queryCatalog(database: ProductSearchDatabase, params: TLoadVisual
 		},
 	});
 
-	const limitado = limit != null && rows.length >= limit;
-	const productRows = limitado ? rows.slice(0, limit! - 1) : rows;
+	const truncated = limit != null && rows.length >= limit;
+	const productRows = truncated ? rows.slice(0, limit! - 1) : rows;
 
 	const channelPrices = await loadChannelPrices(database, {
-		orgId: params.orgId,
-		canalVendaId: params.canalVendaId,
-		produtoIds: productRows.map((row) => row.id),
+		organizationId: params.organizationId,
+		salesChannelId: params.salesChannelId,
+		productIds: productRows.map((row) => row.id),
 	});
 
-	const itens: TVisualKitCatalogItem[] = [];
+	const items: TVisualKitCatalogItem[] = [];
 	for (const product of productRows) {
 		const nodes =
 			product.variantes.length > 0
@@ -151,14 +151,14 @@ async function queryCatalog(database: ProductSearchDatabase, params: TLoadVisual
 
 			const preco = channelPrices.get(chave) ?? node.precoBase;
 			const promocao = resolvePromotion({
-				precoAtual: preco,
+				currentPrice: preco,
 				precoVendaAnterior: node.precoVendaAnterior,
 				dataAlteracaoPrecoVenda: node.dataAlteracaoPrecoVenda,
-				agora,
+				now,
 			});
-			if (params.modo === "BUSCA" && params.somentePromocao && !promocao.emPromocao) continue;
+			if (params.mode === "SEARCH" && params.promotionsOnly && !promocao.emPromocao) continue;
 
-			itens.push({
+			items.push({
 				chave,
 				produtoId: product.id,
 				produtoVarianteId: node.produtoVarianteId,
@@ -180,16 +180,16 @@ async function queryCatalog(database: ProductSearchDatabase, params: TLoadVisual
 		}
 	}
 
-	return { itens, limitado };
+	return { items, truncated };
 }
 
 /** Overrides de preço do canal do kit, por chave de item. Canal de outra organização é ignorado. */
 async function loadChannelPrices(
 	database: ProductSearchDatabase,
-	{ orgId, canalVendaId, produtoIds }: { orgId: string; canalVendaId: string | null; produtoIds: string[] },
+	{ organizationId, salesChannelId, productIds }: { organizationId: string; salesChannelId: string | null; productIds: string[] },
 ) {
 	const prices = new Map<string, number>();
-	if (!canalVendaId || produtoIds.length === 0) return prices;
+	if (!salesChannelId || productIds.length === 0) return prices;
 
 	const rows = await database
 		.select({
@@ -201,9 +201,9 @@ async function loadChannelPrices(
 		.innerJoin(salesChannels, eq(salesChannels.id, productChannelSettings.canalVendaId))
 		.where(
 			and(
-				eq(productChannelSettings.canalVendaId, canalVendaId),
-				eq(salesChannels.organizacaoId, orgId),
-				inArray(productChannelSettings.produtoId, produtoIds),
+				eq(productChannelSettings.canalVendaId, salesChannelId),
+				eq(salesChannels.organizacaoId, organizationId),
+				inArray(productChannelSettings.produtoId, productIds),
 				isNotNull(productChannelSettings.precoVenda),
 			),
 		);

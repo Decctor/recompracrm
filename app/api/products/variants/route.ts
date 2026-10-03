@@ -17,7 +17,7 @@ import {
 } from "@/services/drizzle/schema";
 import { and, eq } from "drizzle-orm";
 import { upsertProductAddOnOptions, validateAndResolveAddOnOptionLink } from "@/lib/products/add-on-options";
-import { buildPrecoVendaUpdate } from "@/lib/products/price-snapshot";
+import { buildSalePriceUpdate } from "@/lib/products/price-snapshot";
 
 const GetProductVariantsInputSchema = z.object({
 	productId: z
@@ -439,10 +439,9 @@ async function updateProductVariant({ input, session }: { input: TUpdateProductV
 				nome: input.productVariant.nome,
 				codigo: input.productVariant.codigo,
 				imagemCapaUrl: input.productVariant.imagemCapaUrl,
-				...buildPrecoVendaUpdate({
-					atual: existingVariant,
-					novoPrecoVenda: input.productVariant.precoVenda,
-					precoVendaAnteriorManual: input.productVariant.precoVendaAnterior,
+				...buildSalePriceUpdate({
+					current: existingVariant,
+					next: { precoVenda: input.productVariant.precoVenda, precoVendaAnterior: input.productVariant.precoVendaAnterior },
 				}),
 				precoCusto: input.productVariant.precoCusto,
 				codigoBarras: input.productVariant.codigoBarras,

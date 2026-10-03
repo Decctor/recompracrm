@@ -15,24 +15,24 @@ import {
 	type TVisualKitPieceRenderer,
 } from "./shared";
 
-const PAGE = VISUAL_KIT_FORMATS.STORY.pagina;
+const PAGE = VISUAL_KIT_FORMATS.STORY.page;
 
 function StoryPage({ props, page }: TVisualKitPageArgs) {
-	const { marca } = props;
-	const item = page.itens[0];
-	const frame = { size: PAGE, background: marca.corPrimaria, color: marca.corPrimariaForeground };
+	const { brand } = props;
+	const item = page.items[0];
+	const frame = { size: PAGE, background: brand.corPrimaria, color: brand.corPrimariaForeground };
 	if (!item) {
 		return (
 			<PageFrame {...frame}>
-				<EmptyNotice color={marca.corPrimariaForeground} size={48} />
+				<EmptyNotice color={brand.corPrimariaForeground} size={48} />
 			</PageFrame>
 		);
 	}
-	const display = resolveItemDisplay(item, props.opcoes);
-	const validade = formatValidity(props.validadeFim);
+	const display = resolveItemDisplay(item, props.configuracao);
+	const validity = formatValidity(props.validadeFim);
 	return (
 		<PageFrame {...frame} style={{ padding: "112px 75px 98px 75px", display: "flex", flexDirection: "column", alignItems: "center", gap: 45 }}>
-			<BrandLogo marca={marca} size={158} radius={34} wordmarkSize={56} />
+			<BrandLogo brand={brand} size={158} radius={34} wordmarkSize={56} />
 			<span
 				style={{
 					maxWidth: "100%",
@@ -48,8 +48,8 @@ function StoryPage({ props, page }: TVisualKitPageArgs) {
 				{props.chamada}
 			</span>
 			<div style={{ position: "relative", width: "100%", flex: 1, minHeight: 0 }}>
-				<ProductImage item={item} marca={marca} radius={52} padding={60} style={{ position: "absolute", inset: 0 }} />
-				{display.percentual != null ? (
+				<ProductImage item={item} brand={brand} radius={52} padding={60} style={{ position: "absolute", inset: 0 }} />
+				{display.percentualDesconto != null ? (
 					<span
 						style={{
 							position: "absolute",
@@ -58,8 +58,8 @@ function StoryPage({ props, page }: TVisualKitPageArgs) {
 							width: 195,
 							height: 195,
 							borderRadius: "50%",
-							background: marca.corSecundaria,
-							color: marca.corSecundariaForeground,
+							background: brand.corSecundaria,
+							color: brand.corSecundariaForeground,
 							display: "flex",
 							alignItems: "center",
 							justifyContent: "center",
@@ -68,7 +68,7 @@ function StoryPage({ props, page }: TVisualKitPageArgs) {
 							letterSpacing: "-0.03em",
 						}}
 					>
-						{discountLabel(display.percentual)}
+						{discountLabel(display.percentualDesconto)}
 					</span>
 				) : null}
 			</div>
@@ -77,8 +77,8 @@ function StoryPage({ props, page }: TVisualKitPageArgs) {
 			</span>
 			<div
 				style={{
-					background: marca.corSecundaria,
-					color: marca.corSecundariaForeground,
+					background: brand.corSecundaria,
+					color: brand.corSecundariaForeground,
 					borderRadius: 45,
 					padding: "30px 68px 38px 68px",
 					display: "flex",
@@ -90,13 +90,13 @@ function StoryPage({ props, page }: TVisualKitPageArgs) {
 				{display.precoDe != null ? <FromPrice value={display.precoDe} style={{ fontSize: 36, fontWeight: 600, opacity: 0.85 }} /> : null}
 				<PriceValue value={item.preco} size={202} />
 			</div>
-			{validade ? <span style={{ fontSize: 32, opacity: 0.75, letterSpacing: "0.08em", textTransform: "uppercase" }}>Válido até {validade}</span> : null}
+			{validity ? <span style={{ fontSize: 32, opacity: 0.75, letterSpacing: "0.08em", textTransform: "uppercase" }}>Válido até {validity}</span> : null}
 		</PageFrame>
 	);
 }
 
 export const storyRenderer: TVisualKitPieceRenderer = {
-	paginate: (props) => paginatePerItem(props.itens),
+	paginate: (props) => paginatePerItem(props.items),
 	pageSize: () => PAGE,
 	Page: StoryPage,
 };

@@ -20,13 +20,13 @@ export function downloadBlob(blob: Blob, fileName: string) {
 }
 
 export type TVisualKitZipEntry = {
-	pasta: string;
-	nome: string;
+	folder: string;
+	name: string;
 	/** Blob já gerado ou URL de um arquivo salvo (baixado com os cookies da sessão). */
 	source: Blob | string;
 };
 
-export type TVisualKitZipProgress = { concluidos: number; total: number };
+export type TVisualKitZipProgress = { done: number; total: number };
 
 async function readSource(source: Blob | string): Promise<Uint8Array> {
 	if (typeof source !== "string") return new Uint8Array(await source.arrayBuffer());
@@ -36,8 +36,8 @@ async function readSource(source: Blob | string): Promise<Uint8Array> {
 }
 
 function zipEntryPath(entry: TVisualKitZipEntry) {
-	const folder = entry.pasta.replace(/^\/+|\/+$/g, "");
-	return folder ? `${folder}/${entry.nome}` : entry.nome;
+	const folder = entry.folder.replace(/^\/+|\/+$/g, "");
+	return folder ? `${folder}/${entry.name}` : entry.name;
 }
 
 /**
@@ -47,25 +47,25 @@ function zipEntryPath(entry: TVisualKitZipEntry) {
  */
 export async function downloadVisualKitZip({
 	zipName,
-	arquivos,
+	files,
 	onProgress,
 }: {
 	zipName: string;
-	arquivos: TVisualKitZipEntry[];
+	files: TVisualKitZipEntry[];
 	onProgress?: (progress: TVisualKitZipProgress) => void;
 }): Promise<boolean> {
 	const writer = await openZipVolumeWriter({ fileNamePrefix: zipName.replace(/\.zip$/i, "") });
 	if (!writer) return false;
-	const total = arquivos.length;
-	let concluidos = 0;
-	onProgress?.({ concluidos, total });
+	const total = files.length;
+	let done = 0;
+	onProgress?.({ done, total });
 	try {
-		await mapWithConcurrency(arquivos, ZIP_FETCH_CONCURRENCY, async (entry) => {
+		await mapWithConcurrency(files, ZIP_FETCH_CONCURRENCY, async (entry) => {
 			const data = await readSource(entry.source);
 			writer.addFile(zipEntryPath(entry), data, { compress: false });
 			await writer.flush();
-			concluidos += 1;
-			onProgress?.({ concluidos, total });
+			done += 1;
+			onProgress?.({ done, total });
 		});
 		await writer.finish();
 		return true;

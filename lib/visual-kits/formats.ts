@@ -19,226 +19,226 @@ import {
 
 // Página em px CSS (96 dpi). A4 = 210 × 297 mm.
 const MM = 96 / 25.4;
-export const A4_PAGE = { largura: Math.round(210 * MM), altura: Math.round(297 * MM) };
+export const A4_PAGE = { width: Math.round(210 * MM), height: Math.round(297 * MM) };
 export const mmToPx = (mm: number) => mm * MM;
 
-export type TVisualKitFormatCategory = "PDV" | "ONLINE";
+export type TVisualKitFormatCategory = "POINT_OF_SALE" | "ONLINE";
 
-export type TVisualKitOutputOption = { id: TVisualKitOutputEnum; titulo: string; descricao: string };
+export type TVisualKitOutputOption = { id: TVisualKitOutputEnum; title: string; description: string };
 
 export type TVisualKitFormatSpec = {
 	id: TVisualKitFormatEnum;
-	nome: string;
-	descricao: string;
-	icone: LucideIcon;
-	categoria: TVisualKitFormatCategory;
-	tamanho: string; // rótulo exibido ("10 × 4 cm")
-	fatos: { rotulo: string; valor: string }[];
-	saidas: TVisualKitOutputOption[]; // a primeira é o padrão
-	usaChamada: boolean; // a peça imprime a chamada do kit
+	name: string;
+	description: string;
+	icon: LucideIcon;
+	category: TVisualKitFormatCategory;
+	sizeLabel: string; // rótulo exibido ("10 × 4 cm")
+	facts: { label: string; value: string }[];
+	outputs: TVisualKitOutputOption[]; // a primeira é o padrão
+	printsHeadline: boolean; // a peça imprime a chamada do kit
 	// Itens por página (folhas e listas) ou nulo quando é um item por imagem.
-	itensPorPagina: number | null;
+	itemsPerPage: number | null;
 	// Teto de itens da peça inteira (carrossel: 20 imagens no Instagram = capa + 18 + fechamento).
-	maxItens: number | null;
+	maxItems: number | null;
 	// Página em px CSS — folhas usam A4; digitais, o tamanho final em px.
-	pagina: { largura: number; altura: number };
+	page: { width: number; height: number };
 	// Miniatura proporcional usada nos cards de revisão [largura, altura, raio].
-	miniatura: [number, number, string];
+	thumbnail: [number, number, string];
 };
 
 export const VISUAL_KIT_FORMATS: Record<TVisualKitFormatEnum, TVisualKitFormatSpec> = {
 	ETIQUETA_GONDOLA: {
 		id: "ETIQUETA_GONDOLA",
-		nome: "Etiqueta de gôndola",
-		descricao: "Preço, nome e código de barras para a prateleira.",
-		icone: Tag,
-		categoria: "PDV",
-		tamanho: "10 × 4 cm",
-		fatos: [
-			{ rotulo: "Tamanho", valor: "10 × 4 cm" },
-			{ rotulo: "Folha", valor: "A4 · 14 etiquetas por folha" },
-			{ rotulo: "Saída", valor: "PDF para impressão" },
+		name: "Etiqueta de gôndola",
+		description: "Preço, nome e código de barras para a prateleira.",
+		icon: Tag,
+		category: "POINT_OF_SALE",
+		sizeLabel: "10 × 4 cm",
+		facts: [
+			{ label: "Tamanho", value: "10 × 4 cm" },
+			{ label: "Folha", value: "A4 · 14 etiquetas por folha" },
+			{ label: "Saída", value: "PDF para impressão" },
 		],
-		saidas: [
-			{ id: "PDF", titulo: "PDF para impressão", descricao: "A4 · 14 etiquetas por folha · linhas de corte" },
-			{ id: "PDF_ETIQUETADORA", titulo: "PDF para impressora de etiquetas", descricao: "Uma etiqueta por página · 10 × 4 cm" },
+		outputs: [
+			{ id: "PDF", title: "PDF para impressão", description: "A4 · 14 etiquetas por folha · linhas de corte" },
+			{ id: "PDF_ETIQUETADORA", title: "PDF para impressora de etiquetas", description: "Uma etiqueta por página · 10 × 4 cm" },
 		],
-		usaChamada: false,
-		itensPorPagina: 14,
-		maxItens: null,
-		pagina: A4_PAGE,
-		miniatura: [56, 22, "3px"],
+		printsHeadline: false,
+		itemsPerPage: 14,
+		maxItems: null,
+		page: A4_PAGE,
+		thumbnail: [56, 22, "3px"],
 	},
 	ADESIVO_PRECO: {
 		id: "ADESIVO_PRECO",
-		nome: "Adesivo de preço",
-		descricao: "Adesivo pequeno para colar direto na embalagem.",
-		icone: Sticker,
-		categoria: "PDV",
-		tamanho: "38 × 21 mm",
-		fatos: [
-			{ rotulo: "Tamanho", valor: "38 × 21 mm" },
-			{ rotulo: "Folha", valor: "A4 · 65 adesivos por folha" },
-			{ rotulo: "Saída", valor: "PDF para impressão" },
+		name: "Adesivo de preço",
+		description: "Adesivo pequeno para colar direto na embalagem.",
+		icon: Sticker,
+		category: "POINT_OF_SALE",
+		sizeLabel: "38 × 21 mm",
+		facts: [
+			{ label: "Tamanho", value: "38 × 21 mm" },
+			{ label: "Folha", value: "A4 · 65 adesivos por folha" },
+			{ label: "Saída", value: "PDF para impressão" },
 		],
-		saidas: [{ id: "PDF", titulo: "PDF para impressão", descricao: "A4 · 65 adesivos por folha · 38 × 21 mm" }],
-		usaChamada: false,
-		itensPorPagina: 65,
-		maxItens: null,
-		pagina: A4_PAGE,
-		miniatura: [50, 28, "4px"],
+		outputs: [{ id: "PDF", title: "PDF para impressão", description: "A4 · 65 adesivos por folha · 38 × 21 mm" }],
+		printsHeadline: false,
+		itemsPerPage: 65,
+		maxItems: null,
+		page: A4_PAGE,
+		thumbnail: [50, 28, "4px"],
 	},
 	WOBBLER: {
 		id: "WOBBLER",
-		nome: "Wobbler",
-		descricao: "Disco com haste que se destaca da prateleira, para a oferta principal.",
-		icone: CircleDot,
-		categoria: "PDV",
-		tamanho: "Ø 10 cm + haste de 4 cm",
-		fatos: [
-			{ rotulo: "Tamanho", valor: "Ø 10 cm + haste de 4 cm" },
-			{ rotulo: "Folha", valor: "A4 · 4 por folha" },
-			{ rotulo: "Saída", valor: "PDF com linhas de corte" },
+		name: "Wobbler",
+		description: "Disco com haste que se destaca da prateleira, para a oferta principal.",
+		icon: CircleDot,
+		category: "POINT_OF_SALE",
+		sizeLabel: "Ø 10 cm + haste de 4 cm",
+		facts: [
+			{ label: "Tamanho", value: "Ø 10 cm + haste de 4 cm" },
+			{ label: "Folha", value: "A4 · 4 por folha" },
+			{ label: "Saída", value: "PDF com linhas de corte" },
 		],
-		saidas: [{ id: "PDF", titulo: "PDF para impressão", descricao: "A4 · 4 por folha · linhas de corte e dobra" }],
-		usaChamada: false,
-		itensPorPagina: 4,
-		maxItens: null,
-		pagina: A4_PAGE,
-		miniatura: [44, 44, "9999px"],
+		outputs: [{ id: "PDF", title: "PDF para impressão", description: "A4 · 4 por folha · linhas de corte e dobra" }],
+		printsHeadline: false,
+		itemsPerPage: 4,
+		maxItems: null,
+		page: A4_PAGE,
+		thumbnail: [44, 44, "9999px"],
 	},
 	ENCARTE: {
 		id: "ENCARTE",
-		nome: "Encarte",
-		descricao: "Página A4 com até 9 ofertas, para imprimir ou mandar no WhatsApp.",
-		icone: Newspaper,
-		categoria: "PDV",
-		tamanho: "A4 · 21 × 29,7 cm",
-		fatos: [
-			{ rotulo: "Tamanho", valor: "A4 · 21 × 29,7 cm" },
-			{ rotulo: "Produtos", valor: "Até 9 por página" },
-			{ rotulo: "Saída", valor: "PDF ou PNG" },
+		name: "Encarte",
+		description: "Página A4 com até 9 ofertas, para imprimir ou mandar no WhatsApp.",
+		icon: Newspaper,
+		category: "POINT_OF_SALE",
+		sizeLabel: "A4 · 21 × 29,7 cm",
+		facts: [
+			{ label: "Tamanho", value: "A4 · 21 × 29,7 cm" },
+			{ label: "Produtos", value: "Até 9 por página" },
+			{ label: "Saída", value: "PDF ou PNG" },
 		],
-		saidas: [
-			{ id: "PDF", titulo: "PDF para impressão", descricao: "A4 · 300 dpi" },
-			{ id: "PNG", titulo: "Imagem PNG", descricao: "Para enviar no WhatsApp" },
+		outputs: [
+			{ id: "PDF", title: "PDF para impressão", description: "A4 · 300 dpi" },
+			{ id: "PNG", title: "Imagem PNG", description: "Para enviar no WhatsApp" },
 		],
-		usaChamada: true,
-		itensPorPagina: 9,
-		maxItens: null,
-		pagina: A4_PAGE,
-		miniatura: [38, 54, "3px"],
+		printsHeadline: true,
+		itemsPerPage: 9,
+		maxItems: null,
+		page: A4_PAGE,
+		thumbnail: [38, 54, "3px"],
 	},
 	SELO_PRODUTO: {
 		id: "SELO_PRODUTO",
-		nome: "Selo para foto do produto",
-		descricao: "Preço e desconto aplicados sobre a foto de cada produto.",
-		icone: Image,
-		categoria: "ONLINE",
-		tamanho: "1080 × 1080 px",
-		fatos: [
-			{ rotulo: "Tamanho", valor: "1080 × 1080 px" },
-			{ rotulo: "Uso", valor: "Loja digital, marketplaces e iFood" },
-			{ rotulo: "Saída", valor: "Uma imagem por produto" },
+		name: "Selo para foto do produto",
+		description: "Preço e desconto aplicados sobre a foto de cada produto.",
+		icon: Image,
+		category: "ONLINE",
+		sizeLabel: "1080 × 1080 px",
+		facts: [
+			{ label: "Tamanho", value: "1080 × 1080 px" },
+			{ label: "Uso", value: "Loja digital, marketplaces e iFood" },
+			{ label: "Saída", value: "Uma imagem por produto" },
 		],
-		saidas: [
-			{ id: "PNG", titulo: "PNG 1080 × 1080", descricao: "Um arquivo por produto, em .zip" },
-			{ id: "JPG", titulo: "JPG 1080 × 1080", descricao: "Arquivos menores, aceitos por todos os marketplaces" },
+		outputs: [
+			{ id: "PNG", title: "PNG 1080 × 1080", description: "Um arquivo por produto, em .zip" },
+			{ id: "JPG", title: "JPG 1080 × 1080", description: "Arquivos menores, aceitos por todos os marketplaces" },
 		],
-		usaChamada: false,
-		itensPorPagina: null,
-		maxItens: null,
-		pagina: { largura: 1080, altura: 1080 },
-		miniatura: [46, 46, "4px"],
+		printsHeadline: false,
+		itemsPerPage: null,
+		maxItems: null,
+		page: { width: 1080, height: 1080 },
+		thumbnail: [46, 46, "4px"],
 	},
 	POST_FEED: {
 		id: "POST_FEED",
-		nome: "Post para feed",
-		descricao: "Post quadrado com foto, nome e preço do produto.",
-		icone: Square,
-		categoria: "ONLINE",
-		tamanho: "1080 × 1080 px",
-		fatos: [
-			{ rotulo: "Tamanho", valor: "1080 × 1080 px" },
-			{ rotulo: "Uso", valor: "Instagram e Facebook" },
-			{ rotulo: "Saída", valor: "Uma imagem por produto" },
+		name: "Post para feed",
+		description: "Post quadrado com foto, nome e preço do produto.",
+		icon: Square,
+		category: "ONLINE",
+		sizeLabel: "1080 × 1080 px",
+		facts: [
+			{ label: "Tamanho", value: "1080 × 1080 px" },
+			{ label: "Uso", value: "Instagram e Facebook" },
+			{ label: "Saída", value: "Uma imagem por produto" },
 		],
-		saidas: [
-			{ id: "PNG", titulo: "PNG 1080 × 1080", descricao: "Um arquivo por produto, em .zip" },
-			{ id: "JPG", titulo: "JPG 1080 × 1080", descricao: "Arquivos menores" },
+		outputs: [
+			{ id: "PNG", title: "PNG 1080 × 1080", description: "Um arquivo por produto, em .zip" },
+			{ id: "JPG", title: "JPG 1080 × 1080", description: "Arquivos menores" },
 		],
-		usaChamada: true,
-		itensPorPagina: null,
-		maxItens: null,
-		pagina: { largura: 1080, altura: 1080 },
-		miniatura: [46, 46, "4px"],
+		printsHeadline: true,
+		itemsPerPage: null,
+		maxItems: null,
+		page: { width: 1080, height: 1080 },
+		thumbnail: [46, 46, "4px"],
 	},
 	STORY: {
 		id: "STORY",
-		nome: "Story",
-		descricao: "Formato vertical para stories e status do WhatsApp.",
-		icone: Smartphone,
-		categoria: "ONLINE",
-		tamanho: "1080 × 1920 px",
-		fatos: [
-			{ rotulo: "Tamanho", valor: "1080 × 1920 px" },
-			{ rotulo: "Uso", valor: "Stories e status do WhatsApp" },
-			{ rotulo: "Saída", valor: "Uma imagem por produto" },
+		name: "Story",
+		description: "Formato vertical para stories e status do WhatsApp.",
+		icon: Smartphone,
+		category: "ONLINE",
+		sizeLabel: "1080 × 1920 px",
+		facts: [
+			{ label: "Tamanho", value: "1080 × 1920 px" },
+			{ label: "Uso", value: "Stories e status do WhatsApp" },
+			{ label: "Saída", value: "Uma imagem por produto" },
 		],
-		saidas: [
-			{ id: "PNG", titulo: "PNG 1080 × 1920", descricao: "Um arquivo por produto, em .zip" },
-			{ id: "JPG", titulo: "JPG 1080 × 1920", descricao: "Arquivos menores" },
+		outputs: [
+			{ id: "PNG", title: "PNG 1080 × 1920", description: "Um arquivo por produto, em .zip" },
+			{ id: "JPG", title: "JPG 1080 × 1920", description: "Arquivos menores" },
 		],
-		usaChamada: true,
-		itensPorPagina: null,
-		maxItens: null,
-		pagina: { largura: 1080, altura: 1920 },
-		miniatura: [30, 54, "5px"],
+		printsHeadline: true,
+		itemsPerPage: null,
+		maxItems: null,
+		page: { width: 1080, height: 1920 },
+		thumbnail: [30, 54, "5px"],
 	},
 	CARROSSEL: {
 		id: "CARROSSEL",
-		nome: "Carrossel",
-		descricao: "Capa, um produto por página e fechamento, para arrastar no feed.",
-		icone: GalleryHorizontal,
-		categoria: "ONLINE",
-		tamanho: "1080 × 1350 px (4:5)",
-		fatos: [
-			{ rotulo: "Tamanho", valor: "1080 × 1350 px (4:5)" },
-			{ rotulo: "Páginas", valor: "Capa + produtos + fechamento · até 20" },
-			{ rotulo: "Saída", valor: "Imagens numeradas em .zip" },
+		name: "Carrossel",
+		description: "Capa, um produto por página e fechamento, para arrastar no feed.",
+		icon: GalleryHorizontal,
+		category: "ONLINE",
+		sizeLabel: "1080 × 1350 px (4:5)",
+		facts: [
+			{ label: "Tamanho", value: "1080 × 1350 px (4:5)" },
+			{ label: "Páginas", value: "Capa + produtos + fechamento · até 20" },
+			{ label: "Saída", value: "Imagens numeradas em .zip" },
 		],
-		saidas: [
-			{ id: "PNG", titulo: "PNG 1080 × 1350", descricao: "Páginas numeradas, em .zip" },
-			{ id: "JPG", titulo: "JPG 1080 × 1350", descricao: "Arquivos menores" },
+		outputs: [
+			{ id: "PNG", title: "PNG 1080 × 1350", description: "Páginas numeradas, em .zip" },
+			{ id: "JPG", title: "JPG 1080 × 1350", description: "Arquivos menores" },
 		],
-		usaChamada: true,
-		itensPorPagina: null,
-		maxItens: 18,
-		pagina: { largura: 1080, altura: 1350 },
-		miniatura: [40, 50, "4px"],
+		printsHeadline: true,
+		itemsPerPage: null,
+		maxItems: 18,
+		page: { width: 1080, height: 1350 },
+		thumbnail: [40, 50, "4px"],
 	},
 	LISTA_WHATSAPP: {
 		id: "LISTA_WHATSAPP",
-		nome: "Lista para WhatsApp",
-		descricao: "Todas as ofertas numa imagem só, para mandar em conversas e grupos.",
-		icone: MessageCircle,
-		categoria: "ONLINE",
-		tamanho: "1080 px de largura",
-		fatos: [
-			{ rotulo: "Tamanho", valor: "1080 px de largura" },
-			{ rotulo: "Produtos", valor: "Até 12 por imagem" },
-			{ rotulo: "Saída", valor: "PNG ou PDF" },
+		name: "Lista para WhatsApp",
+		description: "Todas as ofertas numa imagem só, para mandar em conversas e grupos.",
+		icon: MessageCircle,
+		category: "ONLINE",
+		sizeLabel: "1080 px de largura",
+		facts: [
+			{ label: "Tamanho", value: "1080 px de largura" },
+			{ label: "Produtos", value: "Até 12 por imagem" },
+			{ label: "Saída", value: "PNG ou PDF" },
 		],
-		saidas: [
-			{ id: "PNG", titulo: "Imagem PNG", descricao: "1080 px de largura · para conversas e grupos" },
-			{ id: "PDF", titulo: "PDF", descricao: "Uma página, para imprimir ou anexar" },
+		outputs: [
+			{ id: "PNG", title: "Imagem PNG", description: "1080 px de largura · para conversas e grupos" },
+			{ id: "PDF", title: "PDF", description: "Uma página, para imprimir ou anexar" },
 		],
-		usaChamada: true,
-		itensPorPagina: 12,
-		maxItens: 12,
+		printsHeadline: true,
+		itemsPerPage: 12,
+		maxItems: 12,
 		// Altura cresce com a quantidade de itens: 480 de cabeçalho/rodapé + 150 por item.
-		pagina: { largura: 1080, altura: 480 + 12 * 150 },
-		miniatura: [26, 56, "4px"],
+		page: { width: 1080, height: 480 + 12 * 150 },
+		thumbnail: [26, 56, "4px"],
 	},
 };
 
@@ -257,41 +257,41 @@ export const VISUAL_KIT_FORMAT_ORDER: TVisualKitFormatEnum[] = [
 
 export const VISUAL_KIT_CATEGORIES: {
 	id: TVisualKitFormatCategory;
-	nome: string;
-	chamada: string;
-	descricao: string;
-	icone: LucideIcon;
+	name: string;
+	tagline: string;
+	description: string;
+	icon: LucideIcon;
 }[] = [
 	{
-		id: "PDV",
-		nome: "Ponto de venda",
-		chamada: "Para imprimir e usar na loja",
-		descricao: "Etiquetas, adesivos, wobblers e encartes impressos, com preço, código de barras e validade.",
-		icone: Store,
+		id: "POINT_OF_SALE",
+		name: "Ponto de venda",
+		tagline: "Para imprimir e usar na loja",
+		description: "Etiquetas, adesivos, wobblers e encartes impressos, com preço, código de barras e validade.",
+		icon: Store,
 	},
 	{
 		id: "ONLINE",
-		nome: "Online",
-		chamada: "Para loja digital, marketplaces e redes",
-		descricao: "Selos sobre a foto do produto, posts, stories, carrosséis e listas para WhatsApp.",
-		icone: Globe,
+		name: "Online",
+		tagline: "Para loja digital, marketplaces e redes",
+		description: "Selos sobre a foto do produto, posts, stories, carrosséis e listas para WhatsApp.",
+		icon: Globe,
 	},
 ];
 
-export const VISUAL_KIT_PRESETS: { id: string; nome: string; descricao: string; formatos: TVisualKitFormatEnum[] }[] = [
+export const VISUAL_KIT_PRESETS: { id: string; name: string; description: string; formats: TVisualKitFormatEnum[] }[] = [
 	{
 		id: "semana",
-		nome: "Oferta da semana",
-		descricao: "Encarte, redes e WhatsApp com as mesmas ofertas.",
-		formatos: ["ENCARTE", "POST_FEED", "STORY", "LISTA_WHATSAPP"],
+		name: "Oferta da semana",
+		description: "Encarte, redes e WhatsApp com as mesmas ofertas.",
+		formats: ["ENCARTE", "POST_FEED", "STORY", "LISTA_WHATSAPP"],
 	},
 	{
 		id: "etiquetagem",
-		nome: "Etiquetagem da loja",
-		descricao: "Preço na prateleira, na embalagem e um destaque.",
-		formatos: ["ETIQUETA_GONDOLA", "ADESIVO_PRECO", "WOBBLER"],
+		name: "Etiquetagem da loja",
+		description: "Preço na prateleira, na embalagem e um destaque.",
+		formats: ["ETIQUETA_GONDOLA", "ADESIVO_PRECO", "WOBBLER"],
 	},
-	{ id: "digital", nome: "Vitrine digital", descricao: "Loja digital, marketplaces e redes.", formatos: ["SELO_PRODUTO", "STORY", "CARROSSEL"] },
+	{ id: "digital", name: "Vitrine digital", description: "Loja digital, marketplaces e redes.", formats: ["SELO_PRODUTO", "STORY", "CARROSSEL"] },
 ];
 
 export function sortVisualKitFormats<T extends { formato: TVisualKitFormatEnum }>(pieces: T[]): T[] {
@@ -300,7 +300,7 @@ export function sortVisualKitFormats<T extends { formato: TVisualKitFormatEnum }
 
 /** Quantos itens a peça usa de fato (respeita o teto do formato). */
 export function visualKitPieceItemCount(formato: TVisualKitFormatEnum, total: number) {
-	const max = VISUAL_KIT_FORMATS[formato].maxItens;
+	const max = VISUAL_KIT_FORMATS[formato].maxItems;
 	return max == null ? total : Math.min(total, max);
 }
 

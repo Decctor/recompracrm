@@ -128,7 +128,7 @@ async function getVisualKits({ input, session }: { input: TGetVisualKitsInput; s
 				)
 		: [];
 	const priceChanges = await countVisualKitPriceChanges({
-		orgId: organizationId,
+		organizationId,
 		kits: generatedKits.map((kit) => ({ id: kit.id, canalVendaId: kit.canalVendaId, itens: generatedItems.filter((item) => item.kitId === kit.id) })),
 	});
 
@@ -162,7 +162,7 @@ async function getVisualKitsRoute(request: NextRequest) {
 // -----------------------------------------------------------------------------
 const VisualKitPayloadSchema = z.object({
 	kit: VisualKitSchema.omit({ organizacaoId: true, status: true, autorId: true }),
-	pecas: z
+	pieces: z
 		.array(VisualKitPieceSchema, {
 			required_error: "Peças do kit não informadas.",
 			invalid_type_error: "Tipo não válido para peças do kit.",
@@ -171,15 +171,15 @@ const VisualKitPayloadSchema = z.object({
 			const seen = new Set<string>();
 			for (const piece of pieces) {
 				if (seen.has(piece.formato)) {
-					ctx.addIssue({ code: z.ZodIssueCode.custom, message: `A peça "${VISUAL_KIT_FORMATS[piece.formato].nome}" aparece mais de uma vez no kit.` });
+					ctx.addIssue({ code: z.ZodIssueCode.custom, message: `A peça "${VISUAL_KIT_FORMATS[piece.formato].name}" aparece mais de uma vez no kit.` });
 				}
 				seen.add(piece.formato);
-				if (!VISUAL_KIT_FORMATS[piece.formato].saidas.some((output) => output.id === piece.saida)) {
-					ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Saída inválida para a peça "${VISUAL_KIT_FORMATS[piece.formato].nome}".` });
+				if (!VISUAL_KIT_FORMATS[piece.formato].outputs.some((output) => output.id === piece.saida)) {
+					ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Saída inválida para a peça "${VISUAL_KIT_FORMATS[piece.formato].name}".` });
 				}
 			}
 		}),
-	itens: z
+	items: z
 		.array(VisualKitItemSchema, {
 			required_error: "Produtos do kit não informados.",
 			invalid_type_error: "Tipo não válido para produtos do kit.",
@@ -206,7 +206,7 @@ async function validateVisualKitReferences(tx: DBTransaction, organizationId: st
 		if (!channel) throw new createHttpError.BadRequest("Canal de venda não encontrado.");
 	}
 
-	const productIds = [...new Set(payload.itens.map((item) => item.produtoId))];
+	const productIds = [...new Set(payload.items.map((item) => item.produtoId))];
 	if (productIds.length) {
 		const found = await tx
 			.select({ id: products.id })
@@ -215,14 +215,14 @@ async function validateVisualKitReferences(tx: DBTransaction, organizationId: st
 		if (found.length !== productIds.length) throw new createHttpError.BadRequest("Algum produto do kit não foi encontrado.");
 	}
 
-	const variantIds = [...new Set(payload.itens.flatMap((item) => (item.produtoVarianteId ? [item.produtoVarianteId] : [])))];
+	const variantIds = [...new Set(payload.items.flatMap((item) => (item.produtoVarianteId ? [item.produtoVarianteId] : [])))];
 	if (variantIds.length) {
 		const found = await tx
 			.select({ id: productVariants.id, produtoId: productVariants.produtoId })
 			.from(productVariants)
 			.where(and(eq(productVariants.organizacaoId, organizationId), inArray(productVariants.id, variantIds)));
 		const productByVariant = new Map(found.map((variant) => [variant.id, variant.produtoId]));
-		for (const item of payload.itens) {
+		for (const item of payload.items) {
 			if (item.produtoVarianteId && productByVariant.get(item.produtoVarianteId) !== item.produtoId) {
 				throw new createHttpError.BadRequest("Alguma variante do kit não foi encontrada.");
 			}
@@ -236,7 +236,7 @@ async function validateVisualKitReferences(tx: DBTransaction, organizationId: st
  * "Preço mudou" depois da geração.
  */
 async function syncVisualKitChildren(tx: DBTransaction, organizationId: string, kitId: string, payload: TVisualKitPayload) {
-	const formats = payload.pecas.map((piece) => piece.formato);
+	const formats = payload.pieces.map((piece) => piece.formato);
 	// Arquivos gerados de peças que saem do kit: lidos antes do delete (a ligação cai em cascata).
 	const orphanFileIds = (
 		await tx
@@ -248,7 +248,7 @@ async function syncVisualKitChildren(tx: DBTransaction, organizationId: string, 
 	await tx
 		.delete(visualKitPieces)
 		.where(and(eq(visualKitPieces.kitId, kitId), formats.length ? notInArray(visualKitPieces.formato, formats) : undefined));
-	for (const piece of payload.pecas) {
+	for (const piece of payload.pieces) {
 		await tx
 			.insert(visualKitPieces)
 			.values({ organizacaoId: organizationId, kitId, formato: piece.formato, saida: piece.saida, ordem: piece.ordem, configuracao: piece.configuracao })
@@ -263,13 +263,13 @@ async function syncVisualKitChildren(tx: DBTransaction, organizationId: string, 
 		.from(visualKitItems)
 		.where(eq(visualKitItems.kitId, kitId));
 	const existingByKey = new Map(existingItems.map((item) => [visualKitItemKey(item), item.id]));
-	const incomingKeys = new Set(payload.itens.map(visualKitItemKey));
+	const incomingKeys = new Set(payload.items.map(visualKitItemKey));
 
 	const removedIds = existingItems.filter((item) => !incomingKeys.has(visualKitItemKey(item))).map((item) => item.id);
 	if (removedIds.length) await tx.delete(visualKitItems).where(inArray(visualKitItems.id, removedIds));
 
 	const newItems: (typeof visualKitItems.$inferInsert)[] = [];
-	for (const item of payload.itens) {
+	for (const item of payload.items) {
 		const existingId = existingByKey.get(visualKitItemKey(item));
 		if (existingId) {
 			await tx.update(visualKitItems).set({ ordem: item.ordem }).where(eq(visualKitItems.id, existingId));

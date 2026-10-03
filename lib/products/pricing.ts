@@ -20,32 +20,32 @@ const NO_PROMOTION: TPromotionResolution = { emPromocao: false, precoDe: null, p
  * Promoção inferida do snapshot: o preço anterior é maior que o atual e a mudança foi há no máximo
  * `PROMOTION_PREVIOUS_PRICE_WINDOW_DAYS` dias.
  *
- * `precoAtual` é o preço efetivo de onde a peça é exibida — o do canal (`resolveChannelPrice`) quando
+ * `currentPrice` é o preço efetivo de onde a peça é exibida — o do canal (`resolveChannelPrice`) quando
  * houver um, senão o preço base. O "De" é sempre o anterior do preço base: preços por canal não têm
  * snapshot.
  */
 export function resolvePromotion({
-	precoAtual,
+	currentPrice,
 	precoVendaAnterior,
 	dataAlteracaoPrecoVenda,
-	agora = new Date(),
+	now = new Date(),
 }: {
-	precoAtual: number | null;
+	currentPrice: number | null;
 	precoVendaAnterior: number | null;
 	dataAlteracaoPrecoVenda: Date | string | null;
-	agora?: Date;
+	now?: Date;
 }): TPromotionResolution {
-	if (precoAtual == null || precoVendaAnterior == null || dataAlteracaoPrecoVenda == null) return NO_PROMOTION;
-	if (precoVendaAnterior <= precoAtual || isSamePrice(precoVendaAnterior, precoAtual)) return NO_PROMOTION;
+	if (currentPrice == null || precoVendaAnterior == null || dataAlteracaoPrecoVenda == null) return NO_PROMOTION;
+	if (precoVendaAnterior <= currentPrice || isSamePrice(precoVendaAnterior, currentPrice)) return NO_PROMOTION;
 
 	const changedAt = new Date(dataAlteracaoPrecoVenda).getTime();
 	if (Number.isNaN(changedAt)) return NO_PROMOTION;
-	const elapsed = agora.getTime() - changedAt;
+	const elapsed = now.getTime() - changedAt;
 	if (elapsed > PROMOTION_PREVIOUS_PRICE_WINDOW_DAYS * DAY_MS) return NO_PROMOTION;
 
 	return {
 		emPromocao: true,
 		precoDe: precoVendaAnterior,
-		percentualDesconto: Math.round((1 - precoAtual / precoVendaAnterior) * 100),
+		percentualDesconto: Math.round((1 - currentPrice / precoVendaAnterior) * 100),
 	};
 }

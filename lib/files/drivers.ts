@@ -19,7 +19,7 @@ export type TStorageDriver = {
 	 */
 	createSignedUpload: (input: { bucket: string; caminho: string }) => Promise<{ signedUrl: string; token: string }>;
 	/** Remove todos os objetos diretamente sob a "pasta" (envio direto abandonado). */
-	removeFolder: (input: { bucket: string; pasta: string }) => Promise<void>;
+	removeFolder: (input: { bucket: string; prefix: string }) => Promise<void>;
 };
 
 async function getSupabaseStorage() {
@@ -60,11 +60,11 @@ const supabaseDriver: TStorageDriver = {
 		if (error || !data) throw new createHttpError.InternalServerError("Não foi possível preparar o envio do arquivo.");
 		return { signedUrl: data.signedUrl, token: data.token };
 	},
-	removeFolder: async ({ bucket, pasta }) => {
+	removeFolder: async ({ bucket, prefix }) => {
 		const storage = await getSupabaseStorage();
-		const { data, error } = await storage.from(bucket).list(pasta);
+		const { data, error } = await storage.from(bucket).list(prefix);
 		if (error) throw new createHttpError.InternalServerError("Não foi possível listar os arquivos do armazenamento.");
-		const paths = (data ?? []).map((object) => `${pasta.replace(/\/$/, "")}/${object.name}`);
+		const paths = (data ?? []).map((object) => `${prefix.replace(/\/$/, "")}/${object.name}`);
 		if (paths.length) await storage.from(bucket).remove(paths);
 	},
 };

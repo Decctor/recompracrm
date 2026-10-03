@@ -111,10 +111,10 @@ type TRasterizePageArgs = {
 	fontEmbedCSS?: string;
 };
 
-async function rasterizeNode(node: HTMLElement, size: { largura: number; altura: number }, pixelRatio: number, fontEmbedCSS?: string) {
+async function rasterizeNode(node: HTMLElement, size: { width: number; height: number }, pixelRatio: number, fontEmbedCSS?: string) {
 	return toCanvas(node, {
-		width: size.largura,
-		height: size.altura,
+		width: size.width,
+		height: size.height,
 		pixelRatio,
 		backgroundColor: "#ffffff",
 		fontEmbedCSS,

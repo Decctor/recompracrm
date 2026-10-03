@@ -9,11 +9,11 @@ import Link from "next/link";
 import { type TKitSaveStatus, useKitBuilder } from "./kit-builder-context";
 
 const SAVE_STATUS: Record<TKitSaveStatus, { label: string; className: string; icon: typeof CircleCheck }> = {
-	NOVO: { label: "Rascunho", className: "bg-muted text-muted-foreground", icon: CircleDashed },
-	PENDENTE: { label: "Alterações não salvas", className: "bg-muted text-muted-foreground", icon: CircleDashed },
-	SALVANDO: { label: "Salvando", className: "bg-brand/10 text-brand", icon: LoaderCircle },
-	SALVO: { label: "Rascunho salvo", className: "bg-green-500/15 text-green-600 dark:text-green-400", icon: CircleCheck },
-	ERRO: { label: "Erro ao salvar", className: "bg-destructive/10 text-destructive", icon: CircleAlert },
+	NEW: { label: "Rascunho", className: "bg-muted text-muted-foreground", icon: CircleDashed },
+	PENDING: { label: "Alterações não salvas", className: "bg-muted text-muted-foreground", icon: CircleDashed },
+	SAVING: { label: "Salvando", className: "bg-brand/10 text-brand", icon: LoaderCircle },
+	SAVED: { label: "Rascunho salvo", className: "bg-green-500/15 text-green-600 dark:text-green-400", icon: CircleCheck },
+	ERROR: { label: "Erro ao salvar", className: "bg-destructive/10 text-destructive", icon: CircleAlert },
 };
 
 export default function KitBuilderHeader() {
@@ -38,15 +38,15 @@ export default function KitBuilderHeader() {
 				</div>
 				<button
 					type="button"
-					onClick={() => (saveStatus === "ERRO" ? void saveNow() : undefined)}
+					onClick={() => (saveStatus === "ERROR" ? void saveNow() : undefined)}
 					className={cn(
 						"flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide",
 						status.className,
-						saveStatus !== "ERRO" && "cursor-default",
+						saveStatus !== "ERROR" && "cursor-default",
 					)}
-					title={saveStatus === "ERRO" ? "Tentar salvar de novo" : undefined}
+					title={saveStatus === "ERROR" ? "Tentar salvar de novo" : undefined}
 				>
-					<StatusIcon className={cn("h-3.5 w-3.5", saveStatus === "SALVANDO" && "animate-spin")} />
+					<StatusIcon className={cn("h-3.5 w-3.5", saveStatus === "SAVING" && "animate-spin")} />
 					{status.label}
 				</button>
 			</div>

@@ -29,7 +29,7 @@ export function proxyVisualKitImageUrl(url: string | null, origin: string | null
 export function withProxiedImages(props: TVisualKitPieceProps, origin: string | null = currentOrigin()): TVisualKitPieceProps {
 	return {
 		...props,
-		itens: props.itens.map((item) => ({ ...item, imagemUrl: proxyVisualKitImageUrl(item.imagemUrl, origin) })),
-		marca: { ...props.marca, logoUrl: proxyVisualKitImageUrl(props.marca.logoUrl, origin) },
+		items: props.items.map((item) => ({ ...item, imagemUrl: proxyVisualKitImageUrl(item.imagemUrl, origin) })),
+		brand: { ...props.brand, logoUrl: proxyVisualKitImageUrl(props.brand.logoUrl, origin) },
 	};
 }

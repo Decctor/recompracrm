@@ -23,7 +23,7 @@ export default function KitBuilderStepper() {
 			<ol className="flex w-full items-center gap-1 overflow-x-auto scrollbar-thin scrollbar-track-primary/10 scrollbar-thumb-primary/30">
 				{KIT_STAGE_IDS.map((stageId, index) => {
 					const meta = KIT_STAGES[stageId];
-					const Icon = meta.icone;
+					const Icon = meta.icon;
 					const isActive = stageId === stage;
 					const isComplete = index < currentIndex;
 					const isClickable = index <= currentIndex || canNavigateFreely;

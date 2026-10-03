@@ -11,7 +11,7 @@ import { z } from "zod";
 // (`produtoId:produtoVarianteId`) para pré-visualizar as peças com preços atuais.
 const GetVisualKitCatalogInputSchema = z.object({
 	search: ProductSearchQuerySchema,
-	canalVendaId: z
+	salesChannelId: z
 		.string({ invalid_type_error: "Tipo inválido para canal de venda." })
 		.optional()
 		.nullable()
@@ -34,13 +34,13 @@ async function getVisualKitCatalog({ input, session }: { input: TGetVisualKitCat
 	if (!organizationId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
 
 	const result = input.keys
-		? await loadVisualKitCatalog({ orgId: organizationId, canalVendaId: input.canalVendaId, modo: "CHAVES", chaves: input.keys })
+		? await loadVisualKitCatalog({ organizationId, salesChannelId: input.salesChannelId, mode: "KEYS", keys: input.keys })
 		: await loadVisualKitCatalog({
-				orgId: organizationId,
-				canalVendaId: input.canalVendaId,
-				modo: "BUSCA",
-				busca: input.search,
-				somentePromocao: input.promo,
+				organizationId,
+				salesChannelId: input.salesChannelId,
+				mode: "SEARCH",
+				search: input.search,
+				promotionsOnly: input.promo,
 			});
 
 	return { data: result, message: "Catálogo carregado com sucesso." };
@@ -53,7 +53,7 @@ async function getVisualKitCatalogRoute(request: NextRequest) {
 	const searchParams = request.nextUrl.searchParams;
 	const input = GetVisualKitCatalogInputSchema.parse({
 		search: searchParams.get("search"),
-		canalVendaId: searchParams.get("canalVendaId"),
+		salesChannelId: searchParams.get("salesChannelId"),
 		promo: searchParams.get("promo"),
 		keys: searchParams.get("keys"),
 	});

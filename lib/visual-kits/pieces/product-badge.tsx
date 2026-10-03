@@ -18,16 +18,16 @@ import {
 	accentOnPaper,
 } from "./shared";
 
-const PAGE = VISUAL_KIT_FORMATS.SELO_PRODUTO.pagina;
+const PAGE = VISUAL_KIT_FORMATS.SELO_PRODUTO.page;
 const BAR_HEIGHT = 255;
 
 /** Logo no canto (com contorno branco para destacar da foto) ou nome da organização num selo branco. */
-function CornerBrand({ marca }: { marca: TVisualKitBrand }) {
-	if (marca.logoUrl) {
+function CornerBrand({ brand }: { brand: TVisualKitBrand }) {
+	if (brand.logoUrl) {
 		return (
 			<LogoImage
-				src={marca.logoUrl}
-				alt={marca.nome}
+				src={brand.logoUrl}
+				alt={brand.nome}
 				size={147}
 				radius={34}
 				style={{ position: "absolute", right: 49, top: 49, boxShadow: "0 0 0 10px #ffffff, 0 10px 30px rgba(0,0,0,0.15)" }}
@@ -41,20 +41,20 @@ function CornerBrand({ marca }: { marca: TVisualKitBrand }) {
 				right: 49,
 				top: 49,
 				background: PAPER,
-				color: accentOnPaper(marca),
+				color: accentOnPaper(brand),
 				borderRadius: 24,
 				padding: "18px 28px",
 				boxShadow: "0 10px 30px rgba(0,0,0,0.12)",
 			}}
 		>
-			<Wordmark marca={marca} size={40} />
+			<Wordmark brand={brand} size={40} />
 		</div>
 	);
 }
 
-function SeloPage({ props, page }: TVisualKitPageArgs) {
-	const { marca } = props;
-	const item = page.itens[0];
+function ProductBadgePage({ props, page }: TVisualKitPageArgs) {
+	const { brand } = props;
+	const item = page.items[0];
 	if (!item) {
 		return (
 			<PageFrame size={PAGE} background={PAPER}>
@@ -62,18 +62,18 @@ function SeloPage({ props, page }: TVisualKitPageArgs) {
 			</PageFrame>
 		);
 	}
-	const display = resolveItemDisplay(item, props.opcoes);
+	const display = resolveItemDisplay(item, props.configuracao);
 	return (
 		<PageFrame size={PAGE} background={PAPER}>
-			<ProductImage item={item} marca={marca} padding={70} style={{ position: "absolute", inset: `0 0 ${BAR_HEIGHT}px 0` }} />
-			{display.percentual != null ? (
+			<ProductImage item={item} brand={brand} padding={70} style={{ position: "absolute", inset: `0 0 ${BAR_HEIGHT}px 0` }} />
+			{display.percentualDesconto != null ? (
 				<div
 					style={{
 						position: "absolute",
 						left: 0,
 						top: 0,
-						background: marca.corSecundaria,
-						color: marca.corSecundariaForeground,
+						background: brand.corSecundaria,
+						color: brand.corSecundariaForeground,
 						padding: "30px 44px 26px 49px",
 						borderBottomRightRadius: 49,
 						fontSize: 88,
@@ -82,10 +82,10 @@ function SeloPage({ props, page }: TVisualKitPageArgs) {
 						letterSpacing: "-0.03em",
 					}}
 				>
-					{discountLabel(display.percentual)}
+					{discountLabel(display.percentualDesconto)}
 				</div>
 			) : null}
-			<CornerBrand marca={marca} />
+			<CornerBrand brand={brand} />
 			<div
 				style={{
 					position: "absolute",
@@ -93,9 +93,9 @@ function SeloPage({ props, page }: TVisualKitPageArgs) {
 					right: 0,
 					bottom: 0,
 					height: BAR_HEIGHT,
-					background: marca.corPrimaria,
-					color: marca.corPrimariaForeground,
-					boxShadow: `inset 0 15px 0 ${marca.corSecundaria}`,
+					background: brand.corPrimaria,
+					color: brand.corPrimariaForeground,
+					boxShadow: `inset 0 15px 0 ${brand.corSecundaria}`,
 					display: "flex",
 					alignItems: "center",
 					gap: 49,
@@ -105,7 +105,7 @@ function SeloPage({ props, page }: TVisualKitPageArgs) {
 			>
 				<div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 10 }}>
 					<span style={{ fontSize: 52, fontWeight: 700, lineHeight: 1.05, letterSpacing: "-0.01em", ...clampLines(2) }}>{item.nome}</span>
-					{display.precoDe != null ? <FromPrice value={display.precoDe} withPor={false} style={{ fontSize: 38, opacity: 0.75 }} /> : null}
+					{display.precoDe != null ? <FromPrice value={display.precoDe} withSuffix={false} style={{ fontSize: 38, opacity: 0.75 }} /> : null}
 				</div>
 				<FlatPrice value={item.preco} size={118} />
 			</div>
@@ -113,8 +113,8 @@ function SeloPage({ props, page }: TVisualKitPageArgs) {
 	);
 }
 
-export const seloProdutoRenderer: TVisualKitPieceRenderer = {
-	paginate: (props) => paginatePerItem(props.itens),
+export const productBadgeRenderer: TVisualKitPieceRenderer = {
+	paginate: (props) => paginatePerItem(props.items),
 	pageSize: () => PAGE,
-	Page: SeloPage,
+	Page: ProductBadgePage,
 };

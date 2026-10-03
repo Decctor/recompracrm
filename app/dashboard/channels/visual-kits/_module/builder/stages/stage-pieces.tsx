@@ -15,7 +15,7 @@ export default function StagePieces() {
 
 	return (
 		<StageShell>
-			<StageShell.Title icon={KIT_STAGES.pecas.icone} label={KIT_STAGES.pecas.titulo} description={KIT_STAGES.pecas.descricao} />
+			<StageShell.Title icon={KIT_STAGES.pieces.icon} label={KIT_STAGES.pieces.title} description={KIT_STAGES.pieces.description} />
 			<StageShell.Body className="gap-6">
 				<section className="flex flex-col gap-3">
 					<div className="flex flex-col">
@@ -24,12 +24,12 @@ export default function StagePieces() {
 					</div>
 					<div className="grid grid-cols-1 gap-3 md:grid-cols-3">
 						{VISUAL_KIT_PRESETS.map((preset) => {
-							const isActive = preset.formatos.length === count && preset.formatos.every((formato) => selected.has(formato));
+							const isActive = preset.formats.length === count && preset.formats.every((formato) => selected.has(formato));
 							return (
 								<button
 									key={preset.id}
 									type="button"
-									onClick={() => setPieces(preset.formatos)}
+									onClick={() => setPieces(preset.formats)}
 									aria-pressed={isActive}
 									className={cn(
 										"flex flex-col gap-3 rounded-2xl border p-4 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-brand/40 hover:shadow-sm",
@@ -38,23 +38,23 @@ export default function StagePieces() {
 								>
 									<div className="flex items-start justify-between gap-2">
 										<div className="flex flex-col gap-0.5">
-											<h4 className="text-sm font-semibold tracking-tight">{preset.nome}</h4>
-											<p className="text-xs text-muted-foreground">{preset.descricao}</p>
+											<h4 className="text-sm font-semibold tracking-tight">{preset.name}</h4>
+											<p className="text-xs text-muted-foreground">{preset.description}</p>
 										</div>
 										<span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-foreground/80">
-											{preset.formatos.length} peças
+											{preset.formats.length} peças
 										</span>
 									</div>
 									<div className="flex flex-wrap gap-1">
-										{preset.formatos.map((formato) => {
-											const Icon = VISUAL_KIT_FORMATS[formato].icone;
+										{preset.formats.map((formato) => {
+											const Icon = VISUAL_KIT_FORMATS[formato].icon;
 											return (
 												<span
 													key={formato}
 													className="flex items-center gap-1 rounded-full border border-border bg-background px-2 py-0.5 text-[10px] font-medium text-foreground/80"
 												>
 													<Icon className="h-3 w-3 opacity-70" />
-													{VISUAL_KIT_FORMATS[formato].nome}
+													{VISUAL_KIT_FORMATS[formato].name}
 												</span>
 											);
 										})}
@@ -66,8 +66,8 @@ export default function StagePieces() {
 				</section>
 
 				{VISUAL_KIT_CATEGORIES.map((category) => {
-					const CategoryIcon = category.icone;
-					const formats = VISUAL_KIT_FORMAT_ORDER.filter((formato) => VISUAL_KIT_FORMATS[formato].categoria === category.id);
+					const CategoryIcon = category.icon;
+					const formats = VISUAL_KIT_FORMAT_ORDER.filter((formato) => VISUAL_KIT_FORMATS[formato].category === category.id);
 					const picked = formats.filter((formato) => selected.has(formato)).length;
 					return (
 						<section key={category.id} className="flex flex-col gap-3">
@@ -77,8 +77,8 @@ export default function StagePieces() {
 										<CategoryIcon className="h-4 w-4 opacity-85" />
 									</span>
 									<div className="flex flex-col">
-										<h3 className="text-sm font-semibold tracking-tight">{category.nome}</h3>
-										<p className="text-xs text-muted-foreground">{category.chamada}</p>
+										<h3 className="text-sm font-semibold tracking-tight">{category.name}</h3>
+										<p className="text-xs text-muted-foreground">{category.tagline}</p>
 									</div>
 								</div>
 								<span className="text-[11px] font-medium text-muted-foreground">
@@ -88,7 +88,7 @@ export default function StagePieces() {
 							<div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
 								{formats.map((formato) => {
 									const format = VISUAL_KIT_FORMATS[formato];
-									const Icon = format.icone;
+									const Icon = format.icon;
 									const isOn = selected.has(formato);
 									return (
 										<button
@@ -118,10 +118,10 @@ export default function StagePieces() {
 												<Icon className="h-4 w-4" />
 											</div>
 											<div className="flex flex-col gap-0.5 pr-5">
-												<h4 className="text-sm font-semibold tracking-tight">{format.nome}</h4>
-												<p className="text-xs text-muted-foreground line-clamp-2">{format.descricao}</p>
+												<h4 className="text-sm font-semibold tracking-tight">{format.name}</h4>
+												<p className="text-xs text-muted-foreground line-clamp-2">{format.description}</p>
 											</div>
-											<span className="mt-auto text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{format.tamanho}</span>
+											<span className="mt-auto text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{format.sizeLabel}</span>
 										</button>
 									);
 								})}
@@ -139,19 +139,19 @@ export default function StagePieces() {
 					</span>
 					{state.pecas.map((piece) => {
 						const format = VISUAL_KIT_FORMATS[piece.formato];
-						const Icon = format.icone;
+						const Icon = format.icon;
 						return (
 							<span
 								key={piece.formato}
 								className="flex items-center gap-1 rounded-full border border-border bg-background py-0.5 pl-2 pr-0.5 text-[11px] font-medium"
 							>
 								<Icon className="h-3 w-3 opacity-75" />
-								{format.nome}
+								{format.name}
 								<button
 									type="button"
 									onClick={() => togglePiece(piece.formato)}
 									className="flex h-4 w-4 items-center justify-center rounded-full hover:bg-muted"
-									aria-label={`Remover ${format.nome} do kit`}
+									aria-label={`Remover ${format.name} do kit`}
 								>
 									<X className="h-3 w-3" />
 								</button>

@@ -13,8 +13,8 @@ export default async function NewVisualKit() {
 		<KitBuilder
 			kitId={null}
 			// Kit novo sempre começa nas peças: as etapas seguintes dependem delas.
-			initialStage="pecas"
-			marca={resolveVisualKitBrand(organization)}
+			initialStage="pieces"
+			brand={resolveVisualKitBrand(organization)}
 			orgHasERPAccess={organization.configuracao.recursos.erp.acesso}
 		/>
 	);

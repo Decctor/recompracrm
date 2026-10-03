@@ -27,7 +27,7 @@ export function VisualKitPieceCanvas({ formato, props, page, ref }: TVisualKitPi
 	const size = renderer.pageSize(props, page);
 	const { Page } = renderer;
 	return (
-		<div ref={ref} data-visual-kit-canvas={formato} style={{ width: size.largura, height: size.altura, overflow: "hidden" }}>
+		<div ref={ref} data-visual-kit-canvas={formato} style={{ width: size.width, height: size.height, overflow: "hidden" }}>
 			<Page props={props} page={page} />
 		</div>
 	);
@@ -70,19 +70,19 @@ export function VisualKitPiecePreview({ formato, props, pageIndex, maxWidth, max
 
 	const availableWidth = maxWidth ?? measuredWidth;
 	const scale =
-		availableWidth == null ? 0 : Math.min(1, availableWidth / size.largura, maxHeight != null ? maxHeight / size.altura : Number.POSITIVE_INFINITY);
+		availableWidth == null ? 0 : Math.min(1, availableWidth / size.width, maxHeight != null ? maxHeight / size.height : Number.POSITIVE_INFINITY);
 
 	return (
 		<div ref={containerRef} className={cn("flex w-full justify-center", className)}>
 			<div
 				style={{
 					...PAPER_STYLE,
-					width: size.largura * scale,
-					height: size.altura * scale,
+					width: size.width * scale,
+					height: size.height * scale,
 					visibility: scale > 0 ? "visible" : "hidden",
 				}}
 			>
-				<div style={{ width: size.largura, height: size.altura, transform: `scale(${scale})`, transformOrigin: "top left" }}>
+				<div style={{ width: size.width, height: size.height, transform: `scale(${scale})`, transformOrigin: "top left" }}>
 					<VisualKitPieceCanvas formato={formato} props={props} page={page} />
 				</div>
 			</div>

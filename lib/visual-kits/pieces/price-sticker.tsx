@@ -24,7 +24,7 @@ const STICKER_HEIGHT = mmToPx(21);
 const COLUMN_GAP = mmToPx(1);
 const ROW_GAP = mmToPx(0.5);
 const SHEET_TOP = mmToPx(7);
-const SHEET_LEFT = (A4_PAGE.largura - COLUMNS * STICKER_WIDTH - (COLUMNS - 1) * COLUMN_GAP) / 2;
+const SHEET_LEFT = (A4_PAGE.width - COLUMNS * STICKER_WIDTH - (COLUMNS - 1) * COLUMN_GAP) / 2;
 
 /** Repete cada produto para completar a folha de 65 (mesma regra de `describeVisualKitPiece`). */
 export function expandStickerItems(items: TVisualKitPieceItem[]) {
@@ -32,8 +32,8 @@ export function expandStickerItems(items: TVisualKitPieceItem[]) {
 	return items.flatMap((item) => Array.from({ length: copies }, () => item));
 }
 
-function Sticker({ item, marca, opcoes }: { item: TVisualKitPieceItem; marca: TVisualKitBrand; opcoes: TVisualKitConfig }) {
-	const display = resolveItemDisplay(item, opcoes);
+function Sticker({ item, brand, configuracao }: { item: TVisualKitPieceItem; brand: TVisualKitBrand; configuracao: TVisualKitConfig }) {
+	const display = resolveItemDisplay(item, configuracao);
 	return (
 		<div
 			style={{
@@ -49,7 +49,7 @@ function Sticker({ item, marca, opcoes }: { item: TVisualKitPieceItem; marca: TV
 				background: PAPER,
 			}}
 		>
-			<div style={{ width: 8, flexShrink: 0, background: marca.corPrimaria }} />
+			<div style={{ width: 8, flexShrink: 0, background: brand.corPrimaria }} />
 			<div style={{ flex: 1, minWidth: 0, padding: "8px 8px 6px 8px", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
 				<span
 					style={{
@@ -60,7 +60,7 @@ function Sticker({ item, marca, opcoes }: { item: TVisualKitPieceItem; marca: TV
 						whiteSpace: "nowrap",
 						overflow: "hidden",
 						textOverflow: "ellipsis",
-						paddingRight: display.percentual != null ? 28 : 0,
+						paddingRight: display.percentualDesconto != null ? 28 : 0,
 					}}
 				>
 					{item.nome}
@@ -70,21 +70,21 @@ function Sticker({ item, marca, opcoes }: { item: TVisualKitPieceItem; marca: TV
 					<PriceValue value={item.preco} size={32} style={{ marginLeft: "auto" }} />
 				</div>
 			</div>
-			{display.percentual != null ? (
+			{display.percentualDesconto != null ? (
 				<span
 					style={{
 						position: "absolute",
 						top: 0,
 						right: 0,
-						background: marca.corSecundaria,
-						color: marca.corSecundariaForeground,
+						background: brand.corSecundaria,
+						color: brand.corSecundariaForeground,
 						fontSize: 9.5,
 						fontWeight: 800,
 						padding: "2px 6px",
 						borderBottomLeftRadius: 6,
 					}}
 				>
-					{discountLabel(display.percentual)}
+					{discountLabel(display.percentualDesconto)}
 				</span>
 			) : null}
 		</div>
@@ -94,7 +94,7 @@ function Sticker({ item, marca, opcoes }: { item: TVisualKitPieceItem; marca: TV
 function StickerSheet({ props, page }: TVisualKitPageArgs) {
 	return (
 		<PageFrame size={A4_PAGE} background={PAPER}>
-			{page.itens.length ? (
+			{page.items.length ? (
 				<div
 					style={{
 						position: "absolute",
@@ -107,21 +107,21 @@ function StickerSheet({ props, page }: TVisualKitPageArgs) {
 						rowGap: ROW_GAP,
 					}}
 				>
-					{page.itens.map((item, index) => (
-						<Sticker key={`${item.chave}-${index}`} item={item} marca={props.marca} opcoes={props.opcoes} />
+					{page.items.map((item, index) => (
+						<Sticker key={`${item.chave}-${index}`} item={item} brand={props.brand} configuracao={props.configuracao} />
 					))}
 				</div>
 			) : (
 				<EmptyNotice />
 			)}
-			<SheetFooter marca={props.marca} formato="ADESIVO_PRECO" page={page} hint="38 × 21 mm · 65 por folha" />
+			<SheetFooter brand={props.brand} formato="ADESIVO_PRECO" page={page} hint="38 × 21 mm · 65 por folha" />
 		</PageFrame>
 	);
 }
 
-export const adesivoPrecoRenderer: TVisualKitPieceRenderer = {
+export const priceStickerRenderer: TVisualKitPieceRenderer = {
 	// Mais de 65 produtos: um adesivo de cada, em quantas folhas forem necessárias.
-	paginate: (props) => paginateSheets(expandStickerItems(props.itens), PER_SHEET),
+	paginate: (props) => paginateSheets(expandStickerItems(props.items), PER_SHEET),
 	pageSize: () => A4_PAGE,
 	Page: StickerSheet,
 };

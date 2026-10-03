@@ -25,12 +25,12 @@ export default function StageVisual() {
 
 	return (
 		<StageShell>
-			<StageShell.Title icon={KIT_STAGES.visual.icone} label={KIT_STAGES.visual.titulo} description={KIT_STAGES.visual.descricao} />
+			<StageShell.Title icon={KIT_STAGES.visual.icon} label={KIT_STAGES.visual.title} description={KIT_STAGES.visual.description} />
 			<StageShell.Body>
 				<div className="flex flex-wrap items-center justify-between gap-2">
 					<div className="flex flex-wrap items-center gap-1 rounded-xl bg-muted p-1">
 						{state.pecas.map((piece) => {
-							const Icon = VISUAL_KIT_FORMATS[piece.formato].icone;
+							const Icon = VISUAL_KIT_FORMATS[piece.formato].icon;
 							const isActive = piece.formato === formato;
 							return (
 								<button
@@ -43,7 +43,7 @@ export default function StageVisual() {
 									)}
 								>
 									<Icon className={cn("h-3.5 w-3.5", !isActive && "opacity-60")} />
-									{VISUAL_KIT_FORMATS[piece.formato].nome}
+									{VISUAL_KIT_FORMATS[piece.formato].name}
 								</button>
 							);
 						})}
@@ -63,10 +63,10 @@ export default function StageVisual() {
 								<h3 className="text-xs font-semibold tracking-tight">DETALHES DA PEÇA</h3>
 							</div>
 							<div className="flex flex-col divide-y divide-border rounded-xl border border-border bg-card">
-								{format.fatos.map((fact) => (
-									<div key={fact.rotulo} className="flex items-center justify-between gap-2 px-3 py-2 text-xs">
-										<span className="text-muted-foreground">{fact.rotulo}</span>
-										<span className="text-right font-medium">{fact.valor}</span>
+								{format.facts.map((fact) => (
+									<div key={fact.label} className="flex items-center justify-between gap-2 px-3 py-2 text-xs">
+										<span className="text-muted-foreground">{fact.label}</span>
+										<span className="text-right font-medium">{fact.value}</span>
 									</div>
 								))}
 								<div className="flex items-center justify-between gap-2 px-3 py-2 text-xs">
@@ -74,7 +74,7 @@ export default function StageVisual() {
 									<span className="text-right font-medium">{describeVisualKitPiece(formato, pieceItems.length)}</span>
 								</div>
 							</div>
-							{format.usaChamada ? (
+							{format.printsHeadline ? (
 								<TextInput label="TÍTULO" value={state.kit.chamada} placeholder="Ex.: Ofertas da semana" handleChange={(chamada) => updateKit({ chamada })} />
 							) : null}
 							{showsLabelOptions ? (
@@ -120,7 +120,7 @@ function PiecePreviewPages({ formato, props, loading }: { formato: TVisualKitFor
 	return (
 		<div className="flex min-w-0 flex-col gap-3 rounded-xl border border-border bg-muted/40 p-3">
 			<div className="flex items-center justify-between gap-2">
-				<span className="truncate text-xs font-medium text-muted-foreground">{page?.rotulo ?? ""}</span>
+				<span className="truncate text-xs font-medium text-muted-foreground">{page?.label ?? ""}</span>
 				<div className="flex items-center gap-1">
 					{loading ? <LoaderCircle className="h-4 w-4 animate-spin opacity-50" /> : null}
 					<Button

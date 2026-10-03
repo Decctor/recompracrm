@@ -21,7 +21,7 @@ export type TGeneratedFileMimeType = "application/pdf" | "image/png" | "image/jp
 
 export type TGeneratedFile = {
 	nome: string;
-	pasta: string;
+	folder: string;
 	mimeType: TGeneratedFileMimeType;
 	blob: Blob;
 	produtoId: string | null;
@@ -33,11 +33,11 @@ export type TGeneratedFile = {
 export type TGeneratedPiece = { formato: TVisualKitFormatEnum; saida: TVisualKitOutputEnum; arquivos: TGeneratedFile[] };
 
 export type TGenerationProgress = {
-	pecaIndice: number; // 0-based
-	totalPecas: number;
+	pieceIndex: number; // 0-based
+	pieceCount: number;
 	formato: TVisualKitFormatEnum;
-	paginaAtual: number; // 1-based: a página que está sendo renderizada agora
-	totalPaginas: number;
+	page: number; // 1-based: a página que está sendo renderizada agora
+	pageCount: number;
 };
 
 export type TGenerationPieceInput = { formato: TVisualKitFormatEnum; saida: TVisualKitOutputEnum; props: TVisualKitPieceProps };
@@ -48,14 +48,14 @@ const PER_PRODUCT_FORMATS = new Set<TVisualKitFormatEnum>(["SELO_PRODUTO", "POST
 /** Erro pt-BR quando a saída não vale para o formato (ex.: PNG de etiqueta de gôndola). */
 export function assertVisualKitOutput(formato: TVisualKitFormatEnum, saida: TVisualKitOutputEnum) {
 	const spec = VISUAL_KIT_FORMATS[formato];
-	if (!spec.saidas.some((option) => option.id === saida)) {
-		const validas = spec.saidas.map((option) => option.titulo).join(" ou ");
-		throw new Error(`A peça "${spec.nome}" não pode ser gerada nesse formato de arquivo. Use ${validas}.`);
+	if (!spec.outputs.some((option) => option.id === saida)) {
+		const validas = spec.outputs.map((option) => option.title).join(" ou ");
+		throw new Error(`A peça "${spec.name}" não pode ser gerada nesse formato de arquivo. Use ${validas}.`);
 	}
 }
 
 function hasItems(pages: TVisualKitPage[]) {
-	return pages.some((page) => page.itens.length > 0);
+	return pages.some((page) => page.items.length > 0);
 }
 
 type TPieceContext = {
@@ -66,7 +66,7 @@ type TPieceContext = {
 	pixelRatio: number;
 	fontEmbedCSS: string | undefined;
 	signal: AbortSignal | undefined;
-	reportPage: (paginaAtual: number) => void;
+	reportPage: (page: number) => void;
 };
 
 /** Rasteriza as páginas em ordem, uma por vez, chamando `onPage` com cada canvas (liberado em seguida). */
@@ -89,11 +89,11 @@ async function forEachRenderedPage(ctx: TPieceContext, onPage: (canvas: HTMLCanv
 
 async function generatePdfPiece(ctx: TPieceContext): Promise<TGeneratedFile[]> {
 	const spec = VISUAL_KIT_FORMATS[ctx.formato];
-	const pdf = await createVisualKitPdf({ titulo: `${spec.nome} · ${ctx.props.marca.nome}` });
-	const isA4 = spec.pagina === A4_PAGE;
+	const pdf = await createVisualKitPdf({ titulo: `${spec.name} · ${ctx.props.brand.nome}` });
+	const isA4 = spec.page === A4_PAGE;
 	await forEachRenderedPage(ctx, async (canvas, page) => {
 		if (ctx.saida === "PDF_ETIQUETADORA") {
-			await pdf.addShelfLabelsFromSheet(canvas, { count: page.itens.length, pixelRatio: ctx.pixelRatio });
+			await pdf.addShelfLabelsFromSheet(canvas, { count: page.items.length, pixelRatio: ctx.pixelRatio });
 			return;
 		}
 		await pdf.addCanvasPage(canvas, isA4 ? PDF_A4_SIZE : pdfPageSizeForCanvas(canvas, ctx.pixelRatio));
@@ -103,7 +103,7 @@ async function generatePdfPiece(ctx: TPieceContext): Promise<TGeneratedFile[]> {
 	return [
 		{
 			nome: visualKitPieceFileName(ctx.formato, "pdf"),
-			pasta: visualKitPieceFolderName(ctx.formato),
+			folder: visualKitPieceFolderName(ctx.formato),
 			mimeType: "application/pdf",
 			blob,
 			produtoId: null,
@@ -121,15 +121,15 @@ async function generateImagePiece(ctx: TPieceContext): Promise<TGeneratedFile[]>
 	const files: TGeneratedFile[] = [];
 	await forEachRenderedPage(ctx, async (canvas, page, index) => {
 		const ordem = index + 1;
-		const item = perProduct ? (page.itens[0] ?? null) : null;
+		const item = perProduct ? (page.items[0] ?? null) : null;
 		let nome: string;
-		if (item) nome = visualKitProductFileName({ ordem, total, produtoNome: item.nome, ext });
-		else if (ctx.formato === "CARROSSEL") nome = visualKitCarouselFileName({ ordem, total, ext });
-		else nome = visualKitPagedFileName({ formato: ctx.formato, ordem, total, ext });
+		if (item) nome = visualKitProductFileName({ order: ordem, total, productName: item.nome, ext });
+		else if (ctx.formato === "CARROSSEL") nome = visualKitCarouselFileName({ order: ordem, total, ext });
+		else nome = visualKitPagedFileName({ formato: ctx.formato, order: ordem, total, ext });
 		const blob = ctx.saida === "JPG" ? await canvasToJpg(canvas) : await canvasToPng(canvas);
 		files.push({
 			nome,
-			pasta: visualKitPieceFolderName(ctx.formato),
+			folder: visualKitPieceFolderName(ctx.formato),
 			mimeType,
 			blob,
 			produtoId: item?.produtoId ?? null,
@@ -145,20 +145,20 @@ async function generateImagePiece(ctx: TPieceContext): Promise<TGeneratedFile[]>
  * quando `signal` é abortado — a checagem acontece entre páginas.
  */
 export async function generateVisualKit({
-	pecas,
+	pieces,
 	onProgress,
 	signal,
 }: {
-	pecas: TGenerationPieceInput[];
+	pieces: TGenerationPieceInput[];
 	onProgress?: (progress: TGenerationProgress) => void;
 	signal?: AbortSignal;
 }): Promise<TGeneratedPiece[]> {
 	// Valida tudo antes de renderizar qualquer coisa: erro de configuração não desperdiça minutos.
-	const prepared = pecas.map(({ formato, saida, props }) => {
+	const prepared = pieces.map(({ formato, saida, props }) => {
 		assertVisualKitOutput(formato, saida);
 		const proxied = withProxiedImages(props);
 		const pages = paginateVisualKitPiece(formato, proxied);
-		if (!hasItems(pages)) throw new Error(`A peça "${VISUAL_KIT_FORMATS[formato].nome}" não tem produtos para gerar.`);
+		if (!hasItems(pages)) throw new Error(`A peça "${VISUAL_KIT_FORMATS[formato].name}" não tem produtos para gerar.`);
 		return { formato, saida, props: proxied, pages };
 	});
 	if (!prepared.length) return [];
@@ -168,15 +168,14 @@ export async function generateVisualKit({
 	const { fontEmbedCSS } = await prepareVisualKitRasterization({ formato: first.formato, props: first.props, page: first.pages[0] });
 
 	const results: TGeneratedPiece[] = [];
-	for (let pecaIndice = 0; pecaIndice < prepared.length; pecaIndice += 1) {
-		const piece = prepared[pecaIndice];
+	for (let pieceIndex = 0; pieceIndex < prepared.length; pieceIndex += 1) {
+		const piece = prepared[pieceIndex];
 		const ctx: TPieceContext = {
 			...piece,
 			pixelRatio: VISUAL_KIT_PIXEL_RATIOS[piece.formato],
 			fontEmbedCSS,
 			signal,
-			reportPage: (paginaAtual) =>
-				onProgress?.({ pecaIndice, totalPecas: prepared.length, formato: piece.formato, paginaAtual, totalPaginas: piece.pages.length }),
+			reportPage: (page) => onProgress?.({ pieceIndex, pieceCount: prepared.length, formato: piece.formato, page, pageCount: piece.pages.length }),
 		};
 		const isPdf = piece.saida === "PDF" || piece.saida === "PDF_ETIQUETADORA";
 		const arquivos = isPdf ? await generatePdfPiece(ctx) : await generateImagePiece(ctx);

@@ -4,34 +4,34 @@ import { isValidGtin, normalizeGtin } from "./gtin";
 import { PROMOTION_PREVIOUS_PRICE_WINDOW_DAYS, resolvePromotion } from "./pricing";
 import { formatProductContent, resolveUnitPrice, resolveVariantContent } from "./unit-price";
 
-const agora = new Date("2026-10-03T12:00:00Z");
-const daysAgo = (days: number) => new Date(agora.getTime() - days * 24 * 60 * 60 * 1000);
+const now = new Date("2026-10-03T12:00:00Z");
+const daysAgo = (days: number) => new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
 
 test("promoção: anterior maior que o atual, dentro da janela", () => {
-	assert.deepEqual(resolvePromotion({ precoAtual: 9.9, precoVendaAnterior: 12.9, dataAlteracaoPrecoVenda: daysAgo(3), agora }), {
+	assert.deepEqual(resolvePromotion({ currentPrice: 9.9, precoVendaAnterior: 12.9, dataAlteracaoPrecoVenda: daysAgo(3), now }), {
 		emPromocao: true,
 		precoDe: 12.9,
 		percentualDesconto: 23,
 	});
 	// Data serializada (resposta de API) também vale.
 	assert.equal(
-		resolvePromotion({ precoAtual: 9.9, precoVendaAnterior: 12.9, dataAlteracaoPrecoVenda: daysAgo(3).toISOString(), agora }).emPromocao,
+		resolvePromotion({ currentPrice: 9.9, precoVendaAnterior: 12.9, dataAlteracaoPrecoVenda: daysAgo(3).toISOString(), now }).emPromocao,
 		true,
 	);
 });
 
 test("sem promoção: aumento, igual, sem anterior ou fora da janela", () => {
 	const off = { emPromocao: false, precoDe: null, percentualDesconto: null };
-	assert.deepEqual(resolvePromotion({ precoAtual: 12.9, precoVendaAnterior: 9.9, dataAlteracaoPrecoVenda: daysAgo(1), agora }), off);
-	assert.deepEqual(resolvePromotion({ precoAtual: 9.9, precoVendaAnterior: 9.9, dataAlteracaoPrecoVenda: daysAgo(1), agora }), off);
-	assert.deepEqual(resolvePromotion({ precoAtual: 9.9, precoVendaAnterior: null, dataAlteracaoPrecoVenda: null, agora }), off);
-	assert.deepEqual(resolvePromotion({ precoAtual: null, precoVendaAnterior: 12.9, dataAlteracaoPrecoVenda: daysAgo(1), agora }), off);
+	assert.deepEqual(resolvePromotion({ currentPrice: 12.9, precoVendaAnterior: 9.9, dataAlteracaoPrecoVenda: daysAgo(1), now }), off);
+	assert.deepEqual(resolvePromotion({ currentPrice: 9.9, precoVendaAnterior: 9.9, dataAlteracaoPrecoVenda: daysAgo(1), now }), off);
+	assert.deepEqual(resolvePromotion({ currentPrice: 9.9, precoVendaAnterior: null, dataAlteracaoPrecoVenda: null, now }), off);
+	assert.deepEqual(resolvePromotion({ currentPrice: null, precoVendaAnterior: 12.9, dataAlteracaoPrecoVenda: daysAgo(1), now }), off);
 	assert.deepEqual(
-		resolvePromotion({ precoAtual: 9.9, precoVendaAnterior: 12.9, dataAlteracaoPrecoVenda: daysAgo(PROMOTION_PREVIOUS_PRICE_WINDOW_DAYS + 1), agora }),
+		resolvePromotion({ currentPrice: 9.9, precoVendaAnterior: 12.9, dataAlteracaoPrecoVenda: daysAgo(PROMOTION_PREVIOUS_PRICE_WINDOW_DAYS + 1), now }),
 		off,
 	);
 	assert.equal(
-		resolvePromotion({ precoAtual: 9.9, precoVendaAnterior: 12.9, dataAlteracaoPrecoVenda: daysAgo(PROMOTION_PREVIOUS_PRICE_WINDOW_DAYS), agora })
+		resolvePromotion({ currentPrice: 9.9, precoVendaAnterior: 12.9, dataAlteracaoPrecoVenda: daysAgo(PROMOTION_PREVIOUS_PRICE_WINDOW_DAYS), now })
 			.emPromocao,
 		true,
 	);
@@ -39,9 +39,9 @@ test("sem promoção: aumento, igual, sem anterior ou fora da janela", () => {
 
 test("preço do canal é comparado com o anterior do preço base", () => {
 	// Canal mais barato que o base: o desconto exibido é sobre o anterior do base.
-	assert.equal(resolvePromotion({ precoAtual: 8.9, precoVendaAnterior: 12.9, dataAlteracaoPrecoVenda: daysAgo(2), agora }).percentualDesconto, 31);
+	assert.equal(resolvePromotion({ currentPrice: 8.9, precoVendaAnterior: 12.9, dataAlteracaoPrecoVenda: daysAgo(2), now }).percentualDesconto, 31);
 	// Canal acima do anterior (iFood com acréscimo): sem "De / Por".
-	assert.equal(resolvePromotion({ precoAtual: 14.9, precoVendaAnterior: 12.9, dataAlteracaoPrecoVenda: daysAgo(2), agora }).emPromocao, false);
+	assert.equal(resolvePromotion({ currentPrice: 14.9, precoVendaAnterior: 12.9, dataAlteracaoPrecoVenda: daysAgo(2), now }).emPromocao, false);
 });
 
 test("GTIN: aceita EAN-8/12/13/14 com verificador válido e normaliza separadores", () => {

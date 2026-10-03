@@ -1,38 +1,38 @@
 import { DollarSign, LayoutTemplate, ListChecks, type LucideIcon, Package, PencilRuler } from "lucide-react";
 
-export const KIT_STAGE_IDS = ["pecas", "produtos", "preco", "visual", "revisao"] as const;
+export const KIT_STAGE_IDS = ["pieces", "products", "price", "visual", "review"] as const;
 export type TKitStageId = (typeof KIT_STAGE_IDS)[number];
 
-export const KIT_STAGES: Record<TKitStageId, { label: string; titulo: string; descricao: string; icone: LucideIcon }> = {
-	pecas: {
+export const KIT_STAGES: Record<TKitStageId, { label: string; title: string; description: string; icon: LucideIcon }> = {
+	pieces: {
 		label: "Peças",
-		titulo: "Peças do kit",
-		descricao: "Escolha as peças que o kit vai gerar. Todas usam os mesmos produtos, preços e validade.",
-		icone: LayoutTemplate,
+		title: "Peças do kit",
+		description: "Escolha as peças que o kit vai gerar. Todas usam os mesmos produtos, preços e validade.",
+		icon: LayoutTemplate,
 	},
-	produtos: {
+	products: {
 		label: "Produtos",
-		titulo: "Produtos",
-		descricao: "Escolha os produtos que entram no kit. Nome, código e foto vêm do cadastro.",
-		icone: Package,
+		title: "Produtos",
+		description: "Escolha os produtos que entram no kit. Nome, código e foto vêm do cadastro.",
+		icon: Package,
 	},
-	preco: {
+	price: {
 		label: "Preço",
-		titulo: "Preço",
-		descricao: "A promoção é inferida: quando o preço anterior do produto é maior que o atual, as peças mostram De / Por.",
-		icone: DollarSign,
+		title: "Preço",
+		description: "A promoção é inferida: quando o preço anterior do produto é maior que o atual, as peças mostram De / Por.",
+		icon: DollarSign,
 	},
 	visual: {
 		label: "Visual",
-		titulo: "Visual",
-		descricao: "Confira cada peça. Logo e cores vêm da sua marca.",
-		icone: PencilRuler,
+		title: "Visual",
+		description: "Confira cada peça. Logo e cores vêm da sua marca.",
+		icon: PencilRuler,
 	},
-	revisao: {
+	review: {
 		label: "Revisão",
-		titulo: "Revisão",
-		descricao: "Confira o kit antes de concluir.",
-		icone: ListChecks,
+		title: "Revisão",
+		description: "Confira o kit antes de concluir.",
+		icon: ListChecks,
 	},
 };
 

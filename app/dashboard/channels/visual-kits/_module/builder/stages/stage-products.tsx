@@ -13,29 +13,29 @@ import { useKitBuilder } from "../kit-builder-context";
 import { KIT_STAGES } from "../stages";
 import { useKitChannels } from "../use-kit-channels";
 
-type TProductFilter = "TODOS" | "PROMOCAO" | "SELECIONADOS";
+type TProductFilter = "ALL" | "PROMOTION" | "SELECTED";
 
 export default function StageProducts() {
 	const { state, itemKeys, toggleItem, addItems, selectedItems, pieceItems, next, back } = useKitBuilder();
 	const { selectedLabel } = useKitChannels();
 	const [search, setSearch] = useState("");
-	const [filter, setFilter] = useState<TProductFilter>("TODOS");
+	const [filter, setFilter] = useState<TProductFilter>("ALL");
 
-	const { data, isFetching } = useVisualKitCatalogSearch({ search, canalVendaId: state.kit.canalVendaId, promo: filter === "PROMOCAO" });
+	const { data, isFetching } = useVisualKitCatalogSearch({ search, salesChannelId: state.kit.canalVendaId, promo: filter === "PROMOTION" });
 	const selectedKeys = new Set(itemKeys);
-	const rows = filter === "SELECIONADOS" ? selectedItems : (data?.itens ?? []);
+	const rows = filter === "SELECTED" ? selectedItems : (data?.items ?? []);
 	const addable = rows.filter((item) => item.preco != null && !selectedKeys.has(item.chave));
 	const count = itemKeys.length;
 
 	const filters: { id: TProductFilter; label: string }[] = [
-		{ id: "TODOS", label: "Todos" },
-		{ id: "PROMOCAO", label: "Em promoção" },
-		{ id: "SELECIONADOS", label: `Selecionados · ${count}` },
+		{ id: "ALL", label: "Todos" },
+		{ id: "PROMOTION", label: "Em promoção" },
+		{ id: "SELECTED", label: `Selecionados · ${count}` },
 	];
 
 	return (
 		<StageShell>
-			<StageShell.Title icon={KIT_STAGES.produtos.icone} label={KIT_STAGES.produtos.titulo} description={KIT_STAGES.produtos.descricao} />
+			<StageShell.Title icon={KIT_STAGES.products.icon} label={KIT_STAGES.products.title} description={KIT_STAGES.products.description} />
 			<StageShell.Body>
 				<div className="flex items-center justify-between gap-2">
 					<div className="flex items-center gap-1.5">
@@ -89,14 +89,14 @@ export default function StageProducts() {
 					))}
 					{rows.length === 0 && !isFetching ? (
 						<p className="py-6 text-center text-xs text-muted-foreground">
-							{filter === "SELECIONADOS"
+							{filter === "SELECTED"
 								? "Nenhum produto selecionado ainda."
-								: filter === "PROMOCAO"
+								: filter === "PROMOTION"
 									? "Nenhum produto em promoção: só entram produtos cujo preço caiu nos últimos 30 dias."
 									: "Nenhum produto encontrado."}
 						</p>
 					) : null}
-					{filter !== "SELECIONADOS" && data?.limitado ? (
+					{filter !== "SELECTED" && data?.truncated ? (
 						<p className="py-2 text-center text-[11px] text-muted-foreground">
 							Mostrando os primeiros resultados. Refine a busca para encontrar outros produtos.
 						</p>

@@ -13,12 +13,12 @@ import type { TKitStageId } from "./stages";
 type KitBuilderLoaderProps = {
 	kitId: string;
 	initialStage: TKitStageId;
-	marca: TVisualKitBrand;
+	brand: TVisualKitBrand;
 	orgHasERPAccess: boolean;
 };
 
 /** Carrega o kit uma vez e entrega o estado inicial ao construtor (que daí em diante salva sozinho). */
-export default function KitBuilderLoader({ kitId, initialStage, marca, orgHasERPAccess }: KitBuilderLoaderProps) {
+export default function KitBuilderLoader({ kitId, initialStage, brand, orgHasERPAccess }: KitBuilderLoaderProps) {
 	const { data: kit, isLoading, isError, error } = useVisualKitById({ id: kitId });
 
 	const initialState = useMemo<TVisualKitState | null>(() => {
@@ -38,5 +38,5 @@ export default function KitBuilderLoader({ kitId, initialStage, marca, orgHasERP
 
 	if (isLoading) return <LoadingComponent />;
 	if (isError || !initialState) return <ErrorComponent msg={getErrorMessage(error)} />;
-	return <KitBuilder kitId={kitId} initialState={initialState} initialStage={initialStage} marca={marca} orgHasERPAccess={orgHasERPAccess} />;
+	return <KitBuilder kitId={kitId} initialState={initialState} initialStage={initialStage} brand={brand} orgHasERPAccess={orgHasERPAccess} />;
 }

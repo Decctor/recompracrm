@@ -18,19 +18,19 @@ const OUTPUT_SHORT_LABEL = { PDF: "PDF", PDF_ETIQUETADORA: "Etiquetadora", PNG: 
 
 export default function StageReview() {
 	const router = useRouter();
-	const { state, updatePiece, pieceItems, marca, setStage, back } = useKitBuilder();
+	const { state, updatePiece, pieceItems, brand, setStage, back } = useKitBuilder();
 	const { generation, start, reset } = useKitGeneration();
 	const pieceCount = state.pecas.length;
 	const inPromotion = pieceItems.filter((item) => item.promocao.emPromocao).length;
 
-	if (generation.fase !== "OCIOSO") {
+	if (generation.phase !== "IDLE") {
 		return (
 			<StageShell>
-				<StageShell.Title icon={KIT_STAGES.revisao.icone} label={KIT_STAGES.revisao.titulo} description={KIT_STAGES.revisao.descricao} />
-				{generation.fase === "GERANDO" ? <GenerationRunning generation={generation} /> : null}
-				{generation.fase === "PRONTO" ? (
+				<StageShell.Title icon={KIT_STAGES.review.icon} label={KIT_STAGES.review.title} description={KIT_STAGES.review.description} />
+				{generation.phase === "RUNNING" ? <GenerationRunning generation={generation} /> : null}
+				{generation.phase === "DONE" ? (
 					<GenerationDone
-						pecas={generation.pecas}
+						pieces={generation.pieces}
 						onEdit={() => {
 							reset();
 							setStage("visual");
@@ -38,16 +38,16 @@ export default function StageReview() {
 						onNewKit={() => router.push(appRoutes.channels.newVisualKit())}
 					/>
 				) : null}
-				{generation.fase === "ERRO" ? <GenerationFailed message={generation.mensagem} onRetry={() => void start()} onBack={reset} /> : null}
+				{generation.phase === "FAILED" ? <GenerationFailed message={generation.message} onRetry={() => void start()} onBack={reset} /> : null}
 			</StageShell>
 		);
 	}
 
 	return (
 		<StageShell>
-			<StageShell.Title icon={KIT_STAGES.revisao.icone} label={KIT_STAGES.revisao.titulo} description={KIT_STAGES.revisao.descricao} />
+			<StageShell.Title icon={KIT_STAGES.review.icon} label={KIT_STAGES.review.title} description={KIT_STAGES.review.description} />
 			<StageShell.Body className="gap-4">
-				<ReviewCard title="Kit" onEdit={() => setStage("pecas")}>
+				<ReviewCard title="Kit" onEdit={() => setStage("pieces")}>
 					<div className="flex flex-col gap-0.5">
 						<span className="text-base font-semibold tracking-tight">{state.kit.nome.trim() || "Sem nome"}</span>
 						<span className="text-xs text-muted-foreground">
@@ -57,15 +57,15 @@ export default function StageReview() {
 					<div className="grid grid-cols-2 gap-2 md:grid-cols-4">
 						{state.pecas.map((piece) => {
 							const format = VISUAL_KIT_FORMATS[piece.formato];
-							const [width, height, radius] = format.miniatura;
+							const [width, height, radius] = format.thumbnail;
 							return (
 								<div key={piece.formato} className="flex items-center gap-3 rounded-xl border border-border bg-card p-3">
 									<span className="flex h-14 w-14 shrink-0 items-center justify-center">
 										<span className="block bg-brand/80" style={{ width, height, borderRadius: radius }} />
 									</span>
 									<span className="flex min-w-0 flex-col">
-										<span className="truncate text-xs font-semibold">{format.nome}</span>
-										<span className="truncate text-[11px] text-muted-foreground">{format.tamanho}</span>
+										<span className="truncate text-xs font-semibold">{format.name}</span>
+										<span className="truncate text-[11px] text-muted-foreground">{format.sizeLabel}</span>
 										<span className="truncate text-[11px] text-muted-foreground">{describeVisualKitPiece(piece.formato, pieceItems.length)}</span>
 									</span>
 								</div>
@@ -75,7 +75,7 @@ export default function StageReview() {
 				</ReviewCard>
 
 				<div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-					<ReviewCard title="Produtos" onEdit={() => setStage("produtos")}>
+					<ReviewCard title="Produtos" onEdit={() => setStage("products")}>
 						<span className="text-2xl font-bold tabular-nums">{pieceItems.length}</span>
 						<ul className="flex flex-col gap-1">
 							{pieceItems.slice(0, 3).map((item) => (
@@ -90,7 +90,7 @@ export default function StageReview() {
 						</ul>
 					</ReviewCard>
 
-					<ReviewCard title="Promoções" onEdit={() => setStage("preco")}>
+					<ReviewCard title="Promoções" onEdit={() => setStage("price")}>
 						<span className="flex items-baseline gap-1.5">
 							<span className="text-2xl font-bold tabular-nums">{inPromotion}</span>
 							<span className="text-xs text-muted-foreground">de {pieceItems.length} em promoção</span>
@@ -112,7 +112,7 @@ export default function StageReview() {
 						</div>
 					</ReviewCard>
 
-					<ReviewCard title="Validade" onEdit={() => setStage("preco")}>
+					<ReviewCard title="Validade" onEdit={() => setStage("price")}>
 						<div className="flex items-center gap-3">
 							<span className="flex flex-col items-center rounded-lg bg-brand px-3 py-1.5 text-brand-foreground">
 								<span className="text-[9px] font-semibold tracking-wider">ATÉ</span>
@@ -126,22 +126,22 @@ export default function StageReview() {
 
 					<ReviewCard title="Marca">
 						<div className="flex items-center gap-3">
-							{marca.logoUrl ? (
+							{brand.logoUrl ? (
 								// biome-ignore lint/performance/noImgElement: logo da organização (URL externa do cadastro)
-								<img src={marca.logoUrl} alt={marca.nome} className="h-10 w-10 rounded-xl object-cover" />
+								<img src={brand.logoUrl} alt={brand.nome} className="h-10 w-10 rounded-xl object-cover" />
 							) : (
 								<span
 									className="flex h-10 w-10 items-center justify-center rounded-xl text-sm font-bold"
-									style={{ background: marca.corPrimaria, color: marca.corPrimariaForeground }}
+									style={{ background: brand.corPrimaria, color: brand.corPrimariaForeground }}
 								>
-									{marca.nome.slice(0, 1).toUpperCase()}
+									{brand.nome.slice(0, 1).toUpperCase()}
 								</span>
 							)}
 							<div className="flex min-w-0 flex-col gap-1">
-								<span className="truncate text-sm font-semibold">{marca.nome}</span>
+								<span className="truncate text-sm font-semibold">{brand.nome}</span>
 								<span className="flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
-									<ColorDot color={marca.corPrimaria} label="Primária" />
-									<ColorDot color={marca.corSecundaria} label="Secundária" />
+									<ColorDot color={brand.corPrimaria} label="Primária" />
+									<ColorDot color={brand.corSecundaria} label="Secundária" />
 								</span>
 							</div>
 						</div>
@@ -156,20 +156,20 @@ export default function StageReview() {
 					<div className="flex flex-col divide-y divide-border rounded-xl border border-border bg-card">
 						{state.pecas.map((piece) => {
 							const format = VISUAL_KIT_FORMATS[piece.formato];
-							const Icon = format.icone;
-							const option = format.saidas.find((output) => output.id === piece.saida) ?? format.saidas[0];
+							const Icon = format.icon;
+							const option = format.outputs.find((output) => output.id === piece.saida) ?? format.outputs[0];
 							return (
 								<div key={piece.formato} className="flex flex-wrap items-center gap-3 px-3 py-2.5">
 									<span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10">
 										<Icon className="h-4 w-4 opacity-85" />
 									</span>
 									<span className="flex min-w-0 flex-1 flex-col">
-										<span className="truncate text-xs font-semibold">{format.nome}</span>
-										<span className="truncate text-[11px] text-muted-foreground">{option.descricao}</span>
+										<span className="truncate text-xs font-semibold">{format.name}</span>
+										<span className="truncate text-[11px] text-muted-foreground">{option.description}</span>
 									</span>
-									{format.saidas.length > 1 ? (
+									{format.outputs.length > 1 ? (
 										<span className="flex items-center rounded-full bg-muted p-0.5">
-											{format.saidas.map((output) => (
+											{format.outputs.map((output) => (
 												<button
 													key={output.id}
 													type="button"

@@ -1,7 +1,7 @@
 -- Preço anterior, código de barras e conteúdo da embalagem em produtos e variantes.
 -- `preco_venda_anterior` + `data_alteracao_preco_venda` são o snapshot do preço de venda anterior
 -- (promoção = anterior > atual, dentro de 30 dias). Escritos pela aplicação, em todo update de
--- `preco_venda`, via `buildPrecoVendaUpdate` (lib/products/price-snapshot.ts) — sem trigger.
+-- `preco_venda`, via `buildSalePriceUpdate` (lib/products/price-snapshot.ts) — sem trigger.
 -- `codigo_barras` é o GTIN validado; `codigo` segue como chave de identidade das integrações.
 -- `conteudo_quantidade` + `conteudo_unidade` alimentam o preço por unidade de medida nas etiquetas;
 -- a variante só sobrescreve a quantidade (a unidade é sempre a do produto).

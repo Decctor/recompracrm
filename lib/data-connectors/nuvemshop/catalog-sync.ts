@@ -1,6 +1,6 @@
 import { db, type DBTransaction } from "@/services/drizzle";
 import { productOptionValues, productOptions, productVariantOptionValues, productVariants, products } from "@/services/drizzle/schema";
-import { buildPrecoVendaUpdate } from "@/lib/products/price-snapshot";
+import { buildSalePriceUpdate } from "@/lib/products/price-snapshot";
 import { and, eq } from "drizzle-orm";
 import { fetchAllNuvemshopProducts, mapNuvemshopStructuredCatalog, type TNuvemshopCatalogProduct } from "./index";
 import type { TNuvemshopConfig } from "./types";
@@ -79,7 +79,7 @@ async function upsertCatalogProduct({
 			.update(products)
 			.set({
 				...productValues,
-				...buildPrecoVendaUpdate({ atual: existingProduct, novoPrecoVenda: product.precoVenda }),
+				...buildSalePriceUpdate({ current: existingProduct, next: { precoVenda: product.precoVenda } }),
 				// GTIN ausente/inválido na loja não apaga o que foi cadastrado no app.
 				codigoBarras: product.codigoBarras ?? existingProduct.codigoBarras,
 			})
@@ -174,7 +174,7 @@ async function upsertCatalogProduct({
 				.update(productVariants)
 				.set({
 					...variantValues,
-					...buildPrecoVendaUpdate({ atual: existingVariant, novoPrecoVenda: variant.precoVenda }),
+					...buildSalePriceUpdate({ current: existingVariant, next: { precoVenda: variant.precoVenda } }),
 					codigoBarras: variant.codigoBarras ?? existingVariant.codigoBarras,
 				})
 				.where(eq(productVariants.id, existingVariant.id));

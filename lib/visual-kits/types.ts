@@ -33,19 +33,19 @@ export type TVisualKitPieceItem = {
 
 /** Tudo que uma peça precisa para renderizar. */
 export type TVisualKitPieceProps = {
-	itens: TVisualKitPieceItem[];
+	items: TVisualKitPieceItem[];
 	chamada: string; // título da peça ("Ofertas da semana")
 	validadeFim: Date | string | null;
-	marca: TVisualKitBrand;
-	opcoes: TVisualKitConfig;
+	brand: TVisualKitBrand;
+	configuracao: TVisualKitConfig;
 };
 
 /** Uma página/imagem de uma peça. Folhas A4 agrupam vários itens; posts têm um item cada. */
 export type TVisualKitPage = {
-	indice: number;
-	tipo: "FOLHA" | "PRODUTO" | "CAPA" | "FECHAMENTO" | "LISTA";
-	itens: TVisualKitPieceItem[];
-	rotulo: string; // "Folha 1 de 2", "Dipirona 1g", "Capa"
+	index: number;
+	kind: "SHEET" | "PRODUCT" | "COVER" | "CLOSING" | "LIST";
+	items: TVisualKitPieceItem[];
+	label: string; // "Folha 1 de 2", "Dipirona 1g", "Capa"
 };
 
 export function visualKitItemKey(item: { produtoId: string; produtoVarianteId: string | null | undefined }) {

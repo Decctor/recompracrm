@@ -31,7 +31,7 @@ const CELL_HEIGHT = DISC + STEM_LENGTH;
 const COLUMN_GAP = mmToPx(4);
 const ROW_GAP = mmToPx(3);
 const SHEET_TOP = mmToPx(5);
-const SHEET_LEFT = (A4_PAGE.largura - 2 * DISC - COLUMN_GAP) / 2;
+const SHEET_LEFT = (A4_PAGE.width - 2 * DISC - COLUMN_GAP) / 2;
 
 /** Contorno de corte: disco + haste numa linha só. */
 function cutPath() {
@@ -43,10 +43,10 @@ function cutPath() {
 }
 const CUT_PATH = cutPath();
 
-type TWobblerProps = { item: TVisualKitPieceItem; marca: TVisualKitBrand; opcoes: TVisualKitConfig; validade: string | null };
+type TWobblerProps = { item: TVisualKitPieceItem; brand: TVisualKitBrand; configuracao: TVisualKitConfig; validity: string | null };
 
-function Wobbler({ item, marca, opcoes, validade }: TWobblerProps) {
-	const display = resolveItemDisplay(item, opcoes);
+function Wobbler({ item, brand, configuracao, validity }: TWobblerProps) {
+	const display = resolveItemDisplay(item, configuracao);
 	return (
 		<div style={{ position: "relative", width: DISC, height: CELL_HEIGHT }}>
 			<div
@@ -86,8 +86,8 @@ function Wobbler({ item, marca, opcoes, validade }: TWobblerProps) {
 					height: DISC,
 					boxSizing: "border-box",
 					borderRadius: "50%",
-					background: marca.corPrimaria,
-					color: marca.corPrimariaForeground,
+					background: brand.corPrimaria,
+					color: brand.corPrimariaForeground,
 					display: "flex",
 					flexDirection: "column",
 					alignItems: "center",
@@ -97,7 +97,7 @@ function Wobbler({ item, marca, opcoes, validade }: TWobblerProps) {
 					textAlign: "center",
 				}}
 			>
-				<div style={{ position: "absolute", inset: 14, borderRadius: "50%", border: `2px solid ${hexToRgba(marca.corPrimariaForeground, 0.35)}` }} />
+				<div style={{ position: "absolute", inset: 14, borderRadius: "50%", border: `2px solid ${hexToRgba(brand.corPrimariaForeground, 0.35)}` }} />
 				<span
 					style={{
 						fontSize: 15,
@@ -105,7 +105,7 @@ function Wobbler({ item, marca, opcoes, validade }: TWobblerProps) {
 						letterSpacing: "0.28em",
 						paddingLeft: "0.28em",
 						textTransform: "uppercase",
-						color: readableOn(marca.corPrimaria, marca.corSecundaria, marca.corPrimariaForeground),
+						color: readableOn(brand.corPrimaria, brand.corSecundaria, brand.corPrimariaForeground),
 					}}
 				>
 					Oferta
@@ -113,22 +113,22 @@ function Wobbler({ item, marca, opcoes, validade }: TWobblerProps) {
 				<span style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.05, letterSpacing: "-0.01em", maxWidth: 250, ...clampLines(2) }}>{item.nome}</span>
 				{display.precoDe != null ? <FromPrice value={display.precoDe} style={{ fontSize: 14, opacity: 0.8 }} /> : null}
 				<PriceValue value={item.preco} size={88} />
-				{display.percentual != null ? (
+				{display.percentualDesconto != null ? (
 					<span
 						style={{
-							background: marca.corSecundaria,
-							color: marca.corSecundariaForeground,
+							background: brand.corSecundaria,
+							color: brand.corSecundariaForeground,
 							fontSize: 15,
 							fontWeight: 800,
 							padding: "3px 15px",
 							borderRadius: 9999,
 						}}
 					>
-						{discountLabel(display.percentual)}
+						{discountLabel(display.percentualDesconto)}
 					</span>
 				) : null}
-				{validade ? (
-					<span style={{ fontSize: 10.5, opacity: 0.7, letterSpacing: "0.08em", textTransform: "uppercase" }}>Válido até {validade}</span>
+				{validity ? (
+					<span style={{ fontSize: 10.5, opacity: 0.7, letterSpacing: "0.08em", textTransform: "uppercase" }}>Válido até {validity}</span>
 				) : null}
 			</div>
 			<svg
@@ -145,11 +145,11 @@ function Wobbler({ item, marca, opcoes, validade }: TWobblerProps) {
 }
 
 function WobblerSheet({ props, page }: TVisualKitPageArgs) {
-	const validade = formatValidity(props.validadeFim);
+	const validity = formatValidity(props.validadeFim);
 	return (
 		<PageFrame size={A4_PAGE} background={PAPER}>
-			{page.itens.length ? (
-				page.itens.map((item, index) => (
+			{page.items.length ? (
+				page.items.map((item, index) => (
 					<div
 						key={`${item.chave}-${index}`}
 						style={{
@@ -158,19 +158,19 @@ function WobblerSheet({ props, page }: TVisualKitPageArgs) {
 							top: SHEET_TOP + Math.floor(index / 2) * (CELL_HEIGHT + ROW_GAP),
 						}}
 					>
-						<Wobbler item={item} marca={props.marca} opcoes={props.opcoes} validade={validade} />
+						<Wobbler item={item} brand={props.brand} configuracao={props.configuracao} validity={validity} />
 					</div>
 				))
 			) : (
 				<EmptyNotice />
 			)}
-			<SheetFooter marca={props.marca} formato="WOBBLER" page={page} hint="Ø 10 cm · recorte nas linhas tracejadas, dobre na linha da haste" />
+			<SheetFooter brand={props.brand} formato="WOBBLER" page={page} hint="Ø 10 cm · recorte nas linhas tracejadas, dobre na linha da haste" />
 		</PageFrame>
 	);
 }
 
 export const wobblerRenderer: TVisualKitPieceRenderer = {
-	paginate: (props) => paginateSheets(props.itens, PER_SHEET),
+	paginate: (props) => paginateSheets(props.items, PER_SHEET),
 	pageSize: () => A4_PAGE,
 	Page: WobblerSheet,
 };

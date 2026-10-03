@@ -122,14 +122,14 @@ function VisualKitCard({ kit, onDelete }: { kit: TVisualKitListItem; onDelete: (
 					<span className="flex flex-wrap gap-1">
 						{kit.formatos.map((formato) => {
 							const format = VISUAL_KIT_FORMATS[formato];
-							const Icon = format.icone;
+							const Icon = format.icon;
 							return (
 								<span
 									key={formato}
 									className="flex items-center gap-1 rounded-full border border-border bg-background px-2 py-0.5 text-[10px] font-medium text-foreground/80"
 								>
 									<Icon className="h-3 w-3 opacity-70" />
-									{format.nome}
+									{format.name}
 								</span>
 							);
 						})}
@@ -139,7 +139,7 @@ function VisualKitCard({ kit, onDelete }: { kit: TVisualKitListItem; onDelete: (
 			<div className="flex shrink-0 flex-wrap items-center gap-1 self-end lg:self-center">
 				{isGenerated && changed > 0 ? (
 					<Button type="button" variant="brand" size="sm" asChild>
-						<Link href={`${appRoutes.channels.visualKit(kit.id)}?stage=revisao`}>
+						<Link href={`${appRoutes.channels.visualKit(kit.id)}?stage=review`}>
 							<RefreshCw className="h-3.5 w-3.5" />
 							GERAR DE NOVO
 						</Link>
@@ -169,11 +169,11 @@ function DownloadKitButton({ kitId, kitName }: { kitId: string; kitName: string 
 		setDownloading(true);
 		try {
 			const kit = await queryClient.fetchQuery({ queryKey: ["visual-kit-by-id", kitId], queryFn: () => fetchVisualKitById(kitId) });
-			const arquivos = kit.pecas.flatMap((piece) =>
-				piece.arquivos.map((file) => ({ pasta: visualKitPieceFolder(piece.formato), nome: file.nome, source: `/api/files/${file.arquivo.id}` })),
+			const files = kit.pecas.flatMap((piece) =>
+				piece.arquivos.map((file) => ({ folder: visualKitPieceFolder(piece.formato), name: file.nome, source: `/api/files/${file.arquivo.id}` })),
 			);
-			if (arquivos.length === 0) throw new Error("Este kit ainda não tem arquivos gerados.");
-			await downloadVisualKitZip({ zipName: kitZipName(kitName || "kit"), arquivos });
+			if (files.length === 0) throw new Error("Este kit ainda não tem arquivos gerados.");
+			await downloadVisualKitZip({ zipName: kitZipName(kitName || "kit"), files });
 		} catch (error) {
 			toast.error(getErrorMessage(error));
 		} finally {

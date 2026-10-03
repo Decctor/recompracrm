@@ -5,16 +5,16 @@ import { scaleRectToCanvas, SHELF_LABEL_HEIGHT_MM, SHELF_LABEL_PER_SHEET, SHELF_
 const PT_PER_MM = 72 / 25.4;
 const PT_PER_CSS_PX = 72 / 96;
 
-export const PDF_A4_SIZE = { largura: 595.28, altura: 841.89 };
-export const PDF_SHELF_LABEL_SIZE = { largura: SHELF_LABEL_WIDTH_MM * PT_PER_MM, altura: SHELF_LABEL_HEIGHT_MM * PT_PER_MM };
+export const PDF_A4_SIZE = { width: 595.28, height: 841.89 };
+export const PDF_SHELF_LABEL_SIZE = { width: SHELF_LABEL_WIDTH_MM * PT_PER_MM, height: SHELF_LABEL_HEIGHT_MM * PT_PER_MM };
 export const PDF_JPEG_QUALITY = 0.9;
 const PDF_CREATOR = "Comunicação visual";
 
-export type TPdfPageSize = { largura: number; altura: number }; // em pontos (1/72")
+export type TPdfPageSize = { width: number; height: number }; // em pontos (1/72")
 
 /** Página do tamanho da imagem: px CSS → pontos (72/96), descontando o pixel ratio do canvas. */
 export function pdfPageSizeForCanvas(canvas: HTMLCanvasElement, pixelRatio: number): TPdfPageSize {
-	return { largura: (canvas.width / pixelRatio) * PT_PER_CSS_PX, altura: (canvas.height / pixelRatio) * PT_PER_CSS_PX };
+	return { width: (canvas.width / pixelRatio) * PT_PER_CSS_PX, height: (canvas.height / pixelRatio) * PT_PER_CSS_PX };
 }
 
 export type TVisualKitPdfBuilder = {
@@ -38,9 +38,9 @@ async function canvasToJpegBytes(canvas: HTMLCanvasElement) {
  * Monta o PDF página a página: cada canvas é embutido e pode ser descartado em seguida, então a
  * memória não cresce com folhas de 300 dpi (~35 MB cada) guardadas até o fim.
  */
-export async function createVisualKitPdf({ titulo }: { titulo: string }): Promise<TVisualKitPdfBuilder> {
+export async function createVisualKitPdf({ titulo: title }: { titulo: string }): Promise<TVisualKitPdfBuilder> {
 	const doc = await PDFDocument.create();
-	doc.setTitle(titulo);
+	doc.setTitle(title);
 	doc.setCreator(PDF_CREATOR);
 	doc.setProducer(PDF_CREATOR);
 	const now = new Date();
@@ -49,8 +49,8 @@ export async function createVisualKitPdf({ titulo }: { titulo: string }): Promis
 
 	async function addCanvasPage(canvas: HTMLCanvasElement, size: TPdfPageSize) {
 		const image = await doc.embedJpg(await canvasToJpegBytes(canvas));
-		const page = doc.addPage([size.largura, size.altura]);
-		page.drawImage(image, { x: 0, y: 0, width: size.largura, height: size.altura });
+		const page = doc.addPage([size.width, size.height]);
+		page.drawImage(image, { x: 0, y: 0, width: size.width, height: size.height });
 	}
 
 	async function addShelfLabelsFromSheet(sheet: HTMLCanvasElement, { count, pixelRatio }: { count: number; pixelRatio: number }) {

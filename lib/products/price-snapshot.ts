@@ -1,7 +1,7 @@
 // Snapshot do preço de venda anterior em produtos e variantes.
 //
 // Todo update de `precoVenda` em `products`/`productVariants` espalha o retorno de
-// `buildPrecoVendaUpdate` no `.set(...)`. A regra mora aqui (e não num trigger) para ficar visível no
+// `buildSalePriceUpdate` no `.set(...)`. A regra mora aqui (e não num trigger) para ficar visível no
 // código; o teste `price-snapshot.test.ts` varre o repositório e falha se um caminho de escrita novo
 // gravar `precoVenda` sem passar pelo helper.
 
@@ -13,12 +13,12 @@ export function isSamePrice(a: number | null | undefined, b: number | null | und
 	return Math.abs(a - b) < PRICE_EPSILON;
 }
 
-export type TPrecoVendaSnapshotState = {
+export type TSalePriceState = {
 	precoVenda: number | null;
 	precoVendaAnterior: number | null;
 };
 
-export type TPrecoVendaUpdate<TPreco extends number | null> = {
+export type TSalePriceUpdate<TPreco extends number | null> = {
 	precoVenda: TPreco;
 	precoVendaAnterior?: number | null;
 	dataAlteracaoPrecoVenda?: Date;
@@ -29,32 +29,31 @@ export type TPrecoVendaUpdate<TPreco extends number | null> = {
  *
  * - Preço igual ao atual (escritas repetidas de sincronização): só `precoVenda`, sem snapshot.
  * - Preço diferente: o atual vira `precoVendaAnterior` e `dataAlteracaoPrecoVenda` = agora.
- * - `precoVendaAnteriorManual` (formulário do produto) vence quando difere do anterior gravado:
+ * - `next.precoVendaAnterior` (formulário do produto) vence quando difere do anterior gravado:
  *   corrige digitação (9,90 → 99,00 → 9,90 anunciaria 90% de desconto) ou define o "De" explícito.
  *   Um valor manual não nulo também reinicia a data, já que declara a promoção a partir de agora.
  *   Igual ao gravado = o formulário só reenviou o que leu, e a regra automática segue valendo.
+ *   Ausente (`undefined`) = só a regra automática.
  */
-export function buildPrecoVendaUpdate<TPreco extends number | null>({
-	atual,
-	novoPrecoVenda,
-	precoVendaAnteriorManual,
-	agora = new Date(),
+export function buildSalePriceUpdate<TPreco extends number | null>({
+	current,
+	next,
+	now = new Date(),
 }: {
-	atual: TPrecoVendaSnapshotState;
-	novoPrecoVenda: TPreco;
-	precoVendaAnteriorManual?: number | null;
-	agora?: Date;
-}): TPrecoVendaUpdate<TPreco> {
-	const update: TPrecoVendaUpdate<TPreco> = { precoVenda: novoPrecoVenda };
+	current: TSalePriceState;
+	next: { precoVenda: TPreco; precoVendaAnterior?: number | null };
+	now?: Date;
+}): TSalePriceUpdate<TPreco> {
+	const update: TSalePriceUpdate<TPreco> = { precoVenda: next.precoVenda };
 
-	if (!isSamePrice(novoPrecoVenda, atual.precoVenda)) {
-		update.precoVendaAnterior = atual.precoVenda;
-		update.dataAlteracaoPrecoVenda = agora;
+	if (!isSamePrice(next.precoVenda, current.precoVenda)) {
+		update.precoVendaAnterior = current.precoVenda;
+		update.dataAlteracaoPrecoVenda = now;
 	}
 
-	if (precoVendaAnteriorManual !== undefined && !isSamePrice(precoVendaAnteriorManual, atual.precoVendaAnterior)) {
-		update.precoVendaAnterior = precoVendaAnteriorManual;
-		if (precoVendaAnteriorManual != null) update.dataAlteracaoPrecoVenda = agora;
+	if (next.precoVendaAnterior !== undefined && !isSamePrice(next.precoVendaAnterior, current.precoVendaAnterior)) {
+		update.precoVendaAnterior = next.precoVendaAnterior;
+		if (next.precoVendaAnterior != null) update.dataAlteracaoPrecoVenda = now;
 	}
 
 	return update;

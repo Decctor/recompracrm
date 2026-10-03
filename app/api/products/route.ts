@@ -38,7 +38,7 @@ import {
 } from "@/services/drizzle/schema";
 import { and, asc, count, desc, eq, gt, gte, inArray, isNull, lt, lte, max, min, notInArray, or, type SQL, sql } from "drizzle-orm";
 import { upsertProductAddOnOptions } from "@/lib/products/add-on-options";
-import { buildPrecoVendaUpdate } from "@/lib/products/price-snapshot";
+import { buildSalePriceUpdate } from "@/lib/products/price-snapshot";
 import { splitChannelSettingNodes, validateChannelSettingNodes } from "@/lib/products/sales-channels";
 import createHttpError from "http-errors";
 import { z } from "zod";
@@ -1238,10 +1238,9 @@ async function updateProduct({ session, input }: { session: TAuthUserSession; in
 				grupo: input.product.grupo,
 				imagemCapaUrl: input.product.imagemCapaUrl,
 				// Preço atual lido sob a mesma trava: o snapshot não pode usar um preço que outra escrita já trocou.
-				...buildPrecoVendaUpdate({
-					atual: currentProductState,
-					novoPrecoVenda: input.product.precoVenda ?? null,
-					precoVendaAnteriorManual: input.product.precoVendaAnterior,
+				...buildSalePriceUpdate({
+					current: currentProductState,
+					next: { precoVenda: input.product.precoVenda ?? null, precoVendaAnterior: input.product.precoVendaAnterior },
 				}),
 				precoCusto: input.product.precoCusto,
 				codigoBarras: input.product.codigoBarras,
@@ -1344,10 +1343,9 @@ async function updateProduct({ session, input }: { session: TAuthUserSession; in
 						nome: variant.nome,
 						codigo: variant.codigo,
 						imagemCapaUrl: variant.imagemCapaUrl,
-						...buildPrecoVendaUpdate({
-							atual: currentVariantState,
-							novoPrecoVenda: variant.precoVenda,
-							precoVendaAnteriorManual: variant.precoVendaAnterior,
+						...buildSalePriceUpdate({
+							current: currentVariantState,
+							next: { precoVenda: variant.precoVenda, precoVendaAnterior: variant.precoVendaAnterior },
 						}),
 						precoCusto: variant.precoCusto,
 						codigoBarras: variant.codigoBarras,

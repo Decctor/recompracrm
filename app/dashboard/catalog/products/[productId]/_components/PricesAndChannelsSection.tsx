@@ -186,7 +186,7 @@ function PreviousPriceField({
 	onChange: (value: number | null) => void;
 }) {
 	const promotion = resolvePromotion({
-		precoAtual: product.precoVenda,
+		currentPrice: product.precoVenda,
 		precoVendaAnterior: product.precoVendaAnterior,
 		dataAlteracaoPrecoVenda: product.dataAlteracaoPrecoVenda,
 	});

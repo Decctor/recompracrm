@@ -8,7 +8,7 @@ export const maxDuration = 120;
 /** Expira uploads abandonados e remove os bytes de envios diretos que nunca foram conferidos. */
 async function runUploadsSweep() {
 	const result = await sweepExpiredUploads();
-	console.log(`[INFO] [UPLOADS_SWEEP] ${result.expirados} upload(s) expirado(s), ${result.pastasRemovidas} pasta(s) removida(s).`);
+	console.log(`[INFO] [UPLOADS_SWEEP] ${result.expired} upload(s) expirado(s), ${result.removedFolders} pasta(s) removida(s).`);
 	return { data: result, message: "Uploads expirados varridos com sucesso." };
 }
 export type TRunUploadsSweepOutput = Awaited<ReturnType<typeof runUploadsSweep>>;

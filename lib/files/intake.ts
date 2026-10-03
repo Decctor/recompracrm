@@ -27,18 +27,18 @@ type TUploadPurposeBase = {
  * Como os bytes chegam:
  * - `PROXY`: PUT same-origin em /api/uploads/[id]; o servidor decodifica o conteúdo por completo.
  *   O corpo de requisição na Vercel é limitado a ~4.5 MB — `maxBytes` fica abaixo disso.
- * - `DIRETO`: o cliente envia ao provedor por URL assinada (sem limite de corpo da Vercel) e o
+ * - `DIRECT`: o cliente envia ao provedor por URL assinada (sem limite de corpo da Vercel) e o
  *   servidor confere depois, em `completeDirectUpload`: tamanho exato, SHA-256 e tipo pela
  *   assinatura dos primeiros bytes. Para arquivos gerados no navegador (PDFs, imagens de peças).
  */
 export type TUploadPurposeDefinition =
 	| (TUploadPurposeBase & {
-			transporte: "PROXY";
+			transport: "PROXY";
 			/** Valida os bytes por sniffing e decodificação COMPLETA — nunca confie em mime declarado. */
 			inspect: (buffer: Buffer) => Promise<TInspectedFile>;
 	  })
 	| (TUploadPurposeBase & {
-			transporte: "DIRETO";
+			transport: "DIRECT";
 			mimeTypes: ReadonlySet<string>;
 	  });
 
@@ -49,7 +49,7 @@ export type TUploadPurposeDefinition =
  */
 export const UPLOAD_PURPOSES: Record<TUploadPurposeEnum, TUploadPurposeDefinition> = {
 	MIDIA_TEMPLATE_MENSAGEM: {
-		transporte: "PROXY",
+		transport: "PROXY",
 		maxBytes: 4 * 1024 * 1024,
 		ttlMinutes: 60,
 		bucket: PUBLIC_FILES_BUCKET,
@@ -59,7 +59,7 @@ export const UPLOAD_PURPOSES: Record<TUploadPurposeEnum, TUploadPurposeDefinitio
 	},
 	// Arquivos das peças de comunicação visual, gerados no navegador (lib/visual-kits/generation).
 	ARQUIVO_KIT_VISUAL: {
-		transporte: "DIRETO",
+		transport: "DIRECT",
 		maxBytes: 50 * 1024 * 1024,
 		ttlMinutes: 60,
 		bucket: PRIVATE_FILES_BUCKET,
@@ -103,7 +103,7 @@ export async function createUploadIntake({
 	contexto?: TUploadContext | null;
 }) {
 	const definition = getPurposeDefinition(proposito);
-	if (definition.transporte !== "PROXY")
+	if (definition.transport !== "PROXY")
 		throw new createHttpError.BadRequest("Este propósito usa envio direto: crie a intenção com createDirectUploadIntake.");
 	if (!Number.isInteger(tamanhoEsperadoBytes) || tamanhoEsperadoBytes <= 0 || tamanhoEsperadoBytes > definition.maxBytes) {
 		throw new createHttpError.BadRequest(`O arquivo deve ter mais de 0 e no máximo ${Math.floor(definition.maxBytes / (1024 * 1024))} MB.`);
@@ -166,7 +166,7 @@ export async function receiveUploadBytes({
 	if (upload.dataExpiracao <= new Date()) throw new createHttpError.BadRequest("Este upload expirou. Crie um novo antes de enviar os bytes.");
 
 	const definition = getPurposeDefinition(upload.proposito);
-	if (definition.transporte !== "PROXY") throw new createHttpError.BadRequest("Este upload usa envio direto ao armazenamento.");
+	if (definition.transport !== "PROXY") throw new createHttpError.BadRequest("Este upload usa envio direto ao armazenamento.");
 	if (buffer.length !== upload.tamanhoEsperadoBytes) {
 		throw new createHttpError.BadRequest(
 			`Foram recebidos ${buffer.length} bytes, mas o upload declarou ${upload.tamanhoEsperadoBytes}. O arquivo chegou incompleto ou alterado — envie novamente.`,
@@ -245,7 +245,7 @@ export async function createDirectUploadIntake({
 	contexto?: TUploadContext | null;
 }) {
 	const definition = getPurposeDefinition(proposito);
-	if (definition.transporte !== "DIRETO") throw new createHttpError.BadRequest("Este propósito não aceita envio direto.");
+	if (definition.transport !== "DIRECT") throw new createHttpError.BadRequest("Este propósito não aceita envio direto.");
 	if (!definition.mimeTypes.has(mimeType)) throw new createHttpError.BadRequest("Tipo de arquivo não aceito para este envio.");
 	if (!Number.isInteger(tamanhoEsperadoBytes) || tamanhoEsperadoBytes <= 0 || tamanhoEsperadoBytes > definition.maxBytes) {
 		throw new createHttpError.BadRequest(`O arquivo deve ter mais de 0 e no máximo ${Math.floor(definition.maxBytes / (1024 * 1024))} MB.`);
@@ -298,7 +298,7 @@ export async function completeDirectUpload({
 	if (upload.status !== "AGUARDANDO") throw new createHttpError.Conflict("Este upload já foi conferido, consumido ou expirou.");
 	if (upload.dataExpiracao <= new Date()) throw new createHttpError.BadRequest("Este upload expirou. Gere os arquivos de novo.");
 	const definition = getPurposeDefinition(upload.proposito);
-	if (definition.transporte !== "DIRETO") throw new createHttpError.BadRequest("Este upload não é de envio direto.");
+	if (definition.transport !== "DIRECT") throw new createHttpError.BadRequest("Este upload não é de envio direto.");
 	if (!definition.mimeTypes.has(mimeType)) throw new createHttpError.BadRequest("Tipo de arquivo não aceito para este envio.");
 
 	const driver = getStorageDriver("SUPABASE");
@@ -402,16 +402,16 @@ export async function sweepExpiredUploads() {
 		.returning({ id: uploads.id, proposito: uploads.proposito, organizacaoId: uploads.organizacaoId });
 
 	const driver = getStorageDriver("SUPABASE");
-	let pastasRemovidas = 0;
+	let removedFolders = 0;
 	for (const upload of expired) {
 		const definition = UPLOAD_PURPOSES[upload.proposito as TUploadPurposeEnum];
-		if (definition?.transporte !== "DIRETO") continue;
+		if (definition?.transport !== "DIRECT") continue;
 		await driver
-			.removeFolder({ bucket: definition.bucket, pasta: directUploadFolder(definition, upload) })
+			.removeFolder({ bucket: definition.bucket, prefix: directUploadFolder(definition, upload) })
 			.then(() => {
-				pastasRemovidas += 1;
+				removedFolders += 1;
 			})
 			.catch((error) => console.error("[UPLOADS] [SWEEP] Falha ao remover envio direto abandonado:", upload.id, error));
 	}
-	return { expirados: expired.length, pastasRemovidas };
+	return { expired: expired.length, removedFolders };
 }

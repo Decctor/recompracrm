@@ -62,24 +62,24 @@ export function visualKitPieceFileName(formato: TVisualKitFormatEnum, ext: TVisu
 }
 
 /** Imagem por produto: `03-shampoo-anticaspa-200ml.png`. */
-export function visualKitProductFileName(args: { ordem: number; total: number; produtoNome: string; ext: TVisualKitFileExtension }): string {
-	const slug = slugifyFileName(args.produtoNome) || "produto";
-	return `${padFileOrder(args.ordem, args.total)}-${slug}.${args.ext}`;
+export function visualKitProductFileName(args: { order: number; total: number; productName: string; ext: TVisualKitFileExtension }): string {
+	const slug = slugifyFileName(args.productName) || "produto";
+	return `${padFileOrder(args.order, args.total)}-${slug}.${args.ext}`;
 }
 
 /** Página do carrossel: `01.png`, `02.png`… */
-export function visualKitCarouselFileName(args: { ordem: number; total: number; ext: TVisualKitFileExtension }): string {
-	return `${padFileOrder(args.ordem, args.total)}.${args.ext}`;
+export function visualKitCarouselFileName(args: { order: number; total: number; ext: TVisualKitFileExtension }): string {
+	return `${padFileOrder(args.order, args.total)}.${args.ext}`;
 }
 
 /** Página de peça em várias imagens (encarte em PNG): `encarte-01.png`; uma página só → `encarte.png`. */
-export function visualKitPagedFileName(args: { formato: TVisualKitFormatEnum; ordem: number; total: number; ext: TVisualKitFileExtension }): string {
+export function visualKitPagedFileName(args: { formato: TVisualKitFormatEnum; order: number; total: number; ext: TVisualKitFileExtension }): string {
 	if (args.total <= 1) return visualKitPieceFileName(args.formato, args.ext);
-	return `${VISUAL_KIT_PIECE_SLUGS[args.formato]}-${padFileOrder(args.ordem, args.total)}.${args.ext}`;
+	return `${VISUAL_KIT_PIECE_SLUGS[args.formato]}-${padFileOrder(args.order, args.total)}.${args.ext}`;
 }
 
 /** Zip do kit inteiro: `kit-ofertas-da-semana.zip`. */
-export function kitZipName(nomeDoKit: string): string {
-	const slug = slugifyFileName(nomeDoKit);
+export function kitZipName(kitName: string): string {
+	const slug = slugifyFileName(kitName);
 	return slug ? `kit-${slug}.zip` : "kit.zip";
 }

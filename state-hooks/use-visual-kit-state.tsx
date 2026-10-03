@@ -26,14 +26,14 @@ export const EMPTY_VISUAL_KIT_STATE: TVisualKitState = {
 };
 
 function newPiece(formato: TVisualKitFormatEnum): Omit<TVisualKitPiece, "ordem"> {
-	return { formato, saida: VISUAL_KIT_FORMATS[formato].saidas[0].id, configuracao: null };
+	return { formato, saida: VISUAL_KIT_FORMATS[formato].outputs[0].id, configuracao: null };
 }
 
 export function buildVisualKitPayload(state: TVisualKitState): TCreateVisualKitInput {
 	return {
 		kit: state.kit,
-		pecas: state.pecas.map((piece, index) => ({ ...piece, ordem: index })),
-		itens: state.itens.map((item, index) => ({ ...item, ordem: index })),
+		pieces: state.pecas.map((piece, index) => ({ ...piece, ordem: index })),
+		items: state.itens.map((item, index) => ({ ...item, ordem: index })),
 	};
 }
 

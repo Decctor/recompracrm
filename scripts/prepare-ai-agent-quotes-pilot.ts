@@ -2,7 +2,7 @@ import "dotenv/config";
 import { ensureOrganizationAgent } from "@/lib/ai/agent/provisioning";
 import { parseJsonbWithFallback } from "@/lib/ai/shared/json";
 import { getCatalogCommercialReadiness } from "@/lib/products/commercial-readiness";
-import { buildPrecoVendaUpdate } from "@/lib/products/price-snapshot";
+import { buildSalePriceUpdate } from "@/lib/products/price-snapshot";
 import { AiAgentCapabilitiesSchema } from "@/schemas/ai-agents";
 import { connection, db } from "@/services/drizzle";
 import { aiAgents, organizations, productAddOnReferences, products, productVariants } from "@/services/drizzle/schema";
@@ -328,7 +328,7 @@ async function main() {
 				if (!current) continue;
 				await tx
 					.update(productVariants)
-					.set(buildPrecoVendaUpdate({ atual: current, novoPrecoVenda: item.preco_observado }))
+					.set(buildSalePriceUpdate({ current: current, next: { precoVenda: item.preco_observado } }))
 					.where(variantWhere);
 			} else {
 				const productWhere = and(eq(products.id, item.produto_id), eq(products.organizacaoId, args.orgId));
@@ -338,7 +338,7 @@ async function main() {
 					.where(productWhere)
 					.for("update");
 				if (!current) continue;
-				await tx.update(products).set(buildPrecoVendaUpdate({ atual: current, novoPrecoVenda: item.preco_observado })).where(productWhere);
+				await tx.update(products).set(buildSalePriceUpdate({ current: current, next: { precoVenda: item.preco_observado } })).where(productWhere);
 			}
 		}
 

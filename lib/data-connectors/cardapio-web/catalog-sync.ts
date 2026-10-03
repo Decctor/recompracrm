@@ -1,6 +1,6 @@
 import { db } from "@/services/drizzle";
 import { productAddOnOptions, productAddOnReferences, productAddOns, products } from "@/services/drizzle/schema";
-import { buildPrecoVendaUpdate } from "@/lib/products/price-snapshot";
+import { buildSalePriceUpdate } from "@/lib/products/price-snapshot";
 import { eq, inArray } from "drizzle-orm";
 import { createCardapioWebClient, getCardapioWebCatalog } from "./index";
 import { extractAllCatalogData } from "./catalog-mappers";
@@ -48,7 +48,7 @@ export async function syncCardapioWebCatalog(organizationId: string, config: TCa
 						nome: product.nome,
 						descricao: product.descricao,
 						imagemCapaUrl: product.imagemCapaUrl,
-						...buildPrecoVendaUpdate({ atual: existingProduct, novoPrecoVenda: product.precoVenda }),
+						...buildSalePriceUpdate({ current: existingProduct, next: { precoVenda: product.precoVenda } }),
 						precoCusto: product.precoCusto,
 						unidade: product.unidade,
 						grupo: product.grupo,

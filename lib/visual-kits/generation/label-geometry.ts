@@ -1,7 +1,7 @@
 import { mmToPx } from "../formats";
 
 // Geometria da folha de etiquetas de gôndola (A4, grade 2 × 7 de 100 × 40 mm).
-// Fonte da verdade: `lib/visual-kits/pieces/etiqueta-gondola.tsx` (PER_SHEET, LABEL_WIDTH,
+// Fonte da verdade: `lib/visual-kits/pieces/shelf-label.tsx` (PER_SHEET, LABEL_WIDTH,
 // LABEL_HEIGHT, SHEET_TOP, SHEET_LEFT e o grid de 2 colunas preenchido linha a linha). Se o layout
 // da folha mudar lá, mude aqui também — o PDF para etiquetadora recorta cada célula da folha.
 

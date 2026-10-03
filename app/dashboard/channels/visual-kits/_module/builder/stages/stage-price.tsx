@@ -22,7 +22,7 @@ export default function StagePrice() {
 
 	return (
 		<StageShell>
-			<StageShell.Title icon={KIT_STAGES.preco.icone} label={KIT_STAGES.preco.titulo} description={KIT_STAGES.preco.descricao} />
+			<StageShell.Title icon={KIT_STAGES.price.icon} label={KIT_STAGES.price.title} description={KIT_STAGES.price.description} />
 			<StageShell.Body className="gap-6">
 				{orgHasERPAccess && options.length > 0 ? (
 					<section className="flex flex-col gap-3">

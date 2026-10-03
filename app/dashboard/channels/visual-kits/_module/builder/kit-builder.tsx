@@ -16,13 +16,13 @@ type KitBuilderProps = {
 	kitId: string | null;
 	initialState?: TVisualKitState;
 	initialStage: TKitStageId;
-	marca: TVisualKitBrand;
+	brand: TVisualKitBrand;
 	orgHasERPAccess: boolean;
 };
 
-export default function KitBuilder({ kitId, initialState, initialStage, marca, orgHasERPAccess }: KitBuilderProps) {
+export default function KitBuilder({ kitId, initialState, initialStage, brand, orgHasERPAccess }: KitBuilderProps) {
 	return (
-		<KitBuilderProvider kitId={kitId} initialState={initialState} initialStage={initialStage} marca={marca} orgHasERPAccess={orgHasERPAccess}>
+		<KitBuilderProvider kitId={kitId} initialState={initialState} initialStage={initialStage} brand={brand} orgHasERPAccess={orgHasERPAccess}>
 			<div className="mx-auto flex w-full flex-col gap-4 px-3 py-4 lg:px-6">
 				<KitBuilderHeader />
 				<KitBuilderStepper />
@@ -37,15 +37,15 @@ export default function KitBuilder({ kitId, initialState, initialStage, marca, o
 function KitBuilderStage() {
 	const { stage } = useKitBuilder();
 	switch (stage) {
-		case "pecas":
+		case "pieces":
 			return <StagePieces />;
-		case "produtos":
+		case "products":
 			return <StageProducts />;
-		case "preco":
+		case "price":
 			return <StagePrice />;
 		case "visual":
 			return <StageVisual />;
-		case "revisao":
+		case "review":
 			return <StageReview />;
 	}
 }

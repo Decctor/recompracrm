@@ -47,15 +47,15 @@ test("nomes de arquivo por peça", () => {
 	assert.equal(visualKitPieceFileName("ETIQUETA_GONDOLA", "pdf"), "etiquetas-gondola.pdf");
 	assert.equal(visualKitPieceFileName("LISTA_WHATSAPP", "png"), "lista-whatsapp.png");
 	assert.equal(
-		visualKitProductFileName({ ordem: 3, total: 12, produtoNome: "Shampoo Anticaspa 200 ml", ext: "png" }),
+		visualKitProductFileName({ order: 3, total: 12, productName: "Shampoo Anticaspa 200 ml", ext: "png" }),
 		"03-shampoo-anticaspa-200-ml.png",
 	);
-	assert.equal(visualKitProductFileName({ ordem: 7, total: 120, produtoNome: "Óleo", ext: "jpg" }), "007-oleo.jpg");
-	assert.equal(visualKitProductFileName({ ordem: 1, total: 1, produtoNome: "***", ext: "png" }), "01-produto.png");
-	assert.equal(visualKitCarouselFileName({ ordem: 1, total: 20, ext: "png" }), "01.png");
-	assert.equal(visualKitCarouselFileName({ ordem: 20, total: 20, ext: "jpg" }), "20.jpg");
-	assert.equal(visualKitPagedFileName({ formato: "ENCARTE", ordem: 2, total: 3, ext: "png" }), "encarte-02.png");
-	assert.equal(visualKitPagedFileName({ formato: "ENCARTE", ordem: 1, total: 1, ext: "png" }), "encarte.png");
+	assert.equal(visualKitProductFileName({ order: 7, total: 120, productName: "Óleo", ext: "jpg" }), "007-oleo.jpg");
+	assert.equal(visualKitProductFileName({ order: 1, total: 1, productName: "***", ext: "png" }), "01-produto.png");
+	assert.equal(visualKitCarouselFileName({ order: 1, total: 20, ext: "png" }), "01.png");
+	assert.equal(visualKitCarouselFileName({ order: 20, total: 20, ext: "jpg" }), "20.jpg");
+	assert.equal(visualKitPagedFileName({ formato: "ENCARTE", order: 2, total: 3, ext: "png" }), "encarte-02.png");
+	assert.equal(visualKitPagedFileName({ formato: "ENCARTE", order: 1, total: 1, ext: "png" }), "encarte.png");
 	assert.equal(padFileOrder(5, 9), "05");
 	assert.equal(padFileOrder(100, 100), "100");
 });
@@ -97,12 +97,12 @@ test("withProxiedImages reescreve fotos e logo sem mutar as props", () => {
 		preco: 10,
 		promocao: { emPromocao: false, precoDe: null, percentualDesconto: null },
 		precoUnidade: null,
-	} as unknown as Parameters<typeof withProxiedImages>[0]["itens"][number];
+	} as unknown as Parameters<typeof withProxiedImages>[0]["items"][number];
 	const props = {
-		itens: [item],
+		items: [item],
 		chamada: "Ofertas",
 		validadeFim: null,
-		marca: {
+		brand: {
 			nome: "Loja",
 			logoUrl: "https://s3.example.com/logo.png",
 			corPrimaria: "#000",
@@ -110,13 +110,13 @@ test("withProxiedImages reescreve fotos e logo sem mutar as props", () => {
 			corSecundaria: "#fff",
 			corSecundariaForeground: "#000",
 		},
-		opcoes: {},
+		configuracao: {},
 	} as unknown as Parameters<typeof withProxiedImages>[0];
 	const result = withProxiedImages(props, origin);
-	assert.ok(result.itens[0].imagemUrl?.startsWith("/api/visual-kits/image?url="));
-	assert.ok(result.marca.logoUrl?.startsWith("/api/visual-kits/image?url="));
-	assert.equal(props.itens[0].imagemUrl, "https://cdn.example.com/x.png");
-	assert.equal(props.marca.logoUrl, "https://s3.example.com/logo.png");
+	assert.ok(result.items[0].imagemUrl?.startsWith("/api/visual-kits/image?url="));
+	assert.ok(result.brand.logoUrl?.startsWith("/api/visual-kits/image?url="));
+	assert.equal(props.items[0].imagemUrl, "https://cdn.example.com/x.png");
+	assert.equal(props.brand.logoUrl, "https://s3.example.com/logo.png");
 });
 
 test("células da folha de etiquetas: grade 2 × 7 de 100 × 40 mm a partir de (5, 6) mm", () => {
@@ -129,8 +129,8 @@ test("células da folha de etiquetas: grade 2 × 7 de 100 × 40 mm a partir de (
 	const last = shelfLabelCellRect(13);
 	assert.equal(last.x, mmToPx(105));
 	assert.ok(Math.abs(last.y - mmToPx(246)) < 1e-9);
-	assert.ok(last.x + last.width <= A4_PAGE.largura);
-	assert.ok(last.y + last.height <= A4_PAGE.altura);
+	assert.ok(last.x + last.width <= A4_PAGE.width);
+	assert.ok(last.y + last.height <= A4_PAGE.height);
 	assert.throws(() => shelfLabelCellRect(14), RangeError);
 	assert.throws(() => shelfLabelCellRect(-1), RangeError);
 });

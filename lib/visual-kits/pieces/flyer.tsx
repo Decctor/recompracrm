@@ -29,8 +29,8 @@ import {
 const PER_PAGE = 9;
 const GRID_LINE = "#ececec";
 
-function OfferCell({ item, marca, opcoes }: { item: TVisualKitPieceItem; marca: TVisualKitBrand; opcoes: TVisualKitConfig }) {
-	const display = resolveItemDisplay(item, opcoes);
+function OfferCell({ item, brand, configuracao }: { item: TVisualKitPieceItem; brand: TVisualKitBrand; configuracao: TVisualKitConfig }) {
+	const display = resolveItemDisplay(item, configuracao);
 	const detail = joinDefined([item.detalhe, display.precoUnidade ? `${display.precoUnidade.valor} ${display.precoUnidade.rotulo}` : null]);
 	return (
 		<div
@@ -45,15 +45,15 @@ function OfferCell({ item, marca, opcoes }: { item: TVisualKitPieceItem; marca: 
 				overflow: "hidden",
 			}}
 		>
-			<ProductImage item={item} marca={marca} radius={6} style={{ flex: 1, minHeight: 83 }} />
-			{display.percentual != null ? (
+			<ProductImage item={item} brand={brand} radius={6} style={{ flex: 1, minHeight: 83 }} />
+			{display.percentualDesconto != null ? (
 				<span
 					style={{
 						position: "absolute",
 						top: 13,
 						left: 13,
-						background: marca.corPrimaria,
-						color: marca.corPrimariaForeground,
+						background: brand.corPrimaria,
+						color: brand.corPrimariaForeground,
 						fontSize: 13.5,
 						fontWeight: 800,
 						padding: "4px 9px",
@@ -61,7 +61,7 @@ function OfferCell({ item, marca, opcoes }: { item: TVisualKitPieceItem; marca: 
 						borderBottomRightRadius: 8,
 					}}
 				>
-					{discountLabel(display.percentual)}
+					{discountLabel(display.percentualDesconto)}
 				</span>
 			) : null}
 			<span style={{ fontSize: 15, fontWeight: 700, lineHeight: 1.08, letterSpacing: "-0.01em", color: INK, marginTop: 4, ...clampLines(2) }}>
@@ -70,10 +70,10 @@ function OfferCell({ item, marca, opcoes }: { item: TVisualKitPieceItem; marca: 
 			{detail ? (
 				<span style={{ fontSize: 11, color: MUTED_INK, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{detail}</span>
 			) : null}
-			<div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 8, color: accentOnPaper(marca) }}>
+			<div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 8, color: accentOnPaper(brand) }}>
 				{display.precoDe != null ? (
 					<span style={{ fontSize: 11, color: MUTED_INK, lineHeight: 1.2 }}>
-						<FromPrice value={display.precoDe} withPor={false} />
+						<FromPrice value={display.precoDe} withSuffix={false} />
 						<br />
 						por
 					</span>
@@ -84,17 +84,17 @@ function OfferCell({ item, marca, opcoes }: { item: TVisualKitPieceItem; marca: 
 	);
 }
 
-function EncartePage({ props, page }: TVisualKitPageArgs) {
-	const { marca } = props;
-	const validade = formatValidity(props.validadeFim);
-	const pages = Math.ceil(Math.max(1, props.itens.length) / PER_PAGE);
-	const blanks = page.itens.length ? PER_PAGE - page.itens.length : 0;
+function FlyerPage({ props, page }: TVisualKitPageArgs) {
+	const { brand } = props;
+	const validity = formatValidity(props.validadeFim);
+	const pages = Math.ceil(Math.max(1, props.items.length) / PER_PAGE);
+	const blanks = page.items.length ? PER_PAGE - page.items.length : 0;
 	return (
 		<PageFrame size={A4_PAGE} background={PAPER} style={{ display: "flex", flexDirection: "column" }}>
 			<div
 				style={{
-					background: marca.corPrimaria,
-					color: marca.corPrimariaForeground,
+					background: brand.corPrimaria,
+					color: brand.corPrimariaForeground,
 					padding: "30px 34px",
 					display: "flex",
 					alignItems: "center",
@@ -102,9 +102,9 @@ function EncartePage({ props, page }: TVisualKitPageArgs) {
 				}}
 			>
 				{/* Sem logo, o sobretítulo com o nome da organização faz o papel de marca. */}
-				{marca.logoUrl ? <LogoImage src={marca.logoUrl} alt={marca.nome} size={87} radius={11} /> : null}
+				{brand.logoUrl ? <LogoImage src={brand.logoUrl} alt={brand.nome} size={87} radius={11} /> : null}
 				<div style={{ display: "flex", flex: 1, minWidth: 0, flexDirection: "column", gap: 8 }}>
-					<Eyebrow marca={marca} size={14} />
+					<Eyebrow brand={brand} size={14} />
 					<span
 						style={{
 							fontSize: fitTitleSize(props.chamada, 57, 18),
@@ -118,10 +118,10 @@ function EncartePage({ props, page }: TVisualKitPageArgs) {
 						{props.chamada}
 					</span>
 				</div>
-				{validade ? <ValidityBadge marca={marca} validade={validade} scale={1.89} /> : null}
+				{validity ? <ValidityBadge brand={brand} validity={validity} scale={1.89} /> : null}
 			</div>
 			<div style={{ position: "relative", flex: 1, minHeight: 0, margin: 23 }}>
-				{page.itens.length ? (
+				{page.items.length ? (
 					<div
 						style={{
 							height: "100%",
@@ -134,8 +134,8 @@ function EncartePage({ props, page }: TVisualKitPageArgs) {
 							boxSizing: "border-box",
 						}}
 					>
-						{page.itens.map((item) => (
-							<OfferCell key={item.chave} item={item} marca={marca} opcoes={props.opcoes} />
+						{page.items.map((item) => (
+							<OfferCell key={item.chave} item={item} brand={brand} configuracao={props.configuracao} />
 						))}
 						{Array.from({ length: blanks }, (_, index) => (
 							<div key={`blank-${index}`} style={{ background: PAPER }} />
@@ -150,23 +150,23 @@ function EncartePage({ props, page }: TVisualKitPageArgs) {
 					display: "flex",
 					justifyContent: "space-between",
 					gap: 16,
-					background: marca.corSecundaria,
-					color: marca.corSecundariaForeground,
+					background: brand.corSecundaria,
+					color: brand.corSecundariaForeground,
 					padding: "13px 34px",
 					fontSize: 12,
 					fontWeight: 600,
 					letterSpacing: "0.02em",
 				}}
 			>
-				<span>{offersDisclaimer(validade, "Imagens meramente ilustrativas.")}</span>
-				{pages > 1 ? <span style={{ flexShrink: 0 }}>{`${page.indice + 1}/${pages}`}</span> : null}
+				<span>{offersDisclaimer(validity, "Imagens meramente ilustrativas.")}</span>
+				{pages > 1 ? <span style={{ flexShrink: 0 }}>{`${page.index + 1}/${pages}`}</span> : null}
 			</div>
 		</PageFrame>
 	);
 }
 
-export const encarteRenderer: TVisualKitPieceRenderer = {
-	paginate: (props) => paginateSheets(props.itens, PER_PAGE, "Página"),
+export const flyerRenderer: TVisualKitPieceRenderer = {
+	paginate: (props) => paginateSheets(props.items, PER_PAGE, "Página"),
 	pageSize: () => A4_PAGE,
-	Page: EncartePage,
+	Page: FlyerPage,
 };

@@ -27,11 +27,11 @@ const LABEL_HEIGHT = mmToPx(40);
 const SHEET_TOP = mmToPx(6);
 const SHEET_LEFT = mmToPx(5);
 
-type TShelfLabelProps = { item: TVisualKitPieceItem; marca: TVisualKitBrand; opcoes: TVisualKitConfig; validade: string | null };
+type TShelfLabelProps = { item: TVisualKitPieceItem; brand: TVisualKitBrand; configuracao: TVisualKitConfig; validity: string | null };
 
-function ShelfLabel({ item, marca, opcoes, validade }: TShelfLabelProps) {
-	const display = resolveItemDisplay(item, opcoes);
-	const barcode = barcodeFor(item, opcoes);
+function ShelfLabel({ item, brand, configuracao, validity }: TShelfLabelProps) {
+	const display = resolveItemDisplay(item, configuracao);
+	const barcode = barcodeFor(item, configuracao);
 	return (
 		<div
 			style={{
@@ -77,8 +77,8 @@ function ShelfLabel({ item, marca, opcoes, validade }: TShelfLabelProps) {
 						position: "relative",
 						width: 159,
 						flexShrink: 0,
-						background: marca.corSecundaria,
-						color: marca.corSecundariaForeground,
+						background: brand.corSecundaria,
+						color: brand.corSecundariaForeground,
 						display: "flex",
 						flexDirection: "column",
 						alignItems: "center",
@@ -87,21 +87,21 @@ function ShelfLabel({ item, marca, opcoes, validade }: TShelfLabelProps) {
 						padding: "0 6px",
 					}}
 				>
-					{display.percentual != null ? (
+					{display.percentualDesconto != null ? (
 						<span
 							style={{
 								position: "absolute",
 								top: 0,
 								left: 0,
-								background: marca.corPrimaria,
-								color: marca.corPrimariaForeground,
+								background: brand.corPrimaria,
+								color: brand.corPrimariaForeground,
 								fontSize: 12.5,
 								fontWeight: 800,
 								padding: "4px 9px 4px 8px",
 								borderBottomRightRadius: 8,
 							}}
 						>
-							{discountLabel(display.percentual)}
+							{discountLabel(display.percentualDesconto)}
 						</span>
 					) : null}
 					{display.precoDe != null ? (
@@ -115,8 +115,8 @@ function ShelfLabel({ item, marca, opcoes, validade }: TShelfLabelProps) {
 				style={{
 					height: 23,
 					flexShrink: 0,
-					background: marca.corPrimaria,
-					color: marca.corPrimariaForeground,
+					background: brand.corPrimaria,
+					color: brand.corPrimariaForeground,
 					display: "flex",
 					alignItems: "center",
 					justifyContent: "space-between",
@@ -129,18 +129,18 @@ function ShelfLabel({ item, marca, opcoes, validade }: TShelfLabelProps) {
 					whiteSpace: "nowrap",
 				}}
 			>
-				<span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{marca.nome}</span>
-				{validade ? <span>Válido até {validade}</span> : null}
+				<span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{brand.nome}</span>
+				{validity ? <span>Válido até {validity}</span> : null}
 			</div>
 		</div>
 	);
 }
 
-function GondolaSheet({ props, page }: TVisualKitPageArgs) {
-	const validade = formatValidity(props.validadeFim);
+function ShelfLabelSheet({ props, page }: TVisualKitPageArgs) {
+	const validity = formatValidity(props.validadeFim);
 	return (
 		<PageFrame size={A4_PAGE} background={PAPER}>
-			{page.itens.length ? (
+			{page.items.length ? (
 				<div
 					style={{
 						position: "absolute",
@@ -151,20 +151,20 @@ function GondolaSheet({ props, page }: TVisualKitPageArgs) {
 						gridAutoRows: `${LABEL_HEIGHT}px`,
 					}}
 				>
-					{page.itens.map((item, index) => (
-						<ShelfLabel key={`${item.chave}-${index}`} item={item} marca={props.marca} opcoes={props.opcoes} validade={validade} />
+					{page.items.map((item, index) => (
+						<ShelfLabel key={`${item.chave}-${index}`} item={item} brand={props.brand} configuracao={props.configuracao} validity={validity} />
 					))}
 				</div>
 			) : (
 				<EmptyNotice />
 			)}
-			<SheetFooter marca={props.marca} formato="ETIQUETA_GONDOLA" page={page} hint="Recorte nas linhas tracejadas" />
+			<SheetFooter brand={props.brand} formato="ETIQUETA_GONDOLA" page={page} hint="Recorte nas linhas tracejadas" />
 		</PageFrame>
 	);
 }
 
-export const etiquetaGondolaRenderer: TVisualKitPieceRenderer = {
-	paginate: (props) => paginateSheets(props.itens, PER_SHEET),
+export const shelfLabelRenderer: TVisualKitPieceRenderer = {
+	paginate: (props) => paginateSheets(props.items, PER_SHEET),
 	pageSize: () => A4_PAGE,
-	Page: GondolaSheet,
+	Page: ShelfLabelSheet,
 };

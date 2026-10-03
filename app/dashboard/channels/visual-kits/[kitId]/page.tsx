@@ -22,7 +22,7 @@ export default async function VisualKitBuilderPage({
 			kitId={kitId}
 			// Kit existente abre direto no Visual: é onde se confere e ajusta as peças já montadas.
 			initialStage={isKitStageId(stage) ? stage : "visual"}
-			marca={resolveVisualKitBrand(organization)}
+			brand={resolveVisualKitBrand(organization)}
 			orgHasERPAccess={organization.configuracao.recursos.erp.acesso}
 		/>
 	);

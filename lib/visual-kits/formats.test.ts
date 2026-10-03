@@ -15,15 +15,15 @@ test("todo formato do enum está no registro e na ordem canônica, com ao menos 
 	for (const formato of VisualKitFormatEnum.options) {
 		assert.ok(VISUAL_KIT_FORMATS[formato], formato);
 		assert.ok(VISUAL_KIT_FORMAT_ORDER.includes(formato), formato);
-		assert.ok(VISUAL_KIT_FORMATS[formato].saidas.length > 0, formato);
+		assert.ok(VISUAL_KIT_FORMATS[formato].outputs.length > 0, formato);
 	}
 	assert.equal(VISUAL_KIT_FORMAT_ORDER.length, VisualKitFormatEnum.options.length);
 });
 
 test("kits prontos só usam formatos existentes, sem repetição", () => {
 	for (const preset of VISUAL_KIT_PRESETS) {
-		assert.equal(new Set(preset.formatos).size, preset.formatos.length, preset.id);
-		for (const formato of preset.formatos) assert.ok(VISUAL_KIT_FORMATS[formato], `${preset.id}: ${formato}`);
+		assert.equal(new Set(preset.formats).size, preset.formats.length, preset.id);
+		for (const formato of preset.formats) assert.ok(VISUAL_KIT_FORMATS[formato], `${preset.id}: ${formato}`);
 	}
 });
 

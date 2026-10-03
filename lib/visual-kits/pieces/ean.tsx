@@ -10,11 +10,11 @@ const G_CODES = R_CODES.map((code) => code.split("").reverse().join(""));
 const EAN13_PARITY = ["LLLLLL", "LLGLGG", "LLGGLG", "LLGGGL", "LGLLGG", "LGGLLG", "LGGGLL", "LGLGLG", "LGLGGL", "LGGLGL"];
 
 export type TEanBars = {
-	tipo: "EAN13" | "EAN8";
-	digitos: string;
-	modulos: string; // "1" = barra, "0" = espaço
+	kind: "EAN13" | "EAN8";
+	digits: string;
+	modules: string; // "1" = barra, "0" = espaço
 	// Índices [início, fim) dos módulos de guarda (barras mais longas).
-	guardas: [number, number][];
+	guards: [number, number][];
 };
 
 /** Normaliza o código: EAN-13 e EAN-8 como estão; UPC-A (12) vira EAN-13 com 0 à esquerda; o resto, nulo. */
@@ -34,16 +34,16 @@ export function eanBars(code: string | null | undefined): TEanBars | null {
 	const d = digits.split("").map(Number);
 
 	if (digits.length === 8) {
-		let modulos = "101";
-		for (let i = 0; i < 4; i++) modulos += L_CODES[d[i]];
-		modulos += "01010";
-		for (let i = 4; i < 8; i++) modulos += R_CODES[d[i]];
-		modulos += "101";
+		let modules = "101";
+		for (let i = 0; i < 4; i++) modules += L_CODES[d[i]];
+		modules += "01010";
+		for (let i = 4; i < 8; i++) modules += R_CODES[d[i]];
+		modules += "101";
 		return {
-			tipo: "EAN8",
-			digitos: digits,
-			modulos,
-			guardas: [
+			kind: "EAN8",
+			digits,
+			modules,
+			guards: [
 				[0, 3],
 				[31, 36],
 				[64, 67],
@@ -52,16 +52,16 @@ export function eanBars(code: string | null | undefined): TEanBars | null {
 	}
 
 	const parity = EAN13_PARITY[d[0]];
-	let modulos = "101";
-	for (let i = 1; i <= 6; i++) modulos += (parity[i - 1] === "L" ? L_CODES : G_CODES)[d[i]];
-	modulos += "01010";
-	for (let i = 7; i <= 12; i++) modulos += R_CODES[d[i]];
-	modulos += "101";
+	let modules = "101";
+	for (let i = 1; i <= 6; i++) modules += (parity[i - 1] === "L" ? L_CODES : G_CODES)[d[i]];
+	modules += "01010";
+	for (let i = 7; i <= 12; i++) modules += R_CODES[d[i]];
+	modules += "101";
 	return {
-		tipo: "EAN13",
-		digitos: digits,
-		modulos,
-		guardas: [
+		kind: "EAN13",
+		digits,
+		modules,
+		guards: [
 			[0, 3],
 			[45, 50],
 			[92, 95],
@@ -77,15 +77,15 @@ const TEXT_Y = 35;
 const FONT_SIZE = 8.5;
 
 function barsPath(bars: TEanBars, offset: number) {
-	const isGuard = (index: number) => bars.guardas.some(([start, end]) => index >= start && index < end);
+	const isGuard = (index: number) => bars.guards.some(([start, end]) => index >= start && index < end);
 	let path = "";
-	for (let i = 0; i < bars.modulos.length; ) {
-		if (bars.modulos[i] !== "1") {
+	for (let i = 0; i < bars.modules.length; ) {
+		if (bars.modules[i] !== "1") {
 			i++;
 			continue;
 		}
 		let j = i;
-		while (bars.modulos[j] === "1") j++;
+		while (bars.modules[j] === "1") j++;
 		const height = isGuard(i) ? GUARD_HEIGHT : BAR_HEIGHT;
 		path += `M${offset + i} 0h${j - i}v${height}h${i - j}z`;
 		i = j;
@@ -107,12 +107,12 @@ export function EanBarcode({ code, width, height, color = "#111111", style }: TE
 	const bars = eanBars(code);
 	if (!bars) return null;
 
-	const isEan13 = bars.tipo === "EAN13";
+	const isEan13 = bars.kind === "EAN13";
 	// EAN-13 reserva a margem esquerda para o primeiro dígito, impresso fora das barras.
 	const left = isEan13 ? 9 : 7;
 	const right = isEan13 ? 4 : 7;
-	const viewWidth = left + bars.modulos.length + right;
-	const halves = isEan13 ? [bars.digitos.slice(1, 7), bars.digitos.slice(7)] : [bars.digitos.slice(0, 4), bars.digitos.slice(4)];
+	const viewWidth = left + bars.modules.length + right;
+	const halves = isEan13 ? [bars.digits.slice(1, 7), bars.digits.slice(7)] : [bars.digits.slice(0, 4), bars.digits.slice(4)];
 	const halfCenters = isEan13 ? [left + 24, left + 71] : [left + 17, left + 50];
 
 	const resolvedWidth = width ?? (height != null ? (height * viewWidth) / VIEW_HEIGHT : undefined);
@@ -124,14 +124,14 @@ export function EanBarcode({ code, width, height, color = "#111111", style }: TE
 			width={resolvedWidth}
 			height={resolvedHeight}
 			role="img"
-			aria-label={bars.digitos}
+			aria-label={bars.digits}
 			style={{ display: "block", flexShrink: 0, fill: color, ...style }}
 		>
 			<path d={barsPath(bars, left)} />
 			<g fontSize={FONT_SIZE} fontWeight={500} textAnchor="middle" letterSpacing={0.6}>
 				{isEan13 ? (
 					<text x={4} y={TEXT_Y}>
-						{bars.digitos[0]}
+						{bars.digits[0]}
 					</text>
 				) : null}
 				<text x={halfCenters[0]} y={TEXT_Y}>

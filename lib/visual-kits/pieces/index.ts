@@ -1,26 +1,26 @@
 import type { TVisualKitFormatEnum } from "@/schemas/enums";
 import type { TVisualKitPage, TVisualKitPieceProps } from "../types";
-import { adesivoPrecoRenderer } from "./adesivo-preco";
-import { carrosselRenderer } from "./carrossel";
-import { encarteRenderer } from "./encarte";
-import { etiquetaGondolaRenderer } from "./etiqueta-gondola";
-import { listaWhatsappRenderer } from "./lista-whatsapp";
-import { postFeedRenderer } from "./post-feed";
-import { seloProdutoRenderer } from "./selo-produto";
+import { priceStickerRenderer } from "./price-sticker";
+import { carouselRenderer } from "./carousel";
+import { flyerRenderer } from "./flyer";
+import { shelfLabelRenderer } from "./shelf-label";
+import { whatsappListRenderer } from "./whatsapp-list";
+import { feedPostRenderer } from "./feed-post";
+import { productBadgeRenderer } from "./product-badge";
 import type { TVisualKitPageSize, TVisualKitPieceRenderer } from "./shared";
 import { storyRenderer } from "./story";
 import { wobblerRenderer } from "./wobbler";
 
 export const VISUAL_KIT_PIECE_RENDERERS: Record<TVisualKitFormatEnum, TVisualKitPieceRenderer> = {
-	ETIQUETA_GONDOLA: etiquetaGondolaRenderer,
-	ADESIVO_PRECO: adesivoPrecoRenderer,
+	ETIQUETA_GONDOLA: shelfLabelRenderer,
+	ADESIVO_PRECO: priceStickerRenderer,
 	WOBBLER: wobblerRenderer,
-	ENCARTE: encarteRenderer,
-	SELO_PRODUTO: seloProdutoRenderer,
-	POST_FEED: postFeedRenderer,
+	ENCARTE: flyerRenderer,
+	SELO_PRODUTO: productBadgeRenderer,
+	POST_FEED: feedPostRenderer,
 	STORY: storyRenderer,
-	CARROSSEL: carrosselRenderer,
-	LISTA_WHATSAPP: listaWhatsappRenderer,
+	CARROSSEL: carouselRenderer,
+	LISTA_WHATSAPP: whatsappListRenderer,
 };
 
 export function paginateVisualKitPiece(formato: TVisualKitFormatEnum, props: TVisualKitPieceProps): TVisualKitPage[] {
@@ -31,14 +31,14 @@ export function getVisualKitPageSize(formato: TVisualKitFormatEnum, props: TVisu
 	return VISUAL_KIT_PIECE_RENDERERS[formato].pageSize(props, page);
 }
 
-export { adesivoPrecoRenderer, expandStickerItems } from "./adesivo-preco";
-export { carrosselRenderer } from "./carrossel";
+export { priceStickerRenderer, expandStickerItems } from "./price-sticker";
+export { carouselRenderer } from "./carousel";
 export { Ean13Barcode, EanBarcode, eanBars, normalizeEanCode, type TEanBars } from "./ean";
-export { encarteRenderer } from "./encarte";
-export { etiquetaGondolaRenderer } from "./etiqueta-gondola";
-export { listaWhatsappRenderer } from "./lista-whatsapp";
-export { postFeedRenderer } from "./post-feed";
-export { seloProdutoRenderer } from "./selo-produto";
+export { flyerRenderer } from "./flyer";
+export { shelfLabelRenderer } from "./shelf-label";
+export { whatsappListRenderer } from "./whatsapp-list";
+export { feedPostRenderer } from "./feed-post";
+export { productBadgeRenderer } from "./product-badge";
 export {
 	formatMoney,
 	formatValidity,

@@ -42,7 +42,7 @@ const CompleteVisualKitGenerationInputSchema = z.object({
 		required_error: "ID do kit não informado.",
 		invalid_type_error: "Tipo inválido para ID do kit.",
 	}),
-	pecas: z.array(
+	pieces: z.array(
 		z.object({
 			formato: VisualKitFormatEnum,
 			saida: VisualKitOutputEnum,
@@ -57,7 +57,7 @@ const CompleteVisualKitGenerationInputSchema = z.object({
 		},
 	),
 	// Preços efetivamente impressos, por item: base do aviso "Preço mudou".
-	precos: z.array(
+	prices: z.array(
 		z.object({
 			produtoId: z.string({ required_error: "Produto não informado.", invalid_type_error: "Tipo inválido para produto." }),
 			produtoVarianteId: z.string({ invalid_type_error: "Tipo inválido para variante." }).nullable(),
@@ -88,13 +88,13 @@ async function completeVisualKitGeneration({ input, session }: { input: TComplet
 	if (!kit) throw new createHttpError.NotFound("Kit não encontrado.");
 
 	const pieceByFormat = new Map(kit.pecas.map((piece) => [piece.formato, piece.id]));
-	if (input.pecas.length !== kit.pecas.length || input.pecas.some((piece) => !pieceByFormat.has(piece.formato))) {
+	if (input.pieces.length !== kit.pecas.length || input.pieces.some((piece) => !pieceByFormat.has(piece.formato))) {
 		throw new createHttpError.BadRequest("As peças geradas não correspondem às peças do kit. Atualize a página e gere de novo.");
 	}
-	if (input.pecas.some((piece) => piece.arquivos.length === 0)) throw new createHttpError.BadRequest("Alguma peça foi gerada sem arquivos.");
+	if (input.pieces.some((piece) => piece.arquivos.length === 0)) throw new createHttpError.BadRequest("Alguma peça foi gerada sem arquivos.");
 
 	// 1. Conferência dos bytes (fora da transação: lê o armazenamento).
-	const generatedFiles = input.pecas.flatMap((piece) => piece.arquivos.map((arquivo) => ({ ...arquivo, formato: piece.formato })));
+	const generatedFiles = input.pieces.flatMap((piece) => piece.arquivos.map((arquivo) => ({ ...arquivo, formato: piece.formato })));
 	const fileByUpload = new Map<string, TFileEntity>();
 	try {
 		await mapWithConcurrency(generatedFiles, 4, async (arquivo) => {
@@ -123,7 +123,7 @@ async function completeVisualKitGeneration({ input, session }: { input: TComplet
 			.where(inArray(visualKitPieceFiles.pecaId, pieceIds));
 		await tx.delete(visualKitPieceFiles).where(inArray(visualKitPieceFiles.pecaId, pieceIds));
 
-		for (const piece of input.pecas) {
+		for (const piece of input.pieces) {
 			const pecaId = pieceByFormat.get(piece.formato) as string;
 			await tx.insert(visualKitPieceFiles).values(
 				piece.arquivos.map((arquivo) => {
@@ -143,7 +143,7 @@ async function completeVisualKitGeneration({ input, session }: { input: TComplet
 			await tx.update(visualKitPieces).set({ saida: piece.saida, dataGeracao: now }).where(eq(visualKitPieces.id, pecaId));
 		}
 
-		const priceByKey = new Map(input.precos.map((price) => [visualKitItemKey(price), price]));
+		const priceByKey = new Map(input.prices.map((price) => [visualKitItemKey(price), price]));
 		const items = await tx
 			.select({ id: visualKitItems.id, produtoId: visualKitItems.produtoId, produtoVarianteId: visualKitItems.produtoVarianteId })
 			.from(visualKitItems)
@@ -166,7 +166,7 @@ async function completeVisualKitGeneration({ input, session }: { input: TComplet
 		await Promise.all(previousFiles.map(deleteStoredFile));
 	}
 
-	return { data: { kitId: kit.id, arquivos: fileByUpload.size }, message: "Kit gerado com sucesso." };
+	return { data: { kitId: kit.id, fileCount: fileByUpload.size }, message: "Kit gerado com sucesso." };
 }
 export type TCompleteVisualKitGenerationOutput = Awaited<ReturnType<typeof completeVisualKitGeneration>>;
 

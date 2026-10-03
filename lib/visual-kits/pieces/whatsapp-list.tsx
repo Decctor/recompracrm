@@ -24,27 +24,27 @@ import {
 	ValidityBadge,
 } from "./shared";
 
-const WIDTH = VISUAL_KIT_FORMATS.LISTA_WHATSAPP.pagina.largura;
+const WIDTH = VISUAL_KIT_FORMATS.LISTA_WHATSAPP.page.width;
 // Cabeçalho + rodapé somam 480 px (ver `VISUAL_KIT_FORMATS.LISTA_WHATSAPP.pagina`).
 const HEADER_HEIGHT = 350;
 const FOOTER_HEIGHT = 130;
 const ROW_HEIGHT = 150;
 
 function paginate(props: TVisualKitPieceProps): TVisualKitPage[] {
-	const itens = props.itens.slice(0, visualKitPieceItemCount("LISTA_WHATSAPP", props.itens.length));
-	return [{ indice: 0, tipo: "LISTA", itens, rotulo: "Lista" }];
+	const listItems = props.items.slice(0, visualKitPieceItemCount("LISTA_WHATSAPP", props.items.length));
+	return [{ index: 0, kind: "LIST", items: listItems, label: "Lista" }];
 }
 
 // Sem itens, reserva uma linha para o aviso de lista vazia.
 function pageSize(_props: TVisualKitPieceProps, page: TVisualKitPage): TVisualKitPageSize {
-	return { largura: WIDTH, altura: HEADER_HEIGHT + FOOTER_HEIGHT + Math.max(1, page.itens.length) * ROW_HEIGHT };
+	return { width: WIDTH, height: HEADER_HEIGHT + FOOTER_HEIGHT + Math.max(1, page.items.length) * ROW_HEIGHT };
 }
 
-type TListRowProps = { item: TVisualKitPieceItem; position: number; marca: TVisualKitBrand; opcoes: TVisualKitConfig };
+type TListRowProps = { item: TVisualKitPieceItem; position: number; brand: TVisualKitBrand; configuracao: TVisualKitConfig };
 
-function ListRow({ item, position, marca, opcoes }: TListRowProps) {
-	const display = resolveItemDisplay(item, opcoes);
-	const hasPromo = display.precoDe != null || display.percentual != null;
+function ListRow({ item, position, brand, configuracao }: TListRowProps) {
+	const display = resolveItemDisplay(item, configuracao);
+	const hasPromo = display.precoDe != null || display.percentualDesconto != null;
 	return (
 		<div
 			style={{
@@ -60,7 +60,7 @@ function ListRow({ item, position, marca, opcoes }: TListRowProps) {
 			<span style={{ width: 47, flexShrink: 0, fontSize: 27, fontWeight: 700, color: "#a3a3a3", fontVariantNumeric: "lining-nums tabular-nums" }}>
 				{String(position).padStart(2, "0")}
 			</span>
-			<ProductImage item={item} marca={marca} radius={20} style={{ width: 110, height: 110, flexShrink: 0 }} />
+			<ProductImage item={item} brand={brand} radius={20} style={{ width: 110, height: 110, flexShrink: 0 }} />
 			<div style={{ display: "flex", flex: 1, minWidth: 0, flexDirection: "column", gap: 6 }}>
 				<span style={{ fontSize: 36, fontWeight: 700, lineHeight: 1.1, letterSpacing: "-0.01em", color: INK, ...clampLines(2) }}>{item.nome}</span>
 				{item.detalhe ? <span style={{ fontSize: 27, color: MUTED_INK }}>{item.detalhe}</span> : null}
@@ -69,18 +69,18 @@ function ListRow({ item, position, marca, opcoes }: TListRowProps) {
 				{hasPromo ? (
 					<span style={{ display: "flex", alignItems: "center", gap: 14 }}>
 						{display.precoDe != null ? <s style={{ fontSize: 25, color: "#8a8a8a" }}>{formatMoney(display.precoDe)}</s> : null}
-						{display.percentual != null ? (
+						{display.percentualDesconto != null ? (
 							<span
 								style={{
-									background: marca.corSecundaria,
-									color: marca.corSecundariaForeground,
+									background: brand.corSecundaria,
+									color: brand.corSecundariaForeground,
 									fontSize: 23,
 									fontWeight: 800,
 									padding: "4px 14px",
 									borderRadius: 11,
 								}}
 							>
-								{discountLabel(display.percentual)}
+								{discountLabel(display.percentualDesconto)}
 							</span>
 						) : null}
 					</span>
@@ -91,9 +91,9 @@ function ListRow({ item, position, marca, opcoes }: TListRowProps) {
 	);
 }
 
-function ListaPage({ props, page }: TVisualKitPageArgs) {
-	const { marca } = props;
-	const validade = formatValidity(props.validadeFim);
+function WhatsappListPage({ props, page }: TVisualKitPageArgs) {
+	const { brand } = props;
+	const validity = formatValidity(props.validadeFim);
 	return (
 		<PageFrame size={pageSize(props, page)} background={PAPER} style={{ display: "flex", flexDirection: "column" }}>
 			<div
@@ -101,8 +101,8 @@ function ListaPage({ props, page }: TVisualKitPageArgs) {
 					height: HEADER_HEIGHT,
 					flexShrink: 0,
 					boxSizing: "border-box",
-					background: marca.corPrimaria,
-					color: marca.corPrimariaForeground,
+					background: brand.corPrimaria,
+					color: brand.corPrimariaForeground,
 					padding: "0 58px",
 					display: "flex",
 					alignItems: "center",
@@ -110,9 +110,9 @@ function ListaPage({ props, page }: TVisualKitPageArgs) {
 				}}
 			>
 				{/* Sem logo, o sobretítulo com o nome da organização faz o papel de marca. */}
-				{marca.logoUrl ? <LogoImage src={marca.logoUrl} alt={marca.nome} size={130} radius={29} /> : null}
+				{brand.logoUrl ? <LogoImage src={brand.logoUrl} alt={brand.nome} size={130} radius={29} /> : null}
 				<div style={{ display: "flex", flex: 1, minWidth: 0, flexDirection: "column", gap: 11 }}>
-					<Eyebrow marca={marca} size={25} />
+					<Eyebrow brand={brand} size={25} />
 					<span
 						style={{
 							fontSize: fitTitleSize(props.chamada, 79, 18),
@@ -126,11 +126,11 @@ function ListaPage({ props, page }: TVisualKitPageArgs) {
 						{props.chamada}
 					</span>
 				</div>
-				{validade ? <ValidityBadge marca={marca} validade={validade} scale={3.6} /> : null}
+				{validity ? <ValidityBadge brand={brand} validity={validity} scale={3.6} /> : null}
 			</div>
 			<div style={{ position: "relative", flex: 1 }}>
-				{page.itens.length ? (
-					page.itens.map((item, index) => <ListRow key={item.chave} item={item} position={index + 1} marca={marca} opcoes={props.opcoes} />)
+				{page.items.length ? (
+					page.items.map((item, index) => <ListRow key={item.chave} item={item} position={index + 1} brand={brand} configuracao={props.configuracao} />)
 				) : (
 					<EmptyNotice size={28} />
 				)}
@@ -140,8 +140,8 @@ function ListaPage({ props, page }: TVisualKitPageArgs) {
 					height: FOOTER_HEIGHT,
 					flexShrink: 0,
 					boxSizing: "border-box",
-					background: marca.corSecundaria,
-					color: marca.corSecundariaForeground,
+					background: brand.corSecundaria,
+					color: brand.corSecundariaForeground,
 					padding: "0 50px",
 					display: "flex",
 					alignItems: "center",
@@ -150,14 +150,14 @@ function ListaPage({ props, page }: TVisualKitPageArgs) {
 					lineHeight: 1.4,
 				}}
 			>
-				{offersDisclaimer(validade, "Imagens meramente ilustrativas.")}
+				{offersDisclaimer(validity, "Imagens meramente ilustrativas.")}
 			</div>
 		</PageFrame>
 	);
 }
 
-export const listaWhatsappRenderer: TVisualKitPieceRenderer = {
+export const whatsappListRenderer: TVisualKitPieceRenderer = {
 	paginate,
 	pageSize,
-	Page: ListaPage,
+	Page: WhatsappListPage,
 };

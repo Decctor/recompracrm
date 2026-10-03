@@ -44,9 +44,9 @@ massa (clientes/vendas), mídia de chat, imagens de produto, extratos bancários
 fiscais.
 
 **Limite de corpo**: funções na Vercel aceitam ~4.5 MB de corpo — todo propósito `PROXY` fica
-abaixo disso. Arquivos maiores usam o transporte `DIRETO` (abaixo).
+abaixo disso. Arquivos maiores usam o transporte `DIRECT` (abaixo).
 
-## Upload direto (transporte `DIRETO`)
+## Upload direto (transporte `DIRECT`)
 
 Para arquivos grandes gerados no navegador (PDFs e imagens das peças de comunicação visual,
 propósito `ARQUIVO_KIT_VISUAL`), os bytes não passam pela função:

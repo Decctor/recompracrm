@@ -35,23 +35,23 @@ export function useVisualKitById({ id, enabled = true }: { id: string | null; en
 	};
 }
 
-async function fetchVisualKitCatalog(params: { search: string; canalVendaId: string | null; promo: boolean }) {
+async function fetchVisualKitCatalog(params: { search: string; salesChannelId: string | null; promo: boolean }) {
 	const searchParams = new URLSearchParams();
 	if (params.search.trim()) searchParams.set("search", params.search.trim());
-	if (params.canalVendaId) searchParams.set("canalVendaId", params.canalVendaId);
+	if (params.salesChannelId) searchParams.set("salesChannelId", params.salesChannelId);
 	if (params.promo) searchParams.set("promo", "true");
 	const { data } = await axios.get<TGetVisualKitCatalogOutput>(`/api/visual-kits/catalog?${searchParams.toString()}`);
 	return data.data;
 }
 
 /** Busca do passo Produtos: termo com debounce, filtro de promoção e preço do canal do kit. */
-export function useVisualKitCatalogSearch({ search, canalVendaId, promo }: { search: string; canalVendaId: string | null; promo: boolean }) {
+export function useVisualKitCatalogSearch({ search, salesChannelId, promo }: { search: string; salesChannelId: string | null; promo: boolean }) {
 	const debouncedSearch = useDebouncedText(search);
-	const queryKey = ["visual-kit-catalog", debouncedSearch, canalVendaId, promo];
+	const queryKey = ["visual-kit-catalog", debouncedSearch, salesChannelId, promo];
 	return {
 		...useQuery({
 			queryKey,
-			queryFn: () => fetchVisualKitCatalog({ search: debouncedSearch, canalVendaId, promo }),
+			queryFn: () => fetchVisualKitCatalog({ search: debouncedSearch, salesChannelId, promo }),
 			placeholderData: keepPreviousData,
 		}),
 		queryKey,
@@ -61,15 +61,15 @@ export function useVisualKitCatalogSearch({ search, canalVendaId, promo }: { sea
 // Chaves vão na URL: lotes curtos mantêm cada requisição bem abaixo do limite de tamanho de URL.
 const KEYS_PER_REQUEST = 50;
 
-export async function fetchVisualKitCatalogItems(keys: string[], canalVendaId: string | null) {
+export async function fetchVisualKitCatalogItems(keys: string[], salesChannelId: string | null) {
 	const chunks: string[][] = [];
 	for (let index = 0; index < keys.length; index += KEYS_PER_REQUEST) chunks.push(keys.slice(index, index + KEYS_PER_REQUEST));
 	const results = await Promise.all(
 		chunks.map(async (chunk) => {
 			const searchParams = new URLSearchParams({ keys: chunk.join(",") });
-			if (canalVendaId) searchParams.set("canalVendaId", canalVendaId);
+			if (salesChannelId) searchParams.set("salesChannelId", salesChannelId);
 			const { data } = await axios.get<TGetVisualKitCatalogOutput>(`/api/visual-kits/catalog?${searchParams.toString()}`);
-			return data.data.itens;
+			return data.data.items;
 		}),
 	);
 	const byKey = new Map<string, TVisualKitCatalogItem>(results.flat().map((item) => [item.chave, item]));
@@ -81,12 +81,12 @@ export async function fetchVisualKitCatalogItems(keys: string[], canalVendaId: s
 }
 
 /** Itens do kit com preços atuais, na ordem do kit — fonte das pré-visualizações. */
-export function useVisualKitCatalogItems({ keys, canalVendaId }: { keys: string[]; canalVendaId: string | null }) {
-	const queryKey = ["visual-kit-catalog-items", keys, canalVendaId];
+export function useVisualKitCatalogItems({ keys, salesChannelId }: { keys: string[]; salesChannelId: string | null }) {
+	const queryKey = ["visual-kit-catalog-items", keys, salesChannelId];
 	return {
 		...useQuery({
 			queryKey,
-			queryFn: () => fetchVisualKitCatalogItems(keys, canalVendaId),
+			queryFn: () => fetchVisualKitCatalogItems(keys, salesChannelId),
 			enabled: keys.length > 0,
 			placeholderData: keepPreviousData,
 		}),

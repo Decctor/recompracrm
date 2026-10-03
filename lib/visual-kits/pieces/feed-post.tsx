@@ -16,26 +16,26 @@ import {
 	type TVisualKitPieceRenderer,
 } from "./shared";
 
-const PAGE = VISUAL_KIT_FORMATS.POST_FEED.pagina;
+const PAGE = VISUAL_KIT_FORMATS.POST_FEED.page;
 
 function PostPage({ props, page }: TVisualKitPageArgs) {
-	const { marca } = props;
-	const item = page.itens[0];
-	const frame = { size: PAGE, background: marca.corPrimaria, color: marca.corPrimariaForeground };
+	const { brand } = props;
+	const item = page.items[0];
+	const frame = { size: PAGE, background: brand.corPrimaria, color: brand.corPrimariaForeground };
 	if (!item) {
 		return (
 			<PageFrame {...frame}>
-				<EmptyNotice color={marca.corPrimariaForeground} size={40} />
+				<EmptyNotice color={brand.corPrimariaForeground} size={40} />
 			</PageFrame>
 		);
 	}
-	const display = resolveItemDisplay(item, props.opcoes);
-	const validade = formatValidity(props.validadeFim);
-	const subtitle = joinDefined([item.detalhe, validade ? `válido até ${validade}` : null]);
+	const display = resolveItemDisplay(item, props.configuracao);
+	const validity = formatValidity(props.validadeFim);
+	const subtitle = joinDefined([item.detalhe, validity ? `válido até ${validity}` : null]);
 	return (
 		<PageFrame {...frame} style={{ padding: 54, display: "flex", flexDirection: "column", gap: 36 }}>
 			<div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 24 }}>
-				<BrandLogo marca={marca} size={102} radius={21} wordmarkSize={39} />
+				<BrandLogo brand={brand} size={102} radius={21} wordmarkSize={39} />
 				<span
 					style={{
 						minWidth: 0,
@@ -53,8 +53,8 @@ function PostPage({ props, page }: TVisualKitPageArgs) {
 				</span>
 			</div>
 			<div style={{ position: "relative", flex: 1, minHeight: 0 }}>
-				<ProductImage item={item} marca={marca} radius={30} padding={40} style={{ position: "absolute", inset: 0 }} />
-				{display.percentual != null ? (
+				<ProductImage item={item} brand={brand} radius={30} padding={40} style={{ position: "absolute", inset: 0 }} />
+				{display.percentualDesconto != null ? (
 					<span
 						style={{
 							position: "absolute",
@@ -63,8 +63,8 @@ function PostPage({ props, page }: TVisualKitPageArgs) {
 							width: 144,
 							height: 144,
 							borderRadius: "50%",
-							background: marca.corSecundaria,
-							color: marca.corSecundariaForeground,
+							background: brand.corSecundaria,
+							color: brand.corSecundariaForeground,
 							display: "flex",
 							alignItems: "center",
 							justifyContent: "center",
@@ -73,7 +73,7 @@ function PostPage({ props, page }: TVisualKitPageArgs) {
 							letterSpacing: "-0.03em",
 						}}
 					>
-						{discountLabel(display.percentual)}
+						{discountLabel(display.percentualDesconto)}
 					</span>
 				) : null}
 			</div>
@@ -85,8 +85,8 @@ function PostPage({ props, page }: TVisualKitPageArgs) {
 				<div
 					style={{
 						flexShrink: 0,
-						background: marca.corSecundaria,
-						color: marca.corSecundariaForeground,
+						background: brand.corSecundaria,
+						color: brand.corSecundariaForeground,
 						borderRadius: 30,
 						padding: "21px 33px 24px 33px",
 						display: "flex",
@@ -103,8 +103,8 @@ function PostPage({ props, page }: TVisualKitPageArgs) {
 	);
 }
 
-export const postFeedRenderer: TVisualKitPieceRenderer = {
-	paginate: (props) => paginatePerItem(props.itens),
+export const feedPostRenderer: TVisualKitPieceRenderer = {
+	paginate: (props) => paginatePerItem(props.items),
 	pageSize: () => PAGE,
 	Page: PostPage,
 };

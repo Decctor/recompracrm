@@ -37,7 +37,7 @@ export const products = newTable(
 		quantidade: doublePrecision("quantidade"),
 		precoVenda: doublePrecision("preco_venda"),
 		// Snapshot do preço de venda anterior + quando o preço mudou. Escritos SOMENTE via
-		// `buildPrecoVendaUpdate` (lib/products/price-snapshot.ts) em todo update de `precoVenda` —
+		// `buildSalePriceUpdate` (lib/products/price-snapshot.ts) em todo update de `precoVenda` —
 		// o teste `price-snapshot.test.ts` falha se um caminho de escrita novo ignorar o helper.
 		// Promoção = anterior > atual dentro da janela de `resolvePromotion` (lib/products/pricing.ts).
 		precoVendaAnterior: doublePrecision("preco_venda_anterior"),
@@ -106,7 +106,7 @@ export const productVariants = newTable(
 		imagemCapaUrl: text("imagem_capa_url"), // Overrides main product image if defined,
 		// Price Override
 		precoVenda: doublePrecision("preco_venda").notNull(),
-		// Mesmo contrato do produto: escritos somente via `buildPrecoVendaUpdate`.
+		// Mesmo contrato do produto: escritos somente via `buildSalePriceUpdate`.
 		precoVendaAnterior: doublePrecision("preco_venda_anterior"),
 		dataAlteracaoPrecoVenda: timestamp("data_alteracao_preco_venda"),
 		precoCusto: doublePrecision("preco_custo"), // Optional: distinct cost per variant

@@ -12,7 +12,7 @@ import { createContext, type ReactNode, useCallback, useContext, useEffect, useM
 import { toast } from "sonner";
 import { KIT_STAGE_IDS, type TKitStageId } from "./stages";
 
-export type TKitSaveStatus = "NOVO" | "SALVO" | "PENDENTE" | "SALVANDO" | "ERRO";
+export type TKitSaveStatus = "NEW" | "SAVED" | "PENDING" | "SAVING" | "ERROR";
 
 type KitBuilderContextValue = TUseVisualKitState & {
 	kitId: string | null;
@@ -20,7 +20,7 @@ type KitBuilderContextValue = TUseVisualKitState & {
 	setStage: (stage: TKitStageId) => void;
 	next: () => void;
 	back: () => void;
-	marca: TVisualKitBrand;
+	brand: TVisualKitBrand;
 	orgHasERPAccess: boolean;
 	// Itens escolhidos com preços atuais (do canal do kit), na ordem do kit.
 	selectedItems: TVisualKitCatalogItem[];
@@ -40,19 +40,19 @@ type KitBuilderProviderProps = {
 	kitId: string | null;
 	initialState?: TVisualKitState;
 	initialStage: TKitStageId;
-	marca: TVisualKitBrand;
+	brand: TVisualKitBrand;
 	orgHasERPAccess: boolean;
 	children: ReactNode;
 };
 
-export function KitBuilderProvider({ kitId: initialKitId, initialState, initialStage, marca, orgHasERPAccess, children }: KitBuilderProviderProps) {
+export function KitBuilderProvider({ kitId: initialKitId, initialState, initialStage, brand, orgHasERPAccess, children }: KitBuilderProviderProps) {
 	const queryClient = useQueryClient();
 	const kitState = useVisualKitState(initialState);
 	const { state, itemKeys } = kitState;
 
 	const [kitId, setKitId] = useState<string | null>(initialKitId);
 	const [stage, setStageState] = useState<TKitStageId>(initialStage);
-	const [saveStatus, setSaveStatus] = useState<TKitSaveStatus>(initialKitId ? "SALVO" : "NOVO");
+	const [saveStatus, setSaveStatus] = useState<TKitSaveStatus>(initialKitId ? "SAVED" : "NEW");
 
 	const payloadJson = useMemo(() => JSON.stringify(buildVisualKitPayload(state)), [state]);
 	const lastSavedJsonRef = useRef<string | null>(initialKitId ? payloadJson : null);
@@ -81,7 +81,7 @@ export function KitBuilderProvider({ kitId: initialKitId, initialState, initialS
 		if (currentKitId && json === lastSavedJsonRef.current) return currentKitId;
 
 		const run = (async () => {
-			setSaveStatus("SALVANDO");
+			setSaveStatus("SAVING");
 			try {
 				let savedId = currentKitId;
 				if (savedId) {
@@ -92,11 +92,11 @@ export function KitBuilderProvider({ kitId: initialKitId, initialState, initialS
 					setKitId(savedId);
 				}
 				lastSavedJsonRef.current = json;
-				setSaveStatus("SALVO");
+				setSaveStatus("SAVED");
 				await queryClient.invalidateQueries({ queryKey: ["visual-kits"] });
 				return savedId;
 			} catch (error) {
-				setSaveStatus("ERRO");
+				setSaveStatus("ERROR");
 				toast.error(getErrorMessage(error));
 				return null;
 			}
@@ -113,14 +113,14 @@ export function KitBuilderProvider({ kitId: initialKitId, initialState, initialS
 	useEffect(() => {
 		if (!kitId) return;
 		if (payloadJson === lastSavedJsonRef.current) return;
-		setSaveStatus("PENDENTE");
+		setSaveStatus("PENDING");
 		const timeout = window.setTimeout(() => void persist(), AUTOSAVE_DELAY_MS);
 		return () => window.clearTimeout(timeout);
 	}, [kitId, payloadJson, persist]);
 
 	// Alteração ainda não gravada ao fechar a aba: o navegador pergunta antes de sair.
 	useEffect(() => {
-		if (saveStatus !== "PENDENTE" && saveStatus !== "SALVANDO") return;
+		if (saveStatus !== "PENDING" && saveStatus !== "SAVING") return;
 		const handler = (event: BeforeUnloadEvent) => event.preventDefault();
 		window.addEventListener("beforeunload", handler);
 		return () => window.removeEventListener("beforeunload", handler);
@@ -148,7 +148,7 @@ export function KitBuilderProvider({ kitId: initialKitId, initialState, initialS
 
 	const { data: selectedItemsData, isLoading: selectedItemsLoading } = useVisualKitCatalogItems({
 		keys: itemKeys,
-		canalVendaId: state.kit.canalVendaId,
+		salesChannelId: state.kit.canalVendaId,
 	});
 	const selectedItems = useMemo(() => (itemKeys.length ? (selectedItemsData ?? []) : []), [itemKeys.length, selectedItemsData]);
 	const pieceItems = useMemo(
@@ -164,7 +164,7 @@ export function KitBuilderProvider({ kitId: initialKitId, initialState, initialS
 			setStage,
 			next,
 			back,
-			marca,
+			brand,
 			orgHasERPAccess,
 			selectedItems,
 			selectedItemsLoading: itemKeys.length > 0 && selectedItemsLoading,
@@ -179,7 +179,7 @@ export function KitBuilderProvider({ kitId: initialKitId, initialState, initialS
 			setStage,
 			next,
 			back,
-			marca,
+			brand,
 			orgHasERPAccess,
 			selectedItems,
 			itemKeys.length,

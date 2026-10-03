@@ -19,7 +19,7 @@ const CreateVisualKitUploadsInputSchema = z.object({
 		required_error: "ID do kit não informado.",
 		invalid_type_error: "Tipo inválido para ID do kit.",
 	}),
-	arquivos: z
+	files: z
 		.array(
 			z.object({
 				nome: z
@@ -70,14 +70,14 @@ async function createVisualKitUploads({ input, session }: { input: TCreateVisual
 	});
 	if (!kit) throw new createHttpError.NotFound("Kit não encontrado.");
 
-	const uploads = await mapWithConcurrency(input.arquivos, 8, (arquivo) =>
+	const uploads = await mapWithConcurrency(input.files, 8, (file) =>
 		createDirectUploadIntake({
 			organizacaoId: organizationId,
 			proposito: "ARQUIVO_KIT_VISUAL",
-			nomeArquivo: arquivo.nome,
-			mimeType: arquivo.mimeType,
-			tamanhoEsperadoBytes: arquivo.tamanhoBytes,
-			sha256Esperado: arquivo.sha256,
+			nomeArquivo: file.nome,
+			mimeType: file.mimeType,
+			tamanhoEsperadoBytes: file.tamanhoBytes,
+			sha256Esperado: file.sha256,
 			criadoPorId: session.user.id,
 			contexto: { origem: "SESSAO_WEB" },
 		}),
