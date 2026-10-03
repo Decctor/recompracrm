@@ -22,6 +22,18 @@ const IFOOD_IDEMPOTENT_METHODS = new Set(["get", "head", "options", "put", "dele
 
 type TIfoodRetryRequestConfig = InternalAxiosRequestConfig & { ifoodRetryAttempt?: number };
 
+declare module "axios" {
+	interface AxiosRequestConfig {
+		/**
+		 * Marca uma chamada não idempotente pelo método (POST/PATCH) como segura de repetir: o
+		 * efeito dela é "defina este valor", não "crie mais um". É o caso dos PATCH de status e
+		 * preço de opção do catálogo. Sem a marca, um PATCH que estoura timeout não é repetido —
+		 * e `PATCH /interruptions`, por exemplo, não pode ser.
+		 */
+		ifoodIdempotent?: boolean;
+	}
+}
+
 function sleep(milliseconds: number) {
 	return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
@@ -58,14 +70,26 @@ export type TIfoodRetryOptions = {
 	maxDelayMs?: number;
 };
 
-export function shouldRetryIfoodRequest({ status, method, code }: { status: number | null; method: string; code?: string }) {
+export function shouldRetryIfoodRequest({
+	status,
+	method,
+	code,
+	idempotent = false,
+}: {
+	status: number | null;
+	method: string;
+	code?: string;
+	/** `ifoodIdempotent` da requisição: o chamador garante que repetir não duplica nada. */
+	idempotent?: boolean;
+}) {
 	// Cancelamento é decisão de quem chamou, não falha do iFood.
 	if (code === "ERR_CANCELED") return false;
 	if (status === 429) return true;
+	const safeToRepeat = idempotent || IFOOD_IDEMPOTENT_METHODS.has(method);
 	// Sem status = timeout ou rede caindo. Vale a mesma regra do 5xx: a requisição pode ter chegado
 	// ao iFood e sido aplicada antes de a conexão morrer, então só repetimos o que é idempotente.
-	if (status === null) return IFOOD_IDEMPOTENT_METHODS.has(method);
-	return status >= 500 && IFOOD_IDEMPOTENT_METHODS.has(method);
+	if (status === null) return safeToRepeat;
+	return status >= 500 && safeToRepeat;
 }
 
 /** Instala o interceptor de retry no client autenticado. Devolve o mesmo client, para encadear. */
@@ -78,7 +102,7 @@ export function attachIfoodRetry(client: AxiosInstance, options: TIfoodRetryOpti
 
 		const status = error.response?.status ?? null;
 		const method = (config.method ?? "get").toLowerCase();
-		if (!shouldRetryIfoodRequest({ status, method, code: error.code })) throw error;
+		if (!shouldRetryIfoodRequest({ status, method, code: error.code, idempotent: config.ifoodIdempotent === true })) throw error;
 
 		const attempt = (config.ifoodRetryAttempt ?? 0) + 1;
 		if (attempt > maxRetries) throw error;

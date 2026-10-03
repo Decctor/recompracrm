@@ -1,5 +1,6 @@
 import type { TIfoodCatalogContextEnum, TIfoodCatalogStatusEnum, TIfoodItemTypeEnum, TIfoodOptionGroupTypeEnum } from "@/schemas/enums";
 import type { AxiosInstance } from "axios";
+import createHttpError from "http-errors";
 import { mapIfoodError } from "./errors";
 import { setIfoodOptionGroupStatus } from "./item-document";
 import { IFOOD_CATALOG_BASE_URL, mapIfoodOptionGroup, IfoodOptionGroupDetailResponseSchema } from "./catalog-types";
@@ -389,6 +390,36 @@ export async function addIfoodOptions(
 	}
 }
 
+/** Resultado de um PATCH por opção: `erro` já traduzido por `mapIfoodError`, `null` quando aplicou. */
+export type TIfoodOptionPatchResult = { optionId: string; erro: string | null };
+
+/**
+ * Os PATCH de opção são um por chamada (ver abaixo), então um lote é uma série de requisições e
+ * cada uma pode falhar sozinha. Devolver o resultado por opção deixa o chamador marcar só a que
+ * falhou — antes, a primeira falha abortava o lote e condenava as já aplicadas e as nem tentadas.
+ * `ifoodIdempotent`: "defina este valor" pode ser repetido num timeout sem duplicar nada.
+ */
+async function patchIfoodOptionsOneByOne<T extends { optionId: string }>(
+	context: string,
+	opcoes: T[],
+	request: (opcao: T) => Promise<unknown>,
+): Promise<TIfoodOptionPatchResult[]> {
+	const results: TIfoodOptionPatchResult[] = [];
+	for (const opcao of opcoes) {
+		try {
+			await request(opcao);
+			results.push({ optionId: opcao.optionId, erro: null });
+		} catch (error) {
+			try {
+				mapIfoodError(context, error);
+			} catch (mapped) {
+				results.push({ optionId: opcao.optionId, erro: mapped instanceof Error ? mapped.message : "Falha desconhecida ao atualizar a opção." });
+			}
+		}
+	}
+	return results;
+}
+
 /**
  * `PATCH /options/price` recebe UM objeto `{ optionId, price: { value } }` por chamada — validado ao
  * vivo (2026-09-30): o array é recusado com 400 `PatchOptionPriceDto.optionId must be a UUID`. Grava
@@ -398,14 +429,10 @@ export async function patchIfoodOptionsPrice(
 	client: AxiosInstance,
 	merchantId: string,
 	opcoes: { optionId: string; preco: number }[],
-): Promise<void> {
-	try {
-		for (const opcao of opcoes) {
-			await client.patch(catalogUrl(merchantId, "/options/price"), { optionId: opcao.optionId, price: { value: opcao.preco } });
-		}
-	} catch (error) {
-		mapIfoodError("patchIfoodOptionsPrice", error);
-	}
+): Promise<TIfoodOptionPatchResult[]> {
+	return patchIfoodOptionsOneByOne("patchIfoodOptionsPrice", opcoes, (opcao) =>
+		client.patch(catalogUrl(merchantId, "/options/price"), { optionId: opcao.optionId, price: { value: opcao.preco } }, { ifoodIdempotent: true }),
+	);
 }
 
 /**
@@ -417,12 +444,17 @@ export async function patchIfoodOptionsStatus(
 	client: AxiosInstance,
 	merchantId: string,
 	opcoes: { optionId: string; status: TIfoodCatalogStatusEnum }[],
-): Promise<void> {
-	try {
-		for (const opcao of opcoes) {
-			await client.patch(catalogUrl(merchantId, "/options/status"), { optionId: opcao.optionId, status: opcao.status });
-		}
-	} catch (error) {
-		mapIfoodError("patchIfoodOptionsStatus", error);
-	}
+): Promise<TIfoodOptionPatchResult[]> {
+	return patchIfoodOptionsOneByOne("patchIfoodOptionsStatus", opcoes, (opcao) =>
+		client.patch(catalogUrl(merchantId, "/options/status"), { optionId: opcao.optionId, status: opcao.status }, { ifoodIdempotent: true }),
+	);
+}
+
+/** Lança o primeiro erro de um lote — para rotas que respondem ao usuário e não têm vínculo onde registrar a falha. */
+export function assertIfoodOptionPatches(results: TIfoodOptionPatchResult[]) {
+	const failed = results.filter((result) => result.erro);
+	if (!failed.length) return;
+	const applied = results.length - failed.length;
+	const first = failed[0]?.erro ?? "Falha desconhecida ao atualizar a opção.";
+	throw new createHttpError.BadGateway(applied > 0 ? `${applied} de ${results.length} opção(ões) atualizada(s); a primeira falha: ${first}` : first);
 }

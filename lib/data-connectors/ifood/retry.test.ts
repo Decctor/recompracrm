@@ -34,6 +34,13 @@ test("falha sem resposta (timeout/rede) segue a regra do 5xx", () => {
 	assert.equal(shouldRetryIfoodRequest({ status: null, method: "post" }), false);
 });
 
+test("PATCH marcado como idempotente é repetido em timeout e 5xx, mas nunca em 4xx", () => {
+	assert.equal(shouldRetryIfoodRequest({ status: null, method: "patch", idempotent: true }), true);
+	assert.equal(shouldRetryIfoodRequest({ status: 503, method: "patch", idempotent: true }), true);
+	assert.equal(shouldRetryIfoodRequest({ status: 400, method: "patch", idempotent: true }), false);
+	assert.equal(shouldRetryIfoodRequest({ status: null, method: "patch", idempotent: false }), false);
+});
+
 test("cancelamento do caller não é retentativa", () => {
 	assert.equal(shouldRetryIfoodRequest({ status: null, method: "get", code: "ERR_CANCELED" }), false);
 	assert.equal(shouldRetryIfoodRequest({ status: 429, method: "get", code: "ERR_CANCELED" }), false);

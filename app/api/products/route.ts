@@ -4,8 +4,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { appApiHandler } from "@/lib/app-api";
 import { runPagesRouteHandler, type PagesRouteHandler } from "@/lib/pages-route-compat";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
-import { scheduleAddOnGroupPush } from "@/lib/integrations/ifood/sync/add-ons";
-import { schedulePushForProduct } from "@/lib/integrations/ifood/sync/push";
+import { scheduleAddOnGroupPush, schedulePushForProduct } from "@/lib/integrations/ifood/sync/queue";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { getSalesIntegrationCondition } from "@/lib/sales/integration-filter";
 import { ProductFiscalProfileSchema } from "@/schemas/fiscal";
@@ -1454,14 +1453,14 @@ const updateProductHandler: PagesRouteHandler<TUpdateProductOutput> = async (req
 	const input = UpdateProductInputSchema.parse(req.body);
 	const data = await updateProduct({ session: sessionUser, input });
 	// Propaga nome/descrição/preço/disponibilidade para as lojas iFood onde o produto está
-	// vinculado. Assíncrono de propósito: o cadastro não pode falhar por indisponibilidade do
-	// iFood — falhas ficam no vínculo (status ERRO) e o cron diário recupera.
-	schedulePushForProduct({ orgId: sessionUser.membership!.organizacao.id, produtoId: input.productId });
+	// vinculado. Assíncrono de propósito (fila): o cadastro não pode falhar por indisponibilidade
+	// do iFood — falhas ficam no vínculo (status ERRO), visíveis na tela de vínculos.
+	await schedulePushForProduct({ orgId: sessionUser.membership!.organizacao.id, produtoId: input.productId });
 	// O push do produto não leva as opções dos grupos de adicionais — elas têm vínculo próprio e o
 	// push do GRUPO é que as propaga para todas as cópias no iFood (o mesmo da aba Adicionais).
 	// Diferencial por snapshot: grupo sem mudança de opção não chama o iFood.
 	for (const produtoAddOnId of editedAddOnGroupIds(input)) {
-		scheduleAddOnGroupPush({ orgId: sessionUser.membership!.organizacao.id, produtoAddOnId });
+		await scheduleAddOnGroupPush({ orgId: sessionUser.membership!.organizacao.id, produtoAddOnId });
 	}
 	return res.status(200).json(data);
 };

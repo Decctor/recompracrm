@@ -10,7 +10,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { appApiHandler } from "@/lib/app-api";
 import { productAddOnReferences, productAddOns, products } from "@/services/drizzle/schema";
-import { scheduleAddOnGroupPush } from "@/lib/integrations/ifood/sync/add-ons";
+import { scheduleAddOnGroupPush } from "@/lib/integrations/ifood/sync/queue";
 import { upsertProductAddOnOptions } from "@/lib/products/add-on-options";
 import { and, eq, ilike, isNull, or } from "drizzle-orm";
 
@@ -376,7 +376,7 @@ async function updateProductAddOn({ input, session }: { input: TUpdateProductAdd
 	});
 
 	// O grupo pode estar vinculado a optionGroups do iFood: nome, status e opções seguem por lá.
-	scheduleAddOnGroupPush({ orgId: session.membership!.organizacao.id, produtoAddOnId: transactionReturn });
+	await scheduleAddOnGroupPush({ orgId: session.membership!.organizacao.id, produtoAddOnId: transactionReturn });
 
 	return {
 		data: {

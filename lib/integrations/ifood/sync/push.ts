@@ -167,9 +167,10 @@ async function pushLink({
 /**
  * Empurra as mudanças de um produto para todas as lojas onde ele está vinculado.
  *
- * Best-effort por vínculo: uma loja que falha é marcada com ERRO e não impede as outras — o
- * cron de reconciliação é a rede de segurança. Nunca lança, porque o chamador é o save do
- * produto (ou dos canais) e o cadastro não pode falhar por causa do iFood.
+ * Best-effort por vínculo: uma loja que falha é marcada com ERRO e não impede as outras. O cron
+ * diário só DETECTA (marca DIVERGENTE/ERRO); quem corrige é o próximo save que mude o campo ou o
+ * "Reenviar o nosso" do vínculo. Nunca lança, porque o chamador é o save do produto (ou dos
+ * canais) e o cadastro não pode falhar por causa do iFood.
  */
 export async function pushProductToLinkedMerchants({
 	orgId,
@@ -239,15 +240,4 @@ export async function pushProductToLinkedMerchants({
 	}
 
 	return { enviados, erros, semMudanca };
-}
-
-/**
- * Dispara o push sem bloquear o chamador. O save do produto/canais responde na hora; a
- * sincronização acontece depois e, se falhar, fica registrada no vínculo (status ERRO) e é
- * recuperada pelo cron diário. Sem isto, uma indisponibilidade do iFood derrubaria o cadastro.
- */
-export function schedulePushForProduct({ orgId, produtoId }: { orgId: string; produtoId: string }) {
-	void pushProductToLinkedMerchants({ orgId, produtoId }).catch((error) => {
-		console.error("[IFOOD_PUSH] Falha inesperada no push assíncrono.", { orgId, produtoId, error });
-	});
 }

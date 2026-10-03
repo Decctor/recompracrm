@@ -1,7 +1,7 @@
 import { appApiHandler } from "@/lib/app-api";
 import { requireOrgSession } from "@/lib/authentication/erp-session";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
-import { schedulePushForProduct } from "@/lib/integrations/ifood/sync/push";
+import { schedulePushForProduct } from "@/lib/integrations/ifood/sync/queue";
 import { splitChannelSettingNodes, validateChannelSettingNodes } from "@/lib/products/sales-channels";
 import { productsTouchingChannels } from "@/lib/products/sales-channels-matrix";
 import { ensureSalesChannelsWithIntegrations } from "@/lib/integrations/ifood/sales-channels";
@@ -262,7 +262,7 @@ async function updateSalesChannelMatrix({ orgId, input }: { orgId: string; input
 	// preço/disponibilidade lá, mas uma edição no PDV não é — e o push custa contexto por merchant.
 	const ifoodChannelIds = new Set(ownedChannels.filter((channel) => channel.canal === "IFOOD").map((channel) => channel.id));
 	for (const produtoId of productsTouchingChannels(input.products, ifoodChannelIds)) {
-		schedulePushForProduct({ orgId, produtoId });
+		await schedulePushForProduct({ orgId, produtoId });
 	}
 
 	return {

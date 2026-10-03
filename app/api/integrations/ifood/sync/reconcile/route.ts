@@ -2,6 +2,7 @@ import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { requireIntegrationManageSession } from "@/lib/integrations/ifood/sync/guards";
 import { adoptRemotePrice, reconcileMerchantCatalog } from "@/lib/integrations/ifood/sync/reconcile";
+import { resendAddOnLink } from "@/lib/integrations/ifood/sync/add-ons";
 import { pushProductToLinkedMerchants } from "@/lib/integrations/ifood/sync/push";
 import { db } from "@/services/drizzle";
 import { catalogLinks } from "@/services/drizzle/schema";
@@ -37,6 +38,14 @@ async function resolveDivergence({ orgId, input }: { orgId: string; input: TReso
 		return { data: { precoAdotado }, message: "Preço do iFood adotado como preço do canal." };
 	}
 
+	// Síncrono de propósito (sem fila): quem clicou está esperando o resultado.
+	if (link.tipo === "ADD_ON" || link.tipo === "ADD_ON_OPCAO") {
+		const resultado = await resendAddOnLink({ orgId, link });
+		return {
+			data: { precoAdotado: null, resultado },
+			message: resultado.erros ? `Reenviado com ${resultado.erros} falha(s) — veja o erro em cada vínculo.` : "Estado interno reenviado ao iFood.",
+		};
+	}
 	if (!link.produtoId) throw new createHttpError.BadRequest("Vínculo sem produto interno associado.");
 	const resultado = await pushProductToLinkedMerchants({ orgId, produtoId: link.produtoId });
 	return { data: { precoAdotado: null, resultado }, message: "Estado interno reenviado ao iFood." };

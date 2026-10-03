@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { getErrorMessage } from "@/lib/errors";
 import { formatToMoney } from "@/lib/formatting";
-import { createCatalogLink, deleteCatalogLink, updateCatalogLinkPolicy } from "@/lib/mutations/catalog-links";
+import { createCatalogLink, deleteCatalogLink, resolveCatalogLinkDivergence, updateCatalogLinkPolicy } from "@/lib/mutations/catalog-links";
 import { type TCatalogLink, useCatalogLinks } from "@/lib/queries/catalog-links";
 import { useIfoodMerchantNames, useIfoodOptionGroups } from "@/lib/queries/ifood";
 import { useSalesChannels } from "@/lib/queries/sales-channels";
@@ -393,8 +393,19 @@ function AddOnGroupLinkDetails({
 		onError: (error) => toast.error(getErrorMessage(error)),
 		onSettled,
 	});
-	const anyPending = policyMutation.isPending || unlinkMutation.isPending;
+	const resendMutation = useMutation({
+		mutationKey: ["resolve-catalog-link-divergence", link.id],
+		mutationFn: () => resolveCatalogLinkDivergence({ linkId: link.id, acao: "APLICAR_NOSSO" }),
+		onSuccess: (data) => toast.success(data.message),
+		onError: (error) => toast.error(getErrorMessage(error)),
+		onSettled,
+	});
+	const anyPending = policyMutation.isPending || unlinkMutation.isPending || resendMutation.isPending;
 	const chip = STATUS_CHIP[link.status];
+	// O grupo pode estar em dia e as opções da cópia não (reescrita no Portal, timeout num lote):
+	// o reenvio cobre a cópia inteira, então a oferta olha para as duas coisas.
+	const needsResend = (status: TCatalogLinkStatusEnum) => status === "ERRO" || status === "DIVERGENTE";
+	const copyNeedsResend = needsResend(link.status) || [...optionLinkById.values()].some((entry) => needsResend(entry.status));
 
 	return (
 		<ResponsiveMenu
@@ -467,6 +478,14 @@ function AddOnGroupLinkDetails({
 								</li>
 							))}
 						</ul>
+					) : null}
+					{copyNeedsResend ? (
+						<div className="mt-2 flex flex-wrap items-center gap-2">
+							<LoadingButton type="button" size="sm" loading={resendMutation.isPending} disabled={anyPending} onClick={() => resendMutation.mutate()}>
+								REENVIAR O NOSSO
+							</LoadingButton>
+							<span className="text-xs text-muted-foreground">Aplica o cadastro daqui nesta cópia: o grupo e as opções vinculadas nela.</span>
+						</div>
 					) : null}
 				</div>
 

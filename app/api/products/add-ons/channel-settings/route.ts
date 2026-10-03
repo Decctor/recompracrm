@@ -3,7 +3,7 @@ import { applyAddOnChannelSettings } from "@/lib/products/add-on-channel-setting
 import { appApiHandler } from "@/lib/app-api";
 import { requireERPSession } from "@/lib/authentication/erp-session";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
-import { scheduleAddOnGroupPush } from "@/lib/integrations/ifood/sync/add-ons";
+import { scheduleAddOnGroupPush } from "@/lib/integrations/ifood/sync/queue";
 import { ensureSalesChannelsWithIntegrations } from "@/lib/integrations/ifood/sales-channels";
 import { db } from "@/services/drizzle";
 import { productAddOnOptionChannelSettings, productAddOns } from "@/services/drizzle/schema";
@@ -61,7 +61,7 @@ export type TGetAddOnChannelSettingsOutput = Awaited<ReturnType<typeof getAddOnC
 
 async function updateAddOnChannelSettings({ orgId, input }: { orgId: string; input: TUpdateAddOnChannelSettingsInput }) {
 	const result = await db.transaction((tx) => applyAddOnChannelSettings({ tx, orgId, ...input }));
-	if (result.touchedIfood) scheduleAddOnGroupPush({ orgId, produtoAddOnId: input.produtoAddOnId });
+	if (result.touchedIfood) await scheduleAddOnGroupPush({ orgId, produtoAddOnId: input.produtoAddOnId });
 	return { data: { updated: true }, message: "Preços e disponibilidade das opções por canal atualizados com sucesso." };
 }
 export type TUpdateAddOnChannelSettingsOutput = Awaited<ReturnType<typeof updateAddOnChannelSettings>>;

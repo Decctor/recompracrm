@@ -1,7 +1,7 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
-import { addIfoodOptions, patchIfoodOptionsPrice, patchIfoodOptionsStatus } from "@/lib/integrations/ifood/catalog-items";
+import { addIfoodOptions, assertIfoodOptionPatches, patchIfoodOptionsPrice, patchIfoodOptionsStatus } from "@/lib/integrations/ifood/catalog-items";
 import { resolveIfoodManagementContext } from "@/lib/integrations/ifood/context";
 import { canManageIntegrations } from "@/lib/integrations/mask";
 import { IFOOD_CATALOG_TITLE_MAX_LENGTH, IfoodCatalogStatusEnum, type TIfoodCatalogStatusEnum } from "@/schemas/enums";
@@ -122,7 +122,7 @@ async function patchIfoodOptionsService({ input, session }: { input: TPatchIfood
 	if (input.tipo === "PRECO") {
 		const opcoes = input.opcoes.filter((opcao) => opcao.preco != null).map((opcao) => ({ optionId: opcao.optionId, preco: opcao.preco as number }));
 		if (!opcoes.length) throw new createHttpError.BadRequest("Nenhuma opção com preço informado.");
-		await patchIfoodOptionsPrice(context.client, input.merchantId, opcoes);
+		assertIfoodOptionPatches(await patchIfoodOptionsPrice(context.client, input.merchantId, opcoes));
 		return { data: { atualizadas: opcoes.length }, message: "Preços das opções atualizados com sucesso no iFood." };
 	}
 
@@ -130,7 +130,7 @@ async function patchIfoodOptionsService({ input, session }: { input: TPatchIfood
 		.filter((opcao) => opcao.status != null)
 		.map((opcao) => ({ optionId: opcao.optionId, status: opcao.status as TIfoodCatalogStatusEnum }));
 	if (!opcoes.length) throw new createHttpError.BadRequest("Nenhuma opção com status informado.");
-	await patchIfoodOptionsStatus(context.client, input.merchantId, opcoes);
+	assertIfoodOptionPatches(await patchIfoodOptionsStatus(context.client, input.merchantId, opcoes));
 	return { data: { atualizadas: opcoes.length }, message: "Status das opções atualizados com sucesso no iFood." };
 }
 export type TPatchIfoodOptionsOutput = Awaited<ReturnType<typeof patchIfoodOptionsService>>;

@@ -1,5 +1,14 @@
 {
 	"functions": {
+		"app/api/queues/ifood-catalog-push/route.ts": {
+			"experimentalTriggers": [
+				{
+					"type": "queue/v2beta",
+					"topic": "ifood-catalog-push",
+					"retryAfterSeconds": 30
+				}
+			]
+		},
 		"app/api/queues/ai-chat-turn/route.ts": {
 			"experimentalTriggers": [
 				{

@@ -17,12 +17,7 @@ import {
 	resolveChannelOptionPrice,
 	type TChannelOptionOverrides,
 } from "@/lib/products/sales-channels";
-import {
-	createsMissingOptions,
-	type TCatalogLinkOptionGroupAssociation,
-	type TCatalogLinkSnapshot,
-	type TCatalogLinkSyncPolicy,
-} from "@/schemas/catalog-links";
+import { type TCatalogLinkDivergence, type TCatalogLinkOptionGroupAssociation, type TCatalogLinkSnapshot, type TCatalogLinkSyncPolicy, createsMissingOptions } from "@/schemas/catalog-links";
 import type { TIfoodOptionGroupTypeEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
 import { catalogLinks, productAddOnReferences, productAddOns, type TCatalogLinkEntity } from "@/services/drizzle/schema";
@@ -589,15 +584,6 @@ export async function linkAddOnGroup({
 	return { link: groupLink, opcoesCasadas: matched, opcoesInternas: node.opcoes.length, opcoesRemotas: remote.opcoes.length };
 }
 
-/** Tamanho de lote dos PATCH de opções — a doc não declara limite; 50 mantém o corpo pequeno. */
-const OPTION_PATCH_CHUNK = 50;
-
-function chunks<T>(list: T[], size: number) {
-	const out: T[][] = [];
-	for (let start = 0; start < list.length; start += size) out.push(list.slice(start, start + size));
-	return out;
-}
-
 /**
  * Empurra o conteúdo de um grupo (nome, status, opções) para todas as lojas onde ele está
  * vinculado. Pelos endpoints de patch, não pelo `PUT /items`: o grupo é da loja, não de um item.
@@ -730,32 +716,40 @@ export async function pushAddOnGroupToLinkedMerchants({ orgId, produtoAddOnId }:
 			settled.set(optionLink.id, optionSnapshot(opcao));
 		}
 
+		// Um PATCH por opção, resultado por opção: a que falhou vira ERRO (e mantém o snapshot
+		// antigo, então o próximo push a reenvia); as outras seguem para SINCRONIZADO.
 		const failed = new Set<string>();
-		for (const batch of chunks(priceUpdates, OPTION_PATCH_CHUNK)) {
-			try {
+		const recordFailures = async (
+			updates: { link: TCatalogLinkEntity; optionId: string }[],
+			results: { optionId: string; erro: string | null }[],
+		) => {
+			const erroPorOpcao = new Map(results.filter((result) => result.erro).map((result) => [result.optionId, result.erro as string]));
+			for (const entry of updates) {
+				const erro = erroPorOpcao.get(entry.optionId);
+				if (!erro) continue;
+				failed.add(entry.link.id);
+				await markCatalogLinkError({ linkId: entry.link.id, erro });
+			}
+		};
+		if (priceUpdates.length) {
+			await recordFailures(
+				priceUpdates,
 				await patchIfoodOptionsPrice(
 					client,
 					merchantId,
-					batch.map(({ optionId, preco }) => ({ optionId, preco })),
-				);
-			} catch (error) {
-				for (const entry of batch) failed.add(entry.link.id);
-				for (const entry of batch)
-					await markCatalogLinkError({ linkId: entry.link.id, erro: error instanceof Error ? error.message : "Falha ao enviar preço." });
-			}
+					priceUpdates.map(({ optionId, preco }) => ({ optionId, preco })),
+				),
+			);
 		}
-		for (const batch of chunks(statusUpdates, OPTION_PATCH_CHUNK)) {
-			try {
+		if (statusUpdates.length) {
+			await recordFailures(
+				statusUpdates,
 				await patchIfoodOptionsStatus(
 					client,
 					merchantId,
-					batch.map(({ optionId, status }) => ({ optionId, status })),
-				);
-			} catch (error) {
-				for (const entry of batch) failed.add(entry.link.id);
-				for (const entry of batch)
-					await markCatalogLinkError({ linkId: entry.link.id, erro: error instanceof Error ? error.message : "Falha ao enviar status." });
-			}
+					statusUpdates.map(({ optionId, status }) => ({ optionId, status })),
+				),
+			);
 		}
 		for (const [linkId, snapshot] of settled) {
 			if (failed.has(linkId)) {
@@ -801,10 +795,58 @@ export async function pushAddOnGroupToLinkedMerchants({ orgId, produtoAddOnId }:
 	return { enviados, erros };
 }
 
-export function scheduleAddOnGroupPush({ orgId, produtoAddOnId }: { orgId: string; produtoAddOnId: string }) {
-	void pushAddOnGroupToLinkedMerchants({ orgId, produtoAddOnId }).catch((error) => {
-		console.error("[IFOOD_PUSH] Falha inesperada no push assíncrono do grupo de adicionais.", { orgId, produtoAddOnId, error });
-	});
+/** Campo da divergência → chave do snapshot. Só os que um vínculo de complemento sincroniza. */
+const DIVERGENCE_SNAPSHOT_KEY: Partial<Record<TCatalogLinkDivergence["campo"], keyof TCatalogLinkSnapshot>> = {
+	nome: "nome",
+	preco: "preco",
+	disponibilidade: "disponivel",
+};
+
+/**
+ * "Reenviar o nosso" para um vínculo de complemento. Um vínculo em ERRO reenvia sozinho — o push
+ * falhou antes de gravar o snapshot, então o diff ainda aponta a mudança. DIVERGENTE não: o
+ * snapshot diz que o iFood já recebeu aquele valor (alguém mudou lá depois) e o diff dá vazio. Por
+ * isso os campos divergentes sincronizados saem do snapshot antes do push. Num vínculo de GRUPO
+ * vale para a cópia inteira: o grupo e as opções vinculadas dentro daquele optionGroup, que podem
+ * pertencer a outro grupo interno (o "Pistache" de "Escolha o sabor:" dentro do gelato) — daí um
+ * push por grupo interno envolvido.
+ */
+export async function resendAddOnLink({ orgId, link }: { orgId: string; link: TCatalogLinkEntity }) {
+	const targets =
+		link.tipo === "ADD_ON" && link.externoOptionGroupId
+			? [
+					link,
+					...(await db.query.catalogLinks.findMany({
+						where: and(
+							eq(catalogLinks.organizacaoId, orgId),
+							eq(catalogLinks.provider, "IFOOD"),
+							eq(catalogLinks.merchantId, link.merchantId),
+							eq(catalogLinks.tipo, "ADD_ON_OPCAO"),
+							eq(catalogLinks.externoOptionGroupId, link.externoOptionGroupId),
+							ne(catalogLinks.status, "DESVINCULADO"),
+						),
+					})),
+				]
+			: [link];
+
+	for (const target of targets) {
+		const keys = (target.divergencias ?? [])
+			.filter((divergence) => divergence.sincronizado)
+			.map((divergence) => DIVERGENCE_SNAPSHOT_KEY[divergence.campo])
+			.filter((key): key is keyof TCatalogLinkSnapshot => !!key);
+		if (!keys.length) continue;
+		const snapshot: TCatalogLinkSnapshot = { ...(target.ultimoSnapshot ?? {}) };
+		for (const key of keys) delete snapshot[key];
+		await db.update(catalogLinks).set({ ultimoSnapshot: snapshot, dataAtualizacao: new Date() }).where(eq(catalogLinks.id, target.id));
+	}
+
+	const result = { enviados: 0, erros: 0 };
+	for (const produtoAddOnId of new Set(targets.map((target) => target.produtoAddOnId).filter((id): id is string => !!id))) {
+		const partial = await pushAddOnGroupToLinkedMerchants({ orgId, produtoAddOnId });
+		result.enviados += partial.enviados;
+		result.erros += partial.erros;
+	}
+	return result;
 }
 
 /** Todos os optionGroups da loja, paginados até acabar — uma passada por reconciliação. */
