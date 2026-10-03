@@ -1112,3 +1112,23 @@ export const CampaignDispatchSkipReasonEnum = z.enum([
 export type TCampaignDispatchSkipReasonEnum = z.infer<typeof CampaignDispatchSkipReasonEnum>;
 export const SendCounterWindowEnum = z.enum(["DIARIO", "SEMANAL"]);
 export type TSendCounterWindowEnum = z.infer<typeof SendCounterWindowEnum>;
+
+// Comunicação visual (kits de peças de PDV e online)
+export const VisualKitStatusEnum = z.enum(["RASCUNHO", "GERADO"], {
+	required_error: "Status do kit não informado.",
+	invalid_type_error: "Tipo não válido para status do kit.",
+});
+export type TVisualKitStatusEnum = z.infer<typeof VisualKitStatusEnum>;
+export const VisualKitFormatEnum = z.enum(
+	["ETIQUETA_GONDOLA", "ADESIVO_PRECO", "WOBBLER", "ENCARTE", "SELO_PRODUTO", "POST_FEED", "STORY", "CARROSSEL", "LISTA_WHATSAPP"],
+	{
+		required_error: "Formato da peça não informado.",
+		invalid_type_error: "Tipo não válido para formato da peça.",
+	},
+);
+export type TVisualKitFormatEnum = z.infer<typeof VisualKitFormatEnum>;
+export const VisualKitOutputEnum = z.enum(["PDF", "PDF_ETIQUETADORA", "PNG", "JPG"], {
+	required_error: "Saída da peça não informada.",
+	invalid_type_error: "Tipo não válido para saída da peça.",
+});
+export type TVisualKitOutputEnum = z.infer<typeof VisualKitOutputEnum>;

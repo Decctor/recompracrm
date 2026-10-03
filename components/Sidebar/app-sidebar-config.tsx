@@ -48,6 +48,7 @@ import {
 	UsersRound,
 	UtensilsCrossed,
 	Wallet,
+	Palette,
 } from "lucide-react";
 
 export type TSidebarAccessContext = {
@@ -449,6 +450,14 @@ export const AppSidebarConfig: TSidebarConfigItemWithAccess[] = [
 				title: "Loja digital",
 				url: appRoutes.catalog.store(),
 				icon: <Store className="size-4" />,
+				items: null,
+			},
+			{
+				id: "visual-kits",
+				capability: "visualKits",
+				title: "Comunicação visual",
+				url: appRoutes.channels.visualKits(),
+				icon: <Palette className="size-4" />,
 				items: null,
 			},
 			{

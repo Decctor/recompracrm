@@ -72,6 +72,7 @@
 		"test:geo": "node --import tsx --test lib/geo/brazilian-locations.test.ts lib/geo/address-parsing.test.ts lib/geo/viacep.test.ts",
 		"test:sales-channels": "node --import tsx --test lib/products/sales-channels.test.ts",
 		"test:product-pricing": "node --import tsx --test lib/products/price-snapshot.test.ts lib/products/pricing.test.ts",
+		"test:visual-kits": "node --import tsx --test lib/visual-kits/formats.test.ts",
 		"test:cashback-rewards-display": "node --import tsx --test lib/cashback/rewards-display-layout.test.ts",
 		"test:client-vinculation": "node --import tsx --test lib/clients/client-vinculation-flow.test.ts lib/clients/parse-client-search-intent.test.ts lib/phone-search-patterns.test.ts",
 		"test:cashback-redemption": "node --import tsx --test lib/cashback/redemption-policy.test.ts lib/shop/checkout.test.ts lib/sales/sale-reward-snapshot.test.ts lib/fiscal/header-discount.test.ts lib/point-of-interaction/sale-value-confirmation.test.ts lib/point-of-interaction/transaction-requests.test.ts",

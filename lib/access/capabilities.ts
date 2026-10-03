@@ -32,6 +32,7 @@ export const dashboardCapabilities = {
 	pointOfInteraction: "pointOfInteraction",
 	store: "store",
 	paidMedia: "paidMedia",
+	visualKits: "visualKits",
 	integrations: "integrations",
 	settings: "settings",
 } as const;
@@ -60,6 +61,9 @@ export function canAccessDashboardCapability(capability: TDashboardCapability, c
 		case "customers":
 		case "segments":
 		case "pointOfInteraction":
+		// Comunicação visual: sem restrição de plano por enquanto — a capability existe para que a
+		// restrição, quando vier, mude num lugar só.
+		case "visualKits":
 			return true;
 		case "sales":
 			return permissions.vendas.visualizar;
