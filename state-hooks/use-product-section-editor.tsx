@@ -304,10 +304,10 @@ export function useProductCoreSectionEditor({ product, callbacks }: { product: T
 	};
 }
 
-type TProductBasePrices = { precoCusto: number | null; precoVenda: number | null };
+type TProductBasePrices = { precoCusto: number | null; precoVenda: number | null; precoVendaAnterior: number | null };
 
 function readBasePrices(product: TGetProductsOutputById): TProductBasePrices {
-	return { precoCusto: product.precoCusto ?? null, precoVenda: product.precoVenda ?? null };
+	return { precoCusto: product.precoCusto ?? null, precoVenda: product.precoVenda ?? null, precoVendaAnterior: product.precoVendaAnterior ?? null };
 }
 
 /**
@@ -394,6 +394,7 @@ export function useProductPricingSectionEditor({
 		mutationFn: async () => {
 			if (basePrices.precoCusto != null && basePrices.precoCusto < 0) throw new Error("O preço de custo não pode ser negativo.");
 			if (basePrices.precoVenda != null && basePrices.precoVenda < 0) throw new Error("O preço de venda não pode ser negativo.");
+			if (basePrices.precoVendaAnterior != null && basePrices.precoVendaAnterior < 0) throw new Error("O preço anterior não pode ser negativo.");
 
 			let message = "Nenhuma alteração para aplicar.";
 

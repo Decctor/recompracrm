@@ -1,5 +1,6 @@
 import { db } from "@/services/drizzle";
 import { productAddOnOptions, productAddOnReferences, productAddOns, products } from "@/services/drizzle/schema";
+import { buildPrecoVendaUpdate } from "@/lib/products/price-snapshot";
 import { eq, inArray } from "drizzle-orm";
 import { createCardapioWebClient, getCardapioWebCatalog } from "./index";
 import { extractAllCatalogData } from "./catalog-mappers";
@@ -27,18 +28,18 @@ export async function syncCardapioWebCatalog(organizationId: string, config: TCa
 		const productCodes = [...new Set(mappedProducts.flatMap((product) => [product.codigo, product.idExterno]))];
 		const existingProducts = await tx.query.products.findMany({
 			where: (fields, { and, eq, inArray }) => and(eq(fields.organizacaoId, organizationId), inArray(fields.codigo, productCodes)),
-			columns: { id: true, codigo: true },
+			columns: { id: true, codigo: true, precoVenda: true, precoVendaAnterior: true },
 		});
-		const existingProductsByCode = new Map(existingProducts.map((product) => [product.codigo, product.id]));
+		const existingProductsByCode = new Map(existingProducts.map((product) => [product.codigo, product]));
 		const existingProductsMap = new Map<string, string>();
 
 		let productsCreated = 0;
 		let productsUpdated = 0;
 
 		for (const product of mappedProducts) {
-			const existingId = existingProductsByCode.get(product.codigo) ?? existingProductsByCode.get(product.idExterno);
+			const existingProduct = existingProductsByCode.get(product.codigo) ?? existingProductsByCode.get(product.idExterno);
 
-			if (existingId) {
+			if (existingProduct) {
 				await tx
 					.update(products)
 					.set({
@@ -47,7 +48,7 @@ export async function syncCardapioWebCatalog(organizationId: string, config: TCa
 						nome: product.nome,
 						descricao: product.descricao,
 						imagemCapaUrl: product.imagemCapaUrl,
-						precoVenda: product.precoVenda,
+						...buildPrecoVendaUpdate({ atual: existingProduct, novoPrecoVenda: product.precoVenda }),
 						precoCusto: product.precoCusto,
 						unidade: product.unidade,
 						grupo: product.grupo,
@@ -55,8 +56,8 @@ export async function syncCardapioWebCatalog(organizationId: string, config: TCa
 						quantidade: product.quantidade,
 						dataUltimaSincronizacao: new Date(),
 					})
-					.where(eq(products.id, existingId));
-				existingProductsMap.set(product.idExterno, existingId);
+					.where(eq(products.id, existingProduct.id));
+				existingProductsMap.set(product.idExterno, existingProduct.id);
 				productsUpdated++;
 			} else {
 				const [inserted] = await tx

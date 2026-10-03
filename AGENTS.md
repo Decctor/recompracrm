@@ -129,6 +129,7 @@ When building a new admin feature, create files in this order:
 - **Don't skip typing API responses.** Always export `TOutput = Awaited<ReturnType<typeof fn>>`.
 - **Don't import React Query hooks in mutation files.** Mutations are plain async functions; hooks go in components.
 - **Don't write page-level inline editing UIs.** All CRUD goes through modals (`ResponsiveMenu`).
+- **Don't write `precoVenda` of `products`/`productVariants` directly in an update.** Spread `buildPrecoVendaUpdate` (`lib/products/price-snapshot.ts`) into the `.set(...)`, reading the current `precoVenda`/`precoVendaAnterior` first (inside the transaction, `FOR UPDATE` when the route already locks). It records the previous price that promotions ("De / Por") are inferred from. `npm run test:product-pricing` fails on a write path that skips it.
 - **Don't translate entity fields when they enter a function signature or an API payload.** A computed block attached to an entity extends it, so it stays Portuguese: `valores.custoTotal`, not `valuation.totalCost`. Type and function **names** are English; their **fields** follow the data. See *Portuguese vs. English* in CLAUDE.md.
 
 ---

@@ -21,6 +21,7 @@ import {
 	saleItems,
 	supplierProductMappings,
 } from "@/services/drizzle/schema";
+import { buildPrecoVendaUpdate } from "@/lib/products/price-snapshot";
 import { and, eq, sql } from "drizzle-orm";
 
 export type TMergeProductsInput = {
@@ -254,7 +255,14 @@ export async function mergeProducts(input: TMergeProductsInput): Promise<TMergeP
 			keeperUpdates.imagemCapaUrl = source.imagemCapaUrl;
 		}
 		if (keeper.precoVenda == null && source.precoVenda != null) {
-			keeperUpdates.precoVenda = source.precoVenda;
+			Object.assign(keeperUpdates, buildPrecoVendaUpdate({ atual: keeper, novoPrecoVenda: source.precoVenda }));
+		}
+		if (!keeper.codigoBarras && source.codigoBarras) {
+			keeperUpdates.codigoBarras = source.codigoBarras;
+		}
+		if (keeper.conteudoQuantidade == null && keeper.conteudoUnidade == null && source.conteudoQuantidade != null) {
+			keeperUpdates.conteudoQuantidade = source.conteudoQuantidade;
+			keeperUpdates.conteudoUnidade = source.conteudoUnidade;
 		}
 		if (keeper.precoCusto == null && source.precoCusto != null) {
 			keeperUpdates.precoCusto = source.precoCusto;

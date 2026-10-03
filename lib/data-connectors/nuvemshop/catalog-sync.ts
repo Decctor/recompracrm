@@ -1,5 +1,6 @@
 import { db, type DBTransaction } from "@/services/drizzle";
 import { productOptionValues, productOptions, productVariantOptionValues, productVariants, products } from "@/services/drizzle/schema";
+import { buildPrecoVendaUpdate } from "@/lib/products/price-snapshot";
 import { and, eq } from "drizzle-orm";
 import { fetchAllNuvemshopProducts, mapNuvemshopStructuredCatalog, type TNuvemshopCatalogProduct } from "./index";
 import type { TNuvemshopConfig } from "./types";
@@ -54,7 +55,6 @@ async function upsertCatalogProduct({
 		nome: product.nome,
 		descricao: product.descricao,
 		imagemCapaUrl: product.imagemCapaUrl,
-		precoVenda: product.precoVenda,
 		precoCusto: product.precoCusto,
 		unidade: product.unidade,
 		grupo: product.grupo,
@@ -67,18 +67,28 @@ async function upsertCatalogProduct({
 
 	const existingProduct = await tx.query.products.findFirst({
 		where: (fields, { and, eq }) => and(eq(fields.organizacaoId, organizationId), eq(fields.codigo, product.codigo)),
-		columns: { id: true },
+		columns: { id: true, precoVenda: true, precoVendaAnterior: true, codigoBarras: true },
 	});
 
 	let productId: string;
 	let created = false;
 	if (existingProduct) {
-		await tx.update(products).set(productValues).where(eq(products.id, existingProduct.id));
+		// A Nuvem Shop já entrega o preço promocional como preço de venda (`variantSalePrice`): com o
+		// snapshot, o início de uma promoção vira "De / Por" automaticamente.
+		await tx
+			.update(products)
+			.set({
+				...productValues,
+				...buildPrecoVendaUpdate({ atual: existingProduct, novoPrecoVenda: product.precoVenda }),
+				// GTIN ausente/inválido na loja não apaga o que foi cadastrado no app.
+				codigoBarras: product.codigoBarras ?? existingProduct.codigoBarras,
+			})
+			.where(eq(products.id, existingProduct.id));
 		productId = existingProduct.id;
 	} else {
 		const [insertedProduct] = await tx
 			.insert(products)
-			.values({ organizacaoId: organizationId, ...productValues })
+			.values({ organizacaoId: organizationId, ...productValues, precoVenda: product.precoVenda, codigoBarras: product.codigoBarras })
 			.returning({ id: products.id });
 		if (!insertedProduct?.id) throw new Error(`Falha ao criar produto do catálogo Nuvem Shop (codigo=${product.codigo}).`);
 		productId = insertedProduct.id;
@@ -138,10 +148,10 @@ async function upsertCatalogProduct({
 	// 2. Upsert das variantes (casadas por id_externo, fallback por código), e suas junções.
 	const existingVariants = await tx.query.productVariants.findMany({
 		where: (fields, { eq }) => eq(fields.produtoId, productId),
-		columns: { id: true, idExterno: true, codigo: true },
+		columns: { id: true, idExterno: true, codigo: true, precoVenda: true, precoVendaAnterior: true, codigoBarras: true },
 	});
-	const variantByExternal = new Map(existingVariants.filter((v) => v.idExterno).map((v) => [v.idExterno as string, v.id]));
-	const variantByCode = new Map(existingVariants.filter((v) => v.codigo).map((v) => [v.codigo as string, v.id]));
+	const variantByExternal = new Map(existingVariants.filter((v) => v.idExterno).map((v) => [v.idExterno as string, v]));
+	const variantByCode = new Map(existingVariants.filter((v) => v.codigo).map((v) => [v.codigo as string, v]));
 
 	let variantsUpserted = 0;
 	for (const variant of product.variants) {
@@ -150,20 +160,34 @@ async function upsertCatalogProduct({
 			nome: variant.nome,
 			codigo: variant.codigo,
 			imagemCapaUrl: variant.imagemCapaUrl,
-			precoVenda: variant.precoVenda,
 			precoCusto: variant.precoCusto,
 			quantidade: variant.quantidade,
 			ativo: variant.ativo,
 			rastreamentoEstoqueAtivo: variant.controlaEstoque,
 		};
 
-		let variantId = variantByExternal.get(variant.idExterno) ?? variantByCode.get(variant.codigo) ?? null;
-		if (variantId) {
-			await tx.update(productVariants).set(variantValues).where(eq(productVariants.id, variantId));
+		const existingVariant = variantByExternal.get(variant.idExterno) ?? variantByCode.get(variant.codigo) ?? null;
+		let variantId: string;
+		if (existingVariant) {
+			variantId = existingVariant.id;
+			await tx
+				.update(productVariants)
+				.set({
+					...variantValues,
+					...buildPrecoVendaUpdate({ atual: existingVariant, novoPrecoVenda: variant.precoVenda }),
+					codigoBarras: variant.codigoBarras ?? existingVariant.codigoBarras,
+				})
+				.where(eq(productVariants.id, existingVariant.id));
 		} else {
 			const [insertedVariant] = await tx
 				.insert(productVariants)
-				.values({ organizacaoId: organizationId, produtoId: productId, ...variantValues })
+				.values({
+					organizacaoId: organizationId,
+					produtoId: productId,
+					...variantValues,
+					precoVenda: variant.precoVenda,
+					codigoBarras: variant.codigoBarras,
+				})
 				.returning({ id: productVariants.id });
 			if (!insertedVariant?.id) throw new Error(`Falha ao criar variante (codigo=${variant.codigo}).`);
 			variantId = insertedVariant.id;

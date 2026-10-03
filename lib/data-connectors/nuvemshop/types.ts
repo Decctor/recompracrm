@@ -193,6 +193,7 @@ export const NuvemshopProductVariantSchema = z
 		stock_management: z.boolean({ invalid_type_error: "Tipo inválido para controle de estoque do produto Nuvem Shop." }).optional().nullable(),
 		stock: NuvemshopStockSchema,
 		sku: NuvemshopNullableStringSchema,
+		barcode: NuvemshopNullableStringSchema,
 	})
 	.passthrough();
 export type TNuvemshopProductVariant = z.infer<typeof NuvemshopProductVariantSchema>;

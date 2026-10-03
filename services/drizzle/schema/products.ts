@@ -3,6 +3,7 @@ import { boolean, doublePrecision, index, integer, text, timestamp, uniqueIndex,
 import { newTable } from "./common";
 import {
 	productClientReferenceWindowEnum,
+	productContentUnitEnum,
 	productStockDeductionModeEnum,
 	stockLotStatusEnum,
 	stockMovementTypeEnum,
@@ -35,7 +36,19 @@ export const products = newTable(
 		unidade: text("unidade").notNull(),
 		quantidade: doublePrecision("quantidade"),
 		precoVenda: doublePrecision("preco_venda"),
+		// Snapshot do preço de venda anterior + quando o preço mudou. Escritos SOMENTE via
+		// `buildPrecoVendaUpdate` (lib/products/price-snapshot.ts) em todo update de `precoVenda` —
+		// o teste `price-snapshot.test.ts` falha se um caminho de escrita novo ignorar o helper.
+		// Promoção = anterior > atual dentro da janela de `resolvePromotion` (lib/products/pricing.ts).
+		precoVendaAnterior: doublePrecision("preco_venda_anterior"),
+		dataAlteracaoPrecoVenda: timestamp("data_alteracao_preco_venda"),
 		precoCusto: doublePrecision("preco_custo"),
+		// GTIN (EAN-8/12/13/14) com dígito verificador válido — `normalizeGtin` (lib/products/gtin.ts).
+		// Separado de `codigo`, que é a chave de identidade das integrações (SKU, código do ERP).
+		codigoBarras: text("codigo_barras"),
+		// Conteúdo da embalagem ("200" + ML): base do preço por unidade de medida nas etiquetas.
+		conteudoQuantidade: doublePrecision("conteudo_quantidade"),
+		conteudoUnidade: productContentUnitEnum("conteudo_unidade"),
 		ncm: text("ncm").notNull(),
 		tipo: text("tipo").notNull(),
 		grupo: text("grupo").notNull(),
@@ -93,7 +106,13 @@ export const productVariants = newTable(
 		imagemCapaUrl: text("imagem_capa_url"), // Overrides main product image if defined,
 		// Price Override
 		precoVenda: doublePrecision("preco_venda").notNull(),
+		// Mesmo contrato do produto: escritos somente via `buildPrecoVendaUpdate`.
+		precoVendaAnterior: doublePrecision("preco_venda_anterior"),
+		dataAlteracaoPrecoVenda: timestamp("data_alteracao_preco_venda"),
 		precoCusto: doublePrecision("preco_custo"), // Optional: distinct cost per variant
+		codigoBarras: text("codigo_barras"), // GTIN da variante (sobrescreve o do produto)
+		// Quantidade do conteúdo da variante (sobrescreve a do produto); a unidade é sempre a do produto.
+		conteudoQuantidade: doublePrecision("conteudo_quantidade"),
 
 		// Stock Control (Optional, for tracking variant stock independently)
 		quantidade: doublePrecision("quantidade"),

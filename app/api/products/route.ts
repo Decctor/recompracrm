@@ -38,6 +38,7 @@ import {
 } from "@/services/drizzle/schema";
 import { and, asc, count, desc, eq, gt, gte, inArray, isNull, lt, lte, max, min, notInArray, or, type SQL, sql } from "drizzle-orm";
 import { upsertProductAddOnOptions } from "@/lib/products/add-on-options";
+import { buildPrecoVendaUpdate } from "@/lib/products/price-snapshot";
 import { splitChannelSettingNodes, validateChannelSettingNodes } from "@/lib/products/sales-channels";
 import createHttpError from "http-errors";
 import { z } from "zod";
@@ -1215,7 +1216,7 @@ async function updateProduct({ session, input }: { session: TAuthUserSession; in
 		// Saldo lido com trava (FOR UPDATE): a edição vira um AJUSTE calculado por delta, então o
 		// saldo de referência não pode mudar (venda concorrente) entre a leitura e a movimentação.
 		const [currentProductState] = await tx
-			.select({ quantidade: products.quantidade })
+			.select({ quantidade: products.quantidade, precoVenda: products.precoVenda, precoVendaAnterior: products.precoVendaAnterior })
 			.from(products)
 			.where(and(eq(products.id, input.productId), eq(products.organizacaoId, userOrgId)))
 			.for("update");
@@ -1236,8 +1237,16 @@ async function updateProduct({ session, input }: { session: TAuthUserSession; in
 				tipo: input.product.tipo,
 				grupo: input.product.grupo,
 				imagemCapaUrl: input.product.imagemCapaUrl,
-				precoVenda: input.product.precoVenda,
+				// Preço atual lido sob a mesma trava: o snapshot não pode usar um preço que outra escrita já trocou.
+				...buildPrecoVendaUpdate({
+					atual: currentProductState,
+					novoPrecoVenda: input.product.precoVenda ?? null,
+					precoVendaAnteriorManual: input.product.precoVendaAnterior,
+				}),
 				precoCusto: input.product.precoCusto,
+				codigoBarras: input.product.codigoBarras,
+				conteudoQuantidade: input.product.conteudoQuantidade,
+				conteudoUnidade: input.product.conteudoUnidade,
 				rastreamentoEstoqueAtivo: input.product.rastreamentoEstoqueAtivo,
 				baixaEstoqueModo: input.product.baixaEstoqueModo,
 				fichaTecnicaReceitaId: input.product.fichaTecnicaReceitaId,
@@ -1319,7 +1328,11 @@ async function updateProduct({ session, input }: { session: TAuthUserSession; in
 			if (variantId) {
 				// Mesmo tratamento do produto: saldo travado, flag persistido antes, delta via AJUSTE.
 				const [currentVariantState] = await tx
-					.select({ quantidade: productVariants.quantidade })
+					.select({
+						quantidade: productVariants.quantidade,
+						precoVenda: productVariants.precoVenda,
+						precoVendaAnterior: productVariants.precoVendaAnterior,
+					})
 					.from(productVariants)
 					.where(and(eq(productVariants.id, variantId), eq(productVariants.produtoId, input.productId), eq(productVariants.organizacaoId, userOrgId)))
 					.for("update");
@@ -1331,8 +1344,14 @@ async function updateProduct({ session, input }: { session: TAuthUserSession; in
 						nome: variant.nome,
 						codigo: variant.codigo,
 						imagemCapaUrl: variant.imagemCapaUrl,
-						precoVenda: variant.precoVenda,
+						...buildPrecoVendaUpdate({
+							atual: currentVariantState,
+							novoPrecoVenda: variant.precoVenda,
+							precoVendaAnteriorManual: variant.precoVendaAnterior,
+						}),
 						precoCusto: variant.precoCusto,
+						codigoBarras: variant.codigoBarras,
+						conteudoQuantidade: variant.conteudoQuantidade,
 						rastreamentoEstoqueAtivo: variant.rastreamentoEstoqueAtivo,
 						ativo: variant.ativo,
 					})
@@ -1371,6 +1390,8 @@ async function updateProduct({ session, input }: { session: TAuthUserSession; in
 						imagemCapaUrl: variant.imagemCapaUrl,
 						precoVenda: variant.precoVenda,
 						precoCusto: variant.precoCusto,
+						codigoBarras: variant.codigoBarras,
+						conteudoQuantidade: variant.conteudoQuantidade,
 						quantidade: variant.quantidade,
 						rastreamentoEstoqueAtivo: variant.rastreamentoEstoqueAtivo,
 						ativo: variant.ativo,
@@ -1611,6 +1632,9 @@ async function createProduct({ session, input }: { session: TAuthUserSession; in
 				imagemCapaUrl: input.product.imagemCapaUrl,
 				precoVenda: input.product.precoVenda,
 				precoCusto: input.product.precoCusto,
+				codigoBarras: input.product.codigoBarras,
+				conteudoQuantidade: input.product.conteudoQuantidade,
+				conteudoUnidade: input.product.conteudoUnidade,
 				quantidade: input.product.quantidade,
 				rastreamentoEstoqueAtivo: input.product.rastreamentoEstoqueAtivo,
 				baixaEstoqueModo: input.product.baixaEstoqueModo,
@@ -1696,6 +1720,8 @@ async function createProduct({ session, input }: { session: TAuthUserSession; in
 					imagemCapaUrl: variant.imagemCapaUrl,
 					precoVenda: variant.precoVenda,
 					precoCusto: variant.precoCusto,
+					codigoBarras: variant.codigoBarras,
+					conteudoQuantidade: variant.conteudoQuantidade,
 					quantidade: variant.quantidade,
 					rastreamentoEstoqueAtivo: variant.rastreamentoEstoqueAtivo,
 					ativo: variant.ativo,

@@ -57,6 +57,8 @@ export function hydrateVariationsState(product: TGetProductsOutputById): Partial
 			codigo: variant.codigo ?? "",
 			precoCusto: variant.precoCusto ?? 0,
 			precoVenda: variant.precoVenda,
+			codigoBarras: variant.codigoBarras,
+			conteudoQuantidade: variant.conteudoQuantidade,
 			quantidade: variant.quantidade ?? 0,
 			ativo: variant.ativo ?? true,
 			rastreamentoEstoqueAtivo: variant.rastreamentoEstoqueAtivo ?? false,
@@ -176,6 +178,8 @@ export function buildVariationsUpdateInput(
 			imagemCapaUrl: variant.imagemCapaUrl ?? null,
 			precoVenda: variant.precoVenda,
 			precoCusto: variant.precoCusto,
+			codigoBarras: variant.codigoBarras ?? null,
+			conteudoQuantidade: variant.conteudoQuantidade ?? null,
 			quantidade: variant.quantidade,
 			ativo: variant.ativo,
 			rastreamentoEstoqueAtivo: variant.rastreamentoEstoqueAtivo,
@@ -280,6 +284,9 @@ export function mapProductToCoreState(product: TGetProductsOutputById): TProduct
 		imagemCapaUrl: product.imagemCapaUrl,
 		precoCusto: product.precoCusto,
 		precoVenda: product.precoVenda,
+		codigoBarras: product.codigoBarras,
+		conteudoQuantidade: product.conteudoQuantidade,
+		conteudoUnidade: product.conteudoUnidade,
 		quantidade: product.quantidade,
 		rastreamentoEstoqueAtivo: !!product.rastreamentoEstoqueAtivo,
 		imagemCapaHolder: {
@@ -316,6 +323,9 @@ export function buildCoreGeneralUpdateInput(
 			ncm: state.ncm,
 			tipo: state.tipo,
 			grupo: state.grupo,
+			codigoBarras: state.codigoBarras ?? null,
+			conteudoQuantidade: state.conteudoQuantidade ?? null,
+			conteudoUnidade: state.conteudoUnidade ?? null,
 			rastreamentoEstoqueAtivo: state.rastreamentoEstoqueAtivo,
 			// Preços vivem na seção "PREÇOS E CANAIS DE VENDA": reenviamos o valor do servidor para
 			// que esta seção nunca sobrescreva um rascunho de preço aberto na outra.
@@ -335,7 +345,7 @@ export function buildCoreGeneralUpdateInput(
 
 export function buildBasePricesUpdateInput(
 	product: TGetProductsOutputById,
-	prices: { precoCusto: number | null; precoVenda: number | null },
+	prices: { precoCusto: number | null; precoVenda: number | null; precoVendaAnterior: number | null },
 ): TUpdateProductInput {
 	return {
 		productId: product.id,
@@ -343,6 +353,8 @@ export function buildBasePricesUpdateInput(
 			...buildProductMetadata(product),
 			precoCusto: prices.precoCusto,
 			precoVenda: prices.precoVenda,
+			// Só vai quando o usuário editou o preço anterior; ausente, a rota aplica o snapshot automático.
+			precoVendaAnterior: prices.precoVendaAnterior === (product.precoVendaAnterior ?? null) ? undefined : prices.precoVendaAnterior,
 			// Esta seção não mexe em estoque: `null` evita que um saldo lido há minutos vire AJUSTE.
 			quantidade: null,
 		},

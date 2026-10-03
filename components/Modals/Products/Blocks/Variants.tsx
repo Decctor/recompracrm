@@ -17,16 +17,18 @@ import { toast } from "sonner";
 const VARIANT_GRID_COL = {
 	VARIANT: 0,
 	CODE: 1,
-	COST: 2,
-	SALE: 3,
-	STOCK: 4,
+	BARCODE: 2,
+	CONTENT: 3,
+	COST: 4,
+	SALE: 5,
+	STOCK: 6,
 } as const;
 
-const VARIANT_GRID_COL_COUNT = 5;
+const VARIANT_GRID_COL_COUNT = 7;
 
-/** Proporções do plano (32+14+14+14+11+5); grid garante alinhamento header ↔ linhas. */
+/** Proporções (24+11+13+9+11+11+9+5); grid garante alinhamento header ↔ linhas. */
 const VARIANT_TABLE_GRID_COLS =
-	"grid-cols-[minmax(0,32fr)_minmax(0,14fr)_minmax(0,14fr)_minmax(0,14fr)_minmax(0,11fr)_minmax(2.5rem,5fr)]";
+	"grid-cols-[minmax(0,24fr)_minmax(0,11fr)_minmax(0,13fr)_minmax(0,9fr)_minmax(0,11fr)_minmax(0,11fr)_minmax(0,9fr)_minmax(2.5rem,5fr)]";
 
 const VARIANT_TABLE_DESKTOP_ROW = cn("hidden w-full lg:grid", VARIANT_TABLE_GRID_COLS, "items-center gap-x-1 px-2");
 
@@ -137,6 +139,8 @@ function VariantTable({
 			<div className={cn(VARIANT_TABLE_DESKTOP_ROW, "min-h-9 border-b border-border bg-muted/60 py-1.5 text-[0.68rem] font-medium uppercase text-muted-foreground")}>
 				<p className="min-w-0 px-1 text-start">Variante</p>
 				<p className="min-w-0 px-1 text-center">Código</p>
+				<p className="min-w-0 px-1 text-center">Cód. barras</p>
+				<p className="min-w-0 px-1 text-center">Conteúdo</p>
 				<p className="min-w-0 px-1 text-center">Custo</p>
 				<p className="min-w-0 px-1 text-center">Venda</p>
 				<p className="min-w-0 px-1 text-center">Estoque</p>
@@ -209,6 +213,29 @@ function VariantTableRow({ variant, tags, gridRow, gridBounds, onUpdate, onImage
 					/>
 				</div>
 				<div className="min-w-0 px-1">
+					<EditableTextCell
+						value={variant.codigoBarras ?? ""}
+						ariaLabel="Editar código de barras da variante"
+						align="center"
+						gridRow={gridRow}
+						gridCol={VARIANT_GRID_COL.BARCODE}
+						gridBounds={gridBounds}
+						onCommit={(codigoBarras) => onUpdate({ codigoBarras: codigoBarras.trim() ? codigoBarras : null })}
+					/>
+				</div>
+				<div className="min-w-0 px-1">
+					<EditableNumberCell
+						value={variant.conteudoQuantidade ?? 0}
+						ariaLabel="Editar conteúdo da variante"
+						min={0}
+						gridRow={gridRow}
+						gridCol={VARIANT_GRID_COL.CONTENT}
+						gridBounds={gridBounds}
+						format={(value) => (value > 0 ? value.toLocaleString("pt-BR") : "-")}
+						onCommit={(conteudoQuantidade) => onUpdate({ conteudoQuantidade: conteudoQuantidade > 0 ? conteudoQuantidade : null })}
+					/>
+				</div>
+				<div className="min-w-0 px-1">
 					<EditableNumberCell
 						value={variant.precoCusto}
 						ariaLabel="Editar preço de custo"
@@ -269,6 +296,23 @@ function VariantTableRow({ variant, tags, gridRow, gridBounds, onUpdate, onImage
 							ariaLabel="Editar código da variante"
 							align="center"
 							onCommit={(codigo) => onUpdate({ codigo })}
+						/>
+					</MobileEditableField>
+					<MobileEditableField label="Cód. barras">
+						<EditableTextCell
+							value={variant.codigoBarras ?? ""}
+							ariaLabel="Editar código de barras da variante"
+							align="center"
+							onCommit={(codigoBarras) => onUpdate({ codigoBarras: codigoBarras.trim() ? codigoBarras : null })}
+						/>
+					</MobileEditableField>
+					<MobileEditableField label="Conteúdo">
+						<EditableNumberCell
+							value={variant.conteudoQuantidade ?? 0}
+							ariaLabel="Editar conteúdo da variante"
+							min={0}
+							format={(value) => (value > 0 ? value.toLocaleString("pt-BR") : "-")}
+							onCommit={(conteudoQuantidade) => onUpdate({ conteudoQuantidade: conteudoQuantidade > 0 ? conteudoQuantidade : null })}
 						/>
 					</MobileEditableField>
 					<MobileEditableField label="Estoque">
@@ -501,6 +545,29 @@ function DraftVariantTableRow({ addVariant, gridRow, gridBounds }: DraftVariantT
 					/>
 				</div>
 				<div className="min-w-0 px-1">
+					<EditableTextCell
+						value={draftVariant.codigoBarras ?? ""}
+						ariaLabel="Código de barras da nova variante"
+						align="center"
+						gridRow={gridRow}
+						gridCol={VARIANT_GRID_COL.BARCODE}
+						gridBounds={gridBounds}
+						onCommit={(codigoBarras) => updateDraft({ codigoBarras: codigoBarras.trim() ? codigoBarras : null })}
+					/>
+				</div>
+				<div className="min-w-0 px-1">
+					<EditableNumberCell
+						value={draftVariant.conteudoQuantidade ?? 0}
+						ariaLabel="Conteúdo da nova variante"
+						min={0}
+						gridRow={gridRow}
+						gridCol={VARIANT_GRID_COL.CONTENT}
+						gridBounds={gridBounds}
+						format={(value) => (value > 0 ? value.toLocaleString("pt-BR") : "-")}
+						onCommit={(conteudoQuantidade) => updateDraft({ conteudoQuantidade: conteudoQuantidade > 0 ? conteudoQuantidade : null })}
+					/>
+				</div>
+				<div className="min-w-0 px-1">
 					<EditableNumberCell
 						value={draftVariant.precoCusto}
 						ariaLabel="Preço de custo da nova variante"
@@ -559,6 +626,23 @@ function DraftVariantTableRow({ addVariant, gridRow, gridBounds }: DraftVariantT
 							ariaLabel="Código da nova variante"
 							align="center"
 							onCommit={(codigo) => updateDraft({ codigo })}
+						/>
+					</MobileEditableField>
+					<MobileEditableField label="Cód. barras">
+						<EditableTextCell
+							value={draftVariant.codigoBarras ?? ""}
+							ariaLabel="Código de barras da nova variante"
+							align="center"
+							onCommit={(codigoBarras) => updateDraft({ codigoBarras: codigoBarras.trim() ? codigoBarras : null })}
+						/>
+					</MobileEditableField>
+					<MobileEditableField label="Conteúdo">
+						<EditableNumberCell
+							value={draftVariant.conteudoQuantidade ?? 0}
+							ariaLabel="Conteúdo da nova variante"
+							min={0}
+							format={(value) => (value > 0 ? value.toLocaleString("pt-BR") : "-")}
+							onCommit={(conteudoQuantidade) => updateDraft({ conteudoQuantidade: conteudoQuantidade > 0 ? conteudoQuantidade : null })}
 						/>
 					</MobileEditableField>
 					<MobileEditableField label="Estoque">

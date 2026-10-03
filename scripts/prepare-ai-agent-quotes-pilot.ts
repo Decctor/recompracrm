@@ -2,6 +2,7 @@ import "dotenv/config";
 import { ensureOrganizationAgent } from "@/lib/ai/agent/provisioning";
 import { parseJsonbWithFallback } from "@/lib/ai/shared/json";
 import { getCatalogCommercialReadiness } from "@/lib/products/commercial-readiness";
+import { buildPrecoVendaUpdate } from "@/lib/products/price-snapshot";
 import { AiAgentCapabilitiesSchema } from "@/schemas/ai-agents";
 import { connection, db } from "@/services/drizzle";
 import { aiAgents, organizations, productAddOnReferences, products, productVariants } from "@/services/drizzle/schema";
@@ -314,21 +315,30 @@ async function main() {
 	await db.transaction(async (tx) => {
 		for (const item of candidates) {
 			if (item.produto_variante_id) {
+				const variantWhere = and(
+					eq(productVariants.id, item.produto_variante_id),
+					eq(productVariants.produtoId, item.produto_id),
+					eq(productVariants.organizacaoId, args.orgId),
+				);
+				const [current] = await tx
+					.select({ precoVenda: productVariants.precoVenda, precoVendaAnterior: productVariants.precoVendaAnterior })
+					.from(productVariants)
+					.where(variantWhere)
+					.for("update");
+				if (!current) continue;
 				await tx
 					.update(productVariants)
-					.set({ precoVenda: item.preco_observado })
-					.where(
-						and(
-							eq(productVariants.id, item.produto_variante_id),
-							eq(productVariants.produtoId, item.produto_id),
-							eq(productVariants.organizacaoId, args.orgId),
-						),
-					);
+					.set(buildPrecoVendaUpdate({ atual: current, novoPrecoVenda: item.preco_observado }))
+					.where(variantWhere);
 			} else {
-				await tx
-					.update(products)
-					.set({ precoVenda: item.preco_observado })
-					.where(and(eq(products.id, item.produto_id), eq(products.organizacaoId, args.orgId)));
+				const productWhere = and(eq(products.id, item.produto_id), eq(products.organizacaoId, args.orgId));
+				const [current] = await tx
+					.select({ precoVenda: products.precoVenda, precoVendaAnterior: products.precoVendaAnterior })
+					.from(products)
+					.where(productWhere)
+					.for("update");
+				if (!current) continue;
+				await tx.update(products).set(buildPrecoVendaUpdate({ atual: current, novoPrecoVenda: item.preco_observado })).where(productWhere);
 			}
 		}
 

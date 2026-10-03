@@ -720,6 +720,11 @@ export type TServicePointTypeEnum = z.infer<typeof ServicePointTypeEnum>;
 // Espelha o pgEnum productStockDeductionModeEnum.
 export const ProductStockDeductionModeEnum = z.enum(["ESTOQUE_PROPRIO", "COMPOSICAO"]);
 export type TProductStockDeductionModeEnum = z.infer<typeof ProductStockDeductionModeEnum>;
+export const ProductContentUnitEnum = z.enum(["ML", "L", "G", "KG", "UN", "COMPRIMIDO", "CAPSULA", "METRO"], {
+	required_error: "Unidade do conteúdo não informada.",
+	invalid_type_error: "Tipo não válido para unidade do conteúdo.",
+});
+export type TProductContentUnitEnum = z.infer<typeof ProductContentUnitEnum>;
 
 // Politicas de serviceSettings (apenas app-level, nao sao pgEnum: vivem no jsonb de configuracoes).
 export const TabIdentificationModeEnum = z.enum(["AUTOMATICA", "CODIGO_MANUAL"]);

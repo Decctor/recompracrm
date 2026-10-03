@@ -17,6 +17,7 @@ import {
 } from "@/services/drizzle/schema";
 import { and, eq } from "drizzle-orm";
 import { upsertProductAddOnOptions, validateAndResolveAddOnOptionLink } from "@/lib/products/add-on-options";
+import { buildPrecoVendaUpdate } from "@/lib/products/price-snapshot";
 
 const GetProductVariantsInputSchema = z.object({
 	productId: z
@@ -305,6 +306,8 @@ async function createProductVariant({ input, session }: { input: TCreateProductV
 				imagemCapaUrl: input.productVariant.imagemCapaUrl,
 				precoVenda: input.productVariant.precoVenda,
 				precoCusto: input.productVariant.precoCusto,
+				codigoBarras: input.productVariant.codigoBarras,
+				conteudoQuantidade: input.productVariant.conteudoQuantidade,
 				quantidade: input.productVariant.quantidade,
 				rastreamentoEstoqueAtivo: input.productVariant.rastreamentoEstoqueAtivo,
 				ativo: input.productVariant.ativo,
@@ -421,21 +424,29 @@ async function updateProductVariant({ input, session }: { input: TUpdateProductV
 	});
 	if (!product) throw new createHttpError.NotFound("Produto não encontrado.");
 
-	const existingVariant = await db.query.productVariants.findFirst({
-		where: and(eq(productVariants.id, productVariantId), eq(productVariants.produtoId, productId), eq(productVariants.organizacaoId, userOrgId)),
-		columns: { id: true },
-	});
-	if (!existingVariant) throw new createHttpError.NotFound("Variante não encontrada.");
-
 	const transactionReturn = await db.transaction(async (tx) => {
+		// Preço atual lido com trava: base do snapshot do preço anterior.
+		const [existingVariant] = await tx
+			.select({ precoVenda: productVariants.precoVenda, precoVendaAnterior: productVariants.precoVendaAnterior })
+			.from(productVariants)
+			.where(and(eq(productVariants.id, productVariantId), eq(productVariants.produtoId, productId), eq(productVariants.organizacaoId, userOrgId)))
+			.for("update");
+		if (!existingVariant) throw new createHttpError.NotFound("Variante não encontrada.");
+
 		const [updatedVariant] = await tx
 			.update(productVariants)
 			.set({
 				nome: input.productVariant.nome,
 				codigo: input.productVariant.codigo,
 				imagemCapaUrl: input.productVariant.imagemCapaUrl,
-				precoVenda: input.productVariant.precoVenda,
+				...buildPrecoVendaUpdate({
+					atual: existingVariant,
+					novoPrecoVenda: input.productVariant.precoVenda,
+					precoVendaAnteriorManual: input.productVariant.precoVendaAnterior,
+				}),
 				precoCusto: input.productVariant.precoCusto,
+				codigoBarras: input.productVariant.codigoBarras,
+				conteudoQuantidade: input.productVariant.conteudoQuantidade,
 				quantidade: input.productVariant.quantidade,
 				rastreamentoEstoqueAtivo: input.productVariant.rastreamentoEstoqueAtivo,
 				ativo: input.productVariant.ativo,
