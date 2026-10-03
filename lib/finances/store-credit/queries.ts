@@ -1,8 +1,8 @@
 import dayjs from "dayjs";
-import { and, asc, count, eq, gte, isNull, lte, ne, notInArray, or, type SQL, sql } from "drizzle-orm";
+import { and, asc, count, eq, exists, gte, inArray, isNull, lte, ne, notInArray, or, type SQL, sql } from "drizzle-orm";
 import { formatAsNumber } from "@/lib/formatting";
 import { db } from "@/services/drizzle";
-import { accountingEntries, clients, financialTransactions, sales } from "@/services/drizzle/schema";
+import { accountingEntries, clients, financialAccounts, financialTransactions, sales } from "@/services/drizzle/schema";
 import { bucketStoreCreditByAging, getStoreCreditAgingDueDateRange, type TStoreCreditAgingBucket } from "./aging";
 import {
 	STORE_CREDIT_METHOD,
@@ -335,6 +335,137 @@ export async function getStoreCreditClientTitles({
 }
 
 export type TStoreCreditClientTitles = Awaited<ReturnType<typeof getStoreCreditClientTitles>>;
+
+export const STORE_CREDIT_EXPORT_PAGE_SIZE = 500;
+
+/**
+ * Títulos para a exportação em planilha, página a página — uma linha por movimentação.
+ *
+ * O recorte é o mesmo da listagem: os filtros de status e faixa de atraso qualificam o CLIENTE
+ * (HAVING sobre o agregado), então aqui eles escolhem quais clientes entram, e de cada cliente
+ * escolhido vêm os títulos — "vencidos" exporta tudo de quem tem algo vencido, como a tela mostra.
+ * A escolha roda como subconsulta não correlacionada (lista de ids), igual ao resto do módulo.
+ *
+ * O balde de órfãos (venda que perdeu o cliente) não tem id para entrar na lista, então tem
+ * perna própria: sem ela, a soma da planilha deixaria de bater com a da tela.
+ */
+export async function getStoreCreditTitlesForExport({
+	organizacaoId,
+	search,
+	statuses = [],
+	agingBuckets = [],
+	originAfter,
+	originBefore,
+	includeSettled,
+	page,
+}: Omit<TStoreCreditClientsFilters, "sortField" | "sortDirection" | "page"> & { includeSettled: boolean; page: number }) {
+	const referenceDate = new Date();
+	const whereConditions = buildStoreCreditUniverseConditions(organizacaoId);
+	whereConditions.push(...buildStoreCreditOriginConditions({ originAfter, originBefore }));
+	const trimmedSearch = search?.trim();
+	if (trimmedSearch) {
+		const searchCondition = or(
+			sql`${clients.nome} ilike '%' || ${trimmedSearch} || '%'`,
+			sql`${clients.telefone} ilike '%' || ${trimmedSearch} || '%'`,
+			sql`${clients.cpfCnpj} ilike '%' || ${trimmedSearch} || '%'`,
+		);
+		if (searchCondition) whereConditions.push(searchCondition);
+	}
+
+	const havingConditions = buildStoreCreditHavingConditions({ statuses, agingBuckets, referenceDate });
+	const titleConditions: SQL<unknown>[] = [...whereConditions];
+	if (havingConditions.length > 0) {
+		const matchedClients = (extraCondition?: SQL<unknown>) =>
+			db
+				.select({ clienteId: sales.clienteId })
+				.from(financialTransactions)
+				.innerJoin(accountingEntries, eq(financialTransactions.lancamentoContabilId, accountingEntries.id))
+				.leftJoin(sales, eq(accountingEntries.vendaId, sales.id))
+				.leftJoin(clients, eq(sales.clienteId, clients.id))
+				.where(and(...whereConditions, extraCondition))
+				.groupBy(sales.clienteId)
+				.having(and(...havingConditions));
+		const clientMatch = or(
+			inArray(sales.clienteId, matchedClients()),
+			and(isNull(sales.clienteId), exists(matchedClients(isNull(sales.clienteId)))),
+		);
+		if (clientMatch) titleConditions.push(clientMatch);
+	}
+	if (!includeSettled) titleConditions.push(isNull(financialTransactions.dataEfetivacao));
+	const where = and(...titleConditions);
+
+	function buildTitlesQuery() {
+		return db
+			.select({
+				transacaoId: financialTransactions.id,
+				titulo: financialTransactions.titulo,
+				valor: financialTransactions.valor,
+				metodo: financialTransactions.metodo,
+				dataPrevisao: financialTransactions.dataPrevisao,
+				dataEfetivacao: financialTransactions.dataEfetivacao,
+				dataOrigem: sql<Date>`${storeCreditOriginDate}`.mapWith(financialTransactions.dataInsercao),
+				origem: sql<string | null>`${financialTransactions.modificadoresMetadata}->>'origem'`,
+				contaFinanceiraNome: financialAccounts.nome,
+				clienteId: sales.clienteId,
+				clienteNome: clients.nome,
+				clienteTelefone: clients.telefone,
+				clienteCpfCnpj: clients.cpfCnpj,
+				vendaId: accountingEntries.vendaId,
+				vendaDataVenda: sales.dataVenda,
+				vendaValorTotal: sales.valorTotal,
+				vendedorNome: sales.vendedorNome,
+			})
+			.from(financialTransactions)
+			.innerJoin(accountingEntries, eq(financialTransactions.lancamentoContabilId, accountingEntries.id))
+			.leftJoin(sales, eq(accountingEntries.vendaId, sales.id))
+			.leftJoin(clients, eq(sales.clienteId, clients.id))
+			.leftJoin(financialAccounts, eq(financialTransactions.contaFinanceiraId, financialAccounts.id))
+			.where(where);
+	}
+
+	// Ordem estável para a paginação por offset: cliente, vencimento, id. Os títulos de um cliente
+	// ficam juntos, que é como a planilha é lida.
+	const [rows, countRows] = await Promise.all([
+		buildTitlesQuery()
+			.orderBy(
+				sql`${clients.nome} asc nulls last`,
+				sql`${sales.clienteId} asc nulls last`,
+				sql`${financialTransactions.dataPrevisao} asc nulls last`,
+				asc(financialTransactions.id),
+			)
+			.limit(STORE_CREDIT_EXPORT_PAGE_SIZE)
+			.offset(STORE_CREDIT_EXPORT_PAGE_SIZE * (page - 1)),
+		// A contagem só na primeira página: o laço de exportação já sabe quantas páginas tem depois dela.
+		page === 1
+			? db
+					.select({ count: count() })
+					.from(financialTransactions)
+					.innerJoin(accountingEntries, eq(financialTransactions.lancamentoContabilId, accountingEntries.id))
+					.leftJoin(sales, eq(accountingEntries.vendaId, sales.id))
+					.leftJoin(clients, eq(sales.clienteId, clients.id))
+					.where(where)
+			: Promise.resolve(null),
+	]);
+
+	const titlesMatched = countRows?.[0]?.count ?? null;
+	return {
+		titulos: rows.map((row) => {
+			const semCliente = row.clienteId === null;
+			return {
+				...row,
+				clienteId: row.clienteId ?? STORE_CREDIT_UNLINKED_CLIENT_ID,
+				clienteNome: semCliente ? "Sem cliente vinculado" : (row.clienteNome ?? "Cliente sem nome"),
+				valor: formatAsNumber(row.valor),
+				vendaValorTotal: row.vendaValorTotal === null ? null : formatAsNumber(row.vendaValorTotal),
+				emAberto: !row.dataEfetivacao,
+			};
+		}),
+		titlesMatched,
+		totalPages: titlesMatched === null ? null : Math.ceil(titlesMatched / STORE_CREDIT_EXPORT_PAGE_SIZE),
+	};
+}
+
+export type TStoreCreditExportTitles = Awaited<ReturnType<typeof getStoreCreditTitlesForExport>>;
 
 /**
  * Indicadores do topo da aba. Cada um responde uma pergunta diferente: quanto está na rua, quanto

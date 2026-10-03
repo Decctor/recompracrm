@@ -19,10 +19,18 @@ export type UsePaginatedExportReturn<TRow> = UsePaginatedLoopReturn & {
 	downloadXlsx: (fileName?: string) => void;
 };
 
+export type TPaginatedExportSheet = { name: string; rows: object[] };
+
 type UsePaginatedExportParams<TRow> = {
 	fetchPage: (page: number) => Promise<TPaginatedExportPage<TRow>>;
-	/** Nome da aba na planilha ("Clientes", "Vendas"). */
+	/** Nome da aba na planilha ("Clientes", "Vendas"). Ignorado quando `toSheets` é informado. */
 	sheetName: string;
+	/**
+	 * Mais de uma aba: recebe tudo o que o laço acumulou e devolve as abas na ordem. Com ele, as
+	 * linhas acumuladas podem ser o registro cru — a formatação acontece só no download, e uma aba
+	 * de resumo pode agregar os números sem desfazer formatação.
+	 */
+	toSheets?: (rows: TRow[]) => TPaginatedExportSheet[];
 	/** Prefixo do arquivo; recebe data e hora no download ("vendas-2026-09-12_10-30-00.xlsx"). */
 	fileNamePrefix: string;
 	/** Mensagem de erro genérica, quando a falha não traz mensagem própria. */
@@ -32,6 +40,7 @@ type UsePaginatedExportParams<TRow> = {
 export function usePaginatedExport<TRow extends object>({
 	fetchPage,
 	sheetName,
+	toSheets,
 	fileNamePrefix,
 	errorMessage,
 }: UsePaginatedExportParams<TRow>): UsePaginatedExportReturn<TRow> {
@@ -65,13 +74,13 @@ export function usePaginatedExport<TRow extends object>({
 			}
 
 			const safeName = fileName?.trim().length ? fileName.trim() : `${fileNamePrefix}-${dayjs().format("YYYY-MM-DD_HH-mm-ss")}`;
-			const worksheet = XLSX.utils.json_to_sheet(exportData);
+			const sheets = toSheets ? toSheets(exportData) : [{ name: sheetName, rows: exportData }];
 			const workbook = XLSX.utils.book_new();
-			XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+			for (const sheet of sheets) XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(sheet.rows), sheet.name);
 			XLSX.writeFile(workbook, `${safeName}.xlsx`);
 			toast.success("Arquivo XLSX gerado.");
 		},
-		[exportData, fileNamePrefix, sheetName],
+		[exportData, fileNamePrefix, sheetName, toSheets],
 	);
 
 	return { ...loop, reset, exportData, downloadXlsx };

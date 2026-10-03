@@ -77,7 +77,7 @@
 		"test:sales-results": "node --import tsx --test lib/sales/results/classify.test.ts lib/sales/results/payment-reconciliation.test.ts lib/sales/results/universe.test.ts lib/access/capabilities.test.ts",
 		"test:sale-payments": "node --import tsx --test lib/sales/payment-grouping.test.ts lib/payments/defaults.test.ts",
 		"verify:store-credit": "tsx ./scripts/verify-store-credit-queries.ts",
-		"test:store-credit": "node --import tsx --test lib/finances/store-credit/allocate.test.ts lib/finances/store-credit/aging.test.ts lib/navigation/routes.test.ts",
+		"test:store-credit": "node --import tsx --test lib/finances/store-credit/allocate.test.ts lib/finances/store-credit/aging.test.ts lib/finances/store-credit/export.test.ts lib/navigation/routes.test.ts",
 		"test:data-collecting": "node --import tsx --test lib/data-collecting-v2/run-plan.test.ts lib/data-collecting-v2/batch-lookup-keys.test.ts lib/data-collecting-v2/sale-signature.test.ts lib/data-collecting-v2/delivery-locations.test.ts lib/data-collecting-v2/integrated-sale-confirmation-policy.test.ts",
 		"test:ifood": "node --import tsx --test lib/integrations/ifood/sync/add-ons-association.test.ts lib/data-connectors/ifood/date.test.ts lib/data-connectors/ifood/retry.test.ts lib/data-connectors/ifood/cancellation-request.test.ts lib/data-connectors/ifood/handshake-dispute.test.ts lib/data-connectors/ifood/payment.test.ts lib/data-connectors/ifood/totals.test.ts lib/fiscal/managed-sale-payments.test.ts lib/shop/config.test.ts",
 		"normalize:client-locations": "tsx ./scripts/normalize-client-locations.ts",

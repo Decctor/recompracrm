@@ -6,6 +6,7 @@ import {
 	CalendarRange,
 	CheckCircle2,
 	Clock,
+	FileSpreadsheet,
 	HandCoins,
 	ListFilter,
 	NotebookPen,
@@ -14,6 +15,7 @@ import {
 	Users,
 	Wallet,
 } from "lucide-react";
+import dayjs from "dayjs";
 import { useMemo, useState } from "react";
 import type { TGetStoreCreditOutputDefault } from "@/app/api/finances/store-credit/route";
 import { DeltaBadge } from "@/app/dashboard/finance/_components/delta-badge";
@@ -21,6 +23,7 @@ import { StatCard } from "@/app/dashboard/finance/_components/stat-card";
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
 import LoadingComponent from "@/components/Layouts/LoadingComponent";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { InteractiveFilter } from "@/components/ui/interactive-filter";
 import GeneralPaginationComponent from "@/components/Utils/Pagination";
@@ -29,6 +32,7 @@ import { STORE_CREDIT_AGING_BUCKETS, type TStoreCreditAgingBucket } from "@/lib/
 import type { TStoreCreditSortField, TStoreCreditStatus } from "@/lib/finances/store-credit/constants";
 import { formatDateAsLocale, formatDecimalPlaces, formatToMoney } from "@/lib/formatting";
 import { hasStoreCreditOriginScope, type TStoreCreditOriginScope, useStoreCreditClients, useStoreCreditStats } from "@/lib/queries/store-credit";
+import ExportStoreCredit from "@/components/Modals/Finances/ExportStoreCredit";
 import { ReceiveStoreCreditMenu } from "@/components/Modals/Finances/ReceiveStoreCreditMenu";
 import { StoreCreditAging } from "./_components/store-credit-aging";
 import { StoreCreditClientCard } from "./_components/store-credit-client-card";
@@ -57,6 +61,7 @@ type ReceiveTarget = { cliente: StoreCreditClient; transacaoId: string | null };
 
 export default function StoreCreditPage({ organizationId, canReceive }: { organizationId: string; canReceive: boolean }) {
 	const [receiveTarget, setReceiveTarget] = useState<ReceiveTarget | null>(null);
+	const [exportModalIsOpen, setExportModalIsOpen] = useState(false);
 
 	const { data: stats, isLoading: statsLoading, isError: statsError, error: statsErrorObject, params, updateParams } = useStoreCreditStats({});
 	const { data, isLoading, isError, isSuccess, error, filters, updateFilters } = useStoreCreditClients({});
@@ -197,6 +202,10 @@ export default function StoreCreditPage({ organizationId, canReceive }: { organi
 					onChange={(event) => updateFilters({ search: event.target.value, page: 1 })}
 					className="grow rounded-xl"
 				/>
+				<Button variant="ghost" className="flex items-center gap-2" size="sm" onClick={() => setExportModalIsOpen(true)}>
+					<FileSpreadsheet className="h-4 w-4 min-h-4 min-w-4" />
+					EXPORTAR
+				</Button>
 			</div>
 
 			<div className="flex flex-col gap-3 justify-end lg:flex-row lg:items-end">
@@ -259,7 +268,14 @@ export default function StoreCreditPage({ organizationId, canReceive }: { organi
 					<InteractiveFilter.Content className="w-auto p-0">
 						<InteractiveFilter.DateRangeContent
 							value={{ from: filters.originAfter ?? undefined, to: filters.originBefore ?? undefined }}
-							onChange={(nextPeriod) => updateFilters({ originAfter: nextPeriod.from ?? null, originBefore: nextPeriod.to ?? null, page: 1 })}
+							// O seletor devolve o último dia à meia-noite; sem o fim do dia, "1 a 30" perderia os fiados do dia 30.
+							onChange={(nextPeriod) =>
+								updateFilters({
+									originAfter: nextPeriod.from ? dayjs(nextPeriod.from).startOf("day").toDate() : null,
+									originBefore: nextPeriod.to ? dayjs(nextPeriod.to).endOf("day").toDate() : null,
+									page: 1,
+								})
+							}
 						/>
 					</InteractiveFilter.Content>
 				</InteractiveFilter.Root>
@@ -343,6 +359,8 @@ export default function StoreCreditPage({ organizationId, canReceive }: { organi
 					</Empty>
 				)
 			) : null}
+
+			{exportModalIsOpen ? <ExportStoreCredit filters={filters} closeModal={() => setExportModalIsOpen(false)} /> : null}
 
 			{receiveTarget ? (
 				<ReceiveStoreCreditMenu

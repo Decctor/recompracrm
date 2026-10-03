@@ -4,15 +4,11 @@ import z from "zod";
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
-import { STORE_CREDIT_AGING_BUCKET_KEYS, type TStoreCreditAgingBucket } from "@/lib/finances/store-credit/aging";
-import type { TStoreCreditSortDirection, TStoreCreditSortField, TStoreCreditStatus } from "@/lib/finances/store-credit/constants";
+import { StoreCreditFiltersSchema } from "@/lib/finances/store-credit/filters";
 import { getStoreCreditClients, getStoreCreditClientTitles } from "@/lib/finances/store-credit/queries";
 import { canViewFinances } from "@/lib/permissions/finances";
 
-const VALID_STATUSES: TStoreCreditStatus[] = ["EM_ABERTO", "VENCIDO", "QUITADO"];
-const VALID_SORT_FIELDS: TStoreCreditSortField[] = ["saldo", "previsao", "nome"];
-
-const GetStoreCreditInputSchema = z.object({
+const GetStoreCreditInputSchema = StoreCreditFiltersSchema.extend({
 	clientId: z.string({ invalid_type_error: "Tipo inválido para ID do cliente." }).optional().nullable(),
 	includeSettled: z
 		.string({ invalid_type_error: "Tipo inválido para inclusão do histórico." })
@@ -24,47 +20,6 @@ const GetStoreCreditInputSchema = z.object({
 		.optional()
 		.nullable()
 		.transform((value) => (value ? Number(value) : 1)),
-	search: z.string({ invalid_type_error: "Tipo inválido para pesquisa." }).optional().nullable(),
-	// Recorte por quando o fiado foi gerado (a venda), não por quando vence — é o eixo do
-	// fechamento mensal de quem fecha a conta do mês independente do vencimento.
-	originAfter: z
-		.string({ invalid_type_error: "Tipo inválido para o período de origem." })
-		.datetime({ message: "Tipo inválido para o período de origem." })
-		.optional()
-		.nullable()
-		.transform((value) => (value ? new Date(value) : null)),
-	originBefore: z
-		.string({ invalid_type_error: "Tipo inválido para o período de origem." })
-		.datetime({ message: "Tipo inválido para o período de origem." })
-		.optional()
-		.nullable()
-		.transform((value) => (value ? new Date(value) : null)),
-	statuses: z
-		.string({ invalid_type_error: "Tipo inválido para status." })
-		.optional()
-		.nullable()
-		.transform((value) =>
-			value ? (value.split(",").filter((item) => VALID_STATUSES.includes(item as TStoreCreditStatus)) as TStoreCreditStatus[]) : [],
-		),
-	agingBuckets: z
-		.string({ invalid_type_error: "Tipo inválido para faixa de atraso." })
-		.optional()
-		.nullable()
-		.transform((value) =>
-			value
-				? (value.split(",").filter((item) => STORE_CREDIT_AGING_BUCKET_KEYS.includes(item as TStoreCreditAgingBucket)) as TStoreCreditAgingBucket[])
-				: [],
-		),
-	sortField: z
-		.string({ invalid_type_error: "Tipo inválido para ordenação." })
-		.optional()
-		.nullable()
-		.transform((value) => (value && VALID_SORT_FIELDS.includes(value as TStoreCreditSortField) ? (value as TStoreCreditSortField) : "saldo")),
-	sortDirection: z
-		.string({ invalid_type_error: "Tipo inválido para direção da ordenação." })
-		.optional()
-		.nullable()
-		.transform((value) => (value === "asc" ? "asc" : "desc") as TStoreCreditSortDirection),
 });
 export type TGetStoreCreditInput = z.infer<typeof GetStoreCreditInputSchema>;
 
