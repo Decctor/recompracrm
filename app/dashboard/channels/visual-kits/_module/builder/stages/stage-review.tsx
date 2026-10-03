@@ -8,28 +8,39 @@ import { cn } from "@/lib/utils";
 import { describeVisualKitPiece, VISUAL_KIT_FORMATS } from "@/lib/visual-kits/formats";
 import { FileText, Info } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
 import type { ReactNode } from "react";
-import { toast } from "sonner";
+import { GenerationDone, GenerationFailed, GenerationRunning } from "../generation-panel";
 import { useKitBuilder } from "../kit-builder-context";
+import { useKitGeneration } from "../use-kit-generation";
 import { KIT_STAGES } from "../stages";
 
 const OUTPUT_SHORT_LABEL = { PDF: "PDF", PDF_ETIQUETADORA: "Etiquetadora", PNG: "PNG", JPG: "JPG" } as const;
 
 export default function StageReview() {
 	const router = useRouter();
-	const { state, updatePiece, pieceItems, marca, setStage, saveNow, back } = useKitBuilder();
-	const [finishing, setFinishing] = useState(false);
+	const { state, updatePiece, pieceItems, marca, setStage, back } = useKitBuilder();
+	const { generation, start, reset } = useKitGeneration();
 	const pieceCount = state.pecas.length;
 	const inPromotion = pieceItems.filter((item) => item.promocao.emPromocao).length;
 
-	async function handleFinish() {
-		setFinishing(true);
-		const savedId = await saveNow();
-		setFinishing(false);
-		if (!savedId) return;
-		toast.success("Kit salvo em Meus kits.");
-		router.push(appRoutes.channels.visualKits());
+	if (generation.fase !== "OCIOSO") {
+		return (
+			<StageShell>
+				<StageShell.Title icon={KIT_STAGES.revisao.icone} label={KIT_STAGES.revisao.titulo} description={KIT_STAGES.revisao.descricao} />
+				{generation.fase === "GERANDO" ? <GenerationRunning generation={generation} /> : null}
+				{generation.fase === "PRONTO" ? (
+					<GenerationDone
+						pecas={generation.pecas}
+						onEdit={() => {
+							reset();
+							setStage("visual");
+						}}
+						onNewKit={() => router.push(appRoutes.channels.newVisualKit())}
+					/>
+				) : null}
+				{generation.fase === "ERRO" ? <GenerationFailed message={generation.mensagem} onRetry={() => void start()} onBack={reset} /> : null}
+			</StageShell>
+		);
 	}
 
 	return (
@@ -181,17 +192,16 @@ export default function StageReview() {
 						})}
 					</div>
 					<p className="flex items-start gap-1.5 text-[11px] text-muted-foreground">
-						<Info className="mt-0.5 h-3 w-3 shrink-0" />O kit fica salvo em Meus kits. A geração dos arquivos (PDF, imagens e .zip) chega na próxima etapa
-						da Comunicação visual.
+						<Info className="mt-0.5 h-3 w-3 shrink-0" />O kit fica salvo em Meus kits. Quando o preço de algum produto mudar, avisamos e você gera o kit
+						atualizado sem montar de novo.
 					</p>
 				</section>
 			</StageShell.Body>
 			<StageShell.Footer
 				onBack={back}
 				isFinalStage
-				finalLabel="SALVAR KIT"
-				finalLoading={finishing}
-				onFinal={() => void handleFinish()}
+				finalLabel="GERAR KIT"
+				onFinal={() => void start()}
 				nextDisabled={pieceItems.length === 0}
 				nextDisabledReason="Selecione ao menos um produto com preço."
 			/>

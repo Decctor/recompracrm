@@ -2,10 +2,21 @@ import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { sortVisualKitFormats, VISUAL_KIT_FORMATS } from "@/lib/visual-kits/formats";
+import { deleteStoredFile } from "@/lib/files/service";
+import { countVisualKitPriceChanges } from "@/lib/visual-kits/price-changes";
 import { visualKitItemKey } from "@/lib/visual-kits/types";
 import { VisualKitItemSchema, VisualKitPieceSchema, VisualKitSchema } from "@/schemas/visual-kits";
 import { db, type DBTransaction } from "@/services/drizzle";
-import { products, productVariants, salesChannels, visualKitItems, visualKitPieces, visualKits } from "@/services/drizzle/schema";
+import {
+	files,
+	products,
+	productVariants,
+	salesChannels,
+	visualKitItems,
+	visualKitPieceFiles,
+	visualKitPieces,
+	visualKits,
+} from "@/services/drizzle/schema";
 import { and, count, desc, eq, inArray, notInArray, sql } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
@@ -39,7 +50,15 @@ async function getVisualKits({ input, session }: { input: TGetVisualKitsInput; s
 		const kit = await db.query.visualKits.findFirst({
 			where: and(eq(visualKits.id, input.id), eq(visualKits.organizacaoId, organizationId)),
 			with: {
-				pecas: true,
+				pecas: {
+					with: {
+						arquivos: {
+							columns: { id: true, nome: true, ordem: true, produtoId: true, produtoVarianteId: true },
+							orderBy: (file, { asc: ascending }) => ascending(file.ordem),
+							with: { arquivo: { columns: { id: true, mimeType: true, tamanhoBytes: true } } },
+						},
+					},
+				},
 				itens: {
 					columns: { id: true, produtoId: true, produtoVarianteId: true, ordem: true, precoGerado: true, precoDeGerado: true },
 					orderBy: (item, { asc: ascending }) => ascending(item.ordem),
@@ -64,6 +83,7 @@ async function getVisualKits({ input, session }: { input: TGetVisualKitsInput; s
 			nome: true,
 			chamada: true,
 			status: true,
+			canalVendaId: true,
 			validadeFim: true,
 			dataInsercao: true,
 			dataAtualizacao: true,
@@ -88,6 +108,30 @@ async function getVisualKits({ input, session }: { input: TGetVisualKitsInput; s
 		: [];
 	const itemCountByKit = new Map(itemCounts.map((row) => [row.kitId, Number(row.total)]));
 
+	// "Preço mudou": só kits já gerados, comparando o impresso com o preço atual do canal do kit.
+	const generatedKits = kits.filter((kit) => kit.status === "GERADO");
+	const generatedItems = generatedKits.length
+		? await db
+				.select({
+					kitId: visualKitItems.kitId,
+					produtoId: visualKitItems.produtoId,
+					produtoVarianteId: visualKitItems.produtoVarianteId,
+					precoGerado: visualKitItems.precoGerado,
+					precoDeGerado: visualKitItems.precoDeGerado,
+				})
+				.from(visualKitItems)
+				.where(
+					inArray(
+						visualKitItems.kitId,
+						generatedKits.map((kit) => kit.id),
+					),
+				)
+		: [];
+	const priceChanges = await countVisualKitPriceChanges({
+		orgId: organizationId,
+		kits: generatedKits.map((kit) => ({ id: kit.id, canalVendaId: kit.canalVendaId, itens: generatedItems.filter((item) => item.kitId === kit.id) })),
+	});
+
 	return {
 		data: {
 			byId: null,
@@ -95,6 +139,7 @@ async function getVisualKits({ input, session }: { input: TGetVisualKitsInput; s
 				...kit,
 				formatos: sortVisualKitFormats(kit.pecas).map((piece) => piece.formato),
 				quantidadeItens: itemCountByKit.get(kit.id) ?? 0,
+				produtosComPrecoAlterado: priceChanges.get(kit.id) ?? 0,
 			})),
 		},
 		message: "Kits encontrados com sucesso.",
@@ -192,6 +237,14 @@ async function validateVisualKitReferences(tx: DBTransaction, organizationId: st
  */
 async function syncVisualKitChildren(tx: DBTransaction, organizationId: string, kitId: string, payload: TVisualKitPayload) {
 	const formats = payload.pecas.map((piece) => piece.formato);
+	// Arquivos gerados de peças que saem do kit: lidos antes do delete (a ligação cai em cascata).
+	const orphanFileIds = (
+		await tx
+			.select({ arquivoId: visualKitPieceFiles.arquivoId })
+			.from(visualKitPieceFiles)
+			.innerJoin(visualKitPieces, eq(visualKitPieces.id, visualKitPieceFiles.pecaId))
+			.where(and(eq(visualKitPieces.kitId, kitId), formats.length ? notInArray(visualKitPieces.formato, formats) : undefined))
+	).map((row) => row.arquivoId);
 	await tx
 		.delete(visualKitPieces)
 		.where(and(eq(visualKitPieces.kitId, kitId), formats.length ? notInArray(visualKitPieces.formato, formats) : undefined));
@@ -225,6 +278,15 @@ async function syncVisualKitChildren(tx: DBTransaction, organizationId: string, 
 		}
 	}
 	if (newItems.length) await tx.insert(visualKitItems).values(newItems);
+
+	return { orphanFileIds };
+}
+
+/** Arquivos que perderam a peça (peça removida ou kit excluído): fora do catálogo e do armazenamento. */
+async function deleteVisualKitFiles(fileIds: string[]) {
+	if (fileIds.length === 0) return;
+	const storedFiles = await db.query.files.findMany({ where: inArray(files.id, fileIds) });
+	await Promise.all(storedFiles.map(deleteStoredFile));
 }
 
 // -----------------------------------------------------------------------------
@@ -273,7 +335,7 @@ export type TUpdateVisualKitInput = z.input<typeof UpdateVisualKitInputSchema>;
 async function updateVisualKit({ input, session }: { input: z.infer<typeof UpdateVisualKitInputSchema>; session: TAuthUserSession }) {
 	const organizationId = requireOrganizationId(session);
 
-	await db.transaction(async (tx) => {
+	const { orphanFileIds } = await db.transaction(async (tx) => {
 		// Trava o kit: dois salvamentos automáticos em voo não podem intercalar a sincronização dos filhos.
 		const [kit] = await tx
 			.select({ id: visualKits.id })
@@ -287,8 +349,9 @@ async function updateVisualKit({ input, session }: { input: z.infer<typeof Updat
 			.update(visualKits)
 			.set({ ...input.kit, dataAtualizacao: new Date() })
 			.where(eq(visualKits.id, kit.id));
-		await syncVisualKitChildren(tx, organizationId, kit.id, input);
+		return syncVisualKitChildren(tx, organizationId, kit.id, input);
 	});
+	await deleteVisualKitFiles(orphanFileIds);
 
 	return { data: { updatedId: input.id }, message: "Kit salvo com sucesso." };
 }
@@ -315,11 +378,20 @@ export type TDeleteVisualKitInput = z.infer<typeof DeleteVisualKitInputSchema>;
 
 async function deleteVisualKit({ input, session }: { input: TDeleteVisualKitInput; session: TAuthUserSession }) {
 	const organizationId = requireOrganizationId(session);
+	const kitFileIds = (
+		await db
+			.select({ arquivoId: visualKitPieceFiles.arquivoId })
+			.from(visualKitPieceFiles)
+			.innerJoin(visualKitPieces, eq(visualKitPieces.id, visualKitPieceFiles.pecaId))
+			.innerJoin(visualKits, eq(visualKits.id, visualKitPieces.kitId))
+			.where(and(eq(visualKits.id, input.id), eq(visualKits.organizacaoId, organizationId)))
+	).map((row) => row.arquivoId);
 	const deleted = await db
 		.delete(visualKits)
 		.where(and(eq(visualKits.id, input.id), eq(visualKits.organizacaoId, organizationId)))
 		.returning({ id: visualKits.id });
 	if (!deleted[0]?.id) throw new createHttpError.NotFound("Kit não encontrado.");
+	await deleteVisualKitFiles(kitFileIds);
 	return { data: { deletedId: deleted[0].id }, message: "Kit excluído com sucesso." };
 }
 export type TDeleteVisualKitOutput = Awaited<ReturnType<typeof deleteVisualKit>>;

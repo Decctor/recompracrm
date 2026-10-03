@@ -31,3 +31,16 @@ export async function inspectImageFile(buffer: Buffer, { allowedMimeTypes }: { a
 		throw new createHttpError.BadRequest("O arquivo enviado não é uma imagem válida ou está corrompido.");
 	}
 }
+
+/**
+ * Tipo real pelos primeiros bytes (assinatura do formato). Usado no upload direto, em que o
+ * servidor não tem o arquivo em memória para decodificar: o conteúdo é conferido por tamanho e
+ * SHA-256 contra o declarado, e o tipo pela assinatura — nunca pelo Content-Type do envio.
+ */
+export function sniffMimeType(head: Uint8Array): string | null {
+	const startsWith = (signature: number[]) => signature.every((byte, index) => head[index] === byte);
+	if (startsWith([0x25, 0x50, 0x44, 0x46, 0x2d])) return "application/pdf"; // %PDF-
+	if (startsWith([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return "image/png";
+	if (startsWith([0xff, 0xd8, 0xff])) return "image/jpeg";
+	return null;
+}

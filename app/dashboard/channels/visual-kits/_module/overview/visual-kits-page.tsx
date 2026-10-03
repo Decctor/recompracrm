@@ -12,11 +12,12 @@ import { getErrorMessage } from "@/lib/errors";
 import { formatDateAsLocale } from "@/lib/formatting";
 import { deleteVisualKit } from "@/lib/mutations/visual-kits";
 import { appRoutes } from "@/lib/navigation/routes";
-import { useVisualKits } from "@/lib/queries/visual-kits";
+import { fetchVisualKitById, useVisualKits } from "@/lib/queries/visual-kits";
 import { cn } from "@/lib/utils";
 import { VISUAL_KIT_FORMATS } from "@/lib/visual-kits/formats";
+import { downloadVisualKitZip, kitZipName, visualKitPieceFolder } from "@/lib/visual-kits/generation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Package, Palette, Pencil, Plus, Trash2 } from "lucide-react";
+import { Download, LoaderCircle, Package, Palette, Pencil, Plus, RefreshCw, Trash2, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -84,6 +85,8 @@ function VisualKitCard({ kit, onDelete }: { kit: TVisualKitListItem; onDelete: (
 	const updatedAt = kit.dataAtualizacao ?? kit.dataInsercao;
 	const pieceLabel = kit.formatos.length === 1 ? "1 peça" : `${kit.formatos.length} peças`;
 	const productLabel = kit.quantidadeItens === 1 ? "1 produto" : `${kit.quantidadeItens} produtos`;
+	const isGenerated = kit.status === "GERADO";
+	const changed = kit.produtosComPrecoAlterado;
 
 	return (
 		<div className="flex w-full flex-col gap-3 rounded-2xl border border-border bg-card p-4 transition-colors hover:border-brand/30 lg:flex-row lg:items-center">
@@ -97,14 +100,23 @@ function VisualKitCard({ kit, onDelete }: { kit: TVisualKitListItem; onDelete: (
 						<span
 							className={cn(
 								"rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-								kit.status === "GERADO" ? "bg-green-500/15 text-green-600 dark:text-green-400" : "bg-muted text-muted-foreground",
+								isGenerated ? "bg-green-500/15 text-green-600 dark:text-green-400" : "bg-muted text-muted-foreground",
 							)}
 						>
-							{kit.status === "GERADO" ? "Gerado" : "Rascunho"}
+							{isGenerated ? "Gerado" : "Rascunho"}
 						</span>
+						{isGenerated && changed > 0 ? (
+							<span className="flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-400">
+								<TriangleAlert className="h-3 w-3" />
+								Preço mudou em {changed === 1 ? "1 produto" : `${changed} produtos`}
+							</span>
+						) : null}
 					</span>
 					<span className="text-xs text-muted-foreground">
-						{productLabel} · {pieceLabel} · atualizado em {formatDateAsLocale(updatedAt, true)}
+						{productLabel} · {pieceLabel} ·{" "}
+						{isGenerated && kit.dataUltimaGeracao
+							? `gerado em ${formatDateAsLocale(kit.dataUltimaGeracao, true)}`
+							: `atualizado em ${formatDateAsLocale(updatedAt, true)}`}
 						{kit.validadeFim ? ` · válido até ${formatDateAsLocale(kit.validadeFim)}` : ""}
 					</span>
 					<span className="flex flex-wrap gap-1">
@@ -124,7 +136,16 @@ function VisualKitCard({ kit, onDelete }: { kit: TVisualKitListItem; onDelete: (
 					</span>
 				</span>
 			</Link>
-			<div className="flex shrink-0 items-center gap-1 self-end lg:self-center">
+			<div className="flex shrink-0 flex-wrap items-center gap-1 self-end lg:self-center">
+				{isGenerated && changed > 0 ? (
+					<Button type="button" variant="brand" size="sm" asChild>
+						<Link href={`${appRoutes.channels.visualKit(kit.id)}?stage=revisao`}>
+							<RefreshCw className="h-3.5 w-3.5" />
+							GERAR DE NOVO
+						</Link>
+					</Button>
+				) : null}
+				{isGenerated ? <DownloadKitButton kitId={kit.id} kitName={kit.nome} /> : null}
 				<Button type="button" variant="ghost" size="sm" asChild>
 					<Link href={appRoutes.channels.visualKit(kit.id)}>
 						<Pencil className="h-3.5 w-3.5" />
@@ -136,6 +157,47 @@ function VisualKitCard({ kit, onDelete }: { kit: TVisualKitListItem; onDelete: (
 				</Button>
 			</div>
 		</div>
+	);
+}
+
+/** Baixa os arquivos guardados da última geração, montando o .zip aqui no navegador. */
+function DownloadKitButton({ kitId, kitName }: { kitId: string; kitName: string }) {
+	const queryClient = useQueryClient();
+	const [downloading, setDownloading] = useState(false);
+
+	async function handleDownload() {
+		setDownloading(true);
+		try {
+			const kit = await queryClient.fetchQuery({ queryKey: ["visual-kit-by-id", kitId], queryFn: () => fetchVisualKitById(kitId) });
+			const arquivos = kit.pecas.flatMap((piece) =>
+				piece.arquivos.map((file) => ({ pasta: visualKitPieceFolder(piece.formato), nome: file.nome, source: `/api/files/${file.arquivo.id}` })),
+			);
+			if (arquivos.length === 0) throw new Error("Este kit ainda não tem arquivos gerados.");
+			await downloadVisualKitZip({ zipName: kitZipName(kitName || "kit"), arquivos });
+		} catch (error) {
+			toast.error(getErrorMessage(error));
+		} finally {
+			setDownloading(false);
+		}
+	}
+
+	// O seletor de arquivo do Chrome exige o clique "fresco": a lista de arquivos é buscada antes,
+	// ao passar o mouse, para o download começar sem esperar a rede.
+	const prefetch = () => void queryClient.prefetchQuery({ queryKey: ["visual-kit-by-id", kitId], queryFn: () => fetchVisualKitById(kitId) });
+
+	return (
+		<Button
+			type="button"
+			variant="outline"
+			size="sm"
+			onPointerEnter={prefetch}
+			onFocus={prefetch}
+			onClick={() => void handleDownload()}
+			disabled={downloading}
+		>
+			{downloading ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+			BAIXAR
+		</Button>
 	);
 }
 

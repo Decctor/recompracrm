@@ -20,7 +20,7 @@ export function useVisualKits() {
 	};
 }
 
-async function fetchVisualKitById(id: string) {
+export async function fetchVisualKitById(id: string) {
 	const { data } = await axios.get<TGetVisualKitsOutput>(`/api/visual-kits?id=${id}`);
 	const result = data.data.byId;
 	if (!result) throw new Error("Kit não encontrado.");
@@ -61,7 +61,7 @@ export function useVisualKitCatalogSearch({ search, canalVendaId, promo }: { sea
 // Chaves vão na URL: lotes curtos mantêm cada requisição bem abaixo do limite de tamanho de URL.
 const KEYS_PER_REQUEST = 50;
 
-async function fetchVisualKitCatalogItems(keys: string[], canalVendaId: string | null) {
+export async function fetchVisualKitCatalogItems(keys: string[], canalVendaId: string | null) {
 	const chunks: string[][] = [];
 	for (let index = 0; index < keys.length; index += KEYS_PER_REQUEST) chunks.push(keys.slice(index, index + KEYS_PER_REQUEST));
 	const results = await Promise.all(

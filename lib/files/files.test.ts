@@ -49,3 +49,12 @@ test("o intake recusa tamanho fora do teto e SHA-256 malformado antes de tocar n
 		/SHA-256/,
 	);
 });
+
+test("sniffMimeType reconhece PDF, PNG e JPEG pela assinatura e recusa o resto", async () => {
+	const { sniffMimeType } = await import("./inspect");
+	assert.equal(sniffMimeType(new TextEncoder().encode("%PDF-1.7\n")), "application/pdf");
+	assert.equal(sniffMimeType(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0])), "image/png");
+	assert.equal(sniffMimeType(new Uint8Array([0xff, 0xd8, 0xff, 0xe0])), "image/jpeg");
+	assert.equal(sniffMimeType(new TextEncoder().encode("<html>")), null);
+	assert.equal(sniffMimeType(new Uint8Array([])), null);
+});
