@@ -1,5 +1,6 @@
 import type {
 	TAccountingEntryOriginTypeEnum,
+	TProductContentUnitEnum,
 	TAttributionModelEnum,
 	TCampaignExecutionDelayDirectionEnum,
 	TCampaignTriggerTypeEnum,
@@ -461,6 +462,18 @@ export const UnitsOfMeasurementOptions: { id: number; label: string; value: stri
 	{ id: 18, label: "PACOTE", value: "PACOTE" }, // Pacote
 	{ id: 19, label: "BARRA", value: "BARRA" }, // Barra
 	{ id: 20, label: "FATIA", value: "FATIA" }, // Fatia
+];
+
+// Unidade do conteúdo da embalagem (base do preço por unidade de medida nas etiquetas).
+export const ProductContentUnitOptions: { id: number; label: string; value: TProductContentUnitEnum }[] = [
+	{ id: 1, label: "ML", value: "ML" },
+	{ id: 2, label: "LITROS", value: "L" },
+	{ id: 3, label: "GRAMAS", value: "G" },
+	{ id: 4, label: "KG", value: "KG" },
+	{ id: 5, label: "UNIDADES", value: "UN" },
+	{ id: 6, label: "COMPRIMIDOS", value: "COMPRIMIDO" },
+	{ id: 7, label: "CÁPSULAS", value: "CAPSULA" },
+	{ id: 8, label: "METROS", value: "METRO" },
 ];
 
 export const AttributionModelOptions: { id: number; label: string; value: TAttributionModelEnum }[] = [

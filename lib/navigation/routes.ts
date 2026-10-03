@@ -96,6 +96,9 @@ export const appRoutes = {
 	channels: {
 		whatsapp: () => "/dashboard/channels/whatsapp",
 		paidMedia: () => "/dashboard/channels/paid-media",
+		visualKits: () => "/dashboard/channels/visual-kits",
+		newVisualKit: () => "/dashboard/channels/visual-kits/new",
+		visualKit: (kitId: string) => `/dashboard/channels/visual-kits/${kitId}`,
 	},
 	integrations: () => "/dashboard/integrations",
 	settings: () => "/dashboard/settings",

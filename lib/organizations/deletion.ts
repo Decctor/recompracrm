@@ -1,3 +1,4 @@
+import { getStorageDriver } from "@/lib/files/drivers";
 import type { DBTransaction } from "@/services/drizzle";
 import {
 	accountingEntries,
@@ -34,6 +35,7 @@ import {
 	couponTargets,
 	coupons,
 	externalEvents,
+	files,
 	financialAccounts,
 	financialOpenFinanceConnections,
 	financialReconciliationMatches,
@@ -90,9 +92,15 @@ import {
 	shopSettings,
 	supplierProductMappings,
 	suppliers,
+	uploads,
 	utils,
+	visualKitItems,
+	visualKitPieceFiles,
+	visualKitPieces,
+	visualKits,
 	whatsappConnectionPhones,
 	whatsappConnections,
+	type TFileEntity,
 } from "@/services/drizzle/schema";
 import { eq, inArray } from "drizzle-orm";
 
@@ -101,6 +109,24 @@ export const BLOCKING_STRIPE_SUBSCRIPTION_STATUSES = ["active", "trialing", "pas
 
 export function organizationHasBlockingSubscription(stripeSubscriptionStatus: string | null | undefined) {
 	return !!stripeSubscriptionStatus && BLOCKING_STRIPE_SUBSCRIPTION_STATUSES.includes(stripeSubscriptionStatus);
+}
+
+export type TOrganizationStoredObject = Pick<TFileEntity, "provedor" | "bucket" | "caminho">;
+
+/**
+ * Remove do provedor os bytes dos arquivos que `deleteAllOrganizationData` tirou do catálogo.
+ * Chamar SÓ depois do commit: com a transação revertida as linhas voltariam apontando para bytes
+ * apagados. Best-effort — uma falha deixa um objeto órfão no bucket (varrível), e a exclusão da
+ * organização já está feita.
+ */
+export async function removeOrganizationStoredObjects(objects: TOrganizationStoredObject[]) {
+	for (const object of objects) {
+		try {
+			await getStorageDriver(object.provedor).remove({ bucket: object.bucket, caminho: object.caminho });
+		} catch (error) {
+			console.error("[DELETE ORGANIZATION] Falha ao remover arquivo do armazenamento:", object.bucket, object.caminho, error);
+		}
+	}
 }
 
 /**
@@ -118,7 +144,7 @@ export async function deleteAllOrganizationData({
 	trx: DBTransaction;
 	organizationId: string;
 	organizationName: string;
-}) {
+}): Promise<{ storedObjects: TOrganizationStoredObject[] }> {
 	// --- Vínculos sem organizacao_id próprio (via subquery no pai) ---
 	await trx
 		.delete(saleItemModifiers)
@@ -279,6 +305,19 @@ export async function deleteAllOrganizationData({
 	await trx.delete(clients).where(eq(clients.organizacaoId, organizationId));
 	await trx.delete(goals).where(eq(goals.organizacaoId, organizationId));
 
+	// --- Kits de comunicação visual (antes de produtos/variantes, canais e arquivos) ---
+	await trx.delete(visualKitPieceFiles).where(eq(visualKitPieceFiles.organizacaoId, organizationId));
+	await trx.delete(visualKitItems).where(eq(visualKitItems.organizacaoId, organizationId));
+	await trx.delete(visualKitPieces).where(eq(visualKitPieces.organizacaoId, organizationId));
+	await trx.delete(visualKits).where(eq(visualKits.organizacaoId, organizationId));
+
+	// --- Arquivos (uploads referenciam files; os bytes saem do provedor após o commit) ---
+	await trx.delete(uploads).where(eq(uploads.organizacaoId, organizationId));
+	const storedObjects = await trx
+		.delete(files)
+		.where(eq(files.organizacaoId, organizationId))
+		.returning({ provedor: files.provedor, bucket: files.bucket, caminho: files.caminho });
+
 	// --- Produtos (variantes/opções/complementos antes dos produtos) ---
 	await trx.delete(productVariantOptionValues).where(eq(productVariantOptionValues.organizacaoId, organizationId));
 	await trx.delete(productOptionValues).where(eq(productOptionValues.organizacaoId, organizationId));
@@ -304,4 +343,6 @@ export async function deleteAllOrganizationData({
 
 	// --- Organização (cascade cobre qualquer tabela futura não listada acima) ---
 	await trx.delete(organizations).where(eq(organizations.id, organizationId));
+
+	return { storedObjects };
 }

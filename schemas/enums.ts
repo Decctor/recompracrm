@@ -720,6 +720,11 @@ export type TServicePointTypeEnum = z.infer<typeof ServicePointTypeEnum>;
 // Espelha o pgEnum productStockDeductionModeEnum.
 export const ProductStockDeductionModeEnum = z.enum(["ESTOQUE_PROPRIO", "COMPOSICAO"]);
 export type TProductStockDeductionModeEnum = z.infer<typeof ProductStockDeductionModeEnum>;
+export const ProductContentUnitEnum = z.enum(["ML", "L", "G", "KG", "UN", "COMPRIMIDO", "CAPSULA", "METRO"], {
+	required_error: "Unidade do conteúdo não informada.",
+	invalid_type_error: "Tipo não válido para unidade do conteúdo.",
+});
+export type TProductContentUnitEnum = z.infer<typeof ProductContentUnitEnum>;
 
 // Politicas de serviceSettings (apenas app-level, nao sao pgEnum: vivem no jsonb de configuracoes).
 export const TabIdentificationModeEnum = z.enum(["AUTOMATICA", "CODIGO_MANUAL"]);
@@ -994,7 +999,7 @@ export type TUploadStatusEnum = z.infer<typeof UploadStatusEnum>;
 
 // Espelha as chaves do registro em lib/files/intake.ts — o registro é a fonte da verdade; o enum
 // existe para que registrar um propósito sem declará-lo aqui vire erro de tipo.
-export const UploadPurposeEnum = z.enum(["MIDIA_TEMPLATE_MENSAGEM"], {
+export const UploadPurposeEnum = z.enum(["MIDIA_TEMPLATE_MENSAGEM", "ARQUIVO_KIT_VISUAL"], {
 	invalid_type_error: "Tipo não válido para o propósito do upload.",
 });
 export type TUploadPurposeEnum = z.infer<typeof UploadPurposeEnum>;
@@ -1107,3 +1112,23 @@ export const CampaignDispatchSkipReasonEnum = z.enum([
 export type TCampaignDispatchSkipReasonEnum = z.infer<typeof CampaignDispatchSkipReasonEnum>;
 export const SendCounterWindowEnum = z.enum(["DIARIO", "SEMANAL"]);
 export type TSendCounterWindowEnum = z.infer<typeof SendCounterWindowEnum>;
+
+// Comunicação visual (kits de peças de PDV e online)
+export const VisualKitStatusEnum = z.enum(["RASCUNHO", "GERADO"], {
+	required_error: "Status do kit não informado.",
+	invalid_type_error: "Tipo não válido para status do kit.",
+});
+export type TVisualKitStatusEnum = z.infer<typeof VisualKitStatusEnum>;
+export const VisualKitFormatEnum = z.enum(
+	["ETIQUETA_GONDOLA", "ADESIVO_PRECO", "WOBBLER", "ENCARTE", "SELO_PRODUTO", "POST_FEED", "STORY", "CARROSSEL", "LISTA_WHATSAPP"],
+	{
+		required_error: "Formato da peça não informado.",
+		invalid_type_error: "Tipo não válido para formato da peça.",
+	},
+);
+export type TVisualKitFormatEnum = z.infer<typeof VisualKitFormatEnum>;
+export const VisualKitOutputEnum = z.enum(["PDF", "PDF_ETIQUETADORA", "PNG", "JPG"], {
+	required_error: "Saída da peça não informada.",
+	invalid_type_error: "Tipo não válido para saída da peça.",
+});
+export type TVisualKitOutputEnum = z.infer<typeof VisualKitOutputEnum>;

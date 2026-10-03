@@ -1,5 +1,36 @@
 import { z } from "zod";
-import { ProductStockDeductionModeEnum, StockMovementTypeEnum, VariantOptionTypeEnum } from "./enums";
+import { normalizeGtin } from "@/lib/products/gtin";
+import { ProductContentUnitEnum, ProductStockDeductionModeEnum, StockMovementTypeEnum, VariantOptionTypeEnum } from "./enums";
+
+// GTIN opcional: vazio vira null; preenchido precisa ser um EAN/GTIN válido e é gravado só com dígitos.
+// Opcional SEM default: payload sem o campo não altera o valor persistido.
+const ProductBarcodeSchema = z
+	.string({
+		invalid_type_error: "Tipo não válido para código de barras.",
+	})
+	.nullable()
+	.optional()
+	.refine((value) => value == null || value.trim() === "" || normalizeGtin(value) != null, {
+		message: "Código de barras inválido: informe um EAN/GTIN de 8, 12, 13 ou 14 dígitos com dígito verificador válido.",
+	})
+	.transform((value) => (value === undefined ? undefined : normalizeGtin(value)));
+
+const ProductContentQuantitySchema = z
+	.number({
+		invalid_type_error: "Tipo não válido para quantidade do conteúdo.",
+	})
+	.positive({ message: "A quantidade do conteúdo deve ser maior que zero." })
+	.nullable()
+	.optional();
+
+// Preço "De" manual (formulário do produto). Ausente = regra automática de `buildSalePriceUpdate`.
+const ProductPreviousPriceSchema = z
+	.number({
+		invalid_type_error: "Tipo não válido para preço anterior.",
+	})
+	.nonnegative({ message: "O preço anterior não pode ser negativo." })
+	.nullable()
+	.optional();
 
 export const ProductSchema = z.object({
 	organizacaoId: z.string({
@@ -101,6 +132,10 @@ export const ProductSchema = z.object({
 		})
 		.optional()
 		.nullable(),
+	precoVendaAnterior: ProductPreviousPriceSchema,
+	codigoBarras: ProductBarcodeSchema,
+	conteudoQuantidade: ProductContentQuantitySchema,
+	conteudoUnidade: ProductContentUnitEnum.nullable().optional(),
 });
 export type TProduct = z.infer<typeof ProductSchema>;
 
@@ -136,6 +171,10 @@ export const ProductVariantSchema = z.object({
 		required_error: "Preço de custo da variante não informado.",
 		invalid_type_error: "Tipo não válido para preço de custo da variante.",
 	}),
+	precoVendaAnterior: ProductPreviousPriceSchema,
+	codigoBarras: ProductBarcodeSchema,
+	// A unidade é sempre a do produto; a variante só sobrescreve a quantidade.
+	conteudoQuantidade: ProductContentQuantitySchema,
 	quantidade: z.number({
 		required_error: "Quantidade da variante não informada.",
 		invalid_type_error: "Tipo não válido para quantidade da variante.",

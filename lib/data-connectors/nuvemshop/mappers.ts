@@ -1,4 +1,5 @@
 import { formatPhoneAsBase, formatToCPForCNPJ, formatToPhone } from "@/lib/formatting";
+import { normalizeGtin } from "@/lib/products/gtin";
 import dayjs from "dayjs";
 import type {
 	TCanonicalClient,
@@ -162,6 +163,8 @@ export type TNuvemshopCatalogOption = { nome: string; valores: string[] };
 export type TNuvemshopCatalogVariant = {
 	idExterno: string;
 	codigo: string;
+	// GTIN validado (`normalizeGtin`); código inválido ou ausente vira null.
+	codigoBarras: string | null;
 	nome: string;
 	precoVenda: number;
 	precoCusto: number | null;
@@ -174,6 +177,8 @@ export type TNuvemshopCatalogVariant = {
 export type TNuvemshopCatalogProduct = {
 	idExterno: string;
 	codigo: string;
+	// GTIN validado (`normalizeGtin`); código inválido ou ausente vira null.
+	codigoBarras: string | null;
 	nome: string;
 	descricao: string | null;
 	imagemCapaUrl: string | null;
@@ -210,6 +215,7 @@ export function mapNuvemshopCatalogProduct(product: TNuvemshopProduct): TNuvemsh
 		return {
 			idExterno: productId,
 			codigo: getCatalogProductCode(product, variant),
+			codigoBarras: normalizeGtin(variant?.barcode),
 			...baseFields,
 			controlaEstoque: variant?.stock_management ?? false,
 			precoVenda: variantSalePrice(variant),
@@ -236,6 +242,7 @@ export function mapNuvemshopCatalogProduct(product: TNuvemshopProduct): TNuvemsh
 		return {
 			idExterno: toStringId(variant.id) ?? getCatalogProductCode(product, variant),
 			codigo: getCatalogProductCode(product, variant),
+			codigoBarras: normalizeGtin(variant.barcode),
 			nome: valores.length > 0 ? valores.map((value) => value.valor).join(" / ") : productName,
 			precoVenda: variantSalePrice(variant),
 			precoCusto: variant.cost ?? null,
@@ -253,6 +260,8 @@ export function mapNuvemshopCatalogProduct(product: TNuvemshopProduct): TNuvemsh
 	return {
 		idExterno: productId,
 		codigo: `NS-${productId}`,
+		// Produto com variantes: cada variante carrega o próprio GTIN.
+		codigoBarras: null,
 		...baseFields,
 		controlaEstoque: product.variants.some((variant) => variant.stock_management),
 		precoVenda,

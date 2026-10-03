@@ -6,8 +6,10 @@ import TextInput from "@/components/Inputs/TextInput";
 import TextareaInput from "@/components/Inputs/TextareaInput";
 import { ProductActiveToggle, ProductInactiveHint } from "@/components/Products/Shared/ProductActiveStatus";
 import ResponsiveMenuSection from "@/components/Utils/ResponsiveMenuSection";
+import { normalizeGtin } from "@/lib/products/gtin";
+import type { TProductContentUnitEnum } from "@/schemas/enums";
 import type { TProductCoreState, TUseProductCoreState } from "@/state-hooks/use-product-state";
-import { UnitsOfMeasurementOptions } from "@/utils/select-options";
+import { ProductContentUnitOptions, UnitsOfMeasurementOptions } from "@/utils/select-options";
 import { ImageIcon, LayoutGrid } from "lucide-react";
 import Image from "next/image";
 import { useId } from "react";
@@ -70,6 +72,37 @@ export default function ProductStateGeneralBlock({
 							handleChange={(value) => updateProduct({ unidade: value })}
 							options={UnitsOfMeasurementOptions}
 							onReset={() => updateProduct({ unidade: "UN" })}
+						/>
+					</div>
+				</div>
+				<div className="w-full flex flex-col gap-1">
+					<TextInput
+						label="CÓDIGO DE BARRAS (EAN/GTIN)"
+						value={product.codigoBarras ?? ""}
+						placeholder="Ex.: 7891234567895"
+						handleChange={(value) => updateProduct({ codigoBarras: value.trim() ? value : null })}
+					/>
+					{product.codigoBarras && !normalizeGtin(product.codigoBarras) ? (
+						<p className="text-[0.6rem] text-destructive tracking-tight">Código inválido: use 8, 12, 13 ou 14 dígitos, com o dígito verificador correto.</p>
+					) : null}
+				</div>
+				<div className="w-full flex items-center gap-2 lg:flex-row">
+					<div className="w-full lg:w-1/2">
+						<NumberInput
+							label="CONTEÚDO DA EMBALAGEM"
+							value={product.conteudoQuantidade ?? null}
+							placeholder="Ex.: 200"
+							handleChange={(value) => updateProduct({ conteudoQuantidade: value > 0 ? value : null })}
+						/>
+					</div>
+					<div className="w-full lg:w-1/2">
+						<SelectInput
+							label="UNIDADE DO CONTEÚDO"
+							value={product.conteudoUnidade ?? null}
+							resetOptionLabel="SEM CONTEÚDO"
+							handleChange={(value) => updateProduct({ conteudoUnidade: value as TProductContentUnitEnum })}
+							options={ProductContentUnitOptions}
+							onReset={() => updateProduct({ conteudoUnidade: null })}
 						/>
 					</div>
 				</div>

@@ -497,6 +497,9 @@ export const servicePointTypeEnum = pgEnum("service_point_type", ["MESA", "BALCA
 // ESTOQUE_PROPRIO — baixa o saldo do proprio produto/variante (comportamento atual);
 // COMPOSICAO — explode a ficha tecnica e baixa os insumos (pratos, drinks, lanches).
 export const productStockDeductionModeEnum = pgEnum("product_stock_deduction_mode", ["ESTOQUE_PROPRIO", "COMPOSICAO"]);
+// Unidade do conteúdo da embalagem ("200 ml", "10 comprimidos"), base do preço por unidade de medida
+// nas etiquetas. Diferente de `products.unidade` (unidade comercial de venda: UN, CX, KG…).
+export const productContentUnitEnum = pgEnum("product_content_unit", ["ML", "L", "G", "KG", "UN", "COMPRIMIDO", "CAPSULA", "METRO"]);
 
 // ============================================================================
 // ACCESS (fundação de acesso externo — docs/dev-planning/poi-mobile-react-native-plan.md §9)
@@ -602,3 +605,20 @@ export const sendCounterWindowEnum = pgEnum("send_counter_window", ["DIARIO", "S
 // provedor e bloqueios de quota/contato vivem em campaign_dispatch_recipients, nunca aqui.
 export const interactionDeliveryStatusEnum = pgEnum("interaction_delivery_status", ["PENDENTE", "ENVIADO", "ENTREGUE", "LIDO", "FALHOU"]);
 export const attributionModelEnum = pgEnum("attribution_model", ["LAST_TOUCH", "FIRST_TOUCH", "LINEAR"]);
+
+// ============================================================================
+// COMUNICAÇÃO VISUAL (kits de peças de PDV e online)
+// ============================================================================
+export const visualKitStatusEnum = pgEnum("visual_kit_status", ["RASCUNHO", "GERADO"]);
+export const visualKitFormatEnum = pgEnum("visual_kit_format", [
+	"ETIQUETA_GONDOLA",
+	"ADESIVO_PRECO",
+	"WOBBLER",
+	"ENCARTE",
+	"SELO_PRODUTO",
+	"POST_FEED",
+	"STORY",
+	"CARROSSEL",
+	"LISTA_WHATSAPP",
+]);
+export const visualKitOutputEnum = pgEnum("visual_kit_output", ["PDF", "PDF_ETIQUETADORA", "PNG", "JPG"]);

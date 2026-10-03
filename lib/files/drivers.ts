@@ -12,6 +12,14 @@ export type TStorageDriver = {
 	publicUrl: (input: { bucket: string; caminho: string }) => Promise<string>;
 	signedUrl: (input: { bucket: string; caminho: string; expiraEmSegundos: number }) => Promise<string>;
 	remove: (input: { bucket: string; caminho: string }) => Promise<void>;
+	/**
+	 * URL para o CLIENTE enviar os bytes direto ao provedor (sem passar pela função da Vercel e seu
+	 * limite de ~4.5 MB de corpo). O objeto só entra no catálogo depois de conferido no servidor —
+	 * ver `completeDirectUpload` em intake.ts.
+	 */
+	createSignedUpload: (input: { bucket: string; caminho: string }) => Promise<{ signedUrl: string; token: string }>;
+	/** Remove todos os objetos diretamente sob a "pasta" (envio direto abandonado). */
+	removeFolder: (input: { bucket: string; prefix: string }) => Promise<void>;
 };
 
 async function getSupabaseStorage() {
@@ -45,6 +53,19 @@ const supabaseDriver: TStorageDriver = {
 		const storage = await getSupabaseStorage();
 		const { error } = await storage.from(bucket).remove([caminho]);
 		if (error) throw new createHttpError.InternalServerError("Não foi possível remover o arquivo do armazenamento.");
+	},
+	createSignedUpload: async ({ bucket, caminho }) => {
+		const storage = await getSupabaseStorage();
+		const { data, error } = await storage.from(bucket).createSignedUploadUrl(caminho, { upsert: false });
+		if (error || !data) throw new createHttpError.InternalServerError("Não foi possível preparar o envio do arquivo.");
+		return { signedUrl: data.signedUrl, token: data.token };
+	},
+	removeFolder: async ({ bucket, prefix }) => {
+		const storage = await getSupabaseStorage();
+		const { data, error } = await storage.from(bucket).list(prefix);
+		if (error) throw new createHttpError.InternalServerError("Não foi possível listar os arquivos do armazenamento.");
+		const paths = (data ?? []).map((object) => `${prefix.replace(/\/$/, "")}/${object.name}`);
+		if (paths.length) await storage.from(bucket).remove(paths);
 	},
 };
 

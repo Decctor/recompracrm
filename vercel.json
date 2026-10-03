@@ -66,6 +66,10 @@
 	},
 	"crons": [
 		{
+			"path": "/api/cron/uploads-sweep",
+			"schedule": "17 * * * *"
+		},
+		{
 			"path": "/api/cron/meta-capi-purchases",
 			"schedule": "*/10 * * * *"
 		},

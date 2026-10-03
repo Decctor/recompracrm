@@ -53,3 +53,4 @@ export * from "./sales-channels";
 export * from "./catalog-links";
 export * from "./files";
 export * from "./integration-import-jobs";
+export * from "./visual-kits";

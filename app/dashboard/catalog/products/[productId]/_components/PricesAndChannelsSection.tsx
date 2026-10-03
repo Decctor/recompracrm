@@ -8,7 +8,9 @@ import { SalesChannelMark, salesChannelLabel } from "@/components/SalesChannels/
 import SectionApplyBar from "@/components/Utils/SectionApplyBar";
 import { Section } from "@/components/ui/section";
 import { DataList } from "@/components/ui/data-list";
-import { formatDecimalPlaces } from "@/lib/formatting";
+import { formatDateAsLocale, formatDecimalPlaces, formatToMoney } from "@/lib/formatting";
+import { PROMOTION_PREVIOUS_PRICE_WINDOW_DAYS, resolvePromotion } from "@/lib/products/pricing";
+import { Button } from "@/components/ui/button";
 import { productChannelNodeKey } from "@/lib/products/product-registry-state";
 import { useIfoodMerchantNames } from "@/lib/queries/ifood";
 import { useProductChannelSettings } from "@/lib/queries/product-channel-settings";
@@ -74,6 +76,11 @@ export default function PricesAndChannelsSection({ product, orgHasERPAccess, cal
 							/>
 						</div>
 					</div>
+					<PreviousPriceField
+						product={product}
+						value={editor.basePrices.precoVendaAnterior}
+						onChange={(precoVendaAnterior) => editor.updateBasePrices({ precoVendaAnterior })}
+					/>
 					<DataList.Line icon={<Percent className="h-4 w-4" />} label="MARGEM DE LUCRO" value={marginLabel} />
 				</div>
 
@@ -161,5 +168,55 @@ export default function PricesAndChannelsSection({ product, orgHasERPAccess, cal
 				<SectionApplyBar isDirty={editor.isDirty} isPending={editor.isPending} onApply={editor.apply} onDiscard={editor.discard} />
 			</Section.Body>
 		</Section.Root>
+	);
+}
+
+/**
+ * Preço "De" das peças de comunicação visual. Preenchido sozinho quando o preço de venda muda
+ * (`buildPrecoVendaUpdate`); editável para corrigir digitação ou declarar o "De" explicitamente.
+ * O status reflete o que está salvo, não o rascunho.
+ */
+function PreviousPriceField({
+	product,
+	value,
+	onChange,
+}: {
+	product: TGetProductsOutputById;
+	value: number | null;
+	onChange: (value: number | null) => void;
+}) {
+	const promotion = resolvePromotion({
+		currentPrice: product.precoVenda,
+		precoVendaAnterior: product.precoVendaAnterior,
+		dataAlteracaoPrecoVenda: product.dataAlteracaoPrecoVenda,
+	});
+
+	let status = "Preenchido automaticamente quando o preço de venda muda. É o “De” das peças quando o produto está em promoção.";
+	if (promotion.emPromocao && product.precoVenda != null && product.dataAlteracaoPrecoVenda) {
+		const promotionEnd = new Date(new Date(product.dataAlteracaoPrecoVenda).getTime() + PROMOTION_PREVIOUS_PRICE_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+		status = `Em promoção: de ${formatToMoney(promotion.precoDe ?? 0)} por ${formatToMoney(product.precoVenda)} (−${promotion.percentualDesconto}%) até ${formatDateAsLocale(promotionEnd)}.`;
+	} else if (product.precoVendaAnterior != null) {
+		status = `Sem promoção: o preço anterior não é maior que o atual ou mudou há mais de ${PROMOTION_PREVIOUS_PRICE_WINDOW_DAYS} dias.`;
+	}
+
+	return (
+		<div className="flex w-full flex-col gap-1">
+			<div className="flex w-full items-end gap-2">
+				<div className="grow">
+					<NumberInput
+						label="PREÇO ANTERIOR (DE)"
+						value={value}
+						placeholder="Sem preço anterior."
+						handleChange={(next) => onChange(next > 0 ? next : null)}
+					/>
+				</div>
+				{value != null ? (
+					<Button type="button" variant="ghost" size="sm" onClick={() => onChange(null)}>
+						LIMPAR
+					</Button>
+				) : null}
+			</div>
+			<p className="text-[0.65rem] tracking-tight text-muted-foreground">{status}</p>
+		</div>
 	);
 }
