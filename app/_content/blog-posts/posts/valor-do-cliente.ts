@@ -29,7 +29,7 @@ export const valorDoClientePost: BlogPost = {
 			type: "text",
 			heading: "Os números que todo mundo repete",
 			body:
-				"Qualquer apresentação sobre fidelização tem pelo menos um destes: \"conquistar um cliente custa de 5 a 25 vezes mais que manter\", \"aumentar a retenção em 5% eleva o lucro de 25% a 95%\" e \"a chance de vender para um cliente atual é de 60% a 70%\".\n\nA ideia por trás deles é boa. Mas, quando fomos atrás da origem de cada um, encontramos estudos antigos, de outros setores, citados com números que não estão no original. Antes de usá-los para decidir onde investir, vale saber o que eles realmente dizem.",
+				"Qualquer apresentação sobre fidelização tem pelo menos um destes: \"conquistar um cliente custa de 5 a 25 vezes mais que manter\", \"aumentar a retenção em 5% eleva o lucro de 25% a 95%\" e \"a chance de vender para um cliente atual é de 60% a 70%\".\n\nA ideia por trás deles é boa. Mas, quando fomos atrás da origem de cada um, encontramos estudos antigos, de outros setores, citados com números que as próprias fontes não sustentam. Antes de usá-los para decidir onde investir, vale saber o que eles realmente dizem.",
 		},
 		{
 			type: "table",
@@ -44,7 +44,7 @@ export const valorDoClientePost: BlogPost = {
 				[
 					"5% a mais de retenção aumenta o lucro de 25% a 95%",
 					"Reichheld e Sasser, Harvard Business Review, 1990",
-					"Reduzir em 5% a perda de clientes elevou o lucro de 25% a 85% em empresas de serviços estudadas, como banco, corretora de seguros e oficina. O \"95%\" não está no estudo, e varejo não foi analisado.",
+					"Segundo o artigo, como é citado, reduzir em 5% a perda de clientes elevou o lucro de 25% a 85% em empresas de serviços: 85% numa rede de agências bancárias, 50% numa corretora de seguros, 30% numa rede de oficinas. O \"95%\" não aparece nessas citações nem no boletim da Bain, e varejo não foi analisado.",
 				],
 				[
 					"Vender para cliente atual: 60% a 70% de chance; para um novo, 5% a 20%",
@@ -65,13 +65,13 @@ export const valorDoClientePost: BlogPost = {
 			type: "text",
 			heading: "Os melhores clientes pagam boa parte das contas, mas mudam",
 			body:
-				"A famosa regra 80/20 (20% dos clientes geram 80% das vendas) também é mais branda na prática. Um estudo com seis anos de dados de mais de 100 mil domicílios americanos, em 22 categorias de supermercado, encontrou que os 20% que mais compram respondem por **65% a 73% das vendas** de uma marca (Kim, Singh e Winer, 2017).\n\nPesquisadores do Instituto Ehrenberg-Bass chegaram a uma proporção ainda menor, perto de **60/20**. E observaram algo mais útil para o lojista: cerca de **metade** dos maiores compradores de um ano não está mais no grupo dos 20% no ano seguinte (Sharp e Romaniuk, 2019).\n\nA lição: a concentração existe, mas o grupo do topo muda. Não basta mimar quem já compra muito. É preciso perceber quem está esfriando e continuar trazendo clientes novos para o topo.",
+				"A famosa regra 80/20 (20% dos clientes geram 80% das vendas) também é mais branda na prática. Um estudo com seis anos de dados de mais de 100 mil domicílios americanos, em 22 categorias de supermercado, encontrou que os 20% que mais compram respondem por **65% a 73% das vendas** de uma marca (Kim, Singh e Winer, 2017).\n\nPesquisadores do Instituto Ehrenberg-Bass chegaram a uma proporção ainda menor: os 20% que mais compram costumam responder por **pouco mais da metade** das vendas de uma marca, perto de 60/20. E observaram algo mais útil para o lojista: mesmo em marcas estáveis, cerca de **metade** dos maiores compradores de um ano nem se qualifica para o grupo dos 20% no ano seguinte (Sharp, Romaniuk e Graham, 2019).\n\nA lição: a concentração existe, mas o grupo do topo muda. Não basta mimar quem já compra muito. É preciso perceber quem está esfriando e continuar trazendo clientes novos para o topo.",
 		},
 		{
 			type: "stats",
 			items: [
 				{ value: "65–73%", label: "das vendas de uma marca vêm dos 20% que mais compram", source: "Kim, Singh e Winer, 2017" },
-				{ value: "½", label: "dos maiores compradores sai do grupo do topo no ano seguinte", source: "Sharp e Romaniuk, 2019" },
+				{ value: "½", label: "dos maiores compradores sai do grupo do topo no ano seguinte", source: "Sharp, Romaniuk e Graham, 2019" },
 				{ value: "88,3%", label: "dos consumidores brasileiros usam programas de fidelidade", source: "ABEMF/Valuenet, 2025" },
 			],
 		},
@@ -118,7 +118,7 @@ export const valorDoClientePost: BlogPost = {
 		{
 			question: "De onde vem a estatística de que 5% de retenção aumenta o lucro em até 95%?",
 			answer:
-				"Do artigo \"Zero Defections\" de Reichheld e Sasser (Harvard Business Review, 1990), que mostrou aumentos de 25% a 85% no lucro ao reduzir em 5% a perda de clientes em empresas de serviços, como banco, seguros e oficinas. O \"95%\" não está no estudo original, e o varejo não foi analisado.",
+				"É atribuída ao artigo \"Zero Defections\" de Reichheld e Sasser (Harvard Business Review, 1990), citado com aumentos de 25% a 85% no lucro ao reduzir em 5% a perda de clientes em empresas de serviços, como banco, seguros e oficinas. O \"95%\" não aparece nas citações do estudo nem no boletim da Bain de 2001, e o varejo não foi analisado.",
 		},
 		{
 			question: "Como calcular o valor de um cliente na minha loja?",
@@ -136,7 +136,7 @@ export const valorDoClientePost: BlogPost = {
 		{ label: "Bain & Company — Prescription for Cutting Costs (Reichheld, 2001)", url: "https://media.bain.com/Images/BB_Prescription_cutting_costs.pdf" },
 		{ label: "Ipsos — Shattering the Myths of Customer Loyalty", url: "https://www.ipsos.com/en-us/shattering-myths-customer-loyalty" },
 		{ label: "Kim, Singh e Winer — The Pareto rule for frequently purchased packaged goods (Marketing Letters, 2017)", url: "https://doi.org/10.1007/s11002-017-9442-5" },
-		{ label: "Sharp e Romaniuk — Marketing's 60/20 Pareto Law (2019)", url: "https://openresearch.lsbu.ac.uk/item/88vw1" },
+		{ label: "Sharp, Romaniuk e Graham — Marketing's 60/20 Pareto Law (Ehrenberg-Bass, 2019)", url: "https://openresearch.lsbu.ac.uk/item/88vw1" },
 		{
 			label: "ABEMF/Valuenet — 88% dos brasileiros utilizam programas de fidelidade (via Panrotas)",
 			url: "https://www.panrotas.com.br/mercado/pesquisas-e-estatisticas/2025/10/88-dos-brasileiros-utilizam-programas-de-fidelidade-diz-pesquisa-da-abemf_222537.html",

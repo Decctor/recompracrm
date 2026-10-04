@@ -46,14 +46,14 @@ export const blackFridayNatal2026Post: BlogPost = {
 			rows: [
 				["12/10/2026", "Segunda", "Dia das Crianças e feriado de Nossa Senhora Aparecida"],
 				["27/11/2026", "Sexta", "**Black Friday**"],
-				["30/11/2026", "Segunda", "Cyber Monday e **prazo da 1ª parcela do 13º salário**"],
-				["18/12/2026", "Sexta", "Pagamento da 2ª parcela do 13º na prática (o prazo legal, 20/12, cai num domingo)"],
+				["30/11/2026", "Segunda", "Cyber Monday e **último dia útil para a 1ª parcela do 13º salário**"],
+				["18/12/2026", "Sexta", "Último dia útil antes do prazo da 2ª parcela do 13º (20/12, um domingo)"],
 				["25/12/2026", "Sexta", "**Natal**"],
 				["31/12/2026", "Quinta", "Réveillon"],
 				["09/02/2027", "Terça", "Carnaval"],
 			],
 			note:
-				"A 1ª parcela do 13º (metade do salário, sem descontos) pode ser paga até 30/11 (Lei 4.749/1965), e muita empresa paga no fim do prazo: o dinheiro entra na semana da Black Friday. Antecipar a 2ª parcela para 18/12 é a orientação comum das contabilidades quando o dia 20 cai no domingo. A volta às aulas varia por estado e rede de ensino.",
+				"Pela Lei 4.749/1965, a 1ª parcela do 13º (metade do salário do mês anterior) é paga \"entre os meses de fevereiro e novembro\", e a 2ª \"até o dia 20 de dezembro\". Muita empresa paga a 1ª no fim da janela, e o dinheiro entra na semana da Black Friday. A lei não prevê prorrogação quando o dia 20 cai num fim de semana: a orientação usual de contadores e advogados é antecipar para o último dia útil, a sexta, 18/12. A volta às aulas varia por estado e rede de ensino.",
 		},
 		{
 			type: "text",
@@ -72,7 +72,7 @@ export const blackFridayNatal2026Post: BlogPost = {
 			type: "text",
 			heading: "O que a lei pede da sua loja",
 			body:
-				"• **Oferta anunciada obriga** (Código de Defesa do Consumidor, art. 30). Se a loja se recusar a cumprir, o cliente pode exigir o anunciado, aceitar um produto equivalente ou desistir com devolução do valor (art. 35).\n• **Preço claro e correto** na etiqueta e no anúncio (art. 31).\n• **Troca de produto sem defeito não é obrigatória na compra presencial.** O direito de arrependimento de 7 dias (art. 49) vale para compras feitas fora do estabelecimento, como internet e telefone. Mas, se a loja promete troca em placa, etiqueta ou nota, a promessa passa a valer.\n• **Produto com defeito:** a loja tem 30 dias para resolver (art. 18), e o cliente tem 30 dias para reclamar de produto não durável e 90 dias de durável (art. 26).\n\nUma política de troca de Natal por escrito, com prazo até meados de janeiro, é um diferencial que o cliente valoriza, e as regras são suas. Este resumo é orientação geral e não substitui consultoria jurídica.",
+				"• **Oferta anunciada obriga** (Código de Defesa do Consumidor, art. 30). Se a loja se recusar a cumprir, o cliente pode exigir o anunciado, aceitar um produto equivalente ou desistir com devolução do valor (art. 35).\n• **Preço claro e correto** na etiqueta e no anúncio (art. 31).\n• **Troca de produto sem defeito não é obrigatória na compra presencial.** Nenhum artigo do CDC exige essa troca, e os Procons a tratam como liberalidade da loja. O direito de arrependimento de 7 dias (art. 49) vale para contratações feitas fora do estabelecimento comercial, como internet e telefone. Mas, se a loja anuncia uma política de troca em placa, etiqueta ou nota, ela passa a valer como oferta (art. 30).\n• **Produto com defeito:** se o defeito não for resolvido em até 30 dias, o cliente pode escolher entre a troca, o dinheiro de volta ou um abatimento no preço (art. 18, §1º). O prazo para reclamar de defeito aparente é de 30 dias para produto não durável e 90 dias para durável, contados da entrega (art. 26).\n\nUma política de troca de Natal por escrito, com prazo até meados de janeiro, é um diferencial que o cliente valoriza, e as regras são suas. Este resumo é orientação geral e não substitui consultoria jurídica.",
 		},
 		{
 			type: "timeline",
@@ -133,12 +133,12 @@ export const blackFridayNatal2026Post: BlogPost = {
 		{
 			question: "Qual é a data da Black Friday 2026?",
 			answer:
-				"A Black Friday de 2026 é na sexta-feira, 27 de novembro. A Cyber Monday cai em 30 de novembro, mesmo dia do prazo para o pagamento da 1ª parcela do 13º salário. O Natal é numa sexta-feira, 25 de dezembro.",
+				"A Black Friday de 2026 é na sexta-feira, 27 de novembro. A Cyber Monday cai em 30 de novembro, último dia da janela para o pagamento da 1ª parcela do 13º salário, que a lei fixa entre fevereiro e novembro. O Natal é numa sexta-feira, 25 de dezembro.",
 		},
 		{
 			question: "A loja física é obrigada a trocar presente de Natal?",
 			answer:
-				"Não, se o produto não tem defeito e foi comprado na loja. O direito de arrependimento de 7 dias (art. 49 do CDC) vale só para compras fora do estabelecimento. Se a loja promete troca em placa, etiqueta ou nota, porém, a promessa passa a valer. Para produto com defeito, a loja tem 30 dias para resolver (art. 18).",
+				"Não, se o produto não tem defeito e foi comprado na loja: nenhum artigo do CDC exige essa troca. O direito de arrependimento de 7 dias (art. 49) vale só para contratações fora do estabelecimento comercial. Se a loja anuncia uma política de troca em placa, etiqueta ou nota, porém, ela passa a valer como oferta (art. 30). Para produto com defeito, se o problema não for resolvido em 30 dias, o cliente escolhe entre troca, dinheiro de volta ou abatimento (art. 18).",
 		},
 		{
 			question: "Vale a pena a loja física entrar na Black Friday?",

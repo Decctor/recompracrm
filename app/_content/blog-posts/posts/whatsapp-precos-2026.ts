@@ -70,7 +70,7 @@ export const whatsappPrecos2026Post: BlogPost = {
 			icon: "coins",
 			title: "2. Use utilidade para o que é utilidade",
 			body:
-				"Saldo de cashback a vencer, pedido pronto para retirada e confirmação de compra são mensagens de utilidade, cerca de 9 vezes mais baratas. A Meta revisa a categoria dos modelos e pode reclassificar como marketing uma mensagem de utilidade que traz promoção. Mantenha o conteúdo informativo.",
+				"Saldo de cashback a vencer, pedido pronto para retirada e confirmação de compra são mensagens de utilidade, cerca de 9 vezes mais baratas. A Meta revisa a categoria dos modelos e, desde abril de 2025, aprova como marketing um modelo enviado como utilidade que traz promoção. Mantenha o conteúdo informativo.",
 		},
 		{
 			type: "feature-highlight",
@@ -84,7 +84,7 @@ export const whatsappPrecos2026Post: BlogPost = {
 			icon: "bolt",
 			title: "4. Anúncio de clique para WhatsApp abre 72 horas grátis",
 			body:
-				"Quando o cliente chega por um anúncio de clique para WhatsApp ou pelo botão da página no Facebook, abre-se uma janela de 72 horas em que as mensagens não são cobradas. Para captar clientes novos, essa porta de entrada saiu mais barata que o disparo.",
+				"Quando o cliente escreve a partir de um anúncio de clique para WhatsApp ou do botão da página no Facebook, usando o app do celular (Android ou iOS), e a loja responde em até 24 horas, abre-se uma janela de 72 horas em que qualquer mensagem é gratuita. Mensagens vindas do WhatsApp Web ou do desktop não abrem essa janela. Para captar clientes novos, essa porta de entrada saiu mais barata que o disparo.",
 		},
 		{
 			type: "callout",
@@ -127,7 +127,7 @@ export const whatsappPrecos2026Post: BlogPost = {
 		{
 			question: "Responder o cliente no WhatsApp agora é pago?",
 			answer:
-				"Na API, sim. Desde 1º de outubro de 2026, as respostas dentro da janela de 24 horas (mensagens de atendimento) custam R$ 0,035 cada no Brasil. A exceção é a janela de 72 horas aberta quando o cliente chega por anúncio de clique para WhatsApp ou pelo botão da página no Facebook, que continua gratuita.",
+				"Na API, sim. Desde 1º de outubro de 2026, as respostas dentro da janela de 24 horas (mensagens de atendimento) custam R$ 0,035 cada no Brasil. A exceção é a janela de 72 horas aberta quando o cliente escreve pelo app do celular a partir de um anúncio de clique para WhatsApp ou do botão da página no Facebook e a loja responde em até 24 horas: nela, as mensagens continuam gratuitas.",
 		},
 		{
 			question: "Preciso de autorização do cliente para mandar promoção pelo WhatsApp?",
@@ -146,6 +146,7 @@ export const whatsappPrecos2026Post: BlogPost = {
 			url: "https://developers.facebook.com/documentation/business-messaging/whatsapp/templates/marketing-templates/per-user-limits",
 		},
 		{ label: "Meta for Developers — obtendo o opt-in do cliente", url: "https://developers.facebook.com/documentation/business-messaging/whatsapp/getting-opt-in" },
+		{ label: "Meta for Developers — categorização de modelos", url: "https://developers.facebook.com/docs/whatsapp/updates-to-pricing/new-template-guidelines" },
 		{ label: "Mobile Time — WhatsApp passa a cobrar respostas das empresas", url: "https://www.mobiletime.com.br/noticias/23/06/2026/whatsapp-respostas/" },
 		{ label: "Lei Geral de Proteção de Dados (Lei 13.709/2018)", url: "https://www.planalto.gov.br/ccivil_03/_ato2015-2018/2018/lei/l13709.htm" },
 		{ label: "ANPD — Guia orientativo sobre legítimo interesse (2024)", url: "https://www.gov.br/anpd" },
