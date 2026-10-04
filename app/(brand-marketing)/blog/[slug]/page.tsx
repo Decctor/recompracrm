@@ -2,7 +2,9 @@ import { BLOG_POSTS, getBlogPost } from "@/app/_content/blog-posts";
 import { ArticleCTA } from "@/components/Content/ArticleCTA";
 import { ArticleFAQ, buildFAQPageJsonLd } from "@/components/Content/ArticleFAQ";
 import { ArticleHero } from "@/components/Content/ArticleHero";
-import { ArticleSection } from "@/components/Content/ArticleSection";
+import { ArticleOutline } from "@/components/Content/ArticleOutline";
+import { ArticleSection, getArticleOutline } from "@/components/Content/ArticleSection";
+import { ArticleSources } from "@/components/Content/ArticleSources";
 import { RelatedPosts } from "@/components/Content/RelatedPosts";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
@@ -80,6 +82,7 @@ export default async function BlogPostPage({ params }: Props) {
 			"@id": canonicalUrl,
 		},
 		image: post.coverImage?.src,
+		citation: post.sources?.map((source) => source.url),
 		keywords: post.seo.keywords.join(", "),
 	};
 
@@ -92,36 +95,39 @@ export default async function BlogPostPage({ params }: Props) {
 			{faqJsonLd && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }} />}
 
 			<ArticleHero
-				emoji={post.coverEmoji}
-				image={post.coverImage}
+				cover={post.cover}
+				coverLabel={post.headline}
 				categoryLabel={post.categoryLabel}
 				categoryHref={`/blog?categoria=${post.category}`}
 				title={post.title}
 				description={post.description}
+				author={authorName}
 				publishedAt={post.publishedAt}
+				updatedAt={post.updatedAt}
 				readingTime={post.readingTime}
 			/>
 
-			<div className="px-6 pb-20">
-				<div className="container mx-auto max-w-3xl">
-					{/* Divider */}
-					<div className="h-px bg-slate-100 mb-10" />
+			<div className="px-4 pb-16 sm:px-6">
+				<div className="container mx-auto max-w-5xl lg:grid lg:grid-cols-[minmax(0,680px)_200px] lg:justify-between lg:gap-12">
+					<article className="min-w-0">
+						{post.sections.map((section, i) => (
+							<ArticleSection key={`${section.type}-${i}`} section={section} />
+						))}
 
-					{/* Article body */}
-					{post.sections.map((section, i) => (
-						<ArticleSection key={`${section.type}-${"heading" in section ? section.heading : "title" in section ? section.title : i}`} section={section} />
-					))}
+						<ArticleCTA headline={post.cta.headline} sub={post.cta.sub} buttonText={post.cta.buttonText} whatsappMessage={post.cta.whatsappMessage} />
 
-					{/* CTA */}
-					<ArticleCTA headline={post.cta.headline} sub={post.cta.sub} buttonText={post.cta.buttonText} whatsappMessage={post.cta.whatsappMessage} />
+						{post.faqs && post.faqs.length > 0 && <ArticleFAQ faqs={post.faqs} />}
 
-					{/* FAQ */}
-					{post.faqs && post.faqs.length > 0 && <ArticleFAQ faqs={post.faqs} />}
+						{post.sources && <ArticleSources sources={post.sources} />}
+					</article>
 
-					{/* Related posts */}
-					<RelatedPosts posts={relatedPosts} />
+					<aside className="hidden lg:block">
+						<ArticleOutline items={getArticleOutline(post.sections)} />
+					</aside>
 				</div>
 			</div>
+
+			<RelatedPosts posts={relatedPosts} />
 		</>
 	);
 }

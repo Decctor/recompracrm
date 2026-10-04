@@ -420,6 +420,30 @@ A label (12px uppercase, muted) above a confident number (24–48px, font-extrab
 
 ---
 
+### Ilustrações isométricas (blog e páginas de conteúdo)
+
+Capas e ícones do conteúdo de marketing são ilustrações isométricas em SVG, desenhadas em código em
+`components/Illustrations/Isometric/` — nunca emoji, nunca imagem de banco. Três camadas:
+
+- `engine.tsx`: projeção isométrica verdadeira (30°) e as primitivas `Box`, `Cylinder`, `Plane`
+  (desenho 2D colado numa face), `Extrude` (glifo com volume) e `Shadow`.
+- `objects.tsx`: objetos reutilizáveis (loja, calendário, celular, moedas, gráfico, presente…).
+- `IsoCover` (capas, por `scene`) e `IsoIcon` (ícones sobre pedestal, por `icon`).
+
+**Luz única.** A luz vem de cima à esquerda: topo mais claro, face esquerda no tom base, face
+direita na sombra. Um objeto novo usa as primitivas — não desenha polígonos com cores próprias —,
+e é isso que mantém todas as capas da mesma família.
+
+**Paleta fechada.** Os materiais de `palette.ts` derivam do Azul Primário, do Ouro Comercial e da
+rampa chart-gold (bronze). A proporção 1:3 vale aqui também: âmbar é o destaque da cena (a barra
+que mais cresce, a moeda, o presente), azul é a estrutura. Matiz nova exige registrar aqui.
+
+**Capa decorativa nos cards.** No card o título já diz do que se trata, então a capa vai sem
+`label` (`aria-hidden`); no hero do artigo ela recebe o `headline` como `aria-label`.
+
+**Sem `<filter>`.** Ids de filtro e gradiente colidem quando várias ilustrações dividem a página
+(e um `<svg>` escondido derruba a referência). Sombras são losangos translúcidos empilhados.
+
 ## 6. Do's and Don'ts
 
 ### Do

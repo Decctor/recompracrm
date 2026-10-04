@@ -1,46 +1,55 @@
 import type { BlogPost } from "@/app/_content/blog-posts";
-import { Clock } from "lucide-react";
+import { IsoCover } from "@/components/Illustrations/Isometric/IsoCover";
+import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
+import { formatArticleDate } from "./article-dates";
 
 type BlogPostCardProps = {
 	post: BlogPost;
+	// "featured": cartão largo do topo do índice, com a capa em azul profundo ao lado do texto.
+	variant?: "default" | "featured";
 };
 
-export function BlogPostCard({ post }: BlogPostCardProps) {
-	const formattedDate = new Date(post.publishedAt).toLocaleDateString("pt-BR", {
-		day: "numeric",
-		month: "short",
-		year: "numeric",
-	});
+export function BlogPostCard({ post, variant = "default" }: BlogPostCardProps) {
+	const featured = variant === "featured";
 
 	return (
 		<Link
 			href={`/blog/${post.slug}`}
-			className="group flex flex-col bg-white rounded-2xl border border-slate-200 hover:border-[#24549C]/30 hover:shadow-lg hover:-translate-y-1 transition-all duration-300 overflow-hidden"
+			className={`group flex flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white transition-[transform,box-shadow,border-color] duration-300 hover:-translate-y-1 hover:border-[#24549C]/25 hover:shadow-[0_12px_32px_-12px_rgba(36,84,156,0.18),0_4px_8px_rgba(0,0,0,0.04)] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[#24549C]/30 ${featured ? "lg:flex-row" : ""}`}
 		>
-			{post.coverImage ? (
-				<img src={post.coverImage.src} alt={post.coverImage.alt} className="h-40 w-full object-cover bg-slate-100" />
-			) : (
-				<div className="h-40 bg-gradient-to-br from-blue-50 to-slate-100 flex items-center justify-center text-6xl">{post.coverEmoji}</div>
-			)}
+			<div className={`relative overflow-hidden ${featured ? "lg:w-[56%] lg:shrink-0" : ""}`}>
+				<IsoCover
+					scene={post.cover}
+					tone={featured ? "deep" : "soft"}
+					className={`block w-full transition-transform duration-500 group-hover:scale-[1.03] ${featured ? "aspect-[16/10] lg:h-full lg:aspect-auto" : "aspect-[16/10]"}`}
+				/>
+			</div>
 
-			<div className="p-6 flex flex-col flex-1">
-				{/* Category badge */}
-				<span className="inline-block text-xs font-bold text-[#24549C] bg-blue-50 px-3 py-1 rounded-full mb-3 w-fit">{post.categoryLabel}</span>
+			<div className={`flex flex-1 flex-col ${featured ? "p-7 sm:p-9 lg:justify-center" : "p-6"}`}>
+				<div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1">
+					{featured && <span className="rounded-full bg-[#FFB900] px-3 py-1 text-label text-slate-900">Mais recente</span>}
+					<span className="text-label text-[#24549C]">{post.categoryLabel}</span>
+				</div>
 
-				{/* Title */}
-				<h3 className="font-black text-slate-900 leading-snug mb-2 group-hover:text-[#24549C] transition-colors text-base sm:text-lg">{post.title}</h3>
+				<h3
+					className={`mb-3 font-extrabold leading-[1.15] tracking-[-0.015em] text-slate-900 text-balance transition-colors group-hover:text-[#24549C] ${featured ? "text-2xl sm:text-[32px]" : "text-lg sm:text-xl"}`}
+				>
+					{post.title}
+				</h3>
 
-				{/* Headline */}
-				<p className="text-sm text-slate-500 leading-relaxed mb-4 flex-1">{post.headline}</p>
+				<p className={`mb-6 flex-1 leading-relaxed text-slate-500 ${featured ? "text-base sm:text-lg" : "text-[15px]"}`}>{post.headline}</p>
 
-				{/* Meta */}
-				<div className="flex items-center gap-4 text-xs text-slate-400 font-medium pt-3 border-t border-slate-100">
-					<span>{formattedDate}</span>
-					<span className="flex items-center gap-1">
-						<Clock className="w-3 h-3" />
-						{post.readingTime}
+				<div className="flex items-center justify-between gap-4 border-t border-slate-100 pt-4 text-sm text-slate-400">
+					<span>
+						<time dateTime={post.publishedAt}>{formatArticleDate(post.publishedAt, "short")}</time>
+						<span aria-hidden> · </span>
+						{post.readingTime} de leitura
 					</span>
+					<ArrowUpRight
+						className="size-5 shrink-0 text-slate-300 transition-[color,transform] duration-300 group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-[#24549C]"
+						aria-hidden
+					/>
 				</div>
 			</div>
 		</Link>

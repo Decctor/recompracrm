@@ -1,3 +1,4 @@
+import type { TIsoCoverKey } from "@/components/Illustrations/Isometric/IsoCover";
 import type { ContentSection, FAQItem } from "./blog-posts";
 
 export type FeaturePage = {
@@ -5,7 +6,7 @@ export type FeaturePage = {
 	title: string;
 	headline: string;
 	description: string;
-	coverEmoji: string;
+	cover: TIsoCoverKey; // ilustração isométrica da capa
 	sections: ContentSection[];
 	faqs?: FAQItem[];
 	cta: {
@@ -28,7 +29,7 @@ export const FEATURE_PAGES: FeaturePage[] = [
 		headline: "Transforme cada venda em motivo para o cliente voltar",
 		description:
 			"Crie um programa de cashback personalizado para sua loja física. Configure percentuais, prazos e regras — o RecompraCRM automatiza tudo enquanto você foca nas vendas.",
-		coverEmoji: "💸",
+		cover: "feature-cashback",
 		seo: {
 			keywords: [
 				"programa cashback loja",
@@ -58,25 +59,25 @@ export const FEATURE_PAGES: FeaturePage[] = [
 			},
 			{
 				type: "feature-highlight",
-				icon: "⚙️",
+				icon: "gear",
 				title: "Configure do seu jeito — sem complicação",
 				body: "No RecompraCRM, você define as regras do cashback em minutos:\n\n• **Percentual de retorno**: de 1% a 20%, você escolhe o que faz sentido para a margem do seu negócio.\n• **Prazo de validade**: créditos expiram em 30, 60 ou 90 dias — criando urgência para o cliente voltar logo.\n• **Valor mínimo para resgate**: evite resgates insignificantes definindo um saldo mínimo.\n• **Promoções pontuais**: duplique o cashback em datas especiais para turbinar o movimento.\n\nTudo configurável pelo painel administrativo, sem precisar de TI ou suporte técnico.",
 			},
 			{
 				type: "feature-highlight",
-				icon: "🖥️",
+				icon: "monitor",
 				title: "Integrado ao PDI — experiência fluida no caixa",
 				body: "O cashback funciona em perfeita sincronia com o Ponto de Interação (PDI), nosso totem de balcão. O atendente registra a venda, o sistema calcula e acumula o cashback automaticamente, e o cliente vê o saldo atualizado na tela em tempo real.\n\nNa hora de resgatar, basta o cliente informar o CPF ou telefone. Sem app para baixar, sem cartão para carregar, sem atrito. O resgate é processado na hora, descontado do total da compra.",
 			},
 			{
 				type: "feature-highlight",
-				icon: "📱",
+				icon: "phone",
 				title: "Notificações automáticas por WhatsApp",
 				body: "Cada vez que o cliente acumula ou usa cashback, ele recebe uma notificação automática pelo WhatsApp com o extrato atualizado. Isso reforça a sensação de valor e mantém sua marca presente no celular do cliente sem esforço da sua equipe.\n\nAlém disso, quando o cashback está próximo de expirar, o sistema envia um lembrete automático — criando urgência e trazendo o cliente de volta antes que ele esqueça.",
 			},
 			{
 				type: "feature-highlight",
-				icon: "📊",
+				icon: "chart",
 				title: "Relatórios que revelam o ROI real do cashback",
 				body: "Através do painel de Business Intelligence do RecompraCRM, você acompanha em tempo real:\n\n• Quanto de cashback foi distribuído e resgatado por período\n• Quais clientes mais acumulam e mais resgatam\n• Taxa de retorno de clientes após acumular cashback\n• Comparativo de ticket médio: clientes com e sem cashback\n• ROI do programa — você vê exatamente quanto cada real de cashback gerou em receita",
 			},
@@ -121,7 +122,7 @@ export const FEATURE_PAGES: FeaturePage[] = [
 		headline: "Campanhas automáticas no WhatsApp que vendem enquanto você dorme",
 		description:
 			"Crie campanhas segmentadas e automáticas no WhatsApp para sua loja. Reative clientes inativos, divulgue promoções e acompanhe o ROI de cada mensagem enviada.",
-		coverEmoji: "📱",
+		cover: "feature-campanhas",
 		seo: {
 			keywords: [
 				"campanhas whatsapp varejo",
@@ -151,25 +152,25 @@ export const FEATURE_PAGES: FeaturePage[] = [
 			},
 			{
 				type: "feature-highlight",
-				icon: "⚡",
+				icon: "bolt",
 				title: "7+ gatilhos automáticos para cada momento do cliente",
 				body: "O RecompraCRM oferece gatilhos prontos para os momentos mais importantes da jornada do cliente:\n\n• **Nova compra**: Envie uma mensagem de boas-vindas com o saldo de cashback acumulado.\n• **Cashback expirando**: Lembre o cliente que seus créditos vencem em breve — urgência que gera visita.\n• **Cliente em risco**: Identifique automaticamente quem não compra há X dias e envie um incentivo.\n• **Aniversário**: Parabenize o cliente e ofereça cashback bônus no mês do aniversário.\n• **Quantidade de compras**: Premie clientes que atingirem marcos (5ª compra, 10ª compra, etc.).\n• **Valor total de compras**: Recompense clientes que acumularem um valor total em compras.\n• **Recorrente**: Campanhas periódicas (diárias, semanais, mensais) para segmentos específicos.\n\nCada gatilho é configurado uma vez. Depois, roda no automático — para sempre.",
 			},
 			{
 				type: "feature-highlight",
-				icon: "🎯",
+				icon: "target",
 				title: "Segmentação inteligente por perfil RFM",
 				body: "Não adianta enviar a mesma mensagem para todos os clientes. O RecompraCRM permite segmentar campanhas pelos 9 segmentos da análise RFM:\n\n• **Campeões e Fiéis**: Acesso VIP, lançamentos antecipados, condições exclusivas.\n• **Promissores e Novos**: Incentivos para consolidar o hábito de compra.\n• **Em Risco e Precisam de Atenção**: Reativação com cashback bônus e ofertas especiais.\n• **Hibernando e Perdidos**: Últimas tentativas com descontos agressivos — ou remoção da base.\n\nVocê escolhe para quem cada campanha vai, e o sistema envia automaticamente quando o gatilho dispara.",
 			},
 			{
 				type: "feature-highlight",
-				icon: "📊",
+				icon: "chart",
 				title: "ROI de cada campanha — na ponta do lápis",
 				body: "O RecompraCRM rastreia o funil completo de cada campanha:\n\n• **Mensagens enviadas** → entregues → lidas → clientes que voltaram à loja → vendas atribuídas.\n• **Modelos de atribuição**: Last Touch, First Touch ou Linear — você escolhe como contabilizar as conversões.\n• **ROI em reais**: veja exatamente quanto de receita cada campanha gerou em relação ao custo.\n• **Tempo de conversão**: quanto tempo levou entre a mensagem e a compra na loja.\n\nChega de achismo. Cada real investido em WhatsApp é rastreável do envio até a venda.",
 			},
 			{
 				type: "feature-highlight",
-				icon: "💰",
+				icon: "coins",
 				title: "Cashback bônus integrado às campanhas",
 				body: "Cada campanha pode incluir um bônus de cashback como incentivo extra. Por exemplo: \"Volte esta semana e ganhe 25% de cashback bônus na sua compra\" — com prazo curto de expiração para gerar urgência.\n\nO bônus é configurável por campanha: percentual, prazo de validade e valor mínimo de compra para ativar. Tudo integrado ao programa de cashback principal, sem duplicidade ou confusão para o cliente.",
 			},
@@ -214,7 +215,7 @@ export const FEATURE_PAGES: FeaturePage[] = [
 		headline: "Um tablet no balcão que transforma cada venda em fidelização",
 		description:
 			"O Ponto de Interação do RecompraCRM é um tablet no caixa da sua loja que registra vendas, acumula cashback e engaja clientes automaticamente — sem app e sem fricção.",
-		coverEmoji: "🖥️",
+		cover: "feature-pdi",
 		seo: {
 			keywords: [
 				"ponto de venda cashback",
@@ -244,25 +245,25 @@ export const FEATURE_PAGES: FeaturePage[] = [
 			},
 			{
 				type: "feature-highlight",
-				icon: "📱",
+				icon: "phone",
 				title: "Fluxo em 4 passos — rápido e sem fricção",
 				body: "O PDI foi desenhado para ser extremamente simples, mesmo para atendentes sem experiência com tecnologia:\n\n• **Passo 1**: O cliente informa o número de telefone. O sistema encontra o perfil automaticamente (ou cria um novo na hora).\n• **Passo 2**: O atendente digita o valor da venda.\n• **Passo 3**: O sistema calcula o cashback automaticamente e mostra na tela. Se o cliente tiver saldo, ele pode resgatar com um toque.\n• **Passo 4**: O operador confirma com sua senha — e pronto.\n\nEm 10 segundos, a venda está registrada, o cashback acumulado e o cliente sai sabendo exatamente quanto tem de crédito para a próxima visita.",
 			},
 			{
 				type: "feature-highlight",
-				icon: "🔒",
+				icon: "lock",
 				title: "Modo quiosque: tela cheia e segurança",
 				body: "O PDI tem um modo quiosque dedicado que coloca a interface em tela cheia, ativa o bloqueio de tela (wake lock) e impede que o atendente saia do sistema acidentalmente.\n\nÉ ideal para totens de autoatendimento ou tablets fixos no balcão. O cliente pode até interagir diretamente com a tela para ver seu saldo, enquanto o operador confirma as operações com senha.",
 			},
 			{
 				type: "feature-highlight",
-				icon: "🏆",
+				icon: "trophy",
 				title: "Ranking de vendedores: gamificação que engaja a equipe",
 				body: "O PDI exibe em tempo real o ranking dos vendedores da loja, com volume de vendas, número de clientes atendidos e progresso em relação à meta mensal.\n\nEssa gamificação natural motiva a equipe a registrar cada venda corretamente (melhorando a qualidade dos dados) e cria uma competição saudável que eleva o desempenho geral.\n\nPara o gestor, os dados de vendedores também aparecem no painel de Business Intelligence, permitindo análises mais profundas de produtividade por atendente.",
 			},
 			{
 				type: "feature-highlight",
-				icon: "🎁",
+				icon: "gift",
 				title: "Prêmios físicos e descontos: duas modalidades de resgate",
 				body: "O programa de cashback integrado ao PDI suporta dois modos de resgate:\n\n• **Desconto na compra**: O saldo de cashback é abatido diretamente do valor da venda. Simples e direto.\n• **Prêmios físicos**: O cliente troca seus créditos por produtos específicos (ex.: um brinquedo para o pet, uma peça de roupa, um sorvete). Os prêmios são configurados com foto, descrição e valor em créditos.\n\nAmbos os modos podem funcionar simultaneamente, dando ao cliente a liberdade de escolher como usar seus créditos.",
 			},
@@ -307,7 +308,7 @@ export const FEATURE_PAGES: FeaturePage[] = [
 		headline: "Inteligência de dados que mostra exatamente onde investir para vender mais",
 		description:
 			"Dashboards em tempo real, segmentação RFM automática, ROI de campanhas e ranking de vendedores. Tome decisões baseadas em dados, não em achismo.",
-		coverEmoji: "📊",
+		cover: "feature-bi",
 		seo: {
 			keywords: [
 				"análise rfm varejo",
@@ -337,25 +338,25 @@ export const FEATURE_PAGES: FeaturePage[] = [
 			},
 			{
 				type: "feature-highlight",
-				icon: "🧮",
+				icon: "calculator",
 				title: "Matriz RFM: 9 segmentos que revelam a saúde da sua base",
 				body: "A análise RFM (Recência, Frequência e Valor Monetário) é a forma mais consagrada de entender quem são seus clientes. O RecompraCRM calcula automaticamente o score RFM de cada cliente e os agrupa em 9 segmentos:\n\n• **Campeões**: Compraram recentemente, compram com frequência e gastam muito. Seus melhores clientes.\n• **Fiéis**: Alta frequência e bom valor, mas não necessariamente recentes.\n• **Potencialmente Fiéis**: Boa frequência recente — estão no caminho de se tornarem fiéis.\n• **Novos**: Primeira ou segunda compra recente. Precisam de estímulo para voltar.\n• **Precisam de Atenção**: Eram bons clientes, mas a frequência está caindo.\n• **Em Risco**: Bom histórico, mas não compram há bastante tempo.\n• **Promissores**: Poucos dados ainda, mas com sinais positivos.\n• **Hibernando**: Compras antigas e espaçadas. Quase perdidos.\n• **Perdidos**: Sem interação significativa há muito tempo.\n\nO sistema atualiza os segmentos automaticamente a cada nova venda registrada.",
 			},
 			{
 				type: "feature-highlight",
-				icon: "🤖",
+				icon: "sparkle",
 				title: "Sugestões automáticas de ação por segmento",
 				body: "Para cada segmento RFM, o RecompraCRM sugere ações concretas:\n\n• **Campeões**: \"Crie um programa VIP ou ofereça acesso antecipado a promoções.\"\n• **Em Risco**: \"Envie uma campanha de reativação com cashback bônus de 15%.\"\n• **Perdidos**: \"Ofereça um desconto agressivo ou aceite a perda e foque nos segmentos promissores.\"\n\nVocê não precisa ser um cientista de dados para interpretar a matriz. O sistema traduz os números em ações que qualquer lojista pode executar — muitas delas automatizáveis via campanhas de WhatsApp.",
 			},
 			{
 				type: "feature-highlight",
-				icon: "📈",
+				icon: "chart",
 				title: "Dashboards de receita, campanhas e equipe",
 				body: "O painel de Business Intelligence reúne tudo em um só lugar:\n\n• **Receita**: Faturamento por período, ticket médio, número de vendas, comparativo mensal.\n• **Cashback**: Créditos distribuídos vs. resgatados, taxa de retorno, impacto no ticket médio.\n• **Campanhas**: Funil completo (envios → leituras → conversões → receita), ROI por campanha, tempo de conversão.\n• **Equipe**: Ranking de vendedores, volume de vendas por atendente, progresso em relação a metas.\n• **Clientes**: Distribuição por segmento RFM, ciclo de compra, produtos mais comprados por perfil.\n\nTodos os dados são atualizados em tempo real, a cada venda registrada no PDI.",
 			},
 			{
 				type: "feature-highlight",
-				icon: "🔗",
+				icon: "plug",
 				title: "Atribuição de campanhas: saiba o que realmente funciona",
 				body: "O RecompraCRM rastreia o impacto de cada campanha de WhatsApp nas vendas da loja, com três modelos de atribuição configuráveis:\n\n• **Last Touch**: A conversão é atribuída à última campanha que o cliente recebeu antes de comprar.\n• **First Touch**: A conversão é atribuída à primeira campanha que iniciou o ciclo de reengajamento.\n• **Linear**: O crédito é distribuído igualmente entre todas as campanhas que o cliente recebeu.\n\nCom isso, você descobre quais campanhas realmente geram vendas — e quais estão só enchendo linguiça. Dados de conversão incluem receita atribuída, tempo até a conversão e delta de frequência.",
 			},
