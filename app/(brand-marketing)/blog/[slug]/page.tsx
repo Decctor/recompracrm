@@ -35,13 +35,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 			url: canonicalUrl,
 			type: "article",
 			publishedTime: post.publishedAt,
-			images: post.coverImage ? [{ url: post.coverImage.src, alt: post.coverImage.alt }] : undefined,
 		},
 		twitter: {
 			card: "summary_large_image",
 			title: post.title,
 			description: post.description,
-			images: post.coverImage ? [post.coverImage.src] : undefined,
 		},
 	};
 }
@@ -81,7 +79,6 @@ export default async function BlogPostPage({ params }: Props) {
 			"@type": "WebPage",
 			"@id": canonicalUrl,
 		},
-		image: post.coverImage?.src,
 		citation: post.sources?.map((source) => source.url),
 		keywords: post.seo.keywords.join(", "),
 	};

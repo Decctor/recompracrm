@@ -9,10 +9,6 @@ export const festaJuninaPost: BlogPost = {
 	category: "dicas",
 	categoryLabel: "Dicas de gestão",
 	cover: "festa-junina",
-	coverImage: {
-		src: "https://wawrqfehfafrrnfsycgs.supabase.co/storage/v1/object/public/files/public/imagem-junho-ilustrativa.png",
-		alt: "Loja de bairro decorada para uma campanha de Festa Junina, com bandeirinhas, luzes e clientes entrando",
-	},
 	publishedAt: "2026-06-01",
 	readingTime: "6 min",
 	seo: {

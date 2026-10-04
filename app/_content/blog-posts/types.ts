@@ -33,12 +33,7 @@ export type BlogPost = {
 	description: string; // meta description
 	category: BlogCategory;
 	categoryLabel: string;
-	cover: TIsoCoverKey; // ilustração isométrica da capa
-	coverImage?: {
-		// Só para Open Graph: a capa exibida no site é sempre a ilustração.
-		src: string;
-		alt: string;
-	};
+	cover: TIsoCoverKey; // ilustração isométrica da capa (também usada na imagem de compartilhamento)
 	author?: string; // autor exibido e usado no JSON-LD (default: "Equipe RecompraCRM")
 	publishedAt: string; // ISO date
 	updatedAt?: string; // ISO date — usado em dateModified do JSON-LD
