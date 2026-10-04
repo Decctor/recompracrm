@@ -1,71 +1,65 @@
-import { Calendar, Clock } from "lucide-react";
+import { IsoCover, type TIsoCoverKey } from "@/components/Illustrations/Isometric/IsoCover";
+import { ChevronRight } from "lucide-react";
 import Link from "next/link";
+import { formatArticleDate } from "./article-dates";
 
 type ArticleHeroProps = {
-	emoji: string;
-	image?: {
-		src: string;
-		alt: string;
-		caption?: string;
-	};
+	cover: TIsoCoverKey;
+	coverLabel: string;
 	categoryLabel: string;
 	categoryHref: string;
 	title: string;
 	description: string;
+	author: string;
 	publishedAt?: string;
+	updatedAt?: string;
 	readingTime?: string;
 };
 
-export function ArticleHero({ emoji, image, categoryLabel, categoryHref, title, description, publishedAt, readingTime }: ArticleHeroProps) {
-	const formattedDate = publishedAt ? new Date(publishedAt).toLocaleDateString("pt-BR", { day: "numeric", month: "long", year: "numeric" }) : null;
-
+export function ArticleHero({ cover, coverLabel, categoryLabel, categoryHref, title, description, author, publishedAt, updatedAt, readingTime }: ArticleHeroProps) {
 	return (
-		<section className="bg-gradient-to-b from-slate-50 to-white pt-28 pb-12 px-6">
-			<div className="container mx-auto max-w-3xl">
-				{/* Breadcrumb / Category */}
-				<div className="flex items-center gap-2 mb-6">
-					<Link href="/blog" className="text-sm text-[#24549C] font-semibold hover:underline">
+		<header className="px-4 pt-28 pb-12 sm:px-6 sm:pb-16">
+			<div className="container mx-auto max-w-5xl">
+				<nav aria-label="Trilha" className="mb-8 flex items-center gap-1.5 text-sm">
+					<Link href="/blog" className="font-semibold text-[#24549C] hover:underline">
 						Blog
 					</Link>
-					<span className="text-slate-300">/</span>
-					<Link href={categoryHref} className="text-sm text-slate-500 hover:text-[#24549C] transition-colors">
+					<ChevronRight className="size-3.5 text-slate-300" aria-hidden />
+					<Link href={categoryHref} className="text-slate-500 transition-colors hover:text-[#24549C]">
 						{categoryLabel}
 					</Link>
-				</div>
+				</nav>
 
-				{image ? (
-					<figure className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100">
-						<img src={image.src} alt={image.alt} className="h-64 w-full object-cover" />
-						{image.caption && <figcaption className="px-4 py-3 text-sm text-slate-500">{image.caption}</figcaption>}
-					</figure>
-				) : (
-					<div className="w-16 h-16 rounded-2xl bg-blue-50 flex items-center justify-center text-4xl mb-6 border border-blue-100">{emoji}</div>
-				)}
+				<div className="max-w-3xl">
+					<h1 className="mb-5 text-[34px] font-extrabold leading-[1.08] tracking-[-0.025em] text-slate-900 text-balance sm:text-5xl">{title}</h1>
+					<p className="mb-8 text-lg font-medium leading-[1.5] text-slate-600 sm:text-xl">{description}</p>
 
-				{/* Title */}
-				<h1 className="text-3xl sm:text-4xl font-black text-slate-900 leading-tight tracking-tight mb-4">{title}</h1>
-
-				{/* Description */}
-				<p className="text-lg text-slate-600 leading-relaxed mb-6">{description}</p>
-
-				{/* Meta */}
-				{(formattedDate || readingTime) && (
-					<div className="flex items-center gap-5 text-sm text-slate-400 font-medium">
-						{formattedDate && (
-							<span className="flex items-center gap-1.5">
-								<Calendar className="w-4 h-4" />
-								{formattedDate}
-							</span>
+					<div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-slate-500">
+						<span className="font-semibold text-slate-900">{author}</span>
+						{publishedAt && (
+							<>
+								<span aria-hidden className="size-1 rounded-full bg-slate-300" />
+								<time dateTime={publishedAt}>{formatArticleDate(publishedAt)}</time>
+							</>
 						)}
 						{readingTime && (
-							<span className="flex items-center gap-1.5">
-								<Clock className="w-4 h-4" />
-								{readingTime} de leitura
+							<>
+								<span aria-hidden className="size-1 rounded-full bg-slate-300" />
+								<span>{readingTime} de leitura</span>
+							</>
+						)}
+						{updatedAt && updatedAt !== publishedAt && (
+							<span className="rounded-full bg-[#24549C]/10 px-3 py-1 text-xs font-bold text-[#24549C]">
+								Atualizado em <time dateTime={updatedAt}>{formatArticleDate(updatedAt, "short")}</time>
 							</span>
 						)}
 					</div>
-				)}
+				</div>
+
+				<div className="mt-10 overflow-hidden rounded-[26px] border border-slate-200 sm:mt-12">
+					<IsoCover scene={cover} label={coverLabel} className="block aspect-[16/10] w-full sm:aspect-[16/8]" />
+				</div>
 			</div>
-		</section>
+		</header>
 	);
 }

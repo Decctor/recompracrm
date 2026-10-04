@@ -1,98 +1,96 @@
 import { BLOG_POSTS } from "@/app/_content/blog-posts";
 import { FEATURE_PAGES } from "@/app/_content/feature-pages";
 import { BlogPostCard } from "@/components/Content/BlogPostCard";
+import { BlogPostGrid, BlogPostGridView } from "@/components/Content/BlogPostGrid";
 import { FeatureCard } from "@/components/Content/FeatureCard";
+import { IsoIcon } from "@/components/Illustrations/Isometric/IsoIcon";
+import { ArrowRight } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Suspense } from "react";
 
 export const metadata: Metadata = {
 	title: "Blog — Estratégias de retenção para o varejo",
 	description:
-		"Artigos, casos de uso e guias práticos para donos de lojas físicas que querem aumentar a fidelização de clientes, reduzir o churn e crescer com o RecompraCRM.",
+		"Guias práticos e dados verificados para donos de lojas físicas que querem fazer o cliente voltar: datas do varejo, custos do WhatsApp, cashback, segmentação RFM e mais.",
 	alternates: {
 		canonical: "https://www.recompracrm.com.br/blog",
 	},
 	openGraph: {
 		title: "Blog RecompraCRM — Estratégias de retenção para o varejo",
-		description:
-			"Artigos, casos de uso e guias práticos para donos de lojas físicas que querem aumentar a fidelização de clientes.",
+		description: "Guias práticos e dados verificados para donos de lojas físicas que querem fazer o cliente voltar.",
 		url: "https://www.recompracrm.com.br/blog",
 		type: "website",
 	},
 };
 
 export default function BlogIndexPage() {
-	const posts = BLOG_POSTS;
+	const posts = [...BLOG_POSTS].sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
+	const featured = posts[0];
 
 	return (
-		<main className="pt-24 pb-20 px-6">
-			<div className="container mx-auto max-w-5xl">
-				{/* Page Header */}
-				<div className="text-center mb-14">
-					<span className="inline-block text-xs font-bold text-[#24549C] bg-blue-50 px-4 py-2 rounded-full mb-5 uppercase tracking-widest">
-						Blog & Recursos
-					</span>
-					<h1 className="text-4xl sm:text-5xl font-black text-slate-900 tracking-tight mb-4">
-						Estratégias para <span className="text-[#24549C]">vender mais</span> e{" "}
-						<span className="text-[#24549C]">fidelizar clientes</span>
+		<main className="px-4 pt-28 pb-20 sm:px-6">
+			<div className="container mx-auto max-w-6xl">
+				<header className="mb-12 max-w-3xl sm:mb-16">
+					<p className="mb-4 text-label text-[#24549C]">Blog RecompraCRM</p>
+					<h1 className="mb-5 text-[40px] font-extrabold leading-[1.02] tracking-[-0.025em] text-slate-900 text-balance sm:text-6xl">
+						Ideias com dados para o cliente <span className="text-[#24549C]">voltar à sua loja</span>
 					</h1>
-					<p className="text-lg text-slate-500 max-w-2xl mx-auto leading-relaxed">
-						Guias práticos, casos de uso e ideias acionáveis para donos de lojas físicas que querem crescer sem aumentar o
-						custo de aquisição.
+					<p className="text-lg font-medium leading-[1.5] text-slate-500 sm:text-xl">
+						Guias práticos para o varejo físico, com números checados e fonte em cada dado. Sem receita de bolo, sem estatística inventada.
 					</p>
-				</div>
+				</header>
 
-				{/* Segment landings banner */}
-				<section className="mb-16 rounded-3xl border border-slate-200 bg-gradient-to-br from-blue-50 to-slate-50 px-8 py-10 sm:flex sm:items-center sm:justify-between sm:gap-8">
+				{posts.length === 0 ? (
+					<div className="py-20 text-center text-slate-400">
+						<p className="text-lg font-medium">Novos artigos em breve.</p>
+					</div>
+				) : (
+					<>
+						{featured && (
+							<section className="mb-16" aria-label="Artigo em destaque">
+								<BlogPostCard post={featured} variant="featured" />
+							</section>
+						)}
+
+						{posts.length > 1 && (
+							<section id="artigos" className="mb-20 scroll-mt-24">
+								<h2 className="mb-6 text-2xl font-extrabold tracking-[-0.015em] text-slate-900 sm:text-[28px]">Todos os artigos</h2>
+								<Suspense fallback={<BlogPostGridView posts={posts} featuredSlug={featured?.slug} active={null} />}>
+									<BlogPostGrid posts={posts} featuredSlug={featured?.slug} />
+								</Suspense>
+							</section>
+						)}
+					</>
+				)}
+
+				<section className="mb-20 grid items-center gap-6 overflow-hidden rounded-[26px] bg-[#eef3fb] p-7 sm:grid-cols-[160px_minmax(0,1fr)_auto] sm:p-10">
+					<IsoIcon icon="store" className="hidden w-40 sm:block" />
 					<div>
-						<h2 className="text-xl font-black text-slate-900">Procurando o seu segmento?</h2>
-						<p className="mt-2 max-w-xl leading-relaxed text-slate-500">
+						<h2 className="mb-2 text-xl font-extrabold tracking-[-0.015em] text-slate-900 sm:text-2xl">Procurando o seu segmento?</h2>
+						<p className="max-w-xl leading-relaxed text-slate-600">
 							Veja como o programa de fidelidade funciona para restaurantes, pet shops, farmácias, moda e mais de 20 tipos de loja.
 						</p>
 					</div>
 					<Link
 						href="/segmentos"
-						className="mt-6 inline-block whitespace-nowrap rounded-2xl bg-[#24549C] px-6 py-3.5 font-black text-white shadow-lg shadow-[#24549C]/25 transition-all duration-300 hover:-translate-y-0.5 hover:bg-[#1a3d7a] sm:mt-0"
+						className="inline-flex h-12 w-fit items-center gap-2 whitespace-nowrap rounded-2xl bg-[#24549C] px-6 text-[15px] font-extrabold text-white shadow-[0_6px_14px_-4px_rgba(36,84,156,0.32),0_2px_4px_rgba(36,84,156,0.18)] transition-[transform,background-color] duration-300 hover:-translate-y-px hover:bg-[#1a3d7a]"
 					>
-						Ver segmentos →
+						Ver segmentos
+						<ArrowRight className="size-4" aria-hidden />
 					</Link>
 				</section>
 
-				{/* Funcionalidades */}
 				{FEATURE_PAGES.length > 0 && (
-					<section className="mb-16">
-						<div className="flex items-center gap-3 mb-8">
-							<h2 className="text-xl font-black text-slate-900">Conheça as Funcionalidades</h2>
-							<div className="flex-1 h-px bg-slate-100" />
-						</div>
-						<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+					<section>
+						<p className="mb-2 text-label text-[#24549C]">Produto</p>
+						<h2 className="mb-8 text-2xl font-extrabold tracking-[-0.015em] text-slate-900 sm:text-[28px]">Conheça as funcionalidades</h2>
+						<div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
 							{FEATURE_PAGES.map((feature) => (
 								<FeatureCard key={feature.slug} feature={feature} />
 							))}
 						</div>
 					</section>
-				)}
-
-				{/* Posts */}
-				{posts.length > 0 && (
-					<section>
-						<div className="flex items-center gap-3 mb-8">
-							<h2 className="text-xl font-black text-slate-900">Artigos</h2>
-							<div className="flex-1 h-px bg-slate-100" />
-						</div>
-						<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-							{posts.map((post) => (
-								<BlogPostCard key={post.slug} post={post} />
-							))}
-						</div>
-					</section>
-				)}
-
-				{/* Empty state */}
-				{BLOG_POSTS.length === 0 && (
-					<div className="text-center py-20 text-slate-400">
-						<p className="text-lg font-medium">Novos artigos em breve.</p>
-					</div>
 				)}
 			</div>
 		</main>

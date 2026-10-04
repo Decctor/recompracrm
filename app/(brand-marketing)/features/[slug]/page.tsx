@@ -1,8 +1,10 @@
 import { FEATURE_PAGES, getFeaturePage } from "@/app/_content/feature-pages";
 import { SEGMENT_PAGES } from "@/app/_content/segment-pages";
 import { ArticleCTA } from "@/components/Content/ArticleCTA";
+import { IsoCover } from "@/components/Illustrations/Isometric/IsoCover";
 import { ArticleFAQ, buildFAQPageJsonLd } from "@/components/Content/ArticleFAQ";
 import { ArticleSection } from "@/components/Content/ArticleSection";
+import { ArticleSources } from "@/components/Content/ArticleSources";
 import { SegmentCard } from "@/components/Content/Segment/SegmentCard";
 import { Calendar } from "lucide-react";
 import type { Metadata } from "next";
@@ -95,8 +97,9 @@ export default async function FuncionalidadePage({ params }: Props) {
 						<span className="text-sm text-slate-400">Funcionalidades</span>
 					</div>
 
-					{/* Emoji */}
-					<div className="w-16 h-16 rounded-2xl bg-blue-50 flex items-center justify-center text-4xl mb-6 border border-blue-100">{page.coverEmoji}</div>
+					<div className="mb-8 overflow-hidden rounded-[26px] border border-slate-200">
+						<IsoCover scene={page.cover} label={page.headline} className="block aspect-[16/8] w-full" />
+					</div>
 
 					<span className="inline-block text-xs font-bold text-[#24549C] bg-blue-50 px-3 py-1.5 rounded-full mb-4">Funcionalidade</span>
 
@@ -129,6 +132,8 @@ export default async function FuncionalidadePage({ params }: Props) {
 
 					{/* FAQ */}
 					{page.faqs && page.faqs.length > 0 && <ArticleFAQ faqs={page.faqs} />}
+
+					{page.sources && <ArticleSources sources={page.sources} />}
 
 					{/* Related segment landings */}
 					{relatedSegments.length > 0 && (

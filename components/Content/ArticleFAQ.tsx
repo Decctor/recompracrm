@@ -1,5 +1,5 @@
-import { Plus } from "lucide-react";
 import type { FAQItem } from "@/app/_content/blog-posts";
+import { Plus } from "lucide-react";
 
 type ArticleFAQProps = {
 	faqs: FAQItem[];
@@ -12,19 +12,18 @@ export function ArticleFAQ({ faqs, title = "Perguntas frequentes" }: ArticleFAQP
 	if (faqs.length === 0) return null;
 
 	return (
-		<section className="mt-16 pt-12 border-t border-slate-100">
-			<h2 className="text-xl font-black text-slate-900 mb-8">{title}</h2>
-			<div className="flex flex-col gap-3">
+		<section className="mt-16">
+			<h2 className="mb-6 text-2xl font-extrabold tracking-[-0.015em] text-slate-900 sm:text-[28px]">{title}</h2>
+			<div className="divide-y divide-slate-200 overflow-hidden rounded-3xl border border-slate-200 bg-white">
 				{faqs.map((faq) => (
-					<details
-						key={faq.question}
-						className="group rounded-2xl border border-slate-200 bg-white px-5 py-4 [&_summary::-webkit-details-marker]:hidden"
-					>
-						<summary className="flex cursor-pointer items-center justify-between gap-4 text-base font-bold text-slate-900 list-none">
+					<details key={faq.question} className="group [&_summary::-webkit-details-marker]:hidden">
+						<summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-6 py-5 text-base font-bold text-slate-900 transition-colors hover:bg-slate-50 sm:text-[17px]">
 							{faq.question}
-							<Plus className="w-5 h-5 shrink-0 text-[#24549C] transition-transform group-open:rotate-45" />
+							<span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#24549C]/10 text-[#24549C] transition-[transform,background-color] duration-300 group-open:rotate-45 group-open:bg-[#24549C] group-open:text-white">
+								<Plus className="size-4" aria-hidden />
+							</span>
 						</summary>
-						<p className="mt-3 text-slate-600 leading-relaxed">{faq.answer}</p>
+						<p className="px-6 pb-6 leading-relaxed text-slate-600">{faq.answer}</p>
 					</details>
 				))}
 			</div>
