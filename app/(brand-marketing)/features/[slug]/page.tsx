@@ -4,6 +4,7 @@ import { ArticleCTA } from "@/components/Content/ArticleCTA";
 import { IsoCover } from "@/components/Illustrations/Isometric/IsoCover";
 import { ArticleFAQ, buildFAQPageJsonLd } from "@/components/Content/ArticleFAQ";
 import { ArticleSection } from "@/components/Content/ArticleSection";
+import { ArticleSources } from "@/components/Content/ArticleSources";
 import { SegmentCard } from "@/components/Content/Segment/SegmentCard";
 import { Calendar } from "lucide-react";
 import type { Metadata } from "next";
@@ -131,6 +132,8 @@ export default async function FuncionalidadePage({ params }: Props) {
 
 					{/* FAQ */}
 					{page.faqs && page.faqs.length > 0 && <ArticleFAQ faqs={page.faqs} />}
+
+					{page.sources && <ArticleSources sources={page.sources} />}
 
 					{/* Related segment landings */}
 					{relatedSegments.length > 0 && (

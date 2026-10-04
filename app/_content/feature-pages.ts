@@ -20,6 +20,8 @@ export type FeaturePage = {
 	};
 	relatedSegmentSlugs: string[]; // segment landings (/segmentos/[slug]) shown as "por segmento"
 	relatedFeatureSlugs: string[];
+	// Fontes dos números de mercado citados na página (números do próprio produto não entram).
+	sources?: { label: string; url: string }[];
 };
 
 export const FEATURE_PAGES: FeaturePage[] = [
@@ -43,6 +45,16 @@ export const FEATURE_PAGES: FeaturePage[] = [
 		},
 		relatedSegmentSlugs: ["restaurantes", "pet-shop", "loja-de-roupas"],
 		relatedFeatureSlugs: ["campanhas-whatsapp", "ponto-de-interacao", "business-intelligence"],
+		sources: [
+			{
+				label: "ABEMF/Valuenet — 88% dos brasileiros utilizam programas de fidelidade (via Panrotas)",
+				url: "https://www.panrotas.com.br/mercado/pesquisas-e-estatisticas/2025/10/88-dos-brasileiros-utilizam-programas-de-fidelidade-diz-pesquisa-da-abemf_222537.html",
+			},
+			{
+				label: "ABEMF — Panorama da Fidelização no Brasil, 3ª edição (via Estado de Minas)",
+				url: "https://www.em.com.br/mundo-corporativo/2024/09/6951134-cashback-movimenta-comercios-e-atrai-consumidores.html",
+			},
+		],
 		sections: [
 			{
 				type: "text",
@@ -52,9 +64,9 @@ export const FEATURE_PAGES: FeaturePage[] = [
 			{
 				type: "stats",
 				items: [
-					{ value: "5×", label: "Mais barato reter um cliente do que conquistar um novo" },
-					{ value: "68%", label: "Dos consumidores preferem lojas que oferecem cashback" },
-					{ value: "2.3×", label: "Aumento médio na frequência de visitas após adotar cashback" },
+					{ value: "88,3%", label: "dos consumidores brasileiros usam programas de fidelidade", source: "ABEMF/Valuenet, 2025" },
+					{ value: "53,3%", label: "querem cashback como benefício, atrás só do desconto", source: "ABEMF/Valuenet, 2025" },
+					{ value: "83,2%", label: "preferem comprar de empresas que têm programa de fidelidade", source: "ABEMF, Panorama da Fidelização, 2024" },
 				],
 			},
 			{
@@ -96,7 +108,7 @@ export const FEATURE_PAGES: FeaturePage[] = [
 			{
 				question: "Qual percentual de cashback devo oferecer na minha loja?",
 				answer:
-					"No RecompraCRM você configura de 1% a 20%, conforme a sua margem. Para a maioria do varejo, entre 3% e 8% cria um incentivo real de retorno sem comprometer o lucro. É possível aumentar o percentual em datas especiais para turbinar o movimento e testar qual valor gera mais recompra.",
+					"No RecompraCRM você configura de 1% a 20%. O percentual certo depende do seu ticket médio, da sua margem bruta e de quanto do crédito os clientes usam: o custo real é ticket × cashback × taxa de uso, e ele precisa caber na margem. O guia \"Cashback: quanto oferecer sem comer a sua margem\", no blog, traz a conta e uma calculadora. Dá para aumentar o percentual em datas especiais e comparar qual valor gera mais recompra.",
 			},
 			{
 				question: "O cliente precisa baixar algum aplicativo para usar o cashback?",
@@ -136,18 +148,28 @@ export const FEATURE_PAGES: FeaturePage[] = [
 		},
 		relatedSegmentSlugs: ["delivery", "farmacia-e-drogaria", "sorveteria"],
 		relatedFeatureSlugs: ["programa-de-cashback", "ponto-de-interacao", "business-intelligence"],
+		sources: [
+			{
+				label: "Mobile Time/Opinion Box — Super Panorama 2026",
+				url: "https://www.mobiletime.com.br/noticias/17/06/2026/super-panorama-26/",
+			},
+			{
+				label: "Meta for Developers — preços da plataforma do WhatsApp Business",
+				url: "https://developers.facebook.com/documentation/business-messaging/whatsapp/pricing",
+			},
+		],
 		sections: [
 			{
 				type: "text",
 				heading: "Por que o WhatsApp é o canal nº 1 do varejo brasileiro",
-				body: "O WhatsApp está instalado em 99% dos celulares no Brasil. É o canal que seu cliente mais usa, mais confia e mais responde. Enquanto e-mails têm taxas de abertura de 15-20%, mensagens no WhatsApp ultrapassam 77% de leitura.\n\nO problema? A maioria dos lojistas ainda envia mensagens manualmente — copiando e colando textos, perdendo horas e sem saber se gerou alguma venda. O RecompraCRM transforma o WhatsApp numa máquina de vendas automatizada, segmentada e mensurável.",
+				body: "O WhatsApp está na tela inicial de 64,8% dos smartphones brasileiros (Mobile Time/Opinion Box, 2026). É ali que o seu cliente conversa, e é ali que a sua loja precisa estar.\n\nO problema? A maioria dos lojistas ainda envia mensagens manualmente — copiando e colando textos, perdendo horas e sem saber se gerou alguma venda. O RecompraCRM transforma o WhatsApp numa máquina de vendas automatizada, segmentada e mensurável.",
 			},
 			{
 				type: "stats",
 				items: [
-					{ value: "95%", label: "Taxa de entrega das mensagens via WhatsApp Business API" },
-					{ value: "77%", label: "Taxa de leitura — 5× maior que e-mail marketing" },
-					{ value: "21%", label: "Taxa de conversão média das campanhas do RecompraCRM" },
+					{ value: "64,8%", label: "dos smartphones brasileiros têm o WhatsApp na tela inicial", source: "Mobile Time/Opinion Box, 2026" },
+					{ value: "R$ 0,32", label: "por mensagem de marketing entregue: segmentar é o que separa custo de investimento", source: "Meta, tabela de out/2026" },
+					{ value: "≈ 9×", label: "mais barato um aviso de utilidade (saldo de cashback) que uma mensagem de marketing", source: "Meta, tabela de out/2026" },
 				],
 			},
 			{
@@ -322,6 +344,12 @@ export const FEATURE_PAGES: FeaturePage[] = [
 		},
 		relatedSegmentSlugs: ["rede-de-lojas", "varejo", "joalheria-e-acessorios"],
 		relatedFeatureSlugs: ["programa-de-cashback", "campanhas-whatsapp", "ponto-de-interacao"],
+		sources: [
+			{
+				label: "Kim, Singh e Winer — The Pareto rule for frequently purchased packaged goods (Marketing Letters, 2017)",
+				url: "https://doi.org/10.1007/s11002-017-9442-5",
+			},
+		],
 		sections: [
 			{
 				type: "text",
@@ -332,7 +360,7 @@ export const FEATURE_PAGES: FeaturePage[] = [
 				type: "stats",
 				items: [
 					{ value: "9", label: "Segmentos RFM automáticos para classificar cada cliente" },
-					{ value: "126×", label: "ROI médio das campanhas rastreadas pela plataforma" },
+					{ value: "65–73%", label: "das vendas de uma marca vêm dos 20% que mais compram", source: "Kim, Singh e Winer, 2017" },
 					{ value: "Tempo real", label: "Dashboards atualizados a cada venda registrada" },
 				],
 			},
