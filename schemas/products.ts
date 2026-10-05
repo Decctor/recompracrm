@@ -1,8 +1,8 @@
 import { z } from "zod";
-import { normalizeGtin } from "@/lib/products/gtin";
+import { normalizeProductBarcode } from "@/lib/products/barcode";
 import { ProductContentUnitEnum, ProductStockDeductionModeEnum, StockMovementTypeEnum, VariantOptionTypeEnum } from "./enums";
 
-// GTIN opcional: vazio vira null; preenchido precisa ser um EAN/GTIN válido e é gravado só com dígitos.
+// Código de barras opcional: GTIN/EAN ou código interno imprimível em Code 128; vazio vira null.
 // Opcional SEM default: payload sem o campo não altera o valor persistido.
 const ProductBarcodeSchema = z
 	.string({
@@ -10,10 +10,10 @@ const ProductBarcodeSchema = z
 	})
 	.nullable()
 	.optional()
-	.refine((value) => value == null || value.trim() === "" || normalizeGtin(value) != null, {
-		message: "Código de barras inválido: informe um EAN/GTIN de 8, 12, 13 ou 14 dígitos com dígito verificador válido.",
+	.refine((value) => value == null || value.trim() === "" || normalizeProductBarcode(value) != null, {
+		message: "Código de barras inválido: use números, letras sem acentos ou símbolos, sem quebras de linha.",
 	})
-	.transform((value) => (value === undefined ? undefined : normalizeGtin(value)));
+	.transform((value) => (value === undefined ? undefined : normalizeProductBarcode(value)));
 
 const ProductContentQuantitySchema = z
 	.number({

@@ -1,9 +1,10 @@
 import type { TVisualKitConfig } from "@/schemas/visual-kits";
 import { A4_PAGE, mmToPx } from "../formats";
 import type { TVisualKitBrand, TVisualKitPieceItem } from "../types";
-import { EanBarcode, eanViewHeight, normalizeEanCode } from "./ean";
+import { barcodeFor } from "./barcode";
+import { Code128Barcode } from "./code128";
+import { EanBarcode, eanViewHeight } from "./ean";
 import {
-	barcodeFor,
 	clampLines,
 	CUT_LINE,
 	discountLabel,
@@ -35,13 +36,14 @@ const FOOTER_STRIP_HEIGHT = 20;
 const BARCODE_MODULE = mmToPx(0.28);
 const BARCODE_BAR_MODULES = 58;
 const BARCODE_HEIGHT = eanViewHeight(BARCODE_BAR_MODULES) * BARCODE_MODULE;
+const MAX_CODE128_MODULES = (LABEL_WIDTH - 159 - 15 - 11 - 8) / BARCODE_MODULE;
 
 type TShelfLabelProps = { item: TVisualKitPieceItem; brand: TVisualKitBrand; configuracao: TVisualKitConfig; validity: string | null };
 
 function ShelfLabel({ item, brand, configuracao, validity }: TShelfLabelProps) {
 	const display = resolveItemDisplay(item, configuracao);
-	const barcode = barcodeFor(item, configuracao);
-	const hasBarcode = normalizeEanCode(barcode) !== null;
+	const barcode = barcodeFor(item, configuracao, MAX_CODE128_MODULES);
+	const hasBarcode = barcode !== null;
 	return (
 		<div
 			style={{
@@ -62,7 +64,11 @@ function ShelfLabel({ item, brand, configuracao, validity }: TShelfLabelProps) {
 					{item.detalhe && !hasBarcode ? <span style={{ fontSize: 12, color: "#5c5c5c", marginTop: 4, ...clampLines(2) }}>{item.detalhe}</span> : null}
 					<div style={{ flex: 1 }} />
 					<div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 8 }}>
-						<EanBarcode code={barcode} height={BARCODE_HEIGHT} barHeight={BARCODE_BAR_MODULES} />
+						{barcode?.kind === "EAN" ? (
+							<EanBarcode code={barcode.code} height={BARCODE_HEIGHT} barHeight={BARCODE_BAR_MODULES} />
+						) : barcode?.kind === "CODE128" ? (
+							<Code128Barcode bars={barcode.bars} moduleWidth={BARCODE_MODULE} barHeight={BARCODE_BAR_MODULES} />
+						) : null}
 						{(item.detalhe && hasBarcode) || display.precoUnidade ? (
 							<span
 								style={{

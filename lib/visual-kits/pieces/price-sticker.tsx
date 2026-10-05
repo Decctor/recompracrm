@@ -1,6 +1,9 @@
 import type { TVisualKitConfig } from "@/schemas/visual-kits";
 import { A4_PAGE, mmToPx } from "../formats";
 import type { TVisualKitBrand, TVisualKitPieceItem } from "../types";
+import { barcodeFor } from "./barcode";
+import { Code128Barcode } from "./code128";
+import { EanBarcode, eanViewHeight } from "./ean";
 import {
 	CUT_LINE,
 	discountLabel,
@@ -25,6 +28,10 @@ const COLUMN_GAP = mmToPx(1);
 const ROW_GAP = mmToPx(0.5);
 const SHEET_TOP = mmToPx(7);
 const SHEET_LEFT = (A4_PAGE.width - COLUMNS * STICKER_WIDTH - (COLUMNS - 1) * COLUMN_GAP) / 2;
+// X fixo de 0,25 mm, sem comprimir barras. Os códigos de 9/10 dígitos cabem em 38 mm.
+const BARCODE_MODULE = mmToPx(0.25);
+const BARCODE_BAR_MODULES = 24;
+const MAX_BARCODE_MODULES = (STICKER_WIDTH - 8 - 16) / BARCODE_MODULE;
 
 /** Repete cada produto para completar a folha de 65 (mesma regra de `describeVisualKitPiece`). */
 export function expandStickerItems(items: TVisualKitPieceItem[]) {
@@ -34,6 +41,7 @@ export function expandStickerItems(items: TVisualKitPieceItem[]) {
 
 function Sticker({ item, brand, configuracao }: { item: TVisualKitPieceItem; brand: TVisualKitBrand; configuracao: TVisualKitConfig }) {
 	const display = resolveItemDisplay(item, configuracao);
+	const barcode = barcodeFor(item, configuracao, MAX_BARCODE_MODULES);
 	return (
 		<div
 			style={{
@@ -50,10 +58,20 @@ function Sticker({ item, brand, configuracao }: { item: TVisualKitPieceItem; bra
 			}}
 		>
 			<div style={{ width: 8, flexShrink: 0, background: brand.corPrimaria }} />
-			<div style={{ flex: 1, minWidth: 0, padding: "8px 8px 6px 8px", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+			<div
+				style={{
+					flex: 1,
+					minWidth: 0,
+					padding: barcode ? "5px 8px 4px" : "8px 8px 6px 8px",
+					display: "flex",
+					flexDirection: "column",
+					justifyContent: "space-between",
+					gap: barcode ? 2 : undefined,
+				}}
+			>
 				<span
 					style={{
-						fontSize: 10.5,
+						fontSize: barcode ? 9.5 : 10.5,
 						fontWeight: 700,
 						lineHeight: 1.05,
 						color: INK,
@@ -67,8 +85,17 @@ function Sticker({ item, brand, configuracao }: { item: TVisualKitPieceItem; bra
 				</span>
 				<div style={{ display: "flex", alignItems: "flex-end", gap: 4, color: INK }}>
 					{display.precoDe != null ? <s style={{ fontSize: 9.5, color: "#6b6b6b", marginBottom: 2 }}>{formatMoney(display.precoDe)}</s> : null}
-					<PriceValue value={item.preco} size={32} style={{ marginLeft: "auto" }} />
+					<PriceValue value={item.preco} size={barcode ? 24 : 32} style={{ marginLeft: "auto" }} />
 				</div>
+				{barcode ? (
+					<div style={{ display: "flex", justifyContent: "center", flexShrink: 0 }}>
+						{barcode.kind === "CODE128" ? (
+							<Code128Barcode bars={barcode.bars} moduleWidth={BARCODE_MODULE} barHeight={BARCODE_BAR_MODULES} />
+						) : (
+							<EanBarcode code={barcode.code} height={eanViewHeight(BARCODE_BAR_MODULES) * BARCODE_MODULE} barHeight={BARCODE_BAR_MODULES} />
+						)}
+					</div>
+				) : null}
 			</div>
 			{display.percentualDesconto != null ? (
 				<span

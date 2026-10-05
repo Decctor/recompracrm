@@ -81,7 +81,7 @@ export default function StageVisual() {
 								<div className="flex flex-col gap-2">
 									<KitToggle
 										label="Código de barras"
-										hint="Só aparece nos produtos com código de barras cadastrado."
+										hint="Usa o código de barras cadastrado no produto. Códigos muito longos podem não caber na etiqueta."
 										value={state.kit.configuracao.mostrarCodigoBarras}
 										onChange={(mostrarCodigoBarras) => updateConfig({ mostrarCodigoBarras })}
 									/>

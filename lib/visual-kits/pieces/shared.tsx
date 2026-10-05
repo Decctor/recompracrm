@@ -127,10 +127,6 @@ export function resolveItemDisplay(item: TVisualKitPieceItem, configuracao: TVis
 	};
 }
 
-export function barcodeFor(item: TVisualKitPieceItem, configuracao: TVisualKitConfig) {
-	return configuracao.mostrarCodigoBarras ? item.codigoBarras : null;
-}
-
 /**
  * Fator de redução do preço pelo tamanho da parte inteira. O layout é desenhado para dois dígitos
  * ("19"); "129" e "1.299" encolhem para caber na mesma largura (Outfit não tem variante condensada).

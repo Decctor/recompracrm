@@ -23,7 +23,7 @@ export type TVisualKitPieceItem = {
 	detalhe: string | null; // conteúdo da embalagem ("200 ml"), quando cadastrado
 	grupo: string;
 	codigo: string;
-	codigoBarras: string | null; // GTIN validado; nulo = peça sem código de barras
+	codigoBarras: string | null; // GTIN/EAN ou código interno em Code 128; nulo = sem código de barras
 	imagemUrl: string | null;
 	unidade: string; // unidade comercial (UN, CX, KG…) — "por CX"
 	preco: number; // preço efetivo onde a peça é exibida (canal do kit, senão base)

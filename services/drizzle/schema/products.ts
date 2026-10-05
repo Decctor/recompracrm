@@ -43,7 +43,7 @@ export const products = newTable(
 		precoVendaAnterior: doublePrecision("preco_venda_anterior"),
 		dataAlteracaoPrecoVenda: timestamp("data_alteracao_preco_venda"),
 		precoCusto: doublePrecision("preco_custo"),
-		// GTIN (EAN-8/12/13/14) com dígito verificador válido — `normalizeGtin` (lib/products/gtin.ts).
+		// GTIN/EAN ou código interno em Code 128 — `normalizeProductBarcode` (lib/products/barcode.ts).
 		// Separado de `codigo`, que é a chave de identidade das integrações (SKU, código do ERP).
 		codigoBarras: text("codigo_barras"),
 		// Conteúdo da embalagem ("200" + ML): base do preço por unidade de medida nas etiquetas.
@@ -110,7 +110,7 @@ export const productVariants = newTable(
 		precoVendaAnterior: doublePrecision("preco_venda_anterior"),
 		dataAlteracaoPrecoVenda: timestamp("data_alteracao_preco_venda"),
 		precoCusto: doublePrecision("preco_custo"), // Optional: distinct cost per variant
-		codigoBarras: text("codigo_barras"), // GTIN da variante (sobrescreve o do produto)
+		codigoBarras: text("codigo_barras"), // Código de barras próprio da variante
 		// Quantidade do conteúdo da variante (sobrescreve a do produto); a unidade é sempre a do produto.
 		conteudoQuantidade: doublePrecision("conteudo_quantidade"),
 

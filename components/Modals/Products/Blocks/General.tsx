@@ -6,7 +6,7 @@ import TextInput from "@/components/Inputs/TextInput";
 import TextareaInput from "@/components/Inputs/TextareaInput";
 import { ProductActiveToggle, ProductInactiveHint } from "@/components/Products/Shared/ProductActiveStatus";
 import ResponsiveMenuSection from "@/components/Utils/ResponsiveMenuSection";
-import { normalizeGtin } from "@/lib/products/gtin";
+import { normalizeProductBarcode } from "@/lib/products/barcode";
 import type { TProductContentUnitEnum } from "@/schemas/enums";
 import type { TProductCoreState, TUseProductCoreState } from "@/state-hooks/use-product-state";
 import { ProductContentUnitOptions, UnitsOfMeasurementOptions } from "@/utils/select-options";
@@ -77,13 +77,15 @@ export default function ProductStateGeneralBlock({
 				</div>
 				<div className="w-full flex flex-col gap-1">
 					<TextInput
-						label="CÓDIGO DE BARRAS (EAN/GTIN)"
+						label="CÓDIGO DE BARRAS"
 						value={product.codigoBarras ?? ""}
 						placeholder="Ex.: 7891234567895"
 						handleChange={(value) => updateProduct({ codigoBarras: value.trim() ? value : null })}
 					/>
-					{product.codigoBarras && !normalizeGtin(product.codigoBarras) ? (
-						<p className="text-[0.6rem] text-destructive tracking-tight">Código inválido: use 8, 12, 13 ou 14 dígitos, com o dígito verificador correto.</p>
+					{product.codigoBarras && !normalizeProductBarcode(product.codigoBarras) ? (
+						<p className="text-[0.6rem] text-destructive tracking-tight">
+							Código inválido: use números, letras sem acentos ou símbolos, sem quebras de linha.
+						</p>
 					) : null}
 				</div>
 				<div className="w-full flex items-center gap-2 lg:flex-row">
