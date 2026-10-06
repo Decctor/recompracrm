@@ -5,6 +5,7 @@ import {
 	updateCampaign,
 	validateCampaignConfiguration,
 } from "@/app/api/campaigns/route";
+import { assertWhatsappPhoneCanSendCampaigns } from "@/lib/campaigns/dispatch/interruption";
 import { db } from "@/services/drizzle";
 import { campaigns } from "@/services/drizzle/schema";
 import { and, eq } from "drizzle-orm";
@@ -130,6 +131,7 @@ export const activateCampaignTool = defineAgentTool({
 		if (!campaign) throw new createHttpError.NotFound("Campanha não encontrada.");
 		if (campaign.ativo) return { ativada: true, campanhaId: campaign.id, mensagem: "A campanha já está ativa." };
 		await validateCampaignConfiguration({ campaign, organizationId });
+		await assertWhatsappPhoneCanSendCampaigns(campaign.whatsappConexaoTelefoneId);
 		const configurationHash = hashAgentOperationInput({ campaign, segmentacoes: campaign.segmentacoes });
 		if (!input.aprovacaoId) {
 			const request = await createAgentMutationApproval({

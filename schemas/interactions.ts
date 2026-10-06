@@ -1,5 +1,11 @@
 import z from "zod";
-import { CashbackProgramTerminologyEnum, InteractionTypeEnum, SurveyReplySourceEnum } from "./enums";
+import {
+	CashbackProgramTerminologyEnum,
+	InteractionTypeEnum,
+	SurveyReplySourceEnum,
+	WhatsappPricingCategoryEnum,
+	WhatsappPricingTypeEnum,
+} from "./enums";
 
 // Uma resposta a um botão de pesquisa (RESPOSTA_PESQUISA) dada ao envio. Vive em
 // interactions.metadados.pesquisaRespostas — a resposta é o próximo evento da mesma mensagem, ao
@@ -69,6 +75,20 @@ export const InteractionMetadataSchema = InteractionContextMetadataSchema.extend
 	chatMessageId: z.string().optional().nullable(),
 	whatsappStatus: z.string().optional().nullable(),
 	whatsappErrors: z.array(z.unknown()).optional().nullable(),
+	// Objeto `pricing` do último webhook de status da Meta. Cobrança efetiva = cobravel e
+	// statusEnvio ENTREGUE/LIDO (derivada na leitura, nunca gravada).
+	cobrancaWhatsapp: z
+		.object({
+			cobravel: z.boolean({ invalid_type_error: "Tipo inválido para cobrável." }),
+			modelo: z.string({ invalid_type_error: "Tipo inválido para modelo de cobrança." }).nullable(),
+			categoria: WhatsappPricingCategoryEnum,
+			categoriaBruta: z.string({ invalid_type_error: "Tipo inválido para categoria bruta." }).nullable(),
+			tipo: WhatsappPricingTypeEnum,
+			tipoBruto: z.string({ invalid_type_error: "Tipo inválido para tipo bruto." }).nullable(),
+			atualizadoEm: z.string({ invalid_type_error: "Tipo inválido para data de atualização da cobrança." }),
+		})
+		.optional()
+		.nullable(),
 	emailStatus: z.string().optional().nullable(),
 	channelsAttempted: z.array(InteractionDeliveryChannelEnum).optional(),
 	channelsSkipped: z.array(z.string()).optional(),

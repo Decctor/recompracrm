@@ -16,6 +16,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { CircleAlert, RefreshCw, Rocket } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { DispatchInterruptionCallout } from "../../shared/dispatch-interruption-callout";
 
 /**
  * Painel de disparos da campanha: cada rodada (janela agendada, recorrência, evento) com status,
@@ -31,6 +32,7 @@ const STATUS_LABELS: Record<TCampaignDispatchStatusEnum, { label: string; classN
 	CONCLUIDA: { label: "CONCLUÍDO", className: "bg-green-500 text-white" },
 	FALHOU: { label: "FALHOU", className: "bg-red-500 text-white" },
 	CANCELADA: { label: "CANCELADO", className: "bg-muted text-muted-foreground" },
+	INTERROMPIDA: { label: "INTERROMPIDO", className: "bg-red-500 text-white" },
 };
 
 const ORIGIN_LABELS: Record<TCampaignDispatchOriginEnum, string> = {
@@ -48,6 +50,7 @@ const SKIP_REASON_LABELS: Record<TCampaignDispatchSkipReasonEnum, string> = {
 	COMUNICACAO_PAUSADA: "comunicação pausada",
 	FREQUENCIA: "já recebeu no intervalo",
 	CAMPANHA_INATIVA: "campanha pausada",
+	ENVIO_INTERROMPIDO: "envio interrompido",
 };
 
 const RETRYABLE_SKIP_REASONS: TCampaignDispatchSkipReasonEnum[] = [
@@ -112,6 +115,10 @@ function CampaignDispatchCard({ dispatch }: { dispatch: TGetCampaignDispatchesOu
 		(dispatch.status === "ENFILEIRADA" || dispatch.status === "ENVIANDO" || dispatch.status === "RESOLVENDO") &&
 		Date.now() - new Date(dispatch.dataAtualizacao).getTime() > 30 * 60_000;
 	const canRetry = dispatch.status === "FALHOU" || dispatch.status === "CONCLUIDA" || isStuck;
+	const isInterrupted = dispatch.status === "INTERROMPIDA" && !!dispatch.motivoInterrupcao;
+	// Evento interrompido não é retomado: a mensagem perderia o momento do gatilho.
+	const canResume = isInterrupted && dispatch.origem !== "EVENTO";
+	const notContacted = (dispatch.pulosPorMotivo.find((skip) => skip.motivo === "ENVIO_INTERROMPIDO")?.qtde ?? 0) + dispatch.totalFalhados;
 
 	return (
 		<div className="bg-background border-border flex w-full flex-col gap-2 rounded-xl border px-3 py-3">
@@ -122,7 +129,7 @@ function CampaignDispatchCard({ dispatch }: { dispatch: TGetCampaignDispatchesOu
 					<span className="text-xs text-muted-foreground tabular-nums">{dispatch.janelaReferencia}</span>
 				</div>
 				<div className="flex items-center gap-2">
-					{dispatch.erro ? (
+					{dispatch.erro && !isInterrupted ? (
 						<TooltipProvider>
 							<Tooltip>
 								<TooltipTrigger
@@ -159,6 +166,28 @@ function CampaignDispatchCard({ dispatch }: { dispatch: TGetCampaignDispatchesOu
 					) : null}
 				</div>
 			</div>
+			{isInterrupted && dispatch.motivoInterrupcao ? (
+				<DispatchInterruptionCallout
+					motivo={dispatch.motivoInterrupcao}
+					codigo={dispatch.interrupcao?.codigo ?? null}
+					tituloMeta={dispatch.interrupcao?.titulo}
+					detalhesMeta={dispatch.interrupcao?.detalhes}
+					impacto={
+						notContacted > 0
+							? `${formatDecimalPlaces(notContacted)} ${notContacted === 1 ? "cliente ficou" : "clientes ficaram"} sem receber. Mensagens que falharam não são cobradas pela Meta.${canResume ? " Ao retomar, eles voltam para a fila." : ""}`
+							: null
+					}
+				>
+					{canResume ? (
+						<Button size="sm" disabled={isPending} className="h-7 text-[0.65rem] font-semibold" onClick={() => handleRetry(null)}>
+							<RefreshCw className={cn("w-3.5 h-3.5", { "animate-spin": isPending })} />
+							RETOMAR ENVIO
+						</Button>
+					) : dispatch.origem === "EVENTO" ? (
+						<span className="text-xs text-muted-foreground">Disparos por evento não são retomados: a mensagem perderia o momento do gatilho.</span>
+					) : null}
+				</DispatchInterruptionCallout>
+			) : null}
 			<div className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 text-xs tabular-nums">
 				<span>
 					<span className="text-muted-foreground">destinatários</span> {formatDecimalPlaces(dispatch.totalDestinatarios)}

@@ -1,6 +1,7 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
+import { assertWhatsappPhoneCanSendCampaigns } from "@/lib/campaigns/dispatch/interruption";
 import { CAMPAIGN_SENT_INTERACTION_STATUSES } from "@/lib/campaigns/utils";
 import {
 	getOrganizationWeeklyCampaignLimit,
@@ -266,6 +267,7 @@ export async function createCampaign({
 	// Com `couponToCreate` o cupom ainda não existe, então não há id para validar aqui — a coerência
 	// dele é checada dentro da transação, na hora de inserir.
 	if (!input.couponToCreate) await validateCampaignCouponGenerationSettings(input.campaign, userOrgId);
+	if (input.campaign.ativo) await assertWhatsappPhoneCanSendCampaigns(input.campaign.whatsappConexaoTelefoneId);
 
 	const insertedCampaignId = await db.transaction(async (trx) => {
 		let cupomGeracaoCupomId = input.campaign.cupomGeracaoCupomId ?? null;
@@ -647,6 +649,15 @@ export async function updateCampaign({ input, organizationId: userOrgId }: { inp
 
 	await validateCampaignCouponGenerationSettings(input.campaign, userOrgId);
 
+	// Só a ativação é barrada: editar uma campanha já ativa com o número bloqueado continua possível.
+	if (input.campaign.ativo) {
+		const existing = await db.query.campaigns.findFirst({
+			where: and(eq(campaigns.id, campaignId), eq(campaigns.organizacaoId, userOrgId)),
+			columns: { ativo: true },
+		});
+		if (!existing?.ativo) await assertWhatsappPhoneCanSendCampaigns(input.campaign.whatsappConexaoTelefoneId);
+	}
+
 	return await db.transaction(async (trx) => {
 		console.log("[INFO] [UPDATE-CAMPAIGN] Starting to update campaign...", {
 			campaignId,
@@ -661,12 +672,16 @@ export async function updateCampaign({ input, organizationId: userOrgId }: { inp
 
 		const updatedCampaignId = updatedCampaignResponse[0]?.id;
 		if (!updatedCampaignId) throw new createHttpError.InternalServerError("Oops, houve um erro desconhecido ao atualizar campanha.");
-		const preset = await trx.query.campaigns.findFirst({ where: and(eq(campaigns.id, updatedCampaignId), eq(campaigns.organizacaoId, userOrgId)), columns: { chavePreset: true } });
+		const preset = await trx.query.campaigns.findFirst({
+			where: and(eq(campaigns.id, updatedCampaignId), eq(campaigns.organizacaoId, userOrgId)),
+			columns: { chavePreset: true },
+		});
 		if (preset?.chavePreset && typeof input.campaign.ativo === "boolean") {
 			const journey = await getJourney({ executor: trx, organizationId: userOrgId, produto: "CRM" });
 			if (journey) {
 				const keys = new Set(journey.respostas.campanhasComEnvioHabilitado);
-				if (input.campaign.ativo) keys.add(preset.chavePreset); else keys.delete(preset.chavePreset);
+				if (input.campaign.ativo) keys.add(preset.chavePreset);
+				else keys.delete(preset.chavePreset);
 				await updateJourneyProgress({ executor: trx, organizationId: userOrgId, produto: "CRM", respostas: { campanhasComEnvioHabilitado: [...keys] } });
 			}
 			await reconcileOnboardingCampaigns({ executor: trx, organizationId: userOrgId });

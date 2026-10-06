@@ -1,3 +1,4 @@
+import { HandCoins } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatToMoney } from "@/lib/formatting";
 import { cn } from "@/lib/utils";
@@ -63,9 +64,11 @@ export default function TotalDock({
 			className: "text-green-700 dark:text-green-400",
 		});
 	}
-	if (saleState.troco > 0) {
-		secondaryLines.push({ key: "troco", label: "TROCO", value: formatToMoney(saleState.troco), className: "text-amber-600 dark:text-amber-400" });
-	} else if (showRestante) {
+	// Troco não entra na linha rasa: é o número que o operador conta na gaveta e entrega na mão do
+	// cliente, e em 11px âmbar sobre branco (contraste ~3:1) ele sumia ao lado do total. Ganha faixa
+	// própria abaixo; RESTANTE segue aqui porque só informa — não pede ação física.
+	const showTroco = saleState.troco > 0;
+	if (showRestante) {
 		secondaryLines.push({ key: "restante", label: "RESTANTE", value: formatToMoney(saleState.valorRestante), className: "text-muted-foreground" });
 	}
 
@@ -78,6 +81,33 @@ export default function TotalDock({
 							{line.label} {line.value}
 						</span>
 					))}
+				</div>
+			) : null}
+
+			{/* Faixa de troco: nesse momento ela é a instrução — o total já foi falado, o troco é o que
+			    falta fazer. O número fica um passo abaixo do total (e não no mesmo corpo): com faixa
+			    colorida e tamanho igual, os dois disputavam o olhar e o dock pesava. Fundo âmbar claro com texto âmbar-900 em vez de
+			    texto âmbar solto: passa 4.5:1 nos dois temas. O RECEBIDO ao lado deixa o operador conferir
+			    a nota que tem na mão antes de abrir a gaveta. A altura extra só existe quando há troco, e
+			    nessa hora o carrinho já está fechado — não rouba espaço da lista enquanto se bipa. */}
+			{showTroco ? (
+				<div
+					role="status"
+					className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 rounded-lg border border-amber-300 bg-amber-100 px-3 py-1.5 text-amber-900 animate-in fade-in-0 slide-in-from-bottom-1 duration-200 motion-reduce:animate-none dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-200"
+				>
+					<div className="flex items-center gap-2">
+						<HandCoins className="size-4 shrink-0" aria-hidden />
+						<span className="text-[10px] font-bold uppercase tracking-[0.1em]">Troco</span>
+						<span
+							className={cn(
+								"font-black tracking-tight tabular-nums transition-[font-size] duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] motion-reduce:transition-none",
+								expanded ? "text-xl" : "text-base",
+							)}
+						>
+							{formatToMoney(saleState.troco)}
+						</span>
+					</div>
+					<span className="text-[11px] font-semibold tabular-nums opacity-80">RECEBIDO {formatToMoney(saleState.totalPagamentos)}</span>
 				</div>
 			) : null}
 

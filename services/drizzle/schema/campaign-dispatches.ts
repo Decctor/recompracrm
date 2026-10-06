@@ -1,10 +1,12 @@
 import type { TInteractionContextMetadados } from "@/lib/message-templates";
+import type { TCampaignDispatchInterruptionScopeEnum } from "@/schemas/enums";
 import { relations } from "drizzle-orm";
 import { index, integer, jsonb, text, timestamp, unique, varchar } from "drizzle-orm/pg-core";
 import { campaigns } from "./campaigns";
 import { clients } from "./clients";
 import { newTable } from "./common";
 import {
+	campaignDispatchInterruptionReasonEnum,
 	campaignDispatchOriginEnum,
 	campaignDispatchRecipientStatusEnum,
 	campaignDispatchSkipReasonEnum,
@@ -21,6 +23,18 @@ import { sales } from "./sales";
  * O pipeline (o que enviar, para quem, sob qual orçamento) vive aqui. `interactions` é só o
  * registro do que realmente aconteceu — uma linha por mensagem enviada, criada no envio.
  */
+
+// O erro da Meta que interrompeu o disparo, como chegou: base do aviso no painel de disparos.
+export type TCampaignDispatchInterruption = {
+	escopo: TCampaignDispatchInterruptionScopeEnum;
+	codigo: number | null;
+	titulo: string | null;
+	detalhes: string | null;
+	// Interação cuja falha (webhook) disparou a interrupção; null quando veio do envio síncrono ou
+	// de um bloqueio já registrado no número/template.
+	interacaoId: string | null;
+	ocorridoEm: string;
+};
 
 // Uma "rodada" de campanha. A chave única (campanha, janela) É o claim: o relógio faz
 // INSERT ... ON CONFLICT DO NOTHING e quem inseriu publica o trabalho. Substitui o antigo
@@ -51,6 +65,9 @@ export const campaignDispatches = newTable(
 		totalFalhados: integer("total_falhados").notNull().default(0),
 		totalPulados: integer("total_pulados").notNull().default(0),
 		erro: text("erro"),
+		// Preenchidos quando status = INTERROMPIDA; limpos ao retomar.
+		motivoInterrupcao: campaignDispatchInterruptionReasonEnum("motivo_interrupcao"),
+		interrupcao: jsonb("interrupcao").$type<TCampaignDispatchInterruption>(),
 		dataInsercao: timestamp("data_insercao").defaultNow().notNull(),
 		dataAtualizacao: timestamp("data_atualizacao").defaultNow().notNull(),
 		dataConclusao: timestamp("data_conclusao"),

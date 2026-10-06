@@ -7,7 +7,8 @@ import {
 	type TInteractionContextMetadados,
 	type TMessageTemplateRuntimeContext,
 } from "@/lib/message-templates";
-import { sendTemplateWhatsappMessage } from "@/lib/whatsapp";
+import { getThrownWhatsappApiError, sendTemplateWhatsappMessage } from "@/lib/whatsapp";
+import type { ParsedWhatsappStatusError } from "@/lib/whatsapp/parsing";
 import { parseTemplatePayloadToGatewayContent, sendMessage } from "@/lib/whatsapp/internal-gateway";
 import { buildSurveyGatewayButtons } from "@/lib/campaigns/surveys/payload";
 import { formatPhoneForInternalGateway } from "@/lib/whatsapp/utils";
@@ -75,6 +76,8 @@ export type TCampaignDeliveryResult = {
 	channelsSkipped: string[];
 	channelsSent: string[];
 	channelErrors: Record<string, string>;
+	// Erro da Graph API quando o WhatsApp recusou o envio na hora (código da Meta incluso).
+	whatsappError: ParsedWhatsappStatusError | null;
 	whatsappMessageId?: string;
 	emailMessageId?: string;
 	jobId?: string;
@@ -226,6 +229,7 @@ export async function deliverCampaignMessage(params: TCampaignDeliveryInput): Pr
 	let insertedChatMessageId: string | null = null;
 
 	const channelErrors: Record<string, string> = {};
+	let whatsappError: ParsedWhatsappStatusError | null = null;
 	const channelsAttempted: string[] = [];
 	const channelsSkipped: string[] = [];
 
@@ -369,6 +373,7 @@ export async function deliverCampaignMessage(params: TCampaignDeliveryInput): Pr
 				}
 			} catch (error) {
 				channelErrors.WHATSAPP = error instanceof Error ? error.message : "Falha desconhecida no WhatsApp.";
+				whatsappError = getThrownWhatsappApiError(error);
 				if (insertedChatMessageId) await db.update(chatMessages).set({ statusEntrega: "FALHA" }).where(eq(chatMessages.id, insertedChatMessageId));
 			}
 		}
@@ -435,6 +440,7 @@ export async function deliverCampaignMessage(params: TCampaignDeliveryInput): Pr
 			channelsSkipped,
 			channelsSent,
 			channelErrors,
+			whatsappError,
 			whatsappMessageId,
 			emailMessageId,
 			jobId,
@@ -474,6 +480,7 @@ export async function deliverCampaignMessage(params: TCampaignDeliveryInput): Pr
 			channelsSkipped,
 			channelsSent: [],
 			channelErrors,
+			whatsappError,
 			chatMessageId: insertedChatMessageId,
 			whatsappStatus: null,
 			emailStatus: null,

@@ -1095,7 +1095,16 @@ export const ImportJobTypeEnum = z.enum(["HISTORICO"]);
 // --- Pipeline de campanhas (docs/dev-planning/campaigns-interactions-redesign-plan.md) ---
 export const CampaignDispatchOriginEnum = z.enum(["AGENDADA", "RECORRENTE", "EVENTO"]);
 export type TCampaignDispatchOriginEnum = z.infer<typeof CampaignDispatchOriginEnum>;
-export const CampaignDispatchStatusEnum = z.enum(["PENDENTE", "RESOLVENDO", "ENFILEIRADA", "ENVIANDO", "CONCLUIDA", "FALHOU", "CANCELADA"]);
+export const CampaignDispatchStatusEnum = z.enum([
+	"PENDENTE",
+	"RESOLVENDO",
+	"ENFILEIRADA",
+	"ENVIANDO",
+	"CONCLUIDA",
+	"FALHOU",
+	"CANCELADA",
+	"INTERROMPIDA",
+]);
 export type TCampaignDispatchStatusEnum = z.infer<typeof CampaignDispatchStatusEnum>;
 export const CampaignDispatchRecipientStatusEnum = z.enum(["AGUARDANDO", "RESERVADA", "ENVIADA", "FALHOU", "PULADA"]);
 export type TCampaignDispatchRecipientStatusEnum = z.infer<typeof CampaignDispatchRecipientStatusEnum>;
@@ -1108,8 +1117,27 @@ export const CampaignDispatchSkipReasonEnum = z.enum([
 	"COMUNICACAO_PAUSADA",
 	"FREQUENCIA",
 	"CAMPANHA_INATIVA",
+	"ENVIO_INTERROMPIDO",
 ]);
 export type TCampaignDispatchSkipReasonEnum = z.infer<typeof CampaignDispatchSkipReasonEnum>;
+export const CampaignDispatchInterruptionReasonEnum = z.enum([
+	"PAGAMENTO_PENDENTE",
+	"CONTA_RESTRITA",
+	"NUMERO_INDISPONIVEL",
+	"CREDENCIAL_INVALIDA",
+	"TEMPLATE_INDISPONIVEL",
+	"LIMITE_SPAM",
+	"LIMITE_ENVIO",
+]);
+export type TCampaignDispatchInterruptionReasonEnum = z.infer<typeof CampaignDispatchInterruptionReasonEnum>;
+// Onde a interrupção fica registrada: no número (todas as campanhas dele), no template ou só no disparo.
+export const CampaignDispatchInterruptionScopeEnum = z.enum(["NUMERO", "TEMPLATE", "DISPARO"]);
+export type TCampaignDispatchInterruptionScopeEnum = z.infer<typeof CampaignDispatchInterruptionScopeEnum>;
+// Cobrança da Meta por mensagem (objeto `pricing` dos webhooks de status).
+export const WhatsappPricingCategoryEnum = z.enum(["MARKETING", "UTILIDADE", "AUTENTICACAO", "AUTENTICACAO_INTERNACIONAL", "SERVICO", "OUTRA"]);
+export type TWhatsappPricingCategoryEnum = z.infer<typeof WhatsappPricingCategoryEnum>;
+export const WhatsappPricingTypeEnum = z.enum(["REGULAR", "GRATUITA_ATENDIMENTO", "GRATUITA_PONTO_ENTRADA", "OUTRA"]);
+export type TWhatsappPricingTypeEnum = z.infer<typeof WhatsappPricingTypeEnum>;
 export const SendCounterWindowEnum = z.enum(["DIARIO", "SEMANAL"]);
 export type TSendCounterWindowEnum = z.infer<typeof SendCounterWindowEnum>;
 

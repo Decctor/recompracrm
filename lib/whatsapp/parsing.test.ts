@@ -7,6 +7,8 @@ import {
 	parseWebhookIncomingMessages,
 	parseWebhookMessageEchoes,
 	parseWebhookStatusUpdates,
+	parseWhatsappApiErrorBody,
+	parseWhatsappStatusPricing,
 } from "./parsing";
 
 /** Payload mínimo da Cloud API com um change de `messages` por item passado. */
@@ -472,6 +474,85 @@ describe("parseWebhookStatusUpdates", () => {
 		assert.equal(parsed.status, "failed");
 		assert.match(parsed.errorMessage ?? "", /24 horas/);
 		assert.equal(parsed.errors?.[0]?.code, 131047);
+	});
+
+	it("traduz o objeto pricing para o vocabulário do app", () => {
+		const payload = {
+			entry: [
+				{
+					changes: [
+						{
+							field: "messages",
+							value: {
+								statuses: [
+									{
+										id: "wamid.priced",
+										status: "delivered",
+										timestamp: "1755000000",
+										pricing: { billable: true, pricing_model: "PMP", category: "marketing", type: "regular" },
+									},
+									{
+										id: "wamid.free",
+										status: "sent",
+										timestamp: "1755000001",
+										pricing: { billable: false, category: "service", type: "free_customer_service" },
+									},
+									{ id: "wamid.none", status: "sent", timestamp: "1755000002" },
+								],
+							},
+						},
+					],
+				},
+			],
+		};
+
+		const [priced, free, none] = parseWebhookStatusUpdates(payload);
+		assert.deepEqual(priced.pricing, {
+			cobravel: true,
+			modelo: "PMP",
+			categoria: "MARKETING",
+			categoriaBruta: "marketing",
+			tipo: "REGULAR",
+			tipoBruto: "regular",
+		});
+		assert.equal(free.pricing?.cobravel, false);
+		assert.equal(free.pricing?.categoria, "SERVICO");
+		assert.equal(free.pricing?.tipo, "GRATUITA_ATENDIMENTO");
+		assert.equal(none.pricing, null);
+	});
+
+	it("categoria ou tipo desconhecidos viram OUTRA sem perder o valor bruto", () => {
+		const pricing = parseWhatsappStatusPricing({ pricing: { billable: true, category: "nova_categoria", type: "novo_tipo" } });
+		assert.equal(pricing?.categoria, "OUTRA");
+		assert.equal(pricing?.categoriaBruta, "nova_categoria");
+		assert.equal(pricing?.tipo, "OUTRA");
+		assert.equal(parseWhatsappStatusPricing({ pricing: { category: "marketing" } }), null);
+	});
+});
+
+describe("parseWhatsappApiErrorBody", () => {
+	it("extrai código, título e detalhe do erro síncrono da Graph API", () => {
+		const parsed = parseWhatsappApiErrorBody({
+			error: {
+				message: "(#131042) Business eligibility payment issue",
+				type: "OAuthException",
+				code: 131042,
+				error_data: {
+					messaging_product: "whatsapp",
+					details: "Message failed to send because there were one or more errors related to your payment method.",
+				},
+				fbtrace_id: "trace",
+			},
+		});
+		assert.equal(parsed?.code, 131042);
+		assert.equal(parsed?.title, "OAuthException");
+		assert.match(parsed?.details ?? "", /payment method/);
+	});
+
+	it("ignora corpos que não são erro da Graph API", () => {
+		assert.equal(parseWhatsappApiErrorBody(null), null);
+		assert.equal(parseWhatsappApiErrorBody("Bad Gateway"), null);
+		assert.equal(parseWhatsappApiErrorBody({ error: {} }), null);
 	});
 });
 

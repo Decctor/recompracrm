@@ -1,3 +1,4 @@
+import type { TCampaignDispatchInterruptionReasonEnum } from "@/schemas/enums";
 import { relations } from "drizzle-orm";
 import { boolean, jsonb, text, timestamp, varchar } from "drizzle-orm/pg-core";
 import { newTable } from "./common";
@@ -63,6 +64,18 @@ export type TWhatsappConnectionPhoneMetadados = {
 		atualizadoEm: string;
 		ultimoErroCodigo?: string | null;
 	};
+	// Erro da Meta que se repetiria em qualquer envio deste número (pagamento, conta restrita,
+	// credencial, número indisponível). Enquanto presente, nenhum disparo de campanha sai pelo
+	// número. Cai quando o usuário retoma um disparo interrompido por ele, ou quando a Meta
+	// confirma a entrega de uma mensagem enviada depois do bloqueio
+	// (lib/campaigns/dispatch/interruption.ts).
+	bloqueioEnvio?: {
+		motivo: TCampaignDispatchInterruptionReasonEnum;
+		codigo: number | null;
+		titulo: string | null;
+		detalhes: string | null;
+		bloqueadoEm: string;
+	} | null;
 	sincronizacaoSmbApp?: {
 		dataLimiteRequisicao?: string | null;
 		contacts?: {

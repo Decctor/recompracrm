@@ -1,6 +1,8 @@
 "use client";
 
+import { CAMPAIGN_DISPATCH_INTERRUPTION_COPY } from "@/lib/campaigns/dispatch/interruption-policy";
 import { cn } from "@/lib/utils";
+import type { TCampaignDispatchInterruptionReasonEnum } from "@/schemas/enums";
 import { CircleCheck, Phone, PhoneOff } from "lucide-react";
 
 export type TCampaignSenderPhone = {
@@ -9,6 +11,8 @@ export type TCampaignSenderPhone = {
 	numero: string;
 	/** Estado de pagamento da conta Cloud API — o bloqueio de entrega mais comum depois da aprovação. */
 	pagamentoStatus?: string | null;
+	/** Erro da Meta que pausou os envios de campanha pelo número (lib/campaigns/dispatch/interruption.ts). */
+	bloqueioEnvio?: { motivo: TCampaignDispatchInterruptionReasonEnum; codigo: number | null } | null;
 };
 
 type PhonePickerProps = {
@@ -62,6 +66,11 @@ export default function PhonePicker({ phones, selectedPhoneId, onSelect }: Phone
 										? " · pagamento pendente"
 										: null}
 								</span>
+								{phone.bloqueioEnvio ? (
+									<span className="text-[11px] font-medium text-red-600 dark:text-red-400">
+										Envios bloqueados · {CAMPAIGN_DISPATCH_INTERRUPTION_COPY[phone.bloqueioEnvio.motivo].titulo}
+									</span>
+								) : null}
 							</span>
 							{isSelected ? <CircleCheck className="absolute right-2 top-2 h-4 w-4 text-primary" /> : null}
 						</button>

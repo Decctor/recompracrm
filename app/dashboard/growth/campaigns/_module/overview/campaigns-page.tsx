@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger, tabsPageToolbarActionsClassNa
 import { Database, MessageCircle, MessageCircleIcon, Plus, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { parseAsStringEnum, useQueryState } from "nuqs";
+import { BlockedPhonesAlert } from "./blocked-phones-alert";
 import { CampaignsDatabaseView } from "./database/campaigns-database-view";
 import { CampaignsInteractionsView } from "./interactions/campaigns-interactions-view";
 import { CampaignsStatsView } from "./stats/campaigns-stats-view";
@@ -35,6 +36,7 @@ export default function CampaignsPage({ membership }: CampaignsPageProps) {
 
 	return (
 		<div className="flex h-full w-full flex-col gap-3">
+			<BlockedPhonesAlert />
 			<Tabs
 				value={viewMode ?? "stats"}
 				onValueChange={(v: string) => setViewMode(v as "stats" | "database" | "interactions" | "templates")}

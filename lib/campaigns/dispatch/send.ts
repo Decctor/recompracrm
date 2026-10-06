@@ -8,7 +8,7 @@ import {
 import type { TInteractionContextMetadados } from "@/lib/message-templates";
 import type { TCampaignDispatchSkipReasonEnum } from "@/schemas/enums";
 import type { TInteractionMetadata } from "@/schemas/interactions";
-import { type DBTransaction, db } from "@/services/drizzle";
+import { db } from "@/services/drizzle";
 import {
 	type TCampaignDispatchEntity,
 	type TCampaignDispatchRecipientEntity,
@@ -27,6 +27,16 @@ import {
 	type TCampaignSendBonusProgram,
 } from "./bonus";
 import { deliverCampaignMessage, resolveOrganizationHubAccess, type TCampaignDeliveryClient, type TChatPromiseCache } from "./deliver";
+import {
+	blockWhatsappPhoneForCampaigns,
+	buildInterruptionFromWhatsappError,
+	interruptCampaignDispatch,
+	resolveCampaignDispatchSendBlock,
+	skipReservedRecipientsForInterruption,
+	type TCampaignDispatchInterruptionInput,
+} from "./interruption";
+import { classifyWhatsappSendErrorCode } from "./interruption-policy";
+import { skipRemainingRecipients, touchDispatch } from "./progress";
 import { publishCampaignDispatchSend } from "./queue";
 
 /**
@@ -36,6 +46,8 @@ import { publishCampaignDispatchSend } from "./queue";
  *  2. entrega ao provedor com a chave de idempotência do destinatário;
  *  3. registra: interação + bônus + destinatário ENVIADA numa transação; ou FALHOU/PULADA com a
  *     quota devolvida.
+ * Antes de cada lote confere se o disparo, o número e o template ainda podem enviar; um erro da
+ * Meta que se repetiria para todos (./interruption-policy.ts) interrompe o disparo na hora.
  * Ao esgotar o orçamento de tempo com trabalho sobrando, publica uma continuação.
  */
 
@@ -52,6 +64,7 @@ export type TCampaignDispatchSendSummary = {
 	failed: number;
 	skipped: number;
 	stoppedByTimeBudget: boolean;
+	interrupted: boolean;
 	finalized: boolean;
 };
 
@@ -79,44 +92,11 @@ export function buildDispatchInteractionTitle({
 }) {
 	if (origem === "RECORRENTE") return `Recorrente: ${campaign.titulo}`;
 	if (origem === "AGENDADA") {
-		const prefix = campaign.gatilhoTipo === "PROMOCAO-PRODUTOS" ? "Promoção de produtos" : campaign.gatilhoTipo === "PESQUISA" ? "Pesquisa" : "Uso único";
+		const prefix =
+			campaign.gatilhoTipo === "PROMOCAO-PRODUTOS" ? "Promoção de produtos" : campaign.gatilhoTipo === "PESQUISA" ? "Pesquisa" : "Uso único";
 		return `${prefix}: ${campaign.titulo}`;
 	}
 	return `Envio de mensagem automática via campanha ${campaign.titulo}`;
-}
-
-async function touchDispatch(executor: DBTransaction | typeof db, dispatchId: string, patch: Partial<TCampaignDispatchEntity>) {
-	await executor
-		.update(campaignDispatches)
-		.set({ ...patch, dataAtualizacao: new Date() })
-		.where(eq(campaignDispatches.id, dispatchId));
-}
-
-// Marca todos os AGUARDANDO restantes como PULADA (quota esgotada, campanha pausada, campanha
-// sem template) e devolve quantos foram.
-async function skipRemainingRecipients({
-	executor,
-	dispatchId,
-	motivoPulo,
-	erro,
-}: {
-	executor: DBTransaction | typeof db;
-	dispatchId: string;
-	motivoPulo: TCampaignDispatchSkipReasonEnum;
-	erro: string;
-}) {
-	const rows = await executor
-		.update(campaignDispatchRecipients)
-		.set({ status: "PULADA", motivoPulo, erro })
-		.where(and(eq(campaignDispatchRecipients.dispatchId, dispatchId), eq(campaignDispatchRecipients.status, "AGUARDANDO")))
-		.returning({ id: campaignDispatchRecipients.id });
-	if (rows.length > 0) {
-		await executor
-			.update(campaignDispatches)
-			.set({ totalPulados: sql`${campaignDispatches.totalPulados} + ${rows.length}`, dataAtualizacao: new Date() })
-			.where(eq(campaignDispatches.id, dispatchId));
-	}
-	return rows.length;
 }
 
 type TClaimedBatch = {
@@ -261,7 +241,42 @@ async function recordRecipientOutcome({
 	// Envio saiu: interação + bônus + destinatário na mesma transação. O id da interação é a chave
 	// de idempotência do destinatário, então uma reentrega que já registrou não duplica.
 	await db.transaction(async (tx) => {
-		const existing = await tx.query.interactions.findFirst({ where: eq(interactions.id, recipient.chaveIdempotencia), columns: { id: true } });
+		const existing = await tx.query.interactions.findFirst({
+			where: eq(interactions.id, recipient.chaveIdempotencia),
+			columns: { id: true, statusEnvio: true, metadados: true },
+		});
+		const deliveryMetadata: TInteractionMetadata = {
+			dispatchId: dispatch.id,
+			dispatchRecipientId: recipient.id,
+			whatsappTemplateId: campaign.whatsappTemplate.id,
+			messageTemplateId: campaign.whatsappTemplate.id,
+			channelsAttempted: delivery.channelsAttempted as TInteractionMetadata["channelsAttempted"],
+			channelsSkipped: delivery.channelsSkipped,
+			channelsSent: delivery.channelsSent as TInteractionMetadata["channelsSent"],
+			channelErrors: delivery.channelErrors,
+			...(delivery.whatsappMessageId ? { whatsappMessageId: delivery.whatsappMessageId } : {}),
+			...(delivery.emailMessageId ? { emailMessageId: delivery.emailMessageId } : {}),
+			...(delivery.jobId ? { jobId: delivery.jobId } : {}),
+			...(delivery.clientMessageId ? { clientMessageId: delivery.clientMessageId } : {}),
+			...(delivery.chatMessageId ? { chatMessageId: delivery.chatMessageId } : {}),
+			...(delivery.whatsappStatus ? { whatsappStatus: delivery.whatsappStatus } : {}),
+			...(delivery.emailStatus ? { emailStatus: delivery.emailStatus } : {}),
+		};
+		if (existing?.statusEnvio === "FALHOU") {
+			// Reenvio de quem a Meta aceitou e depois recusou (webhook): a interação passa a rastrear a
+			// mensagem nova. A quota desta tentativa foi reservada no claim; o bônus não é concedido de
+			// novo. dataExecucao = agora para que ajustes de quota futuros caiam na janela da reserva.
+			await tx
+				.update(interactions)
+				.set({
+					statusEnvio: delivery.statusEnvio,
+					erroEnvio: delivery.error,
+					dataExecucao: now,
+					dataEnvio: now,
+					metadados: { ...existing.metadados, ...deliveryMetadata, whatsappErrors: null, cobrancaWhatsapp: null },
+				})
+				.where(eq(interactions.id, existing.id));
+		}
 		if (!existing) {
 			const bonus = await grantCampaignBonusOnSend({
 				tx,
@@ -273,24 +288,7 @@ async function recordRecipientOutcome({
 				saleValue: recipient.contexto?.compraValor ?? null,
 				context,
 			});
-			const metadados: TInteractionMetadata = {
-				...bonus.metadata,
-				dispatchId: dispatch.id,
-				dispatchRecipientId: recipient.id,
-				whatsappTemplateId: campaign.whatsappTemplate.id,
-				messageTemplateId: campaign.whatsappTemplate.id,
-				channelsAttempted: delivery.channelsAttempted as TInteractionMetadata["channelsAttempted"],
-				channelsSkipped: delivery.channelsSkipped,
-				channelsSent: delivery.channelsSent as TInteractionMetadata["channelsSent"],
-				channelErrors: delivery.channelErrors,
-				...(delivery.whatsappMessageId ? { whatsappMessageId: delivery.whatsappMessageId } : {}),
-				...(delivery.emailMessageId ? { emailMessageId: delivery.emailMessageId } : {}),
-				...(delivery.jobId ? { jobId: delivery.jobId } : {}),
-				...(delivery.clientMessageId ? { clientMessageId: delivery.clientMessageId } : {}),
-				...(delivery.chatMessageId ? { chatMessageId: delivery.chatMessageId } : {}),
-				...(delivery.whatsappStatus ? { whatsappStatus: delivery.whatsappStatus } : {}),
-				...(delivery.emailStatus ? { emailStatus: delivery.emailStatus } : {}),
-			};
+			const metadados: TInteractionMetadata = { ...bonus.metadata, ...deliveryMetadata };
 			await tx.insert(interactions).values({
 				id: recipient.chaveIdempotencia,
 				organizacaoId: organizationId,
@@ -338,13 +336,23 @@ async function sendReservedRecipients({
 	hasHubAccess: boolean;
 	chatIdCache: TChatPromiseCache;
 	summary: TCampaignDispatchSendSummary;
-}) {
+}): Promise<TCampaignDispatchInterruptionInput | null> {
 	const clientsById = await loadDeliveryClients(recipients.map((recipient) => recipient.clienteId));
 	const connection = campaign.whatsappConexaoTelefone?.conexao;
 	const whatsappToken = connection?.tipoConexao === "META_CLOUD_API" ? (connection.token ?? undefined) : undefined;
 	const whatsappSessionId = connection?.tipoConexao === "INTERNAL_GATEWAY" ? (connection.gatewaySessaoId ?? undefined) : undefined;
 
-	for (const batch of chunkArray(recipients, CAMPAIGN_DISPATCH_SEND_CONCURRENCY)) {
+	// Primeira recusa síncrona da Meta que se repetiria para todos: os grupos seguintes do lote não
+	// saem e seus destinatários reservados são pulados com a quota devolvida.
+	// Objeto (e não `let`): é escrito dentro dos callbacks concorrentes do grupo.
+	const state: { interruption: TCampaignDispatchInterruptionInput | null } = { interruption: null };
+	const groups = chunkArray(recipients, CAMPAIGN_DISPATCH_SEND_CONCURRENCY);
+
+	for (const [groupIndex, batch] of groups.entries()) {
+		if (state.interruption) {
+			await skipReservedRecipientsForInterruption({ dispatch, recipients: groups.slice(groupIndex).flat(), interruption: state.interruption });
+			break;
+		}
 		await Promise.all(
 			batch.map(async (recipient) => {
 				try {
@@ -375,6 +383,11 @@ async function sendReservedRecipients({
 							})
 						: null;
 					const outcome = await recordRecipientOutcome({ dispatch, campaign, recipient, client, context, delivery });
+					// Avaliado mesmo quando o e-mail saiu: o erro é do número/template e se repetiria no
+					// WhatsApp de todos os próximos destinatários.
+					const whatsappError = delivery?.whatsappError ?? null;
+					const rule = whatsappError ? classifyWhatsappSendErrorCode(whatsappError.code) : null;
+					if (whatsappError && rule && !state.interruption) state.interruption = buildInterruptionFromWhatsappError({ error: whatsappError, rule });
 					if (outcome === "SENT") summary.sent += 1;
 					else if (outcome === "QUEUED") summary.queued += 1;
 					else if (outcome === "FAILED") summary.failed += 1;
@@ -388,6 +401,21 @@ async function sendReservedRecipients({
 			}),
 		);
 	}
+	return state.interruption;
+}
+
+// Interrompe o disparo e, se o erro é do número, bloqueia o número para as demais campanhas.
+async function applyDispatchInterruption({
+	dispatchId,
+	phoneId,
+	interruption,
+}: {
+	dispatchId: string;
+	phoneId: string | null;
+	interruption: TCampaignDispatchInterruptionInput;
+}) {
+	if (interruption.escopo === "NUMERO" && phoneId) await blockWhatsappPhoneForCampaigns({ phoneId, interruption });
+	await interruptCampaignDispatch({ dispatchId, interruption });
 }
 
 // Fecha o disparo quando não resta fila. O guard `status = ENVIANDO` garante que só um worker
@@ -434,6 +462,7 @@ export async function runCampaignDispatchSend({
 		failed: 0,
 		skipped: 0,
 		stoppedByTimeBudget: false,
+		interrupted: false,
 		finalized: false,
 	};
 	const logPrefix = `[CAMPAIGN_DISPATCH] [${dispatchId}] [worker ${worker}]`;
@@ -443,7 +472,7 @@ export async function runCampaignDispatchSend({
 		console.warn(`${logPrefix} Disparo não encontrado; mensagem descartada.`);
 		return summary;
 	}
-	if (dispatch.status === "CONCLUIDA" || dispatch.status === "FALHOU" || dispatch.status === "CANCELADA") {
+	if (dispatch.status === "CONCLUIDA" || dispatch.status === "FALHOU" || dispatch.status === "CANCELADA" || dispatch.status === "INTERROMPIDA") {
 		return { ...summary, finalized: true };
 	}
 	if (dispatch.status === "PENDENTE" || dispatch.status === "RESOLVENDO") {
@@ -479,16 +508,46 @@ export async function runCampaignDispatchSend({
 		resolveOrganizationHubAccess(dispatch.organizacaoId),
 	]);
 	const chatIdCache: TChatPromiseCache = new Map();
+	const phoneId = campaign.whatsappConexaoTelefoneId;
+	const sendBlockInput = {
+		dispatchId,
+		phoneId,
+		templateId: campaign.whatsappTemplate.id,
+		checkTemplateApproval: campaign.whatsappConexaoTelefone?.conexao.tipoConexao === "META_CLOUD_API",
+	};
 
 	while (Date.now() - startedAt < RUNTIME_BUDGET_MS) {
+		// Relido a cada lote: um webhook ou outro worker pode ter bloqueado o número ou interrompido
+		// o disparo enquanto o lote anterior era enviado.
+		const block = await resolveCampaignDispatchSendBlock(sendBlockInput);
+		if (block.kind === "STOPPED") {
+			summary.interrupted = true;
+			break;
+		}
+		if (block.kind === "BLOCKED") {
+			await applyDispatchInterruption({ dispatchId, phoneId, interruption: block.interruption });
+			summary.interrupted = true;
+			break;
+		}
+
 		const batch = await claimRecipientBatch({ dispatch, limits, batchSize: CAMPAIGN_DISPATCH_SEND_BATCH_SIZE });
 		if (batch.reserved.length === 0 && !batch.quotaExhaustedBy) break;
 		summary.claimed += batch.reserved.length;
 
 		if (batch.reserved.length > 0) {
-			await sendReservedRecipients({ dispatch, campaign, program, recipients: batch.reserved, hasHubAccess, chatIdCache, summary });
+			const interruption = await sendReservedRecipients({ dispatch, campaign, program, recipients: batch.reserved, hasHubAccess, chatIdCache, summary });
+			if (interruption) {
+				await applyDispatchInterruption({ dispatchId, phoneId, interruption });
+				summary.interrupted = true;
+				break;
+			}
 		}
 		if (batch.quotaExhaustedBy) break;
+	}
+
+	if (summary.interrupted) {
+		console.warn(`${logPrefix} Disparo interrompido ou encerrado por outro processo.`, summary);
+		return summary;
 	}
 
 	if (Date.now() - startedAt >= RUNTIME_BUDGET_MS) {

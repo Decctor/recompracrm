@@ -90,6 +90,7 @@ export default function StageMessage({ organizationId, organizationName, organiz
 					nome: phone.nome,
 					numero: phone.numero,
 					pagamentoStatus: phone.metadados?.pagamento?.status ?? null,
+					bloqueioEnvio: phone.metadados?.bloqueioEnvio ?? null,
 				})) ?? [],
 		[whatsappConnections],
 	);

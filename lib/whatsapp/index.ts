@@ -1,6 +1,7 @@
 import axios from "axios";
 import createHttpError from "http-errors";
 import type { TWhatsappTemplateSendPayload } from "@/lib/message-templates/channels/whatsapp/types";
+import { getWhatsappStatusErrorMessage, type ParsedWhatsappStatusError, parseWhatsappApiErrorBody } from "./parsing";
 
 const GRAPH_API_BASE_URL = "https://graph.facebook.com/v22.0";
 
@@ -132,8 +133,18 @@ export async function sendTemplateWhatsappMessage({
 		if (axios.isAxiosError(error)) {
 			console.error("[ERROR] [WHATSAPP_TEMPLATE_SEND_ERROR_RESPONSE]", error.response?.data);
 		}
-		throw new createHttpError.InternalServerError("Oops, algo deu errado ao enviar o template.");
+		// O código da Meta segue no erro: o disparo de campanhas decide por ele se interrompe o envio.
+		const whatsappError = axios.isAxiosError(error) ? parseWhatsappApiErrorBody(error.response?.data) : null;
+		const message = whatsappError?.code != null ? getWhatsappStatusErrorMessage([whatsappError]) : undefined;
+		throw createHttpError(500, message ?? "Oops, algo deu errado ao enviar o template.", { whatsappError });
 	}
+}
+
+/** Erro da Graph API anexado por sendTemplateWhatsappMessage, quando houver. */
+export function getThrownWhatsappApiError(error: unknown): ParsedWhatsappStatusError | null {
+	if (!error || typeof error !== "object") return null;
+	const whatsappError = (error as { whatsappError?: ParsedWhatsappStatusError | null }).whatsappError;
+	return whatsappError ?? null;
 }
 
 type SendMediaWhatsappMessageParams = {

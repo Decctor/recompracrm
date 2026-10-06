@@ -579,6 +579,7 @@ export const campaignDispatchStatusEnum = pgEnum("campaign_dispatch_status", [
 	"CONCLUIDA",
 	"FALHOU",
 	"CANCELADA",
+	"INTERROMPIDA",
 ]);
 export const campaignDispatchRecipientStatusEnum = pgEnum("campaign_dispatch_recipient_status", [
 	"AGUARDANDO",
@@ -596,6 +597,19 @@ export const campaignDispatchSkipReasonEnum = pgEnum("campaign_dispatch_skip_rea
 	"COMUNICACAO_PAUSADA",
 	"FREQUENCIA",
 	"CAMPANHA_INATIVA",
+	"ENVIO_INTERROMPIDO",
+]);
+// Por que um disparo foi interrompido: um erro da Meta que se repetiria para todo destinatário
+// (lib/campaigns/dispatch/interruption-policy.ts). Pagamento, conta, número e credencial bloqueiam
+// o número; template bloqueia o template; limites de envio interrompem só o disparo.
+export const campaignDispatchInterruptionReasonEnum = pgEnum("campaign_dispatch_interruption_reason", [
+	"PAGAMENTO_PENDENTE",
+	"CONTA_RESTRITA",
+	"NUMERO_INDISPONIVEL",
+	"CREDENCIAL_INVALIDA",
+	"TEMPLATE_INDISPONIVEL",
+	"LIMITE_SPAM",
+	"LIMITE_ENVIO",
 ]);
 // Janela do ledger de quota. SEMANAL é o ritmo de campanha; DIARIO existe para aquecer números
 // novos no WhatsApp (a Meta limita duro nas primeiras 24h). Outras janelas (MENSAL, por telefone)

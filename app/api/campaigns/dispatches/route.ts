@@ -1,6 +1,7 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
+import { clearWhatsappPhoneSendBlock } from "@/lib/campaigns/dispatch/interruption";
 import { publishCampaignDispatchExpand, publishCampaignDispatchSend } from "@/lib/campaigns/dispatch/queue";
 import { CampaignDispatchSkipReasonEnum, type TCampaignDispatchSkipReasonEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
@@ -85,23 +86,34 @@ async function retryCampaignDispatch({ input, session }: { input: TRetryCampaign
 
 	const dispatch = await db.query.campaignDispatches.findFirst({
 		where: and(eq(campaignDispatches.id, input.dispatchId), eq(campaignDispatches.organizacaoId, organizationId)),
-		with: { campanha: { columns: { ativo: true } } },
+		with: { campanha: { columns: { ativo: true, whatsappConexaoTelefoneId: true } } },
 	});
 	if (!dispatch) throw new createHttpError.NotFound("Disparo não encontrado.");
 	if (!dispatch.campanha?.ativo) throw new createHttpError.BadRequest("Ative a campanha antes de reexecutar o disparo.");
+
+	const isInterrupted = dispatch.status === "INTERROMPIDA";
+	if (isInterrupted && dispatch.origem === "EVENTO") {
+		// Mensagem de evento (pós-compra, aniversário) enviada dias depois perde o sentido.
+		throw new createHttpError.BadRequest("Disparos por evento interrompidos não são retomados: a mensagem perderia o momento do gatilho.");
+	}
+	// Retomar é o usuário dizendo "resolvi": o bloqueio do número que causou a interrupção cai. Se a
+	// Meta ainda recusar, o primeiro envio interrompe de novo.
+	if (isInterrupted && dispatch.interrupcao?.escopo === "NUMERO" && dispatch.campanha.whatsappConexaoTelefoneId) {
+		await clearWhatsappPhoneSendBlock({ phoneId: dispatch.campanha.whatsappConexaoTelefoneId });
+	}
 
 	// Disparo agendado que nunca chegou a expandir: volta para a expansão.
 	if (dispatch.origem !== "EVENTO" && dispatch.totalDestinatarios === 0) {
 		await db
 			.update(campaignDispatches)
-			.set({ status: "PENDENTE", erro: null, dataConclusao: null, dataAtualizacao: new Date() })
+			.set({ status: "PENDENTE", erro: null, motivoInterrupcao: null, interrupcao: null, dataConclusao: null, dataAtualizacao: new Date() })
 			.where(eq(campaignDispatches.id, dispatch.id));
 		await publishCampaignDispatchExpand({ dispatchId: dispatch.id, attempt: `retry-${Date.now()}` });
 		return { data: { dispatchId: dispatch.id, requeued: 0 }, message: "Disparo reenviado para expansão da audiência." };
 	}
 
 	const requeued = await db.transaction(async (tx) => {
-		const skipReasons = input.skipReasons ?? [];
+		const skipReasons: TCampaignDispatchSkipReasonEnum[] = [...(input.skipReasons ?? []), ...(isInterrupted ? (["ENVIO_INTERROMPIDO"] as const) : [])];
 		const rows = await tx
 			.update(campaignDispatchRecipients)
 			.set({ status: "AGUARDANDO", motivoPulo: null, erro: null, dataReserva: null })
@@ -130,9 +142,12 @@ async function retryCampaignDispatch({ input, session }: { input: TRetryCampaign
 		await tx
 			.update(campaignDispatches)
 			.set({
-				status: rows.length > 0 ? "ENFILEIRADA" : dispatch.status,
+				// Interrompido volta à fila mesmo sem linhas a reenfileirar: o envio finaliza o disparo.
+				status: rows.length > 0 || isInterrupted ? "ENFILEIRADA" : dispatch.status,
 				erro: null,
-				dataConclusao: rows.length > 0 ? null : dispatch.dataConclusao,
+				motivoInterrupcao: null,
+				interrupcao: null,
+				dataConclusao: rows.length > 0 || isInterrupted ? null : dispatch.dataConclusao,
 				totalFalhados: Number(totals?.falhados ?? 0),
 				totalPulados: Number(totals?.pulados ?? 0),
 				dataAtualizacao: new Date(),
@@ -141,7 +156,7 @@ async function retryCampaignDispatch({ input, session }: { input: TRetryCampaign
 		return rows.length;
 	});
 
-	if (requeued === 0 && (dispatch.status === "ENFILEIRADA" || dispatch.status === "ENVIANDO" || dispatch.status === "PENDENTE")) {
+	if (requeued === 0 && (dispatch.status === "ENFILEIRADA" || dispatch.status === "ENVIANDO" || dispatch.status === "PENDENTE" || isInterrupted)) {
 		// Disparo parado sem destinatários a reenfileirar: só republica o envio.
 		await publishCampaignDispatchSend({ dispatchId: dispatch.id, generation: `retry-${Date.now()}` });
 		return { data: { dispatchId: dispatch.id, requeued: 0 }, message: "Envio do disparo republicado." };

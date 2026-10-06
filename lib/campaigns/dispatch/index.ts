@@ -3,6 +3,8 @@ export * from "./clock";
 export * from "./create";
 export * from "./deliver";
 export * from "./expand";
+export * from "./interruption";
+export * from "./interruption-policy";
 export * from "./queue";
 export * from "./schedule";
 export * from "./send";

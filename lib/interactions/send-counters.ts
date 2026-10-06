@@ -125,6 +125,8 @@ export function getSendQuotaSkipReasonMessage(reason: TCampaignDispatchSkipReaso
 			return "Cliente já recebeu esta campanha dentro do intervalo configurado.";
 		case "CAMPANHA_INATIVA":
 			return "Campanha pausada antes do envio.";
+		case "ENVIO_INTERROMPIDO":
+			return "Envio interrompido por um erro da Meta que afetaria todos os destinatários.";
 	}
 }
 

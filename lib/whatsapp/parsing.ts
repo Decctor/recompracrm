@@ -1,6 +1,6 @@
 import { STICKER_MIME_TYPE } from "@/lib/chats/sticker";
 import type { TWhatsappReferral } from "@/schemas/chats";
-import type { TChatMessageContentTypeEnum } from "@/schemas/enums";
+import type { TChatMessageContentTypeEnum, TWhatsappPricingCategoryEnum, TWhatsappPricingTypeEnum } from "@/schemas/enums";
 import { formatWhatsappIdAsPhone } from "./utils";
 
 type WhatsAppMessageStatus = "pending" | "sent" | "delivered" | "read" | "failed";
@@ -54,6 +54,19 @@ type ParsedStatusUpdate = {
 	timestamp: number;
 	errorMessage?: string;
 	errors?: ParsedWhatsappStatusError[];
+	pricing?: ParsedWhatsappPricing | null;
+};
+
+// Objeto `pricing` dos webhooks de status, já no vocabulário do app (é gravado nos metadados da
+// interação como `cobrancaWhatsapp`). A Meta cobra a mensagem cobrável quando ela é entregue: a
+// cobrança efetiva é `cobravel && statusEnvio ∈ {ENTREGUE, LIDO}`, derivada na leitura.
+export type ParsedWhatsappPricing = {
+	cobravel: boolean;
+	modelo: string | null;
+	categoria: TWhatsappPricingCategoryEnum;
+	categoriaBruta: string | null;
+	tipo: TWhatsappPricingTypeEnum;
+	tipoBruto: string | null;
 };
 
 export type ParsedWhatsappStatusError = {
@@ -162,6 +175,62 @@ function collectWebhookValues(webhookPayload: unknown, options?: { field?: strin
 	return values;
 }
 
+const WHATSAPP_PRICING_CATEGORY_MAP: Record<string, TWhatsappPricingCategoryEnum> = {
+	marketing: "MARKETING",
+	marketing_lite: "MARKETING",
+	utility: "UTILIDADE",
+	authentication: "AUTENTICACAO",
+	authentication_international: "AUTENTICACAO_INTERNACIONAL",
+	service: "SERVICO",
+};
+
+const WHATSAPP_PRICING_TYPE_MAP: Record<string, TWhatsappPricingTypeEnum> = {
+	regular: "REGULAR",
+	free_customer_service: "GRATUITA_ATENDIMENTO",
+	free_entry_point: "GRATUITA_PONTO_ENTRADA",
+};
+
+export function parseWhatsappStatusPricing(status: Record<string, unknown>): ParsedWhatsappPricing | null {
+	const pricing = status.pricing;
+	if (!pricing || typeof pricing !== "object" || Array.isArray(pricing)) return null;
+	const record = pricing as Record<string, unknown>;
+	if (typeof record.billable !== "boolean") return null;
+
+	const rawCategory = typeof record.category === "string" ? record.category : null;
+	const rawType = typeof record.type === "string" ? record.type : null;
+	return {
+		cobravel: record.billable,
+		modelo: typeof record.pricing_model === "string" ? record.pricing_model : null,
+		categoria: (rawCategory && WHATSAPP_PRICING_CATEGORY_MAP[rawCategory.toLowerCase()]) || "OUTRA",
+		categoriaBruta: rawCategory,
+		// Sem `type` (modelo antigo por conversa), a mensagem cobrável é a regular.
+		tipo: rawType ? WHATSAPP_PRICING_TYPE_MAP[rawType.toLowerCase()] || "OUTRA" : "REGULAR",
+		tipoBruto: rawType,
+	};
+}
+
+/**
+ * Erro síncrono da Graph API (corpo `{ error: { code, message, error_user_title, error_data } }`)
+ * no mesmo formato dos erros de status do webhook — para que envio e webhook classifiquem igual.
+ */
+export function parseWhatsappApiErrorBody(body: unknown): ParsedWhatsappStatusError | null {
+	if (!body || typeof body !== "object" || Array.isArray(body)) return null;
+	const error = (body as Record<string, unknown>).error;
+	if (!error || typeof error !== "object" || Array.isArray(error)) return null;
+	const record = error as Record<string, unknown>;
+	const errorData =
+		record.error_data && typeof record.error_data === "object" && !Array.isArray(record.error_data)
+			? (record.error_data as Record<string, unknown>)
+			: null;
+	const parsed: ParsedWhatsappStatusError = {
+		code: typeof record.code === "number" ? record.code : undefined,
+		title: typeof record.error_user_title === "string" ? record.error_user_title : typeof record.type === "string" ? record.type : undefined,
+		message: typeof record.message === "string" ? record.message : undefined,
+		details: typeof errorData?.details === "string" ? errorData.details : typeof record.error_user_msg === "string" ? record.error_user_msg : undefined,
+	};
+	return parsed.code != null || parsed.message ? parsed : null;
+}
+
 function parseSingleStatus(status: Record<string, unknown>): ParsedStatusUpdate | null {
 	if (!status?.id) return null;
 	const errors = parseStatusErrors(status);
@@ -171,6 +240,7 @@ function parseSingleStatus(status: Record<string, unknown>): ParsedStatusUpdate 
 		timestamp: status.timestamp ? Number.parseInt(status.timestamp as string) * 1000 : Date.now(),
 		errorMessage: getWhatsappStatusErrorMessage(errors),
 		errors,
+		pricing: parseWhatsappStatusPricing(status),
 	};
 }
 

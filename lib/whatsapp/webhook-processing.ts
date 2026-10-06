@@ -1,4 +1,5 @@
 import { ensureOrganizationAgent } from "@/lib/ai/agent/provisioning";
+import { handleWhatsappDeliveryConfirmed, handleWhatsappStatusFailure } from "@/lib/campaigns/dispatch/interruption";
 import { captureSurveyReplySafely } from "@/lib/campaigns/surveys/capture";
 import { resolveAiResponseDelayMs } from "@/lib/chats/ai-trigger";
 import { dispatchAiTurn } from "@/lib/chats/ai-turn-dispatch";
@@ -362,12 +363,36 @@ async function handleStatusUpdate(statusUpdate: ReturnType<typeof parseWebhookSt
 	}
 
 	// Interações de campanha: mesmo ponto de aplicação do gateway interno (quota inclusa).
-	await applyProviderStatusUpdate({
+	const interactionUpdate = await applyProviderStatusUpdate({
 		whatsappMessageId: statusUpdate.whatsappMessageId,
 		status: statusUpdate.status,
 		errorMessage: statusUpdate.errorMessage,
-		metadataPatch: statusUpdate.errors && statusUpdate.errors.length > 0 ? { whatsappErrors: statusUpdate.errors } : undefined,
+		metadataPatch: {
+			...(statusUpdate.errors && statusUpdate.errors.length > 0 ? { whatsappErrors: statusUpdate.errors } : {}),
+			...(statusUpdate.pricing ? { cobrancaWhatsapp: { ...statusUpdate.pricing, atualizadoEm: new Date(statusUpdate.timestamp).toISOString() } } : {}),
+		},
 	});
+
+	// Interrupção de disparos: erro que se repetiria para todos bloqueia o número/interrompe o
+	// disparo; entrega confirmada depois de um bloqueio de número o desfaz.
+	try {
+		if (statusUpdate.status === "failed") {
+			await handleWhatsappStatusFailure({
+				whatsappPhoneNumberId: statusUpdate.whatsappPhoneNumberId,
+				errors: statusUpdate.errors,
+				interactionId: interactionUpdate?.interactionId,
+			});
+		} else if (statusUpdate.status === "delivered" || statusUpdate.status === "read") {
+			await handleWhatsappDeliveryConfirmed({
+				whatsappPhoneNumberId: statusUpdate.whatsappPhoneNumberId,
+				whatsappMessageId: statusUpdate.whatsappMessageId,
+				interactionId: interactionUpdate?.interactionId,
+				billable: statusUpdate.pricing?.cobravel ?? null,
+			});
+		}
+	} catch (error) {
+		console.error("[WHATSAPP_WEBHOOK] Falha ao avaliar interrupção de disparos:", { whatsappMessageId: statusUpdate.whatsappMessageId, error });
+	}
 	console.log("[WHATSAPP_WEBHOOK] Status updated for message:", statusUpdate.whatsappMessageId);
 }
 
@@ -529,7 +554,14 @@ async function handleIncomingMessage(incomingMessage: ReturnType<typeof parseWeb
 		...(midiaTipo === "FIGURINHA" ? { whatsappMidia: { animated: incomingMessage.stickerAnimated ?? false } } : {}),
 		...(incomingMessage.button ? { whatsappButton: incomingMessage.button } : {}),
 		...(surveyReply.captured
-			? { pesquisaResposta: { campanhaId: surveyReply.campanhaId, campoId: surveyReply.campoId, opcaoValor: surveyReply.opcaoValor, opcaoTitulo: surveyReply.opcaoTitulo } }
+			? {
+					pesquisaResposta: {
+						campanhaId: surveyReply.campanhaId,
+						campoId: surveyReply.campoId,
+						opcaoValor: surveyReply.opcaoValor,
+						opcaoTitulo: surveyReply.opcaoTitulo,
+					},
+				}
 			: {}),
 		...(incomingMessage.unsupported ? { whatsappUnsupported: incomingMessage.unsupported } : {}),
 		...(incomingMessage.location ? { whatsappLocation: incomingMessage.location } : {}),
