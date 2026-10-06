@@ -3,6 +3,7 @@ import type { TGetSaleForEditOutput } from "@/app/api/pos/sales/edit/route";
 import type { TGetSaleDraftOutput } from "@/app/api/pos/sales/route";
 import type { TGetPOSGroupsOutput } from "@/app/api/pos/groups/route";
 import type { TGetPOSProductsInput, TGetPOSProductsOutput } from "@/app/api/pos/products/route";
+import type { TGetPOSProductByBarcodeOutput } from "@/app/api/pos/products/barcode/route";
 import type { TGetPOSTopProductsOutput } from "@/app/api/pos/top-products/route";
 import type { TGetCrossSellOutput } from "@/app/api/pos/cross-sell/route";
 import type { TGetPOSFinancialAccountsOutput } from "@/app/api/pos/financial-accounts/route";
@@ -200,4 +201,22 @@ export function usePOSFinancialAccounts() {
 		}),
 		queryKey,
 	};
+}
+
+// ============================================================================
+// Leitura de código de barras — resolve o código lido para o item do catálogo
+// ============================================================================
+
+export type TPOSBarcodeMatch = TGetPOSProductByBarcodeOutput["data"]["matches"][number];
+
+/**
+ * Busca imperativa (disparada pela leitura, não por render), por isso não é um hook: o chamador
+ * decide o que fazer com zero, um ou vários matches.
+ */
+export async function fetchPOSProductByBarcode({ code, channel }: { code: string; channel: "POS" | "COMANDA" }, signal?: AbortSignal) {
+	const searchParams = new URLSearchParams();
+	searchParams.set("code", code);
+	searchParams.set("channel", channel);
+	const { data } = await axios.get<TGetPOSProductByBarcodeOutput>(`/api/pos/products/barcode?${searchParams.toString()}`, { signal });
+	return data.data;
 }

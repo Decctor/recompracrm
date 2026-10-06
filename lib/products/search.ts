@@ -11,17 +11,22 @@ function normalized(column: PgColumn | SQL) {
 	return sql`unaccent_immutable(lower(${column}))`;
 }
 
-export function buildProductSearch(terms: readonly string[], columns: { nome: PgColumn | SQL; codigo: PgColumn | SQL }) {
+export function buildProductSearch(terms: readonly string[], columns: { nome: PgColumn | SQL; codigo: PgColumn | SQL; codigoBarras?: PgColumn | SQL }) {
 	const name = normalized(columns.nome);
 	const code = normalized(columns.codigo);
+	// Código de barras digitado (leitor falhou, operador lê os dígitos da etiqueta): só igualdade
+	// exata — um GTIN parcial não identifica nada e só poluiria a relevância.
+	const barcode = columns.codigoBarras ? sql`coalesce(${columns.codigoBarras}, '')` : null;
 	const matches: SQL[] = [];
 	const scores: SQL[] = [];
 	for (const term of terms) {
 		const value = sql`unaccent_immutable(lower(${term}))`;
 		// Escape LIKE metacharacters: a typed '%' or '_' is literal, never a wildcard.
 		const pattern = sql`unaccent_immutable(lower(${`%${term.replace(/[\\%_]/g, "\\$&")}%`}))`;
-		const exact = sql`(${name} = ${value} OR ${code} = ${value})`;
-		const partial = sql`(${name} LIKE ${pattern} OR ${code} LIKE ${pattern})`;
+		const exact = barcode ? sql`(${name} = ${value} OR ${code} = ${value} OR ${barcode} = ${term.trim()})` : sql`(${name} = ${value} OR ${code} = ${value})`;
+		const partial = barcode
+			? sql`(${name} LIKE ${pattern} OR ${code} LIKE ${pattern} OR ${barcode} = ${term.trim()})`
+			: sql`(${name} LIKE ${pattern} OR ${code} LIKE ${pattern})`;
 		const fuzzy = supportsFuzzyProductSearch(term);
 		matches.push(fuzzy ? sql`(${partial} OR ${name} %> ${value})` : partial);
 		scores.push(sql`CASE WHEN ${exact} THEN 3 WHEN ${partial} THEN 2 ELSE ${fuzzy ? sql`word_similarity(${value}, ${name})` : sql`0`} END`);

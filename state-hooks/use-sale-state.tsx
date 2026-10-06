@@ -279,6 +279,34 @@ export const useSaleState = ({ initialState, organizationConfig, contasFinanceir
 		setState((prev) => ({ ...prev, itens: [...prev.itens, item] }));
 	}, []);
 
+	// Leitura de código de barras: bipar o mesmo item três vezes é quantidade 3, não três linhas.
+	// Só funde com uma linha "pura" (mesmo produto/variante, sem adicionais, sem observação, sem
+	// recompensa e mesmo preço unitário); qualquer diferença vira linha nova, como no clique.
+	const addItemOrIncrement = useCallback((item: TCartItem) => {
+		setState((prev) => {
+			const isPlain = (candidate: TCartItem) => candidate.modificadores.length === 0 && !candidate.observacoes?.trim() && !candidate.recompensaId;
+			const existing = isPlain(item)
+				? prev.itens.find(
+						(candidate) =>
+							isPlain(candidate) &&
+							candidate.produtoId === item.produtoId &&
+							(candidate.produtoVarianteId ?? null) === (item.produtoVarianteId ?? null) &&
+							candidate.valorUnitarioFinal === item.valorUnitarioFinal,
+					)
+				: undefined;
+			if (!existing) return { ...prev, itens: [...prev.itens, item] };
+			const quantidade = existing.quantidade + item.quantidade;
+			const valorTotalBruto = existing.valorUnitarioFinal * quantidade;
+			const valorDesconto = Math.min(existing.valorDesconto, valorTotalBruto);
+			return {
+				...prev,
+				itens: prev.itens.map((candidate) =>
+					candidate.tempId === existing.tempId ? { ...candidate, quantidade, valorTotalBruto, valorDesconto, valorTotalLiquido: valorTotalBruto - valorDesconto } : candidate,
+				),
+			};
+		});
+	}, []);
+
 	const updateItemQuantity = useCallback((tempId: string, quantidade: number) => {
 		if (quantidade < 1) return;
 		setState((prev) => ({
@@ -666,6 +694,7 @@ export const useSaleState = ({ initialState, organizationConfig, contasFinanceir
 		clearCliente,
 		setVendedor,
 		addItem,
+		addItemOrIncrement,
 		updateItemQuantity,
 		updateItemObservacoes,
 		removeItem,
