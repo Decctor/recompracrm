@@ -65,6 +65,7 @@ function mapReceiver(snapshot: TFiscalSaleContext["destinatarioSnapshot"], isHom
 		| undefined;
 	const nomeReal = sanitizeNfeText(typeof snapshot.nome === "string" ? snapshot.nome : undefined, 60);
 	const addressNumber = address ? resolveReceiverAddressNumber({ numero: address.numero, complemento: address.complemento }) : null;
+	const street = sanitizeNfeText(address?.logradouro, 60);
 
 	return {
 		name: isHomologacao ? NOME_DESTINATARIO_HOMOLOGACAO : nomeReal,
@@ -76,10 +77,12 @@ function mapReceiver(snapshot: TFiscalSaleContext["destinatarioSnapshot"], isHom
 		// caractere fora do Latin-1, entao passa pelo mesmo saneamento do nome.
 		address: address
 			? {
-					street: sanitizeNfeText(address.logradouro, 60),
+					street,
 					district: sanitizeNfeText(address.bairro, 60),
 					postalCode: onlyDigits(address.cep ?? undefined),
-					number: addressNumber?.number,
+					// nro e obrigatorio no enderDest: com rua e sem numero o XML falha no schema (SPD003,
+					// "expected: 'nro'"). So aparece quando a Spedy monta o enderDest (destinatario com CPF).
+					number: addressNumber?.number ?? (street ? "S/N" : undefined),
 					additionalInformation: addressNumber?.additionalInformation,
 					city: {
 						name: sanitizeNfeText(address.cidade, 60),

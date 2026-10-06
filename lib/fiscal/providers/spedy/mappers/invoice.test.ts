@@ -537,6 +537,25 @@ test("numero de endereco em texto livre cabe nos 10 caracteres da Spedy (HTTP 40
 	assert.equal(payload.receiver.address?.additionalInformation, "Apto 501 - Com 3 e 5 número 491");
 });
 
+test("endereco com rua e sem numero sai com S/N (SPD003: enderDest sem nro)", () => {
+	// Regressao da NFC-e 4064 da Congelatte: destinatario com CPF, rua sem numero cadastrado.
+	const context = buildDeliveryContext({
+		presencaConsumidor: "ENTREGA_DOMICILIO",
+		destinatarioSnapshot: {
+			nome: "Luany",
+			cpfCnpj: "09908909614",
+			endereco: { cep: "38300-078", estado: "MG", cidade: "ITUIUTABA", bairro: "Centro", logradouro: "Rua colina", numero: null, complemento: null },
+		},
+	});
+
+	const payload = mapSaleContextToSpedyInvoicePayload(context, DELIVERY_DOCUMENT) as {
+		receiver: { address?: { number?: string; street?: string } };
+	};
+
+	assert.equal(payload.receiver.address?.street, "Rua colina");
+	assert.equal(payload.receiver.address?.number, "S/N");
+});
+
 test("resolveReceiverAddressNumber preserva numero curto e trata texto sem digitos", () => {
 	assert.deepEqual(resolveReceiverAddressNumber({ numero: " 1534 ", complemento: "Casa 2 " }), {
 		number: "1534",
