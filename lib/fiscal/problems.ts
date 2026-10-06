@@ -134,6 +134,15 @@ export const FISCAL_PROBLEM_SPECS = {
 		reenviavel: true,
 		resolvidoAutomaticamente: false,
 	},
+	PAGAMENTOS_EXCEDENTES: {
+		codigo: "PAGAMENTOS_EXCEDENTES",
+		origem: "PRONTIDAO",
+		categoria: "TRIBUTARIO",
+		acaoSugerida: "Revise acréscimos e pagamentos da venda: a soma dos pagamentos não pode passar do total da nota.",
+		alvo: "PAGAMENTOS",
+		reenviavel: true,
+		resolvidoAutomaticamente: false,
+	},
 	VENDA_SEM_LANCAMENTO: {
 		codigo: "VENDA_SEM_LANCAMENTO",
 		origem: "PRONTIDAO",
@@ -299,6 +308,7 @@ const MESSAGE_PATTERNS: MessagePattern[] = [
 	},
 	{ pattern: /CPF ou CNPJ v[aá]lido para o destinat[aá]rio/i, code: "CLIENTE_SEM_DOCUMENTO" },
 	{ pattern: /certificado/i, code: "CERTIFICADO_INVALIDO" },
+	{ pattern: /soma dos pagamentos e maior/i, code: "PAGAMENTOS_EXCEDENTES" },
 	{ pattern: /soma dos pagamentos/i, code: "PAGAMENTOS_INSUFICIENTES" },
 	{ pattern: /Lan[cç]amento cont[aá]bil da venda/i, code: "VENDA_SEM_LANCAMENTO" },
 	{ pattern: /ja esta sendo processado por outro envio/i, code: "ENVIO_CONCORRENTE" },

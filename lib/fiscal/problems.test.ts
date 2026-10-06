@@ -36,6 +36,10 @@ test("mensagens de prontidao sao classificadas por padrao", () => {
 	assert.equal(classifyFiscalErrorMessage("Empresa fiscal nao sincronizada com a Spedy.")[0].alvo.tipo, "EMPRESA_PROVEDOR");
 	assert.equal(classifyFiscalErrorMessage("CSC da NFC-e nao configurado.")[0].alvo.tipo, "CONFIGURACAO_FISCAL");
 	assert.equal(classifyFiscalErrorMessage("A soma dos pagamentos e menor que o valor total da venda.")[0].alvo.tipo, "PAGAMENTOS");
+	assert.equal(
+		classifyFiscalErrorMessage("A soma dos pagamentos e maior que o total do documento fiscal (vNF). A SEFAZ rejeitaria a nota (866).")[0].codigo,
+		"PAGAMENTOS_EXCEDENTES",
+	);
 	const infra = classifyFiscalErrorMessage("Falha ao emitir. Servico da Spedy indisponivel no momento.")[0];
 	assert.equal(infra.codigo, "PROVEDOR_INDISPONIVEL");
 	assert.equal(infra.resolvidoAutomaticamente, true);

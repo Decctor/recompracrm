@@ -13,6 +13,7 @@ import {
 } from "./engine";
 import { allocateFiscalFreight } from "./freight-allocation";
 import { allocateFiscalHeaderDiscount, resolveFiscalHeaderDiscount } from "./header-discount";
+import { resolveFiscalOtherCharges } from "./other-charges";
 import { resolveFiscalShopDeliveryFee } from "@/lib/shop/config";
 import type { TFiscalSaleContext } from "./types";
 
@@ -82,6 +83,8 @@ export type TSaleItemTaxation = {
 	item: TFiscalSaleContext["venda"]["itens"][number];
 	result: TItemTaxResult;
 	valorFrete: number;
+	// Parcela do acrescimo nao-frete (vOutro) rateada no item.
+	valorOutros: number;
 	// Desconto fiscal efetivo do item: o desconto do proprio item + a fatia rateada do desconto
 	// de cabecalho da venda. E este valor (nao item.valorTotalDesconto) que os mappers devem emitir.
 	valorDesconto: number;
@@ -134,6 +137,20 @@ export function computeSaleTaxation(context: TFiscalSaleContext): TSaleTaxation 
 			});
 	const headerDiscountByItem = allocateFiscalHeaderDiscount({ valorDesconto: headerDiscount, itens: discountableItems });
 
+	// Acrescimo geral (nao frete) como vOutro, rateado como o frete: sem isso a nota sai pelos itens
+	// e os pagamentos (com o acrescimo) passam do vNF — rejeicao 866. Canal gerenciado fica fora
+	// pelo mesmo motivo do desconto de cabecalho.
+	const vOutro = integracaoMetadados
+		? 0
+		: resolveFiscalOtherCharges({
+				itens: discountableItems,
+				valorTotal: context.venda.valorTotal,
+				acrescimosTotal: context.venda.acrescimosTotal,
+				valorFrete: vFreteLoja,
+				valorDescontoCabecalho: headerDiscount,
+			});
+	const otherChargesByItem = allocateFiscalFreight({ valorFrete: vOutro, itens: discountableItems });
+
 	const itens = context.venda.itens.map((item, index) => {
 		const valorDesconto = item.valorTotalDesconto + headerDiscountByItem[index];
 		const perfil = context.perfisProdutos.find((profile) => profile.produtoId === item.produtoId);
@@ -163,7 +180,7 @@ export function computeSaleTaxation(context: TFiscalSaleContext): TSaleTaxation 
 		const vTotTrib = computeVTotTrib({
 			rate: ibptRate,
 			origem: origemMercadoria,
-			baseValue: item.valorVendaTotalBruto - valorDesconto + freightByItem[index],
+			baseValue: item.valorVendaTotalBruto - valorDesconto + freightByItem[index] + otherChargesByItem[index],
 		});
 
 		const result = computeItemTaxation({
@@ -178,16 +195,17 @@ export function computeSaleTaxation(context: TFiscalSaleContext): TSaleTaxation 
 				valorBruto: item.valorVendaTotalBruto,
 				valorDesconto,
 				valorFrete: freightByItem[index],
+				valorOutros: otherChargesByItem[index],
 			},
 			vTotTrib,
 		});
 
-		return { item, result, valorFrete: freightByItem[index], valorDesconto };
+		return { item, result, valorFrete: freightByItem[index], valorOutros: otherChargesByItem[index], valorDesconto };
 	});
 
 	const totais = computeDocumentTotals(
 		itens.map(({ result, item, valorDesconto }) => ({ result, valorBruto: item.valorVendaTotalBruto, valorDesconto })),
-		{ vFrete },
+		{ vFrete, vOutro },
 	);
 	const erros = [...extraErrors, ...aggregateItemErrors(itens.map(({ result }) => result))];
 

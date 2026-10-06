@@ -28,6 +28,28 @@ import {
  */
 const NOME_DESTINATARIO_HOMOLOGACAO = "NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL";
 
+// A Spedy recusa o payload inteiro (HTTP 400, Receiver.Address.Number) quando o numero passa de
+// 10 caracteres — limite dela, mais curto que o nro do XSD.
+const SPEDY_ADDRESS_NUMBER_MAX_LENGTH = 10;
+
+/**
+ * Cliente digita texto livre no campo numero ("Numero 491 residencial harmonia"). O numero de
+ * verdade e a maior sequencia de digitos (nao a primeira: em "Com 3 e 5 numero 491" e o 491); sem
+ * digitos, "S/N". O texto original segue no complemento para a entrega nao perder a referencia.
+ */
+export function resolveReceiverAddressNumber({ numero, complemento }: { numero?: string | null; complemento?: string | null }) {
+	const number = sanitizeNfeText(numero);
+	if (!number || number.length <= SPEDY_ADDRESS_NUMBER_MAX_LENGTH) {
+		return { number, additionalInformation: sanitizeNfeText(complemento, 60) };
+	}
+	const digitRuns = number.match(/\d+/g) ?? [];
+	const longestRun = digitRuns.reduce<string | null>((best, run) => (!best || run.length > best.length ? run : best), null);
+	return {
+		number: longestRun ? longestRun.slice(0, SPEDY_ADDRESS_NUMBER_MAX_LENGTH) : "S/N",
+		additionalInformation: sanitizeNfeText([sanitizeNfeText(complemento), number].filter(Boolean).join(" - "), 60),
+	};
+}
+
 function mapReceiver(snapshot: TFiscalSaleContext["destinatarioSnapshot"], isHomologacao: boolean) {
 	if (!snapshot) return undefined;
 	const address = snapshot.endereco as
@@ -42,6 +64,7 @@ function mapReceiver(snapshot: TFiscalSaleContext["destinatarioSnapshot"], isHom
 		  }
 		| undefined;
 	const nomeReal = sanitizeNfeText(typeof snapshot.nome === "string" ? snapshot.nome : undefined, 60);
+	const addressNumber = address ? resolveReceiverAddressNumber({ numero: address.numero, complemento: address.complemento }) : null;
 
 	return {
 		name: isHomologacao ? NOME_DESTINATARIO_HOMOLOGACAO : nomeReal,
@@ -56,8 +79,8 @@ function mapReceiver(snapshot: TFiscalSaleContext["destinatarioSnapshot"], isHom
 					street: sanitizeNfeText(address.logradouro, 60),
 					district: sanitizeNfeText(address.bairro, 60),
 					postalCode: onlyDigits(address.cep ?? undefined),
-					number: sanitizeNfeText(address.numero, 60),
-					additionalInformation: sanitizeNfeText(address.complemento, 60),
+					number: addressNumber?.number,
+					additionalInformation: addressNumber?.additionalInformation,
 					city: {
 						name: sanitizeNfeText(address.cidade, 60),
 						state: address.estado?.toLowerCase(),
@@ -113,7 +136,7 @@ export function mapSaleContextToSpedyInvoicePayload(context: TFiscalSaleContext,
 		environmentType: ambienteSpedy,
 		receiver: mapReceiver(context.destinatarioSnapshot, ambienteSpedy === "development"),
 		transport: buildSpedyTransport({ presenceType, fiscalConfiguracao: context.organizacao.fiscalConfiguracao }),
-		items: taxation.itens.map(({ item, result, valorFrete, valorDesconto }, index) => {
+		items: taxation.itens.map(({ item, result, valorFrete, valorOutros, valorDesconto }, index) => {
 			const perfil = context.perfisProdutos.find((profile) => profile.produtoId === item.produtoId);
 			return {
 				code: item.produtoId,
@@ -133,6 +156,8 @@ export function mapSaleContextToSpedyInvoicePayload(context: TFiscalSaleContext,
 				// dos totais, senao a soma dos itens nao fecha com o total da nota.
 				discountAmount: valorDesconto > 0 ? valorDesconto : undefined,
 				freightAmount: valorFrete > 0 ? valorFrete : undefined,
+				// vOutro do item: a soma tem que casar com o othersAmount dos totais.
+				othersAmount: valorOutros > 0 ? valorOutros : undefined,
 				makeupTotal: true,
 				taxBenefitCode: perfil?.codigoBeneficioFiscal ?? undefined,
 				taxes: buildSpedyItemTaxes(result),
@@ -153,7 +178,7 @@ export function mapSaleContextToSpedyInvoicePayload(context: TFiscalSaleContext,
 			fcpStAmount: taxation.totais.vFCPST,
 			freightAmount: taxation.totais.vFrete,
 			insuranceAmount: 0,
-			othersAmount: 0,
+			othersAmount: taxation.totais.vOutro,
 			ipiAmount: 0,
 			importTaxAmount: 0,
 			icmsExemptAmount: 0,

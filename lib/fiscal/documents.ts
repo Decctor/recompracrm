@@ -729,6 +729,15 @@ function assertFiscalTaxationValid(context: TFiscalSaleContext) {
 				{ id: context.venda.id },
 			);
 		}
+		// Simetrico: os pagamentos ja chegam liquidos do troco, entao sobra acima do vNF e um valor
+		// da venda que nao entrou na nota. A Spedy nao expoe vTroco — a SEFAZ rejeitaria (866).
+		if (paymentTotal - 0.01 > taxation.totais.vNF) {
+			throw readinessError(
+				"A soma dos pagamentos e maior que o total do documento fiscal (vNF). A SEFAZ rejeitaria a nota (866); confira acrescimos e pagamentos da venda.",
+				"PAGAMENTOS_EXCEDENTES",
+				{ id: context.venda.id },
+			);
+		}
 	}
 }
 

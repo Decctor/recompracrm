@@ -52,6 +52,7 @@ export type TFiscalItemInput = {
 	valorBruto: number; // valor total bruto do item (sem desconto)
 	valorDesconto: number;
 	valorFrete?: number; // parcela do frete alocada ao item
+	valorOutros?: number; // parcela do acrescimo (nao frete) alocada ao item — vOutro
 };
 
 export type TFiscalValidationSeverity = "ERRO" | "AVISO";
@@ -106,5 +107,7 @@ export type TDocumentTaxTotals = {
 	vTotTrib: number;
 	/** Frete cobrado do destinatário (entrega própria de canal gerenciado). Compõe o vNF. */
 	vFrete: number;
+	/** Acréscimo da venda que não é frete (ex.: acréscimo geral do PDV). Compõe o vNF. */
+	vOutro: number;
 	vNF: number;
 };

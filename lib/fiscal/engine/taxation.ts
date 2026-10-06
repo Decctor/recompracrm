@@ -189,9 +189,9 @@ export type TComputeItemTaxationInput = {
 
 export function computeItemTaxation({ scenario, item, group, vTotTrib }: TComputeItemTaxationInput): TItemTaxResult {
 	const erros: TFiscalValidationError[] = [];
-	// Frete cobrado do destinatario compoe a base tributavel do item. O rateio e feito antes desta
-	// etapa para manter bases, itens e totais do documento coerentes.
-	const baseLiquida = round2(item.valorBruto - item.valorDesconto + (item.valorFrete ?? 0));
+	// Frete e outras despesas (vOutro) cobrados do destinatario compoem a base tributavel do item.
+	// O rateio e feito antes desta etapa para manter bases, itens e totais do documento coerentes.
+	const baseLiquida = round2(item.valorBruto - item.valorDesconto + (item.valorFrete ?? 0) + (item.valorOutros ?? 0));
 	const origemCodigo = mapOrigemToCodigo(item.origemMercadoria);
 
 	const config = resolveEffectiveTaxConfig(group, scenario);
@@ -247,7 +247,7 @@ export function computeItemTaxation({ scenario, item, group, vTotTrib }: TComput
 
 export function computeDocumentTotals(
 	items: { result: TItemTaxResult; valorBruto: number; valorDesconto: number }[],
-	extras?: { vFrete?: number },
+	extras?: { vFrete?: number; vOutro?: number },
 ): TDocumentTaxTotals {
 	const totals: TDocumentTaxTotals = {
 		vBC: 0,
@@ -262,6 +262,7 @@ export function computeDocumentTotals(
 		vCOFINS: 0,
 		vTotTrib: 0,
 		vFrete: 0,
+		vOutro: 0,
 		vNF: 0,
 	};
 
@@ -291,8 +292,9 @@ export function computeDocumentTotals(
 	totals.vCOFINS = round2(totals.vCOFINS);
 	totals.vTotTrib = round2(totals.vTotTrib);
 	totals.vFrete = round2(extras?.vFrete ?? 0);
-	// vNF = produtos - desconto + frete + ST + FCP-ST (regra W16 / NT 2016.002; seguro/outros fora de escopo)
-	totals.vNF = round2(totals.vProd - totals.vDesc + totals.vFrete + totals.vST + totals.vFCPST);
+	totals.vOutro = round2(extras?.vOutro ?? 0);
+	// vNF = produtos - desconto + frete + outros + ST + FCP-ST (regra W16 / NT 2016.002; seguro fora de escopo)
+	totals.vNF = round2(totals.vProd - totals.vDesc + totals.vFrete + totals.vOutro + totals.vST + totals.vFCPST);
 
 	return totals;
 }

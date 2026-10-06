@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { TFiscalSaleContext } from "@/lib/fiscal/types";
 import type { TFiscalDocument } from "@/services/drizzle/schema";
-import { mapSaleContextToSpedyInvoicePayload } from "./invoice";
+import { mapSaleContextToSpedyInvoicePayload, resolveReceiverAddressNumber } from "./invoice";
 
 test("envia o frete da loja nos itens e mantem pagamentos iguais ao total da NFC-e", () => {
 	const context = {
@@ -225,6 +225,121 @@ test("desconto geral da venda entra como vDesc e a nota fecha com os pagamentos 
 	);
 });
 
+test("acrescimo geral da venda entra como vOutro e a nota fecha com os pagamentos (rejeicao 866)", () => {
+	// Regressao das vendas da Congelatte de 03/10: o acrescimo geral do PDV nao chegava a nota,
+	// que saia pelos itens com um Pix maior que o total — rejeicao SEFAZ 866. Dois itens para
+	// conferir que o rateio do vOutro fecha centavo a centavo com o total.
+	const context = {
+		venda: {
+			integracaoMetadados: null,
+			rascunhoMetadados: {},
+			entregaModalidade: "PRESENCIAL",
+			valorTotal: 55,
+			descontosTotal: null,
+			acrescimosTotal: 10,
+			itens: [
+				{
+					produtoId: "gelato-80",
+					quantidade: 1,
+					valorVendaUnitario: 17,
+					valorVendaTotalBruto: 17,
+					valorTotalDesconto: 0,
+					metadados: { nome: "Gelato 80ml" },
+				},
+				{
+					produtoId: "gelato-180",
+					quantidade: 1,
+					valorVendaUnitario: 28,
+					valorVendaTotalBruto: 28,
+					valorTotalDesconto: 0,
+					metadados: { nome: "Gelato 180ml" },
+				},
+			],
+		},
+		organizacao: {
+			id: "org",
+			fiscalConfiguracao: {
+				ambiente: "PRODUCAO",
+				regimeTributario: 1,
+				endereco: { uf: "MG" },
+			},
+		},
+		serie: { serie: "3", proximoNumero: 3878 },
+		operacao: {
+			tipoDocumento: "NFCE",
+			finalidade: "NORMAL",
+			presencaConsumidor: "OPERACAO_PRESENCIAL",
+			consumidorFinal: true,
+			cfopPadrao: "5102",
+			naturezaOperacao: "Venda de mercadorias",
+		},
+		perfisProdutos: ["gelato-80", "gelato-180"].map((produtoId) => ({
+			produtoId,
+			grupoTributarioId: "grupo",
+			origemMercadoria: "NACIONAL",
+			ncm: "21050010",
+			cest: null,
+			cfopPadrao: "5102",
+			unidadeComercial: "UN",
+		})),
+		gruposTributarios: [
+			{
+				id: "grupo",
+				csosn: "102",
+				aliquotaIcms: 0,
+				percentualReducaoBc: 0,
+				modalidadeBc: 3,
+				percentualCreditoSn: null,
+				temSubstituicaoTributaria: false,
+				mvaSt: null,
+				aliquotaIcmsSt: null,
+				aliquotaInternaDestino: null,
+				percentualReducaoBcSt: null,
+				aliquotaFcp: 0,
+				aliquotaFcpSt: 0,
+				cstPis: "49",
+				aliquotaPis: 0,
+				cstCofins: "49",
+				aliquotaCofins: 0,
+				regras: [],
+			},
+		],
+		ibptRates: [],
+		destinatarioSnapshot: null,
+		pagamentos: [{ metodo: "PIX", valor: 55 }],
+	} as unknown as TFiscalSaleContext;
+	const document = {
+		tipo: "NFCE",
+		referencia: "VENDA:acrescimo-geral",
+		numero: "3878",
+		tentativasEnvio: 1,
+		chaveAcessoReferencia: null,
+	} as unknown as TFiscalDocument;
+
+	const payload = mapSaleContextToSpedyInvoicePayload(context, document) as {
+		items: { othersAmount?: number; freightAmount?: number }[];
+		total: { invoiceAmount: number; productAmount: number; othersAmount: number; freightAmount: number };
+		payments: { amount: number }[];
+	};
+
+	assert.deepEqual(
+		payload.items.map((item) => item.othersAmount ?? 0),
+		[3.78, 6.22],
+	);
+	assert.deepEqual(
+		payload.items.map((item) => item.freightAmount ?? 0),
+		[0, 0],
+	);
+	assert.equal(payload.total.productAmount, 45);
+	assert.equal(payload.total.othersAmount, 10);
+	assert.equal(payload.total.freightAmount, 0);
+	assert.equal(payload.total.invoiceAmount, 55);
+	assert.equal(
+		payload.payments.reduce((sum, payment) => sum + payment.amount, 0),
+		55,
+	);
+});
+
 // Contexto minimo de NFC-e da Congelatte, parametrizado pela presenca e pelo destinatario.
 function buildDeliveryContext({
 	presencaConsumidor,
@@ -393,4 +508,51 @@ test("endereco do destinatario sai sem espaco sobrando (falha de schema em xBair
 	assert.equal(payload.receiver.address?.district, "Alvorada");
 	assert.equal(payload.receiver.address?.additionalInformation, "Esquina com rua 19 de marco");
 	assert.equal(payload.receiver.address?.postalCode, "38300072");
+});
+
+test("numero de endereco em texto livre cabe nos 10 caracteres da Spedy (HTTP 400 Receiver.Address.Number)", () => {
+	// Regressao das NFC-e 4011 e 662 da Congelatte: a Spedy recusava o payload inteiro.
+	const context = buildDeliveryContext({
+		presencaConsumidor: "ENTREGA_DOMICILIO",
+		destinatarioSnapshot: {
+			nome: "Melina",
+			cpfCnpj: "09908909614",
+			endereco: {
+				cep: "38300-070",
+				estado: "MG",
+				cidade: "ITUIUTABA",
+				bairro: "Setor Norte",
+				logradouro: "Rua Dezesseis",
+				numero: "Com 3 e 5 número 491",
+				complemento: "Apto 501",
+			},
+		},
+	});
+
+	const payload = mapSaleContextToSpedyInvoicePayload(context, DELIVERY_DOCUMENT) as {
+		receiver: { address?: { number?: string; additionalInformation?: string } };
+	};
+
+	assert.equal(payload.receiver.address?.number, "491");
+	assert.equal(payload.receiver.address?.additionalInformation, "Apto 501 - Com 3 e 5 número 491");
+});
+
+test("resolveReceiverAddressNumber preserva numero curto e trata texto sem digitos", () => {
+	assert.deepEqual(resolveReceiverAddressNumber({ numero: " 1534 ", complemento: "Casa 2 " }), {
+		number: "1534",
+		additionalInformation: "Casa 2",
+	});
+	assert.deepEqual(resolveReceiverAddressNumber({ numero: "Número 491 residencial harmonia ", complemento: "Ap 501 " }), {
+		number: "491",
+		additionalInformation: "Ap 501 - Número 491 residencial harmonia",
+	});
+	assert.deepEqual(resolveReceiverAddressNumber({ numero: "sem numero, casa azul", complemento: null }), {
+		number: "S/N",
+		additionalInformation: "sem numero, casa azul",
+	});
+	assert.equal(
+		resolveReceiverAddressNumber({ numero: "Lote 12 quadra 4 condominio das palmeiras", complemento: "Bloco B apartamento 1203 torre norte" })
+			.additionalInformation?.length,
+		60,
+	);
 });
