@@ -440,6 +440,71 @@ export type TFiscalProviderEnum = z.infer<typeof FiscalProviderEnum>;
 export const PaymentProviderEnum = z.enum(["LOCAL", "MERCADO_PAGO", "STRIPE_CONNECT", "PAGARME"]);
 export type TPaymentProviderEnum = z.infer<typeof PaymentProviderEnum>;
 
+// ============================================================================
+// TENTATIVAS DE PAGAMENTO (terminal SmartPOS) — recompracrm-pos-android/docs/03 e 05.
+// Enum próprio de adquirente: `PaymentProviderEnum` acima descreve o gateway da organização; a
+// adquirente que executa a cobrança no terminal é outro conceito e não se mistura a ele.
+// ============================================================================
+
+export const PaymentAttemptStatusEnum = z.enum([
+	"CRIADA",
+	"PROCESSANDO",
+	"APROVADA_EFETIVACAO_PENDENTE",
+	"CONSUMIDA",
+	"NAO_APROVADA",
+	"RESULTADO_INCERTO",
+]);
+export type TPaymentAttemptStatusEnum = z.infer<typeof PaymentAttemptStatusEnum>;
+
+export const PaymentAttemptNotApprovedReasonEnum = z.enum(["RECUSADA", "CANCELADA", "FALHA"]);
+export type TPaymentAttemptNotApprovedReasonEnum = z.infer<typeof PaymentAttemptNotApprovedReasonEnum>;
+
+export const PaymentAttemptOperationEnum = z.enum(["COBRANCA", "CANCELAMENTO"]);
+export type TPaymentAttemptOperationEnum = z.infer<typeof PaymentAttemptOperationEnum>;
+
+export const PaymentAttemptProviderEnum = z.enum(["STONE"]);
+export type TPaymentAttemptProviderEnum = z.infer<typeof PaymentAttemptProviderEnum>;
+
+export const PaymentInstallmentPartyEnum = z.enum(["LOJISTA", "EMISSOR"]);
+export type TPaymentInstallmentPartyEnum = z.infer<typeof PaymentInstallmentPartyEnum>;
+
+// O que o terminal observou. Nunca é um status interno: o backend deriva a transição.
+export const PaymentAttemptEvidenceTypeEnum = z.enum([
+	"INICIADA",
+	"APROVADA",
+	"RECUSADA",
+	"CANCELADA_PELO_OPERADOR",
+	"FALHA_CONCLUSIVA",
+	"DESCONHECIDA",
+]);
+export type TPaymentAttemptEvidenceTypeEnum = z.infer<typeof PaymentAttemptEvidenceTypeEnum>;
+
+// Comando normalizado que o terminal executa; a interface traduz, nunca inventa um estado.
+export const PaymentAttemptNextActionEnum = z.enum([
+	"EXECUTAR",
+	"AGUARDAR",
+	"RECUPERAR_NO_TERMINAL",
+	"AGUARDAR_EFETIVACAO",
+	"ENCERRAR",
+	"INICIAR_NOVA_TENTATIVA",
+]);
+export type TPaymentAttemptNextActionEnum = z.infer<typeof PaymentAttemptNextActionEnum>;
+
+// `origem` e `tipo` de payment_attempt_events são varchar no banco (mesmo racional de access_events).
+export const PaymentAttemptEventOriginEnum = z.enum(["DISPOSITIVO", "PLATAFORMA", "BACKEND", "ADMIN", "RECONCILIACAO"]);
+export type TPaymentAttemptEventOriginEnum = z.infer<typeof PaymentAttemptEventOriginEnum>;
+
+export const PaymentAttemptEventTypeEnum = z.enum([
+	"CRIACAO",
+	"EVIDENCIA",
+	"EVIDENCIA_REPETIDA",
+	"EVIDENCIA_CONFLITANTE",
+	"CANCELAMENTO_PLATAFORMA",
+	"CONSUMO",
+	"FALHA_EFETIVACAO",
+]);
+export type TPaymentAttemptEventTypeEnum = z.infer<typeof PaymentAttemptEventTypeEnum>;
+
 export const PoiTransactionRequestStatusEnum = z.enum(["PENDENTE", "PROCESSANDO", "APROVADO", "REJEITADO", "ERRO"]);
 export type TPoiTransactionRequestStatusEnum = z.infer<typeof PoiTransactionRequestStatusEnum>;
 
@@ -784,6 +849,13 @@ export const AccessScopeEnum = z.enum([
 	"desktop-agent:printers:sync",
 	"desktop-agent:print-jobs:read",
 	"desktop-agent:print-jobs:update",
+	// Terminal de pagamento (SmartPOS). O terminal não cria tentativas no marco 1: lista as
+	// cobranças atribuídas a ele, executa e reporta evidência. Criação de venda/tentativa pelo
+	// terminal (Fluxo A) ganhará scopes próprios quando existir.
+	"payment-terminal:configuration:read",
+	"payment-terminal:charges:read",
+	"payment-terminal:attempts:read",
+	"payment-terminal:attempts:complete",
 	// Agentes de IA (MCP). Leitura por domínio, no mesmo grão em que o lojista pensa no painel:
 	// quem concede "resultados" está liberando faturamento e metas, não a base de clientes.
 	"agent:results:read",

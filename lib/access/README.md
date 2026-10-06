@@ -10,7 +10,7 @@ After migrations that add or change native access clients, run:
 npm run seed:access-clients
 ```
 
-The seed is idempotent and upserts the definitions from `clients-catalog.ts`. The AI connection UI depends on the `AGENT_CLAUDE` and `AGENT_CHATGPT` clients being present; platform credentials additionally depend on `AGENT_CONTROL`.
+The seed is idempotent and upserts the definitions from `clients-catalog.ts`. The payment terminal app (RecompraCRM POS) depends on `RECOMPRA_PAYMENT_TERMINAL` being present. The AI connection UI depends on the `AGENT_CLAUDE` and `AGENT_CHATGPT` clients being present; platform credentials additionally depend on `AGENT_CONTROL`.
 
 Deployments should treat this seed as a required release step whenever the native catalog changes. Database migrations intentionally establish schema invariants only and do not import application code to populate catalog rows.
 

@@ -20,6 +20,7 @@ export * from "./client-seller-references";
 export * from "./message-templates";
 export * from "./cashback-programs";
 export * from "./financial";
+export * from "./payment-attempts";
 export * from "./financial-recurring";
 export * from "./financial-reconciliation";
 export * from "./fiscal";

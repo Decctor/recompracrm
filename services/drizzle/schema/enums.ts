@@ -382,6 +382,21 @@ export const paymentMethodEnum = pgEnum("payment_method", [
 
 export const deliveryModeEnum = pgEnum("delivery_mode", ["PRESENCIAL", "RETIRADA", "ENTREGA", "COMANDA"]);
 
+// Tentativas de pagamento em terminal SmartPOS (payment-attempts.ts). Adquirente da tentativa é
+// enum próprio, separado do gateway da organização.
+export const paymentAttemptStatusEnum = pgEnum("payment_attempt_status", [
+	"CRIADA",
+	"PROCESSANDO",
+	"APROVADA_EFETIVACAO_PENDENTE",
+	"CONSUMIDA",
+	"NAO_APROVADA",
+	"RESULTADO_INCERTO",
+]);
+export const paymentAttemptNotApprovedReasonEnum = pgEnum("payment_attempt_not_approved_reason", ["RECUSADA", "CANCELADA", "FALHA"]);
+export const paymentAttemptOperationEnum = pgEnum("payment_attempt_operation", ["COBRANCA", "CANCELAMENTO"]);
+export const paymentAttemptProviderEnum = pgEnum("payment_attempt_provider", ["STONE"]);
+export const paymentInstallmentPartyEnum = pgEnum("payment_installment_party", ["LOJISTA", "EMISSOR"]);
+
 export const purchaseStatusEnum = pgEnum("purchase_status", ["RASCUNHO", "CONFIRMADA", "RECEBIMENTO_PARCIAL", "RECEBIDA", "CANCELADA"]);
 
 export const fiscalProviderEnum = pgEnum("fiscal_provider", ["MANUAL", "SPEDY"]);

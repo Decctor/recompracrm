@@ -30,6 +30,7 @@ import {
   paymentMethodEnum,
 } from "./enums";
 import { organizations } from "./organizations";
+import { paymentAttempts } from "./payment-attempts";
 import { productStockLots } from "./products";
 import { sales } from "./sales";
 import { salesSessions } from "./sales-sessions";
@@ -397,10 +398,22 @@ export const financialTransactions = newTable(
     // Payment provider tracking (nullable, only populated when a provider is involved)
     provedorReferencia: text("provedor_referencia"),
     provedorStatus: text("provedor_status"),
+    // Tentativa de pagamento em terminal (payment-attempts.ts) que efetivou esta transação.
+    // Unique: uma aprovação no terminal efetiva exatamente uma transação — defesa definitiva
+    // contra duplo consumo, mesmo sob concorrência ou replay.
+    tentativaPagamentoId: varchar("tentativa_pagamento_id", { length: 255 }).references(
+      (): AnyPgColumn => paymentAttempts.id,
+      { onDelete: "set null" },
+    ),
     autorId: varchar("autor_id", { length: 255 }).references(() => users.id),
     dataInsercao: timestamp("data_insercao").defaultNow().notNull(),
   },
   (table) => ({
+    tentativaPagamentoIdx: uniqueIndex(
+      "idx_financial_transactions_tentativa_pagamento",
+    )
+      .on(table.tentativaPagamentoId)
+      .where(sql`${table.tentativaPagamentoId} is not null`),
     organizacaoIdIdx: index("idx_financial_transactions_organizacao_id").on(
       table.organizacaoId,
     ),
