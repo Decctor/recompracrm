@@ -9,6 +9,8 @@
 > modelo; particularidades de um fornecedor específico são combinadas à parte, sempre dentro
 > deste contrato.
 
+Versão resumida para enviar ao integrador: [`INTEGRATOR-DB-VIEWS-COMPACT.md`](./INTEGRATOR-DB-VIEWS-COMPACT.md).
+
 Referência interna (equipe RecompraCRM): o pipeline que consome as views é o mesmo de todas as
 fontes de dados, documentado em [`DATA-COLLECTING-INTEGRATION.md`](./DATA-COLLECTING-INTEGRATION.md).
 A seção [Mapeamento para o modelo canônico](#mapeamento-para-o-modelo-canônico) relaciona cada

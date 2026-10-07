@@ -568,7 +568,8 @@ Body: {
 ## Adding New Integrations
 
 > **Integrator has no API and will expose database views instead?** Hand them
-> [`INTEGRATOR-DB-VIEWS.md`](./INTEGRATOR-DB-VIEWS.md) — the vendor-agnostic view contract
+> [`INTEGRATOR-DB-VIEWS.md`](./INTEGRATOR-DB-VIEWS.md) (full spec) or its short version
+> [`INTEGRATOR-DB-VIEWS-COMPACT.md`](./INTEGRATOR-DB-VIEWS-COMPACT.md) — the vendor-agnostic view contract
 > (required views, columns, status/cancellation rules, query patterns, access and homologation
 > checklist). The connector built on top of it follows the same steps below.
 
