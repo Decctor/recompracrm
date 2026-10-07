@@ -82,11 +82,14 @@ export function describeTerminalCharge(attempt: TSalePaymentAttemptView): { tone
 	}
 }
 
+// Os quatro tons semânticos do DESIGN.md §2, os mesmos que a maquininha pinta: aguardando é
+// informação (azul), incerto é aviso (ouro), aprovado é sucesso, recusado é destrutivo. Quem lê
+// o PDV e o terminal lado a lado aprende uma língua só.
 const TONE_CLASSES: Record<TChargeTone, string> = {
-	waiting: "border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-300",
-	approved: "border-green-600/30 bg-green-500/10 text-green-700 dark:text-green-400",
-	declined: "border-destructive/30 bg-destructive/10 text-destructive",
-	uncertain: "border-destructive/40 bg-destructive/10 text-destructive",
+	waiting: "border-info/20 bg-info-surface text-info-surface-foreground",
+	approved: "border-success/20 bg-success-surface text-success-surface-foreground",
+	declined: "border-destructive/20 bg-destructive-surface text-destructive-surface-foreground",
+	uncertain: "border-warning/35 bg-warning-surface text-warning-surface-foreground",
 };
 
 function ToneIcon({ tone, className }: { tone: TChargeTone; className?: string }) {
@@ -150,7 +153,7 @@ export default function TerminalChargeStatus({ saleId, dispositivoNome, compact 
 				<ToneIcon tone={description.tone} className="mt-0.5 h-4 w-4 shrink-0" />
 				<div className="min-w-0 flex-1">
 					<p className="font-bold">{description.title}</p>
-					<p className={cn("mt-0.5 text-xs", description.tone === "waiting" ? "text-amber-700/90 dark:text-amber-200/80" : "opacity-90")}>{description.detail}</p>
+					<p className="mt-0.5 text-xs opacity-90">{description.detail}</p>
 					{attempt && !compact ? (
 						<p className="mt-1 text-xs opacity-80">
 							{formatToMoney(attempt.valor)}

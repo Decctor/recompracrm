@@ -47,7 +47,7 @@ export default function PendingTerminalChargesPill({ enabled = true }: { enabled
 								{description.tone === "uncertain" ? (
 									<TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
 								) : (
-									<Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-amber-600" aria-hidden="true" />
+									<Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-info" aria-hidden="true" />
 								)}
 								<div className="min-w-0 flex-1">
 									<p className="truncate font-bold">{attempt.venda.clienteNome ?? "Consumidor"}</p>
