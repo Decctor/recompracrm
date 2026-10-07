@@ -28,9 +28,11 @@ export default function ProductOrderingSelect({ value, onChange, disabled }: Pro
 			<SelectTrigger
 				aria-label="Ordenar produtos"
 				title="Ordenar produtos"
-				className="h-9 shrink-0 rounded-xl border-border bg-card px-3 text-xs font-semibold shadow-2xs"
+				className="h-9 shrink-0 rounded-xl border-border bg-card px-3 text-xs font-semibold shadow-2xs max-sm:w-9 max-sm:justify-center max-sm:px-0 max-sm:[&>svg:last-child]:hidden max-sm:[&>[data-slot=select-value]]:hidden!"
 			>
 				<ArrowDownWideNarrow className="h-4 w-4 text-muted-foreground" />
+				{/* No celular só o ícone (valor e chevron somem pelo `max-sm` do trigger): o critério
+				    ativo continua marcado na lista ao abrir. */}
 				<SelectValue />
 			</SelectTrigger>
 			<SelectContent align="end">

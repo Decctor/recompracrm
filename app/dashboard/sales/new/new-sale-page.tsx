@@ -539,10 +539,12 @@ export default function NewSalePage({
 						/>
 					) : null}
 					<div className="shrink-0 flex flex-col gap-3">
-						{/* Em telas estreitas a busca ocupa a linha inteira e os controles quebram para a linha
-						    de baixo: dividir a mesma linha espremia o campo a poucos caracteres visíveis. */}
-						<div className="flex flex-wrap items-center gap-2">
-							<div className="w-full sm:w-auto sm:flex-1">
+						{/* Uma linha só também no celular: abaixo de `sm` a ordenação e o modo de exibição viram
+						    botões de ícone, o que deixa ~250px para a busca. O `min-w` é o piso — abaixo dele os
+						    controles quebram para a linha de baixo em vez de espremer o campo. `items-start`
+						    porque os termos confirmados crescem a coluna da busca para baixo. */}
+						<div className="flex flex-wrap items-start gap-2">
+							<div className="min-w-48 flex-1">
 								<SearchBlock searchValue={searchValue} onSearchChange={handleSearchChange} isLoading={productsLoading} />
 							</div>
 							<ProductOrderingSelect value={filters.ordering} onChange={handleOrderingChange} disabled={productsLoading} />

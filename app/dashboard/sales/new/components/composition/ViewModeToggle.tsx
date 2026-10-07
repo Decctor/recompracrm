@@ -9,8 +9,28 @@ type ViewModeToggleProps = {
 };
 
 export default function ViewModeToggle({ value, onChange }: ViewModeToggleProps) {
+	const nextMode: ProductViewMode = value === "list" ? "grid" : "list";
 	return (
-		<div className="flex shrink-0 items-center gap-1 rounded-xl border border-border bg-card p-1 shadow-2xs">
+		<>
+			{/* No celular, um botão só que alterna: o segmento com os dois modos custa o dobro da largura
+			    numa linha que divide espaço com a busca. O ícone mostra o modo para onde se vai. */}
+			<button
+				type="button"
+				onClick={() => onChange(nextMode)}
+				aria-label={nextMode === "grid" ? "Ver em grade" : "Ver em lista"}
+				title={nextMode === "grid" ? "Ver em grade" : "Ver em lista"}
+				className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border bg-card text-muted-foreground shadow-2xs transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 sm:hidden"
+			>
+				{nextMode === "grid" ? <LayoutGrid className="h-4 w-4" /> : <List className="h-4 w-4" />}
+			</button>
+			<ViewModeSegment value={value} onChange={onChange} />
+		</>
+	);
+}
+
+function ViewModeSegment({ value, onChange }: ViewModeToggleProps) {
+	return (
+		<div className="hidden shrink-0 items-center gap-1 rounded-xl border border-border bg-card p-1 shadow-2xs sm:flex">
 			<ToggleButton active={value === "list"} label="Ver em lista" onClick={() => onChange("list")}>
 				<List className="h-4 w-4" />
 			</ToggleButton>
