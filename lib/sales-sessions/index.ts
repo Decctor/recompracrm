@@ -8,3 +8,4 @@ export { registerSalesSessionMovement } from "./register-movement";
 export { registerRefundCashMovement } from "./register-refund-movement";
 export { isCashDrawerMethod } from "./session-method-lines";
 export type { TransactionClient } from "./types";
+export * from "./payment-terminal-pendencies";

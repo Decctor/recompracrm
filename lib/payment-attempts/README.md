@@ -39,10 +39,46 @@ nativo `RECOMPRA_PAYMENT_TERMINAL` (categoria `TERMINAL_PAGAMENTO`).
    coluna `tentativa_pagamento_id` em `ampmais_financial_transactions`, cinco `pgEnum`).
 2. `npm run seed:access-clients` (cliente nativo `RECOMPRA_PAYMENT_TERMINAL`).
 
-## Pendente (ver `recompracrm-pos-android/docs/11-pendencias-recompracrm.md`)
+## Fluxo B na plataforma (P6–P9, P11)
 
-P6 (confirmação da venda com dispositivo atribuído chamando `createAssignedPaymentAttempt`),
-P7 (PDV web: dispositivos ativos, atribuição, polling, ações de saída usando
-`cancelPaymentAttemptFromPlatform`), P8 (bloqueio de edição com `findActivePaymentAttemptForSale`),
-P9 (sessão de caixa), P11 (listagem administrativa), P12 (testes com Postgres: concorrência,
-replay, rollback).
+- `assignment.ts` valida a regra do MVP (um único cartão cobrindo o total) e
+  `processSaleConfirmationInTransaction` cria a tentativa atribuída na mesma transação da venda.
+- PDV web: `app/api/pos/payment-terminals` (maquininhas com `online` por heartbeat) e
+  `app/api/pos/sales/payment-attempt` (status por venda, pendências, CANCELAR/REATRIBUIR).
+- Edição de venda confirmada é bloqueada com tentativa aberta; cancelar a venda cancela a
+  tentativa em `CRIADA` e é recusado a partir de `PROCESSANDO`.
+- Sessão de caixa (`lib/sales-sessions/payment-terminal-pendencies.ts`): cobrança em andamento
+  bloqueia o fechamento; incerta e não aprovada com pagamento pendente aparecem como aviso; o
+  resumo por método expõe `pendenteEfetivacao`.
+- Admin: `/admin-dashboard/payment-attempts` lista o que exige atenção e permite retomar a
+  efetivação de aprovações pendentes.
+
+## Runbook: "cobrou, mas não efetivou"
+
+Sintoma: o terminal mostrou aprovação, a venda continua com pagamento pendente.
+
+1. Abra `/admin-dashboard/payment-attempts`. A tentativa aparece em **APROVADAS SEM EFETIVAÇÃO**
+   (`APROVADA_EFETIVACAO_PENDENTE`) ou **INCERTAS** (`RESULTADO_INCERTO`).
+2. **Aprovada sem efetivação**: clique em RETOMAR EFETIVAÇÃO. É `consumeApprovedPaymentAttempt`:
+   idempotente, nunca reabre a adquirente. Se falhar de novo, o erro da linha diz por quê —
+   quase sempre a transação pendente foi efetivada por outro meio ou perdeu o vínculo
+   (`PAYMENT_ATTEMPT_INVALID_TRANSITION`) ou valor/método divergem (`PAYMENT_RESULT_MISMATCH`).
+   Nesses casos a aprovação da adquirente é real: concilie manualmente no financeiro da
+   organização (efetivar a transação correta com a referência ITK/ATK da linha) e registre o
+   caso. Não há ação automática para isso de propósito.
+3. **Resultado incerto**: a adquirente pode ter cobrado. Peça ao lojista o comprovante do
+   terminal ou consulte o portal da adquirente pelo `order_id`/ITK/ATK da linha. Confirmada a
+   aprovação, trate como o item 2 (conciliação manual). Confirmada a recusa, a venda segue com
+   pagamento pendente: o lojista troca o método ou cancela a venda pelo PDV. Enquanto a linha
+   estiver incerta, **nenhuma nova cobrança** deve ser feita para a mesma venda.
+4. **Processando acima do SLA** (5 min sem outcome): o terminal iniciou e não reportou. O
+   próprio app recupera pelo journal ao reabrir; se não voltar, trate como incerta.
+5. Revogar o principal do terminal (Configurações > Dispositivos) impede novos comandos sem
+   apagar o histórico.
+
+## Pendente
+
+P10 (emissão fiscal automática para vendas com cobrança em terminal: decisão de produto), P12
+(testes com Postgres: efetivação exatamente uma vez sob concorrência, rollback preservando
+aprovação, corrida cancelamento × outcome) e o contrato de reconciliação
+(`POST /payment-attempts/{id}/reconciliation-outcome`) que tornaria o item 3 do runbook uma ação.

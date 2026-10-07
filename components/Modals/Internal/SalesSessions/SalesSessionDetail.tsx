@@ -2,6 +2,7 @@ import ErrorComponent from "@/components/Layouts/ErrorComponent";
 import { formatSessionDifference, sessionDifferenceClass } from "@/components/Modals/Internal/SalesSessions/Blocks/session-difference";
 import { SessionDrawerComposition } from "@/components/Modals/Internal/SalesSessions/Blocks/SessionDrawerComposition";
 import { SessionFiscalPendingAlert } from "@/components/Modals/Internal/SalesSessions/Blocks/SessionFiscalPendingAlert";
+import { SessionTerminalPendingAlert } from "@/components/Modals/Internal/SalesSessions/Blocks/SessionTerminalPendingAlert";
 import { SessionMetaRow } from "@/components/Modals/Internal/SalesSessions/Blocks/SessionMetaRow";
 import { SessionSectionLabel } from "@/components/Modals/Internal/SalesSessions/Blocks/SessionSectionLabel";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -155,6 +156,7 @@ export default function SalesSessionDetail({ sessionId, closeModal, canReview = 
 						quantidade={session.pendenciasFiscais.length}
 						description="Notas não autorizadas neste turno. Regularize-as para o fechamento refletir o fiscal do dia."
 					/>
+					<SessionTerminalPendingAlert pendencias={session.pendenciasMaquininha ?? []} />
 
 					<div className="grid gap-x-8 gap-y-1.5 rounded-xl bg-muted/50 p-3 sm:grid-cols-2">
 						<SessionMetaRow label="POLÍTICA" value={session.politica === "VENDEDOR_UNICO" ? "Vendedor único" : "Vendedores múltiplos"} />
@@ -211,12 +213,17 @@ export default function SalesSessionDetail({ sessionId, closeModal, canReview = 
 							<div className="flex flex-col px-1">
 								{recebivelLinhas.map((linha) => {
 									const saidas = linha.composicao ? linha.composicao.troco + linha.composicao.outrasSaidas : 0;
+									// Sessão aberta: o ledger ao vivo diz quanto do recebível ainda não entrou (maquininha, fiado, boleto).
+									const pendente = isOpen ? (session?.resumoEsperado.find((resumo) => resumo.metodo === linha.metodo)?.pendenteEfetivacao ?? 0) : 0;
 									return (
 										<div key={linha.metodo} className="flex flex-col gap-0.5 py-1.5">
 											<div className="flex items-center justify-between gap-3">
 												<span className="text-sm text-muted-foreground">{paymentLabel(linha.metodo)}</span>
 												<span className="font-semibold text-xs tabular-nums">{formatToMoney(linha.valorEsperado)}</span>
 											</div>
+											{pendente > 0 ? (
+												<span className="text-[11px] text-warning-surface-foreground tabular-nums">inclui {formatToMoney(pendente)} pendente de efetivação</span>
+											) : null}
 											{linha.composicao && saidas > 0 ? (
 												<span className="text-[11px] text-muted-foreground tabular-nums">
 													Entradas {formatToMoney(linha.composicao.entradas)} · Saídas {formatToMoney(saidas)}

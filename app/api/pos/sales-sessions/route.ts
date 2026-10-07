@@ -1,7 +1,7 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
-import { computeSessionExpectedByMethod } from "@/lib/sales-sessions";
+import { computeSessionExpectedByMethod, listSessionPaymentTerminalPendencies } from "@/lib/sales-sessions";
 import { SALE_CHANGE_TRANSACTION_ORIGIN } from "@/lib/sales/sale-change";
 import { db } from "@/services/drizzle";
 import { accountingEntries, financialTransactions, fiscalOutboundDocuments, sales, salesSessions, users } from "@/services/drizzle/schema";
@@ -49,7 +49,7 @@ async function getSalesSessions({ input, session }: { input: TGetSalesSessionsIn
 		// composição do que `conferencias` congelou — nenhum movimento novo é carimbado numa sessão
 		// fechada, então recalcular aqui devolve os mesmos valores e serve o detalhe histórico.
 		// As pendências fiscais seguem junto: quem confere o caixa precisa vê-las tanto quanto quem fecha.
-		const [resumoEsperado, pendenciasFiscais, movimentosRows] = await Promise.all([
+		const [resumoEsperado, pendenciasFiscais, movimentosRows, pendenciasMaquininha] = await Promise.all([
 			computeSessionExpectedByMethod({ orgId, sessaoVendaId: found.id, saldoInicial: found.saldoInicial }),
 			db
 				.select({
@@ -96,12 +96,15 @@ async function getSalesSessions({ input, session }: { input: TGetSalesSessionsIn
 					),
 				)
 				.orderBy(asc(financialTransactions.dataPrevisao)),
+			// Cobranças na maquininha do turno ainda sem desfecho: quem fecha ou confere o caixa precisa
+			// vê-las ao lado das pendências fiscais.
+			listSessionPaymentTerminalPendencies({ orgId, sessaoVendaId: found.id }),
 		]);
 		const movimentos = movimentosRows.map(({ dataEfetivacao, dataPrevisao, ...movimento }) => ({ ...movimento, data: dataEfetivacao ?? dataPrevisao }));
 
 		return {
 			data: {
-				byId: { ...found, resumoEsperado, pendenciasFiscais, movimentos },
+				byId: { ...found, resumoEsperado, pendenciasFiscais, pendenciasMaquininha, movimentos },
 				default: undefined,
 			},
 			message: "Sessao de venda encontrada com sucesso.",

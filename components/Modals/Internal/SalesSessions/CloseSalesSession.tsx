@@ -7,6 +7,7 @@ import ErrorComponent from "@/components/Layouts/ErrorComponent";
 import { formatSessionDifference, sessionDifferenceClass } from "@/components/Modals/Internal/SalesSessions/Blocks/session-difference";
 import { SessionDrawerComposition } from "@/components/Modals/Internal/SalesSessions/Blocks/SessionDrawerComposition";
 import { SessionFiscalPendingAlert } from "@/components/Modals/Internal/SalesSessions/Blocks/SessionFiscalPendingAlert";
+import { SessionTerminalPendingAlert } from "@/components/Modals/Internal/SalesSessions/Blocks/SessionTerminalPendingAlert";
 import { SessionMetaRow } from "@/components/Modals/Internal/SalesSessions/Blocks/SessionMetaRow";
 import { SessionSectionLabel } from "@/components/Modals/Internal/SalesSessions/Blocks/SessionSectionLabel";
 import ResponsiveMenu from "@/components/Utils/ResponsiveMenu";
@@ -53,6 +54,8 @@ export default function CloseSalesSession({ sessionId, closeModal, blindCount, c
 	});
 	const expectedSummary = session?.resumoEsperado ?? [];
 	const fiscalPendings = session?.pendenciasFiscais ?? [];
+	const terminalPendings = session?.pendenciasMaquininha ?? [];
+	const hasBlockingTerminalCharge = terminalPendings.some((pendency) => pendency.bloqueiaFechamento);
 	const drawerLines = expectedSummary.filter((line) => isCashDrawerMethod(line.metodo));
 	const receivableLines = expectedSummary.filter((line) => !isCashDrawerMethod(line.metodo));
 	const drawerExpectedTotal = drawerLines.reduce((acc, line) => acc + line.valorEsperado, 0);
@@ -76,7 +79,7 @@ export default function CloseSalesSession({ sessionId, closeModal, blindCount, c
 		<ResponsiveMenu
 			menuTitle="FECHAR CAIXA"
 			menuDescription="Conte as notas e moedas da gaveta, incluindo o fundo de troco."
-			menuActionButtonDisabled={!hasCount || !session || session.status !== "ABERTA"}
+			menuActionButtonDisabled={!hasCount || !session || session.status !== "ABERTA" || hasBlockingTerminalCharge}
 			menuActionButtonText={actionButtonText}
 			menuActionButtonClassName={confirmarDiferenca && hasDrawerDifference ? "bg-warning text-warning-foreground hover:bg-warning/90" : undefined}
 			menuCancelButtonText="CANCELAR"
@@ -95,6 +98,7 @@ export default function CloseSalesSession({ sessionId, closeModal, blindCount, c
 						quantidade={fiscalPendings.length}
 						description="Notas não autorizadas neste turno. Conforme a configuração, o fechamento pode ser bloqueado até a regularização."
 					/>
+					<SessionTerminalPendingAlert pendencias={terminalPendings} />
 					<div className="flex flex-col gap-1 rounded-xl bg-muted/50 p-3">
 						<SessionMetaRow label="POLÍTICA" value={session.politica === "VENDEDOR_UNICO" ? "Vendedor único" : "Vendedores múltiplos"} />
 						<SessionMetaRow label="VENDEDOR PADRÃO" value={session.vendedorPadrao?.nome ?? "—"} />
@@ -218,7 +222,14 @@ export default function CloseSalesSession({ sessionId, closeModal, blindCount, c
 								<div className="flex flex-col gap-0.5 px-1">
 									{receivableLines.map((line) => (
 										<div key={line.metodo} className="flex items-center justify-between gap-3 py-1.5">
-											<span className="text-sm text-muted-foreground">{paymentLabels.get(line.metodo) ?? line.metodo.replaceAll("_", " ")}</span>
+											<span className="flex flex-col text-sm text-muted-foreground">
+												{paymentLabels.get(line.metodo) ?? line.metodo.replaceAll("_", " ")}
+												{line.pendenteEfetivacao > 0 ? (
+													<span className="text-[11px] text-warning-surface-foreground">
+														inclui {formatToMoney(line.pendenteEfetivacao)} pendente de efetivação
+													</span>
+												) : null}
+											</span>
 											<span className="font-semibold text-xs tabular-nums">{formatToMoney(line.valorEsperado)}</span>
 										</div>
 									))}

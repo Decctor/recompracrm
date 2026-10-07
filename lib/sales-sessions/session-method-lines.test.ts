@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { buildSessionMethodLines } from "./session-method-lines";
 
-const ledgerDinheiro = { metodo: "DINHEIRO" as const, valorEsperado: 466, entradas: 100, troco: 34, outrasSaidas: 0 };
-const ledgerPix = { metodo: "PIX" as const, valorEsperado: 66, entradas: 66, troco: 0, outrasSaidas: 0 };
+const ledgerDinheiro = { metodo: "DINHEIRO" as const, valorEsperado: 466, entradas: 100, troco: 34, outrasSaidas: 0, pendenteEfetivacao: 0 };
+const ledgerPix = { metodo: "PIX" as const, valorEsperado: 66, entradas: 66, troco: 0, outrasSaidas: 0, pendenteEfetivacao: 0 };
 
 test("sessão sem conferência mostra o ledger ao vivo, sem contagem", () => {
 	const [dinheiro] = buildSessionMethodLines({ saldoInicial: 400, resumoEsperado: [ledgerDinheiro], conferencias: [] });
@@ -62,7 +62,7 @@ test("método com movimento fora do snapshot ainda aparece para quem confere", (
 test("método zerado e sem movimento fora do snapshot não vira linha vazia", () => {
 	const linhas = buildSessionMethodLines({
 		saldoInicial: 400,
-		resumoEsperado: [ledgerDinheiro, { metodo: "CARTAO_DEBITO", valorEsperado: 0, entradas: 0, troco: 0, outrasSaidas: 0 }],
+		resumoEsperado: [ledgerDinheiro, { metodo: "CARTAO_DEBITO", valorEsperado: 0, entradas: 0, troco: 0, outrasSaidas: 0, pendenteEfetivacao: 0 }],
 		conferencias: [{ metodo: "DINHEIRO", valorEsperado: 466, valorInformado: 466, diferenca: 0 }],
 	});
 	assert.equal(linhas.length, 1);
@@ -71,7 +71,7 @@ test("método zerado e sem movimento fora do snapshot não vira linha vazia", ()
 test("tolerância de meio centavo absorve ruído de ponto flutuante", () => {
 	const [dinheiro] = buildSessionMethodLines({
 		saldoInicial: 0,
-		resumoEsperado: [{ metodo: "DINHEIRO", valorEsperado: 0.3, entradas: 0.1 + 0.2, troco: 0, outrasSaidas: 0 }],
+		resumoEsperado: [{ metodo: "DINHEIRO", valorEsperado: 0.3, entradas: 0.1 + 0.2, troco: 0, outrasSaidas: 0, pendenteEfetivacao: 0 }],
 		conferencias: [{ metodo: "DINHEIRO", valorEsperado: 0.3, valorInformado: 0.3, diferenca: 0 }],
 	});
 	assert.notEqual(dinheiro.composicao, null);
