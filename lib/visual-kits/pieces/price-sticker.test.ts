@@ -35,7 +35,13 @@ function fixture(): TVisualKitPieceProps {
 			corSecundaria: "#eeeeee",
 			corSecundariaForeground: "#111111",
 		}),
-		configuracao: { mostrarCodigoBarras: true, mostrarPrecoDe: false, mostrarPercentual: false, mostrarPrecoUnidade: false },
+		configuracao: {
+			mostrarCodigoBarras: true,
+			mostrarPrecoDe: false,
+			mostrarPercentual: false,
+			mostrarPrecoUnidade: false,
+			completarFolhaAdesivos: true,
+		},
 	};
 }
 
@@ -71,6 +77,18 @@ test("toggle desligado mantém o adesivo original, e código grande demais não 
 	props.items[0].codigo = "SKU-MUITO-LONGO-123456789";
 	props.items[0].codigoBarras = props.items[0].codigo;
 	assert.ok(!render(props).includes("<svg"));
+});
+
+test("sem completar a folha, sai um adesivo por produto selecionado", () => {
+	const props = fixture();
+	props.configuracao.completarFolhaAdesivos = false;
+	props.items = Array.from({ length: 4 }, (_, index) => ({ ...props.items[0], chave: `p${index}:`, produtoId: `p${index}` }));
+	assert.deepEqual(
+		priceStickerRenderer.paginate(props).map((page) => page.items.length),
+		[4],
+	);
+	props.configuracao.completarFolhaAdesivos = undefined;
+	assert.equal(priceStickerRenderer.paginate(props)[0].items.length, 4);
 });
 
 test("mais de 65 produtos preservam a paginação em 65 + restante", () => {

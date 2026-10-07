@@ -71,7 +71,7 @@ export default function StageVisual() {
 								))}
 								<div className="flex items-center justify-between gap-2 px-3 py-2 text-xs">
 									<span className="text-muted-foreground">Neste kit</span>
-									<span className="text-right font-medium">{describeVisualKitPiece(formato, pieceItems.length)}</span>
+									<span className="text-right font-medium">{describeVisualKitPiece(formato, pieceItems.length, state.kit.configuracao)}</span>
 								</div>
 							</div>
 							{format.printsHeadline ? (
@@ -91,6 +91,14 @@ export default function StageVisual() {
 										value={state.kit.configuracao.mostrarPrecoUnidade}
 										onChange={(mostrarPrecoUnidade) => updateConfig({ mostrarPrecoUnidade })}
 									/>
+									{formato === "ADESIVO_PRECO" ? (
+										<KitToggle
+											label="Completar a folha"
+											hint="Repete os produtos até preencher os 65 adesivos. Desligado, sai um adesivo por produto."
+											value={state.kit.configuracao.completarFolhaAdesivos ?? false}
+											onChange={(completarFolhaAdesivos) => updateConfig({ completarFolhaAdesivos })}
+										/>
+									) : null}
 								</div>
 							) : null}
 						</aside>

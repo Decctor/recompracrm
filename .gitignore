@@ -59,3 +59,10 @@ output/
 # generated image studies (landing assets)
 .generated/
 .env*
+
+# Saídas locais de ferramentas/agentes (relatórios de migração, logs, críticas) — nunca versionadas.
+/.migration/
+/.codex/*.log
+/.cursor/debug.log
+/.impeccable/critique/
+/.fmtcheck/

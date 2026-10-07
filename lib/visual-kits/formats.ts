@@ -1,4 +1,5 @@
 import type { TVisualKitFormatEnum, TVisualKitOutputEnum } from "@/schemas/enums";
+import type { TVisualKitConfig } from "@/schemas/visual-kits";
 import {
 	CircleDot,
 	GalleryHorizontal,
@@ -305,10 +306,10 @@ export function visualKitPieceItemCount(formato: TVisualKitFormatEnum, total: nu
 }
 
 /**
- * Resumo da peça para cards e revisão ("14 etiquetas · 1 folha A4"). Adesivos repetem os produtos
- * até completar a folha de 65.
+ * Resumo da peça para cards e revisão ("14 etiquetas · 1 folha A4"). Com `completarFolhaAdesivos`,
+ * adesivos repetem os produtos até completar a folha de 65.
  */
-export function describeVisualKitPiece(formato: TVisualKitFormatEnum, total: number) {
+export function describeVisualKitPiece(formato: TVisualKitFormatEnum, total: number, configuracao?: TVisualKitConfig) {
 	const n = Math.max(0, total);
 	const plural = (count: number, singular: string, pluralWord: string) => `${count} ${count === 1 ? singular : pluralWord}`;
 	const sheets = (perSheet: number) => Math.max(1, Math.ceil(n / perSheet));
@@ -316,6 +317,7 @@ export function describeVisualKitPiece(formato: TVisualKitFormatEnum, total: num
 		case "ETIQUETA_GONDOLA":
 			return `${plural(n, "etiqueta", "etiquetas")} · ${plural(sheets(14), "folha A4", "folhas A4")}`;
 		case "ADESIVO_PRECO": {
+			if (!configuracao?.completarFolhaAdesivos) return `${plural(n, "adesivo", "adesivos")} · ${plural(sheets(65), "folha A4", "folhas A4")}`;
 			const copies = Math.max(1, Math.floor(65 / Math.max(1, n)));
 			return `${plural(copies * n, "adesivo", "adesivos")} · ${copies} por produto`;
 		}

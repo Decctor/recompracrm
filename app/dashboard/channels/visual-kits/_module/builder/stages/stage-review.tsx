@@ -66,7 +66,7 @@ export default function StageReview() {
 									<span className="flex min-w-0 flex-col">
 										<span className="truncate text-xs font-semibold">{format.name}</span>
 										<span className="truncate text-[11px] text-muted-foreground">{format.sizeLabel}</span>
-										<span className="truncate text-[11px] text-muted-foreground">{describeVisualKitPiece(piece.formato, pieceItems.length)}</span>
+										<span className="truncate text-[11px] text-muted-foreground">{describeVisualKitPiece(piece.formato, pieceItems.length, state.kit.configuracao)}</span>
 									</span>
 								</div>
 							);
