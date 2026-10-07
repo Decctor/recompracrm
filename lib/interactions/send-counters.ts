@@ -109,6 +109,12 @@ export function computeSendQuotaGrant({ counters, requested }: { counters: TSend
 
 export function getSendQuotaSkipReasonMessage(reason: TCampaignDispatchSkipReasonEnum): string {
 	switch (reason) {
+		case "EVENTO_INVALIDO":
+			return "Evento inválido para envio.";
+		case "VENDA_INVALIDA":
+			return "Venda cancelada, removida ou atribuída a outro cliente.";
+		case "EVENTO_EXPIRADO":
+			return "Janela de envio do evento expirou.";
 		case "QUOTA_ORG_DIARIO":
 			return "Limite diário de envios da organização atingido.";
 		case "QUOTA_ORG_SEMANAL":

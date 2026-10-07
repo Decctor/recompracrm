@@ -16,6 +16,7 @@ import {
 import { interactions } from "./interactions";
 import { organizations } from "./organizations";
 import { sales } from "./sales";
+import { campaignEvents } from "./campaign-events";
 
 /**
  * Pipeline de campanhas (docs/dev-planning/campaigns-interactions-redesign-plan.md, Parte 2).
@@ -53,6 +54,7 @@ export const campaignDispatches = newTable(
 			.references(() => campaigns.id, { onDelete: "cascade" })
 			.notNull(),
 		origem: campaignDispatchOriginEnum("origem").notNull(),
+		campanhaEventoId: varchar("campanha_evento_id", { length: 255 }).references(() => campaignEvents.id, { onDelete: "cascade" }),
 		// AGENDADA/RECORRENTE: 'YYYY-MM-DD@HH:00' (timezone do cron). EVENTO: id da venda ou outra
 		// chave natural do gatilho ('aniversario:2026-09-17', 'entrada:<cliente>:<segmento>:...').
 		janelaReferencia: text("janela_referencia").notNull(),
@@ -75,6 +77,7 @@ export const campaignDispatches = newTable(
 	(table) => [
 		unique("uq_campaign_dispatches_campanha_janela").on(table.campanhaId, table.janelaReferencia),
 		index("idx_campaign_dispatches_org_status").on(table.organizacaoId, table.status, table.dataInsercao),
+		index("idx_campaign_dispatches_event").on(table.campanhaEventoId),
 		// Relógio: disparos pendentes cuja hora chegou, e varredura de disparos parados.
 		index("idx_campaign_dispatches_status_agendada").on(table.status, table.dataAgendada),
 	],
@@ -115,6 +118,7 @@ export const campaignDispatchRecipients = newTable(
 		interacaoId: varchar("interacao_id", { length: 255 }).references(() => interactions.id, { onDelete: "set null" }),
 		// Venda que disparou o gatilho (cashback PERCENTUAL e atribuição precisam dela no envio).
 		vendaId: varchar("venda_id", { length: 255 }).references(() => sales.id, { onDelete: "set null" }),
+		campanhaEventoId: varchar("campanha_evento_id", { length: 255 }).references(() => campaignEvents.id, { onDelete: "cascade" }),
 		// Chave passada ao provedor (clientMessageId no gateway interno): torna o reenvio após uma
 		// queda entre o envio e o registro seguro onde o provedor deduplica.
 		chaveIdempotencia: varchar("chave_idempotencia", { length: 255 }).notNull(),
@@ -138,6 +142,7 @@ export const campaignDispatchRecipients = newTable(
 		index("idx_campaign_dispatch_recipients_org_status_data").on(table.organizacaoId, table.status, table.dataInsercao),
 		// FK ON DELETE SET NULL para interactions.
 		index("idx_campaign_dispatch_recipients_interacao_id").on(table.interacaoId),
+		index("idx_campaign_dispatch_recipients_campanha_evento_id").on(table.campanhaEventoId),
 	],
 );
 export const campaignDispatchRecipientRelations = relations(campaignDispatchRecipients, ({ one }) => ({

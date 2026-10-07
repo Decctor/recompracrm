@@ -8,7 +8,7 @@ import { mapIfoodSale } from "@/lib/data-connectors/ifood/mappers";
 import { processSaleCupomAutoPrintIfEligible } from "@/lib/desktop-agent/auto-print";
 import { resolveIfoodManagementContext } from "@/lib/integrations/ifood/context";
 import { confirmIfoodOrder, getIfoodOrderCancellationReasons, requestIfoodOrderCancellation } from "@/lib/integrations/ifood/orders";
-import { publishEventDispatches } from "@/lib/campaigns/engine";
+import { publishPendingCampaignEventsSafely } from "@/lib/campaigns/events/queue";
 import { getChannelErpPolicy, resolveFulfillmentChannelForSale } from "@/lib/sales/fulfillment-channels";
 import { db } from "@/services/drizzle";
 import { waitUntil } from "@vercel/functions";
@@ -86,8 +86,8 @@ async function postOrderConfirmation({ input, session }: { input: TPostFulfillme
 				organizationConfiguration: session.membership!.organizacao.configuracao,
 			}),
 		);
-		if (confirmation.eventDispatches.length > 0) {
-			waitUntil(publishEventDispatches(confirmation.eventDispatches));
+		if (confirmation.processed) {
+			waitUntil(publishPendingCampaignEventsSafely({ organizationId: orgId, sourceType: "VENDA", sourceId: sale.id }));
 		}
 		// Cupom automático na hora do aceite, sem esperar o sync. Nunca lança; a chave de
 		// idempotência absorve a sobreposição com os hooks da ingestão.

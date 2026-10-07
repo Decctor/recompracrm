@@ -135,6 +135,8 @@ export type TDataCollectingV2RunSummary = {
 	createdSellersCount: number;
 	createdPartnersCount: number;
 	resolvedCampaignAudiencesCount: number;
+	campaignEventsCapturedCount: number;
+	/** @deprecated Dispatch creation is asynchronous; this synchronous count is zero. */
 	createdInteractionsCount: number;
 	immediateInteractionsCount: number;
 	cashbackTransactionsCount: number;

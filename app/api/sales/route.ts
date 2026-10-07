@@ -8,14 +8,8 @@ import { buildSalesHistoryConditions } from "@/lib/sales/history-conditions";
 import { SalesHistoryFiltersSchema } from "@/lib/sales/history-filters";
 import { loadSalesErpData } from "@/lib/sales/erp-data";
 import { resolvePrimarySaleFiscalDocument } from "@/lib/sales/export-summaries";
-import {
-	canScheduleCampaignForClient,
-	createEventCampaignDispatch,
-	publishEventDispatches,
-	resolveTriggeredCampaigns,
-	type TEventDispatchResult,
-} from "@/lib/campaigns/engine";
-import { resolveCampaignAudiencesByCampaignId } from "@/lib/campaigns/filters";
+import { recordPurchaseCampaignEvent } from "@/lib/campaigns/events/purchases";
+import { publishPendingCampaignEventsSafely } from "@/lib/campaigns/events/queue";
 import { getValidClientSaleWhere } from "@/lib/sales/valid-sale";
 import { resolveSaleEditability } from "@/lib/sales/sale-editability";
 import { recalculateSessionAfterSaleDeletion } from "@/lib/sales-sessions/recalculate-after-sale-deletion";
@@ -31,7 +25,20 @@ import type {
 } from "@/schemas/enums";
 import type { TFiscalDocumentStatusEnum, TFiscalDocumentTypeEnum } from "@/schemas/enums";
 import { type DBTransaction, db } from "@/services/drizzle";
-import { accountingEntries, cashbackProgramBalances, cashbackProgramTransactions, cashbackPrograms, clients, financialAccounts, financialReconciliationMatches, financialRecurringRules, fiscalOutboundDocuments, organizations, purchases, sales } from "@/services/drizzle/schema";
+import {
+	accountingEntries,
+	cashbackProgramBalances,
+	cashbackProgramTransactions,
+	cashbackPrograms,
+	clients,
+	financialAccounts,
+	financialReconciliationMatches,
+	financialRecurringRules,
+	fiscalOutboundDocuments,
+	organizations,
+	purchases,
+	sales,
+} from "@/services/drizzle/schema";
 import dayjs from "dayjs";
 import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
 import createHttpError from "http-errors";
@@ -730,18 +737,6 @@ const createSaleRoute: PagesRouteHandler<TCreateSaleOutput> = async (req, res) =
 		}
 
 		// 2.1. Campanhas de cashback acumulado (motor único de gatilhos: lib/campaigns/engine)
-		const campaignsForCashbackAccumulation = await tx.query.campaigns.findMany({
-			where: (fields, { and, eq }) => and(eq(fields.organizacaoId, input.orgId), eq(fields.ativo, true), eq(fields.gatilhoTipo, "CASHBACK-ACUMULADO")),
-			with: { segmentacoes: true },
-		});
-		const audiencesByCampaignId = await resolveCampaignAudiencesByCampaignId({
-			executor: tx,
-			organizationId: input.orgId,
-			campaigns: campaignsForCashbackAccumulation,
-			// Só o pertencimento do cliente da venda é consultado pelos gatilhos.
-			restrictToClientIds: [input.clientId],
-		});
-
 		// 3. If using cashback: validate balance and create redemption
 		let redemptionSnapshot: {
 			previousBalance: number;
@@ -850,7 +845,7 @@ const createSaleRoute: PagesRouteHandler<TCreateSaleOutput> = async (req, res) =
 		const newOverallAvailableBalance = previousOverallAvailableBalance + accumulatedBalance;
 		const newOverallAccumulatedBalance = previousOverallAccumulatedBalance + accumulatedBalance;
 
-		const eventDispatches: TEventDispatchResult[] = [];
+		let campaignEventId: string | null = null;
 
 		if (accumulatedBalance > 0 && balance) {
 			// Update balance (credit)
@@ -880,54 +875,30 @@ const createSaleRoute: PagesRouteHandler<TCreateSaleOutput> = async (req, res) =
 			});
 
 			// 6.1. Campanhas de cashback acumulado: um disparo por (campanha, venda).
-			const triggered = resolveTriggeredCampaigns({
-				campaigns: campaignsForCashbackAccumulation,
-				audiencesByCampaignId,
-				sale: {
-					clientId: input.clientId,
-					isFirstPurchase: false,
-					saleValue: input.saleValue,
-					newTotalPurchaseCount: null,
-					previousTotalPurchaseCount: null,
-					newTotalPurchaseValue: null,
-					previousTotalPurchaseValue: null,
-					cashbackAccumulatedValue: accumulatedBalance,
-					cashbackAvailableBalance: newOverallAvailableBalance,
+			campaignEventId = await recordPurchaseCampaignEvent({
+				tx,
+				organizationId: input.orgId,
+				clientId: input.clientId,
+				sourceId: saleId,
+				type: "CASHBACK_ACUMULADO",
+				idempotencyKey: `cashback-venda:${saleId}`,
+				snapshot: {
+					compraValor: input.saleValue,
+					comprasQuantidadeAnterior: 0,
+					comprasQuantidadePosterior: 0,
+					comprasValorAnterior: 0,
+					comprasValorPosterior: 0,
+					primeiraCompra: false,
+					contabilizarCompra: false,
+					vendedorNome: "PONTO DE INTERAÇÃO",
+					terminologia: program.terminologia,
+					cashbackAcumulado: accumulatedBalance,
+					cashbackSaldoDisponivel: newOverallAvailableBalance,
+					cashbackTotalAcumulado: newOverallAccumulatedBalance,
+					cashbackTotalResgatado: balance.saldoValorResgatadoTotal,
+					origem: "REGISTRO",
 				},
 			});
-			for (const { campaign } of triggered) {
-				if (!(await canScheduleCampaignForClient({ executor: tx, campaign, clientId: input.clientId }))) {
-					console.log(
-						`[ORG: ${input.orgId}] [CAMPAIGN_FREQUENCY] Skipping campaign ${campaign.titulo} for client ${input.clientId} due to frequency limits.`,
-					);
-					continue;
-				}
-				const dispatch = await createEventCampaignDispatch({
-					tx,
-					organizationId: input.orgId,
-					campaign,
-					janelaReferencia: `venda:${saleId}`,
-					recipients: [
-						{
-							clienteId: input.clientId,
-							vendaId: saleId,
-							descricao: `Cliente acumulou R$ ${(accumulatedBalance / 100).toFixed(2)} em cashback. Total acumulado: R$ ${(newOverallAccumulatedBalance / 100).toFixed(2)}.`,
-							contexto: {
-								terminologia: program.terminologia,
-								cashbackAcumuladoValor: accumulatedBalance,
-								compraValor: input.saleValue,
-								compraCashbackAcumulado: accumulatedBalance,
-								compraCashbackNovoSaldo: newOverallAvailableBalance,
-								compraVendedorNome: "PONTO DE INTERAÇÃO",
-								cashbackSaldoDisponivel: newOverallAvailableBalance,
-								cashbackTotalAcumuladoVida: newOverallAccumulatedBalance,
-								cashbackTotalResgatadoVida: balance.saldoValorResgatadoTotal,
-							},
-						},
-					],
-				});
-				if (dispatch.created) eventDispatches.push(dispatch);
-			}
 		}
 
 		// 7. Update client last purchase
@@ -943,12 +914,12 @@ const createSaleRoute: PagesRouteHandler<TCreateSaleOutput> = async (req, res) =
 			saleId,
 			cashbackAcumulado: accumulatedBalance,
 			newBalance: newOverallAvailableBalance,
-			eventDispatches,
+			campaignEventId,
 		};
 	});
 
 	// Disparos de campanha imediatos: publicados depois do commit (best-effort).
-	if (result.eventDispatches.length > 0) await publishEventDispatches(result.eventDispatches);
+	if (result.campaignEventId) await publishPendingCampaignEventsSafely({ organizationId: input.orgId, sourceType: "VENDA", sourceId: result.saleId });
 
 	return res.status(201).json({
 		data: {
@@ -1022,7 +993,17 @@ const deleteSaleRoute: PagesRouteHandler<TDeleteSaleOutput> = async (req, res) =
 					columns: { id: true, origemTipo: true },
 					with: {
 						transacoesFinanceiras: {
-							columns: { id: true, metodo: true, tipo: true, valor: true, dataEfetivacao: true, sessaoVendaId: true, provedorReferencia: true, provedorStatus: true, contaFinanceiraId: true },
+							columns: {
+								id: true,
+								metodo: true,
+								tipo: true,
+								valor: true,
+								dataEfetivacao: true,
+								sessaoVendaId: true,
+								provedorReferencia: true,
+								provedorStatus: true,
+								contaFinanceiraId: true,
+							},
 						},
 					},
 				},
@@ -1065,13 +1046,13 @@ const deleteSaleRoute: PagesRouteHandler<TDeleteSaleOutput> = async (req, res) =
 								(transaction.dataEfetivacao
 									? transaction.provedorStatus === "ESTORNADO"
 									: !transaction.sessaoVendaId || ["CANCELADO", "ESTORNADO"].includes(transaction.provedorStatus ?? "")) &&
-								(transaction.sessaoVendaId ? transaction.sessaoVendaId === sale.sessaoVendaId && transaction.metodo === "DINHEIRO" : !transaction.dataEfetivacao),
+								(transaction.sessaoVendaId
+									? transaction.sessaoVendaId === sale.sessaoVendaId && transaction.metodo === "DINHEIRO"
+									: !transaction.dataEfetivacao),
 						),
 				);
 			if (!entriesCanBeDeleted) {
-				throw new createHttpError.BadRequest(
-					"Não é possível excluir venda com movimentação financeira ou lançamento contábil externo vinculado.",
-				);
+				throw new createHttpError.BadRequest("Não é possível excluir venda com movimentação financeira ou lançamento contábil externo vinculado.");
 			}
 			const entryIds = sale.lancamentosContabeis.map((entry) => entry.id);
 			const linkedFiscalDocuments = await tx
@@ -1102,7 +1083,12 @@ const deleteSaleRoute: PagesRouteHandler<TDeleteSaleOutput> = async (req, res) =
 				const bankMatches = await tx
 					.select({ id: financialReconciliationMatches.id })
 					.from(financialReconciliationMatches)
-					.where(inArray(financialReconciliationMatches.transacaoFinanceiraId, saleTransactions.map((transaction) => transaction.id)))
+					.where(
+						inArray(
+							financialReconciliationMatches.transacaoFinanceiraId,
+							saleTransactions.map((transaction) => transaction.id),
+						),
+					)
 					.limit(1);
 				if (bankMatches.length > 0) throw new createHttpError.BadRequest("Não é possível excluir venda com conciliação bancária vinculada.");
 			}
@@ -1131,9 +1117,15 @@ const deleteSaleRoute: PagesRouteHandler<TDeleteSaleOutput> = async (req, res) =
 
 		console.log("[INFO] Deleting sale:", sale.id);
 		if (sale.lancamentosContabeis.length > 0) {
-			await tx
-				.delete(accountingEntries)
-				.where(and(inArray(accountingEntries.id, sale.lancamentosContabeis.map((entry) => entry.id)), eq(accountingEntries.organizacaoId, orgId)));
+			await tx.delete(accountingEntries).where(
+				and(
+					inArray(
+						accountingEntries.id,
+						sale.lancamentosContabeis.map((entry) => entry.id),
+					),
+					eq(accountingEntries.organizacaoId, orgId),
+				),
+			);
 		}
 		const deletedSale = await tx
 			.delete(sales)

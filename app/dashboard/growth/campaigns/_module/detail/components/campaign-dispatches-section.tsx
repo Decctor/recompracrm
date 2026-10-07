@@ -42,6 +42,9 @@ const ORIGIN_LABELS: Record<TCampaignDispatchOriginEnum, string> = {
 };
 
 const SKIP_REASON_LABELS: Record<TCampaignDispatchSkipReasonEnum, string> = {
+	EVENTO_INVALIDO: "evento inválido",
+	VENDA_INVALIDA: "venda cancelada ou cliente alterado",
+	EVENTO_EXPIRADO: "janela de envio expirada",
 	QUOTA_ORG_DIARIO: "limite diário da organização",
 	QUOTA_ORG_SEMANAL: "limite semanal da organização",
 	QUOTA_CAMPANHA_DIARIO: "limite diário da campanha",

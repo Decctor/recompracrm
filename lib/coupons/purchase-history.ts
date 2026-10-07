@@ -13,6 +13,17 @@ export async function lockClientPurchaseHistory(trx: DBTransaction, organizacaoI
 	}
 }
 
+/**
+ * Blocking variant for background ingestion. A batch holds many sale rows and several customer
+ * locks until it commits; failing fast there would abort a whole import because a POS sale of one
+ * of its customers was mid-confirmation, and the POS would see 409s from a background job. POS
+ * confirmation never waits on rows an import holds (imports only touch integration sales and the
+ * customers they already locked), so waiting here cannot deadlock against it.
+ */
+export async function lockClientPurchaseHistoryBlocking(trx: DBTransaction, organizacaoId: string, clienteId: string) {
+	await trx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${organizacaoId}:${clienteId}:primeira-compra`}, 0))`);
+}
+
 export async function countPreviousConfirmedPurchases({
 	trx,
 	organizacaoId,

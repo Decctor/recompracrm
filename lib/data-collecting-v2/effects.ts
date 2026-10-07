@@ -1,25 +1,21 @@
 import { accumulateCashbackForClient } from "@/lib/cashback/accumulation";
 import { reverseSaleCashback } from "@/lib/cashback/reverse-sale-cashback";
-import {
-	canScheduleCampaignForClient,
-	createEventCampaignDispatch,
-	resolveTriggeredCampaigns,
-	type TEventDispatchResult,
-} from "@/lib/campaigns/engine";
-import { buildBasePurchaseInteractionMetadata } from "@/lib/campaigns/interaction-metadata";
+import { recordPurchaseCampaignEvent } from "@/lib/campaigns/events/purchases";
+import type { TEventDispatchResult } from "@/lib/campaigns/engine";
 import { processConversionAttribution } from "@/lib/conversions/attribution";
 import { cashbackProgramBalances, cashbackPrograms } from "@/services/drizzle/schema";
 import { and, eq, inArray } from "drizzle-orm";
-import type { TCampaignWithAudienceRelations, TDataCollectingV2EffectsOptions, TDataCollectingV2Executor, TPersistedSaleForEffects } from "./types";
+import type { TDataCollectingV2EffectsOptions, TDataCollectingV2Executor, TPersistedSaleForEffects } from "./types";
 
 type TProcessEffectsResult = {
+	campaignEventsCapturedCount: number;
 	createdDispatchesCount: number;
 	immediateDispatchesCount: number;
 	cashbackTransactionsCount: number;
 	cashbackAccumulatedValue: number;
 	firstPurchaseDispatchesCount: number;
 	cashbackAccumulationDispatchesCount: number;
-	// Disparos criados nesta transação; o chamador publica os imediatos DEPOIS do commit.
+	// Compatibility field: dispatches are now created by campaign-event consumers.
 	eventDispatches: TEventDispatchResult[];
 };
 
@@ -37,21 +33,6 @@ type TSaleCashbackAccumulation = {
 	partnerAccumulatedValue: number;
 	partnerClientId: string | null;
 };
-
-function buildInteractionDescription(
-	campaign: TCampaignWithAudienceRelations,
-	persistedSale: TPersistedSaleForEffects,
-	accumulation: TSaleCashbackAccumulation | null,
-) {
-	if (campaign.gatilhoTipo === "PRIMEIRA-COMPRA") return "Cliente realizou sua primeira compra.";
-	if (campaign.gatilhoTipo === "NOVA-COMPRA") return `Cliente realizou nova compra via ${persistedSale.sale.channel ?? "integração"}.`;
-	if (campaign.gatilhoTipo === "QUANTIDADE-TOTAL-COMPRAS") return `Cliente atingiu ${persistedSale.newTotalPurchaseCount} compras totais.`;
-	if (campaign.gatilhoTipo === "VALOR-TOTAL-COMPRAS") return `Cliente atingiu R$ ${persistedSale.newTotalPurchaseValue} em compras totais.`;
-	if (campaign.gatilhoTipo === "CASHBACK-ACUMULADO" && accumulation) {
-		return `Cliente acumulou R$ ${accumulation.buyerAccumulatedValue.toFixed(2)} em cashback. Total acumulado: R$ ${accumulation.buyerAccumulatedTotal.toFixed(2)} via campanha ${campaign.titulo}.`;
-	}
-	return `Cliente se enquadrou no gatilho ${campaign.gatilhoTipo}.`;
-}
 
 function updateBalanceCache({
 	balancesByClientId,
@@ -77,23 +58,20 @@ function updateBalanceCache({
 export async function processDataCollectingV2Effects({
 	tx,
 	organizationId,
-	campaigns,
-	audiencesByCampaignId,
 	persistedSales,
 	options,
+	publicationAllowed = true,
 }: {
 	tx: TDataCollectingV2Executor;
 	organizationId: string;
-	campaigns: TCampaignWithAudienceRelations[];
-	audiencesByCampaignId: Map<string, Set<string>>;
 	persistedSales: TPersistedSaleForEffects[];
 	options: TDataCollectingV2EffectsOptions;
+	publicationAllowed?: boolean;
 }): Promise<TProcessEffectsResult> {
 	const eventDispatches: TEventDispatchResult[] = [];
+	let campaignEventsCapturedCount = 0;
 	let cashbackTransactionsCount = 0;
 	let cashbackAccumulatedValue = 0;
-	let firstPurchaseDispatchesCount = 0;
-	let cashbackAccumulationDispatchesCount = 0;
 
 	const cashbackProgram = options.processCashback
 		? await tx.query.cashbackPrograms.findFirst({
@@ -232,71 +210,44 @@ export async function processDataCollectingV2Effects({
 		if (!options.processCampaigns || !persistedSale.becameValid || !persistedSale.clientId) continue;
 		const clientId = persistedSale.clientId;
 
-		// Motor único de gatilhos (lib/campaigns/engine): mesma decisão do POI.
-		const triggered = resolveTriggeredCampaigns({
-			campaigns,
-			audiencesByCampaignId,
-			sale: {
-				clientId,
-				isFirstPurchase: persistedSale.isFirstPurchase,
-				saleValue: persistedSale.sale.totalValue,
-				newTotalPurchaseCount: persistedSale.newTotalPurchaseCount,
-				previousTotalPurchaseCount: persistedSale.previousTotalPurchaseCount,
-				newTotalPurchaseValue: persistedSale.newTotalPurchaseValue,
-				previousTotalPurchaseValue: persistedSale.previousTotalPurchaseValue,
-				cashbackAccumulatedValue: saleCashbackAccumulation?.buyerAccumulatedValue ?? null,
-				cashbackAvailableBalance: saleCashbackAccumulation?.buyerAvailableBalance ?? null,
+		// Freeze ingestion facts; trigger evaluation belongs to the event consumer.
+		const balance = balancesByClientId.get(clientId);
+		const eventId = await recordPurchaseCampaignEvent({
+			tx,
+			organizationId,
+			clientId,
+			sourceId: persistedSale.id,
+			idempotencyKey: `compra:${persistedSale.id}`,
+			publicationAllowed,
+			snapshot: {
+				compraValor: persistedSale.sale.totalValue,
+				comprasQuantidadeAnterior: persistedSale.previousTotalPurchaseCount ?? 0,
+				comprasQuantidadePosterior: persistedSale.newTotalPurchaseCount ?? 0,
+				comprasValorAnterior: persistedSale.previousTotalPurchaseValue ?? 0,
+				comprasValorPosterior: persistedSale.newTotalPurchaseValue ?? 0,
+				primeiraCompra: persistedSale.isFirstPurchase,
+				contabilizarCompra: persistedSale.newTotalPurchaseCount !== null,
+				vendedorNome: persistedSale.sale.sellerName,
+				terminologia: cashbackProgram?.terminologia ?? "DINHEIRO",
+				cashbackAcumulado: saleCashbackAccumulation?.buyerAccumulatedValue ?? 0,
+				cashbackSaldoDisponivel: balance?.saldoValorDisponivel ?? 0,
+				cashbackTotalAcumulado: balance?.saldoValorAcumuladoTotal ?? 0,
+				origem: "INTEGRACAO",
+				canal: persistedSale.sale.channel ?? null,
+				dataCompra: persistedSale.sale.occurredAt.toISOString(),
 			},
 		});
-
-		for (const { campaign, grupo } of triggered) {
-			if (!(await canScheduleCampaignForClient({ executor: tx, campaign, clientId }))) continue;
-
-			const currentBalance = balancesByClientId.get(clientId);
-			const contexto = {
-				...buildBasePurchaseInteractionMetadata({
-					terminologia: cashbackProgram?.terminologia ?? "DINHEIRO",
-					saleValue: persistedSale.sale.totalValue,
-					transactionAccumulatedCashback: saleCashbackAccumulation?.buyerAccumulatedValue ?? 0,
-					availableBalance: currentBalance?.saldoValorDisponivel ?? 0,
-					accumulatedTotal: currentBalance?.saldoValorAcumuladoTotal ?? 0,
-					sellerName: persistedSale.sale.sellerName,
-					totalPurchaseCount: persistedSale.newTotalPurchaseCount ?? undefined,
-					totalPurchaseValue: persistedSale.newTotalPurchaseValue ?? undefined,
-				}),
-				...(grupo === "CASHBACK" ? { cashbackAcumuladoValor: saleCashbackAccumulation?.buyerAccumulatedValue ?? 0 } : {}),
-			};
-
-			// Um disparo por (campanha, venda): reimportar a mesma venda nunca duplica a mensagem.
-			const dispatch = await createEventCampaignDispatch({
-				tx,
-				organizationId,
-				campaign,
-				janelaReferencia: `venda:${persistedSale.id}`,
-				recipients: [
-					{
-						clienteId: clientId,
-						contexto,
-						vendaId: persistedSale.id,
-						descricao: buildInteractionDescription(campaign, persistedSale, saleCashbackAccumulation),
-					},
-				],
-			});
-			if (!dispatch.created) continue;
-
-			eventDispatches.push(dispatch);
-			if (campaign.gatilhoTipo === "PRIMEIRA-COMPRA") firstPurchaseDispatchesCount += 1;
-			if (campaign.gatilhoTipo === "CASHBACK-ACUMULADO") cashbackAccumulationDispatchesCount += 1;
-		}
+		if (eventId) campaignEventsCapturedCount++;
 	}
 
 	return {
-		createdDispatchesCount: eventDispatches.length,
+		campaignEventsCapturedCount,
+		createdDispatchesCount: 0,
 		immediateDispatchesCount: eventDispatches.filter((dispatch) => dispatch.immediate).length,
 		cashbackTransactionsCount,
 		cashbackAccumulatedValue,
-		firstPurchaseDispatchesCount,
-		cashbackAccumulationDispatchesCount,
+		firstPurchaseDispatchesCount: 0,
+		cashbackAccumulationDispatchesCount: 0,
 		eventDispatches,
 	};
 }

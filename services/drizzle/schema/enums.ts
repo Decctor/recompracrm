@@ -589,6 +589,9 @@ export const campaignDispatchRecipientStatusEnum = pgEnum("campaign_dispatch_rec
 	"PULADA",
 ]);
 export const campaignDispatchSkipReasonEnum = pgEnum("campaign_dispatch_skip_reason", [
+	"EVENTO_INVALIDO",
+	"VENDA_INVALIDA",
+	"EVENTO_EXPIRADO",
 	"QUOTA_ORG_DIARIO",
 	"QUOTA_ORG_SEMANAL",
 	"QUOTA_CAMPANHA_DIARIO",
@@ -636,3 +639,5 @@ export const visualKitFormatEnum = pgEnum("visual_kit_format", [
 	"LISTA_WHATSAPP",
 ]);
 export const visualKitOutputEnum = pgEnum("visual_kit_output", ["PDF", "PDF_ETIQUETADORA", "PNG", "JPG"]);
+
+export const campaignEventStatusEnum = pgEnum("campaign_event_status", ["PENDENTE", "PROCESSADA", "DESCARTADA"]);

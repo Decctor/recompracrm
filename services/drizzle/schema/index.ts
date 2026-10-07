@@ -54,3 +54,4 @@ export * from "./catalog-links";
 export * from "./files";
 export * from "./integration-import-jobs";
 export * from "./visual-kits";
+export * from "./campaign-events";

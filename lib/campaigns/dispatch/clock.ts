@@ -2,16 +2,22 @@ import { releaseSendQuota } from "@/lib/interactions/send-counters";
 import { db } from "@/services/drizzle";
 import { campaignDispatchRecipients, campaignDispatches, campaigns } from "@/services/drizzle/schema";
 import { and, eq, inArray, isNotNull, lte, or, sql } from "drizzle-orm";
-import { createCampaignDispatch } from "./create";
+import { recordCampaignEvent } from "@/lib/campaigns/events/record";
+import { publishPendingCampaignEventsSafely } from "@/lib/campaigns/events/queue";
 import { publishCampaignDispatchExpand, publishCampaignDispatchSend } from "./queue";
-import { buildScheduledWindowReference, resolveScheduledWindowsForNow, shouldRecurrentCampaignRunOnDate } from "./schedule";
+import {
+	buildScheduledWindowReference,
+	resolveDispatchScheduledAtForDate,
+	resolveScheduledWindowsForNow,
+	shouldRecurrentCampaignRunOnDate,
+} from "./schedule";
 
 /**
  * O relógio (cron `campaign-dispatches`): barato e determinístico, termina em segundos mesmo com
  * muitas organizações. Não resolve audiência nem envia nada — cria os claims (INSERT ... ON
  * CONFLICT DO NOTHING) e publica trabalho para os consumers.
  *
- *  1. campanhas agendadas/recorrentes devidas nos blocos já vencidos de hoje → disparo + expand;
+ *  1. campanhas agendadas/recorrentes devidas nos blocos já vencidos de hoje → evento + consumer;
  *  2. disparos de evento com atraso cuja hora chegou → send;
  *  3. varredura: disparos parados (publicação perdida, consumer morto) → republica;
  *  4. varredura: reservas paradas (queda entre o envio e o registro) → voltam à fila.
@@ -21,6 +27,8 @@ const STALE_DISPATCH_MINUTES = 30;
 const STALE_RESERVATION_MINUTES = 15;
 
 export type TCampaignDispatchClockSummary = {
+	scheduledEventsCaptured: number;
+	/** @deprecated Dispatches are created by event consumers. */
 	scheduledDispatchesCreated: number;
 	dueEventDispatchesPublished: number;
 	staleDispatchesRepublished: number;
@@ -60,19 +68,28 @@ async function createScheduledDispatches(now: Date, summary: TCampaignDispatchCl
 		if (isRecurrent && !shouldRecurrentCampaignRunOnDate(campaign, now)) continue;
 
 		const janelaReferencia = buildScheduledWindowReference({ dateKey, block: campaign.execucaoAgendadaBloco });
-		const dispatch = await db.transaction((tx) =>
-			createCampaignDispatch({
+		const eventId = await db.transaction((tx) =>
+			recordCampaignEvent({
 				tx,
-				organizationId: campaign.organizacaoId as string,
-				campaignId: campaign.id,
-				origem: isRecurrent ? "RECORRENTE" : "AGENDADA",
-				janelaReferencia,
+				input: {
+					organizacaoId: campaign.organizacaoId as string,
+					clienteId: null,
+					fonteTipo: "CAMPANHA",
+					fonteId: campaign.id,
+					tipo: "CAMPANHA_AGENDADA",
+					versao: 1,
+					chaveIdempotencia: `${campaign.id}:${janelaReferencia}`,
+					dataEvento: resolveDispatchScheduledAtForDate({ date: now, block: campaign.execucaoAgendadaBloco }),
+					contexto: {
+						campanhaId: campaign.id,
+						gatilho: campaign.gatilhoTipo,
+						janelaReferencia,
+						dataAgendada: resolveDispatchScheduledAtForDate({ date: now, block: campaign.execucaoAgendadaBloco }).toISOString(),
+					},
+				},
 			}),
 		);
-		if (!dispatch.created) continue;
-
-		summary.scheduledDispatchesCreated += 1;
-		await publishCampaignDispatchExpand({ dispatchId: dispatch.dispatchId });
+		if (eventId) summary.scheduledEventsCaptured += 1;
 	}
 }
 
@@ -153,6 +170,7 @@ async function requeueStaleReservations(now: Date, summary: TCampaignDispatchClo
 
 export async function runCampaignDispatchClock({ now = new Date() }: { now?: Date } = {}): Promise<TCampaignDispatchClockSummary> {
 	const summary: TCampaignDispatchClockSummary = {
+		scheduledEventsCaptured: 0,
 		scheduledDispatchesCreated: 0,
 		dueEventDispatchesPublished: 0,
 		staleDispatchesRepublished: 0,
@@ -160,6 +178,7 @@ export async function runCampaignDispatchClock({ now = new Date() }: { now?: Dat
 	};
 
 	await createScheduledDispatches(now, summary);
+	await publishPendingCampaignEventsSafely();
 	await publishDueEventDispatches(now, summary);
 	// Reservas paradas primeiro: ao voltarem à fila, o disparo delas fica elegível à republicação.
 	await requeueStaleReservations(now, summary);

@@ -1,3 +1,4 @@
+import { publishPendingCampaignEventsSafely } from "@/lib/campaigns/events/queue";
 import { fetchConnectorImportBatch, type TCanonicalImportWindow, type TCanonicalImportBatch } from "@/lib/data-connectors";
 import { processSaleCupomAutoPrintIfEligible } from "@/lib/desktop-agent/auto-print";
 import { getActiveDataSourceIntegrations, type TDataSourceIntegration } from "@/lib/integrations/data-sources";
@@ -5,7 +6,7 @@ import { resolveIfoodManagementContext } from "@/lib/integrations/ifood/context"
 import { confirmIfoodOrder } from "@/lib/integrations/ifood/orders";
 import { getChannelErpPolicy } from "@/lib/sales/fulfillment-channels/policy";
 import { processSaleAutomaticFiscalEmissionIfEligible } from "@/lib/sales/sale-processing/process-sale-automatic-fiscal-emission";
-import { publishEventDispatches, type TEventDispatchResult } from "@/lib/campaigns/engine";
+import { type TEventDispatchResult } from "@/lib/campaigns/engine";
 import { db } from "@/services/drizzle";
 import { integrations, organizations } from "@/services/drizzle/schema";
 import { isAxiosError } from "axios";
@@ -14,9 +15,7 @@ import timezone from "dayjs/plugin/timezone";
 import utc from "dayjs/plugin/utc";
 import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import { z } from "zod";
-import { resolveCampaignAudiences } from "./campaign-audiences";
 import { processDataCollectingV2Effects } from "./effects";
-import { loadPurchaseEffectCampaigns } from "./purchase-effect-campaigns";
 import {
 	createEmptyRunSummary,
 	groupIntegrationsByOrganization,
@@ -226,7 +225,6 @@ export async function persistCanonicalBatch({
 		stockTrackingEnabled: organizationConfiguration?.preferencias?.rastreamentoEstoque ?? false,
 		organizationConfiguration,
 	};
-	const campaignsForOrganization = effects.processCampaigns ? await loadPurchaseEffectCampaigns(db, organizationId) : [];
 	let eventDispatches: TEventDispatchResult[] = [];
 	let fiscalEmissionCandidateSaleIds: string[] = [];
 	// Hoisted para os hooks pós-commit (aceite automático iFood + cupom automático no becameValid).
@@ -242,25 +240,12 @@ export async function persistCanonicalBatch({
 		const { persistedSales, saleIdCollisions } = await syncSales({ tx, batch, context: auxiliaryContext, erp });
 		persistedSalesForPostCommit = persistedSales;
 		fiscalEmissionCandidateSaleIds = persistedSales.filter((sale) => sale.managedFiscalEmissionCandidate).map((sale) => sale.id);
-		// Audiences are resolved once from the post-sync state. Keep audience filters independent
-		// from client metrics mutated by this batch; per-sale trigger counters live in persistedSales.
-		// Restritas aos clientes do lote (superconjunto do que os efeitos consultam): a org inteira
-		// era materializada por campanha a cada lote, e a maioria dos lotes tem 0–5 vendas.
-		const audiencesByCampaignId = effects.processCampaigns
-			? await resolveCampaignAudiences({
-					tx,
-					organizationId,
-					campaigns: campaignsForOrganization,
-					restrictToClientIds: Array.from(new Set(persistedSales.map((sale) => sale.clientId).filter((clientId): clientId is string => !!clientId))),
-				})
-			: new Map<string, Set<string>>();
 		const effectsResult = await processDataCollectingV2Effects({
 			tx,
 			organizationId,
-			campaigns: campaignsForOrganization,
-			audiencesByCampaignId,
 			persistedSales,
 			options: effects,
+			publicationAllowed: publishDispatches,
 		});
 
 		eventDispatches = effectsResult.eventDispatches;
@@ -278,8 +263,9 @@ export async function persistCanonicalBatch({
 			createdProductsCount: auxiliaryContext.createdProductsCount,
 			createdSellersCount: auxiliaryContext.createdSellersCount,
 			createdPartnersCount: auxiliaryContext.createdPartnersCount,
-			resolvedCampaignAudiencesCount: audiencesByCampaignId.size,
+			resolvedCampaignAudiencesCount: 0,
 			// Contagens de disparos de campanha (uma mensagem por disparo de evento).
+			campaignEventsCapturedCount: effectsResult.campaignEventsCapturedCount,
 			createdInteractionsCount: effectsResult.createdDispatchesCount,
 			immediateInteractionsCount: effectsResult.immediateDispatchesCount,
 			cashbackTransactionsCount: effectsResult.cashbackTransactionsCount,
@@ -296,8 +282,8 @@ export async function persistCanonicalBatch({
 
 	// Disparos de campanha imediatos: publicados só depois do commit (a fila não pode receber
 	// trabalho que ainda pode dar rollback). Os com atraso ficam para o relógio.
-	if (publishDispatches && eventDispatches.length > 0) {
-		await publishEventDispatches(eventDispatches);
+	if (publishDispatches && effects.processCampaigns) {
+		await publishPendingCampaignEventsSafely({ organizationId });
 	}
 
 	// Aceite automático iFood (pós-commit): pedidos ainda não válidos e não cancelados = PLACED

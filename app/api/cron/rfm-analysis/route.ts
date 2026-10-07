@@ -2,7 +2,8 @@ import dayjs from "dayjs";
 import { NextRequest, NextResponse } from "next/server";
 
 import { appApiHandler } from "@/lib/app-api";
-import { publishEventDispatches, scheduleSegmentationDispatches, type TEventDispatchResult } from "@/lib/campaigns/engine";
+import { recordSegmentationCampaignEvents } from "@/lib/campaigns/engine";
+import { publishPendingCampaignEventsSafely } from "@/lib/campaigns/events/queue";
 import { filterCommunicationPausedClientIds, resolveCampaignAudienceClientIds } from "@/lib/campaigns/filters";
 import { assertCronAuthorized } from "@/lib/cron/assert-cron-authorized";
 import { type DBTransaction, db } from "@/services/drizzle";
@@ -98,7 +99,7 @@ async function getRFMAnalysisRoute(_req: NextRequest) {
 	let failedOrganizationsCount = 0;
 	let analyzedClientsCount = 0;
 	let updatedClientsCount = 0;
-	let immediateInteractionsCount = 0;
+	let campaignEventsCapturedCount = 0;
 
 	for (const organization of organizationsList) {
 		const organizationStartedAt = Date.now();
@@ -183,10 +184,10 @@ async function getRFMAnalysisRoute(_req: NextRequest) {
 			}
 
 			// Collect data for immediate processing
-			const eventDispatches: TEventDispatchResult[] = [];
+			const campaignEventIds: string[] = [];
 			const pendingRFMClientUpdates: TRFMClientUpdateEntry[] = [];
 			let flushedRFMUpdateBatchesCount = 0;
-			let scheduledInteractionsCount = 0;
+			let capturedEventsCount = 0;
 			const transactionStartedAt = Date.now();
 
 			await db.transaction(async (tx) => {
@@ -220,7 +221,7 @@ async function getRFMAnalysisRoute(_req: NextRequest) {
 					const newRFMLabel = getRFMLabel({ monetary: monetaryScore, frequency: frequencyScore, recency: recencyScore });
 
 					const hasClientChangedRFMLabels = results.clientRFMCurrentLabel !== newRFMLabel;
-					const clientDispatches = await scheduleSegmentationDispatches({
+					const clientEventIds = await recordSegmentationCampaignEvents({
 						tx,
 						organizationId: organization.id,
 						client: {
@@ -234,8 +235,8 @@ async function getRFMAnalysisRoute(_req: NextRequest) {
 						filterAudiencesByCampaignId,
 						cashbackTerminology,
 					});
-					eventDispatches.push(...clientDispatches);
-					scheduledInteractionsCount += clientDispatches.length;
+					campaignEventIds.push(...clientEventIds);
+					capturedEventsCount += clientEventIds.length;
 
 					pendingRFMClientUpdates.push({
 						clientId: results.clientId,
@@ -277,19 +278,19 @@ async function getRFMAnalysisRoute(_req: NextRequest) {
 			});
 
 			console.log(
-				`[ORG: ${organization.id}] [INFO] [RFM_ANALYSIS] Transaction completed in ${formatDurationMs(Date.now() - transactionStartedAt)} | clients=${accumulatedResultsByClient.length} | updateBatches=${flushedRFMUpdateBatchesCount} | scheduledInteractions=${scheduledInteractionsCount}`,
+				`[ORG: ${organization.id}] [INFO] [RFM_ANALYSIS] Transaction completed in ${formatDurationMs(Date.now() - transactionStartedAt)} | clients=${accumulatedResultsByClient.length} | updateBatches=${flushedRFMUpdateBatchesCount} | capturedEvents=${capturedEventsCount}`,
 			);
 
 			// Disparos de campanha imediatos: publicados depois do commit; os com atraso ficam para o relógio.
-			if (eventDispatches.length > 0) await publishEventDispatches(eventDispatches);
+			if (campaignEventIds.length > 0) await publishPendingCampaignEventsSafely({ organizationId: organization.id });
 
 			processedOrganizationsCount += 1;
 			analyzedClientsCount += accumulatedResultsByClient.length;
 			updatedClientsCount += accumulatedResultsByClient.length;
-			immediateInteractionsCount += eventDispatches.length;
+			campaignEventsCapturedCount += campaignEventIds.length;
 
 			console.log(
-				`[ORG: ${organization.id}] [INFO] [RFM_ANALYSIS] RFM analysis completed successfully in ${formatDurationMs(Date.now() - organizationStartedAt)} | clients=${accumulatedResultsByClient.length} | immediateInteractions=${eventDispatches.length}`,
+				`[ORG: ${organization.id}] [INFO] [RFM_ANALYSIS] RFM analysis completed successfully in ${formatDurationMs(Date.now() - organizationStartedAt)} | clients=${accumulatedResultsByClient.length} | capturedEvents=${campaignEventIds.length}`,
 			);
 		} catch (error) {
 			failedOrganizationsCount += 1;
@@ -299,7 +300,7 @@ async function getRFMAnalysisRoute(_req: NextRequest) {
 	}
 
 	console.log(
-		`[INFO] [RFM_ANALYSIS] Completed in ${formatDurationMs(Date.now() - startedAt)} | organizations=${processedOrganizationsCount}/${organizationsList.length} | failedOrganizations=${failedOrganizationsCount} | analyzedClients=${analyzedClientsCount} | updatedClients=${updatedClientsCount} | immediateInteractions=${immediateInteractionsCount}`,
+		`[INFO] [RFM_ANALYSIS] Completed in ${formatDurationMs(Date.now() - startedAt)} | organizations=${processedOrganizationsCount}/${organizationsList.length} | failedOrganizations=${failedOrganizationsCount} | analyzedClients=${analyzedClientsCount} | updatedClients=${updatedClientsCount} | capturedEvents=${campaignEventsCapturedCount}`,
 	);
 
 	return NextResponse.json("AN?LISE RFM FEITA COM SUCESSO !", { status: 200 });

@@ -6,15 +6,8 @@ import { type TValidatedPrizeForRedemption, validatePrizeForRedemption } from "@
 import { resolvePoiPrizeLines } from "@/lib/point-of-interaction/prize-lines";
 import { normalizeRewardRedemptionLines } from "@/lib/sales/sale-reward-snapshot";
 import { applyCashbackRedemptionFIFO } from "@/lib/cashback/redemption";
-import {
-	canScheduleCampaignForClient,
-	createEventCampaignDispatch,
-	publishEventDispatches,
-	resolveTriggeredCampaigns,
-	type TEventDispatchResult,
-} from "@/lib/campaigns/engine";
-import { resolveCampaignAudiencesByCampaignId } from "@/lib/campaigns/filters";
-import { buildBasePurchaseInteractionMetadata } from "@/lib/campaigns/interaction-metadata";
+import { recordPurchaseCampaignEvent } from "@/lib/campaigns/events/purchases";
+import { publishPendingCampaignEventsSafely } from "@/lib/campaigns/events/queue";
 import { processConversionAttribution } from "@/lib/conversions/attribution";
 import { formatCashbackValue, formatPhoneAsBase } from "@/lib/formatting";
 import { isValidCpfCnpj } from "@/lib/validation";
@@ -312,8 +305,6 @@ async function preparePointOfInteractionTransaction({ input, operatorContext, tx
 		});
 		const operatorMembershipUser = operatorMembership?.usuario;
 
-		const eventDispatches: TEventDispatchResult[] = [];
-
 		let transactionSaleId: string | null = null;
 		let transactionAccumulationId: string | null = null;
 		let transactionRedemptionId: string | null = null;
@@ -420,8 +411,7 @@ async function preparePointOfInteractionTransaction({ input, operatorContext, tx
 			clientCurrentPurchaseCount,
 			clientCurrentPurchaseValue,
 		});
-		const { organizationCampaigns, audiencesByCampaignId } = await getOrganizationCampaigns({ tx, orgId: input.orgId, clientId });
-		console.log(`[POI ${input.orgId}] [CAMPAIGNS APPLICABLE]`, organizationCampaigns.length);
+
 		let salePartnerId: string | null = null;
 		let salePartnerClientId: string | null = null;
 		const normalizedPartnerCode = input.sale.partnerCode?.trim().toUpperCase() || null;
@@ -803,81 +793,35 @@ async function preparePointOfInteractionTransaction({ input, operatorContext, tx
 		const shouldProcessPurchaseCampaigns =
 			transactionRequiresSaleProcessing || transactionRequiresAccumulationProcessing || transactionRequiresRedemptionProcessing;
 
-		if (shouldProcessPurchaseCampaigns) {
-			console.log(`[POI ${input.orgId}] [CAMPAIGNS] Iniciando processamento de campanhas de compra`, {
-				transactionRequiresSaleProcessing,
-				transactionRequiresAccumulationProcessing,
-				transactionRequiresRedemptionProcessing,
-				transactionSaleId,
-				effectiveSaleValue,
+		let campaignEventId: string | null = null;
+		if (shouldProcessPurchaseCampaigns && clientId) {
+			const occurrenceId = transactionSaleId ?? transactionAccumulationId ?? transactionRedemptionId ?? crypto.randomUUID();
+			campaignEventId = await recordPurchaseCampaignEvent({
+				tx,
+				organizationId: input.orgId,
 				clientId,
-			});
-
-			// Motor único de gatilhos (lib/campaigns/engine): a mesma decisão das integrações.
-			const triggered = resolveTriggeredCampaigns({
-				campaigns: organizationCampaigns,
-				audiencesByCampaignId,
-				sale: {
-					clientId,
-					isFirstPurchase: clientIsNew,
-					saleValue: effectiveSaleValue,
-					// clientCurrentPurchaseCount/Value já incluem a venda desta transação.
-					newTotalPurchaseCount: transactionRequiresSaleProcessing ? clientCurrentPurchaseCount : null,
-					previousTotalPurchaseCount: transactionRequiresSaleProcessing ? clientCurrentPurchaseCount - 1 : null,
-					newTotalPurchaseValue: transactionRequiresSaleProcessing ? clientCurrentPurchaseValue : null,
-					previousTotalPurchaseValue: transactionRequiresSaleProcessing ? clientCurrentPurchaseValue - effectiveSaleValue : null,
-					cashbackAccumulatedValue: clientNewAccumulatedCashbackValue > 0 ? clientNewAccumulatedCashbackValue : null,
-					cashbackAvailableBalance: clientCashbackAvailableBalance ?? 0,
+				sourceType: transactionSaleId ? "VENDA" : transactionAccumulationId || transactionRedemptionId ? "TRANSACAO_CASHBACK" : "CLIENTE",
+				sourceId: transactionSaleId ?? transactionAccumulationId ?? transactionRedemptionId ?? clientId,
+				idempotencyKey: `poi:${occurrenceId}`,
+				snapshot: {
+					compraValor: effectiveSaleValue,
+					comprasQuantidadeAnterior: transactionRequiresSaleProcessing ? clientCurrentPurchaseCount - 1 : 0,
+					comprasQuantidadePosterior: transactionRequiresSaleProcessing ? clientCurrentPurchaseCount : 0,
+					comprasValorAnterior: transactionRequiresSaleProcessing ? clientCurrentPurchaseValue - effectiveSaleValue : 0,
+					comprasValorPosterior: transactionRequiresSaleProcessing ? clientCurrentPurchaseValue : 0,
+					primeiraCompra: clientIsNew,
+					contabilizarCompra: transactionRequiresSaleProcessing,
+					segmentacao: clientRfmTitle,
+					vendedorNome: operator.nome,
+					terminologia: program.terminologia,
+					cashbackAcumulado: clientNewAccumulatedCashbackValue,
+					cashbackSaldoDisponivel: clientCashbackAvailableBalance ?? 0,
+					cashbackTotalAcumulado: clientCashbackAccumulatedBalance ?? 0,
+					cashbackTotalResgatado: clientCashbackRedeemedBalanceTotal ?? 0,
+					origem: "POI",
+					janelaReferencia: `poi:${occurrenceId}`,
 				},
 			});
-			console.log(
-				`[POI ${input.orgId}] [CAMPAIGNS] Campanhas disparadas`,
-				triggered.map(({ campaign, grupo }) => `${grupo}:${campaign.titulo}`),
-			);
-
-			for (const { campaign, grupo } of triggered) {
-				if (!(await canScheduleCampaignForClient({ executor: tx, campaign, clientId }))) {
-					console.log(`[POI ${input.orgId}] [CAMPAIGN_FREQUENCY] Pulando campanha ${campaign.titulo} para o cliente ${clientId} por frequência.`);
-					continue;
-				}
-
-				const contexto = {
-					...buildBasePurchaseInteractionMetadata({
-						terminologia: program.terminologia,
-						saleValue: effectiveSaleValue,
-						transactionAccumulatedCashback: clientNewAccumulatedCashbackValue,
-						availableBalance: clientCashbackAvailableBalance ?? 0,
-						accumulatedTotal: clientCashbackAccumulatedBalance ?? 0,
-						redeemedTotal: clientCashbackRedeemedBalanceTotal ?? 0,
-						sellerName: operator.nome,
-						totalPurchaseCount: transactionRequiresSaleProcessing ? clientCurrentPurchaseCount : undefined,
-						totalPurchaseValue: transactionRequiresSaleProcessing ? clientCurrentPurchaseValue : undefined,
-					}),
-					...(grupo === "CASHBACK" ? { cashbackAcumuladoValor: clientNewAccumulatedCashbackValue } : {}),
-				};
-				const descricao =
-					campaign.gatilhoTipo === "PRIMEIRA-COMPRA"
-						? "Cliente realizou sua primeira compra."
-						: campaign.gatilhoTipo === "NOVA-COMPRA"
-							? `Cliente se enquadrou no parâmetro de nova compra ${clientRfmTitle}.`
-							: campaign.gatilhoTipo === "QUANTIDADE-TOTAL-COMPRAS"
-								? `Cliente atingiu ${clientCurrentPurchaseCount} compras totais (gatilho: ${campaign.gatilhoQuantidadeTotalCompras}).`
-								: campaign.gatilhoTipo === "VALOR-TOTAL-COMPRAS"
-									? `Cliente atingiu R$ ${clientCurrentPurchaseValue.toFixed(2)} em compras totais (gatilho: R$ ${campaign.gatilhoValorTotalCompras?.toFixed(2)}).`
-									: `Cliente acumulou R$ ${clientNewAccumulatedCashbackValue.toFixed(2)} em cashback. Total acumulado: R$ ${(clientCashbackAvailableBalance ?? 0).toFixed(2)}.`;
-
-				// Um disparo por (campanha, transação): o reprocessamento idempotente do POI não duplica.
-				const dispatch = await createEventCampaignDispatch({
-					tx,
-					organizationId: input.orgId,
-					campaign,
-					janelaReferencia: `poi:${transactionSaleId ?? transactionAccumulationId ?? transactionRedemptionId ?? crypto.randomUUID()}`,
-					recipients: [{ clienteId: clientId, contexto, vendaId: transactionSaleId, descricao }],
-				});
-				if (dispatch.created) eventDispatches.push(dispatch);
-			}
-		} else {
-			console.log(`[POI ${input.orgId}] [CAMPAIGNS] Nenhuma campanha de compra processada — transação sem acúmulo, resgate ou venda interna`);
 		}
 
 		return {
@@ -890,7 +834,7 @@ async function preparePointOfInteractionTransaction({ input, operatorContext, tx
 			clientNewOverallAvailableBalance: clientCashbackAvailableBalance,
 			visualClientAccumulatedCashbackValue,
 			visualClientNewOverallAvailableBalance,
-			eventDispatches,
+			campaignEventId,
 			createdClienteId: clientIsNew && clientId ? clientId : null,
 		};
 	})();
@@ -900,12 +844,7 @@ async function preparePointOfInteractionTransaction({ input, operatorContext, tx
 		if (result.createdClienteId) {
 			void recomputeClientDuplicatesSafely({ organizacaoId: input.orgId, clienteId: result.createdClienteId });
 		}
-		if (result.eventDispatches.length > 0) {
-			// Publica os disparos imediatos depois do commit; a função só encerra quando a fila aceitou.
-			waitUntil(publishEventDispatches(result.eventDispatches));
-		} else {
-			console.log("[POI] [CAMPAIGNS] Nenhum disparo de campanha para publicar");
-		}
+		if (result.campaignEventId) waitUntil(publishPendingCampaignEventsSafely({ organizationId: input.orgId }));
 	};
 
 	const response = {
@@ -966,27 +905,3 @@ export const POST = appApiHandler({
 
 // Audiências restritas ao cliente da transação: os gatilhos só perguntam se ELE pertence a cada
 // campanha, e materializar a org inteira por campanha a cada transação era egress puro.
-async function getOrganizationCampaigns({ tx, orgId, clientId }: { tx: DBTransaction; orgId: string; clientId: string | null | undefined }) {
-	const organizationCampaigns = await tx.query.campaigns.findMany({
-		where: (fields, { and, or, eq }) =>
-			and(
-				eq(fields.organizacaoId, orgId),
-				eq(fields.ativo, true),
-				or(
-					eq(fields.gatilhoTipo, "NOVA-COMPRA"),
-					eq(fields.gatilhoTipo, "PRIMEIRA-COMPRA"),
-					eq(fields.gatilhoTipo, "CASHBACK-ACUMULADO"),
-					eq(fields.gatilhoTipo, "QUANTIDADE-TOTAL-COMPRAS"),
-					eq(fields.gatilhoTipo, "VALOR-TOTAL-COMPRAS"),
-				),
-			),
-		with: { segmentacoes: true },
-	});
-	const audiencesByCampaignId = await resolveCampaignAudiencesByCampaignId({
-		executor: tx,
-		organizationId: orgId,
-		campaigns: organizationCampaigns,
-		restrictToClientIds: clientId ? [clientId] : [],
-	});
-	return { organizationCampaigns, audiencesByCampaignId };
-}

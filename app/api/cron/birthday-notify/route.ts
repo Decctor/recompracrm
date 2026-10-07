@@ -1,10 +1,7 @@
+import { recordCampaignOccurrence } from "@/lib/campaigns/events/occurrences";
+import { publishPendingCampaignEventsSafely } from "@/lib/campaigns/events/queue";
 import { appApiHandler } from "@/lib/app-api";
-import {
-	createEventCampaignDispatch,
-	filterClientIdsByFrequencyCap,
-	publishEventDispatches,
-	type TEventDispatchResult,
-} from "@/lib/campaigns/engine";
+import { filterClientIdsByFrequencyCap } from "@/lib/campaigns/engine";
 import { resolveDispatchScheduledAtForDate } from "@/lib/campaigns/dispatch/schedule";
 import { resolveCampaignAudienceClientIdsForCampaign } from "@/lib/campaigns/filters";
 import { buildBaseCashbackInteractionMetadata } from "@/lib/campaigns/interaction-metadata";
@@ -20,8 +17,8 @@ import { NextRequest, NextResponse } from "next/server";
 type TOrganizationBirthdayNotifySummary = {
 	activeCampaigns: number;
 	matchingClients: number;
-	dispatchesCreated: number;
-	recipientsQueued: number;
+	eventsCaptured: number;
+	recipientsCaptured: number;
 	skippedByFrequencyRules: number;
 };
 
@@ -40,12 +37,12 @@ async function getBirthdayNotifyRoute(_req: NextRequest) {
 
 		for (const organization of organizationsList) {
 			console.log(`[ORG: ${organization.id}] Processing organization...`);
-			const eventDispatches: TEventDispatchResult[] = [];
+
 			const organizationSummary: TOrganizationBirthdayNotifySummary = {
 				activeCampaigns: 0,
 				matchingClients: 0,
-				dispatchesCreated: 0,
-				recipientsQueued: 0,
+				eventsCaptured: 0,
+				recipientsCaptured: 0,
 				skippedByFrequencyRules: 0,
 			};
 
@@ -118,12 +115,13 @@ async function getBirthdayNotifyRoute(_req: NextRequest) {
 					organizationSummary.skippedByFrequencyRules += frequency.blocked.length;
 					const clientNameById = new Map(targetBirthdayClients.map((client) => [client.id, client.nome]));
 
-					const dispatch = await createEventCampaignDispatch({
+					const occurrence = await recordCampaignOccurrence({
 						tx,
 						organizationId: organization.id,
 						campaign,
 						janelaReferencia: `aniversario:${todayKey}`,
 						scheduledAt,
+						validity: { nascimentoMes: targetMonth, nascimentoDia: targetDay },
 						recipients: [
 							...frequency.allowed.map((clientId) => ({
 								clienteId: clientId,
@@ -134,14 +132,14 @@ async function getBirthdayNotifyRoute(_req: NextRequest) {
 						],
 						now,
 					});
-					if (!dispatch.created) continue;
-					eventDispatches.push(dispatch);
-					organizationSummary.dispatchesCreated += 1;
-					organizationSummary.recipientsQueued += dispatch.inserted;
+					if (!occurrence.captured) continue;
+
+					organizationSummary.eventsCaptured += 1;
+					organizationSummary.recipientsCaptured += occurrence.recipientsCaptured;
 				}
 			});
 
-			await publishEventDispatches(eventDispatches);
+			await publishPendingCampaignEventsSafely({ organizationId: organization.id });
 
 			console.log(`[ORG: ${organization.id}] [INFO] [BIRTHDAY_NOTIFY] Organization processing summary`, {
 				...organizationSummary,

@@ -1109,6 +1109,9 @@ export type TCampaignDispatchStatusEnum = z.infer<typeof CampaignDispatchStatusE
 export const CampaignDispatchRecipientStatusEnum = z.enum(["AGUARDANDO", "RESERVADA", "ENVIADA", "FALHOU", "PULADA"]);
 export type TCampaignDispatchRecipientStatusEnum = z.infer<typeof CampaignDispatchRecipientStatusEnum>;
 export const CampaignDispatchSkipReasonEnum = z.enum([
+	"EVENTO_INVALIDO",
+	"VENDA_INVALIDA",
+	"EVENTO_EXPIRADO",
 	"QUOTA_ORG_DIARIO",
 	"QUOTA_ORG_SEMANAL",
 	"QUOTA_CAMPANHA_DIARIO",

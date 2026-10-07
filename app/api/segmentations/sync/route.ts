@@ -1,6 +1,7 @@
 import dayjs from "dayjs";
 
-import { publishEventDispatches, scheduleSegmentationDispatches, type TEventDispatchResult } from "@/lib/campaigns/engine";
+import { recordSegmentationCampaignEvents } from "@/lib/campaigns/engine";
+import { publishPendingCampaignEventsSafely } from "@/lib/campaigns/events/queue";
 import { filterCommunicationPausedClientIds, resolveCampaignAudienceClientIds } from "@/lib/campaigns/filters";
 import { type DBTransaction, db } from "@/services/drizzle";
 import { clients, sales, utils } from "@/services/drizzle/schema";
@@ -46,7 +47,7 @@ async function syncSegmentations({ input, session }: { input: TSyncSegmentations
 	const startedAt = Date.now();
 	let analyzedClientsCount = 0;
 	let updatedClientsCount = 0;
-	let immediateInteractionsCount = 0;
+	let campaignEventsCapturedCount = 0;
 
 	const campaigns = await db.query.campaigns.findMany({
 		where: (fields, { eq, and, or }) =>
@@ -127,10 +128,10 @@ async function syncSegmentations({ input, session }: { input: TSyncSegmentations
 	console.log(`[ORG: ${userOrgId}] [INFO] [RFM_ANALYSIS] RFM config found:`, rfmConfig);
 
 	// Collect data for immediate processing
-	const eventDispatches: TEventDispatchResult[] = [];
+	const campaignEventIds: string[] = [];
 	const pendingRFMClientUpdates: TRFMClientUpdateEntry[] = [];
 	let flushedRFMUpdateBatchesCount = 0;
-	let scheduledInteractionsCount = 0;
+	let capturedEventsCount = 0;
 	const transactionStartedAt = Date.now();
 
 	await db.transaction(async (tx) => {
@@ -165,7 +166,7 @@ async function syncSegmentations({ input, session }: { input: TSyncSegmentations
 
 			const hasClientChangedRFMLabels = results.clientRFMCurrentLabel !== newRFMLabel;
 			if (input.runCampaigns) {
-				const clientDispatches = await scheduleSegmentationDispatches({
+				const clientEventIds = await recordSegmentationCampaignEvents({
 					tx,
 					organizationId: organizationId,
 					client: {
@@ -179,8 +180,8 @@ async function syncSegmentations({ input, session }: { input: TSyncSegmentations
 					filterAudiencesByCampaignId,
 					cashbackTerminology,
 				});
-				eventDispatches.push(...clientDispatches);
-				scheduledInteractionsCount += clientDispatches.length;
+				campaignEventIds.push(...clientEventIds);
+				capturedEventsCount += clientEventIds.length;
 			}
 
 			pendingRFMClientUpdates.push({
@@ -223,25 +224,26 @@ async function syncSegmentations({ input, session }: { input: TSyncSegmentations
 	});
 
 	console.log(
-		`[ORG: ${userOrgId}] [INFO] [RFM_ANALYSIS] Transaction completed in ${formatDurationMs(Date.now() - transactionStartedAt)} | clients=${accumulatedResultsByClient.length} | updateBatches=${flushedRFMUpdateBatchesCount} | scheduledInteractions=${scheduledInteractionsCount}`,
+		`[ORG: ${userOrgId}] [INFO] [RFM_ANALYSIS] Transaction completed in ${formatDurationMs(Date.now() - transactionStartedAt)} | clients=${accumulatedResultsByClient.length} | updateBatches=${flushedRFMUpdateBatchesCount} | capturedEvents=${capturedEventsCount}`,
 	);
 
 	// Disparos de campanha imediatos: publicados depois do commit; os com atraso ficam para o relógio.
-	if (eventDispatches.length > 0) await publishEventDispatches(eventDispatches);
+	if (campaignEventIds.length > 0) await publishPendingCampaignEventsSafely({ organizationId: userOrgId });
 
 	analyzedClientsCount += accumulatedResultsByClient.length;
 	updatedClientsCount += accumulatedResultsByClient.length;
-	immediateInteractionsCount += eventDispatches.length;
+	campaignEventsCapturedCount += campaignEventIds.length;
 
 	console.log(
-		`[ORG: ${userOrgId}] [INFO] [RFM_ANALYSIS] RFM analysis completed successfully in ${formatDurationMs(Date.now() - startedAt)} | clients=${accumulatedResultsByClient.length} | immediateInteractions=${eventDispatches.length}`,
+		`[ORG: ${userOrgId}] [INFO] [RFM_ANALYSIS] RFM analysis completed successfully in ${formatDurationMs(Date.now() - startedAt)} | clients=${accumulatedResultsByClient.length} | capturedEvents=${campaignEventIds.length}`,
 	);
 
 	return {
 		data: {
 			analyzedClientsCount,
 			updatedClientsCount,
-			immediateInteractionsCount,
+			campaignEventsCapturedCount,
+			immediateInteractionsCount: 0,
 		},
 		message: "Segmentações sincronizadas com sucesso.",
 	};
