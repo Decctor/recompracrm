@@ -100,6 +100,21 @@ export const ACCESS_SCOPE_CATALOG: Record<TAccessScopeEnum, TAccessScopeDescript
 		description: "Informar a aprovação ou recusa da maquininha para efetivar o pagamento da venda.",
 		group: "TERMINAL_PAGAMENTO",
 	},
+	"payment-terminal:catalog:read": {
+		label: "Ver o catálogo",
+		description: "Listar grupos, produtos e preços do canal PDV para montar uma venda na maquininha.",
+		group: "TERMINAL_PAGAMENTO",
+	},
+	"payment-terminal:clients:read": {
+		label: "Identificar clientes pelo telefone",
+		description: "Buscar o cliente pelo telefone para vincular a venda feita na maquininha.",
+		group: "TERMINAL_PAGAMENTO",
+	},
+	"payment-terminal:sales:create": {
+		label: "Vender pela maquininha",
+		description: "Criar e confirmar a venda no terminal; o pagamento fica pendente até a aprovação do cartão.",
+		group: "TERMINAL_PAGAMENTO",
+	},
 	"agent:results:read": {
 		label: "Consultar resultados comerciais",
 		description: "Ver faturamento, margem, ticket médio e o quanto a meta do período já foi atingida.",

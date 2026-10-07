@@ -21,13 +21,16 @@ export const DESKTOP_AGENT_ACCESS_SCOPES: TAccessScopeEnum[] = [
 	"desktop-agent:print-jobs:update",
 ];
 
-// Scopes do terminal de pagamento (RecompraCRM POS em SmartPOS). Marco 1: o terminal só lista as
-// cobranças atribuídas a ele, executa e reporta evidência — nunca cria venda ou tentativa.
+// Scopes do terminal de pagamento (RecompraCRM POS em SmartPOS). Fluxo B: lista as cobranças
+// atribuídas, executa e reporta. Fluxo A: catálogo, cliente e criação da venda no terminal.
 export const PAYMENT_TERMINAL_ACCESS_SCOPES: TAccessScopeEnum[] = [
 	"payment-terminal:configuration:read",
 	"payment-terminal:charges:read",
 	"payment-terminal:attempts:read",
 	"payment-terminal:attempts:complete",
+	"payment-terminal:catalog:read",
+	"payment-terminal:clients:read",
+	"payment-terminal:sales:create",
 ];
 
 // Scopes de leitura dos agentes de IA (MCP). `agent:clients:pii` fica de fora do teto padrão:

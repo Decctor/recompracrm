@@ -9,4 +9,5 @@ export * from "./events";
 export * from "./evidence";
 export * from "./report-evidence";
 export * from "./state-machine";
+export * from "./terminal-sale";
 export * from "./views";

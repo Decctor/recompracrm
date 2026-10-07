@@ -70,6 +70,9 @@ export type TProcessSaleConfirmationInput = {
 	accumulateCashback?: boolean;
 	// Sessão de venda que recortou esta venda (nullable). Carimba a venda e seus movimentos financeiros.
 	sessaoVendaId?: string | null;
+	// Fluxo A (venda nascida no terminal): a tentativa registra a chave/fingerprint do comando e
+	// nasce com origem DISPOSITIVO. Ausente no PDV web (Fluxo B).
+	terminalAttempt?: { chaveIdempotencia: string; fingerprintEntrada: string; origem: "DISPOSITIVO" } | null;
 };
 
 type TProcessSaleConfirmationPostCommitInput = Pick<TProcessSaleConfirmationInput, "organization" | "saleId" | "saleAuthorId">;
@@ -193,6 +196,9 @@ export async function processSaleConfirmationInTransaction({ tx, input }: { tx: 
 			totalParcelas: terminalAssignment.payment.totalParcelas ?? 1,
 			parcelamentoResponsavel: "LOJISTA",
 			actorUserId: input.saleAuthorId,
+			chaveIdempotencia: input.terminalAttempt?.chaveIdempotencia ?? null,
+			fingerprintEntrada: input.terminalAttempt?.fingerprintEntrada ?? null,
+			origem: input.terminalAttempt?.origem ?? "PLATAFORMA",
 		});
 		tentativaPagamento = { id: attempt.id, status: attempt.status, dispositivoId: attempt.dispositivoId, dispositivoNome: attempt.dispositivoNome };
 	}

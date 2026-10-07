@@ -856,6 +856,12 @@ export const AccessScopeEnum = z.enum([
 	"payment-terminal:charges:read",
 	"payment-terminal:attempts:read",
 	"payment-terminal:attempts:complete",
+	// Fluxo A (venda nascida no terminal): catálogo, cliente por telefone e criação da venda já
+	// com a tentativa atribuída ao próprio dispositivo. Separados dos scopes de execução para que
+	// um terminal "só cobrador" não precise enxergar catálogo nem clientes.
+	"payment-terminal:catalog:read",
+	"payment-terminal:clients:read",
+	"payment-terminal:sales:create",
 	// Agentes de IA (MCP). Leitura por domínio, no mesmo grão em que o lojista pensa no painel:
 	// quem concede "resultados" está liberando faturamento e metas, não a base de clientes.
 	"agent:results:read",

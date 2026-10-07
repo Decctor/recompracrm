@@ -70,6 +70,11 @@ export type TCreateAssignedPaymentAttemptParams = {
 	parcelamentoResponsavel?: TPaymentInstallmentPartyEnum | null;
 	// Usuário da plataforma que atribuiu a cobrança — fica nos eventos, não na tentativa.
 	actorUserId?: string | null;
+	// Fluxo A: a tentativa nasce de um comando externo do próprio dispositivo; a chave e o
+	// fingerprint do comando ficam na tentativa (unique por organização + dispositivo + chave).
+	chaveIdempotencia?: string | null;
+	fingerprintEntrada?: string | null;
+	origem?: "PLATAFORMA" | "DISPOSITIVO";
 };
 
 // Fluxo B: a tentativa nasce CRIADA, dentro da transação que confirma a venda, já atribuída ao
@@ -139,6 +144,8 @@ export async function createAssignedPaymentAttempt(params: TCreateAssignedPaymen
 			parcelamentoResponsavel: totalParcelas > 1 ? (params.parcelamentoResponsavel ?? "LOJISTA") : null,
 			status: "CRIADA",
 			transacaoFinanceiraId: financialTransactionId,
+			chaveIdempotencia: params.chaveIdempotencia ?? null,
+			fingerprintEntrada: params.fingerprintEntrada ?? null,
 		})
 		.returning();
 
@@ -146,12 +153,15 @@ export async function createAssignedPaymentAttempt(params: TCreateAssignedPaymen
 		tx,
 		organizationId,
 		attemptId: attempt.id,
-		origem: "PLATAFORMA",
+		origem: params.origem ?? "PLATAFORMA",
 		tipo: "CRIACAO",
 		statusAnterior: null,
 		statusPosterior: "CRIADA",
 		usuarioId: actorUserId ?? null,
-		descricao: `Cobrança atribuída ao terminal "${device.nome}".`,
+		principalId: params.origem === "DISPOSITIVO" ? deviceId : null,
+		chaveIdempotencia: params.chaveIdempotencia ?? null,
+		fingerprintEntrada: params.fingerprintEntrada ?? null,
+		descricao: params.origem === "DISPOSITIVO" ? `Venda criada no terminal "${device.nome}".` : `Cobrança atribuída ao terminal "${device.nome}".`,
 	});
 
 	return { ...attempt, dispositivoNome: device.nome };
