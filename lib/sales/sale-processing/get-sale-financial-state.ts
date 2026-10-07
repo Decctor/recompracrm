@@ -1,9 +1,22 @@
 import { computeSaleFinancialStatus } from "@/lib/sales/utils";
-import { db } from "@/services/drizzle";
+import { type DBTransaction, db } from "@/services/drizzle";
 import createHttpError from "http-errors";
 
-export async function getSaleFinancialState({ organizationId, saleId }: { organizationId: string; saleId: string }) {
-	const sale = await db.query.sales.findFirst({
+/**
+ * `tx` quando a leitura acontece dentro de uma transação aberta: pedir outra conexão ao `db`
+ * global enquanto a transação segura a sua trava o pool sob concorrência.
+ */
+export async function getSaleFinancialState({
+	organizationId,
+	saleId,
+	tx,
+}: {
+	organizationId: string;
+	saleId: string;
+	tx?: Pick<DBTransaction, "query">;
+}) {
+	const executor: Pick<DBTransaction, "query"> = tx ?? db;
+	const sale = await executor.query.sales.findFirst({
 		where: (fields, { and, eq }) => and(eq(fields.id, saleId), eq(fields.organizacaoId, organizationId)),
 		columns: {
 			id: true,

@@ -1,5 +1,5 @@
 import type { TShopSettingsConfiguration } from "@/schemas/shop";
-import { db } from "@/services/drizzle";
+import { type DB, type DBTransaction, db } from "@/services/drizzle";
 import {
 	productAddOnOptionChannelSettings,
 	productChannelSettings,
@@ -96,11 +96,27 @@ export async function syncShopSalesChannel({ orgId, produtos }: { orgId: string;
  * Estado de um canal para leitura de catálogo: a linha do canal + mapas esparsos de disponibilidade
  * e preço por produto, por variante e por opção de adicional. Nulo quando a organização ainda não
  * tem a linha (migração não aplicada / org não materializada) — o chamador decide o fallback.
+ *
+ * `tx` quando a leitura acontece dentro de uma transação aberta (edição de venda, busca fuzzy do
+ * PDV): pedir outra conexão ao `db` global enquanto a transação segura a sua trava o pool sob
+ * concorrência. As duas leituras abaixo ficam serializadas numa transação — correto, só não
+ * paralelo.
  */
-export async function loadChannelState({ orgId, canal, refExterno }: { orgId: string; canal: TChannel["canal"]; refExterno?: string | null }) {
+export async function loadChannelState({
+	orgId,
+	canal,
+	refExterno,
+	tx,
+}: {
+	orgId: string;
+	canal: TChannel["canal"];
+	refExterno?: string | null;
+	tx?: DB | DBTransaction;
+}) {
+	const executor = tx ?? db;
 	// Canais internos são identificados pela ausência de integração/ref; canais de integração
 	// (iFood) por merchant, já que preço e disponibilidade podem divergir entre lojas.
-	const channel = await db.query.salesChannels.findFirst({
+	const channel = await executor.query.salesChannels.findFirst({
 		where: refExterno
 			? and(eq(salesChannels.organizacaoId, orgId), eq(salesChannels.canal, canal), eq(salesChannels.refExterno, refExterno))
 			: and(
@@ -113,11 +129,11 @@ export async function loadChannelState({ orgId, canal, refExterno }: { orgId: st
 	if (!channel) return null;
 
 	const [overrides, optionRows] = await Promise.all([
-		db.query.productChannelSettings.findMany({
+		executor.query.productChannelSettings.findMany({
 			where: eq(productChannelSettings.canalVendaId, channel.id),
 			columns: { produtoId: true, produtoVarianteId: true, disponivel: true, precoVenda: true },
 		}),
-		db.query.productAddOnOptionChannelSettings.findMany({
+		executor.query.productAddOnOptionChannelSettings.findMany({
 			where: eq(productAddOnOptionChannelSettings.canalVendaId, channel.id),
 			columns: { produtoAddOnOpcaoId: true, disponivel: true, precoDelta: true },
 		}),

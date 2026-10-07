@@ -288,7 +288,7 @@ export async function processConfirmedSaleEditInTransaction({ tx, input }: { tx:
 	if (itemsForCatalogValidation.length > 0) {
 		// Só itens novos/reprecificados chegam aqui — itens intactos mantêm o preço pelo qual foram
 		// vendidos, então o gate do canal não rejeita vendas antigas de produto que saiu do canal.
-		await validateSaleItemsPricing({ orgId: organizationId, itens: itemsForCatalogValidation, canal: toSalesChannelType(sale.canal) });
+		await validateSaleItemsPricing({ tx, orgId: organizationId, itens: itemsForCatalogValidation, canal: toSalesChannelType(sale.canal) });
 	}
 
 	// ------------------------------------------------------------------

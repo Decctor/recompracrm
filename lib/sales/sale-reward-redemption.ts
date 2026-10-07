@@ -100,7 +100,7 @@ export async function admitSaleRewardRedemptions({
 	const surfaceBlockReason = getCashbackRedemptionBlockReason({ program, surface });
 	if (surfaceBlockReason) throw new createHttpError.Forbidden(surfaceBlockReason);
 
-	const channelState = canal ? await loadChannelState({ orgId: organizacaoId, canal }) : null;
+	const channelState = canal ? await loadChannelState({ orgId: organizacaoId, canal, tx }) : null;
 	const admitted: TAdmittedSaleReward[] = [];
 	for (const line of linhas) {
 		const prize = await validatePrizeForRedemption({

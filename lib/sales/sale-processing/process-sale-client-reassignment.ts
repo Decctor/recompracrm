@@ -124,7 +124,7 @@ async function resolveNextClientAccumulationEligibility({
 }) {
 	if (sale.statusVenda !== "CONFIRMADA") return false;
 	if (sale.clienteId && (await saleHasBuyerAccumulation({ tx, organizationId, saleId: sale.id, clientId: sale.clienteId }))) return true;
-	const financialState = await getSaleFinancialState({ organizationId, saleId: sale.id });
+	const financialState = await getSaleFinancialState({ tx, organizationId, saleId: sale.id });
 	return financialState.isFullyPaid;
 }
 

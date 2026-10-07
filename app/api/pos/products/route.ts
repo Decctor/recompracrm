@@ -140,8 +140,10 @@ async function queryProducts({ input, session }: { input: TGetPOSProductsInput; 
 	const limit = PAGE_SIZE;
 
 	// Disponibilidade e preço no canal pedido (linhas esparsas da matriz de canais). O mesmo estado
-	// serve de filtro para a grade e para a barra de categorias (/api/pos/groups).
-	const channelState = await loadChannelState({ orgId: userOrgId, canal: input.channel });
+	// serve de filtro para a grade e para a barra de categorias (/api/pos/groups). Com busca fuzzy,
+	// `db` aqui é a transação read-only de `withProductSearch` — a leitura do canal precisa ir por
+	// ela, senão o request segura uma conexão e pede outra ao pool.
+	const channelState = await loadChannelState({ orgId: userOrgId, canal: input.channel, tx: db });
 	const catalogConditions = buildChannelCatalogConditions({ orgId: userOrgId, channelState });
 	if (!catalogConditions) return { data: { products: [], productsMatched: 0, totalPages: 0, currentPage: input.page } };
 
