@@ -1,5 +1,9 @@
 "use client";
 
+import BarcodeMatchPicker from "@/components/Modals/Sales/BarcodeMatchPicker";
+import type { TBuiltOrderItem } from "@/components/Products/ProductBuilderForm";
+import { usePOSBarcodeScan } from "@/lib/hooks/use-pos-barcode-scan";
+import type { TBarcodeScanResolution } from "@/lib/pos/barcode-scan-action";
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
 import LoadingComponent from "@/components/Layouts/LoadingComponent";
 import { Button } from "@/components/ui/button";
@@ -106,6 +110,7 @@ export default function EditSalePage({
 	const [searchValue, setSearchValue] = useState<string[]>([]);
 	const [viewMode, setViewMode] = useState<ProductViewMode>("list");
 	const [builderProduct, setBuilderProduct] = useState<TGetPOSProductsOutput["data"]["products"][number] | null>(null);
+	const [builderVariantId, setBuilderVariantId] = useState<string | null>(null);
 	const [isCheckoutSheetOpen, setIsCheckoutSheetOpen] = useState(false);
 	const saleState = useSaleState({ organizationConfig: organizationConfiguration, contasFinanceiras: organizationFinancialAccounts });
 
@@ -289,6 +294,7 @@ export default function EditSalePage({
 			const hasVariants = product.variantes.length > 0;
 			const hasAddOns = product.addOnsReferencias.length > 0;
 			if (hasVariants || hasAddOns) {
+				setBuilderVariantId(null);
 				setBuilderProduct(product);
 				return;
 			}
@@ -313,6 +319,29 @@ export default function EditSalePage({
 		},
 		[addItem],
 	);
+
+	// Leitor de código de barras (modo teclado): o item lido entra direto no carrinho, somando na
+	// linha existente quando é o mesmo item; produto com escolhas pendentes abre o builder.
+	const pageRef = useRef<HTMLDivElement>(null);
+	const addItemOrIncrement = saleState.addItemOrIncrement;
+	const handleScannedItem = useCallback(
+		(item: TBuiltOrderItem) => {
+			addItemOrIncrement({ ...item, tempId: crypto.randomUUID() });
+			toast.success(`${item.nome} adicionado ao carrinho.`);
+		},
+		[addItemOrIncrement],
+	);
+	const handleScannedBuilder = useCallback(({ product, variantId }: TBarcodeScanResolution) => {
+		setBuilderVariantId(variantId);
+		setBuilderProduct(product);
+	}, []);
+	const barcodeScan = usePOSBarcodeScan({
+		channel: "POS",
+		enabled: saleForEdit?.editabilidade.nivel === "TOTAL",
+		ownerRef: pageRef,
+		onAddDirect: handleScannedItem,
+		onOpenBuilder: handleScannedBuilder,
+	});
 
 	if (isLoading) return <LoadingComponent />;
 	if (isError) return <ErrorComponent msg={getErrorMessage(error)} />;
@@ -371,7 +400,7 @@ export default function EditSalePage({
 	) : null;
 
 	return (
-		<div className="flex h-[calc(100dvh-7rem)] w-full flex-col gap-3 p-4 lg:h-[calc(100dvh-8rem)]">
+		<div ref={pageRef} className="flex h-[calc(100dvh-7rem)] w-full flex-col gap-3 p-4 lg:h-[calc(100dvh-8rem)]">
 			<div className="flex items-center justify-between">
 				<div className="flex items-center gap-3">
 					<Button variant="ghost" size="icon" onClick={() => router.back()} aria-label="Voltar">
@@ -451,7 +480,20 @@ export default function EditSalePage({
 					</div>
 				</div>
 
-				{builderProduct ? <ProductBuilderModal product={builderProduct} onAddToCart={saleState.addItem} onClose={() => setBuilderProduct(null)} /> : null}
+				{builderProduct ? (
+					<ProductBuilderModal
+						product={builderProduct}
+						initialVariantId={builderVariantId}
+						onAddToCart={saleState.addItem}
+						onClose={() => {
+							setBuilderProduct(null);
+							setBuilderVariantId(null);
+						}}
+					/>
+				) : null}
+				{barcodeScan.candidates ? (
+					<BarcodeMatchPicker candidates={barcodeScan.candidates} onChoose={barcodeScan.chooseCandidate} onClose={barcodeScan.dismissCandidates} />
+				) : null}
 
 				{isDiscountApprovalOpen ? (
 					<DiscountApproval

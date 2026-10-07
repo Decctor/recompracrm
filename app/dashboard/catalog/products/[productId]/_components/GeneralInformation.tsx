@@ -55,6 +55,7 @@ export default function ProductGeneralInformation({ product, callbacks }: Produc
 				<ProductStateGeneralBlock
 					embedded
 					showPricing={false}
+					productId={product.id}
 					product={editor.state}
 					updateProduct={editor.updateProduct}
 					updateProductImageHolder={editor.updateProductImageHolder}

@@ -66,6 +66,8 @@ export const products = newTable(
 		grupoIdx: index("idx_products_grupo").on(table.grupo),
 		organizacaoIdx: index("idx_products_organizacao").on(table.organizacaoId),
 		codigoIdx: index("idx_products_codigo").on(table.codigo),
+		// Leitura de código de barras no PDV: resolução exata por organização (lib/pos/barcode-lookup.ts).
+		codigoBarrasIdx: index("idx_products_organizacao_codigo_barras").on(table.organizacaoId, table.codigoBarras),
 		// Shortlist por similaridade na conciliação de itens de nota fiscal: a descrição impressa
 		// raramente bate o nome do catálogo palavra por palavra. Mesmo padrão de `idx_clients_nome`.
 		nomeIdx: index("idx_products_nome").using("gist", sql`unaccent_immutable(lower(${table.nome})) gist_trgm_ops`),
@@ -122,6 +124,8 @@ export const productVariants = newTable(
 	},
 	(table) => ({
 		produtoIdx: index("idx_variantes_produto").on(table.produtoId),
+		// Mesma resolução por código de barras da leitura no PDV, no nível da variante.
+		codigoBarrasIdx: index("idx_variantes_organizacao_codigo_barras").on(table.organizacaoId, table.codigoBarras),
 	}),
 );
 export const productVariantsRelations = relations(productVariants, ({ one, many }) => ({

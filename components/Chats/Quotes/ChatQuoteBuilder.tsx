@@ -10,15 +10,17 @@ import { Textarea } from "@/components/ui/textarea";
 import { getErrorMessage } from "@/lib/errors";
 import { formatToMoney } from "@/lib/formatting";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
+import { usePOSBarcodeScan } from "@/lib/hooks/use-pos-barcode-scan";
 import { createQuote } from "@/lib/mutations/sales";
 import { usePOSProducts } from "@/lib/queries/pos";
 import { getClientOpenQuotesQueryKey } from "@/lib/queries/sales";
 import { cn } from "@/lib/utils";
 import { appRoutes } from "@/lib/navigation/routes";
 import { useInternalQuoteState } from "@/state-hooks/use-internal-quote-state";
+import BarcodeMatchPicker from "@/components/Modals/Sales/BarcodeMatchPicker";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check, ExternalLink, Loader2, Minus, Package, Plus, Search, ShoppingBag, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 
 /**
@@ -201,6 +203,43 @@ export function ChatQuoteBuilder({ open, onOpenChange, clientId, chatId, clientN
 		updateFilters({ search: value ? [value] : [], page: 1 });
 	}
 
+	// Leitor de código de barras: mesma elegibilidade das linhas (`resolveEligibility`). Sem builder
+	// aqui, um produto com variações não identificadas vira busca pelo nome, para as variações
+	// aparecerem expandidas na lista; com adicionais, o item não cabe num orçamento pelo chat.
+	const catalogRef = useRef<HTMLDivElement>(null);
+	const barcodeScan = usePOSBarcodeScan({
+		channel: "POS",
+		enabled: open && !createdQuote,
+		ownerRef: catalogRef,
+		onAddDirect: (item, { product, variantId }) => {
+			const variant = variantId ? product.variantes.find((candidate) => candidate.id === variantId) : null;
+			const preco = variant ? variant.precoVenda : product.precoVenda;
+			const { eligible, reason } = resolveEligibility({ preco, blocked: false });
+			if (!eligible) {
+				toast.error(`${item.nome}: ${reason}.`);
+				return;
+			}
+			quoteState.addItem({
+				produtoId: product.id,
+				produtoVarianteId: variant?.id ?? null,
+				nome: product.nome,
+				variacao: variant?.nome ?? null,
+				codigo: item.codigo,
+				imagemUrl: item.imagemUrl,
+				preco: preco ?? 0,
+			});
+		},
+		onOpenBuilder: ({ product, variantId }) => {
+			const variant = variantId ? product.variantes.find((candidate) => candidate.id === variantId) : null;
+			if (hasProductWideAddOns(product) || (variant && variant.addOnsReferencias.length > 0)) {
+				toast.error(`${product.nome}: precisa de escolhas adicionais e não cabe num orçamento pelo chat.`);
+				return;
+			}
+			handleSearchChange(product.nome);
+			toast.message(`Escolha a variação de ${product.nome} na lista.`);
+		},
+	});
+
 	function handleClose(nextOpen: boolean) {
 		onOpenChange(nextOpen);
 		if (nextOpen) return;
@@ -276,7 +315,7 @@ export function ChatQuoteBuilder({ open, onOpenChange, clientId, chatId, clientN
 					</div>
 				) : (
 					<>
-						<div className="min-h-0 flex-1 overflow-y-auto p-4">
+						<div ref={catalogRef} className="min-h-0 flex-1 overflow-y-auto p-4">
 							<div className="flex flex-col gap-4">
 								<div>
 									<div className="relative">
@@ -437,6 +476,9 @@ export function ChatQuoteBuilder({ open, onOpenChange, clientId, chatId, clientN
 					</>
 				)}
 			</SheetContent>
+			{barcodeScan.candidates ? (
+				<BarcodeMatchPicker candidates={barcodeScan.candidates} onChoose={barcodeScan.chooseCandidate} onClose={barcodeScan.dismissCandidates} />
+			) : null}
 		</Sheet>
 	);
 }

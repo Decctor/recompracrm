@@ -50,8 +50,12 @@ type SelectedModifier = {
 	quantidade: number;
 };
 
-export function useProductBuilder({ product }: { product: TBuilderProduct }) {
-	const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
+export function useProductBuilder({ product, initialVariantId = null }: { product: TBuilderProduct; initialVariantId?: string | null }) {
+	// Variante já identificada antes de abrir (código de barras da própria variante): o operador só
+	// escolhe os adicionais. Ignorada se não pertencer ao produto, para não travar o estado.
+	const [selectedVariantId, setSelectedVariantId] = useState<string | null>(() =>
+		initialVariantId && product.variantes.some((variant) => variant.id === initialVariantId) ? initialVariantId : null,
+	);
 	const [selectedModifiers, setSelectedModifiers] = useState<SelectedModifier[]>([]);
 	const [observacoes, setObservacoes] = useState("");
 	const [quantity, setQuantity] = useState(1);

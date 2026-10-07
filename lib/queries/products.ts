@@ -7,6 +7,7 @@ import type { TGetProductFiscalProfilesOutput } from "@/app/api/products/fiscal-
 import type { TGetProductsByCodesInput, TGetProductsByCodesOutput } from "@/app/api/products/by-codes/route";
 import type { TGetProductGraphInput, TGetProductGraphOutput } from "@/app/api/products/graph/route";
 import type { TGetProductsBySearchInput, TGetProductsBySearchOutput } from "@/app/api/products/search/route";
+import type { TGetProductBarcodeUsageInput, TGetProductBarcodeUsageOutput } from "@/app/api/products/barcode-usage/route";
 import type { TGetProductStatsInput, TGetProductStatsOutput } from "@/app/api/products/stats/route";
 import type { TGetProductsGraphInput, TGetProductsGraphOutput } from "@/app/api/products/stats/graph/route";
 import type { TGetProductsOverallStatsInput, TGetProductsOverallStatsOutput } from "@/app/api/products/stats/overall/route";
@@ -698,6 +699,39 @@ export function useProductGroups() {
 	const queryKey = ["product-groups"];
 	return {
 		...useQuery({ queryKey, queryFn: fetchProductGroups, staleTime: 5 * 60 * 1000 }),
+		queryKey,
+	};
+}
+
+// ============================================================================
+// Uso de código de barras — aviso de duplicidade no formulário de produto
+// ============================================================================
+
+async function fetchProductBarcodeUsage(input: TGetProductBarcodeUsageInput, signal?: AbortSignal) {
+	const searchParams = new URLSearchParams();
+	searchParams.set("code", input.code);
+	if (input.excludeProductId) searchParams.set("excludeProductId", input.excludeProductId);
+	if (input.excludeVariantId) searchParams.set("excludeVariantId", input.excludeVariantId);
+	const { data } = await axios.get<TGetProductBarcodeUsageOutput>(`/api/products/barcode-usage?${searchParams.toString()}`, { signal });
+	return data.data.usages;
+}
+
+export type TProductBarcodeUsage = TGetProductBarcodeUsageOutput["data"]["usages"][number];
+
+/**
+ * Quem mais usa o código na organização, com debounce para não consultar a cada tecla. `code`
+ * vazio desliga a consulta — o campo em branco nunca conflita.
+ */
+export function useProductBarcodeUsage({ code, excludeProductId, excludeVariantId }: { code: string | null | undefined; excludeProductId?: string | null; excludeVariantId?: string | null }) {
+	const debounced = useDebounceMemo({ code: code?.trim() ?? "" }, 400);
+	const queryKey = ["product-barcode-usage", debounced.code, excludeProductId ?? null, excludeVariantId ?? null];
+	return {
+		...useQuery({
+			queryKey,
+			queryFn: ({ signal }) => fetchProductBarcodeUsage({ code: debounced.code, excludeProductId, excludeVariantId }, signal),
+			enabled: debounced.code.length > 0,
+			staleTime: 30 * 1000,
+		}),
 		queryKey,
 	};
 }

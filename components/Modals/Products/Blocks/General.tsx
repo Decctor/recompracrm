@@ -5,6 +5,7 @@ import SelectProductGroup from "@/components/Inputs/SelectProductGroup";
 import TextInput from "@/components/Inputs/TextInput";
 import TextareaInput from "@/components/Inputs/TextareaInput";
 import { ProductActiveToggle, ProductInactiveHint } from "@/components/Products/Shared/ProductActiveStatus";
+import ProductBarcodeConflictHint from "@/components/Products/Shared/ProductBarcodeConflictHint";
 import ResponsiveMenuSection from "@/components/Utils/ResponsiveMenuSection";
 import { normalizeProductBarcode } from "@/lib/products/barcode";
 import type { TProductContentUnitEnum } from "@/schemas/enums";
@@ -18,6 +19,8 @@ type ProductStateGeneralBlockProps = {
 	product: TProductCoreState;
 	updateProduct: TUseProductCoreState["updateProduct"];
 	updateProductImageHolder: TUseProductCoreState["updateProductImageHolder"];
+	/** Id do produto em edição, para o aviso de código de barras duplicado ignorar o próprio cadastro. */
+	productId?: string | null;
 	showPricing?: boolean;
 	embedded?: boolean;
 };
@@ -26,6 +29,7 @@ export default function ProductStateGeneralBlock({
 	product,
 	updateProduct,
 	updateProductImageHolder,
+	productId = null,
 	showPricing = true,
 	embedded = false,
 }: ProductStateGeneralBlockProps) {
@@ -86,7 +90,9 @@ export default function ProductStateGeneralBlock({
 						<p className="text-[0.6rem] text-destructive tracking-tight">
 							Código inválido: use números, letras sem acentos ou símbolos, sem quebras de linha.
 						</p>
-					) : null}
+					) : (
+						<ProductBarcodeConflictHint code={product.codigoBarras} excludeProductId={productId} />
+					)}
 				</div>
 				<div className="w-full flex items-center gap-2 lg:flex-row">
 					<div className="w-full lg:w-1/2">
