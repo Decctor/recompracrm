@@ -4,6 +4,7 @@ import {
 	type TCheckoutPaymentSplit,
 	getDefaultCheckoutPaymentSplit,
 	isCheckoutPaymentSplitValid,
+	isPaymentTerminalMethod,
 } from "@/lib/payments/schemas";
 import {
 	getOrganizationPaymentMethodDefault,
@@ -132,6 +133,12 @@ const SaleSuccessSchema = z
 		pagamentos: z.array(CheckoutPaymentSplitSchema.pick({ metodo: true, valor: true })),
 		troco: z.number(),
 		cashbackAcumulado: z.number().optional().nullable(),
+		// Cobrança enviada à maquininha: a venda está confirmada, mas o pagamento só efetiva quando
+		// o terminal aprovar. A tela de sucesso acompanha por polling.
+		tentativaPagamento: z
+			.object({ id: z.string(), dispositivoId: z.string(), dispositivoNome: z.string() })
+			.optional()
+			.nullable(),
 		fiscal: z
 			.object({
 				status: z.enum(["NAO_SOLICITADO", "SOLICITADO", "AGENDADO", "ERRO"]),
@@ -475,6 +482,13 @@ export const useSaleState = ({ initialState, organizationConfig, contasFinanceir
 								}
 							: {}),
 						...updates,
+						// Maquininha só cobra cartão: trocar para outro método desfaz a atribuição.
+						dispositivoId:
+							updates.dispositivoId !== undefined
+								? updates.dispositivoId
+								: isPaymentTerminalMethod(metodoAtualizado)
+									? payment.dispositivoId ?? null
+									: null,
 						valor: typeof updates.valor === "number" ? Math.max(0, updates.valor) : payment.valor,
 					};
 				}),

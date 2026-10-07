@@ -98,12 +98,12 @@ export const paymentAttempts = newTable(
 		erroCodigo: varchar("erro_codigo", { length: 64 }),
 		erroMensagem: text("erro_mensagem"),
 		resultadoSanitizado: jsonb("resultado_sanitizado").$type<TPaymentAttemptSanitizedResult | null>(),
-		// Transação financeira pendente que esta tentativa efetiva ao ser consumida. Not null no
-		// Fluxo B (criada na mesma transação). A FK unique inversa em financial_transactions
-		// (`tentativa_pagamento_id`) é a defesa definitiva contra duplo consumo.
-		transacaoFinanceiraId: varchar("transacao_financeira_id", { length: 255 })
-			.references(() => financialTransactions.id, { onDelete: "restrict" })
-			.notNull(),
+		// Transação financeira pendente que esta tentativa efetiva ao ser consumida. Sempre preenchida
+		// na criação (Fluxo B cria ambas na mesma transação); fica nula só quando a plataforma
+		// cancela a tentativa e a edição da venda apaga a transação pendente — uma tentativa aberta
+		// bloqueia a edição, então o vínculo nunca se perde enquanto importa. A FK unique inversa em
+		// financial_transactions (`tentativa_pagamento_id`) é a defesa definitiva contra duplo consumo.
+		transacaoFinanceiraId: varchar("transacao_financeira_id", { length: 255 }).references(() => financialTransactions.id, { onDelete: "set null" }),
 		// Compare-and-set: toda transição exige `versao` igual à lida; o perdedor da corrida recebe 409.
 		versao: integer("versao").notNull().default(1),
 		dataInicio: timestamp("data_inicio"),
@@ -120,7 +120,11 @@ export const paymentAttempts = newTable(
 		dispositivoStatusIdx: index("idx_payment_attempts_dispositivo_status").on(table.dispositivoId, table.status),
 		organizacaoVendaStatusIdx: index("idx_payment_attempts_organizacao_venda_status").on(table.organizacaoId, table.vendaId, table.status),
 		atkProvedorIdx: index("idx_payment_attempts_atk_provedor").on(table.atkProvedor),
-		transacaoFinanceiraIdx: uniqueIndex("idx_payment_attempts_transacao_financeira").on(table.transacaoFinanceiraId),
+		// Uma transação pendente só pode ter UMA tentativa viva (aberta ou consumida); reatribuir o
+		// terminal cancela a anterior (NAO_APROVADA) e cria outra para a mesma transação.
+		transacaoFinanceiraIdx: uniqueIndex("idx_payment_attempts_transacao_financeira")
+			.on(table.transacaoFinanceiraId)
+			.where(sql`${table.status} <> 'NAO_APROVADA'`),
 		provedorOrdemIdx: uniqueIndex("idx_payment_attempts_provedor_ordem").on(table.provedor, table.ordemProvedorId),
 		chaveIdempotenciaIdx: uniqueIndex("idx_payment_attempts_chave_idempotencia")
 			.on(table.organizacaoId, table.dispositivoId, table.chaveIdempotencia)

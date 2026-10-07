@@ -1,4 +1,5 @@
 export * from "./api";
+export * from "./assignment";
 export * from "./cancel-from-platform";
 export * from "./constants";
 export * from "./consume";

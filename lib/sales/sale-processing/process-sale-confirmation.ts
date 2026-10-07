@@ -5,6 +5,7 @@ import { type TCouponCartItem, type TCouponRedemptionSurface, evaluateCouponAgai
 import type { TBenefitRedemptionSurface } from "@/schemas/enums";
 import { processCouponRedemption } from "@/lib/coupons/redemption";
 import { processSaleCupomAutoPrintIfEligible } from "@/lib/desktop-agent/auto-print";
+import { createAssignedPaymentAttempt, normalizePaymentsForTerminal, resolvePaymentTerminalAssignment } from "@/lib/payment-attempts";
 import { type TPaymentSplit, getPaymentProvider } from "@/lib/payments";
 import { buildSaleEntryTitle } from "@/lib/sales/entry-titles";
 import { validateSalesSessionSeller } from "@/lib/sales-sessions";
@@ -156,13 +157,18 @@ export async function processSaleConfirmationInTransaction({ tx, input }: { tx: 
 		});
 	}
 
+	// Cobrança na maquininha (Fluxo B do RecompraCRM POS): valida a regra "um único cartão
+	// cobrindo o total" antes de qualquer efeito e normaliza o split como pendente.
+	const terminalAssignment = resolvePaymentTerminalAssignment({ payments: input.salePayments, saleTotal: sale.valorTotal });
+	const salePayments = terminalAssignment ? normalizePaymentsForTerminal(input.salePayments) : input.salePayments;
+
 	const paymentProvider = getPaymentProvider(input.organization);
 	const paymentResults = await paymentProvider.processPayments(
 		{
 			vendaId: input.saleId,
 			lancamentoContabilId: entry.id,
 			organizacaoId: input.organization.id,
-			pagamentos: input.salePayments,
+			pagamentos: salePayments,
 			autorId: input.saleAuthorId,
 			sessaoVendaId: input.sessaoVendaId ?? null,
 			saleLabel,
@@ -170,13 +176,34 @@ export async function processSaleConfirmationInTransaction({ tx, input }: { tx: 
 		tx,
 	);
 
+	// A tentativa nasce aqui, na mesma transação da venda confirmada e da transação pendente, já
+	// atribuída ao dispositivo. Nenhuma chamada à adquirente acontece dentro da transação.
+	let tentativaPagamento: { id: string; status: string; dispositivoId: string; dispositivoNome: string } | null = null;
+	if (terminalAssignment) {
+		const pendingTransactionId = paymentResults[terminalAssignment.index]?.transacaoId;
+		if (!pendingTransactionId) throw new createHttpError.InternalServerError("Transação pendente da cobrança na maquininha não foi criada.");
+		const attempt = await createAssignedPaymentAttempt({
+			tx,
+			organizationId: input.organization.id,
+			saleId: input.saleId,
+			deviceId: terminalAssignment.dispositivoId,
+			financialTransactionId: pendingTransactionId,
+			metodo: terminalAssignment.payment.metodo,
+			valor: terminalAssignment.payment.valor,
+			totalParcelas: terminalAssignment.payment.totalParcelas ?? 1,
+			parcelamentoResponsavel: "LOJISTA",
+			actorUserId: input.saleAuthorId,
+		});
+		tentativaPagamento = { id: attempt.id, status: attempt.status, dispositivoId: attempt.dispositivoId, dispositivoNome: attempt.dispositivoNome };
+	}
+
 	// Pagamentos entram pelo valor entregue pelo cliente; o excesso sobre o total vira uma SAÍDA
 	// de troco em dinheiro no mesmo lançamento (valida as regras e lança, ou aborta a confirmação).
 	const change = await registerSaleChangeTransaction({
 		tx,
 		organization: input.organization,
 		lancamentoContabilId: entry.id,
-		salePayments: input.salePayments,
+		salePayments,
 		saleTotal: sale.valorTotal,
 		sessaoVendaId: input.sessaoVendaId ?? null,
 		autorId: input.saleAuthorId,
@@ -513,6 +540,7 @@ export async function processSaleConfirmationInTransaction({ tx, input }: { tx: 
 		vendaId: input.saleId,
 		lancamentoContabilId: entry.id,
 		pagamentos: paymentResults,
+		tentativaPagamento,
 		troco: change?.valor ?? 0,
 		cashbackResgate: cashbackRedemptionResult,
 		cashbackAcumulo: cashbackAccumulationResult,

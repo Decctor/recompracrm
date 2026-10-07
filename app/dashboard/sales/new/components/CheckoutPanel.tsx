@@ -168,7 +168,7 @@ export default function CheckoutPanel({
 					onOpenNewLocation={() => setIsNewLocationOpen(true)}
 					onPreloadNewLocation={preloadNewClientLocation}
 				/>
-				<PaymentsSection saleState={saleState} pagamentosEfetivados={edit?.pagamentosEfetivados} />
+				<PaymentsSection saleState={saleState} pagamentosEfetivados={edit?.pagamentosEfetivados} allowTerminal={!edit} />
 				<SummarySection
 					saleState={saleState}
 					organizationCashbackProgram={organizationCashbackProgram}

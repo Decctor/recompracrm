@@ -9,6 +9,7 @@ import { db } from "@/services/drizzle";
 import { accountingEntries, couponRedemptions, financialTransactions, productStockLots, saleItems, sales } from "@/services/drizzle/schema";
 import { and, eq, sql } from "drizzle-orm";
 import createHttpError from "http-errors";
+import { cancelPaymentAttemptFromPlatform, findActivePaymentAttemptForSale } from "@/lib/payment-attempts";
 import { attendanceStatusValues } from "@/lib/sales/sale-processing/attendance";
 
 export async function processConfirmedSaleCancellation({
@@ -56,7 +57,17 @@ export async function processConfirmedSaleCancellation({
 	// A sessão é uma lente: o estorno cai sempre na sessão atualmente aberta, nunca na original (imutável).
 	const activeSession = sessaoVendaId ? await resolveActiveSalesSession({ orgId: organizationId, sessaoVendaId }) : null;
 
+	// Cobrança na maquininha: só cancela a venda enquanto a tentativa ainda não chegou ao terminal
+	// (CRIADA). A partir daí a Stone pode ter cobrado — a resolução vem do terminal ou da conciliação.
+	const activeAttempt = await findActivePaymentAttemptForSale({ organizationId, saleId });
+	if (activeAttempt && activeAttempt.status !== "CRIADA") {
+		throw new createHttpError.Conflict("A cobrança desta venda está em andamento na maquininha. Aguarde o resultado antes de cancelar a venda.");
+	}
+
 	await db.transaction(async (tx) => {
+		if (activeAttempt) {
+			await cancelPaymentAttemptFromPlatform({ tx, organizationId, attemptId: activeAttempt.id, userId: authorId, motivo: `Venda cancelada: ${reason}` });
+		}
 		if (sale.clienteId) {
 			await reverseSaleCashback({ tx, saleId, clientId: sale.clienteId, organizationId, reason });
 		}

@@ -154,5 +154,5 @@ export async function createAssignedPaymentAttempt(params: TCreateAssignedPaymen
 		descricao: `Cobrança atribuída ao terminal "${device.nome}".`,
 	});
 
-	return attempt;
+	return { ...attempt, dispositivoNome: device.nome };
 }

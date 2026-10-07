@@ -19,6 +19,7 @@ import {
 	WalletCards,
 } from "lucide-react";
 import Link from "next/link";
+import TerminalChargeStatus from "./TerminalChargeStatus";
 
 const DELIVERY_LABELS: Record<TSaleSuccess["entregaModalidade"], string> = {
 	PRESENCIAL: "Presencial",
@@ -58,7 +59,7 @@ export default function SaleSuccessPanel({ success, onStartNewSale }: SaleSucces
 					</div>
 					<div className="space-y-1">
 						<p className="text-xs font-extrabold uppercase tracking-[0.08em] text-muted-foreground">
-							{success.mode === "ORCAMENTO" ? "Orçamento registrado" : "Venda concluída"}
+							{success.mode === "ORCAMENTO" ? "Orçamento registrado" : success.tentativaPagamento ? "Venda confirmada" : "Venda concluída"}
 						</p>
 						<h1 id="sale-success-title" className="text-balance text-xl font-black tracking-tight sm:text-2xl">
 							{success.title}
@@ -111,6 +112,12 @@ export default function SaleSuccessPanel({ success, onStartNewSale }: SaleSucces
 							<p className="font-bold">{DELIVERY_LABELS[success.entregaModalidade]}</p>
 						</div>
 					</div>
+
+					{success.tentativaPagamento ? (
+						<div className="border-t border-border pt-3">
+							<TerminalChargeStatus saleId={success.saleId} dispositivoNome={success.tentativaPagamento.dispositivoNome} />
+						</div>
+					) : null}
 
 					{success.pagamentos.length > 0 ? (
 						<div className="flex items-start gap-2.5 border-t border-border pt-3">

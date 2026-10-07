@@ -39,12 +39,17 @@ export async function consumeApprovedPaymentAttempt(params: TConsumeApprovedPaym
 		if (!attempt) throw new PaymentTerminalError(404, "PAYMENT_ATTEMPT_NOT_FOUND", "Tentativa de pagamento não encontrada.", { attemptId: paymentAttemptId });
 
 		if (attempt.status === "CONSUMIDA") {
-			return { attemptId: attempt.id, saleId: attempt.vendaId, financialTransactionId: attempt.transacaoFinanceiraId, alreadyConsumed: true };
+			return { attemptId: attempt.id, saleId: attempt.vendaId, financialTransactionId: attempt.transacaoFinanceiraId ?? "", alreadyConsumed: true };
 		}
 		if (attempt.status !== "APROVADA_EFETIVACAO_PENDENTE") {
 			throw new PaymentTerminalError(409, "PAYMENT_ATTEMPT_INVALID_TRANSITION", "Somente tentativas aprovadas podem ser consumidas.", { attemptId: attempt.id });
 		}
 
+		if (!attempt.transacaoFinanceiraId) {
+			throw new PaymentTerminalError(409, "PAYMENT_ATTEMPT_INVALID_TRANSITION", "A tentativa aprovada perdeu o vínculo com a transação financeira. Conciliação manual necessária.", {
+				attemptId: attempt.id,
+			});
+		}
 		const [transaction] = await tx
 			.select({
 				id: financialTransactions.id,

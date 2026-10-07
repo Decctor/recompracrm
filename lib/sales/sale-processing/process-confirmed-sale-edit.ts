@@ -3,6 +3,7 @@ import { type TCouponCartItem, evaluateCouponAgainstCart } from "@/lib/coupons/e
 import { cancelCouponRedemption } from "@/lib/coupons/redemption";
 import { getCouponCheckoutConditionIssue, readCouponCheckoutConditions } from "@/lib/coupons/conditions";
 import { ACCOUNTING_ENTRY_BALANCE_TOLERANCE, getAccountingEntryBalanceError } from "@/lib/finances/accounting-entry-balance";
+import { findActivePaymentAttemptForSale } from "@/lib/payment-attempts";
 import { type TPaymentSplit, getPaymentProvider } from "@/lib/payments";
 import { validateSalesSessionSeller } from "@/lib/sales-sessions";
 import { getSaleChangeTotal } from "@/lib/sales/sale-change";
@@ -207,6 +208,16 @@ export async function processConfirmedSaleEditInTransaction({ tx, input }: { tx:
 	}
 	if (Math.abs(sale.valorTotal - input.valorTotalEsperado) > 0.001) {
 		throw new createHttpError.Conflict("A venda foi alterada por outra operação. Recarregue os dados e tente novamente.");
+	}
+	// Cobrança em andamento na maquininha congela a venda: valor, método e parcelas da tentativa
+	// são imutáveis e a transação pendente é a que ela vai efetivar. Cancele a cobrança primeiro
+	// (ação de saída do PDV) para trocar o método ou editar o pedido.
+	const activeAttempt = await findActivePaymentAttemptForSale({ organizationId, saleId: input.saleId, database: tx });
+	if (activeAttempt) {
+		throw new createHttpError.Conflict("Esta venda tem uma cobrança em andamento na maquininha. Cancele a cobrança antes de editar a venda.");
+	}
+	if (input.pagamentos.some((payment) => payment.dispositivoId)) {
+		throw new createHttpError.BadRequest("A cobrança na maquininha só pode ser atribuída na confirmação da venda.");
 	}
 
 	const existingItemsById = new Map(sale.itens.map((item) => [item.id, item]));

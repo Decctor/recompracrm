@@ -11,7 +11,7 @@ import type { TPaymentSplit } from "./types";
 type TPaymentMethodsConfig = TOrganizationConfiguration["defaults"]["pagamentos"]["metodos"];
 
 type TResolvablePayment = Pick<TCheckoutPaymentSplit, "metodo" | "valor" | "efetivacaoTipo"> &
-	Partial<Pick<TCheckoutPaymentSplit, "totalParcelas" | "dataPrevisao" | "observacoes" | "contaFinanceiraId">>;
+	Partial<Pick<TCheckoutPaymentSplit, "totalParcelas" | "dataPrevisao" | "observacoes" | "contaFinanceiraId" | "dispositivoId">>;
 
 /** Alguma configuração de método deixa o operador escolher a conta? */
 export function hasEditableFinancialAccountMethod(methodsConfig: TPaymentMethodsConfig): boolean {
@@ -81,6 +81,7 @@ export function resolvePaymentFinancialAccountsAgainstAccounts({
 			dataPrevisao: payment.dataPrevisao ?? undefined,
 			observacoes: payment.observacoes ?? undefined,
 			contaFinanceiraId: payment.contaFinanceiraId ?? methodConfig.contaFinanceiraPadraoId ?? null,
+			dispositivoId: payment.dispositivoId ?? null,
 		};
 	});
 }

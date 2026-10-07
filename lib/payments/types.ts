@@ -10,6 +10,10 @@ export type TPaymentSplit = {
 	observacoes?: string | null;
 	// Conta já resolvida (escolha do operador ou padrão do método) — ver resolvePaymentFinancialAccounts.
 	contaFinanceiraId?: string | null;
+	// Terminal de pagamento atribuído à cobrança (ver CheckoutPaymentSplitSchema). Faz o provider
+	// criar UMA transação pendente, mesmo parcelado: o parcelamento é da adquirente, não do
+	// contas-a-receber.
+	dispositivoId?: string | null;
 };
 
 export type TProcessPaymentsInput = {

@@ -15,6 +15,7 @@ import { evaluateDiscount } from "@/lib/permissions/discounts";
 import { useSaleDiscountContext } from "@/lib/queries/action-approvals";
 import { usePOSGroups, usePOSProducts } from "@/lib/queries/pos";
 import { fetchClientContext } from "@/lib/queries/clients/context";
+import { getPendingTerminalChargesQueryKey } from "@/lib/queries/payment-terminals";
 import { getOrganizationOpenQuotesQueryKey } from "@/lib/queries/sales";
 import { useActiveSalesSession } from "@/lib/queries/sales-sessions";
 import type { TGetPOSProductsOutput } from "@/app/api/pos/products/route";
@@ -28,6 +29,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import CheckoutPanel from "./components/CheckoutPanel";
 import OpenQuotesPill from "./components/OpenQuotesPill";
+import PendingTerminalChargesPill from "./components/PendingTerminalChargesPill";
 import ProductBuilderModal from "./components/ProductBuilderModal";
 import SaleSuccessPanel from "./components/SaleSuccessPanel";
 import CategoriesBar from "./components/composition/CategoriesBar";
@@ -271,12 +273,19 @@ export default function NewSalePage({
 				toast.warning(`Venda finalizada, mas a emissao fiscal falhou: ${data.data.confirmation.fiscal.error}`);
 			}
 			setDiscountApproval(null);
+			const tentativaPagamento = data.data.confirmation.tentativaPagamento;
+			if (tentativaPagamento) void queryClient.invalidateQueries({ queryKey: getPendingTerminalChargesQueryKey() });
 			saleState.setSuccess({
 				mode: "FINALIZADA",
 				saleId: data.data.saleId,
-				title: "Venda finalizada com sucesso",
-				description: "Pagamento confirmado e venda concluída.",
+				title: tentativaPagamento ? "Venda confirmada, cobrança enviada à maquininha" : "Venda finalizada com sucesso",
+				description: tentativaPagamento
+					? `O pagamento será efetivado quando a maquininha "${tentativaPagamento.dispositivoNome}" aprovar. Você já pode atender o próximo cliente.`
+					: "Pagamento confirmado e venda concluída.",
 				...getSaleSuccessSnapshot(saleState),
+				tentativaPagamento: tentativaPagamento
+					? { id: tentativaPagamento.id, dispositivoId: tentativaPagamento.dispositivoId, dispositivoNome: tentativaPagamento.dispositivoNome }
+					: null,
 				cashbackAcumulado: data.data.confirmation.cashbackAcumulo?.accumulatedValue ?? null,
 				fiscal: {
 					status: data.data.confirmation.fiscal.status,
@@ -400,6 +409,7 @@ export default function NewSalePage({
 				efetivacaoTipo: payment.efetivacaoTipo,
 				dataPrevisao: payment.dataPrevisao,
 				observacoes: payment.observacoes,
+				dispositivoId: payment.dispositivoId,
 			})),
 			cashbackResgate: saleState.state.cashbackResgate,
 			cupomResgate: saleState.state.cupomResgate,
@@ -517,6 +527,7 @@ export default function NewSalePage({
 							{/* Pendência comercial ao lado da busca: aparece sozinha quando existe e some quando
 							    a fila zera, sem ocupar espaço fixo da grade de produtos. */}
 							<OpenQuotesPill canViewQuotes={canViewSales} permissions={quotePermissions} cartItemCount={saleState.itemCount} />
+							<PendingTerminalChargesPill enabled={canViewSales} />
 						</div>
 						{/* A barra se encarrega do próprio skeleton: montá-la só depois do load a inseria na
 						    árvore com a grade já pintada e empurrava tudo para baixo. */}
