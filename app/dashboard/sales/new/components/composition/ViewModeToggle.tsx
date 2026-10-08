@@ -19,7 +19,7 @@ export default function ViewModeToggle({ value, onChange }: ViewModeToggleProps)
 				onClick={() => onChange(nextMode)}
 				aria-label={nextMode === "grid" ? "Ver em grade" : "Ver em lista"}
 				title={nextMode === "grid" ? "Ver em grade" : "Ver em lista"}
-				className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border bg-card text-muted-foreground shadow-2xs transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 sm:hidden"
+				className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-border bg-card text-muted-foreground shadow-2xs transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 sm:hidden"
 			>
 				{nextMode === "grid" ? <LayoutGrid className="h-4 w-4" /> : <List className="h-4 w-4" />}
 			</button>
