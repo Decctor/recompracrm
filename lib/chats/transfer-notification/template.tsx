@@ -11,6 +11,8 @@ export type THandoffHeaderPayload = {
 	clientName: string;
 	clientPhone: string;
 	reason: string;
+	/** Quem transferiu. `null` = a IA. */
+	transferredBy: string | null;
 };
 
 function truncate(value: string, maximumLength: number) {
@@ -24,6 +26,7 @@ export async function buildHandoffHeaderElement(payload: THandoffHeaderPayload):
 	const organizationName = truncate(payload.organizationName, 42);
 	const organizationInitial = organizationName.charAt(0).toUpperCase() || "?";
 	const reason = truncate(payload.reason, 145);
+	const originLabel = payload.transferredBy ? `TRANSFERIDO POR ${truncate(payload.transferredBy, 24).toUpperCase()}` : "TRANSFERÊNCIA DA IA";
 
 	return (
 		<div
@@ -54,7 +57,7 @@ export async function buildHandoffHeaderElement(payload: THandoffHeaderPayload):
 							letterSpacing: 1.8,
 						}}
 					>
-						TRANSFERÊNCIA DA IA
+						{originLabel}
 					</div>
 				</div>
 

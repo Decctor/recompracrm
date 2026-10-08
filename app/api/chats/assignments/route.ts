@@ -17,6 +17,7 @@ import {
 	transferChatAttendance,
 	updateChatAttendanceSummary,
 } from "@/lib/chats/attendance-state";
+import { buildManualTransferDetails, notifyChatTransferRecipient } from "@/lib/chats/transfer-notification/notify";
 import { ChatAssignmentPriorityEnum, ChatAssignmentStatusEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
 import { chats } from "@/services/drizzle/schema/chats";
@@ -157,6 +158,45 @@ async function assignAttendanceToAgent({
 	return { data: { chatId: input.chatId, atendimentoId: assigned.id }, message: "Atendimento direcionado ao agente de IA." };
 }
 
+/**
+ * Avisa pelo WhatsApp quem recebeu o atendimento de outra pessoa, como a IA já fazia no
+ * handoff. Roda fora do ciclo do request: renderizar o header e subir a mídia leva segundos, e a
+ * notificação é acessória à posse.
+ */
+function notifyManualTransferRecipient({
+	session,
+	organizacaoId,
+	chatId,
+	usuarioDestinoId,
+	acao,
+	motivo,
+	resumo,
+}: {
+	session: TAuthUserSession;
+	organizacaoId: string;
+	chatId: string;
+	usuarioDestinoId: string;
+	acao: "TRANSFERENCIA" | "ATRIBUICAO";
+	motivo: string | null;
+	resumo: string | null;
+}) {
+	// Atribuir a si mesmo não é passar a conversa para ninguém.
+	if (usuarioDestinoId === session.user.id) return;
+
+	const fallbackReason = acao === "ATRIBUICAO" ? "Atendimento atribuído a você." : "Atendimento transferido para você.";
+	waitUntil(
+		notifyChatTransferRecipient({
+			db,
+			organizacaoId,
+			chatId,
+			usuarioDestinoId,
+			transferidoPor: session.user.nome,
+			motivo: motivo?.trim() || resumo?.trim() || fallbackReason,
+			detalhes: buildManualTransferDetails({ acao, transferidoPor: session.user.nome, motivo, resumo }),
+		}),
+	);
+}
+
 async function updateChatAssignment({ session, input }: { session: TAuthUserSession; input: TUpdateChatAssignmentInput }) {
 	const { organizacaoId } = assertChatAccess({ session, permission: ACTION_PERMISSION[input.acao] });
 	await assertChatBelongsToOrganization({ organizacaoId, chatId: input.chatId });
@@ -179,6 +219,17 @@ async function updateChatAssignment({ session, input }: { session: TAuthUserSess
 			usuarioId: input.usuarioDestinoId,
 			atribuidoPorUsuarioId: session.user.id,
 		});
+		if (assigned) {
+			notifyManualTransferRecipient({
+				session,
+				organizacaoId,
+				chatId: input.chatId,
+				usuarioDestinoId: input.usuarioDestinoId,
+				acao: "ATRIBUICAO",
+				motivo: null,
+				resumo: assigned.resumo,
+			});
+		}
 		return { data: { chatId: input.chatId, atendimentoId: assigned?.id ?? null }, message: "Atendimento atribuído." };
 	}
 
@@ -202,6 +253,17 @@ async function updateChatAssignment({ session, input }: { session: TAuthUserSess
 			prioridade: input.prioridade ?? null,
 			transferidoPorUsuarioId: session.user.id,
 		});
+		if (transferred) {
+			notifyManualTransferRecipient({
+				session,
+				organizacaoId,
+				chatId: input.chatId,
+				usuarioDestinoId: input.destino.usuarioDestinoId,
+				acao: "TRANSFERENCIA",
+				motivo: input.motivo ?? null,
+				resumo: transferred.resumo,
+			});
+		}
 		return { data: { chatId: input.chatId, atendimentoId: transferred?.id ?? null }, message: "Atendimento transferido." };
 	}
 
