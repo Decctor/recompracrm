@@ -1,10 +1,19 @@
-import { cashbackProgramBalances, cashbackProgramPrizes, cashbackProgramTransactions, cashbackPrograms } from "@/services/drizzle/schema";
-import { and, asc, count, desc, eq, gte, lte } from "drizzle-orm";
+import { describeCashbackDiscount, describeCashbackPrizeGap, listCashbackRedemptionSurfaceLabels } from "@/lib/cashback/client-position";
+import { listProgramCashbackRewards, resolveClientCashbackProgram } from "@/lib/cashback/prizes";
+import { cashbackProgramTransactions } from "@/services/drizzle/schema";
+import type { TCashbackProgramEntity } from "@/services/drizzle/schema";
+import { isSameDay } from "date-fns";
+import { and, asc, count, desc, eq, gt, gte, isNotNull, lte } from "drizzle-orm";
 import z from "zod";
 import { defineAgentTool } from "./define-tool";
+import type { TAgentToolContext } from "./types";
 
 /**
  * Consulta o programa de cashback da organização e a posição do cliente nele.
+ *
+ * O programa é o do saldo do cliente (fallback: programa ativo da organização), pela mesma
+ * resolução do PDV e da loja digital (`resolveClientCashbackProgram`) — o agente nunca pode
+ * discordar do caixa sobre qual prêmio dá para resgatar.
  *
  * Uma organização sem programa ativo devolve `success: false` com mensagem — é informação
  * legítima para o agente comunicar, não um erro de execução.
@@ -14,54 +23,60 @@ export const cashbackTool = defineAgentTool({
 	description: `Consulta o programa de cashback da empresa e a situação do cliente com quem
 você está conversando.
 
-Use visao="SALDO" (padrão) para o saldo disponível do cliente e as regras do programa
-(percentual/valor de acúmulo, valor mínimo de compra, validade, limite de resgate).
+Use visao="SALDO" (padrão) — responde quase tudo em uma chamada: o saldo disponível, as regras
+do programa (acúmulo, valor mínimo de compra, validade), a próxima expiração de saldo, quanto do
+saldo pode virar desconto (quando o programa permite) e, quando o programa trabalha com
+recompensas, a lista de prêmios com "resgatavel", "falta" (quanto de saldo ainda falta) e
+"compraEstimada" (quanto o cliente precisaria comprar para chegar lá, pela regra de acúmulo).
+Use visao="RECOMPENSAS" para a mesma lista de prêmios com descrição completa.
 Use visao="EXTRATO" para o histórico de movimentações (acúmulos, resgates, expirações),
 opcionalmente filtrado por dataInicio/dataFim em ISO 8601.
-Use visao="RECOMPENSAS" para os prêmios que o cliente pode resgatar com o saldo.
 
-Sempre consulte esta ferramenta antes de falar sobre saldo, pontos ou cashback — nunca
-estime valores nem prometa benefícios que não vieram daqui.`,
+Sempre consulte esta ferramenta antes de falar sobre saldo, pontos, cashback, desconto do
+programa ou recompensas — nunca estime valores nem prometa benefícios que não vieram daqui.
+Você não resgata nada por aqui: aponte o cliente para "ondeResgatar".`,
 	inputSchema: z.object({
 		visao: z.enum(["SALDO", "EXTRATO", "RECOMPENSAS"]).optional().describe("O que consultar. Padrão: SALDO."),
 		dataInicio: z.string().datetime().optional().describe("Início do período no extrato (ISO 8601)."),
 		dataFim: z.string().datetime().optional().describe("Fim do período no extrato (ISO 8601)."),
-		limite: z.number().int().min(1).max(50).optional().describe("Máximo de movimentações no extrato. Padrão: 10."),
+		limite: z
+			.number()
+			.int()
+			.min(1)
+			.max(50)
+			.optional()
+			.describe("Máximo de movimentações no extrato ou de recompensas na lista. Padrão: 10 no extrato, 20 nas recompensas."),
 	}),
 	async execute(input, context) {
 		const { db, organizacaoId, chat } = context;
 		const view = input.visao ?? "SALDO";
 
-		const program = await db.query.cashbackPrograms.findFirst({
-			where: and(eq(cashbackPrograms.organizacaoId, organizacaoId), eq(cashbackPrograms.ativo, true)),
-		});
+		const { program, balance } = await resolveClientCashbackProgram({ tx: db, organizacaoId, clienteId: chat.clienteId });
 
-		if (!program) {
+		if (!program?.ativo) {
 			return { success: false, message: "A empresa não possui um programa de cashback ativo no momento." };
 		}
+
+		const saldoDisponivel = balance?.saldoValorDisponivel ?? 0;
+		const ondeResgatar = listCashbackRedemptionSurfaceLabels(program);
+		const programa = { titulo: program.titulo, terminologia: program.terminologia };
 
 		if (view === "RECOMPENSAS") {
 			if (!program.modalidadeRecompensasPermitida) {
 				return {
 					success: false,
 					message: "O programa de cashback desta empresa não trabalha com recompensas — o saldo é usado como desconto nas compras.",
+					result: { programa, saldo: { disponivel: saldoDisponivel }, desconto: describeCashbackDiscount({ program, saldoDisponivel }), ondeResgatar },
 				};
 			}
 
-			const prizes = await db.query.cashbackProgramPrizes.findMany({
-				where: and(eq(cashbackProgramPrizes.programaId, program.id), eq(cashbackProgramPrizes.ativo, true)),
-				orderBy: [asc(cashbackProgramPrizes.valor)],
-				limit: input.limite ?? 20,
-				columns: { titulo: true, descricao: true, valor: true },
-			});
+			const recompensas = await listPrizesForClient({ context, program, saldoDisponivel, limit: input.limite ?? 20, detailed: true });
+			const resgataveis = recompensas.filter((prize) => prize.resgatavel).length;
 
 			return {
 				success: true,
-				message: `${prizes.length} recompensa(s) disponível(is) no programa "${program.titulo}".`,
-				result: {
-					programa: { titulo: program.titulo, terminologia: program.terminologia },
-					recompensas: prizes,
-				},
+				message: `${recompensas.length} recompensa(s) no programa "${program.titulo}", ${resgataveis} já resgatável(is) com o saldo atual.`,
+				result: { programa, saldo: { disponivel: saldoDisponivel }, ondeResgatar, recompensas },
 			};
 		}
 
@@ -96,22 +111,16 @@ estime valores nem prometa benefícios que não vieram daqui.`,
 			return {
 				success: true,
 				message: `${transactions.length} de ${totalEncontrado} movimentação(ões) de cashback.`,
-				result: {
-					programa: { titulo: program.titulo, terminologia: program.terminologia },
-					totalEncontrado,
-					movimentacoes: transactions,
-				},
+				result: { programa, totalEncontrado, movimentacoes: transactions },
 			};
 		}
 
-		const balance = await db.query.cashbackProgramBalances.findFirst({
-			where: and(
-				eq(cashbackProgramBalances.organizacaoId, organizacaoId),
-				eq(cashbackProgramBalances.clienteId, chat.clienteId),
-				eq(cashbackProgramBalances.programaId, program.id),
-			),
-			columns: { saldoValorDisponivel: true, saldoValorAcumuladoTotal: true, saldoValorResgatadoTotal: true },
-		});
+		const [proximaExpiracao, recompensas] = await Promise.all([
+			findNextExpiration({ context, programId: program.id }),
+			program.modalidadeRecompensasPermitida
+				? listPrizesForClient({ context, program, saldoDisponivel, limit: 20, detailed: false })
+				: Promise.resolve(null),
+		]);
 
 		return {
 			success: true,
@@ -120,9 +129,8 @@ estime valores nem prometa benefícios que não vieram daqui.`,
 				: `O cliente ainda não possui saldo no programa "${program.titulo}".`,
 			result: {
 				programa: {
-					titulo: program.titulo,
+					...programa,
 					descricao: program.descricao,
-					terminologia: program.terminologia,
 					acumuloTipo: program.acumuloTipo,
 					acumuloValor: program.acumuloValor,
 					acumuloValorMinimoCompra: program.acumuloRegraValorMinimo,
@@ -133,11 +141,86 @@ estime valores nem prometa benefícios que não vieram daqui.`,
 					usoComoRecompensa: program.modalidadeRecompensasPermitida,
 				},
 				saldo: {
-					disponivel: balance?.saldoValorDisponivel ?? 0,
+					disponivel: saldoDisponivel,
 					acumuladoTotal: balance?.saldoValorAcumuladoTotal ?? 0,
 					resgatadoTotal: balance?.saldoValorResgatadoTotal ?? 0,
+					membroDesde: balance?.dataAdesao ?? null,
 				},
+				proximaExpiracao,
+				ondeResgatar,
+				desconto: describeCashbackDiscount({ program, saldoDisponivel }),
+				// `null` = o programa não trabalha com recompensas (já dito em `usoComoRecompensa`);
+				// lista vazia = trabalha, mas não há prêmio cadastrado/resgatável.
+				recompensas,
 			},
 		};
 	},
 });
+
+/**
+ * Prêmios do programa com a posição do cliente em cada um. A lista é a mesma do PDV e da loja
+ * (`listProgramCashbackRewards`, sem superfície: o agente informa, não resgata); o preço de venda
+ * do prêmio só sai quando o agente pode falar de preços.
+ */
+async function listPrizesForClient({
+	context,
+	program,
+	saldoDisponivel,
+	limit,
+	detailed,
+}: {
+	context: TAgentToolContext;
+	program: TCashbackProgramEntity;
+	saldoDisponivel: number;
+	limit: number;
+	detailed: boolean;
+}) {
+	const rewards = await listProgramCashbackRewards({
+		tx: context.db,
+		organizacaoId: context.organizacaoId,
+		program,
+		saldoValorDisponivel: saldoDisponivel,
+		surface: null,
+	});
+	const pricesVisible = context.capacidades.comercial.precos.visiveis;
+
+	return rewards.slice(0, limit).map((reward) => {
+		const gap = describeCashbackPrizeGap({ program, prizeValue: reward.valor, saldoDisponivel });
+		return {
+			titulo: reward.titulo,
+			...(detailed ? { descricao: reward.descricao, grupo: reward.grupo } : {}),
+			valor: reward.valor,
+			...(pricesVisible ? { valorVenda: reward.valorVenda } : {}),
+			...gap,
+		};
+	});
+}
+
+/**
+ * O lote de saldo que expira primeiro: acúmulos ativos com saldo restante e data futura, somados
+ * por dia (o mesmo dia costuma ter mais de uma compra). `null` sem expiração à vista.
+ */
+async function findNextExpiration({ context, programId }: { context: TAgentToolContext; programId: string }) {
+	const rows = await context.db.query.cashbackProgramTransactions.findMany({
+		where: and(
+			eq(cashbackProgramTransactions.organizacaoId, context.organizacaoId),
+			eq(cashbackProgramTransactions.clienteId, context.chat.clienteId),
+			eq(cashbackProgramTransactions.programaId, programId),
+			eq(cashbackProgramTransactions.tipo, "ACÚMULO"),
+			eq(cashbackProgramTransactions.status, "ATIVO"),
+			gt(cashbackProgramTransactions.valorRestante, 0),
+			isNotNull(cashbackProgramTransactions.expiracaoData),
+			gte(cashbackProgramTransactions.expiracaoData, new Date()),
+		),
+		orderBy: [asc(cashbackProgramTransactions.expiracaoData)],
+		limit: 50,
+		columns: { valorRestante: true, expiracaoData: true },
+	});
+	const first = rows[0];
+	if (!first?.expiracaoData) return null;
+	const firstDate = first.expiracaoData;
+	const valor = rows
+		.filter((row) => row.expiracaoData && isSameDay(row.expiracaoData, firstDate))
+		.reduce((total, row) => total + row.valorRestante, 0);
+	return { data: firstDate, valor: Math.round(valor * 100) / 100 };
+}

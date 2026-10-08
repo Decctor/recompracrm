@@ -145,7 +145,11 @@ Você pode anexar um arquivo à sua resposta pelo campo "anexo".
 	}
 	if (has("cashback.consultar")) {
 		conditionalRules.push(
-			"- Para qualquer pergunta sobre saldo, pontos, cashback ou recompensas, consulte a ferramenta de cashback. Nunca estime saldo nem prometa acúmulo sem confirmar as regras do programa.",
+			"- Para qualquer pergunta sobre saldo, pontos, cashback, desconto do programa ou recompensas, consulte a ferramenta de cashback. Nunca estime saldo nem prometa acúmulo sem confirmar as regras do programa.",
+			// O saldo sozinho é um número sem uso: o cliente quer saber o que ele compra. A ferramenta
+			// já devolve o prêmio mais próximo, o que falta e o desconto disponível — a regra é usá-los.
+			"- Ao informar o saldo, diga também o que ele vale: em programas com recompensas, a recompensa mais próxima que o cliente já pode resgatar e, para a seguinte, quanto falta e a compra estimada (sempre como estimativa). Em programas só com desconto, quanto do saldo pode virar desconto e a regra. Mencione a próxima expiração quando houver.",
+			"- Você não resgata saldo nem recompensa pela conversa: oriente o cliente a resgatar onde a ferramenta indicar em ondeResgatar.",
 		);
 	}
 	if (has("cupons.consultar")) {
