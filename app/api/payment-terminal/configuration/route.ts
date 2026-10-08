@@ -1,6 +1,5 @@
 import { authenticateExternalRequest, requireExternalScope } from "@/lib/access/authentication";
-import { PAYMENT_TERMINAL_METHODS, paymentTerminalApiHandler } from "@/lib/payment-attempts";
-import { getOrganizationPaymentMethodsConfig, getPaymentInstallmentsOptions } from "@/lib/payments/defaults";
+import { listTerminalPaymentMethods, paymentTerminalApiHandler } from "@/lib/payment-attempts";
 import { db } from "@/services/drizzle";
 import { accessPrincipals, organizations, salesSessions, sellers } from "@/services/drizzle/schema";
 import { and, asc, eq } from "drizzle-orm";
@@ -9,8 +8,9 @@ import { type NextRequest, NextResponse } from "next/server";
 
 // Configuração do terminal (scope payment-terminal:configuration:read). O que o app precisa para
 // montar uma venda no Fluxo A sem adivinhar: vendedores ativos, caixas abertos e a política de
-// sessão, métodos de cartão e parcelamento permitidos pela organização. Organização e dispositivo
-// vêm da credencial.
+// sessão, e os métodos de pagamento que o terminal oferece — com o que cada um exige (cliente no
+// fiado), permite (troco no dinheiro) e quem o executa (a maquininha, no cartão). Organização e
+// dispositivo vêm da credencial.
 async function getPaymentTerminalConfiguration({ organizationId, deviceId }: { organizationId: string; deviceId: string }) {
 	const [organization, device, activeSellers, openSessions] = await Promise.all([
 		db.query.organizations.findFirst({ where: eq(organizations.id, organizationId), columns: { id: true, nome: true, configuracao: true } }),
@@ -25,12 +25,7 @@ async function getPaymentTerminalConfiguration({ organizationId, deviceId }: { o
 	]);
 	if (!organization) throw new createHttpError.NotFound("Organização não encontrada.");
 
-	const methodsConfig = getOrganizationPaymentMethodsConfig(organization.configuracao);
-	const metodos = PAYMENT_TERMINAL_METHODS.filter((metodo) => methodsConfig[metodo]?.suportado).map((metodo) => ({
-		metodo,
-		// Débito nunca parcela; crédito segue o teto da organização (1 quando não há parcelamento).
-		maxParcelas: metodo === "CARTAO_CREDITO" ? Math.max(1, ...getPaymentInstallmentsOptions(methodsConfig[metodo])) : 1,
-	}));
+	const metodos = listTerminalPaymentMethods(organization.configuracao);
 	const sessoesVenda = organization.configuracao.preferencias.sessoesVenda;
 
 	return {
