@@ -57,26 +57,31 @@ Você não resgata nada por aqui: aponte o cliente para "ondeResgatar".`,
 			return { success: false, message: "A empresa não possui um programa de cashback ativo no momento." };
 		}
 
-		const saldoDisponivel = balance?.saldoValorDisponivel ?? 0;
-		const ondeResgatar = listCashbackRedemptionSurfaceLabels(program);
-		const programa = { titulo: program.titulo, terminologia: program.terminologia };
+		const availableBalance = balance?.saldoValorDisponivel ?? 0;
+		const redemptionSurfaces = listCashbackRedemptionSurfaceLabels(program);
+		const programSummary = { titulo: program.titulo, terminologia: program.terminologia };
 
 		if (view === "RECOMPENSAS") {
 			if (!program.modalidadeRecompensasPermitida) {
 				return {
 					success: false,
 					message: "O programa de cashback desta empresa não trabalha com recompensas — o saldo é usado como desconto nas compras.",
-					result: { programa, saldo: { disponivel: saldoDisponivel }, desconto: describeCashbackDiscount({ program, saldoDisponivel }), ondeResgatar },
+					result: {
+						programa: programSummary,
+						saldo: { disponivel: availableBalance },
+						desconto: describeCashbackDiscount({ program, availableBalance }),
+						ondeResgatar: redemptionSurfaces,
+					},
 				};
 			}
 
-			const recompensas = await listPrizesForClient({ context, program, saldoDisponivel, limit: input.limite ?? 20, detailed: true });
-			const resgataveis = recompensas.filter((prize) => prize.resgatavel).length;
+			const prizes = await listPrizesForClient({ context, program, availableBalance, limit: input.limite ?? 20, detailed: true });
+			const redeemableCount = prizes.filter((prize) => prize.resgatavel).length;
 
 			return {
 				success: true,
-				message: `${recompensas.length} recompensa(s) no programa "${program.titulo}", ${resgataveis} já resgatável(is) com o saldo atual.`,
-				result: { programa, saldo: { disponivel: saldoDisponivel }, ondeResgatar, recompensas },
+				message: `${prizes.length} recompensa(s) no programa "${program.titulo}", ${redeemableCount} já resgatável(is) com o saldo atual.`,
+				result: { programa: programSummary, saldo: { disponivel: availableBalance }, ondeResgatar: redemptionSurfaces, recompensas: prizes },
 			};
 		}
 
@@ -91,7 +96,7 @@ Você não resgata nada por aqui: aponte o cliente para "ondeResgatar".`,
 			const where = and(...conditions);
 
 			const [totalRow] = await db.select({ total: count() }).from(cashbackProgramTransactions).where(where);
-			const totalEncontrado = Number(totalRow?.total ?? 0);
+			const totalCount = Number(totalRow?.total ?? 0);
 
 			const transactions = await db.query.cashbackProgramTransactions.findMany({
 				where,
@@ -110,15 +115,15 @@ Você não resgata nada por aqui: aponte o cliente para "ondeResgatar".`,
 
 			return {
 				success: true,
-				message: `${transactions.length} de ${totalEncontrado} movimentação(ões) de cashback.`,
-				result: { programa, totalEncontrado, movimentacoes: transactions },
+				message: `${transactions.length} de ${totalCount} movimentação(ões) de cashback.`,
+				result: { programa: programSummary, totalEncontrado: totalCount, movimentacoes: transactions },
 			};
 		}
 
-		const [proximaExpiracao, recompensas] = await Promise.all([
+		const [nextExpiration, prizes] = await Promise.all([
 			findNextExpiration({ context, programId: program.id }),
 			program.modalidadeRecompensasPermitida
-				? listPrizesForClient({ context, program, saldoDisponivel, limit: 20, detailed: false })
+				? listPrizesForClient({ context, program, availableBalance, limit: 20, detailed: false })
 				: Promise.resolve(null),
 		]);
 
@@ -129,7 +134,7 @@ Você não resgata nada por aqui: aponte o cliente para "ondeResgatar".`,
 				: `O cliente ainda não possui saldo no programa "${program.titulo}".`,
 			result: {
 				programa: {
-					...programa,
+					...programSummary,
 					descricao: program.descricao,
 					acumuloTipo: program.acumuloTipo,
 					acumuloValor: program.acumuloValor,
@@ -141,17 +146,17 @@ Você não resgata nada por aqui: aponte o cliente para "ondeResgatar".`,
 					usoComoRecompensa: program.modalidadeRecompensasPermitida,
 				},
 				saldo: {
-					disponivel: saldoDisponivel,
+					disponivel: availableBalance,
 					acumuladoTotal: balance?.saldoValorAcumuladoTotal ?? 0,
 					resgatadoTotal: balance?.saldoValorResgatadoTotal ?? 0,
 					membroDesde: balance?.dataAdesao ?? null,
 				},
-				proximaExpiracao,
-				ondeResgatar,
-				desconto: describeCashbackDiscount({ program, saldoDisponivel }),
+				proximaExpiracao: nextExpiration,
+				ondeResgatar: redemptionSurfaces,
+				desconto: describeCashbackDiscount({ program, availableBalance }),
 				// `null` = o programa não trabalha com recompensas (já dito em `usoComoRecompensa`);
 				// lista vazia = trabalha, mas não há prêmio cadastrado/resgatável.
-				recompensas,
+				recompensas: prizes,
 			},
 		};
 	},
@@ -165,13 +170,13 @@ Você não resgata nada por aqui: aponte o cliente para "ondeResgatar".`,
 async function listPrizesForClient({
 	context,
 	program,
-	saldoDisponivel,
+	availableBalance,
 	limit,
 	detailed,
 }: {
 	context: TAgentToolContext;
 	program: TCashbackProgramEntity;
-	saldoDisponivel: number;
+	availableBalance: number;
 	limit: number;
 	detailed: boolean;
 }) {
@@ -179,13 +184,13 @@ async function listPrizesForClient({
 		tx: context.db,
 		organizacaoId: context.organizacaoId,
 		program,
-		saldoValorDisponivel: saldoDisponivel,
+		availableBalance,
 		surface: null,
 	});
 	const pricesVisible = context.capacidades.comercial.precos.visiveis;
 
 	return rewards.slice(0, limit).map((reward) => {
-		const gap = describeCashbackPrizeGap({ program, prizeValue: reward.valor, saldoDisponivel });
+		const gap = describeCashbackPrizeGap({ program, prizeValue: reward.valor, availableBalance });
 		return {
 			titulo: reward.titulo,
 			...(detailed ? { descricao: reward.descricao, grupo: reward.grupo } : {}),
@@ -219,8 +224,8 @@ async function findNextExpiration({ context, programId }: { context: TAgentToolC
 	const first = rows[0];
 	if (!first?.expiracaoData) return null;
 	const firstDate = first.expiracaoData;
-	const valor = rows
+	const expiringValue = rows
 		.filter((row) => row.expiracaoData && isSameDay(row.expiracaoData, firstDate))
 		.reduce((total, row) => total + row.valorRestante, 0);
-	return { data: firstDate, valor: Math.round(valor * 100) / 100 };
+	return { data: firstDate, valor: Math.round(expiringValue * 100) / 100 };
 }

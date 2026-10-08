@@ -11,12 +11,12 @@ const percentProgram = { acumuloTipo: "PERCENTUAL" as const, acumuloValor: 5, ac
 const fixedProgram = { acumuloTipo: "FIXO" as const, acumuloValor: 10, acumuloRegraValorMinimo: 50 };
 
 test("prize gap: eligible when the balance covers the prize", () => {
-	const gap = describeCashbackPrizeGap({ program: percentProgram, prizeValue: 30, saldoDisponivel: 38 });
+	const gap = describeCashbackPrizeGap({ program: percentProgram, prizeValue: 30, availableBalance: 38 });
 	assert.deepEqual(gap, { resgatavel: true, falta: 0, compraEstimada: null });
 });
 
 test("prize gap: percentage accumulation estimates the purchase total that closes the gap", () => {
-	const gap = describeCashbackPrizeGap({ program: percentProgram, prizeValue: 80, saldoDisponivel: 38 });
+	const gap = describeCashbackPrizeGap({ program: percentProgram, prizeValue: 80, availableBalance: 38 });
 	assert.equal(gap.resgatavel, false);
 	assert.equal(gap.falta, 42);
 	assert.equal(gap.compraEstimada?.valorCompras, 840);
@@ -26,12 +26,12 @@ test("prize gap: percentage accumulation estimates the purchase total that close
 });
 
 test("prize gap: a purchase below the program minimum accumulates nothing, so the estimate never goes below it", () => {
-	const estimate = estimatePurchaseToAccumulate({ program: percentProgram, falta: 0.5 });
+	const estimate = estimatePurchaseToAccumulate({ program: percentProgram, gap: 0.5 });
 	assert.equal(estimate?.valorCompras, 20);
 });
 
 test("prize gap: fixed accumulation counts purchases and prices them by the minimum", () => {
-	const gap = describeCashbackPrizeGap({ program: fixedProgram, prizeValue: 100, saldoDisponivel: 75 });
+	const gap = describeCashbackPrizeGap({ program: fixedProgram, prizeValue: 100, availableBalance: 75 });
 	assert.equal(gap.falta, 25);
 	assert.equal(gap.compraEstimada?.quantidadeCompras, 3);
 	assert.equal(gap.compraEstimada?.valorCompras, 150);
@@ -39,20 +39,20 @@ test("prize gap: fixed accumulation counts purchases and prices them by the mini
 });
 
 test("prize gap: fixed accumulation without a minimum has no purchase total", () => {
-	const estimate = estimatePurchaseToAccumulate({ program: { ...fixedProgram, acumuloRegraValorMinimo: 0 }, falta: 10 });
+	const estimate = estimatePurchaseToAccumulate({ program: { ...fixedProgram, acumuloRegraValorMinimo: 0 }, gap: 10 });
 	assert.equal(estimate?.quantidadeCompras, 1);
 	assert.equal(estimate?.valorCompras, null);
 	assert.match(estimate?.descricao ?? "", /^1 compra \(/);
 });
 
 test("prize gap: a program that does not accumulate has no path to the prize", () => {
-	assert.equal(estimatePurchaseToAccumulate({ program: { ...percentProgram, acumuloValor: 0 }, falta: 10 }), null);
+	assert.equal(estimatePurchaseToAccumulate({ program: { ...percentProgram, acumuloValor: 0 }, gap: 10 }), null);
 });
 
 test("discount: percentage limit states the rule instead of a number", () => {
 	const discount = describeCashbackDiscount({
 		program: { terminologia: "DINHEIRO", modalidadeDescontosPermitida: true, resgateLimiteTipo: "PERCENTUAL", resgateLimiteValor: 30 },
-		saldoDisponivel: 38,
+		availableBalance: 38,
 	});
 	assert.equal(discount.permitido, true);
 	assert.equal(discount.maximoPorCompra, null);
@@ -64,7 +64,7 @@ test("discount: percentage limit states the rule instead of a number", () => {
 test("discount: fixed limit caps the balance per purchase", () => {
 	const discount = describeCashbackDiscount({
 		program: { terminologia: "DINHEIRO", modalidadeDescontosPermitida: true, resgateLimiteTipo: "FIXO", resgateLimiteValor: 20 },
-		saldoDisponivel: 38,
+		availableBalance: 38,
 	});
 	assert.equal(discount.maximoPorCompra, 20);
 	assert.match(discount.regra, /R\$ 20,00/);
@@ -74,7 +74,7 @@ test("discount: fixed limit caps the balance per purchase", () => {
 test("discount: no limit uses the whole balance up to the purchase value", () => {
 	const discount = describeCashbackDiscount({
 		program: { terminologia: "DINHEIRO", modalidadeDescontosPermitida: true, resgateLimiteTipo: null, resgateLimiteValor: null },
-		saldoDisponivel: 38,
+		availableBalance: 38,
 	});
 	assert.equal(discount.maximoPorCompra, 38);
 	assert.match(discount.regra, /até o valor da compra/);
@@ -83,7 +83,7 @@ test("discount: no limit uses the whole balance up to the purchase value", () =>
 test("discount: points programs speak in points", () => {
 	const discount = describeCashbackDiscount({
 		program: { terminologia: "PONTOS", modalidadeDescontosPermitida: true, resgateLimiteTipo: null, resgateLimiteValor: null },
-		saldoDisponivel: 120,
+		availableBalance: 120,
 	});
 	assert.match(discount.regra, /120 pontos/);
 });
@@ -91,12 +91,12 @@ test("discount: points programs speak in points", () => {
 test("discount: empty balance and discount-less programs are stated, not computed", () => {
 	const noBalance = describeCashbackDiscount({
 		program: { terminologia: "DINHEIRO", modalidadeDescontosPermitida: true, resgateLimiteTipo: null, resgateLimiteValor: null },
-		saldoDisponivel: 0,
+		availableBalance: 0,
 	});
 	assert.equal(noBalance.maximoPorCompra, 0);
 	const notAllowed = describeCashbackDiscount({
 		program: { terminologia: "DINHEIRO", modalidadeDescontosPermitida: false, resgateLimiteTipo: null, resgateLimiteValor: null },
-		saldoDisponivel: 38,
+		availableBalance: 38,
 	});
 	assert.equal(notAllowed.permitido, false);
 });

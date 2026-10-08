@@ -44,39 +44,39 @@ export type TCashbackPurchaseEstimate = {
 };
 
 /**
- * Quanto o cliente precisa comprar para acumular `falta` na moeda do programa, pela regra de
+ * Quanto o cliente precisa comprar para acumular `gap` na moeda do programa, pela regra de
  * acúmulo cadastrada. `null` quando o programa não acumula (valor zero) — aí não há caminho.
  */
 export function estimatePurchaseToAccumulate({
 	program,
-	falta,
+	gap,
 }: {
 	program: Pick<TCashbackPositionProgram, "acumuloTipo" | "acumuloValor" | "acumuloRegraValorMinimo">;
-	falta: number;
+	gap: number;
 }): TCashbackPurchaseEstimate | null {
-	if (falta <= 0) return { valorCompras: 0, quantidadeCompras: 0, descricao: "Já alcançado." };
+	if (gap <= 0) return { valorCompras: 0, quantidadeCompras: 0, descricao: "Já alcançado." };
 	if (program.acumuloValor <= 0) return null;
 	const minimum = Math.max(0, program.acumuloRegraValorMinimo);
 
 	if (program.acumuloTipo === "PERCENTUAL") {
 		// Uma compra abaixo do mínimo não acumula nada: a compra estimada nunca fica abaixo dele.
-		const valorCompras = Math.max(ceilCurrency((falta * 100) / program.acumuloValor), minimum);
+		const purchaseTotal = Math.max(ceilCurrency((gap * 100) / program.acumuloValor), minimum);
 		return {
-			valorCompras,
+			valorCompras: purchaseTotal,
 			quantidadeCompras: null,
-			descricao: `Cerca de ${formatToMoney(valorCompras)} em compras (estimativa pela regra de acúmulo de ${formatDecimalPlaces(program.acumuloValor)}% por compra${
+			descricao: `Cerca de ${formatToMoney(purchaseTotal)} em compras (estimativa pela regra de acúmulo de ${formatDecimalPlaces(program.acumuloValor)}% por compra${
 				minimum > 0 ? `, válida para compras a partir de ${formatToMoney(minimum)}` : ""
 			}).`,
 		};
 	}
 
 	// FIXO: cada venda que passa do mínimo acumula o mesmo valor, então a conta é em compras.
-	const quantidadeCompras = Math.ceil(falta / program.acumuloValor - 1e-9);
-	const valorCompras = minimum > 0 ? roundCurrency(quantidadeCompras * minimum) : null;
+	const purchaseCount = Math.ceil(gap / program.acumuloValor - 1e-9);
+	const purchaseTotal = minimum > 0 ? roundCurrency(purchaseCount * minimum) : null;
 	return {
-		valorCompras,
-		quantidadeCompras,
-		descricao: `${quantidadeCompras} compra${quantidadeCompras === 1 ? "" : "s"}${
+		valorCompras: purchaseTotal,
+		quantidadeCompras: purchaseCount,
+		descricao: `${purchaseCount} compra${purchaseCount === 1 ? "" : "s"}${
 			minimum > 0 ? ` de pelo menos ${formatToMoney(minimum)} cada` : ""
 		} (estimativa pela regra de acúmulo fixo por compra).`,
 	};
@@ -93,18 +93,18 @@ export type TCashbackPrizeGap = {
 export function describeCashbackPrizeGap({
 	program,
 	prizeValue,
-	saldoDisponivel,
+	availableBalance,
 }: {
 	program: Pick<TCashbackPositionProgram, "acumuloTipo" | "acumuloValor" | "acumuloRegraValorMinimo">;
 	prizeValue: number;
-	saldoDisponivel: number;
+	availableBalance: number;
 }): TCashbackPrizeGap {
-	const falta = roundCurrency(Math.max(0, prizeValue - saldoDisponivel));
-	const resgatavel = falta <= 0;
+	const gap = roundCurrency(Math.max(0, prizeValue - availableBalance));
+	const redeemable = gap <= 0;
 	return {
-		resgatavel,
-		falta,
-		compraEstimada: resgatavel ? null : estimatePurchaseToAccumulate({ program, falta }),
+		resgatavel: redeemable,
+		falta: gap,
+		compraEstimada: redeemable ? null : estimatePurchaseToAccumulate({ program, gap }),
 	};
 }
 
@@ -124,21 +124,21 @@ export type TCashbackDiscountPosition = {
  */
 export function describeCashbackDiscount({
 	program,
-	saldoDisponivel,
+	availableBalance,
 }: {
 	program: Pick<TCashbackPositionProgram, "terminologia" | "modalidadeDescontosPermitida" | "resgateLimiteTipo" | "resgateLimiteValor">;
-	saldoDisponivel: number;
+	availableBalance: number;
 }): TCashbackDiscountPosition {
 	if (!program.modalidadeDescontosPermitida) {
 		return { permitido: false, maximoPorCompra: null, limitePercentualDaCompra: null, regra: "O programa não usa o saldo como desconto." };
 	}
-	const saldo = roundCurrency(Math.max(0, saldoDisponivel));
-	const terminologia = program.terminologia;
+	const balance = roundCurrency(Math.max(0, availableBalance));
+	const terminology = program.terminologia;
 	const limitValue = program.resgateLimiteValor ?? 0;
 	const limitPercent = program.resgateLimiteTipo === "PERCENTUAL" && limitValue > 0 ? limitValue : null;
 	const limitFixed = program.resgateLimiteTipo === "FIXO" && limitValue > 0 ? limitValue : null;
 
-	if (saldo <= 0) {
+	if (balance <= 0) {
 		return {
 			permitido: true,
 			maximoPorCompra: 0,
@@ -152,19 +152,19 @@ export function describeCashbackDiscount({
 			permitido: true,
 			maximoPorCompra: null,
 			limitePercentualDaCompra: limitPercent,
-			regra: `Pode usar até ${formatCashbackValue(saldo, terminologia)} do saldo como desconto, limitado a ${formatDecimalPlaces(limitPercent)}% do valor de cada compra.`,
+			regra: `Pode usar até ${formatCashbackValue(balance, terminology)} do saldo como desconto, limitado a ${formatDecimalPlaces(limitPercent)}% do valor de cada compra.`,
 		};
 	}
 
-	const maximoPorCompra = limitFixed !== null ? Math.min(saldo, limitFixed) : saldo;
-	const cappedByLimit = limitFixed !== null && limitFixed < saldo;
+	const maxPerPurchase = limitFixed !== null ? Math.min(balance, limitFixed) : balance;
+	const cappedByLimit = limitFixed !== null && limitFixed < balance;
 	return {
 		permitido: true,
-		maximoPorCompra: roundCurrency(maximoPorCompra),
+		maximoPorCompra: roundCurrency(maxPerPurchase),
 		limitePercentualDaCompra: null,
 		regra: cappedByLimit
-			? `Pode usar até ${formatCashbackValue(maximoPorCompra, terminologia)} do saldo como desconto por compra (limite do programa; o restante fica para as próximas compras).`
-			: `Pode usar até ${formatCashbackValue(maximoPorCompra, terminologia)} do saldo como desconto, até o valor da compra.`,
+			? `Pode usar até ${formatCashbackValue(maxPerPurchase, terminology)} do saldo como desconto por compra (limite do programa; o restante fica para as próximas compras).`
+			: `Pode usar até ${formatCashbackValue(maxPerPurchase, terminology)} do saldo como desconto, até o valor da compra.`,
 	};
 }
 

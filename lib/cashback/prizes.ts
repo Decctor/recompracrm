@@ -181,7 +181,7 @@ export async function listProgramCashbackRewards({
 	tx,
 	organizacaoId,
 	program,
-	saldoValorDisponivel,
+	availableBalance,
 	surface,
 	channelState,
 }: {
@@ -191,7 +191,7 @@ export async function listProgramCashbackRewards({
 		TCashbackProgramEntity,
 		"id" | "ativo" | "modalidadeRecompensasPermitida" | "resgatePermitirViaPos" | "resgatePermitirViaPontoIntegracao" | "resgatePermitirViaLojaDigital"
 	> | null;
-	saldoValorDisponivel: number;
+	availableBalance: number;
 	surface: TBenefitRedemptionSurface | null;
 	channelState?: TChannelState | null;
 }) {
@@ -231,7 +231,7 @@ export async function listProgramCashbackRewards({
 				});
 				// Fora do canal não aparece: `validatePrizeForRedemption` recusaria o resgate de qualquer forma.
 				if (!channelPricing.disponivel) return [];
-				const elegivel = saldoValorDisponivel >= prize.valor;
+				const eligible = availableBalance >= prize.valor;
 				return [
 					{
 						id: prize.id,
@@ -241,8 +241,8 @@ export async function listProgramCashbackRewards({
 						grupo: prize.produto?.grupo ?? null,
 						valor: prize.valor,
 						valorVenda: channelPricing.precoVenda,
-						elegivel,
-						motivo: elegivel ? null : "Saldo insuficiente.",
+						elegivel: eligible,
+						motivo: eligible ? null : "Saldo insuficiente.",
 					},
 				];
 			})
@@ -269,8 +269,8 @@ export async function listAvailableCashbackRewards({
 	channelState?: TChannelState | null;
 }) {
 	const { program, balance } = await resolveClientCashbackProgram({ tx, organizacaoId, clienteId });
-	const saldoValorDisponivel = balance?.saldoValorDisponivel ?? 0;
-	const rewards = await listProgramCashbackRewards({ tx, organizacaoId, program, saldoValorDisponivel, surface, channelState });
+	const availableBalance = balance?.saldoValorDisponivel ?? 0;
+	const rewards = await listProgramCashbackRewards({ tx, organizacaoId, program, availableBalance, surface, channelState });
 
 	return {
 		program: program
@@ -281,7 +281,7 @@ export async function listAvailableCashbackRewards({
 					modalidadeRecompensasPermitida: program.modalidadeRecompensasPermitida,
 				}
 			: null,
-		saldoValorDisponivel,
+		saldoValorDisponivel: availableBalance,
 		rewards,
 	};
 }
