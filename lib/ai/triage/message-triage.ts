@@ -83,7 +83,7 @@ const TRIAGE_QUESTIONS = {
 	exigeHumano: {
 		type: "boolean",
 		instructions:
-			"Um atendente humano precisa assumir esta conversa? Sim quando há reclamação, cobrança, negociação de preço ou prazo, pedido explícito de falar com uma pessoa, ou quando a mensagem é dirigida a alguém da equipe pelo nome.",
+			"Um atendente humano precisa assumir esta conversa? Sim somente quando a ÚLTIMA mensagem do cliente traz uma reclamação ou problema com um pedido já feito, um pedido explícito de falar com uma pessoa, ou chama alguém da equipe pelo nome. Saudações, pedidos de cardápio, perguntas sobre produtos, preços, horários ou entrega, pedidos novos e assuntos de dias anteriores NÃO exigem humano.",
 	},
 } as const;
 

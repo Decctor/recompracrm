@@ -117,7 +117,7 @@ Você pode anexar um arquivo à sua resposta pelo campo "anexo".
 	if (has("produtos.consultar")) {
 		conditionalRules.push(
 			capacidades.comercial.precos.visiveis
-				? "- Consulte o catálogo antes de citar produto ou preço. Use somente o preço retornado pela ferramenta. Item sem o campo de preço está sem preço cadastrado: não estime valor, pergunte ou encaminhe."
+				? "- Consulte o catálogo antes de citar produto ou preço. Use somente o preço retornado pela ferramenta. Item sem o campo de preço está sem preço cadastrado: não estime valor, diga que a equipe confirma o preço."
 				: "- Consulte o catálogo antes de citar produtos. Os preços não estão visíveis para este agente: não informe nem estime valores.",
 			// A regra de estoque fica **fora** do branch de preços: uma organização que esconde preços
 			// continua precisando que o agente não invente disponibilidade.
@@ -155,10 +155,17 @@ Você pode anexar um arquivo à sua resposta pelo campo "anexo".
 	}
 	if (has("atendimento.transferir_para_humano")) {
 		conditionalRules.push(
-			"- Transfira para um atendente humano quando o cliente pedir, quando demonstrar insatisfação, quando houver reclamação ou problema com pedido, ou quando o assunto exigir decisão comercial. Ao transferir, avise o cliente de que um atendente vai continuar.",
+			// O padrão é não transferir. A versão anterior listava gatilhos amplos ("insatisfação",
+			// "decisão comercial", "resposta a um atendente") e a Famoso Pão transferia "Oi", "Cardápio"
+			// e "O menu por favor". Transferir tira a conversa da IA e põe um humano na fila: só vale
+			// quando há um motivo concreto na mensagem atual.
+			"- Por padrão, você mesmo atende: não transfira. Transfira para um atendente humano somente quando (1) o cliente pedir explicitamente para falar com uma pessoa, (2) houver reclamação ou problema com um pedido já feito, ou (3) as instruções da empresa acima mandarem transferir naquele caso específico. Ao transferir, avise o cliente de que um atendente vai continuar.",
+			"- Saudação, pedido de cardápio, pergunta sobre produto, preço, horário, endereço ou entrega, e qualquer coisa que você possa responder ou esclarecer perguntando nunca são motivo para transferir. Se a base de conhecimento não responde a pergunta, diga com franqueza que não tem essa informação e pergunte se pode ajudar com outra coisa — não transfira por isso. Na dúvida entre transferir e perguntar, pergunte.",
+			"- O motivo da transferência tem de estar na mensagem atual do cliente. Assuntos de dias anteriores (pedido, evento, orçamento) não são motivo.",
 			// Caso real: "Tiago, qual é a marca do fio?" respondido pela IA com uma marca que o Tiago
-			// não tinha vendido. Uma pergunta dirigida a uma pessoa é dela.
-			'- Se a última mensagem do cliente for dirigida a alguém da equipe pelo nome, ou for resposta a algo que um "Atendente humano" disse na conversa, não responda em nome dessa pessoa: transfira para um atendente e avise o cliente de que a equipe continua.',
+			// não tinha vendido. Uma pergunta dirigida a uma pessoa é dela. Mas "Oi" depois de uma
+			// mensagem do atendente não é resposta a ele — a regra antiga transferia exatamente isso.
+			'- Se a última mensagem do cliente chamar alguém da equipe pelo nome, ou responder diretamente a uma pergunta que um "Atendente humano" fez hoje, não responda em nome dessa pessoa: transfira e avise o cliente de que a equipe continua. Saudação, "ok" ou um pedido novo não são resposta ao atendente.',
 		);
 	} else {
 		conditionalRules.push(

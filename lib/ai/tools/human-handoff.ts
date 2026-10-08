@@ -12,10 +12,11 @@ export const humanHandoffTool = defineAgentTool({
 	name: "atendimento.transferir_para_humano",
 	description: `Transfere esta conversa para um atendente humano.
 
-Use quando: o cliente pedir explicitamente falar com uma pessoa; demonstrar irritação ou
-insatisfação; o assunto exigir decisão comercial (negociação de preço, prazo, exceção de
-política); houver reclamação, cobrança ou problema com um pedido; ou você não conseguir
-resolver com as informações disponíveis.
+Por padrão, NÃO use: você mesmo atende. Use somente quando o cliente pedir explicitamente
+falar com uma pessoa, houver reclamação ou problema com um pedido já feito, ou as instruções da
+empresa mandarem transferir naquele caso. Nunca use por saudação, pedido de cardápio, pergunta
+sobre produto, preço, horário ou entrega, por assunto de dias anteriores, nem porque a base de
+conhecimento não responde — nesse caso diga que não tem a informação.
 
 Escreva um "resumoConversa" completo — é o que o atendente vê antes de assumir, e ele não
 lerá o histórico inteiro. Após transferir, não envie outra mensagem ao cliente no mesmo turno
