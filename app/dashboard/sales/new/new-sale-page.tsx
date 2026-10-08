@@ -564,7 +564,7 @@ export default function NewSalePage({
 						/>
 					</div>
 
-					<div className="flex-1 min-h-0 flex flex-col gap-4 overflow-y-auto scrollbar-thin scrollbar-track-primary/10 scrollbar-thumb-primary/30 pr-1">
+					<div className="flex-1 min-h-0 flex flex-col gap-4 overflow-y-auto scrollbar-thin scrollbar-track-primary/10 scrollbar-thumb-primary/30 sm:pr-1">
 						<ProductsGridBlock
 							productsData={productsData}
 							isLoading={productsLoading}
