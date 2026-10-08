@@ -5,7 +5,7 @@ import { runDataCollectingV2 } from "@/lib/data-collecting-v2";
 import { processIntegratedSaleConfirmation } from "@/lib/data-collecting-v2/process-integrated-sale-confirmation";
 import { getIfoodOrder } from "@/lib/data-connectors/ifood";
 import { mapIfoodSale } from "@/lib/data-connectors/ifood/mappers";
-import { processSaleCupomAutoPrintIfEligible } from "@/lib/desktop-agent/auto-print";
+import { processSaleCupomAutoPrintIfEligible, processSalePreparationTicketAutoPrintIfEligible } from "@/lib/desktop-agent/auto-print";
 import { resolveIfoodManagementContext } from "@/lib/integrations/ifood/context";
 import { confirmIfoodOrder, getIfoodOrderCancellationReasons, requestIfoodOrderCancellation } from "@/lib/integrations/ifood/orders";
 import { publishPendingCampaignEventsSafely } from "@/lib/campaigns/events/queue";
@@ -92,6 +92,13 @@ async function postOrderConfirmation({ input, session }: { input: TPostFulfillme
 		// Cupom automático na hora do aceite, sem esperar o sync. Nunca lança; a chave de
 		// idempotência absorve a sobreposição com os hooks da ingestão.
 		await processSaleCupomAutoPrintIfEligible({
+			organizacaoId: orgId,
+			saleId: sale.id,
+			configuracao: session.membership!.organizacao.configuracao,
+			solicitadoPorId: session.user.id,
+		});
+		// O aceite coloca a venda EM_PREPARO (processIntegratedSaleConfirmation): ticket da cozinha agora.
+		await processSalePreparationTicketAutoPrintIfEligible({
 			organizacaoId: orgId,
 			saleId: sale.id,
 			configuracao: session.membership!.organizacao.configuracao,

@@ -42,7 +42,9 @@ const PRESET_OPTIONS: { preset: TServiceSettingsPreset; title: string; descripti
 function matchesPreset(configuration: TServiceSettingsConfiguration, preset: TServiceSettingsPreset) {
 	const target = SERVICE_SETTINGS_PRESETS[preset];
 	// Compara apenas a forma de operação; as políticas de QR são independentes do preset.
-	return JSON.stringify({ pontos: target.pontos, contas: target.contas }) === JSON.stringify({ pontos: configuration.pontos, contas: configuration.contas });
+	return (
+		JSON.stringify({ pontos: target.pontos, contas: target.contas }) === JSON.stringify({ pontos: configuration.pontos, contas: configuration.contas })
+	);
 }
 
 type ServiceSettingsProps = {
@@ -71,8 +73,10 @@ export function ServiceSettings({ closeModal }: ServiceSettingsProps) {
 	});
 
 	const contasHabilitadas = configuration.contas.habilitadas;
-	// v1 do QR: SOLICITACAO (aprovação do operador). DIRETO fica para depois dos controles de abuso.
-	const pedidosQrAtivos = configuration.pedidosCliente === "SOLICITACAO";
+	// SOLICITACAO = operador aprova no inbox; DIRETO = lançado na hora (com teto por dispositivo e
+	// fallback para o inbox quando o QR do ponto não identifica a comanda sozinho).
+	const pedidosQrAtivos = configuration.pedidosCliente !== "DESABILITADO";
+	const aprovacaoAutomatica = configuration.pedidosCliente === "DIRETO";
 
 	return (
 		<ResponsiveMenu
@@ -122,9 +126,7 @@ export function ServiceSettings({ closeModal }: ServiceSettingsProps) {
 									<QrCode className="h-3.5 w-3.5" />
 									PEDIDOS PELO QR CODE
 								</span>
-								<span className="text-xs text-muted-foreground">
-									O cliente monta o pedido pelo celular e o pedido entra como solicitação, para aprovação do operador no board.
-								</span>
+								<span className="text-xs text-muted-foreground">O cliente monta o pedido pelo celular a partir do QR da mesa ou da comanda.</span>
 							</div>
 							<Switch
 								checked={pedidosQrAtivos}
@@ -139,9 +141,23 @@ export function ServiceSettings({ closeModal }: ServiceSettingsProps) {
 							/>
 						</div>
 						{pedidosQrAtivos ? (
-							<p className="text-[0.7rem] text-muted-foreground">
-								Imprima o QR de cada ponto (gerado ao criar ou regenerar o ponto) e cole na mesa. Nenhum pedido é lançado sem aprovação.
-							</p>
+							<>
+								<div className="flex items-center justify-between gap-3 border-t border-border pt-2">
+									<div className="flex flex-col gap-0.5">
+										<span className="text-sm font-bold tracking-tight">LANÇAR SEM APROVAÇÃO</span>
+										<span className="text-xs text-muted-foreground">
+											{aprovacaoAutomatica
+												? "O pedido entra na conta (e na cozinha) na hora. Quando o QR do ponto não identifica a comanda, ou após muitos pedidos seguidos do mesmo celular, ele cai no inbox para aprovação."
+												: "Cada pedido entra como solicitação e só é lançado quando o operador aprovar no inbox."}
+										</span>
+									</div>
+									<Switch
+										checked={aprovacaoAutomatica}
+										onCheckedChange={(checked) => setConfiguration((prev) => ({ ...prev, pedidosCliente: checked ? "DIRETO" : "SOLICITACAO" }))}
+									/>
+								</div>
+								<p className="text-[0.7rem] text-muted-foreground">Imprima o QR de cada ponto (gerado ao criar ou regenerar o ponto) e cole na mesa.</p>
+							</>
 						) : null}
 					</div>
 				) : null}

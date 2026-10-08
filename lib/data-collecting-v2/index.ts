@@ -1,6 +1,6 @@
 import { publishPendingCampaignEventsSafely } from "@/lib/campaigns/events/queue";
 import { fetchConnectorImportBatch, type TCanonicalImportWindow, type TCanonicalImportBatch } from "@/lib/data-connectors";
-import { processSaleCupomAutoPrintIfEligible } from "@/lib/desktop-agent/auto-print";
+import { processSaleCupomAutoPrintIfEligible, processSalePreparationTicketAutoPrintIfEligible } from "@/lib/desktop-agent/auto-print";
 import { getActiveDataSourceIntegrations, type TDataSourceIntegration } from "@/lib/integrations/data-sources";
 import { resolveIfoodManagementContext } from "@/lib/integrations/ifood/context";
 import { confirmIfoodOrder } from "@/lib/integrations/ifood/orders";
@@ -336,9 +336,16 @@ export async function persistCanonicalBatch({
 	// iFood, aceite na plataforma e o automático do run anterior. becameValid é exactly-once por
 	// venda, então não se paga chamada por venda a cada polling; a allowlist de canais
 	// (INTEGRACAO-<canal>) decide se a venda imprime.
+	// O ticket de preparo vai junto: o pedido confirmado no iFood entra EM_PREPARO neste mesmo
+	// sync, e o orquestrador checa o estado — pedido já PRONTO/ENTREGUE na origem não imprime.
 	for (const persisted of persistedSalesForPostCommit) {
 		if (!persisted.becameValid || persisted.nowCanceled) continue;
 		await processSaleCupomAutoPrintIfEligible({
+			organizacaoId: organizationId,
+			saleId: persisted.id,
+			configuracao: organizationConfiguration,
+		});
+		await processSalePreparationTicketAutoPrintIfEligible({
 			organizacaoId: organizationId,
 			saleId: persisted.id,
 			configuracao: organizationConfiguration,

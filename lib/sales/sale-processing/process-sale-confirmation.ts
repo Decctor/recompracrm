@@ -7,7 +7,7 @@ import { getCashbackRedemptionBlockReason } from "@/lib/cashback/redemption-poli
 import { type TCouponCartItem, type TCouponRedemptionSurface, evaluateCouponAgainstCart } from "@/lib/coupons/engine";
 import type { TBenefitRedemptionSurface } from "@/schemas/enums";
 import { processCouponRedemption } from "@/lib/coupons/redemption";
-import { processSaleCupomAutoPrintIfEligible } from "@/lib/desktop-agent/auto-print";
+import { processSaleCupomAutoPrintIfEligible, processSalePreparationTicketAutoPrintIfEligible } from "@/lib/desktop-agent/auto-print";
 import { type TPaymentSplit, getPaymentProvider } from "@/lib/payments";
 import { buildSaleEntryTitle } from "@/lib/sales/entry-titles";
 import { validateSalesSessionSeller } from "@/lib/sales-sessions";
@@ -540,6 +540,14 @@ export async function processSaleConfirmationPostCommit(input: TProcessSaleConfi
 	// pode envolver o provedor. Um ponto cobre POS (create-and-confirm e confirm), comanda e shop.
 	// Nunca lança; a chave de idempotência (CUPOM_VENDA:<vendaId>) absorve reconfirmações.
 	await processSaleCupomAutoPrintIfEligible({
+		organizacaoId: input.organization.id,
+		saleId: input.saleId,
+		configuracao: input.organization.configuracao,
+		solicitadoPorId: input.saleAuthorId,
+	});
+	// Ticket de preparo: o orquestrador só imprime se a venda nasceu EM_PREPARO (entrega); balcão e
+	// fechamento de conta (nasce ENTREGUE) passam reto. Nunca lança.
+	await processSalePreparationTicketAutoPrintIfEligible({
 		organizacaoId: input.organization.id,
 		saleId: input.saleId,
 		configuracao: input.organization.configuracao,

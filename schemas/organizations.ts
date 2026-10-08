@@ -224,6 +224,9 @@ export const OrganizationPrintPreferencesSchema = z
 		automatica: z
 			.object({
 				CUPOM_VENDA: OrganizationAutoPrintRuleSchema.default({}),
+				// Dispara quando a unidade de preparo (venda ou pedido de conta) entra em EM_PREPARO.
+				// "COMANDA" aqui significa cada rodada da conta — o fechamento nunca imprime preparo.
+				TICKET_PREPARO: OrganizationAutoPrintRuleSchema.default({}),
 				DANFE_NFCE: OrganizationAutoPrintRuleSchema.default({}),
 				DANFE_NFE: OrganizationAutoPrintRuleSchema.default({}),
 			})

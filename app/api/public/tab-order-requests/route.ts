@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { appApiHandler } from "@/lib/app-api";
-import { filterComandaOrderableProductIds, hashPublicToken, resolveServiceSettings } from "@/lib/tabs";
+import { autoApproveTabOrderRequest, filterComandaOrderableProductIds, hashPublicToken, resolveServiceSettings } from "@/lib/tabs";
 import { enforcePublicRateLimit } from "@/lib/tabs/public-rate-limit";
 import { TabOrderRequestPayloadSchema } from "@/schemas/tab-order-requests";
 import { db } from "@/services/drizzle";
@@ -13,8 +13,10 @@ import z from "zod";
 // ============================================================================
 // Solicitacao publica de pedido via QR. O cliente publico NAO envia precos —
 // apenas referencias de produto + quantidade; a precificacao autoritativa
-// acontece na aprovacao do operador. Idempotencia por (org, idempotencyKey),
-// padrao shopOrderRequests.
+// acontece na aprovacao (do operador ou, no modo DIRETO, automatica logo apos
+// o registro — a linha da solicitacao continua existindo como trilha e como
+// vinculo dispositivo->conta). Idempotencia por (org, idempotencyKey), padrao
+// shopOrderRequests.
 // ============================================================================
 
 const CreatePublicTabOrderRequestInputSchema = z.object({
@@ -84,7 +86,7 @@ async function createPublicTabOrderRequest({ input, clientIp }: { input: TCreate
 		servicePointId = tab.servicePointId;
 	}
 
-	// Politica da organizacao: pedidos de cliente precisam estar habilitados (v1: SOLICITACAO).
+	// Politica da organizacao: pedidos de cliente precisam estar habilitados.
 	const settings = await resolveServiceSettings({ orgId });
 	if (settings.pedidosCliente === "DESABILITADO") {
 		throw new createHttpError.Forbidden("Pedidos pelo QR Code nao estao habilitados. Chame um atendente.");
@@ -114,7 +116,7 @@ async function createPublicTabOrderRequest({ input, clientIp }: { input: TCreate
 		if (existing.payloadHash !== payloadHash) throw new createHttpError.Conflict("A chave de idempotencia ja foi usada com outro pedido.");
 		return {
 			data: { requestId: existing.id, status: existing.status },
-			message: "Solicitacao ja registrada. Aguarde a aprovacao do atendente.",
+			message: requestStatusMessage(existing.status, { repeated: true }),
 		};
 	}
 
@@ -141,13 +143,27 @@ async function createPublicTabOrderRequest({ input, clientIp }: { input: TCreate
 		});
 		if (!raced) throw new createHttpError.InternalServerError("Erro ao registrar a solicitacao.");
 		if (raced.payloadHash !== payloadHash) throw new createHttpError.Conflict("A chave de idempotencia ja foi usada com outro pedido.");
-		return { data: { requestId: raced.id, status: raced.status }, message: "Solicitacao ja registrada. Aguarde a aprovacao do atendente." };
+		return { data: { requestId: raced.id, status: raced.status }, message: requestStatusMessage(raced.status, { repeated: true }) };
+	}
+
+	// DIRETO: aprova agora, sem operador. Nunca lanca — destino ambiguo ou limite por dispositivo
+	// devolve PENDENTE ao inbox, e o cliente recebe a mensagem de espera em vez de um erro.
+	if (settings.pedidosCliente === "DIRETO") {
+		const auto = await autoApproveTabOrderRequest({ orgId, requestId: created.id, deviceKeyHash, tabId, payload });
+		return { data: { requestId: created.id, status: auto.status }, message: requestStatusMessage(auto.status, { repeated: false }) };
 	}
 
 	return {
 		data: { requestId: created.id, status: created.status },
-		message: "Pedido enviado! Aguarde a aprovacao do atendente.",
+		message: requestStatusMessage(created.status, { repeated: false }),
 	};
+}
+
+type TPublicRequestStatus = (typeof tabOrderRequests.$inferSelect)["status"];
+function requestStatusMessage(status: TPublicRequestStatus, { repeated }: { repeated: boolean }) {
+	if (status === "CONCLUIDA" || status === "APROVADA") return repeated ? "Pedido ja enviado para a cozinha." : "Pedido enviado para a cozinha!";
+	if (status === "REJEITADA") return "Esta solicitacao foi recusada pelo atendente.";
+	return repeated ? "Solicitacao ja registrada. Aguarde a aprovacao do atendente." : "Pedido enviado! Aguarde a aprovacao do atendente.";
 }
 export type TCreatePublicTabOrderRequestOutput = Awaited<ReturnType<typeof createPublicTabOrderRequest>>;
 

@@ -67,7 +67,9 @@ export function PublicOrderMenu({ token, context, products, deviceKey: providedD
 	const [cart, setCart] = useState<TPublicCartItem[]>([]);
 	const [notes, setNotes] = useState("");
 	const [tabCode, setTabCode] = useState("");
-	const [submitted, setSubmitted] = useState(false);
+	// Status devolvido pela rota: no modo DIRETO o pedido ja saiu para a cozinha; nos demais
+	// (ou quando o DIRETO caiu para o inbox) o cliente precisa saber que e espera, nao conclusao.
+	const [submitted, setSubmitted] = useState<TCreatePublicTabOrderRequestOutput["data"]["status"] | null>(null);
 	// Uma intencao de pedido = uma chave; retries reutilizam a mesma.
 	const [idempotencyKey, setIdempotencyKey] = useState<string>(() => crypto.randomUUID());
 
@@ -81,7 +83,7 @@ export function PublicOrderMenu({ token, context, products, deviceKey: providedD
 		mutationFn: submitOrderRequest,
 		onSuccess: (data) => {
 			toast.success(data.message);
-			setSubmitted(true);
+			setSubmitted(data.data.status);
 			setCart([]);
 			setNotes("");
 			setIdempotencyKey(crypto.randomUUID());
@@ -128,14 +130,17 @@ export function PublicOrderMenu({ token, context, products, deviceKey: providedD
 	}
 
 	if (submitted) {
+		const launched = submitted === "CONCLUIDA" || submitted === "APROVADA";
 		return (
 			<div className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-card px-4 py-10 text-center animate-in fade-in-0 zoom-in-95 duration-300">
 				<div className="flex size-14 items-center justify-center rounded-full bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300">
 					<CheckCheck className="size-7" />
 				</div>
-				<p className="text-base font-black">Pedido enviado!</p>
-				<p className="max-w-xs text-xs text-muted-foreground">Sua solicitação foi enviada para aprovação do atendente.</p>
-				<Button size="sm" variant="secondary" onClick={() => setSubmitted(false)}>
+				<p className="text-base font-black">{launched ? "Pedido na cozinha!" : "Pedido enviado!"}</p>
+				<p className="max-w-xs text-xs text-muted-foreground">
+					{launched ? "Seu pedido já foi lançado na conta e está em preparo." : "Sua solicitação foi enviada para aprovação do atendente."}
+				</p>
+				<Button size="sm" variant="secondary" onClick={() => setSubmitted(null)}>
 					FAZER OUTRO PEDIDO
 				</Button>
 			</div>

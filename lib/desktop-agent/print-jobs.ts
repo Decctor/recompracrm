@@ -9,6 +9,7 @@ import { z } from "zod";
 import { CupomVendaDadosSchema, renderCupomVendaHtml } from "./templates/cupom-venda";
 import { EtiquetaLoteDadosSchema, renderEtiquetaLoteHtml, renderEtiquetaLoteZpl } from "./templates/etiqueta-lote";
 import { TesteImpressaoDadosSchema, renderTesteImpressaoHtml, renderTesteImpressaoZpl } from "./templates/teste-impressao";
+import { TicketPreparoDadosSchema, renderTicketPreparoHtml } from "./templates/ticket-preparo";
 
 // Fila durável de jobs de impressão do agente desktop (plano: docs/dev-planning/desktop-agent-printing-plan.md).
 // Enqueue renderiza no servidor; claim é atômico com lease; report exige posse da tentativa.
@@ -16,6 +17,8 @@ import { TesteImpressaoDadosSchema, renderTesteImpressaoHtml, renderTesteImpress
 // TTL por finalidade: cupom atrasado é pior que cupom nenhum; etiqueta e DANFE toleram espera.
 const FINALIDADE_TTL_MINUTES: Record<TPrintJobFinalidadeEnum, number> = {
 	CUPOM_VENDA: 30,
+	// Ticket de preparo atrasado é um prato que já saiu (ou nem foi feito): mesmo TTL do cupom.
+	TICKET_PREPARO: 30,
 	ETIQUETA_LOTE: 24 * 60,
 	DANFE_NFCE: 24 * 60,
 	DANFE_NFE: 24 * 60,
@@ -71,6 +74,10 @@ function renderPrintJobContent({
 		case "CUPOM_VENDA": {
 			const parsed = CupomVendaDadosSchema.parse(dados);
 			return { formato: "HTML", conteudo: renderCupomVendaHtml(parsed), conteudoUrl: null };
+		}
+		case "TICKET_PREPARO": {
+			const parsed = TicketPreparoDadosSchema.parse(dados);
+			return { formato: "HTML", conteudo: renderTicketPreparoHtml(parsed), conteudoUrl: null };
 		}
 		case "ETIQUETA_LOTE": {
 			const parsed = EtiquetaLoteDadosSchema.parse(dados);

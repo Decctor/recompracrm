@@ -4,13 +4,15 @@ import ErrorComponent from "@/components/Layouts/ErrorComponent";
 import LoadingComponent from "@/components/Layouts/LoadingComponent";
 import { Button } from "@/components/ui/button";
 import { getErrorMessage } from "@/lib/errors";
+import { createManualPrintJob } from "@/lib/mutations/desktop-agent";
 import { updateTabOrderStatus } from "@/lib/mutations/tabs";
+import { organizationHasPrinterForFinalidade, useAgentPrinters } from "@/lib/queries/desktop-agent";
 import { usePreparationTickets } from "@/lib/queries/tabs";
 import { cn } from "@/lib/utils";
 import type { TSaleAttendanceStatusEnum } from "@/schemas/enums";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
-import { Bike, CheckCheck, ChefHat, Clock, MapPin, NotebookPen, Package, Play, ShoppingBag, UtensilsCrossed } from "lucide-react";
+import { Bike, CheckCheck, ChefHat, Clock, MapPin, NotebookPen, Package, Play, Printer, ShoppingBag, UtensilsCrossed } from "lucide-react";
 import type { ReactNode } from "react";
 import { toast } from "sonner";
 
@@ -54,10 +56,13 @@ async function advanceTicket({ ticket, targetStatus }: { ticket: TPreparationTic
 	return updateTabOrderStatus({ tabOrderId: ticket.tabOrderId as string, status: targetStatus });
 }
 
-function PreparationTicketCard({ ticket }: { ticket: TPreparationTicket }) {
+function PreparationTicketCard({ ticket, canPrint }: { ticket: TPreparationTicket; canPrint: boolean }) {
 	const queryClient = useQueryClient();
 	const nextAction = NEXT_STATUS[ticket.status];
-	const originMeta = ORIGIN_META[ticket.entregaModalidade ?? ""] ?? { icon: <Package className="w-3 h-3" />, className: "bg-secondary text-foreground/80" };
+	const originMeta = ORIGIN_META[ticket.entregaModalidade ?? ""] ?? {
+		icon: <Package className="w-3 h-3" />,
+		className: "bg-secondary text-foreground/80",
+	};
 
 	const { mutate, isPending } = useMutation({
 		mutationKey: ["advance-preparation-ticket", ticket.ticketId],
@@ -66,6 +71,20 @@ function PreparationTicketCard({ ticket }: { ticket: TPreparationTicket }) {
 			toast.success(data.message);
 			queryClient.invalidateQueries({ queryKey: ["preparation-tickets"] });
 		},
+		onError: (error) => toast.error(getErrorMessage(error)),
+	});
+
+	// Reimpressão manual da via de cozinha — mesmo builder do auto-print, sem chave de idempotência
+	// (reimprimir é decisão humana, sempre gera um job novo).
+	const { mutate: printTicket, isPending: isPrinting } = useMutation({
+		mutationKey: ["print-preparation-ticket", ticket.ticketId],
+		mutationFn: () =>
+			createManualPrintJob(
+				ticket.origem === "VENDA"
+					? { finalidade: "TICKET_PREPARO", vendaId: ticket.saleId }
+					: { finalidade: "TICKET_PREPARO", tabOrderId: ticket.tabOrderId },
+			),
+		onSuccess: (data) => toast.success(data.message),
 		onError: (error) => toast.error(getErrorMessage(error)),
 	});
 
@@ -90,6 +109,18 @@ function PreparationTicketCard({ ticket }: { ticket: TPreparationTicket }) {
 				>
 					<Clock className="w-3 h-3" />
 					{elapsed}
+					{canPrint ? (
+						<Button
+							variant="ghost"
+							size="icon"
+							className="h-6 w-6 text-muted-foreground"
+							title="Imprimir ticket de preparo"
+							disabled={isPrinting}
+							onClick={() => printTicket()}
+						>
+							<Printer className="w-3.5 h-3.5" />
+						</Button>
+					) : null}
 				</div>
 			</div>
 
@@ -148,6 +179,10 @@ function PreparationTicketCard({ ticket }: { ticket: TPreparationTicket }) {
 
 export default function PreparationBoard() {
 	const { data: tickets, isLoading, isError, error } = usePreparationTickets();
+	// O botão de imprimir só existe quando alguma impressora ativa atende a via de preparo — sem
+	// isso o job nasceria para expirar no painel.
+	const { data: printers } = useAgentPrinters();
+	const canPrint = organizationHasPrinterForFinalidade(printers, "TICKET_PREPARO");
 
 	if (isLoading) return <LoadingComponent />;
 	if (isError) return <ErrorComponent msg={getErrorMessage(error)} />;
@@ -167,7 +202,7 @@ export default function PreparationBoard() {
 						</div>
 						<div className="flex flex-col gap-2 overflow-y-auto">
 							{columnTickets.length > 0 ? (
-								columnTickets.map((ticket) => <PreparationTicketCard key={ticket.ticketId} ticket={ticket} />)
+								columnTickets.map((ticket) => <PreparationTicketCard key={ticket.ticketId} ticket={ticket} canPrint={canPrint} />)
 							) : (
 								<p className="text-center text-xs text-muted-foreground py-6">Nenhum ticket.</p>
 							)}

@@ -37,6 +37,12 @@ const FINALIDADE_METADATA: Array<{ key: TAutoPrintFinalidade; label: string; des
 		description: "Imprime o cupom não fiscal automaticamente quando a venda é confirmada — no iFood, quando o pedido é aceito.",
 	},
 	{
+		key: "TICKET_PREPARO",
+		label: "TICKET DE PREPARO",
+		description:
+			"Imprime a via da cozinha (itens, adicionais e observações, sem preços) quando o pedido entra em preparo — cada pedido lançado numa conta, cada venda que precisa ser preparada.",
+	},
+	{
 		key: "DANFE_NFCE",
 		label: "DANFE — NFC-E",
 		description: "Imprime a DANFE automaticamente quando a NFC-e é autorizada pela SEFAZ.",
@@ -52,6 +58,7 @@ function toAutoPrintDraft(impressoes: TOrganizationPrintPreferences | undefined)
 	return {
 		automatica: {
 			CUPOM_VENDA: { ...EMPTY_RULE, ...impressoes?.automatica?.CUPOM_VENDA },
+			TICKET_PREPARO: { ...EMPTY_RULE, ...impressoes?.automatica?.TICKET_PREPARO },
 			DANFE_NFCE: { ...EMPTY_RULE, ...impressoes?.automatica?.DANFE_NFCE },
 			DANFE_NFE: { ...EMPTY_RULE, ...impressoes?.automatica?.DANFE_NFE },
 		},
@@ -79,9 +86,7 @@ export default function SettingsAutoPrint({ membership }: SettingsAutoPrintProps
 
 	function updateRule(finalidade: TAutoPrintFinalidade, partial: Partial<TOrganizationAutoPrintRule>) {
 		setDraft((current) =>
-			current
-				? { automatica: { ...current.automatica, [finalidade]: { ...current.automatica[finalidade], ...partial } } }
-				: current,
+			current ? { automatica: { ...current.automatica, [finalidade]: { ...current.automatica[finalidade], ...partial } } } : current,
 		);
 	}
 
@@ -110,7 +115,11 @@ export default function SettingsAutoPrint({ membership }: SettingsAutoPrintProps
 								<span className="text-sm font-medium tracking-tight">{finalidade.label}</span>
 								<span className="text-muted-foreground text-xs">{finalidade.description}</span>
 							</div>
-							<Switch checked={rule.habilitada} onCheckedChange={(value) => canEdit && updateRule(finalidade.key, { habilitada: value })} disabled={!canEdit} />
+							<Switch
+								checked={rule.habilitada}
+								onCheckedChange={(value) => canEdit && updateRule(finalidade.key, { habilitada: value })}
+								disabled={!canEdit}
+							/>
 						</div>
 						{rule.habilitada ? (
 							<div className="border-border flex flex-col gap-3 border-t px-4 py-3">

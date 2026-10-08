@@ -823,7 +823,9 @@ export type TAgentPrinterDriverEnum = z.infer<typeof AgentPrinterDriverEnum>;
 
 // Roteamento por finalidade: a impressora declara o que atende; o job nasce com uma finalidade.
 // TESTE sempre carrega impressoraId fixado (bypassa o roteamento) — valida o pipeline fim-a-fim.
-export const PrintJobFinalidadeEnum = z.enum(["CUPOM_VENDA", "ETIQUETA_LOTE", "DANFE_NFCE", "DANFE_NFE", "TESTE"]);
+// TICKET_PREPARO é a via da cozinha/produção: sem preços, uma por unidade de preparo (venda ou
+// pedido de conta) ao entrar em EM_PREPARO.
+export const PrintJobFinalidadeEnum = z.enum(["CUPOM_VENDA", "TICKET_PREPARO", "ETIQUETA_LOTE", "DANFE_NFCE", "DANFE_NFE", "TESTE"]);
 export type TPrintJobFinalidadeEnum = z.infer<typeof PrintJobFinalidadeEnum>;
 
 export const PrintJobFormatoEnum = z.enum(["HTML", "PDF_URL", "ZPL"]);
@@ -832,7 +834,7 @@ export type TPrintJobFormatoEnum = z.infer<typeof PrintJobFormatoEnum>;
 export const PrintJobStatusEnum = z.enum(["PENDENTE", "PROCESSANDO", "IMPRESSO", "ERRO", "CANCELADO", "EXPIRADO"]);
 export type TPrintJobStatusEnum = z.infer<typeof PrintJobStatusEnum>;
 
-export const PrintJobOrigemTipoEnum = z.enum(["VENDA", "LOTE", "NOTA_FISCAL", "MANUAL"]);
+export const PrintJobOrigemTipoEnum = z.enum(["VENDA", "PEDIDO_CONTA", "LOTE", "NOTA_FISCAL", "MANUAL"]);
 export type TPrintJobOrigemTipoEnum = z.infer<typeof PrintJobOrigemTipoEnum>;
 
 // `tipo` de access_events é varchar no banco; este enum é a fonte de verdade no app

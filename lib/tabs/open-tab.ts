@@ -23,7 +23,8 @@ export type TOpenTabInput = {
  * - o token publico bruto e retornado somente na criacao (persistimos apenas o hash);
  * - nao cria venda — a venda rascunho e lazy no primeiro pedido (launchTabOrder).
  */
-export async function openTab({ orgId, userId, input }: { orgId: string; userId: string; input: TOpenTabInput }) {
+// userId nulo = ator de sistema (conta aberta por aprovacao automatica de solicitacao pelo QR).
+export async function openTab({ orgId, userId, input }: { orgId: string; userId: string | null; input: TOpenTabInput }) {
 	const settings = await resolveServiceSettings({ orgId });
 	if (!settings.contas.habilitadas) {
 		throw new createHttpError.BadRequest("Contas de atendimento nao estao habilitadas para esta organizacao.");

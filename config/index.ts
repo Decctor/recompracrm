@@ -226,6 +226,7 @@ export const DEFAULT_ORGANIZATION_CONFIGURATION_PREFERENCES: TOrganizationConfig
 	impressoes: {
 		automatica: {
 			CUPOM_VENDA: { habilitada: false, canais: [], copias: 1 },
+			TICKET_PREPARO: { habilitada: false, canais: [], copias: 1 },
 			DANFE_NFCE: { habilitada: false, canais: [], copias: 1 },
 			DANFE_NFE: { habilitada: false, canais: [], copias: 1 },
 		},
