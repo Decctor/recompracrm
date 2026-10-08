@@ -1,35 +1,32 @@
 "use client";
 
 import type { TCreatePublicTabOrderRequestInput, TCreatePublicTabOrderRequestOutput } from "@/app/api/public/tab-order-requests/route";
+import { ProductBuilderForm, ProductBuilderStepper, type TBuiltOrderItem, useProductBuilder } from "@/components/Products/ProductBuilderForm";
 import { Button } from "@/components/ui/button";
+import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { Input } from "@/components/ui/input";
 import { getErrorMessage } from "@/lib/errors";
 import { formatToMoney } from "@/lib/formatting";
+import type { TTabMenuProduct } from "@/lib/tabs/public-menu";
 import { cn } from "@/lib/utils";
 import { useMutation } from "@tanstack/react-query";
 import axios from "axios";
-import { CheckCheck, ChevronLeft, ChevronRight, Minus, Plus, Search, Send, ShoppingBasket, X } from "lucide-react";
+import { CheckCheck, ChevronLeft, ChevronRight, Minus, Plus, Search, Send, ShoppingBasket, SlidersHorizontal, X } from "lucide-react";
 import Image from "next/image";
 import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { usePublicOrderingDeviceKey } from "./use-public-ordering-device-key";
 
 // ============================================================================
-// Cardapio publico do QR (v1: produto/variante/quantidade), no mesmo padrao do
-// TabOrderComposer: catalogo → revisao morfando no mesmo container. Os precos
-// exibidos sao informativos — o payload envia apenas referencias + quantidade e
-// a precificacao autoritativa acontece na aprovacao do operador.
+// Cardapio publico do QR, no mesmo padrao do TabOrderComposer: catalogo → revisao
+// morfando no mesmo container. Produto com variantes ou adicionais abre a MESMA
+// montagem do PDV e do workspace (ProductBuilderForm) numa gaveta, como na loja.
+// Os precos exibidos sao informativos — o payload envia apenas referencias
+// (produto, variante, opcoes, quantidade, observacao) e a precificacao
+// autoritativa acontece na aprovacao do operador.
 // ============================================================================
 
-export type TPublicMenuProduct = {
-	id: string;
-	nome: string;
-	grupo: string;
-	descricao: string | null;
-	precoVenda: number | null;
-	imagemCapaUrl: string | null;
-	variantes: { id: string; nome: string; precoVenda: number }[];
-};
+export type TPublicMenuProduct = TTabMenuProduct;
 
 type TPublicCartItem = {
 	cartKey: string;
@@ -37,11 +34,49 @@ type TPublicCartItem = {
 	produtoVarianteId: string | null;
 	nome: string;
 	imagemUrl: string | null;
+	/** Unitario informativo, ja com os adicionais. */
 	precoUnitario: number;
 	quantidade: number;
+	observacoes: string | null;
+	modificadores: { opcaoId: string; nome: string; quantidade: number; precoDelta: number }[];
 };
 
 type TPublicCartEntry = Omit<TPublicCartItem, "quantidade">;
+
+function isComplexProduct(product: TPublicMenuProduct) {
+	return product.variantes.length > 0 || product.addOnsReferencias.length > 0;
+}
+
+function simpleCartKey(productId: string) {
+	return `${productId}::`;
+}
+
+// Mesma montagem = mesma linha (a quantidade soma); montagem diferente = linha nova.
+function cartKeyFor(item: Pick<TBuiltOrderItem, "produtoId" | "produtoVarianteId" | "modificadores" | "observacoes">) {
+	const signature = item.modificadores
+		.map((modifier) => `${modifier.opcaoId}x${modifier.quantidade}`)
+		.sort()
+		.join("|");
+	return `${item.produtoId}:${item.produtoVarianteId ?? ""}:${signature}:${item.observacoes ?? ""}`;
+}
+
+function entryFromBuiltItem(item: TBuiltOrderItem): TPublicCartEntry {
+	return {
+		cartKey: cartKeyFor(item),
+		produtoId: item.produtoId,
+		produtoVarianteId: item.produtoVarianteId,
+		nome: item.nome,
+		imagemUrl: item.imagemUrl,
+		precoUnitario: item.valorUnitarioFinal,
+		observacoes: item.observacoes,
+		modificadores: item.modificadores.map((modifier) => ({
+			opcaoId: modifier.opcaoId,
+			nome: modifier.nome,
+			quantidade: modifier.quantidade,
+			precoDelta: modifier.valorUnitario,
+		})),
+	};
+}
 
 async function submitOrderRequest(input: TCreatePublicTabOrderRequestInput) {
 	const { data } = await axios.post<TCreatePublicTabOrderRequestOutput>("/api/public/tab-order-requests", input);
@@ -65,6 +100,7 @@ export function PublicOrderMenu({ token, context, products, deviceKey: providedD
 	const [search, setSearch] = useState("");
 	const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
 	const [cart, setCart] = useState<TPublicCartItem[]>([]);
+	const [builderProduct, setBuilderProduct] = useState<TPublicMenuProduct | null>(null);
 	const [notes, setNotes] = useState("");
 	const [tabCode, setTabCode] = useState("");
 	// Status devolvido pela rota: no modo DIRETO o pedido ja saiu para a cozinha; nos demais
@@ -95,6 +131,11 @@ export function PublicOrderMenu({ token, context, products, deviceKey: providedD
 
 	const cartTotal = cart.reduce((sum, item) => sum + item.precoUnitario * item.quantidade, 0);
 	const cartCount = cart.reduce((sum, item) => sum + item.quantidade, 0);
+	const cartQtyByProduct = useMemo(() => {
+		const map = new Map<string, number>();
+		for (const item of cart) map.set(item.produtoId, (map.get(item.produtoId) ?? 0) + item.quantidade);
+		return map;
+	}, [cart]);
 
 	function changeQuantity(entry: TPublicCartEntry, delta: number) {
 		setCart((prev) => {
@@ -111,6 +152,11 @@ export function PublicOrderMenu({ token, context, products, deviceKey: providedD
 		return cart.find((item) => item.cartKey === cartKey)?.quantidade ?? 0;
 	}
 
+	function handleBuilt(item: TBuiltOrderItem) {
+		changeQuantity(entryFromBuiltItem(item), item.quantidade);
+		setBuilderProduct(null);
+	}
+
 	function handleSubmit() {
 		if (cart.length === 0 || !deviceKey) return;
 		mutate({
@@ -125,6 +171,8 @@ export function PublicOrderMenu({ token, context, products, deviceKey: providedD
 				produtoVarianteId: item.produtoVarianteId,
 				nome: item.nome,
 				quantidade: item.quantidade,
+				observacoes: item.observacoes,
+				modificadores: item.modificadores.map((modifier) => ({ opcaoId: modifier.opcaoId, nome: modifier.nome, quantidade: modifier.quantidade })),
 			})),
 		});
 	}
@@ -165,6 +213,8 @@ export function PublicOrderMenu({ token, context, products, deviceKey: providedD
 						setSelectedGroup={setSelectedGroup}
 						getQuantity={getQuantity}
 						changeQuantity={changeQuantity}
+						cartQtyByProduct={cartQtyByProduct}
+						onOpenBuilder={setBuilderProduct}
 						cartCount={cartCount}
 						cartTotal={cartTotal}
 						onReview={() => goTo("review", "forward")}
@@ -186,6 +236,8 @@ export function PublicOrderMenu({ token, context, products, deviceKey: providedD
 					/>
 				)}
 			</div>
+
+			{builderProduct ? <ProductBuilderDrawer product={builderProduct} onClose={() => setBuilderProduct(null)} onConfirm={handleBuilt} /> : null}
 		</div>
 	);
 }
@@ -202,6 +254,8 @@ type CatalogStageProps = {
 	setSelectedGroup: (value: string | null) => void;
 	getQuantity: (cartKey: string) => number;
 	changeQuantity: (entry: TPublicCartEntry, delta: number) => void;
+	cartQtyByProduct: Map<string, number>;
+	onOpenBuilder: (product: TPublicMenuProduct) => void;
 	cartCount: number;
 	cartTotal: number;
 	onReview: () => void;
@@ -215,6 +269,8 @@ function CatalogStage({
 	setSelectedGroup,
 	getQuantity,
 	changeQuantity,
+	cartQtyByProduct,
+	onOpenBuilder,
 	cartCount,
 	cartTotal,
 	onReview,
@@ -290,13 +346,16 @@ function CatalogStage({
 					<div className="flex w-fit items-center rounded bg-brand px-2 py-1 text-brand-foreground">
 						<h2 className="text-xs font-medium uppercase tracking-wide">{section.group}</h2>
 					</div>
-					{section.products.map((product) =>
-						product.variantes.length > 0 ? (
-							<VariantProductCard key={product.id} product={product} getQuantity={getQuantity} changeQuantity={changeQuantity} />
-						) : (
-							<SimpleProductRow key={product.id} product={product} getQuantity={getQuantity} changeQuantity={changeQuantity} />
-						),
-					)}
+					{section.products.map((product) => (
+						<ProductRow
+							key={product.id}
+							product={product}
+							quantityInCart={cartQtyByProduct.get(product.id) ?? 0}
+							getQuantity={getQuantity}
+							changeQuantity={changeQuantity}
+							onOpenBuilder={onOpenBuilder}
+						/>
+					))}
 				</section>
 			))}
 
@@ -342,90 +401,151 @@ function CatalogStage({
 	);
 }
 
-function SimpleProductRow({
+// Uma linha para os dois casos, como na loja: produto simples soma direto no carrinho
+// (stepper inline); produto com variantes ou adicionais abre a montagem — toque na linha
+// ou no botão fazem a mesma coisa.
+function ProductRow({
 	product,
+	quantityInCart,
 	getQuantity,
 	changeQuantity,
+	onOpenBuilder,
 }: {
 	product: TPublicMenuProduct;
+	quantityInCart: number;
 	getQuantity: (cartKey: string) => number;
 	changeQuantity: (entry: TPublicCartEntry, delta: number) => void;
+	onOpenBuilder: (product: TPublicMenuProduct) => void;
 }) {
-	const entry: TPublicCartEntry = {
-		cartKey: `${product.id}:`,
+	const complex = isComplexProduct(product);
+	const hasVariants = product.variantes.length > 0;
+	const lowestPrice = hasVariants ? Math.min(...product.variantes.map((variant) => variant.precoVenda)) : (product.precoVenda ?? 0);
+
+	const simpleEntry: TPublicCartEntry = {
+		cartKey: simpleCartKey(product.id),
 		produtoId: product.id,
 		produtoVarianteId: null,
 		nome: product.nome,
 		imagemUrl: product.imagemCapaUrl,
 		precoUnitario: product.precoVenda ?? 0,
+		observacoes: null,
+		modificadores: [],
 	};
+	const simpleQuantity = complex ? 0 : getQuantity(simpleEntry.cartKey);
+
+	function handleTap() {
+		if (complex) return onOpenBuilder(product);
+		changeQuantity(simpleEntry, 1);
+	}
 
 	return (
 		<div className="flex items-center gap-3 rounded-xl border border-border bg-card p-2.5">
-			<ProductThumb src={product.imagemCapaUrl} name={product.nome} className="size-14 rounded-lg" sizes="56px" />
-			<div className="flex min-w-0 flex-1 flex-col gap-0.5">
-				<span className="truncate text-sm font-semibold tracking-tight">{product.nome}</span>
-				{product.descricao ? <span className="line-clamp-1 text-xs text-muted-foreground">{product.descricao}</span> : null}
-				<span className="text-xs font-black tabular-nums text-primary">{formatToMoney(product.precoVenda ?? 0)}</span>
-			</div>
-			<QuantityControl
-				name={product.nome}
-				quantity={getQuantity(entry.cartKey)}
-				onAdd={() => changeQuantity(entry, 1)}
-				onRemove={() => changeQuantity(entry, -1)}
-			/>
+			<button
+				type="button"
+				className="flex min-w-0 flex-1 items-center gap-3 rounded-lg text-left transition-colors active:bg-secondary/50"
+				onClick={handleTap}
+			>
+				<ProductThumb
+					src={product.imagemCapaUrl}
+					name={product.nome}
+					className="size-14 rounded-lg"
+					sizes="56px"
+					badgeCount={complex ? quantityInCart : 0}
+				/>
+				<div className="flex min-w-0 flex-1 flex-col gap-0.5">
+					<span className="truncate text-sm font-semibold tracking-tight">{product.nome}</span>
+					{product.descricao ? <span className="line-clamp-1 text-xs text-muted-foreground">{product.descricao}</span> : null}
+					<span className="text-xs font-black tabular-nums text-primary">
+						{hasVariants ? "a partir de " : null}
+						{formatToMoney(lowestPrice)}
+						{complex ? <span className="ml-1.5 font-medium text-muted-foreground">· personalizável</span> : null}
+					</span>
+				</div>
+			</button>
+
+			{complex ? (
+				<Button
+					size="icon"
+					variant="outline"
+					className="size-9 shrink-0 rounded-lg"
+					aria-label={`Montar ${product.nome}`}
+					onClick={() => onOpenBuilder(product)}
+				>
+					<SlidersHorizontal className="size-4" />
+				</Button>
+			) : (
+				<QuantityControl
+					name={product.nome}
+					quantity={simpleQuantity}
+					onAdd={() => changeQuantity(simpleEntry, 1)}
+					onRemove={() => changeQuantity(simpleEntry, -1)}
+				/>
+			)}
 		</div>
 	);
 }
 
-function VariantProductCard({
+// ============================================================================
+// Montagem (variantes + adicionais + observação) — gaveta, como a loja
+// ============================================================================
+
+function ProductBuilderDrawer({
 	product,
-	getQuantity,
-	changeQuantity,
+	onClose,
+	onConfirm,
 }: {
 	product: TPublicMenuProduct;
-	getQuantity: (cartKey: string) => number;
-	changeQuantity: (entry: TPublicCartEntry, delta: number) => void;
+	onClose: () => void;
+	onConfirm: (item: TBuiltOrderItem) => void;
 }) {
-	const lowestPrice = Math.min(...product.variantes.map((variant) => variant.precoVenda));
+	const builder = useProductBuilder({ product });
+
+	function handleConfirm() {
+		const item = builder.buildItem();
+		if (!item) {
+			if (builder.blockReason) toast.error(builder.blockReason);
+			return;
+		}
+		onConfirm(item);
+	}
 
 	return (
-		<div className="flex flex-col overflow-hidden rounded-xl border border-border bg-card">
-			<div className="flex items-center gap-3 p-2.5">
-				<ProductThumb src={product.imagemCapaUrl} name={product.nome} className="size-14 rounded-lg" sizes="56px" />
-				<div className="flex min-w-0 flex-1 flex-col gap-0.5">
-					<span className="truncate text-sm font-semibold tracking-tight">{product.nome}</span>
-					{product.descricao ? <span className="line-clamp-1 text-xs text-muted-foreground">{product.descricao}</span> : null}
-					<span className="text-xs font-black tabular-nums text-primary">a partir de {formatToMoney(lowestPrice)}</span>
+		<Drawer open onOpenChange={(open) => !open && onClose()}>
+			<DrawerContent className="max-h-[92dvh]">
+				<DrawerHeader className="text-left">
+					<DrawerTitle className="text-lg font-black tracking-tight">{product.nome}</DrawerTitle>
+					<DrawerDescription>Monte do seu jeito</DrawerDescription>
+				</DrawerHeader>
+
+				<div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-1 pb-2">
+					<ProductBuilderForm product={product} builder={builder} showFooter={false} />
 				</div>
-			</div>
-			<div className="flex flex-col divide-y divide-border/60 border-t border-border/60">
-				{product.variantes.map((variant) => {
-					const entry: TPublicCartEntry = {
-						cartKey: `${product.id}:${variant.id}`,
-						produtoId: product.id,
-						produtoVarianteId: variant.id,
-						nome: `${product.nome} — ${variant.nome}`,
-						imagemUrl: product.imagemCapaUrl,
-						precoUnitario: variant.precoVenda,
-					};
-					return (
-						<div key={variant.id} className="flex items-center justify-between gap-2 py-2 pl-3 pr-2.5">
-							<div className="flex min-w-0 flex-col">
-								<span className="truncate text-sm font-medium tracking-tight">{variant.nome}</span>
-								<span className="text-xs font-bold tabular-nums text-muted-foreground">{formatToMoney(variant.precoVenda)}</span>
-							</div>
-							<QuantityControl
-								name={entry.nome}
-								quantity={getQuantity(entry.cartKey)}
-								onAdd={() => changeQuantity(entry, 1)}
-								onRemove={() => changeQuantity(entry, -1)}
+
+				{/* Quantidade + confirmação na zona do polegar (padrão do workspace e do PDV) */}
+				<div className="flex shrink-0 flex-col gap-2 border-t pt-3">
+					{builder.blockReason ? <p className="text-center text-xs font-medium text-destructive">{builder.blockReason}</p> : null}
+					<div className="flex items-center gap-2">
+						<div className="flex h-12 shrink-0 items-center rounded-2xl border border-border bg-background px-1.5">
+							<ProductBuilderStepper
+								value={builder.quantity}
+								size="sm"
+								onDecrement={() => builder.setQuantity(Math.max(1, builder.quantity - 1))}
+								onIncrement={() => builder.setQuantity(builder.quantity + 1)}
+								decrementDisabled={builder.quantity <= 1}
 							/>
 						</div>
-					);
-				})}
-			</div>
-		</div>
+						<Button
+							size="lg"
+							className="h-12 flex-1 rounded-2xl text-sm font-extrabold disabled:opacity-100 disabled:bg-muted disabled:text-muted-foreground"
+							disabled={!builder.canConfirm}
+							onClick={handleConfirm}
+						>
+							ADICIONAR · {formatToMoney(builder.finalPrice)}
+						</Button>
+					</div>
+				</div>
+			</DrawerContent>
+		</Drawer>
 	);
 }
 
@@ -486,15 +606,22 @@ function ReviewStage({
 				<>
 					<div className="flex flex-col rounded-xl border border-border bg-card px-3">
 						{cart.map((item) => (
-							<div key={item.cartKey} className="flex items-center gap-3 border-b border-border/60 py-2.5 last:border-b-0">
+							<div key={item.cartKey} className="flex items-start gap-3 border-b border-border/60 py-2.5 last:border-b-0">
 								<ProductThumb src={item.imagemUrl} name={item.nome} className="size-11 rounded-lg" sizes="44px" />
 								<div className="flex min-w-0 flex-1 flex-col gap-0.5">
 									<span className="text-sm font-semibold leading-snug tracking-tight [overflow-wrap:anywhere]">{item.nome}</span>
+									{item.modificadores.length > 0 ? (
+										<span className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
+											{item.modificadores.map((modifier) => `${modifier.quantidade}x ${modifier.nome}`).join(" · ")}
+										</span>
+									) : null}
+									{item.observacoes ? <span className="text-xs italic text-muted-foreground [overflow-wrap:anywhere]">{item.observacoes}</span> : null}
 									<span className="text-xs font-bold tabular-nums">{formatToMoney(item.precoUnitario * item.quantidade)}</span>
 								</div>
 								<QuantityControl
 									name={item.nome}
 									quantity={item.quantidade}
+									className="pt-0.5"
 									onAdd={() => onChangeQuantity(item, 1)}
 									onRemove={() => onChangeQuantity(item, -1)}
 								/>
@@ -554,16 +681,28 @@ function GroupChip({ label, active, onClick }: { label: string; active: boolean;
 	);
 }
 
-function QuantityControl({ name, quantity, onAdd, onRemove }: { name: string; quantity: number; onAdd: () => void; onRemove: () => void }) {
+function QuantityControl({
+	name,
+	quantity,
+	onAdd,
+	onRemove,
+	className,
+}: {
+	name: string;
+	quantity: number;
+	onAdd: () => void;
+	onRemove: () => void;
+	className?: string;
+}) {
 	if (quantity === 0) {
 		return (
-			<Button size="icon" variant="outline" className="size-9 shrink-0 rounded-lg" aria-label={`Adicionar ${name}`} onClick={onAdd}>
+			<Button size="icon" variant="outline" className={cn("size-9 shrink-0 rounded-lg", className)} aria-label={`Adicionar ${name}`} onClick={onAdd}>
 				<Plus className="size-4" />
 			</Button>
 		);
 	}
 	return (
-		<div className="flex shrink-0 items-center gap-1.5">
+		<div className={cn("flex shrink-0 items-center gap-1.5", className)}>
 			<Button size="icon" variant="outline" className="size-9 rounded-lg" aria-label={`Remover 1 ${name}`} onClick={onRemove}>
 				<Minus className="size-3.5" />
 			</Button>
@@ -575,7 +714,19 @@ function QuantityControl({ name, quantity, onAdd, onRemove }: { name: string; qu
 	);
 }
 
-function ProductThumb({ src, name, className, sizes }: { src: string | null; name: string; className?: string; sizes: string }) {
+function ProductThumb({
+	src,
+	name,
+	className,
+	sizes,
+	badgeCount = 0,
+}: {
+	src: string | null;
+	name: string;
+	className?: string;
+	sizes: string;
+	badgeCount?: number;
+}) {
 	return (
 		<span className={cn("relative flex shrink-0 items-center justify-center overflow-hidden bg-secondary/60", className)}>
 			{src ? (
@@ -585,6 +736,11 @@ function ProductThumb({ src, name, className, sizes }: { src: string | null; nam
 					{name.trim().charAt(0)}
 				</span>
 			)}
+			{badgeCount > 0 ? (
+				<span className="absolute right-0.5 top-0.5 flex min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-black tabular-nums text-primary-foreground">
+					{badgeCount}
+				</span>
+			) : null}
 		</span>
 	);
 }

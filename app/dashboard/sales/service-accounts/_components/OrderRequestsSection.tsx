@@ -75,12 +75,12 @@ function RequestCard({ request, now, onDecided }: { request: TTabOrderRequestLis
 	const codeIsOpenElsewhere = Boolean(matchingCodeTab && matchingCodeTab.servicePointId !== request.servicePointId);
 	const canOpenRequestedTab = Boolean(
 		needsTabSelection &&
-			requestedCode &&
-			!suggestedTab &&
-			settings?.contas.identificacao === "CODIGO_MANUAL" &&
-			settings.aberturaPublica !== "DESABILITADA" &&
-			!pointLimitReached &&
-			!codeIsOpenElsewhere,
+		requestedCode &&
+		!suggestedTab &&
+		settings?.contas.identificacao === "CODIGO_MANUAL" &&
+		settings.aberturaPublica !== "DESABILITADA" &&
+		!pointLimitReached &&
+		!codeIsOpenElsewhere,
 	);
 	const blockReason = codeIsOpenElsewhere
 		? `A comanda ${requestedCode} já está aberta em outro ponto de atendimento.`
@@ -128,10 +128,19 @@ function RequestCard({ request, now, onDecided }: { request: TTabOrderRequestLis
 				</span>
 				<div className="flex flex-col gap-0.5">
 					{request.payloadSolicitacao.itens.map((item, index) => (
-						<span key={`${request.id}-${index}`} className="flex items-baseline gap-1.5 text-xs">
+						<div key={`${request.id}-${index}`} className="flex items-baseline gap-1.5 text-xs">
 							<span className="shrink-0 font-bold tabular-nums text-muted-foreground">{item.quantidade}×</span>
-							<span className="min-w-0 flex-1 [overflow-wrap:anywhere]">{item.nome}</span>
-						</span>
+							<div className="flex min-w-0 flex-1 flex-col">
+								<span className="[overflow-wrap:anywhere]">{item.nome}</span>
+								{/* O que o cliente escolheu — o operador aprova o item montado, não só o nome */}
+								{item.modificadores.length > 0 ? (
+									<span className="text-[11px] text-muted-foreground [overflow-wrap:anywhere]">
+										{item.modificadores.map((modifier) => `${modifier.quantidade}x ${modifier.nome ?? "adicional"}`).join(" · ")}
+									</span>
+								) : null}
+								{item.observacoes ? <span className="text-[11px] italic text-muted-foreground [overflow-wrap:anywhere]">“{item.observacoes}”</span> : null}
+							</div>
+						</div>
 					))}
 				</div>
 				{request.payloadSolicitacao.observacoes ? (
@@ -203,7 +212,12 @@ function RequestCard({ request, now, onDecided }: { request: TTabOrderRequestLis
 						mutate({
 							requestId: request.id,
 							action: "APPROVE",
-							destination: opensRequestedTab && requestedCode ? { type: "NEW", code: requestedCode } : effectiveTabId ? { type: "EXISTING", tabId: effectiveTabId } : null,
+							destination:
+								opensRequestedTab && requestedCode
+									? { type: "NEW", code: requestedCode }
+									: effectiveTabId
+										? { type: "EXISTING", tabId: effectiveTabId }
+										: null,
 						})
 					}
 				>
@@ -244,10 +258,7 @@ function RequestCard({ request, now, onDecided }: { request: TTabOrderRequestLis
 function DestinationChip({ tone, label, detail }: { tone: "match" | "new"; label: string; detail: string }) {
 	return (
 		<div
-			className={cn(
-				"flex items-start gap-2 rounded-xl px-2.5 py-2",
-				tone === "match" ? "bg-primary/10 text-primary" : URGENCY_META.atencao.surface,
-			)}
+			className={cn("flex items-start gap-2 rounded-xl px-2.5 py-2", tone === "match" ? "bg-primary/10 text-primary" : URGENCY_META.atencao.surface)}
 		>
 			<TicketCheck className="mt-px size-3.5 shrink-0" />
 			<div className="flex min-w-0 flex-col leading-tight">
@@ -276,7 +287,9 @@ export default function OrderRequestsSection() {
 			<h2 className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-[0.08em] text-muted-foreground">
 				<Inbox className="size-3.5" />
 				Solicitações de pedido
-				<span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-black tabular-nums leading-none text-primary-foreground">{requests.length}</span>
+				<span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-black tabular-nums leading-none text-primary-foreground">
+					{requests.length}
+				</span>
 			</h2>
 			<div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
 				{requests.map((request) => (

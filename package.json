@@ -73,6 +73,7 @@
 		"test:campaign-dispatch": "node --import tsx --test lib/campaigns/dispatch/schedule.test.ts lib/campaigns/dispatch/interruption-policy.test.ts",
 		"test:geo": "node --import tsx --test lib/geo/brazilian-locations.test.ts lib/geo/address-parsing.test.ts lib/geo/viacep.test.ts",
 		"test:sales-channels": "node --import tsx --test lib/products/sales-channels.test.ts",
+		"test:tab-ordering": "node --import tsx --test lib/products/resolve-catalog-order-item.test.ts lib/products/add-on-rules.test.ts",
 		"test:product-pricing": "node --import tsx --test lib/products/price-snapshot.test.ts lib/products/pricing.test.ts",
 		"test:visual-kits": "node --import tsx --test lib/visual-kits/formats.test.ts lib/visual-kits/generation/file-names.test.ts lib/visual-kits/pieces/ean.test.ts lib/visual-kits/pieces/code128.test.ts lib/visual-kits/pieces/price-sticker.test.ts lib/products/barcode.test.ts",
 		"test:cashback-rewards-display": "node --import tsx --test lib/cashback/rewards-display-layout.test.ts",

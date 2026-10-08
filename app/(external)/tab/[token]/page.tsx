@@ -1,11 +1,11 @@
 import { formatToMoney } from "@/lib/formatting";
-import { getComandaMenuProducts, hashPublicToken, resolveServiceSettings } from "@/lib/tabs";
+import { getTabMenuProducts, hashPublicToken, resolveServiceSettings } from "@/lib/tabs";
 import { OrgColorsProvider } from "@/components/Providers/OrgColorsProvider";
 import { db } from "@/services/drizzle";
 import { sales } from "@/services/drizzle/schema";
 import { and, eq } from "drizzle-orm";
 import { ReceiptText } from "lucide-react";
-import { PublicOrderMenu, type TPublicMenuProduct } from "../../_components/PublicOrderMenu";
+import { PublicOrderMenu } from "../../_components/PublicOrderMenu";
 import { PublicShell } from "../../_components/PublicShell";
 
 // ============================================================================
@@ -87,7 +87,7 @@ export default async function TabPublicPage({ params }: { params: Promise<{ toke
 	const isOpen = tab.status === "ABERTA";
 	const orderingEnabled = isOpen && settings.pedidosCliente !== "DESABILITADO";
 
-	const products = orderingEnabled ? await getComandaMenuProducts({ orgId: tab.organizacaoId }) : [];
+	const products = orderingEnabled ? await getTabMenuProducts({ orgId: tab.organizacaoId }) : [];
 
 	const etiqueta = tab.servicePoint?.rotulo ?? (tab.codigo ? `Comanda ${tab.codigo}` : "Conta");
 	const activeOrders = tab.pedidos.filter((order) => order.status !== "CANCELADO");
@@ -148,7 +148,7 @@ export default async function TabPublicPage({ params }: { params: Promise<{ toke
 				{orderingEnabled ? (
 					<section className="flex flex-col gap-2">
 						<h2 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Pedir mais</h2>
-						<PublicOrderMenu token={token} context="TAB" products={products as TPublicMenuProduct[]} />
+						<PublicOrderMenu token={token} context="TAB" products={products} />
 					</section>
 				) : null}
 			</PublicShell>

@@ -24,4 +24,4 @@ export {
 } from "./process-tab-order-status-change";
 export { transferTab, type TTransferTabInput, type TTransferTabResult } from "./transfer-tab";
 export { generatePublicToken, hashPublicToken, resolveServiceSettings } from "./utils";
-export { filterComandaOrderableProductIds, getComandaMenuProducts } from "./public-menu";
+export { getTabMenuProducts, type TTabMenuProduct } from "./public-menu";

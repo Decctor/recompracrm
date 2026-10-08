@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { appApiHandler } from "@/lib/app-api";
-import { autoApproveTabOrderRequest, filterComandaOrderableProductIds, hashPublicToken, resolveServiceSettings } from "@/lib/tabs";
+import { resolveCatalogOrderItem } from "@/lib/products/resolve-catalog-order-item";
+import { autoApproveTabOrderRequest, getTabMenuProducts, hashPublicToken, resolveServiceSettings } from "@/lib/tabs";
 import { enforcePublicRateLimit } from "@/lib/tabs/public-rate-limit";
 import { TabOrderRequestPayloadSchema } from "@/schemas/tab-order-requests";
 import { db } from "@/services/drizzle";
@@ -92,11 +93,23 @@ async function createPublicTabOrderRequest({ input, clientIp }: { input: TCreate
 		throw new createHttpError.Forbidden("Pedidos pelo QR Code nao estao habilitados. Chame um atendente.");
 	}
 
-	// Valida os produtos referenciados (existencia/atividade/vendabilidade/canal COMANDA — sem precos).
+	// Valida os itens contra o cardapio da comanda (existencia/atividade/vendabilidade/canal COMANDA)
+	// e as regras dos grupos de adicionais — o cliente descobre agora que falta uma escolha
+	// obrigatoria, em vez de ver a solicitacao morrer na aprovacao. Os valores calculados aqui sao
+	// descartados: o payload guarda so referencias, e a aprovacao reprecifica.
 	const productIds = [...new Set(input.items.map((item) => item.produtoId))];
-	const orderableIds = await filterComandaOrderableProductIds({ orgId, productIds });
-	if (orderableIds.size !== productIds.length) {
-		throw new createHttpError.BadRequest("Um ou mais itens nao estao disponiveis. Atualize a pagina.");
+	const catalog = await getTabMenuProducts({ orgId, productIds });
+	const productMap = new Map(catalog.map((product) => [product.id, product]));
+	for (const item of input.items) {
+		const product = productMap.get(item.produtoId);
+		if (!product) throw new createHttpError.BadRequest("Um ou mais itens nao estao disponiveis. Atualize a pagina.");
+		resolveCatalogOrderItem({
+			product,
+			variantId: item.produtoVarianteId ?? null,
+			quantity: item.quantidade,
+			modifiers: item.modificadores,
+			observacoes: item.observacoes ?? null,
+		});
 	}
 
 	const payload = TabOrderRequestPayloadSchema.parse({

@@ -8,6 +8,10 @@ import {
 } from "@/lib/coupons/engine";
 import { formatPhoneAsBase } from "@/lib/formatting";
 import { getOrganizationPaymentMethodsConfig } from "@/lib/payments";
+import {
+  resolveCatalogOrderItem,
+  type TResolvedCatalogOrderItem,
+} from "@/lib/products/resolve-catalog-order-item";
 import { processSaleConfirmation } from "@/lib/sales/sale-processing";
 import {
   admitSaleRewardRedemptions,
@@ -18,10 +22,7 @@ import {
   sumAdmittedRewardsSaleValue,
   toSaleRewardRedemptionInputs,
 } from "@/lib/sales/sale-reward-redemption";
-import {
-  getShopCatalogProducts,
-  type TShopCatalogProduct,
-} from "@/lib/shop/catalog";
+import { getShopCatalogProducts } from "@/lib/shop/catalog";
 import { getShopAvailability } from "@/lib/shop/availability";
 import {
   normalizeShopSettingsConfiguration,
@@ -94,160 +95,9 @@ function getShopPaymentDescription(
   return labels[method];
 }
 
-type CalculatedModifier = {
-  opcaoId: string;
-  nome: string;
-  quantidade: number;
-  valorUnitario: number;
-  valorTotal: number;
-};
-
-type CalculatedItem = {
-  produtoId: string;
-  produtoVarianteId: string | null;
-  nome: string;
-  codigo: string;
-  imagemUrl: string | null;
-  grupo: string | null;
-  quantidade: number;
-  valorUnitarioBase: number;
-  valorModificadores: number;
-  valorUnitarioFinal: number;
-  valorTotalBruto: number;
-  valorDesconto: number;
-  valorTotalLiquido: number;
-  valorCustoUnitario: number;
-  valorCustoTotal: number;
-  modificadores: CalculatedModifier[];
-};
-
-function getAvailableReferences(
-  product: TShopCatalogProduct,
-  variantId: string | null,
-) {
-  const variant = variantId
-    ? product.variantes.find((item) => item.id === variantId)
-    : null;
-  return [...product.addOnsReferencias, ...(variant?.addOnsReferencias ?? [])];
-}
-
-function calculateShopItem({
-  product,
-  variantId,
-  quantity,
-  modifiers,
-}: {
-  product: TShopCatalogProduct;
-  variantId: string | null;
-  quantity: number;
-  modifiers: Array<{ opcaoId: string; quantidade: number }>;
-}): CalculatedItem {
-  const variant = variantId
-    ? product.variantes.find((item) => item.id === variantId)
-    : null;
-  if (variantId && !variant)
-    throw new createHttpError.BadRequest(
-      "Variante não disponível para este produto.",
-    );
-  if (product.variantes.length > 0 && !variant)
-    throw new createHttpError.BadRequest(
-      "Selecione uma variante para este produto.",
-    );
-
-  const availableReferences = getAvailableReferences(product, variantId);
-  const aggregatedModifiers = new Map<string, number>();
-  for (const modifier of modifiers) {
-    aggregatedModifiers.set(
-      modifier.opcaoId,
-      (aggregatedModifiers.get(modifier.opcaoId) ?? 0) + modifier.quantidade,
-    );
-  }
-
-  for (const reference of availableReferences) {
-    const group = reference.grupo;
-    const selectedOptions = group.opcoes
-      .map((option) => ({
-        option,
-        quantity: aggregatedModifiers.get(option.id) ?? 0,
-      }))
-      .filter((item) => item.quantity > 0);
-    const selectedQuantity = selectedOptions.reduce(
-      (sum, item) => sum + item.quantity,
-      0,
-    );
-
-    if (selectedQuantity < group.minOpcoes) {
-      throw new createHttpError.BadRequest(
-        `Selecione pelo menos ${group.minOpcoes} opção(ões) em ${group.nome}.`,
-      );
-    }
-    if (selectedQuantity > group.maxOpcoes) {
-      throw new createHttpError.BadRequest(
-        `Selecione no máximo ${group.maxOpcoes} opção(ões) em ${group.nome}.`,
-      );
-    }
-    for (const selected of selectedOptions) {
-      if (
-        selected.option.maxQtdePorItem !== null &&
-        selected.option.maxQtdePorItem !== undefined &&
-        selected.quantity > selected.option.maxQtdePorItem
-      ) {
-        throw new createHttpError.BadRequest(
-          `Quantidade máxima excedida para ${selected.option.nome}.`,
-        );
-      }
-    }
-  }
-
-  const optionMap = new Map(
-    availableReferences.flatMap((reference) =>
-      reference.grupo.opcoes.map((option) => [option.id, option]),
-    ),
-  );
-  const calculatedModifiers: CalculatedModifier[] = [];
-  for (const [optionId, modifierQuantity] of aggregatedModifiers.entries()) {
-    const option = optionMap.get(optionId);
-    if (!option)
-      throw new createHttpError.BadRequest(
-        "Opção de adicional não disponível para este produto.",
-      );
-    calculatedModifiers.push({
-      opcaoId: option.id,
-      nome: option.nome,
-      quantidade: modifierQuantity,
-      valorUnitario: option.precoDelta,
-      valorTotal: option.precoDelta * modifierQuantity,
-    });
-  }
-
-  const basePrice = variant?.precoVenda ?? product.precoVenda ?? 0;
-  const modifiersPrice = calculatedModifiers.reduce(
-    (sum, modifier) => sum + modifier.valorTotal,
-    0,
-  );
-  const unitFinal = basePrice + modifiersPrice;
-  const cost = variant?.precoCusto ?? product.precoCusto ?? 0;
-  const itemName = variant ? `${product.nome} - ${variant.nome}` : product.nome;
-
-  return {
-    produtoId: product.id,
-    produtoVarianteId: variant?.id ?? null,
-    nome: itemName,
-    codigo: variant?.codigo ?? product.codigo,
-    imagemUrl: variant?.imagemCapaUrl ?? product.imagemCapaUrl,
-    grupo: product.grupo,
-    quantidade: quantity,
-    valorUnitarioBase: basePrice,
-    valorModificadores: modifiersPrice,
-    valorUnitarioFinal: unitFinal,
-    valorTotalBruto: unitFinal * quantity,
-    valorDesconto: 0,
-    valorTotalLiquido: unitFinal * quantity,
-    valorCustoUnitario: cost,
-    valorCustoTotal: cost * quantity,
-    modificadores: calculatedModifiers,
-  };
-}
+// A conta do item (variante, regras de grupo, preço das opções) é a mesma da comanda e vive em
+// lib/products/resolve-catalog-order-item.ts; o catálogo da loja já chega projetado para o canal.
+type CalculatedItem = TResolvedCatalogOrderItem;
 
 async function getOrCreateShopClient({
   orgId,
@@ -653,7 +503,7 @@ async function createShopOrder(request: NextRequest) {
       throw new createHttpError.BadRequest(
         "Produto não disponível na loja digital.",
       );
-    return calculateShopItem({
+    return resolveCatalogOrderItem({
       product,
       variantId: item.produtoVarianteId ?? null,
       quantity: item.quantidade,

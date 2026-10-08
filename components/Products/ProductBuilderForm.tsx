@@ -1,4 +1,3 @@
-import type { TGetPOSProductsOutput } from "@/app/api/pos/products/route";
 import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { Textarea } from "@/components/ui/textarea";
@@ -17,8 +16,32 @@ const ADD_ON_SEARCH_THRESHOLD = 8;
 // só bloqueia o envio quando os mínimos/máximos dos grupos não são atendidos.
 // ============================================================================
 
-export type TBuilderProduct = TGetPOSProductsOutput["data"]["products"][number];
-type TGrupo = TBuilderProduct["addOnsReferencias"][number]["grupo"];
+// Shape ESTRUTURAL do que a montagem lê — não o row do PDV. Assim a mesma montagem serve a
+// grade do PDV (row completo), o workspace de contas e o cardápio público do QR, que envia um
+// recorte sem custo. Quem tem mais campos continua compatível; quem tem menos não compila.
+export type TBuilderAddOnOption = { id: string; nome: string; precoDelta: number; maxQtdePorItem?: number | null };
+export type TBuilderAddOnReference = {
+	produtoAddOnId: string;
+	grupo: { id: string; nome: string; minOpcoes: number; maxOpcoes: number; opcoes: TBuilderAddOnOption[] };
+};
+export type TBuilderVariant = {
+	id: string;
+	nome: string;
+	codigo?: string | null;
+	imagemCapaUrl?: string | null;
+	precoVenda: number;
+	addOnsReferencias: TBuilderAddOnReference[];
+};
+export type TBuilderProduct = {
+	id: string;
+	nome: string;
+	codigo: string;
+	imagemCapaUrl: string | null;
+	precoVenda: number | null;
+	variantes: TBuilderVariant[];
+	addOnsReferencias: TBuilderAddOnReference[];
+};
+type TGrupo = TBuilderAddOnReference["grupo"];
 
 export type TBuiltOrderItemModifier = {
 	opcaoId: string;

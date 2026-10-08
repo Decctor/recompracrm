@@ -1,4 +1,4 @@
-import { channelNodePrice, loadChannelState } from "@/lib/products/sales-channels-store";
+import { resolveCatalogOrderItem } from "@/lib/products/resolve-catalog-order-item";
 import type { TTabOrderRequestPayload } from "@/schemas/tab-order-requests";
 import { db } from "@/services/drizzle";
 import { tabOrderRequests } from "@/services/drizzle/schema";
@@ -6,7 +6,7 @@ import { and, count, eq, gt, inArray } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { launchTabOrder, processTabOrderLaunchPostCommit, type TTabOrderItemInput } from "./launch-tab-order";
 import { openTab } from "./open-tab";
-import { filterComandaOrderableProductIds } from "./public-menu";
+import { getTabMenuProducts } from "./public-menu";
 import { resolveServiceSettings } from "./utils";
 
 // ============================================================================
@@ -102,54 +102,41 @@ export async function approveTabOrderRequest({ orgId, requestId, operatorId, des
 		}
 
 		// Precificacao autoritativa NA APROVACAO: precos atuais do catalogo, nunca do cliente publico.
+		// O cardapio da comanda (restrito aos produtos citados) ja vem com o gate do canal COMANDA e
+		// com os grupos projetados — a solicitacao pode ter sido feita antes de o produto sair do
+		// canal ou de uma opcao ser pausada, e a aprovacao e a superficie que revalida.
 		const payload = request.payloadSolicitacao;
 		const productIds = [...new Set(payload.itens.map((item) => item.produtoId))];
-		const variantIds = payload.itens.map((item) => item.produtoVarianteId).filter((id): id is string => !!id);
-		const [produtos, variantes, orderableIds, channelState] = await Promise.all([
-			db.query.products.findMany({
-				where: (fields, { and, eq, inArray }) =>
-					and(inArray(fields.id, productIds), eq(fields.organizacaoId, orgId), eq(fields.ativo, true), eq(fields.vendavel, true)),
-				columns: { id: true, nome: true, codigo: true, imagemCapaUrl: true, precoVenda: true },
-			}),
-			variantIds.length > 0
-				? db.query.productVariants.findMany({
-						where: (fields, { and, eq, inArray }) => and(inArray(fields.id, variantIds), eq(fields.organizacaoId, orgId), eq(fields.ativo, true)),
-						columns: { id: true, produtoId: true, nome: true, codigo: true, precoVenda: true },
-					})
-				: [],
-			filterComandaOrderableProductIds({ orgId, productIds }),
-			loadChannelState({ orgId, canal: "COMANDA" }),
-		]);
-		// Gate do canal COMANDA na aprovacao: a solicitacao pode ter sido feita antes de o produto
-		// sair do canal — a aprovacao e a superficie autoritativa e revalida.
-		const productMap = new Map(produtos.filter((product) => orderableIds.has(product.id)).map((product) => [product.id, product]));
-		const variantMap = new Map(variantes.map((variant) => [variant.id, variant]));
+		const catalog = await getTabMenuProducts({ orgId, productIds });
+		const productMap = new Map(catalog.map((product) => [product.id, product]));
 
 		const itens: TTabOrderItemInput[] = payload.itens.map((item) => {
 			const product = productMap.get(item.produtoId);
 			if (!product) throw new createHttpError.BadRequest(`O produto do item "${item.nome}" nao esta mais disponivel.`);
-			const variant = item.produtoVarianteId ? variantMap.get(item.produtoVarianteId) : null;
-			if (item.produtoVarianteId && (!variant || variant.produtoId !== product.id)) {
-				throw new createHttpError.BadRequest(`A variante do item "${item.nome}" nao esta mais disponivel.`);
-			}
-			// Preço resolvido do canal COMANDA — o mesmo exibido no cardápio público.
-			const unitPrice = variant
-				? (channelNodePrice(channelState, { produtoId: product.id, produtoVarianteId: variant.id, precoVenda: variant.precoVenda }) ?? 0)
-				: (channelNodePrice(channelState, { produtoId: product.id, precoVenda: product.precoVenda }) ?? 0);
+			// Regras de grupo (minimo/maximo/quantidade por opcao) e precos de opcao no canal — a mesma
+			// conta da loja, sobre o mesmo catalogo que o cliente viu.
+			const resolved = resolveCatalogOrderItem({
+				product,
+				variantId: item.produtoVarianteId ?? null,
+				quantity: item.quantidade,
+				modifiers: item.modificadores,
+				observacoes: item.observacoes ?? null,
+			});
 			return {
-				produtoId: product.id,
-				produtoVarianteId: variant?.id ?? null,
-				nome: variant ? `${product.nome} — ${variant.nome}` : product.nome,
-				codigo: variant?.codigo ?? product.codigo,
-				imagemUrl: product.imagemCapaUrl,
-				quantidade: item.quantidade,
-				valorUnitarioBase: unitPrice,
-				valorModificadores: 0,
-				valorUnitarioFinal: unitPrice,
-				valorTotalBruto: unitPrice * item.quantidade,
-				valorDesconto: 0,
-				valorTotalLiquido: unitPrice * item.quantidade,
-				modificadores: [],
+				produtoId: resolved.produtoId,
+				produtoVarianteId: resolved.produtoVarianteId,
+				nome: resolved.nome,
+				codigo: resolved.codigo,
+				imagemUrl: resolved.imagemUrl,
+				quantidade: resolved.quantidade,
+				valorUnitarioBase: resolved.valorUnitarioBase,
+				valorModificadores: resolved.valorModificadores,
+				valorUnitarioFinal: resolved.valorUnitarioFinal,
+				valorTotalBruto: resolved.valorTotalBruto,
+				valorDesconto: resolved.valorDesconto,
+				valorTotalLiquido: resolved.valorTotalLiquido,
+				observacoes: resolved.observacoes,
+				modificadores: resolved.modificadores,
 			};
 		});
 
