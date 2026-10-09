@@ -1,4 +1,5 @@
 import { ensureOrganizationAgent } from "@/lib/ai/agent/provisioning";
+import { getUnsupportedAgentModelSelections } from "@/lib/ai/providers/model-selection";
 import { parseJsonbWithFallback } from "@/lib/ai/shared/json";
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
@@ -58,6 +59,10 @@ export type TGetAiAgentOutput = Awaited<ReturnType<typeof getAiAgent>>;
 
 async function updateAiAgent({ input, organizacaoId }: { input: TUpdateAiAgentInput; organizacaoId: string }) {
 	const agent = await ensureOrganizationAgent(db, organizacaoId);
+	const currentModelConfig = parseJsonbWithFallback(AiAgentModelConfigSchema, agent.modeloConfig);
+	if (getUnsupportedAgentModelSelections(input.agente.modeloConfig, currentModelConfig).length > 0) {
+		throw new createHttpError.BadRequest("Escolha um dos modelos disponíveis para configurar o agente.");
+	}
 
 	await db.transaction(async (tx) => {
 		await tx

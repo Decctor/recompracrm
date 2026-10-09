@@ -24,7 +24,7 @@ import {
 // MODELO
 // ============================================================================
 
-export const DEFAULT_AI_AGENT_MODEL = "openai/gpt-5";
+export const DEFAULT_AI_AGENT_MODEL = "openai/gpt-6-luna";
 
 export const AiAgentModelConfigSchema = z
 	.object({

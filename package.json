@@ -108,7 +108,7 @@
 		"test:agent-tools": "node --import tsx --test lib/access/clients-catalog.test.ts lib/access/oauth.test.ts lib/agent-tools/organization-scope.test.ts lib/agent-tools/registry.test.ts lib/agent-tools/serialization.test.ts lib/agent-tools/period.test.ts lib/http/fetch-public-url.test.ts lib/files/files.test.ts lib/message-templates/agent-media.test.ts lib/mcp/json-schema.test.ts lib/mcp/protocol.test.ts lib/mcp/server.test.ts",
 		"test:agent-tools:db": "tsx ./scripts/test-agent-tools.ts",
 		"test:chats-inbox": "node --import tsx --test lib/chats/inbox-filters.test.ts",
-		"test:ai-agent": "node --import tsx --test lib/ai/providers/warnings.test.ts lib/ai/triage/message-triage.test.ts lib/ai/agent/follow-up-schedule.test.ts lib/chats/ai-presence.test.ts lib/chats/ai-pre-run-failure.test.ts lib/ai/providers/pricing.test.ts lib/ai/agent/spend.test.ts lib/ai/agent/attachment.test.ts lib/ai/agent/turn-validation.test.ts lib/ai/agent/run-memory.test.ts lib/ai/agent/context.test.ts lib/ai/agent/provisioning.test.ts",
+		"test:ai-agent": "node --import tsx --test lib/ai/providers/warnings.test.ts lib/ai/providers/model-selection.test.ts lib/ai/triage/message-triage.test.ts lib/ai/agent/follow-up-schedule.test.ts lib/chats/ai-presence.test.ts lib/chats/ai-pre-run-failure.test.ts lib/ai/providers/pricing.test.ts lib/ai/agent/spend.test.ts lib/ai/agent/attachment.test.ts lib/ai/agent/turn-validation.test.ts lib/ai/agent/run-memory.test.ts lib/ai/agent/context.test.ts lib/ai/agent/provisioning.test.ts",
 		"test:campaign-events": "node --conditions=react-server --import tsx --import ./lib/campaigns/events/test-env.ts --test lib/campaigns/events/events.test.ts lib/campaigns/engine/triggers.test.ts"
 	},
 	"dependencies": {

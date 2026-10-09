@@ -1,4 +1,10 @@
-import { AiAgentCapabilitiesSchema, AiAgentModelConfigSchema, type TAiAgentCapabilities, type TAiAgentTurnOutput } from "@/schemas/ai-agents";
+import {
+	AiAgentCapabilitiesSchema,
+	AiAgentModelConfigSchema,
+	DEFAULT_AI_AGENT_MODEL,
+	type TAiAgentCapabilities,
+	type TAiAgentTurnOutput,
+} from "@/schemas/ai-agents";
 import { AiAgentAttachmentTypeEnum, type TAiAgentRunTriggerEnum, type TAiAgentToolNameEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
 import type { DB, DBTransaction } from "@/services/drizzle";
@@ -29,7 +35,7 @@ import { completeAgentRun, createAgentRun, failAgentRun, markAgentRunCancelled, 
 import { shouldRetryDeferredAction } from "./turn-validation";
 
 type TDb = DB | DBTransaction;
-const STRUCTURED_OUTPUT_FALLBACK_MODEL = "openai/gpt-5-mini";
+const STRUCTURED_OUTPUT_FALLBACK_MODEL = DEFAULT_AI_AGENT_MODEL;
 
 /**
  * Quantas mensagens do cliente as ferramentas recebem para interpretar o pedido. Cobre o vaivém

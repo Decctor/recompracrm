@@ -8,7 +8,7 @@ import type { TAiAgentModelProfileEnum } from "@/schemas/enums";
  * catálogo garante: chamada de ferramentas (`tool-use`) e saída estruturada — sem as duas o
  * turno falha em `executeAgentTurn`, não degrada.
  *
- * Os preços são por 1 milhão de tokens em USD, conferidos no AI Gateway em 2026-07-30. Servem
+ * Os preços são por 1 milhão de tokens em USD, conferidos no AI Gateway em 2026-10-09. Servem
  * de referência na UI e de fallback quando a consulta de preços ao Gateway falha; a cobrança
  * real é sempre a do Gateway. São os valores **base**: alguns modelos têm preço por região
  * (o `deepseek-v4-pro` chega a 4x em `us`), e o Gateway não expõe a tabela regional na
@@ -34,6 +34,55 @@ export type TAiAgentModelCatalogEntry = {
  * aquele patamar de custo.
  */
 export const AI_AGENT_MODEL_CATALOG: TAiAgentModelCatalogEntry[] = [
+	{
+		id: "openai/gpt-6-luna",
+		nome: "GPT-6 Luna",
+		fornecedor: "OpenAI",
+		fornecedorSlug: "openai",
+		perfil: "ECONOMICO",
+		descricao: "Opção padrão e econômica para atendimento. Preço base para até 272 mil tokens de entrada.",
+		recomendado: true,
+		precoEntrada: 0.1,
+		precoSaida: 0.5,
+		janelaContexto: 1_050_000,
+	},
+	{
+		id: "anthropic/claude-haiku-5.5",
+		nome: "Claude Haiku 5.5",
+		fornecedor: "Anthropic",
+		fornecedorSlug: "anthropic",
+		perfil: "ECONOMICO",
+		descricao: "Alternativa econômica da Anthropic. Preço base para até 100 mil tokens de entrada; acima disso, custa 5x mais.",
+		precoEntrada: 0.1,
+		precoSaida: 0.5,
+		janelaContexto: 1_000_000,
+	},
+	{
+		id: "alibaba/qwen3.8-flash",
+		nome: "Qwen 3.8 Flash",
+		fornecedor: "Alibaba",
+		fornecedorSlug: "alibaba",
+		perfil: "ECONOMICO",
+		descricao: "Alternativa econômica da Alibaba, com contexto amplo para conversas longas.",
+		precoEntrada: 0.15,
+		precoSaida: 0.47,
+		janelaContexto: 991_000,
+	},
+	{
+		id: "zai/glm-5.3-flash",
+		nome: "GLM 5.3 Flash",
+		fornecedor: "Z.ai",
+		fornecedorSlug: "zai",
+		perfil: "ECONOMICO",
+		descricao: "Alternativa econômica da Z.ai, com contexto amplo para conversas longas.",
+		precoEntrada: 0.15,
+		precoSaida: 0.5,
+		janelaContexto: 1_000_000,
+	},
+];
+
+/** Mantém estimativas de custo de agentes e runs antigos, sem oferecer estes modelos na UI. */
+const LEGACY_AI_AGENT_MODEL_CATALOG: TAiAgentModelCatalogEntry[] = [
 	// --- ECONOMICO: atendimento de alto volume, respostas diretas ---
 	{
 		id: "deepseek/deepseek-v4-flash",
@@ -103,8 +152,8 @@ export const AI_AGENT_MODEL_CATALOG: TAiAgentModelCatalogEntry[] = [
 		descricao:
 			"O melhor equilíbrio testado para vender pelo WhatsApp: cuidadoso com ferramentas e barato. Atenção: o preço varia com a região de execução e pode ser até 4x o valor exibido.",
 		recomendado: true,
-		precoEntrada: 0.435,
-		precoSaida: 0.87,
+		precoEntrada: 0.66,
+		precoSaida: 1.98,
 		janelaContexto: 1_000_000,
 	},
 	{
@@ -199,5 +248,5 @@ export const AI_AGENT_MODEL_PROFILE_LABELS: Record<TAiAgentModelProfileEnum, str
 export const AI_AGENT_MODEL_PROFILE_ORDER: TAiAgentModelProfileEnum[] = ["ECONOMICO", "EQUILIBRADO", "AVANCADO"];
 
 export function findAiAgentModelInCatalog(id: string): TAiAgentModelCatalogEntry | null {
-	return AI_AGENT_MODEL_CATALOG.find((entry) => entry.id === id) ?? null;
+	return AI_AGENT_MODEL_CATALOG.find((entry) => entry.id === id) ?? LEGACY_AI_AGENT_MODEL_CATALOG.find((entry) => entry.id === id) ?? null;
 }

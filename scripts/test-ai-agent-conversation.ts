@@ -23,6 +23,7 @@ import { asc, eq } from "drizzle-orm";
  *   npx tsx ./scripts/test-ai-agent-conversation.ts --orgId=<uuid>
  *   npx tsx ./scripts/test-ai-agent-conversation.ts --orgId=<uuid> --roteiro="Oi|Quanto custa X?"
  *   npx tsx ./scripts/test-ai-agent-conversation.ts --orgId=<uuid> --batch --roteiro="Oi|Bom dia|Qual cardápio de hj ?"
+ *   npx tsx ./scripts/test-ai-agent-conversation.ts --orgId=<uuid> --model=openai/gpt-6-luna --batch --roteiro="Oi|Qual cardápio de hj ?"
  */
 
 const LOG = "[AI_AGENT_CONVERSATION]";
@@ -63,9 +64,11 @@ async function main() {
 			.filter(Boolean) ?? DEFAULT_SCRIPT;
 	// Reproduz a rajada recebida antes do debounce: todas as mensagens entram no mesmo turno.
 	const batch = process.argv.includes("--batch");
+	const modeloOverride = getArgValue("model");
 
 	const agent = await ensureOrganizationAgent(db, organizacaoId);
 	console.log(`${LOG} Agente ${agent.nome} (${agent.id}) | modelo: ${JSON.stringify(agent.modeloConfig)}`);
+	if (modeloOverride) console.log(`${LOG} Modelo somente para este teste: ${modeloOverride}`);
 
 	// Chat novo: um roteiro não deve herdar o contexto do anterior.
 	const { chatId, clienteId } = await createPlaygroundChat({ organizacaoId, agenteId: agent.id });
@@ -106,6 +109,7 @@ async function main() {
 				chatId,
 				gatilho: "PLAYGROUND",
 				mensagemGatilhoId: inserted.id,
+				modeloOverride,
 				deliver: createPlaygroundDeliverer({ organizacaoId, chatId }),
 			});
 			runIds.push(result.runId);
@@ -128,6 +132,7 @@ async function main() {
 			console.log(`         ANEXO: ${JSON.stringify(result.anexo)}`);
 		} catch (error) {
 			console.error(`         ❌ FALHA: ${error instanceof Error ? error.message : String(error)}`);
+			process.exitCode = 1;
 		}
 	}
 
