@@ -64,11 +64,19 @@ const UpdateChatAssignmentInputSchema = z.discriminatedUnion("acao", [
 ]);
 export type TUpdateChatAssignmentInput = z.infer<typeof UpdateChatAssignmentInputSchema>;
 
-/** Cada ação tem sua permissão de entrada; a posse é verificada depois, por atendimento. */
+/**
+ * Cada ação tem sua permissão de entrada; a posse é verificada depois, por atendimento
+ * (`mayManageAssignment`: responsável atual ou gestor com `finalizar`).
+ *
+ * Transferir e liberar exigem apenas `responder`: quem pode conduzir um atendimento pode
+ * passá-lo adiante ou devolvê-lo à fila. `receberTransferencias` é permissão do lado de
+ * quem RECEBE — filtra os destinos elegíveis (abaixo e em `transfer-to-human.ts`) — e
+ * não diz nada sobre quem envia.
+ */
 const ACTION_PERMISSION = {
 	assumir: "responder",
-	transferir: "receberTransferencias",
-	liberar: "receberTransferencias",
+	transferir: "responder",
+	liberar: "responder",
 	alterar_status: "responder",
 	alterar_prioridade: "responder",
 	alterar_resumo: "responder",
