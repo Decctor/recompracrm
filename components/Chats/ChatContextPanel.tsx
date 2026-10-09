@@ -23,7 +23,6 @@ import {
 	MapPin,
 	Package,
 	Repeat2,
-	Smartphone,
 	Sparkles,
 	Tag,
 	UserRound,
@@ -32,6 +31,7 @@ import { stripCatalogMemory } from "@/lib/ai/agent/run-memory";
 import { AiRunsHistory } from "./AiRunsHistory";
 import { formatFollowUpMoment } from "./FollowUpNotice";
 import { ChatAssignmentActions, type TChatActionPermissions } from "./ChatAssignmentActions";
+import { RESPONSIBLE_META, STATUS_META } from "./attendance-meta";
 import { ChatQuotesBlock } from "./Quotes/ChatQuotesBlock";
 import type { TQuotePermissions } from "./Quotes/config";
 
@@ -57,13 +57,6 @@ type ChatContextPanelProps = {
 	onInsertQuoteInConversation?: (texto: string) => void;
 	className?: string;
 };
-
-const RESPONSIBLE_LABELS = {
-	USUARIO: "Responsável",
-	AGENTE: "Automação",
-	EXTERNO: "Atendido pelo telefone",
-	NAO_ATRIBUIDO: "Sem responsável",
-} as const;
 
 const WINDOW_TONE = {
 	aberta: "text-muted-foreground",
@@ -156,6 +149,10 @@ function AttendanceTab({
 	actionPermissions,
 }: Pick<ChatContextPanelProps, "chatId" | "chat" | "currentUserId" | "actionPermissions">) {
 	const atendimento = chat.atendimentoAtivo;
+	// Sem ticket ativo, o último encerrado diz em que pé a conversa ficou (em vez de parecer livre).
+	const encerrado = atendimento ? null : chat.ultimoAtendimentoEncerrado;
+	const responsibleMeta = RESPONSIBLE_META[atendimento?.responsavelTipo ?? "NAO_ATRIBUIDO"];
+	const ResponsibleIcon = responsibleMeta.icon;
 	const janela = getWhatsappWindowDisplay({ expiracao: chat.whatsappJanelaDataExpiracao, tipoConexao: chat.conexaoTipo });
 
 	return (
@@ -168,6 +165,7 @@ function AttendanceTab({
 					atendimentoIa={chat.atendimentoIa}
 					currentUserId={currentUserId}
 					permissions={actionPermissions}
+					atendimentoEncerrado={encerrado}
 				/>
 			</div>
 
@@ -187,13 +185,25 @@ function AttendanceTab({
 						</span>
 					) : (
 						<span className="inline-flex items-center gap-1">
-							{atendimento?.responsavelTipo === "AGENTE" && <Sparkles className="h-3 w-3" />}
-							{atendimento?.responsavelTipo === "EXTERNO" && <Smartphone className="h-3 w-3" />}
-							{RESPONSIBLE_LABELS[atendimento?.responsavelTipo ?? "NAO_ATRIBUIDO"]}
+							{(atendimento?.responsavelTipo === "AGENTE" || atendimento?.responsavelTipo === "EXTERNO") && <ResponsibleIcon className="h-3 w-3" />}
+							{responsibleMeta.label}
 						</span>
 					)}
 				</InfoRow>
-				<InfoRow label="Desde">{formatRelative(atendimento?.dataAtribuicao)}</InfoRow>
+				{encerrado ? (
+					<>
+						<InfoRow label="Status">
+							<span className="inline-flex items-center gap-1.5">
+								<span className={cn("h-2 w-2 shrink-0 rounded-full", STATUS_META[encerrado.status].dot)} aria-hidden />
+								{STATUS_META[encerrado.status].label}
+							</span>
+						</InfoRow>
+						<InfoRow label="Encerrado">{formatRelative(encerrado.dataEncerramento)}</InfoRow>
+						{encerrado.resultado && <InfoRow label="Resultado">{encerrado.resultado}</InfoRow>}
+					</>
+				) : (
+					<InfoRow label="Desde">{formatRelative(atendimento?.dataAtribuicao)}</InfoRow>
+				)}
 				{atendimento?.transferenciaMotivo && <InfoRow label="Motivo">{atendimento.transferenciaMotivo}</InfoRow>}
 				{chat.retomadaAgendada && (
 					<InfoRow label="Retomada">

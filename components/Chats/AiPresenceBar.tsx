@@ -2,7 +2,6 @@
 
 import { Button } from "@/components/ui/button";
 import type { TAiPresence } from "@/lib/chats/ai-presence";
-import { cn } from "@/lib/utils";
 import { AlertTriangle, Loader2, Sparkles } from "lucide-react";
 import { TypingIndicator } from "./TypingIndicator";
 
@@ -14,6 +13,8 @@ type AiPresenceBarProps = {
 	onAssume?: () => void;
 	isAssuming?: boolean;
 	onOpenRun?: (runId: string) => void;
+	/** Texto legível do bloqueio (`atendimentoIa.motivoIndisponivel`); vem do servidor para o motivo ter uma só redação. */
+	blockedMessage?: string | null;
 };
 
 function formatClock(date: Date) {
@@ -25,16 +26,17 @@ function formatClock(date: Date) {
  *
  * É discreta de propósito nos estados normais (aguardando, respondendo) — o atendente só
  * precisa saber que não está sozinho — e vira alerta quando a IA falhou ou bateu o limite,
- * porque aí o atendimento parece atendido e não está.
+ * porque aí o atendimento parece atendido e não está. O bloqueio (agente pausado, limite, número
+ * sem IA...) é o mesmo caso: o cabeçalho diz "Com a IA" e ninguém vai responder.
  */
-export function AiPresenceBar({ presence, agentName, onAssume, isAssuming, onOpenRun }: AiPresenceBarProps) {
+export function AiPresenceBar({ presence, agentName, onAssume, isAssuming, onOpenRun, blockedMessage }: AiPresenceBarProps) {
 	if (presence.estado === "ausente") return null;
 
 	const nome = agentName?.trim() || "A IA";
 	const assumeButton = onAssume ? (
 		<Button
 			size="sm"
-			variant={presence.estado === "falhou" || presence.estado === "limite" ? "default" : "ghost"}
+			variant={presence.estado === "falhou" || presence.estado === "bloqueado" ? "default" : "ghost"}
 			className="h-7 shrink-0"
 			onClick={onAssume}
 			disabled={isAssuming}
@@ -72,13 +74,26 @@ export function AiPresenceBar({ presence, agentName, onAssume, isAssuming, onOpe
 		);
 	}
 
-	const isLimit = presence.estado === "limite";
+	if (presence.estado === "bloqueado") {
+		const message = blockedMessage || "O atendimento com IA não está disponível para esta conversa.";
+		return (
+			<div className="flex items-start gap-2 border-t border-destructive/30 bg-destructive/5 px-4 py-1.5 text-[11px] text-destructive">
+				<AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />
+				{/* Sem truncate: o motivo é a informação, e algumas redações são longas. */}
+				<span className="min-w-0 flex-1 leading-snug">
+					{nome} não vai responder esta conversa. {message}
+				</span>
+				{assumeButton}
+			</div>
+		);
+	}
+
 	return (
-		<div className={cn("flex items-center gap-2 border-t px-4 py-1.5 text-[11px]", "border-destructive/30 bg-destructive/5 text-destructive")}>
+		<div className="flex items-center gap-2 border-t border-destructive/30 bg-destructive/5 px-4 py-1.5 text-[11px] text-destructive">
 			<AlertTriangle className="h-3 w-3 shrink-0" aria-hidden />
 			<span className="min-w-0 flex-1 truncate">
-				{isLimit ? "Limite mensal de IA atingido: a IA não responde até o próximo mês." : `${nome} não conseguiu responder.`}
-				{!isLimit && onOpenRun ? (
+				{nome} não conseguiu responder.
+				{onOpenRun ? (
 					<>
 						{" "}
 						<button type="button" className="underline underline-offset-2" onClick={() => onOpenRun(presence.runId)}>

@@ -46,6 +46,8 @@ type ChatAssignmentActionsProps = {
 	atendimentoIa: TAtendimentoIa;
 	currentUserId: string;
 	permissions: TChatActionPermissions;
+	/** Último ticket encerrado quando não há ativo: o botão de status mostra como terminou, não "Definir". */
+	atendimentoEncerrado?: { status: TChatAssignmentStatus } | null;
 	/**
 	 * Header da thread: só posse e roteamento (assumir/liberar/transferir). Status e
 	 * prioridade vivem no painel de contexto — são decisões, não reflexos, e no header
@@ -133,6 +135,7 @@ export function ChatAssignmentActions({
 	atendimentoIa,
 	currentUserId,
 	permissions,
+	atendimentoEncerrado = null,
 	compact = false,
 	collapsed = false,
 	overflowItems,
@@ -278,8 +281,12 @@ export function ChatAssignmentActions({
 							>
 								<span className="text-muted-foreground">Status</span>
 								<span className="flex min-w-0 items-center gap-1.5">
-									{atendimento && <span className={cn("h-2 w-2 shrink-0 rounded-full", STATUS_META[atendimento.status].dot)} />}
-									<span className="truncate">{atendimento ? STATUS_META[atendimento.status].label : "Definir"}</span>
+									{(atendimento ?? atendimentoEncerrado) && (
+										<span className={cn("h-2 w-2 shrink-0 rounded-full", STATUS_META[(atendimento ?? atendimentoEncerrado)!.status].dot)} />
+									)}
+									<span className="truncate">
+										{atendimento ? STATUS_META[atendimento.status].label : atendimentoEncerrado ? STATUS_META[atendimentoEncerrado.status].label : "Definir"}
+									</span>
 									<ChevronDown className="h-3 w-3 shrink-0 opacity-60" />
 								</span>
 							</Button>

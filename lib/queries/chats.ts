@@ -91,6 +91,7 @@ export type TChatInboxItem = NonNullable<TGetChatsOutput["data"]["default"]>["it
 export type TChatMessagesPage = TGetChatMessagesOutput["data"];
 export type TChatThreadMessage = TChatMessagesPage["items"][number];
 export type TChatAttendance = TChatMessagesPage["chat"]["atendimentoAtivo"];
+export type TChatClosedAttendance = TChatMessagesPage["chat"]["ultimoAtendimentoEncerrado"];
 
 export function getChatsQueryKey({ quickFilter, ...filters }: TChatInboxQueryFilters & { quickFilter: TChatInboxQuickFilter }) {
 	return ["chats", filters.whatsappConexaoTelefoneId, filters.view, filters.search, filters.status, filters.priority, quickFilter] as const;
