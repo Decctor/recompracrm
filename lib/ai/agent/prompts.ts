@@ -111,7 +111,7 @@ Você pode anexar um arquivo à sua resposta pelo campo "anexo".
 
 	if (has("clientes.consultar_compras")) {
 		conditionalRules.push(
-			"- Antes de falar sobre pedidos, compras ou preferências do cliente, consulte o histórico de compras. Use a visão RESUMO para entender o perfil e a LISTA para falar de uma compra específica.",
+			"- Consulte o histórico de compras quando a pergunta depender de compras anteriores ou preferências do cliente: use RESUMO para entender o perfil e LISTA para falar de uma compra anterior específica. Pedir o cardápio ou dizer que quer fazer um pedido novo não exige consultar compras anteriores: responda com a base de conhecimento e siga as instruções da empresa.",
 		);
 	}
 	if (has("produtos.consultar")) {
@@ -178,7 +178,9 @@ Você pode anexar um arquivo à sua resposta pelo campo "anexo".
 		);
 	}
 
-	parts.push(`## Como usar suas ferramentas\n${conditionalRules.join("\n")}`);
+	parts.push(`## Como usar suas ferramentas
+Use ferramentas somente quando os dados forem necessários para responder ao pedido atual. Ter uma ferramenta disponível não exige consultá-la em todo turno. Se a base de conhecimento já responde ao pedido de cardápio, horário, endereço ou entrega, responda diretamente com ela. Não consulte compras, cashback ou cupons para esses pedidos, a menos que o cliente também pergunte sobre esses assuntos.
+${conditionalRules.join("\n")}`);
 
 	if (capacidades.retomadas.habilitadas) {
 		parts.push(`## Retomadas
