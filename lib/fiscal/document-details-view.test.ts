@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { extractPayloadItems, extractRecipientFromPayload, extractTaxTotalsFromPayload } from "./document-details-view";
+import {
+	buildSaleProductNames,
+	extractPayloadItems,
+	extractRecipientFromPayload,
+	extractTaxTotalsFromPayload,
+	isPlaceholderItemDescription,
+} from "./document-details-view";
 
 const spedyPayload = {
 	receiver: { name: "Maria", federalTaxNumber: "13953428659" },
@@ -25,7 +31,13 @@ const spedyPayload = {
 const infNFePayload = {
 	infNFe: {
 		dest: { xNome: "Empresa X", CNPJ: "53825696000151" },
-		det: [{ nItem: 1, prod: { xProd: "Bombom", NCM: "18069000", CFOP: "5102", qCom: 3, vUnCom: 2, vProd: 6 }, imposto: { ICMS: { ICMSSN102: { CSOSN: "102" } } } }],
+		det: [
+			{
+				nItem: 1,
+				prod: { xProd: "Bombom", NCM: "18069000", CFOP: "5102", qCom: 3, vUnCom: 2, vProd: 6 },
+				imposto: { ICMS: { ICMSSN102: { CSOSN: "102" } } },
+			},
+		],
 		total: { ICMSTot: { vNF: "6.00", vProd: "6.00", vDesc: "0.00", vTotTrib: "1.10" } },
 	},
 };
@@ -68,4 +80,52 @@ test("itens: CFOP e CSOSN numéricos da Spedy viram texto", () => {
 		],
 	);
 	assert.equal(extractPayloadItems(infNFePayload)[0]?.cfop, "5102");
+});
+
+test("itens: código do item vira produtoId nos dois formatos", () => {
+	const spedy = extractPayloadItems({ items: [{ code: "prod-1", description: "ITEM 1", quantity: 1, totalAmount: 5 }] });
+	assert.equal(spedy[0].produtoId, "prod-1");
+	const xml = extractPayloadItems({ infNFe: { det: [{ nItem: 1, prod: { cProd: "prod-2", xProd: "Bombom" } }] } });
+	assert.equal(xml[0].produtoId, "prod-2");
+});
+
+test("itens: só o ITEM N de reserva conta como nome genérico", () => {
+	assert.equal(isPlaceholderItemDescription("ITEM 1"), true);
+	assert.equal(isPlaceholderItemDescription("Item 12"), true);
+	assert.equal(isPlaceholderItemDescription("Item especial"), false);
+	assert.equal(isPlaceholderItemDescription("Açaí 500ml"), false);
+});
+
+test("nomes da venda: nome gravado no item ganha do catálogo", () => {
+	const names = buildSaleProductNames({
+		id: "v1",
+		valorTotal: 10,
+		dataVenda: null,
+		statusVenda: null,
+		canal: null,
+		itens: [
+			{
+				id: "i1",
+				produtoId: "p1",
+				produto: { nome: "Catálogo 1" },
+				quantidade: 1,
+				valorVendaUnitario: 5,
+				valorVendaTotalBruto: 5,
+				valorTotalDesconto: 0,
+				metadados: { nome: "Na venda 1" },
+			},
+			{
+				id: "i2",
+				produtoId: "p2",
+				produto: { nome: "Catálogo 2" },
+				quantidade: 1,
+				valorVendaUnitario: 5,
+				valorVendaTotalBruto: 5,
+				valorTotalDesconto: 0,
+				metadados: { origem: "IMPORTACAO" },
+			},
+		],
+	});
+	assert.equal(names.get("p1"), "Na venda 1");
+	assert.equal(names.get("p2"), "Catálogo 2");
 });
