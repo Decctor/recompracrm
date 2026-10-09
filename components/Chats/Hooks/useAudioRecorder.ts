@@ -109,13 +109,38 @@ export function useAudioRecorder(): AudioRecorderResult {
 	}, []);
 
 	/**
+	 * Libera timers, microfone e contexto de áudio. Usado nos caminhos de erro, onde nenhum
+	 * `onstop` virá limpar o que já foi aberto (ex.: permissão concedida, mas o MediaRecorder falha).
+	 */
+	const releaseCaptureResources = useCallback(() => {
+		if (durationIntervalRef.current) {
+			clearInterval(durationIntervalRef.current);
+			durationIntervalRef.current = null;
+		}
+		if (audioLevelIntervalRef.current) {
+			clearInterval(audioLevelIntervalRef.current);
+			audioLevelIntervalRef.current = null;
+		}
+		if (streamRef.current) {
+			for (const track of streamRef.current.getTracks()) {
+				track.stop();
+			}
+			streamRef.current = null;
+		}
+		if (audioContextRef.current) {
+			void audioContextRef.current.close();
+			audioContextRef.current = null;
+		}
+		analyserRef.current = null;
+	}, []);
+
+	/**
 	 * Start audio recording
 	 */
 	const startRecording = useCallback(async () => {
 		try {
 			console.log("[AudioRecorder] Starting recording...");
 			setError(null);
-			setRecordingState("recording");
 			chunksRef.current = [];
 			setAudioLevels(Array(WAVEFORM_BARS).fill(0));
 
@@ -165,6 +190,9 @@ export function useAudioRecorder(): AudioRecorderResult {
 
 			// Handle recording stop
 			mediaRecorder.onstop = () => {
+				// Cancelar ou falhar já liberou o stream (e voltou o estado); o `stop` assíncrono do
+				// MediaRecorder não deve ressuscitar uma gravação descartada.
+				if (!streamRef.current) return;
 				console.log("[AudioRecorder] Recording stopped");
 				const blob = new Blob(chunksRef.current, { type: mimeType || "audio/webm" });
 				setAudioBlob(blob);
@@ -191,6 +219,7 @@ export function useAudioRecorder(): AudioRecorderResult {
 			// Handle errors
 			mediaRecorder.onerror = (event) => {
 				console.error("[AudioRecorder] MediaRecorder error:", event);
+				releaseCaptureResources();
 				setError("Erro ao gravar áudio");
 				setRecordingState("error");
 			};
@@ -198,6 +227,10 @@ export function useAudioRecorder(): AudioRecorderResult {
 			// Start recording
 			mediaRecorder.start(100); // Collect data every 100ms
 			startTimeRef.current = Date.now();
+			// Só agora o estado vira "recording": antes disso o usuário ainda pode negar o microfone, e
+			// a barra de gravação não deve aparecer para uma gravação que não existe.
+			setRecordingDuration(0);
+			setRecordingState("recording");
 
 			// Start duration timer
 			durationIntervalRef.current = setInterval(() => {
@@ -219,6 +252,7 @@ export function useAudioRecorder(): AudioRecorderResult {
 			console.log("[AudioRecorder] Recording started successfully");
 		} catch (err) {
 			console.error("[AudioRecorder] Error starting recording:", err);
+			releaseCaptureResources();
 
 			let errorMessage = "Erro ao acessar microfone";
 			if (err instanceof Error) {
@@ -235,7 +269,7 @@ export function useAudioRecorder(): AudioRecorderResult {
 			setError(errorMessage);
 			setRecordingState("error");
 		}
-	}, [getSupportedMimeType, updateAudioLevels]);
+	}, [getSupportedMimeType, updateAudioLevels, releaseCaptureResources]);
 
 	/**
 	 * Stop recording
