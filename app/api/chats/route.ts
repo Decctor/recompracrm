@@ -10,7 +10,7 @@ import { chatAssignments, chatMessages, chats } from "@/services/drizzle/schema/
 import { clients } from "@/services/drizzle/schema/clients";
 import { users } from "@/services/drizzle/schema/users";
 import { whatsappConnectionPhones, whatsappConnections } from "@/services/drizzle/schema/whatsapp-connections";
-import { and, desc, eq, lt, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, lt, or, sql } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
@@ -302,14 +302,73 @@ async function createChatRoute(req: NextRequest) {
 
 // ============= PATCH - Ações sobre o chat =============
 
-const UpdateChatInputSchema = z.object({
+const MarkChatAsReadInputSchema = z.object({
 	acao: z.literal("mark_as_read"),
 	chatId: z.string({ required_error: "ID do chat não informado.", invalid_type_error: "Tipo inválido para o ID do chat." }),
 });
-export type TUpdateChatInput = z.infer<typeof UpdateChatInputSchema>;
 
-async function updateChat({ session, input }: { session: TAuthUserSession; input: TUpdateChatInput }) {
+/**
+ * Escopo da inbox de onde o "marcar todas como lidas" foi disparado: os mesmos filtros que
+ * `GET /api/chats/inbox-counts` recebe, para que o número mostrado na confirmação ("as 134
+ * conversas") seja exatamente o conjunto zerado. Chegam no corpo JSON, então já tipados (sem o
+ * parse de string separada por vírgula da query).
+ */
+const MarkAllChatsAsReadInputSchema = z.object({
+	acao: z.literal("mark_all_as_read"),
+	whatsappConexaoTelefoneId: z.string({ invalid_type_error: "Tipo inválido para o ID do telefone da conexão." }).optional().nullable(),
+	view: ChatInboxViewEnum,
+	search: z.string({ invalid_type_error: "Tipo inválido para a busca." }).optional().nullable(),
+	status: z.array(ChatAssignmentStatusEnum, { invalid_type_error: "Tipo inválido para o filtro de status." }).optional().default([]),
+	priority: z.array(ChatInboxPriorityFilterEnum, { invalid_type_error: "Tipo inválido para o filtro de prioridade." }).optional().default([]),
+});
+
+const UpdateChatInputSchema = z.discriminatedUnion("acao", [MarkChatAsReadInputSchema, MarkAllChatsAsReadInputSchema], {
+	errorMap: () => ({ message: "Ação inválida para o chat." }),
+});
+export type TUpdateChatInput = z.input<typeof UpdateChatInputSchema>;
+type TParsedUpdateChatInput = z.infer<typeof UpdateChatInputSchema>;
+
+async function markAllChatsAsRead({
+	session,
+	organizacaoId,
+	input,
+}: {
+	session: TAuthUserSession;
+	organizacaoId: string;
+	input: z.infer<typeof MarkAllChatsAsReadInputSchema>;
+}) {
+	// As condições da inbox dependem de joins (cliente e última mensagem para a busca, atendimento
+	// corrente para visão/status/prioridade). O UPDATE não aceita esses leftJoins, então o escopo vem
+	// de uma subquery com a mesma forma de join das contagens — o predicado é idêntico ao do contador
+	// "Não lidas".
+	const scopedChatIds = db
+		.select({ id: chats.id })
+		.from(chats)
+		.leftJoin(clients, eq(chats.clienteId, clients.id))
+		.leftJoin(chatMessages, eq(chats.ultimaMensagemId, chatMessages.id))
+		.leftJoin(chatAssignments, currentChatAssignmentJoin)
+		.where(
+			and(...buildChatInboxFilterConditions({ ...input, userId: session.user.id, organizacaoId }), buildChatInboxQuickFilterCondition("NAO_LIDAS")),
+		);
+
+	const result = await db
+		.update(chats)
+		.set({ mensagensNaoLidas: 0, ultimaLeituraData: new Date(), ultimaLeituraPorUsuarioId: session.user.id })
+		.where(and(eq(chats.organizacaoId, organizacaoId), gt(chats.mensagensNaoLidas, 0), inArray(chats.id, scopedChatIds)));
+
+	return result.count;
+}
+
+async function updateChat({ session, input }: { session: TAuthUserSession; input: TParsedUpdateChatInput }) {
 	const { organizacaoId } = assertChatAccess({ session, permission: "visualizar" });
+
+	if (input.acao === "mark_all_as_read") {
+		const atualizadas = await markAllChatsAsRead({ session, organizacaoId, input });
+		return {
+			data: { acao: input.acao, chatId: null, atualizadas },
+			message: `${atualizadas} ${atualizadas === 1 ? "conversa marcada como lida" : "conversas marcadas como lidas"}.`,
+		};
+	}
 
 	const [updated] = await db
 		.update(chats)
@@ -319,7 +378,7 @@ async function updateChat({ session, input }: { session: TAuthUserSession; input
 
 	if (!updated) throw new createHttpError.NotFound("Chat não encontrado.");
 
-	return { data: { chatId: updated.id, acao: input.acao }, message: "Mensagens marcadas como lidas." };
+	return { data: { acao: input.acao, chatId: updated.id as string | null, atualizadas: 1 }, message: "Mensagens marcadas como lidas." };
 }
 export type TUpdateChatOutput = Awaited<ReturnType<typeof updateChat>>;
 

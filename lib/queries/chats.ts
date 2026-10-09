@@ -1,5 +1,6 @@
 import type { TGetTransferTargetsOutput } from "@/app/api/chats/assignments/route";
 import type { TGetChatMessagesOutput } from "@/app/api/chats/messages/route";
+import type { TGetForwardTargetsOutput } from "@/app/api/chats/forward-targets/route";
 import type { TGetChatInboxCountsOutput } from "@/app/api/chats/inbox-counts/route";
 import type { TGetChatsOutput } from "@/app/api/chats/route";
 import type { TGetClientContextOutput } from "@/app/api/clients/context/route";
@@ -69,6 +70,14 @@ async function fetchChatMessages(params: { chatId: string; cursor?: TChatMessage
 async function fetchChatTransferTargets() {
 	const { data } = await axios.get<TGetTransferTargetsOutput>("/api/chats/assignments");
 	return data.data.usuarios;
+}
+
+async function fetchChatForwardTargets(params: { sourceChatId: string; search: string }) {
+	const searchParams = new URLSearchParams();
+	searchParams.set("sourceChatId", params.sourceChatId);
+	if (params.search) searchParams.set("search", params.search);
+	const { data } = await axios.get<TGetForwardTargetsOutput>(`/api/chats/forward-targets?${searchParams.toString()}`);
+	return data.data.items;
 }
 
 async function fetchClientContext(clientId: string) {
@@ -175,6 +184,25 @@ export function useChatClientContext({ clienteId, enabled = true }: { clienteId:
 	const queryKey = ["chat-client-context", clienteId] as const;
 	return {
 		...useQuery({ queryKey, queryFn: () => fetchClientContext(clienteId ?? ""), enabled: enabled && !!clienteId }),
+		queryKey,
+	};
+}
+
+export type TChatForwardTarget = TGetForwardTargetsOutput["data"]["items"][number];
+
+/** Destinos de um encaminhamento: conversas recentes do mesmo número, com busca por nome ou telefone. */
+export function useChatForwardTargets({ sourceChatId, search, enabled = true }: { sourceChatId: string; search: string; enabled?: boolean }) {
+	const debounced = useDebounceMemo({ search: search.trim() }, 300);
+	// Abaixo de 2 caracteres a rota ignora a busca: a chave também, para não refazer a mesma lista.
+	const effectiveSearch = debounced.search.length >= 2 ? debounced.search : "";
+	const queryKey = ["chat-forward-targets", sourceChatId, effectiveSearch] as const;
+	return {
+		...useQuery({
+			queryKey,
+			queryFn: () => fetchChatForwardTargets({ sourceChatId, search: effectiveSearch }),
+			enabled,
+			placeholderData: (previous) => previous,
+		}),
 		queryKey,
 	};
 }

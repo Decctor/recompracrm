@@ -42,6 +42,7 @@ export default function ChatHub({ user, organizationId, whatsappConnections, sel
 						currentUser={currentUser}
 						quotePermissions={quotePermissions}
 						onBack={() => onSelectChat(null)}
+						onOpenChat={onSelectChat}
 					/>
 				) : (
 					<div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">

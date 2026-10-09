@@ -1,6 +1,7 @@
 import type { TChatAssistInput, TChatAssistOutput } from "@/app/api/chats/assist/route";
 import type { TUpdateChatAssignmentInput, TUpdateChatAssignmentOutput } from "@/app/api/chats/assignments/route";
 import type { TDeleteChatFollowUpInput, TDeleteChatFollowUpOutput } from "@/app/api/chats/follow-ups/route";
+import type { TForwardChatMessageInput, TForwardChatMessageOutput } from "@/app/api/chats/messages/forward/route";
 import type { TRetryChatMessageInput, TRetryChatMessageOutput } from "@/app/api/chats/messages/retry/route";
 import type { TCreateChatMessageInput, TCreateChatMessageOutput } from "@/app/api/chats/messages/route";
 import type { TCreateChatInput, TCreateChatOutput, TUpdateChatInput, TUpdateChatOutput } from "@/app/api/chats/route";
@@ -44,5 +45,16 @@ export async function cancelChatFollowUp(input: TDeleteChatFollowUpInput) {
 
 export async function requestChatAssist(input: TChatAssistInput) {
 	const { data } = await axios.post<TChatAssistOutput>("/api/chats/assist", input);
+	return data;
+}
+
+export async function markAllChatsRead(input: Omit<Extract<TUpdateChatInput, { acao: "mark_all_as_read" }>, "acao">) {
+	const payload: TUpdateChatInput = { acao: "mark_all_as_read", ...input };
+	const { data } = await axios.patch<TUpdateChatOutput>("/api/chats", payload);
+	return data;
+}
+
+export async function forwardChatMessage(input: TForwardChatMessageInput) {
+	const { data } = await axios.post<TForwardChatMessageOutput>("/api/chats/messages/forward", input);
 	return data;
 }

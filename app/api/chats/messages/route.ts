@@ -5,9 +5,8 @@ import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { assertChatAccess } from "@/lib/chats/access";
 import { AI_ASSIGNMENT_BLOCK_MESSAGES, resolveAiAssignmentAvailability } from "@/lib/chats/ai-assignment";
-import { markChatAnswered } from "@/lib/chats/attendance-state";
 import { buildQuotedMessageSnapshot } from "@/lib/chats/quoted-message";
-import { deliverChatMessage, loadChatForSending, renderTemplatePlainContent, resolveApprovedTemplate } from "@/lib/chats/outgoing-message";
+import { loadChatForSending, renderTemplatePlainContent, resolveApprovedTemplate, sendOutgoingChatMessage } from "@/lib/chats/outgoing-message";
 import { getChatMediaUrl, uploadChatMedia } from "@/lib/files-storage/chat-media";
 import { AiAgentCapabilitiesSchema } from "@/schemas/ai-agents";
 import type { TChatMessageMetadata } from "@/schemas/chats";
@@ -307,59 +306,30 @@ async function createChatMessage({ session, input }: { session: TAuthUserSession
 			}
 		: null;
 
-	const now = new Date();
-	const [inserted] = await db
-		.insert(chatMessages)
-		.values({
-			organizacaoId,
-			chatId: input.chatId,
-			clienteId: chat.clienteId,
-			autorTipo: "USUÁRIO",
-			autorUsuarioId: session.user.id,
-			conteudoTexto: texto || null,
-			conteudoMidiaTipo: input.midia?.tipo ?? "TEXTO",
-			conteudoMidiaUrl: midiaUrl,
-			conteudoMidiaStorageId: midiaStorageId,
-			conteudoMidiaMimeType: input.midia?.mimeType ?? null,
-			conteudoMidiaArquivoNome: input.midia?.arquivoNome ?? null,
-			conteudoMidiaArquivoTamanho: midiaTamanho,
-			clienteMensagemId: input.clienteMensagemId ?? null,
-			whatsappTemplateId: template?.id ?? null,
-			// Nasce PENDENTE antes do envio: uma falha do provedor deixa rastro em vez de
-			// sumir, e o retry tem uma mensagem concreta para reprocessar.
-			statusEntrega: "PENDENTE",
-			metadados: quoteMetadata,
-			dataEnvio: now,
-		})
-		.returning({ id: chatMessages.id });
-
-	if (!inserted) throw new createHttpError.InternalServerError("Erro ao registrar a mensagem.");
-
-	const delivery = await deliverChatMessage({
-		messageId: inserted.id,
+	const { messageId, delivery } = await sendOutgoingChatMessage({
+		organizacaoId,
 		chat,
+		autorUsuarioId: session.user.id,
 		texto,
-		replyToWhatsappMessageId: quotedMessage?.whatsappMessageId ?? null,
-		midia: midiaStorageId
-			? {
-					tipo: input.midia?.tipo ?? "DOCUMENTO",
-					storageId: midiaStorageId,
-					mimeType: input.midia?.mimeType ?? "application/octet-stream",
-					arquivoNome: input.midia?.arquivoNome ?? null,
-				}
-			: null,
+		midia:
+			midiaStorageId && input.midia
+				? {
+						tipo: input.midia.tipo,
+						storageId: midiaStorageId,
+						mimeType: input.midia.mimeType,
+						arquivoNome: input.midia.arquivoNome ?? null,
+						url: midiaUrl,
+						tamanho: midiaTamanho,
+					}
+				: null,
 		template,
+		clienteMensagemId: input.clienteMensagemId,
+		metadados: quoteMetadata,
+		replyToWhatsappMessageId: quotedMessage?.whatsappMessageId ?? null,
 	});
 
-	await db
-		.update(chats)
-		.set({ ultimaMensagemId: inserted.id, ultimaMensagemData: now, ultimaMensagemSaidaData: now })
-		.where(eq(chats.id, input.chatId));
-
-	await markChatAnswered(db, { organizacaoId, chatId: input.chatId, responseDate: now, source: "HUB", now });
-
 	const persisted = await db.query.chatMessages.findFirst({
-		where: eq(chatMessages.id, inserted.id),
+		where: eq(chatMessages.id, messageId),
 		with: MESSAGE_AUTHOR_WITH,
 	});
 	if (!persisted) throw new createHttpError.InternalServerError("Erro ao carregar a mensagem enviada.");

@@ -32,9 +32,11 @@ import { AttendanceSummaryCard } from "./AttendanceSummaryCard";
 import { FollowUpNotice } from "./FollowUpNotice";
 import { ChatAssignmentActions } from "./ChatAssignmentActions";
 import { ChatContextPanel } from "./ChatContextPanel";
+import { canForwardMessage } from "@/lib/chats/forward-message";
 import { buildQuotedMessageSnapshot } from "@/lib/chats/quoted-message";
 import { ChatInputArea, type TChatAssistAction, type TChatInputAreaHandle, type TChatReplyTarget, type TOutgoingAttachment } from "./ChatInputArea";
 import { ChatMessageBubble, type TOptimisticFields } from "./ChatMessageBubble";
+import { ForwardMessageDialog } from "./ForwardMessageDialog";
 import { ChatQuotesHeaderActions } from "./Quotes/ChatQuotesHeaderActions";
 import type { TQuotePermissions } from "./Quotes/config";
 
@@ -48,6 +50,8 @@ type ChatThreadProps = {
 	quotePermissions: TQuotePermissions;
 	/** Celular: a lista fica escondida enquanto a conversa está aberta, e este é o caminho de volta. */
 	onBack?: () => void;
+	/** Abre outra conversa no hub (ex.: "Abrir" no toast de um encaminhamento). */
+	onOpenChat?: (chatId: string) => void;
 };
 
 function insertMessageIntoCache(data: InfiniteData<TChatMessagesPage> | undefined, message: TChatThreadMessage) {
@@ -142,7 +146,7 @@ function formatDaySeparator(date: Date) {
 	return date.toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" });
 }
 
-export function ChatThread({ chatId, organizationId, currentUser, quotePermissions, onBack }: ChatThreadProps) {
+export function ChatThread({ chatId, organizationId, currentUser, quotePermissions, onBack, onOpenChat }: ChatThreadProps) {
 	const queryClient = useQueryClient();
 	const queryKey = getChatMessagesQueryKey(chatId);
 	const { messages, chat, isPending, isError, error, hasNextPage, fetchNextPage, isFetchingNextPage, refetch } = useChatMessages(chatId);
@@ -152,6 +156,7 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 	const [openRunId, setOpenRunId] = useState<string | null>(null);
 	const [replyTarget, setReplyTarget] = useState<TChatReplyTarget | null>(null);
 	const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+	const [forwardTarget, setForwardTarget] = useState<TChatThreadMessage | null>(null);
 	// Trocar de conversa descarta a resposta em andamento: ela pertence ao chat anterior.
 	useEffect(() => {
 		setReplyTarget(null);
@@ -667,6 +672,10 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 												}
 											: undefined
 									}
+									// Encaminhar independe da posse desta conversa: a posse que importa é a dos destinos.
+									onForward={
+										!message.optimistic && message.statusEntrega !== "FALHA" && canForwardMessage(message) ? () => setForwardTarget(message) : undefined
+									}
 									highlighted={highlightedMessageId === message.id}
 								/>
 							</div>
@@ -744,6 +753,16 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 			</div>
 
 			{openRunId ? <AgentRunDrawer runId={openRunId} closeModal={() => setOpenRunId(null)} /> : null}
+
+			{forwardTarget ? (
+				<ForwardMessageDialog
+					message={forwardTarget}
+					sourceChatId={chatId}
+					clientName={clientName}
+					closeModal={() => setForwardTarget(null)}
+					onOpenChat={onOpenChat}
+				/>
+			) : null}
 
 			<aside className={cn("hidden min-h-0 w-80 shrink-0 overflow-hidden border-l border-border", contextPanelOpen && "xl:block")}>
 				<ChatContextPanel

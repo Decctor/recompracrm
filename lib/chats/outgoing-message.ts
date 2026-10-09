@@ -1,3 +1,4 @@
+import { markChatAnswered } from "@/lib/chats/attendance-state";
 import { isWhatsappWindowOpen } from "@/lib/chats/whatsapp-window-status";
 import { getChatMediaUrl } from "@/lib/files-storage/chat-media";
 import { buildWhatsappTemplateSendPayload } from "@/lib/message-templates/channels/whatsapp/send-payload";
@@ -5,6 +6,7 @@ import { buildWhatsappPlainContent } from "@/lib/message-templates/channels/what
 import { sendBasicWhatsappMessage, sendMediaWhatsappMessage, sendTemplateWhatsappMessage, uploadMediaToWhatsapp } from "@/lib/whatsapp";
 import { parseTemplatePayloadToGatewayContent, sendMessage as sendInternalGatewayMessage } from "@/lib/whatsapp/internal-gateway";
 import { formatPhoneAsWhatsappId, formatPhoneForInternalGateway } from "@/lib/whatsapp/utils";
+import type { TChatMessageMetadata } from "@/schemas/chats";
 import type { TChatMessageDeliveryStatus, TChatMessageContentTypeEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
 import { SUPABASE_STORAGE_CHAT_MEDIA_BUCKET } from "@/lib/files-storage/chat-media";
@@ -244,6 +246,82 @@ export async function deliverChatMessage({ messageId, chat, texto, midia, templa
 		await db.update(chatMessages).set({ statusEntrega: "FALHA", provedorStatusDataAtualizacao: new Date() }).where(eq(chatMessages.id, messageId));
 		throw error;
 	}
+}
+
+/** Mídia já gravada no storage do hub, com o que a linha da mensagem precisa guardar. */
+export type TStoredOutgoingMedia = TOutgoingMedia & { url: string | null; tamanho: number | null };
+
+/**
+ * Registra uma mensagem de saída do hub e a despacha: insert em PENDENTE → envio pelo provedor
+ * → `ultimaMensagem*` do chat → atendimento marcado como respondido.
+ *
+ * É o miolo comum ao envio do composer (`POST /api/chats/messages`) e ao encaminhamento
+ * (`POST /api/chats/messages/forward`). Pré-condições (posse, janela, template) ficam com o
+ * chamador. Uma falha do provedor propaga depois de a mensagem ficar em FALHA, como antes.
+ */
+export async function sendOutgoingChatMessage({
+	organizacaoId,
+	chat,
+	autorUsuarioId,
+	texto,
+	midia,
+	template,
+	clienteMensagemId,
+	metadados,
+	replyToWhatsappMessageId,
+}: {
+	organizacaoId: string;
+	chat: TChatForSending;
+	autorUsuarioId: string;
+	texto: string;
+	midia: TStoredOutgoingMedia | null;
+	template: TApprovedTemplate | null;
+	clienteMensagemId?: string | null;
+	metadados?: TChatMessageMetadata | null;
+	replyToWhatsappMessageId?: string | null;
+}) {
+	const now = new Date();
+	const [inserted] = await db
+		.insert(chatMessages)
+		.values({
+			organizacaoId,
+			chatId: chat.id,
+			clienteId: chat.clienteId,
+			autorTipo: "USUÁRIO",
+			autorUsuarioId,
+			conteudoTexto: texto || null,
+			conteudoMidiaTipo: midia?.tipo ?? "TEXTO",
+			conteudoMidiaUrl: midia?.url ?? null,
+			conteudoMidiaStorageId: midia?.storageId ?? null,
+			conteudoMidiaMimeType: midia?.mimeType ?? null,
+			conteudoMidiaArquivoNome: midia?.arquivoNome ?? null,
+			conteudoMidiaArquivoTamanho: midia?.tamanho ?? null,
+			clienteMensagemId: clienteMensagemId ?? null,
+			whatsappTemplateId: template?.id ?? null,
+			// Nasce PENDENTE antes do envio: uma falha do provedor deixa rastro em vez de
+			// sumir, e o retry tem uma mensagem concreta para reprocessar.
+			statusEntrega: "PENDENTE",
+			metadados: metadados ?? null,
+			dataEnvio: now,
+		})
+		.returning({ id: chatMessages.id });
+
+	if (!inserted) throw new createHttpError.InternalServerError("Erro ao registrar a mensagem.");
+
+	const delivery = await deliverChatMessage({
+		messageId: inserted.id,
+		chat,
+		texto,
+		replyToWhatsappMessageId: replyToWhatsappMessageId ?? null,
+		midia: midia ? { tipo: midia.tipo, storageId: midia.storageId, mimeType: midia.mimeType, arquivoNome: midia.arquivoNome } : null,
+		template,
+	});
+
+	await db.update(chats).set({ ultimaMensagemId: inserted.id, ultimaMensagemData: now, ultimaMensagemSaidaData: now }).where(eq(chats.id, chat.id));
+
+	await markChatAnswered(db, { organizacaoId, chatId: chat.id, responseDate: now, source: "HUB", now });
+
+	return { messageId: inserted.id, delivery };
 }
 
 /**

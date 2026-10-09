@@ -5,10 +5,13 @@ import { Button } from "@/components/ui/button";
 import { chipVariants } from "@/components/ui/chip";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { chatsInboxParsers } from "@/lib/chats/inbox-url-state";
 import { isActiveAiRunStatus } from "@/lib/chats/ai-presence";
 import { mapRealtimeChatRow, type TRealtimeAiRunRow, type TRealtimeChatRow } from "@/lib/chats/realtime-mappers";
 import { getErrorMessage } from "@/lib/errors";
+import { useDebounceMemo } from "@/lib/hooks/use-debounce";
+import { markAllChatsRead } from "@/lib/mutations/chats";
 import { CHAT_INBOX_COUNTS_QUERY_KEY_ROOT, useChatInboxCounts, useChats, type TChatInboxItem } from "@/lib/queries/chats";
 import { cn } from "@/lib/utils";
 import {
@@ -21,13 +24,15 @@ import {
 	type TChatInboxView,
 } from "@/schemas/enums";
 import { supabaseClient } from "@/services/supabase";
-import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
+import { useMutation, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import {
 	Check,
+	CheckCheck,
 	ChevronLeft,
 	ChevronRight,
 	Inbox,
 	LayoutGrid,
+	Loader2,
 	type LucideIcon,
 	RefreshCw,
 	Search,
@@ -39,6 +44,7 @@ import {
 } from "lucide-react";
 import { useQueryStates } from "nuqs";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { PRIORITY_META, STATUS_META } from "./attendance-meta";
 import { ChatInboxListItem } from "./ChatInboxListItem";
 
@@ -457,6 +463,10 @@ export function ChatSidebar({ organizationId, selectedChatId, onSelectChat, what
 							</div>
 						</PopoverContent>
 					</Popover>
+
+					{counts && counts.NAO_LIDAS > 0 ? (
+						<MarkAllReadControl unreadCount={counts.NAO_LIDAS} filters={filters} hasScopeFilters={advancedFilterCount > 0 || !!search.trim()} />
+					) : null}
 				</div>
 
 				<HorizontalScroller ariaLabel="Atalhos de filtro">
@@ -544,6 +554,120 @@ export function ChatSidebar({ organizationId, selectedChatId, onSelectChat, what
 				)}
 			</div>
 		</aside>
+	);
+}
+
+type TInboxScope = {
+	whatsappConexaoTelefoneId: string | null;
+	view: TChatInboxView;
+	search: string;
+	status: TChatAssignmentStatus[];
+	priority: TChatInboxPriorityFilter[];
+};
+
+function describeMarkAllReadScope({ count, view, hasScopeFilters }: { count: number; view: TChatInboxView; hasScopeFilters: boolean }) {
+	const conversations = count === 1 ? "conversa" : "conversas";
+	const read = count === 1 ? "lida" : "lidas";
+	const filtersSuffix = hasScopeFilters ? " com os filtros atuais" : "";
+	if (view === "MINHAS") return `Marcar ${count === 1 ? "sua" : "suas"} ${count} ${conversations}${filtersSuffix} como ${read}?`;
+	const article = count === 1 ? "a" : "as";
+	const viewSuffix = view === "TODAS" ? "" : ` de ${INBOX_VIEWS.find((item) => item.id === view)?.label ?? ""}`;
+	return `Marcar ${article} ${count} ${conversations}${viewSuffix}${filtersSuffix} como ${read}?`;
+}
+
+/**
+ * Zera as não lidas de todo o escopo atual da inbox (visão + busca + filtros), não só da página
+ * carregada: o número da confirmação é a contagem de "Não lidas" do servidor, e o PATCH aplica o
+ * mesmo predicado. Confirmação em popover, não em modal — é reversível no sentido prático (a
+ * próxima mensagem do cliente volta a marcar) e não merece interromper a tela.
+ */
+function MarkAllReadControl({ unreadCount, filters, hasScopeFilters }: { unreadCount: number; filters: TInboxScope; hasScopeFilters: boolean }) {
+	const queryClient = useQueryClient();
+	const [open, setOpen] = useState(false);
+	// Mesmo debounce das contagens: o escopo enviado é o que produziu o número exibido.
+	const debounced = useDebounceMemo({ search: filters.search }, 350);
+
+	const { mutate, isPending } = useMutation({
+		mutationKey: ["mark-all-chats-read"],
+		mutationFn: markAllChatsRead,
+		onMutate: () => {
+			// Todas as visões: a mesma conversa aparece em "Livres", "Todas" etc.
+			queryClient.setQueriesData<InfiniteData<TInboxPage>>({ queryKey: ["chats"] }, (current) =>
+				current?.pages
+					? {
+							...current,
+							pages: current.pages.map((page) => ({
+								...page,
+								items: page.items.map((item) => (item.mensagensNaoLidas > 0 ? { ...item, mensagensNaoLidas: 0 } : item)),
+							})),
+						}
+					: current,
+			);
+			queryClient.setQueriesData<Record<TChatInboxQuickFilter, number>>({ queryKey: [CHAT_INBOX_COUNTS_QUERY_KEY_ROOT] }, (current) =>
+				current ? { ...current, NAO_LIDAS: 0 } : current,
+			);
+		},
+		onSuccess: (data) => {
+			toast.success(data.message);
+			setOpen(false);
+		},
+		onError: (error) => {
+			toast.error(getErrorMessage(error));
+		},
+		onSettled: () => {
+			void queryClient.invalidateQueries({ queryKey: ["chats"] });
+			void queryClient.invalidateQueries({ queryKey: [CHAT_INBOX_COUNTS_QUERY_KEY_ROOT] });
+		},
+	});
+
+	return (
+		<TooltipProvider delay={300}>
+			<Tooltip>
+				<Popover open={open} onOpenChange={setOpen}>
+					<TooltipTrigger
+						render={
+							<PopoverTrigger
+								render={
+									<Button type="button" variant="ghost" size="icon-sm" className="size-9 shrink-0 lg:size-8" aria-label="Marcar todas como lidas">
+										<CheckCheck />
+									</Button>
+								}
+							/>
+						}
+					/>
+					<TooltipContent side="bottom">Marcar todas como lidas</TooltipContent>
+					<PopoverContent align="end" className="w-72 gap-3">
+						<div className="flex flex-col gap-1">
+							<p className="text-sm font-semibold tracking-tight">Marcar todas como lidas</p>
+							<p className="text-numeric text-sm text-foreground">{describeMarkAllReadScope({ count: unreadCount, view: filters.view, hasScopeFilters })}</p>
+							{filters.view !== "MINHAS" ? <p className="text-xs text-muted-foreground">Vale para toda a equipe.</p> : null}
+						</div>
+						<div className="flex items-center justify-end gap-2">
+							<Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)} disabled={isPending}>
+								Cancelar
+							</Button>
+							<Button
+								type="button"
+								size="sm"
+								disabled={isPending}
+								onClick={() =>
+									mutate({
+										whatsappConexaoTelefoneId: filters.whatsappConexaoTelefoneId,
+										view: filters.view,
+										search: debounced.search || null,
+										status: filters.status,
+										priority: filters.priority,
+									})
+								}
+							>
+								{isPending ? <Loader2 className="animate-spin" /> : null}
+								Marcar como lidas
+							</Button>
+						</div>
+					</PopoverContent>
+				</Popover>
+			</Tooltip>
+		</TooltipProvider>
 	);
 }
 
