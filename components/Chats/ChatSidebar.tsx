@@ -23,7 +23,7 @@ import {
 	type TChatInboxQuickFilter,
 	type TChatInboxView,
 } from "@/schemas/enums";
-import { supabaseClient } from "@/services/supabase";
+import { createRealtimeChannel, supabaseClient } from "@/services/supabase";
 import { useMutation, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import {
 	Check,
@@ -276,8 +276,8 @@ function ChatSidebarContent({
 			}, 800);
 		};
 
-		const channel = supabaseClient
-			.channel(`chats-sidebar-${organizationId}`)
+		// Nome único por inscrição: ver `createRealtimeChannel`.
+		const channel = createRealtimeChannel(`chats-sidebar-${organizationId}`)
 			.on(
 				"postgres_changes",
 				{ event: "UPDATE", schema: "public", table: "ampmais_chats", filter: `organizacao_id=eq.${organizationId}` },

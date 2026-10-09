@@ -20,7 +20,7 @@ import {
 } from "@/lib/queries/chats";
 import { useChatTemplates } from "@/lib/queries/chat-templates";
 import { cn } from "@/lib/utils";
-import { supabaseClient } from "@/services/supabase";
+import { createRealtimeChannel, supabaseClient } from "@/services/supabase";
 import { useMutation, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { ArrowLeft, ChevronDown, Loader2, PanelRightClose, PanelRightOpen, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -316,8 +316,9 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 		let disposed = false;
 		let wasDown = false;
 		setRealtimeDown(false);
-		const channel = supabaseClient
-			.channel(`chat-thread-${chatId}`)
+		// Nome único por inscrição: ver `createRealtimeChannel`. Com o nome fixo, remontar a thread
+		// dentro da janela de saída do canal anterior deixava a conversa aberta sem realtime.
+		const channel = createRealtimeChannel(`chat-thread-${chatId}`)
 			.on("postgres_changes", { event: "INSERT", schema: "public", table: "ampmais_chat_messages", filter: `chat_id=eq.${chatId}` }, (payload) => {
 				const currentUser = currentUserRef.current;
 				const message = mapRealtimeMessageRow(payload.new as TRealtimeChatMessageRow, currentUser);
