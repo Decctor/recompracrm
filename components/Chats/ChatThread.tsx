@@ -30,7 +30,7 @@ import AgentRunDrawer from "@/components/Settings/AiAgent/AgentRunDrawer";
 import { AiPresenceBar } from "./AiPresenceBar";
 import { AttendanceSummaryCard } from "./AttendanceSummaryCard";
 import { FollowUpNotice } from "./FollowUpNotice";
-import { ChatAssignmentActions } from "./ChatAssignmentActions";
+import { ChatAssignmentActions, type TAttendancePermissions } from "./ChatAssignmentActions";
 import { ChatContextPanel } from "./ChatContextPanel";
 import { canForwardMessage } from "@/lib/chats/forward-message";
 import { buildQuotedMessageSnapshot } from "@/lib/chats/quoted-message";
@@ -48,6 +48,8 @@ type ChatThreadProps = {
 	organizationId: string;
 	currentUser: { id: string; nome: string; avatarUrl: string | null };
 	quotePermissions: TQuotePermissions;
+	/** Flags da sessão; a thread as combina com a posse para decidir o que oferecer em cada conversa. */
+	attendancePermissions: TAttendancePermissions;
 	/** Celular: a lista fica escondida enquanto a conversa está aberta, e este é o caminho de volta. */
 	onBack?: () => void;
 	/** Abre outra conversa no hub (ex.: "Abrir" no toast de um encaminhamento). */
@@ -146,7 +148,7 @@ function formatDaySeparator(date: Date) {
 	return date.toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" });
 }
 
-export function ChatThread({ chatId, organizationId, currentUser, quotePermissions, onBack, onOpenChat }: ChatThreadProps) {
+export function ChatThread({ chatId, organizationId, currentUser, quotePermissions, attendancePermissions, onBack, onOpenChat }: ChatThreadProps) {
 	const queryClient = useQueryClient();
 	const queryKey = getChatMessagesQueryKey(chatId);
 	const { messages, chat, isPending, isError, error, hasNextPage, fetchNextPage, isFetchingNextPage, refetch } = useChatMessages(chatId);
@@ -180,6 +182,10 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 
 	const atendimento = chat?.atendimentoAtivo ?? null;
 	const isOwner = atendimento?.responsavelTipo === "USUARIO" && atendimento.responsavelUsuarioId === currentUser.id;
+	const { canRespond, canManage } = attendancePermissions;
+	// Espelha `mayManageAssignment` do servidor: o dono, ou quem tem `finalizar`.
+	const canManageThis = isOwner || canManage;
+	const actionPermissions = { canRespond, canManageThis };
 
 	// Otimista + persistida: a reconciliação é por clienteMensagemId, gerado no cliente.
 	const threadMessages = useMemo<TThreadMessage[]>(() => {
@@ -533,6 +539,7 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 								atendimento={atendimento}
 								atendimentoIa={chat.atendimentoIa}
 								currentUserId={currentUser.id}
+								permissions={actionPermissions}
 								compact
 								collapsed={!isWideHeader}
 								overflowItems={
@@ -583,6 +590,7 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 										chatId={chatId}
 										chat={chat}
 										currentUserId={currentUser.id}
+										actionPermissions={actionPermissions}
 										quotePermissions={quotePermissions}
 										onInsertQuoteInConversation={insertQuoteInConversation}
 									/>
@@ -617,8 +625,14 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 					resumo={atendimento?.resumo}
 					transferenciaMotivo={atendimento?.transferenciaMotivo}
 					defaultOpen={summaryOpenByDefault}
-					onSave={isOwner ? (resumo) => updateSummaryMutation.mutate({ acao: "alterar_resumo", chatId, resumo }) : undefined}
-					onRegenerate={isOwner && canAssist ? () => requestAssist({ acao: "RESUMIR", texto: "" }) : undefined}
+					// Editar é do dono ou do gestor, mas a rota exige `responder` para entrar. Regenerar
+					// segue a regra do assist: o dono, ou o gestor quando o responsável é uma pessoa.
+					onSave={canRespond && canManageThis ? (resumo) => updateSummaryMutation.mutate({ acao: "alterar_resumo", chatId, resumo }) : undefined}
+					onRegenerate={
+						canAssist && (isOwner || (canManage && atendimento?.responsavelTipo === "USUARIO"))
+							? () => requestAssist({ acao: "RESUMIR", texto: "" })
+							: undefined
+					}
 					isSaving={updateSummaryMutation.isPending}
 					isRegenerating={pendingAssist === "RESUMIR"}
 				/>
@@ -658,7 +672,8 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 								<ChatMessageBubble
 									message={message}
 									showAuthor={showAuthor}
-									onRetry={(messageId) => retryMutation.mutate({ messageId })}
+									// A rota de retry exige `responder` e ser o dono: gestor não reenvia por outro.
+									onRetry={isOwner && canRespond ? (messageId) => retryMutation.mutate({ messageId }) : undefined}
 									isRetrying={retryMutation.isPending}
 									onOpenAiRun={setOpenRunId}
 									clientName={clientName}
@@ -672,9 +687,12 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 												}
 											: undefined
 									}
-									// Encaminhar independe da posse desta conversa: a posse que importa é a dos destinos.
+									// Encaminhar independe da posse desta conversa (a que importa é a dos destinos),
+									// mas a rota exige `responder`.
 									onForward={
-										!message.optimistic && message.statusEntrega !== "FALHA" && canForwardMessage(message) ? () => setForwardTarget(message) : undefined
+										canRespond && !message.optimistic && message.statusEntrega !== "FALHA" && canForwardMessage(message)
+											? () => setForwardTarget(message)
+											: undefined
 									}
 									highlighted={highlightedMessageId === message.id}
 								/>
@@ -719,7 +737,7 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 				<AiPresenceBar
 					presence={aiPresence}
 					agentName={chat.atendimentoIa.agenteNome}
-					onAssume={isOwner ? undefined : () => assumeMutation.mutate({ acao: "assumir", chatId })}
+					onAssume={isOwner || !canRespond ? undefined : () => assumeMutation.mutate({ acao: "assumir", chatId })}
 					isAssuming={assumeMutation.isPending}
 					onOpenRun={setOpenRunId}
 				/>
@@ -728,7 +746,7 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 					<FollowUpNotice
 						retomada={chat.retomadaAgendada}
 						agentName={chat.atendimentoIa.agenteNome}
-						onCancel={() => cancelFollowUpMutation.mutate({ id: chat.retomadaAgendada?.id as string })}
+						onCancel={canRespond ? () => cancelFollowUpMutation.mutate({ id: chat.retomadaAgendada?.id as string }) : undefined}
 						isCancelling={cancelFollowUpMutation.isPending}
 					/>
 				)}
@@ -738,6 +756,7 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 					organizationId={organizationId}
 					userName={currentUser.nome}
 					isOwner={!!isOwner}
+					canRespond={canRespond}
 					janelaExpiracao={chat.whatsappJanelaDataExpiracao}
 					conexaoTipo={chat.conexaoTipo}
 					isSending={sendMutation.isPending}
@@ -769,6 +788,7 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 					chatId={chatId}
 					chat={chat}
 					currentUserId={currentUser.id}
+					actionPermissions={actionPermissions}
 					quotePermissions={quotePermissions}
 					onInsertQuoteInConversation={insertQuoteInConversation}
 				/>

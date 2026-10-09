@@ -40,6 +40,8 @@ type ChatInputAreaProps = {
 	userName: string;
 	organizationId: string;
 	isOwner: boolean;
+	/** `atendimentos.responder`: sem ele "assumir" voltaria 403, então o composer só explica. */
+	canRespond: boolean;
 	janelaExpiracao: Date | string | null;
 	conexaoTipo: "META_CLOUD_API" | "INTERNAL_GATEWAY" | null;
 	isSending: boolean;
@@ -70,6 +72,7 @@ export const ChatInputArea = forwardRef<TChatInputAreaHandle, ChatInputAreaProps
 		userName,
 		organizationId,
 		isOwner,
+		canRespond,
 		janelaExpiracao,
 		conexaoTipo,
 		isSending,
@@ -187,11 +190,15 @@ export const ChatInputArea = forwardRef<TChatInputAreaHandle, ChatInputAreaProps
 	if (!isOwner) {
 		return (
 			<div className="flex items-center justify-between gap-3 border-t border-border bg-muted/40 px-4 py-3">
-				<p className="text-xs text-muted-foreground">Assuma este atendimento para enviar mensagens.</p>
-				<Button size="sm" className="shrink-0 gap-1 text-[11px] font-extrabold uppercase tracking-[0.08em]" onClick={onAssume}>
-					<UserPlus className="h-3 w-3" />
-					ASSUMIR
-				</Button>
+				<p className="text-xs text-muted-foreground">
+					{canRespond ? "Assuma este atendimento para enviar mensagens." : "Você não possui permissão para responder atendimentos."}
+				</p>
+				{canRespond && (
+					<Button size="sm" className="shrink-0 gap-1 text-[11px] font-extrabold uppercase tracking-[0.08em]" onClick={onAssume}>
+						<UserPlus className="h-3 w-3" />
+						ASSUMIR
+					</Button>
+				)}
 			</div>
 		);
 	}

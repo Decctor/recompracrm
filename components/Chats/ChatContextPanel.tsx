@@ -31,7 +31,7 @@ import {
 import { stripCatalogMemory } from "@/lib/ai/agent/run-memory";
 import { AiRunsHistory } from "./AiRunsHistory";
 import { formatFollowUpMoment } from "./FollowUpNotice";
-import { ChatAssignmentActions } from "./ChatAssignmentActions";
+import { ChatAssignmentActions, type TChatActionPermissions } from "./ChatAssignmentActions";
 import { ChatQuotesBlock } from "./Quotes/ChatQuotesBlock";
 import type { TQuotePermissions } from "./Quotes/config";
 
@@ -50,6 +50,8 @@ type ChatContextPanelProps = {
 	chatId: string;
 	chat: TChatMessagesPage["chat"];
 	currentUserId: string;
+	/** Já resolvidas para esta conversa (dono ou gestor); o painel só repassa às ações. */
+	actionPermissions: TChatActionPermissions;
 	quotePermissions: TQuotePermissions;
 	/** Ausente quando a conversa não aceita mensagem agora (sem posse ou fora da janela de 24h). */
 	onInsertQuoteInConversation?: (texto: string) => void;
@@ -147,7 +149,12 @@ function CouponBenefit({ beneficioTipo, beneficioValor }: { beneficioTipo: strin
 	return <>Oferta especial</>;
 }
 
-function AttendanceTab({ chatId, chat, currentUserId }: Pick<ChatContextPanelProps, "chatId" | "chat" | "currentUserId">) {
+function AttendanceTab({
+	chatId,
+	chat,
+	currentUserId,
+	actionPermissions,
+}: Pick<ChatContextPanelProps, "chatId" | "chat" | "currentUserId" | "actionPermissions">) {
 	const atendimento = chat.atendimentoAtivo;
 	const janela = getWhatsappWindowDisplay({ expiracao: chat.whatsappJanelaDataExpiracao, tipoConexao: chat.conexaoTipo });
 
@@ -155,7 +162,13 @@ function AttendanceTab({ chatId, chat, currentUserId }: Pick<ChatContextPanelPro
 		<div className="flex flex-col gap-4">
 			<div>
 				<SectionTitle>Ações</SectionTitle>
-				<ChatAssignmentActions chatId={chatId} atendimento={atendimento} atendimentoIa={chat.atendimentoIa} currentUserId={currentUserId} />
+				<ChatAssignmentActions
+					chatId={chatId}
+					atendimento={atendimento}
+					atendimentoIa={chat.atendimentoIa}
+					currentUserId={currentUserId}
+					permissions={actionPermissions}
+				/>
 			</div>
 
 			<div className="border-t border-border pt-3">
@@ -491,7 +504,15 @@ function ActivityTab({ chat }: { chat: TChatMessagesPage["chat"] }) {
 	);
 }
 
-export function ChatContextPanel({ chatId, chat, currentUserId, quotePermissions, onInsertQuoteInConversation, className }: ChatContextPanelProps) {
+export function ChatContextPanel({
+	chatId,
+	chat,
+	currentUserId,
+	actionPermissions,
+	quotePermissions,
+	onInsertQuoteInConversation,
+	className,
+}: ChatContextPanelProps) {
 	return (
 		<Tabs defaultValue="atendimento" className={cn("flex h-full min-h-0 flex-col", className)}>
 			<div className="shrink-0 px-3 pt-3">
@@ -513,7 +534,7 @@ export function ChatContextPanel({ chatId, chat, currentUserId, quotePermissions
 
 			<div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4 pt-3">
 				<TabsContent value="atendimento" className="mt-0">
-					<AttendanceTab chatId={chatId} chat={chat} currentUserId={currentUserId} />
+					<AttendanceTab chatId={chatId} chat={chat} currentUserId={currentUserId} actionPermissions={actionPermissions} />
 				</TabsContent>
 				<TabsContent value="cliente" className="mt-0">
 					<ClientTab chatId={chatId} chat={chat} quotePermissions={quotePermissions} onInsertQuoteInConversation={onInsertQuoteInConversation} />
