@@ -8,7 +8,14 @@ import { AiAgentCapabilitiesSchema, AiAgentModelConfigSchema, type TAiAgentCapab
 import type { DB, DBTransaction } from "@/services/drizzle";
 import { type TAiAgentEntity, chatMessages, chats } from "@/services/drizzle/schema";
 import { and, desc, eq } from "drizzle-orm";
-import { TRIAGE_INTENT_CATEGORY, TRIAGE_MESSAGE_WINDOW, type TMessageTriage, type TTriageDecision, decideTriageAction, triageIncomingMessage } from "./message-triage";
+import {
+	TRIAGE_INTENT_CATEGORY,
+	TRIAGE_MESSAGE_WINDOW,
+	type TMessageTriage,
+	type TTriageDecision,
+	decideTriageAction,
+	triageIncomingMessage,
+} from "./message-triage";
 
 type TDb = DB | DBTransaction;
 
@@ -65,7 +72,8 @@ export async function runTriageGate(
 			.reverse()
 			.map((message) => ({
 				autor: describeAuthor(message.autorTipo),
-				texto: message.conteudoTexto || message.conteudoMidiaTextoProcessado || (message.conteudoMidiaTipo !== "TEXTO" ? `[${message.conteudoMidiaTipo}]` : ""),
+				texto:
+					message.conteudoTexto || message.conteudoMidiaTextoProcessado || (message.conteudoMidiaTipo !== "TEXTO" ? `[${message.conteudoMidiaTipo}]` : ""),
 			}))
 			.filter((message) => message.texto.length > 0),
 		resumo: atendimento?.resumo ?? null,
@@ -152,14 +160,21 @@ async function recordTriageOnlyRun(
 			organizacaoId: input.organizacaoId,
 			chatId: input.chatId,
 			motivo: `Triagem: ${input.decision.motivo}`,
-			resumoConversa: input.triagem.intencao === "RECLAMACAO" ? "Cliente com reclamação ou problema; a IA encaminhou sem responder." : "Conversa que exige decisão humana; a IA encaminhou sem responder.",
+			resumoConversa:
+				input.triagem.intencao === "RECLAMACAO"
+					? "Cliente com reclamação ou problema; a IA encaminhou sem responder."
+					: "Conversa que exige decisão humana; a IA encaminhou sem responder.",
 		});
-		await input.deliver({ mensagem: HANDOFF_NOTICE_MESSAGE, anexo: null, runId: run.id, agenteId: input.agent.id });
+		// O aviso é entregue, mas não conta como resposta: quem recebeu o ticket ainda precisa atender.
+		await input.deliver({ mensagem: HANDOFF_NOTICE_MESSAGE, anexo: null, runId: run.id, agenteId: input.agent.id, manterPendente: true });
 		await completeAgentRun(db, { runId: run.id, outputResumo: `Triagem: encaminhado a ${usuarioDestinoNome}. ${input.decision.motivo}`, uso });
 		return { acao: "HANDOFF", runId: run.id, triagem: input.triagem };
 	} catch (error) {
 		// Sem candidato para transferir, ou falha no envio: a run registra e o turno completo assume.
-		await failAgentRun(db, { runId: run.id, erro: `Triagem (${input.decision.acao}) falhou: ${error instanceof Error ? error.message : String(error)}` });
+		await failAgentRun(db, {
+			runId: run.id,
+			erro: `Triagem (${input.decision.acao}) falhou: ${error instanceof Error ? error.message : String(error)}`,
+		});
 		console.warn("[AI_TRIAGE] Ação da triagem falhou; seguindo com o turno completo:", error);
 		return { acao: "TURNO_COMPLETO", triagem: input.triagem };
 	}

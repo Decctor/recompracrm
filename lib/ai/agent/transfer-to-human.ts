@@ -54,13 +54,18 @@ export async function transferChatToHuman({
 	const target = candidates[Math.floor(Math.random() * candidates.length)];
 	const summary = `[TRANSFERÊNCIA IA]\nMotivo: ${motivo}\n\nResumo da conversa:\n${resumoConversa}`;
 
-	await updateChatAttendanceSummary(db, { organizacaoId, chatId, resumo: summary });
 	const attendance = await transferChatAttendance(db, {
 		organizacaoId,
 		chatId,
 		usuarioDestinoId: target.id,
 		motivo: `HUMAN_HANDOFF: ${motivo}`,
+		// As estatísticas contam `resultado = 'HUMAN_HANDOFF'`; nada gravava isso, e o card de
+		// handoffs ficava em zero. O ticket segue ativo com o humano e o resultado vale quando ele fechar.
+		resultado: "HUMAN_HANDOFF",
 	});
+	// Depois da transferência, que garante o ticket: `updateChatAttendanceSummary` não abre ticket
+	// e devolve `null` sem ele, e o resumo do handoff é justamente o que o humano precisa ler.
+	await updateChatAttendanceSummary(db, { organizacaoId, chatId, resumo: summary });
 
 	await notifyChatTransferRecipient({
 		db,

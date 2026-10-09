@@ -5,7 +5,7 @@ import { AiAgentCapabilitiesSchema, AiAgentScopeSchema, isClientExplicitlyInclud
 import type { TAiAgentRunTriggerEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
 import { chatMessages, chats } from "@/services/drizzle/schema";
-import { and, desc, eq, gt, inArray } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, ne } from "drizzle-orm";
 
 /**
  * Decide se a IA deve responder a uma mensagem recebida.
@@ -28,6 +28,13 @@ import { and, desc, eq, gt, inArray } from "drizzle-orm";
 const AI_RESPONSE_DELAY_MS = 5000;
 
 export type TAiTriggerDecision = { shouldRespond: true } | { shouldRespond: false; reason: string };
+
+/**
+ * Resultado do claim. `fresh` diz se este turno foi quem tirou o atendimento da fila: só então o
+ * runner pode devolvê-lo à fila se o turno morrer antes de gerar qualquer coisa. Um episódio que o
+ * agente já conduzia (`fresh: false`) tem história — liberar ali apagaria a posse legítima.
+ */
+export type TAiClaimDecision = { shouldRespond: true; fresh: boolean } | { shouldRespond: false; reason: string };
 
 const OUT_OF_SCOPE_RELEASE_REASON = "CLIENTE_FORA_DO_ESCOPO";
 const STAFF_PHONE_RELEASE_REASON = "NUMERO_DA_EQUIPE";
@@ -111,8 +118,8 @@ export async function confirmClientInAgentScope({
 /**
  * Reivindica o atendimento para a IA.
  *
- * Devolve `false` quando a conversa já tem dono — humano do hub, telefone ou outro
- * episódio da própria IA que ainda não encerrou.
+ * Recusa (`shouldRespond: false`) quando a conversa tem dono humano ou o telefone, ou quando o
+ * CAS perde para outra parte. Um episódio da própria IA ainda aberto segue com `fresh: false`.
  */
 export async function claimChatForAi({
 	organizationId,
@@ -122,18 +129,18 @@ export async function claimChatForAi({
 	organizationId: string;
 	chatId: string;
 	agentId: string;
-}): Promise<TAiTriggerDecision> {
+}): Promise<TAiClaimDecision> {
 	const atual = await getCurrentChatAttendance(db, { organizacaoId: organizationId, chatId });
 
 	if (atual?.responsavelTipo === "USUARIO") return { shouldRespond: false, reason: "Atendimento com responsável humano." };
 	if (atual?.responsavelTipo === "EXTERNO") return { shouldRespond: false, reason: "Atendimento em andamento pelo telefone." };
 	// Já é da IA: o episódio segue, não precisa reivindicar de novo.
-	if (atual?.responsavelTipo === "AGENTE") return { shouldRespond: true };
+	if (atual?.responsavelTipo === "AGENTE") return { shouldRespond: true, fresh: false };
 
 	const claimed = await claimChatAttendanceForAgent(db, { organizacaoId: organizationId, chatId, agenteId: agentId });
 	if (!claimed) return { shouldRespond: false, reason: "Atendimento assumido por outra parte durante o claim." };
 
-	return { shouldRespond: true };
+	return { shouldRespond: true, fresh: true };
 }
 
 /**
@@ -194,6 +201,9 @@ export async function confirmAiResponseStillValid({
 			eq(chatMessages.chatId, chatId),
 			inArray(chatMessages.autorTipo, ["USUÁRIO", "AI", "BUSINESS-APP"]),
 			gt(chatMessages.dataEnvio, messageDate),
+			// Envio que falhou não respondeu ninguém: sem este filtro a FALHA da própria IA
+			// bloqueava toda nova tentativa ("já foi respondida") e o cliente ficava sem retorno.
+			ne(chatMessages.statusEntrega, "FALHA"),
 		),
 		columns: { id: true },
 	});
@@ -262,6 +272,8 @@ export async function confirmAiDeliveryStillValid({
 			eq(chatMessages.chatId, chatId),
 			inArray(chatMessages.autorTipo, ["USUÁRIO", "AI", "BUSINESS-APP"]),
 			gt(chatMessages.dataEnvio, runStartedAt),
+			// Mesmo critério do confirm pré-run: uma tentativa que falhou não é resposta.
+			ne(chatMessages.statusEntrega, "FALHA"),
 		),
 		columns: { id: true },
 	});

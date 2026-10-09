@@ -1,6 +1,8 @@
 import "dotenv/config";
 import {
+	ATTENDANCE_TAKEOVER_REASON,
 	assumeChatAttendanceForUser,
+	changeChatAttendancePriority,
 	changeChatAttendanceStatus,
 	claimChatAttendanceForAgent,
 	getCurrentChatAttendance,
@@ -8,6 +10,7 @@ import {
 	markChatAttendedExternally,
 	markChatNeedsResponse,
 	releaseChatAttendance,
+	updateChatAttendanceSummary,
 } from "@/lib/chats/attendance-state";
 import { connection, db } from "@/services/drizzle";
 import { chatAssignments, chats } from "@/services/drizzle/schema";
@@ -71,7 +74,33 @@ async function main() {
 		assumeChatAttendanceForUser(db, { organizacaoId: ORG, chatId, usuarioId: "user2" }),
 	]);
 	const vencedores = assumidos.filter(Boolean);
-	check("exatamente 1 usuário assumiu", vencedores.length === 1, assumidos.map((a) => a?.responsavelUsuarioId));
+	check(
+		"exatamente 1 usuário assumiu",
+		vencedores.length === 1,
+		assumidos.map((a) => a?.responsavelUsuarioId),
+	);
+
+	console.log("\n2b. assumir toma a conversa de um colega e registra como transferência");
+	const dono = await getCurrentChatAttendance(db, { organizacaoId: ORG, chatId });
+	const outroUsuario = dono?.responsavelUsuarioId === "user1" ? "user2" : "user1";
+	const tomada = await assumeChatAttendanceForUser(db, { organizacaoId: ORG, chatId, usuarioId: outroUsuario });
+	check("take-over devolve o ticket", !!tomada && tomada.id === dono?.id);
+	check("novo responsável é quem assumiu", tomada?.responsavelUsuarioId === outroUsuario, tomada?.responsavelUsuarioId);
+	check("motivo registrado como transferência", tomada?.transferenciaMotivo === ATTENDANCE_TAKEOVER_REASON, tomada?.transferenciaMotivo);
+	check("segue um único atendimento ativo", (await countActive(chatId)) === 1);
+
+	console.log("\n2c. alterar status/resumo/prioridade sem ticket ativo não cria ticket fantasma");
+	await db.delete(chatAssignments).where(eq(chatAssignments.chatId, chatId));
+	check("status devolve null", (await changeChatAttendanceStatus(db, { organizacaoId: ORG, chatId, status: "ENCERRADO" })) === null);
+	check("resumo devolve null", (await updateChatAttendanceSummary(db, { organizacaoId: ORG, chatId, resumo: "x" })) === null);
+	check("prioridade devolve null", (await changeChatAttendancePriority(db, { organizacaoId: ORG, chatId, prioridade: "ALTA" })) === null);
+	check(
+		"nenhum atendimento criado",
+		(await countActive(chatId)) === 0 && (await db.query.chatAssignments.findMany({ where: eq(chatAssignments.chatId, chatId) })).length === 0,
+	);
+	await resetChat(chatId, { entrada: antes });
+	await markChatNeedsResponse(db, { organizacaoId: ORG, chatId, messageDate: antes });
+	await assumeChatAttendanceForUser(db, { organizacaoId: ORG, chatId, usuarioId: "user1" });
 
 	console.log("\n3. IA recua quando um humano já assumiu");
 	const claimed = await claimChatAttendanceForAgent(db, { organizacaoId: ORG, chatId });
@@ -83,6 +112,11 @@ async function main() {
 	await markChatAttendedExternally(db, { organizacaoId: ORG, chatId, responseDate: now });
 	const aposEcho = await getCurrentChatAttendance(db, { organizacaoId: ORG, chatId });
 	check("responsável segue USUARIO", aposEcho?.responsavelTipo === "USUARIO", aposEcho?.responsavelTipo);
+	check(
+		"echo registra a resposta (sai de ABERTO, primeira resposta gravada)",
+		aposEcho?.status === "EM_ATENDIMENTO" && !!aposEcho?.dataPrimeiraResposta,
+		aposEcho?.status,
+	);
 
 	console.log("\n5. dataPrimeiraResposta não muda na segunda resposta");
 	await resetChat(chatId, { entrada: antes });

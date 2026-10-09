@@ -2,7 +2,9 @@ import { resolveChatDeliverer } from "@/lib/ai/agent/delivery";
 import { ensureOrganizationAgent } from "@/lib/ai/agent/provisioning";
 import { respondToChatWithAgent } from "@/lib/ai/agent/respond-to-chat";
 import { runTriageGate } from "@/lib/ai/triage/triage-gate";
+import { AI_PRE_RUN_FAILURE_RELEASE_REASON, shouldReleaseAfterPreRunFailure } from "@/lib/chats/ai-pre-run-failure";
 import { claimChatForAi, confirmAiResponseStillValid, confirmClientInAgentScope } from "@/lib/chats/ai-trigger";
+import { getCurrentChatAttendance, releaseChatAttendance } from "@/lib/chats/attendance-state";
 import { db } from "@/services/drizzle";
 
 /**
@@ -99,5 +101,25 @@ export async function runAiTurnForMessage(payload: TAiTurnPayload): Promise<void
 		// A execução falha fica registrada em `ai_agent_runs` com o erro; nada é enviado ao
 		// cliente — mensagem genérica de desculpas só esconderia o problema.
 		console.error("[AI_TURN] Falha na execução do agente de IA:", error);
+
+		// Falha antes de a run existir (teto diário, teto de gasto, agente pausado no intervalo): não
+		// há linha em `ai_agent_runs` nem resposta, e o ticket que este turno reivindicou ficaria
+		// `AGENTE` para sempre com o cliente sem retorno. Devolve à fila para a equipe atender.
+		if (shouldReleaseAfterPreRunFailure({ freshClaim: claim.fresh, error })) {
+			try {
+				// Só se o ticket ainda é deste agente: um humano pode ter assumido no intervalo, e
+				// liberar aí tiraria a conversa dele.
+				const atual = await getCurrentChatAttendance(db, { organizacaoId: payload.organizationId, chatId: payload.chatId });
+				if (atual?.responsavelTipo === "AGENTE" && atual.responsavelAgenteId === agent.id) {
+					await releaseChatAttendance(db, {
+						organizacaoId: payload.organizationId,
+						chatId: payload.chatId,
+						motivo: AI_PRE_RUN_FAILURE_RELEASE_REASON,
+					});
+				}
+			} catch (releaseError) {
+				console.error("[AI_TURN] Falha ao devolver o atendimento à fila:", releaseError);
+			}
+		}
 	}
 }

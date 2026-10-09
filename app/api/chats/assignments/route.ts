@@ -211,9 +211,11 @@ async function updateChatAssignment({ session, input }: { session: TAuthUserSess
 
 	if (input.acao === "assumir") {
 		const assumed = await assumeChatAttendanceForUser(db, { organizacaoId, chatId: input.chatId, usuarioId: session.user.id });
-		// null = o compare-and-set não casou: outro usuário assumiu entre a leitura e a
-		// escrita. Sobrescrever aqui seria roubar a conversa de quem chegou primeiro.
-		if (!assumed) throw new createHttpError.Conflict("Esta conversa já possui responsável.");
+		// Quem tem `responder` pode assumir inclusive o que está com um colega (decisão de produto:
+		// o assumir é o caminho de autosserviço para quando a pessoa saiu de turno), então "já tem
+		// responsável" deixou de ser motivo de recusa. null = o compare-and-set perdeu uma corrida
+		// genuína: outra pessoa assumiu entre a leitura e a escrita, ou o ticket foi encerrado.
+		if (!assumed) throw new createHttpError.Conflict("Esta conversa acabou de mudar de responsável ou foi encerrada. Atualize e tente novamente.");
 		return { data: { chatId: input.chatId, atendimentoId: assumed.id }, message: "Atendimento assumido." };
 	}
 
@@ -284,8 +286,11 @@ async function updateChatAssignment({ session, input }: { session: TAuthUserSess
 		return { data: { chatId: input.chatId, atendimentoId: released?.id ?? null }, message: "Atendimento liberado." };
 	}
 
+	// Status, resumo e prioridade são atributos de um atendimento em curso: sem ticket ativo não há o
+	// que alterar, e criar um aqui (como antes) deixava tickets fantasmas, alguns já nascidos encerrados.
 	if (input.acao === "alterar_status") {
-		if (atual && !mayManageAssignment({ session, assignment: atual })) {
+		if (!atual) throw new createHttpError.Conflict("Conversa sem atendimento ativo.");
+		if (!mayManageAssignment({ session, assignment: atual })) {
 			throw new createHttpError.Forbidden("Somente o responsável ou um gestor pode alterar este atendimento.");
 		}
 		const updated = await changeChatAttendanceStatus(db, {
@@ -298,14 +303,16 @@ async function updateChatAssignment({ session, input }: { session: TAuthUserSess
 	}
 
 	if (input.acao === "alterar_resumo") {
-		if (atual && !mayManageAssignment({ session, assignment: atual })) {
+		if (!atual) throw new createHttpError.Conflict("Conversa sem atendimento ativo.");
+		if (!mayManageAssignment({ session, assignment: atual })) {
 			throw new createHttpError.Forbidden("Somente o responsável ou um gestor pode alterar este atendimento.");
 		}
 		const updated = await updateChatAttendanceSummary(db, { organizacaoId, chatId: input.chatId, resumo: input.resumo });
 		return { data: { chatId: input.chatId, atendimentoId: updated?.id ?? null }, message: "Resumo do atendimento atualizado." };
 	}
 
-	if (atual && !mayManageAssignment({ session, assignment: atual })) {
+	if (!atual) throw new createHttpError.Conflict("Conversa sem atendimento ativo.");
+	if (!mayManageAssignment({ session, assignment: atual })) {
 		throw new createHttpError.Forbidden("Somente o responsável ou um gestor pode alterar este atendimento.");
 	}
 	const updated = await changeChatAttendancePriority(db, { organizacaoId, chatId: input.chatId, prioridade: input.prioridade });
