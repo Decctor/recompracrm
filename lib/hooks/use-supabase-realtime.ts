@@ -1,6 +1,6 @@
 "use client";
 
-import { supabaseClient } from "@/services/supabase";
+import { createRealtimeChannel, supabaseClient } from "@/services/supabase";
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import type { QueryKey } from "@tanstack/react-query";
 import { useQueryClient } from "@tanstack/react-query";
@@ -132,7 +132,8 @@ export function useSupabaseRealtime<T extends Record<string, unknown>>({
 		}
 
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		const channel = (supabaseClient.channel(channelName).on as any)(
+		// Nome único por inscrição: ver `createRealtimeChannel`.
+		const channel = (createRealtimeChannel(channelName).on as any)(
 			"postgres_changes",
 			{
 				event,

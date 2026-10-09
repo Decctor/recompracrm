@@ -3,6 +3,7 @@
 import { cn } from "@/lib/utils";
 import { Check, Mic, Square, Trash2 } from "lucide-react";
 import { useEffect, useRef } from "react";
+import { toast } from "sonner";
 import { useAudioRecorder } from "./Hooks/useAudioRecorder";
 import { validateAudioSize } from "./utils/audioUpload";
 
@@ -48,10 +49,22 @@ export function ChatVoiceRecorder({ disabled, onRecorded, onActiveChange }: Chat
 		onActiveChangeRef.current?.(isActive);
 	}, [isActive]);
 
+	// O hook só informa o erro; o aviso é daqui. Sem isso, microfone negado/ausente não mostrava
+	// nada: o estado `error` cai no botão ocioso, e o texto de erro só existia na barra de gravação.
+	// `resetRecording` volta ao ocioso para o próximo toque tentar de novo (e não repetir o toast).
+	useEffect(() => {
+		if (recordingState !== "error") return;
+		toast.error(error ?? "Não foi possível gravar o áudio.");
+		resetRecording();
+	}, [recordingState, error, resetRecording]);
+
 	function handleConfirm() {
 		if (!audioBlob) return;
 		const validation = validateAudioSize(audioBlob);
-		if (!validation.isValid) return;
+		if (!validation.isValid) {
+			toast.error(validation.error ?? "O áudio gravado excede o tamanho máximo permitido.");
+			return;
+		}
 		onRecorded({ blob: audioBlob, mimeType: audioBlob.type || "audio/webm", durationSeconds: recordingDuration });
 		resetRecording();
 	}
@@ -97,8 +110,6 @@ export function ChatVoiceRecorder({ disabled, onRecorded, onActiveChange }: Chat
 					))}
 				</div>
 			</div>
-
-			{error && <span className="shrink-0 text-[11px] text-destructive">{error}</span>}
 
 			{isRecording ? (
 				<button

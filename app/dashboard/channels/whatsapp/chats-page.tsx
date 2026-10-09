@@ -12,7 +12,12 @@ export default function ChatsPage({ user, membership }: ChatsPageProps) {
 			<ChatsMain
 				user={user}
 				organizationId={membership.organizacao.id}
-				canManageAttendances={membership.permissoes.atendimentos.finalizar ?? false}
+				attendancePermissions={{
+					// `responder` é o gate de entrada de quase toda ação da API (assumir, transferir, liberar...).
+					canRespond: membership.permissoes.atendimentos.responder ?? false,
+					// `finalizar` é "gerir qualquer atendimento" no servidor (`mayManageAssignment`), não só encerrar.
+					canManage: membership.permissoes.atendimentos.finalizar ?? false,
+				}}
 				quotePermissions={{
 					criar: membership.permissoes.vendas.criar ?? false,
 					// Mesmo gate da listagem de vendas para abrir o checkout de um orçamento.

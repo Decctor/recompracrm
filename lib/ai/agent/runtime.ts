@@ -24,7 +24,8 @@ import { buildAgentSystemPrompt } from "./prompts";
 import { mergeRunSummary } from "./run-memory";
 import { assertAiSpendWithinLimit } from "./spend";
 import { notifyAiSpendThresholdIfReached } from "./spend-alert";
-import { completeAgentRun, countAgentRunsToday, createAgentRun, failAgentRun, markAgentRunCancelled, markAgentRunRunning } from "./runs";
+import { getAgentDailyRunLimitState } from "./run-limit";
+import { completeAgentRun, createAgentRun, failAgentRun, markAgentRunCancelled, markAgentRunRunning } from "./runs";
 import { shouldRetryDeferredAction } from "./turn-validation";
 
 type TDb = DB | DBTransaction;
@@ -181,8 +182,8 @@ export async function prepareAgentExecution({
 			: baseModelConfig;
 	const capacidades = assistencia ? narrowCapabilitiesForAssist(baseCapabilities) : baseCapabilities;
 
-	const runsToday = await countAgentRunsToday(database, organizacaoId);
-	if (runsToday >= capacidades.limites.maxRunsDiarios) {
+	const dailyLimit = await getAgentDailyRunLimitState(database, { organizacaoId, maxRunsDiarios: capacidades.limites.maxRunsDiarios });
+	if (dailyLimit.reached) {
 		throw new AgentDailyRunLimitError(`Limite diário de ${capacidades.limites.maxRunsDiarios} execuções do agente atingido.`);
 	}
 

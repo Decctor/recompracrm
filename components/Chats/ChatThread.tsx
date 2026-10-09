@@ -13,14 +13,16 @@ import {
 	getChatMessagesQueryKey,
 	useChatMessages,
 	type TChatAttendance,
+	type TChatClosedAttendance,
 	type TChatInboxItem,
 	type TChatMessagesPage,
 	type TChatThreadMessage,
 } from "@/lib/queries/chats";
+import { useChatTemplates } from "@/lib/queries/chat-templates";
 import { cn } from "@/lib/utils";
-import { supabaseClient } from "@/services/supabase";
+import { createRealtimeChannel, supabaseClient } from "@/services/supabase";
 import { useMutation, useQueryClient, type InfiniteData } from "@tanstack/react-query";
-import { ArrowLeft, ChevronDown, Loader2, PanelRightClose, PanelRightOpen, Plus, Smartphone, Sparkles, UserRound, UserRoundPlus } from "lucide-react";
+import { ArrowLeft, ChevronDown, Loader2, PanelRightClose, PanelRightOpen, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
@@ -30,12 +32,13 @@ import AgentRunDrawer from "@/components/Settings/AiAgent/AgentRunDrawer";
 import { AiPresenceBar } from "./AiPresenceBar";
 import { AttendanceSummaryCard } from "./AttendanceSummaryCard";
 import { FollowUpNotice } from "./FollowUpNotice";
-import { ChatAssignmentActions } from "./ChatAssignmentActions";
+import { ChatAssignmentActions, type TAttendancePermissions } from "./ChatAssignmentActions";
 import { ChatContextPanel } from "./ChatContextPanel";
 import { canForwardMessage } from "@/lib/chats/forward-message";
 import { buildQuotedMessageSnapshot } from "@/lib/chats/quoted-message";
 import { ChatInputArea, type TChatAssistAction, type TChatInputAreaHandle, type TChatReplyTarget, type TOutgoingAttachment } from "./ChatInputArea";
 import { ChatMessageBubble, type TOptimisticFields } from "./ChatMessageBubble";
+import { RESPONSIBLE_META, STATUS_META } from "./attendance-meta";
 import { ForwardMessageDialog } from "./ForwardMessageDialog";
 import { ChatQuotesHeaderActions } from "./Quotes/ChatQuotesHeaderActions";
 import type { TQuotePermissions } from "./Quotes/config";
@@ -48,6 +51,8 @@ type ChatThreadProps = {
 	organizationId: string;
 	currentUser: { id: string; nome: string; avatarUrl: string | null };
 	quotePermissions: TQuotePermissions;
+	/** Flags da sessão; a thread as combina com a posse para decidir o que oferecer em cada conversa. */
+	attendancePermissions: TAttendancePermissions;
 	/** Celular: a lista fica escondida enquanto a conversa está aberta, e este é o caminho de volta. */
 	onBack?: () => void;
 	/** Abre outra conversa no hub (ex.: "Abrir" no toast de um encaminhamento). */
@@ -128,13 +133,15 @@ const WINDOW_DOT_CLASS = {
 	expirada: "bg-destructive",
 } as const;
 
-function describeResponsible(atendimento: TChatAttendance, isOwner: boolean) {
+function describeResponsible(atendimento: TChatAttendance, encerrado: TChatClosedAttendance, isOwner: boolean) {
+	// Conversa sem ticket ativo mas com um encerrado não está "livre": foi atendida e fechada, e
+	// assumir abre outro ticket. "Sem responsável" aqui parecia uma fila esperando alguém.
+	if (!atendimento && encerrado) return { icon: STATUS_META[encerrado.status].icon, label: "Atendimento encerrado" };
+	const meta = RESPONSIBLE_META[atendimento?.responsavelTipo ?? "NAO_ATRIBUIDO"];
 	if (atendimento?.responsavelTipo === "USUARIO") {
-		return { icon: UserRound, label: isOwner ? "Com você" : `Com ${atendimento.responsavelUsuario?.nome ?? "outro atendente"}` };
+		return { icon: meta.icon, label: isOwner ? "Com você" : `Com ${atendimento.responsavelUsuario?.nome ?? "outro atendente"}` };
 	}
-	if (atendimento?.responsavelTipo === "AGENTE") return { icon: Sparkles, label: "Com a IA" };
-	if (atendimento?.responsavelTipo === "EXTERNO") return { icon: Smartphone, label: "Atendido pelo telefone" };
-	return { icon: UserRoundPlus, label: "Sem responsável" };
+	return { icon: meta.icon, label: meta.label };
 }
 
 function formatDaySeparator(date: Date) {
@@ -146,10 +153,14 @@ function formatDaySeparator(date: Date) {
 	return date.toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" });
 }
 
-export function ChatThread({ chatId, organizationId, currentUser, quotePermissions, onBack, onOpenChat }: ChatThreadProps) {
+export function ChatThread({ chatId, organizationId, currentUser, quotePermissions, attendancePermissions, onBack, onOpenChat }: ChatThreadProps) {
 	const queryClient = useQueryClient();
-	const queryKey = getChatMessagesQueryKey(chatId);
+	// Memoizada: é dependência da inscrição de realtime, e um array novo a cada render a refaria
+	// (cancelando o canal) a cada tique do relógio de 5s.
+	const queryKey = useMemo(() => getChatMessagesQueryKey(chatId), [chatId]);
 	const { messages, chat, isPending, isError, error, hasNextPage, fetchNextPage, isFetchingNextPage, refetch } = useChatMessages(chatId);
+	// Só a Meta Cloud API tem janela de 24h e templates; o gateway interno envia texto livre sempre.
+	const { data: templates } = useChatTemplates({ chatId, enabled: chat?.conexaoTipo === "META_CLOUD_API" });
 
 	const [optimisticMessages, setOptimisticMessages] = useState<TThreadMessage[]>([]);
 	const [unseenCount, setUnseenCount] = useState(0);
@@ -175,11 +186,24 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 	const optimisticQuoteRef = useRef(new Map<string, ReturnType<typeof buildQuotedMessageSnapshot>>());
 	const isAtBottomRef = useRef(true);
 	const initialSubscriptionCompleteRef = useRef(false);
+	const lastMarkedReadRef = useRef<string | null>(null);
 	const refetchRef = useRef(refetch);
 	refetchRef.current = refetch;
+	// `currentUser` é um objeto novo a cada render do hub; lido por ref para não refazer o canal.
+	const currentUserRef = useRef(currentUser);
+	currentUserRef.current = currentUser;
+	// Realtime caído (erro, timeout ou canal fechado): o refetch periódico cobre a lacuna.
+	const [realtimeDown, setRealtimeDown] = useState(false);
+	// Rascunho de cada envio em voo, para devolver ao compositor se o servidor recusar.
+	const sendDraftsRef = useRef(new Map<string, { texto: string; midia: TOutgoingAttachment | null; replyTarget: TChatReplyTarget | null }>());
 
 	const atendimento = chat?.atendimentoAtivo ?? null;
+	const atendimentoEncerrado = atendimento ? null : (chat?.ultimoAtendimentoEncerrado ?? null);
 	const isOwner = atendimento?.responsavelTipo === "USUARIO" && atendimento.responsavelUsuarioId === currentUser.id;
+	const { canRespond, canManage } = attendancePermissions;
+	// Espelha `mayManageAssignment` do servidor: o dono, ou quem tem `finalizar`.
+	const canManageThis = isOwner || canManage;
+	const actionPermissions = { canRespond, canManageThis };
 
 	// Otimista + persistida: a reconciliação é por clienteMensagemId, gerado no cliente.
 	const threadMessages = useMemo<TThreadMessage[]>(() => {
@@ -218,36 +242,85 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 		},
 		onError: () => {
 			// Se a persistência falhar, recarregamos a fonte de verdade e restauramos o badge.
+			lastMarkedReadRef.current = null;
 			void queryClient.invalidateQueries({ queryKey: ["chats"] });
 		},
 	});
 	const markReadRef = useRef(markRead);
 	markReadRef.current = markRead;
 
-	const newestMessageId = threadMessages[0]?.id ?? null;
+	// Só anexo bloqueia o compositor; texto é otimista e reconcilia por clienteMensagemId.
+	const isUploadingMedia = optimisticMessages.some((message) => message.conteudoMidiaTipo !== "TEXTO" && message.statusEntrega === "PENDENTE");
+
+	const newestMessage = threadMessages[0] ?? null;
+	const newestMessageId = newestMessage?.id ?? null;
+	// A própria mensagem (otimista ou já persistida) não é "nova" para quem acabou de enviá-la.
+	const newestIsOwnRef = useRef(false);
+	newestIsOwnRef.current =
+		!!newestMessage && (!!newestMessage.optimistic || (newestMessage.autorTipo === "USUÁRIO" && newestMessage.autorUsuario?.id === currentUser.id));
 	useEffect(() => {
 		if (!newestMessageId) return;
 		if (isAtBottomRef.current) {
 			setUnseenCount(0);
 			return;
 		}
+		if (newestIsOwnRef.current) return;
 		setUnseenCount((current) => current + 1);
 	}, [newestMessageId]);
 
-	// A aba que escreve não recebe eco do próprio write, então a leitura é marcada aqui.
-	useEffect(() => {
-		if (!chatId || !messages.length) return;
+	// Leitura só conta quando alguém pode estar vendo: aba do navegador visível e a thread
+	// realmente desenhada (o hub é `forceMount` no ChatsWorkspace e fica `display: none` quando a
+	// aba ativa é o Quadro). Mensagem otimista não tem id no servidor, então só a persistida
+	// marca; o último id marcado evita repetir o PATCH a cada render.
+	const newestPersistedId = messages[0]?.id ?? null;
+	const newestPersistedIdRef = useRef(newestPersistedId);
+	newestPersistedIdRef.current = newestPersistedId;
+	const threadOnScreenRef = useRef(true);
+	const markThreadRead = useCallback(() => {
+		const messageId = newestPersistedIdRef.current;
+		if (!messageId || lastMarkedReadRef.current === messageId) return;
+		if (document.visibilityState !== "visible" || !threadOnScreenRef.current) return;
+		lastMarkedReadRef.current = messageId;
+		// A aba que escreve não recebe eco do próprio write, então a leitura é marcada aqui.
 		markReadRef.current.mutate({ chatId });
 		queryClient.setQueryData<InfiniteData<TChatMessagesPage>>(queryKey, (current) =>
 			current ? { ...current, pages: current.pages.map((page) => ({ ...page, chat: { ...page.chat, mensagensNaoLidas: 0 } })) } : current,
 		);
-		// biome-ignore lint/correctness/useExhaustiveDependencies: só o id da mais recente importa
-	}, [chatId, newestMessageId]);
+	}, [chatId, queryClient, queryKey]);
+	const markThreadReadRef = useRef(markThreadRead);
+	markThreadReadRef.current = markThreadRead;
 
 	useEffect(() => {
-		const channel = supabaseClient
-			.channel(`chat-thread-${chatId}`)
+		markThreadReadRef.current();
+	}, [newestPersistedId]);
+
+	// Voltar à aba do navegador ou ao Hub marca o que chegou enquanto a thread estava fora de vista.
+	const hasThread = !!chat;
+	useEffect(() => {
+		const element = scrollRef.current;
+		if (!element) return;
+		const observer = new IntersectionObserver(([entry]) => {
+			threadOnScreenRef.current = !!entry?.isIntersecting;
+			markThreadReadRef.current();
+		});
+		observer.observe(element);
+		const onVisibilityChange = () => markThreadReadRef.current();
+		document.addEventListener("visibilitychange", onVisibilityChange);
+		return () => {
+			observer.disconnect();
+			document.removeEventListener("visibilitychange", onVisibilityChange);
+		};
+	}, [hasThread]);
+
+	useEffect(() => {
+		let disposed = false;
+		let wasDown = false;
+		setRealtimeDown(false);
+		// Nome único por inscrição: ver `createRealtimeChannel`. Com o nome fixo, remontar a thread
+		// dentro da janela de saída do canal anterior deixava a conversa aberta sem realtime.
+		const channel = createRealtimeChannel(`chat-thread-${chatId}`)
 			.on("postgres_changes", { event: "INSERT", schema: "public", table: "ampmais_chat_messages", filter: `chat_id=eq.${chatId}` }, (payload) => {
+				const currentUser = currentUserRef.current;
 				const message = mapRealtimeMessageRow(payload.new as TRealtimeChatMessageRow, currentUser);
 				if (message.clienteMensagemId) {
 					setOptimisticMessages((current) => current.filter((item) => item.clienteMensagemId !== message.clienteMensagemId));
@@ -261,7 +334,8 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 				// prefixo: só uma conversa está aberta por vez, e assim o `clienteId` não precisa
 				// entrar nas dependências desta inscrição.
 				if (message.autorTipo !== "CLIENTE") void queryClient.invalidateQueries({ queryKey: ["client-open-quotes"] });
-				if (message.autorTipo === "CLIENTE") markReadRef.current.mutate({ chatId });
+				// A leitura de mensagem do cliente sai do efeito sobre o id mais recente persistido, que
+				// respeita aba visível e thread em tela.
 			})
 			.on("postgres_changes", { event: "UPDATE", schema: "public", table: "ampmais_chat_messages", filter: `chat_id=eq.${chatId}` }, (payload) => {
 				const row = payload.new as TRealtimeChatMessageRow;
@@ -303,19 +377,47 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 				void refetchRef.current();
 			})
 			.subscribe((status) => {
+				// `removeChannel` dispara CLOSED na própria limpeza; isso não é queda.
+				if (disposed) return;
+				if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+					wasDown = true;
+					setRealtimeDown(true);
+					return;
+				}
 				if (status !== "SUBSCRIBED") return;
-				if (!initialSubscriptionCompleteRef.current) {
+				setRealtimeDown(false);
+				// A primeira inscrição já vem de uma query fresca; as seguintes (e a primeira depois de
+				// uma queda) precisam recuperar o que passou enquanto o canal estava fora.
+				if (!initialSubscriptionCompleteRef.current && !wasDown) {
 					initialSubscriptionCompleteRef.current = true;
 					return;
 				}
+				initialSubscriptionCompleteRef.current = true;
+				wasDown = false;
 				void refetchRef.current();
 			});
 
 		return () => {
+			disposed = true;
 			initialSubscriptionCompleteRef.current = false;
 			void supabaseClient.removeChannel(channel);
 		};
-	}, [chatId, currentUser, queryClient, queryKey]);
+	}, [chatId, queryClient, queryKey]);
+
+	// Sem realtime, a thread só se atualizaria na próxima ação do usuário. Enquanto o canal está
+	// fora: refetch a cada 15s com a aba visível e ao voltar o foco para a janela.
+	useEffect(() => {
+		if (!realtimeDown) return;
+		const timer = setInterval(() => {
+			if (document.visibilityState === "visible") void refetchRef.current();
+		}, 15_000);
+		const onFocus = () => void refetchRef.current();
+		window.addEventListener("focus", onFocus);
+		return () => {
+			clearInterval(timer);
+			window.removeEventListener("focus", onFocus);
+		};
+	}, [realtimeDown]);
 
 	const sendMutation = useMutation({
 		mutationFn: sendChatMessage,
@@ -324,11 +426,31 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 			queryClient.setQueryData<InfiniteData<TChatMessagesPage>>(queryKey, (current) => insertMessageIntoCache(current, data.data));
 			void queryClient.invalidateQueries({ queryKey: ["chats"] });
 		},
-		onError: (error, variables) => {
-			setOptimisticMessages((current) =>
-				current.map((item) => (item.clienteMensagemId === variables.clienteMensagemId ? { ...item, statusEntrega: "FALHA" as const } : item)),
-			);
+		onError: async (error, variables) => {
 			toast.error(getErrorMessage(error));
+			const { clienteMensagemId } = variables;
+			const draft = clienteMensagemId ? sendDraftsRef.current.get(clienteMensagemId) : undefined;
+			// Envio de template não tem bolha otimista nem rascunho.
+			if (!clienteMensagemId || !draft) return;
+
+			// A rota também lança quando o provedor falha depois de gravar a mensagem (FALHA), e aí a
+			// resposta não carrega o id. Só o servidor sabe se houve linha: recarregar e procurar o
+			// clienteMensagemId distingue "recusada antes de gravar" (403, 412, 400, rede) de
+			// "gravada e não entregue" — esta última segue como bolha FALHA com "Tentar novamente".
+			const refreshed = await refetchRef.current();
+			const persisted = !!refreshed.data?.pages.some((page) => page.items.some((item) => item.clienteMensagemId === clienteMensagemId));
+			if (persisted) {
+				setOptimisticMessages((current) =>
+					current.map((item) => (item.clienteMensagemId === clienteMensagemId ? { ...item, statusEntrega: "FALHA" as const } : item)),
+				);
+				return;
+			}
+			setOptimisticMessages((current) => current.filter((item) => item.clienteMensagemId !== clienteMensagemId));
+			inputAreaRef.current?.restoreDraft({ texto: draft.texto, attachment: draft.midia });
+			if (draft.replyTarget) setReplyTarget((current) => current ?? draft.replyTarget);
+		},
+		onSettled: (_data, _error, variables) => {
+			if (variables.clienteMensagemId) sendDraftsRef.current.delete(variables.clienteMensagemId);
 		},
 	});
 
@@ -423,6 +545,12 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 			const clienteMensagemId = crypto.randomUUID();
 			// A bolha otimista já desenha o painel de citação enquanto o envio confirma.
 			const quotedMessage = input.replyToMessageId ? (optimisticQuoteRef.current.get(input.replyToMessageId) ?? null) : null;
+			// O compositor se esvazia já no envio; se o servidor recusar, é daqui que o rascunho volta.
+			sendDraftsRef.current.set(clienteMensagemId, {
+				texto: input.texto,
+				midia: input.midia,
+				replyTarget: input.replyToMessageId && quotedMessage ? { messageId: input.replyToMessageId, quote: quotedMessage } : null,
+			});
 			setOptimisticMessages((current) => [
 				{
 					id: `optimistic-${clienteMensagemId}`,
@@ -470,7 +598,7 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 	// (Meta Cloud API; o Gateway Interno não expõe citação).
 	const canReply = !!isOwner && janela.canSendFreeform && chat.conexaoTipo === "META_CLOUD_API";
 	const clientName = chat.cliente?.nome ?? "Cliente";
-	const { icon: ResponsibleIcon, label: responsibleLabel } = describeResponsible(atendimento, isOwner);
+	const { icon: ResponsibleIcon, label: responsibleLabel } = describeResponsible(atendimento, atendimentoEncerrado, isOwner);
 	const aiPresence = resolveAiPresence({
 		atendimento,
 		atendimentoIa: { disponivel: chat.atendimentoIa.disponivel, motivo: chat.atendimentoIa.motivo },
@@ -484,7 +612,11 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 	const summaryOpenByDefault = !!atendimento?.transferenciaMotivo && isOwner;
 	// Assistência exige o recurso de IA no plano (aqui o agente ajuda o humano, não atende o
 	// cliente: escopo e habilitação por número não se aplicam) e crédito no mês.
-	const canAssist = chat.atendimentoIa.motivo !== "RECURSO_INDISPONIVEL" && chat.atendimentoIa.motivo !== "LIMITE_CREDITOS";
+	// A assistência passa por `prepareAgentExecution`, que recusa plano sem IA e os dois tetos.
+	const canAssist =
+		chat.atendimentoIa.motivo !== "RECURSO_INDISPONIVEL" &&
+		chat.atendimentoIa.motivo !== "LIMITE_CREDITOS" &&
+		chat.atendimentoIa.motivo !== "LIMITE_EXECUCOES_DIARIAS";
 
 	/**
 	 * Inserir o orçamento na conversa só faz sentido quando a conversa aceita texto livre agora: sem
@@ -533,6 +665,7 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 								atendimento={atendimento}
 								atendimentoIa={chat.atendimentoIa}
 								currentUserId={currentUser.id}
+								permissions={actionPermissions}
 								compact
 								collapsed={!isWideHeader}
 								overflowItems={
@@ -583,6 +716,7 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 										chatId={chatId}
 										chat={chat}
 										currentUserId={currentUser.id}
+										actionPermissions={actionPermissions}
 										quotePermissions={quotePermissions}
 										onInsertQuoteInConversation={insertQuoteInConversation}
 									/>
@@ -617,8 +751,14 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 					resumo={atendimento?.resumo}
 					transferenciaMotivo={atendimento?.transferenciaMotivo}
 					defaultOpen={summaryOpenByDefault}
-					onSave={isOwner ? (resumo) => updateSummaryMutation.mutate({ acao: "alterar_resumo", chatId, resumo }) : undefined}
-					onRegenerate={isOwner && canAssist ? () => requestAssist({ acao: "RESUMIR", texto: "" }) : undefined}
+					// Editar é do dono ou do gestor, mas a rota exige `responder` para entrar. Regenerar
+					// segue a regra do assist: o dono, ou o gestor quando o responsável é uma pessoa.
+					onSave={canRespond && canManageThis ? (resumo) => updateSummaryMutation.mutate({ acao: "alterar_resumo", chatId, resumo }) : undefined}
+					onRegenerate={
+						canAssist && (isOwner || (canManage && atendimento?.responsavelTipo === "USUARIO"))
+							? () => requestAssist({ acao: "RESUMIR", texto: "" })
+							: undefined
+					}
 					isSaving={updateSummaryMutation.isPending}
 					isRegenerating={pendingAssist === "RESUMIR"}
 				/>
@@ -658,7 +798,8 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 								<ChatMessageBubble
 									message={message}
 									showAuthor={showAuthor}
-									onRetry={(messageId) => retryMutation.mutate({ messageId })}
+									// A rota de retry exige `responder` e ser o dono: gestor não reenvia por outro.
+									onRetry={isOwner && canRespond ? (messageId) => retryMutation.mutate({ messageId }) : undefined}
 									isRetrying={retryMutation.isPending}
 									onOpenAiRun={setOpenRunId}
 									clientName={clientName}
@@ -672,9 +813,12 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 												}
 											: undefined
 									}
-									// Encaminhar independe da posse desta conversa: a posse que importa é a dos destinos.
+									// Encaminhar independe da posse desta conversa (a que importa é a dos destinos),
+									// mas a rota exige `responder`.
 									onForward={
-										!message.optimistic && message.statusEntrega !== "FALHA" && canForwardMessage(message) ? () => setForwardTarget(message) : undefined
+										canRespond && !message.optimistic && message.statusEntrega !== "FALHA" && canForwardMessage(message)
+											? () => setForwardTarget(message)
+											: undefined
 									}
 									highlighted={highlightedMessageId === message.id}
 								/>
@@ -719,7 +863,8 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 				<AiPresenceBar
 					presence={aiPresence}
 					agentName={chat.atendimentoIa.agenteNome}
-					onAssume={isOwner ? undefined : () => assumeMutation.mutate({ acao: "assumir", chatId })}
+					blockedMessage={chat.atendimentoIa.motivoIndisponivel}
+					onAssume={isOwner || !canRespond ? undefined : () => assumeMutation.mutate({ acao: "assumir", chatId })}
 					isAssuming={assumeMutation.isPending}
 					onOpenRun={setOpenRunId}
 				/>
@@ -728,7 +873,7 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 					<FollowUpNotice
 						retomada={chat.retomadaAgendada}
 						agentName={chat.atendimentoIa.agenteNome}
-						onCancel={() => cancelFollowUpMutation.mutate({ id: chat.retomadaAgendada?.id as string })}
+						onCancel={canRespond ? () => cancelFollowUpMutation.mutate({ id: chat.retomadaAgendada?.id as string }) : undefined}
 						isCancelling={cancelFollowUpMutation.isPending}
 					/>
 				)}
@@ -738,15 +883,18 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 					organizationId={organizationId}
 					userName={currentUser.nome}
 					isOwner={!!isOwner}
+					canRespond={canRespond}
 					janelaExpiracao={chat.whatsappJanelaDataExpiracao}
 					conexaoTipo={chat.conexaoTipo}
 					isSending={sendMutation.isPending}
+					isUploadingMedia={isUploadingMedia}
+					attendanceClosed={!!atendimentoEncerrado}
 					onSend={handleSend}
 					clientName={clientName}
 					replyTarget={replyTarget}
 					onCancelReply={() => setReplyTarget(null)}
 					onAssume={() => assumeMutation.mutate({ acao: "assumir", chatId })}
-					templates={[]}
+					templates={templates ?? []}
 					onSendTemplate={(messageTemplateId) => sendMutation.mutate({ chatId, messageTemplateId, assinaturaAtiva: false })}
 					assist={canAssist ? { onRequest: requestAssist, pendingAction: pendingAssist } : undefined}
 				/>
@@ -769,6 +917,7 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 					chatId={chatId}
 					chat={chat}
 					currentUserId={currentUser.id}
+					actionPermissions={actionPermissions}
 					quotePermissions={quotePermissions}
 					onInsertQuoteInConversation={insertQuoteInConversation}
 				/>

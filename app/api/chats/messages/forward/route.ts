@@ -126,8 +126,10 @@ async function forwardChatMessage({ session, input }: { session: TAuthUserSessio
 			if (!janelaAberta) throw new ForwardTargetError("Janela de 24h fechada.");
 
 			if (!ownedByMe) {
-				const assumed = await assumeChatAttendanceForUser(db, { organizacaoId, chatId, usuarioId: session.user.id });
-				// null = o compare-and-set perdeu para alguém que assumiu entre a leitura e a escrita.
+				// `somenteSeLivre`: assumir toma a conversa de um colega por padrão (decisão de produto),
+				// mas encaminhar não é esse gesto — aqui só se assume o que estava livre na leitura.
+				const assumed = await assumeChatAttendanceForUser(db, { organizacaoId, chatId, usuarioId: session.user.id, somenteSeLivre: true });
+				// null = alguém assumiu entre a leitura e a escrita.
 				if (!assumed) throw new ForwardTargetError("Em atendimento por outro usuário.");
 			}
 

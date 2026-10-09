@@ -13,7 +13,7 @@ import type { TChatMessageMetadata } from "@/schemas/chats";
 import { db } from "@/services/drizzle";
 import { aiAgentRuns, aiAgents } from "@/services/drizzle/schema/ai-agents";
 import { chatAssignments, chatMessages, chats } from "@/services/drizzle/schema/chats";
-import { and, eq, lt, ne, notInArray, or } from "drizzle-orm";
+import { and, eq, inArray, lt, ne, notInArray, or } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
@@ -108,6 +108,21 @@ async function getChatMessages({ session, input }: { session: TAuthUserSession; 
 		orderBy: (fields, { desc: orderDesc }) => [orderDesc(fields.dataAtribuicao)],
 	});
 
+	// Sem atendimento ativo a thread não sabe distinguir "nunca atendida" de "atendimento
+	// encerrado": ambos viravam "Sem responsável", e assumir abre um ticket novo em silêncio.
+	// O último ticket terminal desfaz a ambiguidade (a conversa só ganha ticket novo ao assumir).
+	const ultimoAtendimentoEncerrado = atendimentoAtivo
+		? null
+		: ((await db.query.chatAssignments.findFirst({
+				where: and(
+					eq(chatAssignments.chatId, input.chatId),
+					eq(chatAssignments.organizacaoId, organizacaoId),
+					inArray(chatAssignments.status, [...CLOSED_ASSIGNMENT_STATUSES]),
+				),
+				columns: { id: true, status: true, dataEncerramento: true, resultado: true },
+				orderBy: (fields, { desc: orderDesc }) => [orderDesc(fields.dataInsercao)],
+			})) ?? null);
+
 	// Disponibilidade do agente para esta conversa. Vem junto com a thread de propósito: é por
 	// chat (depende do número de entrada), então uma query própria no cliente seria uma chamada
 	// por conversa aberta. A rota de atribuição revalida com o mesmo resolvedor.
@@ -171,6 +186,7 @@ async function getChatMessages({ session, input }: { session: TAuthUserSession; 
 				...chat,
 				conexaoTipo: chat.whatsappConexao?.tipoConexao ?? null,
 				atendimentoAtivo: atendimentoAtivo ?? null,
+				ultimoAtendimentoEncerrado,
 				atendimentoIa,
 				aiRun: aiRun ?? null,
 				aiCapacidades,
@@ -251,7 +267,7 @@ async function createChatMessage({ session, input }: { session: TAuthUserSession
 	}
 
 	const template = input.messageTemplateId
-		? await resolveApprovedTemplate({ organizacaoId, messageTemplateId: input.messageTemplateId, whatsappTelefoneId: chat.whatsappTelefoneId })
+		? await resolveApprovedTemplate({ organizacaoId, messageTemplateId: input.messageTemplateId, conexaoTelefoneId: chat.whatsappConexaoTelefoneId })
 		: null;
 
 	if (!janelaAberta && !template) {

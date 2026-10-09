@@ -107,48 +107,57 @@ type TPersistIncomingParams = {
 export async function persistIncomingClientMessage(input: TPersistIncomingParams) {
 	const now = input.now ?? new Date();
 
-	const [inserted] = await db
-		.insert(chatMessages)
-		.values({
-			organizacaoId: input.organizacaoId,
-			chatId: input.chatId,
-			clienteId: input.clienteId,
-			autorTipo: "CLIENTE",
-			autorClienteId: input.clienteId,
-			conteudoTexto: input.conteudoTexto || null,
-			conteudoMidiaTipo: input.conteudoMidiaTipo,
-			conteudoMidiaUrl: input.midia?.publicUrl ?? null,
-			conteudoMidiaStorageId: input.midia?.storageId ?? null,
-			conteudoMidiaMimeType: input.midia?.mimeType ?? null,
-			conteudoMidiaArquivoTamanho: input.midia?.fileSize ?? null,
-			conteudoMidiaWhatsappId: input.midia?.whatsappMediaId ?? null,
-			whatsappMessageId: input.whatsappMessageId,
-			// Uma mensagem que chegou pelo webhook já foi entregue a nós por definição.
-			statusEntrega: "ENTREGUE",
-			provedorStatusDataAtualizacao: now,
-			metadados: input.metadados ?? null,
-			dataEnvio: now,
-		})
-		.onConflictDoNothing({
-			target: [chatMessages.whatsappMessageId, chatMessages.organizacaoId],
-			where: sql`${chatMessages.whatsappMessageId} is not null`,
-		})
-		.returning({ id: chatMessages.id, dataEnvio: chatMessages.dataEnvio });
+	// Mensagem e denormalização do chat na mesma transação: se o UPDATE falhasse depois do INSERT, a
+	// reentrega do provedor cairia no conflito de wamid (devolve `null`) e o contador, a
+	// pendência e o gatilho da IA nunca mais seriam aplicados àquela mensagem.
+	const inserted = await db.transaction(async (tx) => {
+		const [row] = await tx
+			.insert(chatMessages)
+			.values({
+				organizacaoId: input.organizacaoId,
+				chatId: input.chatId,
+				clienteId: input.clienteId,
+				autorTipo: "CLIENTE",
+				autorClienteId: input.clienteId,
+				conteudoTexto: input.conteudoTexto || null,
+				conteudoMidiaTipo: input.conteudoMidiaTipo,
+				conteudoMidiaUrl: input.midia?.publicUrl ?? null,
+				conteudoMidiaStorageId: input.midia?.storageId ?? null,
+				conteudoMidiaMimeType: input.midia?.mimeType ?? null,
+				conteudoMidiaArquivoTamanho: input.midia?.fileSize ?? null,
+				conteudoMidiaWhatsappId: input.midia?.whatsappMediaId ?? null,
+				whatsappMessageId: input.whatsappMessageId,
+				// Uma mensagem que chegou pelo webhook já foi entregue a nós por definição.
+				statusEntrega: "ENTREGUE",
+				provedorStatusDataAtualizacao: now,
+				metadados: input.metadados ?? null,
+				dataEnvio: now,
+			})
+			.onConflictDoNothing({
+				target: [chatMessages.whatsappMessageId, chatMessages.organizacaoId],
+				where: sql`${chatMessages.whatsappMessageId} is not null`,
+			})
+			.returning({ id: chatMessages.id, dataEnvio: chatMessages.dataEnvio });
+
+		if (!row) return null;
+
+		await tx
+			.update(chats)
+			.set({
+				ultimaMensagemId: row.id,
+				ultimaMensagemData: row.dataEnvio,
+				ultimaMensagemEntradaData: row.dataEnvio,
+				// Incremento no SQL, não a partir do valor lido: webhooks concorrentes
+				// sobrescreviam o contador um do outro no código antigo.
+				mensagensNaoLidas: sql`${chats.mensagensNaoLidas} + 1`,
+				whatsappJanelaDataExpiracao: input.tipoConexao === "META_CLOUD_API" ? new Date(now.getTime() + WHATSAPP_WINDOW_MS) : null,
+			})
+			.where(eq(chats.id, input.chatId));
+
+		return row;
+	});
 
 	if (!inserted) return null;
-
-	await db
-		.update(chats)
-		.set({
-			ultimaMensagemId: inserted.id,
-			ultimaMensagemData: inserted.dataEnvio,
-			ultimaMensagemEntradaData: inserted.dataEnvio,
-			// Incremento no SQL, não a partir do valor lido: webhooks concorrentes
-			// sobrescreviam o contador um do outro no código antigo.
-			mensagensNaoLidas: sql`${chats.mensagensNaoLidas} + 1`,
-			whatsappJanelaDataExpiracao: input.tipoConexao === "META_CLOUD_API" ? new Date(now.getTime() + WHATSAPP_WINDOW_MS) : null,
-		})
-		.where(eq(chats.id, input.chatId));
 
 	await markChatNeedsResponse(db, {
 		organizacaoId: input.organizacaoId,
@@ -167,7 +176,42 @@ type TPersistOutboundParams = Omit<TPersistIncomingParams, "tipoConexao"> & {
 	/** `WHATSAPP_ECHO` = respondido pelo app no celular (Coexistence). */
 	origem: "WHATSAPP_ECHO" | "AI";
 	autorUsuarioId?: string | null;
+	/**
+	 * A mensagem chegou ao cliente (ou foi aceita pelo canal)? Padrão `true`.
+	 *
+	 * `false` é uma tentativa que já se sabe falha: a linha é gravada (o hub precisa mostrar a
+	 * FALHA), mas ela não pode contar como resposta — senão o chat sai de "aguardando resposta" e
+	 * o ticket vira EM_ATENDIMENTO enquanto o cliente nunca recebeu nada. É o mesmo contrato do
+	 * caminho do hub, que só marca a resposta depois de entregar.
+	 */
+	entregue?: boolean;
+	/**
+	 * A mensagem conta como resposta ao cliente? Padrão `true`.
+	 *
+	 * `false` para o aviso que a IA envia ao transferir para um humano: ele foi entregue, mas quem
+	 * recebeu o atendimento ainda precisa responder ao pedido do cliente. Contá-lo como resposta
+	 * apagaria a pendência e deixaria o ticket EM_ATENDIMENTO sem que ninguém tenha atendido.
+	 */
+	contarComoResposta?: boolean;
 };
+
+/**
+ * Registra no chat e no atendimento que uma mensagem de saída respondeu ao cliente: avança
+ * `ultimaMensagemSaidaData` (fecha a pendência) e grava as métricas de resposta.
+ *
+ * Separada do insert para o gateway interno, cuja mensagem nasce antes de saber se o envio
+ * vai para a fila e só pode contar como resposta depois que a fila a aceita.
+ */
+export async function registerOutboundAiMessageAnswered(input: { organizacaoId: string; chatId: string; responseDate: Date; now?: Date }) {
+	await db.update(chats).set({ ultimaMensagemSaidaData: input.responseDate }).where(eq(chats.id, input.chatId));
+	await markChatAnswered(db, {
+		organizacaoId: input.organizacaoId,
+		chatId: input.chatId,
+		responseDate: input.responseDate,
+		source: "AI",
+		now: input.now,
+	});
+}
 
 /**
  * Mensagem que saiu por fora do hub: echo do celular ou resposta da IA.
@@ -213,14 +257,19 @@ export async function persistOutboundNonHubMessage(input: TPersistOutboundParams
 
 	if (!inserted) return null;
 
+	// Echo do celular já foi entregue por definição; só a IA tem tentativa falha ou aviso de handoff.
+	const countsAsAnswer = isEcho || ((input.entregue ?? true) && (input.contarComoResposta ?? true));
+
 	await db
 		.update(chats)
 		.set({
 			ultimaMensagemId: inserted.id,
 			ultimaMensagemData: inserted.dataEnvio,
-			ultimaMensagemSaidaData: inserted.dataEnvio,
+			...(countsAsAnswer ? { ultimaMensagemSaidaData: inserted.dataEnvio } : {}),
 		})
 		.where(eq(chats.id, input.chatId));
+
+	if (!countsAsAnswer) return { messageId: inserted.id, dataEnvio: inserted.dataEnvio };
 
 	if (isEcho) {
 		await markChatAttendedExternally(db, {

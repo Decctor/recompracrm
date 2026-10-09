@@ -85,27 +85,32 @@ export function renderTemplatePlainContent(template: NonNullable<TApprovedTempla
 /**
  * Valida que o template existe, é da organização e está **aprovado para o número em uso**.
  *
- * A aprovação da Meta é por telefone e vive em `metadados.porNumeroTelefone[telefoneId]`;
- * a coluna `status` da tabela é o ciclo de vida interno (RASCUNHO/ATIVO/ARQUIVADO) e não
- * diz nada sobre a aprovação.
+ * A aprovação da Meta é por telefone e vive em `metadados.porNumeroTelefone[<id>]`; a coluna
+ * `status` da tabela é o ciclo de vida interno (RASCUNHO/ATIVO/ARQUIVADO) e não diz nada sobre
+ * a aprovação.
+ *
+ * A chave é o **id da linha** de `whatsapp_connection_phones` (`chats.whatsappConexaoTelefoneId`),
+ * que é o que a submissão, a sincronização e o construtor de campanhas gravam. Não é o id do
+ * número na Meta (`chats.whatsappTelefoneId`): o envio do hub passava esse e nenhum template
+ * jamais constava como aprovado.
  */
 export async function resolveApprovedTemplate({
 	organizacaoId,
 	messageTemplateId,
-	whatsappTelefoneId,
+	conexaoTelefoneId,
 }: {
 	organizacaoId: string;
 	messageTemplateId: string;
-	whatsappTelefoneId: string | null;
+	conexaoTelefoneId: string | null;
 }) {
 	const template = await db.query.messageTemplates.findFirst({
 		where: and(eq(messageTemplates.id, messageTemplateId), eq(messageTemplates.organizacaoId, organizacaoId)),
 	});
 	if (!template) throw new createHttpError.NotFound("Template não encontrado.");
 
-	if (!whatsappTelefoneId) throw new createHttpError.BadRequest("Número do WhatsApp não configurado para este chat.");
+	if (!conexaoTelefoneId) throw new createHttpError.BadRequest("Número do WhatsApp não configurado para este chat.");
 
-	const phoneMetadata = template.metadados?.porNumeroTelefone?.[whatsappTelefoneId];
+	const phoneMetadata = template.metadados?.porNumeroTelefone?.[conexaoTelefoneId];
 	if (phoneMetadata?.status !== "APROVADO") {
 		throw new createHttpError.BadRequest(`O template "${template.nome}" não está aprovado para este número.`);
 	}

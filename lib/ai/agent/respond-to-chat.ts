@@ -58,7 +58,20 @@ export type TAgentMessageDeliverer = (args: {
 	agenteId: string;
 	/** Preenchido quando a mensagem é uma retomada programada: a bolha do hub a rotula. */
 	retomadaId?: string | null;
-}) => Promise<{ messageId: string | null }>;
+	/**
+	 * A run transferiu o atendimento a um humano e esta é a mensagem de despedida: o adapter
+	 * a entrega, mas não a conta como resposta — o humano que recebeu o ticket ainda tem de
+	 * atender o pedido, e o chat precisa continuar "aguardando resposta" para ele.
+	 */
+	manterPendente?: boolean;
+}) => Promise<{
+	messageId: string | null;
+	/**
+	 * A mensagem chegou ao cliente (ou foi aceita pelo canal)? `false` com `messageId` preenchido é
+	 * a linha FALHA: existe para o hub exibir, mas não é resposta e não justifica retomada.
+	 */
+	entregue: boolean;
+}>;
 
 /** Turno de retomada: o que o agente pediu ao agendar, para o prompt do turno. */
 export type TRespondToChatFollowUp = { id: string; objetivo: string; horasSilencio: number | null };
@@ -137,6 +150,7 @@ export async function respondToChatWithAgent({
 	}
 
 	let messageId: string | null = null;
+	let messageDelivered = false;
 	// Um anexo sozinho é entrega legítima: o arquivo pode ser a resposta inteira.
 	if (output.mensagem?.trim() || output.anexo) {
 		// A run não é cancelável em andamento; este é o ponto de corte. Se o cliente mandou
@@ -156,12 +170,16 @@ export async function respondToChatWithAgent({
 			runId: prepared.run.id,
 			agenteId: prepared.toolContext.agent.id,
 			retomadaId: retomada?.id ?? null,
+			// O handoff desta run já aconteceu no turno (a ferramenta roda antes da entrega).
+			manterPendente: prepared.toolContext.effects.handoffAttendanceId !== null,
 		});
 		messageId = delivered.messageId;
+		messageDelivered = delivered.entregue;
 		if (messageId) await linkAgentRunMessage(database, { runId: prepared.run.id, mensagemId: messageId });
 	}
 
 	// O resumo é acessório: já respondemos ao cliente, e uma falha aqui não deve derrubar o turno.
+	// Sem ticket ativo (`null`) não há o que atualizar — não é erro, e não abre ticket.
 	if (output.resumoAtendimento?.trim()) {
 		try {
 			await updateChatAttendanceSummary(database, { organizacaoId, chatId, resumo: output.resumoAtendimento.trim() });
@@ -174,7 +192,9 @@ export async function respondToChatWithAgent({
 	// Acessória como o resumo, e só em turnos que respondem ao cliente — uma retomada nunca
 	// agenda outra retomada, e o playground não tem cliente para esperar.
 	let retomadaAgendada: TRespondToChatResult["retomadaAgendada"] = null;
-	if (output.retomada && messageId && (gatilho === "CHAT_MENSAGEM" || gatilho === "ATRIBUICAO_HUB")) {
+	// Só com mensagem entregue: um envio que falhou não deixou nada para o cliente "retomar", e o lembrete
+	// sairia sobre uma conversa em que a IA nunca falou.
+	if (output.retomada && messageId && messageDelivered && (gatilho === "CHAT_MENSAGEM" || gatilho === "ATRIBUICAO_HUB")) {
 		try {
 			const scheduled = await scheduleFollowUpFromTurn(database, {
 				organizacaoId,

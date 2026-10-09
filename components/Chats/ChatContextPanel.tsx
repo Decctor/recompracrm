@@ -23,7 +23,6 @@ import {
 	MapPin,
 	Package,
 	Repeat2,
-	Smartphone,
 	Sparkles,
 	Tag,
 	UserRound,
@@ -31,7 +30,8 @@ import {
 import { stripCatalogMemory } from "@/lib/ai/agent/run-memory";
 import { AiRunsHistory } from "./AiRunsHistory";
 import { formatFollowUpMoment } from "./FollowUpNotice";
-import { ChatAssignmentActions } from "./ChatAssignmentActions";
+import { ChatAssignmentActions, type TChatActionPermissions } from "./ChatAssignmentActions";
+import { RESPONSIBLE_META, STATUS_META } from "./attendance-meta";
 import { ChatQuotesBlock } from "./Quotes/ChatQuotesBlock";
 import type { TQuotePermissions } from "./Quotes/config";
 
@@ -50,18 +50,13 @@ type ChatContextPanelProps = {
 	chatId: string;
 	chat: TChatMessagesPage["chat"];
 	currentUserId: string;
+	/** Já resolvidas para esta conversa (dono ou gestor); o painel só repassa às ações. */
+	actionPermissions: TChatActionPermissions;
 	quotePermissions: TQuotePermissions;
 	/** Ausente quando a conversa não aceita mensagem agora (sem posse ou fora da janela de 24h). */
 	onInsertQuoteInConversation?: (texto: string) => void;
 	className?: string;
 };
-
-const RESPONSIBLE_LABELS = {
-	USUARIO: "Responsável",
-	AGENTE: "Automação",
-	EXTERNO: "Atendido pelo telefone",
-	NAO_ATRIBUIDO: "Sem responsável",
-} as const;
 
 const WINDOW_TONE = {
 	aberta: "text-muted-foreground",
@@ -147,15 +142,31 @@ function CouponBenefit({ beneficioTipo, beneficioValor }: { beneficioTipo: strin
 	return <>Oferta especial</>;
 }
 
-function AttendanceTab({ chatId, chat, currentUserId }: Pick<ChatContextPanelProps, "chatId" | "chat" | "currentUserId">) {
+function AttendanceTab({
+	chatId,
+	chat,
+	currentUserId,
+	actionPermissions,
+}: Pick<ChatContextPanelProps, "chatId" | "chat" | "currentUserId" | "actionPermissions">) {
 	const atendimento = chat.atendimentoAtivo;
+	// Sem ticket ativo, o último encerrado diz em que pé a conversa ficou (em vez de parecer livre).
+	const encerrado = atendimento ? null : chat.ultimoAtendimentoEncerrado;
+	const responsibleMeta = RESPONSIBLE_META[atendimento?.responsavelTipo ?? "NAO_ATRIBUIDO"];
+	const ResponsibleIcon = responsibleMeta.icon;
 	const janela = getWhatsappWindowDisplay({ expiracao: chat.whatsappJanelaDataExpiracao, tipoConexao: chat.conexaoTipo });
 
 	return (
 		<div className="flex flex-col gap-4">
 			<div>
 				<SectionTitle>Ações</SectionTitle>
-				<ChatAssignmentActions chatId={chatId} atendimento={atendimento} atendimentoIa={chat.atendimentoIa} currentUserId={currentUserId} />
+				<ChatAssignmentActions
+					chatId={chatId}
+					atendimento={atendimento}
+					atendimentoIa={chat.atendimentoIa}
+					currentUserId={currentUserId}
+					permissions={actionPermissions}
+					atendimentoEncerrado={encerrado}
+				/>
 			</div>
 
 			<div className="border-t border-border pt-3">
@@ -174,13 +185,25 @@ function AttendanceTab({ chatId, chat, currentUserId }: Pick<ChatContextPanelPro
 						</span>
 					) : (
 						<span className="inline-flex items-center gap-1">
-							{atendimento?.responsavelTipo === "AGENTE" && <Sparkles className="h-3 w-3" />}
-							{atendimento?.responsavelTipo === "EXTERNO" && <Smartphone className="h-3 w-3" />}
-							{RESPONSIBLE_LABELS[atendimento?.responsavelTipo ?? "NAO_ATRIBUIDO"]}
+							{(atendimento?.responsavelTipo === "AGENTE" || atendimento?.responsavelTipo === "EXTERNO") && <ResponsibleIcon className="h-3 w-3" />}
+							{responsibleMeta.label}
 						</span>
 					)}
 				</InfoRow>
-				<InfoRow label="Desde">{formatRelative(atendimento?.dataAtribuicao)}</InfoRow>
+				{encerrado ? (
+					<>
+						<InfoRow label="Status">
+							<span className="inline-flex items-center gap-1.5">
+								<span className={cn("h-2 w-2 shrink-0 rounded-full", STATUS_META[encerrado.status].dot)} aria-hidden />
+								{STATUS_META[encerrado.status].label}
+							</span>
+						</InfoRow>
+						<InfoRow label="Encerrado">{formatRelative(encerrado.dataEncerramento)}</InfoRow>
+						{encerrado.resultado && <InfoRow label="Resultado">{encerrado.resultado}</InfoRow>}
+					</>
+				) : (
+					<InfoRow label="Desde">{formatRelative(atendimento?.dataAtribuicao)}</InfoRow>
+				)}
 				{atendimento?.transferenciaMotivo && <InfoRow label="Motivo">{atendimento.transferenciaMotivo}</InfoRow>}
 				{chat.retomadaAgendada && (
 					<InfoRow label="Retomada">
@@ -491,7 +514,15 @@ function ActivityTab({ chat }: { chat: TChatMessagesPage["chat"] }) {
 	);
 }
 
-export function ChatContextPanel({ chatId, chat, currentUserId, quotePermissions, onInsertQuoteInConversation, className }: ChatContextPanelProps) {
+export function ChatContextPanel({
+	chatId,
+	chat,
+	currentUserId,
+	actionPermissions,
+	quotePermissions,
+	onInsertQuoteInConversation,
+	className,
+}: ChatContextPanelProps) {
 	return (
 		<Tabs defaultValue="atendimento" className={cn("flex h-full min-h-0 flex-col", className)}>
 			<div className="shrink-0 px-3 pt-3">
@@ -513,7 +544,7 @@ export function ChatContextPanel({ chatId, chat, currentUserId, quotePermissions
 
 			<div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4 pt-3">
 				<TabsContent value="atendimento" className="mt-0">
-					<AttendanceTab chatId={chatId} chat={chat} currentUserId={currentUserId} />
+					<AttendanceTab chatId={chatId} chat={chat} currentUserId={currentUserId} actionPermissions={actionPermissions} />
 				</TabsContent>
 				<TabsContent value="cliente" className="mt-0">
 					<ClientTab chatId={chatId} chat={chat} quotePermissions={quotePermissions} onInsertQuoteInConversation={onInsertQuoteInConversation} />

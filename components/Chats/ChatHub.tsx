@@ -5,6 +5,7 @@ import type { TAuthUserSession } from "@/lib/authentication/types";
 import { cn } from "@/lib/utils";
 import { MessageSquare } from "lucide-react";
 import { ChatSidebar } from "./ChatSidebar";
+import type { TAttendancePermissions } from "./ChatAssignmentActions";
 import { ChatThread } from "./ChatThread";
 import type { TQuotePermissions } from "./Quotes/config";
 
@@ -16,9 +17,18 @@ type ChatHubProps = {
 	selectedChatId: string | null;
 	onSelectChat: (chatId: string | null) => void;
 	quotePermissions: TQuotePermissions;
+	attendancePermissions: TAttendancePermissions;
 };
 
-export default function ChatHub({ user, organizationId, whatsappConnections, selectedChatId, onSelectChat, quotePermissions }: ChatHubProps) {
+export default function ChatHub({
+	user,
+	organizationId,
+	whatsappConnections,
+	selectedChatId,
+	onSelectChat,
+	quotePermissions,
+	attendancePermissions,
+}: ChatHubProps) {
 	const currentUser = { id: user.id, nome: user.nome, avatarUrl: user.avatarUrl };
 
 	return (
@@ -41,6 +51,7 @@ export default function ChatHub({ user, organizationId, whatsappConnections, sel
 						organizationId={organizationId}
 						currentUser={currentUser}
 						quotePermissions={quotePermissions}
+						attendancePermissions={attendancePermissions}
 						onBack={() => onSelectChat(null)}
 						onOpenChat={onSelectChat}
 					/>

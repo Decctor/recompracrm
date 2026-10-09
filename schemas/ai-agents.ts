@@ -273,6 +273,16 @@ export function isClientInAgentScope(escopo: TAiAgentScope, clienteId: string): 
 	return true;
 }
 
+/**
+ * O cliente foi nomeado numa lista de inclusão. É a única forma de o agente atender um número
+ * da equipe: a lista explícita vence a regra do telefone da equipe, e é assim que a loja testa
+ * o agente no próprio número antes de liberá-lo para todo mundo. `TODOS` e `EXCLUIR` não contam
+ * — não nomeiam ninguém.
+ */
+export function isClientExplicitlyIncludedInAgentScope(escopo: TAiAgentScope, clienteId: string): boolean {
+	return escopo.tipo === "INCLUIR" && isClientInAgentScope(escopo, clienteId);
+}
+
 // ============================================================================
 // EXECUÇÃO (run)
 // ============================================================================

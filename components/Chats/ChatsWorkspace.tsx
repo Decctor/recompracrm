@@ -6,6 +6,7 @@ import type { TAuthUserSession } from "@/lib/authentication/types";
 import { BarChart3, Columns3, MessagesSquare } from "lucide-react";
 import { useCallback, useState } from "react";
 import ChatsBoard from "./Board/ChatsBoard";
+import type { TAttendancePermissions } from "./ChatAssignmentActions";
 import ChatHub from "./ChatHub";
 import type { TQuotePermissions } from "./Quotes/config";
 import ChatsStatsSection from "./Stats/ChatsStatsSection";
@@ -28,11 +29,11 @@ type ChatsWorkspaceProps = {
 	user: TAuthUserSession["user"];
 	organizationId: string;
 	whatsappConnections: TGetWhatsappConnectionsOutput["data"];
-	canManageAttendances: boolean;
+	attendancePermissions: TAttendancePermissions;
 	quotePermissions: TQuotePermissions;
 };
 
-export default function ChatsWorkspace({ user, organizationId, whatsappConnections, canManageAttendances, quotePermissions }: ChatsWorkspaceProps) {
+export default function ChatsWorkspace({ user, organizationId, whatsappConnections, attendancePermissions, quotePermissions }: ChatsWorkspaceProps) {
 	const [tab, setTab] = useState<TChatsWorkspaceTab>("hub");
 	const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
 
@@ -81,6 +82,7 @@ export default function ChatsWorkspace({ user, organizationId, whatsappConnectio
 						selectedChatId={selectedChatId}
 						onSelectChat={setSelectedChatId}
 						quotePermissions={quotePermissions}
+						attendancePermissions={attendancePermissions}
 					/>
 				</TabsContent>
 
@@ -90,7 +92,7 @@ export default function ChatsWorkspace({ user, organizationId, whatsappConnectio
 				</TabsContent>
 
 				<TabsContent value="estatisticas" className="mt-3 flex min-h-0 flex-1 flex-col">
-					<ChatsStatsSection whatsappConnections={whatsappConnections} canManageAttendances={canManageAttendances} />
+					<ChatsStatsSection whatsappConnections={whatsappConnections} canManageAttendances={attendancePermissions.canManage} />
 				</TabsContent>
 			</Tabs>
 		</div>

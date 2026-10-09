@@ -34,12 +34,10 @@ export const CHAT_BOARD_COLUMN_LIMIT = 60;
 /**
  * `ENCERRADO` é vitrine, não área de drop.
  *
- * `changeChatAttendanceStatus` passa por `ensureCurrentAttendance`, que só enxerga
- * atendimentos não-terminais. Aplicado a um ticket encerrado, ele **cria um atendimento
- * novo** em vez de reabrir o antigo — o card sairia da coluna deixando para trás um
- * histórico órfão e começando outro com métricas zeradas. Reabrir de verdade exigiria uma
- * ação própria em `lib/chats/attendance-state.ts`; até lá, o caminho legítimo de reabertura
- * é o cliente mandar uma mensagem nova (`markChatNeedsResponse`).
+ * `changeChatAttendanceStatus` só enxerga atendimentos não-terminais: aplicado a um ticket
+ * encerrado não há o que alterar e a rota responde 409. Reabrir de verdade exigiria uma ação
+ * própria em `lib/chats/attendance-state.ts`; até lá, o caminho legítimo de reabertura é o
+ * cliente mandar uma mensagem nova (`markChatNeedsResponse`).
  */
 export function isValidChatBoardTransition(from: TChatAssignmentStatus, to: TChatAssignmentStatus) {
 	if (from === to) return false;

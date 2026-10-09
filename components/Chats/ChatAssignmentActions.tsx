@@ -13,6 +13,8 @@ import {
 	DropdownMenuSubTrigger,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { chatBoardTransitionNeedsConfirmation } from "@/lib/chats/board";
 import { getErrorMessage } from "@/lib/errors";
 import { PRIORITY_META, STATUS_META } from "./attendance-meta";
 import { cn } from "@/lib/utils";
@@ -26,11 +28,26 @@ import { toast } from "sonner";
 
 type TAtendimentoIa = TChatMessagesPage["chat"]["atendimentoIa"];
 
+/**
+ * Permissões do usuário no módulo, como a página as lê da sessão. `canManage` é
+ * `atendimentos.finalizar`, que no servidor significa "gerir qualquer atendimento", não só encerrar.
+ */
+export type TAttendancePermissions = { canRespond: boolean; canManage: boolean };
+
+/**
+ * Permissões já resolvidas para UMA conversa: `canManageThis` = dono ou gestor (`mayManageAssignment`).
+ * O servidor aplica as mesmas regras; aqui elas só evitam oferecer o que voltaria como 403.
+ */
+export type TChatActionPermissions = { canRespond: boolean; canManageThis: boolean };
+
 type ChatAssignmentActionsProps = {
 	chatId: string;
 	atendimento: TChatAttendance;
 	atendimentoIa: TAtendimentoIa;
 	currentUserId: string;
+	permissions: TChatActionPermissions;
+	/** Último ticket encerrado quando não há ativo: o botão de status mostra como terminou, não "Definir". */
+	atendimentoEncerrado?: { status: TChatAssignmentStatus } | null;
 	/**
 	 * Header da thread: só posse e roteamento (assumir/liberar/transferir). Status e
 	 * prioridade vivem no painel de contexto — são decisões, não reflexos, e no header
@@ -117,11 +134,16 @@ export function ChatAssignmentActions({
 	atendimento,
 	atendimentoIa,
 	currentUserId,
+	permissions,
+	atendimentoEncerrado = null,
 	compact = false,
 	collapsed = false,
 	overflowItems,
 }: ChatAssignmentActionsProps) {
+	const { canRespond, canManageThis } = permissions;
 	const [transferMenuOpen, setTransferMenuOpen] = useState(false);
+	// Status terminal pede confirmação, como no quadro: a escolha fica pendente até o diálogo.
+	const [pendingTerminalStatus, setPendingTerminalStatus] = useState<TChatAssignmentStatus | null>(null);
 	const { mutate, isPending } = useChatAssignmentMutation(chatId);
 
 	const isOwner = atendimento?.responsavelTipo === "USUARIO" && atendimento.responsavelUsuarioId === currentUserId;
@@ -136,10 +158,27 @@ export function ChatAssignmentActions({
 			? "ASSUMIR DA IA"
 			: atendimento?.responsavelTipo === "EXTERNO"
 				? "ASSUMIR DO TELEFONE"
-				: "ASSUMIR";
+				: atendimento?.responsavelTipo === "USUARIO"
+					? `ASSUMIR DE ${(atendimento.responsavelUsuario?.nome ?? "outro atendente").toUpperCase()}`
+					: "ASSUMIR";
 	const assumeLabel = compact ? "ASSUMIR" : assumeDetail;
 	// Uma única escala para tudo que divide a faixa do header: mesma altura, mesmo peso.
 	const actionTypography = "text-[11px] font-extrabold uppercase tracking-[0.08em]";
+
+	// Liberar também é do gestor quando o responsável é outra pessoa ou a IA (o servidor aceita dono
+	// ou `finalizar`); o telefone fica de fora porque aquela posse só sai assumindo.
+	const managerCanRelease = !isOwner && canManageThis && (atendimento?.responsavelTipo === "USUARIO" || atendimento?.responsavelTipo === "AGENTE");
+	const canRelease = canRespond && (isOwner || managerCanRelease);
+
+	// Transferir, status e prioridade exigem `responder` para entrar, um atendimento ativo e dono
+	// ou gestor. A razão aparece no title e, no painel, numa linha visível (title não existe no toque).
+	const manageBlockedReason = !canRespond
+		? "Você não possui permissão para responder atendimentos."
+		: !atendimento
+			? "Conversa sem atendimento ativo"
+			: !canManageThis
+				? "Somente o responsável ou um gestor pode alterar este atendimento."
+				: null;
 
 	const transferItems = (
 		<ChatTransferMenuItems
@@ -152,24 +191,26 @@ export function ChatAssignmentActions({
 
 	return (
 		<div className={cn(compact ? "flex items-center gap-1.5" : "flex flex-col gap-2")}>
-			{!isOwner && (
+			{!isOwner && canRespond && (
 				<Button
 					size="sm"
-					className={cn("gap-1", actionTypography, !compact && "col-span-2 w-full")}
+					className={cn("min-w-0 gap-1", actionTypography, !compact && "col-span-2 w-full")}
 					title={assumeDetail !== assumeLabel ? assumeDetail : undefined}
 					disabled={isPending}
 					onClick={() => mutate({ acao: "assumir", chatId })}
 				>
-					<UserPlus className="h-3 w-3" />
-					{assumeLabel}
+					<UserPlus className="h-3 w-3 shrink-0" />
+					{/* Nome de colega pode ser longo: trunca em vez de empurrar o painel. */}
+					<span className="truncate">{assumeLabel}</span>
 				</Button>
 			)}
 
-			{isOwner && (
+			{canRelease && (
 				<Button
 					size="sm"
 					variant="outline"
 					className={cn("gap-1 text-[11px]", !compact && "col-span-2 w-full")}
+					title="Devolver para a fila"
 					disabled={isPending}
 					onClick={() => mutate({ acao: "liberar", chatId })}
 				>
@@ -189,7 +230,7 @@ export function ChatAssignmentActions({
 					/>
 					<DropdownMenuContent align="end">
 						<DropdownMenuSub onOpenChange={setTransferMenuOpen}>
-							<DropdownMenuSubTrigger>
+							<DropdownMenuSubTrigger disabled={!!manageBlockedReason} title={manageBlockedReason ?? undefined}>
 								<ArrowRightLeft className="h-4 w-4" />
 								Transferir
 							</DropdownMenuSubTrigger>
@@ -206,7 +247,8 @@ export function ChatAssignmentActions({
 								size="sm"
 								variant="outline"
 								className={cn("gap-1", actionTypography, !compact && "col-span-2 w-full")}
-								disabled={isPending}
+								disabled={isPending || !!manageBlockedReason}
+								title={manageBlockedReason ?? undefined}
 								aria-label="Transferir atendimento"
 							>
 								TRANSFERIR
@@ -230,11 +272,21 @@ export function ChatAssignmentActions({
 				<DropdownMenu>
 					<DropdownMenuTrigger
 						render={
-							<Button size="sm" variant="outline" className="w-full justify-between gap-2 px-2.5 text-xs" disabled={isPending}>
+							<Button
+								size="sm"
+								variant="outline"
+								className="w-full justify-between gap-2 px-2.5 text-xs"
+								disabled={isPending || !!manageBlockedReason}
+								title={manageBlockedReason ?? undefined}
+							>
 								<span className="text-muted-foreground">Status</span>
 								<span className="flex min-w-0 items-center gap-1.5">
-									{atendimento && <span className={cn("h-2 w-2 shrink-0 rounded-full", STATUS_META[atendimento.status].dot)} />}
-									<span className="truncate">{atendimento ? STATUS_META[atendimento.status].label : "Definir"}</span>
+									{(atendimento ?? atendimentoEncerrado) && (
+										<span className={cn("h-2 w-2 shrink-0 rounded-full", STATUS_META[(atendimento ?? atendimentoEncerrado)!.status].dot)} />
+									)}
+									<span className="truncate">
+										{atendimento ? STATUS_META[atendimento.status].label : atendimentoEncerrado ? STATUS_META[atendimentoEncerrado.status].label : "Definir"}
+									</span>
 									<ChevronDown className="h-3 w-3 shrink-0 opacity-60" />
 								</span>
 							</Button>
@@ -245,7 +297,13 @@ export function ChatAssignmentActions({
 							{(Object.keys(STATUS_META) as TChatAssignmentStatus[]).map((status) => {
 								const StatusIcon = STATUS_META[status].icon;
 								return (
-									<DropdownMenuItem key={status} className="gap-2" onClick={() => mutate({ acao: "alterar_status", chatId, status })}>
+									<DropdownMenuItem
+										key={status}
+										className="gap-2"
+										onClick={() =>
+											chatBoardTransitionNeedsConfirmation(status) ? setPendingTerminalStatus(status) : mutate({ acao: "alterar_status", chatId, status })
+										}
+									>
 										<StatusIcon className={cn("h-3.5 w-3.5", STATUS_META[status].dot.replace("bg-", "text-"))} />
 										{STATUS_META[status].label}
 									</DropdownMenuItem>
@@ -260,7 +318,13 @@ export function ChatAssignmentActions({
 				<DropdownMenu>
 					<DropdownMenuTrigger
 						render={
-							<Button size="sm" variant="outline" className="w-full justify-between gap-2 px-2.5 text-xs" disabled={isPending}>
+							<Button
+								size="sm"
+								variant="outline"
+								className="w-full justify-between gap-2 px-2.5 text-xs"
+								disabled={isPending || !!manageBlockedReason}
+								title={manageBlockedReason ?? undefined}
+							>
 								<span className="text-muted-foreground">Prioridade</span>
 								<span className="flex min-w-0 items-center gap-1">
 									<span className="truncate">{atendimento?.prioridade ? PRIORITY_META[atendimento.prioridade].label : "Nenhuma"}</span>
@@ -282,6 +346,8 @@ export function ChatAssignmentActions({
 				</DropdownMenu>
 			)}
 
+			{!compact && manageBlockedReason && <p className="col-span-2 text-[11px] text-muted-foreground">{manageBlockedReason}</p>}
+
 			{!compact && atendimento?.responsavelTipo === "AGENTE" && (
 				<span
 					className={cn("flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground", !compact && "col-span-2 w-fit")}
@@ -296,6 +362,35 @@ export function ChatAssignmentActions({
 					<Smartphone className="h-3 w-3" /> TELEFONE
 				</span>
 			)}
+
+			{/* Mesma confirmação e mesmo texto do quadro: encerrar e cancelar não têm volta por aqui. */}
+			<Dialog open={pendingTerminalStatus !== null} onOpenChange={(open) => !open && setPendingTerminalStatus(null)}>
+				<DialogContent className="sm:max-w-md">
+					<DialogHeader>
+						<DialogTitle>{pendingTerminalStatus === "CANCELADO" ? "Cancelar atendimento?" : "Encerrar atendimento?"}</DialogTitle>
+						<DialogDescription>
+							{pendingTerminalStatus === "CANCELADO"
+								? "O atendimento sai do quadro. Uma nova mensagem do cliente abre um atendimento novo, do zero."
+								: "O atendimento sai do fluxo e passa a aparecer só na coluna de encerrados, dentro da janela escolhida. Não é possível trazê-lo de volta pelo quadro."}
+						</DialogDescription>
+					</DialogHeader>
+					<DialogFooter>
+						<Button variant="outline" onClick={() => setPendingTerminalStatus(null)}>
+							VOLTAR
+						</Button>
+						<Button
+							variant={pendingTerminalStatus === "CANCELADO" ? "destructive" : "default"}
+							disabled={isPending}
+							onClick={() => {
+								if (pendingTerminalStatus) mutate({ acao: "alterar_status", chatId, status: pendingTerminalStatus });
+								setPendingTerminalStatus(null);
+							}}
+						>
+							{pendingTerminalStatus === "CANCELADO" ? "CANCELAR ATENDIMENTO" : "ENCERRAR"}
+						</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
 		</div>
 	);
 }

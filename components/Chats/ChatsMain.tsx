@@ -5,19 +5,20 @@ import { getErrorMessage } from "@/lib/errors";
 import { useWhatsappConnections } from "@/lib/queries/whatsapp-connections";
 import ErrorComponent from "../Layouts/ErrorComponent";
 import LoadingComponent from "../Layouts/LoadingComponent";
+import type { TAttendancePermissions } from "./ChatAssignmentActions";
 import ChatsWorkspace from "./ChatsWorkspace";
 import type { TQuotePermissions } from "./Quotes/config";
 
 type ChatsMainProps = {
 	user: TAuthUserSession["user"];
 	organizationId: string;
-	/** `atendimentos.finalizar`: libera o ranking nominal na aba de estatísticas. */
-	canManageAttendances: boolean;
+	/** `canManage` (`atendimentos.finalizar`) também libera o ranking nominal na aba de estatísticas. */
+	attendancePermissions: TAttendancePermissions;
 	/** Permissões de venda: o hub e o módulo comercial são gateados de forma independente. */
 	quotePermissions: TQuotePermissions;
 };
 
-export default function ChatsMain({ user, organizationId, canManageAttendances, quotePermissions }: ChatsMainProps) {
+export default function ChatsMain({ user, organizationId, attendancePermissions, quotePermissions }: ChatsMainProps) {
 	const { data: whatsappConnections, isPending, isError, error } = useWhatsappConnections();
 
 	if (isPending) return <LoadingComponent />;
@@ -31,7 +32,7 @@ export default function ChatsMain({ user, organizationId, canManageAttendances, 
 			user={user}
 			organizationId={organizationId}
 			whatsappConnections={whatsappConnections}
-			canManageAttendances={canManageAttendances}
+			attendancePermissions={attendancePermissions}
 			quotePermissions={quotePermissions}
 		/>
 	);

@@ -1,6 +1,8 @@
+import { getAgentDailyRunLimitState } from "@/lib/ai/agent/run-limit";
 import { isAiSpendLimitReached } from "@/lib/ai/agent/spend";
 import { parseJsonbWithFallback } from "@/lib/ai/shared/json";
-import { AiAgentScopeSchema, isClientInAgentScope } from "@/schemas/ai-agents";
+import { isOrganizationStaffPhone, resolveClientPhoneBase } from "@/lib/chats/staff-phone";
+import { AiAgentCapabilitiesSchema, AiAgentScopeSchema, isClientExplicitlyIncludedInAgentScope, isClientInAgentScope } from "@/schemas/ai-agents";
 import type { TOrganizationConfiguration } from "@/schemas/organizations";
 import type { DB, DBTransaction } from "@/services/drizzle";
 import { aiAgents, chats, whatsappConnectionPhones } from "@/services/drizzle/schema";
@@ -23,7 +25,14 @@ import { and, eq } from "drizzle-orm";
 
 type TDb = DB | DBTransaction;
 
-export type TAiAssignmentBlockReason = "RECURSO_INDISPONIVEL" | "TELEFONE_SEM_IA" | "AGENTE_PAUSADO" | "CLIENTE_FORA_DO_ESCOPO" | "LIMITE_CREDITOS";
+export type TAiAssignmentBlockReason =
+	| "RECURSO_INDISPONIVEL"
+	| "TELEFONE_SEM_IA"
+	| "AGENTE_PAUSADO"
+	| "CLIENTE_FORA_DO_ESCOPO"
+	| "NUMERO_DA_EQUIPE"
+	| "LIMITE_CREDITOS"
+	| "LIMITE_EXECUCOES_DIARIAS";
 
 export type TAiAssignmentAvailability =
 	| { disponivel: true; agenteId: string | null; agenteNome: string | null }
@@ -34,7 +43,11 @@ export const AI_ASSIGNMENT_BLOCK_MESSAGES: Record<TAiAssignmentBlockReason, stri
 	TELEFONE_SEM_IA: "O atendimento com IA não está habilitado para o número desta conversa.",
 	AGENTE_PAUSADO: "O agente de IA da organização está pausado.",
 	CLIENTE_FORA_DO_ESCOPO: "O cliente desta conversa está fora do escopo de atendimento do agente de IA.",
+	NUMERO_DA_EQUIPE:
+		"O número desta conversa pertence a alguém da equipe da organização e o agente de IA não atende a equipe. Para testar o agente com este número, inclua o cliente na lista de atendimento do agente.",
 	LIMITE_CREDITOS: "A organização atingiu o limite mensal de créditos de IA.",
+	LIMITE_EXECUCOES_DIARIAS:
+		"O agente de IA atingiu o limite diário de execuções. Ele volta a responder amanhã, ou o limite pode ser ajustado nas configurações do agente.",
 };
 
 export async function resolveAiAssignmentAvailability(
@@ -51,6 +64,7 @@ export async function resolveAiAssignmentAvailability(
 	const chat = await db.query.chats.findFirst({
 		where: and(eq(chats.id, input.chatId), eq(chats.organizacaoId, input.organizacaoId)),
 		columns: { whatsappConexaoTelefoneId: true, clienteId: true },
+		with: { cliente: { columns: { telefone: true, telefoneBase: true } } },
 	});
 	if (!chat?.whatsappConexaoTelefoneId) return { disponivel: false, motivo: "TELEFONE_SEM_IA" };
 
@@ -65,17 +79,34 @@ export async function resolveAiAssignmentAvailability(
 	// organização como efeito de abrir uma conversa seria um efeito colateral em caminho quente.
 	const agente = await db.query.aiAgents.findFirst({
 		where: eq(aiAgents.organizacaoId, input.organizacaoId),
-		columns: { id: true, nome: true, status: true, escopo: true },
+		columns: { id: true, nome: true, status: true, escopo: true, capacidades: true },
 	});
 	// Ausência de linha não é indisponibilidade: a organização tem o recurso e o número
 	// habilitados, e a atribuição provisiona o agente na primeira vez.
 	if (!agente) return { disponivel: true, agenteId: null, agenteNome: null };
 	if (agente.status !== "ATIVO") return { disponivel: false, motivo: "AGENTE_PAUSADO" };
 
+	// Mesmo teto que `prepareAgentExecution` aplica (via o mesmo helper): sem ele o hub entregava a
+	// conversa a um agente que, a cada turno, lança `AgentDailyRunLimitError` e nunca responde.
+	const capacidades = parseJsonbWithFallback(AiAgentCapabilitiesSchema, agente.capacidades);
+	const dailyLimit = await getAgentDailyRunLimitState(db, { organizacaoId: input.organizacaoId, maxRunsDiarios: capacidades.limites.maxRunsDiarios });
+	if (dailyLimit.reached) return { disponivel: false, motivo: "LIMITE_EXECUCOES_DIARIAS" };
+
 	// Mesma invariante dos demais gates: o hub não pode entregar ao agente uma conversa que o
 	// runtime vai recusar (`confirmClientInAgentScope`). Sem isto o botão existiria e a
 	// atribuição viraria silêncio para o cliente.
+	//
+	// A regra do telefone da equipe é a que mais engana: o runtime não só recusa como LIBERA o
+	// atendimento que acabou de ser entregue ao agente (`releaseIfOwnedByAgent`), então a
+	// atribuição pelo hub respondia sucesso e a conversa voltava para "sem responsável" no
+	// segundo seguinte. Mesma exceção do runtime: a lista de inclusão explícita vence.
 	const escopo = parseJsonbWithFallback(AiAgentScopeSchema, agente.escopo);
+	if (!isClientExplicitlyIncludedInAgentScope(escopo, chat.clienteId)) {
+		const telefoneBase = resolveClientPhoneBase(chat.cliente);
+		if (await isOrganizationStaffPhone(db, { organizationId: input.organizacaoId, telefoneBase })) {
+			return { disponivel: false, motivo: "NUMERO_DA_EQUIPE" };
+		}
+	}
 	if (!isClientInAgentScope(escopo, chat.clienteId)) return { disponivel: false, motivo: "CLIENTE_FORA_DO_ESCOPO" };
 
 	return { disponivel: true, agenteId: agente.id, agenteNome: agente.nome };
