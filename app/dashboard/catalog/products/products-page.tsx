@@ -1,4 +1,5 @@
 "use client";
+import dynamic from "next/dynamic";
 import DateIntervalInput from "@/components/Inputs/DateIntervalInput";
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
 import LoadingComponent from "@/components/Layouts/LoadingComponent";
@@ -15,6 +16,7 @@ import ProductsPortfolioAnalysisSection from "@/app/dashboard/catalog/products/p
 import StatUnitCard from "@/components/Stats/StatUnitCard";
 import GeneralPaginationComponent from "@/components/Utils/Pagination";
 import { Button } from "@/components/ui/button";
+import { ActionToolbar } from "@/components/ui/action-toolbar";
 import { Chip } from "@/components/ui/chip";
 import ProductSearchInput from "@/components/Inputs/ProductSearchInput";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -40,6 +42,7 @@ import {
 	Code,
 	Diamond,
 	DollarSign,
+	FileSpreadsheet,
 	Info,
 	Layers,
 	Package,
@@ -56,6 +59,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { parseAsStringEnum, useQueryState } from "nuqs";
 import { type ReactNode, useState } from "react";
+
+const ExportProducts = dynamic(() => import("@/components/Modals/Products/ExportProducts"));
 
 type ProductsPageProps = {
 	user: TAuthUserSession["user"];
@@ -122,6 +127,7 @@ function ProductsDatabaseView({ user, userMembership, organization }: ProductsDa
 	const orgHasStockTracking = organization.configuracao.preferencias.rastreamentoEstoque;
 	const userHasPurchasesViewPermission = userMembership.permissoes.compras.visualizar;
 	const queryClient = useQueryClient();
+	const [exportModalIsOpen, setExportModalIsOpen] = useState(false);
 	const [newProductModalIsOpen, setNewProductModalIsOpen] = useState<boolean>(false);
 	const [suggestMainSuppliersModalIsOpen, setSuggestMainSuppliersModalIsOpen] = useState<boolean>(false);
 	const [recountingProductId, setRecountingProductId] = useState<string | null>(null);
@@ -168,16 +174,19 @@ function ProductsDatabaseView({ user, userMembership, organization }: ProductsDa
 		<div className="w-full flex flex-col gap-3">
 			<div className="w-full flex items-center gap-2 flex-col-reverse lg:flex-row">
 				<ProductSearchInput value={filters.search} onChange={(search, immediate) => updateFilters({ search }, immediate)} className="grow" />
-				{userHasPurchasesViewPermission ? (
-					<Button variant="outline" className="flex items-center gap-2" size="sm" onClick={() => setSuggestMainSuppliersModalIsOpen(true)}>
-						<Truck className="w-4 h-4 min-w-4 min-h-4" />
-						SUGERIR FORNECEDORES
-					</Button>
-				) : null}
-				<Button className="flex items-center gap-2" size="sm" onClick={() => setNewProductModalIsOpen(true)}>
-					<Plus className="w-4 h-4 min-w-4 min-h-4" />
-					NOVO PRODUTO
-				</Button>
+				<ActionToolbar collapseSecondary>
+					{userHasPurchasesViewPermission ? (
+						<ActionToolbar.Action icon={Truck} onClick={() => setSuggestMainSuppliersModalIsOpen(true)}>
+							SUGERIR FORNECEDORES
+						</ActionToolbar.Action>
+					) : null}
+					<ActionToolbar.Action icon={FileSpreadsheet} onClick={() => setExportModalIsOpen(true)}>
+						EXPORTAR
+					</ActionToolbar.Action>
+					<ActionToolbar.Primary icon={Plus} onClick={() => setNewProductModalIsOpen(true)}>
+						NOVO PRODUTO
+					</ActionToolbar.Primary>
+				</ActionToolbar>
 			</div>
 			<GeneralPaginationComponent
 				activePage={filters.page}
@@ -206,6 +215,7 @@ function ProductsDatabaseView({ user, userMembership, organization }: ProductsDa
 					<p className="w-full tracking-tight text-center">Nenhum produto encontrado.</p>
 				)
 			) : null}
+			{exportModalIsOpen ? <ExportProducts filters={filters} closeModal={() => setExportModalIsOpen(false)} /> : null}
 			{newProductModalIsOpen ? (
 				<NewProduct
 					user={user}

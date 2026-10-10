@@ -171,18 +171,32 @@ function resolveSecondaryMobileRender({
 	return <ActionToolbarOverflowMenu actions={secondary} />;
 }
 
-function ActionToolbarRoot({ children, className }: { children: React.ReactNode; className?: string }) {
+function ActionToolbarRoot({
+	children,
+	className,
+	collapseSecondary = false,
+}: {
+	children: React.ReactNode;
+	className?: string;
+	collapseSecondary?: boolean;
+}) {
 	const isDesktop = useMediaQuery("(min-width: 1024px)");
 	const { primary, secondary, ordered } = splitActionToolbarChildren(children);
 
 	return (
 		<div className={cn("flex shrink-0 items-center gap-2", className)} data-slot="action-toolbar">
-			{isDesktop ? (
+			{isDesktop && !collapseSecondary ? (
 				ordered
 			) : (
 				<>
 					{primary}
-					{resolveSecondaryMobileRender({ primary, secondary })}
+					{collapseSecondary ? (
+						secondary.length > 0 ? (
+							<ActionToolbarOverflowMenu actions={secondary} />
+						) : null
+					) : (
+						resolveSecondaryMobileRender({ primary, secondary })
+					)}
 				</>
 			)}
 		</div>

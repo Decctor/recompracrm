@@ -275,7 +275,7 @@ export const useProductState = ({ initialState }: UseProductStateProps = {}) => 
 			codigo: initialState?.product?.codigo ?? "",
 			nome: initialState?.product?.nome ?? "",
 			descricao: initialState?.product?.descricao ?? null,
-			unidade: initialState?.product?.unidade ?? "",
+			unidade: initialState?.product?.unidade ?? "UN",
 			ncm: initialState?.product?.ncm ?? "",
 			tipo: initialState?.product?.tipo ?? "",
 			grupo: initialState?.product?.grupo ?? "",
@@ -572,9 +572,7 @@ export const useProductState = ({ initialState }: UseProductStateProps = {}) => 
 
 	const moveProductAddOn = useCallback((index: number, direction: "up" | "down") => {
 		setState((prev) => {
-			const visible = prev.productAddOns
-				.map((addOn, originalIndex) => ({ addOn, originalIndex }))
-				.filter(({ addOn }) => !addOn.deletar);
+			const visible = prev.productAddOns.map((addOn, originalIndex) => ({ addOn, originalIndex })).filter(({ addOn }) => !addOn.deletar);
 			const position = visible.findIndex(({ originalIndex }) => originalIndex === index);
 			const target = direction === "up" ? position - 1 : position + 1;
 			if (position < 0 || target < 0 || target >= visible.length) return prev;

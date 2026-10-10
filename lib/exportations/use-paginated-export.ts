@@ -19,7 +19,7 @@ export type UsePaginatedExportReturn<TRow> = UsePaginatedLoopReturn & {
 	downloadXlsx: (fileName?: string) => void;
 };
 
-export type TPaginatedExportSheet = { name: string; rows: object[] };
+export type TPaginatedExportSheet = { name: string; rows: object[]; headers?: string[]; columnWidths?: number[] };
 
 type UsePaginatedExportParams<TRow> = {
 	fetchPage: (page: number) => Promise<TPaginatedExportPage<TRow>>;
@@ -74,9 +74,14 @@ export function usePaginatedExport<TRow extends object>({
 			}
 
 			const safeName = fileName?.trim().length ? fileName.trim() : `${fileNamePrefix}-${dayjs().format("YYYY-MM-DD_HH-mm-ss")}`;
-			const sheets = toSheets ? toSheets(exportData) : [{ name: sheetName, rows: exportData }];
+			const sheets: TPaginatedExportSheet[] = toSheets ? toSheets(exportData) : [{ name: sheetName, rows: exportData }];
 			const workbook = XLSX.utils.book_new();
-			for (const sheet of sheets) XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(sheet.rows), sheet.name);
+			for (const sheet of sheets) {
+				const worksheet = XLSX.utils.json_to_sheet(sheet.rows, { header: sheet.headers });
+				if (sheet.columnWidths) worksheet["!cols"] = sheet.columnWidths.map((wch) => ({ wch }));
+				if (sheet.headers && worksheet["!ref"]) worksheet["!autofilter"] = { ref: worksheet["!ref"] };
+				XLSX.utils.book_append_sheet(workbook, worksheet, sheet.name);
+			}
 			XLSX.writeFile(workbook, `${safeName}.xlsx`);
 			toast.success("Arquivo XLSX gerado.");
 		},

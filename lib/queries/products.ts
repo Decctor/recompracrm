@@ -1,3 +1,4 @@
+import { buildProductsSearchParams } from "@/lib/products/search-params";
 import { useProductSearchFilters } from "@/lib/hooks/use-product-search-filters";
 import type { TGetProductsByIdInput, TGetProductsDefaultInput, TGetProductsOutput, TGetProductsOutputStock } from "@/app/api/products/route";
 import type { TGetProductVariantsOutput } from "@/app/api/products/variants/route";
@@ -21,27 +22,7 @@ import type { TGetProductsPortfolioAnalysisInput, TGetProductsPortfolioAnalysisO
 
 async function fetchProducts(input: TGetProductsDefaultInput, signal?: AbortSignal) {
 	try {
-		const searchParams = new URLSearchParams();
-		if (input.page) searchParams.set("page", input.page.toString());
-		if (input.search.length) searchParams.set("search", input.search.join(","));
-		if (input.groups) searchParams.set("groups", input.groups.join(","));
-		if (input.statsPeriodBefore) searchParams.set("statsPeriodBefore", input.statsPeriodBefore.toISOString());
-		if (input.statsPeriodAfter) searchParams.set("statsPeriodAfter", input.statsPeriodAfter.toISOString());
-		if (input.statsIntegrationsIds) searchParams.set("statsIntegrationsIds", input.statsIntegrationsIds.join(","));
-		if (input.statsExcludedSalesIds) searchParams.set("statsExcludedSalesIds", input.statsExcludedSalesIds.join(","));
-		if (input.statsTotalMin) searchParams.set("statsTotalMin", input.statsTotalMin.toString());
-		if (input.statsTotalMax) searchParams.set("statsTotalMax", input.statsTotalMax.toString());
-		if (input.stockStatus && input.stockStatus.length > 0) searchParams.set("stockStatus", input.stockStatus.join(","));
-		if (input.trackedOnly) searchParams.set("trackedOnly", "true");
-		if (input.mainSupplierIds && input.mainSupplierIds.length > 0) searchParams.set("mainSupplierIds", input.mainSupplierIds.join(","));
-		if (input.withoutMainSupplier) searchParams.set("withoutMainSupplier", "true");
-		if (input.priceMin) searchParams.set("priceMin", input.priceMin.toString());
-		if (input.priceMax) searchParams.set("priceMax", input.priceMax.toString());
-		if (input.orderByField) searchParams.set("orderByField", input.orderByField);
-		if (input.orderByDirection) searchParams.set("orderByDirection", input.orderByDirection);
-		if (input.abcClasses && input.abcClasses.length > 0) searchParams.set("abcClasses", input.abcClasses.join(","));
-		if (input.resultLimit) searchParams.set("resultLimit", input.resultLimit.toString());
-		if (input.statsSellerIds) searchParams.set("statsSellerIds", input.statsSellerIds.join(","));
+		const searchParams = buildProductsSearchParams(input);
 		const { data } = await axios.get<TGetProductsOutput>(`/api/products?${searchParams.toString()}`, { signal });
 		const result = data.data.default;
 		if (!result) throw new Error("Produtos não encontrados.");
@@ -731,7 +712,15 @@ export type TProductBarcodeUsage = TGetProductBarcodeUsageOutput["data"]["usages
  * Quem mais usa o código na organização, com debounce para não consultar a cada tecla. `code`
  * vazio desliga a consulta — o campo em branco nunca conflita.
  */
-export function useProductBarcodeUsage({ code, excludeProductId, excludeVariantId }: { code: string | null | undefined; excludeProductId?: string | null; excludeVariantId?: string | null }) {
+export function useProductBarcodeUsage({
+	code,
+	excludeProductId,
+	excludeVariantId,
+}: {
+	code: string | null | undefined;
+	excludeProductId?: string | null;
+	excludeVariantId?: string | null;
+}) {
 	const debounced = useDebounceMemo({ code: code?.trim() ?? "" }, 400);
 	const queryKey = ["product-barcode-usage", debounced.code, excludeProductId ?? null, excludeVariantId ?? null];
 	return {
