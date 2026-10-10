@@ -12,16 +12,35 @@ import {
 	isInteractiveSortActive,
 } from "@/components/ui/interactive-filter-formatting";
 import { useSaleQueryFilterOptions } from "@/lib/queries/stats/utils";
+import { useSupplierOptions } from "@/lib/queries/suppliers";
 import type { TGetProductsDefaultInput } from "@/app/api/products/route";
-import { BadgeDollarSign, Calendar, ListFilter } from "lucide-react";
+import { BadgeDollarSign, Calendar, ListFilter, Truck } from "lucide-react";
 
 type ProductsInlineFiltersProps = {
 	filters: TGetProductsDefaultInput;
 	updateFilters: (filters: Partial<TGetProductsDefaultInput>) => void;
+	// Fornecedores ficam atrás da permissão de visualizar compras.
+	showMainSupplierFilter?: boolean;
 };
 
-export default function ProductsInlineFilters({ filters, updateFilters }: ProductsInlineFiltersProps) {
+// Opção sintética do filtro de fornecedor principal: vira `withoutMainSupplier` na consulta.
+const WITHOUT_MAIN_SUPPLIER_OPTION = "__sem_fornecedor_principal__";
+
+export default function ProductsInlineFilters({ filters, updateFilters, showMainSupplierFilter = false }: ProductsInlineFiltersProps) {
 	const { data: filterOptions } = useSaleQueryFilterOptions();
+	const { data: supplierOptionsResult } = useSupplierOptions({ enabled: showMainSupplierFilter });
+	const mainSupplierOptions = [
+		{ id: WITHOUT_MAIN_SUPPLIER_OPTION, label: "SEM FORNECEDOR PRINCIPAL", value: WITHOUT_MAIN_SUPPLIER_OPTION },
+		...(supplierOptionsResult ?? []).map((supplier) => ({ id: supplier.id, label: supplier.nome, value: supplier.id })),
+	] satisfies InteractiveFilterOption<string>[];
+	const mainSupplierValue = [...(filters.mainSupplierIds ?? []), ...(filters.withoutMainSupplier ? [WITHOUT_MAIN_SUPPLIER_OPTION] : [])];
+	const updateMainSupplierFilter = (value: string[]) =>
+		updateFilters({
+			mainSupplierIds: value.filter((id) => id !== WITHOUT_MAIN_SUPPLIER_OPTION),
+			withoutMainSupplier: value.includes(WITHOUT_MAIN_SUPPLIER_OPTION),
+			page: 1,
+		});
+	const clearMainSupplierFilter = () => updateFilters({ mainSupplierIds: [], withoutMainSupplier: false, page: 1 });
 	const groupOptions = (filterOptions?.productsGroups ?? []) as InteractiveFilterOption<string>[];
 	const integrationOptions = buildSalesIntegrationFilterOptions(filterOptions?.integrations);
 	const sellerOptions = (filterOptions?.sellers ?? []) as InteractiveFilterOption<string>[];
@@ -56,6 +75,7 @@ export default function ProductsInlineFilters({ filters, updateFilters }: Produc
 	const hasIntegrations = (filters.statsIntegrationsIds ?? []).length > 0;
 	const hasSellers = (filters.statsSellerIds ?? []).length > 0;
 	const hasStock = (filters.stockStatus ?? []).length > 0;
+	const hasMainSupplier = mainSupplierValue.length > 0;
 	const hasABCClasses = (filters.abcClasses ?? []).length > 0;
 	const hasPrice = filters.priceMin != null || filters.priceMax != null;
 	const hasStatsTotal = filters.statsTotalMin != null || filters.statsTotalMax != null;
@@ -118,6 +138,15 @@ export default function ProductsInlineFilters({ filters, updateFilters }: Produc
 					value={filters.stockStatus ?? []}
 					onChange={(stockStatus) => updateFilters({ stockStatus, page: 1 })}
 					onClear={() => updateFilters({ stockStatus: [], page: 1 })}
+				/>
+			) : null}
+			{showMainSupplierFilter && hasMainSupplier ? (
+				<ProductsMultiFilter
+					label="FORNECEDOR PRINCIPAL"
+					options={mainSupplierOptions}
+					value={mainSupplierValue}
+					onChange={updateMainSupplierFilter}
+					onClear={clearMainSupplierFilter}
 				/>
 			) : null}
 			{hasABCClasses ? (
@@ -204,6 +233,18 @@ export default function ProductsInlineFilters({ filters, updateFilters }: Produc
 									value={filters.stockStatus ?? []}
 									onChange={(stockStatus) => updateFilters({ stockStatus, page: 1 })}
 									onClear={() => updateFilters({ stockStatus: [], page: 1 })}
+									clearLabel="TODOS"
+								/>
+							</InteractiveFilter.AddFilterItem>
+						) : null}
+						{showMainSupplierFilter && !hasMainSupplier ? (
+							<InteractiveFilter.AddFilterItem id="mainSupplier" label="FORNECEDOR PRINCIPAL" icon={<Truck className="h-4 w-4" />}>
+								<InteractiveFilter.MultiContent
+									options={mainSupplierOptions}
+									value={mainSupplierValue}
+									onChange={updateMainSupplierFilter}
+									onClear={clearMainSupplierFilter}
+									searchPlaceholder="Buscar fornecedor..."
 									clearLabel="TODOS"
 								/>
 							</InteractiveFilter.AddFilterItem>

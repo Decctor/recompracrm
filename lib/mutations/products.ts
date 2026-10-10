@@ -26,6 +26,7 @@ import type {
 	TUpdateProductFiscalProfileInput,
 	TUpdateProductFiscalProfileOutput,
 } from "@/app/api/products/fiscal-profiles/route";
+import type { TUpdateProductMainSupplierInput, TUpdateProductMainSupplierOutput } from "@/app/api/products/main-supplier/route";
 import axios from "axios";
 
 export async function createProduct(input: TCreateProductInput) {
@@ -89,5 +90,10 @@ export async function deleteProductFiscalProfile(input: TDeleteProductFiscalProf
 
 export async function renameProductGroup(input: TRenameProductGroupInput) {
 	const { data } = await axios.put<TRenameProductGroupOutput>("/api/products/groups", input);
+	return data;
+}
+
+export async function updateProductMainSupplier(input: TUpdateProductMainSupplierInput) {
+	const { data } = await axios.put<TUpdateProductMainSupplierOutput>("/api/products/main-supplier", input);
 	return data;
 }
