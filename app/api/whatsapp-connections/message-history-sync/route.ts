@@ -77,7 +77,7 @@ async function syncWhatsappMessageHistoryRoute(request: NextRequest) {
 	const organizationId = session.membership?.organizacao.id;
 	if (!organizationId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização.");
 	if (!session.membership?.organizacao.configuracao.recursos.hubAtendimentos.acesso) {
-		throw new createHttpError.Forbidden("Sua organização não possui acesso ao módulo de atendimentos via WhatsApp Hub.");
+		throw new createHttpError.Forbidden("Sua organização não possui acesso ao módulo de Conversas.");
 	}
 
 	const input = SyncWhatsappMessageHistoryInputSchema.parse({

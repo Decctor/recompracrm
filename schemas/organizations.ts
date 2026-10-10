@@ -255,7 +255,7 @@ export const OrganizationConfigurationSchema = z.object({
 		}),
 		hubAtendimentos: z.object({
 			acesso: z.boolean({
-				invalid_type_error: "Tipo não válido para o acesso aos recursos de atendimentos via WhatsApp Hub.",
+				invalid_type_error: "Tipo não válido para o acesso ao módulo de Conversas.",
 			}),
 			limiteAtendentes: z
 				.number({

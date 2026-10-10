@@ -16,7 +16,7 @@ type ClientContactSectionProps = {
 	missingFields: Set<TClientEssentialField>;
 };
 
-/** Por onde se fala com o cliente — o que as campanhas e o WhatsApp Hub consomem. */
+/** Por onde se fala com o cliente — o que as campanhas e as Conversas consomem. */
 export default function ClientContactSection({ editor, missingFields }: ClientContactSectionProps) {
 	const { state, updateClient } = editor;
 	const sectionMissingCount = (["telefone", "email"] as const).filter((field) => missingFields.has(field)).length;

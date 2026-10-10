@@ -73,7 +73,7 @@ Gestão
   Parceiros
 
 Canais
-  WhatsApp Hub
+  Conversas (Caixa de entrada, Quadro, Estatísticas)
   Ponto de interação
   Loja digital
   Mídia paga
@@ -85,7 +85,7 @@ Configurações
 ### Navigation decisions
 
 - [ ] Use `Pedidos` instead of the current sales tab label `Atendimento`.
-- [ ] Keep WhatsApp customer service labeled `WhatsApp Hub` under `Canais`.
+- [x] ~~Keep WhatsApp customer service labeled `WhatsApp Hub` under `Canais`.~~ Superseded: it is the channel-agnostic `Conversas` group under `Canais` (WhatsApp today, Instagram DM next), one page per former tab.
 - [ ] Place `Preparo` under `Operação`, not under sales history.
 - [ ] Place `Produtos` under `Operação`, while keeping its canonical URL under `catalog`.
 - [ ] Place `Aprovações` under `Vendas` in the sidebar for the current scope.
@@ -151,6 +151,7 @@ Configurações
 - [x] Move `/dashboard/team/sellers` to `/dashboard/management/sellers`.
 - [x] Move `/dashboard/commercial/partners` to `/dashboard/management/partners`.
 - [x] Move `/dashboard/chats` to `/dashboard/channels/whatsapp`.
+- [x] Move `/dashboard/channels/whatsapp` to `/dashboard/conversations` (+ `/board`, `/stats`); both old routes redirect in `next.config.mjs`.
 - [x] Move `/dashboard/commercial/marketing` to `/dashboard/channels/paid-media`.
 - [ ] Treat Meta Ads as the first provider inside the provider-neutral paid-media workspace.
 - [ ] Keep the paid-media route and navigation label independent from Meta, TikTok, Google, or any other provider.
