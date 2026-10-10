@@ -23,6 +23,10 @@ test("builds canonical finance routes", () => {
 });
 
 test("keeps provider-neutral growth and channel routes", () => {
+	assert.equal(appRoutes.conversations.inbox(), "/dashboard/conversations");
+	assert.equal(appRoutes.conversations.chat("chat 1"), "/dashboard/conversations?chat=chat%201");
+	assert.equal(appRoutes.conversations.board(), "/dashboard/conversations/board");
+	assert.equal(appRoutes.conversations.stats(), "/dashboard/conversations/stats");
 	assert.equal(appRoutes.channels.paidMedia(), "/dashboard/channels/paid-media");
 	assert.equal(appRoutes.channels.visualKits(), "/dashboard/channels/visual-kits");
 	assert.equal(appRoutes.channels.visualKit("kit-1"), "/dashboard/channels/visual-kits/kit-1");

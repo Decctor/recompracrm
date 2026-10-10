@@ -35,5 +35,5 @@ const serializeChatsInbox = createSerializer(chatsInboxParsers);
 
 /** Link para a inbox de chats com filtros ativos; chaves omitidas ficam no padrão. */
 export function buildChatsInboxHref(filters: Partial<TChatsInboxUrlState>) {
-	return serializeChatsInbox(appRoutes.channels.whatsapp(), filters);
+	return serializeChatsInbox(appRoutes.conversations.inbox(), filters);
 }

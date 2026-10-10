@@ -34,6 +34,7 @@ import {
 	saleItems,
 	sales,
 	salesChannels,
+	suppliers,
 } from "@/services/drizzle/schema";
 import { and, asc, count, desc, eq, gt, gte, inArray, isNull, lt, lte, max, min, notInArray, or, type SQL, sql } from "drizzle-orm";
 import { upsertProductAddOnOptions } from "@/lib/products/add-on-options";
@@ -112,6 +113,16 @@ const GetProductsDefaultInputSchema = z.object({
 		.optional()
 		.nullable()
 		.transform((val) => (val ? val.split(",") : [])),
+	mainSupplierIds: z
+		.string({ invalid_type_error: "Tipo não válido para os IDs de fornecedor principal." })
+		.optional()
+		.nullable()
+		.transform((val) => (val ? val.split(",") : [])),
+	withoutMainSupplier: z
+		.string({ invalid_type_error: "Tipo não válido para o filtro de produtos sem fornecedor principal." })
+		.optional()
+		.nullable()
+		.transform((val) => val === "true"),
 	// Só produtos com rastreamento de estoque ativo: sem isso, quantidade nula vira "sem estoque".
 	trackedOnly: z
 		.string({ invalid_type_error: "Tipo não válido para o filtro de rastreamento." })
@@ -197,6 +208,11 @@ function buildProductFilterConditions(input: TGetProductsDefaultInput, userOrgId
 	}
 	if (input.priceMin) conditions.push(gte(products.precoVenda, input.priceMin));
 	if (input.priceMax) conditions.push(lte(products.precoVenda, input.priceMax));
+	// Fornecedores escolhidos e/ou "sem fornecedor principal": as duas opções somam (OR).
+	const mainSupplierConditions: SQL[] = [];
+	if (input.mainSupplierIds.length > 0) mainSupplierConditions.push(inArray(products.fornecedorPrincipalId, input.mainSupplierIds));
+	if (input.withoutMainSupplier) mainSupplierConditions.push(isNull(products.fornecedorPrincipalId));
+	if (mainSupplierConditions.length > 0) conditions.push(or(...mainSupplierConditions) as SQL);
 
 	return conditions;
 }
@@ -486,6 +502,9 @@ async function queryProducts({ input, session }: GetProductsParams, db: ProductS
 				perfisFiscais: {
 					where: (fields, { eq }) => eq(fields.ativo, true),
 				},
+				fornecedorPrincipal: {
+					columns: { id: true, nome: true, cpfCnpj: true, telefone: true, email: true, ativo: true },
+				},
 			},
 		});
 		if (!product) throw new createHttpError.NotFound("Produto não encontrado.");
@@ -504,40 +523,7 @@ async function queryProducts({ input, session }: GetProductsParams, db: ProductS
 		return getProductsStockView({ input, userOrgId }, db);
 	}
 
-	const productQueryConditions = [eq(products.organizacaoId, userOrgId)];
-
-	const search = buildProductSearch(input.search, products);
-	if (search.condition) productQueryConditions.push(search.condition);
-	if (input.groups.length > 0) {
-		productQueryConditions.push(inArray(products.grupo, input.groups));
-	}
-
-	// Stock status filters
-	if (input.stockStatus && input.stockStatus.length > 0) {
-		const stockConditions = [];
-		for (const status of input.stockStatus) {
-			if (status === "out") {
-				stockConditions.push(sql`(${products.quantidade} IS NULL OR ${products.quantidade} = 0)`);
-			} else if (status === "low") {
-				stockConditions.push(sql`(${products.quantidade} > 0 AND ${products.quantidade} <= 10)`);
-			} else if (status === "healthy") {
-				stockConditions.push(sql`(${products.quantidade} > 10 AND ${products.quantidade} <= 50)`);
-			} else if (status === "overstocked") {
-				stockConditions.push(sql`${products.quantidade} > 50`);
-			}
-		}
-		if (stockConditions.length > 0) {
-			productQueryConditions.push(sql`(${sql.join(stockConditions, sql` OR `)})`);
-		}
-	}
-
-	// Price range filters
-	if (input.priceMin) {
-		productQueryConditions.push(gte(products.precoVenda, input.priceMin));
-	}
-	if (input.priceMax) {
-		productQueryConditions.push(lte(products.precoVenda, input.priceMax));
-	}
+	const productQueryConditions = buildProductFilterConditions(input, userOrgId);
 
 	const statsConditions = [eq(sales.organizacaoId, userOrgId), eq(sales.statusVenda, "CONFIRMADA")];
 	if (input.statsPeriodBefore) statsConditions.push(lte(sales.dataVenda, input.statsPeriodBefore));
@@ -595,6 +581,8 @@ async function queryProducts({ input, session }: GetProductsParams, db: ProductS
 			quantidade: products.quantidade,
 			organizacaoId: products.organizacaoId,
 			dataUltimaSincronizacao: products.dataUltimaSincronizacao,
+			fornecedorPrincipalId: products.fornecedorPrincipalId,
+			fornecedorPrincipalNome: sql<string | null>`${suppliers.nome}`.as("fornecedor_principal_nome"),
 			// Campos de stats - 0 quando nenhuma venda passa nos filtros
 			totalSalesValue: sql<number>`COALESCE(${salesStatsSubquery.totalSalesValue}, 0)`.as("total_sales_value"),
 			totalSalesQty: sql<number>`COALESCE(${salesStatsSubquery.totalSalesQty}, 0)`.as("total_sales_qty"),
@@ -607,6 +595,7 @@ async function queryProducts({ input, session }: GetProductsParams, db: ProductS
 		})
 		.from(products)
 		.leftJoin(salesStatsSubquery, eq(salesStatsSubquery.produtoId, products.id))
+		.leftJoin(suppliers, eq(suppliers.id, products.fornecedorPrincipalId))
 		.where(and(...productQueryConditions, ...statsTotalConditions));
 
 	const productStatsSubquery = baseQuery.as("product_stats");
@@ -635,6 +624,8 @@ async function queryProducts({ input, session }: GetProductsParams, db: ProductS
 		quantidade: source.quantidade,
 		organizacaoId: source.organizacaoId,
 		dataUltimaSincronizacao: source.dataUltimaSincronizacao,
+		fornecedorPrincipalId: source.fornecedorPrincipalId,
+		fornecedorPrincipalNome: source.fornecedorPrincipalNome,
 		totalSalesValue: source.totalSalesValue,
 		totalSalesQty: source.totalSalesQty,
 		totalCostValue: source.totalCostValue,
@@ -732,6 +723,7 @@ async function queryProducts({ input, session }: GetProductsParams, db: ProductS
 			quantidade: row.quantidade,
 			organizacaoId: row.organizacaoId,
 			dataUltimaSincronizacao: row.dataUltimaSincronizacao,
+			fornecedorPrincipal: row.fornecedorPrincipalId ? { id: row.fornecedorPrincipalId, nome: row.fornecedorPrincipalNome } : null,
 			estatisticas: {
 				vendasValorTotal: totalSales,
 				vendasQtdeTotal: row.totalSalesQty ? Number(row.totalSalesQty) : 0,
@@ -778,6 +770,8 @@ async function getProductsRoute(request: NextRequest) {
 		statsTotalMax: request.nextUrl.searchParams.get("statsTotalMax") ?? undefined,
 		stockStatus: request.nextUrl.searchParams.get("stockStatus") ?? undefined,
 		trackedOnly: request.nextUrl.searchParams.get("trackedOnly") ?? undefined,
+		mainSupplierIds: request.nextUrl.searchParams.get("mainSupplierIds") ?? undefined,
+		withoutMainSupplier: request.nextUrl.searchParams.get("withoutMainSupplier") ?? undefined,
 		abcClasses: request.nextUrl.searchParams.get("abcClasses") ?? undefined,
 		priceMin: request.nextUrl.searchParams.get("priceMin") ?? undefined,
 		priceMax: request.nextUrl.searchParams.get("priceMax") ?? undefined,

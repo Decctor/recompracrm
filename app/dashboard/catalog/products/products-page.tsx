@@ -4,6 +4,7 @@ import ErrorComponent from "@/components/Layouts/ErrorComponent";
 import LoadingComponent from "@/components/Layouts/LoadingComponent";
 import PlanRestrictionComponent from "@/components/Layouts/PlanRestrictionComponent";
 import NewProduct from "@/components/Modals/Products/NewProduct";
+import SuggestMainSuppliers from "@/components/Modals/Products/SuggestMainSuppliers";
 import RecountProduct from "@/components/Modals/Internal/StockRecount/RecountProduct";
 import ProductsAddOnsView from "@/app/dashboard/catalog/products/_components/ProductsAddOnsView";
 import ProductsChannelsView from "@/app/dashboard/catalog/products/_components/channels/ProductsChannelsView";
@@ -48,6 +49,7 @@ import {
 	ShoppingCart,
 	Store,
 	TrendingUp,
+	Truck,
 	Users,
 } from "lucide-react";
 import Image from "next/image";
@@ -118,8 +120,10 @@ type ProductsDatabaseViewProps = {
 };
 function ProductsDatabaseView({ user, userMembership, organization }: ProductsDatabaseViewProps) {
 	const orgHasStockTracking = organization.configuracao.preferencias.rastreamentoEstoque;
+	const userHasPurchasesViewPermission = userMembership.permissoes.compras.visualizar;
 	const queryClient = useQueryClient();
 	const [newProductModalIsOpen, setNewProductModalIsOpen] = useState<boolean>(false);
+	const [suggestMainSuppliersModalIsOpen, setSuggestMainSuppliersModalIsOpen] = useState<boolean>(false);
 	const [recountingProductId, setRecountingProductId] = useState<string | null>(null);
 	const {
 		data: productsResult,
@@ -164,6 +168,12 @@ function ProductsDatabaseView({ user, userMembership, organization }: ProductsDa
 		<div className="w-full flex flex-col gap-3">
 			<div className="w-full flex items-center gap-2 flex-col-reverse lg:flex-row">
 				<ProductSearchInput value={filters.search} onChange={(search, immediate) => updateFilters({ search }, immediate)} className="grow" />
+				{userHasPurchasesViewPermission ? (
+					<Button variant="outline" className="flex items-center gap-2" size="sm" onClick={() => setSuggestMainSuppliersModalIsOpen(true)}>
+						<Truck className="w-4 h-4 min-w-4 min-h-4" />
+						SUGERIR FORNECEDORES
+					</Button>
+				) : null}
 				<Button className="flex items-center gap-2" size="sm" onClick={() => setNewProductModalIsOpen(true)}>
 					<Plus className="w-4 h-4 min-w-4 min-h-4" />
 					NOVO PRODUTO
@@ -177,7 +187,7 @@ function ProductsDatabaseView({ user, userMembership, organization }: ProductsDa
 				itemsMatchedText={productsMatched > 0 ? `${productsMatched} produtos encontrados.` : `${productsMatched} produto encontrado.`}
 				itemsShowingText={productsShowing > 0 ? `Mostrando ${productsShowing} produtos.` : `Mostrando ${productsShowing} produto.`}
 			/>
-			<ProductsInlineFilters filters={filters} updateFilters={updateFilters} />
+			<ProductsInlineFilters filters={filters} updateFilters={updateFilters} showMainSupplierFilter={userHasPurchasesViewPermission} />
 			{isLoading ? <LoadingComponent /> : null}
 			{isError ? <ErrorComponent msg={getErrorMessage(error)} /> : null}
 			{isSuccess && products ? (
@@ -204,6 +214,7 @@ function ProductsDatabaseView({ user, userMembership, organization }: ProductsDa
 					callbacks={{ onMutate: handleOnMutate, onSettled: handleOnSettled }}
 				/>
 			) : null}
+			{suggestMainSuppliersModalIsOpen ? <SuggestMainSuppliers closeModal={() => setSuggestMainSuppliersModalIsOpen(false)} /> : null}
 			{recountingProductId ? (
 				<RecountProduct
 					productId={recountingProductId}
@@ -547,6 +558,12 @@ function ProductCard({
 								<div className="flex items-center gap-1">
 									<Diamond className="w-4 h-4 min-w-4 min-h-4" />
 									<h1 className="py-0.5 text-center text-[0.65rem] font-medium italic text-foreground/80">{product.grupo}</h1>
+								</div>
+							) : null}
+							{product.fornecedorPrincipal ? (
+								<div className="flex min-w-0 items-center gap-1" title="Fornecedor principal">
+									<Truck className="w-4 h-4 min-w-4 min-h-4" />
+									<h1 className="truncate py-0.5 text-[0.65rem] font-medium italic text-foreground/80">{product.fornecedorPrincipal.nome}</h1>
 								</div>
 							) : null}
 						</div>

@@ -34,6 +34,11 @@ const nextConfig = {
 		const legacyFeatureSlugs = ["programa-de-cashback", "campanhas-whatsapp", "ponto-de-interacao", "business-intelligence"];
 
 		return [
+			// O hub de WhatsApp virou o módulo "Conversas" (canal-agnóstico). As duas rotas antigas do hub
+			// (`/dashboard/chats` e `/dashboard/channels/whatsapp`) seguem valendo para favoritos e links
+			// antigos; a query string (filtros da inbox) segue junto no redirect.
+			{ source: "/dashboard/chats", destination: "/dashboard/conversations", permanent: false },
+			{ source: "/dashboard/channels/whatsapp", destination: "/dashboard/conversations", permanent: false },
 			// Consolidate every route on the canonical www host.
 			{
 				source: "/:path*",

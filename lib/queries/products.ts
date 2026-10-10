@@ -16,6 +16,7 @@ import { useInfiniteQuery, useQueries, useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import { useEffect, useMemo, useState } from "react";
 import { useDebounceMemo } from "../hooks/use-debounce";
+import type { TGetProductMainSupplierSuggestionsOutput } from "@/app/api/products/main-supplier/suggestions/route";
 import type { TGetProductsPortfolioAnalysisInput, TGetProductsPortfolioAnalysisOutput } from "@/app/api/products/stats/portfolio-analysis/route";
 
 async function fetchProducts(input: TGetProductsDefaultInput, signal?: AbortSignal) {
@@ -32,6 +33,8 @@ async function fetchProducts(input: TGetProductsDefaultInput, signal?: AbortSign
 		if (input.statsTotalMax) searchParams.set("statsTotalMax", input.statsTotalMax.toString());
 		if (input.stockStatus && input.stockStatus.length > 0) searchParams.set("stockStatus", input.stockStatus.join(","));
 		if (input.trackedOnly) searchParams.set("trackedOnly", "true");
+		if (input.mainSupplierIds && input.mainSupplierIds.length > 0) searchParams.set("mainSupplierIds", input.mainSupplierIds.join(","));
+		if (input.withoutMainSupplier) searchParams.set("withoutMainSupplier", "true");
 		if (input.priceMin) searchParams.set("priceMin", input.priceMin.toString());
 		if (input.priceMax) searchParams.set("priceMax", input.priceMax.toString());
 		if (input.orderByField) searchParams.set("orderByField", input.orderByField);
@@ -88,6 +91,8 @@ export function useProducts({ initialFilters }: UseProductsParams) {
 		statsTotalMax: initialFilters?.statsTotalMax || null,
 		stockStatus: initialFilters?.stockStatus || [],
 		trackedOnly: initialFilters?.trackedOnly ?? false,
+		mainSupplierIds: initialFilters?.mainSupplierIds || [],
+		withoutMainSupplier: initialFilters?.withoutMainSupplier ?? false,
 		priceMin: initialFilters?.priceMin || null,
 		priceMax: initialFilters?.priceMax || null,
 		abcClasses: initialFilters?.abcClasses || [],
@@ -118,6 +123,8 @@ async function fetchProductsStock(input: TGetProductsDefaultInput, signal?: Abor
 		if (input.statsPeriodBefore) searchParams.set("statsPeriodBefore", input.statsPeriodBefore.toISOString());
 		if (input.stockStatus && input.stockStatus.length > 0) searchParams.set("stockStatus", input.stockStatus.join(","));
 		if (input.trackedOnly) searchParams.set("trackedOnly", "true");
+		if (input.mainSupplierIds && input.mainSupplierIds.length > 0) searchParams.set("mainSupplierIds", input.mainSupplierIds.join(","));
+		if (input.withoutMainSupplier) searchParams.set("withoutMainSupplier", "true");
 		if (input.priceMin) searchParams.set("priceMin", input.priceMin.toString());
 		if (input.priceMax) searchParams.set("priceMax", input.priceMax.toString());
 		if (input.orderByField) searchParams.set("orderByField", input.orderByField);
@@ -150,6 +157,8 @@ export function useProductsStock({ initialFilters, enabled = true }: UseProducts
 		statsTotalMax: null,
 		stockStatus: initialFilters?.stockStatus || [],
 		trackedOnly: initialFilters?.trackedOnly ?? false,
+		mainSupplierIds: initialFilters?.mainSupplierIds || [],
+		withoutMainSupplier: initialFilters?.withoutMainSupplier ?? false,
 		priceMin: initialFilters?.priceMin || null,
 		priceMax: initialFilters?.priceMax || null,
 		abcClasses: [],
@@ -733,5 +742,47 @@ export function useProductBarcodeUsage({ code, excludeProductId, excludeVariantI
 			staleTime: 30 * 1000,
 		}),
 		queryKey,
+	};
+}
+
+// Sugestões de fornecedor principal (somente leitura — a atribuição é sempre do usuário).
+async function fetchProductMainSupplierCandidates(productId: string) {
+	const { data } = await axios.get<TGetProductMainSupplierSuggestionsOutput>(`/api/products/main-supplier/suggestions?productId=${productId}`);
+	const result = data.data.byProduct;
+	if (!result) throw new Error("Sugestões de fornecedor principal não encontradas.");
+	return result.candidates;
+}
+
+export function useProductMainSupplierCandidates({ productId, enabled = true }: { productId: string; enabled?: boolean }) {
+	return {
+		...useQuery({
+			queryKey: ["product-main-supplier-candidates", productId],
+			queryFn: () => fetchProductMainSupplierCandidates(productId),
+			enabled: enabled && !!productId,
+		}),
+		queryKey: ["product-main-supplier-candidates", productId],
+	};
+}
+
+async function fetchProductMainSupplierSuggestions({ page }: { page: number }) {
+	const searchParams = new URLSearchParams();
+	searchParams.set("page", page.toString());
+	const { data } = await axios.get<TGetProductMainSupplierSuggestionsOutput>(`/api/products/main-supplier/suggestions?${searchParams.toString()}`);
+	const result = data.data.default;
+	if (!result) throw new Error("Sugestões de fornecedor principal não encontradas.");
+	return result;
+}
+
+export function useProductMainSupplierSuggestions({ enabled = true }: { enabled?: boolean } = {}) {
+	const [page, setPage] = useState(1);
+	return {
+		...useQuery({
+			queryKey: ["product-main-supplier-suggestions", page],
+			queryFn: () => fetchProductMainSupplierSuggestions({ page }),
+			enabled,
+		}),
+		queryKey: ["product-main-supplier-suggestions", page],
+		page,
+		updatePage: setPage,
 	};
 }

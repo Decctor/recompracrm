@@ -81,7 +81,7 @@ export default function AdminOrganizationResourcesBlock({ recursos, updateResour
 			/>
 			<ResourceRow
 				title="Hub de atendimentos"
-				description="Atendimentos via WhatsApp Hub com múltiplos atendentes."
+				description="Conversas com clientes, com múltiplos atendentes."
 				access={recursos.hubAtendimentos.acesso}
 				onAccessChange={(checked) => updateResource("hubAtendimentos", { acesso: checked })}
 				limitLabel="LIMITE DE ATENDENTES SIMULTÂNEOS"

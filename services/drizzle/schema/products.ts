@@ -17,6 +17,7 @@ import { productFiscalProfiles } from "./fiscal";
 import { accountingEntries } from "./financial";
 import { clients } from "./clients";
 import { productionInputs, productionOutputs, productions } from "./productions";
+import { suppliers } from "./suppliers";
 
 export const products = newTable(
 	"products",
@@ -58,6 +59,10 @@ export const products = newTable(
 		baixaEstoqueModo: productStockDeductionModeEnum("baixa_estoque_modo").default("ESTOQUE_PROPRIO").notNull(),
 		// FK para productionRecipes criada apenas na migracao SQL (evita import circular com productions.ts).
 		fichaTecnicaReceitaId: varchar("ficha_tecnica_receita_id", { length: 255 }),
+		// Fornecedor principal: atribuído SOMENTE por ação do usuário (PUT /api/products/main-supplier).
+		// O histórico de compras gera sugestões, nunca escreve aqui; o PUT do cadastro e as sincronizações
+		// de catálogo não enviam o campo, então não o sobrescrevem.
+		fornecedorPrincipalId: varchar("fornecedor_principal_id", { length: 255 }).references(() => suppliers.id, { onDelete: "set null" }),
 		dataUltimaSincronizacao: timestamp("data_ultima_sincronizacao"),
 		// valorUnitario: doublePrecision("valor_unitario").notNull(),
 	},
@@ -66,6 +71,7 @@ export const products = newTable(
 		grupoIdx: index("idx_products_grupo").on(table.grupo),
 		organizacaoIdx: index("idx_products_organizacao").on(table.organizacaoId),
 		codigoIdx: index("idx_products_codigo").on(table.codigo),
+		fornecedorPrincipalIdx: index("idx_products_organizacao_fornecedor_principal").on(table.organizacaoId, table.fornecedorPrincipalId),
 		// Leitura de código de barras no PDV: resolução exata por organização (lib/pos/barcode-lookup.ts).
 		codigoBarrasIdx: index("idx_products_organizacao_codigo_barras").on(table.organizacaoId, table.codigoBarras),
 		// Shortlist por similaridade na conciliação de itens de nota fiscal: a descrição impressa
@@ -73,7 +79,11 @@ export const products = newTable(
 		nomeIdx: index("idx_products_nome").using("gist", sql`unaccent_immutable(lower(${table.nome})) gist_trgm_ops`),
 	}),
 );
-export const productsRelations = relations(products, ({ many }) => ({
+export const productsRelations = relations(products, ({ one, many }) => ({
+	fornecedorPrincipal: one(suppliers, {
+		fields: [products.fornecedorPrincipalId],
+		references: [suppliers.id],
+	}),
 	pedidos: many(saleItems),
 	variantes: many(productVariants),
 	opcoes: many(productOptions),
