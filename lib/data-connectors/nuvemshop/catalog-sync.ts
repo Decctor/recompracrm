@@ -1,6 +1,7 @@
 import { db, type DBTransaction } from "@/services/drizzle";
 import { productOptionValues, productOptions, productVariantOptionValues, productVariants, products } from "@/services/drizzle/schema";
 import { buildSalePriceUpdate } from "@/lib/products/price-snapshot";
+import { withProductUpdateStamp } from "@/lib/products/update-stamp";
 import { and, eq } from "drizzle-orm";
 import { fetchAllNuvemshopProducts, mapNuvemshopStructuredCatalog, type TNuvemshopCatalogProduct } from "./index";
 import type { TNuvemshopConfig } from "./types";
@@ -77,12 +78,12 @@ async function upsertCatalogProduct({
 		// snapshot, o início de uma promoção vira "De / Por" automaticamente.
 		await tx
 			.update(products)
-			.set({
+			.set(withProductUpdateStamp({
 				...productValues,
 				...buildSalePriceUpdate({ current: existingProduct, next: { precoVenda: product.precoVenda } }),
 				// GTIN ausente/inválido na loja não apaga o que foi cadastrado no app.
 				codigoBarras: product.codigoBarras ?? existingProduct.codigoBarras,
-			})
+			}))
 			.where(eq(products.id, existingProduct.id));
 		productId = existingProduct.id;
 	} else {

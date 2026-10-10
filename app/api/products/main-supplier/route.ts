@@ -2,6 +2,7 @@ import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { db } from "@/services/drizzle";
+import { withProductUpdateStamp } from "@/lib/products/update-stamp";
 import { products, suppliers } from "@/services/drizzle/schema";
 import { and, eq, inArray, isNull, type SQL } from "drizzle-orm";
 import createHttpError from "http-errors";
@@ -57,7 +58,7 @@ async function updateProductMainSupplier({
 
 	const updated = await db
 		.update(products)
-		.set({ fornecedorPrincipalId: input.fornecedorId })
+		.set(withProductUpdateStamp({ fornecedorPrincipalId: input.fornecedorId }))
 		.where(and(...conditions))
 		.returning({ id: products.id });
 

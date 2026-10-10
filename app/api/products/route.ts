@@ -39,6 +39,7 @@ import {
 import { and, asc, count, desc, eq, gt, gte, inArray, isNull, lt, lte, max, min, notInArray, or, type SQL, sql } from "drizzle-orm";
 import { upsertProductAddOnOptions } from "@/lib/products/add-on-options";
 import { buildSalePriceUpdate } from "@/lib/products/price-snapshot";
+import { withProductUpdateStamp } from "@/lib/products/update-stamp";
 import { splitChannelSettingNodes, validateChannelSettingNodes } from "@/lib/products/sales-channels";
 import createHttpError from "http-errors";
 import { z } from "zod";
@@ -1227,7 +1228,7 @@ async function updateProduct({ session, input }: { session: TAuthUserSession; in
 		// movimentação de estoque (abaixo), preservando o livro-razão.
 		const [updatedProduct] = await tx
 			.update(products)
-			.set({
+			.set(withProductUpdateStamp({
 				vendavel: input.product.vendavel,
 				ativo: input.product.ativo,
 				nome: input.product.nome,
@@ -1251,7 +1252,7 @@ async function updateProduct({ session, input }: { session: TAuthUserSession; in
 				rastreamentoEstoqueAtivo: input.product.rastreamentoEstoqueAtivo,
 				baixaEstoqueModo: input.product.baixaEstoqueModo,
 				fichaTecnicaReceitaId: input.product.fichaTecnicaReceitaId,
-			})
+			}))
 			.where(and(eq(products.id, input.productId), eq(products.organizacaoId, userOrgId)))
 			.returning({ updatedId: products.id });
 

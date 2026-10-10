@@ -22,6 +22,7 @@ import {
 	supplierProductMappings,
 } from "@/services/drizzle/schema";
 import { buildSalePriceUpdate } from "@/lib/products/price-snapshot";
+import { withProductUpdateStamp } from "@/lib/products/update-stamp";
 import { and, eq, sql } from "drizzle-orm";
 
 export type TMergeProductsInput = {
@@ -272,7 +273,7 @@ export async function mergeProducts(input: TMergeProductsInput): Promise<TMergeP
 			keeperUpdates.fornecedorPrincipalId = source.fornecedorPrincipalId;
 		}
 		if (Object.keys(keeperUpdates).length > 0) {
-			await tx.update(products).set(keeperUpdates).where(eq(products.id, input.keeperId));
+			await tx.update(products).set(withProductUpdateStamp(keeperUpdates)).where(eq(products.id, input.keeperId));
 		}
 
 		await tx.delete(products).where(and(eq(products.id, input.sourceId), eq(products.organizacaoId, input.organizacaoId)));

@@ -65,6 +65,13 @@ export const products = newTable(
 		fornecedorPrincipalId: varchar("fornecedor_principal_id", { length: 255 }).references(() => suppliers.id, { onDelete: "set null" }),
 		dataUltimaSincronizacao: timestamp("data_ultima_sincronizacao"),
 		// valorUnitario: doublePrecision("valor_unitario").notNull(),
+		// Linhas anteriores à coluna foram estimadas pela 0127 (primeiro uso, limitado à criação da organização).
+		dataInsercao: timestamp("data_insercao").defaultNow().notNull(),
+		// Última alteração do CADASTRO — saldo (`quantidade`) e `dataUltimaSincronizacao` não contam.
+		// Escrito SOMENTE via `withProductUpdateStamp` (lib/products/update-stamp.ts), que só avança a data
+		// quando algum valor gravado de fato muda; o teste `update-stamp.test.ts` falha se um caminho de
+		// escrita novo ignorar o helper.
+		dataAtualizacao: timestamp("data_atualizacao").defaultNow().notNull(),
 	},
 	(table) => ({
 		// ...existing indices...

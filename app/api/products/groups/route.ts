@@ -2,6 +2,7 @@ import { appApiHandler } from "@/lib/app-api";
 import { requireOrgSession } from "@/lib/authentication/erp-session";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { db } from "@/services/drizzle";
+import { withProductUpdateStamp } from "@/lib/products/update-stamp";
 import { catalogLinks, couponTargets, products, salesChannels } from "@/services/drizzle/schema";
 import { and, eq } from "drizzle-orm";
 import createHttpError from "http-errors";
@@ -75,7 +76,7 @@ async function renameProductGroup({ orgId, input }: { orgId: string; input: TRen
 	await db.transaction(async (tx) => {
 		await tx
 			.update(products)
-			.set({ grupo: grupoNovo })
+			.set(withProductUpdateStamp({ grupo: grupoNovo }))
 			.where(and(eq(products.organizacaoId, orgId), eq(products.grupo, grupoAtual)));
 
 		// Alvos de cupom casam por nome (`coupon_targets.grupo`): sem esta reescrita, um cupom de
