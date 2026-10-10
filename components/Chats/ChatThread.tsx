@@ -269,8 +269,8 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 	}, [newestMessageId]);
 
 	// Leitura só conta quando alguém pode estar vendo: aba do navegador visível e a thread
-	// realmente desenhada (o hub é `forceMount` no ChatsWorkspace e fica `display: none` quando a
-	// aba ativa é o Quadro). Mensagem otimista não tem id no servidor, então só a persistida
+	// realmente desenhada (no celular a thread fica `display: none` enquanto a lista está à vista).
+	// Mensagem otimista não tem id no servidor, então só a persistida
 	// marca; o último id marcado evita repetir o PATCH a cada render.
 	const newestPersistedId = messages[0]?.id ?? null;
 	const newestPersistedIdRef = useRef(newestPersistedId);

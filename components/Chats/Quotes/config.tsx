@@ -9,7 +9,7 @@ import type { ComponentType } from "react";
 
 /**
  * Os três gates de orçamento no hub. Ficam em um objeto só porque atravessam seis níveis de props
- * (`ChatsPage` → `ChatsMain` → `ChatsWorkspace` → `ChatHub` → `ChatThread` → header/painel), e três
+ * (página → `ChatsMain` → `ChatsInbox` → `ChatHub` → `ChatThread` → header/painel), e três
  * booleanos soltos multiplicariam esse encadeamento por três.
  *
  * Os nomes espelham as permissões de origem em `membership.permissoes.vendas`.

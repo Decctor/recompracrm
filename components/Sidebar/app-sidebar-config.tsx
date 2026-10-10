@@ -13,6 +13,7 @@ import { filterNavigationItems } from "@/lib/access/navigation";
 import {
 	ArrowRightLeft,
 	BadgePercent,
+	BarChart3,
 	Banknote,
 	BookText,
 	Boxes,
@@ -21,6 +22,7 @@ import {
 	CircleHelp,
 	CirclePlay,
 	ClipboardList,
+	Columns3,
 	CreditCard,
 	Factory,
 	FileCheck2,
@@ -33,6 +35,7 @@ import {
 	List,
 	Megaphone,
 	MessageCircle,
+	MessagesSquare,
 	NotebookPen,
 	Package,
 	Plug,
@@ -429,12 +432,41 @@ export const AppSidebarConfig: TSidebarConfigItemWithAccess[] = [
 		group: "Canais",
 		items: [
 			{
-				id: "whatsapp",
+				// Agrupa o atendimento independente do canal (WhatsApp hoje, Instagram DM em seguida).
+				// A capability segue `whatsapp`: é a chave de acesso, não o nome da tela.
+				id: "conversations",
 				capability: "whatsapp",
-				title: "WhatsApp Hub",
-				url: appRoutes.channels.whatsapp(),
+				title: "Conversas",
+				// Caminho dono mantém o grupo ativo em todas as subpáginas.
+				url: appRoutes.conversations.inbox(),
 				icon: <MessageCircle className="size-4" />,
-				items: null,
+				items: [
+					{
+						id: "conversations-inbox",
+						capability: "whatsapp",
+						activeMatch: "exact",
+						title: "Caixa de entrada",
+						url: appRoutes.conversations.inbox(),
+						icon: <MessagesSquare className="size-4" />,
+						items: null,
+					},
+					{
+						id: "conversations-board",
+						capability: "whatsapp",
+						title: "Quadro",
+						url: appRoutes.conversations.board(),
+						icon: <Columns3 className="size-4" />,
+						items: null,
+					},
+					{
+						id: "conversations-stats",
+						capability: "whatsapp",
+						title: "Estatísticas",
+						url: appRoutes.conversations.stats(),
+						icon: <BarChart3 className="size-4" />,
+						items: null,
+					},
+				],
 			},
 			{
 				id: "point-of-interaction",
