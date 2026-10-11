@@ -68,6 +68,7 @@ export async function resolveSaleDiscountAuthority({
 export async function authorizeSaleDiscount({
 	orgId,
 	session,
+	deviceId = null,
 	vendedorId,
 	valorBase,
 	descontoTotal,
@@ -75,6 +76,8 @@ export async function authorizeSaleDiscount({
 }: {
 	orgId: string;
 	session: TAuthUserSession | null;
+	/** Ator dispositivo (a maquininha): só consome aprovação pedida por ele mesmo. */
+	deviceId?: string | null;
 	vendedorId: string | null | undefined;
 	valorBase: number;
 	descontoTotal: number;
@@ -92,6 +95,10 @@ export async function authorizeSaleDiscount({
 	});
 	if (!approval || approval.tipo !== "VENDA_DESCONTO" || approval.payload.tipo !== "VENDA_DESCONTO") {
 		throw new createHttpError.Forbidden("Aprovação de desconto não encontrada para esta organização.");
+	}
+	// Aprovação pedida pela maquininha vale só para ela; a do PDV web, só para o PDV web.
+	if ((approval.solicitanteDispositivoId ?? null) !== (deviceId ?? null)) {
+		throw new createHttpError.Forbidden(deviceId ? "A aprovação de desconto foi pedida por outro terminal." : "A aprovação de desconto foi pedida por um terminal.");
 	}
 	if (approval.status !== "APROVADA") {
 		throw new createHttpError.Forbidden("A aprovação de desconto informada não está aprovada ou já foi utilizada.");

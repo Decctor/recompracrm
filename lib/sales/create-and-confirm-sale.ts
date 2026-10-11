@@ -169,6 +169,7 @@ export async function prepareSaleCreation({ actor, input }: { actor: TSaleActor;
 	const descontoAprovacaoId = await authorizeSaleDiscount({
 		orgId,
 		session,
+		deviceId: actor.kind === "DEVICE" ? actor.deviceId : null,
 		vendedorId: input.vendedorId,
 		valorBase: descontoAgregado.valorBase,
 		descontoTotal: descontoAgregado.descontoTotal,

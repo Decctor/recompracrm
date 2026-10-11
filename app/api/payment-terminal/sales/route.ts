@@ -21,6 +21,9 @@ const CreateTerminalSaleInputSchema = z.object({
 		vendedorId: z.string({ invalid_type_error: "Tipo inválido para o vendedor." }).optional().nullable(),
 		sessaoVendaId: z.string({ invalid_type_error: "Tipo inválido para o caixa." }).optional().nullable(),
 		observacoes: z.string({ invalid_type_error: "Tipo inválido para observações." }).max(500).optional().nullable(),
+		// Desconto geral, em reais; acima do teto do vendedor exige a aprovação pedida por este terminal.
+		descontosTotal: z.number({ invalid_type_error: "Tipo inválido para o desconto." }).min(0, "O desconto não pode ser negativo.").optional().nullable(),
+		descontoAprovacaoId: z.string({ invalid_type_error: "Tipo inválido para a aprovação de desconto." }).optional().nullable(),
 		// Vazio só numa venda de recompensas: o service exige itens ou recompensas.
 		itens: TerminalSaleItemsInputSchema,
 	}),

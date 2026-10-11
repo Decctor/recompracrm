@@ -14,7 +14,9 @@ export type TPaymentTerminalErrorCode =
 	| "PAYMENT_ATTEMPT_UNCERTAIN"
 	| "ACTIVE_PAYMENT_ATTEMPT_EXISTS"
 	| "PAYMENT_RESULT_MISMATCH"
-	| "UNSUPPORTED_PAYMENT_OPERATION";
+	| "UNSUPPORTED_PAYMENT_OPERATION"
+	// Desconto acima do teto do vendedor sem aprovação válida: o app pede a aprovação remota.
+	| "DISCOUNT_APPROVAL_REQUIRED";
 
 export class PaymentTerminalError extends Error {
 	readonly status: number;

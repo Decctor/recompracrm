@@ -1,6 +1,7 @@
 import type { TActionApprovalConsumption, TActionApprovalPayload, TActionApprovalSummary } from "@/schemas/action-approvals";
 import { relations } from "drizzle-orm";
 import { index, jsonb, text, timestamp, varchar } from "drizzle-orm/pg-core";
+import { accessPrincipals } from "./access";
 import { newTable } from "./common";
 import { actionApprovalDecisionMethodEnum, actionApprovalStatusEnum } from "./enums";
 import { organizations } from "./organizations";
@@ -30,10 +31,11 @@ export const actionApprovalRequests = newTable(
 		payload: jsonb("payload").$type<TActionApprovalPayload>().notNull(),
 		resumo: jsonb("resumo").$type<TActionApprovalSummary>().notNull(),
 
-		// Atores
-		solicitanteId: varchar("solicitante_id", { length: 255 })
-			.references(() => users.id, { onDelete: "set null" })
-			.notNull(),
+		// Atores. O solicitante é um usuário (PDV web) ou um dispositivo (a maquininha, que vende sem
+		// sessão humana) — exatamente um dos dois. Aprovação pedida por dispositivo só é consumida
+		// por ele (lib/sales/sale-discount-authorization.ts).
+		solicitanteId: varchar("solicitante_id", { length: 255 }).references(() => users.id, { onDelete: "set null" }),
+		solicitanteDispositivoId: varchar("solicitante_dispositivo_id", { length: 255 }).references(() => accessPrincipals.id, { onDelete: "set null" }),
 		decididaPorId: varchar("decidida_por_id", { length: 255 }).references(() => users.id, { onDelete: "set null" }),
 		metodoDecisao: actionApprovalDecisionMethodEnum("metodo_decisao"),
 		motivoDecisao: text("motivo_decisao"),
@@ -60,6 +62,10 @@ export const actionApprovalRequestsRelations = relations(actionApprovalRequests,
 		fields: [actionApprovalRequests.solicitanteId],
 		references: [users.id],
 		relationName: "solicitante",
+	}),
+	solicitanteDispositivo: one(accessPrincipals, {
+		fields: [actionApprovalRequests.solicitanteDispositivoId],
+		references: [accessPrincipals.id],
 	}),
 	decididaPor: one(users, {
 		fields: [actionApprovalRequests.decididaPorId],

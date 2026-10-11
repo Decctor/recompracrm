@@ -115,6 +115,10 @@ export type TTerminalBenefitsRequest = {
  * carrinho precificado, programa e saldo). Recusa com mensagem para o operador; nunca ajusta um
  * valor em silêncio — o total que o cliente pagou foi calculado com o valor que a tela mostrou.
  */
+/**
+ * `itemsTotal` é o valor que os benefícios podem abater: os itens menos o desconto manual da venda
+ * (que vem antes do cupom, como no checkout web).
+ */
 export function decideTerminalBenefits({
 	itemsTotal,
 	hasClient,
@@ -149,7 +153,10 @@ export function decideTerminalBenefits({
 		if (!cupom) invalid("Cupom indisponível para este cliente.");
 		if (!cupom!.selecionavel || cupom!.valorDesconto === null) invalid(cupom!.motivo ?? "Cupom indisponível para este carrinho.");
 	}
-	const cupomDesconto = Math.min(cupom?.valorDesconto ?? 0, roundCents(itemsTotal));
+	// O motor avalia o cupom sobre os itens; depois de um desconto manual ele pode passar do que
+	// sobrou. Recusa em vez de cortar: o servidor confere o valor declarado contra o motor.
+	const cupomDesconto = cupom?.valorDesconto ?? 0;
+	if (cupomDesconto > roundCents(itemsTotal) + 0.001) invalid("O cupom passa do valor da venda depois do desconto: reduza o desconto ou tire o cupom.");
 	const valueBeforeCashback = roundCents(itemsTotal - cupomDesconto);
 
 	if (requestedCashback > 0) {

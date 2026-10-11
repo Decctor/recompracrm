@@ -6,7 +6,9 @@ import { clients, organizations, sellers } from "@/services/drizzle/schema";
 import { and, eq } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { PaymentTerminalError } from "./errors";
+import { authorizeSaleDiscount } from "@/lib/sales/sale-discount-authorization";
 import { buildTerminalCartItems, loadTerminalClientBenefits } from "./terminal-benefits";
+import { resolveTerminalDiscount } from "./terminal-discount-policy";
 import { type TTerminalBenefitsRequest, decideTerminalBenefits } from "./terminal-benefits-policy";
 import { type TTerminalSaleItemInput, roundCents } from "./terminal-cart-item";
 import {
@@ -31,7 +33,10 @@ import { buildChargeView, buildPaymentAttemptSaleView, findPaymentAttemptForDevi
 //   mesma venda;
 // - benefícios (cupom AUTOMATICA, cashback, recompensas) são decididos aqui contra o carrinho já
 //   precificado (terminal-benefits-policy.ts) e entram no pipeline como no PDV web; o que o cliente
-//   paga é o total depois deles, e uma venda quitada pelos benefícios não leva pagamento.
+//   paga é o total depois deles, e uma venda quitada pelos benefícios não leva pagamento;
+// - desconto manual segue o teto do vendedor (sem vendedor com membership, zero): acima dele a
+//   venda exige uma aprovação pedida por ESTE terminal (terminal-discount-approvals.ts), e a
+//   recusa sai como DISCOUNT_APPROVAL_REQUIRED para o app pedir ao gestor.
 
 export type { TTerminalSaleItemInput };
 
@@ -41,6 +46,9 @@ export type TCreateTerminalSaleInput = {
 		vendedorId?: string | null;
 		sessaoVendaId?: string | null;
 		observacoes?: string | null;
+		/** Desconto geral da venda, em reais. Acima do teto do vendedor exige `descontoAprovacaoId`. */
+		descontosTotal?: number | null;
+		descontoAprovacaoId?: string | null;
 		itens: TTerminalSaleItemInput[];
 	};
 	benefits?: TTerminalBenefitsRequest | null;
@@ -90,12 +98,34 @@ export async function createTerminalSale({ organizationId, deviceId, deviceName,
 					})
 				: null;
 
+			// Desconto manual antes dos benefícios (mesma ordem do checkout web). Conferido aqui para a
+			// recusa sair com código próprio; o pipeline confere de novo e consome a aprovação.
+			const vendedorId = seller?.id ?? input.sale.vendedorId ?? null;
+			const descontosTotal = resolveTerminalDiscount({ descontosTotal: input.sale.descontosTotal, itemsTotal });
+			const descontoAprovacaoId = input.sale.descontoAprovacaoId ?? null;
+			if (descontosTotal > 0) {
+				await authorizeSaleDiscount({
+					orgId: organizationId,
+					session: null,
+					deviceId,
+					vendedorId,
+					valorBase: roundCents(itens.reduce((sum, item) => sum + item.valorTotalBruto, 0)),
+					descontoTotal: descontosTotal,
+					aprovacaoId: descontoAprovacaoId,
+				}).catch((error: unknown) => {
+					if (createHttpError.isHttpError(error) && error.statusCode === 403) {
+						throw new PaymentTerminalError(403, "DISCOUNT_APPROVAL_REQUIRED", error.message);
+					}
+					throw error;
+				});
+			}
+
 			// Benefícios contra o carrinho precificado: o desconto do cupom é o do motor, o cashback
 			// respeita o teto do programa sobre o que sobra depois do cupom.
 			const wantsBenefits = !!input.benefits?.cupomId || (input.benefits?.cashbackResgate ?? 0) > 0 || hasRewards;
 			const benefits = wantsBenefits && client ? await loadTerminalClientBenefits({ organizationId, clienteId: client.id, itens }) : null;
 			const decision = decideTerminalBenefits({
-				itemsTotal,
+				itemsTotal: roundCents(itemsTotal - descontosTotal),
 				hasClient: Boolean(client),
 				request: input.benefits,
 				coupons: benefits?.cupons ?? [],
@@ -122,10 +152,12 @@ export async function createTerminalSale({ organizationId, deviceId, deviceName,
 
 			const saleInput: TCreateAndConfirmSaleInput = {
 				clienteId: client?.id ?? null,
-				vendedorId: seller?.id ?? input.sale.vendedorId ?? null,
+				vendedorId,
 				vendedorNome: seller?.nome ?? null,
 				entregaModalidade: "PRESENCIAL",
 				observacoes: input.sale.observacoes ?? null,
+				descontosTotal: descontosTotal > 0 ? descontosTotal : null,
+				descontoAprovacaoId: descontosTotal > 0 ? descontoAprovacaoId : null,
 				pagamentos: resolvedPayments.splits.map(({ id: _id, ...split }) => split),
 				cashbackResgate: decision.cashbackResgate,
 				cashbackProgramaId: decision.cashbackProgramaId,
@@ -167,6 +199,7 @@ export async function createTerminalSale({ organizationId, deviceId, deviceName,
 					venda: {
 						...sale,
 						troco: confirmation.troco,
+						descontoManual: descontosTotal,
 						descontoCupom: decision.cupomDesconto,
 						cashbackResgatado: decision.cashbackResgate,
 						cashbackAcumulado: confirmation.cashbackAcumulo?.accumulatedValue ?? 0,

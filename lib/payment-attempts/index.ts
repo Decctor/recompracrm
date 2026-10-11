@@ -12,6 +12,8 @@ export * from "./state-machine";
 export * from "./terminal-benefits";
 export * from "./terminal-benefits-policy";
 export * from "./terminal-cart-item";
+export * from "./terminal-discount-approvals";
+export * from "./terminal-discount-policy";
 export * from "./terminal-payments";
 export * from "./terminal-sale";
 export * from "./views";

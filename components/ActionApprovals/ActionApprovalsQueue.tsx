@@ -169,7 +169,7 @@ function ActionApprovalHistory() {
 										<p className="font-semibold">{request.resumo.titulo}</p>
 										<p className="max-w-md truncate text-muted-foreground">{request.resumo.descricao}</p>
 									</td>
-									<td className="px-4 py-3">{request.solicitante?.nome ?? "Não identificado"}</td>
+									<td className="px-4 py-3">{request.solicitante?.nome ?? request.solicitanteDispositivo?.nome ?? "Não identificado"}</td>
 									<td className="px-4 py-3">
 										<span className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-semibold", config?.className)}>
 											<StatusIcon className="h-3.5 w-3.5" />
@@ -219,7 +219,7 @@ function ActionApprovalRequestCard({
 					<h1 className="text-xs font-bold tracking-tight lg:text-sm">{request.resumo.titulo}</h1>
 					<div className="flex items-center gap-1">
 						<CircleUser className="w-4 h-4 min-w-4 min-h-4" />
-						<p className="py-0.5 text-center text-[0.65rem] font-medium italic">{request.solicitante?.nome ?? "Solicitante não identificado"}</p>
+						<p className="py-0.5 text-center text-[0.65rem] font-medium italic">{request.solicitante?.nome ?? request.solicitanteDispositivo?.nome ?? "Solicitante não identificado"}</p>
 					</div>
 				</div>
 				<div className="flex items-center gap-3">

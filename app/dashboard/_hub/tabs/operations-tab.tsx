@@ -183,7 +183,7 @@ function ResolveNowRail({ context }: { context: TCapabilityContext }) {
 							}
 							primary={request.resumo.titulo}
 							secondary={[
-								request.solicitante?.nome,
+								request.solicitante?.nome ?? request.solicitanteDispositivo?.nome,
 								formatTimeAgo(request.dataInsercao),
 								request.resumo.valorPrincipal !== null ? formatToMoney(request.resumo.valorPrincipal) : null,
 							]

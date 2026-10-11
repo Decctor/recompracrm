@@ -115,3 +115,24 @@ nem imprime NFC-e (a emissão automática segue a política da organização, co
   pelos benefícios (total zero) vai sem pagamento, e venda só de recompensas vai sem itens.
 - Cupom de validação MANUAL aparece na lista, sem poder ser escolhido: a validação é do operador
   e o desconto conta no teto — no terminal, sem teto, viraria aprovação a cada venda.
+
+### Desconto com aprovação remota
+
+- O teto é o do vendedor da venda (membership vinculada); sem vendedor com membership, o do
+  dispositivo é zero. `GET /configuration` manda `vendedores[].descontoLimite` e
+  `descontoLimitePadrao` (`null` = sem teto) para o app avisar antes de cobrar.
+- Acima do teto, o app pede a aprovação: `POST /api/payment-terminal/discount-approvals`
+  (`{vendedorId, itens, descontosTotal}`; base e desconto calculados aqui sobre os itens
+  precificados) abre uma `VENDA_DESCONTO` na fila da plataforma com o terminal como solicitante
+  (`solicitanteDispositivoId`; `solicitanteId` ficou anulável). Dentro do teto responde
+  `approval: null`; um pedido pendente idêntico é devolvido em vez de duplicar a fila.
+  `GET .../{id}` acompanha (expiração preguiçosa) e `POST .../{id}/cancel` desiste. Tudo no scope
+  `payment-terminal:sales:create`: pedir desconto é parte de vender, sem nova ativação.
+- A venda leva `sale.descontosTotal` e `sale.descontoAprovacaoId`. Sem aprovação válida a recusa é
+  `403 DISCOUNT_APPROVAL_REQUIRED` (não `SCOPE_REQUIRED`). Aprovação pedida pelo terminal só é
+  consumida por ele, e a do PDV web só pelo PDV web (`authorizeSaleDiscount`, `deviceId`).
+- O desconto vem antes dos benefícios, como no checkout: cupom e cashback abatem o que sobra.
+
+Deploy desta etapa: `npm run db:push` (coluna `solicitante_dispositivo_id`, `solicitante_id` anulável
+em `ampmais_action_approval_requests`).
+
