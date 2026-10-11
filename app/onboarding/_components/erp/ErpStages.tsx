@@ -14,9 +14,14 @@ import { DEFAULT_SHOP_SETTINGS_CONFIGURATION } from "@/schemas/shop";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { getErrorMessage } from "@/lib/errors";
 import { toast } from "sonner";
+import { Skeleton } from "@/components/ui/skeleton";
 import dynamic from "next/dynamic";
-const NewProduct = dynamic(() => import("@/components/Modals/Products/NewProduct"));
-const ShopSettingsPanel = dynamic(() => import("@/app/dashboard/catalog/store/components/ShopSettingsPanel"));
+// `loading` não é opcional: sem ele o next/dynamic não cria Suspense próprio e, com o chunk ainda
+// não baixado, a suspensão sobe até o loading.tsx da rota — a tela inteira vira loading.
+const NewProduct = dynamic(() => import("@/components/Modals/Products/NewProduct"), { loading: () => null });
+const ShopSettingsPanel = dynamic(() => import("@/app/dashboard/catalog/store/components/ShopSettingsPanel"), {
+ loading: () => <Skeleton className="h-64 w-full rounded-xl" />,
+});
 
 type Props = {
  stage: string; readiness: TOnboardingReadiness; user: TAuthUserSession["user"]; membership: TAuthUserSession["membership"];

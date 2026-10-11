@@ -39,43 +39,24 @@ export function ControlServicePoint({ servicePoint, closeModal, callbacks }: Con
 		ativo: servicePoint.ativo,
 	});
 
-	// Token bruto: aparece SOMENTE apos a regeneracao (invalida o QR impresso anterior).
-	const [regeneratedToken, setRegeneratedToken] = useState<string | null>(null);
+	// QR fixo do ponto. Muda apenas quando o operador regenera (invalida o impresso).
+	const [tokenPublico, setTokenPublico] = useState(servicePoint.tokenPublico);
 
 	const { mutate, isPending } = useMutation({
 		mutationKey: ["update-service-point", servicePoint.id],
 		mutationFn: updateServicePoint,
-		onSuccess: (data) => {
+		onSuccess: (data, variables) => {
 			callbacks?.onSuccess?.();
-			toast.success(data.message);
-			if (data.data.tokenPublico) {
-				setRegeneratedToken(data.data.tokenPublico);
+			if (variables.regenerarToken) {
+				setTokenPublico(data.data.servicePoint.tokenPublico);
+				toast.success("QR regenerado. O QR impresso anterior não funciona mais — imprima o novo.");
 				return;
 			}
+			toast.success(data.message);
 			closeModal();
 		},
 		onError: (error) => toast.error(getErrorMessage(error)),
 	});
-
-	if (regeneratedToken) {
-		return (
-			<ResponsiveMenu
-				menuTitle="QR REGENERADO"
-				menuDescription="O QR anterior foi invalidado. Imprima ou copie o novo — ele aparece somente agora."
-				menuActionButtonText="CONCLUIR"
-				menuCancelButtonText="FECHAR"
-				actionFunction={closeModal}
-				actionIsLoading={false}
-				stateIsLoading={false}
-				stateError={null}
-				closeMenu={closeModal}
-			>
-				<div className="p-1">
-					<ServicePointQrDisplay tokenPublico={regeneratedToken} rotulo={state.rotulo ?? servicePoint.rotulo} />
-				</div>
-			</ResponsiveMenu>
-		);
-	}
 
 	return (
 		<ResponsiveMenu
@@ -95,6 +76,7 @@ export function ControlServicePoint({ servicePoint, closeModal, callbacks }: Con
 			closeMenu={closeModal}
 		>
 			<div className="flex flex-col gap-3 p-1">
+				<ServicePointQrDisplay tokenPublico={tokenPublico} rotulo={state.rotulo || servicePoint.rotulo} />
 				<TextInput
 					label="RÓTULO"
 					value={state.rotulo ?? ""}

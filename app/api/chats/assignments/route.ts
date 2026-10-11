@@ -17,6 +17,7 @@ import {
 	transferChatAttendance,
 	updateChatAttendanceSummary,
 } from "@/lib/chats/attendance-state";
+import { buildManualTransferDetails, notifyChatTransferRecipient } from "@/lib/chats/transfer-notification/notify";
 import { ChatAssignmentPriorityEnum, ChatAssignmentStatusEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
 import { chats } from "@/services/drizzle/schema/chats";
@@ -63,11 +64,19 @@ const UpdateChatAssignmentInputSchema = z.discriminatedUnion("acao", [
 ]);
 export type TUpdateChatAssignmentInput = z.infer<typeof UpdateChatAssignmentInputSchema>;
 
-/** Cada ação tem sua permissão de entrada; a posse é verificada depois, por atendimento. */
+/**
+ * Cada ação tem sua permissão de entrada; a posse é verificada depois, por atendimento
+ * (`mayManageAssignment`: responsável atual ou gestor com `finalizar`).
+ *
+ * Transferir e liberar exigem apenas `responder`: quem pode conduzir um atendimento pode
+ * passá-lo adiante ou devolvê-lo à fila. `receberTransferencias` é permissão do lado de
+ * quem RECEBE — filtra os destinos elegíveis (abaixo e em `transfer-to-human.ts`) — e
+ * não diz nada sobre quem envia.
+ */
 const ACTION_PERMISSION = {
 	assumir: "responder",
-	transferir: "receberTransferencias",
-	liberar: "receberTransferencias",
+	transferir: "responder",
+	liberar: "responder",
 	alterar_status: "responder",
 	alterar_prioridade: "responder",
 	alterar_resumo: "responder",
@@ -157,15 +166,56 @@ async function assignAttendanceToAgent({
 	return { data: { chatId: input.chatId, atendimentoId: assigned.id }, message: "Atendimento direcionado ao agente de IA." };
 }
 
+/**
+ * Avisa pelo WhatsApp quem recebeu o atendimento de outra pessoa, como a IA já fazia no
+ * handoff. Roda fora do ciclo do request: renderizar o header e subir a mídia leva segundos, e a
+ * notificação é acessória à posse.
+ */
+function notifyManualTransferRecipient({
+	session,
+	organizacaoId,
+	chatId,
+	usuarioDestinoId,
+	acao,
+	motivo,
+	resumo,
+}: {
+	session: TAuthUserSession;
+	organizacaoId: string;
+	chatId: string;
+	usuarioDestinoId: string;
+	acao: "TRANSFERENCIA" | "ATRIBUICAO";
+	motivo: string | null;
+	resumo: string | null;
+}) {
+	// Atribuir a si mesmo não é passar a conversa para ninguém.
+	if (usuarioDestinoId === session.user.id) return;
+
+	const fallbackReason = acao === "ATRIBUICAO" ? "Atendimento atribuído a você." : "Atendimento transferido para você.";
+	waitUntil(
+		notifyChatTransferRecipient({
+			db,
+			organizacaoId,
+			chatId,
+			usuarioDestinoId,
+			transferidoPor: session.user.nome,
+			motivo: motivo?.trim() || resumo?.trim() || fallbackReason,
+			detalhes: buildManualTransferDetails({ acao, transferidoPor: session.user.nome, motivo, resumo }),
+		}),
+	);
+}
+
 async function updateChatAssignment({ session, input }: { session: TAuthUserSession; input: TUpdateChatAssignmentInput }) {
 	const { organizacaoId } = assertChatAccess({ session, permission: ACTION_PERMISSION[input.acao] });
 	await assertChatBelongsToOrganization({ organizacaoId, chatId: input.chatId });
 
 	if (input.acao === "assumir") {
 		const assumed = await assumeChatAttendanceForUser(db, { organizacaoId, chatId: input.chatId, usuarioId: session.user.id });
-		// null = o compare-and-set não casou: outro usuário assumiu entre a leitura e a
-		// escrita. Sobrescrever aqui seria roubar a conversa de quem chegou primeiro.
-		if (!assumed) throw new createHttpError.Conflict("Esta conversa já possui responsável.");
+		// Quem tem `responder` pode assumir inclusive o que está com um colega (decisão de produto:
+		// o assumir é o caminho de autosserviço para quando a pessoa saiu de turno), então "já tem
+		// responsável" deixou de ser motivo de recusa. null = o compare-and-set perdeu uma corrida
+		// genuína: outra pessoa assumiu entre a leitura e a escrita, ou o ticket foi encerrado.
+		if (!assumed) throw new createHttpError.Conflict("Esta conversa acabou de mudar de responsável ou foi encerrada. Atualize e tente novamente.");
 		return { data: { chatId: input.chatId, atendimentoId: assumed.id }, message: "Atendimento assumido." };
 	}
 
@@ -179,6 +229,17 @@ async function updateChatAssignment({ session, input }: { session: TAuthUserSess
 			usuarioId: input.usuarioDestinoId,
 			atribuidoPorUsuarioId: session.user.id,
 		});
+		if (assigned) {
+			notifyManualTransferRecipient({
+				session,
+				organizacaoId,
+				chatId: input.chatId,
+				usuarioDestinoId: input.usuarioDestinoId,
+				acao: "ATRIBUICAO",
+				motivo: null,
+				resumo: assigned.resumo,
+			});
+		}
 		return { data: { chatId: input.chatId, atendimentoId: assigned?.id ?? null }, message: "Atendimento atribuído." };
 	}
 
@@ -202,6 +263,17 @@ async function updateChatAssignment({ session, input }: { session: TAuthUserSess
 			prioridade: input.prioridade ?? null,
 			transferidoPorUsuarioId: session.user.id,
 		});
+		if (transferred) {
+			notifyManualTransferRecipient({
+				session,
+				organizacaoId,
+				chatId: input.chatId,
+				usuarioDestinoId: input.destino.usuarioDestinoId,
+				acao: "TRANSFERENCIA",
+				motivo: input.motivo ?? null,
+				resumo: transferred.resumo,
+			});
+		}
 		return { data: { chatId: input.chatId, atendimentoId: transferred?.id ?? null }, message: "Atendimento transferido." };
 	}
 
@@ -214,8 +286,11 @@ async function updateChatAssignment({ session, input }: { session: TAuthUserSess
 		return { data: { chatId: input.chatId, atendimentoId: released?.id ?? null }, message: "Atendimento liberado." };
 	}
 
+	// Status, resumo e prioridade são atributos de um atendimento em curso: sem ticket ativo não há o
+	// que alterar, e criar um aqui (como antes) deixava tickets fantasmas, alguns já nascidos encerrados.
 	if (input.acao === "alterar_status") {
-		if (atual && !mayManageAssignment({ session, assignment: atual })) {
+		if (!atual) throw new createHttpError.Conflict("Conversa sem atendimento ativo.");
+		if (!mayManageAssignment({ session, assignment: atual })) {
 			throw new createHttpError.Forbidden("Somente o responsável ou um gestor pode alterar este atendimento.");
 		}
 		const updated = await changeChatAttendanceStatus(db, {
@@ -228,14 +303,16 @@ async function updateChatAssignment({ session, input }: { session: TAuthUserSess
 	}
 
 	if (input.acao === "alterar_resumo") {
-		if (atual && !mayManageAssignment({ session, assignment: atual })) {
+		if (!atual) throw new createHttpError.Conflict("Conversa sem atendimento ativo.");
+		if (!mayManageAssignment({ session, assignment: atual })) {
 			throw new createHttpError.Forbidden("Somente o responsável ou um gestor pode alterar este atendimento.");
 		}
 		const updated = await updateChatAttendanceSummary(db, { organizacaoId, chatId: input.chatId, resumo: input.resumo });
 		return { data: { chatId: input.chatId, atendimentoId: updated?.id ?? null }, message: "Resumo do atendimento atualizado." };
 	}
 
-	if (atual && !mayManageAssignment({ session, assignment: atual })) {
+	if (!atual) throw new createHttpError.Conflict("Conversa sem atendimento ativo.");
+	if (!mayManageAssignment({ session, assignment: atual })) {
 		throw new createHttpError.Forbidden("Somente o responsável ou um gestor pode alterar este atendimento.");
 	}
 	const updated = await changeChatAttendancePriority(db, { organizacaoId, chatId: input.chatId, prioridade: input.prioridade });

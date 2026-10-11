@@ -7,13 +7,15 @@ import { toast } from "sonner";
 
 type ProductBuilderModalProps = {
 	product: TGetPOSProductsOutput["data"]["products"][number];
+	/** Variante pré-selecionada (leitura do código de barras da variante). */
+	initialVariantId?: string | null;
 	onAddToCart: (item: TCartItem) => void;
 	onClose: () => void;
 	showImage?: boolean;
 };
 
-export default function ProductBuilderModal({ product, onAddToCart, onClose, showImage = false }: ProductBuilderModalProps) {
-	const builder = useProductBuilder({ product });
+export default function ProductBuilderModal({ product, initialVariantId = null, onAddToCart, onClose, showImage = false }: ProductBuilderModalProps) {
+	const builder = useProductBuilder({ product, initialVariantId });
 
 	const handleAddToCart = () => {
 		const item = builder.buildItem();

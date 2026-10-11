@@ -27,7 +27,7 @@ function ProductsGridBlock({ productsData, isLoading, isError, error, viewMode, 
 	if (productsData && productsData.products.length > 0) {
 		if (viewMode === "list") {
 			return (
-				<div className="flex flex-col gap-2 pb-4">
+				<div className="flex flex-col gap-2 pb-4 text-numeric">
 					{productsData.products.map((product) => (
 						<ProductListRow key={product.id} product={product} orgTracksStock={orgTracksStock} onSelect={onProductClick} />
 					))}
@@ -36,7 +36,7 @@ function ProductsGridBlock({ productsData, isLoading, isError, error, viewMode, 
 		}
 
 		return (
-			<div className="grid grid-cols-2 gap-2.5 pb-4 sm:grid-cols-[repeat(auto-fill,minmax(9.5rem,10.5rem))] sm:justify-start">
+			<div className="grid grid-cols-2 gap-2.5 pb-4 text-numeric sm:grid-cols-[repeat(auto-fill,minmax(9.5rem,10.5rem))] sm:justify-start">
 				{productsData.products.map((product) => (
 					<ProductCard key={product.id} product={product} orgTracksStock={orgTracksStock} onSelect={onProductClick} />
 				))}

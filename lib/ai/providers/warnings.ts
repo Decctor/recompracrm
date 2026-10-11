@@ -16,8 +16,8 @@ import type { LogWarningsFunction, Warning } from "ai";
  * `responseFormat JSON schema` em modo de compatibilidade: o AI Gateway injeta o JSON schema no
  * system prompt quando o modelo não expõe `response_format: json_schema` nativo (DeepSeek, entre
  * outros). O resultado continua validado pelo Zod em `Output.object`, e um formato inválido cai
- * no modelo de resgate (`STRUCTURED_OUTPUT_FALLBACK_MODEL`). Como o DeepSeek V4 Pro é o modelo
- * recomendado do catálogo, o aviso apareceria duas vezes em todo turno de atendimento.
+ * no modelo de resgate (`STRUCTURED_OUTPUT_FALLBACK_MODEL`). Agentes antigos ainda podem usar
+ * modelos com esse comportamento, sem que o aviso represente uma falha no atendimento.
  */
 export function isExpectedAiSdkWarning(warning: Warning): boolean {
 	return warning.type === "compatibility" && warning.feature === "responseFormat JSON schema";

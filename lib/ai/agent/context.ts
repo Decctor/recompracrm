@@ -64,7 +64,53 @@ function formatSaoPauloMoment(instant: string): string {
 		hour12: false,
 	}).format(date);
 
-	return `${localDateTime} (${period})`;
+	// O dia da semana vai escrito: deduzi-lo da data é conta que o modelo erra, e é dele que
+	// dependem horário de funcionamento e cardápio do dia.
+	return `${formatSaoPauloWeekday(date)}, ${localDateTime} (${period})`;
+}
+
+function formatSaoPauloWeekday(date: Date): string {
+	return new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", weekday: "long" }).format(date);
+}
+
+/** Dia civil em São Paulo como `YYYY-MM-DD`, para comparar dias sem cair na virada UTC. */
+function saoPauloDayKey(date: Date): string {
+	return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
+}
+
+function daysBetweenDayKeys(from: string, to: string): number {
+	return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
+}
+
+function formatConversationDaySeparator(date: Date, now: Date): string {
+	const day = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short" }).format(date);
+	const age = daysBetweenDayKeys(saoPauloDayKey(date), saoPauloDayKey(now));
+	const relative = age <= 0 ? "hoje" : age === 1 ? "ontem" : `há ${age} dias`;
+	return `--- ${formatSaoPauloWeekday(date)}, ${day} (${relative}) ---`;
+}
+
+/**
+ * A conversa vai agrupada por dia. Sem as datas, uma conversa de semanas atrás e a saudação de
+ * hoje chegavam ao modelo como um diálogo contínuo — e um "Oi" virava continuação do orçamento
+ * de evento antigo, com transferência para humano.
+ */
+function formatConversation(conversa: TChatRunContext["conversa"], agora: string): string {
+	const now = new Date(agora);
+	let previousDayKey: string | null = null;
+	const lines: string[] = [];
+	for (const message of conversa) {
+		// O snapshot da run volta do JSON com a data em string.
+		const sentAt = message.dataEnvio ? new Date(message.dataEnvio) : null;
+		if (sentAt && !Number.isNaN(sentAt.getTime())) {
+			const dayKey = saoPauloDayKey(sentAt);
+			if (dayKey !== previousDayKey) {
+				lines.push(formatConversationDaySeparator(sentAt, now));
+				previousDayKey = dayKey;
+			}
+		}
+		lines.push(`${message.autor}: ${message.texto}`);
+	}
+	return lines.join("\n");
 }
 
 /**
@@ -247,7 +293,7 @@ export function formatChatRunContext(context: TChatRunContext, options: TChatRun
 		.filter(Boolean)
 		.join("\n");
 
-	const conversation = context.conversa.map((message) => `${message.autor}: ${message.texto}`).join("\n");
+	const conversation = formatConversation(context.conversa, context.tempo.agora);
 
 	const attendanceBlock = context.atendimento
 		? `\n## Atendimento em aberto\n- Status: ${context.atendimento.status}\n- Responsável: ${context.atendimento.responsavelTipo}${

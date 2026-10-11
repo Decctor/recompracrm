@@ -5,10 +5,13 @@ import { Button } from "@/components/ui/button";
 import { chipVariants } from "@/components/ui/chip";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { chatsInboxParsers } from "@/lib/chats/inbox-url-state";
 import { isActiveAiRunStatus } from "@/lib/chats/ai-presence";
 import { mapRealtimeChatRow, type TRealtimeAiRunRow, type TRealtimeChatRow } from "@/lib/chats/realtime-mappers";
 import { getErrorMessage } from "@/lib/errors";
+import { useDebounceMemo } from "@/lib/hooks/use-debounce";
+import { markAllChatsRead } from "@/lib/mutations/chats";
 import { CHAT_INBOX_COUNTS_QUERY_KEY_ROOT, useChatInboxCounts, useChats, type TChatInboxItem } from "@/lib/queries/chats";
 import { cn } from "@/lib/utils";
 import {
@@ -20,14 +23,16 @@ import {
 	type TChatInboxQuickFilter,
 	type TChatInboxView,
 } from "@/schemas/enums";
-import { supabaseClient } from "@/services/supabase";
-import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
+import { createRealtimeChannel, supabaseClient } from "@/services/supabase";
+import { useMutation, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import {
 	Check,
+	CheckCheck,
 	ChevronLeft,
 	ChevronRight,
 	Inbox,
 	LayoutGrid,
+	Loader2,
 	type LucideIcon,
 	RefreshCw,
 	Search,
@@ -39,6 +44,7 @@ import {
 } from "lucide-react";
 import { useQueryStates } from "nuqs";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { PRIORITY_META, STATUS_META } from "./attendance-meta";
 import { ChatInboxListItem } from "./ChatInboxListItem";
 
@@ -133,16 +139,23 @@ function parseEnumArray<T extends string>(values: unknown, parse: (value: unknow
 	});
 }
 
+/** Intervalo do polling de contingência quando o canal realtime está fora do ar. */
+const REALTIME_FALLBACK_POLL_MS = 15_000;
+
+/**
+ * Dono da semeadura dos filtros salvos. A lista só monta (e só dispara a query) depois que a
+ * semeadura terminou: `useChats` não expõe `enabled`, então o portão é o próprio componente. Sem
+ * isso a visão padrão ("Minhas") carregava, e logo em seguida a visão salva a substituía — duas
+ * requisições e um flash. O primeiro render (servidor e cliente) é sempre o esqueleto, então não há
+ * divergência de hidratação.
+ */
 export function ChatSidebar({ organizationId, selectedChatId, onSelectChat, whatsappConnections, className }: ChatSidebarProps) {
 	// A URL é a dona dos filtros: deep-links do dashboard (`?view=TODAS&status=ABERTO`) e filtros
 	// escolhidos aqui são o mesmo estado, compartilhável por definição.
 	const [inboxFilters, setInboxFilters] = useQueryStates(chatsInboxParsers, { history: "replace" });
-	const { view, status: statusFilter, priority: priorityFilter, quick: quickFilter } = inboxFilters;
-	const [search, setSearch] = useState("");
+	const { view, status: statusFilter, priority: priorityFilter } = inboxFilters;
 	const [selectedPhoneId, setSelectedPhoneId] = useState<string | null>(null);
 	const [filtersLoaded, setFiltersLoaded] = useState(false);
-	const queryClient = useQueryClient();
-	const initialSubscriptionCompleteRef = useRef(false);
 	const seededRef = useRef(false);
 
 	const phones = useMemo(() => whatsappConnections.flatMap((connection) => connection.telefones ?? []), [whatsappConnections]);
@@ -191,6 +204,52 @@ export function ChatSidebar({ organizationId, selectedChatId, onSelectChat, what
 		}
 	}, [filtersLoaded, storageKey, view, selectedPhoneId, statusFilter, priorityFilter]);
 
+	if (!filtersLoaded) {
+		return (
+			<aside className={cn("flex h-full min-h-0 w-full min-w-0 flex-col border-r border-border bg-background", className)}>
+				<ChatListSkeleton />
+			</aside>
+		);
+	}
+
+	return (
+		<ChatSidebarContent
+			organizationId={organizationId}
+			selectedChatId={selectedChatId}
+			onSelectChat={onSelectChat}
+			className={className}
+			phones={phones}
+			selectedPhoneId={selectedPhoneId}
+			onSelectedPhoneIdChange={setSelectedPhoneId}
+		/>
+	);
+}
+
+type TPhone = NonNullable<TGetWhatsappConnectionsOutput["data"][number]["telefones"]>[number];
+
+type ChatSidebarContentProps = Omit<ChatSidebarProps, "whatsappConnections"> & {
+	phones: TPhone[];
+	selectedPhoneId: string | null;
+	onSelectedPhoneIdChange: (phoneId: string | null) => void;
+};
+
+function ChatSidebarContent({
+	organizationId,
+	selectedChatId,
+	onSelectChat,
+	className,
+	phones,
+	selectedPhoneId,
+	onSelectedPhoneIdChange,
+}: ChatSidebarContentProps) {
+	const [inboxFilters, setInboxFilters] = useQueryStates(chatsInboxParsers, { history: "replace" });
+	const { view, status: statusFilter, priority: priorityFilter, quick: quickFilter } = inboxFilters;
+	const [search, setSearch] = useState("");
+	const queryClient = useQueryClient();
+	const initialSubscriptionCompleteRef = useRef(false);
+	// Canal realtime fora do ar (erro, timeout ou fechado): a lista passa a atualizar por polling.
+	const [realtimeDown, setRealtimeDown] = useState(false);
+
 	const filters = { whatsappConexaoTelefoneId: selectedPhoneId, view, search, status: statusFilter, priority: priorityFilter };
 	const { chats, isPending, isError, error, refetch, hasNextPage, fetchNextPage, isFetchingNextPage, queryKey } = useChats({
 		...filters,
@@ -206,6 +265,9 @@ export function ChatSidebar({ organizationId, selectedChatId, onSelectChat, what
 		// Rajadas de mensagens disparam vários UPDATEs em sequência; as contagens só precisam
 		// refletir o estado final.
 		let countsTimer: ReturnType<typeof setTimeout> | null = null;
+		let disposed = false;
+		let hadFailure = false;
+		setRealtimeDown(false);
 		const scheduleCountsRefresh = () => {
 			if (countsTimer) return;
 			countsTimer = setTimeout(() => {
@@ -214,8 +276,8 @@ export function ChatSidebar({ organizationId, selectedChatId, onSelectChat, what
 			}, 800);
 		};
 
-		const channel = supabaseClient
-			.channel(`chats-sidebar-${organizationId}`)
+		// Nome único por inscrição: ver `createRealtimeChannel`.
+		const channel = createRealtimeChannel(`chats-sidebar-${organizationId}`)
 			.on(
 				"postgres_changes",
 				{ event: "UPDATE", schema: "public", table: "ampmais_chats", filter: `organizacao_id=eq.${organizationId}` },
@@ -284,23 +346,57 @@ export function ChatSidebar({ organizationId, selectedChatId, onSelectChat, what
 				},
 			)
 			.subscribe((status) => {
+				// `removeChannel` dispara CLOSED na limpeza; esse não é uma falha.
+				if (disposed) return;
+				if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+					hadFailure = true;
+					setRealtimeDown(true);
+					return;
+				}
 				if (status !== "SUBSCRIBED") return;
+				setRealtimeDown(false);
 				// A primeira inscrição não precisa invalidar (a query acabou de rodar); as
-				// seguintes são reconexões, e aí o cache pode ter perdido eventos.
-				if (!initialSubscriptionCompleteRef.current) {
+				// seguintes são reconexões, e aí o cache pode ter perdido eventos. Se a primeira
+				// tentativa falhou, a inscrição que enfim funciona também é uma reconexão.
+				if (!initialSubscriptionCompleteRef.current && !hadFailure) {
 					initialSubscriptionCompleteRef.current = true;
 					return;
 				}
+				initialSubscriptionCompleteRef.current = true;
+				hadFailure = false;
 				void queryClient.invalidateQueries({ queryKey: queryKeyRef.current });
 				scheduleCountsRefresh();
 			});
 
 		return () => {
+			disposed = true;
 			if (countsTimer) clearTimeout(countsTimer);
 			initialSubscriptionCompleteRef.current = false;
 			void supabaseClient.removeChannel(channel);
 		};
 	}, [organizationId, queryClient]);
+
+	// Contingência: com o canal fora do ar a lista não recebe mais eventos e `useChats` não refaz a
+	// busca sozinho (sem intervalo, sem refetch no foco), enquanto a pílula de não lidas segue
+	// atualizando a cada 60s — número novo, linhas velhas. Aqui a lista é reconsultada por intervalo
+	// e ao voltar para a aba até o canal reinscrever.
+	const refetchRef = useRef(refetch);
+	refetchRef.current = refetch;
+	useEffect(() => {
+		if (!realtimeDown) return;
+		const refresh = () => {
+			if (document.visibilityState === "hidden") return;
+			void refetchRef.current();
+		};
+		const interval = setInterval(refresh, REALTIME_FALLBACK_POLL_MS);
+		window.addEventListener("focus", refresh);
+		document.addEventListener("visibilitychange", refresh);
+		return () => {
+			clearInterval(interval);
+			window.removeEventListener("focus", refresh);
+			document.removeEventListener("visibilitychange", refresh);
+		};
+	}, [realtimeDown]);
 
 	const loadMoreRef = useRef<HTMLDivElement | null>(null);
 	useEffect(() => {
@@ -320,7 +416,7 @@ export function ChatSidebar({ organizationId, selectedChatId, onSelectChat, what
 	const hasAnyFilter = advancedFilterCount > 0 || quickFilter !== "TODAS" || !!search;
 
 	function clearAdvancedFilters() {
-		setSelectedPhoneId(null);
+		onSelectedPhoneIdChange(null);
 		void setInboxFilters({ status: [], priority: [] });
 	}
 
@@ -409,12 +505,12 @@ export function ChatSidebar({ organizationId, selectedChatId, onSelectChat, what
 								{phones.length > 1 ? (
 									<FilterSection title="Número">
 										<div className="flex flex-col gap-0.5">
-											<PhoneOption selected={selectedPhoneId == null} onSelect={() => setSelectedPhoneId(null)} icon={LayoutGrid} name="Todos os números" />
+											<PhoneOption selected={selectedPhoneId == null} onSelect={() => onSelectedPhoneIdChange(null)} icon={LayoutGrid} name="Todos os números" />
 											{phones.map((phone) => (
 												<PhoneOption
 													key={phone.id}
 													selected={phone.id === selectedPhoneId}
-													onSelect={() => setSelectedPhoneId(phone.id)}
+													onSelect={() => onSelectedPhoneIdChange(phone.id)}
 													icon={Smartphone}
 													name={phone.nome || phone.numero}
 													detail={phone.nome ? phone.numero : null}
@@ -457,6 +553,10 @@ export function ChatSidebar({ organizationId, selectedChatId, onSelectChat, what
 							</div>
 						</PopoverContent>
 					</Popover>
+
+					{counts && counts.NAO_LIDAS > 0 ? (
+						<MarkAllReadControl unreadCount={counts.NAO_LIDAS} filters={filters} hasScopeFilters={advancedFilterCount > 0 || !!search.trim()} />
+					) : null}
 				</div>
 
 				<HorizontalScroller ariaLabel="Atalhos de filtro">
@@ -488,6 +588,12 @@ export function ChatSidebar({ organizationId, selectedChatId, onSelectChat, what
 						);
 					})}
 				</HorizontalScroller>
+
+				{realtimeDown ? (
+					<p role="status" className="text-[11px] leading-snug text-muted-foreground">
+						Atualizações em tempo real indisponíveis. Atualizando periodicamente.
+					</p>
+				) : null}
 			</div>
 
 			<div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-foreground/15">
@@ -544,6 +650,120 @@ export function ChatSidebar({ organizationId, selectedChatId, onSelectChat, what
 				)}
 			</div>
 		</aside>
+	);
+}
+
+type TInboxScope = {
+	whatsappConexaoTelefoneId: string | null;
+	view: TChatInboxView;
+	search: string;
+	status: TChatAssignmentStatus[];
+	priority: TChatInboxPriorityFilter[];
+};
+
+function describeMarkAllReadScope({ count, view, hasScopeFilters }: { count: number; view: TChatInboxView; hasScopeFilters: boolean }) {
+	const conversations = count === 1 ? "conversa" : "conversas";
+	const read = count === 1 ? "lida" : "lidas";
+	const filtersSuffix = hasScopeFilters ? " com os filtros atuais" : "";
+	if (view === "MINHAS") return `Marcar ${count === 1 ? "sua" : "suas"} ${count} ${conversations}${filtersSuffix} como ${read}?`;
+	const article = count === 1 ? "a" : "as";
+	const viewSuffix = view === "TODAS" ? "" : ` de ${INBOX_VIEWS.find((item) => item.id === view)?.label ?? ""}`;
+	return `Marcar ${article} ${count} ${conversations}${viewSuffix}${filtersSuffix} como ${read}?`;
+}
+
+/**
+ * Zera as não lidas de todo o escopo atual da inbox (visão + busca + filtros), não só da página
+ * carregada: o número da confirmação é a contagem de "Não lidas" do servidor, e o PATCH aplica o
+ * mesmo predicado. Confirmação em popover, não em modal — é reversível no sentido prático (a
+ * próxima mensagem do cliente volta a marcar) e não merece interromper a tela.
+ */
+function MarkAllReadControl({ unreadCount, filters, hasScopeFilters }: { unreadCount: number; filters: TInboxScope; hasScopeFilters: boolean }) {
+	const queryClient = useQueryClient();
+	const [open, setOpen] = useState(false);
+	// Mesmo debounce das contagens: o escopo enviado é o que produziu o número exibido.
+	const debounced = useDebounceMemo({ search: filters.search }, 350);
+
+	const { mutate, isPending } = useMutation({
+		mutationKey: ["mark-all-chats-read"],
+		mutationFn: markAllChatsRead,
+		onMutate: () => {
+			// Todas as visões: a mesma conversa aparece em "Livres", "Todas" etc.
+			queryClient.setQueriesData<InfiniteData<TInboxPage>>({ queryKey: ["chats"] }, (current) =>
+				current?.pages
+					? {
+							...current,
+							pages: current.pages.map((page) => ({
+								...page,
+								items: page.items.map((item) => (item.mensagensNaoLidas > 0 ? { ...item, mensagensNaoLidas: 0 } : item)),
+							})),
+						}
+					: current,
+			);
+			queryClient.setQueriesData<Record<TChatInboxQuickFilter, number>>({ queryKey: [CHAT_INBOX_COUNTS_QUERY_KEY_ROOT] }, (current) =>
+				current ? { ...current, NAO_LIDAS: 0 } : current,
+			);
+		},
+		onSuccess: (data) => {
+			toast.success(data.message);
+			setOpen(false);
+		},
+		onError: (error) => {
+			toast.error(getErrorMessage(error));
+		},
+		onSettled: () => {
+			void queryClient.invalidateQueries({ queryKey: ["chats"] });
+			void queryClient.invalidateQueries({ queryKey: [CHAT_INBOX_COUNTS_QUERY_KEY_ROOT] });
+		},
+	});
+
+	return (
+		<TooltipProvider delay={300}>
+			<Tooltip>
+				<Popover open={open} onOpenChange={setOpen}>
+					<TooltipTrigger
+						render={
+							<PopoverTrigger
+								render={
+									<Button type="button" variant="ghost" size="icon-sm" className="size-9 shrink-0 lg:size-8" aria-label="Marcar todas como lidas">
+										<CheckCheck />
+									</Button>
+								}
+							/>
+						}
+					/>
+					<TooltipContent side="bottom">Marcar todas como lidas</TooltipContent>
+					<PopoverContent align="end" className="w-72 gap-3">
+						<div className="flex flex-col gap-1">
+							<p className="text-sm font-semibold tracking-tight">Marcar todas como lidas</p>
+							<p className="text-numeric text-sm text-foreground">{describeMarkAllReadScope({ count: unreadCount, view: filters.view, hasScopeFilters })}</p>
+							{filters.view !== "MINHAS" ? <p className="text-xs text-muted-foreground">Vale para toda a equipe.</p> : null}
+						</div>
+						<div className="flex items-center justify-end gap-2">
+							<Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)} disabled={isPending}>
+								Cancelar
+							</Button>
+							<Button
+								type="button"
+								size="sm"
+								disabled={isPending}
+								onClick={() =>
+									mutate({
+										whatsappConexaoTelefoneId: filters.whatsappConexaoTelefoneId,
+										view: filters.view,
+										search: debounced.search || null,
+										status: filters.status,
+										priority: filters.priority,
+									})
+								}
+							>
+								{isPending ? <Loader2 className="animate-spin" /> : null}
+								Marcar como lidas
+							</Button>
+						</div>
+					</PopoverContent>
+				</Popover>
+			</Tooltip>
+		</TooltipProvider>
 	);
 }
 

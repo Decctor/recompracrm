@@ -17,7 +17,7 @@ import { updateChatAssignment } from "@/lib/mutations/chats";
 import { useChatsBoard, type TChatBoardCard, type TChatBoardData, type TChatBoardFilters } from "@/lib/queries/chats-board";
 import { cn } from "@/lib/utils";
 import type { TChatAssignmentPriority, TChatAssignmentStatus } from "@/schemas/enums";
-import { supabaseClient } from "@/services/supabase";
+import { createRealtimeChannel, supabaseClient } from "@/services/supabase";
 import {
 	closestCorners,
 	DndContext,
@@ -91,8 +91,8 @@ export default function ChatsBoard({ organizationId, whatsappConnections, onOpen
 	// atendimento. Diferente da inbox, aqui não há patch cirúrgico que valha a pena: a
 	// posição do card depende do status e o total da coluna vem do servidor.
 	useEffect(() => {
-		const channel = supabaseClient
-			.channel(`chats-board-${organizationId}`)
+		// Nome único por inscrição: ver `createRealtimeChannel`.
+		const channel = createRealtimeChannel(`chats-board-${organizationId}`)
 			.on("postgres_changes", { event: "*", schema: "public", table: "ampmais_chat_assignments", filter: `organizacao_id=eq.${organizationId}` }, () => {
 				// Enquanto há movimento em voo, o cache local é a verdade — invalidar aqui
 				// competiria com o otimismo e faria o card piscar entre as colunas.

@@ -24,7 +24,7 @@ import {
 // MODELO
 // ============================================================================
 
-export const DEFAULT_AI_AGENT_MODEL = "openai/gpt-5";
+export const DEFAULT_AI_AGENT_MODEL = "openai/gpt-6-luna";
 
 export const AiAgentModelConfigSchema = z
 	.object({
@@ -271,6 +271,16 @@ export function isClientInAgentScope(escopo: TAiAgentScope, clienteId: string): 
 	if (escopo.tipo === "INCLUIR") return clienteIds.includes(clienteId);
 	if (escopo.tipo === "EXCLUIR") return clienteIds.length === 0 || !clienteIds.includes(clienteId);
 	return true;
+}
+
+/**
+ * O cliente foi nomeado numa lista de inclusão. É a única forma de o agente atender um número
+ * da equipe: a lista explícita vence a regra do telefone da equipe, e é assim que a loja testa
+ * o agente no próprio número antes de liberá-lo para todo mundo. `TODOS` e `EXCLUIR` não contam
+ * — não nomeiam ninguém.
+ */
+export function isClientExplicitlyIncludedInAgentScope(escopo: TAiAgentScope, clienteId: string): boolean {
+	return escopo.tipo === "INCLUIR" && isClientInAgentScope(escopo, clienteId);
 }
 
 // ============================================================================

@@ -2,6 +2,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { connection, db } from "@/services/drizzle";
+import { withProductUpdateStamp } from "@/lib/products/update-stamp";
 import { clients, integrations, organizations, products, sales, sellers } from "@/services/drizzle/schema";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { formatPhoneAsBase } from "@/lib/formatting";
@@ -189,7 +190,7 @@ async function main() {
 	}
 	await recomputeClientMetricsForOrganization({ organizationId });
 	// Itens criados apenas para referenciar o histórico não devem virar ofertas no futuro ERP.
-	await db.update(products).set({ ativo: false, vendavel: false }).where(and(eq(products.organizacaoId, organizationId), eq(products.grupo, "PHIBO-HISTORICO"), inArray(products.codigo, createdProducts.map((product) => product.code))));
+	await db.update(products).set(withProductUpdateStamp({ ativo: false, vendavel: false })).where(and(eq(products.organizacaoId, organizationId), eq(products.grupo, "PHIBO-HISTORICO"), inArray(products.codigo, createdProducts.map((product) => product.code))));
 	const [dbSales, dbItems, dbProducts] = await Promise.all([
 		db.select({ quantidade: sql<number>`count(*)::integer`, valorCentavos: sql<number>`round(sum(${sales.valorTotal}) * 100)::integer` }).from(sales).where(and(eq(sales.organizacaoId, organizationId), eq(sales.integracaoId, integration.id))),
 		db.execute(sql`select count(*)::integer as quantidade from ampmais_sale_items i join ampmais_sales v on v.id = i.venda_id where v.organizacao_id = ${organizationId} and v.integracao_id = ${integration.id}`),

@@ -5,12 +5,11 @@ import { getChannelErpPolicy } from "@/lib/sales/fulfillment-channels/policy";
 import type { TOrganizationConfiguration } from "@/schemas/organizations";
 import { clients, sales } from "@/services/drizzle/schema";
 import { and, eq, isNull } from "drizzle-orm";
-import { resolveCampaignAudiences } from "./campaign-audiences";
 import { processDataCollectingV2Effects } from "./effects";
 import { shouldProcessIntegratedSaleConfirmation } from "./integrated-sale-confirmation-policy";
-import { loadPurchaseEffectCampaigns } from "./purchase-effect-campaigns";
 import type { TDataCollectingV2Executor, TPersistedSaleForEffects } from "./types";
 import { attendanceStatusValues } from "@/lib/sales/sale-processing/attendance";
+import { lockClientPurchaseHistoryBlocking } from "@/lib/coupons/purchase-history";
 
 export async function processIntegratedSaleConfirmation({
 	tx,
@@ -49,6 +48,9 @@ export async function processIntegratedSaleConfirmation({
 	// conclusão dos seus efeitos. A evolução correta é separar essas responsabilidades com um
 	// marcador/ledger transacional de efeitos de confirmação, permitindo repetir efeitos que
 	// falharam sem regredir o status comercial da venda.
+	// Customer lock before the sale row claim, same order as POS confirmation. The remote order is
+	// already confirmed when this runs, so waiting here beats failing the local confirmation.
+	if (existingSale.clienteId) await lockClientPurchaseHistoryBlocking(tx, organizationId, existingSale.clienteId);
 	const claimed = await tx
 		.update(sales)
 		.set({ statusVenda: "CONFIRMADA", ...attendanceStatusValues("EM_PREPARO") })
@@ -56,7 +58,12 @@ export async function processIntegratedSaleConfirmation({
 		.returning({ id: sales.id });
 	if (claimed.length === 0) return { processed: false, eventDispatches: [] };
 
-	const client = existingSale.cliente;
+	const client = existingSale.clienteId
+		? await tx.query.clients.findFirst({
+				where: and(eq(clients.id, existingSale.clienteId), eq(clients.organizacaoId, organizationId)),
+				columns: { id: true, primeiraCompraId: true, metadataTotalCompras: true, metadataValorTotalCompras: true },
+			})
+		: null;
 	const previousTotalPurchaseCount = client?.metadataTotalCompras ?? 0;
 	const previousTotalPurchaseValue = client?.metadataValorTotalCompras ?? 0;
 	const newTotalPurchaseCount = client ? previousTotalPurchaseCount + 1 : null;
@@ -98,18 +105,9 @@ export async function processIntegratedSaleConfirmation({
 		previousTotalPurchaseValue: client ? previousTotalPurchaseValue : null,
 	};
 
-	const purchaseCampaigns = await loadPurchaseEffectCampaigns(tx, organizationId);
-	const audiencesByCampaignId = await resolveCampaignAudiences({
-		tx,
-		organizationId,
-		campaigns: purchaseCampaigns,
-		restrictToClientIds: existingSale.clienteId ? [existingSale.clienteId] : [],
-	});
 	const effectsResult = await processDataCollectingV2Effects({
 		tx,
 		organizationId,
-		campaigns: purchaseCampaigns,
-		audiencesByCampaignId,
 		persistedSales: [persistedSale],
 		options: { processCashback: true, processCampaigns: true, processConversionAttribution: true },
 	});
@@ -124,5 +122,5 @@ export async function processIntegratedSaleConfirmation({
 		});
 	}
 
-	return { processed: true, eventDispatches: effectsResult.eventDispatches };
+	return { processed: true, eventDispatches: effectsResult.eventDispatches, campaignEventsCapturedCount: effectsResult.campaignEventsCapturedCount };
 }

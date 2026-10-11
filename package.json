@@ -38,6 +38,7 @@
 		"dedupe:product-add-ons": "tsx ./scripts/dedupe-product-add-ons.ts",
 		"dedupe:add-on-options": "tsx ./scripts/dedupe-add-on-options.ts",
 		"test:dedupe-add-on-options": "node --import tsx --test lib/products/dedupe-add-on-options.test.ts",
+		"test:pos-barcode": "node --import tsx --test lib/pos/barcode-scan-detector.test.ts lib/pos/barcode-lookup.test.ts",
 		"analyze:product-add-ons": "tsx ./scripts/analyze-product-add-ons.ts",
 		"verify:organization-slugs": "tsx ./scripts/verify-organization-slugs.ts",
 		"seed:access-clients": "tsx ./scripts/seed-access-clients.ts",
@@ -63,7 +64,7 @@
 		"simulate:sale-taxes": "tsx --conditions=react-server ./scripts/simulate-todays-sale-taxes.ts",
 		"test:data-collecting-template-vars": "tsx ./scripts/validate-data-collecting-template-variables.ts",
 		"test:goals": "node --import tsx --test lib/goals/pacing.test.ts lib/operation-timezone.test.ts",
-		"test:print-templates": "node --import tsx --test lib/desktop-agent/templates/cupom-venda.test.ts lib/sales/sale-item-modifier-groups.test.ts",
+		"test:print-templates": "node --import tsx --test lib/desktop-agent/templates/cupom-venda.test.ts lib/desktop-agent/templates/ticket-preparo.test.ts lib/sales/sale-item-modifier-groups.test.ts",
 		"test:fiscal-auto-emission": "node --import tsx --test lib/fiscal/auto-emission-policy.test.ts lib/fiscal/auto-emission-delay.test.ts",
 		"test:fiscal-export": "node --import tsx --test lib/fiscal/document-details-view.test.ts",
 		"test:sale-change": "node --import tsx --test lib/sales/sale-change.test.ts lib/sales/sale-processing/attendance.test.ts",
@@ -72,11 +73,12 @@
 		"test:campaign-dispatch": "node --import tsx --test lib/campaigns/dispatch/schedule.test.ts lib/campaigns/dispatch/interruption-policy.test.ts",
 		"test:geo": "node --import tsx --test lib/geo/brazilian-locations.test.ts lib/geo/address-parsing.test.ts lib/geo/viacep.test.ts",
 		"test:sales-channels": "node --import tsx --test lib/products/sales-channels.test.ts",
-		"test:product-pricing": "node --import tsx --test lib/products/price-snapshot.test.ts lib/products/pricing.test.ts",
+		"test:tab-ordering": "node --import tsx --test lib/products/resolve-catalog-order-item.test.ts lib/products/add-on-rules.test.ts",
+		"test:product-pricing": "node --import tsx --test lib/products/price-snapshot.test.ts lib/products/pricing.test.ts lib/products/update-stamp.test.ts",
 		"test:visual-kits": "node --import tsx --test lib/visual-kits/formats.test.ts lib/visual-kits/generation/file-names.test.ts lib/visual-kits/pieces/ean.test.ts lib/visual-kits/pieces/code128.test.ts lib/visual-kits/pieces/price-sticker.test.ts lib/products/barcode.test.ts",
 		"test:cashback-rewards-display": "node --import tsx --test lib/cashback/rewards-display-layout.test.ts",
 		"test:client-vinculation": "node --import tsx --test lib/clients/client-vinculation-flow.test.ts lib/clients/parse-client-search-intent.test.ts lib/phone-search-patterns.test.ts",
-		"test:cashback-redemption": "node --import tsx --test lib/cashback/redemption-policy.test.ts lib/shop/checkout.test.ts lib/sales/sale-reward-snapshot.test.ts lib/fiscal/header-discount.test.ts lib/fiscal/other-charges.test.ts lib/point-of-interaction/sale-value-confirmation.test.ts lib/point-of-interaction/transaction-requests.test.ts",
+		"test:cashback-redemption": "node --import tsx --test lib/cashback/redemption-policy.test.ts lib/cashback/client-position.test.ts lib/shop/checkout.test.ts lib/sales/sale-reward-snapshot.test.ts lib/fiscal/header-discount.test.ts lib/fiscal/other-charges.test.ts lib/point-of-interaction/sale-value-confirmation.test.ts lib/point-of-interaction/transaction-requests.test.ts",
 		"test:sales-results": "node --import tsx --test lib/sales/results/classify.test.ts lib/sales/results/payment-reconciliation.test.ts lib/sales/results/universe.test.ts lib/access/capabilities.test.ts",
 		"test:sale-payments": "node --import tsx --test lib/sales/payment-grouping.test.ts lib/payments/defaults.test.ts",
 		"verify:store-credit": "tsx ./scripts/verify-store-credit-queries.ts",
@@ -106,7 +108,9 @@
 		"test:payment-attempts": "node --import tsx --test lib/payment-attempts/state-machine.test.ts lib/payment-attempts/evidence.test.ts lib/payment-attempts/assignment.test.ts lib/payment-attempts/terminal-payments.test.ts lib/sales-sessions/payment-terminal-pendencies.test.ts lib/sales-sessions/summarize-session-transactions.test.ts lib/sales-sessions/session-method-lines.test.ts lib/access/clients-catalog.test.ts",
 		"test:agent-tools": "node --import tsx --test lib/access/clients-catalog.test.ts lib/access/oauth.test.ts lib/agent-tools/organization-scope.test.ts lib/agent-tools/registry.test.ts lib/agent-tools/serialization.test.ts lib/agent-tools/period.test.ts lib/http/fetch-public-url.test.ts lib/files/files.test.ts lib/message-templates/agent-media.test.ts lib/mcp/json-schema.test.ts lib/mcp/protocol.test.ts lib/mcp/server.test.ts",
 		"test:agent-tools:db": "tsx ./scripts/test-agent-tools.ts",
-		"test:ai-agent": "node --import tsx --test lib/ai/providers/warnings.test.ts lib/ai/triage/message-triage.test.ts lib/ai/agent/follow-up-schedule.test.ts lib/chats/ai-presence.test.ts lib/ai/providers/pricing.test.ts lib/ai/agent/spend.test.ts lib/ai/agent/attachment.test.ts lib/ai/agent/turn-validation.test.ts lib/ai/agent/run-memory.test.ts lib/ai/agent/context.test.ts lib/ai/agent/provisioning.test.ts"
+		"test:chats-inbox": "node --import tsx --test lib/chats/inbox-filters.test.ts",
+		"test:ai-agent": "node --import tsx --test lib/ai/providers/warnings.test.ts lib/ai/providers/model-selection.test.ts lib/ai/triage/message-triage.test.ts lib/ai/agent/follow-up-schedule.test.ts lib/chats/ai-presence.test.ts lib/chats/ai-pre-run-failure.test.ts lib/ai/providers/pricing.test.ts lib/ai/agent/spend.test.ts lib/ai/agent/attachment.test.ts lib/ai/agent/turn-validation.test.ts lib/ai/agent/run-memory.test.ts lib/ai/agent/context.test.ts lib/ai/agent/provisioning.test.ts",
+		"test:campaign-events": "node --conditions=react-server --import tsx --import ./lib/campaigns/events/test-env.ts --test lib/campaigns/events/events.test.ts lib/campaigns/engine/triggers.test.ts"
 	},
 	"dependencies": {
 		"@ai-sdk/react": "^4.0.96",
@@ -211,6 +215,7 @@
 		"zod": "^3.23.8"
 	},
 	"devDependencies": {
+		"@electric-sql/pglite": "^0.5.8",
 		"@tailwindcss/postcss": "^4.1.16",
 		"@types/geojson": "^7946.0.16",
 		"@types/node": "^20.19.24",

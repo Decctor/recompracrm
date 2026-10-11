@@ -40,16 +40,6 @@ export const FISCAL_ACTION_ORDER: TFiscalDocumentActionKey[] = [
 	"BAIXAR_PDF",
 ];
 
-// Acoes que mudam o documento — as unicas cujo bloqueio vale a pena explicar em texto na barra.
-export const FISCAL_OPERATIONAL_ACTIONS: TFiscalDocumentActionKey[] = [
-	"CANCELAR",
-	"CARTA_CORRECAO",
-	"INUTILIZAR",
-	"DEVOLUCAO",
-	"REENVIAR",
-	"SINCRONIZAR",
-];
-
 const PERMISSION_VERB: Record<TFiscalDocumentActionKey, string> = {
 	CANCELAR: "cancelar documentos fiscais",
 	CARTA_CORRECAO: "registrar cartas de correção",

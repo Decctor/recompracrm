@@ -80,6 +80,7 @@ export async function getFiscalDocumentDetailsById({ documentId, organizationId 
 					statusVenda: true,
 					canal: true,
 					entregaModalidade: true,
+					vendedorNome: true,
 				},
 				with: {
 					cliente: {
@@ -90,7 +91,11 @@ export async function getFiscalDocumentDetailsById({ documentId, organizationId 
 							telefone: true,
 						},
 					},
-					itens: true,
+					itens: {
+						with: {
+							produto: { columns: { nome: true } },
+						},
+					},
 				},
 			},
 			autorPresencaConsumidor: {

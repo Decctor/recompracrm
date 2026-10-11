@@ -394,6 +394,14 @@ export const ChatMessageMetadataSchema = z.object({
 		})
 		.optional()
 		.nullable(),
+	/** Mensagem de saída encaminhada pelo hub: a original e a conversa de onde ela veio. */
+	encaminhadaDe: z
+		.object({
+			mensagemId: z.string(),
+			chatId: z.string(),
+		})
+		.optional()
+		.nullable(),
 });
 export type TChatMessageMetadata = z.infer<typeof ChatMessageMetadataSchema>;
 

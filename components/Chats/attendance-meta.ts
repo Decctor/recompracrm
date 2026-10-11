@@ -1,5 +1,19 @@
-import type { TChatAssignmentPriority, TChatAssignmentStatus } from "@/schemas/enums";
-import { ArrowUp, CircleCheck, CircleCheckBig, CircleDot, CircleSlash, Clock, MessageCircle, PauseCircle, type LucideIcon } from "lucide-react";
+import type { TChatAssignmentPriority, TChatAssignmentResponsibleType, TChatAssignmentStatus } from "@/schemas/enums";
+import {
+	ArrowUp,
+	CircleCheck,
+	CircleCheckBig,
+	CircleDot,
+	CircleSlash,
+	Clock,
+	MessageCircle,
+	PauseCircle,
+	Smartphone,
+	Sparkles,
+	UserRound,
+	UserRoundPlus,
+	type LucideIcon,
+} from "lucide-react";
 
 /**
  * Vocabulário visual dos estados de atendimento, compartilhado entre o select de ações,
@@ -41,4 +55,21 @@ export const PRIORITY_META: Record<TChatAssignmentPriority, TAttendancePriorityM
 	MEDIA: { label: "Média", pill: "border-border text-muted-foreground", icon: null },
 	ALTA: { label: "Alta", pill: "border-brand/40 bg-brand/15 text-foreground", icon: ArrowUp },
 	URGENTE: { label: "Urgente", pill: "border-destructive/30 bg-destructive/10 text-destructive", icon: ArrowUp },
+};
+
+/**
+ * Quem responde, no mesmo vocabulário do header, da lista, do painel e do quadro. Antes cada
+ * superfície escrevia o seu ("Com a IA" / "Automação", "Atendido pelo telefone" / "Telefone"),
+ * e o atendente não sabia se eram coisas diferentes.
+ *
+ * `label` é a forma completa (header, painel, lista); `shortLabel` cabe em um chip (quadro).
+ * Para `USUARIO` o nome da pessoa substitui o rótulo onde houver espaço — este é só o fallback.
+ */
+export type TAttendanceResponsibleMeta = { label: string; shortLabel: string; icon: LucideIcon };
+
+export const RESPONSIBLE_META: Record<TChatAssignmentResponsibleType, TAttendanceResponsibleMeta> = {
+	USUARIO: { label: "Com atendente", shortLabel: "Atendente", icon: UserRound },
+	AGENTE: { label: "Com a IA", shortLabel: "IA", icon: Sparkles },
+	EXTERNO: { label: "Pelo telefone", shortLabel: "Telefone", icon: Smartphone },
+	NAO_ATRIBUIDO: { label: "Sem responsável", shortLabel: "Livre", icon: UserRoundPlus },
 };

@@ -2,6 +2,7 @@ import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { buildCupomVendaDados } from "@/lib/desktop-agent/cupom-venda-data";
 import { enqueuePrintJob } from "@/lib/desktop-agent/print-jobs";
+import { buildTicketPreparoDadosFromSale, buildTicketPreparoDadosFromTabOrder } from "@/lib/desktop-agent/ticket-preparo-data";
 import type { TEtiquetaLoteDados } from "@/lib/desktop-agent/templates/etiqueta-lote";
 import type { TTesteImpressaoDados } from "@/lib/desktop-agent/templates/teste-impressao";
 import { PrintJobStatusEnum } from "@/schemas/enums";
@@ -76,11 +77,13 @@ async function getPrintJobsManagementRoute(request: NextRequest) {
 }
 
 const CreateManualPrintJobInputSchema = z.object({
-	finalidade: z.enum(["CUPOM_VENDA", "ETIQUETA_LOTE", "TESTE"], {
+	finalidade: z.enum(["CUPOM_VENDA", "TICKET_PREPARO", "ETIQUETA_LOTE", "TESTE"], {
 		required_error: "Finalidade da impressão não informada.",
 		invalid_type_error: "Tipo não válido para a finalidade da impressão.",
 	}),
 	vendaId: z.string({ invalid_type_error: "Tipo não válido para o ID da venda." }).optional().nullable(),
+	// TICKET_PREPARO aceita venda OU pedido de conta (rodada) — o grão do board de preparo.
+	tabOrderId: z.string({ invalid_type_error: "Tipo não válido para o ID do pedido." }).optional().nullable(),
 	producaoId: z.string({ invalid_type_error: "Tipo não válido para o ID da produção." }).optional().nullable(),
 	impressoraId: z.string({ invalid_type_error: "Tipo não válido para o ID da impressora." }).optional().nullable(),
 });
@@ -114,6 +117,25 @@ async function createManualPrintJob({ input, organizacaoId, solicitadoPorId, sol
 			solicitadoPorId,
 		});
 		return { data: { jobs: [result.job] }, message: "Cupom enviado para impressão." };
+	}
+
+	if (input.finalidade === "TICKET_PREPARO") {
+		if (!input.vendaId && !input.tabOrderId) throw new createHttpError.BadRequest("Informe a venda ou o pedido para a impressão do ticket de preparo.");
+		// Builders compartilhados com o auto-print — reimpressão manual idêntica à automática.
+		const dados = input.tabOrderId
+			? await buildTicketPreparoDadosFromTabOrder({ organizacaoId, tabOrderId: input.tabOrderId })
+			: await buildTicketPreparoDadosFromSale({ organizacaoId, vendaId: input.vendaId as string });
+
+		const result = await enqueuePrintJob({
+			organizacaoId,
+			finalidade: "TICKET_PREPARO",
+			dados: dados as unknown as Record<string, unknown>,
+			origemTipo: input.tabOrderId ? "PEDIDO_CONTA" : "VENDA",
+			origemId: input.tabOrderId ?? input.vendaId,
+			impressoraId: input.impressoraId,
+			solicitadoPorId,
+		});
+		return { data: { jobs: [result.job] }, message: "Ticket de preparo enviado para impressão." };
 	}
 
 	if (input.finalidade === "ETIQUETA_LOTE") {

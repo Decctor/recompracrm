@@ -1,6 +1,10 @@
 import type { TCanonicalImportBatch, TCanonicalSale, TCanonicalSaleItem } from "@/lib/data-connectors";
 import { mapCanonicalSaleAttendanceStatus, mapCanonicalSaleCommercialStatus } from "@/lib/data-connectors";
-import { attendanceStatusRequiresPhysicalOut, attendanceStatusValuesIfChanged, isValidAttendanceTransition } from "@/lib/sales/sale-processing/attendance";
+import {
+	attendanceStatusRequiresPhysicalOut,
+	attendanceStatusValuesIfChanged,
+	isValidAttendanceTransition,
+} from "@/lib/sales/sale-processing/attendance";
 import {
 	cancelManagedSaleFinancials,
 	processManagedSaleFinancials,
@@ -14,6 +18,7 @@ import { clients, saleItemModifiers, saleItems, sales } from "@/services/drizzle
 import { and, eq, inArray } from "drizzle-orm";
 import { resolveDeliveryLocationId } from "./delivery-locations";
 import { computeSaleImportSignature } from "./sale-signature";
+import { lockClientPurchaseHistoryBlocking } from "@/lib/coupons/purchase-history";
 import { getCanonicalClientResolutionKey, resolveClientForCanonicalSale } from "./sync-auxiliary-entities";
 import type { TDataCollectingV2Executor, TPersistedSaleForEffects, TResolvedAuxiliaryEntities, TResolvedClientForImport } from "./types";
 
@@ -306,6 +311,7 @@ export async function syncSales({
 	erp?: TSyncSalesErpOptions | null;
 }): Promise<TSyncSalesResult> {
 	const saleSourceIds = batch.sales.map((sale) => sale.sourceSaleId);
+	const lockedClientIds = new Set<string>();
 	if (new Set(saleSourceIds).size !== saleSourceIds.length) {
 		throw new Error(`O lote canônico da integração ${batch.integrationId} contém IDs de venda repetidos.`);
 	}
@@ -348,6 +354,7 @@ export async function syncSales({
 	for (const sale of batch.sales) {
 		const client = resolveClientForCanonicalSale(batch, context, sale.client);
 		const clientId = client?.id ?? null;
+
 		const sellerId = getSellerId(context, sale);
 		const partner = getPartner(context, sale);
 		const existingSale = existingSalesBySourceId.get(sale.sourceSaleId);
@@ -402,6 +409,21 @@ export async function syncSales({
 		// nenhuma escrita é necessária. Canal gerenciado nunca pula: applyManagedSaleDeliveryEffects
 		// roda em todo sync por design (rede de segurança para entregas feitas pelo board).
 		const skipped = !!existingSale && !saleIsManaged && existingSale.assinaturaExterna === externalSignature;
+
+		// Only metric-changing transitions need purchase-history serialization. Blocking on purpose:
+		// a background batch must wait for a POS confirmation, not abort it or be aborted by it.
+		if (client && becameValid && !skipped && !lockedClientIds.has(client.id)) {
+			await lockClientPurchaseHistoryBlocking(tx, batch.organizationId, client.id);
+			const current = await tx.query.clients.findFirst({
+				where: and(eq(clients.id, client.id), eq(clients.organizacaoId, batch.organizationId)),
+				columns: { metadataTotalCompras: true, metadataValorTotalCompras: true },
+			});
+			if (current) {
+				client.metadataTotalPurchases = current.metadataTotalCompras ?? 0;
+				client.metadataTotalPurchaseValue = current.metadataValorTotalCompras ?? 0;
+			}
+			lockedClientIds.add(client.id);
+		}
 
 		if (!existingSale) {
 			isNewSale = true;

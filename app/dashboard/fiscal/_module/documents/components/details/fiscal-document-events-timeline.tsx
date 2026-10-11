@@ -34,13 +34,12 @@ const FISCAL_EVENT_TONES: Partial<Record<TFiscalDocumentEventTypeEnum, TTimeline
 
 type FiscalDocumentEventsTimelineProps = {
 	events: TGetFiscalDocumentsOutputById["events"];
-	className?: string;
 };
 
 /** Historico do documento como linha do tempo, do mais recente para o mais antigo (ordem da API). */
-export function FiscalDocumentEventsTimeline({ events, className }: FiscalDocumentEventsTimelineProps) {
+export function FiscalDocumentEventsTimeline({ events }: FiscalDocumentEventsTimelineProps) {
 	return (
-		<Section.Root className={className}>
+		<Section.Root>
 			<Section.Header>
 				<Section.Icon>
 					<History />

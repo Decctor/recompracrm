@@ -3,7 +3,7 @@ import test from "node:test";
 import { estimateRunCostUsd, estimateUsageCostUsd, formatUsd, resolveModelPrice } from "./pricing";
 
 test("resolveModelPrice resolves aliases and ids sem provider pelo catálogo", () => {
-	assert.deepEqual(resolveModelPrice("agent-fast"), { precoEntrada: 0.25, precoSaida: 2 });
+	assert.deepEqual(resolveModelPrice("agent-fast"), { precoEntrada: 0.1, precoSaida: 0.5 });
 	assert.deepEqual(resolveModelPrice("gpt-5"), { precoEntrada: 1.25, precoSaida: 10 });
 	assert.equal(resolveModelPrice("acme/modelo-inexistente"), null);
 });

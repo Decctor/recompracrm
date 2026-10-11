@@ -2,7 +2,7 @@ import { appApiHandler } from "@/lib/app-api";
 import { requireERPSession } from "@/lib/authentication/erp-session";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
-import { launchTabOrder } from "@/lib/tabs";
+import { launchTabOrder, processTabOrderLaunchPostCommit } from "@/lib/tabs";
 import { type NextRequest, NextResponse } from "next/server";
 import z from "zod";
 
@@ -56,6 +56,7 @@ export type TCreateTabOrderInput = z.infer<typeof CreateTabOrderInputSchema>;
 async function createTabOrder({ input, session }: { input: TCreateTabOrderInput; session: TAuthUserSession }) {
 	const orgId = session.membership!.organizacao.id;
 	const result = await launchTabOrder({ orgId, userId: session.user.id, input });
+	await processTabOrderLaunchPostCommit({ orgId, tabOrderId: result.tabOrderId, userId: session.user.id });
 
 	return {
 		data: result,

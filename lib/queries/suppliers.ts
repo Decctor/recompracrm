@@ -55,3 +55,24 @@ export function useSupplierById({ supplierId }: { supplierId: string }) {
 		queryKey: ["supplier-by-id", supplierId],
 	};
 }
+
+// Opções de filtro (ex.: produtos por fornecedor principal): inclui inativos, que ainda podem estar vinculados.
+async function fetchSupplierOptions() {
+	const searchParams = new URLSearchParams();
+	searchParams.set("limit", "500");
+	const { data } = await axios.get<TGetSuppliersOutput>(`/api/suppliers?${searchParams.toString()}`);
+	const result = data.data.default;
+	if (!result) throw new Error("Erro ao buscar fornecedores.");
+	return result.suppliers;
+}
+
+export function useSupplierOptions({ enabled = true }: { enabled?: boolean } = {}) {
+	return {
+		...useQuery({
+			queryKey: ["supplier-options"],
+			queryFn: fetchSupplierOptions,
+			enabled,
+		}),
+		queryKey: ["supplier-options"],
+	};
+}

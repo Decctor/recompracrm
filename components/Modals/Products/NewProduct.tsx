@@ -207,7 +207,7 @@ export default function NewProduct({ user, userMembership, closeModal, callbacks
 					codigo: "",
 					nome: "",
 					descricao: null,
-					unidade: "",
+					unidade: "UN",
 					ncm: "",
 					tipo: "",
 					grupo: "",

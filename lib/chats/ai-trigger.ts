@@ -1,11 +1,11 @@
 import { parseJsonbWithFallback } from "@/lib/ai/shared/json";
 import { claimChatAttendanceForAgent, getCurrentChatAttendance, releaseChatAttendance } from "@/lib/chats/attendance-state";
-import { formatPhoneAsBase } from "@/lib/formatting";
-import { AiAgentCapabilitiesSchema, AiAgentScopeSchema, isClientInAgentScope } from "@/schemas/ai-agents";
+import { isOrganizationStaffPhone, resolveClientPhoneBase } from "@/lib/chats/staff-phone";
+import { AiAgentCapabilitiesSchema, AiAgentScopeSchema, isClientExplicitlyIncludedInAgentScope, isClientInAgentScope } from "@/schemas/ai-agents";
 import type { TAiAgentRunTriggerEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
-import { chatMessages, chats, organizationMembers, sellers, users } from "@/services/drizzle/schema";
-import { and, desc, eq, gt, inArray } from "drizzle-orm";
+import { chatMessages, chats } from "@/services/drizzle/schema";
+import { and, desc, eq, gt, inArray, ne } from "drizzle-orm";
 
 /**
  * Decide se a IA deve responder a uma mensagem recebida.
@@ -29,6 +29,13 @@ const AI_RESPONSE_DELAY_MS = 5000;
 
 export type TAiTriggerDecision = { shouldRespond: true } | { shouldRespond: false; reason: string };
 
+/**
+ * Resultado do claim. `fresh` diz se este turno foi quem tirou o atendimento da fila: só então o
+ * runner pode devolvê-lo à fila se o turno morrer antes de gerar qualquer coisa. Um episódio que o
+ * agente já conduzia (`fresh: false`) tem história — liberar ali apagaria a posse legítima.
+ */
+export type TAiClaimDecision = { shouldRespond: true; fresh: boolean } | { shouldRespond: false; reason: string };
+
 const OUT_OF_SCOPE_RELEASE_REASON = "CLIENTE_FORA_DO_ESCOPO";
 const STAFF_PHONE_RELEASE_REASON = "NUMERO_DA_EQUIPE";
 
@@ -45,29 +52,6 @@ export function resolveAiResponseDelayMs(capacidades: unknown): number {
 	const debounce = parsed.atendimento.atrasoRespostaMs ?? AI_RESPONSE_DELAY_MS;
 	if (parsed.atendimento.modo !== "RESERVA") return debounce;
 	return Math.max(debounce, parsed.atendimento.esperaHumanoMs);
-}
-
-/**
- * O número é de alguém da equipe da organização (membro do hub ou vendedor)?
- *
- * Um vendedor que manda o endereço da obra pelo número da loja não é um cliente, e a IA
- * respondendo a ele ("quer que eu registre no CRM?") é ruído para todo mundo. A comparação é
- * pela base do telefone (DDD + 8 dígitos), a mesma da deduplicação de clientes.
- */
-async function isOrganizationStaffPhone({ organizationId, telefoneBase }: { organizationId: string; telefoneBase: string }): Promise<boolean> {
-	if (!telefoneBase) return false;
-	const [members, orgSellers] = await Promise.all([
-		db
-			.select({ telefone: users.telefone })
-			.from(organizationMembers)
-			.innerJoin(users, eq(users.id, organizationMembers.usuarioId))
-			.where(eq(organizationMembers.organizacaoId, organizationId)),
-		db
-			.select({ telefone: sellers.telefone })
-			.from(sellers)
-			.where(and(eq(sellers.organizacaoId, organizationId), eq(sellers.ativo, true))),
-	]);
-	return [...members, ...orgSellers].some((row) => row.telefone && formatPhoneAsBase(row.telefone) === telefoneBase);
 }
 
 /**
@@ -115,11 +99,11 @@ export async function confirmClientInAgentScope({
 	};
 
 	// Lista explícita de inclusão vence a regra da equipe: é assim que a loja testa o agente no
-	// próprio número antes de liberá-lo para todo mundo.
-	const explicitlyIncluded = scope.tipo === "INCLUIR" && isClientInAgentScope(scope, chat.clienteId);
-	if (!explicitlyIncluded) {
-		const telefoneBase = chat.cliente?.telefoneBase || (chat.cliente?.telefone ? formatPhoneAsBase(chat.cliente.telefone) : "");
-		if (await isOrganizationStaffPhone({ organizationId, telefoneBase })) {
+	// próprio número antes de liberá-lo para todo mundo. O gate do hub
+	// (`resolveAiAssignmentAvailability`) aplica a mesma exceção.
+	if (!isClientExplicitlyIncludedInAgentScope(scope, chat.clienteId)) {
+		const telefoneBase = resolveClientPhoneBase(chat.cliente);
+		if (await isOrganizationStaffPhone(db, { organizationId, telefoneBase })) {
 			await releaseIfOwnedByAgent(STAFF_PHONE_RELEASE_REASON);
 			return { shouldRespond: false, reason: "Número de alguém da equipe da organização." };
 		}
@@ -134,8 +118,8 @@ export async function confirmClientInAgentScope({
 /**
  * Reivindica o atendimento para a IA.
  *
- * Devolve `false` quando a conversa já tem dono — humano do hub, telefone ou outro
- * episódio da própria IA que ainda não encerrou.
+ * Recusa (`shouldRespond: false`) quando a conversa tem dono humano ou o telefone, ou quando o
+ * CAS perde para outra parte. Um episódio da própria IA ainda aberto segue com `fresh: false`.
  */
 export async function claimChatForAi({
 	organizationId,
@@ -145,18 +129,18 @@ export async function claimChatForAi({
 	organizationId: string;
 	chatId: string;
 	agentId: string;
-}): Promise<TAiTriggerDecision> {
+}): Promise<TAiClaimDecision> {
 	const atual = await getCurrentChatAttendance(db, { organizacaoId: organizationId, chatId });
 
 	if (atual?.responsavelTipo === "USUARIO") return { shouldRespond: false, reason: "Atendimento com responsável humano." };
 	if (atual?.responsavelTipo === "EXTERNO") return { shouldRespond: false, reason: "Atendimento em andamento pelo telefone." };
 	// Já é da IA: o episódio segue, não precisa reivindicar de novo.
-	if (atual?.responsavelTipo === "AGENTE") return { shouldRespond: true };
+	if (atual?.responsavelTipo === "AGENTE") return { shouldRespond: true, fresh: false };
 
 	const claimed = await claimChatAttendanceForAgent(db, { organizacaoId: organizationId, chatId, agenteId: agentId });
 	if (!claimed) return { shouldRespond: false, reason: "Atendimento assumido por outra parte durante o claim." };
 
-	return { shouldRespond: true };
+	return { shouldRespond: true, fresh: true };
 }
 
 /**
@@ -217,6 +201,9 @@ export async function confirmAiResponseStillValid({
 			eq(chatMessages.chatId, chatId),
 			inArray(chatMessages.autorTipo, ["USUÁRIO", "AI", "BUSINESS-APP"]),
 			gt(chatMessages.dataEnvio, messageDate),
+			// Envio que falhou não respondeu ninguém: sem este filtro a FALHA da própria IA
+			// bloqueava toda nova tentativa ("já foi respondida") e o cliente ficava sem retorno.
+			ne(chatMessages.statusEntrega, "FALHA"),
 		),
 		columns: { id: true },
 	});
@@ -285,6 +272,8 @@ export async function confirmAiDeliveryStillValid({
 			eq(chatMessages.chatId, chatId),
 			inArray(chatMessages.autorTipo, ["USUÁRIO", "AI", "BUSINESS-APP"]),
 			gt(chatMessages.dataEnvio, runStartedAt),
+			// Mesmo critério do confirm pré-run: uma tentativa que falhou não é resposta.
+			ne(chatMessages.statusEntrega, "FALHA"),
 		),
 		columns: { id: true },
 	});

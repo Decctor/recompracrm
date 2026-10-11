@@ -44,6 +44,7 @@ export function createEmptyRunSummary({
 		createdSellersCount: 0,
 		createdPartnersCount: 0,
 		resolvedCampaignAudiencesCount: 0,
+		campaignEventsCapturedCount: 0,
 		createdInteractionsCount: 0,
 		immediateInteractionsCount: 0,
 		cashbackTransactionsCount: 0,

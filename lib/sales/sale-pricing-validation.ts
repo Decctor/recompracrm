@@ -1,7 +1,7 @@
 import { resolveChannelOptionPrice } from "@/lib/products/sales-channels";
 import { channelNodePrice, channelProductFilter, loadChannelState } from "@/lib/products/sales-channels-store";
 import type { TSalesChannelTypeEnum } from "@/schemas/enums";
-import { db } from "@/services/drizzle";
+import { type DB, type DBTransaction, db } from "@/services/drizzle";
 import createHttpError from "http-errors";
 import { modifierPricesDiverge, resolveCurrentModifierPrices, type TSaleItemRepricing } from "./sale-item-repricing";
 
@@ -51,6 +51,10 @@ type TCatalogPrices = {
  * os overrides de preço do canal substituem o preço base, node-scoped (ver resolver). Modificadores
  * seguem a mesma regra: preço da opção no canal, e opção pausada no canal sai do mapa. Sem `canal`,
  * comportamento histórico: preço base, sem gates.
+ *
+ * `tx` quando o chamador já está dentro de uma transação: pedir outra conexão ao `db` global
+ * enquanto a transação segura a sua trava o pool sob concorrência. Numa transação as três leituras
+ * do `Promise.all` ficam serializadas na mesma conexão — correto, só não paralelo.
  */
 async function loadCatalogPrices({
 	orgId,
@@ -58,19 +62,22 @@ async function loadCatalogPrices({
 	variantIds,
 	optionIds,
 	canal,
+	tx,
 }: {
 	orgId: string;
 	productIds: string[];
 	variantIds: string[];
 	optionIds: string[];
 	canal?: TSalesChannelTypeEnum;
+	tx?: DB | DBTransaction;
 }): Promise<TCatalogPrices> {
-	const channelState = canal ? await loadChannelState({ orgId, canal }) : null;
+	const executor = tx ?? db;
+	const channelState = canal ? await loadChannelState({ orgId, canal, tx: executor }) : null;
 	const channelFilter = channelState ? channelProductFilter(channelState) : null;
 
 	const [produtos, variantes, opcoes] = await Promise.all([
 		productIds.length > 0
-			? db.query.products.findMany({
+			? executor.query.products.findMany({
 					where: (fields, { and, eq, inArray }) =>
 						canal
 							? and(inArray(fields.id, productIds), eq(fields.organizacaoId, orgId), eq(fields.ativo, true), eq(fields.vendavel, true))
@@ -79,7 +86,7 @@ async function loadCatalogPrices({
 				})
 			: [],
 		variantIds.length > 0
-			? db.query.productVariants.findMany({
+			? executor.query.productVariants.findMany({
 					where: (fields, { and, eq, inArray }) =>
 						canal
 							? and(inArray(fields.id, variantIds), eq(fields.organizacaoId, orgId), eq(fields.ativo, true))
@@ -88,7 +95,7 @@ async function loadCatalogPrices({
 				})
 			: [],
 		optionIds.length > 0
-			? db.query.productAddOnOptions.findMany({
+			? executor.query.productAddOnOptions.findMany({
 					where: (fields, { and, eq, inArray }) => and(inArray(fields.id, optionIds), eq(fields.organizacaoId, orgId)),
 					columns: { id: true, precoDelta: true },
 				})
@@ -135,14 +142,17 @@ export async function validateSaleItemsPricing({
 	orgId,
 	itens,
 	canal,
+	tx,
 }: {
 	orgId: string;
 	itens: TSaleItemPricingInput[];
 	canal?: TSalesChannelTypeEnum;
+	tx?: DB | DBTransaction;
 }): Promise<void> {
 	const { productPriceMap, variantMap, optionPriceMap } = await loadCatalogPrices({
 		orgId,
 		canal,
+		tx,
 		productIds: [...new Set(itens.map((item) => item.produtoId))],
 		variantIds: [...new Set(itens.map((item) => item.produtoVarianteId).filter((id): id is string => !!id))],
 		optionIds: [...new Set(itens.flatMap((item) => item.modificadores.map((mod) => mod.opcaoId)))],
@@ -247,14 +257,17 @@ export async function computeSaleItemsPricingDrift({
 	orgId,
 	itens,
 	canal,
+	tx,
 }: {
 	orgId: string;
 	itens: TSaleItemDriftInput[];
 	canal?: TSalesChannelTypeEnum;
+	tx?: DB | DBTransaction;
 }): Promise<TSalePricingDrift> {
 	const { productPriceMap, variantMap, optionPriceMap } = await loadCatalogPrices({
 		orgId,
 		canal,
+		tx,
 		productIds: [...new Set(itens.map((item) => item.produtoId))],
 		variantIds: [...new Set(itens.map((item) => item.produtoVarianteId).filter((id): id is string => !!id))],
 		optionIds: [...new Set(itens.flatMap((item) => item.modificadores.map((mod) => mod.opcaoId).filter((id): id is string => !!id)))],

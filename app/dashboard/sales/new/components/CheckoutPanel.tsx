@@ -20,8 +20,13 @@ import PaymentsSection from "./checkout/PaymentsSection";
 import SummarySection from "./checkout/SummarySection";
 import TotalDock from "./checkout/TotalDock";
 
-const ClientVinculationMenu = dynamic(() => import("@/components/Clients/ClientVinculationMenu"));
-const NewClientLocation = dynamic(() => import("@/components/Modals/Clients/Locations/NewClientLocation").then((module) => module.NewClientLocation));
+// `loading` não é opcional aqui: sem ele o next/dynamic não cria Suspense próprio e, com o chunk
+// ainda não baixado, a suspensão sobe até o loading.tsx da rota — a tela inteira vira loading.
+const ClientVinculationMenu = dynamic(() => import("@/components/Clients/ClientVinculationMenu"), { loading: () => null });
+const NewClientLocation = dynamic(
+	() => import("@/components/Modals/Clients/Locations/NewClientLocation").then((module) => module.NewClientLocation),
+	{ loading: () => null },
+);
 
 function preloadClientVinculationMenu() {
 	void import("@/components/Clients/ClientVinculationMenu");

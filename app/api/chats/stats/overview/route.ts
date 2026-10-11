@@ -117,7 +117,8 @@ async function fetchClosingCohort({ filters, startDate, endDate }: { filters: TC
 			encerrados: sql<number>`count(*)::int`,
 			cancelados: sql<number>`count(*) filter (where ${chatAssignments.status} = 'CANCELADO')::int`,
 			encerradosPelaIA: sql<number>`count(*) filter (where ${chatAssignments.responsavelTipo} = 'AGENTE')::int`,
-			// `resultado` é gravado por `closeChatAttendance`; HUMAN_HANDOFF marca a IA desistindo.
+			// `resultado` é gravado por `closeChatAttendance` e, no handoff, por `transferChatAttendance` (via
+			// `transferChatToHuman`); HUMAN_HANDOFF marca a IA desistindo e conta quando o ticket fecha.
 			handoffs: sql<number>`count(*) filter (where ${chatAssignments.resultado} = 'HUMAN_HANDOFF')::int`,
 		})
 		.from(chatAssignments)

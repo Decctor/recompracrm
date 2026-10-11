@@ -33,8 +33,12 @@ const BARCODE_MODULE = mmToPx(0.25);
 const BARCODE_BAR_MODULES = 24;
 const MAX_BARCODE_MODULES = (STICKER_WIDTH - 8 - 16) / BARCODE_MODULE;
 
-/** Repete cada produto para completar a folha de 65 (mesma regra de `describeVisualKitPiece`). */
-export function expandStickerItems(items: TVisualKitPieceItem[]) {
+/**
+ * Um adesivo por produto; com `completarFolhaAdesivos`, repete cada produto para completar a folha
+ * de 65 (mesma regra de `describeVisualKitPiece`).
+ */
+export function expandStickerItems(items: TVisualKitPieceItem[], configuracao: TVisualKitConfig) {
+	if (!configuracao.completarFolhaAdesivos) return items;
 	const copies = Math.max(1, Math.floor(PER_SHEET / Math.max(1, items.length)));
 	return items.flatMap((item) => Array.from({ length: copies }, () => item));
 }
@@ -148,7 +152,7 @@ function StickerSheet({ props, page }: TVisualKitPageArgs) {
 
 export const priceStickerRenderer: TVisualKitPieceRenderer = {
 	// Mais de 65 produtos: um adesivo de cada, em quantas folhas forem necessárias.
-	paginate: (props) => paginateSheets(expandStickerItems(props.items), PER_SHEET),
+	paginate: (props) => paginateSheets(expandStickerItems(props.items, props.configuracao), PER_SHEET),
 	pageSize: () => A4_PAGE,
 	Page: StickerSheet,
 };

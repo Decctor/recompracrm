@@ -16,7 +16,7 @@ import { chatAssignments, chatMessages, chats } from "@/services/drizzle/schema/
 import { clients } from "@/services/drizzle/schema/clients";
 import { users } from "@/services/drizzle/schema/users";
 import { whatsappConnections } from "@/services/drizzle/schema/whatsapp-connections";
-import { and, count, desc, eq, gte, ilike, or, sql } from "drizzle-orm";
+import { and, count, desc, eq, gte, ilike, inArray, or, sql } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -188,15 +188,32 @@ async function getChatBoard({ session, input }: { session: TAuthUserSession; inp
 
 	// Totais do cabeçalho: contam a operação viva, então ignoram a coluna de encerrados.
 	const activeColumns = columns.filter((column) => column.status !== "ENCERRADO");
-	const cards = activeColumns.flatMap((column) => column.itens);
+	const activeStatuses = CHAT_BOARD_STATUSES.filter((status) => status !== "ENCERRADO");
+
+	// "Na fila" e "aguardando resposta" saem de contagem SQL sobre o mesmo universo dos totais das
+	// colunas (mesmas `baseConditions` + estados vivos). Contar os cards devolvidos subcontava assim
+	// que uma coluna passava do teto de `CHAT_BOARD_COLUMN_LIMIT`, enquanto `abertos` somava os totais.
+	const [headerCounts] = await db
+		.select({
+			naFila: sql<number>`count(*) filter (where ${chatAssignments.responsavelTipo} = 'NAO_ATRIBUIDO')`.mapWith(Number),
+			// Mesma regra de `aguardandoResposta` em `mapChatBoardRow`.
+			pendentes:
+				sql<number>`count(*) filter (where ${chats.ultimaMensagemEntradaData} is not null and (${chats.ultimaMensagemSaidaData} is null or ${chats.ultimaMensagemEntradaData} > ${chats.ultimaMensagemSaidaData}))`.mapWith(
+					Number,
+				),
+		})
+		.from(chatAssignments)
+		.innerJoin(chats, eq(chatAssignments.chatId, chats.id))
+		.leftJoin(clients, eq(chats.clienteId, clients.id))
+		.where(and(...baseConditions, inArray(chatAssignments.status, activeStatuses)));
 
 	return {
 		data: {
 			colunas: columns,
 			totais: {
 				abertos: activeColumns.reduce((sum, column) => sum + column.total, 0),
-				naFila: cards.filter((card) => card.responsavelTipo === "NAO_ATRIBUIDO").length,
-				pendentes: cards.filter((card) => card.aguardandoResposta).length,
+				naFila: headerCounts?.naFila ?? 0,
+				pendentes: headerCounts?.pendentes ?? 0,
 			},
 			// A UI precisa saber se algum total ficou acima do teto para anunciar o excedente.
 			limitePorColuna: CHAT_BOARD_COLUMN_LIMIT,

@@ -6,7 +6,6 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import type { TQuotedMessageSnapshot } from "@/lib/chats/quoted-message";
 import { getWhatsappWindowDisplay } from "@/lib/chats/whatsapp-window-status";
-import { cn } from "@/lib/utils";
 import { Loader2, Lock, Paperclip, Send, Sparkles, UserPlus, X } from "lucide-react";
 import { ChatVoiceRecorder } from "./ChatVoiceRecorder";
 import { QuotedMessagePreview } from "./QuotedMessagePreview";
@@ -26,6 +25,12 @@ export type TChatInputAreaHandle = {
 	/** Substitui o rascunho: é o que a sugestão da IA faz — o atendente pediu um texto novo. */
 	replaceText: (texto: string) => void;
 	getText: () => string;
+	/**
+	 * Devolve ao compositor o que um envio recusado levou embora. Não apaga o que o atendente já
+	 * digitou depois: o texto devolvido vem antes, o anexo só entra se o compositor não tem outro.
+	 * A citação não passa por aqui — é prop da thread, que a restaura por conta própria.
+	 */
+	restoreDraft: (draft: { texto: string; attachment: TOutgoingAttachment | null }) => void;
 };
 
 export type TChatAssistAction = "SUGERIR_RESPOSTA" | "RESUMIR" | "REESCREVER";
@@ -40,9 +45,19 @@ type ChatInputAreaProps = {
 	userName: string;
 	organizationId: string;
 	isOwner: boolean;
+	/** `atendimentos.responder`: sem ele "assumir" voltaria 403, então o composer só explica. */
+	canRespond: boolean;
 	janelaExpiracao: Date | string | null;
 	conexaoTipo: "META_CLOUD_API" | "INTERNAL_GATEWAY" | null;
+	/** Um envio qualquer em andamento. Só trava o que não tem como coexistir com ele (template). */
 	isSending: boolean;
+	/**
+	 * Há um anexo subindo. É o único estado que bloqueia o compositor: texto puro é otimista e
+	 * reconcilia por `clienteMensagemId`, então o atendente segue digitando e enviando.
+	 */
+	isUploadingMedia: boolean;
+	/** O chat tem um atendimento encerrado e nenhum ativo: assumir abre um novo. */
+	attendanceClosed?: boolean;
 	onSend: (input: { texto: string; assinaturaAtiva: boolean; midia: TOutgoingAttachment | null; replyToMessageId: string | null }) => void;
 	/** Nome do cliente, para rotular a citação de uma mensagem dele no painel de resposta. */
 	clientName?: string;
@@ -70,9 +85,12 @@ export const ChatInputArea = forwardRef<TChatInputAreaHandle, ChatInputAreaProps
 		userName,
 		organizationId,
 		isOwner,
+		canRespond,
 		janelaExpiracao,
 		conexaoTipo,
 		isSending,
+		isUploadingMedia,
+		attendanceClosed = false,
 		onSend,
 		onAssume,
 		templates,
@@ -92,6 +110,12 @@ export const ChatInputArea = forwardRef<TChatInputAreaHandle, ChatInputAreaProps
 	const signatureSwitchId = useId();
 	const fileInputRef = useRef<HTMLInputElement>(null);
 	const signatureStorageKey = `chat-signature-${organizationId}`;
+	// Teclado de celular não tem Shift+Enter: lá Enter quebra linha e o botão envia. Medido no
+	// cliente (o servidor não sabe o ponteiro), então o primeiro render assume mouse.
+	const [isCoarsePointer, setIsCoarsePointer] = useState(false);
+	useEffect(() => {
+		setIsCoarsePointer(window.matchMedia("(pointer: coarse)").matches);
+	}, []);
 
 	useEffect(() => {
 		setAssinaturaAtiva(window.localStorage.getItem(signatureStorageKey) === "true");
@@ -133,6 +157,11 @@ export const ChatInputArea = forwardRef<TChatInputAreaHandle, ChatInputAreaProps
 				focusEnd();
 			},
 			getText: () => textareaRef.current?.value ?? "",
+			restoreDraft: ({ texto: draftText, attachment: draftAttachment }) => {
+				setTexto((current) => (!draftText ? current : current.trim() ? `${draftText}\n\n${current}` : draftText));
+				setAttachment((current) => current ?? draftAttachment);
+				focusEnd();
+			},
 		}),
 		[focusEnd],
 	);
@@ -173,13 +202,16 @@ export const ChatInputArea = forwardRef<TChatInputAreaHandle, ChatInputAreaProps
 	}
 
 	function handleSubmit() {
-		if (isSending) return;
+		// Sem trava por `isSending`: um segundo Enter durante um envio é outro envio, com o seu
+		// próprio clienteMensagemId.
 		if (!texto.trim() && !attachment) return;
 		onSend({ texto: texto.trim(), assinaturaAtiva, midia: attachment, replyToMessageId: replyTarget?.messageId ?? null });
 		setTexto("");
 		setAttachment(null);
 		// A citação some do compositor já no envio: a bolha otimista a carrega dali em diante.
 		onCancelReply?.();
+		// O clique no botão de enviar tira o foco do textarea; quem escreve em sequência não deve precisar voltar a ele.
+		focusEnd();
 	}
 
 	// Sem posse, o envio seria recusado com 403 pela rota. Bloquear aqui transforma um
@@ -187,11 +219,19 @@ export const ChatInputArea = forwardRef<TChatInputAreaHandle, ChatInputAreaProps
 	if (!isOwner) {
 		return (
 			<div className="flex items-center justify-between gap-3 border-t border-border bg-muted/40 px-4 py-3">
-				<p className="text-xs text-muted-foreground">Assuma este atendimento para enviar mensagens.</p>
-				<Button size="sm" className="shrink-0 gap-1 text-[11px] font-extrabold uppercase tracking-[0.08em]" onClick={onAssume}>
-					<UserPlus className="h-3 w-3" />
-					ASSUMIR
-				</Button>
+				<p className="text-xs text-muted-foreground">
+					{!canRespond
+						? "Você não possui permissão para responder atendimentos."
+						: attendanceClosed
+							? "Atendimento encerrado. Assumir abre um novo atendimento."
+							: "Assuma este atendimento para enviar mensagens."}
+				</p>
+				{canRespond && (
+					<Button size="sm" className="shrink-0 gap-1 text-[11px] font-extrabold uppercase tracking-[0.08em]" onClick={onAssume}>
+						<UserPlus className="h-3 w-3" />
+						ASSUMIR
+					</Button>
+				)}
 			</div>
 		);
 	}
@@ -263,13 +303,13 @@ export const ChatInputArea = forwardRef<TChatInputAreaHandle, ChatInputAreaProps
 						className="shrink-0"
 						aria-label="Anexar arquivo"
 						onClick={() => fileInputRef.current?.click()}
-						disabled={isSending}
+						disabled={isUploadingMedia}
 					>
 						<Paperclip className="h-4 w-4" />
 					</Button>
 				)}
 
-				<ChatVoiceRecorder disabled={isSending} onRecorded={(input) => void handleVoiceRecorded(input)} onActiveChange={setIsRecordingVoice} />
+				<ChatVoiceRecorder disabled={isUploadingMedia} onRecorded={(input) => void handleVoiceRecorded(input)} onActiveChange={setIsRecordingVoice} />
 
 				{/* Assistência: a IA rascunha, o atendente envia. O rascunho atual vira orientação da
 				    sugestão ("diz que o frete é grátis") — é o jeito natural de pedir algo específico. */}
@@ -283,7 +323,7 @@ export const ChatInputArea = forwardRef<TChatInputAreaHandle, ChatInputAreaProps
 									className="shrink-0 text-primary"
 									aria-label="Pedir ajuda à IA"
 									title="Pedir ajuda à IA"
-									disabled={isSending || assist.pendingAction !== null}
+									disabled={assist.pendingAction !== null}
 								>
 									{assist.pendingAction ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
 								</Button>
@@ -315,7 +355,8 @@ export const ChatInputArea = forwardRef<TChatInputAreaHandle, ChatInputAreaProps
 						}}
 						onKeyDown={(event) => {
 							// Enter envia, Shift+Enter quebra linha — convenção de chat, não de formulário.
-							if (event.key === "Enter" && !event.shiftKey) {
+							// Em ponteiro grosso (celular) Enter fica com a quebra de linha nativa.
+							if (event.key === "Enter" && !event.shiftKey && !isCoarsePointer) {
 								event.preventDefault();
 								handleSubmit();
 							}
@@ -328,25 +369,18 @@ export const ChatInputArea = forwardRef<TChatInputAreaHandle, ChatInputAreaProps
 						placeholder="Digite uma mensagem..."
 						rows={1}
 						className="min-h-9 resize-none py-2 text-sm"
-						disabled={isSending}
 					/>
 				)}
 
 				{!isRecordingVoice && (
-					<Button
-						size="icon"
-						className="shrink-0"
-						aria-label="Enviar mensagem"
-						onClick={handleSubmit}
-						disabled={isSending || (!texto.trim() && !attachment)}
-					>
+					<Button size="icon" className="shrink-0" aria-label="Enviar mensagem" onClick={handleSubmit} disabled={!texto.trim() && !attachment}>
 						<Send className="h-4 w-4" />
 					</Button>
 				)}
 			</div>
 
-			<div className={cn("flex items-center gap-2 self-start", isSending && "opacity-60")}>
-				<Switch id={signatureSwitchId} checked={assinaturaAtiva} onCheckedChange={handleSignatureChange} disabled={isSending} />
+			<div className="flex items-center gap-2 self-start">
+				<Switch id={signatureSwitchId} checked={assinaturaAtiva} onCheckedChange={handleSignatureChange} />
 				<label htmlFor={signatureSwitchId} className="cursor-pointer text-[11px] text-muted-foreground">
 					Assinar como {userName}
 				</label>

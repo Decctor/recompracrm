@@ -31,7 +31,7 @@ import { useEffect, useRef, useState } from "react";
 /** `gap-1.5` em px. A medição precisa do mesmo valor que o CSS aplica, ou o corte erra por item. */
 const GAP_PX = 6;
 
-const PILL_CLASS = "shrink-0 rounded-full text-xs font-bold";
+const PILL_CLASS = "h-11 shrink-0 rounded-full text-xs font-bold sm:h-9";
 /**
  * `truncate` (que traz `overflow: hidden`) é o que faz o `min-width: auto` do flex item resolver
  * para 0 — sem ele o span não encolhe e o `max-w` do pai não tem efeito nenhum.
@@ -137,11 +137,11 @@ export default function CategoriesBar({ groups, selectedGroup, onGroupSelect, is
 
 	if (isLoadingGroups) {
 		return (
-			<div aria-hidden className="flex h-9 items-center gap-1.5">
-				<Skeleton className="h-9 w-20 rounded-full" />
-				<Skeleton className="h-9 w-32 rounded-full" />
-				<Skeleton className="h-9 w-28 rounded-full" />
-				<Skeleton className="h-9 w-36 rounded-full" />
+			<div aria-hidden className="flex h-11 items-center gap-1.5 sm:h-9">
+				<Skeleton className="h-11 w-20 rounded-full sm:h-9" />
+				<Skeleton className="h-11 w-32 rounded-full sm:h-9" />
+				<Skeleton className="h-11 w-28 rounded-full sm:h-9" />
+				<Skeleton className="h-11 w-36 rounded-full sm:h-9" />
 			</div>
 		);
 	}
@@ -176,7 +176,7 @@ export default function CategoriesBar({ groups, selectedGroup, onGroupSelect, is
 		// e o navegador reduz o zoom, espremendo a venda inteira à esquerda. `overflow-clip`
 		// recorta o espelho sem criar scroll container, então as larguras medidas — e o `+N` —
 		// continuam iguais no desktop e no mobile.
-		<div ref={containerRef} className="relative h-9 w-full min-w-0 overflow-clip">
+		<div ref={containerRef} className="relative h-11 w-full min-w-0 overflow-clip sm:h-9">
 			{/* Linha espelho: mede as larguras reais (truncagem inclusa) sem nunca ser vista nem
 			    focada. `visibility: hidden` mantém a caixa de layout, ao contrário de `display: none`. */}
 			<div aria-hidden ref={mirrorRef} className="pointer-events-none invisible absolute top-0 left-0 flex w-max items-center gap-1.5">
@@ -197,7 +197,7 @@ export default function CategoriesBar({ groups, selectedGroup, onGroupSelect, is
 				role="group"
 				aria-label="Filtrar produtos por categoria"
 				aria-busy={isFilteringProducts}
-				className={cn("flex h-9 items-center gap-1.5 overflow-hidden", isFilteringProducts && "[&_button]:cursor-progress")}
+				className={cn("flex h-11 items-center gap-1.5 overflow-hidden sm:h-9", isFilteringProducts && "[&_button]:cursor-progress")}
 			>
 				<Button
 					type="button"

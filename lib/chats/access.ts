@@ -26,13 +26,7 @@ export type TChatAccessContext = {
  * Valida sessão + recurso da organização + permissão, e devolve o `organizacaoId` já
  * estreitado para não-nulo. Toda rota do módulo começa por aqui.
  */
-export function assertChatAccess({
-	session,
-	permission,
-}: {
-	session: TAuthUserSession | null;
-	permission: TChatPermission;
-}): TChatAccessContext {
+export function assertChatAccess({ session, permission }: { session: TAuthUserSession | null; permission: TChatPermission }): TChatAccessContext {
 	if (!session) throw new createHttpError.Unauthorized("Você precisa estar autenticado.");
 
 	const organizacaoId = session.membership?.organizacao.id;
@@ -52,7 +46,7 @@ const CHAT_PERMISSION_ERRORS: Record<TChatPermission, string> = {
 	visualizar: "Você não possui permissão para visualizar atendimentos.",
 	iniciar: "Você não possui permissão para iniciar atendimentos.",
 	responder: "Você não possui permissão para responder atendimentos.",
-	receberTransferencias: "Você não possui permissão para transferir atendimentos.",
+	receberTransferencias: "Você não possui permissão para receber transferências de atendimentos.",
 	finalizar: "Você não possui permissão para gerenciar atendimentos.",
 };
 

@@ -5,8 +5,9 @@ import { saleItems, sales } from "@/services/drizzle/schema";
 import { and, eq, sql } from "drizzle-orm";
 
 // ============================================================================
-// Tokens publicos (QR de ponto e de tab). Persistimos apenas o hash (sha256 hex);
-// o token bruto aparece somente na criacao/regeneracao — padrao shopOrderRequests.
+// Tokens publicos (QR de ponto e de tab). A busca publica e sempre pelo hash
+// (sha256 hex). O QR da tab guarda apenas o hash (mostra consumo; o bruto aparece
+// somente na abertura). O QR do ponto tambem guarda o bruto, para reimpressao.
 // ============================================================================
 
 export function generatePublicToken(): string {

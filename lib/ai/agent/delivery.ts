@@ -1,4 +1,4 @@
-import { applyProviderDeliveryStatus, persistOutboundNonHubMessage } from "@/lib/chats/incoming-message";
+import { applyProviderDeliveryStatus, persistOutboundNonHubMessage, registerOutboundAiMessageAnswered } from "@/lib/chats/incoming-message";
 import { isWhatsappWindowOpen } from "@/lib/chats/whatsapp-window-status";
 import { type SendMessageContent, sendMessage as sendInternalGatewayMessage } from "@/lib/whatsapp/internal-gateway";
 import { formatPhoneAsWhatsappId, formatPhoneForInternalGateway } from "@/lib/whatsapp/utils";
@@ -92,17 +92,17 @@ async function loadChatForDelivery(organizacaoId: string, chatId: string) {
 
 /** Meta Cloud API: envia primeiro, persiste depois — o id do provider volta na resposta. */
 export function createMetaCloudDeliverer({ organizacaoId, chatId }: TDelivererParams): TAgentMessageDeliverer {
-	return async ({ mensagem, anexo, runId, agenteId, retomadaId = null }) => {
+	return async ({ mensagem, anexo, runId, agenteId, retomadaId = null, manterPendente = false }) => {
 		const chat = await loadChatForDelivery(organizacaoId, chatId);
 		if (!chat) {
 			console.error("[AI_AGENT] [DELIVERY] Chat não encontrado para entrega:", chatId);
-			return { messageId: null };
+			return { messageId: null, entregue: false };
 		}
 
 		// Fora da janela de 24h só passa template, e a IA não envia template.
 		if (!isWhatsappWindowOpen({ expiracao: chat.whatsappJanelaDataExpiracao, tipoConexao: chat.whatsappConexao?.tipoConexao })) {
 			console.log("[AI_AGENT] [DELIVERY] Janela de 24h expirada, resposta descartada:", chatId);
-			return { messageId: null };
+			return { messageId: null, entregue: false };
 		}
 
 		const { whatsappMessageId, anexoEnviado } =
@@ -125,15 +125,19 @@ export function createMetaCloudDeliverer({ organizacaoId, chatId }: TDelivererPa
 			conteudoTexto: mensagem,
 			...attachmentColumns(anexo, anexoEnviado),
 			metadados: { aiAgente: { runId, agenteId, retomadaId } },
+			// Sem wamid o provedor não aceitou o envio: a linha FALHA fica para o hub, mas não pode
+			// contar como resposta (senão o cliente sai da fila sem ter recebido nada).
+			entregue: whatsappMessageId !== null,
+			contarComoResposta: !manterPendente,
 		});
-		// null = wamid já persistido por outra via (o webhook de echo chegou primeiro).
-		if (!inserted) return { messageId: null };
+		// null = wamid já persistido por outra via (o webhook de echo chegou primeiro), ou seja, entregue.
+		if (!inserted) return { messageId: null, entregue: true };
 
 		if (!whatsappMessageId) {
 			await applyProviderDeliveryStatus({ statusEntrega: "FALHA", chatMessageId: inserted.messageId });
 		}
 
-		return { messageId: inserted.messageId };
+		return { messageId: inserted.messageId, entregue: whatsappMessageId !== null };
 	};
 }
 
@@ -142,11 +146,11 @@ export function createMetaCloudDeliverer({ organizacaoId, chatId }: TDelivererPa
  * `clientMessageId` é o próprio id da mensagem, que é como o webhook `message.sent` reconcilia.
  */
 export function createInternalGatewayDeliverer({ organizacaoId, chatId, sessaoId }: TDelivererParams & { sessaoId: string }): TAgentMessageDeliverer {
-	return async ({ mensagem, anexo, runId, agenteId, retomadaId = null }) => {
+	return async ({ mensagem, anexo, runId, agenteId, retomadaId = null, manterPendente = false }) => {
 		const chat = await loadChatForDelivery(organizacaoId, chatId);
 		if (!chat) {
 			console.error("[AI_AGENT] [DELIVERY] Chat não encontrado para entrega:", chatId);
-			return { messageId: null };
+			return { messageId: null, entregue: false };
 		}
 
 		const inserted = await persistOutboundNonHubMessage({
@@ -160,14 +164,17 @@ export function createInternalGatewayDeliverer({ organizacaoId, chatId, sessaoId
 			// corrigida abaixo se a fila recusar.
 			...attachmentColumns(anexo, true),
 			metadados: { gatewayInterno: { sessaoId }, aiAgente: { runId, agenteId, retomadaId } },
+			// A mensagem nasce antes do envio (o id dela é o `clientMessageId`), então ainda não sabemos
+			// se a fila vai aceitá-la: ela só passa a contar como resposta depois do enqueue, abaixo.
+			entregue: false,
 		});
 		// Sem wamid não há alvo de conflito; o null aqui é impossível, mas o tipo exige o guard.
-		if (!inserted) return { messageId: null };
+		if (!inserted) return { messageId: null, entregue: false };
 
 		if (!chat.whatsappConexao?.gatewaySessaoId || chat.whatsappConexao.gatewayStatus !== "connected" || !chat.cliente?.telefone) {
 			console.warn("[AI_AGENT] [DELIVERY] Gateway interno indisponível:", chatId);
 			await applyProviderDeliveryStatus({ statusEntrega: "FALHA", chatMessageId: inserted.messageId });
-			return { messageId: inserted.messageId };
+			return { messageId: inserted.messageId, entregue: false };
 		}
 
 		const gatewaySessaoId = chat.whatsappConexao.gatewaySessaoId;
@@ -177,6 +184,7 @@ export function createInternalGatewayDeliverer({ organizacaoId, chatId, sessaoId
 			if (!response.success) throw new Error(response.error || "Falha ao enfileirar a mensagem da IA no Gateway Interno.");
 		};
 
+		let enfileirada = true;
 		try {
 			await enqueue(
 				anexo
@@ -209,10 +217,18 @@ export function createInternalGatewayDeliverer({ organizacaoId, chatId, sessaoId
 				}
 			})();
 
-			if (!degradou) await applyProviderDeliveryStatus({ statusEntrega: "FALHA", chatMessageId: inserted.messageId });
+			if (!degradou) {
+				enfileirada = false;
+				await applyProviderDeliveryStatus({ statusEntrega: "FALHA", chatMessageId: inserted.messageId });
+			}
 		}
 
-		return { messageId: inserted.messageId };
+		// Fila aceitou: agora sim é resposta. Falhou: a linha FALHA fica sem mexer em pendência nem ticket.
+		if (enfileirada && !manterPendente) {
+			await registerOutboundAiMessageAnswered({ organizacaoId, chatId, responseDate: inserted.dataEnvio });
+		}
+
+		return { messageId: inserted.messageId, entregue: enfileirada };
 	};
 }
 
@@ -244,9 +260,9 @@ export async function resolveChatDeliverer({ organizacaoId, chatId }: TDeliverer
  * não tem conexão de WhatsApp.
  */
 export function createPlaygroundDeliverer({ organizacaoId, chatId }: TDelivererParams): TAgentMessageDeliverer {
-	return async ({ mensagem, anexo, runId, agenteId, retomadaId = null }) => {
+	return async ({ mensagem, anexo, runId, agenteId, retomadaId = null, manterPendente = false }) => {
 		const chat = await loadChatForDelivery(organizacaoId, chatId);
-		if (!chat) return { messageId: null };
+		if (!chat) return { messageId: null, entregue: false };
 
 		const inserted = await persistOutboundNonHubMessage({
 			organizacaoId,
@@ -259,8 +275,9 @@ export function createPlaygroundDeliverer({ organizacaoId, chatId }: TDelivererP
 			// é justamente o que a organização precisa conferir antes de soltar o agente.
 			...attachmentColumns(anexo, true),
 			metadados: { aiAgente: { runId, agenteId, retomadaId } },
+			contarComoResposta: !manterPendente,
 		});
 
-		return { messageId: inserted?.messageId ?? null };
+		return { messageId: inserted?.messageId ?? null, entregue: inserted !== null };
 	};
 }

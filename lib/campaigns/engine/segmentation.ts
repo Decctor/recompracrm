@@ -4,7 +4,7 @@ import type { TCashbackProgramTerminologyEnum, TTimeDurationUnitsEnum } from "@/
 import type { DBTransaction } from "@/services/drizzle";
 import type { TCampaignEntity, TCampaignSegmentationEntity } from "@/services/drizzle/schema";
 import dayjs from "dayjs";
-import { createEventCampaignDispatch, type TEventDispatchResult } from "./event-dispatch";
+import { recordCampaignOccurrence } from "@/lib/campaigns/events/occurrences";
 import { canScheduleCampaignForClient } from "./frequency-cap";
 
 /**
@@ -61,13 +61,13 @@ export function resolveSegmentationCampaigns({
 }
 
 /**
- * Cria os disparos de segmentação de um cliente dentro da transação da análise RFM.
+ * Records segmentation occurrences in the RFM analysis transaction.
  * Chaves de janela naturais deduplicam por construção:
  *  - ENTRADA: uma por (campanha, cliente, segmento, dia da mudança);
  *  - PERMANÊNCIA: uma por (campanha, cliente, última mudança de segmento) — a checagem antiga de
  *    "já existe interação desde a última mudança" vira a própria chave única.
  */
-export async function scheduleSegmentationDispatches({
+export async function recordSegmentationCampaignEvents({
 	tx,
 	organizationId,
 	client,
@@ -85,11 +85,11 @@ export async function scheduleSegmentationDispatches({
 	filterAudiencesByCampaignId: Map<string, Set<string>>;
 	cashbackTerminology: TCashbackProgramTerminologyEnum;
 	now?: Date;
-}): Promise<TEventDispatchResult[]> {
+}): Promise<string[]> {
 	const applicable = resolveSegmentationCampaigns({ entryCampaigns, permanenceCampaigns, filterAudiencesByCampaignId, client, now });
 	if (applicable.length === 0) return [];
 
-	const results: TEventDispatchResult[] = [];
+	const results: string[] = [];
 	const dayKey = dayjs(now).format("YYYY-MM-DD");
 	for (const { campaign, kind } of applicable) {
 		if (!(await canScheduleCampaignForClient({ executor: tx, campaign, clientId: client.clientId, now }))) continue;
@@ -98,11 +98,12 @@ export async function scheduleSegmentationDispatches({
 			kind === "ENTRADA"
 				? `entrada:${client.clientId}:${client.newLabel}:${dayKey}`
 				: `permanencia:${client.clientId}:${client.lastLabelModification?.toISOString() ?? dayKey}`;
-		const dispatch = await createEventCampaignDispatch({
+		const occurrence = await recordCampaignOccurrence({
 			tx,
 			organizationId,
 			campaign,
 			janelaReferencia,
+			validity: { segmentacaoEsperada: client.newLabel },
 			recipients: [
 				{
 					clienteId: client.clientId,
@@ -113,7 +114,7 @@ export async function scheduleSegmentationDispatches({
 			],
 			now,
 		});
-		if (dispatch.created) results.push(dispatch);
+		if (occurrence.eventId) results.push(occurrence.eventId);
 	}
 	return results;
 }

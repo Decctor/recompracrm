@@ -93,8 +93,14 @@ export const appRoutes = {
 		seller: (sellerId: string) => `/dashboard/management/sellers/${sellerId}`,
 		partners: () => "/dashboard/management/partners",
 	},
+	conversations: {
+		inbox: () => "/dashboard/conversations",
+		/** Abre a caixa de entrada já na conversa indicada (ex.: clique num card do quadro). */
+		chat: (chatId: string) => `/dashboard/conversations?chat=${encodeURIComponent(chatId)}`,
+		board: () => "/dashboard/conversations/board",
+		stats: () => "/dashboard/conversations/stats",
+	},
 	channels: {
-		whatsapp: () => "/dashboard/channels/whatsapp",
 		paidMedia: () => "/dashboard/channels/paid-media",
 		visualKits: () => "/dashboard/channels/visual-kits",
 		newVisualKit: () => "/dashboard/channels/visual-kits/new",

@@ -36,6 +36,7 @@ import {
 	CalendarClock,
 } from "lucide-react";
 import { forwardRef, type CSSProperties } from "react";
+import { RESPONSIBLE_META } from "../attendance-meta";
 import { CHAT_ASSIGNMENT_STATUS_LABEL, CHAT_PRIORITY_LABEL, CHAT_PRIORITY_PILL_CLASS, CHAT_WINDOW_DOT_CLASS } from "./config";
 
 const MEDIA_ICONS = { IMAGEM: ImageIcon, VIDEO: Video, AUDIO: Mic, DOCUMENTO: FileText, FIGURINHA: Sticker, LOCALIZACAO: MapPin } as const;
@@ -229,16 +230,18 @@ export const ChatsBoardCard = forwardRef<HTMLDivElement, ChatsBoardCardProps>(fu
 				)}
 				{card.responsavelTipo === "AGENTE" && (
 					<span className="flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5">
-						<Sparkles className="h-3 w-3" /> Automação
+						<Sparkles className="h-3 w-3" /> {RESPONSIBLE_META.AGENTE.shortLabel}
 					</span>
 				)}
 				{card.responsavelTipo === "EXTERNO" && (
 					<span className="flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5">
-						<Smartphone className="h-3 w-3" /> Telefone
+						<Smartphone className="h-3 w-3" /> {RESPONSIBLE_META.EXTERNO.shortLabel}
 					</span>
 				)}
 				{card.responsavelTipo === "NAO_ATRIBUIDO" && (
-					<span className="rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 font-bold text-primary">Livre</span>
+					<span className="rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 font-bold text-primary">
+						{RESPONSIBLE_META.NAO_ATRIBUIDO.shortLabel}
+					</span>
 				)}
 
 				{card.prioridade && prioridadePillClass && (

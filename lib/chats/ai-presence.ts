@@ -35,7 +35,10 @@ export type TAiPresence =
 	| { estado: "aguardando"; motivo: "debounce" | "reserva"; previstoEm: Date }
 	| { estado: "respondendo"; runId: string; desde: Date }
 	| { estado: "falhou"; runId: string; erro: string | null; em: Date }
-	| { estado: "limite"; motivo: TAiAssignmentBlockReason };
+	| { estado: "bloqueado"; motivo: TAiAssignmentBlockReason | null };
+
+/** Bloqueios que a equipe não configurou e podem sumir sozinhos: valem alerta mesmo sem dono. */
+const TRANSIENT_BLOCK_REASONS = new Set<TAiAssignmentBlockReason>(["LIMITE_CREDITOS", "LIMITE_EXECUCOES_DIARIAS", "AGENTE_PAUSADO"]);
 
 export type TResolveAiPresenceInput = {
 	atendimento: { responsavelTipo: string } | null;
@@ -79,9 +82,17 @@ export function resolveAiPresence(input: TResolveAiPresenceInput): TAiPresence {
 		if (!ultimaEntradaEm || em >= ultimaEntradaEm) return { estado: "falhou", runId: run.id, erro: run.erro, em };
 	}
 
-	// 4. Bloqueio explícito: sem agente disponível não há o que esperar.
+	// 4. Bloqueio explícito: sem agente disponível não há o que esperar. Com a IA como dona, o
+	//    cabeçalho diz "Com a IA" e ninguém vai responder — o pior desencontro possível, então
+	//    qualquer motivo aparece (pausa, número sem IA, escopo, limite...). Sem dono, só os motivos
+	//    transitórios e com cliente esperando: a equipe contava com a IA e ela parou. Um número sem
+	//    IA ou um plano sem o recurso são configuração, não surpresa — alertar ali seria uma faixa
+	//    vermelha em toda conversa da fila de quem nunca teve IA.
 	if (!atendimentoIa.disponivel) {
-		if (atendimentoIa.motivo === "LIMITE_CREDITOS") return { estado: "limite", motivo: atendimentoIa.motivo };
+		if (responsavel === "AGENTE") return { estado: "bloqueado", motivo: atendimentoIa.motivo };
+		if (pendente && atendimentoIa.motivo && TRANSIENT_BLOCK_REASONS.has(atendimentoIa.motivo)) {
+			return { estado: "bloqueado", motivo: atendimentoIa.motivo };
+		}
 		return { estado: "ausente" };
 	}
 

@@ -36,6 +36,8 @@ import {
 	type TCampaignDispatchInterruptionInput,
 } from "./interruption";
 import { classifyWhatsappSendErrorCode } from "./interruption-policy";
+import { createCampaignEventSendGuard } from "@/lib/campaigns/events/send-guard";
+import type { TCampaignEventRecipientClient } from "@/lib/campaigns/events/types";
 import { skipRemainingRecipients, touchDispatch } from "./progress";
 import { publishCampaignDispatchSend } from "./queue";
 
@@ -174,6 +176,8 @@ async function claimRecipientBatch({
 	});
 }
 
+// Also carries what the event send guards revalidate (pause, segment, birthday): one batched
+// query per batch instead of one lookup per recipient.
 const DELIVERY_CLIENT_COLUMNS = {
 	id: true,
 	nome: true,
@@ -183,9 +187,11 @@ const DELIVERY_CLIENT_COLUMNS = {
 	metadataProdutoMaisCompradoId: true,
 	metadataGrupoProdutoMaisComprado: true,
 	metadataProdutoSugeridoId: true,
+	comunicacaoPausadaAte: true,
+	dataNascimento: true,
 } as const;
 
-async function loadDeliveryClients(clientIds: string[]): Promise<Map<string, TCampaignDeliveryClient>> {
+async function loadDeliveryClients(clientIds: string[]): Promise<Map<string, TCampaignDeliveryClient & TCampaignEventRecipientClient>> {
 	if (clientIds.length === 0) return new Map();
 	const rows = await db.query.clients.findMany({ where: inArray(clients.id, clientIds), columns: DELIVERY_CLIENT_COLUMNS });
 	return new Map(rows.map((row) => [row.id, row]));
@@ -338,6 +344,8 @@ async function sendReservedRecipients({
 	summary: TCampaignDispatchSendSummary;
 }): Promise<TCampaignDispatchInterruptionInput | null> {
 	const clientsById = await loadDeliveryClients(recipients.map((recipient) => recipient.clienteId));
+	// One guard per batch: the originating event is loaded and parsed once for all its recipients.
+	const eventGuard = createCampaignEventSendGuard();
 	const connection = campaign.whatsappConexaoTelefone?.conexao;
 	const whatsappToken = connection?.tipoConexao === "META_CLOUD_API" ? (connection.token ?? undefined) : undefined;
 	const whatsappSessionId = connection?.tipoConexao === "INTERNAL_GATEWAY" ? (connection.gatewaySessaoId ?? undefined) : undefined;
@@ -356,6 +364,30 @@ async function sendReservedRecipients({
 		await Promise.all(
 			batch.map(async (recipient) => {
 				try {
+					const saleBlock = await eventGuard.getRecipientBlock({
+						recipient,
+						client: clientsById.get(recipient.clienteId) ?? null,
+						scheduledAt: dispatch.dataAgendada,
+					});
+					if (saleBlock) {
+						await db.transaction(async (tx) => {
+							const [skipped] = await tx
+								.update(campaignDispatchRecipients)
+								.set({ status: "PULADA", motivoPulo: saleBlock.motivo, erro: saleBlock.erro })
+								.where(and(eq(campaignDispatchRecipients.id, recipient.id), eq(campaignDispatchRecipients.status, "RESERVADA")))
+								.returning({ id: campaignDispatchRecipients.id });
+							if (!skipped) return;
+							await releaseSendQuota({
+								tx,
+								organizationId: dispatch.organizacaoId,
+								campaignId: dispatch.campanhaId,
+								reservedAt: recipient.dataReserva ?? new Date(),
+							});
+							await touchDispatch(tx, dispatch.id, { totalPulados: sql`${campaignDispatches.totalPulados} + 1` as unknown as number });
+						});
+						summary.skipped += 1;
+						return;
+					}
 					const client = clientsById.get(recipient.clienteId) ?? null;
 					const context = await projectCampaignSendContext({
 						organizationId: dispatch.organizacaoId,

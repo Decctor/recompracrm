@@ -8,7 +8,7 @@ import type { TChatInboxItem } from "@/lib/queries/chats";
 import { cn } from "@/lib/utils";
 import { CalendarClock, FileText, Image as ImageIcon, MapPin, Mic, Smartphone, Sparkles, Sticker, UserRound, Video } from "lucide-react";
 import { formatFollowUpMoment } from "./FollowUpNotice";
-import { PRIORITY_META, STATUS_META } from "./attendance-meta";
+import { PRIORITY_META, RESPONSIBLE_META, STATUS_META } from "./attendance-meta";
 import { TypingIndicator } from "./TypingIndicator";
 
 type ChatInboxListItemProps = {
@@ -81,7 +81,7 @@ function ResponsibleLine({ atendimento, aiRunAtiva }: { atendimento: TChatInboxI
 				<span className={cn(avatarClass, "bg-primary/10 text-primary")}>
 					<Sparkles className="h-3 w-3" aria-hidden />
 				</span>
-				<span className="truncate text-xs font-medium text-foreground">Automação</span>
+				<span className="truncate text-xs font-medium text-foreground">{RESPONSIBLE_META.AGENTE.label}</span>
 				{/* Run em curso: a IA está escrevendo agora. Quem varre a lista sabe que não precisa entrar. */}
 				{aiRunAtiva && (
 					<span className="flex items-center gap-1 text-[11px] text-primary">
@@ -98,7 +98,7 @@ function ResponsibleLine({ atendimento, aiRunAtiva }: { atendimento: TChatInboxI
 				<span className={cn(avatarClass, "bg-muted text-muted-foreground")}>
 					<Smartphone className="h-3 w-3" aria-hidden />
 				</span>
-				<span className="truncate text-xs text-muted-foreground">Telefone</span>
+				<span className="truncate text-xs text-muted-foreground">{RESPONSIBLE_META.EXTERNO.label}</span>
 			</span>
 		);
 	}
@@ -109,7 +109,7 @@ function ResponsibleLine({ atendimento, aiRunAtiva }: { atendimento: TChatInboxI
 			<span className={cn(avatarClass, "border border-dashed border-muted-foreground/40 text-muted-foreground")}>
 				<UserRound className="h-3 w-3 opacity-60" aria-hidden />
 			</span>
-			<span className="truncate text-xs italic text-muted-foreground/80">Sem responsável</span>
+			<span className="truncate text-xs italic text-muted-foreground/80">{RESPONSIBLE_META.NAO_ATRIBUIDO.label}</span>
 		</span>
 	);
 }

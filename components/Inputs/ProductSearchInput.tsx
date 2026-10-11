@@ -1,6 +1,5 @@
 "use client";
 
-import { useId } from "react";
 import { Loader2, Search, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
@@ -17,7 +16,6 @@ type ProductSearchInputProps = {
 };
 
 export default function ProductSearchInput({ value, onChange, isLoading, className }: ProductSearchInputProps) {
-	const hintId = useId();
 	const { inputRef, committed, draft, atLimit, commit, remove, changeDraft, clear } = useProductSearchInput(value, onChange);
 	return (
 		<div className={cn("flex w-full min-w-0 flex-col gap-2", className)}>
@@ -27,7 +25,6 @@ export default function ProductSearchInput({ value, onChange, isLoading, classNa
 					value={draft}
 					onChange={(event) => changeDraft(event.target.value.replaceAll(",", " "))}
 					aria-label="Buscar produtos"
-					aria-describedby={hintId}
 					placeholder={atLimit ? "Limite de 5 termos" : "Buscar produto ou código…"}
 					readOnly={atLimit}
 					maxLength={PRODUCT_SEARCH_MAX_LENGTH}
@@ -67,9 +64,6 @@ export default function ProductSearchInput({ value, onChange, isLoading, classNa
 					))}
 				</div>
 			) : null}
-			<p id={hintId} className="text-xs text-muted-foreground">
-				Enter ou OK para adicionar outro termo. Até 5 termos.
-			</p>
 		</div>
 	);
 }

@@ -34,7 +34,7 @@ const MainLayout = async ({ children }: { children: ReactNode }) => {
 			<AppSidebar user={user.user} organization={user.membership.organizacao} permissions={user.membership.permissoes} />
 			<Suspense fallback={<LoadingComponent />}>
 				<SidebarInset className="min-w-0">
-					<div className="flex min-h-full w-full flex-col gap-3 p-6">
+					<div className="flex min-h-full w-full flex-col gap-3 p-3 sm:p-6">
 						<OrgColorsProvider
 							corPrimaria={user.membership.organizacao.corPrimaria}
 							corPrimariaForeground={user.membership.organizacao.corPrimariaForeground}

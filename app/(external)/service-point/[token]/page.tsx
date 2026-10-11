@@ -1,7 +1,6 @@
 import { OrgColorsProvider } from "@/components/Providers/OrgColorsProvider";
-import { getComandaMenuProducts, hashPublicToken, resolveServiceSettings } from "@/lib/tabs";
+import { getTabMenuProducts, hashPublicToken, resolveServiceSettings } from "@/lib/tabs";
 import { db } from "@/services/drizzle";
-import type { TPublicMenuProduct } from "../../_components/PublicOrderMenu";
 import { PublicShell } from "../../_components/PublicShell";
 import { PublicServicePointExperience } from "../../_components/PublicServicePointExperience";
 
@@ -47,7 +46,7 @@ export default async function ServicePointPublicPage({ params }: { params: Promi
 	const settings = await resolveServiceSettings({ orgId: servicePoint.organizacaoId });
 	const orderingEnabled = settings.pedidosCliente !== "DESABILITADO";
 
-	const products = orderingEnabled ? await getComandaMenuProducts({ orgId: servicePoint.organizacaoId }) : [];
+	const products = orderingEnabled ? await getTabMenuProducts({ orgId: servicePoint.organizacaoId }) : [];
 
 	return (
 		<OrgColorsProvider
@@ -63,7 +62,7 @@ export default async function ServicePointPublicPage({ params }: { params: Promi
 				logoUrl={servicePoint.organizacao?.logoUrl}
 			>
 				{orderingEnabled ? (
-					<PublicServicePointExperience token={token} products={products as TPublicMenuProduct[]} />
+					<PublicServicePointExperience token={token} products={products} />
 				) : (
 					<div className="rounded-2xl border border-border bg-card px-4 py-8 text-center">
 						<p className="text-sm text-muted-foreground">

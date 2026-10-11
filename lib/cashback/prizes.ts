@@ -1,7 +1,8 @@
-import { isCashbackRedemptionAllowedOnSurface } from "@/lib/cashback/redemption-policy";
+import { hasAnyCashbackRedemptionSurface, isCashbackRedemptionAllowedOnSurface } from "@/lib/cashback/redemption-policy";
 import type { TBenefitRedemptionSurface } from "@/schemas/enums";
 import { type TChannelState, channelNodePrice, channelProductFilter } from "@/lib/products/sales-channels-store";
 import type { DB, DBTransaction } from "@/services/drizzle";
+import type { TCashbackProgramEntity } from "@/services/drizzle/schema";
 import createHttpError from "http-errors";
 
 /**
@@ -137,6 +138,118 @@ export async function validatePrizeForRedemption({
 }
 
 /**
+ * Resolve o programa de cashback de um cliente e a linha de saldo dele nesse programa.
+ *
+ * Mesma resolução do resgate (`admitSaleRewardRedemptions`): o programa do cliente é o do seu
+ * saldo. Só quando o cliente não tem saldo em nenhum programa é que se cai no programa ativo da
+ * organização — do contrário, uma org com mais de um programa listaria prêmios de um e
+ * debitaria o saldo de outro. PDV, loja digital e agente de IA passam por aqui para não
+ * discordarem sobre qual programa (e qual saldo) vale para o cliente.
+ */
+export async function resolveClientCashbackProgram({
+	tx,
+	organizacaoId,
+	clienteId,
+}: {
+	tx: DB | DBTransaction;
+	organizacaoId: string;
+	clienteId: string;
+}) {
+	const clientBalance = await tx.query.cashbackProgramBalances.findFirst({
+		where: (fields, { and, eq }) => and(eq(fields.organizacaoId, organizacaoId), eq(fields.clienteId, clienteId)),
+		columns: { programaId: true, saldoValorDisponivel: true, saldoValorAcumuladoTotal: true, saldoValorResgatadoTotal: true, dataAdesao: true },
+	});
+	const program = await tx.query.cashbackPrograms.findFirst({
+		where: (fields, { and, eq }) =>
+			clientBalance?.programaId
+				? and(eq(fields.id, clientBalance.programaId), eq(fields.organizacaoId, organizacaoId))
+				: and(eq(fields.organizacaoId, organizacaoId), eq(fields.ativo, true)),
+	});
+	// Saldo só conta quando é do programa resolvido.
+	const balance = clientBalance && clientBalance.programaId === program?.id ? clientBalance : null;
+	return { program: program ?? null, balance };
+}
+
+/**
+ * Prêmios de um programa, com a elegibilidade do cliente marcada a partir do saldo informado.
+ *
+ * `surface: null` significa "nenhuma superfície específica" (o agente de IA informa, não resgata):
+ * a lista sai desde que o programa resgate em alguma superfície. Com uma superfície, sem resgate
+ * nela a lista sai vazia (a admissão recusaria de qualquer forma).
+ */
+export async function listProgramCashbackRewards({
+	tx,
+	organizacaoId,
+	program,
+	availableBalance,
+	surface,
+	channelState,
+}: {
+	tx: DB | DBTransaction;
+	organizacaoId: string;
+	program: Pick<
+		TCashbackProgramEntity,
+		"id" | "ativo" | "modalidadeRecompensasPermitida" | "resgatePermitirViaPos" | "resgatePermitirViaPontoIntegracao" | "resgatePermitirViaLojaDigital"
+	> | null;
+	availableBalance: number;
+	surface: TBenefitRedemptionSurface | null;
+	channelState?: TChannelState | null;
+}) {
+	const redeemableSomewhere = program
+		? surface
+			? isCashbackRedemptionAllowedOnSurface(program, surface)
+			: hasAnyCashbackRedemptionSurface(program)
+		: false;
+	const rewardsAvailable = !!program?.ativo && program.modalidadeRecompensasPermitida && redeemableSomewhere;
+
+	const prizes =
+		rewardsAvailable && program
+			? await tx.query.cashbackProgramPrizes.findMany({
+					where: (fields, { and, eq, gt }) =>
+						and(eq(fields.organizacaoId, organizacaoId), eq(fields.programaId, program.id), eq(fields.ativo, true), gt(fields.valor, 0)),
+					columns: { id: true, titulo: true, descricao: true, imagemCapaUrl: true, valor: true, produtoId: true, produtoVarianteId: true },
+					with: {
+						produto: { columns: { precoVenda: true, grupo: true, imagemCapaUrl: true } },
+						produtoVariante: { columns: { produtoId: true, precoVenda: true, imagemCapaUrl: true } },
+					},
+					orderBy: (fields, { asc }) => asc(fields.valor),
+				})
+			: [];
+
+	return (
+		prizes
+			// Prêmio sem vínculo com produto/variante não é resgatável (não vira item de venda).
+			// `valor > 0` já é filtrado na query: prêmio de valor zero não passa no débito do ledger.
+			.filter((prize) => !!prize.produtoId || !!prize.produtoVarianteId)
+			.flatMap((prize) => {
+				const produtoId = prize.produtoId ?? prize.produtoVariante?.produtoId;
+				if (!produtoId) return [];
+				const channelPricing = resolvePrizeChannelPricing(channelState, {
+					produtoId,
+					produtoVarianteId: prize.produtoVarianteId,
+					precoVenda: prize.produtoVariante?.precoVenda ?? prize.produto?.precoVenda ?? null,
+				});
+				// Fora do canal não aparece: `validatePrizeForRedemption` recusaria o resgate de qualquer forma.
+				if (!channelPricing.disponivel) return [];
+				const eligible = availableBalance >= prize.valor;
+				return [
+					{
+						id: prize.id,
+						titulo: prize.titulo,
+						descricao: prize.descricao,
+						imagemCapaUrl: prize.imagemCapaUrl ?? prize.produtoVariante?.imagemCapaUrl ?? prize.produto?.imagemCapaUrl ?? null,
+						grupo: prize.produto?.grupo ?? null,
+						valor: prize.valor,
+						valorVenda: channelPricing.precoVenda,
+						elegivel: eligible,
+						motivo: eligible ? null : "Saldo insuficiente.",
+					},
+				];
+			})
+	);
+}
+
+/**
  * Lista as recompensas resgatáveis de um cliente, com o saldo e o programa resolvidos. Usada pelo
  * PDV e pela loja digital — a elegibilidade e a resolução de programa precisam ser idênticas nas
  * duas superfícies, senão elas mostram listas diferentes para o mesmo cliente.
@@ -155,77 +268,9 @@ export async function listAvailableCashbackRewards({
 	surface: TBenefitRedemptionSurface;
 	channelState?: TChannelState | null;
 }) {
-	// Mesma resolução do resgate (`admitSaleRewardRedemptions`): o programa do cliente é o do seu
-	// saldo. Só quando o cliente não tem saldo em nenhum programa é que se cai no programa ativo da
-	// organização — do contrário, uma org com mais de um programa listaria prêmios de um e
-	// debitaria o saldo de outro.
-	const clientBalance = await tx.query.cashbackProgramBalances.findFirst({
-		where: (fields, { and, eq }) => and(eq(fields.organizacaoId, organizacaoId), eq(fields.clienteId, clienteId)),
-		columns: { saldoValorDisponivel: true, programaId: true },
-	});
-	const program = await tx.query.cashbackPrograms.findFirst({
-		where: (fields, { and, eq }) =>
-			clientBalance?.programaId
-				? and(eq(fields.id, clientBalance.programaId), eq(fields.organizacaoId, organizacaoId))
-				: and(eq(fields.organizacaoId, organizacaoId), eq(fields.ativo, true)),
-		columns: {
-			id: true,
-			ativo: true,
-			terminologia: true,
-			modalidadeRecompensasPermitida: true,
-			resgatePermitirViaPos: true,
-			resgatePermitirViaPontoIntegracao: true,
-			resgatePermitirViaLojaDigital: true,
-		},
-	});
-	const rewardsAvailable = !!program?.ativo && program.modalidadeRecompensasPermitida && isCashbackRedemptionAllowedOnSurface(program, surface);
-	// Saldo só conta quando é do programa resolvido.
-	const balance = clientBalance && clientBalance.programaId === program?.id ? clientBalance : null;
-	const saldoValorDisponivel = balance?.saldoValorDisponivel ?? 0;
-
-	const prizes =
-		rewardsAvailable && program
-			? await tx.query.cashbackProgramPrizes.findMany({
-					where: (fields, { and, eq, gt }) =>
-						and(eq(fields.organizacaoId, organizacaoId), eq(fields.programaId, program.id), eq(fields.ativo, true), gt(fields.valor, 0)),
-					columns: { id: true, titulo: true, descricao: true, imagemCapaUrl: true, valor: true, produtoId: true, produtoVarianteId: true },
-					with: {
-						produto: { columns: { precoVenda: true, grupo: true, imagemCapaUrl: true } },
-						produtoVariante: { columns: { produtoId: true, precoVenda: true, imagemCapaUrl: true } },
-					},
-					orderBy: (fields, { asc }) => asc(fields.valor),
-				})
-			: [];
-
-	const rewards = prizes
-		// Prêmio sem vínculo com produto/variante não é resgatável (não vira item de venda).
-		// `valor > 0` já é filtrado na query: prêmio de valor zero não passa no débito do ledger.
-		.filter((prize) => !!prize.produtoId || !!prize.produtoVarianteId)
-		.flatMap((prize) => {
-			const produtoId = prize.produtoId ?? prize.produtoVariante?.produtoId;
-			if (!produtoId) return [];
-			const channelPricing = resolvePrizeChannelPricing(channelState, {
-				produtoId,
-				produtoVarianteId: prize.produtoVarianteId,
-				precoVenda: prize.produtoVariante?.precoVenda ?? prize.produto?.precoVenda ?? null,
-			});
-			// Fora do canal não aparece: `validatePrizeForRedemption` recusaria o resgate de qualquer forma.
-			if (!channelPricing.disponivel) return [];
-			const elegivel = saldoValorDisponivel >= prize.valor;
-			return [
-				{
-					id: prize.id,
-					titulo: prize.titulo,
-					descricao: prize.descricao,
-					imagemCapaUrl: prize.imagemCapaUrl ?? prize.produtoVariante?.imagemCapaUrl ?? prize.produto?.imagemCapaUrl ?? null,
-					grupo: prize.produto?.grupo ?? null,
-					valor: prize.valor,
-					valorVenda: channelPricing.precoVenda,
-					elegivel,
-					motivo: elegivel ? null : "Saldo insuficiente.",
-				},
-			];
-		});
+	const { program, balance } = await resolveClientCashbackProgram({ tx, organizacaoId, clienteId });
+	const availableBalance = balance?.saldoValorDisponivel ?? 0;
+	const rewards = await listProgramCashbackRewards({ tx, organizacaoId, program, availableBalance, surface, channelState });
 
 	return {
 		program: program
@@ -236,7 +281,7 @@ export async function listAvailableCashbackRewards({
 					modalidadeRecompensasPermitida: program.modalidadeRecompensasPermitida,
 				}
 			: null,
-		saldoValorDisponivel,
+		saldoValorDisponivel: availableBalance,
 		rewards,
 	};
 }

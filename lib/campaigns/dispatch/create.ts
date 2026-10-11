@@ -24,6 +24,7 @@ export async function createCampaignDispatch({
 	origem,
 	janelaReferencia,
 	dataAgendada = null,
+	campanhaEventoId = null,
 }: {
 	tx: DBTransaction;
 	organizationId: string;
@@ -31,10 +32,11 @@ export async function createCampaignDispatch({
 	origem: TCampaignDispatchOriginEnum;
 	janelaReferencia: string;
 	dataAgendada?: Date | null;
+	campanhaEventoId?: string | null;
 }): Promise<TCreateCampaignDispatchResult> {
 	const [inserted] = await tx
 		.insert(campaignDispatches)
-		.values({ organizacaoId: organizationId, campanhaId: campaignId, origem, janelaReferencia, dataAgendada })
+		.values({ organizacaoId: organizationId, campanhaId: campaignId, origem, janelaReferencia, dataAgendada, campanhaEventoId })
 		.onConflictDoNothing({ target: [campaignDispatches.campanhaId, campaignDispatches.janelaReferencia] })
 		.returning({ id: campaignDispatches.id });
 
@@ -52,6 +54,7 @@ export type TCampaignDispatchRecipientInput = {
 	clienteId: string;
 	contexto?: TInteractionContextMetadados | null;
 	vendaId?: string | null;
+	campanhaEventoId?: string | null;
 	descricao?: string | null;
 	// Destinatários já decididos como pulados na expansão (frequência, pausa de comunicação):
 	// entram como PULADA para responder "por que não recebeu?" com uma linha.
@@ -94,6 +97,7 @@ export async function insertCampaignDispatchRecipients({
 					status: recipient.motivoPulo ? ("PULADA" as const) : ("AGUARDANDO" as const),
 					motivoPulo: recipient.motivoPulo ?? null,
 					vendaId: recipient.vendaId ?? null,
+					campanhaEventoId: recipient.campanhaEventoId ?? null,
 					descricao: recipient.descricao ?? null,
 					// A chave de idempotência nasce aqui e vira o id da interação no envio: o gateway
 					// interno recebe-a como clientMessageId, então um reenvio após queda deduplica.

@@ -1,3 +1,4 @@
+import { processSalePreparationTicketAutoPrintIfEligible } from "@/lib/desktop-agent/auto-print";
 import { db } from "@/services/drizzle";
 import { financialTransactions, saleItems, sales } from "@/services/drizzle/schema";
 import type { TOrganizationEntity } from "@/services/drizzle/schema";
@@ -123,6 +124,17 @@ export async function processSaleAttendanceStatusChange(input: ProcessSaleAttend
 			}
 		}
 	});
+
+	// Entrada em EM_PREPARO por transição manual (NAO_INICIADO -> EM_PREPARO): mesma via de
+	// cozinha da confirmação. Pós-commit, nunca lança; a chave por venda absorve repetições.
+	if (input.targetStatus === "EM_PREPARO") {
+		await processSalePreparationTicketAutoPrintIfEligible({
+			organizacaoId: input.organization.id,
+			saleId: input.saleId,
+			configuracao: input.organization.configuracao,
+			solicitadoPorId: input.authorId,
+		});
+	}
 
 	if (input.targetStatus === "ENTREGUE") {
 		await processSaleCashbackAccumulationIfEligible({

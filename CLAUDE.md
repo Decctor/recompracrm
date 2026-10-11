@@ -313,6 +313,18 @@ export function NewFoo({ closeModal, callbacks }: NewFooProps) {
 - "Today" comes from `useDayKey()` plus `resolveTodayRange()`, never from module-level date constants: the page stays open all day on a counter tablet.
 - The band paints the organization's own primary, darkened until white text passes 4.5:1 (`darkenUntilReadableWithWhite`). Org colors come from the database with no contrast guarantee and the band's caption line is 13px — without the adjustment a light brand color makes it unreadable.
 
+## POS Barcode Scanning Conventions
+
+**Location**: `lib/pos/barcode-*.ts`, `lib/hooks/use-barcode-scanner.ts`, `lib/hooks/use-pos-barcode-scan.ts`
+
+- Scanners are keyboard wedges: the code arrives as keystrokes a few milliseconds apart, closed by Enter or Tab. The only reliable signal is timing, so `createBarcodeScanDetector` (pure, tested) decides from inter-key intervals. Never key it on focus or on a dedicated "scan here" input — focus is stolen by every click.
+- `useBarcodeScanner` listens on `window` in the capture phase, `preventDefault`s the terminator (so Enter never commits the search or clicks a focused button) and strips the scanned text from whatever text field received it. With a dialog open, a scan only counts when the dialog contains the hook's `ownerRef`; otherwise it is refused with a toast, never silently dropped.
+- Resolution lives server-side in `GET /api/pos/products/barcode` (`lookupPOSProductsByBarcode`): variant `codigoBarras` → product `codigoBarras` → variant `codigo` → product `codigo`, compared through `barcodeLookupForms` (GTIN normalization plus UPC-A/EAN-13 equivalence). Results come hydrated through `hydratePOSProducts`, so the scan and the grid show the same price and the same add-on rules for the channel.
+- Every screen that builds a cart from the grid mounts `usePOSBarcodeScan` and renders `BarcodeMatchPicker` for duplicates. The action mirrors the click: variants or add-ons open the builder (with the matched variant preselected via `initialVariantId`); a plain item goes straight to the cart through `addItemOrIncrement`, so scanning the same item three times is quantity 3, not three lines.
+- Duplicate barcodes are a warning (`ProductBarcodeConflictHint`, `GET /api/products/barcode-usage`), not a constraint — the POS resolves them with the picker.
+
+---
+
 ## Public Page Conventions
 
 **Location**: `/app/(external)/`

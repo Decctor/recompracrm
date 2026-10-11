@@ -62,6 +62,15 @@
 					"topic": "fiscal-auto-emissions"
 				}
 			]
+		},
+		"app/api/queues/campaign-events/route.ts": {
+			"experimentalTriggers": [
+				{
+					"type": "queue/v2beta",
+					"topic": "campaign-events",
+					"retryAfterSeconds": 60
+				}
+			]
 		}
 	},
 	"crons": [

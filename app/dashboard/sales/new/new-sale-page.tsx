@@ -3,6 +3,10 @@
 import CashSessionBar from "@/components/CashSessions/CashSessionBar";
 import CashSessionGate from "@/components/CashSessions/CashSessionGate";
 import ControlClient from "@/components/Modals/Clients/ControlClient";
+import BarcodeMatchPicker from "@/components/Modals/Sales/BarcodeMatchPicker";
+import type { TBuiltOrderItem } from "@/components/Products/ProductBuilderForm";
+import { usePOSBarcodeScan } from "@/lib/hooks/use-pos-barcode-scan";
+import type { TBarcodeScanResolution } from "@/lib/pos/barcode-scan-action";
 import { ConfirmSaleChange } from "@/components/Modals/Sales/ConfirmSaleChange";
 import { DiscountApproval } from "@/components/Modals/Sales/DiscountApproval";
 import { getErrorMessage } from "@/lib/errors";
@@ -25,7 +29,7 @@ import type { TCashbackProgramEntity } from "@/services/drizzle/schema";
 import { type TSaleFinancialAccountOption, type TUseSaleState, getDefaultSaleState, useSaleState } from "@/state-hooks/use-sale-state";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ShoppingCart } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import CheckoutPanel from "./components/CheckoutPanel";
 import OpenQuotesPill from "./components/OpenQuotesPill";
@@ -104,6 +108,8 @@ export default function NewSalePage({
 	const [searchValue, setSearchValue] = useState<string[]>([]);
 	const [viewMode, setViewMode] = useState<ProductViewMode>("list");
 	const [builderProduct, setBuilderProduct] = useState<TGetPOSProductsOutput["data"]["products"][number] | null>(null);
+	// Variante pré-selecionada no builder: só a leitura de código de barras a conhece de antemão.
+	const [builderVariantId, setBuilderVariantId] = useState<string | null>(null);
 	const [isCheckoutSheetOpen, setIsCheckoutSheetOpen] = useState(false);
 	// Foco do checkout (desktop): clicar dentro da coluna a expande de 420px para 640px e esmaece o
 	// catálogo; clicar no scrim do catálogo ou Esc devolve sem acionar um controle por baixo.
@@ -334,6 +340,7 @@ export default function NewSalePage({
 			const hasAddOns = product.addOnsReferencias.length > 0;
 			const isComplex = hasVariants || hasAddOns;
 			if (isComplex) {
+				setBuilderVariantId(null);
 				setBuilderProduct(product);
 				return;
 			}
@@ -358,6 +365,32 @@ export default function NewSalePage({
 		},
 		[addItem],
 	);
+
+	// Leitor de código de barras (modo teclado): o item lido entra direto no carrinho, somando na
+	// linha existente quando é o mesmo item; produto com escolhas pendentes abre o builder.
+	const pageRef = useRef<HTMLDivElement>(null);
+	const addItemOrIncrement = saleState.addItemOrIncrement;
+	const handleScannedItem = useCallback(
+		(item: TBuiltOrderItem) => {
+			addItemOrIncrement({ ...item, tempId: crypto.randomUUID() });
+			toast.success(`${item.nome} adicionado ao carrinho.`);
+		},
+		[addItemOrIncrement],
+	);
+	const handleScannedBuilder = useCallback(({ product, variantId }: TBarcodeScanResolution) => {
+		setBuilderVariantId(variantId);
+		setBuilderProduct(product);
+	}, []);
+	// Modo obrigatório sem caixa aberto: a tela mostra o gate, e um item lido cairia num carrinho
+	// que o operador não vê.
+	const isCashGateBlocking = cashEnabled && cashRequired && !cashLoading && !activeSession;
+	const barcodeScan = usePOSBarcodeScan({
+		channel: "POS",
+		enabled: !saleState.state.success && !isCashGateBlocking,
+		ownerRef: pageRef,
+		onAddDirect: handleScannedItem,
+		onOpenBuilder: handleScannedBuilder,
+	});
 
 	const handleCreateDraft = () => {
 		if (!saleState.isReadyForDraft) {
@@ -464,7 +497,7 @@ export default function NewSalePage({
 	}
 
 	// Modo obrigatório sem caixa aberto: bloqueia a entrada do fluxo de venda (gate cedo).
-	if (cashEnabled && cashRequired && !cashLoading && !activeSession) {
+	if (isCashGateBlocking) {
 		return (
 			<div className="flex h-[calc(100dvh-7rem)] w-full flex-col p-4 lg:h-[calc(100dvh-8rem)]">
 				<CashSessionGate
@@ -497,7 +530,7 @@ export default function NewSalePage({
 		// Altura em `dvh` e com o recuo do header do mobile (7rem; 8rem no desktop): a página é a
 		// viewport inteira, e a última linha da coluna — a barra do checkout no mobile — fica no
 		// rodapé visível sem depender de `position: fixed` (ver MobileCheckoutBar).
-		<div className="flex h-[calc(100dvh-7rem)] w-full flex-col gap-3 p-4 lg:h-[calc(100dvh-8rem)]">
+		<div ref={pageRef} className="flex h-[calc(100dvh-7rem)] w-full flex-col gap-3 p-4 lg:h-[calc(100dvh-8rem)]">
 			<div className="flex flex-1 min-h-0 gap-3">
 				{/* O clique nas colunas é atalho de conveniência (foco/desfoco), não a única via: toda
 				    interação continua acessível pelos controles internos e o Esc desfaz o foco. */}
@@ -516,10 +549,12 @@ export default function NewSalePage({
 						/>
 					) : null}
 					<div className="shrink-0 flex flex-col gap-3">
-						{/* Em telas estreitas a busca ocupa a linha inteira e os controles quebram para a linha
-						    de baixo: dividir a mesma linha espremia o campo a poucos caracteres visíveis. */}
-						<div className="flex flex-wrap items-center gap-2">
-							<div className="w-full sm:w-auto sm:flex-1">
+						{/* Uma linha só também no celular: abaixo de `sm` a ordenação e o modo de exibição viram
+						    botões de ícone, o que deixa ~250px para a busca. O `min-w` é o piso — abaixo dele os
+						    controles quebram para a linha de baixo em vez de espremer o campo. `items-start`
+						    porque os termos confirmados crescem a coluna da busca para baixo. */}
+						<div className="flex flex-wrap items-start gap-2">
+							<div className="min-w-48 flex-1">
 								<SearchBlock searchValue={searchValue} onSearchChange={handleSearchChange} isLoading={productsLoading} />
 							</div>
 							<ProductOrderingSelect value={filters.ordering} onChange={handleOrderingChange} disabled={productsLoading} />
@@ -540,7 +575,7 @@ export default function NewSalePage({
 						/>
 					</div>
 
-					<div className="flex-1 min-h-0 flex flex-col gap-4 overflow-y-auto scrollbar-thin scrollbar-track-primary/10 scrollbar-thumb-primary/30 pr-1">
+					<div className="flex-1 min-h-0 flex flex-col gap-4 overflow-y-auto scrollbar-thin scrollbar-track-primary/10 scrollbar-thumb-primary/30 sm:pr-1">
 						<ProductsGridBlock
 							productsData={productsData}
 							isLoading={productsLoading}
@@ -629,7 +664,20 @@ export default function NewSalePage({
 					<ControlClient clientId={linkedClientId} closeModal={handleCloseClientEdit} callbacks={{ onSuccess: () => void handleClientEdited() }} />
 				) : null}
 
-				{builderProduct ? <ProductBuilderModal product={builderProduct} onAddToCart={saleState.addItem} onClose={() => setBuilderProduct(null)} /> : null}
+				{builderProduct ? (
+					<ProductBuilderModal
+						product={builderProduct}
+						initialVariantId={builderVariantId}
+						onAddToCart={saleState.addItem}
+						onClose={() => {
+							setBuilderProduct(null);
+							setBuilderVariantId(null);
+						}}
+					/>
+				) : null}
+				{barcodeScan.candidates ? (
+					<BarcodeMatchPicker candidates={barcodeScan.candidates} onChoose={barcodeScan.chooseCandidate} onClose={barcodeScan.dismissCandidates} />
+				) : null}
 
 				{isDiscountApprovalOpen ? (
 					<DiscountApproval

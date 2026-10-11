@@ -1,10 +1,7 @@
+import { recordCampaignOccurrence } from "@/lib/campaigns/events/occurrences";
+import { publishPendingCampaignEventsSafely } from "@/lib/campaigns/events/queue";
 import { appApiHandler } from "@/lib/app-api";
-import {
-	createEventCampaignDispatch,
-	filterClientIdsByFrequencyCap,
-	publishEventDispatches,
-	type TEventDispatchResult,
-} from "@/lib/campaigns/engine";
+import { filterClientIdsByFrequencyCap } from "@/lib/campaigns/engine";
 import { resolveDispatchScheduledAtForDate } from "@/lib/campaigns/dispatch/schedule";
 import { resolveCampaignAudienceClientIdsForCampaign } from "@/lib/campaigns/filters";
 import { buildBaseCashbackInteractionMetadata } from "@/lib/campaigns/interaction-metadata";
@@ -31,7 +28,6 @@ async function getWorstSalesDayNotifyRoute(_req: NextRequest) {
 
 		for (const organization of organizationsList) {
 			console.log(`[ORG: ${organization.id}] Processing organization...`);
-			const eventDispatches: TEventDispatchResult[] = [];
 
 			await db.transaction(async (tx) => {
 				const worstDayCampaigns = await tx.query.campaigns.findMany({
@@ -88,7 +84,7 @@ async function getWorstSalesDayNotifyRoute(_req: NextRequest) {
 					if (targetClientIds.length === 0) continue;
 
 					const frequency = await filterClientIdsByFrequencyCap({ executor: tx, campaign, clientIds: targetClientIds, now });
-					const dispatch = await createEventCampaignDispatch({
+					await recordCampaignOccurrence({
 						tx,
 						organizationId: organization.id,
 						campaign,
@@ -104,11 +100,10 @@ async function getWorstSalesDayNotifyRoute(_req: NextRequest) {
 						],
 						now,
 					});
-					if (dispatch.created) eventDispatches.push(dispatch);
 				}
 			});
 
-			await publishEventDispatches(eventDispatches);
+			await publishPendingCampaignEventsSafely({ organizationId: organization.id });
 		}
 
 		console.log("[INFO] [WORST_SALES_DAY_NOTIFY] All organizations processed successfully");

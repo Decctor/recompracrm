@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { VisualKitFormatEnum } from "@/schemas/enums";
+import { DEFAULT_VISUAL_KIT_CONFIG } from "@/schemas/visual-kits";
 import {
 	describeVisualKitPiece,
 	sortVisualKitFormats,
@@ -41,7 +42,11 @@ test("tetos por formato e resumo da peça", () => {
 	assert.equal(visualKitPieceItemCount("POST_FEED", 30), 30);
 	assert.equal(describeVisualKitPiece("ETIQUETA_GONDOLA", 15), "15 etiquetas · 2 folhas A4");
 	assert.equal(describeVisualKitPiece("ETIQUETA_GONDOLA", 1), "1 etiqueta · 1 folha A4");
-	assert.equal(describeVisualKitPiece("ADESIVO_PRECO", 5), "65 adesivos · 13 por produto");
+	assert.equal(describeVisualKitPiece("ADESIVO_PRECO", 5), "5 adesivos · 1 folha A4");
+	assert.equal(
+		describeVisualKitPiece("ADESIVO_PRECO", 5, { ...DEFAULT_VISUAL_KIT_CONFIG, completarFolhaAdesivos: true }),
+		"65 adesivos · 13 por produto",
+	);
 	assert.equal(describeVisualKitPiece("CARROSSEL", 30), "20 páginas");
 	assert.equal(describeVisualKitPiece("LISTA_WHATSAPP", 3), "1 imagem · 3 produtos");
 });

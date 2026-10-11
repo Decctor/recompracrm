@@ -1,7 +1,8 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
-import { createEventCampaignDispatch, publishEventDispatches } from "@/lib/campaigns/engine";
+import { recordCampaignOccurrence } from "@/lib/campaigns/events/occurrences";
+import { publishPendingCampaignEventsSafely } from "@/lib/campaigns/events/queue";
 import { InteractionContextMetadataSchema, InteractionsStatusEnum } from "@/schemas/interactions";
 import { db } from "@/services/drizzle";
 import { clients } from "@/services/drizzle/schema/clients";
@@ -249,8 +250,9 @@ async function retryCampaignInteraction({ input, session }: { input: TRetryCampa
 	// O reenvio é um novo disparo de evento com o mesmo contexto congelado na interação original:
 	// passa pelo mesmo pipeline (quota, registro, bônus) que qualquer envio.
 	const contexto = InteractionContextMetadataSchema.safeParse(interaction.metadados ?? {});
-	const dispatch = await db.transaction((tx) =>
-		createEventCampaignDispatch({
+	const occurrence = await db.transaction((tx) =>
+		recordCampaignOccurrence({
+			manual: true,
 			tx,
 			organizationId: userOrgId,
 			campaign: interaction.campanha!,
@@ -259,11 +261,11 @@ async function retryCampaignInteraction({ input, session }: { input: TRetryCampa
 			recipients: [{ clienteId: interaction.clienteId, contexto: contexto.success ? contexto.data : null, descricao: interaction.descricao }],
 		}),
 	);
-	await publishEventDispatches([dispatch]);
+	await publishPendingCampaignEventsSafely({ organizationId: userOrgId });
 
 	return {
-		data: { interactionId: interaction.id, dispatchId: dispatch.dispatchId, reenviada: dispatch.inserted > 0 },
-		message: dispatch.inserted > 0 ? "Reenvio enfileirado com sucesso." : "Não foi possível enfileirar o reenvio dessa interação.",
+		data: { interactionId: interaction.id, eventId: occurrence.eventId, dispatchId: null, reenviada: occurrence.captured },
+		message: occurrence.captured ? "Reenvio enfileirado com sucesso." : "Não foi possível enfileirar o reenvio dessa interação.",
 	};
 }
 export type TRetryCampaignInteractionOutput = Awaited<ReturnType<typeof retryCampaignInteraction>>;

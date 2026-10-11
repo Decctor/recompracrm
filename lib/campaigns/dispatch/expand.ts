@@ -123,6 +123,7 @@ export async function runCampaignDispatchExpand({ dispatchId }: { dispatchId: st
 
 	const recipients: TCampaignDispatchRecipientInput[] = audienceClientIds.map((clienteId) => ({
 		clienteId,
+		campanhaEventoId: dispatch.campanhaEventoId,
 		contexto: promotionContextByClientId.get(clienteId) ?? null,
 		motivoPulo: !deliverableClientIds.has(clienteId) ? "COMUNICACAO_PAUSADA" : blockedByFrequency.has(clienteId) ? "FREQUENCIA" : null,
 	}));

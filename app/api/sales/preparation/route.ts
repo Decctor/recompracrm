@@ -1,7 +1,13 @@
 import { appApiHandler } from "@/lib/app-api";
 import { requireERPSession } from "@/lib/authentication/erp-session";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
-import { groupSaleItemModifiers } from "@/lib/sales/sale-item-modifier-groups";
+import {
+	PREPARATION_DELIVERY_MODE_LABELS,
+	PREPARATION_ITEMS_WITH,
+	PREPARATION_STATUSES,
+	type TPreparationTicketItem,
+	mapPreparationTicketItems,
+} from "@/lib/sales/preparation-tickets";
 import type { TSaleAttendanceStatusEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
 import { sales, tabOrders } from "@/services/drizzle/schema";
@@ -15,18 +21,6 @@ import { type NextRequest, NextResponse } from "next/server";
 // abertas (comanda — 1 venda rascunho : N rodadas). O board e dono do trecho
 // EM_PREPARO -> PRONTO do eixo de atendimento; zero pagamento, zero fiscal.
 // ============================================================================
-
-const PREPARATION_STATUSES = ["NAO_INICIADO", "EM_PREPARO", "PRONTO"] as const;
-
-type TPreparationTicketItem = {
-	id: string;
-	nome: string;
-	quantidade: number;
-	// "sem cebola", "leite ninho além dos selecionados": é aqui que a cozinha precisa ler.
-	observacoes: string | null;
-	// Adicionais agrupados pelo grupo de origem ("Escolha seu gelato") — ver groupSaleItemModifiers.
-	gruposAdicionais: { grupo: string | null; adicionais: { nome: string; quantidade: number }[] }[];
-};
 
 export type TPreparationTicket = {
 	ticketId: string;
@@ -45,65 +39,12 @@ export type TPreparationTicket = {
 	itens: TPreparationTicketItem[];
 };
 
-type TItemRow = {
-	id: string;
-	quantidade: number;
-	quantidadeCancelada: number;
-	observacoes: string | null;
-	metadados: unknown;
-	produto: { nome: string } | null;
-	produtoVariante: { nome: string } | null;
-	adicionais: { id: string; nome: string; quantidade: number; opcao: { produtoAddOn: { nome: string } } | null }[];
-};
-
-function mapTicketItems(items: TItemRow[]): TPreparationTicketItem[] {
-	return items
-		.filter((item) => item.quantidadeCancelada < item.quantidade)
-		.map((item) => {
-			const metadata = (item.metadados ?? {}) as { nome?: string };
-			const variantSuffix = item.produtoVariante?.nome ? ` — ${item.produtoVariante.nome}` : "";
-			return {
-				id: item.id,
-				nome: metadata.nome ?? `${item.produto?.nome ?? "Item"}${variantSuffix}`,
-				quantidade: item.quantidade,
-				observacoes: item.observacoes?.trim() || null,
-				gruposAdicionais: groupSaleItemModifiers(item.adicionais, (modifier) => modifier.opcao?.produtoAddOn.nome).map(({ grupo, adicionais }) => ({
-					grupo,
-					adicionais: adicionais.map((modifier) => ({ nome: modifier.nome, quantidade: modifier.quantidade })),
-				})),
-			};
-		});
-}
-
-const ITEMS_WITH = {
-	columns: { id: true, quantidade: true, quantidadeCancelada: true, observacoes: true, metadados: true },
-	with: {
-		produto: { columns: { nome: true } },
-		produtoVariante: { columns: { nome: true } },
-		adicionais: {
-			columns: { id: true, nome: true, quantidade: true },
-			with: { opcao: { columns: { id: true }, with: { produtoAddOn: { columns: { nome: true } } } } },
-		},
-	},
-} as const;
-
-const DELIVERY_MODE_LABELS: Record<string, string> = {
-	PRESENCIAL: "Balcao",
-	RETIRADA: "Retirada",
-	ENTREGA: "Entrega",
-	COMANDA: "Comanda",
-};
-
 async function getPreparationTickets({ orgId }: { orgId: string }) {
 	const [saleRows, orderRows] = await Promise.all([
 		// Fonte 1: vendas confirmadas com preparo. Vendas de conta (tabId) nunca aparecem aqui:
 		// enquanto abertas sao ORCAMENTO; ao fechar nascem ENTREGUE.
 		db.query.sales.findMany({
-			where: and(
-				eq(sales.organizacaoId, orgId),
-				eq(sales.statusVenda, "CONFIRMADA"),
-				inArray(sales.statusAtendimento, [...PREPARATION_STATUSES]),
-			),
+			where: and(eq(sales.organizacaoId, orgId), eq(sales.statusVenda, "CONFIRMADA"), inArray(sales.statusAtendimento, [...PREPARATION_STATUSES])),
 			columns: {
 				id: true,
 				statusAtendimento: true,
@@ -114,7 +55,7 @@ async function getPreparationTickets({ orgId }: { orgId: string }) {
 			},
 			with: {
 				cliente: { columns: { nome: true } },
-				itens: ITEMS_WITH,
+				itens: PREPARATION_ITEMS_WITH,
 			},
 			orderBy: (fields, { asc }) => asc(fields.dataVenda),
 		}),
@@ -129,7 +70,7 @@ async function getPreparationTickets({ orgId }: { orgId: string }) {
 						cliente: { columns: { nome: true } },
 					},
 				},
-				itens: ITEMS_WITH,
+				itens: PREPARATION_ITEMS_WITH,
 			},
 			orderBy: (fields, { asc }) => asc(fields.dataEnvio),
 		}),
@@ -143,12 +84,12 @@ async function getPreparationTickets({ orgId }: { orgId: string }) {
 		tabId: null,
 		numeroPedido: null,
 		status: sale.statusAtendimento,
-		etiqueta: sale.comandaNumero ?? DELIVERY_MODE_LABELS[sale.entregaModalidade ?? ""] ?? "Venda",
+		etiqueta: sale.comandaNumero ?? PREPARATION_DELIVERY_MODE_LABELS[sale.entregaModalidade ?? ""] ?? "Venda",
 		entregaModalidade: sale.entregaModalidade,
 		observacoes: sale.observacoes,
 		clienteNome: sale.cliente?.nome ?? null,
 		data: sale.dataVenda ?? new Date(),
-		itens: mapTicketItems(sale.itens),
+		itens: mapPreparationTicketItems(sale.itens),
 	}));
 
 	const orderTickets: TPreparationTicket[] = orderRows
@@ -166,7 +107,7 @@ async function getPreparationTickets({ orgId }: { orgId: string }) {
 			observacoes: order.observacoes,
 			clienteNome: order.tab.cliente?.nome ?? null,
 			data: order.dataEnvio,
-			itens: mapTicketItems(order.itens),
+			itens: mapPreparationTicketItems(order.itens),
 		}));
 
 	const tickets = [...saleTickets, ...orderTickets].sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime());

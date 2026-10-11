@@ -33,7 +33,7 @@ export function NewServicePoint({ closeModal, callbacks }: NewServicePointProps)
 		capacidade: null,
 	});
 
-	// Token bruto do QR do ponto: aparece SOMENTE apos a criacao (persistimos o hash).
+	// Apos criar, mostra o QR fixo do ponto ja pronto para imprimir.
 	const [createdToken, setCreatedToken] = useState<string | null>(null);
 
 	const { mutate, isPending } = useMutation({
@@ -42,7 +42,7 @@ export function NewServicePoint({ closeModal, callbacks }: NewServicePointProps)
 		onSuccess: (data) => {
 			callbacks?.onSuccess?.();
 			toast.success(data.message);
-			setCreatedToken(data.data.tokenPublico);
+			setCreatedToken(data.data.servicePoint.tokenPublico);
 		},
 		onError: (error) => toast.error(getErrorMessage(error)),
 	});
@@ -51,7 +51,7 @@ export function NewServicePoint({ closeModal, callbacks }: NewServicePointProps)
 		return (
 			<ResponsiveMenu
 				menuTitle="PONTO CRIADO"
-				menuDescription="Imprima ou copie o QR do ponto — ele aparece somente agora."
+				menuDescription="Imprima o QR do ponto. Você pode reabri-lo depois em Editar ponto."
 				menuActionButtonText="CONCLUIR"
 				menuCancelButtonText="FECHAR"
 				actionFunction={closeModal}

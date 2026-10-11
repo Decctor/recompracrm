@@ -5,6 +5,7 @@ import type { TAuthUserSession } from "@/lib/authentication/types";
 import ProductAddOnsInformation from "./_components/AddOnsInformation";
 import ProductFiscalProfilesInformation from "./_components/FiscalProfilesInformation";
 import ProductGeneralInformation from "./_components/GeneralInformation";
+import MainSupplierSection from "./_components/MainSupplierSection";
 import PricesAndChannelsSection from "./_components/PricesAndChannelsSection";
 import ProductVariantsInformation from "./_components/VariantsInformation";
 
@@ -23,11 +24,13 @@ export default function ProductRegistryTab({ sessionUserMembership, product, cal
 	const orgHasERPAccess = sessionUserMembership?.organizacao.configuracao.recursos.erp.acesso;
 	const userHasFiscalViewPermission = sessionUserMembership?.permissoes.fiscal.visualizar;
 	const userHasFiscalConfigurePermission = sessionUserMembership?.permissoes.fiscal.configurar;
+	const userHasPurchasesViewPermission = sessionUserMembership?.permissoes.compras.visualizar;
 
 	return (
 		<div className="flex w-full flex-col gap-6">
 			<ProductGeneralInformation product={product} callbacks={callbacks} />
 			<PricesAndChannelsSection product={product} orgHasERPAccess={orgHasERPAccess} callbacks={callbacks} />
+			<MainSupplierSection product={product} userHasPurchasesViewPermission={userHasPurchasesViewPermission} callbacks={callbacks} />
 			<ProductVariantsInformation product={product} callbacks={callbacks} />
 			<ProductAddOnsInformation product={product} callbacks={callbacks} />
 			{orgHasERPAccess ? (

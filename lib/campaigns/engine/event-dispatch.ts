@@ -31,6 +31,7 @@ export async function createEventCampaignDispatch({
 	recipients,
 	scheduledAt,
 	now = new Date(),
+	campanhaEventoId,
 }: {
 	tx: DBTransaction;
 	organizationId: string;
@@ -40,11 +41,20 @@ export async function createEventCampaignDispatch({
 	// Sobrescreve a agenda derivada da campanha (gatilhos "ANTES": aniversário, pior dia).
 	scheduledAt?: Date | null;
 	now?: Date;
+	campanhaEventoId?: string;
 }): Promise<TEventDispatchResult> {
 	const dataAgendada = scheduledAt === undefined ? resolveEventDispatchScheduledAt({ campaign, now }) : scheduledAt;
 	const immediate = isDispatchDue({ scheduledAt: dataAgendada, now });
 
-	const dispatch = await createCampaignDispatch({ tx, organizationId, campaignId: campaign.id, origem: "EVENTO", janelaReferencia, dataAgendada });
+	const dispatch = await createCampaignDispatch({
+		tx,
+		organizationId,
+		campaignId: campaign.id,
+		origem: "EVENTO",
+		janelaReferencia,
+		dataAgendada,
+		campanhaEventoId,
+	});
 	if (!dispatch.created) {
 		// Já existe (gatilho reprocessado, venda reimportada): nada a fazer — o disparo original
 		// segue seu curso.

@@ -226,6 +226,7 @@ export const DEFAULT_ORGANIZATION_CONFIGURATION_PREFERENCES: TOrganizationConfig
 	impressoes: {
 		automatica: {
 			CUPOM_VENDA: { habilitada: false, canais: [], copias: 1 },
+			TICKET_PREPARO: { habilitada: false, canais: [], copias: 1 },
 			DANFE_NFCE: { habilitada: false, canais: [], copias: 1 },
 			DANFE_NFE: { habilitada: false, canais: [], copias: 1 },
 		},
@@ -383,7 +384,7 @@ export const AppSubscriptionPlans: {
 				accessible: true,
 				redirectTo: null,
 			},
-			"/dashboard/channels/whatsapp": {
+			"/dashboard/conversations": {
 				accessible: false,
 				redirectTo: "/dashboard/growth/campaigns",
 			},
@@ -502,7 +503,7 @@ export const AppSubscriptionPlans: {
 				accessible: true,
 				redirectTo: null,
 			},
-			"/dashboard/channels/whatsapp": {
+			"/dashboard/conversations": {
 				accessible: false,
 				redirectTo: "/dashboard/growth/campaigns",
 			},
@@ -629,7 +630,7 @@ export const AppSubscriptionPlans: {
 				accessible: true,
 				redirectTo: null,
 			},
-			"/dashboard/channels/whatsapp": {
+			"/dashboard/conversations": {
 				accessible: true,
 				redirectTo: null,
 			},
@@ -858,9 +859,19 @@ export const AppRoutes = [
 		description: "Painel de acompanhamento e gestão das metas de vendas.",
 	},
 	{
-		path: "/dashboard/channels/whatsapp",
+		path: "/dashboard/conversations",
 		title: "Conversas",
-		description: "Hub de atendimento com os clientes.",
+		description: "Caixa de entrada do atendimento com os clientes.",
+	},
+	{
+		path: "/dashboard/conversations/board",
+		title: "Quadro de conversas",
+		description: "Atendimentos organizados por etapa, do primeiro contato ao encerramento.",
+	},
+	{
+		path: "/dashboard/conversations/stats",
+		title: "Estatísticas de conversas",
+		description: "Volume, tempo de resposta e desempenho do atendimento.",
 	},
 	{
 		path: "/dashboard/production",

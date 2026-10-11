@@ -3,6 +3,7 @@ import { ensureOrganizationAgent } from "@/lib/ai/agent/provisioning";
 import { parseJsonbWithFallback } from "@/lib/ai/shared/json";
 import { getCatalogCommercialReadiness } from "@/lib/products/commercial-readiness";
 import { buildSalePriceUpdate } from "@/lib/products/price-snapshot";
+import { withProductUpdateStamp } from "@/lib/products/update-stamp";
 import { AiAgentCapabilitiesSchema } from "@/schemas/ai-agents";
 import { connection, db } from "@/services/drizzle";
 import { aiAgents, organizations, productAddOnReferences, products, productVariants } from "@/services/drizzle/schema";
@@ -338,7 +339,7 @@ async function main() {
 					.where(productWhere)
 					.for("update");
 				if (!current) continue;
-				await tx.update(products).set(buildSalePriceUpdate({ current: current, next: { precoVenda: item.preco_observado } })).where(productWhere);
+				await tx.update(products).set(withProductUpdateStamp(buildSalePriceUpdate({ current: current, next: { precoVenda: item.preco_observado } }))).where(productWhere);
 			}
 		}
 

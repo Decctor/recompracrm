@@ -5,7 +5,20 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import type { TChatThreadMessage } from "@/lib/queries/chats";
 import { cn } from "@/lib/utils";
 import type { TChatMessageMetadata } from "@/schemas/chats";
-import { AlertCircle, Check, CheckCheck, ChevronDown, Clock, CornerUpRight, MapPin, Reply, RotateCw, Smartphone, Sparkles } from "lucide-react";
+import {
+	AlertCircle,
+	Check,
+	CheckCheck,
+	ChevronDown,
+	Clock,
+	CornerUpRight,
+	Forward,
+	MapPin,
+	Reply,
+	RotateCw,
+	Smartphone,
+	Sparkles,
+} from "lucide-react";
 import { useState } from "react";
 import { ChatMediaAttachment } from "./ChatMediaAttachment";
 import { QuotedMessagePreview } from "./QuotedMessagePreview";
@@ -28,6 +41,8 @@ type ChatMessageBubbleProps = {
 	onQuoteClick?: (chatMessageId: string) => void;
 	/** Presente = a bolha ganha a ação "Responder" (hover no desktop, toque na bolha no touch). */
 	onReply?: () => void;
+	/** Presente = a bolha ganha a ação "Encaminhar", ao lado de "Responder" e com o mesmo gesto de revelação. */
+	onForward?: () => void;
 	/** Destaque momentâneo ao chegar por um pulo de citação. */
 	highlighted?: boolean;
 };
@@ -117,8 +132,10 @@ export function ChatMessageBubble({
 	clientName = "Cliente",
 	onQuoteClick,
 	onReply,
+	onForward,
 	highlighted = false,
 }: ChatMessageBubbleProps) {
+	const hasActions = !!onReply || !!onForward;
 	// No touch não há hover: um toque na bolha revela a ação, outro esconde.
 	const [actionsRevealed, setActionsRevealed] = useState(false);
 	const isIncoming = message.autorTipo === "CLIENTE";
@@ -135,6 +152,13 @@ export function ChatMessageBubble({
 	// Bolha de saída (azul) e de falha (vermelha) são superfícies coloridas: links, code
 	// e fundos de anexo precisam derivar da cor do texto em vez de usar tokens fixos.
 	const onColoredSurface = !isIncoming && !isAutomated;
+	// As duas ações do canto dividem o mesmo visual: só o ícone e o rótulo mudam.
+	const actionButtonClassName = cn(
+		"h-6 w-6 rounded-full opacity-0 transition-opacity focus-visible:opacity-100 group-hover/bubble:opacity-100 data-[revealed=true]:opacity-100",
+		onColoredSurface
+			? "bg-primary/80 text-primary-foreground hover:bg-primary hover:text-primary-foreground"
+			: "bg-card/90 text-muted-foreground hover:text-foreground",
+	);
 	const referral = message.metadados?.whatsappReferral;
 	const aiContext = message.conteudoMidiaTextoProcessado || message.conteudoMidiaTextoProcessadoResumo;
 	// O metadata guarda o histórico de react/unreact. No WhatsApp cada remetente tem no
@@ -183,7 +207,7 @@ export function ChatMessageBubble({
 			)}
 
 			<div
-				onClick={onReply ? () => setActionsRevealed((revealed) => !revealed) : undefined}
+				onClick={hasActions ? () => setActionsRevealed((revealed) => !revealed) : undefined}
 				className={cn(
 					"group/bubble relative max-w-[72%] rounded-2xl text-sm",
 					!isSticker && "px-3 py-2 shadow-sm",
@@ -209,29 +233,45 @@ export function ChatMessageBubble({
 					message.optimistic && "opacity-70",
 				)}
 			>
-				{onReply && (
-					// No canto superior da bolha, como o chevron do WhatsApp Web. Invisível até o hover
-					// (mouse) ou até um toque na bolha (touch); sempre alcançável por teclado.
-					<Button
-						type="button"
-						variant="ghost"
-						size="icon"
-						aria-label="Responder"
-						data-revealed={actionsRevealed ? "true" : "false"}
-						className={cn(
-							"absolute top-0.5 right-0.5 z-10 h-6 w-6 rounded-full opacity-0 transition-opacity focus-visible:opacity-100 group-hover/bubble:opacity-100 data-[revealed=true]:opacity-100",
-							onColoredSurface
-								? "bg-primary/80 text-primary-foreground hover:bg-primary hover:text-primary-foreground"
-								: "bg-card/90 text-muted-foreground hover:text-foreground",
+				{hasActions && (
+					// No canto superior da bolha, como o chevron do WhatsApp Web. Invisíveis até o hover
+					// (mouse) ou até um toque na bolha (touch); sempre alcançáveis por teclado.
+					<div className="absolute top-0.5 right-0.5 z-10 flex items-center gap-0.5">
+						{onForward && (
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon"
+								aria-label="Encaminhar"
+								data-revealed={actionsRevealed ? "true" : "false"}
+								className={actionButtonClassName}
+								onClick={(event) => {
+									event.stopPropagation();
+									setActionsRevealed(false);
+									onForward();
+								}}
+							>
+								<Forward className="h-3 w-3" />
+							</Button>
 						)}
-						onClick={(event) => {
-							event.stopPropagation();
-							setActionsRevealed(false);
-							onReply();
-						}}
-					>
-						<Reply className="h-3 w-3" />
-					</Button>
+						{onReply && (
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon"
+								aria-label="Responder"
+								data-revealed={actionsRevealed ? "true" : "false"}
+								className={actionButtonClassName}
+								onClick={(event) => {
+									event.stopPropagation();
+									setActionsRevealed(false);
+									onReply();
+								}}
+							>
+								<Reply className="h-3 w-3" />
+							</Button>
+						)}
+					</div>
 				)}
 
 				{forwarded && (

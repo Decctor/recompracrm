@@ -3,6 +3,7 @@ import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { ProductStockDeductionModeEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
+import { withProductUpdateStamp } from "@/lib/products/update-stamp";
 import { products } from "@/services/drizzle/schema";
 import { and, eq } from "drizzle-orm";
 import createHttpError from "http-errors";
@@ -42,10 +43,12 @@ async function updateProductStockDeduction({ input, session }: { input: TUpdateP
 
 	await db
 		.update(products)
-		.set({
-			baixaEstoqueModo: input.baixaEstoqueModo,
-			fichaTecnicaReceitaId: input.baixaEstoqueModo === "COMPOSICAO" ? (input.fichaTecnicaReceitaId ?? null) : null,
-		})
+		.set(
+			withProductUpdateStamp({
+				baixaEstoqueModo: input.baixaEstoqueModo,
+				fichaTecnicaReceitaId: input.baixaEstoqueModo === "COMPOSICAO" ? (input.fichaTecnicaReceitaId ?? null) : null,
+			}),
+		)
 		.where(and(eq(products.id, input.productId), eq(products.organizacaoId, orgId)));
 
 	return {

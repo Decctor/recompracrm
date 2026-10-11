@@ -1,3 +1,4 @@
+import { processTabOrderPreparationTicketAutoPrintIfEligible } from "@/lib/desktop-agent/auto-print";
 import { validateSaleItemsPricing } from "@/lib/sales/sale-pricing-validation";
 import { db } from "@/services/drizzle";
 import { saleItemModifiers, saleItems, sales, tabOrders, tabs } from "@/services/drizzle/schema";
@@ -47,7 +48,8 @@ export type TLaunchTabOrderInput = {
  * 5. insere tabOrder + saleItems/modifiers vinculados a venda e a rodada;
  * 6. recalcula os totais da venda rascunho.
  */
-export async function launchTabOrder({ orgId, userId, input }: { orgId: string; userId: string; input: TLaunchTabOrderInput }) {
+// userId nulo = ator de sistema (aprovacao automatica de solicitacao pelo QR).
+export async function launchTabOrder({ orgId, userId, input }: { orgId: string; userId: string | null; input: TLaunchTabOrderInput }) {
 	if (input.itens.length === 0) throw new createHttpError.BadRequest("Informe pelo menos um item para o pedido.");
 
 	// Nunca confie nos valores do cliente: recalcula os itens contra o catalogo antes de qualquer uso.
@@ -237,3 +239,11 @@ export async function launchTabOrder({ orgId, userId, input }: { orgId: string; 
 	});
 }
 export type TLaunchTabOrderResult = Awaited<ReturnType<typeof launchTabOrder>>;
+
+// Efeitos pós-commit do lançamento — espelho de processSaleConfirmationPostCommit no grão do
+// pedido. Todo caller de launchTabOrder (composer do operador, aprovação manual ou automática de
+// solicitação) chama isto depois da sua transação. Nunca lança; pedido deduplicado reaproveita a
+// chave e devolve o job original em vez de imprimir de novo.
+export async function processTabOrderLaunchPostCommit({ orgId, tabOrderId, userId }: { orgId: string; tabOrderId: string; userId: string | null }) {
+	await processTabOrderPreparationTicketAutoPrintIfEligible({ organizacaoId: orgId, tabOrderId, solicitadoPorId: userId });
+}

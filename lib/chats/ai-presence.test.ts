@@ -45,9 +45,30 @@ test("run falha anterior à última entrada não conta: a nova mensagem abre out
 	assert.equal(presence.estado, "aguardando");
 });
 
-test("limite de créditos aparece como estado próprio; outros bloqueios viram ausente", () => {
-	assert.equal(resolveAiPresence({ ...base, atendimentoIa: { disponivel: false, motivo: "LIMITE_CREDITOS" } }).estado, "limite");
-	assert.equal(resolveAiPresence({ ...base, atendimentoIa: { disponivel: false, motivo: "AGENTE_PAUSADO" } }).estado, "ausente");
+test("agente dono sem poder responder: bloqueado, qualquer que seja o motivo", () => {
+	for (const motivo of ["LIMITE_CREDITOS", "AGENTE_PAUSADO", "TELEFONE_SEM_IA", "CLIENTE_FORA_DO_ESCOPO"] as const) {
+		const presence = resolveAiPresence({ ...base, atendimentoIa: { disponivel: false, motivo } });
+		assert.equal(presence.estado, "bloqueado");
+		assert.equal(presence.estado === "bloqueado" && presence.motivo, motivo);
+	}
+	// Sem pendência o dono AGENTE continua bloqueado: o cabeçalho segue dizendo "Com a IA".
+	assert.equal(resolveAiPresence({ ...base, ultimaSaidaEm: now, atendimentoIa: { disponivel: false, motivo: "AGENTE_PAUSADO" } }).estado, "bloqueado");
+});
+
+test("bloqueio da IA não aparece quando um humano ou o telefone está no comando", () => {
+	const atendimentoIa = { disponivel: false, motivo: "AGENTE_PAUSADO" } as const;
+	assert.equal(resolveAiPresence({ ...base, atendimento: { responsavelTipo: "USUARIO" }, atendimentoIa }).estado, "ausente");
+	assert.equal(resolveAiPresence({ ...base, atendimento: { responsavelTipo: "EXTERNO" }, atendimentoIa }).estado, "ausente");
+});
+
+test("sem responsável, o bloqueio só aparece com cliente esperando e motivo transitório", () => {
+	const atendimentoIa = { disponivel: false, motivo: "LIMITE_CREDITOS" } as const;
+	assert.equal(resolveAiPresence({ ...base, atendimento: null, atendimentoIa }).estado, "bloqueado");
+	assert.equal(resolveAiPresence({ ...base, atendimento: null, ultimaSaidaEm: now, atendimentoIa }).estado, "ausente");
+	// Número sem IA ou plano sem o recurso é configuração: nada a alertar numa conversa da fila.
+	for (const motivo of ["TELEFONE_SEM_IA", "RECURSO_INDISPONIVEL", "CLIENTE_FORA_DO_ESCOPO", "NUMERO_DA_EQUIPE"] as const) {
+		assert.equal(resolveAiPresence({ ...base, atendimento: null, atendimentoIa: { disponivel: false, motivo } }).estado, "ausente", motivo);
+	}
 });
 
 test("pendência sem run: aguardando com previsão pelo debounce (ou pela espera no modo RESERVA)", () => {

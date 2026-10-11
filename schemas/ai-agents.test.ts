@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { AiAgentCapabilitiesSchema, AiAgentScopeSchema, isClientInAgentScope } from "./ai-agents";
+import { AiAgentCapabilitiesSchema, AiAgentScopeSchema, isClientExplicitlyIncludedInAgentScope, isClientInAgentScope } from "./ai-agents";
 
 test("capacidades antigas recebem os defaults comerciais", () => {
 	const capabilities = AiAgentCapabilitiesSchema.parse({ ferramentas: {} });
@@ -115,4 +115,13 @@ test("escopo persistido antes da coluna recebe os defaults", () => {
 	assert.deepEqual(AiAgentScopeSchema.parse({}), { tipo: "TODOS", clienteIds: [] });
 	assert.deepEqual(AiAgentScopeSchema.parse({ tipo: "EXCLUIR" }), { tipo: "EXCLUIR", clienteIds: [] });
 	assert.equal(AiAgentScopeSchema.safeParse({ tipo: "QUALQUER_COISA" }).success, false);
+});
+
+test("só a lista de inclusão nomeia um cliente explicitamente", () => {
+	// É a exceção à regra do telefone da equipe: TODOS e EXCLUIR não nomeiam ninguém, então um
+	// número da equipe continua barrado neles mesmo estando "no escopo".
+	assert.equal(isClientExplicitlyIncludedInAgentScope(AiAgentScopeSchema.parse({ tipo: "INCLUIR", clienteIds: ["c1"] }), "c1"), true);
+	assert.equal(isClientExplicitlyIncludedInAgentScope(AiAgentScopeSchema.parse({ tipo: "INCLUIR", clienteIds: ["c1"] }), "c2"), false);
+	assert.equal(isClientExplicitlyIncludedInAgentScope(AiAgentScopeSchema.parse({ tipo: "TODOS" }), "c1"), false);
+	assert.equal(isClientExplicitlyIncludedInAgentScope(AiAgentScopeSchema.parse({ tipo: "EXCLUIR", clienteIds: [] }), "c1"), false);
 });

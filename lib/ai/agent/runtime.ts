@@ -1,4 +1,10 @@
-import { AiAgentCapabilitiesSchema, AiAgentModelConfigSchema, type TAiAgentCapabilities, type TAiAgentTurnOutput } from "@/schemas/ai-agents";
+import {
+	AiAgentCapabilitiesSchema,
+	AiAgentModelConfigSchema,
+	DEFAULT_AI_AGENT_MODEL,
+	type TAiAgentCapabilities,
+	type TAiAgentTurnOutput,
+} from "@/schemas/ai-agents";
 import { AiAgentAttachmentTypeEnum, type TAiAgentRunTriggerEnum, type TAiAgentToolNameEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
 import type { DB, DBTransaction } from "@/services/drizzle";
@@ -24,11 +30,12 @@ import { buildAgentSystemPrompt } from "./prompts";
 import { mergeRunSummary } from "./run-memory";
 import { assertAiSpendWithinLimit } from "./spend";
 import { notifyAiSpendThresholdIfReached } from "./spend-alert";
-import { completeAgentRun, countAgentRunsToday, createAgentRun, failAgentRun, markAgentRunCancelled, markAgentRunRunning } from "./runs";
+import { getAgentDailyRunLimitState } from "./run-limit";
+import { completeAgentRun, createAgentRun, failAgentRun, markAgentRunCancelled, markAgentRunRunning } from "./runs";
 import { shouldRetryDeferredAction } from "./turn-validation";
 
 type TDb = DB | DBTransaction;
-const STRUCTURED_OUTPUT_FALLBACK_MODEL = "openai/gpt-5-mini";
+const STRUCTURED_OUTPUT_FALLBACK_MODEL = DEFAULT_AI_AGENT_MODEL;
 
 /**
  * Quantas mensagens do cliente as ferramentas recebem para interpretar o pedido. Cobre o vaivém
@@ -181,8 +188,8 @@ export async function prepareAgentExecution({
 			: baseModelConfig;
 	const capacidades = assistencia ? narrowCapabilitiesForAssist(baseCapabilities) : baseCapabilities;
 
-	const runsToday = await countAgentRunsToday(database, organizacaoId);
-	if (runsToday >= capacidades.limites.maxRunsDiarios) {
+	const dailyLimit = await getAgentDailyRunLimitState(database, { organizacaoId, maxRunsDiarios: capacidades.limites.maxRunsDiarios });
+	if (dailyLimit.reached) {
 		throw new AgentDailyRunLimitError(`Limite diário de ${capacidades.limites.maxRunsDiarios} execuções do agente atingido.`);
 	}
 
@@ -241,7 +248,7 @@ export async function prepareAgentExecution({
 			run: { id: run.id, gatilho, mensagemGatilhoId: mensagemGatilhoId ?? null },
 			chat: { id: chatId, clienteId },
 			turn: { mensagensRecentesCliente: recentClientMessages },
-			effects: { handoffAttendanceId: null },
+			effects: { handoffAttendanceId: null, handoffStarted: false },
 			capacidades,
 		},
 		systemPrompt: buildAgentSystemPrompt({

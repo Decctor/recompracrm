@@ -19,6 +19,12 @@ export const VisualKitConfigSchema = z.object({
 		required_error: "Opção de preço por unidade de medida não informada.",
 		invalid_type_error: "Tipo não válido para opção de preço por unidade de medida.",
 	}),
+	// Adesivos: repete os produtos até completar a folha de 65. Ausente em kits antigos = desligado.
+	completarFolhaAdesivos: z
+		.boolean({
+			invalid_type_error: "Tipo não válido para opção de completar a folha de adesivos.",
+		})
+		.optional(),
 });
 export type TVisualKitConfig = z.infer<typeof VisualKitConfigSchema>;
 
@@ -27,6 +33,7 @@ export const DEFAULT_VISUAL_KIT_CONFIG: TVisualKitConfig = {
 	mostrarPercentual: true,
 	mostrarCodigoBarras: true,
 	mostrarPrecoUnidade: true,
+	completarFolhaAdesivos: false,
 };
 
 // Sobrescritas por peça (hoje só a chamada); vazio = herda do kit.

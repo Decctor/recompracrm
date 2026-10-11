@@ -78,6 +78,7 @@ export const suppliersRelations = relations(suppliers, ({ one, many }) => ({
 		references: [organizations.id],
 	}),
 	mapeamentos: many(supplierProductMappings),
+	produtosPrincipais: many(products),
 }));
 
 export const supplierProductMappingsRelations = relations(supplierProductMappings, ({ one }) => ({

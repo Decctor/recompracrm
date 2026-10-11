@@ -5,16 +5,15 @@ import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { assertChatAccess } from "@/lib/chats/access";
 import { AI_ASSIGNMENT_BLOCK_MESSAGES, resolveAiAssignmentAvailability } from "@/lib/chats/ai-assignment";
-import { markChatAnswered } from "@/lib/chats/attendance-state";
 import { buildQuotedMessageSnapshot } from "@/lib/chats/quoted-message";
-import { deliverChatMessage, loadChatForSending, renderTemplatePlainContent, resolveApprovedTemplate } from "@/lib/chats/outgoing-message";
+import { loadChatForSending, renderTemplatePlainContent, resolveApprovedTemplate, sendOutgoingChatMessage } from "@/lib/chats/outgoing-message";
 import { getChatMediaUrl, uploadChatMedia } from "@/lib/files-storage/chat-media";
 import { AiAgentCapabilitiesSchema } from "@/schemas/ai-agents";
 import type { TChatMessageMetadata } from "@/schemas/chats";
 import { db } from "@/services/drizzle";
 import { aiAgentRuns, aiAgents } from "@/services/drizzle/schema/ai-agents";
 import { chatAssignments, chatMessages, chats } from "@/services/drizzle/schema/chats";
-import { and, eq, lt, ne, notInArray, or } from "drizzle-orm";
+import { and, eq, inArray, lt, ne, notInArray, or } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
@@ -109,6 +108,21 @@ async function getChatMessages({ session, input }: { session: TAuthUserSession; 
 		orderBy: (fields, { desc: orderDesc }) => [orderDesc(fields.dataAtribuicao)],
 	});
 
+	// Sem atendimento ativo a thread não sabe distinguir "nunca atendida" de "atendimento
+	// encerrado": ambos viravam "Sem responsável", e assumir abre um ticket novo em silêncio.
+	// O último ticket terminal desfaz a ambiguidade (a conversa só ganha ticket novo ao assumir).
+	const ultimoAtendimentoEncerrado = atendimentoAtivo
+		? null
+		: ((await db.query.chatAssignments.findFirst({
+				where: and(
+					eq(chatAssignments.chatId, input.chatId),
+					eq(chatAssignments.organizacaoId, organizacaoId),
+					inArray(chatAssignments.status, [...CLOSED_ASSIGNMENT_STATUSES]),
+				),
+				columns: { id: true, status: true, dataEncerramento: true, resultado: true },
+				orderBy: (fields, { desc: orderDesc }) => [orderDesc(fields.dataInsercao)],
+			})) ?? null);
+
 	// Disponibilidade do agente para esta conversa. Vem junto com a thread de propósito: é por
 	// chat (depende do número de entrada), então uma query própria no cliente seria uma chamada
 	// por conversa aberta. A rota de atribuição revalida com o mesmo resolvedor.
@@ -172,6 +186,7 @@ async function getChatMessages({ session, input }: { session: TAuthUserSession; 
 				...chat,
 				conexaoTipo: chat.whatsappConexao?.tipoConexao ?? null,
 				atendimentoAtivo: atendimentoAtivo ?? null,
+				ultimoAtendimentoEncerrado,
 				atendimentoIa,
 				aiRun: aiRun ?? null,
 				aiCapacidades,
@@ -252,7 +267,7 @@ async function createChatMessage({ session, input }: { session: TAuthUserSession
 	}
 
 	const template = input.messageTemplateId
-		? await resolveApprovedTemplate({ organizacaoId, messageTemplateId: input.messageTemplateId, whatsappTelefoneId: chat.whatsappTelefoneId })
+		? await resolveApprovedTemplate({ organizacaoId, messageTemplateId: input.messageTemplateId, conexaoTelefoneId: chat.whatsappConexaoTelefoneId })
 		: null;
 
 	if (!janelaAberta && !template) {
@@ -307,59 +322,30 @@ async function createChatMessage({ session, input }: { session: TAuthUserSession
 			}
 		: null;
 
-	const now = new Date();
-	const [inserted] = await db
-		.insert(chatMessages)
-		.values({
-			organizacaoId,
-			chatId: input.chatId,
-			clienteId: chat.clienteId,
-			autorTipo: "USUÁRIO",
-			autorUsuarioId: session.user.id,
-			conteudoTexto: texto || null,
-			conteudoMidiaTipo: input.midia?.tipo ?? "TEXTO",
-			conteudoMidiaUrl: midiaUrl,
-			conteudoMidiaStorageId: midiaStorageId,
-			conteudoMidiaMimeType: input.midia?.mimeType ?? null,
-			conteudoMidiaArquivoNome: input.midia?.arquivoNome ?? null,
-			conteudoMidiaArquivoTamanho: midiaTamanho,
-			clienteMensagemId: input.clienteMensagemId ?? null,
-			whatsappTemplateId: template?.id ?? null,
-			// Nasce PENDENTE antes do envio: uma falha do provedor deixa rastro em vez de
-			// sumir, e o retry tem uma mensagem concreta para reprocessar.
-			statusEntrega: "PENDENTE",
-			metadados: quoteMetadata,
-			dataEnvio: now,
-		})
-		.returning({ id: chatMessages.id });
-
-	if (!inserted) throw new createHttpError.InternalServerError("Erro ao registrar a mensagem.");
-
-	const delivery = await deliverChatMessage({
-		messageId: inserted.id,
+	const { messageId, delivery } = await sendOutgoingChatMessage({
+		organizacaoId,
 		chat,
+		autorUsuarioId: session.user.id,
 		texto,
-		replyToWhatsappMessageId: quotedMessage?.whatsappMessageId ?? null,
-		midia: midiaStorageId
-			? {
-					tipo: input.midia?.tipo ?? "DOCUMENTO",
-					storageId: midiaStorageId,
-					mimeType: input.midia?.mimeType ?? "application/octet-stream",
-					arquivoNome: input.midia?.arquivoNome ?? null,
-				}
-			: null,
+		midia:
+			midiaStorageId && input.midia
+				? {
+						tipo: input.midia.tipo,
+						storageId: midiaStorageId,
+						mimeType: input.midia.mimeType,
+						arquivoNome: input.midia.arquivoNome ?? null,
+						url: midiaUrl,
+						tamanho: midiaTamanho,
+					}
+				: null,
 		template,
+		clienteMensagemId: input.clienteMensagemId,
+		metadados: quoteMetadata,
+		replyToWhatsappMessageId: quotedMessage?.whatsappMessageId ?? null,
 	});
 
-	await db
-		.update(chats)
-		.set({ ultimaMensagemId: inserted.id, ultimaMensagemData: now, ultimaMensagemSaidaData: now })
-		.where(eq(chats.id, input.chatId));
-
-	await markChatAnswered(db, { organizacaoId, chatId: input.chatId, responseDate: now, source: "HUB", now });
-
 	const persisted = await db.query.chatMessages.findFirst({
-		where: eq(chatMessages.id, inserted.id),
+		where: eq(chatMessages.id, messageId),
 		with: MESSAGE_AUTHOR_WITH,
 	});
 	if (!persisted) throw new createHttpError.InternalServerError("Erro ao carregar a mensagem enviada.");

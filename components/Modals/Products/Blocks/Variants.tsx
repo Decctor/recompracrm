@@ -4,6 +4,7 @@ import DeleteRowButton from "@/components/Spreadsheet/DeleteRowButton";
 import EditableNumberCell from "@/components/Spreadsheet/EditableNumberCell";
 import EditableTextCell from "@/components/Spreadsheet/EditableTextCell";
 import MobileEditableField from "@/components/Spreadsheet/MobileEditableField";
+import ProductBarcodeConflictHint from "@/components/Products/Shared/ProductBarcodeConflictHint";
 import ResponsiveMenuSection from "@/components/Utils/ResponsiveMenuSection";
 import { formatToMoney } from "@/lib/formatting";
 import { SPREADSHEET_TABLE_ATTR, type SpreadsheetGridBounds } from "@/lib/spreadsheet-navigation";
@@ -43,6 +44,8 @@ type ProductStateVariantsBlockProps = {
 	updateVariant: TUseProductState["updateProductVariant"];
 	updateVariantImageHolder: TUseProductState["updateProductVariantImageHolder"];
 	removeVariant: TUseProductState["removeProductVariant"];
+	/** Id do produto em edição, para o aviso de código de barras duplicado ignorar o próprio cadastro. */
+	productId?: string | null;
 	embedded?: boolean;
 };
 
@@ -53,6 +56,7 @@ export default function ProductStateVariantsBlock({
 	updateVariant,
 	updateVariantImageHolder,
 	removeVariant,
+	productId = null,
 	embedded = false,
 }: ProductStateVariantsBlockProps) {
 	const resolveTags = useVariantOptionTags(options);
@@ -77,6 +81,7 @@ export default function ProductStateVariantsBlock({
 			updateVariant={updateVariant}
 			updateVariantImageHolder={updateVariantImageHolder}
 			removeVariant={removeVariant}
+			productId={productId}
 		/>
 	);
 
@@ -123,6 +128,7 @@ type VariantTableProps = {
 	updateVariant: TUseProductState["updateProductVariant"];
 	updateVariantImageHolder: TUseProductState["updateProductVariantImageHolder"];
 	removeVariant: TUseProductState["removeProductVariant"];
+	productId: string | null;
 };
 
 function VariantTable({
@@ -133,6 +139,7 @@ function VariantTable({
 	updateVariant,
 	updateVariantImageHolder,
 	removeVariant,
+	productId,
 }: VariantTableProps) {
 	return (
 		<div {...{ [SPREADSHEET_TABLE_ATTR]: "true" }} className="flex w-full flex-col overflow-hidden rounded-md border border-border bg-background">
@@ -155,6 +162,7 @@ function VariantTable({
 						tags={resolveTags(variant)}
 						gridRow={rowIndex}
 						gridBounds={gridBounds}
+						productId={productId}
 						onUpdate={(partial) => updateVariant(variant.originalIndex, partial)}
 						onImageChange={(holder) => updateVariantImageHolder(variant.originalIndex, holder)}
 						onRemove={() => removeVariant(variant.originalIndex)}
@@ -180,12 +188,13 @@ type VariantTableRowProps = {
 	tags: VariantOptionTag[];
 	gridRow: number;
 	gridBounds: SpreadsheetGridBounds;
+	productId: string | null;
 	onUpdate: (partial: Partial<Omit<TProductVariantState, "imagemCapaHolder" | "addOns">>) => void;
 	onImageChange: (holder: Partial<TProductVariantState["imagemCapaHolder"]>) => void;
 	onRemove: () => void;
 };
 
-function VariantTableRow({ variant, tags, gridRow, gridBounds, onUpdate, onImageChange, onRemove }: VariantTableRowProps) {
+function VariantTableRow({ variant, tags, gridRow, gridBounds, productId, onUpdate, onImageChange, onRemove }: VariantTableRowProps) {
 	return (
 		<div className="border-t border-border first:border-t-0">
 			<div className={cn(VARIANT_TABLE_DESKTOP_ROW, "min-h-11 py-1 text-xs transition-colors hover:bg-muted/40")}>
@@ -212,7 +221,7 @@ function VariantTableRow({ variant, tags, gridRow, gridBounds, onUpdate, onImage
 						onCommit={(codigo) => onUpdate({ codigo })}
 					/>
 				</div>
-				<div className="min-w-0 px-1">
+				<div className="relative min-w-0 px-1">
 					<EditableTextCell
 						value={variant.codigoBarras ?? ""}
 						ariaLabel="Editar código de barras da variante"
@@ -221,6 +230,13 @@ function VariantTableRow({ variant, tags, gridRow, gridBounds, onUpdate, onImage
 						gridCol={VARIANT_GRID_COL.BARCODE}
 						gridBounds={gridBounds}
 						onCommit={(codigoBarras) => onUpdate({ codigoBarras: codigoBarras.trim() ? codigoBarras : null })}
+					/>
+					<ProductBarcodeConflictHint
+						compact
+						code={variant.codigoBarras}
+						excludeProductId={productId}
+						excludeVariantId={variant.id ?? null}
+						className="pointer-events-auto absolute right-1.5 top-1/2 -translate-y-1/2"
 					/>
 				</div>
 				<div className="min-w-0 px-1">
@@ -299,12 +315,21 @@ function VariantTableRow({ variant, tags, gridRow, gridBounds, onUpdate, onImage
 						/>
 					</MobileEditableField>
 					<MobileEditableField label="Cód. barras">
-						<EditableTextCell
-							value={variant.codigoBarras ?? ""}
-							ariaLabel="Editar código de barras da variante"
-							align="center"
-							onCommit={(codigoBarras) => onUpdate({ codigoBarras: codigoBarras.trim() ? codigoBarras : null })}
-						/>
+						<div className="relative">
+							<EditableTextCell
+								value={variant.codigoBarras ?? ""}
+								ariaLabel="Editar código de barras da variante"
+								align="center"
+								onCommit={(codigoBarras) => onUpdate({ codigoBarras: codigoBarras.trim() ? codigoBarras : null })}
+							/>
+							<ProductBarcodeConflictHint
+								compact
+								code={variant.codigoBarras}
+								excludeProductId={productId}
+								excludeVariantId={variant.id ?? null}
+								className="absolute right-1.5 top-1/2 -translate-y-1/2"
+							/>
+						</div>
 					</MobileEditableField>
 					<MobileEditableField label="Conteúdo">
 						<EditableNumberCell

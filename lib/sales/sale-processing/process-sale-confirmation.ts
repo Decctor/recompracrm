@@ -1,10 +1,13 @@
 import { accumulateCashbackForClient } from "@/lib/cashback/accumulation";
+import { captureSaleCampaignEvent } from "@/lib/campaigns/events/handlers/sale-capture";
+import { publishPendingCampaignEventsSafely } from "@/lib/campaigns/events/queue";
+import { waitUntil } from "@vercel/functions";
 import { applyCashbackRedemptionFIFO } from "@/lib/cashback/redemption";
 import { getCashbackRedemptionBlockReason } from "@/lib/cashback/redemption-policy";
 import { type TCouponCartItem, type TCouponRedemptionSurface, evaluateCouponAgainstCart } from "@/lib/coupons/engine";
 import type { TBenefitRedemptionSurface } from "@/schemas/enums";
 import { processCouponRedemption } from "@/lib/coupons/redemption";
-import { processSaleCupomAutoPrintIfEligible } from "@/lib/desktop-agent/auto-print";
+import { processSaleCupomAutoPrintIfEligible, processSalePreparationTicketAutoPrintIfEligible } from "@/lib/desktop-agent/auto-print";
 import { createAssignedPaymentAttempt, normalizePaymentsForTerminal, resolvePaymentTerminalAssignment } from "@/lib/payment-attempts";
 import { type TPaymentSplit, getPaymentProvider } from "@/lib/payments";
 import { buildSaleEntryTitle } from "@/lib/sales/entry-titles";
@@ -508,6 +511,7 @@ export async function processSaleConfirmationInTransaction({ tx, input }: { tx: 
 	}
 
 	let cashbackAccumulationResult: Awaited<ReturnType<typeof accumulateCashbackForClient>> | null = null;
+	let cashbackProgramId = input.saleCashbackProgramId ?? null;
 
 	if (clientId && input.accumulateCashback !== false) {
 		cashbackAccumulationResult = await (async () => {
@@ -524,6 +528,7 @@ export async function processSaleConfirmationInTransaction({ tx, input }: { tx: 
 					});
 
 			if (!program) return null;
+			cashbackProgramId = program.id;
 
 			return accumulateCashbackForClient({
 				tx,
@@ -542,6 +547,16 @@ export async function processSaleConfirmationInTransaction({ tx, input }: { tx: 
 		})();
 	}
 
+	await captureSaleCampaignEvent({
+		tx,
+		organizationId: input.organization.id,
+		saleId: input.saleId,
+		clientId,
+		occurredAt: confirmedAt,
+		accumulation: cashbackAccumulationResult,
+		programId: cashbackProgramId,
+	});
+
 	return {
 		vendaId: input.saleId,
 		lancamentoContabilId: entry.id,
@@ -554,10 +569,19 @@ export async function processSaleConfirmationInTransaction({ tx, input }: { tx: 
 	};
 }
 export async function processSaleConfirmationPostCommit(input: TProcessSaleConfirmationPostCommitInput) {
+	waitUntil(publishPendingCampaignEventsSafely({ organizationId: input.organization.id, sourceType: "VENDA", sourceId: input.saleId }));
 	// Cupom automático ANTES da emissão fiscal: cupom é latência-sensível (TTL 30min) e a emissão
 	// pode envolver o provedor. Um ponto cobre POS (create-and-confirm e confirm), comanda e shop.
 	// Nunca lança; a chave de idempotência (CUPOM_VENDA:<vendaId>) absorve reconfirmações.
 	await processSaleCupomAutoPrintIfEligible({
+		organizacaoId: input.organization.id,
+		saleId: input.saleId,
+		configuracao: input.organization.configuracao,
+		solicitadoPorId: input.saleAuthorId,
+	});
+	// Ticket de preparo: o orquestrador só imprime se a venda nasceu EM_PREPARO (entrega); balcão e
+	// fechamento de conta (nasce ENTREGUE) passam reto. Nunca lança.
+	await processSalePreparationTicketAutoPrintIfEligible({
 		organizacaoId: input.organization.id,
 		saleId: input.saleId,
 		configuracao: input.organization.configuracao,

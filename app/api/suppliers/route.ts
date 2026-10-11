@@ -30,6 +30,14 @@ const GetSuppliersInputSchema = z.object({
 		.optional()
 		.nullable()
 		.transform((val) => val === "true"),
+	// Padrão 25 (busca do seletor). Listas de opção (ex.: filtro de produtos por fornecedor) pedem mais.
+	limit: z
+		.string({
+			invalid_type_error: "Tipo não válido para limite.",
+		})
+		.optional()
+		.nullable()
+		.transform((val) => Math.min(Math.max(Number(val) || 25, 1), 500)),
 });
 export type TGetSuppliersInput = z.infer<typeof GetSuppliersInputSchema>;
 
@@ -68,7 +76,7 @@ async function getSuppliers({ input, session }: { input: TGetSuppliersInput; ses
 	const suppliersResult = await db.query.suppliers.findMany({
 		where: and(...conditions),
 		orderBy: [desc(suppliers.dataInsercao)],
-		limit: 25,
+		limit: input.limit,
 	});
 
 	return {
@@ -91,6 +99,7 @@ async function getSuppliersRoute(request: NextRequest) {
 		id: searchParams.get("id") ?? undefined,
 		search: searchParams.get("search") ?? undefined,
 		activeOnly: searchParams.get("activeOnly") ?? undefined,
+		limit: searchParams.get("limit") ?? undefined,
 	});
 	const result = await getSuppliers({ input, session });
 	return NextResponse.json(result);

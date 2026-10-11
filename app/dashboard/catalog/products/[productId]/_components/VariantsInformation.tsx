@@ -44,6 +44,7 @@ export default function ProductVariantsInformation({ product, sectionWrapperClas
 				/>
 				<ProductStateVariantsBlock
 					embedded
+					productId={product.id}
 					variants={editor.state.productVariants}
 					options={editor.state.productOptions}
 					addVariant={editor.addProductVariant}

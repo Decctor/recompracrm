@@ -59,7 +59,9 @@ export const printJobs = newTable(
 		// Sem FK enquanto lojas não forem entidade do schema (mesmo racional de access_principals.loja_id).
 		// Agent só claima jobs da sua loja ou sem loja.
 		lojaId: varchar("loja_id", { length: 255 }),
-		finalidade: varchar("finalidade", { length: 30 }).$type<"CUPOM_VENDA" | "ETIQUETA_LOTE" | "DANFE_NFCE" | "DANFE_NFE" | "TESTE">().notNull(),
+		finalidade: varchar("finalidade", { length: 30 })
+			.$type<"CUPOM_VENDA" | "TICKET_PREPARO" | "ETIQUETA_LOTE" | "DANFE_NFCE" | "DANFE_NFE" | "TESTE">()
+			.notNull(),
 		formato: varchar("formato", { length: 30 }).$type<"HTML" | "PDF_URL" | "ZPL">().notNull(),
 		// Conteúdo renderizado no servidor — o agent é burro (plano, decisão 2).
 		conteudo: text("conteudo"),
@@ -67,7 +69,7 @@ export const printJobs = newTable(
 		copias: integer("copias").notNull().default(1),
 		// Snapshot estruturado da origem — reimpressão e debug, nunca re-renderização no agent.
 		dados: jsonb("dados").$type<Record<string, unknown>>(),
-		origemTipo: varchar("origem_tipo", { length: 30 }).$type<"VENDA" | "LOTE" | "NOTA_FISCAL" | "MANUAL">().notNull(),
+		origemTipo: varchar("origem_tipo", { length: 30 }).$type<"VENDA" | "PEDIDO_CONTA" | "LOTE" | "NOTA_FISCAL" | "MANUAL">().notNull(),
 		origemId: varchar("origem_id", { length: 255 }),
 		// Nullable (jobs manuais); unicidade por (organizacao, chave) impede duplicar auto-print.
 		chaveIdempotencia: varchar("chave_idempotencia", { length: 255 }),

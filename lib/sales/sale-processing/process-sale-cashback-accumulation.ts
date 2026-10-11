@@ -4,6 +4,9 @@ import { cashbackProgramTransactions, cashbackPrograms } from "@/services/drizzl
 import { and, eq } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { getSaleFinancialState } from "./get-sale-financial-state";
+import { captureSaleCampaignEvent } from "@/lib/campaigns/events/handlers/sale-capture";
+import { publishPendingCampaignEventsSafely } from "@/lib/campaigns/events/queue";
+import { waitUntil } from "@vercel/functions";
 
 export async function processSaleCashbackAccumulationIfEligible({
 	organizationId,
@@ -34,7 +37,7 @@ export async function processSaleCashbackAccumulationIfEligible({
 	if (!sale.clienteId || sale.statusVenda !== "CONFIRMADA" || !financialState.isFullyPaid) return null;
 	const clientId = sale.clienteId;
 
-	return db.transaction(async (tx) => {
+	const accumulation = await db.transaction(async (tx) => {
 		// Do cliente ATUAL da venda: um acúmulo revertido por reatribuição (cliente anterior) não
 		// conta — o novo dono ainda precisa acumular quando o pagamento se completar.
 		const existing = await tx.query.cashbackProgramTransactions.findFirst({
@@ -69,6 +72,18 @@ export async function processSaleCashbackAccumulationIfEligible({
 			},
 		});
 
+		await captureSaleCampaignEvent({
+			tx,
+			organizationId,
+			saleId,
+			clientId,
+			occurredAt: new Date(),
+			accumulation: result,
+			programId: program.id,
+			type: "CASHBACK_ACUMULADO",
+		});
 		return { ...result, alreadyProcessed: false };
 	});
+	waitUntil(publishPendingCampaignEventsSafely({ organizationId, sourceType: "VENDA", sourceId: saleId }));
+	return accumulation;
 }

@@ -1,9 +1,9 @@
 import type { TChatAssignmentPriority, TChatAssignmentStatus } from "@/schemas/enums";
 import type { DB, DBTransaction } from "@/services/drizzle";
-import { chatAssignments, chats } from "@/services/drizzle/schema";
+import { aiAgentFollowUps, chatAssignments, chats } from "@/services/drizzle/schema";
 import { AI_AGENT_FOLLOW_UP_CANCEL_REASONS } from "@/schemas/ai-agents";
 import { cancelScheduledFollowUp, cancelScheduledFollowUpsForChats } from "@/lib/ai/agent/follow-up-cancel";
-import { and, eq, inArray, isNull, lt, notInArray, or, sql } from "drizzle-orm";
+import { and, eq, inArray, lt, notExists, notInArray, sql } from "drizzle-orm";
 
 /**
  * Camada canônica do estado de atendimento de um chat.
@@ -25,6 +25,12 @@ type TAttendanceDb = DB | DBTransaction;
 export type TAttendanceResponseSource = "HUB" | "AI" | "WHATSAPP_ECHO" | "INTERNAL_GATEWAY";
 
 const CLOSED_ATTENDANCE_STATUSES: TChatAssignmentStatus[] = ["ENCERRADO", "CANCELADO"];
+
+/**
+ * Motivo gravado quando um atendente assume uma conversa que era de um colega. Constante de
+ * dados (aparece em `transferencia_motivo`), por isso em português e em SCREAMING_CASE.
+ */
+export const ATTENDANCE_TAKEOVER_REASON = "ASSUMIDO_PELO_ATENDENTE";
 
 export function isClosedAttendanceStatus(status: string | null | undefined): status is "ENCERRADO" | "CANCELADO" {
 	return CLOSED_ATTENDANCE_STATUSES.includes(status as TChatAssignmentStatus);
@@ -154,7 +160,19 @@ export async function markChatAttendedExternally(
 	const current = await getCurrentChatAttendance(db, input);
 
 	// USUARIO sempre implica um responsavelUsuarioId real; tickets de fila são NAO_ATRIBUIDO.
-	if (current && current.responsavelTipo === "USUARIO") return current;
+	if (current && current.responsavelTipo === "USUARIO") {
+		// O dono segue o mesmo, mas o cliente foi de fato respondido pelo celular: sem registrar a
+		// resposta o ticket ficava em ABERTO e sem `dataPrimeiraResposta`, como se ninguém tivesse
+		// falado — e o tempo de primeira resposta saía errado nas métricas.
+		const answered = await markChatAnswered(db, {
+			organizacaoId: input.organizacaoId,
+			chatId: input.chatId,
+			responseDate: input.responseDate,
+			source: "WHATSAPP_ECHO",
+			now,
+		});
+		return answered ?? current;
+	}
 
 	const ensured = await ensureCurrentAttendance(db, { ...input, now, status: "EM_ATENDIMENTO" });
 	if (!ensured) return null;
@@ -180,23 +198,45 @@ export async function markChatAttendedExternally(
 }
 
 /**
- * Um usuário do hub assume o atendimento.
+ * Um usuário do hub assume o atendimento — inclusive o que está com um colega.
  *
- * Compare-and-set: o UPDATE só casa enquanto o ticket não tem dono humano (ou já é do
- * próprio usuário, o que torna a operação idempotente). Se outro usuário assumiu entre
- * o `ensure` e o `update`, zero linhas casam e a função devolve `null` — o chamador deve
- * responder 409, não sobrescrever.
+ * Decisão de produto: quem tem `responder` pode tomar qualquer atendimento ativo. As pessoas
+ * saem de turno, e o assumir é o caminho de autosserviço para repassar a conversa; exigir um
+ * gestor para isso deixava o cliente esperando por alguém que já foi embora. Quando o dono é
+ * outro usuário a troca é registrada como transferência (`transferidoParaUsuarioId` = quem
+ * assumiu e `transferenciaMotivo` = `ATTENDANCE_TAKEOVER_REASON`), para a trilha não mentir.
+ *
+ * Compare-and-set sobre o dono **observado**: o UPDATE só casa se o ticket ainda tem o dono
+ * (tipo + usuário) que acabamos de ler e segue ativo. Se outra pessoa assumiu entre o `ensure` e
+ * o `update`, ou o ticket foi encerrado, zero linhas casam e a função devolve `null` — o
+ * chamador deve responder 409 (corrida genuína), não sobrescrever às cegas. Assumir o que já é
+ * seu continua idempotente.
  *
  * Para o gestor atribuindo a conversa a um terceiro existe `assignChatAttendance`, que
  * tem semântica de override consciente.
  */
 export async function assumeChatAttendanceForUser(
 	db: TAttendanceDb,
-	input: { organizacaoId: string; chatId: string; usuarioId: string; now?: Date },
+	input: {
+		organizacaoId: string;
+		chatId: string;
+		usuarioId: string;
+		/**
+		 * Recusa (devolve `null`) quando o dono observado é outro usuário, em vez de tomar a conversa.
+		 * Para chamadores que só podem assumir o que está livre — o encaminhamento, que já recusou a
+		 * conversa de um colega na leitura e não pode tomá-la na janela entre a leitura e o CAS.
+		 */
+		somenteSeLivre?: boolean;
+		now?: Date;
+	},
 ) {
 	const now = input.now ?? new Date();
 	const ensured = await ensureCurrentAttendance(db, { ...input, now, status: "ABERTO" });
 	if (!ensured) return null;
+
+	const isTakeoverFromColleague =
+		ensured.responsavelTipo === "USUARIO" && !!ensured.responsavelUsuarioId && ensured.responsavelUsuarioId !== input.usuarioId;
+	if (isTakeoverFromColleague && input.somenteSeLivre) return null;
 
 	const pending = await getChatPendingState(db, input);
 	await cancelScheduledFollowUp(db, { chatId: input.chatId, motivo: AI_AGENT_FOLLOW_UP_CANCEL_REASONS.HUMANO_ASSUMIU });
@@ -208,6 +248,7 @@ export async function assumeChatAttendanceForUser(
 			responsavelUsuarioId: input.usuarioId,
 			responsavelAgenteId: null,
 			atribuidoPorUsuarioId: input.usuarioId,
+			...(isTakeoverFromColleague ? { transferidoParaUsuarioId: input.usuarioId, transferenciaMotivo: ATTENDANCE_TAKEOVER_REASON } : {}),
 			dataAtribuicao: now,
 			status: pending?.needsResponse ? "ABERTO" : "EM_ATENDIMENTO",
 			dataLiberacao: null,
@@ -217,7 +258,10 @@ export async function assumeChatAttendanceForUser(
 				eq(chatAssignments.id, ensured.id),
 				eq(chatAssignments.organizacaoId, input.organizacaoId),
 				notInArray(chatAssignments.status, CLOSED_ATTENDANCE_STATUSES),
-				or(isNull(chatAssignments.responsavelUsuarioId), eq(chatAssignments.responsavelUsuarioId, input.usuarioId)),
+				// Dono observado, não "sem dono": é o que deixa o take-over passar sem abrir mão da
+				// detecção de corrida. `IS NOT DISTINCT FROM` porque o dono observado pode ser nulo.
+				eq(chatAssignments.responsavelTipo, ensured.responsavelTipo),
+				sql`${chatAssignments.responsavelUsuarioId} is not distinct from ${ensured.responsavelUsuarioId}`,
 			),
 		)
 		.returning();
@@ -241,6 +285,10 @@ export async function assignChatAttendance(
 		status: pending?.needsResponse ? "ABERTO" : "EM_ATENDIMENTO",
 	});
 	if (!current) return null;
+
+	// Toda troca de dono apaga a retomada da IA (assumir, transferir, liberar já o faziam); esta era
+	// a única que deixava o lembrete agendado disparar por cima do novo responsável.
+	await cancelScheduledFollowUp(db, { chatId: input.chatId, motivo: AI_AGENT_FOLLOW_UP_CANCEL_REASONS.HUMANO_ASSUMIU });
 
 	const [updated] = await db
 		.update(chatAssignments)
@@ -335,6 +383,11 @@ export async function assignChatAttendanceToAgent(
 
 	const pending = await getChatPendingState(db, input);
 
+	// Um novo episódio do agente decide sozinho se quer retomar: o lembrete do episódio anterior
+	// (que pode ter sido agendado por outro objetivo) não vale mais. `SUBSTITUIDA` e não
+	// `HUMANO_ASSUMIU`: ninguém humano assumiu aqui, e ela não conta no limite de retomadas por atendimento.
+	await cancelScheduledFollowUp(db, { chatId: input.chatId, motivo: AI_AGENT_FOLLOW_UP_CANCEL_REASONS.SUBSTITUIDA });
+
 	const [updated] = await db
 		.update(chatAssignments)
 		.set({
@@ -367,6 +420,8 @@ export async function transferChatAttendance(
 		motivo?: string | null;
 		prioridade?: TChatAssignmentPriority | null;
 		transferidoPorUsuarioId?: string | null;
+		/** Resultado do atendimento a gravar já na transferência (ex.: `HUMAN_HANDOFF` quando a IA desiste). */
+		resultado?: string | null;
 		now?: Date;
 	},
 ) {
@@ -385,6 +440,9 @@ export async function transferChatAttendance(
 			atribuidoPorUsuarioId: input.transferidoPorUsuarioId ?? current.atribuidoPorUsuarioId,
 			transferidoParaUsuarioId: input.usuarioDestinoId,
 			transferenciaMotivo: input.motivo ?? null,
+			// O ticket segue ativo com o humano, então o resultado só vira estatística quando ele
+			// fechar: `closeChatAttendance` e o cron de inatividade preservam o que já está gravado.
+			resultado: input.resultado ?? current.resultado,
 			prioridade: input.prioridade ?? current.prioridade,
 			dataAtribuicao: now,
 			dataLiberacao: null,
@@ -428,11 +486,17 @@ export async function changeChatAttendanceStatus(
 	input: { organizacaoId: string; chatId: string; status: TChatAssignmentStatus; usuarioId?: string | null; now?: Date },
 ) {
 	const now = input.now ?? new Date();
-	const current = await ensureCurrentAttendance(db, { ...input, now });
+	// Sem `ensure`: mudar o status de uma conversa sem atendimento ativo não é abrir um ticket. O
+	// insert antigo espalhava `status` no ticket novo e nascia um atendimento já encerrado.
+	const current = await getCurrentChatAttendance(db, input);
 	if (!current) return null;
 
 	const isTerminal = input.status === "ENCERRADO" || input.status === "CANCELADO";
-	if (isTerminal) await cancelScheduledFollowUp(db, { chatId: input.chatId, motivo: AI_AGENT_FOLLOW_UP_CANCEL_REASONS.ATENDIMENTO_ENCERRADO });
+	// RESOLVIDO também encerra o assunto para a IA: um lembrete saindo depois de "resolvido" seria
+	// ela reabrindo o que a equipe acabou de dar por concluído.
+	if (isTerminal || input.status === "RESOLVIDO") {
+		await cancelScheduledFollowUp(db, { chatId: input.chatId, motivo: AI_AGENT_FOLLOW_UP_CANCEL_REASONS.ATENDIMENTO_ENCERRADO });
+	}
 	const [updated] = await db
 		.update(chatAssignments)
 		.set({
@@ -467,6 +531,13 @@ export async function closeStaleChatAttendances(db: TAttendanceDb, input: { inac
 
 	const staleChats = db.select({ id: chats.id }).from(chats).where(lt(chats.ultimaMensagemData, input.inactiveSince));
 
+	// Retomada agendada da IA: o silêncio que ela espera pode ser maior que a janela de inatividade,
+	// e fechar o ticket cancelaria justamente o lembrete que existe para reativar o cliente.
+	const hasScheduledFollowUp = db
+		.select({ one: sql`1` })
+		.from(aiAgentFollowUps)
+		.where(and(eq(aiAgentFollowUps.atendimentoId, chatAssignments.id), eq(aiAgentFollowUps.status, "AGENDADA")));
+
 	const closed = await db
 		.update(chatAssignments)
 		.set({
@@ -476,7 +547,17 @@ export async function closeStaleChatAttendances(db: TAttendanceDb, input: { inac
 			dataEncerramento: now,
 			dataLiberacao: now,
 		})
-		.where(and(notInArray(chatAssignments.status, CLOSED_ATTENDANCE_STATUSES), inArray(chatAssignments.chatId, staleChats)))
+		.where(
+			and(
+				notInArray(chatAssignments.status, CLOSED_ATTENDANCE_STATUSES),
+				inArray(chatAssignments.chatId, staleChats),
+				// Inatividade é do ticket, não só do chat: um ticket atribuído há minutos sobre um chat
+				// antigo (alguém reabriu a conversa) não pode ser fechado pelo cron horário.
+				// `dataAtribuicao` é notNull e reescrita a cada assumir/atribuir/transferir/claim.
+				lt(chatAssignments.dataAtribuicao, input.inactiveSince),
+				notExists(hasScheduledFollowUp),
+			),
+		)
 		.returning({
 			id: chatAssignments.id,
 			chatId: chatAssignments.chatId,
@@ -499,9 +580,9 @@ export async function closeStaleChatAttendances(db: TAttendanceDb, input: { inac
  * o campo que no modelo antigo era a `descricao` do serviço, quase sempre preenchida com
  * o placeholder "NÃO ESPECIFICADO".
  */
-export async function updateChatAttendanceSummary(db: TAttendanceDb, input: { organizacaoId: string; chatId: string; resumo: string; now?: Date }) {
-	const now = input.now ?? new Date();
-	const current = await ensureCurrentAttendance(db, { ...input, now });
+export async function updateChatAttendanceSummary(db: TAttendanceDb, input: { organizacaoId: string; chatId: string; resumo: string }) {
+	// Sem ticket ativo não há o que resumir: `null` é "nada a atualizar", e quem chama decide se isso importa.
+	const current = await getCurrentChatAttendance(db, input);
 	if (!current) return null;
 
 	const [updated] = await db.update(chatAssignments).set({ resumo: input.resumo }).where(eq(chatAssignments.id, current.id)).returning();
@@ -519,10 +600,10 @@ export async function updateChatAttendanceCategory(db: TAttendanceDb, input: { o
 
 export async function changeChatAttendancePriority(
 	db: TAttendanceDb,
-	input: { organizacaoId: string; chatId: string; prioridade: TChatAssignmentPriority | null; now?: Date },
+	input: { organizacaoId: string; chatId: string; prioridade: TChatAssignmentPriority | null },
 ) {
-	const now = input.now ?? new Date();
-	const current = await ensureCurrentAttendance(db, { ...input, now, status: "ABERTO" });
+	// Sem `ensure`, pelo mesmo motivo de `changeChatAttendanceStatus`: prioridade não abre ticket.
+	const current = await getCurrentChatAttendance(db, input);
 	if (!current) return null;
 
 	const [updated] = await db.update(chatAssignments).set({ prioridade: input.prioridade }).where(eq(chatAssignments.id, current.id)).returning();

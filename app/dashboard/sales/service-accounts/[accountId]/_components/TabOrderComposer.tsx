@@ -1,5 +1,7 @@
 "use client";
 import ProductSearchInput from "@/components/Inputs/ProductSearchInput";
+import BarcodeMatchPicker from "@/components/Modals/Sales/BarcodeMatchPicker";
+import { usePOSBarcodeScan } from "@/lib/hooks/use-pos-barcode-scan";
 import { normalizeProductSearchTerms } from "@/lib/products/search-terms";
 import type { TCreateTabOrderInput } from "@/app/api/tabs/orders/route";
 import TextInput from "@/components/Inputs/TextInput";
@@ -32,7 +34,7 @@ import { toast } from "sonner";
 
 type TCartItem = TCreateTabOrderInput["itens"][number] & { cartKey: string };
 
-type TComposerStage = { kind: "catalog" } | { kind: "builder"; product: TBuilderProduct } | { kind: "review" };
+type TComposerStage = { kind: "catalog" } | { kind: "builder"; product: TBuilderProduct; initialVariantId?: string | null } | { kind: "review" };
 
 function modifierSignature(modifiers: TBuiltOrderItem["modificadores"]) {
 	return modifiers
@@ -139,6 +141,18 @@ export function TabOrderComposer({ tabId, contextLabel, onLaunched, onExit, clas
 		addSimpleProduct(product);
 	}
 
+	// Leitor de código de barras no canal COMANDA: o item lido soma no carrinho pela mesma chave do
+	// toque; produto com escolhas pendentes abre a montagem. Durante a montagem a leitura é
+	// recusada em vez de trocar o produto no meio e perder as escolhas feitas.
+	const composerRef = useRef<HTMLDivElement>(null);
+	const barcodeScan = usePOSBarcodeScan({
+		channel: "COMANDA",
+		ownerRef: composerRef,
+		blockedReason: stage.kind === "builder" ? "Conclua a montagem do item antes de ler outro código." : null,
+		onAddDirect: (item) => addItem(item),
+		onOpenBuilder: ({ product, variantId }) => goTo({ kind: "builder", product, initialVariantId: variantId }, "forward"),
+	});
+
 	function handleLaunch() {
 		if (cart.length === 0) return;
 		launchOrder({
@@ -149,10 +163,10 @@ export function TabOrderComposer({ tabId, contextLabel, onLaunched, onExit, clas
 		});
 	}
 
-	const stageKey = stage.kind === "builder" ? `builder-${stage.product.id}` : stage.kind;
+	const stageKey = stage.kind === "builder" ? `builder-${stage.product.id}-${stage.initialVariantId ?? ""}` : stage.kind;
 
 	return (
-		<div className={cn("flex min-w-0 flex-col", className)}>
+		<div ref={composerRef} className={cn("flex min-w-0 flex-col", className)}>
 			<div
 				key={stageKey}
 				className={cn(
@@ -177,6 +191,7 @@ export function TabOrderComposer({ tabId, contextLabel, onLaunched, onExit, clas
 				{stage.kind === "builder" ? (
 					<BuilderStage
 						product={stage.product}
+						initialVariantId={stage.initialVariantId ?? null}
 						onBack={() => goTo({ kind: "catalog" }, "back")}
 						onConfirm={(item) => {
 							addItem(item);
@@ -198,6 +213,10 @@ export function TabOrderComposer({ tabId, contextLabel, onLaunched, onExit, clas
 					/>
 				) : null}
 			</div>
+
+			{barcodeScan.candidates ? (
+				<BarcodeMatchPicker candidates={barcodeScan.candidates} onChoose={barcodeScan.chooseCandidate} onClose={barcodeScan.dismissCandidates} />
+			) : null}
 		</div>
 	);
 }
@@ -538,8 +557,18 @@ function ProductThumb({
 // Estágio: montagem (variantes + adicionais)
 // ============================================================================
 
-function BuilderStage({ product, onBack, onConfirm }: { product: TBuilderProduct; onBack: () => void; onConfirm: (item: TBuiltOrderItem) => void }) {
-	const builder = useProductBuilder({ product });
+function BuilderStage({
+	product,
+	initialVariantId,
+	onBack,
+	onConfirm,
+}: {
+	product: TBuilderProduct;
+	initialVariantId: string | null;
+	onBack: () => void;
+	onConfirm: (item: TBuiltOrderItem) => void;
+}) {
+	const builder = useProductBuilder({ product, initialVariantId });
 
 	function handleConfirm() {
 		const item = builder.buildItem();

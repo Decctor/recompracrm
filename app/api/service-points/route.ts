@@ -82,13 +82,13 @@ async function createServicePoint({ input, orgId }: { input: TCreateServicePoint
 			grupo: input.grupo ?? null,
 			tipo: input.tipo,
 			capacidade: input.capacidade ?? null,
+			tokenPublico,
 			tokenPublicoHash: hashPublicToken(tokenPublico),
 		})
 		.returning();
 
 	return {
-		// Token bruto aparece SOMENTE aqui (criacao) — persistimos apenas o hash.
-		data: { servicePoint: created, tokenPublico },
+		data: { servicePoint: created },
 		message: "Ponto de atendimento criado com sucesso.",
 	};
 }
@@ -111,13 +111,14 @@ async function updateServicePoint({ input, orgId }: { input: TUpdateServicePoint
 			tipo: input.tipo,
 			capacidade: input.capacidade,
 			ativo: input.ativo,
-			...(tokenPublico ? { tokenPublicoHash: hashPublicToken(tokenPublico) } : {}),
+			// Regenerar invalida o QR impresso: o hash antigo deixa de resolver.
+			...(tokenPublico ? { tokenPublico, tokenPublicoHash: hashPublicToken(tokenPublico) } : {}),
 		})
 		.where(and(eq(servicePoints.id, input.id), eq(servicePoints.organizacaoId, orgId)))
 		.returning();
 
 	return {
-		data: { servicePoint: updated, tokenPublico },
+		data: { servicePoint: updated },
 		message: "Ponto de atendimento atualizado com sucesso.",
 	};
 }

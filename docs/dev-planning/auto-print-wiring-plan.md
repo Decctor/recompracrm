@@ -97,14 +97,14 @@ automática: **avaliam elegibilidade e nunca lançam** (try/catch integral + `co
 de impressão jamais quebra confirmação de venda ou autorização fiscal. Ambas rodam **pós-commit**.
 
 ```typescript
-processSaleCupomAutoPrintIfEligible({ organizacaoId, saleId })
+processSaleCupomAutoPrintIfEligible({ organizacaoId, saleId });
 // 1. Parseia preferencias.impressoes; CUPOM_VENDA.habilitada? chave de política da venda na allowlist? senão, skip.
 // 2. Org tem impressora ativa com a finalidade? (guarda anti-lixo, decisão 5) senão, skip.
 // 3. Monta dados do cupom (builder compartilhado, decisão 6) e enfileira:
 //    enqueuePrintJob({ finalidade: "CUPOM_VENDA", origemTipo: "VENDA", origemId: saleId,
 //                      chaveIdempotencia: `CUPOM_VENDA:${saleId}`, copias: regra.copias, lojaId: null })
 
-processFiscalDocumentAutoPrintIfEligible({ organizacaoId, documentoId })
+processFiscalDocumentAutoPrintIfEligible({ organizacaoId, documentoId });
 // Igual, para DANFE_NFCE/DANFE_NFE: finalidade vem de documento.tipo, chave de política vem da
 // venda ligada ao documento, chave `DANFE:${documentoId}`, dados = { pdfUrl: <URL assinada, decisão 7> }.
 ```
@@ -195,12 +195,12 @@ existe em lugar nenhum:
 
 ### `CUPOM_VENDA`
 
-| Fluxo | Hook | Observação |
-| --- | --- | --- |
-| POS (create-and-confirm), POS confirm, fechamento de comanda, checkout do Shop | `processSaleConfirmationPostCommit` (`lib/sales/sale-processing/process-sale-confirmation.ts:431`) | Um único ponto cobre os quatro caminhos internos — mesmo lugar onde a emissão fiscal automática já é disparada. Chamar o orquestrador **antes** da emissão fiscal (cupom é latência-sensível; TTL 30min). |
-| iFood — aceite automático | Pós-commit do `runDataCollectingV2`, após o `confirmIfoodOrder` | Enfileira direto, sem promoção local — ver seção iFood. |
-| iFood — aceite na plataforma | `app/api/sales/fulfillment/order-confirmation/route.ts`, após a transação local de confirmação | Os efeitos de nova compra e o cupom saem no aceite, sem esperar o sync. |
-| iFood — aceite no dispositivo iFood / consolidação | Pós-commit do `runDataCollectingV2` (junto ao loop de `fiscalEmissionCandidateSaleIds`) | Disparar apenas para vendas com `becameValid && !nowCanceled` — exactly-once por construção; a chave dedupe a sobreposição com os caminhos de aceite, e não se paga insert-conflito por venda a cada polling. |
+| Fluxo                                                                          | Hook                                                                                               | Observação                                                                                                                                                                                                    |
+| ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| POS (create-and-confirm), POS confirm, fechamento de comanda, checkout do Shop | `processSaleConfirmationPostCommit` (`lib/sales/sale-processing/process-sale-confirmation.ts:431`) | Um único ponto cobre os quatro caminhos internos — mesmo lugar onde a emissão fiscal automática já é disparada. Chamar o orquestrador **antes** da emissão fiscal (cupom é latência-sensível; TTL 30min).     |
+| iFood — aceite automático                                                      | Pós-commit do `runDataCollectingV2`, após o `confirmIfoodOrder`                                    | Enfileira direto, sem promoção local — ver seção iFood.                                                                                                                                                       |
+| iFood — aceite na plataforma                                                   | `app/api/sales/fulfillment/order-confirmation/route.ts`, após a transação local de confirmação     | Os efeitos de nova compra e o cupom saem no aceite, sem esperar o sync.                                                                                                                                       |
+| iFood — aceite no dispositivo iFood / consolidação                             | Pós-commit do `runDataCollectingV2` (junto ao loop de `fiscalEmissionCandidateSaleIds`)            | Disparar apenas para vendas com `becameValid && !nowCanceled` — exactly-once por construção; a chave dedupe a sobreposição com os caminhos de aceite, e não se paga insert-conflito por venda a cada polling. |
 
 ### `DANFE_NFCE` / `DANFE_NFE`
 
@@ -233,8 +233,27 @@ documento autorizado imprime (a política é sobre a impressão, não sobre quem
 
 ## Evoluções previstas (fora do v1)
 
-- Multi-vias: `vias: [{ finalidade: "CUPOM_COZINHA" }, ...]` — a extensibilidade de `finalidade`
-  como varchar já comporta finalidades novas sem migração.
+- ~~Multi-vias: `vias: [{ finalidade: "CUPOM_COZINHA" }, ...]`~~ — **feito como `TICKET_PREPARO`**
+  (2026-10-08). Não é "via" do cupom: é uma finalidade própria, sem preços, com builder e template
+  próprios (`lib/desktop-agent/ticket-preparo-data.ts`, `templates/ticket-preparo.ts`). O gatilho é a
+  **unidade de preparo entrar em `EM_PREPARO`** — nunca o canal ou a modalidade:
+  - venda: `processSalePreparationTicketAutoPrintIfEligible` checa o estado ela mesma; chamada
+    pós-commit em `processSaleConfirmationPostCommit`, na transição manual
+    (`processSaleAttendanceStatusChange`), no `becameValid` do data-collecting-v2 e no aceite manual
+    do iFood. Chave `TICKET_PREPARO:VENDA:<id>` (EM_PREPARO nunca é reentrado).
+  - pedido de conta (rodada): `processTabOrderLaunchPostCommit` após todo `launchTabOrder`
+    (composer, aprovação manual e automática). Chave `TICKET_PREPARO:PEDIDO_CONTA:<id>`.
+  - O fechamento da conta não imprime preparo: a venda rascunho nasce ENTREGUE.
+  - Mesmo mapeamento de itens do board (`lib/sales/preparation-tickets.ts`), reimpressão manual pelo
+    botão do card e pela rota de gestão (`vendaId` ou `tabOrderId`).
+  - **Limitação conhecida**: no aceite automático do iFood a venda ainda está `NAO_INICIADO` (a
+    consolidação para EM_PREPARO fica para o próximo sync), então o ticket sai um ciclo de polling
+    depois do cupom.
+  - **Follow-up separado**: `RETIRADA` nasce `PRONTO` e `PRESENCIAL` nasce `ENTREGUE`
+    (`resolveInitialAttendanceStatus`), logo nunca passam por EM_PREPARO e nunca imprimem ticket.
+    Para food-service de balcão/retirada, a resposta é um ajuste nos defaults de status inicial
+    (com atenção à baixa de estoque, que acompanha `attendanceStatusRequiresPhysicalOut`), não
+    alargar o gatilho para `PRONTO`.
 - `ETIQUETA_LOTE` automática em eventos de produção.
 - Cleanup do `loja_id` em `print_jobs`/`access_principals` + claim do agent (modelagem morta).
 

@@ -7,7 +7,7 @@ import { DEFAULT_AI_AGENT_MODEL } from "@/schemas/ai-agents";
  */
 export const AI_MODEL_ALIASES = {
 	"agent-default": DEFAULT_AI_AGENT_MODEL,
-	"agent-fast": "openai/gpt-5-mini",
+	"agent-fast": DEFAULT_AI_AGENT_MODEL,
 } as const;
 
 export type TAiModelAlias = keyof typeof AI_MODEL_ALIASES;

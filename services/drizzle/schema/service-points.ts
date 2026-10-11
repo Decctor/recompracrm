@@ -24,8 +24,11 @@ export const servicePoints = newTable(
 		grupo: text("grupo"), // texto livre opcional: "Salao", "Varanda", "Terreo"
 		tipo: servicePointTypeEnum("tipo").notNull().default("MESA"),
 		capacidade: doublePrecision("capacidade"), // lugares/ocupacao (opcional)
-		// Token do QR duravel do ponto. Persistimos apenas o hash (sha256 hex);
-		// o token bruto aparece somente na criacao/regeneracao.
+		// Token do QR duravel do ponto. Fica legivel (diferente do QR da tab) para o
+		// painel reexibir/reimprimir o QR a qualquer momento: ele ja esta impresso na
+		// mesa e so abre cardapio + solicitacao aprovada pelo operador, nunca consumo.
+		// A busca publica continua pelo hash (sha256 hex). Rotacionar = regenerar.
+		tokenPublico: varchar("token_publico", { length: 64 }).notNull(),
 		tokenPublicoHash: varchar("token_publico_hash", { length: 64 }).notNull(),
 		ativo: boolean("ativo").default(true).notNull(),
 		metadados: jsonb("metadados"), // extensoes; nao guarda regras centrais de atendimento

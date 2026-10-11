@@ -6,6 +6,20 @@ import { z } from "zod";
 // produto + quantidade; a precificacao autoritativa acontece na aprovacao.
 // ============================================================================
 
+// Adicional escolhido pelo cliente: so a referencia da opcao e a quantidade. Nome e preco vem do
+// catalogo na aprovacao (resolveCatalogOrderItem), nunca do payload.
+export const TabOrderRequestItemModifierSchema = z.object({
+	opcaoId: z.string({ required_error: "ID da opcao nao informado.", invalid_type_error: "Tipo nao valido para ID da opcao." }),
+	// Snapshot para exibicao no inbox do operador (o preco e o nome lancado vem do catalogo).
+	nome: z.string({ invalid_type_error: "Tipo nao valido para nome da opcao." }).max(200).optional().nullable(),
+	quantidade: z
+		.number({ required_error: "Quantidade do adicional nao informada.", invalid_type_error: "Tipo nao valido para quantidade do adicional." })
+		.int({ message: "Quantidade do adicional deve ser inteira." })
+		.positive({ message: "Quantidade do adicional deve ser positiva." })
+		.max(99, { message: "Quantidade maxima por adicional excedida." }),
+});
+export type TTabOrderRequestItemModifier = z.infer<typeof TabOrderRequestItemModifierSchema>;
+
 export const TabOrderRequestItemSchema = z.object({
 	produtoId: z.string({ required_error: "ID do produto nao informado.", invalid_type_error: "Tipo nao valido para ID do produto." }),
 	produtoVarianteId: z.string({ invalid_type_error: "Tipo nao valido para ID da variante." }).optional().nullable(),
@@ -15,6 +29,14 @@ export const TabOrderRequestItemSchema = z.object({
 		.number({ required_error: "Quantidade nao informada.", invalid_type_error: "Tipo nao valido para quantidade." })
 		.positive({ message: "Quantidade deve ser positiva." })
 		.max(99, { message: "Quantidade maxima por item excedida." }),
+	observacoes: z
+		.string({ invalid_type_error: "Tipo nao valido para observacoes do item." })
+		.trim()
+		.max(200, { message: "Observacao do item deve ter no maximo 200 caracteres." })
+		.optional()
+		.nullable(),
+	// Default vazio: solicitacoes gravadas antes dos adicionais continuam legiveis.
+	modificadores: z.array(TabOrderRequestItemModifierSchema).max(30, { message: "Limite de adicionais por item excedido." }).default([]),
 });
 export type TTabOrderRequestItem = z.infer<typeof TabOrderRequestItemSchema>;
 

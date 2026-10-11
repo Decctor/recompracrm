@@ -1,6 +1,7 @@
 import { db } from "@/services/drizzle";
 import { productAddOnOptions, productAddOnReferences, productAddOns, products } from "@/services/drizzle/schema";
 import { buildSalePriceUpdate } from "@/lib/products/price-snapshot";
+import { withProductUpdateStamp } from "@/lib/products/update-stamp";
 import { eq, inArray } from "drizzle-orm";
 import { createCardapioWebClient, getCardapioWebCatalog } from "./index";
 import { extractAllCatalogData } from "./catalog-mappers";
@@ -42,7 +43,7 @@ export async function syncCardapioWebCatalog(organizationId: string, config: TCa
 			if (existingProduct) {
 				await tx
 					.update(products)
-					.set({
+					.set(withProductUpdateStamp({
 						ativo: product.ativo,
 						codigo: product.codigo,
 						nome: product.nome,
@@ -55,7 +56,7 @@ export async function syncCardapioWebCatalog(organizationId: string, config: TCa
 						tipo: product.tipo,
 						quantidade: product.quantidade,
 						dataUltimaSincronizacao: new Date(),
-					})
+					}))
 					.where(eq(products.id, existingProduct.id));
 				existingProductsMap.set(product.idExterno, existingProduct.id);
 				productsUpdated++;

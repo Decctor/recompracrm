@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { renderHandoffHeaderPng } from "@/lib/ai/agent/handoff-notification/render";
+import { renderHandoffHeaderPng } from "@/lib/chats/transfer-notification/render";
 import { createMetaWhatsappTemplate, listMetaWhatsappTemplates } from "@/lib/message-templates/channels/whatsapp/meta-client";
 import type { TMetaCreateTemplatePayload } from "@/lib/message-templates/channels/whatsapp/types";
 import { uploadTemplateMediaToMeta } from "@/lib/whatsapp/media-upload";
@@ -21,6 +21,7 @@ async function renderSampleHeader() {
 		clientName: "Lucas Fernandes",
 		clientPhone: "+55 34 99662-6855",
 		reason: "A política de pagamento não está documentada e precisa ser confirmada pela equipe.",
+		transferredBy: null,
 	});
 }
 

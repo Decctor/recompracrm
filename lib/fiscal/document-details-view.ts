@@ -15,7 +15,10 @@ export type TFiscalDocumentTaxTotalsView = {
 
 export type TFiscalDocumentPayloadItemView = {
 	numero: number;
+	// Como foi à SEFAZ — pode ser o "ITEM N" de quando a venda não guardou o nome do produto.
 	descricao: string;
+	// Código do item no payload: o id do produto na Spedy (`code`), o `cProd` no espelho do XML.
+	produtoId: string | null;
 	ncm: string | null;
 	cfop: string | null;
 	quantidade: number | null;
@@ -39,6 +42,7 @@ export type TFiscalDocumentSaleSummaryView = {
 	valorTotal: number | null;
 	statusVenda: string | null;
 	canal: string | null;
+	vendedorNome: string | null;
 	clienteNome: string | null;
 	clienteCpfCnpj: string | null;
 	itens: TFiscalDocumentSaleItemView[];
@@ -80,10 +84,23 @@ function extractCsosnFromImposto(imposto: unknown): string | null {
 	return null;
 }
 
-function resolveItemDescription(metadados: unknown, fallback: string) {
-	if (!metadados || typeof metadados !== "object") return fallback;
+// `nome` é a chave que PDV, loja, comandas e rascunhos gravam; as outras vêm de formatos antigos.
+function readItemName(metadados: unknown) {
+	if (!metadados || typeof metadados !== "object") return null;
 	const record = metadados as JsonRecord;
-	return readString(record.nomeProduto) ?? readString(record.descricao) ?? fallback;
+	return readString(record.nome) ?? readString(record.nomeProduto) ?? readString(record.descricao);
+}
+
+function resolveItemDescription(metadados: unknown, fallback: string) {
+	return readItemName(metadados) ?? fallback;
+}
+
+/**
+ * O "ITEM 1" que a emissão usa quando o item da venda não tem nome. Ele vai assim para a SEFAZ,
+ * então a tela mostra o nome do catálogo por cima e mantém o texto da nota visível.
+ */
+export function isPlaceholderItemDescription(descricao: string) {
+	return /^item\s+\d+$/i.test(descricao.trim());
 }
 
 export function parseFiscalDocumentProviderPayload(value: string | null | undefined) {
@@ -171,6 +188,7 @@ export function extractPayloadItems(payload: JsonRecord | null): TFiscalDocument
 			return {
 				numero: index + 1,
 				descricao: readString(record.description) ?? `Item ${index + 1}`,
+				produtoId: readCode(record.code),
 				ncm: readCode(record.ncm),
 				// A Spedy recebe CFOP e CSOSN como número.
 				cfop: readCode(record.cfop),
@@ -190,6 +208,7 @@ export function extractPayloadItems(payload: JsonRecord | null): TFiscalDocument
 		return {
 			numero: readNumber(record.nItem) ?? index + 1,
 			descricao: readString(prod.xProd) ?? `Item ${index + 1}`,
+			produtoId: readCode(prod.cProd),
 			ncm: readString(prod.NCM),
 			cfop: readString(prod.CFOP),
 			quantidade: readNumber(prod.qCom),
@@ -209,9 +228,12 @@ type SaleSnapshotInput = {
 		dataVenda: Date | null;
 		statusVenda: string | null;
 		canal: string | null;
+		vendedorNome?: string | null;
 		cliente?: { nome: string; cpfCnpj: string | null } | null;
 		itens?: Array<{
 			id: string;
+			produtoId: string;
+			produto?: { nome: string } | null;
 			quantidade: number;
 			valorVendaUnitario: number;
 			valorVendaTotalBruto: number;
@@ -233,7 +255,7 @@ export function buildFiscalDocumentSaleSummary(input: SaleSnapshotInput): TFisca
 	const itensFromDb =
 		venda?.itens?.map((item, index) => ({
 			id: item.id,
-			descricao: resolveItemDescription(item.metadados, `Item ${index + 1}`),
+			descricao: readItemName(item.metadados) ?? item.produto?.nome ?? `Item ${index + 1}`,
 			quantidade: item.quantidade,
 			valorUnitario: item.valorVendaUnitario,
 			valorTotal: item.valorVendaTotalBruto,
@@ -262,6 +284,7 @@ export function buildFiscalDocumentSaleSummary(input: SaleSnapshotInput): TFisca
 		valorTotal: venda?.valorTotal ?? readNumber(snapshotVenda?.valorTotal),
 		statusVenda: venda?.statusVenda ?? readString(snapshotVenda?.statusVenda),
 		canal: venda?.canal ?? readString(snapshotVenda?.canal),
+		vendedorNome: venda?.vendedorNome ?? readString(snapshotVenda?.vendedorNome),
 		clienteNome: clienteFromDb?.nome ?? readString(snapshotDestinatario?.nome),
 		clienteCpfCnpj: clienteFromDb?.cpfCnpj ?? readString(snapshotDestinatario?.cpfCnpj),
 		itens: itensFromDb.length > 0 ? itensFromDb : itensFromSnapshot,
@@ -274,4 +297,17 @@ export function formatJsonForDisplay(value: unknown) {
 	} catch {
 		return String(value);
 	}
+}
+
+/**
+ * Nome de cada produto da venda, para dar nome aos itens que foram à SEFAZ como "ITEM N". O nome
+ * gravado no item (o da hora da venda) ganha do catálogo, que pode ter mudado depois.
+ */
+export function buildSaleProductNames(venda: SaleSnapshotInput["venda"]): Map<string, string> {
+	const names = new Map<string, string>();
+	for (const item of venda?.itens ?? []) {
+		const name = readItemName(item.metadados) ?? readString(item.produto?.nome);
+		if (name && !names.has(item.produtoId)) names.set(item.produtoId, name);
+	}
+	return names;
 }

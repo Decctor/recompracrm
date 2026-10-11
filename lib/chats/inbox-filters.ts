@@ -1,7 +1,8 @@
 import type { TChatAssignmentStatus, TChatInboxPriorityFilter, TChatInboxQuickFilter, TChatInboxView } from "@/schemas/enums";
 import { chatAssignments, chatMessages, chats } from "@/services/drizzle/schema/chats";
 import { clients } from "@/services/drizzle/schema/clients";
-import { and, eq, gt, ilike, inArray, isNotNull, isNull, notInArray, or, type SQL } from "drizzle-orm";
+import { whatsappConnections } from "@/services/drizzle/schema/whatsapp-connections";
+import { and, eq, gt, ilike, inArray, isNotNull, isNull, notInArray, or, sql, type SQL } from "drizzle-orm";
 
 /**
  * Condições da inbox compartilhadas entre a lista (`GET /api/chats`) e as contagens dos atalhos
@@ -64,6 +65,22 @@ export function buildChatInboxFilterConditions(filters: TChatInboxFilters) {
 			? or(ilike(clients.nome, `%${searchTerm}%`), ilike(clients.telefone, `%${searchTerm}%`), ilike(chatMessages.conteudoTexto, `%${searchTerm}%`))
 			: undefined,
 	];
+}
+
+/**
+ * "Janela aberta" em SQL. Espelha `isWhatsappWindowOpen` (`lib/chats/whatsapp-window-status.ts`),
+ * a regra que a rota de envio e a UI ("Sessão ativa") aplicam: conexão `INTERNAL_GATEWAY` não tem
+ * janela de 24h e conta como aberta. O webhook grava `whatsappJanelaDataExpiracao = null` para
+ * esses chats, então comparar só a data deixava os chats de gateway fora do atalho.
+ *
+ * Subconsulta correlacionada em vez de `join`: a lista e as contagens não juntam
+ * `whatsapp_connections`, e este predicado precisa funcionar nas duas sem mudar a forma delas.
+ */
+export function buildWhatsappWindowOpenCondition(now: Date = new Date()) {
+	return or(
+		sql`exists (select 1 from ${whatsappConnections} where ${whatsappConnections.id} = ${chats.whatsappConexaoId} and ${whatsappConnections.tipoConexao} = 'INTERNAL_GATEWAY')`,
+		gt(chats.whatsappJanelaDataExpiracao, now),
+	);
 }
 
 export function buildChatInboxQuickFilterCondition(quickFilter: TChatInboxQuickFilter) {
