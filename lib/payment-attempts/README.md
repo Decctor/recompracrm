@@ -95,3 +95,23 @@ vale para o terminal no mesmo commit; o que falta para usá-la é o terminal env
 Decisões vigentes (2026-10-11): desconto acima do teto é aprovado remotamente por um gestor; o
 terminal escolhe um caixa já aberto no RecompraCRM, sem abrir/fechar/sangria; o terminal não emite
 nem imprime NFC-e (a emissão automática segue a política da organização, como no PDV web).
+
+### Cliente e benefícios no terminal
+
+- `GET /api/payment-terminal/clients?telefone=` identifica; `POST /api/payment-terminal/clients`
+  cadastra (scope `payment-terminal:clients:create`, nome + telefone + aceite de marketing,
+  `lib/clients/create-counter-client.ts`). Telefone já cadastrado é `CONFLICT`. O scope novo entra
+  no teto do cliente nativo: terminais ativados antes dele precisam ser ativados de novo para
+  cadastrar (identificar e vender continuam funcionando).
+- `POST /api/payment-terminal/clients/benefits` recebe `{clienteId, itens}` e devolve, sobre o
+  carrinho precificado pelo servidor, o cashback (saldo, limite do programa, se pode virar
+  desconto e por quê), os cupons avaliados (`lib/coupons/client-cart-coupons.ts`, o mesmo do PDV
+  web) e as recompensas. Superfície `POS`: desligar resgates no PDV desliga aqui também.
+- A venda recebe `benefits: {cupomId?, cashbackResgate?, recompensas?}`. O servidor decide de novo
+  (`terminal-benefits-policy.ts`): o desconto do cupom é o do motor, o cashback respeita
+  `getCashbackRedemptionMaximum` sobre o que sobra depois do cupom, recompensa não se combina com
+  cupom nem cashback. Nada é ajustado em silêncio: um valor que deixou de valer é recusado com a
+  mensagem para o operador. Os pagamentos cobrem o total depois dos benefícios; venda quitada
+  pelos benefícios (total zero) vai sem pagamento, e venda só de recompensas vai sem itens.
+- Cupom de validação MANUAL aparece na lista, sem poder ser escolhido: a validação é do operador
+  e o desconto conta no teto — no terminal, sem teto, viraria aprovação a cada venda.

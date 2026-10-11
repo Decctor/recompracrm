@@ -9,6 +9,8 @@ export * from "./events";
 export * from "./evidence";
 export * from "./report-evidence";
 export * from "./state-machine";
+export * from "./terminal-benefits";
+export * from "./terminal-benefits-policy";
 export * from "./terminal-cart-item";
 export * from "./terminal-payments";
 export * from "./terminal-sale";

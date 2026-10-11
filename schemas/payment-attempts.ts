@@ -69,3 +69,45 @@ export const PaymentAttemptEvidenceSchema = z.object({
 	mensagem: evidenceText("a mensagem", 500),
 });
 export type TPaymentAttemptEvidence = z.infer<typeof PaymentAttemptEvidenceSchema>;
+
+// Item da venda nascida no terminal (Fluxo A): referência, quantidade, adicionais escolhidos e
+// observação. Preço e regras de grupo são do servidor. Compartilhado pela criação da venda e pela
+// leitura dos benefícios do cliente, que avalia cupons sobre o mesmo carrinho precificado.
+export const TerminalSaleItemInputSchema = z.object({
+	produtoId: z.string({ required_error: "Produto não informado.", invalid_type_error: "Tipo inválido para o produto." }),
+	produtoVarianteId: z.string({ invalid_type_error: "Tipo inválido para a variação." }).optional().nullable(),
+	quantidade: z.number({ required_error: "Quantidade não informada.", invalid_type_error: "Tipo inválido para a quantidade." }).positive("A quantidade deve ser positiva."),
+	modificadores: z
+		.array(
+			z.object({
+				opcaoId: z.string({ required_error: "Opção do adicional não informada.", invalid_type_error: "Tipo inválido para a opção do adicional." }),
+				quantidade: z
+					.number({ required_error: "Quantidade do adicional não informada.", invalid_type_error: "Tipo inválido para a quantidade do adicional." })
+					.int()
+					.positive("A quantidade do adicional deve ser positiva."),
+			}),
+		)
+		.max(50, "O item excede o número máximo de adicionais.")
+		.optional()
+		.nullable(),
+	observacoes: z.string({ invalid_type_error: "Tipo inválido para a observação do item." }).max(500).optional().nullable(),
+});
+
+export const TerminalSaleItemsInputSchema = z.array(TerminalSaleItemInputSchema).max(200, "A venda excede o número máximo de itens.");
+
+// Benefícios escolhidos no terminal: o cupom vai só pelo id (o servidor avalia e define o
+// desconto), o cashback pelo valor que a tela mostrou, as recompensas por id e quantidade.
+export const TerminalSaleBenefitsInputSchema = z.object({
+	cupomId: z.string({ invalid_type_error: "Tipo inválido para o cupom." }).optional().nullable(),
+	cashbackResgate: z.number({ invalid_type_error: "Tipo inválido para o resgate de cashback." }).min(0, "O resgate de cashback não pode ser negativo.").optional().nullable(),
+	recompensas: z
+		.array(
+			z.object({
+				recompensaId: z.string({ required_error: "Recompensa não informada.", invalid_type_error: "Tipo inválido para a recompensa." }),
+				quantidade: z.number({ invalid_type_error: "Tipo inválido para a quantidade da recompensa." }).int().positive("A quantidade da recompensa deve ser positiva.").optional().nullable(),
+			}),
+		)
+		.max(20, "A venda excede o número máximo de recompensas.")
+		.optional()
+		.nullable(),
+});

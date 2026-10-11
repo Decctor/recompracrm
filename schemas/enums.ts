@@ -861,6 +861,9 @@ export const AccessScopeEnum = z.enum([
 	// um terminal "só cobrador" não precise enxergar catálogo nem clientes.
 	"payment-terminal:catalog:read",
 	"payment-terminal:clients:read",
+	// Cadastro do cliente no balcão (nome, telefone, consentimento). Separado da leitura: um
+	// terminal pode identificar sem poder cadastrar.
+	"payment-terminal:clients:create",
 	"payment-terminal:sales:create",
 	// Agentes de IA (MCP). Leitura por domínio, no mesmo grão em que o lojista pensa no painel:
 	// quem concede "resultados" está liberando faturamento e metas, não a base de clientes.

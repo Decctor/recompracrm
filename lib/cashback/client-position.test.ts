@@ -4,6 +4,7 @@ import {
 	describeCashbackDiscount,
 	describeCashbackPrizeGap,
 	estimatePurchaseToAccumulate,
+	getCashbackRedemptionMaximum,
 	listCashbackRedemptionSurfaceLabels,
 } from "./client-position";
 
@@ -118,4 +119,24 @@ test("redemption surfaces are listed in words, only the enabled ones", () => {
 		}),
 		[],
 	);
+});
+
+test("redemption maximum: the smallest of balance, program limit and purchase value", () => {
+	const fixed = { modalidadeDescontosPermitida: true, resgateLimiteTipo: "FIXO" as const, resgateLimiteValor: 15 };
+	assert.equal(getCashbackRedemptionMaximum({ program: fixed, availableBalance: 40, valueBeforeCashback: 100 }), 15);
+	assert.equal(getCashbackRedemptionMaximum({ program: fixed, availableBalance: 8.5, valueBeforeCashback: 100 }), 8.5);
+	assert.equal(getCashbackRedemptionMaximum({ program: fixed, availableBalance: 40, valueBeforeCashback: 12 }), 12);
+	const open = { modalidadeDescontosPermitida: true, resgateLimiteTipo: null, resgateLimiteValor: null };
+	assert.equal(getCashbackRedemptionMaximum({ program: open, availableBalance: 40, valueBeforeCashback: 100 }), 40);
+});
+
+test("redemption maximum: percentage limit floors to the cent and never passes the server ceiling", () => {
+	const percent = { modalidadeDescontosPermitida: true, resgateLimiteTipo: "PERCENTUAL" as const, resgateLimiteValor: 10 };
+	assert.equal(getCashbackRedemptionMaximum({ program: percent, availableBalance: 40, valueBeforeCashback: 33.33 }), 3.33);
+	assert.equal(getCashbackRedemptionMaximum({ program: percent, availableBalance: 40, valueBeforeCashback: 34.99 }), 3.49);
+});
+
+test("redemption maximum: zero when the program does not redeem as discount", () => {
+	const rewardsOnly = { modalidadeDescontosPermitida: false, resgateLimiteTipo: null, resgateLimiteValor: null };
+	assert.equal(getCashbackRedemptionMaximum({ program: rewardsOnly, availableBalance: 40, valueBeforeCashback: 100 }), 0);
 });

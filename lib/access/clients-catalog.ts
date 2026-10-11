@@ -30,6 +30,7 @@ export const PAYMENT_TERMINAL_ACCESS_SCOPES: TAccessScopeEnum[] = [
 	"payment-terminal:attempts:complete",
 	"payment-terminal:catalog:read",
 	"payment-terminal:clients:read",
+	"payment-terminal:clients:create",
 	"payment-terminal:sales:create",
 ];
 

@@ -107,7 +107,12 @@ export const ACCESS_SCOPE_CATALOG: Record<TAccessScopeEnum, TAccessScopeDescript
 	},
 	"payment-terminal:clients:read": {
 		label: "Identificar clientes pelo telefone",
-		description: "Buscar o cliente pelo telefone para vincular a venda feita na maquininha.",
+		description: "Buscar o cliente pelo telefone e ver o saldo de cashback, os cupons e as recompensas disponíveis para a venda.",
+		group: "TERMINAL_PAGAMENTO",
+	},
+	"payment-terminal:clients:create": {
+		label: "Cadastrar clientes",
+		description: "Cadastrar o cliente no balcão (nome, telefone e consentimento de marketing) para vincular a venda e o cashback.",
 		group: "TERMINAL_PAGAMENTO",
 	},
 	"payment-terminal:sales:create": {

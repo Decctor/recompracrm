@@ -168,6 +168,35 @@ export function describeCashbackDiscount({
 	};
 }
 
+export type TCashbackRedemptionMaximumProgram = Pick<TCashbackPositionProgram, "modalidadeDescontosPermitida" | "resgateLimiteTipo" | "resgateLimiteValor">;
+
+/**
+ * Quanto do saldo vira desconto NESTA compra: o menor entre saldo, limite do programa (fixo, ou
+ * percentual sobre o valor antes do cashback) e o próprio valor. Mesma conta do PDV web e da
+ * confirmação da venda; arredonda para baixo nos centavos para nunca passar do teto que o
+ * servidor confere.
+ */
+export function getCashbackRedemptionMaximum({
+	program,
+	availableBalance,
+	valueBeforeCashback,
+}: {
+	program: TCashbackRedemptionMaximumProgram;
+	availableBalance: number;
+	valueBeforeCashback: number;
+}): number {
+	if (!program.modalidadeDescontosPermitida) return 0;
+	const limitValue = program.resgateLimiteValor;
+	const ruleMaximum =
+		!program.resgateLimiteTipo || limitValue === null || limitValue === undefined
+			? Number.POSITIVE_INFINITY
+			: program.resgateLimiteTipo === "FIXO"
+				? Math.max(0, limitValue)
+				: Math.max(0, (valueBeforeCashback * limitValue) / 100);
+	const maximum = Math.max(0, Math.min(availableBalance, ruleMaximum, valueBeforeCashback));
+	return Math.floor(maximum * 100 + 1e-9) / 100;
+}
+
 const SURFACE_LABELS: {
 	flag: keyof Pick<TCashbackPositionProgram, "resgatePermitirViaPos" | "resgatePermitirViaPontoIntegracao" | "resgatePermitirViaLojaDigital">;
 	label: string;
