@@ -82,3 +82,16 @@ P10 (emissão fiscal automática para vendas com cobrança em terminal: decisão
 (testes com Postgres: efetivação exatamente uma vez sob concorrência, rollback preservando
 aprovação, corrida cancelamento × outcome) e o contrato de reconciliação
 (`POST /payment-attempts/{id}/reconciliation-outcome`) que tornaria o item 3 do runbook uma ação.
+
+## Venda nascida no terminal (Fluxo A)
+
+`POST /api/payment-terminal/sales` não tem pipeline próprio: monta o carrinho pelo catálogo do canal
+PDV (`terminal-cart-item.ts`, com `resolveCatalogOrderItem` aplicando preço, regras de grupo e preço
+das opções), resolve os pagamentos pelo recorte do terminal (`terminal-payments.ts`) e chama as três
+etapas de `lib/sales/create-and-confirm-sale.ts` dentro da transação idempotente do dispositivo, com
+a maquininha como ator `DEVICE`. Qualquer regra nova do PDV web (cupom, cashback, desconto, entrega)
+vale para o terminal no mesmo commit; o que falta para usá-la é o terminal enviar o campo.
+
+Decisões vigentes (2026-10-11): desconto acima do teto é aprovado remotamente por um gestor; o
+terminal escolhe um caixa já aberto no RecompraCRM, sem abrir/fechar/sangria; o terminal não emite
+nem imprime NFC-e (a emissão automática segue a política da organização, como no PDV web).

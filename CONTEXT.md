@@ -116,3 +116,7 @@ A plataforma só cancela a tentativa em `CRIADA`.
 Estado em que a adquirente pode ter recebido ou aprovado a operação, mas o RecompraCRM não possui
 evidência conclusiva (callback perdido, valor divergente). Bloqueia nova cobrança automática e
 exige recuperação no terminal ou conciliação.
+
+### Ator da venda (`saleActor`)
+
+Quem cria e confirma uma venda de balcão: o operador logado no PDV web (`USER`) ou a maquininha, que vende com a credencial do dispositivo e sem sessão humana (`DEVICE`). Os dois passam pelo mesmo pipeline (`lib/sales/create-and-confirm-sale.ts`): preço pelo catálogo do canal PDV, regras de grupo dos adicionais, cupom, cashback, recompensas, caixa, troco e efetivação. O ator só decide autoria, o teto de desconto quando o vendedor não tem membership (o dispositivo não tem teto próprio: qualquer desconto exige aprovação remota de um gestor) e o override fiscal (o dispositivo não altera, herda o padrão da organização).

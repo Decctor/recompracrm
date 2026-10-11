@@ -1,6 +1,6 @@
 import { isActionApprovalExpired } from "@/lib/action-approvals";
 import type { TAuthUserSession } from "@/lib/authentication/types";
-import { evaluateDiscount, resolveDiscountAuthority, type TDiscountAuthority } from "@/lib/permissions/discounts";
+import { DEVICE_DISCOUNT_AUTHORITY, evaluateDiscount, resolveDiscountAuthority, type TDiscountAuthority } from "@/lib/permissions/discounts";
 import { SALE_PRICING_CENT_TOLERANCE, saleValuesDiverge } from "@/lib/sales/sale-pricing-validation";
 import { type DBTransaction, db } from "@/services/drizzle";
 import { actionApprovalRequests } from "@/services/drizzle/schema";
@@ -35,14 +35,17 @@ export function computeSaleAggregatedDiscount({ itens, descontosGerais, cupomRes
 	return { valorBase, descontoTotal: Math.max(0, descontosGerais) + descontoItens + cupomManual };
 }
 
-/** Resolve a autoridade de desconto da identidade avaliada (vendedor da venda ou sessão). */
+/**
+ * Resolve a autoridade de desconto da identidade avaliada: o vendedor da venda (via membership) e,
+ * na falta dele, a sessão humana. `session` nulo é o ator dispositivo (DEVICE_DISCOUNT_AUTHORITY).
+ */
 export async function resolveSaleDiscountAuthority({
 	orgId,
 	session,
 	vendedorId,
 }: {
 	orgId: string;
-	session: TAuthUserSession;
+	session: TAuthUserSession | null;
 	vendedorId: string | null | undefined;
 }): Promise<TDiscountAuthority> {
 	if (vendedorId) {
@@ -52,6 +55,7 @@ export async function resolveSaleDiscountAuthority({
 		});
 		if (membership) return resolveDiscountAuthority(membership.permissoes);
 	}
+	if (!session) return DEVICE_DISCOUNT_AUTHORITY;
 	return resolveDiscountAuthority(session.membership!.permissoes);
 }
 
@@ -70,7 +74,7 @@ export async function authorizeSaleDiscount({
 	aprovacaoId,
 }: {
 	orgId: string;
-	session: TAuthUserSession;
+	session: TAuthUserSession | null;
 	vendedorId: string | null | undefined;
 	valorBase: number;
 	descontoTotal: number;

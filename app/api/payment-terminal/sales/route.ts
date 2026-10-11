@@ -8,7 +8,8 @@ import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 // Fluxo A: venda nascida no terminal (scope payment-terminal:sales:create, Idempotency-Key
-// obrigatório). O backend precifica pelo catálogo e aplica as regras de pagamento do checkout
+// obrigatório). Mesmo pipeline do PDV web (lib/sales/create-and-confirm-sale.ts) com a maquininha
+// como ator dispositivo. O backend precifica pelo catálogo, confere as regras de adicionais e aplica as regras de pagamento do checkout
 // (lib/payment-attempts/terminal-payments.ts). Com cartão, devolve a cobrança já atribuída a este
 // dispositivo e o app segue para a execução; com dinheiro, Pix ou fiado, a venda já sai registrada
 // e a resposta traz o troco.
@@ -24,6 +25,21 @@ const CreateTerminalSaleInputSchema = z.object({
 					produtoId: z.string({ required_error: "Produto não informado.", invalid_type_error: "Tipo inválido para o produto." }),
 					produtoVarianteId: z.string({ invalid_type_error: "Tipo inválido para a variação." }).optional().nullable(),
 					quantidade: z.number({ required_error: "Quantidade não informada.", invalid_type_error: "Tipo inválido para a quantidade." }).positive("A quantidade deve ser positiva."),
+					// Adicionais escolhidos: só a opção e a quantidade. Preço e regras do grupo são do servidor.
+					modificadores: z
+						.array(
+							z.object({
+								opcaoId: z.string({ required_error: "Opção do adicional não informada.", invalid_type_error: "Tipo inválido para a opção do adicional." }),
+								quantidade: z
+									.number({ required_error: "Quantidade do adicional não informada.", invalid_type_error: "Tipo inválido para a quantidade do adicional." })
+									.int()
+									.positive("A quantidade do adicional deve ser positiva."),
+							}),
+						)
+						.max(50, "O item excede o número máximo de adicionais.")
+						.optional()
+						.nullable(),
+					observacoes: z.string({ invalid_type_error: "Tipo inválido para a observação do item." }).max(500).optional().nullable(),
 				}),
 			)
 			.min(1, "Adicione pelo menos um item à venda.")
