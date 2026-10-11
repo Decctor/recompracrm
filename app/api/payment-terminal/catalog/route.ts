@@ -64,7 +64,7 @@ async function getTerminalCatalog({ input, organizationId }: { input: TGetTermin
 			with: {
 				variantes: {
 					where: (fields, { eq: equals }) => equals(fields.ativo, true),
-					columns: { id: true, nome: true, codigo: true, precoVenda: true },
+					columns: { id: true, nome: true, codigo: true, precoVenda: true, imagemCapaUrl: true },
 					orderBy: (fields, { asc: ascending }) => ascending(fields.precoVenda),
 					with: { addOnsReferencias: { columns: { id: true } } },
 				},
@@ -89,6 +89,8 @@ async function getTerminalCatalog({ input, organizationId }: { input: TGetTermin
 						id: variant.id,
 						nome: variant.nome,
 						codigo: variant.codigo,
+						// Foto própria da variação (a cor da camiseta); o app cai na foto do produto quando é nula.
+						imagemUrl: variant.imagemCapaUrl,
 						precoVenda: channelNodePrice(channelState, { produtoId: product.id, produtoVarianteId: variant.id, precoVenda: variant.precoVenda }),
 						possuiAdicionais: variant.addOnsReferencias.length > 0,
 					})),
