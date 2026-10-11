@@ -47,6 +47,9 @@ além de avisá-lo de que um atendente vai continuar.`,
 			};
 		}
 
+		// Antes de gravar: o vigia da run não pode ler a posse que esta transferência acabou de
+		// tirar da IA como um humano assumindo (ver `watchForStaleRun`).
+		context.effects.handoffStarted = true;
 		const { atendimentoId, usuarioDestinoNome } = await transferChatToHuman({
 			db: context.db,
 			organizacaoId: context.organizacaoId,

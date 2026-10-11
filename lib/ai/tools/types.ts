@@ -27,8 +27,11 @@ export type TAgentToolContext = {
 	 * único canal de volta das ferramentas para quem entrega a resposta. Hoje carrega o handoff —
 	 * o atendimento que a própria run transferiu não pode barrar a entrega do aviso ao cliente,
 	 * e uma segunda chamada de transferência na mesma run não pode sortear outro atendente.
+	 *
+	 * `handoffStarted` sobe antes da transferência gravar: entre o commit e o fim da notificação
+	 * ao atendente (segundos), o atendimento já é do humano e `handoffAttendanceId` ainda é nulo.
 	 */
-	effects: { handoffAttendanceId: string | null };
+	effects: { handoffAttendanceId: string | null; handoffStarted: boolean };
 	capacidades: TAiAgentCapabilities;
 	toolCall?: { id: string };
 	operation?: { id: string; tipo: TAiAgentOperationTypeEnum };

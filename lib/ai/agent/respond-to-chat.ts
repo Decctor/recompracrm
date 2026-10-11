@@ -21,16 +21,31 @@ const STALE_RUN_CHECK_INTERVAL_MS = 3000;
  * era descartada depois de pronta, com todo o custo já gasto.
  *
  * Um tique nunca sobrepõe o anterior: se o banco demorar, o próximo espera.
+ *
+ * `isSuspended` desliga o vigia de vez quando a própria run começa a transferir para um humano.
+ * A transferência grava o atendimento do humano e só depois de notificá-lo devolve o id; nesse
+ * intervalo o tique via "o atendimento deixou de ser da IA" e abortava a run que transferiu — o
+ * cliente ficava sem o aviso (10 de 21 handoffs na Famoso Pão, 09–11/10/2026). Daí em diante só
+ * resta escrever o aviso, e a checagem antes da entrega continua valendo.
  */
-function watchForStaleRun({ check, onStale }: { check: () => Promise<TAiTriggerDecision>; onStale: (reason: string) => void }): () => void {
+function watchForStaleRun({
+	check,
+	onStale,
+	isSuspended,
+}: {
+	check: () => Promise<TAiTriggerDecision>;
+	onStale: (reason: string) => void;
+	isSuspended: () => boolean;
+}): () => void {
 	let stopped = false;
 	let inFlight = false;
 	const timer = setInterval(async () => {
-		if (stopped || inFlight) return;
+		if (stopped || inFlight || isSuspended()) return;
 		inFlight = true;
 		try {
 			const decision = await check();
-			if (!decision.shouldRespond && !stopped) onStale(decision.reason);
+			// Reavaliado depois da consulta: a transferência pode ter começado enquanto ela rodava.
+			if (!decision.shouldRespond && !stopped && !isSuspended()) onStale(decision.reason);
 		} catch (error) {
 			console.error("[AI_AGENT] Falha na checagem de run obsoleta:", error);
 		} finally {
@@ -134,7 +149,13 @@ export async function respondToChatWithAgent({
 			ownHandoffAttendanceId: prepared.toolContext.effects.handoffAttendanceId,
 		});
 	const stopWatching =
-		gatilho === "PLAYGROUND" ? () => {} : watchForStaleRun({ check: checkStillValid, onStale: (reason) => abortController.abort(reason) });
+		gatilho === "PLAYGROUND"
+			? () => {}
+			: watchForStaleRun({
+					check: checkStillValid,
+					onStale: (reason) => abortController.abort(reason),
+					isSuspended: () => prepared.toolContext.effects.handoffStarted,
+				});
 
 	let output: Awaited<ReturnType<typeof executeAgentTurn>>;
 	try {

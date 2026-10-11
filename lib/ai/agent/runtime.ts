@@ -248,7 +248,7 @@ export async function prepareAgentExecution({
 			run: { id: run.id, gatilho, mensagemGatilhoId: mensagemGatilhoId ?? null },
 			chat: { id: chatId, clienteId },
 			turn: { mensagensRecentesCliente: recentClientMessages },
-			effects: { handoffAttendanceId: null },
+			effects: { handoffAttendanceId: null, handoffStarted: false },
 			capacidades,
 		},
 		systemPrompt: buildAgentSystemPrompt({
