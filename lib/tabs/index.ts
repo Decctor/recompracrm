@@ -16,7 +16,8 @@ export {
 	type TLaunchTabOrderResult,
 	type TTabOrderItemInput,
 } from "./launch-tab-order";
-export { openTab, type TOpenTabInput, type TOpenTabResult } from "./open-tab";
+export { linkTabClient, type TLinkTabClientInput, type TLinkTabClientResult } from "./link-tab-client";
+export { openTab,type TOpenTabInput, type TOpenTabResult } from "./open-tab";
 export {
 	processTabOrderStatusChange,
 	type TProcessTabOrderStatusChangeInput,

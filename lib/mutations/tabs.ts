@@ -1,5 +1,6 @@
 import type { TCancelTabOutput, TCancelTabRouteInput } from "@/app/api/tabs/cancel/route";
 import type { TDecideTabOrderRequestInput, TDecideTabOrderRequestOutput } from "@/app/api/tabs/order-requests/route";
+import type { TUpdateTabClientInput, TUpdateTabClientOutput } from "@/app/api/tabs/client/route";
 import type { TCloseTabOutput, TCloseTabRouteInput } from "@/app/api/tabs/close/route";
 import type { TCreateTabOrderInput, TCreateTabOrderOutput } from "@/app/api/tabs/orders/route";
 import type { TUpdateTabOrderStatusInput, TUpdateTabOrderStatusOutput } from "@/app/api/tabs/orders/status/route";
@@ -63,6 +64,11 @@ export async function cancelTabOrOrder(input: TCancelTabRouteInput) {
 
 export async function transferTab(input: TTransferTabRouteInput) {
 	const { data } = await axios.post<TTransferTabOutput>("/api/tabs/transfer", input);
+	return data;
+}
+
+export async function updateTabClient(input: TUpdateTabClientInput) {
+	const { data } = await axios.post<TUpdateTabClientOutput>("/api/tabs/client", input);
 	return data;
 }
 
