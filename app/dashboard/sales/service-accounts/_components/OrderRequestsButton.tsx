@@ -3,6 +3,9 @@
 import type { TTabOrderRequestListItem } from "@/app/api/tabs/order-requests/route";
 import SelectInput from "@/components/Inputs/SelectInput";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { useMediaQuery } from "@/lib/hooks/use-media-query";
 import { getErrorMessage } from "@/lib/errors";
 import { decideTabOrderRequest } from "@/lib/mutations/tabs";
 import { useServiceSettings, useTabOrderRequests, useTabs } from "@/lib/queries/tabs";
@@ -269,10 +272,17 @@ function DestinationChip({ tone, label, detail }: { tone: "match" | "new"; label
 	);
 }
 
-export default function OrderRequestsSection() {
+/**
+ * Inbox do QR como acao da toolbar: o contador fica a vista e os cards abrem
+ * por cima do board (popover no desktop, sheet no celular) em vez de empurrar
+ * o board para baixo. Sem solicitacoes, o botao nao existe.
+ */
+export default function OrderRequestsButton() {
 	const queryClient = useQueryClient();
 	const { data: requests, queryKey } = useTabOrderRequests();
 	const now = useTickingNow();
+	const isDesktop = useMediaQuery("(min-width: 768px)");
+	const [open, setOpen] = useState(false);
 
 	if (!requests || requests.length === 0) return null;
 
@@ -282,20 +292,42 @@ export default function OrderRequestsSection() {
 		queryClient.invalidateQueries({ queryKey: ["preparation-tickets"] });
 	}
 
-	return (
+	const trigger = (
+		<Button size="sm" variant="secondary" className="gap-2 rounded-full bg-primary/10 font-bold text-primary hover:bg-primary/15">
+			<Inbox className="size-4" />
+			{requests.length} {requests.length === 1 ? "solicitação" : "solicitações"}
+		</Button>
+	);
+
+	const list = (
 		<div className="flex flex-col gap-2">
-			<h2 className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-[0.08em] text-muted-foreground">
-				<Inbox className="size-3.5" />
-				Solicitações de pedido
-				<span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-black tabular-nums leading-none text-primary-foreground">
-					{requests.length}
-				</span>
-			</h2>
-			<div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-				{requests.map((request) => (
-					<RequestCard key={request.id} request={request} now={now} onDecided={refresh} />
-				))}
-			</div>
+			{requests.map((request) => (
+				<RequestCard key={request.id} request={request} now={now} onDecided={refresh} />
+			))}
 		</div>
+	);
+
+	if (isDesktop) {
+		return (
+			<Popover open={open} onOpenChange={setOpen}>
+				<PopoverTrigger render={trigger} />
+				<PopoverContent align="end" className="flex max-h-[min(70dvh,640px)] w-[380px] flex-col gap-2 overflow-y-auto rounded-2xl p-3">
+					<span className="px-1 text-[11px] font-extrabold uppercase tracking-[0.08em] text-muted-foreground">Solicitações de pedido</span>
+					{list}
+				</PopoverContent>
+			</Popover>
+		);
+	}
+
+	return (
+		<Sheet open={open} onOpenChange={setOpen}>
+			<SheetTrigger render={trigger} />
+			<SheetContent side="bottom" className="max-h-[85dvh] overflow-y-auto rounded-t-3xl">
+				<SheetHeader>
+					<SheetTitle>Solicitações de pedido</SheetTitle>
+				</SheetHeader>
+				<div className="px-4 pb-4">{list}</div>
+			</SheetContent>
+		</Sheet>
 	);
 }

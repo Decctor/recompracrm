@@ -18,7 +18,6 @@ export const appRoutes = {
 		checkout: (saleId: string) => `/dashboard/sales/checkout/${saleId}`,
 		cashSessions: () => "/dashboard/sales/cash-sessions",
 		serviceAccounts: () => "/dashboard/sales/service-accounts",
-		serviceAccount: (accountId: string) => `/dashboard/sales/service-accounts/${accountId}`,
 		pointOfInteraction: () => "/dashboard/sales/point-of-interaction",
 	},
 	operations: {

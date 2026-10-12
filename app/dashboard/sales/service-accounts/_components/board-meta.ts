@@ -84,10 +84,20 @@ export function worstUrgency(rounds: TBoardRound[]): TRoundUrgency | null {
 	return rounds.reduce<TRoundUrgency>((worst, round) => (URGENCY_WEIGHT[round.urgencia] > URGENCY_WEIGHT[worst] ? round.urgencia : worst), "no-prazo");
 }
 
-export const URGENCY_META: Record<TRoundUrgency, { dot: string; text: string; surface: string }> = {
-	"no-prazo": { dot: "bg-muted-foreground/40", text: "text-muted-foreground", surface: "bg-secondary/60 text-muted-foreground" },
-	atencao: { dot: "bg-amber-500", text: "text-amber-600 dark:text-amber-400", surface: "bg-amber-500/10 text-amber-700 dark:text-amber-400" },
-	atrasado: { dot: "bg-destructive", text: "text-destructive", surface: "bg-destructive/10 text-destructive" },
+export const URGENCY_META: Record<TRoundUrgency, { dot: string; text: string; surface: string; border: string }> = {
+	"no-prazo": {
+		dot: "bg-muted-foreground/40",
+		text: "text-muted-foreground",
+		surface: "bg-secondary/60 text-muted-foreground",
+		border: "border-border",
+	},
+	atencao: {
+		dot: "bg-warning",
+		text: "text-warning-surface-foreground",
+		surface: "bg-warning-surface text-warning-surface-foreground",
+		border: "border-warning/40",
+	},
+	atrasado: { dot: "bg-destructive", text: "text-destructive", surface: "bg-destructive/10 text-destructive", border: "border-destructive/35" },
 };
 
 export const ROUND_STATUS_LABEL: Record<string, string> = {
@@ -97,6 +107,19 @@ export const ROUND_STATUS_LABEL: Record<string, string> = {
 	EM_ENTREGA: "em entrega",
 	PARCIALMENTE_ENTREGUE: "entrega parcial",
 };
+
+/** Abreviacao para o card do board: "Pedido 2 em preparo · 24min" */
+const ROUND_STATUS_SHORT: Record<string, string> = {
+	NAO_INICIADO: "na fila",
+	EM_PREPARO: "em preparo",
+	PRONTO: "pronto",
+	EM_ENTREGA: "em entrega",
+	PARCIALMENTE_ENTREGUE: "parcial",
+};
+
+export function describeRoundShort(round: TBoardRound) {
+	return `Pedido ${round.numero} ${ROUND_STATUS_SHORT[round.status] ?? round.status.toLowerCase()} · ${round.minutos}min`;
+}
 
 /** "Pedido 2 · em preparo há 24min" */
 export function describeRound(round: TBoardRound) {
@@ -126,4 +149,30 @@ export function useTickingNow(intervalMs = 15_000) {
 
 export function tabLabel(tab: Pick<TTabListItem, "codigo" | "servicePoint">) {
 	return tab.servicePoint?.rotulo ?? (tab.codigo ? `Comanda ${tab.codigo}` : "Conta avulsa");
+}
+
+/**
+ * Leitura derivada de uma conta para o board: rodadas abertas (mais critica
+ * primeiro) e a pior urgencia. Calculada uma vez por tick e compartilhada entre
+ * filtros, ordenacao, cards e navegacao do painel.
+ */
+export type TBoardTab = TTabListItem & {
+	label: string;
+	rounds: TBoardRound[];
+	critical: TBoardRound | null;
+	urgencia: TRoundUrgency | null;
+};
+
+export function toBoardTab(tab: TTabListItem, now: number): TBoardTab {
+	const rounds = getOpenRounds(tab, now);
+	return { ...tab, label: tabLabel(tab), rounds, critical: rounds[0] ?? null, urgencia: worstUrgency(rounds) };
+}
+
+/** Atrasadas primeiro, depois a rodada mais antiga, depois o rotulo — a ordem que o salao precisa ler. */
+export function compareBoardTabs(a: TBoardTab, b: TBoardTab) {
+	return (
+		urgencyRank(b.urgencia) - urgencyRank(a.urgencia) ||
+		(b.critical?.minutos ?? 0) - (a.critical?.minutos ?? 0) ||
+		a.label.localeCompare(b.label, "pt-BR", { numeric: true })
+	);
 }
