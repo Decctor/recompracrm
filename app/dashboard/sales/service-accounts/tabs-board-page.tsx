@@ -2,6 +2,9 @@
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
 import { ControlServicePoint } from "@/components/Modals/Internal/ServicePoints/ControlServicePoint";
 import { NewServicePoint } from "@/components/Modals/Internal/ServicePoints/NewServicePoint";
+import { ControlServiceCard } from "@/components/Modals/ServiceCards/ControlServiceCard";
+import { NewServiceCards } from "@/components/Modals/ServiceCards/NewServiceCards";
+import { ExportServiceCards } from "@/components/Modals/ServiceCards/ExportServiceCards";
 import { NewTab } from "@/components/Modals/Internal/Tabs/NewTab";
 import { ServiceSettings } from "@/components/Modals/Internal/Tabs/ServiceSettings";
 import { ActionToolbar } from "@/components/ui/action-toolbar";
@@ -10,12 +13,18 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger, tabsPageToolbarActionsClassName, tabsPageToolbarClassName } from "@/components/ui/tabs";
 import { getErrorMessage } from "@/lib/errors";
 import { formatToMoney } from "@/lib/formatting";
-import { useServicePoints, useServiceSettings, useTabs } from "@/lib/queries/tabs";
+import { useBarcodeScanner } from "@/lib/hooks/use-barcode-scanner";
+import { fetchServiceCardLookup, useServiceCards, useServicePoints, useServiceSettings, useTabs } from "@/lib/queries/tabs";
+import { extractServiceCardToken, normalizeServiceCardCode, SERVICE_CARD_SCAN_MAX_LENGTH } from "@/lib/tabs/service-card-codes";
 import { cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
 	AlarmClock,
+	FileDown,
 	Hourglass,
+	IdCard,
+	Info,
 	Layers,
 	LayoutGrid,
 	type LucideIcon,
@@ -29,7 +38,7 @@ import {
 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FreePointTile, OccupiedTile, TabCard, type TServicePoint } from "./_components/BoardCards";
+import { FreeCardTile, FreePointTile, OccupiedTile, TabCard, type TServiceCard, type TServicePoint } from "./_components/BoardCards";
 import OrderRequestsButton from "./_components/OrderRequestsButton";
 import { AccountPanel, type TAccountPanelTab, type TTransferTarget } from "./_components/account-panel/AccountPanel";
 import { type TBoardTab, compareBoardTabs, toBoardTab, useTickingNow } from "./_components/board-meta";
@@ -46,15 +55,26 @@ import { type TBoardTab, compareBoardTabs, toBoardTab, useTickingNow } from "./_
 const SELECTED_PARAM = "conta";
 
 type TActiveModal =
-	| { type: "nova-conta"; servicePointId?: string | null }
+	| { type: "nova-conta"; servicePointId?: string | null; codigo?: string | null }
 	| { type: "novo-ponto" }
 	| { type: "editar-ponto"; pointId: string }
 	| { type: "configuracoes" }
+	| { type: "exportar-comandas" }
+	| { type: "nova-comanda" }
+	| { type: "editar-comanda"; cardId: string }
 	| null;
 
 type TBoardFilter = "todas" | "atrasadas" | "atencao" | "mesas" | "comandas";
+type TCardFilter = "todas" | "livres" | "em-uso" | "desativadas";
 
-export default function TabsBoardPage() {
+function matchesCardFilter(card: TServiceCard, filter: TCardFilter, inUse: boolean) {
+	if (filter === "livres") return card.ativo && !inUse;
+	if (filter === "em-uso") return inUse;
+	if (filter === "desativadas") return !card.ativo;
+	return true;
+}
+
+export default function TabsBoardPage({ organizationLogoUrl }: { organizationLogoUrl: string | null }) {
 	const router = useRouter();
 	const pathname = usePathname();
 	const searchParams = useSearchParams();
@@ -64,8 +84,9 @@ export default function TabsBoardPage() {
 	const { data: servicePoints, isLoading: pointsLoading, queryKey: pointsQueryKey } = useServicePoints();
 	const { data: tabs, isLoading: tabsLoading, isError, error, queryKey: tabsQueryKey } = useTabs();
 	const [activeModal, setActiveModal] = useState<TActiveModal>(null);
-	const [mode, setMode] = useState<"por-conta" | "por-mesa">("por-conta");
+	const [mode, setMode] = useState<"por-conta" | "por-mesa" | "por-comanda">("por-conta");
 	const [filter, setFilter] = useState<TBoardFilter>("todas");
+	const [cardFilter, setCardFilter] = useState<TCardFilter>("todas");
 	const [query, setQuery] = useState("");
 	const [sheetTab, setSheetTab] = useState<TAccountPanelTab>("pedidos");
 	const searchRef = useRef<HTMLInputElement>(null);
@@ -75,9 +96,16 @@ export default function TabsBoardPage() {
 	const pontosHabilitados = settings?.pontos.habilitados ?? false;
 	const contasHabilitadas = settings?.contas.habilitadas ?? false;
 	// Sem pontos habilitados o modo por mesa nem existe — o board colapsa em "por conta".
-	const effectiveMode = pontosHabilitados ? mode : "por-conta";
+	const effectiveMode = mode === "por-mesa" && !pontosHabilitados ? "por-conta" : mode;
 	const activePoints = useMemo(() => (servicePoints ?? []).filter((point) => point.ativo), [servicePoints]);
 	const editingPoint = activeModal?.type === "editar-ponto" ? activePoints.find((point) => point.id === activeModal.pointId) : undefined;
+	// Comandas fixas so fazem sentido quando a conta e identificada por codigo (nao no "Somente mesas").
+	// Visivel em qualquer modo: os cartoes sao cadastrados e impressos antes de a operacao passar a usa-los.
+	const comandasDisponiveis = contasHabilitadas;
+	// So abre conta pelo cartao quando a operacao usa comandas cadastradas.
+	const cardsInUse = settings?.contas.identificacao === "COMANDA_CADASTRADA";
+	const { data: serviceCards, queryKey: serviceCardsQueryKey } = useServiceCards({ enabled: comandasDisponiveis });
+	const editingCard = activeModal?.type === "editar-comanda" ? serviceCards?.find((card) => card.id === activeModal.cardId) : undefined;
 
 	const boardTabs = useMemo(() => (tabs ?? []).map((tab) => toBoardTab(tab, now)), [tabs, now]);
 	const tabsByPoint = useMemo(() => {
@@ -88,6 +116,31 @@ export default function TabsBoardPage() {
 		}
 		return map;
 	}, [boardTabs]);
+	const tabByCard = useMemo(() => new Map(boardTabs.filter((tab) => tab.serviceCardId).map((tab) => [tab.serviceCardId as string, tab])), [boardTabs]);
+	const allCards = useMemo(() => serviceCards ?? [], [serviceCards]);
+	const activeCardCount = allCards.filter((card) => card.ativo).length;
+	const cardCounts: Record<TCardFilter, number> = {
+		todas: allCards.length,
+		livres: allCards.filter((card) => matchesCardFilter(card, "livres", tabByCard.has(card.id))).length,
+		"em-uso": allCards.filter((card) => matchesCardFilter(card, "em-uso", tabByCard.has(card.id))).length,
+		desativadas: allCards.filter((card) => matchesCardFilter(card, "desativadas", tabByCard.has(card.id))).length,
+	};
+	const visibleCards = useMemo(() => {
+		const needle = query.trim();
+		const codeNeedle = needle ? normalizeServiceCardCode(needle) : "";
+		const textNeedle = needle.toLocaleLowerCase("pt-BR");
+		return allCards
+			.filter((card) => matchesCardFilter(card, cardFilter, tabByCard.has(card.id)))
+			.filter((card) => {
+				if (!needle) return true;
+				const tab = tabByCard.get(card.id);
+				// Numero da comanda ou quem esta nela (cliente/vendedor da conta aberta).
+				return (
+					card.codigoNormalizado.includes(codeNeedle) ||
+					[tab?.cliente?.nome, tab?.responsavelVendedor?.nome].filter(Boolean).join(" ").toLocaleLowerCase("pt-BR").includes(textNeedle)
+				);
+			});
+	}, [allCards, cardFilter, query, tabByCard]);
 
 	const counts: Record<TBoardFilter, number> = {
 		todas: boardTabs.length,
@@ -188,6 +241,36 @@ export default function TabsBoardPage() {
 		[navigationOrder, selectTab, selectedId],
 	);
 
+	// Leitura do QR de uma comanda cadastrada: abre a conta dela ou a abertura ja preenchida.
+	// So reage a leituras com token de cartao — codigos de barras de produto sao do composer.
+	// Com qualquer dialog aberto a leitura e descartada pelo hook (o NewTab tem o proprio leitor).
+	useBarcodeScanner({
+		enabled: contasHabilitadas && settings?.contas.identificacao === "COMANDA_CADASTRADA" && activeModal === null,
+		maxLength: SERVICE_CARD_SCAN_MAX_LENGTH,
+		onScan: async (code) => {
+			const token = extractServiceCardToken(code);
+			if (!token) return;
+			try {
+				const { card, tabAberta } = await fetchServiceCardLookup({ token });
+				if (!card) {
+					toast.error("QR de comanda não reconhecido nesta organização.");
+					return;
+				}
+				if (!card.ativo) {
+					toast.error(`Comanda ${card.codigo} desativada.`);
+					return;
+				}
+				if (tabAberta) {
+					selectTab(tabAberta.id);
+					return;
+				}
+				setActiveModal({ type: "nova-conta", codigo: card.codigo });
+			} catch (scanError) {
+				toast.error(getErrorMessage(scanError));
+			}
+		},
+	});
+
 	// Atalhos: / busca, ↑↓ (ou j/k) troca de conta, Esc fecha o painel.
 	useEffect(() => {
 		function onKeyDown(event: KeyboardEvent) {
@@ -224,6 +307,7 @@ export default function TabsBoardPage() {
 	function refresh() {
 		queryClient.invalidateQueries({ queryKey: tabsQueryKey });
 		queryClient.invalidateQueries({ queryKey: pointsQueryKey });
+		queryClient.invalidateQueries({ queryKey: serviceCardsQueryKey });
 	}
 
 	const panelOpen = !!selectedId;
@@ -247,7 +331,7 @@ export default function TabsBoardPage() {
 						</Button>
 					</div>
 				) : (
-					<Skeleton className="h-40 w-full rounded-2xl" />
+					<Skeleton className="h-40 w-full rounded-xl" />
 				)}
 				{activeModal?.type === "configuracoes" ? <ServiceSettings closeModal={() => setActiveModal(null)} /> : null}
 			</div>
@@ -263,13 +347,20 @@ export default function TabsBoardPage() {
 						<TabsTrigger value="por-conta">
 							<ReceiptText className="size-4" />
 							Por conta
-							<span className="font-extrabold text-muted-foreground">{boardTabs.length}</span>
+							<span className="font-bold text-muted-foreground">{boardTabs.length}</span>
 						</TabsTrigger>
 						{pontosHabilitados ? (
 							<TabsTrigger value="por-mesa">
 								<LayoutGrid className="size-4" />
 								Por mesa
-								<span className="font-extrabold text-muted-foreground">{activePoints.length}</span>
+								<span className="font-bold text-muted-foreground">{activePoints.length}</span>
+							</TabsTrigger>
+						) : null}
+						{comandasDisponiveis ? (
+							<TabsTrigger value="por-comanda">
+								<IdCard className="size-4" />
+								Por comanda
+								<span className="font-bold text-muted-foreground">{activeCardCount}</span>
 							</TabsTrigger>
 						) : null}
 					</TabsList>
@@ -286,7 +377,7 @@ export default function TabsBoardPage() {
 
 			<div
 				className={cn(
-					"grid min-h-0 flex-1 overflow-hidden rounded-[18px] border border-border",
+					"grid min-h-0 flex-1 overflow-hidden rounded-xl border border-border",
 					panelOpen ? "lg:grid-cols-[minmax(0,1fr)_minmax(440px,520px)]" : "grid-cols-1",
 				)}
 			>
@@ -295,16 +386,16 @@ export default function TabsBoardPage() {
 					<div className="flex flex-col gap-3 px-4 pt-4 pb-3 sm:px-5">
 						<div className="flex flex-wrap items-center justify-between gap-3">
 							<label className="flex h-9 w-full max-w-[300px] min-w-[200px] flex-1 items-center gap-2 rounded-xl border border-border pr-2.5 pl-3 focus-within:border-primary">
-								<Search className="size-[15px] shrink-0 text-muted-foreground" />
+								<Search className="size-4 shrink-0 text-muted-foreground" />
 								<input
 									ref={searchRef}
 									value={query}
 									onChange={(event) => setQuery(event.target.value)}
 									placeholder="Mesa, comanda ou cliente"
 									aria-label="Buscar conta"
-									className="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-muted-foreground"
+									className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
 								/>
-								<kbd className="hidden rounded border border-border px-1.5 font-mono text-[10px] leading-4 text-muted-foreground md:inline">/</kbd>
+								<kbd className="hidden rounded border border-border px-1.5 font-mono text-xs leading-4 text-muted-foreground md:inline">/</kbd>
 							</label>
 							<span className="whitespace-nowrap text-xs font-semibold text-muted-foreground">
 								{boardTabs.length
@@ -333,11 +424,61 @@ export default function TabsBoardPage() {
 								/>
 								{pontosHabilitados ? (
 									<>
-										<span className="mx-1 h-[18px] w-px bg-border" aria-hidden />
+										<span className="mx-1 h-4 w-px bg-border" aria-hidden />
 										<FilterChip icon={LayoutGrid} label="Mesas" count={counts.mesas} active={filter === "mesas"} onClick={() => setFilter("mesas")} />
 										<FilterChip icon={Ticket} label="Comandas" count={counts.comandas} active={filter === "comandas"} onClick={() => setFilter("comandas")} />
 									</>
 								) : null}
+							</div>
+						) : null}
+						{effectiveMode === "por-mesa" ? (
+							<div className="flex justify-end">
+								<Button size="sm" variant="outline" onClick={() => setActiveModal({ type: "novo-ponto" })}>
+									<Plus className="size-4" />
+									Nova mesa
+								</Button>
+							</div>
+						) : null}
+						{effectiveMode === "por-comanda" ? (
+							<div className="flex flex-wrap items-center justify-between gap-2">
+								<div className="flex flex-wrap items-center gap-1.5">
+									<FilterChip icon={Layers} label="Todas" count={cardCounts.todas} active={cardFilter === "todas"} onClick={() => setCardFilter("todas")} />
+									<FilterChip
+										icon={IdCard}
+										label="Livres"
+										count={cardCounts.livres}
+										active={cardFilter === "livres"}
+										onClick={() => setCardFilter("livres")}
+									/>
+									<FilterChip
+										icon={ReceiptText}
+										label="Em uso"
+										count={cardCounts["em-uso"]}
+										active={cardFilter === "em-uso"}
+										onClick={() => setCardFilter("em-uso")}
+									/>
+									{cardCounts.desativadas > 0 ? (
+										<FilterChip
+											icon={Ticket}
+											label="Desativadas"
+											count={cardCounts.desativadas}
+											active={cardFilter === "desativadas"}
+											onClick={() => setCardFilter("desativadas")}
+										/>
+									) : null}
+								</div>
+								<div className="flex flex-wrap items-center gap-2">
+									{activeCardCount > 0 ? (
+										<Button size="sm" variant="outline" onClick={() => setActiveModal({ type: "exportar-comandas" })}>
+											<FileDown className="size-4" />
+											Arquivo para gráfica
+										</Button>
+									) : null}
+									<Button size="sm" variant="outline" onClick={() => setActiveModal({ type: "nova-comanda" })}>
+										<Plus className="size-4" />
+										Nova comanda
+									</Button>
+								</div>
 							</div>
 						) : null}
 					</div>
@@ -356,6 +497,20 @@ export default function TabsBoardPage() {
 								onSelect={selectTab}
 								onCreateTab={() => setActiveModal({ type: "nova-conta" })}
 								onChooseTable={() => setMode("por-mesa")}
+							/>
+						) : effectiveMode === "por-comanda" ? (
+							<PorComanda
+								loading={!serviceCards}
+								hasAnyCard={allCards.length > 0}
+								cards={visibleCards}
+								tabByCard={tabByCard}
+								cardsInUse={cardsInUse}
+								now={now}
+								selectedId={selectedId}
+								onSelect={selectTab}
+								onOpenFree={(codigo) => setActiveModal({ type: "nova-conta", codigo })}
+								onEditCard={(cardId) => setActiveModal({ type: "editar-comanda", cardId })}
+								onCreateCards={() => setActiveModal({ type: "nova-comanda" })}
 							/>
 						) : (
 							<PorMesa
@@ -382,7 +537,7 @@ export default function TabsBoardPage() {
 							"flex min-h-0 min-w-0 flex-col bg-background",
 							// Celular: o painel cobre a tela (o voltar fecha). Desktop: coluna ao lado do board.
 							"max-lg:fixed max-lg:inset-0 max-lg:z-50 max-lg:animate-in max-lg:fade-in-0 max-lg:slide-in-from-bottom-2",
-							"lg:border-l lg:border-border lg:shadow-[-12px_0_24px_-16px_rgba(0,0,0,0.12)]",
+							"lg:border-l lg:border-border",
 						)}
 					>
 						<AccountPanel
@@ -404,8 +559,10 @@ export default function TabsBoardPage() {
 			{activeModal?.type === "nova-conta" ? (
 				<NewTab
 					initialServicePointId={activeModal.servicePointId}
+					initialCodigo={activeModal.codigo}
 					closeModal={() => setActiveModal(null)}
 					callbacks={{
+						onOpenExisting: (tabId) => selectTab(tabId),
 						onSuccess: (data) => {
 							refresh();
 							setActiveModal(null);
@@ -421,6 +578,20 @@ export default function TabsBoardPage() {
 				<ControlServicePoint servicePoint={editingPoint} closeModal={() => setActiveModal(null)} callbacks={{ onSuccess: refresh }} />
 			) : null}
 			{activeModal?.type === "configuracoes" ? <ServiceSettings closeModal={() => setActiveModal(null)} /> : null}
+			{activeModal?.type === "exportar-comandas" ? (
+				<ExportServiceCards cards={allCards} logoUrl={organizationLogoUrl} closeModal={() => setActiveModal(null)} />
+			) : null}
+			{activeModal?.type === "nova-comanda" ? (
+				<NewServiceCards logoUrl={organizationLogoUrl} closeModal={() => setActiveModal(null)} callbacks={{ onSuccess: refresh }} />
+			) : null}
+			{activeModal?.type === "editar-comanda" && editingCard ? (
+				<ControlServiceCard
+					serviceCard={editingCard}
+					logoUrl={organizationLogoUrl}
+					closeModal={() => setActiveModal(null)}
+					callbacks={{ onSuccess: refresh }}
+				/>
+			) : null}
 		</div>
 	);
 }
@@ -446,21 +617,21 @@ function PorConta({ loading, hasAnyTab, tabs, now, selectedId, pontosHabilitados
 
 	if (!hasAnyTab) {
 		return (
-			<div className="mt-6 flex flex-col items-center gap-2 rounded-[22px] border border-dashed border-border px-4 py-14 text-center">
-				<span className="flex size-[52px] items-center justify-center rounded-[18px] bg-primary/10 text-primary">
-					<ReceiptText className="size-[22px]" />
+			<div className="mt-6 flex flex-col items-center gap-2 rounded-xl border border-dashed border-border px-4 py-14 text-center">
+				<span className="flex size-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
+					<ReceiptText className="size-5" />
 				</span>
-				<span className="text-xl font-extrabold tracking-tight">Nenhuma conta aberta no momento</span>
-				<span className="max-w-[380px] text-[13px] leading-normal text-muted-foreground">
+				<span className="text-xl font-bold tracking-tight">Nenhuma conta aberta no momento</span>
+				<span className="max-w-[380px] text-sm leading-normal text-muted-foreground">
 					Abra uma conta para começar a lançar pedidos. O pagamento acontece só no fechamento.
 				</span>
 				<div className="mt-2 flex flex-wrap justify-center gap-2">
-					<Button className="h-11 gap-2 rounded-[18px] px-5 text-sm font-extrabold" onClick={onCreateTab}>
+					<Button className="h-11 gap-2 rounded-xl px-5 text-sm font-bold" onClick={onCreateTab}>
 						<Plus className="size-4" />
 						Abrir conta
 					</Button>
 					{pontosHabilitados ? (
-						<Button variant="outline" className="h-11 gap-2 rounded-[18px] px-5 text-sm font-bold" onClick={onChooseTable}>
+						<Button variant="outline" className="h-11 gap-2 rounded-xl px-5 text-sm font-bold" onClick={onChooseTable}>
 							<LayoutGrid className="size-4" />
 							Escolher mesa
 						</Button>
@@ -473,7 +644,7 @@ function PorConta({ loading, hasAnyTab, tabs, now, selectedId, pontosHabilitados
 	if (tabs.length === 0) {
 		return (
 			<div className="flex flex-col items-center gap-1.5 px-4 py-12 text-center text-muted-foreground">
-				<SearchX className="size-[22px]" />
+				<SearchX className="size-5" />
 				<span className="text-sm font-bold text-foreground">Nenhuma conta encontrada</span>
 				<span className="text-xs">Ajuste a busca ou o filtro.</span>
 			</div>
@@ -521,7 +692,7 @@ function PorMesa({ loading, points, tabsByPoint, looseTabs, now, selectedId, onS
 
 	if (points.length === 0 && looseTabs.length === 0) {
 		return (
-			<div className="mt-6 flex flex-col items-center gap-2 rounded-[22px] border border-dashed border-border px-4 py-14 text-center">
+			<div className="mt-6 flex flex-col items-center gap-2 rounded-xl border border-dashed border-border px-4 py-14 text-center">
 				<LayoutGrid className="size-8 text-muted-foreground" />
 				<span className="text-sm font-semibold">Nenhum ponto de atendimento cadastrado.</span>
 				<span className="max-w-sm text-xs text-muted-foreground">Cadastre mesas, balcões ou quiosques para enxergar a ocupação do salão.</span>
@@ -569,10 +740,104 @@ function PorMesa({ loading, points, tabsByPoint, looseTabs, now, selectedId, onS
 	);
 }
 
+// ============================================================================
+// Por comanda
+// ============================================================================
+
+type PorComandaProps = {
+	loading: boolean;
+	hasAnyCard: boolean;
+	cards: TServiceCard[];
+	tabByCard: Map<string, TBoardTab>;
+	cardsInUse: boolean;
+	now: number;
+	selectedId: string | null;
+	onSelect: (tabId: string) => void;
+	onOpenFree: (codigo: string) => void;
+	onEditCard: (cardId: string) => void;
+	onCreateCards: () => void;
+};
+
+function PorComanda({
+	loading,
+	hasAnyCard,
+	cards,
+	tabByCard,
+	cardsInUse,
+	now,
+	selectedId,
+	onSelect,
+	onOpenFree,
+	onEditCard,
+	onCreateCards,
+}: PorComandaProps) {
+	if (loading) return <CardGridSkeleton />;
+
+	if (!hasAnyCard) {
+		return (
+			<div className="mt-6 flex flex-col items-center gap-2 rounded-xl border border-dashed border-border px-4 py-14 text-center">
+				<IdCard className="size-8 text-muted-foreground" />
+				<span className="text-sm font-semibold">Nenhuma comanda cadastrada.</span>
+				<span className="max-w-sm text-xs text-muted-foreground">
+					Gere uma sequência numerada (ex.: 001 a 200) e baixe o arquivo para a gráfica imprimir os cartões com QR.
+				</span>
+				<Button size="sm" className="mt-1" onClick={onCreateCards}>
+					<Plus className="size-4" />
+					Gerar comandas
+				</Button>
+			</div>
+		);
+	}
+
+	return (
+		<div className="flex flex-col gap-3">
+			{!cardsInUse ? (
+				<div className="flex items-start gap-2 rounded-xl border border-border bg-muted/30 px-3 py-2.5 text-xs text-muted-foreground">
+					<Info className="mt-0.5 size-4 shrink-0" />
+					<span>
+						As comandas ainda não são usadas para abrir contas. Quando os cartões estiverem prontos, ative em{" "}
+						<span className="font-bold text-foreground">Modo de atendimento</span> uma forma com comandas e{" "}
+						<span className="font-bold text-foreground">Usar comandas cadastradas</span>.
+					</span>
+				</div>
+			) : null}
+			{cards.length === 0 ? (
+				<div className="flex flex-col items-center gap-1.5 px-4 py-12 text-center text-muted-foreground">
+					<SearchX className="size-5" />
+					<span className="text-sm font-bold text-foreground">Nenhuma comanda encontrada</span>
+					<span className="text-xs">Ajuste a busca ou o filtro.</span>
+				</div>
+			) : (
+				<div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] items-start gap-2.5">
+					{cards.map((card) => {
+						const tab = tabByCard.get(card.id);
+						return tab ? (
+							<OccupiedTile
+								key={card.id}
+								label={`Comanda ${card.codigo}`}
+								pointTabs={[tab]}
+								now={now}
+								selectedTabId={selectedId}
+								onSelectTab={onSelect}
+								onEdit={() => onEditCard(card.id)}
+								editLabel={`Editar comanda ${card.codigo}`}
+								// O tile ja e a comanda: a linha diz onde ela esta e de quem e.
+								rowLabel={(row) => row.servicePoint?.rotulo ?? row.cliente?.nome ?? row.responsavelVendedor?.nome ?? "Conta"}
+							/>
+						) : (
+							<FreeCardTile key={card.id} card={card} onOpen={cardsInUse ? () => onOpenFree(card.codigo) : undefined} onEdit={() => onEditCard(card.id)} />
+						);
+					})}
+				</div>
+			)}
+		</div>
+	);
+}
+
 function AreaSection({ title, children }: { title: string; children: React.ReactNode }) {
 	return (
 		<div className="flex flex-col gap-2.5">
-			<span className="text-xs font-extrabold uppercase tracking-[0.08em] text-muted-foreground">{title}</span>
+			<span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">{title}</span>
 			{/* items-start: tile nao estica ate o mais alto da linha (ocupado vs. livre e a leitura do salao). */}
 			<div className="grid grid-cols-[repeat(auto-fill,minmax(176px,1fr))] items-start gap-2.5">{children}</div>
 		</div>
@@ -604,7 +869,7 @@ function FilterChip({ icon: Icon, label, count, active, tone, onClick }: FilterC
 			aria-pressed={active}
 			onClick={onClick}
 			className={cn(
-				"flex h-[30px] items-center gap-1.5 whitespace-nowrap rounded-full border pr-2.5 pl-[9px] text-xs font-bold transition-colors",
+				"flex h-8 items-center gap-1.5 whitespace-nowrap rounded-full border pr-2.5 pl-2.5 text-xs font-bold transition-colors",
 				!tone && (active ? "border-foreground bg-foreground text-background" : "border-border bg-card text-foreground hover:bg-secondary/60"),
 				tone === "danger" &&
 					(active
@@ -625,7 +890,7 @@ function FilterChip({ icon: Icon, label, count, active, tone, onClick }: FilterC
 			{tone ? (
 				<span
 					className={cn(
-						"flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-[5px] text-[11px] font-extrabold tabular-nums",
+						"flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-xs font-bold tabular-nums",
 						active
 							? "bg-white/35"
 							: zero
@@ -638,7 +903,7 @@ function FilterChip({ icon: Icon, label, count, active, tone, onClick }: FilterC
 					{count}
 				</span>
 			) : (
-				<span className={cn("font-extrabold tabular-nums", active ? "text-background/75" : "text-muted-foreground")}>{count}</span>
+				<span className={cn("font-bold tabular-nums", active ? "text-background/75" : "text-muted-foreground")}>{count}</span>
 			)}
 		</button>
 	);
@@ -672,7 +937,7 @@ function CardGridSkeleton() {
 		<div className="grid grid-cols-[repeat(auto-fill,minmax(232px,1fr))] gap-2.5">
 			{Array.from({ length: 6 }).map((_, index) => (
 				// biome-ignore lint/suspicious/noArrayIndexKey: skeletons estáticos
-				<Skeleton key={index} className="h-40 w-full rounded-2xl" />
+				<Skeleton key={index} className="h-40 w-full rounded-xl" />
 			))}
 		</div>
 	);

@@ -59,10 +59,20 @@ async function getServicePoints({ input, orgId }: { input: TGetServicePointsInpu
 		};
 	}
 
-	const points = await db.query.servicePoints.findMany({
-		where: (fields, { and, eq }) => (input.activeOnly ? and(eq(fields.organizacaoId, orgId), eq(fields.ativo, true)) : eq(fields.organizacaoId, orgId)),
-		orderBy: (fields, { asc }) => [asc(fields.grupo), asc(fields.rotulo)],
-	});
+	const points = (
+		await db.query.servicePoints.findMany({
+			where: (fields, { and, eq }) =>
+				input.activeOnly ? and(eq(fields.organizacaoId, orgId), eq(fields.ativo, true)) : eq(fields.organizacaoId, orgId),
+		})
+	)
+		// Ordem de leitura humana: "MESA 2" antes de "MESA 10" (o ORDER BY do banco e lexico).
+		.sort(
+			(a, b) =>
+				// Pontos sem grupo depois das areas nomeadas.
+				Number(!a.grupo) - Number(!b.grupo) ||
+				(a.grupo ?? "").localeCompare(b.grupo ?? "", "pt-BR", { sensitivity: "base" }) ||
+				a.rotulo.localeCompare(b.rotulo, "pt-BR", { numeric: true, sensitivity: "base" }),
+		);
 
 	return {
 		data: { byId: null, default: points },
@@ -127,7 +137,6 @@ export type TUpdateServicePointOutput = Awaited<ReturnType<typeof updateServiceP
 // ============================================================================
 // HANDLERS
 // ============================================================================
-
 
 async function getServicePointsRoute(request: NextRequest) {
 	const session = requireERPSession(await getCurrentSessionUncached());

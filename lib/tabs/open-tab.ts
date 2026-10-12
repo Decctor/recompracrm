@@ -2,11 +2,15 @@ import { db } from "@/services/drizzle";
 import { tabs } from "@/services/drizzle/schema";
 import { and, eq } from "drizzle-orm";
 import createHttpError from "http-errors";
+import { tabUsesCode } from "@/schemas/service-settings";
+import { requireUsableServiceCard } from "./service-cards";
 import { acquireTabOpeningLock, generatePublicToken, hashPublicToken, resolveServiceSettings } from "./utils";
 
 export type TOpenTabInput = {
 	servicePointId?: string | null;
 	codigo?: string | null;
+	/** Comanda fixa (modo COMANDA_CADASTRADA). Alternativa a `codigo`: o numero sai do cartao. */
+	serviceCardId?: string | null;
 	clienteId?: string | null;
 	responsavelVendedorId?: string | null;
 	observacoes?: string | null;
@@ -20,6 +24,8 @@ export type TOpenTabInput = {
  *   (identificacao automatica, max 1 conta por ponto), selecionar a mesa RESOLVE a
  *   tab aberta existente em vez de criar outra;
  * - comanda fisica (codigo) e defendida tambem pelo partial unique idx_tabs_org_codigo_aberta;
+ * - em COMANDA_CADASTRADA o codigo precisa resolver uma comanda fixa ativa; a conta grava o
+ *   cartao e o numero impresso como snapshot (idx_tabs_org_service_card_aberta: 1 conta por cartao);
  * - o token publico bruto e retornado somente na criacao (persistimos apenas o hash);
  * - nao cria venda — a venda rascunho e lazy no primeiro pedido (launchTabOrder).
  */
@@ -31,13 +37,20 @@ export async function openTab({ orgId, userId, input }: { orgId: string; userId:
 	}
 
 	const servicePointId = input.servicePointId ?? null;
-	const codigo = input.codigo?.trim() || null;
+	let codigo = input.codigo?.trim() || null;
+	let serviceCardId: string | null = null;
 
 	if (settings.contas.pontoObrigatorio && !servicePointId) {
 		throw new createHttpError.BadRequest("Selecione o ponto de atendimento para abrir a conta.");
 	}
-	if (settings.contas.identificacao === "CODIGO_MANUAL" && !codigo) {
+	if (tabUsesCode(settings.contas) && !codigo && !input.serviceCardId) {
 		throw new createHttpError.BadRequest("Informe o codigo da comanda para abrir a conta.");
+	}
+	// Codigo avulso e recusado: so abre conta em comanda cadastrada e ativa.
+	if (settings.contas.identificacao === "COMANDA_CADASTRADA") {
+		const card = await requireUsableServiceCard({ orgId, input: { serviceCardId: input.serviceCardId, codigo } });
+		serviceCardId = card.id;
+		codigo = card.codigo;
 	}
 
 	if (servicePointId) {
@@ -98,6 +111,7 @@ export async function openTab({ orgId, userId, input }: { orgId: string; userId:
 					organizacaoId: orgId,
 					servicePointId,
 					codigo,
+					serviceCardId,
 					clienteId: input.clienteId ?? null,
 					status: "ABERTA",
 					tokenPublicoHash: hashPublicToken(tokenPublico),
@@ -111,7 +125,9 @@ export async function openTab({ orgId, userId, input }: { orgId: string; userId:
 		} catch (error) {
 			// Violacao do partial unique de codigo aberto — mensagem amigavel.
 			if (error instanceof Error && "code" in error && (error as { code?: string }).code === "23505") {
-				throw new createHttpError.Conflict(`Ja existe uma conta aberta com o codigo "${codigo}".`);
+				throw new createHttpError.Conflict(
+					serviceCardId ? `A comanda ${codigo} ja esta em uso.` : `Ja existe uma conta aberta com o codigo "${codigo}".`,
+				);
 			}
 			throw error;
 		}

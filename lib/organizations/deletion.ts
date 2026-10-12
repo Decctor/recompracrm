@@ -100,6 +100,12 @@ import {
 	visualKits,
 	whatsappConnectionPhones,
 	whatsappConnections,
+	serviceCards,
+	servicePoints,
+	serviceSettings,
+	tabOrderRequests,
+	tabOrders,
+	tabs,
 	type TFileEntity,
 } from "@/services/drizzle/schema";
 import { eq, inArray } from "drizzle-orm";
@@ -265,6 +271,13 @@ export async function deleteAllOrganizationData({
 	// --- Vendas (itens antes; vendas referenciam clientes/vendedores/campanhas/sessões) ---
 	await trx.delete(saleItems).where(eq(saleItems.organizacaoId, organizationId));
 	await trx.delete(sales).where(eq(sales.organizacaoId, organizationId));
+	// Mesas e comandas: depois das vendas (sales.tab_id) e itens (sale_items.tab_order_id).
+	await trx.delete(tabOrderRequests).where(eq(tabOrderRequests.organizacaoId, organizationId));
+	await trx.delete(tabOrders).where(eq(tabOrders.organizacaoId, organizationId));
+	await trx.delete(tabs).where(eq(tabs.organizacaoId, organizationId));
+	await trx.delete(serviceCards).where(eq(serviceCards.organizacaoId, organizationId));
+	await trx.delete(servicePoints).where(eq(servicePoints.organizacaoId, organizationId));
+	await trx.delete(serviceSettings).where(eq(serviceSettings.organizacaoId, organizationId));
 	await trx.delete(interactions).where(eq(interactions.organizacaoId, organizationId));
 	await trx.delete(salesSessionReconciliations).where(eq(salesSessionReconciliations.organizacaoId, organizationId));
 	await trx.delete(salesSessions).where(eq(salesSessions.organizacaoId, organizationId));

@@ -118,20 +118,24 @@ const ROUND_STATUS_SHORT: Record<string, string> = {
 };
 
 export function describeRoundShort(round: TBoardRound) {
-	return `Pedido ${round.numero} ${ROUND_STATUS_SHORT[round.status] ?? round.status.toLowerCase()} · ${round.minutos}min`;
+	return `Pedido ${round.numero} ${ROUND_STATUS_SHORT[round.status] ?? round.status.toLowerCase()} · ${formatElapsedMinutes(round.minutos)}`;
 }
 
 /** "Pedido 2 · em preparo há 24min" */
 export function describeRound(round: TBoardRound) {
-	return `Pedido ${round.numero} · ${ROUND_STATUS_LABEL[round.status] ?? round.status.toLowerCase()} há ${round.minutos}min`;
+	return `Pedido ${round.numero} · ${ROUND_STATUS_LABEL[round.status] ?? round.status.toLowerCase()} há ${formatElapsedMinutes(round.minutos)}`;
 }
 
-export function formatTabAge(from: Date | string, now: number) {
-	const minutes = elapsedMinutes(from, now);
+/** 24min · 3h05 · 3d — um pedido esquecido nao vira "5239min". */
+export function formatElapsedMinutes(minutes: number) {
 	if (minutes < 60) return `${minutes}min`;
 	const hours = Math.floor(minutes / 60);
 	if (hours < 24) return `${hours}h${(minutes % 60).toString().padStart(2, "0")}`;
 	return `${Math.floor(hours / 24)}d`;
+}
+
+export function formatTabAge(from: Date | string, now: number) {
+	return formatElapsedMinutes(elapsedMinutes(from, now));
 }
 
 /**

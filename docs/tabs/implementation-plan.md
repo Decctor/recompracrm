@@ -1,6 +1,6 @@
 # Pontos de Atendimento e Contas (Tabs) — Plano Consolidado
 
-Documento unico de design + implementacao do modulo de mesas e comandas. Consolida `interaction-points-and-tabs-design.md`, `tabs-implementation-plan.md` e os pontos aproveitados da auditoria externa (`food-service-command-module-design.md`), todos removidos apos esta consolidacao. Melhorias deliberadamente adiadas estao em `future-improvements.md`.
+Documento unico de design + implementacao do modulo de mesas e comandas. Consolida `interaction-points-and-tabs-design.md`, `tabs-implementation-plan.md` e os pontos aproveitados da auditoria externa (`food-service-command-module-design.md`), todos removidos apos esta consolidacao. Melhorias deliberadamente adiadas estao em `future-improvements.md`. Comandas fixas (cartao cadastrado com QR proprio) estao em `service-cards.md`.
 
 ## 1. Contexto e decisao
 
@@ -28,7 +28,7 @@ O modulo de codigo vive em **`lib/tabs/`** — o `lib/` e organizado por dominio
 | ----------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | `servicePoint`    | Ancora fisica/logica do atendimento ("Mesa 5", "Balcao", "Quiosque 2") | Duravel — sobrevive a todas as sessoes                               | QR proprio duravel; opcional (balcao puro nao cadastra pontos)                                               |
 | `tab`             | Conta de consumo ("comanda") — o que o cliente deve                    | Efemera: abre → acumula → fecha (`ABERTA`/`FECHADA`/`CANCELADA`)     | Pode existir sem ponto; QR proprio efemero                                                                   |
-| `codigo` (da tab) | Numero da comanda fisica (cartao/ficha reutilizavel)                   | Unico entre tabs `ABERTAS` (partial unique); liberado no fechamento  | Ponte pragmatica: cartao plastico reutilizavel nao carrega token efemero                                     |
+| `codigo` (da tab) | Numero da comanda fisica (cartao/ficha reutilizavel)                   | Unico entre tabs `ABERTAS` (partial unique); liberado no fechamento  | Ponte pragmatica: cartao plastico reutilizavel nao carrega token efemero. Comanda fixa cadastrada: `service-cards.md` |
 | `tabOrder`        | Rodada/pedido — o ticket que a cozinha enxerga                         | Vive dentro da tab, `numero` sequencial                              | Sem identidade comercial/financeira/fiscal; status reusa `saleAttendanceStatusEnum`; baixa fisica na entrega |
 | venda rascunho    | Identidade comercial da conta                                          | Uma venda `ORCAMENTO` por tab aberta, criada lazy no primeiro pedido | Pagamento/fiscal/contabil acontecem uma unica vez, no fechamento                                             |
 | `tabOrderRequest` | Intencao publica de pedido via QR, aguardando aprovacao                | `PENDENTE → PROCESSANDO → CONCLUIDA/REJEITADA/ERRO`                  | Precificacao autoritativa na aprovacao; idempotente por chave + payload                                      |

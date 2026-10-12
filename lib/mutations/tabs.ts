@@ -6,7 +6,20 @@ import type { TCreateTabOrderInput, TCreateTabOrderOutput } from "@/app/api/tabs
 import type { TUpdateTabOrderStatusInput, TUpdateTabOrderStatusOutput } from "@/app/api/tabs/orders/status/route";
 import type { TCreateTabInput, TCreateTabOutput } from "@/app/api/tabs/route";
 import type { TTransferTabOutput, TTransferTabRouteInput } from "@/app/api/tabs/transfer/route";
-import type { TCreateServicePointInput, TCreateServicePointOutput, TUpdateServicePointInput, TUpdateServicePointOutput } from "@/app/api/service-points/route";
+import type {
+	TCreateServiceCardsInput,
+	TCreateServiceCardsOutput,
+	TDeleteServiceCardInput,
+	TDeleteServiceCardOutput,
+	TUpdateServiceCardInput,
+	TUpdateServiceCardOutput,
+} from "@/app/api/service-cards/route";
+import type {
+	TCreateServicePointInput,
+	TCreateServicePointOutput,
+	TUpdateServicePointInput,
+	TUpdateServicePointOutput,
+} from "@/app/api/service-points/route";
 import type { TUpdateServiceSettingsInput, TUpdateServiceSettingsOutput } from "@/app/api/service-settings/route";
 import axios from "axios";
 
@@ -30,6 +43,25 @@ export async function createServicePoint(input: TCreateServicePointInput) {
 
 export async function updateServicePoint(input: TUpdateServicePointInput) {
 	const { data } = await axios.put<TUpdateServicePointOutput>(`/api/service-points?id=${input.id}`, input);
+	return data;
+}
+
+// ============================================================================
+// SERVICE CARDS (comandas fixas)
+// ============================================================================
+
+export async function createServiceCards(input: TCreateServiceCardsInput) {
+	const { data } = await axios.post<TCreateServiceCardsOutput>("/api/service-cards", input);
+	return data;
+}
+
+export async function updateServiceCard(input: TUpdateServiceCardInput) {
+	const { data } = await axios.put<TUpdateServiceCardOutput>(`/api/service-cards?id=${input.id}`, input);
+	return data;
+}
+
+export async function deleteServiceCard(input: TDeleteServiceCardInput) {
+	const { data } = await axios.delete<TDeleteServiceCardOutput>(`/api/service-cards?id=${input.id}`);
 	return data;
 }
 

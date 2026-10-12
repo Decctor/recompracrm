@@ -182,18 +182,18 @@ export function ClosePane({ tabId, tabLabel, total, orderCount, itemCount, onBac
 					<ArrowLeft className="size-4" />
 				</Button>
 				<div className="flex flex-col">
-					<span className="whitespace-nowrap text-xs font-extrabold uppercase tracking-[0.08em]">Fechar conta</span>
+					<span className="whitespace-nowrap text-xs font-bold uppercase tracking-wide">Fechar conta</span>
 					<span className="text-xs text-muted-foreground">{tabLabel}</span>
 				</div>
 			</div>
 
 			<div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
 				{/* Total + progresso do que já foi informado */}
-				<div className="flex flex-col gap-3 rounded-[18px] bg-warning-surface p-4 text-warning-surface-foreground">
+				<div className="flex flex-col gap-3 rounded-xl bg-warning-surface p-4 text-warning-surface-foreground">
 					<div className="flex items-end justify-between gap-3">
 						<div className="flex flex-col gap-1.5">
-							<span className="text-xs font-extrabold uppercase tracking-[0.08em]">Total a receber</span>
-							<span className="text-[30px] font-black leading-none tracking-tight text-foreground tabular-nums">{formatToMoney(total)}</span>
+							<span className="text-xs font-bold uppercase tracking-wide">Total a receber</span>
+							<span className="text-3xl font-bold leading-none tracking-tight text-foreground tabular-nums">{formatToMoney(total)}</span>
 						</div>
 						<span className="whitespace-nowrap text-right text-xs font-semibold">
 							{orderCount} {orderCount === 1 ? "pedido" : "pedidos"} · {itemCount} {itemCount === 1 ? "item" : "itens"}
@@ -224,45 +224,41 @@ export function ClosePane({ tabId, tabLabel, total, orderCount, itemCount, onBac
 				</div>
 
 				{/* Divisão igual */}
-				<div className="flex items-center justify-between gap-3 rounded-[14px] border border-border px-3 py-2.5">
+				<div className="flex items-center justify-between gap-3 rounded-xl border border-border px-3 py-2.5">
 					<span className="flex min-w-0 items-center gap-2.5">
-						<span className="flex size-8 shrink-0 items-center justify-center rounded-[10px] bg-secondary">
+						<span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-secondary">
 							<UsersRound className="size-4" />
 						</span>
 						<span className="flex min-w-0 flex-col">
-							<span className="whitespace-nowrap text-[13px] font-bold">Dividir igualmente</span>
+							<span className="whitespace-nowrap text-sm font-bold">Dividir igualmente</span>
 							<span className="whitespace-nowrap text-xs text-muted-foreground tabular-nums">
 								{splitPeople} × {formatToMoney(splitShare)}
 							</span>
 						</span>
 					</span>
 					<span className="flex shrink-0 items-center gap-1.5">
-						<span className="flex items-center rounded-[10px] border border-border">
+						<span className="flex items-center rounded-lg border border-border">
 							<button
 								type="button"
 								aria-label="Menos pessoas"
 								disabled={splitPeople <= SPLIT_MIN}
-								className="flex size-[30px] items-center justify-center disabled:opacity-40"
+								className="flex size-8 items-center justify-center disabled:opacity-40"
 								onClick={() => setSplitPeople((value) => Math.max(SPLIT_MIN, value - 1))}
 							>
 								<Minus className="size-3.5" />
 							</button>
-							<span className="w-[22px] text-center text-sm font-black tabular-nums">{splitPeople}</span>
+							<span className="w-6 text-center text-sm font-bold tabular-nums">{splitPeople}</span>
 							<button
 								type="button"
 								aria-label="Mais pessoas"
 								disabled={splitPeople >= SPLIT_MAX}
-								className="flex size-[30px] items-center justify-center disabled:opacity-40"
+								className="flex size-8 items-center justify-center disabled:opacity-40"
 								onClick={() => setSplitPeople((value) => Math.min(SPLIT_MAX, value + 1))}
 							>
 								<Plus className="size-3.5" />
 							</button>
 						</span>
-						<Button
-							size="sm"
-							className="h-8 rounded-[10px] bg-foreground px-3 text-xs font-bold text-background hover:bg-foreground/90"
-							onClick={applySplit}
-						>
+						<Button size="sm" className="h-8 rounded-lg bg-foreground px-3 text-xs font-bold text-background hover:bg-foreground/90" onClick={applySplit}>
 							Dividir
 						</Button>
 					</span>
@@ -270,7 +266,7 @@ export function ClosePane({ tabId, tabLabel, total, orderCount, itemCount, onBac
 
 				{/* Pagamentos */}
 				<div className="flex flex-col gap-2.5">
-					<span className="text-xs font-extrabold uppercase tracking-[0.08em] text-muted-foreground">Pagamentos · {payments.length}</span>
+					<span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Pagamentos · {payments.length}</span>
 					{payments.map((payment, index) => {
 						const meta = METHOD_META[payment.metodo] ?? METHOD_META.OUTRO!;
 						const MethodIcon = meta.icon;
@@ -281,15 +277,15 @@ export function ClosePane({ tabId, tabLabel, total, orderCount, itemCount, onBac
 						const change = payment.recebido !== null ? Math.max(0, roundCents(payment.recebido - payment.valor)) : null;
 
 						return (
-							<div key={payment.key} className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-3 shadow-2xs">
+							<div key={payment.key} className="flex flex-col gap-3 rounded-xl border border-border bg-card p-3 shadow-2xs">
 								<div className="flex items-center justify-between gap-2">
 									<span className="flex items-center gap-2.5">
-										<span className="flex size-8 items-center justify-center rounded-[10px] bg-primary/10 text-primary">
+										<span className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
 											<MethodIcon className="size-4" />
 										</span>
 										<span className="flex flex-col">
-											<span className="text-[13px] font-extrabold">{meta.label}</span>
-											<span className="text-[11px] font-semibold text-muted-foreground">Pagamento {index + 1}</span>
+											<span className="text-sm font-bold">{meta.label}</span>
+											<span className="text-xs font-semibold text-muted-foreground">Pagamento {index + 1}</span>
 										</span>
 									</span>
 									{payments.length > 1 ? (
@@ -340,7 +336,7 @@ export function ClosePane({ tabId, tabLabel, total, orderCount, itemCount, onBac
 								</div>
 
 								<div className="flex items-stretch gap-2">
-									<label className="flex h-11 flex-1 items-center gap-2 rounded-[14px] border border-border px-3.5 focus-within:border-primary">
+									<label className="flex h-11 flex-1 items-center gap-2 rounded-xl border border-border px-3.5 focus-within:border-primary">
 										<span className="text-sm font-bold text-muted-foreground">R$</span>
 										<input
 											inputMode="decimal"
@@ -348,13 +344,13 @@ export function ClosePane({ tabId, tabLabel, total, orderCount, itemCount, onBac
 											value={payment.raw ?? formatInput(payment.valor)}
 											onChange={(event) => updatePayment(payment.key, { raw: event.target.value, valor: parseInput(event.target.value) })}
 											onBlur={() => updatePayment(payment.key, { raw: null })}
-											className="min-w-0 flex-1 bg-transparent text-lg font-extrabold tabular-nums outline-none"
+											className="min-w-0 flex-1 bg-transparent text-lg font-bold tabular-nums outline-none"
 										/>
 									</label>
 									{Math.abs(rest - payment.valor) > 0.01 ? (
 										<Button
 											variant="outline"
-											className="h-11 rounded-[14px] px-3 text-xs font-bold"
+											className="h-11 rounded-xl px-3 text-xs font-bold"
 											onClick={() => updatePayment(payment.key, { valor: rest, raw: null })}
 										>
 											Usar restante
@@ -379,7 +375,7 @@ export function ClosePane({ tabId, tabLabel, total, orderCount, itemCount, onBac
 															aria-pressed={active}
 															onClick={() => updatePayment(payment.key, { recebido: note.value })}
 															className={cn(
-																"h-[26px] whitespace-nowrap rounded-lg border px-2 text-[11px] font-bold",
+																"h-7 whitespace-nowrap rounded-lg border px-2 text-xs font-bold",
 																active ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card",
 															)}
 														>
@@ -390,11 +386,11 @@ export function ClosePane({ tabId, tabLabel, total, orderCount, itemCount, onBac
 											</div>
 										</div>
 										<div className="flex items-center justify-between">
-											<span className="flex items-center gap-1.5 text-[13px] font-bold">
-												<HandCoins className="size-[15px]" />
+											<span className="flex items-center gap-1.5 text-sm font-bold">
+												<HandCoins className="size-4" />
 												Troco
 											</span>
-											<span className={cn("text-base font-black tabular-nums", change !== null ? "text-success" : "text-muted-foreground")}>
+											<span className={cn("text-base font-bold tabular-nums", change !== null ? "text-success" : "text-muted-foreground")}>
 												{change !== null ? formatToMoney(change) : "—"}
 											</span>
 										</div>
@@ -416,7 +412,7 @@ export function ClosePane({ tabId, tabLabel, total, orderCount, itemCount, onBac
 					})}
 					<button
 						type="button"
-						className="flex h-10 items-center justify-center gap-1.5 rounded-[14px] border border-dashed border-border text-[13px] font-bold text-primary transition-colors hover:bg-primary/5"
+						className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-dashed border-border text-sm font-bold text-primary transition-colors hover:bg-primary/5"
 						onClick={() =>
 							setPayments((prev) => [
 								...prev,
@@ -431,27 +427,27 @@ export function ClosePane({ tabId, tabLabel, total, orderCount, itemCount, onBac
 							])
 						}
 					>
-						<Plus className="size-[15px]" />
+						<Plus className="size-4" />
 						Adicionar outra forma de pagamento
 					</button>
 				</div>
 
 				{(openSessions ?? []).length > 0 ? (
 					<div className="flex flex-col gap-1.5">
-						<span className="text-xs font-extrabold uppercase tracking-[0.08em] text-muted-foreground">Sessão de caixa</span>
+						<span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Sessão de caixa</span>
 						<DropdownMenu>
 							<DropdownMenuTrigger
 								render={
 									<button
 										type="button"
-										className="flex h-11 w-full items-center justify-between gap-2.5 rounded-[14px] border border-border px-3 text-left transition-colors hover:bg-secondary/40"
+										className="flex h-11 w-full items-center justify-between gap-2.5 rounded-xl border border-border px-3 text-left transition-colors hover:bg-secondary/40"
 									>
 										{selectedSession ? (
 											<SessionLine session={selectedSession} />
 										) : (
 											<span className="flex min-w-0 items-center gap-2.5">
 												<span className="size-2 shrink-0 rounded-full bg-muted-foreground/40" aria-hidden />
-												<span className="text-[13px] font-bold text-muted-foreground">Sem sessão de caixa</span>
+												<span className="text-sm font-bold text-muted-foreground">Sem sessão de caixa</span>
 											</span>
 										)}
 										<ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" />
@@ -486,12 +482,7 @@ export function ClosePane({ tabId, tabLabel, total, orderCount, itemCount, onBac
 							? `Faltam ${formatToMoney(difference)}`
 							: `Excedente de ${formatToMoney(-difference)}`}
 				</div>
-				<Button
-					variant="brand"
-					className="h-12 rounded-2xl text-sm font-extrabold shadow-[0_6px_14px_-4px_rgba(255,185,0,0.42),0_2px_4px_rgba(0,0,0,0.08)]"
-					disabled={!matches || isPending}
-					onClick={confirm}
-				>
+				<Button variant="brand" size="lg" disabled={!matches || isPending} onClick={confirm}>
 					<Receipt className="size-4" />
 					{isPending ? "Fechando..." : `Confirmar fechamento · ${formatToMoney(total)}`}
 				</Button>
@@ -508,13 +499,13 @@ function MethodTile({ icon: Icon, label, active, className, ...props }: MethodTi
 			type="button"
 			aria-pressed={active}
 			className={cn(
-				"flex h-[52px] min-w-0 flex-col items-center justify-center gap-1 rounded-xl border-[1.5px] px-1 text-[11px] font-bold transition-colors",
+				"flex h-12 min-w-0 flex-col items-center justify-center gap-1 rounded-xl border px-1 text-xs font-bold transition-colors",
 				active ? "border-primary bg-primary/10 text-primary" : "border-border bg-card hover:border-primary/50",
 				className,
 			)}
 			{...props}
 		>
-			<Icon className="size-[18px] shrink-0" />
+			<Icon className="size-4 shrink-0" />
 			<span className="max-w-full truncate">{label}</span>
 		</button>
 	);
@@ -525,7 +516,7 @@ function SessionLine({ session }: { session: TOpenSalesSession }) {
 	return (
 		<span className="flex min-w-0 items-center gap-2.5">
 			<span className="size-2 shrink-0 rounded-full bg-success" aria-hidden />
-			<span className="whitespace-nowrap text-[13px] font-bold">{title}</span>
+			<span className="whitespace-nowrap text-sm font-bold">{title}</span>
 			<span className="truncate text-xs text-muted-foreground">{detail}</span>
 		</span>
 	);

@@ -68,3 +68,8 @@ export const SERVICE_SETTINGS_PRESETS = {
 	},
 } as const satisfies Record<string, TServiceSettingsConfiguration>;
 export type TServiceSettingsPreset = keyof typeof SERVICE_SETTINGS_PRESETS;
+
+/** A conta e identificada por um codigo de comanda (livre ou cadastrada) — e nao pela mesa. */
+export function tabUsesCode(contas: TServiceSettingsConfiguration["contas"]) {
+	return contas.identificacao === "CODIGO_MANUAL" || contas.identificacao === "COMANDA_CADASTRADA";
+}

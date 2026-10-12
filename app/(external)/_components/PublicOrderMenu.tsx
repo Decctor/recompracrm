@@ -85,7 +85,7 @@ async function submitOrderRequest(input: TCreatePublicTabOrderRequestInput) {
 
 type PublicOrderMenuProps = {
 	token: string;
-	context: "PONTO" | "TAB";
+	context: TCreatePublicTabOrderRequestInput["context"];
 	products: TPublicMenuProduct[];
 	deviceKey?: string | null;
 	linkedTabCode?: string | null;

@@ -40,6 +40,7 @@ export * from "./integrations";
 export * from "./audiences";
 export * from "./deal-onboarding";
 export * from "./deals";
+export * from "./service-cards";
 export * from "./service-points";
 export * from "./service-settings";
 export * from "./tabs";

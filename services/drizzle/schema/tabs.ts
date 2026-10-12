@@ -7,6 +7,7 @@ import { saleAttendanceStatusEnum, tabStatusEnum } from "./enums";
 import { organizations } from "./organizations";
 import { saleItems, sales } from "./sales";
 import { sellers } from "./sellers";
+import { serviceCards } from "./service-cards";
 import { servicePoints } from "./service-points";
 import { users } from "./users";
 
@@ -29,6 +30,8 @@ export const tabs = newTable(
 			.notNull(),
 		servicePointId: varchar("service_point_id", { length: 255 }).references(() => servicePoints.id, { onDelete: "set null" }),
 		codigo: text("codigo"), // nullable em mesa; obrigatorio quando houver comanda fisica
+		// Comanda fixa cadastrada; `codigo` recebe o snapshot do numero do cartao na abertura.
+		serviceCardId: varchar("service_card_id", { length: 255 }).references(() => serviceCards.id, { onDelete: "set null" }),
 		clienteId: varchar("cliente_id", { length: 255 }).references(() => clients.id, { onDelete: "set null" }),
 		status: tabStatusEnum("status").notNull().default("ABERTA"),
 		// Token do QR efemero da tab (papel/pulseira/cartao). Persistimos apenas o hash.
@@ -51,6 +54,10 @@ export const tabs = newTable(
 		codigoAbertaIdx: uniqueIndex("idx_tabs_org_codigo_aberta")
 			.on(table.organizacaoId, table.codigo)
 			.where(sql`status = 'ABERTA' AND codigo IS NOT NULL`),
+		// Um cartao hospeda no maximo uma conta aberta.
+		cartaoAbertaIdx: uniqueIndex("idx_tabs_org_service_card_aberta")
+			.on(table.organizacaoId, table.serviceCardId)
+			.where(sql`status = 'ABERTA' AND service_card_id IS NOT NULL`),
 	}),
 );
 
@@ -62,6 +69,10 @@ export const tabsRelations = relations(tabs, ({ one, many }) => ({
 	servicePoint: one(servicePoints, {
 		fields: [tabs.servicePointId],
 		references: [servicePoints.id],
+	}),
+	serviceCard: one(serviceCards, {
+		fields: [tabs.serviceCardId],
+		references: [serviceCards.id],
 	}),
 	cliente: one(clients, {
 		fields: [tabs.clienteId],

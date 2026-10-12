@@ -17,5 +17,5 @@ export default async function Tabs() {
 	const { unauthorized } = await requireDashboardCapability("serviceAccounts");
 	if (unauthorized) return unauthorized;
 
-	return <TabsBoardPage />;
+	return <TabsBoardPage organizationLogoUrl={membership.organizacao.logoUrl ?? null} />;
 }

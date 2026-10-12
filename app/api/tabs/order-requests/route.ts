@@ -38,6 +38,8 @@ const ApprovalDestinationSchema = z.discriminatedUnion("type", [
 			.trim()
 			.min(1)
 			.max(100),
+		// Solicitacao sem ponto (QR do cartao): mesa onde a conta sera aberta.
+		servicePointId: z.string({ invalid_type_error: "Tipo nao valido para ID do ponto." }).optional().nullable(),
 	}),
 ]);
 

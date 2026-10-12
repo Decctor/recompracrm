@@ -11,7 +11,7 @@ import { useMutation } from "@tanstack/react-query";
 import { Ban, CheckCheck, ChefHat, Clock, Receipt } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { URGENCY_META, getOpenRounds, isOpenRound } from "../board-meta";
+import { URGENCY_META, formatElapsedMinutes, getOpenRounds, isOpenRound } from "../board-meta";
 import { ORDER_NEXT_ACTION, ORDER_STATUS_META } from "./tab-meta";
 
 // ============================================================================
@@ -81,12 +81,13 @@ export function AccountOrders({ tab, now, refresh, onStartClose }: AccountOrders
 							return (
 								<article
 									key={order.id}
-									className={cn("flex flex-col gap-3 rounded-2xl border bg-card px-4 py-3.5 shadow-2xs", URGENCY_META[urgencia].border)}
+									// O atraso ja aparece no relogio colorido do cabecalho; a borda fica neutra.
+									className="flex flex-col gap-3 rounded-xl border border-border bg-card px-4 py-3.5 shadow-2xs"
 								>
 									<header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
 										<div className="flex min-w-0 items-center gap-2.5">
-											<span className="whitespace-nowrap text-[15px] font-extrabold">Pedido {order.numero}</span>
-											<span className={cn("whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-bold", statusMeta.className)}>{statusMeta.label}</span>
+											<span className="whitespace-nowrap text-sm font-bold">Pedido {order.numero}</span>
+											<span className={cn("whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-bold", statusMeta.className)}>{statusMeta.label}</span>
 											<span
 												className={cn(
 													"flex items-center gap-1 whitespace-nowrap text-xs",
@@ -94,7 +95,7 @@ export function AccountOrders({ tab, now, refresh, onStartClose }: AccountOrders
 												)}
 											>
 												<Clock className="size-3.5" />
-												{round && round.minutos > 0 ? `há ${round.minutos}min` : "agora"}
+												{round && round.minutos > 0 ? `há ${formatElapsedMinutes(round.minutos)}` : "agora"}
 											</span>
 										</div>
 										{isOpen && !isConfirmingCancel ? (
@@ -151,25 +152,25 @@ export function AccountOrders({ tab, now, refresh, onStartClose }: AccountOrders
 						<SectionLabel>
 							Entregues · {doneOrders.length} {doneOrders.length === 1 ? "pedido" : "pedidos"} · {doneItems} itens
 						</SectionLabel>
-						<div className="flex flex-col overflow-hidden rounded-2xl border border-border bg-card">
+						<div className="flex flex-col overflow-hidden rounded-xl border border-border bg-card">
 							{doneOrders.map((order) => {
 								const statusMeta = ORDER_STATUS_META[order.status] ?? ORDER_STATUS_META.ENTREGUE;
 								const orderTotal = order.itens.reduce((sum, item) => sum + item.valorVendaTotalLiquido, 0);
 								return (
 									<div key={order.id} className="flex flex-col gap-1.5 border-b border-border/60 px-4 py-3 last:border-b-0">
 										<div className="flex items-center justify-between gap-2">
-											<span className="flex items-center gap-2 text-[13px] font-bold">
+											<span className="flex items-center gap-2 text-sm font-bold">
 												Pedido {order.numero}
-												<span className={cn("rounded-full px-1.5 py-0.5 text-[10px] font-bold", statusMeta.className)}>{statusMeta.label}</span>
+												<span className={cn("rounded-full px-1.5 py-0.5 text-xs font-bold", statusMeta.className)}>{statusMeta.label}</span>
 											</span>
-											<span className={cn("text-[13px] font-bold tabular-nums text-muted-foreground", order.status === "CANCELADO" && "line-through")}>
+											<span className={cn("text-sm font-bold tabular-nums text-muted-foreground", order.status === "CANCELADO" && "line-through")}>
 												{formatToMoney(orderTotal)}
 											</span>
 										</div>
 										{order.itens.map((item) => {
 											const metadata = (item.metadados ?? {}) as { nome?: string };
 											return (
-												<div key={item.id} className="grid grid-cols-[28px_1fr_auto] gap-2 text-[13px] text-foreground/75">
+												<div key={item.id} className="grid grid-cols-[28px_1fr_auto] gap-2 text-sm text-foreground/75">
 													<span className="font-bold text-muted-foreground">{item.quantidade}×</span>
 													<span className="min-w-0 [overflow-wrap:anywhere]">{metadata.nome ?? "Item"}</span>
 													<span className="tabular-nums text-muted-foreground">{formatToMoney(item.valorVendaTotalLiquido)}</span>
@@ -184,12 +185,12 @@ export function AccountOrders({ tab, now, refresh, onStartClose }: AccountOrders
 				) : null}
 
 				{tab.pedidos.length === 0 ? (
-					<div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-border px-4 py-12 text-center">
+					<div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-border px-4 py-12 text-center">
 						<span className="flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
 							<ChefHat className="size-5" />
 						</span>
-						<span className="text-[15px] font-bold">Nenhum pedido lançado ainda</span>
-						<span className="max-w-[300px] text-[13px] leading-snug text-muted-foreground">
+						<span className="text-sm font-bold">Nenhum pedido lançado ainda</span>
+						<span className="max-w-[300px] text-sm leading-snug text-muted-foreground">
 							Monte o primeiro pedido em “Lançar pedido”. O pagamento acontece só no fechamento.
 						</span>
 					</div>
@@ -203,17 +204,12 @@ export function AccountOrders({ tab, now, refresh, onStartClose }: AccountOrders
 						{tab.pedidos.length} {tab.pedidos.length === 1 ? "pedido" : "pedidos"} · {openOrders.length} em andamento
 					</span>
 					<span className="flex items-baseline gap-2">
-						<span className="text-xs font-extrabold uppercase tracking-[0.08em] text-muted-foreground">{isOpen ? "Total parcial" : "Total"}</span>
-						<span className="text-lg font-black tracking-tight tabular-nums">{formatToMoney(consumo)}</span>
+						<span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">{isOpen ? "Total parcial" : "Total"}</span>
+						<span className="text-lg font-bold tracking-tight tabular-nums">{formatToMoney(consumo)}</span>
 					</span>
 				</div>
 				{isOpen ? (
-					<Button
-						variant="brand"
-						className="h-12 w-full rounded-2xl text-[15px] font-extrabold shadow-[0_6px_14px_-4px_rgba(255,185,0,0.42),0_2px_4px_rgba(0,0,0,0.08)]"
-						disabled={consumo <= 0}
-						onClick={onStartClose}
-					>
+					<Button variant="brand" size="lg" className="w-full" disabled={consumo <= 0} onClick={onStartClose}>
 						<Receipt className="size-4" />
 						Fechar conta · {formatToMoney(consumo)}
 					</Button>
@@ -224,7 +220,7 @@ export function AccountOrders({ tab, now, refresh, onStartClose }: AccountOrders
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
-	return <span className="text-xs font-extrabold uppercase tracking-[0.08em] text-muted-foreground">{children}</span>;
+	return <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">{children}</span>;
 }
 
 function OrderItems({ order }: { order: TTabOrder }) {
@@ -239,12 +235,12 @@ function OrderItems({ order }: { order: TTabOrder }) {
 						key={item.id}
 						className={cn("grid grid-cols-[28px_1fr_auto] items-baseline gap-2 text-sm", fullyCancelled && "text-muted-foreground line-through")}
 					>
-						<span className="font-extrabold text-muted-foreground">{item.quantidade}×</span>
+						<span className="font-bold text-muted-foreground">{item.quantidade}×</span>
 						<span className="flex min-w-0 flex-col">
 							<span className="font-semibold [overflow-wrap:anywhere]">{metadata.nome ?? "Item"}</span>
 							{addOns ? <span className="text-xs text-muted-foreground">{addOns}</span> : null}
 						</span>
-						<span className="text-[13px] font-bold tabular-nums">{formatToMoney(item.valorVendaTotalLiquido)}</span>
+						<span className="text-sm font-bold tabular-nums">{formatToMoney(item.valorVendaTotalLiquido)}</span>
 					</div>
 				);
 			})}
@@ -308,7 +304,7 @@ export function InlineCancelTabConfirm({ hasDeliveredItems, pending, onKeep, onC
 	return (
 		<div className="flex flex-col gap-2.5 rounded-xl bg-destructive/10 px-3.5 py-3 animate-in fade-in-0 slide-in-from-top-1 duration-200">
 			<div className="flex flex-wrap items-center justify-between gap-3">
-				<p className="text-[13px] font-bold text-destructive">Cancelar a conta inteira? Pedidos ativos serão cancelados.</p>
+				<p className="text-sm font-bold text-destructive">Cancelar a conta inteira? Pedidos ativos serão cancelados.</p>
 				<div className="flex gap-2">
 					<Button size="sm" variant="outline" className="h-8 rounded-lg text-xs font-bold" disabled={pending} onClick={onKeep}>
 						Manter conta

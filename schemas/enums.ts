@@ -727,7 +727,8 @@ export const ProductContentUnitEnum = z.enum(["ML", "L", "G", "KG", "UN", "COMPR
 export type TProductContentUnitEnum = z.infer<typeof ProductContentUnitEnum>;
 
 // Politicas de serviceSettings (apenas app-level, nao sao pgEnum: vivem no jsonb de configuracoes).
-export const TabIdentificationModeEnum = z.enum(["AUTOMATICA", "CODIGO_MANUAL"]);
+// COMANDA_CADASTRADA: codigo obrigatorio e restrito as comandas fixas cadastradas (serviceCards).
+export const TabIdentificationModeEnum = z.enum(["AUTOMATICA", "CODIGO_MANUAL", "COMANDA_CADASTRADA"]);
 export type TTabIdentificationModeEnum = z.infer<typeof TabIdentificationModeEnum>;
 
 export const PublicTabOpeningModeEnum = z.enum(["DESABILITADA", "SOLICITACAO", "AUTOMATICA"]);

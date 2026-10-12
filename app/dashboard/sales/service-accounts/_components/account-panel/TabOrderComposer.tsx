@@ -194,7 +194,7 @@ export function TabOrderComposer({ tabId, onLaunched, onCartCountChange }: TabOr
 					{cartCount > 0 ? (
 						<>
 							<div className="flex items-center justify-between">
-								<span className="text-xs font-extrabold uppercase tracking-[0.08em] text-muted-foreground">
+								<span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
 									Novo pedido · {cartCount} {cartCount === 1 ? "item" : "itens"}
 								</span>
 								<button type="button" className="text-xs font-semibold text-muted-foreground hover:text-foreground" onClick={() => setCart([])}>
@@ -213,7 +213,7 @@ export function TabOrderComposer({ tabId, onLaunched, onCartCountChange }: TabOr
 											>
 												<Minus className="size-3" />
 											</button>
-											<span className="w-5 text-center text-[13px] font-black tabular-nums">{item.quantidade}</span>
+											<span className="w-5 text-center text-sm font-bold tabular-nums">{item.quantidade}</span>
 											<button
 												type="button"
 												aria-label={`Adicionar 1 ${item.nome}`}
@@ -224,14 +224,14 @@ export function TabOrderComposer({ tabId, onLaunched, onCartCountChange }: TabOr
 											</button>
 										</div>
 										<span className="flex min-w-0 flex-1 flex-col">
-											<span className="truncate text-[13px] font-semibold">{item.nome}</span>
+											<span className="truncate text-sm font-semibold">{item.nome}</span>
 											{item.modificadores.length > 0 ? (
-												<span className="truncate text-[11px] text-muted-foreground">
+												<span className="truncate text-xs text-muted-foreground">
 													{item.modificadores.map((modifier) => `${modifier.quantidade}x ${modifier.nome}`).join(" · ")}
 												</span>
 											) : null}
 										</span>
-										<span className="shrink-0 text-[13px] font-bold tabular-nums">{formatToMoney(item.valorTotalLiquido)}</span>
+										<span className="shrink-0 text-sm font-bold tabular-nums">{formatToMoney(item.valorTotalLiquido)}</span>
 									</div>
 								))}
 							</div>
@@ -239,13 +239,9 @@ export function TabOrderComposer({ tabId, onLaunched, onCartCountChange }: TabOr
 								value={observacoes}
 								onChange={(event) => setObservacoes(event.target.value)}
 								placeholder="Observação: sem cebola, nome da rodada…"
-								className="h-9 rounded-xl text-[13px]"
+								className="h-9 rounded-xl text-sm"
 							/>
-							<Button
-								className="h-12 rounded-2xl text-sm font-extrabold shadow-[0_6px_14px_-4px_rgba(36,84,156,0.32),0_2px_4px_rgba(36,84,156,0.18)]"
-								disabled={launchPending}
-								onClick={handleLaunch}
-							>
+							<Button size="lg" disabled={launchPending} onClick={handleLaunch}>
 								<SendHorizonal className="size-4" />
 								{launchPending ? "Enviando..." : `Enviar pedido · ${formatToMoney(cartTotal)}`}
 							</Button>
@@ -313,7 +309,7 @@ function CatalogStage({
 				{/* Mais pedidos — acesso rápido aos itens corriqueiros */}
 				{showTopStrip ? (
 					<div className="flex flex-col gap-1.5">
-						<span className="flex items-center gap-1 text-[11px] font-extrabold uppercase tracking-[0.08em] text-muted-foreground">
+						<span className="flex items-center gap-1 text-xs font-bold uppercase tracking-wide text-muted-foreground">
 							<Flame className="size-3" />
 							Mais pedidos
 						</span>
@@ -327,9 +323,7 @@ function CatalogStage({
 								>
 									{product.nome}
 									{cartQtyByProduct.get(product.id) ? (
-										<span className="ml-1.5 rounded-full bg-primary px-1.5 text-[10px] font-black text-primary-foreground">
-											{cartQtyByProduct.get(product.id)}
-										</span>
+										<span className="ml-1.5 rounded-full bg-primary px-1.5 text-xs font-bold text-primary-foreground">{cartQtyByProduct.get(product.id)}</span>
 									) : null}
 								</button>
 							))}
@@ -341,7 +335,7 @@ function CatalogStage({
 					<div className="grid grid-cols-2 gap-2">
 						{Array.from({ length: 8 }).map((_, index) => (
 							// biome-ignore lint/suspicious/noArrayIndexKey: lista estática de skeletons
-							<Skeleton key={index} className="h-[76px] rounded-xl" />
+							<Skeleton key={index} className="h-19 rounded-xl" />
 						))}
 					</div>
 				) : null}
@@ -377,17 +371,17 @@ function CatalogStage({
 									type="button"
 									onClick={() => onProductTap(product)}
 									className={cn(
-										"relative flex min-h-[76px] flex-col justify-between gap-1.5 rounded-xl border px-3 py-2.5 text-left transition-colors hover:border-primary/50",
+										"relative flex min-h-19 flex-col justify-between gap-1.5 rounded-xl border px-3 py-2.5 text-left transition-colors hover:border-primary/50",
 										qty > 0 ? "border-primary/35 bg-primary/5" : "border-border bg-card",
 									)}
 								>
-									<span className="line-clamp-2 pr-6 text-[13px] font-bold leading-tight">{product.nome}</span>
+									<span className="line-clamp-2 pr-6 text-sm font-bold leading-tight">{product.nome}</span>
 									<span className="flex w-full items-center justify-between gap-1.5">
-										<span className="text-xs font-extrabold tabular-nums text-foreground/75">{priceLabel}</span>
-										{complex ? <span className="text-[10px] font-bold text-primary">Personalizável</span> : null}
+										<span className="text-xs font-bold tabular-nums text-foreground/75">{priceLabel}</span>
+										{complex ? <span className="text-xs font-bold text-primary">Personalizável</span> : null}
 									</span>
 									{qty > 0 ? (
-										<span className="absolute top-2 right-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-black tabular-nums text-primary-foreground">
+										<span className="absolute top-2 right-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-bold tabular-nums text-primary-foreground">
 											{qty}
 										</span>
 									) : null}
@@ -423,7 +417,7 @@ function GroupChip({ label, active, onClick }: { label: string; active: boolean;
 			type="button"
 			aria-pressed={active}
 			className={cn(
-				"h-[30px] shrink-0 whitespace-nowrap rounded-full px-3 text-xs font-bold transition-colors",
+				"h-8 shrink-0 whitespace-nowrap rounded-full px-3 text-xs font-bold transition-colors",
 				active ? "bg-foreground text-background" : "bg-secondary text-secondary-foreground hover:bg-secondary/70",
 			)}
 			onClick={onClick}
@@ -478,7 +472,7 @@ function BuilderStage({
 			<div className="flex flex-col gap-1.5 border-t border-border bg-card px-4 pt-3 pb-4">
 				{builder.blockReason ? <p className="text-center text-xs font-medium text-destructive">{builder.blockReason}</p> : null}
 				<div className="flex items-center gap-2">
-					<div className="flex h-12 shrink-0 items-center rounded-2xl border border-border bg-background px-1.5">
+					<div className="flex h-12 shrink-0 items-center rounded-xl border border-border bg-background px-1.5">
 						<ProductBuilderStepper
 							value={builder.quantity}
 							size="sm"
@@ -489,7 +483,7 @@ function BuilderStage({
 					</div>
 					<Button
 						size="lg"
-						className="h-12 flex-1 rounded-2xl text-sm font-extrabold disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100"
+						className="h-12 flex-1 rounded-xl text-sm font-bold disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100"
 						disabled={!builder.canConfirm}
 						onClick={handleConfirm}
 					>

@@ -29,6 +29,7 @@ export type TGetTabsInput = z.infer<typeof GetTabsInputSchema>;
 const CreateTabInputSchema = z.object({
 	servicePointId: z.string({ invalid_type_error: "Tipo nao valido para ID do ponto." }).optional().nullable(),
 	codigo: z.string({ invalid_type_error: "Tipo nao valido para codigo da comanda." }).optional().nullable(),
+	serviceCardId: z.string({ invalid_type_error: "Tipo nao valido para ID da comanda." }).optional().nullable(),
 	clienteId: z.string({ invalid_type_error: "Tipo nao valido para ID do cliente." }).optional().nullable(),
 	responsavelVendedorId: z.string({ invalid_type_error: "Tipo nao valido para ID do vendedor." }).optional().nullable(),
 	observacoes: z.string({ invalid_type_error: "Tipo nao valido para observacoes." }).optional().nullable(),
@@ -136,7 +137,6 @@ export type TCreateTabOutput = Awaited<ReturnType<typeof createTab>>;
 // ============================================================================
 // HANDLERS
 // ============================================================================
-
 
 async function getTabsRoute(request: NextRequest) {
 	const session = requireERPSession(await getCurrentSessionUncached());

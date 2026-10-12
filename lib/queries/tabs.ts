@@ -1,9 +1,11 @@
 import type { TGetPreparationOutput } from "@/app/api/sales/preparation/route";
 import type { TGetTabOrderRequestsOutput } from "@/app/api/tabs/order-requests/route";
+import type { TGetServiceCardsOutput } from "@/app/api/service-cards/route";
 import type { TGetServicePointsOutput } from "@/app/api/service-points/route";
 import type { TGetServiceSettingsOutput } from "@/app/api/service-settings/route";
 import type { TGetTabsOutput } from "@/app/api/tabs/route";
 import type { TTabStatusEnum } from "@/schemas/enums";
+import { useDebouncedText } from "@/lib/hooks/use-debounced-text";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import { useCallback, useState } from "react";
@@ -41,6 +43,51 @@ export function useServicePoints({ activeOnly }: { activeOnly?: boolean } = {}) 
 	return {
 		...useQuery({ queryKey: ["service-points", activeOnly ?? false], queryFn: () => fetchServicePoints({ activeOnly }) }),
 		queryKey: ["service-points", activeOnly ?? false],
+	};
+}
+
+// ============================================================================
+// SERVICE CARDS (comandas fixas)
+// ============================================================================
+
+async function fetchServiceCards({ activeOnly }: { activeOnly?: boolean } = {}) {
+	const searchParams = new URLSearchParams();
+	if (activeOnly) searchParams.set("activeOnly", "true");
+	const { data } = await axios.get<TGetServiceCardsOutput>(`/api/service-cards?${searchParams.toString()}`);
+	const result = data.data.default;
+	if (!result) throw new Error("Comandas nao encontradas.");
+	return result;
+}
+
+export function useServiceCards({ activeOnly, enabled = true }: { activeOnly?: boolean; enabled?: boolean } = {}) {
+	return {
+		...useQuery({ queryKey: ["service-cards", activeOnly ?? false], queryFn: () => fetchServiceCards({ activeOnly }), enabled }),
+		queryKey: ["service-cards", activeOnly ?? false],
+	};
+}
+
+export async function fetchServiceCardLookup({ codigo, token }: { codigo?: string | null; token?: string | null }) {
+	const searchParams = new URLSearchParams();
+	if (codigo) searchParams.set("codigo", codigo);
+	if (token) searchParams.set("token", token);
+	const { data } = await axios.get<TGetServiceCardsOutput>(`/api/service-cards?${searchParams.toString()}`);
+	const result = data.data.byLookup;
+	if (!result) throw new Error("Consulta de comanda invalida.");
+	return result;
+}
+
+/** Status da comanda digitada (cadastrada? em uso?) enquanto o operador abre a conta. */
+export function useServiceCardLookup({ codigo, enabled = true }: { codigo: string; enabled?: boolean }) {
+	const trimmed = codigo.trim();
+	const debounced = useDebouncedText(trimmed, 250);
+	return {
+		...useQuery({
+			queryKey: ["service-card-lookup", debounced],
+			queryFn: () => fetchServiceCardLookup({ codigo: debounced }),
+			enabled: enabled && !!debounced,
+		}),
+		isDebouncing: debounced !== trimmed,
+		queryKey: ["service-card-lookup", debounced],
 	};
 }
 
