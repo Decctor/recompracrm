@@ -15,12 +15,14 @@ const model: MockLanguageModelV4 = new MockLanguageModelV4({
 	}),
 });
 
-mock.module("ai", { namedExports: { ...ai, gateway: () => model } });
+const gateway = mock.fn((_modelId: string) => model);
+mock.module("ai", { namedExports: { ...ai, gateway } });
 const { handleAIDocumentProcessing } = await import("./index.ts");
 
 test("envia os bytes do PDF ao modelo e resume a extração", async () => {
 	const bytes = Buffer.from("%PDF-1.7\nconteúdo do documento");
 	const result = await handleAIDocumentProcessing(bytes, "application/pdf");
+	assert.equal(gateway.mock.calls[0].arguments[0], "google/gemini-2.5-flash-lite");
 	const content = model.doGenerateCalls[0].prompt[0].content;
 	assert.ok(Array.isArray(content));
 	const file = content.find((part) => part.type === "file");

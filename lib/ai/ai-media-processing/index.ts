@@ -92,11 +92,12 @@ export async function handleAIDocumentProcessing(fileBuffer: Buffer, mimeType: s
 	try {
 		const mediaType = mimeType.split(";")[0].trim().toLowerCase();
 		const isPdf = mediaType === "application/pdf";
+		const model = gateway(isPdf ? "google/gemini-2.5-flash-lite" : "openai/gpt-4o-mini");
 		const textContent =
 			mediaType.startsWith("text/") || mediaType === "application/json" ? fileBuffer.toString("utf-8") : `Documento recebido (${mimeType})`;
 
 		const extractionResult = await generateText({
-			model: gateway("openai/gpt-4o-mini"),
+			model,
 			...(isPdf
 				? {
 						messages: [
@@ -113,7 +114,7 @@ export async function handleAIDocumentProcessing(fileBuffer: Buffer, mimeType: s
 		});
 
 		const summaryResult = await generateText({
-			model: gateway("openai/gpt-4o-mini"),
+			model,
 			prompt: `Resuma o seguinte documento em português de forma concisa (máximo 3 linhas):\n\n${extractionResult.text}`,
 		});
 
