@@ -1,3 +1,4 @@
+import { handleAIDocumentProcessing } from "@/lib/ai/ai-media-processing";
 import { appApiHandler } from "@/lib/app-api";
 import { supabaseClient } from "@/services/supabase";
 import { gateway, generateText, transcribe } from "ai";
@@ -32,10 +33,13 @@ async function processMediaRoute(req: NextRequest) {
 
 		const validationResult = ProcessMediaInputSchema.safeParse(payload);
 		if (!validationResult.success) {
-			return NextResponse.json({
-				success: false,
-				error: `Dados inválidos: ${validationResult.error.errors.map((e) => e.message).join(", ")}`,
-			}, { status: 400 });
+			return NextResponse.json(
+				{
+					success: false,
+					error: `Dados inválidos: ${validationResult.error.errors.map((e) => e.message).join(", ")}`,
+				},
+				{ status: 400 },
+			);
 		}
 
 		const { messageId, storageId, mimeType, mediaType } = validationResult.data;
@@ -45,10 +49,13 @@ async function processMediaRoute(req: NextRequest) {
 
 		if (downloadError || !fileData) {
 			console.error("[PROCESS_MEDIA] Download error:", downloadError);
-			return NextResponse.json({
-				success: false,
-				error: "Erro ao baixar arquivo do storage",
-			}, { status: 500 });
+			return NextResponse.json(
+				{
+					success: false,
+					error: "Erro ao baixar arquivo do storage",
+				},
+				{ status: 500 },
+			);
 		}
 
 		const fileBuffer = Buffer.from(await fileData.arrayBuffer());
@@ -75,7 +82,7 @@ async function processMediaRoute(req: NextRequest) {
 				break;
 			}
 			case "DOCUMENTO": {
-				const result = await processDocument(fileBuffer, mimeType);
+				const result = await handleAIDocumentProcessing(fileBuffer, mimeType);
 				processedText = result.extraction;
 				summary = result.summary;
 				break;
@@ -84,17 +91,23 @@ async function processMediaRoute(req: NextRequest) {
 
 		console.log("[PROCESS_MEDIA] Completed for message:", messageId);
 
-		return NextResponse.json({
-			success: true,
-			processedText,
-			summary,
-		}, { status: 200 });
+		return NextResponse.json(
+			{
+				success: true,
+				processedText,
+				summary,
+			},
+			{ status: 200 },
+		);
 	} catch (error) {
 		console.error("[PROCESS_MEDIA] Error:", error);
-		return NextResponse.json({
-			success: false,
-			error: error instanceof Error ? error.message : "Erro desconhecido",
-		}, { status: 500 });
+		return NextResponse.json(
+			{
+				success: false,
+				error: error instanceof Error ? error.message : "Erro desconhecido",
+			},
+			{ status: 500 },
+		);
 	}
 }
 
@@ -181,40 +194,6 @@ async function processVideo(fileBuffer: Buffer, mimeType: string): Promise<{ ana
 	const summary = "Vídeo recebido - processamento básico";
 
 	return { analysis, summary };
-}
-
-async function processDocument(fileBuffer: Buffer, mimeType: string): Promise<{ extraction: string; summary: string }> {
-	console.log("[AI_MEDIA] Processing document file");
-
-	try {
-		let textContent = "";
-
-		if (mimeType === "application/pdf") {
-			textContent = `Documento PDF recebido. Para extração completa de texto, considere adicionar a biblioteca 'pdf-parse'.`;
-		} else if (mimeType.includes("text/") || mimeType.includes("application/json")) {
-			textContent = fileBuffer.toString("utf-8");
-		} else {
-			textContent = `Documento recebido (${mimeType})`;
-		}
-
-		const extractionResult = await generateText({
-			model: gateway("openai/gpt-4o-mini"),
-			prompt: `Analise o seguinte documento e extraia as informações-chave mais importantes em português:\n\n${textContent}`,
-		});
-
-		const summaryResult = await generateText({
-			model: gateway("openai/gpt-4o-mini"),
-			prompt: `Resuma o seguinte documento em português de forma concisa (máximo 3 linhas):\n\n${extractionResult.text}`,
-		});
-
-		return {
-			extraction: extractionResult.text,
-			summary: summaryResult.text,
-		};
-	} catch (error) {
-		console.error("[AI_MEDIA] Error processing document:", error);
-		throw error;
-	}
 }
 
 export type TProcessMediaOutput = z.infer<typeof ProcessMediaOutputSchema>;
