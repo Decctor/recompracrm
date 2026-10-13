@@ -6,6 +6,7 @@ import { appApiHandler } from "@/lib/app-api";
 import { runPagesRouteHandler, type PagesRouteHandler } from "@/lib/pages-route-compat";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { scheduleAddOnGroupPush, schedulePushForProduct } from "@/lib/integrations/ifood/sync/queue";
+import { editedAddOnGroupIds } from "@/lib/integrations/ifood/sync/option-sync";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { ProductFiscalProfileSchema } from "@/schemas/fiscal";
 import {
@@ -1108,21 +1109,12 @@ const updateProductHandler: PagesRouteHandler<TUpdateProductOutput> = async (req
 	await schedulePushForProduct({ orgId: sessionUser.membership!.organizacao.id, produtoId: input.productId });
 	// O push do produto não leva as opções dos grupos de adicionais — elas têm vínculo próprio e o
 	// push do GRUPO é que as propaga para todas as cópias no iFood (o mesmo da aba Adicionais).
-	// Diferencial por snapshot: grupo sem mudança de opção não chama o iFood.
-	for (const produtoAddOnId of editedAddOnGroupIds(input)) {
+	// A leitura confirma o estado remoto; opções já alinhadas não são reenviadas.
+	for (const produtoAddOnId of editedAddOnGroupIds([...input.productAddOns, ...input.productVariants.flatMap((variant) => variant.addOns ?? [])])) {
 		await scheduleAddOnGroupPush({ orgId: sessionUser.membership!.organizacao.id, produtoAddOnId });
 	}
 	return res.status(200).json(data);
 };
-
-/**
- * Grupos cujo conteúdo este save pode ter mudado: os enviados com id e não desanexados, no produto e
- * nas variantes. Grupo novo ainda não tem vínculo no iFood; desanexar não muda o grupo em si.
- */
-function editedAddOnGroupIds(input: TUpdateProductInput) {
-	const addOns = [...input.productAddOns, ...input.productVariants.flatMap((variant) => variant.addOns ?? [])];
-	return [...new Set(addOns.filter((addOn) => addOn.id && !addOn.deletar).map((addOn) => addOn.id as string))];
-}
 
 // ========== CREATE PRODUCT ==========
 

@@ -1,5 +1,6 @@
 import { pushAddOnGroupToLinkedMerchants } from "./add-ons";
 import { pushProductToLinkedMerchants } from "./push";
+import { assertCatalogPushComplete, catalogPushRetry } from "./queue-policy";
 
 /**
  * Transporte do push de catálogo para o iFood (produto ou grupo de adicionais).
@@ -20,7 +21,7 @@ export const IFOOD_CATALOG_PUSH_TOPIC = "ifood-catalog-push";
 
 export type TIfoodCatalogPushMessage = { orgId: string } & (
 	| { tipo: "PRODUTO"; produtoId: string }
-	| { tipo: "ADD_ON_GROUP"; produtoAddOnId: string }
+	| { tipo: "ADD_ON_GROUP"; produtoAddOnId: string; availabilityOnly?: boolean }
 );
 
 /** Chave de serialização: dois pushes do mesmo nó não rodam ao mesmo tempo (ver o consumer). */
@@ -31,7 +32,7 @@ export function ifoodCatalogPushLockKey(message: TIfoodCatalogPushMessage) {
 
 export async function runIfoodCatalogPush(message: TIfoodCatalogPushMessage) {
 	if (message.tipo === "PRODUTO") return pushProductToLinkedMerchants({ orgId: message.orgId, produtoId: message.produtoId });
-	return pushAddOnGroupToLinkedMerchants({ orgId: message.orgId, produtoAddOnId: message.produtoAddOnId });
+	return pushAddOnGroupToLinkedMerchants({ orgId: message.orgId, produtoAddOnId: message.produtoAddOnId, availabilityOnly: message.availabilityOnly });
 }
 
 function transport(): "queue" | "inline" {
@@ -41,9 +42,19 @@ function transport(): "queue" | "inline" {
 }
 
 function runInline(message: TIfoodCatalogPushMessage) {
-	void runIfoodCatalogPush(message).catch((error) => {
-		console.error("[IFOOD_PUSH] Falha inesperada no push assíncrono.", { ...message, error });
-	});
+	void (async () => {
+		for (let attempt = 1; attempt <= 3; attempt++) {
+			try {
+				assertCatalogPushComplete(await runIfoodCatalogPush(message));
+				return;
+			} catch (error) {
+				const decision = catalogPushRetry(error, attempt);
+				console.error("[IFOOD_PUSH] Falha no push assíncrono.", { ...message, tentativa: attempt, error });
+				if ("acknowledge" in decision) return;
+				await new Promise((resolve) => setTimeout(resolve, decision.afterSeconds * 1000));
+			}
+		}
+	})();
 }
 
 /**
@@ -68,6 +79,14 @@ export function schedulePushForProduct({ orgId, produtoId }: { orgId: string; pr
 	return scheduleIfoodCatalogPush({ tipo: "PRODUTO", orgId, produtoId });
 }
 
-export function scheduleAddOnGroupPush({ orgId, produtoAddOnId }: { orgId: string; produtoAddOnId: string }) {
-	return scheduleIfoodCatalogPush({ tipo: "ADD_ON_GROUP", orgId, produtoAddOnId });
+export function scheduleAddOnGroupPush({
+	orgId,
+	produtoAddOnId,
+	availabilityOnly,
+}: {
+	orgId: string;
+	produtoAddOnId: string;
+	availabilityOnly?: boolean;
+}) {
+	return scheduleIfoodCatalogPush({ tipo: "ADD_ON_GROUP", orgId, produtoAddOnId, availabilityOnly });
 }

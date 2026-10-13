@@ -8,7 +8,21 @@ import {
 } from "@/lib/integrations/ifood/catalog-items";
 import type { TIfoodItemFlatDTO, TIfoodOptionGroupDTO } from "@/lib/integrations/ifood/catalog-types";
 import { resolveIfoodManagementContext } from "@/lib/integrations/ifood/context";
-import { baseProductOf, type TIfoodDocumentAssociation, type TIfoodItemDocument } from "@/lib/integrations/ifood/item-document";
+import {
+	baseProductOf,
+	collectIfoodOptionStates,
+	findIfoodItemWithOptionGroup,
+	type TIfoodDocumentAssociation,
+	type TIfoodItemDocument,
+} from "@/lib/integrations/ifood/item-document";
+import { verifyIfoodOptionStates } from "../option-state";
+import {
+	computeOptionDivergences,
+	confirmedOptionSnapshot,
+	hasManagedDrift,
+	hasPotentialOptionDuplicate,
+	shouldPushOptionAvailability,
+} from "./option-sync";
 import { resolveAddOnReferencesRules } from "@/lib/products/add-on-rules";
 import { loadChannelState } from "@/lib/products/sales-channels-store";
 import {
@@ -17,14 +31,22 @@ import {
 	resolveChannelOptionPrice,
 	type TChannelOptionOverrides,
 } from "@/lib/products/sales-channels";
-import { type TCatalogLinkDivergence, type TCatalogLinkOptionGroupAssociation, type TCatalogLinkSnapshot, type TCatalogLinkSyncPolicy, createsMissingOptions } from "@/schemas/catalog-links";
+import {
+	type TCatalogLinkDivergence,
+	type TCatalogLinkOptionGroupAssociation,
+	type TCatalogLinkSnapshot,
+	type TCatalogLinkSyncPolicy,
+	createsMissingOptions,
+} from "@/schemas/catalog-links";
 import type { TIfoodOptionGroupTypeEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
 import { catalogLinks, productAddOnReferences, productAddOns, type TCatalogLinkEntity } from "@/services/drizzle/schema";
 import type { AxiosInstance } from "axios";
 import { and, asc, eq, inArray, isNull, ne } from "drizzle-orm";
 import { isHttpError } from "http-errors";
+import createHttpError from "http-errors";
 import { markCatalogLinkError, upsertCatalogLink } from "./links";
+import { isRetryableIfoodError } from "./queue-policy";
 
 /**
  * Adicionais ↔ complementos do iFood (docs/catalog-channels-matrix-design.md §10).
@@ -433,10 +455,26 @@ function optionSnapshot(opcao: TAddOnOptionNode): TCatalogLinkSnapshot {
 	return { nome: opcao.nome, preco: opcao.precoDelta, disponivel: opcao.disponivel };
 }
 
-async function markSynchronized({ orgId, linkId, snapshot }: { orgId: string; linkId: string; snapshot: TCatalogLinkSnapshot }) {
+async function markSynchronized({
+	orgId,
+	linkId,
+	snapshot,
+	divergences = [],
+}: {
+	orgId: string;
+	linkId: string;
+	snapshot: TCatalogLinkSnapshot;
+	divergences?: TCatalogLinkDivergence[];
+}) {
 	await db
 		.update(catalogLinks)
-		.set({ status: "SINCRONIZADO", ultimoSnapshot: snapshot, dataUltimaSincronizacao: new Date(), ultimoErro: null, divergencias: null })
+		.set({
+			status: divergences.some((d) => d.sincronizado || d.campo === "complementos") ? "DIVERGENTE" : "SINCRONIZADO",
+			ultimoSnapshot: snapshot,
+			dataUltimaSincronizacao: new Date(),
+			ultimoErro: null,
+			divergencias: divergences.length ? divergences : null,
+		})
 		.where(and(eq(catalogLinks.id, linkId), eq(catalogLinks.organizacaoId, orgId)));
 }
 
@@ -468,6 +506,7 @@ export async function recordAddOnLinksFromFlatItem({
 		map.set(key, [...list, link]);
 	};
 	const usedGroupIds = new Set<string>();
+	const unconfirmedGroups = new Set<string>();
 	const flatGroupIds = new Set(flat.gruposComplementos.map((grupo) => grupo.id).filter((id): id is string => !!id));
 
 	for (const node of nodes) {
@@ -495,7 +534,10 @@ export async function recordAddOnLinksFromFlatItem({
 			const remoteOption =
 				(existingOption?.externoOptionId ? remoteGroup.opcoes.find((option) => option.id === existingOption.externoOptionId) : undefined) ??
 				remoteGroup.opcoes.find((option) => option.id && !usedOptionIds.has(option.id) && normalizeName(option.nome) === normalizeName(opcao.nome));
-			if (!remoteOption?.id) continue;
+			if (!remoteOption?.id) {
+				unconfirmedGroups.add(node.grupoId);
+				continue;
+			}
 			usedOptionIds.add(remoteOption.id);
 
 			const optionLink = await upsertCatalogLink({
@@ -506,9 +548,31 @@ export async function recordAddOnLinksFromFlatItem({
 				sincronizar: existingOption?.sincronizar,
 				autorId,
 			});
-			await markSynchronized({ orgId, linkId: optionLink.id, snapshot: optionSnapshot(opcao) });
-			record(next.options, opcao.opcaoId, { ...optionLink, status: "SINCRONIZADO" });
+			const divergences = computeOptionDivergences({
+				link: optionLink,
+				option: opcao,
+				observed: {
+					nome: remoteOption.nome,
+					preco: remoteOption.preco,
+					disponivel: remoteOption.status === "AVAILABLE" ? true : remoteOption.status === "UNAVAILABLE" ? false : null,
+				},
+			});
+			if (divergences.some((d) => d.sincronizado)) {
+				await markCatalogLinkError({
+					linkId: optionLink.id,
+					erro: "O iFood ainda não confirmou os dados da opção publicada. O vínculo foi preservado para retentar.",
+				});
+				unconfirmedGroups.add(node.grupoId);
+				record(next.options, opcao.opcaoId, { ...optionLink, status: "ERRO" });
+			} else {
+				await markSynchronized({ orgId, linkId: optionLink.id, snapshot: optionSnapshot(opcao), divergences });
+				record(next.options, opcao.opcaoId, { ...optionLink, status: "SINCRONIZADO" });
+			}
 		}
+	}
+	if (unconfirmedGroups.size) {
+		const { scheduleAddOnGroupPush } = await import("./queue");
+		for (const produtoAddOnId of unconfirmedGroups) await scheduleAddOnGroupPush({ orgId, produtoAddOnId });
 	}
 	return next;
 }
@@ -587,7 +651,7 @@ export async function linkAddOnGroup({
 /**
  * Empurra o conteúdo de um grupo (nome, status, opções) para todas as lojas onde ele está
  * vinculado. Pelos endpoints de patch, não pelo `PUT /items`: o grupo é da loja, não de um item.
- * Best-effort por vínculo, nunca lança — o chamador é o save do grupo.
+ * Falhas de escrita ficam por vínculo; falhas de infraestrutura sobem para a retentativa da fila.
  *
  * Muitos-para-um (drizzle/0116): o trabalho de OPÇÃO é conduzido pelos vínculos de opção, não pelo
  * vínculo do grupo — cada opção interna pode ter um vínculo por cópia do grupo no iFood, e pode até
@@ -596,7 +660,15 @@ export async function linkAddOnGroup({
  * todas as cópias. O trabalho de GRUPO (nome, status, criar opções sem par) segue por vínculo de
  * grupo, e criar opções respeita `criarOpcoes` — cópias parciais não são completadas.
  */
-export async function pushAddOnGroupToLinkedMerchants({ orgId, produtoAddOnId }: { orgId: string; produtoAddOnId: string }) {
+export async function pushAddOnGroupToLinkedMerchants({
+	orgId,
+	produtoAddOnId,
+	availabilityOnly = false,
+}: {
+	orgId: string;
+	produtoAddOnId: string;
+	availabilityOnly?: boolean;
+}) {
 	const rows = await db.query.catalogLinks.findMany({
 		where: and(
 			eq(catalogLinks.organizacaoId, orgId),
@@ -607,10 +679,11 @@ export async function pushAddOnGroupToLinkedMerchants({ orgId, produtoAddOnId }:
 		),
 		orderBy: [asc(catalogLinks.dataInsercao), asc(catalogLinks.id)],
 	});
-	if (rows.length === 0) return { enviados: 0, erros: 0 };
+	if (rows.length === 0) return { enviados: 0, erros: 0, errosRetentaveis: 0 };
 
 	let enviados = 0;
 	let erros = 0;
+	let errosRetentaveis = 0;
 
 	const merchantIds = [...new Set(rows.map((row) => row.merchantId))];
 	for (const merchantId of merchantIds) {
@@ -635,6 +708,7 @@ export async function pushAddOnGroupToLinkedMerchants({ orgId, produtoAddOnId }:
 			const erro = error instanceof Error ? error.message : "Falha ao resolver a conexão do iFood.";
 			for (const link of [...groupLinks, ...optionLinks]) await markCatalogLinkError({ linkId: link.id, erro });
 			erros += groupLinks.length + optionLinks.length;
+			if (isRetryableIfoodError(error)) errosRetentaveis += groupLinks.length + optionLinks.length;
 			continue;
 		}
 
@@ -657,13 +731,17 @@ export async function pushAddOnGroupToLinkedMerchants({ orgId, produtoAddOnId }:
 
 		// 1. Grupo: nome e status, por cópia vinculada.
 		for (const groupLink of groupLinks) {
+			if (availabilityOnly) continue;
 			if (!groupLink.externoOptionGroupId) continue;
 			try {
 				const previous = groupLink.ultimoSnapshot ?? {};
-				if (groupLink.sincronizar.nome && previous.nome !== node.nome) {
+				const changedName = groupLink.sincronizar.nome && (previous.nome !== node.nome || hasManagedDrift(groupLink, "nome"));
+				const changedAvailability =
+					groupLink.sincronizar.disponibilidade && (previous.disponivel !== node.disponivel || hasManagedDrift(groupLink, "disponibilidade"));
+				if (changedName) {
 					await updateIfoodOptionGroup(client, merchantId, groupLink.externoOptionGroupId, { nome: node.nome });
 				}
-				if (groupLink.sincronizar.disponibilidade && previous.disponivel !== node.disponivel) {
+				if (changedAvailability) {
 					await patchIfoodOptionGroupStatus(
 						client,
 						merchantId,
@@ -672,11 +750,35 @@ export async function pushAddOnGroupToLinkedMerchants({ orgId, produtoAddOnId }:
 						linkedItemIds,
 					);
 				}
-				await markSynchronized({ orgId, linkId: groupLink.id, snapshot: groupSnapshot(node) });
+				if (changedName || changedAvailability) {
+					const groupId = groupLink.externoOptionGroupId;
+					const confirmed = await verifyIfoodOptionStates({
+						optionIds: new Set([groupId]),
+						read: async () => {
+							const remote = await getIfoodOptionGroup(client, merchantId, groupId);
+							const document = changedAvailability ? await findIfoodItemWithOptionGroup(client, merchantId, groupId, linkedItemIds) : null;
+							const status = document?.optionGroups.find((group) => group.id === groupId)?.status ?? remote.status;
+							return new Map([
+								[groupId, { nome: remote.nome, preco: null, disponivel: status === "AVAILABLE" ? true : status === "UNAVAILABLE" ? false : null }],
+							]);
+						},
+						matches: (_, observed) =>
+							(!changedName || normalizeName(observed.nome) === normalizeName(node.nome)) &&
+							(!changedAvailability || observed.disponivel === node.disponivel),
+					});
+					if (!confirmed.has(groupId)) throw new Error("O iFood ainda não confirmou os dados do grupo de adicionais.");
+				}
+				await markSynchronized({
+					orgId,
+					linkId: groupLink.id,
+					snapshot: groupSnapshot(node),
+					divergences: groupLink.divergencias?.filter((d) => !d.sincronizado),
+				});
 				enviados += 1;
 			} catch (error) {
 				await markCatalogLinkError({ linkId: groupLink.id, erro: error instanceof Error ? error.message : "Falha desconhecida ao sincronizar o grupo." });
 				erros += 1;
+				if (isRetryableIfoodError(error)) errosRetentaveis += 1;
 			}
 		}
 
@@ -685,49 +787,72 @@ export async function pushAddOnGroupToLinkedMerchants({ orgId, produtoAddOnId }:
 		const priceUpdates: { link: TCatalogLinkEntity; optionId: string; preco: number }[] = [];
 		const statusUpdates: { link: TCatalogLinkEntity; optionId: string; status: "AVAILABLE" | "UNAVAILABLE" }[] = [];
 		const settled = new Map<string, TCatalogLinkSnapshot>();
+		const observedBefore = await collectIfoodOptionStates(
+			client,
+			merchantId,
+			linkedItemIds,
+			new Set(optionLinks.map((link) => link.externoOptionId!)),
+		).catch(() => new Map());
 		for (const optionLink of optionLinks) {
 			const externoOptionId = optionLink.externoOptionId as string;
 			const opcao = optionLink.produtoAddOnOpcaoId ? optionById.get(optionLink.produtoAddOnOpcaoId) : undefined;
 			const before = optionLink.ultimoSnapshot ?? {};
+			const observed = observedBefore.get(externoOptionId);
 			if (!opcao) {
-				if (before.disponivel !== false) {
+				if (shouldPushOptionAvailability({ link: optionLink, option: undefined, observed })) {
 					statusUpdates.push({ link: optionLink, optionId: externoOptionId, status: "UNAVAILABLE" });
-					settled.set(optionLink.id, { ...before, disponivel: false });
 				}
+				settled.set(optionLink.id, confirmedOptionSnapshot(optionLink, undefined, availabilityOnly));
 				continue;
 			}
 			try {
 				// O nome mora no PRODUTO da opção, e um produto pode servir a opções de várias cópias do
 				// grupo: renomear vale para todas — é o que se quer, já que todas são a mesma opção interna.
-				if (optionLink.sincronizar.nome && before.nome !== opcao.nome && optionLink.externoProdutoId) {
+				if (
+					!availabilityOnly &&
+					optionLink.sincronizar.nome &&
+					(before.nome !== opcao.nome ||
+						hasManagedDrift(optionLink, "nome") ||
+						(observed && computeOptionDivergences({ link: optionLink, option: opcao, observed }).some((d) => d.campo === "nome"))) &&
+					optionLink.externoProdutoId
+				) {
 					await updateIfoodProduct(client, merchantId, optionLink.externoProdutoId, { nome: opcao.nome });
 				}
 			} catch (error) {
 				await markCatalogLinkError({ linkId: optionLink.id, erro: error instanceof Error ? error.message : "Falha ao renomear a opção." });
 				erros += 1;
+				if (isRetryableIfoodError(error)) errosRetentaveis += 1;
 				continue;
 			}
-			if (optionLink.sincronizar.preco && before.preco !== opcao.precoDelta) {
+			if (
+				!availabilityOnly &&
+				optionLink.sincronizar.preco &&
+				(before.preco !== opcao.precoDelta ||
+					hasManagedDrift(optionLink, "preco") ||
+					(observed && computeOptionDivergences({ link: optionLink, option: opcao, observed }).some((d) => d.campo === "preco")))
+			) {
 				priceUpdates.push({ link: optionLink, optionId: externoOptionId, preco: opcao.precoDelta });
 			}
-			if (optionLink.sincronizar.disponibilidade && before.disponivel !== opcao.disponivel) {
+			if (shouldPushOptionAvailability({ link: optionLink, option: opcao, observed })) {
 				statusUpdates.push({ link: optionLink, optionId: externoOptionId, status: opcao.disponivel ? "AVAILABLE" : "UNAVAILABLE" });
 			}
-			settled.set(optionLink.id, optionSnapshot(opcao));
+			settled.set(optionLink.id, confirmedOptionSnapshot(optionLink, opcao, availabilityOnly));
 		}
 
 		// Um PATCH por opção, resultado por opção: a que falhou vira ERRO (e mantém o snapshot
 		// antigo, então o próximo push a reenvia); as outras seguem para SINCRONIZADO.
 		const failed = new Set<string>();
+		const retryableFailures = new Set<string>();
 		const recordFailures = async (
 			updates: { link: TCatalogLinkEntity; optionId: string }[],
-			results: { optionId: string; erro: string | null }[],
+			results: { optionId: string; erro: string | null; retentavel?: boolean }[],
 		) => {
 			const erroPorOpcao = new Map(results.filter((result) => result.erro).map((result) => [result.optionId, result.erro as string]));
 			for (const entry of updates) {
 				const erro = erroPorOpcao.get(entry.optionId);
 				if (!erro) continue;
 				failed.add(entry.link.id);
+				if (results.find((result) => result.optionId === entry.optionId)?.retentavel !== false) retryableFailures.add(entry.link.id);
 				await markCatalogLinkError({ linkId: entry.link.id, erro });
 			}
 		};
@@ -751,18 +876,44 @@ export async function pushAddOnGroupToLinkedMerchants({ orgId, produtoAddOnId }:
 				),
 			);
 		}
+		const linksByOptionId = new Map(optionLinks.map((link) => [link.externoOptionId!, link]));
+		const confirmed = await verifyIfoodOptionStates({
+			optionIds: new Set(optionLinks.filter((link) => settled.has(link.id) && !failed.has(link.id)).map((link) => link.externoOptionId!)),
+			read: (ids) => collectIfoodOptionStates(client, merchantId, linkedItemIds, ids),
+			matches: (id, observed) => {
+				const link = linksByOptionId.get(id)!;
+				const option = optionById.get(link.produtoAddOnOpcaoId!);
+				return !computeOptionDivergences({ link, option, observed }).some(
+					(divergence) => divergence.sincronizado && (!availabilityOnly || divergence.campo === "disponibilidade"),
+				);
+			},
+		});
 		for (const [linkId, snapshot] of settled) {
 			if (failed.has(linkId)) {
 				erros += 1;
+				if (retryableFailures.has(linkId)) errosRetentaveis += 1;
 				continue;
 			}
-			await markSynchronized({ orgId, linkId, snapshot });
+			const link = optionLinks.find((link) => link.id === linkId)!;
+			const observed = confirmed.get(link.externoOptionId!);
+			if (!observed) {
+				await markCatalogLinkError({ linkId, erro: "O iFood ainda não confirmou os dados da opção. A sincronização será tentada novamente." });
+				erros += 1;
+				errosRetentaveis += 1;
+				continue;
+			}
+			await markSynchronized({
+				orgId,
+				linkId,
+				snapshot,
+				divergences: computeOptionDivergences({ link, option: optionById.get(link.produtoAddOnOpcaoId!), observed }),
+			});
 			enviados += 1;
 		}
 
 		// 3. Opções internas sem par numa cópia: criadas nela — só onde a política do grupo permite.
 		for (const groupLink of groupLinks) {
-			if (!groupLink.externoOptionGroupId || !createsMissingOptions(groupLink.sincronizar)) continue;
+			if (availabilityOnly || !groupLink.externoOptionGroupId || !createsMissingOptions(groupLink.sincronizar)) continue;
 			const linkedHere = new Set(
 				optionLinks.filter((link) => link.externoOptionGroupId === groupLink.externoOptionGroupId).map((link) => link.produtoAddOnOpcaoId),
 			);
@@ -771,9 +922,13 @@ export async function pushAddOnGroupToLinkedMerchants({ orgId, produtoAddOnId }:
 			const newOptions = node.opcoes.filter((opcao) => opcao.disponivel && !linkedHere.has(opcao.opcaoId));
 			if (!newOptions.length) continue;
 			try {
+				const remoteGroup = await getIfoodOptionGroup(client, merchantId, groupLink.externoOptionGroupId);
 				// Uma opção por vez, vinculada logo em seguida com os ids da própria resposta: se a
 				// terceira falhar, as duas primeiras já têm vínculo e o próximo push não as recria.
 				for (const opcao of newOptions) {
+					if (hasPotentialOptionDuplicate(opcao, remoteGroup.opcoes)) {
+						throw new createHttpError.Conflict(`A opção "${opcao.nome}" já existe no iFood sem este vínculo. Revise os vínculos para evitar duplicação.`);
+					}
 					const [created] = await addIfoodOptions(client, merchantId, groupLink.externoOptionGroupId, [
 						{ nome: opcao.nome, preco: opcao.precoDelta, codigoExterno: opcao.codigo, status: opcao.disponivel ? "AVAILABLE" : "UNAVAILABLE" },
 					]);
@@ -784,15 +939,30 @@ export async function pushAddOnGroupToLinkedMerchants({ orgId, produtoAddOnId }:
 						node: { tipo: "ADD_ON_OPCAO", produtoAddOnId, produtoAddOnOpcaoId: opcao.opcaoId },
 						externalRefs: { externoOptionGroupId: groupLink.externoOptionGroupId, externoOptionId: created.optionId, externoProdutoId: created.productId },
 					});
+					const confirmed = await verifyIfoodOptionStates({
+						optionIds: new Set([created.optionId]),
+						read: (ids) => collectIfoodOptionStates(client, merchantId, linkedItemIds, ids),
+						matches: (_, observed) => !computeOptionDivergences({ link: optionLink, option: opcao, observed }).some((d) => d.sincronizado),
+					});
+					if (!confirmed.has(created.optionId)) {
+						await markCatalogLinkError({
+							linkId: optionLink.id,
+							erro: "O iFood ainda não confirmou a opção criada. O vínculo foi preservado para retentar sem duplicar.",
+						});
+						erros += 1;
+						errosRetentaveis += 1;
+						continue;
+					}
 					await markSynchronized({ orgId, linkId: optionLink.id, snapshot: optionSnapshot(opcao) });
 				}
 			} catch (error) {
 				await markCatalogLinkError({ linkId: groupLink.id, erro: error instanceof Error ? error.message : "Falha ao criar opções no grupo." });
 				erros += 1;
+				if (isRetryableIfoodError(error)) errosRetentaveis += 1;
 			}
 		}
 	}
-	return { enviados, erros };
+	return { enviados, erros, errosRetentaveis };
 }
 
 /** Campo da divergência → chave do snapshot. Só os que um vínculo de complemento sincroniza. */
@@ -835,7 +1005,7 @@ export async function resendAddOnLink({ orgId, link }: { orgId: string; link: TC
 			.map((divergence) => DIVERGENCE_SNAPSHOT_KEY[divergence.campo])
 			.filter((key): key is keyof TCatalogLinkSnapshot => !!key);
 		if (!keys.length) continue;
-		const snapshot: TCatalogLinkSnapshot = { ...(target.ultimoSnapshot ?? {}) };
+		const snapshot: TCatalogLinkSnapshot = { ...target.ultimoSnapshot };
 		for (const key of keys) delete snapshot[key];
 		await db.update(catalogLinks).set({ ultimoSnapshot: snapshot, dataAtualizacao: new Date() }).where(eq(catalogLinks.id, target.id));
 	}

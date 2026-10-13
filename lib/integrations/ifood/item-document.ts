@@ -4,6 +4,8 @@ import createHttpError from "http-errors";
 import { getIfoodCatalogs, listIfoodCategories } from "./catalog";
 import { IFOOD_CATALOG_BASE_URL } from "./catalog-types";
 import { mapIfoodError } from "./errors";
+import { effectiveOptionPrice, observeIfoodOption, verifyIfoodOptionStates, type TObservedIfoodOption } from "./option-state";
+export { effectiveOptionPrice, effectiveOptionAvailability } from "./option-state";
 
 /**
  * O item do iFood como documento: `GET /items/{id}/flat` devolve exatamente o shape que `PUT /items`
@@ -66,7 +68,21 @@ export async function readIfoodItemDocument(client: AxiosInstance, merchantId: s
 
 export async function writeIfoodItemDocument(client: AxiosInstance, merchantId: string, doc: TIfoodItemDocument): Promise<void> {
 	try {
+		const { protectManagedOptionAvailability } = await import("./sync/document-availability");
+		const desired = await protectManagedOptionAvailability(merchantId, doc);
 		await client.put(itemsUrl(merchantId), doc);
+		if (desired.size) {
+			const confirmed = await verifyIfoodOptionStates({
+				optionIds: new Set(desired.keys()),
+				read: async () => {
+					const observed = await readIfoodItemDocument(client, merchantId, doc.item.id);
+					return new Map(observed.options.map((option) => [option.id, observeIfoodOption(observed, option)]));
+				},
+				matches: (id, observed) => observed.disponivel === desired.get(id)?.disponivel,
+			});
+			if (confirmed.size !== desired.size)
+				throw new createHttpError.BadGateway("O iFood ainda não confirmou a disponibilidade dos adicionais após salvar o item.");
+		}
 	} catch (error) {
 		mapIfoodError("writeIfoodItemDocument", error);
 	}
@@ -77,12 +93,6 @@ export function baseProductOf(doc: TIfoodItemDocument) {
 	const product = doc.products.find((candidate) => candidate.id === doc.item.productId);
 	if (!product) throw new Error("O item do iFood não trouxe o produto base.");
 	return product;
-}
-
-/** Preço efetivo de uma opção: o do canal DEFAULT quando existe (é onde o Portal grava), senão o da raiz. */
-export function effectiveOptionPrice(option: TIfoodDocumentOption) {
-	const context = option.contextModifiers?.find((modifier) => modifier.catalogContext === "DEFAULT");
-	return context?.price?.value ?? option.price?.value ?? null;
 }
 
 /**
@@ -146,4 +156,28 @@ export async function collectEffectiveOptionPrices(client: AxiosInstance, mercha
 		for (const option of doc?.options ?? []) if (!prices.has(option.id)) prices.set(option.id, effectiveOptionPrice(option));
 	}
 	return prices;
+}
+
+/** Uma leitura por grupo costuma cobrir todas as cópias; só varre outros itens se faltarem ids. */
+export async function collectIfoodOptionStates(client: AxiosInstance, merchantId: string, itemIds: string[], optionIds: ReadonlySet<string>) {
+	const states = new Map<string, TObservedIfoodOption>();
+	const visited = new Set<string>();
+	async function read(itemId: string) {
+		if (visited.has(itemId) || states.size === optionIds.size) return;
+		visited.add(itemId);
+		const doc = await readIfoodItemDocument(client, merchantId, itemId).catch(() => null);
+		for (const option of doc?.options ?? []) {
+			if (optionIds.has(option.id)) states.set(option.id, observeIfoodOption(doc!, option));
+		}
+	}
+	for (const itemId of itemIds) await read(itemId);
+	if (states.size < optionIds.size) {
+		for (const catalog of await getIfoodCatalogs(client, merchantId)) {
+			if (states.size === optionIds.size) break;
+			for (const category of await listIfoodCategories(client, merchantId, { catalogId: catalog.id })) {
+				for (const item of category.itens) if (item.id) await read(item.id);
+			}
+		}
+	}
+	return states;
 }

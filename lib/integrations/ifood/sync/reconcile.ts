@@ -1,6 +1,8 @@
 import { getIfoodCatalogs, getIfoodItemFlat, listIfoodCategories } from "@/lib/integrations/ifood/catalog";
 import { resolveIfoodManagementContext } from "@/lib/integrations/ifood/context";
-import { collectEffectiveOptionPrices } from "@/lib/integrations/ifood/item-document";
+import { collectIfoodOptionStates } from "@/lib/integrations/ifood/item-document";
+import { computeOptionDivergences, findUnlinkedAvailableOptions } from "./option-sync";
+import { scheduleAddOnGroupPush } from "./queue";
 import type { TIfoodItemDTO, TIfoodItemFlatDTO } from "@/lib/integrations/ifood/catalog-types";
 import { loadChannelState } from "@/lib/products/sales-channels-store";
 import { type TCatalogLinkDivergence, type TCatalogLinkOptionGroupAssociation, syncsComplementos } from "@/schemas/catalog-links";
@@ -110,11 +112,12 @@ export function computeDivergences({
  * Reconcilia uma loja: lê o catálogo remoto UMA vez (a listagem por categoria já traz os itens) e
  * confronta com o estado desejado de cada vínculo.
  *
- * Não re-empurra automaticamente: marca DIVERGENTE e deixa a decisão para a UI ("aplicar o nosso"
- * ou "adotar o do iFood"). Push automático aqui transformaria uma edição legítima no Portal numa
- * briga silenciosa entre os dois sistemas.
+ * Disponibilidade de opções gerida pelo cadastro é reparada pela fila. Os demais campos e as
+ * políticas opt-out continuam para resolução manual ("aplicar o nosso" / "adotar o do iFood").
  */
 export async function reconcileMerchantCatalog({ orgId, merchantId }: { orgId: string; merchantId: string }) {
+	const availabilityRepairs = new Set<string>();
+	const unlinkedOptions: { externoOptionGroupId: string; externoOptionId: string; nome: string | null }[] = [];
 	// Só vínculos de ITEM neste loop: grupos e opções de complemento têm reconciliação própria
 	// abaixo — antes, um vínculo ADD_ON aqui cairia em "o item não existe mais".
 	const links = await db.query.catalogLinks.findMany({
@@ -128,7 +131,7 @@ export async function reconcileMerchantCatalog({ orgId, merchantId }: { orgId: s
 	});
 	const addOnLinks = await loadAddOnLinks({ orgId, merchantId });
 	if (links.length === 0 && addOnLinks.groups.size === 0 && addOnLinks.options.size === 0)
-		return { verificados: 0, sincronizados: 0, divergentes: 0, ausentes: 0, propagando: 0 };
+		return { verificados: 0, sincronizados: 0, divergentes: 0, ausentes: 0, propagando: 0, reparosAgendados: 0, opcoesSemVinculo: unlinkedOptions };
 
 	const context = await resolveIfoodManagementContext({ organizacaoId: orgId, merchantId });
 	const channelState = await loadChannelState({ orgId, canal: "IFOOD", refExterno: merchantId });
@@ -245,6 +248,23 @@ export async function reconcileMerchantCatalog({ orgId, merchantId }: { orgId: s
 		const remoteGroups = await listAllIfoodOptionGroups(context.client, merchantId).catch(() => null);
 		if (remoteGroups) {
 			const remoteById = new Map(remoteGroups.map((grupo) => [grupo.id, grupo]));
+			const linkedIds = new Set(
+				allOptionLinks(addOnLinks)
+					.map((link) => link.externoOptionId)
+					.filter((id): id is string => !!id),
+			);
+			const managedGroupIds = new Set(allGroupLinks(addOnLinks).map((link) => link.externoOptionGroupId));
+			const observedOptions = await collectIfoodOptionStates(
+				context.client,
+				merchantId,
+				[...remoteItems.keys()],
+				new Set([
+					...linkedIds,
+					...remoteGroups
+						.filter((group) => managedGroupIds.has(group.id))
+						.flatMap((group) => group.opcoes.map((option) => option.id).filter((id): id is string => !!id)),
+				]),
+			);
 			const groupNodes = new Map<string, TAddOnGroupNode | null>();
 			async function groupNodeFor(produtoAddOnId: string) {
 				if (groupNodes.has(produtoAddOnId)) return groupNodes.get(produtoAddOnId) ?? null;
@@ -257,7 +277,7 @@ export async function reconcileMerchantCatalog({ orgId, merchantId }: { orgId: s
 				await db.update(catalogLinks).set({ status: "ERRO", ultimoErro: erro, dataAtualizacao: new Date() }).where(eq(catalogLinks.id, linkId));
 				ausentes += 1;
 			};
-			const settle = async (link: TCatalogLinkEntity, divergences: TCatalogLinkDivergence[]) => {
+			const settle = async (link: TCatalogLinkEntity, divergences: TCatalogLinkDivergence[], missingMappings = false) => {
 				const pushRecente = link.dataUltimaSincronizacao != null && Date.now() - link.dataUltimaSincronizacao.getTime() < PROPAGATION_GRACE_MS;
 				if (pushRecente && divergences.some((divergence) => divergence.sincronizado)) {
 					propagando += 1;
@@ -267,12 +287,15 @@ export async function reconcileMerchantCatalog({ orgId, merchantId }: { orgId: s
 				await db
 					.update(catalogLinks)
 					.set({
-						status: acionaveis.length ? "DIVERGENTE" : "SINCRONIZADO",
+						status: acionaveis.length || missingMappings ? "DIVERGENTE" : "SINCRONIZADO",
 						divergencias: divergences.length ? divergences : null,
+						ultimoErro: missingMappings ? "Há opções ativas no iFood sem vínculo com o cadastro. Revise os vínculos antes de sincronizar." : null,
 						dataAtualizacao: new Date(),
 					})
 					.where(eq(catalogLinks.id, link.id));
-				if (acionaveis.length) divergentes += 1;
+				if (link.tipo === "ADD_ON_OPCAO" && link.produtoAddOnId && acionaveis.some((d) => d.campo === "disponibilidade"))
+					availabilityRepairs.add(link.produtoAddOnId);
+				if (acionaveis.length || missingMappings) divergentes += 1;
 				else sincronizados += 1;
 			};
 
@@ -301,17 +324,17 @@ export async function reconcileMerchantCatalog({ orgId, merchantId }: { orgId: s
 						sincronizado: groupLink.sincronizar.disponibilidade,
 					});
 				}
-				await settle(groupLink, divergences);
+				const missing = findUnlinkedAvailableOptions(remote.opcoes, linkedIds, observedOptions);
+				for (const option of missing) unlinkedOptions.push({ externoOptionGroupId: remote.id, externoOptionId: option.id!, nome: option.nome });
+				if (missing.length)
+					divergences.push({
+						campo: "complementos",
+						valorInterno: "Opções vinculadas ao cadastro",
+						valorExterno: `${missing.length} opção(ões) ativa(s) sem vínculo: ${missing.map((o) => o.nome ?? o.id).join(", ")}`,
+						sincronizado: false,
+					});
+				await settle(groupLink, divergences, missing.length > 0);
 			}
-
-			// Preço efetivo das opções vem dos itens (canal DEFAULT), não da listagem, que só traz o raiz.
-			const effectivePrices = allOptionLinks(addOnLinks).length
-				? await collectEffectiveOptionPrices(
-						context.client,
-						merchantId,
-						links.map((link) => link.externoItemId).filter((id): id is string => !!id),
-					)
-				: new Map<string, number | null>();
 
 			// Opções locais excluídas que ainda têm vínculo: o nó do grupo não as carrega (filtra tombstones).
 			const linkedOptionIds = allOptionLinks(addOnLinks)
@@ -342,51 +365,36 @@ export async function reconcileMerchantCatalog({ orgId, merchantId }: { orgId: s
 				}
 				const node = optionLink.produtoAddOnId ? await groupNodeFor(optionLink.produtoAddOnId) : null;
 				const opcao = node?.opcoes.find((candidate) => candidate.opcaoId === opcaoId);
+				const observed = optionLink.externoOptionId ? observedOptions.get(optionLink.externoOptionId) : undefined;
+				if (!observed || observed.disponivel === null) {
+					await markMissing(optionLink.id, "Não foi possível confirmar a disponibilidade da opção no canal iFood.");
+					continue;
+				}
 				if (!opcao) {
 					// Opção excluída (tombstone) fica fora do nó, mas o vínculo segue válido: o push a pausa
 					// no iFood (D3, nunca apaga). O estado desejado é "indisponível" — só é divergência se o
 					// iFood a mostrar à venda; não é erro.
 					if (tombstonedOptionIds.has(opcaoId)) {
-						const remoteDisponivel = remote.status?.toUpperCase() !== "UNAVAILABLE";
-						await settle(
-							optionLink,
-							remoteDisponivel
-								? [{ campo: "disponibilidade", valorInterno: false, valorExterno: true, sincronizado: optionLink.sincronizar.disponibilidade }]
-								: [],
-						);
+						await settle(optionLink, computeOptionDivergences({ link: optionLink, option: undefined, observed }));
 						continue;
 					}
 					await markMissing(optionLink.id, "A opção de adicional interna não existe mais.");
 					continue;
 				}
-				const divergences: TCatalogLinkDivergence[] = [];
-				if (textDiverges(remote.nome, opcao.nome)) {
-					divergences.push({ campo: "nome", valorInterno: opcao.nome, valorExterno: remote.nome, sincronizado: optionLink.sincronizar.nome });
-				}
-				const remotePrice = (remote.id ? effectivePrices.get(remote.id) : undefined) ?? remote.preco;
-				if (priceDiverges(remotePrice, opcao.precoDelta)) {
-					divergences.push({ campo: "preco", valorInterno: opcao.precoDelta, valorExterno: remotePrice, sincronizado: optionLink.sincronizar.preco });
-				}
-				const remoteDisponivel = remote.status?.toUpperCase() !== "UNAVAILABLE";
-				if (remoteDisponivel !== opcao.disponivel) {
-					divergences.push({
-						campo: "disponibilidade",
-						valorInterno: opcao.disponivel,
-						valorExterno: remoteDisponivel,
-						sincronizado: optionLink.sincronizar.disponibilidade,
-					});
-				}
-				await settle(optionLink, divergences);
+				await settle(optionLink, computeOptionDivergences({ link: optionLink, option: opcao, observed }));
 			}
 		}
 	}
 
+	for (const produtoAddOnId of availabilityRepairs) await scheduleAddOnGroupPush({ orgId, produtoAddOnId, availabilityOnly: true });
 	return {
 		verificados: links.length + allGroupLinks(addOnLinks).length + allOptionLinks(addOnLinks).length,
 		sincronizados,
 		divergentes,
 		ausentes,
 		propagando,
+		reparosAgendados: availabilityRepairs.size,
+		opcoesSemVinculo: unlinkedOptions,
 	};
 }
 

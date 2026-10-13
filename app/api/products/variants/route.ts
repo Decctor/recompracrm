@@ -18,6 +18,8 @@ import {
 import { and, eq } from "drizzle-orm";
 import { upsertProductAddOnOptions, validateAndResolveAddOnOptionLink } from "@/lib/products/add-on-options";
 import { buildSalePriceUpdate } from "@/lib/products/price-snapshot";
+import { scheduleAddOnGroupPush } from "@/lib/integrations/ifood/sync/queue";
+import { editedAddOnGroupIds } from "@/lib/integrations/ifood/sync/option-sync";
 
 const GetProductVariantsInputSchema = z.object({
 	productId: z
@@ -485,6 +487,10 @@ async function updateProductVariantRoute(request: NextRequest) {
 	if (!session) throw new createHttpError.Unauthorized("Você precisa estar autenticado para acessar esse recurso.");
 	const input = UpdateProductVariantInputSchema.parse(await request.json());
 	const result = await updateProductVariant({ input, session });
+	// Editar uma opção aqui muda o grupo compartilhado, inclusive suas cópias vinculadas no iFood.
+	for (const produtoAddOnId of editedAddOnGroupIds(input.addOns)) {
+		await scheduleAddOnGroupPush({ orgId: session.membership!.organizacao.id, produtoAddOnId });
+	}
 	return NextResponse.json(result);
 }
 
