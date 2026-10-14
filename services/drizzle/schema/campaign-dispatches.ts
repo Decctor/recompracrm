@@ -142,6 +142,7 @@ export const campaignDispatchRecipients = newTable(
 		index("idx_campaign_dispatch_recipients_org_status_data").on(table.organizacaoId, table.status, table.dataInsercao),
 		// FK ON DELETE SET NULL para interactions.
 		index("idx_campaign_dispatch_recipients_interacao_id").on(table.interacaoId),
+		index("idx_campaign_dispatch_recipients_venda_id").on(table.vendaId),
 		index("idx_campaign_dispatch_recipients_campanha_evento_id").on(table.campanhaEventoId),
 	],
 );

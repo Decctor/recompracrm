@@ -523,6 +523,7 @@ export const productStockTransactions = newTable(
 		produtoIdIdx: index("idx_product_stock_transactions_produto_id").on(table.produtoId),
 		produtoVarianteIdIdx: index("idx_product_stock_transactions_variante_id").on(table.produtoVarianteId),
 		vendaIdIdx: index("idx_product_stock_transactions_venda_id").on(table.vendaId),
+		vendaItemIdIdx: index("idx_product_stock_transactions_venda_item_id").on(table.vendaItemId),
 		producaoIdIdx: index("idx_product_stock_transactions_producao_id").on(table.producaoId),
 		loteIdIdx: index("idx_product_stock_transactions_lote_id").on(table.loteId),
 		tipoIdx: index("idx_product_stock_transactions_tipo").on(table.tipo),

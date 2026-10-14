@@ -42,6 +42,7 @@ export const poiTransactionRequests = newTable(
 		statusIdx: index("idx_poi_transaction_requests_status").on(table.status),
 		tokenPublicoIdx: index("idx_poi_transaction_requests_token_publico").on(table.tokenPublico),
 		clienteIdIdx: index("idx_poi_transaction_requests_cliente_id").on(table.clienteId),
+		vendaIdIdx: index("idx_poi_transaction_requests_venda_id").on(table.vendaId),
 		dataInsercaoIdx: index("idx_poi_transaction_requests_data_insercao").on(table.dataInsercao),
 	}),
 );

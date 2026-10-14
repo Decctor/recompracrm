@@ -40,6 +40,13 @@ const BACKGROUNDS = [
 	{ key: "black", label: "Preto", color: BRAND_COLORS.black },
 ] as const;
 
+const TRANSPARENT_BACKGROUND = { key: "transparent", label: "Transparente", color: "transparent" } as const;
+const TRANSPARENCY_PREVIEW_STYLE = {
+	backgroundColor: "#808080",
+	backgroundImage: "conic-gradient(#a3a3a3 25%, transparent 0 50%, #a3a3a3 0 75%, transparent 0)",
+	backgroundSize: "16px 16px",
+};
+
 // Catálogo completo — espelha `BRAND_LOGO_SOURCES`. `color-on-dark` traz duas
 // barras brancas no símbolo, então só rende em fundo escuro; os lockups
 // `*-badge` trazem a própria cápsula azul e servem em qualquer fundo.
@@ -102,17 +109,31 @@ async function exportNode(node: HTMLElement, filename: string, format: "png" | "
 	downloadDataUrl(dataUrl, `${filename}.${format === "jpeg" ? "jpg" : "png"}`);
 }
 
-function ColorPicker({ value, onChange }: { value: string; onChange: (color: string) => void }) {
+function ColorPicker({
+	value,
+	onChange,
+	allowTransparent = false,
+}: {
+	value: string;
+	onChange: (color: string) => void;
+	allowTransparent?: boolean;
+}) {
+	const backgrounds = allowTransparent ? [...BACKGROUNDS, TRANSPARENT_BACKGROUND] : BACKGROUNDS;
+
 	return (
 		<div className="flex flex-wrap gap-2" aria-label="Cor de fundo">
-			{BACKGROUNDS.map((background) => (
+			{backgrounds.map((background) => (
 				<button
 					type="button"
 					key={background.key}
 					onClick={() => onChange(background.color)}
+					aria-pressed={value === background.color}
 					className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${value === background.color ? "border-primary ring-2 ring-primary/20" : "border-border hover:border-foreground/30"}`}
 				>
-					<span className="size-4 rounded-full border border-black/15" style={{ backgroundColor: background.color }} />
+					<span
+						className="size-4 rounded-full border border-black/15"
+						style={background.color === "transparent" ? TRANSPARENCY_PREVIEW_STYLE : { backgroundColor: background.color }}
+					/>
 					{background.label}
 				</button>
 			))}
@@ -123,33 +144,38 @@ function ColorPicker({ value, onChange }: { value: string; onChange: (color: str
 function LogoCard({ logo }: { logo: (typeof LOGOS)[number] }) {
 	const [background, setBackground] = useState<string>(BRAND_COLORS.white);
 	const previewRef = useRef<HTMLDivElement>(null);
+	const isTransparent = background === "transparent";
 
 	const handleRasterExport = useCallback(
 		async (format: "png" | "jpeg") => {
 			if (!previewRef.current) return;
+			if (format === "jpeg" && isTransparent) return;
 			try {
-				await exportNode(previewRef.current, `recompra-logo-${logo.slug}-${background.slice(1)}`, format);
+				const backgroundSuffix = isTransparent ? "sem-fundo" : background.slice(1);
+				await exportNode(previewRef.current, `recompra-logo-${logo.slug}-${backgroundSuffix}`, format);
 				toast.success(`Logo exportada em ${format.toUpperCase()}.`);
 			} catch {
 				toast.error("Não foi possível exportar a logo.");
 			}
 		},
-		[background, logo.slug],
+		[background, isTransparent, logo.slug],
 	);
 
 	return (
 		<article className="overflow-hidden rounded-2xl border bg-card shadow-sm">
-			<div ref={previewRef} className="flex aspect-[4/3] items-center justify-center p-8" style={{ backgroundColor: background }}>
-				<Image src={logo.src} alt={logo.name} className="max-h-full w-full object-contain" />
+			<div style={isTransparent ? TRANSPARENCY_PREVIEW_STYLE : undefined}>
+				<div ref={previewRef} className="flex aspect-[4/3] items-center justify-center p-8" style={{ backgroundColor: background }}>
+					<Image src={logo.src} alt={logo.name} className="max-h-full w-full object-contain" />
+				</div>
 			</div>
 			<div className="space-y-3 border-t p-4">
 				<h3 className="font-semibold">{logo.name}</h3>
-				<ColorPicker value={background} onChange={setBackground} />
+				<ColorPicker value={background} onChange={setBackground} allowTransparent />
 				<div className="flex flex-wrap gap-2">
 					<Button size="sm" onClick={() => handleRasterExport("png")}>
 						<Download /> PNG
 					</Button>
-					<Button size="sm" variant="outline" onClick={() => handleRasterExport("jpeg")}>
+					<Button size="sm" variant="outline" disabled={isTransparent} onClick={() => handleRasterExport("jpeg")}>
 						<Download /> JPEG
 					</Button>
 					<Button size="sm" variant="ghost" asChild>
@@ -158,6 +184,7 @@ function LogoCard({ logo }: { logo: (typeof LOGOS)[number] }) {
 						</a>
 					</Button>
 				</div>
+				{isTransparent ? <p className="text-xs text-muted-foreground">PNG preserva o fundo transparente. JPEG precisa de um fundo colorido.</p> : null}
 			</div>
 		</article>
 	);

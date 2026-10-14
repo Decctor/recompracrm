@@ -2,6 +2,7 @@ import { getStorageDriver } from "@/lib/files/drivers";
 import type { DBTransaction } from "@/services/drizzle";
 import {
 	accountingEntries,
+	accountingEntryLines,
 	accountsCharts,
 	actionApprovalRequests,
 	aiAgentKnowledge,
@@ -24,6 +25,7 @@ import {
 	cashbackPrograms,
 	chatMessages,
 	chatAssignments,
+	chatServices,
 	chats,
 	clientLocations,
 	clientTagReferences,
@@ -54,6 +56,7 @@ import {
 	goals,
 	goalsSellers,
 	integrations,
+	integrationImportJobs,
 	interactions,
 	messageTemplates,
 	organizationMembers,
@@ -199,6 +202,7 @@ export async function deleteAllOrganizationData({
 	// --- Atendimento / conversas ---
 	await trx.delete(chatMessages).where(eq(chatMessages.organizacaoId, organizationId));
 	await trx.delete(chatAssignments).where(eq(chatAssignments.organizacaoId, organizationId));
+	await trx.delete(chatServices).where(eq(chatServices.organizacaoId, organizationId));
 
 	// --- Inbox de eventos externos (webhooks) ---
 	// Payloads contêm dados pessoais (telefone, nome, conteúdo de mensagem). Só as linhas
@@ -266,6 +270,7 @@ export async function deleteAllOrganizationData({
 
 	// --- Financeiro (transações → lançamentos → contas → plano de contas) ---
 	await trx.delete(financialTransactions).where(eq(financialTransactions.organizacaoId, organizationId));
+	await trx.delete(accountingEntryLines).where(eq(accountingEntryLines.organizacaoId, organizationId));
 	await trx.delete(accountingEntries).where(eq(accountingEntries.organizacaoId, organizationId));
 
 	// --- Vendas (itens antes; vendas referenciam clientes/vendedores/campanhas/sessões) ---
@@ -308,6 +313,8 @@ export async function deleteAllOrganizationData({
 		);
 	await trx.delete(whatsappConnections).where(eq(whatsappConnections.organizacaoId, organizationId));
 	await trx.delete(audiences).where(eq(audiences.organizacaoId, organizationId));
+	// A FK integracao_id usa RESTRICT: os jobs precisam sair antes das integrações.
+	await trx.delete(integrationImportJobs).where(eq(integrationImportJobs.organizacaoId, organizationId));
 	await trx.delete(integrations).where(eq(integrations.organizacaoId, organizationId));
 	await trx.delete(actionApprovalRequests).where(eq(actionApprovalRequests.organizacaoId, organizationId));
 

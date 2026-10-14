@@ -260,26 +260,32 @@ export const saleItemsRelations = relations(saleItems, ({ one, many }) => ({
 export type TSaleItemEntity = typeof saleItems.$inferSelect;
 export type TNewSaleItemEntity = typeof saleItems.$inferInsert;
 
-export const saleItemModifiers = newTable("sale_item_modifiers", {
-	id: varchar("id", { length: 255 })
-		.primaryKey()
-		.$defaultFn(() => crypto.randomUUID()),
+export const saleItemModifiers = newTable(
+	"sale_item_modifiers",
+	{
+		id: varchar("id", { length: 255 })
+			.primaryKey()
+			.$defaultFn(() => crypto.randomUUID()),
 
-	// Links to the specific line item (e.g., The "Burger" on line 3)
-	itemVendaId: varchar("item_venda_id", { length: 255 })
-		.references(() => saleItems.id, { onDelete: "cascade" })
-		.notNull(),
+		// Links to the specific line item (e.g., The "Burger" on line 3)
+		itemVendaId: varchar("item_venda_id", { length: 255 })
+			.references(() => saleItems.id, { onDelete: "cascade" })
+			.notNull(),
 
-	// Link to the definition (for inventory/reporting: "How much Bacon did we sell?")
-	opcaoId: varchar("opcao_id", { length: 255 }).references(() => productAddOnOptions.id, { onDelete: "set null" }),
+		// Link to the definition (for inventory/reporting: "How much Bacon did we sell?")
+		opcaoId: varchar("opcao_id", { length: 255 }).references(() => productAddOnOptions.id, { onDelete: "set null" }),
 
-	// SNAPSHOT DATA (History preservation)
-	nome: text("nome").notNull(), // "Extra Bacon"
+		// SNAPSHOT DATA (History preservation)
+		nome: text("nome").notNull(), // "Extra Bacon"
 
-	quantidade: doublePrecision("quantidade").default(1.0).notNull(),
-	valorUnitario: doublePrecision("valor_unitario").notNull(), // Price at moment of sale
-	valorTotal: doublePrecision("valor_total").notNull(), // Qty * UnitPrice
-});
+		quantidade: doublePrecision("quantidade").default(1.0).notNull(),
+		valorUnitario: doublePrecision("valor_unitario").notNull(), // Price at moment of sale
+		valorTotal: doublePrecision("valor_total").notNull(), // Qty * UnitPrice
+	},
+	(table) => ({
+		itemVendaIdIdx: index("idx_sale_item_modifiers_item_venda_id").on(table.itemVendaId),
+	}),
+);
 
 export const saleItemModifiersRelations = relations(saleItemModifiers, ({ one }) => ({
 	itemVenda: one(saleItems, {
