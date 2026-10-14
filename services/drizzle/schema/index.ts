@@ -47,6 +47,7 @@ export * from "./tabs";
 export * from "./tab-order-requests";
 export * from "./access";
 export * from "./desktop-agent";
+export * from "./preparation-stations";
 export * from "./external-events";
 export * from "./organization-onboardings";
 export * from "./custom-fields";

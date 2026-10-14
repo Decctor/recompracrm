@@ -1166,3 +1166,15 @@ export const VisualKitOutputEnum = z.enum(["PDF", "PDF_ETIQUETADORA", "PNG", "JP
 	invalid_type_error: "Tipo não válido para saída da peça.",
 });
 export type TVisualKitOutputEnum = z.infer<typeof VisualKitOutputEnum>;
+
+// Estações de preparo (roteamento do TICKET_PREPARO). Ver docs/dev-planning/preparation-stations-plan.md.
+export const PreparationStationTicketScopeEnum = z.enum(["PEDIDO", "ESTACAO"], {
+	required_error: "Escopo do ticket da estação não informado.",
+	invalid_type_error: "Tipo não válido para escopo do ticket da estação.",
+});
+export type TPreparationStationTicketScopeEnum = z.infer<typeof PreparationStationTicketScopeEnum>;
+export const PreparationStationRuleCriterionEnum = z.enum(["GRUPO", "PRODUTO"], {
+	required_error: "Critério da regra da estação não informado.",
+	invalid_type_error: "Tipo não válido para critério da regra da estação.",
+});
+export type TPreparationStationRuleCriterionEnum = z.infer<typeof PreparationStationRuleCriterionEnum>;

@@ -6,6 +6,7 @@ import { boolean, index, integer, jsonb, text, timestamp, uniqueIndex, varchar }
 import { accessPrincipals } from "./access";
 import { newTable } from "./common";
 import { organizations } from "./organizations";
+import { preparationStations } from "./preparation-stations";
 import { users } from "./users";
 
 // finalidade/formato/driver/status NÃO são pgEnum de propósito (mesmo racional de access_events):
@@ -29,6 +30,10 @@ export const agentPrinters = newTable(
 		driver: varchar("driver", { length: 30 }).$type<"DRIVER_SO" | "ZPL_REDE">().notNull().default("DRIVER_SO"),
 		// Roteamento: quais finalidades esta impressora atende (late binding no claim).
 		finalidades: jsonb("finalidades").$type<string[]>().notNull().default([]),
+		// Estações de preparo (ids de preparation_stations) que esta impressora atende para
+		// TICKET_PREPARO. Mesmo contrato "vazio = nada" de `finalidades`: vazio atende SÓ jobs sem
+		// estação; job com estação casa apenas com impressora que a liste aqui.
+		estacoesPreparo: jsonb("estacoes_preparo").$type<string[]>().notNull().default([]),
 		// `ativa` é controle do dashboard; `disponivel` é reportado pelo sync (sumiu do SO → false).
 		ativa: boolean("ativa").notNull().default(true),
 		disponivel: boolean("disponivel").notNull().default(true),
@@ -84,6 +89,11 @@ export const printJobs = newTable(
 		// Override de reimpressão, ou carimbada no claim (quem imprimiu de fato).
 		impressoraId: varchar("impressora_id", { length: 255 }).references(() => agentPrinters.id, { onDelete: "set null" }),
 		principalId: varchar("principal_id", { length: 255 }).references(() => accessPrincipals.id, { onDelete: "set null" }),
+		// Estação de preparo do ticket (null = job sem estação, casa com qualquer impressora da finalidade).
+		// preparation-stations.ts não importa este arquivo, então a FK pode ser declarada aqui sem ciclo.
+		estacaoPreparoId: varchar("estacao_preparo_id", { length: 255 }).references(() => preparationStations.id, {
+			onDelete: "set null",
+		}),
 		erro: text("erro"),
 		// TTL por finalidade: cupom atrasado é pior que cupom nenhum (plano, ciclo de vida).
 		expiraEm: timestamp("expira_em").notNull(),
@@ -171,6 +181,10 @@ export const printJobsRelations = relations(printJobs, ({ one }) => ({
 	solicitadoPor: one(users, {
 		fields: [printJobs.solicitadoPorId],
 		references: [users.id],
+	}),
+	estacaoPreparo: one(preparationStations, {
+		fields: [printJobs.estacaoPreparoId],
+		references: [preparationStations.id],
 	}),
 }));
 

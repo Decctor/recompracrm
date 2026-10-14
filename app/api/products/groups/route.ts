@@ -3,8 +3,8 @@ import { requireOrgSession } from "@/lib/authentication/erp-session";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { db } from "@/services/drizzle";
 import { withProductUpdateStamp } from "@/lib/products/update-stamp";
-import { catalogLinks, couponTargets, products, salesChannels } from "@/services/drizzle/schema";
-import { and, eq } from "drizzle-orm";
+import { catalogLinks, couponTargets, preparationStationRules, products, salesChannels } from "@/services/drizzle/schema";
+import { and, eq, sql } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
@@ -36,11 +36,7 @@ export type TRenameProductGroupInput = z.infer<typeof RenameProductGroupInputSch
  * — é a digitação repetida que cria "Bebidas" e "bebidas " como dois grupos.
  */
 async function getProductGroups({ orgId }: { orgId: string }) {
-	const rows = await db
-		.selectDistinct({ grupo: products.grupo })
-		.from(products)
-		.where(eq(products.organizacaoId, orgId))
-		.orderBy(products.grupo);
+	const rows = await db.selectDistinct({ grupo: products.grupo }).from(products).where(eq(products.organizacaoId, orgId)).orderBy(products.grupo);
 
 	return {
 		data: { groups: rows.map((row) => row.grupo).filter((grupo) => grupo && grupo.trim().length > 0) },
@@ -70,7 +66,9 @@ async function renameProductGroup({ orgId, input }: { orgId: string; input: TRen
 		.map((channel) => ({
 			id: channel.id,
 			// A fusão pode gerar o mesmo nome duas vezes na ordem; a posição que vale é a primeira.
-			ordemGrupos: channel.ordemGrupos.map((grupo) => (grupo === grupoAtual ? grupoNovo : grupo)).filter((grupo, index, list) => list.indexOf(grupo) === index),
+			ordemGrupos: channel.ordemGrupos
+				.map((grupo) => (grupo === grupoAtual ? grupoNovo : grupo))
+				.filter((grupo, index, list) => list.indexOf(grupo) === index),
 		}));
 
 	await db.transaction(async (tx) => {
@@ -92,6 +90,52 @@ async function renameProductGroup({ orgId, input }: { orgId: string; input: TRen
 			.update(catalogLinks)
 			.set({ grupoInterno: grupoNovo })
 			.where(and(eq(catalogLinks.organizacaoId, orgId), eq(catalogLinks.tipo, "CATEGORIA"), eq(catalogLinks.grupoInterno, grupoAtual)));
+
+		// Regras GRUPO das estações de preparo casam por nome (sem caixa e sem espaços nas pontas,
+		// como o resolver). Na fusão, se o grupo de destino já tem estação, a dele prevalece e a regra
+		// do grupo antigo sai — um grupo pertence a no máximo uma estação.
+		const groupRuleOf = (grupo: string) =>
+			and(
+				eq(preparationStationRules.organizacaoId, orgId),
+				eq(preparationStationRules.criterio, "GRUPO"),
+				sql`lower(trim(${preparationStationRules.valor}->>'grupo')) = lower(trim(${grupo}))`,
+			);
+		const sameNormalizedGroup = grupoAtual.trim().toLocaleLowerCase("pt-BR") === grupoNovo.trim().toLocaleLowerCase("pt-BR");
+		const [targetStationRule] = sameNormalizedGroup
+			? []
+			: await tx.select({ id: preparationStationRules.id }).from(preparationStationRules).where(groupRuleOf(grupoNovo)).limit(1);
+		// A regra casa sem caixa/espaços, mas o rename só move o texto exato: se sobrou produto com
+		// outra grafia do grupo antigo ("bebidas "), a regra antiga continua valendo para ele e o
+		// grupo novo ganha uma cópia — senão esses produtos cairiam na estação padrão em silêncio.
+		const [remainingOldGroupProduct] = sameNormalizedGroup
+			? []
+			: await tx
+					.select({ id: products.id })
+					.from(products)
+					.where(and(eq(products.organizacaoId, orgId), sql`lower(trim(${products.grupo})) = lower(trim(${grupoAtual}))`))
+					.limit(1);
+		if (remainingOldGroupProduct) {
+			if (!targetStationRule) {
+				// Um grupo pertence a no máximo uma estação: a cópia vai para a mesma, uma vez só.
+				const [oldRule] = await tx
+					.select({ estacaoId: preparationStationRules.estacaoId })
+					.from(preparationStationRules)
+					.where(groupRuleOf(grupoAtual))
+					.limit(1);
+				if (oldRule)
+					await tx.insert(preparationStationRules).values({
+						organizacaoId: orgId,
+						estacaoId: oldRule.estacaoId,
+						criterio: "GRUPO",
+						valor: { criterio: "GRUPO", grupo: grupoNovo },
+					});
+			}
+		} else if (targetStationRule) await tx.delete(preparationStationRules).where(groupRuleOf(grupoAtual));
+		else
+			await tx
+				.update(preparationStationRules)
+				.set({ valor: { criterio: "GRUPO", grupo: grupoNovo } })
+				.where(groupRuleOf(grupoAtual));
 
 		for (const channel of channelsToUpdate) {
 			await tx.update(salesChannels).set({ ordemGrupos: channel.ordemGrupos, dataAtualizacao: new Date() }).where(eq(salesChannels.id, channel.id));

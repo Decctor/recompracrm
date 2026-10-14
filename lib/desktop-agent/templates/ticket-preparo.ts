@@ -19,12 +19,24 @@ export const TicketPreparoDadosSchema = z.object({
 	clienteNome: z.string({ invalid_type_error: "Tipo não válido para o nome do cliente." }).optional().nullable(),
 	codigoInterno: z.string({ invalid_type_error: "Tipo não válido para o código interno." }).optional().nullable(),
 	observacoes: z.string({ invalid_type_error: "Tipo não válido para as observações." }).optional().nullable(),
+	// Estação de preparo deste ticket (docs/dev-planning/preparation-stations-plan.md). Ausente em
+	// jobs antigos e em orgs sem estação: ticket único, sem cabeçalho de estação.
+	estacao: z
+		.object({
+			id: z.string({ required_error: "ID da estação não informado.", invalid_type_error: "Tipo não válido para o ID da estação." }),
+			nome: z.string({ required_error: "Nome da estação não informado.", invalid_type_error: "Tipo não válido para o nome da estação." }),
+		})
+		.optional()
+		.nullable(),
 	itens: z
 		.array(
 			z.object({
 				nome: z.string({ required_error: "Nome do item não informado.", invalid_type_error: "Tipo não válido para o nome do item." }),
 				quantidade: z.number({ required_error: "Quantidade do item não informada.", invalid_type_error: "Tipo não válido para a quantidade." }),
 				observacoes: z.string({ invalid_type_error: "Tipo não válido para as observações do item." }).optional().nullable(),
+				// Item da estação deste ticket. Os demais (escopo PEDIDO) saem em corpo menor sob
+				// "Também neste pedido". Default true: job antigo imprime tudo em destaque, como antes.
+				destaque: z.boolean({ invalid_type_error: "Tipo não válido para o destaque do item." }).optional().default(true),
 				gruposAdicionais: z
 					.array(
 						z.object({
@@ -43,7 +55,9 @@ export const TicketPreparoDadosSchema = z.object({
 		)
 		.min(1, { message: "Ticket de preparo sem itens." }),
 });
-export type TTicketPreparoDados = z.infer<typeof TicketPreparoDadosSchema>;
+// Tipo de ENTRADA do schema: `destaque` é opcional (default true no parse) para que `dados` antigos
+// e montagens manuais continuem válidos; o template trata ausente como destaque.
+export type TTicketPreparoDados = z.input<typeof TicketPreparoDadosSchema>;
 
 const MODALIDADE_LABELS: Record<string, string> = {
 	PRESENCIAL: "BALCÃO",
@@ -68,6 +82,27 @@ function renderAdicionaisHtml(grupos: NonNullable<TTicketPreparoItem["gruposAdic
 		.join("");
 }
 
+function renderItemDescricaoHtml(item: TTicketPreparoItem) {
+	return `${escapeHtml(item.nome)}${item.gruposAdicionais?.length ? renderAdicionaisHtml(item.gruposAdicionais) : ""}${
+		item.observacoes ? `<span class="observacao">&raquo; ${escapeHtml(item.observacoes)}</span>` : ""
+	}`;
+}
+
+// Itens de outras estações: contexto para a montagem do pedido, não trabalho desta estação —
+// corpo menor, sem negrito, sem a quantidade em fonte grande.
+function renderOutrosItensHtml(itens: TTicketPreparoItem[]) {
+	const linhasHtml = itens
+		.map(
+			(item) =>
+				`<div class="outro-item">${item.quantidade}x ${escapeHtml(item.nome)}${item.gruposAdicionais?.length ? renderAdicionaisHtml(item.gruposAdicionais) : ""}${
+					item.observacoes ? `<span class="outro-observacao">&raquo; ${escapeHtml(item.observacoes)}</span>` : ""
+				}</div>`,
+		)
+		.join("");
+	return `<div class="sep"></div>
+<div class="outros"><p class="outros-titulo">Também neste pedido</p>${linhasHtml}</div>`;
+}
+
 export function renderTicketPreparoHtml(dados: TTicketPreparoDados) {
 	const modalidadeLabel = dados.modalidade ? (MODALIDADE_LABELS[dados.modalidade] ?? dados.modalidade) : null;
 	// A linha de contexto só acrescenta o que a etiqueta ainda não disse: "Mesa 12" dispensa
@@ -81,15 +116,20 @@ export function renderTicketPreparoHtml(dados: TTicketPreparoDados) {
 		.filter(Boolean)
 		.join(" · ");
 
-	const totalItens = dados.itens.reduce((total, item) => total + item.quantidade, 0);
+	// Sem nenhum item em destaque (dado inconsistente), imprime tudo em destaque: melhor um ticket
+	// sem realce do que um ticket sem trabalho.
+	const hasHighlightedItem = dados.itens.some((item) => item.destaque !== false);
+	const itensDestaque = hasHighlightedItem ? dados.itens.filter((item) => item.destaque !== false) : dados.itens;
+	const outrosItens = hasHighlightedItem ? dados.itens.filter((item) => item.destaque === false) : [];
 
-	const itensHtml = dados.itens
+	const totalItens = itensDestaque.reduce((total, item) => total + item.quantidade, 0);
+	const totalOutrosItens = outrosItens.reduce((total, item) => total + item.quantidade, 0);
+
+	const itensHtml = itensDestaque
 		.map(
 			(item) => `<tr>
 			<td class="qtd">${item.quantidade}</td>
-			<td class="desc">${escapeHtml(item.nome)}${item.gruposAdicionais?.length ? renderAdicionaisHtml(item.gruposAdicionais) : ""}${
-				item.observacoes ? `<span class="observacao">&raquo; ${escapeHtml(item.observacoes)}</span>` : ""
-			}</td>
+			<td class="desc">${renderItemDescricaoHtml(item)}</td>
 		</tr>`,
 		)
 		.join("");
@@ -117,15 +157,31 @@ p { margin: 0; }
 .observacao { display: inline-block; margin-top: 0.8mm; padding: 0.5mm 1mm; background: #000; color: #fff; font-size: 9.5pt; }
 .observacoes-pedido { margin-top: 1mm; padding: 1.5mm 1mm; border: 0.5mm solid #000; font-size: 10pt; }
 .rodape { margin-top: 2mm; font-size: 8pt; }
-</style></head><body>
-<div class="centro etiqueta">${escapeHtml(dados.etiqueta)}</div>
+${
+	dados.estacao
+		? `.estacao { margin-bottom: 1.5mm; padding: 0.8mm 1mm; background: #000; color: #fff; font-size: 11pt; text-transform: uppercase; letter-spacing: 0.3mm; word-break: break-word; }
+`
+		: ""
+}${
+		outrosItens.length > 0
+			? `.outros { font-weight: 400; font-size: 8.5pt; }
+.outros-titulo { font-size: 8pt; text-transform: uppercase; letter-spacing: 0.1mm; margin-bottom: 0.8mm; }
+.outro-item { padding: 0.6mm 0; word-break: break-word; }
+.outros .adicional { font-size: 8pt; }
+.outro-observacao { display: block; padding-left: 2mm; font-size: 8pt; }
+`
+			: ""
+	}</style></head><body>
+${dados.estacao ? `<p class="centro estacao">${escapeHtml(dados.estacao.nome)}</p>\n` : ""}<div class="centro etiqueta">${escapeHtml(dados.etiqueta)}</div>
 ${dados.numeroPedido ? `<p class="centro pedido">PEDIDO ${dados.numeroPedido}</p>` : ""}
 ${contexto ? `<p class="centro contexto">${contexto}</p>` : ""}
 <p class="centro meta">${formatDateTimeInOperationTimezone(dados.data)}${dados.clienteNome ? ` &middot; ${escapeHtml(dados.clienteNome)}` : ""}</p>
 <div class="sep"></div>
 <table class="itens">${itensHtml}</table>
 ${dados.observacoes ? `<div class="observacoes-pedido">OBS: ${escapeHtml(dados.observacoes)}</div>` : ""}
-<div class="sep"></div>
-<p class="centro rodape">${totalItens} ${totalItens === 1 ? "ITEM" : "ITENS"}${dados.codigoInterno ? ` &middot; #${escapeHtml(dados.codigoInterno)}` : ""}</p>
+${outrosItens.length > 0 ? `${renderOutrosItensHtml(outrosItens)}\n` : ""}<div class="sep"></div>
+<p class="centro rodape">${totalItens} ${totalItens === 1 ? "ITEM" : "ITENS"}${
+		totalOutrosItens > 0 ? ` &middot; +${totalOutrosItens} EM OUTRAS ESTAÇÕES` : ""
+	}${dados.codigoInterno ? ` &middot; #${escapeHtml(dados.codigoInterno)}` : ""}</p>
 </body></html>`;
 }

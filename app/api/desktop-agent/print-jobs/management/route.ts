@@ -1,7 +1,7 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { buildCupomVendaDados } from "@/lib/desktop-agent/cupom-venda-data";
-import { enqueuePrintJob } from "@/lib/desktop-agent/print-jobs";
+import { enqueuePrintJob, organizationHasActivePrinterForPreparationStation } from "@/lib/desktop-agent/print-jobs";
 import { buildTicketPreparoDadosFromSale, buildTicketPreparoDadosFromTabOrder } from "@/lib/desktop-agent/ticket-preparo-data";
 import type { TEtiquetaLoteDados } from "@/lib/desktop-agent/templates/etiqueta-lote";
 import type { TTesteImpressaoDados } from "@/lib/desktop-agent/templates/teste-impressao";
@@ -44,6 +44,7 @@ async function getPrintJobsManagement({ input, organizacaoId }: TGetPrintJobsMan
 			origemId: true,
 			status: true,
 			numeroTentativas: true,
+			estacaoPreparoId: true,
 			erro: true,
 			expiraEm: true,
 			dataInsercao: true,
@@ -121,21 +122,47 @@ async function createManualPrintJob({ input, organizacaoId, solicitadoPorId, sol
 
 	if (input.finalidade === "TICKET_PREPARO") {
 		if (!input.vendaId && !input.tabOrderId) throw new createHttpError.BadRequest("Informe a venda ou o pedido para a impressão do ticket de preparo.");
-		// Builders compartilhados com o auto-print — reimpressão manual idêntica à automática.
-		const dados = input.tabOrderId
+		// Builders compartilhados com o auto-print — reimpressão manual idêntica à automática, um
+		// job por estação de preparo. O override `impressoraId` vale para todos os jobs gerados.
+		const entries = input.tabOrderId
 			? await buildTicketPreparoDadosFromTabOrder({ organizacaoId, tabOrderId: input.tabOrderId })
 			: await buildTicketPreparoDadosFromSale({ organizacaoId, vendaId: input.vendaId as string });
 
-		const result = await enqueuePrintJob({
-			organizacaoId,
-			finalidade: "TICKET_PREPARO",
-			dados: dados as unknown as Record<string, unknown>,
-			origemTipo: input.tabOrderId ? "PEDIDO_CONTA" : "VENDA",
-			origemId: input.tabOrderId ?? input.vendaId,
-			impressoraId: input.impressoraId,
-			solicitadoPorId,
-		});
-		return { data: { jobs: [result.job] }, message: "Ticket de preparo enviado para impressão." };
+		// Sem override, estação sem impressora que a atenda não gera job: ficaria PENDENTE até expirar
+		// (mesma guarda do auto-print). Se nenhuma estação tem impressora, a reimpressão é recusada.
+		const printableEntries = [];
+		for (const entry of entries) {
+			if (
+				!input.impressoraId &&
+				entry.estacaoId &&
+				!(await organizationHasActivePrinterForPreparationStation({ organizacaoId, estacaoId: entry.estacaoId }))
+			)
+				continue;
+			printableEntries.push(entry);
+		}
+		if (printableEntries.length === 0)
+			throw new createHttpError.BadRequest(
+				"Nenhuma impressora ativa atende as estações de preparo deste pedido. Escolha uma impressora para reimprimir.",
+			);
+
+		const jobs = [];
+		for (const { estacaoId, dados } of printableEntries) {
+			const result = await enqueuePrintJob({
+				organizacaoId,
+				finalidade: "TICKET_PREPARO",
+				dados: dados as unknown as Record<string, unknown>,
+				origemTipo: input.tabOrderId ? "PEDIDO_CONTA" : "VENDA",
+				origemId: input.tabOrderId ?? input.vendaId,
+				impressoraId: input.impressoraId,
+				solicitadoPorId,
+				estacaoPreparoId: estacaoId,
+			});
+			jobs.push(result.job);
+		}
+		return {
+			data: { jobs },
+			message: jobs.length === 1 ? "Ticket de preparo enviado para impressão." : `${jobs.length} tickets de preparo enviados para impressão.`,
+		};
 	}
 
 	if (input.finalidade === "ETIQUETA_LOTE") {

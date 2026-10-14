@@ -15,6 +15,9 @@ export type TPreparationTicketItem = {
 	observacoes: string | null;
 	// Adicionais agrupados pelo grupo de origem ("Escolha seu gelato") — ver groupSaleItemModifiers.
 	gruposAdicionais: { grupo: string | null; adicionais: { nome: string; quantidade: number }[] }[];
+	// Roteamento por estação de preparo (lib/sales/preparation-stations.ts): o board ignora.
+	produtoId: string | null;
+	grupo: string | null;
 };
 
 export type TPreparationItemRow = {
@@ -23,16 +26,17 @@ export type TPreparationItemRow = {
 	quantidadeCancelada: number;
 	observacoes: string | null;
 	metadados: unknown;
-	produto: { nome: string } | null;
+	produtoId: string | null;
+	produto: { nome: string; grupo: string | null } | null;
 	produtoVariante: { nome: string } | null;
 	adicionais: { id: string; nome: string; quantidade: number; opcao: { produtoAddOn: { nome: string } } | null }[];
 };
 
 // Cláusula `with` dos itens — a mesma para vendas e pedidos de conta.
 export const PREPARATION_ITEMS_WITH = {
-	columns: { id: true, quantidade: true, quantidadeCancelada: true, observacoes: true, metadados: true },
+	columns: { id: true, quantidade: true, quantidadeCancelada: true, observacoes: true, metadados: true, produtoId: true },
 	with: {
-		produto: { columns: { nome: true } },
+		produto: { columns: { nome: true, grupo: true } },
 		produtoVariante: { columns: { nome: true } },
 		adicionais: {
 			columns: { id: true, nome: true, quantidade: true },
@@ -63,6 +67,8 @@ export function mapPreparationTicketItems(items: TPreparationItemRow[]): TPrepar
 					grupo,
 					adicionais: adicionais.map((modifier) => ({ nome: modifier.nome, quantidade: modifier.quantidade })),
 				})),
+				produtoId: item.produtoId,
+				grupo: item.produto?.grupo ?? null,
 			};
 		});
 }

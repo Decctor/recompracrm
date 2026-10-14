@@ -112,6 +112,8 @@ type TEnqueuePrintJobParams = {
 	impressoraId?: string | null;
 	solicitadoPorId?: string | null;
 	formatoPreferido?: TPrintJobFormatoEnum | null;
+	// Estação de preparo do TICKET_PREPARO: o claim só entrega a impressora que atende a estação.
+	estacaoPreparoId?: string | null;
 };
 // Ponto de entrada único de criação de jobs — o futuro wiring de vendas/delivery chama isto.
 export async function enqueuePrintJob(params: TEnqueuePrintJobParams) {
@@ -134,6 +136,7 @@ export async function enqueuePrintJob(params: TEnqueuePrintJobParams) {
 			chaveIdempotencia: params.chaveIdempotencia ?? null,
 			impressoraId: params.impressoraId ?? null,
 			solicitadoPorId: params.solicitadoPorId ?? null,
+			estacaoPreparoId: params.estacaoPreparoId ?? null,
 			expiraEm,
 		})
 		.onConflictDoNothing({ target: [printJobs.organizacaoId, printJobs.chaveIdempotencia] })
@@ -169,6 +172,29 @@ export async function organizationHasActivePrinterForFinalidade({
 	return printers.some((printer) => printer.finalidades.includes(finalidade));
 }
 
+// Variante por estação de preparo da guarda acima: estação sem impressora que a atenda não gera
+// job (acumularia EXPIRADO). Mesmo racional de ignorar `disponivel`: agent offline imprime ao
+// voltar, dentro do TTL — e o ticket sem estação da mesma org seguiria a mesma regra.
+export async function organizationHasActivePrinterForPreparationStation({ organizacaoId, estacaoId }: { organizacaoId: string; estacaoId: string }) {
+	const printers = await db.query.agentPrinters.findMany({
+		where: and(eq(agentPrinters.organizacaoId, organizacaoId), eq(agentPrinters.ativa, true)),
+		columns: { finalidades: true, estacoesPreparo: true },
+	});
+	return printers.some((printer) => printerServesPreparationStation({ printer, estacaoId }));
+}
+
+// Impressora atende a estação: finalidade TICKET_PREPARO E a estação listada. `estacoesPreparo`
+// vazio = nenhuma estação (mesmo contrato "vazio = nada" de `finalidades`).
+function printerServesPreparationStation({
+	printer,
+	estacaoId,
+}: {
+	printer: Pick<TAgentPrinterEntity, "finalidades" | "estacoesPreparo">;
+	estacaoId: string;
+}) {
+	return printer.finalidades.includes("TICKET_PREPARO") && printer.estacoesPreparo.includes(estacaoId);
+}
+
 // Impressoras do principal aptas a receber trabalho (ativas no dashboard e presentes no último sync).
 export async function getClaimablePrinters(principalId: string) {
 	return await db.query.agentPrinters.findMany({
@@ -180,11 +206,15 @@ function resolvePrinterForJob({
 	job,
 	printers,
 }: {
-	job: { finalidade: string; formato: TPrintJobFormatoEnum; impressoraId: string | null };
+	job: { finalidade: string; formato: TPrintJobFormatoEnum; impressoraId: string | null; estacaoPreparoId: string | null };
 	printers: TAgentPrinterEntity[];
 }) {
 	const compatiblePrinters = printers.filter((printer) => FORMATO_DRIVERS_COMPATIVEIS[job.formato].includes(printer.driver));
+	// Override de impressora (reimpressão manual) vence a estação: quem escolheu a impressora decidiu.
 	if (job.impressoraId) return compatiblePrinters.find((printer) => printer.id === job.impressoraId) ?? null;
+	// Job de estação só sai na impressora que a atende; job sem estação, em qualquer uma da finalidade.
+	const estacaoId = job.estacaoPreparoId;
+	if (estacaoId) return compatiblePrinters.find((printer) => printerServesPreparationStation({ printer, estacaoId })) ?? null;
 	return compatiblePrinters.find((printer) => printer.finalidades.includes(job.finalidade)) ?? null;
 }
 
@@ -203,13 +233,23 @@ export async function claimPrintJobs({ actor, limite }: TClaimPrintJobsParams) {
 	if (printers.length === 0) return { jobs: [], impressorasAtivas: 0 };
 
 	const finalidadesAtendidas = Array.from(new Set(printers.flatMap((printer) => printer.finalidades)));
+	// Só conta estação de impressora que tem a finalidade TICKET_PREPARO (a única que roteia por estação).
+	const estacoesAtendidas = Array.from(
+		new Set(printers.filter((printer) => printer.finalidades.includes("TICKET_PREPARO")).flatMap((printer) => printer.estacoesPreparo)),
+	);
 	const printerIds = printers.map((printer) => printer.id);
 	const now = new Date();
 
-	// Candidatos: roteáveis por finalidade OU endereçados a uma impressora deste agent.
+	// Candidatos: roteáveis por finalidade (sem estação, ou de uma estação que este agent atende)
+	// OU endereçados a uma impressora deste agent. Filtrar a estação já no SQL evita que jobs de
+	// outras estações ocupem o `limite` e deixem os deste agent para trás.
+	const estacaoCondition =
+		estacoesAtendidas.length > 0
+			? or(isNull(printJobs.estacaoPreparoId), inArray(printJobs.estacaoPreparoId, estacoesAtendidas))
+			: isNull(printJobs.estacaoPreparoId);
 	const finalidadeCondition =
 		finalidadesAtendidas.length > 0
-			? or(inArray(printJobs.finalidade, finalidadesAtendidas as never), inArray(printJobs.impressoraId, printerIds))
+			? or(and(inArray(printJobs.finalidade, finalidadesAtendidas as never), estacaoCondition), inArray(printJobs.impressoraId, printerIds))
 			: inArray(printJobs.impressoraId, printerIds);
 
 	const candidates = await db.query.printJobs.findMany({
@@ -333,6 +373,7 @@ export async function listPrintJobs({ organizacaoId, status, limite }: TListPrin
 			numeroTentativas: true,
 			impressoraId: true,
 			principalId: true,
+			estacaoPreparoId: true,
 			erro: true,
 			expiraEm: true,
 			dataInsercao: true,
