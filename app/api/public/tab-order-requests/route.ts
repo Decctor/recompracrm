@@ -4,6 +4,7 @@ import { resolveCatalogOrderItem } from "@/lib/products/resolve-catalog-order-it
 import { autoApproveTabOrderRequest, getTabMenuProducts, hashPublicToken, resolveServiceSettings } from "@/lib/tabs";
 import { enforcePublicRateLimit } from "@/lib/tabs/public-rate-limit";
 import { findOpenTabByServiceCard } from "@/lib/tabs/service-cards";
+import { tabUsesCode } from "@/schemas/service-settings";
 import { TabOrderRequestPayloadSchema } from "@/schemas/tab-order-requests";
 import { db } from "@/services/drizzle";
 import { sales, tabOrderRequests, tabs } from "@/services/drizzle/schema";
@@ -130,10 +131,12 @@ async function createPublicTabOrderRequest({ input, clientIp }: { input: TCreate
 		});
 	}
 
+	// Codigo digitado so vale quando a conta e identificada por codigo: em "Somente mesas" ele
+	// desviaria a aprovacao para a abertura por codigo (recusada) em vez da conta implicita da mesa.
 	const payload = TabOrderRequestPayloadSchema.parse({
 		itens: input.items,
 		observacoes: input.notes ?? null,
-		codigoTab: input.context === "PONTO" && !tabId ? (input.tabCode ?? null) : serviceCardCode,
+		codigoTab: input.context === "PONTO" && !tabId ? (tabUsesCode(settings.contas) ? (input.tabCode ?? null) : null) : serviceCardCode,
 		contexto: input.context,
 	});
 	const payloadHash = createHash("sha256").update(JSON.stringify(payload)).digest("hex");

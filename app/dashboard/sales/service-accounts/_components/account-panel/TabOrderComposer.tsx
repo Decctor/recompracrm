@@ -1,5 +1,4 @@
 "use client";
-import type { TCreateTabOrderInput } from "@/app/api/tabs/orders/route";
 import ProductSearchInput from "@/components/Inputs/ProductSearchInput";
 import BarcodeMatchPicker from "@/components/Modals/Sales/BarcodeMatchPicker";
 import {
@@ -21,8 +20,9 @@ import { usePOSGroups, usePOSProducts, usePOSTopProducts } from "@/lib/queries/p
 import { cn } from "@/lib/utils";
 import { useMutation } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Flame, Minus, MousePointerClick, Plus, Search, SendHorizonal } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
+import type { TUseTabOrderCart } from "./use-tab-order-cart";
 
 // ============================================================================
 // Aba "Lançar pedido" do painel: catálogo em grade de toque, carrinho fixo no
@@ -31,25 +31,7 @@ import { toast } from "sonner";
 // no client e mantido em retries: duplo toque reenvia o mesmo id e não duplica.
 // ============================================================================
 
-type TCartItem = TCreateTabOrderInput["itens"][number] & { cartKey: string };
-
 type TComposerStage = { kind: "catalog" } | { kind: "builder"; product: TBuilderProduct; initialVariantId?: string | null };
-
-function modifierSignature(modifiers: TBuiltOrderItem["modificadores"]) {
-	return modifiers
-		.map((modifier) => `${modifier.opcaoId}x${modifier.quantidade}`)
-		.sort()
-		.join("|");
-}
-
-function cartKeyFor(item: Pick<TBuiltOrderItem, "produtoId" | "produtoVarianteId" | "modificadores" | "observacoes">) {
-	return `${item.produtoId}:${item.produtoVarianteId ?? ""}:${modifierSignature(item.modificadores)}:${item.observacoes ?? ""}`;
-}
-
-function withQuantity(item: TCartItem, quantidade: number): TCartItem {
-	const valorTotalBruto = item.valorUnitarioFinal * quantidade;
-	return { ...item, quantidade, valorTotalBruto, valorTotalLiquido: valorTotalBruto - item.valorDesconto };
-}
 
 function isComplexProduct(product: TBuilderProduct) {
 	return product.variantes.length > 0 || product.addOnsReferencias.length > 0;
@@ -57,58 +39,45 @@ function isComplexProduct(product: TBuilderProduct) {
 
 type TabOrderComposerProps = {
 	tabId: string;
+	/** Carrinho do painel — compartilhado com o "pedir mais um" da aba Pedidos. */
+	orderCart: TUseTabOrderCart;
 	/** Chamado após lançar com sucesso (refresh do painel e do board). */
 	onLaunched: () => void;
-	/** Quantidade de itens no carrinho, para o badge da aba. */
-	onCartCountChange?: (count: number) => void;
 };
 
-export function TabOrderComposer({ tabId, onLaunched, onCartCountChange }: TabOrderComposerProps) {
+export function TabOrderComposer({ tabId, orderCart, onLaunched }: TabOrderComposerProps) {
 	const [stage, setStage] = useState<TComposerStage>({ kind: "catalog" });
 	const directionRef = useRef<"forward" | "back">("forward");
-	const [cart, setCart] = useState<TCartItem[]>([]);
-	const [observacoes, setObservacoes] = useState("");
-	// Um id por "intenção de pedido": permanece o mesmo em retries, muda apenas após sucesso.
-	const [tabOrderId, setTabOrderId] = useState<string>(() => crypto.randomUUID());
+	const {
+		cart,
+		observacoes,
+		setObservacoes,
+		tabOrderId,
+		cartTotal,
+		cartCount,
+		cartQtyByProduct,
+		addItem,
+		changeQuantity,
+		clearCart,
+		resetAfterLaunch,
+	} = orderCart;
 
 	function goTo(next: TComposerStage, direction: "forward" | "back") {
 		directionRef.current = direction;
 		setStage(next);
 	}
 
-	const cartTotal = useMemo(() => cart.reduce((sum, item) => sum + item.valorTotalLiquido, 0), [cart]);
-	const cartCount = useMemo(() => cart.reduce((sum, item) => sum + item.quantidade, 0), [cart]);
-	useEffect(() => {
-		onCartCountChange?.(cartCount);
-	}, [cartCount, onCartCountChange]);
-	const cartQtyByProduct = useMemo(() => {
-		const map = new Map<string, number>();
-		for (const item of cart) map.set(item.produtoId, (map.get(item.produtoId) ?? 0) + item.quantidade);
-		return map;
-	}, [cart]);
-
 	const { mutate: launchOrder, isPending: launchPending } = useMutation({
 		mutationKey: ["create-tab-order", tabOrderId],
 		mutationFn: createTabOrder,
 		onSuccess: (data) => {
 			toast.success(data.message);
-			setCart([]);
-			setObservacoes("");
-			setTabOrderId(crypto.randomUUID());
+			resetAfterLaunch();
 			goTo({ kind: "catalog" }, "back");
 			onLaunched();
 		},
 		onError: (error) => toast.error(getErrorMessage(error)),
 	});
-
-	function addItem(item: TBuiltOrderItem) {
-		const cartKey = cartKeyFor(item);
-		setCart((prev) => {
-			const existing = prev.find((entry) => entry.cartKey === cartKey);
-			if (existing) return prev.map((entry) => (entry.cartKey === cartKey ? withQuantity(entry, entry.quantidade + item.quantidade) : entry));
-			return [...prev, withQuantity({ ...item, cartKey }, item.quantidade)];
-		});
-	}
 
 	function addSimpleProduct(product: TBuilderProduct) {
 		addItem({
@@ -127,12 +96,6 @@ export function TabOrderComposer({ tabId, onLaunched, onCartCountChange }: TabOr
 			observacoes: null,
 			modificadores: [],
 		});
-	}
-
-	function changeQuantity(cartKey: string, delta: number) {
-		setCart((prev) =>
-			prev.map((item) => (item.cartKey === cartKey ? withQuantity(item, item.quantidade + delta) : item)).filter((item) => item.quantidade > 0),
-		);
 	}
 
 	function handleProductTap(product: TBuilderProduct) {
@@ -197,7 +160,7 @@ export function TabOrderComposer({ tabId, onLaunched, onCartCountChange }: TabOr
 								<span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
 									Novo pedido · {cartCount} {cartCount === 1 ? "item" : "itens"}
 								</span>
-								<button type="button" className="text-xs font-semibold text-muted-foreground hover:text-foreground" onClick={() => setCart([])}>
+								<button type="button" className="text-xs font-semibold text-muted-foreground hover:text-foreground" onClick={clearCart}>
 									Limpar
 								</button>
 							</div>

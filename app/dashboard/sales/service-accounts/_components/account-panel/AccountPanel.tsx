@@ -19,6 +19,7 @@ import { formatTabAge, tabLabel } from "../board-meta";
 import { AccountOrders, InlineCancelTabConfirm } from "./AccountOrders";
 import { ClosePane } from "./ClosePane";
 import { TabOrderComposer } from "./TabOrderComposer";
+import { useTabOrderCart } from "./use-tab-order-cart";
 
 // ============================================================================
 // Painel lateral da conta. Substitui a pagina /[accountId]: o board continua
@@ -53,7 +54,7 @@ export function AccountPanel({ tabId, now, sheetTab, onSheetTabChange, transferT
 	const [confirmingCancel, setConfirmingCancel] = useState(false);
 	const [linkClientOpen, setLinkClientOpen] = useState(false);
 	const [changeCardOpen, setChangeCardOpen] = useState(false);
-	const [cartCount, setCartCount] = useState(0);
+	const orderCart = useTabOrderCart();
 
 	function refresh() {
 		queryClient.invalidateQueries({ queryKey });
@@ -286,9 +287,9 @@ export function AccountPanel({ tabId, now, sheetTab, onSheetTabChange, transferT
 							<SheetTabButton active={sheetTab === "lancar"} onClick={() => onSheetTabChange("lancar")}>
 								<Plus className="size-4" />
 								Lançar pedido
-								{cartCount > 0 ? (
+								{orderCart.cartCount > 0 ? (
 									<span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-bold text-primary-foreground">
-										{cartCount}
+										{orderCart.cartCount}
 									</span>
 								) : null}
 							</SheetTabButton>
@@ -297,13 +298,22 @@ export function AccountPanel({ tabId, now, sheetTab, onSheetTabChange, transferT
 
 					{/* Compositor sempre montado: o carrinho sobrevive a ida e volta entre as abas. */}
 					<div className={cn("flex min-h-0 flex-1 flex-col", sheetTab !== "pedidos" && isOpen && "hidden")}>
-						<AccountOrders tab={tab} now={now} refresh={refresh} onStartClose={() => setPane("fechar")} />
+						<AccountOrders
+							tab={tab}
+							now={now}
+							refresh={refresh}
+							onStartClose={() => setPane("fechar")}
+							onRepeatItem={(item) => {
+								orderCart.addItem(item);
+								onSheetTabChange("lancar");
+							}}
+						/>
 					</div>
 					{isOpen ? (
 						<div className={cn("flex min-h-0 flex-1 flex-col bg-card", sheetTab !== "lancar" && "hidden")}>
 							<TabOrderComposer
 								tabId={tab.id}
-								onCartCountChange={setCartCount}
+								orderCart={orderCart}
 								onLaunched={() => {
 									refresh();
 									onSheetTabChange("pedidos");

@@ -89,10 +89,20 @@ type PublicOrderMenuProps = {
 	products: TPublicMenuProduct[];
 	deviceKey?: string | null;
 	linkedTabCode?: string | null;
+	/** QR do ponto: pede o numero da comanda so quando a operacao identifica contas por codigo. */
+	asksTabCode?: boolean;
 	onSubmitted?: () => void;
 };
 
-export function PublicOrderMenu({ token, context, products, deviceKey: providedDeviceKey, linkedTabCode, onSubmitted }: PublicOrderMenuProps) {
+export function PublicOrderMenu({
+	token,
+	context,
+	products,
+	deviceKey: providedDeviceKey,
+	linkedTabCode,
+	asksTabCode = false,
+	onSubmitted,
+}: PublicOrderMenuProps) {
 	const localDeviceKey = usePublicOrderingDeviceKey();
 	const deviceKey = providedDeviceKey ?? localDeviceKey;
 	const [stage, setStage] = useState<"catalog" | "review">("catalog");
@@ -165,7 +175,7 @@ export function PublicOrderMenu({ token, context, products, deviceKey: providedD
 			idempotencyKey,
 			deviceKey,
 			notes: notes || null,
-			tabCode: context === "PONTO" && !linkedTabCode ? tabCode.trim() || null : null,
+			tabCode: context === "PONTO" && !linkedTabCode && asksTabCode ? tabCode.trim() || null : null,
 			items: cart.map((item) => ({
 				produtoId: item.produtoId,
 				produtoVarianteId: item.produtoVarianteId,
@@ -227,7 +237,7 @@ export function PublicOrderMenu({ token, context, products, deviceKey: providedD
 						setNotes={setNotes}
 						tabCode={tabCode}
 						setTabCode={setTabCode}
-						showTabCode={context === "PONTO" && !linkedTabCode}
+						showTabCode={context === "PONTO" && !linkedTabCode && asksTabCode}
 						deviceKeyReady={Boolean(deviceKey)}
 						isPending={isPending}
 						onBack={() => goTo("catalog", "back")}

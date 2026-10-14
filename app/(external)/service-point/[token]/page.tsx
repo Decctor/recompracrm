@@ -1,5 +1,6 @@
 import { OrgColorsProvider } from "@/components/Providers/OrgColorsProvider";
 import { getTabMenuProducts, hashPublicToken, resolveServiceSettings } from "@/lib/tabs";
+import { tabUsesCode } from "@/schemas/service-settings";
 import { db } from "@/services/drizzle";
 import { PublicShell } from "../../_components/PublicShell";
 import { PublicServicePointExperience } from "../../_components/PublicServicePointExperience";
@@ -62,7 +63,7 @@ export default async function ServicePointPublicPage({ params }: { params: Promi
 				logoUrl={servicePoint.organizacao?.logoUrl}
 			>
 				{orderingEnabled ? (
-					<PublicServicePointExperience token={token} products={products} />
+					<PublicServicePointExperience token={token} products={products} asksTabCode={tabUsesCode(settings.contas)} />
 				) : (
 					<div className="rounded-2xl border border-border bg-card px-4 py-8 text-center">
 						<p className="text-sm text-muted-foreground">

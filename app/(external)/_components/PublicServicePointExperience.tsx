@@ -17,9 +17,11 @@ async function fetchDeviceSession({ token, deviceKey }: { token: string; deviceK
 type PublicServicePointExperienceProps = {
 	token: string;
 	products: TPublicMenuProduct[];
+	/** A operacao identifica contas por codigo de comanda — em "Somente mesas" a mesa ja e a conta. */
+	asksTabCode: boolean;
 };
 
-export function PublicServicePointExperience({ token, products }: PublicServicePointExperienceProps) {
+export function PublicServicePointExperience({ token, products, asksTabCode }: PublicServicePointExperienceProps) {
 	const deviceKey = usePublicOrderingDeviceKey();
 	const sessionQuery = useQuery({
 		queryKey: ["public-tab-device-session", token, deviceKey],
@@ -39,6 +41,7 @@ export function PublicServicePointExperience({ token, products }: PublicServiceP
 				products={products}
 				deviceKey={deviceKey}
 				linkedTabCode={session?.tab?.codigo}
+				asksTabCode={asksTabCode}
 				onSubmitted={() => void sessionQuery.refetch()}
 			/>
 		</>

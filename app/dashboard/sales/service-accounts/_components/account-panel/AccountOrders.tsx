@@ -1,18 +1,22 @@
 "use client";
 import type { TTabDetails } from "@/app/api/tabs/route";
 import { Button } from "@/components/ui/button";
+import type { TBuiltOrderItem } from "@/components/Products/ProductBuilderForm";
 import { Checkbox } from "@/components/ui/checkbox";
 import { getErrorMessage } from "@/lib/errors";
 import { formatToMoney } from "@/lib/formatting";
+import { createManualPrintJob } from "@/lib/mutations/desktop-agent";
 import { cancelTabOrOrder, updateTabOrderStatus } from "@/lib/mutations/tabs";
+import { organizationHasPrinterForFinalidade, useAgentPrinters } from "@/lib/queries/desktop-agent";
 import { cn } from "@/lib/utils";
 import type { TSaleAttendanceStatusEnum } from "@/schemas/enums";
 import { useMutation } from "@tanstack/react-query";
-import { Ban, CheckCheck, ChefHat, Clock, Receipt } from "lucide-react";
+import { Ban, CheckCheck, ChefHat, Clock, Plus, Printer, Receipt } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { URGENCY_META, formatElapsedMinutes, getOpenRounds, isOpenRound } from "../board-meta";
 import { ORDER_NEXT_ACTION, ORDER_STATUS_META } from "./tab-meta";
+import { toRepeatOrderItem } from "./use-tab-order-cart";
 
 // ============================================================================
 // Aba "Pedidos" do painel: rodadas em andamento como cards de acao (mais
@@ -22,15 +26,18 @@ import { ORDER_NEXT_ACTION, ORDER_STATUS_META } from "./tab-meta";
 // ============================================================================
 
 type TTabOrder = TTabDetails["pedidos"][number];
+type TTabOrderItem = TTabOrder["itens"][number];
 
 type AccountOrdersProps = {
 	tab: TTabDetails;
 	now: number;
 	refresh: () => void;
 	onStartClose: () => void;
+	/** "Pedir mais um": leva uma unidade do item ao carrinho do Lançar pedido. */
+	onRepeatItem: (item: TBuiltOrderItem) => void;
 };
 
-export function AccountOrders({ tab, now, refresh, onStartClose }: AccountOrdersProps) {
+export function AccountOrders({ tab, now, refresh, onStartClose, onRepeatItem }: AccountOrdersProps) {
 	const isOpen = tab.status === "ABERTA";
 	const [confirmingOrderId, setConfirmingOrderId] = useState<string | null>(null);
 
@@ -55,6 +62,21 @@ export function AccountOrders({ tab, now, refresh, onStartClose }: AccountOrders
 		onError: (mutationError) => toast.error(getErrorMessage(mutationError)),
 	});
 
+	// Reimpressão da via de cozinha do pedido — mesmo builder do auto-print, um job por estação.
+	// O botão só aparece quando alguma impressora ativa atende o TICKET_PREPARO.
+	const { data: printers } = useAgentPrinters();
+	const canPrint = organizationHasPrinterForFinalidade(printers, "TICKET_PREPARO");
+	const {
+		mutate: mutatePrint,
+		isPending: printPending,
+		variables: printingOrderId,
+	} = useMutation({
+		mutationKey: ["print-tab-order-ticket", tab.id],
+		mutationFn: (tabOrderId: string) => createManualPrintJob({ finalidade: "TICKET_PREPARO", tabOrderId }),
+		onSuccess: (data) => toast.success(data.message),
+		onError: (mutationError) => toast.error(getErrorMessage(mutationError)),
+	});
+
 	const rounds = getOpenRounds(tab, now);
 	const roundById = new Map(rounds.map((round) => [round.id, round]));
 	const ordersById = new Map(tab.pedidos.map((order) => [order.id, order]));
@@ -63,6 +85,7 @@ export function AccountOrders({ tab, now, refresh, onStartClose }: AccountOrders
 	const doneOrders = tab.pedidos.filter((order) => !isOpenRound(order.status));
 	const doneItems = doneOrders.reduce((sum, order) => sum + order.itens.reduce((acc, item) => acc + item.quantidade, 0), 0);
 	const consumo = isOpen ? (tab.consumoParcial ?? 0) : (tab.valorTotal ?? tab.consumoParcial ?? 0);
+	const repeatItem = isOpen ? onRepeatItem : undefined;
 
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
@@ -111,6 +134,19 @@ export function AccountOrders({ tab, now, refresh, onStartClose }: AccountOrders
 														{nextAction.label}
 													</Button>
 												) : null}
+												{canPrint ? (
+													<Button
+														size="icon"
+														variant="ghost"
+														className="size-8 rounded-lg text-muted-foreground"
+														aria-label={`Reimprimir pedido ${order.numero}`}
+														title="Reimprimir ticket de preparo"
+														disabled={printPending && printingOrderId === order.id}
+														onClick={() => mutatePrint(order.id)}
+													>
+														<Printer className="size-4" />
+													</Button>
+												) : null}
 												<Button
 													size="icon"
 													variant="ghost"
@@ -126,7 +162,7 @@ export function AccountOrders({ tab, now, refresh, onStartClose }: AccountOrders
 										) : null}
 									</header>
 
-									<OrderItems order={order} />
+									<OrderItems order={order} onRepeatItem={repeatItem} />
 
 									{order.observacoes ? <span className="text-xs italic text-muted-foreground">“{order.observacoes}”</span> : null}
 
@@ -170,10 +206,17 @@ export function AccountOrders({ tab, now, refresh, onStartClose }: AccountOrders
 										{order.itens.map((item) => {
 											const metadata = (item.metadados ?? {}) as { nome?: string };
 											return (
-												<div key={item.id} className="grid grid-cols-[28px_1fr_auto] gap-2 text-sm text-foreground/75">
+												<div
+													key={item.id}
+													className={cn(
+														"grid items-center gap-2 text-sm text-foreground/75",
+														repeatItem ? "grid-cols-[28px_1fr_auto_auto]" : "grid-cols-[28px_1fr_auto]",
+													)}
+												>
 													<span className="font-bold text-muted-foreground">{item.quantidade}×</span>
 													<span className="min-w-0 [overflow-wrap:anywhere]">{metadata.nome ?? "Item"}</span>
 													<span className="tabular-nums text-muted-foreground">{formatToMoney(item.valorVendaTotalLiquido)}</span>
+													{repeatItem ? <RepeatItemButton item={item} onRepeatItem={repeatItem} /> : null}
 												</div>
 											);
 										})}
@@ -223,7 +266,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 	return <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">{children}</span>;
 }
 
-function OrderItems({ order }: { order: TTabOrder }) {
+function OrderItems({ order, onRepeatItem }: { order: TTabOrder; onRepeatItem?: (item: TBuiltOrderItem) => void }) {
 	return (
 		<div className="flex flex-col gap-1.5">
 			{order.itens.map((item) => {
@@ -233,7 +276,11 @@ function OrderItems({ order }: { order: TTabOrder }) {
 				return (
 					<div
 						key={item.id}
-						className={cn("grid grid-cols-[28px_1fr_auto] items-baseline gap-2 text-sm", fullyCancelled && "text-muted-foreground line-through")}
+						className={cn(
+							"grid items-baseline gap-2 text-sm",
+							onRepeatItem ? "grid-cols-[28px_1fr_auto_auto]" : "grid-cols-[28px_1fr_auto]",
+							fullyCancelled && "text-muted-foreground line-through",
+						)}
 					>
 						<span className="font-bold text-muted-foreground">{item.quantidade}×</span>
 						<span className="flex min-w-0 flex-col">
@@ -241,10 +288,32 @@ function OrderItems({ order }: { order: TTabOrder }) {
 							{addOns ? <span className="text-xs text-muted-foreground">{addOns}</span> : null}
 						</span>
 						<span className="text-sm font-bold tabular-nums">{formatToMoney(item.valorVendaTotalLiquido)}</span>
+						{onRepeatItem ? <RepeatItemButton item={item} onRepeatItem={onRepeatItem} /> : null}
 					</div>
 				);
 			})}
 		</div>
+	);
+}
+
+// "Mais uma": a mesma unidade (variante, adicionais, observação) vai ao carrinho do Lançar pedido,
+// onde o garçom ajusta a quantidade e envia. Item cancelado ou sem como repetir guarda o espaço
+// do botão para os preços continuarem alinhados.
+function RepeatItemButton({ item, onRepeatItem }: { item: TTabOrderItem; onRepeatItem: (item: TBuiltOrderItem) => void }) {
+	const repeatable = item.quantidadeCancelada < item.quantidade ? toRepeatOrderItem(item) : null;
+	if (!repeatable) return <span className="size-7" aria-hidden />;
+
+	return (
+		<Button
+			size="icon"
+			variant="ghost"
+			className="size-7 self-center rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary"
+			aria-label={`Pedir mais 1 ${repeatable.nome}`}
+			title="Pedir mais 1"
+			onClick={() => onRepeatItem(repeatable)}
+		>
+			<Plus className="size-4" />
+		</Button>
 	);
 }
 
