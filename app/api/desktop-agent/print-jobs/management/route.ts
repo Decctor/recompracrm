@@ -87,6 +87,19 @@ const CreateManualPrintJobInputSchema = z.object({
 	tabOrderId: z.string({ invalid_type_error: "Tipo não válido para o ID do pedido." }).optional().nullable(),
 	producaoId: z.string({ invalid_type_error: "Tipo não válido para o ID da produção." }).optional().nullable(),
 	impressoraId: z.string({ invalid_type_error: "Tipo não válido para o ID da impressora." }).optional().nullable(),
+	// CUPOM_VENDA de venda em aberto (cupom da conta no fechamento): desconto/acréscimo da tela,
+	// ainda não gravados. Recusado para venda confirmada.
+	ajustesRascunho: z
+		.object({
+			descontoGeral: z
+				.number({ required_error: "Desconto do cupom não informado.", invalid_type_error: "Tipo não válido para o desconto do cupom." })
+				.min(0, { message: "O desconto do cupom não pode ser negativo." }),
+			acrescimoGeral: z
+				.number({ required_error: "Acréscimo do cupom não informado.", invalid_type_error: "Tipo não válido para o acréscimo do cupom." })
+				.min(0, { message: "O acréscimo do cupom não pode ser negativo." }),
+		})
+		.optional()
+		.nullable(),
 });
 export type TCreateManualPrintJobInput = z.infer<typeof CreateManualPrintJobInputSchema>;
 
@@ -106,7 +119,7 @@ async function createManualPrintJob({ input, organizacaoId, solicitadoPorId, sol
 	if (input.finalidade === "CUPOM_VENDA") {
 		if (!input.vendaId) throw new createHttpError.BadRequest("ID da venda não informado para a impressão do cupom.");
 		// Builder compartilhado com o auto-print — cupom manual e automático sempre idênticos.
-		const dados = await buildCupomVendaDados({ organizacaoId, vendaId: input.vendaId });
+		const dados = await buildCupomVendaDados({ organizacaoId, vendaId: input.vendaId, ajustesRascunho: input.ajustesRascunho });
 
 		const result = await enqueuePrintJob({
 			organizacaoId,

@@ -66,7 +66,7 @@ async function getTabs({ input, orgId }: { input: TGetTabsInput; orgId: string }
 
 		const draftSale = await db.query.sales.findFirst({
 			where: and(eq(sales.tabId, tab.id), eq(sales.statusVenda, "ORCAMENTO")),
-			columns: { id: true, valorTotal: true, descontosTotal: true },
+			columns: { id: true, valorTotal: true, descontosTotal: true, vendedorId: true },
 		});
 
 		return {
@@ -76,6 +76,8 @@ async function getTabs({ input, orgId }: { input: TGetTabsInput; orgId: string }
 					// Total parcial derivado da venda rascunho — nao existe recebivel antes do fechamento.
 					consumoParcial: draftSale?.valorTotal ?? 0,
 					vendaRascunhoId: draftSale?.id ?? null,
+					// Identidade avaliada pelo teto de desconto no fechamento (vendedor da venda rascunho).
+					vendaRascunhoVendedorId: draftSale?.vendedorId ?? null,
 				},
 				default: null,
 			},

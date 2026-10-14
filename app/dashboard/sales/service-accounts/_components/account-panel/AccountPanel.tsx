@@ -125,6 +125,7 @@ export function AccountPanel({ tabId, now, sheetTab, onSheetTabChange, transferT
 		.filter(Boolean)
 		.join(" · ");
 	const consumo = isOpen ? (tab.consumoParcial ?? 0) : (tab.valorTotal ?? tab.consumoParcial ?? 0);
+	const activeItems = activeOrders.flatMap((order) => order.itens).filter((item) => item.quantidadeCancelada < item.quantidade);
 	const hasDeliveredItems = tab.pedidos.some((order) => order.itens.some((item) => (item.quantidadeEntregue ?? 0) > 0));
 	const targets = (transferTargets ?? []).filter((point) => point.id !== tab.servicePointId);
 
@@ -269,7 +270,11 @@ export function AccountPanel({ tabId, now, sheetTab, onSheetTabChange, transferT
 				<ClosePane
 					tabId={tab.id}
 					tabLabel={label}
-					total={tab.consumoParcial ?? 0}
+					subtotal={tab.consumoParcial ?? 0}
+					itemsGross={activeItems.reduce((sum, item) => sum + item.valorVendaTotalBruto, 0)}
+					itemsDiscount={activeItems.reduce((sum, item) => sum + item.valorTotalDesconto, 0)}
+					vendedorId={tab.vendaRascunhoVendedorId}
+					draftSaleId={tab.vendaRascunhoId}
 					orderCount={activeOrders.length}
 					itemCount={activeOrders.reduce((sum, order) => sum + order.itens.reduce((acc, item) => acc + item.quantidade - item.quantidadeCancelada, 0), 0)}
 					onBack={() => setPane("conta")}

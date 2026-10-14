@@ -179,11 +179,11 @@ export default function ProductBuilderSheet({ product, editItem = null, onClose 
 
 	return (
 		<Drawer open onOpenChange={(open) => !open && onClose()}>
-			<DrawerContent className="max-h-[92dvh]">
+			<DrawerContent className="data-[vaul-drawer-direction=bottom]:max-h-[88dvh]">
 				<MotionConfig reducedMotion="user">
-					<DrawerHeader className="text-left">
+					<DrawerHeader className="group-data-[vaul-drawer-direction=bottom]/drawer-content:text-left">
 						<DrawerTitle className="text-lg font-black tracking-tight">{product.nome}</DrawerTitle>
-						<DrawerDescription>Monte do seu jeito</DrawerDescription>
+						<DrawerDescription className="whitespace-pre-line text-pretty">{product.descricao || "Monte do seu jeito"}</DrawerDescription>
 					</DrawerHeader>
 
 					<div className="scrollbar-thin scrollbar-track-primary/10 scrollbar-thumb-primary/30 flex flex-1 flex-col gap-7 overflow-auto px-1 pb-2">

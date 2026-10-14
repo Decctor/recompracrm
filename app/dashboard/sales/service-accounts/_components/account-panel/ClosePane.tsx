@@ -1,11 +1,16 @@
 "use client";
 import type { TGetSalesSessionsOutput } from "@/app/api/pos/sales-sessions/route";
 import SelectInput from "@/components/Inputs/SelectInput";
+import { DiscountApproval } from "@/components/Modals/Sales/DiscountApproval";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { getErrorMessage } from "@/lib/errors";
 import { formatToMoney } from "@/lib/formatting";
+import { createManualPrintJob } from "@/lib/mutations/desktop-agent";
 import { closeTab } from "@/lib/mutations/tabs";
+import { evaluateDiscount } from "@/lib/permissions/discounts";
+import { useSaleDiscountContext } from "@/lib/queries/action-approvals";
+import { organizationHasPrinterForFinalidade, useAgentPrinters } from "@/lib/queries/desktop-agent";
 import { usePOSFinancialAccounts } from "@/lib/queries/pos";
 import { cn } from "@/lib/utils";
 import type { TPaymentMethodEnum } from "@/schemas/enums";
@@ -23,10 +28,13 @@ import {
 	HandCoins,
 	type LucideIcon,
 	Minus,
+	Percent,
 	Plus,
+	Printer,
 	QrCode,
 	Receipt,
 	Ticket,
+	Tag,
 	Trash2,
 	UsersRound,
 	WalletCards,
@@ -36,7 +44,7 @@ import { toast } from "sonner";
 
 // ============================================================================
 // Fechamento dentro do painel: total com a barra do que já foi informado,
-// divisão igual, um cartão por forma de pagamento e a conferência com o total
+// ajustes do total (desconto e acréscimo, como no checkout do PDV), divisão igual, um cartão por forma de pagamento e a conferência com o total
 // antes de confirmar. Os quatro métodos do salão têm tile próprio; os demais
 // vivem em "Outro". A conta financeira só aparece quando o método deixa
 // escolher — mesmo contrato do modal CloseTab/POS.
@@ -74,6 +82,24 @@ const roundCents = (value: number) => Math.round(value * 100) / 100;
 const formatInput = (value: number) => value.toFixed(2).replace(".", ",");
 const parseInput = (raw: string) => Number.parseFloat(raw.replace(/\./g, "").replace(",", ".")) || 0;
 
+type TAdjustmentMode = "VALOR" | "PERCENTUAL";
+type TAdjustment = { mode: TAdjustmentMode; amount: number; raw: string | null };
+const EMPTY_ADJUSTMENT: TAdjustment = { mode: "VALOR", amount: 0, raw: null };
+const SERVICE_FEE_PERCENT = 10;
+
+/** Valor em R$ do ajuste: percentual incide sobre o consumo (taxa de serviço = 10% do consumo). */
+function resolveAdjustment(adjustment: TAdjustment, subtotal: number) {
+	const value = adjustment.mode === "PERCENTUAL" ? (subtotal * adjustment.amount) / 100 : adjustment.amount;
+	return roundCents(Math.max(0, value));
+}
+
+/** Mesma conta do servidor (closeTab): desconto limitado ao consumo, acréscimo por último. */
+function computeCloseTotals({ subtotal, discount, surcharge }: { subtotal: number; discount: TAdjustment; surcharge: TAdjustment }) {
+	const descontoGeral = Math.min(resolveAdjustment(discount, subtotal), subtotal);
+	const acrescimoGeral = resolveAdjustment(surcharge, subtotal);
+	return { descontoGeral, acrescimoGeral, total: roundCents(subtotal - descontoGeral + acrescimoGeral) };
+}
+
 /** Notas prováveis acima do valor: arredondamentos para 10/50/100 e as notas comuns. */
 function likelyNotes(valor: number) {
 	const candidates = [Math.ceil(valor / 10) * 10, Math.ceil(valor / 50) * 50, Math.ceil(valor / 100) * 100, 50, 100, 200];
@@ -104,17 +130,69 @@ function describeSession(session: TOpenSalesSession) {
 type ClosePaneProps = {
 	tabId: string;
 	tabLabel: string;
-	total: number;
+	/** Consumo da conta (líquido dos itens), antes dos ajustes do fechamento. */
+	subtotal: number;
+	/** Bruto e desconto dos itens ativos — base do teto de desconto do vendedor. */
+	itemsGross: number;
+	itemsDiscount: number;
+	/** Vendedor da venda rascunho: identidade avaliada pelo teto de desconto. */
+	vendedorId: string | null;
+	/** Venda rascunho da conta: é ela que o cupom imprime antes do fechamento. */
+	draftSaleId: string | null;
 	orderCount: number;
 	itemCount: number;
 	onBack: () => void;
 	onClosed: () => void;
 };
 
-export function ClosePane({ tabId, tabLabel, total, orderCount, itemCount, onBack, onClosed }: ClosePaneProps) {
+export function ClosePane({
+	tabId,
+	tabLabel,
+	subtotal,
+	itemsGross,
+	itemsDiscount,
+	vendedorId,
+	draftSaleId,
+	orderCount,
+	itemCount,
+	onBack,
+	onClosed,
+}: ClosePaneProps) {
 	const [payments, setPayments] = useState<TPaymentRow[]>([
-		{ key: 1, metodo: "PIX", valor: total, raw: null, contaFinanceiraId: null, recebido: null },
+		{ key: 1, metodo: "PIX", valor: subtotal, raw: null, contaFinanceiraId: null, recebido: null },
 	]);
+	const [discount, setDiscount] = useState<TAdjustment>(EMPTY_ADJUSTMENT);
+	const [surcharge, setSurcharge] = useState<TAdjustment>(EMPTY_ADJUSTMENT);
+	const { descontoGeral, acrescimoGeral, total } = computeCloseTotals({ subtotal, discount, surcharge });
+
+	// Ajuste muda o total: com um único pagamento, ele acompanha o novo total; com vários, a
+	// conferência mostra a diferença e o "Usar restante" resolve.
+	function changeAdjustment(kind: "discount" | "surcharge", next: TAdjustment) {
+		const nextTotals = computeCloseTotals({
+			subtotal,
+			discount: kind === "discount" ? next : discount,
+			surcharge: kind === "surcharge" ? next : surcharge,
+		});
+		if (kind === "discount") setDiscount(next);
+		else setSurcharge(next);
+		setPayments((prev) => (prev.length === 1 ? [{ ...prev[0], valor: nextTotals.total, raw: null }] : prev));
+	}
+
+	// Teto de desconto: feedback imediato aqui, enforcement autoritativo na rota (mesmo do PDV).
+	const { data: discountContext } = useSaleDiscountContext({ vendedorId });
+	const discountAuthority = discountContext?.authority ?? null;
+	const aggregatedDiscount = { valorBase: roundCents(itemsGross), descontoTotal: roundCents(descontoGeral + itemsDiscount) };
+	const discountRequiresApproval =
+		descontoGeral > 0 && discountAuthority ? evaluateDiscount({ authority: discountAuthority, ...aggregatedDiscount }) === "REQUER_APROVACAO" : false;
+	const [isDiscountApprovalOpen, setIsDiscountApprovalOpen] = useState(false);
+	const [discountApproval, setDiscountApproval] = useState<{ id: string; valorBase: number; descontoTotal: number } | null>(null);
+	// Aprovação só vale para o desconto aprovado: mudou o valor, pede de novo.
+	const validDiscountApproval =
+		discountApproval &&
+		discountApproval.valorBase === aggregatedDiscount.valorBase &&
+		discountApproval.descontoTotal === aggregatedDiscount.descontoTotal
+			? discountApproval
+			: null;
 	const [splitPeople, setSplitPeople] = useState(SPLIT_MIN);
 	const [sessaoVendaId, setSessaoVendaId] = useState<string | null>(null);
 
@@ -125,6 +203,23 @@ export function ClosePane({ tabId, tabLabel, total, orderCount, itemCount, onBac
 	const { data: financialAccounts } = usePOSFinancialAccounts();
 	const accountOptions = (financialAccounts?.contas ?? []).map((conta) => ({ id: conta.id, value: conta.id, label: conta.nome }));
 	const methodsWithEditableAccount = financialAccounts?.metodosComContaEditavel ?? [];
+
+	// Cupom da conta antes de receber — o mesmo CUPOM_VENDA do histórico de vendas, impresso a partir
+	// da venda rascunho com os ajustes que estão na tela (ainda não gravados até o fechamento).
+	// Só aparece quando alguma impressora ativa atende a cupons.
+	const { data: printers } = useAgentPrinters();
+	const canPrintCupom = !!draftSaleId && organizationHasPrinterForFinalidade(printers, "CUPOM_VENDA");
+	const { mutate: printCupom, isPending: printCupomPending } = useMutation({
+		mutationKey: ["print-tab-cupom", tabId],
+		mutationFn: () =>
+			createManualPrintJob({
+				finalidade: "CUPOM_VENDA",
+				vendaId: draftSaleId,
+				ajustesRascunho: descontoGeral > 0 || acrescimoGeral > 0 ? { descontoGeral, acrescimoGeral } : null,
+			}),
+		onSuccess: (data) => toast.success(data.message),
+		onError: (error) => toast.error(getErrorMessage(error)),
+	});
 
 	const { mutate, isPending } = useMutation({
 		mutationKey: ["close-tab", tabId],
@@ -159,10 +254,12 @@ export function ClosePane({ tabId, tabLabel, total, orderCount, itemCount, onBac
 		);
 	}
 
-	function confirm() {
-		if (!matches) return;
+	function submit(descontoAprovacaoId: string | null) {
 		mutate({
 			tabId,
+			descontoGeral: descontoGeral > 0 ? descontoGeral : null,
+			acrescimoGeral: acrescimoGeral > 0 ? acrescimoGeral : null,
+			descontoAprovacaoId,
 			pagamentos: payments.map((payment) => ({
 				metodo: payment.metodo,
 				valor: payment.valor,
@@ -173,6 +270,15 @@ export function ClosePane({ tabId, tabLabel, total, orderCount, itemCount, onBac
 		});
 	}
 
+	function confirm() {
+		if (!matches) return;
+		if (discountRequiresApproval && !validDiscountApproval) {
+			setIsDiscountApprovalOpen(true);
+			return;
+		}
+		submit(validDiscountApproval?.id ?? null);
+	}
+
 	const selectedSession = (openSessions ?? []).find((session) => session.id === sessaoVendaId) ?? null;
 
 	return (
@@ -181,10 +287,22 @@ export function ClosePane({ tabId, tabLabel, total, orderCount, itemCount, onBac
 				<Button size="icon" variant="ghost" className="size-8 rounded-lg" aria-label="Voltar aos pedidos" title="Voltar aos pedidos" onClick={onBack}>
 					<ArrowLeft className="size-4" />
 				</Button>
-				<div className="flex flex-col">
+				<div className="flex min-w-0 flex-1 flex-col">
 					<span className="whitespace-nowrap text-xs font-bold uppercase tracking-wide">Fechar conta</span>
-					<span className="text-xs text-muted-foreground">{tabLabel}</span>
+					<span className="truncate text-xs text-muted-foreground">{tabLabel}</span>
 				</div>
+				{canPrintCupom ? (
+					<Button
+						variant="outline"
+						className="h-8 gap-1.5 rounded-lg px-3 text-sm font-bold"
+						title="Imprimir o cupom da conta com os ajustes atuais"
+						disabled={printCupomPending}
+						onClick={() => printCupom()}
+					>
+						<Printer className="size-4" />
+						Imprimir cupom
+					</Button>
+				) : null}
 			</div>
 
 			<div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
@@ -199,6 +317,13 @@ export function ClosePane({ tabId, tabLabel, total, orderCount, itemCount, onBac
 							{orderCount} {orderCount === 1 ? "pedido" : "pedidos"} · {itemCount} {itemCount === 1 ? "item" : "itens"}
 						</span>
 					</div>
+					{descontoGeral > 0 || acrescimoGeral > 0 ? (
+						<div className="flex flex-wrap gap-x-3 gap-y-1 text-xs font-semibold tabular-nums">
+							<span>Consumo {formatToMoney(subtotal)}</span>
+							{descontoGeral > 0 ? <span>Desconto −{formatToMoney(descontoGeral)}</span> : null}
+							{acrescimoGeral > 0 ? <span>Acréscimo +{formatToMoney(acrescimoGeral)}</span> : null}
+						</div>
+					) : null}
 					<div className="flex flex-col gap-1.5">
 						<div
 							className="h-1.5 overflow-hidden rounded-full bg-warning-surface-foreground/15"
@@ -222,6 +347,39 @@ export function ClosePane({ tabId, tabLabel, total, orderCount, itemCount, onBac
 						</div>
 					</div>
 				</div>
+
+				{/* Ajustes do total — desconto e acréscimo de cabeçalho, como no checkout do PDV */}
+				<div className="flex flex-col divide-y divide-border rounded-xl border border-border">
+					<AdjustmentRow
+						icon={Tag}
+						label="Desconto"
+						hint="Sobre o consumo"
+						adjustment={discount}
+						resolvedValue={descontoGeral}
+						sign="−"
+						onChange={(next) => changeAdjustment("discount", next)}
+					/>
+					<AdjustmentRow
+						icon={Percent}
+						label="Acréscimo"
+						hint="Taxa de serviço, couvert"
+						adjustment={surcharge}
+						resolvedValue={acrescimoGeral}
+						sign="+"
+						onChange={(next) => changeAdjustment("surcharge", next)}
+						shortcut={{
+							label: `Serviço ${SERVICE_FEE_PERCENT}%`,
+							active: surcharge.mode === "PERCENTUAL" && surcharge.amount === SERVICE_FEE_PERCENT,
+							apply: () => changeAdjustment("surcharge", { mode: "PERCENTUAL", amount: SERVICE_FEE_PERCENT, raw: null }),
+						}}
+					/>
+				</div>
+				{discountRequiresApproval && !validDiscountApproval ? (
+					<div className="-mt-2 flex items-center gap-2 rounded-xl bg-warning-surface px-3 py-2 text-xs font-semibold text-warning-surface-foreground">
+						<CircleAlert className="size-4 shrink-0" />
+						Desconto acima do limite do vendedor — o fechamento pedirá a aprovação de um gestor.
+					</div>
+				) : null}
 
 				{/* Divisão igual */}
 				<div className="flex items-center justify-between gap-3 rounded-xl border border-border px-3 py-2.5">
@@ -487,6 +645,102 @@ export function ClosePane({ tabId, tabLabel, total, orderCount, itemCount, onBac
 					{isPending ? "Fechando..." : `Confirmar fechamento · ${formatToMoney(total)}`}
 				</Button>
 			</div>
+
+			{isDiscountApprovalOpen ? (
+				<DiscountApproval
+					vendedorId={vendedorId}
+					valorBase={aggregatedDiscount.valorBase}
+					descontoTotal={aggregatedDiscount.descontoTotal}
+					limiteSolicitante={
+						discountAuthority && discountAuthority.limiteTipo
+							? { tipo: discountAuthority.limiteTipo, valor: discountAuthority.limiteValor }
+							: discountAuthority && !discountAuthority.aplicar
+								? { tipo: null, valor: 0 }
+								: null
+					}
+					closeModal={() => setIsDiscountApprovalOpen(false)}
+					onApproved={(approvalRequestId) => {
+						setDiscountApproval({ id: approvalRequestId, ...aggregatedDiscount });
+						setIsDiscountApprovalOpen(false);
+						submit(approvalRequestId);
+					}}
+				/>
+			) : null}
+		</div>
+	);
+}
+
+type AdjustmentRowProps = {
+	icon: LucideIcon;
+	label: string;
+	hint: string;
+	adjustment: TAdjustment;
+	resolvedValue: number;
+	sign: "+" | "−";
+	onChange: (next: TAdjustment) => void;
+	shortcut?: { label: string; active: boolean; apply: () => void };
+};
+
+function AdjustmentRow({ icon: Icon, label, hint, adjustment, resolvedValue, sign, onChange, shortcut }: AdjustmentRowProps) {
+	const isPercent = adjustment.mode === "PERCENTUAL";
+	return (
+		<div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-3 py-2.5">
+			<span className="flex min-w-0 items-center gap-2.5">
+				<span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-secondary">
+					<Icon className="size-4" />
+				</span>
+				<span className="flex min-w-0 flex-col">
+					<span className="whitespace-nowrap text-sm font-bold">{label}</span>
+					<span className="whitespace-nowrap text-xs text-muted-foreground tabular-nums">
+						{resolvedValue > 0 ? `${sign}${formatToMoney(resolvedValue)}${isPercent ? ` · ${adjustment.amount}%` : ""}` : hint}
+					</span>
+				</span>
+			</span>
+			<span className="flex shrink-0 items-center gap-1.5">
+				{shortcut ? (
+					<button
+						type="button"
+						aria-pressed={shortcut.active}
+						onClick={shortcut.active ? () => onChange(EMPTY_ADJUSTMENT) : shortcut.apply}
+						className={cn(
+							"h-8 whitespace-nowrap rounded-lg border px-2.5 text-xs font-bold transition-colors",
+							shortcut.active ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card hover:border-primary/50",
+						)}
+					>
+						{shortcut.label}
+					</button>
+				) : null}
+				<span className="flex h-8 items-center rounded-lg border border-border p-0.5">
+					{(["VALOR", "PERCENTUAL"] as const).map((mode) => (
+						<button
+							key={mode}
+							type="button"
+							aria-pressed={adjustment.mode === mode}
+							aria-label={mode === "VALOR" ? `${label} em reais` : `${label} em percentual`}
+							// Trocar a unidade zera o valor: 10 reais não viram 10%.
+							onClick={() => adjustment.mode !== mode && onChange({ mode, amount: 0, raw: null })}
+							className={cn(
+								"h-full rounded-md px-2 text-xs font-bold transition-colors",
+								adjustment.mode === mode ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground",
+							)}
+						>
+							{mode === "VALOR" ? "R$" : "%"}
+						</button>
+					))}
+				</span>
+				<input
+					inputMode="decimal"
+					aria-label={`${label} (${isPercent ? "%" : "R$"})`}
+					placeholder="0,00"
+					value={adjustment.raw ?? (adjustment.amount > 0 ? formatInput(adjustment.amount) : "")}
+					onChange={(event) => {
+						const parsed = Math.max(0, parseInput(event.target.value));
+						onChange({ ...adjustment, raw: event.target.value, amount: isPercent ? Math.min(100, parsed) : parsed });
+					}}
+					onBlur={() => onChange({ ...adjustment, raw: null })}
+					className="h-8 w-20 rounded-lg border border-border bg-transparent px-2 text-right text-sm font-bold tabular-nums outline-none focus:border-primary"
+				/>
+			</span>
 		</div>
 	);
 }
