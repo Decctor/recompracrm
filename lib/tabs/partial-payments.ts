@@ -22,6 +22,18 @@ const roundCents = (value: number) => Math.round((value + Number.EPSILON) * 100)
 
 export type TTabPaymentLike = { valor: number; status: string };
 
+export type TTabDraftItemLike = { valorVendaTotalLiquido: number; quantidade: number; quantidadeCancelada: number };
+
+/**
+ * Consumo da conta = liquido dos itens ativos da venda rascunho. E o mesmo numero que o
+ * fechamento recalcula sob o lock (recomputeTabDraftSaleTotals): a tela parte daqui, e nao de
+ * `sales.valorTotal`, para nao divergir do servidor se o total gravado ficar desatualizado.
+ */
+export function sumTabDraftConsumption(items: TTabDraftItemLike[]) {
+	// v1 cancela itens inteiros (quantidadeCancelada === quantidade); itens cancelados saem do consumo.
+	return roundCents(items.filter((item) => item.quantidadeCancelada < item.quantidade).reduce((sum, item) => sum + item.valorVendaTotalLiquido, 0));
+}
+
 /** Soma dos parciais ativos (estornados ficam de fora). */
 export function sumActiveTabPayments(payments: TTabPaymentLike[]) {
 	return roundCents(payments.filter((payment) => payment.status === "ATIVO").reduce((sum, payment) => sum + payment.valor, 0));

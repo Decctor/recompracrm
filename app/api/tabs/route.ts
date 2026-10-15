@@ -3,7 +3,7 @@ import { requireERPSession } from "@/lib/authentication/erp-session";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { openTab } from "@/lib/tabs";
-import { resolveTabPartialPaymentCap, sumActiveTabPayments } from "@/lib/tabs/partial-payments";
+import { resolveTabPartialPaymentCap, sumActiveTabPayments, sumTabDraftConsumption } from "@/lib/tabs/partial-payments";
 import { TabStatusEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
 import { sales, tabs } from "@/services/drizzle/schema";
@@ -76,8 +76,11 @@ async function getTabs({ input, orgId }: { input: TGetTabsInput; orgId: string }
 		const draftSale = await db.query.sales.findFirst({
 			where: and(eq(sales.tabId, tab.id), eq(sales.statusVenda, "ORCAMENTO")),
 			columns: { id: true, valorTotal: true, descontosTotal: true, vendedorId: true },
+			with: { itens: { columns: { valorVendaTotalLiquido: true, quantidade: true, quantidadeCancelada: true } } },
 		});
-		const consumoParcial = draftSale?.valorTotal ?? 0;
+		// Mesma base do fechamento (itens ativos), nunca o valorTotal gravado: se ele divergir, a tela
+		// cobraria um restante que o closeTab recusa.
+		const consumoParcial = draftSale ? sumTabDraftConsumption(draftSale.itens) : 0;
 		const valorPago = sumActiveTabPayments(tab.pagamentosParciais);
 
 		return {
@@ -110,7 +113,8 @@ async function getTabs({ input, orgId }: { input: TGetTabsInput; orgId: string }
 			pedidos: { columns: { id: true, numero: true, status: true, dataEnvio: true, dataInsercao: true } },
 			vendas: {
 				where: (fields, { eq }) => eq(fields.statusVenda, "ORCAMENTO"),
-				columns: { id: true, valorTotal: true },
+				columns: { id: true },
+				with: { itens: { columns: { valorVendaTotalLiquido: true, quantidade: true, quantidadeCancelada: true } } },
 			},
 			pagamentosParciais: {
 				where: (fields, { eq }) => eq(fields.status, "ATIVO"),
@@ -122,7 +126,7 @@ async function getTabs({ input, orgId }: { input: TGetTabsInput; orgId: string }
 
 	const list = rows.map((tab) => {
 		const { vendas, pagamentosParciais, ...rest } = tab;
-		const consumoParcial = vendas[0]?.valorTotal ?? 0;
+		const consumoParcial = vendas[0] ? sumTabDraftConsumption(vendas[0].itens) : 0;
 		const valorPago = sumActiveTabPayments(pagamentosParciais);
 		return {
 			...rest,

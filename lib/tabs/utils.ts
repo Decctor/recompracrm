@@ -8,7 +8,7 @@ import { type DBTransaction, db } from "@/services/drizzle";
 import { saleItems, sales, tabPayments } from "@/services/drizzle/schema";
 import { and, eq, sql } from "drizzle-orm";
 import createHttpError from "http-errors";
-import { TAB_PAYMENT_TOLERANCE, sumActiveTabPayments } from "./partial-payments";
+import { TAB_PAYMENT_TOLERANCE, sumActiveTabPayments, sumTabDraftConsumption } from "./partial-payments";
 
 // ============================================================================
 // Tokens publicos (QR de ponto e de tab). A busca publica e sempre pelo hash
@@ -75,7 +75,7 @@ export async function recomputeTabDraftSaleTotals(tx: DBTransaction, { saleId }:
 
 	// v1 cancela itens inteiros (quantidadeCancelada === quantidade); itens cancelados saem dos totais.
 	const activeItems = items.filter((item) => item.quantidadeCancelada < item.quantidade);
-	const valorTotal = activeItems.reduce((sum, item) => sum + item.valorVendaTotalLiquido, 0);
+	const valorTotal = sumTabDraftConsumption(items);
 	const descontosTotal = activeItems.reduce((sum, item) => sum + item.valorTotalDesconto, 0);
 	const custoTotal = activeItems.reduce((sum, item) => sum + item.valorCustoTotal, 0);
 

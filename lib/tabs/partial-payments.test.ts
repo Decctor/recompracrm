@@ -5,6 +5,7 @@ import {
 	resolveTabBalance,
 	resolveTabPartialPaymentCap,
 	sumActiveTabPayments,
+	sumTabDraftConsumption,
 	tabPaymentsMatchRemaining,
 } from "./partial-payments";
 
@@ -61,4 +62,15 @@ test("tabPaymentsMatchRemaining: tolerancia de um centavo", () => {
 	assert.equal(tabPaymentsMatchRemaining({ paymentsTotal: 38.01, restante: 38 }), true);
 	assert.equal(tabPaymentsMatchRemaining({ paymentsTotal: 38.02, restante: 38 }), false);
 	assert.equal(tabPaymentsMatchRemaining({ paymentsTotal: 0, restante: 0 }), true);
+});
+
+test("sumTabDraftConsumption: liquido dos itens ativos, nunca o total gravado da venda", () => {
+	// Mesa 11 da Brejaria: itens somam 117,80; o rascunho gravado dizia 129,58 (com 10% embutido).
+	const itens = [13, 7.9, 8.9, 16, 16, 32, 24].map((valor) => ({ valorVendaTotalLiquido: valor, quantidade: 1, quantidadeCancelada: 0 }));
+	assert.equal(sumTabDraftConsumption(itens), 117.8);
+	assert.equal(sumTabDraftConsumption([...itens, { valorVendaTotalLiquido: 50, quantidade: 2, quantidadeCancelada: 2 }]), 117.8);
+	assert.equal(sumTabDraftConsumption([]), 0);
+	// O total que a tela cobra e o que o fechamento aceita saem da mesma base.
+	const balance = resolveTabBalance({ consumo: sumTabDraftConsumption(itens), acrescimoGeral: 11.78, jaPago: 0 });
+	assert.equal(tabPaymentsMatchRemaining({ paymentsTotal: 129.58, restante: balance.restante }), true);
 });
