@@ -6,6 +6,8 @@ import { extractCompositionFromNfeXml } from "@/lib/purchase/import-xml";
 import { buildPurchaseImportedDocumentPath } from "@/lib/purchase/imported-documents";
 import { storePrivateFile } from "@/lib/files-storage/private";
 import { matchCompositionItemsToProducts } from "@/lib/purchase/match-products";
+import { describeErrorForLogging } from "@/lib/errors";
+import type { TPurchaseImportStageEnum, TPurchaseImportStageStatusEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
 import createHttpError from "http-errors";
 import { NextResponse, type NextRequest } from "next/server";
@@ -41,12 +43,42 @@ const ImportPurchaseCompositionInputSchema = z.object({
 });
 export type TImportPurchaseCompositionInput = z.infer<typeof ImportPurchaseCompositionInputSchema>;
 
-async function importPurchaseComposition({ input, session }: { input: TImportPurchaseCompositionInput; session: TAuthUserSession }) {
+export type TImportPurchaseCompositionStageEvent = {
+	type: "stage";
+	stage: TPurchaseImportStageEnum;
+	status: TPurchaseImportStageStatusEnum;
+	detail: string | null;
+};
+type TOnImportStage = (event: Omit<TImportPurchaseCompositionStageEvent, "type">) => void;
+
+function assertImportIsActive(abortSignal?: AbortSignal) {
+	if (abortSignal?.aborted) throw new createHttpError.BadRequest("Leitura cancelada.");
+}
+
+function formatBRL(value: number) {
+	return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function getUserOrgIdForImport(session: TAuthUserSession) {
 	const userOrgId = session.membership?.organizacao.id;
 	if (!userOrgId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
-
 	if (!session.membership?.permissoes.compras.criar && !session.membership?.permissoes.compras.editar)
 		throw new createHttpError.Unauthorized("Você não possui permissão para acessar esse recurso.");
+	return userOrgId;
+}
+
+async function importPurchaseComposition({
+	input,
+	session,
+	onStage = () => {},
+	abortSignal,
+}: {
+	input: TImportPurchaseCompositionInput;
+	session: TAuthUserSession;
+	onStage?: TOnImportStage;
+	abortSignal?: AbortSignal;
+}) {
+	const userOrgId = getUserOrgIdForImport(session);
 
 	const fileBuffer = Buffer.from(input.file.dataBase64, "base64");
 	const contentLooksLikeXml = /^\s*(?:<\?xml\b|<(?:\w+:)?(?:nfeProc|NFe)\b)/i.test(fileBuffer.subarray(0, 512).toString("utf8"));
@@ -56,11 +88,13 @@ async function importPurchaseComposition({ input, session }: { input: TImportPur
 		input.file.fileName?.toLowerCase().endsWith(".xml") === true ||
 		contentLooksLikeXml;
 	let extracted: Awaited<ReturnType<typeof extractCompositionFromFile>>;
+	onStage({ stage: "LEITURA", status: "INICIADO", detail: isXml ? "Lendo o XML da NF-e…" : "Extraindo texto e tabelas com IA…" });
 	try {
 		extracted = isXml
 			? extractCompositionFromNfeXml(fileBuffer.toString("utf8"))
-			: await extractCompositionFromFile({ dataBase64: input.file.dataBase64, mimeType: input.file.mimeType });
+			: await extractCompositionFromFile({ dataBase64: input.file.dataBase64, mimeType: input.file.mimeType, abortSignal });
 	} catch (error) {
+		assertImportIsActive(abortSignal);
 		console.error(`[PURCHASE_IMPORT] Erro na extração ${isXml ? "do XML" : "por IA"}.`, error);
 		if (isXml)
 			throw new createHttpError.UnprocessableEntity(error instanceof Error ? error.message : "Não foi possível interpretar o XML da nota fiscal.");
@@ -71,9 +105,16 @@ async function importPurchaseComposition({ input, session }: { input: TImportPur
 		throw new createHttpError.UnprocessableEntity(
 			"Nenhum item foi identificado no documento. Verifique se o arquivo é uma nota/cupom de compra legível.",
 		);
+	onStage({
+		stage: "LEITURA",
+		status: "CONCLUIDO",
+		detail: isXml ? "XML de NF-e válido · leitura exata" : `${input.file.mimeType === "application/pdf" ? "PDF" : "Imagem"} lido com IA`,
+	});
+	assertImportIsActive(abortSignal);
 
-	// Supplier resolution is lookup-only here: creation happens on review confirm (POST /api/suppliers),
-	// so cancelling the review never leaves an orphan supplier behind.
+	// Supplier resolution is lookup-only here: creation happens with the purchase itself (POST /api/purchases),
+	// so abandoning the purchase never leaves an orphan supplier behind.
+	onStage({ stage: "FORNECEDOR", status: "INICIADO", detail: "Procurando CNPJ e razão social…" });
 	const extractedCnpj = (extracted.fornecedor?.cnpj ?? "").replace(/\D/g, "");
 	const existingSupplier = extractedCnpj
 		? ((await db.query.suppliers.findFirst({
@@ -81,11 +122,44 @@ async function importPurchaseComposition({ input, session }: { input: TImportPur
 				columns: { id: true, nome: true, cpfCnpj: true, telefone: true, email: true },
 			})) ?? null)
 		: null;
+	const supplierName = existingSupplier?.nome ?? extracted.fornecedor?.nome ?? null;
+	onStage({
+		stage: "FORNECEDOR",
+		status: "CONCLUIDO",
+		detail: supplierName
+			? `${supplierName}${extractedCnpj ? ` · CNPJ ${formatCnpj(extractedCnpj)}` : ""}${existingSupplier ? " · já cadastrado" : ""}`
+			: "Fornecedor não identificado no documento",
+	});
 
+	const documentTotalForDetail = extracted.valorTotalDocumento && extracted.valorTotalDocumento > 0 ? extracted.valorTotalDocumento : null;
+	const installmentCount = extracted.duplicatas?.length ?? 0;
+	onStage({
+		stage: "ITENS",
+		status: "CONCLUIDO",
+		detail: [
+			`${extracted.itens.length} ${extracted.itens.length === 1 ? "linha" : "linhas"}`,
+			documentTotalForDetail !== null ? formatBRL(documentTotalForDetail) : null,
+			installmentCount > 0 ? `${installmentCount} ${installmentCount === 1 ? "duplicata" : "duplicatas"}` : null,
+		]
+			.filter(Boolean)
+			.join(" · "),
+	});
+	assertImportIsActive(abortSignal);
+
+	onStage({ stage: "CATALOGO", status: "INICIADO", detail: "Procurando por EAN, código e nome…" });
 	const itens = await matchCompositionItemsToProducts({
 		organizacaoId: userOrgId,
 		fornecedorId: existingSupplier?.id ?? null,
 		itens: extracted.itens,
+		abortSignal,
+	});
+	assertImportIsActive(abortSignal);
+	const matchedCount = itens.filter((item) => item.matchTipo === "MAPEADO" || item.matchTipo === "CODIGO").length;
+	const reviewCount = itens.length - matchedCount;
+	onStage({
+		stage: "CATALOGO",
+		status: "CONCLUIDO",
+		detail: `${matchedCount} ${matchedCount === 1 ? "vinculado" : "vinculados"} · ${reviewCount} para você revisar`,
 	});
 
 	// Cabeçalho: o total do documento alimenta o lançamento contábil da compra, e a divergência
@@ -129,10 +203,9 @@ async function importPurchaseComposition({ input, session }: { input: TImportPur
 		0,
 	);
 	if (impostosPendentes > 0)
-		avisos.push(
-			`${impostosPendentes} ${impostosPendentes === 1 ? "imposto exige" : "impostos exigem"} revisão do tratamento contábil antes de adicionar os itens.`,
-		);
+		avisos.push(`${impostosPendentes} ${impostosPendentes === 1 ? "imposto exige" : "impostos exigem"} revisão do tratamento contábil.`);
 
+	assertImportIsActive(abortSignal);
 	const documentReference = randomUUID();
 	// O nome do arquivo é metadado, não endereço: o objeto vive num caminho derivado da referência,
 	// para que nada no payload consiga escolher onde ler ou escrever depois.
@@ -152,7 +225,16 @@ async function importPurchaseComposition({ input, session }: { input: TImportPur
 		data: {
 			fornecedor: {
 				existente: existingSupplier,
-				extraido: extracted.fornecedor ? { nome: extracted.fornecedor.nome, cnpj: extractedCnpj || null } : null,
+				extraido: extracted.fornecedor
+					? {
+							nome: extracted.fornecedor.nome,
+							cnpj: extractedCnpj || null,
+							inscricaoEstadual: extracted.fornecedor.inscricaoEstadual?.replace(/\D/g, "") || null,
+							telefone: extracted.fornecedor.telefone?.trim() || null,
+							email: extracted.fornecedor.email?.trim() || null,
+							cidade: extracted.fornecedor.cidade?.trim() || null,
+						}
+					: null,
 			},
 			documento: {
 				origem: extracted.origem ?? "IA",
@@ -165,6 +247,18 @@ async function importPurchaseComposition({ input, session }: { input: TImportPur
 				valorDesconto,
 				somaItens,
 				totaisOriginais: extracted.totaisOriginais ?? null,
+				duplicatas: (extracted.duplicatas ?? [])
+					.filter((installment) => installment.valor > 0)
+					.map((installment) => ({
+						numero: installment.numero?.trim() || null,
+						dataVencimento: parseIsoDate(installment.dataVencimento),
+						valor: roundToCents(installment.valor),
+					})),
+				modalidadeFrete: extracted.modalidadeFrete ?? null,
+				transportadora:
+					extracted.transportadora && (extracted.transportadora.nome || extracted.transportadora.cnpj)
+						? { nome: extracted.transportadora.nome?.trim() || null, cnpj: extracted.transportadora.cnpj?.replace(/\D/g, "") || null }
+						: null,
 				importado: {
 					referencia: documentReference,
 					origem: importedDocumentOrigin,
@@ -188,6 +282,10 @@ async function importPurchaseComposition({ input, session }: { input: TImportPur
 	};
 }
 
+function formatCnpj(digits: string) {
+	return digits.length === 14 ? digits.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5") : digits;
+}
+
 function roundToCents(value: number) {
 	return Math.round(value * 100) / 100;
 }
@@ -201,13 +299,63 @@ function parseIsoDate(value?: string | null) {
 }
 export type TImportPurchaseCompositionOutput = Awaited<ReturnType<typeof importPurchaseComposition>>;
 
+/**
+ * The response is NDJSON: one `stage` event per processing step, then a single `result` (with the
+ * same `{ data, message }` envelope as before) or `error`. Validation and auth failures happen
+ * before the stream opens, so they still come back as regular JSON errors with an HTTP status.
+ */
+export type TImportPurchaseCompositionStreamEvent =
+	| TImportPurchaseCompositionStageEvent
+	| ({ type: "result" } & TImportPurchaseCompositionOutput)
+	| { type: "error"; message: string };
+
 async function importPurchaseCompositionRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	getUserOrgIdForImport(session);
 	const body = await request.json();
 	const input = ImportPurchaseCompositionInputSchema.parse(body);
-	const result = await importPurchaseComposition({ input, session });
-	return NextResponse.json(result);
+
+	const encoder = new TextEncoder();
+	const abortSignal = request.signal;
+	const stream = new ReadableStream<Uint8Array>({
+		async start(controller) {
+			const send = (event: TImportPurchaseCompositionStreamEvent) => {
+				if (abortSignal.aborted) return;
+				try {
+					controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
+				} catch {
+					// The client went away: nothing left to deliver.
+				}
+			};
+			try {
+				const result = await importPurchaseComposition({
+					input,
+					session,
+					abortSignal,
+					onStage: (event) => send({ type: "stage", ...event }),
+				});
+				send({ type: "result", ...result });
+			} catch (error) {
+				if (!abortSignal.aborted) console.error("[PURCHASE_IMPORT] Erro na leitura do documento.", describeErrorForLogging(error));
+				const message =
+					createHttpError.isHttpError(error) && error.expose
+						? error.message
+						: "Não foi possível ler o documento. Tente novamente ou envie um arquivo mais legível.";
+				send({ type: "error", message });
+			} finally {
+				try {
+					controller.close();
+				} catch {
+					// Already closed by a client abort.
+				}
+			}
+		},
+	});
+
+	return new NextResponse(stream, {
+		headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-cache, no-transform" },
+	});
 }
 
 export const POST = appApiHandler({
