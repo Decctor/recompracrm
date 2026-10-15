@@ -1,5 +1,6 @@
 import { authenticateExternalRequest, requireExternalScope } from "@/lib/access/authentication";
 import { paymentTerminalApiHandler } from "@/lib/payment-attempts";
+import { toTerminalCatalogProduct } from "@/lib/payment-attempts/terminal-catalog";
 import { hydratePOSProducts } from "@/lib/pos/hydrate-pos-products";
 import { sortGroupsByChannelOrder } from "@/lib/products/sales-channels";
 import { buildChannelCatalogConditions, loadChannelState } from "@/lib/products/sales-channels-store";
@@ -15,26 +16,6 @@ import { z } from "zod";
 // canal POS. Cada produto e cada variação trazem seus grupos de adicionais com as regras já
 // resolvidas (mínimo, máximo, máximo por opção) para o app montar a escolha; a venda confere as
 // mesmas regras no servidor.
-
-type TTerminalAddOnReference = {
-	grupo: {
-		id: string;
-		nome: string;
-		minOpcoes: number;
-		maxOpcoes: number;
-		opcoes: { id: string; nome: string; precoDelta: number; maxQtdePorItem: number | null }[];
-	};
-};
-
-function toTerminalAddOnGroups(references: TTerminalAddOnReference[]) {
-	return references.map(({ grupo }) => ({
-		id: grupo.id,
-		nome: grupo.nome,
-		minOpcoes: grupo.minOpcoes,
-		maxOpcoes: grupo.maxOpcoes,
-		opcoes: grupo.opcoes.map((opcao) => ({ id: opcao.id, nome: opcao.nome, precoDelta: opcao.precoDelta, maxQtdePorItem: opcao.maxQtdePorItem })),
-	}));
-}
 
 const PAGE_SIZE = 40;
 
@@ -99,29 +80,7 @@ async function getTerminalCatalog({ input, organizationId }: { input: TGetTermin
 		// e do canal, opções com preço e pausa do canal — é exatamente o que o servidor confere.
 		const hydrated = await hydratePOSProducts({ orgId: organizationId, productIds: ids, canal: input.canal });
 		const rank = new Map(ids.map((id, index) => [id, index]));
-		const list = hydrated
-			.sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0))
-			.map((product) => ({
-				id: product.id,
-				nome: product.nome,
-				codigo: product.codigo,
-				grupo: product.grupo,
-				imagemUrl: product.imagemCapaUrl,
-				precoVenda: product.precoVenda,
-				gruposAdicionais: toTerminalAddOnGroups(product.addOnsReferencias),
-				// Compatibilidade: versões do app anteriores aos grupos bloqueiam o produto com este flag.
-				possuiAdicionais: product.addOnsReferencias.length > 0,
-				variantes: product.variantes.map((variant) => ({
-					id: variant.id,
-					nome: variant.nome,
-					codigo: variant.codigo,
-					// Foto própria da variação (a cor da camiseta); o app cai na foto do produto quando é nula.
-					imagemUrl: variant.imagemCapaUrl,
-					precoVenda: variant.precoVenda,
-					gruposAdicionais: toTerminalAddOnGroups(variant.addOnsReferencias),
-					possuiAdicionais: variant.addOnsReferencias.length > 0,
-				})),
-			}));
+		const list = hydrated.sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0)).map(toTerminalCatalogProduct);
 
 		return {
 			data: { groups, products: list, page: input.page, totalPages: Math.ceil(total / PAGE_SIZE), total },

@@ -192,3 +192,14 @@ do painel seguem chamando `closeTab`/`receiveTabPayment`, com o mesmo comportame
   continua sendo editar o pagamento ou cancelar a venda no RecompraCRM — o dinheiro já recebido
   das outras pernas fica registrado.
 
+
+### Código de barras
+
+- `GET /api/payment-terminal/catalog/barcode?code=&canal=` (scope `catalog:read`) resolve o código
+  lido pela câmera do terminal ou por um leitor pareado com a mesma função do PDV web
+  (`lookupPOSProductsByBarcode`: GTIN da variante → GTIN do produto → SKU da variante → SKU do
+  produto, UPC-A e EAN-13 equivalentes) e responde `{ code, matches: [{ product, variantId,
+  matchedBy }] }`, com `product` no formato do catálogo do terminal (`toTerminalCatalogProduct`,
+  a mesma projeção da listagem). `canal=COMANDA` resolve com preço e disponibilidade da conta.
+- Código duplicado no cadastro devolve todos os produtos (o app pergunta qual); nenhum match é lista
+  vazia, não erro.
