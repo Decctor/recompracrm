@@ -51,16 +51,16 @@ function readItemSnapshot(metadados: unknown) {
 
 // Ajustes de cabeçalho ainda não gravados — o cupom da conta impresso no fechamento, antes de
 // receber, mostra o desconto/acréscimo que está na tela. Só valem para venda rascunho.
-export type TCupomVendaDraftAdjustments = { descontoGeral: number; acrescimoGeral: number };
+export type TSaleReceiptDraftAdjustments = { descontoGeral: number; acrescimoGeral: number };
 
 export async function buildCupomVendaDados({
 	organizacaoId,
 	vendaId,
-	ajustesRascunho,
+	draftAdjustments,
 }: {
 	organizacaoId: string;
 	vendaId: string;
-	ajustesRascunho?: TCupomVendaDraftAdjustments | null;
+	draftAdjustments?: TSaleReceiptDraftAdjustments | null;
 }): Promise<TCupomVendaDados> {
 	const organization = await db.query.organizations.findFirst({
 		where: eq(organizations.id, organizacaoId),
@@ -146,16 +146,16 @@ export async function buildCupomVendaDados({
 		},
 	});
 	if (!sale) throw new createHttpError.NotFound("Venda não encontrada.");
-	if (ajustesRascunho && sale.statusVenda !== "ORCAMENTO") {
+	if (draftAdjustments && sale.statusVenda !== "ORCAMENTO") {
 		throw new createHttpError.BadRequest("Ajustes de cupom só valem para venda em aberto.");
 	}
 
 	// Item inteiramente cancelado (pedido de conta cancelado) não é consumo: fica fora do cupom.
-	const itensAtivos = sale.itens.filter((item) => (item.quantidadeCancelada ?? 0) < item.quantidade);
+	const activeItems = sale.itens.filter((item) => (item.quantidadeCancelada ?? 0) < item.quantidade);
 
-	// Rascunho: valorTotal é o líquido dos itens; os ajustes entram como no fechamento (closeTab).
-	const valorTotal = ajustesRascunho
-		? Math.round((Math.max(0, sale.valorTotal - ajustesRascunho.descontoGeral) + ajustesRascunho.acrescimoGeral) * 100) / 100
+	// Rascunho: sale.valorTotal é o líquido dos itens; os ajustes entram como no fechamento (closeTab).
+	const saleTotal = draftAdjustments
+		? Math.round((Math.max(0, sale.valorTotal - draftAdjustments.descontoGeral) + draftAdjustments.acrescimoGeral) * 100) / 100
 		: sale.valorTotal;
 
 	const clienteId = sale.clienteId;
@@ -182,8 +182,8 @@ export async function buildCupomVendaDados({
 	]);
 
 	// ---- Decomposição dos descontos (mesma regra de lib/sales/map-sale-to-sale-state.ts) ----
-	const descontosTotal = ajustesRascunho && ajustesRascunho.descontoGeral > 0 ? ajustesRascunho.descontoGeral : (sale.descontosTotal ?? 0);
-	const acrescimosTotal = ajustesRascunho ? ajustesRascunho.acrescimoGeral : (sale.acrescimosTotal ?? 0);
+	const descontosTotal = draftAdjustments && draftAdjustments.descontoGeral > 0 ? draftAdjustments.descontoGeral : (sale.descontosTotal ?? 0);
+	const acrescimosTotal = draftAdjustments ? draftAdjustments.acrescimoGeral : (sale.acrescimosTotal ?? 0);
 	// A loja digital grava a taxa no snapshot do checkout; o restante segue como acréscimo genérico
 	// (no PDV a taxa entra via acréscimo geral e não tem como ser distinguida).
 	const taxaEntrega = Math.min(readShopDeliveryFee(sale.rascunhoMetadados), acrescimosTotal);
@@ -201,7 +201,7 @@ export async function buildCupomVendaDados({
 	// Uma linha impressa por recompensa; o "Desconto" geral subtrai TODAS — subtrair só a primeira
 	// imprimiria o valor das demais como desconto do operador.
 	const rewardItems = temRecompensaResgatada
-		? itensAtivos.filter((item) => readItemSnapshot(item.metadados)?.origem === POS_REWARD_SALE_ITEM_ORIGIN)
+		? activeItems.filter((item) => readItemSnapshot(item.metadados)?.origem === POS_REWARD_SALE_ITEM_ORIGIN)
 		: [];
 	const descontoRecompensas = rewardItems.reduce((sum, item) => sum + (item.valorTotalDesconto ?? 0), 0);
 	const descontoGeral = Math.max(0, descontosTotal - cupomDesconto - cashbackResgate - descontoRecompensas);
@@ -210,8 +210,8 @@ export async function buildCupomVendaDados({
 	// A soma dos itens só é usada quando as duas concordam: vendas de canal externo chegam com totais
 	// da origem que nem sempre batem com a soma das linhas, e um cupom que não fecha a conta na frente
 	// do cliente é pior do que um cupom sem detalhe.
-	const subtotalItens = itensAtivos.reduce((sum, item) => sum + (item.valorVendaTotalBruto ?? 0), 0);
-	const subtotalReconciliado = valorTotal + descontosTotal - acrescimosTotal;
+	const subtotalItens = activeItems.reduce((sum, item) => sum + (item.valorVendaTotalBruto ?? 0), 0);
+	const subtotalReconciliado = saleTotal + descontosTotal - acrescimosTotal;
 	const subtotal = Math.abs(subtotalItens - subtotalReconciliado) < 0.01 ? subtotalItens : subtotalReconciliado;
 
 	// ---- Pagamentos: agrupados por método + situação, como o cliente lê ----
@@ -263,7 +263,7 @@ export async function buildCupomVendaDados({
 					accumulationType: program.acumuloTipo,
 					accumulationValue: program.acumuloValor,
 					minimumSaleValue: program.acumuloRegraValorMinimo,
-					saleValue: valorTotal,
+					saleValue: saleTotal,
 				})
 			: 0;
 	const valorGanho = acumulo ? acumulo.valor : ganhoProjetado;
@@ -307,7 +307,7 @@ export async function buildCupomVendaDados({
 							expiraEm: sale.integracaoMetadados.contatoTemporario.expiraEm ? new Date(sale.integracaoMetadados.contatoTemporario.expiraEm) : null,
 						}
 					: null,
-			itens: itensAtivos.map((item) => {
+			itens: activeItems.map((item) => {
 				const snapshot = readItemSnapshot(item.metadados);
 				return {
 					descricao: [item.produto?.nome, item.produtoVariante?.nome].filter(Boolean).join(" - ") || snapshot?.nome || "Item",
@@ -327,11 +327,11 @@ export async function buildCupomVendaDados({
 			descontoGeral,
 			acrescimos: acrescimosGenericos,
 			taxaEntrega,
-			valorFinal: valorTotal,
+			valorFinal: saleTotal,
 			pagamentos: pagamentosCupom,
 			troco: pagamentosCanal.length === 0 && trocoTotal > 0 ? trocoTotal : null,
 			valorJaPago: valorJaPagoConta > 0 ? valorJaPagoConta : null,
-			valorRestante: valorJaPagoConta > 0 ? Math.max(0, Math.round((valorTotal - valorJaPagoConta) * 100) / 100) : null,
+			valorRestante: valorJaPagoConta > 0 ? Math.max(0, Math.round((saleTotal - valorJaPagoConta) * 100) / 100) : null,
 		},
 		cliente: sale.cliente ? { nome: sale.cliente.nome, telefone: sale.cliente.telefone, totalCompras } : null,
 		cupom: cupomResgatado

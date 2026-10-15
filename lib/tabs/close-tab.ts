@@ -3,7 +3,7 @@ import { consumeSaleDiscountApproval } from "@/lib/sales/sale-discount-authoriza
 import {
 	type TProcessSaleConfirmationInput,
 	processSaleConfirmationInTransaction,
-	processSaleConfirmationPostCommit,
+	processSaleConfirmationPostCommitDetailed,
 } from "@/lib/sales/sale-processing";
 import type { TPaymentMethodEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
@@ -40,6 +40,8 @@ export type TCloseTabInput = {
 	// Entregar no fechamento os pedidos ainda em andamento, em vez de recusar. Explicito: sem a
 	// flag a API continua recusando, e nada e marcado como entregue por acidente.
 	entregarPedidosEmAndamento?: boolean | null;
+	// Switch "Imprimir cupom ao fechar". null = segue a impressão automática da organização.
+	printReceipt?: boolean | null;
 };
 
 /**
@@ -195,6 +197,7 @@ export async function closeTab({ organization, userId, input }: { organization: 
 			sessaoVendaId: input.sessaoVendaId ?? null,
 			existingAccountingEntryId: existingEntry?.id ?? null,
 			prepaidAmount: jaPago,
+			receiptPrintOverride: input.printReceipt ?? null,
 		};
 
 		// One-shot: a aprovação de desconto é consumida na mesma transação do fechamento.
@@ -214,9 +217,10 @@ export async function closeTab({ organization, userId, input }: { organization: 
 		return { tabId: tab.id, saleId: draftSale.id, confirmation, valorTotal: confirmedSale?.valorTotal ?? valorTotal, valorPago: jaPago };
 	});
 
-	// Efeitos externos fora da transacao (emissao fiscal automatica conforme configuracao).
-	const fiscal = confirmationInput ? await processSaleConfirmationPostCommit(confirmationInput) : null;
+	// Efeitos externos fora da transacao: cupom (switch do operador ou regra da organizacao) e
+	// emissao fiscal automatica conforme configuracao.
+	const postCommit = confirmationInput ? await processSaleConfirmationPostCommitDetailed(confirmationInput) : null;
 
-	return { ...result, fiscal };
+	return { ...result, receiptPrint: postCommit?.receiptPrint ?? null, fiscal: postCommit?.fiscal ?? null };
 }
 export type TCloseTabResult = Awaited<ReturnType<typeof closeTab>>;

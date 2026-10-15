@@ -69,17 +69,23 @@ type TProcessSaleCupomAutoPrintParams = {
 	// Evita um fetch por venda quando o chamador já tem a config em mãos (hot paths de venda/sync).
 	configuracao?: TOrganizationEntity["configuracao"] | null;
 	solicitadoPorId?: string | null;
+	// Decisão do operador para esta venda (ex.: switch do fechamento de conta). null = segue a regra
+	// da organização; true = imprime mesmo com a regra desligada ou sem o canal; false = não imprime.
+	// A impressora ativa continua obrigatória, e a chave de idempotência é a mesma em todos os casos.
+	override?: boolean | null;
 };
 export async function processSaleCupomAutoPrintIfEligible({
 	organizacaoId,
 	saleId,
 	configuracao,
 	solicitadoPorId,
+	override,
 }: TProcessSaleCupomAutoPrintParams) {
 	try {
+		if (override === false) return { status: "NAO_SOLICITADO" as const, reason: "DESATIVADA_NA_VENDA" as const };
 		const resolvedConfiguracao = await resolveConfiguracao({ organizacaoId, configuracao });
 		const rule = parsePrintPreferences(resolvedConfiguracao).automatica.CUPOM_VENDA;
-		if (!rule.habilitada) return { status: "NAO_SOLICITADO" as const, reason: "IMPRESSAO_AUTOMATICA_DESATIVADA" as const };
+		if (!rule.habilitada && !override) return { status: "NAO_SOLICITADO" as const, reason: "IMPRESSAO_AUTOMATICA_DESATIVADA" as const };
 
 		const sale = await db.query.sales.findFirst({
 			where: and(eq(sales.id, saleId), eq(sales.organizacaoId, organizacaoId)),
@@ -87,7 +93,7 @@ export async function processSaleCupomAutoPrintIfEligible({
 		});
 		if (!sale) return { status: "NAO_SOLICITADO" as const, reason: "VENDA_NAO_ENCONTRADA" as const };
 		if (sale.statusVenda === "CANCELADA") return { status: "NAO_SOLICITADO" as const, reason: "VENDA_CANCELADA" as const };
-		if (!isChannelAllowed({ rule, canal: sale.canal, processamentoOrigem: sale.processamentoOrigem })) {
+		if (!override && !isChannelAllowed({ rule, canal: sale.canal, processamentoOrigem: sale.processamentoOrigem })) {
 			return { status: "NAO_SOLICITADO" as const, reason: "CANAL_NAO_HABILITADO" as const };
 		}
 

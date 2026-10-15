@@ -2,6 +2,7 @@
 import SelectInput from "@/components/Inputs/SelectInput";
 import { DiscountApproval } from "@/components/Modals/Sales/DiscountApproval";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { getErrorMessage } from "@/lib/errors";
 import { formatToMoney } from "@/lib/formatting";
 import { createManualPrintJob } from "@/lib/mutations/desktop-agent";
@@ -9,6 +10,7 @@ import { closeTab } from "@/lib/mutations/tabs";
 import { evaluateDiscount } from "@/lib/permissions/discounts";
 import { useSaleDiscountContext } from "@/lib/queries/action-approvals";
 import { organizationHasPrinterForFinalidade, useAgentPrinters } from "@/lib/queries/desktop-agent";
+import { useOrganization } from "@/lib/queries/organizations";
 import { usePOSFinancialAccounts } from "@/lib/queries/pos";
 import { resolveTabBalance } from "@/lib/tabs/partial-payments";
 import { cn } from "@/lib/utils";
@@ -183,24 +185,44 @@ export function ClosePane({
 	// da venda rascunho com os ajustes que estão na tela (ainda não gravados até o fechamento).
 	// Só aparece quando alguma impressora ativa atende a cupons.
 	const { data: printers } = useAgentPrinters();
-	const canPrintCupom = !!draftSaleId && organizationHasPrinterForFinalidade(printers, "CUPOM_VENDA");
-	const { mutate: printCupom, isPending: printCupomPending } = useMutation({
-		mutationKey: ["print-tab-cupom", tabId],
+	const canPrintReceipt = !!draftSaleId && organizationHasPrinterForFinalidade(printers, "CUPOM_VENDA");
+	const { mutate: printDraftReceipt, isPending: printReceiptPending } = useMutation({
+		mutationKey: ["print-tab-receipt", tabId],
 		mutationFn: () =>
 			createManualPrintJob({
 				finalidade: "CUPOM_VENDA",
 				vendaId: draftSaleId,
-				ajustesRascunho: descontoGeral > 0 || acrescimoGeral > 0 ? { descontoGeral, acrescimoGeral } : null,
+				draftAdjustments: descontoGeral > 0 || acrescimoGeral > 0 ? { descontoGeral, acrescimoGeral } : null,
 			}),
 		onSuccess: (data) => toast.success(data.message),
 		onError: (error) => toast.error(getErrorMessage(error)),
 	});
 
+	// "Imprimir cupom ao fechar": começa na regra automática da organização (cupom ligado e com o
+	// canal COMANDA) e vale só para este fechamento. Sem organização carregada, o switch não aparece
+	// e o fechamento segue a regra no servidor.
+	const { data: organization } = useOrganization();
+	const receiptAutoPrintRule = organization?.configuracao.preferencias.impressoes?.automatica?.CUPOM_VENDA;
+	const receiptOnCloseByDefault = !!receiptAutoPrintRule?.habilitada && !!receiptAutoPrintRule.canais?.includes("COMANDA");
+	const [receiptOnCloseChoice, setReceiptOnCloseChoice] = useState<boolean | null>(null);
+	const showReceiptOnClose = canPrintReceipt && !!organization;
+	const printReceiptOnClose = receiptOnCloseChoice ?? receiptOnCloseByDefault;
+
 	const { mutate, isPending } = useMutation({
 		mutationKey: ["close-tab", tabId],
 		mutationFn: closeTab,
-		onSuccess: (data) => {
-			toast.success(data.message);
+		onSuccess: (data, variables) => {
+			// A conta já fechou; um cupom pedido que não saiu vira só aviso.
+			const receiptPrint = data.data.receiptPrint;
+			if (variables.printReceipt && receiptPrint && receiptPrint.status !== "SOLICITADO") {
+				toast.warning(
+					receiptPrint.status === "ERRO"
+						? `Conta fechada, mas o cupom não foi impresso: ${receiptPrint.error}`
+						: "Conta fechada, mas nenhuma impressora ativa atende a cupons.",
+				);
+			} else {
+				toast.success(data.message);
+			}
 			onClosed();
 		},
 		onError: (error) => toast.error(getErrorMessage(error)),
@@ -244,6 +266,7 @@ export function ClosePane({
 			})),
 			sessaoVendaId,
 			entregarPedidosEmAndamento: pendingOrders.length > 0,
+			printReceipt: showReceiptOnClose ? printReceiptOnClose : null,
 		});
 	}
 
@@ -266,13 +289,13 @@ export function ClosePane({
 					<span className="whitespace-nowrap text-xs font-bold uppercase tracking-wide">Fechar conta</span>
 					<span className="truncate text-xs text-muted-foreground">{tabLabel}</span>
 				</div>
-				{canPrintCupom ? (
+				{canPrintReceipt ? (
 					<Button
 						variant="outline"
 						className="h-8 gap-1.5 rounded-lg px-3 text-sm font-bold"
 						title="Imprimir o cupom da conta com os ajustes atuais"
-						disabled={printCupomPending}
-						onClick={() => printCupom()}
+						disabled={printReceiptPending}
+						onClick={() => printDraftReceipt()}
 					>
 						<Printer className="size-4" />
 						Imprimir cupom
@@ -621,6 +644,15 @@ export function ClosePane({
 								? `Faltam ${formatToMoney(difference)}`
 								: `Excedente de ${formatToMoney(-difference)}`}
 				</div>
+				{showReceiptOnClose ? (
+					<label className="flex h-10 cursor-pointer items-center justify-between gap-2 rounded-xl border border-border px-3 text-sm font-bold">
+						<span className="flex items-center gap-2">
+							<Printer className="size-4 text-muted-foreground" />
+							Imprimir cupom ao fechar
+						</span>
+						<Switch checked={printReceiptOnClose} onCheckedChange={setReceiptOnCloseChoice} />
+					</label>
+				) : null}
 				<Button variant="brand" size="lg" disabled={!matches || isPending} onClick={confirm}>
 					<Receipt className="size-4" />
 					{isPending

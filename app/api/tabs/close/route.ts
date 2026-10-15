@@ -34,6 +34,9 @@ const CloseTabInputSchema = z.object({
 	descontoAprovacaoId: z.string({ invalid_type_error: "Tipo nao valido para o ID da aprovacao de desconto." }).optional().nullable(),
 	// Entregar no fechamento os pedidos ainda em andamento (sem a flag, eles bloqueiam o fechamento).
 	entregarPedidosEmAndamento: z.boolean({ invalid_type_error: "Tipo nao valido para entregar pedidos em andamento." }).optional().nullable(),
+	// Switch "Imprimir cupom ao fechar": true imprime mesmo sem a regra automatica, false suprime.
+	// Ausente = segue a impressao automatica da organizacao.
+	printReceipt: z.boolean({ invalid_type_error: "Tipo nao valido para imprimir cupom." }).optional().nullable(),
 });
 export type TCloseTabRouteInput = z.infer<typeof CloseTabInputSchema>;
 
@@ -98,6 +101,7 @@ async function closeTabService({ input, session }: { input: TCloseTabRouteInput;
 			acrescimoGeral: input.acrescimoGeral,
 			descontoAprovacaoId,
 			entregarPedidosEmAndamento: input.entregarPedidosEmAndamento,
+			printReceipt: input.printReceipt,
 		},
 	});
 

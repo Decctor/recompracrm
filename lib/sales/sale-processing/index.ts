@@ -2,6 +2,7 @@ export {
 	processSaleConfirmation,
 	processSaleConfirmationInTransaction,
 	processSaleConfirmationPostCommit,
+	processSaleConfirmationPostCommitDetailed,
 	type TProcessSaleConfirmationInput,
 } from "./process-sale-confirmation";
 export { createAccountingEntry } from "./create-accounting-entry";

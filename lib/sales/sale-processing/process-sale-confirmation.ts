@@ -82,9 +82,15 @@ export type TProcessSaleConfirmationInput = {
 	// Soma dos parciais já recebidos: os pagamentos do fechamento cobrem só o restante, e o troco
 	// precisa ser calculado contra `valorTotal − prepaidAmount`, não contra o total.
 	prepaidAmount?: number | null;
+	// Pós-commit: decisão do operador sobre o cupom desta venda (switch do fechamento de conta).
+	// null/ausente = segue a regra de impressão automática da organização.
+	receiptPrintOverride?: boolean | null;
 };
 
-type TProcessSaleConfirmationPostCommitInput = Pick<TProcessSaleConfirmationInput, "organization" | "saleId" | "saleAuthorId">;
+type TProcessSaleConfirmationPostCommitInput = Pick<
+	TProcessSaleConfirmationInput,
+	"organization" | "saleId" | "saleAuthorId" | "receiptPrintOverride"
+>;
 
 /**
  * Atualiza em place o lançamento VENDA que já existe (nascido num recebimento parcial de conta):
@@ -606,16 +612,19 @@ export async function processSaleConfirmationInTransaction({ tx, input }: { tx: 
 		cupomResgate: couponRedemptionResult,
 	};
 }
-export async function processSaleConfirmationPostCommit(input: TProcessSaleConfirmationPostCommitInput) {
+// Pós-commit com o resultado do cupom exposto: o fechamento de conta avisa o operador quando o
+// cupom pedido no switch não saiu. Os demais chamadores usam processSaleConfirmationPostCommit.
+export async function processSaleConfirmationPostCommitDetailed(input: TProcessSaleConfirmationPostCommitInput) {
 	waitUntil(publishPendingCampaignEventsSafely({ organizationId: input.organization.id, sourceType: "VENDA", sourceId: input.saleId }));
 	// Cupom automático ANTES da emissão fiscal: cupom é latência-sensível (TTL 30min) e a emissão
 	// pode envolver o provedor. Um ponto cobre POS (create-and-confirm e confirm), comanda e shop.
 	// Nunca lança; a chave de idempotência (CUPOM_VENDA:<vendaId>) absorve reconfirmações.
-	await processSaleCupomAutoPrintIfEligible({
+	const receiptPrint = await processSaleCupomAutoPrintIfEligible({
 		organizacaoId: input.organization.id,
 		saleId: input.saleId,
 		configuracao: input.organization.configuracao,
 		solicitadoPorId: input.saleAuthorId,
+		override: input.receiptPrintOverride,
 	});
 	// Ticket de preparo: o orquestrador só imprime se a venda nasceu EM_PREPARO (entrega); balcão e
 	// fechamento de conta (nasce ENTREGUE) passam reto. Nunca lança.
@@ -627,11 +636,17 @@ export async function processSaleConfirmationPostCommit(input: TProcessSaleConfi
 	});
 	// A decisão de emitir (org default vs. override por venda) vive na coluna sales.emissaoFiscalAutomatica,
 	// resolvida dentro de processSaleAutomaticFiscalEmissionIfEligible — fonte única para confirm e entrega.
-	return processSaleAutomaticFiscalEmissionIfEligible({
+	const fiscal = await processSaleAutomaticFiscalEmissionIfEligible({
 		organization: input.organization,
 		saleId: input.saleId,
 		authorId: input.saleAuthorId,
 	});
+	return { receiptPrint, fiscal };
+}
+
+export async function processSaleConfirmationPostCommit(input: TProcessSaleConfirmationPostCommitInput) {
+	const { fiscal } = await processSaleConfirmationPostCommitDetailed(input);
+	return fiscal;
 }
 
 export async function processSaleConfirmation(input: TProcessSaleConfirmationInput) {
