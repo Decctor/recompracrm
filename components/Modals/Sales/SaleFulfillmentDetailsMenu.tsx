@@ -5,8 +5,10 @@ import ResponsiveMenu from "@/components/Utils/ResponsiveMenu";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getErrorMessage } from "@/lib/errors";
+import { createManualPrintJob } from "@/lib/mutations/desktop-agent";
 import { formatDateAsLocale, formatToMoney, formatToPhone } from "@/lib/formatting";
 import { appRoutes } from "@/lib/navigation/routes";
+import { organizationHasPrinterForFinalidade, useAgentPrinters } from "@/lib/queries/desktop-agent";
 import { PAYMENT_METHOD_LABELS } from "@/lib/payments/labels";
 import { useSalesFulfillmentById } from "@/lib/queries/sales-fulfillment";
 import { saleOffersClientReassignment } from "@/lib/sales/sale-client-reassignment-policy";
@@ -14,6 +16,7 @@ import { groupSaleItemModifiers } from "@/lib/sales/sale-item-modifier-groups";
 import { SALE_FINANCIAL_STATUS_PRESENTATION, SALE_FISCAL_STATUS_PRESENTATION, type TSaleStatusTone } from "@/lib/sales/status-presentation";
 import { cn } from "@/lib/utils";
 import type { TSaleFinancialDerivedStatusEnum, TSaleFiscalDerivedStatusEnum } from "@/schemas/enums";
+import { useMutation } from "@tanstack/react-query";
 import {
 	BadgeCheck,
 	Banknote,
@@ -36,6 +39,7 @@ import {
 	PencilLine,
 	Phone,
 	PhoneCall,
+	Printer,
 	ReceiptText,
 	RefreshCw,
 	Store,
@@ -47,6 +51,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { FaWhatsapp } from "react-icons/fa6";
+import { toast } from "sonner";
 import { CancelConfirmedSaleDialog } from "./CancelConfirmedSaleDialog";
 import { ReassignSaleClientDialog } from "./ReassignSaleClientDialog";
 
@@ -600,7 +605,17 @@ function SaleActionsFooter({
 	// Trocar/definir cliente segue a política do servidor (prévia no diálogo); aqui só o recorte
 	// grosso, o mesmo que o painel CLIENTE da página da venda usa.
 	const showClient = !!canEditSales && saleOffersClientReassignment(sale);
-	if (!showEdit && !showCancel && !showClient) return null;
+	// Reimpressão do cupom via agente desktop: mesmo builder do auto-print, sem chave de
+	// idempotência (sempre gera um job novo). Só aparece quando há impressora apta a cupons.
+	const { data: printers } = useAgentPrinters();
+	const showPrint = organizationHasPrinterForFinalidade(printers, "CUPOM_VENDA");
+	const { mutate: printCupom, isPending: printIsPending } = useMutation({
+		mutationKey: ["print-sale-cupom", sale.id],
+		mutationFn: createManualPrintJob,
+		onSuccess: (data) => toast.success(data.message),
+		onError: (mutationError) => toast.error(getErrorMessage(mutationError)),
+	});
+	if (!showEdit && !showCancel && !showClient && !showPrint) return null;
 	const editHref = editability.rascunho ? appRoutes.sales.checkout(sale.id) : appRoutes.sales.edit(sale.id);
 	const editIsEnabled = editability.nivel === "TOTAL" || editability.rascunho;
 	return (
@@ -611,6 +626,12 @@ function SaleActionsFooter({
 					<Button variant="ghost-destructive" onClick={() => setCancelDialogIsOpen(true)}>
 						<CircleX className="size-4" />
 						Cancelar venda
+					</Button>
+				) : null}
+				{showPrint ? (
+					<Button variant="outline" disabled={printIsPending} onClick={() => printCupom({ finalidade: "CUPOM_VENDA", vendaId: sale.id })}>
+						<Printer className="size-4" />
+						Reimprimir cupom
 					</Button>
 				) : null}
 				{showClient ? (

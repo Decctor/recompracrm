@@ -4,6 +4,7 @@ import { saleItems, sales, tabOrders, tabs } from "@/services/drizzle/schema";
 import { and, eq, ne } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { attendanceStatusValues } from "@/lib/sales/sale-processing/attendance";
+import { sumTabActivePayments } from "./utils";
 
 export type TCancelTabInput = {
 	tabId: string;
@@ -18,15 +19,7 @@ export type TCancelTabInput = {
  * Cancela a conta inteira: pedidos ativos -> CANCELADO, venda rascunho -> CANCELADA,
  * tab -> CANCELADA (compare-and-set sob lock).
  */
-export async function cancelTab({
-	organization,
-	userId,
-	input,
-}: {
-	organization: TOrganizationEntity;
-	userId: string;
-	input: TCancelTabInput;
-}) {
+export async function cancelTab({ organization, userId, input }: { organization: TOrganizationEntity; userId: string; input: TCancelTabInput }) {
 	return db.transaction(async (tx) => {
 		const [tab] = await tx
 			.select()
@@ -36,6 +29,12 @@ export async function cancelTab({
 
 		if (!tab) throw new createHttpError.NotFound("Conta nao encontrada.");
 		if (tab.status !== "ABERTA") throw new createHttpError.BadRequest("Conta nao esta aberta.");
+
+		// O estorno de um parcial e um ato fisico (devolver nota, estornar na maquininha) e precisa
+		// de confirmacao um a um; cancelar a conta nao estorna em lote. Com todos estornados, o
+		// lancamento VENDA fica com valor 0 junto da venda CANCELADA, preservando a trilha.
+		const jaPago = await sumTabActivePayments(tx, { tabId: tab.id });
+		if (jaPago > 0) throw new createHttpError.BadRequest("Estorne os recebimentos parciais antes de cancelar a conta.");
 
 		const [draftSale] = await tx
 			.select({ id: sales.id })

@@ -8,7 +8,8 @@ import z from "zod";
 
 const TransferTabInputSchema = z.object({
 	tabId: z.string({ required_error: "ID da conta nao informado." }),
-	servicePointDestinoId: z.string({ required_error: "ID do ponto de destino nao informado." }),
+	servicePointDestinoId: z.string({ invalid_type_error: "Tipo nao valido para ID do ponto de destino." }).optional().nullable(),
+	serviceCardDestinoId: z.string({ invalid_type_error: "Tipo nao valido para ID da comanda de destino." }).optional().nullable(),
 	motivo: z.string({ invalid_type_error: "Tipo nao valido para motivo." }).optional().nullable(),
 });
 export type TTransferTabRouteInput = z.infer<typeof TransferTabInputSchema>;

@@ -90,23 +90,31 @@ export async function handleAIDocumentProcessing(fileBuffer: Buffer, mimeType: s
 	console.log("[AI_MEDIA] Processing document file");
 
 	try {
-		let textContent = "";
-
-		if (mimeType === "application/pdf") {
-			textContent = `Documento PDF recebido. Para extração completa de texto, considere adicionar a biblioteca 'pdf-parse'.`;
-		} else if (mimeType.includes("text/") || mimeType.includes("application/json")) {
-			textContent = fileBuffer.toString("utf-8");
-		} else {
-			textContent = `Documento recebido (${mimeType})`;
-		}
+		const mediaType = mimeType.split(";")[0].trim().toLowerCase();
+		const isPdf = mediaType === "application/pdf";
+		const model = gateway(isPdf ? "google/gemini-2.5-flash-lite" : "openai/gpt-4o-mini");
+		const textContent =
+			mediaType.startsWith("text/") || mediaType === "application/json" ? fileBuffer.toString("utf-8") : `Documento recebido (${mimeType})`;
 
 		const extractionResult = await generateText({
-			model: gateway("openai/gpt-4o-mini"),
-			prompt: `Analise o seguinte documento e extraia as informações-chave mais importantes em português:\n\n${textContent}`,
+			model,
+			...(isPdf
+				? {
+						messages: [
+							{
+								role: "user" as const,
+								content: [
+									{ type: "text" as const, text: "Analise o documento anexado e extraia as informações-chave mais importantes em português." },
+									{ type: "file" as const, data: fileBuffer, mediaType: "application/pdf" },
+								],
+							},
+						],
+					}
+				: { prompt: `Analise o seguinte documento e extraia as informações-chave mais importantes em português:\n\n${textContent}` }),
 		});
 
 		const summaryResult = await generateText({
-			model: gateway("openai/gpt-4o-mini"),
+			model,
 			prompt: `Resuma o seguinte documento em português de forma concisa (máximo 3 linhas):\n\n${extractionResult.text}`,
 		});
 

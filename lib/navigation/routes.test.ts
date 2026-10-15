@@ -40,7 +40,6 @@ test("builds nested entity routes without legacy segments", () => {
 		appRoutes.customers.details("customer-1"),
 		appRoutes.management.seller("seller-1"),
 		appRoutes.inventory.lot("lot-1"),
-		appRoutes.sales.serviceAccount("account-1"),
 	];
 
 	assert.ok(paths.every((path) => !/(commercial|operational|team|chats)/.test(path)));

@@ -3,10 +3,15 @@
 import type { TTabOrderRequestListItem } from "@/app/api/tabs/order-requests/route";
 import SelectInput from "@/components/Inputs/SelectInput";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { useMediaQuery } from "@/lib/hooks/use-media-query";
 import { getErrorMessage } from "@/lib/errors";
 import { decideTabOrderRequest } from "@/lib/mutations/tabs";
-import { useServiceSettings, useTabOrderRequests, useTabs } from "@/lib/queries/tabs";
+import { useServicePoints, useServiceSettings, useTabOrderRequests, useTabs } from "@/lib/queries/tabs";
+import { normalizeServiceCardCode } from "@/lib/tabs/service-card-codes";
 import { cn } from "@/lib/utils";
+import { tabUsesCode } from "@/schemas/service-settings";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Ban, Check, Clock, Inbox, MapPin, TicketCheck, TriangleAlert } from "lucide-react";
 import { useState } from "react";
@@ -40,6 +45,11 @@ function formatWait(minutes: number) {
 function RequestCard({ request, now, onDecided }: { request: TTabOrderRequestListItem; now: number; onDecided: () => void }) {
 	const { data: settings } = useServiceSettings();
 	const { data: openTabs } = useTabs();
+	// Pedido do QR de um cartao livre nao tem mesa: o operador escolhe onde abrir a conta.
+	const fromServiceCard = request.payloadSolicitacao.contexto === "COMANDA";
+	const needsPointForNewTab = fromServiceCard && !request.servicePointId && (settings?.pontos.habilitados ?? false);
+	const { data: servicePoints } = useServicePoints({ activeOnly: true });
+	const [newTabPointId, setNewTabPointId] = useState<string | null>(null);
 	// undefined = ainda usar a sugestao derivada do codigo informado pelo cliente;
 	// null = operador limpou explicitamente a selecao.
 	const [selectedTabId, setSelectedTabId] = useState<string | null | undefined>(undefined);
@@ -64,20 +74,25 @@ function RequestCard({ request, now, onDecided }: { request: TTabOrderRequestLis
 	const autoResolvesTab = settings?.contas.identificacao === "AUTOMATICA" && settings?.contas.maxAbertasPorPonto === 1;
 	const needsTabSelection = !request.tabId && !(request.servicePointId && autoResolvesTab);
 	const requestedCode = request.payloadSolicitacao.codigoTab?.trim() || null;
-	const matchingCodeTab = requestedCode
-		? openTabs?.find((tab) => tab.codigo?.trim().toLocaleLowerCase("pt-BR") === requestedCode.toLocaleLowerCase("pt-BR"))
-		: undefined;
+	// Comanda cadastrada: "7" e "007" sao o mesmo cartao.
+	const sameCode = (code: string) =>
+		settings?.contas.identificacao === "COMANDA_CADASTRADA"
+			? normalizeServiceCardCode(code) === normalizeServiceCardCode(requestedCode ?? "")
+			: code.trim().toLocaleLowerCase("pt-BR") === requestedCode?.toLocaleLowerCase("pt-BR");
+	const matchingCodeTab = requestedCode ? openTabs?.find((tab) => !!tab.codigo && sameCode(tab.codigo)) : undefined;
 	const suggestedTab = matchingCodeTab?.servicePointId === request.servicePointId ? matchingCodeTab : undefined;
 	const effectiveTabId = selectedTabId === undefined ? (suggestedTab?.id ?? null) : selectedTabId;
 	const openTabsAtPoint = (openTabs ?? []).filter((tab) => tab.servicePointId === request.servicePointId).length;
 	const pointLimit = settings?.contas.maxAbertasPorPonto ?? null;
-	const pointLimitReached = pointLimit !== null && openTabsAtPoint >= pointLimit;
-	const codeIsOpenElsewhere = Boolean(matchingCodeTab && matchingCodeTab.servicePointId !== request.servicePointId);
+	// Limite e por ponto: solicitacao sem ponto (cartao livre) nao esbarra nele aqui — o server valida na abertura.
+	const pointLimitReached = !!request.servicePointId && pointLimit !== null && openTabsAtPoint >= pointLimit;
+	const codeIsOpenElsewhere = Boolean(matchingCodeTab && request.servicePointId && matchingCodeTab.servicePointId !== request.servicePointId);
 	const canOpenRequestedTab = Boolean(
 		needsTabSelection &&
 		requestedCode &&
 		!suggestedTab &&
-		settings?.contas.identificacao === "CODIGO_MANUAL" &&
+		!!settings &&
+		tabUsesCode(settings.contas) &&
 		settings.aberturaPublica !== "DESABILITADA" &&
 		!pointLimitReached &&
 		!codeIsOpenElsewhere,
@@ -96,19 +111,22 @@ function RequestCard({ request, now, onDecided }: { request: TTabOrderRequestLis
 	const isError = request.status === "ERRO";
 	const waitMinutes = requestWaitMinutes(request.dataInsercao, now);
 	const urgency = URGENCY_META[requestUrgency(waitMinutes)];
-	const etiqueta = request.tab?.codigo ? `Comanda ${request.tab.codigo}` : (request.servicePoint?.rotulo ?? "Solicitação");
+	const etiqueta = request.tab?.codigo
+		? `Comanda ${request.tab.codigo}`
+		: (request.servicePoint?.rotulo ?? (fromServiceCard && requestedCode ? `Comanda ${requestedCode}` : "Solicitação"));
+	const missingPoint = opensRequestedTab && needsPointForNewTab && !!settings?.contas.pontoObrigatorio && !newTabPointId;
 	const itemCount = request.payloadSolicitacao.itens.reduce((sum, item) => sum + item.quantidade, 0);
 
 	return (
 		<article
 			className={cn(
-				"flex flex-col gap-3 self-start rounded-2xl border bg-card px-4 py-3.5 shadow-2xs",
+				"flex flex-col gap-3 self-start rounded-xl border bg-card px-4 py-3.5 shadow-2xs",
 				isError ? "border-destructive/40" : "border-border",
 			)}
 		>
 			<header className="flex items-start justify-between gap-2">
 				<div className="flex min-w-0 flex-col">
-					<span className="flex items-center gap-1.5 text-sm font-extrabold uppercase tracking-tight">
+					<span className="flex items-center gap-1.5 text-sm font-bold uppercase tracking-tight">
 						<MapPin className="size-3.5 shrink-0" />
 						<span className="truncate">{etiqueta}</span>
 					</span>
@@ -123,7 +141,7 @@ function RequestCard({ request, now, onDecided }: { request: TTabOrderRequestLis
 			</header>
 
 			<div className="flex flex-col gap-1">
-				<span className="text-[11px] font-extrabold uppercase tracking-[0.08em] text-muted-foreground">
+				<span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
 					{itemCount} {itemCount === 1 ? "item pedido" : "itens pedidos"}
 				</span>
 				<div className="flex flex-col gap-0.5">
@@ -134,22 +152,22 @@ function RequestCard({ request, now, onDecided }: { request: TTabOrderRequestLis
 								<span className="[overflow-wrap:anywhere]">{item.nome}</span>
 								{/* O que o cliente escolheu — o operador aprova o item montado, não só o nome */}
 								{item.modificadores.length > 0 ? (
-									<span className="text-[11px] text-muted-foreground [overflow-wrap:anywhere]">
+									<span className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
 										{item.modificadores.map((modifier) => `${modifier.quantidade}x ${modifier.nome ?? "adicional"}`).join(" · ")}
 									</span>
 								) : null}
-								{item.observacoes ? <span className="text-[11px] italic text-muted-foreground [overflow-wrap:anywhere]">“{item.observacoes}”</span> : null}
+								{item.observacoes ? <span className="text-xs italic text-muted-foreground [overflow-wrap:anywhere]">“{item.observacoes}”</span> : null}
 							</div>
 						</div>
 					))}
 				</div>
 				{request.payloadSolicitacao.observacoes ? (
-					<p className="text-[11px] italic text-muted-foreground [overflow-wrap:anywhere]">“{request.payloadSolicitacao.observacoes}”</p>
+					<p className="text-xs italic text-muted-foreground [overflow-wrap:anywhere]">“{request.payloadSolicitacao.observacoes}”</p>
 				) : null}
 			</div>
 
 			{isError && request.erroProcessamento ? (
-				<p className="flex items-start gap-1.5 text-[11px] font-medium text-destructive">
+				<p className="flex items-start gap-1.5 text-xs font-medium text-destructive">
 					<TriangleAlert className="mt-px size-3 shrink-0" />
 					<span className="[overflow-wrap:anywhere]">{request.erroProcessamento}</span>
 				</p>
@@ -157,10 +175,10 @@ function RequestCard({ request, now, onDecided }: { request: TTabOrderRequestLis
 
 			{needsTabSelection ? (
 				<div className="flex flex-col gap-2 border-t border-border/60 pt-2.5">
-					<span className="text-[11px] font-extrabold uppercase tracking-[0.08em] text-muted-foreground">Conta de destino</span>
+					<span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Conta de destino</span>
 
 					{blockReason ? (
-						<p className="flex items-start gap-1.5 text-[11px] font-semibold text-destructive">
+						<p className="flex items-start gap-1.5 text-xs font-semibold text-destructive">
 							<TriangleAlert className="mt-px size-3 shrink-0" />
 							<span>{blockReason}</span>
 						</p>
@@ -171,13 +189,30 @@ function RequestCard({ request, now, onDecided }: { request: TTabOrderRequestLis
 					) : null}
 
 					{opensRequestedTab && requestedCode ? (
-						<DestinationChip tone="new" label={`Comanda ${requestedCode}`} detail="informada pelo cliente, ainda não aberta neste ponto" />
+						<DestinationChip
+							tone="new"
+							label={`Comanda ${requestedCode}`}
+							detail={fromServiceCard ? "QR do cartão, ainda sem conta aberta" : "informada pelo cliente, ainda não aberta neste ponto"}
+						/>
+					) : null}
+
+					{opensRequestedTab && needsPointForNewTab ? (
+						<SelectInput
+							label="Mesa da conta"
+							showLabel={false}
+							triggerProps={{ className: "h-9 rounded-xl" }}
+							value={newTabPointId}
+							options={(servicePoints ?? []).map((point) => ({ id: point.id, value: point.id, label: point.rotulo }))}
+							resetOptionLabel={settings?.contas.pontoObrigatorio ? "Selecione a mesa" : "Sem mesa"}
+							handleChange={(value) => setNewTabPointId(value)}
+							onReset={() => setNewTabPointId(null)}
+						/>
 					) : null}
 
 					{showSelect ? (
 						<>
 							{requestedCode && !suggestedTab && !blockReason ? (
-								<p className="text-[11px] text-muted-foreground">
+								<p className="text-xs text-muted-foreground">
 									Cliente informou a comanda <span className="font-bold text-foreground">{requestedCode}</span>.
 								</p>
 							) : null}
@@ -206,15 +241,15 @@ function RequestCard({ request, now, onDecided }: { request: TTabOrderRequestLis
 			<div className="flex items-center gap-1.5 pt-0.5">
 				<Button
 					size="sm"
-					className="h-9 flex-1 gap-1.5 rounded-xl font-extrabold"
-					disabled={isPending || (needsTabSelection && !opensRequestedTab && !effectiveTabId)}
+					className="h-9 flex-1 gap-1.5 rounded-xl font-bold"
+					disabled={isPending || missingPoint || (needsTabSelection && !opensRequestedTab && !effectiveTabId)}
 					onClick={() =>
 						mutate({
 							requestId: request.id,
 							action: "APPROVE",
 							destination:
 								opensRequestedTab && requestedCode
-									? { type: "NEW", code: requestedCode }
+									? { type: "NEW", code: requestedCode, servicePointId: needsPointForNewTab ? newTabPointId : null }
 									: effectiveTabId
 										? { type: "EXISTING", tabId: effectiveTabId }
 										: null,
@@ -240,7 +275,7 @@ function RequestCard({ request, now, onDecided }: { request: TTabOrderRequestLis
 			{needsTabSelection && (suggestedTab || canOpenRequestedTab) ? (
 				<button
 					type="button"
-					className="-mt-1 w-fit text-[11px] font-semibold text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline"
+					className="-mt-1 w-fit text-xs font-semibold text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline"
 					onClick={() => {
 						setIsChoosingTab((previous) => !previous);
 						if (!isChoosingTab) setSelectedTabId(null);
@@ -262,17 +297,24 @@ function DestinationChip({ tone, label, detail }: { tone: "match" | "new"; label
 		>
 			<TicketCheck className="mt-px size-3.5 shrink-0" />
 			<div className="flex min-w-0 flex-col leading-tight">
-				<span className="truncate text-xs font-extrabold">{label}</span>
-				<span className="text-[11px] font-medium opacity-80">{detail}</span>
+				<span className="truncate text-xs font-bold">{label}</span>
+				<span className="text-xs font-medium opacity-80">{detail}</span>
 			</div>
 		</div>
 	);
 }
 
-export default function OrderRequestsSection() {
+/**
+ * Inbox do QR como acao da toolbar: o contador fica a vista e os cards abrem
+ * por cima do board (popover no desktop, sheet no celular) em vez de empurrar
+ * o board para baixo. Sem solicitacoes, o botao nao existe.
+ */
+export default function OrderRequestsButton() {
 	const queryClient = useQueryClient();
 	const { data: requests, queryKey } = useTabOrderRequests();
 	const now = useTickingNow();
+	const isDesktop = useMediaQuery("(min-width: 768px)");
+	const [open, setOpen] = useState(false);
 
 	if (!requests || requests.length === 0) return null;
 
@@ -282,20 +324,42 @@ export default function OrderRequestsSection() {
 		queryClient.invalidateQueries({ queryKey: ["preparation-tickets"] });
 	}
 
-	return (
+	const trigger = (
+		<Button size="sm" variant="secondary" className="gap-2 rounded-full bg-primary/10 font-bold text-primary hover:bg-primary/15">
+			<Inbox className="size-4" />
+			{requests.length} {requests.length === 1 ? "solicitação" : "solicitações"}
+		</Button>
+	);
+
+	const list = (
 		<div className="flex flex-col gap-2">
-			<h2 className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-[0.08em] text-muted-foreground">
-				<Inbox className="size-3.5" />
-				Solicitações de pedido
-				<span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-black tabular-nums leading-none text-primary-foreground">
-					{requests.length}
-				</span>
-			</h2>
-			<div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-				{requests.map((request) => (
-					<RequestCard key={request.id} request={request} now={now} onDecided={refresh} />
-				))}
-			</div>
+			{requests.map((request) => (
+				<RequestCard key={request.id} request={request} now={now} onDecided={refresh} />
+			))}
 		</div>
+	);
+
+	if (isDesktop) {
+		return (
+			<Popover open={open} onOpenChange={setOpen}>
+				<PopoverTrigger render={trigger} />
+				<PopoverContent align="end" className="flex max-h-[min(70dvh,640px)] w-[380px] flex-col gap-2 overflow-y-auto rounded-xl p-3">
+					<span className="px-1 text-xs font-bold uppercase tracking-wide text-muted-foreground">Solicitações de pedido</span>
+					{list}
+				</PopoverContent>
+			</Popover>
+		);
+	}
+
+	return (
+		<Sheet open={open} onOpenChange={setOpen}>
+			<SheetTrigger render={trigger} />
+			<SheetContent side="bottom" className="max-h-[85dvh] overflow-y-auto rounded-t-3xl">
+				<SheetHeader>
+					<SheetTitle>Solicitações de pedido</SheetTitle>
+				</SheetHeader>
+				<div className="px-4 pb-4">{list}</div>
+			</SheetContent>
+		</Sheet>
 	);
 }

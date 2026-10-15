@@ -778,6 +778,10 @@ export type TDealOnboardingFormSituationEnum = z.infer<typeof DealOnboardingForm
 export const TabStatusEnum = z.enum(["ABERTA", "FECHADA", "CANCELADA"]);
 export type TTabStatusEnum = z.infer<typeof TabStatusEnum>;
 
+// Espelha o pgEnum tabPaymentStatusEnum.
+export const TabPaymentStatusEnum = z.enum(["ATIVO", "ESTORNADO"]);
+export type TTabPaymentStatusEnum = z.infer<typeof TabPaymentStatusEnum>;
+
 // Espelha o pgEnum servicePointTypeEnum.
 export const ServicePointTypeEnum = z.enum(["MESA", "BALCAO", "QUIOSQUE", "OUTRO"]);
 export type TServicePointTypeEnum = z.infer<typeof ServicePointTypeEnum>;
@@ -792,7 +796,8 @@ export const ProductContentUnitEnum = z.enum(["ML", "L", "G", "KG", "UN", "COMPR
 export type TProductContentUnitEnum = z.infer<typeof ProductContentUnitEnum>;
 
 // Politicas de serviceSettings (apenas app-level, nao sao pgEnum: vivem no jsonb de configuracoes).
-export const TabIdentificationModeEnum = z.enum(["AUTOMATICA", "CODIGO_MANUAL"]);
+// COMANDA_CADASTRADA: codigo obrigatorio e restrito as comandas fixas cadastradas (serviceCards).
+export const TabIdentificationModeEnum = z.enum(["AUTOMATICA", "CODIGO_MANUAL", "COMANDA_CADASTRADA"]);
 export type TTabIdentificationModeEnum = z.infer<typeof TabIdentificationModeEnum>;
 
 export const PublicTabOpeningModeEnum = z.enum(["DESABILITADA", "SOLICITACAO", "AUTOMATICA"]);
@@ -1246,3 +1251,15 @@ export const VisualKitOutputEnum = z.enum(["PDF", "PDF_ETIQUETADORA", "PNG", "JP
 	invalid_type_error: "Tipo não válido para saída da peça.",
 });
 export type TVisualKitOutputEnum = z.infer<typeof VisualKitOutputEnum>;
+
+// Estações de preparo (roteamento do TICKET_PREPARO). Ver docs/dev-planning/preparation-stations-plan.md.
+export const PreparationStationTicketScopeEnum = z.enum(["PEDIDO", "ESTACAO"], {
+	required_error: "Escopo do ticket da estação não informado.",
+	invalid_type_error: "Tipo não válido para escopo do ticket da estação.",
+});
+export type TPreparationStationTicketScopeEnum = z.infer<typeof PreparationStationTicketScopeEnum>;
+export const PreparationStationRuleCriterionEnum = z.enum(["GRUPO", "PRODUTO"], {
+	required_error: "Critério da regra da estação não informado.",
+	invalid_type_error: "Tipo não válido para critério da regra da estação.",
+});
+export type TPreparationStationRuleCriterionEnum = z.infer<typeof PreparationStationRuleCriterionEnum>;

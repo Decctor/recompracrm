@@ -3,6 +3,7 @@ import {
 	cashbackProgramPrizes,
 	catalogLinks,
 	couponTargets,
+	preparationStationRules,
 	productAddOnOptions,
 	productAddOnReferences,
 	productChannelSettings,
@@ -274,6 +275,31 @@ export async function mergeProducts(input: TMergeProductsInput): Promise<TMergeP
 		}
 		if (Object.keys(keeperUpdates).length > 0) {
 			await tx.update(products).set(withProductUpdateStamp(keeperUpdates)).where(eq(products.id, input.keeperId));
+		}
+
+		// Regras de estação de preparo por produto não têm FK (valor jsonb): sem isto, a regra do
+		// produto removido ficaria órfã. Migra para o mantido; se ele já tem estação, a dele prevalece.
+		const productRuleOf = (productId: string) =>
+			and(
+				eq(preparationStationRules.organizacaoId, input.organizacaoId),
+				eq(preparationStationRules.criterio, "PRODUTO"),
+				sql`${preparationStationRules.valor}->>'produtoId' = ${productId}`,
+			);
+		const [keeperStationRule] = await tx
+			.select({ id: preparationStationRules.id })
+			.from(preparationStationRules)
+			.where(productRuleOf(input.keeperId))
+			.limit(1);
+		if (keeperStationRule) {
+			const removed = await tx.delete(preparationStationRules).where(productRuleOf(input.sourceId)).returning({ id: preparationStationRules.id });
+			registrosMovidos.preparationStationRulesDuplicadasRemovidas = removed.length;
+		} else {
+			const moved = await tx
+				.update(preparationStationRules)
+				.set({ valor: { criterio: "PRODUTO", produtoId: input.keeperId } })
+				.where(productRuleOf(input.sourceId))
+				.returning({ id: preparationStationRules.id });
+			registrosMovidos.preparationStationRules = moved.length;
 		}
 
 		await tx.delete(products).where(and(eq(products.id, input.sourceId), eq(products.organizacaoId, input.organizacaoId)));

@@ -5,8 +5,8 @@ import { db } from "@/services/drizzle";
 import { organizations, sales, tabOrders, type TFiscalDocument, type TOrganizationEntity } from "@/services/drizzle/schema";
 import { and, eq } from "drizzle-orm";
 import { buildCupomVendaDados } from "./cupom-venda-data";
-import { enqueuePrintJob, organizationHasActivePrinterForFinalidade } from "./print-jobs";
-import { buildTicketPreparoDadosFromSale, buildTicketPreparoDadosFromTabOrder } from "./ticket-preparo-data";
+import { enqueuePrintJob, organizationHasActivePrinterForFinalidade, organizationHasActivePrinterForPreparationStation } from "./print-jobs";
+import { type TTicketPreparoBuildEntry, buildTicketPreparoDadosFromSale, buildTicketPreparoDadosFromTabOrder } from "./ticket-preparo-data";
 
 // Orquestradores de impressão automática (docs/dev-planning/auto-print-wiring-plan.md).
 // Mesma filosofia de processSaleAutomaticFiscalEmissionIfEligible: avaliam elegibilidade,
@@ -69,17 +69,23 @@ type TProcessSaleCupomAutoPrintParams = {
 	// Evita um fetch por venda quando o chamador já tem a config em mãos (hot paths de venda/sync).
 	configuracao?: TOrganizationEntity["configuracao"] | null;
 	solicitadoPorId?: string | null;
+	// Decisão do operador para esta venda (ex.: switch do fechamento de conta). null = segue a regra
+	// da organização; true = imprime mesmo com a regra desligada ou sem o canal; false = não imprime.
+	// A impressora ativa continua obrigatória, e a chave de idempotência é a mesma em todos os casos.
+	override?: boolean | null;
 };
 export async function processSaleCupomAutoPrintIfEligible({
 	organizacaoId,
 	saleId,
 	configuracao,
 	solicitadoPorId,
+	override,
 }: TProcessSaleCupomAutoPrintParams) {
 	try {
+		if (override === false) return { status: "NAO_SOLICITADO" as const, reason: "DESATIVADA_NA_VENDA" as const };
 		const resolvedConfiguracao = await resolveConfiguracao({ organizacaoId, configuracao });
 		const rule = parsePrintPreferences(resolvedConfiguracao).automatica.CUPOM_VENDA;
-		if (!rule.habilitada) return { status: "NAO_SOLICITADO" as const, reason: "IMPRESSAO_AUTOMATICA_DESATIVADA" as const };
+		if (!rule.habilitada && !override) return { status: "NAO_SOLICITADO" as const, reason: "IMPRESSAO_AUTOMATICA_DESATIVADA" as const };
 
 		const sale = await db.query.sales.findFirst({
 			where: and(eq(sales.id, saleId), eq(sales.organizacaoId, organizacaoId)),
@@ -87,7 +93,7 @@ export async function processSaleCupomAutoPrintIfEligible({
 		});
 		if (!sale) return { status: "NAO_SOLICITADO" as const, reason: "VENDA_NAO_ENCONTRADA" as const };
 		if (sale.statusVenda === "CANCELADA") return { status: "NAO_SOLICITADO" as const, reason: "VENDA_CANCELADA" as const };
-		if (!isChannelAllowed({ rule, canal: sale.canal, processamentoOrigem: sale.processamentoOrigem })) {
+		if (!override && !isChannelAllowed({ rule, canal: sale.canal, processamentoOrigem: sale.processamentoOrigem })) {
 			return { status: "NAO_SOLICITADO" as const, reason: "CANAL_NAO_HABILITADO" as const };
 		}
 
@@ -113,6 +119,48 @@ export async function processSaleCupomAutoPrintIfEligible({
 	}
 }
 export type TProcessSaleCupomAutoPrintOutput = Awaited<ReturnType<typeof processSaleCupomAutoPrintIfEligible>>;
+
+// Enfileira um TICKET_PREPARO por estação (docs/dev-planning/preparation-stations-plan.md). Estação
+// sem impressora que a atenda é pulada sem impedir as outras. Sem estação: a chave de sempre.
+async function enqueuePreparationTicketJobs({
+	organizacaoId,
+	entries,
+	origemTipo,
+	origemId,
+	copias,
+	solicitadoPorId,
+}: {
+	organizacaoId: string;
+	entries: TTicketPreparoBuildEntry[];
+	origemTipo: "VENDA" | "PEDIDO_CONTA";
+	origemId: string;
+	copias: number;
+	solicitadoPorId?: string | null;
+}) {
+	const jobs: { estacaoId: string | null; jobId: string; created: boolean }[] = [];
+	const estacoesSemImpressora: string[] = [];
+	for (const { estacaoId, dados } of entries) {
+		if (estacaoId && !(await organizationHasActivePrinterForPreparationStation({ organizacaoId, estacaoId }))) {
+			estacoesSemImpressora.push(estacaoId);
+			continue;
+		}
+		const baseKey = `TICKET_PREPARO:${origemTipo}:${origemId}`;
+		const result = await enqueuePrintJob({
+			organizacaoId,
+			finalidade: "TICKET_PREPARO",
+			dados: dados as unknown as Record<string, unknown>,
+			origemTipo,
+			origemId,
+			copias,
+			chaveIdempotencia: estacaoId ? `${baseKey}:${estacaoId}` : baseKey,
+			solicitadoPorId: solicitadoPorId ?? null,
+			estacaoPreparoId: estacaoId,
+		});
+		jobs.push({ estacaoId, jobId: result.job.id, created: result.created });
+	}
+	if (jobs.length === 0) return { status: "NAO_SOLICITADO" as const, reason: "SEM_IMPRESSORA_ESTACAO" as const, estacoesSemImpressora };
+	return { status: "SOLICITADO" as const, jobs, estacoesSemImpressora };
+}
 
 // Ticket de preparo por VENDA: o gatilho é a venda ENTRAR em EM_PREPARO, não o canal nem a
 // modalidade. O orquestrador checa o estado ele mesmo — os chamadores (confirmação, transição
@@ -152,18 +200,8 @@ export async function processSalePreparationTicketAutoPrintIfEligible({
 			return { status: "NAO_SOLICITADO" as const, reason: "SEM_IMPRESSORA" as const };
 		}
 
-		const dados = await buildTicketPreparoDadosFromSale({ organizacaoId, vendaId: saleId });
-		const result = await enqueuePrintJob({
-			organizacaoId,
-			finalidade: "TICKET_PREPARO",
-			dados: dados as unknown as Record<string, unknown>,
-			origemTipo: "VENDA",
-			origemId: saleId,
-			copias: rule.copias,
-			chaveIdempotencia: `TICKET_PREPARO:VENDA:${saleId}`,
-			solicitadoPorId: solicitadoPorId ?? null,
-		});
-		return { status: "SOLICITADO" as const, jobId: result.job.id, created: result.created };
+		const entries = await buildTicketPreparoDadosFromSale({ organizacaoId, vendaId: saleId });
+		return await enqueuePreparationTicketJobs({ organizacaoId, entries, origemTipo: "VENDA", origemId: saleId, copias: rule.copias, solicitadoPorId });
 	} catch (error) {
 		console.error(`[AUTO_PRINT] [ORG: ${organizacaoId}] Falha no auto-print do ticket de preparo da venda ${saleId}.`, error);
 		return { status: "ERRO" as const, error: getErrorMessage(error) };
@@ -206,18 +244,15 @@ export async function processTabOrderPreparationTicketAutoPrintIfEligible({
 			return { status: "NAO_SOLICITADO" as const, reason: "SEM_IMPRESSORA" as const };
 		}
 
-		const dados = await buildTicketPreparoDadosFromTabOrder({ organizacaoId, tabOrderId });
-		const result = await enqueuePrintJob({
+		const entries = await buildTicketPreparoDadosFromTabOrder({ organizacaoId, tabOrderId });
+		return await enqueuePreparationTicketJobs({
 			organizacaoId,
-			finalidade: "TICKET_PREPARO",
-			dados: dados as unknown as Record<string, unknown>,
+			entries,
 			origemTipo: "PEDIDO_CONTA",
 			origemId: tabOrderId,
 			copias: rule.copias,
-			chaveIdempotencia: `TICKET_PREPARO:PEDIDO_CONTA:${tabOrderId}`,
-			solicitadoPorId: solicitadoPorId ?? null,
+			solicitadoPorId,
 		});
-		return { status: "SOLICITADO" as const, jobId: result.job.id, created: result.created };
 	} catch (error) {
 		console.error(`[AUTO_PRINT] [ORG: ${organizacaoId}] Falha no auto-print do ticket de preparo do pedido ${tabOrderId}.`, error);
 		return { status: "ERRO" as const, error: getErrorMessage(error) };

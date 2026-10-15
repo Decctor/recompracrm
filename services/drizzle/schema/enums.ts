@@ -506,6 +506,9 @@ export const actionApprovalDecisionMethodEnum = pgEnum("action_approval_decision
 
 export const tabStatusEnum = pgEnum("tab_status", ["ABERTA", "FECHADA", "CANCELADA"]);
 
+// Recebimento parcial de uma conta (docs/dev-planning/tab-partial-payments-plan.md).
+export const tabPaymentStatusEnum = pgEnum("tab_payment_status", ["ATIVO", "ESTORNADO"]);
+
 export const servicePointTypeEnum = pgEnum("service_point_type", ["MESA", "BALCAO", "QUIOSQUE", "OUTRO"]);
 
 // Como a venda de um produto baixa estoque:

@@ -159,6 +159,8 @@ export const productions = newTable(
 	},
 	(table) => ({
 		organizacaoIdx: index("idx_productions_organizacao").on(table.organizacaoId),
+		vendaIdIdx: index("idx_productions_venda_id").on(table.vendaId),
+		vendaItemIdIdx: index("idx_productions_venda_item_id").on(table.vendaItemId),
 		statusIdx: index("idx_productions_status").on(table.status),
 		receitaIdx: index("idx_productions_receita").on(table.receitaId),
 		dataInsercaoIdx: index("idx_productions_data_insercao").on(table.dataInsercao),

@@ -6,6 +6,7 @@ import { getErrorMessage } from "@/lib/errors";
 import { formatDateAsLocale } from "@/lib/formatting";
 import { createManualPrintJob, updateAgentPrinter } from "@/lib/mutations/desktop-agent";
 import type { TAgentPrinterListItem } from "@/lib/queries/desktop-agent";
+import { usePreparationStations } from "@/lib/queries/preparation-stations";
 import { cn } from "@/lib/utils";
 import type { TPrintJobFinalidadeEnum } from "@/schemas/enums";
 import { useMutation } from "@tanstack/react-query";
@@ -44,6 +45,19 @@ export const AgentPrinterCard = memo(function AgentPrinterCard({ printer, readOn
 		onSuccess: (data) => toast.success(data.message),
 		onError: (error) => toast.error(getErrorMessage(error)),
 	});
+
+	// Estações de preparo: query org-wide compartilhada com Configurações (mesmo queryKey, um fetch).
+	const { data: preparationStations } = usePreparationStations({ enabled: !readOnly });
+	const activeStations = preparationStations?.filter((station) => station.ativa) ?? [];
+	const servesPreparationTicket = printer.finalidades.includes("TICKET_PREPARO");
+
+	const toggleStation = (stationId: string) => {
+		// Ids de estações excluídas caem fora aqui: o servidor recusa id que não é da organização.
+		const knownIds = new Set(preparationStations?.map((station) => station.id) ?? []);
+		const current = printer.estacoesPreparo.filter((id) => knownIds.has(id));
+		const next = current.includes(stationId) ? current.filter((id) => id !== stationId) : [...current, stationId];
+		mutatePrinter({ id: printer.id, estacoesPreparo: next });
+	};
 
 	const toggleFinalidade = (finalidade: TPrintJobFinalidadeEnum) => {
 		const current = printer.finalidades as TPrintJobFinalidadeEnum[];
@@ -130,6 +144,36 @@ export const AgentPrinterCard = memo(function AgentPrinterCard({ printer, readOn
 						})}
 						{printer.finalidades.length === 0 ? <span className="text-xs text-muted-foreground">Nada ainda</span> : null}
 					</div>
+				</div>
+			) : null}
+
+			{/* Org sem estação: nada novo aparece — a impressora atende o ticket inteiro, como sempre. */}
+			{!readOnly && servesPreparationTicket && activeStations.length > 0 ? (
+				<div className="flex w-full flex-col gap-1.5">
+					<span className="text-[0.65rem] font-bold tracking-[0.08em] text-muted-foreground">ESTAÇÕES DE PREPARO</span>
+					<div className="flex flex-wrap items-center gap-1.5">
+						{activeStations.map((station) => {
+							const isAssigned = printer.estacoesPreparo.includes(station.id);
+							return (
+								<button
+									key={station.id}
+									type="button"
+									aria-pressed={isAssigned}
+									disabled={isUpdating}
+									onClick={() => toggleStation(station.id)}
+									className={cn(
+										"rounded-full border px-3 py-1 text-xs font-bold transition-colors disabled:opacity-50",
+										isAssigned ? "border-primary/25 bg-primary/10 text-primary" : "border-border bg-muted text-muted-foreground hover:bg-accent",
+									)}
+								>
+									{station.nome}
+								</button>
+							);
+						})}
+					</div>
+					{!activeStations.some((station) => printer.estacoesPreparo.includes(station.id)) ? (
+						<span className="text-xs text-muted-foreground">Sem estação marcada, esta impressora não recebe tickets de preparo separados por estação.</span>
+					) : null}
 				</div>
 			) : null}
 

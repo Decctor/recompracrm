@@ -1,4 +1,5 @@
 import { resolveCatalogOrderItem } from "@/lib/products/resolve-catalog-order-item";
+import { tabUsesCode } from "@/schemas/service-settings";
 import type { TTabOrderRequestPayload } from "@/schemas/tab-order-requests";
 import { db } from "@/services/drizzle";
 import { tabOrderRequests } from "@/services/drizzle/schema";
@@ -7,6 +8,7 @@ import createHttpError from "http-errors";
 import { launchTabOrder, processTabOrderLaunchPostCommit, type TTabOrderItemInput } from "./launch-tab-order";
 import { openTab } from "./open-tab";
 import { getTabMenuProducts } from "./public-menu";
+import { findOpenTabByServiceCard, requireUsableServiceCard } from "./service-cards";
 import { resolveServiceSettings } from "./utils";
 
 // ============================================================================
@@ -18,7 +20,12 @@ import { resolveServiceSettings } from "./utils";
 // retry de aprovacao nao duplica pedido.
 // ============================================================================
 
-export type TApproveTabOrderRequestDestination = { type: "EXISTING"; tabId: string } | { type: "NEW"; code: string } | null;
+// NEW.servicePointId: so para solicitacoes sem ponto (QR do cartao) — a solicitacao do QR da mesa
+// sempre abre a conta na propria mesa.
+export type TApproveTabOrderRequestDestination =
+	| { type: "EXISTING"; tabId: string }
+	| { type: "NEW"; code: string; servicePointId?: string | null }
+	| null;
 
 export type TApproveTabOrderRequestInput = {
 	orgId: string;
@@ -63,21 +70,28 @@ export async function approveTabOrderRequest({ orgId, requestId, operatorId, des
 		let tabId = request.tabId ?? selectedTabId;
 		const newTabCode = destination?.type === "NEW" ? destination.code : null;
 		if (!tabId && newTabCode) {
-			if (!request.servicePointId) throw new createHttpError.BadRequest("A solicitacao nao possui um ponto de atendimento para abrir a conta.");
 			const settings = await resolveServiceSettings({ orgId });
 			if (settings.aberturaPublica === "DESABILITADA") {
 				throw new createHttpError.Forbidden("A abertura de contas a partir de solicitacoes publicas nao esta habilitada.");
 			}
-			if (settings.contas.identificacao !== "CODIGO_MANUAL") {
+			if (!tabUsesCode(settings.contas)) {
 				throw new createHttpError.BadRequest("Esta operacao nao utiliza contas identificadas por codigo.");
 			}
+			// Solicitacao do QR da mesa: a conta nasce na mesa. Do QR do cartao (sem ponto): onde o
+			// operador indicar — openTab exige o ponto quando a configuracao o torna obrigatorio.
+			const servicePointId = request.servicePointId ?? (destination?.type === "NEW" ? (destination.servicePointId ?? null) : null);
 
-			const openTabWithCode = await db.query.tabs.findFirst({
-				where: (fields, { and, eq }) => and(eq(fields.organizacaoId, orgId), eq(fields.codigo, newTabCode), eq(fields.status, "ABERTA")),
-				columns: { id: true, servicePointId: true },
-			});
+			// Comanda cadastrada: "7" e "007" sao o mesmo cartao — a busca vai pelo cartao, nao pelo texto.
+			const card =
+				settings.contas.identificacao === "COMANDA_CADASTRADA" ? await requireUsableServiceCard({ orgId, input: { codigo: newTabCode } }) : null;
+			const openTabWithCode = card
+				? await findOpenTabByServiceCard(db, { orgId, serviceCardId: card.id })
+				: ((await db.query.tabs.findFirst({
+						where: (fields, { and, eq }) => and(eq(fields.organizacaoId, orgId), eq(fields.codigo, newTabCode), eq(fields.status, "ABERTA")),
+						columns: { id: true, servicePointId: true },
+					})) ?? null);
 			if (openTabWithCode) {
-				if (openTabWithCode.servicePointId !== request.servicePointId) {
+				if (request.servicePointId && openTabWithCode.servicePointId !== request.servicePointId) {
 					throw new createHttpError.Conflict(`A comanda ${newTabCode} ja esta aberta em outro ponto de atendimento.`);
 				}
 				tabId = openTabWithCode.id;
@@ -85,7 +99,7 @@ export async function approveTabOrderRequest({ orgId, requestId, operatorId, des
 				const opened = await openTab({
 					orgId,
 					userId: operatorId,
-					input: { servicePointId: request.servicePointId, codigo: newTabCode },
+					input: { servicePointId, codigo: card?.codigo ?? newTabCode, serviceCardId: card?.id ?? null },
 				});
 				tabId = opened.tab.id;
 			}

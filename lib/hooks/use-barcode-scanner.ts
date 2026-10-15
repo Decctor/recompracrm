@@ -21,6 +21,8 @@ type UseBarcodeScannerOptions = {
 	 */
 	ownerRef?: RefObject<HTMLElement | null>;
 	onBlocked?: (reason: TBarcodeScanBlockedReason) => void;
+	/** Teto da rajada. O padrao cobre codigos de barras; o QR da comanda fixa (URL) passa de 64. */
+	maxLength?: number;
 };
 
 type TBurstField = { element: HTMLInputElement | HTMLTextAreaElement; valueBefore: string };
@@ -68,7 +70,7 @@ function isScanAllowed(owner: HTMLElement | null) {
 	return true;
 }
 
-export function useBarcodeScanner({ onScan, enabled = true, ownerRef, onBlocked }: UseBarcodeScannerOptions) {
+export function useBarcodeScanner({ onScan, enabled = true, ownerRef, onBlocked, maxLength }: UseBarcodeScannerOptions) {
 	const onScanRef = useRef(onScan);
 	const onBlockedRef = useRef(onBlocked);
 	useEffect(() => {
@@ -78,7 +80,7 @@ export function useBarcodeScanner({ onScan, enabled = true, ownerRef, onBlocked 
 
 	useEffect(() => {
 		if (!enabled) return;
-		const detector = createBarcodeScanDetector();
+		const detector = createBarcodeScanDetector({ maxLength });
 		let burstField: TBurstField | null = null;
 
 		function handleKeyDown(event: KeyboardEvent) {
@@ -113,5 +115,5 @@ export function useBarcodeScanner({ onScan, enabled = true, ownerRef, onBlocked 
 
 		window.addEventListener("keydown", handleKeyDown, true);
 		return () => window.removeEventListener("keydown", handleKeyDown, true);
-	}, [enabled, ownerRef]);
+	}, [enabled, ownerRef, maxLength]);
 }

@@ -43,10 +43,10 @@ export type TTabOrderRequestItem = z.infer<typeof TabOrderRequestItemSchema>;
 export const TabOrderRequestPayloadSchema = z.object({
 	itens: z.array(TabOrderRequestItemSchema).min(1, { message: "Pelo menos um item e obrigatorio." }).max(50, { message: "Limite de itens excedido." }),
 	observacoes: z.string({ invalid_type_error: "Tipo nao valido para observacoes." }).max(500).optional().nullable(),
-	// Informado apenas no QR do ponto quando ha varias comandas abertas. E uma
-	// pista para o operador, nao uma autorizacao para vincular a conta sozinho.
+	// Informado no QR do ponto quando ha varias comandas abertas — pista para o operador, nao
+	// autorizacao para vincular a conta sozinho. No QR da comanda fixa livre, o numero do cartao.
 	codigoTab: z.string({ invalid_type_error: "Tipo nao valido para codigo da comanda." }).trim().min(1).max(100).optional().nullable(),
-	contexto: z.enum(["PONTO", "TAB"], {
+	contexto: z.enum(["PONTO", "TAB", "COMANDA"], {
 		required_error: "Contexto da solicitacao nao informado.",
 		invalid_type_error: "Tipo nao valido para contexto da solicitacao.",
 	}),

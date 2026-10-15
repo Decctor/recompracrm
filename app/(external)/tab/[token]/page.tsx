@@ -1,12 +1,12 @@
-import { formatToMoney } from "@/lib/formatting";
 import { getTabMenuProducts, hashPublicToken, resolveServiceSettings } from "@/lib/tabs";
 import { OrgColorsProvider } from "@/components/Providers/OrgColorsProvider";
 import { db } from "@/services/drizzle";
+import { getTabPaidAmount } from "@/lib/tabs/utils";
 import { sales } from "@/services/drizzle/schema";
 import { and, eq } from "drizzle-orm";
-import { ReceiptText } from "lucide-react";
 import { PublicOrderMenu } from "../../_components/PublicOrderMenu";
 import { PublicShell } from "../../_components/PublicShell";
+import { PublicTabStatement } from "../../_components/PublicTabStatement";
 
 // ============================================================================
 // QR da TAB (efemero — papel/pulseira/cartao): identifica uma conta especifica,
@@ -76,12 +76,13 @@ export default async function TabPublicPage({ params }: { params: Promise<{ toke
 		);
 	}
 
-	const [draftSale, settings] = await Promise.all([
+	const [draftSale, settings, valorPago] = await Promise.all([
 		db.query.sales.findFirst({
 			where: and(eq(sales.tabId, tab.id), eq(sales.statusVenda, "ORCAMENTO")),
 			columns: { valorTotal: true },
 		}),
 		resolveServiceSettings({ orgId: tab.organizacaoId }),
+		getTabPaidAmount({ tabId: tab.id }),
 	]);
 
 	const isOpen = tab.status === "ABERTA";
@@ -90,7 +91,6 @@ export default async function TabPublicPage({ params }: { params: Promise<{ toke
 	const products = orderingEnabled ? await getTabMenuProducts({ orgId: tab.organizacaoId }) : [];
 
 	const etiqueta = tab.servicePoint?.rotulo ?? (tab.codigo ? `Comanda ${tab.codigo}` : "Conta");
-	const activeOrders = tab.pedidos.filter((order) => order.status !== "CANCELADO");
 
 	return (
 		<OrgColorsProvider
@@ -101,49 +101,7 @@ export default async function TabPublicPage({ params }: { params: Promise<{ toke
 			corSecundariaForeground={tab.organizacao?.corSecundariaForeground}
 		>
 			<PublicShell title={tab.organizacao?.nome ?? "Sua conta"} subtitle={etiqueta} logoUrl={tab.organizacao?.logoUrl}>
-				<section className="flex flex-col gap-2 rounded-2xl border border-border bg-card px-4 py-3">
-					<div className="flex items-center justify-between">
-						<span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-muted-foreground">
-							<ReceiptText className="h-3.5 w-3.5" />
-							Extrato da conta
-						</span>
-						<span
-							className={
-								isOpen
-									? "rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-800 dark:bg-green-950 dark:text-green-300"
-									: "rounded-full bg-muted px-2.5 py-0.5 text-xs font-semibold text-muted-foreground"
-							}
-						>
-							{isOpen ? "ABERTA" : tab.status}
-						</span>
-					</div>
-
-					{activeOrders.length === 0 ? <p className="py-2 text-center text-xs text-muted-foreground">Nenhum pedido lançado ainda.</p> : null}
-					{activeOrders.map((order) => (
-						<div key={order.id} className="flex flex-col gap-0.5 border-t border-border/50 pt-2">
-							<span className="text-xs font-bold">Pedido {order.numero}</span>
-							{order.itens
-								.filter((item) => item.quantidadeCancelada < item.quantidade)
-								.map((item) => {
-									const metadata = (item.metadados ?? {}) as { nome?: string };
-									return (
-										<div key={item.id} className="flex items-center justify-between text-xs">
-											<span>
-												{item.quantidade}x {metadata.nome ?? "Item"}
-											</span>
-											<span className="font-medium">{formatToMoney(item.valorVendaTotalLiquido)}</span>
-										</div>
-									);
-								})}
-						</div>
-					))}
-
-					<div className="flex items-center justify-between border-t border-border pt-2">
-						<span className="text-sm font-bold uppercase">Total parcial</span>
-						<span className="text-base font-bold">{formatToMoney(draftSale?.valorTotal ?? 0)}</span>
-					</div>
-					<p className="text-[0.65rem] text-muted-foreground">O pagamento acontece no fechamento da conta com o atendente.</p>
-				</section>
+				<PublicTabStatement status={tab.status} pedidos={tab.pedidos} consumoParcial={draftSale?.valorTotal ?? 0} valorPago={valorPago} />
 
 				{orderingEnabled ? (
 					<section className="flex flex-col gap-2">

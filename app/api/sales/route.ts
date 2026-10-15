@@ -38,6 +38,7 @@ import {
 	organizations,
 	purchases,
 	sales,
+	tabPayments,
 } from "@/services/drizzle/schema";
 import dayjs from "dayjs";
 import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
@@ -1029,6 +1030,16 @@ const deleteSaleRoute: PagesRouteHandler<TDeleteSaleOutput> = async (req, res) =
 		}
 		if (sale.documentosFiscais.length > 0) {
 			throw new createHttpError.BadRequest("Não é possível excluir venda com documento fiscal vinculado.");
+		}
+		// Venda de conta com recebimentos parciais (mesmo todos estornados): excluir apagaria o
+		// lançamento e, em cascata, a trilha dos parciais que o cancelamento da conta preserva.
+		const [tabPaymentRow] = await tx
+			.select({ id: tabPayments.id })
+			.from(tabPayments)
+			.where(and(eq(tabPayments.vendaId, sale.id), eq(tabPayments.organizacaoId, orgId)))
+			.limit(1);
+		if (tabPaymentRow) {
+			throw new createHttpError.BadRequest("A venda possui recebimentos parciais registrados na conta e não pode ser excluída.");
 		}
 		const saleTransactions = sale.lancamentosContabeis.flatMap((entry) => entry.transacoesFinanceiras);
 		if (sale.lancamentosContabeis.length > 0) {

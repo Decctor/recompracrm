@@ -2,6 +2,7 @@ import { getStorageDriver } from "@/lib/files/drivers";
 import type { DBTransaction } from "@/services/drizzle";
 import {
 	accountingEntries,
+	accountingEntryLines,
 	accountsCharts,
 	actionApprovalRequests,
 	aiAgentKnowledge,
@@ -24,6 +25,7 @@ import {
 	cashbackPrograms,
 	chatMessages,
 	chatAssignments,
+	chatServices,
 	chats,
 	clientLocations,
 	clientTagReferences,
@@ -54,6 +56,7 @@ import {
 	goals,
 	goalsSellers,
 	integrations,
+	integrationImportJobs,
 	interactions,
 	messageTemplates,
 	organizationMembers,
@@ -100,6 +103,12 @@ import {
 	visualKits,
 	whatsappConnectionPhones,
 	whatsappConnections,
+	serviceCards,
+	servicePoints,
+	serviceSettings,
+	tabOrderRequests,
+	tabOrders,
+	tabs,
 	type TFileEntity,
 } from "@/services/drizzle/schema";
 import { eq, inArray } from "drizzle-orm";
@@ -193,6 +202,7 @@ export async function deleteAllOrganizationData({
 	// --- Atendimento / conversas ---
 	await trx.delete(chatMessages).where(eq(chatMessages.organizacaoId, organizationId));
 	await trx.delete(chatAssignments).where(eq(chatAssignments.organizacaoId, organizationId));
+	await trx.delete(chatServices).where(eq(chatServices.organizacaoId, organizationId));
 
 	// --- Inbox de eventos externos (webhooks) ---
 	// Payloads contêm dados pessoais (telefone, nome, conteúdo de mensagem). Só as linhas
@@ -260,11 +270,19 @@ export async function deleteAllOrganizationData({
 
 	// --- Financeiro (transações → lançamentos → contas → plano de contas) ---
 	await trx.delete(financialTransactions).where(eq(financialTransactions.organizacaoId, organizationId));
+	await trx.delete(accountingEntryLines).where(eq(accountingEntryLines.organizacaoId, organizationId));
 	await trx.delete(accountingEntries).where(eq(accountingEntries.organizacaoId, organizationId));
 
 	// --- Vendas (itens antes; vendas referenciam clientes/vendedores/campanhas/sessões) ---
 	await trx.delete(saleItems).where(eq(saleItems.organizacaoId, organizationId));
 	await trx.delete(sales).where(eq(sales.organizacaoId, organizationId));
+	// Mesas e comandas: depois das vendas (sales.tab_id) e itens (sale_items.tab_order_id).
+	await trx.delete(tabOrderRequests).where(eq(tabOrderRequests.organizacaoId, organizationId));
+	await trx.delete(tabOrders).where(eq(tabOrders.organizacaoId, organizationId));
+	await trx.delete(tabs).where(eq(tabs.organizacaoId, organizationId));
+	await trx.delete(serviceCards).where(eq(serviceCards.organizacaoId, organizationId));
+	await trx.delete(servicePoints).where(eq(servicePoints.organizacaoId, organizationId));
+	await trx.delete(serviceSettings).where(eq(serviceSettings.organizacaoId, organizationId));
 	await trx.delete(interactions).where(eq(interactions.organizacaoId, organizationId));
 	await trx.delete(salesSessionReconciliations).where(eq(salesSessionReconciliations.organizacaoId, organizationId));
 	await trx.delete(salesSessions).where(eq(salesSessions.organizacaoId, organizationId));
@@ -295,6 +313,8 @@ export async function deleteAllOrganizationData({
 		);
 	await trx.delete(whatsappConnections).where(eq(whatsappConnections.organizacaoId, organizationId));
 	await trx.delete(audiences).where(eq(audiences.organizacaoId, organizationId));
+	// A FK integracao_id usa RESTRICT: os jobs precisam sair antes das integrações.
+	await trx.delete(integrationImportJobs).where(eq(integrationImportJobs.organizacaoId, organizationId));
 	await trx.delete(integrations).where(eq(integrations.organizacaoId, organizationId));
 	await trx.delete(actionApprovalRequests).where(eq(actionApprovalRequests.organizacaoId, organizationId));
 

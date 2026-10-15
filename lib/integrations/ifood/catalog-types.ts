@@ -1,4 +1,5 @@
 import z from "zod";
+import { effectiveOptionAvailability, effectiveOptionPrice } from "./option-state";
 
 /**
  * Schemas das respostas da Catalog API v2.0 do iFood (tolerantes, `.passthrough()`) e os DTOs em
@@ -348,6 +349,7 @@ const IfoodOptionResponseSchema = z
 		status: NullableString,
 		index: NullableNumber,
 		price: IfoodItemPriceResponseSchema.optional().nullable(),
+		contextModifiers: z.array(IfoodContextModifierResponseSchema).optional().nullable(),
 	})
 	.passthrough();
 
@@ -399,9 +401,9 @@ export function mapIfoodOption(option: z.infer<typeof IfoodOptionResponseSchema>
 		produtoId: option.productId,
 		nome: option.name,
 		codigoExterno: option.externalCode,
-		status: option.status,
+		status: effectiveOptionAvailability(option) === null ? null : effectiveOptionAvailability(option) ? "AVAILABLE" : "UNAVAILABLE",
 		indice: option.index,
-		preco: option.price?.value ?? null,
+		preco: effectiveOptionPrice(option),
 	};
 }
 
@@ -435,6 +437,7 @@ const IfoodFlatOptionResponseSchema = z
 		status: NullableString,
 		index: NullableNumber,
 		price: IfoodItemPriceResponseSchema.optional().nullable(),
+		contextModifiers: z.array(IfoodContextModifierResponseSchema).optional().nullable(),
 	})
 	.passthrough();
 
@@ -543,8 +546,8 @@ export function mapIfoodItemFlat(payload: z.infer<typeof IfoodItemFlatResponseSc
 				nome: resolveOptionName(opcao),
 				descricao: opcao.description,
 				codigoExterno: opcao.externalCode,
-				status: opcao.status,
-				preco: opcao.price?.value ?? null,
+				status: effectiveOptionAvailability(opcao) === null ? null : effectiveOptionAvailability(opcao) ? "AVAILABLE" : "UNAVAILABLE",
+				preco: effectiveOptionPrice(opcao),
 			})),
 		};
 	});

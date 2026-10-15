@@ -9,9 +9,10 @@ import {
 	SERVICE_SETTINGS_PRESETS,
 	type TServiceSettingsConfiguration,
 	type TServiceSettingsPreset,
+	tabUsesCode,
 } from "@/schemas/service-settings";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { LayoutGrid, NotebookTabs, QrCode, Store, UtensilsCrossed } from "lucide-react";
+import { IdCard, LayoutGrid, NotebookTabs, QrCode, Store, UtensilsCrossed } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -39,11 +40,17 @@ const PRESET_OPTIONS: { preset: TServiceSettingsPreset; title: string; descripti
 	},
 ];
 
+// Comanda livre ou cadastrada e a mesma FORMA de operar: a escolha do cadastro e uma politica a parte.
+function presetComparableContas(contas: TServiceSettingsConfiguration["contas"]) {
+	return { ...contas, identificacao: tabUsesCode(contas) ? "CODIGO_MANUAL" : contas.identificacao };
+}
+
 function matchesPreset(configuration: TServiceSettingsConfiguration, preset: TServiceSettingsPreset) {
 	const target = SERVICE_SETTINGS_PRESETS[preset];
 	// Compara apenas a forma de operação; as políticas de QR são independentes do preset.
 	return (
-		JSON.stringify({ pontos: target.pontos, contas: target.contas }) === JSON.stringify({ pontos: configuration.pontos, contas: configuration.contas })
+		JSON.stringify({ pontos: target.pontos, contas: target.contas }) ===
+		JSON.stringify({ pontos: configuration.pontos, contas: presetComparableContas(configuration.contas) })
 	);
 }
 
@@ -97,12 +104,16 @@ export function ServiceSettings({ closeModal }: ServiceSettingsProps) {
 							key={option.preset}
 							type="button"
 							onClick={() =>
-								setConfiguration((prev) => ({
-									...prev,
-									// Preset define a FORMA de operar; as políticas de QR são preservadas.
-									pontos: SERVICE_SETTINGS_PRESETS[option.preset].pontos,
-									contas: SERVICE_SETTINGS_PRESETS[option.preset].contas,
-								}))
+								setConfiguration((prev) => {
+									const contas = SERVICE_SETTINGS_PRESETS[option.preset].contas;
+									// Preset define a FORMA de operar; as políticas de QR e o uso de comandas cadastradas são preservados.
+									const keepRegisteredCards = prev.contas.identificacao === "COMANDA_CADASTRADA" && tabUsesCode(contas);
+									return {
+										...prev,
+										pontos: SERVICE_SETTINGS_PRESETS[option.preset].pontos,
+										contas: keepRegisteredCards ? { ...contas, identificacao: "COMANDA_CADASTRADA" } : contas,
+									};
+								})
 							}
 							className={cn(
 								"flex items-start gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors",
@@ -117,6 +128,28 @@ export function ServiceSettings({ closeModal }: ServiceSettingsProps) {
 						</button>
 					))}
 				</div>
+
+				{contasHabilitadas && tabUsesCode(configuration.contas) ? (
+					<div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-muted/20 p-3">
+						<div className="flex flex-col gap-0.5">
+							<span className="flex items-center gap-1.5 text-sm font-bold tracking-tight">
+								<IdCard className="h-3.5 w-3.5" />
+								USAR COMANDAS CADASTRADAS
+							</span>
+							<span className="text-xs text-muted-foreground">
+								{configuration.contas.identificacao === "COMANDA_CADASTRADA"
+									? "Só abre conta com o número de uma comanda cadastrada e ativa — leia o QR do cartão ou digite o número."
+									: "Qualquer código digitado vira uma comanda. Ative para aceitar só os cartões cadastrados em Comandas."}
+							</span>
+						</div>
+						<Switch
+							checked={configuration.contas.identificacao === "COMANDA_CADASTRADA"}
+							onCheckedChange={(checked) =>
+								setConfiguration((prev) => ({ ...prev, contas: { ...prev.contas, identificacao: checked ? "COMANDA_CADASTRADA" : "CODIGO_MANUAL" } }))
+							}
+						/>
+					</div>
+				) : null}
 
 				{contasHabilitadas ? (
 					<div className="flex flex-col gap-2 rounded-xl border border-border bg-muted/20 p-3">
@@ -156,7 +189,9 @@ export function ServiceSettings({ closeModal }: ServiceSettingsProps) {
 										onCheckedChange={(checked) => setConfiguration((prev) => ({ ...prev, pedidosCliente: checked ? "DIRETO" : "SOLICITACAO" }))}
 									/>
 								</div>
-								<p className="text-[0.7rem] text-muted-foreground">Imprima o QR de cada ponto (gerado ao criar ou regenerar o ponto) e cole na mesa.</p>
+								<p className="text-[0.7rem] text-muted-foreground">
+									Imprima o QR de cada ponto (gerado ao criar ou regenerar o ponto) e cole na mesa. Comandas cadastradas trazem o QR no próprio cartão.
+								</p>
 							</>
 						) : null}
 					</div>

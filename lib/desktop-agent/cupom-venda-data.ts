@@ -6,6 +6,7 @@ import { classifySalePaymentTransactions } from "@/lib/sales/utils";
 import { readShopDeliveryFee } from "@/lib/shop/config";
 import { db } from "@/services/drizzle";
 import { cashbackPrograms, couponRedemptions, organizations, sales } from "@/services/drizzle/schema";
+import { sumActiveTabPayments } from "@/lib/tabs/partial-payments";
 import { and, count, eq } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { fetchOrganizationLogoDataUrl } from "./organization-logo";
@@ -48,7 +49,19 @@ function readItemSnapshot(metadados: unknown) {
 	return metadados as { nome?: string; origem?: string; recompensaId?: string };
 }
 
-export async function buildCupomVendaDados({ organizacaoId, vendaId }: { organizacaoId: string; vendaId: string }): Promise<TCupomVendaDados> {
+// Ajustes de cabeçalho ainda não gravados — o cupom da conta impresso no fechamento, antes de
+// receber, mostra o desconto/acréscimo que está na tela. Só valem para venda rascunho.
+export type TSaleReceiptDraftAdjustments = { descontoGeral: number; acrescimoGeral: number };
+
+export async function buildCupomVendaDados({
+	organizacaoId,
+	vendaId,
+	draftAdjustments,
+}: {
+	organizacaoId: string;
+	vendaId: string;
+	draftAdjustments?: TSaleReceiptDraftAdjustments | null;
+}): Promise<TCupomVendaDados> {
 	const organization = await db.query.organizations.findFirst({
 		where: eq(organizations.id, organizacaoId),
 		columns: { nome: true, cnpj: true, telefone: true, logoUrl: true },
@@ -60,6 +73,7 @@ export async function buildCupomVendaDados({ organizacaoId, vendaId }: { organiz
 		columns: {
 			id: true,
 			dataVenda: true,
+			statusVenda: true,
 			valorTotal: true,
 			descontosTotal: true,
 			acrescimosTotal: true,
@@ -70,9 +84,12 @@ export async function buildCupomVendaDados({ organizacaoId, vendaId }: { organiz
 			rascunhoMetadados: true,
 			entregaModalidade: true,
 			comandaNumero: true,
+			tabId: true,
 		},
 		with: {
 			cliente: { columns: { id: true, nome: true, telefone: true } },
+			// Conta aberta: parciais já recebidos abatem do que o cupom de conferência pede.
+			pagamentosParciaisConta: { columns: { valor: true, status: true } },
 			entregaLocalizacao: {
 				columns: {
 					localizacaoCep: true,
@@ -87,6 +104,7 @@ export async function buildCupomVendaDados({ organizacaoId, vendaId }: { organiz
 			itens: {
 				columns: {
 					quantidade: true,
+					quantidadeCancelada: true,
 					valorVendaUnitario: true,
 					valorVendaTotalBruto: true,
 					valorTotalDesconto: true,
@@ -128,6 +146,17 @@ export async function buildCupomVendaDados({ organizacaoId, vendaId }: { organiz
 		},
 	});
 	if (!sale) throw new createHttpError.NotFound("Venda não encontrada.");
+	if (draftAdjustments && sale.statusVenda !== "ORCAMENTO") {
+		throw new createHttpError.BadRequest("Ajustes de cupom só valem para venda em aberto.");
+	}
+
+	// Item inteiramente cancelado (pedido de conta cancelado) não é consumo: fica fora do cupom.
+	const activeItems = sale.itens.filter((item) => (item.quantidadeCancelada ?? 0) < item.quantidade);
+
+	// Rascunho: sale.valorTotal é o líquido dos itens; os ajustes entram como no fechamento (closeTab).
+	const saleTotal = draftAdjustments
+		? Math.round((Math.max(0, sale.valorTotal - draftAdjustments.descontoGeral) + draftAdjustments.acrescimoGeral) * 100) / 100
+		: sale.valorTotal;
 
 	const clienteId = sale.clienteId;
 	const [logoDataUrl, cupomResgatado, program, totalCompras] = await Promise.all([
@@ -153,8 +182,8 @@ export async function buildCupomVendaDados({ organizacaoId, vendaId }: { organiz
 	]);
 
 	// ---- Decomposição dos descontos (mesma regra de lib/sales/map-sale-to-sale-state.ts) ----
-	const descontosTotal = sale.descontosTotal ?? 0;
-	const acrescimosTotal = sale.acrescimosTotal ?? 0;
+	const descontosTotal = draftAdjustments && draftAdjustments.descontoGeral > 0 ? draftAdjustments.descontoGeral : (sale.descontosTotal ?? 0);
+	const acrescimosTotal = draftAdjustments ? draftAdjustments.acrescimoGeral : (sale.acrescimosTotal ?? 0);
 	// A loja digital grava a taxa no snapshot do checkout; o restante segue como acréscimo genérico
 	// (no PDV a taxa entra via acréscimo geral e não tem como ser distinguida).
 	const taxaEntrega = Math.min(readShopDeliveryFee(sale.rascunhoMetadados), acrescimosTotal);
@@ -172,7 +201,7 @@ export async function buildCupomVendaDados({ organizacaoId, vendaId }: { organiz
 	// Uma linha impressa por recompensa; o "Desconto" geral subtrai TODAS — subtrair só a primeira
 	// imprimiria o valor das demais como desconto do operador.
 	const rewardItems = temRecompensaResgatada
-		? sale.itens.filter((item) => readItemSnapshot(item.metadados)?.origem === POS_REWARD_SALE_ITEM_ORIGIN)
+		? activeItems.filter((item) => readItemSnapshot(item.metadados)?.origem === POS_REWARD_SALE_ITEM_ORIGIN)
 		: [];
 	const descontoRecompensas = rewardItems.reduce((sum, item) => sum + (item.valorTotalDesconto ?? 0), 0);
 	const descontoGeral = Math.max(0, descontosTotal - cupomDesconto - cashbackResgate - descontoRecompensas);
@@ -181,8 +210,8 @@ export async function buildCupomVendaDados({ organizacaoId, vendaId }: { organiz
 	// A soma dos itens só é usada quando as duas concordam: vendas de canal externo chegam com totais
 	// da origem que nem sempre batem com a soma das linhas, e um cupom que não fecha a conta na frente
 	// do cliente é pior do que um cupom sem detalhe.
-	const subtotalItens = sale.itens.reduce((sum, item) => sum + (item.valorVendaTotalBruto ?? 0), 0);
-	const subtotalReconciliado = sale.valorTotal + descontosTotal - acrescimosTotal;
+	const subtotalItens = activeItems.reduce((sum, item) => sum + (item.valorVendaTotalBruto ?? 0), 0);
+	const subtotalReconciliado = saleTotal + descontosTotal - acrescimosTotal;
 	const subtotal = Math.abs(subtotalItens - subtotalReconciliado) < 0.01 ? subtotalItens : subtotalReconciliado;
 
 	// ---- Pagamentos: agrupados por método + situação, como o cliente lê ----
@@ -190,10 +219,12 @@ export async function buildCupomVendaDados({ organizacaoId, vendaId }: { organiz
 		entry.transacoesFinanceiras.map((transaction) => ({ ...transaction, lancamentoContabilId: entry.id })),
 	);
 	const pagamentosClassificados = classifySalePaymentTransactions(transacoesVenda);
+	// Estornado/cancelado não é pagamento: um parcial devolvido antes do fechamento sairia como PAGO.
+	const pagamentosVivos = pagamentosClassificados.todas.filter((pagamento) => !["ESTORNADO", "CANCELADO"].includes(pagamento.provedorStatus ?? ""));
 	// Pagamentos saem pelo valor entregue (R$ 50 em dinheiro) e o troco vem da SAÍDA de troco da venda.
 	const trocoTotal = getSaleChangeTotal(transacoesVenda);
 	const pagamentosAgrupados = new Map<string, { metodo: string; valor: number; parcelas: number | null; pago: boolean }>();
-	for (const pagamento of pagamentosClassificados.todas) {
+	for (const pagamento of pagamentosVivos) {
 		const pago = pagamento.dataEfetivacao != null;
 		const chave = `${pagamento.metodo}:${pago}`;
 		const atual = pagamentosAgrupados.get(chave);
@@ -218,6 +249,10 @@ export async function buildCupomVendaDados({ organizacaoId, vendaId }: { organiz
 				}))
 			: [...pagamentosAgrupados.values()].map((pagamento) => ({ ...pagamento, situacao: pagamento.pago ? ("PAGO" as const) : ("EM_ABERTO" as const) }));
 
+	// Conta de atendimento ainda aberta: "Já pago" e "Restante" só fazem sentido antes do fechamento
+	// (depois, os parciais são pagamentos da venda como quaisquer outros).
+	const valorJaPagoConta = sale.statusVenda === "ORCAMENTO" && sale.tabId ? sumActiveTabPayments(sale.pagamentosParciaisConta) : 0;
+
 	// ---- Cashback: realizado quando o ledger já tem o ACÚMULO, projetado quando ainda não ----
 	const acumulo = sale.transacoesCashback.find((transaction) => transaction.tipo === "ACÚMULO") ?? null;
 	// Projeção pela MESMA função que o acúmulo real usa (lib/cashback/accumulation.ts) — inclusive a
@@ -228,7 +263,7 @@ export async function buildCupomVendaDados({ organizacaoId, vendaId }: { organiz
 					accumulationType: program.acumuloTipo,
 					accumulationValue: program.acumuloValor,
 					minimumSaleValue: program.acumuloRegraValorMinimo,
-					saleValue: sale.valorTotal,
+					saleValue: saleTotal,
 				})
 			: 0;
 	const valorGanho = acumulo ? acumulo.valor : ganhoProjetado;
@@ -272,7 +307,7 @@ export async function buildCupomVendaDados({ organizacaoId, vendaId }: { organiz
 							expiraEm: sale.integracaoMetadados.contatoTemporario.expiraEm ? new Date(sale.integracaoMetadados.contatoTemporario.expiraEm) : null,
 						}
 					: null,
-			itens: sale.itens.map((item) => {
+			itens: activeItems.map((item) => {
 				const snapshot = readItemSnapshot(item.metadados);
 				return {
 					descricao: [item.produto?.nome, item.produtoVariante?.nome].filter(Boolean).join(" - ") || snapshot?.nome || "Item",
@@ -292,9 +327,11 @@ export async function buildCupomVendaDados({ organizacaoId, vendaId }: { organiz
 			descontoGeral,
 			acrescimos: acrescimosGenericos,
 			taxaEntrega,
-			valorFinal: sale.valorTotal,
+			valorFinal: saleTotal,
 			pagamentos: pagamentosCupom,
 			troco: pagamentosCanal.length === 0 && trocoTotal > 0 ? trocoTotal : null,
+			valorJaPago: valorJaPagoConta > 0 ? valorJaPagoConta : null,
+			valorRestante: valorJaPagoConta > 0 ? Math.max(0, Math.round((saleTotal - valorJaPagoConta) * 100) / 100) : null,
 		},
 		cliente: sale.cliente ? { nome: sale.cliente.nome, telefone: sale.cliente.telefone, totalCompras } : null,
 		cupom: cupomResgatado

@@ -85,14 +85,24 @@ async function submitOrderRequest(input: TCreatePublicTabOrderRequestInput) {
 
 type PublicOrderMenuProps = {
 	token: string;
-	context: "PONTO" | "TAB";
+	context: TCreatePublicTabOrderRequestInput["context"];
 	products: TPublicMenuProduct[];
 	deviceKey?: string | null;
 	linkedTabCode?: string | null;
+	/** QR do ponto: pede o numero da comanda so quando a operacao identifica contas por codigo. */
+	asksTabCode?: boolean;
 	onSubmitted?: () => void;
 };
 
-export function PublicOrderMenu({ token, context, products, deviceKey: providedDeviceKey, linkedTabCode, onSubmitted }: PublicOrderMenuProps) {
+export function PublicOrderMenu({
+	token,
+	context,
+	products,
+	deviceKey: providedDeviceKey,
+	linkedTabCode,
+	asksTabCode = false,
+	onSubmitted,
+}: PublicOrderMenuProps) {
 	const localDeviceKey = usePublicOrderingDeviceKey();
 	const deviceKey = providedDeviceKey ?? localDeviceKey;
 	const [stage, setStage] = useState<"catalog" | "review">("catalog");
@@ -165,7 +175,7 @@ export function PublicOrderMenu({ token, context, products, deviceKey: providedD
 			idempotencyKey,
 			deviceKey,
 			notes: notes || null,
-			tabCode: context === "PONTO" && !linkedTabCode ? tabCode.trim() || null : null,
+			tabCode: context === "PONTO" && !linkedTabCode && asksTabCode ? tabCode.trim() || null : null,
 			items: cart.map((item) => ({
 				produtoId: item.produtoId,
 				produtoVarianteId: item.produtoVarianteId,
@@ -227,7 +237,7 @@ export function PublicOrderMenu({ token, context, products, deviceKey: providedD
 						setNotes={setNotes}
 						tabCode={tabCode}
 						setTabCode={setTabCode}
-						showTabCode={context === "PONTO" && !linkedTabCode}
+						showTabCode={context === "PONTO" && !linkedTabCode && asksTabCode}
 						deviceKeyReady={Boolean(deviceKey)}
 						isPending={isPending}
 						onBack={() => goTo("catalog", "back")}
@@ -511,10 +521,10 @@ function ProductBuilderDrawer({
 
 	return (
 		<Drawer open onOpenChange={(open) => !open && onClose()}>
-			<DrawerContent className="max-h-[92dvh]">
-				<DrawerHeader className="text-left">
+			<DrawerContent className="data-[vaul-drawer-direction=bottom]:max-h-[88dvh]">
+				<DrawerHeader className="group-data-[vaul-drawer-direction=bottom]/drawer-content:text-left">
 					<DrawerTitle className="text-lg font-black tracking-tight">{product.nome}</DrawerTitle>
-					<DrawerDescription>Monte do seu jeito</DrawerDescription>
+					<DrawerDescription className="whitespace-pre-line text-pretty">{product.descricao || "Monte do seu jeito"}</DrawerDescription>
 				</DrawerHeader>
 
 				<div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-1 pb-2">

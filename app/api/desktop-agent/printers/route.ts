@@ -2,8 +2,8 @@ import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { PrintJobFinalidadeEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
-import { agentPrinters } from "@/services/drizzle/schema";
-import { and, eq } from "drizzle-orm";
+import { agentPrinters, preparationStations } from "@/services/drizzle/schema";
+import { and, eq, inArray } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
@@ -20,6 +20,7 @@ async function getAgentPrinters({ organizacaoId }: { organizacaoId: string }) {
 			apelido: true,
 			driver: true,
 			finalidades: true,
+			estacoesPreparo: true,
 			ativa: true,
 			disponivel: true,
 			metadados: true,
@@ -54,15 +55,16 @@ const UpdateAgentPrinterInputSchema = z.object({
 		required_error: "ID da impressora não informado.",
 		invalid_type_error: "Tipo não válido para o ID da impressora.",
 	}),
-	apelido: z
-		.string({ invalid_type_error: "Tipo não válido para o apelido da impressora." })
-		.optional()
-		.nullable(),
-	finalidades: z
-		.array(PrintJobFinalidadeEnum, { invalid_type_error: "Tipo não válido para a lista de finalidades." })
-		.optional()
-		.nullable(),
+	apelido: z.string({ invalid_type_error: "Tipo não válido para o apelido da impressora." }).optional().nullable(),
+	finalidades: z.array(PrintJobFinalidadeEnum, { invalid_type_error: "Tipo não válido para a lista de finalidades." }).optional().nullable(),
 	ativa: z.boolean({ invalid_type_error: "Tipo não válido para o status da impressora." }).optional().nullable(),
+	// Estações de preparo atendidas no TICKET_PREPARO (ids de preparation_stations da organização).
+	estacoesPreparo: z
+		.array(z.string({ invalid_type_error: "Tipo não válido para a estação de preparo." }), {
+			invalid_type_error: "Tipo não válido para a lista de estações de preparo.",
+		})
+		.optional()
+		.nullable(),
 });
 export type TUpdateAgentPrinterInput = z.infer<typeof UpdateAgentPrinterInputSchema>;
 
@@ -79,11 +81,22 @@ async function updateAgentPrinter({ input, organizacaoId }: TUpdateAgentPrinterP
 	// TESTE nunca é finalidade de roteamento (sempre carrega impressoraId fixado) — não persiste.
 	const finalidades = input.finalidades?.filter((finalidade) => finalidade !== "TESTE");
 
+	// estacoes_preparo é jsonb sem FK: só ids de estações desta organização entram.
+	const estacoesPreparo = input.estacoesPreparo ? [...new Set(input.estacoesPreparo)] : null;
+	if (estacoesPreparo && estacoesPreparo.length > 0) {
+		const stations = await db
+			.select({ id: preparationStations.id })
+			.from(preparationStations)
+			.where(and(eq(preparationStations.organizacaoId, organizacaoId), inArray(preparationStations.id, estacoesPreparo)));
+		if (stations.length !== estacoesPreparo.length) throw new createHttpError.BadRequest("Estação de preparo não encontrada na organização.");
+	}
+
 	await db
 		.update(agentPrinters)
 		.set({
 			...(input.apelido !== undefined ? { apelido: input.apelido?.trim() || null } : {}),
 			...(finalidades ? { finalidades } : {}),
+			...(estacoesPreparo ? { estacoesPreparo } : {}),
 			...(input.ativa != null ? { ativa: input.ativa } : {}),
 		})
 		.where(eq(agentPrinters.id, printer.id));

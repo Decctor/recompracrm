@@ -17,9 +17,11 @@ async function fetchDeviceSession({ token, deviceKey }: { token: string; deviceK
 type PublicServicePointExperienceProps = {
 	token: string;
 	products: TPublicMenuProduct[];
+	/** A operacao identifica contas por codigo de comanda — em "Somente mesas" a mesa ja e a conta. */
+	asksTabCode: boolean;
 };
 
-export function PublicServicePointExperience({ token, products }: PublicServicePointExperienceProps) {
+export function PublicServicePointExperience({ token, products, asksTabCode }: PublicServicePointExperienceProps) {
 	const deviceKey = usePublicOrderingDeviceKey();
 	const sessionQuery = useQuery({
 		queryKey: ["public-tab-device-session", token, deviceKey],
@@ -39,6 +41,7 @@ export function PublicServicePointExperience({ token, products }: PublicServiceP
 				products={products}
 				deviceKey={deviceKey}
 				linkedTabCode={session?.tab?.codigo}
+				asksTabCode={asksTabCode}
 				onSubmitted={() => void sessionQuery.refetch()}
 			/>
 		</>
@@ -71,6 +74,12 @@ function DeviceAccountSection({ session }: { session: TGetPublicTabOrderSessionO
 						</div>
 						<p className="shrink-0 text-base font-black tabular-nums">{formatToMoney(session.tab.consumoParcial)}</p>
 					</div>
+					{session.tab.valorPago > 0 ? (
+						<div className="flex items-center justify-between gap-3 text-xs">
+							<span className="font-semibold text-muted-foreground">Já pago {formatToMoney(session.tab.valorPago)}</span>
+							<span className="font-bold tabular-nums">Restante {formatToMoney(Math.max(0, session.tab.consumoParcial - session.tab.valorPago))}</span>
+						</div>
+					) : null}
 
 					<div className="flex flex-col gap-2 border-t border-border/60 pt-2">
 						{session.tab.pedidos

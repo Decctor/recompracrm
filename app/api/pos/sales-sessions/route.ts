@@ -3,9 +3,18 @@ import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { computeSessionExpectedByMethod, listSessionPaymentTerminalPendencies } from "@/lib/sales-sessions";
 import { SALE_CHANGE_TRANSACTION_ORIGIN } from "@/lib/sales/sale-change";
+import { TAB_PARTIAL_PAYMENT_TRANSACTION_ORIGIN } from "@/lib/tabs/partial-payments";
 import { db } from "@/services/drizzle";
-import { accountingEntries, financialTransactions, fiscalOutboundDocuments, sales, salesSessions, users } from "@/services/drizzle/schema";
-import { and, asc, count, desc, eq, ne, or, sql } from "drizzle-orm";
+import {
+	accountingEntries,
+	financialTransactions,
+	fiscalOutboundDocuments,
+	sales,
+	salesSessions,
+	tabPayments,
+	users,
+} from "@/services/drizzle/schema";
+import { and, asc, count, desc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
@@ -69,6 +78,8 @@ async function getSalesSessions({ input, session }: { input: TGetSalesSessionsIn
 			// Os movimentos que a composição resume em uma linha só: sangrias, suprimentos e estornos.
 			// Ficam de fora o troco (já é linha própria) e o recebimento de venda (já é a lista de vendas
 			// do turno) — sem isso, um turno movimentado despejaria centenas de linhas dentro do modal.
+			// Exceção: o recebimento parcial de uma conta que NÃO foi fechada neste caixa. A venda vai
+			// aparecer na lista do caixa que fechar; sem esta linha o dinheiro ficaria invisível aqui.
 			db
 				.select({
 					id: financialTransactions.id,
@@ -86,13 +97,21 @@ async function getSalesSessions({ input, session }: { input: TGetSalesSessionsIn
 				})
 				.from(financialTransactions)
 				.innerJoin(accountingEntries, eq(financialTransactions.lancamentoContabilId, accountingEntries.id))
+				.leftJoin(sales, eq(accountingEntries.vendaId, sales.id))
 				.leftJoin(users, eq(financialTransactions.autorId, users.id))
 				.where(
 					and(
 						eq(financialTransactions.organizacaoId, orgId),
 						eq(financialTransactions.sessaoVendaId, found.id),
 						sql`coalesce(${financialTransactions.modificadoresMetadata} ->> 'origem', '') <> ${SALE_CHANGE_TRANSACTION_ORIGIN}`,
-						or(ne(accountingEntries.origemTipo, "VENDA"), ne(financialTransactions.tipo, "ENTRADA")),
+						or(
+							ne(accountingEntries.origemTipo, "VENDA"),
+							ne(financialTransactions.tipo, "ENTRADA"),
+							and(
+								sql`coalesce(${financialTransactions.modificadoresMetadata} ->> 'origem', '') = ${TAB_PARTIAL_PAYMENT_TRANSACTION_ORIGIN}`,
+								or(isNull(sales.sessaoVendaId), ne(sales.sessaoVendaId, found.id)),
+							),
+						),
 					),
 				)
 				.orderBy(asc(financialTransactions.dataPrevisao)),
@@ -102,9 +121,34 @@ async function getSalesSessions({ input, session }: { input: TGetSalesSessionsIn
 		]);
 		const movimentos = movimentosRows.map(({ dataEfetivacao, dataPrevisao, ...movimento }) => ({ ...movimento, data: dataEfetivacao ?? dataPrevisao }));
 
+		// Lado oposto do parcial: a venda de uma conta fechada neste caixa pode ter sido recebida em
+		// parte noutro caixa (ou sem caixa). A lista de vendas mostra o total da venda, mas a gaveta
+		// daqui só recebeu o restante — o resumo precisa do valor líquido para bater com o esperado.
+		const saleIds = found.vendas.map((venda) => venda.id);
+		const partialsElsewhere =
+			saleIds.length > 0
+				? await db
+						.select({ vendaId: tabPayments.vendaId, valor: sql<number>`coalesce(sum(${tabPayments.valor}), 0)` })
+						.from(tabPayments)
+						.where(
+							and(
+								eq(tabPayments.organizacaoId, orgId),
+								inArray(tabPayments.vendaId, saleIds),
+								eq(tabPayments.status, "ATIVO"),
+								or(isNull(tabPayments.sessaoVendaId), ne(tabPayments.sessaoVendaId, found.id)),
+							),
+						)
+						.groupBy(tabPayments.vendaId)
+				: [];
+		const partialsBySale = new Map(partialsElsewhere.map((row) => [row.vendaId, Number(row.valor)]));
+		const vendas = found.vendas.map((venda) => {
+			const valorRecebidoOutroCaixa = Math.round((partialsBySale.get(venda.id) ?? 0) * 100) / 100;
+			return { ...venda, valorRecebidoOutroCaixa, valorNoCaixa: Math.round((venda.valorTotal - valorRecebidoOutroCaixa) * 100) / 100 };
+		});
+
 		return {
 			data: {
-				byId: { ...found, resumoEsperado, pendenciasFiscais, pendenciasMaquininha, movimentos },
+				byId: { ...found, vendas, resumoEsperado, pendenciasFiscais, pendenciasMaquininha, movimentos },
 				default: undefined,
 			},
 			message: "Sessao de venda encontrada com sucesso.",

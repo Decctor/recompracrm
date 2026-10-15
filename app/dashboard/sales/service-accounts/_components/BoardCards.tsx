@@ -1,236 +1,224 @@
 "use client";
+import type { TGetServiceCardsOutput } from "@/app/api/service-cards/route";
 import type { TGetServicePointsOutput } from "@/app/api/service-points/route";
-import type { TTabListItem } from "@/app/api/tabs/route";
 import { Button } from "@/components/ui/button";
 import { formatToMoney } from "@/lib/formatting";
 import { cn } from "@/lib/utils";
-import { ChefHat, CircleUser, Clock, MapPin, Pencil, Plus, UserRound, Utensils } from "lucide-react";
-import { URGENCY_META, describeRound, formatTabAge, getOpenRounds, tabLabel, worstUrgency } from "./board-meta";
+import { Ban, Clock, Pencil, Plus } from "lucide-react";
+import { type TBoardTab, URGENCY_META, describeRoundShort, formatTabAge, urgencyRank } from "./board-meta";
 
 // ============================================================================
 // Cards do board. Densidade e proposital: ponto livre e um slot quieto de pouca
-// tinta, conta aberta e um card cheio. A diferenca entre os dois estados e o que
-// da leitura de salao a distancia.
+// tinta, conta aberta e um card cheio. A conta aberta no painel lateral ganha
+// anel primario — o board continua visivel e mostra onde o operador esta.
 // ============================================================================
 
-type TServicePoint = NonNullable<TGetServicePointsOutput["data"]["default"]>[number];
+export type TServicePoint = NonNullable<TGetServicePointsOutput["data"]["default"]>[number];
+export type TServiceCard = NonNullable<TGetServiceCardsOutput["data"]["default"]>[number];
+
+function statusLine(tab: TBoardTab) {
+	if (!tab.critical) {
+		return {
+			label: tab.pedidos.length ? "Nada em aberto" : "Sem pedidos ainda",
+			surface: "bg-secondary/50 text-muted-foreground",
+			text: "text-muted-foreground",
+			dot: "bg-muted-foreground/35",
+		};
+	}
+	const meta = URGENCY_META[tab.critical.urgencia];
+	return { label: describeRoundShort(tab.critical), surface: meta.surface, text: meta.text, dot: meta.dot };
+}
 
 // ----------------------------------------------------------------- Por conta
 
-export function TabCard({ tab, now, onOpen }: { tab: TTabListItem; now: number; onOpen: () => void }) {
-	const rounds = getOpenRounds(tab, now);
-	const urgencia = worstUrgency(rounds);
-	const critical = rounds[0];
+export function TabCard({ tab, now, selected, onSelect }: { tab: TBoardTab; now: number; selected: boolean; onSelect: () => void }) {
+	const status = statusLine(tab);
+	const people = [tab.responsavelVendedor?.nome, tab.cliente?.nome].filter(Boolean).join(" · ");
 
 	return (
 		<button
 			type="button"
-			onClick={onOpen}
+			onClick={onSelect}
+			aria-pressed={selected}
 			className={cn(
-				// self-start: o card assume a altura do proprio conteudo em vez de esticar
-				// ate o mais alto da linha, o que abria vazios embaixo dos mais curtos.
-				"flex min-h-44 w-full flex-col gap-3 self-start rounded-2xl border bg-card px-4 py-3.5 text-left shadow-2xs transition-all hover:shadow-sm",
-				urgencia === "atrasado" ? "border-destructive/40" : "border-border",
+				"flex w-full flex-col gap-2.5 rounded-xl border bg-card px-4 py-3.5 text-left transition-shadow hover:shadow-md focus-visible:outline-2 focus-visible:outline-primary",
+				tab.urgencia === "atrasado" ? URGENCY_META.atrasado.border : "border-border",
+				selected && "ring-2 ring-primary",
 			)}
 		>
-			<header className="flex items-start justify-between gap-2">
-				<div className="flex min-w-0 flex-col">
-					<span className="flex items-center gap-1.5 text-sm font-extrabold uppercase tracking-tight">
-						<MapPin className="size-3.5 shrink-0" />
-						<span className="truncate">{tabLabel(tab)}</span>
-					</span>
-					{tab.codigo && tab.servicePoint ? <span className="pl-5 text-xs font-medium text-muted-foreground">Comanda {tab.codigo}</span> : null}
-				</div>
-				<span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+			<div className="flex w-full items-center justify-between gap-2">
+				<span className="flex min-w-0 items-center gap-1.5">
+					<span className="truncate text-sm font-bold tracking-tight">{tab.label}</span>
+					{tab.codigo && tab.servicePoint ? <span className="shrink-0 text-xs font-semibold text-muted-foreground">#{tab.codigo}</span> : null}
+				</span>
+				<span className="flex shrink-0 items-center gap-1 text-xs font-semibold text-muted-foreground">
 					<Clock className="size-3" />
 					{formatTabAge(tab.dataAbertura, now)}
 				</span>
-			</header>
-
-			<div className="flex flex-col gap-0.5">
-				<span className="text-[11px] font-extrabold uppercase tracking-[0.08em] text-muted-foreground">Consumo em aberto</span>
-				<span className="text-2xl font-black tabular-nums tracking-tight">{formatToMoney(tab.consumoParcial ?? 0)}</span>
 			</div>
-
-			<RoundsSummary rounds={rounds} totalRounds={tab.pedidos.length} critical={critical} />
-
-			{tab.cliente || tab.responsavelVendedor ? (
-				<footer className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/60 pt-2 text-xs text-muted-foreground">
-					{tab.cliente ? (
-						<span className="flex min-w-0 items-center gap-1.5">
-							<CircleUser className="size-3 shrink-0" />
-							<span className="truncate">{tab.cliente.nome}</span>
-						</span>
-					) : null}
-					{tab.responsavelVendedor ? (
-						<span className="flex min-w-0 items-center gap-1.5">
-							<UserRound className="size-3 shrink-0" />
-							<span className="truncate">{tab.responsavelVendedor.nome}</span>
-						</span>
-					) : null}
-				</footer>
-			) : null}
-		</button>
-	);
-}
-
-function RoundsSummary({
-	rounds,
-	totalRounds,
-	critical,
-}: {
-	rounds: ReturnType<typeof getOpenRounds>;
-	totalRounds: number;
-	critical?: ReturnType<typeof getOpenRounds>[number];
-}) {
-	if (totalRounds === 0) {
-		return (
-			<div className="flex items-center gap-1.5 rounded-lg bg-secondary/50 px-2.5 py-1.5 text-xs text-muted-foreground">
-				<ChefHat className="size-3.5" />
-				Nenhum pedido lançado
-			</div>
-		);
-	}
-
-	if (rounds.length === 0) {
-		return (
-			<div className="flex items-center gap-1.5 rounded-lg bg-secondary/50 px-2.5 py-1.5 text-xs text-muted-foreground">
-				<Utensils className="size-3.5" />
-				{totalRounds} {totalRounds === 1 ? "rodada entregue" : "rodadas entregues"} · nada em aberto
-			</div>
-		);
-	}
-
-	const meta = URGENCY_META[critical?.urgencia ?? "no-prazo"];
-
-	return (
-		<div className="flex flex-col gap-1">
-			<div className={cn("flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold", meta.surface)}>
-				<span className={cn("size-1.5 shrink-0 rounded-full", meta.dot)} aria-hidden />
-				<span className="truncate">{critical ? describeRound(critical) : ""}</span>
-			</div>
-			{/* So conta a historia quando ha mais de uma rodada; "1 de 1" nao informa nada. */}
-			{rounds.length > 1 ? (
-				<span className="pl-1 text-[11px] text-muted-foreground">
-					+{rounds.length - 1} {rounds.length - 1 === 1 ? "rodada" : "rodadas"} em aberto de {totalRounds}
+			{/* Com parcial recebido, o numero grande e o que falta cobrar; o pago fica discreto ao lado. */}
+			<span className="flex items-baseline gap-2">
+				<span className="text-2xl font-bold leading-none tracking-tight tabular-nums">
+					{formatToMoney((tab.valorPago ?? 0) > 0 ? (tab.valorRestante ?? 0) : (tab.consumoParcial ?? 0))}
 				</span>
-			) : totalRounds > 1 ? (
-				<span className="pl-1 text-[11px] text-muted-foreground">1 de {totalRounds} em aberto</span>
-			) : null}
-		</div>
+				{(tab.valorPago ?? 0) > 0 ? (
+					<span className="whitespace-nowrap text-xs font-bold text-success tabular-nums">{formatToMoney(tab.valorPago ?? 0)} pago</span>
+				) : null}
+			</span>
+			<div className={cn("flex w-full items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold", status.surface)}>
+				<span className={cn("size-1.5 shrink-0 rounded-full", status.dot)} aria-hidden />
+				<span className="min-w-0 flex-1 truncate">{status.label}</span>
+				{tab.rounds.length > 1 ? <span className="shrink-0 font-bold opacity-75">+{tab.rounds.length - 1}</span> : null}
+			</div>
+			{people ? <span className="w-full truncate text-xs text-muted-foreground">{people}</span> : null}
+		</button>
 	);
 }
 
 // ------------------------------------------------------------------ Por mesa
 
-type ServicePointCardProps = {
-	point: TServicePoint;
-	pointTabs: TTabListItem[];
-	now: number;
-	onOpenTab: (tabId: string) => void;
-	onCreateTab: () => void;
-	onEditPoint: () => void;
-};
-
-export function ServicePointCard({ point, pointTabs, now, onOpenTab, onCreateTab, onEditPoint }: ServicePointCardProps) {
-	const occupied = pointTabs.length > 0;
-	const rounds = pointTabs.flatMap((tab) => getOpenRounds(tab, now));
-	const urgencia = worstUrgency(rounds);
-	const consumoTotal = pointTabs.reduce((sum, tab) => sum + (tab.consumoParcial ?? 0), 0);
-
-	// Ponto livre: slot silencioso e curto. Nao estica junto com os ocupados —
-	// a diferenca de altura e o que da leitura de salao a distancia.
-	if (!occupied) {
-		return (
-			<div className="group relative flex flex-col self-start rounded-2xl border border-dashed border-border">
-				<button
-					type="button"
-					onClick={onCreateTab}
-					className="flex flex-col items-center justify-center gap-1.5 rounded-2xl px-4 py-5 transition-colors hover:bg-secondary/40"
-				>
-					<span className="text-sm font-bold tracking-tight">{point.rotulo}</span>
-					<span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-						<span className="size-1.5 rounded-full bg-green-500" aria-hidden />
-						Livre
-						{point.capacidade ? ` · ${point.capacidade} lugares` : ""}
-					</span>
-					{/* Sempre visivel: no celular (dispositivo primario) nao existe hover. */}
-					<span className="mt-1 flex items-center gap-1 text-xs font-bold text-primary">
-						<Plus className="size-3.5" />
-						ABRIR CONTA
-					</span>
-				</button>
-				<EditPointButton onClick={onEditPoint} label={point.rotulo} />
-			</div>
-		);
-	}
-
+export function FreePointTile({ point, onOpen, onEdit }: { point: TServicePoint; onOpen: () => void; onEdit: () => void }) {
 	return (
-		<div
-			className={cn(
-				"group relative flex min-h-44 flex-col gap-3 self-start rounded-2xl border bg-card px-4 py-3.5 shadow-2xs",
-				urgencia === "atrasado" ? "border-destructive/40" : "border-border",
-			)}
-		>
-			<header className="flex items-start justify-between gap-2 pr-6">
-				<div className="flex min-w-0 flex-col">
-					<span className="truncate text-sm font-extrabold uppercase tracking-tight">{point.rotulo}</span>
-					<span className="text-xs text-muted-foreground">
-						{point.grupo ? `${point.grupo} · ` : ""}
-						{pointTabs.length > 1 ? `${pointTabs.length} contas` : "Ocupado"}
+		<div className="relative flex">
+			<button
+				type="button"
+				onClick={onOpen}
+				className="flex min-h-24 flex-1 flex-col items-start justify-between gap-3 rounded-xl border border-dashed border-border px-3.5 py-3 text-left transition-colors hover:border-success hover:bg-success-surface"
+			>
+				<span className="pr-6 text-sm font-bold text-foreground/80">{point.rotulo}</span>
+				<span className="flex w-full items-center justify-between text-xs text-muted-foreground">
+					<span className="flex items-center gap-1.5">
+						<span className="size-1.5 rounded-full bg-success" aria-hidden />
+						{point.capacidade ? `${point.capacidade} lugares` : "Livre"}
 					</span>
-				</div>
-				<span className="shrink-0 text-lg font-black tabular-nums tracking-tight">{formatToMoney(consumoTotal)}</span>
-			</header>
-
-			<div className="flex flex-col gap-2">
-				{pointTabs.map((tab) => {
-					const tabRounds = getOpenRounds(tab, now);
-					const critical = tabRounds[0];
-					const meta = URGENCY_META[critical?.urgencia ?? "no-prazo"];
-					return (
-						<button
-							key={tab.id}
-							type="button"
-							onClick={() => onOpenTab(tab.id)}
-							className="flex flex-col gap-1 rounded-xl bg-secondary/40 px-2.5 py-2 text-left transition-colors hover:bg-secondary/70"
-						>
-							<div className="flex items-center justify-between gap-2">
-								<span className="flex min-w-0 items-center gap-1.5 text-xs font-bold">
-									<span className="truncate">{tab.codigo ? `Comanda ${tab.codigo}` : "Conta"}</span>
-									{tab.cliente ? <span className="truncate font-medium text-muted-foreground">· {tab.cliente.nome}</span> : null}
-								</span>
-								<span className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground">
-									<Clock className="size-3" />
-									{formatTabAge(tab.dataAbertura, now)}
-								</span>
-							</div>
-							{pointTabs.length > 1 ? <span className="text-xs font-bold tabular-nums">{formatToMoney(tab.consumoParcial ?? 0)}</span> : null}
-							{critical ? (
-								<span className={cn("flex items-center gap-1.5 text-[11px] font-semibold", meta.text)}>
-									<span className={cn("size-1.5 shrink-0 rounded-full", meta.dot)} aria-hidden />
-									<span className="truncate">{describeRound(critical)}</span>
-									{tabRounds.length > 1 ? <span className="shrink-0 font-medium opacity-70">+{tabRounds.length - 1}</span> : null}
-								</span>
-							) : (
-								<span className="text-[11px] text-muted-foreground">Nada em aberto</span>
-							)}
-						</button>
-					);
-				})}
-			</div>
-
-			<EditPointButton onClick={onEditPoint} label={point.rotulo} />
+					{/* Sempre visivel: no celular nao existe hover. */}
+					<span className="flex items-center gap-0.5 font-bold text-primary">
+						<Plus className="size-3.5" />
+						Abrir
+					</span>
+				</span>
+			</button>
+			<EditTileButton onClick={onEdit} ariaLabel={`Editar ponto ${point.rotulo}`} />
 		</div>
 	);
 }
 
-function EditPointButton({ onClick, label }: { onClick: () => void; label: string }) {
+type OccupiedTileProps = {
+	label: string;
+	pointTabs: TBoardTab[];
+	now: number;
+	selectedTabId: string | null;
+	onSelectTab: (tabId: string) => void;
+	onEdit?: () => void;
+	editLabel?: string;
+	/** Identificacao de cada conta dentro do tile. Padrao: comanda, cliente ou vendedor. */
+	rowLabel?: (tab: TBoardTab) => string;
+};
+
+export function OccupiedTile({ label, pointTabs, now, selectedTabId, onSelectTab, onEdit, editLabel, rowLabel }: OccupiedTileProps) {
+	const urgencia = pointTabs.reduce<TBoardTab["urgencia"]>(
+		(worst, tab) => (urgencyRank(tab.urgencia) > urgencyRank(worst) ? tab.urgencia : worst),
+		null,
+	);
+	// Soma do que ainda falta cobrar no ponto (parciais ja recebidos descontados).
+	const consumo = pointTabs.reduce((sum, tab) => sum + ((tab.valorPago ?? 0) > 0 ? (tab.valorRestante ?? 0) : (tab.consumoParcial ?? 0)), 0);
+	const selected = pointTabs.some((tab) => tab.id === selectedTabId);
+
+	return (
+		<div
+			className={cn(
+				"relative flex min-h-24 flex-1 flex-col gap-2 rounded-xl border p-3",
+				urgencia === "atrasado"
+					? "border-transparent bg-destructive/10"
+					: urgencia === "atencao"
+						? "border-transparent bg-warning-surface"
+						: "border-border bg-card",
+				selected && "ring-2 ring-primary",
+			)}
+		>
+			<div className={cn("flex items-baseline justify-between gap-1.5 px-0.5", onEdit && "pr-7")}>
+				<span className="truncate text-sm font-bold">{label}</span>
+				<span className="shrink-0 text-sm font-bold tabular-nums">{formatToMoney(consumo)}</span>
+			</div>
+			<div className="flex flex-col gap-1.5">
+				{pointTabs.map((tab) => {
+					const status = statusLine(tab);
+					const tinted = tab.critical && tab.critical.urgencia !== "no-prazo";
+					return (
+						<button
+							key={tab.id}
+							type="button"
+							onClick={() => onSelectTab(tab.id)}
+							className="flex w-full flex-col gap-0.5 rounded-lg bg-background/70 px-2.5 py-1.5 text-left transition-colors hover:bg-background"
+						>
+							<span className="flex w-full justify-between gap-1.5 text-xs font-bold">
+								<span className="truncate">
+									{rowLabel ? rowLabel(tab) : tab.codigo ? `Comanda ${tab.codigo}` : (tab.cliente?.nome ?? tab.responsavelVendedor?.nome ?? "Conta")}
+								</span>
+								<span className="shrink-0 text-muted-foreground">{formatTabAge(tab.dataAbertura, now)}</span>
+							</span>
+							<span className={cn("truncate text-xs font-bold", tinted ? status.text : "text-muted-foreground")}>{status.label}</span>
+						</button>
+					);
+				})}
+			</div>
+			{onEdit ? <EditTileButton onClick={onEdit} ariaLabel={editLabel ?? `Editar ponto ${label}`} /> : null}
+		</div>
+	);
+}
+
+// ---------------------------------------------------------------- Por comanda
+
+/**
+ * Comanda fixa sem conta aberta. Com comandas cadastradas em uso, o clique abre a conta
+ * no cartao; antes disso (cartoes ainda na grafica) o tile so leva a edicao.
+ */
+export function FreeCardTile({ card, onOpen, onEdit }: { card: TServiceCard; onOpen?: () => void; onEdit: () => void }) {
+	const disabled = !card.ativo;
+	return (
+		<div className="relative flex">
+			<button
+				type="button"
+				onClick={!disabled && onOpen ? onOpen : onEdit}
+				className={cn(
+					"flex min-h-20 flex-1 flex-col items-start justify-between gap-2 rounded-xl border border-dashed border-border px-3.5 py-3 text-left transition-colors",
+					disabled ? "bg-secondary/40 text-muted-foreground" : onOpen ? "hover:border-success hover:bg-success-surface" : "hover:bg-secondary/50",
+				)}
+			>
+				<span className={cn("pr-6 text-sm font-bold", disabled ? "text-muted-foreground line-through" : "text-foreground/80")}>
+					Comanda {card.codigo}
+				</span>
+				<span className="flex w-full items-center justify-between text-xs text-muted-foreground">
+					{disabled ? (
+						<span className="flex items-center gap-1.5">
+							<Ban className="size-3" />
+							Desativada
+						</span>
+					) : (
+						<span className="flex items-center gap-1.5">
+							<span className="size-1.5 rounded-full bg-success" aria-hidden />
+							Livre
+						</span>
+					)}
+					{!disabled && onOpen ? (
+						<span className="flex items-center gap-0.5 font-bold text-primary">
+							<Plus className="size-3.5" />
+							Abrir
+						</span>
+					) : null}
+				</span>
+			</button>
+			<EditTileButton onClick={onEdit} ariaLabel={`Editar comanda ${card.codigo}`} />
+		</div>
+	);
+}
+
+function EditTileButton({ onClick, ariaLabel }: { onClick: () => void; ariaLabel: string }) {
 	return (
 		<Button
 			size="icon"
 			variant="ghost"
-			aria-label={`Editar ponto ${label}`}
+			aria-label={ariaLabel}
 			// Discreto, mas nunca invisivel: esconder atras de hover deixaria a edicao
 			// inalcancavel no toque.
 			className="absolute right-1.5 top-1.5 size-7 text-muted-foreground/50 transition-colors hover:text-foreground focus-visible:text-foreground"

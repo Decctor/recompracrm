@@ -17,6 +17,7 @@ import NewAccessEnrollment from "../Modals/Internal/Access/NewAccessEnrollment";
 import { Button } from "../ui/button";
 import DesktopAgentDownload from "./DesktopAgentDownload";
 import SettingsAutoPrint from "./SettingsAutoPrint";
+import SettingsPreparationStations from "./SettingsPreparationStations";
 import SettingsPanelSection from "./SettingsPanelSection";
 
 type SettingsDevicesProps = {
@@ -119,6 +120,7 @@ export default function SettingsDevices({ user: _user, membership }: SettingsDev
 			{isSuccess && principals.some((principal) => principal.tipo === "AGENTE_DESKTOP") ? (
 				<>
 					<SettingsAutoPrint membership={membership} />
+					<SettingsPreparationStations membership={membership} />
 					<PrintJobsPanel />
 				</>
 			) : null}

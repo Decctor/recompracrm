@@ -2,8 +2,9 @@ import type { TIfoodCatalogContextEnum, TIfoodCatalogStatusEnum, TIfoodItemTypeE
 import type { AxiosInstance } from "axios";
 import createHttpError from "http-errors";
 import { mapIfoodError } from "./errors";
-import { setIfoodOptionGroupStatus } from "./item-document";
+import { setIfoodOptionGroupStatus, writeIfoodItemDocument } from "./item-document";
 import { IFOOD_CATALOG_BASE_URL, mapIfoodOptionGroup, IfoodOptionGroupDetailResponseSchema } from "./catalog-types";
+import { isRetryableIfoodError } from "./sync/queue-policy";
 
 /**
  * Escritas de ITENS (produto vendável em categoria) e COMPLEMENTOS (option groups/options) da
@@ -140,8 +141,10 @@ export async function upsertIfoodItem(
 		// O `FullItemDto` é PLANO: três listas que se referenciam por id. A árvore (item → grupos →
 		// opções → grupos de 3º nível, no combo) é expressa por `products[].optionGroups`, que carrega
 		// min/max/index/associationType do vínculo. Achatamos a árvore aqui.
-		const gruposAchatados: (TIfoodItemOptionGroupPayload & { id: string; opcoes: (TIfoodItemOptionPayload & { id: string; produtoId: string })[] })[] =
-			[];
+		const gruposAchatados: (Omit<TIfoodItemOptionGroupPayload, "id" | "opcoes"> & {
+			id: string;
+			opcoes: (Omit<TIfoodItemOptionPayload, "id" | "produtoId"> & { id: string; produtoId: string })[];
+		})[] = [];
 		/** Vínculos produto → grupos, na forma de objeto que o iFood exige. */
 		const vinculosPorProduto = new Map<string, { id: string; min: number; max: number; index?: number; associationType?: "MAIN" }[]>();
 
@@ -190,7 +193,7 @@ export async function upsertIfoodItem(
 				]
 			: [];
 
-		await client.put(catalogUrl(merchantId, "/items"), {
+		await writeIfoodItemDocument(client, merchantId, {
 			item: {
 				id: itemId,
 				type: tipoItem,
@@ -391,7 +394,7 @@ export async function addIfoodOptions(
 }
 
 /** Resultado de um PATCH por opção: `erro` já traduzido por `mapIfoodError`, `null` quando aplicou. */
-export type TIfoodOptionPatchResult = { optionId: string; erro: string | null };
+export type TIfoodOptionPatchResult = { optionId: string; erro: string | null; retentavel?: boolean };
 
 /**
  * Os PATCH de opção são um por chamada (ver abaixo), então um lote é uma série de requisições e
@@ -413,7 +416,11 @@ async function patchIfoodOptionsOneByOne<T extends { optionId: string }>(
 			try {
 				mapIfoodError(context, error);
 			} catch (mapped) {
-				results.push({ optionId: opcao.optionId, erro: mapped instanceof Error ? mapped.message : "Falha desconhecida ao atualizar a opção." });
+				results.push({
+					optionId: opcao.optionId,
+					erro: mapped instanceof Error ? mapped.message : "Falha desconhecida ao atualizar a opção.",
+					retentavel: isRetryableIfoodError(mapped),
+				});
 			}
 		}
 	}

@@ -3,6 +3,9 @@ import { appApiHandler } from "@/lib/app-api";
 import { resolveCatalogOrderItem } from "@/lib/products/resolve-catalog-order-item";
 import { autoApproveTabOrderRequest, getTabMenuProducts, hashPublicToken, resolveServiceSettings } from "@/lib/tabs";
 import { enforcePublicRateLimit } from "@/lib/tabs/public-rate-limit";
+import { findOpenTabByServiceCard } from "@/lib/tabs/service-cards";
+import { getTabPaidAmount } from "@/lib/tabs/utils";
+import { tabUsesCode } from "@/schemas/service-settings";
 import { TabOrderRequestPayloadSchema } from "@/schemas/tab-order-requests";
 import { db } from "@/services/drizzle";
 import { sales, tabOrderRequests, tabs } from "@/services/drizzle/schema";
@@ -23,7 +26,7 @@ import z from "zod";
 const CreatePublicTabOrderRequestInputSchema = z.object({
 	// Token bruto do QR (do ponto ou da tab). Resolvido por hash — nunca persistido.
 	token: z.string({ required_error: "Token nao informado." }).min(16, { message: "Token invalido." }),
-	context: z.enum(["PONTO", "TAB"], { required_error: "Contexto nao informado." }),
+	context: z.enum(["PONTO", "TAB", "COMANDA"], { required_error: "Contexto nao informado." }),
 	idempotencyKey: z.string({ required_error: "Chave de idempotencia nao informada." }).uuid({ message: "Chave de idempotencia invalida." }),
 	deviceKey: z.string({ required_error: "Identificacao do dispositivo nao informada." }).uuid({ message: "Identificacao do dispositivo invalida." }),
 	notes: z.string({ invalid_type_error: "Tipo nao valido para observacoes." }).max(500).optional().nullable(),
@@ -47,6 +50,7 @@ async function createPublicTabOrderRequest({ input, clientIp }: { input: TCreate
 	let orgId: string;
 	let servicePointId: string | null = null;
 	let tabId: string | null = null;
+	let serviceCardCode: string | null = null;
 
 	if (input.context === "PONTO") {
 		const point = await db.query.servicePoints.findFirst({
@@ -75,6 +79,19 @@ async function createPublicTabOrderRequest({ input, clientIp }: { input: TCreate
 			.orderBy(desc(tabOrderRequests.dataInsercao))
 			.limit(1);
 		tabId = linkedRequest?.tabId ?? null;
+	} else if (input.context === "COMANDA") {
+		// QR da comanda fixa: com conta aberta o destino e deterministico (a conta do cartao);
+		// cartao livre vira pedido de abertura para o operador — nunca abre conta sozinho.
+		const card = await db.query.serviceCards.findFirst({
+			where: (fields, { and, eq }) => and(eq(fields.tokenPublicoHash, tokenHash), eq(fields.ativo, true)),
+			columns: { id: true, organizacaoId: true, codigo: true },
+		});
+		if (!card) throw new createHttpError.NotFound("QR Code invalido ou desativado.");
+		orgId = card.organizacaoId;
+		const cardTab = await findOpenTabByServiceCard(db, { orgId, serviceCardId: card.id });
+		tabId = cardTab?.id ?? null;
+		servicePointId = cardTab?.servicePointId ?? null;
+		serviceCardCode = cardTab ? null : card.codigo;
 	} else {
 		const tab = await db.query.tabs.findFirst({
 			where: (fields, { eq }) => eq(fields.tokenPublicoHash, tokenHash),
@@ -91,6 +108,9 @@ async function createPublicTabOrderRequest({ input, clientIp }: { input: TCreate
 	const settings = await resolveServiceSettings({ orgId });
 	if (settings.pedidosCliente === "DESABILITADO") {
 		throw new createHttpError.Forbidden("Pedidos pelo QR Code nao estao habilitados. Chame um atendente.");
+	}
+	if (serviceCardCode && settings.aberturaPublica === "DESABILITADA") {
+		throw new createHttpError.Forbidden("Esta comanda ainda nao tem conta aberta. Apresente o cartao ao atendente.");
 	}
 
 	// Valida os itens contra o cardapio da comanda (existencia/atividade/vendabilidade/canal COMANDA)
@@ -112,10 +132,12 @@ async function createPublicTabOrderRequest({ input, clientIp }: { input: TCreate
 		});
 	}
 
+	// Codigo digitado so vale quando a conta e identificada por codigo: em "Somente mesas" ele
+	// desviaria a aprovacao para a abertura por codigo (recusada) em vez da conta implicita da mesa.
 	const payload = TabOrderRequestPayloadSchema.parse({
 		itens: input.items,
 		observacoes: input.notes ?? null,
-		codigoTab: input.context === "PONTO" && !tabId ? (input.tabCode ?? null) : null,
+		codigoTab: input.context === "PONTO" && !tabId ? (tabUsesCode(settings.contas) ? (input.tabCode ?? null) : null) : serviceCardCode,
 		contexto: input.context,
 	});
 	const payloadHash = createHash("sha256").update(JSON.stringify(payload)).digest("hex");
@@ -161,7 +183,8 @@ async function createPublicTabOrderRequest({ input, clientIp }: { input: TCreate
 
 	// DIRETO: aprova agora, sem operador. Nunca lanca — destino ambiguo ou limite por dispositivo
 	// devolve PENDENTE ao inbox, e o cliente recebe a mensagem de espera em vez de um erro.
-	if (settings.pedidosCliente === "DIRETO") {
+	// Cartao livre nao entra: abrir a conta e decisao do operador (a criacao nunca e silenciosa).
+	if (settings.pedidosCliente === "DIRETO" && !serviceCardCode) {
 		const auto = await autoApproveTabOrderRequest({ orgId, requestId: created.id, deviceKeyHash, tabId, payload });
 		return { data: { requestId: created.id, status: auto.status }, message: requestStatusMessage(auto.status, { repeated: false }) };
 	}
@@ -245,17 +268,20 @@ async function getPublicTabOrderSession({ input, clientIp }: { input: TGetPublic
 		if (linkedTab) break;
 	}
 
-	const draftSale = linkedTab
-		? await db.query.sales.findFirst({
-				where: and(eq(sales.tabId, linkedTab.id), eq(sales.statusVenda, "ORCAMENTO")),
-				columns: { valorTotal: true },
-			})
-		: null;
+	const [draftSale, valorPago] = linkedTab
+		? await Promise.all([
+				db.query.sales.findFirst({
+					where: and(eq(sales.tabId, linkedTab.id), eq(sales.statusVenda, "ORCAMENTO")),
+					columns: { valorTotal: true },
+				}),
+				getTabPaidAmount({ tabId: linkedTab.id }),
+			])
+		: [null, 0];
 
 	return {
 		data: {
 			requests,
-			tab: linkedTab ? { ...linkedTab, consumoParcial: draftSale?.valorTotal ?? 0 } : null,
+			tab: linkedTab ? { ...linkedTab, consumoParcial: draftSale?.valorTotal ?? 0, valorPago } : null,
 		},
 		message: "Sessao do dispositivo carregada com sucesso.",
 	};

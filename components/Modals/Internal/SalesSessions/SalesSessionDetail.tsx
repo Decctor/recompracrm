@@ -69,8 +69,11 @@ export default function SalesSessionDetail({ sessionId, closeModal, canReview = 
 	const temContagem = gavetaLinhas.some((linha) => linha.valorInformado !== null);
 
 	const vendas = session?.vendas ?? [];
-	const totalVendas = sumMoney(vendas.map((venda) => venda.valorTotal));
-	const vendasPorVendedor = summarizeSessionSalesBySeller(vendas);
+	// O que entrou NESTE caixa: parciais de conta recebidos noutro caixa já descontados, senão o
+	// "total de vendas" não fecharia com o esperado por método.
+	const totalVendas = sumMoney(vendas.map((venda) => venda.valorNoCaixa));
+	const totalRecebidoOutroCaixa = sumMoney(vendas.map((venda) => venda.valorRecebidoOutroCaixa));
+	const vendasPorVendedor = summarizeSessionSalesBySeller(vendas.map((venda) => ({ ...venda, valorTotal: venda.valorNoCaixa })));
 
 	// O snapshot do fechamento é a diferença oficial. A conta esperado/contado só aparece embaixo dela
 	// quando a gaveta explica a diferença inteira — senão seria uma subtração que não fecha na tela.
@@ -250,6 +253,7 @@ export default function SalesSessionDetail({ sessionId, closeModal, canReview = 
 								<SessionSectionLabel>VENDAS DO TURNO</SessionSectionLabel>
 								<span className="text-xs text-muted-foreground">
 									{vendas.length} {vendas.length === 1 ? "venda" : "vendas"} · {formatToMoney(totalVendas)}
+									{totalRecebidoOutroCaixa > MONEY_TOLERANCE ? ` · ${formatToMoney(totalRecebidoOutroCaixa)} recebidos em outro caixa` : ""}
 								</span>
 							</div>
 							{vendasPorVendedor.length > 0 ? (
@@ -280,8 +284,13 @@ export default function SalesSessionDetail({ sessionId, closeModal, canReview = 
 												className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 py-1.5 text-xs [&:not(:last-child)]:border-b [&:not(:last-child)]:border-border/40"
 											>
 												<span className="truncate font-medium text-foreground">{venda.cliente?.nome || "AO CONSUMIDOR"}</span>
-												<span className="text-right font-semibold tabular-nums">{formatToMoney(venda.valorTotal)}</span>
-												<span className="col-span-2 text-[11px] text-muted-foreground">{formatDateTime(venda.dataVenda)}</span>
+												<span className="text-right font-semibold tabular-nums">{formatToMoney(venda.valorNoCaixa)}</span>
+												<span className="col-span-2 text-[11px] text-muted-foreground">
+													{formatDateTime(venda.dataVenda)}
+													{venda.valorRecebidoOutroCaixa > MONEY_TOLERANCE
+														? ` · venda de ${formatToMoney(venda.valorTotal)}, ${formatToMoney(venda.valorRecebidoOutroCaixa)} recebidos em outro caixa`
+														: ""}
+												</span>
 											</div>
 										))}
 									</div>
