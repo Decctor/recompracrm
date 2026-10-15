@@ -27,7 +27,7 @@ import type { TTerminalSaleItemInput } from "./terminal-cart-item";
 import { roundCents } from "./terminal-cart-item";
 import { resolveTerminalDiscount } from "./terminal-discount-policy";
 import { type TTerminalPaymentInput, listTerminalPaymentMethods, resolveTerminalSalePayments } from "./terminal-payments";
-import { buildChargeView, buildPaymentAttemptSaleView, findPaymentAttemptForDevice } from "./views";
+import { buildDeviceChargesForAttempts, buildPaymentAttemptSaleView } from "./views";
 
 // Contas de atendimento (mesas e comandas) na maquininha. O domínio é o de `lib/tabs` — abrir,
 // lançar pedido, receber parcial, fechar —, com o terminal como ator dispositivo (sem usuário):
@@ -432,12 +432,16 @@ export async function closeTerminalTab({
 				terminalAttempt: resolved.terminal ? { chaveIdempotencia: idempotencyKey, fingerprintEntrada: fingerprint, origem: "DISPOSITIVO" } : null,
 			});
 
-			let charge: ReturnType<typeof buildChargeView> | null = null;
-			if (resolved.terminal) {
-				const attemptId = result.confirmation.tentativaPagamento?.id;
-				if (!attemptId) throw new createHttpError.InternalServerError("A tentativa de pagamento do fechamento não foi criada.");
-				charge = buildChargeView(await findPaymentAttemptForDevice({ organizationId, deviceId, attemptId, database: tx }));
-			}
+			// Uma cobrança por perna em cartão, na ordem das pernas; `charge` (a primeira) fica para
+			// versões do app que só executam uma.
+			const charges = await buildDeviceChargesForAttempts({
+				organizationId,
+				deviceId,
+				attemptIds: result.confirmation.tentativasPagamento.map((attempt) => attempt.id),
+				database: tx,
+			});
+			if (resolved.terminal && charges.length === 0) throw new createHttpError.InternalServerError("A tentativa de pagamento não foi criada.");
+			const charge = charges[0] ?? null;
 			const sale = buildPaymentAttemptSaleView({
 				id: result.saleId,
 				idExterno: "",
@@ -449,6 +453,7 @@ export async function closeTerminalTab({
 				result: {
 					data: {
 						charge,
+						charges,
 						saleId: result.saleId,
 						venda: {
 							...sale,

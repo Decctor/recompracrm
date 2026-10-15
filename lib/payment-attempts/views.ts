@@ -115,3 +115,24 @@ export function buildAttemptStatusView(attempt: TPaymentAttemptWithSale, now = n
 	};
 }
 export type TAttemptStatusView = ReturnType<typeof buildAttemptStatusView>;
+
+/**
+ * Cobranças de uma venda para o terminal executar, na ordem das pernas. Uma por perna em cartão;
+ * o app cobra uma depois da outra.
+ */
+export async function buildDeviceChargesForAttempts({
+	organizationId,
+	deviceId,
+	attemptIds,
+	database,
+}: {
+	organizationId: string;
+	deviceId: string;
+	attemptIds: string[];
+	database?: Parameters<typeof findPaymentAttemptForDevice>[0]["database"];
+}) {
+	const charges: ReturnType<typeof buildChargeView>[] = [];
+	for (const attemptId of attemptIds)
+		charges.push(buildChargeView(await findPaymentAttemptForDevice({ organizationId, deviceId, attemptId, database })));
+	return charges;
+}

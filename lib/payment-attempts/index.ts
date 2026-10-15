@@ -8,6 +8,7 @@ export * from "./errors";
 export * from "./events";
 export * from "./evidence";
 export * from "./report-evidence";
+export * from "./retry-from-device";
 export * from "./state-machine";
 export * from "./terminal-benefits";
 export * from "./terminal-benefits-policy";

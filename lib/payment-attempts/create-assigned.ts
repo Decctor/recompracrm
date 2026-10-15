@@ -47,7 +47,13 @@ export async function findAssignablePaymentTerminalDevice({
 	database?: DB | DBTransaction;
 }) {
 	const [row] = await database
-		.select({ id: accessPrincipals.id, nome: accessPrincipals.nome, status: accessPrincipals.status, tipo: accessPrincipals.tipo, clientCode: accessClients.codigo })
+		.select({
+			id: accessPrincipals.id,
+			nome: accessPrincipals.nome,
+			status: accessPrincipals.status,
+			tipo: accessPrincipals.tipo,
+			clientCode: accessClients.codigo,
+		})
 		.from(accessPrincipals)
 		.innerJoin(accessClients, eq(accessClients.id, accessPrincipals.accessClientId))
 		.where(and(eq(accessPrincipals.id, deviceId), eq(accessPrincipals.organizacaoId, organizationId)))
@@ -75,6 +81,8 @@ export type TCreateAssignedPaymentAttemptParams = {
 	chaveIdempotencia?: string | null;
 	fingerprintEntrada?: string | null;
 	origem?: "PLATAFORMA" | "DISPOSITIVO";
+	// Nova tentativa deliberada depois de uma não aprovada, para a mesma transação pendente.
+	tentativaOrigemId?: string | null;
 };
 
 // Fluxo B: a tentativa nasce CRIADA, dentro da transação que confirma a venda, já atribuída ao
@@ -86,7 +94,11 @@ export async function createAssignedPaymentAttempt(params: TCreateAssignedPaymen
 	const totalParcelas = params.totalParcelas ?? 1;
 
 	if (!isPaymentTerminalMethod(params.metodo)) {
-		throw new PaymentTerminalError(422, "UNSUPPORTED_PAYMENT_OPERATION", "O terminal de pagamento só executa cobranças em cartão de débito ou crédito.");
+		throw new PaymentTerminalError(
+			422,
+			"UNSUPPORTED_PAYMENT_OPERATION",
+			"O terminal de pagamento só executa cobranças em cartão de débito ou crédito.",
+		);
 	}
 	if (!Number.isFinite(params.valor) || params.valor <= 0) {
 		throw new PaymentTerminalError(422, "UNSUPPORTED_PAYMENT_OPERATION", "O valor da cobrança no terminal deve ser maior que zero.");
@@ -111,9 +123,20 @@ export async function createAssignedPaymentAttempt(params: TCreateAssignedPaymen
 	});
 	if (!sale) throw new PaymentTerminalError(404, "NOT_FOUND", "Venda não encontrada.");
 
-	const active = await findActivePaymentAttemptForSale({ organizationId, saleId, database: tx });
+	// Uma venda pode ter várias pernas em cartão (uma tentativa por transação pendente); o que não
+	// pode é a MESMA transação ter duas tentativas vivas — o índice parcial garante, aqui vira 409.
+	const active = await tx.query.paymentAttempts.findFirst({
+		where: and(
+			eq(paymentAttempts.organizacaoId, organizationId),
+			eq(paymentAttempts.transacaoFinanceiraId, financialTransactionId),
+			inArray(paymentAttempts.status, [...OPEN_PAYMENT_ATTEMPT_STATUSES]),
+		),
+		columns: { id: true },
+	});
 	if (active) {
-		throw new PaymentTerminalError(409, "ACTIVE_PAYMENT_ATTEMPT_EXISTS", "Esta venda já possui uma cobrança em andamento no terminal.", { attemptId: active.id });
+		throw new PaymentTerminalError(409, "ACTIVE_PAYMENT_ATTEMPT_EXISTS", "Este pagamento já possui uma cobrança em andamento no terminal.", {
+			attemptId: active.id,
+		});
 	}
 
 	const transaction = await tx.query.financialTransactions.findFirst({
@@ -146,6 +169,7 @@ export async function createAssignedPaymentAttempt(params: TCreateAssignedPaymen
 			transacaoFinanceiraId: financialTransactionId,
 			chaveIdempotencia: params.chaveIdempotencia ?? null,
 			fingerprintEntrada: params.fingerprintEntrada ?? null,
+			tentativaOrigemId: params.tentativaOrigemId ?? null,
 		})
 		.returning();
 
@@ -161,7 +185,11 @@ export async function createAssignedPaymentAttempt(params: TCreateAssignedPaymen
 		principalId: params.origem === "DISPOSITIVO" ? deviceId : null,
 		chaveIdempotencia: params.chaveIdempotencia ?? null,
 		fingerprintEntrada: params.fingerprintEntrada ?? null,
-		descricao: params.origem === "DISPOSITIVO" ? `Venda criada no terminal "${device.nome}".` : `Cobrança atribuída ao terminal "${device.nome}".`,
+		descricao: params.tentativaOrigemId
+			? `Nova cobrança no terminal "${device.nome}" depois de uma não aprovada.`
+			: params.origem === "DISPOSITIVO"
+				? `Venda criada no terminal "${device.nome}".`
+				: `Cobrança atribuída ao terminal "${device.nome}".`,
 	});
 
 	return { ...attempt, dispositivoNome: device.nome };

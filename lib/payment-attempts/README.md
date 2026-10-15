@@ -171,3 +171,24 @@ como ator sem usuário (`abertaPorDispositivoId`/`fechadaPorDispositivoId` em `t
 `receiveTabPaymentInTransaction`) para rodarem na transação idempotente do dispositivo; as rotas
 do painel seguem chamando `closeTab`/`receiveTabPayment`, com o mesmo comportamento.
 
+### Cartão combinado com outros métodos
+
+- Cada perna em cartão com `dispositivoId` vira **uma tentativa própria**, na sua transação
+  pendente (`resolvePaymentTerminalAssignments`, até 4 por venda, todas na mesma maquininha). As
+  pernas combinam com dinheiro, Pix, fiado e outros cartões; dinheiro/Pix/fiado efetivam na
+  confirmação e cada cartão efetiva quando a maquininha aprovar. Cartão nunca passa do total.
+- Troco: a perna cobrada na maquininha conta como recebida agora (`isImmediateSalePayment`), então
+  "R$ 50 no crédito + R$ 50 em dinheiro" numa venda de R$ 80,80 devolve R$ 19,20 do dinheiro.
+- A trava de concorrência saiu da venda para a transação: duas tentativas vivas para o mesmo
+  pagamento continuam impossíveis (índice parcial + 409); pernas diferentes coexistem.
+- Venda e fechamento de conta pelo terminal respondem `charges` (na ordem das pernas) além de
+  `charge` (a primeira, para versões antigas do app). A chave do comando vai na primeira tentativa;
+  as seguintes levam `chave#2`, `chave#3` (a chave é única por dispositivo).
+- "Tentar de novo": `POST /api/payment-terminal/payment-attempts/{id}/retry` (Idempotency-Key,
+  scope `attempts:complete`) cria, depois de uma tentativa `NAO_APROVADA`, uma nova para o mesmo
+  pagamento pendente (mesmo método, valor e parcelas; `tentativaOrigemId` aponta a anterior) — a
+  mesma operação do "reatribuir" da plataforma. Recusa se a venda não está confirmada ou se o
+  pagamento já foi efetivado, cancelado ou trocado. Se o cliente não tiver como pagar, o caminho
+  continua sendo editar o pagamento ou cancelar a venda no RecompraCRM — o dinheiro já recebido
+  das outras pernas fica registrado.
+

@@ -18,7 +18,7 @@ import {
 	listTerminalPaymentMethods,
 	resolveTerminalSalePayments,
 } from "./terminal-payments";
-import { buildChargeView, buildPaymentAttemptSaleView, findPaymentAttemptForDevice } from "./views";
+import { buildDeviceChargesForAttempts, buildPaymentAttemptSaleView } from "./views";
 
 // Fluxo A (recompracrm-pos-android/docs/01): a venda nasce no terminal e segue o MESMO pipeline do
 // PDV web (lib/sales/create-and-confirm-sale.ts), com a maquininha como ator dispositivo. O que
@@ -109,7 +109,8 @@ export async function createTerminalSale({ organizationId, deviceId, deviceName,
 			// Modalidade de entrega: mesmas exigências do checkout web.
 			const entregaModalidade = input.sale.entregaModalidade ?? "PRESENCIAL";
 			if (entregaModalidade === "ENTREGA" && !client) throw new PaymentTerminalError(422, "VALIDATION_ERROR", "Entrega exige um cliente identificado.");
-			if (entregaModalidade === "ENTREGA" && !input.sale.entregaLocalizacaoId) throw new PaymentTerminalError(422, "VALIDATION_ERROR", "Escolha o endereço de entrega.");
+			if (entregaModalidade === "ENTREGA" && !input.sale.entregaLocalizacaoId)
+				throw new PaymentTerminalError(422, "VALIDATION_ERROR", "Escolha o endereço de entrega.");
 			const entregaLocalizacaoId =
 				entregaModalidade === "ENTREGA" && client && input.sale.entregaLocalizacaoId
 					? await requireTerminalSaleAddress({ organizationId, clienteId: client.id, entregaLocalizacaoId: input.sale.entregaLocalizacaoId })
@@ -205,12 +206,16 @@ export async function createTerminalSale({ organizationId, deviceId, deviceName,
 
 			// Com cartão, a cobrança volta para o app executar; sem cartão, a venda já está registrada
 			// e o app só mostra o resultado (e o troco).
-			let charge: ReturnType<typeof buildChargeView> | null = null;
-			if (resolvedPayments.terminal) {
-				const attemptId = confirmation.tentativaPagamento?.id;
-				if (!attemptId) throw new createHttpError.InternalServerError("A tentativa de pagamento da venda não foi criada.");
-				charge = buildChargeView(await findPaymentAttemptForDevice({ organizationId, deviceId, attemptId, database: tx }));
-			}
+			// Uma cobrança por perna em cartão, na ordem das pernas; `charge` (a primeira) fica para
+			// versões do app que só executam uma.
+			const charges = await buildDeviceChargesForAttempts({
+				organizationId,
+				deviceId,
+				attemptIds: confirmation.tentativasPagamento.map((attempt) => attempt.id),
+				database: tx,
+			});
+			if (resolvedPayments.terminal && charges.length === 0) throw new createHttpError.InternalServerError("A tentativa de pagamento não foi criada.");
+			const charge = charges[0] ?? null;
 			const sale = buildPaymentAttemptSaleView({
 				id: saleId,
 				idExterno: "",
@@ -221,6 +226,7 @@ export async function createTerminalSale({ organizationId, deviceId, deviceName,
 			const result = {
 				data: {
 					charge,
+					charges,
 					saleId,
 					venda: {
 						...sale,

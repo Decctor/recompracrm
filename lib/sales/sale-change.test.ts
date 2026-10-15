@@ -103,3 +103,16 @@ test("visao fiscal sem troco devolve os pagamentos intactos", () => {
 	const payments = [{ metodo: "PIX" as const, valor: 37 }];
 	assert.equal(netSaleChangeFromPayments(payments, 0), payments);
 });
+
+test("card charged on the terminal does not block change from the cash received with it", () => {
+	const result = resolveSaleChange({
+		payments: [
+			{ metodo: "CARTAO_CREDITO", valor: 50, efetivacaoTipo: "PENDENTE", totalParcelas: 3, dispositivoId: "dev-1" },
+			{ metodo: "DINHEIRO", valor: 50, efetivacaoTipo: "IMEDIATA" },
+		],
+		saleTotal: 80,
+	});
+	assert.equal(result.bloqueio, null);
+	assert.equal(result.troco, 20);
+	assert.equal(result.cobertoPorDinheiro, true);
+});

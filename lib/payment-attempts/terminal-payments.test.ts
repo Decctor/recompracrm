@@ -106,20 +106,57 @@ test("fiado aceita prazo explícito, mas não no passado nem sem cliente", () =>
 	rejects([{ metodo: "FIADO_NOTA", valor: 80.8 }], "UNSUPPORTED_PAYMENT_OPERATION");
 });
 
-test("cartão é perna única e exata, atribuída ao dispositivo como pendente", () => {
+test("cartão vai para a maquininha como pendente e se combina com dinheiro, Pix e outro cartão", () => {
 	const result = resolveTerminalSalePayments({ ...base, payments: [{ metodo: "CARTAO_CREDITO", valor: 80.8, totalParcelas: 3 }] });
 	assert.equal(result.terminal, true);
 	assert.equal(result.splits[0].dispositivoId, "dev-1");
 	assert.equal(result.splits[0].efetivacaoTipo, "PENDENTE");
 	assert.equal(result.splits[0].totalParcelas, 3);
+
+	// R$ 50 no crédito + R$ 50 em dinheiro numa venda de R$ 80,80: troco de R$ 19,20 do dinheiro.
+	const mixed = resolveTerminalSalePayments({
+		...base,
+		payments: [
+			{ metodo: "CARTAO_CREDITO", valor: 50 },
+			{ metodo: "DINHEIRO", valor: 50 },
+		],
+	});
+	assert.equal(mixed.troco, 19.2);
+	assert.equal(mixed.splits.filter((split) => split.dispositivoId).length, 1);
+	const twoCards = resolveTerminalSalePayments({
+		...base,
+		payments: [
+			{ metodo: "CARTAO_CREDITO", valor: 50 },
+			{ metodo: "CARTAO_DEBITO", valor: 30.8 },
+		],
+	});
+	assert.equal(twoCards.splits.filter((split) => split.dispositivoId).length, 2);
+	resolveTerminalSalePayments({
+		...base,
+		payments: [
+			{ metodo: "PIX", valor: 30.8 },
+			{ metodo: "CARTAO_DEBITO", valor: 50 },
+		],
+	});
+
+	rejects([{ metodo: "CARTAO_DEBITO", valor: 100 }], "UNSUPPORTED_PAYMENT_OPERATION");
 	rejects(
 		[
-			{ metodo: "CARTAO_CREDITO", valor: 50 },
-			{ metodo: "DINHEIRO", valor: 30.8 },
+			{ metodo: "CARTAO_DEBITO", valor: 60 },
+			{ metodo: "PIX", valor: 30 },
 		],
 		"UNSUPPORTED_PAYMENT_OPERATION",
 	);
-	rejects([{ metodo: "CARTAO_DEBITO", valor: 100 }], "UNSUPPORTED_PAYMENT_OPERATION");
+	assert.equal(
+		resolveTerminalSalePayments({
+			...base,
+			payments: [
+				{ metodo: "CARTAO_DEBITO", valor: 60 },
+				{ metodo: "DINHEIRO", valor: 30 },
+			],
+		}).troco,
+		9.2,
+	);
 	rejects([{ metodo: "CARTAO_DEBITO", valor: 80.8, totalParcelas: 2 }], "UNSUPPORTED_PAYMENT_OPERATION");
 	rejects([{ metodo: "CARTAO_CREDITO", valor: 80.8, totalParcelas: 12 }], "UNSUPPORTED_PAYMENT_OPERATION");
 });

@@ -8,7 +8,7 @@ import { type TCouponCartItem, type TCouponRedemptionSurface, evaluateCouponAgai
 import type { TBenefitRedemptionSurface } from "@/schemas/enums";
 import { processCouponRedemption } from "@/lib/coupons/redemption";
 import { processSaleCupomAutoPrintIfEligible, processSalePreparationTicketAutoPrintIfEligible } from "@/lib/desktop-agent/auto-print";
-import { createAssignedPaymentAttempt, normalizePaymentsForTerminal, resolvePaymentTerminalAssignment } from "@/lib/payment-attempts";
+import { createAssignedPaymentAttempt, normalizePaymentsForTerminal, resolvePaymentTerminalAssignments } from "@/lib/payment-attempts";
 import { type TPaymentSplit, getPaymentProvider } from "@/lib/payments";
 import { buildSaleEntryTitle } from "@/lib/sales/entry-titles";
 import { validateSalesSessionSeller } from "@/lib/sales-sessions";
@@ -245,8 +245,8 @@ export async function processSaleConfirmationInTransaction({ tx, input }: { tx: 
 	// Com recebimentos parciais (conta de atendimento), os pagamentos desta confirmação cobrem só o
 	// restante: a perna de cartão na maquininha e o troco são conferidos contra ele.
 	const remainingSaleTotal = Math.max(0, sale.valorTotal - (input.prepaidAmount ?? 0));
-	const terminalAssignment = resolvePaymentTerminalAssignment({ payments: input.salePayments, saleTotal: remainingSaleTotal });
-	const salePayments = terminalAssignment ? normalizePaymentsForTerminal(input.salePayments) : input.salePayments;
+	const terminalAssignments = resolvePaymentTerminalAssignments({ payments: input.salePayments, saleTotal: remainingSaleTotal });
+	const salePayments = terminalAssignments.length > 0 ? normalizePaymentsForTerminal(input.salePayments) : input.salePayments;
 
 	const paymentProvider = getPaymentProvider(input.organization);
 	const paymentResults = await paymentProvider.processPayments(
@@ -264,27 +264,34 @@ export async function processSaleConfirmationInTransaction({ tx, input }: { tx: 
 
 	// A tentativa nasce aqui, na mesma transação da venda confirmada e da transação pendente, já
 	// atribuída ao dispositivo. Nenhuma chamada à adquirente acontece dentro da transação.
-	let tentativaPagamento: { id: string; status: string; dispositivoId: string; dispositivoNome: string } | null = null;
-	if (terminalAssignment) {
-		const pendingTransactionId = paymentResults[terminalAssignment.index]?.transacaoId;
+	// Uma tentativa por perna em cartão, cada uma na sua transação pendente: dinheiro, Pix e fiado
+	// da mesma venda já efetivam aqui; os cartões efetivam um a um, quando a maquininha aprovar.
+	const tentativasPagamento: { id: string; status: string; dispositivoId: string; dispositivoNome: string; valor: number; metodo: string }[] = [];
+	for (const [position, assignment] of terminalAssignments.entries()) {
+		const pendingTransactionId = paymentResults[assignment.index]?.transacaoId;
 		if (!pendingTransactionId) throw new createHttpError.InternalServerError("Transação pendente da cobrança na maquininha não foi criada.");
+		// A chave do comando do dispositivo é única por terminal: a primeira perna leva a chave, as
+		// seguintes a mesma chave com a posição — o replay da venda devolve todas.
+		const chave = input.terminalAttempt?.chaveIdempotencia ?? null;
 		const attempt = await createAssignedPaymentAttempt({
 			tx,
 			organizationId: input.organization.id,
 			saleId: input.saleId,
-			deviceId: terminalAssignment.dispositivoId,
+			deviceId: assignment.dispositivoId,
 			financialTransactionId: pendingTransactionId,
-			metodo: terminalAssignment.payment.metodo,
-			valor: terminalAssignment.payment.valor,
-			totalParcelas: terminalAssignment.payment.totalParcelas ?? 1,
+			metodo: assignment.payment.metodo,
+			valor: assignment.payment.valor,
+			totalParcelas: assignment.payment.totalParcelas ?? 1,
 			parcelamentoResponsavel: "LOJISTA",
 			actorUserId: input.saleAuthorId,
-			chaveIdempotencia: input.terminalAttempt?.chaveIdempotencia ?? null,
+			chaveIdempotencia: chave ? (position === 0 ? chave : `${chave}#${position + 1}`) : null,
 			fingerprintEntrada: input.terminalAttempt?.fingerprintEntrada ?? null,
 			origem: input.terminalAttempt?.origem ?? "PLATAFORMA",
 		});
-		tentativaPagamento = { id: attempt.id, status: attempt.status, dispositivoId: attempt.dispositivoId, dispositivoNome: attempt.dispositivoNome };
+		tentativasPagamento.push({ id: attempt.id, status: attempt.status, dispositivoId: attempt.dispositivoId, dispositivoNome: attempt.dispositivoNome, valor: attempt.valor, metodo: attempt.metodo });
 	}
+	// Compatibilidade: quem só conhece uma cobrança por venda lê a primeira.
+	const tentativaPagamento = tentativasPagamento[0] ?? null;
 
 	// Pagamentos entram pelo valor entregue pelo cliente; o excesso sobre o total vira uma SAÍDA
 	// de troco em dinheiro no mesmo lançamento (valida as regras e lança, ou aborta a confirmação).
@@ -643,6 +650,7 @@ export async function processSaleConfirmationInTransaction({ tx, input }: { tx: 
 		lancamentoContabilId: entry.id,
 		pagamentos: paymentResults,
 		tentativaPagamento,
+		tentativasPagamento,
 		troco: change?.valor ?? 0,
 		cashbackResgate: cashbackRedemptionResult,
 		cashbackAcumulo: cashbackAccumulationResult,

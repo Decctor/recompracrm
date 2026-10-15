@@ -10,6 +10,7 @@ import { SALE_CHANGE_TOLERANCE, resolveSaleChange } from "@/lib/sales/sale-chang
 import type { TDeliveryModeEnum, TPaymentMethodEnum } from "@/schemas/enums";
 import type { TOrganizationConfiguration } from "@/schemas/organizations";
 import dayjs from "dayjs";
+import { MAX_TERMINAL_LEGS_PER_SALE } from "./assignment";
 import { PaymentTerminalError } from "./errors";
 
 /**
@@ -105,9 +106,9 @@ function invalid(message: string): never {
 /**
  * Valida e normaliza os pagamentos do terminal no formato do split do checkout.
  *
- * Regras deste marco: dinheiro, Pix e fiado combinam entre si e o excesso em dinheiro vira troco;
- * cartão ainda é uma perna única cobrindo exatamente o total (a tentativa cobre a venda inteira —
- * split misto com cartão é o próximo passo, lib/payment-attempts/assignment.ts).
+ * Dinheiro, Pix, fiado e cartão combinam entre si; o excesso em dinheiro vira troco. Cada perna
+ * em cartão é atribuída a este dispositivo e vira uma cobrança própria (assignment.ts), cobrada
+ * uma depois da outra.
  */
 export function resolveTerminalSalePayments({
 	payments,
@@ -165,13 +166,12 @@ export function resolveTerminalSalePayments({
 		});
 	});
 
-	// Cartão neste marco: perna única e exata. A tentativa atribuída cobre a venda inteira.
+	// Cartão se combina com os demais métodos e com outros cartões: cada perna vira uma cobrança
+	// própria na maquininha. Cartão nunca passa do total — o excesso só sai do dinheiro, como troco.
 	const terminalLegs = splits.filter((split) => split.dispositivoId);
-	if (terminalLegs.length > 0) {
-		if (splits.length > 1) unsupported("Nesta versão o cartão não se combina com outros métodos: a cobrança na maquininha cobre o total da venda.");
-		if (Math.abs(terminalLegs[0].valor - saleTotal) > SALE_CHANGE_TOLERANCE)
-			unsupported("O pagamento em cartão precisa ser exatamente o total da venda.");
-	}
+	if (terminalLegs.length > MAX_TERMINAL_LEGS_PER_SALE) unsupported(`A venda aceita até ${MAX_TERMINAL_LEGS_PER_SALE} cobranças em cartão.`);
+	const cardTotal = terminalLegs.reduce((sum, split) => sum + split.valor, 0);
+	if (cardTotal > saleTotal + SALE_CHANGE_TOLERANCE) unsupported("O cartão não pode passar do total da venda: o troco só sai do dinheiro.");
 
 	const change = resolveSaleChange({ payments: splits, saleTotal });
 	if (change.totalPagamentos + SALE_CHANGE_TOLERANCE < saleTotal)
