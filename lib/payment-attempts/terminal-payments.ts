@@ -1,8 +1,13 @@
 import { getOrganizationPaymentMethodsConfig, getPaymentInstallmentsOptions } from "@/lib/payments/defaults";
 import { PAYMENT_METHOD_LABELS } from "@/lib/payments/labels";
-import { type TCheckoutPaymentSplit, getDefaultCheckoutPaymentSplit, isCheckoutPaymentSplitValid, isPaymentTerminalMethod } from "@/lib/payments/schemas";
+import {
+	type TCheckoutPaymentSplit,
+	getDefaultCheckoutPaymentSplit,
+	isCheckoutPaymentSplitValid,
+	isPaymentTerminalMethod,
+} from "@/lib/payments/schemas";
 import { SALE_CHANGE_TOLERANCE, resolveSaleChange } from "@/lib/sales/sale-change";
-import type { TPaymentMethodEnum } from "@/schemas/enums";
+import type { TDeliveryModeEnum, TPaymentMethodEnum } from "@/schemas/enums";
 import type { TOrganizationConfiguration } from "@/schemas/organizations";
 import dayjs from "dayjs";
 import { PaymentTerminalError } from "./errors";
@@ -17,7 +22,13 @@ import { PaymentTerminalError } from "./errors";
  * é combinável. Puro, sem banco: testável e compartilhável com a documentação.
  */
 
-export const TERMINAL_SALE_METHODS = ["DINHEIRO", "PIX", "CARTAO_DEBITO", "CARTAO_CREDITO", "FIADO_NOTA"] as const satisfies readonly TPaymentMethodEnum[];
+export const TERMINAL_SALE_METHODS = [
+	"DINHEIRO",
+	"PIX",
+	"CARTAO_DEBITO",
+	"CARTAO_CREDITO",
+	"FIADO_NOTA",
+] as const satisfies readonly TPaymentMethodEnum[];
 export type TTerminalSaleMethod = (typeof TERMINAL_SALE_METHODS)[number];
 
 const DATE_INPUT = /^\d{4}-\d{2}-\d{2}$/;
@@ -40,7 +51,9 @@ export type TTerminalPaymentMethodView = {
 };
 
 /** Métodos que este terminal oferece: os do recorte acima que a organização marcou como suportados. */
-export function listTerminalPaymentMethods(configuracao: Pick<TOrganizationConfiguration, "defaults"> | null | undefined): TTerminalPaymentMethodView[] {
+export function listTerminalPaymentMethods(
+	configuracao: Pick<TOrganizationConfiguration, "defaults"> | null | undefined,
+): TTerminalPaymentMethodView[] {
 	const methodsConfig = getOrganizationPaymentMethodsConfig(configuracao);
 	return TERMINAL_SALE_METHODS.filter((metodo) => methodsConfig[metodo]?.suportado).map((metodo) => {
 		const config = methodsConfig[metodo];
@@ -62,8 +75,12 @@ export type TTerminalPaymentInput = {
 	metodo: TPaymentMethodEnum;
 	valor: number;
 	totalParcelas?: number | null;
-	// YYYY-MM-DD; só para métodos pendentes (fiado). Ausente = prazo padrão da organização.
+	// YYYY-MM-DD; só para métodos pendentes (fiado, entrega). Ausente = prazo padrão da organização.
 	dataPrevisao?: string | null;
+	// Dinheiro e Pix: "recebido agora" (IMEDIATA) ou "receber depois" (PENDENTE). Ausente = o padrão
+	// do método, que na ENTREGA é receber na porta (getOrganizationPaymentMethodDefault). Cartão
+	// segue a maquininha e fiado é sempre pendente.
+	efetivacaoTipo?: "IMEDIATA" | "PENDENTE" | null;
 };
 
 export type TResolvedTerminalPayments = {
@@ -98,6 +115,7 @@ export function resolveTerminalSalePayments({
 	deviceId,
 	hasClient,
 	methods,
+	entregaModalidade = null,
 	today = dayjs().format("YYYY-MM-DD"),
 }: {
 	payments: TTerminalPaymentInput[];
@@ -105,6 +123,7 @@ export function resolveTerminalSalePayments({
 	deviceId: string;
 	hasClient: boolean;
 	methods: TTerminalPaymentMethodView[];
+	entregaModalidade?: TDeliveryModeEnum | null;
 	today?: string;
 }): TResolvedTerminalPayments {
 	if (payments.length === 0) invalid("Informe pelo menos um pagamento.");
@@ -119,13 +138,16 @@ export function resolveTerminalSalePayments({
 		const totalParcelas = payment.totalParcelas ?? 1;
 		if (!Number.isInteger(totalParcelas) || totalParcelas < 1) unsupported("Parcelamento inválido.");
 		if (totalParcelas > method.maxParcelas) {
-			unsupported(method.maxParcelas === 1 ? `${method.rotulo} não admite parcelamento.` : `${method.rotulo} parcela em até ${method.maxParcelas}x nesta loja.`);
+			unsupported(
+				method.maxParcelas === 1 ? `${method.rotulo} não admite parcelamento.` : `${method.rotulo} parcela em até ${method.maxParcelas}x nesta loja.`,
+			);
 		}
 
 		if (method.exigeCliente && !hasClient) unsupported("Fiado exige um cliente identificado: busque o cliente pelo telefone antes de cobrar.");
 
+		const efetivacao = resolveTerminalPaymentSettlement({ method, requested: payment.efetivacaoTipo, entregaModalidade });
 		let dataPrevisao = today;
-		if (method.efetivacao === "PENDENTE" && !method.executaNaMaquininha) {
+		if (efetivacao === "PENDENTE" && !method.executaNaMaquininha) {
 			if (payment.dataPrevisao != null) {
 				if (!DATE_INPUT.test(payment.dataPrevisao) || !dayjs(payment.dataPrevisao).isValid()) invalid("Data de previsão inválida.");
 				if (payment.dataPrevisao < today) invalid("A data de previsão não pode ficar no passado.");
@@ -137,7 +159,7 @@ export function resolveTerminalSalePayments({
 			metodo: method.metodo,
 			valor,
 			totalParcelas: method.executaNaMaquininha ? totalParcelas : null,
-			efetivacaoTipo: method.efetivacao,
+			efetivacaoTipo: efetivacao,
 			dataPrevisao,
 			dispositivoId: method.executaNaMaquininha ? deviceId : null,
 		});
@@ -147,11 +169,13 @@ export function resolveTerminalSalePayments({
 	const terminalLegs = splits.filter((split) => split.dispositivoId);
 	if (terminalLegs.length > 0) {
 		if (splits.length > 1) unsupported("Nesta versão o cartão não se combina com outros métodos: a cobrança na maquininha cobre o total da venda.");
-		if (Math.abs(terminalLegs[0].valor - saleTotal) > SALE_CHANGE_TOLERANCE) unsupported("O pagamento em cartão precisa ser exatamente o total da venda.");
+		if (Math.abs(terminalLegs[0].valor - saleTotal) > SALE_CHANGE_TOLERANCE)
+			unsupported("O pagamento em cartão precisa ser exatamente o total da venda.");
 	}
 
 	const change = resolveSaleChange({ payments: splits, saleTotal });
-	if (change.totalPagamentos + SALE_CHANGE_TOLERANCE < saleTotal) invalid(`Os pagamentos somam menos que o total da venda. Falta ${formatMoney(round2(saleTotal - change.totalPagamentos))}.`);
+	if (change.totalPagamentos + SALE_CHANGE_TOLERANCE < saleTotal)
+		invalid(`Os pagamentos somam menos que o total da venda. Falta ${formatMoney(round2(saleTotal - change.totalPagamentos))}.`);
 	if (change.bloqueio) unsupported(change.bloqueio);
 	if (change.troco > 0 && !change.cobertoPorDinheiro) unsupported("Troco só sai do dinheiro recebido: informe o valor exato nos demais métodos.");
 
@@ -160,6 +184,25 @@ export function resolveTerminalSalePayments({
 	}
 
 	return { splits, troco: change.troco, terminal: terminalLegs.length > 0 };
+}
+
+/**
+ * Efetivação de uma perna: cartão segue a maquininha, fiado é sempre pendente; dinheiro e Pix
+ * aceitam a escolha do operador e, sem ela, recebem na porta quando a venda é ENTREGA — o mesmo
+ * default do checkout web.
+ */
+export function resolveTerminalPaymentSettlement({
+	method,
+	requested,
+	entregaModalidade,
+}: {
+	method: Pick<TTerminalPaymentMethodView, "metodo" | "executaNaMaquininha" | "efetivacao">;
+	requested?: "IMEDIATA" | "PENDENTE" | null;
+	entregaModalidade?: TDeliveryModeEnum | null;
+}): "IMEDIATA" | "PENDENTE" {
+	if (method.executaNaMaquininha || method.metodo === "FIADO_NOTA") return method.efetivacao;
+	if (requested) return requested;
+	return entregaModalidade === "ENTREGA" ? "PENDENTE" : method.efetivacao;
 }
 
 function formatMoney(value: number) {

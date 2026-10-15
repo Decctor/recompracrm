@@ -1,6 +1,6 @@
 import { authenticateExternalRequest, requireExternalScope } from "@/lib/access/authentication";
 import { PaymentTerminalError, createTerminalSale, paymentTerminalApiHandler } from "@/lib/payment-attempts";
-import { PaymentMethodEnum } from "@/schemas/enums";
+import { DeliveryModeEnum, PaymentMethodEnum } from "@/schemas/enums";
 import { TerminalSaleBenefitsInputSchema, TerminalSaleItemsInputSchema } from "@/schemas/payment-attempts";
 import { db } from "@/services/drizzle";
 import { accessPrincipals } from "@/services/drizzle/schema";
@@ -21,8 +21,19 @@ const CreateTerminalSaleInputSchema = z.object({
 		vendedorId: z.string({ invalid_type_error: "Tipo inválido para o vendedor." }).optional().nullable(),
 		sessaoVendaId: z.string({ invalid_type_error: "Tipo inválido para o caixa." }).optional().nullable(),
 		observacoes: z.string({ invalid_type_error: "Tipo inválido para observações." }).max(500).optional().nullable(),
+		entregaModalidade: DeliveryModeEnum.optional().nullable(),
+		entregaLocalizacaoId: z.string({ invalid_type_error: "Tipo inválido para o endereço de entrega." }).optional().nullable(),
+		comandaNumero: z
+			.string({ invalid_type_error: "Tipo inválido para o número da comanda." })
+			.max(20, "Número da comanda muito longo.")
+			.optional()
+			.nullable(),
 		// Desconto geral, em reais; acima do teto do vendedor exige a aprovação pedida por este terminal.
-		descontosTotal: z.number({ invalid_type_error: "Tipo inválido para o desconto." }).min(0, "O desconto não pode ser negativo.").optional().nullable(),
+		descontosTotal: z
+			.number({ invalid_type_error: "Tipo inválido para o desconto." })
+			.min(0, "O desconto não pode ser negativo.")
+			.optional()
+			.nullable(),
 		descontoAprovacaoId: z.string({ invalid_type_error: "Tipo inválido para a aprovação de desconto." }).optional().nullable(),
 		// Vazio só numa venda de recompensas: o service exige itens ou recompensas.
 		itens: TerminalSaleItemsInputSchema,
@@ -42,6 +53,8 @@ const CreateTerminalSaleInputSchema = z.object({
 					.regex(/^\d{4}-\d{2}-\d{2}$/, "Data de previsão inválida.")
 					.optional()
 					.nullable(),
+				// Dinheiro e Pix: recebido agora ou na entrega (padrão da ENTREGA). Cartão e fiado ignoram.
+				efetivacaoTipo: z.enum(["IMEDIATA", "PENDENTE"], { invalid_type_error: "Tipo inválido para a efetivação do pagamento." }).optional().nullable(),
 			}),
 		)
 		// Vazio só quando os benefícios quitam a venda (total zero).

@@ -11,11 +11,20 @@ import { buildTerminalCashbackView, buildTerminalCouponView } from "./terminal-b
 // carrinho e recompensas. A superfície é a do PDV ("POS"): a maquininha é um caixa da loja, e o
 // lojista que desliga resgates no PDV os desliga aqui também.
 
-/** Itens do terminal precificados pelo catálogo do canal PDV, como na criação da venda. */
-export async function buildTerminalCartItems({ organizationId, itens }: { organizationId: string; itens: TTerminalSaleItemInput[] }) {
+/** Itens do terminal precificados pelo catálogo do canal (PDV na venda, COMANDA no pedido da conta). */
+export async function buildTerminalCartItems({
+	organizationId,
+	itens,
+	canal = "POS",
+}: {
+	organizationId: string;
+	itens: TTerminalSaleItemInput[];
+	/** COMANDA para pedidos de conta de atendimento (preço e disponibilidade do canal da conta). */
+	canal?: "POS" | "COMANDA";
+}) {
 	if (itens.length === 0) return [];
 	const productIds = [...new Set(itens.map((item) => item.produtoId))];
-	const catalog = new Map((await hydratePOSProducts({ orgId: organizationId, productIds })).map((product) => [product.id, product]));
+	const catalog = new Map((await hydratePOSProducts({ orgId: organizationId, productIds, canal })).map((product) => [product.id, product]));
 	return itens.map((item) => buildTerminalCartItem(catalog.get(item.produtoId), item));
 }
 

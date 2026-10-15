@@ -8,7 +8,7 @@ export {
 } from "./approve-tab-order-request";
 export { cancelTab, type TCancelTabInput, type TCancelTabResult } from "./cancel-tab";
 export { cancelTabOrder, type TCancelTabOrderInput, type TCancelTabOrderResult } from "./cancel-tab-order";
-export { closeTab, type TCloseTabInput, type TCloseTabResult } from "./close-tab";
+export { closeTab, closeTabInTransaction, finishTabClose, prepareTabClose, type TCloseTabInput, type TCloseTabResult, type TPreparedTabClose } from "./close-tab";
 export {
 	launchTabOrder,
 	processTabOrderLaunchPostCommit,
@@ -23,7 +23,7 @@ export {
 	type TProcessTabOrderStatusChangeInput,
 	type TProcessTabOrderStatusChangeResult,
 } from "./process-tab-order-status-change";
-export { receiveTabPayment, type TReceiveTabPaymentInput, type TReceiveTabPaymentResult } from "./receive-tab-payment";
+export { prepareTabPayment, receiveTabPayment, receiveTabPaymentInTransaction, type TReceiveTabPaymentInput, type TReceiveTabPaymentResult } from "./receive-tab-payment";
 export { refundTabPayment, type TRefundTabPaymentInput, type TRefundTabPaymentResult } from "./refund-tab-payment";
 export { transferTab, type TTransferTabInput, type TTransferTabResult } from "./transfer-tab";
 export { generatePublicToken, hashPublicToken, resolveServiceSettings } from "./utils";

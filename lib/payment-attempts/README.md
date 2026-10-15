@@ -136,3 +136,38 @@ nem imprime NFC-e (a emissão automática segue a política da organização, co
 Deploy desta etapa: `npm run db:push` (coluna `solicitante_dispositivo_id`, `solicitante_id` anulável
 em `ampmais_action_approval_requests`).
 
+### Modalidades de entrega
+
+- A venda leva `sale.entregaModalidade` (`PRESENCIAL` padrão, `RETIRADA`, `ENTREGA`, `COMANDA`).
+  ENTREGA exige cliente e `entregaLocalizacaoId` (endereço **do cliente**); COMANDA exige
+  `comandaNumero`. São as exigências da tela do PDV web, aqui conferidas no servidor.
+- Taxa de entrega: `resolveShopDeliveryFee` (a mesma da loja digital e do PDV) sobre o subtotal dos
+  itens, gravada como acréscimo e marcada em `rascunhoMetadados.taxaEntrega` (o fiscal a destaca).
+  `GET /configuration` manda a regra (`entrega: { ativo, taxa, gratisAcima }`) para o app mostrar.
+- Na ENTREGA, dinheiro e Pix nascem "a receber na entrega" (PENDENTE, como o default do checkout
+  web); `payments[].efetivacaoTipo` permite marcar "já recebido". Pendente não gera troco.
+- Endereços: `GET/POST /api/payment-terminal/clients/addresses` (listar com `clients:read`,
+  cadastrar com `clients:create`) e `GET /api/payment-terminal/cep?cep=` (ViaCEP normalizado). O
+  cadastro começa pelo CEP: cidade e estado vêm dele, rua e bairro do que o operador confirmou.
+
+### Contas de atendimento (mesas e comandas)
+
+Endpoints sob `/api/payment-terminal/tabs` (scope `sales:create`) sobre `lib/tabs`, com o terminal
+como ator sem usuário (`abertaPorDispositivoId`/`fechadaPorDispositivoId` em `tabs.metadados`):
+
+- `GET /tabs` — configuração de atendimento, pontos ativos (com contas abertas) e contas abertas
+  (consumo, pago, restante, pedidos em andamento); `GET /tabs/{id}` — pedidos com itens e parciais.
+- `POST /tabs` — abre a conta (ponto e/ou código; a mesa automática devolve a conta já aberta).
+- `POST /tabs/orders` — pedido com itens no formato da venda, montados no canal **COMANDA**
+  (`GET /catalog?canal=COMANDA` mostra esses preços); `tabOrderId` do aparelho torna o envio
+  idempotente; o ticket de preparo sai como no painel.
+- `POST /tabs/payments` — parcial em dinheiro ou Pix, com `Idempotency-Key`.
+- `POST /tabs/close` — fechamento com `Idempotency-Key`: o restante pelo recorte do terminal
+  (cartão como perna única exata → cobrança atribuída a este dispositivo), desconto com a
+  aprovação remota do terminal.
+
+`closeTab` e `receiveTabPayment` foram divididos em preparação / transação / pós-commit
+(`prepareTabClose`, `closeTabInTransaction`, `finishTabClose`; `prepareTabPayment`,
+`receiveTabPaymentInTransaction`) para rodarem na transação idempotente do dispositivo; as rotas
+do painel seguem chamando `closeTab`/`receiveTabPayment`, com o mesmo comportamento.
+

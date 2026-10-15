@@ -1,5 +1,5 @@
 import { authenticateExternalRequest, requireExternalScope } from "@/lib/access/authentication";
-import { listTerminalPaymentMethods, paymentTerminalApiHandler, toTerminalDiscountLimit } from "@/lib/payment-attempts";
+import { listTerminalPaymentMethods, loadTerminalDeliveryRules, paymentTerminalApiHandler, toTerminalDiscountLimit } from "@/lib/payment-attempts";
 import { DEVICE_DISCOUNT_AUTHORITY, resolveDiscountAuthority } from "@/lib/permissions/discounts";
 import { db } from "@/services/drizzle";
 import { accessPrincipals, organizationMembers, organizations, salesSessions, sellers } from "@/services/drizzle/schema";
@@ -15,7 +15,7 @@ import { type NextRequest, NextResponse } from "next/server";
 // o app avisar antes de cobrar que o desconto vai precisar de aprovação. Organização e dispositivo
 // vêm da credencial.
 async function getPaymentTerminalConfiguration({ organizationId, deviceId }: { organizationId: string; deviceId: string }) {
-	const [organization, device, activeSellers, openSessions, sellerMemberships] = await Promise.all([
+	const [organization, device, activeSellers, openSessions, sellerMemberships, deliveryRules] = await Promise.all([
 		db.query.organizations.findFirst({ where: eq(organizations.id, organizationId), columns: { id: true, nome: true, configuracao: true } }),
 		db.query.accessPrincipals.findFirst({ where: eq(accessPrincipals.id, deviceId), columns: { id: true, nome: true } }),
 		db
@@ -33,6 +33,7 @@ async function getPaymentTerminalConfiguration({ organizationId, deviceId }: { o
 			.select({ vendedorId: organizationMembers.usuarioVendedorId, permissoes: organizationMembers.permissoes })
 			.from(organizationMembers)
 			.where(and(eq(organizationMembers.organizacaoId, organizationId), isNotNull(organizationMembers.usuarioVendedorId))),
+		loadTerminalDeliveryRules(organizationId),
 	]);
 	if (!organization) throw new createHttpError.NotFound("Organização não encontrada.");
 
@@ -62,6 +63,8 @@ async function getPaymentTerminalConfiguration({ organizationId, deviceId }: { o
 				})),
 			},
 			pagamentos: { metodos },
+			// Taxa de entrega da loja (a mesma do PDV web e da loja digital); o servidor recalcula na venda.
+			entrega: deliveryRules,
 			// Reservado para o rollout: o app compara e exige atualização quando abaixo (docs/08).
 			appVersaoMinima: null as string | null,
 		},

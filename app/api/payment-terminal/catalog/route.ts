@@ -17,7 +17,13 @@ import { z } from "zod";
 // mesmas regras no servidor.
 
 type TTerminalAddOnReference = {
-	grupo: { id: string; nome: string; minOpcoes: number; maxOpcoes: number; opcoes: { id: string; nome: string; precoDelta: number; maxQtdePorItem: number | null }[] };
+	grupo: {
+		id: string;
+		nome: string;
+		minOpcoes: number;
+		maxOpcoes: number;
+		opcoes: { id: string; nome: string; precoDelta: number; maxQtdePorItem: number | null }[];
+	};
 };
 
 function toTerminalAddOnGroups(references: TTerminalAddOnReference[]) {
@@ -40,11 +46,18 @@ const GetTerminalCatalogInputSchema = z.object({
 		.optional()
 		.nullable()
 		.transform((value) => (value ? Math.max(1, Number(value) || 1) : 1)),
+	// POS (venda no terminal, padrão) ou COMANDA (pedido de conta de atendimento: preço e
+	// disponibilidade do canal da conta).
+	canal: z
+		.enum(["POS", "COMANDA"], { invalid_type_error: "Canal inválido." })
+		.optional()
+		.nullable()
+		.transform((value) => value ?? "POS"),
 });
 export type TGetTerminalCatalogInput = z.infer<typeof GetTerminalCatalogInputSchema>;
 
 async function getTerminalCatalog({ input, organizationId }: { input: TGetTerminalCatalogInput; organizationId: string }) {
-	const channelState = await loadChannelState({ orgId: organizationId, canal: "POS" });
+	const channelState = await loadChannelState({ orgId: organizationId, canal: input.canal });
 	const catalogConditions = buildChannelCatalogConditions({ orgId: organizationId, channelState });
 	if (!catalogConditions) {
 		return { data: { groups: [], products: [], page: 1, totalPages: 0, total: 0 }, message: "Catálogo vazio para o canal PDV." };
@@ -57,7 +70,10 @@ async function getTerminalCatalog({ input, organizationId }: { input: TGetTermin
 		if (input.group) conditions.push(eq(products.grupo, input.group));
 
 		const [groupRows, pageRows] = await Promise.all([
-			database.selectDistinct({ grupo: products.grupo }).from(products).where(and(...catalogConditions)),
+			database
+				.selectDistinct({ grupo: products.grupo })
+				.from(products)
+				.where(and(...catalogConditions)),
 			database
 				.select({ id: products.id, total: sql<number>`count(*) over ()`.mapWith(Number) })
 				.from(products)
@@ -72,12 +88,16 @@ async function getTerminalCatalog({ input, organizationId }: { input: TGetTermin
 		);
 		const total = pageRows[0]?.total ?? 0;
 		const ids = pageRows.map((row) => row.id);
-		if (ids.length === 0) return { data: { groups, products: [], page: input.page, totalPages: Math.ceil(total / PAGE_SIZE), total }, message: "Catálogo listado com sucesso." };
+		if (ids.length === 0)
+			return {
+				data: { groups, products: [], page: input.page, totalPages: Math.ceil(total / PAGE_SIZE), total },
+				message: "Catálogo listado com sucesso.",
+			};
 
 		// Mesma projeção do canal PDV que a venda usa (`hydratePOSProducts` → `resolveCatalogOrderItem`):
 		// o que o terminal mostra — preço do nó, variações disponíveis, grupos com as regras do vínculo
 		// e do canal, opções com preço e pausa do canal — é exatamente o que o servidor confere.
-		const hydrated = await hydratePOSProducts({ orgId: organizationId, productIds: ids });
+		const hydrated = await hydratePOSProducts({ orgId: organizationId, productIds: ids, canal: input.canal });
 		const rank = new Map(ids.map((id, index) => [id, index]));
 		const list = hydrated
 			.sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0))
@@ -103,7 +123,10 @@ async function getTerminalCatalog({ input, organizationId }: { input: TGetTermin
 				})),
 			}));
 
-		return { data: { groups, products: list, page: input.page, totalPages: Math.ceil(total / PAGE_SIZE), total }, message: "Catálogo listado com sucesso." };
+		return {
+			data: { groups, products: list, page: input.page, totalPages: Math.ceil(total / PAGE_SIZE), total },
+			message: "Catálogo listado com sucesso.",
+		};
 	});
 }
 export type TGetTerminalCatalogOutput = Awaited<ReturnType<typeof getTerminalCatalog>>;
@@ -112,7 +135,12 @@ async function getTerminalCatalogRoute(request: NextRequest) {
 	const actor = await authenticateExternalRequest(request);
 	requireExternalScope(actor, "payment-terminal:catalog:read");
 	const { searchParams } = request.nextUrl;
-	const input = GetTerminalCatalogInputSchema.parse({ search: searchParams.get("search"), group: searchParams.get("group"), page: searchParams.get("page") });
+	const input = GetTerminalCatalogInputSchema.parse({
+		search: searchParams.get("search"),
+		group: searchParams.get("group"),
+		page: searchParams.get("page"),
+		canal: searchParams.get("canal"),
+	});
 	return NextResponse.json(await getTerminalCatalog({ input, organizationId: actor.organizationId }));
 }
 

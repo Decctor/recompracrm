@@ -8,6 +8,7 @@ import createHttpError from "http-errors";
 import { PaymentTerminalError } from "./errors";
 import { authorizeSaleDiscount } from "@/lib/sales/sale-discount-authorization";
 import { buildTerminalCartItems, loadTerminalClientBenefits } from "./terminal-benefits";
+import { requireTerminalSaleAddress, resolveTerminalDeliveryFee } from "./terminal-delivery";
 import { resolveTerminalDiscount } from "./terminal-discount-policy";
 import { type TTerminalBenefitsRequest, decideTerminalBenefits } from "./terminal-benefits-policy";
 import { type TTerminalSaleItemInput, roundCents } from "./terminal-cart-item";
@@ -36,7 +37,10 @@ import { buildChargeView, buildPaymentAttemptSaleView, findPaymentAttemptForDevi
 //   paga é o total depois deles, e uma venda quitada pelos benefícios não leva pagamento;
 // - desconto manual segue o teto do vendedor (sem vendedor com membership, zero): acima dele a
 //   venda exige uma aprovação pedida por ESTE terminal (terminal-discount-approvals.ts), e a
-//   recusa sai como DISCOUNT_APPROVAL_REQUIRED para o app pedir ao gestor.
+//   recusa sai como DISCOUNT_APPROVAL_REQUIRED para o app pedir ao gestor;
+// - modalidade de entrega como no checkout web: ENTREGA exige cliente, leva um endereço dele e a
+//   taxa da loja (acréscimo marcado em `rascunhoMetadados.taxaEntrega`, que o fiscal destaca), e
+//   dinheiro/Pix passam a "receber na entrega" por padrão; COMANDA leva o número.
 
 export type { TTerminalSaleItemInput };
 
@@ -46,6 +50,10 @@ export type TCreateTerminalSaleInput = {
 		vendedorId?: string | null;
 		sessaoVendaId?: string | null;
 		observacoes?: string | null;
+		/** PRESENCIAL (padrão), RETIRADA, ENTREGA (cliente + endereço + taxa da loja) ou COMANDA (número). */
+		entregaModalidade?: "PRESENCIAL" | "RETIRADA" | "ENTREGA" | "COMANDA" | null;
+		entregaLocalizacaoId?: string | null;
+		comandaNumero?: string | null;
 		/** Desconto geral da venda, em reais. Acima do teto do vendedor exige `descontoAprovacaoId`. */
 		descontosTotal?: number | null;
 		descontoAprovacaoId?: string | null;
@@ -98,6 +106,18 @@ export async function createTerminalSale({ organizationId, deviceId, deviceName,
 					})
 				: null;
 
+			// Modalidade de entrega: mesmas exigências do checkout web.
+			const entregaModalidade = input.sale.entregaModalidade ?? "PRESENCIAL";
+			if (entregaModalidade === "ENTREGA" && !client) throw new PaymentTerminalError(422, "VALIDATION_ERROR", "Entrega exige um cliente identificado.");
+			if (entregaModalidade === "ENTREGA" && !input.sale.entregaLocalizacaoId) throw new PaymentTerminalError(422, "VALIDATION_ERROR", "Escolha o endereço de entrega.");
+			const entregaLocalizacaoId =
+				entregaModalidade === "ENTREGA" && client && input.sale.entregaLocalizacaoId
+					? await requireTerminalSaleAddress({ organizationId, clienteId: client.id, entregaLocalizacaoId: input.sale.entregaLocalizacaoId })
+					: null;
+			const comandaNumero = entregaModalidade === "COMANDA" ? input.sale.comandaNumero?.trim() || null : null;
+			if (entregaModalidade === "COMANDA" && !comandaNumero) throw new PaymentTerminalError(422, "VALIDATION_ERROR", "Informe o número da comanda.");
+			const taxaEntrega = await resolveTerminalDeliveryFee({ organizationId, entregaModalidade, subtotalItens: itemsTotal });
+
 			// Desconto manual antes dos benefícios (mesma ordem do checkout web). Conferido aqui para a
 			// recusa sair com código próprio; o pipeline confere de novo e consome a aprovação.
 			const vendedorId = seller?.id ?? input.sale.vendedorId ?? null;
@@ -131,7 +151,8 @@ export async function createTerminalSale({ organizationId, deviceId, deviceName,
 				coupons: benefits?.cupons ?? [],
 				cashback: benefits?.cashback ?? null,
 			});
-			const saleTotal = decision.total;
+			// A taxa de entrega soma depois dos descontos (acréscimo da venda, como no checkout web).
+			const saleTotal = roundCents(decision.total + taxaEntrega);
 
 			// Quitada pelos benefícios (total zero): não há o que cobrar.
 			if (saleTotal <= 0 && input.payments.length > 0) {
@@ -148,13 +169,18 @@ export async function createTerminalSale({ organizationId, deviceId, deviceName,
 							deviceId,
 							hasClient: Boolean(client),
 							methods: listTerminalPaymentMethods(organization.configuracao),
+							entregaModalidade,
 						});
 
 			const saleInput: TCreateAndConfirmSaleInput = {
 				clienteId: client?.id ?? null,
 				vendedorId,
 				vendedorNome: seller?.nome ?? null,
-				entregaModalidade: "PRESENCIAL",
+				entregaModalidade,
+				entregaLocalizacaoId,
+				comandaNumero,
+				acrescimosTotal: taxaEntrega > 0 ? taxaEntrega : null,
+				rascunhoMetadados: taxaEntrega > 0 ? { taxaEntrega } : null,
 				observacoes: input.sale.observacoes ?? null,
 				descontosTotal: descontosTotal > 0 ? descontosTotal : null,
 				descontoAprovacaoId: descontosTotal > 0 ? descontoAprovacaoId : null,
@@ -199,6 +225,8 @@ export async function createTerminalSale({ organizationId, deviceId, deviceName,
 					venda: {
 						...sale,
 						troco: confirmation.troco,
+						entregaModalidade,
+						taxaEntrega,
 						descontoManual: descontosTotal,
 						descontoCupom: decision.cupomDesconto,
 						cashbackResgatado: decision.cashbackResgate,
