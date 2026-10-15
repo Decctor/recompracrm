@@ -13,7 +13,9 @@ import z from "zod";
 
 const CloseTabInputSchema = z.object({
 	tabId: z.string({ required_error: "ID da conta nao informado." }),
-	pagamentos: z.array(CheckoutPaymentSplitSchema.omit({ id: true })).min(1, { message: "Informe os pagamentos do fechamento." }),
+	// Pode vir vazio: com os recebimentos parciais cobrindo tudo, a conta fecha sem pagamento novo.
+	// O servidor exige pagamento quando ha restante (closeTab).
+	pagamentos: z.array(CheckoutPaymentSplitSchema.omit({ id: true })),
 	sessaoVendaId: z.string({ invalid_type_error: "Tipo nao valido para o ID da sessao de venda." }).optional().nullable(),
 	contaDebitoId: z.string({ invalid_type_error: "Tipo nao valido para conta de debito." }).optional().nullable(),
 	contaCreditoId: z.string({ invalid_type_error: "Tipo nao valido para conta de credito." }).optional().nullable(),
@@ -30,6 +32,8 @@ const CloseTabInputSchema = z.object({
 		.nullable(),
 	// Aprovacao VENDA_DESCONTO exigida quando o desconto excede o teto do vendedor da conta.
 	descontoAprovacaoId: z.string({ invalid_type_error: "Tipo nao valido para o ID da aprovacao de desconto." }).optional().nullable(),
+	// Entregar no fechamento os pedidos ainda em andamento (sem a flag, eles bloqueiam o fechamento).
+	entregarPedidosEmAndamento: z.boolean({ invalid_type_error: "Tipo nao valido para entregar pedidos em andamento." }).optional().nullable(),
 });
 export type TCloseTabRouteInput = z.infer<typeof CloseTabInputSchema>;
 
@@ -93,6 +97,7 @@ async function closeTabService({ input, session }: { input: TCloseTabRouteInput;
 			descontoGeral: input.descontoGeral,
 			acrescimoGeral: input.acrescimoGeral,
 			descontoAprovacaoId,
+			entregarPedidosEmAndamento: input.entregarPedidosEmAndamento,
 		},
 	});
 

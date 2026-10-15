@@ -12,12 +12,15 @@ type PublicTabStatementProps = {
 	status: string;
 	pedidos: TPublicTabStatementOrder[];
 	consumoParcial: number;
+	/** Recebimentos parciais ja feitos (sem nomes de pagador: e o extrato de todo mundo da mesa). */
+	valorPago?: number;
 };
 
 /** Extrato publico de uma conta aberta (QR da conta e QR da comanda fixa). */
-export function PublicTabStatement({ status, pedidos, consumoParcial }: PublicTabStatementProps) {
+export function PublicTabStatement({ status, pedidos, consumoParcial, valorPago = 0 }: PublicTabStatementProps) {
 	const isOpen = status === "ABERTA";
 	const activeOrders = pedidos.filter((order) => order.status !== "CANCELADO");
+	const restante = Math.max(0, Math.round((consumoParcial - valorPago) * 100) / 100);
 
 	return (
 		<section className="flex flex-col gap-2 rounded-2xl border border-border bg-card px-4 py-3">
@@ -61,6 +64,18 @@ export function PublicTabStatement({ status, pedidos, consumoParcial }: PublicTa
 				<span className="text-sm font-bold uppercase">Total parcial</span>
 				<span className="text-base font-bold">{formatToMoney(consumoParcial)}</span>
 			</div>
+			{valorPago > 0 ? (
+				<>
+					<div className="flex items-center justify-between text-xs">
+						<span className="font-semibold text-muted-foreground">Já pago</span>
+						<span className="font-semibold tabular-nums">−{formatToMoney(valorPago)}</span>
+					</div>
+					<div className="flex items-center justify-between">
+						<span className="text-sm font-bold uppercase">Restante</span>
+						<span className="text-base font-bold tabular-nums">{formatToMoney(restante)}</span>
+					</div>
+				</>
+			) : null}
 			<p className="text-[0.65rem] text-muted-foreground">O pagamento acontece no fechamento da conta com o atendente.</p>
 		</section>
 	);

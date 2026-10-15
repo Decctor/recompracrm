@@ -56,7 +56,15 @@ export function TabCard({ tab, now, selected, onSelect }: { tab: TBoardTab; now:
 					{formatTabAge(tab.dataAbertura, now)}
 				</span>
 			</div>
-			<span className="text-2xl font-bold leading-none tracking-tight tabular-nums">{formatToMoney(tab.consumoParcial ?? 0)}</span>
+			{/* Com parcial recebido, o numero grande e o que falta cobrar; o pago fica discreto ao lado. */}
+			<span className="flex items-baseline gap-2">
+				<span className="text-2xl font-bold leading-none tracking-tight tabular-nums">
+					{formatToMoney((tab.valorPago ?? 0) > 0 ? (tab.valorRestante ?? 0) : (tab.consumoParcial ?? 0))}
+				</span>
+				{(tab.valorPago ?? 0) > 0 ? (
+					<span className="whitespace-nowrap text-xs font-bold text-success tabular-nums">{formatToMoney(tab.valorPago ?? 0)} pago</span>
+				) : null}
+			</span>
 			<div className={cn("flex w-full items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold", status.surface)}>
 				<span className={cn("size-1.5 shrink-0 rounded-full", status.dot)} aria-hidden />
 				<span className="min-w-0 flex-1 truncate">{status.label}</span>
@@ -112,7 +120,8 @@ export function OccupiedTile({ label, pointTabs, now, selectedTabId, onSelectTab
 		(worst, tab) => (urgencyRank(tab.urgencia) > urgencyRank(worst) ? tab.urgencia : worst),
 		null,
 	);
-	const consumo = pointTabs.reduce((sum, tab) => sum + (tab.consumoParcial ?? 0), 0);
+	// Soma do que ainda falta cobrar no ponto (parciais ja recebidos descontados).
+	const consumo = pointTabs.reduce((sum, tab) => sum + ((tab.valorPago ?? 0) > 0 ? (tab.valorRestante ?? 0) : (tab.consumoParcial ?? 0)), 0);
 	const selected = pointTabs.some((tab) => tab.id === selectedTabId);
 
 	return (

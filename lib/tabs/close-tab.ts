@@ -11,7 +11,9 @@ import type { TOrganizationEntity } from "@/services/drizzle/schema";
 import { sales, tabOrders, tabs } from "@/services/drizzle/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import createHttpError from "http-errors";
-import { recomputeTabDraftSaleTotals } from "./utils";
+import { TAB_CLOSE_BLOCKING_ORDER_STATUSES } from "./close-blocking";
+import { resolveTabBalance, tabPaymentsMatchRemaining } from "./partial-payments";
+import { recomputeTabDraftSaleTotals, sumTabActivePayments } from "./utils";
 
 type TCloseTabPaymentInput = {
 	metodo: TPaymentMethodEnum;
@@ -35,28 +37,26 @@ export type TCloseTabInput = {
 	acrescimoGeral?: number | null;
 	// Aprovação VENDA_DESCONTO já validada pelo chamador (authorizeSaleDiscount); consumida aqui.
 	descontoAprovacaoId?: string | null;
+	// Entregar no fechamento os pedidos ainda em andamento, em vez de recusar. Explicito: sem a
+	// flag a API continua recusando, e nada e marcado como entregue por acidente.
+	entregarPedidosEmAndamento?: boolean | null;
 };
-
-const roundCents = (value: number) => Math.round(value * 100) / 100;
-
-// Pedidos que ainda dependem da cozinha/expedicao bloqueiam o fechamento; o operador
-// resolve cada um (entregar ou cancelar) antes. PARCIALMENTE_ENTREGUE nao bloqueia:
-// o delta remanescente e baixado na confirmacao.
-const CLOSE_BLOCKING_ORDER_STATUSES = ["NAO_INICIADO", "EM_PREPARO", "PRONTO", "EM_ENTREGA"] as const;
 
 /**
  * Fecha a conta = checkout da venda rascunho, uma unica vez, com pagamentos reais:
  * 1. lock da tab (FOR UPDATE) — serializa contra fechamento/cancelamento/pedido concorrentes;
- * 2. bloqueia se houver pedidos em andamento na cozinha;
- * 3. aplica desconto/acréscimo do fechamento aos totais da venda rascunho;
+ * 2. bloqueia se houver pedidos em andamento na cozinha — ou, com `entregarPedidosEmAndamento`,
+ *    marca todos como ENTREGUE na mesma transacao;
+ * 3. aplica desconto/acréscimo do fechamento aos totais da venda rascunho; os recebimentos
+ *    parciais ja ativos (tab_payments) abatem do total, e os pagamentos informados cobrem so o
+ *    restante — restante zero fecha sem pagamento nenhum;
  * 4. confirma a venda rascunho via processSaleConfirmationInTransaction nascendo ENTREGUE —
- *    contabil, financeiro efetivado no turno de caixa, cashback e (pos-commit) fiscal disparam
+ *    contabil (reaproveitando o lancamento VENDA nascido no primeiro parcial, se houver),
+ *    financeiro efetivado no turno de caixa, cashback e (pos-commit) fiscal disparam
  *    exatamente uma vez; a baixa embutida usa o delta por item (pedidos ja entregues = no-op);
  * 5. tab -> FECHADA com valorTotal congelado (update condicional como segunda guarda).
  */
 export async function closeTab({ organization, userId, input }: { organization: TOrganizationEntity; userId: string; input: TCloseTabInput }) {
-	if (input.pagamentos.length === 0) throw new createHttpError.BadRequest("Informe os pagamentos do fechamento.");
-
 	const organizationSaleDefaults = organization.configuracao.defaults.contabilidade.lancamentosPadrao.vendas;
 	const accountingEntryDebitAccountId = input.contaDebitoId ?? organizationSaleDefaults.debitoContaId;
 	const accountingEntryCreditAccountId = input.contaCreditoId ?? organizationSaleDefaults.creditoContaId;
@@ -105,9 +105,17 @@ export async function closeTab({ organization, userId, input }: { organization: 
 		const activeOrders = await tx
 			.select({ id: tabOrders.id, numero: tabOrders.numero })
 			.from(tabOrders)
-			.where(and(eq(tabOrders.tabId, tab.id), inArray(tabOrders.status, [...CLOSE_BLOCKING_ORDER_STATUSES])));
+			.where(and(eq(tabOrders.tabId, tab.id), inArray(tabOrders.status, [...TAB_CLOSE_BLOCKING_ORDER_STATUSES])));
 		if (activeOrders.length > 0) {
-			throw new createHttpError.BadRequest("Existem pedidos em andamento. Entregue ou cancele cada pedido antes de fechar a conta.");
+			if (!input.entregarPedidosEmAndamento) {
+				throw new createHttpError.BadRequest("Existem pedidos em andamento. Entregue ou cancele cada pedido antes de fechar a conta.");
+			}
+			// Sob o lock da tab: inclui pedido lançado depois que a tela de fechamento abriu. Sem baixa
+			// aqui — a confirmação abaixo nasce ENTREGUE e baixa o delta por item da venda inteira.
+			await tx
+				.update(tabOrders)
+				.set({ status: "ENTREGUE" })
+				.where(and(eq(tabOrders.tabId, tab.id), inArray(tabOrders.status, [...TAB_CLOSE_BLOCKING_ORDER_STATUSES])));
 		}
 
 		const [draftSale] = await tx
@@ -126,8 +134,12 @@ export async function closeTab({ organization, userId, input }: { organization: 
 		if (descontoGeral > itemTotals.valorTotal + 0.01) {
 			throw new createHttpError.BadRequest("O desconto nao pode superar o consumo da conta.");
 		}
-		const valorTotal = roundCents(Math.max(0, itemTotals.valorTotal - descontoGeral) + acrescimoGeral);
+		// Parciais ja recebidos (sob o mesmo lock): abatem do total; o fechamento cobre o restante.
+		const jaPago = await sumTabActivePayments(tx, { tabId: tab.id });
+		const balance = resolveTabBalance({ consumo: itemTotals.valorTotal, descontoGeral, acrescimoGeral, jaPago });
+		const valorTotal = balance.valorTotal;
 		if (valorTotal <= 0) throw new createHttpError.BadRequest("O total da conta precisa ser maior que zero para fechar.");
+		if (balance.bloqueio) throw new createHttpError.BadRequest(balance.bloqueio);
 		const descontosTotal = descontoGeral > 0 ? descontoGeral : itemTotals.descontosTotal;
 		await tx
 			.update(sales)
@@ -138,12 +150,25 @@ export async function closeTab({ organization, userId, input }: { organization: 
 			})
 			.where(eq(sales.id, draftSale.id));
 
-		// Soma dos pagamentos precisa cobrir exatamente o total autoritativo da conta
-		// (tolerancia de centavos de serializacao). O client tambem valida, mas a guarda e aqui.
+		// Soma dos pagamentos precisa cobrir exatamente o RESTANTE autoritativo da conta (total menos
+		// parciais ativos; tolerancia de centavos). O client tambem valida, mas a guarda e aqui.
 		const paymentsTotal = salePayments.reduce((sum, payment) => sum + payment.valor, 0);
-		if (Math.abs(paymentsTotal - valorTotal) > 0.01) {
-			throw new createHttpError.BadRequest("A soma dos pagamentos nao confere com o total da conta. Atualize e tente novamente.");
+		if (balance.restante > 0 && salePayments.length === 0) {
+			throw new createHttpError.BadRequest("Informe os pagamentos do fechamento.");
 		}
+		if (!tabPaymentsMatchRemaining({ paymentsTotal, restante: balance.restante })) {
+			throw new createHttpError.BadRequest("A soma dos pagamentos nao confere com o restante da conta. Atualize e tente novamente.");
+		}
+
+		// Lancamento VENDA nascido no primeiro parcial: a confirmacao o reaproveita em vez de criar outro.
+		const existingEntry =
+			jaPago > 0
+				? await tx.query.accountingEntries.findFirst({
+						where: (fields, { and, eq }) =>
+							and(eq(fields.vendaId, draftSale.id), eq(fields.organizacaoId, organization.id), eq(fields.origemTipo, "VENDA")),
+						columns: { id: true },
+					})
+				: null;
 
 		// Invariante 3 do plano: a transicao ABERTA -> FECHADA (compare-and-set) acontece
 		// ANTES de qualquer efeito financeiro. O snapshot de valorTotal e preenchido depois.
@@ -168,6 +193,8 @@ export async function closeTab({ organization, userId, input }: { organization: 
 			// por item, entao pedidos ja entregues durante o atendimento nao baixam de novo.
 			initialAttendanceStatus: "ENTREGUE",
 			sessaoVendaId: input.sessaoVendaId ?? null,
+			existingAccountingEntryId: existingEntry?.id ?? null,
+			prepaidAmount: jaPago,
 		};
 
 		// One-shot: a aprovação de desconto é consumida na mesma transação do fechamento.
@@ -184,7 +211,7 @@ export async function closeTab({ organization, userId, input }: { organization: 
 			.set({ valorTotal: confirmedSale?.valorTotal ?? valorTotal })
 			.where(eq(tabs.id, tab.id));
 
-		return { tabId: tab.id, saleId: draftSale.id, confirmation, valorTotal: confirmedSale?.valorTotal ?? valorTotal };
+		return { tabId: tab.id, saleId: draftSale.id, confirmation, valorTotal: confirmedSale?.valorTotal ?? valorTotal, valorPago: jaPago };
 	});
 
 	// Efeitos externos fora da transacao (emissao fiscal automatica conforme configuracao).

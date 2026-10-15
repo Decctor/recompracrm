@@ -1,6 +1,7 @@
 import { getTabMenuProducts, hashPublicToken, resolveServiceSettings } from "@/lib/tabs";
 import { OrgColorsProvider } from "@/components/Providers/OrgColorsProvider";
 import { db } from "@/services/drizzle";
+import { getTabPaidAmount } from "@/lib/tabs/utils";
 import { sales } from "@/services/drizzle/schema";
 import { and, eq } from "drizzle-orm";
 import { PublicOrderMenu } from "../../_components/PublicOrderMenu";
@@ -75,12 +76,13 @@ export default async function TabPublicPage({ params }: { params: Promise<{ toke
 		);
 	}
 
-	const [draftSale, settings] = await Promise.all([
+	const [draftSale, settings, valorPago] = await Promise.all([
 		db.query.sales.findFirst({
 			where: and(eq(sales.tabId, tab.id), eq(sales.statusVenda, "ORCAMENTO")),
 			columns: { valorTotal: true },
 		}),
 		resolveServiceSettings({ orgId: tab.organizacaoId }),
+		getTabPaidAmount({ tabId: tab.id }),
 	]);
 
 	const isOpen = tab.status === "ABERTA";
@@ -99,7 +101,7 @@ export default async function TabPublicPage({ params }: { params: Promise<{ toke
 			corSecundariaForeground={tab.organizacao?.corSecundariaForeground}
 		>
 			<PublicShell title={tab.organizacao?.nome ?? "Sua conta"} subtitle={etiqueta} logoUrl={tab.organizacao?.logoUrl}>
-				<PublicTabStatement status={tab.status} pedidos={tab.pedidos} consumoParcial={draftSale?.valorTotal ?? 0} />
+				<PublicTabStatement status={tab.status} pedidos={tab.pedidos} consumoParcial={draftSale?.valorTotal ?? 0} valorPago={valorPago} />
 
 				{orderingEnabled ? (
 					<section className="flex flex-col gap-2">

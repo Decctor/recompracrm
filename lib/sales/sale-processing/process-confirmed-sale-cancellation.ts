@@ -6,7 +6,15 @@ import { saleFiscalDocumentsAllowCancellation } from "@/lib/sales/sale-editabili
 import { reverseSaleItemStock } from "@/lib/sales/sale-processing/reverse-sale-item-stock";
 import { applyStockMovement } from "@/lib/stock/apply-stock-movement";
 import { db } from "@/services/drizzle";
-import { accountingEntries, couponRedemptions, financialTransactions, productStockLots, saleItems, sales } from "@/services/drizzle/schema";
+import {
+	accountingEntries,
+	couponRedemptions,
+	financialTransactions,
+	productStockLots,
+	saleItems,
+	sales,
+	tabPayments,
+} from "@/services/drizzle/schema";
 import { and, eq, sql } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { attendanceStatusValues } from "@/lib/sales/sale-processing/attendance";
@@ -75,6 +83,14 @@ export async function processConfirmedSaleCancellation({
 				.update(financialTransactions)
 				.set({ provedorStatus: transaction.dataEfetivacao ? "ESTORNADO" : "CANCELADO" })
 				.where(eq(financialTransactions.id, transaction.id));
+		}
+		// Venda de conta: os recebimentos parciais vivem no mesmo lançamento (já estornado acima);
+		// o registro operacional acompanha para o histórico da conta não mentir.
+		if (sale.tabId) {
+			await tx
+				.update(tabPayments)
+				.set({ status: "ESTORNADO", estornadoPorUsuarioId: authorId, dataEstorno: new Date(), motivoEstorno: `Venda cancelada: ${reason}` })
+				.where(and(eq(tabPayments.vendaId, saleId), eq(tabPayments.organizacaoId, organizationId), eq(tabPayments.status, "ATIVO")));
 		}
 		const originalEntry = sale.lancamentosContabeis[0];
 		if (originalEntry) {

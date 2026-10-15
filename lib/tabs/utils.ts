@@ -1,8 +1,14 @@
 import { createHash, randomBytes } from "node:crypto";
-import { DEFAULT_SERVICE_SETTINGS_CONFIGURATION, ServiceSettingsConfigurationSchema, type TServiceSettingsConfiguration } from "@/schemas/service-settings";
+import {
+	DEFAULT_SERVICE_SETTINGS_CONFIGURATION,
+	ServiceSettingsConfigurationSchema,
+	type TServiceSettingsConfiguration,
+} from "@/schemas/service-settings";
 import { type DBTransaction, db } from "@/services/drizzle";
-import { saleItems, sales } from "@/services/drizzle/schema";
+import { saleItems, sales, tabPayments } from "@/services/drizzle/schema";
 import { and, eq, sql } from "drizzle-orm";
+import createHttpError from "http-errors";
+import { TAB_PAYMENT_TOLERANCE, sumActiveTabPayments } from "./partial-payments";
 
 // ============================================================================
 // Tokens publicos (QR de ponto e de tab). A busca publica e sempre pelo hash
@@ -95,4 +101,42 @@ export async function findTabDraftSale(tx: DBTransaction, { tabId }: { tabId: st
 		.where(and(eq(sales.tabId, tabId), eq(sales.statusVenda, "ORCAMENTO")))
 		.limit(1);
 	return draft ?? null;
+}
+
+// ============================================================================
+// Recebimentos parciais
+// ============================================================================
+
+/**
+ * Soma dos parciais ATIVOS da conta. Chamar sob o lock da tab: e o `jaPago` que o
+ * fechamento, o novo parcial e o cancelamento de pedido comparam com o consumo.
+ */
+export async function sumTabActivePayments(tx: Pick<DBTransaction, "select">, { tabId }: { tabId: string }) {
+	const rows = await tx.select({ valor: tabPayments.valor, status: tabPayments.status }).from(tabPayments).where(eq(tabPayments.tabId, tabId));
+	return sumActiveTabPayments(rows);
+}
+
+/**
+ * Guarda dos fluxos que reduzem o consumo (cancelar pedido): a conta nunca pode ficar abaixo
+ * do que ja foi recebido. O caminho e estornar um parcial antes.
+ */
+export async function assertTabCoversPartialPayments(tx: Pick<DBTransaction, "select">, { tabId, consumo }: { tabId: string; consumo: number }) {
+	const jaPago = await sumTabActivePayments(tx, { tabId });
+	if (consumo < jaPago - TAB_PAYMENT_TOLERANCE) {
+		throw new createHttpError.BadRequest(
+			`O cancelamento deixaria a conta abaixo do valor ja recebido (R$ ${jaPago.toFixed(2).replace(".", ",")}). Estorne um recebimento parcial antes.`,
+		);
+	}
+	return jaPago;
+}
+
+/** Rotulo da conta para titulos de lancamento/transacao: "Mesa 4", "Comanda 12", "Conta". */
+export function describeTabForTitle(tab: { codigo: string | null; servicePoint?: { rotulo: string } | null }) {
+	return tab.servicePoint?.rotulo ?? (tab.codigo ? `Comanda ${tab.codigo}` : "Conta");
+}
+
+/** Soma dos parciais ATIVOS fora de transacao (leituras: QR publico, paginas). */
+export async function getTabPaidAmount({ tabId }: { tabId: string }) {
+	const rows = await db.select({ valor: tabPayments.valor, status: tabPayments.status }).from(tabPayments).where(eq(tabPayments.tabId, tabId));
+	return sumActiveTabPayments(rows);
 }

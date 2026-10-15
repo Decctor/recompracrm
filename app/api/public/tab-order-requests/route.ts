@@ -4,6 +4,7 @@ import { resolveCatalogOrderItem } from "@/lib/products/resolve-catalog-order-it
 import { autoApproveTabOrderRequest, getTabMenuProducts, hashPublicToken, resolveServiceSettings } from "@/lib/tabs";
 import { enforcePublicRateLimit } from "@/lib/tabs/public-rate-limit";
 import { findOpenTabByServiceCard } from "@/lib/tabs/service-cards";
+import { getTabPaidAmount } from "@/lib/tabs/utils";
 import { tabUsesCode } from "@/schemas/service-settings";
 import { TabOrderRequestPayloadSchema } from "@/schemas/tab-order-requests";
 import { db } from "@/services/drizzle";
@@ -267,17 +268,20 @@ async function getPublicTabOrderSession({ input, clientIp }: { input: TGetPublic
 		if (linkedTab) break;
 	}
 
-	const draftSale = linkedTab
-		? await db.query.sales.findFirst({
-				where: and(eq(sales.tabId, linkedTab.id), eq(sales.statusVenda, "ORCAMENTO")),
-				columns: { valorTotal: true },
-			})
-		: null;
+	const [draftSale, valorPago] = linkedTab
+		? await Promise.all([
+				db.query.sales.findFirst({
+					where: and(eq(sales.tabId, linkedTab.id), eq(sales.statusVenda, "ORCAMENTO")),
+					columns: { valorTotal: true },
+				}),
+				getTabPaidAmount({ tabId: linkedTab.id }),
+			])
+		: [null, 0];
 
 	return {
 		data: {
 			requests,
-			tab: linkedTab ? { ...linkedTab, consumoParcial: draftSale?.valorTotal ?? 0 } : null,
+			tab: linkedTab ? { ...linkedTab, consumoParcial: draftSale?.valorTotal ?? 0, valorPago } : null,
 		},
 		message: "Sessao do dispositivo carregada com sucesso.",
 	};

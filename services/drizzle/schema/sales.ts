@@ -15,7 +15,7 @@ import { partners } from "./partners";
 import { productAddOnOptions, productStockTransactions, productVariants, products } from "./products";
 import { salesSessions } from "./sales-sessions";
 import { sellers } from "./sellers";
-import { tabOrders, tabs } from "./tabs";
+import { tabOrders, tabPayments, tabs } from "./tabs";
 
 export const sales = newTable(
 	"sales",
@@ -188,6 +188,8 @@ export const salesRelations = relations(sales, ({ one, many }) => ({
 	}),
 	// ERP back-relations
 	lancamentosContabeis: many(accountingEntries),
+	// Recebimentos parciais da conta de atendimento enquanto a venda ainda e rascunho.
+	pagamentosParciaisConta: many(tabPayments),
 	documentosFiscais: many(fiscalOutboundDocuments),
 	movimentacoesEstoque: many(productStockTransactions),
 }));

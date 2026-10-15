@@ -21,6 +21,7 @@ export async function registerRefundCashMovement({
 	contaFinanceiraId,
 	autorId,
 	titulo,
+	origem,
 }: {
 	tx: TransactionClient;
 	orgId: string;
@@ -30,6 +31,8 @@ export async function registerRefundCashMovement({
 	contaFinanceiraId: string | null;
 	autorId: string | null;
 	titulo: string;
+	/** Origem carimbada na SAIDA (ex.: estorno de parcial de conta). Nunca TROCO. */
+	origem?: string | null;
 }) {
 	if (valorDinheiro <= 0) return null;
 
@@ -42,7 +45,7 @@ export async function registerRefundCashMovement({
 			sessaoVendaId,
 			titulo,
 			tipo: "SAIDA",
-			...normalizeFinancialTransactionValue({ valor: valorDinheiro }),
+			...normalizeFinancialTransactionValue({ valor: valorDinheiro, modificadoresMetadata: origem ? { origem } : null }),
 			metodo: "DINHEIRO",
 			dataPrevisao: new Date(),
 			dataEfetivacao: new Date(),

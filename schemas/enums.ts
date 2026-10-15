@@ -713,6 +713,10 @@ export type TDealOnboardingFormSituationEnum = z.infer<typeof DealOnboardingForm
 export const TabStatusEnum = z.enum(["ABERTA", "FECHADA", "CANCELADA"]);
 export type TTabStatusEnum = z.infer<typeof TabStatusEnum>;
 
+// Espelha o pgEnum tabPaymentStatusEnum.
+export const TabPaymentStatusEnum = z.enum(["ATIVO", "ESTORNADO"]);
+export type TTabPaymentStatusEnum = z.infer<typeof TabPaymentStatusEnum>;
+
 // Espelha o pgEnum servicePointTypeEnum.
 export const ServicePointTypeEnum = z.enum(["MESA", "BALCAO", "QUIOSQUE", "OUTRO"]);
 export type TServicePointTypeEnum = z.infer<typeof ServicePointTypeEnum>;

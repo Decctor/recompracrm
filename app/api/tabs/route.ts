@@ -3,6 +3,7 @@ import { requireERPSession } from "@/lib/authentication/erp-session";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { openTab } from "@/lib/tabs";
+import { resolveTabPartialPaymentCap, sumActiveTabPayments } from "@/lib/tabs/partial-payments";
 import { TabStatusEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
 import { sales, tabs } from "@/services/drizzle/schema";
@@ -60,6 +61,14 @@ async function getTabs({ input, orgId }: { input: TGetTabsInput; orgId: string }
 						},
 					},
 				},
+				// Ativos e estornados: o historico da conta mostra os dois.
+				pagamentosParciais: {
+					orderBy: (fields, { asc }) => asc(fields.dataRecebimento),
+					with: {
+						recebidoPorUsuario: { columns: { id: true, nome: true } },
+						estornadoPorUsuario: { columns: { id: true, nome: true } },
+					},
+				},
 			},
 		});
 		if (!tab) throw new createHttpError.NotFound("Conta nao encontrada.");
@@ -68,13 +77,18 @@ async function getTabs({ input, orgId }: { input: TGetTabsInput; orgId: string }
 			where: and(eq(sales.tabId, tab.id), eq(sales.statusVenda, "ORCAMENTO")),
 			columns: { id: true, valorTotal: true, descontosTotal: true, vendedorId: true },
 		});
+		const consumoParcial = draftSale?.valorTotal ?? 0;
+		const valorPago = sumActiveTabPayments(tab.pagamentosParciais);
 
 		return {
 			data: {
 				byId: {
 					...tab,
-					// Total parcial derivado da venda rascunho — nao existe recebivel antes do fechamento.
-					consumoParcial: draftSale?.valorTotal ?? 0,
+					// Total parcial derivado da venda rascunho — o recebivel antes do fechamento sao so os parciais.
+					consumoParcial,
+					// Recebimentos parciais ativos e o que ainda cabe receber (sem desconto/acrescimo do fechamento).
+					valorPago,
+					valorRestante: resolveTabPartialPaymentCap({ consumo: consumoParcial, jaPago: valorPago }),
 					vendaRascunhoId: draftSale?.id ?? null,
 					// Identidade avaliada pelo teto de desconto no fechamento (vendedor da venda rascunho).
 					vendaRascunhoVendedorId: draftSale?.vendedorId ?? null,
@@ -98,15 +112,23 @@ async function getTabs({ input, orgId }: { input: TGetTabsInput; orgId: string }
 				where: (fields, { eq }) => eq(fields.statusVenda, "ORCAMENTO"),
 				columns: { id: true, valorTotal: true },
 			},
+			pagamentosParciais: {
+				where: (fields, { eq }) => eq(fields.status, "ATIVO"),
+				columns: { valor: true, status: true },
+			},
 		},
 		orderBy: (fields, { asc }) => asc(fields.dataAbertura),
 	});
 
 	const list = rows.map((tab) => {
-		const { vendas, ...rest } = tab;
+		const { vendas, pagamentosParciais, ...rest } = tab;
+		const consumoParcial = vendas[0]?.valorTotal ?? 0;
+		const valorPago = sumActiveTabPayments(pagamentosParciais);
 		return {
 			...rest,
-			consumoParcial: vendas[0]?.valorTotal ?? 0,
+			consumoParcial,
+			valorPago,
+			valorRestante: resolveTabPartialPaymentCap({ consumo: consumoParcial, jaPago: valorPago }),
 			vendaRascunhoId: vendas[0]?.id ?? null,
 		};
 	});

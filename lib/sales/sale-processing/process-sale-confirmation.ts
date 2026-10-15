@@ -11,8 +11,10 @@ import { processSaleCupomAutoPrintIfEligible, processSalePreparationTicketAutoPr
 import { type TPaymentSplit, getPaymentProvider } from "@/lib/payments";
 import { buildSaleEntryTitle } from "@/lib/sales/entry-titles";
 import { validateSalesSessionSeller } from "@/lib/sales-sessions";
+import { writeDefaultAccountingEntryLines } from "@/lib/finances/accounting-entry-lines";
 import { db, type DBTransaction } from "@/services/drizzle";
 import {
+	accountingEntries,
 	cashbackProgramBalances,
 	cashbackProgramTransactions,
 	cashbackPrograms,
@@ -72,9 +74,67 @@ export type TProcessSaleConfirmationInput = {
 	accumulateCashback?: boolean;
 	// Sessão de venda que recortou esta venda (nullable). Carimba a venda e seus movimentos financeiros.
 	sessaoVendaId?: string | null;
+	// Conta de atendimento com recebimentos parciais: o lançamento VENDA já nasceu no primeiro
+	// parcial (lib/tabs/receive-tab-payment.ts). A confirmação o reaproveita — valor passa ao total
+	// da venda, competência à confirmação — em vez de criar um segundo lançamento, preservando o
+	// invariante "um lançamento VENDA por venda" que cancelamento, fiscal e reatribuição assumem.
+	existingAccountingEntryId?: string | null;
+	// Soma dos parciais já recebidos: os pagamentos do fechamento cobrem só o restante, e o troco
+	// precisa ser calculado contra `valorTotal − prepaidAmount`, não contra o total.
+	prepaidAmount?: number | null;
 };
 
 type TProcessSaleConfirmationPostCommitInput = Pick<TProcessSaleConfirmationInput, "organization" | "saleId" | "saleAuthorId">;
+
+/**
+ * Atualiza em place o lançamento VENDA que já existe (nascido num recebimento parcial de conta):
+ * valor = total da venda, título e competência da confirmação, contas do fechamento. As linhas são
+ * ressincronizadas pelo mesmo helper da criação — mesmo padrão da edição de venda confirmada.
+ */
+async function reuseAccountingEntry(
+	tx: DBTransaction,
+	params: {
+		organizacaoId: string;
+		entryId: string;
+		vendaId: string;
+		valor: number;
+		titulo: string;
+		idContaDebito: string;
+		idContaCredito: string;
+		dataCompetencia: Date;
+	},
+) {
+	const [entry] = await tx
+		.update(accountingEntries)
+		.set({
+			valor: params.valor,
+			titulo: params.titulo,
+			dataCompetencia: params.dataCompetencia,
+			idContaDebito: params.idContaDebito,
+			idContaCredito: params.idContaCredito,
+		})
+		.where(
+			and(
+				eq(accountingEntries.id, params.entryId),
+				eq(accountingEntries.organizacaoId, params.organizacaoId),
+				eq(accountingEntries.vendaId, params.vendaId),
+				eq(accountingEntries.origemTipo, "VENDA"),
+			),
+		)
+		.returning({ id: accountingEntries.id });
+	if (!entry) throw new createHttpError.Conflict("O lançamento contábil da conta não foi encontrado. Atualize e tente novamente.");
+
+	await writeDefaultAccountingEntryLines({
+		trx: tx,
+		organizationId: params.organizacaoId,
+		accountingEntryId: entry.id,
+		entryValue: params.valor,
+		debitAccountId: params.idContaDebito,
+		creditAccountId: params.idContaCredito,
+	});
+
+	return entry;
+}
 
 /**
  * Confirms a sale using the caller-owned transaction.
@@ -138,15 +198,26 @@ export async function processSaleConfirmationInTransaction({ tx, input }: { tx: 
 	}
 
 	const saleLabel = buildSaleEntryTitle({ clientName: sale.cliente?.nome, totalValue: sale.valorTotal, occurredAt: confirmedAt });
-	const entry = await createAccountingEntry(tx, {
-		organizacaoId: input.organization.id,
-		vendaId: input.saleId,
-		valor: sale.valorTotal,
-		titulo: saleLabel,
-		idContaDebito: input.accountingEntryDebitAccountId,
-		idContaCredito: input.accountingEntryCreditAccountId,
-		autorId: input.saleAuthorId,
-	});
+	const entry = input.existingAccountingEntryId
+		? await reuseAccountingEntry(tx, {
+				organizacaoId: input.organization.id,
+				entryId: input.existingAccountingEntryId,
+				vendaId: input.saleId,
+				valor: sale.valorTotal,
+				titulo: saleLabel,
+				idContaDebito: input.accountingEntryDebitAccountId,
+				idContaCredito: input.accountingEntryCreditAccountId,
+				dataCompetencia: confirmedAt,
+			})
+		: await createAccountingEntry(tx, {
+				organizacaoId: input.organization.id,
+				vendaId: input.saleId,
+				valor: sale.valorTotal,
+				titulo: saleLabel,
+				idContaDebito: input.accountingEntryDebitAccountId,
+				idContaCredito: input.accountingEntryCreditAccountId,
+				autorId: input.saleAuthorId,
+			});
 
 	// A confirmacao NAO baixa estoque obrigatoriamente. A baixa fisica acontece na entrega.
 	// Quando a venda ja nasce ENTREGUE (ex.: balcao/PRESENCIAL), a entrega e imediata: baixa aqui.
@@ -175,12 +246,13 @@ export async function processSaleConfirmationInTransaction({ tx, input }: { tx: 
 
 	// Pagamentos entram pelo valor entregue pelo cliente; o excesso sobre o total vira uma SAÍDA
 	// de troco em dinheiro no mesmo lançamento (valida as regras e lança, ou aborta a confirmação).
+	// Com parciais já recebidos, o que estes pagamentos cobrem é só o restante.
 	const change = await registerSaleChangeTransaction({
 		tx,
 		organization: input.organization,
 		lancamentoContabilId: entry.id,
 		salePayments: input.salePayments,
-		saleTotal: sale.valorTotal,
+		saleTotal: Math.max(0, sale.valorTotal - (input.prepaidAmount ?? 0)),
 		sessaoVendaId: input.sessaoVendaId ?? null,
 		autorId: input.saleAuthorId,
 	});

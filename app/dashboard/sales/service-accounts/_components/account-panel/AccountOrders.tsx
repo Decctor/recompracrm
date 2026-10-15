@@ -11,10 +11,11 @@ import { organizationHasPrinterForFinalidade, useAgentPrinters } from "@/lib/que
 import { cn } from "@/lib/utils";
 import type { TSaleAttendanceStatusEnum } from "@/schemas/enums";
 import { useMutation } from "@tanstack/react-query";
-import { Ban, CheckCheck, ChefHat, Clock, Plus, Printer, Receipt } from "lucide-react";
+import { Ban, CheckCheck, ChefHat, Clock, HandCoins, Plus, Printer, Receipt } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { URGENCY_META, formatElapsedMinutes, getOpenRounds, isOpenRound } from "../board-meta";
+import { PartialPaymentsList } from "./PartialPaymentsList";
 import { ORDER_NEXT_ACTION, ORDER_STATUS_META } from "./tab-meta";
 import { toRepeatOrderItem } from "./use-tab-order-cart";
 
@@ -33,11 +34,13 @@ type AccountOrdersProps = {
 	now: number;
 	refresh: () => void;
 	onStartClose: () => void;
+	/** Receber parcial: alguem da mesa paga a parte dela antes do fechamento. */
+	onStartPartial: () => void;
 	/** "Pedir mais um": leva uma unidade do item ao carrinho do Lançar pedido. */
 	onRepeatItem: (item: TBuiltOrderItem) => void;
 };
 
-export function AccountOrders({ tab, now, refresh, onStartClose, onRepeatItem }: AccountOrdersProps) {
+export function AccountOrders({ tab, now, refresh, onStartClose, onStartPartial, onRepeatItem }: AccountOrdersProps) {
 	const isOpen = tab.status === "ABERTA";
 	const [confirmingOrderId, setConfirmingOrderId] = useState<string | null>(null);
 
@@ -85,6 +88,9 @@ export function AccountOrders({ tab, now, refresh, onStartClose, onRepeatItem }:
 	const doneOrders = tab.pedidos.filter((order) => !isOpenRound(order.status));
 	const doneItems = doneOrders.reduce((sum, order) => sum + order.itens.reduce((acc, item) => acc + item.quantidade, 0), 0);
 	const consumo = isOpen ? (tab.consumoParcial ?? 0) : (tab.valorTotal ?? tab.consumoParcial ?? 0);
+	const valorPago = tab.valorPago ?? 0;
+	// O que o fechamento vai cobrar: consumo menos os parciais ja recebidos.
+	const restante = isOpen ? (tab.valorRestante ?? Math.max(0, consumo - valorPago)) : consumo;
 	const repeatItem = isOpen ? onRepeatItem : undefined;
 
 	return (
@@ -227,6 +233,8 @@ export function AccountOrders({ tab, now, refresh, onStartClose, onRepeatItem }:
 					</section>
 				) : null}
 
+				<PartialPaymentsList payments={tab.pagamentosParciais} isOpen={isOpen} refresh={refresh} />
+
 				{tab.pedidos.length === 0 ? (
 					<div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-border px-4 py-12 text-center">
 						<span className="flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
@@ -240,13 +248,28 @@ export function AccountOrders({ tab, now, refresh, onStartClose, onRepeatItem }:
 				) : null}
 			</div>
 
-			{/* Fechamento fixo — padrao do checkout do PDV. Só o botão: o total já está no botão e no
-			    cabeçalho, e as contagens na aba e no rótulo "Em andamento". */}
+			{/* Fechamento fixo — padrao do checkout do PDV. O total já está no botão e no cabeçalho, e as
+			    contagens na aba e no rótulo "Em andamento". O parcial fica ao lado, menor: é a exceção. */}
 			{isOpen ? (
-				<div className="border-t border-border bg-card px-4 pt-3 pb-4 sm:px-5">
-					<Button variant="brand" size="lg" className="w-full" disabled={consumo <= 0} onClick={onStartClose}>
+				<div className="flex gap-2 border-t border-border bg-card px-4 pt-3 pb-4 sm:px-5">
+					<Button
+						variant="outline"
+						size="lg"
+						className="shrink-0 gap-1.5 px-3 font-bold"
+						disabled={restante <= 0}
+						title="Receber a parte de quem vai embora antes"
+						onClick={onStartPartial}
+					>
+						<HandCoins className="size-4" />
+						<span className="hidden sm:inline">Receber parcial</span>
+						<span className="sm:hidden">Parcial</span>
+					</Button>
+					<Button variant="brand" size="lg" className="min-w-0 flex-1" disabled={consumo <= 0} onClick={onStartClose}>
 						<Receipt className="size-4" />
-						Fechar conta · {formatToMoney(consumo)}
+						<span className="truncate">
+							Fechar conta · {formatToMoney(restante)}
+							{valorPago > 0 ? <span className="font-semibold opacity-80"> ({formatToMoney(valorPago)} pago)</span> : null}
+						</span>
 					</Button>
 				</div>
 			) : null}

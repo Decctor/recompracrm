@@ -3,9 +3,11 @@ import { relations } from "drizzle-orm";
 import { doublePrecision, index, jsonb, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/pg-core";
 import { clients } from "./clients";
 import { newTable } from "./common";
-import { saleAttendanceStatusEnum, tabStatusEnum } from "./enums";
+import { paymentMethodEnum, saleAttendanceStatusEnum, tabPaymentStatusEnum, tabStatusEnum } from "./enums";
+import { accountingEntries, financialTransactions } from "./financial";
 import { organizations } from "./organizations";
 import { saleItems, sales } from "./sales";
+import { salesSessions } from "./sales-sessions";
 import { sellers } from "./sellers";
 import { serviceCards } from "./service-cards";
 import { servicePoints } from "./service-points";
@@ -94,6 +96,7 @@ export const tabsRelations = relations(tabs, ({ one, many }) => ({
 	}),
 	vendas: many(sales),
 	pedidos: many(tabOrders),
+	pagamentosParciais: many(tabPayments),
 }));
 
 export type TTabEntity = typeof tabs.$inferSelect;
@@ -149,3 +152,92 @@ export const tabOrdersRelations = relations(tabOrders, ({ one, many }) => ({
 
 export type TTabOrderEntity = typeof tabOrders.$inferSelect;
 export type TNewTabOrderEntity = typeof tabOrders.$inferInsert;
+
+// ============================================================================
+// TAB PAYMENTS (Recebimentos parciais de uma conta)
+// Alguem da mesa vai embora antes e paga a parte dela. O parcial abate um valor
+// da conta (nunca itens), entra no caixa na hora e e descontado no fechamento.
+// O dinheiro vive em financialTransactions, ancorado no lancamento VENDA da venda
+// rascunho (criado no primeiro recebimento); esta tabela e o registro operacional
+// (quem pagou, quem recebeu, estorno). Ver docs/dev-planning/tab-partial-payments-plan.md.
+// ============================================================================
+
+export const tabPayments = newTable(
+	"tab_payments",
+	{
+		id: varchar("id", { length: 255 })
+			.primaryKey()
+			.$defaultFn(() => crypto.randomUUID()),
+		organizacaoId: varchar("organizacao_id", { length: 255 })
+			.references(() => organizations.id, { onDelete: "cascade" })
+			.notNull(),
+		tabId: varchar("tab_id", { length: 255 })
+			.references(() => tabs.id, { onDelete: "cascade" })
+			.notNull(),
+		// A venda rascunho da conta no momento do recebimento (vira a venda confirmada no fechamento).
+		vendaId: varchar("venda_id", { length: 255 })
+			.references(() => sales.id, { onDelete: "cascade" })
+			.notNull(),
+		// O lancamento VENDA da venda — um so por venda, compartilhado com o fechamento.
+		lancamentoContabilId: varchar("lancamento_contabil_id", { length: 255 }).references(() => accountingEntries.id, { onDelete: "set null" }),
+		transacaoFinanceiraId: varchar("transacao_financeira_id", { length: 255 }).references(() => financialTransactions.id, { onDelete: "set null" }),
+		// Caixa que recebeu (pode ser diferente do caixa que fecha a conta).
+		sessaoVendaId: varchar("sessao_venda_id", { length: 255 }).references(() => salesSessions.id, { onDelete: "set null" }),
+		metodo: paymentMethodEnum("metodo").notNull(),
+		valor: doublePrecision("valor").notNull(),
+		// Nome livre, so exibicao ("Joao"). Sem atribuicao de cliente: cashback e da conta inteira.
+		pagadorNome: text("pagador_nome"),
+		status: tabPaymentStatusEnum("status").notNull().default("ATIVO"),
+		recebidoPorUsuarioId: varchar("recebido_por_usuario_id", { length: 255 }).references(() => users.id, { onDelete: "set null" }),
+		dataRecebimento: timestamp("data_recebimento").defaultNow().notNull(),
+		estornadoPorUsuarioId: varchar("estornado_por_usuario_id", { length: 255 }).references(() => users.id, { onDelete: "set null" }),
+		dataEstorno: timestamp("data_estorno"),
+		motivoEstorno: text("motivo_estorno"),
+		dataInsercao: timestamp("data_insercao").defaultNow().notNull(),
+	},
+	(table) => ({
+		tabStatusIdx: index("idx_tab_payments_tab").on(table.tabId, table.status),
+		vendaIdx: index("idx_tab_payments_venda").on(table.vendaId),
+		sessaoIdx: index("idx_tab_payments_sessao").on(table.sessaoVendaId),
+	}),
+);
+
+export const tabPaymentsRelations = relations(tabPayments, ({ one }) => ({
+	organizacao: one(organizations, {
+		fields: [tabPayments.organizacaoId],
+		references: [organizations.id],
+	}),
+	tab: one(tabs, {
+		fields: [tabPayments.tabId],
+		references: [tabs.id],
+	}),
+	venda: one(sales, {
+		fields: [tabPayments.vendaId],
+		references: [sales.id],
+	}),
+	lancamentoContabil: one(accountingEntries, {
+		fields: [tabPayments.lancamentoContabilId],
+		references: [accountingEntries.id],
+	}),
+	transacaoFinanceira: one(financialTransactions, {
+		fields: [tabPayments.transacaoFinanceiraId],
+		references: [financialTransactions.id],
+	}),
+	sessaoVenda: one(salesSessions, {
+		fields: [tabPayments.sessaoVendaId],
+		references: [salesSessions.id],
+	}),
+	recebidoPorUsuario: one(users, {
+		fields: [tabPayments.recebidoPorUsuarioId],
+		references: [users.id],
+		relationName: "tab-payment-recebido-por",
+	}),
+	estornadoPorUsuario: one(users, {
+		fields: [tabPayments.estornadoPorUsuarioId],
+		references: [users.id],
+		relationName: "tab-payment-estornado-por",
+	}),
+}));
+
+export type TTabPaymentEntity = typeof tabPayments.$inferSelect;
+export type TNewTabPaymentEntity = typeof tabPayments.$inferInsert;

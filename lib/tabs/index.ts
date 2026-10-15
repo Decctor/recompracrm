@@ -17,12 +17,14 @@ export {
 	type TTabOrderItemInput,
 } from "./launch-tab-order";
 export { linkTabClient, type TLinkTabClientInput, type TLinkTabClientResult } from "./link-tab-client";
-export { openTab,type TOpenTabInput, type TOpenTabResult } from "./open-tab";
+export { openTab, type TOpenTabInput, type TOpenTabResult } from "./open-tab";
 export {
 	processTabOrderStatusChange,
 	type TProcessTabOrderStatusChangeInput,
 	type TProcessTabOrderStatusChangeResult,
 } from "./process-tab-order-status-change";
+export { receiveTabPayment, type TReceiveTabPaymentInput, type TReceiveTabPaymentResult } from "./receive-tab-payment";
+export { refundTabPayment, type TRefundTabPaymentInput, type TRefundTabPaymentResult } from "./refund-tab-payment";
 export { transferTab, type TTransferTabInput, type TTransferTabResult } from "./transfer-tab";
 export { generatePublicToken, hashPublicToken, resolveServiceSettings } from "./utils";
 export { getTabMenuProducts, type TTabMenuProduct } from "./public-menu";

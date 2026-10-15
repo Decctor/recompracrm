@@ -1,6 +1,7 @@
 import { OrgColorsProvider } from "@/components/Providers/OrgColorsProvider";
 import { getTabMenuProducts, hashPublicToken, resolveServiceSettings } from "@/lib/tabs";
 import { db } from "@/services/drizzle";
+import { getTabPaidAmount } from "@/lib/tabs/utils";
 import { sales } from "@/services/drizzle/schema";
 import { and, eq } from "drizzle-orm";
 import { IdCard } from "lucide-react";
@@ -68,12 +69,15 @@ export default async function ServiceCardPublicPage({ params }: { params: Promis
 		}),
 	]);
 
-	const draftSale = tab
-		? await db.query.sales.findFirst({
-				where: and(eq(sales.tabId, tab.id), eq(sales.statusVenda, "ORCAMENTO")),
-				columns: { valorTotal: true },
-			})
-		: null;
+	const [draftSale, valorPago] = tab
+		? await Promise.all([
+				db.query.sales.findFirst({
+					where: and(eq(sales.tabId, tab.id), eq(sales.statusVenda, "ORCAMENTO")),
+					columns: { valorTotal: true },
+				}),
+				getTabPaidAmount({ tabId: tab.id }),
+			])
+		: [null, 0];
 
 	// Cartao livre so recebe pedido quando a organizacao aceita abertura a partir do QR.
 	const orderingEnabled = settings.pedidosCliente !== "DESABILITADO" && (!!tab || settings.aberturaPublica !== "DESABILITADA");
@@ -91,7 +95,7 @@ export default async function ServiceCardPublicPage({ params }: { params: Promis
 		>
 			<PublicShell title={card.organizacao?.nome ?? "Sua comanda"} subtitle={subtitle} logoUrl={card.organizacao?.logoUrl}>
 				{tab ? (
-					<PublicTabStatement status={tab.status} pedidos={tab.pedidos} consumoParcial={draftSale?.valorTotal ?? 0} />
+					<PublicTabStatement status={tab.status} pedidos={tab.pedidos} consumoParcial={draftSale?.valorTotal ?? 0} valorPago={valorPago} />
 				) : (
 					<section className="flex flex-col items-center gap-1.5 rounded-2xl border border-border bg-card px-4 py-6 text-center">
 						<IdCard className="h-6 w-6 text-muted-foreground" />

@@ -4,7 +4,7 @@ import type { TOrganizationEntity } from "@/services/drizzle/schema";
 import { saleItems, tabOrders, tabs } from "@/services/drizzle/schema";
 import { and, eq } from "drizzle-orm";
 import createHttpError from "http-errors";
-import { recomputeTabDraftSaleTotals } from "./utils";
+import { assertTabCoversPartialPayments, recomputeTabDraftSaleTotals } from "./utils";
 
 export type TCancelTabOrderInput = {
 	tabOrderId: string;
@@ -92,6 +92,8 @@ export async function cancelTabOrder({
 
 		const saleId = order.itens[0]?.vendaId;
 		const totals = saleId ? await recomputeTabDraftSaleTotals(tx, { saleId }) : null;
+		// A conta nao pode ficar abaixo do que ja foi recebido em parciais; estorna-se um antes.
+		if (totals) await assertTabCoversPartialPayments(tx, { tabId: tab.id, consumo: totals.valorTotal });
 
 		return {
 			tabOrderId: order.id,

@@ -3,6 +3,8 @@ import type { TDecideTabOrderRequestInput, TDecideTabOrderRequestOutput } from "
 import type { TUpdateTabClientInput, TUpdateTabClientOutput } from "@/app/api/tabs/client/route";
 import type { TCloseTabOutput, TCloseTabRouteInput } from "@/app/api/tabs/close/route";
 import type { TCreateTabOrderInput, TCreateTabOrderOutput } from "@/app/api/tabs/orders/route";
+import type { TCreateTabPaymentInput, TCreateTabPaymentOutput } from "@/app/api/tabs/payments/route";
+import type { TRefundTabPaymentOutput, TRefundTabPaymentRouteInput } from "@/app/api/tabs/payments/refund/route";
 import type { TUpdateTabOrderStatusInput, TUpdateTabOrderStatusOutput } from "@/app/api/tabs/orders/status/route";
 import type { TCreateTabInput, TCreateTabOutput } from "@/app/api/tabs/route";
 import type { TTransferTabOutput, TTransferTabRouteInput } from "@/app/api/tabs/transfer/route";
@@ -106,5 +108,19 @@ export async function updateTabClient(input: TUpdateTabClientInput) {
 
 export async function decideTabOrderRequest(input: TDecideTabOrderRequestInput) {
 	const { data } = await axios.post<TDecideTabOrderRequestOutput>("/api/tabs/order-requests", input);
+	return data;
+}
+
+// ============================================================================
+// RECEBIMENTOS PARCIAIS
+// ============================================================================
+
+export async function receiveTabPayment(input: TCreateTabPaymentInput) {
+	const { data } = await axios.post<TCreateTabPaymentOutput>("/api/tabs/payments", input);
+	return data;
+}
+
+export async function refundTabPayment(input: TRefundTabPaymentRouteInput) {
+	const { data } = await axios.post<TRefundTabPaymentOutput>("/api/tabs/payments/refund", input);
 	return data;
 }

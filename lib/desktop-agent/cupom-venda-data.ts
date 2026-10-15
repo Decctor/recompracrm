@@ -6,6 +6,7 @@ import { classifySalePaymentTransactions } from "@/lib/sales/utils";
 import { readShopDeliveryFee } from "@/lib/shop/config";
 import { db } from "@/services/drizzle";
 import { cashbackPrograms, couponRedemptions, organizations, sales } from "@/services/drizzle/schema";
+import { sumActiveTabPayments } from "@/lib/tabs/partial-payments";
 import { and, count, eq } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { fetchOrganizationLogoDataUrl } from "./organization-logo";
@@ -83,9 +84,12 @@ export async function buildCupomVendaDados({
 			rascunhoMetadados: true,
 			entregaModalidade: true,
 			comandaNumero: true,
+			tabId: true,
 		},
 		with: {
 			cliente: { columns: { id: true, nome: true, telefone: true } },
+			// Conta aberta: parciais já recebidos abatem do que o cupom de conferência pede.
+			pagamentosParciaisConta: { columns: { valor: true, status: true } },
 			entregaLocalizacao: {
 				columns: {
 					localizacaoCep: true,
@@ -215,10 +219,12 @@ export async function buildCupomVendaDados({
 		entry.transacoesFinanceiras.map((transaction) => ({ ...transaction, lancamentoContabilId: entry.id })),
 	);
 	const pagamentosClassificados = classifySalePaymentTransactions(transacoesVenda);
+	// Estornado/cancelado não é pagamento: um parcial devolvido antes do fechamento sairia como PAGO.
+	const pagamentosVivos = pagamentosClassificados.todas.filter((pagamento) => !["ESTORNADO", "CANCELADO"].includes(pagamento.provedorStatus ?? ""));
 	// Pagamentos saem pelo valor entregue (R$ 50 em dinheiro) e o troco vem da SAÍDA de troco da venda.
 	const trocoTotal = getSaleChangeTotal(transacoesVenda);
 	const pagamentosAgrupados = new Map<string, { metodo: string; valor: number; parcelas: number | null; pago: boolean }>();
-	for (const pagamento of pagamentosClassificados.todas) {
+	for (const pagamento of pagamentosVivos) {
 		const pago = pagamento.dataEfetivacao != null;
 		const chave = `${pagamento.metodo}:${pago}`;
 		const atual = pagamentosAgrupados.get(chave);
@@ -242,6 +248,10 @@ export async function buildCupomVendaDados({
 					trocoPara: pagamento.trocoPara ?? null,
 				}))
 			: [...pagamentosAgrupados.values()].map((pagamento) => ({ ...pagamento, situacao: pagamento.pago ? ("PAGO" as const) : ("EM_ABERTO" as const) }));
+
+	// Conta de atendimento ainda aberta: "Já pago" e "Restante" só fazem sentido antes do fechamento
+	// (depois, os parciais são pagamentos da venda como quaisquer outros).
+	const valorJaPagoConta = sale.statusVenda === "ORCAMENTO" && sale.tabId ? sumActiveTabPayments(sale.pagamentosParciaisConta) : 0;
 
 	// ---- Cashback: realizado quando o ledger já tem o ACÚMULO, projetado quando ainda não ----
 	const acumulo = sale.transacoesCashback.find((transaction) => transaction.tipo === "ACÚMULO") ?? null;
@@ -320,6 +330,8 @@ export async function buildCupomVendaDados({
 			valorFinal: valorTotal,
 			pagamentos: pagamentosCupom,
 			troco: pagamentosCanal.length === 0 && trocoTotal > 0 ? trocoTotal : null,
+			valorJaPago: valorJaPagoConta > 0 ? valorJaPagoConta : null,
+			valorRestante: valorJaPagoConta > 0 ? Math.max(0, Math.round((valorTotal - valorJaPagoConta) * 100) / 100) : null,
 		},
 		cliente: sale.cliente ? { nome: sale.cliente.nome, telefone: sale.cliente.telefone, totalCompras } : null,
 		cupom: cupomResgatado

@@ -9,6 +9,7 @@ import { getErrorMessage } from "@/lib/errors";
 import { formatToMoney } from "@/lib/formatting";
 import { cancelTabOrOrder, transferTab, updateTabClient } from "@/lib/mutations/tabs";
 import { useTabById } from "@/lib/queries/tabs";
+import { isTabCloseBlockingOrderStatus } from "@/lib/tabs/close-blocking";
 import { cn } from "@/lib/utils";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -32,6 +33,7 @@ import { toast } from "sonner";
 import { formatTabAge, tabLabel } from "../board-meta";
 import { AccountOrders, InlineCancelTabConfirm } from "./AccountOrders";
 import { ClosePane } from "./ClosePane";
+import { PartialPaymentPane } from "./PartialPaymentPane";
 import { TabOrderComposer } from "./TabOrderComposer";
 import { useTabOrderCart } from "./use-tab-order-cart";
 
@@ -66,7 +68,7 @@ type AccountPanelProps = {
 export function AccountPanel({ tabId, now, sheetTab, onSheetTabChange, transferTargets, onPrev, onNext, onClose, onFinished }: AccountPanelProps) {
 	const queryClient = useQueryClient();
 	const { data: tab, isLoading, isError, error, queryKey } = useTabById({ tabId });
-	const [pane, setPane] = useState<"conta" | "fechar">("conta");
+	const [pane, setPane] = useState<"conta" | "fechar" | "parcial">("conta");
 	const [transferOpen, setTransferOpen] = useState(false);
 	const [confirmingCancel, setConfirmingCancel] = useState(false);
 	const [linkClientOpen, setLinkClientOpen] = useState(false);
@@ -142,6 +144,9 @@ export function AccountPanel({ tabId, now, sheetTab, onSheetTabChange, transferT
 
 	const isOpen = tab.status === "ABERTA";
 	const closing = pane === "fechar" && isOpen;
+	const receivingPartial = pane === "parcial" && isOpen;
+	const valorPago = tab.valorPago ?? 0;
+	const activePartials = tab.pagamentosParciais.filter((payment) => payment.status === "ATIVO").length;
 	const activeOrders = tab.pedidos.filter((order) => order.status !== "CANCELADO");
 	const label = tabLabel(tab);
 	const meta = [
@@ -152,6 +157,8 @@ export function AccountPanel({ tabId, now, sheetTab, onSheetTabChange, transferT
 		.filter(Boolean)
 		.join(" · ");
 	const consumo = isOpen ? (tab.consumoParcial ?? 0) : (tab.valorTotal ?? tab.consumoParcial ?? 0);
+	// Com parcial recebido, o numero do cabecalho e o que falta: e isso que o garcom vai cobrar.
+	const headline = isOpen && valorPago > 0 ? (tab.valorRestante ?? Math.max(0, consumo - valorPago)) : consumo;
 	const activeItems = activeOrders.flatMap((order) => order.itens).filter((item) => item.quantidadeCancelada < item.quantidade);
 	const hasDeliveredItems = tab.pedidos.some((order) => order.itens.some((item) => (item.quantidadeEntregue ?? 0) > 0));
 	const targets = (transferTargets ?? []).filter((point) => point.id !== tab.servicePointId);
@@ -167,10 +174,20 @@ export function AccountPanel({ tabId, now, sheetTab, onSheetTabChange, transferT
 						{/* No celular, sem espaço ao lado do nome, o total desce para a linha de baixo. */}
 						<div className="flex min-w-0 flex-wrap items-baseline gap-x-3">
 							<h2 className="min-w-0 truncate text-2xl font-bold leading-tight tracking-tight">{label}</h2>
-							{/* No fechamento o total vive no cartao "Total a receber" — sem repetir o numero aqui. */}
-							{closing ? null : (
-								<span className="text-numeric whitespace-nowrap text-lg font-bold tracking-tight" title={isOpen ? "Consumo em aberto" : "Total da conta"}>
-									{formatToMoney(consumo)}
+							{/* No fechamento/parcial o total vive no cartao do pane — sem repetir o numero aqui. */}
+							{closing || receivingPartial ? null : (
+								<span className="flex items-baseline gap-2">
+									<span
+										className="text-numeric whitespace-nowrap text-lg font-bold tracking-tight"
+										title={isOpen ? (valorPago > 0 ? "Restante a receber" : "Consumo em aberto") : "Total da conta"}
+									>
+										{formatToMoney(headline)}
+									</span>
+									{isOpen && valorPago > 0 ? (
+										<span className="whitespace-nowrap rounded-full bg-success-surface px-2 py-0.5 text-xs font-bold text-success-surface-foreground tabular-nums">
+											{formatToMoney(valorPago)} pago
+										</span>
+									) : null}
 								</span>
 							)}
 						</div>
@@ -316,16 +333,31 @@ export function AccountPanel({ tabId, now, sheetTab, onSheetTabChange, transferT
 			</div>
 
 			{/* ---------------------------------------------------------------- Corpo */}
-			{closing ? (
+			{receivingPartial ? (
+				<PartialPaymentPane
+					tabId={tab.id}
+					tabLabel={label}
+					consumo={tab.consumoParcial ?? 0}
+					jaPago={valorPago}
+					onBack={() => setPane("conta")}
+					onReceived={() => {
+						setPane("conta");
+						refresh();
+					}}
+				/>
+			) : closing ? (
 				<ClosePane
 					tabId={tab.id}
 					tabLabel={label}
 					subtotal={tab.consumoParcial ?? 0}
+					jaPago={valorPago}
+					partialCount={activePartials}
 					itemsGross={activeItems.reduce((sum, item) => sum + item.valorVendaTotalBruto, 0)}
 					itemsDiscount={activeItems.reduce((sum, item) => sum + item.valorTotalDesconto, 0)}
 					vendedorId={tab.vendaRascunhoVendedorId}
 					draftSaleId={tab.vendaRascunhoId}
 					orderCount={activeOrders.length}
+					pendingOrders={tab.pedidos.filter((order) => isTabCloseBlockingOrderStatus(order.status))}
 					itemCount={activeOrders.reduce((sum, order) => sum + order.itens.reduce((acc, item) => acc + item.quantidade - item.quantidadeCancelada, 0), 0)}
 					onBack={() => setPane("conta")}
 					onClosed={finish}
@@ -358,6 +390,7 @@ export function AccountPanel({ tabId, now, sheetTab, onSheetTabChange, transferT
 							now={now}
 							refresh={refresh}
 							onStartClose={() => setPane("fechar")}
+							onStartPartial={() => setPane("parcial")}
 							onRepeatItem={(item) => {
 								orderCart.addItem(item);
 								onSheetTabChange("lancar");

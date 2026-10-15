@@ -111,6 +111,10 @@ export const CupomVendaDadosSchema = z.object({
 			.optional()
 			.nullable(),
 		troco: z.number({ invalid_type_error: "Tipo não válido para o troco." }).optional().nullable(),
+		// Conta de atendimento ainda aberta com recebimentos parciais: o cupom de conferência mostra
+		// o que já foi pago e o que falta. Ausentes na venda confirmada (os parciais já estão em pagamentos).
+		valorJaPago: z.number({ invalid_type_error: "Tipo não válido para o valor já pago." }).optional().nullable(),
+		valorRestante: z.number({ invalid_type_error: "Tipo não válido para o valor restante." }).optional().nullable(),
 	}),
 	cliente: z
 		.object({
@@ -315,7 +319,11 @@ export function renderCupomVendaHtml(dados: TCupomVendaDados) {
 		${acrescimos > 0 ? renderLinha("Acréscimo", formatToMoney(acrescimos)) : ""}
 	</div>
 	<div class="sep fina"></div>
-	<div class="bloco">${renderLinha("TOTAL", formatToMoney(venda.valorFinal), { destaque: true })}</div>`;
+	<div class="bloco">${renderLinha("TOTAL", formatToMoney(venda.valorFinal), { destaque: true })}${
+		venda.valorJaPago && venda.valorJaPago > 0
+			? `${renderLinha("Já pago", formatToMoney(venda.valorJaPago), { negativo: true })}${renderLinha("RESTANTE", formatToMoney(venda.valorRestante ?? 0), { destaque: true })}`
+			: ""
+	}</div>`;
 
 	const pagamentosHtml = venda.pagamentos?.length
 		? `<div class="sep"></div>

@@ -74,6 +74,12 @@ function DeviceAccountSection({ session }: { session: TGetPublicTabOrderSessionO
 						</div>
 						<p className="shrink-0 text-base font-black tabular-nums">{formatToMoney(session.tab.consumoParcial)}</p>
 					</div>
+					{session.tab.valorPago > 0 ? (
+						<div className="flex items-center justify-between gap-3 text-xs">
+							<span className="font-semibold text-muted-foreground">Já pago {formatToMoney(session.tab.valorPago)}</span>
+							<span className="font-bold tabular-nums">Restante {formatToMoney(Math.max(0, session.tab.consumoParcial - session.tab.valorPago))}</span>
+						</div>
+					) : null}
 
 					<div className="flex flex-col gap-2 border-t border-border/60 pt-2">
 						{session.tab.pedidos
