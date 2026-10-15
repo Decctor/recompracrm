@@ -33,9 +33,16 @@ type ClientVinculationMenuProps = {
 	// Vendedor do contexto (ex.: vendedor selecionado na venda) para autoria do cadastro
 	// criado via menu. Quando ausente, o servidor usa o vínculo vendedor da sessão.
 	authorSellerId?: string | null;
+	// O picker é compartilhado (venda, conta de mesa/comanda): quem abre diz onde o cliente entra.
+	description?: string;
 };
 
-export default function ClientVinculationMenu({ closeModal, onSelectClient, authorSellerId }: ClientVinculationMenuProps) {
+export default function ClientVinculationMenu({
+	closeModal,
+	onSelectClient,
+	authorSellerId,
+	description = "Busque por nome, telefone ou CPF/CNPJ para vincular um cliente na venda.",
+}: ClientVinculationMenuProps) {
 	const {
 		search,
 		updateSearch,
@@ -168,7 +175,7 @@ export default function ClientVinculationMenu({ closeModal, onSelectClient, auth
 			<ResponsiveMenu.Content dialogVariant="sm" drawerVariant="full" dialogClassName="h-[60%] min-h-[60%] w-[40%] min-w-[40%] max-w-[40%]">
 				<ResponsiveMenu.Header>
 					<ResponsiveMenu.Title>VINCULAR CLIENTE</ResponsiveMenu.Title>
-					<ResponsiveMenu.Description>Busque por nome, telefone ou CPF/CNPJ para vincular um cliente na venda.</ResponsiveMenu.Description>
+					<ResponsiveMenu.Description>{description}</ResponsiveMenu.Description>
 				</ResponsiveMenu.Header>
 				<ResponsiveMenu.Body>
 					{flowState.mode === "search" ? (
@@ -189,7 +196,7 @@ export default function ClientVinculationMenu({ closeModal, onSelectClient, auth
 							</div>
 							<p className="text-sm font-medium text-foreground mb-1">Comece a buscar</p>
 							<p className="text-xs text-muted-foreground text-center max-w-[240px] leading-relaxed">
-								Digite nome, telefone ou CPF/CNPJ no campo acima para encontrar e vincular o cliente à venda.
+								Digite nome, telefone ou CPF/CNPJ no campo acima para encontrar e vincular o cliente.
 							</p>
 							<div className="mt-4 flex flex-wrap justify-center gap-2">
 								{["NOME", "TELEFONE", "CPF/CNPJ"].map((hint) => (

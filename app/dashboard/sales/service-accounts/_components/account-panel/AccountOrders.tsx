@@ -240,24 +240,16 @@ export function AccountOrders({ tab, now, refresh, onStartClose, onRepeatItem }:
 				) : null}
 			</div>
 
-			{/* Fechamento fixo — padrao do checkout do PDV */}
-			<div className="flex flex-col gap-2.5 border-t border-border bg-card px-4 pt-3 pb-4 sm:px-5">
-				<div className="flex items-baseline justify-between gap-3">
-					<span className="text-xs font-semibold text-muted-foreground">
-						{tab.pedidos.length} {tab.pedidos.length === 1 ? "pedido" : "pedidos"} · {openOrders.length} em andamento
-					</span>
-					<span className="flex items-baseline gap-2">
-						<span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">{isOpen ? "Total parcial" : "Total"}</span>
-						<span className="text-lg font-bold tracking-tight tabular-nums">{formatToMoney(consumo)}</span>
-					</span>
-				</div>
-				{isOpen ? (
+			{/* Fechamento fixo — padrao do checkout do PDV. Só o botão: o total já está no botão e no
+			    cabeçalho, e as contagens na aba e no rótulo "Em andamento". */}
+			{isOpen ? (
+				<div className="border-t border-border bg-card px-4 pt-3 pb-4 sm:px-5">
 					<Button variant="brand" size="lg" className="w-full" disabled={consumo <= 0} onClick={onStartClose}>
 						<Receipt className="size-4" />
 						Fechar conta · {formatToMoney(consumo)}
 					</Button>
-				) : null}
-			</div>
+				</div>
+			) : null}
 		</div>
 	);
 }

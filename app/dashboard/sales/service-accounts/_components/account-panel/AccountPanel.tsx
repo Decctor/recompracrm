@@ -1,6 +1,5 @@
 "use client";
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
-import { LinkTabClient } from "@/components/Modals/Internal/Tabs/LinkTabClient";
 import { ChangeTabServiceCard } from "@/components/Modals/ServiceCards/ChangeTabServiceCard";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -8,11 +7,26 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Skeleton } from "@/components/ui/skeleton";
 import { getErrorMessage } from "@/lib/errors";
 import { formatToMoney } from "@/lib/formatting";
-import { cancelTabOrOrder, transferTab } from "@/lib/mutations/tabs";
+import { cancelTabOrOrder, transferTab, updateTabClient } from "@/lib/mutations/tabs";
 import { useTabById } from "@/lib/queries/tabs";
 import { cn } from "@/lib/utils";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowRightLeft, Ban, ChevronDown, ChevronUp, CircleUser, Ellipsis, IdCard, Plus, UserRound, UserRoundPlus, Utensils, X } from "lucide-react";
+import {
+	ArrowRightLeft,
+	Ban,
+	ChevronDown,
+	ChevronUp,
+	CircleUser,
+	Ellipsis,
+	IdCard,
+	Plus,
+	UserRound,
+	UserRoundMinus,
+	UserRoundPlus,
+	Utensils,
+	X,
+} from "lucide-react";
+import dynamic from "next/dynamic";
 import { useState } from "react";
 import { toast } from "sonner";
 import { formatTabAge, tabLabel } from "../board-meta";
@@ -20,6 +34,9 @@ import { AccountOrders, InlineCancelTabConfirm } from "./AccountOrders";
 import { ClosePane } from "./ClosePane";
 import { TabOrderComposer } from "./TabOrderComposer";
 import { useTabOrderCart } from "./use-tab-order-cart";
+
+// Mesmo picker do PDV: busca por nome/telefone/CPF e cadastro na hora quando o cliente não existe.
+const ClientVinculationMenu = dynamic(() => import("@/components/Clients/ClientVinculationMenu"), { loading: () => null });
 
 // ============================================================================
 // Painel lateral da conta. Substitui a pagina /[accountId]: o board continua
@@ -81,6 +98,17 @@ export function AccountPanel({ tabId, now, sheetTab, onSheetTabChange, transferT
 		onError: (mutationError) => toast.error(getErrorMessage(mutationError)),
 	});
 
+	// Vincular, trocar e desvincular: o picker só escolhe; a gravação na conta acontece aqui.
+	const { mutate: mutateTabClient, isPending: tabClientPending } = useMutation({
+		mutationKey: ["update-tab-client", tabId],
+		mutationFn: updateTabClient,
+		onSuccess: (data) => {
+			toast.success(data.message);
+			refresh();
+		},
+		onError: (mutationError) => toast.error(getErrorMessage(mutationError)),
+	});
+
 	const { mutate: mutateCancelTab, isPending: cancelPending } = useMutation({
 		mutationKey: ["cancel-tab", tabId],
 		mutationFn: cancelTabOrOrder,
@@ -94,11 +122,10 @@ export function AccountPanel({ tabId, now, sheetTab, onSheetTabChange, transferT
 	if (isLoading || !tab) {
 		return (
 			<div className="flex min-h-0 flex-1 flex-col">
-				<div className="flex items-start justify-between gap-3 border-b border-border bg-card px-5 pt-4.5 pb-3.5">
+				<div className="flex items-start justify-between gap-3 border-b border-border bg-card px-4 pt-4 pb-3 sm:px-5">
 					<div className="flex flex-col gap-2">
-						<Skeleton className="h-6 w-32" />
-						<Skeleton className="h-3.5 w-48" />
-						<Skeleton className="mt-3 h-8 w-36" />
+						<Skeleton className="h-7 w-44" />
+						<Skeleton className="h-4 w-56" />
 					</div>
 					<Button size="icon" variant="ghost" className="size-8 rounded-lg" aria-label="Fechar painel" onClick={onClose}>
 						<X className="size-4" />
@@ -132,11 +159,50 @@ export function AccountPanel({ tabId, now, sheetTab, onSheetTabChange, transferT
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
 			{/* ------------------------------------------------------------ Cabecalho */}
-			<div className="flex flex-col gap-3.5 border-b border-border bg-card px-4 pt-4 pb-3.5 sm:px-5">
-				<div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
-					<div className="flex min-w-0 flex-col gap-1">
-						<h2 className="truncate text-2xl font-bold leading-tight tracking-tight">{label}</h2>
-						<span className="truncate text-sm text-muted-foreground">{meta}</span>
+			{/* Duas linhas: o total fica ao lado do nome (o rodapé só existe em Pedidos, e o Lançar
+			    pedido também precisa dele); cliente e responsável entram na linha de metadados. */}
+			<div className="flex flex-col gap-3 border-b border-border bg-card px-4 pt-4 pb-3 sm:px-5">
+				<div className="flex items-start justify-between gap-x-4">
+					<div className="flex min-w-0 flex-1 flex-col gap-1">
+						{/* No celular, sem espaço ao lado do nome, o total desce para a linha de baixo. */}
+						<div className="flex min-w-0 flex-wrap items-baseline gap-x-3">
+							<h2 className="min-w-0 truncate text-2xl font-bold leading-tight tracking-tight">{label}</h2>
+							{/* No fechamento o total vive no cartao "Total a receber" — sem repetir o numero aqui. */}
+							{closing ? null : (
+								<span className="text-numeric whitespace-nowrap text-lg font-bold tracking-tight" title={isOpen ? "Consumo em aberto" : "Total da conta"}>
+									{formatToMoney(consumo)}
+								</span>
+							)}
+						</div>
+						<div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm text-muted-foreground">
+							<span>{meta}</span>
+							<span aria-hidden>·</span>
+							{isOpen ? (
+								<button
+									type="button"
+									onClick={() => setLinkClientOpen(true)}
+									title={tab.cliente ? "Trocar cliente" : "Vincular cliente"}
+									className="-mx-1 flex items-center gap-1.5 whitespace-nowrap rounded-md px-1 underline decoration-dotted decoration-muted-foreground/60 underline-offset-4 transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+								>
+									<CircleUser className="size-3.5" />
+									{tab.cliente?.nome ?? "Sem cliente"}
+								</button>
+							) : (
+								<span className="flex items-center gap-1.5 whitespace-nowrap">
+									<CircleUser className="size-3.5" />
+									{tab.cliente?.nome ?? "Sem cliente"}
+								</span>
+							)}
+							{tab.responsavelVendedor ? (
+								<>
+									<span aria-hidden>·</span>
+									<span className="flex items-center gap-1.5 whitespace-nowrap">
+										<UserRound className="size-3.5" />
+										{tab.responsavelVendedor.nome}
+									</span>
+								</>
+							) : null}
+						</div>
 					</div>
 					<div className="flex shrink-0 items-center gap-1.5">
 						<IconAction label="Conta anterior (↑)" onClick={onPrev}>
@@ -195,6 +261,12 @@ export function AccountPanel({ tabId, now, sheetTab, onSheetTabChange, transferT
 											<UserRoundPlus className="size-4" />
 											{tab.cliente ? "Trocar cliente" : "Vincular cliente"}
 										</DropdownMenuItem>
+										{tab.cliente ? (
+											<DropdownMenuItem disabled={tabClientPending} onClick={() => mutateTabClient({ tabId: tab.id, clienteId: null })}>
+												<UserRoundMinus className="size-4" />
+												Desvincular cliente
+											</DropdownMenuItem>
+										) : null}
 										{tab.serviceCardId ? (
 											<DropdownMenuItem onClick={() => setChangeCardOpen(true)}>
 												<IdCard className="size-4" />
@@ -220,28 +292,6 @@ export function AccountPanel({ tabId, now, sheetTab, onSheetTabChange, transferT
 						>
 							<X className="size-4" />
 						</Button>
-					</div>
-				</div>
-
-				{/* No fechamento o total vive no cartao "Total a receber" — sem repetir o numero aqui. */}
-				<div className={cn("flex flex-wrap items-end gap-x-7 gap-y-3", closing && "hidden")}>
-					<div className="flex flex-col gap-1.5">
-						<span className="whitespace-nowrap text-xs font-bold uppercase tracking-wide text-muted-foreground">
-							{isOpen ? "Consumo em aberto" : "Total da conta"}
-						</span>
-						<span className="whitespace-nowrap text-3xl font-bold leading-none tracking-tight tabular-nums">{formatToMoney(consumo)}</span>
-					</div>
-					<div className="flex flex-col gap-1 pb-0.5 text-sm text-muted-foreground">
-						<span className="flex items-center gap-1.5 whitespace-nowrap">
-							<CircleUser className="size-3.5" />
-							{tab.cliente?.nome ?? "Sem cliente"}
-						</span>
-						{tab.responsavelVendedor ? (
-							<span className="flex items-center gap-1.5">
-								<UserRound className="size-3.5" />
-								{tab.responsavelVendedor.nome}
-							</span>
-						) : null}
 					</div>
 				</div>
 
@@ -330,7 +380,15 @@ export function AccountPanel({ tabId, now, sheetTab, onSheetTabChange, transferT
 			)}
 
 			{linkClientOpen ? (
-				<LinkTabClient tabId={tab.id} cliente={tab.cliente} closeModal={() => setLinkClientOpen(false)} callbacks={{ onSuccess: refresh }} />
+				<ClientVinculationMenu
+					description="Busque por nome, telefone ou CPF/CNPJ. O consumo da conta passa a contar no histórico do cliente quando a conta for fechada."
+					authorSellerId={tab.responsavelVendedor?.id ?? null}
+					closeModal={() => setLinkClientOpen(false)}
+					onSelectClient={(client) => {
+						setLinkClientOpen(false);
+						if (client.id !== tab.cliente?.id) mutateTabClient({ tabId: tab.id, clienteId: client.id });
+					}}
+				/>
 			) : null}
 			{changeCardOpen ? (
 				<ChangeTabServiceCard
