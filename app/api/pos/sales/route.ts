@@ -1,3 +1,5 @@
+import { SaleFiscalDocumentSchema } from "@/schemas/fiscal";
+import { resolveSaleFiscalDocumentPreference } from "@/lib/fiscal/emission-document-policy";
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
@@ -16,7 +18,7 @@ import { syncDraftItems } from "@/lib/sales/drafts/sync-draft-items";
 import { AppliedCouponSchema } from "@/schemas/coupons";
 import { db } from "@/services/drizzle";
 import { saleItemModifiers, saleItems, sales } from "@/services/drizzle/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import z from "zod";
@@ -68,6 +70,7 @@ const CreateSaleDraftInputSchema = z.object({
 	...saleRewardRedemptionInputFields,
 	rascunhoMetadados: z.unknown().optional().nullable(),
 	// Override tri-state da emissão fiscal automática. null/ausente = herda a preferência da organização.
+	emissaoFiscalDocumento: SaleFiscalDocumentSchema.optional(),
 	emissaoFiscalAutomatica: z.boolean({ invalid_type_error: "Tipo não válido para emissão fiscal automática." }).optional().nullable(),
 	// Rascunho só-recompensas é permitido (carrinho vazio + recompensasResgate); a exigência de
 	// pelo menos um item quando não há recompensa é validada no service.
@@ -81,6 +84,7 @@ const GetSaleDraftInputSchema = z.object({
 
 const UpdateSaleDraftInputSchema = z.object({
 	id: z.string({ required_error: "ID da venda não informado." }),
+	clienteId: z.string({ required_error: "Cliente não informado.", invalid_type_error: "Cliente inválido." }).optional().nullable(),
 	vendedorId: z.string({ invalid_type_error: "Tipo não válido para ID do vendedor." }).optional().nullable(),
 	vendedorNome: z.string({ invalid_type_error: "Tipo não válido para nome do vendedor." }).optional().nullable(),
 	entregaModalidade: z.enum(["PRESENCIAL", "RETIRADA", "ENTREGA", "COMANDA"]).optional().nullable(),
@@ -95,6 +99,7 @@ const UpdateSaleDraftInputSchema = z.object({
 	...saleRewardRedemptionInputFields,
 	rascunhoMetadados: z.unknown().optional().nullable(),
 	// Override tri-state da emissão fiscal automática. Ausente = não altera; null = herda a organização.
+	emissaoFiscalDocumento: SaleFiscalDocumentSchema.optional(),
 	emissaoFiscalAutomatica: z.boolean({ invalid_type_error: "Tipo não válido para emissão fiscal automática." }).optional().nullable(),
 	// Ausente = não mexe nos itens (o PDV salva rascunho sem reenviá-los). Presente = a lista passa a
 	// ser a verdade do rascunho: linhas com `id` são atualizadas, sem `id` inseridas, ausentes removidas.
@@ -139,6 +144,11 @@ async function createSaleDraft({ input, session }: { input: TCreateSaleDraftInpu
 		hasCoupon: !!input.cupomResgate,
 		cashbackResgate: input.cashbackResgate,
 		surface: "POS",
+	});
+
+	const emissaoFiscalDocumento = resolveSaleFiscalDocumentPreference({
+		requested: input.emissaoFiscalDocumento,
+		canEmit: !!session.membership?.permissoes.fiscal.emitir,
 	});
 
 	// Override fiscal por venda: valida permissão simétrica e resolve o valor a persistir (null = herda org).
@@ -229,6 +239,7 @@ async function createSaleDraft({ input, session }: { input: TCreateSaleDraftInpu
 				processamentoOrigem: "INTERNO",
 				statusVenda: "ORCAMENTO",
 				emissaoFiscalAutomatica,
+				emissaoFiscalDocumento,
 			})
 			.returning({ id: sales.id });
 
@@ -371,7 +382,7 @@ async function updateSaleDraft({ input, session }: { input: TUpdateSaleDraftInpu
 	// Verify the sale exists and belongs to the org
 	const existing = await db.query.sales.findFirst({
 		where: (fields, { and, eq }) => and(eq(fields.id, input.id), eq(fields.organizacaoId, orgId)),
-		columns: { id: true, statusVenda: true, tabId: true, clienteId: true, rascunhoMetadados: true },
+		columns: { id: true, statusVenda: true, tabId: true, clienteId: true, emissaoFiscalDocumento: true, rascunhoMetadados: true },
 		with: {
 			itens: {
 				columns: { valorVendaTotalLiquido: true },
@@ -386,8 +397,17 @@ async function updateSaleDraft({ input, session }: { input: TUpdateSaleDraftInpu
 	// Rascunho de conta de atendimento não é editável pelo fluxo comum (invariante 11).
 	if (existing.tabId)
 		throw new createHttpError.BadRequest("Esta venda pertence a uma conta de atendimento. Gerencie-a pelo board de Mesas & Comandas.");
+	const clientId = input.clienteId === undefined ? existing.clienteId : input.clienteId;
+	if (clientId) {
+		const client = await db.query.clients.findFirst({
+			where: (f, o) => o.and(o.eq(f.id, clientId), o.eq(f.organizacaoId, orgId)),
+			columns: { id: true },
+		});
+		if (!client) throw new createHttpError.NotFound("Cliente não encontrado nesta organização.");
+	}
 
 	// Campo ausente => não altera; presente (boolean|null) => resolve override com gate de permissão.
+
 	const emissaoFiscalAutomatica =
 		input.emissaoFiscalAutomatica !== undefined
 			? resolveSaleFiscalEmissionOverride({
@@ -433,7 +453,7 @@ async function updateSaleDraft({ input, session }: { input: TUpdateSaleDraftInpu
 			? await admitSaleRewardRedemptions({
 					tx: db,
 					organizacaoId: orgId,
-					clienteId: existing.clienteId,
+					clienteId: clientId,
 					recompensas: rewardLinesInput,
 					hasCoupon: !!input.cupomResgate,
 					cashbackResgate: input.cashbackResgate,
@@ -458,13 +478,37 @@ async function updateSaleDraft({ input, session }: { input: TUpdateSaleDraftInpu
 	}
 
 	await db.transaction(async (tx) => {
+		const [lockedSale] = await tx
+			.select({ statusVenda: sales.statusVenda, emissaoFiscalDocumento: sales.emissaoFiscalDocumento })
+			.from(sales)
+			.where(and(eq(sales.id, input.id), eq(sales.organizacaoId, orgId)))
+			.for("update");
+		if (lockedSale?.statusVenda !== "ORCAMENTO") throw new createHttpError.Conflict("O rascunho foi alterado. Recarregue a venda.");
+		const documents = await tx.query.fiscalOutboundDocuments.findMany({
+			where: (f, o) => o.and(o.eq(f.vendaId, input.id), o.eq(f.organizacaoId, orgId)),
+			columns: { statusInterno: true },
+		});
+		const emissaoFiscalDocumento = resolveSaleFiscalDocumentPreference({
+			requested: input.emissaoFiscalDocumento,
+			current: lockedSale.emissaoFiscalDocumento,
+			canEmit: !!session.membership?.permissoes.fiscal.emitir,
+			documents,
+		});
+
 		// Itens e totais precisam cair juntos: um rascunho com itens novos e `valorTotal` antigo
 		// confirmaria com o valor errado.
-		const itemTotals = input.itens ? await syncDraftItems({ tx, orgId, saleId: input.id, clienteId: existing.clienteId, itens: input.itens }) : null;
+		const itemTotals = input.itens ? await syncDraftItems({ tx, orgId, saleId: input.id, clienteId: clientId, itens: input.itens }) : null;
+		if (input.clienteId !== undefined) {
+			await tx
+				.update(saleItems)
+				.set({ clienteId: clientId })
+				.where(and(eq(saleItems.vendaId, input.id), eq(saleItems.organizacaoId, orgId)));
+		}
 
 		await tx
 			.update(sales)
 			.set({
+				clienteId: input.clienteId,
 				vendedorId: input.vendedorId,
 				vendedorNome: input.vendedorNome ?? undefined,
 				entregaModalidade: input.entregaModalidade ?? undefined,
@@ -481,6 +525,7 @@ async function updateSaleDraft({ input, session }: { input: TUpdateSaleDraftInpu
 					...buildRewardSnapshotsMetadataKeys(recompensasPersistidas),
 				},
 				emissaoFiscalAutomatica,
+				emissaoFiscalDocumento,
 			})
 			.where(eq(sales.id, input.id));
 	});

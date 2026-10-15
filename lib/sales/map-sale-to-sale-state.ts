@@ -210,5 +210,6 @@ export function mapSaleForEditToSaleState(
 			};
 		}),
 		emissaoFiscalAutomatica: venda.emissaoFiscalAutomatica ?? null,
+		emissaoFiscalDocumento: venda.emissaoFiscalDocumento ?? null,
 	};
 }

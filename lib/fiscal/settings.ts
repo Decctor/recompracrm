@@ -1,6 +1,6 @@
 import { handleSimpleChildRowsProcessing, isUniqueViolationError } from "@/lib/db-utils";
 import { OrganizationFiscalConfigSchema, type TOrganizationFiscalConfig } from "@/schemas/fiscal";
-import { db } from "@/services/drizzle";
+import { db, type DB } from "@/services/drizzle";
 import { fiscalOperationProfiles, fiscalSeries, fiscalTaxGroupRules, fiscalTaxGroups, organizations } from "@/services/drizzle/schema";
 import { and, eq, sql } from "drizzle-orm";
 import createHttpError from "http-errors";
@@ -85,8 +85,10 @@ export async function updateFiscalSettings({
 	return updated;
 }
 
-export async function loadFiscalOrganization(organizacaoId: string) {
-	const organization = await db.query.organizations.findFirst({
+export type TFiscalReadDatabase = Pick<DB, "query">;
+
+export async function loadFiscalOrganization(organizacaoId: string, database: TFiscalReadDatabase = db) {
+	const organization = await database.query.organizations.findFirst({
 		where: (fields, operators) => operators.eq(fields.id, organizacaoId),
 	});
 	return organization ?? null;
@@ -146,12 +148,14 @@ export async function findActiveFiscalSeries({
 	organizacaoId,
 	tipoDocumento,
 	ambiente,
+	database = db,
 }: {
 	organizacaoId: string;
 	tipoDocumento: typeof fiscalSeries.$inferSelect.tipoDocumento;
 	ambiente: typeof fiscalSeries.$inferSelect.ambiente;
+	database?: TFiscalReadDatabase;
 }) {
-	return db.query.fiscalSeries.findFirst({
+	return database.query.fiscalSeries.findFirst({
 		where: (fields, operators) =>
 			operators.and(
 				operators.eq(fields.organizacaoId, organizacaoId),
@@ -240,12 +244,17 @@ export async function listFiscalOperationProfiles(organizacaoId: string) {
 }
 
 type FindFiscalOperationProfileByIdParams = {
+	database?: TFiscalReadDatabase;
 	fiscalOperationProfileId: string;
 	organizationId: string;
 };
 
-export async function findFiscalOperationProfileById({ fiscalOperationProfileId, organizationId }: FindFiscalOperationProfileByIdParams) {
-	return db.query.fiscalOperationProfiles.findFirst({
+export async function findFiscalOperationProfileById({
+	fiscalOperationProfileId,
+	organizationId,
+	database = db,
+}: FindFiscalOperationProfileByIdParams) {
+	return database.query.fiscalOperationProfiles.findFirst({
 		where: (fields, operators) => operators.and(operators.eq(fields.id, fiscalOperationProfileId), operators.eq(fields.organizacaoId, organizationId)),
 		with: {
 			seriePadrao: true,
@@ -259,6 +268,7 @@ export async function findDefaultOperationProfileForType({
 	profileId,
 	presencaConsumidor,
 	finalidade,
+	database = db,
 }: {
 	organizacaoId: string;
 	tipoDocumento: typeof fiscalOperationProfiles.$inferSelect.tipoDocumento;
@@ -267,14 +277,15 @@ export async function findDefaultOperationProfileForType({
 		| typeof fiscalOperationProfiles.$inferSelect.presencaConsumidor
 		| Array<typeof fiscalOperationProfiles.$inferSelect.presencaConsumidor>;
 	finalidade?: typeof fiscalOperationProfiles.$inferSelect.finalidade;
+	database?: TFiscalReadDatabase;
 }) {
-	if (profileId) return findFiscalOperationProfileById({ fiscalOperationProfileId: profileId, organizationId: organizacaoId });
+	if (profileId) return findFiscalOperationProfileById({ fiscalOperationProfileId: profileId, organizationId: organizacaoId, database });
 
 	const presencaCandidates = presencaConsumidor ? (Array.isArray(presencaConsumidor) ? presencaConsumidor : [presencaConsumidor]) : null;
 
 	if (presencaCandidates?.length) {
 		for (const presenca of presencaCandidates) {
-			const profile = await db.query.fiscalOperationProfiles.findFirst({
+			const profile = await database.query.fiscalOperationProfiles.findFirst({
 				where: (fields, operators) =>
 					operators.and(
 						operators.eq(fields.organizacaoId, organizacaoId),
@@ -294,7 +305,7 @@ export async function findDefaultOperationProfileForType({
 		return null;
 	}
 
-	return db.query.fiscalOperationProfiles.findFirst({
+	return database.query.fiscalOperationProfiles.findFirst({
 		where: (fields, operators) =>
 			operators.and(
 				operators.eq(fields.organizacaoId, organizacaoId),

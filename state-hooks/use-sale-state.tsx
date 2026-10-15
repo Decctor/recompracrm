@@ -1,3 +1,4 @@
+import { SaleFiscalDocumentSchema } from "@/schemas/fiscal";
 import { repriceSaleItem, type TSaleItemRepricing } from "@/lib/sales/sale-item-repricing";
 import {
 	CheckoutPaymentSplitSchema,
@@ -180,6 +181,7 @@ export const SaleStateSchema = z.object({
 	cupomResgate: SaleAppliedCouponSchema.optional().nullable(),
 	recompensasResgate: z.array(SaleRewardRedemptionSchema).default([]),
 	// Override tri-state da emissão fiscal automática. null = herda a preferência da organização.
+	emissaoFiscalDocumento: SaleFiscalDocumentSchema.default(null),
 	emissaoFiscalAutomatica: z.boolean({ invalid_type_error: "Tipo não válido para emissão fiscal automática." }).nullable().default(null),
 	success: SaleSuccessSchema,
 });
@@ -242,6 +244,7 @@ export function getDefaultSaleState(initialState?: Partial<TSaleState>): TSaleSt
 		cupomResgate: initialState?.cupomResgate ?? null,
 		recompensasResgate: initialState?.recompensasResgate ?? [],
 		emissaoFiscalAutomatica: initialState?.emissaoFiscalAutomatica ?? null,
+		emissaoFiscalDocumento: initialState?.emissaoFiscalDocumento ?? null,
 		success: initialState?.success ?? null,
 	};
 }
@@ -301,7 +304,9 @@ export const useSaleState = ({ initialState, organizationConfig, contasFinanceir
 			return {
 				...prev,
 				itens: prev.itens.map((candidate) =>
-					candidate.tempId === existing.tempId ? { ...candidate, quantidade, valorTotalBruto, valorDesconto, valorTotalLiquido: valorTotalBruto - valorDesconto } : candidate,
+					candidate.tempId === existing.tempId
+						? { ...candidate, quantidade, valorTotalBruto, valorDesconto, valorTotalLiquido: valorTotalBruto - valorDesconto }
+						: candidate,
 				),
 			};
 		});
@@ -515,6 +520,10 @@ export const useSaleState = ({ initialState, organizationConfig, contasFinanceir
 		setState((prev) => ({ ...prev, cupomResgate, recompensasResgate: cupomResgate ? [] : prev.recompensasResgate }));
 	}, []);
 
+	const setEmissaoFiscalDocumento = useCallback((emissaoFiscalDocumento: TSaleState["emissaoFiscalDocumento"]) => {
+		setState((prev) => ({ ...prev, emissaoFiscalDocumento }));
+	}, []);
+
 	const setEmissaoFiscalAutomatica = useCallback((emissaoFiscalAutomatica: boolean | null) => {
 		setState((prev) => ({ ...prev, emissaoFiscalAutomatica }));
 	}, []);
@@ -721,6 +730,7 @@ export const useSaleState = ({ initialState, organizationConfig, contasFinanceir
 		recompensasResgateTotal,
 		setCupomResgate,
 		setEmissaoFiscalAutomatica,
+		setEmissaoFiscalDocumento,
 		setSuccess,
 		clearSuccess,
 		subtotal,

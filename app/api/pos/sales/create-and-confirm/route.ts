@@ -1,3 +1,5 @@
+import { SaleFiscalDocumentSchema } from "@/schemas/fiscal";
+import { resolveSaleFiscalDocumentPreference } from "@/lib/fiscal/emission-document-policy";
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { validateActiveSeller } from "@/lib/sellers/validate-active-seller";
@@ -71,6 +73,7 @@ const CreateAndConfirmSaleInputSchema = z.object({
 	...saleRewardRedemptionInputFields,
 	sessaoVendaId: z.string({ invalid_type_error: "Tipo não válido para o ID da sessão de venda." }).optional().nullable(),
 	// Override tri-state da emissão fiscal automática. null/ausente = herda a preferência da organização.
+	emissaoFiscalDocumento: SaleFiscalDocumentSchema.optional(),
 	emissaoFiscalAutomatica: z.boolean({ invalid_type_error: "Tipo não válido para emissão fiscal automática." }).optional().nullable(),
 	// Aprovação VENDA_DESCONTO exigida quando o desconto agregado excede o teto do vendedor.
 	descontoAprovacaoId: z.string({ invalid_type_error: "Tipo não válido para o ID da aprovação de desconto." }).optional().nullable(),
@@ -132,6 +135,11 @@ async function createAndConfirmSale({ input, session }: { input: TCreateAndConfi
 	]);
 
 	if (!organization) throw new createHttpError.NotFound("Organização não encontrada.");
+
+	const emissaoFiscalDocumento = resolveSaleFiscalDocumentPreference({
+		requested: input.emissaoFiscalDocumento,
+		canEmit: !!session.membership?.permissoes.fiscal.emitir,
+	});
 
 	// Override fiscal por venda: valida permissão simétrica e resolve o valor a persistir (null = herda org).
 	const emissaoFiscalAutomatica = resolveSaleFiscalEmissionOverride({
@@ -242,6 +250,7 @@ async function createAndConfirmSale({ input, session }: { input: TCreateAndConfi
 				processamentoOrigem: "INTERNO",
 				statusVenda: "ORCAMENTO",
 				emissaoFiscalAutomatica,
+				emissaoFiscalDocumento,
 			})
 			.returning({ id: sales.id });
 
@@ -323,6 +332,7 @@ async function createAndConfirmSale({ input, session }: { input: TCreateAndConfi
 		const confirmation = await processSaleConfirmationInTransaction({
 			tx,
 			input: {
+				validatePOSFiscalEmission: true,
 				organization,
 				saleId: newSaleId,
 				salePayments,

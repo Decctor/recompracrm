@@ -1,12 +1,12 @@
 import type { TSaleCapiMetadata, TSaleIntegrationMetadata } from "@/schemas/sales";
 import { relations, sql } from "drizzle-orm";
-import { boolean, doublePrecision, index, jsonb, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/pg-core";
+import { boolean, check, doublePrecision, index, jsonb, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/pg-core";
 import { campaignConversions } from "./campaign-conversions";
 import { campaigns } from "./campaigns";
 import { cashbackProgramTransactions } from "./cashback-programs";
 import { clientLocations, clients } from "./clients";
 import { newTable } from "./common";
-import { deliveryModeEnum, saleAttendanceStatusEnum, saleProcessingSourceEnum, saleStatusEnum } from "./enums";
+import { fiscalDocumentTypeEnum, deliveryModeEnum, saleAttendanceStatusEnum, saleProcessingSourceEnum, saleStatusEnum } from "./enums";
 import { accountingEntries, fiscalOutboundDocuments } from "./financial";
 import { integrations } from "./integrations";
 import { interactions } from "./interactions";
@@ -91,6 +91,8 @@ export const sales = newTable(
 		// ERP: override por venda da emissão fiscal automática. null = herda organizacao.fiscalEmissaoAutomatica;
 		// true/false = decisão explícita da venda (respeitada tanto no confirm quanto na entrega).
 		emissaoFiscalAutomatica: boolean("emissao_fiscal_automatica"),
+		// NULL = automático; escolha explícita preservada até a emissão.
+		emissaoFiscalDocumento: fiscalDocumentTypeEnum("emissao_fiscal_documento").$type<"NFE" | "NFCE">(),
 		// ERP: horário PARA O QUAL a emissão fiscal automática foi agendada (atraso configurado em
 		// fiscalConfiguracao.emissaoAutomatica.atrasoMinutos) — não o momento em que o agendamento
 		// foi feito. Não nulo = agendamento vigente: o gatilho não publica de novo, e o consumer da
@@ -112,6 +114,10 @@ export const sales = newTable(
 		assinaturaExterna: text("assinatura_externa"),
 	},
 	(table) => ({
+		fiscalDocumentCheck: check(
+			"sales_emissao_fiscal_documento_check",
+			sql`${table.emissaoFiscalDocumento} IS NULL OR ${table.emissaoFiscalDocumento} IN ('NFE', 'NFCE')`,
+		),
 		clientIdIdx: index("idx_sales_client_id").on(table.clienteId),
 		// FK ON DELETE SET NULL: sem este índice, apagar interações varre a tabela de vendas inteira.
 		atribuicaoInteracaoIdx: index("idx_sales_atribuicao_interacao_id").on(table.atribuicaoInteracaoId),

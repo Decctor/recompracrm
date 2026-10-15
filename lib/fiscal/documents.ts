@@ -2,7 +2,9 @@ import { processFiscalDocumentDanfeAutoPrintIfEligible } from "@/lib/desktop-age
 import { getSaleChangeTotal, netSaleChangeFromPayments } from "@/lib/sales/sale-change";
 import { isValidCpfCnpj } from "@/lib/validation";
 import { db } from "@/services/drizzle";
-import { fiscalDocumentEvents, fiscalOutboundDocuments } from "@/services/drizzle/schema";
+import { fiscalDocumentEvents, fiscalOutboundDocuments, sales } from "@/services/drizzle/schema";
+import { isOrganizationFiscalDocumentCapable } from "./auto-emission-capability";
+import { getFiscalRecipientIssues } from "./emission-document-policy";
 import { and, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { getErrorMessage } from "../errors";
@@ -414,38 +416,43 @@ async function createOrUpdateDraftDocument({
 	referencia: string;
 	statusInterno: "RASCUNHO" | "PRONTO_PARA_ENVIO";
 }) {
-	const existing = await findFiscalDocumentByReference({
-		organizacaoId: input.organizacaoId,
-		referencia,
+	return db.transaction(async (tx) => {
+		// One sale lock serializes creation across both document models and POS edits.
+		const [sale] = await tx
+			.select({ id: sales.id, emissaoFiscalDocumento: sales.emissaoFiscalDocumento })
+			.from(sales)
+			.where(and(eq(sales.id, input.vendaId), eq(sales.organizacaoId, input.organizacaoId)))
+			.for("update");
+		if (!sale) throw new createHttpError.NotFound("Venda nao encontrada para emissao fiscal.");
+		const documents = await tx.query.fiscalOutboundDocuments.findMany({
+			where: (f, o) => o.and(o.eq(f.organizacaoId, input.organizacaoId), o.eq(f.vendaId, input.vendaId)),
+		});
+		const existing = documents.find((document) => document.referencia === referencia);
+		if (existing) return existing;
+		if (!input.documentoOrigemId) {
+			if (sale.emissaoFiscalDocumento && sale.emissaoFiscalDocumento !== input.tipo) {
+				throw new createHttpError.Conflict("O modelo solicitado diverge da escolha fiscal salva na venda.");
+			}
+			if (documents.some((document) => !document.documentoOrigemId && !["CANCELADO", "INUTILIZADO"].includes(document.statusInterno ?? ""))) {
+				throw new createHttpError.Conflict("Esta venda ja possui documento fiscal. Use o documento existente.");
+			}
+		}
+		const [inserted] = await tx
+			.insert(fiscalOutboundDocuments)
+			.values({
+				organizacaoId: input.organizacaoId,
+				vendaId: input.vendaId,
+				lancamentoContabilId: input.lancamentoContabilId ?? null,
+				tipo: input.tipo,
+				status: "PENDENTE",
+				statusInterno,
+				referencia,
+				documentoOrigemId: input.documentoOrigemId ?? null,
+				chaveAcessoReferencia: input.chaveAcessoReferencia ?? null,
+			})
+			.returning();
+		return inserted;
 	});
-	if (existing) return existing;
-
-	const [inserted] = await db
-		.insert(fiscalOutboundDocuments)
-		.values({
-			organizacaoId: input.organizacaoId,
-			vendaId: input.vendaId,
-			lancamentoContabilId: input.lancamentoContabilId ?? null,
-			tipo: input.tipo,
-			status: "PENDENTE",
-			statusInterno,
-			referencia,
-			documentoOrigemId: input.documentoOrigemId ?? null,
-			chaveAcessoReferencia: input.chaveAcessoReferencia ?? null,
-		})
-		.onConflictDoNothing({
-			target: [fiscalOutboundDocuments.organizacaoId, fiscalOutboundDocuments.referencia],
-		})
-		.returning();
-	if (inserted) return inserted;
-
-	// Outra requisicao inseriu a mesma referencia entre o find e o insert: usa o registro vencedor.
-	const winner = await findFiscalDocumentByReference({
-		organizacaoId: input.organizacaoId,
-		referencia,
-	});
-	if (!winner) throw new createHttpError.InternalServerError("Erro ao criar o documento fiscal.");
-	return winner;
 }
 
 type LoadSaleForFiscalParams = {
@@ -569,6 +576,33 @@ function assertFiscalReadiness(context: TFiscalSaleContext) {
 	if (!fiscalConfig) throw readinessError("Configuracao fiscal da organizacao nao encontrada.", "CONFIGURACAO_FISCAL_INCOMPLETA");
 	if (!context.serie?.id) throw readinessError("Serie fiscal ativa nao encontrada para esta emissao.", "SERIE_AUSENTE");
 	if (!context.operacao?.id) throw readinessError("Perfil de operacao fiscal nao encontrado para esta emissao.", "PERFIL_OPERACAO_AUSENTE");
+	if (
+		!context.serie.ativo ||
+		context.serie.tipoDocumento !== context.operacao.tipoDocumento ||
+		context.serie.ambiente !== fiscalConfig.ambiente ||
+		context.serie.organizacaoId !== context.organizacao.id
+	) {
+		throw readinessError("A série fiscal não está ativa para este modelo e ambiente.", "SERIE_AUSENTE");
+	}
+	if (
+		context.organizacao.fiscalProvedor === "SPEDY" &&
+		!isOrganizationFiscalDocumentCapable(context.organizacao, context.operacao.tipoDocumento as "NFE" | "NFCE")
+	) {
+		throw readinessError("Credenciais ou certificado fiscal não configurados para este modelo.", "CONFIGURACAO_FISCAL_INCOMPLETA");
+	}
+	const recipient = context.destinatarioSnapshot;
+	const address = recipient?.endereco as Record<string, string | null> | undefined;
+	if (!context.classificacaoPresencaExcepcional) {
+		const issues = getFiscalRecipientIssues({
+			tipo: context.operacao.tipoDocumento as "NFE" | "NFCE",
+			entregaModalidade: context.venda.entregaModalidade,
+			cpfCnpjValid: isValidCpfCnpj(String(recipient?.cpfCnpj ?? "")),
+			addressComplete: !!address && [address.cep, address.estado, address.cidade, address.bairro, address.logradouro].every((value) => !!value?.trim()),
+			ufOrigem: fiscalConfig.endereco.uf,
+			ufDestino: address?.estado,
+		});
+		if (issues.length) throw readinessError(issues.join(" "), "CONFIGURACAO_FISCAL_INCOMPLETA");
+	}
 	if (!fiscalConfig.cpfCnpj) throw readinessError("CPF/CNPJ fiscal da organizacao nao configurado.", "CONFIGURACAO_FISCAL_INCOMPLETA");
 	if (!fiscalConfig.nomeRazaoSocial) throw readinessError("Razao social fiscal da organizacao nao configurada.", "CONFIGURACAO_FISCAL_INCOMPLETA");
 	if (

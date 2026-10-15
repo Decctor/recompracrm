@@ -224,6 +224,7 @@ async function confirmSale({ input, session }: { input: TConfirmSaleInput; sessi
 	const salePayments = await resolvePaymentFinancialAccounts({ organization, payments: input.pagamentos });
 
 	const confirmationInput: TProcessSaleConfirmationInput = {
+		validatePOSFiscalEmission: true,
 		organization,
 		saleId: input.id,
 		salePayments,

@@ -246,6 +246,7 @@ export default function EditSalePage({
 				observacoes: payment.observacoes,
 			})),
 			emissaoFiscalAutomatica: saleState.state.emissaoFiscalAutomatica,
+			emissaoFiscalDocumento: saleState.state.emissaoFiscalDocumento,
 			itens: mapItemsToApi(saleState, deletedItemIds),
 		});
 	};
@@ -463,6 +464,7 @@ export default function EditSalePage({
 				<div className="hidden w-[420px] shrink-0 overflow-hidden rounded-xl border border-border/70 bg-muted/45 lg:block">
 					<div className="h-full overflow-y-auto p-3 scrollbar-thin scrollbar-track-primary/10 scrollbar-thumb-primary/30">
 						<CheckoutPanel
+							fiscalSaleId={saleId}
 							organizationCashbackProgram={organizationCashbackProgram}
 							saleState={saleState}
 							sellerEditable={activeSession?.politica !== "VENDEDOR_UNICO"}
@@ -527,6 +529,7 @@ export default function EditSalePage({
 				ariaLabel={`Abrir edição da venda: ${saleState.itemCount} ${saleState.itemCount === 1 ? "item" : "itens"}, total ${formatToMoney(saleState.valorFinal)}`}
 			>
 				<CheckoutPanel
+					fiscalSaleId={saleId}
 					organizationCashbackProgram={organizationCashbackProgram}
 					saleState={saleState}
 					sellerEditable={activeSession?.politica !== "VENDEDOR_UNICO"}

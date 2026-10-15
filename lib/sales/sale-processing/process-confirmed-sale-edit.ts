@@ -1,3 +1,5 @@
+import { resolveSaleFiscalDocumentPreference, type TSaleFiscalDocument } from "@/lib/fiscal/emission-document-policy";
+import { assertPOSFiscalEmissionReady } from "@/lib/fiscal/document-preview";
 import { resyncSaleCashbackAccumulation } from "@/lib/cashback/resync-sale-accumulation";
 import { type TCouponCartItem, evaluateCouponAgainstCart } from "@/lib/coupons/engine";
 import { cancelCouponRedemption } from "@/lib/coupons/redemption";
@@ -90,6 +92,8 @@ export type TProcessConfirmedSaleEditInput = {
 	pagamentos: TPaymentSplit[];
 	// Já resolvido pela rota via resolveSaleFiscalEmissionOverride (null = herda a organização).
 	emissaoFiscalAutomatica: boolean | null;
+	emissaoFiscalDocumento?: TSaleFiscalDocument | null;
+	canChooseFiscalDocument?: boolean;
 	// Consentimento explícito para derrubar um cupom invalidado pelo carrinho editado.
 	removerCupom?: boolean;
 	// Aprovação de desconto já autorizada pela rota; consumida one-shot nesta transação.
@@ -178,6 +182,28 @@ export async function processConfirmedSaleEditInTransaction({ tx, input }: { tx:
 		},
 	});
 	if (!sale) throw new createHttpError.NotFound("Venda não encontrada.");
+
+	const emissaoFiscalDocumento = resolveSaleFiscalDocumentPreference({
+		requested: input.emissaoFiscalDocumento,
+		current: sale.emissaoFiscalDocumento,
+		canEmit: input.canChooseFiscalDocument ?? false,
+		documents: sale.documentosFiscais,
+	});
+	await assertPOSFiscalEmissionReady(
+		{
+			organization: input.organization,
+			organizationId,
+			clienteId: sale.clienteId,
+			entregaModalidade: input.entregaModalidade ?? sale.entregaModalidade ?? "PRESENCIAL",
+			entregaLocalizacaoId:
+				(input.entregaModalidade ?? sale.entregaModalidade) === "ENTREGA" ? (input.entregaLocalizacaoId ?? sale.entregaLocalizacaoId) : null,
+			canal: sale.canal,
+			emissaoFiscalDocumento,
+			emissaoFiscalAutomatica: input.emissaoFiscalAutomatica,
+			metodos: input.pagamentos.filter((payment) => payment.valor > 0).map((payment) => payment.metodo),
+		},
+		tx,
+	);
 
 	// Re-checagem autoritativa da política DENTRO da transação: a editabilidade vista pelo cliente
 	// pode ter mudado (nota emitida, entrega concluída, cancelamento) entre o GET e o PUT.
@@ -636,6 +662,7 @@ export async function processConfirmedSaleEditInTransaction({ tx, input }: { tx:
 			comandaNumero: input.entregaModalidade === "COMANDA" ? (input.comandaNumero ?? sale.comandaNumero) : null,
 			observacoes: input.observacoes ?? sale.observacoes,
 			emissaoFiscalAutomatica: input.emissaoFiscalAutomatica,
+			emissaoFiscalDocumento,
 			rascunhoMetadados: {
 				...previousDraftMetadata,
 				descontoGeral: descontosGerais,

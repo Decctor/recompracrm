@@ -211,6 +211,7 @@ export default function NewSalePage({
 	const handleClientEdited = useCallback(async () => {
 		if (!linkedClientId) return;
 		void queryClient.invalidateQueries({ queryKey: ["client-by-id", linkedClientId] });
+		void queryClient.invalidateQueries({ queryKey: ["pos-fiscal-preview"] });
 		try {
 			// O carrinho carrega uma cópia de nome/telefone: recarrega o contexto e propaga.
 			const context = await queryClient.fetchQuery({
@@ -248,6 +249,7 @@ export default function NewSalePage({
 					})),
 					rascunhoMetadados: saleState.getDraftMetadata(),
 					emissaoFiscalAutomatica: saleState.state.emissaoFiscalAutomatica,
+					emissaoFiscalDocumento: saleState.state.emissaoFiscalDocumento,
 				});
 				saleState.setSuccess({
 					mode: "ORCAMENTO",
@@ -408,6 +410,7 @@ export default function NewSalePage({
 			})),
 			rascunhoMetadados: saleState.getDraftMetadata(),
 			emissaoFiscalAutomatica: saleState.state.emissaoFiscalAutomatica,
+			emissaoFiscalDocumento: saleState.state.emissaoFiscalDocumento,
 			itens: mapItemsToApi(saleState),
 		});
 	};
@@ -442,6 +445,7 @@ export default function NewSalePage({
 				quantidade: recompensa.quantidade,
 			})),
 			emissaoFiscalAutomatica: saleState.state.emissaoFiscalAutomatica,
+			emissaoFiscalDocumento: saleState.state.emissaoFiscalDocumento,
 			itens: mapItemsToApi(saleState),
 		});
 	};

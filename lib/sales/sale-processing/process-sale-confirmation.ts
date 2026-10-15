@@ -1,4 +1,5 @@
 import { accumulateCashbackForClient } from "@/lib/cashback/accumulation";
+import { assertPOSFiscalEmissionReady } from "@/lib/fiscal/document-preview";
 import { captureSaleCampaignEvent } from "@/lib/campaigns/events/handlers/sale-capture";
 import { publishPendingCampaignEventsSafely } from "@/lib/campaigns/events/queue";
 import { waitUntil } from "@vercel/functions";
@@ -34,6 +35,7 @@ import { registerSaleChangeTransaction } from "./register-sale-change";
 import { attendanceStatusValues } from "@/lib/sales/sale-processing/attendance";
 
 export type TProcessSaleConfirmationInput = {
+	validatePOSFiscalEmission?: boolean;
 	organization: TOrganizationEntity;
 
 	saleId: string;
@@ -147,8 +149,14 @@ async function reuseAccountingEntry(
  * All database effects must use `tx`; external effects run after commit.
  */
 export async function processSaleConfirmationInTransaction({ tx, input }: { tx: DBTransaction; input: TProcessSaleConfirmationInput }) {
+	// Serializa confirmação contra alterações da preferência no rascunho.
+	await tx
+		.select({ id: sales.id })
+		.from(sales)
+		.where(and(eq(sales.id, input.saleId), eq(sales.organizacaoId, input.organization.id)))
+		.for("update");
 	const sale = await tx.query.sales.findFirst({
-		where: (fields, { eq }) => eq(fields.id, input.saleId),
+		where: (fields, { and, eq }) => and(eq(fields.id, input.saleId), eq(fields.organizacaoId, input.organization.id)),
 		with: {
 			itens: {
 				with: {
@@ -161,6 +169,22 @@ export async function processSaleConfirmationInTransaction({ tx, input }: { tx: 
 
 	if (!sale) {
 		throw new createHttpError.NotFound("Venda nao encontrada.");
+	}
+	if (input.validatePOSFiscalEmission) {
+		await assertPOSFiscalEmissionReady(
+			{
+				organization: input.organization,
+				organizationId: input.organization.id,
+				clienteId: input.saleClientId ?? sale.clienteId,
+				entregaLocalizacaoId: sale.entregaLocalizacaoId,
+				entregaModalidade: sale.entregaModalidade ?? "PRESENCIAL",
+				canal: sale.canal,
+				emissaoFiscalDocumento: sale.emissaoFiscalDocumento,
+				emissaoFiscalAutomatica: sale.emissaoFiscalAutomatica,
+				metodos: input.salePayments.filter((payment) => payment.valor > 0).map((payment) => payment.metodo),
+			},
+			tx,
+		);
 	}
 
 	if (sale.statusVenda !== "ORCAMENTO") {

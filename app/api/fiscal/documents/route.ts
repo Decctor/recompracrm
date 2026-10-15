@@ -148,7 +148,10 @@ async function createFiscalDocument({ input }: { input: TEmitFiscalDocumentInput
 		where: (fields, { and, eq }) => and(eq(fields.id, input.vendaId), eq(fields.organizacaoId, orgId)),
 		with: {
 			cliente: { columns: { cpfCnpj: true } },
-			documentosFiscais: { columns: { statusInterno: true } },
+			documentosFiscais: {
+				columns: { tipo: true, statusInterno: true, documentoOrigemId: true },
+				orderBy: (fields, { desc }) => desc(fields.dataInsercao),
+			},
 		},
 	});
 	if (!saleBelongsToOrg) throw new createHttpError.NotFound("Venda não encontrada para emissão fiscal.");
@@ -166,19 +169,23 @@ async function createFiscalDocument({ input }: { input: TEmitFiscalDocumentInput
 		if (restriction?.code === "MISSING_PERMISSION") throw new createHttpError.Forbidden(restriction.message);
 		if (restriction) throw new createHttpError.BadRequest(restriction.message);
 	}
-	if (!input.tipo) {
-		if (saleBelongsToOrg.statusVenda !== "CONFIRMADA") {
-			throw new createHttpError.BadRequest("Apenas vendas confirmadas podem emitir nota fiscal.");
-		}
-		const hasActiveFiscalDocument = saleBelongsToOrg.documentosFiscais.some((document) => blocksNewManualFiscalEmission(document.statusInterno));
-		if (hasActiveFiscalDocument) {
-			throw new createHttpError.Conflict("Esta venda já possui um documento fiscal ativo.");
-		}
+	// The guard also applies when a caller explicitly supplies a model (retry UI).
+	if (saleBelongsToOrg.statusVenda !== "CONFIRMADA") throw new createHttpError.BadRequest("Apenas vendas confirmadas podem emitir nota fiscal.");
+	if (saleBelongsToOrg.documentosFiscais.some((document) => blocksNewManualFiscalEmission(document.statusInterno))) {
+		throw new createHttpError.Conflict("Esta venda já possui um documento fiscal ativo.");
 	}
+	const retryDocument = saleBelongsToOrg.documentosFiscais.find(
+		(document) => !document.documentoOrigemId && ["ERRO", "REJEITADO"].includes(document.statusInterno ?? ""),
+	);
+	const retryType = retryDocument?.tipo === "NFE" || retryDocument?.tipo === "NFCE" ? retryDocument.tipo : null;
+	if (input.tipo && retryType && input.tipo !== retryType)
+		throw new createHttpError.Conflict("A retentativa deve usar o modelo do documento existente.");
 	const tipo =
 		input.tipo ??
+		retryType ??
 		(await resolveEmissionDocumentType({
 			organizacaoId: orgId,
+			emissaoFiscalDocumento: saleBelongsToOrg.emissaoFiscalDocumento,
 			operacaoPadraoNfeId: fiscalOrganization?.fiscalConfiguracao?.operacaoPadraoPorTipo?.NFE ?? null,
 			signals: {
 				canal: saleBelongsToOrg.canal,

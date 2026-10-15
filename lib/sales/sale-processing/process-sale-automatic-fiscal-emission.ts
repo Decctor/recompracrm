@@ -187,6 +187,7 @@ export async function processSaleAutomaticFiscalEmissionIfEligible({
 	try {
 		const tipoDocumento = await resolveEmissionDocumentType({
 			organizacaoId: organization.id,
+			emissaoFiscalDocumento: sale.emissaoFiscalDocumento,
 			operacaoPadraoNfeId: organization.fiscalConfiguracao?.operacaoPadraoPorTipo?.NFE ?? null,
 			signals: {
 				canal: sale.canal,

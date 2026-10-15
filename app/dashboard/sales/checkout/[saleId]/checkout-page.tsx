@@ -224,6 +224,7 @@ export default function CheckoutPage({
 			// rascunho gravado, não o payload. Se o PUT falhar, a confirmação nem chega a acontecer.
 			await updateSaleDraft({
 				id: saleId,
+				clienteId: saleState.state.cliente?.id ?? null,
 				vendedorId: saleState.state.vendedorId,
 				vendedorNome: saleState.state.vendedorNome,
 				entregaModalidade: saleState.state.entregaModalidade,
@@ -235,6 +236,7 @@ export default function CheckoutPage({
 				cashbackResgate: saleState.state.cashbackResgate,
 				cupomResgate: saleState.state.cupomResgate,
 				emissaoFiscalAutomatica: saleState.state.emissaoFiscalAutomatica,
+				emissaoFiscalDocumento: saleState.state.emissaoFiscalDocumento,
 				rascunhoMetadados: {
 					...(draft?.rascunhoMetadados as Record<string, unknown> | null),
 					...saleState.getDraftMetadata(),
@@ -438,6 +440,7 @@ export default function CheckoutPage({
 
 	const checkoutPanel = (
 		<CheckoutPanel
+			fiscalSaleId={saleId}
 			organizationCashbackProgram={organizationCashbackProgram}
 			saleState={saleState}
 			sellerEditable={activeSession?.politica !== "VENDEDOR_UNICO"}

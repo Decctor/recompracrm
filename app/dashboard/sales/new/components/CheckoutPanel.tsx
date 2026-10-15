@@ -2,6 +2,8 @@
 
 import SelectInput from "@/components/Inputs/SelectInput";
 import type { TAutoEmissionExceptions } from "@/lib/fiscal/auto-emission-policy";
+import { resolveAutoEmissionException } from "@/lib/fiscal/auto-emission-policy";
+import { useFiscalPreview } from "@/lib/queries/fiscal-preview";
 import type { TDiscountAuthority } from "@/lib/permissions/discounts";
 import { useClientLocations } from "@/lib/queries/clients/locations";
 import type { ClassifiedPayment } from "@/lib/sales/utils";
@@ -23,6 +25,7 @@ import TotalDock from "./checkout/TotalDock";
 // `loading` não é opcional aqui: sem ele o next/dynamic não cria Suspense próprio e, com o chunk
 // ainda não baixado, a suspensão sobe até o loading.tsx da rota — a tela inteira vira loading.
 const ClientVinculationMenu = dynamic(() => import("@/components/Clients/ClientVinculationMenu"), { loading: () => null });
+const ControlClient = dynamic(() => import("@/components/Modals/Clients/ControlClient"), { loading: () => null });
 const NewClientLocation = dynamic(
 	() => import("@/components/Modals/Clients/Locations/NewClientLocation").then((module) => module.NewClientLocation),
 	{ loading: () => null },
@@ -44,6 +47,8 @@ export type CheckoutPanelEditContext = {
 };
 
 type CheckoutPanelProps = {
+	fiscalSaleId?: string;
+	fiscalChannel?: string | null;
 	organizationCashbackProgram: TCashbackProgramEntity | null;
 	saleState: TUseSaleState;
 	organizationAutoFiscalEmission: boolean;
@@ -72,6 +77,8 @@ type CheckoutPanelProps = {
 };
 
 export default function CheckoutPanel({
+	fiscalSaleId,
+	fiscalChannel,
 	organizationCashbackProgram,
 	saleState,
 	organizationAutoFiscalEmission,
@@ -95,6 +102,39 @@ export default function CheckoutPanel({
 }: CheckoutPanelProps) {
 	const [isVinculationMenuOpen, setIsVinculationMenuOpen] = useState(false);
 	const [isNewLocationOpen, setIsNewLocationOpen] = useState(false);
+	const [isFiscalClientEditOpen, setIsFiscalClientEditOpen] = useState(false);
+	const exception = resolveAutoEmissionException({
+		metodos: saleState.state.pagamentos.filter((payment) => payment.valor > 0).map((payment) => payment.metodo),
+		excecoes: autoEmissionExceptions,
+	});
+	const fiscalEnabled = saleState.state.emissaoFiscalAutomatica ?? (organizationAutoFiscalEmission && !exception);
+	// Keep the switch available if an existing fiscal setup becomes incomplete or expires.
+	const fiscalControlsVisible =
+		organizationAutoFiscalCapable ||
+		organizationAutoFiscalEmission ||
+		saleState.state.emissaoFiscalAutomatica === true ||
+		saleState.state.emissaoFiscalDocumento !== null;
+	const fiscalPreview = useFiscalPreview(
+		{
+			saleId: fiscalSaleId,
+			canal: fiscalChannel,
+			clienteId: saleState.state.cliente?.id,
+			entregaModalidade: saleState.state.entregaModalidade,
+			entregaLocalizacaoId: saleState.state.entregaModalidade === "ENTREGA" ? saleState.state.entregaLocalizacaoId : null,
+			emissaoFiscalDocumento: saleState.state.emissaoFiscalDocumento,
+		},
+		fiscalControlsVisible && fiscalEnabled,
+	);
+	const fiscalBlockedReason =
+		fiscalEnabled && fiscalControlsVisible
+			? fiscalPreview.isPending || fiscalPreview.isFetching
+				? "Verificando o modelo da nota fiscal."
+				: fiscalPreview.isError
+					? "Não foi possível verificar a emissão fiscal. Tente novamente."
+					: !fiscalPreview.data?.disponivel
+						? (fiscalPreview.data?.problemas[0] ?? "Revise a configuração fiscal.")
+						: null
+			: null;
 	const { data: sellers } = useSellersSimplified();
 	const { data: clientLocations = [], refetch: refetchClientLocations } = useClientLocations({ clienteId: saleState.state.cliente?.id ?? null });
 
@@ -181,9 +221,11 @@ export default function CheckoutPanel({
 					editMode={!!edit}
 				/>
 				<FiscalEmissionSection
+					preview={fiscalPreview}
+					onResolveClient={() => (saleState.state.cliente ? setIsFiscalClientEditOpen(true) : setIsVinculationMenuOpen(true))}
 					saleState={saleState}
 					organizationAutoFiscalEmission={organizationAutoFiscalEmission}
-					organizationAutoFiscalCapable={organizationAutoFiscalCapable}
+					organizationAutoFiscalCapable={fiscalControlsVisible}
 					autoEmissionExceptions={autoEmissionExceptions}
 					canEmitFiscal={canEmitFiscal}
 					canConfigureFiscal={canConfigureFiscal}
@@ -198,7 +240,7 @@ export default function CheckoutPanel({
 					isFinalizingSale={isFinalizingSale}
 					isCreatingDraft={isCreatingDraft}
 					editMode={!!edit}
-					finalizeBlockedReason={finalizeBlockedReason}
+					finalizeBlockedReason={finalizeBlockedReason ?? fiscalBlockedReason}
 					hideDraftAction={hideDraftAction}
 					expanded={expanded}
 				/>
@@ -212,6 +254,18 @@ export default function CheckoutPanel({
 						saleState.setModoCliente("VINCULADO");
 						saleState.setCliente(client);
 						setIsVinculationMenuOpen(false);
+					}}
+				/>
+			) : null}
+			{isFiscalClientEditOpen && saleState.state.cliente ? (
+				<ControlClient
+					clientId={saleState.state.cliente.id}
+					closeModal={() => setIsFiscalClientEditOpen(false)}
+					callbacks={{
+						onSuccess: () => {
+							void fiscalPreview.refetch();
+							void refetchClientLocations();
+						},
 					}}
 				/>
 			) : null}

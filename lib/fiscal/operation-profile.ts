@@ -5,7 +5,7 @@ import {
 	resolveExpectedConsumerPresenceCandidates,
 	type TFiscalOperationProfileSignals,
 } from "./sale-fiscal-signals";
-import { findDefaultOperationProfileForType, findFiscalOperationProfileById } from "./settings";
+import { findDefaultOperationProfileForType, findFiscalOperationProfileById, type TFiscalReadDatabase } from "./settings";
 
 function assertOperationProfileMatchesDocumentType({
 	profile,
@@ -32,6 +32,7 @@ export async function resolveOperationProfileForSale({
 	operationProfileId,
 	operacaoPadraoPorTipoId,
 	finalidade = "NORMAL",
+	database,
 }: {
 	organizacaoId: string;
 	tipoDocumento: Extract<TFiscalDocumentTypeEnum, "NFCE" | "NFE">;
@@ -39,9 +40,11 @@ export async function resolveOperationProfileForSale({
 	operationProfileId?: string | null;
 	operacaoPadraoPorTipoId?: string | null;
 	finalidade?: TFiscalOperationFinalityEnum;
+	database?: TFiscalReadDatabase;
 }) {
 	if (operationProfileId) {
 		const profile = await findFiscalOperationProfileById({
+			database,
 			fiscalOperationProfileId: operationProfileId,
 			organizationId: organizacaoId,
 		});
@@ -52,6 +55,7 @@ export async function resolveOperationProfileForSale({
 
 	if (finalidade === "DEVOLUCAO") {
 		const profile = await findDefaultOperationProfileForType({
+			database,
 			organizacaoId,
 			tipoDocumento,
 			finalidade: "DEVOLUCAO",
@@ -66,6 +70,7 @@ export async function resolveOperationProfileForSale({
 
 	if (operacaoPadraoPorTipoId) {
 		const configuredProfile = await findFiscalOperationProfileById({
+			database,
 			fiscalOperationProfileId: operacaoPadraoPorTipoId,
 			organizationId: organizacaoId,
 		});
@@ -80,6 +85,7 @@ export async function resolveOperationProfileForSale({
 	}
 
 	const profile = await findDefaultOperationProfileForType({
+		database,
 		organizacaoId,
 		tipoDocumento,
 		presencaConsumidor: candidates,
