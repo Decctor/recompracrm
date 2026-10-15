@@ -13,9 +13,12 @@ import {
 	type TPurchaseItemInput,
 	type TPurchaseItemStockOperation,
 } from "@/lib/purchase-processing/process-purchase-item-stock";
+import { upsertSupplierProductMappings } from "@/lib/purchase/supplier-product-mappings";
 import { createSimplifiedSearchCondition } from "@/lib/search";
 import { PurchaseStatusEnum, TPurchaseStatusEnum } from "@/schemas/enums";
 import { AccountingEntrySchema, FinancialTransactionSchema } from "@/schemas/financial";
+import { ProductSchema } from "@/schemas/products";
+import { SupplierProductMappingSchema, SupplierSchema } from "@/schemas/suppliers";
 import {
 	PurchaseImportedDocumentSchema,
 	PurchaseItemSchema,
@@ -24,7 +27,7 @@ import {
 	type TPurchaseImportedDocument,
 } from "@/schemas/purchases";
 import { db, type DBTransaction } from "@/services/drizzle";
-import { accountingEntries, financialTransactions, organizations, productStockLots, purchases } from "@/services/drizzle/schema";
+import { accountingEntries, financialTransactions, organizations, products, productStockLots, purchases, suppliers } from "@/services/drizzle/schema";
 import { and, count, eq, inArray, or } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { NextResponse, type NextRequest } from "next/server";
@@ -290,6 +293,42 @@ const CreatePurchaseInputSchema = z.object({
 	lancamentoContabil: PurchaseAccountingEntryFieldsSchema.extend({
 		transacoes: z.array(PurchaseAccountingEntryTransactionInputSchema),
 	}),
+	// Registered together with the purchase, in the same transaction, so abandoning a purchase never
+	// leaves an orphan supplier, product or de-para behind.
+	// A new supplier replaces `purchase.fornecedorId`; an existing one with the same CNPJ is reused.
+	newSupplier: SupplierSchema.pick({ nome: true, cpfCnpj: true, inscricaoEstadual: true, telefone: true, email: true }).optional().nullable(),
+	// The client generates each new product's id and uses it as `produtoId` in `purchaseItems`.
+	newProducts: z
+		.array(
+			ProductSchema.pick({
+				nome: true,
+				codigo: true,
+				codigoBarras: true,
+				unidade: true,
+				ncm: true,
+				vendavel: true,
+				rastreamentoEstoqueAtivo: true,
+				precoCusto: true,
+			}).extend({
+				id: z
+					.string({ required_error: "ID do novo produto não informado.", invalid_type_error: "Tipo não válido para o ID do novo produto." })
+					.uuid("ID do novo produto inválido."),
+			}),
+		)
+		.optional(),
+	// De-paras of the purchase's supplier to remember for its next invoices.
+	supplierProductMappings: z
+		.array(
+			SupplierProductMappingSchema.pick({
+				codigoFornecedor: true,
+				ean: true,
+				produtoId: true,
+				produtoVarianteId: true,
+				unidadeExterna: true,
+				fatorConversao: true,
+			}),
+		)
+		.optional(),
 });
 export type TCreatePurchaseInput = z.infer<typeof CreatePurchaseInputSchema>;
 
@@ -464,7 +503,27 @@ async function createPurchase({ input, session }: { input: TCreatePurchaseInput;
 	if (isPurchaseConsideredReceived(payloadPurchase))
 		assertPurchaseEntryMatchesItems({ entryValue: accountingEntryFields.valor, items: normalizedPurchaseItems });
 
+	const newSupplier = input.newSupplier ?? null;
+	const newProducts = input.newProducts ?? [];
+	const supplierProductMappingsInput = input.supplierProductMappings ?? [];
+	if (newSupplier && payloadPurchase.fornecedorId)
+		throw new createHttpError.BadRequest("Informe um fornecedor existente ou um novo fornecedor, não os dois.");
+	if (supplierProductMappingsInput.length > 0 && !newSupplier && !payloadPurchase.fornecedorId)
+		throw new createHttpError.BadRequest("Para lembrar vínculos de produtos, a compra precisa de um fornecedor.");
+	const newProductIds = new Set(newProducts.map((product) => product.id));
+	if (newProductIds.size !== newProducts.length) throw new createHttpError.BadRequest("Há novos produtos repetidos na compra.");
+	if (newProductIds.size > 0) {
+		const usedProductIds = new Set(normalizedPurchaseItems.map((item) => item.produtoId));
+		if ([...newProductIds].some((id) => !usedProductIds.has(id)))
+			throw new createHttpError.BadRequest("Todo novo produto precisa estar em algum item da compra.");
+	}
+
 	return await db.transaction(async (tx) => {
+		// Fornecedor e produtos novos nascem antes da compra: ela e seus itens os referenciam.
+		const supplierId = newSupplier
+			? await resolveOrCreatePurchaseSupplier({ trx: tx, organizationId: userOrgId, supplier: newSupplier })
+			: (payloadPurchase.fornecedorId ?? null);
+		if (newProducts.length > 0) await insertPurchaseNewProducts({ trx: tx, organizationId: userOrgId, newProducts });
 		// Primeiro o lançamento contábil, já que a compra referencia ele
 		const { debitAccountId, creditAccountId } = await resolvePurchaseAccountingAccountIds({ trx: tx, orgId: userOrgId });
 		const insertedAccountingEntry = await tx
@@ -497,6 +556,11 @@ async function createPurchase({ input, session }: { input: TCreatePurchaseInput;
 			.insert(purchases)
 			.values({
 				...payloadPurchase,
+				fornecedorId: supplierId,
+				pedidoFornecedorNome: payloadPurchase.pedidoFornecedorNome ?? newSupplier?.nome ?? null,
+				pedidoFornecedorCnpj: payloadPurchase.pedidoFornecedorCnpj ?? newSupplier?.cpfCnpj ?? null,
+				pedidoFornecedorTelefone: payloadPurchase.pedidoFornecedorTelefone ?? newSupplier?.telefone ?? null,
+				pedidoFornecedorEmail: payloadPurchase.pedidoFornecedorEmail ?? newSupplier?.email ?? null,
 				documentosImportados: buildPurchaseImportedDocumentsSnapshot(input.importedDocuments),
 				lancamentoContabilId: insertedAccountingEntryId,
 				organizacaoId: userOrgId,
@@ -531,6 +595,9 @@ async function createPurchase({ input, session }: { input: TCreatePurchaseInput;
 			});
 		}
 
+		if (supplierId && supplierProductMappingsInput.length > 0)
+			await upsertSupplierProductMappings({ trx: tx, organizationId: userOrgId, supplierId, mappings: supplierProductMappingsInput });
+
 		return {
 			data: { insertedPurchaseId },
 			message: "Compra criada com sucesso.",
@@ -538,6 +605,80 @@ async function createPurchase({ input, session }: { input: TCreatePurchaseInput;
 	});
 }
 export type TCreatePurchaseOutput = Awaited<ReturnType<typeof createPurchase>>;
+
+/** Idempotent by CNPJ within the org, same as POST /api/suppliers: re-importing an invoice never duplicates the supplier. */
+async function resolveOrCreatePurchaseSupplier({
+	trx,
+	organizationId,
+	supplier,
+}: {
+	trx: DBTransaction;
+	organizationId: string;
+	supplier: NonNullable<TCreatePurchaseInput["newSupplier"]>;
+}) {
+	const cpfCnpj = (supplier.cpfCnpj ?? "").replace(/\D/g, "") || null;
+	if (cpfCnpj) {
+		const [existing] = await trx
+			.select({ id: suppliers.id })
+			.from(suppliers)
+			.where(and(eq(suppliers.organizacaoId, organizationId), eq(suppliers.cpfCnpj, cpfCnpj)))
+			.limit(1);
+		if (existing) return existing.id;
+	}
+	const [inserted] = await trx
+		.insert(suppliers)
+		.values({
+			organizacaoId: organizationId,
+			nome: supplier.nome.trim(),
+			cpfCnpj,
+			inscricaoEstadual: supplier.inscricaoEstadual?.trim() || null,
+			telefone: supplier.telefone?.trim() || null,
+			email: supplier.email?.trim() || null,
+		})
+		.returning({ id: suppliers.id });
+	if (!inserted) throw new createHttpError.InternalServerError("Erro ao criar fornecedor.");
+	return inserted.id;
+}
+
+async function insertPurchaseNewProducts({
+	trx,
+	organizationId,
+	newProducts,
+}: {
+	trx: DBTransaction;
+	organizationId: string;
+	newProducts: NonNullable<TCreatePurchaseInput["newProducts"]>;
+}) {
+	const clashing = await trx
+		.select({ id: products.id })
+		.from(products)
+		.where(
+			inArray(
+				products.id,
+				newProducts.map((product) => product.id),
+			),
+		)
+		.limit(1);
+	if (clashing.length > 0) throw new createHttpError.Conflict("Um dos novos produtos já existe. Recarregue a página e tente novamente.");
+	await trx.insert(products).values(
+		newProducts.map((product) => ({
+			id: product.id,
+			organizacaoId: organizationId,
+			nome: product.nome.trim(),
+			codigo: product.codigo.trim(),
+			codigoBarras: product.codigoBarras ?? null,
+			unidade: product.unidade.trim() || "UN",
+			ncm: product.ncm.trim(),
+			tipo: "",
+			grupo: "",
+			vendavel: product.vendavel,
+			rastreamentoEstoqueAtivo: product.rastreamentoEstoqueAtivo,
+			precoCusto: product.precoCusto ?? null,
+			// Estoque inicial em 0: é a própria compra que dará a entrada, quando for recebida.
+			quantidade: 0,
+		})),
+	);
+}
 
 async function createPurchaseRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
