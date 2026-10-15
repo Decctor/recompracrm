@@ -15,6 +15,12 @@ export const runtime = "nodejs";
 const GetPurchaseImportedDocumentInputSchema = z.object({
 	purchaseId: z.string({ required_error: "ID da compra não informado." }),
 	referencia: z.string({ required_error: "Referência do documento não informada." }),
+	// "inline" serve the file for an in-page preview; anything else downloads it.
+	disposition: z
+		.string({ invalid_type_error: "Tipo não válido para a forma de entrega do arquivo." })
+		.optional()
+		.nullable()
+		.transform((value) => (value === "inline" ? ("inline" as const) : ("attachment" as const))),
 });
 export type TGetPurchaseImportedDocumentInput = z.infer<typeof GetPurchaseImportedDocumentInputSchema>;
 
@@ -46,13 +52,20 @@ async function getPurchaseImportedDocumentRoute(request: NextRequest) {
 	const input = GetPurchaseImportedDocumentInputSchema.parse({
 		purchaseId: request.nextUrl.searchParams.get("purchaseId") ?? undefined,
 		referencia: request.nextUrl.searchParams.get("referencia") ?? undefined,
+		disposition: request.nextUrl.searchParams.get("disposition"),
 	});
 	const result = await getPurchaseImportedDocument(input);
+	// Only PDFs and raster images may render in the page. An XML or SVG served inline from this origin could carry
+	// script (XHTML namespaces), so it always downloads. No CSP sandbox: Chrome refuses to render a
+	// sandboxed PDF, and nosniff keeps the browser on the declared type.
+	const canPreview = ["application/pdf", "image/png", "image/jpeg", "image/webp"].includes(result.mimeType);
+	const inline = input.disposition === "inline" && canPreview;
 	return new NextResponse(result.data, {
 		headers: {
 			"Content-Type": result.mimeType,
-			"Content-Disposition": `attachment; filename="${result.fileName.replace(/["\\\r\n]/g, "-")}"`,
+			"Content-Disposition": `${inline ? "inline" : "attachment"}; filename="${result.fileName.replace(/["\\\r\n]/g, "-")}"`,
 			"Cache-Control": "private, no-store",
+			"X-Content-Type-Options": "nosniff",
 		},
 	});
 }
