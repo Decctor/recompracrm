@@ -27,7 +27,16 @@ import {
 	type TPurchaseImportedDocument,
 } from "@/schemas/purchases";
 import { db, type DBTransaction } from "@/services/drizzle";
-import { accountingEntries, financialTransactions, organizations, products, productStockLots, purchases, suppliers } from "@/services/drizzle/schema";
+import {
+	accountingEntries,
+	financialTransactions,
+	organizations,
+	products,
+	productStockLots,
+	purchases,
+	supplierProductMappings,
+	suppliers,
+} from "@/services/drizzle/schema";
 import { and, count, eq, inArray, or } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { NextResponse, type NextRequest } from "next/server";
@@ -158,10 +167,37 @@ async function getPurchases({ input, session }: { input: TGetPurchasesInput; ses
 		});
 		if (!purchase) throw new createHttpError.NotFound("Compra não encontrada.");
 
+		// De-paras do fornecedor que apontam para produtos desta compra. Os vínculos não guardam a compra
+		// que os criou, então isto mostra os que valem para os itens, não "os aprendidos aqui".
+		const purchaseProductIds = [...new Set(purchase.itens.map((item) => item.produtoId))];
+		const vinculosFornecedor =
+			purchase.fornecedorId && purchaseProductIds.length > 0
+				? await db
+						.select({
+							id: supplierProductMappings.id,
+							codigoFornecedor: supplierProductMappings.codigoFornecedor,
+							ean: supplierProductMappings.ean,
+							produtoId: supplierProductMappings.produtoId,
+							produtoNome: products.nome,
+							produtoUnidade: products.unidade,
+							unidadeExterna: supplierProductMappings.unidadeExterna,
+							fatorConversao: supplierProductMappings.fatorConversao,
+						})
+						.from(supplierProductMappings)
+						.innerJoin(products, eq(products.id, supplierProductMappings.produtoId))
+						.where(
+							and(
+								eq(supplierProductMappings.organizacaoId, userOrgId),
+								eq(supplierProductMappings.fornecedorId, purchase.fornecedorId),
+								inArray(supplierProductMappings.produtoId, purchaseProductIds),
+							),
+						)
+				: [];
+
 		return {
 			data: {
 				default: null,
-				byId: purchase,
+				byId: { ...purchase, vinculosFornecedor },
 			},
 		};
 	}

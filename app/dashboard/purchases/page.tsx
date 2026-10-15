@@ -12,5 +12,5 @@ export default async function Purchases() {
 	if (!sessionUser.membership) redirect("/onboarding");
 	if (!sessionUser.membership.organizacao.configuracao.recursos.erp.acesso)
 		return <UnauthorizedPage message="Oops,  sua organização não possui acesso a este recurso." />;
-	return <PurchasesPage user={sessionUser.user} membership={sessionUser.membership} />;
+	return <PurchasesPage membership={sessionUser.membership} />;
 }
