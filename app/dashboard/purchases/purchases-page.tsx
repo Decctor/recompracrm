@@ -1,5 +1,4 @@
 "use client";
-import NewPurchase from "@/components/Modals/Purchases/NewPurchase";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import InboundDocumentsTab from "./components/InboundDocumentsTab";
 import { Button } from "@/components/ui/button";
@@ -20,6 +19,7 @@ import type { TGetPurchasesOutputDefault } from "@/app/api/purchases/route";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { formatDateAsLocale, formatNameAsInitials } from "@/lib/formatting";
 import Link from "next/link";
+import { appRoutes } from "@/lib/navigation/routes";
 import { PurchaseStatusOptions } from "@/utils/select-options";
 import { cn } from "@/lib/utils";
 import ControlPurchase from "@/components/Modals/Purchases/ControlPurchase";
@@ -30,7 +30,6 @@ type PurchasesPageProps = {
 
 export default function PurchasesPage({ user, membership }: PurchasesPageProps) {
 	const queryClient = useQueryClient();
-	const [newPurchaseModalIsOpen, setNewPurchaseModalIsOpen] = useState(false);
 	const [editingPurchaseId, setEditingPurchaseId] = useState<string | null>(null);
 	const { data, isLoading, isError, isSuccess, error, queryKey, filters, updateFilters } = usePurchases({ initialFilters: { page: 1, search: "" } });
 	const purchases = data?.purchases ?? [];
@@ -61,9 +60,11 @@ export default function PurchasesPage({ user, membership }: PurchasesPageProps) 
 					className="grow rounded-xl"
 				/>
 
-				<Button className="flex items-center gap-2" size="sm" onClick={() => setNewPurchaseModalIsOpen(true)}>
-					<Plus className="w-4 h-4 min-w-4 min-h-4" />
-					NOVA COMPRA
+				<Button className="flex items-center gap-2" size="sm" asChild>
+					<Link href={appRoutes.newPurchase()}>
+						<Plus className="w-4 h-4 min-w-4 min-h-4" />
+						NOVA COMPRA
+					</Link>
 				</Button>
 			</div>
 			<GeneralPaginationComponent
@@ -91,17 +92,12 @@ export default function PurchasesPage({ user, membership }: PurchasesPageProps) 
 							<EmptyDescription>Você não tem nenhuma compra ainda. Comece criando sua primeira compra.</EmptyDescription>
 						</EmptyHeader>
 						<EmptyContent className="flex-row justify-center gap-2">
-							<Button onClick={() => setNewPurchaseModalIsOpen(true)}>CRIAR NOVA COMPRA</Button>
+							<Button asChild>
+								<Link href={appRoutes.newPurchase()}>CRIAR NOVA COMPRA</Link>
+							</Button>
 						</EmptyContent>
 					</Empty>
 				)
-			) : null}
-			{newPurchaseModalIsOpen ? (
-				<NewPurchase
-					user={user}
-					closeModal={() => setNewPurchaseModalIsOpen(false)}
-					callbacks={{ onMutate: handleOnMutate, onSettled: handleOnSettled }}
-				/>
 			) : null}
 			{editingPurchaseId ? (
 				<ControlPurchase

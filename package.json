@@ -63,6 +63,7 @@
 		"sync:data-collecting": "tsx --conditions=react-server ./scripts/sync-data-collecting.ts",
 		"simulate:sale-taxes": "tsx --conditions=react-server ./scripts/simulate-todays-sale-taxes.ts",
 		"test:data-collecting-template-vars": "tsx ./scripts/validate-data-collecting-template-variables.ts",
+		"test:purchases": "node --import tsx --test lib/purchase/import-xml.test.ts app/dashboard/purchases/_module/builder/helpers/review-lines.test.ts",
 		"test:goals": "node --import tsx --test lib/goals/pacing.test.ts lib/operation-timezone.test.ts",
 		"test:print-templates": "node --import tsx --test lib/desktop-agent/templates/cupom-venda.test.ts lib/desktop-agent/templates/ticket-preparo.test.ts lib/sales/sale-item-modifier-groups.test.ts lib/sales/preparation-stations.test.ts",
 		"test:fiscal-auto-emission": "node --import tsx --test lib/fiscal/auto-emission-policy.test.ts lib/fiscal/auto-emission-delay.test.ts",
