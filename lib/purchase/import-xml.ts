@@ -1,7 +1,17 @@
 import { XMLParser, XMLValidator } from "fast-xml-parser";
+import type { TPurchaseFreightModalityEnum } from "@/schemas/enums";
 import { ExtractedCompositionSchema, type TExtractedComposition, type TExtractedCostModifier } from "./import";
 
 const UNSAFE_XML_DECLARATION = /<!\s*(?:DOCTYPE|ENTITY)\b/i;
+
+const FREIGHT_MODALITY_BY_CODE: Record<string, TPurchaseFreightModalityEnum> = {
+	"0": "REMETENTE",
+	"1": "DESTINATARIO",
+	"2": "TERCEIROS",
+	"3": "PROPRIO_REMETENTE",
+	"4": "PROPRIO_DESTINATARIO",
+	"9": "SEM_FRETE",
+};
 
 type TXmlNode = Record<string, unknown>;
 
@@ -207,12 +217,33 @@ export function extractCompositionFromNfeXml(xml: string): TExtractedComposition
 		cents(totals.vFCPST),
 	);
 
+	const issuerAddress = node(issuer.enderEmit);
+	const transport = node(info.transp);
+	const carrier = node(transport.transporta);
+	const carrierName = text(carrier.xNome);
+	const carrierDocument = text(carrier.CNPJ ?? carrier.CPF)?.replace(/\D/g, "") || null;
+	const installments = nodes(node(info.cobr).dup)
+		.map((installment) => ({
+			numero: text(installment.nDup),
+			dataVencimento: text(installment.dVenc)?.slice(0, 10) ?? null,
+			valor: decimal(installment.vDup) ?? 0,
+		}))
+		.filter((installment) => installment.valor > 0);
+
 	return ExtractedCompositionSchema.parse({
 		origem: "XML",
 		fornecedor: {
 			nome: text(issuer.xNome),
 			cnpj: text(issuer.CNPJ ?? issuer.CPF)?.replace(/\D/g, "") ?? null,
+			inscricaoEstadual: text(issuer.IE)?.replace(/\D/g, "") || null,
+			telefone: text(issuerAddress.fone),
+			// O emitente da NF-e não declara email.
+			email: null,
+			cidade: text(issuerAddress.xMun),
 		},
+		duplicatas: installments.length > 0 ? installments : null,
+		modalidadeFrete: FREIGHT_MODALITY_BY_CODE[text(transport.modFrete) ?? ""] ?? null,
+		transportadora: carrierName || carrierDocument ? { nome: carrierName, cnpj: carrierDocument } : null,
 		numeroDocumento: text(identification.nNF),
 		serieDocumento: text(identification.serie),
 		chaveAcesso: accessKey,

@@ -431,6 +431,25 @@ export type TPurchaseCostModifierOriginEnum = z.infer<typeof PurchaseCostModifie
 export const PurchaseCostAllocationMethodEnum = z.enum(["INFORMADO_ITEM", "PROPORCIONAL_VALOR", "PROPORCIONAL_QUANTIDADE", "MANUAL"]);
 export type TPurchaseCostAllocationMethodEnum = z.infer<typeof PurchaseCostAllocationMethodEnum>;
 
+// Modalidade do frete da NF-e (modFrete): 0 remetente (CIF), 1 destinatário (FOB), 2 terceiros,
+// 3 próprio remetente, 4 próprio destinatário, 9 sem frete. Lida do documento, não persistida.
+export const PurchaseFreightModalityEnum = z.enum([
+	"REMETENTE",
+	"DESTINATARIO",
+	"TERCEIROS",
+	"PROPRIO_REMETENTE",
+	"PROPRIO_DESTINATARIO",
+	"SEM_FRETE",
+]);
+export type TPurchaseFreightModalityEnum = z.infer<typeof PurchaseFreightModalityEnum>;
+
+// Etapas da leitura de documento de compra, transmitidas ao cliente durante o processamento.
+export const PurchaseImportStageEnum = z.enum(["LEITURA", "FORNECEDOR", "ITENS", "CATALOGO"]);
+export type TPurchaseImportStageEnum = z.infer<typeof PurchaseImportStageEnum>;
+
+export const PurchaseImportStageStatusEnum = z.enum(["INICIADO", "CONCLUIDO"]);
+export type TPurchaseImportStageStatusEnum = z.infer<typeof PurchaseImportStageStatusEnum>;
+
 export const PurchaseImportedDocumentOriginEnum = z.enum(["XML", "PDF", "IMAGEM", "MANUAL", "DFE"]);
 export type TPurchaseImportedDocumentOriginEnum = z.infer<typeof PurchaseImportedDocumentOriginEnum>;
 
