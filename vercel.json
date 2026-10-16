@@ -1,4 +1,5 @@
 {
+	"ignoreCommand": "case \"$VERCEL_GIT_COMMIT_REF\" in ccr-*|claude/*|cursor/*|codex/*|copilot/*|devin/*|agent/*|ai/*) exit 0 ;; *) exit 1 ;; esac",
 	"functions": {
 		"app/api/queues/ifood-catalog-push/route.ts": {
 			"experimentalTriggers": [
