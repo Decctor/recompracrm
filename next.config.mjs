@@ -2,11 +2,6 @@
 const nextConfig = {
 	reactCompiler: true,
 	reactStrictMode: true,
-	experimental: {
-		// O cache em disco do Turbopack no build (~1,2–1,3 GB) é enviado a cada deploy
-		// e não é reaproveitado de forma confiável entre builds. Desligar evita esse upload.
-		turbopackFileSystemCacheForBuild: false,
-	},
 	async redirects() {
 		// Os posts de caso de uso do blog foram convertidos em landings de conversão
 		// por segmento (/segmentos/[slug]) — o conteúdo vive em app/_content/segment-pages.ts.
