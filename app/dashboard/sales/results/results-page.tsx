@@ -3,11 +3,12 @@
 import { CommercialStatsSection } from "@/components/Stats/CommercialStatsSection";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { TAuthUserSession } from "@/lib/authentication/types";
-import { BadgeDollarSign, ReceiptText } from "lucide-react";
+import { BadgeDollarSign, GitCompare, ReceiptText } from "lucide-react";
 import { parseAsStringEnum, useQueryState } from "nuqs";
+import { ComparisonView } from "./_components/comparison-view";
 import { OperationalResultsView } from "./_components/operational-results-view";
 
-const RESULTS_VIEWS = ["comercial", "operacional"] as const;
+const RESULTS_VIEWS = ["comercial", "comparativo", "operacional"] as const;
 type TResultsView = (typeof RESULTS_VIEWS)[number];
 
 type SalesResultsPageProps = {
@@ -21,12 +22,13 @@ type SalesResultsPageProps = {
 };
 
 /**
- * Único lar dos resultados de vendas. A análise comercial (faturamento, gráficos, agrupamentos e
- * comparação de períodos) vale para qualquer organização; a visão operacional só existe com ERP.
+ * Único lar dos resultados de vendas. A análise comercial e o comparativo de períodos valem para
+ * qualquer organização; a visão operacional só existe com ERP.
  */
 export default function SalesResultsPage({ user, userOrg, membership, scopeSellersIds, hasErpAccess }: SalesResultsPageProps) {
 	const [viewMode, setViewMode] = useQueryState("view", parseAsStringEnum([...RESULTS_VIEWS]));
-	const activeView: TResultsView = hasErpAccess ? (viewMode ?? "comercial") : "comercial";
+	const requestedView = viewMode ?? "comercial";
+	const activeView: TResultsView = requestedView === "operacional" && !hasErpAccess ? "comercial" : requestedView;
 
 	return (
 		<div className="flex w-full flex-col gap-4 p-1">
@@ -35,37 +37,44 @@ export default function SalesResultsPage({ user, userOrg, membership, scopeSelle
 					<h1 className="font-black text-2xl tracking-tight">Resultados</h1>
 					<p className="text-sm text-muted-foreground">
 						{hasErpAccess
-							? "Análise comercial do período e, na visão operacional, recebimentos, modalidades, vendedores e emissão fiscal."
-							: "Faturamento, ticket médio, evolução e agrupamentos das vendas no período."}
+							? "Análise comercial do período, comparativo entre períodos e, na visão operacional, recebimentos, modalidades, vendedores e emissão fiscal."
+							: "Análise comercial do período e comparativo entre períodos."}
 					</p>
 				</div>
 			</div>
 
-			{hasErpAccess ? (
-				<Tabs value={activeView} onValueChange={(v) => setViewMode(v as TResultsView)} className="flex w-full flex-col gap-3">
-					<TabsList variant="page">
-						<TabsTrigger value="comercial">
-							<BadgeDollarSign className="h-4 w-4 min-h-4 min-w-4" />
-							Comercial
-						</TabsTrigger>
+			<Tabs value={activeView} onValueChange={(v) => setViewMode(v as TResultsView)} className="flex w-full flex-col gap-3">
+				<TabsList variant="page">
+					<TabsTrigger value="comercial">
+						<BadgeDollarSign className="h-4 w-4 min-h-4 min-w-4" />
+						Comercial
+					</TabsTrigger>
+					<TabsTrigger value="comparativo">
+						<GitCompare className="h-4 w-4 min-h-4 min-w-4" />
+						Comparativo
+					</TabsTrigger>
+					{hasErpAccess ? (
 						<TabsTrigger value="operacional">
 							<ReceiptText className="h-4 w-4 min-h-4 min-w-4" />
 							Operacional
 						</TabsTrigger>
-					</TabsList>
-					<TabsContent value="comercial">
-						<CommercialStatsSection user={user} userOrg={userOrg} membership={membership} scopeSellersIds={scopeSellersIds} />
-					</TabsContent>
+					) : null}
+				</TabsList>
+				<TabsContent value="comercial">
+					<CommercialStatsSection user={user} userOrg={userOrg} membership={membership} scopeSellersIds={scopeSellersIds} />
+				</TabsContent>
+				<TabsContent value="comparativo">
+					<ComparisonView scopeSellersIds={scopeSellersIds} />
+				</TabsContent>
+				{hasErpAccess ? (
 					<TabsContent value="operacional">
 						<OperationalResultsView
 							hasResultsScope={Boolean(membership.permissoes.resultados.escopo && membership.permissoes.resultados.escopo.length > 0)}
 							canViewSensitive={membership.permissoes.resultados.visualizarSensiveis}
 						/>
 					</TabsContent>
-				</Tabs>
-			) : (
-				<CommercialStatsSection user={user} userOrg={userOrg} membership={membership} scopeSellersIds={scopeSellersIds} />
-			)}
+				) : null}
+			</Tabs>
 		</div>
 	);
 }

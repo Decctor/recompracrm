@@ -64,6 +64,7 @@
 		"simulate:sale-taxes": "tsx --conditions=react-server ./scripts/simulate-todays-sale-taxes.ts",
 		"test:data-collecting-template-vars": "tsx ./scripts/validate-data-collecting-template-variables.ts",
 		"test:goals": "node --import tsx --test lib/goals/pacing.test.ts lib/operation-timezone.test.ts",
+		"test:period-presets": "node --import tsx --test lib/period-presets.test.ts",
 		"test:print-templates": "node --import tsx --test lib/desktop-agent/templates/cupom-venda.test.ts lib/desktop-agent/templates/ticket-preparo.test.ts lib/sales/sale-item-modifier-groups.test.ts lib/sales/preparation-stations.test.ts",
 		"test:fiscal-auto-emission": "node --import tsx --test lib/fiscal/auto-emission-policy.test.ts lib/fiscal/auto-emission-delay.test.ts",
 		"test:fiscal-document": "node --import tsx --test lib/fiscal/emission-document-policy.test.ts lib/fiscal/emission-document-migration.test.ts lib/fiscal/manual-emission-policy.test.ts lib/fiscal/sale-fiscal-signals.test.ts lib/sales/fiscal-document-state.test.ts",

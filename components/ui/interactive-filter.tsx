@@ -1,11 +1,12 @@
 "use client";
 
-import { endOfDay, isSameDay, startOfDay, subDays, subMonths, subYears, type Locale } from "date-fns";
+import { isSameDay, type Locale } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { ArrowDownNarrowWide, ArrowUpNarrowWide, Check, ChevronLeft, X } from "lucide-react";
 import * as React from "react";
 
 import { useMediaQuery } from "@/lib/hooks/use-media-query";
+import { REPORT_PERIOD_PRESETS, type TPeriodPreset } from "@/lib/period-presets";
 import { cn } from "@/lib/utils";
 
 import { Button } from "./button";
@@ -589,59 +590,17 @@ export type InteractiveFilterDateRange = {
 	to?: Date;
 };
 
-export type InteractiveFilterDateRangePreset = {
-	id: string;
-	label: string;
-	getValue: (referenceDate: Date) => Required<InteractiveFilterDateRange>;
-};
+/** Mesmo contrato de `TPeriodPreset`; o nome antigo fica para quem já importa daqui. */
+export type InteractiveFilterDateRangePreset = TPeriodPreset;
 
-export const defaultInteractiveFilterDateRangePresets: readonly InteractiveFilterDateRangePreset[] = [
-	{
-		id: "today",
-		label: "HOJE",
-		getValue: (referenceDate) => ({
-			from: startOfDay(referenceDate),
-			to: endOfDay(referenceDate),
-		}),
-	},
-	{
-		id: "last-7-days",
-		label: "ÚLTIMOS 7 DIAS",
-		getValue: (referenceDate) => ({
-			from: startOfDay(subDays(referenceDate, 6)),
-			to: endOfDay(referenceDate),
-		}),
-	},
-	{
-		id: "last-month",
-		label: "ÚLTIMO MÊS",
-		getValue: (referenceDate) => ({
-			from: startOfDay(subMonths(referenceDate, 1)),
-			to: endOfDay(referenceDate),
-		}),
-	},
-	{
-		id: "last-semester",
-		label: "ÚLTIMO SEMESTRE",
-		getValue: (referenceDate) => ({
-			from: startOfDay(subMonths(referenceDate, 6)),
-			to: endOfDay(referenceDate),
-		}),
-	},
-	{
-		id: "last-year",
-		label: "ÚLTIMO ANO",
-		getValue: (referenceDate) => ({
-			from: startOfDay(subYears(referenceDate, 1)),
-			to: endOfDay(referenceDate),
-		}),
-	},
-];
+/** Os atalhos padrão vivem em `lib/period-presets.ts`, para que toda tela mostre o mesmo conjunto. */
+export const defaultInteractiveFilterDateRangePresets = REPORT_PERIOD_PRESETS;
 
 type InteractiveFilterDateRangeContentProps = {
 	value: InteractiveFilterDateRange;
 	onChange: (nextValue: InteractiveFilterDateRange) => void;
 	locale?: Locale;
+	/** Meses lado a lado. Sem valor, dois no desktop e um no celular, onde dois não cabem. */
 	numberOfMonths?: number;
 	presets?: readonly InteractiveFilterDateRangePreset[];
 	className?: string;
@@ -651,11 +610,13 @@ function InteractiveFilterDateRangeContent({
 	value,
 	onChange,
 	locale = ptBR,
-	numberOfMonths = 2,
+	numberOfMonths,
 	presets = defaultInteractiveFilterDateRangePresets,
 	className,
 }: InteractiveFilterDateRangeContentProps) {
 	const { setOpen } = useInteractiveFilterContext();
+	const isDesktop = useMediaQuery("(min-width: 768px)");
+	const resolvedNumberOfMonths = numberOfMonths ?? (isDesktop ? 2 : 1);
 	const referenceDate = new Date();
 
 	function isPresetSelected(preset: InteractiveFilterDateRangePreset) {
@@ -704,7 +665,7 @@ function InteractiveFilterDateRangeContent({
 				defaultMonth={value.from}
 				selected={{ from: value.from, to: value.to }}
 				onSelect={(selectedValue) => onChange({ from: selectedValue?.from, to: selectedValue?.to })}
-				numberOfMonths={numberOfMonths}
+				numberOfMonths={resolvedNumberOfMonths}
 			/>
 		</div>
 	);

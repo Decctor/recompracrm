@@ -1,30 +1,10 @@
 "use client";
 
-import { InteractiveFilter, type InteractiveFilterDateRangePreset, type InteractiveFilterOption } from "@/components/ui/interactive-filter";
+import { InteractiveFilter, type InteractiveFilterOption } from "@/components/ui/interactive-filter";
 import { formatInteractiveDateRangeSummary, formatInteractiveOptionSummary } from "@/components/ui/interactive-filter-formatting";
 import { useSaleQueryFilterOptions } from "@/lib/queries/stats/utils";
 import type { TSalesResultsParams } from "@/lib/queries/sales-results";
-import dayjs from "dayjs";
 import { Calendar, ListFilter, Store, UserRound, WalletCards } from "lucide-react";
-
-const RESULTS_DATE_PRESETS: readonly InteractiveFilterDateRangePreset[] = [
-	{ id: "today", label: "HOJE", getValue: (ref) => ({ from: dayjs(ref).startOf("day").toDate(), to: dayjs(ref).endOf("day").toDate() }) },
-	{
-		id: "yesterday",
-		label: "ONTEM",
-		getValue: (ref) => ({ from: dayjs(ref).subtract(1, "day").startOf("day").toDate(), to: dayjs(ref).subtract(1, "day").endOf("day").toDate() }),
-	},
-	{ id: "this-week", label: "ESTA SEMANA", getValue: (ref) => ({ from: dayjs(ref).startOf("week").toDate(), to: dayjs(ref).endOf("day").toDate() }) },
-	{ id: "this-month", label: "ESTE MÊS", getValue: (ref) => ({ from: dayjs(ref).startOf("month").toDate(), to: dayjs(ref).endOf("day").toDate() }) },
-	{
-		id: "last-month",
-		label: "MÊS ANTERIOR",
-		getValue: (ref) => ({
-			from: dayjs(ref).subtract(1, "month").startOf("month").toDate(),
-			to: dayjs(ref).subtract(1, "month").endOf("month").toDate(),
-		}),
-	},
-];
 
 type ResultsFiltersProps = {
 	params: TSalesResultsParams;
@@ -61,7 +41,6 @@ export function ResultsFilters({ params, updateParams, channelOptions, financial
 				<InteractiveFilter.Content className="w-auto p-0">
 					<InteractiveFilter.DateRangeContent
 						value={{ from: params.after, to: params.before }}
-						presets={RESULTS_DATE_PRESETS}
 						onChange={(period) => updateParams({ after: period.from ?? params.after, before: period.to ?? params.before })}
 					/>
 				</InteractiveFilter.Content>

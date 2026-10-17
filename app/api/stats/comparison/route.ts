@@ -1,512 +1,120 @@
-import { appApiHandler } from "@/lib/app-api";
-import { runPagesRouteHandler, type PagesRouteHandler, type PagesRouteRequest, type PagesRouteResponse } from "@/lib/pages-route-compat";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
-import { getBestNumberOfPointsBetweenDates, getDateBuckets, getDayStringsBetweenDates, getEvenlySpacedDates } from "@/lib/dates";
-import { db } from "@/services/drizzle";
-import { sales } from "@/services/drizzle/schema";
-import dayjs from "dayjs";
-import { and, eq, gte, inArray, lte, notInArray } from "drizzle-orm";
+import { appApiHandler } from "@/lib/app-api";
+import { resolveResultsScopeSellerIds } from "@/lib/permissions/results-scope";
+import { getSalesComparisonStats } from "@/lib/sales/comparison-stats";
 import createHttpError from "http-errors";
+import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
-const StatsComparisonInputSchema = z.object({
-	firstPeriod: z.object({
-		after: z
-			.string({
-				required_error: "Parâmetros do primeiro período não fornecidos ou inválidos.",
-				invalid_type_error: "Parâmetros do primeiro período não fornecidos ou inválidos.",
-			})
-			.datetime({ message: "Tipo inválido para parâmetro de período." }),
-		before: z
-			.string({
-				required_error: "Parâmetros do primeiro período não fornecidos ou inválidos.",
-				invalid_type_error: "Parâmetros do primeiro período não fornecidos ou inválidos.",
-			})
-			.datetime({ message: "Tipo inválido para parâmetro do primeiro período." }),
-	}),
-	secondPeriod: z.object({
-		after: z
-			.string({
-				required_error: "Parâmetros do segundo período não fornecidos ou inválidos.",
-				invalid_type_error: "Parâmetros do segundo período não fornecidos ou inválidos.",
-			})
-			.datetime({ message: "Tipo inválido para parâmetro de período." }),
-		before: z
-			.string({
-				required_error: "Parâmetros do segundo período não fornecidos ou inválidos.",
-				invalid_type_error: "Parâmetros do segundo período não fornecidos ou inválidos.",
-			})
-			.datetime({ message: "Tipo inválido para parâmetro do segundo período." }),
-	}),
-});
-export type TStatsComparisonInput = z.infer<typeof StatsComparisonInputSchema>;
-
-type TStatsComparisonReduced = {
-	faturamentoBruto: {
-		primeiroPeriodo: number;
-		segundoPeriodo: number;
-	};
-	gastoBruto: {
-		primeiroPeriodo: number;
-		segundoPeriodo: number;
-	};
-	qtdeVendas: {
-		primeiroPeriodo: number;
-		segundoPeriodo: number;
-	};
-	qtdeItensVendidos: {
-		primeiroPeriodo: number;
-		segundoPeriodo: number;
-	};
-	diario: {
-		primeiroPeriodo: {
-			[key: string]: {
-				qtdeVendas: number;
-				totalVendido: number;
-			};
-		};
-		segundoPeriodo: {
-			[key: string]: {
-				qtdeVendas: number;
-				totalVendido: number;
-			};
-		};
-	};
-	porItem: {
-		[key: string]: {
-			primeiroPeriodo: {
-				qtdeVendas: number;
-				totalVendido: number;
-			};
-			segundoPeriodo: {
-				qtdeVendas: number;
-				totalVendido: number;
-			};
-		};
-	};
-	porVendedor: {
-		[key: string]: {
-			primeiroPeriodo: {
-				qtdeVendas: number;
-				totalVendido: number;
-			};
-			segundoPeriodo: {
-				qtdeVendas: number;
-				totalVendido: number;
-			};
-		};
-	};
-};
-export type TStatsComparisonOutput = {
-	faturamentoBruto: {
-		primeiroPeriodo: number;
-		segundoPeriodo: number;
-	};
-	faturamentoLiquido: {
-		primeiroPeriodo: number;
-		segundoPeriodo: number;
-	};
-
-	qtdeVendas: {
-		primeiroPeriodo: number;
-		segundoPeriodo: number;
-	};
-	ticketMedio: {
-		primeiroPeriodo: number;
-		segundoPeriodo: number;
-	};
-	qtdeItensVendidos: {
-		primeiroPeriodo: number;
-		segundoPeriodo: number;
-	};
-	itensPorVendaMedio: {
-		primeiroPeriodo: number;
-		segundoPeriodo: number;
-	};
-	valorDiarioVendido: {
-		primeiroPeriodo: number;
-		segundoPeriodo: number;
-	};
-	diario: {
-		primeiroPeriodo: {
-			titulo: string;
-			qtdeVendas: number;
-			totalVendido: number;
-		}[];
-		segundoPeriodo: {
-			titulo: string;
-			qtdeVendas: number;
-			totalVendido: number;
-		}[];
-	};
-	porItem: {
-		titulo: string;
-		primeiroPeriodo: {
-			qtdeVendas: number;
-			totalVendido: number;
-		};
-		segundoPeriodo: {
-			qtdeVendas: number;
-			totalVendido: number;
-		};
-	}[];
-	porVendedor: {
-		titulo: string;
-		primeiroPeriodo: {
-			qtdeVendas: number;
-			totalVendido: number;
-		};
-		segundoPeriodo: {
-			qtdeVendas: number;
-			totalVendido: number;
-		};
-	}[];
-};
-async function fetchStatsComparison(filters: TStatsComparisonInput, organizacaoId: string) {
-	const firstPeriodAjusted = {
-		after: new Date(filters.firstPeriod.after),
-		before: new Date(filters.firstPeriod.before),
-	};
-
-	const secondPeriodAjusted = {
-		after: new Date(filters.secondPeriod.after),
-		before: new Date(filters.secondPeriod.before),
-	};
-
-	const conditions = [eq(sales.organizacaoId, organizacaoId), eq(sales.statusVenda, "CONFIRMADA")];
-
-	const { points: bestNumberOfPointsForFirstPeriodDates } = getBestNumberOfPointsBetweenDates({
-		startDate: firstPeriodAjusted.after,
-		endDate: firstPeriodAjusted.before,
-	});
-	const firstPeriodDatesStrs = getEvenlySpacedDates({
-		startDate: firstPeriodAjusted.after,
-		endDate: firstPeriodAjusted.before,
-		points: bestNumberOfPointsForFirstPeriodDates,
-	});
-
-	const firstPeriodDateBuckets = getDateBuckets(firstPeriodDatesStrs);
-
-	const { points: bestNumberOfPointsForSecondPeriodDates } = getBestNumberOfPointsBetweenDates({
-		startDate: secondPeriodAjusted.after,
-		endDate: secondPeriodAjusted.before,
-	});
-	const secondPeriodDatesStrs = getEvenlySpacedDates({
-		startDate: secondPeriodAjusted.after,
-		endDate: secondPeriodAjusted.before,
-		points: bestNumberOfPointsForSecondPeriodDates,
-	});
-	const secondPeriodDateBuckets = getDateBuckets(secondPeriodDatesStrs);
-
-	const firstPeriodSales = await db.query.sales.findMany({
-		where: and(...conditions, gte(sales.dataVenda, firstPeriodAjusted.after), lte(sales.dataVenda, firstPeriodAjusted.before)),
-		columns: {
-			id: true,
-			valorTotal: true,
-			custoTotal: true,
-			dataVenda: true,
-			vendedorNome: true,
-		},
-		with: {
-			itens: {
-				columns: {
-					quantidade: true,
-					valorVendaTotalLiquido: true,
-				},
-				with: {
-					produto: {
-						columns: {
-							nome: true,
-						},
-					},
-				},
-			},
-		},
-	});
-	const secondPeriodSales = await db.query.sales.findMany({
-		where: and(...conditions, gte(sales.dataVenda, secondPeriodAjusted.after), lte(sales.dataVenda, secondPeriodAjusted.before)),
-		columns: {
-			id: true,
-			valorTotal: true,
-			custoTotal: true,
-			dataVenda: true,
-			vendedorNome: true,
-		},
-		with: {
-			itens: {
-				columns: {
-					quantidade: true,
-					valorVendaTotalLiquido: true,
-				},
-				with: {
-					produto: {
-						columns: {
-							nome: true,
-						},
-					},
-				},
-			},
-		},
-	});
-
-	const firstPeriodStats = firstPeriodSales.reduce(
-		(acc: TStatsComparisonReduced, sale) => {
-			acc.faturamentoBruto.primeiroPeriodo += sale.valorTotal || 0;
-			acc.gastoBruto.primeiroPeriodo += sale.custoTotal || 0;
-			acc.qtdeVendas.primeiroPeriodo += 1;
-			acc.qtdeItensVendidos.primeiroPeriodo += sale.itens.reduce((acc, item) => acc + (item.quantidade || 0), 0);
-
-			if (!sale.dataVenda) return acc;
-			const saleTime = sale.dataVenda.getTime() || 0;
-			// Finding the correct - O(1) in average
-			const bucket = firstPeriodDateBuckets.find((b) => saleTime >= b.start && saleTime <= b.end);
-
-			if (bucket) {
-				// updating daily statistics
-				if (acc.diario.primeiroPeriodo[bucket.key]) {
-					if (acc.diario.primeiroPeriodo[bucket.key]) {
-						acc.diario.primeiroPeriodo[bucket.key]!.totalVendido += sale.valorTotal;
-						acc.diario.primeiroPeriodo[bucket.key]!.qtdeVendas += 1;
-					}
-				}
-			}
-
-			// updating per product statistics
-			for (const product of sale.itens) {
-				if (!acc.porItem[product.produto.nome]) {
-					acc.porItem[product.produto.nome] = {
-						primeiroPeriodo: {
-							qtdeVendas: 0,
-							totalVendido: 0,
-						},
-						segundoPeriodo: {
-							qtdeVendas: 0,
-							totalVendido: 0,
-						},
-					};
-				}
-				acc.porItem[product.produto.nome].primeiroPeriodo.qtdeVendas += product.quantidade;
-				acc.porItem[product.produto.nome].primeiroPeriodo.totalVendido += product.valorVendaTotalLiquido || 0;
-			}
-			// updating per seller statistics
-			if (!acc.porVendedor[sale.vendedorNome]) {
-				acc.porVendedor[sale.vendedorNome] = {
-					primeiroPeriodo: {
-						qtdeVendas: 0,
-						totalVendido: 0,
-					},
-					segundoPeriodo: {
-						qtdeVendas: 0,
-						totalVendido: 0,
-					},
-				};
-			}
-			acc.porVendedor[sale.vendedorNome].primeiroPeriodo.qtdeVendas += 1;
-			acc.porVendedor[sale.vendedorNome].primeiroPeriodo.totalVendido += sale.valorTotal || 0;
-			return acc;
-		},
-		{
-			faturamentoBruto: {
-				primeiroPeriodo: 0,
-				segundoPeriodo: 0,
-			},
-			gastoBruto: {
-				primeiroPeriodo: 0,
-				segundoPeriodo: 0,
-			},
-			qtdeVendas: {
-				primeiroPeriodo: 0,
-				segundoPeriodo: 0,
-			},
-			qtdeItensVendidos: {
-				primeiroPeriodo: 0,
-				segundoPeriodo: 0,
-			},
-			diario: {
-				primeiroPeriodo: Object.fromEntries(
-					firstPeriodDatesStrs.map((date) => [
-						date.toISOString(),
-						{
-							qtdeVendas: 0,
-							totalVendido: 0,
-						},
-					]),
-				),
-				segundoPeriodo: Object.fromEntries(
-					secondPeriodDatesStrs.map((date) => [
-						date.toISOString(),
-						{
-							qtdeVendas: 0,
-							totalVendido: 0,
-						},
-					]),
-				),
-			},
-			porItem: {},
-			porVendedor: {},
-		},
-	);
-	const secondPeriodStats = secondPeriodSales.reduce((acc: TStatsComparisonReduced, sale) => {
-		acc.faturamentoBruto.segundoPeriodo += sale.valorTotal || 0;
-		acc.gastoBruto.segundoPeriodo += sale.custoTotal || 0;
-		acc.qtdeVendas.segundoPeriodo += 1;
-		acc.qtdeItensVendidos.segundoPeriodo += sale.itens.reduce((acc, item) => acc + (item.quantidade || 0), 0);
-
-		if (!sale.dataVenda) return acc;
-		const saleTime = sale.dataVenda.getTime() || 0;
-		// Encontrar o bucket correto - O(1) em média
-		const bucket = secondPeriodDateBuckets.find((b) => saleTime >= b.start && saleTime <= b.end);
-
-		if (bucket) {
-			// Atualizar estatísticas gerais
-			// Atualizar estatísticas do período
-			if (acc.diario.segundoPeriodo[bucket.key]) {
-				if (acc.diario.segundoPeriodo[bucket.key]) {
-					acc.diario.segundoPeriodo[bucket.key]!.totalVendido += sale.valorTotal;
-					acc.diario.segundoPeriodo[bucket.key]!.qtdeVendas += 1;
-				}
-			}
-		}
-		// updating per product statistics
-		for (const product of sale.itens) {
-			if (!acc.porItem[product.produto.nome]) {
-				acc.porItem[product.produto.nome] = {
-					primeiroPeriodo: {
-						qtdeVendas: 0,
-						totalVendido: 0,
-					},
-					segundoPeriodo: {
-						qtdeVendas: 0,
-						totalVendido: 0,
-					},
-				};
-			}
-			acc.porItem[product.produto.nome].segundoPeriodo.qtdeVendas += product.quantidade;
-			acc.porItem[product.produto.nome].segundoPeriodo.totalVendido += product.valorVendaTotalLiquido || 0;
-		}
-		if (!acc.porVendedor[sale.vendedorNome]) {
-			// updating per seller statistics
-			acc.porVendedor[sale.vendedorNome] = {
-				primeiroPeriodo: {
-					qtdeVendas: 0,
-					totalVendido: 0,
-				},
-				segundoPeriodo: {
-					qtdeVendas: 0,
-					totalVendido: 0,
-				},
-			};
-		}
-		acc.porVendedor[sale.vendedorNome].segundoPeriodo.qtdeVendas += 1;
-		acc.porVendedor[sale.vendedorNome].segundoPeriodo.totalVendido += sale.valorTotal || 0;
-		return acc;
-	}, firstPeriodStats);
-
-	const statsComparisonResult: TStatsComparisonOutput = {
-		faturamentoBruto: {
-			primeiroPeriodo: firstPeriodStats.faturamentoBruto.primeiroPeriodo,
-			segundoPeriodo: secondPeriodStats.faturamentoBruto.segundoPeriodo,
-		},
-		faturamentoLiquido: {
-			primeiroPeriodo: firstPeriodStats.faturamentoBruto.primeiroPeriodo - firstPeriodStats.gastoBruto.primeiroPeriodo,
-			segundoPeriodo: secondPeriodStats.faturamentoBruto.segundoPeriodo - secondPeriodStats.gastoBruto.segundoPeriodo,
-		},
-		qtdeVendas: {
-			primeiroPeriodo: firstPeriodStats.qtdeVendas.primeiroPeriodo,
-			segundoPeriodo: secondPeriodStats.qtdeVendas.segundoPeriodo,
-		},
-		ticketMedio: {
-			primeiroPeriodo: firstPeriodStats.faturamentoBruto.primeiroPeriodo / firstPeriodStats.qtdeVendas.primeiroPeriodo,
-			segundoPeriodo: secondPeriodStats.faturamentoBruto.segundoPeriodo / secondPeriodStats.qtdeVendas.segundoPeriodo,
-		},
-		qtdeItensVendidos: {
-			primeiroPeriodo: firstPeriodStats.qtdeItensVendidos.primeiroPeriodo,
-			segundoPeriodo: secondPeriodStats.qtdeItensVendidos.segundoPeriodo,
-		},
-		itensPorVendaMedio: {
-			primeiroPeriodo: firstPeriodStats.qtdeItensVendidos.primeiroPeriodo / firstPeriodStats.qtdeVendas.primeiroPeriodo,
-			segundoPeriodo: secondPeriodStats.qtdeItensVendidos.segundoPeriodo / secondPeriodStats.qtdeVendas.segundoPeriodo,
-		},
-		valorDiarioVendido: {
-			primeiroPeriodo: firstPeriodStats.faturamentoBruto.primeiroPeriodo / firstPeriodDatesStrs.length,
-			segundoPeriodo: secondPeriodStats.faturamentoBruto.segundoPeriodo / secondPeriodDatesStrs.length,
-		},
-		diario: {
-			primeiroPeriodo: Object.entries(firstPeriodStats.diario.primeiroPeriodo).map(([key, value]) => ({
-				titulo: key,
-				qtdeVendas: value.qtdeVendas,
-				totalVendido: value.totalVendido,
-			})),
-			segundoPeriodo: Object.entries(secondPeriodStats.diario.segundoPeriodo).map(([key, value]) => ({
-				titulo: key,
-				qtdeVendas: value.qtdeVendas,
-				totalVendido: value.totalVendido,
-			})),
-		},
-		porItem: Object.entries(firstPeriodStats.porItem)
-			.map(([key, value]) => ({
-				titulo: key,
-				primeiroPeriodo: {
-					qtdeVendas: value.primeiroPeriodo.qtdeVendas,
-					totalVendido: value.primeiroPeriodo.totalVendido,
-				},
-				segundoPeriodo: {
-					qtdeVendas: value.segundoPeriodo.qtdeVendas,
-					totalVendido: value.segundoPeriodo.totalVendido,
-				},
-			}))
-			.sort((a, b) => b.primeiroPeriodo.totalVendido - a.primeiroPeriodo.totalVendido || b.primeiroPeriodo.qtdeVendas - a.primeiroPeriodo.qtdeVendas)
-			.slice(0, 25),
-		porVendedor: Object.entries(firstPeriodStats.porVendedor)
-			.map(([key, value]) => ({
-				titulo: key,
-				primeiroPeriodo: {
-					qtdeVendas: value.primeiroPeriodo.qtdeVendas,
-					totalVendido: value.primeiroPeriodo.totalVendido,
-				},
-				segundoPeriodo: {
-					qtdeVendas: value.segundoPeriodo.qtdeVendas,
-					totalVendido: value.segundoPeriodo.totalVendido,
-				},
-			}))
-			.sort((a, b) => b.primeiroPeriodo.totalVendido - a.primeiroPeriodo.totalVendido || b.primeiroPeriodo.qtdeVendas - a.primeiroPeriodo.qtdeVendas)
-			.slice(0, 25),
-	};
-
-	return statsComparisonResult;
+function dateParam(label: string) {
+	return z
+		.string({ required_error: `${label} não informado.`, invalid_type_error: `Tipo inválido para ${label.toLowerCase()}.` })
+		.datetime({ message: `Tipo inválido para ${label.toLowerCase()}.` })
+		.transform((v) => new Date(v));
 }
 
-const handleGetStatsComparison: PagesRouteHandler<{
-	data: TStatsComparisonOutput;
-}> = async (req, res) => {
-	const sessionUser = await getCurrentSessionUncached();
-	if (!sessionUser) throw new createHttpError.Unauthorized("Você não está autenticado.");
+function idListParam(label: string) {
+	return z
+		.string({ invalid_type_error: `Tipo inválido para ${label}.` })
+		.optional()
+		.nullable()
+		.transform((v) => (v ? v.split(",").filter(Boolean) : []));
+}
 
-	const userOrgMembership = sessionUser.membership;
-	const userOrgId = userOrgMembership?.organizacao.id;
-	if (!userOrgId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
+function numberParam(label: string) {
+	return z
+		.string({ invalid_type_error: `Tipo inválido para ${label}.` })
+		.optional()
+		.nullable()
+		.transform((v) => (v ? Number(v) : null))
+		.refine((v) => v === null || Number.isFinite(v), { message: `Tipo inválido para ${label}.` });
+}
 
-	// Users with results scope restrictions cannot access unrestricted comparison stats (exposes all sellers data)
-	const sessionUserResultsScope = userOrgMembership.permissoes.resultados.escopo;
-	if (sessionUserResultsScope) {
-		throw new createHttpError.Unauthorized("Você não tem permissão para acessar esse recurso.");
-	}
-	const filters = StatsComparisonInputSchema.parse(req.body);
-	const statsComparisonResult = await fetchStatsComparison(filters, userOrgId);
+const GetSalesComparisonInputSchema = z
+	.object({
+		baseAfter: dateParam("Início do período"),
+		baseBefore: dateParam("Fim do período"),
+		compareAfter: dateParam("Início do período de comparação"),
+		compareBefore: dateParam("Fim do período de comparação"),
+		sellersIds: idListParam("vendedores"),
+		integrationsIds: idListParam("integrações"),
+		clientRFMTitles: idListParam("títulos RFM"),
+		excludedSalesIds: idListParam("vendas excluídas"),
+		totalMin: numberParam("valor mínimo"),
+		totalMax: numberParam("valor máximo"),
+	})
+	.refine((v) => v.baseAfter <= v.baseBefore, { message: "O período começa depois de terminar." })
+	.refine((v) => v.compareAfter <= v.compareBefore, { message: "O período de comparação começa depois de terminar." });
+export type TGetSalesComparisonInput = z.infer<typeof GetSalesComparisonInputSchema>;
 
-	return res.status(200).json({
-		data: statsComparisonResult,
+async function getSalesComparison({
+	input,
+	organizacaoId,
+	scopeSellerIds,
+	canViewSensitive,
+}: {
+	input: TGetSalesComparisonInput;
+	organizacaoId: string;
+	scopeSellerIds: string[] | null;
+	canViewSensitive: boolean;
+}) {
+	// Com escopo, o filtro de vendedores nunca sai dele: um filtro vazio vira o escopo inteiro, e um
+	// filtro com ids de fora é reduzido ao que o membro pode ver.
+	const sellersIds = scopeSellerIds
+		? input.sellersIds.length > 0
+			? input.sellersIds.filter((id) => scopeSellerIds.includes(id))
+			: scopeSellerIds
+		: input.sellersIds;
+	if (scopeSellerIds && sellersIds.length === 0) throw new createHttpError.Unauthorized("Você não tem permissão para acessar esse recurso.");
+
+	const data = await getSalesComparisonStats({
+		organizacaoId,
+		filters: {
+			sellersIds,
+			integrationsIds: input.integrationsIds,
+			clientRFMTitles: input.clientRFMTitles,
+			excludedSalesIds: input.excludedSalesIds,
+			total: { min: input.totalMin, max: input.totalMax },
+		},
+		base: { after: input.baseAfter, before: input.baseBefore },
+		comparacao: { after: input.compareAfter, before: input.compareBefore },
+		canViewSensitive,
 	});
-};
+	return { data, message: "Comparativo de períodos calculado com sucesso." };
+}
+export type TGetSalesComparisonOutput = Awaited<ReturnType<typeof getSalesComparison>>;
 
-const routeHandlers = {
-	POST: handleGetStatsComparison,
-	GET: handleGetStatsComparison,
-} satisfies Partial<Record<"GET" | "POST" | "PUT" | "PATCH" | "DELETE", PagesRouteHandler<any>>>;
+async function getSalesComparisonRoute(request: NextRequest) {
+	const session = await getCurrentSessionUncached();
+	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	const membership = session.membership;
+	const organizacaoId = membership?.organizacao.id;
+	if (!membership || !organizacaoId)
+		throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
 
-export const POST = appApiHandler({
-	POST: (request) => runPagesRouteHandler({ request, handler: routeHandlers.POST! }),
-});
-export const GET = appApiHandler({
-	GET: (request) => runPagesRouteHandler({ request, handler: routeHandlers.GET!, bodyFromSearchParam: "payload" }),
-});
+	const params = request.nextUrl.searchParams;
+	const input = GetSalesComparisonInputSchema.parse({
+		baseAfter: params.get("baseAfter"),
+		baseBefore: params.get("baseBefore"),
+		compareAfter: params.get("compareAfter"),
+		compareBefore: params.get("compareBefore"),
+		sellersIds: params.get("sellersIds"),
+		integrationsIds: params.get("integrationsIds"),
+		clientRFMTitles: params.get("clientRFMTitles"),
+		excludedSalesIds: params.get("excludedSalesIds"),
+		totalMin: params.get("totalMin"),
+		totalMax: params.get("totalMax"),
+	});
+
+	const scopeSellerIds = await resolveResultsScopeSellerIds({ organizacaoId, resultsScope: membership.permissoes.resultados.escopo });
+
+	const result = await getSalesComparison({
+		input,
+		organizacaoId,
+		scopeSellerIds,
+		canViewSensitive: membership.permissoes.resultados.visualizarSensiveis,
+	});
+	return NextResponse.json(result);
+}
+
+export const GET = appApiHandler({ GET: getSalesComparisonRoute });
