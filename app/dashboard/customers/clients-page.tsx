@@ -9,12 +9,7 @@ import LoadingComponent from "@/components/Layouts/LoadingComponent";
 import StatUnitCard from "@/components/Stats/StatUnitCard";
 import GeneralPaginationComponent from "@/components/Utils/Pagination";
 import { Button } from "@/components/ui/button";
-import {
-	InteractiveFilter,
-	type InteractiveFilterDateRangePreset,
-	type InteractiveFilterOption,
-	type InteractiveFilterSortValue,
-} from "@/components/ui/interactive-filter";
+import { InteractiveFilter, type InteractiveFilterOption, type InteractiveFilterSortValue } from "@/components/ui/interactive-filter";
 import { Input } from "@/components/ui/input";
 import { StatBadge } from "@/components/ui/stat-badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -28,6 +23,7 @@ import {
 	formatInteractiveSortFieldSummary,
 	isInteractiveSortActive,
 } from "@/components/ui/interactive-filter-formatting";
+import { UPCOMING_PERIOD_PRESETS } from "@/lib/period-presets";
 import { useClientsOverallStats, useClientsQuery } from "@/lib/queries/clients";
 import { clientsDatabaseParsers, toClientsInput, type TClientsDatabaseUrlState } from "@/lib/clients/database-url-state";
 import { useDebounceMemo } from "@/lib/hooks/use-debounce";
@@ -193,27 +189,6 @@ function ClientsDatabaseView() {
 	);
 }
 
-// Presets de aniversário olham para a frente ("quem faz aniversário em breve"), ao contrário dos
-// presets padrão do DateRange, que recortam o passado.
-const birthdayRangePresets = [
-	{ id: "today", label: "HOJE", getValue: (ref: Date) => ({ from: dayjs(ref).startOf("day").toDate(), to: dayjs(ref).endOf("day").toDate() }) },
-	{
-		id: "next-7-days",
-		label: "PRÓXIMOS 7 DIAS",
-		getValue: (ref: Date) => ({ from: dayjs(ref).startOf("day").toDate(), to: dayjs(ref).add(6, "day").endOf("day").toDate() }),
-	},
-	{
-		id: "this-month",
-		label: "ESTE MÊS",
-		getValue: (ref: Date) => ({ from: dayjs(ref).startOf("month").toDate(), to: dayjs(ref).endOf("month").toDate() }),
-	},
-	{
-		id: "next-month",
-		label: "PRÓXIMO MÊS",
-		getValue: (ref: Date) => ({ from: dayjs(ref).add(1, "month").startOf("month").toDate(), to: dayjs(ref).add(1, "month").endOf("month").toDate() }),
-	},
-] satisfies InteractiveFilterDateRangePreset[];
-
 type ClientsInlineFiltersProps = {
 	filters: TGetClientsInput;
 	updateFilters: (filters: Partial<TClientsDatabaseUrlState>) => void;
@@ -312,7 +287,7 @@ function ClientsInlineFilters({ filters, updateFilters }: ClientsInlineFiltersPr
 					</InteractiveFilter.Trigger>
 					<InteractiveFilter.Content className="w-auto p-0">
 						<InteractiveFilter.DateRangeContent
-							presets={birthdayRangePresets}
+							presets={UPCOMING_PERIOD_PRESETS}
 							value={{ from: filters.birthdaysPeriodAfter ?? undefined, to: filters.birthdaysPeriodBefore ?? undefined }}
 							onChange={(period) => updateFilters({ birthdaysPeriodAfter: period.from ?? null, birthdaysPeriodBefore: period.to ?? null, page: 1 })}
 						/>
@@ -371,7 +346,7 @@ function ClientsInlineFilters({ filters, updateFilters }: ClientsInlineFiltersPr
 						{!hasBirthdays ? (
 							<InteractiveFilter.AddFilterItem id="birthdays" label="ANIVERSARIANTES" icon={<Cake className="h-4 w-4" />}>
 								<InteractiveFilter.DateRangeContent
-									presets={birthdayRangePresets}
+									presets={UPCOMING_PERIOD_PRESETS}
 									value={{ from: filters.birthdaysPeriodAfter ?? undefined, to: filters.birthdaysPeriodBefore ?? undefined }}
 									onChange={(period) => updateFilters({ birthdaysPeriodAfter: period.from ?? null, birthdaysPeriodBefore: period.to ?? null, page: 1 })}
 								/>
