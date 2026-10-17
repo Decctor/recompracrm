@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { REPORT_PERIOD_PRESETS, UPCOMING_PERIOD_PRESETS, type TPeriodPreset } from "./period-presets";
+import {
+	REPORT_PERIOD_PRESETS,
+	UPCOMING_PERIOD_PRESETS,
+	buildComparisonPeriodPresets,
+	matchPeriodPreset,
+	type TPeriodPreset,
+} from "./period-presets";
 
 function preset(list: readonly TPeriodPreset[], id: string) {
 	const found = list.find((item) => item.id === id);
@@ -82,5 +88,49 @@ describe("UPCOMING_PERIOD_PRESETS", () => {
 	it("próximo mês é o mês de calendário seguinte completo", () => {
 		const { from, to } = preset(UPCOMING_PERIOD_PRESETS, "next-month").getValue(new Date(2026, 11, 20));
 		assert.deepEqual([from, to], [local(2027, 0, 1), local(2027, 0, 31, true)]);
+	});
+});
+
+describe("buildComparisonPeriodPresets", () => {
+	const base = { after: local(2026, 9, 1), before: local(2026, 9, 15, true) };
+
+	it("período anterior tem a mesma duração e termina 1ms antes do base", () => {
+		const { from, to } = preset(buildComparisonPeriodPresets(base), "previous-period").getValue(reference);
+		assert.deepEqual([from, to], [local(2026, 8, 16), local(2026, 8, 30, true)]);
+	});
+
+	it("mesmo período do mês anterior desloca as duas pontas um mês", () => {
+		const { from, to } = preset(buildComparisonPeriodPresets(base), "same-period-previous-month").getValue(reference);
+		assert.deepEqual([from, to], [local(2026, 8, 1), local(2026, 8, 15, true)]);
+	});
+
+	it("mesmo período do ano anterior desloca as duas pontas um ano", () => {
+		const { from, to } = preset(buildComparisonPeriodPresets(base), "same-period-previous-year").getValue(reference);
+		assert.deepEqual([from, to], [local(2025, 9, 1), local(2025, 9, 15, true)]);
+	});
+
+	it("período anterior de um mês de 31 dias são 31 dias, não o mês de calendário anterior", () => {
+		// Para "setembro inteiro" existe o atalho de mês anterior; este é literal na duração.
+		const month = { after: local(2026, 9, 1), before: local(2026, 9, 31, true) };
+		const { from, to } = preset(buildComparisonPeriodPresets(month), "previous-period").getValue(reference);
+		assert.deepEqual([from, to], [local(2026, 7, 31), local(2026, 8, 30, true)]);
+	});
+
+	it("mesmo período do mês anterior de um mês inteiro é o mês de calendário anterior inteiro", () => {
+		const month = { after: local(2026, 9, 1), before: local(2026, 9, 31, true) };
+		const { from, to } = preset(buildComparisonPeriodPresets(month), "same-period-previous-month").getValue(reference);
+		assert.deepEqual([from, to], [local(2026, 8, 1), local(2026, 8, 30, true)]);
+	});
+});
+
+describe("matchPeriodPreset", () => {
+	it("reconhece o atalho pelo recorte, ignorando a hora", () => {
+		const match = matchPeriodPreset(REPORT_PERIOD_PRESETS, { after: local(2026, 9, 1, true), before: local(2026, 9, 16) }, reference);
+		assert.equal(match?.id, "this-month");
+	});
+
+	it("devolve null para um recorte que não é atalho", () => {
+		const match = matchPeriodPreset(REPORT_PERIOD_PRESETS, { after: local(2026, 9, 3), before: local(2026, 9, 9, true) }, reference);
+		assert.equal(match, null);
 	});
 });

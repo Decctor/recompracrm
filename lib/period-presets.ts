@@ -93,3 +93,39 @@ export const UPCOMING_PERIOD_PRESETS: readonly TPeriodPreset[] = [
 		}),
 	},
 ];
+
+/**
+ * Referências para comparar com um período já escolhido. Fechadas sobre o período base: a data de
+ * referência do seletor não importa aqui, só o recorte que está na tela.
+ */
+export function buildComparisonPeriodPresets(base: { after: Date; before: Date }): readonly TPeriodPreset[] {
+	const durationMs = base.before.getTime() - base.after.getTime();
+	return [
+		{
+			id: "previous-period",
+			label: "PERÍODO ANTERIOR",
+			// Janela imediatamente anterior, de mesma duração: termina 1ms antes do início do período base.
+			getValue: () => ({ from: new Date(base.after.getTime() - 1 - durationMs), to: new Date(base.after.getTime() - 1) }),
+		},
+		{
+			id: "same-period-previous-month",
+			label: "MESMO PERÍODO DO MÊS ANTERIOR",
+			getValue: () => ({ from: dayjs(base.after).subtract(1, "month").toDate(), to: dayjs(base.before).subtract(1, "month").toDate() }),
+		},
+		{
+			id: "same-period-previous-year",
+			label: "MESMO PERÍODO DO ANO ANTERIOR",
+			getValue: () => ({ from: dayjs(base.after).subtract(1, "year").toDate(), to: dayjs(base.before).subtract(1, "year").toDate() }),
+		},
+	];
+}
+
+/** O atalho cujo recorte coincide (por dia) com o valor dado, para nomear o período na tela. */
+export function matchPeriodPreset(presets: readonly TPeriodPreset[], value: { after: Date; before: Date }, referenceDate = new Date()) {
+	return (
+		presets.find((item) => {
+			const candidate = item.getValue(referenceDate);
+			return dayjs(candidate.from).isSame(value.after, "day") && dayjs(candidate.to).isSame(value.before, "day");
+		}) ?? null
+	);
+}
