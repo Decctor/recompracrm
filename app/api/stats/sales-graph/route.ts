@@ -199,7 +199,7 @@ async function getSalesGrouped({ filters, organizacaoId }: GetSalesGroupedParams
 		if (ajustedAfter) conditions.push(gte(sales.dataVenda, ajustedAfter));
 		if (ajustedBefore) conditions.push(lte(sales.dataVenda, ajustedBefore));
 		if (filters.total.min) conditions.push(gte(sales.valorTotal, filters.total.min));
-		if (filters.total.max) conditions.push(gte(sales.valorTotal, filters.total.max));
+		if (filters.total.max) conditions.push(lte(sales.valorTotal, filters.total.max));
 
 		const integrationCondition = getSalesIntegrationCondition(filters.integrationsIds);
 		if (integrationCondition) conditions.push(integrationCondition);

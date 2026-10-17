@@ -128,7 +128,7 @@ export async function getOverallStats(filters: TSaleStatsGeneralQueryParams, org
 	const conditions = [eq(sales.organizacaoId, organizacaoId), eq(sales.statusVenda, "CONFIRMADA")];
 
 	if (filters.total.min) conditions.push(gte(sales.valorTotal, filters.total.min));
-	if (filters.total.max) conditions.push(gte(sales.valorTotal, filters.total.max));
+	if (filters.total.max) conditions.push(lte(sales.valorTotal, filters.total.max));
 	const integrationCondition = getSalesIntegrationCondition(filters.integrationsIds);
 	if (integrationCondition) conditions.push(integrationCondition);
 	if (filters.sellersIds.length > 0) conditions.push(inArray(sales.vendedorId, filters.sellersIds));
