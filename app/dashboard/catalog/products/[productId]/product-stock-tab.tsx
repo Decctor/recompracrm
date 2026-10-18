@@ -3,6 +3,8 @@
 import StockTransactionRow from "@/app/dashboard/inventory/movements/_components/StockTransactionRow";
 import type { TGetProductsOutput } from "@/app/api/products/route";
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
+import NewStockTransaction from "@/components/Modals/StockTransactions/NewStockTransaction";
+import { Button } from "@/components/ui/button";
 import GeneralPaginationComponent from "@/components/Utils/Pagination";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -11,7 +13,9 @@ import { formatDateAsLocale, formatDecimalPlaces } from "@/lib/formatting";
 import { useProductStockLots } from "@/lib/queries/product-stock-lots";
 import { useProductStockTransactions } from "@/lib/queries/product-stock-transactions";
 import { cn } from "@/lib/utils";
-import { AlertTriangle, ArrowLeftRight, Boxes, CalendarClock, CheckCheck, History, Layers, PackageX } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { AlertTriangle, ArrowLeftRight, Boxes, CalendarClock, CheckCheck, History, Layers, PackageX, Plus } from "lucide-react";
+import { useState } from "react";
 import StockDeductionModeSection from "./_components/StockDeductionModeSection";
 
 type Product = NonNullable<TGetProductsOutput["data"]["byId"]>;
@@ -94,7 +98,7 @@ export default function ProductStockTab({ product, enabled = true }: ProductStoc
 			</div>
 
 			<ProductLotsSection productId={product.id} />
-			<ProductTransactionsSection productId={product.id} enabled={enabled} />
+			<ProductTransactionsSection product={product} enabled={enabled} />
 		</div>
 	);
 }
@@ -186,9 +190,11 @@ function ProductLotLine({ lot }: { lot: StockLot }) {
 	);
 }
 
-function ProductTransactionsSection({ productId, enabled }: { productId: string; enabled?: boolean }) {
+function ProductTransactionsSection({ product, enabled }: { product: Product; enabled?: boolean }) {
+	const queryClient = useQueryClient();
+	const [newTransactionModalIsOpen, setNewTransactionModalIsOpen] = useState(false);
 	const { data, isLoading, isError, isSuccess, error, filters, updateFilters } = useProductStockTransactions({
-		initialFilters: { produtoId: productId },
+		initialFilters: { productId: product.id },
 		enabled,
 	});
 
@@ -198,7 +204,12 @@ function ProductTransactionsSection({ productId, enabled }: { productId: string;
 
 	return (
 		<div className="flex w-full flex-col gap-2">
-			<SectionHeader icon={History} title="Movimentações recentes" />
+			<SectionHeader icon={History} title="Movimentações recentes">
+				<Button size="fit" variant="ghost" className="rounded-lg px-2 py-1 text-xs" onClick={() => setNewTransactionModalIsOpen(true)}>
+					<Plus className="h-3.5 w-3.5 min-h-3.5 min-w-3.5" />
+					NOVA MOVIMENTAÇÃO
+				</Button>
+			</SectionHeader>
 
 			<GeneralPaginationComponent
 				activePage={filters.page}
@@ -234,6 +245,20 @@ function ProductTransactionsSection({ productId, enabled }: { productId: string;
 						</EmptyDescription>
 					</EmptyHeader>
 				</Empty>
+			) : null}
+
+			{newTransactionModalIsOpen ? (
+				<NewStockTransaction
+					product={product}
+					closeModal={() => setNewTransactionModalIsOpen(false)}
+					callbacks={{
+						onSuccess: () => {
+							queryClient.invalidateQueries({ queryKey: ["product-stock-transactions"] });
+							queryClient.invalidateQueries({ queryKey: ["product-stock-lots"] });
+							queryClient.invalidateQueries({ queryKey: ["product-by-id", product.id] });
+						},
+					}}
+				/>
 			) : null}
 		</div>
 	);

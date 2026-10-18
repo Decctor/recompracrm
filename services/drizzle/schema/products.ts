@@ -6,6 +6,7 @@ import {
 	productContentUnitEnum,
 	productStockDeductionModeEnum,
 	stockLotStatusEnum,
+	stockMovementOriginEnum,
 	stockMovementTypeEnum,
 	variantOptionTypeEnum,
 } from "./enums";
@@ -501,6 +502,7 @@ export const productStockTransactions = newTable(
 		loteId: varchar("lote_id", { length: 255 }).references(() => productStockLots.id, { onDelete: "set null" }),
 
 		tipo: stockMovementTypeEnum("tipo").default("SAIDA").notNull(),
+		origem: stockMovementOriginEnum("origem").default("SISTEMA").notNull(),
 
 		// Quantity related fields
 		quantidade: doublePrecision("quantidade").notNull(), // quantidade movimentada
@@ -527,6 +529,7 @@ export const productStockTransactions = newTable(
 		producaoIdIdx: index("idx_product_stock_transactions_producao_id").on(table.producaoId),
 		loteIdIdx: index("idx_product_stock_transactions_lote_id").on(table.loteId),
 		tipoIdx: index("idx_product_stock_transactions_tipo").on(table.tipo),
+		origemIdx: index("idx_product_stock_transactions_origem").on(table.origem),
 	}),
 );
 

@@ -343,6 +343,18 @@ export const StockMovementTypeEnum = z.enum([
 	"DESCARTE",
 ]);
 export type TStockMovementTypeEnum = z.infer<typeof StockMovementTypeEnum>;
+export const StockMovementOriginEnum = z.enum(["SISTEMA", "MANUAL"]);
+export type TStockMovementOriginEnum = z.infer<typeof StockMovementOriginEnum>;
+// Tipos que o usuário pode lançar manualmente. AJUSTE fica de fora: a recontagem já cobre o caso.
+export const ManualStockMovementTypeEnum = StockMovementTypeEnum.extract([
+	"ENTRADA_AQUISICAO",
+	"ENTRADA_PRODUCAO",
+	"ENTRADA_DEVOLUCAO",
+	"SAIDA",
+	"SAIDA_PRODUCAO",
+	"DESCARTE",
+]);
+export type TManualStockMovementTypeEnum = z.infer<typeof ManualStockMovementTypeEnum>;
 export const ProductionStatusEnum = z.enum(["RASCUNHO", "PLANEJADA", "EM_PRODUCAO", "CONCLUIDA", "CANCELADA"]);
 export type TProductionStatusEnum = z.infer<typeof ProductionStatusEnum>;
 export const ProductionOriginEnum = z.enum(["MANUAL", "PEDIDO", "AGENDADA"]);

@@ -1,4 +1,4 @@
-import type { TStockMovementTypeEnum } from "@/schemas/enums";
+import type { TStockMovementOriginEnum, TStockMovementTypeEnum } from "@/schemas/enums";
 import type { DBTransaction } from "@/services/drizzle";
 import { productStockTransactions, productVariants, products } from "@/services/drizzle/schema";
 import { and, eq, sql } from "drizzle-orm";
@@ -27,6 +27,8 @@ type ApplyStockMovementParams = {
 	unitCost?: number | null;
 	links?: StockMovementLinks;
 	validateSufficientStock?: boolean;
+	/** MANUAL quando lançada diretamente pelo usuário; SISTEMA (padrão) para os processos do app. */
+	origin?: TStockMovementOriginEnum;
 };
 
 type StockMovementResult = {
@@ -51,6 +53,7 @@ export async function applyStockMovement({
 	unitCost = null,
 	links,
 	validateSufficientStock = false,
+	origin = "SISTEMA",
 }: ApplyStockMovementParams): Promise<StockMovementResult> {
 	if (signedQuantity === 0) {
 		return {
@@ -77,6 +80,7 @@ export async function applyStockMovement({
 			unitCost,
 			links,
 			validateSufficientStock,
+			origin,
 		});
 	}
 
@@ -91,6 +95,7 @@ export async function applyStockMovement({
 		unitCost,
 		links,
 		validateSufficientStock,
+		origin,
 	});
 }
 
@@ -133,6 +138,7 @@ async function applyProductStockMovement({
 	unitCost,
 	links,
 	validateSufficientStock,
+	origin = "SISTEMA",
 }: Omit<ApplyStockMovementParams, "produtoVarianteId">): Promise<StockMovementResult> {
 	const product = await trx.query.products.findFirst({
 		where: (fields, { and, eq }) => and(eq(fields.id, produtoId), eq(fields.organizacaoId, organizationId)),
@@ -174,6 +180,7 @@ async function applyProductStockMovement({
 		producaoSaidaId: links?.producaoSaidaId ?? null,
 		loteId: links?.loteId ?? null,
 		tipo: movementType,
+		origem: origin,
 		quantidade: Math.abs(signedQuantity),
 		saldoAnterior: previousQuantity,
 		saldoPosterior: nextQuantity,
@@ -215,6 +222,7 @@ async function applyVariantStockMovement({
 	unitCost,
 	links,
 	validateSufficientStock,
+	origin = "SISTEMA",
 }: ApplyStockMovementParams & { produtoVarianteId: string }): Promise<StockMovementResult> {
 	const variant = await trx.query.productVariants.findFirst({
 		where: (fields, { and, eq }) => and(eq(fields.id, produtoVarianteId), eq(fields.organizacaoId, organizationId)),
@@ -257,6 +265,7 @@ async function applyVariantStockMovement({
 		producaoSaidaId: links?.producaoSaidaId ?? null,
 		loteId: links?.loteId ?? null,
 		tipo: movementType,
+		origem: origin,
 		quantidade: Math.abs(signedQuantity),
 		saldoAnterior: previousQuantity,
 		saldoPosterior: nextQuantity,

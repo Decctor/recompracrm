@@ -11,9 +11,10 @@ async function fetchProductStockTransactions(input: TGetProductStockTransactions
 	const searchParams = new URLSearchParams();
 	if (input.page) searchParams.set("page", input.page.toString());
 	if (input.search) searchParams.set("search", input.search);
-	if (input.tipo.length > 0) searchParams.set("tipo", input.tipo.join(","));
-	if (input.produtoId) searchParams.set("produtoId", input.produtoId);
-	if (input.produtoVarianteId) searchParams.set("produtoVarianteId", input.produtoVarianteId);
+	if (input.types.length > 0) searchParams.set("types", input.types.join(","));
+	if (input.origin) searchParams.set("origin", input.origin);
+	if (input.productId) searchParams.set("productId", input.productId);
+	if (input.productVariantId) searchParams.set("productVariantId", input.productVariantId);
 	if (input.periodAfter) searchParams.set("periodAfter", new Date(input.periodAfter).toISOString());
 	if (input.periodBefore) searchParams.set("periodBefore", new Date(input.periodBefore).toISOString());
 
@@ -31,9 +32,10 @@ export function useProductStockTransactions({ initialFilters, enabled = true }: 
 	const [filters, setFilters] = useState<TGetProductStockTransactionsDefaultInput>({
 		page: initialFilters?.page ?? 1,
 		search: initialFilters?.search ?? "",
-		tipo: initialFilters?.tipo ?? [],
-		produtoId: initialFilters?.produtoId ?? null,
-		produtoVarianteId: initialFilters?.produtoVarianteId ?? null,
+		types: initialFilters?.types ?? [],
+		origin: initialFilters?.origin ?? null,
+		productId: initialFilters?.productId ?? null,
+		productVariantId: initialFilters?.productVariantId ?? null,
 		periodAfter: initialFilters?.periodAfter ?? null,
 		periodBefore: initialFilters?.periodBefore ?? null,
 	});
