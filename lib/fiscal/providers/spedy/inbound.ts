@@ -208,7 +208,7 @@ export class SpedyInboundProvider implements IFiscalInboundProvider {
 	async requestSync(organization: TFiscalOrganization): Promise<{ accepted: boolean; retryAfterSeconds?: number | null }> {
 		const client = getSpedyCompanyClient(organization);
 		try {
-			await client.post("/v1/inbound-product-invoices/sync");
+			await client.post("/v1/inbound-product-invoices/sync", undefined, { spedySkip429Retry: true });
 			return { accepted: true };
 		} catch (error) {
 			// Rate limit vem da SEFAZ, nao e falha nossa: devolve a janela para o core reagendar.

@@ -7,6 +7,14 @@ const SPEDY_MAX_429_RETRIES = 2;
 const SPEDY_RETRY_BASE_DELAY_MS = 2_000;
 const SPEDY_RETRY_MAX_DELAY_MS = 30_000;
 
+declare module "axios" {
+	interface AxiosRequestConfig {
+		// 429 que e janela de negocio (ex.: sync da SEFAZ), nao excesso de requisicoes: o chamador
+		// trata a recusa, entao a retentativa so atrasaria a mesma resposta.
+		spedySkip429Retry?: boolean;
+	}
+}
+
 type TSpedyRetryRequestConfig = InternalAxiosRequestConfig & { spedy429RetryAttempt?: number };
 
 const nextRequestAtByApiKey = new Map<string, number>();
@@ -55,7 +63,7 @@ export function attachSpedyRateLimit(client: AxiosInstance, apiKey: string): Axi
 
 	client.interceptors.response.use(undefined, async (error: AxiosError) => {
 		const config = error.config as TSpedyRetryRequestConfig | undefined;
-		if (!config || error.response?.status !== 429) throw error;
+		if (!config || config.spedySkip429Retry || error.response?.status !== 429) throw error;
 
 		const attempt = (config.spedy429RetryAttempt ?? 0) + 1;
 		if (attempt > SPEDY_MAX_429_RETRIES) throw error;
