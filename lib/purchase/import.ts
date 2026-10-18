@@ -1,6 +1,6 @@
 import { gateway, generateText, Output } from "ai";
 import { z } from "zod";
-import { PurchaseCostModifierEffectEnum, PurchaseCostModifierKeyEnum, PurchaseCostTreatmentEnum } from "@/schemas/enums";
+import { PurchaseCostModifierEffectEnum, PurchaseCostModifierKeyEnum, PurchaseCostTreatmentEnum, PurchaseFreightModalityEnum } from "@/schemas/enums";
 
 export const IMPORT_COMPOSITION_ALLOWED_MIME_TYPES = [
 	"application/pdf",
@@ -41,7 +41,31 @@ export const ExtractedCompositionSchema = z.object({
 		.object({
 			nome: z.string({ invalid_type_error: "Tipo não válido para o nome do fornecedor extraído." }).nullable(),
 			cnpj: z.string({ invalid_type_error: "Tipo não válido para o CNPJ do fornecedor extraído." }).nullable(),
+			inscricaoEstadual: z.string({ invalid_type_error: "Tipo não válido para a inscrição estadual do fornecedor extraído." }).optional().nullable(),
+			telefone: z.string({ invalid_type_error: "Tipo não válido para o telefone do fornecedor extraído." }).optional().nullable(),
+			email: z.string({ invalid_type_error: "Tipo não válido para o email do fornecedor extraído." }).optional().nullable(),
+			// Só exibição: o cadastro de fornecedores não guarda endereço.
+			cidade: z.string({ invalid_type_error: "Tipo não válido para a cidade do fornecedor extraído." }).optional().nullable(),
 		})
+		.nullable(),
+	// Duplicatas (cobr/dup na NF-e): viram as transações a pagar sugeridas da compra.
+	duplicatas: z
+		.array(
+			z.object({
+				numero: z.string({ invalid_type_error: "Tipo não válido para o número da duplicata extraída." }).nullable(),
+				dataVencimento: z.string({ invalid_type_error: "Tipo não válido para o vencimento da duplicata extraída." }).nullable(),
+				valor: z.number({ invalid_type_error: "Tipo não válido para o valor da duplicata extraída." }),
+			}),
+		)
+		.optional()
+		.nullable(),
+	modalidadeFrete: PurchaseFreightModalityEnum.optional().nullable(),
+	transportadora: z
+		.object({
+			nome: z.string({ invalid_type_error: "Tipo não válido para o nome da transportadora extraída." }).nullable(),
+			cnpj: z.string({ invalid_type_error: "Tipo não válido para o CNPJ da transportadora extraída." }).nullable(),
+		})
+		.optional()
 		.nullable(),
 	// Cabeçalho do documento: alimenta o lançamento contábil da compra (valor efetivo, competência
 	// e título) e permite conferir se a soma das linhas lidas explica o total impresso.
@@ -84,20 +108,36 @@ Regras:
 - Valores monetários em número decimal (ponto como separador). Ex: "1.234,56" vira 1234.56.
 - "desconto" é o desconto da linha quando destacado; senão null.
 - "fornecedor" é o EMITENTE do documento (quem vendeu), nunca o destinatário. CNPJ apenas com dígitos. Se ilegível, use null nos campos.
+- Do emitente, extraia também "inscricaoEstadual" (apenas dígitos), "telefone", "email" e "cidade" (município, sem UF) quando impressos; senão null.
 
 Cabeçalho do documento:
 - "numeroDocumento" é o número da nota/cupom/pedido quando impresso; senão null.
+- "serieDocumento" é a SÉRIE da nota quando impressa; senão null.
+- "chaveAcesso" é a CHAVE DE ACESSO da NF-e (44 dígitos, apenas dígitos) quando impressa; senão null.
 - "dataEmissao" no formato ISO "AAAA-MM-DD". Se só houver dia/mês, deduza o ano pelo restante do documento. Se ilegível, null.
 - "valorTotalDocumento" é o VALOR TOTAL DA NOTA (total geral a pagar, já com frete e descontos quando o documento assim declarar).
 - "valorFrete" e "valorDesconto" apenas quando destacados em campo próprio; senão null.
 - Nunca estime nem calcule esses valores: se não estiverem impressos, use null.
+
+Cobrança e transporte:
+- "duplicatas" são as parcelas do quadro FATURA/DUPLICATAS: "numero" (ex: "001"), "dataVencimento" em ISO "AAAA-MM-DD" e "valor". Se não houver o quadro, null.
+- "modalidadeFrete" vem de "FRETE POR CONTA" / "MODALIDADE DO FRETE": 0 ou Emitente/Remetente (CIF) = "REMETENTE"; 1 ou Destinatário (FOB) = "DESTINATARIO"; 2 = "TERCEIROS"; 3 = "PROPRIO_REMETENTE"; 4 = "PROPRIO_DESTINATARIO"; 9 ou sem frete = "SEM_FRETE". Se não houver, null.
+- "transportadora" é o quadro TRANSPORTADOR: "nome" (razão social) e "cnpj" (apenas dígitos). Se não houver, null.
 
 - Se o documento não for uma nota/cupom de compra ou estiver ilegível, retorne itens: [].`;
 
 // Sonnet for document vision quality; the cheaper mapping step (match-products) uses Haiku.
 const EXTRACTION_MODEL = "anthropic/claude-sonnet-4.5";
 
-export async function extractCompositionFromFile({ dataBase64, mimeType }: { dataBase64: string; mimeType: TImportCompositionMimeType }) {
+export async function extractCompositionFromFile({
+	dataBase64,
+	mimeType,
+	abortSignal,
+}: {
+	dataBase64: string;
+	mimeType: TImportCompositionMimeType;
+	abortSignal?: AbortSignal;
+}) {
 	const buffer = Buffer.from(dataBase64, "base64");
 
 	// PDF e imagem entram como parte "file" (a parte "image" foi depreciada no AI SDK 7).
@@ -107,6 +147,7 @@ export async function extractCompositionFromFile({ dataBase64, mimeType }: { dat
 		model: gateway(EXTRACTION_MODEL),
 		output: Output.object({ schema: ExtractedCompositionSchema }),
 		system: EXTRACTION_SYSTEM_PROMPT,
+		abortSignal,
 		messages: [
 			{
 				role: "user",

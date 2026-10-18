@@ -1,14 +1,12 @@
 "use client";
-import NewPurchase from "@/components/Modals/Purchases/NewPurchase";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import InboundDocumentsTab from "./components/InboundDocumentsTab";
 import { Button } from "@/components/ui/button";
 import { TAuthUserSession } from "@/lib/authentication/types";
 import { usePurchases } from "@/lib/queries/purchases";
-import { useQueryClient } from "@tanstack/react-query";
-import { Factory, ListFilter, Plus, ShoppingCart, Truck, SquareArrowOutUpRight, Pencil } from "lucide-react";
+import { Factory, ListFilter, Plus, ShoppingCart, Truck, SquareArrowOutUpRight } from "lucide-react";
 import { BsCalendar, BsCalendarCheck, BsCalendarEvent, BsCalendarPlus } from "react-icons/bs";
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import GeneralPaginationComponent from "@/components/Utils/Pagination";
 import { getErrorMessage } from "@/lib/errors";
@@ -20,26 +18,20 @@ import type { TGetPurchasesOutputDefault } from "@/app/api/purchases/route";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { formatDateAsLocale, formatNameAsInitials } from "@/lib/formatting";
 import Link from "next/link";
+import { appRoutes } from "@/lib/navigation/routes";
 import { PurchaseStatusOptions } from "@/utils/select-options";
 import { cn } from "@/lib/utils";
-import ControlPurchase from "@/components/Modals/Purchases/ControlPurchase";
 type PurchasesPageProps = {
-	user: TAuthUserSession["user"];
 	membership: NonNullable<TAuthUserSession["membership"]>;
 };
 
-export default function PurchasesPage({ user, membership }: PurchasesPageProps) {
-	const queryClient = useQueryClient();
-	const [newPurchaseModalIsOpen, setNewPurchaseModalIsOpen] = useState(false);
-	const [editingPurchaseId, setEditingPurchaseId] = useState<string | null>(null);
-	const { data, isLoading, isError, isSuccess, error, queryKey, filters, updateFilters } = usePurchases({ initialFilters: { page: 1, search: "" } });
+export default function PurchasesPage({ membership }: PurchasesPageProps) {
+	const { data, isLoading, isError, isSuccess, error, filters, updateFilters } = usePurchases({ initialFilters: { page: 1, search: "" } });
 	const purchases = data?.purchases ?? [];
 	const purchasesMatched = data?.purchasesMatched ?? 0;
 	const purchasesTotalPages = data?.totalPages ?? 0;
 	const purchasesShowing = purchases.length;
 
-	const handleOnMutate = async () => await queryClient.cancelQueries({ queryKey: queryKey });
-	const handleOnSettled = async () => await queryClient.invalidateQueries({ queryKey: queryKey });
 	return (
 		<Tabs defaultValue="compras" className="w-full flex flex-col gap-3">
 			<TabsList variant="page">
@@ -61,9 +53,11 @@ export default function PurchasesPage({ user, membership }: PurchasesPageProps) 
 					className="grow rounded-xl"
 				/>
 
-				<Button className="flex items-center gap-2" size="sm" onClick={() => setNewPurchaseModalIsOpen(true)}>
-					<Plus className="w-4 h-4 min-w-4 min-h-4" />
-					NOVA COMPRA
+				<Button className="flex items-center gap-2" size="sm" asChild>
+					<Link href={appRoutes.newPurchase()}>
+						<Plus className="w-4 h-4 min-w-4 min-h-4" />
+						NOVA COMPRA
+					</Link>
 				</Button>
 			</div>
 			<GeneralPaginationComponent
@@ -79,7 +73,7 @@ export default function PurchasesPage({ user, membership }: PurchasesPageProps) 
 			{isSuccess && purchases ? (
 				purchases.length > 0 ? (
 					purchases.map((purchase, index: number) => (
-						<PurchasePageCard key={purchase.id} purchase={purchase} handleEditClick={() => setEditingPurchaseId(purchase.id)} />
+						<PurchasePageCard key={purchase.id} purchase={purchase} />
 					))
 				) : (
 					<Empty>
@@ -91,25 +85,12 @@ export default function PurchasesPage({ user, membership }: PurchasesPageProps) 
 							<EmptyDescription>Você não tem nenhuma compra ainda. Comece criando sua primeira compra.</EmptyDescription>
 						</EmptyHeader>
 						<EmptyContent className="flex-row justify-center gap-2">
-							<Button onClick={() => setNewPurchaseModalIsOpen(true)}>CRIAR NOVA COMPRA</Button>
+							<Button asChild>
+								<Link href={appRoutes.newPurchase()}>CRIAR NOVA COMPRA</Link>
+							</Button>
 						</EmptyContent>
 					</Empty>
 				)
-			) : null}
-			{newPurchaseModalIsOpen ? (
-				<NewPurchase
-					user={user}
-					closeModal={() => setNewPurchaseModalIsOpen(false)}
-					callbacks={{ onMutate: handleOnMutate, onSettled: handleOnSettled }}
-				/>
-			) : null}
-			{editingPurchaseId ? (
-				<ControlPurchase
-					purchaseId={editingPurchaseId}
-					user={user}
-					closeModal={() => setEditingPurchaseId(null)}
-					callbacks={{ onMutate: handleOnMutate, onSettled: handleOnSettled }}
-				/>
 			) : null}
 			</TabsContent>
 			<TabsContent value="notas-recebidas" className="w-full">
@@ -121,9 +102,8 @@ export default function PurchasesPage({ user, membership }: PurchasesPageProps) 
 
 type PurchasePageCardProps = {
 	purchase: TGetPurchasesOutputDefault["purchases"][number];
-	handleEditClick: () => void;
 };
-function PurchasePageCard({ purchase, handleEditClick }: PurchasePageCardProps) {
+function PurchasePageCard({ purchase }: PurchasePageCardProps) {
 	const getPurchaseStatus = useCallback(() => {
 		const status = PurchaseStatusOptions.find((status) => status.value === purchase.status);
 		return status || null;
@@ -134,7 +114,9 @@ function PurchasePageCard({ purchase, handleEditClick }: PurchasePageCardProps) 
 		<div className="bg-card border-border flex w-full flex-col gap-1 rounded-xl border px-3 py-4 shadow-2xs">
 			<div className="flex w-full flex-col items-center justify-between gap-2 lg:flex-row">
 				<div className="flex items-center gap-2">
-					<h1 className="text-xs font-bold tracking-tight lg:text-sm">{purchase.titulo || "TÍTULO NÃO DEFINIDO"}</h1>
+					<Link href={appRoutes.purchase(purchase.id)} className="text-xs font-bold tracking-tight hover:underline lg:text-sm">
+						{purchase.titulo || "TÍTULO NÃO DEFINIDO"}
+					</Link>
 				</div>
 				{purchaseStatus ? (
 					<div className={cn("flex items-center gap-1.5 px-2 py-1 rounded-lg", purchaseStatus.className, "border-none")}>
@@ -166,9 +148,11 @@ function PurchasePageCard({ purchase, handleEditClick }: PurchasePageCardProps) 
 						<h2 className="text-[0.65rem] font-medium text-muted-foreground">{purchase.autor?.nome || "N/A"}</h2>
 					</div>
 				</div>
-				<Button variant="ghost" size="xs" onClick={handleEditClick}>
-					<Pencil className="w-4 h-4 min-w-4 min-h-4" />
-					<p>EDITAR</p>
+				<Button variant="ghost" size="xs" asChild>
+					<Link href={appRoutes.purchase(purchase.id)}>
+						<SquareArrowOutUpRight className="w-4 h-4 min-w-4 min-h-4" />
+						<p>ABRIR</p>
+					</Link>
 				</Button>
 			</div>
 		</div>

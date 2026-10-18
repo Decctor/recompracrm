@@ -124,6 +124,7 @@ export const PurchaseSchema = z.object({
 		required_error: "Título da compra não informado.",
 		invalid_type_error: "Tipo não válido para o título da compra.",
 	}),
+	anotacoes: z.string({ invalid_type_error: "Tipo não válido para as anotações da compra." }).optional().nullable(),
 	documentosImportados: PurchaseImportedDocumentsSnapshotSchema.optional().nullable(),
 	lancamentoContabilId: z.string({ invalid_type_error: "Tipo não válido para o ID do lançamento contábil." }).optional().nullable(),
 	pedidoData: z

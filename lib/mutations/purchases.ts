@@ -1,4 +1,9 @@
-import { TImportPurchaseCompositionInput, TImportPurchaseCompositionOutput } from "@/app/api/purchases/import-composition/route";
+import type {
+	TImportPurchaseCompositionInput,
+	TImportPurchaseCompositionOutput,
+	TImportPurchaseCompositionStageEvent,
+	TImportPurchaseCompositionStreamEvent,
+} from "@/app/api/purchases/import-composition/route";
 import { TCreatePurchaseInput, TCreatePurchaseOutput, TUpdatePurchaseInput, TUpdatePurchaseOutput } from "@/app/api/purchases/route";
 import axios from "axios";
 
@@ -12,10 +17,47 @@ export async function updatePurchase(input: TUpdatePurchaseInput) {
 	return data;
 }
 
-export async function importPurchaseComposition(input: TImportPurchaseCompositionInput) {
-	const { data } = await axios.post<TImportPurchaseCompositionOutput>("/api/purchases/import-composition", input, {
-		// Vision extraction can take tens of seconds; mirror the route's maxDuration.
-		timeout: 120_000,
+/**
+ * Reads the NDJSON stream from the import route, reporting each processing stage through `onStage`.
+ * Uses `fetch` because axios can't stream response bodies in the browser. Aborting `signal` cancels
+ * the request, and the server stops at its next checkpoint.
+ */
+export async function importPurchaseComposition(
+	input: TImportPurchaseCompositionInput,
+	{ onStage, signal }: { onStage?: (event: TImportPurchaseCompositionStageEvent) => void; signal?: AbortSignal } = {},
+): Promise<TImportPurchaseCompositionOutput> {
+	// Vision extraction can take tens of seconds; mirror the route's maxDuration.
+	const timeoutSignal = AbortSignal.timeout(120_000);
+	const response = await fetch("/api/purchases/import-composition", {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify(input),
+		signal: signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal,
 	});
-	return data;
+	if (!response.ok || !response.body) {
+		const body = await response.json().catch(() => null);
+		throw new Error(body?.error?.message ?? "Não foi possível ler o documento.");
+	}
+
+	const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+	let buffer = "";
+	let result: TImportPurchaseCompositionOutput | null = null;
+	const handleLine = (line: string) => {
+		if (!line.trim()) return;
+		const event = JSON.parse(line) as TImportPurchaseCompositionStreamEvent;
+		if (event.type === "stage") onStage?.(event);
+		else if (event.type === "error") throw new Error(event.message);
+		else result = { data: event.data, message: event.message };
+	};
+	while (true) {
+		const { value, done } = await reader.read();
+		if (done) break;
+		buffer += value;
+		const lines = buffer.split("\n");
+		buffer = lines.pop() ?? "";
+		for (const line of lines) handleLine(line);
+	}
+	handleLine(buffer);
+	if (!result) throw new Error("A leitura terminou sem resultado. Tente novamente.");
+	return result;
 }

@@ -97,6 +97,7 @@ export const usePurchaseState = ({ initialState }: UsePurchaseStateProps = {}) =
 		() => ({
 			purchase: {
 				titulo: initialState?.purchase?.titulo ?? "",
+				anotacoes: initialState?.purchase?.anotacoes ?? null,
 				status: initialState?.purchase?.status ?? "RASCUNHO",
 				documentosImportados: initialState?.purchase?.documentosImportados ?? { versao: 1, documentos: [] },
 				pedidoData: initialState?.purchase?.pedidoData ?? null,

@@ -7,7 +7,7 @@ const NFE_XML = `<?xml version="1.0" encoding="UTF-8"?>
   <NFe>
     <infNFe Id="NFe35123456789012345678901234567890123456789012" versao="4.00">
       <ide><serie>3</serie><nNF>987</nNF><dhEmi>2026-08-10T10:30:00-03:00</dhEmi></ide>
-      <emit><CNPJ>12345678000190</CNPJ><xNome>Fornecedor Exemplo</xNome></emit>
+      <emit><CNPJ>12345678000190</CNPJ><xNome>Fornecedor Exemplo</xNome><enderEmit><xMun>Belem</xMun><fone>9132224410</fone></enderEmit><IE>123.456.789</IE></emit>
       <det nItem="1">
         <prod>
           <cProd>ABC-1</cProd><cEAN>7891234567890</cEAN><xProd>Produto A</xProd><NCM>21069090</NCM><uCom>UN</uCom>
@@ -24,6 +24,8 @@ const NFE_XML = `<?xml version="1.0" encoding="UTF-8"?>
         <imposto><ICMS><ICMS00><vICMS>5.40</vICMS></ICMS00></ICMS></imposto>
       </det>
       <total><ICMSTot><vProd>50.00</vProd><vFrete>2.00</vFrete><vSeg>0.50</vSeg><vDesc>1.00</vDesc><vOutro>0.25</vOutro><vIPI>1.50</vIPI><vST>3.00</vST><vFCPST>0.40</vFCPST><vNF>56.65</vNF></ICMSTot></total>
+      <transp><modFrete>0</modFrete><transporta><CNPJ>98765432000110</CNPJ><xNome>Transportes Norte</xNome></transporta></transp>
+      <cobr><dup><nDup>001</nDup><dVenc>2026-09-10</dVenc><vDup>28.33</vDup></dup><dup><nDup>002</nDup><dVenc>2026-10-10</dVenc><vDup>28.32</vDup></dup></cobr>
     </infNFe>
   </NFe>
 </nfeProc>`;
@@ -52,6 +54,27 @@ test("parses namespaced NF-e metadata, items and exact cost modifiers", () => {
 		],
 	);
 	assert.equal(result.totaisOriginais?.documentoCentavos, 5665);
+});
+
+test("parses supplier contact, installments and transport", () => {
+	const result = extractCompositionFromNfeXml(NFE_XML);
+	assert.equal(result.fornecedor?.inscricaoEstadual, "123456789");
+	assert.equal(result.fornecedor?.telefone, "9132224410");
+	assert.equal(result.fornecedor?.cidade, "Belem");
+	assert.deepEqual(result.duplicatas, [
+		{ numero: "001", dataVencimento: "2026-09-10", valor: 28.33 },
+		{ numero: "002", dataVencimento: "2026-10-10", valor: 28.32 },
+	]);
+	assert.equal(result.modalidadeFrete, "REMETENTE");
+	assert.deepEqual(result.transportadora, { nome: "Transportes Norte", cnpj: "98765432000110" });
+});
+
+test("leaves installments and transport empty when the NF-e has none", () => {
+	const xml = NFE_XML.replace(/<transp>[\s\S]*?<\/transp>/, "").replace(/<cobr>[\s\S]*?<\/cobr>/, "");
+	const result = extractCompositionFromNfeXml(xml);
+	assert.equal(result.duplicatas, null);
+	assert.equal(result.modalidadeFrete, null);
+	assert.equal(result.transportadora, null);
 });
 
 test("parses an NFe root without nfeProc", () => {

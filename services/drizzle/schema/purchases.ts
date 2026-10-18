@@ -18,6 +18,7 @@ export const purchases = newTable("purchases", {
 
 	status: purchaseStatusEnum("status").default("RASCUNHO").notNull(),
 	titulo: text("titulo").notNull(),
+	anotacoes: text("anotacoes"),
 	// Snapshot documental pertencente à compra. Consulte docs/adr/0001 e docs/domain/purchase-costing.md.
 	documentosImportados: jsonb("documentos_importados").$type<TPurchaseImportedDocumentsSnapshot>(),
 
