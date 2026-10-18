@@ -7,6 +7,7 @@ import {
 	ArrowUpRight,
 	Code,
 	Factory,
+	Hand,
 	Layers,
 	MoveRight,
 	PackagePlus,
@@ -55,7 +56,10 @@ type StockTransactionRowProps = {
 };
 
 export default function StockTransactionRow({ transaction, hideProduct }: StockTransactionRowProps) {
-	const config = MOVEMENT_TYPE_CONFIG[transaction.tipo as TStockMovementTypeEnum] ?? MOVEMENT_TYPE_CONFIG.AJUSTE;
+	const isManual = transaction.origem === "MANUAL";
+	const baseConfig = MOVEMENT_TYPE_CONFIG[transaction.tipo as TStockMovementTypeEnum] ?? MOVEMENT_TYPE_CONFIG.AJUSTE;
+	// SAIDA manual nunca é venda: é o uso/consumo lançado pelo usuário.
+	const config = isManual && transaction.tipo === "SAIDA" ? { ...baseConfig, label: "USO / CONSUMO" } : baseConfig;
 	const TypeIcon = config.icon;
 	const direction = getDirectionTone(transaction.direcao);
 	const DirectionIcon = direction.icon;
@@ -102,6 +106,7 @@ export default function StockTransactionRow({ transaction, hideProduct }: StockT
 						<TypeIcon className="h-3.5 w-3.5 min-h-3.5 min-w-3.5" />
 						{config.label}
 					</span>
+					{isManual ? <OriginBadge icon={Hand} label="Manual" /> : null}
 					{transaction.compra ? <OriginBadge icon={ShoppingCart} label={`Compra · ${transaction.compra.titulo}`} /> : null}
 					{transaction.venda ? <OriginBadge icon={ShoppingBag} label={`Venda · ${transaction.venda.idExterno}`} /> : null}
 					{transaction.producao ? <OriginBadge icon={Factory} label={`Produção · ${transaction.producao.titulo}`} /> : null}

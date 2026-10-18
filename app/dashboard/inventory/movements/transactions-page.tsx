@@ -12,18 +12,27 @@ import { getErrorMessage } from "@/lib/errors";
 import { appRoutes } from "@/lib/navigation/routes";
 import { formatDecimalPlaces } from "@/lib/formatting";
 import { useProductStockTransactions } from "@/lib/queries/product-stock-transactions";
-import type { TStockMovementTypeEnum } from "@/schemas/enums";
+import type { TStockMovementOriginEnum, TStockMovementTypeEnum } from "@/schemas/enums";
 import dayjs from "dayjs";
-import { ArrowDownRight, ArrowLeftRight, ArrowUpRight, Boxes, ListChecks, Package, PackageSearch, Scale } from "lucide-react";
+import NewStockTransaction from "@/components/Modals/StockTransactions/NewStockTransaction";
+import { useQueryClient } from "@tanstack/react-query";
+import { ArrowDownRight, ArrowLeftRight, ArrowUpRight, Boxes, ListChecks, Package, PackageSearch, Plus, Scale } from "lucide-react";
 import Link from "next/link";
+import { useState } from "react";
 import StockTransactionRow from "./_components/StockTransactionRow";
 
-const MOVEMENT_TYPE_FILTERS: { label: string; tipo: TStockMovementTypeEnum[] }[] = [
-	{ label: "TODAS", tipo: [] },
-	{ label: "ENTRADAS", tipo: ["ENTRADA_AQUISICAO", "ENTRADA_DEVOLUCAO", "ENTRADA_PRODUCAO"] },
-	{ label: "SAÍDAS", tipo: ["SAIDA", "SAIDA_PRODUCAO"] },
-	{ label: "AJUSTES", tipo: ["AJUSTE"] },
-	{ label: "DESCARTES", tipo: ["DESCARTE"] },
+const MOVEMENT_TYPE_FILTERS: { label: string; types: TStockMovementTypeEnum[] }[] = [
+	{ label: "TODAS", types: [] },
+	{ label: "ENTRADAS", types: ["ENTRADA_AQUISICAO", "ENTRADA_DEVOLUCAO", "ENTRADA_PRODUCAO"] },
+	{ label: "SAÍDAS", types: ["SAIDA", "SAIDA_PRODUCAO"] },
+	{ label: "AJUSTES", types: ["AJUSTE"] },
+	{ label: "DESCARTES", types: ["DESCARTE"] },
+];
+
+const MOVEMENT_ORIGIN_FILTERS: { label: string; origin: TStockMovementOriginEnum | null }[] = [
+	{ label: "TODAS AS ORIGENS", origin: null },
+	{ label: "AUTOMÁTICAS", origin: "SISTEMA" },
+	{ label: "MANUAIS", origin: "MANUAL" },
 ];
 
 function isMovementFilterActive(active: TStockMovementTypeEnum[], filter: TStockMovementTypeEnum[]) {
@@ -31,6 +40,8 @@ function isMovementFilterActive(active: TStockMovementTypeEnum[], filter: TStock
 }
 
 export default function StockTransactionsPage() {
+	const queryClient = useQueryClient();
+	const [newTransactionModalIsOpen, setNewTransactionModalIsOpen] = useState(false);
 	const { data, isLoading, isError, isSuccess, error, filters, updateFilters } = useProductStockTransactions({
 		initialFilters: {
 			periodAfter: dayjs().startOf("month").toDate(),
@@ -99,6 +110,10 @@ export default function StockTransactionsPage() {
 							})
 						}
 					/>
+					<Button size="sm" className="shrink-0" onClick={() => setNewTransactionModalIsOpen(true)}>
+						<Plus className="h-4 w-4 min-h-4 min-w-4" />
+						NOVA MOVIMENTAÇÃO
+					</Button>
 					<Button variant="outline" size="sm" className="shrink-0" asChild>
 						<Link href={appRoutes.inventory.root()}>
 							<Boxes className="h-4 w-4 min-h-4 min-w-4" />
@@ -110,10 +125,22 @@ export default function StockTransactionsPage() {
 					{MOVEMENT_TYPE_FILTERS.map((filter) => (
 						<Button
 							key={filter.label}
-							variant={isMovementFilterActive(filters.tipo, filter.tipo) ? "default" : "ghost"}
+							variant={isMovementFilterActive(filters.types, filter.types) ? "default" : "ghost"}
 							size="fit"
 							className="rounded-lg px-2 py-1 text-xs"
-							onClick={() => updateFilters({ tipo: filter.tipo, page: 1 })}
+							onClick={() => updateFilters({ types: filter.types, page: 1 })}
+						>
+							{filter.label}
+						</Button>
+					))}
+					<span className="bg-border mx-1 h-4 w-px" aria-hidden />
+					{MOVEMENT_ORIGIN_FILTERS.map((filter) => (
+						<Button
+							key={filter.label}
+							variant={filters.origin === filter.origin ? "default" : "ghost"}
+							size="fit"
+							className="rounded-lg px-2 py-1 text-xs"
+							onClick={() => updateFilters({ origin: filter.origin, page: 1 })}
 						>
 							{filter.label}
 						</Button>
@@ -147,18 +174,30 @@ export default function StockTransactionsPage() {
 				<Empty>
 					<EmptyHeader>
 						<EmptyMedia variant="icon">
-							{filters.search || filters.tipo.length > 0 ? <PackageSearch /> : <ArrowLeftRight />}
+							{filters.search || filters.types.length > 0 || filters.origin ? <PackageSearch /> : <ArrowLeftRight />}
 						</EmptyMedia>
 						<EmptyTitle>
-							{filters.search || filters.tipo.length > 0 ? "Nenhuma movimentação corresponde aos filtros" : "Nenhuma movimentação no período"}
+							{filters.search || filters.types.length > 0 || filters.origin ? "Nenhuma movimentação corresponde aos filtros" : "Nenhuma movimentação no período"}
 						</EmptyTitle>
 						<EmptyDescription>
-							{filters.search || filters.tipo.length > 0
+							{filters.search || filters.types.length > 0 || filters.origin
 								? "Ajuste os filtros de tipo, período ou o termo pesquisado para ampliar a auditoria."
 								: "Compras, vendas, produções e ajustes de produtos com rastreamento de estoque aparecem aqui, com o saldo antes e depois de cada movimento."}
 						</EmptyDescription>
 					</EmptyHeader>
 				</Empty>
+			) : null}
+
+			{newTransactionModalIsOpen ? (
+				<NewStockTransaction
+					closeModal={() => setNewTransactionModalIsOpen(false)}
+					callbacks={{
+						onSuccess: () => {
+							queryClient.invalidateQueries({ queryKey: ["product-stock-transactions"] });
+							queryClient.invalidateQueries({ queryKey: ["product-stock-lots"] });
+						},
+					}}
+				/>
 			) : null}
 		</div>
 	);

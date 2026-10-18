@@ -339,6 +339,10 @@ export const stockMovementTypeEnum = pgEnum("stock_movement_type", [
 	"DESCARTE",
 ]);
 
+// SISTEMA: gerada por um processo do app (venda, compra, produção, recontagem, descarte de lote).
+// MANUAL: lançada diretamente pelo usuário.
+export const stockMovementOriginEnum = pgEnum("stock_movement_origin", ["SISTEMA", "MANUAL"]);
+
 export const productionStatusEnum = pgEnum("production_status", ["RASCUNHO", "PLANEJADA", "EM_PRODUCAO", "CONCLUIDA", "CANCELADA"]);
 
 export const productionOriginEnum = pgEnum("production_origin", ["MANUAL", "PEDIDO", "AGENDADA"]);

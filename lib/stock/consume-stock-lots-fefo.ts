@@ -1,4 +1,4 @@
-import type { TStockMovementTypeEnum } from "@/schemas/enums";
+import type { TStockMovementOriginEnum, TStockMovementTypeEnum } from "@/schemas/enums";
 import type { DBTransaction } from "@/services/drizzle";
 import { productStockLots } from "@/services/drizzle/schema";
 import { and, asc, eq, gt, isNull, or, sql } from "drizzle-orm";
@@ -27,6 +27,7 @@ type ConsumeStockLotsByFefoParams = {
 	unitCost?: number | null;
 	links?: StockLotConsumptionLinks;
 	allowPartial?: boolean;
+	origin?: TStockMovementOriginEnum;
 };
 
 export type TConsumedStockLot = {
@@ -52,6 +53,7 @@ export async function consumeStockLotsByFefo({
 	unitCost = null,
 	links,
 	allowPartial = false,
+	origin = "SISTEMA",
 }: ConsumeStockLotsByFefoParams): Promise<TConsumedStockLot[]> {
 	if (quantidade <= 0) throw new createHttpError.BadRequest("Quantidade para consumo por lote deve ser maior que zero.");
 
@@ -97,6 +99,7 @@ export async function consumeStockLotsByFefo({
 				loteId: lot.id,
 			},
 			validateSufficientStock: true,
+			origin,
 		});
 
 		await trx
