@@ -226,6 +226,14 @@ export const AppSidebarConfig: TSidebarConfigItemWithAccess[] = [
 						items: null,
 					},
 					{
+						id: "inventory-reports",
+						capability: "inventory",
+						title: "Relatórios",
+						url: appRoutes.inventory.reports(),
+						icon: <ChartNoAxesColumnIncreasing className="size-4" />,
+						items: null,
+					},
+					{
 						id: "inventory-movements",
 						capability: "inventory",
 						title: "Movimentações",

@@ -5,7 +5,6 @@ import type { TGetProductsOutputStock } from "@/app/api/products/route";
 import DateIntervalInput from "@/components/Inputs/DateIntervalInput";
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
 import RecountProduct from "@/components/Modals/Internal/StockRecount/RecountProduct";
-import StatUnitCard from "@/components/Stats/StatUnitCard";
 import GeneralPaginationComponent from "@/components/Utils/Pagination";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
@@ -17,13 +16,12 @@ import { cn } from "@/lib/utils";
 import { appRoutes } from "@/lib/navigation/routes";
 import dayjs from "dayjs";
 import {
-	AlertTriangle,
 	ArrowDownRight,
 	ArrowLeftRight,
 	ArrowUpRight,
 	BadgeDollarSign,
-	Boxes,
 	CalendarClock,
+	ChartNoAxesColumnIncreasing,
 	ClipboardList,
 	Code,
 	Diamond,
@@ -62,42 +60,14 @@ export default function StocksPage() {
 	});
 
 	const products = stock?.products ?? [];
-	const resumo = stock?.resumo;
 	const productsShowing = products.length;
 	const productsMatched = stock?.productsMatched ?? 0;
 	const totalPages = stock?.totalPages ?? 0;
 
 	return (
 		<div className="flex w-full flex-col gap-4">
-			{/* Resumo — visão geral do estoque no conjunto filtrado */}
-			<div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-				<StatUnitCard
-					title="Em estoque"
-					subtitle={resumo ? `${formatDecimalPlaces(resumo.produtosComEstoque)} produtos com saldo` : "Unidades disponíveis"}
-					icon={<Boxes className="h-4 w-4 min-h-4 min-w-4" />}
-					current={{ value: resumo?.totalEmEstoque ?? 0, format: (n) => `${formatDecimalPlaces(n)} un` }}
-				/>
-				<StatUnitCard
-					title="Valor imobilizado"
-					subtitle="Saldo × custo unitário"
-					icon={<BadgeDollarSign className="h-4 w-4 min-h-4 min-w-4" />}
-					current={{ value: resumo?.valorImobilizado ?? 0, format: (n) => formatToMoney(n) }}
-				/>
-				<StatUnitCard
-					title="Sem estoque"
-					subtitle="Produtos zerados"
-					icon={<AlertTriangle className="h-4 w-4 min-h-4 min-w-4" />}
-					current={{ value: resumo?.produtosSemEstoque ?? 0, format: (n) => formatDecimalPlaces(n) }}
-				/>
-				<StatUnitCard
-					title="Lotes vencendo"
-					subtitle="Ativos com validade em 7 dias"
-					icon={<CalendarClock className="h-4 w-4 min-h-4 min-w-4" />}
-					current={{ value: resumo?.lotesVencendo7Dias ?? 0, format: (n) => formatDecimalPlaces(n) }}
-				/>
-			</div>
-
-			{/* Toolbar — busca, período da movimentação e atalho para lotes */}
+			{/* Toolbar — busca, período da movimentação e atalhos para relatórios, lotes e transações.
+			    Os indicadores do estoque ficam em Estoque › Relatórios: esta página é a listagem. */}
 			<div className="flex w-full flex-col-reverse items-stretch gap-2 lg:flex-row lg:items-center">
 				<ProductSearchInput value={filters.search} onChange={(search, immediate) => updateFilters({ search }, immediate)} className="grow" />
 				<DateIntervalInput
@@ -116,6 +86,12 @@ export default function StocksPage() {
 						})
 					}
 				/>
+				<Button variant="outline" size="sm" className="shrink-0" asChild>
+					<Link href={appRoutes.inventory.reports()}>
+						<ChartNoAxesColumnIncreasing className="h-4 w-4 min-h-4 min-w-4" />
+						RELATÓRIOS
+					</Link>
+				</Button>
 				<Button variant="outline" size="sm" className="shrink-0" asChild>
 					<Link href={appRoutes.inventory.lots()}>
 						<Layers className="h-4 w-4 min-h-4 min-w-4" />

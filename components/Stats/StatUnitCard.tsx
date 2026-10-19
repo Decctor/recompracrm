@@ -95,7 +95,7 @@ export default function StatUnitCard({
 					<div className="flex min-w-0 items-center gap-2">
 						<span className="text-muted-foreground shrink-0 [&>svg]:h-4 [&>svg]:w-4">{icon}</span>
 						<div className="flex min-w-0 items-center gap-1.5">
-							<h1 className="truncate text-xs font-medium uppercase tracking-tight">{title}</h1>
+							<h1 className="text-xs leading-tight font-medium uppercase tracking-tight">{title}</h1>
 							{scopeTag}
 						</div>
 					</div>
@@ -136,10 +136,7 @@ export default function StatUnitCard({
 				<div className="text-2xl font-bold" style={{ color: colors.secondary }}>
 					{current.format(current.value)}
 				</div>
-				<p
-					className={cn("text-muted-foreground min-h-4 text-xs tracking-tight", !showComparison && "invisible")}
-					aria-hidden={!showComparison}
-				>
+				<p className={cn("text-muted-foreground min-h-4 text-xs tracking-tight", !showComparison && "invisible")} aria-hidden={!showComparison}>
 					{comparisonLine ?? "\u00A0"}
 				</p>
 			</div>

@@ -530,6 +530,8 @@ export const productStockTransactions = newTable(
 		loteIdIdx: index("idx_product_stock_transactions_lote_id").on(table.loteId),
 		tipoIdx: index("idx_product_stock_transactions_tipo").on(table.tipo),
 		origemIdx: index("idx_product_stock_transactions_origem").on(table.origem),
+		organizacaoDataIdx: index("idx_product_stock_transactions_org_data").on(table.organizacaoId, table.dataInsercao),
+		produtoDataIdx: index("idx_product_stock_transactions_produto_data").on(table.produtoId, table.dataInsercao),
 	}),
 );
 

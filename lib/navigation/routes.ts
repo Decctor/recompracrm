@@ -33,6 +33,7 @@ export const appRoutes = {
 		movements: () => "/dashboard/inventory/movements",
 		recount: () => "/dashboard/inventory/recount",
 		lots: () => "/dashboard/inventory/lots",
+		reports: () => "/dashboard/inventory/reports",
 		lot: (lotId: string) => `/dashboard/inventory/lots/${lotId}`,
 		lotLabelsPreview: () => "/dashboard/inventory/lots/labels/preview",
 	},

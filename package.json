@@ -39,6 +39,7 @@
 		"dedupe:add-on-options": "tsx ./scripts/dedupe-add-on-options.ts",
 		"test:dedupe-add-on-options": "node --import tsx --test lib/products/dedupe-add-on-options.test.ts",
 		"test:manual-stock-movements": "node --import tsx --test lib/stock/manual-stock-movements.test.ts",
+		"test:stock-analytics": "node --import tsx --test lib/stock/analytics/analytics.test.ts",
 		"test:pos-barcode": "node --import tsx --test lib/pos/barcode-scan-detector.test.ts lib/pos/barcode-lookup.test.ts",
 		"analyze:product-add-ons": "tsx ./scripts/analyze-product-add-ons.ts",
 		"verify:organization-slugs": "tsx ./scripts/verify-organization-slugs.ts",
