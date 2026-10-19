@@ -10,7 +10,7 @@ import { useDebounce } from "use-debounce";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -20,8 +20,10 @@ import { WeeklyRevenueHeatmap } from "@/components/SalesStats/Blocks/WeeklyReven
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { getErrorMessage } from "@/lib/errors";
 import { getExcelFromJSON } from "@/lib/excel-utils";
+import { useMediaQuery } from "@/lib/hooks/use-media-query";
+import { cn } from "@/lib/utils";
 import { isValidNumber } from "@/lib/validation";
-import { BadgeDollarSign, Calendar, CirclePlus, Download, Radio, Truck, UserRound, Users } from "lucide-react";
+import { BadgeDollarSign, Calendar, CirclePlus, Download, Package, Radio, Shapes, Truck, UserRound, Users } from "lucide-react";
 import { VariableSizeList } from "react-window";
 import { Pie, PieChart } from "recharts";
 import { toast } from "sonner";
@@ -111,6 +113,7 @@ export default GroupedStatsBlock;
 /// [TODO   ] VIRTUALIZE LIST OF PRODUCTS
 function ResultsByItemGraph({ data }: { data: TGroupedSalesStats["porItem"] }) {
 	const [type, setType] = useState<"qtde" | "total">("total");
+	const isDesktop = useMediaQuery("(min-width: 1024px)");
 	const dataSorted = [...data].sort((a, b) => (type === "total" ? b.total - a.total : b.qtde - a.qtde));
 
 	const maxValue = useMemo(() => {
@@ -150,25 +153,19 @@ function ResultsByItemGraph({ data }: { data: TGroupedSalesStats["porItem"] }) {
 						<HoverCard>
 							<HoverCardTrigger
 								render={
-									<div className="flex items-center gap-4 w-full hover:bg-primary/10 rounded-lg transition-all px-2 py-0.5">
-										<div className="flex items-center gap-3 w-[250px] min-w-[250px]">
-											<span className="text-xs font-bold text-muted-foreground w-6">#{index + 1}</span>
-
-											<div className="flex items-center gap-2 cursor-pointer">
-												<div className="flex flex-col">
-													<span className="text-sm font-medium truncate max-w-[150px] leading-none" title={list[index].titulo}>
-														{list[index].titulo}
-													</span>
-													{/* <span className="text-[0.6rem] text-muted-foreground">ID: {list[index].identificador}</span> */}
-												</div>
-											</div>
+									<div className={RANKING_ROW_CLASS}>
+										<div className={RANKING_IDENTITY_CLASS}>
+											<span className={RANKING_POSITION_CLASS}>#{index + 1}</span>
+											<span className="min-w-0 truncate text-sm font-medium leading-none cursor-pointer" title={list[index].titulo}>
+												{list[index].titulo}
+											</span>
 										</div>
 
-										<div className="flex-1 flex flex-col justify-center h-full">
+										<div className={RANKING_BAR_CLASS}>
 											<Progress value={percentage} className="h-2 w-full" />
 										</div>
 
-										<div className="w-[100px] text-right font-bold text-sm">{type === "total" ? formatToMoney(value) : value}</div>
+										<div className={RANKING_VALUE_CLASS}>{type === "total" ? formatToMoney(value) : formatDecimalPlaces(value)}</div>
 									</div>
 								}
 							/>
@@ -204,7 +201,7 @@ function ResultsByItemGraph({ data }: { data: TGroupedSalesStats["porItem"] }) {
 
 	return (
 		<div className="bg-card border-border flex w-full flex-col gap-1 rounded-xl border px-3 py-4 shadow-2xs">
-			<div className="flex items-center justify-between">
+			<div className="flex flex-wrap items-center justify-between gap-2">
 				<h1 className="text-xs font-medium tracking-tight uppercase">PARTICIPAÇÃO POR ITEM</h1>
 				<div className="flex items-center gap-2">
 					<TooltipProvider>
@@ -247,8 +244,19 @@ function ResultsByItemGraph({ data }: { data: TGroupedSalesStats["porItem"] }) {
 					</TooltipProvider>
 				</div>
 			</div>
-			<div className="px-6 py-2 flex w-full flex-col gap-2 h-[300px] lg:h-[350px] max-h-[300px] lg:max-h-[350px] items-center justify-center overflow-y-auto overscroll-y-auto scrollbar-thin scrollbar-track-primary/10 scrollbar-thumb-primary/30">
-				<ProductsList height={330} width={"100%"} list={dataSorted} />
+			<div className="w-full py-2">
+				{dataSorted.length === 0 ? (
+					<StatEmptyState
+						className="min-h-[260px] w-full"
+						icon={Package}
+						title="Nenhum item no período"
+						description="Não há itens vendidos no período e filtros selecionados. Ajuste os filtros ou escolha outro intervalo para ver a participação."
+					/>
+				) : (
+					// A lista virtualizada precisa de altura em px: ela é o único elemento que rola, e com a
+					// altura maior que a do container o último item ficava cortado sem jeito de alcançá-lo.
+					<ProductsList height={isDesktop ? 350 : 300} width={"100%"} list={dataSorted} />
+				)}
 			</div>
 		</div>
 	);
@@ -256,7 +264,7 @@ function ResultsByItemGraph({ data }: { data: TGroupedSalesStats["porItem"] }) {
 
 function ResultsByProductGroupGraph({ data }: { data: TGroupedSalesStats["porGrupo"] }) {
 	const [type, setType] = useState<"qtde" | "total">("total");
-	const { colors } = useOrgColors();
+	const palette = useSharePalette();
 
 	async function handleExportData(data: TGroupedSalesStats["porGrupo"] | undefined) {
 		try {
@@ -273,20 +281,9 @@ function ResultsByProductGroupGraph({ data }: { data: TGroupedSalesStats["porGru
 			return toast.error(msg);
 		}
 	}
-	const chartColorsList = useMemo(() => [colors.secondary, colors.primary, "#ff595e", "#8ac926", "#6a4c93", "#5adbff"], [colors]);
-	const total = useMemo(() => data.reduce((acc, current) => (type === "total" ? acc + current.total : acc + current.qtde), 0), [data, type]);
-	const graphData = useMemo(
-		() =>
-			data
-				.filter((d) => d.qtde > 100)
-				.sort((a, b) => b.qtde - a.qtde)
-				.map((p, index) => ({ ...p, fill: chartColorsList[index] || "#000" })),
-		[data, chartColorsList],
-	);
-	const projectTypesChartConfig = { titulo: { label: "GRUPO" } };
 	return (
 		<div className="bg-card border-border flex w-full flex-col gap-1 rounded-xl border px-3 py-4 shadow-2xs">
-			<div className="flex items-center justify-between">
+			<div className="flex flex-wrap items-center justify-between gap-2">
 				<h1 className="text-xs font-medium tracking-tight uppercase">PARTICIPAÇÃO POR GRUPO</h1>
 				<div className="flex items-center gap-2">
 					<TooltipProvider>
@@ -329,26 +326,17 @@ function ResultsByProductGroupGraph({ data }: { data: TGroupedSalesStats["porGru
 					</TooltipProvider>
 				</div>
 			</div>
-			<div className="px-6 py-2 flex w-full flex-col gap-2 h-[300px] lg:h-[350px] max-h-[300px] lg:max-h-[350px] items-center justify-center">
-				<ChartContainer config={projectTypesChartConfig} className="h-[250px] w-[250px]">
-					<PieChart>
-						<ChartTooltip cursor={false} content={<ChartTooltipContent hideLabel />} />
-						<Pie
-							data={graphData}
-							dataKey={type}
-							nameKey="titulo"
-							label={(x) => {
-								return `${formatDecimalPlaces((100 * (x.value as number)) / total)}%`;
-							}}
-							innerRadius={60}
-							strokeWidth={2}
-						/>
-						<ChartLegend
-							content={<ChartLegendContent payload={graphData} verticalAlign="bottom" />}
-							className="-translate-y-2 flex-wrap gap-2 *:basis-1/4 *:justify-center"
-						/>
-					</PieChart>
-				</ChartContainer>
+			<div className={SHARE_BODY_CLASS}>
+				{data.length === 0 ? (
+					<StatEmptyState
+						className="min-h-[260px] w-full flex-1"
+						icon={Shapes}
+						title="Nenhum grupo no período"
+						description="Não há vendas por grupo de produto no período e filtros selecionados. Ajuste os filtros ou escolha outro intervalo para ver a participação."
+					/>
+				) : (
+					<ShareDonut data={data} type={type} label="GRUPO" palette={palette} />
+				)}
 			</div>
 		</div>
 	);
@@ -382,7 +370,7 @@ function ResultsBySellerGraph({ data }: { data: TGroupedSalesStats["porVendedor"
 
 	return (
 		<div className="bg-card border-border flex w-full flex-col gap-1 rounded-xl border px-3 py-4 shadow-2xs">
-			<div className="flex items-center justify-between">
+			<div className="flex flex-wrap items-center justify-between gap-2">
 				<h1 className="text-xs font-medium tracking-tight uppercase">RANKING DE VENDEDORES</h1>
 				<div className="flex items-center gap-2">
 					<TooltipProvider>
@@ -443,29 +431,29 @@ function ResultsBySellerGraph({ data }: { data: TGroupedSalesStats["porVendedor"
 								<HoverCard key={item.vendedor.id}>
 									<HoverCardTrigger
 										render={
-											<div key={item.vendedor.id} className="flex items-center gap-4 w-full group">
-												<div className="flex items-center gap-3 w-[250px] min-w-[250px]">
-													<span className="text-xs font-bold text-muted-foreground w-6">#{index + 1}</span>
+											<div key={item.vendedor.id} className={cn(RANKING_ROW_CLASS, "group")}>
+												<div className={RANKING_IDENTITY_CLASS}>
+													<span className={RANKING_POSITION_CLASS}>#{index + 1}</span>
 
-													<div className="flex items-center gap-2 cursor-pointer">
-														<Avatar className="h-9 w-9 border-2 border-transparent group-hover:border-border transition-colors">
+													<div className="flex min-w-0 items-center gap-2 cursor-pointer">
+														<Avatar className="h-9 w-9 shrink-0 border-2 border-transparent group-hover:border-border transition-colors">
 															<AvatarImage src={item.vendedor.avatarUrl || undefined} alt={item.vendedor.nome} />
 															<AvatarFallback className="font-bold text-foreground">{formatNameAsInitials(item.vendedor.nome)}</AvatarFallback>
 														</Avatar>
-														<div className="flex flex-col">
-															<span className="text-sm font-medium truncate max-w-[150px] leading-none" title={item.vendedor.nome || "NÃO DEFINIDO"}>
+														<div className="flex min-w-0 flex-col">
+															<span className="text-sm font-medium truncate leading-none" title={item.vendedor.nome || "NÃO DEFINIDO"}>
 																{item.vendedor.nome || "NÃO DEFINIDO"}
 															</span>
-															<span className="text-[0.6rem] text-muted-foreground">ID: {item.vendedor.identificador || "N/A"}</span>
+															<span className="truncate text-[0.6rem] text-muted-foreground">ID: {item.vendedor.identificador || "N/A"}</span>
 														</div>
 													</div>
 												</div>
 
-												<div className="flex-1 flex flex-col justify-center h-full">
+												<div className={RANKING_BAR_CLASS}>
 													<Progress value={percentage} className="h-2 w-full" />
 												</div>
 
-												<div className="w-[100px] text-right font-bold text-sm">{type === "total" ? formatToMoney(value) : value}</div>
+												<div className={RANKING_VALUE_CLASS}>{type === "total" ? formatToMoney(value) : value}</div>
 											</div>
 										}
 									/>
@@ -535,7 +523,7 @@ function ResultsByPartnerGraph({ data }: { data: TGroupedSalesStats["porParceiro
 
 	return (
 		<div className="bg-card border-border flex w-full flex-col gap-1 rounded-xl border px-3 py-4 shadow-2xs">
-			<div className="flex items-center justify-between">
+			<div className="flex flex-wrap items-center justify-between gap-2">
 				<h1 className="text-xs font-medium tracking-tight uppercase">RANKING DE PARCEIROS</h1>
 				<div className="flex items-center gap-2">
 					<TooltipProvider>
@@ -597,28 +585,28 @@ function ResultsByPartnerGraph({ data }: { data: TGroupedSalesStats["porParceiro
 								<HoverCard key={item.parceiro.id}>
 									<HoverCardTrigger
 										render={
-											<div className="flex items-center gap-4 w-full hover:bg-primary/10 rounded-lg transition-all px-2 py-">
-												<div className="flex items-center gap-3 w-fit min-w-fit lg:w-[250px] lg:min-w-[250px]">
-													<span className="text-xs font-bold text-muted-foreground w-6">#{index + 1}</span>
-													<div className="flex items-center gap-2 cursor-pointer">
-														<Avatar className="h-9 w-9 border-2 border-transparent transition-colors">
+											<div className={RANKING_ROW_CLASS}>
+												<div className={RANKING_IDENTITY_CLASS}>
+													<span className={RANKING_POSITION_CLASS}>#{index + 1}</span>
+													<div className="flex min-w-0 items-center gap-2 cursor-pointer">
+														<Avatar className="h-9 w-9 shrink-0 border-2 border-transparent transition-colors">
 															<AvatarImage src={item.parceiro.avatarUrl || undefined} alt={item.parceiro.nome} />
 															<AvatarFallback className="font-bold text-foreground">{formatNameAsInitials(item.parceiro.nome)}</AvatarFallback>
 														</Avatar>
-														<div className="flex flex-col">
-															<span className="text-sm font-medium truncate max-w-[150px] leading-none" title={item.parceiro.nome}>
+														<div className="flex min-w-0 flex-col">
+															<span className="text-sm font-medium truncate leading-none" title={item.parceiro.nome}>
 																{item.parceiro.nome}
 															</span>
-															<span className="text-[0.6rem] text-muted-foreground">ID: {item.parceiro.identificador}</span>
+															<span className="truncate text-[0.6rem] text-muted-foreground">ID: {item.parceiro.identificador}</span>
 														</div>
 													</div>
 												</div>
 
-												<div className="hidden lg:flex flex-1 flex-col justify-center h-full">
+												<div className={RANKING_BAR_CLASS}>
 													<Progress value={percentage} className="h-2 w-full" />
 												</div>
 
-												<div className="w-fit lg:w-[100px] text-right font-bold text-sm">{type === "total" ? formatToMoney(value) : value}</div>
+												<div className={RANKING_VALUE_CLASS}>{type === "total" ? formatToMoney(value) : value}</div>
 											</div>
 										}
 									/>
@@ -899,7 +887,7 @@ function GroupedByMonth({ data }: { data: TGroupedSalesStats["porMes"] }) {
 
 function ResultsByChannelGraph({ data }: { data: TGroupedSalesStats["porCanal"] }) {
 	const [type, setType] = useState<"qtde" | "total">("total");
-	const { colors } = useOrgColors();
+	const palette = useSharePalette();
 
 	async function handleExportData(data: TGroupedSalesStats["porCanal"] | undefined) {
 		try {
@@ -916,16 +904,9 @@ function ResultsByChannelGraph({ data }: { data: TGroupedSalesStats["porCanal"] 
 			return toast.error(msg);
 		}
 	}
-	const chartColorsList = useMemo(() => [colors.secondary, colors.primary, "#ff595e", "#8ac926", "#6a4c93", "#5adbff"], [colors]);
-	const total = useMemo(() => data.reduce((acc, current) => (type === "total" ? acc + current.total : acc + current.qtde), 0), [data, type]);
-	const graphData = useMemo(
-		() => data.sort((a, b) => b.qtde - a.qtde).map((p, index) => ({ ...p, fill: chartColorsList[index % chartColorsList.length] || "#000" })),
-		[data, chartColorsList],
-	);
-	const chartConfig = { titulo: { label: "CANAL" } };
 	return (
 		<div className="bg-card border-border flex w-full flex-col gap-1 rounded-xl border px-3 py-4 shadow-2xs">
-			<div className="flex items-center justify-between">
+			<div className="flex flex-wrap items-center justify-between gap-2">
 				<h1 className="text-xs font-medium tracking-tight uppercase">PARTICIPAÇÃO POR CANAL</h1>
 				<div className="flex items-center gap-2">
 					<TooltipProvider>
@@ -968,7 +949,7 @@ function ResultsByChannelGraph({ data }: { data: TGroupedSalesStats["porCanal"] 
 					</TooltipProvider>
 				</div>
 			</div>
-			<div className="px-6 py-2 flex w-full flex-col gap-2 h-[300px] lg:h-[350px] max-h-[300px] lg:max-h-[350px] items-center justify-center">
+			<div className={SHARE_BODY_CLASS}>
 				{data.length === 0 ? (
 					<StatEmptyState
 						className="min-h-[260px] w-full flex-1"
@@ -977,25 +958,7 @@ function ResultsByChannelGraph({ data }: { data: TGroupedSalesStats["porCanal"] 
 						description="Não há vendas por canal no período e filtros selecionados. Ajuste os filtros ou escolha outro intervalo para ver a participação."
 					/>
 				) : (
-					<ChartContainer config={chartConfig} className="h-[250px] w-[250px]">
-						<PieChart>
-							<ChartTooltip cursor={false} content={<ChartTooltipContent hideLabel />} />
-							<Pie
-								data={graphData}
-								dataKey={type}
-								nameKey="titulo"
-								label={(x) => {
-									return `${formatDecimalPlaces((100 * (x.value as number)) / total)}%`;
-								}}
-								innerRadius={60}
-								strokeWidth={2}
-							/>
-							<ChartLegend
-								content={<ChartLegendContent payload={graphData} verticalAlign="bottom" />}
-								className="-translate-y-2 flex-wrap gap-2 *:basis-1/4 *:justify-center"
-							/>
-						</PieChart>
-					</ChartContainer>
+					<ShareDonut data={data} type={type} label="CANAL" palette={palette} />
 				)}
 			</div>
 		</div>
@@ -1004,7 +967,7 @@ function ResultsByChannelGraph({ data }: { data: TGroupedSalesStats["porCanal"] 
 
 function ResultsByFulfillmentMethodGraph({ data }: { data: TGroupedSalesStats["porEntregaModalidade"] }) {
 	const [type, setType] = useState<"qtde" | "total">("total");
-	const { colors } = useOrgColors();
+	const palette = useSharePalette();
 
 	async function handleExportData(data: TGroupedSalesStats["porEntregaModalidade"] | undefined) {
 		try {
@@ -1021,16 +984,9 @@ function ResultsByFulfillmentMethodGraph({ data }: { data: TGroupedSalesStats["p
 			return toast.error(msg);
 		}
 	}
-	const chartColorsList = useMemo(() => [colors.secondary, colors.primary, "#ff595e", "#8ac926", "#6a4c93", "#5adbff"], [colors]);
-	const total = useMemo(() => data.reduce((acc, current) => (type === "total" ? acc + current.total : acc + current.qtde), 0), [data, type]);
-	const graphData = useMemo(
-		() => data.sort((a, b) => b.qtde - a.qtde).map((p, index) => ({ ...p, fill: chartColorsList[index % chartColorsList.length] || "#000" })),
-		[data, chartColorsList],
-	);
-	const chartConfig = { titulo: { label: "MODALIDADE" } };
 	return (
 		<div className="bg-card border-border flex w-full flex-col gap-1 rounded-xl border px-3 py-4 shadow-2xs">
-			<div className="flex items-center justify-between">
+			<div className="flex flex-wrap items-center justify-between gap-2">
 				<h1 className="text-xs font-medium tracking-tight uppercase">PARTICIPAÇÃO POR MODALIDADE</h1>
 				<div className="flex items-center gap-2">
 					<TooltipProvider>
@@ -1073,7 +1029,7 @@ function ResultsByFulfillmentMethodGraph({ data }: { data: TGroupedSalesStats["p
 					</TooltipProvider>
 				</div>
 			</div>
-			<div className="px-6 py-2 flex w-full flex-col gap-2 h-[300px] lg:h-[350px] max-h-[300px] lg:max-h-[350px] items-center justify-center">
+			<div className={SHARE_BODY_CLASS}>
 				{data.length === 0 ? (
 					<StatEmptyState
 						className="min-h-[260px] w-full flex-1"
@@ -1082,27 +1038,75 @@ function ResultsByFulfillmentMethodGraph({ data }: { data: TGroupedSalesStats["p
 						description="Não há vendas por modalidade de entrega no período e filtros selecionados. Ajuste os filtros ou escolha outro intervalo para ver a participação."
 					/>
 				) : (
-					<ChartContainer config={chartConfig} className="h-[250px] w-[250px]">
-						<PieChart>
-							<ChartTooltip cursor={false} content={<ChartTooltipContent hideLabel />} />
-							<Pie
-								data={graphData}
-								dataKey={type}
-								nameKey="titulo"
-								label={(x) => {
-									return `${formatDecimalPlaces((100 * (x.value as number)) / total)}%`;
-								}}
-								innerRadius={60}
-								strokeWidth={2}
-							/>
-							<ChartLegend
-								content={<ChartLegendContent payload={graphData} verticalAlign="bottom" />}
-								className="-translate-y-2 flex-wrap gap-2 *:basis-1/4 *:justify-center"
-							/>
-						</PieChart>
-					</ChartContainer>
+					<ShareDonut data={data} type={type} label="MODALIDADE" palette={palette} />
 				)}
 			</div>
+		</div>
+	);
+}
+
+// Linhas de ranking (parceiros, vendedores, itens). No celular a identificação ocupa o espaço livre e
+// a barra some: com 250px fixos + barra + 100px a linha passava de 380px e o valor saía do card.
+const RANKING_ROW_CLASS = "flex w-full min-w-0 items-center gap-3 rounded-lg px-2 py-0.5 transition-all hover:bg-primary/10";
+const RANKING_IDENTITY_CLASS = "flex min-w-0 flex-1 items-center gap-3 sm:flex-none sm:w-[200px] lg:w-[250px]";
+const RANKING_POSITION_CLASS = "w-6 shrink-0 text-xs font-bold text-muted-foreground";
+const RANKING_BAR_CLASS = "hidden h-full min-w-0 flex-1 flex-col justify-center sm:flex";
+const RANKING_VALUE_CLASS = "shrink-0 text-right text-sm font-bold tabular-nums lg:w-[100px]";
+
+const SHARE_BODY_CLASS = "flex w-full flex-col items-center justify-center gap-2 py-2 min-h-[300px] lg:min-h-[350px]";
+const SHARE_MAX_SLICES = 6;
+const SHARE_OTHERS_COLOR = "#a1a1aa";
+
+function useSharePalette() {
+	const { colors } = useOrgColors();
+	return useMemo(() => [colors.secondary, colors.primary, "#ff595e", "#8ac926", "#6a4c93", "#5adbff"], [colors]);
+}
+
+type TShareDatum = { titulo: string; total: number; qtde: number };
+
+// Rosca + legenda com nome e percentual. A legenda fica fora do SVG: os rótulos externos do Recharts
+// estouravam o quadrado de 250px no celular e a legenda injetada saía sem nome (só a cor). Acima de
+// SHARE_MAX_SLICES fatias, o restante vira "OUTROS" para as cores não se repetirem e a soma fechar 100%.
+function ShareDonut({ data, type, label, palette }: { data: TShareDatum[]; type: "qtde" | "total"; label: string; palette: string[] }) {
+	const slices = useMemo(() => {
+		const sorted = [...data].filter((d) => d[type] > 0).sort((a, b) => b[type] - a[type]);
+		const total = sorted.reduce((acc, d) => acc + d[type], 0);
+		const visible = sorted.length > SHARE_MAX_SLICES ? sorted.slice(0, SHARE_MAX_SLICES - 1) : sorted;
+		const rest = sorted.slice(visible.length);
+		const grouped: TShareDatum[] = rest.length
+			? [
+					...visible,
+					{ titulo: "OUTROS", total: rest.reduce((acc, d) => acc + d.total, 0), qtde: rest.reduce((acc, d) => acc + d.qtde, 0) },
+				]
+			: visible;
+		return grouped.map((d, index) => ({
+			titulo: d.titulo,
+			total: d.total,
+			qtde: d.qtde,
+			fill: rest.length && index === grouped.length - 1 ? SHARE_OTHERS_COLOR : palette[index % palette.length],
+			percentual: total > 0 ? (100 * d[type]) / total : 0,
+		}));
+	}, [data, type, palette]);
+
+	return (
+		<div className="flex w-full flex-col items-center gap-4 sm:flex-row sm:justify-center">
+			<ChartContainer config={{ titulo: { label } }} className="aspect-square h-[200px] w-[200px] shrink-0">
+				<PieChart>
+					<ChartTooltip cursor={false} content={<ChartTooltipContent hideLabel />} />
+					<Pie data={slices} dataKey={type} nameKey="titulo" innerRadius={55} strokeWidth={2} />
+				</PieChart>
+			</ChartContainer>
+			<ul className="flex w-full min-w-0 flex-col gap-1.5 sm:w-auto sm:max-w-[240px] sm:flex-1">
+				{slices.map((slice, index) => (
+					<li key={`${slice.titulo}-${index}`} className="flex items-center gap-2 text-xs">
+						<span className="h-2.5 w-2.5 shrink-0 rounded-[2px]" style={{ backgroundColor: slice.fill }} />
+						<span className="min-w-0 flex-1 truncate" title={slice.titulo}>
+							{slice.titulo}
+						</span>
+						<span className="shrink-0 font-bold tabular-nums">{formatDecimalPlaces(slice.percentual)}%</span>
+					</li>
+				))}
+			</ul>
 		</div>
 	);
 }
