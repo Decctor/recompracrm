@@ -11,13 +11,14 @@ import {
 	couponRedemptions,
 	financialTransactions,
 	productStockLots,
+	paymentAttempts,
 	saleItems,
 	sales,
 	tabPayments,
 } from "@/services/drizzle/schema";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import createHttpError from "http-errors";
-import { cancelPaymentAttemptFromPlatform, findActivePaymentAttemptForSale } from "@/lib/payment-attempts";
+import { cancelPaymentAttemptFromPlatform, OPEN_PAYMENT_ATTEMPT_STATUSES } from "@/lib/payment-attempts";
 import { attendanceStatusValues } from "@/lib/sales/sale-processing/attendance";
 
 export async function processConfirmedSaleCancellation({
@@ -67,13 +68,23 @@ export async function processConfirmedSaleCancellation({
 	].filter((id): id is string => id != null);
 
 	// Cobrança na maquininha: só cancela a venda enquanto a tentativa ainda não chegou ao terminal
-	// (CRIADA). A partir daí a Stone pode ter cobrado — a resolução vem do terminal ou da conciliação.
-	const activeAttempt = await findActivePaymentAttemptForSale({ organizationId, saleId });
-	if (activeAttempt && activeAttempt.status !== "CRIADA") {
-		throw new createHttpError.Conflict("A cobrança desta venda está em andamento na maquininha. Aguarde o resultado antes de cancelar a venda.");
-	}
-
 	await db.transaction(async (tx) => {
+		const activeAttempts = await tx
+			.select()
+			.from(paymentAttempts)
+			.where(
+				and(
+					eq(paymentAttempts.organizacaoId, organizationId),
+					eq(paymentAttempts.vendaId, saleId),
+					inArray(paymentAttempts.status, [...OPEN_PAYMENT_ATTEMPT_STATUSES]),
+				),
+			)
+			.orderBy(paymentAttempts.id)
+			.for("update");
+		if (activeAttempts.some((attempt) => attempt.status !== "CRIADA")) {
+			throw new createHttpError.Conflict("A cobrança desta venda está em andamento na maquininha. Aguarde o resultado antes de cancelar a venda.");
+		}
+
 		// Resolvida antes de qualquer escrita: sem caixa para devolver o dinheiro, nada é cancelado.
 		const activeSession = await resolveCashRefundSession({
 			tx,
@@ -83,8 +94,14 @@ export async function processConfirmedSaleCancellation({
 			originSessionIds: cashOriginSessionIds,
 		});
 
-		if (activeAttempt) {
-			await cancelPaymentAttemptFromPlatform({ tx, organizationId, attemptId: activeAttempt.id, userId: authorId, motivo: `Venda cancelada: ${reason}` });
+		for (const activeAttempt of activeAttempts) {
+			await cancelPaymentAttemptFromPlatform({
+				tx,
+				organizationId,
+				attemptId: activeAttempt.id,
+				userId: authorId,
+				motivo: `Venda cancelada: ${reason}`,
+			});
 		}
 		if (sale.clienteId) {
 			await reverseSaleCashback({ tx, saleId, clientId: sale.clienteId, organizationId, reason });

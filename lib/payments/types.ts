@@ -29,6 +29,7 @@ export type TProcessPaymentsInput = {
 };
 
 export type TPaymentIntentResult = {
+	indicePagamento: number;
 	transacaoId: string;
 	provedorReferencia: string | null;
 	provedorStatus: string;

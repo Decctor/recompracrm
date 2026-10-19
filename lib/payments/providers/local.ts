@@ -20,7 +20,7 @@ export class LocalPaymentProvider implements IPaymentProvider {
 	async processPayments(input: TProcessPaymentsInput, tx: DBTransaction): Promise<TPaymentIntentResult[]> {
 		const results: TPaymentIntentResult[] = [];
 
-		for (const pagamento of input.pagamentos) {
+		for (const [indicePagamento, pagamento] of input.pagamentos.entries()) {
 			const now = new Date();
 			// Cobrança na maquininha: uma única transação PENDENTE, mesmo parcelada — a aprovação no
 			// terminal efetiva tudo de uma vez (lib/payment-attempts/consume.ts). Parcelas mensais
@@ -64,6 +64,7 @@ export class LocalPaymentProvider implements IPaymentProvider {
 
 					results.push({
 						transacaoId: inserted.id,
+						indicePagamento,
 						provedorReferencia: null,
 						provedorStatus: "PENDENTE",
 						efetivado: false,
@@ -101,6 +102,7 @@ export class LocalPaymentProvider implements IPaymentProvider {
 
 			results.push({
 				transacaoId: inserted.id,
+				indicePagamento,
 				provedorReferencia: null,
 				provedorStatus,
 				efetivado: isImmediate,

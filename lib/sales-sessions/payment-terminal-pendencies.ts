@@ -25,7 +25,7 @@ export type TPaymentTerminalPendency = {
 
 export const REVERSED_TRANSACTION_STATUSES = ["CANCELADO", "ESTORNADO"] as const;
 
-// Pura, para teste: decide se a última tentativa de uma venda ainda é pendência do turno.
+// Decide se a tentativa de um pagamento ainda é pendência do turno.
 export function classifyPaymentTerminalPendency({
 	status,
 	transacaoPendente,
@@ -71,12 +71,10 @@ export async function listSessionPaymentTerminalPendencies({
 		},
 	});
 
-	// Só a última tentativa de cada venda conta: as anteriores foram canceladas pela reatribuição.
-	const latestBySale = new Map<string, (typeof rows)[number]>();
-	for (const row of rows) if (!latestBySale.has(row.vendaId)) latestBySale.set(row.vendaId, row);
+	const latestByPayment = selectSessionPaymentAttempts(rows);
 
 	const pendencies: TPaymentTerminalPendency[] = [];
-	for (const row of latestBySale.values()) {
+	for (const row of latestByPayment) {
 		if (row.venda.statusVenda === "CANCELADA") continue;
 		const transaction = row.transacaoFinanceira;
 		const transacaoPendente =
@@ -95,4 +93,18 @@ export async function listSessionPaymentTerminalPendencies({
 		});
 	}
 	return pendencies;
+}
+
+export function selectSessionPaymentAttempts<T extends { id: string; transacaoFinanceiraId: string | null; status: TPaymentAttemptStatusEnum }>(
+	rows: T[],
+): T[] {
+	const byPayment = new Map<string, T>();
+	// O índice parcial permite no máximo uma tentativa não recusada por transação.
+	// Ela prevalece sobre recusas anteriores mesmo quando os timestamps coincidem.
+	for (const row of rows) {
+		const key = row.transacaoFinanceiraId ?? row.id;
+		const current = byPayment.get(key);
+		if (!current || (current.status === "NAO_APROVADA" && row.status !== "NAO_APROVADA")) byPayment.set(key, row);
+	}
+	return [...byPayment.values()];
 }

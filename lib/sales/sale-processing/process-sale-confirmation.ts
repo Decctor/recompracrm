@@ -292,7 +292,7 @@ export async function processSaleConfirmationInTransaction({ tx, input }: { tx: 
 	// da mesma venda já efetivam aqui; os cartões efetivam um a um, quando a maquininha aprovar.
 	const tentativasPagamento: { id: string; status: string; dispositivoId: string; dispositivoNome: string; valor: number; metodo: string }[] = [];
 	for (const [position, assignment] of terminalAssignments.entries()) {
-		const pendingTransactionId = paymentResults[assignment.index]?.transacaoId;
+		const pendingTransactionId = paymentResults.find((result) => result.indicePagamento === assignment.index)?.transacaoId;
 		if (!pendingTransactionId) throw new createHttpError.InternalServerError("Transação pendente da cobrança na maquininha não foi criada.");
 		// A chave do comando do dispositivo é única por terminal: a primeira perna leva a chave, as
 		// seguintes a mesma chave com a posição — o replay da venda devolve todas.
@@ -312,7 +312,14 @@ export async function processSaleConfirmationInTransaction({ tx, input }: { tx: 
 			fingerprintEntrada: input.terminalAttempt?.fingerprintEntrada ?? null,
 			origem: input.terminalAttempt?.origem ?? "PLATAFORMA",
 		});
-		tentativasPagamento.push({ id: attempt.id, status: attempt.status, dispositivoId: attempt.dispositivoId, dispositivoNome: attempt.dispositivoNome, valor: attempt.valor, metodo: attempt.metodo });
+		tentativasPagamento.push({
+			id: attempt.id,
+			status: attempt.status,
+			dispositivoId: attempt.dispositivoId,
+			dispositivoNome: attempt.dispositivoNome,
+			valor: attempt.valor,
+			metodo: attempt.metodo,
+		});
 	}
 	// Compatibilidade: quem só conhece uma cobrança por venda lê a primeira.
 	const tentativaPagamento = tentativasPagamento[0] ?? null;

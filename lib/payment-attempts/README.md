@@ -35,8 +35,9 @@ nativo `RECOMPRA_PAYMENT_TERMINAL` (categoria `TERMINAL_PAGAMENTO`).
 
 ## Deploy
 
-1. `npm run db:push` (novas tabelas `ampmais_payment_attempts`, `ampmais_payment_attempt_events`,
-   coluna `tentativa_pagamento_id` em `ampmais_financial_transactions`, cinco `pgEnum`).
+1. `npx tsx scripts/apply-sql-migration.ts drizzle/0136_payment_terminals.sql` (novas tabelas
+   `ampmais_payment_attempts`, `ampmais_payment_attempt_events`, coluna `tentativa_pagamento_id`
+   em `ampmais_financial_transactions`, cinco `pgEnum` e solicitante de aprovação por dispositivo).
 2. `npm run seed:access-clients` (cliente nativo `RECOMPRA_PAYMENT_TERMINAL`).
 
 ## Fluxo B na plataforma (P6–P9, P11)

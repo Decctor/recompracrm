@@ -290,21 +290,21 @@ export async function receiveTerminalTabPayment({
 			"Parcial no terminal é em dinheiro ou Pix. O cartão passa no fechamento da conta.",
 		);
 	}
-	const organization = await loadOrganization(organizationId);
-	const sessaoVendaId = await resolveTabSalesSession({ organizationId, organization, tabId: input.tabId, sessaoVendaId: input.sessaoVendaId });
-	const tabInput = {
-		tabId: input.tabId,
-		payment: { metodo: input.payment.metodo as "DINHEIRO" | "PIX", valor: roundCents(input.payment.valor) },
-		payerName: input.pagadorNome ?? null,
-		sessaoVendaId,
-	};
-	const salePayment = await prepareTabPayment({ organization, input: tabInput });
 	return runPoiTransactionWithIdempotency({
 		organizacaoId: organizationId,
 		principalId: deviceId,
 		idempotencyKey,
 		payload: { deviceId, operation: "TAB_PAYMENT", input },
 		execute: async (tx) => {
+			const organization = await loadOrganization(organizationId);
+			const sessaoVendaId = await resolveTabSalesSession({ organizationId, organization, tabId: input.tabId, sessaoVendaId: input.sessaoVendaId });
+			const tabInput = {
+				tabId: input.tabId,
+				payment: { metodo: input.payment.metodo as "DINHEIRO" | "PIX", valor: roundCents(input.payment.valor) },
+				payerName: input.pagadorNome ?? null,
+				sessaoVendaId,
+			};
+			const salePayment = await prepareTabPayment({ organization, input: tabInput });
 			const received = await receiveTabPaymentInTransaction({ tx, organization, userId: null, input: tabInput, salePayment });
 			return {
 				result: {
@@ -342,8 +342,6 @@ export async function closeTerminalTab({
 	idempotencyKey: string;
 	input: TCloseTerminalTabInput;
 }) {
-	const organization = await loadOrganization(organizationId);
-	const sessaoVendaId = await resolveTabSalesSession({ organizationId, organization, tabId: input.tabId, sessaoVendaId: input.sessaoVendaId });
 	const fingerprint = hashAccessSecret(JSON.stringify({ deviceId, operation: "TAB_CLOSE", input }));
 
 	return runPoiTransactionWithIdempotency({
@@ -352,6 +350,8 @@ export async function closeTerminalTab({
 		idempotencyKey,
 		payload: { deviceId, operation: "TAB_CLOSE", input },
 		execute: async (tx) => {
+			const organization = await loadOrganization(organizationId);
+			const sessaoVendaId = await resolveTabSalesSession({ organizationId, organization, tabId: input.tabId, sessaoVendaId: input.sessaoVendaId });
 			const [tab] = await tx
 				.select({ id: tabs.id, status: tabs.status, clienteId: tabs.clienteId })
 				.from(tabs)
