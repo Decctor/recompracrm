@@ -6,14 +6,20 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDateAsLocale, formatToMoney } from "@/lib/formatting";
 import { usePublicShopOrder } from "@/lib/queries/shop";
+import { getShopPaymentLabel } from "@/lib/shop/order-whatsapp-message";
 import type { TSaleAttendanceStatusEnum } from "@/schemas/enums";
 import {
 	AlertCircle,
+	Bike,
 	Check,
+	ChefHat,
 	Clock3,
 	CreditCard,
 	Gift,
+	House,
+	type LucideIcon,
 	Package,
+	PackageCheck,
 	Receipt,
 	RefreshCw,
 	RotateCcw,
@@ -27,6 +33,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import WhatsappIcon from "../../_components/WhatsappIcon";
 
 type PublicOrderPageProps = {
 	orgId: string;
@@ -37,42 +44,61 @@ type PublicOrderPageProps = {
 type PublicOrderData = TGetPublicShopOrderOutput["data"];
 type PublicOrder = PublicOrderData["order"];
 
-const STATUS_LABELS: Record<TSaleAttendanceStatusEnum, string> = {
-	NAO_INICIADO: "Confirmado",
-	EM_PREPARO: "Em preparo",
-	PRONTO: "Pronto",
-	EM_ENTREGA: "Em entrega",
-	ENTREGUE: "Entregue",
-	PARCIALMENTE_ENTREGUE: "Entrega parcial",
-	CANCELADO: "Cancelado",
+type TOrderStage = {
+	status: TSaleAttendanceStatusEnum;
+	label: string;
+	title: string;
+	description: string;
+	icon: LucideIcon;
 };
 
-const STATUS_MESSAGES: Record<TSaleAttendanceStatusEnum, string> = {
-	NAO_INICIADO: "A loja recebeu seu pedido e vai iniciar o atendimento.",
-	EM_PREPARO: "Seu pedido está sendo preparado ou separado.",
-	PRONTO: "Seu pedido está pronto para retirada ou envio.",
-	EM_ENTREGA: "Seu pedido saiu para entrega.",
-	ENTREGUE: "Seu pedido foi entregue. Obrigado pela compra!",
-	PARCIALMENTE_ENTREGUE: "Uma parte do pedido foi entregue. A loja seguirá com os itens restantes.",
-	CANCELADO: "Este pedido foi cancelado.",
+// Posição de cada status na jornada. Um status que não é etapa do modo do pedido (EM_ENTREGA numa
+// retirada) cai na última etapa já alcançada, em vez de voltar para a primeira.
+const STATUS_RANK: Record<TSaleAttendanceStatusEnum, number> = {
+	NAO_INICIADO: 0,
+	EM_PREPARO: 1,
+	PRONTO: 2,
+	EM_ENTREGA: 3,
+	PARCIALMENTE_ENTREGUE: 4,
+	ENTREGUE: 4,
+	CANCELADO: -1,
 };
 
-const PAYMENT_LABELS: Record<string, string> = {
-	DINHEIRO: "Dinheiro",
-	PIX: "PIX",
-	CARTAO_DEBITO: "Cartão de débito",
-	CARTAO_CREDITO: "Cartão de crédito",
-};
-
-function getStatusSteps(deliveryMode: PublicOrder["deliveryMode"]): TSaleAttendanceStatusEnum[] {
-	const base: TSaleAttendanceStatusEnum[] = ["NAO_INICIADO", "EM_PREPARO", "PRONTO"];
-	return deliveryMode === "ENTREGA" ? [...base, "EM_ENTREGA", "ENTREGUE"] : [...base, "ENTREGUE"];
+function getOrderStages(deliveryMode: PublicOrder["deliveryMode"]): TOrderStage[] {
+	const isDelivery = deliveryMode === "ENTREGA";
+	const stages: TOrderStage[] = [
+		{
+			status: "NAO_INICIADO",
+			label: "Recebido",
+			title: "Pedido recebido",
+			description: "A loja recebeu seu pedido e logo vai começar a prepará-lo.",
+			icon: Receipt,
+		},
+		{ status: "EM_PREPARO", label: "Em preparo", title: "Em preparo", description: "Seu pedido está sendo preparado.", icon: ChefHat },
+		{
+			status: "PRONTO",
+			label: "Pronto",
+			title: isDelivery ? "Pronto para envio" : "Pronto para retirada",
+			description: isDelivery ? "Seu pedido está pronto e logo sai para entrega." : "Seu pedido está pronto. Você já pode retirá-lo na loja.",
+			icon: PackageCheck,
+		},
+	];
+	if (isDelivery) {
+		stages.push({ status: "EM_ENTREGA", label: "A caminho", title: "Saiu para entrega", description: "Seu pedido está a caminho.", icon: Bike });
+	}
+	stages.push({
+		status: "ENTREGUE",
+		label: isDelivery ? "Entregue" : "Retirado",
+		title: isDelivery ? "Pedido entregue" : "Pedido retirado",
+		description: "Tudo certo com o seu pedido. Obrigado pela compra!",
+		icon: House,
+	});
+	return stages;
 }
 
-function getCurrentStepIndex(order: PublicOrder, steps: TSaleAttendanceStatusEnum[]) {
-	if (order.statusAtendimento === "PARCIALMENTE_ENTREGUE") return steps.length - 1;
-	const index = steps.indexOf(order.statusAtendimento);
-	return Math.max(0, index);
+function getCurrentStageIndex(status: TSaleAttendanceStatusEnum, stages: TOrderStage[]) {
+	const rank = STATUS_RANK[status];
+	return stages.reduce((current, stage, index) => (STATUS_RANK[stage.status] <= rank ? index : current), 0);
 }
 
 function OrderLoading() {
@@ -155,20 +181,31 @@ function StoreHeader({ organization, slug }: { organization: PublicOrderData["or
 }
 
 function OrderStatus({ order, isRefetching, onRefresh }: { order: PublicOrder; isRefetching: boolean; onRefresh: () => void }) {
-	const steps = getStatusSteps(order.deliveryMode);
-	const currentIndex = getCurrentStepIndex(order, steps);
+	const stages = getOrderStages(order.deliveryMode);
+	const currentIndex = getCurrentStageIndex(order.statusAtendimento, stages);
+	const currentStage = stages[currentIndex];
+	const nextStage = stages[currentIndex + 1] ?? null;
 	const isCanceled = order.statusAtendimento === "CANCELADO" || order.status === "CANCELADA";
+	const isFinished = order.statusAtendimento === "ENTREGUE";
+	const isPartial = order.statusAtendimento === "PARCIALMENTE_ENTREGUE";
+
+	const title = isCanceled ? "Pedido cancelado" : isPartial ? "Entrega parcial" : currentStage.title;
+	const description = isCanceled
+		? "Este pedido foi cancelado."
+		: isPartial
+			? "Uma parte do pedido foi entregue. A loja seguirá com os itens restantes."
+			: currentStage.description;
 
 	return (
 		<section className="overflow-hidden rounded-2xl border bg-card shadow-sm" aria-live="polite">
-			<div className="flex flex-col gap-4 p-5 sm:p-6">
+			<div className="flex flex-col gap-5 p-5 sm:p-6">
 				<div className="flex flex-wrap items-start justify-between gap-3">
 					<div>
 						<p className="text-xs font-extrabold tracking-[0.08em] text-muted-foreground uppercase">Pedido #{order.orderNumber}</p>
 						<h1 className={"mt-1 text-2xl font-black tracking-tight sm:text-3xl " + (isCanceled ? "text-destructive" : "text-foreground")}>
-							{isCanceled ? "Pedido cancelado" : STATUS_LABELS[order.statusAtendimento]}
+							{title}
 						</h1>
-						<p className="mt-2 max-w-[60ch] text-sm leading-relaxed text-muted-foreground">{STATUS_MESSAGES[order.statusAtendimento]}</p>
+						<p className="mt-2 max-w-[60ch] text-sm leading-relaxed text-muted-foreground">{description}</p>
 					</div>
 					<div className="flex items-center gap-1.5 rounded-full bg-muted px-3 py-1.5 text-xs font-semibold text-muted-foreground">
 						<Clock3 className="size-3.5" />
@@ -182,46 +219,64 @@ function OrderStatus({ order, isRefetching, onRefresh }: { order: PublicOrder; i
 						<span>Entre em contato com a loja se precisar de mais informações.</span>
 					</div>
 				) : (
-					<div className="flex flex-col gap-3">
-						<div className={"grid gap-0 pt-2 " + (steps.length === 5 ? "grid-cols-5" : "grid-cols-4")}>
-							{steps.map((step, index) => {
-								const isComplete = index < currentIndex || order.statusAtendimento === "ENTREGUE";
-								const isCurrent = index === currentIndex && order.statusAtendimento !== "ENTREGUE";
+					<div className="flex flex-col gap-4">
+						<ol className="grid" style={{ gridTemplateColumns: `repeat(${stages.length}, minmax(0, 1fr))` }}>
+							{stages.map((stage, index) => {
+								const state = isFinished || index < currentIndex ? "done" : index === currentIndex ? "current" : "upcoming";
+								const Icon = state === "done" ? Check : stage.icon;
 								return (
-									<div key={step} className="relative flex min-w-0 flex-col items-center gap-2 text-center">
+									<li
+										key={stage.status}
+										aria-current={state === "current" ? "step" : undefined}
+										className="relative flex min-w-0 flex-col items-center gap-2 text-center"
+									>
 										{index > 0 ? (
 											<div
-												className={"absolute top-[0.9375rem] right-1/2 h-0.5 w-full " + (index <= currentIndex ? "bg-brand" : "bg-border")}
+												className={"absolute top-5 right-1/2 h-1 w-full -translate-y-1/2 " + (state === "upcoming" ? "bg-border" : "bg-brand")}
 												aria-hidden="true"
 											/>
 										) : null}
 										<div
 											className={
-												"relative z-10 flex size-8 items-center justify-center rounded-full border-2 text-xs font-black " +
-												(isComplete
-													? "border-brand bg-brand text-brand-foreground"
-													: isCurrent
-														? "border-brand bg-card text-foreground ring-4 ring-brand/15"
-														: "border-border bg-muted text-muted-foreground")
+												"relative z-10 flex size-10 items-center justify-center rounded-full " +
+												(state === "upcoming"
+													? "border-2 border-border bg-card text-muted-foreground"
+													: state === "current"
+														? "bg-brand text-brand-foreground shadow-md ring-4 ring-brand/25"
+														: "bg-brand text-brand-foreground")
 											}
 										>
-											{isComplete ? <Check className="size-4" strokeWidth={3} /> : index + 1}
+											{state === "current" ? (
+												<span className="absolute inset-0 animate-ping rounded-full bg-brand/30 motion-reduce:hidden" aria-hidden="true" />
+											) : null}
+											<Icon className="relative size-5" strokeWidth={state === "done" ? 3 : 2} />
 										</div>
 										<span
 											className={
-												"hidden text-[0.625rem] leading-tight font-bold sm:block sm:text-xs " +
-												(index <= currentIndex ? "text-foreground" : "text-muted-foreground")
+												"px-0.5 text-[0.6875rem] leading-tight sm:text-xs " +
+												(state === "current"
+													? "font-black text-foreground"
+													: state === "done"
+														? "font-bold text-foreground"
+														: "font-semibold text-muted-foreground")
 											}
 										>
-											{STATUS_LABELS[step]}
+											{stage.label}
 										</span>
-									</div>
+									</li>
 								);
 							})}
-						</div>
-						<p className="text-center text-xs font-bold text-muted-foreground sm:hidden">
-							Etapa {currentIndex + 1} de {steps.length}
-						</p>
+						</ol>
+						{!isFinished ? (
+							<p className="text-center text-xs font-semibold text-muted-foreground">
+								Etapa {currentIndex + 1} de {stages.length}
+								{nextStage ? (
+									<>
+										{" · "}Próxima: <span className="font-bold text-foreground">{nextStage.label}</span>
+									</>
+								) : null}
+							</p>
+						) : null}
 					</div>
 				)}
 			</div>
@@ -235,6 +290,28 @@ function OrderStatus({ order, isRefetching, onRefresh }: { order: PublicOrder; i
 					ATUALIZAR
 				</Button>
 			</div>
+		</section>
+	);
+}
+
+function WhatsappSummaryCard({ url }: { url: string }) {
+	return (
+		<section className="flex flex-col gap-4 rounded-2xl border bg-card p-5 shadow-sm sm:flex-row sm:items-center sm:p-6">
+			<div className="flex items-center gap-4 sm:flex-1">
+				<span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-emerald-600/10 text-emerald-700 dark:text-emerald-400">
+					<WhatsappIcon className="size-6" />
+				</span>
+				<div className="min-w-0">
+					<h2 className="font-black">Envie o pedido para a loja</h2>
+					<p className="mt-0.5 text-sm leading-relaxed text-muted-foreground">O resumo completo já vai pronto. É só tocar em enviar no WhatsApp.</p>
+				</div>
+			</div>
+			<Button asChild variant="none" className="h-11 shrink-0 rounded-xl bg-emerald-700 font-bold text-white hover:bg-emerald-800">
+				<a href={url} target="_blank" rel="noopener noreferrer">
+					<WhatsappIcon className="size-4" />
+					ENVIAR NO WHATSAPP
+				</a>
+			</Button>
 		</section>
 	);
 }
@@ -420,7 +497,7 @@ function DeliveryAndPayment({ order }: { order: PublicOrder }) {
 				<div>
 					<h2 className="text-sm font-black">Pagamento</h2>
 					<p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-						{order.payment.method ? (PAYMENT_LABELS[order.payment.method] ?? order.payment.method) : "Forma de pagamento não informada"}
+						{getShopPaymentLabel(order.payment.method) ?? "Forma de pagamento não informada"}
 					</p>
 					{order.payment.description ? <p className="mt-0.5 text-xs text-muted-foreground">{order.payment.description}</p> : null}
 				</div>
@@ -466,12 +543,14 @@ function OrderContent({
 	isRefetching: boolean;
 	onRefresh: () => void;
 }) {
-	const { order, organization } = data;
+	const { order, organization, whatsappUrl } = data;
+	const isCanceled = order.statusAtendimento === "CANCELADO" || order.status === "CANCELADA";
 	return (
 		<div className="min-h-screen bg-muted/30">
 			<StoreHeader organization={organization} slug={slug} />
 			<main className="mx-auto flex max-w-4xl flex-col gap-4 px-4 py-5 sm:py-7">
 				<OrderStatus order={order} isRefetching={isRefetching} onRefresh={onRefresh} />
+				{whatsappUrl && !isCanceled ? <WhatsappSummaryCard url={whatsappUrl} /> : null}
 				<CashbackEarnedBanner order={order} />
 				<div className="grid items-start gap-4 md:grid-cols-[minmax(0,1.45fr)_minmax(18rem,0.75fr)]">
 					<OrderItems order={order} />

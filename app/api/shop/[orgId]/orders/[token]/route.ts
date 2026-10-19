@@ -1,8 +1,10 @@
 import { appApiHandler } from "@/lib/app-api";
+import { normalizeShopSettingsConfiguration } from "@/lib/shop/config";
+import { buildShopOrderWhatsappMessage, buildWhatsappMessageUrl } from "@/lib/shop/order-whatsapp-message";
 import type { TAppliedCoupon } from "@/schemas/coupons";
 import type { TShopRewardSnapshot } from "@/schemas/shop";
 import { db } from "@/services/drizzle";
-import { shopOrderRequests } from "@/services/drizzle/schema";
+import { shopOrderRequests, shopSettings } from "@/services/drizzle/schema";
 import { and, eq } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
@@ -31,7 +33,7 @@ type TShopDraftMetadata = {
 			descricao?: string;
 			observacoes?: string | null;
 		};
-		entrega?: { modalidade?: "RETIRADA" | "ENTREGA" };
+		entrega?: { modalidade?: "RETIRADA" | "ENTREGA"; taxa?: number };
 	};
 };
 
@@ -39,6 +41,7 @@ type TShopItemMetadata = {
 	nome?: string;
 	codigo?: string;
 	imagemUrl?: string | null;
+	valorUnitarioBase?: number;
 };
 
 function hashPublicAccessToken(token: string) {
@@ -110,6 +113,7 @@ async function getPublicShopOrder({ input }: { input: TGetPublicShopOrderInput }
 					canal: true,
 				},
 				with: {
+					cliente: { columns: { nome: true, telefone: true } },
 					entregaLocalizacao: {
 						columns: {
 							localizacaoCep: true,
@@ -117,6 +121,8 @@ async function getPublicShopOrder({ input }: { input: TGetPublicShopOrderInput }
 							localizacaoCidade: true,
 							localizacaoBairro: true,
 							localizacaoLogradouro: true,
+							localizacaoNumero: true,
+							localizacaoComplemento: true,
 						},
 					},
 					itens: {
@@ -127,6 +133,7 @@ async function getPublicShopOrder({ input }: { input: TGetPublicShopOrderInput }
 							valorVendaTotalBruto: true,
 							valorTotalDesconto: true,
 							valorVendaTotalLiquido: true,
+							observacoes: true,
 							metadados: true,
 						},
 						with: {
@@ -139,6 +146,12 @@ async function getPublicShopOrder({ input }: { input: TGetPublicShopOrderInput }
 									quantidade: true,
 									valorUnitario: true,
 									valorTotal: true,
+								},
+								with: {
+									opcao: {
+										columns: {},
+										with: { produtoAddOn: { columns: { nome: true } } },
+									},
 								},
 							},
 						},
@@ -163,69 +176,130 @@ async function getPublicShopOrder({ input }: { input: TGetPublicShopOrderInput }
 	const sale = requestRecord.venda;
 	const metadata = sale.rascunhoMetadados as TShopDraftMetadata | null;
 	const shopMetadata = metadata?.shop;
+	const settings = await db.query.shopSettings.findFirst({
+		where: eq(shopSettings.organizacaoId, input.orgId),
+		columns: { configuracoes: true },
+	});
+	const configuration = normalizeShopSettingsConfiguration(settings?.configuracoes);
 	const cashbackAccumulated = sale.transacoesCashback
 		.filter((transaction) => transaction.tipo === "ACÚMULO" && transaction.status !== "EXPIRADO")
 		.reduce((sum, transaction) => sum + transaction.valor, 0);
 
+	const order = {
+		orderNumber: sale.id.slice(0, 8).toUpperCase(),
+		createdAt: shopMetadata?.criadoEm ?? sale.dataVenda?.toISOString() ?? null,
+		checkedAt: new Date().toISOString(),
+		status: sale.statusVenda,
+		statusAtendimento: sale.statusAtendimento,
+		deliveryMode: sale.entregaModalidade,
+		items: sale.itens.map((item) => {
+			const itemMetadata = item.metadados as TShopItemMetadata | null;
+			return {
+				id: item.id,
+				name: itemMetadata?.nome ?? item.produtoVariante?.nome ?? item.produto?.nome ?? "Produto",
+				imageUrl: itemMetadata?.imagemUrl ?? item.produtoVariante?.imagemCapaUrl ?? item.produto?.imagemCapaUrl ?? null,
+				quantity: item.quantidade,
+				unitPrice: item.valorVendaUnitario,
+				grossTotal: item.valorVendaTotalBruto,
+				discount: item.valorTotalDesconto,
+				total: item.valorVendaTotalLiquido,
+				modifiers: item.adicionais.map((modifier) => ({
+					id: modifier.id,
+					name: modifier.nome,
+					quantity: modifier.quantidade,
+					unitPrice: modifier.valorUnitario,
+					total: modifier.valorTotal,
+				})),
+			};
+		}),
+		subtotal: shopMetadata?.subtotalItens ?? sale.itens.reduce((sum, item) => sum + item.valorVendaTotalBruto, 0),
+		discount: sale.descontosTotal ?? 0,
+		coupon: shopMetadata?.cupom
+			? {
+					code: shopMetadata.cupom.codigo ?? null,
+					title: shopMetadata.cupom.titulo ?? null,
+					discount: shopMetadata.cupom.valorDesconto,
+				}
+			: null,
+		rewards: (shopMetadata?.recompensas ?? (shopMetadata?.recompensa ? [shopMetadata.recompensa] : [])).map((reward) => ({
+			title: reward.titulo,
+			points: reward.valor,
+			commercialValue: reward.valorVenda,
+			quantity: reward.quantidade ?? 1,
+			imageUrl: reward.imagemCapaUrl,
+		})),
+		additions: sale.acrescimosTotal ?? 0,
+		total: sale.valorTotal,
+		payment: {
+			method: shopMetadata?.pagamento?.metodo ?? null,
+			description: shopMetadata?.pagamento?.descricao ?? null,
+		},
+		deliveryAddress: maskDeliveryAddress(sale.entregaLocalizacao),
+		notes: sale.observacoes,
+		cashback: {
+			redeemed: shopMetadata?.cashbackResgateSolicitado ?? 0,
+			accumulated: cashbackAccumulated,
+		},
+	};
+
+	// A página pública mascara o endereço; a mensagem não, porque é a loja quem a recebe e precisa
+	// do endereço para entregar. Só quem tem o token (o próprio cliente) chega a esta resposta.
+	const rewardsDiscount = order.rewards.reduce((sum, reward) => sum + reward.commercialValue * reward.quantity, 0);
+	const location = sale.entregaLocalizacao;
+	const whatsappMessage = buildShopOrderWhatsappMessage({
+		organizationName: requestRecord.organizacao.nome,
+		orderNumber: order.orderNumber,
+		client: sale.cliente ? { nome: sale.cliente.nome, telefone: sale.cliente.telefone } : null,
+		deliveryMode: sale.entregaModalidade,
+		address: location
+			? {
+					logradouro: location.localizacaoLogradouro,
+					numero: location.localizacaoNumero,
+					complemento: location.localizacaoComplemento,
+					bairro: location.localizacaoBairro,
+					cidade: location.localizacaoCidade,
+					estado: location.localizacaoEstado,
+					cep: location.localizacaoCep,
+				}
+			: null,
+		paymentMethod: order.payment.method,
+		items: sale.itens.map((item) => {
+			const itemMetadata = item.metadados as TShopItemMetadata | null;
+			const modifiersTotal = item.adicionais.reduce((sum, modifier) => sum + modifier.valorTotal, 0);
+			return {
+				nome: itemMetadata?.nome ?? item.produtoVariante?.nome ?? item.produto?.nome ?? "Produto",
+				quantidade: item.quantidade,
+				valorUnitarioBase: itemMetadata?.valorUnitarioBase ?? item.valorVendaUnitario - modifiersTotal,
+				valorTotalBruto: item.valorVendaTotalBruto,
+				observacoes: item.observacoes,
+				adicionais: item.adicionais.map((modifier) => ({
+					nome: modifier.nome,
+					grupo: modifier.opcao?.produtoAddOn?.nome ?? null,
+					quantidade: modifier.quantidade,
+					valorUnitario: modifier.valorUnitario,
+					valorTotal: modifier.valorTotal,
+				})),
+			};
+		}),
+		subtotal: order.subtotal,
+		coupon: order.coupon ? { code: order.coupon.code, discount: order.coupon.discount } : null,
+		cashbackRedeemed: order.cashback.redeemed,
+		rewards: order.rewards.map((reward) => ({
+			title: reward.title,
+			value: reward.commercialValue * reward.quantity,
+		})),
+		otherDiscount: Math.max(0, order.discount - (order.coupon?.discount ?? 0) - order.cashback.redeemed - rewardsDiscount),
+		deliveryFee: shopMetadata?.entrega?.taxa ?? order.additions,
+		estimatedMinutes: sale.entregaModalidade === "ENTREGA" ? configuration.atendimento.entrega.prazoMinutos : configuration.operacao.preparoMinutos,
+		total: order.total,
+		notes: order.notes,
+	});
+
 	return {
 		data: {
-			order: {
-				orderNumber: sale.id.slice(0, 8).toUpperCase(),
-				createdAt: shopMetadata?.criadoEm ?? sale.dataVenda?.toISOString() ?? null,
-				checkedAt: new Date().toISOString(),
-				status: sale.statusVenda,
-				statusAtendimento: sale.statusAtendimento,
-				deliveryMode: sale.entregaModalidade,
-				items: sale.itens.map((item) => {
-					const itemMetadata = item.metadados as TShopItemMetadata | null;
-					return {
-						id: item.id,
-						name: itemMetadata?.nome ?? item.produtoVariante?.nome ?? item.produto?.nome ?? "Produto",
-						imageUrl: itemMetadata?.imagemUrl ?? item.produtoVariante?.imagemCapaUrl ?? item.produto?.imagemCapaUrl ?? null,
-						quantity: item.quantidade,
-						unitPrice: item.valorVendaUnitario,
-						grossTotal: item.valorVendaTotalBruto,
-						discount: item.valorTotalDesconto,
-						total: item.valorVendaTotalLiquido,
-						modifiers: item.adicionais.map((modifier) => ({
-							id: modifier.id,
-							name: modifier.nome,
-							quantity: modifier.quantidade,
-							unitPrice: modifier.valorUnitario,
-							total: modifier.valorTotal,
-						})),
-					};
-				}),
-				subtotal: shopMetadata?.subtotalItens ?? sale.itens.reduce((sum, item) => sum + item.valorVendaTotalBruto, 0),
-				discount: sale.descontosTotal ?? 0,
-				coupon: shopMetadata?.cupom
-					? {
-							code: shopMetadata.cupom.codigo ?? null,
-							title: shopMetadata.cupom.titulo ?? null,
-							discount: shopMetadata.cupom.valorDesconto,
-						}
-					: null,
-				rewards: (shopMetadata?.recompensas ?? (shopMetadata?.recompensa ? [shopMetadata.recompensa] : [])).map((reward) => ({
-					title: reward.titulo,
-					points: reward.valor,
-					commercialValue: reward.valorVenda,
-					quantity: reward.quantidade ?? 1,
-					imageUrl: reward.imagemCapaUrl,
-				})),
-				additions: sale.acrescimosTotal ?? 0,
-				total: sale.valorTotal,
-				payment: {
-					method: shopMetadata?.pagamento?.metodo ?? null,
-					description: shopMetadata?.pagamento?.descricao ?? null,
-				},
-				deliveryAddress: maskDeliveryAddress(sale.entregaLocalizacao),
-				notes: sale.observacoes,
-				cashback: {
-					redeemed: shopMetadata?.cashbackResgateSolicitado ?? 0,
-					accumulated: cashbackAccumulated,
-				},
-			},
+			order,
 			organization: requestRecord.organizacao,
+			whatsappUrl: buildWhatsappMessageUrl(requestRecord.organizacao.telefone, whatsappMessage),
 		},
 		message: "Pedido carregado com sucesso.",
 	};
