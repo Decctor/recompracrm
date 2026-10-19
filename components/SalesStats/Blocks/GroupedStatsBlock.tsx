@@ -142,7 +142,10 @@ function ResultsByItemGraph({ data }: { data: TGroupedSalesStats["porItem"] }) {
 			height={height}
 			width={width}
 			itemCount={list ? list.length : 0}
-			itemSize={(_index) => 30} // Adjust the item height as needed
+			// No celular o nome quebra em até duas linhas (a coluna do nome é estreita e o hover card que
+			// mostraria o nome completo não abre no toque), então a linha precisa de altura para isso.
+			key={isDesktop ? "desktop" : "mobile"}
+			itemSize={(_index) => (isDesktop ? 30 : 44)}
 			className="overflow-y-auto overscroll-y-auto scrollbar-thin scrollbar-track-primary/10 scrollbar-thumb-primary/30"
 		>
 			{({ index, style }) => {
@@ -153,10 +156,13 @@ function ResultsByItemGraph({ data }: { data: TGroupedSalesStats["porItem"] }) {
 						<HoverCard>
 							<HoverCardTrigger
 								render={
-									<div className={RANKING_ROW_CLASS}>
+									<div className={cn(RANKING_ROW_CLASS, "h-full")}>
 										<div className={RANKING_IDENTITY_CLASS}>
 											<span className={RANKING_POSITION_CLASS}>#{index + 1}</span>
-											<span className="min-w-0 truncate text-sm font-medium leading-none cursor-pointer" title={list[index].titulo}>
+											<span
+												className="min-w-0 line-clamp-2 break-words text-sm font-medium leading-tight cursor-pointer lg:line-clamp-1"
+												title={list[index].titulo}
+											>
 												{list[index].titulo}
 											</span>
 										</div>
