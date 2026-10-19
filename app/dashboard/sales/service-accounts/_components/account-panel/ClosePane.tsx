@@ -37,13 +37,12 @@ import { toast } from "sonner";
 import {
 	METHOD_META,
 	PaymentMethodPicker,
-	SalesSessionPicker,
 	formatInput,
 	likelyNotes,
 	parseInput,
 	roundCents,
-	useOpenSalesSessionSelection,
 } from "./payment-shared";
+import { SalesSessionPicker, useOpenSalesSessionSelection } from "@/components/CashSessions/SalesSessionPicker";
 import { ORDER_STATUS_META } from "./tab-meta";
 
 // ============================================================================

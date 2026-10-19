@@ -6,5 +6,6 @@ export { closeSalesSession } from "./close-sales-session";
 export { reviewSalesSession } from "./review-sales-session";
 export { registerSalesSessionMovement } from "./register-movement";
 export { registerRefundCashMovement } from "./register-refund-movement";
+export { resolveCashRefundSession } from "./resolve-cash-refund-session";
 export { isCashDrawerMethod } from "./session-method-lines";
 export type { TransactionClient } from "./types";

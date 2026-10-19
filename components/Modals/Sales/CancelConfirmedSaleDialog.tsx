@@ -1,5 +1,6 @@
 "use client";
 
+import { SalesSessionPicker, useOpenSalesSessionSelection } from "@/components/CashSessions/SalesSessionPicker";
 import { LoadingButton } from "@/components/loading-button";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -22,6 +23,8 @@ type CancelConfirmedSaleDialogProps = {
 	idExterno: string;
 	valorTotal: number;
 	clienteNome?: string | null;
+	// Venda recebida em dinheiro: o cancelamento devolve o valor por uma gaveta, então pede o caixa.
+	hasCashPayment: boolean;
 	// Documento fiscal vivo: o cancelamento da venda exige cancelar/inutilizar a nota primeiro.
 	exigeCancelamentoFiscal: boolean;
 	// Documentos da venda com a matriz de acoes: decide entre "cancele a nota" e "gere a devolucao".
@@ -40,6 +43,7 @@ export function CancelConfirmedSaleDialog({
 	idExterno,
 	valorTotal,
 	clienteNome,
+	hasCashPayment,
 	exigeCancelamentoFiscal,
 	documentosFiscais = [],
 	closeModal,
@@ -55,6 +59,9 @@ export function CancelConfirmedSaleDialog({
 	const queryClient = useQueryClient();
 	const [reason, setReason] = useState("");
 	const reasonIsValid = reason.trim().length >= 3;
+	// Sem escolha, o servidor usa o caixa onde o dinheiro entrou (se ainda aberto) ou o único aberto;
+	// com vários abertos e nenhum deles o de origem, ele recusa e pede a escolha feita aqui.
+	const { openSessions, sessaoVendaId, setSessaoVendaId, selectedSession } = useOpenSalesSessionSelection();
 
 	const { mutate: cancelSale, isPending } = useMutation({
 		mutationKey: ["cancel-confirmed-sale", saleId],
@@ -65,6 +72,7 @@ export function CancelConfirmedSaleDialog({
 				queryClient.invalidateQueries({ queryKey: ["sales-by-id", saleId] }),
 				queryClient.invalidateQueries({ queryKey: SALES_FULFILLMENT_QUERY_KEY }),
 				queryClient.invalidateQueries({ queryKey: ["sales-fulfillment-by-id", saleId] }),
+				queryClient.invalidateQueries({ queryKey: ["sales-session-by-id"] }),
 			]);
 			toast.success(data.message);
 			onSuccess?.();
@@ -146,6 +154,15 @@ export function CancelConfirmedSaleDialog({
 							onChange={(event) => setReason(event.target.value)}
 							disabled={isPending}
 						/>
+						{hasCashPayment && openSessions.length > 0 ? (
+							<SalesSessionPicker
+								openSessions={openSessions}
+								selectedSession={selectedSession}
+								onSelect={setSessaoVendaId}
+								required
+								label="Caixa que devolve o dinheiro"
+							/>
+						) : null}
 					</div>
 				)}
 
@@ -158,7 +175,7 @@ export function CancelConfirmedSaleDialog({
 							variant="destructive"
 							loading={isPending}
 							disabled={!reasonIsValid}
-							onClick={() => cancelSale({ id: saleId, reason: reason.trim() })}
+							onClick={() => cancelSale({ id: saleId, reason: reason.trim(), saleSessionId: hasCashPayment ? sessaoVendaId : null })}
 						>
 							CANCELAR VENDA E ESTORNAR
 						</LoadingButton>

@@ -1,7 +1,7 @@
 import { reverseSaleCashback } from "@/lib/cashback/reverse-sale-cashback";
 import { writeDefaultAccountingEntryLines } from "@/lib/finances/accounting-entry-lines";
 import { cancelCouponRedemption } from "@/lib/coupons/redemption";
-import { registerRefundCashMovement, resolveActiveSalesSession } from "@/lib/sales-sessions";
+import { registerRefundCashMovement, resolveCashRefundSession } from "@/lib/sales-sessions";
 import { saleFiscalDocumentsAllowCancellation } from "@/lib/sales/sale-editability";
 import { reverseSaleItemStock } from "@/lib/sales/sale-processing/reverse-sale-item-stock";
 import { applyStockMovement } from "@/lib/stock/apply-stock-movement";
@@ -30,7 +30,7 @@ export async function processConfirmedSaleCancellation({
 	saleId: string;
 	authorId: string;
 	reason: string;
-	// Sessão de venda atualmente aberta (informada pelo cliente). O estorno de dinheiro cai nela.
+	// Caixa escolhido por quem cancela. Opcional: sem ele, o servidor resolve (ver pickCashRefundSession).
 	sessaoVendaId?: string | null;
 }) {
 	const sale = await db.query.sales.findFirst({
@@ -54,17 +54,27 @@ export async function processConfirmedSaleCancellation({
 
 	// Estorno de gaveta: dinheiro efetivamente recebido nesta venda, líquido do troco já entregue
 	// (SAÍDA em DINHEIRO do próprio lançamento) — devolve-se ao cliente o que ele pagou de fato.
+	const cashTransactions = sale.lancamentosContabeis
+		.flatMap((entry) => entry.transacoesFinanceiras)
+		.filter((transaction) => transaction.metodo === "DINHEIRO" && transaction.dataEfetivacao);
 	const cashEfetivado = Math.max(
 		0,
-		sale.lancamentosContabeis
-			.flatMap((entry) => entry.transacoesFinanceiras)
-			.filter((transaction) => transaction.metodo === "DINHEIRO" && transaction.dataEfetivacao)
-			.reduce((acc, transaction) => acc + (transaction.tipo === "SAIDA" ? -transaction.valor : transaction.valor), 0),
+		cashTransactions.reduce((acc, transaction) => acc + (transaction.tipo === "SAIDA" ? -transaction.valor : transaction.valor), 0),
 	);
-	// A sessão é uma lente: o estorno cai sempre na sessão atualmente aberta, nunca na original (imutável).
-	const activeSession = sessaoVendaId ? await resolveActiveSalesSession({ orgId: organizationId, sessaoVendaId }) : null;
+	const cashOriginSessionIds = [
+		...new Set(cashTransactions.filter((transaction) => transaction.tipo === "ENTRADA").map((transaction) => transaction.sessaoVendaId)),
+	].filter((id): id is string => id != null);
 
 	await db.transaction(async (tx) => {
+		// Resolvida antes de qualquer escrita: sem caixa para devolver o dinheiro, nada é cancelado.
+		const activeSession = await resolveCashRefundSession({
+			tx,
+			orgId: organizationId,
+			cashToRefund: cashEfetivado,
+			requestedSessionId: sessaoVendaId,
+			originSessionIds: cashOriginSessionIds,
+		});
+
 		if (sale.clienteId) {
 			await reverseSaleCashback({ tx, saleId, clientId: sale.clienteId, organizationId, reason });
 		}
@@ -128,7 +138,7 @@ export async function processConfirmedSaleCancellation({
 					sessaoVendaId: activeSession.id,
 					lancamentoContabilId: reversalEntry.id,
 					valorDinheiro: cashEfetivado,
-					contaFinanceiraId: activeSession.contaFinanceiraId ?? null,
+					contaFinanceiraId: activeSession.contaFinanceiraId,
 					autorId: authorId,
 					titulo: `ESTORNO DINHEIRO - ${originalEntry.titulo}`,
 				});

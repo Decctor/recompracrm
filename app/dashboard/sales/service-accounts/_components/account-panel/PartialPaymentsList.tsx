@@ -9,7 +9,8 @@ import { useMutation } from "@tanstack/react-query";
 import { HandCoins, Undo2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { METHOD_META, SalesSessionPicker, useOpenSalesSessionSelection } from "./payment-shared";
+import { METHOD_META } from "./payment-shared";
+import { SalesSessionPicker, useOpenSalesSessionSelection } from "@/components/CashSessions/SalesSessionPicker";
 
 // ============================================================================
 // Recebidos da conta: "Joao · Pix · R$ 62,00 · 21:14 · por Ana". Estorno inline

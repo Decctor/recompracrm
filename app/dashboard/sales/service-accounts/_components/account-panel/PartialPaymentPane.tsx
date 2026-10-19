@@ -14,13 +14,12 @@ import { useState } from "react";
 import { toast } from "sonner";
 import {
 	PaymentMethodPicker,
-	SalesSessionPicker,
 	formatInput,
 	likelyNotes,
 	parseInput,
 	roundCents,
-	useOpenSalesSessionSelection,
 } from "./payment-shared";
+import { SalesSessionPicker, useOpenSalesSessionSelection } from "@/components/CashSessions/SalesSessionPicker";
 
 // ============================================================================
 // Recebimento parcial: alguem da mesa vai embora antes e paga a parte dela. Por

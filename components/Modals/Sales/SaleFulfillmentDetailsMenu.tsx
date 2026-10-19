@@ -662,6 +662,7 @@ function SaleActionsFooter({
 					idExterno={sale.idExterno}
 					valorTotal={sale.valorTotal}
 					clienteNome={sale.cliente?.nome}
+					hasCashPayment={sale.pagamentos.some((payment) => payment.metodo === "DINHEIRO")}
 					exigeCancelamentoFiscal={editability.cancelamentoExigeFiscal}
 					closeModal={() => setCancelDialogIsOpen(false)}
 				/>

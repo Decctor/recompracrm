@@ -1221,6 +1221,7 @@ function SaleCancelButton({ sale, userCanDeleteSales }: { sale: TGetSalesOutputB
 					idExterno={sale.idExterno}
 					valorTotal={sale.valorTotal}
 					clienteNome={sale.cliente?.nome}
+					hasCashPayment={!!sale.erp?.financeiro.pagamentos.some((payment) => payment.metodo === "DINHEIRO")}
 					exigeCancelamentoFiscal={editability.cancelamentoExigeFiscal}
 					documentosFiscais={sale.erp?.fiscal?.documentos ?? []}
 					closeModal={() => setCancelDialogIsOpen(false)}
