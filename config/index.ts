@@ -884,6 +884,11 @@ export const AppRoutes = [
 		description: "Visão operacional do estoque: saldo, movimentação e lotes ativos dos seus produtos.",
 	},
 	{
+		path: "/dashboard/inventory/reports",
+		title: "Relatórios de Estoque",
+		description: "Curva ABC, giro, reposição, estoque parado, custos, perdas e vencimentos do seu estoque.",
+	},
+	{
 		path: "/dashboard/inventory/lots",
 		title: "Lotes de Estoque",
 		description: "Painel de acompanhamento e gestão dos lotes de estoque do seu negócio.",

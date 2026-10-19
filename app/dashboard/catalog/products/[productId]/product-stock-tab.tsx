@@ -9,14 +9,39 @@ import GeneralPaginationComponent from "@/components/Utils/Pagination";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getErrorMessage } from "@/lib/errors";
+import type { TProductStockAnalytics } from "@/app/api/products/stock-analytics/route";
+import StatUnitCard from "@/components/Stats/StatUnitCard";
+import SegmentedControl from "@/components/Utils/SegmentedControl";
 import { formatDateAsLocale, formatDecimalPlaces } from "@/lib/formatting";
+import { appRoutes } from "@/lib/navigation/routes";
+import { type TProductStockAnalyticsPeriod, useProductStockAnalytics } from "@/lib/queries/product-stock-analytics";
+import { formatDayMonth, formatDays } from "@/lib/stock/analytics/format";
 import { useProductStockLots } from "@/lib/queries/product-stock-lots";
 import { useProductStockTransactions } from "@/lib/queries/product-stock-transactions";
 import { cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, ArrowLeftRight, Boxes, CalendarClock, CheckCheck, History, Layers, PackageX, Plus } from "lucide-react";
+import {
+	AlertTriangle,
+	ArrowLeftRight,
+	ArrowRight,
+	Boxes,
+	CalendarClock,
+	ChartPie,
+	CheckCheck,
+	History,
+	Layers,
+	PackageX,
+	Plus,
+	RefreshCw,
+	TrendingDown,
+} from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 import StockDeductionModeSection from "./_components/StockDeductionModeSection";
+import { AbcPositionCard } from "./_components/stock/abc-position-card";
+import { CostPriceChart } from "./_components/stock/cost-price-chart";
+import { ReorderPointCard } from "./_components/stock/reorder-point-card";
+import { StockEventChart } from "./_components/stock/stock-event-chart";
 
 type Product = NonNullable<TGetProductsOutput["data"]["byId"]>;
 
@@ -60,46 +85,161 @@ export default function ProductStockTab({ product, enabled = true }: ProductStoc
 		);
 	}
 
-	const saldo = product.quantidade ?? 0;
+	return <TrackedProductStock product={product} variantesRastreadas={variantesRastreadas} enabled={enabled} />;
+}
+
+const PERIOD_OPTIONS: { value: TProductStockAnalyticsPeriod; label: string }[] = [
+	{ value: 7, label: "7 dias" },
+	{ value: 30, label: "30 dias" },
+	{ value: 90, label: "90 dias" },
+];
+
+function TrackedProductStock({
+	product,
+	variantesRastreadas,
+	enabled,
+}: {
+	product: Product;
+	variantesRastreadas: NonNullable<Product["variantes"]>;
+	enabled: boolean;
+}) {
+	const [period, setPeriod] = useState<TProductStockAnalyticsPeriod>(30);
+	const { data: analytics, isLoading, error } = useProductStockAnalytics({ productId: product.id, period, enabled });
+	// O saldo do painel soma produto e variantes rastreadas; enquanto carrega, o do próprio produto.
+	const saldo = analytics?.produto.saldo ?? product.quantidade ?? 0;
 
 	return (
-		<div className="flex w-full flex-col gap-4">
-			<StockDeductionModeSection productId={product.id} baixaEstoqueModo={product.baixaEstoqueModo} fichaTecnicaReceitaId={product.fichaTecnicaReceitaId} />
-			{/* Saldo atual — produto e, quando houver, cada variante rastreada */}
-			<div className="flex items-center justify-start gap-3">
-				<div className="flex items-center gap-1.5">
-					<Boxes className="h-4 w-4 min-h-4 min-w-4" />
-					<span className="text-xs font-bold uppercase tracking-wide">SALDO ATUAL</span>
-				</div>
-				<span className={cn("inline-flex w-fit items-center gap-1.5 rounded-lg px-2.5 py-1 text-lg font-bold tabular-nums", getSaldoTone(saldo))}>
-					<Boxes className="h-4 w-4 min-h-4 min-w-4" />
-					{formatDecimalPlaces(saldo)} {product.unidade}
-				</span>
-
-				{variantesRastreadas.length > 0 ? (
-					<div className="border-border grid grid-cols-2 gap-2 border-t pt-3 sm:grid-cols-3 lg:grid-cols-4">
-						{variantesRastreadas.map((variante) => {
-							const varianteSaldo = variante.quantidade ?? 0;
-							return (
-								<div key={variante.id} className="border-border flex flex-col gap-1 rounded-lg border px-2.5 py-2">
-									<span className="truncate text-xs font-bold tracking-tight" title={variante.nome}>
-										{variante.nome}
-									</span>
-									<span
-										className={cn("inline-flex w-fit items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-bold tabular-nums", getSaldoTone(varianteSaldo))}
-									>
-										{formatDecimalPlaces(varianteSaldo)} {product.unidade}
-									</span>
-								</div>
-							);
-						})}
+		<div className="flex w-full flex-col gap-4 text-sm">
+			<div className="flex flex-wrap items-center justify-between gap-3">
+				<div className="flex items-center gap-3">
+					<div className="flex items-center gap-1.5">
+						<Boxes className="h-4 w-4 min-h-4 min-w-4" />
+						<span className="text-xs font-bold uppercase tracking-wide">SALDO ATUAL</span>
 					</div>
-				) : null}
+					<span className={cn("inline-flex w-fit items-center gap-1.5 rounded-lg px-2.5 py-1 text-lg font-bold tabular-nums", getSaldoTone(saldo))}>
+						<Boxes className="h-4 w-4 min-h-4 min-w-4" />
+						{formatDecimalPlaces(saldo)} {product.unidade}
+					</span>
+				</div>
+				<SegmentedControl aria-label="Período da análise de estoque" value={period} onChange={setPeriod} options={PERIOD_OPTIONS} />
 			</div>
 
+			{variantesRastreadas.length > 0 ? (
+				<div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+					{variantesRastreadas.map((variante) => {
+						const varianteSaldo = variante.quantidade ?? 0;
+						return (
+							<div key={variante.id} className="border-border flex flex-col gap-1 rounded-lg border px-2.5 py-2">
+								<span className="truncate text-xs font-bold tracking-tight" title={variante.nome}>
+									{variante.nome}
+								</span>
+								<span
+									className={cn("inline-flex w-fit items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-bold tabular-nums", getSaldoTone(varianteSaldo))}
+								>
+									{formatDecimalPlaces(varianteSaldo)} {product.unidade}
+								</span>
+							</div>
+						);
+					})}
+				</div>
+			) : null}
+
+			{isLoading ? (
+				<div className="flex flex-col gap-4">
+					<div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+						{Array.from({ length: 4 }).map((_, index) => (
+							<Skeleton key={index} className="h-[88px] w-full rounded-xl" />
+						))}
+					</div>
+					<Skeleton className="h-[420px] w-full rounded-xl" />
+				</div>
+			) : null}
+			{error ? <ErrorComponent msg={getErrorMessage(error)} /> : null}
+			{analytics ? <StockAnalyticsOverview analytics={analytics} period={period} /> : null}
+
+			<CostPriceChart productId={product.id} unit={product.unidade} enabled={enabled} />
 			<ProductLotsSection productId={product.id} />
 			<ProductTransactionsSection product={product} enabled={enabled} />
+			{/* Configuração, não análise: fica no fim da aba. */}
+			<StockDeductionModeSection
+				productId={product.id}
+				baixaEstoqueModo={product.baixaEstoqueModo}
+				fichaTecnicaReceitaId={product.fichaTecnicaReceitaId}
+			/>
 		</div>
+	);
+}
+
+function StockAnalyticsOverview({ analytics, period }: { analytics: TProductStockAnalytics; period: TProductStockAnalyticsPeriod }) {
+	const { kpis, reposicao, abc, produto } = analytics;
+	const unit = produto.unidade.toLowerCase();
+	const periodLabel = `${period} dias`;
+	const perDay = (value: number) => `${formatDecimalPlaces(value, 0, 1)}/dia`;
+
+	return (
+		<>
+			{reposicao.abaixoPontoPedido ? (
+				<div className="border-warning/40 bg-warning-surface text-warning-surface-foreground flex w-full items-center gap-2.5 rounded-xl border p-3">
+					<AlertTriangle className="size-4 shrink-0" />
+					<p className="flex-1 text-pretty text-xs font-medium">
+						Saldo abaixo do ponto de pedido ({formatDecimalPlaces(reposicao.pontoPedido)} {unit}). No ritmo atual de{" "}
+						{formatDecimalPlaces(kpis.consumoMedioDia, 0, 1)} {unit}
+						/dia, o estoque zera em cerca de {formatDecimalPlaces(kpis.coberturaDias ?? 0, 0, 0)} dias
+						{reposicao.rupturaPrevista != null ? `, por volta de ${formatDayMonth(reposicao.rupturaPrevista)}` : ""}. Sugestão de compra:{" "}
+						<b>
+							{formatDecimalPlaces(reposicao.sugestao)} {unit}
+						</b>
+						.
+					</p>
+					<Link href={appRoutes.newPurchase()} className="flex items-center gap-1 whitespace-nowrap text-xs font-bold">
+						NOVA COMPRA
+						<ArrowRight className="size-3.5" />
+					</Link>
+				</div>
+			) : null}
+
+			<div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+				<StatUnitCard
+					variant="horizontal"
+					title="Cobertura"
+					subtitle="Saldo atual ÷ consumo médio diário"
+					icon={<CalendarClock />}
+					current={{ value: kpis.coberturaDias ?? 0, format: () => formatDays(kpis.coberturaDias, { cap: 365 }) }}
+				/>
+				<StatUnitCard
+					variant="horizontal"
+					title="Consumo médio"
+					subtitle="Saídas dos últimos 30 dias, sem vendas atípicas"
+					icon={<TrendingDown />}
+					current={{ value: kpis.consumoMedioDia, format: perDay }}
+					previous={{ value: kpis.consumoMedioAnterior, format: (value) => `${formatDecimalPlaces(value, 0, 1)} ${unit}/dia` }}
+					previousLabel="NOS 30 DIAS ANTERIORES"
+				/>
+				<StatUnitCard
+					variant="horizontal"
+					title={`Giro (${periodLabel})`}
+					subtitle="Saídas no período ÷ saldo médio"
+					icon={<RefreshCw />}
+					current={{ value: kpis.giro ?? 0, format: () => (kpis.giro != null ? `${formatDecimalPlaces(kpis.giro, 0, 1)}×` : "—") }}
+				/>
+				<StatUnitCard
+					variant="horizontal"
+					title="Classe ABC"
+					subtitle={
+						abc.posicao != null && abc.faturamento > 0 ? `${abc.posicao}º de ${abc.totalProdutos} em faturamento` : `Sem vendas nos últimos ${periodLabel}`
+					}
+					icon={<ChartPie />}
+					current={{ value: 0, format: () => abc.classe }}
+				/>
+			</div>
+
+			<StockEventChart analytics={analytics} />
+
+			<div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+				<ReorderPointCard analytics={analytics} />
+				<AbcPositionCard analytics={analytics} periodLabel={periodLabel} />
+			</div>
+		</>
 	);
 }
 
@@ -256,6 +396,8 @@ function ProductTransactionsSection({ product, enabled }: { product: Product; en
 							queryClient.invalidateQueries({ queryKey: ["product-stock-transactions"] });
 							queryClient.invalidateQueries({ queryKey: ["product-stock-lots"] });
 							queryClient.invalidateQueries({ queryKey: ["product-by-id", product.id] });
+							queryClient.invalidateQueries({ queryKey: ["product-stock-analytics", product.id] });
+							queryClient.invalidateQueries({ queryKey: ["product-price-cost-history", product.id] });
 						},
 					}}
 				/>

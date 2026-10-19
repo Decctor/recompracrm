@@ -9,6 +9,7 @@ import type { TDashboardCapability } from "@/lib/access/capabilities";
 import { StoreCreditOverdueSidebarBadge } from "@/components/Finances/StoreCreditOverdueSidebarBadge";
 import { FiscalPendingSidebarBadge } from "@/components/Fiscal/FiscalPendingSidebarBadge";
 import { SalesOrdersPendingSidebarBadge } from "@/components/Sales/SalesOrdersPendingSidebarBadge";
+import { SidebarNewBadge } from "@/components/Sidebar/SidebarNewBadge";
 import { filterNavigationItems } from "@/lib/access/navigation";
 import {
 	ArrowRightLeft,
@@ -223,6 +224,15 @@ export const AppSidebarConfig: TSidebarConfigItemWithAccess[] = [
 						title: "Visão geral",
 						url: appRoutes.inventory.root(),
 						icon: <TrendingUp className="size-4" />,
+						items: null,
+					},
+					{
+						id: "inventory-reports",
+						capability: "inventory",
+						title: "Relatórios",
+						url: appRoutes.inventory.reports(),
+						icon: <ChartNoAxesColumnIncreasing className="size-4" />,
+						badge: <SidebarNewBadge />,
 						items: null,
 					},
 					{
