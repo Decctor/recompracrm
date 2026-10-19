@@ -21,6 +21,19 @@ export const DESKTOP_AGENT_ACCESS_SCOPES: TAccessScopeEnum[] = [
 	"desktop-agent:print-jobs:update",
 ];
 
+// Scopes do terminal de pagamento (RecompraCRM POS em SmartPOS). Fluxo B: lista as cobranças
+// atribuídas, executa e reporta. Fluxo A: catálogo, cliente e criação da venda no terminal.
+export const PAYMENT_TERMINAL_ACCESS_SCOPES: TAccessScopeEnum[] = [
+	"payment-terminal:configuration:read",
+	"payment-terminal:charges:read",
+	"payment-terminal:attempts:read",
+	"payment-terminal:attempts:complete",
+	"payment-terminal:catalog:read",
+	"payment-terminal:clients:read",
+	"payment-terminal:clients:create",
+	"payment-terminal:sales:create",
+];
+
 // Scopes de leitura dos agentes de IA (MCP). `agent:clients:pii` fica de fora do teto padrão:
 // é o único que expõe contato de cliente, e um cliente MCP genérico não deveria poder pedi-lo —
 // quando um agente precisar, o teto daquela aplicação é ampliado explicitamente.
@@ -79,6 +92,14 @@ export const NATIVE_ACCESS_CLIENTS: TNativeAccessClientDefinition[] = [
 		nome: "Agente desktop local (periféricos)",
 		categoria: "NATIVO_DESKTOP",
 		escoposPermitidos: DESKTOP_AGENT_ACCESS_SCOPES,
+	},
+	// Um principal DISPOSITIVO por terminal instalado. A organização e o dispositivo de toda
+	// cobrança derivam da credencial — o terminal nunca informa a quem pertence.
+	{
+		codigo: "RECOMPRA_PAYMENT_TERMINAL",
+		nome: "Terminal de pagamento (SmartPOS)",
+		categoria: "TERMINAL_PAGAMENTO",
+		escoposPermitidos: PAYMENT_TERMINAL_ACCESS_SCOPES,
 	},
 	// Um cliente por aplicação de IA, e não um "MCP" genérico: é o que permite revogar o Claude
 	// de uma organização sem derrubar o ChatGPT, e o que faz a auditoria dizer quem consultou.

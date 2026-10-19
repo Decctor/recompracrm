@@ -8,7 +8,7 @@ import { copyToClipboard } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { useMutation } from "@tanstack/react-query";
 import dayjs from "dayjs";
-import { AppWindow, Check, Copy, Monitor, TabletSmartphone, TriangleAlert } from "lucide-react";
+import { AppWindow, Check, Copy, CreditCard, Monitor, TabletSmartphone, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -34,6 +34,13 @@ const ENROLLABLE_CLIENTS = [
 		descricao: "Aplicativo desktop para controle de periféricos da loja (impressoras etc.).",
 		permissoesDescricao: "apenas as permissões do agente desktop (periféricos)",
 		icon: Monitor,
+	},
+	{
+		codigo: "RECOMPRA_PAYMENT_TERMINAL",
+		titulo: "Maquininha (SmartPOS)",
+		descricao: "Terminal de pagamento com o aplicativo RecompraCRM POS instalado.",
+		permissoesDescricao: "apenas as permissões do terminal de pagamento (cobranças atribuídas)",
+		icon: CreditCard,
 	},
 ] as const;
 

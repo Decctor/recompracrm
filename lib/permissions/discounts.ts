@@ -15,6 +15,13 @@ export type TDiscountAuthority = {
 
 export type TDiscountEvaluation = "PERMITIDO" | "REQUER_APROVACAO";
 
+/**
+ * Autoridade de quem vende sem sessão humana (a maquininha, como dispositivo): nenhum desconto é
+ * liberado pela identidade, e qualquer desconto exige aprovação de um gestor — a menos que o
+ * vendedor escolhido tenha membership com teto próprio.
+ */
+export const DEVICE_DISCOUNT_AUTHORITY: TDiscountAuthority = { aplicar: false, limiteTipo: null, limiteValor: null, aprovar: false };
+
 // Mesma tolerância de centavos do recálculo de venda (não importada para manter o módulo puro/client-safe).
 const DISCOUNT_CENT_TOLERANCE = 0.01;
 

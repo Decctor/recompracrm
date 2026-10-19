@@ -12,26 +12,41 @@ import { InteractiveInput } from "@/components/ui/interactive-input";
 import { Input } from "@/components/ui/input";
 import { formatDateAsLocale, formatDateOnInputChange } from "@/lib/formatting";
 import { getPaymentInstallmentsOptions } from "@/lib/payments/defaults";
-import { getTodayDateInputValue } from "@/lib/payments/schemas";
+import { getTodayDateInputValue, isPaymentTerminalMethod } from "@/lib/payments/schemas";
+import { type TPaymentTerminalListItem, usePaymentTerminals } from "@/lib/queries/payment-terminals";
 import { formatToMoney } from "@/lib/formatting";
 import type { ClassifiedPayment } from "@/lib/sales/utils";
 import type { TUseSaleState } from "@/state-hooks/use-sale-state";
 import { SalePaymentMethodsOptions } from "@/utils/select-options";
 import { CalendarClock, Check, CheckCheck, Clock, Landmark, Plus, Wallet, X } from "lucide-react";
 import { useMemo } from "react";
+import TerminalPicker from "./TerminalPicker";
 
 type PaymentsSectionProps = {
 	saleState: TUseSaleState;
 	// Modo edição: transações já efetivadas, exibidas travadas — nunca entram nos splits editáveis.
 	pagamentosEfetivados?: Pick<ClassifiedPayment, "id" | "metodo" | "valor" | "parcela" | "totalParcelas">[];
+	// Cobrança na maquininha só nasce na confirmação (não na edição de venda confirmada).
+	allowTerminal?: boolean;
 };
 
 type PaymentCardProps = {
 	saleState: TUseSaleState;
 	payment: TUseSaleState["state"]["pagamentos"][number];
+	terminals: TPaymentTerminalListItem[];
 };
 
-function PaymentCard({ saleState, payment }: PaymentCardProps) {
+// Regra do MVP (docs/10, decisão 4): um único pagamento em cartão cobrindo o total. O motivo
+// aparece no próprio botão em vez de sumir com ele — o operador entende o que precisa mudar.
+function resolveTerminalBlockedReason(saleState: TUseSaleState, payment: PaymentCardProps["payment"]): string | null {
+	if (!isPaymentTerminalMethod(payment.metodo)) return "A maquininha só cobra cartão de débito ou crédito.";
+	if (saleState.state.pagamentos.length > 1) return "A maquininha exige um único pagamento cobrindo o total da venda.";
+	if (saleState.state.pagamentosEfetivadosTotal > 0) return "A maquininha não cobra vendas com pagamentos já recebidos.";
+	if (Math.abs(payment.valor - saleState.valorAposEfetivados) > 0.01) return "O pagamento na maquininha precisa cobrir exatamente o total da venda.";
+	return null;
+}
+
+function PaymentCard({ saleState, payment, terminals }: PaymentCardProps) {
 	const paymentMethodConfig = saleState.organizationPaymentMethodsConfig[payment.metodo];
 	const selectedMethod = SalePaymentMethodsOptions.find((method) => method.value === payment.metodo);
 	const selectedForecastDate = payment.dataPrevisao ? new Date(payment.dataPrevisao) : undefined;
@@ -43,6 +58,9 @@ function PaymentCard({ saleState, payment }: PaymentCardProps) {
 	const accountOptions = saleState.organizationFinancialAccounts;
 	const shouldShowAccount = (paymentMethodConfig?.contaFinanceiraEditavel ?? false) && accountOptions.length > 0;
 	const selectedAccount = accountOptions.find((account) => account.id === payment.contaFinanceiraId);
+	const terminalBlockedReason = terminals.length > 0 ? resolveTerminalBlockedReason(saleState, payment) : null;
+	const shouldShowTerminal = terminals.length > 0 && (isPaymentTerminalMethod(payment.metodo) || !!payment.dispositivoId);
+	const isTerminalCharge = !!payment.dispositivoId;
 	return (
 		<div className="w-full flex flex-col gap-2 rounded-lg border px-2 py-2">
 			<div className="flex items-center gap-1.5 justify-between">
@@ -131,9 +149,17 @@ function PaymentCard({ saleState, payment }: PaymentCardProps) {
 				</div>
 			</div>
 
-			{shouldShowAccount || shouldShowInstallments || payment.efetivacaoTipo === "PENDENTE" ? (
+			{shouldShowAccount || shouldShowInstallments || shouldShowTerminal || payment.efetivacaoTipo === "PENDENTE" ? (
 				<div className="w-full flex flex-wrap justify-end items-center gap-x-3 gap-y-1">
 					{/* Ordem do modificador mais estrutural para o mais temporal: onde cai → como divide → quando entra. */}
+					{shouldShowTerminal ? (
+						<TerminalPicker
+							terminals={terminals}
+							value={payment.dispositivoId}
+							blockedReason={terminalBlockedReason}
+							onChange={(dispositivoId) => saleState.updatePagamento(payment.id, { dispositivoId })}
+						/>
+					) : null}
 					{shouldShowAccount ? (
 						<DropdownMenu>
 							<DropdownMenuTrigger
@@ -190,7 +216,7 @@ function PaymentCard({ saleState, payment }: PaymentCardProps) {
 							</DropdownMenuContent>
 						</DropdownMenu>
 					) : null}
-					{payment.efetivacaoTipo === "PENDENTE" ? (
+					{payment.efetivacaoTipo === "PENDENTE" && !isTerminalCharge ? (
 						<InteractiveInput.Root>
 							<InteractiveInput.Trigger>
 								<Button type="button" variant="ghost" size="sm" className="h-8 gap-1.5 text-[0.7rem]">
@@ -216,10 +242,13 @@ function PaymentCard({ saleState, payment }: PaymentCardProps) {
 	);
 }
 
-export default function PaymentsSection({ saleState, pagamentosEfetivados }: PaymentsSectionProps) {
+export default function PaymentsSection({ saleState, pagamentosEfetivados, allowTerminal = true }: PaymentsSectionProps) {
 	const missingTotal = useMemo(() => saleState.valorRestante, [saleState.valorRestante]);
 	const supportedMethodOptions = SalePaymentMethodsOptions.filter((method) => saleState.organizationPaymentMethodsConfig[method.value]?.suportado);
 	const hasSettledPayments = (pagamentosEfetivados?.length ?? 0) > 0;
+	// Uma consulta por checkout; organização sem maquininha recebe lista vazia e nenhum controle novo.
+	const { data: terminals = [] } = usePaymentTerminals({ enabled: allowTerminal });
+	const hasTerminalCharge = saleState.state.pagamentos.some((payment) => payment.dispositivoId);
 
 	return (
 		<div className="bg-card border-border flex w-full flex-col gap-3 rounded-xl border px-3 py-3 shadow-2xs">
@@ -291,8 +320,13 @@ export default function PaymentsSection({ saleState, pagamentosEfetivados }: Pay
 			) : null}
 
 			{saleState.state.pagamentos.map((payment) => (
-				<PaymentCard key={payment.id} saleState={saleState} payment={payment} />
+				<PaymentCard key={payment.id} saleState={saleState} payment={payment} terminals={allowTerminal ? terminals : []} />
 			))}
+			{hasTerminalCharge ? (
+				<p className="text-[11px] text-muted-foreground">
+					A venda será confirmada e a cobrança enviada para a maquininha. O pagamento fica pendente até a aprovação no terminal.
+				</p>
+			) : null}
 		</div>
 	);
 }

@@ -22,7 +22,11 @@ export class LocalPaymentProvider implements IPaymentProvider {
 
 		for (const pagamento of input.pagamentos) {
 			const now = new Date();
-			const isInstallmentPayment = pagamento.metodo === "CARTAO_CREDITO" && (pagamento.totalParcelas ?? 1) > 1;
+			// Cobrança na maquininha: uma única transação PENDENTE, mesmo parcelada — a aprovação no
+			// terminal efetiva tudo de uma vez (lib/payment-attempts/consume.ts). Parcelas mensais
+			// no contas-a-receber são do crédito "a receber do emissor", não do terminal.
+			const isTerminalPayment = Boolean(pagamento.dispositivoId);
+			const isInstallmentPayment = !isTerminalPayment && pagamento.metodo === "CARTAO_CREDITO" && (pagamento.totalParcelas ?? 1) > 1;
 
 			if (isInstallmentPayment) {
 				const totalParcelas = pagamento.totalParcelas ?? 1;
@@ -69,8 +73,8 @@ export class LocalPaymentProvider implements IPaymentProvider {
 				continue;
 			}
 
-			const isImmediate = pagamento.efetivacaoTipo === "IMEDIATA";
-			const dataPrevisao = isImmediate ? now : resolveDate(pagamento.dataPrevisao, now);
+			const isImmediate = !isTerminalPayment && pagamento.efetivacaoTipo === "IMEDIATA";
+			const dataPrevisao = isImmediate || isTerminalPayment ? now : resolveDate(pagamento.dataPrevisao, now);
 			const dataEfetivacao = isImmediate ? now : null;
 			const provedorStatus = isImmediate ? "APROVADO" : "PENDENTE";
 

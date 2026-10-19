@@ -4,7 +4,7 @@ import type { TAccessScopeEnum } from "@/schemas/enums";
 // Quem abre a tela de dispositivos é o lojista: cada scope precisa dizer o que o aparelho passa a
 // conseguir fazer no balcão. Este catálogo é a única fonte desses rótulos.
 
-export type TAccessScopeGroup = "PONTO_DE_INTERACAO" | "AGENTE_DESKTOP" | "AGENTE_IA" | "PLATAFORMA" | "OUTROS";
+export type TAccessScopeGroup = "PONTO_DE_INTERACAO" | "AGENTE_DESKTOP" | "TERMINAL_PAGAMENTO" | "AGENTE_IA" | "PLATAFORMA" | "OUTROS";
 
 export type TAccessScopeDescriptor = {
 	label: string;
@@ -15,13 +15,14 @@ export type TAccessScopeDescriptor = {
 export const ACCESS_SCOPE_GROUP_LABELS: Record<TAccessScopeGroup, string> = {
 	PONTO_DE_INTERACAO: "Ponto de interação",
 	AGENTE_DESKTOP: "Agente desktop",
+	TERMINAL_PAGAMENTO: "Terminal de pagamento",
 	AGENTE_IA: "Agente de IA",
 	PLATAFORMA: "Plataforma (interno)",
 	OUTROS: "Outras permissões",
 };
 
 // Ordem de renderização dos grupos — estável, independente da ordem que os scopes chegam da API.
-export const ACCESS_SCOPE_GROUP_ORDER: TAccessScopeGroup[] = ["PONTO_DE_INTERACAO", "AGENTE_DESKTOP", "AGENTE_IA", "PLATAFORMA", "OUTROS"];
+export const ACCESS_SCOPE_GROUP_ORDER: TAccessScopeGroup[] = ["PONTO_DE_INTERACAO", "AGENTE_DESKTOP", "TERMINAL_PAGAMENTO", "AGENTE_IA", "PLATAFORMA", "OUTROS"];
 
 export const ACCESS_SCOPE_CATALOG: Record<TAccessScopeEnum, TAccessScopeDescriptor> = {
 	"poi:configuration:read": {
@@ -78,6 +79,46 @@ export const ACCESS_SCOPE_CATALOG: Record<TAccessScopeEnum, TAccessScopeDescript
 		label: "Confirmar impressões",
 		description: "Marcar cada trabalho como impresso ou reportar o erro que ocorreu.",
 		group: "AGENTE_DESKTOP",
+	},
+	"payment-terminal:configuration:read": {
+		label: "Ler a configuração do terminal",
+		description: "Carregar a adquirente, a versão mínima do aplicativo e as regras de cobrança da loja.",
+		group: "TERMINAL_PAGAMENTO",
+	},
+	"payment-terminal:charges:read": {
+		label: "Ver cobranças atribuídas",
+		description: "Listar as vendas confirmadas no PDV cuja cobrança foi enviada para esta maquininha.",
+		group: "TERMINAL_PAGAMENTO",
+	},
+	"payment-terminal:attempts:read": {
+		label: "Consultar o andamento de uma cobrança",
+		description: "Acompanhar se a cobrança foi aprovada, recusada ou ainda precisa de recuperação.",
+		group: "TERMINAL_PAGAMENTO",
+	},
+	"payment-terminal:attempts:complete": {
+		label: "Registrar o resultado da cobrança",
+		description: "Informar a aprovação ou recusa da maquininha para efetivar o pagamento da venda.",
+		group: "TERMINAL_PAGAMENTO",
+	},
+	"payment-terminal:catalog:read": {
+		label: "Ver o catálogo",
+		description: "Listar grupos, produtos e preços do canal PDV para montar uma venda na maquininha.",
+		group: "TERMINAL_PAGAMENTO",
+	},
+	"payment-terminal:clients:read": {
+		label: "Identificar clientes pelo telefone",
+		description: "Buscar o cliente pelo telefone e ver o saldo de cashback, os cupons e as recompensas disponíveis para a venda.",
+		group: "TERMINAL_PAGAMENTO",
+	},
+	"payment-terminal:clients:create": {
+		label: "Cadastrar clientes",
+		description: "Cadastrar o cliente no balcão (nome, telefone e consentimento de marketing) para vincular a venda e o cashback.",
+		group: "TERMINAL_PAGAMENTO",
+	},
+	"payment-terminal:sales:create": {
+		label: "Vender pela maquininha",
+		description: "Criar e confirmar a venda no terminal; o pagamento fica pendente até a aprovação do cartão.",
+		group: "TERMINAL_PAGAMENTO",
 	},
 	"agent:results:read": {
 		label: "Consultar resultados comerciais",

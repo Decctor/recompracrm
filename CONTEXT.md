@@ -77,3 +77,46 @@ Snapshot da origem documental de uma compra, como NF-e XML, PDF ou imagem. Prese
 ### Linha contábil (`accountingEntryLine`)
 
 Débito ou crédito imutável em uma conta contábil que participa de um lançamento. As linhas representam a classificação contábil efetiva e devem se balancear; chaves de modificadores de compra não são uma taxonomia paralela de linhas.
+
+## Pagamentos presenciais (terminal SmartPOS)
+
+### Tentativa de pagamento (`paymentAttempt`)
+
+Registro durável de uma única intenção de executar uma operação financeira externa (cobrança em
+terminal SmartPOS) com valor, método, provedor, venda e dispositivo imutáveis. No Fluxo B nasce no
+backend, dentro da própria transação que confirma a venda, vinculada à transação financeira
+pendente e atribuída a um dispositivo. Preserva o resultado observado, inclusive quando incerto,
+e só produz efeito financeiro ao ser consumida atomicamente. `payment_attempts` é a projeção
+autoritativa; `payment_attempt_events` é append-only para auditoria.
+
+### Evidência do terminal (`terminalEvidence`)
+
+Fato sanitizado observado pelo aplicativo após a execução no terminal: aprovação, recusa,
+cancelamento, ATK, ITK, código de autorização, PAN mascarado. Não é um comando nem um status
+interno: o backend valida a correlação (valor, parcelas, `order_id`) e deriva o estado da
+tentativa. Chaves fora da allowlist são descartadas antes de persistir.
+
+### Consumo da tentativa (`paymentAttemptConsumption`)
+
+Transição atômica que efetiva a transação financeira pendente vinculada a uma tentativa aprovada
+(seta `dataEfetivacao`, `provedorReferencia` e `tentativaPagamentoId`) e marca a tentativa como
+`CONSUMIDA` na mesma transação PostgreSQL. Uma tentativa consumida não pode ser reutilizada,
+reatribuída ou ter valor, método e parcelamento alterados.
+
+### Atribuição de dispositivo (`deviceAssignment`)
+
+Escolha, feita pelo operador do PDV web no bloco de pagamento, do terminal (principal
+`DISPOSITIVO` do cliente `RECOMPRA_PAYMENT_TERMINAL`) responsável por executar a cobrança de uma
+venda confirmada. A venda fica confirmada com transação financeira pendente de efetivação, o
+mesmo mecanismo de FIADO/BOLETO; a tentativa atribuída alimenta a listagem daquele dispositivo.
+A plataforma só cancela a tentativa em `CRIADA`.
+
+### Resultado incerto (`uncertainPaymentOutcome`)
+
+Estado em que a adquirente pode ter recebido ou aprovado a operação, mas o RecompraCRM não possui
+evidência conclusiva (callback perdido, valor divergente). Bloqueia nova cobrança automática e
+exige recuperação no terminal ou conciliação.
+
+### Ator da venda (`saleActor`)
+
+Quem cria e confirma uma venda de balcão: o operador logado no PDV web (`USER`) ou a maquininha, que vende com a credencial do dispositivo e sem sessão humana (`DEVICE`). Os dois passam pelo mesmo pipeline (`lib/sales/create-and-confirm-sale.ts`): preço pelo catálogo do canal PDV, regras de grupo dos adicionais, cupom, cashback, recompensas, caixa, troco e efetivação. O ator só decide autoria, o teto de desconto quando o vendedor não tem membership (o dispositivo não tem teto próprio: qualquer desconto exige aprovação remota de um gestor) e o override fiscal (o dispositivo não altera, herda o padrão da organização).

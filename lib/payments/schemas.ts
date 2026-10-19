@@ -1,4 +1,4 @@
-import { PaymentMethodEnum, type TDeliveryModeEnum } from "@/schemas/enums";
+import { PaymentMethodEnum, type TDeliveryModeEnum, type TPaymentMethodEnum } from "@/schemas/enums";
 import dayjs from "dayjs";
 import z from "zod";
 
@@ -22,6 +22,10 @@ export const CheckoutPaymentSplitSchema = z.object({
 	// Conta escolhida pelo operador. `null` significa "usar a conta padrão do método" — só vem
 	// preenchida quando o método tem contaFinanceiraEditavel.
 	contaFinanceiraId: z.string({ invalid_type_error: "Tipo não válido para a conta financeira." }).optional().nullable(),
+	// Terminal de pagamento (principal DISPOSITIVO do cliente RECOMPRA_PAYMENT_TERMINAL) que vai
+	// executar esta cobrança. Só para CARTAO_*; a venda é confirmada com a transação pendente e a
+	// aprovação na maquininha a efetiva (lib/payment-attempts).
+	dispositivoId: z.string({ invalid_type_error: "Tipo não válido para o terminal de pagamento." }).optional().nullable(),
 });
 
 export type TCheckoutPaymentSplit = z.infer<typeof CheckoutPaymentSplitSchema>;
@@ -40,7 +44,15 @@ export function getDefaultCheckoutPaymentSplit(overrides?: Partial<Omit<TCheckou
 		dataPrevisao: overrides?.dataPrevisao ?? getTodayDateInputValue(),
 		observacoes: overrides?.observacoes ?? null,
 		contaFinanceiraId: overrides?.contaFinanceiraId ?? null,
+		dispositivoId: overrides?.dispositivoId ?? null,
 	};
+}
+
+// Métodos que a maquininha executa (débito, crédito à vista e parcelado pelo lojista).
+export const PAYMENT_TERMINAL_METHODS = ["CARTAO_CREDITO", "CARTAO_DEBITO"] as const satisfies readonly TPaymentMethodEnum[];
+
+export function isPaymentTerminalMethod(metodo: TPaymentMethodEnum) {
+	return (PAYMENT_TERMINAL_METHODS as readonly TPaymentMethodEnum[]).includes(metodo);
 }
 
 type PaymentValidationContext = {
@@ -54,6 +66,7 @@ export function isInstallmentPayment(payment: Pick<TCheckoutPaymentSplit, "metod
 
 export function isCheckoutPaymentSplitValid(payment: TCheckoutPaymentSplit, context: PaymentValidationContext) {
 	if (!Number.isFinite(payment.valor) || payment.valor <= 0) return false;
+	if (payment.dispositivoId && !isPaymentTerminalMethod(payment.metodo)) return false;
 	if (payment.metodo === "A_DEFINIR" && payment.efetivacaoTipo !== "PENDENTE") return false;
 	if (payment.metodo === "FIADO_NOTA" && !context.hasLinkedClient) return false;
 	if ((payment.efetivacaoTipo === "PENDENTE" || payment.metodo === "FIADO_NOTA") && !payment.dataPrevisao) return false;

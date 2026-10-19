@@ -31,6 +31,7 @@ export async function computeSessionExpectedByMethod({
 			tipo: financialTransactions.tipo,
 			valor: financialTransactions.valor,
 			modificadoresMetadata: financialTransactions.modificadoresMetadata,
+			dataEfetivacao: financialTransactions.dataEfetivacao,
 		})
 		.from(financialTransactions)
 		.where(and(eq(financialTransactions.organizacaoId, orgId), eq(financialTransactions.sessaoVendaId, sessaoVendaId)));

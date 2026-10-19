@@ -1,6 +1,6 @@
 import { isActionApprovalExpired } from "@/lib/action-approvals";
 import type { TAuthUserSession } from "@/lib/authentication/types";
-import { evaluateDiscount, resolveDiscountAuthority, type TDiscountAuthority } from "@/lib/permissions/discounts";
+import { DEVICE_DISCOUNT_AUTHORITY, evaluateDiscount, resolveDiscountAuthority, type TDiscountAuthority } from "@/lib/permissions/discounts";
 import { SALE_PRICING_CENT_TOLERANCE, saleValuesDiverge } from "@/lib/sales/sale-pricing-validation";
 import { type DBTransaction, db } from "@/services/drizzle";
 import { actionApprovalRequests } from "@/services/drizzle/schema";
@@ -35,14 +35,17 @@ export function computeSaleAggregatedDiscount({ itens, descontosGerais, cupomRes
 	return { valorBase, descontoTotal: Math.max(0, descontosGerais) + descontoItens + cupomManual };
 }
 
-/** Resolve a autoridade de desconto da identidade avaliada (vendedor da venda ou sessão). */
+/**
+ * Resolve a autoridade de desconto da identidade avaliada: o vendedor da venda (via membership) e,
+ * na falta dele, a sessão humana. `session` nulo é o ator dispositivo (DEVICE_DISCOUNT_AUTHORITY).
+ */
 export async function resolveSaleDiscountAuthority({
 	orgId,
 	session,
 	vendedorId,
 }: {
 	orgId: string;
-	session: TAuthUserSession;
+	session: TAuthUserSession | null;
 	vendedorId: string | null | undefined;
 }): Promise<TDiscountAuthority> {
 	if (vendedorId) {
@@ -52,6 +55,7 @@ export async function resolveSaleDiscountAuthority({
 		});
 		if (membership) return resolveDiscountAuthority(membership.permissoes);
 	}
+	if (!session) return DEVICE_DISCOUNT_AUTHORITY;
 	return resolveDiscountAuthority(session.membership!.permissoes);
 }
 
@@ -64,13 +68,16 @@ export async function resolveSaleDiscountAuthority({
 export async function authorizeSaleDiscount({
 	orgId,
 	session,
+	deviceId = null,
 	vendedorId,
 	valorBase,
 	descontoTotal,
 	aprovacaoId,
 }: {
 	orgId: string;
-	session: TAuthUserSession;
+	session: TAuthUserSession | null;
+	/** Ator dispositivo (a maquininha): só consome aprovação pedida por ele mesmo. */
+	deviceId?: string | null;
 	vendedorId: string | null | undefined;
 	valorBase: number;
 	descontoTotal: number;
@@ -88,6 +95,10 @@ export async function authorizeSaleDiscount({
 	});
 	if (!approval || approval.tipo !== "VENDA_DESCONTO" || approval.payload.tipo !== "VENDA_DESCONTO") {
 		throw new createHttpError.Forbidden("Aprovação de desconto não encontrada para esta organização.");
+	}
+	// Aprovação pedida pela maquininha vale só para ela; a do PDV web, só para o PDV web.
+	if ((approval.solicitanteDispositivoId ?? null) !== (deviceId ?? null)) {
+		throw new createHttpError.Forbidden(deviceId ? "A aprovação de desconto foi pedida por outro terminal." : "A aprovação de desconto foi pedida por um terminal.");
 	}
 	if (approval.status !== "APROVADA") {
 		throw new createHttpError.Forbidden("A aprovação de desconto informada não está aprovada ou já foi utilizada.");

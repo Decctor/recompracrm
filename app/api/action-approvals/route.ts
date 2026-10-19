@@ -108,6 +108,7 @@ async function getActionApprovals({ input, session }: { input: TGetActionApprova
 			where: (fields, { and, eq }) => and(eq(fields.id, input.id as string), eq(fields.organizacaoId, orgId)),
 			with: {
 				solicitante: { columns: { id: true, nome: true } },
+				solicitanteDispositivo: { columns: { id: true, nome: true } },
 				decididaPor: { columns: { id: true, nome: true } },
 			},
 		});
@@ -158,6 +159,7 @@ async function getActionApprovals({ input, session }: { input: TGetActionApprova
 		},
 		with: {
 			solicitante: { columns: { id: true, nome: true } },
+			solicitanteDispositivo: { columns: { id: true, nome: true } },
 			decididaPor: { columns: { id: true, nome: true } },
 		},
 		orderBy: (fields, { desc }) => [desc(fields.dataInsercao)],

@@ -22,6 +22,8 @@ export type TSaleChangeablePayment = {
 	valor: number;
 	efetivacaoTipo?: "IMEDIATA" | "PENDENTE" | null;
 	totalParcelas?: number | null;
+	// Perna cobrada na maquininha: nasce PENDENTE só porque efetiva quando o terminal aprovar.
+	dispositivoId?: string | null;
 };
 
 export type TSaleChangeResolution = {
@@ -41,9 +43,13 @@ function round2(value: number) {
 
 /**
  * Só dinheiro recebido AGORA pode gerar troco. Previsto/fiado é dinheiro que ainda não entrou e o
- * cartão parcelado entra na agenda como PENDENTE mesmo com efetivação "imediata".
+ * cartão parcelado entra na agenda como PENDENTE mesmo com efetivação "imediata" — exceto a perna
+ * cobrada na maquininha, que acontece na hora (parcelada ou não).
  */
 export function isImmediateSalePayment(payment: TSaleChangeablePayment) {
+	// Cartão na maquininha é cobrado agora, com o cliente no balcão: não é "dinheiro que ainda vai
+	// entrar" e não impede o troco que sai do dinheiro recebido junto.
+	if (payment.dispositivoId) return true;
 	if ((payment.efetivacaoTipo ?? "IMEDIATA") !== "IMEDIATA") return false;
 	if (payment.metodo === "CARTAO_CREDITO" && (payment.totalParcelas ?? 1) > 1) return false;
 	return true;

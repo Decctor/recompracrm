@@ -5,6 +5,7 @@ import { fiscalOutboundDocuments, sales, salesSessionReconciliations, salesSessi
 import { and, eq, ne } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { computeSessionExpectedByMethod } from "./compute-session-expected-by-method";
+import { listSessionPaymentTerminalPendencies } from "./payment-terminal-pendencies";
 
 export async function closeSalesSession({
 	orgId,
@@ -42,6 +43,17 @@ export async function closeSalesSession({
 		if (bloquearComPendenciaFiscal && pendingFiscalDocuments.length > 0) {
 			throw new createHttpError.BadRequest(
 				`Existem ${pendingFiscalDocuments.length} documento(s) fiscal(is) pendente(s) nesta sessao. Resolva-os antes de fechar o caixa.`,
+			);
+		}
+
+		// Cobrança na maquininha ainda em andamento: o resultado chega em minutos e decide se o valor
+		// entra como recebido, vira recusa ou troca de método. Fechar agora congelaria um esperado que
+		// a tentativa pode desfazer. Incertas e recusadas com pagamento pendente só avisam.
+		const pendenciasMaquininha = await listSessionPaymentTerminalPendencies({ orgId, sessaoVendaId: input.sessaoVendaId, trx: tx });
+		const blockingTerminalCharges = pendenciasMaquininha.filter((pendency) => pendency.bloqueiaFechamento);
+		if (blockingTerminalCharges.length > 0) {
+			throw new createHttpError.Conflict(
+				`Existe${blockingTerminalCharges.length > 1 ? "m" : ""} ${blockingTerminalCharges.length} cobrança${blockingTerminalCharges.length > 1 ? "s" : ""} em andamento na maquininha neste caixa. Aguarde o resultado no terminal (ou cancele a cobrança no PDV) antes de fechar.`,
 			);
 		}
 
@@ -95,6 +107,7 @@ export async function closeSalesSession({
 			diferencaTotal,
 			conferencias: reconciliationRows,
 			pendenciasFiscais: pendingFiscalDocuments,
+			pendenciasMaquininha,
 		};
 	});
 }
