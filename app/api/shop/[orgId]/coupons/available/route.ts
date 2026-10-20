@@ -1,9 +1,8 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getAvailableCouponsForClient } from "@/lib/coupons/availability";
 import { type TCouponCartItem, evaluateCouponAgainstCart } from "@/lib/coupons/engine";
+import { countPreviousConfirmedPurchases } from "@/lib/coupons/purchase-history";
 import { db } from "@/services/drizzle";
-import { sales } from "@/services/drizzle/schema";
-import { and, count, eq } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import z from "zod";
@@ -17,10 +16,14 @@ const CartItemInputSchema = z.object({
 });
 
 const GetAvailableShopCouponsInputSchema = z.object({
-	clienteId: z.string({
-		required_error: "ID do cliente não informado.",
-		invalid_type_error: "Tipo não válido para o ID do cliente.",
-	}),
+	// Nulo = cliente ainda sem cadastro (telefone não encontrado); avaliado como cliente novo.
+	clienteId: z
+		.string({
+			required_error: "ID do cliente não informado.",
+			invalid_type_error: "Tipo não válido para o ID do cliente.",
+		})
+		.optional()
+		.nullable(),
 	itens: z.array(CartItemInputSchema).min(1, "Carrinho não informado."),
 	entregaModalidade: DeliveryModeEnum.optional().nullable(),
 });
@@ -39,13 +42,12 @@ async function getAvailableShopCoupons({ orgId, input }: { orgId: string; input:
 
 	const availableCoupons = await getAvailableCouponsForClient({
 		organizacaoId: orgId,
-		clienteId: input.clienteId,
+		clienteId: input.clienteId ?? null,
 		surface: "LOJA_DIGITAL",
 	});
-	const [purchaseHistory] = await db
-		.select({ total: count() })
-		.from(sales)
-		.where(and(eq(sales.clienteId, input.clienteId), eq(sales.organizacaoId, orgId), eq(sales.statusVenda, "CONFIRMADA")));
+	const previousConfirmedPurchases = input.clienteId
+		? await countPreviousConfirmedPurchases({ trx: db, organizacaoId: orgId, clienteId: input.clienteId })
+		: 0;
 
 	const productIds = [...new Set(input.itens.map((item) => item.produtoId))];
 	const productsResult = await db.query.products.findMany({
@@ -69,7 +71,7 @@ async function getAvailableShopCoupons({ orgId, input }: { orgId: string; input:
 						coupon,
 						targets: coupon.alvos,
 						cartItems,
-						context: { entregaModalidade: input.entregaModalidade ?? null, comprasAnterioresConfirmadas: purchaseHistory?.total ?? 0 },
+						context: { entregaModalidade: input.entregaModalidade ?? null, comprasAnterioresConfirmadas: previousConfirmedPurchases },
 					})
 				: null;
 		return {

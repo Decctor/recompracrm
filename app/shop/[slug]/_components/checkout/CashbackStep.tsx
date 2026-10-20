@@ -59,7 +59,10 @@ export default function CashbackStep({ onNext }: CashbackStepProps) {
 		entregaModalidade: delivery.modalidade,
 	});
 	const program = catalog.cashbackProgram;
-	const { descontoCashback: supportsCashbackDiscount, recompensas: supportsRewards } = getShopCashbackCapabilities(program);
+	const programCapabilities = getShopCashbackCapabilities(program);
+	// Cliente novo chega aqui só pelos cupons: sem cadastro não há saldo a usar nem a mostrar.
+	const supportsCashbackDiscount = !!customer.id && programCapabilities.descontoCashback;
+	const supportsRewards = !!customer.id && programCapabilities.recompensas;
 	// Sem a modalidade não há o que listar — a rota faria 4 queries para devolver lista vazia.
 	const { data: rewardsData, isLoading: isLoadingRewards } = useShopAvailableRewards({
 		orgId,
@@ -341,7 +344,6 @@ export default function CashbackStep({ onNext }: CashbackStepProps) {
 							<Loader2 className="size-4 animate-spin" /> Buscando cupons...
 						</div>
 					) : (
-						// Cliente sempre identificado aqui: a etapa de benefícios só existe com customer.id.
 						<div className="rounded-2xl border bg-card p-4 text-sm text-muted-foreground">Nenhum cupom disponível para este carrinho.</div>
 					)}
 				</section>

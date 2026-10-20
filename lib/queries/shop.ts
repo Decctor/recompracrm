@@ -249,16 +249,15 @@ export function useShopAvailableCoupons({
         fetchShopAvailableCoupons({
           orgId: debouncedInput.orgId,
           input: {
-            clienteId: debouncedInput.clienteId as string,
+            clienteId: debouncedInput.clienteId,
             itens: debouncedInput.itens,
             entregaModalidade: debouncedInput.entregaModalidade,
           },
         }),
+      // clienteId nulo é consulta válida (cliente novo): quem chama decide, via `enabled`, quando o
+      // telefone já foi conferido.
       enabled:
-        enabled &&
-        !!debouncedInput.orgId &&
-        !!debouncedInput.clienteId &&
-        debouncedInput.itens.length > 0,
+        enabled && !!debouncedInput.orgId && debouncedInput.itens.length > 0,
     }),
     queryKey,
   };

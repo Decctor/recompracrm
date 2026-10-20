@@ -70,12 +70,15 @@ export default function CheckoutSheet() {
 	);
 	// Fora do checkout a consulta fica dormente: cada mutação de carrinho durante a navegação do
 	// catálogo dispararia uma avaliação de cupons no servidor que o cliente talvez nunca veja.
+	// Telefone conferido sem cadastro (id nulo) é cliente novo: os cupons de primeira compra são
+	// justamente para ele. O cadastro só nasce no envio do pedido, que revalida o cupom.
+	const isCustomerIdentified = !!customer.id || !!customer.telefone;
 	const { data: availableCoupons, isLoading: isLoadingCoupons } = useShopAvailableCoupons({
 		orgId,
 		clienteId: customer.id ?? null,
 		itens: couponItems,
 		entregaModalidade: orderState.state.delivery.modalidade,
-		enabled: isCheckoutOpen,
+		enabled: isCheckoutOpen && isCustomerIdentified,
 	});
 	const program = catalog.cashbackProgram;
 	const appliedCoupon = orderState.state.coupon.resgate;
@@ -89,7 +92,7 @@ export default function CheckoutSheet() {
 			orderState.updateCoupon({ ...appliedCoupon, valorDesconto: freshCoupon.avaliacao.valorDesconto });
 		}
 	}, [appliedCoupon, availableCoupons, orderState.updateCoupon]);
-	const hasCouponBenefit = !!customer.id && (isLoadingCoupons || (availableCoupons?.length ?? 0) > 0 || !!orderState.state.coupon.resgate);
+	const hasCouponBenefit = isCustomerIdentified && (isLoadingCoupons || (availableCoupons?.length ?? 0) > 0 || !!orderState.state.coupon.resgate);
 	const { descontoCashback: supportsCashbackDiscount, recompensas: supportsRewards } = getShopCashbackCapabilities(program);
 	const benefitCapabilities = {
 		cupons: hasCouponBenefit,
