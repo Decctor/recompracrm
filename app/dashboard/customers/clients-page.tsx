@@ -1,6 +1,7 @@
 ﻿"use client";
 import { buildSalesIntegrationFilterOptions } from "@/components/Sales/sales-integration-filter-options";
 import ClientsGraphs from "@/components/Clients/ClientsGraphs";
+import ClientWhatsappButton from "@/components/Clients/ClientWhatsappButton";
 import { ClientReconciliationQueue } from "@/components/Clients/duplicates/ClientReconciliationQueue";
 import ClientsRanking from "@/components/Clients/ClientsRanking";
 import DateIntervalInput from "@/components/Inputs/DateIntervalInput";
@@ -682,6 +683,7 @@ function ClientPageCard({ client, handleEditClick }: ClientCardProps) {
 					<div className={cn("flex items-center gap-1")}>
 						<Phone className="w-4 h-4 min-w-4 min-h-4" />
 						<h1 className="py-0.5 text-center text-[0.65rem] font-medium italic">{client.telefone || "NÃO DEFINIDO"}</h1>
+						<ClientWhatsappButton telefone={client.telefone} className="size-5 min-w-5" />
 					</div>
 					{client.email ? (
 						<div className="flex items-center gap-1">

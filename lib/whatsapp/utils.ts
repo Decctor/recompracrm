@@ -41,3 +41,15 @@ export function sanitizeTemplateParameter(text: string): string {
 		.replace(/\s{4,}/g, "   ") // Replace 4 or more consecutive spaces with 3 spaces
 		.trim();
 }
+
+/**
+ * Builds a `wa.me` link that opens a chat with the given phone. Local Brazilian numbers
+ * (10-11 digits) get the 55 country code; anything shorter cannot be dialed and yields null.
+ */
+export function buildWhatsappChatUrl(phone: string | null | undefined, message?: string) {
+	const digits = phone?.replace(/[^0-9]/g, "") ?? "";
+	if (digits.length < 10) return null;
+	const internationalNumber = digits.length <= 11 ? `55${digits}` : digits;
+	const url = `https://wa.me/${internationalNumber}`;
+	return message ? `${url}?text=${encodeURIComponent(message)}` : url;
+}

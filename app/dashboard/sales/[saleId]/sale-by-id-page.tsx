@@ -2,6 +2,7 @@
 
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
 import { ClientDuplicatePill } from "@/components/Clients/duplicates/ClientDuplicatePill";
+import ClientWhatsappButton from "@/components/Clients/ClientWhatsappButton";
 import LoadingComponent from "@/components/Layouts/LoadingComponent";
 import { PageHeader } from "@/components/Layouts/PageHeader";
 import { CancelConfirmedSaleDialog } from "@/components/Modals/Sales/CancelConfirmedSaleDialog";
@@ -346,6 +347,7 @@ function ClientSection({ sale, canReconcile, canEditSales }: { sale: TGetSalesOu
 							<Phone className="w-4 h-4 text-muted-foreground" />
 							<h3 className="text-sm font-semibold tracking-tighter text-foreground/80">TELEFONE</h3>
 							<h3 className="text-sm font-semibold tracking-tight">{formatToPhone(client.telefone)}</h3>
+							<ClientWhatsappButton telefone={client.telefone} />
 						</div>
 					)}
 
