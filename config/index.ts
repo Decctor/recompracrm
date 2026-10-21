@@ -1,5 +1,6 @@
 import type { TOrganizationDefaults, TOrganizationConfiguration } from "@/schemas/organizations";
 import type { TUserPermissions } from "@/schemas/users";
+import { DEFAULT_SCALE_BARCODE_CONFIG } from "@/lib/pos/scale-barcode";
 import type { TOrganizationEntity } from "@/services/drizzle/schema";
 
 export const SESSION_COOKIE_NAME = "syncrono-session";
@@ -231,6 +232,7 @@ export const DEFAULT_ORGANIZATION_CONFIGURATION_PREFERENCES: TOrganizationConfig
 			DANFE_NFE: { habilitada: false, canais: [], copias: 1 },
 		},
 	},
+	balanca: DEFAULT_SCALE_BARCODE_CONFIG,
 };
 
 const DEFAULT_PAYMENT_METHOD_CONFIGURATION: TOrganizationConfiguration["defaults"]["pagamentos"]["metodos"]["DINHEIRO"] = {

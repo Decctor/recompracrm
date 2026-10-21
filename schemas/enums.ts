@@ -826,6 +826,14 @@ export const ProductContentUnitEnum = z.enum(["ML", "L", "G", "KG", "UN", "COMPR
 });
 export type TProductContentUnitEnum = z.infer<typeof ProductContentUnitEnum>;
 
+// O que a etiqueta da balança embute no código de barras (app-level: vive no jsonb de configuração
+// da organização). PRECO: total a pagar da pesagem; PESO: a quantidade pesada.
+export const ScaleBarcodeValueTypeEnum = z.enum(["PRECO", "PESO"], {
+	required_error: "Tipo de valor da etiqueta da balança não informado.",
+	invalid_type_error: "Tipo não válido para o tipo de valor da etiqueta da balança.",
+});
+export type TScaleBarcodeValueTypeEnum = z.infer<typeof ScaleBarcodeValueTypeEnum>;
+
 // Politicas de serviceSettings (apenas app-level, nao sao pgEnum: vivem no jsonb de configuracoes).
 // COMANDA_CADASTRADA: codigo obrigatorio e restrito as comandas fixas cadastradas (serviceCards).
 export const TabIdentificationModeEnum = z.enum(["AUTOMATICA", "CODIGO_MANUAL", "COMANDA_CADASTRADA"]);

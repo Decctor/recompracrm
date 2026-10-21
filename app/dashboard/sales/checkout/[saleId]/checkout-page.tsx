@@ -4,6 +4,7 @@ import BarcodeMatchPicker from "@/components/Modals/Sales/BarcodeMatchPicker";
 import type { TBuiltOrderItem } from "@/components/Products/ProductBuilderForm";
 import { usePOSBarcodeScan } from "@/lib/hooks/use-pos-barcode-scan";
 import type { TBarcodeScanResolution } from "@/lib/pos/barcode-scan-action";
+import { formatItemQuantity } from "@/lib/pos/scale-barcode";
 import { modifierPricesDiverge } from "@/lib/sales/sale-item-repricing";
 
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
@@ -373,12 +374,15 @@ export default function CheckoutPage({
 	// linha existente quando é o mesmo item; produto com escolhas pendentes abre o builder.
 	const pageRef = useRef<HTMLDivElement>(null);
 	const addItemOrIncrement = saleState.addItemOrIncrement;
+	const addItemLine = saleState.addItem;
 	const handleScannedItem = useCallback(
-		(item: TBuiltOrderItem) => {
-			addItemOrIncrement({ ...item, tempId: crypto.randomUUID() });
-			toast.success(`${item.nome} adicionado ao carrinho.`);
+		(item: TBuiltOrderItem, { scaleReading }: TBarcodeScanResolution) => {
+			// Cada etiqueta de balança é uma pesagem própria: linha nova, nunca soma na existente.
+			if (scaleReading) addItemLine({ ...item, tempId: crypto.randomUUID() });
+			else addItemOrIncrement({ ...item, tempId: crypto.randomUUID() });
+			toast.success(`${item.nome}${scaleReading ? ` (${formatItemQuantity(item.quantidade)})` : ""} adicionado ao carrinho.`);
 		},
-		[addItemOrIncrement],
+		[addItemOrIncrement, addItemLine],
 	);
 	const handleScannedBuilder = useCallback(({ product, variantId }: TBarcodeScanResolution) => {
 		setBuilderVariantId(variantId);

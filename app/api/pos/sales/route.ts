@@ -41,7 +41,7 @@ const CartItemInputSchema = z.object({
 	nome: z.string({ required_error: "Nome do item não informado." }),
 	codigo: z.string({ required_error: "Código do item não informado." }),
 	imagemUrl: z.string({ invalid_type_error: "Tipo não válido para URL da imagem." }).optional().nullable(),
-	quantidade: z.number({ required_error: "Quantidade não informada." }).min(1),
+	quantidade: z.number({ required_error: "Quantidade não informada." }).positive("Quantidade deve ser maior que zero."),
 	valorUnitarioBase: z.number({ required_error: "Valor unitário base não informado." }),
 	valorModificadores: z.number({ required_error: "Valor de modificadores não informado." }),
 	valorUnitarioFinal: z.number({ required_error: "Valor unitário final não informado." }),

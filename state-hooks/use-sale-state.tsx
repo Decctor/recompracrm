@@ -50,7 +50,7 @@ export const CartItemSchema = z.object({
 	imagemUrl: z.string({ invalid_type_error: "Tipo não válido para URL da imagem." }).optional().nullable(),
 	quantidade: z
 		.number({ required_error: "Quantidade não informada.", invalid_type_error: "Tipo não válido para quantidade." })
-		.min(1, { message: "Quantidade deve ser no mínimo 1." }),
+		.positive({ message: "Quantidade deve ser maior que zero." }),
 	valorUnitarioBase: z.number({
 		required_error: "Valor unitário base não informado.",
 		invalid_type_error: "Tipo não válido para valor unitário base.",
@@ -136,10 +136,7 @@ const SaleSuccessSchema = z
 		cashbackAcumulado: z.number().optional().nullable(),
 		// Cobrança enviada à maquininha: a venda está confirmada, mas o pagamento só efetiva quando
 		// o terminal aprovar. A tela de sucesso acompanha por polling.
-		tentativaPagamento: z
-			.object({ id: z.string(), dispositivoId: z.string(), dispositivoNome: z.string() })
-			.optional()
-			.nullable(),
+		tentativaPagamento: z.object({ id: z.string(), dispositivoId: z.string(), dispositivoNome: z.string() }).optional().nullable(),
 		fiscal: z
 			.object({
 				status: z.enum(["NAO_SOLICITADO", "SOLICITADO", "AGENDADO", "ERRO"]),
@@ -520,7 +517,7 @@ export const useSaleState = ({ initialState, organizationConfig, contasFinanceir
 							updates.dispositivoId !== undefined
 								? updates.dispositivoId
 								: isPaymentTerminalMethod(metodoAtualizado)
-									? payment.dispositivoId ?? null
+									? (payment.dispositivoId ?? null)
 									: null,
 						valor: typeof updates.valor === "number" ? Math.max(0, updates.valor) : payment.valor,
 					};

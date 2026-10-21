@@ -25,7 +25,7 @@ export const SaleCheckoutItemInputSchema = z.object({
 	nome: z.string({ required_error: "Nome do item não informado.", invalid_type_error: "Tipo não válido para nome do item." }),
 	codigo: z.string({ required_error: "Código do item não informado.", invalid_type_error: "Tipo não válido para código do item." }),
 	imagemUrl: z.string({ invalid_type_error: "Tipo não válido para URL da imagem." }).optional().nullable(),
-	quantidade: z.number({ required_error: "Quantidade não informada.", invalid_type_error: "Tipo não válido para quantidade." }).min(1),
+	quantidade: z.number({ required_error: "Quantidade não informada.", invalid_type_error: "Tipo não válido para quantidade." }).positive("Quantidade deve ser maior que zero."),
 	valorUnitarioBase: z.number({ required_error: "Valor unitário base não informado.", invalid_type_error: "Tipo não válido para valor unitário base." }),
 	valorModificadores: z.number({ required_error: "Valor de modificadores não informado.", invalid_type_error: "Tipo não válido para valor de modificadores." }),
 	valorUnitarioFinal: z.number({ required_error: "Valor unitário final não informado.", invalid_type_error: "Tipo não válido para valor unitário final." }),

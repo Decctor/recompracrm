@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { formatToMoney } from "@/lib/formatting";
+import { formatItemQuantity } from "@/lib/pos/scale-barcode";
 import type { TCartItem } from "@/state-hooks/use-sale-state";
 import { Minus, Plus, Trash2 } from "lucide-react";
 
@@ -40,22 +41,29 @@ export default function CartItemRow({ item, onUpdateQuantity, onRemove }: CartIt
 
 			{/* Quantity and Price */}
 			<div className="flex items-center justify-between">
-				{/* Quantity Stepper */}
-				<div className="flex items-center gap-2">
-					<Button
-						size="icon"
-						variant="outline"
-						className="h-7 w-7 rounded-lg"
-						onClick={() => onUpdateQuantity(item.tempId, item.quantidade - 1)}
-						disabled={item.quantidade <= 1}
-					>
-						<Minus className="w-3 h-3" />
-					</Button>
-					<span className="w-8 text-center font-bold text-sm">{item.quantidade}</span>
-					<Button size="icon" variant="outline" className="h-7 w-7 rounded-lg" onClick={() => onUpdateQuantity(item.tempId, item.quantidade + 1)}>
-						<Plus className="w-3 h-3" />
-					</Button>
-				</div>
+				{/* Pesagem (etiqueta de balança): a quantidade vem da etiqueta, sem stepper de unidade. */}
+				{!Number.isInteger(item.quantidade) ? (
+					<span className="text-sm font-bold tabular-nums">
+						{formatItemQuantity(item.quantidade)}{" "}
+						<span className="text-xs font-normal text-muted-foreground">× {formatToMoney(item.valorUnitarioFinal)}</span>
+					</span>
+				) : (
+					<div className="flex items-center gap-2">
+						<Button
+							size="icon"
+							variant="outline"
+							className="h-7 w-7 rounded-lg"
+							onClick={() => onUpdateQuantity(item.tempId, item.quantidade - 1)}
+							disabled={item.quantidade <= 1}
+						>
+							<Minus className="w-3 h-3" />
+						</Button>
+						<span className="w-8 text-center font-bold text-sm">{item.quantidade}</span>
+						<Button size="icon" variant="outline" className="h-7 w-7 rounded-lg" onClick={() => onUpdateQuantity(item.tempId, item.quantidade + 1)}>
+							<Plus className="w-3 h-3" />
+						</Button>
+					</div>
+				)}
 
 				{/* Line Total */}
 				<div className="text-right">

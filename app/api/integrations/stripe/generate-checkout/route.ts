@@ -6,6 +6,7 @@ import {
 	type TAppSubscriptionPlanKey,
 } from "@/config";
 import { appApiHandler } from "@/lib/app-api";
+import { DEFAULT_SCALE_BARCODE_CONFIG } from "@/lib/pos/scale-barcode";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { db } from "@/services/drizzle";
 import { organizations } from "@/services/drizzle/schema";
@@ -155,6 +156,7 @@ async function generateCheckoutRoute(request: NextRequest) {
 							DANFE_NFE: { habilitada: false, canais: [], copias: 1 },
 						},
 					},
+					balanca: organization.configuracao.preferencias.balanca ?? DEFAULT_SCALE_BARCODE_CONFIG,
 				},
 				defaults: organization.configuracao.defaults,
 			},

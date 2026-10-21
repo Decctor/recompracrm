@@ -22,7 +22,11 @@ type UsePOSBarcodeScanOptions = {
 	ownerRef?: RefObject<HTMLElement | null>;
 	/** Motivo para recusar leituras neste momento (ex.: montagem de item em andamento). */
 	blockedReason?: string | null;
-	/** Produto simples ou variante identificada sem adicionais: vai direto ao carrinho. */
+	/**
+	 * Produto simples, variante identificada sem adicionais ou etiqueta de balança: vai direto ao
+	 * carrinho. Pesagem chega com `resolution.scaleReading` e quantidade fracionada — cada etiqueta
+	 * é uma linha, nunca soma na existente.
+	 */
 	onAddDirect: (item: Extract<TBarcodeScanAction, { type: "ADD_DIRECT" }>["item"], resolution: TBarcodeScanResolution) => void;
 	/** Produto com variantes não identificadas ou com adicionais: a tela abre o builder. */
 	onOpenBuilder: (resolution: TBarcodeScanResolution) => void;
@@ -47,6 +51,11 @@ export function usePOSBarcodeScan({ channel, enabled = true, ownerRef, blockedRe
 
 	const applyResolution = useCallback((resolution: TBarcodeScanResolution) => {
 		const action = resolveBarcodeScanAction(resolution);
+		if (action.type === "REJECT") {
+			playScanFeedback("ERRO");
+			toast.error(action.message);
+			return;
+		}
 		if (action.type === "ADD_DIRECT") {
 			playScanFeedback("SUCESSO");
 			callbacksRef.current.onAddDirect(action.item, resolution);
@@ -79,7 +88,7 @@ export function usePOSBarcodeScan({ channel, enabled = true, ownerRef, blockedRe
 						continue;
 					}
 					const [match] = result.matches;
-					applyResolution({ product: match.product, variantId: match.variantId });
+					applyResolution({ product: match.product, variantId: match.variantId, scaleReading: match.scaleReading });
 				} catch (error) {
 					if (!mountedRef.current) return;
 					playScanFeedback("ERRO");
@@ -116,7 +125,7 @@ export function usePOSBarcodeScan({ channel, enabled = true, ownerRef, blockedRe
 	const chooseCandidate = useCallback(
 		(match: TPOSBarcodeMatch) => {
 			setCandidates(null);
-			applyResolution({ product: match.product, variantId: match.variantId });
+			applyResolution({ product: match.product, variantId: match.variantId, scaleReading: match.scaleReading });
 		},
 		[applyResolution],
 	);

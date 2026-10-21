@@ -6,6 +6,7 @@ import Image from "next/image";
 import { useState } from "react";
 
 import { formatToMoney } from "@/lib/formatting";
+import { formatItemQuantity } from "@/lib/pos/scale-barcode";
 import type { TCartItem } from "@/state-hooks/use-sale-state";
 
 type ItemsSectionProps = {
@@ -149,6 +150,12 @@ function CartItemRow({ item, onUpdateQuantity, onUpdateObservacoes, onRemove }: 
 				{/* Stepper coeso: um único pill com divisórias internas */}
 				{isReward ? (
 					<span className="text-sm font-bold tabular-nums">1x</span>
+				) : !Number.isInteger(item.quantidade) ? (
+					// Pesagem (etiqueta de balança): a quantidade vem da etiqueta, sem stepper de unidade.
+					<span className="text-sm font-bold tabular-nums">
+						{formatItemQuantity(item.quantidade)}{" "}
+						<span className="text-xs font-normal text-muted-foreground">× {formatToMoney(item.valorUnitarioFinal)}</span>
+					</span>
 				) : (
 					<div className="inline-flex items-center rounded-lg border border-border">
 						<button

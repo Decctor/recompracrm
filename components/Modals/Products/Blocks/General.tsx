@@ -83,7 +83,7 @@ export default function ProductStateGeneralBlock({
 					<TextInput
 						label="CÓDIGO DE BARRAS"
 						value={product.codigoBarras ?? ""}
-						placeholder="Ex.: 7891234567895"
+						placeholder="Ex.: 7891234567895 (item pesado: o código PLU da balança)"
 						handleChange={(value) => updateProduct({ codigoBarras: value.trim() ? value : null })}
 					/>
 					{product.codigoBarras && !normalizeProductBarcode(product.codigoBarras) ? (

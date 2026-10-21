@@ -1,10 +1,17 @@
 import z from "zod";
-import { DefaultDataSourceEnum, DiscountLimitTypeEnum, OrganizationIntegrationTypeEnum, PoiRegistrationFlowEnum } from "./enums";
+import {
+	DefaultDataSourceEnum,
+	DiscountLimitTypeEnum,
+	OrganizationIntegrationTypeEnum,
+	PoiRegistrationFlowEnum,
+	ScaleBarcodeValueTypeEnum,
+} from "./enums";
 import { OrganizationFiscalConfigSchema } from "./fiscal";
 import { DataSourceIntegrationConfigSchema } from "./integrations";
 import { ORGANIZATION_SLUG_INVALID_MESSAGE, ORGANIZATION_SLUG_REGEX } from "@/lib/organizations/slug";
 import { normalizeEmail } from "@/lib/formatting";
 import { PaymentEffectivenessTypeEnum } from "@/lib/payments/schemas";
+import { DEFAULT_SCALE_BARCODE_CONFIG, parseScaleBarcodeMask } from "@/lib/pos/scale-barcode";
 
 /**
  * @deprecated As variantes vivem em `schemas/integrations.ts` (DataSourceIntegrationConfigSchema);
@@ -235,6 +242,29 @@ export const OrganizationPrintPreferencesSchema = z
 	.default({});
 export type TOrganizationPrintPreferences = z.infer<typeof OrganizationPrintPreferencesSchema>;
 
+// Etiquetas de balança lidas no PDV (lib/pos/scale-barcode.ts). O modelo da balança nem sempre é
+// conhecido, então o layout do código é uma máscara que a própria organização descreve e testa.
+export const OrganizationScaleBarcodeConfigSchema = z
+	.object({
+		habilitado: z.boolean({ invalid_type_error: "Tipo não válido para a habilitação das etiquetas de balança." }),
+		mascara: z
+			.string({ required_error: "Máscara da etiqueta não informada.", invalid_type_error: "Tipo não válido para a máscara da etiqueta." })
+			.trim()
+			.toUpperCase()
+			.superRefine((value, ctx) => {
+				const parsed = parseScaleBarcodeMask(value);
+				if (!parsed.ok) ctx.addIssue({ code: z.ZodIssueCode.custom, message: parsed.error });
+			}),
+		tipoValor: ScaleBarcodeValueTypeEnum,
+		casasDecimais: z
+			.number({ required_error: "Casas decimais do valor não informadas.", invalid_type_error: "Tipo não válido para as casas decimais do valor." })
+			.int("As casas decimais devem ser um número inteiro.")
+			.min(0, "As casas decimais não podem ser negativas.")
+			.max(3, "O valor tem no máximo 3 casas decimais."),
+	})
+	.default(DEFAULT_SCALE_BARCODE_CONFIG);
+export type TOrganizationScaleBarcodeConfig = z.infer<typeof OrganizationScaleBarcodeConfigSchema>;
+
 export const OrganizationConfigurationSchema = z.object({
 	recursos: z.object({
 		analytics: z.object({
@@ -375,6 +405,7 @@ export const OrganizationConfigurationSchema = z.object({
 			})
 			.default({ habilitado: false }),
 		impressoes: OrganizationPrintPreferencesSchema,
+		balanca: OrganizationScaleBarcodeConfigSchema,
 	}),
 	defaults: OrganizationDefaultsSchema,
 });

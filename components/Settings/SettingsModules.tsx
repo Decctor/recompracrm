@@ -7,11 +7,13 @@ import type { TAuthUserSession } from "@/lib/authentication/types";
 import { getErrorMessage } from "@/lib/errors";
 import type { TOrganizationConfiguration } from "@/schemas/organizations";
 import { type PropsWithChildren, useEffect, useState } from "react";
+import { DEFAULT_SCALE_BARCODE_CONFIG } from "@/lib/pos/scale-barcode";
 import { useOrganizationSectionForm } from "./Organization/use-organization-section-form";
+import SettingsScaleBarcode from "./SettingsScaleBarcode";
 import SettingsSectionActions from "./SettingsSectionActions";
 
 type TPreferences = TOrganizationConfiguration["preferencias"];
-type TModulesDraft = Pick<TPreferences, "carteirasClientes" | "rastreamentoEstoque" | "sessoesVenda" | "contasAtendimento">;
+type TModulesDraft = Pick<TPreferences, "carteirasClientes" | "rastreamentoEstoque" | "sessoesVenda" | "contasAtendimento" | "balanca">;
 
 const EMPTY_SESSOES_VENDA = {
 	habilitado: false,
@@ -27,6 +29,7 @@ function toModulesDraft(preferencias: TPreferences): TModulesDraft {
 		rastreamentoEstoque: preferencias.rastreamentoEstoque,
 		sessoesVenda: preferencias.sessoesVenda ?? EMPTY_SESSOES_VENDA,
 		contasAtendimento: preferencias.contasAtendimento ?? { habilitado: false },
+		balanca: preferencias.balanca ?? DEFAULT_SCALE_BARCODE_CONFIG,
 	};
 }
 
@@ -99,6 +102,11 @@ export default function SettingsModules({ membership }: SettingsModulesProps) {
 	const hasErpAccess = organization.configuracao.recursos.erp.acesso;
 	const sessoesVenda = draft.sessoesVenda ?? EMPTY_SESSOES_VENDA;
 
+	const balanca = draft.balanca ?? DEFAULT_SCALE_BARCODE_CONFIG;
+	function updateBalanca(partial: Partial<TPreferences["balanca"]>) {
+		setDraft((current) => (current ? { ...current, balanca: { ...(current.balanca ?? DEFAULT_SCALE_BARCODE_CONFIG), ...partial } } : current));
+	}
+
 	function updateSessoesVenda(partial: Partial<NonNullable<TPreferences["sessoesVenda"]>>) {
 		setDraft((current) => (current ? { ...current, sessoesVenda: { ...(current.sessoesVenda ?? EMPTY_SESSOES_VENDA), ...partial } } : current));
 	}
@@ -167,6 +175,16 @@ export default function SettingsModules({ membership }: SettingsModulesProps) {
 						onCheckedChange={(checked) => setDraft((current) => (current ? { ...current, contasAtendimento: { habilitado: checked } } : current))}
 						editable={canEdit}
 					/>
+
+					<ModuleCard
+						title="ETIQUETAS DE BALANÇA"
+						description="Lê no PDV as etiquetas impressas pela balança e lança o item pesado com a quantidade calculada pelo preço do sistema."
+						checked={balanca.habilitado}
+						onCheckedChange={(checked) => updateBalanca({ habilitado: checked })}
+						editable={canEdit}
+					>
+						<SettingsScaleBarcode balanca={balanca} updateBalanca={updateBalanca} editable={canEdit} />
+					</ModuleCard>
 				</>
 			) : null}
 

@@ -211,7 +211,11 @@ export function ChatQuoteBuilder({ open, onOpenChange, clientId, chatId, clientN
 		channel: "POS",
 		enabled: open && !createdQuote,
 		ownerRef: catalogRef,
-		onAddDirect: (item, { product, variantId }) => {
+		onAddDirect: (item, { product, variantId, scaleReading }) => {
+			if (scaleReading) {
+				toast.error("Etiqueta de balança não entra em orçamento: a pesagem é da venda no balcão.");
+				return;
+			}
 			const variant = variantId ? product.variantes.find((candidate) => candidate.id === variantId) : null;
 			const preco = variant ? variant.precoVenda : product.precoVenda;
 			const { eligible, reason } = resolveEligibility({ preco, blocked: false });

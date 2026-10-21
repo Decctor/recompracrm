@@ -111,7 +111,14 @@ export function TabOrderComposer({ tabId, orderCart, onLaunched }: TabOrderCompo
 		channel: "COMANDA",
 		ownerRef: composerRef,
 		blockedReason: stage.kind === "builder" ? "Conclua a montagem do item antes de ler outro código." : null,
-		onAddDirect: (item) => addItem(item),
+		onAddDirect: (item, { scaleReading }) => {
+			// Pedido de conta soma por unidade; pesagem fracionada fica para o PDV.
+			if (scaleReading) {
+				toast.error("Etiqueta de balança não entra em pedido de conta. Lance o item pesado pelo PDV.");
+				return;
+			}
+			addItem(item);
+		},
 		onOpenBuilder: ({ product, variantId }) => goTo({ kind: "builder", product, initialVariantId: variantId }, "forward"),
 	});
 
