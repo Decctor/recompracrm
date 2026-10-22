@@ -14,7 +14,7 @@ import { eq } from "drizzle-orm";
 import z from "zod";
 import { resolveLanguageModel } from "../providers/language";
 import { resolveLanguageModelId } from "../providers/models";
-import { normalizeAiUsage, type TAiUsageSegment } from "../providers/usage";
+import { createModelCallCollector, finalizeRunUsage } from "../providers/run-usage";
 import { isAiGatewayCreditError, notifyAiGatewayCreditExhausted } from "../providers/credit-alert";
 import { AgentDailyRunLimitError, AgentInactiveError, AgentRunAbortedError, formatAgentErrorChain } from "../shared/errors";
 import { parseJsonbWithFallback } from "../shared/json";
@@ -121,8 +121,8 @@ export type TPreparedAgentExecution = {
 	run: { id: string };
 	gatilho: TAiAgentRunTriggerEnum;
 	modo: "ATENDIMENTO" | "ASSISTENCIA";
-	/** Custo da triagem que antecedeu esta run, somado ao `uso` no fechamento. */
-	triagemCustoUsd: number | null;
+	/** Triagem que antecedeu esta run. Tokens e custo entram no `uso` no fechamento. */
+	triagem: TMessageTriage | null;
 	toolContext: TAgentToolContext;
 	systemPrompt: string;
 	turnPrompt: string;
@@ -238,7 +238,7 @@ export async function prepareAgentExecution({
 		run,
 		gatilho,
 		modo,
-		triagemCustoUsd: triagem?.custoUsd ?? null,
+		triagem,
 		toolContext: {
 			db: database,
 			organizacaoId,
@@ -277,6 +277,7 @@ export async function prepareAgentExecution({
  * `abortSignal` corta a geração no meio quando a conversa supera a run (ver
  * `respondToChatWithAgent`). Um turno leva dezenas de segundos e chegava ao fim para ser
  * descartado na revalidação pré-entrega — em duas semanas, 19 runs e ~500k tokens de entrada.
+ * O uso acumulado até o corte (ou até a falha) é gravado com `usoParcial`.
  */
 export async function executeAgentTurn(
 	prepared: TPreparedAgentExecution,
@@ -286,17 +287,33 @@ export async function executeAgentTurn(
 
 	await markAgentRunRunning(toolContext.db, run.id);
 	const outputSchema = resolveTurnOutputSchema({ gatilho: prepared.gatilho, retomadasHabilitadas: toolContext.capacidades.retomadas.habilitadas });
+	const collectors: Array<ReturnType<typeof createModelCallCollector>> = [];
+	const configuredModelId = resolveLanguageModelId(modeloConfig.modelo);
+
+	const persistableUsage = async (usoParcial: boolean) => {
+		try {
+			return await finalizeRunUsage({
+				steps: collectors.flatMap((collector) => collector.steps()),
+				triagem: prepared.triagem,
+				usoParcial,
+			});
+		} catch (usageError) {
+			console.warn(`[AI_AGENT] Não foi possível consolidar o uso da run ${run.id}:`, usageError);
+			return null;
+		}
+	};
 
 	try {
 		const tools = toAISdkTools(toolContext);
 		const results: Array<{ steps: Array<{ toolCalls: unknown[]; toolResults: Array<{ toolName: string; output: unknown }> }> }> = [];
-		// Um trecho por chamada de modelo, na ordem: o custo é estimado por trecho com o preço do
-		// modelo que o executou (o fallback de saída estruturada troca de modelo no meio da run).
-		const usageSegments: TAiUsageSegment[] = [];
 
 		const generate = async ({ modelConfig, prompt }: { modelConfig: ReturnType<typeof AiAgentModelConfigSchema.parse>; prompt: string }) => {
-			const segment: TAiUsageSegment = { modelo: resolveLanguageModelId(modelConfig.modelo), usage: undefined };
-			usageSegments.push(segment);
+			const modeloSolicitado = resolveLanguageModelId(modelConfig.modelo);
+			const collector = createModelCallCollector({
+				modeloSolicitado,
+				papel: modeloSolicitado === configuredModelId ? "TURNO" : "SAIDA_ESTRUTURADA",
+			});
+			collectors.push(collector);
 			const loopAgent = new ToolLoopAgent({
 				model: resolveLanguageModel(modelConfig),
 				// O system prompt (instruções + regras + base de conhecimento) é o mesmo em todo turno da
@@ -309,11 +326,26 @@ export async function executeAgentTurn(
 				topP: modelConfig.topP,
 				stopWhen: stepCountIs(prepared.maxSteps),
 				output: Output.object({ schema: outputSchema }),
+				// Atribui o gasto no gateway à organização e à run, sem dado pessoal do cliente.
+				providerOptions: {
+					gateway: {
+						user: toolContext.organizacaoId,
+						tags: ["agente", `run:${run.id}`],
+					},
+				},
+				onLanguageModelCallEnd: (event) => collector.onLanguageModelCallEnd(event),
+				onStepEnd: (event) => collector.onStepEnd(event),
 			});
-			const result = await loopAgent.generate({ prompt, abortSignal });
-			segment.usage = result.totalUsage;
-			results.push(result);
-			return result;
+			try {
+				const result = await loopAgent.generate({ prompt, abortSignal });
+				results.push(result);
+				return result;
+			} catch (error) {
+				// Passos já registrados não são somados de novo: `noteError` só age se a chamada
+				// morreu antes do primeiro callback.
+				collector.noteError(error);
+				throw error;
+			}
 		};
 
 		const generateWithFallback = async (prompt: string, preferredConfig: ReturnType<typeof AiAgentModelConfigSchema.parse> = modeloConfig) => {
@@ -321,8 +353,6 @@ export async function executeAgentTurn(
 				return await generate({ modelConfig: preferredConfig, prompt });
 			} catch (error) {
 				if (!NoObjectGeneratedError.isInstance(error) || preferredConfig.modelo === STRUCTURED_OUTPUT_FALLBACK_MODEL) throw error;
-				// A tentativa falha também custou tokens: o trecho já está na lista, só recebe o uso.
-				usageSegments[usageSegments.length - 1]!.usage = error.usage;
 				console.warn(`[AI_AGENT] Saída estruturada inválida no modelo ${preferredConfig.modelo}; repetindo com ${STRUCTURED_OUTPUT_FALLBACK_MODEL}.`);
 				return generate({
 					modelConfig: { ...preferredConfig, modelo: STRUCTURED_OUTPUT_FALLBACK_MODEL },
@@ -380,27 +410,26 @@ Execute a ferramenta nesta execução ou pergunte objetivamente o único dado qu
 			}),
 		};
 
-		const uso = normalizeAiUsage(usageSegments);
 		await completeAgentRun(toolContext.db, {
 			runId: run.id,
 			outputResumo: finalOutput.resumoAtendimento,
-			// A triagem custou centavos de centavo, mas custou: entra no mesmo número.
-			uso: uso && prepared.triagemCustoUsd !== null ? { ...uso, custoUsd: (uso.custoUsd ?? 0) + prepared.triagemCustoUsd } : uso,
+			uso: await persistableUsage(false),
 		});
 		// Acessório e nunca lança: o custo desta run pode ter cruzado 80% do limite mensal.
 		await notifyAiSpendThresholdIfReached({ organizacaoId: toolContext.organizacaoId });
 
 		return finalOutput;
 	} catch (error) {
+		const uso = await persistableUsage(true);
 		// Abortada de fora: a conversa seguiu sem esta run. Não é falha do agente.
 		if (abortSignal?.aborted) {
 			const reason = typeof abortSignal.reason === "string" ? abortSignal.reason : "Execução abortada.";
-			await markAgentRunCancelled(toolContext.db, { runId: run.id, reason });
+			await markAgentRunCancelled(toolContext.db, { runId: run.id, reason, uso });
 			throw new AgentRunAbortedError(reason);
 		}
 
 		const erro = formatRunError(error);
-		await failAgentRun(toolContext.db, { runId: run.id, erro });
+		await failAgentRun(toolContext.db, { runId: run.id, erro, uso });
 		// Crédito do gateway é global: esta run é só a primeira de muitas a falhar.
 		if (isAiGatewayCreditError(error)) {
 			await notifyAiGatewayCreditExhausted({ source: "AGENTE", organizacaoId: toolContext.organizacaoId, detail: erro });

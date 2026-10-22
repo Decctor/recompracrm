@@ -105,6 +105,7 @@ export default function AgentRunsList() {
 								<span className="text-xs text-muted-foreground">
 									{run.uso?.tokensTotal ? `${run.uso.tokensTotal} tokens` : "—"}
 									{typeof run.uso?.custoUsd === "number" ? ` · ${formatUsd(run.uso.custoUsd)}` : ""}
+									{run.uso?.usoParcial ? " · parcial" : ""}
 								</span>
 							</div>
 						</button>
@@ -158,7 +159,7 @@ function AgentSpendSummary({ mes }: { mes: NonNullable<ReturnType<typeof useAiAg
 					<span className="text-xs text-muted-foreground">· {mes.runs} execuções</span>
 				</div>
 				<span className="text-xs text-muted-foreground">
-					{mes.limiteUsd ? `limite ${formatUsd(mes.limiteUsd)} · ${percentual}%` : "sem limite configurado"} · valores estimados
+					{mes.limiteUsd ? `limite ${formatUsd(mes.limiteUsd)} · ${percentual}%` : "sem limite configurado"} · gateway ou estimativa
 				</span>
 			</div>
 			{mes.limiteUsd ? (

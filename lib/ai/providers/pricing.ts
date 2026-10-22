@@ -5,10 +5,10 @@ import { resolveLanguageModelId } from "./models";
 /**
  * Preço por modelo e custo estimado de uma run.
  *
- * Os valores são **estimativas**: o preço vem do catálogo curado (`model-catalog.ts`), conferido
- * na curadoria, e a cobrança real é a do AI Gateway — que tem preço regional em alguns modelos.
- * A UI diz "estimado" onde exibe. O que importa aqui não é o centavo, é a ordem de grandeza por
- * organização e por mês, para o limite de créditos ter em que se apoiar.
+ * Os valores daqui são **estimativas** do catálogo curado (`model-catalog.ts`). A cobrança que
+ * vale para o limite mensal é `uso.custoUsd`, que prefere o USD do AI Gateway e só cai nesta
+ * estimativa quando o gateway não informa o valor. O que importa não é o centavo, é a ordem de
+ * grandeza por organização e por mês.
  */
 
 export type TModelPrice = { precoEntrada: number; precoSaida: number };

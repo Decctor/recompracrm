@@ -27,6 +27,38 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 	return <h3 className="text-xs font-medium uppercase tracking-tight text-muted-foreground">{children}</h3>;
 }
 
+function usageCostLabel(origem: string | null | undefined) {
+	if (origem === "GATEWAY") return "CUSTO";
+	if (origem === "MISTO") return "CUSTO (GATEWAY + ESTIMADO)";
+	return "CUSTO ESTIMADO";
+}
+
+function usageModelCaption(
+	uso:
+		| {
+				modelo?: string;
+				modeloResolvido?: string;
+				modeloConfirmado?: boolean;
+				usoParcial?: boolean;
+				custoParcial?: boolean;
+				latenciaMs?: number;
+				contingencia?: { ocorreu: boolean; solicitado: string } | null;
+		  }
+		| null
+		| undefined,
+) {
+	if (!uso) return null;
+	const modelo = uso.modeloResolvido ?? uso.modelo;
+	const parts = [
+		modelo ? (uso.modeloConfirmado === false ? `${modelo} (solicitado)` : modelo) : null,
+		uso.contingencia?.ocorreu ? `fallback de ${uso.contingencia.solicitado}` : null,
+		uso.usoParcial ? "parcial" : null,
+		uso.custoParcial ? "preço incompleto" : null,
+		typeof uso.latenciaMs === "number" ? `${Math.round(uso.latenciaMs)} ms` : null,
+	].filter((part): part is string => Boolean(part));
+	return parts.length > 0 ? parts.join(" · ") : null;
+}
+
 /** Conveniência local sobre `CodeBlock`: pula o bloco quando não há payload e nomeia a cópia. */
 function JsonBlock({ label, value }: { label: string; value: unknown }) {
 	if (value === null || value === undefined) return null;
@@ -47,6 +79,7 @@ function JsonBlock({ label, value }: { label: string; value: unknown }) {
  */
 export default function AgentRunDrawer({ runId, closeModal }: AgentRunDrawerProps) {
 	const { data: run, isLoading, isError, error } = useAiAgentRunById({ runId });
+	const modelCaption = usageModelCaption(run?.uso);
 
 	return (
 		<ResponsiveMenu
@@ -87,13 +120,33 @@ export default function AgentRunDrawer({ runId, closeModal }: AgentRunDrawerProp
 						<div className="flex flex-col">
 							<SectionLabel>TOKENS</SectionLabel>
 							<span className="text-sm font-bold">{run.uso?.tokensTotal ?? "—"}</span>
+							{typeof run.uso?.tokensCacheLeitura === "number" && run.uso.tokensCacheLeitura > 0 ? (
+								<span className="text-xs text-muted-foreground">{run.uso.tokensCacheLeitura} em cache</span>
+							) : null}
 						</div>
 						<div className="flex flex-col">
-							<SectionLabel>CUSTO ESTIMADO</SectionLabel>
+							<SectionLabel>{usageCostLabel(run.uso?.custoOrigem)}</SectionLabel>
 							<span className="text-sm font-bold">{formatUsd(run.uso?.custoUsd)}</span>
-							{run.uso?.modelo ? <span className="text-xs text-muted-foreground">{run.uso.modelo}</span> : null}
+							{modelCaption ? <span className="text-xs text-muted-foreground">{modelCaption}</span> : null}
 						</div>
 					</div>
+
+					{run.uso?.passos && run.uso.passos.length > 0 ? (
+						<div className="flex w-full flex-col gap-1">
+							<SectionLabel>PASSOS DO MODELO</SectionLabel>
+							<ul className="flex flex-col gap-1">
+								{run.uso.passos.map((passo) => (
+									<li key={passo.indice ?? `${passo.papel}-${passo.modeloSolicitado}`} className="text-xs text-muted-foreground">
+										{passo.papel ?? "PASSO"} · {passo.modeloResolvido ?? passo.modeloSolicitado ?? "—"}
+										{passo.modeloConfirmado === false ? " (solicitado)" : ""}
+										{typeof passo.custoUsd === "number" ? ` · ${formatUsd(passo.custoUsd)}` : ""}
+										{typeof passo.latenciaMs === "number" ? ` · ${Math.round(passo.latenciaMs)} ms` : ""}
+										{passo.ferramentas && passo.ferramentas.length > 0 ? ` · ${passo.ferramentas.join(", ")}` : ""}
+									</li>
+								))}
+							</ul>
+						</div>
+					) : null}
 
 					{run.erro ? (
 						<div className="flex w-full flex-col gap-1 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">

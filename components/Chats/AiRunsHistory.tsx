@@ -68,6 +68,7 @@ export function AiRunsHistory({ chatId }: { chatId: string }) {
 								<span className="ml-auto shrink-0 text-muted-foreground">
 									{formatRelative(run.dataInsercao)}
 									{typeof run.uso?.custoUsd === "number" ? ` · ${formatUsd(run.uso.custoUsd)}` : ""}
+									{run.uso?.usoParcial ? " · parcial" : ""}
 								</span>
 							</span>
 							{resumo ? <span className={cn("line-clamp-2 leading-snug", run.erro ? "text-destructive" : "text-muted-foreground")}>{resumo}</span> : null}

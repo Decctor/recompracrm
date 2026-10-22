@@ -9,6 +9,10 @@ import {
 	AiAgentStatusEnum,
 	AiAgentToolCallStatusEnum,
 	AiAgentToolNameEnum,
+	AiAgentUsageAttemptOriginEnum,
+	AiAgentUsageCostOriginEnum,
+	AiAgentUsageFallbackOriginEnum,
+	AiAgentUsageStepRoleEnum,
 } from "./enums";
 
 /**
@@ -287,19 +291,87 @@ export function isClientExplicitlyIncludedInAgentScope(escopo: TAiAgentScope, cl
 // EXECUÇÃO (run)
 // ============================================================================
 
+const AiAgentUsageAttemptSchema = z.object({
+	modelo: z.string({ invalid_type_error: "Tipo não válido para o modelo da tentativa." }),
+	sucesso: z.boolean({ invalid_type_error: "Tipo não válido para o sucesso da tentativa." }).optional(),
+	provedor: z.string({ invalid_type_error: "Tipo não válido para o provedor da tentativa." }).optional(),
+	idGeracao: z.string({ invalid_type_error: "Tipo não válido para o ID da geração." }).optional(),
+	custoUsd: z.number({ invalid_type_error: "Tipo não válido para o custo da tentativa." }).optional(),
+	origem: AiAgentUsageAttemptOriginEnum.optional(),
+});
+
+const AiAgentUsageStepSchema = z.object({
+	indice: z.number({ invalid_type_error: "Tipo não válido para o índice do passo." }).int().nonnegative().optional(),
+	papel: AiAgentUsageStepRoleEnum.optional(),
+	modeloSolicitado: z.string({ invalid_type_error: "Tipo não válido para o modelo solicitado." }).optional(),
+	modeloResolvido: z.string({ invalid_type_error: "Tipo não válido para o modelo resolvido." }).optional(),
+	/** `true` quando o gateway (roteamento ou consulta da geração) nomeou o modelo que rodou. */
+	modeloConfirmado: z.boolean({ invalid_type_error: "Tipo não válido para a confirmação do modelo." }).optional(),
+	provedor: z.string({ invalid_type_error: "Tipo não válido para o provedor do modelo." }).optional(),
+	modeloProvedorId: z.string({ invalid_type_error: "Tipo não válido para o ID do modelo no provedor." }).optional(),
+	tokensEntrada: z.number({ invalid_type_error: "Tipo não válido para os tokens de entrada do passo." }).optional(),
+	tokensSaida: z.number({ invalid_type_error: "Tipo não válido para os tokens de saída do passo." }).optional(),
+	tokensCacheLeitura: z.number({ invalid_type_error: "Tipo não válido para os tokens de cache lidos no passo." }).optional(),
+	tokensCacheEscrita: z.number({ invalid_type_error: "Tipo não válido para os tokens de cache escritos no passo." }).optional(),
+	tokensRaciocinio: z.number({ invalid_type_error: "Tipo não válido para os tokens de raciocínio do passo." }).optional(),
+	custoUsd: z.number({ invalid_type_error: "Tipo não válido para o custo do passo." }).optional(),
+	custoOrigem: AiAgentUsageCostOriginEnum.optional(),
+	latenciaMs: z.number({ invalid_type_error: "Tipo não válido para a latência do passo." }).optional(),
+	motivoEncerramento: z.string({ invalid_type_error: "Tipo não válido para o motivo de encerramento." }).optional(),
+	ferramentas: z.array(z.string({ invalid_type_error: "Tipo não válido para a ferramenta do passo." })).optional(),
+	idGeracao: z.string({ invalid_type_error: "Tipo não válido para o ID da geração do passo." }).optional(),
+});
+
+/**
+ * Uso de uma execução, persistido em `ai_agent_runs.uso`.
+ *
+ * Os campos originais (`tokensEntrada`, `tokensSaida`, `tokensTotal`, `tokensEntradaCache`,
+ * `modelo`, `modelos`, `custoUsd`, `custoParcial`) continuam com o mesmo significado. O restante
+ * é aditivo: modelo resolvido, tokens por tipo, custo do gateway e o detalhe por passo.
+ */
 export const AiAgentUsageSchema = z.object({
 	tokensEntrada: z.number({ invalid_type_error: "Tipo não válido para os tokens de entrada." }).optional(),
 	tokensSaida: z.number({ invalid_type_error: "Tipo não válido para os tokens de saída." }).optional(),
 	tokensTotal: z.number({ invalid_type_error: "Tipo não válido para o total de tokens." }).optional(),
 	// Tokens de entrada servidos do cache de prefixo do provedor (subconjunto de `tokensEntrada`).
 	tokensEntradaCache: z.number({ invalid_type_error: "Tipo não válido para os tokens de entrada em cache." }).optional(),
-	// "modelo-a -> modelo-b" quando a run passou por fallback. `modelos` é a lista tipada.
+	// Leitura e escrita de cache, e tokens de raciocínio (subconjunto de `tokensSaida`).
+	tokensCacheLeitura: z.number({ invalid_type_error: "Tipo não válido para os tokens de cache lidos." }).optional(),
+	tokensCacheEscrita: z.number({ invalid_type_error: "Tipo não válido para os tokens de cache escritos." }).optional(),
+	tokensRaciocinio: z.number({ invalid_type_error: "Tipo não válido para os tokens de raciocínio." }).optional(),
+	// "modelo-a -> modelo-b" quando mais de um modelo chegou a ser chamado. `modelos` é a lista.
+	// `modeloResolvido` é o que efetivamente produziu o fim da run — sem a ambiguidade da seta.
 	modelo: z.string({ invalid_type_error: "Tipo não válido para o modelo utilizado." }).optional(),
 	modelos: z.array(z.string({ invalid_type_error: "Tipo não válido para o modelo utilizado." })).optional(),
-	// Estimativa em USD pelo preço de referência do catálogo (`lib/ai/providers/pricing.ts`).
-	// A cobrança real é a do AI Gateway. `custoParcial` = algum trecho da run sem preço conhecido.
-	custoUsd: z.number({ invalid_type_error: "Tipo não válido para o custo estimado." }).optional(),
+	modeloSolicitado: z.string({ invalid_type_error: "Tipo não válido para o modelo solicitado." }).optional(),
+	modeloResolvido: z.string({ invalid_type_error: "Tipo não válido para o modelo resolvido." }).optional(),
+	modeloConfirmado: z.boolean({ invalid_type_error: "Tipo não válido para a confirmação do modelo." }).optional(),
+	provedor: z.string({ invalid_type_error: "Tipo não válido para o provedor do modelo." }).optional(),
+	modeloProvedorId: z.string({ invalid_type_error: "Tipo não válido para o ID do modelo no provedor." }).optional(),
+	/**
+	 * USD da run. Prefere a cobrança devolvida pelo AI Gateway; cai na estimativa do catálogo
+	 * quando o gateway não informa o valor. `custoParcial` = algum trecho sem preço conhecido.
+	 * `usoParcial` = a run parou antes do fim (falha, cancelamento, aborto) e o número é o
+	 * acumulado até ali, não um turno completo.
+	 */
+	custoUsd: z.number({ invalid_type_error: "Tipo não válido para o custo." }).optional(),
+	custoGatewayUsd: z.number({ invalid_type_error: "Tipo não válido para o custo do gateway." }).optional(),
+	custoEstimadoUsd: z.number({ invalid_type_error: "Tipo não válido para o custo estimado." }).optional(),
+	custoOrigem: AiAgentUsageCostOriginEnum.optional(),
 	custoParcial: z.boolean({ invalid_type_error: "Tipo não válido para a marcação de custo parcial." }).optional(),
+	usoParcial: z.boolean({ invalid_type_error: "Tipo não válido para a marcação de uso parcial." }).optional(),
+	latenciaMs: z.number({ invalid_type_error: "Tipo não válido para a latência." }).optional(),
+	idsGeracao: z.array(z.string({ invalid_type_error: "Tipo não válido para o ID da geração." })).optional(),
+	contingencia: z
+		.object({
+			ocorreu: z.boolean({ invalid_type_error: "Tipo não válido para a ocorrência do fallback." }),
+			origem: AiAgentUsageFallbackOriginEnum,
+			solicitado: z.string({ invalid_type_error: "Tipo não válido para o modelo solicitado no fallback." }),
+			usado: z.string({ invalid_type_error: "Tipo não válido para o modelo usado no fallback." }),
+			tentativas: z.array(AiAgentUsageAttemptSchema).optional(),
+		})
+		.optional(),
+	passos: z.array(AiAgentUsageStepSchema).optional(),
 });
 export type TAiAgentUsage = z.infer<typeof AiAgentUsageSchema>;
 
