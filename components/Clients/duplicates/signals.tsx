@@ -18,6 +18,7 @@ const DUPLICATE_SIGNALS: Record<TClientDuplicateSignalTypeEnum, TDuplicateSignal
 	EMAIL: { label: "Mesmo e-mail", short: "E-mail", icon: MailIcon },
 	CPF_CNPJ: { label: "Mesmo CPF/CNPJ", short: "CPF/CNPJ", icon: CreditCardIcon },
 	INSTAGRAM_USERNAME: { label: "Mesmo @ do Instagram", short: "Instagram", icon: InstagramIcon },
+	NOME_SEMELHANTE: { label: "Nome semelhante", short: "Nome semelhante", icon: TriangleAlertIcon },
 };
 
 /**
@@ -25,7 +26,7 @@ const DUPLICATE_SIGNALS: Record<TClientDuplicateSignalTypeEnum, TDuplicateSignal
  * telefone raramente, e-mail com frequência (famílias e lojas compartilham) e
  * Instagram é o mais fraco. Tudo que ordena ou agrupa sinais usa esta lista.
  */
-export const DUPLICATE_SIGNAL_ORDER: TClientDuplicateSignalTypeEnum[] = ["CPF_CNPJ", "TELEFONE", "EMAIL", "INSTAGRAM_USERNAME"];
+export const DUPLICATE_SIGNAL_ORDER: TClientDuplicateSignalTypeEnum[] = ["CPF_CNPJ", "TELEFONE", "EMAIL", "INSTAGRAM_USERNAME", "NOME_SEMELHANTE"];
 
 export function duplicateSignalPriority(tipo: string): number {
 	const index = DUPLICATE_SIGNAL_ORDER.indexOf(tipo as TClientDuplicateSignalTypeEnum);

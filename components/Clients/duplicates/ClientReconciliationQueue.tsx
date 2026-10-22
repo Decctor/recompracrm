@@ -82,7 +82,7 @@ function QueueList({
 				<CheckCheckIcon className="h-8 w-8 text-muted-foreground" />
 				<p className="text-sm font-semibold">Tudo reconciliado</p>
 				<p className="max-w-xs text-xs leading-relaxed text-muted-foreground">
-					Nenhuma duplicidade pendente. Novos pares aparecem aqui assim que dois cadastros compartilharem um mesmo contato.
+					Nenhuma duplicidade pendente. Contatos compartilhados são detectados ao atualizar cadastros; nomes semelhantes são verificados diariamente.
 				</p>
 			</div>
 		);
@@ -210,7 +210,7 @@ function QueueMenu({ closeMenu, selectedPair, onBack, listIsLoading, listError, 
 		<ResponsiveMenu
 			mode="read-only"
 			menuTitle={MENU_TITLE}
-			menuDescription="Possíveis cadastros duplicados detectados por CPF/CNPJ, telefone, e-mail ou @ do Instagram."
+			menuDescription="Possíveis cadastros duplicados detectados por CPF/CNPJ, telefone, e-mail, @ do Instagram ou nome semelhante. Confira os dados antes de mesclar."
 			menuCancelButtonText="FECHAR"
 			stateIsLoading={listIsLoading}
 			stateError={listError}

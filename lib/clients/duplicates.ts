@@ -2,6 +2,7 @@ import type { TClientDuplicateReason } from "@/schemas/clients";
 import { type DB, type DBTransaction, db as defaultDb } from "@/services/drizzle";
 import { clientDuplicateCandidates, clients } from "@/services/drizzle/schema";
 import { type SQL, and, eq, ne, sql } from "drizzle-orm";
+import { buildClientNameDuplicateInsert, buildLiveDuplicateReasonsUpdate } from "./name-duplicate-query";
 
 type TDetectionDb = DB | DBTransaction;
 
@@ -108,7 +109,11 @@ export async function recomputeClientDuplicatesForClient(input: { db?: TDetectio
 			.values({ organizacaoId: input.organizacaoId, clienteAId, clienteBId, motivos })
 			.onConflictDoUpdate({
 				target: [clientDuplicateCandidates.organizacaoId, clientDuplicateCandidates.clienteAId, clientDuplicateCandidates.clienteBId],
-				set: { motivos, dataAtualizacao: new Date() },
+				set: {
+					// Name evidence is maintained by the nightly sweep, not these live lookups.
+					motivos: buildLiveDuplicateReasonsUpdate(motivos),
+					dataAtualizacao: new Date(),
+				},
 				// Descartes e merges são permanentes — só pares pendentes recebem motivos novos.
 				setWhere: sql`${clientDuplicateCandidates.status} = 'PENDENTE'`,
 			});
@@ -165,4 +170,22 @@ export async function sweepClientDuplicates(input?: { db?: DB }): Promise<void> 
 			`),
 		);
 	}
+
+	// Sequential per-organization work: a large tenant cannot monopolize the sweep.
+	const organizations = await db.selectDistinct({ organizacaoId: clients.organizacaoId }).from(clients);
+	const failedOrganizations: string[] = [];
+	for (const { organizacaoId } of organizations) {
+		const startedAt = Date.now();
+		try {
+			const candidates = await db.transaction(async (tx) => {
+				await tx.execute(sql`set local statement_timeout = '15s'`);
+				return tx.execute(buildClientNameDuplicateInsert(organizacaoId));
+			});
+			console.info("[CLIENT_DUPLICATES] Name sweep", { organizacaoId, candidates: candidates.length, durationMs: Date.now() - startedAt });
+		} catch (error) {
+			failedOrganizations.push(organizacaoId);
+			console.error("[CLIENT_DUPLICATES] Name sweep failed", { organizacaoId, error });
+		}
+	}
+	if (failedOrganizations.length) throw new Error(`Name duplicate sweep failed for ${failedOrganizations.length} organizations.`);
 }

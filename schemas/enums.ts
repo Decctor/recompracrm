@@ -1154,7 +1154,7 @@ export const POS_PRODUCT_ORDERING_LABELS: Record<TPOSProductOrderingEnum, string
 	NOME: "Nome (A-Z)",
 };
 
-export const ClientDuplicateSignalTypeEnum = z.enum(["TELEFONE", "EMAIL", "CPF_CNPJ", "INSTAGRAM_USERNAME"], {
+export const ClientDuplicateSignalTypeEnum = z.enum(["TELEFONE", "EMAIL", "CPF_CNPJ", "INSTAGRAM_USERNAME", "NOME_SEMELHANTE"], {
 	required_error: "Tipo do sinal de duplicidade não informado.",
 	invalid_type_error: "Tipo não válido para o sinal de duplicidade.",
 });
