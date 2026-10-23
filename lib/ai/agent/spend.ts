@@ -12,7 +12,9 @@ type TDb = DB | DBTransaction;
  *
  * `recursos.iaAtendimento.limiteCreditos` existia desde o redesign do atendimento e nunca foi
  * lido pelo runtime — o único freio era `maxRunsDiarios`. Aqui ele vira o que o rótulo promete:
- * um teto mensal, em USD estimados (`uso.custoUsd`), somado sobre `ai_agent_runs`.
+ * um teto mensal, em USD (`uso.custoUsd`), somado sobre `ai_agent_runs`. O número prefere a
+ * cobrança do AI Gateway e cai na estimativa do catálogo quando ela não vem. Falha, cancelamento
+ * e aborto entram na soma: o token foi consumido mesmo sem entrega.
  *
  * O mês é o de São Paulo: a organização pensa em "este mês" no fuso dela, e o limite deve virar
  * na mesma meia-noite em que ela vira o calendário.

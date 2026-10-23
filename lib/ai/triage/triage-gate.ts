@@ -1,5 +1,6 @@
 import type { TAgentMessageDeliverer } from "@/lib/ai/agent/respond-to-chat";
 import { completeAgentRun, createAgentRun, failAgentRun, markAgentRunRunning } from "@/lib/ai/agent/runs";
+import { finalizeRunUsage } from "@/lib/ai/providers/run-usage";
 import { transferChatToHuman } from "@/lib/ai/agent/transfer-to-human";
 import { parseJsonbWithFallback } from "@/lib/ai/shared/json";
 import { isToolEnabled } from "@/lib/ai/tools/guards";
@@ -140,14 +141,8 @@ async function recordTriageOnlyRun(
 	});
 	await markAgentRunRunning(db, run.id);
 
-	const uso = {
-		tokensEntrada: input.triagem.tokensEntrada,
-		tokensSaida: 0,
-		tokensTotal: input.triagem.tokensEntrada,
-		modelo: input.triagem.modelo,
-		modelos: [input.triagem.modelo],
-		custoUsd: input.triagem.custoUsd ?? undefined,
-	};
+	// Sem consulta HTTP: o preço da triagem já veio na resposta (gateway) ou da tabela fixa do Jev.
+	const uso = await finalizeRunUsage({ steps: [], triagem: input.triagem, lookup: async () => null });
 
 	try {
 		if (input.decision.acao === "PULAR") {
@@ -174,6 +169,7 @@ async function recordTriageOnlyRun(
 		await failAgentRun(db, {
 			runId: run.id,
 			erro: `Triagem (${input.decision.acao}) falhou: ${error instanceof Error ? error.message : String(error)}`,
+			uso,
 		});
 		console.warn("[AI_TRIAGE] Ação da triagem falhou; seguindo com o turno completo:", error);
 		return { acao: "TURNO_COMPLETO", triagem: input.triagem };

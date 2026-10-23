@@ -78,7 +78,7 @@ export async function notifyAiSpendThresholdIfReached({ organizacaoId }: { organ
 		const lines = [
 			`O agente de IA da ${organization.nome} já usou ${percent}% do limite mensal de créditos.`,
 			"",
-			`Gasto estimado no mês: ${formatUsd(custoUsd)}`,
+			`Gasto no mês: ${formatUsd(custoUsd)}`,
 			`Limite configurado: ${formatUsd(limite)}`,
 			"",
 			"Ao atingir 100%, o agente para de responder e as conversas voltam para a fila da equipe até o",

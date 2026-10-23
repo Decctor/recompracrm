@@ -1,5 +1,6 @@
 import type { TAiAgentCapabilities } from "@/schemas/ai-agents";
 import { type Experimental_EvaluationModel, experimental_evaluate as evaluate } from "ai";
+import { readGatewayCallFacts } from "../providers/gateway-usage";
 
 /**
  * Triagem pré-run com Jev (TypeSafe AI, `typesafe-ai/jev` no AI Gateway).
@@ -57,8 +58,19 @@ export type TMessageTriage = {
 	/** P(um humano precisa assumir). */
 	exigeHumano: number;
 	tokensEntrada: number | undefined;
+	tokensSaida?: number;
+	tokensCacheLeitura?: number;
+	tokensCacheEscrita?: number;
+	tokensRaciocinio?: number;
+	/** Estimativa do catálogo da triagem (USD por 1M de entrada). Independente da cobrança do gateway. */
 	custoUsd: number | null;
+	/** Cobrança devolvida pelo gateway nesta chamada, quando a resposta já traz o USD. */
+	custoGatewayUsd?: number | null;
 	modelo: string;
+	modeloSolicitado?: string;
+	modeloConfirmado?: boolean;
+	idGeracao?: string;
+	latenciaMs?: number;
 };
 
 export type TTriageMessage = { autor: string; texto: string };
@@ -87,7 +99,10 @@ const TRIAGE_QUESTIONS = {
 	},
 } as const;
 
-export async function triageIncomingMessage(input: TTriageInput, options: { model?: Experimental_EvaluationModel } = {}): Promise<TMessageTriage | null> {
+export async function triageIncomingMessage(
+	input: TTriageInput,
+	options: { model?: Experimental_EvaluationModel } = {},
+): Promise<TMessageTriage | null> {
 	const mensagens = input.mensagens.slice(-TRIAGE_MESSAGE_WINDOW);
 	if (mensagens.length === 0) return null;
 
@@ -104,14 +119,20 @@ export async function triageIncomingMessage(input: TTriageInput, options: { mode
 
 		const intencao = result.answers.intencao;
 		const tokensEntrada = result.usage.inputTokens;
+		const facts = readGatewayCallFacts(result.providerMetadata, result.response.modelId);
 		return {
 			intencao: intencao.choice,
 			intencaoProbabilidade: intencao.probabilities?.[intencao.choice] ?? 1,
 			precisaResposta: result.answers.precisaResposta.probability,
 			exigeHumano: result.answers.exigeHumano.probability,
 			tokensEntrada,
+			tokensSaida: result.usage.outputTokens,
 			custoUsd: typeof tokensEntrada === "number" ? (tokensEntrada * TRIAGE_PRICE_INPUT_PER_MILLION) / 1_000_000 : null,
-			modelo: result.response.modelId || TRIAGE_MODEL_ID,
+			custoGatewayUsd: facts.custoUsd ?? null,
+			modelo: facts.modeloResolvido ?? (result.response.modelId || TRIAGE_MODEL_ID),
+			modeloSolicitado: TRIAGE_MODEL_ID,
+			modeloConfirmado: facts.modeloConfirmado,
+			idGeracao: facts.idGeracao,
 		};
 	} catch (error) {
 		console.warn("[AI_TRIAGE] Falha na triagem; seguindo com o turno completo:", error);
@@ -167,7 +188,11 @@ export function decideTriageAction({
 		return { acao: "HANDOFF", motivo: `Exige humano (p=${triagem.exigeHumano.toFixed(2)}; intenção ${triagem.intencao}).` };
 	}
 
-	if (settings.modeloEconomico && ECONOMY_MODEL_INTENTS.includes(triagem.intencao) && triagem.intencaoProbabilidade >= TRIAGE_THRESHOLDS.economicoMinIntencao) {
+	if (
+		settings.modeloEconomico &&
+		ECONOMY_MODEL_INTENTS.includes(triagem.intencao) &&
+		triagem.intencaoProbabilidade >= TRIAGE_THRESHOLDS.economicoMinIntencao
+	) {
 		return { acao: "MODELO_ECONOMICO", motivo: `Intenção simples (${triagem.intencao}, p=${triagem.intencaoProbabilidade.toFixed(2)}).` };
 	}
 

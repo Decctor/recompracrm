@@ -706,9 +706,38 @@ export const AiAgentScopeTypeEnum = z.enum(["TODOS", "INCLUIR", "EXCLUIR"]);
 export type TAiAgentScopeTypeEnum = z.infer<typeof AiAgentScopeTypeEnum>;
 
 // Ciclo de vida de uma execução (run) do agente.
-// CANCELADO = o turno concluiu, mas a entrega foi abortada pela revalidação (run supersedida).
+// CANCELADO = a run foi interrompida antes da entrega: abortada durante a geração
+// (a conversa seguiu) ou concluída e descartada na revalidação pré-entrega.
 export const AiAgentRunStatusEnum = z.enum(["PENDENTE", "RODANDO", "CONCLUIDO", "FALHA", "CANCELADO"]);
 export type TAiAgentRunStatusEnum = z.infer<typeof AiAgentRunStatusEnum>;
+
+/** De onde veio `uso.custoUsd`: cobrança do AI Gateway, estimativa do catálogo, ou as duas. */
+export const AiAgentUsageCostOriginEnum = z.enum(["GATEWAY", "ESTIMADO", "MISTO"], {
+	required_error: "Origem do custo de IA não informada.",
+	invalid_type_error: "Tipo não válido para a origem do custo de IA.",
+});
+export type TAiAgentUsageCostOriginEnum = z.infer<typeof AiAgentUsageCostOriginEnum>;
+
+/** Papel de uma chamada de modelo dentro da run. A triagem não é o modelo do turno. */
+export const AiAgentUsageStepRoleEnum = z.enum(["TURNO", "TRIAGEM", "SAIDA_ESTRUTURADA"], {
+	required_error: "Papel do passo de IA não informado.",
+	invalid_type_error: "Tipo não válido para o papel do passo de IA.",
+});
+export type TAiAgentUsageStepRoleEnum = z.infer<typeof AiAgentUsageStepRoleEnum>;
+
+/** Por que a run acabou num modelo diferente do que foi pedido. */
+export const AiAgentUsageFallbackOriginEnum = z.enum(["GATEWAY", "SAIDA_ESTRUTURADA", "MISTA"], {
+	required_error: "Origem do fallback de modelo não informada.",
+	invalid_type_error: "Tipo não válido para a origem do fallback de modelo.",
+});
+export type TAiAgentUsageFallbackOriginEnum = z.infer<typeof AiAgentUsageFallbackOriginEnum>;
+
+/** De onde veio cada tentativa listada em `uso.contingencia.tentativas`. */
+export const AiAgentUsageAttemptOriginEnum = z.enum(["GATEWAY", "SAIDA_ESTRUTURADA", "TURNO"], {
+	required_error: "Origem da tentativa de modelo não informada.",
+	invalid_type_error: "Tipo não válido para a origem da tentativa de modelo.",
+});
+export type TAiAgentUsageAttemptOriginEnum = z.infer<typeof AiAgentUsageAttemptOriginEnum>;
 
 // O que originou a execução. PLAYGROUND roda o mesmo pipeline, sem envio externo.
 // ATRIBUICAO_HUB é a execução disparada por um humano que entregou a conversa ao agente pelo
