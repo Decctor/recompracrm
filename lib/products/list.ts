@@ -112,7 +112,10 @@ export const GetProductsDefaultInputSchema = z.object({
 		.optional()
 		.nullable()
 		.transform((val) => (val ? Number(val) : null)),
-	orderByField: z.enum(["nome", "codigo", "grupo", "vendasValorTotal", "vendasQtdeTotal", "quantidade"]).optional().nullable(),
+	orderByField: z
+		.enum(["nome", "codigo", "grupo", "vendasValorTotal", "vendasQtdeTotal", "quantidade", "dataInsercao", "dataAtualizacao"])
+		.optional()
+		.nullable(),
 	orderByDirection: z.enum(["asc", "desc"]).optional().nullable(),
 	// Controla qual "modo" de leitura o endpoint executa (ver getProducts). Ausente/"default" retorna produtos + stats
 	// comerciais; "stock" retorna a visão operacional de estoque (saldo, movimentação no período, lote ativo).
@@ -219,6 +222,8 @@ export async function queryProductsList(
 			quantidade: products.quantidade,
 			organizacaoId: products.organizacaoId,
 			dataUltimaSincronizacao: products.dataUltimaSincronizacao,
+			dataInsercao: products.dataInsercao,
+			dataAtualizacao: products.dataAtualizacao,
 			fornecedorPrincipalId: products.fornecedorPrincipalId,
 			fornecedorPrincipalNome: sql<string | null>`${suppliers.nome}`.as("fornecedor_principal_nome"),
 			// Campos de stats - 0 quando nenhuma venda passa nos filtros
@@ -262,6 +267,8 @@ export async function queryProductsList(
 		quantidade: source.quantidade,
 		organizacaoId: source.organizacaoId,
 		dataUltimaSincronizacao: source.dataUltimaSincronizacao,
+		dataInsercao: source.dataInsercao,
+		dataAtualizacao: source.dataAtualizacao,
 		fornecedorPrincipalId: source.fornecedorPrincipalId,
 		fornecedorPrincipalNome: source.fornecedorPrincipalNome,
 		totalSalesValue: source.totalSalesValue,
@@ -304,6 +311,10 @@ export async function queryProductsList(
 				return direction(sql`COALESCE(${source.totalSalesQty}, 0)`);
 			case "quantidade":
 				return direction(sql`COALESCE(${source.quantidade}, 0)`);
+			case "dataInsercao":
+				return direction(source.dataInsercao);
+			case "dataAtualizacao":
+				return direction(source.dataAtualizacao);
 			default:
 				return asc(source.nome);
 		}

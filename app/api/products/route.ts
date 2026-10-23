@@ -83,6 +83,10 @@ async function getProductsStockView({ input, userOrgId }: { input: TGetProductsD
 				return direction(products.grupo);
 			case "quantidade":
 				return direction(sql`COALESCE(${products.quantidade}, 0)`);
+			case "dataInsercao":
+				return direction(products.dataInsercao);
+			case "dataAtualizacao":
+				return direction(products.dataAtualizacao);
 			default:
 				return direction(products.nome);
 		}

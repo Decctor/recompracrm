@@ -62,6 +62,8 @@ export default function ProductsInlineFilters({ filters, updateFilters, showMain
 		{ id: "vendasValorTotal", label: "VALOR TOTAL DE VENDAS", value: "vendasValorTotal" },
 		{ id: "vendasQtdeTotal", label: "QUANTIDADE TOTAL DE VENDAS", value: "vendasQtdeTotal" },
 		{ id: "quantidade", label: "QUANTIDADE EM ESTOQUE", value: "quantidade" },
+		{ id: "dataInsercao", label: "DATA DE CRIAÇÃO", value: "dataInsercao" },
+		{ id: "dataAtualizacao", label: "DATA DE ATUALIZAÇÃO", value: "dataAtualizacao" },
 	] satisfies InteractiveFilterOption<NonNullable<TGetProductsDefaultInput["orderByField"]>>[];
 	const defaultSort = {
 		field: "nome",
