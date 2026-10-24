@@ -34,9 +34,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 	];
 
 	const segmentRoutes: MetadataRoute.Sitemap = [
-		{ url: `${BASE_URL}/segmentos`, lastModified: new Date(), changeFrequency: "weekly", priority: 0.9 },
+		{ url: `${BASE_URL}/segments`, lastModified: new Date(), changeFrequency: "weekly", priority: 0.9 },
 		...SEGMENT_PAGES.map((page) => ({
-			url: `${BASE_URL}/segmentos/${page.slug}`,
+			url: `${BASE_URL}/segments/${page.slug}`,
 			lastModified: new Date(page.updatedAt),
 			changeFrequency: "monthly" as const,
 			priority: 0.85,
@@ -61,9 +61,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 	];
 
 	const helpRoutes: MetadataRoute.Sitemap = [
-		{ url: `${BASE_URL}/ajuda`, lastModified: new Date(), changeFrequency: "weekly", priority: 0.8 },
+		{ url: `${BASE_URL}/help`, lastModified: new Date(), changeFrequency: "weekly", priority: 0.8 },
 		...HELP_ARTICLES.map((article) => ({
-			url: `${BASE_URL}/ajuda/${article.slug}`,
+			url: `${BASE_URL}/help/${article.slug}`,
 			lastModified: new Date(article.updatedAt),
 			changeFrequency: "monthly" as const,
 			priority: 0.75,
@@ -72,6 +72,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
 	const staticRoutes: MetadataRoute.Sitemap = [
 		{ url: BASE_URL, lastModified: new Date(), changeFrequency: "weekly", priority: 1 },
+		{ url: `${BASE_URL}/erp`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.95 },
 		{ url: `${BASE_URL}/presentation`, lastModified: new Date(), changeFrequency: "monthly", priority: 1 },
 		{ url: `${BASE_URL}/community`, lastModified: new Date(), changeFrequency: "weekly", priority: 0.9 },
 		{ url: `${BASE_URL}/community/courses`, lastModified: new Date(), changeFrequency: "weekly", priority: 0.8 },

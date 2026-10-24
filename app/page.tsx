@@ -1,17 +1,16 @@
 import { buildFAQPageJsonLd } from "@/components/Content/ArticleFAQ";
-import "./_components/ledger/ledger.css";
+import { Dock } from "./_components/Dock";
 import LandingAnalyticsTracker from "./_components/LandingAnalyticsTracker";
-import { LedgerCases } from "./_components/ledger/cases/Cases";
-import { LANDING_FAQS, LedgerFAQ } from "./_components/ledger/FAQ";
-import { LedgerClosingCTA, LedgerFooter } from "./_components/ledger/Footer";
-import { LedgerFeatures } from "./_components/ledger/Features";
-import { LedgerHero } from "./_components/ledger/Hero";
-import { LedgerHowItWorks } from "./_components/ledger/HowItWorks";
-import { LedgerIntegrations } from "./_components/ledger/Integrations";
-import { LedgerNavbar } from "./_components/ledger/Navbar";
-import { LedgerPricing } from "./_components/ledger/Pricing";
-import { LedgerProblem } from "./_components/ledger/Problem";
-import { LedgerTrust } from "./_components/ledger/Trust";
+import { LandingCases } from "./_components/landing/Cases";
+import { LandingCashback } from "./_components/landing/Cashback";
+import { LandingClosingCta, LandingFooter } from "./_components/landing/Closing";
+import { LandingErp } from "./_components/landing/Erp";
+import { LANDING_FAQS, LandingFaq } from "./_components/landing/Faq";
+import { LandingHero } from "./_components/landing/Hero";
+import { LandingIntegrations } from "./_components/landing/Integrations";
+import { LandingPricing } from "./_components/landing/Pricing";
+import { LandingTrust } from "./_components/landing/Trust";
+import { LandingTwoFronts } from "./_components/landing/TwoFronts";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -25,24 +24,24 @@ export default function LandingPage() {
 	const faqJsonLd = buildFAQPageJsonLd(LANDING_FAQS);
 
 	return (
-		<div className="min-h-screen bg-[#fafaf7] text-[#171717] selection:bg-[#ffb900]/35 selection:text-[#171717]">
+		<div className="min-h-screen bg-white font-outfit leading-[normal] text-[#0e1214] tabular-nums antialiased selection:bg-[#24549c]/15">
 			{/* JSON-LD FAQPage */}
 			<script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }} />
 			<LandingAnalyticsTracker />
-			<LedgerNavbar />
+			<Dock variant="landing" />
 			<main>
-				<LedgerHero />
-				<LedgerProblem />
-				<LedgerHowItWorks />
-				<LedgerCases />
-				<LedgerFeatures />
-				<LedgerIntegrations />
-				<LedgerTrust />
-				<LedgerPricing />
-				<LedgerFAQ />
-				<LedgerClosingCTA />
+				<LandingHero />
+				<LandingTwoFronts />
+				<LandingCashback />
+				<LandingErp />
+				<LandingCases />
+				<LandingIntegrations />
+				<LandingTrust />
+				<LandingPricing />
+				<LandingFaq />
+				<LandingClosingCta />
 			</main>
-			<LedgerFooter />
+			<LandingFooter />
 		</div>
 	);
 }

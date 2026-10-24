@@ -1,3 +1,4 @@
+import { Dock } from "@/app/_components/Dock";
 import { BLOG_POSTS, getBlogPost } from "@/app/_content/blog-posts";
 import { ArticleCTA } from "@/components/Content/ArticleCTA";
 import { ArticleFAQ, buildFAQPageJsonLd } from "@/components/Content/ArticleFAQ";
@@ -5,6 +6,7 @@ import { ArticleHero } from "@/components/Content/ArticleHero";
 import { ArticleOutline } from "@/components/Content/ArticleOutline";
 import { ArticleSection, getArticleOutline } from "@/components/Content/ArticleSection";
 import { ArticleSources } from "@/components/Content/ArticleSources";
+import { headingAnchor } from "@/components/Content/article-text";
 import { RelatedPosts } from "@/components/Content/RelatedPosts";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
@@ -49,7 +51,8 @@ export default async function BlogPostPage({ params }: Props) {
 	const post = getBlogPost(slug);
 	if (!post) notFound();
 
-	const relatedPosts = BLOG_POSTS.filter((p) => post.relatedSlugs.includes(p.slug));
+	// Na ordem em que o artigo lista os relacionados.
+	const relatedPosts = post.relatedSlugs.flatMap((s) => BLOG_POSTS.filter((p) => p.slug === s));
 
 	const canonicalUrl = `https://www.recompracrm.com.br/blog/${post.slug}`;
 	const authorName = post.author ?? "Equipe RecompraCRM";
@@ -85,17 +88,23 @@ export default async function BlogPostPage({ params }: Props) {
 
 	const faqJsonLd = post.faqs && post.faqs.length > 0 ? buildFAQPageJsonLd(post.faqs) : null;
 
+	// O sumário termina nas perguntas frequentes, como no design.
+	const outline = getArticleOutline(post.sections);
+	if (post.faqs && post.faqs.length > 0) outline.push({ id: headingAnchor("Perguntas frequentes"), label: "Perguntas frequentes" });
+
 	return (
 		<>
 			{/* JSON-LD */}
 			<script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
 			{faqJsonLd && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }} />}
 
+			<Dock variant="artigo" />
+
 			<ArticleHero
 				cover={post.cover}
-				coverLabel={post.headline}
+				category={post.category}
 				categoryLabel={post.categoryLabel}
-				categoryHref={`/blog?categoria=${post.category}`}
+				categoryHref={`/blog?categoria=${post.category}#artigos`}
 				title={post.title}
 				description={post.description}
 				author={authorName}
@@ -104,24 +113,23 @@ export default async function BlogPostPage({ params }: Props) {
 				readingTime={post.readingTime}
 			/>
 
-			<div className="px-4 pb-16 sm:px-6">
-				<div className="container mx-auto max-w-5xl lg:grid lg:grid-cols-[minmax(0,680px)_200px] lg:justify-between lg:gap-12">
-					<article className="min-w-0">
-						{post.sections.map((section, i) => (
-							<ArticleSection key={`${section.type}-${i}`} section={section} />
-						))}
+			{/* Coluna do texto com 700px no máximo; a partir de 1100px o sumário "Neste artigo" ocupa 220px à direita. */}
+			<div className="mx-auto grid max-w-[1240px] grid-cols-[minmax(0,1fr)] items-start gap-20 px-6 pt-16 pb-24 sm:pt-20 sm:pb-[120px] min-[1100px]:grid-cols-[minmax(0,1fr)_220px]">
+				<article data-article="" className="w-full min-w-0 max-w-[700px] justify-self-center text-numeric">
+					{post.sections.map((section, i) => (
+						<ArticleSection key={`${section.type}-${i}`} section={section} />
+					))}
 
-						<ArticleCTA headline={post.cta.headline} sub={post.cta.sub} buttonText={post.cta.buttonText} whatsappMessage={post.cta.whatsappMessage} />
+					<ArticleCTA headline={post.cta.headline} sub={post.cta.sub} buttonText={post.cta.buttonText} whatsappMessage={post.cta.whatsappMessage} />
 
-						{post.faqs && post.faqs.length > 0 && <ArticleFAQ faqs={post.faqs} />}
+					{post.faqs && post.faqs.length > 0 && <ArticleFAQ faqs={post.faqs} />}
 
-						{post.sources && <ArticleSources sources={post.sources} />}
-					</article>
+					{post.sources && <ArticleSources sources={post.sources} />}
+				</article>
 
-					<aside className="hidden lg:block">
-						<ArticleOutline items={getArticleOutline(post.sections)} />
-					</aside>
-				</div>
+				<aside className="sticky top-28 hidden min-[1100px]:block">
+					<ArticleOutline items={outline} />
+				</aside>
 			</div>
 
 			<RelatedPosts posts={relatedPosts} />

@@ -18,7 +18,7 @@ export type FeaturePage = {
 	seo: {
 		keywords: string[];
 	};
-	relatedSegmentSlugs: string[]; // segment landings (/segmentos/[slug]) shown as "por segmento"
+	relatedSegmentSlugs: string[]; // segment landings (/segments/[slug]) shown as "por segmento"
 	relatedFeatureSlugs: string[];
 	// Fontes dos números de mercado citados na página (números do próprio produto não entram).
 	sources?: { label: string; url: string }[];

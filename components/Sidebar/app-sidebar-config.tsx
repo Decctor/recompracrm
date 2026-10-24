@@ -516,7 +516,7 @@ export const AppSidebarConfig: TSidebarConfigItemWithAccess[] = [
 			{
 				id: "help",
 				title: "Ajuda",
-				url: "/ajuda",
+				url: "/help",
 				icon: <CircleHelp className="size-4" />,
 				items: null,
 			},

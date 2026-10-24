@@ -1,9 +1,7 @@
+import { Dock } from "@/app/_components/Dock";
 import { BLOG_POSTS } from "@/app/_content/blog-posts";
-import { FEATURE_PAGES } from "@/app/_content/feature-pages";
 import { BlogPostCard } from "@/components/Content/BlogPostCard";
 import { BlogPostGrid, BlogPostGridView } from "@/components/Content/BlogPostGrid";
-import { FeatureCard } from "@/components/Content/FeatureCard";
-import { IsoIcon } from "@/components/Illustrations/Isometric/IsoIcon";
 import { ArrowRight } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -24,75 +22,74 @@ export const metadata: Metadata = {
 	},
 };
 
+const CONTAINER = "mx-auto max-w-[1240px] px-6";
+
 export default function BlogIndexPage() {
 	const posts = [...BLOG_POSTS].sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
 	const featured = posts[0];
 
 	return (
-		<main className="px-4 pt-28 pb-20 sm:px-6">
-			<div className="container mx-auto max-w-6xl">
-				<header className="mb-12 max-w-3xl sm:mb-16">
-					<p className="mb-4 text-label text-[#24549C]">Blog RecompraCRM</p>
-					<h1 className="mb-5 text-[40px] font-extrabold leading-[1.02] tracking-[-0.025em] text-slate-900 text-balance sm:text-6xl">
-						Ideias com dados para o cliente <span className="text-[#24549C]">voltar à sua loja</span>
-					</h1>
-					<p className="text-lg font-medium leading-[1.5] text-slate-500 sm:text-xl">
-						Guias práticos para o varejo físico, com números checados e fonte em cada dado. Sem receita de bolo, sem estatística inventada.
-					</p>
-				</header>
+		<>
+			<Dock variant="blog" />
+			<main className="text-numeric">
+				<section id="top" className="pt-32 pb-14 sm:pt-[168px] sm:pb-[72px]">
+					<div className={CONTAINER}>
+						<p className="m-0 mb-5 text-[13px] font-semibold text-[#24549c]">Blog RecompraCRM</p>
+						<h1 className="m-0 max-w-[920px] text-[42px] font-semibold leading-[1.02] tracking-[-0.04em] text-balance sm:text-[52px] lg:text-[64px]">
+							Ideias com dados para o cliente <span className="text-[#8a979c]">voltar à sua loja</span>
+						</h1>
+						<p className="m-0 mt-6 max-w-[640px] text-[17px] leading-[1.55] text-[#5b6a70] text-pretty sm:text-[19px]">
+							Guias práticos para o varejo físico, com números checados e fonte em cada dado. Sem receita de bolo, sem estatística inventada.
+						</p>
+					</div>
+				</section>
 
 				{posts.length === 0 ? (
-					<div className="py-20 text-center text-slate-400">
-						<p className="text-lg font-medium">Novos artigos em breve.</p>
-					</div>
+					<section className="pb-24 sm:pb-[120px]">
+						<p className={`${CONTAINER} text-lg font-medium text-[#8a979c]`}>Novos artigos em breve.</p>
+					</section>
 				) : (
 					<>
-						{featured && (
-							<section className="mb-16" aria-label="Artigo em destaque">
-								<BlogPostCard post={featured} variant="featured" />
+						{featured ? (
+							<section aria-label="Artigo em destaque" className="pb-24 sm:pb-[120px]">
+								<div className={CONTAINER}>
+									<BlogPostCard post={featured} variant="featured" />
+								</div>
 							</section>
-						)}
+						) : null}
 
-						{posts.length > 1 && (
-							<section id="artigos" className="mb-20 scroll-mt-24">
-								<h2 className="mb-6 text-2xl font-extrabold tracking-[-0.015em] text-slate-900 sm:text-[28px]">Todos os artigos</h2>
-								<Suspense fallback={<BlogPostGridView posts={posts} featuredSlug={featured?.slug} active={null} />}>
-									<BlogPostGrid posts={posts} featuredSlug={featured?.slug} />
-								</Suspense>
+						{posts.length > 1 ? (
+							<section id="artigos" className="scroll-mt-24 pb-24 sm:pb-[120px]">
+								<div className={CONTAINER}>
+									<Suspense fallback={<BlogPostGridView posts={posts} featuredSlug={featured?.slug} active={null} />}>
+										<BlogPostGrid posts={posts} featuredSlug={featured?.slug} />
+									</Suspense>
+								</div>
 							</section>
-						)}
+						) : null}
 					</>
 				)}
 
-				<section className="mb-20 grid items-center gap-6 overflow-hidden rounded-[26px] bg-[#eef3fb] p-7 sm:grid-cols-[160px_minmax(0,1fr)_auto] sm:p-10">
-					<IsoIcon icon="store" className="hidden w-40 sm:block" />
-					<div>
-						<h2 className="mb-2 text-xl font-extrabold tracking-[-0.015em] text-slate-900 sm:text-2xl">Procurando o seu segmento?</h2>
-						<p className="max-w-xl leading-relaxed text-slate-600">
-							Veja como o programa de fidelidade funciona para restaurantes, pet shops, farmácias, moda e mais de 20 tipos de loja.
-						</p>
-					</div>
-					<Link
-						href="/segmentos"
-						className="inline-flex h-12 w-fit items-center gap-2 whitespace-nowrap rounded-2xl bg-[#24549C] px-6 text-[15px] font-extrabold text-white shadow-[0_6px_14px_-4px_rgba(36,84,156,0.32),0_2px_4px_rgba(36,84,156,0.18)] transition-[transform,background-color] duration-300 hover:-translate-y-px hover:bg-[#1a3d7a]"
-					>
-						Ver segmentos
-						<ArrowRight className="size-4" aria-hidden />
-					</Link>
-				</section>
-
-				{FEATURE_PAGES.length > 0 && (
-					<section>
-						<p className="mb-2 text-label text-[#24549C]">Produto</p>
-						<h2 className="mb-8 text-2xl font-extrabold tracking-[-0.015em] text-slate-900 sm:text-[28px]">Conheça as funcionalidades</h2>
-						<div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-							{FEATURE_PAGES.map((feature) => (
-								<FeatureCard key={feature.slug} feature={feature} />
-							))}
+				<section className="pb-24 sm:pb-[120px]">
+					<div className={CONTAINER}>
+						<div className="flex flex-wrap items-center justify-between gap-x-12 gap-y-6 rounded-[28px] bg-[#eef2f6] p-7 sm:p-12">
+							<div className="max-w-[620px]">
+								<h2 className="m-0 text-[26px] font-semibold leading-[1.1] tracking-[-0.03em] sm:text-[32px]">Procurando o seu segmento?</h2>
+								<p className="m-0 mt-3 text-[17px] leading-[1.6] text-[#5b6a70]">
+									Veja como o programa de fidelidade funciona para restaurantes, pet shops, farmácias, moda e mais de 20 tipos de loja.
+								</p>
+							</div>
+							<Link
+								href="/segments"
+								className="inline-flex h-[46px] items-center gap-2 whitespace-nowrap rounded-full bg-[#0e1214] px-[22px] text-[15px] font-medium text-white transition-colors hover:bg-[#24549c]"
+							>
+								Ver segmentos
+								<ArrowRight className="size-4" aria-hidden />
+							</Link>
 						</div>
-					</section>
-				)}
-			</div>
-		</main>
+					</div>
+				</section>
+			</main>
+		</>
 	);
 }
