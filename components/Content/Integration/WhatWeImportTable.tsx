@@ -1,45 +1,41 @@
 import type { IntegrationImportGroup } from "@/app/_content/integration-pages";
+import { Check } from "lucide-react";
+import { getEntityIcon } from "./integration-icons";
 
 type WhatWeImportTableProps = {
 	name: string;
 	groups: IntegrationImportGroup[];
 };
 
-// Plain-language "what comes in" section. Business language + human-readable
-// tags — deliberately not a technical field-mapping.
+// "O que o RecompraCRM importa": um cartão por grupo de dados, em linguagem de negócio — de
+// propósito não é um mapeamento técnico de campos. `id="importa"` é o destino do botão do topo.
 export function WhatWeImportTable({ name, groups }: WhatWeImportTableProps) {
 	return (
-		<section className="mb-16">
-			<div className="mb-8">
-				<span className="text-xs font-black uppercase tracking-[0.2em] text-[#24549C]">O que entra</span>
-				<h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">Tudo que vem do {name}, sem digitar</h2>
-				<p className="mt-3 max-w-2xl leading-relaxed text-slate-600">
-					A cada sincronização, o RecompraCRM traz suas vendas, clientes e produtos do {name} já organizados — prontos para gerar cashback e campanhas.
-				</p>
-			</div>
-
-			<div className="overflow-hidden rounded-3xl border border-slate-200 bg-white">
-				{groups.map((group, gi) => (
-					<div key={group.entity} className={`grid gap-4 p-6 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] sm:gap-8 sm:p-8${gi > 0 ? " border-t border-slate-100" : ""}`}>
-						{/* What */}
-						<div className="flex gap-4">
-							<span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-slate-50 text-xl">{group.emoji}</span>
-							<div>
-								<h3 className="text-base font-black tracking-tight text-slate-900">{group.entity}</h3>
-								<p className="mt-1 text-sm leading-relaxed text-slate-600">{group.summary}</p>
-							</div>
+		<section id="importa" className="scroll-mt-[110px]">
+			<h2 className="m-0 max-w-[640px] text-[32px] font-semibold leading-[1.05] tracking-[-0.035em] text-balance sm:text-[44px]">
+				O que o RecompraCRM importa do {name}
+			</h2>
+			<div className="mt-10 grid grid-cols-[repeat(auto-fit,minmax(min(100%,300px),1fr))] gap-3 rounded-[28px] bg-[#eef2f6] p-3">
+				{groups.map((group) => {
+					const Icon = getEntityIcon(group.entity);
+					return (
+						<div key={group.entity} className="flex flex-col gap-4 rounded-[20px] bg-white p-6 sm:p-7">
+							<span className="flex size-11 items-center justify-center rounded-full bg-[#eef2f6] text-[#24549c]">
+								<Icon className="size-5" aria-hidden />
+							</span>
+							<h3 className="m-0 text-[22px] font-semibold leading-[normal] tracking-[-0.02em]">{group.entity}</h3>
+							<p className="m-0 text-[15px] leading-[1.6] text-[#5b6a70]">{group.summary}</p>
+							<ul className="m-0 mt-auto flex list-none flex-col gap-2 border-t border-[#eef1f2] p-0 pt-4">
+								{group.items.map((item) => (
+									<li key={item} className="flex items-center gap-2.5 text-sm leading-[normal] text-[#2b3538]">
+										<Check className="size-3.5 flex-none text-[#24549c]" aria-hidden />
+										{item}
+									</li>
+								))}
+							</ul>
 						</div>
-
-						{/* Human-readable tags */}
-						<div className="flex flex-wrap content-start gap-2 sm:justify-end">
-							{group.items.map((item) => (
-								<span key={item} className="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-semibold text-[#24549C]">
-									{item}
-								</span>
-							))}
-						</div>
-					</div>
-				))}
+					);
+				})}
 			</div>
 		</section>
 	);

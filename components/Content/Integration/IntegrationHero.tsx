@@ -1,101 +1,124 @@
-import { BrandLogo } from "@/components/Brand/BrandLogo";
 import type { IntegrationPage } from "@/app/_content/integration-pages";
-import { ArrowRight, Calendar, Plug } from "lucide-react";
-import Image from "next/image";
+import { BrandLogo } from "@/components/Brand/BrandLogo";
+import { ArrowRight, Check, ChevronRight, Plus, RefreshCcw, ShieldCheck } from "lucide-react";
 import Link from "next/link";
-
-const WHATSAPP_NUMBER = "553499480791";
+import { CategoryChip, IntegrationLogo } from "./IntegrationCard";
+import { getEntityIcon } from "./integration-icons";
+import { buildWhatsappUrl } from "./links";
+import { TrackedLink } from "./TrackedLink";
 
 type IntegrationHeroProps = {
 	page: IntegrationPage;
 };
 
+// Topo da página de uma integração: trilha, par de logos, chamada e o painel "conectado" com o
+// que a integração importa.
 export function IntegrationHero({ page }: IntegrationHeroProps) {
-	const whatsappUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(page.cta.whatsappMessage)}`;
-
 	return (
-		<section className="bg-gradient-to-b from-slate-50 to-white px-6 pt-28 pb-16">
-			<div className="container mx-auto max-w-5xl">
-				{/* Breadcrumb */}
-				<nav aria-label="Trilha de navegação" className="mb-8 flex items-center gap-2 text-sm">
-					<Link href="/" className="font-semibold text-[#24549C] hover:underline">
-						Home
-					</Link>
-					<span className="text-slate-300">/</span>
-					<Link href="/integrations" className="text-slate-500 transition-colors hover:text-[#24549C]">
+		<header id="top" className="pt-[120px] sm:pt-[152px]">
+			<div className="mx-auto max-w-[1240px] px-6">
+				<nav aria-label="Trilha" className="mb-10 flex items-center gap-2 text-sm leading-[normal] sm:mb-12">
+					<Link href="/integrations" className="font-medium text-[#0e1214] hover:text-[#24549c]">
 						Integrações
 					</Link>
-					<span className="text-slate-300">/</span>
-					<span className="text-slate-400">{page.name}</span>
+					<ChevronRight className="size-3.5 flex-none text-[#c9d1d4]" aria-hidden />
+					<span aria-current="page" className="text-[#687a80]">
+						{page.name}
+					</span>
 				</nav>
 
-				<div className="grid items-center gap-12 lg:grid-cols-2">
-					{/* Copy */}
-					<div>
-						<span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1.5 text-xs font-bold text-[#24549C]">
-							<Plug className="h-3.5 w-3.5" />
-							Integração · {page.category}
-						</span>
+				<div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,440px),1fr))] items-center gap-x-[72px] gap-y-14">
+					<div className="min-w-0">
+						<div className="flex flex-wrap items-center gap-2.5">
+							<IntegrationLogo integration={page} className="size-14 p-[11px]" />
+							<Plus className="size-4 flex-none text-[#9aa6ab]" aria-hidden />
+							<span className="flex size-14 flex-none items-center justify-center rounded-full bg-[#0b1628] p-2">
+								<span className="relative size-full">
+									<BrandLogo lockup="icon-badge" tone="color" alt="RecompraCRM" fill className="object-contain" />
+								</span>
+							</span>
+							<span className="ml-2">
+								<CategoryChip>{page.category}</CategoryChip>
+							</span>
+						</div>
 
-						<h1 className="mt-4 text-3xl font-black leading-tight tracking-tight text-slate-900 sm:text-4xl lg:text-5xl">{page.tagline}</h1>
-						<p className="mt-5 text-lg leading-relaxed text-slate-600">{page.heroSubtitle}</p>
+						<h1 className="m-0 mt-7 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em] text-balance sm:text-[48px] lg:text-[56px] lg:leading-[1.03]">
+							{page.tagline}
+						</h1>
+						<p className="m-0 mt-5 max-w-[560px] text-[17px] leading-[1.6] text-[#5b6a70] text-pretty sm:text-lg">{page.heroSubtitle}</p>
 
-						<div className="mt-8 flex flex-wrap items-center gap-3">
-							<a
-								href={whatsappUrl}
-								target="_blank"
-								rel="noopener noreferrer"
-								className="inline-flex items-center gap-2 rounded-2xl bg-[#24549C] px-6 py-3.5 text-base font-black text-white shadow-lg shadow-[#24549C]/25 transition-all duration-300 hover:-translate-y-0.5 hover:bg-[#1a3d7a]"
+						<div className="mt-7 flex flex-wrap gap-2.5">
+							<TrackedLink
+								href={buildWhatsappUrl(page.cta.whatsappMessage)}
+								ctaId="integration_demo"
+								location="hero"
+								page={`integration_${page.slug}`}
+								className="inline-flex h-[46px] items-center gap-2 whitespace-nowrap rounded-full bg-[#0e1214] px-[22px] text-[15px] font-medium text-white transition-colors hover:bg-[#24549c]"
 							>
 								{page.cta.buttonText}
-								<ArrowRight className="h-5 w-5" />
-							</a>
+								<ArrowRight className="size-4" aria-hidden />
+							</TrackedLink>
 							<a
-								href="#como-conecta"
-								className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-6 py-3.5 text-base font-bold text-slate-700 transition-colors hover:bg-slate-50"
+								href="#importa"
+								className="inline-flex h-[46px] items-center whitespace-nowrap rounded-full border border-[#e3e8ea] px-[22px] text-[15px] font-medium text-[#0e1214] transition-colors hover:bg-[#f6f8f9]"
 							>
-								Ver como conecta
+								O que importamos
 							</a>
 						</div>
 
-						<div className="mt-8 flex flex-wrap gap-4 text-sm font-medium text-slate-500">
-							<span className="flex items-center gap-1.5">
-								<Calendar className="h-4 w-4 text-[#24549C]" />
-								15 dias grátis para testar
-							</span>
-							<span>✓ Setup em menos de 1 dia</span>
-						</div>
+						<p className="m-0 mt-6 flex items-center gap-2 text-sm leading-[1.4] text-[#5b6a70]">
+							<ShieldCheck className="size-4 flex-none text-[#16a34a]" aria-hidden />
+							{page.connectionSummary}
+						</p>
 					</div>
 
-					{/* Connection lockup — partner logo × RecompraCRM */}
-					<div className="relative">
-						<div className="absolute -inset-4 -z-10 rounded-[2rem] bg-blue-50/60 blur-2xl" aria-hidden />
-						<div className="flex flex-col items-center gap-7 rounded-3xl border border-slate-200 bg-white px-8 py-12 shadow-xl shadow-slate-900/5">
-							<span className="rounded-full bg-blue-50 px-3 py-1 text-[0.65rem] font-black uppercase tracking-widest text-[#24549C]">
-								Integração oficial
-							</span>
-
-							<div className="flex h-24 w-full max-w-[240px] items-center justify-center">
-								<Image src={page.logo} alt={page.logoAlt} className="h-full w-full object-contain" priority />
-							</div>
-
-							{/* Connector */}
-							<div className="flex w-full max-w-[240px] items-center gap-3" aria-hidden>
-								<span className="h-px flex-1 bg-slate-200" />
-								<span className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-50 text-[#24549C]">
-									<Plug className="h-4 w-4" />
-								</span>
-								<span className="h-px flex-1 bg-slate-200" />
-							</div>
-
-							<div className="relative h-7 w-40">
-								<BrandLogo lockup="horizontal-badge" tone="color-on-light" alt="RecompraCRM" fill className="object-contain" />
-							</div>
-						</div>
-						<p className="mt-4 text-center text-xs font-medium text-slate-400">{page.connectionSummary}</p>
-					</div>
+					<ConnectedPanel page={page} />
 				</div>
 			</div>
-		</section>
+		</header>
+	);
+}
+
+// Recorte ilustrativo do conector já ligado: uma linha por grupo de dados importados.
+function ConnectedPanel({ page }: { page: IntegrationPage }) {
+	return (
+		<div className="min-w-0 rounded-[28px] bg-[#eef2f6] p-4 sm:p-10" aria-hidden>
+			<div className="overflow-hidden rounded-2xl border border-[rgba(14,18,20,0.08)] bg-white shadow-[0_30px_70px_-30px_rgba(16,24,40,0.35)]">
+				<div className="flex items-center justify-between gap-3 border-b border-[#e3e8ea] px-[18px] py-4">
+					<div className="flex min-w-0 items-center gap-2.5">
+						<IntegrationLogo integration={page} decorative className="size-8 p-1.5" />
+						<span className="truncate text-[15px] font-bold leading-[normal] tracking-[-0.015em]">{page.name}</span>
+					</div>
+					<span className="inline-flex flex-none items-center gap-1.5 rounded-full bg-[#dcfce7] px-2.5 py-1 text-xs font-semibold leading-[normal] text-[#15803d]">
+						<span className="size-1.5 rounded-full bg-[#16a34a]" />
+						CONECTADO
+					</span>
+				</div>
+				<div className="flex flex-col">
+					{page.whatWeImport.map((group) => {
+						const Icon = getEntityIcon(group.entity);
+						return (
+							<div key={group.entity} className="flex items-center gap-3 border-b border-[#f2f4f4] px-[18px] py-3.5">
+								<span className="flex size-9 flex-none items-center justify-center rounded-[10px] bg-[rgba(36,84,156,0.1)] text-[#24549c]">
+									<Icon className="size-4" />
+								</span>
+								<div className="min-w-0 flex-1">
+									<p className="m-0 text-sm font-bold leading-[normal]">{group.entity}</p>
+									<p className="m-0 mt-0.5 truncate text-xs leading-[normal] text-[#687a80]">{group.items.join(" · ")}</p>
+								</div>
+								<span className="inline-flex flex-none items-center gap-1 whitespace-nowrap text-xs font-semibold leading-[normal] text-[#15803d]">
+									<Check className="size-3.5" />
+									<span className="hidden min-[380px]:inline">Sincronizado</span>
+								</span>
+							</div>
+						);
+					})}
+				</div>
+				<div className="flex items-center gap-2 bg-[#f7f9f9] px-[18px] py-3 text-xs leading-[normal] text-[#687a80]">
+					<RefreshCcw className="size-3.5" />
+					Sincronização automática
+				</div>
+			</div>
+		</div>
 	);
 }

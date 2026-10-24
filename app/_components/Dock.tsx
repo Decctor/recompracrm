@@ -5,6 +5,7 @@ import { captureClientEvent } from "@/lib/analytics/posthog-client";
 import { cn } from "@/lib/utils";
 import { ArrowRight, Menu, X } from "lucide-react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 // Header "dock" das páginas de marketing. No topo é uma barra larga e transparente; ao rolar
@@ -112,6 +113,18 @@ const TAG: Record<TDockVariant, string | null> = {
 	help: "Ajuda",
 	partners: "Parceiros",
 };
+// Página que contém as seções de cada área. Fora dela (num artigo de ajuda, num case), o link de
+// seção volta para lá em vez de apontar para uma âncora que não existe na página atual. Sem entrada,
+// toda página da área tem as mesmas seções (funcionalidades, integrações).
+const SECTIONS_PAGE: Partial<Record<TDockVariant, string>> = {
+	landing: "/",
+	erp: "/erp",
+	blog: "/blog",
+	cases: "/cases",
+	help: "/help",
+	partners: "/partnerships",
+};
+
 const HOME_HREF: Record<TDockVariant, string> = {
 	landing: "#top",
 	erp: "/",
@@ -163,6 +176,7 @@ type DockProps = {
 };
 
 export function Dock({ variant = "landing", theme = "auto", compactOnScroll = true }: DockProps) {
+	const pathname = usePathname();
 	const [scrolled, setScrolled] = useState(false);
 	const [overDark, setOverDark] = useState(false);
 	const [active, setActive] = useState<string | null>(null);
@@ -238,6 +252,8 @@ export function Dock({ variant = "landing", theme = "auto", compactOnScroll = tr
 	const cta = (active ? CTA[variant][active] : undefined) ?? CTA[variant]._;
 	const ctaIsExternal = cta.href.startsWith("http");
 	const tag = TAG[variant];
+	const sectionsPage = SECTIONS_PAGE[variant];
+	const sectionHref = (id?: string) => (sectionsPage && pathname !== sectionsPage ? `${sectionsPage}#${id}` : `#${id}`);
 	const bp = getBreakpointClasses(variant);
 	const isArticleReading = variant === "artigo" && compact;
 
@@ -299,7 +315,7 @@ export function Dock({ variant = "landing", theme = "auto", compactOnScroll = tr
 				{links.length > 0 ? (
 					<div className={cn("hidden min-w-0 items-center gap-0.5", bp.flex)}>
 						{links.map((link) => {
-							const href = link.href ?? `#${link.id}`;
+							const href = link.href ?? sectionHref(link.id);
 							const on = !!link.id && link.id === active && !link.href;
 							return (
 								<Link
@@ -378,7 +394,7 @@ export function Dock({ variant = "landing", theme = "auto", compactOnScroll = tr
 					)}
 				>
 					{links.map((link) => {
-						const href = link.href ?? `#${link.id}`;
+						const href = link.href ?? sectionHref(link.id);
 						const on = !!link.id && link.id === active && !link.href;
 						return (
 							<Link

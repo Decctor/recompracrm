@@ -1,14 +1,16 @@
 import { getIntegrationPage, INTEGRATION_PAGES } from "@/app/_content/integration-pages";
-import { ArticleCTA } from "@/components/Content/ArticleCTA";
-import { ArticleFAQ, buildFAQPageJsonLd } from "@/components/Content/ArticleFAQ";
+import { buildFAQPageJsonLd } from "@/components/Content/ArticleFAQ";
 import { IntegrationCard } from "@/components/Content/Integration/IntegrationCard";
+import { IntegrationCTA } from "@/components/Content/Integration/IntegrationCTA";
+import { IntegrationFAQ } from "@/components/Content/Integration/IntegrationFAQ";
 import { IntegrationHero } from "@/components/Content/Integration/IntegrationHero";
 import { IntegrationHowItWorks } from "@/components/Content/Integration/IntegrationHowItWorks";
 import { IntegrationUnlocks } from "@/components/Content/Integration/IntegrationUnlocks";
 import { WhatWeImportTable } from "@/components/Content/Integration/WhatWeImportTable";
+import { ArrowRight } from "lucide-react";
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
-import { IntegrationMockup } from "../_components/mockups";
 
 const BASE_URL = "https://www.recompracrm.com.br";
 
@@ -47,7 +49,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 function formatUpdatedAt(iso: string) {
-	return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "long", year: "numeric" }).format(new Date(iso));
+	return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(iso));
 }
 
 export default async function IntegrationDetailPage({ params }: Props) {
@@ -56,7 +58,8 @@ export default async function IntegrationDetailPage({ params }: Props) {
 	if (!page) notFound();
 
 	const canonicalUrl = `${BASE_URL}/integrations/${page.slug}`;
-	const relatedIntegrations = INTEGRATION_PAGES.filter((p) => page.relatedIntegrationSlugs.includes(p.slug));
+	// Na ordem em que a integração lista as relacionadas.
+	const relatedIntegrations = page.relatedIntegrationSlugs.flatMap((s) => INTEGRATION_PAGES.filter((p) => p.slug === s));
 
 	const softwareJsonLd = {
 		"@context": "https://schema.org",
@@ -91,8 +94,6 @@ export default async function IntegrationDetailPage({ params }: Props) {
 		],
 	};
 
-	const stepMockups = page.howItWorks.map((step) => <IntegrationMockup key={step.mockupKey} mockupKey={step.mockupKey} logo={page.logo} name={page.name} />);
-
 	return (
 		<>
 			<script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareJsonLd) }} />
@@ -101,40 +102,48 @@ export default async function IntegrationDetailPage({ params }: Props) {
 
 			<IntegrationHero page={page} />
 
-			<div className="px-6 pb-20">
-				<div className="container mx-auto max-w-5xl">
-					{/* Answer block — extractable definition */}
-					<div className="mb-16 rounded-3xl border border-slate-200 bg-slate-50/60 p-8 sm:p-10">
-						<div className="flex items-center justify-between gap-4">
-							<h2 className="text-lg font-black tracking-tight text-slate-900">O que é a integração {page.name}?</h2>
-							<span className="hidden whitespace-nowrap text-xs font-medium text-slate-400 sm:block">Atualizado em {formatUpdatedAt(page.updatedAt)}</span>
-						</div>
-						<p className="mt-4 text-lg leading-relaxed text-slate-700">{page.answerBlock}</p>
-						<span className="mt-4 block text-xs font-medium text-slate-400 sm:hidden">Atualizado em {formatUpdatedAt(page.updatedAt)}</span>
+			<main className="mx-auto flex max-w-[1240px] flex-col gap-20 px-6 pt-16 sm:gap-[120px] sm:pt-24">
+				{/* Bloco de resposta — definição extraível por buscadores e agentes. */}
+				<section className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,360px),1fr))] items-start gap-x-[72px] gap-y-5 border-t border-[#0e1214] pt-10">
+					<div>
+						<h2 className="m-0 text-2xl font-semibold leading-[1.15] tracking-[-0.025em] sm:text-[28px]">O que é a integração {page.name}?</h2>
+						<p className="m-0 mt-3 text-[13px] leading-[normal] text-[#8a979c]">
+							Atualizado em <time dateTime={page.updatedAt}>{formatUpdatedAt(page.updatedAt)}</time>
+						</p>
 					</div>
+					<p className="m-0 text-lg leading-[1.6] text-[#2b3538] text-pretty sm:text-xl">{page.answerBlock}</p>
+				</section>
 
-					<WhatWeImportTable name={page.name} groups={page.whatWeImport} />
+				<WhatWeImportTable name={page.name} groups={page.whatWeImport} />
 
-					<IntegrationHowItWorks name={page.name} steps={page.howItWorks} mockups={stepMockups} />
+				<IntegrationHowItWorks steps={page.howItWorks} />
 
-					<IntegrationUnlocks name={page.name} unlocks={page.unlocks} />
+				<IntegrationUnlocks unlocks={page.unlocks} />
 
-					<ArticleCTA headline={page.cta.headline} sub={page.cta.sub} buttonText={page.cta.buttonText} whatsappMessage={page.cta.whatsappMessage} />
+				<IntegrationCTA page={page} />
 
-					<ArticleFAQ faqs={page.faqs} />
+				<IntegrationFAQ faqs={page.faqs} />
 
-					{relatedIntegrations.length > 0 && (
-						<section className="mt-16 border-t border-slate-100 pt-12">
-							<h2 className="mb-8 text-xl font-black text-slate-900">Outras integrações</h2>
-							<div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-								{relatedIntegrations.map((integration) => (
-									<IntegrationCard key={integration.slug} integration={integration} />
-								))}
-							</div>
-						</section>
-					)}
-				</div>
-			</div>
+				{relatedIntegrations.length > 0 && (
+					<section id="conectores" className="scroll-mt-[110px] border-t border-[#e3e8ea] pt-14 pb-24 sm:pb-[120px]">
+						<div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+							<h2 className="m-0 text-[32px] font-semibold leading-[1.05] tracking-[-0.035em] sm:text-[40px]">Outras integrações</h2>
+							<Link
+								href="/integrations"
+								className="inline-flex items-center gap-1.5 text-[15px] font-medium leading-[normal] text-[#0e1214] hover:text-[#24549c]"
+							>
+								Ver todas
+								<ArrowRight className="size-4" aria-hidden />
+							</Link>
+						</div>
+						<div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,340px),1fr))] gap-6">
+							{relatedIntegrations.map((integration) => (
+								<IntegrationCard key={integration.slug} integration={integration} variant="compact" />
+							))}
+						</div>
+					</section>
+				)}
+			</main>
 		</>
 	);
 }

@@ -9,36 +9,31 @@ import type { FAQItem } from "./blog-posts";
 // ----------------------------------------------------------------------------
 // Content model for integration ("data connector") landing pages.
 // One object per integration drives a full page + hub card. Adding a new
-// integration = adding one object here (plus its mockups, if any are new).
+// integration = adding one object here. Icons are resolved by entity name and
+// feature slug in components/Content/Integration/integration-icons.ts.
 // ----------------------------------------------------------------------------
 
 // A group of data the connector brings into RecompraCRM, described in plain
-// business language (not source field names). Powers the "O que entra" section.
+// business language (not source field names). Powers the "O que importamos" section
+// and the "connected" panel in the hero.
 export type IntegrationImportGroup = {
 	entity: string; // e.g. "Vendas", "Clientes", "Produtos"
-	emoji: string; // small visual marker
 	summary: string; // one plain-language line: what comes in and why
 	items: string[]; // human-readable things captured (no code / field paths)
 };
 
-// A single connection step, illustrated by a mockup (see mockups registry).
+// A single connection step ("Como funciona a conexão").
 export type IntegrationStep = {
 	title: string;
 	body: string;
-	mockupKey: IntegrationMockupKey;
 };
 
 // A retention capability the imported data unlocks; links to a feature page.
 export type IntegrationUnlock = {
-	emoji: string;
 	title: string;
 	body: string;
 	featureSlug: string;
 };
-
-// Keys resolved by the mockups registry in the integrations route.
-// "connect" = OAuth authorize screen; "connect-credentials" = credentials form.
-export type IntegrationMockupKey = "connect" | "connect-credentials" | "sync" | "mapping" | "imported";
 
 export type IntegrationPage = {
 	slug: string;
@@ -88,19 +83,16 @@ export const INTEGRATION_PAGES: IntegrationPage[] = [
 		whatWeImport: [
 			{
 				entity: "Vendas",
-				emoji: "🧾",
 				summary: "Cada pedido do Bling vira uma venda completa no CRM — e cancelamentos são revertidos sozinhos.",
 				items: ["Valor e data", "Itens e descontos", "Vendedor responsável", "Cancelamentos revertidos"],
 			},
 			{
 				entity: "Clientes",
-				emoji: "👤",
 				summary: "Quem compra entra na sua base de contatos, pronto para receber cashback e campanhas.",
 				items: ["Nome", "Telefone", "CPF / CNPJ", "Cidade e estado"],
 			},
 			{
 				entity: "Produtos",
-				emoji: "📦",
 				summary: "Seu catálogo do Bling espelhado no CRM para análises de recompra por item.",
 				items: ["Nome e código", "Categoria", "Unidade de medida"],
 			},
@@ -108,40 +100,36 @@ export const INTEGRATION_PAGES: IntegrationPage[] = [
 		howItWorks: [
 			{
 				title: "Autorize o Bling",
-				body: "Em Configurações → Integrações, clique em conectar e autorize o acesso pela tela oficial do Bling (OAuth). Nenhuma senha é compartilhada com o RecompraCRM.",
-				mockupKey: "connect",
+				body:
+					"Em Configurações → Integrações, clique em conectar e autorize o acesso pela tela oficial do Bling (OAuth). Nenhuma senha é compartilhada com o RecompraCRM.",
 			},
 			{
 				title: "Sincronização automática",
-				body: "A cada poucos minutos o RecompraCRM busca os novos pedidos, contatos e produtos do período. Você acompanha a última sincronização e a contagem de itens importados.",
-				mockupKey: "sync",
+				body:
+					"A cada poucos minutos o RecompraCRM busca os novos pedidos, contatos e produtos do período. Você acompanha a última sincronização e a contagem de itens importados.",
 			},
 			{
 				title: "Organização automática",
 				body: "Os pedidos do Bling viram vendas, os contatos viram clientes e os itens viram produtos — sem duplicar quem já está na sua base.",
-				mockupKey: "mapping",
 			},
 			{
 				title: "Dados viram recompra",
-				body: "Com as vendas no CRM, o cashback acumula sozinho, a análise RFM reclassifica os clientes e as campanhas de WhatsApp disparam nos gatilhos certos.",
-				mockupKey: "imported",
+				body:
+					"Com as vendas no CRM, o cashback acumula sozinho, a análise RFM reclassifica os clientes e as campanhas de WhatsApp disparam nos gatilhos certos.",
 			},
 		],
 		unlocks: [
 			{
-				emoji: "💸",
 				title: "Cashback automático",
 				body: "Cada venda importada do Bling acumula cashback conforme as regras do seu programa, sem lançamento manual.",
 				featureSlug: "programa-de-cashback",
 			},
 			{
-				emoji: "📱",
 				title: "Campanhas de WhatsApp",
 				body: "Primeira compra, cliente sumido e cashback expirando viram disparos automáticos a partir das vendas do Bling.",
 				featureSlug: "campanhas-whatsapp",
 			},
 			{
-				emoji: "📊",
 				title: "Análise RFM e BI",
 				body: "A base sincronizada alimenta a segmentação RFM e os painéis de faturamento, ticket médio e recompra.",
 				featureSlug: "business-intelligence",
@@ -214,25 +202,21 @@ export const INTEGRATION_PAGES: IntegrationPage[] = [
 		whatWeImport: [
 			{
 				entity: "Vendas",
-				emoji: "🧾",
 				summary: "Cada venda do balcão registrada no ERP vira uma venda completa no CRM, com dados fiscais da nota.",
 				items: ["Valor e data", "Itens e descontos", "Nota fiscal (NF-e)", "Cancelamentos revertidos"],
 			},
 			{
 				entity: "Clientes",
-				emoji: "👤",
 				summary: "Quem compra entra na sua base de contatos, pronto para receber cashback e campanhas.",
 				items: ["Nome", "Telefone", "Histórico de compras"],
 			},
 			{
 				entity: "Produtos",
-				emoji: "📦",
 				summary: "Seu catálogo do ERP espelhado no CRM para análises de recompra por item.",
 				items: ["Código e descrição", "Grupo", "Unidade e NCM"],
 			},
 			{
 				entity: "Equipe",
-				emoji: "🤝",
 				summary: "Vendedores e parceiros vêm junto, para você medir desempenho e atribuir cada venda.",
 				items: ["Vendedores", "Parceiros"],
 			},
@@ -241,39 +225,35 @@ export const INTEGRATION_PAGES: IntegrationPage[] = [
 			{
 				title: "Informe suas credenciais",
 				body: "Em Configurações → Integrações, escolha o Online Software e informe as credenciais de acesso do seu ERP. A conexão é validada na hora.",
-				mockupKey: "connect-credentials",
 			},
 			{
 				title: "Sincronização automática",
-				body: "A cada poucos minutos o RecompraCRM busca as novas vendas do período no seu ERP. Você acompanha a última sincronização e a contagem de itens importados.",
-				mockupKey: "sync",
+				body:
+					"A cada poucos minutos o RecompraCRM busca as novas vendas do período no seu ERP. Você acompanha a última sincronização e a contagem de itens importados.",
 			},
 			{
 				title: "Organização automática",
-				body: "As vendas do Online Software viram vendas no CRM, os clientes viram contatos e os itens viram produtos — sem duplicar quem já está na sua base.",
-				mockupKey: "mapping",
+				body:
+					"As vendas do Online Software viram vendas no CRM, os clientes viram contatos e os itens viram produtos — sem duplicar quem já está na sua base.",
 			},
 			{
 				title: "Dados viram recompra",
-				body: "Com as vendas no CRM, o cashback acumula sozinho, a análise RFM reclassifica os clientes e as campanhas de WhatsApp disparam nos gatilhos certos.",
-				mockupKey: "imported",
+				body:
+					"Com as vendas no CRM, o cashback acumula sozinho, a análise RFM reclassifica os clientes e as campanhas de WhatsApp disparam nos gatilhos certos.",
 			},
 		],
 		unlocks: [
 			{
-				emoji: "💸",
 				title: "Cashback automático",
 				body: "Cada venda importada do Online Software acumula cashback conforme as regras do seu programa, sem lançamento manual.",
 				featureSlug: "programa-de-cashback",
 			},
 			{
-				emoji: "📱",
 				title: "Campanhas de WhatsApp",
 				body: "Primeira compra, cliente sumido e cashback expirando viram disparos automáticos a partir das vendas do ERP.",
 				featureSlug: "campanhas-whatsapp",
 			},
 			{
-				emoji: "📊",
 				title: "Análise RFM e BI",
 				body: "A base sincronizada alimenta a segmentação RFM e os painéis de faturamento, ticket médio e desempenho por vendedor.",
 				featureSlug: "business-intelligence",
@@ -339,19 +319,16 @@ export const INTEGRATION_PAGES: IntegrationPage[] = [
 		whatWeImport: [
 			{
 				entity: "Pedidos",
-				emoji: "🛵",
 				summary: "Cada pedido de delivery, retirada ou salão vira uma venda completa no CRM.",
 				items: ["Valor e data", "Itens e adicionais", "Taxa de entrega", "Canal (iFood, WhatsApp, Portal)"],
 			},
 			{
 				entity: "Clientes",
-				emoji: "👤",
 				summary: "Quem pede entra na sua base com endereço, pronto para receber cashback e campanhas.",
 				items: ["Nome", "Telefone", "Endereço de entrega", "Bairro e cidade"],
 			},
 			{
 				entity: "Cardápio",
-				emoji: "🍔",
 				summary: "Seus itens e combos espelhados no CRM para análises de recompra por produto.",
 				items: ["Nome do item", "Combos", "Complementos e adicionais"],
 			},
@@ -360,39 +337,35 @@ export const INTEGRATION_PAGES: IntegrationPage[] = [
 			{
 				title: "Informe suas credenciais",
 				body: "Em Configurações → Integrações, escolha o Cardápio Web e informe as credenciais de acesso da sua conta. A conexão é validada na hora.",
-				mockupKey: "connect-credentials",
 			},
 			{
 				title: "Sincronização automática",
-				body: "A cada poucos minutos o RecompraCRM busca os novos pedidos do período. Você acompanha a última sincronização e a contagem de itens importados.",
-				mockupKey: "sync",
+				body:
+					"A cada poucos minutos o RecompraCRM busca os novos pedidos do período. Você acompanha a última sincronização e a contagem de itens importados.",
 			},
 			{
 				title: "Organização automática",
-				body: "Os pedidos do Cardápio Web viram vendas no CRM, os clientes viram contatos e os itens viram produtos — sem duplicar quem já está na sua base.",
-				mockupKey: "mapping",
+				body:
+					"Os pedidos do Cardápio Web viram vendas no CRM, os clientes viram contatos e os itens viram produtos — sem duplicar quem já está na sua base.",
 			},
 			{
 				title: "Pedidos viram recompra",
-				body: "Com os pedidos no CRM, o cashback acumula sozinho, a análise RFM reclassifica os clientes e as campanhas de WhatsApp trazem de volta quem parou de pedir.",
-				mockupKey: "imported",
+				body:
+					"Com os pedidos no CRM, o cashback acumula sozinho, a análise RFM reclassifica os clientes e as campanhas de WhatsApp trazem de volta quem parou de pedir.",
 			},
 		],
 		unlocks: [
 			{
-				emoji: "💸",
 				title: "Cashback automático",
 				body: "Cada pedido importado do Cardápio Web acumula cashback conforme as regras do seu programa, incentivando o próximo pedido.",
 				featureSlug: "programa-de-cashback",
 			},
 			{
-				emoji: "📱",
 				title: "Campanhas de WhatsApp",
 				body: "Primeiro pedido, cliente sumido e cashback expirando viram disparos automáticos que trazem o cliente de volta ao delivery.",
 				featureSlug: "campanhas-whatsapp",
 			},
 			{
-				emoji: "📊",
 				title: "Análise RFM e BI",
 				body: "A base sincronizada alimenta a segmentação RFM e os painéis de faturamento, ticket médio e frequência de pedidos.",
 				featureSlug: "business-intelligence",
@@ -458,19 +431,16 @@ export const INTEGRATION_PAGES: IntegrationPage[] = [
 		whatWeImport: [
 			{
 				entity: "Pedidos",
-				emoji: "🛒",
 				summary: "Cada pedido da sua loja online vira uma venda completa no CRM, já com o status de pagamento.",
 				items: ["Valor e data", "Itens e frete", "Desconto", "Pagamento confirmado"],
 			},
 			{
 				entity: "Clientes",
-				emoji: "👤",
 				summary: "Quem compra entra na sua base com e-mail e endereço, pronto para campanhas.",
 				items: ["Nome", "Telefone", "E-mail", "CPF / CNPJ", "Endereço"],
 			},
 			{
 				entity: "Produtos",
-				emoji: "📦",
 				summary: "Seu catálogo espelhado no CRM, com variantes e estoque, para análises por item.",
 				items: ["Nome e SKU", "Variantes (cor, tamanho)", "Categoria", "Estoque"],
 			},
@@ -478,40 +448,37 @@ export const INTEGRATION_PAGES: IntegrationPage[] = [
 		howItWorks: [
 			{
 				title: "Autorize a Nuvem Shop",
-				body: "Em Configurações → Integrações, clique em conectar e autorize o acesso pela tela oficial da Nuvem Shop (OAuth). Nenhuma senha é compartilhada com o RecompraCRM.",
-				mockupKey: "connect",
+				body:
+					"Em Configurações → Integrações, clique em conectar e autorize o acesso pela tela oficial da Nuvem Shop (OAuth). Nenhuma senha é compartilhada com o RecompraCRM.",
 			},
 			{
 				title: "Sincronização automática",
-				body: "A cada poucos minutos o RecompraCRM busca os novos pedidos e produtos da sua loja. Você acompanha a última sincronização e a contagem de itens importados.",
-				mockupKey: "sync",
+				body:
+					"A cada poucos minutos o RecompraCRM busca os novos pedidos e produtos da sua loja. Você acompanha a última sincronização e a contagem de itens importados.",
 			},
 			{
 				title: "Organização automática",
-				body: "Os pedidos da Nuvem Shop viram vendas no CRM, os clientes viram contatos e os itens viram produtos — sem duplicar quem já está na sua base.",
-				mockupKey: "mapping",
+				body:
+					"Os pedidos da Nuvem Shop viram vendas no CRM, os clientes viram contatos e os itens viram produtos — sem duplicar quem já está na sua base.",
 			},
 			{
 				title: "Pedidos viram recompra",
-				body: "Com os pedidos no CRM, o cashback acumula sozinho, a análise RFM reclassifica os clientes e as campanhas de WhatsApp trazem de volta quem comprou uma vez só.",
-				mockupKey: "imported",
+				body:
+					"Com os pedidos no CRM, o cashback acumula sozinho, a análise RFM reclassifica os clientes e as campanhas de WhatsApp trazem de volta quem comprou uma vez só.",
 			},
 		],
 		unlocks: [
 			{
-				emoji: "💸",
 				title: "Cashback automático",
 				body: "Cada pedido importado da Nuvem Shop acumula cashback conforme as regras do seu programa, incentivando a próxima compra online.",
 				featureSlug: "programa-de-cashback",
 			},
 			{
-				emoji: "📱",
 				title: "Campanhas de WhatsApp",
 				body: "Primeira compra, carrinho de quem sumiu e cashback expirando viram disparos automáticos de recompra.",
 				featureSlug: "campanhas-whatsapp",
 			},
 			{
-				emoji: "📊",
 				title: "Análise RFM e BI",
 				body: "A base sincronizada alimenta a segmentação RFM e os painéis de faturamento, ticket médio e recompra da loja online.",
 				featureSlug: "business-intelligence",
@@ -577,19 +544,16 @@ export const INTEGRATION_PAGES: IntegrationPage[] = [
 		whatWeImport: [
 			{
 				entity: "Pedidos",
-				emoji: "🛵",
 				summary: "Cada pedido confirmado no iFood vira uma venda completa no CRM, com a modalidade de entrega.",
 				items: ["Valor e data", "Itens e adicionais", "Taxa de entrega", "Entrega ou retirada"],
 			},
 			{
 				entity: "Clientes",
-				emoji: "👤",
 				summary: "Quem pede entra na sua base com endereço de entrega, pronto para campanhas diretas.",
 				items: ["Nome", "Telefone", "Endereço de entrega", "Bairro e cidade"],
 			},
 			{
 				entity: "Produtos",
-				emoji: "🍔",
 				summary: "Seus itens do iFood espelhados no CRM para análises de recompra por produto.",
 				items: ["Nome do item", "Adicionais e observações"],
 			},
@@ -597,40 +561,37 @@ export const INTEGRATION_PAGES: IntegrationPage[] = [
 		howItWorks: [
 			{
 				title: "Autorize o iFood",
-				body: "Em Configurações → Integrações, clique em conectar e autorize o acesso pela tela oficial do iFood (OAuth). Nenhuma senha é compartilhada com o RecompraCRM.",
-				mockupKey: "connect",
+				body:
+					"Em Configurações → Integrações, clique em conectar e autorize o acesso pela tela oficial do iFood (OAuth). Nenhuma senha é compartilhada com o RecompraCRM.",
 			},
 			{
 				title: "Sincronização automática",
-				body: "A cada poucos minutos o RecompraCRM busca os novos pedidos e sua evolução de status. Você acompanha a última sincronização e a contagem de itens importados.",
-				mockupKey: "sync",
+				body:
+					"A cada poucos minutos o RecompraCRM busca os novos pedidos e sua evolução de status. Você acompanha a última sincronização e a contagem de itens importados.",
 			},
 			{
 				title: "Organização automática",
 				body: "Os pedidos do iFood viram vendas no CRM, os clientes viram contatos e os itens viram produtos — sem duplicar quem já está na sua base.",
-				mockupKey: "mapping",
 			},
 			{
 				title: "Pedidos viram recompra",
-				body: "Com os pedidos no CRM, o cashback acumula sozinho, a análise RFM reclassifica os clientes e as campanhas de WhatsApp trazem o cliente de volta pelo seu canal direto.",
-				mockupKey: "imported",
+				body:
+					"Com os pedidos no CRM, o cashback acumula sozinho, a análise RFM reclassifica os clientes e as campanhas de WhatsApp trazem o cliente de volta pelo seu canal direto.",
 			},
 		],
 		unlocks: [
 			{
-				emoji: "💸",
 				title: "Cashback automático",
-				body: "Cada pedido importado do iFood acumula cashback conforme as regras do seu programa, dando um motivo para o cliente pedir direto na próxima.",
+				body:
+					"Cada pedido importado do iFood acumula cashback conforme as regras do seu programa, dando um motivo para o cliente pedir direto na próxima.",
 				featureSlug: "programa-de-cashback",
 			},
 			{
-				emoji: "📱",
 				title: "Campanhas de WhatsApp",
 				body: "Primeiro pedido, cliente sumido e cashback expirando viram disparos automáticos que reativam quem pediu pelo iFood.",
 				featureSlug: "campanhas-whatsapp",
 			},
 			{
-				emoji: "📊",
 				title: "Análise RFM e BI",
 				body: "A base sincronizada alimenta a segmentação RFM e os painéis de faturamento, ticket médio e frequência de pedidos.",
 				featureSlug: "business-intelligence",

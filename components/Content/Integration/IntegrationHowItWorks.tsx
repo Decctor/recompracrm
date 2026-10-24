@@ -1,40 +1,30 @@
 import type { IntegrationStep } from "@/app/_content/integration-pages";
-import { cn } from "@/lib/utils";
-import type { ReactNode } from "react";
 
 type IntegrationHowItWorksProps = {
-	name: string;
 	steps: IntegrationStep[];
-	// Mockup node per step, pre-resolved by the page (keeps mockups colocated
-	// with the route, components decoupled from the registry).
-	mockups: ReactNode[];
 };
 
-export function IntegrationHowItWorks({ name, steps, mockups }: IntegrationHowItWorksProps) {
+// "Como funciona a conexão": faixa escura com os passos numerados lado a lado. `data-dock="dark"`
+// escurece o Dock enquanto ele passa por cima.
+export function IntegrationHowItWorks({ steps }: IntegrationHowItWorksProps) {
 	return (
-		<section id="como-conecta" className="mb-16 scroll-mt-24">
-			<div className="mb-10">
-				<span className="text-xs font-black uppercase tracking-[0.2em] text-[#24549C]">Passo a passo</span>
-				<h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">Como a conexão com o {name} funciona</h2>
-			</div>
-
-			<div className="flex flex-col gap-12">
+		<section
+			id="como-conecta"
+			data-dock="dark"
+			className="scroll-mt-[110px] rounded-[28px] bg-[#0b1628] px-6 py-14 text-white sm:-mx-6 sm:px-12 sm:py-24"
+		>
+			<h2 className="m-0 max-w-[640px] text-[32px] font-semibold leading-[1.05] tracking-[-0.035em] text-balance sm:text-[44px]">
+				Como funciona a conexão
+			</h2>
+			<ol className="m-0 mt-10 grid list-none grid-cols-[repeat(auto-fit,minmax(min(100%,220px),1fr))] gap-px overflow-hidden rounded-[20px] border border-white/8 bg-white/8 p-0 sm:mt-14">
 				{steps.map((step, i) => (
-					<div key={step.title} className={cn("grid items-center gap-8 lg:grid-cols-2", i % 2 === 1 && "lg:[&>*:first-child]:order-2")}>
-						{/* Copy */}
-						<div>
-							<div className="flex items-center gap-3">
-								<span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-[#24549C] text-sm font-black text-white">{i + 1}</span>
-								<h3 className="text-lg font-black tracking-tight text-slate-900">{step.title}</h3>
-							</div>
-							<p className="mt-3 leading-relaxed text-slate-600 lg:pl-12">{step.body}</p>
-						</div>
-
-						{/* Mockup */}
-						<div className="flex justify-center">{mockups[i]}</div>
-					</div>
+					<li key={step.title} className="flex flex-col gap-3 bg-[#0b1628] p-6 sm:min-h-[260px] sm:p-7">
+						<span className="text-[13px] font-semibold leading-[normal] text-[#ffb900]">{String(i + 1).padStart(2, "0")}</span>
+						<h3 className="m-0 mt-3 text-[19px] font-semibold leading-[normal] tracking-[-0.015em] sm:mt-6">{step.title}</h3>
+						<p className="m-0 text-sm leading-[1.6] text-white/65">{step.body}</p>
+					</li>
 				))}
-			</div>
+			</ol>
 		</section>
 	);
 }
