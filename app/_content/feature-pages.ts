@@ -1,4 +1,3 @@
-import type { TIsoCoverKey } from "@/components/Illustrations/Isometric/IsoCover";
 import type { ContentSection, FAQItem } from "./blog-posts";
 
 export type FeaturePage = {
@@ -8,7 +7,6 @@ export type FeaturePage = {
 	// Nome curto da funcionalidade: abas, eyebrow e cartões de "Outras funcionalidades".
 	shortName: string;
 	description: string;
-	cover: TIsoCoverKey; // ilustração isométrica da capa
 	sections: ContentSection[];
 	faqs?: FAQItem[];
 	cta: {
@@ -34,7 +32,6 @@ export const FEATURE_PAGES: FeaturePage[] = [
 		shortName: "Cashback",
 		description:
 			"Crie um programa de cashback personalizado para sua loja física. Configure percentuais, prazos e regras — o RecompraCRM automatiza tudo enquanto você foca nas vendas.",
-		cover: "feature-cashback",
 		seo: {
 			keywords: [
 				"programa cashback loja",
@@ -144,7 +141,6 @@ export const FEATURE_PAGES: FeaturePage[] = [
 		shortName: "Campanhas no WhatsApp",
 		description:
 			"Crie campanhas segmentadas e automáticas no WhatsApp para sua loja. Reative clientes inativos, divulgue promoções e acompanhe o ROI de cada mensagem enviada.",
-		cover: "feature-campanhas",
 		seo: {
 			keywords: [
 				"campanhas whatsapp varejo",
@@ -262,7 +258,6 @@ export const FEATURE_PAGES: FeaturePage[] = [
 		shortName: "Ponto de Interação",
 		description:
 			"O Ponto de Interação do RecompraCRM é um tablet no caixa da sua loja que registra vendas, acumula cashback e engaja clientes automaticamente — sem app e sem fricção.",
-		cover: "feature-pdi",
 		seo: {
 			keywords: [
 				"ponto de venda cashback",
@@ -362,7 +357,6 @@ export const FEATURE_PAGES: FeaturePage[] = [
 		shortName: "Business Intelligence",
 		description:
 			"Dashboards em tempo real, segmentação RFM automática, ROI de campanhas e ranking de vendedores. Tome decisões baseadas em dados, não em achismo.",
-		cover: "feature-bi",
 		seo: {
 			keywords: [
 				"análise rfm varejo",
