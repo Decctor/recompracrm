@@ -17,6 +17,11 @@ export const metadata: Metadata = {
 		url: `${BASE_URL}/segments`,
 		type: "website",
 	},
+	twitter: {
+		card: "summary_large_image",
+		title: "Programa de Fidelidade por Segmento | RecompraCRM",
+		description: "Cashback, campanhas no WhatsApp e análise RFM aplicados à realidade de cada tipo de loja. Encontre o seu segmento.",
+	},
 };
 
 export default function SegmentsHubPage() {
