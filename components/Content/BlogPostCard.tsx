@@ -1,53 +1,59 @@
 import type { BlogPost } from "@/app/_content/blog-posts";
-import { IsoCover } from "@/components/Illustrations/Isometric/IsoCover";
 import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 import { formatArticleDate } from "./article-dates";
+import { DataCover } from "./DataCover";
 
 type BlogPostCardProps = {
 	post: BlogPost;
-	// "featured": cartão largo do topo do índice, com a capa em azul profundo ao lado do texto.
-	variant?: "default" | "featured";
+	// "featured": cartão largo do topo do índice, capa de dados ao lado do texto.
+	// "compact": "Leia também" — só título e data, sem o subtítulo.
+	variant?: "default" | "featured" | "compact";
 };
 
+const CARD_SHELL =
+	"group overflow-hidden border border-[rgba(14,18,20,0.08)] bg-white text-[#0e1214] text-numeric transition-[box-shadow,transform] duration-[350ms] hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[#24549c]/30";
+
 export function BlogPostCard({ post, variant = "default" }: BlogPostCardProps) {
-	const featured = variant === "featured";
-
-	return (
-		<Link
-			href={`/blog/${post.slug}`}
-			className={`group flex flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white transition-[transform,box-shadow,border-color] duration-300 hover:-translate-y-1 hover:border-[#24549C]/25 hover:shadow-[0_12px_32px_-12px_rgba(36,84,156,0.18),0_4px_8px_rgba(0,0,0,0.04)] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[#24549C]/30 ${featured ? "lg:flex-row" : ""}`}
-		>
-			<div className={`relative overflow-hidden ${featured ? "lg:w-[56%] lg:shrink-0" : ""}`}>
-				<IsoCover
-					scene={post.cover}
-					tone={featured ? "deep" : "soft"}
-					className={`block w-full transition-transform duration-500 group-hover:scale-[1.03] ${featured ? "aspect-[16/10] lg:h-full lg:aspect-auto" : "aspect-[16/10]"}`}
-				/>
-			</div>
-
-			<div className={`flex flex-1 flex-col ${featured ? "p-7 sm:p-9 lg:justify-center" : "p-6"}`}>
-				<div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1">
-					{featured && <span className="rounded-full bg-[#FFB900] px-3 py-1 text-label text-slate-900">Mais recente</span>}
-					<span className="text-label text-[#24549C]">{post.categoryLabel}</span>
+	if (variant === "featured") {
+		return (
+			<Link
+				href={`/blog/${post.slug}`}
+				className={`${CARD_SHELL} grid grid-cols-[repeat(auto-fit,minmax(min(100%,440px),1fr))] rounded-[28px] hover:shadow-[0_30px_70px_-34px_rgba(16,24,40,0.35)]`}
+			>
+				<DataCover post={post} variant="featured" badge="Mais recente" />
+				<div className="flex flex-col justify-center gap-4 p-7 sm:p-12">
+					<p className="m-0 text-[13px] font-semibold text-[#24549c]">{post.categoryLabel}</p>
+					<h3 className="m-0 text-[28px] font-semibold leading-[1.1] tracking-[-0.03em] text-balance sm:text-[36px]">{post.title}</h3>
+					<p className="m-0 text-[17px] leading-[1.55] text-[#5b6a70] text-pretty sm:text-lg">{post.headline}</p>
+					<div className="mt-4 flex items-center justify-between gap-4 border-t border-[#e3e8ea] pt-5">
+						<span className="text-sm text-[#687a80]">
+							<time dateTime={post.publishedAt}>{formatArticleDate(post.publishedAt)}</time> · {post.readingTime} de leitura
+						</span>
+						<span className="flex size-11 flex-none items-center justify-center rounded-full bg-[#0e1214] text-white transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:translate-x-0.5">
+							<ArrowUpRight className="size-[18px]" aria-hidden />
+						</span>
+					</div>
 				</div>
+			</Link>
+		);
+	}
 
-				<h3
-					className={`mb-3 font-extrabold leading-[1.15] tracking-[-0.015em] text-slate-900 text-balance transition-colors group-hover:text-[#24549C] ${featured ? "text-2xl sm:text-[32px]" : "text-lg sm:text-xl"}`}
+	const compact = variant === "compact";
+	return (
+		<Link href={`/blog/${post.slug}`} className={`${CARD_SHELL} flex flex-col rounded-3xl hover:shadow-[0_24px_56px_-30px_rgba(16,24,40,0.35)]`}>
+			<DataCover post={post} variant="card" />
+			<div className="flex flex-1 flex-col gap-2.5 p-6">
+				<h3 className="m-0 text-xl font-semibold leading-[1.25] tracking-[-0.02em] text-balance">{post.title}</h3>
+				{compact ? null : <p className="m-0 line-clamp-3 flex-1 text-[15px] leading-[1.55] text-[#5b6a70]">{post.headline}</p>}
+				<div
+					className={`${compact ? "mt-auto" : "mt-3"} flex items-center justify-between gap-3 border-t border-[#eef1f2] pt-4 text-[13px] text-[#687a80]`}
 				>
-					{post.title}
-				</h3>
-
-				<p className={`mb-6 flex-1 leading-relaxed text-slate-500 ${featured ? "text-base sm:text-lg" : "text-[15px]"}`}>{post.headline}</p>
-
-				<div className="flex items-center justify-between gap-4 border-t border-slate-100 pt-4 text-sm text-slate-400">
 					<span>
-						<time dateTime={post.publishedAt}>{formatArticleDate(post.publishedAt, "short")}</time>
-						<span aria-hidden> · </span>
-						{post.readingTime} de leitura
+						<time dateTime={post.publishedAt}>{formatArticleDate(post.publishedAt, "short")}</time> · {post.readingTime}
 					</span>
 					<ArrowUpRight
-						className="size-5 shrink-0 text-slate-300 transition-[color,transform] duration-300 group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-[#24549C]"
+						className="size-[18px] flex-none text-[#8a979c] transition-[color,transform] duration-300 group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-[#0e1214]"
 						aria-hidden
 					/>
 				</div>

@@ -8,7 +8,11 @@ export const segmentacaoRfmPost: BlogPost = {
 		"Guia prático de segmentação RFM para o varejo: o que é recência, frequência e valor monetário, como dar notas de 1 a 5 numa planilha, o ajuste para lojas com muitos clientes de compra única e que ação tomar com cada segmento.",
 	category: "guias",
 	categoryLabel: "Guias práticos",
-	cover: "rfm",
+	illustration: "rfm",
+	cover: {
+		stat: "125",
+		label: "combinações de recência, frequência e valor, de 555 a 111",
+	},
 	publishedAt: "2026-10-04",
 	readingTime: "7 min",
 	seo: {
@@ -48,8 +52,7 @@ export const segmentacaoRfmPost: BlogPost = {
 			type: "feature-highlight",
 			icon: "coins",
 			title: "M de valor monetário: quanto gastou",
-			body:
-				"Total gasto no período. Diz quanto está em jogo se aquele cliente sumir e ajuda a decidir quanto esforço vale a pena para recuperá-lo.",
+			body: "Total gasto no período. Diz quanto está em jogo se aquele cliente sumir e ajuda a decidir quanto esforço vale a pena para recuperá-lo.",
 		},
 		{
 			type: "timeline",
@@ -133,9 +136,15 @@ export const segmentacaoRfmPost: BlogPost = {
 		},
 	],
 	sources: [
-		{ label: "Bult e Wansbeek — Optimal Selection for Direct Mail (Marketing Science, 1995)", url: "https://ideas.repec.org/a/inm/ormksc/v14y1995i4p378-394.html" },
+		{
+			label: "Bult e Wansbeek — Optimal Selection for Direct Mail (Marketing Science, 1995)",
+			url: "https://ideas.repec.org/a/inm/ormksc/v14y1995i4p378-394.html",
+		},
 		{ label: "IBM SPSS — introdução à análise RFM", url: "https://www.ibm.com/support/knowledgecenter/SSLVMB_23.0.0/spss/rfm/rfm_intro.xml.html" },
-		{ label: "Meta for Developers — preços da plataforma do WhatsApp Business", url: "https://developers.facebook.com/documentation/business-messaging/whatsapp/pricing" },
+		{
+			label: "Meta for Developers — preços da plataforma do WhatsApp Business",
+			url: "https://developers.facebook.com/documentation/business-messaging/whatsapp/pricing",
+		},
 	],
 	cta: {
 		headline: "Quer saber quem acionar primeiro na sua loja?",

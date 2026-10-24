@@ -13,7 +13,7 @@ export function formatInline(text: string): ReactNode[] {
 		if (index > last) nodes.push(text.slice(last, index));
 		if (match[1]) {
 			nodes.push(
-				<strong key={index} className="font-bold text-slate-900">
+				<strong key={index} className="font-semibold text-[#0e1214]">
 					{match[1]}
 				</strong>,
 			);
@@ -24,7 +24,7 @@ export function formatInline(text: string): ReactNode[] {
 					href={match[3]}
 					target="_blank"
 					rel="noopener noreferrer"
-					className="font-semibold text-[#24549C] underline decoration-[#24549C]/30 underline-offset-[3px] transition-colors hover:decoration-[#24549C]"
+					className="text-[#24549c] underline decoration-[#24549c]/35 underline-offset-[3px] transition-colors hover:text-[#1a3d7a] hover:decoration-[#1a3d7a]"
 				>
 					{match[2]}
 				</a>,
@@ -36,17 +36,18 @@ export function formatInline(text: string): ReactNode[] {
 	return nodes;
 }
 
-export function ArticleRichText({ body, className = "text-slate-700" }: { body: string; className?: string }) {
+// Cor e entrelinha vêm do contêiner (o corpo do artigo, o destaque, o callout); `className` só refina.
+export function ArticleRichText({ body, className = "" }: { body: string; className?: string }) {
 	return (
 		<>
 			{body.split("\n\n").map((para, i) => {
 				const lines = para.split("\n");
 				if (lines.every((l) => l.trim().startsWith("•"))) {
 					return (
-						<ul key={i} className="space-y-2.5">
+						<ul key={i} className="m-0 flex list-none flex-col gap-2.5 p-0">
 							{lines.map((line, j) => (
-								<li key={j} className={`flex gap-3 leading-relaxed ${className}`}>
-									<span aria-hidden className="mt-[0.6em] size-1.5 shrink-0 rounded-full bg-[#FFB900]" />
+								<li key={j} className={`flex gap-3.5 ${className}`}>
+									<span aria-hidden className="mt-[0.72em] size-1.5 shrink-0 rounded-full bg-[#24549c]" />
 									<span>{formatInline(line.replace(/^\s*•\s*/, ""))}</span>
 								</li>
 							))}
@@ -54,7 +55,7 @@ export function ArticleRichText({ body, className = "text-slate-700" }: { body: 
 					);
 				}
 				return (
-					<p key={i} className={`leading-[1.75] ${className}`}>
+					<p key={i} className={`m-0 text-pretty ${className}`}>
 						{lines.map((line, j) => (
 							<Fragment key={j}>
 								{j > 0 && <br />}

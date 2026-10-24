@@ -9,7 +9,12 @@ export const whatsappPrecos2026Post: BlogPost = {
 		"Desde 1º/10/2026 a Meta cobra R$ 0,035 por resposta de atendimento na API do WhatsApp. Veja a tabela de preços do Brasil (marketing, utilidade, autenticação), o limite de mensagens de marketing por pessoa e o que a LGPD exige.",
 	category: "dados",
 	categoryLabel: "Dados do varejo",
-	cover: "whatsapp",
+	illustration: "whatsapp",
+	cover: {
+		stat: "R$ 0,035",
+		label: "por resposta de atendimento, antes gratuita, desde 1º de outubro",
+		source: "Meta for Developers",
+	},
 	publishedAt: "2026-10-04",
 	readingTime: "7 min",
 	seo: {
@@ -56,7 +61,7 @@ export const whatsappPrecos2026Post: BlogPost = {
 			type: "text",
 			heading: "Quanto isso pesa no mês de uma loja",
 			body:
-				"Imagine uma base de **2.000 clientes** com permissão para receber mensagens:\n\n• **Duas campanhas de marketing por mês para todos:** 4.000 × R$ 0,3217 = **R$ 1.286,80**.\n• **Um aviso de utilidade por mês** (\"seu cashback de R$ 12 vence sexta\"): 2.000 × R$ 0,035 = **R$ 70**.\n• **Atendimento:** 300 conversas por mês com 10 respostas cada = 3.000 × R$ 0,035 = **R$ 105**, valor que até setembro era zero.\n\nO peso está no marketing. E a cobrança é por mensagem entregue, então o custo cresce junto com o tamanho da lista, não com o resultado.",
+				'Imagine uma base de **2.000 clientes** com permissão para receber mensagens:\n\n• **Duas campanhas de marketing por mês para todos:** 4.000 × R$ 0,3217 = **R$ 1.286,80**.\n• **Um aviso de utilidade por mês** ("seu cashback de R$ 12 vence sexta"): 2.000 × R$ 0,035 = **R$ 70**.\n• **Atendimento:** 300 conversas por mês com 10 respostas cada = 3.000 × R$ 0,035 = **R$ 105**, valor que até setembro era zero.\n\nO peso está no marketing. E a cobrança é por mensagem entregue, então o custo cresce junto com o tamanho da lista, não com o resultado.',
 		},
 		{
 			type: "feature-highlight",
@@ -97,7 +102,7 @@ export const whatsappPrecos2026Post: BlogPost = {
 			type: "text",
 			heading: "Opt-in: o que a Meta e a LGPD exigem",
 			body:
-				"A Meta exige que o cliente tenha dado **permissão (opt-in)** para receber mensagens da sua empresa, com o nome da loja claro. Vale permissão por escrito no papel ou dada pessoalmente no balcão. A Meta também recomenda permissões separadas por tipo de mensagem e uma forma fácil de sair.\n\nPela LGPD (Lei 13.709/2018), mandar marketing exige uma base legal: o **consentimento** (art. 7º, I) ou o **legítimo interesse** (art. 7º, IX, e art. 10). O legítimo interesse pede finalidade clara, respeito às expectativas do cliente e uma avaliação documentada, conforme o guia da ANPD de 2024. Em qualquer caso, o cliente pode se opor e pedir para não receber mais (art. 18, §2º).\n\n**Na prática:** no caixa, pergunte \"posso te mandar o seu saldo de cashback e as novidades pelo WhatsApp?\", registre a resposta com a data e inclua em toda campanha uma forma simples de sair, como \"responda SAIR\".",
+				'A Meta exige que o cliente tenha dado **permissão (opt-in)** para receber mensagens da sua empresa, com o nome da loja claro. Vale permissão por escrito no papel ou dada pessoalmente no balcão. A Meta também recomenda permissões separadas por tipo de mensagem e uma forma fácil de sair.\n\nPela LGPD (Lei 13.709/2018), mandar marketing exige uma base legal: o **consentimento** (art. 7º, I) ou o **legítimo interesse** (art. 7º, IX, e art. 10). O legítimo interesse pede finalidade clara, respeito às expectativas do cliente e uma avaliação documentada, conforme o guia da ANPD de 2024. Em qualquer caso, o cliente pode se opor e pedir para não receber mais (art. 18, §2º).\n\n**Na prática:** no caixa, pergunte "posso te mandar o seu saldo de cashback e as novidades pelo WhatsApp?", registre a resposta com a data e inclua em toda campanha uma forma simples de sair, como "responda SAIR".',
 		},
 		{
 			type: "callout",
@@ -136,7 +141,10 @@ export const whatsappPrecos2026Post: BlogPost = {
 		},
 	],
 	sources: [
-		{ label: "Meta for Developers — preços da plataforma do WhatsApp Business", url: "https://developers.facebook.com/documentation/business-messaging/whatsapp/pricing" },
+		{
+			label: "Meta for Developers — preços da plataforma do WhatsApp Business",
+			url: "https://developers.facebook.com/documentation/business-messaging/whatsapp/pricing",
+		},
 		{
 			label: "Meta for Developers — cobrança de mensagens fora de modelos (atendimento)",
 			url: "https://developers.facebook.com/documentation/business-messaging/whatsapp/pricing/non-template-messages",
@@ -145,9 +153,18 @@ export const whatsappPrecos2026Post: BlogPost = {
 			label: "Meta for Developers — limites de mensagens de marketing por usuário",
 			url: "https://developers.facebook.com/documentation/business-messaging/whatsapp/templates/marketing-templates/per-user-limits",
 		},
-		{ label: "Meta for Developers — obtendo o opt-in do cliente", url: "https://developers.facebook.com/documentation/business-messaging/whatsapp/getting-opt-in" },
-		{ label: "Meta for Developers — categorização de modelos", url: "https://developers.facebook.com/docs/whatsapp/updates-to-pricing/new-template-guidelines" },
-		{ label: "Mobile Time — WhatsApp passa a cobrar respostas das empresas", url: "https://www.mobiletime.com.br/noticias/23/06/2026/whatsapp-respostas/" },
+		{
+			label: "Meta for Developers — obtendo o opt-in do cliente",
+			url: "https://developers.facebook.com/documentation/business-messaging/whatsapp/getting-opt-in",
+		},
+		{
+			label: "Meta for Developers — categorização de modelos",
+			url: "https://developers.facebook.com/docs/whatsapp/updates-to-pricing/new-template-guidelines",
+		},
+		{
+			label: "Mobile Time — WhatsApp passa a cobrar respostas das empresas",
+			url: "https://www.mobiletime.com.br/noticias/23/06/2026/whatsapp-respostas/",
+		},
 		{ label: "Lei Geral de Proteção de Dados (Lei 13.709/2018)", url: "https://www.planalto.gov.br/ccivil_03/_ato2015-2018/2018/lei/l13709.htm" },
 		{ label: "ANPD — Guia orientativo sobre legítimo interesse (2024)", url: "https://www.gov.br/anpd" },
 	],
@@ -155,6 +172,7 @@ export const whatsappPrecos2026Post: BlogPost = {
 		headline: "Quer gastar menos com WhatsApp e vender mais com ele?",
 		sub: "Veja como o RecompraCRM segmenta sua base, dispara para quem tem motivo para comprar e mostra o retorno de cada campanha.",
 		buttonText: "Agendar demonstração gratuita",
-		whatsappMessage: "Olá! Li o artigo sobre os novos preços do WhatsApp no blog do RecompraCRM e gostaria de entender como reduzir meu custo com campanhas.",
+		whatsappMessage:
+			"Olá! Li o artigo sobre os novos preços do WhatsApp no blog do RecompraCRM e gostaria de entender como reduzir meu custo com campanhas.",
 	},
 };

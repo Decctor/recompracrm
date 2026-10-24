@@ -4,12 +4,17 @@ export const valorDoClientePost: BlogPost = {
 	slug: "quanto-vale-um-cliente-que-volta",
 	title: "Quanto vale um cliente que volta? O que os números de retenção dizem e o que não dizem",
 	headline:
-		"\"Reter é 5 vezes mais barato\" e \"5% de retenção dá até 95% de lucro\" circulam sem fonte. Fomos atrás da origem e trouxemos uma conta que você pode fazer com os dados da sua loja.",
+		'"Reter é 5 vezes mais barato" e "5% de retenção dá até 95% de lucro" circulam sem fonte. Fomos atrás da origem e trouxemos uma conta que você pode fazer com os dados da sua loja.',
 	description:
 		"De onde vêm as estatísticas famosas de retenção de clientes (HBR, Bain, Marketing Metrics), o que elas realmente dizem, quanto da receita vem dos melhores clientes e como calcular o valor de um cliente na sua loja.",
 	category: "dados",
 	categoryLabel: "Dados do varejo",
-	cover: "valor-do-cliente",
+	illustration: "valor-do-cliente",
+	cover: {
+		stat: "65–73%",
+		label: "das vendas de uma marca vêm dos 20% que mais compram",
+		source: "Kim, Singh e Winer, 2017",
+	},
 	publishedAt: "2026-10-04",
 	readingTime: "8 min",
 	seo: {
@@ -23,13 +28,17 @@ export const valorDoClientePost: BlogPost = {
 			"regra 80/20 clientes",
 		],
 	},
-	relatedSlugs: ["segmentacao-rfm-varejo-guia-pratico", "quanto-oferecer-de-cashback-sem-perder-margem", "como-fechar-a-semana-no-varejo-e-preparar-a-proxima"],
+	relatedSlugs: [
+		"segmentacao-rfm-varejo-guia-pratico",
+		"quanto-oferecer-de-cashback-sem-perder-margem",
+		"como-fechar-a-semana-no-varejo-e-preparar-a-proxima",
+	],
 	sections: [
 		{
 			type: "text",
 			heading: "Os números que todo mundo repete",
 			body:
-				"Qualquer apresentação sobre fidelização tem pelo menos um destes: \"conquistar um cliente custa de 5 a 25 vezes mais que manter\", \"aumentar a retenção em 5% eleva o lucro de 25% a 95%\" e \"a chance de vender para um cliente atual é de 60% a 70%\".\n\nA ideia por trás deles é boa. Mas, quando fomos atrás da origem de cada um, encontramos estudos antigos, de outros setores, citados com números que as próprias fontes não sustentam. Antes de usá-los para decidir onde investir, vale saber o que eles realmente dizem.",
+				'Qualquer apresentação sobre fidelização tem pelo menos um destes: "conquistar um cliente custa de 5 a 25 vezes mais que manter", "aumentar a retenção em 5% eleva o lucro de 25% a 95%" e "a chance de vender para um cliente atual é de 60% a 70%".\n\nA ideia por trás deles é boa. Mas, quando fomos atrás da origem de cada um, encontramos estudos antigos, de outros setores, citados com números que as próprias fontes não sustentam. Antes de usá-los para decidir onde investir, vale saber o que eles realmente dizem.',
 		},
 		{
 			type: "table",
@@ -39,12 +48,12 @@ export const valorDoClientePost: BlogPost = {
 				[
 					"Conquistar custa de 5 a 25 vezes mais que reter",
 					"Amy Gallo, Harvard Business Review, 2014",
-					"A própria autora diz que o número varia \"dependendo do estudo em que você acredita e do setor em que está\". O artigo não cita um estudo único.",
+					'A própria autora diz que o número varia "dependendo do estudo em que você acredita e do setor em que está". O artigo não cita um estudo único.',
 				],
 				[
 					"5% a mais de retenção aumenta o lucro de 25% a 95%",
 					"Reichheld e Sasser, Harvard Business Review, 1990",
-					"Segundo o artigo, como é citado, reduzir em 5% a perda de clientes elevou o lucro de 25% a 85% em empresas de serviços: 85% numa rede de agências bancárias, 50% numa corretora de seguros, 30% numa rede de oficinas. O \"95%\" não aparece nessas citações nem no boletim da Bain, e varejo não foi analisado.",
+					'Segundo o artigo, como é citado, reduzir em 5% a perda de clientes elevou o lucro de 25% a 85% em empresas de serviços: 85% numa rede de agências bancárias, 50% numa corretora de seguros, 30% numa rede de oficinas. O "95%" não aparece nessas citações nem no boletim da Bain, e varejo não foi analisado.',
 				],
 				[
 					"Vender para cliente atual: 60% a 70% de chance; para um novo, 5% a 20%",
@@ -52,7 +61,8 @@ export const valorDoClientePost: BlogPost = {
 					"É repetida sem página nem método. Não conseguimos confirmá-la no livro.",
 				],
 			],
-			note: "O próprio boletim da Bain sobre o tema, de 2001, afirma apenas que, em serviços financeiros, 5% a mais de retenção gera mais de 25% de lucro.",
+			note:
+				"O próprio boletim da Bain sobre o tema, de 2001, afirma apenas que, em serviços financeiros, 5% a mais de retenção gera mais de 25% de lucro.",
 		},
 		{
 			type: "callout",
@@ -79,7 +89,7 @@ export const valorDoClientePost: BlogPost = {
 			type: "text",
 			heading: "A conta que vale para a sua loja",
 			body:
-				"O valor de um cliente em 12 meses, em margem, é:\n\n• **Ticket médio × compras por ano × margem bruta**\n\nCom ticket de R$ 80, 6 compras por ano e margem de 40%, cada cliente fiel deixa **R$ 192 de margem por ano**. Se 100 clientes assim param de vir, a loja perde R$ 19.200 de margem no ano, e precisa conquistar 100 novos clientes, que ainda não têm o hábito, só para ficar no mesmo lugar.\n\nPara chegar aos seus números, tire do sistema de vendas:\n\n• Quantos clientes identificados compraram nos últimos 12 meses.\n• O ticket médio e o número médio de compras por cliente.\n• Desses clientes, quantos compraram de novo em até 90 dias: essa é a sua **taxa de recompra**.\n• Quanto você gasta, entre anúncio, desconto de primeira compra e brinde, para trazer um cliente novo.\n\nCom isso você tem o seu próprio \"X vezes mais caro\", com dados da sua operação.",
+				'O valor de um cliente em 12 meses, em margem, é:\n\n• **Ticket médio × compras por ano × margem bruta**\n\nCom ticket de R$ 80, 6 compras por ano e margem de 40%, cada cliente fiel deixa **R$ 192 de margem por ano**. Se 100 clientes assim param de vir, a loja perde R$ 19.200 de margem no ano, e precisa conquistar 100 novos clientes, que ainda não têm o hábito, só para ficar no mesmo lugar.\n\nPara chegar aos seus números, tire do sistema de vendas:\n\n• Quantos clientes identificados compraram nos últimos 12 meses.\n• O ticket médio e o número médio de compras por cliente.\n• Desses clientes, quantos compraram de novo em até 90 dias: essa é a sua **taxa de recompra**.\n• Quanto você gasta, entre anúncio, desconto de primeira compra e brinde, para trazer um cliente novo.\n\nCom isso você tem o seu próprio "X vezes mais caro", com dados da sua operação.',
 		},
 		{
 			type: "feature-highlight",
@@ -113,12 +123,12 @@ export const valorDoClientePost: BlogPost = {
 		{
 			question: "É verdade que conquistar um cliente custa 5 vezes mais que manter?",
 			answer:
-				"É uma regra de bolso, não um dado. A faixa \"5 a 25 vezes\" vem de um artigo da Harvard Business Review de 2014, em que a autora diz que o número varia conforme o estudo e o setor, sem citar uma pesquisa única. O mais seguro é calcular a proporção da sua loja: quanto você gasta para trazer um cliente novo e quanto vale, em margem, um cliente que volta.",
+				'É uma regra de bolso, não um dado. A faixa "5 a 25 vezes" vem de um artigo da Harvard Business Review de 2014, em que a autora diz que o número varia conforme o estudo e o setor, sem citar uma pesquisa única. O mais seguro é calcular a proporção da sua loja: quanto você gasta para trazer um cliente novo e quanto vale, em margem, um cliente que volta.',
 		},
 		{
 			question: "De onde vem a estatística de que 5% de retenção aumenta o lucro em até 95%?",
 			answer:
-				"É atribuída ao artigo \"Zero Defections\" de Reichheld e Sasser (Harvard Business Review, 1990), citado com aumentos de 25% a 85% no lucro ao reduzir em 5% a perda de clientes em empresas de serviços, como banco, seguros e oficinas. O \"95%\" não aparece nas citações do estudo nem no boletim da Bain de 2001, e o varejo não foi analisado.",
+				'É atribuída ao artigo "Zero Defections" de Reichheld e Sasser (Harvard Business Review, 1990), citado com aumentos de 25% a 85% no lucro ao reduzir em 5% a perda de clientes em empresas de serviços, como banco, seguros e oficinas. O "95%" não aparece nas citações do estudo nem no boletim da Bain de 2001, e o varejo não foi analisado.',
 		},
 		{
 			question: "Como calcular o valor de um cliente na minha loja?",
@@ -132,10 +142,19 @@ export const valorDoClientePost: BlogPost = {
 		},
 	],
 	sources: [
-		{ label: "Amy Gallo — The Value of Keeping the Right Customers (HBR, 2014)", url: "https://hbr.org/2014/10/the-value-of-keeping-the-right-customers" },
-		{ label: "Bain & Company — Prescription for Cutting Costs (Reichheld, 2001)", url: "https://media.bain.com/Images/BB_Prescription_cutting_costs.pdf" },
+		{
+			label: "Amy Gallo — The Value of Keeping the Right Customers (HBR, 2014)",
+			url: "https://hbr.org/2014/10/the-value-of-keeping-the-right-customers",
+		},
+		{
+			label: "Bain & Company — Prescription for Cutting Costs (Reichheld, 2001)",
+			url: "https://media.bain.com/Images/BB_Prescription_cutting_costs.pdf",
+		},
 		{ label: "Ipsos — Shattering the Myths of Customer Loyalty", url: "https://www.ipsos.com/en-us/shattering-myths-customer-loyalty" },
-		{ label: "Kim, Singh e Winer — The Pareto rule for frequently purchased packaged goods (Marketing Letters, 2017)", url: "https://doi.org/10.1007/s11002-017-9442-5" },
+		{
+			label: "Kim, Singh e Winer — The Pareto rule for frequently purchased packaged goods (Marketing Letters, 2017)",
+			url: "https://doi.org/10.1007/s11002-017-9442-5",
+		},
 		{ label: "Sharp, Romaniuk e Graham — Marketing's 60/20 Pareto Law (Ehrenberg-Bass, 2019)", url: "https://openresearch.lsbu.ac.uk/item/88vw1" },
 		{
 			label: "ABEMF/Valuenet — 88% dos brasileiros utilizam programas de fidelidade (via Panrotas)",

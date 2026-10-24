@@ -14,5 +14,5 @@ export default async function BlogPostOpengraphImage({ params }: { params: Promi
 	const { slug } = await params;
 	const post = getBlogPost(slug);
 	if (!post) notFound();
-	return renderContentOgImage({ eyebrow: post.categoryLabel, title: post.title, cover: post.cover, footer: "recompracrm.com.br/blog" });
+	return renderContentOgImage({ eyebrow: post.categoryLabel, title: post.title, cover: post.illustration, footer: "recompracrm.com.br/blog" });
 }

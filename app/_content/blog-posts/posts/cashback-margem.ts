@@ -8,7 +8,12 @@ export const cashbackMargemPost: BlogPost = {
 		"Como definir o percentual de cashback da sua loja a partir do ticket médio, da margem bruta e da taxa de uso do crédito. Com calculadora, exemplos por margem e dados da ABEMF sobre fidelidade no Brasil.",
 	category: "guias",
 	categoryLabel: "Guias práticos",
-	cover: "cashback",
+	illustration: "cashback",
+	cover: {
+		stat: "88,3%",
+		label: "dos consumidores usam programas de fidelidade",
+		source: "ABEMF/Valuenet, 2025",
+	},
 	publishedAt: "2026-10-04",
 	readingTime: "7 min",
 	seo: {
@@ -28,7 +33,7 @@ export const cashbackMargemPost: BlogPost = {
 			type: "text",
 			heading: "Todo mundo quer cashback. Ninguém publica quanto dar",
 			body:
-				"Programa de fidelidade já faz parte da rotina do brasileiro. Em pesquisa da ABEMF com a Valuenet, **88,3% dos consumidores disseram usar programas de fidelidade**, e o cashback foi o segundo benefício mais desejado (53,3%), atrás só do desconto.\n\nA pergunta que todo lojista faz, \"quanto devo oferecer?\", não tem resposta pronta. Procuramos e não encontramos nenhuma referência confiável de percentual por segmento. E faz sentido que não exista: o percentual certo depende de três números que só a sua loja tem. Por isso, em vez de um número mágico, este guia traz a conta.",
+				'Programa de fidelidade já faz parte da rotina do brasileiro. Em pesquisa da ABEMF com a Valuenet, **88,3% dos consumidores disseram usar programas de fidelidade**, e o cashback foi o segundo benefício mais desejado (53,3%), atrás só do desconto.\n\nA pergunta que todo lojista faz, "quanto devo oferecer?", não tem resposta pronta. Procuramos e não encontramos nenhuma referência confiável de percentual por segmento. E faz sentido que não exista: o percentual certo depende de três números que só a sua loja tem. Por isso, em vez de um número mágico, este guia traz a conta.',
 		},
 		{
 			type: "stats",
@@ -64,7 +69,8 @@ export const cashbackMargemPost: BlogPost = {
 				["60%", "R$ 48,00", "R$ 2,40 (5% da margem)", "**+5,3%**"],
 				["25%, com cashback de 10%", "R$ 20,00", "R$ 4,80 (24% da margem)", "**+31,6%**"],
 			],
-			note: "Exemplo com ticket médio de R$ 80, cashback de 5% (exceto na última linha) e 60% do crédito usado. Refaça com os números da sua loja na calculadora acima.",
+			note:
+				"Exemplo com ticket médio de R$ 80, cashback de 5% (exceto na última linha) e 60% do crédito usado. Refaça com os números da sua loja na calculadora acima.",
 		},
 		{
 			type: "feature-highlight",
@@ -85,7 +91,7 @@ export const cashbackMargemPost: BlogPost = {
 			icon: "gift",
 			title: "Bônus direcionado custa menos que percentual alto",
 			body:
-				"Em vez de subir o percentual para todo mundo, mantenha a base baixa e ofereça um bônus pontual para quem está esfriando: \"R$ 15 de crédito até domingo\" para clientes que não voltam há 60 dias. O custo cai só onde há algo a recuperar.",
+				'Em vez de subir o percentual para todo mundo, mantenha a base baixa e ofereça um bônus pontual para quem está esfriando: "R$ 15 de crédito até domingo" para clientes que não voltam há 60 dias. O custo cai só onde há algo a recuperar.',
 		},
 		{
 			type: "feature-highlight",
@@ -133,7 +139,10 @@ export const cashbackMargemPost: BlogPost = {
 			label: "ABEMF — Panorama da Fidelização no Brasil, 3ª edição (via Estado de Minas)",
 			url: "https://www.em.com.br/mundo-corporativo/2024/09/6951134-cashback-movimenta-comercios-e-atrai-consumidores.html",
 		},
-		{ label: "Meta for Developers — preços da plataforma do WhatsApp Business", url: "https://developers.facebook.com/documentation/business-messaging/whatsapp/pricing" },
+		{
+			label: "Meta for Developers — preços da plataforma do WhatsApp Business",
+			url: "https://developers.facebook.com/documentation/business-messaging/whatsapp/pricing",
+		},
 	],
 	cta: {
 		headline: "Quer um cashback que se paga?",
