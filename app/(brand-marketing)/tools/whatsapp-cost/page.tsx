@@ -17,7 +17,7 @@ export const metadata: Metadata = {
 	description,
 	alternates: { canonical: PATH },
 	openGraph: { title: `${title} | RecompraCRM`, description, url: `https://www.recompracrm.com.br${PATH}` },
-	twitter: { title: `${title} | RecompraCRM`, description },
+	twitter: { card: "summary_large_image", title: `${title} | RecompraCRM`, description },
 };
 
 const ARTICLE_SLUG = "whatsapp-api-precos-outubro-2026-varejo";

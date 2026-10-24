@@ -32,7 +32,6 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 		.filter(Boolean)
 		.join(" ");
 	const url = `${CASES_BASE_URL}${caseHref(item)}`;
-	const image = caseThumbnail(item, 1920);
 
 	return {
 		title,
@@ -43,9 +42,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 			description,
 			url,
 			type: "article",
-			...(image ? { images: [{ url: image, width: 1920, height: 1080, alt: title }] } : {}),
 		},
-		twitter: { card: "summary_large_image", title: `${title} | RecompraCRM`, description, ...(image ? { images: [image] } : {}) },
+		twitter: { card: "summary_large_image", title: `${title} | RecompraCRM`, description },
 	};
 }
 
