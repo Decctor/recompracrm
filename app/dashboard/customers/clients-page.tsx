@@ -211,8 +211,10 @@ function ClientsInlineFilters({ filters, updateFilters }: ClientsInlineFiltersPr
 		{ id: "primeiraCompraData", label: "PRIMEIRA COMPRA", value: "primeiraCompraData" },
 		{ id: "ultimaCompraData", label: "ÚLTIMA COMPRA", value: "ultimaCompraData" },
 	] satisfies InteractiveFilterOption<NonNullable<TGetClientsInput["orderByField"]>>[];
+	// O padrão não aparece entre as opções: com busca é a relevância, sem busca a API ordena por nome.
+	// Escolher "NOME" explicitamente mantém a ordem alfabética mesmo durante a busca.
 	const defaultSort = {
-		field: "nome",
+		field: "relevancia",
 		direction: "asc",
 	} satisfies InteractiveFilterSortValue<NonNullable<TGetClientsInput["orderByField"]>>;
 	const sortValue = {

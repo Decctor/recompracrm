@@ -5,7 +5,8 @@ import { INTERACTIONS_CRON_TIMEZONE } from "@/lib/campaigns/time-blocks";
 import dayjs from "dayjs";
 import { getSalesIntegrationCondition } from "@/lib/sales/integration-filter";
 import { formatPhoneAsBase } from "@/lib/formatting";
-import { createSimplifiedEmailSearchCondition, createSimplifiedPhoneSearchCondition, createSimplifiedSearchCondition } from "@/lib/search";
+import { type ClientSearchDatabase, type TClientSearch, withClientSearch } from "@/lib/clients/search";
+import { parseClientSearchTerm } from "@/lib/clients/search-terms";
 import {
 	CLIENT_LOCATION_STREET_REQUIRED_MESSAGE,
 	ClientLocationSchema,
@@ -16,7 +17,7 @@ import {
 import { db } from "@/services/drizzle";
 import { clients, sales } from "@/services/drizzle/schema";
 import { clientLocations, clientTagReferences } from "@/services/drizzle/schema/clients";
-import { and, asc, count, desc, eq, gte, inArray, lte, max, min, notInArray, or, sql, sum } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, lte, max, min, notInArray, sql, sum } from "drizzle-orm";
 import createHttpError from "http-errors";
 import z from "zod";
 import { NextRequest, NextResponse } from "next/server";
@@ -105,7 +106,11 @@ const GetClientsInputSchema = z.object({
 		.optional()
 		.nullable()
 		.transform((val) => (val ? new Date(val) : null)),
-	orderByField: z.enum(["nome", "comprasValorTotal", "comprasQtdeTotal", "primeiraCompraData", "ultimaCompraData"]).optional().nullable(),
+	// `relevancia` (e a ausência de ordenação) só vale com busca: sem termo, a lista cai em `nome`.
+	orderByField: z
+		.enum(["relevancia", "nome", "comprasValorTotal", "comprasQtdeTotal", "primeiraCompraData", "ultimaCompraData"])
+		.optional()
+		.nullable(),
 	orderByDirection: z.enum(["asc", "desc"]).optional().nullable(),
 });
 export type TGetClientsInput = z.infer<typeof GetClientsInputSchema>;
@@ -139,19 +144,27 @@ async function getClients({ input, session }: { input: TGetClientsInput; session
 		};
 	}
 
+	// Regras de casamento e relevância em `lib/clients/search.ts`, as mesmas do vínculo de cliente.
+	// Com palavra para aproximação, tudo abaixo roda na transação do limiar trigram.
+	const term = parseClientSearchTerm(input.search);
+	return withClientSearch(db, { organizacaoId: userOrgId, term }, (database, search) => getClientsPage({ input, userOrgId, database, search }));
+}
+
+async function getClientsPage({
+	input,
+	userOrgId,
+	database,
+	search,
+}: {
+	input: TGetClientsInput;
+	userOrgId: string;
+	database: ClientSearchDatabase;
+	search: TClientSearch | null;
+}) {
 	// First, we start fetching clients with their purchases...
 	const clientConditions = [eq(clients.organizacaoId, userOrgId)];
 
-	if (input.search && input.search.trim().length > 0) {
-		const searchCondition = or(
-			createSimplifiedSearchCondition(clients.nome, input.search),
-			createSimplifiedPhoneSearchCondition(clients.telefoneBase, input.search),
-			createSimplifiedEmailSearchCondition(clients.email, input.search),
-		);
-		if (searchCondition) {
-			clientConditions.push(searchCondition);
-		}
-	}
+	if (search?.condition) clientConditions.push(search.condition);
 	if (input.acquisitionChannels && input.acquisitionChannels.length > 0) {
 		clientConditions.push(inArray(clients.canalAquisicao, input.acquisitionChannels));
 	}
@@ -175,7 +188,7 @@ async function getClients({ input, session }: { input: TGetClientsInput; session
 	const PAGE_SIZE = 25;
 	const skip = PAGE_SIZE * (input.page - 1);
 
-	const [{ clientsMatched }] = await db
+	const [{ clientsMatched }] = await database
 		.select({
 			clientsMatched: count(),
 		})
@@ -221,23 +234,25 @@ async function getClients({ input, session }: { input: TGetClientsInput; session
 	// `clients.id` como último critério: sem um desempate único, OFFSET/LIMIT pode repetir ou pular
 	// clientes homônimos entre páginas.
 	const direction = input.orderByDirection === "desc" ? desc : asc;
-	const orderByField = input.orderByField ?? "nome";
+	// Com busca, o padrão é o mais parecido primeiro; a direção não se aplica à relevância.
+	const orderByField = input.orderByField ?? "relevancia";
+	const relevance = orderByField === "relevancia" ? (search?.relevance ?? null) : null;
 
 	let paginatedClientsWithStats: TClientPageStats[];
-	if (orderByField === "nome") {
-		// Ordenação por nome não depende das estatísticas: pagina os clientes primeiro e agrega as
-		// vendas (LATERAL, via índice de cliente_id) só para as 25 linhas da página, em vez de agregar
-		// todas as vendas da organização a cada requisição. Uma consulta só: com a função longe do
-		// banco, uma ida a mais custa mais do que a agregação economizada.
-		const clientsPage = db
-			.select({ id: clients.id, nome: clients.nome })
+	if (orderByField === "nome" || orderByField === "relevancia") {
+		// Ordenação por nome (ou relevância) não depende das estatísticas: pagina os clientes primeiro
+		// e agrega as vendas (LATERAL, via índice de cliente_id) só para as 25 linhas da página, em vez
+		// de agregar todas as vendas da organização a cada requisição. Uma consulta só: com a função
+		// longe do banco, uma ida a mais custa mais do que a agregação economizada.
+		const clientsPage = database
+			.select({ id: clients.id, nome: clients.nome, relevancia: (relevance ?? sql<number>`0`).as("relevancia") })
 			.from(clients)
 			.where(and(...clientConditions))
-			.orderBy(direction(clients.nome), asc(clients.id))
+			.orderBy(...(relevance ? [desc(relevance), asc(clients.nome)] : [direction(clients.nome)]), asc(clients.id))
 			.offset(skip)
 			.limit(PAGE_SIZE)
 			.as("clients_page");
-		const pageStats = db
+		const pageStats = database
 			.select({
 				totalPurchasesValue: statsSelection.totalPurchasesValue,
 				totalPurchasesQty: statsSelection.totalPurchasesQty,
@@ -247,7 +262,7 @@ async function getClients({ input, session }: { input: TGetClientsInput; session
 			.from(sales)
 			.where(and(...statsConditions, eq(sales.clienteId, clientsPage.id)))
 			.as("stats_by_client");
-		paginatedClientsWithStats = await db
+		paginatedClientsWithStats = await database
 			.select({
 				clientId: clientsPage.id,
 				totalPurchasesValue: sql<number>`COALESCE(${pageStats.totalPurchasesValue}, 0)`,
@@ -257,25 +272,24 @@ async function getClients({ input, session }: { input: TGetClientsInput; session
 			})
 			.from(clientsPage)
 			.leftJoinLateral(pageStats, sql`true`)
-			.orderBy(direction(clientsPage.nome), asc(clientsPage.id));
+			.orderBy(...(relevance ? [desc(clientsPage.relevancia), asc(clientsPage.nome)] : [direction(clientsPage.nome)]), asc(clientsPage.id));
 	} else {
 		// Ordenação por estatística exige agregar as vendas de todos os clientes candidatos. Com busca
 		// textual o conjunto é pequeno e vale restringir a agregação a ele; sem busca, restringir só
 		// piora o plano (merge join por idx_sales_client_id varrendo vendas de outras organizações).
-		const hasSearch = !!input.search && input.search.trim().length > 0;
-		const scopedStatsConditions = hasSearch
+		const scopedStatsConditions = search
 			? [
 					...statsConditions,
 					inArray(
 						sales.clienteId,
-						db
+						database
 							.select({ id: clients.id })
 							.from(clients)
 							.where(and(...clientConditions)),
 					),
 				]
 			: statsConditions;
-		const statsByClientSubquery = db
+		const statsByClientSubquery = database
 			.select(statsSelection)
 			.from(sales)
 			.where(and(...scopedStatsConditions))
@@ -298,7 +312,7 @@ async function getClients({ input, session }: { input: TGetClientsInput; session
 				break;
 		}
 
-		paginatedClientsWithStats = await db
+		paginatedClientsWithStats = await database
 			.select({
 				clientId: clients.id,
 				totalPurchasesValue: sql<number>`COALESCE(${statsByClientSubquery.totalPurchasesValue}, 0)`,
@@ -327,7 +341,7 @@ async function getClients({ input, session }: { input: TGetClientsInput; session
 		};
 	}
 
-	const clientsResult = await db.query.clients.findMany({
+	const clientsResult = await database.query.clients.findMany({
 		where: inArray(clients.id, clientIds),
 		with: {
 			saldos: true,

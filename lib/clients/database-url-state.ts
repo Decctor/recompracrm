@@ -20,7 +20,15 @@ export const clientsDatabaseParsers = {
 	statsExcludedSalesIds: parseAsArrayOf(parseAsString).withDefault([]),
 	birthdaysPeriodAfter: parseAsIsoDateTime,
 	birthdaysPeriodBefore: parseAsIsoDateTime,
-	orderByField: parseAsStringEnum(["nome", "comprasValorTotal", "comprasQtdeTotal", "primeiraCompraData", "ultimaCompraData"]).withDefault("nome"),
+	// `relevancia`: com busca, o mais parecido primeiro; sem busca, a API ordena por nome.
+	orderByField: parseAsStringEnum([
+		"relevancia",
+		"nome",
+		"comprasValorTotal",
+		"comprasQtdeTotal",
+		"primeiraCompraData",
+		"ultimaCompraData",
+	]).withDefault("relevancia"),
 	orderByDirection: parseAsStringEnum(["asc", "desc"]).withDefault("asc"),
 };
 
