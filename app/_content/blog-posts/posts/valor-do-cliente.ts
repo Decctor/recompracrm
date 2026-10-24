@@ -9,7 +9,6 @@ export const valorDoClientePost: BlogPost = {
 		"De onde vêm as estatísticas famosas de retenção de clientes (HBR, Bain, Marketing Metrics), o que elas realmente dizem, quanto da receita vem dos melhores clientes e como calcular o valor de um cliente na sua loja.",
 	category: "dados",
 	categoryLabel: "Dados do varejo",
-	illustration: "valor-do-cliente",
 	cover: {
 		stat: "65–73%",
 		label: "das vendas de uma marca vêm dos 20% que mais compram",

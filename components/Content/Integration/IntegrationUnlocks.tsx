@@ -1,39 +1,43 @@
 import type { IntegrationUnlock } from "@/app/_content/integration-pages";
-import { ArrowRight } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
+import { getFeatureIcon } from "./integration-icons";
 
 type IntegrationUnlocksProps = {
-	name: string;
 	unlocks: IntegrationUnlock[];
 };
 
-export function IntegrationUnlocks({ name, unlocks }: IntegrationUnlocksProps) {
+// "O que a integração destrava": cada cartão leva à página da funcionalidade.
+export function IntegrationUnlocks({ unlocks }: IntegrationUnlocksProps) {
 	return (
-		<section className="mb-16">
-			<div className="mb-8">
-				<span className="text-xs font-black uppercase tracking-[0.2em] text-[#24549C]">Depois da conexão</span>
-				<h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">O que os dados do {name} desbloqueiam</h2>
-				<p className="mt-3 max-w-2xl leading-relaxed text-slate-600">
-					Importar os dados é o começo. Assim que as vendas entram no RecompraCRM, elas alimentam os três motores de retenção da plataforma.
-				</p>
-			</div>
-
-			<div className="grid gap-4 sm:grid-cols-3">
-				{unlocks.map((unlock) => (
-					<Link
-						key={unlock.featureSlug}
-						href={`/features/${unlock.featureSlug}`}
-						className="group flex flex-col rounded-2xl border border-slate-200 bg-white p-6 transition-all duration-300 hover:-translate-y-1 hover:border-[#24549C]/30 hover:shadow-lg hover:shadow-slate-900/5"
-					>
-						<span className="text-3xl">{unlock.emoji}</span>
-						<h3 className="mt-4 text-base font-black tracking-tight text-slate-900">{unlock.title}</h3>
-						<p className="mt-2 flex-1 text-sm leading-relaxed text-slate-600">{unlock.body}</p>
-						<span className="mt-4 inline-flex items-center gap-1.5 text-sm font-bold text-[#24549C]">
-							Saiba mais
-							<ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-						</span>
-					</Link>
-				))}
+		<section>
+			<h2 className="m-0 max-w-[640px] text-[32px] font-semibold leading-[1.05] tracking-[-0.035em] text-balance sm:text-[44px]">
+				O que a integração destrava
+			</h2>
+			<div className="mt-10 grid grid-cols-[repeat(auto-fit,minmax(min(100%,300px),1fr))] gap-6">
+				{unlocks.map((unlock) => {
+					const Icon = getFeatureIcon(unlock.featureSlug);
+					return (
+						<Link
+							key={unlock.featureSlug}
+							href={`/features/${unlock.featureSlug}`}
+							className="group flex flex-col gap-3.5 rounded-3xl border border-[rgba(14,18,20,0.08)] bg-white p-6 text-[#0e1214] transition-[box-shadow,transform] duration-300 hover:-translate-y-0.5 hover:shadow-[0_24px_56px_-30px_rgba(16,24,40,0.35)] sm:min-h-[240px] sm:p-7"
+						>
+							<span className="flex size-11 items-center justify-center rounded-full bg-[#eef2f6] text-[#24549c]">
+								<Icon className="size-5" aria-hidden />
+							</span>
+							<h3 className="m-0 mt-2 text-xl font-semibold leading-[normal] tracking-[-0.02em]">{unlock.title}</h3>
+							<p className="m-0 text-[15px] leading-[1.6] text-[#5b6a70]">{unlock.body}</p>
+							<span className="mt-auto flex items-center justify-between border-t border-[#eef1f2] pt-4 text-sm font-medium leading-[normal] text-[#5b6a70] group-hover:text-[#0e1214]">
+								Ver funcionalidade
+								<ArrowUpRight
+									className="size-[18px] text-[#8a979c] transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
+									aria-hidden
+								/>
+							</span>
+						</Link>
+					);
+				})}
 			</div>
 		</section>
 	);

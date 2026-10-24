@@ -22,6 +22,7 @@ export const metadata: Metadata = {
 		url: "https://www.recompracrm.com.br/erp",
 	},
 	twitter: {
+		card: "summary_large_image",
 		title: `${title} | RecompraCRM`,
 		description,
 	},

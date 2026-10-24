@@ -5,6 +5,7 @@ import { captureClientEvent } from "@/lib/analytics/posthog-client";
 import { cn } from "@/lib/utils";
 import { ArrowRight, Menu, X } from "lucide-react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 // Header "dock" das páginas de marketing. No topo é uma barra larga e transparente; ao rolar
@@ -13,7 +14,7 @@ import { useCallback, useEffect, useState } from "react";
 // No artigo mostra "Lendo · <seção>" (lido de `[data-outline]`) e a barra de progresso
 // (medida em `[data-article]`).
 
-export type TDockVariant = "landing" | "erp" | "blog" | "artigo" | "product" | "cases" | "tools" | "integrations" | "help" | "partners";
+export type TDockVariant = "landing" | "erp" | "blog" | "artigo" | "product" | "cases" | "tools" | "integrations" | "help" | "partners" | "segments";
 
 type TDockLink = { label: string; id?: string; href?: string };
 
@@ -65,6 +66,11 @@ const LINKS: Record<TDockVariant, TDockLink[]> = {
 		{ label: "Integrações", href: "/integrations" },
 		{ label: "Blog", href: "/blog" },
 	],
+	segments: [
+		{ id: "segmentos", label: "Segmentos" },
+		{ label: "Cases", href: "/cases" },
+		{ label: "Planos", href: "/#planos" },
+	],
 	partners: [
 		{ id: "como-funciona-parceria", label: "Como funciona" },
 		{ id: "esquema-de-pagamento", label: "Pagamento" },
@@ -94,6 +100,7 @@ const CTA: Record<TDockVariant, Record<string, { label: string; short: string; h
 	artigo: { _: DEMO },
 	product: { _: DEMO },
 	cases: { _: DEMO },
+	segments: { _: DEMO },
 	tools: { _: TRIAL },
 	integrations: { _: TRIAL, cta: DEMO },
 	help: { _: { label: "Falar com o suporte", short: "Suporte", href: WHATSAPP_SUPPORT } },
@@ -111,7 +118,21 @@ const TAG: Record<TDockVariant, string | null> = {
 	integrations: "Integrações",
 	help: "Ajuda",
 	partners: "Parceiros",
+	segments: "Segmentos",
 };
+// Página que contém as seções de cada área. Fora dela (num artigo de ajuda, num case), o link de
+// seção volta para lá em vez de apontar para uma âncora que não existe na página atual. Sem entrada,
+// toda página da área tem as mesmas seções (funcionalidades, integrações).
+const SECTIONS_PAGE: Partial<Record<TDockVariant, string>> = {
+	landing: "/",
+	erp: "/erp",
+	blog: "/blog",
+	cases: "/cases",
+	help: "/help",
+	partners: "/partnerships",
+	segments: "/segments",
+};
+
 const HOME_HREF: Record<TDockVariant, string> = {
 	landing: "#top",
 	erp: "/",
@@ -123,6 +144,7 @@ const HOME_HREF: Record<TDockVariant, string> = {
 	integrations: "/",
 	help: "/",
 	partners: "/",
+	segments: "/",
 };
 
 // Quanto mais links (e a etiqueta da área), mais cedo a barra recolhe para o menu. As classes
@@ -163,6 +185,7 @@ type DockProps = {
 };
 
 export function Dock({ variant = "landing", theme = "auto", compactOnScroll = true }: DockProps) {
+	const pathname = usePathname();
 	const [scrolled, setScrolled] = useState(false);
 	const [overDark, setOverDark] = useState(false);
 	const [active, setActive] = useState<string | null>(null);
@@ -238,6 +261,8 @@ export function Dock({ variant = "landing", theme = "auto", compactOnScroll = tr
 	const cta = (active ? CTA[variant][active] : undefined) ?? CTA[variant]._;
 	const ctaIsExternal = cta.href.startsWith("http");
 	const tag = TAG[variant];
+	const sectionsPage = SECTIONS_PAGE[variant];
+	const sectionHref = (id?: string) => (sectionsPage && pathname !== sectionsPage ? `${sectionsPage}#${id}` : `#${id}`);
 	const bp = getBreakpointClasses(variant);
 	const isArticleReading = variant === "artigo" && compact;
 
@@ -299,8 +324,8 @@ export function Dock({ variant = "landing", theme = "auto", compactOnScroll = tr
 				{links.length > 0 ? (
 					<div className={cn("hidden min-w-0 items-center gap-0.5", bp.flex)}>
 						{links.map((link) => {
-							const href = link.href ?? `#${link.id}`;
-							const on = !!link.id && link.id === active && !link.href;
+							const href = link.href ?? sectionHref(link.id);
+							const on = link.href ? link.href === pathname : !!link.id && link.id === active;
 							return (
 								<Link
 									key={href}
@@ -378,8 +403,8 @@ export function Dock({ variant = "landing", theme = "auto", compactOnScroll = tr
 					)}
 				>
 					{links.map((link) => {
-						const href = link.href ?? `#${link.id}`;
-						const on = !!link.id && link.id === active && !link.href;
+						const href = link.href ?? sectionHref(link.id);
+						const on = link.href ? link.href === pathname : !!link.id && link.id === active;
 						return (
 							<Link
 								key={href}

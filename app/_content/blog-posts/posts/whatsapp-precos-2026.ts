@@ -9,7 +9,6 @@ export const whatsappPrecos2026Post: BlogPost = {
 		"Desde 1º/10/2026 a Meta cobra R$ 0,035 por resposta de atendimento na API do WhatsApp. Veja a tabela de preços do Brasil (marketing, utilidade, autenticação), o limite de mensagens de marketing por pessoa e o que a LGPD exige.",
 	category: "dados",
 	categoryLabel: "Dados do varejo",
-	illustration: "whatsapp",
 	cover: {
 		stat: "R$ 0,035",
 		label: "por resposta de atendimento, antes gratuita, desde 1º de outubro",

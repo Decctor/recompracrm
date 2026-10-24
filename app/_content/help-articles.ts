@@ -22,7 +22,11 @@ export type THelpArticle = {
 	stepCount: number;
 	updatedAt: string;
 	requirements: string[];
+	// Value the reader copies during the tutorial (e.g. the MCP address), shown next to the requirements.
+	connection?: { label: string; value: string };
 	steps: THelpArticleStep[];
+	// Closing panel after the last step: what the reader can do now.
+	conclusion?: { title: string; description: string; examples: string[] };
 	faqs: { question: string; answer: string }[];
 };
 
@@ -38,6 +42,7 @@ export const HELP_ARTICLES: THelpArticle[] = [
 		stepCount: 6,
 		updatedAt: "2026-08-30",
 		requirements: ["Uma conta ativa no Claude", "Acesso ao RecompraCRM", "Permissão para acessar a organização desejada"],
+		connection: { label: "Endereço MCP", value: "https://www.recompracrm.com.br/api/mcp" },
 		steps: [
 			{
 				number: 1,
@@ -111,6 +116,15 @@ export const HELP_ARTICLES: THelpArticle[] = [
 				},
 			},
 		],
+		conclusion: {
+			title: "Seu Claude já pode trabalhar com o CRM",
+			description: "Abra uma nova conversa e experimente uma pergunta. O Claude pedirá aprovação sempre que uma ação puder alterar sua operação.",
+			examples: [
+				"Quais foram os resultados comerciais deste mês?",
+				"Quais clientes estão há mais tempo sem comprar?",
+				"Quais produtos tiveram melhor desempenho no período?",
+			],
+		},
 		faqs: [
 			{
 				question: "O Claude não conseguiu encontrar o servidor. O que fazer?",

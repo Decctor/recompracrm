@@ -8,7 +8,6 @@ export const fechamentoSemanalPost: BlogPost = {
 		"Veja como usar o fechamento de sexta-feira para analisar campanhas, preparar ações sazonais e começar a próxima semana com mais clareza no varejo.",
 	category: "dicas",
 	categoryLabel: "Dicas de gestão",
-	illustration: "fechamento-semanal",
 	cover: {
 		stat: "30 min",
 		label: "para um pré-fechamento semanal com a equipe",

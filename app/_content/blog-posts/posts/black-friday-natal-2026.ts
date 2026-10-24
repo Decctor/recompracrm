@@ -9,7 +9,6 @@ export const blackFridayNatal2026Post: BlogPost = {
 		"Datas da Black Friday, do 13º salário e do Natal 2026, os resultados de 2025 no varejo físico (Cielo, CNDL/SPC, Abrasce, Procon-SP) e um plano prático para a loja vender no fim de ano sem cair na desconfiança do consumidor.",
 	category: "guias",
 	categoryLabel: "Guias práticos",
-	illustration: "black-friday-natal",
 	cover: {
 		stat: "−1,4%",
 		label: "nas vendas da loja física no fim de semana da Black Friday 2025",

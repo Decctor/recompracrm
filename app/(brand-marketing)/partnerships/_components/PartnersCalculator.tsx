@@ -1,144 +1,122 @@
 "use client";
 
+import { TrackedLink } from "@/app/_components/ledger/TrackedLink";
 import { formatToMoney } from "@/lib/formatting";
 import { ArrowRight, Minus, Plus, Store } from "lucide-react";
-import { useMemo, useState } from "react";
-import { TrackedLink } from "@/app/_components/ledger/TrackedLink";
-import { Reveal } from "@/app/_components/ledger/_primitives/Reveal";
-import { SectionEyebrow } from "./SectionEyebrow";
-import { FIRST_MONTH_PAYOUT, FIRST_YEAR_PAYOUT, PARTNER_LOGIN_HREF, RECURRING_MONTH_PAYOUT, THIRD_MONTH_PAYOUT } from "./program-facts";
+import { useState } from "react";
+import { SectionHeading } from "./SectionHeading";
+import {
+	CALCULATOR_DEFAULT_STORES,
+	CALCULATOR_MAX_STORES,
+	CALCULATOR_MIN_STORES,
+	FIRST_MONTH_PAYOUT,
+	FIRST_YEAR_PAYOUT,
+	PARTNER_CTA_EVENT,
+	PARTNER_LOGIN_HREF,
+	RECURRING_MONTH_PAYOUT,
+	THIRD_MONTH_PAYOUT,
+} from "./program-facts";
 
-const MIN_STORES = 1;
-const MAX_STORES = 30;
+const clampStores = (value: number) => Math.min(CALCULATOR_MAX_STORES, Math.max(CALCULATOR_MIN_STORES, value));
+
+const STEP_BUTTON_CLASS =
+	"flex size-12 flex-none items-center justify-center rounded-full border border-[#e3e8ea] bg-white text-[#0e1214] transition-colors hover:border-[#24549c]/40 disabled:cursor-default disabled:opacity-35 disabled:hover:border-[#e3e8ea]";
 
 export function PartnersCalculator() {
-	const [stores, setStores] = useState(5);
-
-	const { activation, recurring, firstYear } = useMemo(
-		() => ({
-			activation: stores * (FIRST_MONTH_PAYOUT + THIRD_MONTH_PAYOUT),
-			recurring: stores * RECURRING_MONTH_PAYOUT,
-			firstYear: stores * FIRST_YEAR_PAYOUT,
-		}),
-		[stores],
-	);
-
-	const clamp = (value: number) => Math.min(MAX_STORES, Math.max(MIN_STORES, value));
+	const [stores, setStores] = useState(CALCULATOR_DEFAULT_STORES);
+	const updateStores = (value: number) => setStores(clampStores(value));
 
 	return (
-		<section id="calculadora" className="ledger-canvas relative py-20 lg:py-28">
-			<div className="mx-auto max-w-7xl px-5 lg:px-8">
-				<Reveal className="max-w-3xl">
-					<SectionEyebrow index="03" label="Calculadora de ganhos" />
-					<h2 className="font-extrabold text-[#171717] tracking-[-0.02em] leading-[1.05] text-[32px] sm:text-[42px] lg:text-[52px]">
-						<span className="block ledger-write" style={{ "--i": 1 } as React.CSSProperties} data-stagger>
-							Quanto a sua rede
-						</span>
-						<span className="block ledger-fade text-[#24549c]" style={{ "--i": 3 } as React.CSSProperties} data-stagger>
-							pode te render?
-						</span>
-					</h2>
-				</Reveal>
+		<section id="calculadora" className="scroll-mt-[60px] pt-36 max-md:pt-24">
+			<div className="mx-auto max-w-[1240px] px-6 max-md:px-4">
+				<SectionHeading eyebrow="03 · Calculadora de ganhos" title="Quanto a sua rede" muted="pode te render?" />
 
-				<Reveal className="mt-12 lg:mt-16">
-					<div
-						className="ledger-fade overflow-hidden rounded-3xl border border-[#e5e5e5] bg-white shadow-[0_24px_60px_-30px_rgba(36,84,156,0.32)] lg:grid lg:grid-cols-[0.92fr_1.08fr]"
-						data-stagger
-					>
-						{/* Controles */}
-						<div className="border-b border-[#e5e5e5] p-7 sm:p-9 lg:border-b-0 lg:border-r">
-							<div className="flex items-center gap-2.5">
-								<span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-[#24549c]/10 text-[#24549c]">
-									<Store className="h-4 w-4" strokeWidth={2.5} />
-								</span>
-								<p className="text-[12px] font-extrabold uppercase tracking-[0.14em] text-[#737373]">Lojas que você indica</p>
-							</div>
-
-							<div className="mt-6 flex items-center justify-between">
-								<button
-									type="button"
-									onClick={() => setStores((current) => clamp(current - 1))}
-									disabled={stores <= MIN_STORES}
-									aria-label="Diminuir lojas"
-									className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-[#e5e5e5] text-[#171717] transition-colors hover:border-[#24549c]/40 hover:text-[#24549c] disabled:opacity-35 disabled:hover:border-[#e5e5e5] disabled:hover:text-[#171717]"
-								>
-									<Minus className="h-4 w-4" strokeWidth={2.5} />
-								</button>
-								<span className="ledger-tabular text-[64px] font-extrabold leading-none tracking-[-0.04em] text-[#171717]">{stores}</span>
-								<button
-									type="button"
-									onClick={() => setStores((current) => clamp(current + 1))}
-									disabled={stores >= MAX_STORES}
-									aria-label="Aumentar lojas"
-									className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-[#e5e5e5] text-[#171717] transition-colors hover:border-[#24549c]/40 hover:text-[#24549c] disabled:opacity-35 disabled:hover:border-[#e5e5e5] disabled:hover:text-[#171717]"
-								>
-									<Plus className="h-4 w-4" strokeWidth={2.5} />
-								</button>
-							</div>
-
-							<input
-								type="range"
-								min={MIN_STORES}
-								max={MAX_STORES}
-								value={stores}
-								onChange={(event) => setStores(clamp(Number(event.target.value)))}
-								aria-label="Número de lojas indicadas"
-								className="mt-7 w-full cursor-pointer accent-[#24549c]"
-							/>
-							<div className="mt-2 flex justify-between text-[11px] font-bold text-[#171717]/40">
-								<span>{MIN_STORES} loja</span>
-								<span>{MAX_STORES}+ lojas</span>
-							</div>
-
-							<p className="mt-7 text-[13px] leading-[1.6] text-[#171717]/55">
-								Cada loja ativa rende {formatToMoney(FIRST_MONTH_PAYOUT)} no primeiro mês, {formatToMoney(THIRD_MONTH_PAYOUT)} no terceiro mês e{" "}
-								{formatToMoney(RECURRING_MONTH_PAYOUT)} nas demais mensalidades.
-							</p>
-						</div>
-
-						{/* Resultado */}
-						<div className="relative flex flex-col justify-between bg-gradient-to-br from-[#24549c] to-[#1a3d7a] p-7 text-white sm:p-9">
-							<div className="absolute -top-16 -right-16 h-[220px] w-[220px] rounded-full bg-[#ffb900]/15 blur-3xl pointer-events-none" aria-hidden />
-
-							<div className="relative">
-								<p className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-white/60">Receita recorrente</p>
-								<div className="mt-2 flex items-baseline gap-2">
-									<span className="ledger-tabular text-[44px] font-extrabold leading-none tracking-[-0.03em] text-[#ffb900] sm:text-[56px]">
-										{formatToMoney(recurring)}
-									</span>
-									<span className="text-[15px] font-bold text-white/70">/mês</span>
-								</div>
-								<p className="mt-2 text-[13px] text-white/60">Mensalidades sem bônus cheio, mês após mês.</p>
-							</div>
-
-							<div className="relative mt-8 grid grid-cols-2 gap-4">
-								<div className="rounded-2xl bg-white/10 p-4">
-									<p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-white/55">Bônus de 1º + 3º mês</p>
-									<p className="ledger-tabular mt-1.5 text-[22px] font-extrabold text-white">{formatToMoney(activation)}</p>
-									<p className="mt-0.5 text-[11px] text-white/50">por loja mantida</p>
-								</div>
-								<div className="rounded-2xl bg-white/10 p-4">
-									<p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-white/55">Total no 1º ano</p>
-									<p className="ledger-tabular mt-1.5 text-[22px] font-extrabold text-white">{formatToMoney(firstYear)}</p>
-									<p className="mt-0.5 text-[11px] text-white/50">ativação + recorrência</p>
-								</div>
-							</div>
-
-							<TrackedLink
-								href={PARTNER_LOGIN_HREF}
-								event="partner_program_cta_clicked"
-								controlEvent="lead"
-								properties={{ cta_id: "calculadora_entrar_no_programa", location: "partner_calculator", stores }}
-								className="group relative mt-7 inline-flex items-center justify-center gap-2 rounded-2xl bg-[#ffb900] px-6 py-4 text-[14px] font-extrabold uppercase tracking-[0.04em] text-[#171717] shadow-[0_16px_40px_-12px_rgba(255,185,0,0.5)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#e6a700]"
+				<div className="mt-14 grid grid-cols-[repeat(auto-fit,minmax(min(100%,420px),1fr))] gap-3 rounded-[28px] bg-[#eef2f6] p-3 max-md:mt-10 max-md:rounded-3xl max-md:p-2">
+					<div className="flex flex-col rounded-[20px] bg-white p-9 max-md:p-6">
+						<p className="flex items-center gap-2.5 text-[14px] font-medium text-[#5b6a70]">
+							<Store className="size-[18px] flex-none text-[#24549c]" aria-hidden />
+							Lojas que você indica
+						</p>
+						<div className="mt-7 flex items-center justify-between gap-4">
+							<button
+								type="button"
+								onClick={() => updateStores(stores - 1)}
+								disabled={stores <= CALCULATOR_MIN_STORES}
+								aria-label="Diminuir lojas"
+								className={STEP_BUTTON_CLASS}
 							>
-								Começar a indicar
-								<ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-							</TrackedLink>
+								<Minus className="size-4" aria-hidden />
+							</button>
+							<output aria-live="polite" className="text-[96px] font-medium leading-none tracking-[-0.05em] max-md:text-[80px]">
+								{stores}
+							</output>
+							<button
+								type="button"
+								onClick={() => updateStores(stores + 1)}
+								disabled={stores >= CALCULATOR_MAX_STORES}
+								aria-label="Aumentar lojas"
+								className={STEP_BUTTON_CLASS}
+							>
+								<Plus className="size-4" aria-hidden />
+							</button>
 						</div>
+						<input
+							type="range"
+							min={CALCULATOR_MIN_STORES}
+							max={CALCULATOR_MAX_STORES}
+							value={stores}
+							onChange={(event) => updateStores(Number(event.target.value))}
+							aria-label="Número de lojas indicadas"
+							className="mt-8 w-full cursor-pointer accent-[#24549c]"
+						/>
+						<div className="mt-2 flex justify-between text-[12px] font-medium text-[#8a979c]">
+							<span>{CALCULATOR_MIN_STORES} loja</span>
+							<span>{CALCULATOR_MAX_STORES}+ lojas</span>
+						</div>
+						<p className="mt-auto pt-7 text-[14px] leading-[1.6] text-[#687a80]">
+							Cada loja ativa rende {formatToMoney(FIRST_MONTH_PAYOUT)} no primeiro mês, {formatToMoney(THIRD_MONTH_PAYOUT)} no terceiro mês e{" "}
+							{formatToMoney(RECURRING_MONTH_PAYOUT)} nas demais mensalidades.
+						</p>
 					</div>
-				</Reveal>
 
-				<p className="mt-5 text-center text-[12px] text-[#737373]">
+					<div data-dock="dark" className="flex flex-col gap-7 rounded-[20px] bg-[#0b1628] p-9 text-white max-md:p-6">
+						<div>
+							<p className="text-[13px] font-semibold text-white/60">Receita recorrente</p>
+							<p className="mt-2.5 flex flex-wrap items-baseline gap-2">
+								<span className="text-[64px] font-medium leading-none tracking-[-0.05em] text-[#ffb900] max-md:text-[48px] max-[400px]:text-[42px]">
+									{formatToMoney(stores * RECURRING_MONTH_PAYOUT)}
+								</span>
+								<span className="text-[16px] font-medium text-white/65">/mês</span>
+							</p>
+							<p className="mt-2.5 text-[14px] text-white/60">Mensalidades sem bônus cheio, mês após mês.</p>
+						</div>
+						<div className="grid grid-cols-2 gap-2.5">
+							<div className="rounded-2xl bg-white/7 p-[18px] max-md:p-4">
+								<p className="text-[12px] font-semibold text-white/55">Bônus de 1º + 3º mês</p>
+								<p className="mt-2 text-[24px] font-semibold tracking-[-0.02em] max-md:text-[19px]">
+									{formatToMoney(stores * (FIRST_MONTH_PAYOUT + THIRD_MONTH_PAYOUT))}
+								</p>
+								<p className="mt-1 text-[12px] text-white/50">por loja mantida</p>
+							</div>
+							<div className="rounded-2xl bg-white/7 p-[18px] max-md:p-4">
+								<p className="text-[12px] font-semibold text-white/55">Total no 1º ano</p>
+								<p className="mt-2 text-[24px] font-semibold tracking-[-0.02em] max-md:text-[19px]">{formatToMoney(stores * FIRST_YEAR_PAYOUT)}</p>
+								<p className="mt-1 text-[12px] text-white/50">ativação + recorrência</p>
+							</div>
+						</div>
+						<TrackedLink
+							href={PARTNER_LOGIN_HREF}
+							event={PARTNER_CTA_EVENT}
+							controlEvent="lead"
+							properties={{ cta_id: "calculadora_entrar_no_programa", location: "partner_calculator", stores }}
+							className="mt-auto inline-flex h-[52px] items-center justify-center gap-2 whitespace-nowrap rounded-full bg-[#ffb900] text-[15px] font-semibold text-[#171717] transition-colors hover:bg-[#e6a700]"
+						>
+							Começar a indicar
+							<ArrowRight className="size-4 flex-none" aria-hidden />
+						</TrackedLink>
+					</div>
+				</div>
+				<p className="mt-4 text-center text-[13px] text-[#8a979c]">
 					Estimativa ilustrativa considerando lojas no plano mensal e ativas no período. Valores brutos, antes de impostos.
 				</p>
 			</div>

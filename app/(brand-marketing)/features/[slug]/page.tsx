@@ -1,15 +1,14 @@
+import { Dock } from "@/app/_components/Dock";
 import { FEATURE_PAGES, getFeaturePage } from "@/app/_content/feature-pages";
-import { SEGMENT_PAGES } from "@/app/_content/segment-pages";
-import { ArticleCTA } from "@/components/Content/ArticleCTA";
-import { IsoCover } from "@/components/Illustrations/Isometric/IsoCover";
-import { ArticleFAQ, buildFAQPageJsonLd } from "@/components/Content/ArticleFAQ";
-import { ArticleSection } from "@/components/Content/ArticleSection";
-import { ArticleSources } from "@/components/Content/ArticleSources";
-import { SegmentCard } from "@/components/Content/Segment/SegmentCard";
-import { Calendar } from "lucide-react";
+import { buildFAQPageJsonLd } from "@/components/Content/ArticleFAQ";
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
+import { FeatureChapters } from "../_components/FeatureChapters";
+import { FeatureCta } from "../_components/FeatureCta";
+import { FeatureFaq } from "../_components/FeatureFaq";
+import { FeatureHero } from "../_components/FeatureHero";
+import { FeatureOthers } from "../_components/FeatureOthers";
+import { FeatureTextBlock } from "../_components/FeatureTextBlock";
 
 type Props = {
 	params: Promise<{ slug: string }>;
@@ -45,12 +44,19 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 	};
 }
 
-export default async function FuncionalidadePage({ params }: Props) {
+export default async function FeaturePageRoute({ params }: Props) {
 	const { slug } = await params;
 	const page = getFeaturePage(slug);
 	if (!page) notFound();
 
-	const relatedSegments = SEGMENT_PAGES.filter((p) => page.relatedSegmentSlugs.includes(p.slug));
+	// O conteúdo vem em seções do formato do blog; o desenho da página as distribui: o primeiro texto
+	// abre, o último fecha, os números vão para a faixa escura do herói e cada destaque vira um capítulo.
+	const texts = page.sections.filter((section) => section.type === "text");
+	const stats = page.sections.find((section) => section.type === "stats")?.items ?? [];
+	const chapters = page.sections.filter((section) => section.type === "feature-highlight");
+	const intro = texts[0];
+	const closing = texts.length > 1 ? texts[texts.length - 1] : undefined;
+	const relatedFeatures = page.relatedFeatureSlugs.map(getFeaturePage).filter((feature) => feature !== undefined);
 
 	const jsonLd = {
 		"@context": "https://schema.org",
@@ -77,77 +83,19 @@ export default async function FuncionalidadePage({ params }: Props) {
 
 	return (
 		<>
-			{/* JSON-LD */}
 			<script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
 			{faqJsonLd && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }} />}
 
-			{/* Hero */}
-			<section className="bg-gradient-to-b from-slate-50 to-white pt-28 pb-12 px-6">
-				<div className="container mx-auto max-w-3xl">
-					{/* Breadcrumb */}
-					<div className="flex items-center gap-2 mb-6">
-						<Link href="/" className="text-sm text-[#24549C] font-semibold hover:underline">
-							Home
-						</Link>
-						<span className="text-slate-300">/</span>
-						<Link href="/blog" className="text-sm text-slate-500 hover:text-[#24549C] transition-colors">
-							Blog
-						</Link>
-						<span className="text-slate-300">/</span>
-						<span className="text-sm text-slate-400">Funcionalidades</span>
-					</div>
-
-					<div className="mb-8 overflow-hidden rounded-[26px] border border-slate-200">
-						<IsoCover scene={page.cover} label={page.headline} className="block aspect-[16/8] w-full" />
-					</div>
-
-					<span className="inline-block text-xs font-bold text-[#24549C] bg-blue-50 px-3 py-1.5 rounded-full mb-4">Funcionalidade</span>
-
-					<h1 className="text-3xl sm:text-4xl font-black text-slate-900 leading-tight tracking-tight mb-4">{page.headline}</h1>
-					<p className="text-lg text-slate-600 leading-relaxed mb-6">{page.description}</p>
-
-					{/* Quick trust row */}
-					<div className="flex flex-wrap gap-4 text-sm text-slate-500 font-medium">
-						<span className="flex items-center gap-1.5">
-							<Calendar className="w-4 h-4 text-[#24549C]" />
-							15 dias grátis para testar
-						</span>
-						<span>✓ Sem cartão de crédito</span>
-						<span>✓ Suporte incluso</span>
-					</div>
-				</div>
-			</section>
-
-			<div className="px-6 pb-20">
-				<div className="container mx-auto max-w-3xl">
-					<div className="h-px bg-slate-100 mb-10" />
-
-					{/* Feature body */}
-					{page.sections.map((section, i) => (
-						<ArticleSection key={i} section={section} />
-					))}
-
-					{/* CTA */}
-					<ArticleCTA headline={page.cta.headline} sub={page.cta.sub} buttonText={page.cta.buttonText} whatsappMessage={page.cta.whatsappMessage} />
-
-					{/* FAQ */}
-					{page.faqs && page.faqs.length > 0 && <ArticleFAQ faqs={page.faqs} />}
-
-					{page.sources && <ArticleSources sources={page.sources} />}
-
-					{/* Related segment landings */}
-					{relatedSegments.length > 0 && (
-						<section className="mt-16 pt-12 border-t border-slate-100">
-							<h2 className="text-xl font-black text-slate-900 mb-8">Veja como funciona por segmento</h2>
-							<div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-								{relatedSegments.map((segment) => (
-									<SegmentCard key={segment.slug} segment={segment} />
-								))}
-							</div>
-						</section>
-					)}
-				</div>
-			</div>
+			<Dock variant="product" />
+			<main>
+				<FeatureHero page={page} stats={stats} />
+				{intro?.heading ? <FeatureTextBlock variant="intro" heading={intro.heading} body={intro.body} /> : null}
+				<FeatureChapters slug={page.slug} chapters={chapters} />
+				{closing?.heading ? <FeatureTextBlock variant="closing" heading={closing.heading} body={closing.body} /> : null}
+				<FeatureCta page={page} />
+				<FeatureFaq faqs={page.faqs ?? []} sources={page.sources} />
+				<FeatureOthers features={relatedFeatures} />
+			</main>
 		</>
 	);
 }

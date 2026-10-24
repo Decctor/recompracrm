@@ -1,4 +1,5 @@
 import type { BlogCategory, BlogPost } from "@/app/_content/blog-posts";
+import type { TStatOgPanel } from "@/lib/content/og-image";
 import { cn } from "@/lib/utils";
 
 // Capa de dados dos artigos: o número-chave em tipo grande, o rótulo e a fonte. Substitui as
@@ -14,6 +15,13 @@ export const COVER_TONES: Record<BlogCategory, { surface: string; value: string;
 		meta: "text-[rgba(122,81,23,0.6)]",
 		rule: "border-[rgba(122,81,23,0.14)]",
 	},
+};
+
+// As mesmas cores em hex, para a imagem de compartilhamento do artigo (o satori não lê classes).
+export const COVER_OG_PANELS: Record<BlogCategory, TStatOgPanel> = {
+	guias: { background: "#0b1628", value: "#ffffff", label: "rgba(255,255,255,0.72)", meta: "rgba(255,255,255,0.5)", accent: "#ffb900" },
+	dados: { background: "#eef2f6", value: "#24549c", label: "#4b585d", meta: "#8a979c", accent: "#24549c" },
+	dicas: { background: "#fff7e5", value: "#7a5117", label: "#7a5117", meta: "rgba(122,81,23,0.6)", accent: "#7a5117" },
 };
 
 type TCoverPost = Pick<BlogPost, "category" | "categoryLabel" | "cover" | "readingTime">;
