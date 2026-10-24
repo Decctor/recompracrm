@@ -316,7 +316,7 @@ export function Dock({ variant = "landing", theme = "auto", compactOnScroll = tr
 					<div className={cn("hidden min-w-0 items-center gap-0.5", bp.flex)}>
 						{links.map((link) => {
 							const href = link.href ?? sectionHref(link.id);
-							const on = !!link.id && link.id === active && !link.href;
+							const on = link.href ? link.href === pathname : !!link.id && link.id === active;
 							return (
 								<Link
 									key={href}
@@ -395,7 +395,7 @@ export function Dock({ variant = "landing", theme = "auto", compactOnScroll = tr
 				>
 					{links.map((link) => {
 						const href = link.href ?? sectionHref(link.id);
-						const on = !!link.id && link.id === active && !link.href;
+						const on = link.href ? link.href === pathname : !!link.id && link.id === active;
 						return (
 							<Link
 								key={href}

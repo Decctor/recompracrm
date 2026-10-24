@@ -1,11 +1,12 @@
-// Conteúdo dos cases de clientes exibidos na seção "Resultado comprovado" da
-// landing. Conteúdo de landing vive em código (como app/_content/integration-pages):
+// Conteúdo dos cases de clientes: a seção "Resultado" da landing e as páginas /cases e
+// /cases/[id]. Conteúdo de marketing vive em código (como app/_content/integration-pages):
 // poucos clientes, curadoria manual — sem necessidade de banco/admin por ora.
 //
 // Para adicionar um case:
 // 1. Suba a logo do cliente em /public/landing/cases/{slug}.png (fundo transparente).
-// 2. Faça upload do vídeo no Mux com playback policy PUBLIC e copie o playback ID.
-// 3. Adicione uma entrada em LANDING_CASES abaixo.
+// 2. Faça upload do vídeo no Mux com playback policy PUBLIC e copie o playback ID
+//    (scripts/upload-mux-video.ts).
+// 3. Adicione uma entrada em LANDING_CASES abaixo. O `id` vira o slug de /cases/{id}.
 
 export type TCaseMetric = {
 	label: string;
@@ -48,6 +49,8 @@ export type TLandingCase = {
 	metrics: TCaseMetric[];
 	quote?: { text: string; author?: string; role?: string };
 	video?: TCaseVideo;
+	/** Slugs de /features/{slug} usados no case, na ordem em que aparecem em "Com o que foi feito". */
+	features?: string[];
 };
 
 export const LANDING_CASES: TLandingCase[] = [
@@ -94,6 +97,7 @@ export const LANDING_CASES: TLandingCase[] = [
 			title: "Como a Ampère Mais gerou R$17 mil extras em 30 dias",
 			orientation: "landscape",
 		},
+		features: ["campanhas-whatsapp", "business-intelligence"],
 	},
 	{
 		id: "congelatte",
@@ -134,5 +138,10 @@ export const LANDING_CASES: TLandingCase[] = [
 			title: "Como a Congelatte aumentou em 30% suas vendas com a RecompraCRM",
 			orientation: "landscape",
 		},
+		features: ["programa-de-cashback", "campanhas-whatsapp"],
 	},
 ];
+
+export function getCase(id: string): TLandingCase | undefined {
+	return LANDING_CASES.find((item) => item.id === id);
+}

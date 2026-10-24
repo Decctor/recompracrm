@@ -1,6 +1,6 @@
 "use client";
 
-import { LANDING_CASES, type TCaseMetric, type TLandingCase } from "@/app/_components/ledger/cases/cases-data";
+import { LANDING_CASES, type TCaseMetric, type TLandingCase } from "@/app/_content/cases";
 import { cn } from "@/lib/utils";
 import { Play } from "lucide-react";
 import dynamic from "next/dynamic";
