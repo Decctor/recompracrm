@@ -13,7 +13,7 @@ import { useCallback, useEffect, useState } from "react";
 // No artigo mostra "Lendo · <seção>" (lido de `[data-outline]`) e a barra de progresso
 // (medida em `[data-article]`).
 
-export type TDockVariant = "landing" | "erp" | "blog" | "artigo";
+export type TDockVariant = "landing" | "erp" | "blog" | "artigo" | "product" | "cases" | "tools" | "integrations" | "help" | "partners";
 
 type TDockLink = { label: string; id?: string; href?: string };
 
@@ -39,9 +39,44 @@ const LINKS: Record<TDockVariant, TDockLink[]> = {
 		{ label: "ERP", href: "/erp" },
 	],
 	artigo: [],
+	product: [
+		{ id: "conteudo", label: "Como funciona" },
+		{ id: "perguntas-frequentes", label: "Dúvidas" },
+		{ label: "Integrações", href: "/integrations" },
+		{ label: "Planos", href: "/#planos" },
+	],
+	cases: [
+		{ id: "cases", label: "Cases" },
+		{ label: "Funcionalidades", href: "/features/programa-de-cashback" },
+		{ label: "Planos", href: "/#planos" },
+	],
+	tools: [
+		{ label: "Calculadora de cashback", href: "/tools/cashback-calculator" },
+		{ label: "Custo do WhatsApp", href: "/tools/whatsapp-cost" },
+		{ label: "Blog", href: "/blog" },
+	],
+	integrations: [
+		{ id: "conectores", label: "Conectores" },
+		{ label: "Funcionalidades", href: "/features/programa-de-cashback" },
+		{ label: "Ajuda", href: "/help" },
+	],
+	help: [
+		{ id: "tutoriais", label: "Tutoriais" },
+		{ label: "Integrações", href: "/integrations" },
+		{ label: "Blog", href: "/blog" },
+	],
+	partners: [
+		{ id: "como-funciona-parceria", label: "Como funciona" },
+		{ id: "esquema-de-pagamento", label: "Pagamento" },
+		{ id: "calculadora", label: "Calculadora" },
+		{ id: "para-quem", label: "Para quem é" },
+	],
 };
 
 const WHATSAPP_SPECIALIST = "https://wa.me/553499480791?text=Olá, gostaria de falar com um especialista do RecompraCRM.";
+const WHATSAPP_SUPPORT = "https://wa.me/553499480791?text=Olá, preciso de ajuda com o RecompraCRM.";
+const TRIAL = { label: "Testar 15 dias grátis", short: "Testar grátis", href: "/auth/signup" };
+const DEMO = { label: "Agendar demonstração", short: "Agendar demo", href: "#cta" };
 
 // `_` é o CTA padrão; as demais chaves são ids de seção que trocam o CTA quando estão em leitura.
 const CTA: Record<TDockVariant, Record<string, { label: string; short: string; href: string }>> = {
@@ -56,11 +91,70 @@ const CTA: Record<TDockVariant, Record<string, { label: string; short: string; h
 		top: { label: "Ver por dentro", short: "Ver por dentro", href: "#canais" },
 	},
 	blog: { _: { label: "Testar 15 dias grátis", short: "Testar grátis", href: "/auth/signup" } },
-	artigo: { _: { label: "Agendar demonstração", short: "Agendar demo", href: "#cta" } },
+	artigo: { _: DEMO },
+	product: { _: DEMO },
+	cases: { _: DEMO },
+	tools: { _: TRIAL },
+	integrations: { _: TRIAL, cta: DEMO },
+	help: { _: { label: "Falar com o suporte", short: "Suporte", href: WHATSAPP_SUPPORT } },
+	partners: { _: { label: "Entrar no programa", short: "Participar", href: "/auth/signin?redirectTo=%2Fpartner-dashboard" } },
 };
 
-const TAG: Record<TDockVariant, string | null> = { landing: null, erp: "ERP", blog: "Blog", artigo: "Blog" };
-const HOME_HREF: Record<TDockVariant, string> = { landing: "#top", erp: "/", blog: "/", artigo: "/blog" };
+const TAG: Record<TDockVariant, string | null> = {
+	landing: null,
+	erp: "ERP",
+	blog: "Blog",
+	artigo: "Blog",
+	product: "Produto",
+	cases: "Cases",
+	tools: "Ferramentas",
+	integrations: "Integrações",
+	help: "Ajuda",
+	partners: "Parceiros",
+};
+const HOME_HREF: Record<TDockVariant, string> = {
+	landing: "#top",
+	erp: "/",
+	blog: "/",
+	artigo: "/blog",
+	product: "/",
+	cases: "/",
+	tools: "/",
+	integrations: "/",
+	help: "/",
+	partners: "/",
+};
+
+// Quanto mais links (e a etiqueta da área), mais cedo a barra recolhe para o menu. As classes
+// ficam literais para o Tailwind enxergá-las.
+const BREAKPOINT_CLASSES = {
+	860: {
+		wide: "min-[860px]:max-w-[880px]",
+		flex: "min-[860px]:flex",
+		inline: "min-[860px]:inline-flex",
+		block: "min-[860px]:block",
+		hide: "min-[860px]:hidden",
+	},
+	960: {
+		wide: "min-[960px]:max-w-[880px]",
+		flex: "min-[960px]:flex",
+		inline: "min-[960px]:inline-flex",
+		block: "min-[960px]:block",
+		hide: "min-[960px]:hidden",
+	},
+	1040: {
+		wide: "min-[1040px]:max-w-[880px]",
+		flex: "min-[1040px]:flex",
+		inline: "min-[1040px]:inline-flex",
+		block: "min-[1040px]:block",
+		hide: "min-[1040px]:hidden",
+	},
+} as const;
+
+function getBreakpointClasses(variant: TDockVariant) {
+	const density = LINKS[variant].length + (TAG[variant] ? 1 : 0);
+	return BREAKPOINT_CLASSES[density >= 5 ? 1040 : density >= 4 ? 960 : 860];
+}
 
 type DockProps = {
 	variant?: TDockVariant;
@@ -144,6 +238,7 @@ export function Dock({ variant = "landing", theme = "auto", compactOnScroll = tr
 	const cta = (active ? CTA[variant][active] : undefined) ?? CTA[variant]._;
 	const ctaIsExternal = cta.href.startsWith("http");
 	const tag = TAG[variant];
+	const bp = getBreakpointClasses(variant);
 	const isArticleReading = variant === "artigo" && compact;
 
 	const glass = dark
@@ -166,7 +261,7 @@ export function Dock({ variant = "landing", theme = "auto", compactOnScroll = tr
 					"pointer-events-auto relative flex w-full items-center justify-between gap-4 border backdrop-blur-[16px] backdrop-saturate-[1.6]",
 					"transition-[max-width,height,padding,border-radius,background-color,border-color,box-shadow] duration-500",
 					ease,
-					compact ? "h-14 max-w-[560px] rounded-full pr-1.5 pl-3.5 min-[860px]:max-w-[880px]" : "h-[72px] max-w-[1240px] rounded-none px-3 sm:px-6",
+					compact ? cn("h-14 max-w-[560px] rounded-full pr-1.5 pl-3.5", bp.wide) : "h-[72px] max-w-[1240px] rounded-none px-3 sm:px-6",
 					compact || dark ? glass : "border-transparent bg-transparent shadow-none",
 				)}
 			>
@@ -202,7 +297,7 @@ export function Dock({ variant = "landing", theme = "auto", compactOnScroll = tr
 				</Link>
 
 				{links.length > 0 ? (
-					<div className="hidden min-w-0 items-center gap-0.5 min-[860px]:flex">
+					<div className={cn("hidden min-w-0 items-center gap-0.5", bp.flex)}>
 						{links.map((link) => {
 							const href = link.href ?? `#${link.id}`;
 							const on = !!link.id && link.id === active && !link.href;
@@ -226,7 +321,7 @@ export function Dock({ variant = "landing", theme = "auto", compactOnScroll = tr
 				) : null}
 
 				{isArticleReading ? (
-					<div className={cn("hidden min-w-0 flex-1 items-center justify-center gap-2 text-sm min-[860px]:flex", subText)}>
+					<div className={cn("hidden min-w-0 flex-1 items-center justify-center gap-2 text-sm", bp.flex, subText)}>
 						<span className={cn("block h-1.5 w-1.5 flex-none rounded-full", heading ? "bg-[#ffb900]" : dark ? "bg-white/30" : "bg-[#c9d1d4]")} />
 						<span className="flex-none font-medium">{heading ? "Lendo" : "Neste artigo"}</span>
 						<span className="min-w-0 truncate">{heading ?? ""}</span>
@@ -235,10 +330,7 @@ export function Dock({ variant = "landing", theme = "auto", compactOnScroll = tr
 
 				<div className="flex flex-none items-center gap-1">
 					{!compact ? (
-						<Link
-							href="/auth/signin"
-							className={cn("hidden h-10 items-center whitespace-nowrap px-3.5 text-sm font-medium min-[860px]:inline-flex", subText)}
-						>
+						<Link href="/auth/signin" className={cn("hidden h-10 items-center whitespace-nowrap px-3.5 text-sm font-medium", bp.inline, subText)}>
 							Entrar
 						</Link>
 					) : null}
@@ -261,7 +353,7 @@ export function Dock({ variant = "landing", theme = "auto", compactOnScroll = tr
 					>
 						<span className="whitespace-nowrap sm:hidden">{cta.short}</span>
 						<span className="hidden whitespace-nowrap sm:inline">{cta.label}</span>
-						{compact ? <ArrowRight className="hidden h-3.5 w-3.5 min-[860px]:block" /> : null}
+						{compact ? <ArrowRight className={cn("hidden h-3.5 w-3.5", bp.block)} /> : null}
 					</Link>
 					{links.length > 0 ? (
 						<button
@@ -269,7 +361,7 @@ export function Dock({ variant = "landing", theme = "auto", compactOnScroll = tr
 							onClick={() => setMenuOpen((o) => !o)}
 							aria-label="Menu"
 							aria-expanded={menuOpen}
-							className={cn("flex h-11 w-11 items-center justify-center rounded-full bg-transparent min-[860px]:hidden", fgText)}
+							className={cn("flex h-11 w-11 items-center justify-center rounded-full bg-transparent", bp.hide, fgText)}
 						>
 							{menuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
 						</button>
@@ -280,7 +372,8 @@ export function Dock({ variant = "landing", theme = "auto", compactOnScroll = tr
 			{menuOpen ? (
 				<div
 					className={cn(
-						"pointer-events-auto mt-2 flex w-full max-w-[560px] flex-col gap-0.5 rounded-3xl border p-2 backdrop-blur-[16px] backdrop-saturate-[1.6] min-[860px]:hidden",
+						"pointer-events-auto mt-2 flex w-full max-w-[560px] flex-col gap-0.5 rounded-3xl border p-2 backdrop-blur-[16px] backdrop-saturate-[1.6]",
+						bp.hide,
 						glass,
 					)}
 				>

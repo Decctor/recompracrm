@@ -53,7 +53,7 @@ export default function SettingsAiConnections({ membership }: SettingsAiConnecti
 				}
 			>
 				<Link
-					href="/ajuda/como-conectar-recompracrm-ao-claude"
+					href="/help/como-conectar-recompracrm-ao-claude"
 					className="inline-flex w-fit items-center gap-2 rounded-full border border-[#D97757]/25 bg-[#D97757]/10 px-3.5 py-2 text-xs font-bold text-[#9d4e36] transition-colors hover:border-[#D97757]/45 hover:bg-[#D97757]/15 dark:text-[#efaa91]"
 				>
 					<ConnectorMark connectorCode="AGENT_CLAUDE" className="size-4" />

@@ -1,7 +1,7 @@
 import type { FAQItem } from "./blog-posts";
 
 // ----------------------------------------------------------------------------
-// Content model for segment landing pages (/segmentos/[slug]).
+// Content model for segment landing pages (/segments/[slug]).
 // One config per segment drives a full conversion landing + hub card, no modelo
 // "página-por-segmento" (Fidelimax). Adding a new segment = adding one config.
 // The old blog case posts (/blog/como-recompracrm-pode-ajudar-*) redirect here —

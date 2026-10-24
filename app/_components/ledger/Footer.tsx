@@ -30,10 +30,10 @@ const FOOTER_GROUPS = [
 		title: "Conteúdo",
 		links: [
 			{ label: "Blog", href: "/blog" },
-			{ label: "Todos os segmentos", href: "/segmentos" },
-			{ label: "Restaurantes", href: "/segmentos/restaurantes" },
-			{ label: "Pet Shops", href: "/segmentos/pet-shop" },
-			{ label: "Lojas de Roupas", href: "/segmentos/loja-de-roupas" },
+			{ label: "Todos os segmentos", href: "/segments" },
+			{ label: "Restaurantes", href: "/segments/restaurantes" },
+			{ label: "Pet Shops", href: "/segments/pet-shop" },
+			{ label: "Lojas de Roupas", href: "/segments/loja-de-roupas" },
 		],
 	},
 	{

@@ -35,7 +35,7 @@ export function HelpCenterSearch({ articles }: { articles: THelpArticle[] }) {
 						{filteredArticles.map((article) => (
 							<Link
 								key={article.slug}
-								href={`/ajuda/${article.slug}`}
+								href={`/help/${article.slug}`}
 								className="group relative overflow-hidden rounded-[1.6rem] border border-slate-200 bg-white p-6 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition duration-300 hover:-translate-y-0.5 hover:border-[#D97757]/40 hover:shadow-[0_18px_50px_-32px_rgba(36,84,156,0.55)] sm:p-8"
 							>
 								<div className="flex flex-col gap-6 sm:flex-row sm:items-center">

@@ -5,7 +5,7 @@ const LINKS = [
 	{ label: "Produto", href: "/" },
 	{ label: "ERP", href: "/erp" },
 	{ label: "Blog", href: "/blog" },
-	{ label: "Segmentos", href: "/segmentos" },
+	{ label: "Segmentos", href: "/segments" },
 	{ label: "Integrações", href: "/integrations" },
 	{ label: "Privacidade", href: "/legal" },
 ];

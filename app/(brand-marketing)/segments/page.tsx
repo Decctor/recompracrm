@@ -10,12 +10,12 @@ export const metadata: Metadata = {
 	title: "Programa de Fidelidade por Segmento",
 	description:
 		"Cashback, campanhas no WhatsApp e análise RFM aplicados à realidade de cada tipo de loja: restaurantes, pet shops, farmácias, moda e mais. Encontre o seu segmento.",
-	alternates: { canonical: `${BASE_URL}/segmentos` },
+	alternates: { canonical: `${BASE_URL}/segments` },
 	openGraph: {
 		title: "Programa de Fidelidade por Segmento | RecompraCRM",
 		description:
 			"Cashback, campanhas no WhatsApp e análise RFM aplicados à realidade de cada tipo de loja. Encontre o seu segmento.",
-		url: `${BASE_URL}/segmentos`,
+		url: `${BASE_URL}/segments`,
 		type: "website",
 	},
 };
@@ -29,7 +29,7 @@ export default function SegmentosHubPage() {
 			"@type": "ListItem",
 			position: i + 1,
 			name: segment.title,
-			url: `${BASE_URL}/segmentos/${segment.slug}`,
+			url: `${BASE_URL}/segments/${segment.slug}`,
 		})),
 	};
 

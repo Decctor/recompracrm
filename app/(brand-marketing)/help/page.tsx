@@ -6,11 +6,11 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
 	title: "Central de Ajuda",
 	description: "Tutoriais práticos para configurar integrações e usar melhor o RecompraCRM.",
-	alternates: { canonical: "https://www.recompracrm.com.br/ajuda" },
+	alternates: { canonical: "https://www.recompracrm.com.br/help" },
 	openGraph: {
 		title: "Central de Ajuda RecompraCRM",
 		description: "Tutoriais práticos para configurar integrações e usar melhor o RecompraCRM.",
-		url: "https://www.recompracrm.com.br/ajuda",
+		url: "https://www.recompracrm.com.br/help",
 		type: "website",
 	},
 };

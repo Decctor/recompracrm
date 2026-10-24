@@ -23,7 +23,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 	const page = getSegmentPage(slug);
 	if (!page) return {};
 
-	const canonicalUrl = `${BASE_URL}/segmentos/${page.slug}`;
+	const canonicalUrl = `${BASE_URL}/segments/${page.slug}`;
 
 	return {
 		title: page.title,
@@ -53,7 +53,7 @@ export default async function SegmentDetailPage({ params }: Props) {
 	const page = getSegmentPage(slug);
 	if (!page) notFound();
 
-	const canonicalUrl = `${BASE_URL}/segmentos/${page.slug}`;
+	const canonicalUrl = `${BASE_URL}/segments/${page.slug}`;
 	const relatedSegments = SEGMENT_PAGES.filter((p) => page.relatedSlugs.includes(p.slug));
 
 	const serviceJsonLd = {
@@ -77,7 +77,7 @@ export default async function SegmentDetailPage({ params }: Props) {
 		"@type": "BreadcrumbList",
 		itemListElement: [
 			{ "@type": "ListItem", position: 1, name: "Home", item: BASE_URL },
-			{ "@type": "ListItem", position: 2, name: "Segmentos", item: `${BASE_URL}/segmentos` },
+			{ "@type": "ListItem", position: 2, name: "Segmentos", item: `${BASE_URL}/segments` },
 			{ "@type": "ListItem", position: 3, name: page.name, item: canonicalUrl },
 		],
 	};

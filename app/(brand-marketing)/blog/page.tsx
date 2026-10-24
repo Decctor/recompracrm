@@ -80,7 +80,7 @@ export default function BlogIndexPage() {
 								</p>
 							</div>
 							<Link
-								href="/segmentos"
+								href="/segments"
 								className="inline-flex h-[46px] items-center gap-2 whitespace-nowrap rounded-full bg-[#0e1214] px-[22px] text-[15px] font-medium text-white transition-colors hover:bg-[#24549c]"
 							>
 								Ver segmentos

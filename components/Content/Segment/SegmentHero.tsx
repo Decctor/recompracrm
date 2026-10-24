@@ -20,7 +20,7 @@ export function SegmentHero({ page }: SegmentHeroProps) {
 						Home
 					</Link>
 					<span className="text-slate-300">/</span>
-					<Link href="/segmentos" className="text-slate-500 transition-colors hover:text-[#24549C]">
+					<Link href="/segments" className="text-slate-500 transition-colors hover:text-[#24549C]">
 						Segmentos
 					</Link>
 					<span className="text-slate-300">/</span>

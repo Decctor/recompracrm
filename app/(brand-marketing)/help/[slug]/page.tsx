@@ -18,7 +18,7 @@ export function generateStaticParams() {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
 	const article = getHelpArticle((await params).slug);
 	if (!article) return {};
-	const url = `https://www.recompracrm.com.br/ajuda/${article.slug}`;
+	const url = `https://www.recompracrm.com.br/help/${article.slug}`;
 	return {
 		title: article.title,
 		description: article.description,
@@ -32,7 +32,7 @@ export default async function HelpArticlePage({ params }: Props) {
 	const article = getHelpArticle((await params).slug);
 	if (!article) notFound();
 
-	const url = `https://www.recompracrm.com.br/ajuda/${article.slug}`;
+	const url = `https://www.recompracrm.com.br/help/${article.slug}`;
 	const howToJsonLd = {
 		"@context": "https://schema.org",
 		"@type": "HowTo",
@@ -61,7 +61,7 @@ export default async function HelpArticlePage({ params }: Props) {
 
 			<section className="border-b border-slate-100 bg-[radial-gradient(circle_at_75%_0%,rgba(217,119,87,0.13),transparent_40%)] px-6 py-14 sm:py-18">
 				<div className="mx-auto max-w-4xl">
-					<Link href="/ajuda" className="inline-flex items-center gap-2 text-sm font-bold text-[#24549C] transition hover:text-[#1a3d7a]">
+					<Link href="/help" className="inline-flex items-center gap-2 text-sm font-bold text-[#24549C] transition hover:text-[#1a3d7a]">
 						<ArrowLeft className="size-4" /> Central de Ajuda
 					</Link>
 					<div className="mt-8 flex flex-col gap-6 sm:flex-row sm:items-start">

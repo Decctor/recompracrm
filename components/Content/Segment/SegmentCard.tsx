@@ -5,7 +5,7 @@ import Link from "next/link";
 export function SegmentCard({ segment }: { segment: SegmentPage }) {
 	return (
 		<Link
-			href={`/segmentos/${segment.slug}`}
+			href={`/segments/${segment.slug}`}
 			className="group flex flex-col rounded-2xl border border-slate-200 bg-white p-6 transition-all duration-300 hover:-translate-y-1 hover:border-[#24549C]/30 hover:shadow-lg hover:shadow-slate-900/5"
 		>
 			<div className="flex items-center justify-between">

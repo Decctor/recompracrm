@@ -200,22 +200,22 @@ export default function FooterV2() {
 									</Link>
 								</li>
 								<li>
-									<Link href="/segmentos" className="hover:text-[#24549C] transition-colors">
+									<Link href="/segments" className="hover:text-[#24549C] transition-colors">
 										Todos os Segmentos
 									</Link>
 								</li>
 								<li>
-									<Link href="/segmentos/restaurantes" className="hover:text-[#24549C] transition-colors">
+									<Link href="/segments/restaurantes" className="hover:text-[#24549C] transition-colors">
 										Restaurantes
 									</Link>
 								</li>
 								<li>
-									<Link href="/segmentos/pet-shop" className="hover:text-[#24549C] transition-colors">
+									<Link href="/segments/pet-shop" className="hover:text-[#24549C] transition-colors">
 										Pet Shops
 									</Link>
 								</li>
 								<li>
-									<Link href="/segmentos/loja-de-roupas" className="hover:text-[#24549C] transition-colors">
+									<Link href="/segments/loja-de-roupas" className="hover:text-[#24549C] transition-colors">
 										Lojas de Roupas
 									</Link>
 								</li>

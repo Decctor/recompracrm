@@ -4,7 +4,7 @@ const nextConfig = {
 	reactStrictMode: true,
 	async redirects() {
 		// Os posts de caso de uso do blog foram convertidos em landings de conversão
-		// por segmento (/segmentos/[slug]) — o conteúdo vive em app/_content/segment-pages.ts.
+		// por segmento (/segments/[slug]) — o conteúdo vive em app/_content/segment-pages.ts.
 		const blogCasePostToSegment = {
 			"sua-sorveteria": "sorveteria",
 			"seu-petshop": "pet-shop",
@@ -49,9 +49,16 @@ const nextConfig = {
 			// A página de lotes foi movida para dentro do módulo de Estoque.
 			{
 				source: "/casos-de-uso",
-				destination: "/segmentos",
+				destination: "/segments",
 				permanent: true,
 			},
+			// Rotas de marketing em inglês, como o resto do app; os slugs continuam os mesmos.
+			{ source: "/ajuda", destination: "/help", permanent: true },
+			{ source: "/ajuda/:slug*", destination: "/help/:slug*", permanent: true },
+			{ source: "/segmentos", destination: "/segments", permanent: true },
+			{ source: "/segmentos/:slug*", destination: "/segments/:slug*", permanent: true },
+			// Ainda não há índice de ferramentas; a calculadora é a porta de entrada.
+			{ source: "/tools", destination: "/tools/cashback-calculator", permanent: false },
 			...legacyFeatureSlugs.map((slug) => ({
 				source: `/funcionalidades/${slug}`,
 				destination: `/features/${slug}`,
@@ -59,7 +66,7 @@ const nextConfig = {
 			})),
 			...Object.entries(blogCasePostToSegment).map(([blogSuffix, segmentSlug]) => ({
 				source: `/blog/como-recompracrm-pode-ajudar-${blogSuffix}`,
-				destination: `/segmentos/${segmentSlug}`,
+				destination: `/segments/${segmentSlug}`,
 				permanent: true,
 			})),
 		];
