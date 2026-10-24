@@ -8,7 +8,6 @@ export const segmentacaoRfmPost: BlogPost = {
 		"Guia prático de segmentação RFM para o varejo: o que é recência, frequência e valor monetário, como dar notas de 1 a 5 numa planilha, o ajuste para lojas com muitos clientes de compra única e que ação tomar com cada segmento.",
 	category: "guias",
 	categoryLabel: "Guias práticos",
-	illustration: "rfm",
 	cover: {
 		stat: "125",
 		label: "combinações de recência, frequência e valor, de 555 a 111",

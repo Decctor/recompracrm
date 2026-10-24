@@ -65,12 +65,26 @@ type TStatOgImageInput = {
 	stat: string;
 	/** O que o número mede, em uma ou duas linhas. */
 	statLabel: string;
+	/** Linha pequena sob o rótulo (ex: "Fonte: Cielo ICVA"). */
+	statSource?: string | null;
 	footer: string;
+	/** Cores do painel do número. Sem elas, azul-noite com número branco. */
+	panel?: TStatOgPanel;
 };
 
-// Variante com "capa de dados" (cases e ferramentas): no lugar da capa isométrica, o número que
-// resume a página em letra grande, como as capas do blog. Mesma coluna da esquerda da versão acima.
-export async function renderStatOgImage({ eyebrow, title, stat, statLabel, footer }: TStatOgImageInput) {
+export type TStatOgPanel = { background: string; value: string; label: string; meta: string; accent: string };
+
+const DEFAULT_STAT_PANEL: TStatOgPanel = {
+	background: "#0b1628",
+	value: "#ffffff",
+	label: "rgba(255,255,255,0.72)",
+	meta: "rgba(255,255,255,0.5)",
+	accent: "#ffb900",
+};
+
+// Variante com "capa de dados" (blog, cases e ferramentas): no lugar da capa isométrica, o número
+// que resume a página em letra grande. Mesma coluna da esquerda da versão acima.
+export async function renderStatOgImage({ eyebrow, title, stat, statLabel, statSource, footer, panel = DEFAULT_STAT_PANEL }: TStatOgImageInput) {
 	const [fonts, logo] = await Promise.all([getReportFonts(), loadBrandLogo("horizontalColorOnDark")]);
 	const logoHeight = 40;
 	const titleSize = title.length > 70 ? 46 : title.length > 48 ? 52 : 60;
@@ -108,12 +122,13 @@ export async function renderStatOgImage({ eyebrow, title, stat, statLabel, foote
 					justifyContent: "flex-end",
 					width: 560,
 					padding: "56px 56px 60px",
-					backgroundColor: "#0b1628",
+					backgroundColor: panel.background,
 				}}
 			>
-				<div style={{ display: "flex", width: 64, height: 4, backgroundColor: "#ffb900", marginBottom: 28 }} />
-				<div style={{ display: "flex", color: "#ffffff", fontSize: statSize, fontWeight: 600, lineHeight: 1, letterSpacing: "-0.04em" }}>{stat}</div>
-				<div style={{ display: "flex", marginTop: 24, color: "rgba(255,255,255,0.72)", fontSize: 26, fontWeight: 400, lineHeight: 1.3 }}>{statLabel}</div>
+				<div style={{ display: "flex", width: 64, height: 4, backgroundColor: panel.accent, marginBottom: 28 }} />
+				<div style={{ display: "flex", color: panel.value, fontSize: statSize, fontWeight: 600, lineHeight: 1, letterSpacing: "-0.04em" }}>{stat}</div>
+				<div style={{ display: "flex", marginTop: 24, color: panel.label, fontSize: 26, fontWeight: 400, lineHeight: 1.3 }}>{statLabel}</div>
+				{statSource ? <div style={{ display: "flex", marginTop: 20, color: panel.meta, fontSize: 18, fontWeight: 600 }}>{statSource}</div> : null}
 			</div>
 		</div>,
 		{ ...CONTENT_OG_SIZE, fonts },

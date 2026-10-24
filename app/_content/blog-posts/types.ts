@@ -1,4 +1,3 @@
-import type { TIsoCoverKey } from "@/components/Illustrations/Isometric/IsoCover";
 import type { TIsoIconKey } from "@/components/Illustrations/Isometric/IsoIcon";
 
 // Corpo dos artigos. Texto aceita **negrito**, [link](url), parágrafos separados por \n\n e
@@ -44,7 +43,6 @@ export type BlogPost = {
 	// Capa de dados: o número-chave do artigo em destaque, com rótulo e fonte. A cor vem da categoria.
 	// Sem ela, a capa cai no tempo de leitura (ver `components/Content/DataCover.tsx`).
 	cover?: BlogCover;
-	illustration: TIsoCoverKey; // ilustração isométrica usada na imagem de compartilhamento (Open Graph)
 	author?: string; // autor exibido e usado no JSON-LD (default: "Equipe RecompraCRM")
 	publishedAt: string; // ISO date
 	updatedAt?: string; // ISO date — usado em dateModified do JSON-LD

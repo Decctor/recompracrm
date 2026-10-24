@@ -8,7 +8,6 @@ export const cashbackMargemPost: BlogPost = {
 		"Como definir o percentual de cashback da sua loja a partir do ticket médio, da margem bruta e da taxa de uso do crédito. Com calculadora, exemplos por margem e dados da ABEMF sobre fidelidade no Brasil.",
 	category: "guias",
 	categoryLabel: "Guias práticos",
-	illustration: "cashback",
 	cover: {
 		stat: "88,3%",
 		label: "dos consumidores usam programas de fidelidade",

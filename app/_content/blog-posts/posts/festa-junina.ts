@@ -8,7 +8,6 @@ export const festaJuninaPost: BlogPost = {
 		"Veja como criar uma campanha de Festa Junina para movimentar sua loja em junho, aproveitar o Dia dos Namorados e vender sem depender apenas de descontos.",
 	category: "dicas",
 	categoryLabel: "Dicas de gestão",
-	illustration: "festa-junina",
 	cover: {
 		stat: "4 semanas",
 		label: "de campanha, do Arraiá ao São João",
