@@ -31,6 +31,7 @@ export * from "./ai-agents";
 export * from "./community";
 export * from "./suppliers";
 export * from "./purchases";
+export * from "./fixed-assets";
 export * from "./poi-transaction-requests";
 export * from "./action-approvals";
 export * from "./coupons";

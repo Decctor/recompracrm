@@ -2,6 +2,7 @@ import type { TAcquisitionNatureEnum } from "@/schemas/enums";
 import { DBTransaction } from "@/services/drizzle";
 import { productStockLots, productStockTransactions, productVariants, products, purchaseItems } from "@/services/drizzle/schema";
 import { calculatePurchaseItemCost } from "@/lib/purchase/costing";
+import { createFixedAssetsForPurchaseItem, removeFixedAssetsForPurchaseItem } from "@/lib/fixed-assets/from-purchase";
 import { isStockTrackingActive } from "@/lib/stock/apply-stock-movement";
 import type { TPurchaseCostModifiersSnapshot } from "@/schemas/purchases";
 import { and, eq, sql } from "drizzle-orm";
@@ -78,6 +79,10 @@ export async function handlePurchaseItemStockProcessing({
 		return;
 	}
 
+	// Bem do ativo imobilizado não é estoque (ADR-0002, decisão 8): o recebimento cria o registro em
+	// `fixed_assets`; desfazer o recebimento o remove, se nenhum fechamento mensal já o contou.
+	const isFixedAsset = item.destinacao === "ATIVO_IMOBILIZADO";
+
 	if (operation === "RECEIVING") {
 		if (isExisting && shouldDelete) {
 			await deletePurchaseItemRow({ trx, organizationId, itemId: item.id! });
@@ -85,6 +90,10 @@ export async function handlePurchaseItemStockProcessing({
 		}
 
 		const persistedItemId = await persistPurchaseItemRow({ trx, organizationId, purchaseId, item });
+		if (isFixedAsset) {
+			await createFixedAssetsForPurchaseItem({ trx, organizationId, userId, purchaseId, purchaseItemId: persistedItemId, item, receivedAt: new Date() });
+			return;
+		}
 		await applyStockEntry({
 			trx,
 			organizationId,
@@ -105,21 +114,25 @@ export async function handlePurchaseItemStockProcessing({
 		}
 
 		const previousItem = await loadPreviousItem({ trx, organizationId, itemId: item.id! });
-		await applyStockExit({
-			trx,
-			organizationId,
-			userId,
-			purchaseId,
-			purchaseItemId: previousItem.id,
-			produtoId: previousItem.produtoId,
-			produtoVarianteId: previousItem.produtoVarianteId,
-			quantidade: previousItem.quantidade,
-			unitCost: resolveUnitCost(previousItem),
-			reason: reasonOverride?.exit ?? DEFAULT_REASONS.unreceiving,
-		});
-		// Reverse the lot spawned by this item's receipt. The route only allows un-receiving while lots
-		// are pristine, so zeroing here keeps the FEFO sub-ledger in sync with products.quantidade.
-		await discardPurchaseItemLot({ trx, organizationId, purchaseItemId: previousItem.id });
+		if (previousItem.destinacao === "ATIVO_IMOBILIZADO") {
+			await removeFixedAssetsForPurchaseItem({ trx, organizationId, purchaseItemId: previousItem.id });
+		} else {
+			await applyStockExit({
+				trx,
+				organizationId,
+				userId,
+				purchaseId,
+				purchaseItemId: previousItem.id,
+				produtoId: previousItem.produtoId,
+				produtoVarianteId: previousItem.produtoVarianteId,
+				quantidade: previousItem.quantidade,
+				unitCost: resolveUnitCost(previousItem),
+				reason: reasonOverride?.exit ?? DEFAULT_REASONS.unreceiving,
+			});
+			// Reverse the lot spawned by this item's receipt. The route only allows un-receiving while lots
+			// are pristine, so zeroing here keeps the FEFO sub-ledger in sync with products.quantidade.
+			await discardPurchaseItemLot({ trx, organizationId, purchaseItemId: previousItem.id });
+		}
 
 		if (shouldDelete) {
 			await deletePurchaseItemRow({ trx, organizationId, itemId: item.id! });

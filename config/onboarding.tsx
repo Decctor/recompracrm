@@ -76,6 +76,11 @@ export const RecompraCRMDefaultAccountCharts: TOnboardingAccountChartNode[] = [
 			// mercadoria: são um ativo contra o fisco. Ver docs/domain/purchase-costing.md.
 			{ key: "tributos_recuperar", nome: "Tributos a Recuperar", codigo: "1.4", natureza: "ATIVO" },
 			{ key: "outros_ativos", nome: "Outros Ativos", codigo: "1.5", natureza: "ATIVO" },
+			// Patrimônio (ADR-0002, decisão 8): bens, sua depreciação acumulada (redutora) e o crédito de
+			// ICMS do ativo ainda não apropriado (CIAP, 1/48 por mês).
+			{ key: "imobilizado", nome: "Imobilizado", codigo: "1.6", natureza: "ATIVO" },
+			{ key: "depreciacao_acumulada", nome: "Depreciação Acumulada", codigo: "1.7", natureza: "ATIVO" },
+			{ key: "ciap_controle", nome: "ICMS a Recuperar — CIAP", codigo: "1.8", natureza: "ATIVO" },
 		],
 	},
 	{
@@ -135,6 +140,7 @@ export const RecompraCRMDefaultAccountCharts: TOnboardingAccountChartNode[] = [
 			{ key: "despesas_financeiras", nome: "Despesas Financeiras", codigo: "6.4", natureza: "DESPESA" },
 			{ key: "perdas_estoque", nome: "Perdas de Estoque", codigo: "6.5", natureza: "DESPESA" },
 			{ key: "material_uso_consumo", nome: "Material de Uso e Consumo", codigo: "6.6", natureza: "DESPESA" },
+			{ key: "despesas_depreciacao", nome: "Despesas com Depreciação", codigo: "6.7", natureza: "DESPESA" },
 		],
 	},
 ];
@@ -153,6 +159,7 @@ export const RecompraCRMDefaultAccountingDefaults: {
 		transferencias: { debitoKey: string; creditoKey: string };
 		perdasEstoque: { debitoKey: string; creditoKey: string };
 		taxasCanal: { debitoKey: string; creditoKey: string };
+		patrimonio: { imobilizadoKey: string; depreciacaoAcumuladaKey: string; despesaDepreciacaoKey: string; ciapControleKey: string };
 	};
 } = {
 	lancamentosPadrao: {
@@ -163,9 +170,14 @@ export const RecompraCRMDefaultAccountingDefaults: {
 			debitoCreditoTributarioKey: "tributos_recuperar",
 			debitoDespesaPeriodoKey: "despesas_operacionais",
 			creditoTributoCompraKey: "obrigacoes_tributarias",
-			// Insumo é estoque como a mercadoria; uso e consumo vai a despesa; o imobilizado só ganha
-			// conta própria na Fase 7 (patrimônio) e até lá cai em "outros ativos".
-			debitoPorDestinacaoKey: { INSUMO: "estoques", USO_CONSUMO: "material_uso_consumo", ATIVO_IMOBILIZADO: "outros_ativos" },
+			// Insumo é estoque como a mercadoria; uso e consumo vai a despesa; o imobilizado tem conta própria.
+			debitoPorDestinacaoKey: { INSUMO: "estoques", USO_CONSUMO: "material_uso_consumo", ATIVO_IMOBILIZADO: "imobilizado" },
+		},
+		patrimonio: {
+			imobilizadoKey: "imobilizado",
+			depreciacaoAcumuladaKey: "depreciacao_acumulada",
+			despesaDepreciacaoKey: "despesas_depreciacao",
+			ciapControleKey: "ciap_controle",
 		},
 		transferencias: {
 			debitoKey: "caixa_bancos",
@@ -349,6 +361,17 @@ export function buildOrganizationAccountingDefaults(accountIdsByKey: Map<string,
 				debitoContaKey: RecompraCRMDefaultAccountingDefaults.lancamentosPadrao.taxasCanal.debitoKey,
 				creditoContaId: accountIdsByKey.get(RecompraCRMDefaultAccountingDefaults.lancamentosPadrao.taxasCanal.creditoKey) ?? null,
 				creditoContaKey: RecompraCRMDefaultAccountingDefaults.lancamentosPadrao.taxasCanal.creditoKey,
+			},
+			patrimonio: {
+				imobilizadoContaId: accountIdsByKey.get(RecompraCRMDefaultAccountingDefaults.lancamentosPadrao.patrimonio.imobilizadoKey) ?? null,
+				imobilizadoContaKey: RecompraCRMDefaultAccountingDefaults.lancamentosPadrao.patrimonio.imobilizadoKey,
+				depreciacaoAcumuladaContaId:
+					accountIdsByKey.get(RecompraCRMDefaultAccountingDefaults.lancamentosPadrao.patrimonio.depreciacaoAcumuladaKey) ?? null,
+				depreciacaoAcumuladaContaKey: RecompraCRMDefaultAccountingDefaults.lancamentosPadrao.patrimonio.depreciacaoAcumuladaKey,
+				despesaDepreciacaoContaId: accountIdsByKey.get(RecompraCRMDefaultAccountingDefaults.lancamentosPadrao.patrimonio.despesaDepreciacaoKey) ?? null,
+				despesaDepreciacaoContaKey: RecompraCRMDefaultAccountingDefaults.lancamentosPadrao.patrimonio.despesaDepreciacaoKey,
+				ciapControleContaId: accountIdsByKey.get(RecompraCRMDefaultAccountingDefaults.lancamentosPadrao.patrimonio.ciapControleKey) ?? null,
+				ciapControleContaKey: RecompraCRMDefaultAccountingDefaults.lancamentosPadrao.patrimonio.ciapControleKey,
 			},
 			perdasEstoque: {
 				debitoContaId: accountIdsByKey.get(RecompraCRMDefaultAccountingDefaults.lancamentosPadrao.perdasEstoque.debitoKey) ?? null,

@@ -20,6 +20,9 @@ export type TPurchaseAccountingAmounts = {
 	valorCustoEstoque: number;
 	custoPorDestinacao?: Partial<Record<TAcquisitionNatureEnum, number>>;
 	valorCreditoTributario: number;
+	// Parte de `valorCreditoTributario` que é ICMS de bens do ativo: vai para a conta de controle do
+	// CIAP (apropriada 1/48 por mês pelo patrimônio), não para o crédito corrente.
+	valorCreditoCiap?: number;
 	valorDespesaPeriodo: number;
 };
 
@@ -27,6 +30,7 @@ export type TPurchaseAccountingAccounts = {
 	estoqueContaId: string;
 	fornecedoresContaId: string;
 	creditoTributarioContaId?: string | null;
+	ciapControleContaId?: string | null;
 	despesaPeriodoContaId?: string | null;
 	// Débito do custo por destinação; REVENDA (e qualquer ausente) cai em `estoqueContaId`.
 	contasPorDestinacao?: Partial<Record<TAcquisitionNatureEnum, string | null>>;
@@ -129,10 +133,18 @@ export function buildPurchaseAccountingEntryLines({
 			destination,
 		});
 	}
+	// Sem conta de controle do CIAP configurada, o crédito do ativo fica com os demais créditos.
+	const ciapCents = accounts.ciapControleContaId ? moneyToCents(amounts.valorCreditoCiap ?? 0) : 0;
 	appendDebit({
 		accountId: accounts.creditoTributarioContaId,
-		value: amounts.valorCreditoTributario,
+		value: centsToMoney(moneyToCents(amounts.valorCreditoTributario) - ciapCents),
 		description: "Créditos tributários da compra",
+		treatment: "CREDITO_TRIBUTARIO",
+	});
+	appendDebit({
+		accountId: accounts.ciapControleContaId,
+		value: centsToMoney(ciapCents),
+		description: "Crédito de ICMS do ativo (CIAP)",
 		treatment: "CREDITO_TRIBUTARIO",
 	});
 	appendDebit({

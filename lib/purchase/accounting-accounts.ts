@@ -1,5 +1,5 @@
 import { getDefaultAccountChartCodeByKey, RecompraCRMDefaultAccountingDefaults } from "@/config/onboarding";
-import { resolveAccountingDefaultAccountIds } from "@/lib/finances/resolve-accounting-default-accounts";
+import { provisionSeedAccountChart, resolveAccountingDefaultAccountIds } from "@/lib/finances/resolve-accounting-default-accounts";
 import type { TAcquisitionNatureEnum } from "@/schemas/enums";
 import type { DBTransaction } from "@/services/drizzle";
 
@@ -49,7 +49,11 @@ export async function resolvePurchaseDestinationAccountIds({
 		}
 		const key = entry?.contaKey ?? seedKeys[destination];
 		const code = key ? getDefaultAccountChartCodeByKey(key) : null;
-		resolved[destination] = (code ? accountIdByCode.get(code) : null) ?? null;
+		let accountId = (code ? accountIdByCode.get(code) : null) ?? null;
+		// Conta do seed ausente (organização onboardada antes dela existir): provisiona na hora, como
+		// o descarte de lotes faz — o recebimento não pode parar por configuração contábil ausente.
+		if (!accountId && key) accountId = await provisionSeedAccountChart({ trx, orgId: organizationId, key });
+		resolved[destination] = accountId;
 	}
 	return resolved;
 }

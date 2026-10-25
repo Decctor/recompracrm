@@ -288,6 +288,16 @@ export const DEFAULT_ORGANIZATION_CONFIGURATION_DEFAULTS: TOrganizationDefaults 
 				creditoContaId: null,
 				creditoContaKey: null,
 			},
+			patrimonio: {
+				imobilizadoContaId: null,
+				imobilizadoContaKey: null,
+				depreciacaoAcumuladaContaId: null,
+				depreciacaoAcumuladaContaKey: null,
+				despesaDepreciacaoContaId: null,
+				despesaDepreciacaoContaKey: null,
+				ciapControleContaId: null,
+				ciapControleContaKey: null,
+			},
 			perdasEstoque: {
 				debitoContaId: null,
 				debitoContaKey: null,

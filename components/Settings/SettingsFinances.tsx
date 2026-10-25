@@ -265,6 +265,23 @@ export default function SettingsFinances({ membership }: SettingsFinancesProps) 
 		);
 	}
 
+	function updatePatrimonio(partial: Partial<TOrganizationDefaults["contabilidade"]["lancamentosPadrao"]["patrimonio"]>) {
+		setDraft((current) =>
+			current
+				? {
+						...current,
+						contabilidade: {
+							...current.contabilidade,
+							lancamentosPadrao: {
+								...current.contabilidade.lancamentosPadrao,
+								patrimonio: { ...current.contabilidade.lancamentosPadrao.patrimonio, ...partial },
+							},
+						},
+					}
+				: current,
+		);
+	}
+
 	function updatePaymentMethod(key: string, data: TOrganizationPaymentMethodDefaults) {
 		setDraft((current) =>
 			current ? { ...current, pagamentos: { ...current.pagamentos, metodos: { ...current.pagamentos.metodos, [key]: data } } } : current,
@@ -390,6 +407,42 @@ export default function SettingsFinances({ membership }: SettingsFinancesProps) 
 						</div>
 					);
 				})}
+				{/* Patrimônio (ADR-0002, decisão 8): fechamento mensal de depreciação/CIAP e baixa de bens. */}
+				<div className="border-border bg-muted/20 flex flex-col gap-3 rounded-lg border p-4">
+					<h4 className="text-sm font-semibold">Patrimônio</h4>
+					<p className="text-muted-foreground text-xs">
+						Depreciação do mês (despesa × acumulada), apropriação do CIAP (crédito tributário × controle) e baixa de bens (contra o imobilizado).
+					</p>
+					<div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+						{(
+							[
+								["imobilizado", "CONTA DE IMOBILIZADO"],
+								["depreciacaoAcumulada", "CONTA DE DEPRECIAÇÃO ACUMULADA"],
+								["despesaDepreciacao", "CONTA DE DESPESA DE DEPRECIAÇÃO"],
+								["ciapControle", "CONTA DE CONTROLE DO CIAP"],
+							] as const
+						).map(([field, label]) => {
+							const patrimonio = draft.contabilidade.lancamentosPadrao.patrimonio;
+							const idField = `${field}ContaId` as const;
+							const keyField = `${field}ContaKey` as const;
+							return (
+								<SelectInput
+									key={field}
+									label={label}
+									value={patrimonio?.[idField] ?? null}
+									options={accountChartsOptions}
+									resetOptionLabel="Conta do plano padrão"
+									editable={canEdit}
+									handleChange={(selected) => {
+										const account = accountChartsOptions.find((option) => option.value === selected);
+										updatePatrimonio({ [idField]: account?.value ?? null, [keyField]: account?.label ?? null });
+									}}
+									onReset={() => updatePatrimonio({ [idField]: null, [keyField]: null })}
+								/>
+							);
+						})}
+					</div>
+				</div>
 			</SettingsFormSection>
 
 			<SettingsFormSection title="MÉTODOS DE PAGAMENTO" icon={<Wallet className="h-4 w-4" />}>

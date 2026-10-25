@@ -543,7 +543,7 @@ Cada fase é entregável sozinha e não muda nada para quem não usa a novidade.
 | 4 ✅ | `contrapartida = INCLUSO_NO_VALOR`, créditos de ICMS/ICMS SN/PIS/COFINS, presets, overrides                                                                                                 | JSONB, `fiscalConfiguracao`                                                 |
 | 5 ✅ | Contrapartida `FISCO`, DIFAL/antecipação/ST de entrada, lançamentos por credor com contraparte, guias a pagar, `DOCUMENTO_FINANCEIRO`, backfill de `clienteId`/`fornecedorId`               | `accounting_entries`, `financial_recurring_rules`, `financial_transactions` |
 | 6 ✅ | CT-e                                                                                                                                                                                        | —                                                                           |
-| 7    | Patrimônio                                                                                                                                                                                  | `fixed_assets`                                                              |
+| 7 ✅ | Patrimônio                                                                                                                                                                                  | `fixed_assets`                                                              |
 | 8    | ST retido na saída; devolução de compra; IBS/CBS como componentes                                                                                                                           | —                                                                           |
 
 Fase 1 entregue em `drizzle/0138_purchase_fiscal_entry_documents.sql` + `scripts/backfill-purchase-fiscal-files.ts`
@@ -570,6 +570,31 @@ overrides da organização; o import aplica e descarta o embutido que "fica no c
 `regimeApuracao` configurado (CRT 3 é ambíguo), os tributos continuam pendentes para a pessoa, como
 antes. Tela "Entrada de compras" em Fiscal › Configurações. A contrapartida `FISCO` já é calculada pelo
 custeio, mas nada a produz até a Fase 5.
+
+Fase 7 entregue (migration `0141_fixed_assets.sql`, a única tabela nova do plano): `fixed_assets`
+com produto (catálogo), item de compra de origem, plaqueta, série, local, responsável, status,
+quantidade, aquisição, início de uso, vida útil, residual, depreciação inicial e CIAP. Recebimento
+de item `ATIVO_IMOBILIZADO` não move estoque: cria um registro com a quantidade do item,
+`valorAquisicao` = custo total e CIAP = crédito de ICMS do item (vida útil padrão de 120 meses,
+editável); desfazer o recebimento remove o bem, salvo se um fechamento mensal já o contou. No
+lançamento da compra, o crédito de ICMS do ativo vai para a conta de controle do CIAP (1.8), não
+para o crédito corrente. `lib/fixed-assets/depreciation.ts` é puro e testado: depreciação linear
+(mês de início conta como 1, baixa encerra no mês anterior), CIAP em 48 parcelas com a última
+absorvendo o resto, divisão proporcional de registro. Fechamento mensal
+(`lib/fixed-assets/monthly-close.ts`, cron diário `/api/cron/fixed-assets-close` nos meses
+completos sem lançamento): um lançamento `PATRIMONIO` por organização e mês,
+`chaveIdempotencia = patrimonio:{org}:{AAAA-MM}`, com depreciação (despesa × acumulada) e
+apropriação do CIAP (crédito tributário × controle); refechar recalcula, nunca duplica. O
+coeficiente de saídas tributadas do CIAP entra como parâmetro (padrão 1, gravado nas anotações do
+lançamento): a apuração automática das saídas é follow-up. Baixa (total ou parcial, por divisão do
+registro) grava data, motivo e valor e lança depreciação acumulada e valor contábil contra o
+imobilizado (`patrimonio:{org}:baixa:{bem}`); o valor recebido pela venda é informativo. Contas
+novas no plano padrão (1.6 Imobilizado, 1.7 Depreciação Acumulada, 1.8 ICMS a Recuperar — CIAP,
+6.7 Despesas com Depreciação), provisionadas sob demanda para organizações antigas; bloco
+"Patrimônio" em Configurações › Financeiro. Interface própria em Produtos › Patrimônio
+(`/dashboard/catalog/assets`): lista com posição contábil, cadastro manual, edição, divisão, baixa e
+fechamento manual do mês pendente. O responsável fica na API (`responsavelId`); a UI ainda não o
+escolhe.
 
 Fase 6 entregue, sem migration: `lib/purchase/import-cte.ts` lê o CT-e (tomador, `vTPrest`, ICMS,
 chaves das NF-e transportadas, protocolo) com a mesma barreira de XML inseguro; o DF-e passa a gravar

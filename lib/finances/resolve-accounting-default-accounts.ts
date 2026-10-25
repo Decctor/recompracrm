@@ -9,7 +9,8 @@ import type { DBTransaction } from "@/services/drizzle";
 import { accountsCharts } from "@/services/drizzle/schema";
 import createHttpError from "http-errors";
 
-export type TAccountingEntryDefaultsKind = keyof typeof RecompraCRMDefaultAccountingDefaults.lancamentosPadrao;
+// `patrimonio` tem contas próprias (imobilizado, depreciação, CIAP), não um par débito/crédito: lib/fixed-assets/accounts.ts.
+export type TAccountingEntryDefaultsKind = Exclude<keyof typeof RecompraCRMDefaultAccountingDefaults.lancamentosPadrao, "patrimonio">;
 
 type TAccountingEntryDefaultsBlock = TOrganizationDefaults["contabilidade"]["lancamentosPadrao"]["vendas"];
 
@@ -73,7 +74,7 @@ function findSeedNodeWithParent(
  * seed quando ela existir no plano da organização. Chamar somente após confirmar (na mesma
  * transação) que não existe conta com o código do seed.
  */
-async function provisionSeedAccountChart({ trx, orgId, key }: { trx: DBTransaction; orgId: string; key: string }): Promise<string | null> {
+export async function provisionSeedAccountChart({ trx, orgId, key }: { trx: DBTransaction; orgId: string; key: string }): Promise<string | null> {
 	const seed = findSeedNodeWithParent(key);
 	if (!seed) return null;
 

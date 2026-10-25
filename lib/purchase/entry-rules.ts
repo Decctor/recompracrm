@@ -78,7 +78,7 @@ export const ACQUISITION_NATURE_LABELS: Record<TAcquisitionNatureEnum, string> =
 };
 
 /** Destinações que o recebimento já sabe tratar. Ativo imobilizado chega com o patrimônio (Fase 7). */
-export const SUPPORTED_PURCHASE_DESTINATIONS: TAcquisitionNatureEnum[] = ["REVENDA", "INSUMO", "USO_CONSUMO"];
+export const SUPPORTED_PURCHASE_DESTINATIONS: TAcquisitionNatureEnum[] = ["REVENDA", "INSUMO", "USO_CONSUMO", "ATIVO_IMOBILIZADO"];
 
 /** Combinação de cadastro que merece aviso, não bloqueio. */
 export function getProductNatureWarning({ natureza, vendavel }: { natureza: TAcquisitionNatureEnum; vendavel: boolean }): string | null {

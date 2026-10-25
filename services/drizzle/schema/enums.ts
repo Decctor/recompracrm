@@ -240,7 +240,11 @@ export const accountingEntryOriginTypeEnum = pgEnum("accounting_entry_origin_typ
 	"PAGAMENTO_CARTAO",
 	// Divida com o fisco nascida de uma compra (DIFAL, antecipacao, ST de entrada) — ADR-0002, decisao 5.
 	"TRIBUTO_COMPRA",
+	// Gerado pelo patrimonio: depreciacao e CIAP do mes, baixa de bem — ADR-0002, decisao 8.
+	"PATRIMONIO",
 ]);
+
+export const fixedAssetStatusEnum = pgEnum("fixed_asset_status", ["EM_USO", "EM_MANUTENCAO", "BAIXADO"]);
 
 export const accountingEntryLineNatureEnum = pgEnum("accounting_entry_line_nature", ["DEBITO", "CREDITO"]);
 

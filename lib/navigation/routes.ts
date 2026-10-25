@@ -72,6 +72,8 @@ export const appRoutes = {
 	catalog: {
 		products: () => "/dashboard/catalog/products",
 		product: (productId: string) => `/dashboard/catalog/products/${productId}`,
+		/** Patrimônio: bens do ativo imobilizado (ADR-0002, decisão 8). */
+		assets: () => "/dashboard/catalog/assets",
 		store: () => "/dashboard/catalog/store",
 	},
 	customers: {

@@ -242,6 +242,8 @@ export const AccountingEntryOriginTypeEnum = z.enum([
 	"RECORRENCIA",
 	"PAGAMENTO_CARTAO",
 	"TRIBUTO_COMPRA",
+	// Gerado pelo patrimônio: depreciação e CIAP do mês, baixa de bem (ADR-0002, decisão 8).
+	"PATRIMONIO",
 ]);
 export type TAccountingEntryOriginTypeEnum = z.infer<typeof AccountingEntryOriginTypeEnum>;
 
@@ -335,6 +337,15 @@ export type TFiscalInboundManifestEventEnum = z.infer<typeof FiscalInboundManife
 export const FiscalInboundSituacaoEnum = z.enum(["AUTORIZADA", "DENEGADA", "CANCELADA"]);
 export type TFiscalInboundSituacaoEnum = z.infer<typeof FiscalInboundSituacaoEnum>;
 export const FiscalInboundDocumentModelEnum = z.enum(["NFE", "CTE"]);
+
+// Estado de um bem do ativo imobilizado (ADR-0002, decisão 8).
+export const FixedAssetStatusEnum = z.enum(["EM_USO", "EM_MANUTENCAO", "BAIXADO"], { invalid_type_error: "Tipo não válido para o status do bem." });
+export type TFixedAssetStatusEnum = z.infer<typeof FixedAssetStatusEnum>;
+export const FIXED_ASSET_STATUS_LABELS: Record<TFixedAssetStatusEnum, string> = {
+	EM_USO: "Em uso",
+	EM_MANUTENCAO: "Em manutenção",
+	BAIXADO: "Baixado",
+};
 export type TFiscalInboundDocumentModelEnum = z.infer<typeof FiscalInboundDocumentModelEnum>;
 // O que o produto é para a organização (`products.natureza`) e para que serve uma aquisição
 // (`purchase_items.destinacao`). Um enum, dois lugares — ADR-0002, decisão 3.

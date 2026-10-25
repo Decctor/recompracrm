@@ -17,6 +17,8 @@ import { ACQUISITION_NATURE_LABELS, SUPPORTED_PURCHASE_DESTINATIONS } from "@/li
 import { removePurchaseTaxObligationEntry, syncPurchaseTaxObligationEntry } from "@/lib/purchase/tax-obligation-entry";
 import { removePurchaseCarrierEntries, syncPurchaseCarrierEntries } from "@/lib/purchase/carrier-entry";
 import { resolvePurchaseAccountingAccountIds, resolvePurchaseDestinationAccountIds } from "@/lib/purchase/accounting-accounts";
+import { getItemCiapCreditCents } from "@/lib/fixed-assets/from-purchase";
+import { resolveFixedAssetAccounts } from "@/lib/fixed-assets/accounts";
 import { getModifierCounterparty } from "@/lib/purchase/costing";
 import type { TAcquisitionNatureEnum } from "@/schemas/enums";
 import {
@@ -474,6 +476,7 @@ function getPurchaseAccountingAmounts(items: TPurchaseItemInput[]) {
 	let financialCents = 0;
 	let inventoryCents = 0;
 	let taxCreditCents = 0;
+	let ciapCreditCents = 0;
 	let periodExpenseCents = 0;
 	const inventoryCentsByDestination: Partial<Record<TAcquisitionNatureEnum, number>> = {};
 	for (const item of items) {
@@ -496,7 +499,10 @@ function getPurchaseAccountingAmounts(items: TPurchaseItemInput[]) {
 		financialCents += moneyToCents(result.valorTotalLiquido);
 		inventoryCents += itemInventoryCents;
 		inventoryCentsByDestination[destination] = (inventoryCentsByDestination[destination] ?? 0) + itemInventoryCents;
-		taxCreditCents += moneyToCents(result.valorTotalCreditoTributario) - fiscoCreditCents;
+		const itemCreditCents = moneyToCents(result.valorTotalCreditoTributario) - fiscoCreditCents;
+		taxCreditCents += itemCreditCents;
+		// ICMS de bem do ativo é CIAP: entra na conta de controle e é apropriado 1/48 por mês (decisão 8).
+		if (destination === "ATIVO_IMOBILIZADO") ciapCreditCents += Math.min(itemCreditCents, getItemCiapCreditCents(item));
 		periodExpenseCents += moneyToCents(result.valorTotalDespesaPeriodo) - fiscoExpenseCents;
 	}
 	return {
@@ -506,8 +512,15 @@ function getPurchaseAccountingAmounts(items: TPurchaseItemInput[]) {
 			Object.entries(inventoryCentsByDestination).map(([destination, cents]) => [destination, centsToMoney(cents)]),
 		),
 		valorCreditoTributario: centsToMoney(taxCreditCents),
+		valorCreditoCiap: centsToMoney(ciapCreditCents),
 		valorDespesaPeriodo: centsToMoney(periodExpenseCents),
 	};
+}
+
+/** Conta de controle do CIAP, provisionada do seed quando a organização ainda não a tem. */
+async function resolveCiapControlAccountId({ trx, organizationId }: { trx: DBTransaction; organizationId: string }) {
+	const accounts = await resolveFixedAssetAccounts({ trx, organizationId, autoProvisionFromSeed: true });
+	return accounts.ciapControleContaId;
 }
 
 async function syncPurchaseAccountingLines({
@@ -593,6 +606,7 @@ async function syncPurchaseAccountingLines({
 				estoqueContaId: debitAccountId,
 				fornecedoresContaId: creditAccountId,
 				creditoTributarioContaId: purchaseDefaults?.debitoCreditoTributarioContaId,
+				ciapControleContaId: amounts.valorCreditoCiap ? await resolveCiapControlAccountId({ trx, organizationId }) : null,
 				despesaPeriodoContaId: purchaseDefaults?.debitoDespesaPeriodoContaId,
 				contasPorDestinacao,
 			},

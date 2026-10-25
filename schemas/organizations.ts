@@ -191,6 +191,34 @@ export const OrganizationDefaultsSchema = z.object({
 					creditoContaId: null,
 					creditoContaKey: null,
 				}),
+			// Patrimônio (ADR-0002, decisão 8): contas do lançamento mensal de depreciação/CIAP e da baixa.
+			patrimonio: z
+				.object({
+					imobilizadoContaId: z.string({ invalid_type_error: "Tipo não válido para a conta de imobilizado." }).nullable().default(null),
+					imobilizadoContaKey: z.string({ invalid_type_error: "Tipo não válido para a chave da conta de imobilizado." }).nullable().default(null),
+					depreciacaoAcumuladaContaId: z.string({ invalid_type_error: "Tipo não válido para a conta de depreciação acumulada." }).nullable().default(null),
+					depreciacaoAcumuladaContaKey: z
+						.string({ invalid_type_error: "Tipo não válido para a chave da conta de depreciação acumulada." })
+						.nullable()
+						.default(null),
+					despesaDepreciacaoContaId: z.string({ invalid_type_error: "Tipo não válido para a conta de despesa de depreciação." }).nullable().default(null),
+					despesaDepreciacaoContaKey: z
+						.string({ invalid_type_error: "Tipo não válido para a chave da conta de despesa de depreciação." })
+						.nullable()
+						.default(null),
+					ciapControleContaId: z.string({ invalid_type_error: "Tipo não válido para a conta de controle do CIAP." }).nullable().default(null),
+					ciapControleContaKey: z.string({ invalid_type_error: "Tipo não válido para a chave da conta de controle do CIAP." }).nullable().default(null),
+				})
+				.default({
+					imobilizadoContaId: null,
+					imobilizadoContaKey: null,
+					depreciacaoAcumuladaContaId: null,
+					depreciacaoAcumuladaContaKey: null,
+					despesaDepreciacaoContaId: null,
+					despesaDepreciacaoContaKey: null,
+					ciapControleContaId: null,
+					ciapControleContaKey: null,
+				}),
 			perdasEstoque: z
 				.object({
 					debitoContaId: z.string({ invalid_type_error: "Tipo não válido para a conta de débito padrão de perdas de estoque." }).nullable(),
