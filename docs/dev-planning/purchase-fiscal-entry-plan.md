@@ -156,12 +156,12 @@ Por que os dois e não só um:
 - Só no produto: erra a tributação quando o mesmo item tem duas destinações.
 - Só no item: perde o default, e a pessoa escolheria a destinação em toda linha de toda nota.
 
-| Natureza            | `vendavel` padrão | Estoque             | Débito contábil    | ICMS próprio                    | DIFAL interestadual            |
-| ------------------- | ----------------- | ------------------- | ------------------ | ------------------------------- | ------------------------------ |
-| `REVENDA`           | sim               | `ENTRADA_AQUISICAO` | Estoques           | crédito conforme regime         | não (antecipação pode existir) |
-| `INSUMO`            | não               | `ENTRADA_AQUISICAO` | Estoques           | crédito conforme regime         | não                            |
-| `USO_CONSUMO`       | não               | nenhum nesta fase   | Despesa de consumo | sem crédito (LC 87/96, art. 33) | **sim**                        |
-| `ATIVO_IMOBILIZADO` | não               | nenhum; gera bens   | Imobilizado        | CIAP 1/48 conforme regime       | **sim**                        |
+| Natureza            | `vendavel` padrão | Estoque                          | Débito contábil                                                     | ICMS próprio                    | DIFAL interestadual            |
+| ------------------- | ----------------- | -------------------------------- | ------------------------------------------------------------------- | ------------------------------- | ------------------------------ |
+| `REVENDA`           | sim               | `ENTRADA_AQUISICAO`              | Estoques                                                            | crédito conforme regime         | não (antecipação pode existir) |
+| `INSUMO`            | não               | `ENTRADA_AQUISICAO`              | Estoques                                                            | crédito conforme regime         | não                            |
+| `USO_CONSUMO`       | não               | segue `rastreamentoEstoqueAtivo` | Material de consumo (ativo) se rastreado; Despesa de consumo se não | sem crédito (LC 87/96, art. 33) | **sim**                        |
+| `ATIVO_IMOBILIZADO` | não               | nenhum; gera bens                | Imobilizado                                                         | CIAP 1/48 conforme regime       | **sim**                        |
 
 `vendavel` e `rastreamentoEstoqueAtivo` continuam sendo os interruptores reais. `natureza` só
 preenche padrões e avisa sobre combinações incoerentes (bem do ativo vendável). Migração: todo
@@ -448,11 +448,19 @@ cálculo, vencimento sugerido e edição manual (que registra `origem: MANUAL`).
 
 `handlePurchaseItemStockProcessing` passa a ramificar pela destinação:
 
-| Destinação          | Estoque                                                 | Outros efeitos                    |
-| ------------------- | ------------------------------------------------------- | --------------------------------- |
-| `REVENDA`, `INSUMO` | `ENTRADA_AQUISICAO` com `valorUnitarioCusto`, como hoje | lotes pelo `rastro` quando houver |
-| `USO_CONSUMO`       | nenhum                                                  | despesa no lançamento             |
-| `ATIVO_IMOBILIZADO` | nenhum                                                  | cria os `fixed_assets`            |
+| Destinação                  | Estoque                                                 | Outros efeitos                        |
+| --------------------------- | ------------------------------------------------------- | ------------------------------------- |
+| `REVENDA`, `INSUMO`         | `ENTRADA_AQUISICAO` com `valorUnitarioCusto`, como hoje | lotes pelo `rastro` quando houver     |
+| `USO_CONSUMO` rastreado     | `ENTRADA_AQUISICAO`, como revenda                       | débito em Material de consumo (ativo) |
+| `USO_CONSUMO` não rastreado | nenhum                                                  | débito em despesa de consumo          |
+| `ATIVO_IMOBILIZADO`         | nenhum                                                  | cria os `fixed_assets`                |
+
+Uso e consumo não cria tipo de movimentação: a entrada é a mesma `ENTRADA_AQUISICAO` e a
+saída é a `SAIDA` manual que já existe. O que o estoque de hoje **não** tem é lançamento contábil
+na saída manual — o almoxarifado consumido fica no ativo até alguém lançar. Fechar isso é
+espelhar `registerStockLossAccountingEntry` (D despesa de consumo / C material de consumo) na
+`SAIDA` de produtos `USO_CONSUMO`, com origem `CONSUMO_INTERNO`. É pequeno e independente; fica
+como follow-up da Fase 3, não dentro dela.
 
 Os lançamentos de terceiros nascem junto com o do fornecedor, em `syncPurchaseAccountingLines`.
 Desfazer o recebimento remove bens ainda não incluídos em lançamento `PATRIMONIO`; se algum já
@@ -476,8 +484,10 @@ de GNRE fica fora do escopo.
 
 ### F. Patrimônio
 
-Lista, detalhe e baixa de bens; cadastro manual de bens antigos; job mensal
-`/api/cron/fixed-assets-close` gerando o lançamento `PATRIMONIO`.
+Interface própria dentro da seção de Produtos da sidebar (`app/dashboard/products/assets/`,
+capability `produtos`): lista, detalhe, divisão e baixa de bens; cadastro manual de bens
+antigos; job mensal `/api/cron/fixed-assets-close` gerando o lançamento `PATRIMONIO`. O produto
+continua sendo o catálogo (o que o bem é); o módulo lista as unidades.
 
 ### G. ST retido na saída
 
@@ -562,13 +572,16 @@ Cada fase é entregável sozinha e não muda nada para quem não usa a novidade.
 - **Bonificação entra com custo zero** (CPC 16): componente `BONIFICACAO` de 100% do valor-base.
 - **Bem patrimonial tem `quantidade`**; baixa parcial e plaqueta individual são divisão do
   registro.
-- **Contraparte em `accounting_entries`** (`clienteId` / `fornecedorId`), derivada da origem e
-  editável só em lançamentos manuais e recorrentes. Entra na Fase 5 junto com `compraId`.
+- **Contraparte em `accounting_entries`** (`clienteId` / `fornecedorId`), no lançamento pai e não
+  nas linhas, derivada da origem e editável só em lançamentos manuais e recorrentes. Entra na
+  Fase 5 junto com `compraId`. Nas linhas, a contraparte seria um razão auxiliar: permitiria um
+  lançamento com dois credores, o que quebra "um lançamento = um título" e a reconciliação das
+  parcelas com o valor de face. Se um dia for preciso detalhar por linha, `metadados` já existe.
+- **Uso e consumo** segue `rastreamentoEstoqueAtivo` do produto; sem tipo novo de movimentação.
+  Lançamento contábil na saída manual é follow-up da Fase 3.
+- **Patrimônio** é interface própria dentro da seção de Produtos da sidebar.
+- **CT-e é 1:1** com compra nesta fase.
 
 ## Decisões em aberto
 
-1. **Uso e consumo com estoque** (almoxarifado): fica para depois (pede saída `CONSUMO_INTERNO` e
-   lançamento), ou entra na Fase 3?
-2. **Patrimônio**: módulo próprio na navegação ou aba em Produtos?
-3. **CT-e para várias compras**: aceitar o 1:1 nesta fase ou já trocar `compraId` por vínculo pelo
-   snapshot da compra?
+Nenhuma. Próximo passo: Fase 0 (ADR-0002 e atualização do guia de domínio).
