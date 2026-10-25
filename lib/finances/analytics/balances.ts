@@ -1,5 +1,7 @@
+import dayjs from "dayjs";
 import { and, eq, gte, inArray, isNotNull, sql } from "drizzle-orm";
 import { calculateFinancialAccountBalance, getFinancialAccountBalanceType } from "@/lib/finances/financial-account-configuration";
+import { computeCashBalancesAt } from "@/lib/finances/analytics/cash";
 import { formatAsNumber } from "@/lib/formatting";
 import { db } from "@/services/drizzle";
 import { financialAccounts, financialTransactions } from "@/services/drizzle/schema";
@@ -57,4 +59,50 @@ export async function getOrganizationAccountBalances({ organizationId }: { organ
 	});
 
 	return { totalCaixa, totalPassivos, posicaoLiquida: totalCaixa - totalPassivos, contas };
+}
+
+/**
+ * Saldo de caixa consolidado (contas ativas que não são passivo) em cada data de `dates`, a partir
+ * do saldo atual. Transferências CONTAM, como no saldo: só a que sai para um passivo (pagamento de
+ * fatura) muda o consolidado.
+ */
+export async function getOrganizationCashBalancesAt({ organizationId, totalCaixa, dates }: { organizationId: string; totalCaixa: number; dates: Date[] }) {
+	if (dates.length === 0) return [];
+	const accounts = (
+		await db.query.financialAccounts.findMany({
+			where: and(eq(financialAccounts.organizacaoId, organizationId), eq(financialAccounts.ativo, true)),
+			columns: { id: true, tipo: true, saldoInicial: true, dataSaldoInicial: true },
+		})
+	).filter((account) => getFinancialAccountBalanceType(account.tipo) !== "LIABILITY");
+	if (accounts.length === 0) return computeCashBalancesAt({ totalCaixa: 0, accounts: [], dailyFlows: [], dates });
+
+	const earliest = dayjs(Math.min(...dates.map((date) => date.getTime()))).startOf("day");
+	const dailyRows = await db
+		.select({
+			dia: sql<string>`to_char(date_trunc('day', ${financialTransactions.dataEfetivacao}), 'YYYY-MM-DD')`,
+			liquido: sql<number>`COALESCE(SUM(CASE WHEN ${financialTransactions.tipo} = 'ENTRADA' THEN ${financialTransactions.valor} ELSE -${financialTransactions.valor} END), 0)`,
+		})
+		.from(financialTransactions)
+		.innerJoin(financialAccounts, eq(financialTransactions.contaFinanceiraId, financialAccounts.id))
+		.where(
+			and(
+				eq(financialTransactions.organizacaoId, organizationId),
+				isNotNull(financialTransactions.dataEfetivacao),
+				inArray(
+					financialTransactions.contaFinanceiraId,
+					accounts.map((account) => account.id),
+				),
+				// Mesmo recorte do saldo atual: o saldo inicial já cobre o que veio antes da data de referência.
+				gte(financialTransactions.dataEfetivacao, financialAccounts.dataSaldoInicial),
+				gte(financialTransactions.dataEfetivacao, earliest.toDate()),
+			),
+		)
+		.groupBy(sql`date_trunc('day', ${financialTransactions.dataEfetivacao})`);
+
+	return computeCashBalancesAt({
+		totalCaixa,
+		accounts,
+		dailyFlows: dailyRows.map((row) => ({ dia: row.dia, liquido: formatAsNumber(row.liquido) })),
+		dates,
+	});
 }

@@ -17,6 +17,31 @@ export function computeBurnAndRunway({ fluxosMensais, totalCaixa }: { fluxosMens
 	return { mediaLiquidaMensal, queimaMensal, mesesDeCaixa };
 }
 
+/**
+ * Saldo de caixa consolidado em cada data de `dates`, reconstruído para trás a partir do saldo
+ * atual: saldo(D) = saldo atual − fluxo líquido efetivado depois de D. Conta cujo saldo inicial é
+ * posterior a D ainda não existia: o saldo inicial dela também sai do consolidado daquela data.
+ */
+export function computeCashBalancesAt({
+	totalCaixa,
+	accounts,
+	dailyFlows,
+	dates,
+}: {
+	totalCaixa: number;
+	accounts: Array<{ saldoInicial: number; dataSaldoInicial: Date }>;
+	dailyFlows: Array<{ dia: string; liquido: number }>;
+	dates: Date[];
+}) {
+	return dates.map((date) => {
+		const dayKey = dayjs(date).format("YYYY-MM-DD");
+		let saldo = totalCaixa;
+		for (const flow of dailyFlows) if (flow.dia > dayKey) saldo -= flow.liquido;
+		for (const account of accounts) if (dayjs(account.dataSaldoInicial).format("YYYY-MM-DD") > dayKey) saldo -= account.saldoInicial;
+		return { data: dayKey, saldo };
+	});
+}
+
 export type TProjectedCashFlow = {
 	tipo: "ENTRADA" | "SAIDA";
 	valor: number;

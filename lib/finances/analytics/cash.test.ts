@@ -1,6 +1,26 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildDailyCashProjection, computeBurnAndRunway } from "./cash";
+import { buildDailyCashProjection, computeBurnAndRunway, computeCashBalancesAt } from "./cash";
+
+test("cash history walks back from the current balance, dropping accounts opened later", () => {
+	const history = computeCashBalancesAt({
+		totalCaixa: 1000,
+		accounts: [
+			{ saldoInicial: 200, dataSaldoInicial: new Date(2026, 7, 1) },
+			{ saldoInicial: 300, dataSaldoInicial: new Date(2026, 7, 10) },
+		],
+		dailyFlows: [
+			{ dia: "2026-08-05", liquido: 100 },
+			{ dia: "2026-08-12", liquido: -50 },
+		],
+		dates: [new Date(2026, 7, 4), new Date(2026, 7, 11), new Date(2026, 7, 12)],
+	});
+	// 04/08: desfaz +100 e −50; a conta aberta em 10/08 ainda não existia
+	assert.deepEqual(history[0], { data: "2026-08-04", saldo: 1000 - 100 + 50 - 300 });
+	assert.deepEqual(history[1], { data: "2026-08-11", saldo: 1050 });
+	// O próprio dia conta como já efetivado
+	assert.deepEqual(history[2], { data: "2026-08-12", saldo: 1000 });
+});
 
 test("burn is the average negative net of the closed-month window; runway divides cash by burn", () => {
 	const fluxosMensais = [
