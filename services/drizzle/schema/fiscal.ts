@@ -7,6 +7,7 @@ import {
 	fiscalDocumentEventTypeEnum,
 	fiscalDocumentTypeEnum,
 	fiscalIcmsCsosnEnum,
+	fiscalInboundDocumentModelEnum,
 	fiscalInboundManifestEventEnum,
 	fiscalInboundSituacaoEnum,
 	fiscalOperationConsumerPresenceEnum,
@@ -16,6 +17,7 @@ import {
 	fiscalProviderEnum,
 	fiscalTaxRuleScopeEnum,
 } from "./enums";
+import { files } from "./files";
 import { fiscalOutboundDocuments } from "./financial";
 import { organizations } from "./organizations";
 import { products, productVariants } from "./products";
@@ -347,8 +349,10 @@ export const fiscalInboundDocuments = newTable(
 			.references(() => organizations.id, { onDelete: "cascade" })
 			.notNull(),
 		fornecedorId: varchar("fornecedor_id", { length: 255 }).references(() => suppliers.id, { onDelete: "set null" }),
-		// Identidade universal da NF-e (dedupe, sobrevive a troca de provedor).
+		// Identidade universal do documento (dedupe, sobrevive a troca de provedor). Todo XML com
+		// chave vira uma linha aqui, venha do DF-e ou de upload manual (ADR-0002, decisao 1).
 		chaveAcesso: varchar("chave_acesso", { length: 44 }).notNull(),
+		modelo: fiscalInboundDocumentModelEnum("modelo").notNull().default("NFE"),
 		// Handle operacional no provedor (manifestar, baixar assets) — descartavel.
 		provedor: fiscalProviderEnum("provedor").notNull().default("MANUAL"),
 		provedorDocumentoId: varchar("provedor_documento_id", { length: 255 }),
@@ -363,6 +367,10 @@ export const fiscalInboundDocuments = newTable(
 		manifestacaoProtocolo: varchar("manifestacao_protocolo", { length: 60 }),
 		manifestacaoData: timestamp("manifestacao_data"),
 		manifestacaoJustificativa: varchar("manifestacao_justificativa", { length: 255 }),
+		// Arquivos no catalogo `files` (lib/files/README.md). Os caminhos abaixo sao sombra ate o
+		// backfill (scripts/backfill-purchase-fiscal-files.ts) e depois saem.
+		xmlArquivoId: varchar("xml_arquivo_id", { length: 255 }).references(() => files.id, { onDelete: "set null" }),
+		pdfArquivoId: varchar("pdf_arquivo_id", { length: 255 }).references(() => files.id, { onDelete: "set null" }),
 		xmlStoragePath: varchar("xml_storage_path", { length: 500 }),
 		pdfStoragePath: varchar("pdf_storage_path", { length: 500 }),
 		// Eventos SEFAZ vinculados (cancelamento, CC-e...) e retorno cru do provedor, em JSON.
@@ -420,6 +428,14 @@ export const fiscalInboundDocumentsRelations = relations(fiscalInboundDocuments,
 	compra: one(purchases, {
 		fields: [fiscalInboundDocuments.compraId],
 		references: [purchases.id],
+	}),
+	xmlArquivo: one(files, {
+		fields: [fiscalInboundDocuments.xmlArquivoId],
+		references: [files.id],
+	}),
+	pdfArquivo: one(files, {
+		fields: [fiscalInboundDocuments.pdfArquivoId],
+		references: [files.id],
 	}),
 }));
 

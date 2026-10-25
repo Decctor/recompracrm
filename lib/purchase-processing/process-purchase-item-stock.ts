@@ -30,6 +30,8 @@ export type TPurchaseItemInput = {
 	externoUnidade?: string | null;
 	externoFatorConversao?: number | null;
 	anotacoes?: string | null;
+	documentoRef?: string | null;
+	documentoItem?: number | null;
 	dataValidade?: Date | null;
 };
 
@@ -294,6 +296,8 @@ async function persistPurchaseItemRow({ trx, organizationId, purchaseId, item }:
 				externoUnidade: item.externoUnidade ?? null,
 				externoFatorConversao: item.externoFatorConversao ?? null,
 				anotacoes: item.anotacoes ?? null,
+				documentoRef: item.documentoRef ?? null,
+				documentoItem: item.documentoItem ?? null,
 				dataValidade: item.dataValidade ?? null,
 			})
 			.where(and(eq(purchaseItems.id, item.id), eq(purchaseItems.organizacaoId, organizationId)));
@@ -324,6 +328,8 @@ async function persistPurchaseItemRow({ trx, organizationId, purchaseId, item }:
 			externoUnidade: item.externoUnidade ?? null,
 			externoFatorConversao: item.externoFatorConversao ?? null,
 			anotacoes: item.anotacoes ?? null,
+			documentoRef: item.documentoRef ?? null,
+			documentoItem: item.documentoItem ?? null,
 			dataValidade: item.dataValidade ?? null,
 		})
 		.returning({ id: purchaseItems.id });

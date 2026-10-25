@@ -63,6 +63,11 @@ export function buildPurchaseItemsFromLines(lines: TReviewLine[], productIdByLin
 				externoUnidade: line.unidade,
 				externoFatorConversao: line.fatorConversao,
 				anotacoes: `Importado via ${line.origemImportacao}: ${line.descricao}`,
+				// Ponteiro para o `det` do XML; os fatos fiscais ficam no documento (ADR-0002).
+				documentoRef: line.documentoRef,
+				documentoItem: line.documentoItem ?? null,
+				// `rastro/dVal` da NF-e vira a validade do lote no recebimento.
+				dataValidade: line.dataValidade ? new Date(`${line.dataValidade}T00:00:00.000Z`) : null,
 			}),
 		];
 	});

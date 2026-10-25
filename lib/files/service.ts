@@ -14,7 +14,10 @@ export function sha256Hex(buffer: Buffer) {
 const EXTENSION_BY_MIME: Record<string, string> = {
 	"image/png": ".png",
 	"image/jpeg": ".jpg",
+	"image/webp": ".webp",
 	"application/pdf": ".pdf",
+	"application/xml": ".xml",
+	"text/xml": ".xml",
 };
 
 /** Nome seguro para compor caminho de storage; a extensão vem do mime REAL (sniffado), não do nome. */
@@ -123,6 +126,21 @@ export async function deleteStoredFile(file: TFileEntity) {
 	await getStorageDriver(file.provedor)
 		.remove({ bucket: file.bucket, caminho: file.caminho })
 		.catch(() => undefined);
+}
+
+/** Lê os bytes de um arquivo do catálogo pelo driver do seu provedor. */
+export async function readStoredFile(file: TFileEntity): Promise<Buffer> {
+	return getStorageDriver(file.provedor).get({ bucket: file.bucket, caminho: file.caminho });
+}
+
+/**
+ * Arquivo da organização com o mesmo conteúdo (SHA-256) no mesmo bucket, se já existir. Permite
+ * reaproveitar a linha quando o mesmo XML é enviado duas vezes, em vez de gravar outra cópia.
+ */
+export async function findOrganizationFileBySha256({ organizacaoId, sha256, bucket }: { organizacaoId: string; sha256: string; bucket: string }) {
+	return (
+		(await db.query.files.findFirst({ where: and(eq(files.organizacaoId, organizacaoId), eq(files.sha256, sha256), eq(files.bucket, bucket)) })) ?? null
+	);
 }
 
 export async function getOrganizationFileById({ arquivoId, organizacaoId }: { arquivoId: string; organizacaoId: string }) {

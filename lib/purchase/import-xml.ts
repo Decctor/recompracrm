@@ -55,11 +55,135 @@ function addModifier(modifiers: TExtractedCostModifier[], input: Omit<TExtracted
 	modifiers.push({ ...input, valorCentavos: input.valorCentavos });
 }
 
+function integer(value: unknown): number | null {
+	const parsed = decimal(value);
+	return parsed == null || !Number.isInteger(parsed) ? null : parsed;
+}
+
+function digits(value: unknown): string | null {
+	const raw = text(value)?.replace(/\D/g, "");
+	return raw ? raw : null;
+}
+
+function dateOnly(value: unknown): string | null {
+	return text(value)?.slice(0, 10) ?? null;
+}
+
+function parseNfeDocument(xml: string) {
+	if (UNSAFE_XML_DECLARATION.test(xml)) throw new Error("XML com declaração DTD ou ENTITY não é aceito.");
+	const validation = XMLValidator.validate(xml, { allowBooleanAttributes: false });
+	if (validation !== true) throw new Error(`XML inválido: ${validation.err.msg}`);
+
+	const parser = new XMLParser({
+		ignoreAttributes: false,
+		attributeNamePrefix: "@_",
+		removeNSPrefix: true,
+		parseTagValue: false,
+		trimValues: true,
+		processEntities: false,
+	});
+	const parsed = node(parser.parse(xml));
+	const proc = node(parsed.nfeProc);
+	const nfe = node(proc.NFe ?? parsed.NFe);
+	const info = node(nfe.infNFe);
+	if (Object.keys(info).length === 0) throw new Error("O XML não contém uma NF-e reconhecível.");
+	return { info, protocol: node(node(proc.protNFe).infProt) };
+}
+
+/**
+ * Fatos que o emitente declarou sobre um item: CFOP, CST/CSOSN, bases, alíquotas e rastreabilidade.
+ * O item de compra não copia nada disso — guarda só o ponteiro (`documentoRef` + `documentoItem`) e
+ * quem precisar lê daqui, pelo mesmo código que o import usou (ADR-0002, decisão 2).
+ */
+export type TNfeItemFacts = ReturnType<typeof readNfeItemFactsFromDet>;
+
+function readNfeItemFactsFromDet(det: TXmlNode) {
+	const product = node(det.prod);
+	const taxes = node(det.imposto);
+	const icms = firstTaxGroup(taxes.ICMS);
+	const ipi = firstTaxGroup(node(taxes.IPI));
+	const pis = firstTaxGroup(taxes.PIS);
+	const cofins = firstTaxGroup(taxes.COFINS);
+	const importTax = node(taxes.II);
+	const ibsCbs = node(taxes.IBSCBS);
+	const ibsCbsGroup = node(ibsCbs.gIBSCBS);
+	const traces = nodes(product.rastro).map((trace) => ({
+		numeroLote: text(trace.nLote),
+		quantidadeLote: decimal(trace.qLote),
+		dataFabricacao: dateOnly(trace.dFab),
+		dataValidade: dateOnly(trace.dVal),
+	}));
+
+	return {
+		numeroItem: integer(det["@_nItem"]),
+		cfop: text(product.CFOP),
+		ncm: text(product.NCM),
+		cest: text(product.CEST),
+		codigoBeneficioFiscal: text(product.cBenef),
+		origemMercadoria: text(icms.orig),
+		icms: {
+			cst: text(icms.CST),
+			csosn: text(icms.CSOSN),
+			modalidadeBc: text(icms.modBC),
+			baseCalculo: decimal(icms.vBC),
+			percentualReducaoBc: decimal(icms.pRedBC),
+			aliquota: decimal(icms.pICMS),
+			valor: decimal(icms.vICMS),
+			valorDesonerado: decimal(icms.vICMSDeson),
+			aliquotaCreditoSn: decimal(icms.pCredSN),
+			valorCreditoSn: decimal(icms.vCredICMSSN),
+		},
+		icmsSt: {
+			baseCalculo: decimal(icms.vBCST),
+			mva: decimal(icms.pMVAST),
+			aliquota: decimal(icms.pICMSST),
+			valor: decimal(icms.vICMSST),
+			valorFcp: decimal(icms.vFCPST),
+			// ST já retido em etapa anterior (CST 60 / CSOSN 500): alimenta a NF-e de saída.
+			baseCalculoRetido: decimal(icms.vBCSTRet),
+			aliquotaRetido: decimal(icms.pST),
+			valorRetido: decimal(icms.vICMSSTRet),
+			valorFcpRetido: decimal(icms.vFCPSTRet),
+		},
+		ipi: { cst: text(ipi.CST), baseCalculo: decimal(ipi.vBC), aliquota: decimal(ipi.pIPI), valor: decimal(ipi.vIPI) },
+		pis: { cst: text(pis.CST), baseCalculo: decimal(pis.vBC), aliquota: decimal(pis.pPIS), valor: decimal(pis.vPIS) },
+		cofins: { cst: text(cofins.CST), baseCalculo: decimal(cofins.vBC), aliquota: decimal(cofins.pCOFINS), valor: decimal(cofins.vCOFINS) },
+		ii: importTax.vII != null ? { baseCalculo: decimal(importTax.vBC), valor: decimal(importTax.vII) } : null,
+		ibsCbs:
+			Object.keys(ibsCbs).length > 0
+				? {
+						cst: text(ibsCbs.CST),
+						classificacaoTributaria: text(ibsCbs.cClassTrib),
+						baseCalculo: decimal(ibsCbsGroup.vBC),
+						valorIbsUf: decimal(node(ibsCbsGroup.gIBSUF).vIBSUF),
+						valorIbsMunicipio: decimal(node(ibsCbsGroup.gIBSMun).vIBSMun),
+						valorCbs: decimal(node(ibsCbsGroup.gCBS).vCBS),
+					}
+				: null,
+		rastro: traces.length > 0 ? traces : null,
+	};
+}
+
+/** Lê os fatos declarados de um item pelo seu `det/@nItem`. Lança se o XML não tiver o item. */
+export function readNfeItemFacts({ xml, numeroItem }: { xml: string; numeroItem: number }): TNfeItemFacts {
+	const { info } = parseNfeDocument(xml);
+	const det = nodes(info.det).find((candidate) => integer(candidate["@_nItem"]) === numeroItem);
+	if (!det) throw new Error(`O XML não contém o item ${numeroItem}.`);
+	return readNfeItemFactsFromDet(det);
+}
+
+/** Validade do item para o lote: a menor `dVal` entre os `rastro` declarados. */
+function earliestExpiry(facts: TNfeItemFacts): string | null {
+	const dates = (facts.rastro ?? []).map((trace) => trace.dataValidade).filter((value): value is string => !!value);
+	return dates.length > 0 ? dates.sort()[0] : null;
+}
+
 function parseItem(det: TXmlNode) {
 	const product = node(det.prod);
 	const taxes = node(det.imposto);
 	const icms = firstTaxGroup(taxes.ICMS);
 	const ipi = firstTaxGroup(taxes.IPI);
+	const facts = readNfeItemFactsFromDet(det);
 	const modifiers: TExtractedCostModifier[] = [];
 
 	addModifier(modifiers, {
@@ -123,6 +247,9 @@ function parseItem(det: TXmlNode) {
 		valorTotal: decimal(product.vProd) ?? 0,
 		desconto: decimal(product.vDesc),
 		modificadoresCusto: modifiers,
+		documentoItem: facts.numeroItem,
+		cfop: facts.cfop,
+		dataValidade: earliestExpiry(facts),
 	};
 }
 
@@ -158,22 +285,7 @@ function allocateDocumentResidual(
 
 /** Parses NF-e/NFC-e XML locally and deterministically. No document data is sent to an AI model. */
 export function extractCompositionFromNfeXml(xml: string): TExtractedComposition {
-	if (UNSAFE_XML_DECLARATION.test(xml)) throw new Error("XML com declaração DTD ou ENTITY não é aceito.");
-	const validation = XMLValidator.validate(xml, { allowBooleanAttributes: false });
-	if (validation !== true) throw new Error(`XML inválido: ${validation.err.msg}`);
-
-	const parser = new XMLParser({
-		ignoreAttributes: false,
-		attributeNamePrefix: "@_",
-		removeNSPrefix: true,
-		parseTagValue: false,
-		trimValues: true,
-		processEntities: false,
-	});
-	const parsed = node(parser.parse(xml));
-	const nfe = node(node(parsed.nfeProc).NFe ?? parsed.NFe);
-	const info = node(nfe.infNFe);
-	if (Object.keys(info).length === 0) throw new Error("O XML não contém uma NF-e reconhecível.");
+	const { info, protocol } = parseNfeDocument(xml);
 
 	const identification = node(info.ide);
 	const issuer = node(info.emit);
@@ -218,6 +330,8 @@ export function extractCompositionFromNfeXml(xml: string): TExtractedComposition
 	);
 
 	const issuerAddress = node(issuer.enderEmit);
+	const recipient = node(info.dest);
+	const recipientAddress = node(recipient.enderDest);
 	const transport = node(info.transp);
 	const carrier = node(transport.transporta);
 	const carrierName = text(carrier.xNome);
@@ -242,6 +356,20 @@ export function extractCompositionFromNfeXml(xml: string): TExtractedComposition
 			cidade: text(issuerAddress.xMun),
 		},
 		duplicatas: installments.length > 0 ? installments : null,
+		documentoFiscal: {
+			modelo: text(identification.mod),
+			finalidade: integer(identification.finNFe),
+			naturezaOperacao: text(identification.natOp),
+			emitente: { cnpj: digits(issuer.CNPJ ?? issuer.CPF), inscricaoEstadual: digits(issuer.IE), uf: text(issuerAddress.UF), crt: integer(issuer.CRT) },
+			destinatario: { cnpj: digits(recipient.CNPJ ?? recipient.CPF), inscricaoEstadual: digits(recipient.IE), uf: text(recipientAddress.UF) },
+			documentosReferenciados: nodes(identification.NFref)
+				.map((reference) => digits(reference.refNFe))
+				.filter((reference): reference is string => !!reference),
+			protocolo:
+				text(protocol.nProt) || text(protocol.cStat)
+					? { codigoStatus: text(protocol.cStat), numero: text(protocol.nProt), dataRecebimento: text(protocol.dhRecbto) }
+					: null,
+		},
 		modalidadeFrete: FREIGHT_MODALITY_BY_CODE[text(transport.modFrete) ?? ""] ?? null,
 		transportadora: carrierName || carrierDocument ? { nome: carrierName, cnpj: carrierDocument } : null,
 		numeroDocumento: text(identification.nNF),

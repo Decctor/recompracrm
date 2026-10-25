@@ -1,5 +1,5 @@
 import type { TPurchaseCostModifiersSnapshot, TPurchaseImportedDocumentsSnapshot } from "@/schemas/purchases";
-import { doublePrecision, jsonb, numeric, text, timestamp, varchar } from "drizzle-orm/pg-core";
+import { doublePrecision, integer, jsonb, numeric, text, timestamp, varchar } from "drizzle-orm/pg-core";
 import { newTable } from "./common";
 import { organizations } from "./organizations";
 import { accountingEntries, fiscalOutboundDocuments } from "./financial";
@@ -113,6 +113,13 @@ export const purchaseItems = newTable("purchase_items", {
 	externoFatorConversao: doublePrecision("externo_fator_conversao"),
 
 	anotacoes: text("anotacoes"),
+
+	// Ponteiro para o documento de origem: `documentoRef` é a referência em
+	// `purchases.documentosImportados`, `documentoItem` é o `det/@nItem` do XML. Os fatos fiscais
+	// do item (CFOP, CST, bases) não são copiados — são lidos do XML por `readNfeItemFacts`
+	// (ADR-0002, decisão 2).
+	documentoRef: varchar("documento_ref", { length: 255 }),
+	documentoItem: integer("documento_item"),
 
 	// Perishable control: when informed, receiving this item generates a traceable stock lot.
 	dataValidade: timestamp("data_validade"),

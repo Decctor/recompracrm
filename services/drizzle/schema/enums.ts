@@ -435,6 +435,8 @@ export const shopCompositionBlockTypeEnum = pgEnum("shop_composition_block_type"
 export const fiscalInboundManifestEventEnum = pgEnum("fiscal_inbound_manifest_event", ["CIENCIA", "CONFIRMACAO", "DESCONHECIMENTO", "NAO_REALIZADA"]);
 
 export const fiscalInboundSituacaoEnum = pgEnum("fiscal_inbound_situacao", ["AUTORIZADA", "DENEGADA", "CANCELADA"]);
+// Modelo do documento recebido: NF-e (55) ou CT-e (57). A NFC-e nao e recebida por distribuicao.
+export const fiscalInboundDocumentModelEnum = pgEnum("fiscal_inbound_document_model", ["NFE", "CTE"]);
 
 export const platformPartnerStatusEnum = pgEnum("platform_partner_status", ["PENDENTE_APROVACAO", "ATIVO", "SUSPENSO", "REJEITADO"]);
 

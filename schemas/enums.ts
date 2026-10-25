@@ -333,6 +333,8 @@ export type TFiscalInboundManifestEventEnum = z.infer<typeof FiscalInboundManife
 // Situacao de uma nota recebida na SEFAZ (antes varchar livre vindo do provedor).
 export const FiscalInboundSituacaoEnum = z.enum(["AUTORIZADA", "DENEGADA", "CANCELADA"]);
 export type TFiscalInboundSituacaoEnum = z.infer<typeof FiscalInboundSituacaoEnum>;
+export const FiscalInboundDocumentModelEnum = z.enum(["NFE", "CTE"]);
+export type TFiscalInboundDocumentModelEnum = z.infer<typeof FiscalInboundDocumentModelEnum>;
 export const StockMovementTypeEnum = z.enum([
 	"ENTRADA_AQUISICAO",
 	"SAIDA",
@@ -1126,7 +1128,7 @@ export type TUploadStatusEnum = z.infer<typeof UploadStatusEnum>;
 
 // Espelha as chaves do registro em lib/files/intake.ts — o registro é a fonte da verdade; o enum
 // existe para que registrar um propósito sem declará-lo aqui vire erro de tipo.
-export const UploadPurposeEnum = z.enum(["MIDIA_TEMPLATE_MENSAGEM", "ARQUIVO_KIT_VISUAL"], {
+export const UploadPurposeEnum = z.enum(["MIDIA_TEMPLATE_MENSAGEM", "ARQUIVO_KIT_VISUAL", "DOCUMENTO_FISCAL_ENTRADA"], {
 	invalid_type_error: "Tipo não válido para o propósito do upload.",
 });
 export type TUploadPurposeEnum = z.infer<typeof UploadPurposeEnum>;

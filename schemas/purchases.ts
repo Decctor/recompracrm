@@ -62,12 +62,17 @@ export const PurchaseImportedDocumentSchema = z.object({
 		invalid_type_error: "Tipo não válido para a referência do documento importado.",
 	}),
 	origem: PurchaseImportedDocumentOriginEnum,
+	// Linha em `fiscal_inbound_documents` quando o documento tem chave de acesso (ADR-0002).
+	documentoFiscalId: z.string({ invalid_type_error: "Tipo não válido para o ID do documento fiscal." }).optional().nullable(),
+	// Arquivo no catálogo `files`. O servidor resolve por este id, conferindo a organização da linha.
+	arquivoId: z.string({ invalid_type_error: "Tipo não válido para o ID do arquivo do documento importado." }).optional().nullable(),
 	chaveAcesso: z.string({ invalid_type_error: "Tipo não válido para a chave de acesso do documento importado." }).optional().nullable(),
 	numero: z.string({ invalid_type_error: "Tipo não válido para o número do documento importado." }).optional().nullable(),
 	serie: z.string({ invalid_type_error: "Tipo não válido para a série do documento importado." }).optional().nullable(),
 	dataEmissao: z.string({ invalid_type_error: "Tipo não válido para a data de emissão do documento importado." }).optional().nullable(),
-	// Sem `bucket` nem `caminho`: o objeto é localizado por `referencia` + organização da sessão
-	// (lib/purchase/imported-documents.ts). Um caminho carregado no payload seria um caminho forjável.
+	// Sem `bucket` nem `caminho`: o objeto é localizado por `arquivoId` (catálogo `files`, com
+	// checagem de organização) ou, para snapshots anteriores ao backfill, por `referencia` +
+	// organização da sessão (lib/purchase/imported-documents.ts). Um caminho no payload seria forjável.
 	arquivo: z
 		.object({
 			nomeOriginal: z.string({ invalid_type_error: "Tipo não válido para o nome original do documento importado." }).optional().nullable(),
@@ -246,6 +251,13 @@ export const PurchaseItemSchema = z.object({
 	externoUnidade: z.string({ invalid_type_error: "Tipo não válido para a unidade externa." }).optional().nullable(),
 	externoFatorConversao: z.number({ invalid_type_error: "Tipo não válido para o fator de conversão externo." }).optional().nullable(),
 	anotacoes: z.string({ invalid_type_error: "Tipo não válido para as anotações do item da compra." }).optional().nullable(),
+	documentoRef: z.string({ invalid_type_error: "Tipo não válido para a referência do documento do item." }).optional().nullable(),
+	documentoItem: z
+		.number({ invalid_type_error: "Tipo não válido para o número do item no documento." })
+		.int("O número do item no documento deve ser inteiro.")
+		.positive("O número do item no documento deve ser maior que zero.")
+		.optional()
+		.nullable(),
 	dataValidade: z
 		.string({ invalid_type_error: "Tipo não válido para a data de validade do item da compra." })
 		.datetime({ message: "Tipo não válido para a data de validade do item da compra." })

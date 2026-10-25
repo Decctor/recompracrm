@@ -1,12 +1,15 @@
 import { getErrorMessage } from "@/lib/errors";
-import type { TFiscalInboundManifestEventEnum } from "@/schemas/enums";
-import { db } from "@/services/drizzle";
+import { PRIVATE_FILES_BUCKET } from "@/lib/files-storage/buckets";
+import { getOrganizationFileById, readStoredFile, sanitizeFileName, storeFile } from "@/lib/files/service";
+import type { TFiscalInboundDocumentModelEnum, TFiscalInboundManifestEventEnum, TFiscalInboundSituacaoEnum } from "@/schemas/enums";
+import { db, type DBTransaction } from "@/services/drizzle";
 import { fiscalInboundDocuments, fiscalInboundSyncStates, suppliers, type TFiscalInboundDocumentEntity } from "@/services/drizzle/schema";
-import { asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { loadFiscalOrganization } from "../settings";
-import { downloadStoredFiscalAsset, getFiscalAssetContentType, storeFiscalAsset } from "../storage";
+import { downloadStoredFiscalAsset, getFiscalAssetContentType } from "../storage";
 import type { TFiscalOrganization } from "../types";
+import { getFiscalEntryDocumentPrefix } from "./entry-files";
 import { resolveInboundProvider } from "./providers";
 import type { IFiscalInboundProvider, TInboundDocumentSnapshot, TInboundManifestState } from "./types";
 
@@ -15,7 +18,9 @@ const RECONCILE_BATCH_SIZE = 25;
 const AUTO_CIENCIA_BATCH_SIZE = 50;
 
 async function getOrCreateSyncState(organizacaoId: string) {
-	const existing = await db.query.fiscalInboundSyncStates.findFirst({ where: (fields, operators) => operators.eq(fields.organizacaoId, organizacaoId) });
+	const existing = await db.query.fiscalInboundSyncStates.findFirst({
+		where: (fields, operators) => operators.eq(fields.organizacaoId, organizacaoId),
+	});
 	if (existing) return existing;
 	const [created] = await db
 		.insert(fiscalInboundSyncStates)
@@ -54,11 +59,38 @@ function buildManifestFields(manifestacao: TInboundManifestState | null | undefi
 	};
 }
 
+// Assets de nota recebida entram no catalogo `files` (lib/files/README.md); nenhuma coluna guarda caminho.
+async function storeInboundAsset({
+	organizacaoId,
+	chaveAcesso,
+	asset,
+	buffer,
+}: {
+	organizacaoId: string;
+	chaveAcesso: string;
+	asset: "xml" | "pdf";
+	buffer: ArrayBuffer;
+}) {
+	const mimeType = getFiscalAssetContentType(asset);
+	const fileName = sanitizeFileName(`${chaveAcesso}-${asset}`, mimeType);
+	return storeFile({
+		organizacaoId,
+		bucket: PRIVATE_FILES_BUCKET,
+		caminho: `${getFiscalEntryDocumentPrefix({ organizacaoId })}${crypto.randomUUID()}/${fileName}`,
+		visibilidade: "PRIVADO",
+		buffer: Buffer.from(buffer),
+		mimeType,
+		nomeOriginal: `${chaveAcesso}.${asset}`,
+	});
+}
+
 async function storeInboundXmlIfAvailable({
+	organizationId,
 	snapshot,
 	provider,
 	organization,
 }: {
+	organizationId: string;
 	snapshot: TInboundDocumentSnapshot;
 	provider: IFiscalInboundProvider;
 	organization: TFiscalOrganization;
@@ -67,7 +99,8 @@ async function storeInboundXmlIfAvailable({
 	try {
 		const buffer = await provider.downloadXml({ provedorDocumentoId: snapshot.provedorDocumentoId, chaveAcesso: snapshot.chaveAcesso }, organization);
 		if (!buffer) return null;
-		return await storeFiscalAsset({ documentoId: `inbound-${snapshot.chaveAcesso}`, tipo: "entrada", asset: "xml", buffer });
+		const arquivo = await storeInboundAsset({ organizacaoId: organizationId, chaveAcesso: snapshot.chaveAcesso, asset: "xml", buffer });
+		return arquivo.id;
 	} catch (error) {
 		// XML fica para a proxima rodada (reconciliacao); a nota em si nao pode ser perdida por isso.
 		console.warn(`[FISCAL_INBOUND] Falha ao baixar XML da nota ${snapshot.chaveAcesso}: ${getErrorMessage(error)}`);
@@ -91,7 +124,8 @@ export async function applyInboundSnapshot({
 	if (!snapshot.chaveAcesso) return { created: false };
 
 	const existing = await db.query.fiscalInboundDocuments.findFirst({
-		where: (fields, operators) => operators.and(operators.eq(fields.organizacaoId, organizationId), operators.eq(fields.chaveAcesso, snapshot.chaveAcesso)),
+		where: (fields, operators) =>
+			operators.and(operators.eq(fields.organizacaoId, organizationId), operators.eq(fields.chaveAcesso, snapshot.chaveAcesso)),
 	});
 
 	const provedor = organization.fiscalProvedor === "SPEDY" ? ("SPEDY" as const) : ("MANUAL" as const);
@@ -99,7 +133,7 @@ export async function applyInboundSnapshot({
 
 	if (!existing) {
 		const fornecedorId = await resolveOrCreateSupplier(organizationId, snapshot.emitenteCpfCnpj, snapshot.emitenteNome);
-		const xmlStoragePath = snapshot.completo ? await storeInboundXmlIfAvailable({ snapshot, provider, organization }) : null;
+		const xmlArquivoId = snapshot.completo ? await storeInboundXmlIfAvailable({ organizationId, snapshot, provider, organization }) : null;
 		const [inserted] = await db
 			.insert(fiscalInboundDocuments)
 			.values({
@@ -114,7 +148,7 @@ export async function applyInboundSnapshot({
 				emitenteNome: snapshot.emitenteNome ?? null,
 				valorTotal: snapshot.valorTotal ?? null,
 				dataEmissao: snapshot.dataEmissao ?? null,
-				xmlStoragePath,
+				xmlArquivoId,
 				eventosPayload: snapshot.eventos ? JSON.stringify(snapshot.eventos) : null,
 				resumoPayload: snapshot.resumoPayload ? JSON.stringify(snapshot.resumoPayload) : null,
 				...buildManifestFields(snapshot.manifestacao),
@@ -126,8 +160,10 @@ export async function applyInboundSnapshot({
 		return applyInboundSnapshot({ organizationId, snapshot, provider, organization });
 	}
 
-	const xmlStoragePath =
-		snapshot.completo && !existing.xmlStoragePath ? await storeInboundXmlIfAvailable({ snapshot, provider, organization }) : existing.xmlStoragePath;
+	const xmlArquivoId =
+		snapshot.completo && !existing.xmlArquivoId && !existing.xmlStoragePath
+			? await storeInboundXmlIfAvailable({ organizationId, snapshot, provider, organization })
+			: existing.xmlArquivoId;
 
 	await db
 		.update(fiscalInboundDocuments)
@@ -141,7 +177,7 @@ export async function applyInboundSnapshot({
 			emitenteNome: snapshot.emitenteNome ?? existing.emitenteNome,
 			valorTotal: snapshot.valorTotal ?? existing.valorTotal,
 			dataEmissao: snapshot.dataEmissao ?? existing.dataEmissao,
-			xmlStoragePath,
+			xmlArquivoId,
 			eventosPayload: snapshot.eventos ? JSON.stringify(snapshot.eventos) : existing.eventosPayload,
 			resumoPayload: snapshot.resumoPayload ? JSON.stringify(snapshot.resumoPayload) : existing.resumoPayload,
 			dataAtualizacao: new Date(),
@@ -273,10 +309,7 @@ export async function pollInboundDocuments({ organizationId }: { organizationId:
 		}
 		checkpoint = result.checkpoint;
 		// Persiste o checkpoint a cada pagina: a varredura e retomavel de onde parou.
-		await db
-			.update(fiscalInboundSyncStates)
-			.set({ checkpoint, dataAtualizacao: new Date() })
-			.where(eq(fiscalInboundSyncStates.id, syncState.id));
+		await db.update(fiscalInboundSyncStates).set({ checkpoint, dataAtualizacao: new Date() }).where(eq(fiscalInboundSyncStates.id, syncState.id));
 		if (!result.hasMore) break;
 	}
 
@@ -367,13 +400,7 @@ export async function listInboundDocuments({ organizationId, page = 1 }: { organ
 }
 
 // Baixa (e cacheia no storage) um asset da nota recebida sob demanda via provedor.
-async function fetchAndCacheInboundAsset({
-	doc,
-	asset,
-}: {
-	doc: TFiscalInboundDocumentEntity;
-	asset: "xml" | "pdf";
-}): Promise<ArrayBuffer | null> {
+async function fetchAndCacheInboundAsset({ doc, asset }: { doc: TFiscalInboundDocumentEntity; asset: "xml" | "pdf" }): Promise<ArrayBuffer | null> {
 	if (!doc.provedorDocumentoId) return null;
 	const organization = await loadFiscalOrganization(doc.organizacaoId);
 	if (!organization) return null;
@@ -382,19 +409,30 @@ async function fetchAndCacheInboundAsset({
 	if (!download) return null;
 	const buffer = await download({ provedorDocumentoId: doc.provedorDocumentoId, chaveAcesso: doc.chaveAcesso }, organization);
 	if (!buffer) return null;
-	const storagePath = await storeFiscalAsset({ documentoId: `inbound-${doc.chaveAcesso}`, tipo: "entrada", asset, buffer });
+	const arquivo = await storeInboundAsset({ organizacaoId: doc.organizacaoId, chaveAcesso: doc.chaveAcesso, asset, buffer });
 	await db
 		.update(fiscalInboundDocuments)
-		.set(asset === "xml" ? { xmlStoragePath: storagePath } : { pdfStoragePath: storagePath })
+		.set(asset === "xml" ? { xmlArquivoId: arquivo.id } : { pdfArquivoId: arquivo.id })
 		.where(eq(fiscalInboundDocuments.id, doc.id));
 	return buffer;
 }
 
+// Catalogo primeiro; o caminho legado so ate o backfill (scripts/backfill-purchase-fiscal-files.ts).
+async function readCachedInboundAsset(doc: TFiscalInboundDocumentEntity, asset: "xml" | "pdf"): Promise<ArrayBuffer | null> {
+	const arquivoId = asset === "xml" ? doc.xmlArquivoId : doc.pdfArquivoId;
+	if (arquivoId) {
+		const arquivo = await getOrganizationFileById({ arquivoId, organizacaoId: doc.organizacaoId });
+		const bytes = await readStoredFile(arquivo);
+		return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+	}
+	const storagePath = asset === "xml" ? doc.xmlStoragePath : doc.pdfStoragePath;
+	return storagePath ? downloadStoredFiscalAsset(storagePath) : null;
+}
+
 export async function getInboundDocumentXml({ organizationId, inboundId }: { organizationId: string; inboundId: string }) {
 	const doc = await getInboundDocumentOrThrow(organizationId, inboundId);
-	if (doc.xmlStoragePath) {
-		return { buffer: await downloadStoredFiscalAsset(doc.xmlStoragePath), contentType: getFiscalAssetContentType("xml") };
-	}
+	const cached = await readCachedInboundAsset(doc, "xml");
+	if (cached) return { buffer: cached, contentType: getFiscalAssetContentType("xml") };
 	const buffer = await fetchAndCacheInboundAsset({ doc, asset: "xml" });
 	if (!buffer) throw new createHttpError.NotFound("XML da nota recebida nao disponivel.");
 	return { buffer, contentType: getFiscalAssetContentType("xml") };
@@ -402,9 +440,8 @@ export async function getInboundDocumentXml({ organizationId, inboundId }: { org
 
 export async function getInboundDocumentPdf({ organizationId, inboundId }: { organizationId: string; inboundId: string }) {
 	const doc = await getInboundDocumentOrThrow(organizationId, inboundId);
-	if (doc.pdfStoragePath) {
-		return { buffer: await downloadStoredFiscalAsset(doc.pdfStoragePath), contentType: getFiscalAssetContentType("pdf") };
-	}
+	const cached = await readCachedInboundAsset(doc, "pdf");
+	if (cached) return { buffer: cached, contentType: getFiscalAssetContentType("pdf") };
 	// DANFE so existe quando o XML completo foi liberado pela SEFAZ.
 	if (!doc.completo) throw new createHttpError.NotFound("DANFE disponivel apenas apos a nota estar completa.");
 	const buffer = await fetchAndCacheInboundAsset({ doc, asset: "pdf" });
@@ -431,4 +468,132 @@ export async function requestInboundSyncNow({ organizationId }: { organizationId
 			.where(eq(fiscalInboundSyncStates.id, syncState.id));
 	}
 	return { accepted: result.accepted, nextAllowedSyncAt };
+}
+
+// ============================================================================
+// Documento fiscal como primitivo unico (ADR-0002, decisao 1): todo XML com chave vira uma linha
+// aqui, venha do DF-e ou de upload manual. O unique (organizacao, chave) e a deduplicacao.
+// ============================================================================
+
+export type TRegisterManualInboundDocumentInput = {
+	organizacaoId: string;
+	chaveAcesso: string;
+	modelo: TFiscalInboundDocumentModelEnum;
+	xmlArquivoId: string;
+	emitenteCnpj?: string | null;
+	emitenteNome?: string | null;
+	valorTotal?: number | null;
+	dataEmissao?: Date | null;
+	// XML com protocolo de autorizacao e AUTORIZADA; sem protocolo nao se afirma nada.
+	situacao?: TFiscalInboundSituacaoEnum | null;
+};
+
+/**
+ * Registra (ou reaproveita) a linha de um documento enviado a mao. Nunca rebaixa o que o DF-e ja
+ * sabe: provedor, manifestacao e situacao existentes ficam; so preenche o que estava vazio.
+ * Devolve a linha atual — quem chama decide o que fazer com `compraId` ja preenchido.
+ */
+export async function registerManualInboundDocument(input: TRegisterManualInboundDocumentInput): Promise<TFiscalInboundDocumentEntity> {
+	const existing = await db.query.fiscalInboundDocuments.findFirst({
+		where: and(eq(fiscalInboundDocuments.organizacaoId, input.organizacaoId), eq(fiscalInboundDocuments.chaveAcesso, input.chaveAcesso)),
+	});
+	const emitenteCnpj = input.emitenteCnpj?.replace(/\D/g, "") || null;
+
+	if (!existing) {
+		const fornecedorId = await resolveOrCreateSupplier(input.organizacaoId, emitenteCnpj, input.emitenteNome);
+		const [inserted] = await db
+			.insert(fiscalInboundDocuments)
+			.values({
+				organizacaoId: input.organizacaoId,
+				fornecedorId,
+				chaveAcesso: input.chaveAcesso,
+				modelo: input.modelo,
+				provedor: "MANUAL",
+				completo: true,
+				situacao: input.situacao ?? null,
+				emitenteCnpj,
+				emitenteNome: input.emitenteNome ?? null,
+				valorTotal: input.valorTotal ?? null,
+				dataEmissao: input.dataEmissao ?? null,
+				xmlArquivoId: input.xmlArquivoId,
+			})
+			// Corrida com o cron do DF-e: quem perder reaplica como update.
+			.onConflictDoNothing({ target: [fiscalInboundDocuments.organizacaoId, fiscalInboundDocuments.chaveAcesso] })
+			.returning();
+		if (inserted) return inserted;
+		return registerManualInboundDocument(input);
+	}
+
+	const [updated] = await db
+		.update(fiscalInboundDocuments)
+		.set({
+			completo: true,
+			situacao: existing.situacao ?? input.situacao ?? null,
+			emitenteCnpj: existing.emitenteCnpj ?? emitenteCnpj,
+			emitenteNome: existing.emitenteNome ?? input.emitenteNome ?? null,
+			valorTotal: existing.valorTotal ?? input.valorTotal ?? null,
+			dataEmissao: existing.dataEmissao ?? input.dataEmissao ?? null,
+			xmlArquivoId: existing.xmlArquivoId ?? input.xmlArquivoId,
+			dataAtualizacao: new Date(),
+		})
+		.where(eq(fiscalInboundDocuments.id, existing.id))
+		.returning();
+	return updated ?? existing;
+}
+
+/**
+ * Vincula as notas de uma compra (`compraId` e 1:1 nesta fase). Uma nota ja presa a outra compra
+ * e conflito, nao sobrescrita: a mesma NF-e lancada duas vezes dobraria estoque e passivo.
+ */
+export async function linkInboundDocumentsToPurchase({
+	trx,
+	organizationId,
+	purchaseId,
+	documentIds,
+}: {
+	trx: DBTransaction;
+	organizationId: string;
+	purchaseId: string;
+	documentIds: string[];
+}) {
+	const ids = [...new Set(documentIds.filter(Boolean))];
+	if (ids.length === 0) return;
+	const docs = await trx.query.fiscalInboundDocuments.findMany({
+		where: and(eq(fiscalInboundDocuments.organizacaoId, organizationId), inArray(fiscalInboundDocuments.id, ids)),
+		columns: { id: true, compraId: true, chaveAcesso: true },
+	});
+	if (docs.length !== ids.length) throw new createHttpError.BadRequest("Documento fiscal da compra não encontrado.");
+	const taken = docs.find((doc) => doc.compraId && doc.compraId !== purchaseId);
+	if (taken) throw new createHttpError.Conflict(`A nota ${taken.chaveAcesso} já está lançada em outra compra.`);
+	await trx
+		.update(fiscalInboundDocuments)
+		.set({ compraId: purchaseId, dataAtualizacao: new Date() })
+		.where(
+			and(eq(fiscalInboundDocuments.organizacaoId, organizationId), inArray(fiscalInboundDocuments.id, ids), isNull(fiscalInboundDocuments.compraId)),
+		);
+}
+
+/** Compra cancelada devolve as notas ao estado "a lancar". */
+export async function unlinkInboundDocumentsFromPurchase({
+	trx,
+	organizationId,
+	purchaseId,
+}: {
+	trx: DBTransaction;
+	organizationId: string;
+	purchaseId: string;
+}) {
+	await trx
+		.update(fiscalInboundDocuments)
+		.set({ compraId: null, dataAtualizacao: new Date() })
+		.where(and(eq(fiscalInboundDocuments.organizacaoId, organizationId), eq(fiscalInboundDocuments.compraId, purchaseId)));
+}
+
+/** Compras ja vinculadas as chaves informadas (para a validacao de nota complementar). */
+export async function findPurchasesByAccessKeys({ organizationId, chavesAcesso }: { organizationId: string; chavesAcesso: string[] }) {
+	if (chavesAcesso.length === 0) return [];
+	return db.query.fiscalInboundDocuments.findMany({
+		where: and(eq(fiscalInboundDocuments.organizacaoId, organizationId), inArray(fiscalInboundDocuments.chaveAcesso, chavesAcesso)),
+		columns: { chaveAcesso: true, compraId: true },
+	});
 }

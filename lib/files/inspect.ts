@@ -2,11 +2,12 @@ import type { TFileMetadata } from "@/schemas/files";
 import createHttpError from "http-errors";
 import sharp from "sharp";
 
-export type TInspectedFile = { mimeType: string; metadados: TFileMetadata };
+export type TInspectedFile = { mimeType: string; metadados: TFileMetadata | null };
 
 const IMAGE_MIME_BY_FORMAT: Record<string, string> = {
 	png: "image/png",
 	jpeg: "image/jpeg",
+	webp: "image/webp",
 };
 
 /**
@@ -16,13 +17,19 @@ const IMAGE_MIME_BY_FORMAT: Record<string, string> = {
  * lixo (foi exatamente assim que uma imagem cinza chegou a um template). `stats()` percorre
  * todos os pixels e falha em dados truncados.
  */
-export async function inspectImageFile(buffer: Buffer, { allowedMimeTypes }: { allowedMimeTypes: ReadonlySet<string> }): Promise<TInspectedFile> {
+export async function inspectImageFile(
+	buffer: Buffer,
+	{ allowedMimeTypes }: { allowedMimeTypes: ReadonlySet<string> },
+): Promise<TInspectedFile & { metadados: TFileMetadata }> {
 	if (buffer.length === 0) throw new createHttpError.BadRequest("Conteúdo da imagem vazio.");
 	try {
 		const image = sharp(buffer, { failOn: "error" });
 		const metadata = await image.metadata();
 		const mimeType = metadata.format ? (IMAGE_MIME_BY_FORMAT[metadata.format] ?? null) : null;
-		if (!mimeType || !allowedMimeTypes.has(mimeType)) throw new createHttpError.BadRequest("Envie uma imagem JPEG ou PNG.");
+		if (!mimeType || !allowedMimeTypes.has(mimeType))
+			throw new createHttpError.BadRequest(
+				`Envie uma imagem ${[...allowedMimeTypes].map((type) => type.replace("image/", "").toUpperCase()).join(" ou ")}.`,
+			);
 		if (!metadata.width || !metadata.height) throw new createHttpError.BadRequest("Não foi possível determinar as dimensões da imagem.");
 		await image.stats();
 		return { mimeType, metadados: { tipo: "IMAGEM", largura: metadata.width, altura: metadata.height } };
@@ -42,5 +49,7 @@ export function sniffMimeType(head: Uint8Array): string | null {
 	if (startsWith([0x25, 0x50, 0x44, 0x46, 0x2d])) return "application/pdf"; // %PDF-
 	if (startsWith([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return "image/png";
 	if (startsWith([0xff, 0xd8, 0xff])) return "image/jpeg";
+	// RIFF....WEBP
+	if (startsWith([0x52, 0x49, 0x46, 0x46]) && head[8] === 0x57 && head[9] === 0x45 && head[10] === 0x42 && head[11] === 0x50) return "image/webp";
 	return null;
 }

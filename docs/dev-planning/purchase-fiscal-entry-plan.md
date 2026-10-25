@@ -537,7 +537,7 @@ Cada fase é entregável sozinha e não muda nada para quem não usa a novidade.
 | Fase | Entrega                                                                                                                                                                                     | Schema                                                                      |
 | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
 | 0    | ADR-0002 + guia de domínio; validação dos presets e do DIFAL com a contabilidade                                                                                                            | —                                                                           |
-| 1    | Documento como primitivo: uploads de XML viram linha de documento, propósito `DOCUMENTO_FISCAL_ENTRADA`, `arquivoId`, ponteiro do item, validações do import, `rastro` → validade, backfill | `fiscal_inbound_documents`, `purchase_items` (ponteiro), JSONB              |
+| 1 ✅ | Documento como primitivo: uploads de XML viram linha de documento, propósito `DOCUMENTO_FISCAL_ENTRADA`, `arquivoId`, ponteiro do item, validações do import, `rastro` → validade, backfill | `fiscal_inbound_documents`, `purchase_items` (ponteiro), JSONB              |
 | 2    | Nota recebida → compra, `compraId`, cancelamento, confirmação opt-in                                                                                                                        | —                                                                           |
 | 3    | Natureza e destinação, uso e consumo em despesa, bonificação como componente, contas por destinação                                                                                         | `products`, `purchase_items`, `supplier_product_mappings`                   |
 | 4    | `contrapartida = INCLUSO_NO_VALOR`, créditos de ICMS/ICMS SN/PIS/COFINS, presets, overrides                                                                                                 | JSONB, `fiscalConfiguracao`                                                 |
@@ -545,6 +545,11 @@ Cada fase é entregável sozinha e não muda nada para quem não usa a novidade.
 | 6    | CT-e                                                                                                                                                                                        | —                                                                           |
 | 7    | Patrimônio                                                                                                                                                                                  | `fixed_assets`                                                              |
 | 8    | ST retido na saída; devolução de compra; IBS/CBS como componentes                                                                                                                           | —                                                                           |
+
+Fase 1 entregue em `drizzle/0138_purchase_fiscal_entry_documents.sql` + `scripts/backfill-purchase-fiscal-files.ts`
+(aplicar a migration antes do deploy; rodar o backfill depois). O que ficou de fora dela, de propósito:
+a lista de notas recebidas ainda não mostra `compraId` nem tem "Lançar compra" (Fase 2), e o CFOP
+lido por item ainda não decide nada (Fase 3).
 
 **Testes que precisam existir:**
 

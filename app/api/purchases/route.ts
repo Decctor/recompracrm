@@ -14,6 +14,7 @@ import {
 	type TPurchaseItemStockOperation,
 } from "@/lib/purchase-processing/process-purchase-item-stock";
 import { upsertSupplierProductMappings } from "@/lib/purchase/supplier-product-mappings";
+import { linkInboundDocumentsToPurchase, unlinkInboundDocumentsFromPurchase } from "@/lib/fiscal/inbound";
 import { createSimplifiedSearchCondition } from "@/lib/search";
 import { PurchaseStatusEnum, TPurchaseStatusEnum } from "@/schemas/enums";
 import { AccountingEntrySchema, FinancialTransactionSchema } from "@/schemas/financial";
@@ -407,6 +408,10 @@ function normalizePurchaseItems<T extends TPurchaseItemInput>(items: T[]): T[] {
 	}
 }
 
+function getImportedFiscalDocumentIds(documents: TPurchaseImportedDocument[] | undefined) {
+	return (documents ?? []).map((document) => document.documentoFiscalId).filter((id): id is string => !!id);
+}
+
 function buildPurchaseImportedDocumentsSnapshot(documents: TPurchaseImportedDocument[] | undefined) {
 	return { versao: 1 as const, documentos: documents ?? [] };
 }
@@ -606,6 +611,14 @@ async function createPurchase({ input, session }: { input: TCreatePurchaseInput;
 
 		const insertedPurchaseId = insertedPurchase[0]?.id;
 		if (!insertedPurchaseId) throw new createHttpError.InternalServerError("Erro ao criar compra.");
+		// A nota passa a pertencer a esta compra na mesma transação: nenhuma janela em que ela
+		// apareça como "a lançar" com a compra já salva.
+		await linkInboundDocumentsToPurchase({
+			trx: tx,
+			organizationId: userOrgId,
+			purchaseId: insertedPurchaseId,
+			documentIds: getImportedFiscalDocumentIds(input.importedDocuments),
+		});
 
 		// Então as transações financeiras que quitam o lançamento
 		if (payloadAccountingEntryTransactions.length > 0)
@@ -978,6 +991,9 @@ async function updatePurchase({ input, session }: { input: TUpdatePurchaseInput;
 							externoUnidade: previousItem.externoUnidade,
 							externoFatorConversao: previousItem.externoFatorConversao,
 							anotacoes: previousItem.anotacoes,
+							documentoRef: previousItem.documentoRef,
+							documentoItem: previousItem.documentoItem,
+							dataValidade: previousItem.dataValidade,
 						},
 						reasonOverride: { exit: "Rollback - compra cancelada" },
 					});
@@ -992,6 +1008,7 @@ async function updatePurchase({ input, session }: { input: TUpdatePurchaseInput;
 					dataUltimaAtualizacao: new Date(),
 				})
 				.where(and(eq(purchases.id, purchaseId), eq(purchases.organizacaoId, userOrgId)));
+			await unlinkInboundDocumentsFromPurchase({ trx: tx, organizationId: userOrgId, purchaseId });
 
 			return {
 				data: { updatedPurchaseId: purchaseId },
@@ -1017,8 +1034,18 @@ async function updatePurchase({ input, session }: { input: TUpdatePurchaseInput;
 			});
 			await tx
 				.update(purchases)
-				.set({ ...payloadPurchase, documentosImportados: buildPurchaseImportedDocumentsSnapshot(input.importedDocuments), dataUltimaAtualizacao: new Date() })
+				.set({
+					...payloadPurchase,
+					documentosImportados: buildPurchaseImportedDocumentsSnapshot(input.importedDocuments),
+					dataUltimaAtualizacao: new Date(),
+				})
 				.where(and(eq(purchases.id, purchaseId), eq(purchases.organizacaoId, userOrgId)));
+			await linkInboundDocumentsToPurchase({
+				trx: tx,
+				organizationId: userOrgId,
+				purchaseId,
+				documentIds: getImportedFiscalDocumentIds(input.importedDocuments),
+			});
 			// O congelamento vale para os itens (que geraram lotes), não para a programação de pagamento:
 			// reprogramar um pagamento após o recebimento é o caso de uso principal.
 			await syncPurchaseAccountingEntry({
@@ -1052,6 +1079,12 @@ async function updatePurchase({ input, session }: { input: TUpdatePurchaseInput;
 				dataUltimaAtualizacao: new Date(),
 			})
 			.where(and(eq(purchases.id, purchaseId), eq(purchases.organizacaoId, userOrgId)));
+		await linkInboundDocumentsToPurchase({
+			trx: tx,
+			organizationId: userOrgId,
+			purchaseId,
+			documentIds: getImportedFiscalDocumentIds(input.importedDocuments),
+		});
 
 		await syncPurchaseAccountingEntry({
 			tx,

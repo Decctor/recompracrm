@@ -3,8 +3,8 @@ import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { TAuthUserSession } from "@/lib/authentication/types";
 import { extractCompositionFromFile, IMPORT_COMPOSITION_ALLOWED_MIME_TYPES } from "@/lib/purchase/import";
 import { extractCompositionFromNfeXml } from "@/lib/purchase/import-xml";
-import { buildPurchaseImportedDocumentPath } from "@/lib/purchase/imported-documents";
-import { storePrivateFile } from "@/lib/files-storage/private";
+import { looksLikeFiscalXml, storeFiscalEntryDocument } from "@/lib/fiscal/inbound/entry-files";
+import { findPurchasesByAccessKeys, registerManualInboundDocument } from "@/lib/fiscal/inbound";
 import { matchCompositionItemsToProducts } from "@/lib/purchase/match-products";
 import { describeErrorForLogging } from "@/lib/errors";
 import type { TPurchaseImportStageEnum, TPurchaseImportStageStatusEnum } from "@/schemas/enums";
@@ -12,7 +12,7 @@ import { db } from "@/services/drizzle";
 import createHttpError from "http-errors";
 import { NextResponse, type NextRequest } from "next/server";
 import z from "zod";
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -67,6 +67,95 @@ function getUserOrgIdForImport(session: TAuthUserSession) {
 	return userOrgId;
 }
 
+type TExtractedComposition = Awaited<ReturnType<typeof extractCompositionFromFile>>;
+
+function getFiscalAccessKey(extracted: TExtractedComposition) {
+	const chaveAcesso = extracted.chaveAcesso?.replace(/\D/g, "") || null;
+	return extracted.documentoFiscal && chaveAcesso && chaveAcesso.length === 44 ? chaveAcesso : null;
+}
+
+/**
+ * O que um XML precisa para virar compra desta organização, conferido ANTES de gravar qualquer
+ * coisa. Bloqueios são erros 422 com a causa; o que não impede a compra (nota sem protocolo) vira
+ * aviso.
+ */
+async function validateFiscalXml({
+	organizationId,
+	organizationCnpj,
+	extracted,
+	avisos,
+}: {
+	organizationId: string;
+	organizationCnpj: string;
+	extracted: TExtractedComposition;
+	avisos: string[];
+}) {
+	const fiscal = extracted.documentoFiscal;
+	if (!fiscal || !getFiscalAccessKey(extracted)) return;
+
+	const recipientCnpj = fiscal.destinatario.cnpj;
+	const ownCnpj = organizationCnpj.replace(/\D/g, "");
+	if (recipientCnpj && ownCnpj && recipientCnpj !== ownCnpj)
+		throw new createHttpError.UnprocessableEntity(
+			`Esta nota foi emitida para o CNPJ ${formatCnpj(recipientCnpj)}, não para a organização (${formatCnpj(ownCnpj)}).`,
+		);
+
+	if (!fiscal.protocolo)
+		avisos.push("O XML não traz o protocolo de autorização da SEFAZ. Confira se a nota foi autorizada antes de receber a compra.");
+	else if (!isAuthorizedProtocol(extracted))
+		avisos.push(`O protocolo da nota não indica autorização (cStat ${fiscal.protocolo.codigoStatus ?? "?"}). Confira a situação na SEFAZ.`);
+
+	// Nota complementar (finNFe 2) só faz sentido sobre uma compra que já existe aqui.
+	if (fiscal.finalidade === 2) {
+		const referenced = await findPurchasesByAccessKeys({ organizationId, chavesAcesso: fiscal.documentosReferenciados });
+		if (!referenced.some((doc) => doc.compraId))
+			throw new createHttpError.UnprocessableEntity(
+				"Esta é uma NF-e complementar, mas a nota que ela complementa não está lançada em nenhuma compra. Lance a nota original primeiro.",
+			);
+		avisos.push("NF-e complementar: ela ajusta valor ou imposto de uma compra já lançada. O lançamento como compra nova ainda não é suportado.");
+	}
+}
+
+function isAuthorizedProtocol(extracted: TExtractedComposition) {
+	const protocolo = extracted.documentoFiscal?.protocolo;
+	return protocolo?.codigoStatus === "100" || (!!protocolo?.numero && !protocolo.codigoStatus);
+}
+
+/**
+ * Todo XML com chave vira (ou reaproveita) uma linha em `fiscal_inbound_documents` (ADR-0002,
+ * decisão 1). O que o DF-e já sabe dessa nota — cancelamento, outra compra — vale aqui também.
+ */
+async function registerFiscalXml({
+	organizationId,
+	extracted,
+	xmlArquivoId,
+}: {
+	organizationId: string;
+	extracted: TExtractedComposition;
+	xmlArquivoId: string;
+}) {
+	const fiscal = extracted.documentoFiscal;
+	const chaveAcesso = getFiscalAccessKey(extracted);
+	if (!fiscal || !chaveAcesso) return null;
+
+	const document = await registerManualInboundDocument({
+		organizacaoId: organizationId,
+		chaveAcesso,
+		modelo: "NFE",
+		xmlArquivoId,
+		emitenteCnpj: fiscal.emitente.cnpj,
+		emitenteNome: extracted.fornecedor?.nome ?? null,
+		valorTotal: extracted.valorTotalDocumento ?? null,
+		dataEmissao: parseIsoDate(extracted.dataEmissao),
+		situacao: isAuthorizedProtocol(extracted) ? "AUTORIZADA" : null,
+	});
+	const label = extracted.numeroDocumento ? `nº ${extracted.numeroDocumento}` : chaveAcesso;
+	if (document.situacao === "CANCELADA") throw new createHttpError.UnprocessableEntity(`A nota ${label} consta como cancelada na SEFAZ.`);
+	if (document.situacao === "DENEGADA") throw new createHttpError.UnprocessableEntity(`A nota ${label} consta como denegada na SEFAZ.`);
+	if (document.compraId) throw new createHttpError.UnprocessableEntity(`A nota ${label} já está lançada em outra compra (${document.compraId}).`);
+	return document;
+}
+
 async function importPurchaseComposition({
 	input,
 	session,
@@ -81,7 +170,7 @@ async function importPurchaseComposition({
 	const userOrgId = getUserOrgIdForImport(session);
 
 	const fileBuffer = Buffer.from(input.file.dataBase64, "base64");
-	const contentLooksLikeXml = /^\s*(?:<\?xml\b|<(?:\w+:)?(?:nfeProc|NFe)\b)/i.test(fileBuffer.subarray(0, 512).toString("utf8"));
+	const contentLooksLikeXml = looksLikeFiscalXml(fileBuffer.subarray(0, 512).toString("utf8"));
 	const isXml =
 		input.file.mimeType === "application/xml" ||
 		input.file.mimeType === "text/xml" ||
@@ -207,17 +296,15 @@ async function importPurchaseComposition({
 
 	assertImportIsActive(abortSignal);
 	const documentReference = randomUUID();
-	// O nome do arquivo é metadado, não endereço: o objeto vive num caminho derivado da referência,
-	// para que nada no payload consiga escolher onde ler ou escrever depois.
+	// O nome é metadado, não endereço: o arquivo vive no catálogo `files` e é resolvido por id com
+	// checagem de organização, então nada no payload escolhe onde ler ou escrever.
 	const originalFileName = (input.file.fileName?.split(/[\\/]/).pop() || `documento-${documentReference}`)
 		.normalize("NFKD")
 		.replace(/[^a-zA-Z0-9._-]+/g, "-")
 		.slice(0, 120);
-	await storePrivateFile({
-		path: buildPurchaseImportedDocumentPath({ organizationId: userOrgId, referencia: documentReference }),
-		data: fileBuffer.buffer.slice(fileBuffer.byteOffset, fileBuffer.byteOffset + fileBuffer.byteLength),
-		contentType: input.file.mimeType,
-	});
+	if (isXml) await validateFiscalXml({ organizationId: userOrgId, organizationCnpj: session.membership?.organizacao.cnpj ?? "", extracted, avisos });
+	const { arquivo } = await storeFiscalEntryDocument({ organizacaoId: userOrgId, buffer: fileBuffer, nomeOriginal: originalFileName });
+	const fiscalDocument = isXml ? await registerFiscalXml({ organizationId: userOrgId, extracted, xmlArquivoId: arquivo.id }) : null;
 	const importedDocumentOrigin: "XML" | "PDF" | "IMAGEM" =
 		extracted.origem === "XML" ? "XML" : input.file.mimeType === "application/pdf" ? "PDF" : "IMAGEM";
 
@@ -262,15 +349,17 @@ async function importPurchaseComposition({
 				importado: {
 					referencia: documentReference,
 					origem: importedDocumentOrigin,
+					documentoFiscalId: fiscalDocument?.id ?? null,
+					arquivoId: arquivo.id,
 					chaveAcesso: extracted.chaveAcesso?.trim() || null,
 					numero: extracted.numeroDocumento?.trim() || null,
 					serie: extracted.serieDocumento?.trim() || null,
 					dataEmissao: extracted.dataEmissao ?? null,
 					arquivo: {
 						nomeOriginal: originalFileName,
-						sha256: createHash("sha256").update(fileBuffer).digest("hex"),
-						mimeType: input.file.mimeType,
-						tamanhoBytes: fileBuffer.byteLength,
+						sha256: arquivo.sha256,
+						mimeType: arquivo.mimeType,
+						tamanhoBytes: arquivo.tamanhoBytes,
 					},
 					totaisOriginais: extracted.totaisOriginais ?? null,
 				},

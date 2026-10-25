@@ -33,6 +33,11 @@ export const ExtractedCompositionItemSchema = z.object({
 	valorTotal: z.number({ invalid_type_error: "Tipo não válido para o valor total do item extraído." }),
 	desconto: z.number({ invalid_type_error: "Tipo não válido para o desconto do item extraído." }).nullable(),
 	modificadoresCusto: z.array(ExtractedCostModifierSchema).optional(),
+	// Só XML: ponteiro para o `det` e o pouco que o import usa dele na hora (ADR-0002, decisão 2).
+	documentoItem: z.number().int().positive().optional().nullable(),
+	cfop: z.string().optional().nullable(),
+	// Menor `dVal` dos `rastro` do item, em AAAA-MM-DD: vira a validade do lote no recebimento.
+	dataValidade: z.string().optional().nullable(),
 });
 export type TExtractedCompositionItem = z.infer<typeof ExtractedCompositionItemSchema>;
 
@@ -76,6 +81,26 @@ export const ExtractedCompositionSchema = z.object({
 	valorDesconto: z.number({ invalid_type_error: "Tipo não válido para o valor de desconto extraído." }).nullable(),
 	origem: z.enum(["XML", "IA"]).optional(),
 	chaveAcesso: z.string().optional().nullable(),
+	// Só XML. Alimenta as validações do import (destinatário, complementar, protocolo) e a linha em
+	// `fiscal_inbound_documents`; nada disso é copiado para o item.
+	documentoFiscal: z
+		.object({
+			modelo: z.string().nullable(),
+			// finNFe: 1 normal, 2 complementar, 3 ajuste, 4 devolução.
+			finalidade: z.number().int().nullable(),
+			naturezaOperacao: z.string().nullable(),
+			emitente: z.object({
+				cnpj: z.string().nullable(),
+				inscricaoEstadual: z.string().nullable(),
+				uf: z.string().nullable(),
+				crt: z.number().int().nullable(),
+			}),
+			destinatario: z.object({ cnpj: z.string().nullable(), inscricaoEstadual: z.string().nullable(), uf: z.string().nullable() }),
+			documentosReferenciados: z.array(z.string()),
+			protocolo: z.object({ codigoStatus: z.string().nullable(), numero: z.string().nullable(), dataRecebimento: z.string().nullable() }).nullable(),
+		})
+		.optional()
+		.nullable(),
 	serieDocumento: z.string().optional().nullable(),
 	totaisOriginais: z
 		.object({

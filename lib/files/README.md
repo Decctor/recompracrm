@@ -21,7 +21,7 @@ varredura). Um upload recebido materializa uma linha em `files` (`arquivoId`).
 | ------------ | --------------------------------------------------------------------------------------- |
 | `drivers.ts` | Interface `TStorageDriver` + driver Supabase. Todo byte entra e sai por aqui.           |
 | `service.ts` | `storeFile` (única escrita no catálogo), `resolveFileUrl`, lookups, `sanitizeFileName`. |
-| `inspect.ts` | Validação por bytes com decodificação COMPLETA (`sharp.stats()`); `sniffMimeType`.     |
+| `inspect.ts` | Validação por bytes com decodificação COMPLETA (`sharp.stats()`); `sniffMimeType`.      |
 | `intake.ts`  | Registro de propósitos (`UPLOAD_PURPOSES`) + ciclo de vida do upload em duas etapas.    |
 
 ## O fluxo de upload em duas etapas (para agentes e clientes sem acesso ao provedor)
@@ -40,8 +40,7 @@ varredura). Um upload recebido materializa uma linha em `files` (`arquivoId`).
 Novo propósito = nova entrada em `UPLOAD_PURPOSES` (intake.ts) + novo membro em
 `UploadPurposeEnum` (schemas/enums.ts). O banco não muda (`proposito` é varchar, mesma decisão
 do `tipo` de `action_approval_requests`). Candidatos já mapeados: planilhas de importação em
-massa (clientes/vendas), mídia de chat, imagens de produto, extratos bancários, documentos
-fiscais.
+massa (clientes/vendas), mídia de chat, imagens de produto, extratos bancários.
 
 **Limite de corpo**: funções na Vercel aceitam ~4.5 MB de corpo — todo propósito `PROXY` fica
 abaixo disso. Arquivos maiores usam o transporte `DIRECT` (abaixo).
@@ -52,7 +51,7 @@ Para arquivos grandes gerados no navegador (PDFs e imagens das peças de comunic
 propósito `ARQUIVO_KIT_VISUAL`), os bytes não passam pela função:
 
 1. **Intenção** — `createDirectUploadIntake({ proposito, nomeArquivo, mimeType, tamanhoEsperadoBytes,
-   sha256Esperado })`: tamanho, SHA-256 e tipo são OBRIGATÓRIOS. Devolve a URL assinada do
+sha256Esperado })`: tamanho, SHA-256 e tipo são OBRIGATÓRIOS. Devolve a URL assinada do
    provedor. O caminho é `prefixo/<uploadId>/<nome>` — derivado da linha, nada mais é guardado.
 2. **Bytes** — o navegador envia direto ao provedor (`lib/uploads/signed-direct-upload.ts`).
 3. **Conferência** — `completeDirectUpload` lê o objeto em streaming e confere tamanho exato,
@@ -83,8 +82,15 @@ durante a janela de depreciação, e minimize essas URLs usando `/api/files/[id]
 
 ## Estado atual vs. direção (o que ainda NÃO migrou)
 
-Hoje o único consumidor é a mídia de template de mensagem via MCP
-(`lib/message-templates/agent-media.ts` + `lib/agent-tools/tools/message-template-media.ts`).
+Consumidores: a mídia de template de mensagem via MCP (`lib/message-templates/agent-media.ts` +
+`lib/agent-tools/tools/message-template-media.ts`), as peças de comunicação visual e os documentos
+da entrada fiscal de compras (`lib/fiscal/inbound/entry-files.ts`: propósito
+`DOCUMENTO_FISCAL_ENTRADA`, gravação direta pelo import do builder e os assets XML/PDF das notas
+recebidas via DF-e — `purchases.documentosImportados[].arquivoId`,
+`fiscal_inbound_documents.xml_arquivo_id/pdf_arquivo_id`). O mesmo conteúdo enviado duas vezes pela
+mesma organização reaproveita a linha pelo `sha256` (`findOrganizationFileBySha256`). Os caminhos
+antigos (`purchase-imports/*`, `*_storage_path`) são sombra até
+`scripts/backfill-purchase-fiscal-files.ts` catalogar os objetos no lugar em que estão.
 Duas dívidas deliberadas, para migração oportunista:
 
 1. **Rascunhos de template ainda guardam `conteudoMidiaCaminho` (string)**, não `arquivoId`.

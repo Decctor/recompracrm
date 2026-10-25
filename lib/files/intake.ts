@@ -1,4 +1,5 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { getFiscalEntryDocumentPrefix, inspectFiscalEntryDocument } from "@/lib/fiscal/inbound/entry-files";
 import { getAgentTemplateMediaPrefix } from "@/lib/message-templates/agent-media";
 import type { TFileVisibilityEnum, TUploadPurposeEnum } from "@/schemas/enums";
 import type { TUploadConsumption, TUploadContext } from "@/schemas/files";
@@ -66,6 +67,17 @@ export const UPLOAD_PURPOSES: Record<TUploadPurposeEnum, TUploadPurposeDefinitio
 		visibilidade: "PRIVADO",
 		storagePrefix: ({ organizacaoId }) => `visual-kits/${organizacaoId}/`,
 		mimeTypes: new Set(["application/pdf", "image/png", "image/jpeg"]),
+	},
+	// Documentos da entrada de compras (XML de NF-e/CT-e, DANFE, cupom, foto). Mesmas regras do
+	// import pelo builder — lib/fiscal/inbound/entry-files.ts.
+	DOCUMENTO_FISCAL_ENTRADA: {
+		transport: "PROXY",
+		maxBytes: 4 * 1024 * 1024,
+		ttlMinutes: 60,
+		bucket: PRIVATE_FILES_BUCKET,
+		visibilidade: "PRIVADO",
+		storagePrefix: getFiscalEntryDocumentPrefix,
+		inspect: inspectFiscalEntryDocument,
 	},
 };
 

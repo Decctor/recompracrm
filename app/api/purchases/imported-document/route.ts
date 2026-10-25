@@ -1,6 +1,7 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { downloadPrivateFile } from "@/lib/files-storage/private";
+import { getOrganizationFileById, readStoredFile } from "@/lib/files/service";
 import { buildPurchaseImportedDocumentPath } from "@/lib/purchase/imported-documents";
 import { PurchaseImportedDocumentsSnapshotSchema } from "@/schemas/purchases";
 import { db } from "@/services/drizzle";
@@ -36,11 +37,21 @@ async function getPurchaseImportedDocument(input: TGetPurchaseImportedDocumentIn
 	const snapshot = PurchaseImportedDocumentsSnapshotSchema.parse(purchase.documentosImportados ?? { versao: 1, documentos: [] });
 	const document = snapshot.documentos.find((candidate) => candidate.referencia === input.referencia);
 	if (!document?.arquivo) throw new createHttpError.NotFound("Arquivo importado não encontrado.");
-	// O caminho é reconstruído a partir da organização da sessão — nunca lido do snapshot —, então uma
-	// referência gravada por um payload malicioso continua confinada à própria organização.
-	const data = await downloadPrivateFile(
-		buildPurchaseImportedDocumentPath({ organizationId: session.membership.organizacao.id, referencia: document.referencia }),
-	);
+	const organizationId = session.membership.organizacao.id;
+	if (document.arquivoId) {
+		// A linha de `files` é buscada pela organização da sessão: um id gravado por um payload
+		// malicioso só alcança arquivos da própria organização.
+		const file = await getOrganizationFileById({ arquivoId: document.arquivoId, organizacaoId: organizationId });
+		const bytes = await readStoredFile(file);
+		return {
+			data: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
+			mimeType: file.mimeType,
+			fileName: document.arquivo.nomeOriginal ?? file.nomeOriginal ?? `documento-${document.referencia}`,
+		};
+	}
+	// Snapshot anterior ao catálogo (até o backfill): o caminho é reconstruído a partir da
+	// organização da sessão — nunca lido do snapshot.
+	const data = await downloadPrivateFile(buildPurchaseImportedDocumentPath({ organizationId, referencia: document.referencia }));
 	return {
 		data,
 		mimeType: document.arquivo.mimeType ?? "application/octet-stream",
