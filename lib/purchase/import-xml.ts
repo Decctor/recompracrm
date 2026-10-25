@@ -178,7 +178,7 @@ function earliestExpiry(facts: TNfeItemFacts): string | null {
 	return dates.length > 0 ? dates.sort()[0] : null;
 }
 
-function parseItem(det: TXmlNode) {
+function parseItem(det: TXmlNode, issuerCrt: number | null) {
 	const product = node(det.prod);
 	const taxes = node(det.imposto);
 	const icms = firstTaxGroup(taxes.ICMS);
@@ -236,6 +236,45 @@ function parseItem(det: TXmlNode) {
 		descricao: "FCP-ST destacado no item da NF-e; tratamento tributário pendente de revisão",
 	});
 
+	// Tributos embutidos no preço (contrapartida INCLUSO_NO_VALOR): não mudam o valor a pagar; o
+	// preset decide se saem do custo como crédito ou ficam no preço (e então o componente some).
+	// Fornecedor do Simples (CRT 1) só transfere o crédito presumido, nunca ICMS/PIS/COFINS próprios.
+	if (issuerCrt === 1) {
+		addModifier(modifiers, {
+			chave: "IMPOSTOS_ICMS_SN",
+			valorCentavos: cents(facts.icms.valorCreditoSn),
+			efeito: "ACRESCIMO",
+			tratamento: null,
+			contrapartida: "INCLUSO_NO_VALOR",
+			descricao: "Crédito de ICMS concedido por fornecedor do Simples Nacional (vCredICMSSN)",
+		});
+	} else {
+		addModifier(modifiers, {
+			chave: "IMPOSTOS_ICMS",
+			valorCentavos: cents(facts.icms.valor),
+			efeito: "ACRESCIMO",
+			tratamento: null,
+			contrapartida: "INCLUSO_NO_VALOR",
+			descricao: "ICMS próprio embutido no preço do item",
+		});
+		addModifier(modifiers, {
+			chave: "IMPOSTOS_PIS",
+			valorCentavos: cents(facts.pis.valor),
+			efeito: "ACRESCIMO",
+			tratamento: null,
+			contrapartida: "INCLUSO_NO_VALOR",
+			descricao: "PIS embutido no preço do item",
+		});
+		addModifier(modifiers, {
+			chave: "IMPOSTOS_COFINS",
+			valorCentavos: cents(facts.cofins.valor),
+			efeito: "ACRESCIMO",
+			tratamento: null,
+			contrapartida: "INCLUSO_NO_VALOR",
+			descricao: "COFINS embutida no preço do item",
+		});
+	}
+
 	return {
 		descricao: text(product.xProd) ?? "Item sem descrição",
 		codigoFornecedor: text(product.cProd),
@@ -292,7 +331,8 @@ export function extractCompositionFromNfeXml(xml: string): TExtractedComposition
 	const totals = node(node(info.total).ICMSTot);
 	const accessKey = text(info["@_Id"])?.replace(/^NFe/i, "") ?? null;
 	const issueDate = text(identification.dhEmi ?? identification.dEmi);
-	const items = nodes(info.det).map(parseItem);
+	const issuerCrt = integer(issuer.CRT);
+	const items = nodes(info.det).map((det) => parseItem(det, issuerCrt));
 	allocateDocumentResidual(
 		items,
 		{ chave: "DESCONTO", efeito: "REDUCAO", tratamento: "CUSTO_ESTOQUE", descricao: "Desconto da NF-e rateado por valor" },

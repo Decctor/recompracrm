@@ -435,8 +435,21 @@ export const PurchaseCostModifierKeyEnum = z.enum([
 	"SEGURO",
 	"DESPESA_ACESSORIA",
 	"IMPOSTOS_IPI",
+	// Embutidos no preço (contrapartida INCLUSO_NO_VALOR): crédito quando o regime permite.
+	"IMPOSTOS_ICMS",
+	"IMPOSTOS_ICMS_SN",
+	"IMPOSTOS_PIS",
+	"IMPOSTOS_COFINS",
 	"IMPOSTOS_ICMS_ST",
 	"IMPOSTOS_FCP_ST",
+	// Devidos ao fisco pelo destinatário (contrapartida FISCO) — calculados na Fase 5.
+	"IMPOSTOS_ICMS_ST_ENTRADA",
+	"IMPOSTOS_DIFAL",
+	"IMPOSTOS_FCP_DIFAL",
+	"IMPOSTOS_ANTECIPACAO",
+	// Reforma tributária: informativos até comporem o valor devido.
+	"IMPOSTOS_IBS",
+	"IMPOSTOS_CBS",
 	"OUTRO",
 ]);
 export type TPurchaseCostModifierKeyEnum = z.infer<typeof PurchaseCostModifierKeyEnum>;
@@ -447,8 +460,23 @@ export type TPurchaseCostModifierEffectEnum = z.infer<typeof PurchaseCostModifie
 export const PurchaseCostTreatmentEnum = z.enum(["CUSTO_ESTOQUE", "CREDITO_TRIBUTARIO", "DESPESA_PERIODO"]);
 export type TPurchaseCostTreatmentEnum = z.infer<typeof PurchaseCostTreatmentEnum>;
 
-export const PurchaseCostModifierOriginEnum = z.enum(["XML", "IA", "MANUAL"]);
+// CALCULO: valor que a nota não traz e o sistema calcula (DIFAL, antecipação).
+export const PurchaseCostModifierOriginEnum = z.enum(["XML", "IA", "MANUAL", "CALCULO"]);
 export type TPurchaseCostModifierOriginEnum = z.infer<typeof PurchaseCostModifierOriginEnum>;
+
+// De onde vem o valor do modificador (ADR-0002, decisão 4): soma à dívida com o fornecedor, gera
+// dívida com outro credor, ou já estava dentro do valor-base (tira do custo sem mudar dívida alguma).
+export const PurchaseCostCounterpartyEnum = z.enum(["FORNECEDOR", "FISCO", "TRANSPORTADORA", "INCLUSO_NO_VALOR"], {
+	invalid_type_error: "Tipo não válido para a contrapartida do modificador de custo.",
+});
+export type TPurchaseCostCounterpartyEnum = z.infer<typeof PurchaseCostCounterpartyEnum>;
+
+// Regime de apuração para as regras de entrada. Separado do `regimeTributario` (CRT) porque o CRT 3
+// não distingue presumido de real, e é essa diferença que decide o crédito de PIS/COFINS.
+export const PurchaseEntryTaxRegimeEnum = z.enum(["SIMPLES_NACIONAL", "LUCRO_PRESUMIDO", "LUCRO_REAL"], {
+	invalid_type_error: "Tipo não válido para o regime de apuração de entrada.",
+});
+export type TPurchaseEntryTaxRegimeEnum = z.infer<typeof PurchaseEntryTaxRegimeEnum>;
 
 export const PurchaseCostAllocationMethodEnum = z.enum(["INFORMADO_ITEM", "PROPORCIONAL_VALOR", "PROPORCIONAL_QUANTIDADE", "MANUAL"]);
 export type TPurchaseCostAllocationMethodEnum = z.infer<typeof PurchaseCostAllocationMethodEnum>;

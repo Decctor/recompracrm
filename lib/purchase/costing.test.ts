@@ -135,3 +135,104 @@ test("bonificação zera custo e dívida da linha, sem tornar nada negativo", ()
 	assert.equal(result.valorUnitarioCusto, 0);
 	assert.equal(result.descontosTotal, 50);
 });
+
+test("imposto embutido reclassificado como crédito sai do custo sem mudar a dívida com o fornecedor", () => {
+	const result = calculatePurchaseItemCost({
+		quantidade: 10,
+		valorTotalBruto: 100,
+		modificadoresCusto: {
+			versao: 1,
+			modificadores: [
+				{
+					chave: "IMPOSTOS_ICMS",
+					valorCentavos: 1200,
+					efeito: "ACRESCIMO",
+					tratamento: "CREDITO_TRIBUTARIO",
+					contrapartida: "INCLUSO_NO_VALOR",
+					origem: "XML",
+				},
+				{
+					chave: "IMPOSTOS_PIS",
+					valorCentavos: 165,
+					efeito: "ACRESCIMO",
+					tratamento: "CREDITO_TRIBUTARIO",
+					contrapartida: "INCLUSO_NO_VALOR",
+					origem: "XML",
+				},
+			],
+		},
+	});
+	assert.equal(result.valorTotalFornecedor, 100);
+	assert.equal(result.valorTotalLiquido, 100);
+	assert.equal(result.valorTotalCusto, 86.35);
+	assert.equal(result.valorTotalCreditoTributario, 13.65);
+	assert.deepEqual(result.dividasPorContrapartida, {});
+});
+
+test("valor incluso maior que o item ou tratado como custo é recusado", () => {
+	assert.throws(
+		() =>
+			calculatePurchaseItemCost({
+				quantidade: 1,
+				valorTotalBruto: 10,
+				modificadoresCusto: {
+					versao: 1,
+					modificadores: [
+						{
+							chave: "IMPOSTOS_ICMS",
+							valorCentavos: 2000,
+							efeito: "ACRESCIMO",
+							tratamento: "CREDITO_TRIBUTARIO",
+							contrapartida: "INCLUSO_NO_VALOR",
+							origem: "XML",
+						},
+					],
+				},
+			}),
+		/não podem passar/,
+	);
+	assert.throws(
+		() =>
+			calculatePurchaseItemCost({
+				quantidade: 1,
+				valorTotalBruto: 10,
+				modificadoresCusto: {
+					versao: 1,
+					modificadores: [
+						{
+							chave: "IMPOSTOS_ICMS",
+							valorCentavos: 100,
+							efeito: "ACRESCIMO",
+							tratamento: "CUSTO_ESTOQUE",
+							contrapartida: "INCLUSO_NO_VALOR",
+							origem: "XML",
+						},
+					],
+				},
+			}),
+		/reclassificado/,
+	);
+});
+
+test("componente devido ao fisco vira dívida própria e custo, sem engordar a dívida com o fornecedor", () => {
+	const result = calculatePurchaseItemCost({
+		quantidade: 1,
+		valorTotalBruto: 5000,
+		modificadoresCusto: {
+			versao: 1,
+			modificadores: [
+				{ chave: "IMPOSTOS_DIFAL", valorCentavos: 30000, efeito: "ACRESCIMO", tratamento: "CUSTO_ESTOQUE", contrapartida: "FISCO", origem: "CALCULO" },
+			],
+		},
+	});
+	assert.equal(result.valorTotalFornecedor, 5000);
+	assert.equal(result.valorTotalCusto, 5300);
+	assert.deepEqual(result.dividasPorContrapartida, { FISCO: 300 });
+});
+
+test("snapshot sem contrapartida produz exatamente os totais anteriores", () => {
+	const legacy = calculatePurchaseItemCost({ ...baseItem, descontosTotal: 5, acrescimosTotal: 12 });
+	assert.equal(legacy.valorTotalLiquido, 107);
+	assert.equal(legacy.valorTotalFornecedor, 107);
+	assert.equal(legacy.valorTotalCusto, 107);
+});

@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
 	AcquisitionNatureEnum,
 	PurchaseCostAllocationMethodEnum,
+	PurchaseCostCounterpartyEnum,
 	PurchaseCostModifierEffectEnum,
 	PurchaseCostModifierKeyEnum,
 	PurchaseCostModifierOriginEnum,
@@ -27,7 +28,20 @@ export const PurchaseCostModifierSchema = z
 			.positive("O valor do modificador de custo deve ser maior que zero."),
 		efeito: PurchaseCostModifierEffectEnum,
 		tratamento: PurchaseCostTreatmentEnum,
+		// Aditivo ao snapshot v1: ausente = FORNECEDOR, o único comportamento anterior ao ADR-0002.
+		contrapartida: PurchaseCostCounterpartyEnum.optional().nullable(),
 		origem: PurchaseCostModifierOriginEnum,
+		// Base, alíquotas e método do que o sistema calculou (origem CALCULO) ou leu (embutido).
+		memoriaCalculo: z
+			.object({
+				base: z.number({ invalid_type_error: "Tipo não válido para a base da memória de cálculo." }).optional().nullable(),
+				aliquota: z.number({ invalid_type_error: "Tipo não válido para a alíquota da memória de cálculo." }).optional().nullable(),
+				aliquotaInterestadual: z.number({ invalid_type_error: "Tipo não válido para a alíquota interestadual." }).optional().nullable(),
+				metodo: z.string({ invalid_type_error: "Tipo não válido para o método da memória de cálculo." }).optional().nullable(),
+				uf: z.string({ invalid_type_error: "Tipo não válido para a UF da memória de cálculo." }).optional().nullable(),
+			})
+			.optional()
+			.nullable(),
 		documentoRef: z.string({ invalid_type_error: "Tipo não válido para a referência do documento do modificador." }).optional().nullable(),
 		descricao: z.string({ invalid_type_error: "Tipo não válido para a descrição do modificador de custo." }).optional().nullable(),
 		rateio: PurchaseCostAllocationSchema.optional().nullable(),
@@ -38,6 +52,14 @@ export const PurchaseCostModifierSchema = z
 				code: z.ZodIssueCode.custom,
 				message: "Descrição obrigatória para modificadores de custo do tipo OUTRO.",
 				path: ["descricao"],
+			});
+		}
+		// Embutido no valor-base: só faz sentido como acréscimo que sai do custo para outro destino.
+		if (modifier.contrapartida === "INCLUSO_NO_VALOR" && (modifier.efeito !== "ACRESCIMO" || modifier.tratamento === "CUSTO_ESTOQUE")) {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				message: "Um valor incluso no preço só pode ser reclassificado como crédito tributário ou despesa, com efeito de acréscimo.",
+				path: ["contrapartida"],
 			});
 		}
 	});

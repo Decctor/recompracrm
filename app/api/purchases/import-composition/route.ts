@@ -7,6 +7,9 @@ import { looksLikeFiscalXml, storeFiscalEntryDocument } from "@/lib/fiscal/inbou
 import { findPurchasesByAccessKeys, getInboundDocumentXml, registerManualInboundDocument } from "@/lib/fiscal/inbound";
 import { matchCompositionItemsToProducts, type TMatchedCompositionItem } from "@/lib/purchase/match-products";
 import { resolveEntryLineDisposition } from "@/lib/purchase/entry-rules";
+import { inferEntryTaxRegime, resolveEntryTaxTreatment, type TEntryTaxOverrides } from "@/lib/fiscal/entry/presets";
+import { organizations } from "@/services/drizzle/schema";
+import { eq } from "drizzle-orm";
 import { describeErrorForLogging } from "@/lib/errors";
 import type { TPurchaseImportStageEnum, TPurchaseImportStageStatusEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
@@ -171,6 +174,55 @@ export type TImportedLine = TMatchedCompositionItem & {
 	foraDaCompra: string | null;
 };
 
+type TEntryTaxContext = {
+	regime: ReturnType<typeof inferEntryTaxRegime>;
+	contribuinteIpi: boolean;
+	overrides: TEntryTaxOverrides;
+	crtEmitente: number | null;
+};
+
+async function loadEntryTaxContext({
+	organizationId,
+	crtEmitente,
+}: {
+	organizationId: string;
+	crtEmitente: number | null;
+}): Promise<TEntryTaxContext> {
+	const organization = await db.query.organizations.findFirst({ where: eq(organizations.id, organizationId), columns: { fiscalConfiguracao: true } });
+	const fiscal = organization?.fiscalConfiguracao ?? null;
+	return {
+		regime: fiscal?.entrada?.regimeApuracao ?? inferEntryTaxRegime(fiscal?.regimeTributario),
+		contribuinteIpi: fiscal?.entrada?.contribuinteIpi ?? false,
+		overrides: (fiscal?.entrada?.tratamentos ?? {}) as TEntryTaxOverrides,
+		crtEmitente,
+	};
+}
+
+/**
+ * Preset/override decide o tratamento de cada tributo ainda pendente (ADR-0002, decisão 7). Um
+ * tributo embutido que fica no custo é descartado — ele já está no preço. O que o preset não
+ * resolve fica pendente para a pessoa, como antes.
+ */
+function applyEntryTaxTreatments(item: TImportedLine, context: TEntryTaxContext): TImportedLine {
+	const modifiers = (item.modificadoresCusto ?? []).flatMap((modifier) => {
+		if (modifier.tratamento !== null) return [modifier];
+		const contrapartida = modifier.contrapartida ?? "FORNECEDOR";
+		const resolution = resolveEntryTaxTreatment({
+			regime: context.regime,
+			contribuinteIpi: context.contribuinteIpi,
+			overrides: context.overrides,
+			destinacao: item.destinacaoSugerida,
+			chave: modifier.chave,
+			contrapartida,
+			crtEmitente: context.crtEmitente,
+		});
+		if (!resolution.tratamento) return [modifier];
+		if (contrapartida === "INCLUSO_NO_VALOR" && resolution.tratamento === "CUSTO_ESTOQUE") return [];
+		return [{ ...modifier, tratamento: resolution.tratamento, descricao: `${modifier.descricao ?? modifier.chave} — ${resolution.motivo}` }];
+	});
+	return { ...item, modificadoresCusto: modifiers };
+}
+
 /**
  * O CFOP do emitente decide a linha, na hora (ADR-0002, decisão 3): compra entra; bonificação entra
  * com um componente que zera custo e dívida (desconto incondicional de 100%, CPC 16); o resto não
@@ -302,6 +354,7 @@ async function importPurchaseComposition({
 	assertImportIsActive(abortSignal);
 
 	onStage({ stage: "CATALOGO", status: "INICIADO", detail: "Procurando por EAN, código e nome…" });
+	const entryTaxContext = await loadEntryTaxContext({ organizationId: userOrgId, crtEmitente: extracted.documentoFiscal?.emitente.crt ?? null });
 	const itens: TImportedLine[] = (
 		await matchCompositionItemsToProducts({
 			organizacaoId: userOrgId,
@@ -309,7 +362,9 @@ async function importPurchaseComposition({
 			itens: extracted.itens,
 			abortSignal,
 		})
-	).map(applyLineDisposition);
+	)
+		.map(applyLineDisposition)
+		.map((item) => applyEntryTaxTreatments(item, entryTaxContext));
 	assertImportIsActive(abortSignal);
 	const matchedCount = itens.filter((item) => item.matchTipo === "MAPEADO" || item.matchTipo === "CODIGO").length;
 	const reviewCount = itens.length - matchedCount;
@@ -333,7 +388,7 @@ async function importPurchaseComposition({
 							total +
 							item.valorTotal +
 							(item.modificadoresCusto ?? [])
-								.filter((modifier) => modifier.chave !== "BONIFICACAO")
+								.filter((modifier) => modifier.chave !== "BONIFICACAO" && modifier.contrapartida !== "INCLUSO_NO_VALOR")
 								.reduce((modifierTotal, modifier) => modifierTotal + (modifier.efeito === "REDUCAO" ? -1 : 1) * (modifier.valorCentavos / 100), 0),
 						0,
 					),
@@ -367,12 +422,16 @@ async function importPurchaseComposition({
 		avisos.push(
 			`${bonificadas} ${bonificadas === 1 ? "linha bonificada entra" : "linhas bonificadas entram"} no estoque a custo zero, sem valor a pagar.`,
 		);
-	const impostosPendentes = extracted.itens.reduce(
+	const impostosPendentes = itens.reduce(
 		(total, item) => total + (item.modificadoresCusto ?? []).filter((modifier) => modifier.tratamento === null).length,
 		0,
 	);
 	if (impostosPendentes > 0)
-		avisos.push(`${impostosPendentes} ${impostosPendentes === 1 ? "imposto exige" : "impostos exigem"} revisão do tratamento contábil.`);
+		avisos.push(
+			`${impostosPendentes} ${impostosPendentes === 1 ? "imposto exige" : "impostos exigem"} revisão do tratamento contábil.${
+				entryTaxContext.regime ? "" : " Defina o regime de apuração em Fiscal › Entrada de compras para que isso seja automático."
+			}`,
+		);
 
 	assertImportIsActive(abortSignal);
 	const documentReference = randomUUID();

@@ -17,7 +17,21 @@ import type { TPurchaseById } from "../helpers/hydrate";
 
 type TPurchaseItemState = TPurchaseState["purchaseItems"][number];
 
-const TAX_LABELS: Record<string, string> = { IMPOSTOS_IPI: "IPI", IMPOSTOS_ICMS_ST: "ICMS-ST", IMPOSTOS_FCP_ST: "FCP-ST" };
+const TAX_LABELS: Record<string, string> = {
+	IMPOSTOS_IPI: "IPI",
+	IMPOSTOS_ICMS: "ICMS",
+	IMPOSTOS_ICMS_SN: "ICMS-SN",
+	IMPOSTOS_PIS: "PIS",
+	IMPOSTOS_COFINS: "COFINS",
+	IMPOSTOS_ICMS_ST: "ICMS-ST",
+	IMPOSTOS_FCP_ST: "FCP-ST",
+	IMPOSTOS_DIFAL: "DIFAL",
+	IMPOSTOS_FCP_DIFAL: "FCP-DIFAL",
+	IMPOSTOS_ANTECIPACAO: "Antecipação",
+	IMPOSTOS_ICMS_ST_ENTRADA: "ST de entrada",
+	IMPOSTOS_IBS: "IBS",
+	IMPOSTOS_CBS: "CBS",
+};
 const TREATMENT_LABELS: Record<string, string> = { CUSTO_ESTOQUE: "no custo", CREDITO_TRIBUTARIO: "como crédito", DESPESA_PERIODO: "como despesa" };
 const GRID = "grid grid-cols-[minmax(0,2.2fr)_60px_90px_110px_110px_110px_40px] items-center gap-2";
 

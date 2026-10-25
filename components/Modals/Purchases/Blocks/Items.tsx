@@ -510,7 +510,8 @@ function PurchaseItemCostModifiersControl({
 								}
 								className="col-span-2 h-8 rounded-md border bg-background px-2 text-xs sm:col-span-1"
 							>
-								<option value="CUSTO_ESTOQUE">Custo do estoque</option>
+								{/* Embutido no preço (INCLUSO_NO_VALOR) não pode voltar a ser custo: para isso, remova o componente. */}
+								{modifier.contrapartida === "INCLUSO_NO_VALOR" ? null : <option value="CUSTO_ESTOQUE">Custo do estoque</option>}
 								{modifier.chave === "DESCONTO" ? null : <option value="CREDITO_TRIBUTARIO">Crédito tributário</option>}
 								{modifier.chave === "DESCONTO" ? null : <option value="DESPESA_PERIODO">Despesa do período</option>}
 							</select>

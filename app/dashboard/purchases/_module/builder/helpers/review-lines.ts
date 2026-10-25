@@ -113,9 +113,12 @@ export function getLineStatus(line: TReviewLine): TReviewLineStatus {
 /** Line total as printed on the invoice. The conversion factor never changes it. */
 export function getLineTotal(line: Pick<TReviewLine, "quantidade" | "valorUnitario" | "desconto" | "modificadoresCusto">) {
 	if (line.modificadoresCusto)
+		// Embedded taxes (INCLUSO_NO_VALOR) are already inside the printed price.
 		return (
 			line.quantidade * line.valorUnitario +
-			line.modificadoresCusto.reduce((total, modifier) => total + (modifier.efeito === "REDUCAO" ? -1 : 1) * (modifier.valorCentavos / 100), 0)
+			line.modificadoresCusto
+				.filter((modifier) => modifier.contrapartida !== "INCLUSO_NO_VALOR")
+				.reduce((total, modifier) => total + (modifier.efeito === "REDUCAO" ? -1 : 1) * (modifier.valorCentavos / 100), 0)
 		);
 	return line.quantidade * line.valorUnitario - (line.desconto ?? 0);
 }
@@ -207,14 +210,18 @@ export function applyTaxTreatment({
 }) {
 	const target = lines.find((line) => line.id === lineId)?.modificadoresCusto?.[modifierIndex];
 	if (!target) return lines;
+	// "Fica no custo" para um tributo embutido significa "deixa no preço": o componente some.
+	const dropsEmbedded = tratamento === "CUSTO_ESTOQUE";
 	return lines.map((line) => {
 		if (line.id !== lineId && !applyToWholeDocument) return line;
 		return {
 			...line,
-			modificadoresCusto: (line.modificadoresCusto ?? []).map((modifier, index) => {
-				if (line.id === lineId && index === modifierIndex) return { ...modifier, tratamento };
-				if (applyToWholeDocument && modifier.chave === target.chave && modifier.tratamento === null) return { ...modifier, tratamento };
-				return modifier;
+			modificadoresCusto: (line.modificadoresCusto ?? []).flatMap((modifier, index) => {
+				const isTarget = line.id === lineId && index === modifierIndex;
+				const isSameTaxInDocument = applyToWholeDocument && modifier.chave === target.chave && modifier.tratamento === null;
+				if (!isTarget && !isSameTaxInDocument) return [modifier];
+				if (modifier.contrapartida === "INCLUSO_NO_VALOR" && dropsEmbedded) return [];
+				return [{ ...modifier, tratamento }];
 			}),
 		};
 	});

@@ -92,6 +92,11 @@ const MATCH_BADGE: Record<TImportedLine["matchTipo"], { label: string; className
 const CREATE_BADGE = { label: "Será criado", className: "border-amber-500/35 bg-amber-500/15 text-amber-700 dark:text-amber-300" };
 
 const COST_MODIFIER_LABELS: Record<string, string> = {
+	IMPOSTOS_ICMS: "ICMS (embutido)",
+	IMPOSTOS_ICMS_SN: "Crédito ICMS Simples (embutido)",
+	IMPOSTOS_PIS: "PIS (embutido)",
+	IMPOSTOS_COFINS: "COFINS (embutido)",
+	BONIFICACAO: "Bonificação",
 	DESCONTO: "Desconto",
 	FRETE: "Frete",
 	SEGURO: "Seguro",
@@ -328,8 +333,13 @@ export default function ImportCompositionWithAI({
 					? line
 					: {
 							...line,
-							modificadoresCusto: (line.modificadoresCusto ?? []).map((modifier, currentModifierIndex) =>
-								currentModifierIndex === modifierIndex ? { ...modifier, tratamento } : modifier,
+							// Tributo embutido que "fica no custo" já está no preço: o componente some.
+							modificadoresCusto: (line.modificadoresCusto ?? []).flatMap((modifier, currentModifierIndex) =>
+								currentModifierIndex !== modifierIndex
+									? [modifier]
+									: modifier.contrapartida === "INCLUSO_NO_VALOR" && tratamento === "CUSTO_ESTOQUE"
+										? []
+										: [{ ...modifier, tratamento }],
 							),
 						},
 			),
@@ -988,8 +998,10 @@ export default function ImportCompositionWithAI({
 															<option value="" disabled>
 																Revisar tratamento
 															</option>
-															<option value="CUSTO_ESTOQUE">Custo do estoque</option>
-															<option value="CREDITO_TRIBUTARIO">Crédito tributário</option>
+															<option value="CUSTO_ESTOQUE">
+																{modifier.contrapartida === "INCLUSO_NO_VALOR" ? "Fica no custo (não recupero)" : "Custo do estoque"}
+															</option>
+															<option value="CREDITO_TRIBUTARIO">{modifier.contrapartida === "INCLUSO_NO_VALOR" ? "Tomar o crédito" : "Crédito tributário"}</option>
 															<option value="DESPESA_PERIODO">Despesa do período</option>
 														</select>
 													</div>

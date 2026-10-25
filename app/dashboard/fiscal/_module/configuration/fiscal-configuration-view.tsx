@@ -24,6 +24,7 @@ import { CompanyFiscalTaxGroups } from "./components/company-fiscal-tax-groups";
 import { ExceptionalPresenceClassificationSettings } from "./components/exceptional-presence-classification-settings";
 import { FiscalEnvironmentSwitcher } from "./components/fiscal-environment-switcher";
 import { InboundDfeSettings } from "./components/inbound-dfe-settings";
+import { PurchaseEntrySettings } from "./components/purchase-entry-settings";
 
 type FiscalConfigurationViewProps = {
 	canEdit: boolean;
@@ -133,6 +134,7 @@ export function FiscalConfigurationView({ canEdit }: FiscalConfigurationViewProp
 						</>
 					) : null}
 					<InboundDfeSettings fiscalConfig={state.fiscalConfiguracao} updateFiscalConfig={updateFiscalConfig} />
+					<PurchaseEntrySettings fiscalConfig={state.fiscalConfiguracao} updateFiscalConfig={updateFiscalConfig} disabled={!canEdit} />
 					<ExceptionalPresenceClassificationSettings fiscalConfig={state.fiscalConfiguracao} updateFiscalConfig={updateFiscalConfig} disabled={!canEdit} />
 				</Section.Body>
 			</Section.Root>

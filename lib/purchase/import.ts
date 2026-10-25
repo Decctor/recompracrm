@@ -1,6 +1,12 @@
 import { gateway, generateText, Output } from "ai";
 import { z } from "zod";
-import { PurchaseCostModifierEffectEnum, PurchaseCostModifierKeyEnum, PurchaseCostTreatmentEnum, PurchaseFreightModalityEnum } from "@/schemas/enums";
+import {
+	PurchaseCostCounterpartyEnum,
+	PurchaseCostModifierEffectEnum,
+	PurchaseCostModifierKeyEnum,
+	PurchaseCostTreatmentEnum,
+	PurchaseFreightModalityEnum,
+} from "@/schemas/enums";
 
 export const IMPORT_COMPOSITION_ALLOWED_MIME_TYPES = [
 	"application/pdf",
@@ -18,6 +24,8 @@ export const ExtractedCostModifierSchema = z.object({
 	efeito: PurchaseCostModifierEffectEnum,
 	// XML identifies the tax, but not the organization's right to a tax credit.
 	tratamento: PurchaseCostTreatmentEnum.nullable(),
+	// Ausente = FORNECEDOR. INCLUSO_NO_VALOR para o que já está dentro do preço (ICMS, PIS, COFINS).
+	contrapartida: PurchaseCostCounterpartyEnum.optional().nullable(),
 	descricao: z.string().optional().nullable(),
 });
 export type TExtractedCostModifier = z.infer<typeof ExtractedCostModifierSchema>;

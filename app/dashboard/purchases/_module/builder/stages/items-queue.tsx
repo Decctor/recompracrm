@@ -36,8 +36,19 @@ const ISSUE_QUESTIONS: Record<TReviewIssue, string> = {
 
 const TAX_LABELS: Record<string, string> = {
 	IMPOSTOS_IPI: "IPI",
+	IMPOSTOS_ICMS: "ICMS",
+	IMPOSTOS_ICMS_SN: "crédito de ICMS do Simples",
+	IMPOSTOS_PIS: "PIS",
+	IMPOSTOS_COFINS: "COFINS",
 	IMPOSTOS_ICMS_ST: "ICMS-ST",
 	IMPOSTOS_FCP_ST: "FCP-ST",
+	IMPOSTOS_DIFAL: "DIFAL",
+	IMPOSTOS_FCP_DIFAL: "FCP do DIFAL",
+	IMPOSTOS_ANTECIPACAO: "antecipação de ICMS",
+	IMPOSTOS_ICMS_ST_ENTRADA: "ICMS-ST de entrada",
+	IMPOSTOS_IBS: "IBS",
+	IMPOSTOS_CBS: "CBS",
+	BONIFICACAO: "Bonificação",
 	DESCONTO: "Desconto",
 	FRETE: "Frete",
 	SEGURO: "Seguro",
@@ -49,6 +60,12 @@ const TAX_OPTIONS: { id: TPurchaseCostTreatmentEnum; label: string; description:
 	{ id: "CUSTO_ESTOQUE", label: "Custo do estoque", description: "Soma ao custo do produto. O mais comum para quem não recupera o tributo." },
 	{ id: "CREDITO_TRIBUTARIO", label: "Crédito tributário", description: "Não entra no custo; fica como crédito a compensar." },
 	{ id: "DESPESA_PERIODO", label: "Despesa do período", description: "Lançado como despesa do mês, fora do custo do produto." },
+];
+// Tributo embutido no preço: a pergunta é se ele sai do custo, não se ele soma.
+const EMBEDDED_TAX_OPTIONS: { id: TPurchaseCostTreatmentEnum; label: string; description: string }[] = [
+	{ id: "CUSTO_ESTOQUE", label: "Fica no custo", description: "Você não recupera este tributo: o preço da nota é o custo. O mais comum no Simples." },
+	{ id: "CREDITO_TRIBUTARIO", label: "Tomar o crédito", description: "Sai do custo do produto e vira crédito a compensar. O valor a pagar não muda." },
+	{ id: "DESPESA_PERIODO", label: "Despesa do período", description: "Sai do custo e vai direto ao resultado do mês." },
 ];
 
 type TUnmappedMode = "create" | "link" | "ignore";
@@ -418,13 +435,25 @@ function QueuePanel({
 			{issue === "tax" && modifier ? (
 				<div className="flex flex-col gap-2">
 					<p className="text-xs leading-relaxed text-muted-foreground">
-						A nota destaca{" "}
-						<strong className="text-foreground">
-							{TAX_LABELS[modifier.chave] ?? modifier.chave} de {formatToMoney(modifier.valorCentavos / 100)}
-						</strong>{" "}
-						nesta linha. O tratamento define se o valor muda o custo médio do produto.
+						{modifier.contrapartida === "INCLUSO_NO_VALOR" ? (
+							<>
+								A nota traz{" "}
+								<strong className="text-foreground">
+									{TAX_LABELS[modifier.chave] ?? modifier.chave} de {formatToMoney(modifier.valorCentavos / 100)}
+								</strong>{" "}
+								embutido no preço desta linha. Ele já está no valor a pagar; a pergunta é se sai do custo do produto.
+							</>
+						) : (
+							<>
+								A nota destaca{" "}
+								<strong className="text-foreground">
+									{TAX_LABELS[modifier.chave] ?? modifier.chave} de {formatToMoney(modifier.valorCentavos / 100)}
+								</strong>{" "}
+								nesta linha. O tratamento define se o valor muda o custo médio do produto.
+							</>
+						)}
 					</p>
-					{TAX_OPTIONS.map((option) => (
+					{(modifier.contrapartida === "INCLUSO_NO_VALOR" ? EMBEDDED_TAX_OPTIONS : TAX_OPTIONS).map((option) => (
 						<RadioCard
 							key={option.id}
 							selected={taxDraft === option.id}

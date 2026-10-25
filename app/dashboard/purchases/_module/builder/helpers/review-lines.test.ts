@@ -6,6 +6,7 @@ import {
 	buildSupplierProductMappings,
 	getLineIssue,
 	getLineStatus,
+	getLineTotal,
 	resolveNewProducts,
 	type TReviewLine,
 } from "./review-lines";
@@ -109,4 +110,25 @@ test("a tax treatment can be applied to the same tax across the whole invoice", 
 	const all = applyTaxTreatment({ lines, lineId: "a", modifierIndex: 0, tratamento: "CUSTO_ESTOQUE", applyToWholeDocument: true });
 	assert.equal(all[1].modificadoresCusto?.[0].tratamento, "CUSTO_ESTOQUE");
 	assert.equal(all[1].modificadoresCusto?.[1].tratamento, null);
+});
+
+test("keeping an embedded tax in cost drops it; crediting it keeps it, and the line total ignores it", () => {
+	const lines = [
+		line({
+			id: "a",
+			modificadoresCusto: [
+				{ chave: "IMPOSTOS_ICMS", valorCentavos: 480, efeito: "ACRESCIMO", tratamento: null, contrapartida: "INCLUSO_NO_VALOR" },
+				{ chave: "IMPOSTOS_IPI", valorCentavos: 200, efeito: "ACRESCIMO", tratamento: null },
+			],
+		}),
+	];
+	assert.equal(getLineTotal(lines[0]), 42);
+	const kept = applyTaxTreatment({ lines, lineId: "a", modifierIndex: 0, tratamento: "CUSTO_ESTOQUE", applyToWholeDocument: false });
+	assert.deepEqual(
+		kept[0].modificadoresCusto?.map((m) => m.chave),
+		["IMPOSTOS_IPI"],
+	);
+	const credited = applyTaxTreatment({ lines, lineId: "a", modifierIndex: 0, tratamento: "CREDITO_TRIBUTARIO", applyToWholeDocument: false });
+	assert.equal(credited[0].modificadoresCusto?.[0].tratamento, "CREDITO_TRIBUTARIO");
+	assert.equal(getLineTotal(credited[0]), 42);
 });

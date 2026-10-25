@@ -14,6 +14,10 @@ import {
 	FiscalProductOriginEnum,
 	FiscalTaxRuleScopeEnum,
 	PaymentMethodEnum,
+	AcquisitionNatureEnum,
+	PurchaseCostModifierKeyEnum,
+	PurchaseCostTreatmentEnum,
+	PurchaseEntryTaxRegimeEnum,
 } from "./enums";
 
 // A venda escolhe apenas modelos de mercadorias; NFS-e não faz parte do POS.
@@ -290,6 +294,16 @@ export const OrganizationFiscalConfigSchema = z.object({
 				.default({ pagamentoExclusivo: [] }),
 		})
 		.default({ atrasoMinutos: 0, excecoes: { pagamentoExclusivo: [] } }),
+	// Regras de entrada de compras (ADR-0002, decisão 7): regime de apuração, se a empresa é
+	// contribuinte de IPI, e exceções por destinação × tributo sobre o preset em
+	// lib/fiscal/entry/presets.ts. Sem `regimeApuracao`, os tributos ficam pendentes de revisão.
+	entrada: z
+		.object({
+			regimeApuracao: PurchaseEntryTaxRegimeEnum.optional().nullable(),
+			contribuinteIpi: z.boolean({ invalid_type_error: "Tipo não valido para contribuinte de IPI." }).default(false),
+			tratamentos: z.record(AcquisitionNatureEnum, z.record(PurchaseCostModifierKeyEnum, PurchaseCostTreatmentEnum).default({})).default({}),
+		})
+		.default({ regimeApuracao: null, contribuinteIpi: false, tratamentos: {} }),
 	emissaoManual: z
 		.object({
 			classificacaoPresencialExcepcional: z

@@ -57,8 +57,12 @@ test("parses namespaced NF-e metadata, items and exact cost modifiers", () => {
 			{ chave: "IMPOSTOS_IPI", valorCentavos: 150, tratamento: null },
 			{ chave: "IMPOSTOS_ICMS_ST", valorCentavos: 300, tratamento: null },
 			{ chave: "IMPOSTOS_FCP_ST", valorCentavos: 40, tratamento: null },
+			{ chave: "IMPOSTOS_ICMS", valorCentavos: 240, tratamento: null },
+			{ chave: "IMPOSTOS_PIS", valorCentavos: 33, tratamento: null },
+			{ chave: "IMPOSTOS_COFINS", valorCentavos: 152, tratamento: null },
 		],
 	);
+	assert.ok(result.itens[0].modificadoresCusto?.filter((m) => m.contrapartida === "INCLUSO_NO_VALOR").every((m) => m.chave.startsWith("IMPOSTOS_")));
 	assert.equal(result.totaisOriginais?.documentoCentavos, 5665);
 });
 
@@ -156,4 +160,15 @@ test("readNfeItemFacts reads the declared taxes of one det without copying them 
 		{ numeroLote: "L1", quantidadeLote: 1, dataFabricacao: "2026-06-01", dataValidade: "2027-01-15" },
 	]);
 	assert.throws(() => readNfeItemFacts({ xml: NFE_XML, numeroItem: 9 }), /não contém o item 9/);
+});
+
+test("a Simples issuer (CRT 1) yields only the presumed ICMS credit as an embedded tax", () => {
+	const xml = NFE_XML.replace("<CRT>3</CRT>", "<CRT>1</CRT>").replace(
+		"<ICMS00><orig>0</orig><CST>00</CST><vICMS>5.40</vICMS></ICMS00>",
+		"<ICMSSN101><orig>0</orig><CSOSN>101</CSOSN><pCredSN>1.25</pCredSN><vCredICMSSN>0.38</vCredICMSSN></ICMSSN101>",
+	);
+	const [first, second] = extractCompositionFromNfeXml(xml).itens;
+	const embedded = (item: typeof first) => (item.modificadoresCusto ?? []).filter((m) => m.contrapartida === "INCLUSO_NO_VALOR").map((m) => m.chave);
+	assert.deepEqual(embedded(first), []);
+	assert.deepEqual(embedded(second), ["IMPOSTOS_ICMS_SN"]);
 });

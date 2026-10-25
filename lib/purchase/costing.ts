@@ -1,3 +1,4 @@
+import type { TPurchaseCostCounterpartyEnum } from "@/schemas/enums";
 import {
 	EMPTY_PURCHASE_COST_MODIFIERS,
 	PurchaseCostModifierSchema,
@@ -21,13 +22,21 @@ export type TPurchaseCostingResult = {
 	modificadoresCusto: TPurchaseCostModifiersSnapshot;
 	descontosTotal: number;
 	acrescimosTotal: number;
+	// Dívida com o fornecedor. `valorTotalLiquido` é o mesmo número, mantido para os leitores atuais.
+	valorTotalFornecedor: number;
 	valorTotalLiquido: number;
 	valorUnitarioLiquido: number;
 	valorTotalCusto: number;
 	valorUnitarioCusto: number;
 	valorTotalCreditoTributario: number;
 	valorTotalDespesaPeriodo: number;
+	// Dívidas com outros credores (fisco, transportadora), por contrapartida.
+	dividasPorContrapartida: Partial<Record<Exclude<TPurchaseCostCounterpartyEnum, "FORNECEDOR" | "INCLUSO_NO_VALOR">, number>>;
 };
+
+export function getModifierCounterparty(modifier: Pick<TPurchaseCostModifier, "contrapartida">): TPurchaseCostCounterpartyEnum {
+	return modifier.contrapartida ?? "FORNECEDOR";
+}
 
 export function moneyToCents(value: number): number {
 	if (!Number.isFinite(value)) throw new Error("Valor monetário inválido.");
@@ -98,19 +107,29 @@ export function calculatePurchaseItemCost(input: TPurchaseCostingItemInput): TPu
 	const grossCents = moneyToCents(input.valorTotalBruto);
 	let additionsCents = 0;
 	let reductionsCents = 0;
-	let financialModifiersCents = 0;
+	let supplierModifiersCents = 0;
 	let inventoryModifiersCents = 0;
+	let includedCents = 0;
 	let taxCreditCents = 0;
 	let periodExpenseCents = 0;
+	const thirdPartyCents: Partial<Record<"FISCO" | "TRANSPORTADORA", number>> = {};
 
 	for (const modifier of snapshot.modificadores) {
+		const counterparty = getModifierCounterparty(modifier);
 		if (modifier.efeito === "REDUCAO" && modifier.tratamento !== "CUSTO_ESTOQUE")
 			throw new Error("Reduções de crédito tributário ou despesa do período ainda não são suportadas.");
+		if (counterparty === "INCLUSO_NO_VALOR" && (modifier.efeito !== "ACRESCIMO" || modifier.tratamento === "CUSTO_ESTOQUE"))
+			throw new Error("Um valor incluso no preço só pode ser reclassificado como crédito tributário ou despesa.");
 		const signedCents = getSignedCents(modifier);
-		financialModifiersCents += signedCents;
 		if (modifier.efeito === "REDUCAO") reductionsCents += modifier.valorCentavos;
 		else additionsCents += modifier.valorCentavos;
 
+		// Quem paga: fornecedor (dívida da nota), terceiro (dívida própria) ou ninguém (já estava no preço).
+		if (counterparty === "FORNECEDOR") supplierModifiersCents += signedCents;
+		else if (counterparty === "INCLUSO_NO_VALOR") includedCents += modifier.valorCentavos;
+		else thirdPartyCents[counterparty] = (thirdPartyCents[counterparty] ?? 0) + signedCents;
+
+		// Para onde vai: custo, crédito ou despesa. O incluso sai do custo ao entrar no seu destino.
 		switch (modifier.tratamento) {
 			case "CUSTO_ESTOQUE":
 				inventoryModifiersCents += signedCents;
@@ -124,21 +143,30 @@ export function calculatePurchaseItemCost(input: TPurchaseCostingItemInput): TPu
 		}
 	}
 
-	const financialCents = grossCents + financialModifiersCents;
-	const inventoryCents = grossCents + inventoryModifiersCents;
-	if (financialCents < 0) throw new Error("Os modificadores não podem tornar o valor financeiro do item negativo.");
+	const supplierCents = grossCents + supplierModifiersCents;
+	const inventoryCents = grossCents + inventoryModifiersCents - includedCents;
+	if (includedCents > grossCents + supplierModifiersCents) throw new Error("Os valores inclusos no preço não podem passar do valor líquido do item.");
+	if (supplierCents < 0) throw new Error("Os modificadores não podem tornar o valor financeiro do item negativo.");
 	if (inventoryCents < 0) throw new Error("Os modificadores não podem tornar o custo de estoque do item negativo.");
+	for (const cents of Object.values(thirdPartyCents)) if (cents < 0) throw new Error("A dívida com um credor terceiro não pode ser negativa.");
+
+	// Invariante do ADR-0002: custo + crédito + despesa = fornecedor + terceiros, em centavos.
+	const thirdPartyTotal = Object.values(thirdPartyCents).reduce((total, cents) => total + cents, 0);
+	if (inventoryCents + taxCreditCents + periodExpenseCents !== supplierCents + thirdPartyTotal)
+		throw new Error("A composição do item não fecha: custo, crédito e despesa devem somar as dívidas com fornecedor e terceiros.");
 
 	return {
 		modificadoresCusto: snapshot,
 		descontosTotal: centsToMoney(reductionsCents),
 		acrescimosTotal: centsToMoney(additionsCents),
-		valorTotalLiquido: centsToMoney(financialCents),
-		valorUnitarioLiquido: roundUnitCost(centsToMoney(financialCents) / input.quantidade),
+		valorTotalFornecedor: centsToMoney(supplierCents),
+		valorTotalLiquido: centsToMoney(supplierCents),
+		valorUnitarioLiquido: roundUnitCost(centsToMoney(supplierCents) / input.quantidade),
 		valorTotalCusto: centsToMoney(inventoryCents),
 		valorUnitarioCusto: roundUnitCost(centsToMoney(inventoryCents) / input.quantidade),
 		valorTotalCreditoTributario: centsToMoney(taxCreditCents),
 		valorTotalDespesaPeriodo: centsToMoney(periodExpenseCents),
+		dividasPorContrapartida: Object.fromEntries(Object.entries(thirdPartyCents).map(([counterparty, cents]) => [counterparty, centsToMoney(cents)])),
 	};
 }
 

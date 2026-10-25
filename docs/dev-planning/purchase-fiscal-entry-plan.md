@@ -540,7 +540,7 @@ Cada fase é entregável sozinha e não muda nada para quem não usa a novidade.
 | 1 ✅ | Documento como primitivo: uploads de XML viram linha de documento, propósito `DOCUMENTO_FISCAL_ENTRADA`, `arquivoId`, ponteiro do item, validações do import, `rastro` → validade, backfill | `fiscal_inbound_documents`, `purchase_items` (ponteiro), JSONB              |
 | 2 ✅ | Nota recebida → compra, `compraId`, cancelamento, confirmação opt-in                                                                                                                        | —                                                                           |
 | 3 ✅ | Natureza e destinação, uso e consumo em despesa, bonificação como componente, contas por destinação                                                                                         | `products`, `purchase_items`, `supplier_product_mappings`                   |
-| 4    | `contrapartida = INCLUSO_NO_VALOR`, créditos de ICMS/ICMS SN/PIS/COFINS, presets, overrides                                                                                                 | JSONB, `fiscalConfiguracao`                                                 |
+| 4 ✅ | `contrapartida = INCLUSO_NO_VALOR`, créditos de ICMS/ICMS SN/PIS/COFINS, presets, overrides                                                                                                 | JSONB, `fiscalConfiguracao`                                                 |
 | 5    | Contrapartida `FISCO`, DIFAL/antecipação/ST de entrada, lançamentos por credor com contraparte, guias a pagar, `DOCUMENTO_FINANCEIRO`, backfill de `clienteId`/`fornecedorId`               | `accounting_entries`, `financial_recurring_rules`, `financial_transactions` |
 | 6    | CT-e                                                                                                                                                                                        | —                                                                           |
 | 7    | Patrimônio                                                                                                                                                                                  | `fixed_assets`                                                              |
@@ -559,6 +559,17 @@ e no modal, com aviso de divergência; contabilidade abre o custo por destinaç�
 Consumo"). Uso e consumo debita uma única conta configurada — a entrada no estoque continua decidida
 por `rastreamentoEstoqueAtivo`, sem tipo de movimentação novo. `ATIVO_IMOBILIZADO` existe no enum,
 mas o recebimento recusa até a Fase 7.
+
+Fase 4 entregue, sem migration (tudo mora no JSONB do modificador e em `fiscalConfiguracao.entrada`):
+`contrapartida` no componente (default `FORNECEDOR`), `memoriaCalculo`, origem `CALCULO` e as chaves
+`IMPOSTOS_*` novas; `calculatePurchaseItemCost` aplica a fórmula do ADR-0002 completa (dívida com o
+fornecedor, dívidas por credor terceiro, `INCLUSO_NO_VALOR` saindo do custo) e recusa composição que
+não fecha. O parser emite ICMS, PIS e COFINS embutidos (ou só o crédito presumido quando o emitente é
+do Simples); `lib/fiscal/entry/presets.ts` resolve o tratamento por regime × destinação × tributo com
+overrides da organização; o import aplica e descarta o embutido que "fica no custo". Sem
+`regimeApuracao` configurado (CRT 3 é ambíguo), os tributos continuam pendentes para a pessoa, como
+antes. Tela "Entrada de compras" em Fiscal › Configurações. A contrapartida `FISCO` já é calculada pelo
+custeio, mas nada a produz até a Fase 5.
 
 Fase 2 entregue: "Lançar compra" na aba de notas recebidas (`?inboundId=` no builder, mesmo pipeline
 de `/api/purchases/import-composition`), filtro a lançar/lançadas com link para a compra, bloqueio do
