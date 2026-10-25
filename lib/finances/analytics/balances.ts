@@ -5,6 +5,7 @@ import { computeCashBalancesAt } from "@/lib/finances/analytics/cash";
 import { formatAsNumber } from "@/lib/formatting";
 import { db } from "@/services/drizzle";
 import { financialAccounts, financialTransactions } from "@/services/drizzle/schema";
+import { localDayKey } from "@/lib/operation-timezone";
 
 /**
  * Saldos atuais das contas financeiras ativas, com a posição consolidada separando caixa e
@@ -66,7 +67,15 @@ export async function getOrganizationAccountBalances({ organizationId }: { organ
  * do saldo atual. Transferências CONTAM, como no saldo: só a que sai para um passivo (pagamento de
  * fatura) muda o consolidado.
  */
-export async function getOrganizationCashBalancesAt({ organizationId, totalCaixa, dates }: { organizationId: string; totalCaixa: number; dates: Date[] }) {
+export async function getOrganizationCashBalancesAt({
+	organizationId,
+	totalCaixa,
+	dates,
+}: {
+	organizationId: string;
+	totalCaixa: number;
+	dates: Date[];
+}) {
 	if (dates.length === 0) return [];
 	const accounts = (
 		await db.query.financialAccounts.findMany({
@@ -79,7 +88,7 @@ export async function getOrganizationCashBalancesAt({ organizationId, totalCaixa
 	const earliest = dayjs(Math.min(...dates.map((date) => date.getTime()))).startOf("day");
 	const dailyRows = await db
 		.select({
-			dia: sql<string>`to_char(date_trunc('day', ${financialTransactions.dataEfetivacao}), 'YYYY-MM-DD')`,
+			dia: localDayKey(financialTransactions.dataEfetivacao),
 			liquido: sql<number>`COALESCE(SUM(CASE WHEN ${financialTransactions.tipo} = 'ENTRADA' THEN ${financialTransactions.valor} ELSE -${financialTransactions.valor} END), 0)`,
 		})
 		.from(financialTransactions)
@@ -97,7 +106,7 @@ export async function getOrganizationCashBalancesAt({ organizationId, totalCaixa
 				gte(financialTransactions.dataEfetivacao, earliest.toDate()),
 			),
 		)
-		.groupBy(sql`date_trunc('day', ${financialTransactions.dataEfetivacao})`);
+		.groupBy(localDayKey(financialTransactions.dataEfetivacao));
 
 	return computeCashBalancesAt({
 		totalCaixa,

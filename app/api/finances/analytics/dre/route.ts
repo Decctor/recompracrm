@@ -11,6 +11,7 @@ import { formatAsNumber } from "@/lib/formatting";
 import { canViewFinances } from "@/lib/permissions/finances";
 import { db } from "@/services/drizzle";
 import { accountingEntries, accountingEntryLines } from "@/services/drizzle/schema";
+import { inOperationTimezone } from "@/lib/operation-timezone";
 
 const GetFinancesDreInputSchema = z.object({
 	periodAfter: z
@@ -63,7 +64,7 @@ async function getFinancesDre({ input, session }: { input: TGetFinancesDreInput;
 	const [monthlyRows, currentRows, previousRows] = await Promise.all([
 		db
 			.select({
-				month: sql<string>`to_char(date_trunc('month', ${accountingEntries.dataCompetencia}), 'YYYY-MM')`,
+				month: sql<string>`to_char(date_trunc('month', ${inOperationTimezone(accountingEntries.dataCompetencia)}), 'YYYY-MM')`,
 				contaId: accountingEntryLines.contaContabilId,
 				natureza: accountingEntryLines.natureza,
 				total: sum(accountingEntryLines.valor),
@@ -78,7 +79,7 @@ async function getFinancesDre({ input, session }: { input: TGetFinancesDreInput;
 				),
 			)
 			.groupBy(
-				sql`date_trunc('month', ${accountingEntries.dataCompetencia})`,
+				sql`date_trunc('month', ${inOperationTimezone(accountingEntries.dataCompetencia)})`,
 				accountingEntryLines.contaContabilId,
 				accountingEntryLines.natureza,
 			),

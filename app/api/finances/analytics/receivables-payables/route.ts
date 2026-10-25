@@ -1,4 +1,6 @@
 import dayjs from "dayjs";
+import timezone from "dayjs/plugin/timezone";
+import utc from "dayjs/plugin/utc";
 import { and, count, eq, gt, gte, isNotNull, isNull, lt, lte, ne, or, sql, sum } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { NextRequest, NextResponse } from "next/server";
@@ -14,6 +16,10 @@ import { formatAsNumber } from "@/lib/formatting";
 import { canViewFinances } from "@/lib/permissions/finances";
 import { db } from "@/services/drizzle";
 import { financialAccounts, financialTransactions } from "@/services/drizzle/schema";
+import { OPERATION_TIMEZONE } from "@/lib/operation-timezone";
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 /** Semanas (seg–dom) exibidas no calendário de vencimentos. */
 const CALENDAR_DAYS = 42;
@@ -37,7 +43,7 @@ async function getFinancesReceivablesPayables({ input, session }: { input: TGetF
 	if (!organizationId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
 
 	const period = { after: input.periodAfter, before: input.periodBefore };
-	const today = dayjs().startOf("day");
+	const today = dayjs().tz(OPERATION_TIMEZONE).startOf("day");
 	const delayWindowStart = today.subtract(DELAY_WINDOW_DAYS, "day").toDate();
 	// Calendário: 6 semanas (seg–dom) a partir da segunda-feira da semana atual.
 	const calendarStart = today.subtract((today.day() + 6) % 7, "day");
@@ -52,129 +58,137 @@ async function getFinancesReceivablesPayables({ input, session }: { input: TGetF
 
 	const [balances, pendingRows, delayRows, frictionRows, feesByMethodRows, recurringCommitments, inflowByMethodRows, calendarRows, snapshotRows] =
 		await Promise.all([
-		getOrganizationAccountBalances({ organizationId }),
-		db
-			.select({
-				tipo: financialTransactions.tipo,
-				valor: financialTransactions.valor,
-				dataPrevisao: financialTransactions.dataPrevisao,
-			})
-			.from(financialTransactions)
-			.where(and(eq(financialTransactions.organizacaoId, organizationId), isNull(financialTransactions.dataEfetivacao))),
-		db
-			.select({
-				tipo: financialTransactions.tipo,
-				avgDelayDays: sql<number>`AVG(EXTRACT(EPOCH FROM (${financialTransactions.dataEfetivacao} - ${financialTransactions.dataPrevisao})) / 86400)`,
-				transactionsCount: sql<number>`COUNT(*)`,
-			})
-			.from(financialTransactions)
-			.where(
-				and(
-					eq(financialTransactions.organizacaoId, organizationId),
-					isNotNull(financialTransactions.dataEfetivacao),
-					isNotNull(financialTransactions.dataPrevisao),
-					// Transferências têm atraso zero por construção e diluiriam a média
-					ne(financialTransactions.metodo, FINANCIAL_TRANSFER_METHOD),
-					gte(financialTransactions.dataEfetivacao, delayWindowStart),
+			getOrganizationAccountBalances({ organizationId }),
+			db
+				.select({
+					tipo: financialTransactions.tipo,
+					valor: financialTransactions.valor,
+					dataPrevisao: financialTransactions.dataPrevisao,
+				})
+				.from(financialTransactions)
+				.where(and(eq(financialTransactions.organizacaoId, organizationId), isNull(financialTransactions.dataEfetivacao))),
+			db
+				.select({
+					tipo: financialTransactions.tipo,
+					avgDelayDays: sql<number>`AVG(EXTRACT(EPOCH FROM (${financialTransactions.dataEfetivacao} - ${financialTransactions.dataPrevisao})) / 86400)`,
+					transactionsCount: sql<number>`COUNT(*)`,
+				})
+				.from(financialTransactions)
+				.where(
+					and(
+						eq(financialTransactions.organizacaoId, organizationId),
+						isNotNull(financialTransactions.dataEfetivacao),
+						isNotNull(financialTransactions.dataPrevisao),
+						// Transferências têm atraso zero por construção e diluiriam a média
+						ne(financialTransactions.metodo, FINANCIAL_TRANSFER_METHOD),
+						gte(financialTransactions.dataEfetivacao, delayWindowStart),
+					),
+				)
+				.groupBy(financialTransactions.tipo),
+			db
+				.select({
+					tipo: financialTransactions.tipo,
+					juros: sum(financialTransactions.valorJuros),
+					multas: sum(financialTransactions.valorMulta),
+					descontos: sum(financialTransactions.valorDesconto),
+					taxas: sum(financialTransactions.valorTaxas),
+				})
+				.from(financialTransactions)
+				.where(
+					and(
+						eq(financialTransactions.organizacaoId, organizationId),
+						isNotNull(financialTransactions.dataEfetivacao),
+						gte(financialTransactions.dataEfetivacao, period.after),
+						lte(financialTransactions.dataEfetivacao, period.before),
+					),
+				)
+				.groupBy(financialTransactions.tipo),
+			db
+				.select({
+					metodo: financialTransactions.metodo,
+					taxas: sum(financialTransactions.valorTaxas),
+				})
+				.from(financialTransactions)
+				.where(
+					and(
+						eq(financialTransactions.organizacaoId, organizationId),
+						isNotNull(financialTransactions.dataEfetivacao),
+						gte(financialTransactions.dataEfetivacao, period.after),
+						lte(financialTransactions.dataEfetivacao, period.before),
+						gt(financialTransactions.valorTaxas, 0),
+					),
+				)
+				.groupBy(financialTransactions.metodo),
+			getRecurringMonthlyCommitmentsForOrganization(organizationId),
+			db
+				.select({
+					metodo: financialTransactions.metodo,
+					volume: sum(financialTransactions.valor),
+					taxas: sum(financialTransactions.valorTaxas),
+					quantidade: count(),
+				})
+				.from(financialTransactions)
+				.where(
+					and(
+						eq(financialTransactions.organizacaoId, organizationId),
+						eq(financialTransactions.tipo, "ENTRADA"),
+						ne(financialTransactions.metodo, FINANCIAL_TRANSFER_METHOD),
+						isNotNull(financialTransactions.dataEfetivacao),
+						gte(financialTransactions.dataEfetivacao, period.after),
+						lte(financialTransactions.dataEfetivacao, period.before),
+					),
+				)
+				.groupBy(financialTransactions.metodo),
+			db
+				.select({
+					id: financialTransactions.id,
+					titulo: financialTransactions.titulo,
+					tipo: financialTransactions.tipo,
+					valor: financialTransactions.valor,
+					dataPrevisao: financialTransactions.dataPrevisao,
+					contaFinanceira: financialAccounts.nome,
+				})
+				.from(financialTransactions)
+				.leftJoin(financialAccounts, eq(financialTransactions.contaFinanceiraId, financialAccounts.id))
+				.where(
+					and(
+						eq(financialTransactions.organizacaoId, organizationId),
+						isNull(financialTransactions.dataEfetivacao),
+						gte(financialTransactions.dataPrevisao, calendarStart.toDate()),
+						lte(financialTransactions.dataPrevisao, calendarEnd.toDate()),
+					),
+				)
+				.orderBy(financialTransactions.dataPrevisao),
+			// Pendente em D = já lançada até D e não efetivada até D.
+			db
+				.select(
+					Object.fromEntries(
+						snapshotDates.flatMap((date, index) => {
+							// ISO, não Date: o driver postgres-js do drizzle não serializa Date em `sql` cru.
+							const at = date.toISOString();
+							const pendingAt = sql`${financialTransactions.dataInsercao} <= ${at} AND (${financialTransactions.dataEfetivacao} IS NULL OR ${financialTransactions.dataEfetivacao} > ${at})`;
+							return [
+								[
+									`receber${index}`,
+									sql<number>`COALESCE(SUM(CASE WHEN ${pendingAt} AND ${financialTransactions.tipo} = 'ENTRADA' THEN ${financialTransactions.valor} ELSE 0 END), 0)`,
+								],
+								[
+									`pagar${index}`,
+									sql<number>`COALESCE(SUM(CASE WHEN ${pendingAt} AND ${financialTransactions.tipo} = 'SAIDA' THEN ${financialTransactions.valor} ELSE 0 END), 0)`,
+								],
+							];
+						}),
+					) as Record<string, ReturnType<typeof sql<number>>>,
+				)
+				.from(financialTransactions)
+				.where(
+					and(
+						eq(financialTransactions.organizacaoId, organizationId),
+						lt(financialTransactions.dataInsercao, today.toDate()),
+						or(isNull(financialTransactions.dataEfetivacao), gt(financialTransactions.dataEfetivacao, earliestSnapshot)),
+					),
 				),
-			)
-			.groupBy(financialTransactions.tipo),
-		db
-			.select({
-				tipo: financialTransactions.tipo,
-				juros: sum(financialTransactions.valorJuros),
-				multas: sum(financialTransactions.valorMulta),
-				descontos: sum(financialTransactions.valorDesconto),
-				taxas: sum(financialTransactions.valorTaxas),
-			})
-			.from(financialTransactions)
-			.where(
-				and(
-					eq(financialTransactions.organizacaoId, organizationId),
-					isNotNull(financialTransactions.dataEfetivacao),
-					gte(financialTransactions.dataEfetivacao, period.after),
-					lte(financialTransactions.dataEfetivacao, period.before),
-				),
-			)
-			.groupBy(financialTransactions.tipo),
-		db
-			.select({
-				metodo: financialTransactions.metodo,
-				taxas: sum(financialTransactions.valorTaxas),
-			})
-			.from(financialTransactions)
-			.where(
-				and(
-					eq(financialTransactions.organizacaoId, organizationId),
-					isNotNull(financialTransactions.dataEfetivacao),
-					gte(financialTransactions.dataEfetivacao, period.after),
-					lte(financialTransactions.dataEfetivacao, period.before),
-					gt(financialTransactions.valorTaxas, 0),
-				),
-			)
-			.groupBy(financialTransactions.metodo),
-		getRecurringMonthlyCommitmentsForOrganization(organizationId),
-		db
-			.select({
-				metodo: financialTransactions.metodo,
-				volume: sum(financialTransactions.valor),
-				taxas: sum(financialTransactions.valorTaxas),
-				quantidade: count(),
-			})
-			.from(financialTransactions)
-			.where(
-				and(
-					eq(financialTransactions.organizacaoId, organizationId),
-					eq(financialTransactions.tipo, "ENTRADA"),
-					ne(financialTransactions.metodo, FINANCIAL_TRANSFER_METHOD),
-					isNotNull(financialTransactions.dataEfetivacao),
-					gte(financialTransactions.dataEfetivacao, period.after),
-					lte(financialTransactions.dataEfetivacao, period.before),
-				),
-			)
-			.groupBy(financialTransactions.metodo),
-		db
-			.select({
-				id: financialTransactions.id,
-				titulo: financialTransactions.titulo,
-				tipo: financialTransactions.tipo,
-				valor: financialTransactions.valor,
-				dataPrevisao: financialTransactions.dataPrevisao,
-				contaFinanceira: financialAccounts.nome,
-			})
-			.from(financialTransactions)
-			.leftJoin(financialAccounts, eq(financialTransactions.contaFinanceiraId, financialAccounts.id))
-			.where(
-				and(
-					eq(financialTransactions.organizacaoId, organizationId),
-					isNull(financialTransactions.dataEfetivacao),
-					gte(financialTransactions.dataPrevisao, calendarStart.toDate()),
-					lte(financialTransactions.dataPrevisao, calendarEnd.toDate()),
-				),
-			)
-			.orderBy(financialTransactions.dataPrevisao),
-		// Pendente em D = já lançada até D e não efetivada até D.
-		db
-			.select(
-				Object.fromEntries(
-					snapshotDates.flatMap((date, index) => {
-						const pendingAt = sql`${financialTransactions.dataInsercao} <= ${date} AND (${financialTransactions.dataEfetivacao} IS NULL OR ${financialTransactions.dataEfetivacao} > ${date})`;
-						return [
-							[`receber${index}`, sql<number>`COALESCE(SUM(CASE WHEN ${pendingAt} AND ${financialTransactions.tipo} = 'ENTRADA' THEN ${financialTransactions.valor} ELSE 0 END), 0)`],
-							[`pagar${index}`, sql<number>`COALESCE(SUM(CASE WHEN ${pendingAt} AND ${financialTransactions.tipo} = 'SAIDA' THEN ${financialTransactions.valor} ELSE 0 END), 0)`],
-						];
-					}),
-				) as Record<string, ReturnType<typeof sql<number>>>,
-			)
-			.from(financialTransactions)
-			.where(
-				and(
-					eq(financialTransactions.organizacaoId, organizationId),
-					lt(financialTransactions.dataInsercao, today.toDate()),
-					or(isNull(financialTransactions.dataEfetivacao), gt(financialTransactions.dataEfetivacao, earliestSnapshot)),
-				),
-			),
-	]);
+		]);
 
 	const aging = bucketPendingByDueDate(
 		pendingRows.map((row) => ({ tipo: row.tipo, valor: formatAsNumber(row.valor), dataPrevisao: row.dataPrevisao })),
@@ -211,7 +225,12 @@ async function getFinancesReceivablesPayables({ input, session }: { input: TGetF
 	const currentSnapshot = { data: today.format("YYYY-MM-DD"), aReceber: aging.totalAReceber, aPagar: aging.totalAPagar, capitalGiro };
 
 	const meiosPagamento = inflowByMethodRows
-		.map((row) => ({ metodo: row.metodo, volume: formatAsNumber(row.volume), taxas: formatAsNumber(row.taxas), quantidade: formatAsNumber(row.quantidade) }))
+		.map((row) => ({
+			metodo: row.metodo,
+			volume: formatAsNumber(row.volume),
+			taxas: formatAsNumber(row.taxas),
+			quantidade: formatAsNumber(row.quantidade),
+		}))
 		.sort((a, b) => b.volume - a.volume);
 
 	return {
