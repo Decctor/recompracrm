@@ -111,6 +111,11 @@ async function storeInboundXmlIfAvailable({
 
 // Unico write-path de notas recebidas: poll (cron) e webhook convergem aqui.
 // Upsert por (organizacao, chaveAcesso); promove a completo baixando o XML quando disponivel.
+/** Posições 21–22 da chave de acesso são o modelo: 55 = NF-e, 57 = CT-e. */
+export function getInboundDocumentModelFromAccessKey(chaveAcesso: string): TFiscalInboundDocumentModelEnum {
+	return chaveAcesso.replace(/\D/g, "").slice(20, 22) === "57" ? "CTE" : "NFE";
+}
+
 export async function applyInboundSnapshot({
 	organizationId,
 	snapshot,
@@ -131,6 +136,7 @@ export async function applyInboundSnapshot({
 
 	const provedor = organization.fiscalProvedor === "SPEDY" ? ("SPEDY" as const) : ("MANUAL" as const);
 	const emitenteCnpj = snapshot.emitenteCpfCnpj ? snapshot.emitenteCpfCnpj.replace(/\D/g, "") : null;
+	const modelo = getInboundDocumentModelFromAccessKey(snapshot.chaveAcesso);
 
 	if (!existing) {
 		const fornecedorId = await resolveOrCreateSupplier(organizationId, snapshot.emitenteCpfCnpj, snapshot.emitenteNome);
@@ -141,6 +147,7 @@ export async function applyInboundSnapshot({
 				organizacaoId: organizationId,
 				fornecedorId,
 				chaveAcesso: snapshot.chaveAcesso,
+				modelo,
 				provedor,
 				provedorDocumentoId: snapshot.provedorDocumentoId ?? null,
 				completo: snapshot.completo,

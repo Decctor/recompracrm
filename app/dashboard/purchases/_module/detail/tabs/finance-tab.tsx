@@ -121,12 +121,13 @@ export default function FinanceTab({ editor, editable, isReceived, itemsTotal, t
 						<Section.Icon>
 							<Landmark />
 						</Section.Icon>
-						<Section.Title>Obrigações com o fisco</Section.Title>
+						<Section.Title>Obrigações com terceiros</Section.Title>
 						<Section.Count>{taxObligations.length}</Section.Count>
 					</Section.Header>
 					<Section.Body>
 						<p className="-mt-3 text-xs text-muted-foreground">
-							DIFAL ou antecipação de ICMS desta compra: lançamento próprio, fora do valor do fornecedor. A guia é reprogramada e paga no Financeiro.
+							DIFAL ou antecipação de ICMS (fisco) e frete de CT-e (transportadora) desta compra: lançamentos próprios, fora do valor do fornecedor.
+							Vencimento e pagamento ficam no Financeiro.
 						</p>
 						{taxObligations.map((entry) => (
 							<div key={entry.id} className="flex flex-col gap-1.5 rounded-xl border border-border px-3.5 py-3">

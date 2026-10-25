@@ -9,12 +9,13 @@ import GeneralPaginationComponent from "@/components/Utils/Pagination";
 import { getErrorMessage } from "@/lib/errors";
 import { formatDateAsLocale } from "@/lib/formatting";
 import { manifestInboundDocumentMutation, requestInboundSyncMutation } from "@/lib/mutations/fiscal";
+import { attachPurchaseFreightDocument } from "@/lib/mutations/purchases";
 import { appRoutes } from "@/lib/navigation/routes";
 import { useFiscalInboundDocuments, type TFiscalInboundListFilter } from "@/lib/queries/fiscal";
 import { cn } from "@/lib/utils";
 import type { TFiscalInboundManifestEventEnum } from "@/schemas/enums";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Download, FileText, RefreshCcw, ShoppingCart } from "lucide-react";
+import { ArrowRight, Download, FileText, RefreshCcw, ShoppingCart, Truck } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -78,6 +79,18 @@ export default function InboundDocumentsTab() {
 			queryClient.invalidateQueries({ queryKey });
 		},
 		onError: (err) => toast.error(getErrorMessage(err)),
+	});
+
+	// CT-e: não vira compra, vira frete de uma compra já lançada (ADR-0002, fluxo E).
+	const { mutate: attachFreight, isPending: attachPending } = useMutation({
+		mutationKey: ["attach-purchase-freight-document"],
+		mutationFn: attachPurchaseFreightDocument,
+		onSuccess: async (result) => {
+			toast.success(result.message);
+			for (const aviso of result.data.avisos) toast.warning(aviso);
+			await queryClient.invalidateQueries({ queryKey: ["fiscal-inbound-documents"] });
+		},
+		onError: (error) => toast.error(getErrorMessage(error)),
 	});
 
 	const { mutate: requestSync, isPending: syncPending } = useMutation({
@@ -144,6 +157,8 @@ export default function InboundDocumentsTab() {
 							key={doc.id}
 							doc={doc}
 							isPending={isPending}
+							onAttachFreight={(inboundId) => attachFreight({ inboundId })}
+							attachPending={attachPending}
 							onManifest={(inboundId, evento) => {
 								setJustificativa("");
 								setManifestDialog({ inboundId, evento });
@@ -194,20 +209,26 @@ type InboundDocumentCardProps = {
 	doc: TInboundDocument;
 	isPending: boolean;
 	onManifest: (inboundId: string, evento: TFiscalInboundManifestEventEnum) => void;
+	onAttachFreight: (inboundId: string) => void;
+	attachPending: boolean;
 };
-function InboundDocumentCard({ doc, isPending, onManifest }: InboundDocumentCardProps) {
+function InboundDocumentCard({ doc, isPending, onManifest, onAttachFreight, attachPending }: InboundDocumentCardProps) {
 	const canDownloadXml = !!doc.xmlArquivoId || !!doc.xmlStoragePath || !!doc.provedorDocumentoId;
 	const invalid = doc.situacao === "CANCELADA" || doc.situacao === "DENEGADA";
+	const isCte = doc.modelo === "CTE";
 	// Lançar exige o XML completo (itens e impostos) e uma nota que ainda vale e ainda não virou compra.
-	const canCreatePurchase = doc.completo && !doc.compraId && !invalid;
+	const canCreatePurchase = !isCte && doc.completo && !doc.compraId && !invalid;
+	// CT-e completo e válido ainda sem compra: vira frete da compra cujas NF-e ele transporta.
+	const canAttachFreight = isCte && doc.completo && !doc.compraId && !invalid;
 	return (
 		<div className="bg-card border-border flex w-full flex-col gap-2 rounded-xl border px-3 py-3 shadow-2xs">
 			<div className="flex w-full items-center justify-between gap-2 flex-wrap">
 				<div className="flex items-center gap-2">
-					<FileText className="h-4 w-4 text-muted-foreground" />
+					{isCte ? <Truck className="h-4 w-4 text-muted-foreground" /> : <FileText className="h-4 w-4 text-muted-foreground" />}
 					<h3 className="text-sm font-bold tracking-tight">{doc.fornecedor?.nome ?? doc.emitenteNome ?? "Fornecedor não identificado"}</h3>
 				</div>
 				<div className="flex items-center gap-2">
+					{isCte ? <span className="rounded bg-sky-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-tight text-sky-700">CT-e · FRETE</span> : null}
 					{doc.completo ? (
 						<span className="rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-tight text-emerald-700">COMPLETA</span>
 					) : (
@@ -241,7 +262,7 @@ function InboundDocumentCard({ doc, isPending, onManifest }: InboundDocumentCard
 							className="flex items-center gap-1 rounded bg-brand/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-tight text-brand hover:underline"
 						>
 							<ShoppingCart className="h-3 w-3" />
-							{invalid ? "LANÇADA · REVISAR COMPRA" : "LANÇADA"}
+							{invalid ? (isCte ? "VINCULADO · REVISAR COMPRA" : "LANÇADA · REVISAR COMPRA") : isCte ? "VINCULADO" : "LANÇADA"}
 							<ArrowRight className="h-3 w-3" />
 						</Link>
 					) : null}
@@ -274,6 +295,17 @@ function InboundDocumentCard({ doc, isPending, onManifest }: InboundDocumentCard
 							<ShoppingCart className="h-3.5 w-3.5" />
 							LANÇAR COMPRA
 						</Link>
+					</Button>
+				) : null}
+				{canAttachFreight ? (
+					<Button
+						size="xs"
+						disabled={attachPending}
+						title="Encontra a compra pelas NF-e transportadas e lança o frete"
+						onClick={() => onAttachFreight(doc.id)}
+					>
+						<Truck className="h-3.5 w-3.5" />
+						VINCULAR À COMPRA
 					</Button>
 				) : null}
 				<Button variant="ghost" size="xs" disabled={isPending} onClick={() => onManifest(doc.id, "CIENCIA")}>

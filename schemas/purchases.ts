@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
 	AcquisitionNatureEnum,
+	FiscalInboundDocumentModelEnum,
 	PurchaseCostAllocationMethodEnum,
 	PurchaseCostCounterpartyEnum,
 	PurchaseCostModifierEffectEnum,
@@ -85,6 +86,25 @@ export const PurchaseImportedDocumentSchema = z.object({
 		invalid_type_error: "Tipo não válido para a referência do documento importado.",
 	}),
 	origem: PurchaseImportedDocumentOriginEnum,
+	// NFE (default) ou CTE. O CT-e não traz itens: ele existe na compra pelo frete que cobra (fluxo E).
+	modelo: FiscalInboundDocumentModelEnum.optional().nullable(),
+	// Só CT-e: o que a transportadora cobra e como entrou na compra. `capitalizado` = o frete virou
+	// componente FRETE nos itens (compra ainda não recebida); senão foi despesa do período, porque o
+	// custo de uma compra recebida não muda em silêncio (ADR-0001).
+	frete: z
+		.object({
+			valorCentavos: z.number({ invalid_type_error: "Tipo não válido para o valor do frete do CT-e." }).int().nonnegative(),
+			icmsCentavos: z.number({ invalid_type_error: "Tipo não válido para o ICMS do CT-e." }).int().nonnegative(),
+			icmsAliquota: z.number({ invalid_type_error: "Tipo não válido para a alíquota de ICMS do CT-e." }).optional().nullable(),
+			// Quanto do ICMS virou crédito tributário (preset do regime × destinação dos itens).
+			icmsCreditoCentavos: z.number({ invalid_type_error: "Tipo não válido para o crédito de ICMS do CT-e." }).int().nonnegative(),
+			capitalizado: z.boolean({ invalid_type_error: "Tipo não válido para a capitalização do frete." }),
+			transportadoraFornecedorId: z.string({ invalid_type_error: "Tipo não válido para o fornecedor da transportadora." }).optional().nullable(),
+			transportadoraNome: z.string({ invalid_type_error: "Tipo não válido para o nome da transportadora." }).optional().nullable(),
+			chavesNfe: z.array(z.string({ invalid_type_error: "Tipo não válido para a chave da NF-e transportada." })).default([]),
+		})
+		.optional()
+		.nullable(),
 	// Linha em `fiscal_inbound_documents` quando o documento tem chave de acesso (ADR-0002).
 	documentoFiscalId: z.string({ invalid_type_error: "Tipo não válido para o ID do documento fiscal." }).optional().nullable(),
 	// Arquivo no catálogo `files`. O servidor resolve por este id, conferindo a organização da linha.

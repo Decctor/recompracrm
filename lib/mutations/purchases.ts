@@ -5,6 +5,7 @@ import type {
 	TImportPurchaseCompositionStreamEvent,
 } from "@/app/api/purchases/import-composition/route";
 import { TCreatePurchaseInput, TCreatePurchaseOutput, TUpdatePurchaseInput, TUpdatePurchaseOutput } from "@/app/api/purchases/route";
+import type { TAttachFreightDocumentInput, TAttachFreightDocumentOutput } from "@/app/api/purchases/freight-documents/route";
 import axios from "axios";
 
 export async function createPurchase(input: TCreatePurchaseInput) {
@@ -60,4 +61,9 @@ export async function importPurchaseComposition(
 	handleLine(buffer);
 	if (!result) throw new Error("A leitura terminou sem resultado. Tente novamente.");
 	return result;
+}
+
+export async function attachPurchaseFreightDocument(input: TAttachFreightDocumentInput) {
+	const { data } = await axios.post<TAttachFreightDocumentOutput>("/api/purchases/freight-documents", input);
+	return data;
 }

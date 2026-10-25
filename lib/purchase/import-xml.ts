@@ -86,7 +86,11 @@ function parseNfeDocument(xml: string) {
 	const proc = node(parsed.nfeProc);
 	const nfe = node(proc.NFe ?? parsed.NFe);
 	const info = node(nfe.infNFe);
-	if (Object.keys(info).length === 0) throw new Error("O XML não contém uma NF-e reconhecível.");
+	if (Object.keys(info).length === 0) {
+		if (parsed.cteProc || parsed.CTe)
+			throw new Error("Este XML é um CT-e (frete), não uma NF-e. Anexe-o à compra pela aba Documentos ou vincule-o em Notas recebidas.");
+		throw new Error("O XML não contém uma NF-e reconhecível.");
+	}
 	return { info, protocol: node(node(proc.protNFe).infProt) };
 }
 

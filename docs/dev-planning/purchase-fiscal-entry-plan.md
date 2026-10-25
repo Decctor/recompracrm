@@ -542,7 +542,7 @@ Cada fase é entregável sozinha e não muda nada para quem não usa a novidade.
 | 3 ✅ | Natureza e destinação, uso e consumo em despesa, bonificação como componente, contas por destinação                                                                                         | `products`, `purchase_items`, `supplier_product_mappings`                   |
 | 4 ✅ | `contrapartida = INCLUSO_NO_VALOR`, créditos de ICMS/ICMS SN/PIS/COFINS, presets, overrides                                                                                                 | JSONB, `fiscalConfiguracao`                                                 |
 | 5 ✅ | Contrapartida `FISCO`, DIFAL/antecipação/ST de entrada, lançamentos por credor com contraparte, guias a pagar, `DOCUMENTO_FINANCEIRO`, backfill de `clienteId`/`fornecedorId`               | `accounting_entries`, `financial_recurring_rules`, `financial_transactions` |
-| 6    | CT-e                                                                                                                                                                                        | —                                                                           |
+| 6 ✅ | CT-e                                                                                                                                                                                        | —                                                                           |
 | 7    | Patrimônio                                                                                                                                                                                  | `fixed_assets`                                                              |
 | 8    | ST retido na saída; devolução de compra; IBS/CBS como componentes                                                                                                                           | —                                                                           |
 
@@ -570,6 +570,23 @@ overrides da organização; o import aplica e descarta o embutido que "fica no c
 `regimeApuracao` configurado (CRT 3 é ambíguo), os tributos continuam pendentes para a pessoa, como
 antes. Tela "Entrada de compras" em Fiscal › Configurações. A contrapartida `FISCO` já é calculada pelo
 custeio, mas nada a produz até a Fase 5.
+
+Fase 6 entregue, sem migration: `lib/purchase/import-cte.ts` lê o CT-e (tomador, `vTPrest`, ICMS,
+chaves das NF-e transportadas, protocolo) com a mesma barreira de XML inseguro; o DF-e passa a gravar
+`modelo = CTE` pela posição 21–22 da chave. `POST /api/purchases/freight-documents` (arquivo ou
+`inboundId`, `purchaseId` opcional) recusa CT-e cujo tomador não é a organização, acha a compra pelas
+NF-e transportadas (1:1: várias compras exigem anexar a partir da compra), grava o CT-e como documento
+da compra (`modelo`, bloco `frete`) e vincula a linha recebida. Compra ainda não recebida: frete
+líquido do ICMS vira componente `FRETE` e o ICMS vira `IMPOSTOS_ICMS`, ambos `contrapartida =
+TRANSPORTADORA`, rateados por valor, com o tratamento do preset — o lançamento da transportadora
+(`compra:{id}:TRANSPORTADORA:{documentoRef}`, origem `COMPRA`, `fornecedorId` da transportadora,
+uma parcela SAIDA em 30 dias) nasce no recebimento e some sem ele. Compra já recebida: o custo não
+muda em silêncio (ADR-0001) — o frete entra como despesa do período, menos o crédito de ICMS, com o
+lançamento criado na hora e independente do recebimento (`frete.capitalizado = false`). O lançamento
+do fornecedor exclui as parcelas `TRANSPORTADORA` como já excluía as do fisco. UI: "Vincular à
+compra" no CT-e da aba Notas recebidas, "Anexar CT-e" na aba Documentos da compra, seção "Obrigações
+com terceiros" na aba Financeiro. O fluxo explícito de correção de custo após o recebimento continua
+não existindo; quando existir, o CT-e não capitalizado é o primeiro candidato.
 
 Fase 5 entregue (migration `0140_accounting_entry_counterparty_and_purchase_tax.sql` + backfill
 `scripts/backfill-accounting-entry-counterparties.ts`): o parser expõe `tributacao` por item (base,
