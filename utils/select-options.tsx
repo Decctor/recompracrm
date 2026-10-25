@@ -81,6 +81,7 @@ import {
 	Users,
 	PackageX,
 	ListChecks,
+	Landmark,
 } from "lucide-react";
 
 export const CommunityCourseStatusOptions: {
@@ -669,6 +670,16 @@ export const AccountingEntryOriginTypeOptions: {
 		colors: {
 			text: "text-cyan-600",
 			background: "bg-cyan-200",
+		},
+	},
+	{
+		id: 11,
+		label: "TRIBUTO DE COMPRA",
+		value: "TRIBUTO_COMPRA",
+		icon: <Landmark className="w-4 h-4" />,
+		colors: {
+			text: "text-amber-700",
+			background: "bg-amber-200",
 		},
 	},
 ];

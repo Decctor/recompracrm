@@ -10,6 +10,8 @@ type TransactionClient = PgTransaction<PostgresJsQueryResultHKT, typeof schema, 
 type CreateAccountingEntryParams = {
 	organizacaoId: string;
 	vendaId: string;
+	// Contraparte do lançamento (ADR-0002, decisão 5): quem deve à organização.
+	clienteId?: string | null;
 	valor: number;
 	titulo: string;
 	idContaDebito: string;
@@ -27,6 +29,7 @@ export async function createAccountingEntry(tx: TransactionClient, params: Creat
 		.values({
 			organizacaoId: params.organizacaoId,
 			vendaId: params.vendaId,
+			clienteId: params.clienteId ?? null,
 			origemTipo: "VENDA",
 			titulo: params.titulo,
 			idContaDebito: params.idContaDebito,

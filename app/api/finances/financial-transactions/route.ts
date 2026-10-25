@@ -3,13 +3,20 @@ import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { TAuthUserSession } from "@/lib/authentication/types";
 import { canEditFinances, canViewFinances } from "@/lib/permissions/finances";
 import { db } from "@/services/drizzle";
-import { financialTransactions } from "@/services/drizzle/schema";
+import { accountingEntries, files, financialTransactions } from "@/services/drizzle/schema";
 import { and, count, eq, gte, ilike, inArray, isNotNull, isNull, lte, or, type SQL } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { NextRequest, NextResponse } from "next/server";
 import z from "zod";
 import { FinancialTransactionSchema } from "@/schemas/financial";
-import { FinancialTransactionTypeEnum, PaymentMethodEnum, TFinancialTransactionTypeEnum, TPaymentMethodEnum } from "@/schemas/enums";
+import {
+	AccountingEntryOriginTypeEnum,
+	FinancialTransactionTypeEnum,
+	PaymentMethodEnum,
+	TAccountingEntryOriginTypeEnum,
+	TFinancialTransactionTypeEnum,
+	TPaymentMethodEnum,
+} from "@/schemas/enums";
 
 const VALID_STATUSES = ["pendente", "efetivada", "em-atraso"] as const;
 export type TFinancialTransactionStatus = (typeof VALID_STATUSES)[number];
@@ -38,6 +45,8 @@ const GetFinancialTransactionsInputSchema = z.object({
 	types: z.string().optional().nullable(),
 	paymentMethods: z.string().optional().nullable(),
 	statuses: z.string().optional().nullable(),
+	// Origem do lançamento pai (VENDA, COMPRA, TRIBUTO_COMPRA...): é o que separa "guias a pagar" do resto.
+	origins: z.string().optional().nullable(),
 });
 export type TGetFinancialTransactionsInput = z.infer<typeof GetFinancialTransactionsInputSchema>;
 
@@ -45,7 +54,7 @@ async function getFinancialTransactions({ input, session }: { input: TGetFinanci
 	const userOrgId = session.membership?.organizacao.id;
 	if (!userOrgId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
 
-	const { id, page, search, periodAfter, periodBefore, types, paymentMethods, statuses } = input;
+	const { id, page, search, periodAfter, periodBefore, types, paymentMethods, statuses, origins } = input;
 
 	if (id) {
 		const transaction = await db.query.financialTransactions.findFirst({
@@ -53,7 +62,12 @@ async function getFinancialTransactions({ input, session }: { input: TGetFinanci
 			with: {
 				contaFinanceira: { columns: { id: true, nome: true, tipo: true } },
 				autor: { columns: { id: true, nome: true, avatarUrl: true } },
-				lancamentoContabil: { columns: { id: true, titulo: true, valor: true, valorPrevisto: true, anotacoes: true } },
+				lancamentoContabil: {
+					columns: { id: true, titulo: true, valor: true, valorPrevisto: true, anotacoes: true, origemTipo: true, compraId: true, vendaId: true },
+					with: { cliente: { columns: { id: true, nome: true } }, fornecedor: { columns: { id: true, nome: true } } },
+				},
+				documentoCobrancaArquivo: { columns: { id: true, nome: true, mimeType: true, tamanhoBytes: true } },
+				comprovanteArquivo: { columns: { id: true, nome: true, mimeType: true, tamanhoBytes: true } },
 			},
 		});
 		if (!transaction) throw new createHttpError.NotFound("Transação financeira não encontrada.");
@@ -69,6 +83,9 @@ async function getFinancialTransactions({ input, session }: { input: TGetFinanci
 	const statusesArr = statuses
 		? statuses.split(",").filter((v): v is TFinancialTransactionStatus => VALID_STATUSES.includes(v as TFinancialTransactionStatus))
 		: [];
+	const originsArr = origins
+		? (origins.split(",").filter((v) => AccountingEntryOriginTypeEnum.safeParse(v).success) as TAccountingEntryOriginTypeEnum[])
+		: [];
 
 	const now = new Date();
 	const conditions = [eq(financialTransactions.organizacaoId, userOrgId)];
@@ -77,6 +94,17 @@ async function getFinancialTransactions({ input, session }: { input: TGetFinanci
 	if (periodBefore) conditions.push(lte(financialTransactions.dataPrevisao, periodBefore));
 	if (typesArr.length > 0) conditions.push(inArray(financialTransactions.tipo, typesArr));
 	if (paymentMethodsArr.length > 0) conditions.push(inArray(financialTransactions.metodo, paymentMethodsArr));
+	if (originsArr.length > 0) {
+		conditions.push(
+			inArray(
+				financialTransactions.lancamentoContabilId,
+				db
+					.select({ id: accountingEntries.id })
+					.from(accountingEntries)
+					.where(and(eq(accountingEntries.organizacaoId, userOrgId), inArray(accountingEntries.origemTipo, originsArr))),
+			),
+		);
+	}
 
 	if (statusesArr.length > 0) {
 		const statusConditions: SQL<unknown>[] = [];
@@ -110,6 +138,7 @@ async function getFinancialTransactions({ input, session }: { input: TGetFinanci
 			with: {
 				contaFinanceira: { columns: { id: true, nome: true, tipo: true } },
 				autor: { columns: { id: true, nome: true, avatarUrl: true } },
+				lancamentoContabil: { columns: { id: true, origemTipo: true, compraId: true, vendaId: true } },
 			},
 			orderBy: (fields, { desc }) => desc(fields.dataPrevisao),
 			limit: PAGE_SIZE,
@@ -162,9 +191,34 @@ const UpdateFinancialTransactionInputSchema = z.object({
 		contaFinanceiraId: true,
 		metodo: true,
 		dataEfetivacao: true,
-	}),
+		// Anexos (ADR-0002, decisão 5): o boleto/guia chega antes do pagamento; o comprovante, depois.
+		// `undefined` preserva o atual; `null` desanexa.
+		documentoCobrancaArquivoId: true,
+		comprovanteArquivoId: true,
+	}).partial({ documentoCobrancaArquivoId: true, comprovanteArquivoId: true }),
 });
 export type TUpdateFinancialTransactionInput = z.infer<typeof UpdateFinancialTransactionInputSchema>;
+
+/** Confere que cada anexo informado é um arquivo da organização; `undefined` não toca a coluna. */
+async function resolveTransactionAttachments({
+	input,
+	orgId,
+}: {
+	input: { documentoCobrancaArquivoId?: string | null; comprovanteArquivoId?: string | null };
+	orgId: string;
+}) {
+	const attachments: { documentoCobrancaArquivoId?: string | null; comprovanteArquivoId?: string | null } = {};
+	for (const key of ["documentoCobrancaArquivoId", "comprovanteArquivoId"] as const) {
+		const value = input[key];
+		if (value === undefined) continue;
+		if (value) {
+			const file = await db.query.files.findFirst({ where: and(eq(files.id, value), eq(files.organizacaoId, orgId)), columns: { id: true } });
+			if (!file) throw new createHttpError.NotFound("Arquivo do anexo não encontrado nesta organização.");
+		}
+		attachments[key] = value;
+	}
+	return attachments;
+}
 
 async function updateFinancialTransaction({ input, orgId }: { input: TUpdateFinancialTransactionInput; orgId: string }) {
 	const transaction = await db.query.financialTransactions.findFirst({
@@ -172,6 +226,20 @@ async function updateFinancialTransaction({ input, orgId }: { input: TUpdateFina
 	});
 
 	if (!transaction) throw new createHttpError.NotFound("Transação financeira não encontrada.");
+
+	const attachments = await resolveTransactionAttachments({ input: input.transaction, orgId });
+	const changesSettlement =
+		input.transaction.contaFinanceiraId != null || input.transaction.metodo != null || input.transaction.dataEfetivacao != null;
+	if (!changesSettlement) {
+		// Só anexos: permitido antes da efetivação (a guia precisa ser guardada para ser paga).
+		const [updated] = await db
+			.update(financialTransactions)
+			.set(attachments)
+			.where(and(eq(financialTransactions.id, input.transactionId), eq(financialTransactions.organizacaoId, orgId)))
+			.returning({ id: financialTransactions.id });
+		if (!updated) throw new createHttpError.InternalServerError("Erro ao atualizar os anexos da transação financeira.");
+		return { data: { id: updated.id }, message: "Anexos da transação atualizados com sucesso." };
+	}
 	if (!transaction.dataEfetivacao) {
 		throw new createHttpError.BadRequest("Transação ainda não efetivada. Efetive antes de ajustar os dados.");
 	}
@@ -194,6 +262,7 @@ async function updateFinancialTransaction({ input, orgId }: { input: TUpdateFina
 			dataEfetivacao,
 			contaFinanceiraId: input.transaction.contaFinanceiraId ?? transaction.contaFinanceiraId,
 			metodo: input.transaction.metodo ?? transaction.metodo,
+			...attachments,
 		})
 		.where(and(eq(financialTransactions.id, input.transactionId), eq(financialTransactions.organizacaoId, orgId)))
 		.returning({ id: financialTransactions.id });

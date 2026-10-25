@@ -102,9 +102,13 @@ async function createRecurringRule({
 				organizacaoId,
 				autorId: session.user.id,
 				lancamentoContabilOrigemId: entry.id,
+				clienteId: entry.clienteId,
+				fornecedorId: entry.fornecedorId,
 				status: "ATIVA",
 				config,
 				templateLancamento: {
+					clienteId: entry.clienteId,
+					fornecedorId: entry.fornecedorId,
 					titulo: entry.titulo,
 					anotacoes: entry.anotacoes,
 					idContaDebito: entry.idContaDebito,

@@ -149,6 +149,8 @@ function readNfeItemFactsFromDet(det: TXmlNode) {
 		pis: { cst: text(pis.CST), baseCalculo: decimal(pis.vBC), aliquota: decimal(pis.pPIS), valor: decimal(pis.vPIS) },
 		cofins: { cst: text(cofins.CST), baseCalculo: decimal(cofins.vBC), aliquota: decimal(cofins.pCOFINS), valor: decimal(cofins.vCOFINS) },
 		ii: importTax.vII != null ? { baseCalculo: decimal(importTax.vBC), valor: decimal(importTax.vII) } : null,
+		// DIFAL calculado pelo emitente (destinatário não contribuinte): quando presente, não recalculamos.
+		icmsUfDest: { valor: decimal(node(taxes.ICMSUFDest).vICMSUFDest) },
 		ibsCbs:
 			Object.keys(ibsCbs).length > 0
 				? {
@@ -289,6 +291,16 @@ function parseItem(det: TXmlNode, issuerCrt: number | null) {
 		documentoItem: facts.numeroItem,
 		cfop: facts.cfop,
 		dataValidade: earliestExpiry(facts),
+		// O mínimo que o cálculo de DIFAL/antecipação precisa (lib/fiscal/entry/fisco-components.ts);
+		// o restante continua só no XML, pelo ponteiro.
+		tributacao: {
+			baseIcms: facts.icms.baseCalculo,
+			aliquotaIcms: facts.icms.aliquota,
+			origemMercadoria: facts.origemMercadoria,
+			stRetido: facts.icms.cst === "60" || facts.icms.csosn === "500" || (facts.icmsSt.valorRetido ?? 0) > 0,
+			stDestacado: (facts.icmsSt.valor ?? 0) > 0,
+			difalDestacado: (facts.icmsUfDest.valor ?? 0) > 0,
+		},
 	};
 }
 

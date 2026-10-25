@@ -36,6 +36,9 @@ import { sales } from "./sales";
 import { salesSessions } from "./sales-sessions";
 import { users } from "./users";
 import { purchases } from "./purchases";
+import { clients } from "./clients";
+import { suppliers } from "./suppliers";
+import { files } from "./files";
 
 // ============================================================================
 // ACCOUNTS CHARTS (Plano de Contas)
@@ -129,6 +132,22 @@ export const accountingEntries = newTable(
       (): AnyPgColumn => productStockLots.id,
       { onDelete: "set null" },
     ),
+    // Compra que originou o lançamento (fornecedor ou fisco) — ADR-0002, decisão 5.
+    compraId: varchar("compra_id", { length: 255 }).references(
+      (): AnyPgColumn => purchases.id,
+      { onDelete: "set null" },
+    ),
+    // Contraparte do título (ADR-0002, decisão 6): no máximo uma preenchida. Derivada da origem
+    // (venda → cliente, compra → fornecedor), editável só em MANUAL e RECORRENCIA. O fisco não é
+    // contraparte: a origem TRIBUTO_COMPRA o identifica.
+    clienteId: varchar("cliente_id", { length: 255 }).references(
+      (): AnyPgColumn => clients.id,
+      { onDelete: "set null" },
+    ),
+    fornecedorId: varchar("fornecedor_id", { length: 255 }).references(
+      (): AnyPgColumn => suppliers.id,
+      { onDelete: "set null" },
+    ),
     origemTipo: accountingEntryOriginTypeEnum("origem_tipo").notNull(),
     titulo: text("titulo").notNull(),
     anotacoes: text("anotacoes"),
@@ -154,6 +173,11 @@ export const accountingEntries = newTable(
     ),
     vendaIdIdx: index("idx_accounting_entries_venda_id").on(table.vendaId),
     loteIdIdx: index("idx_accounting_entries_lote_id").on(table.loteId),
+    compraIdIdx: index("idx_accounting_entries_compra_id").on(table.compraId),
+    clienteIdIdx: index("idx_accounting_entries_cliente_id").on(table.clienteId),
+    fornecedorIdIdx: index("idx_accounting_entries_fornecedor_id").on(
+      table.fornecedorId,
+    ),
     dataCompetenciaIdx: index("idx_accounting_entries_data_competencia").on(
       table.dataCompetencia,
     ),
@@ -265,6 +289,19 @@ export const accountingEntriesRelations = relations(
       fields: [accountingEntries.idContaCredito],
       references: [accountsCharts.id],
       relationName: "conta-credito",
+    }),
+    compra: one(purchases, {
+      fields: [accountingEntries.compraId],
+      references: [purchases.id],
+      relationName: "purchaseAccountingEntries",
+    }),
+    cliente: one(clients, {
+      fields: [accountingEntries.clienteId],
+      references: [clients.id],
+    }),
+    fornecedor: one(suppliers, {
+      fields: [accountingEntries.fornecedorId],
+      references: [suppliers.id],
     }),
     autor: one(users, {
       fields: [accountingEntries.autorId],
@@ -405,6 +442,13 @@ export const financialTransactions = newTable(
       (): AnyPgColumn => paymentAttempts.id,
       { onDelete: "set null" },
     ),
+    // Anexos da dívida (ADR-0002, decisão 6): o boleto/guia que cobra e o comprovante que quita.
+    documentoCobrancaArquivoId: varchar("documento_cobranca_arquivo_id", {
+      length: 255,
+    }).references((): AnyPgColumn => files.id, { onDelete: "set null" }),
+    comprovanteArquivoId: varchar("comprovante_arquivo_id", {
+      length: 255,
+    }).references((): AnyPgColumn => files.id, { onDelete: "set null" }),
     autorId: varchar("autor_id", { length: 255 }).references(() => users.id),
     dataInsercao: timestamp("data_insercao").defaultNow().notNull(),
   },
@@ -450,6 +494,16 @@ export const financialTransactionsRelations = relations(
     sessao: one(salesSessions, {
       fields: [financialTransactions.sessaoVendaId],
       references: [salesSessions.id],
+    }),
+    documentoCobrancaArquivo: one(files, {
+      fields: [financialTransactions.documentoCobrancaArquivoId],
+      references: [files.id],
+      relationName: "financialTransactionBillingDocument",
+    }),
+    comprovanteArquivo: one(files, {
+      fields: [financialTransactions.comprovanteArquivoId],
+      references: [files.id],
+      relationName: "financialTransactionReceipt",
     }),
     autor: one(users, {
       fields: [financialTransactions.autorId],

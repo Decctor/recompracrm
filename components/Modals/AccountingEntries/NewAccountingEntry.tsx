@@ -2,6 +2,7 @@
 
 import AccountingEntryLinesBlock, { getEntryLinesError } from "@/components/Modals/AccountingEntries/Blocks/Lines";
 import AccountingEntryFinancialTransactionsBlock from "@/components/Modals/AccountingEntries/Blocks/FinancialTransactions";
+import AccountingEntryCounterpartyBlock from "@/components/Modals/AccountingEntries/Blocks/Counterparty";
 import AccountingEntryGeneralBlock from "@/components/Modals/AccountingEntries/Blocks/General";
 import AccountingEntryValuesBlock from "@/components/Modals/AccountingEntries/Blocks/Values";
 import { AccountingEntryRecurrenceBlock } from "@/components/Modals/AccountingEntries/Blocks/Recurrence";
@@ -91,6 +92,7 @@ export default function NewAccountingEntry({ closeModal, callbacks }: NewAccount
 			drawerVariant="lg"
 		>
 			<AccountingEntryGeneralBlock entry={state.entry} updateEntry={updateEntry} />
+			<AccountingEntryCounterpartyBlock entry={state.entry} updateEntry={updateEntry} />
 			<AccountingEntryValuesBlock entry={state.entry} updateEntry={updateEntry} />
 			<AccountingEntryLinesBlock
 				entry={state.entry}

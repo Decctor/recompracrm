@@ -12,7 +12,15 @@ import {
 	type TAccountingEntryLineInput,
 } from "@/lib/finances/accounting-entry-lines";
 import { db, type DBTransaction } from "@/services/drizzle";
-import { accountingEntries, accountsCharts, financialAccounts, financialRecurringRules, financialTransactions } from "@/services/drizzle/schema";
+import {
+	accountingEntries,
+	accountsCharts,
+	clients,
+	financialAccounts,
+	financialRecurringRules,
+	financialTransactions,
+	suppliers,
+} from "@/services/drizzle/schema";
 import { AccountingEntryLineSchema, AccountingEntrySchema, FinancialTransactionSchema } from "@/schemas/financial";
 import { FinancialRecurringRuleConfigSchema } from "@/schemas/financial-recurring";
 import { AccountingEntryOriginTypeEnum, TAccountingEntryOriginTypeEnum } from "@/schemas/enums";
@@ -95,6 +103,8 @@ async function getAccountingEntries({ input, session }: { input: TGetAccountingE
 			with: {
 				contaDebito: { columns: { id: true, nome: true, codigo: true, natureza: true } },
 				contaCredito: { columns: { id: true, nome: true, codigo: true, natureza: true } },
+				cliente: { columns: { id: true, nome: true } },
+				fornecedor: { columns: { id: true, nome: true } },
 				linhas: {
 					with: { contaContabil: { columns: { id: true, nome: true, codigo: true, natureza: true } } },
 					orderBy: (fields, { asc }) => asc(fields.ordem),
@@ -227,6 +237,9 @@ export const GET = appApiHandler({ GET: getAccountingEntriesRoute });
 
 const AccountingEntryMutationSchema = AccountingEntrySchema.pick({
 	titulo: true,
+	// Contraparte (ADR-0002, decisão 5): no máximo um dos dois; vazio = sem contraparte.
+	clienteId: true,
+	fornecedorId: true,
 	anotacoes: true,
 	idContaDebito: true,
 	idContaCredito: true,
@@ -502,11 +515,13 @@ async function createAccountingEntry({ input, session }: { input: TCreateAccount
 			transactions: input.entryFinancialTransactions,
 		});
 
+		const counterparty = await resolveEntryCounterparty({ tx, orgId, entry: input.entry });
 		const [createdEntry] = await tx
 			.insert(accountingEntries)
 			.values({
 				organizacaoId: orgId,
 				origemTipo: "MANUAL",
+				...counterparty,
 				titulo: input.entry.titulo,
 				anotacoes: input.entry.anotacoes ?? null,
 				idContaDebito: resolvedLines.idContaDebito,
@@ -599,6 +614,36 @@ async function createAccountingEntry({ input, session }: { input: TCreateAccount
 }
 export type TCreateAccountingEntryOutput = Awaited<ReturnType<typeof createAccountingEntry>>;
 
+/**
+ * Contraparte do lançamento (ADR-0002, decisão 5). Confere que o cliente/fornecedor é da
+ * organização e devolve as duas colunas prontas para gravar — nulas quando nada foi informado.
+ */
+async function resolveEntryCounterparty({
+	tx,
+	orgId,
+	entry,
+}: {
+	tx: DBTransaction;
+	orgId: string;
+	entry: { clienteId?: string | null; fornecedorId?: string | null };
+}) {
+	const clienteId = entry.clienteId ?? null;
+	const fornecedorId = entry.fornecedorId ?? null;
+	if (clienteId && fornecedorId) throw new createHttpError.BadRequest("Um lançamento tem uma contraparte só: cliente ou fornecedor.");
+	if (clienteId) {
+		const client = await tx.query.clients.findFirst({ where: and(eq(clients.id, clienteId), eq(clients.organizacaoId, orgId)), columns: { id: true } });
+		if (!client) throw new createHttpError.NotFound("Cliente da contraparte não encontrado.");
+	}
+	if (fornecedorId) {
+		const supplier = await tx.query.suppliers.findFirst({
+			where: and(eq(suppliers.id, fornecedorId), eq(suppliers.organizacaoId, orgId)),
+			columns: { id: true },
+		});
+		if (!supplier) throw new createHttpError.NotFound("Fornecedor da contraparte não encontrado.");
+	}
+	return { clienteId, fornecedorId };
+}
+
 async function createAccountingEntryRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você precisa estar autenticado para acessar esse recurso.");
@@ -645,10 +690,13 @@ async function updateAccountingEntry({ input, session }: { input: TUpdateAccount
 			});
 		}
 
+		// Vendas e compras têm a contraparte decidida pela origem; só o lançamento manual escolhe a sua.
+		const counterparty = canUpdateAccountingFields ? await resolveEntryCounterparty({ tx, orgId, entry: input.entry }) : {};
 		const [updatedEntry] = await tx
 			.update(accountingEntries)
 			.set({
 				anotacoes: input.entry.anotacoes ?? null,
+				...counterparty,
 				...(resolvedLines
 					? {
 							titulo: input.entry.titulo,

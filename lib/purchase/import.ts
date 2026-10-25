@@ -7,6 +7,7 @@ import {
 	PurchaseCostTreatmentEnum,
 	PurchaseFreightModalityEnum,
 } from "@/schemas/enums";
+import { PurchaseCostCalculationMemorySchema } from "@/schemas/purchases";
 
 export const IMPORT_COMPOSITION_ALLOWED_MIME_TYPES = [
 	"application/pdf",
@@ -26,6 +27,7 @@ export const ExtractedCostModifierSchema = z.object({
 	tratamento: PurchaseCostTreatmentEnum.nullable(),
 	// Ausente = FORNECEDOR. INCLUSO_NO_VALOR para o que já está dentro do preço (ICMS, PIS, COFINS).
 	contrapartida: PurchaseCostCounterpartyEnum.optional().nullable(),
+	memoriaCalculo: PurchaseCostCalculationMemorySchema.optional().nullable(),
 	descricao: z.string().optional().nullable(),
 });
 export type TExtractedCostModifier = z.infer<typeof ExtractedCostModifierSchema>;
@@ -46,6 +48,18 @@ export const ExtractedCompositionItemSchema = z.object({
 	cfop: z.string().optional().nullable(),
 	// Menor `dVal` dos `rastro` do item, em AAAA-MM-DD: vira a validade do lote no recebimento.
 	dataValidade: z.string().optional().nullable(),
+	// Só XML: o que o cálculo de tributos ao fisco precisa (lib/fiscal/entry/fisco-components.ts).
+	tributacao: z
+		.object({
+			baseIcms: z.number().nullable(),
+			aliquotaIcms: z.number().nullable(),
+			origemMercadoria: z.string().nullable(),
+			stRetido: z.boolean(),
+			stDestacado: z.boolean(),
+			difalDestacado: z.boolean(),
+		})
+		.optional()
+		.nullable(),
 });
 export type TExtractedCompositionItem = z.infer<typeof ExtractedCompositionItemSchema>;
 

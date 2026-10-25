@@ -67,6 +67,8 @@ export async function generateRecurringAccountingEntries(db: DB, referenceDate =
 						.values({
 							organizacaoId: rule.organizacaoId,
 							origemTipo: "RECORRENCIA",
+							clienteId: rule.templateLancamento.clienteId ?? null,
+							fornecedorId: rule.templateLancamento.fornecedorId ?? null,
 							titulo: rule.templateLancamento.titulo,
 							anotacoes: rule.templateLancamento.anotacoes,
 							idContaDebito: rule.templateLancamento.idContaDebito,

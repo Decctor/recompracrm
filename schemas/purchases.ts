@@ -16,6 +16,16 @@ export const PurchaseCostAllocationSchema = z.object({
 });
 export type TPurchaseCostAllocation = z.infer<typeof PurchaseCostAllocationSchema>;
 
+// Base, alíquotas e método do que o sistema calculou (origem CALCULO) ou leu (embutido).
+export const PurchaseCostCalculationMemorySchema = z.object({
+	base: z.number({ invalid_type_error: "Tipo não válido para a base da memória de cálculo." }).optional().nullable(),
+	aliquota: z.number({ invalid_type_error: "Tipo não válido para a alíquota da memória de cálculo." }).optional().nullable(),
+	aliquotaInterestadual: z.number({ invalid_type_error: "Tipo não válido para a alíquota interestadual." }).optional().nullable(),
+	metodo: z.string({ invalid_type_error: "Tipo não válido para o método da memória de cálculo." }).optional().nullable(),
+	uf: z.string({ invalid_type_error: "Tipo não válido para a UF da memória de cálculo." }).optional().nullable(),
+});
+export type TPurchaseCostCalculationMemory = z.infer<typeof PurchaseCostCalculationMemorySchema>;
+
 export const PurchaseCostModifierSchema = z
 	.object({
 		chave: PurchaseCostModifierKeyEnum,
@@ -31,17 +41,7 @@ export const PurchaseCostModifierSchema = z
 		// Aditivo ao snapshot v1: ausente = FORNECEDOR, o único comportamento anterior ao ADR-0002.
 		contrapartida: PurchaseCostCounterpartyEnum.optional().nullable(),
 		origem: PurchaseCostModifierOriginEnum,
-		// Base, alíquotas e método do que o sistema calculou (origem CALCULO) ou leu (embutido).
-		memoriaCalculo: z
-			.object({
-				base: z.number({ invalid_type_error: "Tipo não válido para a base da memória de cálculo." }).optional().nullable(),
-				aliquota: z.number({ invalid_type_error: "Tipo não válido para a alíquota da memória de cálculo." }).optional().nullable(),
-				aliquotaInterestadual: z.number({ invalid_type_error: "Tipo não válido para a alíquota interestadual." }).optional().nullable(),
-				metodo: z.string({ invalid_type_error: "Tipo não válido para o método da memória de cálculo." }).optional().nullable(),
-				uf: z.string({ invalid_type_error: "Tipo não válido para a UF da memória de cálculo." }).optional().nullable(),
-			})
-			.optional()
-			.nullable(),
+		memoriaCalculo: PurchaseCostCalculationMemorySchema.optional().nullable(),
 		documentoRef: z.string({ invalid_type_error: "Tipo não válido para a referência do documento do modificador." }).optional().nullable(),
 		descricao: z.string({ invalid_type_error: "Tipo não válido para a descrição do modificador de custo." }).optional().nullable(),
 		rateio: PurchaseCostAllocationSchema.optional().nullable(),

@@ -246,6 +246,7 @@ export async function processSaleConfirmationInTransaction({ tx, input }: { tx: 
 		: await createAccountingEntry(tx, {
 				organizacaoId: input.organization.id,
 				vendaId: input.saleId,
+				clienteId: input.saleClientId ?? sale.clienteId,
 				valor: sale.valorTotal,
 				titulo: saleLabel,
 				idContaDebito: input.accountingEntryDebitAccountId,

@@ -7,7 +7,7 @@ import { getOrganizationPaymentMethodsConfig } from "@/lib/payments/defaults";
 import { buildSaleEntryTitle } from "@/lib/sales/entry-titles";
 import type { TOrganizationConfiguration } from "@/schemas/organizations";
 import type { DBTransaction } from "@/services/drizzle";
-import { accountingEntries, financialTransactions } from "@/services/drizzle/schema";
+import { accountingEntries, financialTransactions, sales } from "@/services/drizzle/schema";
 import { and, eq, isNull, ne, or } from "drizzle-orm";
 
 /**
@@ -120,12 +120,18 @@ export async function processManagedSaleFinancials(
 
 	const channelAccount = await ensureFirstPartyFinancialAccount(tx, { organizationId, key: channelAccountKey });
 	const methodDefaults = getOrganizationPaymentMethodsConfig(organizationConfiguration);
+	// Contraparte do lançamento (ADR-0002, decisão 5): o cliente que a venda resolveu, quando houve.
+	const saleRow = await tx.query.sales.findFirst({
+		where: and(eq(sales.id, saleId), eq(sales.organizacaoId, organizationId)),
+		columns: { clienteId: true },
+	});
 
 	const [entry] = await tx
 		.insert(accountingEntries)
 		.values({
 			organizacaoId: organizationId,
 			vendaId: saleId,
+			clienteId: saleRow?.clienteId ?? null,
 			origemTipo: "VENDA",
 			titulo: saleLabel,
 			idContaDebito: debitAccountId,

@@ -10,7 +10,9 @@ import { formatDateForInputValue, formatDateOnInputChange, formatToMoney } from 
 import { appRoutes } from "@/lib/navigation/routes";
 import { cn } from "@/lib/utils";
 import type { TUsePurchaseState } from "@/state-hooks/use-purchase-state";
-import { ArrowRightLeft, CircleAlert, CircleCheck, ExternalLink, FileText, Lock } from "lucide-react";
+import { ArrowRightLeft, CircleAlert, CircleCheck, ExternalLink, FileText, Landmark, Lock } from "lucide-react";
+import { formatDateAsLocale } from "@/lib/formatting";
+import type { TPurchaseById } from "../helpers/hydrate";
 import Link from "next/link";
 import { TONE_CLASSES } from "../../builder/components/builder-ui";
 
@@ -19,9 +21,10 @@ type FinanceTabProps = {
 	editable: boolean;
 	isReceived: boolean;
 	itemsTotal: number;
+	taxObligations: TPurchaseById["lancamentosTributos"];
 };
 
-export default function FinanceTab({ editor, editable, isReceived, itemsTotal }: FinanceTabProps) {
+export default function FinanceTab({ editor, editable, isReceived, itemsTotal, taxObligations }: FinanceTabProps) {
 	const { state, updateAccountingEntry, addAccountingEntryTransaction, updateAccountingEntryTransaction, removeAccountingEntryTransaction } = editor;
 	const entry = state.lancamentoContabil;
 	const activeTransactions = entry.transacoes.filter((transaction) => !transaction.deletar);
@@ -111,6 +114,41 @@ export default function FinanceTab({ editor, editable, isReceived, itemsTotal }:
 					) : null}
 				</Section.Body>
 			</Section.Root>
+
+			{taxObligations.length > 0 ? (
+				<Section.Root>
+					<Section.Header>
+						<Section.Icon>
+							<Landmark />
+						</Section.Icon>
+						<Section.Title>Obrigações com o fisco</Section.Title>
+						<Section.Count>{taxObligations.length}</Section.Count>
+					</Section.Header>
+					<Section.Body>
+						<p className="-mt-3 text-xs text-muted-foreground">
+							DIFAL ou antecipação de ICMS desta compra: lançamento próprio, fora do valor do fornecedor. A guia é reprogramada e paga no Financeiro.
+						</p>
+						{taxObligations.map((entry) => (
+							<div key={entry.id} className="flex flex-col gap-1.5 rounded-xl border border-border px-3.5 py-3">
+								<div className="flex flex-wrap items-baseline justify-between gap-2">
+									<span className="text-sm font-semibold">{entry.titulo}</span>
+									<span className="font-mono text-sm font-semibold">{formatToMoney(entry.valor)}</span>
+								</div>
+								{entry.transacoesFinanceiras.map((transaction) => (
+									<div key={transaction.id} className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+										<span>
+											{transaction.titulo} · vence {formatDateAsLocale(transaction.dataPrevisao)}
+										</span>
+										<span className={cn("rounded-full px-2 py-0.5 font-semibold", transaction.dataEfetivacao ? TONE_CLASSES.ok : TONE_CLASSES.warn)}>
+											{transaction.dataEfetivacao ? `Paga em ${formatDateAsLocale(transaction.dataEfetivacao)}` : "A pagar"}
+										</span>
+									</div>
+								))}
+							</div>
+						))}
+					</Section.Body>
+				</Section.Root>
+			) : null}
 
 			<Section.Root>
 				<Section.Header>

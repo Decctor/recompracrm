@@ -155,6 +155,15 @@ export const OrganizationDefaultsSchema = z.object({
 					.string({ invalid_type_error: "Tipo não válido para a chave da conta de débito de despesas do período de compras." })
 					.nullable()
 					.default(null),
+				// Crédito do lançamento TRIBUTO_COMPRA (DIFAL, antecipação, ST de entrada): obrigação com o fisco.
+				creditoTributoCompraContaId: z
+					.string({ invalid_type_error: "Tipo não válido para a conta de crédito de tributos de compra." })
+					.nullable()
+					.default(null),
+				creditoTributoCompraContaKey: z
+					.string({ invalid_type_error: "Tipo não válido para a chave da conta de crédito de tributos de compra." })
+					.nullable()
+					.default(null),
 				// Débito do custo por destinação do item (ADR-0002). REVENDA usa `debitoContaId`; as demais
 				// têm conta própria, com fallback pela chave do seed quando o id não foi configurado.
 				contasDebitoPorDestinacao: z

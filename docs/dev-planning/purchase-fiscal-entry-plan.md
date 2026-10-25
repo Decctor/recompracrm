@@ -541,7 +541,7 @@ Cada fase é entregável sozinha e não muda nada para quem não usa a novidade.
 | 2 ✅ | Nota recebida → compra, `compraId`, cancelamento, confirmação opt-in                                                                                                                        | —                                                                           |
 | 3 ✅ | Natureza e destinação, uso e consumo em despesa, bonificação como componente, contas por destinação                                                                                         | `products`, `purchase_items`, `supplier_product_mappings`                   |
 | 4 ✅ | `contrapartida = INCLUSO_NO_VALOR`, créditos de ICMS/ICMS SN/PIS/COFINS, presets, overrides                                                                                                 | JSONB, `fiscalConfiguracao`                                                 |
-| 5    | Contrapartida `FISCO`, DIFAL/antecipação/ST de entrada, lançamentos por credor com contraparte, guias a pagar, `DOCUMENTO_FINANCEIRO`, backfill de `clienteId`/`fornecedorId`               | `accounting_entries`, `financial_recurring_rules`, `financial_transactions` |
+| 5 ✅ | Contrapartida `FISCO`, DIFAL/antecipação/ST de entrada, lançamentos por credor com contraparte, guias a pagar, `DOCUMENTO_FINANCEIRO`, backfill de `clienteId`/`fornecedorId`               | `accounting_entries`, `financial_recurring_rules`, `financial_transactions` |
 | 6    | CT-e                                                                                                                                                                                        | —                                                                           |
 | 7    | Patrimônio                                                                                                                                                                                  | `fixed_assets`                                                              |
 | 8    | ST retido na saída; devolução de compra; IBS/CBS como componentes                                                                                                                           | —                                                                           |
@@ -570,6 +570,22 @@ overrides da organização; o import aplica e descarta o embutido que "fica no c
 `regimeApuracao` configurado (CRT 3 é ambíguo), os tributos continuam pendentes para a pessoa, como
 antes. Tela "Entrada de compras" em Fiscal › Configurações. A contrapartida `FISCO` já é calculada pelo
 custeio, mas nada a produz até a Fase 5.
+
+Fase 5 entregue (migration `0140_accounting_entry_counterparty_and_purchase_tax.sql` + backfill
+`scripts/backfill-accounting-entry-counterparties.ts`): o parser expõe `tributacao` por item (base,
+alíquota, origem, ST retido/destacado, DIFAL destacado); `lib/fiscal/entry/uf-parameters.ts` guarda
+alíquota interna, FCP, base dupla e prazo por UF, e `lib/fiscal/entry/fisco-components.ts` calcula
+DIFAL (uso/consumo e ativo) e antecipação parcial (revenda/insumo, opt-in
+`entrada.antecipacaoParcial`) como componentes `IMPOSTOS_*` com `contrapartida = FISCO` e
+`memoriaCalculo`, no import e de novo no builder quando a destinação muda. ST de entrada continua
+manual: o cálculo exige MVA por NCM, que não temos. Na compra recebida, o fisco vira um segundo
+lançamento (`origem TRIBUTO_COMPRA`, `chaveIdempotencia = compra:{id}:FISCO`, uma guia SAIDA com
+vencimento pelo prazo da UF) e o lançamento do fornecedor exclui as parcelas FISCO; desfazer o
+recebimento ou cancelar remove a guia, a menos que esteja paga. A contraparte mora no lançamento
+pai: venda → `clienteId`, compra → `fornecedorId` + `compraId`, manual escolhida na UI e herdada
+pela recorrência. Transações filtram por origem (atalho "Guias a pagar") e aceitam
+`documentoCobrancaArquivoId`/`comprovanteArquivoId` pela API (propósito `DOCUMENTO_FINANCEIRO`);
+a UI de anexos fica para quando o módulo de arquivos tiver um cliente de upload PROXY reutilizável.
 
 Fase 2 entregue: "Lançar compra" na aba de notas recebidas (`?inboundId=` no builder, mesmo pipeline
 de `/api/purchases/import-composition`), filtro a lançar/lançadas com link para a compra, bloqueio do

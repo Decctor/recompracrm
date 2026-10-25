@@ -8,6 +8,8 @@ import { findPurchasesByAccessKeys, getInboundDocumentXml, registerManualInbound
 import { matchCompositionItemsToProducts, type TMatchedCompositionItem } from "@/lib/purchase/match-products";
 import { resolveEntryLineDisposition } from "@/lib/purchase/entry-rules";
 import { inferEntryTaxRegime, resolveEntryTaxTreatment, type TEntryTaxOverrides } from "@/lib/fiscal/entry/presets";
+import { computeFiscoComponents, replaceCalculatedFiscoComponents, type TEntryFiscoContext } from "@/lib/fiscal/entry/fisco-components";
+import { getUfIcmsParameters } from "@/lib/fiscal/entry/uf-parameters";
 import { organizations } from "@/services/drizzle/schema";
 import { eq } from "drizzle-orm";
 import { describeErrorForLogging } from "@/lib/errors";
@@ -179,23 +181,53 @@ type TEntryTaxContext = {
 	contribuinteIpi: boolean;
 	overrides: TEntryTaxOverrides;
 	crtEmitente: number | null;
+	// Contexto do cálculo ao fisco, devolvido ao builder para recalcular quando a destinação muda.
+	fisco: TEntryFiscoContext;
 };
 
 async function loadEntryTaxContext({
 	organizationId,
 	crtEmitente,
+	ufEmitente,
+	dataEmissao,
 }: {
 	organizationId: string;
 	crtEmitente: number | null;
+	ufEmitente: string | null;
+	dataEmissao: Date | null;
 }): Promise<TEntryTaxContext> {
 	const organization = await db.query.organizations.findFirst({ where: eq(organizations.id, organizationId), columns: { fiscalConfiguracao: true } });
 	const fiscal = organization?.fiscalConfiguracao ?? null;
+	const regime = fiscal?.entrada?.regimeApuracao ?? inferEntryTaxRegime(fiscal?.regimeTributario);
+	const ufOrganizacao = fiscal?.endereco?.uf?.toUpperCase() || null;
 	return {
-		regime: fiscal?.entrada?.regimeApuracao ?? inferEntryTaxRegime(fiscal?.regimeTributario),
+		regime,
 		contribuinteIpi: fiscal?.entrada?.contribuinteIpi ?? false,
 		overrides: (fiscal?.entrada?.tratamentos ?? {}) as TEntryTaxOverrides,
 		crtEmitente,
+		fisco: {
+			ufOrganizacao,
+			ufEmitente: ufEmitente?.toUpperCase() || null,
+			// Inscrição estadual = contribuinte de ICMS: é quem deve DIFAL/antecipação na entrada.
+			contribuinteIcms: !!fiscal?.inscricaoEstadual?.replace(/\D/g, ""),
+			regime,
+			antecipacaoParcial: fiscal?.entrada?.antecipacaoParcial ?? false,
+			parametrosUf: ufOrganizacao ? getUfIcmsParameters(ufOrganizacao, dataEmissao ?? new Date()) : null,
+		},
 	};
+}
+
+/** Componentes devidos ao fisco (DIFAL, antecipação), pela destinação sugerida. O builder refaz ao trocá-la. */
+function applyFiscoComponents(item: TImportedLine, context: TEntryTaxContext): TImportedLine {
+	if (item.foraDaCompra) return item;
+	const computed = computeFiscoComponents({
+		destinacao: item.destinacaoSugerida,
+		valorLinha: item.valorTotal,
+		facts: item.tributacao,
+		context: context.fisco,
+	});
+	if (computed.length === 0) return item;
+	return { ...item, modificadoresCusto: replaceCalculatedFiscoComponents(item.modificadoresCusto ?? [], computed) };
 }
 
 /**
@@ -354,7 +386,12 @@ async function importPurchaseComposition({
 	assertImportIsActive(abortSignal);
 
 	onStage({ stage: "CATALOGO", status: "INICIADO", detail: "Procurando por EAN, código e nome…" });
-	const entryTaxContext = await loadEntryTaxContext({ organizationId: userOrgId, crtEmitente: extracted.documentoFiscal?.emitente.crt ?? null });
+	const entryTaxContext = await loadEntryTaxContext({
+		organizationId: userOrgId,
+		crtEmitente: extracted.documentoFiscal?.emitente.crt ?? null,
+		ufEmitente: extracted.documentoFiscal?.emitente.uf ?? null,
+		dataEmissao: parseIsoDate(extracted.dataEmissao),
+	});
 	const itens: TImportedLine[] = (
 		await matchCompositionItemsToProducts({
 			organizacaoId: userOrgId,
@@ -364,7 +401,8 @@ async function importPurchaseComposition({
 		})
 	)
 		.map(applyLineDisposition)
-		.map((item) => applyEntryTaxTreatments(item, entryTaxContext));
+		.map((item) => applyEntryTaxTreatments(item, entryTaxContext))
+		.map((item) => applyFiscoComponents(item, entryTaxContext));
 	assertImportIsActive(abortSignal);
 	const matchedCount = itens.filter((item) => item.matchTipo === "MAPEADO" || item.matchTipo === "CODIGO").length;
 	const reviewCount = itens.length - matchedCount;
@@ -388,7 +426,7 @@ async function importPurchaseComposition({
 							total +
 							item.valorTotal +
 							(item.modificadoresCusto ?? [])
-								.filter((modifier) => modifier.chave !== "BONIFICACAO" && modifier.contrapartida !== "INCLUSO_NO_VALOR")
+								.filter((modifier) => modifier.chave !== "BONIFICACAO" && (!modifier.contrapartida || modifier.contrapartida === "FORNECEDOR"))
 								.reduce((modifierTotal, modifier) => modifierTotal + (modifier.efeito === "REDUCAO" ? -1 : 1) * (modifier.valorCentavos / 100), 0),
 						0,
 					),
@@ -421,6 +459,11 @@ async function importPurchaseComposition({
 	if (bonificadas > 0)
 		avisos.push(
 			`${bonificadas} ${bonificadas === 1 ? "linha bonificada entra" : "linhas bonificadas entram"} no estoque a custo zero, sem valor a pagar.`,
+		);
+	const obrigacoesFisco = itens.flatMap((item) => (item.modificadoresCusto ?? []).filter((modifier) => modifier.contrapartida === "FISCO"));
+	if (obrigacoesFisco.length > 0)
+		avisos.push(
+			`Compra interestadual: ${formatBRL(obrigacoesFisco.reduce((total, modifier) => total + modifier.valorCentavos / 100, 0))} de ICMS a recolher à SEFAZ (DIFAL/antecipação), fora do valor do fornecedor. Confira na etapa Financeiro.`,
 		);
 	const impostosPendentes = itens.reduce(
 		(total, item) => total + (item.modificadoresCusto ?? []).filter((modifier) => modifier.tratamento === null).length,
@@ -469,6 +512,8 @@ async function importPurchaseComposition({
 			},
 			documento: {
 				origem: extracted.origem ?? "IA",
+				// Contexto do cálculo ao fisco: o builder recalcula DIFAL/antecipação ao trocar a destinação.
+				fiscalEntrada: entryTaxContext.fisco,
 				numero: extracted.numeroDocumento?.trim() || null,
 				serie: extracted.serieDocumento?.trim() || null,
 				chaveAcesso: extracted.chaveAcesso?.trim() || null,

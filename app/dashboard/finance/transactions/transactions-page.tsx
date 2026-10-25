@@ -2,7 +2,20 @@
 
 import { useMemo, useState } from "react";
 import { useQueryState } from "nuqs";
-import { AlertCircle, ArrowRight, ArrowRightLeft, CalendarDays, CheckCircle2, Clock, DollarSign, ListFilter, Pencil, Wallet } from "lucide-react";
+import {
+	AlertCircle,
+	ArrowRight,
+	ArrowRightLeft,
+	CalendarDays,
+	CheckCircle2,
+	Clock,
+	DollarSign,
+	Landmark,
+	ListFilter,
+	Pencil,
+	Tag,
+	Wallet,
+} from "lucide-react";
 import type { TGetFinancialTransactionsOutputDefault } from "@/app/api/finances/financial-transactions/route";
 import FinancialTransactionMenu from "@/components/Modals/Finances/FinancialTransactionMenu";
 import NewFinancialTransfer from "@/components/Modals/Finances/NewFinancialTransfer";
@@ -18,7 +31,12 @@ import { formatDateAsLocale, formatNameAsInitials, formatToMoney } from "@/lib/f
 import { getErrorMessage } from "@/lib/errors";
 import { useFinancesTransactions } from "@/lib/queries/finances";
 import { cn } from "@/lib/utils";
-import { FinancialAccountTypeOptions, FinancialTransactionTypeOptions, SalePaymentMethodsOptions } from "@/utils/select-options";
+import {
+	AccountingEntryOriginTypeOptions,
+	FinancialAccountTypeOptions,
+	FinancialTransactionTypeOptions,
+	SalePaymentMethodsOptions,
+} from "@/utils/select-options";
 import { BsCalendar, BsCalendarCheck } from "react-icons/bs";
 
 const TRANSACTION_STATUS_OPTIONS = [
@@ -63,6 +81,10 @@ export default function FinanceTransactionsPage() {
 	const selectedStatusesLabel = useMemo(
 		() => filters.statuses.map((status) => TRANSACTION_STATUS_OPTIONS.find((option) => option.value === status)?.label ?? status).join(", "),
 		[filters.statuses],
+	);
+	const selectedOriginsLabel = useMemo(
+		() => filters.origins.map((origin) => AccountingEntryOriginTypeOptions.find((option) => option.value === origin)?.label ?? origin).join(", "),
+		[filters.origins],
 	);
 	const selectedForecastPeriodLabel = useMemo(() => {
 		return filters.periodAfter && filters.periodBefore
@@ -138,6 +160,48 @@ export default function FinanceTransactionsPage() {
 						/>
 					</InteractiveFilter.Content>
 				</InteractiveFilter.Root>
+
+				<InteractiveFilter.Root className="w-fit">
+					<InteractiveFilter.Trigger>
+						<InteractiveFilter.Icon>
+							<Tag className="h-4 w-4 min-h-4 min-w-4" />
+							<InteractiveFilter.Label>ORIGEM</InteractiveFilter.Label>
+						</InteractiveFilter.Icon>
+						<InteractiveFilter.Value>
+							{selectedOriginsLabel.length > 0 ? <strong>{selectedOriginsLabel}</strong> : <span>NENHUM</span>}
+						</InteractiveFilter.Value>
+						<InteractiveFilter.Clear onClear={() => updateFilters({ origins: [], page: 1 })} />
+					</InteractiveFilter.Trigger>
+					<InteractiveFilter.Content className="w-72 p-0">
+						<InteractiveFilter.MultiContent
+							options={AccountingEntryOriginTypeOptions.map((option) => ({ ...option, startContent: option.icon }))}
+							value={filters.origins}
+							onChange={(nextOrigins) => updateFilters({ origins: nextOrigins, page: 1 })}
+							onClear={() => updateFilters({ origins: [], page: 1 })}
+							isCleared={filters.origins.length === 0}
+							searchPlaceholder="Buscar origem..."
+							emptyLabel="Nenhuma origem encontrada."
+							clearLabel="N/A"
+						/>
+					</InteractiveFilter.Content>
+				</InteractiveFilter.Root>
+				{/* Atalho: guias de DIFAL/antecipação nascidas de compras (ADR-0002, decisão 5). */}
+				<Button
+					type="button"
+					variant={filters.origins.length === 1 && filters.origins[0] === "TRIBUTO_COMPRA" ? "default" : "outline"}
+					size="sm"
+					className="w-fit"
+					onClick={() =>
+						updateFilters({
+							origins: filters.origins.length === 1 && filters.origins[0] === "TRIBUTO_COMPRA" ? [] : ["TRIBUTO_COMPRA"],
+							statuses: filters.origins.length === 1 && filters.origins[0] === "TRIBUTO_COMPRA" ? [] : ["pendente", "em-atraso"],
+							page: 1,
+						})
+					}
+				>
+					<Landmark className="h-4 w-4" />
+					GUIAS A PAGAR
+				</Button>
 
 				<InteractiveFilter.Root className="w-fit">
 					<InteractiveFilter.Trigger>

@@ -268,6 +268,8 @@ export const DEFAULT_ORGANIZATION_CONFIGURATION_DEFAULTS: TOrganizationDefaults 
 				debitoCreditoTributarioContaKey: null,
 				debitoDespesaPeriodoContaId: null,
 				debitoDespesaPeriodoContaKey: null,
+				creditoTributoCompraContaId: null,
+				creditoTributoCompraContaKey: null,
 				contasDebitoPorDestinacao: {
 					INSUMO: { contaId: null, contaKey: null },
 					USO_CONSUMO: { contaId: null, contaKey: null },

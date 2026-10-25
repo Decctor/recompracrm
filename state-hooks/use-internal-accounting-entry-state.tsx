@@ -32,6 +32,8 @@ function getDefaultState(): TAccountingEntryState {
 			valor: 0,
 			valorPrevisto: null,
 			dataCompetencia: new Date(),
+			clienteId: null,
+			fornecedorId: null,
 		},
 		// Todo lançamento nasce com o esqueleto mínimo da partida dobrada; o par legado acima é
 		// derivado das linhas no servidor.

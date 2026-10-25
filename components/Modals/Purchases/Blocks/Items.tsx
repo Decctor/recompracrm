@@ -336,8 +336,13 @@ const PURCHASE_MODIFIER_OPTIONS = [
 	["IMPOSTOS_IPI", "IPI"],
 	["IMPOSTOS_ICMS_ST", "ICMS-ST"],
 	["IMPOSTOS_FCP_ST", "FCP-ST"],
+	// Devidos ao fisco pelo destinatário: não somam ao fornecedor, viram guia própria.
+	["IMPOSTOS_DIFAL", "DIFAL (fisco)"],
+	["IMPOSTOS_ANTECIPACAO", "Antecipação de ICMS (fisco)"],
+	["IMPOSTOS_ICMS_ST_ENTRADA", "ICMS-ST de entrada (fisco)"],
 	["OUTRO", "Outro acréscimo"],
 ] as const;
+const FISCO_MODIFIER_KEYS = new Set<string>(["IMPOSTOS_DIFAL", "IMPOSTOS_FCP_DIFAL", "IMPOSTOS_ANTECIPACAO", "IMPOSTOS_ICMS_ST_ENTRADA"]);
 
 /**
  * Para que esta aquisição serve (ADR-0002). Só muda custo/conta quando difere de revenda, então
@@ -468,6 +473,11 @@ function PurchaseItemCostModifiersControl({
 														...current,
 														chave: event.target.value as (typeof PURCHASE_MODIFIER_OPTIONS)[number][0],
 														efeito: event.target.value === "DESCONTO" || event.target.value === "BONIFICACAO" ? "REDUCAO" : "ACRESCIMO",
+														contrapartida: FISCO_MODIFIER_KEYS.has(event.target.value)
+															? "FISCO"
+															: current.contrapartida === "FISCO"
+																? "FORNECEDOR"
+																: current.contrapartida,
 														tratamento: event.target.value === "DESCONTO" || event.target.value === "BONIFICACAO" ? "CUSTO_ESTOQUE" : current.tratamento,
 														descricao: event.target.value === "OUTRO" ? current.descricao || "Outro acréscimo" : current.descricao,
 													}

@@ -181,6 +181,7 @@ type FinancialTransactionsFilters = {
 	types: string[];
 	paymentMethods: string[];
 	statuses: string[];
+	origins: string[];
 };
 
 async function fetchFinancialTransactions(filters: FinancialTransactionsFilters) {
@@ -192,6 +193,7 @@ async function fetchFinancialTransactions(filters: FinancialTransactionsFilters)
 	if (filters.types.length > 0) searchParams.set("types", filters.types.join(","));
 	if (filters.paymentMethods.length > 0) searchParams.set("paymentMethods", filters.paymentMethods.join(","));
 	if (filters.statuses.length > 0) searchParams.set("statuses", filters.statuses.join(","));
+	if (filters.origins.length > 0) searchParams.set("origins", filters.origins.join(","));
 	const { data } = await axios.get<TGetFinancialTransactionsOutput>(`/api/finances/financial-transactions?${searchParams.toString()}`);
 	const result = data.data.default;
 	if (!result) throw new Error("Oops, houve um erro ao buscar as movimentações.");
@@ -210,6 +212,7 @@ export function useFinancesTransactions({ initialFilters }: UseFinancesTransacti
 		types: initialFilters?.types || [],
 		paymentMethods: initialFilters?.paymentMethods || [],
 		statuses: initialFilters?.statuses || [],
+		origins: initialFilters?.origins || [],
 	});
 	function updateFilters(newFilters: Partial<FinancialTransactionsFilters>) {
 		setFilters((prev) => ({ ...prev, ...newFilters }));

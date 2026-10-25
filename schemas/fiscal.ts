@@ -301,9 +301,12 @@ export const OrganizationFiscalConfigSchema = z.object({
 		.object({
 			regimeApuracao: PurchaseEntryTaxRegimeEnum.optional().nullable(),
 			contribuinteIpi: z.boolean({ invalid_type_error: "Tipo não valido para contribuinte de IPI." }).default(false),
+			// Antecipação parcial do ICMS em compras interestaduais para revenda/insumo: regra de algumas
+			// UFs e de alguns regimes. Opt-in explícito, porque errar aqui cria dívida com o fisco.
+			antecipacaoParcial: z.boolean({ invalid_type_error: "Tipo não valido para antecipação parcial." }).default(false),
 			tratamentos: z.record(AcquisitionNatureEnum, z.record(PurchaseCostModifierKeyEnum, PurchaseCostTreatmentEnum).default({})).default({}),
 		})
-		.default({ regimeApuracao: null, contribuinteIpi: false, tratamentos: {} }),
+		.default({ regimeApuracao: null, contribuinteIpi: false, antecipacaoParcial: false, tratamentos: {} }),
 	emissaoManual: z
 		.object({
 			classificacaoPresencialExcepcional: z

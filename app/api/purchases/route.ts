@@ -15,6 +15,8 @@ import {
 } from "@/lib/purchase-processing/process-purchase-item-stock";
 import { upsertSupplierProductMappings } from "@/lib/purchase/supplier-product-mappings";
 import { ACQUISITION_NATURE_LABELS, SUPPORTED_PURCHASE_DESTINATIONS } from "@/lib/purchase/entry-rules";
+import { removePurchaseTaxObligationEntry, syncPurchaseTaxObligationEntry } from "@/lib/purchase/tax-obligation-entry";
+import { getModifierCounterparty } from "@/lib/purchase/costing";
 import { getDefaultAccountChartCodeByKey, RecompraCRMDefaultAccountingDefaults } from "@/config/onboarding";
 import type { TAcquisitionNatureEnum } from "@/schemas/enums";
 import {
@@ -47,6 +49,7 @@ import {
 	suppliers,
 } from "@/services/drizzle/schema";
 import { and, count, eq, inArray, or } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
 import createHttpError from "http-errors";
 import { NextResponse, type NextRequest } from "next/server";
 import z from "zod";
@@ -150,6 +153,12 @@ async function getPurchases({ input, session }: { input: TGetPurchasesInput; ses
 				},
 				notasRecebidas: {
 					columns: { id: true, chaveAcesso: true, situacao: true, manifestacaoAtual: true, completo: true, emitenteNome: true },
+				},
+				// Lançamentos do fisco desta compra (DIFAL, antecipação): guia a pagar fora do fornecedor.
+				lancamentosTributos: {
+					where: (fields, { eq }) => eq(fields.origemTipo, "TRIBUTO_COMPRA"),
+					columns: { id: true, titulo: true, valor: true, dataCompetencia: true },
+					with: { transacoesFinanceiras: { columns: { id: true, titulo: true, valor: true, dataPrevisao: true, dataEfetivacao: true } } },
 				},
 				lancamentoContabil: {
 					columns: {
@@ -479,11 +488,23 @@ function getPurchaseAccountingAmounts(items: TPurchaseItemInput[]) {
 		if (item.deletar) continue;
 		const result = calculatePurchaseItemCost(item);
 		const destination = item.destinacao ?? "REVENDA";
+		// O que é devido ao fisco tem lançamento próprio (TRIBUTO_COMPRA): sai das linhas do fornecedor,
+		// senão a mesma parcela de custo seria debitada duas vezes.
+		let fiscoInventoryCents = 0;
+		let fiscoCreditCents = 0;
+		let fiscoExpenseCents = 0;
+		for (const modifier of item.modificadoresCusto?.modificadores ?? []) {
+			if (getModifierCounterparty(modifier) !== "FISCO") continue;
+			if (modifier.tratamento === "CUSTO_ESTOQUE") fiscoInventoryCents += modifier.valorCentavos;
+			else if (modifier.tratamento === "CREDITO_TRIBUTARIO") fiscoCreditCents += modifier.valorCentavos;
+			else fiscoExpenseCents += modifier.valorCentavos;
+		}
+		const itemInventoryCents = moneyToCents(result.valorTotalCusto) - fiscoInventoryCents;
 		financialCents += moneyToCents(result.valorTotalLiquido);
-		inventoryCents += moneyToCents(result.valorTotalCusto);
-		inventoryCentsByDestination[destination] = (inventoryCentsByDestination[destination] ?? 0) + moneyToCents(result.valorTotalCusto);
-		taxCreditCents += moneyToCents(result.valorTotalCreditoTributario);
-		periodExpenseCents += moneyToCents(result.valorTotalDespesaPeriodo);
+		inventoryCents += itemInventoryCents;
+		inventoryCentsByDestination[destination] = (inventoryCentsByDestination[destination] ?? 0) + itemInventoryCents;
+		taxCreditCents += moneyToCents(result.valorTotalCreditoTributario) - fiscoCreditCents;
+		periodExpenseCents += moneyToCents(result.valorTotalDespesaPeriodo) - fiscoExpenseCents;
 	}
 	return {
 		valorFinanceiro: centsToMoney(financialCents),
@@ -546,6 +567,7 @@ async function syncPurchaseAccountingLines({
 	creditAccountId,
 	items,
 	purchaseIsReceived,
+	taxObligation,
 }: {
 	trx: DBTransaction;
 	organizationId: string;
@@ -556,6 +578,8 @@ async function syncPurchaseAccountingLines({
 	creditAccountId: string;
 	items: TPurchaseItemInput[];
 	purchaseIsReceived: boolean;
+	// Lançamento do fisco (ADR-0002, decisão 5): nasce com o recebimento e some sem ele.
+	taxObligation: { purchaseId: string; userId: string; purchaseTitle: string; dataCompetencia: Date };
 }) {
 	if (!purchaseIsReceived) {
 		await syncAccountingEntryLines({
@@ -565,6 +589,7 @@ async function syncPurchaseAccountingLines({
 			entryValue,
 			lines: buildDefaultAccountingEntryLines({ debitAccountId, creditAccountId, value: entryValue, expectedValue }),
 		});
+		await removePurchaseTaxObligationEntry({ trx, organizationId, purchaseId: taxObligation.purchaseId });
 		return;
 	}
 
@@ -579,7 +604,7 @@ async function syncPurchaseAccountingLines({
 		trx,
 		organizationId,
 		configured: purchaseDefaults?.contasDebitoPorDestinacao,
-		needed: Object.keys(amounts.custoPorDestinacao) as TAcquisitionNatureEnum[],
+		needed: ["REVENDA", "INSUMO", "USO_CONSUMO", "ATIVO_IMOBILIZADO"],
 	});
 	await syncAccountingEntryLines({
 		trx,
@@ -596,6 +621,22 @@ async function syncPurchaseAccountingLines({
 				contasPorDestinacao,
 			},
 		}),
+	});
+	await syncPurchaseTaxObligationEntry({
+		trx,
+		organizationId,
+		userId: taxObligation.userId,
+		purchaseId: taxObligation.purchaseId,
+		purchaseTitle: taxObligation.purchaseTitle,
+		items,
+		dataCompetencia: taxObligation.dataCompetencia,
+		accounts: {
+			estoqueContaId: debitAccountId,
+			contasPorDestinacao,
+			creditoTributarioContaId: purchaseDefaults?.debitoCreditoTributarioContaId ?? null,
+			despesaPeriodoContaId: purchaseDefaults?.debitoDespesaPeriodoContaId ?? null,
+		},
+		defaults: purchaseDefaults,
 	});
 }
 
@@ -641,12 +682,15 @@ async function createPurchase({ input, session }: { input: TCreatePurchaseInput;
 			if (newProducts.length > 0) await insertPurchaseNewProducts({ trx: tx, organizationId: userOrgId, newProducts });
 			// Primeiro o lançamento contábil, já que a compra referencia ele
 			const { debitAccountId, creditAccountId } = await resolvePurchaseAccountingAccountIds({ trx: tx, orgId: userOrgId });
+			// O id da compra nasce aqui: o lançamento do fornecedor e o do fisco apontam para ela.
+			const purchaseId = randomUUID();
 			const insertedAccountingEntry = await tx
 				.insert(accountingEntries)
 				.values({
 					...accountingEntryFields,
 					organizacaoId: userOrgId,
 					origemTipo: "COMPRA",
+					fornecedorId: supplierId,
 					idContaDebito: debitAccountId,
 					idContaCredito: creditAccountId,
 					autorId: session.user.id,
@@ -655,22 +699,12 @@ async function createPurchase({ input, session }: { input: TCreatePurchaseInput;
 
 			const insertedAccountingEntryId = insertedAccountingEntry[0]?.id;
 			if (!insertedAccountingEntryId) throw new createHttpError.InternalServerError("Erro ao criar lançamento contábil da compra.");
-			await syncPurchaseAccountingLines({
-				trx: tx,
-				organizationId: userOrgId,
-				accountingEntryId: insertedAccountingEntryId,
-				entryValue: accountingEntryFields.valor,
-				expectedValue: accountingEntryFields.valorPrevisto,
-				debitAccountId,
-				creditAccountId,
-				items: normalizedPurchaseItems,
-				purchaseIsReceived: isPurchaseConsideredReceived(payloadPurchase),
-			});
 
 			const insertedPurchase = await tx
 				.insert(purchases)
 				.values({
 					...payloadPurchase,
+					id: purchaseId,
 					fornecedorId: supplierId,
 					pedidoFornecedorNome: payloadPurchase.pedidoFornecedorNome ?? newSupplier?.nome ?? null,
 					pedidoFornecedorCnpj: payloadPurchase.pedidoFornecedorCnpj ?? newSupplier?.cpfCnpj ?? null,
@@ -685,6 +719,24 @@ async function createPurchase({ input, session }: { input: TCreatePurchaseInput;
 
 			const insertedPurchaseId = insertedPurchase[0]?.id;
 			if (!insertedPurchaseId) throw new createHttpError.InternalServerError("Erro ao criar compra.");
+			await tx.update(accountingEntries).set({ compraId: insertedPurchaseId }).where(eq(accountingEntries.id, insertedAccountingEntryId));
+			await syncPurchaseAccountingLines({
+				trx: tx,
+				organizationId: userOrgId,
+				accountingEntryId: insertedAccountingEntryId,
+				entryValue: accountingEntryFields.valor,
+				expectedValue: accountingEntryFields.valorPrevisto,
+				debitAccountId,
+				creditAccountId,
+				items: normalizedPurchaseItems,
+				purchaseIsReceived: isPurchaseConsideredReceived(payloadPurchase),
+				taxObligation: {
+					purchaseId: insertedPurchaseId,
+					userId: session.user.id,
+					purchaseTitle: payloadPurchase.titulo,
+					dataCompetencia: accountingEntryFields.dataCompetencia,
+				},
+			});
 			// A nota passa a pertencer a esta compra na mesma transação: nenhuma janela em que ela
 			// apareça como "a lançar" com a compra já salva.
 			if (isPurchaseConsideredReceived(payloadPurchase))
@@ -943,6 +995,8 @@ async function syncPurchaseAccountingEntry({
 	payload,
 	items,
 	purchaseIsReceived,
+	purchaseTitle,
+	supplierId,
 	synchronizeLines = true,
 }: {
 	tx: DBTransaction;
@@ -954,6 +1008,8 @@ async function syncPurchaseAccountingEntry({
 	items: TPurchaseItemInput[];
 	purchaseIsReceived: boolean;
 	synchronizeLines?: boolean;
+	purchaseTitle: string;
+	supplierId: string | null;
 }) {
 	const { id: _payloadEntryId, transacoes: payloadTransactions, ...entryFields } = payload;
 
@@ -962,7 +1018,7 @@ async function syncPurchaseAccountingEntry({
 	if (accountingEntryId) {
 		await tx
 			.update(accountingEntries)
-			.set(entryFields)
+			.set({ ...entryFields, compraId: purchaseId, fornecedorId: supplierId })
 			.where(and(eq(accountingEntries.id, accountingEntryId), eq(accountingEntries.organizacaoId, orgId)));
 	} else {
 		const { debitAccountId, creditAccountId } = await resolvePurchaseAccountingAccountIds({ trx: tx, orgId });
@@ -972,6 +1028,8 @@ async function syncPurchaseAccountingEntry({
 				...entryFields,
 				organizacaoId: orgId,
 				origemTipo: "COMPRA",
+				compraId: purchaseId,
+				fornecedorId: supplierId,
 				idContaDebito: debitAccountId,
 				idContaCredito: creditAccountId,
 				autorId: userId,
@@ -999,6 +1057,7 @@ async function syncPurchaseAccountingEntry({
 			creditAccountId,
 			items,
 			purchaseIsReceived,
+			taxObligation: { purchaseId, userId, purchaseTitle, dataCompetencia: entryFields.dataCompetencia },
 		});
 	}
 
@@ -1099,6 +1158,7 @@ async function updatePurchase({ input, session }: { input: TUpdatePurchaseInput;
 				})
 				.where(and(eq(purchases.id, purchaseId), eq(purchases.organizacaoId, userOrgId)));
 			await unlinkInboundDocumentsFromPurchase({ trx: tx, organizationId: userOrgId, purchaseId });
+			await removePurchaseTaxObligationEntry({ trx: tx, organizationId: userOrgId, purchaseId });
 
 			return {
 				data: { updatedPurchaseId: purchaseId },
@@ -1154,6 +1214,8 @@ async function updatePurchase({ input, session }: { input: TUpdatePurchaseInput;
 				payload: payloadAccountingEntry,
 				items: normalizedPurchaseItems,
 				purchaseIsReceived: true,
+				purchaseTitle: payloadPurchase.titulo,
+				supplierId: payloadPurchase.fornecedorId ?? null,
 				synchronizeLines: false,
 			});
 			return {
@@ -1192,6 +1254,8 @@ async function updatePurchase({ input, session }: { input: TUpdatePurchaseInput;
 			payload: payloadAccountingEntry,
 			items: normalizedPurchaseItems,
 			purchaseIsReceived: isPurchaseConsideredReceived(payloadPurchase),
+			purchaseTitle: payloadPurchase.titulo,
+			supplierId: payloadPurchase.fornecedorId ?? null,
 		});
 
 		for (const item of normalizedPurchaseItems) {

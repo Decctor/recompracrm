@@ -7,11 +7,12 @@ import PurchaseTransactionsTable from "@/components/Modals/Purchases/Blocks/Util
 import { Button } from "@/components/ui/button";
 import { formatDateForInputValue, formatDateOnInputChange, formatToMoney } from "@/lib/formatting";
 import { cn } from "@/lib/utils";
-import { CircleAlert, CircleCheck } from "lucide-react";
+import { CircleAlert, CircleCheck, Landmark } from "lucide-react";
 import { BUILDER_STAGES } from "../helpers/stages";
 import { useBuilder } from "../components/builder-provider";
 import { FieldLabel, ReadBadge, SectionLabel, TONE_CLASSES } from "../components/builder-ui";
 import { useBuilderSummary } from "../components/use-builder-summary";
+import { getFiscoObligations } from "../helpers/review-lines";
 
 export default function StageFinance() {
 	const {
@@ -24,8 +25,11 @@ export default function StageFinance() {
 		removeAccountingEntryTransaction,
 		readFields,
 		clearReadField,
+		lines,
 	} = useBuilder();
 	const summary = useBuilderSummary();
+	const fiscoObligations = getFiscoObligations(lines);
+	const fiscoTotal = fiscoObligations.reduce((total, obligation) => total + obligation.valor, 0);
 	const stage = BUILDER_STAGES.finance;
 	const entry = state.lancamentoContabil;
 	const activeTransactions = entry.transacoes.filter((transaction) => !transaction.deletar);
@@ -113,6 +117,35 @@ export default function StageFinance() {
 						</Button>
 					) : null}
 				</div>
+
+				{fiscoObligations.length > 0 ? (
+					<div className="flex flex-col gap-2">
+						<SectionLabel>Obrigações com o fisco</SectionLabel>
+						<div className="flex flex-col gap-2 rounded-xl border border-border p-3.5">
+							<div className="flex items-center gap-2.5">
+								<span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-lg", TONE_CLASSES.info)}>
+									<Landmark className="h-4 w-4" />
+								</span>
+								<div className="flex flex-col">
+									<p className="text-sm font-semibold">{formatToMoney(fiscoTotal)} a recolher à SEFAZ, fora do valor do fornecedor</p>
+									<p className="text-xs text-muted-foreground">
+										Ao receber a compra, vira um lançamento próprio (origem "Tributo de compra") com uma guia a pagar. Não entra nas transações abaixo.
+									</p>
+								</div>
+							</div>
+							<ul className="flex flex-col gap-1 text-xs">
+								{fiscoObligations.map((obligation) => (
+									<li key={obligation.chave} className="flex flex-wrap items-baseline justify-between gap-2 border-t border-border pt-1.5">
+										<span className="text-muted-foreground">
+											{obligation.descricao ?? obligation.chave} · {obligation.linhas} {obligation.linhas === 1 ? "linha" : "linhas"}
+										</span>
+										<span className="font-mono font-semibold">{formatToMoney(obligation.valor)}</span>
+									</li>
+								))}
+							</ul>
+						</div>
+					</div>
+				) : null}
 
 				<div className="flex flex-col gap-2">
 					<div className="flex flex-wrap items-center gap-2">

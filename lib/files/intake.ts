@@ -13,6 +13,16 @@ import { inspectImageFile, sniffMimeType, type TInspectedFile } from "./inspect"
 import { getFileById, registerStoredFile, sanitizeFileName, sha256Hex, storeFile } from "./service";
 
 const PUBLIC_FILES_BUCKET = "files";
+const FINANCE_DOCUMENT_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
+
+/** Boleto/guia ou comprovante: PDF ou imagem; nada de XML aqui. */
+async function inspectFinanceDocument(buffer: Buffer): Promise<TInspectedFile> {
+	if (buffer.length === 0) throw new createHttpError.BadRequest("Arquivo vazio.");
+	const sniffed = sniffMimeType(buffer.subarray(0, 16));
+	if (sniffed === "application/pdf") return { mimeType: sniffed, metadados: null };
+	if (sniffed && FINANCE_DOCUMENT_IMAGE_TYPES.has(sniffed)) return inspectImageFile(buffer, { allowedMimeTypes: FINANCE_DOCUMENT_IMAGE_TYPES });
+	throw new createHttpError.BadRequest("Envie um PDF ou uma imagem (PNG, JPEG ou WEBP).");
+}
 const ALLOWED_TEMPLATE_IMAGE_TYPES = new Set(["image/jpeg", "image/png"]);
 
 type TUploadPurposeBase = {
@@ -78,6 +88,17 @@ export const UPLOAD_PURPOSES: Record<TUploadPurposeEnum, TUploadPurposeDefinitio
 		visibilidade: "PRIVADO",
 		storagePrefix: getFiscalEntryDocumentPrefix,
 		inspect: inspectFiscalEntryDocument,
+	},
+	// Guia/boleto e comprovante presos a uma transação financeira
+	// (`financial_transactions.documento_cobranca_arquivo_id` / `comprovante_arquivo_id`).
+	DOCUMENTO_FINANCEIRO: {
+		transport: "PROXY",
+		maxBytes: 4 * 1024 * 1024,
+		ttlMinutes: 60,
+		bucket: PRIVATE_FILES_BUCKET,
+		visibilidade: "PRIVADO",
+		storagePrefix: ({ organizacaoId }) => `finance-documents/${organizacaoId}/`,
+		inspect: inspectFinanceDocument,
 	},
 };
 

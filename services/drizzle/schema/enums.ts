@@ -238,6 +238,8 @@ export const accountingEntryOriginTypeEnum = pgEnum("accounting_entry_origin_typ
 	"PERDA_ESTOQUE",
 	"RECORRENCIA",
 	"PAGAMENTO_CARTAO",
+	// Divida com o fisco nascida de uma compra (DIFAL, antecipacao, ST de entrada) — ADR-0002, decisao 5.
+	"TRIBUTO_COMPRA",
 ]);
 
 export const accountingEntryLineNatureEnum = pgEnum("accounting_entry_line_nature", ["DEBITO", "CREDITO"]);

@@ -31,6 +31,9 @@ export const FinancialRecurringRuleConfigSchema = z.object({
 });
 
 export const FinancialRecurringRuleAccountingEntryTemplateSchema = z.object({
+	// Contraparte copiada do lançamento de origem (ADR-0002, decisão 5).
+	clienteId: z.string({ invalid_type_error: "Tipo não válido para o cliente do lançamento recorrente." }).optional().nullable(),
+	fornecedorId: z.string({ invalid_type_error: "Tipo não válido para o fornecedor do lançamento recorrente." }).optional().nullable(),
 	titulo: z.string({
 		required_error: "Título do lançamento recorrente não informado.",
 		invalid_type_error: "Tipo não válido para o título do lançamento recorrente.",

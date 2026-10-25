@@ -47,6 +47,9 @@ export const AccountingEntrySchema = z.object({
 	}),
 	vendaId: z.string({ invalid_type_error: "Tipo nao valido para o ID da venda." }).optional().nullable(),
 	loteId: z.string({ invalid_type_error: "Tipo nao valido para o ID do lote." }).optional().nullable(),
+	// Contraparte do lançamento (ADR-0002, decisão 5): quem deve ou a quem se deve. No máximo um.
+	clienteId: z.string({ invalid_type_error: "Tipo nao valido para o ID do cliente." }).optional().nullable(),
+	fornecedorId: z.string({ invalid_type_error: "Tipo nao valido para o ID do fornecedor." }).optional().nullable(),
 	origemTipo: AccountingEntryOriginTypeEnum,
 	titulo: z.string({
 		required_error: "Titulo do lancamento contabil nao informado.",
@@ -275,6 +278,9 @@ export const FinancialTransactionSchema = z.object({
 		.transform((val) => (val ? new Date(val) : null)),
 	parcela: z.number({ invalid_type_error: "Tipo nao valido para o numero da parcela." }).optional().nullable(),
 	totalParcelas: z.number({ invalid_type_error: "Tipo nao valido para o total de parcelas." }).optional().nullable(),
+	// Anexos da parcela no catálogo `files`: boleto/guia e comprovante (ADR-0002, decisão 5).
+	documentoCobrancaArquivoId: z.string({ invalid_type_error: "Tipo nao valido para o arquivo de cobranca da transacao." }).optional().nullable(),
+	comprovanteArquivoId: z.string({ invalid_type_error: "Tipo nao valido para o comprovante da transacao." }).optional().nullable(),
 	autorId: z.string({ invalid_type_error: "Tipo nao valido para o ID do autor." }).optional().nullable(),
 	dataInsercao: z
 		.string({ invalid_type_error: "Tipo nao valido para a data de insercao." })

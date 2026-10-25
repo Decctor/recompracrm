@@ -153,7 +153,13 @@ export default function PurchaseDetailPage({ membership, purchaseId }: PurchaseD
 					<ItemsTab purchase={purchase} editor={editor} baseline={baseline} editable={canEdit && !isReceived} isReceived={isReceived} />
 				</TabsContent>
 				<TabsContent value="financeiro" className="mt-4">
-					<FinanceTab editor={editor} editable={canEdit} isReceived={isReceived} itemsTotal={itemsTotal} />
+					<FinanceTab
+						editor={editor}
+						editable={canEdit}
+						isReceived={isReceived}
+						itemsTotal={itemsTotal}
+						taxObligations={purchase.lancamentosTributos ?? []}
+					/>
 				</TabsContent>
 				<TabsContent value="documentos" className="mt-4">
 					<DocumentsTab purchase={purchase} state={state} />

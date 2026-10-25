@@ -15,7 +15,14 @@ import { formatNameAsInitials, formatToMoney } from "@/lib/formatting";
 import { cn } from "@/lib/utils";
 import { ArrowRight, BadgeDollarSign, Check, CircleCheck, Ellipsis, EyeOff, ListTodo, Plus, Undo2 } from "lucide-react";
 import { useState } from "react";
-import { getLineIssue, getLineStatus, getLineTotal, lineHasDestinationDivergence, type TReviewLine } from "../helpers/review-lines";
+import {
+	applyLineDestination,
+	getLineIssue,
+	getLineStatus,
+	getLineTotal,
+	lineHasDestinationDivergence,
+	type TReviewLine,
+} from "../helpers/review-lines";
 import { ACQUISITION_NATURE_LABELS, SUPPORTED_PURCHASE_DESTINATIONS } from "@/lib/purchase/entry-rules";
 import type { TAcquisitionNatureEnum } from "@/schemas/enums";
 import { BUILDER_STAGES } from "../helpers/stages";
@@ -69,7 +76,7 @@ export default function StageItems() {
 }
 
 function ReviewTable() {
-	const { lines, updateLine, openQueue, importData, state, addPurchaseItem, updatePurchaseItem, removePurchaseItem } = useBuilder();
+	const { lines, updateLine, setLines, openQueue, importData, state, addPurchaseItem, updatePurchaseItem, removePurchaseItem } = useBuilder();
 	const { pendingLines, readyCount, ignoredCount } = useBuilderSummary();
 	const [filter, setFilter] = useState<TFilter>("all");
 	const [showManualItems, setShowManualItems] = useState(false);
@@ -160,7 +167,9 @@ function ReviewTable() {
 				</div>
 				{visibleLines.map((line) => (
 					<ReviewRow
-						onChangeDestination={(destinacao) => updateLine(line.id, { destinacao })}
+						onChangeDestination={(destinacao) =>
+							setLines((current) => applyLineDestination({ lines: current, lineId: line.id, destinacao, context: importData?.documento?.fiscalEntrada }))
+						}
 						key={line.id}
 						line={line}
 						supplierName={supplierName}

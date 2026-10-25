@@ -1,6 +1,7 @@
 import type { TImportPurchaseCompositionOutput } from "@/app/api/purchases/import-composition/route";
 import type { TAcquisitionNatureEnum, TPurchaseCostTreatmentEnum } from "@/schemas/enums";
 import { convertLineToProductUnit, unitsAreEquivalent } from "@/lib/purchase/units";
+import { computeFiscoComponents, replaceCalculatedFiscoComponents, type TEntryFiscoContext } from "@/lib/fiscal/entry/fisco-components";
 
 export type TImportResult = TImportPurchaseCompositionOutput["data"];
 export type TImportSupplier = TImportResult["fornecedor"];
@@ -72,6 +73,50 @@ export function createReviewLines(result: TImportResult, createId: () => string)
 	}));
 }
 
+/** Troca a destinação e refaz o que é devido ao fisco por ela (DIFAL para uso e consumo, por exemplo). */
+export function applyLineDestination({
+	lines,
+	lineId,
+	destinacao,
+	context,
+}: {
+	lines: TReviewLine[];
+	lineId: string;
+	destinacao: TAcquisitionNatureEnum;
+	context: TEntryFiscoContext | null | undefined;
+}) {
+	return lines.map((line) => {
+		if (line.id !== lineId) return line;
+		if (!context || line.origemImportacao !== "XML") return { ...line, destinacao };
+		const computed = computeFiscoComponents({ destinacao, valorLinha: line.valorTotal, facts: line.tributacao, context });
+		return { ...line, destinacao, modificadoresCusto: replaceCalculatedFiscoComponents(line.modificadoresCusto ?? [], computed) };
+	});
+}
+
+export type TFiscoObligationSummary = { chave: string; valor: number; linhas: number; uf: string | null; descricao: string | null };
+
+/** O que a compra deve ao fisco, agregado por tributo, nas linhas incluídas. */
+export function getFiscoObligations(lines: TReviewLine[]): TFiscoObligationSummary[] {
+	const byKey = new Map<string, TFiscoObligationSummary>();
+	for (const line of lines) {
+		if (!line.incluir) continue;
+		for (const modifier of line.modificadoresCusto ?? []) {
+			if (modifier.contrapartida !== "FISCO") continue;
+			const current = byKey.get(modifier.chave) ?? {
+				chave: modifier.chave,
+				valor: 0,
+				linhas: 0,
+				uf: modifier.memoriaCalculo?.uf ?? null,
+				descricao: modifier.descricao ?? null,
+			};
+			current.valor = Math.round((current.valor + modifier.valorCentavos / 100) * 100) / 100;
+			current.linhas += 1;
+			byKey.set(modifier.chave, current);
+		}
+	}
+	return [...byKey.values()];
+}
+
 /** A destinação escolhida difere do que o cadastro diz que o produto é: aviso, não bloqueio. */
 export function lineHasDestinationDivergence(line: TReviewLine) {
 	return !!line.produto && line.produto.natureza !== line.destinacao;
@@ -117,7 +162,8 @@ export function getLineTotal(line: Pick<TReviewLine, "quantidade" | "valorUnitar
 		return (
 			line.quantidade * line.valorUnitario +
 			line.modificadoresCusto
-				.filter((modifier) => modifier.contrapartida !== "INCLUSO_NO_VALOR")
+				// Só o que o fornecedor cobra: embutido já está no preço; o devido ao fisco é outra guia.
+				.filter((modifier) => !modifier.contrapartida || modifier.contrapartida === "FORNECEDOR")
 				.reduce((total, modifier) => total + (modifier.efeito === "REDUCAO" ? -1 : 1) * (modifier.valorCentavos / 100), 0)
 		);
 	return line.quantidade * line.valorUnitario - (line.desconto ?? 0);

@@ -2,6 +2,7 @@
 
 import AccountingEntryLinesBlock, { getEntryLinesError } from "@/components/Modals/AccountingEntries/Blocks/Lines";
 import AccountingEntryFinancialTransactionsBlock from "@/components/Modals/AccountingEntries/Blocks/FinancialTransactions";
+import AccountingEntryCounterpartyBlock from "@/components/Modals/AccountingEntries/Blocks/Counterparty";
 import AccountingEntryGeneralBlock from "@/components/Modals/AccountingEntries/Blocks/General";
 import AccountingEntryValuesBlock from "@/components/Modals/AccountingEntries/Blocks/Values";
 import { AccountingEntryRecurrenceBlock } from "@/components/Modals/AccountingEntries/Blocks/Recurrence";
@@ -60,6 +61,8 @@ export default function ControlAccountingEntry({ entryId, closeModal, callbacks 
 				valor: entryData.valor,
 				valorPrevisto: entryData.valorPrevisto,
 				dataCompetencia: entryData.dataCompetencia,
+				clienteId: entryData.clienteId ?? null,
+				fornecedorId: entryData.fornecedorId ?? null,
 			},
 			// Lançamentos anteriores às linhas hidratam a partida a partir do par legado — a mesma
 			// derivação que o servidor faria ao salvar sem linhas explícitas.
@@ -241,6 +244,12 @@ export default function ControlAccountingEntry({ entryId, closeModal, callbacks 
 				titleEditable={canEditAccountingFields}
 				competenceEditable={canEditAccountingFields}
 				annotationsEditable={canEditAnnotations}
+			/>
+			<AccountingEntryCounterpartyBlock
+				entry={state.entry}
+				updateEntry={updateEntry}
+				names={{ cliente: entryData?.cliente?.nome, fornecedor: entryData?.fornecedor?.nome }}
+				editable={canEditAccountingFields}
 			/>
 			<AccountingEntryValuesBlock entry={state.entry} updateEntry={updateEntry} editable={canEditAccountingFields} />
 			<AccountingEntryLinesBlock

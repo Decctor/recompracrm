@@ -1,11 +1,13 @@
 import { relations } from "drizzle-orm";
-import { index, jsonb, timestamp, varchar } from "drizzle-orm/pg-core";
+import { index, jsonb, timestamp, varchar, type AnyPgColumn } from "drizzle-orm/pg-core";
 import type {
 	TFinancialRecurringRuleConfig,
 	TFinancialRecurringRuleAccountingEntryTemplate,
 	TFinancialRecurringRuleTransactionTemplate,
 } from "@/schemas/financial-recurring";
 import { accountingEntries } from "./financial";
+import { clients } from "./clients";
+import { suppliers } from "./suppliers";
 import { newTable } from "./common";
 import { organizations } from "./organizations";
 import { users } from "./users";
@@ -25,6 +27,9 @@ export const financialRecurringRules = newTable(
 			.references(() => accountingEntries.id, { onDelete: "cascade" })
 			.notNull(),
 		status: varchar("status", { length: 20 }).notNull().default("ATIVA"),
+		// Contraparte herdada por cada lançamento gerado (ADR-0002, decisão 6).
+		clienteId: varchar("cliente_id", { length: 255 }).references((): AnyPgColumn => clients.id, { onDelete: "set null" }),
+		fornecedorId: varchar("fornecedor_id", { length: 255 }).references((): AnyPgColumn => suppliers.id, { onDelete: "set null" }),
 		config: jsonb("config").$type<TFinancialRecurringRuleConfig>().notNull(),
 		templateLancamento: jsonb("template_lancamento").$type<TFinancialRecurringRuleAccountingEntryTemplate>().notNull(),
 		templateTransacoes: jsonb("template_transacoes").$type<TFinancialRecurringRuleTransactionTemplate[]>().notNull(),

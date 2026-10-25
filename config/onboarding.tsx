@@ -147,6 +147,7 @@ export const RecompraCRMDefaultAccountingDefaults: {
 			creditoKey: string;
 			debitoCreditoTributarioKey: string;
 			debitoDespesaPeriodoKey: string;
+			creditoTributoCompraKey: string;
 			debitoPorDestinacaoKey: { INSUMO: string; USO_CONSUMO: string; ATIVO_IMOBILIZADO: string };
 		};
 		transferencias: { debitoKey: string; creditoKey: string };
@@ -161,6 +162,7 @@ export const RecompraCRMDefaultAccountingDefaults: {
 			creditoKey: "fornecedores",
 			debitoCreditoTributarioKey: "tributos_recuperar",
 			debitoDespesaPeriodoKey: "despesas_operacionais",
+			creditoTributoCompraKey: "obrigacoes_tributarias",
 			// Insumo é estoque como a mercadoria; uso e consumo vai a despesa; o imobilizado só ganha
 			// conta própria na Fase 7 (patrimônio) e até lá cai em "outros ativos".
 			debitoPorDestinacaoKey: { INSUMO: "estoques", USO_CONSUMO: "material_uso_consumo", ATIVO_IMOBILIZADO: "outros_ativos" },
@@ -327,6 +329,8 @@ export function buildOrganizationAccountingDefaults(accountIdsByKey: Map<string,
 				debitoCreditoTributarioContaKey: RecompraCRMDefaultAccountingDefaults.lancamentosPadrao.compras.debitoCreditoTributarioKey,
 				debitoDespesaPeriodoContaId: accountIdsByKey.get(RecompraCRMDefaultAccountingDefaults.lancamentosPadrao.compras.debitoDespesaPeriodoKey) ?? null,
 				debitoDespesaPeriodoContaKey: RecompraCRMDefaultAccountingDefaults.lancamentosPadrao.compras.debitoDespesaPeriodoKey,
+				creditoTributoCompraContaId: accountIdsByKey.get(RecompraCRMDefaultAccountingDefaults.lancamentosPadrao.compras.creditoTributoCompraKey) ?? null,
+				creditoTributoCompraContaKey: RecompraCRMDefaultAccountingDefaults.lancamentosPadrao.compras.creditoTributoCompraKey,
 				contasDebitoPorDestinacao: Object.fromEntries(
 					Object.entries(RecompraCRMDefaultAccountingDefaults.lancamentosPadrao.compras.debitoPorDestinacaoKey).map(([destinacao, key]) => [
 						destinacao,

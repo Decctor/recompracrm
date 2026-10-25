@@ -241,6 +241,7 @@ export const AccountingEntryOriginTypeEnum = z.enum([
 	"PERDA_ESTOQUE",
 	"RECORRENCIA",
 	"PAGAMENTO_CARTAO",
+	"TRIBUTO_COMPRA",
 ]);
 export type TAccountingEntryOriginTypeEnum = z.infer<typeof AccountingEntryOriginTypeEnum>;
 
@@ -1164,7 +1165,7 @@ export type TUploadStatusEnum = z.infer<typeof UploadStatusEnum>;
 
 // Espelha as chaves do registro em lib/files/intake.ts — o registro é a fonte da verdade; o enum
 // existe para que registrar um propósito sem declará-lo aqui vire erro de tipo.
-export const UploadPurposeEnum = z.enum(["MIDIA_TEMPLATE_MENSAGEM", "ARQUIVO_KIT_VISUAL", "DOCUMENTO_FISCAL_ENTRADA"], {
+export const UploadPurposeEnum = z.enum(["MIDIA_TEMPLATE_MENSAGEM", "ARQUIVO_KIT_VISUAL", "DOCUMENTO_FISCAL_ENTRADA", "DOCUMENTO_FINANCEIRO"], {
 	invalid_type_error: "Tipo não válido para o propósito do upload.",
 });
 export type TUploadPurposeEnum = z.infer<typeof UploadPurposeEnum>;

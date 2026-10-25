@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+	applyLineDestination,
 	applyTaxTreatment,
 	buildNewProductDraft,
+	getFiscoObligations,
 	buildSupplierProductMappings,
 	getLineIssue,
 	getLineStatus,
@@ -44,6 +46,7 @@ function line(overrides: Partial<TReviewLine> = {}): TReviewLine {
 		destinacao: "REVENDA",
 		destinacaoSugerida: "REVENDA",
 		foraDaCompra: null,
+		tributacao: { baseIcms: 40, aliquotaIcms: 12, origemMercadoria: "0", stRetido: false, stDestacado: false, difalDestacado: false },
 		origemImportacao: "XML",
 		...overrides,
 	};
@@ -131,4 +134,32 @@ test("keeping an embedded tax in cost drops it; crediting it keeps it, and the l
 	const credited = applyTaxTreatment({ lines, lineId: "a", modifierIndex: 0, tratamento: "CREDITO_TRIBUTARIO", applyToWholeDocument: false });
 	assert.equal(credited[0].modificadoresCusto?.[0].tratamento, "CREDITO_TRIBUTARIO");
 	assert.equal(getLineTotal(credited[0]), 42);
+});
+
+test("changing the destination to uso e consumo computes DIFAL to the fisco; back to revenda removes it", () => {
+	const context = {
+		ufOrganizacao: "MG",
+		ufEmitente: "SP",
+		contribuinteIcms: true,
+		regime: "LUCRO_REAL" as const,
+		antecipacaoParcial: false,
+		parametrosUf: {
+			uf: "MG",
+			vigenciaInicio: "2024-01-01",
+			vigenciaFim: null,
+			aliquotaInterna: 18,
+			aliquotaFcp: 0,
+			metodoDifal: "BASE_UNICA" as const,
+			prazoVencimentoDias: 30,
+		},
+	};
+	const lines = [line({ id: "a", origemImportacao: "XML" })];
+	const consumo = applyLineDestination({ lines, lineId: "a", destinacao: "USO_CONSUMO", context });
+	assert.deepEqual(getFiscoObligations(consumo), [
+		{ chave: "IMPOSTOS_DIFAL", valor: 2.4, linhas: 1, uf: "MG", descricao: consumo[0].modificadoresCusto?.[0].descricao ?? null },
+	]);
+	// The invoice line total never includes what is owed to the fisco.
+	assert.equal(getLineTotal(consumo[0]), 40);
+	const back = applyLineDestination({ lines: consumo, lineId: "a", destinacao: "REVENDA", context });
+	assert.deepEqual(getFiscoObligations(back), []);
 });

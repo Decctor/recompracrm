@@ -67,6 +67,8 @@ export const purchaseRelations = relations(purchases, ({ one, many }) => ({
 	documentosFiscais: many(fiscalOutboundDocuments),
 	// Notas recebidas (DF-e ou XML enviado) que originaram a compra — ADR-0002, decisao 1.
 	notasRecebidas: many(fiscalInboundDocuments),
+	// Lançamentos com `compraId` (fornecedor e fisco) — ADR-0002, decisão 5.
+	lancamentosTributos: many(accountingEntries, { relationName: "purchaseAccountingEntries" }),
 	autor: one(users, {
 		fields: [purchases.autorId],
 		references: [users.id],
