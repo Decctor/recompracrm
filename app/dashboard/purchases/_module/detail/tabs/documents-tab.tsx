@@ -5,7 +5,7 @@ import { Section } from "@/components/ui/section";
 import { formatDateAsLocale } from "@/lib/formatting";
 import { cn } from "@/lib/utils";
 import type { TPurchaseState } from "@/state-hooks/use-purchase-state";
-import { ArrowRight, Brain, Download, FileCode2, Files } from "lucide-react";
+import { ArrowRight, Brain, Download, FileCode2, Files, TriangleAlert } from "lucide-react";
 import { TONE_CLASSES } from "../../builder/components/builder-ui";
 import type { TPurchaseById } from "../helpers/hydrate";
 import { getItemTags } from "./items-tab";
@@ -37,6 +37,8 @@ export default function DocumentsTab({ purchase, state }: { purchase: TPurchaseB
 	// Adjustments are recorded on the items (unit factors and tax treatments), not per document.
 	const adjustments = [...new Set(state.purchaseItems.filter((item) => !item.deletar).flatMap((item) => getItemTags(item).map((tag) => tag.label)))];
 	const supplierName = purchase.fornecedor?.nome ?? purchase.pedidoFornecedorNome ?? "este fornecedor";
+	// Notas que deixaram de valer na SEFAZ depois de virar esta compra (sync do DF-e).
+	const invalidInvoices = (purchase.notasRecebidas ?? []).filter((invoice) => invoice.situacao === "CANCELADA" || invoice.situacao === "DENEGADA");
 
 	return (
 		<div className="flex w-full flex-col gap-6">
@@ -49,6 +51,19 @@ export default function DocumentsTab({ purchase, state }: { purchase: TPurchaseB
 					<Section.Count>{documents.length}</Section.Count>
 				</Section.Header>
 				<Section.Body>
+					{invalidInvoices.map((invoice) => (
+						<div key={invoice.id} className="flex items-start gap-2.5 rounded-lg border border-red-200 bg-red-50 px-3.5 py-2.5 text-red-800">
+							<TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+							<p className="text-xs leading-relaxed">
+								A NF-e {formatAccessKey(invoice.chaveAcesso)}
+								{invoice.emitenteNome ? ` de ${invoice.emitenteNome}` : ""} consta como{" "}
+								<strong>{invoice.situacao === "DENEGADA" ? "denegada" : "cancelada"}</strong> na SEFAZ.{" "}
+								{purchase.status === "RECEBIDA"
+									? "A compra já foi recebida: o estoque e o lançamento continuam valendo. Cancele ou estorne a compra se a mercadoria não entrou."
+									: "A compra não pode ser recebida enquanto a nota estiver assim. Cancele a compra ou lance a nota substituta."}
+							</p>
+						</div>
+					))}
 					{documents.length === 0 ? (
 						<p className="text-xs text-muted-foreground">Esta compra foi preenchida à mão, sem documento importado.</p>
 					) : (

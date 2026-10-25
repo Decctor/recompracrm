@@ -26,6 +26,8 @@ export const appRoutes = {
 	approvals: () => "/dashboard/approvals",
 	purchases: () => "/dashboard/purchases",
 	newPurchase: () => "/dashboard/purchases/new",
+	// "Lançar compra" a partir de uma nota recebida: o builder lê o XML do catálogo.
+	newPurchaseFromInbound: (inboundId: string) => `/dashboard/purchases/new?inboundId=${encodeURIComponent(inboundId)}`,
 	purchase: (purchaseId: string) => `/dashboard/purchases/${purchaseId}`,
 	production: () => "/dashboard/production",
 	inventory: {

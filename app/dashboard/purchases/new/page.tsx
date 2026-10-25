@@ -3,7 +3,7 @@ import { requireDashboardCapability } from "@/lib/access/guards";
 import { redirect } from "next/navigation";
 import PurchaseBuilderShell from "../_module/builder/components/builder-shell";
 
-export default async function NewPurchasePage() {
+export default async function NewPurchasePage({ searchParams }: { searchParams: Promise<{ inboundId?: string | string[] }> }) {
 	const { sessionUser, unauthorized } = await requireDashboardCapability("purchases");
 	if (unauthorized) return unauthorized;
 
@@ -12,5 +12,6 @@ export default async function NewPurchasePage() {
 	if (!sessionUser.membership.organizacao.configuracao.recursos.erp.acesso)
 		return <UnauthorizedPage message="Oops,  sua organização não possui acesso a este recurso." />;
 	if (!sessionUser.membership.permissoes.compras.criar) return <UnauthorizedPage message="Você não possui permissão para criar compras." />;
-	return <PurchaseBuilderShell />;
+	const { inboundId } = await searchParams;
+	return <PurchaseBuilderShell inboundId={typeof inboundId === "string" && inboundId ? inboundId : null} />;
 }

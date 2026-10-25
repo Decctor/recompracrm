@@ -4,7 +4,7 @@ import { TAuthUserSession } from "@/lib/authentication/types";
 import { extractCompositionFromFile, IMPORT_COMPOSITION_ALLOWED_MIME_TYPES } from "@/lib/purchase/import";
 import { extractCompositionFromNfeXml } from "@/lib/purchase/import-xml";
 import { looksLikeFiscalXml, storeFiscalEntryDocument } from "@/lib/fiscal/inbound/entry-files";
-import { findPurchasesByAccessKeys, registerManualInboundDocument } from "@/lib/fiscal/inbound";
+import { findPurchasesByAccessKeys, getInboundDocumentXml, registerManualInboundDocument } from "@/lib/fiscal/inbound";
 import { matchCompositionItemsToProducts } from "@/lib/purchase/match-products";
 import { describeErrorForLogging } from "@/lib/errors";
 import type { TPurchaseImportStageEnum, TPurchaseImportStageStatusEnum } from "@/schemas/enums";
@@ -25,22 +25,29 @@ const MAX_FILE_BASE64_LENGTH = 4_200_000;
 // Divergência tolerada entre a soma das linhas lidas e o total declarado no documento.
 const DOCUMENT_TOTAL_MISMATCH_TOLERANCE = 0.05;
 
-const ImportPurchaseCompositionInputSchema = z.object({
-	file: z.object({
-		dataBase64: z
-			.string({
-				required_error: "Arquivo não informado.",
-				invalid_type_error: "Tipo não válido para o arquivo.",
-			})
-			.min(1, "Arquivo não informado.")
-			.max(MAX_FILE_BASE64_LENGTH, "Arquivo muito grande. O limite é de aproximadamente 3MB por arquivo."),
-		mimeType: z.enum(IMPORT_COMPOSITION_ALLOWED_MIME_TYPES, {
-			required_error: "Tipo do arquivo não informado.",
-			invalid_type_error: "Tipo de arquivo não suportado. Envie XML, PDF ou imagem (PNG, JPEG ou WEBP).",
-		}),
-		fileName: z.string({ invalid_type_error: "Tipo não válido para o nome do arquivo." }).optional().nullable(),
+const ImportCompositionFileSchema = z.object({
+	dataBase64: z
+		.string({
+			required_error: "Arquivo não informado.",
+			invalid_type_error: "Tipo não válido para o arquivo.",
+		})
+		.min(1, "Arquivo não informado.")
+		.max(MAX_FILE_BASE64_LENGTH, "Arquivo muito grande. O limite é de aproximadamente 3MB por arquivo."),
+	mimeType: z.enum(IMPORT_COMPOSITION_ALLOWED_MIME_TYPES, {
+		required_error: "Tipo do arquivo não informado.",
+		invalid_type_error: "Tipo de arquivo não suportado. Envie XML, PDF ou imagem (PNG, JPEG ou WEBP).",
 	}),
+	fileName: z.string({ invalid_type_error: "Tipo não válido para o nome do arquivo." }).optional().nullable(),
 });
+
+// Duas origens, um pipeline: um arquivo enviado, ou uma nota recebida (DF-e) cujo XML já está no
+// catálogo — "Lançar compra" na aba de notas recebidas (ADR-0002, fluxo A).
+const ImportPurchaseCompositionInputSchema = z
+	.object({
+		file: ImportCompositionFileSchema.optional().nullable(),
+		inboundId: z.string({ invalid_type_error: "Tipo não válido para o ID da nota recebida." }).optional().nullable(),
+	})
+	.refine((input) => !!input.file !== !!input.inboundId, { message: "Informe o arquivo ou a nota recebida, não os dois." });
 export type TImportPurchaseCompositionInput = z.infer<typeof ImportPurchaseCompositionInputSchema>;
 
 export type TImportPurchaseCompositionStageEvent = {
@@ -156,6 +163,29 @@ async function registerFiscalXml({
 	return document;
 }
 
+type TImportCompositionFile = z.infer<typeof ImportCompositionFileSchema>;
+
+/** XML de uma nota recebida, lido do catálogo (ou do provedor, se ainda não cacheado). */
+async function loadInboundSource({ organizationId, inboundId }: { organizationId: string; inboundId: string }) {
+	const document = await db.query.fiscalInboundDocuments.findFirst({
+		where: (fields, { and, eq }) => and(eq(fields.organizacaoId, organizationId), eq(fields.id, inboundId)),
+		columns: { id: true, chaveAcesso: true, completo: true, compraId: true, situacao: true },
+	});
+	if (!document) throw new createHttpError.NotFound("Nota recebida não encontrada.");
+	if (document.compraId) throw new createHttpError.UnprocessableEntity(`Esta nota já está lançada na compra ${document.compraId}.`);
+	if (!document.completo)
+		throw new createHttpError.UnprocessableEntity(
+			"O XML completo desta nota ainda não foi liberado pela SEFAZ. Manifeste ciência e aguarde a sincronização.",
+		);
+	const { buffer } = await getInboundDocumentXml({ organizationId, inboundId });
+	const file: TImportCompositionFile = {
+		dataBase64: Buffer.from(buffer).toString("base64"),
+		mimeType: "application/xml",
+		fileName: `${document.chaveAcesso}.xml`,
+	};
+	return { document, file };
+}
+
 async function importPurchaseComposition({
 	input,
 	session,
@@ -169,19 +199,21 @@ async function importPurchaseComposition({
 }) {
 	const userOrgId = getUserOrgIdForImport(session);
 
-	const fileBuffer = Buffer.from(input.file.dataBase64, "base64");
+	const source = input.inboundId ? await loadInboundSource({ organizationId: userOrgId, inboundId: input.inboundId }) : null;
+	const file: TImportCompositionFile = source?.file ?? input.file!;
+	const fileBuffer = Buffer.from(file.dataBase64, "base64");
 	const contentLooksLikeXml = looksLikeFiscalXml(fileBuffer.subarray(0, 512).toString("utf8"));
 	const isXml =
-		input.file.mimeType === "application/xml" ||
-		input.file.mimeType === "text/xml" ||
-		input.file.fileName?.toLowerCase().endsWith(".xml") === true ||
+		file.mimeType === "application/xml" ||
+		file.mimeType === "text/xml" ||
+		file.fileName?.toLowerCase().endsWith(".xml") === true ||
 		contentLooksLikeXml;
 	let extracted: Awaited<ReturnType<typeof extractCompositionFromFile>>;
 	onStage({ stage: "LEITURA", status: "INICIADO", detail: isXml ? "Lendo o XML da NF-e…" : "Extraindo texto e tabelas com IA…" });
 	try {
 		extracted = isXml
 			? extractCompositionFromNfeXml(fileBuffer.toString("utf8"))
-			: await extractCompositionFromFile({ dataBase64: input.file.dataBase64, mimeType: input.file.mimeType, abortSignal });
+			: await extractCompositionFromFile({ dataBase64: file.dataBase64, mimeType: file.mimeType, abortSignal });
 	} catch (error) {
 		assertImportIsActive(abortSignal);
 		console.error(`[PURCHASE_IMPORT] Erro na extração ${isXml ? "do XML" : "por IA"}.`, error);
@@ -197,7 +229,7 @@ async function importPurchaseComposition({
 	onStage({
 		stage: "LEITURA",
 		status: "CONCLUIDO",
-		detail: isXml ? "XML de NF-e válido · leitura exata" : `${input.file.mimeType === "application/pdf" ? "PDF" : "Imagem"} lido com IA`,
+		detail: isXml ? "XML de NF-e válido · leitura exata" : `${file.mimeType === "application/pdf" ? "PDF" : "Imagem"} lido com IA`,
 	});
 	assertImportIsActive(abortSignal);
 
@@ -298,15 +330,20 @@ async function importPurchaseComposition({
 	const documentReference = randomUUID();
 	// O nome é metadado, não endereço: o arquivo vive no catálogo `files` e é resolvido por id com
 	// checagem de organização, então nada no payload escolhe onde ler ou escrever.
-	const originalFileName = (input.file.fileName?.split(/[\\/]/).pop() || `documento-${documentReference}`)
+	const originalFileName = (file.fileName?.split(/[\\/]/).pop() || `documento-${documentReference}`)
 		.normalize("NFKD")
 		.replace(/[^a-zA-Z0-9._-]+/g, "-")
 		.slice(0, 120);
 	if (isXml) await validateFiscalXml({ organizationId: userOrgId, organizationCnpj: session.membership?.organizacao.cnpj ?? "", extracted, avisos });
 	const { arquivo } = await storeFiscalEntryDocument({ organizacaoId: userOrgId, buffer: fileBuffer, nomeOriginal: originalFileName });
 	const fiscalDocument = isXml ? await registerFiscalXml({ organizationId: userOrgId, extracted, xmlArquivoId: arquivo.id }) : null;
-	const importedDocumentOrigin: "XML" | "PDF" | "IMAGEM" =
-		extracted.origem === "XML" ? "XML" : input.file.mimeType === "application/pdf" ? "PDF" : "IMAGEM";
+	const importedDocumentOrigin: "XML" | "PDF" | "IMAGEM" | "DFE" = source
+		? "DFE"
+		: extracted.origem === "XML"
+			? "XML"
+			: file.mimeType === "application/pdf"
+				? "PDF"
+				: "IMAGEM";
 
 	return {
 		data: {

@@ -4,8 +4,9 @@ import { getOrganizationFileById, readStoredFile, sanitizeFileName, storeFile } 
 import type { TFiscalInboundDocumentModelEnum, TFiscalInboundManifestEventEnum, TFiscalInboundSituacaoEnum } from "@/schemas/enums";
 import { db, type DBTransaction } from "@/services/drizzle";
 import { fiscalInboundDocuments, fiscalInboundSyncStates, suppliers, type TFiscalInboundDocumentEntity } from "@/services/drizzle/schema";
-import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import createHttpError from "http-errors";
+import { notifyInboundDocumentCancelled } from "../notifications";
 import { loadFiscalOrganization } from "../settings";
 import { downloadStoredFiscalAsset, getFiscalAssetContentType } from "../storage";
 import type { TFiscalOrganization } from "../types";
@@ -165,6 +166,7 @@ export async function applyInboundSnapshot({
 			? await storeInboundXmlIfAvailable({ organizationId, snapshot, provider, organization })
 			: existing.xmlArquivoId;
 
+	const nextSituacao = snapshot.situacao ?? existing.situacao;
 	await db
 		.update(fiscalInboundDocuments)
 		.set({
@@ -184,6 +186,22 @@ export async function applyInboundSnapshot({
 			...buildManifestFields(snapshot.manifestacao),
 		})
 		.where(eq(fiscalInboundDocuments.id, existing.id));
+
+	// Nota que ja virou compra e deixou de valer na SEFAZ: avisa quem lancou (a compra nao e desfeita
+	// sozinha) — o recebimento passa a ser recusado por `assertLinkedInboundDocumentsReceivable`.
+	const becameInvalid = nextSituacao !== existing.situacao && (nextSituacao === "CANCELADA" || nextSituacao === "DENEGADA");
+	if (becameInvalid && existing.compraId) {
+		const purchase = await db.query.purchases.findFirst({
+			where: (fields, operators) => operators.eq(fields.id, existing.compraId!),
+			columns: { id: true, titulo: true, status: true },
+		});
+		if (purchase)
+			await notifyInboundDocumentCancelled({
+				organization,
+				document: { chaveAcesso: existing.chaveAcesso, emitenteNome: existing.emitenteNome, valorTotal: existing.valorTotal },
+				purchase,
+			});
+	}
 	return { created: false };
 }
 
@@ -377,15 +395,32 @@ export async function manifestInboundDocument({
 	};
 }
 
-export async function listInboundDocuments({ organizationId, page = 1 }: { organizationId: string; page?: number }) {
+export type TInboundListFilter = "TODAS" | "PENDENTES" | "LANCADAS";
+
+export async function listInboundDocuments({
+	organizationId,
+	page = 1,
+	lancamento = "TODAS",
+}: {
+	organizationId: string;
+	page?: number;
+	lancamento?: TInboundListFilter;
+}) {
 	const PAGE_SIZE = 25;
 	const offset = (page - 1) * PAGE_SIZE;
-	const whereClause = eq(fiscalInboundDocuments.organizacaoId, organizationId);
+	const whereClause = and(
+		eq(fiscalInboundDocuments.organizacaoId, organizationId),
+		lancamento === "PENDENTES" ? isNull(fiscalInboundDocuments.compraId) : undefined,
+		lancamento === "LANCADAS" ? isNotNull(fiscalInboundDocuments.compraId) : undefined,
+	);
 
 	const [documents, [{ count }]] = await Promise.all([
 		db.query.fiscalInboundDocuments.findMany({
 			where: whereClause,
-			with: { fornecedor: { columns: { id: true, nome: true, cpfCnpj: true } } },
+			with: {
+				fornecedor: { columns: { id: true, nome: true, cpfCnpj: true } },
+				compra: { columns: { id: true, titulo: true, status: true } },
+			},
 			orderBy: (fields, operators) => [operators.desc(fields.dataInsercao)],
 			offset,
 			limit: PAGE_SIZE,
@@ -596,4 +631,71 @@ export async function findPurchasesByAccessKeys({ organizationId, chavesAcesso }
 		where: and(eq(fiscalInboundDocuments.organizacaoId, organizationId), inArray(fiscalInboundDocuments.chaveAcesso, chavesAcesso)),
 		columns: { chaveAcesso: true, compraId: true },
 	});
+}
+
+/**
+ * Receber uma compra cuja nota foi cancelada ou denegada na SEFAZ daria entrada em mercadoria sem
+ * documento valido. Confere as notas que a compra vai vincular e as que ja estao vinculadas.
+ */
+export async function assertLinkedInboundDocumentsReceivable({
+	trx,
+	organizationId,
+	purchaseId,
+	documentIds,
+}: {
+	trx: DBTransaction;
+	organizationId: string;
+	purchaseId: string | null;
+	documentIds: string[];
+}) {
+	const ids = [...new Set(documentIds.filter(Boolean))];
+	if (ids.length === 0 && !purchaseId) return;
+	const invalid = await trx.query.fiscalInboundDocuments.findFirst({
+		where: and(
+			eq(fiscalInboundDocuments.organizacaoId, organizationId),
+			inArray(fiscalInboundDocuments.situacao, ["CANCELADA", "DENEGADA"]),
+			or(ids.length > 0 ? inArray(fiscalInboundDocuments.id, ids) : undefined, purchaseId ? eq(fiscalInboundDocuments.compraId, purchaseId) : undefined),
+		),
+		columns: { chaveAcesso: true, situacao: true },
+	});
+	if (invalid)
+		throw new createHttpError.UnprocessableEntity(
+			`A nota ${invalid.chaveAcesso} consta como ${invalid.situacao === "DENEGADA" ? "denegada" : "cancelada"} na SEFAZ. Cancele a compra ou lance a nota substituta antes de receber.`,
+		);
+}
+
+/**
+ * Opt-in `dfe.confirmarAoReceber`: a compra recebida confirma a operacao das notas que a originaram.
+ * Roda FORA da transacao da compra e nunca lanca — a SEFAZ fora do ar nao pode desfazer um
+ * recebimento; a nota fica para manifestacao manual.
+ */
+export async function confirmInboundDocumentsOnReceive({ organizationId, purchaseId }: { organizationId: string; purchaseId: string }) {
+	const organization = await loadFiscalOrganization(organizationId);
+	if (!organization?.fiscalConfiguracao?.dfe?.confirmarAoReceber) return { confirmadas: 0 };
+	const provider = resolveInboundProvider(organization);
+	const docs = await db.query.fiscalInboundDocuments.findMany({
+		where: and(
+			eq(fiscalInboundDocuments.organizacaoId, organizationId),
+			eq(fiscalInboundDocuments.compraId, purchaseId),
+			isNotNull(fiscalInboundDocuments.provedorDocumentoId),
+		),
+	});
+	let confirmadas = 0;
+	for (const doc of docs) {
+		// Confirmacao e definitiva; desconhecimento/nao realizada tambem. So quem esta em ciencia (ou
+		// sem manifestacao) pode subir para confirmada.
+		if (doc.manifestacaoAtual && doc.manifestacaoAtual !== "CIENCIA") continue;
+		try {
+			const result = await provider.manifest(
+				{ evento: "CONFIRMACAO" },
+				{ provedorDocumentoId: doc.provedorDocumentoId, chaveAcesso: doc.chaveAcesso },
+				organization,
+			);
+			await persistManifestReadback(doc.id, "CONFIRMACAO", result.manifestacao);
+			confirmadas += 1;
+		} catch (error) {
+			console.warn(`[FISCAL_INBOUND] Falha ao confirmar a nota ${doc.chaveAcesso} ao receber a compra ${purchaseId}: ${getErrorMessage(error)}`);
+		}
+	}
+	return { confirmadas };
 }

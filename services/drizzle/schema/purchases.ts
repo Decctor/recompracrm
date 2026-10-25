@@ -3,6 +3,7 @@ import { doublePrecision, integer, jsonb, numeric, text, timestamp, varchar } fr
 import { newTable } from "./common";
 import { organizations } from "./organizations";
 import { accountingEntries, fiscalOutboundDocuments } from "./financial";
+import { fiscalInboundDocuments } from "./fiscal";
 import { users } from "./users";
 import { relations } from "drizzle-orm";
 import { products, productStockLots, productStockTransactions, productVariants } from "./products";
@@ -64,6 +65,8 @@ export const purchaseRelations = relations(purchases, ({ one, many }) => ({
 	}),
 	itens: many(purchaseItems),
 	documentosFiscais: many(fiscalOutboundDocuments),
+	// Notas recebidas (DF-e ou XML enviado) que originaram a compra — ADR-0002, decisao 1.
+	notasRecebidas: many(fiscalInboundDocuments),
 	autor: one(users, {
 		fields: [purchases.autorId],
 		references: [users.id],

@@ -215,9 +215,12 @@ export function useFiscalTaxGroupById({ id }: { id: string }) {
 	};
 }
 
-async function fetchFiscalInboundDocuments({ page }: { page: number }) {
+export type TFiscalInboundListFilter = "TODAS" | "PENDENTES" | "LANCADAS";
+
+async function fetchFiscalInboundDocuments({ page, lancamento }: { page: number; lancamento: TFiscalInboundListFilter }) {
 	const searchParams = new URLSearchParams();
 	searchParams.set("page", page.toString());
+	if (lancamento !== "TODAS") searchParams.set("lancamento", lancamento);
 	const { data } = await axios.get<TGetInboundDocumentsOutput>(`/api/fiscal/inbound?${searchParams.toString()}`);
 	const result = data.data.default;
 	if (!result) throw new Error("Oops, houve um erro ao buscar as notas recebidas.");
@@ -225,14 +228,20 @@ async function fetchFiscalInboundDocuments({ page }: { page: number }) {
 }
 export function useFiscalInboundDocuments() {
 	const [page, setPage] = useState(1);
-	const queryKey = ["fiscal-inbound-documents", page];
+	const [lancamento, setLancamentoState] = useState<TFiscalInboundListFilter>("TODAS");
+	const queryKey = ["fiscal-inbound-documents", page, lancamento];
 	return {
 		...useQuery({
 			queryKey,
-			queryFn: () => fetchFiscalInboundDocuments({ page }),
+			queryFn: () => fetchFiscalInboundDocuments({ page, lancamento }),
 		}),
 		queryKey,
 		page,
 		setPage,
+		lancamento,
+		setLancamento: (next: TFiscalInboundListFilter) => {
+			setLancamentoState(next);
+			setPage(1);
+		},
 	};
 }

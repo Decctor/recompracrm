@@ -8,7 +8,7 @@ import { importPurchaseComposition } from "@/lib/mutations/purchases";
 import { isAcceptedImportFile, prepareImportFilePayload } from "@/lib/purchase/import-files";
 import type { TPurchaseImportStageEnum, TPurchaseImportStageStatusEnum } from "@/schemas/enums";
 import { usePurchaseState, type TPurchaseAccountingEntryTransaction, type TUsePurchaseState } from "@/state-hooks/use-purchase-state";
-import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import {
 	createReviewLines,
@@ -26,6 +26,8 @@ export type TBuilderFileStatus = "pending" | "reading" | "done" | "error";
 export type TBuilderFileEntry = {
 	id: string;
 	file: File;
+	/** Nota recebida (DF-e): o servidor lê o XML do catálogo; `file` é só o rótulo na fila. */
+	inboundId: string | null;
 	status: TBuilderFileStatus;
 	stages: Partial<Record<TPurchaseImportStageEnum, { status: TPurchaseImportStageStatusEnum; detail: string | null }>>;
 	errorMessage: string | null;
@@ -106,7 +108,15 @@ function mergeImportResults(results: TImportResult[]) {
 	};
 }
 
-export function BuilderProvider({ initialStage, children }: { initialStage: TBuilderStageId; children: ReactNode }) {
+export function BuilderProvider({
+	initialStage,
+	inboundId = null,
+	children,
+}: {
+	initialStage: TBuilderStageId;
+	inboundId?: string | null;
+	children: ReactNode;
+}) {
 	const purchaseState = usePurchaseState({ initialState: {} });
 	const { state, updatePurchase, updateAccountingEntry, redefineState } = purchaseState;
 
@@ -149,7 +159,7 @@ export function BuilderProvider({ initialStage, children }: { initialStage: TBui
 					toast.error(`"${file.name}" não é suportado. Envie XML, PDF ou uma imagem (PNG, JPG, WEBP).`);
 					continue;
 				}
-				accepted.push({ id: crypto.randomUUID(), file, status: "pending", stages: {}, errorMessage: null, itemCount: null });
+				accepted.push({ id: crypto.randomUUID(), file, inboundId: null, status: "pending", stages: {}, errorMessage: null, itemCount: null });
 			}
 			if (accepted.length === 0) return;
 			markDirty();
@@ -273,9 +283,8 @@ export function BuilderProvider({ initialStage, children }: { initialStage: TBui
 			setReadingFileId(entry.id);
 			setFiles((previous) => previous.map((current) => (current.id === entry.id ? { ...current, status: "reading" } : current)));
 			try {
-				const payload = await prepareImportFilePayload(entry.file);
 				const result = await importPurchaseComposition(
-					{ file: payload },
+					entry.inboundId ? { inboundId: entry.inboundId } : { file: await prepareImportFilePayload(entry.file) },
 					{
 						signal: controller.signal,
 						onStage: (event: TImportPurchaseCompositionStageEvent) =>
@@ -310,6 +319,32 @@ export function BuilderProvider({ initialStage, children }: { initialStage: TBui
 		applyImport(results, pending.length);
 		setReadStatus("done");
 	}, [files, applyImport]);
+
+	// "Lançar compra" na aba de notas recebidas: a nota entra na fila como um arquivo que o servidor
+	// já tem, e a leitura começa sozinha. Uma vez só: o estado do builder vive no navegador.
+	const inboundStartedRef = useRef(false);
+	useEffect(() => {
+		if (!inboundId || inboundStartedRef.current) return;
+		inboundStartedRef.current = true;
+		setOrigin("document");
+		setFiles([
+			{
+				id: crypto.randomUUID(),
+				file: new File([], "nota-recebida.xml", { type: "application/xml" }),
+				inboundId,
+				status: "pending",
+				stages: {},
+				errorMessage: null,
+				itemCount: null,
+			},
+		]);
+	}, [inboundId]);
+	const inboundReadRef = useRef(false);
+	useEffect(() => {
+		if (!inboundId || inboundReadRef.current || files.length === 0 || !files.some((entry) => entry.inboundId)) return;
+		inboundReadRef.current = true;
+		void startReading();
+	}, [inboundId, files, startReading]);
 
 	const cancelReading = useCallback(() => {
 		abortRef.current?.abort();

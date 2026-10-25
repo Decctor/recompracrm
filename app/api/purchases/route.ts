@@ -14,7 +14,12 @@ import {
 	type TPurchaseItemStockOperation,
 } from "@/lib/purchase-processing/process-purchase-item-stock";
 import { upsertSupplierProductMappings } from "@/lib/purchase/supplier-product-mappings";
-import { linkInboundDocumentsToPurchase, unlinkInboundDocumentsFromPurchase } from "@/lib/fiscal/inbound";
+import {
+	assertLinkedInboundDocumentsReceivable,
+	confirmInboundDocumentsOnReceive,
+	linkInboundDocumentsToPurchase,
+	unlinkInboundDocumentsFromPurchase,
+} from "@/lib/fiscal/inbound";
 import { createSimplifiedSearchCondition } from "@/lib/search";
 import { PurchaseStatusEnum, TPurchaseStatusEnum } from "@/schemas/enums";
 import { AccountingEntrySchema, FinancialTransactionSchema } from "@/schemas/financial";
@@ -139,6 +144,9 @@ async function getPurchases({ input, session }: { input: TGetPurchasesInput; ses
 						nome: true,
 						avatarUrl: true,
 					},
+				},
+				notasRecebidas: {
+					columns: { id: true, chaveAcesso: true, situacao: true, manifestacaoAtual: true, completo: true, emitenteNome: true },
 				},
 				lancamentoContabil: {
 					columns: {
@@ -559,99 +567,113 @@ async function createPurchase({ input, session }: { input: TCreatePurchaseInput;
 			throw new createHttpError.BadRequest("Todo novo produto precisa estar em algum item da compra.");
 	}
 
-	return await db.transaction(async (tx) => {
-		// Fornecedor e produtos novos nascem antes da compra: ela e seus itens os referenciam.
-		const supplierId = newSupplier
-			? await resolveOrCreatePurchaseSupplier({ trx: tx, organizationId: userOrgId, supplier: newSupplier })
-			: (payloadPurchase.fornecedorId ?? null);
-		if (newProducts.length > 0) await insertPurchaseNewProducts({ trx: tx, organizationId: userOrgId, newProducts });
-		// Primeiro o lançamento contábil, já que a compra referencia ele
-		const { debitAccountId, creditAccountId } = await resolvePurchaseAccountingAccountIds({ trx: tx, orgId: userOrgId });
-		const insertedAccountingEntry = await tx
-			.insert(accountingEntries)
-			.values({
-				...accountingEntryFields,
-				organizacaoId: userOrgId,
-				origemTipo: "COMPRA",
-				idContaDebito: debitAccountId,
-				idContaCredito: creditAccountId,
-				autorId: session.user.id,
-			})
-			.returning({ id: accountingEntries.id });
+	return await db
+		.transaction(async (tx) => {
+			// Fornecedor e produtos novos nascem antes da compra: ela e seus itens os referenciam.
+			const supplierId = newSupplier
+				? await resolveOrCreatePurchaseSupplier({ trx: tx, organizationId: userOrgId, supplier: newSupplier })
+				: (payloadPurchase.fornecedorId ?? null);
+			if (newProducts.length > 0) await insertPurchaseNewProducts({ trx: tx, organizationId: userOrgId, newProducts });
+			// Primeiro o lançamento contábil, já que a compra referencia ele
+			const { debitAccountId, creditAccountId } = await resolvePurchaseAccountingAccountIds({ trx: tx, orgId: userOrgId });
+			const insertedAccountingEntry = await tx
+				.insert(accountingEntries)
+				.values({
+					...accountingEntryFields,
+					organizacaoId: userOrgId,
+					origemTipo: "COMPRA",
+					idContaDebito: debitAccountId,
+					idContaCredito: creditAccountId,
+					autorId: session.user.id,
+				})
+				.returning({ id: accountingEntries.id });
 
-		const insertedAccountingEntryId = insertedAccountingEntry[0]?.id;
-		if (!insertedAccountingEntryId) throw new createHttpError.InternalServerError("Erro ao criar lançamento contábil da compra.");
-		await syncPurchaseAccountingLines({
-			trx: tx,
-			organizationId: userOrgId,
-			accountingEntryId: insertedAccountingEntryId,
-			entryValue: accountingEntryFields.valor,
-			expectedValue: accountingEntryFields.valorPrevisto,
-			debitAccountId,
-			creditAccountId,
-			items: normalizedPurchaseItems,
-			purchaseIsReceived: isPurchaseConsideredReceived(payloadPurchase),
-		});
+			const insertedAccountingEntryId = insertedAccountingEntry[0]?.id;
+			if (!insertedAccountingEntryId) throw new createHttpError.InternalServerError("Erro ao criar lançamento contábil da compra.");
+			await syncPurchaseAccountingLines({
+				trx: tx,
+				organizationId: userOrgId,
+				accountingEntryId: insertedAccountingEntryId,
+				entryValue: accountingEntryFields.valor,
+				expectedValue: accountingEntryFields.valorPrevisto,
+				debitAccountId,
+				creditAccountId,
+				items: normalizedPurchaseItems,
+				purchaseIsReceived: isPurchaseConsideredReceived(payloadPurchase),
+			});
 
-		const insertedPurchase = await tx
-			.insert(purchases)
-			.values({
-				...payloadPurchase,
-				fornecedorId: supplierId,
-				pedidoFornecedorNome: payloadPurchase.pedidoFornecedorNome ?? newSupplier?.nome ?? null,
-				pedidoFornecedorCnpj: payloadPurchase.pedidoFornecedorCnpj ?? newSupplier?.cpfCnpj ?? null,
-				pedidoFornecedorTelefone: payloadPurchase.pedidoFornecedorTelefone ?? newSupplier?.telefone ?? null,
-				pedidoFornecedorEmail: payloadPurchase.pedidoFornecedorEmail ?? newSupplier?.email ?? null,
-				documentosImportados: buildPurchaseImportedDocumentsSnapshot(input.importedDocuments),
-				lancamentoContabilId: insertedAccountingEntryId,
-				organizacaoId: userOrgId,
-				autorId: session.user.id,
-			})
-			.returning({ id: purchases.id });
-
-		const insertedPurchaseId = insertedPurchase[0]?.id;
-		if (!insertedPurchaseId) throw new createHttpError.InternalServerError("Erro ao criar compra.");
-		// A nota passa a pertencer a esta compra na mesma transação: nenhuma janela em que ela
-		// apareça como "a lançar" com a compra já salva.
-		await linkInboundDocumentsToPurchase({
-			trx: tx,
-			organizationId: userOrgId,
-			purchaseId: insertedPurchaseId,
-			documentIds: getImportedFiscalDocumentIds(input.importedDocuments),
-		});
-
-		// Então as transações financeiras que quitam o lançamento
-		if (payloadAccountingEntryTransactions.length > 0)
-			await tx.insert(financialTransactions).values(
-				payloadAccountingEntryTransactions.map((transaction) => ({
-					...normalizePurchaseFinancialTransaction(transaction),
+			const insertedPurchase = await tx
+				.insert(purchases)
+				.values({
+					...payloadPurchase,
+					fornecedorId: supplierId,
+					pedidoFornecedorNome: payloadPurchase.pedidoFornecedorNome ?? newSupplier?.nome ?? null,
+					pedidoFornecedorCnpj: payloadPurchase.pedidoFornecedorCnpj ?? newSupplier?.cpfCnpj ?? null,
+					pedidoFornecedorTelefone: payloadPurchase.pedidoFornecedorTelefone ?? newSupplier?.telefone ?? null,
+					pedidoFornecedorEmail: payloadPurchase.pedidoFornecedorEmail ?? newSupplier?.email ?? null,
+					documentosImportados: buildPurchaseImportedDocumentsSnapshot(input.importedDocuments),
 					lancamentoContabilId: insertedAccountingEntryId,
 					organizacaoId: userOrgId,
 					autorId: session.user.id,
-				})),
-			);
+				})
+				.returning({ id: purchases.id });
 
-		const operation: TPurchaseItemStockOperation = isPurchaseConsideredReceived(payloadPurchase) ? "RECEIVING" : "UPDATING_UNRECEIVED";
-
-		for (const item of normalizedPurchaseItems) {
-			await handlePurchaseItemStockProcessing({
+			const insertedPurchaseId = insertedPurchase[0]?.id;
+			if (!insertedPurchaseId) throw new createHttpError.InternalServerError("Erro ao criar compra.");
+			// A nota passa a pertencer a esta compra na mesma transação: nenhuma janela em que ela
+			// apareça como "a lançar" com a compra já salva.
+			if (isPurchaseConsideredReceived(payloadPurchase))
+				await assertLinkedInboundDocumentsReceivable({
+					trx: tx,
+					organizationId: userOrgId,
+					purchaseId: null,
+					documentIds: getImportedFiscalDocumentIds(input.importedDocuments),
+				});
+			await linkInboundDocumentsToPurchase({
 				trx: tx,
 				organizationId: userOrgId,
-				userId: session.user.id,
 				purchaseId: insertedPurchaseId,
-				operation,
-				item,
+				documentIds: getImportedFiscalDocumentIds(input.importedDocuments),
 			});
-		}
 
-		if (supplierId && supplierProductMappingsInput.length > 0)
-			await upsertSupplierProductMappings({ trx: tx, organizationId: userOrgId, supplierId, mappings: supplierProductMappingsInput });
+			// Então as transações financeiras que quitam o lançamento
+			if (payloadAccountingEntryTransactions.length > 0)
+				await tx.insert(financialTransactions).values(
+					payloadAccountingEntryTransactions.map((transaction) => ({
+						...normalizePurchaseFinancialTransaction(transaction),
+						lancamentoContabilId: insertedAccountingEntryId,
+						organizacaoId: userOrgId,
+						autorId: session.user.id,
+					})),
+				);
 
-		return {
-			data: { insertedPurchaseId },
-			message: "Compra criada com sucesso.",
-		};
-	});
+			const operation: TPurchaseItemStockOperation = isPurchaseConsideredReceived(payloadPurchase) ? "RECEIVING" : "UPDATING_UNRECEIVED";
+
+			for (const item of normalizedPurchaseItems) {
+				await handlePurchaseItemStockProcessing({
+					trx: tx,
+					organizationId: userOrgId,
+					userId: session.user.id,
+					purchaseId: insertedPurchaseId,
+					operation,
+					item,
+				});
+			}
+
+			if (supplierId && supplierProductMappingsInput.length > 0)
+				await upsertSupplierProductMappings({ trx: tx, organizationId: userOrgId, supplierId, mappings: supplierProductMappingsInput });
+
+			return {
+				data: { insertedPurchaseId },
+				message: "Compra criada com sucesso.",
+			};
+		})
+		.then(async (result) => {
+			// Fora da transação e best-effort: a SEFAZ fora do ar não desfaz a compra.
+			if (isPurchaseConsideredReceived(payloadPurchase))
+				await confirmInboundDocumentsOnReceive({ organizationId: userOrgId, purchaseId: result.data.insertedPurchaseId });
+			return result;
+		});
 }
 export type TCreatePurchaseOutput = Awaited<ReturnType<typeof createPurchase>>;
 
@@ -937,7 +959,7 @@ async function updatePurchase({ input, session }: { input: TUpdatePurchaseInput;
 
 	assertAccountingEntryIsBalanced({ entryValue: payloadAccountingEntry.valor, transactions: payloadAccountingEntry.transacoes });
 
-	return await db.transaction(async (tx) => {
+	const result = await db.transaction(async (tx) => {
 		const lockedRows = await tx
 			.select({ id: purchases.id })
 			.from(purchases)
@@ -1017,6 +1039,13 @@ async function updatePurchase({ input, session }: { input: TUpdatePurchaseInput;
 		}
 
 		const operation = resolvePurchaseTransition(previousPurchase, payloadPurchase);
+		if (operation === "RECEIVING")
+			await assertLinkedInboundDocumentsReceivable({
+				trx: tx,
+				organizationId: userOrgId,
+				purchaseId,
+				documentIds: getImportedFiscalDocumentIds(input.importedDocuments),
+			});
 		const normalizedPurchaseItems = normalizePurchaseItems(payloadPurchaseItems);
 		if (operation === "RECEIVING") assertPurchaseEntryMatchesItems({ entryValue: payloadAccountingEntry.valor, items: normalizedPurchaseItems });
 
@@ -1113,6 +1142,9 @@ async function updatePurchase({ input, session }: { input: TUpdatePurchaseInput;
 			message: "Compra atualizada com sucesso.",
 		};
 	});
+	// Fora da transação e best-effort (idempotente: só notas ainda em ciência sobem para confirmada).
+	if (isPurchaseConsideredReceived(payloadPurchase)) await confirmInboundDocumentsOnReceive({ organizationId: userOrgId, purchaseId });
+	return result;
 }
 export type TUpdatePurchaseOutput = Awaited<ReturnType<typeof updatePurchase>>;
 

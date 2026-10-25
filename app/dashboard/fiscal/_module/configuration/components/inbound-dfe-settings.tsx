@@ -59,6 +59,18 @@ export function InboundDfeSettings({ fiscalConfig, updateFiscalConfig }: Inbound
 					</div>
 				</div>
 			) : null}
+			{dfe.habilitado ? (
+				<div className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5">
+					<div>
+						<p className="text-sm font-semibold">Confirmar a operação ao receber a compra</p>
+						<p className="text-xs text-muted-foreground">
+							Quando uma compra lançada a partir de uma nota recebida for marcada como recebida, a nota é manifestada como confirmada na SEFAZ. A confirmação
+							é definitiva.
+						</p>
+					</div>
+					<Switch checked={dfe.confirmarAoReceber} onCheckedChange={(checked) => updateFiscalConfig({ dfe: { ...dfe, confirmarAoReceber: checked } })} />
+				</div>
+			) : null}
 		</div>
 	);
 }

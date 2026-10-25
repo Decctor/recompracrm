@@ -223,3 +223,42 @@ export async function notifyFiscalPendingDigest({ organization, summary }: Notif
 		return { sent: false, recipients: recipients.length };
 	}
 }
+
+type NotifyInboundDocumentCancelledParams = {
+	organization: TOrganizationEntity;
+	document: { chaveAcesso: string; emitenteNome: string | null; valorTotal: number | null };
+	purchase: { id: string; titulo: string; status: string };
+};
+
+/**
+ * A SEFAZ cancelou (ou denegou) uma nota que ja virou compra. Quem lancou precisa decidir o que
+ * fazer: a compra nao e desfeita sozinha. Nunca lanca: e um aviso, nao parte do sync.
+ */
+export async function notifyInboundDocumentCancelled({ organization, document, purchase }: NotifyInboundDocumentCancelledParams) {
+	const recipients = await listFiscalNotificationRecipients(organization);
+	if (recipients.length === 0) return;
+	const purchaseUrl = `${getAppBaseUrl()}${appRoutes.purchase(purchase.id)}`;
+	const received = purchase.status === "RECEBIDA";
+	const lines = [
+		`A NF-e ${document.chaveAcesso}${document.emitenteNome ? ` de ${document.emitenteNome}` : ""}${
+			document.valorTotal != null ? ` (${formatToMoney(document.valorTotal)})` : ""
+		} foi cancelada na SEFAZ, mas está lançada na compra "${purchase.titulo}".`,
+		"",
+		received
+			? "A compra já foi recebida: o estoque e o lançamento contábil continuam valendo. Cancele ou estorne a compra se a mercadoria não entrou."
+			: "A compra ainda não foi recebida e não poderá ser recebida enquanto a nota estiver cancelada. Cancele a compra ou lance a nota substituta.",
+		"",
+		`Compra: ${purchaseUrl}`,
+	];
+	try {
+		const { error } = await resend.emails.send({
+			from: "RecompraCRM <fiscal@recompracrm.com.br>",
+			to: recipients,
+			subject: `[FISCAL] Nota cancelada na SEFAZ já lançada em compra — ${organization.nome}`,
+			text: lines.join("\n"),
+		});
+		if (error) console.error("[FISCAL_INBOUND] Falha ao avisar cancelamento de nota lancada:", error);
+	} catch (error) {
+		console.error("[FISCAL_INBOUND] Erro ao avisar cancelamento de nota lancada.", error);
+	}
+}

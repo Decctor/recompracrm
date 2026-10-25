@@ -175,7 +175,8 @@ function OriginPicker() {
 	);
 }
 
-function getFileVisual(file: File) {
+function getFileVisual(file: File, inboundId: string | null) {
+	if (inboundId) return { icon: FileCode2, mode: "Nota recebida · leitura exata", tone: TONE_CLASSES.ok };
 	if (isXmlFile(file)) return { icon: FileCode2, mode: "Leitura exata", tone: TONE_CLASSES.ok };
 	if (file.type === "application/pdf") return { icon: FileText, mode: "Leitura com IA", tone: TONE_CLASSES.info };
 	return { icon: ImageIcon, mode: "Leitura com IA", tone: TONE_CLASSES.info };
@@ -186,14 +187,18 @@ function formatFileSize(bytes: number) {
 }
 
 function FileRow({ entry, first, onRemove }: { entry: TBuilderFileEntry; first: boolean; onRemove?: () => void }) {
-	const visual = getFileVisual(entry.file);
+	const visual = getFileVisual(entry.file, entry.inboundId);
 	return (
 		<div className={cn("flex items-center gap-2.5 px-3 py-2.5", !first && "border-t border-border")}>
 			<visual.icon className="h-4 w-4 shrink-0 text-muted-foreground" />
 			<div className="min-w-0 flex-1">
-				<p className="truncate text-sm font-medium">{entry.file.name}</p>
+				<p className="truncate text-sm font-medium">{entry.inboundId ? "XML da nota recebida (DF-e)" : entry.file.name}</p>
 				<p className={cn("text-xs", entry.status === "error" ? "text-destructive" : "text-muted-foreground")}>
-					{entry.status === "error" ? entry.errorMessage : formatFileSize(entry.file.size)}
+					{entry.status === "error"
+						? entry.errorMessage
+						: entry.inboundId
+							? "Já está no seu catálogo de notas recebidas"
+							: formatFileSize(entry.file.size)}
 				</p>
 			</div>
 			<span className={cn("rounded-full px-2 py-0.5 text-[0.65rem] font-semibold", visual.tone)}>{visual.mode}</span>
@@ -221,7 +226,7 @@ function ReadingProgress() {
 	const stages = PurchaseImportStageEnum.options;
 	const completedStages = current ? stages.filter((stageId) => current.stages[stageId]?.status === "CONCLUIDO").length : 0;
 	const progress = Math.min(100, (completedStages / stages.length) * 100 + 8);
-	const isXml = current ? isXmlFile(current.file) : false;
+	const isXml = current ? !!current.inboundId || isXmlFile(current.file) : false;
 
 	return (
 		<div className="flex w-full flex-col items-center gap-5 pt-3 pb-2">
@@ -229,7 +234,7 @@ function ReadingProgress() {
 				<span className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand/15 text-brand">
 					<Sparkles className="h-5 w-5" />
 				</span>
-				<p className="text-base font-semibold">Lendo {current?.file.name ?? "documento"}</p>
+				<p className="text-base font-semibold">Lendo {current?.inboundId ? "a nota recebida" : (current?.file.name ?? "documento")}</p>
 				<p className="text-xs text-muted-foreground">
 					{files.length > 1 ? `Arquivo ${currentIndex + 1} de ${files.length}. ` : ""}
 					{isXml ? "Leitura exata do XML, leva poucos segundos." : "Leva cerca de 20 segundos. Mantenha esta página aberta."}

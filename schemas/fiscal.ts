@@ -252,8 +252,15 @@ export const OrganizationFiscalConfigSchema = z.object({
 					invalid_type_error: "Tipo não valido para a flag de auto-ciencia DF-e.",
 				})
 				.default(true),
+			// Manifestar CONFIRMACAO da operacao quando a compra lancada a partir da nota for recebida.
+			// Opt-in: a confirmacao e definitiva na SEFAZ.
+			confirmarAoReceber: z
+				.boolean({
+					invalid_type_error: "Tipo não valido para a flag de confirmacao ao receber.",
+				})
+				.default(false),
 		})
-		.default({ habilitado: false, dataInicio: null, autoCiencia: true }),
+		.default({ habilitado: false, dataInicio: null, autoCiencia: true, confirmarAoReceber: false }),
 	emissaoAutomatica: z
 		.object({
 			// Espera entre a venda ficar elegível e a emissão acontecer (0 = imediato). A elegibilidade

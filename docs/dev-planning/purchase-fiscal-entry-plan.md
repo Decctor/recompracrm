@@ -538,7 +538,7 @@ Cada fase é entregável sozinha e não muda nada para quem não usa a novidade.
 | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
 | 0    | ADR-0002 + guia de domínio; validação dos presets e do DIFAL com a contabilidade                                                                                                            | —                                                                           |
 | 1 ✅ | Documento como primitivo: uploads de XML viram linha de documento, propósito `DOCUMENTO_FISCAL_ENTRADA`, `arquivoId`, ponteiro do item, validações do import, `rastro` → validade, backfill | `fiscal_inbound_documents`, `purchase_items` (ponteiro), JSONB              |
-| 2    | Nota recebida → compra, `compraId`, cancelamento, confirmação opt-in                                                                                                                        | —                                                                           |
+| 2 ✅ | Nota recebida → compra, `compraId`, cancelamento, confirmação opt-in                                                                                                                        | —                                                                           |
 | 3    | Natureza e destinação, uso e consumo em despesa, bonificação como componente, contas por destinação                                                                                         | `products`, `purchase_items`, `supplier_product_mappings`                   |
 | 4    | `contrapartida = INCLUSO_NO_VALOR`, créditos de ICMS/ICMS SN/PIS/COFINS, presets, overrides                                                                                                 | JSONB, `fiscalConfiguracao`                                                 |
 | 5    | Contrapartida `FISCO`, DIFAL/antecipação/ST de entrada, lançamentos por credor com contraparte, guias a pagar, `DOCUMENTO_FINANCEIRO`, backfill de `clienteId`/`fornecedorId`               | `accounting_entries`, `financial_recurring_rules`, `financial_transactions` |
@@ -548,8 +548,13 @@ Cada fase é entregável sozinha e não muda nada para quem não usa a novidade.
 
 Fase 1 entregue em `drizzle/0138_purchase_fiscal_entry_documents.sql` + `scripts/backfill-purchase-fiscal-files.ts`
 (aplicar a migration antes do deploy; rodar o backfill depois). O que ficou de fora dela, de propósito:
-a lista de notas recebidas ainda não mostra `compraId` nem tem "Lançar compra" (Fase 2), e o CFOP
-lido por item ainda não decide nada (Fase 3).
+o CFOP lido por item ainda não decide nada (Fase 3).
+
+Fase 2 entregue: "Lançar compra" na aba de notas recebidas (`?inboundId=` no builder, mesmo pipeline
+de `/api/purchases/import-composition`), filtro a lançar/lançadas com link para a compra, bloqueio do
+recebimento com nota cancelada/denegada (`assertLinkedInboundDocumentsReceivable`), aviso por e-mail
+quando o sync cancela uma nota já lançada, alerta na aba de documentos da compra e o opt-in
+`dfe.confirmarAoReceber`. Sem migration: `compraId` já existia; a flag mora em `fiscalConfiguracao`.
 
 **Testes que precisam existir:**
 
