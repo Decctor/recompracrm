@@ -15,7 +15,9 @@ import { formatNameAsInitials, formatToMoney } from "@/lib/formatting";
 import { cn } from "@/lib/utils";
 import { ArrowRight, BadgeDollarSign, Check, CircleCheck, Ellipsis, EyeOff, ListTodo, Plus, Undo2 } from "lucide-react";
 import { useState } from "react";
-import { getLineIssue, getLineStatus, getLineTotal, type TReviewLine } from "../helpers/review-lines";
+import { getLineIssue, getLineStatus, getLineTotal, lineHasDestinationDivergence, type TReviewLine } from "../helpers/review-lines";
+import { ACQUISITION_NATURE_LABELS, SUPPORTED_PURCHASE_DESTINATIONS } from "@/lib/purchase/entry-rules";
+import type { TAcquisitionNatureEnum } from "@/schemas/enums";
 import { BUILDER_STAGES } from "../helpers/stages";
 import { useBuilder } from "../components/builder-provider";
 import { StatusPill, TONE_CLASSES } from "../components/builder-ui";
@@ -158,6 +160,7 @@ function ReviewTable() {
 				</div>
 				{visibleLines.map((line) => (
 					<ReviewRow
+						onChangeDestination={(destinacao) => updateLine(line.id, { destinacao })}
 						key={line.id}
 						line={line}
 						supplierName={supplierName}
@@ -217,6 +220,7 @@ function ReviewRow({
 	onExclude,
 	onToggleRemember,
 	onUnlink,
+	onChangeDestination,
 }: {
 	line: TReviewLine;
 	supplierName: string | null;
@@ -225,6 +229,7 @@ function ReviewRow({
 	onExclude: () => void;
 	onToggleRemember: () => void;
 	onUnlink: () => void;
+	onChangeDestination: (destinacao: TAcquisitionNatureEnum) => void;
 }) {
 	const status = getLineStatus(line);
 	const issue = getLineIssue(line);
@@ -244,7 +249,7 @@ function ReviewRow({
 			<div>
 				{status === "ignored" ? (
 					<StatusPill tone="mute" icon={EyeOff}>
-						Não incluído
+						{line.foraDaCompra ? "Fora da compra" : "Não incluído"}
 					</StatusPill>
 				) : issue ? (
 					<StatusPill tone={ISSUE_META[issue].tone} icon={ISSUE_META[issue].icon}>
@@ -274,7 +279,30 @@ function ReviewRow({
 				</span>
 				<div className="flex min-w-0 flex-col gap-px">
 					<span className={cn("text-xs font-medium leading-snug", !productName && "text-destructive")}>{productName ?? "Nenhum produto vinculado"}</span>
-					<span className="text-[0.7rem] text-muted-foreground">{productName ? getProductMeta(line) : "Crie ou vincule para incluir"}</span>
+					<span className="text-[0.7rem] text-muted-foreground">
+						{line.foraDaCompra ? line.foraDaCompra : productName ? getProductMeta(line) : "Crie ou vincule para incluir"}
+					</span>
+					{status !== "ignored" && productName ? (
+						<label className="mt-0.5 flex items-center gap-1.5 text-[0.7rem] text-muted-foreground">
+							<span>Destinação</span>
+							<select
+								value={line.destinacao}
+								onChange={(event) => onChangeDestination(event.target.value as TAcquisitionNatureEnum)}
+								className="h-6 rounded-md border border-border bg-background px-1 text-[0.7rem] text-foreground"
+							>
+								{SUPPORTED_PURCHASE_DESTINATIONS.map((value) => (
+									<option key={value} value={value}>
+										{ACQUISITION_NATURE_LABELS[value]}
+									</option>
+								))}
+							</select>
+							{lineHasDestinationDivergence(line) ? (
+								<span className="text-amber-700 dark:text-amber-300" title="A destinação escolhida difere da natureza cadastrada do produto.">
+									≠ cadastro ({ACQUISITION_NATURE_LABELS[line.produto!.natureza]})
+								</span>
+							) : null}
+						</label>
+					) : null}
 				</div>
 			</div>
 			<span className="text-right font-mono text-xs font-medium lg:text-right">{formatToMoney(getLineTotal(line))}</span>

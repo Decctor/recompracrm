@@ -26,7 +26,7 @@ function line(overrides: Partial<TReviewLine> = {}): TReviewLine {
 		matchTipo: "CODIGO",
 		confianca: 0.95,
 		motivo: null,
-		produto: { id: "p1", nome: "Leite Condensado", codigo: "LC", unidade: "UN", imagemCapaUrl: null },
+		produto: { id: "p1", nome: "Leite Condensado", codigo: "LC", unidade: "UN", imagemCapaUrl: null, natureza: "REVENDA" },
 		produtoVarianteId: null,
 		fatorConversaoSugerido: null,
 		divergenciaUnidade: false,
@@ -40,6 +40,9 @@ function line(overrides: Partial<TReviewLine> = {}): TReviewLine {
 		extraidoQuantidade: 4,
 		extraidoValorUnitario: 10,
 		documentoRef: "doc-1",
+		destinacao: "REVENDA",
+		destinacaoSugerida: "REVENDA",
+		foraDaCompra: null,
 		origemImportacao: "XML",
 		...overrides,
 	};

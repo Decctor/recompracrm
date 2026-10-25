@@ -53,3 +53,57 @@ test("linhas desbalanceadas são rejeitadas", () => {
 		/não estão balanceadas/,
 	);
 });
+
+test("compra abre o custo por destinação em contas próprias e mantém revenda na conta de estoque", () => {
+	const lines = buildPurchaseAccountingEntryLines({
+		amounts: {
+			valorFinanceiro: 150,
+			valorCustoEstoque: 150,
+			custoPorDestinacao: { REVENDA: 100, INSUMO: 30, USO_CONSUMO: 20 },
+			valorCreditoTributario: 0,
+			valorDespesaPeriodo: 0,
+		},
+		accounts: {
+			estoqueContaId: "estoque",
+			fornecedoresContaId: "fornecedores",
+			contasPorDestinacao: { INSUMO: "estoque-insumos", USO_CONSUMO: "despesa-consumo" },
+		},
+	});
+	assert.deepEqual(
+		lines.map((line) => [line.natureza, line.contaContabilId, line.valor]),
+		[
+			["DEBITO", "estoque", 100],
+			["DEBITO", "estoque-insumos", 30],
+			["DEBITO", "despesa-consumo", 20],
+			["CREDITO", "fornecedores", 150],
+		],
+	);
+});
+
+test("compra com destinação sem conta configurada falha apontando onde configurar", () => {
+	assert.throws(
+		() =>
+			buildPurchaseAccountingEntryLines({
+				amounts: {
+					valorFinanceiro: 20,
+					valorCustoEstoque: 20,
+					custoPorDestinacao: { USO_CONSUMO: 20 },
+					valorCreditoTributario: 0,
+					valorDespesaPeriodo: 0,
+				},
+				accounts: { estoqueContaId: "estoque", fornecedoresContaId: "fornecedores" },
+			}),
+		/Material de uso e consumo da compra/i,
+	);
+});
+
+test("abertura por destinação que não fecha com o custo total é recusada", () => {
+	assert.throws(
+		() =>
+			buildPurchaseAccountingEntryLines({
+				amounts: { valorFinanceiro: 100, valorCustoEstoque: 100, custoPorDestinacao: { REVENDA: 90 }, valorCreditoTributario: 0, valorDespesaPeriodo: 0 },
+				accounts: { estoqueContaId: "estoque", fornecedoresContaId: "fornecedores" },
+			}),
+		/não fecha/,
+	);
+});

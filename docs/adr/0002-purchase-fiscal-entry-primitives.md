@@ -148,12 +148,11 @@ do registro (reduz a quantidade do original, cria outro com a parte separada).
 
 ### 9. Recebimento por destinação
 
-| Destinação                  | Estoque             | Contabilidade                    |
-| --------------------------- | ------------------- | -------------------------------- |
-| `REVENDA`, `INSUMO`         | `ENTRADA_AQUISICAO` | conta de estoques da destinação  |
-| `USO_CONSUMO` rastreado     | `ENTRADA_AQUISICAO` | material de consumo (ativo)      |
-| `USO_CONSUMO` não rastreado | nenhum              | despesa de consumo               |
-| `ATIVO_IMOBILIZADO`         | nenhum              | imobilizado; cria `fixed_assets` |
+| Destinação          | Estoque                                 | Contabilidade                                                                 |
+| ------------------- | --------------------------------------- | ----------------------------------------------------------------------------- |
+| `REVENDA`, `INSUMO` | `ENTRADA_AQUISICAO`                     | conta de estoques da destinação                                               |
+| `USO_CONSUMO`       | `ENTRADA_AQUISICAO` só com rastreamento | uma conta configurada por destinação (padrão: despesa de material de consumo) |
+| `ATIVO_IMOBILIZADO` | nenhum                                  | imobilizado; cria `fixed_assets`                                              |
 
 Sem tipo novo de movimentação de estoque. O lançamento contábil da `SAIDA` manual de produtos de
 consumo é follow-up, fora deste ADR.

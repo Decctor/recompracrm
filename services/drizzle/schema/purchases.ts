@@ -8,7 +8,7 @@ import { users } from "./users";
 import { relations } from "drizzle-orm";
 import { products, productStockLots, productStockTransactions, productVariants } from "./products";
 import { suppliers } from "./suppliers";
-import { purchaseStatusEnum } from "./enums";
+import { acquisitionNatureEnum, purchaseStatusEnum } from "./enums";
 
 export const purchases = newTable("purchases", {
 	id: varchar("id", { length: 255 })
@@ -88,6 +88,10 @@ export const purchaseItems = newTable("purchase_items", {
 		.references(() => products.id)
 		.notNull(),
 	produtoVarianteId: varchar("produto_variante_id", { length: 255 }).references(() => productVariants.id),
+
+	// Para que esta aquisição serve. Tributação, conta contábil e recebimento decidem por ela, não
+	// pelo cadastro do produto (ADR-0002, decisão 3).
+	destinacao: acquisitionNatureEnum("destinacao").default("REVENDA").notNull(),
 
 	// product related snapshots
 	snapshotProdutoDescricao: text("snapshot_produto_descricao").notNull(),

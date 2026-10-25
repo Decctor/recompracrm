@@ -1,5 +1,5 @@
 import type { TImportPurchaseCompositionOutput } from "@/app/api/purchases/import-composition/route";
-import type { TPurchaseCostTreatmentEnum } from "@/schemas/enums";
+import type { TAcquisitionNatureEnum, TPurchaseCostTreatmentEnum } from "@/schemas/enums";
 import { convertLineToProductUnit, unitsAreEquivalent } from "@/lib/purchase/units";
 
 export type TImportResult = TImportPurchaseCompositionOutput["data"];
@@ -21,6 +21,7 @@ export type TNewProductDraft = {
 	ncm: string;
 	vendavel: boolean;
 	rastreamentoEstoqueAtivo: boolean;
+	natureza: TAcquisitionNatureEnum;
 };
 
 export type TReviewLine = TImportedLine & {
@@ -42,6 +43,8 @@ export type TReviewLine = TImportedLine & {
 	extraidoValorUnitario: number;
 	documentoRef: string;
 	origemImportacao: "XML" | "IA";
+	/** Para que esta aquisição serve. Sugerida pelo de-para/produto; a pessoa pode trocar. */
+	destinacao: TAcquisitionNatureEnum;
 };
 
 export type TReviewIssue = "unmapped" | "suggested" | "unit" | "tax";
@@ -53,7 +56,8 @@ export function createReviewLines(result: TImportResult, createId: () => string)
 	return result.itens.map((item) => ({
 		...item,
 		id: createId(),
-		incluir: true,
+		// Consignação, remessa, devolução: a linha fica visível com o motivo, mas não entra.
+		incluir: !item.foraDaCompra,
 		vinculoConfirmado: false,
 		manualOverride: false,
 		produtoNovo: null,
@@ -64,7 +68,13 @@ export function createReviewLines(result: TImportResult, createId: () => string)
 		extraidoValorUnitario: item.valorUnitario,
 		documentoRef: result.documento.importado.referencia,
 		origemImportacao: result.documento.origem,
+		destinacao: item.destinacaoSugerida,
 	}));
+}
+
+/** A destinação escolhida difere do que o cadastro diz que o produto é: aviso, não bloqueio. */
+export function lineHasDestinationDivergence(line: TReviewLine) {
+	return !!line.produto && line.produto.natureza !== line.destinacao;
 }
 
 /** Internal unit of the line: the linked product's, or the draft's. */
@@ -127,6 +137,8 @@ export function buildNewProductDraft(line: TReviewLine, id: string): TNewProduct
 		// tracking on — the purchase itself gives the first stock entry.
 		vendavel: false,
 		rastreamentoEstoqueAtivo: true,
+		// O cadastro nasce com o que a compra diz que o item é.
+		natureza: line.destinacao,
 	};
 }
 
@@ -173,6 +185,7 @@ export function buildSupplierProductMappings(lines: TReviewLine[], productIdByLi
 				produtoVarianteId: line.produto ? line.produtoVarianteId : null,
 				unidadeExterna: line.unidade,
 				fatorConversao: line.fatorConversao,
+				destinacao: line.destinacao,
 			},
 		];
 	});

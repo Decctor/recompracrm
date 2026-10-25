@@ -268,6 +268,11 @@ export const DEFAULT_ORGANIZATION_CONFIGURATION_DEFAULTS: TOrganizationDefaults 
 				debitoCreditoTributarioContaKey: null,
 				debitoDespesaPeriodoContaId: null,
 				debitoDespesaPeriodoContaKey: null,
+				contasDebitoPorDestinacao: {
+					INSUMO: { contaId: null, contaKey: null },
+					USO_CONSUMO: { contaId: null, contaKey: null },
+					ATIVO_IMOBILIZADO: { contaId: null, contaKey: null },
+				},
 			},
 			transferencias: {
 				debitoContaId: null,

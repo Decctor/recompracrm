@@ -352,6 +352,39 @@ export default function SettingsFinances({ membership }: SettingsFinancesProps) 
 										}}
 										onReset={() => updateAccounting(tipo, { debitoDespesaPeriodoContaId: null, debitoDespesaPeriodoContaKey: null })}
 									/>
+									{/* Débito do custo por destinação do item (ADR-0002): revenda usa a conta de débito padrão. */}
+									{(
+										[
+											["INSUMO", "CONTA DE ESTOQUE DE INSUMOS"],
+											["USO_CONSUMO", "CONTA DE MATERIAL DE USO E CONSUMO"],
+										] as const
+									).map(([destinacao, label]) => {
+										const porDestinacao = draft.contabilidade.lancamentosPadrao.compras.contasDebitoPorDestinacao;
+										return (
+											<SelectInput
+												key={destinacao}
+												label={label}
+												value={porDestinacao?.[destinacao]?.contaId ?? null}
+												options={accountChartsOptions}
+												resetOptionLabel="Conta padrão do plano"
+												editable={canEdit}
+												handleChange={(selected) => {
+													const account = accountChartsOptions.find((option) => option.value === selected);
+													updateAccounting(tipo, {
+														contasDebitoPorDestinacao: {
+															...porDestinacao,
+															[destinacao]: { contaId: account?.value ?? null, contaKey: account?.label ?? null },
+														},
+													});
+												}}
+												onReset={() =>
+													updateAccounting(tipo, {
+														contasDebitoPorDestinacao: { ...porDestinacao, [destinacao]: { contaId: null, contaKey: null } },
+													})
+												}
+											/>
+										);
+									})}
 								</div>
 							) : null}
 						</div>

@@ -495,6 +495,7 @@ export default function ImportCompositionWithAI({
 						codigo: draft.codigo.trim(),
 						unidade: draft.unidade.trim() || "UN",
 						imagemCapaUrl: null,
+						natureza: "REVENDA",
 					};
 					createdProductByKey.set(draftKey, produto);
 				}
@@ -835,6 +836,7 @@ export default function ImportCompositionWithAI({
 														if (!value?.product) return;
 														updateLine(index, {
 															produto: {
+																natureza: "REVENDA",
 																id: value.product.id,
 																nome: value.product.nome,
 																codigo: value.product.codigo,

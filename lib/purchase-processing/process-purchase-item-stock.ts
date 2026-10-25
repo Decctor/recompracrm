@@ -1,3 +1,4 @@
+import type { TAcquisitionNatureEnum } from "@/schemas/enums";
 import { DBTransaction } from "@/services/drizzle";
 import { productStockLots, productStockTransactions, productVariants, products, purchaseItems } from "@/services/drizzle/schema";
 import { calculatePurchaseItemCost } from "@/lib/purchase/costing";
@@ -9,6 +10,7 @@ import createHttpError from "http-errors";
 export type TPurchaseItemStockOperation = "RECEIVING" | "UNRECEIVING" | "UPDATING_RECEIVED" | "UPDATING_UNRECEIVED";
 
 export type TPurchaseItemInput = {
+	destinacao?: TAcquisitionNatureEnum | null;
 	id?: string | null;
 	deletar?: boolean | null;
 	produtoId: string;
@@ -279,6 +281,7 @@ async function persistPurchaseItemRow({ trx, organizationId, purchaseId, item }:
 			.set({
 				produtoId: item.produtoId,
 				produtoVarianteId: item.produtoVarianteId ?? null,
+				destinacao: item.destinacao ?? "REVENDA",
 				snapshotProdutoDescricao: item.snapshotProdutoDescricao,
 				snapshotProdutoCodigo: item.snapshotProdutoCodigo,
 				quantidade: item.quantidade,
@@ -311,6 +314,7 @@ async function persistPurchaseItemRow({ trx, organizationId, purchaseId, item }:
 			compraId: purchaseId,
 			produtoId: item.produtoId,
 			produtoVarianteId: item.produtoVarianteId ?? null,
+			destinacao: item.destinacao ?? "REVENDA",
 			snapshotProdutoDescricao: item.snapshotProdutoDescricao,
 			snapshotProdutoCodigo: item.snapshotProdutoCodigo,
 			quantidade: item.quantidade,

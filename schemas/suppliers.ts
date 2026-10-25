@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { AcquisitionNatureEnum } from "./enums";
 
 export const SupplierSchema = z.object({
 	organizacaoId: z.string({
@@ -50,6 +51,7 @@ export const SupplierProductMappingSchema = z.object({
 		.positive("O fator de conversão deve ser maior que zero.")
 		.optional()
 		.nullable(),
+	destinacao: AcquisitionNatureEnum.optional().nullable(),
 	dataInsercao: z
 		.string({ invalid_type_error: "Tipo não válido para a data de inserção." })
 		.datetime({ message: "Tipo não válido para a data de inserção." })

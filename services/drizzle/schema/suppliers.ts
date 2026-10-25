@@ -1,6 +1,7 @@
 import { relations, sql } from "drizzle-orm";
 import { boolean, doublePrecision, index, timestamp, uniqueIndex, varchar } from "drizzle-orm/pg-core";
 import { newTable } from "./common";
+import { acquisitionNatureEnum } from "./enums";
 import { organizations } from "./organizations";
 import { products, productVariants } from "./products";
 
@@ -53,6 +54,8 @@ export const supplierProductMappings = newTable(
 		// Aprendidos junto do de-para: a proxima nota do mesmo fornecedor ja chega convertida.
 		unidadeExterna: varchar("unidade_externa", { length: 25 }),
 		fatorConversao: doublePrecision("fator_conversao"),
+		// Última destinação usada para este código do fornecedor: vira o default da próxima nota.
+		destinacao: acquisitionNatureEnum("destinacao"),
 		dataInsercao: timestamp("data_insercao").defaultNow().notNull(),
 		dataAtualizacao: timestamp("data_atualizacao").defaultNow().notNull(),
 	},

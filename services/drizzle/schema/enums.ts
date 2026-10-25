@@ -438,6 +438,10 @@ export const fiscalInboundSituacaoEnum = pgEnum("fiscal_inbound_situacao", ["AUT
 // Modelo do documento recebido: NF-e (55) ou CT-e (57). A NFC-e nao e recebida por distribuicao.
 export const fiscalInboundDocumentModelEnum = pgEnum("fiscal_inbound_document_model", ["NFE", "CTE"]);
 
+// O que o produto e para a organizacao (products.natureza) e para que serve uma aquisicao
+// (purchase_items.destinacao). Um enum, dois lugares — ADR-0002, decisao 3.
+export const acquisitionNatureEnum = pgEnum("acquisition_nature", ["REVENDA", "INSUMO", "USO_CONSUMO", "ATIVO_IMOBILIZADO"]);
+
 export const platformPartnerStatusEnum = pgEnum("platform_partner_status", ["PENDENTE_APROVACAO", "ATIVO", "SUSPENSO", "REJEITADO"]);
 
 export const platformPartnerReferralStatusEnum = pgEnum("platform_partner_referral_status", [

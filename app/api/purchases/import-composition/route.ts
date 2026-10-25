@@ -5,7 +5,8 @@ import { extractCompositionFromFile, IMPORT_COMPOSITION_ALLOWED_MIME_TYPES } fro
 import { extractCompositionFromNfeXml } from "@/lib/purchase/import-xml";
 import { looksLikeFiscalXml, storeFiscalEntryDocument } from "@/lib/fiscal/inbound/entry-files";
 import { findPurchasesByAccessKeys, getInboundDocumentXml, registerManualInboundDocument } from "@/lib/fiscal/inbound";
-import { matchCompositionItemsToProducts } from "@/lib/purchase/match-products";
+import { matchCompositionItemsToProducts, type TMatchedCompositionItem } from "@/lib/purchase/match-products";
+import { resolveEntryLineDisposition } from "@/lib/purchase/entry-rules";
 import { describeErrorForLogging } from "@/lib/errors";
 import type { TPurchaseImportStageEnum, TPurchaseImportStageStatusEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
@@ -165,6 +166,39 @@ async function registerFiscalXml({
 
 type TImportCompositionFile = z.infer<typeof ImportCompositionFileSchema>;
 
+export type TImportedLine = TMatchedCompositionItem & {
+	/** Linha que não é aquisição (consignação, remessa, devolução…): fica visível, mas fora da compra. */
+	foraDaCompra: string | null;
+};
+
+/**
+ * O CFOP do emitente decide a linha, na hora (ADR-0002, decisão 3): compra entra; bonificação entra
+ * com um componente que zera custo e dívida (desconto incondicional de 100%, CPC 16); o resto não
+ * vira item de compra.
+ */
+function applyLineDisposition(item: TMatchedCompositionItem): TImportedLine {
+	const disposition = resolveEntryLineDisposition({ cfop: item.cfop });
+	if (disposition.tipo === "FORA") return { ...item, foraDaCompra: disposition.motivo };
+	if (disposition.tipo === "BONIFICACAO") {
+		const modifiers = [...(item.modificadoresCusto ?? [])];
+		// O que a nota já descontou na linha não é bonificado de novo.
+		const discountedCents = modifiers
+			.filter((modifier) => modifier.chave === "DESCONTO")
+			.reduce((total, modifier) => total + modifier.valorCentavos, 0);
+		const bonusCents = Math.round(item.valorTotal * 100) - discountedCents;
+		if (bonusCents > 0)
+			modifiers.push({
+				chave: "BONIFICACAO",
+				valorCentavos: bonusCents,
+				efeito: "REDUCAO",
+				tratamento: "CUSTO_ESTOQUE",
+				descricao: `Bonificação (CFOP ${item.cfop}): entra no estoque a custo zero e não gera valor a pagar`,
+			});
+		return { ...item, modificadoresCusto: modifiers, foraDaCompra: null };
+	}
+	return { ...item, foraDaCompra: null };
+}
+
 /** XML de uma nota recebida, lido do catálogo (ou do provedor, se ainda não cacheado). */
 async function loadInboundSource({ organizationId, inboundId }: { organizationId: string; inboundId: string }) {
 	const document = await db.query.fiscalInboundDocuments.findFirst({
@@ -268,12 +302,14 @@ async function importPurchaseComposition({
 	assertImportIsActive(abortSignal);
 
 	onStage({ stage: "CATALOGO", status: "INICIADO", detail: "Procurando por EAN, código e nome…" });
-	const itens = await matchCompositionItemsToProducts({
-		organizacaoId: userOrgId,
-		fornecedorId: existingSupplier?.id ?? null,
-		itens: extracted.itens,
-		abortSignal,
-	});
+	const itens: TImportedLine[] = (
+		await matchCompositionItemsToProducts({
+			organizacaoId: userOrgId,
+			fornecedorId: existingSupplier?.id ?? null,
+			itens: extracted.itens,
+			abortSignal,
+		})
+	).map(applyLineDisposition);
 	assertImportIsActive(abortSignal);
 	const matchedCount = itens.filter((item) => item.matchTipo === "MAPEADO" || item.matchTipo === "CODIGO").length;
 	const reviewCount = itens.length - matchedCount;
@@ -285,18 +321,20 @@ async function importPurchaseComposition({
 
 	// Cabeçalho: o total do documento alimenta o lançamento contábil da compra, e a divergência
 	// contra a soma das linhas é o sinal de que a leitura pode ter pulado item ou página.
-	const somaItensBase = roundToCents(itens.reduce((total, item) => total + item.quantidade * item.valorUnitario - (item.desconto ?? 0), 0));
+	// Linhas fora da compra não entram na soma; a bonificação entra pelo valor da nota (o vNF a inclui)
+	// mesmo que o item vá para o estoque a custo zero.
+	const purchaseLines = itens.filter((item) => !item.foraDaCompra);
+	const somaItensBase = roundToCents(purchaseLines.reduce((total, item) => total + item.quantidade * item.valorUnitario - (item.desconto ?? 0), 0));
 	const somaItens =
 		extracted.origem === "XML"
 			? roundToCents(
-					itens.reduce(
+					purchaseLines.reduce(
 						(total, item) =>
 							total +
 							item.valorTotal +
-							(item.modificadoresCusto ?? []).reduce(
-								(modifierTotal, modifier) => modifierTotal + (modifier.efeito === "REDUCAO" ? -1 : 1) * (modifier.valorCentavos / 100),
-								0,
-							),
+							(item.modificadoresCusto ?? [])
+								.filter((modifier) => modifier.chave !== "BONIFICACAO")
+								.reduce((modifierTotal, modifier) => modifierTotal + (modifier.efeito === "REDUCAO" ? -1 : 1) * (modifier.valorCentavos / 100), 0),
 						0,
 					),
 				)
@@ -319,6 +357,16 @@ async function importPurchaseComposition({
 	}
 	if (valorFrete !== null && extracted.origem !== "XML")
 		avisos.push(`O documento destaca R$ ${valorFrete.toFixed(2)} de frete, que entra no valor total mas não aparece como item da composição.`);
+	const foraDaCompra = itens.filter((item) => item.foraDaCompra).length;
+	if (foraDaCompra > 0)
+		avisos.push(
+			`${foraDaCompra} ${foraDaCompra === 1 ? "linha da nota não é aquisição" : "linhas da nota não são aquisição"} (consignação, remessa ou devolução) e ${foraDaCompra === 1 ? "ficou" : "ficaram"} fora da compra.`,
+		);
+	const bonificadas = itens.filter((item) => (item.modificadoresCusto ?? []).some((modifier) => modifier.chave === "BONIFICACAO")).length;
+	if (bonificadas > 0)
+		avisos.push(
+			`${bonificadas} ${bonificadas === 1 ? "linha bonificada entra" : "linhas bonificadas entram"} no estoque a custo zero, sem valor a pagar.`,
+		);
 	const impostosPendentes = extracted.itens.reduce(
 		(total, item) => total + (item.modificadoresCusto ?? []).filter((modifier) => modifier.tratamento === null).length,
 		0,

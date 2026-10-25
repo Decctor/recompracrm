@@ -120,3 +120,18 @@ test("rateio por maior resto fecha exatamente em centavos e mantém desempate es
 		100,
 	);
 });
+
+test("bonificação zera custo e dívida da linha, sem tornar nada negativo", () => {
+	const result = calculatePurchaseItemCost({
+		quantidade: 10,
+		valorTotalBruto: 50,
+		modificadoresCusto: {
+			versao: 1,
+			modificadores: [{ chave: "BONIFICACAO", valorCentavos: 5000, efeito: "REDUCAO", tratamento: "CUSTO_ESTOQUE", origem: "XML" }],
+		},
+	});
+	assert.equal(result.valorTotalLiquido, 0);
+	assert.equal(result.valorTotalCusto, 0);
+	assert.equal(result.valorUnitarioCusto, 0);
+	assert.equal(result.descontosTotal, 50);
+});

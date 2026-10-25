@@ -34,6 +34,7 @@ export function buildPurchaseItemsFromLines(lines: TReviewLine[], productIdByLin
 				...createEmptyPurchaseItem(),
 				produtoId,
 				produtoVarianteId: line.produto ? line.produtoVarianteId : null,
+				destinacao: line.destinacao,
 				snapshotProdutoDescricao: line.produtoVariante?.nome ?? produto.nome,
 				snapshotProdutoCodigo: line.produtoVariante?.codigo ?? produto.codigo,
 				produto,
@@ -119,6 +120,7 @@ export function buildCreatePurchaseInput({
 			ncm: product.ncm.trim(),
 			vendavel: product.vendavel,
 			rastreamentoEstoqueAtivo: product.rastreamentoEstoqueAtivo,
+			natureza: product.natureza,
 			precoCusto: product.precoCusto,
 		})),
 		// Without a supplier there is nobody to remember the links for.

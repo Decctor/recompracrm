@@ -9,7 +9,8 @@ import { Switch } from "@/components/ui/switch";
 import { formatToMoney } from "@/lib/formatting";
 import { inferPackFactorFromDescription, unitsAreEquivalent } from "@/lib/purchase/units";
 import { cn } from "@/lib/utils";
-import type { TPurchaseCostTreatmentEnum } from "@/schemas/enums";
+import { AcquisitionNatureEnum, type TAcquisitionNatureEnum, type TPurchaseCostTreatmentEnum } from "@/schemas/enums";
+import { ACQUISITION_NATURE_LABELS } from "@/lib/purchase/entry-rules";
 import { ArrowRight, Check, CheckCheck, EyeOff, FileText, Link2, List, Minus, PackagePlus, Search, Sparkles } from "lucide-react";
 import { useMemo, useState } from "react";
 import {
@@ -209,6 +210,8 @@ function QueuePanel({
 				nome: pick.product.nome,
 				codigo: pick.product.codigo,
 				unidade: pick.product.unidade,
+				// O seletor não carrega a natureza; o servidor usa a do cadastro ao gravar o de-para.
+				natureza: "REVENDA",
 				imagemCapaUrl: pick.product.imagemCapaUrl ?? null,
 			},
 			produtoVarianteId: pick.productVariant?.id ?? null,
@@ -510,6 +513,20 @@ function NewProductForm({ draft, onChange }: { draft: TNewProductDraft; onChange
 				<TextInput label="UNIDADE" value={draft.unidade} placeholder="UN" handleChange={(value) => onChange({ unidade: (value ?? "").toUpperCase() })} />
 				<TextInput label="NCM" value={draft.ncm} placeholder="NCM" handleChange={(value) => onChange({ ncm: value ?? "" })} />
 			</div>
+			<label className="flex flex-col gap-1 text-xs font-medium text-foreground/80">
+				<span className="text-[0.65rem] font-semibold uppercase tracking-wide text-muted-foreground">Natureza do produto</span>
+				<select
+					value={draft.natureza}
+					onChange={(event) => onChange({ natureza: event.target.value as TAcquisitionNatureEnum })}
+					className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm md:w-64"
+				>
+					{AcquisitionNatureEnum.options.map((value) => (
+						<option key={value} value={value}>
+							{ACQUISITION_NATURE_LABELS[value]}
+						</option>
+					))}
+				</select>
+			</label>
 			<div className="flex flex-wrap gap-4 text-xs font-medium text-foreground/80">
 				<label className="flex items-center gap-1.5">
 					<Switch checked={draft.vendavel} onCheckedChange={(checked) => onChange({ vendavel: checked })} />

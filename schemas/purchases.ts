@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+	AcquisitionNatureEnum,
 	PurchaseCostAllocationMethodEnum,
 	PurchaseCostModifierEffectEnum,
 	PurchaseCostModifierKeyEnum,
@@ -219,6 +220,8 @@ export const PurchaseItemSchema = z.object({
 		invalid_type_error: "Tipo não válido para o ID do produto.",
 	}),
 	produtoVarianteId: z.string({ invalid_type_error: "Tipo não válido para o ID da variante do produto." }).optional().nullable(),
+	// Para que esta aquisição serve (ADR-0002, decisão 3). Default REVENDA mantém os clientes antigos.
+	destinacao: AcquisitionNatureEnum.default("REVENDA"),
 	snapshotProdutoDescricao: z.string({
 		required_error: "Descrição do snapshot do produto não informada.",
 		invalid_type_error: "Tipo não válido para a descrição do snapshot do produto.",

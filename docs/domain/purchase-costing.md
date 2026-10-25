@@ -175,12 +175,11 @@ soma das parcelas dos itens = valor declarado no documento
 
 Ao receber a compra, o módulo persiste `valorTotalCusto` e `valorUnitarioCusto` e ramifica pela destinação do item:
 
-| Destinação                  | Estoque             | Débito contábil                 | Outros efeitos                               |
-| --------------------------- | ------------------- | ------------------------------- | -------------------------------------------- |
-| `REVENDA`, `INSUMO`         | `ENTRADA_AQUISICAO` | conta de estoques da destinação | lotes por `rastro` quando houver             |
-| `USO_CONSUMO` rastreado     | `ENTRADA_AQUISICAO` | material de consumo (ativo)     | sai pela `SAIDA` manual existente            |
-| `USO_CONSUMO` não rastreado | nenhum              | despesa de consumo              | —                                            |
-| `ATIVO_IMOBILIZADO`         | nenhum              | imobilizado                     | cria `fixed_assets` com a quantidade do item |
+| Destinação          | Estoque                                              | Débito contábil                                                                                                                                   | Outros efeitos                               |
+| ------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| `REVENDA`, `INSUMO` | `ENTRADA_AQUISICAO`                                  | conta de estoques da destinação                                                                                                                   | lotes por `rastro` quando houver             |
+| `USO_CONSUMO`       | `ENTRADA_AQUISICAO` só se o produto rastreia estoque | conta configurada para uso e consumo (padrão: despesa 6.6 "Material de Uso e Consumo"; quem controla almoxarifado aponta para uma conta de ativo) | sai pela `SAIDA` manual existente            |
+| `ATIVO_IMOBILIZADO` | nenhum                                               | imobilizado                                                                                                                                       | cria `fixed_assets` com a quantidade do item |
 
 Para estoque:
 

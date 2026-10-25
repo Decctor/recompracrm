@@ -134,6 +134,7 @@ export const RecompraCRMDefaultAccountCharts: TOnboardingAccountChartNode[] = [
 			{ key: "despesas_comerciais", nome: "Despesas Comerciais", codigo: "6.3", natureza: "DESPESA" },
 			{ key: "despesas_financeiras", nome: "Despesas Financeiras", codigo: "6.4", natureza: "DESPESA" },
 			{ key: "perdas_estoque", nome: "Perdas de Estoque", codigo: "6.5", natureza: "DESPESA" },
+			{ key: "material_uso_consumo", nome: "Material de Uso e Consumo", codigo: "6.6", natureza: "DESPESA" },
 		],
 	},
 ];
@@ -141,7 +142,13 @@ export const RecompraCRMDefaultAccountCharts: TOnboardingAccountChartNode[] = [
 export const RecompraCRMDefaultAccountingDefaults: {
 	lancamentosPadrao: {
 		vendas: { debitoKey: string; creditoKey: string };
-		compras: { debitoKey: string; creditoKey: string; debitoCreditoTributarioKey: string; debitoDespesaPeriodoKey: string };
+		compras: {
+			debitoKey: string;
+			creditoKey: string;
+			debitoCreditoTributarioKey: string;
+			debitoDespesaPeriodoKey: string;
+			debitoPorDestinacaoKey: { INSUMO: string; USO_CONSUMO: string; ATIVO_IMOBILIZADO: string };
+		};
 		transferencias: { debitoKey: string; creditoKey: string };
 		perdasEstoque: { debitoKey: string; creditoKey: string };
 		taxasCanal: { debitoKey: string; creditoKey: string };
@@ -154,6 +161,9 @@ export const RecompraCRMDefaultAccountingDefaults: {
 			creditoKey: "fornecedores",
 			debitoCreditoTributarioKey: "tributos_recuperar",
 			debitoDespesaPeriodoKey: "despesas_operacionais",
+			// Insumo é estoque como a mercadoria; uso e consumo vai a despesa; o imobilizado só ganha
+			// conta própria na Fase 7 (patrimônio) e até lá cai em "outros ativos".
+			debitoPorDestinacaoKey: { INSUMO: "estoques", USO_CONSUMO: "material_uso_consumo", ATIVO_IMOBILIZADO: "outros_ativos" },
 		},
 		transferencias: {
 			debitoKey: "caixa_bancos",
@@ -317,6 +327,12 @@ export function buildOrganizationAccountingDefaults(accountIdsByKey: Map<string,
 				debitoCreditoTributarioContaKey: RecompraCRMDefaultAccountingDefaults.lancamentosPadrao.compras.debitoCreditoTributarioKey,
 				debitoDespesaPeriodoContaId: accountIdsByKey.get(RecompraCRMDefaultAccountingDefaults.lancamentosPadrao.compras.debitoDespesaPeriodoKey) ?? null,
 				debitoDespesaPeriodoContaKey: RecompraCRMDefaultAccountingDefaults.lancamentosPadrao.compras.debitoDespesaPeriodoKey,
+				contasDebitoPorDestinacao: Object.fromEntries(
+					Object.entries(RecompraCRMDefaultAccountingDefaults.lancamentosPadrao.compras.debitoPorDestinacaoKey).map(([destinacao, key]) => [
+						destinacao,
+						{ contaId: accountIdsByKey.get(key) ?? null, contaKey: key },
+					]),
+				) as TOrganizationDefaults["contabilidade"]["lancamentosPadrao"]["compras"]["contasDebitoPorDestinacao"],
 			},
 			transferencias: {
 				debitoContaId: accountIdsByKey.get(RecompraCRMDefaultAccountingDefaults.lancamentosPadrao.transferencias.debitoKey) ?? null,

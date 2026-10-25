@@ -38,6 +38,7 @@ function calculateInferableValues(item: Partial<TPurchaseItemState>) {
 export default function NewPurchaseItem({ addPurchaseItem, closeMenu }: NewPurchaseItemProps) {
 	const [infoHolder, setInfoHolder] = useState<TPurchaseItemState>({
 		produtoId: "",
+		destinacao: "REVENDA",
 		snapshotProdutoDescricao: "",
 		snapshotProdutoCodigo: "",
 		produto: {

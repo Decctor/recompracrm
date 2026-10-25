@@ -8,6 +8,8 @@ import { ProductActiveToggle, ProductInactiveHint } from "@/components/Products/
 import ProductBarcodeConflictHint from "@/components/Products/Shared/ProductBarcodeConflictHint";
 import ResponsiveMenuSection from "@/components/Utils/ResponsiveMenuSection";
 import { normalizeProductBarcode } from "@/lib/products/barcode";
+import { ACQUISITION_NATURE_LABELS, getProductNatureWarning } from "@/lib/purchase/entry-rules";
+import { AcquisitionNatureEnum, type TAcquisitionNatureEnum } from "@/schemas/enums";
 import type { TProductContentUnitEnum } from "@/schemas/enums";
 import type { TProductCoreState, TUseProductCoreState } from "@/state-hooks/use-product-state";
 import { ProductContentUnitOptions, UnitsOfMeasurementOptions } from "@/utils/select-options";
@@ -115,6 +117,22 @@ export default function ProductStateGeneralBlock({
 					</div>
 				</div>
 				<SelectProductGroup value={product.grupo} handleChange={(grupo) => updateProduct({ grupo })} />
+				<div className="w-full flex flex-col gap-1">
+					<SelectInput
+						label="NATUREZA"
+						value={product.natureza ?? "REVENDA"}
+						resetOptionLabel="REVENDA"
+						handleChange={(value) => updateProduct({ natureza: value as TAcquisitionNatureEnum })}
+						options={AcquisitionNatureEnum.options.map((value) => ({ id: value, value, label: ACQUISITION_NATURE_LABELS[value].toUpperCase() }))}
+						onReset={() => updateProduct({ natureza: "REVENDA" })}
+					/>
+					<p className="text-center text-[0.6rem] text-primary/60 tracking-tight">
+						{(product.natureza ?? "REVENDA") === "REVENDA"
+							? "O que a empresa compra para vender. Define a destinação sugerida nas compras."
+							: (getProductNatureWarning({ natureza: product.natureza ?? "REVENDA", vendavel: product.vendavel }) ??
+								"Insumo, material de consumo ou bem: a compra já entra com a destinação certa.")}
+					</p>
+				</div>
 				<div className="w-full flex flex-col items-center gap-1">
 					<CheckboxInput
 						checked={product.vendavel}

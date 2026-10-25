@@ -9,6 +9,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Input } from "@/components/ui/input";
 import { formatDateForInputValue, formatDateOnInputChange, formatNameAsInitials, formatToMoney } from "@/lib/formatting";
 import { calculatePurchaseItemCost, resolvePurchaseCostModifierSnapshot } from "@/lib/purchase/costing";
+import { ACQUISITION_NATURE_LABELS, SUPPORTED_PURCHASE_DESTINATIONS } from "@/lib/purchase/entry-rules";
+import type { TAcquisitionNatureEnum } from "@/schemas/enums";
 import {
 	consumeProgrammaticSpreadsheetFocus,
 	handleSpreadsheetNavigationKeyDown,
@@ -175,6 +177,7 @@ function PurchaseCompositionTableItem({ item, locked, gridRow, gridBounds, handl
 							<ProductCell item={item} gridRow={gridRow} gridCol={PURCHASE_ITEM_GRID_COL.PRODUCT} gridBounds={gridBounds} onChange={handleUpdate} />
 						)}
 					</div>
+					<PurchaseItemDestinationControl item={item} locked={locked} handleUpdate={handleUpdate} />
 					<PurchaseItemExpiryControl item={item} locked={locked} lots={lots} handleUpdate={handleUpdate} />
 					<PurchaseItemCostModifiersControl item={item} locked={locked} handleUpdate={handleUpdate} />
 				</div>
@@ -256,6 +259,7 @@ function PurchaseCompositionTableItem({ item, locked, gridRow, gridBounds, handl
 				<div className="flex w-full items-start justify-between gap-2">
 					<div className="min-w-0 flex-1">{locked ? <StaticProductLabel item={item} /> : <ProductCell item={item} onChange={handleUpdate} />}</div>
 					<div className="flex shrink-0 items-center gap-1.5">
+						<PurchaseItemDestinationControl item={item} locked={locked} handleUpdate={handleUpdate} />
 						<PurchaseItemExpiryControl item={item} locked={locked} lots={lots} handleUpdate={handleUpdate} />
 						<PurchaseItemCostModifiersControl item={item} locked={locked} handleUpdate={handleUpdate} />
 						{locked ? (
@@ -325,6 +329,7 @@ function PurchaseCompositionTableItem({ item, locked, gridRow, gridBounds, handl
 
 const PURCHASE_MODIFIER_OPTIONS = [
 	["DESCONTO", "Desconto"],
+	["BONIFICACAO", "Bonificação"],
 	["FRETE", "Frete"],
 	["SEGURO", "Seguro"],
 	["DESPESA_ACESSORIA", "Despesa acessória"],
@@ -333,6 +338,51 @@ const PURCHASE_MODIFIER_OPTIONS = [
 	["IMPOSTOS_FCP_ST", "FCP-ST"],
 	["OUTRO", "Outro acréscimo"],
 ] as const;
+
+/**
+ * Para que esta aquisição serve (ADR-0002). Só muda custo/conta quando difere de revenda, então
+ * fica discreto: um seletor curto, ou o rótulo quando o item já está congelado.
+ */
+function PurchaseItemDestinationControl({
+	item,
+	locked,
+	handleUpdate,
+}: {
+	item: TPurchaseItemState;
+	locked: boolean;
+	handleUpdate: (item: Partial<TPurchaseItemState>) => void;
+}) {
+	const destinacao = item.destinacao ?? "REVENDA";
+	if (locked) {
+		if (destinacao === "REVENDA") return null;
+		return (
+			<span
+				className="flex h-7 shrink-0 items-center rounded-md border border-border px-1.5 text-[0.7rem] font-medium text-muted-foreground"
+				title="Destinação do item"
+			>
+				{ACQUISITION_NATURE_LABELS[destinacao]}
+			</span>
+		);
+	}
+	return (
+		<select
+			value={destinacao}
+			title="Destinação do item"
+			aria-label="Destinação do item"
+			onChange={(event) => handleUpdate({ destinacao: event.target.value as TAcquisitionNatureEnum })}
+			className={cn(
+				"h-7 shrink-0 rounded-md border bg-background px-1 text-[0.7rem] font-medium focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/40",
+				destinacao === "REVENDA" ? "border-dashed border-border text-muted-foreground" : "border-primary/30 bg-primary/5 text-primary",
+			)}
+		>
+			{SUPPORTED_PURCHASE_DESTINATIONS.map((value) => (
+				<option key={value} value={value}>
+					{ACQUISITION_NATURE_LABELS[value]}
+				</option>
+			))}
+		</select>
+	);
+}
 
 function PurchaseItemCostModifiersControl({
 	item,
@@ -417,8 +467,8 @@ function PurchaseItemCostModifiersControl({
 												? {
 														...current,
 														chave: event.target.value as (typeof PURCHASE_MODIFIER_OPTIONS)[number][0],
-														efeito: event.target.value === "DESCONTO" ? "REDUCAO" : "ACRESCIMO",
-														tratamento: event.target.value === "DESCONTO" ? "CUSTO_ESTOQUE" : current.tratamento,
+														efeito: event.target.value === "DESCONTO" || event.target.value === "BONIFICACAO" ? "REDUCAO" : "ACRESCIMO",
+														tratamento: event.target.value === "DESCONTO" || event.target.value === "BONIFICACAO" ? "CUSTO_ESTOQUE" : current.tratamento,
 														descricao: event.target.value === "OUTRO" ? current.descricao || "Outro acréscimo" : current.descricao,
 													}
 												: current,
@@ -1008,6 +1058,7 @@ export function createEmptyPurchaseItem(): TPurchaseItemState {
 	return {
 		produtoId: "",
 		produtoVarianteId: null,
+		destinacao: "REVENDA",
 		snapshotProdutoDescricao: "",
 		snapshotProdutoCodigo: "",
 		produto: {

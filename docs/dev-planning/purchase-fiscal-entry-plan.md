@@ -539,7 +539,7 @@ Cada fase é entregável sozinha e não muda nada para quem não usa a novidade.
 | 0    | ADR-0002 + guia de domínio; validação dos presets e do DIFAL com a contabilidade                                                                                                            | —                                                                           |
 | 1 ✅ | Documento como primitivo: uploads de XML viram linha de documento, propósito `DOCUMENTO_FISCAL_ENTRADA`, `arquivoId`, ponteiro do item, validações do import, `rastro` → validade, backfill | `fiscal_inbound_documents`, `purchase_items` (ponteiro), JSONB              |
 | 2 ✅ | Nota recebida → compra, `compraId`, cancelamento, confirmação opt-in                                                                                                                        | —                                                                           |
-| 3    | Natureza e destinação, uso e consumo em despesa, bonificação como componente, contas por destinação                                                                                         | `products`, `purchase_items`, `supplier_product_mappings`                   |
+| 3 ✅ | Natureza e destinação, uso e consumo em despesa, bonificação como componente, contas por destinação                                                                                         | `products`, `purchase_items`, `supplier_product_mappings`                   |
 | 4    | `contrapartida = INCLUSO_NO_VALOR`, créditos de ICMS/ICMS SN/PIS/COFINS, presets, overrides                                                                                                 | JSONB, `fiscalConfiguracao`                                                 |
 | 5    | Contrapartida `FISCO`, DIFAL/antecipação/ST de entrada, lançamentos por credor com contraparte, guias a pagar, `DOCUMENTO_FINANCEIRO`, backfill de `clienteId`/`fornecedorId`               | `accounting_entries`, `financial_recurring_rules`, `financial_transactions` |
 | 6    | CT-e                                                                                                                                                                                        | —                                                                           |
@@ -548,7 +548,17 @@ Cada fase é entregável sozinha e não muda nada para quem não usa a novidade.
 
 Fase 1 entregue em `drizzle/0138_purchase_fiscal_entry_documents.sql` + `scripts/backfill-purchase-fiscal-files.ts`
 (aplicar a migration antes do deploy; rodar o backfill depois). O que ficou de fora dela, de propósito:
-o CFOP lido por item ainda não decide nada (Fase 3).
+nada.
+
+Fase 3 entregue em `drizzle/0139_purchase_acquisition_nature.sql`: `products.natureza`,
+`purchase_items.destinacao`, `supplier_product_mappings.destinacao`; regras de entrada em
+`lib/purchase/entry-rules.ts` (CFOP decide a linha no import: compra, `BONIFICACAO` a custo zero, ou
+fora da compra com motivo); destinação sugerida pelo de-para → produto → revenda, editável no builder
+e no modal, com aviso de divergência; contabilidade abre o custo por destinação
+(`contasDebitoPorDestinacao`, com fallback pela chave do seed; seed novo 6.6 "Material de Uso e
+Consumo"). Uso e consumo debita uma única conta configurada — a entrada no estoque continua decidida
+por `rastreamentoEstoqueAtivo`, sem tipo de movimentação novo. `ATIVO_IMOBILIZADO` existe no enum,
+mas o recebimento recusa até a Fase 7.
 
 Fase 2 entregue: "Lançar compra" na aba de notas recebidas (`?inboundId=` no builder, mesmo pipeline
 de `/api/purchases/import-composition`), filtro a lançar/lançadas com link para a compra, bloqueio do

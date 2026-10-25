@@ -14,6 +14,9 @@ import {
 	type TPurchaseItemStockOperation,
 } from "@/lib/purchase-processing/process-purchase-item-stock";
 import { upsertSupplierProductMappings } from "@/lib/purchase/supplier-product-mappings";
+import { ACQUISITION_NATURE_LABELS, SUPPORTED_PURCHASE_DESTINATIONS } from "@/lib/purchase/entry-rules";
+import { getDefaultAccountChartCodeByKey, RecompraCRMDefaultAccountingDefaults } from "@/config/onboarding";
+import type { TAcquisitionNatureEnum } from "@/schemas/enums";
 import {
 	assertLinkedInboundDocumentsReceivable,
 	confirmInboundDocumentsOnReceive,
@@ -353,6 +356,7 @@ const CreatePurchaseInputSchema = z.object({
 				ncm: true,
 				vendavel: true,
 				rastreamentoEstoqueAtivo: true,
+				natureza: true,
 				precoCusto: true,
 			}).extend({
 				id: z
@@ -371,6 +375,7 @@ const CreatePurchaseInputSchema = z.object({
 				produtoVarianteId: true,
 				unidadeExterna: true,
 				fatorConversao: true,
+				destinacao: true,
 			}),
 		)
 		.optional(),
@@ -409,6 +414,13 @@ function normalizePurchaseFinancialTransaction<T extends { valor: number }>(tran
 // Itens marcados para remoção não passam pelo cálculo: eles vão sair, e uma linha inválida (quantidade
 // zerada, por exemplo) não pode impedir justamente a operação que a remove.
 function normalizePurchaseItems<T extends TPurchaseItemInput>(items: T[]): T[] {
+	for (const item of items) {
+		if (item.deletar || !item.destinacao) continue;
+		if (!SUPPORTED_PURCHASE_DESTINATIONS.includes(item.destinacao))
+			throw new createHttpError.BadRequest(
+				`Destinação "${ACQUISITION_NATURE_LABELS[item.destinacao]}" ainda não é suportada no recebimento de compras (chega com o módulo de patrimônio).`,
+			);
+	}
 	try {
 		return items.map((item) => (item.deletar ? item : normalizePurchaseItemCostValues(item)));
 	} catch (error) {
@@ -462,20 +474,66 @@ function getPurchaseAccountingAmounts(items: TPurchaseItemInput[]) {
 	let inventoryCents = 0;
 	let taxCreditCents = 0;
 	let periodExpenseCents = 0;
+	const inventoryCentsByDestination: Partial<Record<TAcquisitionNatureEnum, number>> = {};
 	for (const item of items) {
 		if (item.deletar) continue;
 		const result = calculatePurchaseItemCost(item);
+		const destination = item.destinacao ?? "REVENDA";
 		financialCents += moneyToCents(result.valorTotalLiquido);
 		inventoryCents += moneyToCents(result.valorTotalCusto);
+		inventoryCentsByDestination[destination] = (inventoryCentsByDestination[destination] ?? 0) + moneyToCents(result.valorTotalCusto);
 		taxCreditCents += moneyToCents(result.valorTotalCreditoTributario);
 		periodExpenseCents += moneyToCents(result.valorTotalDespesaPeriodo);
 	}
 	return {
 		valorFinanceiro: centsToMoney(financialCents),
 		valorCustoEstoque: centsToMoney(inventoryCents),
+		custoPorDestinacao: Object.fromEntries(
+			Object.entries(inventoryCentsByDestination).map(([destination, cents]) => [destination, centsToMoney(cents)]),
+		),
 		valorCreditoTributario: centsToMoney(taxCreditCents),
 		valorDespesaPeriodo: centsToMoney(periodExpenseCents),
 	};
+}
+
+/**
+ * Conta de débito de cada destinação: id configurado → chave configurada → chave do seed, resolvidas
+ * pelo código no plano da organização (mesma regra de `resolveAccountingDefaultAccountIdsAgainstChart`).
+ */
+async function resolvePurchaseDestinationAccountIds({
+	trx,
+	organizationId,
+	configured,
+	needed,
+}: {
+	trx: DBTransaction;
+	organizationId: string;
+	configured: Partial<Record<TAcquisitionNatureEnum, { contaId: string | null; contaKey: string | null } | undefined>> | undefined;
+	needed: TAcquisitionNatureEnum[];
+}) {
+	const resolved: Partial<Record<TAcquisitionNatureEnum, string | null>> = {};
+	const pending = needed.filter((destination) => destination !== "REVENDA");
+	if (pending.length === 0) return resolved;
+	const seedKeys = RecompraCRMDefaultAccountingDefaults.lancamentosPadrao.compras.debitoPorDestinacaoKey;
+	const needsChart = pending.some((destination) => !configured?.[destination]?.contaId);
+	const chart = needsChart
+		? await trx.query.accountsCharts.findMany({
+				where: (fields, { and, eq, isNotNull }) => and(eq(fields.organizacaoId, organizationId), isNotNull(fields.codigo)),
+				columns: { id: true, codigo: true },
+			})
+		: [];
+	const accountIdByCode = new Map(chart.filter((account) => !!account.codigo).map((account) => [account.codigo as string, account.id]));
+	for (const destination of pending) {
+		const entry = configured?.[destination];
+		if (entry?.contaId) {
+			resolved[destination] = entry.contaId;
+			continue;
+		}
+		const key = entry?.contaKey ?? seedKeys[destination];
+		const code = key ? getDefaultAccountChartCodeByKey(key) : null;
+		resolved[destination] = (code ? accountIdByCode.get(code) : null) ?? null;
+	}
+	return resolved;
 }
 
 async function syncPurchaseAccountingLines({
@@ -517,6 +575,12 @@ async function syncPurchaseAccountingLines({
 	if (!organization) throw new createHttpError.NotFound("Organização não encontrada.");
 	const purchaseDefaults = organization.configuracao.defaults.contabilidade.lancamentosPadrao.compras;
 	const amounts = getPurchaseAccountingAmounts(items);
+	const contasPorDestinacao = await resolvePurchaseDestinationAccountIds({
+		trx,
+		organizationId,
+		configured: purchaseDefaults?.contasDebitoPorDestinacao,
+		needed: Object.keys(amounts.custoPorDestinacao) as TAcquisitionNatureEnum[],
+	});
 	await syncAccountingEntryLines({
 		trx,
 		organizationId,
@@ -529,6 +593,7 @@ async function syncPurchaseAccountingLines({
 				fornecedoresContaId: creditAccountId,
 				creditoTributarioContaId: purchaseDefaults?.debitoCreditoTributarioContaId,
 				despesaPeriodoContaId: purchaseDefaults?.debitoDespesaPeriodoContaId,
+				contasPorDestinacao,
 			},
 		}),
 	});
@@ -744,6 +809,7 @@ async function insertPurchaseNewProducts({
 			grupo: "",
 			vendavel: product.vendavel,
 			rastreamentoEstoqueAtivo: product.rastreamentoEstoqueAtivo,
+			natureza: product.natureza ?? "REVENDA",
 			precoCusto: product.precoCusto ?? null,
 			// Estoque inicial em 0: é a própria compra que dará a entrada, quando for recebida.
 			quantidade: 0,
@@ -839,7 +905,8 @@ function assertReceivedPurchaseItemsUnchanged({
 			normalizedPrevious.valorTotalCusto !== normalizedPayload.valorTotalCusto ||
 			normalizedPrevious.valorUnitarioCusto !== normalizedPayload.valorUnitarioCusto ||
 			JSON.stringify(normalizedPrevious.modificadoresCusto) !== JSON.stringify(normalizedPayload.modificadoresCusto) ||
-			(normalizedPrevious.dataValidade?.getTime() ?? null) !== (normalizedPayload.dataValidade?.getTime() ?? null);
+			(normalizedPrevious.dataValidade?.getTime() ?? null) !== (normalizedPayload.dataValidade?.getTime() ?? null) ||
+			(normalizedPrevious.destinacao ?? "REVENDA") !== (normalizedPayload.destinacao ?? "REVENDA");
 		if (changed) throw new createHttpError.BadRequest("Não é possível alterar itens de uma compra já recebida. Cancele a compra para corrigir.");
 	}
 	const activePayloadCount = payloadItems.filter((item) => !item.deletar).length;
@@ -1016,6 +1083,7 @@ async function updatePurchase({ input, session }: { input: TUpdatePurchaseInput;
 							documentoRef: previousItem.documentoRef,
 							documentoItem: previousItem.documentoItem,
 							dataValidade: previousItem.dataValidade,
+							destinacao: previousItem.destinacao,
 						},
 						reasonOverride: { exit: "Rollback - compra cancelada" },
 					});

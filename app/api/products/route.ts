@@ -868,6 +868,7 @@ async function updateProduct({ session, input }: { session: TAuthUserSession; in
 					ncm: input.product.ncm,
 					tipo: input.product.tipo,
 					grupo: input.product.grupo,
+					natureza: input.product.natureza,
 					imagemCapaUrl: input.product.imagemCapaUrl,
 					// Preço atual lido sob a mesma trava: o snapshot não pode usar um preço que outra escrita já trocou.
 					...buildSalePriceUpdate({
@@ -1253,6 +1254,7 @@ async function createProduct({ session, input }: { session: TAuthUserSession; in
 				ncm: input.product.ncm,
 				tipo: input.product.tipo,
 				grupo: input.product.grupo,
+				natureza: input.product.natureza ?? "REVENDA",
 				imagemCapaUrl: input.product.imagemCapaUrl,
 				precoVenda: input.product.precoVenda,
 				precoCusto: input.product.precoCusto,

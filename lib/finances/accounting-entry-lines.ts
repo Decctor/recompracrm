@@ -1,4 +1,5 @@
 import { moneyToCents, centsToMoney } from "@/lib/purchase/costing";
+import type { TAcquisitionNatureEnum } from "@/schemas/enums";
 import type { DBTransaction } from "@/services/drizzle";
 import { accountingEntryLines } from "@/services/drizzle/schema";
 import { and, eq } from "drizzle-orm";
@@ -15,7 +16,9 @@ export type TAccountingEntryLineInput = {
 
 export type TPurchaseAccountingAmounts = {
 	valorFinanceiro: number;
+	// Custo capitalizado de TODAS as destinações; `custoPorDestinacao` é a abertura (ADR-0002).
 	valorCustoEstoque: number;
+	custoPorDestinacao?: Partial<Record<TAcquisitionNatureEnum, number>>;
 	valorCreditoTributario: number;
 	valorDespesaPeriodo: number;
 };
@@ -25,7 +28,17 @@ export type TPurchaseAccountingAccounts = {
 	fornecedoresContaId: string;
 	creditoTributarioContaId?: string | null;
 	despesaPeriodoContaId?: string | null;
+	// Débito do custo por destinação; REVENDA (e qualquer ausente) cai em `estoqueContaId`.
+	contasPorDestinacao?: Partial<Record<TAcquisitionNatureEnum, string | null>>;
 };
+
+const DESTINATION_DESCRIPTIONS: Record<TAcquisitionNatureEnum, string> = {
+	REVENDA: "Custo de estoque da compra",
+	INSUMO: "Custo de insumos da compra",
+	USO_CONSUMO: "Material de uso e consumo da compra",
+	ATIVO_IMOBILIZADO: "Ativo imobilizado da compra",
+};
+const DESTINATION_ORDER: TAcquisitionNatureEnum[] = ["REVENDA", "INSUMO", "USO_CONSUMO", "ATIVO_IMOBILIZADO"];
 
 export function assertAccountingEntryLinesBalanced({ entryValue, lines }: { entryValue: number; lines: TAccountingEntryLineInput[] }) {
 	if (lines.length < 2) throw new Error("O lançamento contábil precisa ter ao menos uma linha de débito e uma de crédito.");
@@ -74,11 +87,13 @@ export function buildPurchaseAccountingEntryLines({
 		value,
 		description,
 		treatment,
+		destination,
 	}: {
 		accountId?: string | null;
 		value: number;
 		description: string;
 		treatment: string;
+		destination?: TAcquisitionNatureEnum;
 	}) => {
 		const valueCents = moneyToCents(value);
 		if (valueCents === 0) return;
@@ -86,23 +101,34 @@ export function buildPurchaseAccountingEntryLines({
 		// Sem flag para desligar as linhas, esta é a falha que o operador realmente encontra: a mensagem
 		// precisa dizer onde resolver, não apenas o que faltou.
 		if (!accountId)
-			throw new Error(`Conta contábil não configurada para ${description.toLowerCase()}. Defina-a em Configurações › Financeiro › Lançamentos padrão › Compras.`);
+			throw new Error(
+				`Conta contábil não configurada para ${description.toLowerCase()}. Defina-a em Configurações › Financeiro › Lançamentos padrão › Compras.`,
+			);
 		lines.push({
 			contaContabilId: accountId,
 			natureza: "DEBITO",
 			valor: centsToMoney(valueCents),
 			descricao: description,
 			ordem: order++,
-			metadados: { origem: "COMPRA", tratamento: treatment },
+			metadados: { origem: "COMPRA", tratamento: treatment, ...(destination ? { destinacao: destination } : {}) },
 		});
 	};
 
-	appendDebit({
-		accountId: accounts.estoqueContaId,
-		value: amounts.valorCustoEstoque,
-		description: "Custo de estoque da compra",
-		treatment: "CUSTO_ESTOQUE",
-	});
+	// Uma linha por destinação com valor. Sem abertura (compras anteriores ao ADR-0002), tudo é revenda.
+	const costByDestination = amounts.custoPorDestinacao ?? { REVENDA: amounts.valorCustoEstoque };
+	const openedCents = DESTINATION_ORDER.reduce((total, destination) => total + moneyToCents(costByDestination[destination] ?? 0), 0);
+	if (openedCents !== moneyToCents(amounts.valorCustoEstoque))
+		throw new Error("A abertura do custo por destinação não fecha com o custo total da compra.");
+	for (const destination of DESTINATION_ORDER) {
+		const value = costByDestination[destination] ?? 0;
+		appendDebit({
+			accountId: destination === "REVENDA" ? accounts.estoqueContaId : (accounts.contasPorDestinacao?.[destination] ?? null),
+			value,
+			description: DESTINATION_DESCRIPTIONS[destination],
+			treatment: "CUSTO_ESTOQUE",
+			destination,
+		});
+	}
 	appendDebit({
 		accountId: accounts.creditoTributarioContaId,
 		value: amounts.valorCreditoTributario,

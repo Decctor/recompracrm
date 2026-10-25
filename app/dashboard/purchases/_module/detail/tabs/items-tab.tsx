@@ -9,7 +9,8 @@ import { Section } from "@/components/ui/section";
 import { formatNameAsInitials, formatToMoney } from "@/lib/formatting";
 import { cn } from "@/lib/utils";
 import type { TPurchaseState, TUsePurchaseState } from "@/state-hooks/use-purchase-state";
-import { BadgeDollarSign, Lock, Plus, ReceiptText, Ruler, ShoppingCart, Sparkles, Trash2 } from "lucide-react";
+import { BadgeDollarSign, Gift, Lock, Plus, ReceiptText, Ruler, ShoppingCart, Sparkles, Tag, Trash2 } from "lucide-react";
+import { ACQUISITION_NATURE_LABELS } from "@/lib/purchase/entry-rules";
 import { useState } from "react";
 import { TONE_CLASSES } from "../../builder/components/builder-ui";
 import type { TPurchaseById } from "../helpers/hydrate";
@@ -25,8 +26,14 @@ export function getItemTags(item: TPurchaseItemState) {
 	const tags: { icon: typeof Ruler; label: string }[] = [];
 	if (item.externoFatorConversao && item.externoFatorConversao !== 1 && item.externoUnidade)
 		tags.push({ icon: Ruler, label: `1 ${item.externoUnidade} = ${item.externoFatorConversao} ${item.produto?.unidade ?? "UN"}` });
+	if (item.destinacao && item.destinacao !== "REVENDA") tags.push({ icon: Tag, label: ACQUISITION_NATURE_LABELS[item.destinacao] });
 	const seen = new Set<string>();
 	for (const modifier of item.modificadoresCusto?.modificadores ?? []) {
+		if (modifier.chave === "BONIFICACAO" && !seen.has("BONIFICACAO")) {
+			seen.add("BONIFICACAO");
+			tags.push({ icon: Gift, label: "Bonificada · custo zero" });
+			continue;
+		}
 		const tax = TAX_LABELS[modifier.chave];
 		const label = tax ? `${tax} ${TREATMENT_LABELS[modifier.tratamento] ?? ""}`.trim() : null;
 		if (!label || seen.has(label)) continue;

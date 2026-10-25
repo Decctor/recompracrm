@@ -9,6 +9,7 @@ import {
 	stockMovementOriginEnum,
 	stockMovementTypeEnum,
 	variantOptionTypeEnum,
+	acquisitionNatureEnum,
 } from "./enums";
 import { organizations } from "./organizations";
 import { saleItems, sales } from "./sales";
@@ -54,6 +55,10 @@ export const products = newTable(
 		ncm: text("ncm").notNull(),
 		tipo: text("tipo").notNull(),
 		grupo: text("grupo").notNull(),
+		// O que o produto é para a organização: revenda, insumo, uso e consumo ou bem do ativo. Define
+		// padrões do cadastro e a destinação sugerida nas compras; `vendavel` e
+		// `rastreamentoEstoqueAtivo` continuam sendo os interruptores reais (ADR-0002, decisão 3).
+		natureza: acquisitionNatureEnum("natureza").default("REVENDA").notNull(),
 		rastreamentoEstoqueAtivo: boolean("rastreamento_estoque_ativo").default(false),
 		// Como a venda baixa estoque: ESTOQUE_PROPRIO (saldo do produto) ou COMPOSICAO
 		// (explosao da ficha tecnica — pratos). Explosao e fiada na Fase 2 de tabs.

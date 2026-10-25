@@ -271,6 +271,7 @@ export const useProductState = ({ initialState }: UseProductStateProps = {}) => 
 	const [state, setState] = useState<TProductState>({
 		product: {
 			vendavel: initialState?.product?.vendavel ?? true,
+			natureza: initialState?.product?.natureza ?? "REVENDA",
 			ativo: initialState?.product?.ativo ?? true,
 			codigo: initialState?.product?.codigo ?? "",
 			nome: initialState?.product?.nome ?? "",
@@ -1263,6 +1264,7 @@ export function useProductCoreState({ initialState }: UseProductCoreStateProps =
 	const initialStateComplete = useMemo<TProductCoreState>(
 		() => ({
 			vendavel: initialState?.vendavel ?? true,
+			natureza: initialState?.natureza ?? "REVENDA",
 			ativo: initialState?.ativo ?? true,
 			nome: initialState?.nome ?? "",
 			descricao: initialState?.descricao ?? null,

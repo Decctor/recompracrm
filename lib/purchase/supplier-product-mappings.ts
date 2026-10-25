@@ -6,7 +6,7 @@ import createHttpError from "http-errors";
 
 export type TSupplierProductMappingInput = Pick<
 	TSupplierProductMapping,
-	"codigoFornecedor" | "ean" | "produtoId" | "produtoVarianteId" | "unidadeExterna" | "fatorConversao"
+	"codigoFornecedor" | "ean" | "produtoId" | "produtoVarianteId" | "unidadeExterna" | "fatorConversao" | "destinacao"
 >;
 
 /**
@@ -82,6 +82,7 @@ export async function upsertSupplierProductMappings({
 				produtoVarianteId: mapping.produtoVarianteId ?? null,
 				unidadeExterna: mapping.unidadeExterna ?? null,
 				fatorConversao: mapping.fatorConversao ?? null,
+				destinacao: mapping.destinacao ?? null,
 			});
 			insertedCount++;
 			continue;
@@ -97,6 +98,8 @@ export async function upsertSupplierProductMappings({
 				produtoVarianteId: mapping.produtoVarianteId ?? null,
 				unidadeExterna: mapping.unidadeExterna ?? null,
 				fatorConversao: mapping.fatorConversao ?? null,
+				// A última destinação usada vence; sem informação, a lembrada fica.
+				...(mapping.destinacao ? { destinacao: mapping.destinacao } : {}),
 				dataAtualizacao: new Date(),
 			})
 			.where(and(eq(supplierProductMappings.id, existing.id), eq(supplierProductMappings.organizacaoId, organizationId)));

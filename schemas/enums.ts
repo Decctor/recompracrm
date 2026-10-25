@@ -335,6 +335,12 @@ export const FiscalInboundSituacaoEnum = z.enum(["AUTORIZADA", "DENEGADA", "CANC
 export type TFiscalInboundSituacaoEnum = z.infer<typeof FiscalInboundSituacaoEnum>;
 export const FiscalInboundDocumentModelEnum = z.enum(["NFE", "CTE"]);
 export type TFiscalInboundDocumentModelEnum = z.infer<typeof FiscalInboundDocumentModelEnum>;
+// O que o produto é para a organização (`products.natureza`) e para que serve uma aquisição
+// (`purchase_items.destinacao`). Um enum, dois lugares — ADR-0002, decisão 3.
+export const AcquisitionNatureEnum = z.enum(["REVENDA", "INSUMO", "USO_CONSUMO", "ATIVO_IMOBILIZADO"], {
+	invalid_type_error: "Tipo não válido para a natureza da aquisição.",
+});
+export type TAcquisitionNatureEnum = z.infer<typeof AcquisitionNatureEnum>;
 export const StockMovementTypeEnum = z.enum([
 	"ENTRADA_AQUISICAO",
 	"SAIDA",
@@ -423,6 +429,8 @@ export type TPurchaseStatusEnum = z.infer<typeof PurchaseStatusEnum>;
 
 export const PurchaseCostModifierKeyEnum = z.enum([
 	"DESCONTO",
+	// Linha bonificada (CFOP 5910/6910): redução de 100% do valor-base — CPC 16, bonificações reduzem o custo.
+	"BONIFICACAO",
 	"FRETE",
 	"SEGURO",
 	"DESPESA_ACESSORIA",

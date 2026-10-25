@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { normalizeProductBarcode } from "@/lib/products/barcode";
-import { ProductContentUnitEnum, ProductStockDeductionModeEnum, StockMovementTypeEnum, VariantOptionTypeEnum } from "./enums";
+import { ProductContentUnitEnum, ProductStockDeductionModeEnum, StockMovementTypeEnum, VariantOptionTypeEnum, AcquisitionNatureEnum } from "./enums";
 
 // Código de barras opcional: GTIN/EAN ou código interno imprimível em Code 128; vazio vira null.
 // Opcional SEM default: payload sem o campo não altera o valor persistido.
@@ -103,6 +103,9 @@ export const ProductSchema = z.object({
 			invalid_type_error: "Tipo não válido para status do rastreamento de estoque.",
 		})
 		.default(false),
+	// O que o produto é para a organização. Opcional SEM default: payload sem o campo não altera
+	// o valor persistido (mesma regra de `vendavel`).
+	natureza: AcquisitionNatureEnum.optional(),
 	// Como a venda baixa estoque: ESTOQUE_PROPRIO (saldo do próprio produto) ou
 	// COMPOSICAO (explosão da ficha técnica — pratos, drinks, lanches).
 	// Opcional SEM default: payload sem o campo não altera o valor persistido

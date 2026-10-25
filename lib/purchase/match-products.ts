@@ -4,7 +4,9 @@ import { products, productVariants } from "@/services/drizzle/schema";
 import { and, eq, inArray, or, sql } from "drizzle-orm";
 import { gateway, generateText, Output } from "ai";
 import { z } from "zod";
+import type { TAcquisitionNatureEnum } from "@/schemas/enums";
 import type { TExtractedCompositionItem } from "./import";
+import { resolveDefaultDestination } from "./entry-rules";
 import { inferPackFactorFromDescription, unitsAreEquivalent } from "./units";
 
 export type TCompositionMatchType = "MAPEADO" | "CODIGO" | "SUGERIDO" | "NAO_MAPEADO";
@@ -15,6 +17,7 @@ export type TMatchedProductInfo = {
 	codigo: string;
 	unidade: string | null;
 	imagemCapaUrl: string | null;
+	natureza: TAcquisitionNatureEnum;
 };
 
 export type TMatchedCompositionItem = TExtractedCompositionItem & {
@@ -28,6 +31,8 @@ export type TMatchedCompositionItem = TExtractedCompositionItem & {
 	fatorConversaoSugerido: number | null;
 	/** A unidade da nota diverge da unidade do produto: exige decisão do operador. */
 	divergenciaUnidade: boolean;
+	/** De-para lembrado → natureza do produto → revenda (lib/purchase/entry-rules.ts). */
+	destinacaoSugerida: TAcquisitionNatureEnum;
 };
 
 /**
@@ -51,6 +56,7 @@ const PRODUCT_INFO_COLUMNS = {
 	codigo: products.codigo,
 	unidade: products.unidade,
 	imagemCapaUrl: products.imagemCapaUrl,
+	natureza: products.natureza,
 };
 
 const AI_MATCH_MODEL = "anthropic/claude-haiku-4.5";
@@ -96,8 +102,11 @@ export async function matchCompositionItemsToProducts({
 		produtoVarianteId: null,
 		fatorConversaoSugerido: null,
 		divergenciaUnidade: false,
+		destinacaoSugerida: "REVENDA",
 	}));
 	if (itens.length === 0) return results;
+	// Resolvida no fim, quando produto e de-para já são conhecidos.
+	const mappedDestinationByResult = new Map<TMatchedCompositionItem, TAcquisitionNatureEnum | null>();
 
 	const productInfoById = new Map<string, TMatchedProductInfo>();
 	async function loadProductInfos(productIds: string[]) {
@@ -114,7 +123,7 @@ export async function matchCompositionItemsToProducts({
 	if (fornecedorId) {
 		const mappings = await db.query.supplierProductMappings.findMany({
 			where: (fields, { and, eq }) => and(eq(fields.fornecedorId, fornecedorId), eq(fields.organizacaoId, organizacaoId)),
-			columns: { codigoFornecedor: true, ean: true, produtoId: true, produtoVarianteId: true, fatorConversao: true },
+			columns: { codigoFornecedor: true, ean: true, produtoId: true, produtoVarianteId: true, fatorConversao: true, destinacao: true },
 		});
 		const mappingByCodigo = new Map(mappings.filter((m) => m.codigoFornecedor).map((m) => [m.codigoFornecedor as string, m]));
 		const mappingByEan = new Map(mappings.filter((m) => m.ean).map((m) => [m.ean as string, m]));
@@ -131,8 +140,9 @@ export async function matchCompositionItemsToProducts({
 				? `Vínculo lembrado para este fornecedor (cód. ${result.codigoFornecedor})`
 				: `Vínculo lembrado para este fornecedor (EAN ${result.ean})`;
 			result.produtoVarianteId = mapping.produtoVarianteId ?? null;
-			result.produto = { id: mapping.produtoId, nome: "", codigo: "", unidade: null, imagemCapaUrl: null };
+			result.produto = { id: mapping.produtoId, nome: "", codigo: "", unidade: null, imagemCapaUrl: null, natureza: "REVENDA" };
 			mappedFactorByResult.set(result, mapping.fatorConversao ?? null);
+			mappedDestinationByResult.set(result, mapping.destinacao ?? null);
 			mappedProductIds.push(mapping.produtoId);
 		}
 		await loadProductInfos(mappedProductIds);
@@ -147,6 +157,7 @@ export async function matchCompositionItemsToProducts({
 				result.produto = null;
 				result.produtoVarianteId = null;
 				mappedFactorByResult.delete(result);
+				mappedDestinationByResult.delete(result);
 			} else {
 				result.produto = info;
 				applyUnitReconciliation(result, mappedFactorByResult.get(result));
@@ -186,7 +197,14 @@ export async function matchCompositionItemsToProducts({
 		]);
 		await loadProductInfos(variantRows.map((variant) => variant.produtoId));
 		for (const row of productRows)
-			productInfoById.set(row.id, { id: row.id, nome: row.nome, codigo: row.codigo, unidade: row.unidade, imagemCapaUrl: row.imagemCapaUrl });
+			productInfoById.set(row.id, {
+				id: row.id,
+				nome: row.nome,
+				codigo: row.codigo,
+				unidade: row.unidade,
+				imagemCapaUrl: row.imagemCapaUrl,
+				natureza: row.natureza,
+			});
 
 		type TCodeHit = { produtoId: string; produtoVarianteId: string | null; motivo: string };
 		const hitByKey = new Map<string, TCodeHit>();
@@ -246,7 +264,7 @@ export async function matchCompositionItemsToProducts({
 			if (candidates.length > 0) candidatesByItemIndex.set(index, candidates);
 		}),
 	);
-	if (candidatesByItemIndex.size === 0) return results;
+	if (candidatesByItemIndex.size === 0) return finalizeDestinations(results, mappedDestinationByResult);
 
 	const aiPromptLines = [...candidatesByItemIndex.entries()].map(([index, candidates]) => ({
 		itemIndex: index,
@@ -293,5 +311,17 @@ export async function matchCompositionItemsToProducts({
 		console.error("[PURCHASE_IMPORT] Erro no matching por IA, mantendo itens não mapeados.", error);
 	}
 
+	return finalizeDestinations(results, mappedDestinationByResult);
+}
+
+function finalizeDestinations(
+	results: TMatchedCompositionItem[],
+	mappedDestinationByResult: Map<TMatchedCompositionItem, TAcquisitionNatureEnum | null>,
+) {
+	for (const result of results)
+		result.destinacaoSugerida = resolveDefaultDestination({
+			mappingDestination: mappedDestinationByResult.get(result) ?? null,
+			productNature: result.produto?.natureza ?? null,
+		});
 	return results;
 }

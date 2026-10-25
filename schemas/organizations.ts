@@ -112,6 +112,13 @@ export const OrganizationPaymentMethodDefaultsSchema = z.object({
 });
 export type TOrganizationPaymentMethodDefaults = z.infer<typeof OrganizationPaymentMethodDefaultsSchema>;
 
+const PurchaseDestinationAccountSchema = z
+	.object({
+		contaId: z.string({ invalid_type_error: "Tipo não válido para a conta de débito por destinação de compras." }).nullable().default(null),
+		contaKey: z.string({ invalid_type_error: "Tipo não válido para a chave da conta de débito por destinação de compras." }).nullable().default(null),
+	})
+	.default({ contaId: null, contaKey: null });
+
 export const OrganizationDefaultsSchema = z.object({
 	contabilidade: z.object({
 		lancamentosPadrao: z.object({
@@ -148,6 +155,19 @@ export const OrganizationDefaultsSchema = z.object({
 					.string({ invalid_type_error: "Tipo não válido para a chave da conta de débito de despesas do período de compras." })
 					.nullable()
 					.default(null),
+				// Débito do custo por destinação do item (ADR-0002). REVENDA usa `debitoContaId`; as demais
+				// têm conta própria, com fallback pela chave do seed quando o id não foi configurado.
+				contasDebitoPorDestinacao: z
+					.object({
+						INSUMO: PurchaseDestinationAccountSchema,
+						USO_CONSUMO: PurchaseDestinationAccountSchema,
+						ATIVO_IMOBILIZADO: PurchaseDestinationAccountSchema,
+					})
+					.default({
+						INSUMO: { contaId: null, contaKey: null },
+						USO_CONSUMO: { contaId: null, contaKey: null },
+						ATIVO_IMOBILIZADO: { contaId: null, contaKey: null },
+					}),
 			}),
 			transferencias: z
 				.object({
