@@ -72,6 +72,8 @@ function computeIcms({
 	origemMercadoria,
 	produtoId,
 	cest,
+	quantidade,
+	stRetidoUnitario,
 	erros,
 }: {
 	config: TEffectiveTaxConfig;
@@ -81,6 +83,8 @@ function computeIcms({
 	origemMercadoria: TFiscalProductOriginEnum;
 	produtoId: string;
 	cest: string | null;
+	quantidade: number;
+	stRetidoUnitario: TFiscalItemInput["stRetidoUnitario"];
 	erros: TFiscalValidationError[];
 }): TIcmsTaxResult {
 	let vBC = 0;
@@ -166,6 +170,26 @@ function computeIcms({
 		}
 	}
 
+	// CSOSN 500: a NF-e de saida informa o ST que a cadeia ja recolheu. O valor vem da ultima entrada
+	// do produto (ADR-0002, fluxo G); sem entrada com ST o campo fica vazio e a pessoa confere.
+	let stRetido: TIcmsTaxResult["stRetido"] = null;
+	if (csosnIcmsJaRetido) {
+		if (stRetidoUnitario && stRetidoUnitario.vICMSSTRet > 0) {
+			stRetido = {
+				vBCSTRet: round2(stRetidoUnitario.vBCSTRet * quantidade),
+				pST: stRetidoUnitario.pST ?? 0,
+				vICMSSTRet: round2(stRetidoUnitario.vICMSSTRet * quantidade),
+			};
+		} else {
+			erros.push({
+				codigo: "ST_RETIDO_AUSENTE",
+				severidade: "AVISO",
+				mensagem: "CSOSN 500 sem ST retido conhecido: nenhuma compra recebida deste produto traz o XML com ST. A nota sai sem vBCSTRet/vICMSSTRet.",
+				produtoId,
+			});
+		}
+	}
+
 	return {
 		csosn: config.csosn,
 		origem: origemCodigo,
@@ -176,6 +200,7 @@ function computeIcms({
 		pCredSN,
 		vCredICMSSN,
 		st,
+		stRetido,
 	};
 }
 
@@ -215,6 +240,8 @@ export function computeItemTaxation({ scenario, item, group, vTotTrib }: TComput
 		origemMercadoria: item.origemMercadoria,
 		produtoId: item.produtoId,
 		cest: item.cest ?? null,
+		quantidade: item.quantidade,
+		stRetidoUnitario: item.stRetidoUnitario ?? null,
 		erros,
 	});
 	const pis = computeContribuicao({

@@ -161,6 +161,44 @@ export const PurchaseImportedDocumentsSnapshotSchema = z.object({
 });
 export type TPurchaseImportedDocumentsSnapshot = z.infer<typeof PurchaseImportedDocumentsSnapshotSchema>;
 
+// Devolução ao fornecedor de parte de uma compra recebida (ADR-0002, Fase 8). Snapshot na compra:
+// a devolução não é uma entidade própria — é uma saída de estoque, um lançamento de crédito com o
+// fornecedor e, quando emitida, uma NF-e de devolução referenciando a nota de origem.
+export const PurchaseReturnItemSchema = z.object({
+	itemId: z.string({ required_error: "Item da devolução não informado.", invalid_type_error: "Tipo não válido para o item da devolução." }),
+	produtoId: z.string({ invalid_type_error: "Tipo não válido para o produto devolvido." }),
+	produtoVarianteId: z.string({ invalid_type_error: "Tipo não válido para a variante devolvida." }).optional().nullable(),
+	descricao: z.string({ invalid_type_error: "Tipo não válido para a descrição do item devolvido." }),
+	quantidade: z
+		.number({ required_error: "Quantidade devolvida não informada.", invalid_type_error: "Tipo não válido para a quantidade devolvida." })
+		.positive(),
+	valorTotalFornecedor: z.number({ invalid_type_error: "Tipo não válido para o valor devolvido ao fornecedor." }).nonnegative(),
+	valorTotalCusto: z.number({ invalid_type_error: "Tipo não válido para o custo devolvido." }).nonnegative(),
+});
+export const PurchaseReturnSchema = z.object({
+	referencia: z.string({
+		required_error: "Referência da devolução não informada.",
+		invalid_type_error: "Tipo não válido para a referência da devolução.",
+	}),
+	data: z.string({ required_error: "Data da devolução não informada.", invalid_type_error: "Tipo não válido para a data da devolução." }),
+	motivo: z.string({ required_error: "Motivo da devolução não informado.", invalid_type_error: "Tipo não válido para o motivo da devolução." }),
+	itens: z.array(PurchaseReturnItemSchema).min(1, "Informe ao menos um item devolvido."),
+	valorTotalFornecedor: z.number({ invalid_type_error: "Tipo não válido para o total devolvido ao fornecedor." }).nonnegative(),
+	valorTotalCusto: z.number({ invalid_type_error: "Tipo não válido para o custo total devolvido." }).nonnegative(),
+	lancamentoContabilId: z.string({ invalid_type_error: "Tipo não válido para o lançamento da devolução." }).optional().nullable(),
+	// Chave da NF-e de entrada que a NF-e de devolução referencia (refNFe); a emissão é passo à parte.
+	chaveNfeOrigem: z.string({ invalid_type_error: "Tipo não válido para a chave da nota de origem." }).optional().nullable(),
+	documentoFiscalId: z.string({ invalid_type_error: "Tipo não válido para o documento fiscal da devolução." }).optional().nullable(),
+	autorId: z.string({ invalid_type_error: "Tipo não válido para o autor da devolução." }).optional().nullable(),
+	dataInsercao: z.string({ invalid_type_error: "Tipo não válido para a data de registro da devolução." }),
+});
+export type TPurchaseReturn = z.infer<typeof PurchaseReturnSchema>;
+export const PurchaseReturnsSnapshotSchema = z.object({
+	versao: z.literal(1, { invalid_type_error: "Tipo não válido para a versão das devoluções." }),
+	devolucoes: z.array(PurchaseReturnSchema),
+});
+export type TPurchaseReturnsSnapshot = z.infer<typeof PurchaseReturnsSnapshotSchema>;
+
 export const PurchaseSchema = z.object({
 	organizacaoId: z.string({
 		required_error: "ID da organização não informado.",
@@ -174,6 +212,7 @@ export const PurchaseSchema = z.object({
 	}),
 	anotacoes: z.string({ invalid_type_error: "Tipo não válido para as anotações da compra." }).optional().nullable(),
 	documentosImportados: PurchaseImportedDocumentsSnapshotSchema.optional().nullable(),
+	devolucoes: PurchaseReturnsSnapshotSchema.optional().nullable(),
 	lancamentoContabilId: z.string({ invalid_type_error: "Tipo não válido para o ID do lançamento contábil." }).optional().nullable(),
 	pedidoData: z
 		.string({ invalid_type_error: "Tipo não válido para a data do pedido." })

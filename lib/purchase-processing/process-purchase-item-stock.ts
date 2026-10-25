@@ -117,7 +117,7 @@ export async function handlePurchaseItemStockProcessing({
 		if (previousItem.destinacao === "ATIVO_IMOBILIZADO") {
 			await removeFixedAssetsForPurchaseItem({ trx, organizationId, purchaseItemId: previousItem.id });
 		} else {
-			await applyStockExit({
+			await applyPurchaseItemStockExit({
 				trx,
 				organizationId,
 				userId,
@@ -159,7 +159,7 @@ export async function handlePurchaseItemStockProcessing({
 		}
 
 		const previousItem = await loadPreviousItem({ trx, organizationId, itemId: item.id! });
-		await applyStockExit({
+		await applyPurchaseItemStockExit({
 			trx,
 			organizationId,
 			userId,
@@ -437,7 +437,7 @@ type ApplyStockExitParams = {
 	reason: string;
 };
 
-async function applyStockExit({
+export async function applyPurchaseItemStockExit({
 	trx,
 	organizationId,
 	userId,

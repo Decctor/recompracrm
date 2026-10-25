@@ -52,6 +52,8 @@ export type TFiscalSaleContext = {
   perfisProdutos: TProductFiscalProfileEntity[];
   gruposTributarios: TFiscalTaxGroupWithRules[];
   ibptRates: TFiscalIbptRateEntity[];
+  // ST retido por unidade, por produto, lido da ultima entrada (CSOSN 500) — ADR-0002, fluxo G.
+  stRetidoPorProduto?: Record<string, { vBCSTRet: number; pST: number | null; vICMSSTRet: number }> | null;
   destinatarioSnapshot: Record<string, unknown> | null;
   pagamentos: TFiscalSalePayment[];
   classificacaoPresencaExcepcional?: {

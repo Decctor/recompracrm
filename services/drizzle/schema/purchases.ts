@@ -1,4 +1,4 @@
-import type { TPurchaseCostModifiersSnapshot, TPurchaseImportedDocumentsSnapshot } from "@/schemas/purchases";
+import type { TPurchaseCostModifiersSnapshot, TPurchaseImportedDocumentsSnapshot, TPurchaseReturnsSnapshot } from "@/schemas/purchases";
 import { doublePrecision, integer, jsonb, numeric, text, timestamp, varchar } from "drizzle-orm/pg-core";
 import { newTable } from "./common";
 import { organizations } from "./organizations";
@@ -22,6 +22,8 @@ export const purchases = newTable("purchases", {
 	anotacoes: text("anotacoes"),
 	// Snapshot documental pertencente à compra. Consulte docs/adr/0001 e docs/domain/purchase-costing.md.
 	documentosImportados: jsonb("documentos_importados").$type<TPurchaseImportedDocumentsSnapshot>(),
+	// Devoluções ao fornecedor desta compra (ADR-0002, Fase 8). Só o servidor escreve.
+	devolucoes: jsonb("devolucoes").$type<TPurchaseReturnsSnapshot>(),
 
 	lancamentoContabilId: varchar("lancamento_contabil_id", { length: 255 }).references(() => accountingEntries.id, { onDelete: "set null" }),
 

@@ -196,6 +196,7 @@ export function computeSaleTaxation(context: TFiscalSaleContext): TSaleTaxation 
 				valorDesconto,
 				valorFrete: freightByItem[index],
 				valorOutros: otherChargesByItem[index],
+				stRetidoUnitario: context.stRetidoPorProduto?.[item.produtoId] ?? null,
 			},
 			vTotTrib,
 		});

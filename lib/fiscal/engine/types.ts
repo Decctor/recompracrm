@@ -53,6 +53,11 @@ export type TFiscalItemInput = {
 	valorDesconto: number;
 	valorFrete?: number; // parcela do frete alocada ao item
 	valorOutros?: number; // parcela do acrescimo (nao frete) alocada ao item — vOutro
+	/**
+	 * ST ja retido na entrada, por unidade (CSOSN 500 / CST 60): lido do `det` da ultima compra do
+	 * produto pelo ponteiro do item (lib/fiscal/entry/st-retained.ts). Nulo = sem entrada com ST.
+	 */
+	stRetidoUnitario?: { vBCSTRet: number; pST: number | null; vICMSSTRet: number } | null;
 };
 
 export type TFiscalValidationSeverity = "ERRO" | "AVISO";
@@ -81,6 +86,8 @@ export type TIcmsTaxResult = {
 		vICMSST: number;
 		vFCPST: number;
 	} | null;
+	/** ST retido anteriormente (CSOSN 500): informativo na saida, obrigatorio no XML (vBCSTRet, pST, vICMSSTRet). */
+	stRetido: { vBCSTRet: number; pST: number; vICMSSTRet: number } | null;
 };
 
 export type TItemTaxResult = {

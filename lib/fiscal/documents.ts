@@ -1,6 +1,7 @@
 import { processFiscalDocumentDanfeAutoPrintIfEligible } from "@/lib/desktop-agent/auto-print";
 import { getSaleChangeTotal, netSaleChangeFromPayments } from "@/lib/sales/sale-change";
 import { isValidCpfCnpj } from "@/lib/validation";
+import { resolveRetainedStForProducts } from "@/lib/fiscal/entry/st-retained";
 import { db } from "@/services/drizzle";
 import { fiscalDocumentEvents, fiscalOutboundDocuments, sales } from "@/services/drizzle/schema";
 import { isOrganizationFiscalDocumentCapable } from "./auto-emission-capability";
@@ -730,6 +731,17 @@ async function buildSaleFiscalContext(input: TEmitirDocumentoInput): Promise<TFi
 		perfisProdutos,
 		uf: organizacao.fiscalConfiguracao?.endereco.uf,
 	});
+	// So os produtos cujo grupo sai com CSOSN 500 precisam do ST retido; ler XML de compra para os
+	// demais seria custo sem uso.
+	const stRetidoPorProduto = await resolveRetainedStForProducts({
+		organizationId: input.organizacaoId,
+		produtoIds: perfisProdutos
+			.filter((perfil) => {
+				const grupo = perfil.grupoTributarioId ? gruposTributarios.find((g) => g.id === perfil.grupoTributarioId) : null;
+				return grupo?.csosn === "500" || grupo?.regras.some((regra) => regra.csosn === "500");
+			})
+			.map((perfil) => perfil.produtoId),
+	});
 
 	return {
 		venda,
@@ -739,6 +751,7 @@ async function buildSaleFiscalContext(input: TEmitirDocumentoInput): Promise<TFi
 		perfisProdutos,
 		gruposTributarios,
 		ibptRates,
+		stRetidoPorProduto,
 		destinatarioSnapshot: buildDestinatarioSnapshot(venda),
 		pagamentos,
 		classificacaoPresencaExcepcional: input.classificacaoPresencaExcepcional ?? null,

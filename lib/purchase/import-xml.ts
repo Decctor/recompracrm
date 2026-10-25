@@ -120,6 +120,7 @@ function readNfeItemFactsFromDet(det: TXmlNode) {
 
 	return {
 		numeroItem: integer(det["@_nItem"]),
+		quantidadeComercial: decimal(product.qCom),
 		cfop: text(product.CFOP),
 		ncm: text(product.NCM),
 		cest: text(product.CEST),
@@ -278,6 +279,28 @@ function parseItem(det: TXmlNode, issuerCrt: number | null) {
 			tratamento: null,
 			contrapartida: "INCLUSO_NO_VALOR",
 			descricao: "COFINS embutida no preço do item",
+		});
+	}
+	// Reforma tributária (NT 2025.002): IBS (UF + município) e CBS destacados no grupo IBSCBS. São
+	// não cumulativos por desenho, então entram como embutidos e o preset decide o crédito; o
+	// emitente do Simples (CRT 1) não transfere o crédito, mesma regra dos demais embutidos.
+	if (facts.ibsCbs) {
+		const ibsCentavos = (cents(facts.ibsCbs.valorIbsUf) ?? 0) + (cents(facts.ibsCbs.valorIbsMunicipio) ?? 0);
+		addModifier(modifiers, {
+			chave: "IMPOSTOS_IBS",
+			valorCentavos: ibsCentavos > 0 ? ibsCentavos : null,
+			efeito: "ACRESCIMO",
+			tratamento: null,
+			contrapartida: "INCLUSO_NO_VALOR",
+			descricao: "IBS (estadual + municipal) embutido no preço do item",
+		});
+		addModifier(modifiers, {
+			chave: "IMPOSTOS_CBS",
+			valorCentavos: cents(facts.ibsCbs.valorCbs),
+			efeito: "ACRESCIMO",
+			tratamento: null,
+			contrapartida: "INCLUSO_NO_VALOR",
+			descricao: "CBS embutida no preço do item",
 		});
 	}
 

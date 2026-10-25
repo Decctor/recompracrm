@@ -20,6 +20,11 @@ export function buildSpedyItemTaxes(result: TItemTaxResult) {
 			stAmount: result.icms.st?.vICMSST,
 			fcpAmount: result.icms.vFCP || undefined,
 			fcpStAmount: result.icms.st?.vFCPST || undefined,
+			// ST retido na entrada (CSOSN 500): vBCSTRet, pST e vICMSSTRet da NF-e. Nomes em camelCase
+			// seguindo o padrao dos demais campos; o provedor ignora o que nao reconhece.
+			baseTaxStRetained: result.icms.stRetido?.vBCSTRet,
+			stRetainedRate: result.icms.stRetido?.pST,
+			stRetainedAmount: result.icms.stRetido?.vICMSSTRet,
 		},
 		pis: {
 			cst: Number(result.pis.cst),

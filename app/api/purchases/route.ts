@@ -160,7 +160,11 @@ async function getPurchases({ input, session }: { input: TGetPurchasesInput; ses
 				// fora do valor do fornecedor.
 				lancamentosTributos: {
 					where: (fields, { eq, like, or }) =>
-						or(eq(fields.origemTipo, "TRIBUTO_COMPRA"), like(fields.chaveIdempotencia, `compra:${purchaseId}:TRANSPORTADORA:%`)),
+						or(
+							eq(fields.origemTipo, "TRIBUTO_COMPRA"),
+							like(fields.chaveIdempotencia, `compra:${purchaseId}:TRANSPORTADORA:%`),
+							like(fields.chaveIdempotencia, `compra:${purchaseId}:DEVOLUCAO:%`),
+						),
 					columns: { id: true, titulo: true, valor: true, dataCompetencia: true },
 					with: { transacoesFinanceiras: { columns: { id: true, titulo: true, valor: true, dataPrevisao: true, dataEfetivacao: true } } },
 				},
@@ -320,6 +324,7 @@ export const GET = appApiHandler({
 // arquivo: o snapshot descreve o documento, mas quem localiza o objeto é o servidor.
 const PurchaseHeaderInputSchema = PurchaseSchema.omit({
 	documentosImportados: true,
+	devolucoes: true,
 	organizacaoId: true,
 	autorId: true,
 	dataInsercao: true,

@@ -21,6 +21,7 @@ export const PurchaseStateSchema = z.object({
 	purchase: PurchaseSchema.omit({
 		organizacaoId: true,
 		idExterno: true,
+		devolucoes: true,
 		autorId: true,
 		dataInsercao: true,
 		dataUltimaAtualizacao: true,

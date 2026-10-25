@@ -172,3 +172,26 @@ test("a Simples issuer (CRT 1) yields only the presumed ICMS credit as an embedd
 	assert.deepEqual(embedded(first), []);
 	assert.deepEqual(embedded(second), ["IMPOSTOS_ICMS_SN"]);
 });
+
+test("IBS and CBS from the IBSCBS group become embedded components (reforma tributária)", () => {
+	const xml = NFE_XML.replace(
+		'</imposto>\n      </det>\n      <det nItem="2">',
+		'<IBSCBS><CST>000</CST><cClassTrib>000001</cClassTrib><gIBSCBS><vBC>20.00</vBC><gIBSUF><pIBSUF>0.10</pIBSUF><vIBSUF>0.02</vIBSUF></gIBSUF><gIBSMun><pIBSMun>0.05</pIBSMun><vIBSMun>0.01</vIBSMun></gIBSMun><vIBS>0.03</vIBS><gCBS><pCBS>0.90</pCBS><vCBS>0.18</vCBS></gCBS></gIBSCBS></IBSCBS></imposto>\n      </det>\n      <det nItem="2">',
+	);
+	const result = extractCompositionFromNfeXml(xml);
+	const first = result.itens[0];
+	const ibs = first.modificadoresCusto?.find((modifier) => modifier.chave === "IMPOSTOS_IBS");
+	const cbs = first.modificadoresCusto?.find((modifier) => modifier.chave === "IMPOSTOS_CBS");
+	assert.deepEqual(
+		{ valor: ibs?.valorCentavos, contrapartida: ibs?.contrapartida, tratamento: ibs?.tratamento },
+		{ valor: 3, contrapartida: "INCLUSO_NO_VALOR", tratamento: null },
+	);
+	assert.equal(cbs?.valorCentavos, 18);
+	const facts = readNfeItemFacts({ xml, numeroItem: 1 });
+	assert.equal(facts.ibsCbs?.classificacaoTributaria, "000001");
+	// Sem o grupo, nada é emitido.
+	assert.equal(
+		result.itens[1].modificadoresCusto?.some((modifier) => modifier.chave === "IMPOSTOS_IBS"),
+		false,
+	);
+});

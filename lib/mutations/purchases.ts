@@ -6,6 +6,7 @@ import type {
 } from "@/app/api/purchases/import-composition/route";
 import { TCreatePurchaseInput, TCreatePurchaseOutput, TUpdatePurchaseInput, TUpdatePurchaseOutput } from "@/app/api/purchases/route";
 import type { TAttachFreightDocumentInput, TAttachFreightDocumentOutput } from "@/app/api/purchases/freight-documents/route";
+import type { TCreatePurchaseReturnInput, TCreatePurchaseReturnOutput } from "@/app/api/purchases/returns/route";
 import axios from "axios";
 
 export async function createPurchase(input: TCreatePurchaseInput) {
@@ -65,5 +66,10 @@ export async function importPurchaseComposition(
 
 export async function attachPurchaseFreightDocument(input: TAttachFreightDocumentInput) {
 	const { data } = await axios.post<TAttachFreightDocumentOutput>("/api/purchases/freight-documents", input);
+	return data;
+}
+
+export async function createPurchaseReturn(input: TCreatePurchaseReturnInput) {
+	const { data } = await axios.post<TCreatePurchaseReturnOutput>("/api/purchases/returns", input);
 	return data;
 }

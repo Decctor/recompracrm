@@ -6,10 +6,13 @@ import ImportCompositionWithAI from "@/components/Modals/Purchases/Blocks/Utils/
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Section } from "@/components/ui/section";
-import { formatNameAsInitials, formatToMoney } from "@/lib/formatting";
+import { formatDateAsLocale, formatNameAsInitials, formatToMoney } from "@/lib/formatting";
 import { cn } from "@/lib/utils";
 import type { TPurchaseState, TUsePurchaseState } from "@/state-hooks/use-purchase-state";
-import { BadgeDollarSign, Gift, Lock, Plus, ReceiptText, Ruler, ShoppingCart, Sparkles, Tag, Trash2 } from "lucide-react";
+import ReturnPurchaseItems from "@/components/Modals/Purchases/ReturnPurchaseItems";
+import { appRoutes } from "@/lib/navigation/routes";
+import Link from "next/link";
+import { BadgeDollarSign, Gift, Lock, Plus, ReceiptText, Ruler, ShoppingCart, Sparkles, Tag, Trash2, Undo2 } from "lucide-react";
 import { ACQUISITION_NATURE_LABELS } from "@/lib/purchase/entry-rules";
 import { useState } from "react";
 import { TONE_CLASSES } from "../../builder/components/builder-ui";
@@ -58,6 +61,8 @@ export function getItemTags(item: TPurchaseItemState) {
 }
 
 type ItemsTabProps = {
+	/** Compra recebida: quem pode editar compras pode devolver itens ao fornecedor. */
+	canReturn?: boolean;
 	purchase: TPurchaseById;
 	editor: TUsePurchaseState;
 	baseline: TPurchaseState;
@@ -65,10 +70,15 @@ type ItemsTabProps = {
 	isReceived: boolean;
 };
 
-export default function ItemsTab({ purchase, editor, baseline, editable, isReceived }: ItemsTabProps) {
+export default function ItemsTab({ purchase, editor, baseline, editable, isReceived, canReturn = false }: ItemsTabProps) {
 	const { state, updatePurchaseItem, removePurchaseItem, addPurchaseItem, updatePurchase, updateAccountingEntry } = editor;
 	const [importOpen, setImportOpen] = useState(false);
 	const [adding, setAdding] = useState(false);
+	const [returning, setReturning] = useState(false);
+	const returns = purchase.devolucoes?.devolucoes ?? [];
+	const returnedByItem = new Map<string, number>();
+	for (const previous of returns)
+		for (const returned of previous.itens) returnedByItem.set(returned.itemId, (returnedByItem.get(returned.itemId) ?? 0) + returned.quantidade);
 	const visibleItems = state.purchaseItems.map((item, index) => ({ item, index })).filter(({ item }) => !item.deletar);
 	const total = getPurchaseItemsTotal(state.purchaseItems);
 
@@ -80,6 +90,14 @@ export default function ItemsTab({ purchase, editor, baseline, editable, isRecei
 				</Section.Icon>
 				<Section.Title>Itens</Section.Title>
 				<Section.Count>{visibleItems.length}</Section.Count>
+				{isReceived && canReturn ? (
+					<Section.Actions>
+						<Button type="button" variant="outline" size="sm" className="flex items-center gap-1.5 rounded-full" onClick={() => setReturning(true)}>
+							<Undo2 className="h-3.5 w-3.5" />
+							DEVOLVER AO FORNECEDOR
+						</Button>
+					</Section.Actions>
+				) : null}
 				{editable ? (
 					<Section.Actions>
 						<Button type="button" variant="outline" size="sm" className="flex items-center gap-1.5 rounded-full" onClick={() => setImportOpen(true)}>
@@ -97,9 +115,31 @@ export default function ItemsTab({ purchase, editor, baseline, editable, isRecei
 				<div className={cn("-mt-3 flex items-start gap-2 rounded-md px-3 py-2 text-xs", TONE_CLASSES.warn)}>
 					<Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
 					<p className="leading-relaxed">
-						Compra recebida — os itens estão travados para preservar os lotes gerados. Para corrigir, cancele a compra (se os lotes ainda não foram usados)
-						ou ajuste diretamente pelo estoque.
+						Compra recebida — os itens estão travados para preservar os lotes gerados. Para corrigir, cancele a compra (se os lotes ainda não foram usados),
+						devolva itens ao fornecedor ou ajuste diretamente pelo estoque.
 					</p>
+				</div>
+			) : null}
+			{returns.length > 0 ? (
+				<div className="-mt-3 flex flex-col gap-2 rounded-md border border-border px-3 py-2.5 text-xs">
+					<span className="font-semibold">Devoluções ao fornecedor</span>
+					{returns.map((devolucao) => (
+						<div key={devolucao.referencia} className="flex flex-wrap items-baseline justify-between gap-2 text-muted-foreground">
+							<span>
+								{formatDateAsLocale(devolucao.data)} · {devolucao.motivo} ·{" "}
+								{devolucao.itens.map((item) => `${item.quantidade}× ${item.descricao}`).join(", ")}
+							</span>
+							<span className="flex items-center gap-2">
+								<strong className="text-foreground">{formatToMoney(devolucao.valorTotalFornecedor)}</strong>
+								{devolucao.lancamentoContabilId ? (
+									<Link href={appRoutes.finance.entry(devolucao.lancamentoContabilId)} className="underline">
+										lançamento
+									</Link>
+								) : null}
+								{!devolucao.documentoFiscalId ? <span className={cn("rounded-full px-2 py-0.5", TONE_CLASSES.warn)}>NF-e de devolução pendente</span> : null}
+							</span>
+						</div>
+					))}
 				</div>
 			) : null}
 			<div className="-mt-3 flex flex-col overflow-x-auto rounded-md border border-border">
@@ -120,6 +160,7 @@ export default function ItemsTab({ purchase, editor, baseline, editable, isRecei
 							original={item.id ? (baseline.purchaseItems.find((candidate) => candidate.id === item.id) ?? null) : null}
 							editable={editable}
 							isReceived={isReceived}
+							returned={item.id ? (returnedByItem.get(item.id) ?? 0) : 0}
 							onQuantity={(quantidade) => updatePurchaseItem({ index, item: normalizeItemValues({ ...item, quantidade }) })}
 							onRemove={() => removePurchaseItem({ index })}
 						/>
@@ -156,6 +197,7 @@ export default function ItemsTab({ purchase, editor, baseline, editable, isRecei
 					currentImportedDocuments={state.purchase.documentosImportados}
 				/>
 			) : null}
+			{returning ? <ReturnPurchaseItems purchase={purchase} closeModal={() => setReturning(false)} /> : null}
 		</Section.Root>
 	);
 }
@@ -165,6 +207,7 @@ function ItemRow({
 	original,
 	editable,
 	isReceived,
+	returned = 0,
 	onQuantity,
 	onRemove,
 }: {
@@ -172,6 +215,7 @@ function ItemRow({
 	original: TPurchaseItemState | null;
 	editable: boolean;
 	isReceived: boolean;
+	returned?: number;
 	onQuantity: (quantidade: number) => void;
 	onRemove: () => void;
 }) {
@@ -182,9 +226,7 @@ function ItemRow({
 	const isNew = !item.id;
 	const lots = (item.lotes ?? []).map((lot) => lot.codigoLote).filter(Boolean);
 	const meta = isReceived
-		? lots.length
-			? `Lote ${lots.join(", ")}`
-			: "Recebido"
+		? `${lots.length ? `Lote ${lots.join(", ")}` : "Recebido"}${returned > 0 ? ` · ${returned} devolvido${returned === 1 ? "" : "s"}` : ""}`
 		: changed
 			? `Era ${original?.quantidade} ${unit}`
 			: isNew

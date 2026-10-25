@@ -544,7 +544,7 @@ Cada fase é entregável sozinha e não muda nada para quem não usa a novidade.
 | 5 ✅ | Contrapartida `FISCO`, DIFAL/antecipação/ST de entrada, lançamentos por credor com contraparte, guias a pagar, `DOCUMENTO_FINANCEIRO`, backfill de `clienteId`/`fornecedorId`               | `accounting_entries`, `financial_recurring_rules`, `financial_transactions` |
 | 6 ✅ | CT-e                                                                                                                                                                                        | —                                                                           |
 | 7 ✅ | Patrimônio                                                                                                                                                                                  | `fixed_assets`                                                              |
-| 8    | ST retido na saída; devolução de compra; IBS/CBS como componentes                                                                                                                           | —                                                                           |
+| 8 ✅ | ST retido na saída; devolução de compra; IBS/CBS como componentes                                                                                                                           | —                                                                           |
 
 Fase 1 entregue em `drizzle/0138_purchase_fiscal_entry_documents.sql` + `scripts/backfill-purchase-fiscal-files.ts`
 (aplicar a migration antes do deploy; rodar o backfill depois). O que ficou de fora dela, de propósito:
@@ -570,6 +570,25 @@ overrides da organização; o import aplica e descarta o embutido que "fica no c
 `regimeApuracao` configurado (CRT 3 é ambíguo), os tributos continuam pendentes para a pessoa, como
 antes. Tela "Entrada de compras" em Fiscal › Configurações. A contrapartida `FISCO` já é calculada pelo
 custeio, mas nada a produz até a Fase 5.
+
+Fase 8 entregue (migration `0142_purchase_returns.sql`, uma coluna JSONB): **IBS/CBS** — o parser lê
+o grupo `IBSCBS` do item e emite `IMPOSTOS_IBS` (UF + município) e `IMPOSTOS_CBS` como embutidos
+(`INCLUSO_NO_VALOR`); o preset já decidia o crédito (Simples deixa no custo; emitente do Simples não
+transfere). **ST retido na saída** — `lib/fiscal/entry/st-retained.ts` lê, pelo ponteiro
+`documentoRef`+`documentoItem`, o `det` da última compra recebida do produto (ST retido na entrada ou
+destacado pelo substituto) e devolve o valor por unidade; o contexto fiscal da venda carrega isso só
+para produtos cujo grupo sai com CSOSN 500, o motor multiplica pela quantidade em `icms.stRetido`
+(`vBCSTRet`, `pST`, `vICMSSTRet`), o mapper do provedor envia os campos e um aviso
+`ST_RETIDO_AUSENTE` marca a nota sem entrada conhecida. Os nomes dos campos no payload do provedor
+(`baseTaxStRetained`, `stRetainedRate`, `stRetainedAmount`) seguem o padrão dos demais e precisam de
+confirmação com a Spedy em homologação. **Devolução de compra** — `POST /api/purchases/returns`
+em compra recebida: saída de estoque ao custo da entrada (abatendo o lote da compra), lançamento
+`compra:{id}:DEVOLUCAO:{ref}` (D Fornecedores × C estoque/crédito/despesa na proporção do item,
+excluídas as parcelas de fisco e transportadora) com uma parcela ENTRADA de crédito com o
+fornecedor, e snapshot em `purchases.devolucoes` com a chave da NF-e de origem. Botão "Devolver ao
+fornecedor" na aba Itens da compra recebida, histórico de devoluções e quantidade devolvida por item.
+A emissão da NF-e de devolução de compra (CFOP 5202/6202, `refNFe` = chave de origem) continua
+manual nesta fase; o snapshot guarda o que ela precisa e marca "NF-e de devolução pendente".
 
 Fase 7 entregue (migration `0141_fixed_assets.sql`, a única tabela nova do plano): `fixed_assets`
 com produto (catálogo), item de compra de origem, plaqueta, série, local, responsável, status,
