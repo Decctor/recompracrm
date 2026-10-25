@@ -2,6 +2,7 @@
 
 - Status: Aceito
 - Data: 2026-08-10
+- Estendido por: [ADR-0002](./0002-purchase-fiscal-entry-primitives.md) (contrapartida dos modificadores, destinação do item, lançamentos por credor, patrimônio)
 
 ## Contexto
 
