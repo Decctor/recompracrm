@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import NewFinancialAccount from "@/components/Modals/Finances/FinancialAccounts/NewFinancialAccount";
 import ControlFinancialAccount from "@/components/Modals/Finances/FinancialAccounts/ControlFinancialAccount";
 import { AccountCard } from "./_components/account-card";
+import { AccountsSummary } from "./_components/accounts-summary";
 
 const ACCOUNT_STATUS_OPTIONS = [
 	{ id: "active", value: "true", label: "Somente ativas" },
@@ -96,6 +97,7 @@ export default function FinanceAccountsPage({ canCreateAccounts = false, canEdit
 			{isSuccess && accounts ? (
 				accounts.length > 0 ? (
 					<div className="w-full flex flex-col gap-3">
+						<AccountsSummary accounts={accounts} />
 						{accounts.map((account) => (
 							<AccountCard
 								key={account.id}

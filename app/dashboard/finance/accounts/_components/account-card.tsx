@@ -1,9 +1,9 @@
 "use client";
 
-import { ArrowDown, ArrowUp, BadgeDollarSign, GitBranch, Pencil, PlayIcon } from "lucide-react";
+import { ArrowDown, ArrowUp, BadgeDollarSign, GitBranch, Pencil, PlayIcon, TrendingUp } from "lucide-react";
 import type { TGetFinancialAccountsOutputDefault } from "@/app/api/finances/financial-accounts/route";
 import { Button } from "@/components/ui/button";
-import { formatDateAsLocale, formatToMoney } from "@/lib/formatting";
+import { formatDateAsLocale, formatDecimalPlaces, formatToMoney } from "@/lib/formatting";
 import { cn } from "@/lib/utils";
 import { FinancialAccountTypeOptions } from "@/utils/select-options";
 import { AccountCardChart } from "./account-card-chart";
@@ -20,6 +20,13 @@ export function AccountCard({ account, statsPeriodAfter, statsPeriodBefore, canE
 	const stats = account.estatisticas;
 	const bankConfig = account.configuracao?.categoria === "BANCO" ? account.configuracao : null;
 	const creditCardConfig = account.configuracao?.categoria === "CARTAO_CREDITO" ? account.configuracao : null;
+	const isCreditCard = account.tipo === "CARTAO_CREDITO";
+	const totalEntradas = stats?.totalEntradas ?? 0;
+	const totalSaidas = stats?.totalSaidas ?? 0;
+	// No cartão, saída aumenta a dívida: o resultado do período é o quanto ela cresceu.
+	const periodResult = isCreditCard ? totalSaidas - totalEntradas : totalEntradas - totalSaidas;
+	const creditLimit = creditCardConfig?.limiteCredito ?? null;
+	const creditUsage = creditLimit ? Math.min(100, Math.max(0, ((stats?.saldoAtual ?? 0) / creditLimit) * 100)) : null;
 
 	return (
 		<div className="bg-card border-border flex w-full flex-col gap-2 rounded-xl border px-4 py-4 shadow-2xs">
@@ -87,10 +94,22 @@ export function AccountCard({ account, statsPeriodAfter, statsPeriodBefore, canE
 				</div>
 			) : null}
 			{creditCardConfig ? (
-				<div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border pt-2 text-[0.65rem] text-muted-foreground">
-					<span>FECHAMENTO: dia {creditCardConfig.diaFechamentoFatura}</span>
-					<span>VENCIMENTO: dia {creditCardConfig.diaVencimentoFatura}</span>
-					{creditCardConfig.limiteCredito ? <span>LIMITE: {formatToMoney(creditCardConfig.limiteCredito)}</span> : null}
+				<div className="flex flex-col gap-1.5 border-t border-border pt-2">
+					<div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.65rem] text-muted-foreground">
+						<span>FECHAMENTO: dia {creditCardConfig.diaFechamentoFatura}</span>
+						<span>VENCIMENTO: dia {creditCardConfig.diaVencimentoFatura}</span>
+						{creditLimit ? <span>LIMITE: {formatToMoney(creditLimit)}</span> : null}
+					</div>
+					{creditLimit && creditUsage !== null ? (
+						<div className="flex items-center gap-2">
+							<div className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary">
+								<div className="h-full rounded-full bg-red-600" style={{ width: `${creditUsage}%` }} />
+							</div>
+							<span className="whitespace-nowrap text-[0.65rem] font-semibold">
+								{formatDecimalPlaces(creditUsage, 1, 1)}% usado · disponível {formatToMoney(Math.max(0, creditLimit - (stats?.saldoAtual ?? 0)))}
+							</span>
+						</div>
+					) : null}
 				</div>
 			) : null}
 			<div className="flex w-full flex-col gap-2 lg:flex-row lg:items-stretch">
@@ -100,7 +119,7 @@ export function AccountCard({ account, statsPeriodAfter, statsPeriodBefore, canE
 					<div className={cn("w-full flex items-center justify-between gap-1.5 rounded-xl px-3 py-1.5 text-[0.65rem] bg-secondary")}>
 						<div className="flex items-center gap-1.5">
 							<BadgeDollarSign className="w-4 h-4 min-w-4 min-h-4" />
-							<span className="text-xs font-medium">{account.tipo === "CARTAO_CREDITO" ? "SALDO DEVEDOR" : "SALDO ATUAL"}</span>
+							<span className="text-xs font-medium">{isCreditCard ? "SALDO DEVEDOR" : "SALDO ATUAL"}</span>
 						</div>
 						<span className="text-sm font-bold tabular-nums">{formatToMoney(stats?.saldoAtual ?? 0)}</span>
 					</div>
@@ -111,7 +130,7 @@ export function AccountCard({ account, statsPeriodAfter, statsPeriodBefore, canE
 							<ArrowUp className="w-4 h-4 min-w-4 min-h-4" />
 							<span className="text-xs font-medium">ENTRADAS</span>
 						</div>
-						<span className="text-sm font-bold tabular-nums">{formatToMoney(stats?.totalEntradas ?? 0)}</span>
+						<span className="text-sm font-bold tabular-nums">{formatToMoney(totalEntradas)}</span>
 					</div>
 
 					{/* Total Saídas — period */}
@@ -120,7 +139,19 @@ export function AccountCard({ account, statsPeriodAfter, statsPeriodBefore, canE
 							<ArrowDown className="w-4 h-4 min-w-4 min-h-4" />
 							<span className="text-xs font-medium">SAÍDAS</span>
 						</div>
-						<span className="text-sm font-bold tabular-nums">{formatToMoney(stats?.totalSaidas ?? 0)}</span>
+						<span className="text-sm font-bold tabular-nums">{formatToMoney(totalSaidas)}</span>
+					</div>
+
+					{/* Resultado — period (entradas − saídas; no cartão, saídas − entradas) */}
+					<div className="w-full flex items-center justify-between gap-1.5 rounded-xl px-3 py-1.5 text-[0.65rem] bg-indigo-100 text-indigo-700">
+						<div className="flex items-center gap-1.5">
+							<TrendingUp className="w-4 h-4 min-w-4 min-h-4" />
+							<span className="text-xs font-medium">RESULTADO</span>
+						</div>
+						<span className="text-sm font-bold tabular-nums">
+							{periodResult >= 0 ? "+" : "−"}
+							{formatToMoney(Math.abs(periodResult))}
+						</span>
 					</div>
 				</div>
 
