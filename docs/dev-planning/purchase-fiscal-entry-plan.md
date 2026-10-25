@@ -20,20 +20,20 @@ configuráveis e sugere; ele não é a fonte de verdade tributária.
 
 ## Estado atual relevante
 
-| Peça | Onde | Observação |
-| --- | --- | --- |
-| Parser de NF-e | `lib/purchase/import-xml.ts` | Determinístico. Lê vDesc, vFrete, vSeg, vOutro, vIPI, vICMSST, vFCPST. **Ignora** vICMS, vPIS, vCOFINS, vCredICMSSN, CFOP, CST/CSOSN, orig, CEST, cBenef, bases, alíquotas, `rastro`, ST retido, `dest`, `finNFe`, `IBSCBS`. |
-| Custeio | `lib/purchase/costing.ts` | `financeiro = bruto ± modificadores`; `custo = bruto ± modificadores CUSTO_ESTOQUE`. Reduções fora de CUSTO_ESTOQUE são recusadas (`costing.ts:107`). |
-| Modificador | `PurchaseCostModifierSchema` (`schemas/purchases.ts`) | chave, valorCentavos, efeito (ACRESCIMO/REDUCAO), tratamento, origem, documentoRef, rateio. Não sabe a quem se paga. |
-| Tratamento | `applyTaxTreatment` (`app/dashboard/purchases/_module/builder/helpers/review-lines.ts`) | Sempre manual, linha a linha ou "nota inteira". Nenhuma regra. |
-| Item de compra | `purchase_items` | `produtoId` NOT NULL; nenhum campo fiscal; implicitamente sempre estoque. |
-| Documentos da compra | `purchases.documentosImportados` (JSONB) | Arquivo em `organizations/{org}/purchase-imports/{ref}` via `storePrivateFile` — **fora** do catálogo `files`. |
-| Nota recebida | `fiscal_inbound_documents` | `xmlStoragePath`/`pdfStoragePath` como caminho — **fora** do catálogo `files`. A aba só manifesta e baixa. |
-| Lançamento da compra | `syncPurchaseAccountingLines` (`app/api/purchases/route.ts`) | Débitos por tratamento; um único crédito (Fornecedores). |
-| Transação financeira | `financial_transactions` | Sem contraparte; reconcilia com o valor de face do lançamento. |
-| Perfil fiscal do produto | `product_fiscal_profiles`, `fiscal_tax_groups` | Orientados à **saída** e ao Simples (CSOSN). Nada de entrada. |
-| Plano de contas padrão | `config/onboarding.tsx` | 1.3 Estoques, 1.4 Tributos a Recuperar, 2.3 Obrigações Tributárias. Sem imobilizado nem depreciação. |
-| Produto | `products` | `tipo` texto livre legado, `vendavel`, `rastreamentoEstoqueAtivo`. Nada diz o que o produto **é** para a empresa. |
+| Peça                     | Onde                                                                                    | Observação                                                                                                                                                                                                                   |
+| ------------------------ | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Parser de NF-e           | `lib/purchase/import-xml.ts`                                                            | Determinístico. Lê vDesc, vFrete, vSeg, vOutro, vIPI, vICMSST, vFCPST. **Ignora** vICMS, vPIS, vCOFINS, vCredICMSSN, CFOP, CST/CSOSN, orig, CEST, cBenef, bases, alíquotas, `rastro`, ST retido, `dest`, `finNFe`, `IBSCBS`. |
+| Custeio                  | `lib/purchase/costing.ts`                                                               | `financeiro = bruto ± modificadores`; `custo = bruto ± modificadores CUSTO_ESTOQUE`. Reduções fora de CUSTO_ESTOQUE são recusadas (`costing.ts:107`).                                                                        |
+| Modificador              | `PurchaseCostModifierSchema` (`schemas/purchases.ts`)                                   | chave, valorCentavos, efeito (ACRESCIMO/REDUCAO), tratamento, origem, documentoRef, rateio. Não sabe a quem se paga.                                                                                                         |
+| Tratamento               | `applyTaxTreatment` (`app/dashboard/purchases/_module/builder/helpers/review-lines.ts`) | Sempre manual, linha a linha ou "nota inteira". Nenhuma regra.                                                                                                                                                               |
+| Item de compra           | `purchase_items`                                                                        | `produtoId` NOT NULL; nenhum campo fiscal; implicitamente sempre estoque.                                                                                                                                                    |
+| Documentos da compra     | `purchases.documentosImportados` (JSONB)                                                | Arquivo em `organizations/{org}/purchase-imports/{ref}` via `storePrivateFile` — **fora** do catálogo `files`.                                                                                                               |
+| Nota recebida            | `fiscal_inbound_documents`                                                              | `xmlStoragePath`/`pdfStoragePath` como caminho — **fora** do catálogo `files`. A aba só manifesta e baixa.                                                                                                                   |
+| Lançamento da compra     | `syncPurchaseAccountingLines` (`app/api/purchases/route.ts`)                            | Débitos por tratamento; um único crédito (Fornecedores).                                                                                                                                                                     |
+| Transação financeira     | `financial_transactions`                                                                | Sem contraparte; reconcilia com o valor de face do lançamento.                                                                                                                                                               |
+| Perfil fiscal do produto | `product_fiscal_profiles`, `fiscal_tax_groups`                                          | Orientados à **saída** e ao Simples (CSOSN). Nada de entrada.                                                                                                                                                                |
+| Plano de contas padrão   | `config/onboarding.tsx`                                                                 | 1.3 Estoques, 1.4 Tributos a Recuperar, 2.3 Obrigações Tributárias. Sem imobilizado nem depreciação.                                                                                                                         |
+| Produto                  | `products`                                                                              | `tipo` texto livre legado, `vendavel`, `rastreamentoEstoqueAtivo`. Nada diz o que o produto **é** para a empresa.                                                                                                            |
 
 ---
 
@@ -85,20 +85,20 @@ Enum único, alinhado ao `TIPO_ITEM` do registro 0200 do SPED (EFD ICMS/IPI), po
 classificação que a escrituração vai exigir de qualquer forma e evita inventar uma taxonomia
 própria:
 
-| Valor (`ProductItemTypeEnum`) | SPED | Comportamento padrão |
-| --- | --- | --- |
-| `MERCADORIA_REVENDA` | 00 | vendável, rastreia estoque, conta 1.3.1 |
-| `MATERIA_PRIMA` | 01 | não vendável, estoque, consumido em produção, conta 1.3.2 |
-| `EMBALAGEM` | 02 | idem matéria-prima |
-| `PRODUTO_EM_PROCESSO` | 03 | gerado por produção |
-| `PRODUTO_ACABADO` | 04 | gerado por produção, vendável |
-| `SUBPRODUTO` | 05 | gerado por produção |
-| `PRODUTO_INTERMEDIARIO` | 06 | insumo consumido no processo |
-| `USO_CONSUMO` | 07 | não vendável, estoque opcional (almoxarifado) |
-| `ATIVO_IMOBILIZADO` | 08 | não vendável, sem estoque; cada unidade recebida vira um bem patrimonial |
-| `SERVICO` | 09 | sem estoque (reservado; serviços tomados ficam fora deste plano) |
-| `OUTROS_INSUMOS` | 10 | insumo |
-| `OUTROS` | 99 | sem comportamento implícito |
+| Valor (`ProductItemTypeEnum`) | SPED | Comportamento padrão                                                     |
+| ----------------------------- | ---- | ------------------------------------------------------------------------ |
+| `MERCADORIA_REVENDA`          | 00   | vendável, rastreia estoque, conta 1.3.1                                  |
+| `MATERIA_PRIMA`               | 01   | não vendável, estoque, consumido em produção, conta 1.3.2                |
+| `EMBALAGEM`                   | 02   | idem matéria-prima                                                       |
+| `PRODUTO_EM_PROCESSO`         | 03   | gerado por produção                                                      |
+| `PRODUTO_ACABADO`             | 04   | gerado por produção, vendável                                            |
+| `SUBPRODUTO`                  | 05   | gerado por produção                                                      |
+| `PRODUTO_INTERMEDIARIO`       | 06   | insumo consumido no processo                                             |
+| `USO_CONSUMO`                 | 07   | não vendável, estoque opcional (almoxarifado)                            |
+| `ATIVO_IMOBILIZADO`           | 08   | não vendável, sem estoque; cada unidade recebida vira um bem patrimonial |
+| `SERVICO`                     | 09   | sem estoque (reservado; serviços tomados ficam fora deste plano)         |
+| `OUTROS_INSUMOS`              | 10   | insumo                                                                   |
+| `OUTROS`                      | 99   | sem comportamento implícito                                              |
 
 - Migração: todo produto existente recebe `MERCADORIA_REVENDA` (é o que o sistema já assume),
   exceto os que hoje são insumo de ficha técnica e não vendáveis → `MATERIA_PRIMA`. Relatório de
@@ -113,12 +113,12 @@ própria:
 
 Enum menor, porque é o que muda tributação e contabilização na entrada:
 
-| Valor (`PurchaseItemDestinationEnum`) | Origem padrão (`tipoItem`) | Estoque | Débito contábil | ICMS próprio | DIFAL interestadual |
-| --- | --- | --- | --- | --- | --- |
-| `REVENDA` | 00, 04 | entrada no saldo | Estoque de mercadorias | crédito conforme regime | não (antecipação parcial pode existir) |
-| `INSUMO` | 01, 02, 06, 10 | entrada no saldo | Estoque de matérias-primas | crédito conforme regime | não |
-| `USO_CONSUMO` | 07 | opcional (almoxarifado) | Despesa de consumo, ou Material de consumo se rastreado | sem crédito (LC 87/96, art. 33) | **sim** |
-| `ATIVO_IMOBILIZADO` | 08 | não; gera bens patrimoniais | Imobilizado | crédito via CIAP (1/48) conforme regime | **sim** |
+| Valor (`PurchaseItemDestinationEnum`) | Origem padrão (`tipoItem`) | Estoque                     | Débito contábil                                         | ICMS próprio                            | DIFAL interestadual                    |
+| ------------------------------------- | -------------------------- | --------------------------- | ------------------------------------------------------- | --------------------------------------- | -------------------------------------- |
+| `REVENDA`                             | 00, 04                     | entrada no saldo            | Estoque de mercadorias                                  | crédito conforme regime                 | não (antecipação parcial pode existir) |
+| `INSUMO`                              | 01, 02, 06, 10             | entrada no saldo            | Estoque de matérias-primas                              | crédito conforme regime                 | não                                    |
+| `USO_CONSUMO`                         | 07                         | opcional (almoxarifado)     | Despesa de consumo, ou Material de consumo se rastreado | sem crédito (LC 87/96, art. 33)         | **sim**                                |
+| `ATIVO_IMOBILIZADO`                   | 08                         | não; gera bens patrimoniais | Imobilizado                                             | crédito via CIAP (1/48) conforme regime | **sim**                                |
 
 - Default: do `tipoItem` do produto; depois do mapeamento fornecedor-produto
   (`lib/purchase/supplier-product-mappings.ts` passa a lembrar a destinação usada na última
@@ -132,15 +132,15 @@ Enum menor, porque é o que muda tributação e contabilização na entrada:
 
 Derivada do CFOP do emitente e do `finNFe`, por item:
 
-| Valor (`PurchaseEntryNatureEnum`) | CFOP do emitente (exemplos) | Efeito |
-| --- | --- | --- |
-| `COMPRA` | 5101/5102/6101/6102/5403/5405/6403/6404 | fluxo normal |
-| `BONIFICACAO` | 5910/6910 | estoque entra; custo pela regra da organização (zero ou valor da nota); não gera duplicata |
-| `CONSIGNACAO` | 5917/6917 | estoque de terceiros; sem custo nem passivo até a venda/devolução |
-| `REMESSA` | 5915/5949/6949/5908 (conserto, demonstração, comodato) | não entra no saldo próprio; registro de controle |
-| `DEVOLUCAO_VENDA` | 5202/6202 com `refNFe` | retorno ao estoque vinculado à venda original (fora do builder de compra — ver Fase 8) |
-| `COMPLEMENTAR` | `finNFe = 2` | complementa valor/imposto de uma compra existente (`refNFe`); não cria linhas novas |
-| `TRANSFERENCIA` | 5152/6152 | entre estabelecimentos; sem passivo |
+| Valor (`PurchaseEntryNatureEnum`) | CFOP do emitente (exemplos)                            | Efeito                                                                                     |
+| --------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| `COMPRA`                          | 5101/5102/6101/6102/5403/5405/6403/6404                | fluxo normal                                                                               |
+| `BONIFICACAO`                     | 5910/6910                                              | estoque entra; custo pela regra da organização (zero ou valor da nota); não gera duplicata |
+| `CONSIGNACAO`                     | 5917/6917                                              | estoque de terceiros; sem custo nem passivo até a venda/devolução                          |
+| `REMESSA`                         | 5915/5949/6949/5908 (conserto, demonstração, comodato) | não entra no saldo próprio; registro de controle                                           |
+| `DEVOLUCAO_VENDA`                 | 5202/6202 com `refNFe`                                 | retorno ao estoque vinculado à venda original (fora do builder de compra — ver Fase 8)     |
+| `COMPLEMENTAR`                    | `finNFe = 2`                                           | complementa valor/imposto de uma compra existente (`refNFe`); não cria linhas novas        |
+| `TRANSFERENCIA`                   | 5152/6152                                              | entre estabelecimentos; sem passivo                                                        |
 
 O que não é `COMPRA`, `BONIFICACAO` ou `COMPLEMENTAR` fica fora do custo médio nesta fase: o
 builder mostra a linha, explica a natureza e não a lança como aquisição.
@@ -265,25 +265,31 @@ modificadores, que o ADR-0001 manteve em JSONB por não terem.
 
 ```typescript
 export const purchaseObligations = newTable("purchase_obligations", {
-	id, organizacaoId,
-	compraId,                                  // FK purchases, cascade
-	tipo: purchaseObligationTypeEnum("tipo"),  // DIFAL | FCP_DIFAL | ANTECIPACAO_PARCIAL | ICMS_ST_ENTRADA | FRETE_CTE | OUTRO
-	credor: purchaseCreditorEnum("credor"),    // FISCO | TRANSPORTADORA
-	status: purchaseObligationStatusEnum("status"), // PREVISTA | GUIA_EMITIDA | PAGA | CANCELADA
-	// Credor fisco
-	uf: varchar("uf", { length: 2 }),
-	codigoReceita: varchar("codigo_receita", { length: 20 }),
-	documentoArrecadacao: varchar("documento_arrecadacao", { length: 60 }), // nº GNRE/DAE
-	// Credor transportadora
-	fornecedorId,                              // suppliers (transportadora cadastrada como fornecedor)
-	documentoRef,                              // referência do CT-e em documentosImportados
-	valor: numeric("valor", { precision: 14, scale: 2, mode: "number" }).notNull(),
-	dataVencimento: timestamp("data_vencimento"),
-	memoriaCalculo: jsonb("memoria_calculo"),
-	guiaArquivoId,                             // files.id
-	comprovanteArquivoId,                      // files.id
-	lancamentoContabilId,                      // lançamento próprio (ver contabilidade)
-	dataInsercao, dataAtualizacao,
+  id,
+  organizacaoId,
+  compraId, // FK purchases, cascade
+  tipo: purchaseObligationTypeEnum("tipo"), // DIFAL | FCP_DIFAL | ANTECIPACAO_PARCIAL | ICMS_ST_ENTRADA | FRETE_CTE | OUTRO
+  credor: purchaseCreditorEnum("credor"), // FISCO | TRANSPORTADORA
+  status: purchaseObligationStatusEnum("status"), // PREVISTA | GUIA_EMITIDA | PAGA | CANCELADA
+  // Credor fisco
+  uf: varchar("uf", { length: 2 }),
+  codigoReceita: varchar("codigo_receita", { length: 20 }),
+  documentoArrecadacao: varchar("documento_arrecadacao", { length: 60 }), // nº GNRE/DAE
+  // Credor transportadora
+  fornecedorId, // suppliers (transportadora cadastrada como fornecedor)
+  documentoRef, // referência do CT-e em documentosImportados
+  valor: numeric("valor", {
+    precision: 14,
+    scale: 2,
+    mode: "number",
+  }).notNull(),
+  dataVencimento: timestamp("data_vencimento"),
+  memoriaCalculo: jsonb("memoria_calculo"),
+  guiaArquivoId, // files.id
+  comprovanteArquivoId, // files.id
+  lancamentoContabilId, // lançamento próprio (ver contabilidade)
+  dataInsercao,
+  dataAtualizacao,
 });
 ```
 
@@ -291,27 +297,39 @@ export const purchaseObligations = newTable("purchase_obligations", {
 
 Presets por regime (`lib/fiscal/entry/presets.ts`, versionados em código, não no banco):
 
-| Regime | ICMS próprio | ICMS SN (CSOSN 101) | IPI | ICMS-ST | PIS/COFINS | DIFAL uso/ativo |
-| --- | --- | --- | --- | --- | --- | --- |
-| Simples Nacional | custo | custo | custo | custo | custo | custo, credor fisco |
-| Lucro Presumido | crédito (revenda/insumo) | crédito | custo (sem IPI na saída) | custo | custo (cumulativo) | custo, credor fisco |
-| Lucro Real | crédito (revenda/insumo) | crédito | crédito se contribuinte de IPI, senão custo | custo | crédito (não cumulativo) | custo, credor fisco |
+| Regime           | ICMS próprio             | ICMS SN (CSOSN 101) | IPI                                         | ICMS-ST | PIS/COFINS               | DIFAL uso/ativo     |
+| ---------------- | ------------------------ | ------------------- | ------------------------------------------- | ------- | ------------------------ | ------------------- |
+| Simples Nacional | custo                    | custo               | custo                                       | custo   | custo                    | custo, credor fisco |
+| Lucro Presumido  | crédito (revenda/insumo) | crédito             | custo (sem IPI na saída)                    | custo   | custo (cumulativo)       | custo, credor fisco |
+| Lucro Real       | crédito (revenda/insumo) | crédito             | crédito se contribuinte de IPI, senão custo | custo   | crédito (não cumulativo) | custo, credor fisco |
 
 Exceções da organização em tabela, com as mesmas convenções de `fiscal_tax_group_rules`
 (coluna anulável = "qualquer"):
 
 ```typescript
 export const fiscalEntryRules = newTable("fiscal_entry_rules", {
-	id, organizacaoId, nome, prioridade, ativo,
-	// Dimensões (anuláveis)
-	destinacao, naturezaEntrada, cfopOrigemPrefixo, ufOrigem, ncmPrefixo,
-	fornecedorId, cstIcms, crtEmitente,
-	// Saídas (anuláveis = mantém o preset)
-	tratamentos: jsonb("tratamentos"),   // { IMPOSTOS_ICMS: "CREDITO_TRIBUTARIO", ... }
-	cfopEntrada,
-	aplicaDifal, aplicaAntecipacao, aliquotaInternaOverride,
-	custoBonificacao,                    // ZERO | VALOR_NOTA
-	dataInsercao,
+  id,
+  organizacaoId,
+  nome,
+  prioridade,
+  ativo,
+  // Dimensões (anuláveis)
+  destinacao,
+  naturezaEntrada,
+  cfopOrigemPrefixo,
+  ufOrigem,
+  ncmPrefixo,
+  fornecedorId,
+  cstIcms,
+  crtEmitente,
+  // Saídas (anuláveis = mantém o preset)
+  tratamentos: jsonb("tratamentos"), // { IMPOSTOS_ICMS: "CREDITO_TRIBUTARIO", ... }
+  cfopEntrada,
+  aplicaDifal,
+  aplicaAntecipacao,
+  aliquotaInternaOverride,
+  custoBonificacao, // ZERO | VALOR_NOTA
+  dataInsercao,
 });
 ```
 
@@ -345,31 +363,51 @@ O produto com papel `ATIVO_IMOBILIZADO` é o **tipo** do bem; cada unidade receb
 
 ```typescript
 export const fixedAssets = newTable("fixed_assets", {
-	id, organizacaoId,
-	produtoId, produtoVarianteId,             // o que o bem é (catálogo)
-	compraItemId,                             // de qual aquisição nasceu (null = cadastro manual/legado)
-	codigoPatrimonio,                         // plaqueta; único por organização
-	descricao, numeroSerie, localizacao, responsavelId,
-	status: fixedAssetStatusEnum("status"),   // EM_USO | EM_MANUTENCAO | BAIXADO
-	valorAquisicao: numeric(14,2),            // = valorUnitarioCusto do item
-	dataAquisicao, dataInicioUso,
-	vidaUtilMeses, valorResidual: numeric(14,2),
-	metodoDepreciacao: "LINEAR",
-	contaContabilId,                          // subconta do imobilizado
-	dataBaixa, motivoBaixa, valorBaixa,
-	dataInsercao,
+  id,
+  organizacaoId,
+  produtoId,
+  produtoVarianteId, // o que o bem é (catálogo)
+  compraItemId, // de qual aquisição nasceu (null = cadastro manual/legado)
+  codigoPatrimonio, // plaqueta; único por organização
+  descricao,
+  numeroSerie,
+  localizacao,
+  responsavelId,
+  status: fixedAssetStatusEnum("status"), // EM_USO | EM_MANUTENCAO | BAIXADO
+  valorAquisicao: numeric(14, 2), // = valorUnitarioCusto do item
+  dataAquisicao,
+  dataInicioUso,
+  vidaUtilMeses,
+  valorResidual: numeric(14, 2),
+  metodoDepreciacao: "LINEAR",
+  contaContabilId, // subconta do imobilizado
+  dataBaixa,
+  motivoBaixa,
+  valorBaixa,
+  dataInsercao,
 });
 
 export const fixedAssetDepreciations = newTable("fixed_asset_depreciations", {
-	id, organizacaoId, bemId, competencia /* 1º dia do mês */, valor: numeric(14,2),
-	lancamentoContabilId, dataInsercao,
-	// unique (bemId, competencia): o job é idempotente
+  id,
+  organizacaoId,
+  bemId,
+  competencia /* 1º dia do mês */,
+  valor: numeric(14, 2),
+  lancamentoContabilId,
+  dataInsercao,
+  // unique (bemId, competencia): o job é idempotente
 });
 
 export const fixedAssetIcmsCredits = newTable("fixed_asset_icms_credits", {
-	id, organizacaoId, bemId, parcela /* 1..48 */, competencia, valor: numeric(14,2),
-	status: "PREVISTA" | "APROPRIADA" | "CANCELADA",     // cancelada na baixa antes de 48 meses
-	lancamentoContabilId, dataInsercao,
+  id,
+  organizacaoId,
+  bemId,
+  parcela /* 1..48 */,
+  competencia,
+  valor: numeric(14, 2),
+  status: "PREVISTA" | "APROPRIADA" | "CANCELADA", // cancelada na baixa antes de 48 meses
+  lancamentoContabilId,
+  dataInsercao,
 });
 ```
 
@@ -444,12 +482,12 @@ gatilho para migrá-los, conforme a dívida listada em `lib/files/README.md`.
 
 ### Novos propósitos de upload (`UPLOAD_PURPOSES` + `UploadPurposeEnum`)
 
-| Propósito | Transporte | Limite | Tipos | Uso |
-| --- | --- | --- | --- | --- |
-| `DOCUMENTO_FISCAL_ENTRADA` | PROXY | 4 MB | XML, PDF, PNG, JPEG, WEBP | NF-e, NFC-e, CT-e, cupom — builder e agente MCP |
-| `GUIA_TRIBUTO` | PROXY | 4 MB | PDF, imagem | guia DAE/GNRE de uma obrigação |
-| `COMPROVANTE_PAGAMENTO` | PROXY | 4 MB | PDF, imagem | comprovante de obrigação ou parcela |
-| `DOCUMENTO_BEM_PATRIMONIAL` | DIRECT | 20 MB | PDF, imagem | termo, foto, laudo, garantia do bem |
+| Propósito                   | Transporte | Limite | Tipos                     | Uso                                             |
+| --------------------------- | ---------- | ------ | ------------------------- | ----------------------------------------------- |
+| `DOCUMENTO_FISCAL_ENTRADA`  | PROXY      | 4 MB   | XML, PDF, PNG, JPEG, WEBP | NF-e, NFC-e, CT-e, cupom — builder e agente MCP |
+| `GUIA_TRIBUTO`              | PROXY      | 4 MB   | PDF, imagem               | guia DAE/GNRE de uma obrigação                  |
+| `COMPROVANTE_PAGAMENTO`     | PROXY      | 4 MB   | PDF, imagem               | comprovante de obrigação ou parcela             |
+| `DOCUMENTO_BEM_PATRIMONIAL` | DIRECT     | 20 MB  | PDF, imagem               | termo, foto, laudo, garantia do bem             |
 
 Todos privados, bucket `private-files`, prefixo `organizations/{org}/...` derivado no servidor
 (regra de `docs/security/file-storage-classification.md`).
@@ -537,14 +575,14 @@ Validações bloqueantes no import (todas com mensagem em português):
 
 `handlePurchaseItemStockProcessing` passa a ramificar pela destinação e natureza:
 
-| Destinação / natureza | Estoque | Outros efeitos |
-| --- | --- | --- |
-| REVENDA, INSUMO | `ENTRADA_AQUISICAO` com `valorUnitarioCusto` (como hoje) | lotes por `rastro` quando houver |
-| USO_CONSUMO rastreado | `ENTRADA_AQUISICAO` | consumo posterior por novo tipo `SAIDA_CONSUMO_INTERNO` (D despesa / C material de consumo) |
-| USO_CONSUMO não rastreado | nenhum | lançado direto em despesa |
-| ATIVO_IMOBILIZADO | nenhum | cria N `fixed_assets` + cronograma CIAP quando houver crédito |
-| BONIFICACAO | `ENTRADA_AQUISICAO` com custo da regra (zero ou valor) | sem duplicata |
-| CONSIGNACAO, REMESSA, TRANSFERENCIA | fora desta fase | linha exibida, não lançada |
+| Destinação / natureza               | Estoque                                                  | Outros efeitos                                                                              |
+| ----------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| REVENDA, INSUMO                     | `ENTRADA_AQUISICAO` com `valorUnitarioCusto` (como hoje) | lotes por `rastro` quando houver                                                            |
+| USO_CONSUMO rastreado               | `ENTRADA_AQUISICAO`                                      | consumo posterior por novo tipo `SAIDA_CONSUMO_INTERNO` (D despesa / C material de consumo) |
+| USO_CONSUMO não rastreado           | nenhum                                                   | lançado direto em despesa                                                                   |
+| ATIVO_IMOBILIZADO                   | nenhum                                                   | cria N `fixed_assets` + cronograma CIAP quando houver crédito                               |
+| BONIFICACAO                         | `ENTRADA_AQUISICAO` com custo da regra (zero ou valor)   | sem duplicata                                                                               |
+| CONSIGNACAO, REMESSA, TRANSFERENCIA | fora desta fase                                          | linha exibida, não lançada                                                                  |
 
 "Desfazer recebimento" (`UNRECEIVING`) ganha a contrapartida: bens sem depreciação lançada são
 removidos; com depreciação, o desfazer é recusado (mesma lógica de `assertPurchaseLotsArePristine`).
@@ -637,8 +675,8 @@ Cada fase é entregável sozinha e mantém o comportamento atual para quem não 
 ### Fase 5 — Credor e obrigações
 
 - `credor` no modificador, `purchase_obligations`, lançamento por obrigação, `fiscal_uf_parameters`
-  + script de carga, cálculo de DIFAL (base única e dupla), antecipação parcial e ST de entrada
-  (`lib/fiscal/entry/difal.ts`, puro), etapa "Obrigações" no builder, "Guias a pagar".
+  - script de carga, cálculo de DIFAL (base única e dupla), antecipação parcial e ST de entrada
+    (`lib/fiscal/entry/difal.ts`, puro), etapa "Obrigações" no builder, "Guias a pagar".
 - Propósitos `GUIA_TRIBUTO` e `COMPROVANTE_PAGAMENTO`.
 - **Testes**: tabela de casos de DIFAL por UF conferida pela contabilidade; invariante
   `custo + crédito + despesa = fornecedor + terceiros`.
