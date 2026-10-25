@@ -244,6 +244,9 @@ Nada de tabela de obrigações. Uma dívida já tem modelo: lançamento contábi
 ```typescript
 // accounting_entries — mesmo padrão de vendaId/loteId
 compraId: varchar("compra_id", { length: 255 }).references(() => purchases.id, { onDelete: "set null" }),
+// Contraparte do título (ver abaixo)
+clienteId: varchar("cliente_id", { length: 255 }).references(() => clients.id, { onDelete: "set null" }),
+fornecedorId: varchar("fornecedor_id", { length: 255 }).references(() => suppliers.id, { onDelete: "set null" }),
 ```
 
 - **Um lançamento por contrapartida e documento.** Isso mantém a invariante de hoje, "as
@@ -255,6 +258,40 @@ compraId: varchar("compra_id", { length: 255 }).references(() => purchases.id, {
   `TRIBUTO_COMPRA` para o fisco: é o filtro da lista "Guias a pagar" e a trava de edição.
 - `purchases.lancamentoContabilId` continua apontando para o lançamento do fornecedor. É a
   sombra de compatibilidade para os leitores atuais.
+
+#### Contraparte do lançamento
+
+Hoje nenhuma estrutura financeira sabe **com quem** é a dívida ou o crédito. A venda chega ao
+cliente por `vendaId → sales.clienteId`; a compra chegaria ao fornecedor por `compraId`;
+recorrências (aluguel, energia) e lançamentos manuais não têm ninguém. "Contas a pagar por
+fornecedor" e "a receber por cliente" não existem porque a pergunta não tem onde morar.
+
+A contraparte é do **título**, não da parcela: um título tem um credor ou devedor; as parcelas
+são as liquidações dele. Por isso ela fica em `accounting_entries`, e `financial_transactions`
+herda pelo `lancamentoContabilId` que já tem.
+
+Duas FKs anuláveis, não um par polimórfico `contraparteTipo/contraparteId`: só existem dois
+cadastros de pessoa, e a FK real garante integridade e `set null` na exclusão. Check constraint:
+no máximo uma preenchida. O fisco **não** é contraparte — não há cadastro para ele e criar
+"SEFAZ-MG" como fornecedor seria uma gambiarra; a origem `TRIBUTO_COMPRA` já o identifica, e a UF
+vem da `memoriaCalculo`.
+
+Como é preenchida:
+
+| Origem                                      | Contraparte                                                                | Editável?      |
+| ------------------------------------------- | -------------------------------------------------------------------------- | -------------- |
+| `VENDA`, `ESTORNO` de venda                 | `clienteId` da venda                                                       | não (derivada) |
+| `COMPRA`, `TRIBUTO_COMPRA`, `PERDA_ESTOQUE` | `fornecedorId` da compra / transportadora; tributo e perda sem contraparte | não (derivada) |
+| `MANUAL`, `RECORRENCIA`                     | escolhida na UI (opcional)                                                 | sim            |
+| demais                                      | nula                                                                       | —              |
+
+`financial_recurring_rules` ganha as mesmas duas colunas, para que as instâncias geradas herdem
+a contraparte. Backfill: `clienteId` a partir de `vendaId`, `fornecedorId` a partir de
+`compraId` (após a Fase 5 preencher `compraId`).
+
+O que isso libera, fora deste plano: extrato por fornecedor/cliente, conciliação bancária com
+sugestão por contraparte (`financial_reconciliation_rules` pode casar pelo CNPJ do fornecedor),
+e o crédito em loja (`store-credit`) deixa de ser o único lugar que liga finanças a cliente.
 
 Linhas, pela conta resultante como no ADR-0001:
 
@@ -319,6 +356,9 @@ export const fixedAssets = newTable("fixed_assets", {
 	compraItemId,                                 // de qual aquisição nasceu; null = cadastro manual
 	codigoPatrimonio, descricao, numeroSerie, localizacao, responsavelId,
 	status: fixedAssetStatusEnum("status"),       // EM_USO | EM_MANUTENCAO | BAIXADO
+	// Bens fungíveis entram agrupados (20 cadeiras = 1 registro). Bem com numeroSerie tem quantidade 1.
+	quantidade: integer("quantidade").notNull().default(1),
+	// Valor do registro inteiro (quantidade × unitário). Depreciação e CIAP são calculados sobre ele.
 	valorAquisicao: numeric("valor_aquisicao", { precision: 14, scale: 2, mode: "number" }).notNull(),
 	dataInicioUso: timestamp("data_inicio_uso").notNull(),
 	vidaUtilMeses: integer("vida_util_meses").notNull(),
@@ -337,7 +377,13 @@ patrimonio:{org}:{yyyy-mm}`: linhas de depreciação e de apropriação do CIAP 
   de saídas tributadas do mês). O lançamento **é** o registro do mês; refazer o job não duplica.
 - Baixa: o bem guarda data e valor; o lançamento de baixa leva o valor contábil residual, e as
   parcelas de CIAP restantes simplesmente deixam de ser apropriadas (a função para na baixa).
-- Quantidade do item > 1 → N bens (ver decisões em aberto sobre bem agrupado).
+- **Baixa parcial = divisão do registro.** Baixar 5 das 20 cadeiras reduz o registro original
+  para 15 (valores proporcionais) e cria um registro `BAIXADO` com 5, `compraItemId` e datas
+  iguais. Cada registro continua sendo uma função pura dos próprios campos — nenhuma tabela de
+  movimentos de bem. O mesmo mecanismo serve para dar plaqueta própria a uma unidade do grupo
+  (dividir sem baixar).
+- Recebimento: um registro por item de compra, com a quantidade do item. Quem quiser plaquetas
+  individuais divide depois.
 
 ---
 
@@ -465,7 +511,8 @@ lidos, pelo ponteiro do item, do `det` da última entrada do produto. Não há c
 | `modificadoresCusto` (JSONB)             | + `contrapartida`, `memoriaCalculo`, origem `CALCULO`, chaves novas               |
 | `purchases.documentosImportados` (JSONB) | + `documentoFiscalId`, `arquivoId`                                                |
 | `fiscal_inbound_documents`               | + `modelo`, `xmlArquivoId`, `pdfArquivoId`; caminhos viram sombra                 |
-| `accounting_entries`                     | + `compraId`; origens `TRIBUTO_COMPRA`, `PATRIMONIO`                              |
+| `accounting_entries`                     | + `compraId`, `clienteId`, `fornecedorId`; origens `TRIBUTO_COMPRA`, `PATRIMONIO` |
+| `financial_recurring_rules`              | + `clienteId`, `fornecedorId`                                                     |
 | `financial_transactions`                 | + `documentoCobrancaArquivoId`, `comprovanteArquivoId`                            |
 | `fiscalConfiguracao` (JSON)              | + `entrada.tratamentos`                                                           |
 | `fixed_assets`                           | **tabela nova**                                                                   |
@@ -477,17 +524,17 @@ lidos, pelo ponteiro do item, do `det` da última entrada do produto. Não há c
 
 Cada fase é entregável sozinha e não muda nada para quem não usa a novidade.
 
-| Fase | Entrega                                                                                                                                                                                     | Schema                                                         |
-| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| 0    | ADR-0002 + guia de domínio; validação dos presets e do DIFAL com a contabilidade                                                                                                            | —                                                              |
-| 1    | Documento como primitivo: uploads de XML viram linha de documento, propósito `DOCUMENTO_FISCAL_ENTRADA`, `arquivoId`, ponteiro do item, validações do import, `rastro` → validade, backfill | `fiscal_inbound_documents`, `purchase_items` (ponteiro), JSONB |
-| 2    | Nota recebida → compra, `compraId`, cancelamento, confirmação opt-in                                                                                                                        | —                                                              |
-| 3    | Natureza e destinação, uso e consumo em despesa, bonificação como componente, contas por destinação                                                                                         | `products`, `purchase_items`, `supplier_product_mappings`      |
-| 4    | `contrapartida = INCLUSO_NO_VALOR`, créditos de ICMS/ICMS SN/PIS/COFINS, presets, overrides                                                                                                 | JSONB, `fiscalConfiguracao`                                    |
-| 5    | Contrapartida `FISCO`, DIFAL/antecipação/ST de entrada, lançamentos por credor, guias a pagar, `DOCUMENTO_FINANCEIRO`                                                                       | `accounting_entries`, `financial_transactions`                 |
-| 6    | CT-e                                                                                                                                                                                        | —                                                              |
-| 7    | Patrimônio                                                                                                                                                                                  | `fixed_assets`                                                 |
-| 8    | ST retido na saída; devolução de compra; IBS/CBS como componentes                                                                                                                           | —                                                              |
+| Fase | Entrega                                                                                                                                                                                     | Schema                                                                      |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| 0    | ADR-0002 + guia de domínio; validação dos presets e do DIFAL com a contabilidade                                                                                                            | —                                                                           |
+| 1    | Documento como primitivo: uploads de XML viram linha de documento, propósito `DOCUMENTO_FISCAL_ENTRADA`, `arquivoId`, ponteiro do item, validações do import, `rastro` → validade, backfill | `fiscal_inbound_documents`, `purchase_items` (ponteiro), JSONB              |
+| 2    | Nota recebida → compra, `compraId`, cancelamento, confirmação opt-in                                                                                                                        | —                                                                           |
+| 3    | Natureza e destinação, uso e consumo em despesa, bonificação como componente, contas por destinação                                                                                         | `products`, `purchase_items`, `supplier_product_mappings`                   |
+| 4    | `contrapartida = INCLUSO_NO_VALOR`, créditos de ICMS/ICMS SN/PIS/COFINS, presets, overrides                                                                                                 | JSONB, `fiscalConfiguracao`                                                 |
+| 5    | Contrapartida `FISCO`, DIFAL/antecipação/ST de entrada, lançamentos por credor com contraparte, guias a pagar, `DOCUMENTO_FINANCEIRO`, backfill de `clienteId`/`fornecedorId`               | `accounting_entries`, `financial_recurring_rules`, `financial_transactions` |
+| 6    | CT-e                                                                                                                                                                                        | —                                                                           |
+| 7    | Patrimônio                                                                                                                                                                                  | `fixed_assets`                                                              |
+| 8    | ST retido na saída; devolução de compra; IBS/CBS como componentes                                                                                                                           | —                                                                           |
 
 **Testes que precisam existir:**
 
@@ -510,17 +557,18 @@ Cada fase é entregável sozinha e não muda nada para quem não usa a novidade.
 - **Organização sem configuração fiscal** cai no preset do Simples, com aviso.
 - **Compras recebidas antes da Fase 4** não são reprocessadas.
 
+## Decisões tomadas
+
+- **Bonificação entra com custo zero** (CPC 16): componente `BONIFICACAO` de 100% do valor-base.
+- **Bem patrimonial tem `quantidade`**; baixa parcial e plaqueta individual são divisão do
+  registro.
+- **Contraparte em `accounting_entries`** (`clienteId` / `fornecedorId`), derivada da origem e
+  editável só em lançamentos manuais e recorrentes. Entra na Fase 5 junto com `compraId`.
+
 ## Decisões em aberto
 
-1. **Bonificação**: custo zero (CPC 16, proposto aqui) ou valor da nota com receita? A segunda
-   exigiria um tratamento novo.
-2. **Uso e consumo com estoque** (almoxarifado): fica para depois (pede saída `CONSUMO_INTERNO` e
+1. **Uso e consumo com estoque** (almoxarifado): fica para depois (pede saída `CONSUMO_INTERNO` e
    lançamento), ou entra na Fase 3?
-3. **Patrimônio**: módulo próprio na navegação ou aba em Produtos?
-4. **Bem agrupado**: um bem por unidade sempre, ou `quantidade` no bem (20 cadeiras = 1 registro)?
-   Se agrupado, um campo a mais e a baixa precisa aceitar baixa parcial.
-5. **CT-e para várias compras**: aceitar o 1:1 nesta fase ou já trocar `compraId` por vínculo pelo
+2. **Patrimônio**: módulo próprio na navegação ou aba em Produtos?
+3. **CT-e para várias compras**: aceitar o 1:1 nesta fase ou já trocar `compraId` por vínculo pelo
    snapshot da compra?
-6. **Contraparte genérica em lançamentos** (fornecedor/cliente em `accounting_entries`): fica
-   fora deste plano, mas resolveria "contas a pagar por fornecedor" para o sistema todo. Vale uma
-   iniciativa própria?
