@@ -261,6 +261,7 @@ async function createProductAddOn({ input, session }: { input: TCreateProductAdd
 				internoNome: input.addOn.internoNome,
 				minOpcoes: input.addOn.minOpcoes,
 				maxOpcoes: input.addOn.maxOpcoes,
+				regraPreco: input.addOn.regraPreco,
 				ativo: input.addOn.ativo,
 			})
 			.returning({ id: productAddOns.id });
@@ -352,6 +353,8 @@ async function updateProductAddOn({ input, session }: { input: TUpdateProductAdd
 				internoNome: input.addOn.internoNome,
 				minOpcoes: input.addOn.minOpcoes,
 				maxOpcoes: input.addOn.maxOpcoes,
+				// Ausente = mantém a regra gravada.
+				regraPreco: input.addOn.regraPreco,
 				ativo: input.addOn.ativo,
 			})
 			.where(and(eq(productAddOns.id, input.productAddOnId), eq(productAddOns.organizacaoId, userOrgId)))

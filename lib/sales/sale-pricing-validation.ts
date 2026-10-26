@@ -1,6 +1,7 @@
+import { resolveAddOnUnitPrices, type TAddOnPricingSelection } from "@/lib/products/add-on-pricing";
 import { resolveChannelOptionPrice } from "@/lib/products/sales-channels";
 import { channelNodePrice, channelProductFilter, loadChannelState } from "@/lib/products/sales-channels-store";
-import type { TSalesChannelTypeEnum } from "@/schemas/enums";
+import type { TProductAddOnPricingRuleEnum, TSalesChannelTypeEnum } from "@/schemas/enums";
 import { type DB, type DBTransaction, db } from "@/services/drizzle";
 import createHttpError from "http-errors";
 import { modifierPricesDiverge, resolveCurrentModifierPrices, type TSaleItemRepricing } from "./sale-item-repricing";
@@ -41,7 +42,25 @@ type TCatalogPrices = {
 	productPriceMap: Map<string, number>;
 	variantMap: Map<string, { id: string; produtoId: string; precoVenda: number }>;
 	optionPriceMap: Map<string, number>;
+	optionGroupMap: Map<string, { grupoId: string; regraPreco: TProductAddOnPricingRuleEnum }>;
 };
+
+/**
+ * Preço unitário efetivo dos modificadores de UM item, com a regra de preço de cada grupo
+ * (lib/products/add-on-pricing.ts). Opção fora do catálogo/canal fica fora do mapa, como em
+ * `optionPriceMap` — o chamador trata a ausência como indisponível.
+ */
+function resolveItemModifierPrices(modifiers: { opcaoId: string | null; quantidade: number }[], catalog: TCatalogPrices) {
+	const selections: TAddOnPricingSelection[] = [];
+	for (const modifier of modifiers) {
+		if (!modifier.opcaoId) continue;
+		const precoDelta = catalog.optionPriceMap.get(modifier.opcaoId);
+		const group = catalog.optionGroupMap.get(modifier.opcaoId);
+		if (precoDelta === undefined || !group) continue;
+		selections.push({ opcaoId: modifier.opcaoId, quantidade: modifier.quantidade, precoDelta, ...group });
+	}
+	return resolveAddOnUnitPrices(selections);
+}
 
 /**
  * Preços vigentes do catálogo para os produtos/variantes/opções citados pelos itens.
@@ -97,7 +116,8 @@ async function loadCatalogPrices({
 		optionIds.length > 0
 			? executor.query.productAddOnOptions.findMany({
 					where: (fields, { and, eq, inArray }) => and(inArray(fields.id, optionIds), eq(fields.organizacaoId, orgId)),
-					columns: { id: true, precoDelta: true },
+					columns: { id: true, precoDelta: true, produtoAddOnId: true },
+					with: { produtoAddOn: { columns: { regraPreco: true } } },
 				})
 			: [],
 	]);
@@ -128,6 +148,7 @@ async function loadCatalogPrices({
 				.filter((opcao) => channelState?.optionOverrides.get(opcao.id)?.disponivel !== false)
 				.map((opcao) => [opcao.id, resolveChannelOptionPrice(opcao, channelState?.optionOverrides)]),
 		),
+		optionGroupMap: new Map(opcoes.map((opcao) => [opcao.id, { grupoId: opcao.produtoAddOnId, regraPreco: opcao.produtoAddOn.regraPreco }])),
 	};
 }
 
@@ -149,7 +170,7 @@ export async function validateSaleItemsPricing({
 	canal?: TSalesChannelTypeEnum;
 	tx?: DB | DBTransaction;
 }): Promise<void> {
-	const { productPriceMap, variantMap, optionPriceMap } = await loadCatalogPrices({
+	const catalog = await loadCatalogPrices({
 		orgId,
 		canal,
 		tx,
@@ -157,6 +178,7 @@ export async function validateSaleItemsPricing({
 		variantIds: [...new Set(itens.map((item) => item.produtoVarianteId).filter((id): id is string => !!id))],
 		optionIds: [...new Set(itens.flatMap((item) => item.modificadores.map((mod) => mod.opcaoId)))],
 	});
+	const { productPriceMap, variantMap } = catalog;
 
 	for (const item of itens) {
 		if (!productPriceMap.has(item.produtoId)) {
@@ -172,9 +194,10 @@ export async function validateSaleItemsPricing({
 			precoBase = variante.precoVenda;
 		}
 
+		const modifierPrices = resolveItemModifierPrices(item.modificadores, catalog);
 		let valorModificadores = 0;
 		for (const mod of item.modificadores) {
-			const precoDelta = optionPriceMap.get(mod.opcaoId);
+			const precoDelta = modifierPrices.get(mod.opcaoId);
 			if (precoDelta === undefined) {
 				throw new createHttpError.BadRequest(`Um modificador do item "${item.nome}" não foi encontrado no catálogo da organização.`);
 			}
@@ -264,7 +287,7 @@ export async function computeSaleItemsPricingDrift({
 	canal?: TSalesChannelTypeEnum;
 	tx?: DB | DBTransaction;
 }): Promise<TSalePricingDrift> {
-	const { productPriceMap, variantMap, optionPriceMap } = await loadCatalogPrices({
+	const catalog = await loadCatalogPrices({
 		orgId,
 		canal,
 		tx,
@@ -272,18 +295,20 @@ export async function computeSaleItemsPricingDrift({
 		variantIds: [...new Set(itens.map((item) => item.produtoVarianteId).filter((id): id is string => !!id))],
 		optionIds: [...new Set(itens.flatMap((item) => item.modificadores.map((mod) => mod.opcaoId).filter((id): id is string => !!id)))],
 	});
+	const { productPriceMap, variantMap } = catalog;
 
 	const linhas = itens.map((item): TSaleItemPricingDrift => {
 		const precoProduto = productPriceMap.get(item.produtoId);
 		const variante = item.produtoVarianteId ? variantMap.get(item.produtoVarianteId) : null;
 		const varianteInvalida = !!item.produtoVarianteId && (!variante || variante.produtoId !== item.produtoId);
-		const modificadoresAtuais = resolveCurrentModifierPrices(item.modificadores, optionPriceMap);
-		const modificadoresDivergem = modifierPricesDiverge(item.modificadores, optionPriceMap);
+		const modifierPrices = resolveItemModifierPrices(item.modificadores, catalog);
+		const modificadoresAtuais = resolveCurrentModifierPrices(item.modificadores, modifierPrices);
+		const modificadoresDivergem = modifierPricesDiverge(item.modificadores, modifierPrices);
 
 		let modificadoresIndisponivel = false;
 		let valorModificadores = 0;
 		for (const mod of item.modificadores) {
-			const precoDelta = mod.opcaoId ? optionPriceMap.get(mod.opcaoId) : undefined;
+			const precoDelta = mod.opcaoId ? modifierPrices.get(mod.opcaoId) : undefined;
 			if (precoDelta === undefined) {
 				modificadoresIndisponivel = true;
 				break;

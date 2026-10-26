@@ -78,7 +78,7 @@
 		"test:campaign-dispatch": "node --import tsx --test lib/campaigns/dispatch/schedule.test.ts lib/campaigns/dispatch/interruption-policy.test.ts",
 		"test:geo": "node --import tsx --test lib/geo/brazilian-locations.test.ts lib/geo/address-parsing.test.ts lib/geo/viacep.test.ts",
 		"test:sales-channels": "node --import tsx --test lib/products/sales-channels.test.ts",
-		"test:tab-ordering": "node --import tsx --test lib/products/resolve-catalog-order-item.test.ts lib/products/add-on-rules.test.ts",
+		"test:tab-ordering": "node --import tsx --test lib/products/resolve-catalog-order-item.test.ts lib/products/add-on-rules.test.ts lib/products/add-on-pricing.test.ts",
 		"test:service-cards": "node --import tsx --test lib/tabs/service-card-codes.test.ts lib/tabs/service-card-print-layout.test.ts",
 		"test:tab-payments": "node --import tsx --test lib/tabs/partial-payments.test.ts",
 		"test:sales-sessions": "node --import tsx --test lib/sales-sessions/cash-refund-session-policy.test.ts lib/sales-sessions/seller-policy.test.ts lib/sales-sessions/session-method-lines.test.ts lib/sales-sessions/summarize-session-transactions.test.ts",

@@ -44,6 +44,7 @@ export default function ControlProductAddOn({ productAddOnId, orgHasERPAccess = 
 				internoNome: productAddOn.internoNome ?? "",
 				minOpcoes: productAddOn.minOpcoes ?? 0,
 				maxOpcoes: productAddOn.maxOpcoes ?? 1,
+				regraPreco: productAddOn.regraPreco,
 				ativo: productAddOn.ativo ?? true,
 				opcoes: productAddOn.opcoes.map((opcao) => ({
 					id: opcao.id,

@@ -820,6 +820,14 @@ export type TServicePointTypeEnum = z.infer<typeof ServicePointTypeEnum>;
 // Espelha o pgEnum productStockDeductionModeEnum.
 export const ProductStockDeductionModeEnum = z.enum(["ESTOQUE_PROPRIO", "COMPOSICAO"]);
 export type TProductStockDeductionModeEnum = z.infer<typeof ProductStockDeductionModeEnum>;
+// Espelha o pgEnum productAddOnPricingRuleEnum. SOMA: cada opção soma o próprio preço (padrão).
+// MAIOR: o grupo cobra só a opção mais cara (pizza de 2 sabores pelo maior valor). MEDIA: cobra a
+// média ponderada pelas quantidades.
+export const ProductAddOnPricingRuleEnum = z.enum(["SOMA", "MAIOR", "MEDIA"], {
+	required_error: "Regra de preço do adicional não informada.",
+	invalid_type_error: "Tipo não válido para regra de preço do adicional.",
+});
+export type TProductAddOnPricingRuleEnum = z.infer<typeof ProductAddOnPricingRuleEnum>;
 export const ProductContentUnitEnum = z.enum(["ML", "L", "G", "KG", "UN", "COMPRIMIDO", "CAPSULA", "METRO"], {
 	required_error: "Unidade do conteúdo não informada.",
 	invalid_type_error: "Tipo não válido para unidade do conteúdo.",

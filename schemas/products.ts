@@ -1,6 +1,12 @@
 import { z } from "zod";
 import { normalizeProductBarcode } from "@/lib/products/barcode";
-import { ProductContentUnitEnum, ProductStockDeductionModeEnum, StockMovementTypeEnum, VariantOptionTypeEnum } from "./enums";
+import {
+	ProductAddOnPricingRuleEnum,
+	ProductContentUnitEnum,
+	ProductStockDeductionModeEnum,
+	StockMovementTypeEnum,
+	VariantOptionTypeEnum,
+} from "./enums";
 
 // Código de barras opcional: GTIN/EAN ou código interno imprimível em Code 128; vazio vira null.
 // Opcional SEM default: payload sem o campo não altera o valor persistido.
@@ -292,6 +298,8 @@ export const ProductAddOnSchema = z.object({
 		required_error: "Quantidade máxima de opções não informada.",
 		invalid_type_error: "Tipo não válido para quantidade máxima de opções.",
 	}),
+	// Opcional: os fluxos que não conhecem a regra (página do produto, variantes) nunca a sobrescrevem.
+	regraPreco: ProductAddOnPricingRuleEnum.optional(),
 	ativo: z
 		.boolean({
 			required_error: "Status do adicional não informado.",

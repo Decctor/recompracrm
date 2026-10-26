@@ -2,6 +2,7 @@ import { relations, sql } from "drizzle-orm";
 import { boolean, doublePrecision, index, integer, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/pg-core";
 import { newTable } from "./common";
 import {
+	productAddOnPricingRuleEnum,
 	productClientReferenceWindowEnum,
 	productContentUnitEnum,
 	productStockDeductionModeEnum,
@@ -299,6 +300,9 @@ export const productAddOns = newTable("product_add_ons", {
 	// Logic Rules
 	minOpcoes: integer("min_opcoes").default(0).notNull(), // 0 = Optional
 	maxOpcoes: integer("max_opcoes").default(1).notNull(), // 1 = Radio, >1 = Checkbox
+	// SOMA = cada opção soma o próprio preço; MAIOR/MEDIA = o grupo cobra a mais cara / a média
+	// (sabores de pizza). Resolvido em lib/products/add-on-pricing.ts por todos os precificadores.
+	regraPreco: productAddOnPricingRuleEnum("regra_preco").default("SOMA").notNull(),
 
 	ativo: boolean("ativo").default(true),
 });

@@ -12,6 +12,7 @@ function toTerminalAddOnGroups(references: TTerminalAddOnReference[]) {
 		nome: grupo.nome,
 		minOpcoes: grupo.minOpcoes,
 		maxOpcoes: grupo.maxOpcoes,
+		regraPreco: grupo.regraPreco,
 		opcoes: grupo.opcoes.map((opcao) => ({ id: opcao.id, nome: opcao.nome, precoDelta: opcao.precoDelta, maxQtdePorItem: opcao.maxQtdePorItem })),
 	}));
 }

@@ -1,4 +1,5 @@
 import { normalizeCouponGiftItem } from "@/lib/coupons/gift-pricing";
+import { resolveSelectedAddOnPrices } from "@/lib/products/add-on-pricing";
 import type { TCouponGiftSelection } from "@/schemas/coupons";
 import type { TShopCatalogProduct } from "@/lib/shop/catalog";
 import type { TShopCartItem } from "@/schemas/shop";
@@ -36,20 +37,24 @@ export function buildShopCartLines(items: TShopCartItem[], products: TShopCatalo
 		const variant = item.produtoVarianteId ? (product.variantes.find((candidate) => candidate.id === item.produtoVarianteId) ?? null) : null;
 		const unitPrice = variant?.precoVenda ?? product.precoVenda ?? 0;
 
+		const references = [...product.addOnsReferencias, ...(variant?.addOnsReferencias ?? [])];
 		const optionsById = new Map<string, { nome: string; precoDelta: number }>();
-		for (const reference of [...product.addOnsReferencias, ...(variant?.addOnsReferencias ?? [])]) {
+		for (const reference of references) {
 			for (const option of reference.grupo.opcoes) {
 				if (!optionsById.has(option.id)) optionsById.set(option.id, { nome: option.nome, precoDelta: option.precoDelta });
 			}
 		}
+		// Preço efetivo com a regra do grupo: no meio a meio pelo maior valor o sabor mais barato sai a 0.
+		const unitPrices = resolveSelectedAddOnPrices(references, item.modificadores);
 
 		const modifiersDetails: TShopCartLineModifier[] = [];
 		let modifiersPrice = 0;
 		for (const modifier of item.modificadores) {
 			const option = optionsById.get(modifier.opcaoId);
 			if (!option) continue;
-			modifiersDetails.push({ nome: option.nome, quantidade: modifier.quantidade, precoDelta: option.precoDelta });
-			modifiersPrice += option.precoDelta * modifier.quantidade;
+			const precoDelta = unitPrices.get(modifier.opcaoId) ?? option.precoDelta;
+			modifiersDetails.push({ nome: option.nome, quantidade: modifier.quantidade, precoDelta });
+			modifiersPrice += precoDelta * modifier.quantidade;
 		}
 
 		const unitFinal = unitPrice + modifiersPrice;
@@ -65,7 +70,10 @@ export function buildShopCartLines(items: TShopCartItem[], products: TShopCatalo
 			modifiersPrice,
 			modifiersDetails,
 			unitFinal,
-			lineTotal: normalizeCouponGiftItem({ chave: item.tempId, valorTotalBruto: unitFinal * item.quantidade, valorTotalLiquido: unitFinal * item.quantidade }, brinde).valorTotalBruto,
+			lineTotal: normalizeCouponGiftItem(
+				{ chave: item.tempId, valorTotalBruto: unitFinal * item.quantidade, valorTotalLiquido: unitFinal * item.quantidade },
+				brinde,
+			).valorTotalBruto,
 			displayName: variant ? `${product.nome} - ${variant.nome}` : product.nome,
 			imageUrl: variant?.imagemCapaUrl ?? product.imagemCapaUrl ?? null,
 		});

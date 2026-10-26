@@ -2,7 +2,9 @@ import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { Textarea } from "@/components/ui/textarea";
 import { formatToMoney, normalizeForSearch } from "@/lib/formatting";
+import { describeAddOnPricingRule, resolveSelectedAddOnPrices } from "@/lib/products/add-on-pricing";
 import { cn } from "@/lib/utils";
+import type { TProductAddOnPricingRuleEnum } from "@/schemas/enums";
 import { Check, Minus, Plus, Search, X } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useDeferredValue, useEffect, useId, useMemo, useState } from "react";
@@ -22,7 +24,15 @@ const ADD_ON_SEARCH_THRESHOLD = 8;
 export type TBuilderAddOnOption = { id: string; nome: string; precoDelta: number; maxQtdePorItem?: number | null };
 export type TBuilderAddOnReference = {
 	produtoAddOnId: string;
-	grupo: { id: string; nome: string; minOpcoes: number; maxOpcoes: number; opcoes: TBuilderAddOnOption[] };
+	grupo: {
+		id: string;
+		nome: string;
+		minOpcoes: number;
+		maxOpcoes: number;
+		// Ausente = SOMA. MAIOR/MEDIA: o grupo cobra a opção mais cara / a média (sabores de pizza).
+		regraPreco?: TProductAddOnPricingRuleEnum | null;
+		opcoes: TBuilderAddOnOption[];
+	};
 };
 export type TBuilderVariant = {
 	id: string;
@@ -120,14 +130,21 @@ export function useProductBuilder({ product, initialVariantId = null }: { produc
 
 	const basePrice = selectedVariant?.precoVenda ?? product.precoVenda ?? 0;
 
+	// Preço efetivo por opção com a regra do grupo (no meio a meio pelo maior valor, o sabor mais
+	// barato sai a 0). É a mesma conta que o servidor refaz na validação da venda.
+	const modifierUnitPrices = useMemo(
+		() => resolveSelectedAddOnPrices(availableReferences, selectedModifiers),
+		[availableReferences, selectedModifiers],
+	);
+
 	const modifiersTotal = useMemo(() => {
 		let total = 0;
 		for (const selected of selectedModifiers) {
 			const option = optionIndex.get(selected.opcaoId)?.option;
-			if (option) total += option.precoDelta * selected.quantidade;
+			if (option) total += (modifierUnitPrices.get(selected.opcaoId) ?? option.precoDelta) * selected.quantidade;
 		}
 		return total;
-	}, [selectedModifiers, optionIndex]);
+	}, [selectedModifiers, optionIndex, modifierUnitPrices]);
 
 	const unitFinal = basePrice + modifiersTotal;
 	const finalPrice = unitFinal * quantity;
@@ -187,12 +204,13 @@ export function useProductBuilder({ product, initialVariantId = null }: { produc
 		for (const selected of selectedModifiers) {
 			const option = optionIndex.get(selected.opcaoId)?.option;
 			if (option) {
+				const valorUnitario = modifierUnitPrices.get(option.id) ?? option.precoDelta;
 				modifiers.push({
 					opcaoId: option.id,
 					nome: option.nome,
 					quantidade: selected.quantidade,
-					valorUnitario: option.precoDelta,
-					valorTotal: option.precoDelta * selected.quantidade,
+					valorUnitario,
+					valorTotal: valorUnitario * selected.quantidade,
 				});
 			}
 		}
@@ -219,6 +237,7 @@ export function useProductBuilder({ product, initialVariantId = null }: { produc
 		blockReason,
 		selectedModifiers,
 		optionIndex,
+		modifierUnitPrices,
 		selectedVariant,
 		selectedVariantId,
 		product,
@@ -411,7 +430,9 @@ export function ProductBuilderForm({ product, builder, showFooter = true, showIm
 						const isSatisfied = selectedCount >= grupo.minOpcoes;
 						const groupFull = hasMax && selectedCount >= grupo.maxOpcoes;
 
-						const hint = isSingle ? "Escolha 1" : hasMax ? `Escolha até ${grupo.maxOpcoes}` : "Quantas quiser";
+						const pickHint = isSingle ? "Escolha 1" : hasMax ? `Escolha até ${grupo.maxOpcoes}` : "Quantas quiser";
+						const pricingHint = describeAddOnPricingRule(grupo.regraPreco);
+						const hint = pricingHint && !isSingle ? `${pickHint} · ${pricingHint}` : pickHint;
 
 						return (
 							<section key={reference.produtoAddOnId} className={cn("flex flex-col gap-3 transition-opacity", isStale && "opacity-70")}>

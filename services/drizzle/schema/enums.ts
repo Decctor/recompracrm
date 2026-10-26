@@ -519,6 +519,8 @@ export const servicePointTypeEnum = pgEnum("service_point_type", ["MESA", "BALCA
 // ESTOQUE_PROPRIO — baixa o saldo do proprio produto/variante (comportamento atual);
 // COMPOSICAO — explode a ficha tecnica e baixa os insumos (pratos, drinks, lanches).
 export const productStockDeductionModeEnum = pgEnum("product_stock_deduction_mode", ["ESTOQUE_PROPRIO", "COMPOSICAO"]);
+// Como um grupo de adicionais cobra as opções escolhidas (lib/products/add-on-pricing.ts).
+export const productAddOnPricingRuleEnum = pgEnum("product_add_on_pricing_rule", ["SOMA", "MAIOR", "MEDIA"]);
 // Unidade do conteúdo da embalagem ("200 ml", "10 comprimidos"), base do preço por unidade de medida
 // nas etiquetas. Diferente de `products.unidade` (unidade comercial de venda: UN, CX, KG…).
 export const productContentUnitEnum = pgEnum("product_content_unit", ["ML", "L", "G", "KG", "UN", "COMPRIMIDO", "CAPSULA", "METRO"]);

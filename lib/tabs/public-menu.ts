@@ -1,3 +1,4 @@
+import type { TProductAddOnPricingRuleEnum } from "@/schemas/enums";
 import { projectAddOnReferencesToChannel } from "@/lib/products/sales-channels";
 import { channelNodePrice, channelProductFilter, loadChannelState } from "@/lib/products/sales-channels-store";
 import { db } from "@/services/drizzle";
@@ -14,6 +15,7 @@ type TLoadedReference = {
 		nome: string;
 		minOpcoes: number;
 		maxOpcoes: number;
+		regraPreco: TProductAddOnPricingRuleEnum;
 		ativo: boolean | null;
 		opcoes: {
 			id: string;
@@ -40,6 +42,7 @@ function toPublicReference(reference: TLoadedReference) {
 			nome: reference.grupo.nome,
 			minOpcoes: reference.grupo.minOpcoes,
 			maxOpcoes: reference.grupo.maxOpcoes,
+			regraPreco: reference.grupo.regraPreco,
 			opcoes: reference.grupo.opcoes.map((option) => ({
 				id: option.id,
 				nome: option.nome,
@@ -98,7 +101,7 @@ export async function getTabMenuProducts({ orgId, productIds }: { orgId: string;
 						orderBy: (fields, { asc }) => asc(fields.ordem),
 						with: {
 							grupo: {
-								columns: { id: true, nome: true, minOpcoes: true, maxOpcoes: true, ativo: true },
+								columns: { id: true, nome: true, minOpcoes: true, maxOpcoes: true, regraPreco: true, ativo: true },
 								with: {
 									opcoes: {
 										where: (fields, { eq: eqOp }) => eqOp(fields.ativo, true),
@@ -123,7 +126,7 @@ export async function getTabMenuProducts({ orgId, productIds }: { orgId: string;
 				orderBy: (fields, { asc }) => asc(fields.ordem),
 				with: {
 					grupo: {
-						columns: { id: true, nome: true, minOpcoes: true, maxOpcoes: true, ativo: true },
+						columns: { id: true, nome: true, minOpcoes: true, maxOpcoes: true, regraPreco: true, ativo: true },
 						with: {
 							opcoes: {
 								where: (fields, { eq: eqOp }) => eqOp(fields.ativo, true),

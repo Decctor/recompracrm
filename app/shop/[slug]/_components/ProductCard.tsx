@@ -26,6 +26,10 @@ export default function ProductCard({ product, variant = "compact" }: ProductCar
 	const isComplex = hasVariants || hasAddOns;
 
 	const lowestPrice = hasVariants ? Math.min(...product.variantes.map((v) => v.precoVenda ?? 0)) : (product.precoVenda ?? 0);
+	// Escolha obrigatória que muda o preço (sabores de pizza por tamanho) também faz o preço "a partir de".
+	const priceVaries =
+		hasVariants ||
+		product.addOnsReferencias.some((reference) => reference.grupo.minOpcoes > 0 && reference.grupo.opcoes.some((option) => option.precoDelta !== 0));
 
 	const handleClick = () => {
 		if (!isOpen) {
@@ -88,7 +92,7 @@ export default function ProductCard({ product, variant = "compact" }: ProductCar
 
 					<div className="flex items-center justify-between gap-2 mt-2">
 						<span className="font-black text-primary">
-							{hasVariants && "a partir de "}
+							{priceVaries && "a partir de "}
 							{formatToMoney(lowestPrice)}
 						</span>
 						<Button
@@ -136,7 +140,7 @@ export default function ProductCard({ product, variant = "compact" }: ProductCar
 			<div className="p-2.5 flex flex-col gap-1">
 				<h3 className="font-semibold text-xs line-clamp-2 leading-tight">{product.nome}</h3>
 				<span className="font-black text-sm text-primary">
-					{hasVariants && "a partir de "}
+					{priceVaries && "a partir de "}
 					{formatToMoney(lowestPrice)}
 				</span>
 			</div>

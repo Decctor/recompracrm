@@ -1,4 +1,6 @@
 import createHttpError from "http-errors";
+import type { TProductAddOnPricingRuleEnum } from "@/schemas/enums";
+import { resolveSelectedAddOnPrices } from "./add-on-pricing";
 
 // ============================================================================
 // Monta um item de pedido a partir de um produto DE CATÁLOGO já projetado para o canal
@@ -22,7 +24,10 @@ export type TCatalogOrderItemOption = {
 
 export type TCatalogOrderItemReference = {
 	grupo: {
+		id?: string;
 		nome: string;
+		// Ausente = SOMA (catálogos montados antes da regra existir).
+		regraPreco?: TProductAddOnPricingRuleEnum | null;
 		minOpcoes: number;
 		maxOpcoes: number;
 		opcoes: TCatalogOrderItemOption[];
@@ -142,17 +147,24 @@ export function resolveCatalogOrderItem({
 		}
 	}
 
+	// Preço por opção com a regra do grupo (SOMA, MAIOR, MEDIA) — ver ./add-on-pricing.ts.
+	const unitPrices = resolveSelectedAddOnPrices(
+		references,
+		[...requestedByOption].map(([opcaoId, quantidade]) => ({ opcaoId, quantidade })),
+	);
+
 	const modificadores: TResolvedCatalogOrderItemModifier[] = [];
 	for (const [opcaoId, requested] of requestedByOption) {
 		// Opção fora dos grupos do produto (ou pausada no canal — já saiu da projeção): recusa.
 		const option = optionMap.get(opcaoId);
 		if (!option) throw new createHttpError.BadRequest(`Um adicional de "${product.nome}" não está disponível.`);
+		const valorUnitario = unitPrices.get(opcaoId) ?? option.precoDelta;
 		modificadores.push({
 			opcaoId: option.id,
 			nome: option.nome,
 			quantidade: requested,
-			valorUnitario: option.precoDelta,
-			valorTotal: option.precoDelta * requested,
+			valorUnitario,
+			valorTotal: valorUnitario * requested,
 		});
 	}
 

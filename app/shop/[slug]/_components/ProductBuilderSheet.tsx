@@ -4,6 +4,7 @@ import { useOrgColors } from "@/components/Providers/OrgColorsProvider";
 import { Button } from "@/components/ui/button";
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { formatToMoney } from "@/lib/formatting";
+import { describeAddOnPricingRule, resolveSelectedAddOnPrices } from "@/lib/products/add-on-pricing";
 import { notifyItemAddedToCart } from "@/lib/shop/cart-toast";
 import type { TShopCatalogProduct } from "@/lib/shop/catalog";
 import { cn } from "@/lib/utils";
@@ -59,17 +60,10 @@ export default function ProductBuilderSheet({ product, editItem = null, onClose 
 		return product.precoVenda ?? 0;
 	};
 
+	// Regra de preço do grupo (pizza meio a meio pelo maior valor): mesma conta do carrinho e do servidor.
 	const getModifiersTotal = () => {
-		let total = 0;
-		for (const selected of selectedModifiers) {
-			for (const reference of availableReferences) {
-				const option = reference.grupo.opcoes.find((o) => o.id === selected.opcaoId);
-				if (option) {
-					total += option.precoDelta * selected.quantidade;
-				}
-			}
-		}
-		return total;
+		const unitPrices = resolveSelectedAddOnPrices(availableReferences, selectedModifiers);
+		return selectedModifiers.reduce((total, selected) => total + (unitPrices.get(selected.opcaoId) ?? 0) * selected.quantidade, 0);
 	};
 
 	const getFinalPrice = () => {
@@ -231,7 +225,9 @@ export default function ProductBuilderSheet({ product, editItem = null, onClose 
 								const isSatisfied = selectedCount >= grupo.minOpcoes;
 								const groupFull = grupo.maxOpcoes >= 1 && selectedCount >= grupo.maxOpcoes;
 
-								const hint = isSingle ? "Escolha 1" : grupo.maxOpcoes > 1 ? `Escolha até ${grupo.maxOpcoes}` : "Quantas quiser";
+								const pickHint = isSingle ? "Escolha 1" : grupo.maxOpcoes > 1 ? `Escolha até ${grupo.maxOpcoes}` : "Quantas quiser";
+								const pricingHint = describeAddOnPricingRule(grupo.regraPreco);
+								const hint = pricingHint && !isSingle ? `${pickHint} · ${pricingHint}` : pickHint;
 
 								return (
 									<section key={reference.produtoAddOnId} className="flex flex-col gap-3">

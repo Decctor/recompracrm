@@ -225,3 +225,49 @@ test("quantidades inválidas são recusadas", () => {
 		/Quantidade inválida em um adicional/,
 	);
 });
+
+test("pizza meio a meio com regra MAIOR: cobra o sabor mais caro, borda soma por cima", () => {
+	const pizza: TCatalogOrderItemProduct = {
+		id: "pizza-g",
+		nome: "Pizza Grande",
+		precoVenda: 77,
+		variantes: [],
+		addOnsReferencias: [
+			{
+				grupo: {
+					id: "sabores-g",
+					nome: "Sabores",
+					regraPreco: "MAIOR",
+					minOpcoes: 1,
+					maxOpcoes: 2,
+					opcoes: [
+						{ id: "calabresa", nome: "Calabresa", precoDelta: 8, maxQtdePorItem: 1 },
+						{ id: "camarao", nome: "Camarão", precoDelta: 53, maxQtdePorItem: 1 },
+					],
+				},
+			},
+			{ grupo: { id: "borda", nome: "Borda", minOpcoes: 0, maxOpcoes: 1, opcoes: [{ id: "catupiry", nome: "Catupiry", precoDelta: 20 }] } },
+		],
+	};
+	const item = resolveCatalogOrderItem({
+		product: pizza,
+		variantId: null,
+		quantity: 1,
+		modifiers: [
+			{ opcaoId: "calabresa", quantidade: 1 },
+			{ opcaoId: "camarao", quantidade: 1 },
+			{ opcaoId: "catupiry", quantidade: 1 },
+		],
+	});
+	assert.equal(item.valorUnitarioFinal, 77 + 53 + 20);
+	assert.deepEqual(
+		item.modificadores.map((modifier) => [modifier.opcaoId, modifier.valorUnitario, modifier.valorTotal]),
+		[
+			["calabresa", 0, 0],
+			["camarao", 53, 53],
+			["catupiry", 20, 20],
+		],
+	);
+	const inteira = resolveCatalogOrderItem({ product: pizza, variantId: null, quantity: 1, modifiers: [{ opcaoId: "calabresa", quantidade: 1 }] });
+	assert.equal(inteira.valorUnitarioFinal, 85);
+});

@@ -1096,6 +1096,7 @@ export function useProductAddOnState({ initialState }: UseProductAddOnStateProps
 			internoNome: initialState?.internoNome ?? "",
 			minOpcoes: initialState?.minOpcoes ?? 0,
 			maxOpcoes: initialState?.maxOpcoes ?? 1,
+			regraPreco: initialState?.regraPreco ?? "SOMA",
 			ativo: initialState?.ativo ?? true,
 			opcoes: initialState?.opcoes ?? [],
 			deletar: initialState?.deletar,

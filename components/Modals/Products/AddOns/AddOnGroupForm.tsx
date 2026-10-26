@@ -2,10 +2,13 @@
 
 import CheckboxInput from "@/components/Inputs/CheckboxInput";
 import NumberInput from "@/components/Inputs/NumberInput";
+import SelectInput from "@/components/Inputs/SelectInput";
 import TextInput from "@/components/Inputs/TextInput";
 import { AddOnOptionTable } from "@/components/Modals/Products/Blocks/AddOns";
 import ResponsiveMenuSection from "@/components/Utils/ResponsiveMenuSection";
+import { ADD_ON_PRICING_RULE_LABELS } from "@/lib/products/add-on-pricing";
 import type { SpreadsheetGridBounds } from "@/lib/spreadsheet-navigation";
+import { ProductAddOnPricingRuleEnum } from "@/schemas/enums";
 import type { TUseProductAddOnState } from "@/state-hooks/use-product-state";
 import { Layers, ListPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -102,6 +105,17 @@ export default function AddOnGroupForm({ state, updateAddOn, addOption, updateOp
 								handleChange={(maxOpcoes) => updateAddOn({ maxOpcoes: Math.max(1, Math.round(maxOpcoes)) })}
 							/>
 						</div>
+					</div>
+					<div className="flex w-full flex-col gap-1">
+						<SelectInput
+							label="COBRANÇA DAS OPÇÕES"
+							value={state.regraPreco ?? "SOMA"}
+							options={ProductAddOnPricingRuleEnum.options.map((rule) => ({ id: rule, label: ADD_ON_PRICING_RULE_LABELS[rule].label, value: rule }))}
+							handleChange={(regraPreco) => updateAddOn({ regraPreco: ProductAddOnPricingRuleEnum.parse(regraPreco) })}
+							onReset={() => updateAddOn({ regraPreco: "SOMA" })}
+							resetOptionLabel="SOMAR OPÇÕES"
+						/>
+						<p className="text-xs text-muted-foreground">{ADD_ON_PRICING_RULE_LABELS[state.regraPreco ?? "SOMA"].description}</p>
 					</div>
 					<CheckboxInput labelTrue="GRUPO ATIVO" labelFalse="GRUPO INATIVO" checked={state.ativo} handleChange={(ativo) => updateAddOn({ ativo })} />
 				</div>
