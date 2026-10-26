@@ -16,7 +16,7 @@ Planos: dois caminhos com a mesma plataforma completa. **Plataforma** (self-serv
 
 - [Página inicial](https://www.recompracrm.com.br): visão geral do produto, como funciona, planos e resultados.
 - [Preços (machine-readable)](https://www.recompracrm.com.br/pricing.md): detalhamento dos planos, valores e inclusos.
-- [Segmentos](https://www.recompracrm.com.br/segmentos): programa de fidelidade aplicado a cada tipo de loja — restaurantes, delivery, pet shops, farmácias, moda e mais de 20 segmentos, com configuração sugerida de cashback por segmento.
+- [Segmentos](https://www.recompracrm.com.br/segments): programa de fidelidade aplicado a cada tipo de loja — restaurantes, delivery, pet shops, farmácias, moda e mais de 20 segmentos, com configuração sugerida de cashback por segmento.
 - [Blog](https://www.recompracrm.com.br/blog): artigos sobre fidelização, cashback e retenção no varejo.
 
 ## Funcionalidades

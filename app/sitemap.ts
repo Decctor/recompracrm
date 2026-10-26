@@ -3,6 +3,7 @@ import { FEATURE_PAGES } from "@/app/_content/feature-pages";
 import { INTEGRATION_PAGES } from "@/app/_content/integration-pages";
 import { SEGMENT_PAGES } from "@/app/_content/segment-pages";
 import { HELP_ARTICLES } from "@/app/_content/help-articles";
+import { LANDING_CASES } from "@/app/_content/cases";
 import { db } from "@/services/drizzle";
 import type { MetadataRoute } from "next";
 
@@ -34,9 +35,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 	];
 
 	const segmentRoutes: MetadataRoute.Sitemap = [
-		{ url: `${BASE_URL}/segmentos`, lastModified: new Date(), changeFrequency: "weekly", priority: 0.9 },
+		{ url: `${BASE_URL}/segments`, lastModified: new Date(), changeFrequency: "weekly", priority: 0.9 },
 		...SEGMENT_PAGES.map((page) => ({
-			url: `${BASE_URL}/segmentos/${page.slug}`,
+			url: `${BASE_URL}/segments/${page.slug}`,
 			lastModified: new Date(page.updatedAt),
 			changeFrequency: "monthly" as const,
 			priority: 0.85,
@@ -61,17 +62,33 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 	];
 
 	const helpRoutes: MetadataRoute.Sitemap = [
-		{ url: `${BASE_URL}/ajuda`, lastModified: new Date(), changeFrequency: "weekly", priority: 0.8 },
+		{ url: `${BASE_URL}/help`, lastModified: new Date(), changeFrequency: "weekly", priority: 0.8 },
 		...HELP_ARTICLES.map((article) => ({
-			url: `${BASE_URL}/ajuda/${article.slug}`,
+			url: `${BASE_URL}/help/${article.slug}`,
 			lastModified: new Date(article.updatedAt),
 			changeFrequency: "monthly" as const,
 			priority: 0.75,
 		})),
 	];
 
+	const caseRoutes: MetadataRoute.Sitemap = [
+		{ url: `${BASE_URL}/cases`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.85 },
+		...LANDING_CASES.map((item) => ({
+			url: `${BASE_URL}/cases/${item.id}`,
+			lastModified: new Date(),
+			changeFrequency: "monthly" as const,
+			priority: 0.8,
+		})),
+	];
+
+	const toolRoutes: MetadataRoute.Sitemap = [
+		{ url: `${BASE_URL}/tools/cashback-calculator`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.85 },
+		{ url: `${BASE_URL}/tools/whatsapp-cost`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.85 },
+	];
+
 	const staticRoutes: MetadataRoute.Sitemap = [
 		{ url: BASE_URL, lastModified: new Date(), changeFrequency: "weekly", priority: 1 },
+		{ url: `${BASE_URL}/erp`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.95 },
 		{ url: `${BASE_URL}/presentation`, lastModified: new Date(), changeFrequency: "monthly", priority: 1 },
 		{ url: `${BASE_URL}/community`, lastModified: new Date(), changeFrequency: "weekly", priority: 0.9 },
 		{ url: `${BASE_URL}/community/courses`, lastModified: new Date(), changeFrequency: "weekly", priority: 0.8 },
@@ -107,6 +124,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 		...featureRoutes,
 		...integrationRoutes,
 		...helpRoutes,
+		...caseRoutes,
+		...toolRoutes,
 		...staticRoutes,
 		...courseRoutes,
 		...ebookRoutes,

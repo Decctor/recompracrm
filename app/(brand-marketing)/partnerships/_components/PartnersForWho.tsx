@@ -1,6 +1,5 @@
 import { Briefcase, Calculator, Megaphone, Users } from "lucide-react";
-import { Reveal } from "@/app/_components/ledger/_primitives/Reveal";
-import { SectionEyebrow } from "./SectionEyebrow";
+import { SectionHeading } from "./SectionHeading";
 
 const PROFILES = [
 	{
@@ -27,45 +26,31 @@ const PROFILES = [
 
 export function PartnersForWho() {
 	return (
-		<section className="ledger-canvas-soft relative py-20 lg:py-28">
-			<div className="mx-auto max-w-7xl px-5 lg:px-8">
-				<div className="grid gap-12 lg:grid-cols-[0.82fr_1.18fr] lg:gap-16">
-					<Reveal>
-						<SectionEyebrow index="04" label="Para quem é" />
-						<h2 className="font-extrabold text-[#171717] tracking-[-0.02em] leading-[1.05] text-[32px] sm:text-[42px] lg:text-[52px]">
-							<span className="block ledger-write" style={{ "--i": 1 } as React.CSSProperties} data-stagger>
-								Feito pra quem
-							</span>
-							<span className="block ledger-fade text-[#24549c]" style={{ "--i": 3 } as React.CSSProperties} data-stagger>
-								já vive de varejo.
-							</span>
-						</h2>
-						<p
-							className="ledger-fade mt-5 max-w-[42ch] text-[16px] leading-[1.6] text-[#171717]/65"
-							style={{ "--i": 5 } as React.CSSProperties}
-							data-stagger
-						>
-							Se a sua relação com o lojista já existe, o programa só transforma essa confiança em receita que se acumula.
-						</p>
-					</Reveal>
-
-					<Reveal>
-						<ul className="divide-y divide-[#e5e5e5] border-y border-[#e5e5e5]">
-							{PROFILES.map((profile, index) => (
-								<li key={profile.title} className="ledger-fade flex items-start gap-5 py-6" style={{ "--i": index } as React.CSSProperties} data-stagger>
-									<span className="ledger-tabular w-8 shrink-0 pt-1 text-[13px] font-extrabold text-[#24549c]/45">{`0${index + 1}`}</span>
-									<span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-[#24549c] shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-										<profile.icon className="h-5 w-5" strokeWidth={2.5} />
-									</span>
-									<div>
-										<h3 className="text-[17px] font-extrabold text-[#171717]">{profile.title}</h3>
-										<p className="mt-1 max-w-[52ch] text-[14px] leading-[1.6] text-[#171717]/65">{profile.text}</p>
-									</div>
-								</li>
-							))}
-						</ul>
-					</Reveal>
+		<section id="para-quem" className="scroll-mt-[60px] py-36 max-md:py-24">
+			<div className="mx-auto grid max-w-[1240px] grid-cols-[repeat(auto-fit,minmax(min(100%,400px),1fr))] items-start gap-x-20 gap-y-12 px-6 max-md:gap-y-10 max-md:px-4">
+				<div>
+					<SectionHeading eyebrow="04 · Para quem é" title="Feito pra quem" muted="já vive de varejo." />
+					<p className="mt-5 max-w-[42ch] text-[17px] leading-[1.6] text-[#5b6a70] max-md:text-[16px]">
+						Se a sua relação com o lojista já existe, o programa só transforma essa confiança em receita que se acumula.
+					</p>
 				</div>
+				<ul className="border-b border-[#e3e8ea]">
+					{PROFILES.map((profile, index) => (
+						<li
+							key={profile.title}
+							className="grid grid-cols-[32px_44px_minmax(0,1fr)] items-start gap-4 border-t border-[#e3e8ea] py-6 max-[400px]:grid-cols-[44px_minmax(0,1fr)]"
+						>
+							<span className="pt-3 text-[13px] font-semibold text-[#8a979c] max-[400px]:hidden">{String(index + 1).padStart(2, "0")}</span>
+							<span className="flex size-11 items-center justify-center rounded-full bg-[#eef2f6] text-[#24549c]">
+								<profile.icon className="size-5" aria-hidden />
+							</span>
+							<div>
+								<h3 className="text-[19px] font-semibold tracking-[-0.015em]">{profile.title}</h3>
+								<p className="mt-1.5 max-w-[52ch] text-[15px] leading-[1.6] text-[#5b6a70]">{profile.text}</p>
+							</div>
+						</li>
+					))}
+				</ul>
 			</div>
 		</section>
 	);

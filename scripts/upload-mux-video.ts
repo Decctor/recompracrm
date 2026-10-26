@@ -4,8 +4,8 @@ import path from "node:path";
 import { muxVideo } from "../services/mux";
 
 // Sobe um vídeo local para o Mux (playback policy PUBLIC) e imprime as
-// informações necessárias para preencher um case da landing
-// (app/_components/ledger/cases/cases-data.ts).
+// informações necessárias para preencher um case
+// (app/_content/cases.ts).
 //
 // Uso: npx tsx ./scripts/upload-mux-video.ts <caminho-do-video>
 

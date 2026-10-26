@@ -24,4 +24,9 @@ export const RECURRING_MONTH_PAYOUT = COMMISSIONABLE_MONTHLY_BASE * (SUBSEQUENT_
 export const FIRST_YEAR_PAYOUT = FIRST_MONTH_PAYOUT + THIRD_MONTH_PAYOUT + RECURRING_MONTH_PAYOUT * 10;
 
 export const PARTNER_LOGIN_HREF = "/auth/signin?redirectTo=%2Fpartner-dashboard";
+export const PARTNER_CTA_EVENT = "partner_program_cta_clicked";
+
+export const CALCULATOR_MIN_STORES = 1;
+export const CALCULATOR_MAX_STORES = 30;
+export const CALCULATOR_DEFAULT_STORES = 5;
 export const PROGRAM_PAGE_HREF = "/programa-de-parceiros";

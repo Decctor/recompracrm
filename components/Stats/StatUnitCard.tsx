@@ -55,7 +55,8 @@ export default function StatUnitCard({
 		if (!previous) return 0;
 		if (previous.value === 0) {
 			if (current.value === 0) return 0;
-			return 100;
+			// Sem base: o sentido vem do sinal do valor atual (KPIs como caixa líquido podem ser negativos).
+			return Math.sign(current.value) * 100;
 		}
 		return ((current.value - previous.value) / Math.abs(previous.value)) * 100;
 	}

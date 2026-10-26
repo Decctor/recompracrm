@@ -1,18 +1,24 @@
 import { TAuthUserSession } from "@/lib/authentication/types";
-import { getDayStringsBetweenDates, isDateOverdue } from "@/lib/dates";
+import { isDateOverdue } from "@/lib/dates";
 import { canViewFinances } from "@/lib/permissions/finances";
 import { FINANCIAL_TRANSFER_METHOD, getAccountChartIdsByNatureza } from "@/lib/finances";
-import { getPreviousPeriod } from "@/lib/finances/analytics/periods";
+import { getPreviousPeriod, getTrailingMonthKeys, getTrailingMonthsRange } from "@/lib/finances/analytics/periods";
 import { db } from "@/services/drizzle";
 import { accountingEntries, accountingEntryLines, financialTransactions } from "@/services/drizzle/schema";
 import dayjs from "dayjs";
+import timezone from "dayjs/plugin/timezone";
+import utc from "dayjs/plugin/utc";
 import createHttpError from "http-errors";
 import z from "zod";
-import { and, eq, gte, lte, ne, sum } from "drizzle-orm";
+import { and, eq, gte, isNotNull, lte, ne, sql, sum } from "drizzle-orm";
 import { formatAsNumber } from "@/lib/formatting";
 import { appApiHandler } from "@/lib/app-api";
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { inOperationTimezone, OPERATION_TIMEZONE } from "@/lib/operation-timezone";
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 type TGeneralFinancesStatsReduced = {
 	totalPendingTransactions: {
@@ -27,10 +33,20 @@ type TGeneralFinancesStatsReduced = {
 		inflow: number;
 		outflow: number;
 	};
+	totalPendingTransactionsNext7Days: {
+		inflow: number;
+		outflow: number;
+	};
+	pendingOverdueCount: number;
 	daily: {
 		[key: string]: {
 			expected: number;
 			effective: number;
+			// Componentes brutos do líquido acima, para gráficos de entradas × saídas.
+			entradasEfetivadas: number;
+			saidasEfetivadas: number;
+			entradasPrevistas: number;
+			saidasPrevistas: number;
 		};
 	};
 };
@@ -64,9 +80,11 @@ async function getFinancesOverallStats({ input, session }: { input: TGetFinances
 	const userOrgId = session.membership?.organizacao.id;
 	if (!userOrgId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
 	const { periodAfter, periodBefore } = input;
-	const initialDate = dayjs(periodAfter).toISOString();
-	const endDate = dayjs(periodBefore).toISOString();
-	const datesStrs = getDayStringsBetweenDates({ initialDate, endDate });
+	// Dias no fuso da operação: o fim de um mês em São Paulo já é o dia 1º seguinte em UTC.
+	const datesStrs: string[] = [];
+	const lastDay = dayjs(periodBefore).tz(OPERATION_TIMEZONE).startOf("day");
+	for (let day = dayjs(periodAfter).tz(OPERATION_TIMEZONE).startOf("day"); !day.isAfter(lastDay); day = day.add(1, "day"))
+		datesStrs.push(day.format("DD/MM"));
 
 	// Agregação pelas linhas contábeis (conta + natureza), não pelo par legado do lançamento: partidas
 	// compostas atribuem cada valor à sua própria conta. Ver ADR-0001.
@@ -155,9 +173,7 @@ async function getFinancesOverallStats({ input, session }: { input: TGetFinances
 	const sumLineRows = (rows: Awaited<ReturnType<typeof groupedLinesForRange>>, accountIds: string[], side: "CREDITO" | "DEBITO") => {
 		if (accountIds.length === 0) return 0;
 		const accountIdSet = new Set(accountIds);
-		return rows
-			.filter((row) => row.natureza === side && accountIdSet.has(row.accountId))
-			.reduce((total, row) => total + formatAsNumber(row.total), 0);
+		return rows.filter((row) => row.natureza === side && accountIdSet.has(row.accountId)).reduce((total, row) => total + formatAsNumber(row.total), 0);
 	};
 
 	const currentRange = { after: periodAfter, before: periodBefore };
@@ -184,7 +200,7 @@ async function getFinancesOverallStats({ input, session }: { input: TGetFinances
 				lte(financialTransactions.dataEfetivacao, periodBefore),
 			),
 		);
-	const totalInFlow = totalInFlowResult[0]?.total || 0;
+	const totalInFlow = formatAsNumber(totalInFlowResult[0]?.total ?? 0);
 
 	const totalOutFlowResult = await db
 		.select({ total: sum(financialTransactions.valor) })
@@ -198,7 +214,41 @@ async function getFinancesOverallStats({ input, session }: { input: TGetFinances
 				lte(financialTransactions.dataEfetivacao, periodBefore),
 			),
 		);
-	const totalOutFlow = totalOutFlowResult[0]?.total || 0;
+	const totalOutFlow = formatAsNumber(totalOutFlowResult[0]?.total ?? 0);
+
+	// Fluxo efetivado do período anterior e série mensal de 12 meses (encerrando no mês final do período).
+	const monthKeys = getTrailingMonthKeys(periodBefore);
+	const monthsRange = getTrailingMonthsRange(periodBefore);
+	const signedFlowSums = {
+		entradas: sql<number>`COALESCE(SUM(CASE WHEN ${financialTransactions.tipo} = 'ENTRADA' THEN ${financialTransactions.valor} ELSE 0 END), 0)`,
+		saidas: sql<number>`COALESCE(SUM(CASE WHEN ${financialTransactions.tipo} = 'SAIDA' THEN ${financialTransactions.valor} ELSE 0 END), 0)`,
+	};
+	const effectiveFlowWhere = (range: { after: Date; before: Date }) =>
+		and(
+			eq(financialTransactions.organizacaoId, userOrgId),
+			ne(financialTransactions.metodo, FINANCIAL_TRANSFER_METHOD),
+			isNotNull(financialTransactions.dataEfetivacao),
+			gte(financialTransactions.dataEfetivacao, range.after),
+			lte(financialTransactions.dataEfetivacao, range.before),
+		);
+	const [previousFlowRows, monthlyFlowRows] = await Promise.all([
+		db.select(signedFlowSums).from(financialTransactions).where(effectiveFlowWhere(previousRange)),
+		db
+			.select({
+				mes: sql<string>`to_char(date_trunc('month', ${inOperationTimezone(financialTransactions.dataEfetivacao)}), 'YYYY-MM')`,
+				...signedFlowSums,
+			})
+			.from(financialTransactions)
+			.where(effectiveFlowWhere(monthsRange))
+			.groupBy(sql`date_trunc('month', ${inOperationTimezone(financialTransactions.dataEfetivacao)})`),
+	]);
+	const monthlyFlowsByKey = new Map(monthlyFlowRows.map((row) => [row.mes, row]));
+	const monthlyCashFlow = monthKeys.map((mes) => {
+		const row = monthlyFlowsByKey.get(mes);
+		const entradas = formatAsNumber(row?.entradas ?? 0);
+		const saidas = formatAsNumber(row?.saidas ?? 0);
+		return { mes, entradas, saidas, liquido: entradas - saidas };
+	});
 	const transactions = await db.query.financialTransactions.findMany({
 		where: (fields, { and, or, gte, lte, eq, ne, isNull }) =>
 			and(
@@ -227,8 +277,13 @@ async function getFinancesOverallStats({ input, session }: { input: TGetFinances
 			inflow: 0,
 			outflow: 0,
 		},
+		totalPendingTransactionsNext7Days: {
+			inflow: 0,
+			outflow: 0,
+		},
+		pendingOverdueCount: 0,
 		daily: datesStrs.reduce((acc: TGeneralFinancesStatsReduced["daily"], current) => {
-			acc[current] = { expected: 0, effective: 0 };
+			acc[current] = { expected: 0, effective: 0, entradasEfetivadas: 0, saidasEfetivadas: 0, entradasPrevistas: 0, saidasPrevistas: 0 };
 			return acc;
 		}, {}),
 	};
@@ -237,19 +292,32 @@ async function getFinancesOverallStats({ input, session }: { input: TGetFinances
 		const transactionType = current.tipo;
 		const transactionValue = current.valor;
 		const transactionExpectedDate = current.dataPrevisao;
-		const transactionExpectedDay = dayjs(transactionExpectedDate).format("DD/MM");
+		const transactionExpectedDay = dayjs(transactionExpectedDate).tz(OPERATION_TIMEZONE).format("DD/MM");
 		const transactionEffectiveDate = current.dataEfetivacao || null;
-		const transactionEffectiveDay = dayjs(transactionEffectiveDate).format("DD/MM");
+		const transactionEffectiveDay = dayjs(transactionEffectiveDate).tz(OPERATION_TIMEZONE).format("DD/MM");
 
 		if (transactionEffectiveDate) {
-			if (acc.daily[transactionEffectiveDay])
-				acc.daily[transactionEffectiveDay].effective += transactionType === "ENTRADA" ? +transactionValue : -transactionValue;
+			const effectiveDay = acc.daily[transactionEffectiveDay];
+			if (effectiveDay) {
+				effectiveDay.effective += transactionType === "ENTRADA" ? +transactionValue : -transactionValue;
+				if (transactionType === "ENTRADA") effectiveDay.entradasEfetivadas += transactionValue;
+				else effectiveDay.saidasEfetivadas += transactionValue;
+			}
 		} else {
 			// Defining flags based on the transaction date
-			const currentDateDayJs = dayjs();
+			const currentDateDayJs = dayjs().tz(OPERATION_TIMEZONE);
 			const transactionIsForToday = transactionExpectedDate && dayjs(transactionExpectedDate).isSame(new Date(), "day");
 			const transactionIsOverdue =
 				transactionExpectedDate && isDateOverdue({ date: transactionExpectedDate, inRelationTo: currentDateDayJs, useEndOfDay: true });
+			// Próximos 7 dias: de amanhã até daqui a 7 dias (hoje e vencidos têm as próprias linhas).
+			const daysUntilDue = transactionExpectedDate ? dayjs(transactionExpectedDate).startOf("day").diff(currentDateDayJs.startOf("day"), "day") : null;
+			const transactionIsNext7Days = daysUntilDue !== null && daysUntilDue >= 1 && daysUntilDue <= 7;
+			if (transactionIsOverdue) acc.pendingOverdueCount += 1;
+			const expectedDay = acc.daily[transactionExpectedDay];
+			if (expectedDay) {
+				if (transactionType === "ENTRADA") expectedDay.entradasPrevistas += transactionValue;
+				else expectedDay.saidasPrevistas += transactionValue;
+			}
 
 			if (transactionType === "ENTRADA") {
 				acc.totalPendingTransactions.inflow += transactionValue;
@@ -257,12 +325,14 @@ async function getFinancesOverallStats({ input, session }: { input: TGetFinances
 				if (acc.daily[transactionExpectedDay]) acc.daily[transactionExpectedDay].expected += +transactionValue;
 				if (transactionIsForToday) acc.totalPendingTransactionsForToday.inflow += transactionValue;
 				if (transactionIsOverdue) acc.totalPendingTransactionsOverdue.inflow += transactionValue;
+				if (transactionIsNext7Days) acc.totalPendingTransactionsNext7Days.inflow += transactionValue;
 			} else {
 				acc.totalPendingTransactions.outflow += transactionValue;
 				// Updating the daily holder
 				if (acc.daily[transactionExpectedDay]) acc.daily[transactionExpectedDay].expected += -transactionValue;
 				if (transactionIsForToday) acc.totalPendingTransactionsForToday.outflow += transactionValue;
 				if (transactionIsOverdue) acc.totalPendingTransactionsOverdue.outflow += transactionValue;
+				if (transactionIsNext7Days) acc.totalPendingTransactionsNext7Days.outflow += transactionValue;
 			}
 		}
 		return acc;
@@ -280,12 +350,17 @@ async function getFinancesOverallStats({ input, session }: { input: TGetFinances
 				totalRevenue: previousTotalRevenue,
 				totalExpense: previousTotalExpense,
 				totalCost: previousTotalCost,
+				totalInFlow: formatAsNumber(previousFlowRows[0]?.entradas ?? 0),
+				totalOutFlow: formatAsNumber(previousFlowRows[0]?.saidas ?? 0),
 			},
+			monthlyCashFlow,
 			totalInFlow,
 			totalOutFlow,
 			totalPendingTransactions: reduced.totalPendingTransactions,
 			totalPendingTransactionsForToday: reduced.totalPendingTransactionsForToday,
 			totalPendingTransactionsOverdue: reduced.totalPendingTransactionsOverdue,
+			totalPendingTransactionsNext7Days: reduced.totalPendingTransactionsNext7Days,
+			pendingOverdueCount: reduced.pendingOverdueCount,
 			daily: Object.entries(reduced.daily).map(([key, value]) => ({ day: key, ...value })),
 		},
 	};

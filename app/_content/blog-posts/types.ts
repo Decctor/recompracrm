@@ -1,4 +1,3 @@
-import type { TIsoCoverKey } from "@/components/Illustrations/Isometric/IsoCover";
 import type { TIsoIconKey } from "@/components/Illustrations/Isometric/IsoIcon";
 
 // Corpo dos artigos. Texto aceita **negrito**, [link](url), parágrafos separados por \n\n e
@@ -26,6 +25,14 @@ export const BLOG_CATEGORIES: { value: BlogCategory; label: string }[] = [
 	{ value: "dicas", label: "Dicas de gestão" },
 ];
 
+// Número da capa. `source` vazio = dado do próprio artigo (uma contagem, um prazo), não uma estatística
+// externa — nesse caso a capa diz "Dado do próprio artigo" em vez de inventar uma fonte.
+export type BlogCover = {
+	stat: string;
+	label: string;
+	source?: string;
+};
+
 export type BlogPost = {
 	slug: string;
 	title: string;
@@ -33,7 +40,9 @@ export type BlogPost = {
 	description: string; // meta description
 	category: BlogCategory;
 	categoryLabel: string;
-	cover: TIsoCoverKey; // ilustração isométrica da capa (também usada na imagem de compartilhamento)
+	// Capa de dados: o número-chave do artigo em destaque, com rótulo e fonte. A cor vem da categoria.
+	// Sem ela, a capa cai no tempo de leitura (ver `components/Content/DataCover.tsx`).
+	cover?: BlogCover;
 	author?: string; // autor exibido e usado no JSON-LD (default: "Equipe RecompraCRM")
 	publishedAt: string; // ISO date
 	updatedAt?: string; // ISO date — usado em dateModified do JSON-LD

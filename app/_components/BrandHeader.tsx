@@ -15,7 +15,7 @@ import { SiteHeader } from "./SiteHeader";
 export const BRAND_NAV_LINKS: Pick<NavLinkProps, "href" | "label">[] = [
 	{ href: "#como-funciona", label: "Como funciona" },
 	{ href: "#funcionalidades", label: "Funcionalidades" },
-	{ href: "/segmentos", label: "Segmentos" },
+	{ href: "/segments", label: "Segmentos" },
 	{ href: "/integrations", label: "Integrações" },
 	{ href: "/blog", label: "Blog" },
 	{ href: "/partnerships", label: "Parcerias" },

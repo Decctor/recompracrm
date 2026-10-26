@@ -1,4 +1,10 @@
 import dayjs from "dayjs";
+import timezone from "dayjs/plugin/timezone";
+import utc from "dayjs/plugin/utc";
+import { OPERATION_TIMEZONE } from "@/lib/operation-timezone";
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 /** Janela fixa de meses fechados usada para o burn médio; meses sem movimento contam como zero. */
 export const BURN_WINDOW_MONTHS = 3;
@@ -15,6 +21,33 @@ export function computeBurnAndRunway({ fluxosMensais, totalCaixa }: { fluxosMens
 	const queimaMensal = mediaLiquidaMensal < 0 ? -mediaLiquidaMensal : 0;
 	const mesesDeCaixa = queimaMensal > 0 && totalCaixa > 0 ? totalCaixa / queimaMensal : null;
 	return { mediaLiquidaMensal, queimaMensal, mesesDeCaixa };
+}
+
+/**
+ * Saldo de caixa consolidado em cada data de `dates`, reconstruído para trás a partir do saldo
+ * atual: saldo(D) = saldo atual − fluxo líquido efetivado depois de D. Conta cujo saldo inicial é
+ * posterior a D ainda não existia: o saldo inicial dela também sai do consolidado daquela data.
+ * Datas comparadas como dia local da operação, a mesma chave de `localDayKey` no SQL.
+ */
+export function computeCashBalancesAt({
+	totalCaixa,
+	accounts,
+	dailyFlows,
+	dates,
+}: {
+	totalCaixa: number;
+	accounts: Array<{ saldoInicial: number; dataSaldoInicial: Date }>;
+	dailyFlows: Array<{ dia: string; liquido: number }>;
+	dates: Date[];
+}) {
+	return dates.map((date) => {
+		const dayKey = dayjs(date).tz(OPERATION_TIMEZONE).format("YYYY-MM-DD");
+		let saldo = totalCaixa;
+		for (const flow of dailyFlows) if (flow.dia > dayKey) saldo -= flow.liquido;
+		for (const account of accounts)
+			if (dayjs(account.dataSaldoInicial).tz(OPERATION_TIMEZONE).format("YYYY-MM-DD") > dayKey) saldo -= account.saldoInicial;
+		return { data: dayKey, saldo };
+	});
 }
 
 export type TProjectedCashFlow = {

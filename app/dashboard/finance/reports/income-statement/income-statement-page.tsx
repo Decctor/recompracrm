@@ -1,45 +1,37 @@
 "use client";
 
-import dayjs from "dayjs";
-import { ChartNoAxesColumnIncreasing, FileSpreadsheet } from "lucide-react";
-import { Bar, CartesianGrid, ComposedChart, Line, XAxis, YAxis } from "recharts";
+import { useState } from "react";
+import { FileSpreadsheet, Layers2, TrendingUp } from "lucide-react";
+import { ReportCard, ReportCardHeader, ReportSectionState } from "@/app/dashboard/inventory/reports/_components/report-section";
 import DateIntervalInput from "@/components/Inputs/DateIntervalInput";
-import ErrorComponent from "@/components/Layouts/ErrorComponent";
-import { type ChartConfig, ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
-import { getErrorMessage } from "@/lib/errors";
+import SegmentedControl from "@/components/Utils/SegmentedControl";
 import { formatToMoney } from "@/lib/formatting";
 import { useFinancesDre } from "@/lib/queries/finance-analytics";
-import { DreStatementLine } from "./_components/dre-statement-line";
+import { buildCompositionGroups, DreCompositionTreemap, type TCompositionMode } from "./_components/dre-composition-treemap";
+import { DreMarginsChart, DreMarginsLegend } from "./_components/dre-margins-chart";
+import { DreStatement } from "./_components/dre-statement";
 
-const trendChartConfig = {
-	receita: {
-		label: "RECEITA",
-		color: "#16a34a",
-	},
-	custo: {
-		label: "CUSTOS",
-		color: "#ea580c",
-	},
-	despesa: {
-		label: "DESPESAS",
-		color: "#dc2626",
-	},
-	resultado: {
-		label: "RESULTADO",
-		color: "#2563eb",
-	},
-} satisfies ChartConfig;
+const COMPOSITION_MODES: { value: TCompositionMode; label: string }[] = [
+	{ value: "all", label: "Custos e despesas" },
+	{ value: "expenses", label: "Só despesas" },
+];
 
 export default function IncomeStatementPage() {
-	const { data: dre, isError, error, params, updateParams } = useFinancesDre({ initialParams: {} });
+	const [compositionMode, setCompositionMode] = useState<TCompositionMode>("all");
+	const { data: dre, isLoading, error, params, updateParams } = useFinancesDre({ initialParams: {} });
 
 	const demonstrativo = dre?.demonstrativo;
-	const revenueTotal = demonstrativo?.receita.total || 0;
+	const serie = dre?.serie ?? [];
+	const compositionGroups = demonstrativo ? buildCompositionGroups(demonstrativo, compositionMode) : [];
+	const compositionTotal = compositionGroups.reduce((sum, group) => sum + group.total, 0);
+	const hasStatement =
+		!!demonstrativo &&
+		[demonstrativo.receita, demonstrativo.custos, demonstrativo.despesas].some((category) => category.total !== 0 || category.totalAnterior !== 0);
 
 	return (
-		<div className="flex h-full w-full flex-col gap-4">
-			<div className="flex min-h-8 items-center justify-between">
-				<h1 className="text-xs font-bold tracking-tight uppercase">DRE GERENCIAL (COMPETÊNCIA)</h1>
+		<div className="flex w-full flex-col gap-4">
+			<div className="flex min-h-8 flex-wrap items-center justify-between gap-3">
+				<h1 className="text-xs font-bold uppercase tracking-tight">DRE gerencial (competência)</h1>
 				<div className="w-fit">
 					<DateIntervalInput
 						label="PERÍODO"
@@ -51,102 +43,62 @@ export default function IncomeStatementPage() {
 				</div>
 			</div>
 
-			{isError ? <ErrorComponent msg={getErrorMessage(error)} /> : null}
+			<div className="flex flex-wrap items-start gap-4">
+				<ReportCard className="min-w-0 flex-[1_1_520px] gap-2">
+					<div className="px-1 pb-1">
+						<ReportCardHeader icon={FileSpreadsheet} title="DEMONSTRATIVO DO PERÍODO" />
+					</div>
+					<ReportSectionState
+						isLoading={isLoading}
+						error={error}
+						isEmpty={!hasStatement}
+						emptyMessage="Nenhum lançamento de receita, custo ou despesa no período."
+						skeletonClassName="h-80"
+					>
+						{demonstrativo ? <DreStatement demonstrativo={demonstrativo} /> : null}
+					</ReportSectionState>
+				</ReportCard>
 
-			<div className="flex w-full flex-col gap-4 xl:flex-row">
-				<div className="bg-card border-border flex w-full flex-col gap-2 rounded-xl border px-3 py-4 shadow-2xs xl:w-[45%]">
-					<div className="flex w-full items-center justify-between gap-2">
-						<div className="flex items-center justify-start gap-2">
-							<FileSpreadsheet className="w-4 h-4 min-w-4 min-h-4" />
-							<h1 className="text-xs font-medium leading-none tracking-tight">DEMONSTRATIVO DO PERÍODO</h1>
+				<ReportCard className="min-w-0 flex-[1_1_440px] gap-4 px-4">
+					<div className="flex flex-wrap items-start justify-between gap-3">
+						<div className="flex flex-col gap-1.5">
+							<ReportCardHeader icon={TrendingUp} title="MARGENS · 12 MESES" />
+							<span className="text-muted-foreground text-xs">Barras: receita bruta do mês</span>
 						</div>
-						<span className="text-[0.65rem] font-medium text-muted-foreground">% REC · Δ ANTERIOR · VALOR</span>
+						<DreMarginsLegend />
 					</div>
-					{demonstrativo ? (
-						<div className="flex w-full flex-col gap-1">
-							<DreStatementLine
-								label="RECEITA BRUTA"
-								total={demonstrativo.receita.total}
-								totalAnterior={demonstrativo.receita.totalAnterior}
-								revenueTotal={revenueTotal}
-								tree={demonstrativo.receita.arvore}
-							/>
-							<DreStatementLine
-								label="CUSTOS"
-								prefix="(−)"
-								total={demonstrativo.custos.total}
-								totalAnterior={demonstrativo.custos.totalAnterior}
-								revenueTotal={revenueTotal}
-								invertDelta
-								tree={demonstrativo.custos.arvore}
-							/>
-							<DreStatementLine
-								label="LUCRO BRUTO"
-								prefix="(=)"
-								total={demonstrativo.lucroBruto.total}
-								totalAnterior={demonstrativo.lucroBruto.totalAnterior}
-								revenueTotal={revenueTotal}
-								emphasized
-								margem={demonstrativo.lucroBruto.margem}
-							/>
-							<DreStatementLine
-								label="DESPESAS"
-								prefix="(−)"
-								total={demonstrativo.despesas.total}
-								totalAnterior={demonstrativo.despesas.totalAnterior}
-								revenueTotal={revenueTotal}
-								invertDelta
-								tree={demonstrativo.despesas.arvore}
-							/>
-							<DreStatementLine
-								label="RESULTADO OPERACIONAL"
-								prefix="(=)"
-								total={demonstrativo.resultado.total}
-								totalAnterior={demonstrativo.resultado.totalAnterior}
-								revenueTotal={revenueTotal}
-								emphasized
-								margem={demonstrativo.resultado.margem}
-							/>
-						</div>
-					) : (
-						<p className="py-4 text-center text-xs text-muted-foreground">Buscando demonstrativo...</p>
-					)}
-				</div>
-
-				<div className="bg-card border-border flex w-full flex-col gap-1 rounded-xl border px-3 py-4 shadow-2xs xl:w-[55%]">
-					<div className="flex w-full items-center justify-between gap-2">
-						<div className="flex items-center justify-start gap-2">
-							<ChartNoAxesColumnIncreasing className="w-4 h-4 min-w-4 min-h-4" />
-							<h1 className="text-xs font-medium leading-none tracking-tight">EVOLUÇÃO 12 MESES</h1>
-						</div>
-					</div>
-					<div className="h-[320px] w-full">
-						<ChartContainer config={trendChartConfig} className="aspect-auto h-full w-full">
-							<ComposedChart accessibilityLayer data={dre?.serie || []}>
-								<CartesianGrid vertical={false} strokeWidth={0.2} />
-								<YAxis tickLine={false} tickMargin={10} axisLine={false} width={80} tickFormatter={(value: number) => formatToMoney(value)} />
-								<XAxis
-									dataKey="mes"
-									tickLine={false}
-									tickMargin={10}
-									axisLine={false}
-									minTickGap={16}
-									tickFormatter={(value: string) => dayjs(`${value}-01`).format("MM/YY")}
-								/>
-								<ChartTooltip
-									cursor={false}
-									content={<ChartTooltipContent indicator="dashed" labelFormatter={(value) => dayjs(`${value as string}-01`).format("MMM/YYYY")} />}
-								/>
-								<Bar dataKey="receita" fill="var(--color-receita)" radius={4} />
-								<Bar dataKey="custo" fill="var(--color-custo)" radius={4} />
-								<Bar dataKey="despesa" fill="var(--color-despesa)" radius={4} />
-								<Line dataKey="resultado" type="monotone" stroke="var(--color-resultado)" strokeWidth={2} dot={false} />
-								<ChartLegend content={<ChartLegendContent />} className="-translate-y-2 flex-wrap gap-2 *:basis-1/5 *:justify-center" />
-							</ComposedChart>
-						</ChartContainer>
-					</div>
-				</div>
+					<ReportSectionState
+						isLoading={isLoading}
+						error={error}
+						isEmpty={serie.every((month) => month.receita === 0)}
+						emptyMessage="Sem receita nos últimos 12 meses para calcular margens."
+						skeletonClassName="h-72"
+					>
+						<DreMarginsChart serie={serie} />
+					</ReportSectionState>
+				</ReportCard>
 			</div>
+
+			<ReportCard className="gap-3.5 px-4">
+				<div className="flex flex-wrap items-start justify-between gap-3">
+					<div className="flex flex-col gap-1.5">
+						<ReportCardHeader icon={Layers2} title="COMPOSIÇÃO DE CUSTOS E DESPESAS" />
+						<span className="text-muted-foreground text-xs">
+							Área proporcional ao valor no período · {formatToMoney(compositionTotal)} por plano de contas
+						</span>
+					</div>
+					<SegmentedControl aria-label="Composição" value={compositionMode} options={COMPOSITION_MODES} onChange={setCompositionMode} />
+				</div>
+				<ReportSectionState
+					isLoading={isLoading}
+					error={error}
+					isEmpty={compositionGroups.length === 0}
+					emptyMessage={compositionMode === "all" ? "Nenhum custo ou despesa no período." : "Nenhuma despesa no período."}
+					skeletonClassName="h-[360px]"
+				>
+					<DreCompositionTreemap groups={compositionGroups} />
+				</ReportSectionState>
+			</ReportCard>
 		</div>
 	);
 }

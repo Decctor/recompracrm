@@ -1,7 +1,7 @@
 import type { FAQItem } from "./blog-posts";
 
 // ----------------------------------------------------------------------------
-// Content model for segment landing pages (/segmentos/[slug]).
+// Content model for segment landing pages (/segments/[slug]).
 // One config per segment drives a full conversion landing + hub card, no modelo
 // "página-por-segmento" (Fidelimax). Adding a new segment = adding one config.
 // The old blog case posts (/blog/como-recompracrm-pode-ajudar-*) redirect here —
@@ -10,9 +10,15 @@ import type { FAQItem } from "./blog-posts";
 
 export type SegmentStat = { value: string; label: string };
 
+// Visual family of the segment page: groups the hub and picks the hero illustration of the
+// detail page (weekly visits, replenishment cycle, occasions calendar, project journey, units).
+export type SegmentFamily = "ALIMENTACAO" | "REPOSICAO" | "MODA_E_OCASIOES" | "CASA_E_OBRA" | "REDES_E_VAREJO";
+
+// A date that drives sales in the segment; `month` is 0-based (0 = janeiro).
+export type SegmentOccasion = { month: number; label: string };
+
 // A retention engine applied to the segment; links to a feature page.
 export type SegmentPlaybookItem = {
-	emoji: string;
 	title: string;
 	body: string;
 	featureSlug: string;
@@ -23,6 +29,8 @@ export type SegmentPage = {
 	name: string; // "Sorveteria" — breadcrumb, cards, FAQ copy
 	audience: string; // plural audience: "sorveterias e gelaterias"
 	emoji: string;
+	family: SegmentFamily;
+	occasions: SegmentOccasion[]; // calendar of the "MODA_E_OCASIOES" hero; empty elsewhere
 	title: string; // keyword-first <title> (layout appends "| RecompraCRM")
 	metaDescription: string;
 	tagline: string; // hero H1
@@ -32,6 +40,10 @@ export type SegmentPage = {
 	updatedAt: string;
 	challenge: string; // segment pain, plain language
 	suggestedConfig: {
+		cashbackPercent: string; // "5%"
+		expirationDays: string; // "30"
+		rescueLimit: string; // "30%"
+		purchaseCycle: string; // "visitas semanais"
 		stats: SegmentStat[];
 		note: string;
 	};
@@ -55,6 +67,8 @@ type SegmentPageConfig = {
 	name: string;
 	audience: string;
 	emoji: string;
+	family: SegmentFamily;
+	occasions?: SegmentOccasion[];
 	title: string;
 	metaDescription: string;
 	tagline: string;
@@ -83,6 +97,8 @@ function createSegmentPage(config: SegmentPageConfig): SegmentPage {
 		name: config.name,
 		audience: config.audience,
 		emoji: config.emoji,
+		family: config.family,
+		occasions: config.occasions ?? [],
 		title: config.title,
 		metaDescription: config.metaDescription,
 		tagline: config.tagline,
@@ -92,6 +108,10 @@ function createSegmentPage(config: SegmentPageConfig): SegmentPage {
 		updatedAt: UPDATED_AT,
 		challenge: `${config.mainChallenge}\n\nNa prática, o problema quase nunca é só atrair gente nova. O desafio é fazer quem já comprou lembrar da loja, voltar no intervalo certo e comprar de novo antes de migrar para o concorrente.`,
 		suggestedConfig: {
+			cashbackPercent: config.cashbackPercent,
+			expirationDays: config.expirationDays,
+			rescueLimit: config.rescueLimit,
+			purchaseCycle: config.purchaseCycle,
 			stats: [
 				{ value: config.cashbackPercent, label: "Cashback inicial sugerido, com controle de margem" },
 				{ value: `${config.expirationDays} dias`, label: `Validade alinhada ao ciclo de ${config.purchaseCycle}` },
@@ -101,25 +121,21 @@ function createSegmentPage(config: SegmentPageConfig): SegmentPage {
 		},
 		playbook: [
 			{
-				emoji: "💸",
 				title: "Cashback ajustado ao ciclo de compra",
 				body: config.cashbackUse,
 				featureSlug: "programa-de-cashback",
 			},
 			{
-				emoji: "📱",
 				title: "Campanhas automáticas no WhatsApp",
 				body: config.whatsappUse,
 				featureSlug: "campanhas-whatsapp",
 			},
 			{
-				emoji: "📊",
 				title: "Análise RFM para priorizar clientes",
 				body: config.rfmUse,
 				featureSlug: "business-intelligence",
 			},
 			{
-				emoji: "🖥️",
 				title: "Registro sem fricção no ponto de venda",
 				body: config.pdiUse,
 				featureSlug: "ponto-de-interacao",
@@ -137,11 +153,13 @@ function createSegmentPage(config: SegmentPageConfig): SegmentPage {
 			},
 			{
 				question: "O cliente precisa baixar aplicativo para participar do programa?",
-				answer: "Não. No Ponto de Interação, o atendente identifica o cliente pelo telefone, registra a venda e permite o resgate com uma confirmação rápida. O cliente não instala aplicativo nem carrega cartão de fidelidade — acumula e usa o cashback direto no balcão, em segundos.",
+				answer:
+					"Não. No Ponto de Interação, o atendente identifica o cliente pelo telefone, registra a venda e permite o resgate com uma confirmação rápida. O cliente não instala aplicativo nem carrega cartão de fidelidade — acumula e usa o cashback direto no balcão, em segundos.",
 			},
 			{
 				question: `Quanto tempo leva para implantar o RecompraCRM em ${config.name.toLowerCase()}?`,
-				answer: "O setup é feito em menos de um dia. A equipe do RecompraCRM configura o cashback, integra seus dados de venda e treina os atendentes. A partir da primeira venda registrada, você já começa a acumular dados de retenção e a acionar campanhas automáticas.",
+				answer:
+					"O setup é feito em menos de um dia. A equipe do RecompraCRM configura o cashback, integra seus dados de venda e treina os atendentes. A partir da primeira venda registrada, você já começa a acumular dados de retenção e a acionar campanhas automáticas.",
 			},
 		],
 		cta: {
@@ -170,6 +188,7 @@ export const SEGMENT_PAGES: SegmentPage[] = [
 		name: "Restaurantes e Lanchonetes",
 		audience: "restaurantes, lanchonetes, cafeterias e lojas de alimentação",
 		emoji: "🍽️",
+		family: "ALIMENTACAO",
 		title: "CRM e Fidelidade para Restaurantes e Lanchonetes",
 		metaDescription:
 			"Programa de fidelidade com cashback para restaurantes, lanchonetes e cafeterias venderem mais para quem já é cliente. Resultados em 30 dias. Agende uma demo.",
@@ -203,6 +222,7 @@ export const SEGMENT_PAGES: SegmentPage[] = [
 		name: "Delivery",
 		audience: "restaurantes e operações de delivery",
 		emoji: "🛵",
+		family: "ALIMENTACAO",
 		title: "Programa de Fidelidade para Delivery",
 		metaDescription:
 			"Cashback e campanhas no WhatsApp para o seu delivery transformar pedidos em clientes recorrentes. Integra com iFood e cardápio digital. Agende uma demo.",
@@ -226,8 +246,7 @@ export const SEGMENT_PAGES: SegmentPage[] = [
 			"O RFM separa quem pede toda semana, quem só aparece em promoção e quem experimentou uma vez e sumiu. Cada grupo recebe a campanha certa, em vez de cupom genérico para todo mundo.",
 		pdiUse:
 			"Para retirada no balcão e atendimento no salão, o PDI registra a venda pelo telefone do cliente e unifica o histórico com os pedidos de delivery importados das integrações. Uma única base, todos os canais.",
-		result:
-			"Operações de delivery reduzem a dependência de marketplace, aumentam pedidos diretos e ganham previsibilidade de recorrência semanal.",
+		result: "Operações de delivery reduzem a dependência de marketplace, aumentam pedidos diretos e ganham previsibilidade de recorrência semanal.",
 		keywords: ["fidelidade delivery", "crm delivery", "cashback delivery", "fidelizar clientes ifood", "marketing delivery"],
 		relatedSlugs: ["restaurantes", "padaria-e-confeitaria", "sorveteria"],
 	}),
@@ -236,6 +255,7 @@ export const SEGMENT_PAGES: SegmentPage[] = [
 		name: "Padaria e Confeitaria",
 		audience: "padarias, confeitarias e docerias",
 		emoji: "🍰",
+		family: "ALIMENTACAO",
 		title: "Programa de Fidelidade para Padaria e Confeitaria",
 		metaDescription:
 			"CRM com cashback para padarias e confeitarias fidelizarem clientes do dia a dia. Campanhas no WhatsApp que trazem o cliente de volta. Agende uma demo.",
@@ -252,8 +272,7 @@ export const SEGMENT_PAGES: SegmentPage[] = [
 		mainChallenge:
 			"Padarias e confeitarias têm potencial enorme de frequência, mas o cliente decide muito por conveniência. Se não houver vínculo, a compra vai para o caminho mais fácil.",
 		cashbackUse: "Cashback com validade curta estimula retorno rápido para café, pão, doces, encomendas e produtos de fim de semana.",
-		whatsappUse:
-			"Campanhas podem divulgar fornadas, encomendas de festa, kits de café, datas comemorativas e lembrar clientes que sumiram da rotina.",
+		whatsappUse: "Campanhas podem divulgar fornadas, encomendas de festa, kits de café, datas comemorativas e lembrar clientes que sumiram da rotina.",
 		rfmUse: "O RFM mostra clientes diários, compradores de encomenda, clientes de fim de semana e pessoas que reduziram frequência.",
 		pdiUse: "O PDI precisa ser rápido, e nesse cenário ele registra telefone, venda e cashback sem travar a operação do balcão.",
 		result: "Padarias e confeitarias aumentam frequência, estimulam encomendas e recuperam clientes que saíram da rotina.",
@@ -265,6 +284,7 @@ export const SEGMENT_PAGES: SegmentPage[] = [
 		name: "Sorveteria",
 		audience: "sorveterias e gelaterias",
 		emoji: "🍦",
+		family: "ALIMENTACAO",
 		title: "Programa de Fidelidade para Sorveteria e Gelateria",
 		metaDescription:
 			"Cashback e campanhas no WhatsApp para sua sorveteria fidelizar clientes e aumentar a recompra. Configure em minutos e veja resultado em 30 dias. Agende uma demo.",
@@ -297,6 +317,7 @@ export const SEGMENT_PAGES: SegmentPage[] = [
 		name: "Açougue e Peixaria",
 		audience: "açougues e peixarias",
 		emoji: "🥩",
+		family: "ALIMENTACAO",
 		title: "Programa de Fidelidade para Açougue e Peixaria",
 		metaDescription:
 			"Cashback e campanhas no WhatsApp para açougues e peixarias fidelizarem clientes da compra semanal. Traga o cliente de volta ao balcão. Agende uma demo.",
@@ -326,6 +347,7 @@ export const SEGMENT_PAGES: SegmentPage[] = [
 		name: "Supermercado e Mercearia",
 		audience: "supermercados, mercados de bairro e mercearias",
 		emoji: "🛒",
+		family: "ALIMENTACAO",
 		title: "Programa de Fidelidade para Supermercado e Mercearia",
 		metaDescription:
 			"Cashback e inteligência de dados para supermercados e mercados de bairro fidelizarem clientes e elevarem o ticket. Veja como. Agende uma demonstração.",
@@ -358,6 +380,7 @@ export const SEGMENT_PAGES: SegmentPage[] = [
 		name: "Pet Shop",
 		audience: "pet shops e casas de ração",
 		emoji: "🐾",
+		family: "REPOSICAO",
 		title: "Programa de Fidelidade para Pet Shop e Casa de Ração",
 		metaDescription:
 			"CRM com cashback e WhatsApp automático para pet shops aumentarem a recorrência de tutores. Recupere clientes inativos sem esforço. Agende uma demonstração.",
@@ -390,6 +413,7 @@ export const SEGMENT_PAGES: SegmentPage[] = [
 		name: "Farmácia e Drogaria",
 		audience: "farmácias e drogarias",
 		emoji: "💊",
+		family: "REPOSICAO",
 		title: "Programa de Fidelidade para Farmácia e Drogaria",
 		metaDescription:
 			"Cashback e campanhas automáticas para farmácias fidelizarem clientes e garantirem a recompra de recorrentes. Configure hoje. Agende uma demo do RecompraCRM.",
@@ -419,6 +443,7 @@ export const SEGMENT_PAGES: SegmentPage[] = [
 		name: "Perfumaria e Cosméticos",
 		audience: "perfumarias, lojas de cosméticos e beleza",
 		emoji: "💄",
+		family: "REPOSICAO",
 		title: "Programa de Fidelidade para Perfumaria e Cosméticos",
 		metaDescription:
 			"CRM com cashback para perfumarias e lojas de beleza aumentarem a recompra. Campanhas automáticas no WhatsApp que vendem sozinhas. Agende uma demonstração.",
@@ -451,12 +476,20 @@ export const SEGMENT_PAGES: SegmentPage[] = [
 		name: "Loja de Roupas",
 		audience: "lojas de roupas, moda e vestuário",
 		emoji: "👗",
+		family: "MODA_E_OCASIOES",
+		occasions: [
+			{ month: 2, label: "Troca de estação" },
+			{ month: 4, label: "Dia das Mães" },
+			{ month: 5, label: "Namorados" },
+			{ month: 7, label: "Dia dos Pais" },
+			{ month: 10, label: "Black Friday" },
+			{ month: 11, label: "Natal" },
+		],
 		title: "Programa de Fidelidade para Loja de Roupas e Moda",
 		metaDescription:
 			"Fidelize clientes da sua loja de roupas com cashback e campanhas automáticas no WhatsApp. Faça o cliente voltar a cada coleção. Peça uma demo do RecompraCRM.",
 		tagline: "Programa de fidelidade para lojas de roupas e moda",
-		heroSubtitle:
-			"A cliente que amou a compra de hoje precisa lembrar de você na próxima coleção. Cashback cria a ponte — e o WhatsApp faz o convite.",
+		heroSubtitle: "A cliente que amou a compra de hoje precisa lembrar de você na próxima coleção. Cashback cria a ponte — e o WhatsApp faz o convite.",
 		answerBlock:
 			"O RecompraCRM é um programa de fidelidade para lojas de roupas e moda que combina cashback, campanhas automáticas no WhatsApp e análise RFM. Cada compra gera crédito que puxa a cliente de volta no lançamento da coleção, na troca de estação e nas datas fortes — sem depender só de post no Instagram.",
 		publishedAt: "2026-03-11",
@@ -483,6 +516,14 @@ export const SEGMENT_PAGES: SegmentPage[] = [
 		name: "Loja de Calçados",
 		audience: "lojas de calçados",
 		emoji: "👟",
+		family: "MODA_E_OCASIOES",
+		occasions: [
+			{ month: 1, label: "Volta às aulas" },
+			{ month: 4, label: "Dia das Mães" },
+			{ month: 7, label: "Dia dos Pais" },
+			{ month: 10, label: "Black Friday" },
+			{ month: 11, label: "Natal" },
+		],
 		title: "Programa de Fidelidade para Loja de Calçados",
 		metaDescription:
 			"Fidelize clientes da sua loja de calçados com cashback e WhatsApp automático. Reative quem não compra há meses. Peça uma demo gratuita do RecompraCRM.",
@@ -514,6 +555,13 @@ export const SEGMENT_PAGES: SegmentPage[] = [
 		name: "Joalheria e Acessórios",
 		audience: "joalherias e lojas de acessórios",
 		emoji: "💎",
+		family: "MODA_E_OCASIOES",
+		occasions: [
+			{ month: 4, label: "Dia das Mães" },
+			{ month: 5, label: "Namorados" },
+			{ month: 7, label: "Dia dos Pais" },
+			{ month: 11, label: "Natal" },
+		],
 		title: "Programa de Fidelidade para Joalheria e Acessórios",
 		metaDescription:
 			"Fidelize clientes da sua joalheria com cashback e campanhas segmentadas no WhatsApp. Aumente a recompra em datas-chave. Peça uma demo do RecompraCRM.",
@@ -543,6 +591,13 @@ export const SEGMENT_PAGES: SegmentPage[] = [
 		name: "Ótica",
 		audience: "óticas",
 		emoji: "👓",
+		family: "MODA_E_OCASIOES",
+		occasions: [
+			{ month: 1, label: "Volta às aulas" },
+			{ month: 4, label: "Dia das Mães" },
+			{ month: 7, label: "Dia dos Pais" },
+			{ month: 10, label: "Black Friday" },
+		],
 		title: "Programa de Fidelidade para Ótica",
 		metaDescription:
 			"CRM com cashback para óticas fidelizarem clientes e lembrarem da troca de lentes na hora certa. Campanhas automáticas no WhatsApp. Agende uma demonstração.",
@@ -573,6 +628,7 @@ export const SEGMENT_PAGES: SegmentPage[] = [
 		name: "Eletrônicos e Eletrodomésticos",
 		audience: "lojas de eletrônicos e eletrodomésticos",
 		emoji: "📱",
+		family: "CASA_E_OBRA",
 		title: "Programa de Fidelidade para Loja de Eletrônicos",
 		metaDescription:
 			"Cashback e campanhas automáticas para lojas de eletrônicos e eletrodomésticos fidelizarem clientes e venderem mais. Veja em 30 dias. Agende uma demo.",
@@ -603,6 +659,7 @@ export const SEGMENT_PAGES: SegmentPage[] = [
 		name: "Casa e Decoração",
 		audience: "lojas de casa, decoração, móveis e utilidades",
 		emoji: "🛋️",
+		family: "CASA_E_OBRA",
 		title: "Programa de Fidelidade para Loja de Casa e Decoração",
 		metaDescription:
 			"CRM com cashback para lojas de decoração e móveis aumentarem a recompra. Reative clientes com campanhas automáticas. Agende uma demo do RecompraCRM.",
@@ -633,12 +690,18 @@ export const SEGMENT_PAGES: SegmentPage[] = [
 		name: "Esportes e Lazer",
 		audience: "lojas de artigos esportivos e lazer",
 		emoji: "🏋️",
+		family: "MODA_E_OCASIOES",
+		occasions: [
+			{ month: 0, label: "Ano novo" },
+			{ month: 7, label: "Dia dos Pais" },
+			{ month: 10, label: "Black Friday" },
+			{ month: 11, label: "Natal" },
+		],
 		title: "Programa de Fidelidade para Loja de Esportes",
 		metaDescription:
 			"Fidelize clientes da sua loja de artigos esportivos com cashback e WhatsApp automático. Faça o cliente voltar e gastar mais. Peça uma demonstração.",
 		tagline: "Programa de fidelidade para lojas de esportes",
-		heroSubtitle:
-			"Quem começa um esporte evolui — e cada evolução é uma compra. Cashback e campanhas por modalidade acompanham a jornada do cliente.",
+		heroSubtitle: "Quem começa um esporte evolui — e cada evolução é uma compra. Cashback e campanhas por modalidade acompanham a jornada do cliente.",
 		answerBlock:
 			"O RecompraCRM é um programa de fidelidade para lojas de artigos esportivos que combina cashback, campanhas automáticas no WhatsApp e análise RFM. O cliente que comprou o primeiro tênis de corrida ganha crédito para roupas, acessórios e upgrades — e a loja aciona cada modalidade com a campanha certa.",
 		publishedAt: "2026-03-18",
@@ -662,12 +725,18 @@ export const SEGMENT_PAGES: SegmentPage[] = [
 		name: "Brinquedos e Infantil",
 		audience: "lojas de brinquedos e produtos infantis",
 		emoji: "🧸",
+		family: "MODA_E_OCASIOES",
+		occasions: [
+			{ month: 3, label: "Páscoa" },
+			{ month: 9, label: "Dia das Crianças" },
+			{ month: 10, label: "Black Friday" },
+			{ month: 11, label: "Natal" },
+		],
 		title: "Programa de Fidelidade para Loja Infantil e Brinquedos",
 		metaDescription:
 			"Cashback e campanhas automáticas para lojas de brinquedos e produtos infantis fidelizarem famílias. Aumente a recompra. Agende uma demo do RecompraCRM.",
 		tagline: "Programa de fidelidade para lojas infantis e de brinquedos",
-		heroSubtitle:
-			"Criança cresce, muda de fase e de tamanho — cada fase é uma recompra. Cashback e campanhas por idade mantêm a família voltando.",
+		heroSubtitle: "Criança cresce, muda de fase e de tamanho — cada fase é uma recompra. Cashback e campanhas por idade mantêm a família voltando.",
 		answerBlock:
 			"O RecompraCRM é um programa de fidelidade para lojas de brinquedos e produtos infantis que combina cashback, campanhas automáticas no WhatsApp e análise RFM. A família acumula crédito a cada compra e recebe sugestões pela fase da criança — do presente de aniversário à volta às aulas.",
 		publishedAt: "2026-03-18",
@@ -691,6 +760,14 @@ export const SEGMENT_PAGES: SegmentPage[] = [
 		name: "Papelaria e Presentes",
 		audience: "papelarias e lojas de presentes",
 		emoji: "✏️",
+		family: "MODA_E_OCASIOES",
+		occasions: [
+			{ month: 1, label: "Volta às aulas" },
+			{ month: 3, label: "Páscoa" },
+			{ month: 4, label: "Dia das Mães" },
+			{ month: 9, label: "Dia das Crianças" },
+			{ month: 11, label: "Natal" },
+		],
 		title: "Programa de Fidelidade para Papelaria e Loja de Presentes",
 		metaDescription:
 			"Cashback e WhatsApp automático para papelarias e lojas de presentes fidelizarem clientes o ano todo. Configure em minutos. Agende uma demonstração.",
@@ -722,6 +799,7 @@ export const SEGMENT_PAGES: SegmentPage[] = [
 		name: "Materiais de Construção",
 		audience: "lojas de materiais de construção",
 		emoji: "🛠️",
+		family: "CASA_E_OBRA",
 		title: "CRM e Fidelidade para Loja de Materiais de Construção",
 		metaDescription:
 			"Fidelize clientes da sua loja de construção com cashback e inteligência de recompra. Traga o cliente de volta na próxima obra. Peça uma demonstração.",
@@ -752,6 +830,7 @@ export const SEGMENT_PAGES: SegmentPage[] = [
 		name: "Materiais Elétricos e Hidráulicos",
 		audience: "lojas de materiais elétricos e hidráulicos",
 		emoji: "⚡",
+		family: "CASA_E_OBRA",
 		title: "Programa de Fidelidade para Loja de Materiais Elétricos e Hidráulicos",
 		metaDescription:
 			"CRM com cashback para lojas de materiais elétricos e hidráulicos fidelizarem eletricistas, encanadores e clientes de obra. Peça uma demonstração.",
@@ -781,12 +860,12 @@ export const SEGMENT_PAGES: SegmentPage[] = [
 		name: "Autopeças",
 		audience: "lojas de autopeças",
 		emoji: "🔧",
+		family: "CASA_E_OBRA",
 		title: "Programa de Fidelidade para Loja de Autopeças",
 		metaDescription:
 			"CRM com cashback e WhatsApp para autopeças aumentarem a recorrência de clientes. Recupere quem sumiu. Agende uma demo gratuita do RecompraCRM.",
 		tagline: "Programa de fidelidade para lojas de autopeças",
-		heroSubtitle:
-			"Todo carro volta para manutenção — a questão é em qual loja. Cashback e relacionamento com oficinas garantem que seja na sua.",
+		heroSubtitle: "Todo carro volta para manutenção — a questão é em qual loja. Cashback e relacionamento com oficinas garantem que seja na sua.",
 		answerBlock:
 			"O RecompraCRM é um programa de fidelidade para lojas de autopeças que combina cashback, campanhas automáticas no WhatsApp e análise RFM. Consumidor final e oficinas parceiras acumulam crédito a cada manutenção — e a loja aciona revisões sazonais e recupera quem sumiu, sem depender só de disponibilidade e preço.",
 		publishedAt: "2026-03-15",
@@ -811,6 +890,7 @@ export const SEGMENT_PAGES: SegmentPage[] = [
 		name: "Rede de Lojas e Franquias",
 		audience: "redes de lojas, filiais e franquias",
 		emoji: "🏬",
+		family: "REDES_E_VAREJO",
 		title: "CRM para Rede de Lojas e Franquias",
 		metaDescription:
 			"Programa de fidelidade centralizado para redes de lojas e franquias: cashback, campanhas no WhatsApp e visão por unidade. Padronize a retenção. Agende uma demo.",
@@ -844,6 +924,7 @@ export const SEGMENT_PAGES: SegmentPage[] = [
 		name: "Varejo",
 		audience: "lojas físicas de diferentes segmentos",
 		emoji: "🏪",
+		family: "REDES_E_VAREJO",
 		title: "Programa de Fidelidade para Loja Física e Varejo",
 		metaDescription:
 			"Cashback, campanhas no WhatsApp e análise RFM para qualquer loja física fidelizar clientes e aumentar a recompra. Configure em minutos. Agende uma demo.",

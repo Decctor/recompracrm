@@ -16,7 +16,7 @@ const REPORT_LINKS = [
 export function ReportsNav() {
 	const pathname = usePathname();
 	return (
-		<nav aria-label="Relatórios financeiros" className="flex w-fit items-center gap-1 rounded-lg bg-muted/70 p-1">
+		<nav aria-label="Relatórios financeiros" className="flex w-fit max-w-full items-center gap-1 overflow-x-auto rounded-[10px] bg-muted/70 p-1">
 			{REPORT_LINKS.map((link) => {
 				const isActive = pathname === link.href;
 				return (
@@ -24,8 +24,8 @@ export function ReportsNav() {
 						key={link.href}
 						href={link.href}
 						aria-current={isActive ? "page" : undefined}
-						className={cn("flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium duration-300 ease-in-out", {
-							"bg-background shadow-sm": isActive,
+						className={cn("flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1 text-xs font-medium duration-300 ease-in-out", {
+							"bg-card text-foreground shadow-sm": isActive,
 							"text-muted-foreground hover:text-foreground": !isActive,
 						})}
 					>

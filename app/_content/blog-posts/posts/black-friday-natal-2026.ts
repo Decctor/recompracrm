@@ -9,7 +9,11 @@ export const blackFridayNatal2026Post: BlogPost = {
 		"Datas da Black Friday, do 13º salário e do Natal 2026, os resultados de 2025 no varejo físico (Cielo, CNDL/SPC, Abrasce, Procon-SP) e um plano prático para a loja vender no fim de ano sem cair na desconfiança do consumidor.",
 	category: "guias",
 	categoryLabel: "Guias práticos",
-	cover: "black-friday-natal",
+	cover: {
+		stat: "−1,4%",
+		label: "nas vendas da loja física no fim de semana da Black Friday 2025",
+		source: "Cielo ICVA",
+	},
 	publishedAt: "2026-10-04",
 	readingTime: "9 min",
 	seo: {
@@ -53,7 +57,7 @@ export const blackFridayNatal2026Post: BlogPost = {
 				["09/02/2027", "Terça", "Carnaval"],
 			],
 			note:
-				"Pela Lei 4.749/1965, a 1ª parcela do 13º (metade do salário do mês anterior) é paga \"entre os meses de fevereiro e novembro\", e a 2ª \"até o dia 20 de dezembro\". Muita empresa paga a 1ª no fim da janela, e o dinheiro entra na semana da Black Friday. A lei não prevê prorrogação quando o dia 20 cai num fim de semana: a orientação usual de contadores e advogados é antecipar para o último dia útil, a sexta, 18/12. A volta às aulas varia por estado e rede de ensino.",
+				'Pela Lei 4.749/1965, a 1ª parcela do 13º (metade do salário do mês anterior) é paga "entre os meses de fevereiro e novembro", e a 2ª "até o dia 20 de dezembro". Muita empresa paga a 1ª no fim da janela, e o dinheiro entra na semana da Black Friday. A lei não prevê prorrogação quando o dia 20 cai num fim de semana: a orientação usual de contadores e advogados é antecipar para o último dia útil, a sexta, 18/12. A volta às aulas varia por estado e rede de ensino.',
 		},
 		{
 			type: "text",

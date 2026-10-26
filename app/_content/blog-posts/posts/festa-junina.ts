@@ -8,7 +8,10 @@ export const festaJuninaPost: BlogPost = {
 		"Veja como criar uma campanha de Festa Junina para movimentar sua loja em junho, aproveitar o Dia dos Namorados e vender sem depender apenas de descontos.",
 	category: "dicas",
 	categoryLabel: "Dicas de gestão",
-	cover: "festa-junina",
+	cover: {
+		stat: "4 semanas",
+		label: "de campanha, do Arraiá ao São João",
+	},
 	publishedAt: "2026-06-01",
 	readingTime: "6 min",
 	seo: {
@@ -22,7 +25,11 @@ export const festaJuninaPost: BlogPost = {
 			"como movimentar loja física",
 		],
 	},
-	relatedSlugs: ["black-friday-e-natal-2026-loja-fisica", "como-fechar-a-semana-no-varejo-e-preparar-a-proxima", "whatsapp-api-precos-outubro-2026-varejo"],
+	relatedSlugs: [
+		"black-friday-e-natal-2026-loja-fisica",
+		"como-fechar-a-semana-no-varejo-e-preparar-a-proxima",
+		"whatsapp-api-precos-outubro-2026-varejo",
+	],
 	sections: [
 		{
 			type: "text",
