@@ -1,17 +1,12 @@
+import { normalizeCouponGiftItem, roundCouponGiftCurrency } from "@/lib/coupons/gift-pricing";
 import { getCashbackRedemptionBlockReason } from "@/lib/cashback/redemption-policy";
 import { appApiHandler } from "@/lib/app-api";
 import { recomputeClientDuplicatesSafely } from "@/lib/clients/duplicates";
 import { getAvailableCouponsForClient } from "@/lib/coupons/availability";
-import {
-  type TCouponCartItem,
-  evaluateCouponAgainstCart,
-} from "@/lib/coupons/engine";
+import { type TCouponCartItem, evaluateCouponAgainstCart } from "@/lib/coupons/engine";
 import { formatPhoneAsBase } from "@/lib/formatting";
 import { getOrganizationPaymentMethodsConfig } from "@/lib/payments";
-import {
-  resolveCatalogOrderItem,
-  type TResolvedCatalogOrderItem,
-} from "@/lib/products/resolve-catalog-order-item";
+import { resolveCatalogOrderItem, type TResolvedCatalogOrderItem } from "@/lib/products/resolve-catalog-order-item";
 import { processSaleConfirmation } from "@/lib/sales/sale-processing";
 import {
   admitSaleRewardRedemptions,
@@ -24,26 +19,12 @@ import {
 } from "@/lib/sales/sale-reward-redemption";
 import { getShopCatalogProducts } from "@/lib/shop/catalog";
 import { getShopAvailability } from "@/lib/shop/availability";
-import {
-  normalizeShopSettingsConfiguration,
-  resolveShopDeliveryFee,
-} from "@/lib/shop/config";
+import { normalizeShopSettingsConfiguration, resolveShopDeliveryFee } from "@/lib/shop/config";
 import { isValidCpfCnpj } from "@/lib/validation";
 import type { TAppliedCoupon } from "@/schemas/coupons";
-import {
-  CreateShopOrderInputSchema,
-  type TShopDraftMetadata,
-} from "@/schemas/shop";
+import { CreateShopOrderInputSchema, type TShopDraftMetadata } from "@/schemas/shop";
 import { db } from "@/services/drizzle";
-import {
-  cashbackProgramBalances,
-  clientLocations,
-  clients,
-  saleItemModifiers,
-  saleItems,
-  sales,
-  shopOrderRequests,
-} from "@/services/drizzle/schema";
+import { cashbackProgramBalances, clientLocations, clients, saleItemModifiers, saleItems, sales, shopOrderRequests } from "@/services/drizzle/schema";
 import { and, count, eq } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
@@ -53,9 +34,7 @@ function extractOrgId(pathname: string) {
   return pathname.split("/")[3];
 }
 
-function hashShopOrderPayload(
-  input: ReturnType<typeof CreateShopOrderInputSchema.parse>,
-) {
+function hashShopOrderPayload(input: ReturnType<typeof CreateShopOrderInputSchema.parse>) {
   // A mesma cesta de recompensas em ordem diferente é o mesmo pedido: normaliza antes de hashear.
   const recompensas = resolveRewardRedemptionLinesInput(input);
   const normalized = {
@@ -81,11 +60,9 @@ function getPublicOrderNumber(saleId: string) {
 const SHOP_ORDER_PUBLIC_TOKEN_CONFLICT_MESSAGE =
   "Este pedido foi alterado após uma tentativa anterior. Tente enviar novamente.";
 
-function getShopPaymentDescription(
-  method: ReturnType<
+function getShopPaymentDescription(method: ReturnType<
     typeof CreateShopOrderInputSchema.parse
-  >["pagamento"]["metodo"],
-) {
+  >["pagamento"]["metodo"]) {
   const labels = {
     DINHEIRO: "Dinheiro",
     PIX: "PIX",
@@ -97,7 +74,7 @@ function getShopPaymentDescription(
 
 // A conta do item (variante, regras de grupo, preço das opções) é a mesma da comanda e vive em
 // lib/products/resolve-catalog-order-item.ts; o catálogo da loja já chega projetado para o canal.
-type CalculatedItem = TResolvedCatalogOrderItem;
+type CalculatedItem = TResolvedCatalogOrderItem & { chave?: string | null };
 
 async function getOrCreateShopClient({
   orgId,
@@ -118,11 +95,7 @@ async function getOrCreateShopClient({
   const identificacaoFiscalObrigatoria = entregaModalidade === "ENTREGA";
 
   const existingClient = await db.query.clients.findFirst({
-    where: (fields, { and, eq }) =>
-      and(
-        eq(fields.organizacaoId, orgId),
-        eq(fields.telefoneBase, telefoneBase),
-      ),
+    where: (fields, { and, eq }) => and(eq(fields.organizacaoId, orgId), eq(fields.telefoneBase, telefoneBase)),
   });
   if (existingClient) {
     if (
@@ -131,37 +104,23 @@ async function getOrCreateShopClient({
     )
       return existingClient;
     if (!cpfCnpjInformado || !isValidCpfCnpj(cpfCnpjInformado)) {
-      throw new createHttpError.BadRequest(
-        "Informe um CPF ou CNPJ válido para o destinatário da entrega.",
-      );
+      throw new createHttpError.BadRequest("Informe um CPF ou CNPJ válido para o destinatário da entrega.");
     }
 
     const [updatedClient] = await db
       .update(clients)
       .set({ cpfCnpj: cpfCnpjInformado })
-      .where(
-        and(
-          eq(clients.id, existingClient.id),
-          eq(clients.organizacaoId, orgId),
-        ),
-      )
+      .where(and(eq(clients.id, existingClient.id), eq(clients.organizacaoId, orgId)))
       .returning();
-    if (!updatedClient)
-      throw new createHttpError.InternalServerError(
-        "Erro ao atualizar a identificação fiscal do cliente.",
-      );
+    if (!updatedClient) throw new createHttpError.InternalServerError("Erro ao atualizar a identificação fiscal do cliente.");
     return updatedClient;
   }
 
   if (!nome?.trim())
     throw new createHttpError.BadRequest("Nome do cliente não informado.");
-  if (
-    identificacaoFiscalObrigatoria &&
-    (!cpfCnpjInformado || !isValidCpfCnpj(cpfCnpjInformado))
-  ) {
-    throw new createHttpError.BadRequest(
-      "Informe um CPF ou CNPJ válido para o destinatário da entrega.",
-    );
+  if (identificacaoFiscalObrigatoria &&
+    (!cpfCnpjInformado || !isValidCpfCnpj(cpfCnpjInformado))) {
+    throw new createHttpError.BadRequest("Informe um CPF ou CNPJ válido para o destinatário da entrega.");
   }
 
   const [inserted] = await db
@@ -223,10 +182,7 @@ async function createDeliveryLocation({
       localizacaoComplemento: address.localizacaoComplemento ?? null,
     })
     .returning();
-  if (!inserted)
-    throw new createHttpError.InternalServerError(
-      "Erro ao criar localização de entrega.",
-    );
+  if (!inserted) throw new createHttpError.InternalServerError("Erro ao criar localização de entrega.");
   return inserted;
 }
 
@@ -247,14 +203,8 @@ async function validateCashbackRequest({
     where: (fields, { and, eq }) =>
       and(eq(fields.organizacaoId, orgId), eq(fields.ativo, true)),
   });
-  if (!program)
-    throw new createHttpError.BadRequest(
-      "Programa de cashback não encontrado.",
-    );
-  if (!program.modalidadeDescontosPermitida)
-    throw new createHttpError.BadRequest(
-      "Resgate de cashback não permitido para esta loja.",
-    );
+  if (!program) throw new createHttpError.BadRequest("Programa de cashback não encontrado.");
+  if (!program.modalidadeDescontosPermitida) throw new createHttpError.BadRequest("Resgate de cashback não permitido para esta loja.");
   const surfaceBlockReason = getCashbackRedemptionBlockReason({
     program,
     surface: "LOJA_DIGITAL",
@@ -273,19 +223,14 @@ async function validateCashbackRequest({
   if (available < requestedValue)
     throw new createHttpError.BadRequest("Saldo insuficiente.");
 
-  if (
-    program.resgateLimiteTipo &&
+  if (program.resgateLimiteTipo &&
     program.resgateLimiteValor !== null &&
-    program.resgateLimiteValor !== undefined
-  ) {
+    program.resgateLimiteValor !== undefined) {
     const maxAllowed =
       program.resgateLimiteTipo === "FIXO"
         ? program.resgateLimiteValor
         : (saleSubtotal * program.resgateLimiteValor) / 100;
-    if (requestedValue > maxAllowed)
-      throw new createHttpError.BadRequest(
-        "Valor de resgate excede o limite permitido.",
-      );
+    if (requestedValue > maxAllowed) throw new createHttpError.BadRequest("Valor de resgate excede o limite permitido.");
   }
 
   return { programId: program.id };
@@ -313,20 +258,14 @@ async function validateCouponRequest({
     clienteId: clientId,
     surface: "LOJA_DIGITAL",
   });
-  const coupon = availableCoupons.find(
-    (item) => item.id === appliedCoupon.cupomId,
-  );
-  if (!coupon)
-    throw new createHttpError.BadRequest(
-      "Cupom não disponível para este cliente.",
-    );
-  if (coupon.validacaoModo !== "AUTOMATICA")
-    throw new createHttpError.BadRequest(
-      "Cupom de validação manual não pode ser usado na loja digital.",
-    );
+  const coupon = availableCoupons.find((item) => item.id === appliedCoupon.cupomId);
+  if (!coupon) throw new createHttpError.BadRequest("Cupom não disponível para este cliente.");
+  if (coupon.validacaoModo !== "AUTOMATICA") throw new createHttpError.BadRequest("Cupom de validação manual não pode ser usado na loja digital.");
 
   const cartItems: TCouponCartItem[] = calculatedItems.map((item, index) => ({
-    chave: String(index),
+    chave: item.chave ?? String(index),
+    valorUnitarioBase: item.valorUnitarioBase,
+    valorDesconto: item.valorDesconto,
     produtoId: item.produtoId,
     produtoVarianteId: item.produtoVarianteId,
     grupo: item.grupo,
@@ -334,22 +273,19 @@ async function validateCouponRequest({
     valorVendaUnitario: item.valorUnitarioFinal,
   }));
   const evaluation = evaluateCouponAgainstCart({
+    brinde: appliedCoupon.brinde,
     coupon,
     targets: coupon.alvos,
     cartItems,
     context: { entregaModalidade, comprasAnterioresConfirmadas },
   });
-  if (!evaluation.elegivel)
-    throw new createHttpError.BadRequest(
-      `Cupom não elegível para este pedido: ${evaluation.motivo}`,
-    );
+  if (!evaluation.elegivel) throw new createHttpError.BadRequest(`Cupom não elegível para este pedido: ${evaluation.motivo}`);
   if (Math.abs(evaluation.valorDesconto - appliedCoupon.valorDesconto) > 0.01) {
-    throw new createHttpError.BadRequest(
-      "O desconto do cupom está desatualizado. Reaplique o cupom e tente novamente.",
-    );
+    throw new createHttpError.BadRequest("O desconto do cupom está desatualizado. Reaplique o cupom e tente novamente.");
   }
 
   return {
+    brinde: appliedCoupon.brinde,
     cupomId: coupon.id,
     valorDesconto: evaluation.valorDesconto,
     codigo: coupon.codigo,
@@ -375,17 +311,12 @@ async function createShopOrder(request: NextRequest) {
   if (!settings || !settings.ativo)
     throw new createHttpError.NotFound("Loja digital indisponível.");
 
-  const configuracoes = normalizeShopSettingsConfiguration(
-    settings.configuracoes,
-  );
+  const configuracoes = normalizeShopSettingsConfiguration(settings.configuracoes);
   const availability = getShopAvailability({
     ativo: settings.ativo,
     configuracoes,
   });
-  if (availability.status !== "ABERTA")
-    throw new createHttpError.BadRequest(
-      "Não estamos recebendo pedidos no momento.",
-    );
+  if (availability.status !== "ABERTA") throw new createHttpError.BadRequest("Não estamos recebendo pedidos no momento.");
   if (
     input.entrega.modalidade === "RETIRADA" &&
     !configuracoes.atendimento.retirada.ativo
@@ -397,30 +328,15 @@ async function createShopOrder(request: NextRequest) {
   )
     throw new createHttpError.BadRequest("Entrega não disponível.");
 
-  if (
-    !configuracoes.pagamento.metodosAceitos.includes(input.pagamento.metodo)
-  ) {
-    throw new createHttpError.BadRequest(
-      "Método de pagamento não disponível para esta loja.",
-    );
-  }
-
   const payloadHash = hashShopOrderPayload(input);
   const publicAccessTokenHash = hashPublicAccessToken(input.publicAccessToken);
   const existingRequest = await db.query.shopOrderRequests.findFirst({
-    where: (fields, { and, eq }) =>
-      and(
-        eq(fields.organizacaoId, orgId),
-        eq(fields.idempotencyKey, input.idempotencyKey),
-      ),
+    where: (fields, { and, eq }) => and(eq(fields.organizacaoId, orgId), eq(fields.idempotencyKey, input.idempotencyKey)),
   });
   // Venda criada em uma tentativa anterior cuja confirmação falhou: retomada em vez de recriada.
   let resumeSaleId: string | null = null;
   if (existingRequest) {
-    if (existingRequest.payloadHash !== payloadHash)
-      throw new createHttpError.Conflict(
-        "A chave de idempotência já foi usada com outro pedido.",
-      );
+    if (existingRequest.payloadHash !== payloadHash) throw new createHttpError.Conflict("A chave de idempotência já foi usada com outro pedido.");
     if (existingRequest.status === "CONCLUIDO" && existingRequest.vendaId) {
       return NextResponse.json({
         data: {
@@ -441,17 +357,10 @@ async function createShopOrder(request: NextRequest) {
       // MESMA venda. Se a confirmação da tentativa anterior chegou a virar a venda (falha só no
       // pós-commit), o pedido na prática deu certo: conclui e responde sucesso.
       const existingSale = await db.query.sales.findFirst({
-        where: (fields, { and, eq }) =>
-          and(
-            eq(fields.id, existingRequest.vendaId as string),
-            eq(fields.organizacaoId, orgId),
-          ),
+        where: (fields, { and, eq }) => and(eq(fields.id, existingRequest.vendaId as string), eq(fields.organizacaoId, orgId)),
         columns: { id: true, statusVenda: true },
       });
-      if (!existingSale)
-        throw new createHttpError.Conflict(
-          "Este pedido já está sendo processado. Aguarde e tente novamente.",
-        );
+      if (!existingSale) throw new createHttpError.Conflict("Este pedido já está sendo processado. Aguarde e tente novamente.");
       if (existingSale.statusVenda !== "ORCAMENTO") {
         await db
           .update(shopOrderRequests)
@@ -468,59 +377,42 @@ async function createShopOrder(request: NextRequest) {
       }
       resumeSaleId = existingSale.id;
     } else {
-      throw new createHttpError.Conflict(
-        "Este pedido já está sendo processado. Aguarde e tente novamente.",
-      );
+      throw new createHttpError.Conflict("Este pedido já está sendo processado. Aguarde e tente novamente.");
     }
   }
 
-  const existingPublicTokenRequest = await db.query.shopOrderRequests.findFirst(
-    {
+  const existingPublicTokenRequest = await db.query.shopOrderRequests.findFirst({
       where: (fields, { eq }) =>
         eq(fields.publicAccessTokenHash, publicAccessTokenHash),
-    },
-  );
+    });
   // Na retomada o token pertence à própria request retomada — só é conflito quando é de outra.
-  if (
-    existingPublicTokenRequest &&
-    existingPublicTokenRequest.id !== existingRequest?.id
-  ) {
-    throw new createHttpError.Conflict(
-      SHOP_ORDER_PUBLIC_TOKEN_CONFLICT_MESSAGE,
-    );
+  if (existingPublicTokenRequest &&
+    existingPublicTokenRequest.id !== existingRequest?.id) {
+    throw new createHttpError.Conflict(SHOP_ORDER_PUBLIC_TOKEN_CONFLICT_MESSAGE);
   }
 
   const catalogProducts = await getShopCatalogProducts({
     orgId,
     configuracoes,
   });
-  const catalogProductMap = new Map(
-    catalogProducts.map((product) => [product.id, product]),
-  );
+  const catalogProductMap = new Map(catalogProducts.map((product) => [product.id, product]));
   const calculatedItems = input.itens.map((item) => {
     const product = catalogProductMap.get(item.produtoId);
-    if (!product)
-      throw new createHttpError.BadRequest(
-        "Produto não disponível na loja digital.",
-      );
-    return resolveCatalogOrderItem({
+    if (!product) throw new createHttpError.BadRequest("Produto não disponível na loja digital.");
+    return {
+      chave: item.tempId,
+      ...resolveCatalogOrderItem({
       product,
       variantId: item.produtoVarianteId ?? null,
       quantity: item.quantidade,
       modifiers: item.modificadores,
-    });
-  });
-  const subtotal = calculatedItems.reduce(
-    (sum, item) => sum + item.valorTotalLiquido,
-    0,
-  );
-  if (
-    input.entrega.modalidade === "ENTREGA" &&
-    subtotal < configuracoes.atendimento.entrega.pedidoMinimo
-  ) {
-    throw new createHttpError.BadRequest(
-      "Pedido mínimo para entrega não atingido.",
-    );
+    }),
+    };
+    }).map((item) => normalizeCouponGiftItem(item, input.cupomResgate?.brinde));
+  const subtotal = calculatedItems.reduce((sum, item) => sum + item.valorTotalLiquido, 0);
+  if (input.entrega.modalidade === "ENTREGA" &&
+    subtotal < configuracoes.atendimento.entrega.pedidoMinimo) {
+    throw new createHttpError.BadRequest("Pedido mínimo para entrega não atingido.");
   }
 
   const client = await getOrCreateShopClient({
@@ -555,10 +447,7 @@ async function createShopOrder(request: NextRequest) {
   });
   const couponDiscount = appliedCoupon?.valorDesconto ?? 0;
   const saleValueBeforeCashback = Math.max(0, subtotal - couponDiscount);
-  const requestedCashback = Math.min(
-    input.cashbackResgateSolicitado,
-    saleValueBeforeCashback,
-  );
+  const requestedCashback = Math.min(input.cashbackResgateSolicitado, saleValueBeforeCashback);
   const { programId } = await validateCashbackRequest({
     orgId,
     clientId: client.id,
@@ -584,8 +473,12 @@ async function createShopOrder(request: NextRequest) {
     modalidade: input.entrega.modalidade,
     subtotalItens: subtotal,
   });
-  const totalToPay =
-    Math.max(0, subtotal - couponDiscount - requestedCashback) + deliveryFee;
+  const computedTotal = Math.max(0, subtotal - couponDiscount - requestedCashback) + deliveryFee;
+  const totalToPay = input.cupomResgate?.brinde ? roundCouponGiftCurrency(computedTotal) : computedTotal;
+
+  if (totalToPay > 0 && !configuracoes.pagamento.metodosAceitos.includes(input.pagamento.metodo)) {
+    throw new createHttpError.BadRequest("Método de pagamento não disponível para esta loja.");
+  }
 
   let requestRecord: { id: string };
   if (resumeSaleId && existingRequest) {
@@ -593,17 +486,9 @@ async function createShopOrder(request: NextRequest) {
     const [claimed] = await db
       .update(shopOrderRequests)
       .set({ status: "PROCESSANDO", erro: null })
-      .where(
-        and(
-          eq(shopOrderRequests.id, existingRequest.id),
-          eq(shopOrderRequests.status, "ERRO"),
-        ),
-      )
+      .where(and(eq(shopOrderRequests.id, existingRequest.id), eq(shopOrderRequests.status, "ERRO")))
       .returning({ id: shopOrderRequests.id });
-    if (!claimed)
-      throw new createHttpError.Conflict(
-        "Este pedido já está sendo processado. Aguarde e tente novamente.",
-      );
+    if (!claimed) throw new createHttpError.Conflict("Este pedido já está sendo processado. Aguarde e tente novamente.");
     requestRecord = claimed;
   } else {
     const [inserted] = await db
@@ -617,10 +502,7 @@ async function createShopOrder(request: NextRequest) {
       })
       .onConflictDoNothing()
       .returning({ id: shopOrderRequests.id });
-    if (!inserted)
-      throw new createHttpError.Conflict(
-        "Este pedido já está sendo processado. Aguarde e tente novamente.",
-      );
+    if (!inserted) throw new createHttpError.Conflict("Este pedido já está sendo processado. Aguarde e tente novamente.");
     requestRecord = inserted;
   }
 
@@ -649,13 +531,7 @@ async function createShopOrder(request: NextRequest) {
     },
     criadoEm: new Date().toISOString(),
   };
-  const saleObservations =
-    [
-      input.observacoes?.trim() || null,
-      input.pagamento.observacoes?.trim() || null,
-    ]
-      .filter(Boolean)
-      .join("\n") || null;
+  const saleObservations = [input.observacoes?.trim() || null, input.pagamento.observacoes?.trim() || null].filter(Boolean).join("\n") || null;
 
   let saleId: string | null = resumeSaleId;
   try {
@@ -672,11 +548,7 @@ async function createShopOrder(request: NextRequest) {
             valorTotal: totalToPay,
             descontosTotal: discountsTotal > 0 ? discountsTotal : null,
             acrescimosTotal: deliveryFee > 0 ? deliveryFee : null,
-            custoTotal:
-              calculatedItems.reduce(
-                (sum, item) => sum + item.valorCustoTotal,
-                0,
-              ) + sumAdmittedRewardsCost(admittedRewards),
+            custoTotal: calculatedItems.reduce((sum, item) => sum + item.valorCustoTotal, 0) + sumAdmittedRewardsCost(admittedRewards),
             vendedorNome: "",
             vendedorId: null,
             entregaModalidade: input.entrega.modalidade,
@@ -699,15 +571,10 @@ async function createShopOrder(request: NextRequest) {
           })
           .returning({ id: sales.id, idExterno: sales.idExterno });
 
-        if (!insertedSale)
-          throw new createHttpError.InternalServerError(
-            "Erro ao criar pedido.",
-          );
+        if (!insertedSale) throw new createHttpError.InternalServerError("Erro ao criar pedido.");
 
         for (const item of calculatedItems) {
-          const [insertedItem] = await tx
-            .insert(saleItems)
-            .values({
+          const [insertedItem] = await tx.insert(saleItems).values({
               organizacaoId: orgId,
               vendaId: insertedSale.id,
               clienteId: client.id,
@@ -721,6 +588,7 @@ async function createShopOrder(request: NextRequest) {
               valorVendaTotalLiquido: item.valorTotalLiquido,
               valorCustoTotal: item.valorCustoTotal,
               metadados: {
+                itemChave: item.chave ?? null,
                 nome: item.nome,
                 codigo: item.codigo,
                 imagemUrl: item.imagemUrl,
@@ -733,10 +601,7 @@ async function createShopOrder(request: NextRequest) {
               },
             })
             .returning({ id: saleItems.id });
-          if (!insertedItem)
-            throw new createHttpError.InternalServerError(
-              "Erro ao criar item do pedido.",
-            );
+          if (!insertedItem) throw new createHttpError.InternalServerError("Erro ao criar item do pedido.");
 
           if (item.modificadores.length > 0) {
             await tx.insert(saleItemModifiers).values(
@@ -772,26 +637,20 @@ async function createShopOrder(request: NextRequest) {
 
     const organizationSaleDefaults =
       organization.configuracao.defaults.contabilidade.lancamentosPadrao.vendas;
-    if (
-      !organizationSaleDefaults.debitoContaId ||
-      !organizationSaleDefaults.creditoContaId
-    ) {
-      throw new createHttpError.InternalServerError(
-        "A organização não possui contas padrão de vendas configuradas.",
-      );
+    if (!organizationSaleDefaults.debitoContaId ||
+      !organizationSaleDefaults.creditoContaId) {
+      throw new createHttpError.InternalServerError("A organização não possui contas padrão de vendas configuradas.");
     }
-    const paymentDefaults = getOrganizationPaymentMethodsConfig(
-      organization.configuracao,
-    )[input.pagamento.metodo];
-    if (!paymentDefaults?.suportado)
-      throw new createHttpError.BadRequest(
-        "Método de pagamento não habilitado para esta organização.",
-      );
+    const paymentDefaults = getOrganizationPaymentMethodsConfig(organization.configuracao)[input.pagamento.metodo];
+    if (totalToPay > 0 && !paymentDefaults?.suportado)
+      throw new createHttpError.BadRequest("Método de pagamento não habilitado para esta organização.");
 
     await processSaleConfirmation({
       organization,
       saleId,
-      salePayments: [
+      salePayments:
+        totalToPay > 0
+          ? [
         {
           metodo: input.pagamento.metodo,
           valor: totalToPay,
@@ -800,15 +659,17 @@ async function createShopOrder(request: NextRequest) {
           observacoes:
             input.pagamento.observacoes ?? metadata.pagamento.descricao,
           // Loja digital não tem operador para escolher conta — sempre a padrão do método.
-          contaFinanceiraId: paymentDefaults.contaFinanceiraPadraoId ?? null,
+                contaFinanceiraId: paymentDefaults?.contaFinanceiraPadraoId ?? null,
         },
-      ],
+            ]
+          : [],
       saleAuthorId: null,
       saleClientId: client.id,
       saleCashbackProgramId: programId,
       saleCashbackRedemptionValue: requestedCashback,
       saleCashbackRedemptionSurface: "LOJA_DIGITAL",
       saleRewardRedemptions: toSaleRewardRedemptionInputs(admittedRewards),
+      saleCouponGift: appliedCoupon?.brinde ?? null,
       saleCouponId: appliedCoupon?.cupomId ?? null,
       saleCouponDeclaredDiscountValue: appliedCoupon?.valorDesconto ?? null,
       saleCouponRedemptionSurface: appliedCoupon ? "LOJA_DIGITAL" : undefined,

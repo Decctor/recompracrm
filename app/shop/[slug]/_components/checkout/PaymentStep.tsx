@@ -34,7 +34,7 @@ export default function PaymentStep({ onNext }: { onNext: () => void }) {
 	const [trocoText, setTrocoText] = useState(payment.trocoPara !== null ? payment.trocoPara.toFixed(2).replace(".", ",") : "");
 
 	const orderTotal = useMemo(() => {
-		const subtotal = getShopCartSubtotal(cart.items, catalog.products);
+		const subtotal = getShopCartSubtotal(cart.items, catalog.products, coupon.resgate?.brinde);
 		const taxaEntrega = resolveShopDeliveryFee({
 			configuracoes: catalog.shopSettings.configuracoes,
 			modalidade: delivery.modalidade,
@@ -54,6 +54,17 @@ export default function PaymentStep({ onNext }: { onNext: () => void }) {
 		if (!acceptedMethods.has(payment.metodo)) return;
 		onNext();
 	};
+
+	if (orderTotal <= 0)
+		return (
+			<div className="flex flex-col gap-4">
+				<h2 className="text-lg font-black">Nenhum pagamento necessário</h2>
+				<p className="text-sm text-muted-foreground">O benefício cobre o valor deste pedido. Continue para revisar e confirmar.</p>
+				<Button type="button" onClick={onNext}>
+					CONTINUAR
+				</Button>
+			</div>
+		);
 
 	return (
 		<div className="flex flex-col gap-5">

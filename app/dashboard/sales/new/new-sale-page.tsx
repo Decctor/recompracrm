@@ -49,6 +49,7 @@ import ClientContextSheet from "./components/context/ClientContextSheet";
 
 function mapItemsToApi(saleState: TUseSaleState) {
 	return saleState.state.itens.map((item) => ({
+		chave: item.tempId,
 		produtoId: item.produtoId,
 		produtoVarianteId: item.produtoVarianteId,
 		nome: item.nome,

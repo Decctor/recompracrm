@@ -1,6 +1,7 @@
 import type { DBTransaction } from "@/services/drizzle";
 import { saleItemModifiers, saleItems } from "@/services/drizzle/schema";
 import { POS_REWARD_SALE_ITEM_ORIGIN } from "@/lib/sales/sale-reward-snapshot";
+import { readCouponItemIdentity } from "@/lib/coupons/gifts";
 import { and, eq, inArray } from "drizzle-orm";
 
 export type TDraftItemModifierInput = {
@@ -12,6 +13,7 @@ export type TDraftItemModifierInput = {
 };
 
 export type TDraftItemInput = {
+	chave?: string | null;
 	/** Presente = linha existente do rascunho; ausente = item novo. */
 	id?: string | null;
 	produtoId: string;
@@ -47,6 +49,7 @@ export function modifierIdentityKey(modifiers: { opcaoId: string | null; quantid
  */
 export function buildDraftItemSnapshot(item: TDraftItemInput) {
 	return {
+		itemChave: item.chave ?? null,
 		nome: item.nome,
 		codigo: item.codigo,
 		imagemUrl: item.imagemUrl ?? null,
@@ -144,7 +147,7 @@ export async function syncDraftItems({
 			valorVendaTotalLiquido: item.valorTotalLiquido,
 			valorCustoTotal: valorCustoUnitario * item.quantidade,
 			observacoes: item.observacoes ?? null,
-			metadados: buildDraftItemSnapshot(item),
+			metadados: buildDraftItemSnapshot({ ...item, chave: existing ? readCouponItemIdentity(existing) : item.chave }),
 		};
 
 		if (!existing) {

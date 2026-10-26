@@ -66,7 +66,20 @@ export function useInternalCouponState({ initialState }: TUseInternalCouponState
 	const [state, setState] = useState<TCouponState>(initialStateHolder);
 
 	const updateCoupon = useCallback((coupon: Partial<TCouponState["coupon"]>) => {
-		setState((prev) => ({ ...prev, coupon: { ...prev.coupon, ...coupon } }));
+		setState((prev) => {
+			const next = { ...prev.coupon, ...coupon };
+			if (next.beneficioTipo === "BRINDE")
+				Object.assign(next, {
+					validacaoModo: "AUTOMATICA",
+					beneficioAplicacao: "ITENS_ELEGIVEIS",
+					beneficioValor: null,
+					beneficioDescontoMaximo: null,
+					beneficioCompreQuantidade: null,
+					beneficioLeveQuantidade: null,
+					resgatePermitirViaPontoInteracao: false,
+				});
+			return { ...prev, coupon: next };
+		});
 	}, []);
 
 	const addCouponTarget = useCallback((couponTarget: TCouponState["couponTargets"][number]) => {

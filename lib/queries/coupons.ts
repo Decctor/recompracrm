@@ -1,3 +1,4 @@
+import type { TGetCouponGiftProductsOutput } from "@/app/api/pos/coupons/gifts/route";
 import type { TGetCouponGrantsInput, TGetCouponGrantsOutput } from "@/app/api/coupons/grants/route";
 import type { TGetCouponRedemptionsInput, TGetCouponRedemptionsOutput } from "@/app/api/coupons/redemptions/route";
 import type { TGetCouponStatsInput, TGetCouponStatsOutput } from "@/app/api/coupons/stats/route";
@@ -247,3 +248,13 @@ export function usePoiAvailableCoupons({
 	};
 }
 export type TPoiAvailableCoupon = Awaited<ReturnType<typeof fetchPoiAvailableCoupons>>[number];
+
+async function fetchPosCouponGiftProducts(couponId: string) {
+	const params = new URLSearchParams({ couponId });
+	const { data } = await axios.get<TGetCouponGiftProductsOutput>(`/api/pos/coupons/gifts?${params}`);
+	return data.data.products;
+}
+export function usePosCouponGiftProducts(couponId: string) {
+	const queryKey = ["pos-coupon-gift-products", couponId];
+	return { ...useQuery({ queryKey, queryFn: () => fetchPosCouponGiftProducts(couponId) }), queryKey };
+}

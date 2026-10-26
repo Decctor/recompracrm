@@ -53,6 +53,9 @@ export default function StageRules() {
 
 	return (
 		<div className="flex w-full flex-col gap-5">
+			{coupon.beneficioTipo === "BRINDE" ? (
+				<p className="text-sm text-muted-foreground">O sistema valida o produto escolhido como brinde no checkout.</p>
+			) : (
 			<ChoiceCards<TCouponValidationModeEnum>
 				label="Como o resgate é validado?"
 				value={coupon.validacaoModo}
@@ -62,6 +65,7 @@ export default function StageRules() {
 					{ value: "MANUAL", label: "Manual, no balcão", description: "O operador lê as condições e confere na hora do resgate.", icon: ClipboardCheck },
 				]}
 			/>
+			)}
 
 			{coupon.validacaoModo === "MANUAL" ? (
 				<>

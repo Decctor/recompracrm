@@ -11,27 +11,52 @@ import z from "zod";
 export const SaleCheckoutItemModifierInputSchema = z.object({
 	opcaoId: z.string({ required_error: "ID da opção não informado.", invalid_type_error: "Tipo não válido para ID da opção." }),
 	nome: z.string({ required_error: "Nome do modificador não informado.", invalid_type_error: "Tipo não válido para nome do modificador." }),
-	quantidade: z.number({ required_error: "Quantidade do modificador não informada.", invalid_type_error: "Tipo não válido para quantidade do modificador." }),
+	quantidade: z.number({
+		required_error: "Quantidade do modificador não informada.",
+		invalid_type_error: "Tipo não válido para quantidade do modificador.",
+	}),
 	valorUnitario: z.number({
 		required_error: "Valor unitário do modificador não informado.",
 		invalid_type_error: "Tipo não válido para valor unitário do modificador.",
 	}),
-	valorTotal: z.number({ required_error: "Valor total do modificador não informado.", invalid_type_error: "Tipo não válido para valor total do modificador." }),
+	valorTotal: z.number({
+		required_error: "Valor total do modificador não informado.",
+		invalid_type_error: "Tipo não válido para valor total do modificador.",
+	}),
 });
 
 export const SaleCheckoutItemInputSchema = z.object({
+	chave: z
+		.string({ required_error: "Chave do item não informada.", invalid_type_error: "Tipo não válido para a chave do item." })
+		.min(1)
+		.optional()
+		.nullable(),
 	produtoId: z.string({ required_error: "ID do produto não informado.", invalid_type_error: "Tipo não válido para ID do produto." }),
 	produtoVarianteId: z.string({ invalid_type_error: "Tipo não válido para ID da variante." }).optional().nullable(),
 	nome: z.string({ required_error: "Nome do item não informado.", invalid_type_error: "Tipo não válido para nome do item." }),
 	codigo: z.string({ required_error: "Código do item não informado.", invalid_type_error: "Tipo não válido para código do item." }),
 	imagemUrl: z.string({ invalid_type_error: "Tipo não válido para URL da imagem." }).optional().nullable(),
-	quantidade: z.number({ required_error: "Quantidade não informada.", invalid_type_error: "Tipo não válido para quantidade." }).positive("Quantidade deve ser maior que zero."),
-	valorUnitarioBase: z.number({ required_error: "Valor unitário base não informado.", invalid_type_error: "Tipo não válido para valor unitário base." }),
-	valorModificadores: z.number({ required_error: "Valor de modificadores não informado.", invalid_type_error: "Tipo não válido para valor de modificadores." }),
-	valorUnitarioFinal: z.number({ required_error: "Valor unitário final não informado.", invalid_type_error: "Tipo não válido para valor unitário final." }),
+	quantidade: z
+		.number({ required_error: "Quantidade não informada.", invalid_type_error: "Tipo não válido para quantidade." })
+		.positive("Quantidade deve ser maior que zero."),
+	valorUnitarioBase: z.number({
+		required_error: "Valor unitário base não informado.",
+		invalid_type_error: "Tipo não válido para valor unitário base.",
+	}),
+	valorModificadores: z.number({
+		required_error: "Valor de modificadores não informado.",
+		invalid_type_error: "Tipo não válido para valor de modificadores.",
+	}),
+	valorUnitarioFinal: z.number({
+		required_error: "Valor unitário final não informado.",
+		invalid_type_error: "Tipo não válido para valor unitário final.",
+	}),
 	valorTotalBruto: z.number({ required_error: "Valor total bruto não informado.", invalid_type_error: "Tipo não válido para valor total bruto." }),
 	valorDesconto: z.number({ invalid_type_error: "Tipo não válido para desconto." }).default(0),
-	valorTotalLiquido: z.number({ required_error: "Valor total líquido não informado.", invalid_type_error: "Tipo não válido para valor total líquido." }),
+	valorTotalLiquido: z.number({
+		required_error: "Valor total líquido não informado.",
+		invalid_type_error: "Tipo não válido para valor total líquido.",
+	}),
 	modificadores: z.array(SaleCheckoutItemModifierInputSchema),
 	observacoes: z.string({ invalid_type_error: "Tipo não válido para observações do item." }).max(500).optional().nullable(),
 });

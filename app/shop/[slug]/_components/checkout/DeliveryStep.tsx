@@ -47,6 +47,7 @@ export default function DeliveryStep({ onNext }: DeliveryStepProps) {
   const subtotal = getShopCartSubtotal(
     orderState.state.cart.items,
     catalog.products,
+    orderState.state.coupon.resgate?.brinde,
   );
 
   const onlyPickup = service.retirada.ativo && !service.entrega.ativo;

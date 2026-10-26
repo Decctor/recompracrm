@@ -1,3 +1,4 @@
+import { normalizeCouponGiftItem, roundCouponGiftCurrency } from "@/lib/coupons/gift-pricing";
 import { accumulateCashbackForClient } from "@/lib/cashback/accumulation";
 import { assertPOSFiscalEmissionReady } from "@/lib/fiscal/document-preview";
 import { captureSaleCampaignEvent } from "@/lib/campaigns/events/handlers/sale-capture";
@@ -6,6 +7,8 @@ import { waitUntil } from "@vercel/functions";
 import { applyCashbackRedemptionFIFO } from "@/lib/cashback/redemption";
 import { getCashbackRedemptionBlockReason } from "@/lib/cashback/redemption-policy";
 import { type TCouponCartItem, type TCouponRedemptionSurface, evaluateCouponAgainstCart } from "@/lib/coupons/engine";
+import type { TCouponGiftSelection, TCouponBenefitSnapshot } from "@/schemas/coupons";
+import { readCouponItemIdentity, readCouponItemBasePrice } from "@/lib/coupons/gifts";
 import type { TBenefitRedemptionSurface } from "@/schemas/enums";
 import { processCouponRedemption } from "@/lib/coupons/redemption";
 import { processSaleCupomAutoPrintIfEligible, processSalePreparationTicketAutoPrintIfEligible } from "@/lib/desktop-agent/auto-print";
@@ -21,6 +24,8 @@ import {
 	cashbackProgramTransactions,
 	cashbackPrograms,
 	couponRedemptions,
+	coupons,
+	saleItems,
 	sales,
 	salesSessions,
 } from "@/services/drizzle/schema";
@@ -68,6 +73,7 @@ export type TProcessSaleConfirmationInput = {
 	// aqui acontece o registro no ledger, com revalidação de disponibilidade e, para
 	// cupons AUTOMATICA, reavaliação do carrinho pelo motor.
 	saleCouponId?: string | null;
+	saleCouponGift?: TCouponGiftSelection | null;
 	saleCouponDeclaredDiscountValue?: number | null;
 	saleCouponRedemptionSurface?: TCouponRedemptionSurface;
 
@@ -553,6 +559,11 @@ export async function processSaleConfirmationInTransaction({ tx, input }: { tx: 
 			});
 			if (existingRedemption) return { redemptionId: existingRedemption.id, valorDesconto: existingRedemption.valorDesconto };
 
+			await tx
+				.select({ id: coupons.id })
+				.from(coupons)
+				.where(and(eq(coupons.id, input.saleCouponId as string), eq(coupons.organizacaoId, input.organization.id)))
+				.for("update");
 			const coupon = await tx.query.coupons.findFirst({
 				where: (fields, { eq, and }) => and(eq(fields.id, input.saleCouponId as string), eq(fields.organizacaoId, input.organization.id)),
 				with: { alvos: true },
@@ -561,6 +572,7 @@ export async function processSaleConfirmationInTransaction({ tx, input }: { tx: 
 
 			const declaredDiscountValue = input.saleCouponDeclaredDiscountValue ?? 0;
 			let discountValue = declaredDiscountValue;
+			let giftSnapshot: TCouponBenefitSnapshot["brinde"];
 
 			if (coupon.validacaoModo === "AUTOMATICA") {
 				const previousConfirmedPurchases = await countPreviousConfirmedPurchases({
@@ -580,7 +592,9 @@ export async function processSaleConfirmationInTransaction({ tx, input }: { tx: 
 						: [];
 				const productGroupById = new Map(productsResult.map((product) => [product.id, product.grupo]));
 				const cartItems: TCouponCartItem[] = sale.itens.map((item) => ({
-					chave: item.id,
+					chave: readCouponItemIdentity(item),
+					valorUnitarioBase: readCouponItemBasePrice(item),
+					valorDesconto: item.valorTotalDesconto,
 					produtoId: item.produtoId,
 					produtoVarianteId: item.produtoVarianteId,
 					grupo: productGroupById.get(item.produtoId) ?? null,
@@ -589,6 +603,7 @@ export async function processSaleConfirmationInTransaction({ tx, input }: { tx: 
 				}));
 
 				const evaluation = evaluateCouponAgainstCart({
+					brinde: input.saleCouponGift,
 					coupon,
 					targets: coupon.alvos,
 					cartItems,
@@ -598,10 +613,44 @@ export async function processSaleConfirmationInTransaction({ tx, input }: { tx: 
 					},
 				});
 				if (!evaluation.elegivel) throw new createHttpError.BadRequest(`Cupom nao elegivel para essa venda: ${evaluation.motivo}`);
-				if (declaredDiscountValue > 0 && Math.abs(evaluation.valorDesconto - declaredDiscountValue) > 0.01) {
+				if (
+					(evaluation.brinde || declaredDiscountValue > 0) &&
+					(!Number.isFinite(declaredDiscountValue) || Math.abs(evaluation.valorDesconto - declaredDiscountValue) > (evaluation.brinde ? 0.000001 : 0.01))
+				) {
 					throw new createHttpError.BadRequest("O desconto do cupom esta desatualizado para o carrinho atual. Reaplique o cupom e tente novamente.");
 				}
+				if (evaluation.brinde) {
+					// O cabeçalho já inclui cupom, cashback e desconto geral; os líquidos dos itens
+					// ainda não incluem o brinde. Não confirme valores financeiros divergentes:
+					// contabilidade, pagamentos e acúmulo usam sale.valorTotal nesta transação.
+					const itemNetTotal = sale.itens.reduce(
+						(sum, item) => sum + normalizeCouponGiftItem(
+							{
+								quantidade: item.quantidade,
+								valorUnitarioFinal: item.valorVendaUnitario,
+								valorTotalBruto: item.valorVendaTotalBruto,
+								valorDesconto: item.valorTotalDesconto,
+								valorTotalLiquido: item.valorVendaTotalLiquido,
+							},
+							evaluation.brinde,
+							readCouponItemIdentity(item),
+						).valorTotalLiquido,
+						0,
+					);
+					const discountsTotal = sale.descontosTotal ?? 0;
+					const chargesTotal = sale.acrescimosTotal ?? 0;
+					const expectedTotal = roundCouponGiftCurrency(Math.max(0, itemNetTotal - discountsTotal) + chargesTotal);
+					if (
+						![itemNetTotal, discountsTotal, chargesTotal, sale.valorTotal].every(Number.isFinite) ||
+						chargesTotal < 0 ||
+						discountsTotal + 0.000001 < evaluation.valorDesconto + redemptionValue ||
+						Math.abs(sale.valorTotal - expectedTotal) > 0.000001
+					) {
+						throw new createHttpError.BadRequest("Os totais da venda não correspondem ao brinde aplicado. Reaplique o cupom e salve o carrinho antes de confirmar.");
+					}
+				}
 				discountValue = evaluation.valorDesconto;
+				giftSnapshot = evaluation.brinde;
 			} else {
 				// MANUAL: o operador valida as condicoes e informa/confirma o valor do desconto.
 				if (discountValue <= 0) throw new createHttpError.BadRequest("Informe o valor do desconto do cupom de validacao manual.");
@@ -612,6 +661,7 @@ export async function processSaleConfirmationInTransaction({ tx, input }: { tx: 
 			}
 
 			const redemption = await processCouponRedemption({
+				brinde: giftSnapshot,
 				trx: tx,
 				organizacaoId: input.organization.id,
 				cupomId: coupon.id,
@@ -625,6 +675,19 @@ export async function processSaleConfirmationInTransaction({ tx, input }: { tx: 
 				entregaModalidade: sale.entregaModalidade,
 			});
 
+			if (giftSnapshot) {
+				const giftedItem = sale.itens.find((item) => readCouponItemIdentity(item) === giftSnapshot.itemChave);
+				if (!giftedItem) throw new createHttpError.BadRequest("Item do brinde não encontrado.");
+				await tx
+					.update(saleItems)
+					.set({
+						valorTotalDesconto: giftedItem.valorTotalDesconto + discountValue,
+						valorVendaTotalBruto: roundCouponGiftCurrency(giftedItem.quantidade * giftedItem.valorVendaUnitario),
+						valorVendaTotalLiquido: roundCouponGiftCurrency(roundCouponGiftCurrency(giftedItem.quantidade * giftedItem.valorVendaUnitario) - giftedItem.valorTotalDesconto - discountValue),
+						metadados: { ...(giftedItem.metadados as Record<string, unknown>), cupomBrindeDesconto: discountValue },
+					})
+					.where(and(eq(saleItems.id, giftedItem.id), eq(saleItems.organizacaoId, input.organization.id)));
+			}
 			return { redemptionId: redemption.redemptionId, valorDesconto: discountValue };
 		})();
 	}

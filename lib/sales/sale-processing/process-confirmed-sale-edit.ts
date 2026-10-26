@@ -1,7 +1,10 @@
+import { normalizeCouponGiftItem, roundCouponGiftCurrency } from "@/lib/coupons/gift-pricing";
 import { resolveSaleFiscalDocumentPreference, type TSaleFiscalDocument } from "@/lib/fiscal/emission-document-policy";
 import { assertPOSFiscalEmissionReady } from "@/lib/fiscal/document-preview";
 import { resyncSaleCashbackAccumulation } from "@/lib/cashback/resync-sale-accumulation";
 import { type TCouponCartItem, evaluateCouponAgainstCart } from "@/lib/coupons/engine";
+import { readCouponItemIdentity } from "@/lib/coupons/gifts";
+import type { TCouponBenefitSnapshot } from "@/schemas/coupons";
 import { cancelCouponRedemption } from "@/lib/coupons/redemption";
 import { getCouponCheckoutConditionIssue, readCouponCheckoutConditions } from "@/lib/coupons/conditions";
 import { ACCOUNTING_ENTRY_BALANCE_TOLERANCE, getAccountingEntryBalanceError } from "@/lib/finances/accounting-entry-balance";
@@ -340,6 +343,7 @@ export async function processConfirmedSaleEditInTransaction({ tx, input }: { tx:
 	});
 	let cupomDesconto = 0;
 	let cupomRemovido = false;
+	let giftAllocation: { itemId: string; valorDesconto: number } | null = null;
 	if (couponRedemption) {
 		if (input.removerCupom) {
 			await cancelCouponRedemption({ trx: tx, organizacaoId: organizationId, redemptionId: couponRedemption.id });
@@ -349,6 +353,9 @@ export async function processConfirmedSaleEditInTransaction({ tx, input }: { tx:
 				where: (fields, { and, eq }) => and(eq(fields.id, couponRedemption.cupomId), eq(fields.organizacaoId, organizationId)),
 				with: { alvos: true },
 			});
+			const redeemedGift = (couponRedemption.beneficioSnapshot as TCouponBenefitSnapshot | null)?.brinde;
+			if (redeemedGift && coupon?.beneficioTipo !== "BRINDE")
+				throw new createHttpError.BadRequest("O benefício do cupom foi alterado. Remova o cupom para salvar.");
 			const checkoutConditions = readCouponCheckoutConditions(couponRedemption.beneficioSnapshot);
 			const conditionIssue = getCouponCheckoutConditionIssue(checkoutConditions, {
 				entregaModalidade: input.entregaModalidade ?? sale.entregaModalidade,
@@ -368,14 +375,18 @@ export async function processConfirmedSaleEditInTransaction({ tx, input }: { tx:
 						: [];
 				const productGroupById = new Map(productsResult.map((product) => [product.id, product.grupo]));
 				const cartItems: TCouponCartItem[] = activeItems.map((item, index) => ({
-					chave: item.id ?? `novo-${index}`,
+					chave: item.id ? readCouponItemIdentity(sale.itens.find((existing) => existing.id === item.id) ?? { id: item.id }) : `novo-${index}`,
+					valorUnitarioBase: item.valorUnitarioBase,
+					valorDesconto: item.valorDesconto,
 					produtoId: item.produtoId,
 					produtoVarianteId: item.produtoVarianteId ?? null,
 					grupo: productGroupById.get(item.produtoId) ?? null,
 					quantidade: item.quantidade,
 					valorVendaUnitario: item.valorUnitarioFinal,
 				}));
+				const giftSnapshot = (couponRedemption.beneficioSnapshot as TCouponBenefitSnapshot | null)?.brinde;
 				const evaluation = evaluateCouponAgainstCart({
+					brinde: giftSnapshot,
 					coupon: { ...coupon, condicaoModalidadesEntrega: checkoutConditions.condicaoModalidadesEntrega ?? null, condicaoPrimeiraCompra: false },
 					targets: coupon.alvos,
 					cartItems,
@@ -391,10 +402,20 @@ export async function processConfirmedSaleEditInTransaction({ tx, input }: { tx:
 						`O cupom aplicado não é mais elegível para o carrinho editado (${evaluation.motivo}). Remova o cupom para salvar.`,
 					);
 				}
-				if (Math.abs(evaluation.valorDesconto - couponRedemption.valorDesconto) > SALE_PRICING_CENT_TOLERANCE) {
+				if (Math.abs(evaluation.valorDesconto - couponRedemption.valorDesconto) > (evaluation.brinde ? 0.000001 : SALE_PRICING_CENT_TOLERANCE)) {
 					throw new createHttpError.BadRequest(
 						"O desconto do cupom muda com o carrinho editado e não pode ser recalculado na edição. Remova o cupom para salvar.",
 					);
+				}
+				if (evaluation.brinde) {
+					if (
+						giftSnapshot &&
+						(evaluation.brinde.produtoId !== giftSnapshot.produtoId || evaluation.brinde.produtoVarianteId !== giftSnapshot.produtoVarianteId)
+					)
+						throw new createHttpError.BadRequest("O produto do brinde não pode ser trocado na edição. Remova o cupom para salvar.");
+					const giftedItem = sale.itens.find((item) => readCouponItemIdentity(item) === evaluation.brinde?.itemChave);
+					if (!giftedItem) throw new createHttpError.BadRequest("O item do brinde foi removido. Remova o cupom para salvar.");
+					giftAllocation = { itemId: giftedItem.id, valorDesconto: evaluation.valorDesconto };
 				}
 				cupomDesconto = couponRedemption.valorDesconto;
 			} else {
@@ -428,7 +449,7 @@ export async function processConfirmedSaleEditInTransaction({ tx, input }: { tx:
 	// ------------------------------------------------------------------
 	// Recompute do dinheiro da venda (mesmas fórmulas da criação).
 	// ------------------------------------------------------------------
-	const valorBaseItens = activeItems.reduce((sum, item) => sum + item.valorTotalLiquido, 0) + rewardValorBase;
+	const valorBaseItens = activeItems.reduce((sum, item) => sum + (giftAllocation && giftAllocation.itemId === item.id ? normalizeCouponGiftItem(item, { itemChave: giftAllocation.itemId, quantidade: 1 }, item.id).valorTotalLiquido : item.valorTotalLiquido), 0) + rewardValorBase;
 	const descontosGerais = input.descontosTotal ?? 0;
 	const acrescimosGerais = input.acrescimosTotal ?? 0;
 	const descontosVenda = descontosGerais + cupomDesconto + cashbackResgate;
@@ -442,7 +463,8 @@ export async function processConfirmedSaleEditInTransaction({ tx, input }: { tx:
 			"O novo total não comporta o resgate de cashback aplicado na venda. Para desfazer o resgate, cancele a venda.",
 		);
 	}
-	const valorTotal = Math.max(0, valorBaseItens - descontosVenda) + acrescimosGerais;
+	const computedTotal = Math.max(0, valorBaseItens - descontosVenda) + acrescimosGerais;
+	const valorTotal = giftAllocation ? roundCouponGiftCurrency(computedTotal) : computedTotal;
 	if (valorTotal < editability.valorMinimoEdicao - ACCOUNTING_ENTRY_BALANCE_TOLERANCE) {
 		throw new createHttpError.BadRequest(
 			`O novo total (R$ ${valorTotal.toFixed(2)}) é menor que o valor já recebido (R$ ${editability.valorMinimoEdicao.toFixed(2)}). Para estornar recebimentos, cancele a venda.`,
@@ -523,7 +545,7 @@ export async function processConfirmedSaleEditInTransaction({ tx, input }: { tx:
 					valorVendaTotalLiquido: item.valorTotalLiquido,
 					valorCustoTotal: valorCustoUnitario * item.quantidade,
 					observacoes: item.observacoes ?? null,
-					metadados: buildItemMetadataSnapshot(item),
+					metadados: { ...buildItemMetadataSnapshot(item), itemChave: readCouponItemIdentity(existing) },
 				})
 				.where(and(eq(saleItems.id, existing.id), eq(saleItems.organizacaoId, organizationId)));
 
@@ -595,6 +617,25 @@ export async function processConfirmedSaleEditInTransaction({ tx, input }: { tx:
 			);
 		}
 		itensInseridos += 1;
+	}
+
+	if (giftAllocation) {
+		const giftedItem = activeItems.find((item) => item.id === giftAllocation.itemId);
+		const original = sale.itens.find((item) => item.id === giftAllocation.itemId);
+		if (!giftedItem || !original) throw new createHttpError.BadRequest("Item do brinde não encontrado.");
+		await tx
+			.update(saleItems)
+			.set({
+				valorTotalDesconto: giftedItem.valorDesconto + giftAllocation.valorDesconto,
+				valorVendaTotalBruto: roundCouponGiftCurrency(giftedItem.quantidade * giftedItem.valorUnitarioFinal),
+				valorVendaTotalLiquido: roundCouponGiftCurrency(roundCouponGiftCurrency(giftedItem.quantidade * giftedItem.valorUnitarioFinal) - giftedItem.valorDesconto - giftAllocation.valorDesconto),
+				metadados: {
+					...buildItemMetadataSnapshot(giftedItem),
+					itemChave: readCouponItemIdentity(original),
+					cupomBrindeDesconto: giftAllocation.valorDesconto,
+				},
+			})
+			.where(and(eq(saleItems.id, giftAllocation.itemId), eq(saleItems.organizacaoId, organizationId)));
 	}
 
 	// Venda já entregue: aumentos e itens novos baixam AGORA, pelo mesmo ponto único de baixa

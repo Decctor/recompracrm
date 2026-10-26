@@ -30,12 +30,21 @@ export default function CouponBenefitBlock({ coupon, updateCoupon, embedded }: C
 						label="ONDE O DESCONTO VALE"
 						resetOptionLabel="NA COMPRA TODA"
 						handleChange={(value) => updateCoupon({ beneficioAplicacao: value as TUseInternalCouponState["state"]["coupon"]["beneficioAplicacao"] })}
-						options={CouponBenefitScopeOptions}
+						options={
+							coupon.beneficioTipo === "BRINDE"
+								? CouponBenefitScopeOptions.filter((option) => option.value === "ITENS_ELEGIVEIS")
+								: CouponBenefitScopeOptions
+						}
 						onReset={() => updateCoupon({ beneficioAplicacao: "VENDA_TOTAL" })}
 					/>
 				</div>
 			</div>
-			{coupon.beneficioTipo === "COMPRE_X_LEVE_Y" ? (
+			{coupon.beneficioTipo === "BRINDE" ? (
+				<p className="text-sm text-muted-foreground">
+					Uma unidade de um dos produtos escolhidos será grátis. Adicionais e entrega são cobrados à parte. O brinde não conta para atingir as condições de
+					compra.
+				</p>
+			) : coupon.beneficioTipo === "COMPRE_X_LEVE_Y" ? (
 				<div className="w-full flex items-center gap-2 flex-col lg:flex-row">
 					<div className="w-full lg:w-1/2">
 						<NumberInput

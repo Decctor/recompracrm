@@ -817,6 +817,7 @@ export const CouponBenefitTypeOptions: { id: number; label: string; value: TCoup
 	{ id: 2, label: "DESCONTO PERCENTUAL (%)", value: "DESCONTO_PERCENTUAL" },
 	{ id: 3, label: "PREÇO FIXO POR UNIDADE", value: "PRECO_FIXO" },
 	{ id: 4, label: "LEVE MAIS, PAGUE MENOS", value: "COMPRE_X_LEVE_Y" },
+	{ id: 5, label: "PRODUTO GRÁTIS", value: "BRINDE" },
 ];
 
 export const CouponBenefitScopeOptions: { id: number; label: string; value: TCouponBenefitScopeEnum }[] = [

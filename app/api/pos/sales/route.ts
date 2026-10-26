@@ -1,3 +1,5 @@
+import { readCouponItemIdentity } from "@/lib/coupons/gifts";
+import { normalizeCouponGiftItem, roundCouponGiftCurrency } from "@/lib/coupons/gift-pricing";
 import { SaleFiscalDocumentSchema } from "@/schemas/fiscal";
 import { resolveSaleFiscalDocumentPreference } from "@/lib/fiscal/emission-document-policy";
 import { appApiHandler } from "@/lib/app-api";
@@ -36,6 +38,11 @@ const CartItemModifierInputSchema = z.object({
 });
 
 const CartItemInputSchema = z.object({
+	chave: z
+		.string({ required_error: "Chave do item não informada.", invalid_type_error: "Tipo não válido para a chave do item." })
+		.min(1)
+		.optional()
+		.nullable(),
 	produtoId: z.string({ required_error: "ID do produto não informado." }),
 	produtoVarianteId: z.string({ invalid_type_error: "Tipo não válido para ID da variante." }).optional().nullable(),
 	nome: z.string({ required_error: "Nome do item não informado." }),
@@ -133,6 +140,7 @@ async function createSaleDraft({ input, session }: { input: TCreateSaleDraftInpu
 
 	// Nunca confie nos valores do cliente: recalcula os itens contra o catálogo antes de qualquer uso.
 	await validateSaleItemsPricing({ orgId, itens: input.itens, canal: "POS" });
+	input = { ...input, itens: input.itens.map((item) => normalizeCouponGiftItem(item, input.cupomResgate?.brinde)) };
 
 	// Recompensas no rascunho: valida e carimba os snapshots autoritativos em rascunhoMetadados.
 	// Itens e débito de saldo só nascem na confirmação, que revalida tudo (preços podem mudar).
@@ -195,7 +203,8 @@ async function createSaleDraft({ input, session }: { input: TCreateSaleDraftInpu
 	if (input.cashbackResgate > valorAntesCashback) {
 		throw new createHttpError.BadRequest("O resgate de cashback não pode superar o valor da venda.");
 	}
-	const valorTotal = Math.max(0, valorBaseItens - descontosVenda) + acrescimosGerais;
+	const computedTotal = Math.max(0, valorBaseItens - descontosVenda) + acrescimosGerais;
+	const valorTotal = input.cupomResgate?.brinde ? roundCouponGiftCurrency(computedTotal) : computedTotal;
 	const custoTotal = input.itens.reduce((sum, item) => {
 		const custo = item.produtoVarianteId ? (variantCostMap.get(item.produtoVarianteId) ?? 0) : (productCostMap.get(item.produtoId) ?? 0);
 		return sum + custo * item.quantidade;
@@ -265,6 +274,7 @@ async function createSaleDraft({ input, session }: { input: TCreateSaleDraftInpu
 					valorCustoTotal: valorCustoUnitario * item.quantidade,
 					observacoes: item.observacoes ?? null,
 					metadados: {
+						itemChave: item.chave ?? null,
 						nome: item.nome,
 						codigo: item.codigo,
 						imagemUrl: item.imagemUrl ?? null,
@@ -385,7 +395,7 @@ async function updateSaleDraft({ input, session }: { input: TUpdateSaleDraftInpu
 		columns: { id: true, statusVenda: true, tabId: true, clienteId: true, emissaoFiscalDocumento: true, rascunhoMetadados: true },
 		with: {
 			itens: {
-				columns: { valorVendaTotalLiquido: true },
+				columns: { id: true, metadados: true, valorVendaTotalBruto: true, valorVendaTotalLiquido: true },
 			},
 		},
 	});
@@ -429,11 +439,26 @@ async function updateSaleDraft({ input, session }: { input: TUpdateSaleDraftInpu
 			throw new createHttpError.BadRequest("O rascunho precisa de pelo menos um item.");
 		}
 		await validateSaleItemsPricing({ orgId, itens: input.itens, canal: "POS" });
+		const existingItemsById = new Map(existing.itens.map((item) => [item.id, item]));
+		input = {
+			...input,
+			itens: input.itens.map((item) => {
+				const current = item.id ? existingItemsById.get(item.id) : undefined;
+				return normalizeCouponGiftItem({ ...item, chave: current ? readCouponItemIdentity(current) : item.chave }, input.cupomResgate?.brinde);
+			}),
+		};
 	}
 
 	const valorBaseItens = input.itens
 		? input.itens.reduce((sum, item) => sum + item.valorTotalLiquido, 0)
-		: existing.itens.reduce((sum, item) => sum + item.valorVendaTotalLiquido, 0);
+		: existing.itens.reduce(
+				(sum, item) => sum + normalizeCouponGiftItem(
+					{ valorTotalBruto: item.valorVendaTotalBruto, valorTotalLiquido: item.valorVendaTotalLiquido },
+					input.cupomResgate?.brinde,
+					readCouponItemIdentity(item),
+				).valorTotalLiquido,
+				0,
+			);
 	const descontosGerais = input.descontosTotal ?? 0;
 	const cupomDesconto = input.cupomResgate?.valorDesconto ?? 0;
 	const descontosVenda = descontosGerais + cupomDesconto + input.cashbackResgate;
@@ -515,7 +540,9 @@ async function updateSaleDraft({ input, session }: { input: TUpdateSaleDraftInpu
 				entregaLocalizacaoId: input.entregaLocalizacaoId,
 				comandaNumero: input.comandaNumero,
 				observacoes: input.observacoes,
-				valorTotal: Math.max(0, valorBaseItens - descontosVenda) + acrescimosVenda,
+				valorTotal: input.cupomResgate?.brinde
+					? roundCouponGiftCurrency(Math.max(0, valorBaseItens - descontosVenda) + acrescimosVenda)
+					: Math.max(0, valorBaseItens - descontosVenda) + acrescimosVenda,
 				descontosTotal: descontosVenda > 0 ? descontosVenda : null,
 				acrescimosTotal: input.acrescimosTotal,
 				...(itemTotals ? { custoTotal: itemTotals.custoTotal } : {}),

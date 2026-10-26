@@ -484,6 +484,7 @@ async function preparePointOfInteractionTransaction({ input, operatorContext, tx
 			});
 			if (!coupon) throw new createHttpError.NotFound("Cupom não encontrado.");
 
+			if (coupon.beneficioTipo === "BRINDE") throw new createHttpError.BadRequest("O brinde exige a seleção de um produto em um checkout com carrinho.");
 			if (coupon.validacaoModo === "AUTOMATICA") {
 				await lockClientPurchaseHistory(tx, input.orgId, clientId as string);
 				const previousConfirmedPurchases = await countPreviousConfirmedPurchases({ trx: tx, organizacaoId: input.orgId, clienteId: clientId as string });

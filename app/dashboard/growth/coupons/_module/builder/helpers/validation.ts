@@ -17,6 +17,8 @@ function activeTargetsCount(targets: TTargets): number {
 // learns about a problem on the step that owns it instead of at final submit.
 function validateBenefitStage(coupon: TCoupon): TStageValidationResult {
 	switch (coupon.beneficioTipo) {
+		case "BRINDE":
+			return { valid: true };
 		case "DESCONTO_PERCENTUAL":
 			if (!coupon.beneficioValor || coupon.beneficioValor <= 0) return { valid: false, reason: "Informe a porcentagem de desconto." };
 			if (coupon.beneficioValor > 100) return { valid: false, reason: "O desconto percentual não pode passar de 100%." };
@@ -40,6 +42,8 @@ function validateBenefitStage(coupon: TCoupon): TStageValidationResult {
 }
 
 function validateRulesStage(coupon: TCoupon, targets: TTargets): TStageValidationResult {
+	if (coupon.beneficioTipo === "BRINDE" && !targets.some((target) => !target.deletar && target.papel === "BENEFICIADO"))
+		return { valid: false, reason: "Escolha pelo menos um produto ou grupo que ganha o brinde." };
 	if (coupon.validacaoModo === "MANUAL") {
 		if (!coupon.condicoesTexto?.trim()) return { valid: false, reason: "Descreva as condições de resgate para orientar o operador." };
 		return { valid: true };

@@ -1,3 +1,5 @@
+import { normalizeCouponGiftItem } from "@/lib/coupons/gift-pricing";
+import type { TCouponGiftSelection } from "@/schemas/coupons";
 import type { TShopCatalogProduct } from "@/lib/shop/catalog";
 import type { TShopCartItem } from "@/schemas/shop";
 
@@ -23,7 +25,7 @@ export type TShopCartLine = {
 	imageUrl: string | null;
 };
 
-export function buildShopCartLines(items: TShopCartItem[], products: TShopCatalogProduct[]): TShopCartLine[] {
+export function buildShopCartLines(items: TShopCartItem[], products: TShopCatalogProduct[], brinde?: TCouponGiftSelection | null): TShopCartLine[] {
 	const productsById = new Map(products.map((product) => [product.id, product]));
 	const lines: TShopCartLine[] = [];
 
@@ -63,7 +65,7 @@ export function buildShopCartLines(items: TShopCartItem[], products: TShopCatalo
 			modifiersPrice,
 			modifiersDetails,
 			unitFinal,
-			lineTotal: unitFinal * item.quantidade,
+			lineTotal: normalizeCouponGiftItem({ chave: item.tempId, valorTotalBruto: unitFinal * item.quantidade, valorTotalLiquido: unitFinal * item.quantidade }, brinde).valorTotalBruto,
 			displayName: variant ? `${product.nome} - ${variant.nome}` : product.nome,
 			imageUrl: variant?.imagemCapaUrl ?? product.imagemCapaUrl ?? null,
 		});
@@ -72,6 +74,6 @@ export function buildShopCartLines(items: TShopCartItem[], products: TShopCatalo
 	return lines;
 }
 
-export function getShopCartSubtotal(items: TShopCartItem[], products: TShopCatalogProduct[]) {
-	return buildShopCartLines(items, products).reduce((sum, line) => sum + line.lineTotal, 0);
+export function getShopCartSubtotal(items: TShopCartItem[], products: TShopCatalogProduct[], brinde?: TCouponGiftSelection | null) {
+	return buildShopCartLines(items, products, brinde).reduce((sum, line) => sum + line.lineTotal, 0);
 }

@@ -1,3 +1,4 @@
+import { normalizeCouponGiftItem, roundCouponGiftCurrency } from "@/lib/coupons/gift-pricing";
 import { resolveSaleFiscalDocumentPreference } from "@/lib/fiscal/emission-document-policy";
 import { resolvePaymentFinancialAccounts } from "@/lib/payments";
 import { hydratePOSProducts } from "@/lib/pos/hydrate-pos-products";
@@ -81,6 +82,7 @@ export async function prepareSaleCreation({ actor, input }: { actor: TSaleActor;
 	// e confere as escolhas de adicionais contra as regras dos grupos.
 	await validateSaleItemsPricing({ orgId, itens: input.itens, canal: "POS" });
 	await validateSaleItemsAddOnRules({ orgId, itens: input.itens });
+	input = { ...input, itens: input.itens.map((item) => normalizeCouponGiftItem(item, input.cupomResgate?.brinde)) };
 
 	// Resgate de recompensas: admissão + resolução autoritativa de cada prêmio contra o catálogo,
 	// com saldo pré-checado sobre a soma. Exclusivo com cupom (espelha o POI) e com
@@ -182,7 +184,8 @@ export async function prepareSaleCreation({ actor, input }: { actor: TSaleActor;
 		aprovacaoId: input.descontoAprovacaoId,
 	});
 
-	const valorTotal = Math.max(0, valorBaseItens - descontosVenda) + acrescimosGerais;
+	const computedTotal = Math.max(0, valorBaseItens - descontosVenda) + acrescimosGerais;
+	const valorTotal = input.cupomResgate?.brinde ? roundCouponGiftCurrency(computedTotal) : computedTotal;
 	const descontosTotalItens = input.itens.reduce((sum, item) => sum + item.valorDesconto, 0);
 	// Os itens das recompensas entram com líquido 0 (bruto = desconto = precoVenda × qtd), então
 	// não afetam valorTotal — mas o desconto comercial compõe descontosTotal e o custo compõe custoTotal.
@@ -299,6 +302,7 @@ export async function persistSaleCreation({
 				valorCustoTotal: valorCustoUnitario * item.quantidade,
 				observacoes: item.observacoes ?? null,
 				metadados: {
+					itemChave: item.chave ?? null,
 					nome: item.nome,
 					codigo: item.codigo,
 					imagemUrl: item.imagemUrl ?? null,
@@ -358,6 +362,7 @@ export async function persistSaleCreation({
 			saleCashbackProgramId: input.cashbackProgramaId,
 			saleCashbackRedemptionValue: input.cashbackResgate,
 			saleRewardRedemptions: toSaleRewardRedemptionInputs(validatedRewards),
+			saleCouponGift: input.cupomResgate?.brinde ?? null,
 			saleCouponId: input.cupomResgate?.cupomId ?? null,
 			saleCouponDeclaredDiscountValue: input.cupomResgate?.valorDesconto ?? null,
 			accountingEntryDebitAccountId: prepared.accountingEntryDebitAccountId,

@@ -53,8 +53,9 @@ export default function CouponTargetsBlock({
 		>
 			<div className="w-full flex flex-col gap-1">
 				<p className="text-sm font-medium text-muted-foreground">
-					Sem produtos, o cupom vale para qualquer compra. Marque um produto como “ativa o cupom” para exigir que ele esteja no carrinho, ou “ganha o
-					desconto” para que o benefício incida só sobre ele.
+					{coupon.beneficioTipo === "BRINDE"
+						? "Produtos que ganham o desconto são alternativas de brinde: o cliente escolhe uma unidade. Produtos que ativam o cupom são exigências adicionais da compra; o brinde não conta para cumpri-las."
+						: "Sem produtos, o cupom vale para qualquer compra. Marque um produto como ativa o cupom para exigir sua compra, ou ganha o desconto para receber o benefício."}
 				</p>
 			</div>
 			<div className="w-full flex items-center gap-2 flex-col lg:flex-row">
@@ -86,7 +87,7 @@ export default function CouponTargetsBlock({
 				</div>
 			</div>
 			<CouponCheckoutConditionsBlock coupon={coupon} updateCoupon={updateCoupon} />
-			<CouponTargetForm addCouponTarget={addCouponTarget} />
+			<CouponTargetForm addCouponTarget={addCouponTarget} defaultRole={coupon.beneficioTipo === "BRINDE" ? "BENEFICIADO" : "ELEGIVEL"} />
 			<div className="w-full flex flex-col gap-1.5">
 				{couponTargets.map((target, index) =>
 					target.deletar ? null : (
@@ -125,7 +126,13 @@ export default function CouponTargetsBlock({
 	);
 }
 
-function CouponTargetForm({ addCouponTarget }: { addCouponTarget: TUseInternalCouponState["addCouponTarget"] }) {
+function CouponTargetForm({
+	addCouponTarget,
+	defaultRole,
+}: {
+	addCouponTarget: TUseInternalCouponState["addCouponTarget"];
+	defaultRole: "BENEFICIADO" | "ELEGIVEL";
+}) {
 	// Cadastro inteiro, não o catálogo do PDV: um cupom pode mirar um grupo que hoje não está na
 	// vitrine de nenhum canal.
 	const { data: groupsResult } = useProductGroups();
@@ -143,7 +150,7 @@ function CouponTargetForm({ addCouponTarget }: { addCouponTarget: TUseInternalCo
 	function handleAdd() {
 		if (mode === "PRODUTO" && selectedProduct) {
 			addCouponTarget({
-				papel: "ELEGIVEL",
+				papel: defaultRole,
 				produtoId: selectedProduct.produtoVarianteId ? null : selectedProduct.produtoId,
 				produtoVarianteId: selectedProduct.produtoVarianteId,
 				grupo: null,
@@ -155,7 +162,7 @@ function CouponTargetForm({ addCouponTarget }: { addCouponTarget: TUseInternalCo
 		}
 		if (mode === "GRUPO" && selectedGroup) {
 			addCouponTarget({
-				papel: "ELEGIVEL",
+				papel: defaultRole,
 				produtoId: null,
 				produtoVarianteId: null,
 				grupo: selectedGroup,

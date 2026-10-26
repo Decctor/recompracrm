@@ -1,3 +1,4 @@
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { TUseSaleState } from "@/state-hooks/use-sale-state";
@@ -42,6 +43,7 @@ export default function ItemsSection({ saleState }: ItemsSectionProps) {
 					<CartItemRow
 						key={item.tempId}
 						item={item}
+						isGift={saleState.state.cupomResgate?.brinde?.itemChave === item.tempId}
 						onUpdateQuantity={saleState.updateItemQuantity}
 						onUpdateObservacoes={saleState.updateItemObservacoes}
 						onRemove={saleState.removeItem}
@@ -59,13 +61,14 @@ export default function ItemsSection({ saleState }: ItemsSectionProps) {
 }
 
 type CartItemRowProps = {
+	isGift: boolean;
 	item: TCartItem;
 	onUpdateQuantity: (tempId: string, quantidade: number) => void;
 	onUpdateObservacoes: (tempId: string, observacoes: string) => void;
 	onRemove: (tempId: string) => void;
 };
 
-function CartItemRow({ item, onUpdateQuantity, onUpdateObservacoes, onRemove }: CartItemRowProps) {
+function CartItemRow({ isGift, item, onUpdateQuantity, onUpdateObservacoes, onRemove }: CartItemRowProps) {
 	const hasDiscount = item.valorDesconto > 0;
 	// Recompensa resgatada: quantidade fixa e sem remoção pelo carrinho. O débito de saldo já está
 	// no ledger — desfazê-lo exige remover a recompensa no resumo (venda em edição: cancelar).
@@ -90,6 +93,7 @@ function CartItemRow({ item, onUpdateQuantity, onUpdateObservacoes, onRemove }: 
 
 				<div className="min-w-0 flex-1">
 					<h4 className="line-clamp-2 text-sm font-bold leading-tight tracking-tight">{item.nome}</h4>
+					{isGift ? <Badge variant="secondary">Brinde: uma unidade grátis, adicionais à parte</Badge> : null}
 					<p className="mt-0.5 truncate text-[0.65rem] font-medium text-muted-foreground">{item.codigo}</p>
 					{isReward ? <span className="text-[0.65rem] font-bold uppercase text-amber-600">Recompensa resgatada</span> : null}
 				</div>

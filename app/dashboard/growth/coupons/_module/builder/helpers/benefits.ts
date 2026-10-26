@@ -1,14 +1,14 @@
 import type { TCouponBenefitTypeEnum } from "@/schemas/enums";
-import { BadgePercent, Coins, Layers, Tag } from "lucide-react";
+import { BadgePercent, Coins, Layers, Tag, Gift } from "lucide-react";
 import type { ComponentType } from "react";
 
 /**
  * Benefit-first entry: the builder opens by asking "o que você quer oferecer?".
  * Each card maps directly to a `beneficioTipo`, in plain lojista language.
- * BRINDE is intentionally omitted (unsupported by the redemption engine).
+ * Includes a single selected free product per redemption.
  */
 export type TBenefitCard = {
-	id: Exclude<TCouponBenefitTypeEnum, "BRINDE">;
+	id: TCouponBenefitTypeEnum;
 	label: string;
 	tagline: string;
 	description: string;
@@ -17,6 +17,14 @@ export type TBenefitCard = {
 };
 
 export const BENEFIT_CARDS: TBenefitCard[] = [
+	{
+		id: "BRINDE",
+		label: "Produto grátis",
+		tagline: "Uma unidade de brinde",
+		description: "O cliente escolhe um produto entre os brindes permitidos. Adicionais são cobrados à parte.",
+		example: "Ex: escolha uma bebida grátis",
+		icon: Gift,
+	},
 	{
 		id: "DESCONTO_PERCENTUAL",
 		label: "Desconto percentual",
@@ -58,7 +66,7 @@ export function getBenefitCard(type: TCouponBenefitTypeEnum | null | undefined):
 
 // Benefit types whose discount necessarily applies to specific eligible items.
 // For these we force `beneficioAplicacao = ITENS_ELEGIVEIS` and hide the choice.
-export const ITEM_SCOPED_BENEFITS: TCouponBenefitTypeEnum[] = ["PRECO_FIXO", "COMPRE_X_LEVE_Y"];
+export const ITEM_SCOPED_BENEFITS: TCouponBenefitTypeEnum[] = ["PRECO_FIXO", "COMPRE_X_LEVE_Y", "BRINDE"];
 
 export function benefitIsItemScoped(type: TCouponBenefitTypeEnum): boolean {
 	return ITEM_SCOPED_BENEFITS.includes(type);

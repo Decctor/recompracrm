@@ -24,7 +24,7 @@ function describeBenefit(
 		case "COMPRE_X_LEVE_Y":
 			return `compre ${coupon.beneficioCompreQuantidade ?? "?"} e leve ${coupon.beneficioLeveQuantidade ?? "?"}`;
 		case "BRINDE":
-			return "brinde";
+			return "uma unidade grátis de um dos produtos permitidos, escolhida no checkout; adicionais e entrega são cobrados à parte";
 		default:
 			return "benefício especial";
 	}

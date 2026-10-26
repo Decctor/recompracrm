@@ -37,7 +37,12 @@ export default function StageBenefit() {
 				</Button>
 			</div>
 
-			{coupon.beneficioTipo === "COMPRE_X_LEVE_Y" ? (
+			{coupon.beneficioTipo === "BRINDE" ? (
+				<p className="text-sm text-muted-foreground">
+					Uma unidade de um dos produtos escolhidos será grátis. Adicionais e entrega são cobrados à parte. O brinde não conta para atingir as condições de
+					compra.
+				</p>
+			) : coupon.beneficioTipo === "COMPRE_X_LEVE_Y" ? (
 				<div className="flex w-full flex-col gap-2 lg:flex-row">
 					<div className="w-full lg:w-1/2">
 						<NumberInput

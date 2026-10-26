@@ -76,6 +76,7 @@ export function useCouponSectionEditor({
 
 	const updaters = useMemo(
 		() => ({
+			redefineState: wrapWithDirty(couponState.redefineState, markDirty),
 			updateCoupon: wrapWithDirty(couponState.updateCoupon, markDirty),
 			addCouponTarget: wrapWithDirty(couponState.addCouponTarget, markDirty),
 			updateCouponTarget: wrapWithDirty(couponState.updateCouponTarget, markDirty),
@@ -84,6 +85,7 @@ export function useCouponSectionEditor({
 			removeCouponAudience: wrapWithDirty(couponState.removeCouponAudience, markDirty),
 		}),
 		[
+			couponState.redefineState,
 			couponState.addCouponAudience,
 			couponState.addCouponTarget,
 			couponState.removeCouponAudience,

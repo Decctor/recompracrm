@@ -1,29 +1,12 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import {
-  formatCashbackValue,
-  formatToMoney,
-  formatToPhone,
-} from "@/lib/formatting";
+import { formatCashbackValue, formatToMoney, formatToPhone } from "@/lib/formatting";
 import { buildShopCartLines } from "@/lib/shop/cart";
 import { resolveShopDeliveryFee } from "@/lib/shop/config";
 import type { TShopPaymentMethod } from "@/schemas/shop";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import {
-  Banknote,
-  Clock3,
-  CreditCard,
-  Gift,
-  Info,
-  Package,
-  QrCode,
-  Send,
-  Sparkles,
-  Ticket,
-  Truck,
-  User,
-} from "lucide-react";
+import { Banknote, Clock3, CreditCard, Gift, Info, Package, QrCode, Send, Sparkles, Ticket, Truck, User } from "lucide-react";
 import Image from "next/image";
 import { useMemo, type ComponentType } from "react";
 import { useShop } from "../ShopProvider";
@@ -79,14 +62,7 @@ type SummaryTileProps = {
   reduced: boolean;
 };
 
-function SummaryTile({
-  icon: Icon,
-  label,
-  value,
-  detail,
-  delay,
-  reduced,
-}: SummaryTileProps) {
+function SummaryTile({ icon: Icon, label, value, detail, delay, reduced }: SummaryTileProps) {
   return (
     <motion.div
       {...fadeUp(delay, reduced)}
@@ -102,20 +78,15 @@ function SummaryTile({
       </div>
       <div className="min-w-0 pl-0.5">
         <p className="text-pretty text-sm font-bold leading-snug">{value}</p>
-        {detail ? (
-          <p className="text-pretty mt-0.5 text-xs leading-relaxed text-muted-foreground">
+        {detail ? <p className="text-pretty mt-0.5 text-xs leading-relaxed text-muted-foreground">
             {detail}
-          </p>
-        ) : null}
+          </p> : null}
       </div>
     </motion.div>
   );
 }
 
-export default function OrderReviewStep({
-  onSubmit,
-  isSubmitting,
-}: OrderReviewStepProps) {
+export default function OrderReviewStep({ onSubmit, isSubmitting }: OrderReviewStepProps) {
   const prefersReducedMotion = useReducedMotion();
   const reduced = prefersReducedMotion ?? false;
 
@@ -125,10 +96,7 @@ export default function OrderReviewStep({
   const config = catalog.shopSettings.configuracoes;
   const shopIsOpen = availability.status === "ABERTA";
 
-  const cartLines = useMemo(
-    () => buildShopCartLines(cart.items, catalog.products),
-    [cart.items, catalog.products],
-  );
+  const cartLines = useMemo(() => buildShopCartLines(cart.items, catalog.products, orderState.state.coupon.resgate?.brinde), [cart.items, catalog.products, orderState.state.coupon.resgate?.brinde]);
 
   const subtotal = cartLines.reduce((sum, line) => sum + line.lineTotal, 0);
   const couponDiscount = coupon.resgate?.valorDesconto ?? 0;
@@ -218,14 +186,9 @@ export default function OrderReviewStep({
           icon={User}
           label="Cliente"
           value={customer.nome || "Cliente"}
-          detail={[
-            formatToPhone(customer.telefone),
-            delivery.modalidade === "ENTREGA"
+          detail={[formatToPhone(customer.telefone), delivery.modalidade === "ENTREGA"
               ? "Documento fiscal informado"
-              : null,
-          ]
-            .filter(Boolean)
-            .join(" · ")}
+              : null].filter(Boolean).join(" · ")}
           delay={0.05}
           reduced={reduced}
         />
@@ -252,8 +215,8 @@ export default function OrderReviewStep({
         <SummaryTile
           icon={PaymentIcon}
           label="Pagamento"
-          value={getPaymentLabel(payment.metodo)}
-          detail={paymentDetail}
+          value={total <= 0 ? "Nenhum pagamento necessário" : getPaymentLabel(payment.metodo)}
+          detail={total <= 0 ? "O benefício cobre o valor do pedido." : paymentDetail}
           delay={0.2}
           reduced={reduced}
         />
@@ -315,18 +278,17 @@ export default function OrderReviewStep({
                     <p className="text-pretty text-sm font-semibold leading-snug">
                       <span className="font-black text-primary">
                         {item.quantidade}x
-                      </span>{" "}
-                      {item.displayName}
+                      </span> {item.displayName}
                     </p>
+                    {coupon.resgate?.brinde?.itemChave === item.tempId ? (
+                      <p className="text-xs font-semibold text-primary">Brinde: uma unidade grátis, adicionais à parte</p>
+                    ) : null}
                     {item.modifiersDetails.length > 0 ? (
                       <p className="text-pretty mt-0.5 text-xs leading-relaxed text-muted-foreground">
                         {item.modifiersDetails
-                          .map((m) =>
-                            m.quantidade > 1
+                          .map((m) => (m.quantidade > 1
                               ? `${m.quantidade}x ${m.nome}`
-                              : m.nome,
-                          )
-                          .join(" · ")}
+                              : m.nome)).join(" · ")}
                       </p>
                     ) : null}
                   </div>
@@ -370,11 +332,8 @@ export default function OrderReviewStep({
               {line.quantidade > 1 ? ` ×${line.quantidade}` : ""}
             </p>
             <p className="text-xs text-muted-foreground">
-              {formatCashbackValue(
-                line.valor * line.quantidade,
-                catalog.cashbackProgram?.terminologia ?? "DINHEIRO",
-              )}{" "}
-              · {formatToMoney(line.valorVenda * line.quantidade)} grátis
+              {formatCashbackValue(line.valor * line.quantidade, catalog.cashbackProgram?.terminologia ?? "DINHEIRO")} · {" "}
+              {formatToMoney(line.valorVenda * line.quantidade)} grátis
             </p>
           </div>
         </motion.div>

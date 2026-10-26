@@ -1,4 +1,6 @@
 import type { TBenefitRedemptionSurface } from "@/schemas/enums";
+import type { TCouponGiftSelection, TCouponBenefitSnapshot } from "@/schemas/coupons";
+import { calculateCouponGiftDiscount, roundCouponGiftCurrency } from "./gift-pricing";
 import { getCouponCheckoutConditionIssue, type TCouponEvaluationContext } from "./conditions";
 export type { TCouponEvaluationContext } from "./conditions";
 import type { TCouponAudienceEntity, TCouponEntity, TCouponGrantEntity, TCouponTargetEntity } from "@/services/drizzle/schema";
@@ -21,6 +23,9 @@ export type TCouponCartItem = {
 	grupo?: string | null;
 	quantidade: number;
 	valorVendaUnitario: number;
+	/** Base sem adicionais. Obrigatória para conceder brinde; nunca inferida do preço final. */
+	valorUnitarioBase?: number;
+	valorDesconto?: number;
 };
 
 // Vocabulário único de superfície, compartilhado com o resgate de cashback (`schemas/enums.ts`).
@@ -34,6 +39,7 @@ export type TCouponEvaluationResult =
 			aplicacao: "VENDA_TOTAL" | "ITENS_ELEGIVEIS";
 			/** Desconto por item (chave do carrinho) quando aplicacao = ITENS_ELEGIVEIS; vazio quando VENDA_TOTAL. */
 			descontosPorItem: Array<{ chave: string; valorDesconto: number }>;
+			brinde?: TCouponBenefitSnapshot["brinde"];
 	  };
 
 function roundCurrency(value: number) {
@@ -169,7 +175,10 @@ export function evaluateCouponAgainstSaleValue({
 	return { elegivel: true, valorDesconto: totalDiscount, aplicacao: "VENDA_TOTAL", descontosPorItem: [] };
 }
 
-function itemMatchesTarget(item: TCouponCartItem, target: Pick<TCouponTargetEntity, "produtoId" | "produtoVarianteId" | "grupo">) {
+export function itemMatchesTarget(
+	item: Pick<TCouponCartItem, "produtoId" | "produtoVarianteId" | "grupo">,
+	target: Pick<TCouponTargetEntity, "produtoId" | "produtoVarianteId" | "grupo">,
+) {
 	if (target.produtoVarianteId) return item.produtoVarianteId === target.produtoVarianteId;
 	if (target.produtoId) return item.produtoId === target.produtoId;
 	if (target.grupo) return !!item.grupo && item.grupo === target.grupo;
@@ -203,6 +212,7 @@ export function evaluateCouponAgainstCart({
 	targets,
 	cartItems,
 	context,
+	brinde,
 }: {
 	coupon: Pick<
 		TCouponEntity,
@@ -222,19 +232,49 @@ export function evaluateCouponAgainstCart({
 	targets: Array<Pick<TCouponTargetEntity, "papel" | "produtoId" | "produtoVarianteId" | "grupo" | "quantidadeMinima">>;
 	cartItems: TCouponCartItem[];
 	context: TCouponEvaluationContext;
+	brinde?: TCouponGiftSelection | null;
 }): TCouponEvaluationResult {
 	if (coupon.validacaoModo !== "AUTOMATICA") {
 		return { elegivel: false, motivo: "Cupom de validação manual: a elegibilidade deve ser confirmada pelo operador." };
 	}
+	let giftItem: TCouponCartItem | undefined;
+	let giftDiscount = 0;
 	if (coupon.beneficioTipo === "BRINDE") {
-		return { elegivel: false, motivo: "Cupons de brinde ainda não são suportados." };
+		if (cartItems.some((item) => !Number.isFinite(item.quantidade) || item.quantidade <= 0 || !Number.isFinite(item.valorVendaUnitario) || item.valorVendaUnitario < 0)) {
+			return { elegivel: false, motivo: "O carrinho contém quantidade ou preço inválido. Atualize os itens para escolher o brinde." };
+		}
+		if (coupon.beneficioAplicacao !== "ITENS_ELEGIVEIS" || !targets.some((target) => target.papel === "BENEFICIADO")) {
+			return { elegivel: false, motivo: "O cupom não possui produtos configurados como brinde." };
+		}
+		if (!brinde || brinde.quantidade !== 1) return { elegivel: false, motivo: "Escolha um produto para receber uma unidade grátis." };
+		const matches = cartItems.filter((item) => item.chave === brinde.itemChave);
+		giftItem = matches.length === 1 ? matches[0] : undefined;
+		if (
+			!giftItem ||
+			!Number.isFinite(giftItem.quantidade) ||
+			giftItem.quantidade < 1 ||
+			!targets.some((target) => target.papel === "BENEFICIADO" && itemMatchesTarget(giftItem!, target))
+		) {
+			return { elegivel: false, motivo: "O item selecionado não está disponível como brinde neste carrinho." };
+		}
+		giftDiscount = giftItem.valorUnitarioBase ?? 0;
+		if (!Number.isFinite(giftDiscount) || giftDiscount <= 0 || giftDiscount > giftItem.valorVendaUnitario || (giftItem.valorDesconto ?? 0) !== 0) {
+			return { elegivel: false, motivo: "O brinde exige preço base válido e não pode ter outro desconto no item." };
+		}
+		giftDiscount = calculateCouponGiftDiscount({ ...giftItem, valorUnitarioBase: giftDiscount });
+		if (giftDiscount > roundCouponGiftCurrency(giftItem.quantidade * giftItem.valorVendaUnitario)) {
+			return { elegivel: false, motivo: "O desconto do brinde não pode superar o valor do item." };
+		}
+		if (giftDiscount <= 0) return { elegivel: false, motivo: "O produto selecionado não gera desconto de brinde." };
 	}
 	if (cartItems.length === 0) return { elegivel: false, motivo: "Carrinho vazio." };
 	const conditionIssue = getCouponCheckoutConditionIssue(coupon, context);
 	if (conditionIssue) return { elegivel: false, motivo: conditionIssue };
 
-	const cartGrossTotal = cartItems.reduce((sum, item) => sum + item.quantidade * item.valorVendaUnitario, 0);
-	const cartTotalQuantity = cartItems.reduce((sum, item) => sum + item.quantidade, 0);
+	const grossTotal = cartItems.reduce((sum, item) => sum + (item === giftItem ? roundCouponGiftCurrency(item.quantidade * item.valorVendaUnitario) : item.quantidade * item.valorVendaUnitario), 0);
+	const cartGrossTotal = giftItem ? roundCurrency(grossTotal - giftDiscount) : grossTotal;
+	const cartTotalQuantity = cartItems.reduce((sum, item) => sum + item.quantidade, 0) - (giftItem ? 1 : 0);
+	const conditionItems = giftItem ? cartItems.map((item) => (item === giftItem ? { ...item, quantidade: item.quantidade - 1 } : item)) : cartItems;
 
 	// Condições gerais
 	if (coupon.condicaoValorMinimoVenda && cartGrossTotal < coupon.condicaoValorMinimoVenda) {
@@ -247,12 +287,27 @@ export function evaluateCouponAgainstCart({
 	// Condições de alvos (ELEGIVEL)
 	const eligibilityTargets = targets.filter((target) => target.papel === "ELEGIVEL");
 	if (eligibilityTargets.length > 0) {
-		const satisfiedTargets = eligibilityTargets.filter((target) => getTargetMatchedQuantity(cartItems, target) >= (target.quantidadeMinima ?? 1));
+		const satisfiedTargets = eligibilityTargets.filter((target) => getTargetMatchedQuantity(conditionItems, target) >= (target.quantidadeMinima ?? 1));
 		const isSatisfied = coupon.condicaoAlvosOperador === "TODOS" ? satisfiedTargets.length === eligibilityTargets.length : satisfiedTargets.length > 0;
 		if (!isSatisfied) return { elegivel: false, motivo: "O carrinho não contém os produtos exigidos pelo cupom." };
 	}
 
 	// Itens beneficiados: alvos BENEFICIADO quando existem; senão, os elegíveis; sem alvos = carrinho todo.
+	if (giftItem && brinde) {
+		return {
+			elegivel: true,
+			valorDesconto: giftDiscount,
+			aplicacao: "ITENS_ELEGIVEIS",
+			descontosPorItem: [{ chave: giftItem.chave, valorDesconto: giftDiscount }],
+			brinde: {
+				...brinde,
+				produtoId: giftItem.produtoId,
+				produtoVarianteId: giftItem.produtoVarianteId ?? null,
+				valorUnitarioBase: giftItem.valorUnitarioBase!,
+				valorDesconto: giftDiscount,
+			},
+		};
+	}
 	const benefitTargets = targets.filter((target) => target.papel === "BENEFICIADO");
 	const benefitScopeTargets = benefitTargets.length > 0 ? benefitTargets : eligibilityTargets;
 	const benefitItems =

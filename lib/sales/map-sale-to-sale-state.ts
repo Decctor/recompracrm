@@ -1,3 +1,4 @@
+import type { TCouponBenefitSnapshot } from "@/schemas/coupons";
 import type { TGetSaleForEditOutput } from "@/app/api/pos/sales/edit/route";
 import { POS_REWARD_SALE_ITEM_ORIGIN, parseSaleRewardDraftSnapshots } from "@/lib/sales/sale-reward-snapshot";
 import { readShopDeliveryFee } from "@/lib/shop/config";
@@ -19,6 +20,8 @@ type TOrganizationPaymentMethodsConfig = TOrganizationConfiguration["defaults"][
 type TSaleForEditData = TGetSaleForEditOutput["data"];
 
 type TItemMetadataSnapshot = {
+	itemChave?: string | null;
+	cupomBrindeDesconto?: number;
 	nome?: string;
 	codigo?: string;
 	imagemUrl?: string | null;
@@ -74,7 +77,7 @@ export function mapItemToCartItem(item: TMappableSaleItem): TCartItem {
 	const valorModificadores = snapshot?.valorModificadores ?? modificadores.reduce((sum, modifier) => sum + modifier.valorTotal, 0);
 
 	return {
-		tempId: item.id,
+		tempId: snapshot?.itemChave ?? item.id,
 		itemId: item.id,
 		quantidadeEntregue: item.quantidadeEntregue ?? 0,
 		recompensaId: snapshot?.origem === POS_REWARD_SALE_ITEM_ORIGIN ? (snapshot.recompensaId ?? null) : null,
@@ -88,8 +91,8 @@ export function mapItemToCartItem(item: TMappableSaleItem): TCartItem {
 		valorModificadores,
 		valorUnitarioFinal: item.valorVendaUnitario,
 		valorTotalBruto: item.valorVendaTotalBruto,
-		valorDesconto: item.valorTotalDesconto,
-		valorTotalLiquido: item.valorVendaTotalLiquido,
+		valorDesconto: Math.max(0, item.valorTotalDesconto - (snapshot?.cupomBrindeDesconto ?? 0)),
+		valorTotalLiquido: item.valorVendaTotalLiquido + (snapshot?.cupomBrindeDesconto ?? 0),
 		modificadores,
 		observacoes: item.observacoes ?? null,
 	};
@@ -188,6 +191,7 @@ export function mapSaleForEditToSaleState(
 		cashbackResgate,
 		cupomResgate: data.cupomResgatado
 			? {
+					brinde: (data.cupomResgatado.beneficioSnapshot as TCouponBenefitSnapshot | null)?.brinde,
 					cupomId: data.cupomResgatado.cupomId,
 					valorDesconto: data.cupomResgatado.valorDesconto,
 					codigo: data.cupomResgatado.cupomCodigo,

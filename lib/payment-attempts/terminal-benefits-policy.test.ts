@@ -3,6 +3,7 @@ import test from "node:test";
 import { PaymentTerminalError } from "./errors";
 import {
 	TERMINAL_MANUAL_COUPON_REASON,
+	TERMINAL_GIFT_COUPON_REASON,
 	buildTerminalCashbackView,
 	buildTerminalCouponView,
 	decideTerminalBenefits,
@@ -26,6 +27,13 @@ const automatic = buildTerminalCouponView({
 	avaliacao: { elegivel: true, valorDesconto: 5, aplicacao: "VENDA_TOTAL", descontosPorItem: [] },
 });
 const manual = buildTerminalCouponView({ ...couponBase, id: "c-manual", validacaoModo: "MANUAL", avaliacao: null });
+
+test("gift coupons stay unavailable on terminals without product selection", () => {
+	const gift = buildTerminalCouponView({ ...couponBase, id: "gift", beneficioTipo: "BRINDE", validacaoModo: "AUTOMATICA", avaliacao: { elegivel: true, valorDesconto: 10, aplicacao: "ITENS_ELEGIVEIS", descontosPorItem: [{ chave: "item", valorDesconto: 10 }] } });
+	assert.equal(gift.selecionavel, false);
+	assert.equal(gift.valorDesconto, null);
+	assert.equal(gift.motivo, TERMINAL_GIFT_COUPON_REASON);
+});
 
 function rejects(fn: () => unknown, message: RegExp) {
 	assert.throws(fn, (error: unknown) => error instanceof PaymentTerminalError && error.status === 422 && message.test(error.message));

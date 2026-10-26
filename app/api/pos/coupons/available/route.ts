@@ -8,6 +8,9 @@ import z from "zod";
 import { DeliveryModeEnum } from "@/schemas/enums";
 
 const CartItemInputSchema = z.object({
+	chave: z.string({ required_error: "Chave do item não informada.", invalid_type_error: "Tipo não válido para a chave do item." }).optional().nullable(),
+	valorUnitarioBase: z.number({ required_error: "Preço base não informado.", invalid_type_error: "Tipo não válido para preço base." }).finite().nonnegative().optional(),
+	valorDesconto: z.number({ required_error: "Desconto do item não informado.", invalid_type_error: "Tipo não válido para desconto do item." }).nonnegative().optional(),
 	produtoId: z.string({ required_error: "ID do produto não informado." }),
 	produtoVarianteId: z.string({ invalid_type_error: "Tipo não válido para ID da variante." }).optional().nullable(),
 	quantidade: z.number({ required_error: "Quantidade não informada." }).min(0),

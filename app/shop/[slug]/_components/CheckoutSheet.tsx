@@ -5,6 +5,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { getErrorMessage } from "@/lib/errors";
 import { createShopOrder } from "@/lib/mutations/shop";
 import { HAPTICS, triggerHaptic } from "@/lib/shop/haptics";
+import { resolveAppliedCouponEvaluation } from "@/lib/coupons/gifts";
 import { buildShopCartLines } from "@/lib/shop/cart";
 import {
 	SHOP_CHECKOUT_STEPS,
@@ -57,10 +58,12 @@ export default function CheckoutSheet() {
 
 	const isInCheckout = (SHOP_CHECKOUT_STEPS as readonly string[]).includes(checkoutStep);
 
-	const cartLines = useMemo(() => buildShopCartLines(cart.items, catalog.products), [cart.items, catalog.products]);
+	const cartLines = useMemo(() => buildShopCartLines(cart.items, catalog.products, orderState.state.coupon.resgate?.brinde), [cart.items, catalog.products, orderState.state.coupon.resgate?.brinde]);
 	const couponItems = useMemo(
 		() =>
 			cartLines.map((line) => ({
+				chave: line.tempId,
+				valorUnitarioBase: line.unitPrice,
 				produtoId: line.produtoId,
 				produtoVarianteId: line.produtoVarianteId,
 				quantidade: line.quantidade,
@@ -85,11 +88,12 @@ export default function CheckoutSheet() {
 	useEffect(() => {
 		if (!appliedCoupon || !availableCoupons) return;
 		const freshCoupon = availableCoupons.find((coupon) => coupon.id === appliedCoupon.cupomId);
-		if (!freshCoupon?.avaliacao?.elegivel) {
+		const evaluation = resolveAppliedCouponEvaluation(freshCoupon, appliedCoupon);
+		if (!evaluation?.elegivel) {
 			orderState.updateCoupon(null);
 			toast.warning("O cupom deixou de valer para este pedido e foi removido.");
-		} else if (Math.abs(freshCoupon.avaliacao.valorDesconto - appliedCoupon.valorDesconto) > 0.01) {
-			orderState.updateCoupon({ ...appliedCoupon, valorDesconto: freshCoupon.avaliacao.valorDesconto });
+		} else if (Math.abs(evaluation.valorDesconto - appliedCoupon.valorDesconto) > (appliedCoupon.brinde ? 0.000001 : 0.01)) {
+			orderState.updateCoupon({ ...appliedCoupon, valorDesconto: evaluation.valorDesconto });
 		}
 	}, [appliedCoupon, availableCoupons, orderState.updateCoupon]);
 	const hasCouponBenefit = isCustomerIdentified && (isLoadingCoupons || (availableCoupons?.length ?? 0) > 0 || !!orderState.state.coupon.resgate);

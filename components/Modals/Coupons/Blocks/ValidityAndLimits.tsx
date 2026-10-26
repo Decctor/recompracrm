@@ -59,6 +59,9 @@ export default function CouponValidityAndLimitsBlock({ coupon, updateCoupon, emb
 					/>
 				</div>
 				<div className="w-full flex items-center justify-center lg:w-1/3">
+					{coupon.beneficioTipo === "BRINDE" ? (
+						<p className="text-xs text-muted-foreground">Brindes exigem carrinho e não podem ser resgatados pelo ponto de interação.</p>
+					) : (
 					<CheckboxInput
 						checked={coupon.resgatePermitirViaPontoInteracao}
 						labelTrue="RESGATÁVEL VIA PONTO DE INTERAÇÃO"
@@ -66,6 +69,7 @@ export default function CouponValidityAndLimitsBlock({ coupon, updateCoupon, emb
 						handleChange={(value) => updateCoupon({ resgatePermitirViaPontoInteracao: value })}
 						justify="justify-center"
 					/>
+					)}
 				</div>
 				<div className="w-full flex items-center justify-center lg:w-1/3">
 					<CheckboxInput

@@ -1,3 +1,5 @@
+import { normalizeCouponGiftItem, roundCouponGiftCurrency } from "@/lib/coupons/gift-pricing";
+import { CouponGiftSelectionSchema } from "@/schemas/coupons";
 import { SaleFiscalDocumentSchema } from "@/schemas/fiscal";
 import { repriceSaleItem, type TSaleItemRepricing } from "@/lib/sales/sale-item-repricing";
 import {
@@ -97,6 +99,7 @@ export const SaleRewardRedemptionSchema = z.object({
 export type TSaleRewardRedemption = z.infer<typeof SaleRewardRedemptionSchema>;
 
 export const SaleAppliedCouponSchema = z.object({
+	brinde: CouponGiftSelectionSchema.optional().nullable(),
 	cupomId: z.string({ required_error: "ID do cupom não informado.", invalid_type_error: "Tipo não válido para ID do cupom." }),
 	valorDesconto: z.number({
 		required_error: "Valor de desconto do cupom não informado.",
@@ -618,14 +621,15 @@ export const useSaleState = ({ initialState, organizationConfig, contasFinanceir
 		});
 	}, []);
 
-	const subtotal = useMemo(() => state.itens.reduce((sum, item) => sum + item.valorTotalBruto, 0), [state.itens]);
+	const giftSelection = state.cupomResgate?.brinde;
+	const subtotal = useMemo(() => state.itens.reduce((sum, item) => sum + normalizeCouponGiftItem(item, giftSelection, item.tempId).valorTotalBruto, 0), [state.itens, giftSelection]);
 	const totalDescontoItens = useMemo(() => state.itens.reduce((sum, item) => sum + item.valorDesconto, 0), [state.itens]);
 	// Base e desconto avaliados contra o teto do operador: itens de recompensa ficam de fora
 	// (o resgate tem regras próprias, como cashback e cupom AUTOMATICA). Mesmo recorte do servidor.
 	const itensAvaliaveis = useMemo(() => state.itens.filter((item) => !item.recompensaId), [state.itens]);
-	const subtotalAvaliavel = useMemo(() => itensAvaliaveis.reduce((sum, item) => sum + item.valorTotalBruto, 0), [itensAvaliaveis]);
+	const subtotalAvaliavel = useMemo(() => itensAvaliaveis.reduce((sum, item) => sum + normalizeCouponGiftItem(item, giftSelection, item.tempId).valorTotalBruto, 0), [itensAvaliaveis, giftSelection]);
 	const totalDescontoItensAvaliavel = useMemo(() => itensAvaliaveis.reduce((sum, item) => sum + item.valorDesconto, 0), [itensAvaliaveis]);
-	const totalItens = useMemo(() => state.itens.reduce((sum, item) => sum + item.valorTotalLiquido, 0), [state.itens]);
+	const totalItens = useMemo(() => state.itens.reduce((sum, item) => sum + normalizeCouponGiftItem(item, giftSelection, item.tempId).valorTotalLiquido, 0), [state.itens, giftSelection]);
 	const itemCount = useMemo(() => state.itens.reduce((sum, item) => sum + item.quantidade, 0), [state.itens]);
 	const cupomDesconto = useMemo(() => state.cupomResgate?.valorDesconto ?? 0, [state.cupomResgate]);
 	// Descontos incidem só sobre os itens; o acréscimo entra por último e não é consumido
@@ -634,8 +638,11 @@ export const useSaleState = ({ initialState, organizationConfig, contasFinanceir
 	const valorAntesCashback = useMemo(() => Math.max(0, valorAntesCupom - cupomDesconto), [valorAntesCupom, cupomDesconto]);
 	const acrescimosTotal = state.acrescimoGeral + state.taxaEntrega;
 	const valorFinal = useMemo(
-		() => Math.max(0, valorAntesCashback - state.cashbackResgate) + acrescimosTotal,
-		[valorAntesCashback, state.cashbackResgate, acrescimosTotal],
+		() => {
+			const total = Math.max(0, valorAntesCashback - state.cashbackResgate) + acrescimosTotal;
+			return giftSelection ? roundCouponGiftCurrency(total) : total;
+		},
+		[valorAntesCashback, state.cashbackResgate, acrescimosTotal, giftSelection],
 	);
 	const totalPagamentos = useMemo(() => state.pagamentos.reduce((sum, p) => sum + p.valor, 0), [state.pagamentos]);
 	// Modo edição: os splits editáveis só precisam cobrir o que ainda não foi recebido.

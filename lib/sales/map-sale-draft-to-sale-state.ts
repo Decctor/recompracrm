@@ -1,3 +1,4 @@
+import type { TAppliedCoupon } from "@/schemas/coupons";
 import type { TGetSaleDraftOutput } from "@/app/api/pos/sales/route";
 import { parseSaleRewardDraftSnapshots } from "@/lib/sales/sale-reward-snapshot";
 import { readShopDeliveryFee } from "@/lib/shop/config";
@@ -19,7 +20,7 @@ type TSaleDraftMetadataSnapshot = {
 	descontoGeral?: number;
 	taxaEntrega?: number;
 	cashbackResgate?: number;
-	cupom?: { cupomId: string; valorDesconto: number; codigo?: string; titulo?: string } | null;
+	cupom?: TAppliedCoupon | null;
 };
 
 function readDraftMetadata(rascunhoMetadados: unknown): TSaleDraftMetadataSnapshot | null {
@@ -57,6 +58,7 @@ export function mapSaleDraftToSaleState(sale: TSaleDraft): Partial<TSaleState> {
 		cashbackResgate,
 		cupomResgate: metadata?.cupom
 			? {
+					...metadata.cupom,
 					cupomId: metadata.cupom.cupomId,
 					valorDesconto: metadata.cupom.valorDesconto,
 					codigo: metadata.cupom.codigo ?? "",

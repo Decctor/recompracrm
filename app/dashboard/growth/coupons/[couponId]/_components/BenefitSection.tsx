@@ -1,5 +1,8 @@
 "use client";
 
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import ControlCouponGiftProducts from "@/components/Modals/Coupons/ControlCouponGiftProducts";
 import CouponBenefitBlock from "@/components/Modals/Coupons/Blocks/Benefit";
 import SectionApplyBar from "@/components/Utils/SectionApplyBar";
 import { Section } from "@/components/ui/section";
@@ -8,6 +11,7 @@ import { BadgePercent } from "lucide-react";
 import type { CouponSectionProps } from "./section-props";
 
 export default function CouponBenefitSection({ coupon, callbacks }: CouponSectionProps) {
+	const [giftProductsOpen, setGiftProductsOpen] = useState(false);
 	const editor = useCouponSectionEditor({ coupon, section: "benefit", callbacks });
 
 	return (
@@ -20,6 +24,14 @@ export default function CouponBenefitSection({ coupon, callbacks }: CouponSectio
 			</Section.Header>
 			<Section.Body>
 				<CouponBenefitBlock embedded coupon={editor.state.coupon} updateCoupon={editor.updateCoupon} />
+				{editor.state.coupon.beneficioTipo === "BRINDE" ? (
+					<Button type="button" variant="outline" onClick={() => setGiftProductsOpen(true)}>
+						Configurar produtos e condições do brinde
+					</Button>
+				) : null}
+				{giftProductsOpen ? (
+					<ControlCouponGiftProducts initialState={editor.state} onSave={editor.redefineState} closeModal={() => setGiftProductsOpen(false)} />
+				) : null}
 				<SectionApplyBar isDirty={editor.isDirty} isPending={editor.isPending} onApply={editor.apply} onDiscard={editor.discard} />
 			</Section.Body>
 		</Section.Root>

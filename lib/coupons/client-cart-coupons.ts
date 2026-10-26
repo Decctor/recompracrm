@@ -1,3 +1,4 @@
+import { buildCouponGiftOptions } from "@/lib/coupons/gifts";
 import { getAvailableCouponsForClient } from "@/lib/coupons/availability";
 import { getCouponCheckoutConditionIssue } from "@/lib/coupons/conditions";
 import { type TCouponCartItem, type TCouponRedemptionSurface, evaluateCouponAgainstCart } from "@/lib/coupons/engine";
@@ -8,6 +9,9 @@ import { and, count, eq } from "drizzle-orm";
 
 /** Item do carrinho como o caixa o vê: referência, quantidade e o unitário final (com adicionais). */
 export type TClientCartCouponItem = {
+	chave?: string | null;
+	valorUnitarioBase?: number;
+	valorDesconto?: number;
 	produtoId: string;
 	produtoVarianteId?: string | null;
 	quantidade: number;
@@ -51,7 +55,9 @@ export async function listCouponsForClientCart({
 		const productGroupById = new Map(productsResult.map((product) => [product.id, product.grupo]));
 		cartItems.push(
 			...itens.map((item, index) => ({
-				chave: String(index),
+				chave: item.chave ?? String(index),
+				valorUnitarioBase: item.valorUnitarioBase,
+				valorDesconto: item.valorDesconto,
 				produtoId: item.produtoId,
 				produtoVarianteId: item.produtoVarianteId ?? null,
 				grupo: productGroupById.get(item.produtoId) ?? null,
@@ -70,6 +76,14 @@ export async function listCouponsForClientCart({
 				? evaluateCouponAgainstCart({ coupon, targets: coupon.alvos, cartItems, context })
 				: null;
 		return {
+			brindes: buildCouponGiftOptions({ coupon, targets: coupon.alvos, cartItems, context }),
+			alvos: coupon.alvos.map(({ papel, produtoId, produtoVarianteId, grupo, quantidadeMinima }) => ({
+				papel,
+				produtoId,
+				produtoVarianteId,
+				grupo,
+				quantidadeMinima,
+			})),
 			id: coupon.id,
 			titulo: coupon.titulo,
 			descricao: coupon.descricao,

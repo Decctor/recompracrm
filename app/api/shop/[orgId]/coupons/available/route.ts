@@ -1,3 +1,4 @@
+import { buildCouponGiftOptions } from "@/lib/coupons/gifts";
 import { appApiHandler } from "@/lib/app-api";
 import { getAvailableCouponsForClient } from "@/lib/coupons/availability";
 import { type TCouponCartItem, evaluateCouponAgainstCart } from "@/lib/coupons/engine";
@@ -9,6 +10,9 @@ import z from "zod";
 import { DeliveryModeEnum } from "@/schemas/enums";
 
 const CartItemInputSchema = z.object({
+	chave: z.string({ required_error: "Chave do item não informada.", invalid_type_error: "Tipo não válido para a chave do item." }).optional().nullable(),
+	valorUnitarioBase: z.number({ required_error: "Preço base não informado.", invalid_type_error: "Tipo não válido para preço base." }).finite().nonnegative().optional(),
+	valorDesconto: z.number({ required_error: "Desconto do item não informado.", invalid_type_error: "Tipo não válido para desconto do item." }).nonnegative().optional(),
 	produtoId: z.string({ required_error: "ID do produto não informado." }),
 	produtoVarianteId: z.string({ invalid_type_error: "Tipo não válido para ID da variante." }).optional().nullable(),
 	quantidade: z.number({ required_error: "Quantidade não informada." }).min(0),
@@ -56,7 +60,9 @@ async function getAvailableShopCoupons({ orgId, input }: { orgId: string; input:
 	});
 	const productGroupById = new Map(productsResult.map((product) => [product.id, product.grupo]));
 	const cartItems: TCouponCartItem[] = input.itens.map((item, index) => ({
-		chave: String(index),
+		chave: item.chave ?? String(index),
+		valorUnitarioBase: item.valorUnitarioBase,
+		valorDesconto: item.valorDesconto,
 		produtoId: item.produtoId,
 		produtoVarianteId: item.produtoVarianteId ?? null,
 		grupo: productGroupById.get(item.produtoId) ?? null,
@@ -75,6 +81,19 @@ async function getAvailableShopCoupons({ orgId, input }: { orgId: string; input:
 					})
 				: null;
 		return {
+			brindes: buildCouponGiftOptions({
+				coupon,
+				targets: coupon.alvos,
+				cartItems,
+				context: { entregaModalidade: input.entregaModalidade ?? null, comprasAnterioresConfirmadas: previousConfirmedPurchases },
+			}),
+			alvos: coupon.alvos.map(({ papel, produtoId, produtoVarianteId, grupo, quantidadeMinima }) => ({
+				papel,
+				produtoId,
+				produtoVarianteId,
+				grupo,
+				quantidadeMinima,
+			})),
 			id: coupon.id,
 			titulo: coupon.titulo,
 			descricao: coupon.descricao,

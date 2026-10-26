@@ -1,9 +1,14 @@
+import CouponRemovalAction from "@/components/Coupons/CouponRemovalAction";
+import CouponGiftChoices from "@/components/Coupons/CouponGiftChoices";
+import { resolveAppliedCouponEvaluation, type TCouponGiftOption } from "@/lib/coupons/gifts";
+import { usePosCouponGiftProducts } from "@/lib/queries/coupons";
+import ProductBuilderModal from "../ProductBuilderModal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatToMoney } from "@/lib/formatting";
 import { type TPosAvailableCoupon, usePosAvailableCoupons } from "@/lib/queries/coupons";
 import type { TUseSaleState } from "@/state-hooks/use-sale-state";
-import { ChevronDown, ChevronUp, Ticket, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Ticket } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -27,6 +32,9 @@ export default function CouponRedemptionSection({ saleState, clientId }: CouponR
 	const cartItemsForEvaluation = useMemo(
 		() =>
 			saleState.state.itens.map((item) => ({
+				chave: item.tempId,
+				valorUnitarioBase: item.valorUnitarioBase,
+				valorDesconto: item.valorDesconto,
 				produtoId: item.produtoId,
 				produtoVarianteId: item.produtoVarianteId ?? null,
 				quantidade: item.quantidade,
@@ -48,13 +56,14 @@ export default function CouponRedemptionSection({ saleState, clientId }: CouponR
 	useEffect(() => {
 		if (!appliedCoupon || !availableCoupons) return;
 		const freshCoupon = availableCoupons.find((coupon) => coupon.id === appliedCoupon.cupomId);
-		if (!freshCoupon || freshCoupon.avaliacao?.elegivel === false || (appliedCoupon.validacaoModo === "AUTOMATICA" && !freshCoupon.avaliacao)) {
+		const evaluation = resolveAppliedCouponEvaluation(freshCoupon, appliedCoupon);
+		if (!freshCoupon || evaluation?.elegivel === false || (freshCoupon.validacaoModo === "AUTOMATICA" && !evaluation)) {
 			saleState.setCupomResgate(null);
 			toast.warning("O cupom aplicado deixou de ser elegível para o carrinho atual e foi removido.");
 			return;
 		}
-		if (freshCoupon.avaliacao?.elegivel && Math.abs(freshCoupon.avaliacao.valorDesconto - appliedCoupon.valorDesconto) > 0.01) {
-			saleState.setCupomResgate({ ...appliedCoupon, valorDesconto: freshCoupon.avaliacao.valorDesconto });
+		if (evaluation?.elegivel && Math.abs(evaluation.valorDesconto - appliedCoupon.valorDesconto) > (appliedCoupon.brinde ? 0.000001 : 0.01)) {
+			saleState.setCupomResgate({ ...appliedCoupon, valorDesconto: evaluation.valorDesconto });
 		}
 	}, [appliedCoupon, availableCoupons, saleState.setCupomResgate]);
 
@@ -70,10 +79,22 @@ export default function CouponRedemptionSection({ saleState, clientId }: CouponR
 					</div>
 					<span className="text-xs font-bold text-primary">-{formatToMoney(appliedCoupon.valorDesconto)}</span>
 				</div>
-				<Button type="button" size="sm" variant="ghost" className="self-end flex items-center gap-1.5" onClick={() => saleState.setCupomResgate(null)}>
-					<X className="w-3 h-3 min-w-3 min-h-3" />
-					REMOVER CUPOM
-				</Button>
+				{appliedCoupon.brinde ? (
+					<p className="text-xs text-muted-foreground">
+						Brinde: {saleState.state.itens.find((item) => item.tempId === appliedCoupon.brinde?.itemChave)?.nome ?? "Produto selecionado"}. Uma unidade
+						grátis; adicionais à parte.
+					</p>
+				) : null}
+				<CouponRemovalAction
+					hasGift={!!appliedCoupon.brinde}
+					onRemove={() => saleState.setCupomResgate(null)}
+					onRemoveGift={() => {
+						const item = saleState.state.itens.find((item) => item.tempId === appliedCoupon.brinde?.itemChave);
+						if (!item) return;
+						if (item.quantidade <= 1) saleState.removeItem(item.tempId);
+						else saleState.updateItemQuantity(item.tempId, item.quantidade - 1);
+					}}
+				/>
 			</div>
 		);
 	}
@@ -114,7 +135,19 @@ function AvailableCouponCard({ coupon, saleState, onApplied }: { coupon: TPosAva
 	const isEligible = isAutomatic ? !!evaluation?.elegivel : evaluation?.elegivel !== false;
 	const manualMaxDiscount = saleState.valorAntesCupom;
 
-	function handleApply() {
+	function handleApply(giftOption?: TCouponGiftOption) {
+		if (giftOption?.avaliacao.elegivel) {
+			saleState.setCupomResgate({
+				cupomId: coupon.id,
+				valorDesconto: giftOption.avaliacao.valorDesconto,
+				codigo: coupon.codigo,
+				titulo: coupon.titulo,
+				validacaoModo: "AUTOMATICA",
+				brinde: { itemChave: giftOption.itemChave, quantidade: 1 },
+			});
+			onApplied();
+			return;
+		}
 		if (isAutomatic) {
 			if (!evaluation?.elegivel) return;
 			saleState.setCupomResgate({
@@ -155,7 +188,9 @@ function AvailableCouponCard({ coupon, saleState, onApplied }: { coupon: TPosAva
 				</div>
 				{isAutomatic && evaluation?.elegivel ? <span className="text-xs font-bold text-primary">-{formatToMoney(evaluation.valorDesconto)}</span> : null}
 			</div>
-			{evaluation && !evaluation.elegivel ? <p className="text-[11px] text-muted-foreground">{evaluation.motivo}</p> : null}
+			{coupon.beneficioTipo !== "BRINDE" && evaluation && !evaluation.elegivel ? (
+				<p className="text-[11px] text-muted-foreground">{evaluation.motivo}</p>
+			) : null}
 			{!isAutomatic ? (
 				<div className="flex flex-col gap-1">
 					{coupon.condicoesTexto ? <p className="text-[11px] text-muted-foreground">CONDIÇÕES: {coupon.condicoesTexto}</p> : null}
@@ -171,9 +206,56 @@ function AvailableCouponCard({ coupon, saleState, onApplied }: { coupon: TPosAva
 					/>
 				</div>
 			) : null}
-			<Button type="button" size="sm" variant="ghost" className="self-end" disabled={!isEligible} onClick={handleApply}>
+			{coupon.beneficioTipo === "BRINDE" ? (
+				<>
+					<CouponGiftChoices
+						options={coupon.brindes}
+						itemLabel={(key) => {
+							const item = saleState.state.itens.find((item) => item.tempId === key);
+							return item
+								? `${item.nome}${item.modificadores.length ? ` (${item.modificadores.map((modifier) => modifier.nome).join(", ")})` : ""}`
+								: "Produto";
+						}}
+						onChoose={handleApply}
+					/>
+					<PosGiftProducts couponId={coupon.id} saleState={saleState} />
+				</>
+			) : (
+				<Button type="button" size="sm" variant="ghost" className="self-end" disabled={!isEligible} onClick={() => handleApply()}>
 				APLICAR CUPOM
 			</Button>
+			)}
+		</div>
+	);
+}
+
+function PosGiftProducts({ couponId, saleState }: { couponId: string; saleState: TUseSaleState }) {
+	const { data: products, isLoading, error } = usePosCouponGiftProducts(couponId);
+	const [selectedProduct, setSelectedProduct] = useState<NonNullable<typeof products>[number] | null>(null);
+	return (
+		<div className="flex flex-col gap-2">
+			<p className="text-xs font-semibold">Produtos permitidos</p>
+			{isLoading ? <p className="text-xs text-muted-foreground">Buscando produtos...</p> : null}
+			{error ? (
+				<p role="alert" className="text-xs text-destructive">
+					Não foi possível carregar os produtos de brinde.
+				</p>
+			) : null}
+			{products?.length === 0 ? <p className="text-xs text-muted-foreground">Nenhum produto disponível neste canal.</p> : null}
+			{products?.map((product) => (
+				<Button
+					key={product.id}
+					type="button"
+					variant="outline"
+					className="h-auto min-h-10 whitespace-normal"
+					onClick={() => setSelectedProduct(product)}
+				>
+					Adicionar {product.nome} ao carrinho
+				</Button>
+			))}
+			{selectedProduct ? (
+				<ProductBuilderModal product={selectedProduct} onAddToCart={saleState.addItem} onClose={() => setSelectedProduct(null)} />
+			) : null}
 		</div>
 	);
 }

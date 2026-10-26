@@ -424,7 +424,18 @@ export type TCouponRedemption = z.infer<typeof CouponRedemptionSchema>;
  * Persistido em sales.rascunhoMetadados.cupom até a confirmação, quando o resgate
  * é registrado no ledger. O desconto entra nos totais da venda como o cashbackResgate.
  */
+export const CouponGiftSelectionSchema = z.object({
+	itemChave: z
+		.string({ required_error: "Item do brinde não informado.", invalid_type_error: "Tipo não válido para o item do brinde." })
+		.min(1, "Selecione o item do brinde."),
+	quantidade: z
+		.literal(1, { required_error: "Quantidade do brinde não informada.", invalid_type_error: "O cupom concede uma unidade de brinde." })
+		.default(1),
+});
+export type TCouponGiftSelection = z.infer<typeof CouponGiftSelectionSchema>;
+
 export const AppliedCouponSchema = z.object({
+	brinde: CouponGiftSelectionSchema.optional().nullable(),
 	cupomId: z.string({
 		required_error: "ID do cupom aplicado não informado.",
 		invalid_type_error: "Tipo não válido para o ID do cupom aplicado.",
@@ -445,6 +456,7 @@ export type TAppliedCoupon = z.infer<typeof AppliedCouponSchema>;
  * já que a definição do cupom pode mudar depois do uso.
  */
 export type TCouponBenefitSnapshot = {
+	brinde?: TCouponGiftSelection & { produtoId: string; produtoVarianteId: string | null; valorUnitarioBase: number; valorDesconto: number };
 	beneficioTipo: TCoupon["beneficioTipo"];
 	beneficioValor: number | null;
 	beneficioDescontoMaximo: number | null;

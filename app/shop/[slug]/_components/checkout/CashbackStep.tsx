@@ -8,9 +8,13 @@ import { Slider } from "@/components/ui/slider";
 import { MAX_REWARD_REDEMPTION_QUANTITY_PER_LINE } from "@/lib/sales/sale-reward-snapshot";
 import { formatCashbackValue, formatToMoney } from "@/lib/formatting";
 import { type TShopAvailableCoupon, useShopAvailableCoupons, useShopAvailableRewards, useShopClientLookup } from "@/lib/queries/shop";
+import CouponRemovalAction from "@/components/Coupons/CouponRemovalAction";
+import CouponGiftChoices from "@/components/Coupons/CouponGiftChoices";
+import { filterCouponGiftProducts, type TCouponGiftOption } from "@/lib/coupons/gifts";
+import { resolveAppliedCouponEvaluation } from "@/lib/coupons/gifts";
 import { buildShopCartLines } from "@/lib/shop/cart";
 import { HAPTICS, triggerHaptic } from "@/lib/shop/haptics";
-import { ArrowRight, BadgePercent, Gift, Info, Loader2, Minus, Plus, Ticket, X } from "lucide-react";
+import { ArrowRight, BadgePercent, Gift, Info, Loader2, Minus, Plus, Ticket } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useMemo } from "react";
 import { toast } from "sonner";
@@ -38,12 +42,14 @@ export default function CashbackStep({ onNext }: CashbackStepProps) {
 		telefone: customer.telefone,
 	});
 
-	const cartLines = useMemo(() => buildShopCartLines(cart.items, catalog.products), [cart.items, catalog.products]);
+	const cartLines = useMemo(() => buildShopCartLines(cart.items, catalog.products, orderState.state.coupon.resgate?.brinde), [cart.items, catalog.products, orderState.state.coupon.resgate?.brinde]);
 
 	const subtotal = useMemo(() => cartLines.reduce((sum, line) => sum + line.lineTotal, 0), [cartLines]);
 	const cartItemsForCoupon = useMemo(
 		() =>
 			cartLines.map((line) => ({
+				chave: line.tempId,
+				valorUnitarioBase: line.unitPrice,
 				produtoId: line.produtoId,
 				produtoVarianteId: line.produtoVarianteId,
 				quantidade: line.quantidade,
@@ -131,13 +137,14 @@ export default function CashbackStep({ onNext }: CashbackStepProps) {
 	useEffect(() => {
 		if (!appliedCoupon || !availableCoupons) return;
 		const freshCoupon = availableCoupons.find((item) => item.id === appliedCoupon.cupomId);
-		if (!freshCoupon || freshCoupon.validacaoModo !== "AUTOMATICA" || !freshCoupon.avaliacao?.elegivel) {
+		const evaluation = resolveAppliedCouponEvaluation(freshCoupon, appliedCoupon);
+		if (!freshCoupon || freshCoupon.validacaoModo !== "AUTOMATICA" || !evaluation?.elegivel) {
 			orderState.updateCoupon(null);
 			toast.warning("O cupom aplicado deixou de valer para o carrinho atual e foi removido.");
 			return;
 		}
-		if (Math.abs(freshCoupon.avaliacao.valorDesconto - appliedCoupon.valorDesconto) > 0.01) {
-			orderState.updateCoupon({ ...appliedCoupon, valorDesconto: freshCoupon.avaliacao.valorDesconto });
+		if (Math.abs(evaluation.valorDesconto - appliedCoupon.valorDesconto) > (appliedCoupon.brinde ? 0.000001 : 0.01)) {
+			orderState.updateCoupon({ ...appliedCoupon, valorDesconto: evaluation.valorDesconto });
 		}
 	}, [appliedCoupon, availableCoupons, orderState.updateCoupon]);
 
@@ -315,10 +322,22 @@ export default function CashbackStep({ onNext }: CashbackStepProps) {
 								</div>
 								<p className="shrink-0 text-sm font-black tabular-nums text-primary">-{formatToMoney(appliedCoupon.valorDesconto)}</p>
 							</div>
-							<Button type="button" variant="ghost" size="sm" className="mt-2 h-8 w-full gap-1.5 rounded-xl" onClick={() => orderState.updateCoupon(null)}>
-								<X className="size-3.5" />
-								Remover cupom
-							</Button>
+							{appliedCoupon.brinde ? (
+								<p className="mt-2 text-xs text-muted-foreground">
+									Brinde: {cartLines.find((line) => line.tempId === appliedCoupon.brinde?.itemChave)?.displayName ?? "Produto selecionado"}. Uma unidade
+									grátis; adicionais à parte.
+								</p>
+							) : null}
+							<CouponRemovalAction
+								hasGift={!!appliedCoupon.brinde}
+								onRemove={() => orderState.updateCoupon(null)}
+								onRemoveGift={() => {
+									const item = cart.items.find((item) => item.tempId === appliedCoupon.brinde?.itemChave);
+									if (!item?.tempId) return;
+									if (item.quantidade <= 1) orderState.removeItem(item.tempId);
+									else orderState.updateItemQuantity(item.tempId, item.quantidade - 1);
+								}}
+							/>
 						</div>
 					) : availableCoupons && availableCoupons.length > 0 ? (
 						<div className="flex flex-col gap-2">
@@ -326,12 +345,17 @@ export default function CashbackStep({ onNext }: CashbackStepProps) {
 								<AvailableCouponCard
 									key={availableCoupon.id}
 									coupon={availableCoupon}
-									onApply={() => {
+									onApply={(giftOption) => {
 										triggerHaptic(HAPTICS.tap);
 										notifyRewardReplaced();
 										orderState.updateCoupon({
+											brinde: giftOption ? { itemChave: giftOption.itemChave, quantidade: 1 } : null,
 											cupomId: availableCoupon.id,
-											valorDesconto: availableCoupon.avaliacao?.elegivel ? availableCoupon.avaliacao.valorDesconto : 0,
+											valorDesconto: giftOption?.avaliacao.elegivel
+												? giftOption.avaliacao.valorDesconto
+												: availableCoupon.avaliacao?.elegivel
+													? availableCoupon.avaliacao.valorDesconto
+													: 0,
 											codigo: availableCoupon.codigo,
 											titulo: availableCoupon.titulo,
 										});
@@ -439,7 +463,10 @@ export default function CashbackStep({ onNext }: CashbackStepProps) {
 	);
 }
 
-function AvailableCouponCard({ coupon, onApply }: { coupon: TShopAvailableCoupon; onApply: () => void }) {
+function AvailableCouponCard({ coupon, onApply }: { coupon: TShopAvailableCoupon; onApply: (giftOption?: TCouponGiftOption) => void }) {
+	const { catalog, orderState, setBuilderProduct } = useShop();
+	const lines = buildShopCartLines(orderState.state.cart.items, catalog.products);
+	const giftProducts = coupon.beneficioTipo === "BRINDE" ? filterCouponGiftProducts(catalog.products, coupon.alvos) : [];
 	const isManual = coupon.validacaoModo === "MANUAL";
 	const evaluation = coupon.avaliacao;
 	const isEligible = !isManual && !!evaluation?.elegivel;
@@ -466,16 +493,44 @@ function AvailableCouponCard({ coupon, onApply }: { coupon: TShopAvailableCoupon
 			{isManual ? <p className="text-xs leading-relaxed text-muted-foreground">Este cupom precisa de validação no atendimento da loja.</p> : null}
 			{!isManual && evaluation && !evaluation.elegivel ? <p className="text-xs leading-relaxed text-muted-foreground">{evaluation.motivo}</p> : null}
 
+			{coupon.beneficioTipo === "BRINDE" ? (
+				<>
+					<CouponGiftChoices
+						options={coupon.brindes}
+						itemLabel={(key) => {
+							const line = lines.find((line) => line.tempId === key);
+							return line
+								? `${line.displayName}${line.modifiersDetails.length ? ` (${line.modifiersDetails.map((modifier) => modifier.nome).join(", ")})` : ""}`
+								: "Produto";
+						}}
+						onChoose={onApply}
+					/>
+					<p className="text-xs font-semibold">Produtos permitidos</p>
+					{giftProducts.map((product) => (
+						<Button
+							key={product.id}
+							type="button"
+							variant="outline"
+							className="h-auto min-h-10 whitespace-normal"
+							onClick={() => setBuilderProduct(product)}
+						>
+							Adicionar {product.nome} ao carrinho
+						</Button>
+					))}
+					{giftProducts.length === 0 ? <p className="text-xs text-muted-foreground">Nenhum produto disponível neste canal.</p> : null}
+				</>
+			) : (
 			<Button
 				type="button"
 				size="sm"
 				variant={isEligible ? "default" : "outline"}
 				className="h-9 rounded-xl font-bold"
 				disabled={!isEligible}
-				onClick={onApply}
+					onClick={() => onApply()}
 			>
 				Aplicar cupom
 			</Button>
+			)}
 		</div>
 	);
 }

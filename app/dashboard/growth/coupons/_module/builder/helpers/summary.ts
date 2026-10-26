@@ -17,7 +17,7 @@ export function buildBenefitLabel(coupon: TState["coupon"]): string {
 		case "COMPRE_X_LEVE_Y":
 			return `leve ${coupon.beneficioLeveQuantidade ?? 0}, pague ${coupon.beneficioCompreQuantidade ?? 0}`;
 		default:
-			return "um brinde";
+			return "uma unidade grátis, escolhida entre os brindes permitidos";
 	}
 }
 
@@ -55,6 +55,7 @@ export function buildCouponSummary(state: TState): string {
 	if (coupon.vigenciaFim) parts.push(`até ${formatDateAsLocale(coupon.vigenciaFim)}`);
 
 	let sentence = `${parts.join(" ")}.`;
+	if (coupon.beneficioTipo === "BRINDE") sentence += " Adicionais são cobrados à parte. O brinde não conta para atingir as condições de compra.";
 	if (coupon.validacaoModo === "MANUAL") sentence += " O operador confere as condições no balcão.";
 
 	const activeTargets = couponTargets.filter((target) => !target.deletar);

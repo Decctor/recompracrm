@@ -1,5 +1,6 @@
 import { getCashbackRedemptionMaximum } from "@/lib/cashback/client-position";
 import type { TCouponEvaluationResult } from "@/lib/coupons/engine";
+import type { TCouponBenefitTypeEnum } from "@/schemas/enums";
 import { formatToMoney } from "@/lib/formatting";
 import { PaymentTerminalError } from "./errors";
 import { roundCents } from "./terminal-cart-item";
@@ -12,6 +13,7 @@ import { roundCents } from "./terminal-cart-item";
 //   conta no teto de desconto — no terminal, sem teto, viraria um pedido de aprovação a cada venda.
 
 export const TERMINAL_MANUAL_COUPON_REASON = "Cupom de validação manual: aplique pelo PDV.";
+export const TERMINAL_GIFT_COUPON_REASON = "Cupom de brinde: escolha o produto pelo PDV ou pela loja digital.";
 
 /** Programa e saldo como o terminal precisa para decidir o cashback. */
 export type TTerminalCashbackView = {
@@ -87,6 +89,7 @@ export type TTerminalCouponView = {
 };
 
 export function buildTerminalCouponView(coupon: {
+	beneficioTipo?: TCouponBenefitTypeEnum;
 	id: string;
 	titulo: string;
 	descricao: string | null;
@@ -96,6 +99,7 @@ export function buildTerminalCouponView(coupon: {
 	avaliacao: TCouponEvaluationResult | null;
 }): TTerminalCouponView {
 	const base = { id: coupon.id, titulo: coupon.titulo, descricao: coupon.descricao, codigo: coupon.codigo, vigenciaFim: coupon.vigenciaFim };
+	if (coupon.beneficioTipo === "BRINDE") return { ...base, selecionavel: false, valorDesconto: null, motivo: TERMINAL_GIFT_COUPON_REASON };
 	if (coupon.validacaoModo !== "AUTOMATICA") return { ...base, selecionavel: false, valorDesconto: null, motivo: TERMINAL_MANUAL_COUPON_REASON };
 	const evaluation = coupon.avaliacao;
 	if (!evaluation) return { ...base, selecionavel: false, valorDesconto: null, motivo: "Adicione itens para avaliar o cupom." };

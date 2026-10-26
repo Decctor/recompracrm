@@ -57,6 +57,7 @@ function resolveInitialCatalogState(rascunhoMetadados: unknown): boolean {
 
 function mapItemsToApi(saleState: TUseSaleState) {
 	return saleState.state.itens.map((item) => ({
+		chave: item.tempId,
 		id: item.itemId ?? null,
 		produtoId: item.produtoId,
 		produtoVarianteId: item.produtoVarianteId,

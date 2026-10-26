@@ -172,7 +172,7 @@ async function getSaleForEdit({ input, session }: { input: TGetSaleForEditInput;
 
 	const cupomResgatado = await db.query.couponRedemptions.findFirst({
 		where: (fields, { and, eq }) => and(eq(fields.vendaId, sale.id), eq(fields.organizacaoId, orgId), eq(fields.status, "UTILIZADO")),
-		columns: { id: true, cupomId: true, valorDesconto: true, cupomTitulo: true, cupomCodigo: true },
+		columns: { id: true, cupomId: true, valorDesconto: true, cupomTitulo: true, cupomCodigo: true, beneficioSnapshot: true },
 	});
 
 	const rawTransactions: SalePaymentTransactionInput[] = sale.lancamentosContabeis.flatMap((entry) =>

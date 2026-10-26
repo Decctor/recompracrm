@@ -39,7 +39,14 @@ export function assertCouponCoherence({
 	const activeTargets = targets.filter((target) => !target.deletar);
 	const activeAudiences = audiences.filter((audience) => !audience.deletar);
 
-	if (coupon.beneficioTipo === "BRINDE") throw new createHttpError.BadRequest("Cupons de brinde ainda não são suportados.");
+	if (coupon.beneficioTipo === "BRINDE") {
+		if (coupon.validacaoModo !== "AUTOMATICA" || coupon.beneficioAplicacao !== "ITENS_ELEGIVEIS") {
+			throw new createHttpError.BadRequest("Cupons de brinde exigem validação automática e aplicação aos itens elegíveis.");
+		}
+		if (!activeTargets.some((target) => target.papel === "BENEFICIADO")) {
+			throw new createHttpError.BadRequest("Selecione pelo menos um produto ou grupo como brinde (ganha o desconto).");
+		}
+	}
 
 	if (coupon.validacaoModo === "MANUAL" && !coupon.condicoesTexto?.trim()) {
 		throw new createHttpError.BadRequest("Cupons de validação manual exigem o texto de condições para orientar cliente e operador.");
@@ -75,15 +82,7 @@ export function assertCouponCoherence({
 	}
 }
 
-export async function assertCouponCodeIsAvailable({
-	tx,
-	organizationId,
-	codigo,
-}: {
-	tx: DBTransaction;
-	organizationId: string;
-	codigo: string;
-}) {
+export async function assertCouponCodeIsAvailable({ tx, organizationId, codigo }: { tx: DBTransaction; organizationId: string; codigo: string }) {
 	const existingCouponWithCode = await tx.query.coupons.findFirst({
 		where: and(eq(coupons.organizacaoId, organizationId), eq(coupons.codigo, codigo)),
 		columns: { id: true },

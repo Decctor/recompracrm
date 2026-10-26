@@ -1,7 +1,7 @@
 import type { TCouponBenefitSnapshot } from "@/schemas/coupons";
 import type { DBTransaction } from "@/services/drizzle";
 import type { TDeliveryModeEnum } from "@/schemas/enums";
-import { couponGrants, couponRedemptions } from "@/services/drizzle/schema";
+import { couponGrants, couponRedemptions, coupons } from "@/services/drizzle/schema";
 import { getCouponCheckoutConditionIssue } from "./conditions";
 import { countPreviousConfirmedPurchases, lockClientPurchaseHistory } from "./purchase-history";
 import { and, count, eq, sql } from "drizzle-orm";
@@ -33,6 +33,7 @@ export async function processCouponRedemption({
 	operadorVendedorId,
 	metadados,
 	entregaModalidade,
+	brinde,
 	now = new Date(),
 }: {
 	trx: DBTransaction;
@@ -47,10 +48,17 @@ export async function processCouponRedemption({
 	operadorVendedorId?: string | null;
 	metadados?: Record<string, unknown> | null;
 	entregaModalidade?: TDeliveryModeEnum | null;
+	brinde?: TCouponBenefitSnapshot["brinde"];
 	now?: Date;
 }) {
 	if (valorDesconto <= 0) throw new createHttpError.BadRequest("O valor de desconto do cupom deve ser maior que zero.");
 
+	await lockClientPurchaseHistory(trx, organizacaoId, clienteId);
+	await trx
+		.select({ id: coupons.id })
+		.from(coupons)
+		.where(and(eq(coupons.id, cupomId), eq(coupons.organizacaoId, organizacaoId)))
+		.for("update");
 	const coupon = await trx.query.coupons.findFirst({
 		where: (fields, { eq, and }) => and(eq(fields.id, cupomId), eq(fields.organizacaoId, organizacaoId)),
 		with: {
@@ -62,8 +70,11 @@ export async function processCouponRedemption({
 		},
 	});
 	if (!coupon) throw new createHttpError.NotFound("Cupom não encontrado.");
+	if (coupon.beneficioTipo === "BRINDE" && (!brinde || !vendaId || surface === "PONTO_INTERACAO" || coupon.validacaoModo !== "AUTOMATICA")) {
+		throw new createHttpError.BadRequest("O brinde exige a seleção de um produto em um checkout com carrinho.");
+	}
 
-	if (coupon.condicaoPrimeiraCompra) await lockClientPurchaseHistory(trx, organizacaoId, clienteId);
+	// Cliente e cupom já estão serializados antes da leitura de limites e atribuições.
 	const previousConfirmedPurchases = await countPreviousConfirmedPurchases({ trx, organizacaoId, clienteId, vendaId });
 	const conditionIssue = getCouponCheckoutConditionIssue(coupon, {
 		entregaModalidade: entregaModalidade ?? null,
@@ -113,6 +124,7 @@ export async function processCouponRedemption({
 	}
 
 	const benefitSnapshot: TCouponBenefitSnapshot = {
+		...(brinde ? { brinde } : {}),
 		beneficioTipo: coupon.beneficioTipo,
 		beneficioValor: coupon.beneficioValor,
 		beneficioDescontoMaximo: coupon.beneficioDescontoMaximo,

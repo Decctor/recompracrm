@@ -100,6 +100,17 @@ export function buildCouponSectionUpdateInput({
 			: {}),
 		...(section === "benefit"
 			? {
+					...(draft.beneficioTipo === "BRINDE"
+						? {
+								validacaoModo: draft.validacaoModo,
+								resgatePermitirViaPontoInteracao: false,
+								condicaoValorMinimoVenda: draft.condicaoValorMinimoVenda,
+								condicaoQuantidadeMinimaItens: draft.condicaoQuantidadeMinimaItens,
+								condicaoAlvosOperador: draft.condicaoAlvosOperador,
+								condicaoModalidadesEntrega: draft.condicaoModalidadesEntrega,
+								condicaoPrimeiraCompra: draft.condicaoPrimeiraCompra,
+							}
+						: {}),
 					beneficioTipo: draft.beneficioTipo,
 					beneficioValor: draft.beneficioValor,
 					beneficioDescontoMaximo: draft.beneficioDescontoMaximo,
@@ -136,7 +147,7 @@ export function buildCouponSectionUpdateInput({
 	return {
 		couponId: coupon.id,
 		coupon: couponPayload,
-		couponTargets: section === "audience" ? state.couponTargets : server.couponTargets,
+		couponTargets: section === "audience" || (section === "benefit" && draft.beneficioTipo === "BRINDE") ? state.couponTargets : server.couponTargets,
 		couponAudiences: section === "audience" ? state.couponAudiences : server.couponAudiences,
 	};
 }
@@ -154,6 +165,8 @@ export function validateCouponSectionState({ state, section }: { state: TCouponS
 	}
 
 	if (section === "benefit") {
+		if (coupon.beneficioTipo === "BRINDE" && !state.couponTargets.some((target) => !target.deletar && target.papel === "BENEFICIADO"))
+			return "Configure pelo menos um produto ou grupo como brinde.";
 		const needsValue = ["DESCONTO_FIXO", "DESCONTO_PERCENTUAL", "PRECO_FIXO"].includes(coupon.beneficioTipo);
 		if (needsValue && (!coupon.beneficioValor || coupon.beneficioValor <= 0)) return "O valor do benefício do cupom deve ser maior que zero.";
 		if (coupon.beneficioTipo === "DESCONTO_PERCENTUAL" && (coupon.beneficioValor ?? 0) > 100) {
