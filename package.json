@@ -66,6 +66,7 @@
 		"test:bank-statement": "tsx ./scripts/generate-test-bank-statement.ts",
 		"test:bling-fetch": "tsx ./scripts/test-bling-fetch.ts",
 		"test:erpflex-fetch": "tsx ./scripts/test-erpflex-fetch.ts",
+		"sql-views": "tsx --conditions=react-server ./scripts/sql-views-integration.ts",
 		"test:sql-views": "node --import tsx --test lib/data-connectors/sql-views/mappers.test.ts",
 		"sync:data-collecting": "tsx --conditions=react-server ./scripts/sync-data-collecting.ts",
 		"simulate:sale-taxes": "tsx --conditions=react-server ./scripts/simulate-todays-sale-taxes.ts",

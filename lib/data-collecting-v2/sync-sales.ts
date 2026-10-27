@@ -86,11 +86,11 @@ async function applyManagedSaleDeliveryEffects({
 	}
 }
 
-function getSellerId(context: TResolvedAuxiliaryEntities, sale: TCanonicalSale) {
+export function getSellerId(context: TResolvedAuxiliaryEntities, sale: TCanonicalSale) {
 	return sale.seller?.identifier ? (context.sellersByIdentifier.get(sale.seller.identifier) ?? null) : null;
 }
 
-function getPartner(context: TResolvedAuxiliaryEntities, sale: TCanonicalSale) {
+export function getPartner(context: TResolvedAuxiliaryEntities, sale: TCanonicalSale) {
 	return sale.partnerIdentifier ? (context.partnersByIdentifier.get(sale.partnerIdentifier) ?? null) : null;
 }
 
@@ -115,7 +115,7 @@ export function resolveSaleItemTarget(context: TResolvedAuxiliaryEntities, item:
 	return null;
 }
 
-function buildSaleValues({
+export function buildSaleValues({
 	batch,
 	sale,
 	clientId,
@@ -166,7 +166,7 @@ function buildSaleValues({
 	};
 }
 
-type TResolvedSaleItemRow = {
+export type TResolvedSaleItemRow = {
 	values: Omit<typeof saleItems.$inferInsert, "vendaId">;
 	modificadores: Omit<typeof saleItemModifiers.$inferInsert, "itemVendaId">[];
 };
@@ -178,7 +178,7 @@ type TResolvedSaleItemRow = {
  * produto/variante/modificador, que depende do estado da plataforma e pode mudar entre runs
  * sem o payload da fonte mudar).
  */
-function buildSaleItemRows({
+export function buildSaleItemRows({
 	batch,
 	context,
 	clientId,
