@@ -2,9 +2,7 @@
 // um job e o claim. O agent alterna entre duas cadências: `ativoMs` enquanto houve impressão
 // recente (a loja está em atendimento) e `ociosoMs` depois de uma janela quieta de 10 minutos —
 // assim a latência fica baixa quando importa e a carga no banco cai fora do expediente. O claim é
-// barato (mediana ~0 ms, ~10 ms de CPU) numa instância já quente — mas é a rota mais chamada do
-// projeto (~16 mil claims/dia), então a cadência ociosa pesa: fora do expediente não há job a
-// esperar, e 30 s deixa o primeiro ticket depois de uma pausa longa com no máximo 30 s de espera.
+// barato (mediana ~0 ms, ~10 ms de CPU) numa instância já quente.
 //
 // Servida em dois lugares: no bootstrap (`/configuration`) e em todo claim. O claim existe porque o
 // agent só lia a configuração ao iniciar — se o PC ligou antes da rede, ela falhava e o agent
@@ -14,7 +12,7 @@
 // inteira em segundos (aceitam 5–300 s). Os três valores têm override por env, sem deploy:
 // DESKTOP_AGENT_POLLING_ATIVO_MS, DESKTOP_AGENT_POLLING_OCIOSO_MS, DESKTOP_AGENT_POLLING_SEGUNDOS.
 const POLLING_ATIVO_MS_PADRAO = 2_000;
-const POLLING_OCIOSO_MS_PADRAO = 30_000;
+const POLLING_OCIOSO_MS_PADRAO = 10_000;
 const POLLING_MS_MIN = 1_000;
 const POLLING_MS_MAX = 300_000;
 const POLLING_INTERVALO_SEGUNDOS_PADRAO = 5;
