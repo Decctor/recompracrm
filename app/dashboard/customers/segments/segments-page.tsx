@@ -23,6 +23,7 @@ import type { TAuthUserSession } from "@/lib/authentication/types";
 import { getErrorMessage } from "@/lib/errors";
 import { getExcelFromJSON } from "@/lib/excel-utils";
 import { formatDateAsLocale, formatToMoney } from "@/lib/formatting";
+import { appRoutes } from "@/lib/navigation/routes";
 import {
 	formatInteractiveCountSummary,
 	formatInteractiveDateRangeSummary,
@@ -59,6 +60,7 @@ import {
 	FilterX,
 	Grid3X3,
 } from "lucide-react";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { BsCalendar } from "react-icons/bs";
 import { toast } from "sonner";
@@ -439,6 +441,12 @@ function SegmentsPageClientCard({ client, period }: SegmentsPageClientCardProps)
 							<p className={cn("text-xs font-medium tracking-tight uppercase")}>{client.analiseRFMTitulo}</p>
 						</div>
 					) : null}
+					<Button variant="link" className="flex items-center gap-1.5" size="sm" asChild>
+						<Link href={appRoutes.customers.details(client.id)}>
+							<Info className="w-3 min-w-3 h-3 min-h-3" />
+							DETALHES
+						</Link>
+					</Button>
 				</div>
 			</div>
 
