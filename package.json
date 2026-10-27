@@ -45,6 +45,7 @@
 		"test:manual-stock-movements": "node --import tsx --test lib/stock/manual-stock-movements.test.ts",
 		"test:stock-analytics": "node --import tsx --test lib/stock/analytics/analytics.test.ts",
 		"test:pos-barcode": "node --import tsx --test lib/pos/barcode-scan-detector.test.ts lib/pos/barcode-lookup.test.ts lib/pos/scale-barcode.test.ts",
+		"test:nuvemshop-pagination": "node --import tsx --test lib/data-connectors/nuvemshop/pagination.test.ts",
 		"test:pos-stock": "node --import tsx --test lib/pos/stock-availability.test.ts lib/products/variant-axes.test.ts",
 		"analyze:product-add-ons": "tsx ./scripts/analyze-product-add-ons.ts",
 		"verify:organization-slugs": "tsx ./scripts/verify-organization-slugs.ts",

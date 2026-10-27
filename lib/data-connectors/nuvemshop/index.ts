@@ -44,6 +44,18 @@ function delay(ms: number) {
 	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * A Nuvem Shop responde 404 `{ description: "Last page is N" }` quando a página pedida passa da
+ * última — inclusive `"Last page is 0"` para uma janela sem nenhum pedido. É resultado vazio, não
+ * falha: tratado como erro, marcava a integração como ERRO a cada rodada do cron numa loja sem
+ * pedidos no dia.
+ */
+export function isNuvemshopPastLastPageError(error: unknown) {
+	if (!isAxiosError(error) || error.response?.status !== 404) return false;
+	const description = (error.response.data as { description?: unknown } | undefined)?.description;
+	return typeof description === "string" && /^Last page is \d+$/.test(description.trim());
+}
+
 async function getNuvemshopOrdersPage({ client, window, page }: { client: AxiosInstance; window: TCanonicalImportWindow; page: number }) {
 	try {
 		const response = await client.get<unknown>("/orders", {
@@ -58,6 +70,7 @@ async function getNuvemshopOrdersPage({ client, window, page }: { client: AxiosI
 
 		return NuvemshopOrdersOutputSchema.parse(response.data);
 	} catch (error) {
+		if (isNuvemshopPastLastPageError(error)) return [];
 		if (isAxiosError(error) && error.response?.status === 429) {
 			const retryAfterMs = getRetryAfterMs(error.response.headers["retry-after"]) ?? 30000;
 			console.warn(`[NUVEMSHOP] Rate limit atingido. Aguardando ${retryAfterMs / 1000}s antes de tentar novamente.`);
@@ -90,6 +103,7 @@ async function getNuvemshopProductsPage({ client, page }: { client: AxiosInstanc
 
 		return NuvemshopProductsOutputSchema.parse(response.data);
 	} catch (error) {
+		if (isNuvemshopPastLastPageError(error)) return [];
 		if (isAxiosError(error) && error.response?.status === 429) {
 			const retryAfterMs = getRetryAfterMs(error.response.headers["retry-after"]) ?? 30000;
 			console.warn(`[NUVEMSHOP] Rate limit atingido ao buscar produtos. Aguardando ${retryAfterMs / 1000}s antes de tentar novamente.`);
