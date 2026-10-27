@@ -64,12 +64,6 @@
 				}
 			]
 		},
-		"app/api/cron/fiscal-queue/route.ts": {
-			"memory": 1024
-		},
-		"app/api/cron/fiscal-inbound/route.ts": {
-			"memory": 1024
-		},
 		"app/api/queues/campaign-events/route.ts": {
 			"experimentalTriggers": [
 				{

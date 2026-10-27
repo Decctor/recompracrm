@@ -19,6 +19,15 @@ export class FiscalReadinessError extends createHttpError.BadRequest {
 	}
 }
 
+/**
+ * `instanceof FiscalReadinessError` é sempre falso: o construtor dos erros do `http-errors`
+ * devolve um objeto próprio (protótipo de `BadRequestError`), que substitui o `this` da subclasse.
+ * O `name` atribuído no construtor sobrevive — é ele que identifica o erro.
+ */
+export function isFiscalReadinessError(error: unknown): error is FiscalReadinessError {
+	return error instanceof Error && error.name === "FiscalReadinessError";
+}
+
 export class FiscalIntegrationError extends Error {
 	constructor(message: string) {
 		super(message);

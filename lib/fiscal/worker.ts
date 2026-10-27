@@ -6,7 +6,7 @@ import createHttpError from "http-errors";
 import { getErrorMessage } from "../errors";
 import { AUTO_EMISSION_SCHEDULE_GRACE_MINUTES } from "./constants";
 import { emitFiscalDocument, syncFiscalDocument } from "./documents";
-import { FiscalReadinessError } from "./errors";
+import { isFiscalReadinessError } from "./errors";
 
 const MAX_ATTEMPTS = 6;
 // Backoff exponencial (minutos) por tentativa.
@@ -87,7 +87,7 @@ async function processFiscalQueueUnlocked({ limit = 25 }: { limit?: number } = {
 			// do envio, sem avancar `tentativasEnvio`, entao o backoff nunca chegava ao limite e a nota
 			// era retentada para sempre. So uma correcao de dados resolve — como no enfileiramento,
 			// encerra a fila; a nova emissao parte da tela do documento.
-			if (error instanceof FiscalReadinessError) {
+			if (isFiscalReadinessError(error)) {
 				await scheduleNextAttempt(doc.id, null);
 				results.falhas++;
 				console.warn(`[FISCAL_WORKER] Documento ${doc.id} retirado da fila por pendencia de cadastro: ${getErrorMessage(error)}`);
