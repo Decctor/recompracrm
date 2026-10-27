@@ -1,7 +1,7 @@
 import type { TExternalActorContext } from "@/lib/access/authentication";
 import type { TPrintJobFinalidadeEnum, TPrintJobFormatoEnum, TPrintJobOrigemTipoEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
-import { type TAgentPrinterEntity, accessPrincipals, agentPrinters, printJobs } from "@/services/drizzle/schema";
+import { type TAgentPrinterEntity, agentPrinters, printJobs } from "@/services/drizzle/schema";
 import dayjs from "dayjs";
 import { and, desc, eq, gt, inArray, isNull, lt, or } from "drizzle-orm";
 import createHttpError from "http-errors";
@@ -225,10 +225,6 @@ type TClaimPrintJobsParams = {
 // Claim atômico: transição condicional PENDENTE→PROCESSANDO (ou retomada de lease vencida)
 // com tentativa própria — dois agents nunca levam o mesmo job (mesmo padrão da idempotência POI).
 export async function claimPrintJobs({ actor, limite }: TClaimPrintJobsParams) {
-	const principal = await db.query.accessPrincipals.findFirst({
-		where: eq(accessPrincipals.id, actor.principalId),
-		columns: { lojaId: true },
-	});
 	const printers = await getClaimablePrinters(actor.principalId);
 	if (printers.length === 0) return { jobs: [], impressorasAtivas: 0 };
 
@@ -258,7 +254,7 @@ export async function claimPrintJobs({ actor, limite }: TClaimPrintJobsParams) {
 			claimablePrintJobsCondition(now),
 			finalidadeCondition,
 			// Job de loja específica só sai no agent daquela loja.
-			principal?.lojaId ? or(isNull(printJobs.lojaId), eq(printJobs.lojaId, principal.lojaId)) : isNull(printJobs.lojaId),
+			actor.storeId ? or(isNull(printJobs.lojaId), eq(printJobs.lojaId, actor.storeId)) : isNull(printJobs.lojaId),
 		),
 		orderBy: (fields, { asc }) => asc(fields.dataInsercao),
 		limit: limite,
