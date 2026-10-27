@@ -1,4 +1,5 @@
 import type { TCanonicalImportBatch, TCanonicalSale, TCanonicalSaleItem } from "@/lib/data-connectors";
+import { resolveExternalSaleItem } from "@/lib/products/external-identities";
 import { mapCanonicalSaleAttendanceStatus, mapCanonicalSaleCommercialStatus } from "@/lib/data-connectors";
 import {
 	attendanceStatusRequiresPhysicalOut,
@@ -94,7 +95,9 @@ function getPartner(context: TResolvedAuxiliaryEntities, sale: TCanonicalSale) {
 }
 
 // Resolve o item de venda: vínculo de catálogo (exato) > variante estruturada > produto plano.
-function resolveSaleItemTarget(context: TResolvedAuxiliaryEntities, item: TCanonicalSaleItem) {
+export function resolveSaleItemTarget(context: TResolvedAuxiliaryEntities, item: TCanonicalSaleItem) {
+	const mapped = resolveExternalSaleItem(context.externalIdentities, item);
+	if (mapped) return mapped;
 	// O vínculo vem primeiro porque é o único casamento que não depende de o provedor ter
 	// preenchido `externalCode` com o mesmo valor do nosso `codigo`.
 	const linked = item.productExternalId ? context.productsByExternalItemId.get(item.productExternalId) : undefined;

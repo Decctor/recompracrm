@@ -1,5 +1,7 @@
 import { relations, sql } from "drizzle-orm";
-import { index, jsonb, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/pg-core";
+import { boolean, index, jsonb, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/pg-core";
+import type { TCatalogExternalIdentityKind } from "@/schemas/enums";
+import { integrations } from "./integrations";
 import type { TCatalogLinkDivergence, TCatalogLinkSnapshot, TCatalogLinkSyncPolicy } from "@/schemas/catalog-links";
 import { newTable } from "./common";
 import { catalogLinkProviderEnum, catalogLinkStatusEnum, catalogLinkTypeEnum } from "./enums";
@@ -47,6 +49,12 @@ export const catalogLinks = newTable(
 		provider: catalogLinkProviderEnum("provider").notNull(),
 		merchantId: varchar("merchant_id", { length: 255 }).notNull(),
 		tipo: catalogLinkTypeEnum("tipo").notNull(),
+		// Import aliases use the same mapping entity as iFood. Multiple external keys may
+		// target one family; scope by connection, never by organization alone.
+		integracaoId: varchar("integracao_id", { length: 255 }).references(() => integrations.id, { onDelete: "restrict" }),
+		identidadeTipo: text("identidade_tipo").$type<TCatalogExternalIdentityKind>(),
+		identidadeValor: text("identidade_valor"),
+		protegido: boolean("protegido").notNull().default(false),
 
 		// Referência interna — exatamente uma preenchida, conforme o tipo.
 		produtoId: varchar("produto_id", { length: 255 }).references(() => products.id, { onDelete: "cascade" }),
@@ -89,6 +97,12 @@ export const catalogLinks = newTable(
 		),
 		organizacaoStatusIdx: index("idx_catalog_links_org_status").on(table.organizacaoId, table.provider, table.merchantId, table.status),
 		produtoIdx: index("idx_catalog_links_produto").on(table.organizacaoId, table.produtoId),
+		externalIdentityUnique: uniqueIndex("unq_catalog_links_external_identity").on(
+			table.organizacaoId,
+			table.integracaoId,
+			table.identidadeTipo,
+			table.identidadeValor,
+		),
 	}),
 );
 

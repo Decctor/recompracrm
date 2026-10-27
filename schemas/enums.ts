@@ -566,7 +566,9 @@ export type TSalesChannelTypeEnum = z.infer<typeof SalesChannelTypeEnum>;
 export const SalesChannelCatalogModeEnum = z.enum(["TODOS", "SELECIONADOS"]);
 export type TSalesChannelCatalogModeEnum = z.infer<typeof SalesChannelCatalogModeEnum>;
 
-export const CatalogLinkProviderEnum = z.enum(["IFOOD"]);
+export const CatalogLinkProviderEnum = z.enum(["IFOOD", "NUVEM-SHOP", "PHIBO"]);
+export const CatalogExternalIdentityKindEnum = z.enum(["PRODUTO", "VARIANTE", "CODIGO", "EAN", "ESTOQUE"]);
+export type TCatalogExternalIdentityKind = z.infer<typeof CatalogExternalIdentityKindEnum>;
 export type TCatalogLinkProviderEnum = z.infer<typeof CatalogLinkProviderEnum>;
 
 export const CatalogLinkTypeEnum = z.enum(["PRODUTO", "VARIANTE", "ADD_ON", "ADD_ON_OPCAO", "CATEGORIA"]);

@@ -36,7 +36,7 @@ export async function syncProductsForIntegration({
 	}
 
 	if (integration.configuracao.tipo === "NUVEM-SHOP") {
-		await syncNuvemshopCatalog(organization.id, integration.configuracao as unknown as TNuvemshopConfig);
+		await syncNuvemshopCatalog(organization.id, integration.configuracao as unknown as TNuvemshopConfig, integration.id);
 		return {
 			organizationId: organization.id,
 			organizationName: organization.nome,

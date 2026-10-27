@@ -5,6 +5,7 @@ import { catalogLinks, clients, partners, productAddOnOptions, productAddOns, pr
 import { and, asc, eq, inArray, ne, or, sql } from "drizzle-orm";
 import { collectBatchLookupKeys, normalizeClientName as normalizeName, type TBatchLookupKeys } from "./batch-lookup-keys";
 import type { TDataCollectingV2Executor, TResolvedAuxiliaryEntities, TResolvedClientForImport } from "./types";
+import { loadExternalIdentities, resolveExternalIdentity } from "@/lib/products/external-identities";
 
 /**
  * Como as entidades existentes são carregadas para o contexto do lote:
@@ -153,6 +154,7 @@ function loadCatalogLinks(tx: TDataCollectingV2Executor, organizationId: string,
 	return tx.query.catalogLinks.findMany({
 		where: and(
 			eq(catalogLinks.organizacaoId, organizationId),
+			eq(catalogLinks.provider, "IFOOD"),
 			ne(catalogLinks.status, "DESVINCULADO"),
 			...(keys ? [inArray(catalogLinks.externoItemId, keys.productExternalItemIds)] : []),
 		),
@@ -448,7 +450,14 @@ export async function syncAuxiliaryEntities({
 		);
 	}
 
+	context.externalIdentities = await loadExternalIdentities(tx, organizationId, batch.integrationId);
 	for (const product of uniqueBy(batch.products, (value) => value.code)) {
+		const mapped = resolveExternalIdentity(context.externalIdentities, [
+			{ tipo: "CODIGO", valor: product.code },
+			{ tipo: "EAN", valor: product.code },
+			...(product.externalId ? [{ tipo: "PRODUTO" as const, valor: product.externalId }] : []),
+		]);
+		if (mapped) continue;
 		if (context.productsByCode.has(product.code)) continue;
 		// Já existe como variante estruturada: não cria produto plano duplicado.
 		if (context.variantsByCode.has(product.code)) continue;

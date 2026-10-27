@@ -422,7 +422,7 @@ export const shopProductsModeEnum = pgEnum("shop_products_mode", ["ATIVOS", "INC
 export const salesChannelTypeEnum = pgEnum("sales_channel_type", ["POS", "SHOP", "COMANDA", "IFOOD"]);
 export const salesChannelCatalogModeEnum = pgEnum("sales_channel_catalog_mode", ["TODOS", "SELECIONADOS"]);
 
-export const catalogLinkProviderEnum = pgEnum("catalog_link_provider", ["IFOOD"]);
+export const catalogLinkProviderEnum = pgEnum("catalog_link_provider", ["IFOOD", "NUVEM-SHOP", "PHIBO"]);
 export const catalogLinkTypeEnum = pgEnum("catalog_link_type", ["PRODUTO", "VARIANTE", "ADD_ON", "ADD_ON_OPCAO", "CATEGORIA"]);
 export const catalogLinkStatusEnum = pgEnum("catalog_link_status", ["PENDENTE", "SINCRONIZADO", "DIVERGENTE", "ERRO", "DESVINCULADO"]);
 

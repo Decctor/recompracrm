@@ -43,6 +43,7 @@ export type TResolvedVariantForImport = {
 };
 
 export type TResolvedAuxiliaryEntities = {
+	externalIdentities?: Map<string, import("@/lib/products/external-identities").TExternalIdentityTarget>;
 	clientsByExternalId: Map<string, TResolvedClientForImport>;
 	clientsByName: Map<string, TResolvedClientForImport>;
 	clientsByBasePhone: Map<string, TResolvedClientForImport>;

@@ -187,6 +187,9 @@ export async function mergeProducts(input: TMergeProductsInput): Promise<TMergeP
 		});
 		const linkIdentity = (row: typeof catalogLinks.$inferSelect) =>
 			[
+				row.integracaoId ?? "",
+				row.identidadeTipo ?? "",
+				row.identidadeValor ?? "",
 				row.provider,
 				row.merchantId,
 				row.tipo,

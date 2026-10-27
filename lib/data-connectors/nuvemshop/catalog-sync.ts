@@ -2,11 +2,12 @@ import { db, type DBTransaction } from "@/services/drizzle";
 import { productOptionValues, productOptions, productVariantOptionValues, productVariants, products } from "@/services/drizzle/schema";
 import { buildSalePriceUpdate } from "@/lib/products/price-snapshot";
 import { withProductUpdateStamp } from "@/lib/products/update-stamp";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { fetchAllNuvemshopProducts, mapNuvemshopStructuredCatalog, type TNuvemshopCatalogProduct } from "./index";
 import type { TNuvemshopConfig } from "./types";
+import { loadExternalIdentities, registerExternalIdentity, resolveExternalIdentity } from "@/lib/products/external-identities";
 
-export async function syncNuvemshopCatalog(organizationId: string, config: TNuvemshopConfig) {
+export async function syncNuvemshopCatalog(organizationId: string, config: TNuvemshopConfig, integrationId: string) {
 	console.log(`[ORG: ${organizationId}] [CATALOG-SYNC] Fetching catalog from Nuvemshop...`);
 	const catalogProducts = await fetchAllNuvemshopProducts(config);
 	console.log(`[ORG: ${organizationId}] [CATALOG-SYNC] Nuvemshop catalog fetched successfully`);
@@ -21,19 +22,23 @@ export async function syncNuvemshopCatalog(organizationId: string, config: TNuve
 
 	let productsCreated = 0;
 	let productsUpdated = 0;
+	let productsPreserved = 0;
 	let variantsUpserted = 0;
 
 	await db.transaction(async (tx) => {
+		await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`catalog:${organizationId}:${integrationId}`}, 0))`);
+		const identities = await loadExternalIdentities(tx, organizationId, integrationId);
 		for (const product of mappedProducts) {
-			const result = await upsertCatalogProduct({ tx, organizationId, product });
-			if (result.created) productsCreated++;
+			const result = await upsertCatalogProduct({ tx, organizationId, integrationId, identities, product });
+			if (result.preserved) productsPreserved++;
+			else if (result.created) productsCreated++;
 			else productsUpdated++;
 			variantsUpserted += result.variantsUpserted;
 		}
 	});
 
 	console.log(
-		`[ORG: ${organizationId}] [CATALOG-SYNC] Nuvemshop products: ${productsCreated} created, ${productsUpdated} updated, ${variantsUpserted} variants upserted`,
+		`[ORG: ${organizationId}] [CATALOG-SYNC] Nuvemshop products: ${productsCreated} created, ${productsUpdated} updated, ${productsPreserved} protected, ${variantsUpserted} variants upserted`,
 	);
 	console.log(`[ORG: ${organizationId}] [CATALOG-SYNC] Nuvemshop sync completed successfully`);
 }
@@ -41,15 +46,36 @@ export async function syncNuvemshopCatalog(organizationId: string, config: TNuve
 // Persiste um produto do catálogo como pai + (opcionalmente) eixos/valores/variantes estruturados.
 // Produto pai é casado por `codigo` (a tabela products não tem id_externo); variantes por id_externo
 // (variant_id), com fallback no código (SKU). Eixos e valores são casados por nome dentro do produto.
-async function upsertCatalogProduct({
+export async function upsertCatalogProduct({
 	tx,
 	organizationId,
+	integrationId,
+	identities,
 	product,
 }: {
 	tx: DBTransaction;
 	organizationId: string;
+	integrationId: string;
+	identities: Awaited<ReturnType<typeof loadExternalIdentities>>;
 	product: TNuvemshopCatalogProduct;
-}): Promise<{ created: boolean; variantsUpserted: number }> {
+}): Promise<{ created: boolean; variantsUpserted: number; preserved?: boolean }> {
+	const identity = resolveExternalIdentity(identities, [
+		{ tipo: "PRODUTO", valor: product.idExterno },
+		{ tipo: "CODIGO", valor: product.codigo },
+	]);
+	const mappedVariants = product.variants.map((v) =>
+		resolveExternalIdentity(identities, [
+			{ tipo: "VARIANTE", valor: v.idExterno },
+			{ tipo: "CODIGO", valor: v.codigo },
+		]),
+	);
+	// A protected family is owned by the app, including names, axes, prices and stock.
+	// Unknown variants need an explicit mapping; guessing here would lose implicit colors.
+	if (identity?.protegido || mappedVariants.some((v) => v?.protegido)) {
+		if (!identity || mappedVariants.some((v) => !v || v.produtoId !== identity.produtoId))
+			throw new Error(`Catálogo protegido: produto/variante sem de-para ou com pai divergente (${product.codigo}).`);
+		return { created: false, variantsUpserted: 0, preserved: true };
+	}
 	const productValues = {
 		ativo: product.ativo,
 		codigo: product.codigo,
@@ -67,7 +93,8 @@ async function upsertCatalogProduct({
 	};
 
 	const existingProduct = await tx.query.products.findFirst({
-		where: (fields, { and, eq }) => and(eq(fields.organizacaoId, organizationId), eq(fields.codigo, product.codigo)),
+		where: (fields, { and, eq }) =>
+			and(eq(fields.organizacaoId, organizationId), identity ? eq(fields.id, identity.produtoId) : eq(fields.codigo, product.codigo)),
 		columns: { id: true, precoVenda: true, precoVendaAnterior: true, codigoBarras: true },
 	});
 
@@ -78,12 +105,14 @@ async function upsertCatalogProduct({
 		// snapshot, o início de uma promoção vira "De / Por" automaticamente.
 		await tx
 			.update(products)
-			.set(withProductUpdateStamp({
-				...productValues,
-				...buildSalePriceUpdate({ current: existingProduct, next: { precoVenda: product.precoVenda } }),
-				// GTIN ausente/inválido na loja não apaga o que foi cadastrado no app.
-				codigoBarras: product.codigoBarras ?? existingProduct.codigoBarras,
-			}))
+			.set(
+				withProductUpdateStamp({
+					...productValues,
+					...buildSalePriceUpdate({ current: existingProduct, next: { precoVenda: product.precoVenda } }),
+					// GTIN ausente/inválido na loja não apaga o que foi cadastrado no app.
+					codigoBarras: product.codigoBarras ?? existingProduct.codigoBarras,
+				}),
+			)
 			.where(eq(products.id, existingProduct.id));
 		productId = existingProduct.id;
 	} else {
@@ -95,6 +124,8 @@ async function upsertCatalogProduct({
 		productId = insertedProduct.id;
 		created = true;
 	}
+	await registerExternalIdentity(tx, organizationId, integrationId, { tipo: "PRODUTO", valor: product.idExterno }, { produtoId: productId });
+	await registerExternalIdentity(tx, organizationId, integrationId, { tipo: "CODIGO", valor: product.codigo }, { produtoId: productId });
 
 	// Produto simples: sem eixos, nada mais a fazer.
 	if (product.options.length === 0) {
@@ -167,7 +198,11 @@ async function upsertCatalogProduct({
 			rastreamentoEstoqueAtivo: variant.controlaEstoque,
 		};
 
-		const existingVariant = variantByExternal.get(variant.idExterno) ?? variantByCode.get(variant.codigo) ?? null;
+		const mapped = mappedVariants[product.variants.indexOf(variant)];
+		const existingVariant = mapped
+			? existingVariants.find((v) => v.id === mapped.produtoVarianteId)
+			: (variantByExternal.get(variant.idExterno) ?? variantByCode.get(variant.codigo) ?? null);
+		if (mapped && !existingVariant) throw new Error(`Variante mapeada fora do produto: ${variant.idExterno}.`);
 		let variantId: string;
 		if (existingVariant) {
 			variantId = existingVariant.id;
@@ -194,6 +229,8 @@ async function upsertCatalogProduct({
 			variantId = insertedVariant.id;
 		}
 		variantsUpserted++;
+		await registerExternalIdentity(tx, organizationId, integrationId, { tipo: "VARIANTE", valor: variant.idExterno }, { produtoVarianteId: variantId });
+		await registerExternalIdentity(tx, organizationId, integrationId, { tipo: "CODIGO", valor: variant.codigo }, { produtoVarianteId: variantId });
 
 		// Junções: substitui o conjunto pela combinação atual da variante.
 		await tx
