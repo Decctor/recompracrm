@@ -2,8 +2,7 @@ import type { TCouponBenefitSnapshot } from "@/schemas/coupons";
 import type { TGetSaleForEditOutput } from "@/app/api/pos/sales/edit/route";
 import { POS_REWARD_SALE_ITEM_ORIGIN, parseSaleRewardDraftSnapshots } from "@/lib/sales/sale-reward-snapshot";
 import { readShopDeliveryFee } from "@/lib/shop/config";
-import type { TCartItem, TCartItemModifier, TSaleState } from "@/state-hooks/use-sale-state";
-import type { TCheckoutPaymentSplit } from "@/lib/payments/schemas";
+import type { TCartItem, TCartItemModifier, TSalePaymentSplit, TSaleState } from "@/state-hooks/use-sale-state";
 import type { TOrganizationConfiguration } from "@/schemas/organizations";
 import type { TPaymentMethodEnum } from "@/schemas/enums";
 
@@ -108,10 +107,10 @@ export function mapItemToCartItem(item: TMappableSaleItem): TCartItem {
 function mapPendingPaymentsToSplits(
 	pagamentos: TSaleForEditData["pagamentos"],
 	methodsConfig: TOrganizationPaymentMethodsConfig,
-): TCheckoutPaymentSplit[] {
+): TSalePaymentSplit[] {
 	const contaEditavel = (metodo: TPaymentMethodEnum) => methodsConfig[metodo]?.contaFinanceiraEditavel ?? false;
 	const pending = pagamentos.todas.filter((payment) => payment.editavel);
-	const splits: TCheckoutPaymentSplit[] = [];
+	const splits: TSalePaymentSplit[] = [];
 	const groupedIds = new Set<string>();
 
 	for (const payment of pending) {
@@ -121,6 +120,8 @@ function mapPendingPaymentsToSplits(
 		const groupPending = pending.filter((entry) => entry.grupoParcelasId === payment.grupoParcelasId);
 		splits.push({
 			id: crypto.randomUUID(),
+			// Transação já gravada: o valor é uma decisão tomada, não acompanha o total.
+			valorModo: "FIXO",
 			metodo: payment.metodo,
 			valor: groupPending.reduce((sum, entry) => sum + entry.valor, 0),
 			totalParcelas: groupPending.length,
@@ -135,6 +136,7 @@ function mapPendingPaymentsToSplits(
 	for (const payment of pending.filter((entry) => !entry.grupoParcelasId)) {
 		splits.push({
 			id: crypto.randomUUID(),
+			valorModo: "FIXO",
 			metodo: payment.metodo,
 			valor: payment.valor,
 			totalParcelas: null,

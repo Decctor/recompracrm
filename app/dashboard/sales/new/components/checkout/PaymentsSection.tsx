@@ -9,17 +9,16 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { InteractiveInput } from "@/components/ui/interactive-input";
-import { Input } from "@/components/ui/input";
 import { formatDateAsLocale, formatDateOnInputChange } from "@/lib/formatting";
 import { getPaymentInstallmentsOptions } from "@/lib/payments/defaults";
 import { getTodayDateInputValue, isPaymentTerminalMethod } from "@/lib/payments/schemas";
 import { type TPaymentTerminalListItem, usePaymentTerminals } from "@/lib/queries/payment-terminals";
 import { formatToMoney } from "@/lib/formatting";
+import { parseDecimalInput, useDecimalDraft } from "@/lib/hooks/use-decimal-draft";
 import type { ClassifiedPayment } from "@/lib/sales/utils";
 import type { TUseSaleState } from "@/state-hooks/use-sale-state";
 import { SalePaymentMethodsOptions } from "@/utils/select-options";
 import { CalendarClock, Check, CheckCheck, Clock, Landmark, Plus, Wallet, X } from "lucide-react";
-import { useMemo } from "react";
 import TerminalPicker from "./TerminalPicker";
 
 type PaymentsSectionProps = {
@@ -40,7 +39,7 @@ type PaymentCardProps = {
 // aparece no próprio botão em vez de sumir com ele — o operador entende o que precisa mudar.
 function resolveTerminalBlockedReason(saleState: TUseSaleState, payment: PaymentCardProps["payment"]): string | null {
 	if (!isPaymentTerminalMethod(payment.metodo)) return "A maquininha só cobra cartão de débito ou crédito.";
-	if (saleState.state.pagamentos.length > 1) return "A maquininha exige um único pagamento cobrindo o total da venda.";
+	if (saleState.paymentsToCharge.length > 1) return "A maquininha exige um único pagamento cobrindo o total da venda.";
 	if (saleState.state.pagamentosEfetivadosTotal > 0) return "A maquininha não cobra vendas com pagamentos já recebidos.";
 	if (Math.abs(payment.valor - saleState.valorAposEfetivados) > 0.01) return "O pagamento na maquininha precisa cobrir exatamente o total da venda.";
 	return null;
@@ -61,9 +60,16 @@ function PaymentCard({ saleState, payment, terminals }: PaymentCardProps) {
 	const terminalBlockedReason = terminals.length > 0 ? resolveTerminalBlockedReason(saleState, payment) : null;
 	const shouldShowTerminal = terminals.length > 0 && (isPaymentTerminalMethod(payment.metodo) || !!payment.dispositivoId);
 	const isTerminalCharge = !!payment.dispositivoId;
+	// RESTANTE acompanha o total sozinho (desconto, item, cupom); digitar o valor o torna FIXO.
+	const isRemaining = payment.valorModo === "RESTANTE";
+	const { display, setDraft } = useDecimalDraft(payment.valor);
+	// "Usar restante" só onde há algo a resolver: falta cobrir, ou o excesso não é troco (fora do
+	// dinheiro, onde o excesso é a nota entregue e o troco é legítimo).
+	const canUseRemaining =
+		!isRemaining && (saleState.valorRestante > 0.01 || (saleState.troco > 0 && !saleState.trocoCobertoPorDinheiro && payment.metodo !== "DINHEIRO"));
 	return (
 		<div className="w-full flex flex-col gap-2 rounded-lg border px-2 py-2">
-			<div className="flex items-center gap-1.5 justify-between">
+			<div className="flex flex-wrap items-center gap-1.5 justify-between">
 				<div className="flex items-center gap-1.5">
 					<DropdownMenu>
 						<DropdownMenuTrigger
@@ -136,18 +142,48 @@ function PaymentCard({ saleState, payment, terminals }: PaymentCardProps) {
 					</DropdownMenu>
 				</div>
 
-				<div className="flex items-center gap-1.5">
-					<Input
-						type="number"
-						className="w-24 max-w-full text-xs"
-						value={payment.valor}
-						onChange={(event) => saleState.updatePagamento(payment.id, { valor: Number(event.target.value) || 0 })}
-					/>
+				<div className="ml-auto flex items-center gap-1.5">
+					{isRemaining ? (
+						<span
+							className="text-micro rounded-full bg-info-surface px-2 py-1 text-info-surface-foreground"
+							title="Acompanha o total: muda sozinho quando o total muda."
+						>
+							RESTANTE
+						</span>
+					) : canUseRemaining ? (
+						<Button
+							type="button"
+							variant="ghost"
+							size="sm"
+							className="h-8 px-2 text-[0.7rem] font-bold"
+							onClick={() => saleState.setPagamentoRestante(payment.id)}
+						>
+							USAR RESTANTE
+						</Button>
+					) : null}
+					<label className="flex h-8 w-28 items-center gap-1 rounded-lg border border-border bg-card px-2 transition-colors focus-within:border-primary focus-within:ring-3 focus-within:ring-primary/15">
+						<span className="text-[0.7rem] font-semibold text-muted-foreground">R$</span>
+						<input
+							inputMode="decimal"
+							aria-label={`Valor do pagamento em ${selectedMethod?.label ?? payment.metodo}`}
+							placeholder="0,00"
+							value={display}
+							onChange={(event) => {
+								setDraft(event.target.value);
+								saleState.updatePagamento(payment.id, { valor: parseDecimalInput(event.target.value) });
+							}}
+							onBlur={() => setDraft(null)}
+							className="min-w-0 flex-1 bg-transparent text-right text-xs font-bold outline-none"
+						/>
+					</label>
 					<Button type="button" variant="ghost-destructive" size="icon" className="h-8 w-8" onClick={() => saleState.removePagamento(payment.id)}>
 						<X className="w-3 h-3" />
 					</Button>
 				</div>
 			</div>
+			{isRemaining && payment.valor <= 0.01 ? (
+				<p className="text-micro text-right text-muted-foreground">Nada a cobrar: os outros pagamentos já cobrem o total.</p>
+			) : null}
 
 			{shouldShowAccount || shouldShowInstallments || shouldShowTerminal || payment.efetivacaoTipo === "PENDENTE" ? (
 				<div className="w-full flex flex-wrap justify-end items-center gap-x-3 gap-y-1">
@@ -243,7 +279,6 @@ function PaymentCard({ saleState, payment, terminals }: PaymentCardProps) {
 }
 
 export default function PaymentsSection({ saleState, pagamentosEfetivados, allowTerminal = true }: PaymentsSectionProps) {
-	const missingTotal = useMemo(() => saleState.valorRestante, [saleState.valorRestante]);
 	const supportedMethodOptions = SalePaymentMethodsOptions.filter((method) => saleState.organizationPaymentMethodsConfig[method.value]?.suportado);
 	const hasSettledPayments = (pagamentosEfetivados?.length ?? 0) > 0;
 	// Uma consulta por checkout; organização sem maquininha recebe lista vazia e nenhum controle novo.
@@ -262,7 +297,7 @@ export default function PaymentsSection({ saleState, pagamentosEfetivados, allow
 					size="fit"
 					className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs"
 					variant="ghost-brand"
-					onClick={() => saleState.addPagamento({ metodo: supportedMethodOptions[0]?.value ?? "DINHEIRO", valor: missingTotal })}
+					onClick={() => saleState.addPagamento({ metodo: supportedMethodOptions[0]?.value ?? "DINHEIRO" })}
 				>
 					<Plus className="w-4 h-4" /> ADICIONAR
 				</Button>
@@ -303,7 +338,7 @@ export default function PaymentsSection({ saleState, pagamentosEfetivados, allow
 									variant="outline"
 									size="fit"
 									className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs"
-									onClick={() => saleState.addPagamento({ metodo: method.value, valor: missingTotal })}
+									onClick={() => saleState.addPagamento({ metodo: method.value })}
 								>
 									{method.renderIcon("w-3.5 h-3.5")}
 									{method.label}

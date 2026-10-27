@@ -1,15 +1,23 @@
+import { AdjustmentRow, DiscountTotalHelpers } from "@/components/Sales/AdjustmentRow";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { formatToMoney } from "@/lib/formatting";
+import { cn } from "@/lib/utils";
 import { evaluateDiscount, getDiscountCeiling, type TDiscountAuthority } from "@/lib/permissions/discounts";
 import { useClientCashbackBalance } from "@/lib/queries/cashback-programs";
+import { DISCOUNT_PERCENT_PRESETS, SURCHARGE_PERCENT_PRESETS, type TSaleAdjustmentInput } from "@/lib/sales/sale-adjustments";
 import type { TCashbackProgramEntity } from "@/services/drizzle/schema";
 import type { TUseSaleState } from "@/state-hooks/use-sale-state";
-import { DollarSign, Minus, Plus, ShieldAlert, Wallet } from "lucide-react";
+import { DollarSign, HandCoins, ShieldAlert, Tag, Wallet } from "lucide-react";
 import { useEffect } from "react";
 import CouponRedemptionSection from "./CouponRedemptionSection";
 import RewardRedemptionSection from "./RewardRedemptionSection";
+
+/** Percentual ativo é a fonte da verdade; sem ele, o ajuste é o valor em R$. */
+function toAdjustmentInput(valor: number, percentual: number | null): TSaleAdjustmentInput {
+	return percentual === null ? { mode: "VALOR", amount: valor } : { mode: "PERCENTUAL", amount: percentual };
+}
 
 type CashbackRedemptionBlockProps = {
 	saleState: TUseSaleState;
@@ -121,6 +129,9 @@ export default function SummarySection({ saleState, organizationCashbackProgram,
 	const podeResgatarPorDesconto = programaCashbackAtivo && !!organizationCashbackProgram?.modalidadeDescontosPermitida;
 	const podeResgatarRecompensa = programaCashbackAtivo && !!organizationCashbackProgram?.modalidadeRecompensasPermitida;
 	const mostrarBlocosDeResgate = !editMode && !!saleState.state.cliente;
+	// Faixa em que o desconto geral move o total 1:1 (cupom e cashback incidem depois dele e o
+	// acréscimo não é consumido): base dos helpers "Arredondar" e "Fechar em".
+	const discountableTotal = Math.max(0, saleState.totalItens - saleState.cupomDesconto - saleState.state.cashbackResgate);
 	return (
 		<div className="bg-card border-border flex w-full flex-col gap-2 rounded-xl border px-3 py-3 shadow-2xs">
 			<div className="flex items-center gap-1.5">
@@ -141,46 +152,49 @@ export default function SummarySection({ saleState, organizationCashbackProgram,
 				{mostrarBlocosDeResgate && podeResgatarPorDesconto && saleState.state.cliente ? (
 					<CashbackRedemptionBlock saleState={saleState} clientId={saleState.state.cliente.id} organizationCashbackProgram={organizationCashbackProgram} />
 				) : null}
-				{/* Borda + fundo tênue, no mesmo padrão do bloco de cashback: em fundo `-200` cheio, o input
-				    de desconto era o elemento mais saturado do checkout inteiro e roubava do total o topo
-				    da hierarquia. O `-200` também não tinha par em dark mode. */}
-				<div className="w-full flex flex-col gap-1 px-2 py-2 rounded-lg border border-red-500/30 bg-red-500/10">
-					<div className="w-full flex items-center justify-between">
-						<div className="flex items-center gap-1.5">
-							<Minus className="w-3 h-3 text-red-600 dark:text-red-400" />
-							<span className="text-xs font-semibold text-red-600 dark:text-red-400">OUTROS DESCONTOS</span>
-						</div>
-						<Input
-							type="number"
-							placeholder="Desconto"
-							className="w-24 text-xs font-bold border-red-500/50 text-red-600 dark:text-red-400"
-							value={saleState.state.descontoGeral}
-							onChange={(event) => saleState.setDescontoGeral(Number(event.target.value) || 0)}
+				{/* Vermelho e verde pelos tokens de superfície suave (não `-200` cheio nem `red-500` avulso):
+				    a cor diz de relance o que tira e o que soma sem disputar o topo da hierarquia com o total. */}
+				<div className="flex flex-col gap-1.5">
+					<AdjustmentRow
+						icon={Tag}
+						label="Outros descontos"
+						hint="Sobre os itens"
+						tone="discount"
+						value={toAdjustmentInput(saleState.state.descontoGeral, saleState.state.descontoGeralPercentual)}
+						resolvedValue={saleState.state.descontoGeral}
+						onChange={(next) => (next.mode === "PERCENTUAL" ? saleState.setDescontoGeralPercentual(next.amount) : saleState.setDescontoGeral(next.amount))}
+						presets={DISCOUNT_PERCENT_PRESETS}
+					>
+						<DiscountTotalHelpers
+							totalWithoutDiscount={discountableTotal + saleState.acrescimosTotal}
+							maxDiscount={discountableTotal}
+							currentDiscount={saleState.state.descontoGeral}
+							onApply={saleState.setDescontoGeral}
 						/>
-					</div>
-					{discountCeiling !== null ? (
-						<span className="text-[11px] font-semibold text-red-600/90 dark:text-red-400/90">LIMITE DO OPERADOR: {formatToMoney(discountCeiling)}</span>
-					) : null}
-					{discountRequiresApproval ? (
-						<div className="flex items-center gap-1.5 text-[11px] font-semibold text-red-700 dark:text-red-400">
-							<ShieldAlert className="w-3 h-3 min-w-3 min-h-3" />
-							<span>Desconto acima do limite — a finalização exigirá a aprovação de um gestor.</span>
-						</div>
-					) : null}
-				</div>
-				<div className="w-full flex items-center justify-between px-2 py-2 rounded-lg border border-green-600/30 bg-green-600/10">
-					<div className="flex items-center gap-1.5">
-						<Plus className="w-3 h-3 text-green-700 dark:text-green-400" />
-						<span className="text-xs font-semibold text-green-700 dark:text-green-400">ACRÉSCIMOS</span>
-					</div>
-					<Input
-						type="number"
-						placeholder="Acréscimo"
-						className="w-24 text-xs font-bold border-green-600/50 text-green-700 dark:text-green-400"
-						value={saleState.state.acrescimoGeral}
-						onChange={(event) => saleState.setAcrescimoGeral(Number(event.target.value) || 0)}
+						{discountCeiling !== null ? (
+							<span className="text-micro text-destructive-surface-foreground opacity-80">Limite do operador: {formatToMoney(discountCeiling)}</span>
+						) : null}
+					</AdjustmentRow>
+					<AdjustmentRow
+						icon={HandCoins}
+						label="Acréscimos"
+						hint="Taxa de serviço, couvert"
+						tone="surcharge"
+						value={toAdjustmentInput(saleState.state.acrescimoGeral, saleState.state.acrescimoGeralPercentual)}
+						resolvedValue={saleState.state.acrescimoGeral}
+						onChange={(next) =>
+							next.mode === "PERCENTUAL" ? saleState.setAcrescimoGeralPercentual(next.amount) : saleState.setAcrescimoGeral(next.amount)
+						}
+						presets={SURCHARGE_PERCENT_PRESETS}
 					/>
 				</div>
+				{/* Fora da bandeja: o aviso não pode ficar escondido atrás de um toque. */}
+				{discountRequiresApproval ? (
+					<div className="flex items-center gap-2 rounded-lg bg-warning-surface px-2.5 py-2 text-xs font-semibold text-warning-surface-foreground">
+						<ShieldAlert className="size-4 shrink-0" />
+						<span>Desconto acima do limite. A finalização vai pedir a aprovação de um gestor.</span>
+					</div>
+				) : null}
 			</div>
 			<Input
 				placeholder="Defina, se aplicável, observações da venda aqui..."
@@ -240,8 +254,14 @@ export default function SummarySection({ saleState, organizationCashbackProgram,
 				<span>{formatToMoney(saleState.totalPagamentos)}</span>
 			</div>
 			{saleState.troco > 0 ? (
-				<div className="flex items-center justify-between text-xs font-semibold text-amber-600 dark:text-amber-400">
-					<span>TROCO</span>
+				// Mesma distinção do dock: só o excesso coberto por dinheiro é troco.
+				<div
+					className={cn(
+						"flex items-center justify-between text-xs font-semibold",
+						saleState.trocoCobertoPorDinheiro ? "text-amber-600 dark:text-amber-400" : "text-destructive-surface-foreground",
+					)}
+				>
+					<span>{saleState.trocoCobertoPorDinheiro ? "TROCO" : "ACIMA DO TOTAL"}</span>
 					<span>{formatToMoney(saleState.troco)}</span>
 				</div>
 			) : (

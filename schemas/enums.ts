@@ -468,6 +468,12 @@ export type TPurchaseImportedDocumentOriginEnum = z.infer<typeof PurchaseImporte
 export const FiscalProviderEnum = z.enum(["MANUAL", "SPEDY"]);
 export type TFiscalProviderEnum = z.infer<typeof FiscalProviderEnum>;
 
+// Como o valor de um pagamento do checkout é definido: RESTANTE acompanha o que falta cobrir (é
+// derivado do total a cada leitura); FIXO é o valor digitado pelo operador. Só existe no cliente:
+// a API recebe o valor já resolvido.
+export const PaymentValueModeEnum = z.enum(["RESTANTE", "FIXO"]);
+export type TPaymentValueModeEnum = z.infer<typeof PaymentValueModeEnum>;
+
 export const PaymentProviderEnum = z.enum(["LOCAL", "MERCADO_PAGO", "STRIPE_CONNECT", "PAGARME"]);
 export type TPaymentProviderEnum = z.infer<typeof PaymentProviderEnum>;
 

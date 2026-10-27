@@ -104,7 +104,7 @@ export default function CheckoutPanel({
 	const [isNewLocationOpen, setIsNewLocationOpen] = useState(false);
 	const [isFiscalClientEditOpen, setIsFiscalClientEditOpen] = useState(false);
 	const exception = resolveAutoEmissionException({
-		metodos: saleState.state.pagamentos.filter((payment) => payment.valor > 0).map((payment) => payment.metodo),
+		metodos: saleState.paymentsToCharge.map((payment) => payment.metodo),
 		excecoes: autoEmissionExceptions,
 	});
 	const fiscalEnabled = saleState.state.emissaoFiscalAutomatica ?? (organizationAutoFiscalEmission && !exception);

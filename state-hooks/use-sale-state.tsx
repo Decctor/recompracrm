@@ -14,8 +14,10 @@ import {
 	getOrganizationPaymentMethodsConfig,
 	type TResolvedPaymentMethodDefault,
 } from "@/lib/payments/defaults";
+import { getPaymentsToCharge, nextPaymentValueMode, promotePaymentToRemaining, resolvePaymentValues } from "@/lib/payments/payment-value-mode";
+import { applyPercentAdjustments, clampAdjustmentPercent } from "@/lib/sales/sale-adjustments";
 import { resolveSaleChange } from "@/lib/sales/sale-change";
-import type { TDeliveryModeEnum } from "@/schemas/enums";
+import { PaymentValueModeEnum, type TDeliveryModeEnum } from "@/schemas/enums";
 import type { TOrganizationConfiguration } from "@/schemas/organizations";
 import { useCallback, useMemo, useState } from "react";
 import z from "zod";
@@ -111,8 +113,16 @@ export const SaleAppliedCouponSchema = z.object({
 });
 export type TSaleAppliedCoupon = z.infer<typeof SaleAppliedCouponSchema>;
 
+// Pagamento do checkout com o modo do valor (ver lib/payments/payment-value-mode.ts). O modo fica
+// fora do CheckoutPaymentSplitSchema de propósito: aquele é o contrato das rotas de venda, que
+// recebem o valor já resolvido.
+export const SalePaymentSplitSchema = CheckoutPaymentSplitSchema.extend({
+	valorModo: PaymentValueModeEnum.default("FIXO"),
+});
+export type TSalePaymentSplit = z.infer<typeof SalePaymentSplitSchema>;
+
 export const SaleDraftMetadataSchema = z.object({
-	pagamentos: z.array(CheckoutPaymentSplitSchema),
+	pagamentos: z.array(SalePaymentSplitSchema),
 	descontoGeral: z.number({ invalid_type_error: "Tipo não válido para desconto geral." }),
 	taxaEntrega: z.number({ invalid_type_error: "Tipo não válido para taxa de entrega." }).default(0),
 	cashbackResgate: z.number({ invalid_type_error: "Tipo não válido para resgate de cashback." }),
@@ -171,6 +181,11 @@ export const SaleStateSchema = z.object({
 	itens: z.array(CartItemSchema),
 	descontoGeral: z.number({ invalid_type_error: "Tipo não válido para desconto geral." }).default(0),
 	acrescimoGeral: z.number({ invalid_type_error: "Tipo não válido para acréscimo geral." }).default(0),
+	// Percentual ativo sobre o subtotal dos itens (null = ajuste em R$). Só existe no checkout: com
+	// ele ativo, `descontoGeral`/`acrescimoGeral` são derivados a cada leitura (ver
+	// applyPercentAdjustments) e é o valor em R$ que segue para o servidor e para o rascunho.
+	descontoGeralPercentual: z.number({ invalid_type_error: "Tipo não válido para percentual de desconto geral." }).nullable().default(null),
+	acrescimoGeralPercentual: z.number({ invalid_type_error: "Tipo não válido para percentual de acréscimo geral." }).nullable().default(null),
 	taxaEntrega: z.number({ invalid_type_error: "Tipo não válido para taxa de entrega." }).default(0),
 	observacoes: z.string({ invalid_type_error: "Tipo não válido para observações." }).default(""),
 	entregaModalidade: z
@@ -180,7 +195,7 @@ export const SaleStateSchema = z.object({
 		.default("PRESENCIAL"),
 	entregaLocalizacaoId: z.string({ invalid_type_error: "Tipo não válido para ID da localização." }).optional().nullable(),
 	comandaNumero: z.string({ invalid_type_error: "Tipo não válido para número da comanda." }).optional().nullable(),
-	pagamentos: z.array(CheckoutPaymentSplitSchema),
+	pagamentos: z.array(SalePaymentSplitSchema),
 	// Modo edição: total já recebido (transações efetivadas) — abate do restante a cobrir pelos
 	// splits editáveis. Sempre 0 no fluxo de criação.
 	pagamentosEfetivadosTotal: z.number({ invalid_type_error: "Tipo não válido para total de pagamentos efetivados." }).default(0),
@@ -212,15 +227,15 @@ type UseSaleStateProps = {
 // modalidade muda. Split cuja efetivação resolvida já coincide com a atual fica intacto, o que
 // preserva uma previsão escolhida a dedo (ex.: FIADO com data negociada segue PENDENTE nas duas
 // modalidades). `changed` alimenta o aviso na UI.
-function rederivePaymentsForModalidade({
+function rederivePaymentsForModalidade<T extends TCheckoutPaymentSplit>({
 	pagamentos,
 	entregaModalidade,
 	organizationConfig,
 }: {
-	pagamentos: TCheckoutPaymentSplit[];
+	pagamentos: T[];
 	entregaModalidade: TDeliveryModeEnum;
 	organizationConfig?: Pick<TOrganizationConfiguration, "defaults"> | null;
-}): { pagamentos: TCheckoutPaymentSplit[]; changed: number } {
+}): { pagamentos: T[]; changed: number } {
 	let changed = 0;
 	const next = pagamentos.map((payment) => {
 		const paymentDefaults = getOrganizationPaymentMethodDefault({ organizationConfig, metodo: payment.metodo, entregaModalidade });
@@ -240,6 +255,8 @@ export function getDefaultSaleState(initialState?: Partial<TSaleState>): TSaleSt
 		itens: initialState?.itens ?? [],
 		descontoGeral: initialState?.descontoGeral ?? 0,
 		acrescimoGeral: initialState?.acrescimoGeral ?? 0,
+		descontoGeralPercentual: initialState?.descontoGeralPercentual ?? null,
+		acrescimoGeralPercentual: initialState?.acrescimoGeralPercentual ?? null,
 		taxaEntrega: initialState?.taxaEntrega ?? 0,
 		observacoes: initialState?.observacoes ?? "",
 		entregaModalidade: initialState?.entregaModalidade ?? "PRESENCIAL",
@@ -257,7 +274,57 @@ export function getDefaultSaleState(initialState?: Partial<TSaleState>): TSaleSt
 }
 
 export const useSaleState = ({ initialState, organizationConfig, contasFinanceiras }: UseSaleStateProps = {}) => {
-	const [state, setState] = useState<TSaleState>(() => getDefaultSaleState(initialState));
+	const [rawState, setState] = useState<TSaleState>(() => getDefaultSaleState(initialState));
+	const giftSelection = rawState.cupomResgate?.brinde;
+	const totalItens = useMemo(
+		() => rawState.itens.reduce((sum, item) => sum + normalizeCouponGiftItem(item, giftSelection, item.tempId).valorTotalLiquido, 0),
+		[rawState.itens, giftSelection],
+	);
+	// Derivação na leitura, nunca sincronização: estado cru → ajustes percentuais → totais →
+	// pagamento RESTANTE → `state`. Toda mutação (bipar, remover, repreçar, brinde do cupom, desconto,
+	// "Fechar em") já sai com os valores certos no mesmo render, sem efeito e sem precisar lembrar de
+	// recalcular nada. O estado cru fica restrito aos updaters; tudo que lê (UI, rascunho, payload)
+	// usa `state`.
+	const adjustedState = useMemo(() => applyPercentAdjustments(rawState, totalItens), [rawState, totalItens]);
+	const subtotal = useMemo(
+		() => adjustedState.itens.reduce((sum, item) => sum + normalizeCouponGiftItem(item, giftSelection, item.tempId).valorTotalBruto, 0),
+		[adjustedState.itens, giftSelection],
+	);
+	const totalDescontoItens = useMemo(() => adjustedState.itens.reduce((sum, item) => sum + item.valorDesconto, 0), [adjustedState.itens]);
+	// Base e desconto avaliados contra o teto do operador: itens de recompensa ficam de fora
+	// (o resgate tem regras próprias, como cashback e cupom AUTOMATICA). Mesmo recorte do servidor.
+	const itensAvaliaveis = useMemo(() => adjustedState.itens.filter((item) => !item.recompensaId), [adjustedState.itens]);
+	const subtotalAvaliavel = useMemo(
+		() => itensAvaliaveis.reduce((sum, item) => sum + normalizeCouponGiftItem(item, giftSelection, item.tempId).valorTotalBruto, 0),
+		[itensAvaliaveis, giftSelection],
+	);
+	const totalDescontoItensAvaliavel = useMemo(() => itensAvaliaveis.reduce((sum, item) => sum + item.valorDesconto, 0), [itensAvaliaveis]);
+	const itemCount = useMemo(() => adjustedState.itens.reduce((sum, item) => sum + item.quantidade, 0), [adjustedState.itens]);
+	const cupomDesconto = useMemo(() => adjustedState.cupomResgate?.valorDesconto ?? 0, [adjustedState.cupomResgate]);
+	// Descontos incidem só sobre os itens; o acréscimo entra por último e não é consumido
+	// por cupom nem cashback. Mesma ordem da loja digital e do backend.
+	const valorAntesCupom = useMemo(() => Math.max(0, totalItens - adjustedState.descontoGeral), [totalItens, adjustedState.descontoGeral]);
+	const valorAntesCashback = useMemo(() => Math.max(0, valorAntesCupom - cupomDesconto), [valorAntesCupom, cupomDesconto]);
+	const acrescimosTotal = adjustedState.acrescimoGeral + adjustedState.taxaEntrega;
+	const valorFinal = useMemo(() => {
+		const total = Math.max(0, valorAntesCashback - adjustedState.cashbackResgate) + acrescimosTotal;
+		return giftSelection ? roundCouponGiftCurrency(total) : total;
+	}, [valorAntesCashback, adjustedState.cashbackResgate, acrescimosTotal, giftSelection]);
+	// Modo edição: os splits editáveis só precisam cobrir o que ainda não foi recebido.
+	const valorAposEfetivados = useMemo(
+		() => Math.max(0, valorFinal - adjustedState.pagamentosEfetivadosTotal),
+		[valorFinal, adjustedState.pagamentosEfetivadosTotal],
+	);
+	// O total a cobrar não depende dos pagamentos, então não há ciclo: o RESTANTE é derivado dele.
+	const resolvedPayments = useMemo(
+		() => resolvePaymentValues(adjustedState.pagamentos, valorAposEfetivados),
+		[adjustedState.pagamentos, valorAposEfetivados],
+	);
+	const state = useMemo(
+		() => (resolvedPayments === adjustedState.pagamentos ? adjustedState : { ...adjustedState, pagamentos: resolvedPayments }),
+		[adjustedState, resolvedPayments],
+	);
+	const paymentsToCharge = useMemo(() => getPaymentsToCharge(state.pagamentos), [state.pagamentos]);
 	const organizationPaymentMethodsConfig = useMemo(() => getOrganizationPaymentMethodsConfig(organizationConfig), [organizationConfig]);
 
 	const setCliente = useCallback((cliente: TSaleState["cliente"]) => {
@@ -385,12 +452,21 @@ export const useSaleState = ({ initialState, organizationConfig, contasFinanceir
 		});
 	}, []);
 
+	// Valor em R$ e percentual são exclusivos: definir um desliga o outro.
 	const setDescontoGeral = useCallback((descontoGeral: number) => {
-		setState((prev) => ({ ...prev, descontoGeral: Math.max(0, descontoGeral || 0) }));
+		setState((prev) => ({ ...prev, descontoGeral: Math.max(0, descontoGeral || 0), descontoGeralPercentual: null }));
+	}, []);
+
+	const setDescontoGeralPercentual = useCallback((percentual: number) => {
+		setState((prev) => ({ ...prev, descontoGeral: 0, descontoGeralPercentual: clampAdjustmentPercent(percentual) }));
 	}, []);
 
 	const setAcrescimoGeral = useCallback((acrescimoGeral: number) => {
-		setState((prev) => ({ ...prev, acrescimoGeral: Math.max(0, acrescimoGeral || 0) }));
+		setState((prev) => ({ ...prev, acrescimoGeral: Math.max(0, acrescimoGeral || 0), acrescimoGeralPercentual: null }));
+	}, []);
+
+	const setAcrescimoGeralPercentual = useCallback((percentual: number) => {
+		setState((prev) => ({ ...prev, acrescimoGeral: 0, acrescimoGeralPercentual: clampAdjustmentPercent(percentual) }));
 	}, []);
 
 	const setTaxaEntrega = useCallback((taxaEntrega: number) => {
@@ -455,7 +531,7 @@ export const useSaleState = ({ initialState, organizationConfig, contasFinanceir
 	);
 
 	const addPagamento = useCallback(
-		(pagamento?: Partial<Omit<TCheckoutPaymentSplit, "id">>) => {
+		(pagamento?: Partial<Omit<TCheckoutPaymentSplit, "id" | "valor">>) => {
 			const metodo = pagamento?.metodo ?? "DINHEIRO";
 			// Resolvido dentro do setState: o default de efetivação depende da modalidade vigente.
 			setState((prev) => {
@@ -464,18 +540,23 @@ export const useSaleState = ({ initialState, organizationConfig, contasFinanceir
 					metodo,
 					entregaModalidade: prev.entregaModalidade,
 				});
+				// Sem valor de entrada: o primeiro pagamento cobre o restante (e acompanha o total); com
+				// um RESTANTE já lançado, o novo nasce FIXO em R$ 0,00, pronto para digitar.
 				return {
 					...prev,
 					pagamentos: [
 						...prev.pagamentos,
-						getDefaultCheckoutPaymentSplit({
-							metodo: paymentDefaults.metodo,
-							efetivacaoTipo: paymentDefaults.efetivacaoTipo,
-							dataPrevisao: paymentDefaults.dataPrevisao,
-							totalParcelas: paymentDefaults.totalParcelas,
-							contaFinanceiraId: resolveSeedContaFinanceiraId(paymentDefaults),
-							...pagamento,
-						}),
+						{
+							...getDefaultCheckoutPaymentSplit({
+								metodo: paymentDefaults.metodo,
+								efetivacaoTipo: paymentDefaults.efetivacaoTipo,
+								dataPrevisao: paymentDefaults.dataPrevisao,
+								totalParcelas: paymentDefaults.totalParcelas,
+								contaFinanceiraId: resolveSeedContaFinanceiraId(paymentDefaults),
+								...pagamento,
+							}),
+							valorModo: nextPaymentValueMode(prev.pagamentos),
+						},
 					],
 				};
 			});
@@ -523,11 +604,31 @@ export const useSaleState = ({ initialState, organizationConfig, contasFinanceir
 									? (payment.dispositivoId ?? null)
 									: null,
 						valor: typeof updates.valor === "number" ? Math.max(0, updates.valor) : payment.valor,
+						// Digitar o valor é decidir o valor: o pagamento deixa de acompanhar o restante.
+						valorModo: typeof updates.valor === "number" ? "FIXO" : payment.valorModo,
 					};
 				}),
 			}));
 		},
 		[organizationConfig, resolveSeedContaFinanceiraId],
+	);
+
+	// "Usar restante": o pagamento passa a acompanhar o que falta cobrir. O que cobria o restante
+	// antes congela no valor que mostrava (o derivado, não o cru), para nada saltar na tela.
+	const setPagamentoRestante = useCallback(
+		(id: string) => {
+			const valorById = new Map(state.pagamentos.map((payment) => [payment.id, payment.valor]));
+			setState((prev) => ({
+				...prev,
+				pagamentos: promotePaymentToRemaining(
+					prev.pagamentos.map((payment) =>
+						payment.valorModo === "RESTANTE" ? { ...payment, valor: valorById.get(payment.id) ?? payment.valor } : payment,
+					),
+					(payment) => payment.id === id,
+				),
+			}));
+		},
+		[state.pagamentos],
 	);
 
 	const setCupomResgate = useCallback((cupomResgate: TSaleAppliedCoupon | null) => {
@@ -621,32 +722,7 @@ export const useSaleState = ({ initialState, organizationConfig, contasFinanceir
 		});
 	}, []);
 
-	const giftSelection = state.cupomResgate?.brinde;
-	const subtotal = useMemo(() => state.itens.reduce((sum, item) => sum + normalizeCouponGiftItem(item, giftSelection, item.tempId).valorTotalBruto, 0), [state.itens, giftSelection]);
-	const totalDescontoItens = useMemo(() => state.itens.reduce((sum, item) => sum + item.valorDesconto, 0), [state.itens]);
-	// Base e desconto avaliados contra o teto do operador: itens de recompensa ficam de fora
-	// (o resgate tem regras próprias, como cashback e cupom AUTOMATICA). Mesmo recorte do servidor.
-	const itensAvaliaveis = useMemo(() => state.itens.filter((item) => !item.recompensaId), [state.itens]);
-	const subtotalAvaliavel = useMemo(() => itensAvaliaveis.reduce((sum, item) => sum + normalizeCouponGiftItem(item, giftSelection, item.tempId).valorTotalBruto, 0), [itensAvaliaveis, giftSelection]);
-	const totalDescontoItensAvaliavel = useMemo(() => itensAvaliaveis.reduce((sum, item) => sum + item.valorDesconto, 0), [itensAvaliaveis]);
-	const totalItens = useMemo(() => state.itens.reduce((sum, item) => sum + normalizeCouponGiftItem(item, giftSelection, item.tempId).valorTotalLiquido, 0), [state.itens, giftSelection]);
-	const itemCount = useMemo(() => state.itens.reduce((sum, item) => sum + item.quantidade, 0), [state.itens]);
-	const cupomDesconto = useMemo(() => state.cupomResgate?.valorDesconto ?? 0, [state.cupomResgate]);
-	// Descontos incidem só sobre os itens; o acréscimo entra por último e não é consumido
-	// por cupom nem cashback. Mesma ordem da loja digital e do backend.
-	const valorAntesCupom = useMemo(() => Math.max(0, totalItens - state.descontoGeral), [totalItens, state.descontoGeral]);
-	const valorAntesCashback = useMemo(() => Math.max(0, valorAntesCupom - cupomDesconto), [valorAntesCupom, cupomDesconto]);
-	const acrescimosTotal = state.acrescimoGeral + state.taxaEntrega;
-	const valorFinal = useMemo(
-		() => {
-			const total = Math.max(0, valorAntesCashback - state.cashbackResgate) + acrescimosTotal;
-			return giftSelection ? roundCouponGiftCurrency(total) : total;
-		},
-		[valorAntesCashback, state.cashbackResgate, acrescimosTotal, giftSelection],
-	);
 	const totalPagamentos = useMemo(() => state.pagamentos.reduce((sum, p) => sum + p.valor, 0), [state.pagamentos]);
-	// Modo edição: os splits editáveis só precisam cobrir o que ainda não foi recebido.
-	const valorAposEfetivados = useMemo(() => Math.max(0, valorFinal - state.pagamentosEfetivadosTotal), [valorFinal, state.pagamentosEfetivadosTotal]);
 	const valorRestante = useMemo(() => Math.max(0, valorAposEfetivados - totalPagamentos), [valorAposEfetivados, totalPagamentos]);
 	// Troco: mesmas regras do servidor (lib/sales/sale-change.ts) — excesso só sobre pagamentos
 	// imediatos; excesso fora do dinheiro pede confirmação explícita antes de finalizar.
@@ -672,9 +748,9 @@ export const useSaleState = ({ initialState, organizationConfig, contasFinanceir
 		if (state.entregaModalidade === "COMANDA" && !state.comandaNumero?.trim()) return false;
 		if (!pagamentoCompleto) return false;
 		if (trocoBloqueio) return false;
-		if (valorAposEfetivados > 0.01 && state.pagamentos.length === 0) return false;
+		if (valorAposEfetivados > 0.01 && paymentsToCharge.length === 0) return false;
 		if (
-			state.pagamentos.some(
+			paymentsToCharge.some(
 				(payment) =>
 					!isCheckoutPaymentSplitValid(payment, {
 						hasLinkedClient: !!state.cliente,
@@ -690,7 +766,7 @@ export const useSaleState = ({ initialState, organizationConfig, contasFinanceir
 		state.entregaModalidade,
 		state.entregaLocalizacaoId,
 		state.comandaNumero,
-		state.pagamentos,
+		paymentsToCharge,
 		state.cliente,
 		pagamentoCompleto,
 		trocoBloqueio,
@@ -728,7 +804,9 @@ export const useSaleState = ({ initialState, organizationConfig, contasFinanceir
 		repriceItems,
 		clearCart,
 		setDescontoGeral,
+		setDescontoGeralPercentual,
 		setAcrescimoGeral,
+		setAcrescimoGeralPercentual,
 		setTaxaEntrega,
 		setObservacoes,
 		setEntregaModalidade,
@@ -739,6 +817,7 @@ export const useSaleState = ({ initialState, organizationConfig, contasFinanceir
 		addPagamento,
 		removePagamento,
 		updatePagamento,
+		setPagamentoRestante,
 		setCashbackResgate,
 		addRecompensaResgate,
 		setRecompensaQuantidade,
@@ -763,6 +842,7 @@ export const useSaleState = ({ initialState, organizationConfig, contasFinanceir
 		acrescimosTotal,
 		valorFinal,
 		totalPagamentos,
+		paymentsToCharge,
 		valorAposEfetivados,
 		valorRestante,
 		troco,

@@ -1,6 +1,7 @@
 "use client";
 import SelectInput from "@/components/Inputs/SelectInput";
 import { DiscountApproval } from "@/components/Modals/Sales/DiscountApproval";
+import { AdjustmentRow, DiscountTotalHelpers } from "@/components/Sales/AdjustmentRow";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { getErrorMessage } from "@/lib/errors";
@@ -12,36 +13,16 @@ import { useSaleDiscountContext } from "@/lib/queries/action-approvals";
 import { organizationHasPrinterForFinalidade, useAgentPrinters } from "@/lib/queries/desktop-agent";
 import { useOrganization } from "@/lib/queries/organizations";
 import { usePOSFinancialAccounts } from "@/lib/queries/pos";
+import { getPaymentsToCharge, nextPaymentValueMode, promotePaymentToRemaining, resolvePaymentValues } from "@/lib/payments/payment-value-mode";
+import { DISCOUNT_PERCENT_PRESETS, EMPTY_SALE_ADJUSTMENT, SURCHARGE_PERCENT_PRESETS, type TSaleAdjustmentInput } from "@/lib/sales/sale-adjustments";
 import { resolveTabBalance } from "@/lib/tabs/partial-payments";
 import { cn } from "@/lib/utils";
-import type { TPaymentMethodEnum } from "@/schemas/enums";
+import type { TPaymentMethodEnum, TPaymentValueModeEnum } from "@/schemas/enums";
 import { useMutation } from "@tanstack/react-query";
-import {
-	ArrowLeft,
-	CircleAlert,
-	CircleCheck,
-	HandCoins,
-	type LucideIcon,
-	Minus,
-	PackageCheck,
-	Percent,
-	Plus,
-	Printer,
-	Receipt,
-	Tag,
-	Trash2,
-	UsersRound,
-} from "lucide-react";
+import { ArrowLeft, CircleAlert, CircleCheck, HandCoins, Minus, PackageCheck, Plus, Printer, Receipt, Tag, Trash2, UsersRound } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import {
-	METHOD_META,
-	PaymentMethodPicker,
-	formatInput,
-	likelyNotes,
-	parseInput,
-	roundCents,
-} from "./payment-shared";
+import { METHOD_META, PaymentMethodPicker, formatInput, likelyNotes, parseInput, roundCents } from "./payment-shared";
 import { SalesSessionPicker, useOpenSalesSessionSelection } from "@/components/CashSessions/SalesSessionPicker";
 import { ORDER_STATUS_META } from "./tab-meta";
 
@@ -59,7 +40,9 @@ const SPLIT_MAX = 12;
 type TPaymentRow = {
 	key: number;
 	metodo: TPaymentMethodEnum;
+	/** No RESTANTE, derivado do que falta receber a cada render (ver payment-value-mode). */
 	valor: number;
+	valorModo: TPaymentValueModeEnum;
 	/** Texto digitado, preservado enquanto o operador edita (vírgula, zeros à direita). */
 	raw: string | null;
 	contaFinanceiraId: string | null;
@@ -67,10 +50,7 @@ type TPaymentRow = {
 	recebido: number | null;
 };
 
-type TAdjustmentMode = "VALOR" | "PERCENTUAL";
-type TAdjustment = { mode: TAdjustmentMode; amount: number; raw: string | null };
-const EMPTY_ADJUSTMENT: TAdjustment = { mode: "VALOR", amount: 0, raw: null };
-const SERVICE_FEE_PERCENT = 10;
+type TAdjustment = TSaleAdjustmentInput;
 
 /** Valor em R$ do ajuste: percentual incide sobre o consumo (taxa de serviço = 10% do consumo). */
 function resolveAdjustment(adjustment: TAdjustment, subtotal: number) {
@@ -135,28 +115,22 @@ export function ClosePane({
 	onBack,
 	onClosed,
 }: ClosePaneProps) {
-	const initialBalance = resolveTabBalance({ consumo: subtotal, jaPago });
+	// O primeiro pagamento cobre o restante: acompanha desconto, acréscimo e parciais sem nenhuma
+	// sincronização. O valor dele é derivado abaixo (resolvedPayments).
 	const [payments, setPayments] = useState<TPaymentRow[]>([
-		{ key: 1, metodo: "PIX", valor: initialBalance.restante, raw: null, contaFinanceiraId: null, recebido: null },
+		{ key: 1, metodo: "PIX", valor: 0, valorModo: "RESTANTE", raw: null, contaFinanceiraId: null, recebido: null },
 	]);
-	const [discount, setDiscount] = useState<TAdjustment>(EMPTY_ADJUSTMENT);
-	const [surcharge, setSurcharge] = useState<TAdjustment>(EMPTY_ADJUSTMENT);
+	const [discount, setDiscount] = useState<TAdjustment>(EMPTY_SALE_ADJUSTMENT);
+	const [surcharge, setSurcharge] = useState<TAdjustment>(EMPTY_SALE_ADJUSTMENT);
 	const { descontoGeral, acrescimoGeral, total, restante, bloqueio } = computeCloseTotals({ subtotal, discount, surcharge, jaPago });
 	// Parciais cobriram tudo: nada a cobrar, nenhum cartão de pagamento.
 	const nothingToCollect = restante <= 0.009;
 
-	// Ajuste muda o restante: com um único pagamento, ele acompanha; com vários, a
-	// conferência mostra a diferença e o "Usar restante" resolve.
+	// O ajuste só muda o restante: o pagamento RESTANTE acompanha sozinho, e os FIXOS ficam como o
+	// operador digitou (a conferência mostra a diferença e o "Usar restante" resolve).
 	function changeAdjustment(kind: "discount" | "surcharge", next: TAdjustment) {
-		const nextTotals = computeCloseTotals({
-			subtotal,
-			discount: kind === "discount" ? next : discount,
-			surcharge: kind === "surcharge" ? next : surcharge,
-			jaPago,
-		});
 		if (kind === "discount") setDiscount(next);
 		else setSurcharge(next);
-		setPayments((prev) => (prev.length === 1 ? [{ ...prev[0], valor: nextTotals.restante, raw: null }] : prev));
 	}
 
 	// Teto de desconto: feedback imediato aqui, enforcement autoritativo na rota (mesmo do PDV).
@@ -227,14 +201,27 @@ export function ClosePane({
 		onError: (error) => toast.error(getErrorMessage(error)),
 	});
 
-	const effectivePayments = nothingToCollect ? [] : payments;
+	const resolvedPayments = resolvePaymentValues(payments, restante);
+	// Zerados não cobram nada (o RESTANTE quando os demais já cobrem tudo, o recém-adicionado ainda
+	// não digitado): ficam fora da soma e do fechamento.
+	const effectivePayments = nothingToCollect ? [] : getPaymentsToCharge(resolvedPayments);
 	const paid = roundCents(effectivePayments.reduce((sum, payment) => sum + payment.valor, 0));
 	const difference = roundCents(restante - paid);
 	const matches = !bloqueio && Math.abs(difference) <= 0.01;
 	const splitShare = Math.floor((restante / splitPeople) * 100) / 100;
 
 	function updatePayment(key: number, changes: Partial<TPaymentRow>) {
-		setPayments((prev) => prev.map((payment) => (payment.key === key ? { ...payment, ...changes } : payment)));
+		setPayments((prev) =>
+			prev.map((payment) =>
+				// Digitar o valor é decidir o valor: o pagamento deixa de acompanhar o restante.
+				payment.key === key ? { ...payment, ...changes, ...(changes.valor !== undefined ? { valorModo: "FIXO" as const } : {}) } : payment,
+			),
+		);
+	}
+
+	// O que cobria o restante congela no valor que mostrava (o resolvido), para nada saltar na tela.
+	function promoteToRemaining(key: number) {
+		setPayments(promotePaymentToRemaining(resolvedPayments, (payment) => payment.key === key).map((payment) => ({ ...payment, raw: null })));
 	}
 
 	function applySplit() {
@@ -244,6 +231,7 @@ export function ClosePane({
 				metodo: "PIX" as const,
 				// A última parte absorve o centavo que sobra da divisão.
 				valor: index === splitPeople - 1 ? roundCents(restante - splitShare * (splitPeople - 1)) : splitShare,
+				valorModo: "FIXO" as const,
 				raw: null,
 				contaFinanceiraId: null,
 				recebido: null,
@@ -394,29 +382,33 @@ export function ClosePane({
 				</div>
 
 				{/* Ajustes do total — desconto e acréscimo de cabeçalho, como no checkout do PDV */}
-				<div className="flex flex-col divide-y divide-border rounded-xl border border-border">
+				<div className="flex flex-col gap-1.5">
 					<AdjustmentRow
 						icon={Tag}
 						label="Desconto"
 						hint="Sobre o consumo"
-						adjustment={discount}
+						tone="discount"
+						value={discount}
 						resolvedValue={descontoGeral}
-						sign="−"
 						onChange={(next) => changeAdjustment("discount", next)}
-					/>
+						presets={DISCOUNT_PERCENT_PRESETS}
+					>
+						<DiscountTotalHelpers
+							totalWithoutDiscount={subtotal + acrescimoGeral}
+							maxDiscount={subtotal}
+							currentDiscount={descontoGeral}
+							onApply={(amount) => changeAdjustment("discount", { mode: "VALOR", amount })}
+						/>
+					</AdjustmentRow>
 					<AdjustmentRow
-						icon={Percent}
+						icon={HandCoins}
 						label="Acréscimo"
 						hint="Taxa de serviço, couvert"
-						adjustment={surcharge}
+						tone="surcharge"
+						value={surcharge}
 						resolvedValue={acrescimoGeral}
-						sign="+"
 						onChange={(next) => changeAdjustment("surcharge", next)}
-						shortcut={{
-							label: `Serviço ${SERVICE_FEE_PERCENT}%`,
-							active: surcharge.mode === "PERCENTUAL" && surcharge.amount === SERVICE_FEE_PERCENT,
-							apply: () => changeAdjustment("surcharge", { mode: "PERCENTUAL", amount: SERVICE_FEE_PERCENT, raw: null }),
-						}}
+						presets={SURCHARGE_PERCENT_PRESETS}
 					/>
 				</div>
 				{bloqueio ? (
@@ -483,7 +475,7 @@ export function ClosePane({
 						{/* Pagamentos */}
 						<div className="flex flex-col gap-2.5">
 							<span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Pagamentos · {payments.length}</span>
-							{payments.map((payment, index) => {
+							{resolvedPayments.map((payment, index) => {
 								const meta = METHOD_META[payment.metodo] ?? METHOD_META.OUTRO!;
 								const MethodIcon = meta.icon;
 								const others = paid - payment.valor;
@@ -500,7 +492,17 @@ export function ClosePane({
 												</span>
 												<span className="flex flex-col">
 													<span className="text-sm font-bold">{meta.label}</span>
-													<span className="text-xs font-semibold text-muted-foreground">Pagamento {index + 1}</span>
+													<span className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+														Pagamento {index + 1}
+														{payment.valorModo === "RESTANTE" ? (
+															<span
+																className="text-micro rounded-full bg-info-surface px-2 py-0.5 text-info-surface-foreground"
+																title="Acompanha o restante: muda sozinho quando o total muda."
+															>
+																RESTANTE
+															</span>
+														) : null}
+													</span>
 												</span>
 											</span>
 											{payments.length > 1 ? (
@@ -535,12 +537,8 @@ export function ClosePane({
 													className="min-w-0 flex-1 bg-transparent text-lg font-bold tabular-nums outline-none"
 												/>
 											</label>
-											{Math.abs(rest - payment.valor) > 0.01 ? (
-												<Button
-													variant="outline"
-													className="h-11 rounded-xl px-3 text-xs font-bold"
-													onClick={() => updatePayment(payment.key, { valor: rest, raw: null })}
-												>
+											{payment.valorModo === "FIXO" && Math.abs(rest - payment.valor) > 0.01 ? (
+												<Button variant="outline" className="h-11 rounded-xl px-3 text-xs font-bold" onClick={() => promoteToRemaining(payment.key)}>
 													Usar restante
 												</Button>
 											) : null}
@@ -607,7 +605,9 @@ export function ClosePane({
 										{
 											key: Math.max(...prev.map((payment) => payment.key)) + 1,
 											metodo: "DINHEIRO",
+											// Ninguém cobrindo o restante: o novo cobre. Senão nasce FIXO, pronto para digitar.
 											valor: Math.max(0, difference),
+											valorModo: nextPaymentValueMode(prev),
 											raw: null,
 											contaFinanceiraId: null,
 											recebido: null,
@@ -682,81 +682,6 @@ export function ClosePane({
 					}}
 				/>
 			) : null}
-		</div>
-	);
-}
-
-type AdjustmentRowProps = {
-	icon: LucideIcon;
-	label: string;
-	hint: string;
-	adjustment: TAdjustment;
-	resolvedValue: number;
-	sign: "+" | "−";
-	onChange: (next: TAdjustment) => void;
-	shortcut?: { label: string; active: boolean; apply: () => void };
-};
-
-function AdjustmentRow({ icon: Icon, label, hint, adjustment, resolvedValue, sign, onChange, shortcut }: AdjustmentRowProps) {
-	const isPercent = adjustment.mode === "PERCENTUAL";
-	return (
-		<div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-3 py-2.5">
-			<span className="flex min-w-0 items-center gap-2.5">
-				<span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-secondary">
-					<Icon className="size-4" />
-				</span>
-				<span className="flex min-w-0 flex-col">
-					<span className="whitespace-nowrap text-sm font-bold">{label}</span>
-					<span className="whitespace-nowrap text-xs text-muted-foreground tabular-nums">
-						{resolvedValue > 0 ? `${sign}${formatToMoney(resolvedValue)}${isPercent ? ` · ${adjustment.amount}%` : ""}` : hint}
-					</span>
-				</span>
-			</span>
-			<span className="flex shrink-0 items-center gap-1.5">
-				{shortcut ? (
-					<button
-						type="button"
-						aria-pressed={shortcut.active}
-						onClick={shortcut.active ? () => onChange(EMPTY_ADJUSTMENT) : shortcut.apply}
-						className={cn(
-							"h-8 whitespace-nowrap rounded-lg border px-2.5 text-xs font-bold transition-colors",
-							shortcut.active ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card hover:border-primary/50",
-						)}
-					>
-						{shortcut.label}
-					</button>
-				) : null}
-				<span className="flex h-8 items-center rounded-lg border border-border p-0.5">
-					{(["VALOR", "PERCENTUAL"] as const).map((mode) => (
-						<button
-							key={mode}
-							type="button"
-							aria-pressed={adjustment.mode === mode}
-							aria-label={mode === "VALOR" ? `${label} em reais` : `${label} em percentual`}
-							// Trocar a unidade zera o valor: 10 reais não viram 10%.
-							onClick={() => adjustment.mode !== mode && onChange({ mode, amount: 0, raw: null })}
-							className={cn(
-								"h-full rounded-md px-2 text-xs font-bold transition-colors",
-								adjustment.mode === mode ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground",
-							)}
-						>
-							{mode === "VALOR" ? "R$" : "%"}
-						</button>
-					))}
-				</span>
-				<input
-					inputMode="decimal"
-					aria-label={`${label} (${isPercent ? "%" : "R$"})`}
-					placeholder="0,00"
-					value={adjustment.raw ?? (adjustment.amount > 0 ? formatInput(adjustment.amount) : "")}
-					onChange={(event) => {
-						const parsed = Math.max(0, parseInput(event.target.value));
-						onChange({ ...adjustment, raw: event.target.value, amount: isPercent ? Math.min(100, parsed) : parsed });
-					}}
-					onBlur={() => onChange({ ...adjustment, raw: null })}
-					className="h-8 w-20 rounded-lg border border-border bg-transparent px-2 text-right text-sm font-bold tabular-nums outline-none focus:border-primary"
-				/>
-			</span>
 		</div>
 	);
 }

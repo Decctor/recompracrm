@@ -1,8 +1,10 @@
-import { HandCoins } from "lucide-react";
+import { CircleAlert, HandCoins } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatToMoney } from "@/lib/formatting";
+import { resolveExcessAdjustment } from "@/lib/payments/payment-value-mode";
 import { cn } from "@/lib/utils";
 import type { TUseSaleState } from "@/state-hooks/use-sale-state";
+import { SalePaymentMethodsOptions } from "@/utils/select-options";
 
 // Rodapé fixo do checkout: o valor da venda e a ação de cobrar são a mesma intenção, separados só
 // por hierarquia. O total vive aqui (e não mais como clímax do Resumo) porque a coluna rola e o
@@ -67,7 +69,15 @@ export default function TotalDock({
 	// Troco não entra na linha rasa: é o número que o operador conta na gaveta e entrega na mão do
 	// cliente, e em 11px âmbar sobre branco (contraste ~3:1) ele sumia ao lado do total. Ganha faixa
 	// própria abaixo; RESTANTE segue aqui porque só informa — não pede ação física.
-	const showTroco = saleState.troco > 0;
+	// Troco é o que sai da gaveta: só o excesso coberto por dinheiro entregue. Excesso em cartão ou
+	// PIX quase sempre é um valor que ficou para trás (desconto lançado depois do pagamento), então
+	// não se chama troco: ganha faixa própria com a correção a um toque.
+	const showTroco = saleState.troco > 0 && saleState.trocoCobertoPorDinheiro;
+	const showExcess = saleState.troco > 0 && !saleState.trocoCobertoPorDinheiro;
+	const excessAdjustment = showExcess ? resolveExcessAdjustment(saleState.state.pagamentos, saleState.troco) : null;
+	const excessAdjustmentLabel = excessAdjustment
+		? (SalePaymentMethodsOptions.find((method) => method.value === excessAdjustment.payment.metodo)?.label ?? excessAdjustment.payment.metodo)
+		: null;
 	if (showRestante) {
 		secondaryLines.push({ key: "restante", label: "RESTANTE", value: formatToMoney(saleState.valorRestante), className: "text-muted-foreground" });
 	}
@@ -108,6 +118,32 @@ export default function TotalDock({
 						</span>
 					</div>
 					<span className="text-[11px] font-semibold tabular-nums opacity-80">RECEBIDO {formatToMoney(saleState.totalPagamentos)}</span>
+				</div>
+			) : null}
+
+			{showExcess ? (
+				<div
+					role="status"
+					className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 rounded-lg bg-destructive-surface px-3 py-1.5 text-destructive-surface-foreground animate-in fade-in-0 slide-in-from-bottom-1 duration-200 motion-reduce:animate-none"
+				>
+					<div className="flex items-center gap-2">
+						<CircleAlert className="size-4 shrink-0" aria-hidden />
+						<span className="text-[10px] font-bold uppercase tracking-[0.1em]">Acima do total</span>
+						<span className="text-base font-black tracking-tight tabular-nums">{formatToMoney(saleState.troco)}</span>
+					</div>
+					{excessAdjustment ? (
+						<Button
+							type="button"
+							size="sm"
+							variant="outline"
+							className="h-8 rounded-lg bg-card text-xs font-bold text-foreground"
+							onClick={() => saleState.setPagamentoRestante(excessAdjustment.payment.id)}
+						>
+							Ajustar {excessAdjustmentLabel} para {formatToMoney(excessAdjustment.valor)}
+						</Button>
+					) : (
+						<span className="text-[11px] font-semibold">Ajuste os valores dos pagamentos.</span>
+					)}
 				</div>
 			) : null}
 

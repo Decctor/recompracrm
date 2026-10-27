@@ -238,7 +238,7 @@ export default function EditSalePage({
 			acrescimosTotal: saleState.acrescimosTotal,
 			taxaEntrega: saleState.state.taxaEntrega,
 			sessaoVendaId: activeSession?.id ?? null,
-			pagamentos: saleState.state.pagamentos.map((payment) => ({
+			pagamentos: saleState.paymentsToCharge.map((payment) => ({
 				metodo: payment.metodo,
 				valor: payment.valor,
 				totalParcelas: payment.totalParcelas,

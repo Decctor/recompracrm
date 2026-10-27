@@ -74,7 +74,7 @@ function getSaleSuccessSnapshot(saleState: TUseSaleState) {
 		clienteNome: saleState.state.cliente?.nome ?? null,
 		vendedorNome: saleState.state.vendedorNome ?? null,
 		entregaModalidade: saleState.state.entregaModalidade,
-		pagamentos: saleState.state.pagamentos.map((payment) => ({ metodo: payment.metodo, valor: payment.valor })),
+		pagamentos: saleState.paymentsToCharge.map((payment) => ({ metodo: payment.metodo, valor: payment.valor })),
 		troco: saleState.troco,
 	};
 }
@@ -443,7 +443,7 @@ export default function NewSalePage({
 			acrescimosTotal: saleState.acrescimosTotal,
 			rascunhoMetadados: saleState.getDraftMetadata(),
 			sessaoVendaId: activeSession?.id ?? null,
-			pagamentos: saleState.state.pagamentos.map((payment) => ({
+			pagamentos: saleState.paymentsToCharge.map((payment) => ({
 				metodo: payment.metodo,
 				valor: payment.valor,
 				totalParcelas: payment.totalParcelas,

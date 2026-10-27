@@ -249,7 +249,7 @@ export default function CheckoutPage({
 			return confirmSale({
 				id: saleId,
 				clienteId: saleState.state.cliente?.id ?? null,
-				pagamentos: saleState.state.pagamentos.map((payment) => ({
+				pagamentos: saleState.paymentsToCharge.map((payment) => ({
 					metodo: payment.metodo,
 					valor: payment.valor,
 					totalParcelas: payment.totalParcelas,
@@ -281,7 +281,7 @@ export default function CheckoutPage({
 				clienteNome: saleState.state.cliente?.nome ?? null,
 				vendedorNome: saleState.state.vendedorNome ?? null,
 				entregaModalidade: saleState.state.entregaModalidade,
-				pagamentos: saleState.state.pagamentos.map((payment) => ({ metodo: payment.metodo, valor: payment.valor })),
+				pagamentos: saleState.paymentsToCharge.map((payment) => ({ metodo: payment.metodo, valor: payment.valor })),
 				troco: saleState.troco,
 				fiscal: {
 					status: data.data.fiscal.status,

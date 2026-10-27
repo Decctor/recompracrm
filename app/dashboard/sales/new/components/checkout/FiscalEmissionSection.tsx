@@ -95,7 +95,7 @@ function FiscalEmissionSectionContent({
 
 	// Mesma regra do servidor: exceções só valem quando a venda herda a preferência da organização.
 	const exception = resolveAutoEmissionException({
-		metodos: saleState.state.pagamentos.filter((payment) => payment.valor > 0).map((payment) => payment.metodo),
+		metodos: saleState.paymentsToCharge.map((payment) => payment.metodo),
 		excecoes: autoEmissionExceptions,
 	});
 
