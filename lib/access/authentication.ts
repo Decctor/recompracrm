@@ -20,6 +20,9 @@ export type TVerifiedAccessCredential = {
 	organizationId: string | null;
 	principalType: TAccessPrincipalTypeEnum;
 	responsibleUserId: string | null;
+	// Loja do principal (agent desktop / POI). Viaja no contexto porque a linha do principal já foi
+	// lida aqui: o claim de impressão, chamado a cada poucos segundos, não precisa relê-la.
+	storeId: string | null;
 	scopes: ReadonlySet<string>;
 };
 
@@ -119,6 +122,7 @@ export async function verifyAccessCredentialFromRequest(request: NextRequest): P
 		organizationId: credential.principal.organizacaoId,
 		principalType: credential.principal.tipo,
 		responsibleUserId: credential.principal.responsavelUsuarioId,
+		storeId: credential.principal.lojaId,
 		scopes,
 	};
 }

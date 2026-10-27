@@ -13,6 +13,10 @@ import type { IFiscalInboundProvider, TInboundDocumentSnapshot, TInboundManifest
 const MAX_PAGES = 10;
 const RECONCILE_BATCH_SIZE = 25;
 const AUTO_CIENCIA_BATCH_SIZE = 50;
+// A SEFAZ recusa a ciencia apresentada mais de 10 dias depois da emissao ("Evento apresentado apos
+// o prazo permitido"). Fora da janela a nota nao tem mais ciencia possivel: sem este corte, as
+// mesmas 50 notas vencidas ocupavam o lote e eram reenviadas (e rejeitadas) a cada rodada do cron.
+const AUTO_CIENCIA_PRAZO_DIAS = 10;
 
 async function getOrCreateSyncState(organizacaoId: string) {
 	const existing = await db.query.fiscalInboundSyncStates.findFirst({ where: (fields, operators) => operators.eq(fields.organizacaoId, organizacaoId) });
@@ -165,13 +169,18 @@ async function persistManifestReadback(documentId: string, evento: TFiscalInboun
 }
 
 async function autoManifestCiencia(organizationId: string, organization: TFiscalOrganization, provider: IFiscalInboundProvider) {
+	const prazoCutoff = new Date(Date.now() - AUTO_CIENCIA_PRAZO_DIAS * 24 * 60 * 60 * 1000);
 	const pendentes = await db.query.fiscalInboundDocuments.findMany({
 		where: (fields, operators) =>
 			operators.and(
 				operators.eq(fields.organizacaoId, organizationId),
 				operators.isNull(fields.manifestacaoAtual),
 				operators.isNotNull(fields.provedorDocumentoId),
+				// Sem data de emissao (resumo incompleto), a insercao e o limite inferior conhecido.
+				operators.gt(sql`coalesce(${fields.dataEmissao}, ${fields.dataInsercao})`, prazoCutoff),
 			),
+		// Mais antigas primeiro: sao as mais perto de perder o prazo.
+		orderBy: (fields, operators) => operators.asc(sql`coalesce(${fields.dataEmissao}, ${fields.dataInsercao})`),
 		limit: AUTO_CIENCIA_BATCH_SIZE,
 	});
 	for (const doc of pendentes) {

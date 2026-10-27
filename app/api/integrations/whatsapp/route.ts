@@ -42,20 +42,25 @@ async function postWhatsappWebhookRoute(req: NextRequest) {
 	}
 	const body = JSON.parse(rawBody) as TMetaWebhookBody;
 
-	console.log("[INFO] [WHATSAPP_WEBHOOK] [POST] Incoming webhook message:", JSON.stringify(body, null, 2));
-
 	if (body.object !== "whatsapp_business_account") {
+		console.warn("[WHATSAPP_WEBHOOK] [POST] Objeto não suportado:", body.object);
 		return NextResponse.json({ error: "Event not supported" }, { status: 404 });
 	}
 
 	// Inbox durável: payload arquivado APÓS a autenticação e ANTES do processamento. Falha
 	// no arquivamento propaga (500 via appApiHandler) e a Meta reentrega — melhor retry do
 	// provider do que payload perdido com 200 devolvido.
+	const tipo = classifyMetaWebhookBody(body);
 	const archived = await archiveExternalEvent({
 		origem: "META-WHATSAPP",
-		tipo: classifyMetaWebhookBody(body),
+		tipo,
 		payload: body,
 	});
+
+	// O payload inteiro já está no inbox (`archived.id`). Imprimi-lo formatado em toda entrega —
+	// dezenas de milhares por semana, históricos de mensagens inclusos — custava CPU e pico de
+	// memória só para duplicar o que o inbox guarda.
+	console.log("[INFO] [WHATSAPP_WEBHOOK] [POST] Webhook recebido:", { eventId: archived.id, tipo, bytes: rawBody.length });
 
 	// A Meta reentrega quando o 200 demora — e o processamento inclui debounce e run de
 	// LLM. Todo o trabalho sai da request; desfecho (status/erro/organização) fica na linha
