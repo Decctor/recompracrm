@@ -74,6 +74,9 @@ export const CartItemSchema = z.object({
 		invalid_type_error: "Tipo não válido para valor total líquido.",
 	}),
 	modificadores: z.array(CartItemModifierSchema),
+	// Saldo rastreado do produto/variante quando a linha entrou (null = sem rastreamento). Só existe
+	// no cliente: o "+" da linha não passa do saldo (ver lib/pos/stock-availability.ts).
+	saldoEstoque: z.number({ invalid_type_error: "Tipo não válido para saldo de estoque." }).optional().nullable(),
 	// Observação livre do item ("sem cebola") — chega à cozinha e ao cupom impresso.
 	observacoes: z
 		.string({ invalid_type_error: "Tipo não válido para observações do item." })
@@ -379,7 +382,15 @@ export const useSaleState = ({ initialState, organizationConfig, contasFinanceir
 				...prev,
 				itens: prev.itens.map((candidate) =>
 					candidate.tempId === existing.tempId
-						? { ...candidate, quantidade, valorTotalBruto, valorDesconto, valorTotalLiquido: valorTotalBruto - valorDesconto }
+						? {
+								...candidate,
+								quantidade,
+								valorTotalBruto,
+								valorDesconto,
+								valorTotalLiquido: valorTotalBruto - valorDesconto,
+								// O snapshot mais recente do saldo é o da leitura que acabou de chegar.
+								saldoEstoque: item.saldoEstoque ?? candidate.saldoEstoque,
+							}
 						: candidate,
 				),
 			};

@@ -1,8 +1,9 @@
 import type { TProductAddOnPricingRuleEnum } from "@/schemas/enums";
 import { projectAddOnReferencesToChannel } from "@/lib/products/sales-channels";
 import { channelNodePrice, channelProductFilter, loadChannelState } from "@/lib/products/sales-channels-store";
+import { resolvePOSProductStock } from "@/lib/pos/product-stock-display";
 import { db } from "@/services/drizzle";
-import { products } from "@/services/drizzle/schema";
+import { organizations, products } from "@/services/drizzle/schema";
 import { and, eq, inArray, notInArray } from "drizzle-orm";
 
 type TLoadedReference = {
@@ -77,7 +78,16 @@ export async function getTabMenuProducts({ orgId, productIds }: { orgId: string;
 	const conditions = [eq(products.organizacaoId, orgId), eq(products.ativo, true), eq(products.vendavel, true)];
 	if (productIds) conditions.push(inArray(products.id, productIds));
 
-	const channelState = await loadChannelState({ orgId, canal: "COMANDA" });
+	const [channelState, organization] = await Promise.all([
+		loadChannelState({ orgId, canal: "COMANDA" }),
+		db.query.organizations.findFirst({ where: eq(organizations.id, orgId), columns: { configuracao: true } }),
+	]);
+	// Mesma regra da baixa da venda: só bloqueia quando a organização E o item rastreiam estoque.
+	const orgTracksStock = !!organization?.configuracao.preferencias.rastreamentoEstoque;
+	const isAvailable = (entity: { quantidade: number | null; rastreamentoEstoqueAtivo: boolean | null }) => {
+		const stock = resolvePOSProductStock({ product: entity, orgTracksStock });
+		return stock === null || stock > 0;
+	};
 	if (channelState) {
 		const filter = channelProductFilter(channelState);
 		if (filter.includeIds) {
@@ -89,13 +99,29 @@ export async function getTabMenuProducts({ orgId, productIds }: { orgId: string;
 
 	const rows = await db.query.products.findMany({
 		where: and(...conditions),
-		columns: { id: true, nome: true, codigo: true, grupo: true, descricao: true, precoVenda: true, imagemCapaUrl: true },
+		columns: {
+			id: true,
+			nome: true,
+			codigo: true,
+			grupo: true,
+			descricao: true,
+			precoVenda: true,
+			imagemCapaUrl: true,
+			quantidade: true,
+			rastreamentoEstoqueAtivo: true,
+		},
 		with: {
+			// Eixos da variação: o cardápio agrupa a escolha por eixo, como o PDV.
+			opcoes: {
+				columns: { id: true, nome: true, ordem: true },
+				with: { valores: { columns: { id: true, nome: true, valorAuxiliar: true, ordem: true } } },
+			},
 			variantes: {
 				where: (fields, { eq: eqOp }) => eqOp(fields.ativo, true),
 				orderBy: (fields, { asc }) => asc(fields.precoVenda),
-				columns: { id: true, nome: true, codigo: true, precoVenda: true, imagemCapaUrl: true },
+				columns: { id: true, nome: true, codigo: true, precoVenda: true, imagemCapaUrl: true, quantidade: true, rastreamentoEstoqueAtivo: true },
 				with: {
+					valoresOpcoes: { columns: { opcaoId: true, opcaoValorId: true } },
 					addOnsReferencias: {
 						columns: { produtoAddOnId: true, ordem: true, minOpcoes: true, maxOpcoes: true },
 						orderBy: (fields, { asc }) => asc(fields.ordem),
@@ -145,18 +171,9 @@ export async function getTabMenuProducts({ orgId, productIds }: { orgId: string;
 		orderBy: (fields, { asc }) => asc(fields.nome),
 	});
 
-	return rows.map((product) => ({
-		id: product.id,
-		nome: product.nome,
-		codigo: product.codigo,
-		grupo: product.grupo,
-		descricao: product.descricao,
-		imagemCapaUrl: product.imagemCapaUrl,
-		// Preço resolvido do canal COMANDA — o mesmo que a aprovação/lançamento vai cobrar.
-		precoVenda: channelNodePrice(channelState, { produtoId: product.id, precoVenda: product.precoVenda }),
-		addOnsReferencias: projectAddOnReferencesToChannel(channelState, publicReferences(product.addOnsReferencias)),
+	return rows.map((product) => {
 		// Linha de variante só restringe dentro de um produto visível (mesma regra do resolver).
-		variantes: product.variantes
+		const variantes = product.variantes
 			.filter((variant) => channelState?.variantOverrides.get(variant.id)?.disponivel !== false)
 			.map((variant) => ({
 				id: variant.id,
@@ -164,9 +181,27 @@ export async function getTabMenuProducts({ orgId, productIds }: { orgId: string;
 				codigo: variant.codigo,
 				imagemCapaUrl: variant.imagemCapaUrl,
 				precoVenda: channelNodePrice(channelState, { produtoId: product.id, produtoVarianteId: variant.id, precoVenda: variant.precoVenda }) ?? 0,
+				valoresOpcoes: variant.valoresOpcoes,
+				// Página pública: diz só se dá para pedir, nunca o saldo.
+				disponivel: isAvailable(variant),
 				addOnsReferencias: projectAddOnReferencesToChannel(channelState, publicReferences(variant.addOnsReferencias)),
-			})),
-	}));
+			}));
+		return {
+			id: product.id,
+			nome: product.nome,
+			codigo: product.codigo,
+			grupo: product.grupo,
+			descricao: product.descricao,
+			imagemCapaUrl: product.imagemCapaUrl,
+			// Preço resolvido do canal COMANDA — o mesmo que a aprovação/lançamento vai cobrar.
+			precoVenda: channelNodePrice(channelState, { produtoId: product.id, precoVenda: product.precoVenda }),
+			opcoes: product.opcoes,
+			// Com variantes, o produto está disponível enquanto alguma estiver.
+			disponivel: variantes.length > 0 ? variantes.some((variant) => variant.disponivel) : isAvailable(product),
+			addOnsReferencias: projectAddOnReferencesToChannel(channelState, publicReferences(product.addOnsReferencias)),
+			variantes,
+		};
+	});
 }
 
 export type TTabMenuProduct = Awaited<ReturnType<typeof getTabMenuProducts>>[number];

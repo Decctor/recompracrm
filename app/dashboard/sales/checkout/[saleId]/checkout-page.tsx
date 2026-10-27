@@ -3,6 +3,7 @@
 import BarcodeMatchPicker from "@/components/Modals/Sales/BarcodeMatchPicker";
 import type { TBuiltOrderItem } from "@/components/Products/ProductBuilderForm";
 import { usePOSBarcodeScan } from "@/lib/hooks/use-pos-barcode-scan";
+import { usePOSStockGuard } from "@/lib/hooks/use-pos-stock-guard";
 import type { TBarcodeScanResolution } from "@/lib/pos/barcode-scan-action";
 import { formatItemQuantity } from "@/lib/pos/scale-barcode";
 import { modifierPricesDiverge } from "@/lib/sales/sale-item-repricing";
@@ -112,6 +113,11 @@ export default function CheckoutPage({
 	const draft = draftData?.sale;
 	const pricing = draftData?.pricing;
 	const saleState = useSaleState({ organizationConfig: organizationConfiguration, contasFinanceiras: organizationFinancialAccounts });
+	// Estoque: grade, código de barras, builder e "+" do carrinho seguem a regra da baixa da venda.
+	const { builderStock, checkDirectAdd } = usePOSStockGuard({
+		lines: saleState.state.itens,
+		orgTracksStock: organizationConfiguration.preferencias.rastreamentoEstoque,
+	});
 
 	const {
 		data: productsData,
@@ -351,8 +357,14 @@ export default function CheckoutPage({
 				setBuilderProduct(product);
 				return;
 			}
+			const { saldoEstoque, shortage } = checkDirectAdd(product, { produtoId: product.id, nome: product.nome, quantidade: 1 });
+			if (shortage) {
+				toast.error(shortage);
+				return;
+			}
 			saleState.addItem({
 				tempId: crypto.randomUUID(),
+				saldoEstoque,
 				produtoId: product.id,
 				produtoVarianteId: null,
 				nome: product.nome,
@@ -368,7 +380,7 @@ export default function CheckoutPage({
 				modificadores: [],
 			});
 		},
-		[saleState],
+		[saleState, checkDirectAdd],
 	);
 
 	// Leitor de código de barras (modo teclado): o item lido entra direto no carrinho, somando na
@@ -377,13 +389,20 @@ export default function CheckoutPage({
 	const addItemOrIncrement = saleState.addItemOrIncrement;
 	const addItemLine = saleState.addItem;
 	const handleScannedItem = useCallback(
-		(item: TBuiltOrderItem, { scaleReading }: TBarcodeScanResolution) => {
+		(item: TBuiltOrderItem, { product, variantId, scaleReading }: TBarcodeScanResolution) => {
+			const variant = variantId ? product.variantes.find((candidate) => candidate.id === variantId) : null;
+			const { saldoEstoque, shortage } = checkDirectAdd(variant ?? product, item);
+			if (shortage) {
+				toast.error(shortage);
+				return;
+			}
+			const line = { ...item, saldoEstoque, tempId: crypto.randomUUID() };
 			// Cada etiqueta de balança é uma pesagem própria: linha nova, nunca soma na existente.
-			if (scaleReading) addItemLine({ ...item, tempId: crypto.randomUUID() });
-			else addItemOrIncrement({ ...item, tempId: crypto.randomUUID() });
+			if (scaleReading) addItemLine(line);
+			else addItemOrIncrement(line);
 			toast.success(`${item.nome}${scaleReading ? ` (${formatItemQuantity(item.quantidade)})` : ""} adicionado ao carrinho.`);
 		},
-		[addItemOrIncrement, addItemLine],
+		[addItemOrIncrement, addItemLine, checkDirectAdd],
 	);
 	const handleScannedBuilder = useCallback(({ product, variantId }: TBarcodeScanResolution) => {
 		setBuilderVariantId(variantId);
@@ -551,6 +570,7 @@ export default function CheckoutPage({
 					<ProductBuilderModal
 						product={builderProduct}
 						initialVariantId={builderVariantId}
+						stock={builderStock}
 						onAddToCart={saleState.addItem}
 						onClose={() => {
 							setBuilderProduct(null);

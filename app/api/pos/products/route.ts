@@ -182,10 +182,17 @@ async function queryProducts({ input, session }: { input: TGetPOSProductsInput; 
 	const productsResult = await db.query.products.findMany({
 		where: and(...conditions, inArray(products.id, pageProductIds)),
 		with: {
+			// Eixos da variação (Cor, Tamanho) e a combinação de cada variante: o builder agrupa a escolha
+			// por eixo. Só ids, nomes, hex e ordem — o resto do cadastro dos eixos não interessa à venda.
+			opcoes: {
+				columns: { id: true, nome: true, ordem: true },
+				with: { valores: { columns: { id: true, nome: true, valorAuxiliar: true, ordem: true } } },
+			},
 			variantes: {
 				where: (fields, { eq }) => eq(fields.ativo, true),
 				orderBy: (fields, { asc }) => asc(fields.precoVenda),
 				with: {
+					valoresOpcoes: { columns: { opcaoId: true, opcaoValorId: true } },
 					addOnsReferencias: {
 						with: {
 							grupo: {

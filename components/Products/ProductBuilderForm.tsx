@@ -2,12 +2,29 @@ import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { Textarea } from "@/components/ui/textarea";
 import { formatToMoney, normalizeForSearch } from "@/lib/formatting";
+import { formatItemQuantity } from "@/lib/pos/scale-barcode";
+import { resolvePOSProductStock } from "@/lib/pos/product-stock-display";
+import { describeStockShortage, resolveAvailableStock } from "@/lib/pos/stock-availability";
 import { describeAddOnPricingRule, resolveSelectedAddOnPrices } from "@/lib/products/add-on-pricing";
+import {
+	buildVariantAxes,
+	fillSingleChoices,
+	findMatchingVariantIds,
+	findVariantIdsForValue,
+	resolveAxisValuePrice,
+	resolveSelectedVariantId,
+	selectAxisValue,
+	selectionFromVariant,
+	type TVariantAxes,
+	type TVariantAxisOptionInput,
+	type TVariantAxisSelection,
+	type TVariantAxisValue,
+} from "@/lib/products/variant-axes";
 import { cn } from "@/lib/utils";
 import type { TProductAddOnPricingRuleEnum } from "@/schemas/enums";
 import { Check, Minus, Plus, Search, X } from "lucide-react";
 import Image from "next/image";
-import { useCallback, useDeferredValue, useEffect, useId, useMemo, useState } from "react";
+import { useCallback, useDeferredValue, useId, useMemo, useState } from "react";
 
 const ADD_ON_SEARCH_THRESHOLD = 8;
 
@@ -34,15 +51,24 @@ export type TBuilderAddOnReference = {
 		opcoes: TBuilderAddOnOption[];
 	};
 };
-export type TBuilderVariant = {
+// Estoque, em dois formatos: o PDV e as contas recebem saldo e rastreamento (o número aparece e
+// limita); o cardápio público recebe só `disponivel`, porque o saldo não vai para a página pública.
+type TBuilderStockFields = {
+	quantidade?: number | null;
+	rastreamentoEstoqueAtivo?: boolean | null;
+	disponivel?: boolean;
+};
+export type TBuilderVariant = TBuilderStockFields & {
 	id: string;
 	nome: string;
 	codigo?: string | null;
 	imagemCapaUrl?: string | null;
 	precoVenda: number;
 	addOnsReferencias: TBuilderAddOnReference[];
+	/** Combinação de eixos (Cor, Tamanho). Sem ela, a escolha cai na lista plana. */
+	valoresOpcoes?: { opcaoId: string; opcaoValorId: string }[];
 };
-export type TBuilderProduct = {
+export type TBuilderProduct = TBuilderStockFields & {
 	id: string;
 	nome: string;
 	codigo: string;
@@ -50,7 +76,22 @@ export type TBuilderProduct = {
 	precoVenda: number | null;
 	variantes: TBuilderVariant[];
 	addOnsReferencias: TBuilderAddOnReference[];
+	/** Eixos da variação, para agrupar a escolha (ver lib/products/variant-axes.ts). */
+	opcoes?: TVariantAxisOptionInput[];
 };
+
+/**
+ * Estoque nas telas internas: o par de flags que a baixa da venda consulta (módulo da organização
+ * + rastreamento do item) e o que o carrinho da tela já reserva. Ausente (cardápio público), o
+ * builder usa só `disponivel`.
+ */
+export type TBuilderStockContext = {
+	orgTracksStock: boolean;
+	reservedFor: (key: { produtoId: string; produtoVarianteId: string | null }) => number;
+};
+
+/** Saldo rastreado (`null` = sem rastreamento ou não exibível) e o que sobra para vender agora. */
+export type TBuilderStock = { stock: number | null; available: number | null };
 type TGrupo = TBuilderAddOnReference["grupo"];
 
 export type TBuiltOrderItemModifier = {
@@ -76,6 +117,8 @@ export type TBuiltOrderItem = {
 	valorTotalLiquido: number;
 	observacoes: string | null;
 	modificadores: TBuiltOrderItemModifier[];
+	/** Saldo rastreado no momento da escolha: o carrinho limita o "+" da linha por ele. */
+	saldoEstoque?: number | null;
 };
 
 type SelectedModifier = {
@@ -83,15 +126,45 @@ type SelectedModifier = {
 	quantidade: number;
 };
 
-export function useProductBuilder({ product, initialVariantId = null }: { product: TBuilderProduct; initialVariantId?: string | null }) {
+export function useProductBuilder({
+	product,
+	initialVariantId = null,
+	stock = null,
+}: {
+	product: TBuilderProduct;
+	initialVariantId?: string | null;
+	stock?: TBuilderStockContext | null;
+}) {
 	// Variante já identificada antes de abrir (código de barras da própria variante): o operador só
 	// escolhe os adicionais. Ignorada se não pertencer ao produto, para não travar o estado.
-	const [selectedVariantId, setSelectedVariantId] = useState<string | null>(() =>
-		initialVariantId && product.variantes.some((variant) => variant.id === initialVariantId) ? initialVariantId : null,
+	const validInitialVariantId = initialVariantId && product.variantes.some((variant) => variant.id === initialVariantId) ? initialVariantId : null;
+	// Com eixos, a escolha é por eixo e a variante é derivada da combinação; sem eles, lista plana.
+	const axes = useMemo(() => buildVariantAxes({ options: product.opcoes ?? [], variants: product.variantes }), [product.opcoes, product.variantes]);
+	const [axisSelection, setAxisSelection] = useState<TVariantAxisSelection>(() =>
+		axes ? fillSingleChoices(axes, selectionFromVariant(axes, validInitialVariantId)) : {},
 	);
+	const [flatVariantId, setFlatVariantId] = useState<string | null>(validInitialVariantId);
 	const [selectedModifiers, setSelectedModifiers] = useState<SelectedModifier[]>([]);
 	const [observacoes, setObservacoes] = useState("");
 	const [quantity, setQuantity] = useState(1);
+
+	// A única variante existente já vem escolhida (na lista plana; nos eixos, `fillSingleChoices`).
+	const selectedVariantId = axes
+		? resolveSelectedVariantId(axes, axisSelection)
+		: (flatVariantId ?? (product.variantes.length === 1 ? product.variantes[0].id : null));
+	const setSelectedVariantId = useCallback(
+		(variantId: string) => {
+			if (axes) setAxisSelection(selectionFromVariant(axes, variantId));
+			else setFlatVariantId(variantId);
+		},
+		[axes],
+	);
+	const chooseAxisValue = useCallback(
+		(axisId: string, valueId: string) => {
+			if (axes) setAxisSelection((prev) => selectAxisValue(axes, prev, axisId, valueId));
+		},
+		[axes],
+	);
 
 	const selectedVariant = selectedVariantId ? product.variantes.find((v) => v.id === selectedVariantId) : null;
 	const availableReferences = useMemo(
@@ -121,12 +194,34 @@ export function useProductBuilder({ product, initialVariantId = null }: { produc
 		return counts;
 	}, [optionIndex, selectedModifiers]);
 
-	// Seleciona automaticamente a única variante existente.
-	useEffect(() => {
-		if (hasVariants && product.variantes.length === 1 && !selectedVariantId) {
-			setSelectedVariantId(product.variantes[0].id);
-		}
-	}, [hasVariants, product.variantes, selectedVariantId]);
+	// Estoque: mesma regra da baixa da venda, menos o que o carrinho da tela já reserva.
+	const stockFor = useCallback(
+		(entity: TBuilderStockFields, produtoVarianteId: string | null): TBuilderStock => {
+			if (!stock) return { stock: null, available: entity.disponivel === false ? 0 : null };
+			const tracked = resolvePOSProductStock({
+				product: { quantidade: entity.quantidade ?? null, rastreamentoEstoqueAtivo: entity.rastreamentoEstoqueAtivo ?? null },
+				orgTracksStock: stock.orgTracksStock,
+			});
+			return {
+				stock: tracked,
+				available: resolveAvailableStock({ stock: tracked, reserved: stock.reservedFor({ produtoId: product.id, produtoVarianteId }) }),
+			};
+		},
+		[stock, product.id],
+	);
+	const variantStock = useMemo(
+		() => new Map(product.variantes.map((variant) => [variant.id, stockFor(variant, variant.id)])),
+		[product.variantes, stockFor],
+	);
+	const selectedStock: TBuilderStock | null = hasVariants
+		? selectedVariantId
+			? (variantStock.get(selectedVariantId) ?? null)
+			: null
+		: stockFor(product, null);
+	// Unidades inteiras no builder: o teto do stepper é o disponível arredondado para baixo.
+	const maxQuantity =
+		selectedStock?.available === null || selectedStock?.available === undefined ? null : Math.max(0, Math.floor(selectedStock.available + 1e-9));
+	const itemName = selectedVariant ? `${product.nome} - ${selectedVariant.nome}` : product.nome;
 
 	const basePrice = selectedVariant?.precoVenda ?? product.precoVenda ?? 0;
 
@@ -155,6 +250,8 @@ export function useProductBuilder({ product, initialVariantId = null }: { produc
 	// Primeira exigência não atendida — usado no aviso e no toast ao tentar confirmar.
 	const blockReason = useMemo(() => {
 		if (hasVariants && !selectedVariantId) return "Selecione uma variante para continuar.";
+		const stockShortage = describeStockShortage({ nome: itemName, available: selectedStock?.available ?? null, quantity });
+		if (stockShortage) return stockShortage;
 		for (const reference of availableReferences) {
 			const grupo = reference.grupo;
 			const total = selectedCountForGroup(grupo);
@@ -166,7 +263,7 @@ export function useProductBuilder({ product, initialVariantId = null }: { produc
 			}
 		}
 		return null;
-	}, [hasVariants, selectedVariantId, availableReferences, selectedCountForGroup]);
+	}, [hasVariants, selectedVariantId, itemName, selectedStock, quantity, availableReferences, selectedCountForGroup]);
 
 	const canConfirm = blockReason === null;
 
@@ -215,8 +312,6 @@ export function useProductBuilder({ product, initialVariantId = null }: { produc
 			}
 		}
 
-		const itemName = selectedVariant ? `${product.nome} - ${selectedVariant.nome}` : product.nome;
-
 		return {
 			produtoId: product.id,
 			produtoVarianteId: selectedVariantId,
@@ -232,6 +327,7 @@ export function useProductBuilder({ product, initialVariantId = null }: { produc
 			valorTotalLiquido: unitFinal * quantity,
 			observacoes: observacoes.trim() || null,
 			modificadores: modifiers,
+			saldoEstoque: selectedStock?.stock ?? null,
 		};
 	}, [
 		blockReason,
@@ -246,12 +342,21 @@ export function useProductBuilder({ product, initialVariantId = null }: { produc
 		modifiersTotal,
 		unitFinal,
 		observacoes,
+		itemName,
+		selectedStock,
 	]);
 
 	return {
 		selectedVariantId,
 		setSelectedVariantId,
 		selectedVariant,
+		axes,
+		axisSelection,
+		chooseAxisValue,
+		variantStock,
+		selectedStock,
+		maxQuantity,
+		showStockNumbers: !!stock,
 		availableReferences,
 		hasVariants,
 		hasAddOns,
@@ -325,6 +430,12 @@ export function ProductBuilderForm({ product, builder, showFooter = true, showIm
 		selectedVariantId,
 		setSelectedVariantId,
 		selectedVariant,
+		axes,
+		axisSelection,
+		chooseAxisValue,
+		variantStock,
+		maxQuantity,
+		showStockNumbers,
 		availableReferences,
 		hasVariants,
 		hasAddOns,
@@ -348,7 +459,10 @@ export function ProductBuilderForm({ product, builder, showFooter = true, showIm
 	const isStale = addOnQuery !== deferredQuery;
 	const observacoesId = useId();
 
-	const headerImage = selectedVariant?.imagemCapaUrl ?? product.imagemCapaUrl;
+	// A foto acompanha a escolha parcial: escolhida a cor, já aparece a foto dela.
+	const firstAxis = axes?.axes[0];
+	const firstAxisImage = firstAxis ? (firstAxis.values.find((value) => value.id === axisSelection[firstAxis.id])?.imageUrl ?? null) : null;
+	const headerImage = selectedVariant?.imagemCapaUrl ?? firstAxisImage ?? product.imagemCapaUrl;
 	const totalOptionCount = useMemo(
 		() => availableReferences.reduce((total, reference) => total + reference.grupo.opcoes.length, 0),
 		[availableReferences],
@@ -388,22 +502,43 @@ export function ProductBuilderForm({ product, builder, showFooter = true, showIm
 				{observacoes.length > 400 ? <span className="text-micro self-end tabular-nums text-muted-foreground">{observacoes.length}/500</span> : null}
 			</section>
 
-			{/* Variantes — mesmas linhas compactas dos adicionais */}
-			{hasVariants ? (
+			{/* Variantes — agrupadas por eixo (Cor, Tamanho) quando o cadastro tem eixos; senão, as mesmas
+			    linhas compactas dos adicionais */}
+			{hasVariants && axes ? (
+				<VariantAxesPicker
+					axes={axes}
+					selection={axisSelection}
+					onChoose={chooseAxisValue}
+					variants={product.variantes}
+					variantStock={variantStock}
+					showStockNumbers={showStockNumbers}
+				/>
+			) : hasVariants ? (
 				<section className="flex flex-col gap-3">
 					<GroupHeading title="Escolha a variante" hint="Escolha 1" required satisfied={!!selectedVariantId} count={selectedVariantId ? 1 : 0} max={1} />
 					<div className="flex flex-col gap-2">
-						{product.variantes.map((variant) => (
-							<OptionRow
-								key={variant.id}
-								name={variant.nome}
-								price={variant.precoVenda}
-								priceMode="absolute"
-								control="radio"
-								selected={selectedVariantId === variant.id}
-								onToggle={() => setSelectedVariantId(variant.id)}
-							/>
-						))}
+						{product.variantes.map((variant) => {
+							const variantAvailability = variantStock.get(variant.id);
+							const soldOut = isSoldOut(variantAvailability);
+							return (
+								<OptionRow
+									key={variant.id}
+									name={variant.nome}
+									price={variant.precoVenda}
+									priceMode="absolute"
+									control="radio"
+									selected={selectedVariantId === variant.id}
+									disabled={soldOut && selectedVariantId !== variant.id}
+									detail={describeStockLabel(variantAvailability, showStockNumbers)}
+									leading={
+										product.variantes.some((candidate) => candidate.imagemCapaUrl) ? (
+											<VariantAvatar imageUrl={variant.imagemCapaUrl ?? null} nome={variant.nome} />
+										) : null
+									}
+									onToggle={() => setSelectedVariantId(variant.id)}
+								/>
+							);
+						})}
 					</div>
 				</section>
 			) : null}
@@ -491,6 +626,7 @@ export function ProductBuilderForm({ product, builder, showFooter = true, showIm
 							onDecrement={() => setQuantity(Math.max(1, quantity - 1))}
 							onIncrement={() => setQuantity(quantity + 1)}
 							decrementDisabled={quantity <= 1}
+							incrementDisabled={maxQuantity !== null && quantity >= maxQuantity}
 						/>
 					</div>
 
@@ -503,6 +639,145 @@ export function ProductBuilderForm({ product, builder, showFooter = true, showIm
 				</div>
 			) : null}
 		</div>
+	);
+}
+
+const isSoldOut = (availability: TBuilderStock | undefined) =>
+	availability?.available !== null && availability?.available !== undefined && availability.available <= 0;
+
+/** Rótulo de estoque: o número nas telas internas; no cardápio público, só "Indisponível". */
+function describeStockLabel(availability: TBuilderStock | undefined, showStockNumbers: boolean) {
+	if (!availability || availability.available === null) return null;
+	if (availability.available <= 0) return showStockNumbers ? "Esgotado" : "Indisponível";
+	return showStockNumbers ? `${formatItemQuantity(availability.available)} em estoque` : null;
+}
+
+type VariantAxesPickerProps = {
+	axes: TVariantAxes;
+	selection: TVariantAxisSelection;
+	onChoose: (axisId: string, valueId: string) => void;
+	variants: TBuilderVariant[];
+	variantStock: Map<string, TBuilderStock>;
+	showStockNumbers: boolean;
+};
+
+/**
+ * Um bloco por eixo com mais de um valor, na ordem do cadastro. Eixo de valor único não vira
+ * pergunta: vai para uma linha de resumo ("Preto · U"). O valor que não combina com o que já foi
+ * escolhido fica tracejado, mas responde ao toque (troca o eixo que conflita); o valor cuja
+ * combinação existe e está sem estoque fica desabilitado. Cada valor mostra o preço das variantes
+ * que ainda pode formar; o estoque aparece no valor que fecha a combinação.
+ */
+function VariantAxesPicker({ axes, selection, onChoose, variants, variantStock, showStockNumbers }: VariantAxesPickerProps) {
+	const variantById = useMemo(() => new Map(variants.map((variant) => [variant.id, variant])), [variants]);
+	const allPrices = useMemo(() => variants.map((variant) => variant.precoVenda), [variants]);
+	const pricesOf = (variantIds: string[]) => variantIds.flatMap((variantId) => variantById.get(variantId)?.precoVenda ?? []);
+	const fixedAxes = axes.axes.filter((axis) => axis.values.length === 1);
+	const choiceAxes = axes.axes.filter((axis) => axis.values.length > 1);
+	// Todos os eixos fixos: a variante já está decidida, e a linha de resumo carrega o estoque dela.
+	const onlyVariantId = choiceAxes.length === 0 ? resolveSelectedVariantId(axes, selection) : null;
+
+	return (
+		<>
+			{fixedAxes.length > 0 ? (
+				<FixedAxesSummary
+					axes={fixedAxes}
+					showAvatar={fixedAxes[0] === axes.axes[0]}
+					detail={onlyVariantId ? describeStockLabel(variantStock.get(onlyVariantId), showStockNumbers) : null}
+				/>
+			) : null}
+			{choiceAxes.map((axis) => {
+				// Avatar só no primeiro eixo e só quando algum valor tem foto ou cor: inicial sozinha é ruído.
+				const showAvatar = axis === axes.axes[0] && axis.values.some((value) => value.imageUrl || value.swatch);
+				const otherAxesChosen = axes.axes.every((other) => other.id === axis.id || !!selection[other.id]);
+				const selectedValueId = selection[axis.id];
+				return (
+					<section key={axis.id} className="flex flex-col gap-3">
+						<GroupHeading title={axis.nome} hint="Escolha 1" required satisfied={!!selectedValueId} count={selectedValueId ? 1 : 0} max={1} />
+						<div className="flex flex-wrap gap-2">
+							{axis.values.map((value) => {
+								const variantIds = findVariantIdsForValue(axes, selection, axis.id, value.id);
+								const combinable = variantIds.length > 0;
+								const soldOut = combinable && variantIds.every((variantId) => isSoldOut(variantStock.get(variantId)));
+								const selected = selectedValueId === value.id;
+								// Sem combinação com a seleção atual, o preço é o do valor por si (o que a troca traria).
+								const price = resolveAxisValuePrice({
+									candidatePrices: pricesOf(combinable ? variantIds : findMatchingVariantIds(axes, { [axis.id]: value.id })),
+									allPrices,
+								});
+								const priceLabel = price ? `${price.isMinimum ? "a partir de " : ""}${formatToMoney(price.amount)}` : null;
+								// Fecha a combinação: os outros eixos estão escolhidos e este valor forma uma variante.
+								const completedId = otherAxesChosen && variantIds.length === 1 ? variantIds[0] : null;
+								const stockLabel = completedId ? describeStockLabel(variantStock.get(completedId), showStockNumbers) : null;
+								const detail = [priceLabel, stockLabel].filter(Boolean).join(" · ");
+								return (
+									<button
+										key={value.id}
+										type="button"
+										aria-pressed={selected}
+										disabled={soldOut && !selected}
+										title={!combinable ? `Sem ${value.nome} na combinação escolhida: toque para trocar.` : undefined}
+										onClick={() => onChoose(axis.id, value.id)}
+										className={cn(
+											"flex min-h-10 items-center gap-2 border text-left text-sm font-semibold transition-colors outline-none focus-visible:ring-3 focus-visible:ring-primary/25",
+											showAvatar ? "rounded-full py-1 pr-3.5 pl-1" : "min-w-12 justify-center rounded-xl px-3.5 py-1.5",
+											selected ? "border-primary bg-primary/10 text-primary" : "border-border hover:border-primary/50",
+											!combinable && !selected && "border-dashed text-muted-foreground",
+											soldOut && "cursor-not-allowed opacity-45",
+										)}
+									>
+										{showAvatar ? <AxisValueAvatar value={value} /> : null}
+										<span className="flex flex-col leading-tight">
+											<span className={cn(soldOut && "line-through decoration-1")}>{value.nome}</span>
+											{detail ? <span className="text-micro text-muted-foreground">{detail}</span> : null}
+										</span>
+									</button>
+								);
+							})}
+						</div>
+					</section>
+				);
+			})}
+		</>
+	);
+}
+
+/** Eixos de valor único: sem escolha a fazer, só a confirmação do que vem no item. */
+function FixedAxesSummary({ axes, showAvatar, detail }: { axes: TVariantAxes["axes"]; showAvatar: boolean; detail: string | null }) {
+	const firstValue = axes[0].values[0];
+	const hasVisual = showAvatar && (!!firstValue.imageUrl || !!firstValue.swatch);
+	return (
+		<div className="flex items-center gap-2.5 rounded-xl border border-border px-3 py-2">
+			{hasVisual ? <AxisValueAvatar value={firstValue} /> : null}
+			<div className="flex min-w-0 flex-1 flex-col gap-0.5">
+				<span className="text-micro uppercase tracking-wide text-muted-foreground">{axes.map((axis) => axis.nome).join(" · ")}</span>
+				<span className="truncate text-sm font-semibold">{axes.map((axis) => axis.values[0].nome).join(" · ")}</span>
+			</div>
+			{detail ? <span className="text-micro shrink-0 text-muted-foreground">{detail}</span> : null}
+		</div>
+	);
+}
+
+/** Foto da cor, ou a amostra do hex, ou a inicial. */
+function AxisValueAvatar({ value }: { value: TVariantAxisValue }) {
+	if (value.imageUrl) return <VariantAvatar imageUrl={value.imageUrl} nome={value.nome} size="sm" />;
+	return (
+		<span
+			aria-hidden
+			className="flex size-8 shrink-0 items-center justify-center rounded-full border border-border bg-muted text-xs font-bold text-muted-foreground"
+			style={value.swatch ? { backgroundColor: value.swatch } : undefined}
+		>
+			{value.swatch ? null : value.nome.slice(0, 1).toUpperCase()}
+		</span>
+	);
+}
+
+function VariantAvatar({ imageUrl, nome, size = "md" }: { imageUrl: string | null; nome: string; size?: "sm" | "md" }) {
+	const dimension = size === "sm" ? "size-8 rounded-full" : "size-10 rounded-lg";
+	return (
+		<span className={cn("relative shrink-0 overflow-hidden border border-border bg-muted", dimension)}>
+			{imageUrl ? <Image src={imageUrl} alt={nome} fill sizes={size === "sm" ? "32px" : "40px"} className="object-cover" /> : null}
+		</span>
 	);
 }
 
@@ -552,6 +827,12 @@ type OptionRowProps = {
 	groupFull?: boolean;
 	quantity?: number;
 	maxQty?: number;
+	/** Fora de alcance (sem estoque): aparece, mas não seleciona. */
+	disabled?: boolean;
+	/** Linha extra sob o preço (estoque). */
+	detail?: string | null;
+	/** Miniatura à esquerda (foto da variante). */
+	leading?: React.ReactNode;
 	onToggle: () => void;
 	onIncrement?: () => void;
 	onDecrement?: () => void;
@@ -566,6 +847,9 @@ function OptionRow({
 	groupFull = false,
 	quantity = 1,
 	maxQty = 1,
+	disabled = false,
+	detail = null,
+	leading = null,
 	onToggle,
 	onIncrement,
 	onDecrement,
@@ -573,12 +857,16 @@ function OptionRow({
 	const quantityActive = control === "quantity" && selected;
 	const showPrice = priceMode === "absolute" || price !== 0;
 	const priceLabel = priceMode === "absolute" ? formatToMoney(price) : `+ ${formatToMoney(price)}`;
-	const addDisabled = control !== "radio" && groupFull && !selected;
+	const addDisabled = disabled || (control !== "radio" && groupFull && !selected);
 
 	const body = (
-		<div className="flex min-w-0 flex-1 flex-col gap-0.5">
-			<span className="text-sm font-semibold leading-snug [overflow-wrap:anywhere]">{name}</span>
-			{showPrice ? <span className="text-xs font-bold text-primary">{priceLabel}</span> : null}
+		<div className="flex min-w-0 flex-1 items-center gap-3">
+			{leading}
+			<div className="flex min-w-0 flex-1 flex-col gap-0.5">
+				<span className="text-sm font-semibold leading-snug [overflow-wrap:anywhere]">{name}</span>
+				{showPrice ? <span className="text-xs font-bold text-primary">{priceLabel}</span> : null}
+				{detail ? <span className="text-micro text-muted-foreground">{detail}</span> : null}
+			</div>
 		</div>
 	);
 

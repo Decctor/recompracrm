@@ -7,7 +7,8 @@ import { useCallback, useMemo, useState } from "react";
 // Pedidos usa o mesmo carrinho para "pedir mais um" de um item já lançado. O painel é remontado
 // por conta (key), então o carrinho nunca vaza para outra mesa.
 
-export type TCartItem = TCreateTabOrderInput["itens"][number] & { cartKey: string };
+// `saldoEstoque` é só do cliente (limita o "+" da linha) e sai no envio, como o `cartKey`.
+export type TCartItem = TCreateTabOrderInput["itens"][number] & { cartKey: string; saldoEstoque?: number | null };
 
 type TTabOrderItem = TTabDetails["pedidos"][number]["itens"][number];
 
@@ -81,7 +82,14 @@ export function useTabOrderCart() {
 		const cartKey = cartKeyFor(item);
 		setCart((prev) => {
 			const existing = prev.find((entry) => entry.cartKey === cartKey);
-			if (existing) return prev.map((entry) => (entry.cartKey === cartKey ? withQuantity(entry, entry.quantidade + item.quantidade) : entry));
+			if (existing) {
+				// O snapshot mais recente do saldo é o do item que acabou de chegar.
+				return prev.map((entry) =>
+					entry.cartKey === cartKey
+						? withQuantity({ ...entry, saldoEstoque: item.saldoEstoque ?? entry.saldoEstoque }, entry.quantidade + item.quantidade)
+						: entry,
+				);
+			}
 			return [...prev, withQuantity({ ...item, cartKey }, item.quantidade)];
 		});
 	}, []);

@@ -8,6 +8,8 @@ import { useState } from "react";
 
 import { formatToMoney } from "@/lib/formatting";
 import { formatItemQuantity } from "@/lib/pos/scale-barcode";
+import { describeCartIncrementShortage } from "@/lib/pos/stock-availability";
+import { toast } from "sonner";
 import type { TCartItem } from "@/state-hooks/use-sale-state";
 
 type ItemsSectionProps = {
@@ -44,6 +46,7 @@ export default function ItemsSection({ saleState }: ItemsSectionProps) {
 						key={item.tempId}
 						item={item}
 						isGift={saleState.state.cupomResgate?.brinde?.itemChave === item.tempId}
+						incrementShortage={describeCartIncrementShortage(saleState.state.itens, item)}
 						onUpdateQuantity={saleState.updateItemQuantity}
 						onUpdateObservacoes={saleState.updateItemObservacoes}
 						onRemove={saleState.removeItem}
@@ -63,12 +66,14 @@ export default function ItemsSection({ saleState }: ItemsSectionProps) {
 type CartItemRowProps = {
 	isGift: boolean;
 	item: TCartItem;
+	/** Motivo para o "+" não somar (saldo do produto/variante já todo no carrinho). */
+	incrementShortage: string | null;
 	onUpdateQuantity: (tempId: string, quantidade: number) => void;
 	onUpdateObservacoes: (tempId: string, observacoes: string) => void;
 	onRemove: (tempId: string) => void;
 };
 
-function CartItemRow({ isGift, item, onUpdateQuantity, onUpdateObservacoes, onRemove }: CartItemRowProps) {
+function CartItemRow({ isGift, item, incrementShortage, onUpdateQuantity, onUpdateObservacoes, onRemove }: CartItemRowProps) {
 	const hasDiscount = item.valorDesconto > 0;
 	// Recompensa resgatada: quantidade fixa e sem remoção pelo carrinho. O débito de saldo já está
 	// no ledger — desfazê-lo exige remover a recompensa no resumo (venda em edição: cancelar).
@@ -172,11 +177,14 @@ function CartItemRow({ isGift, item, onUpdateQuantity, onUpdateObservacoes, onRe
 							<Minus className="w-3 h-3" />
 						</button>
 						<span className="w-8 border-x border-border text-center text-sm font-bold tabular-nums leading-7">{item.quantidade}</span>
+						{/* No limite do saldo o "+" esmaece, mas responde com o motivo em vez de ficar mudo. */}
 						<button
 							type="button"
-							onClick={() => onUpdateQuantity(item.tempId, item.quantidade + 1)}
+							onClick={() => (incrementShortage ? toast.error(incrementShortage) : onUpdateQuantity(item.tempId, item.quantidade + 1))}
 							aria-label="Aumentar quantidade"
-							className="flex h-7 w-7 items-center justify-center rounded-r-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+							aria-disabled={!!incrementShortage}
+							title={incrementShortage ?? undefined}
+							className="flex h-7 w-7 items-center justify-center rounded-r-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground aria-disabled:opacity-40"
 						>
 							<Plus className="w-3 h-3" />
 						</button>

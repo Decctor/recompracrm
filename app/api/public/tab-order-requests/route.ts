@@ -123,6 +123,11 @@ async function createPublicTabOrderRequest({ input, clientIp }: { input: TCreate
 	for (const item of input.items) {
 		const product = productMap.get(item.produtoId);
 		if (!product) throw new createHttpError.BadRequest("Um ou mais itens nao estao disponiveis. Atualize a pagina.");
+		// Sem estoque (organizacao e item rastreando): a baixa na entrega recusaria de qualquer jeito.
+		const variant = item.produtoVarianteId ? product.variantes.find((candidate) => candidate.id === item.produtoVarianteId) : null;
+		if (variant ? !variant.disponivel : !product.disponivel) {
+			throw new createHttpError.BadRequest(`${variant ? `${product.nome} - ${variant.nome}` : product.nome} esta indisponivel no momento.`);
+		}
 		resolveCatalogOrderItem({
 			product,
 			variantId: item.produtoVarianteId ?? null,

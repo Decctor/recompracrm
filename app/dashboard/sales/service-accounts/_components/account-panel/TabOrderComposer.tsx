@@ -5,6 +5,7 @@ import {
 	ProductBuilderForm,
 	ProductBuilderStepper,
 	type TBuilderProduct,
+	type TBuilderStockContext,
 	type TBuiltOrderItem,
 	useProductBuilder,
 } from "@/components/Products/ProductBuilderForm";
@@ -14,8 +15,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { getErrorMessage } from "@/lib/errors";
 import { formatToMoney } from "@/lib/formatting";
 import { usePOSBarcodeScan } from "@/lib/hooks/use-pos-barcode-scan";
+import { usePOSStockGuard } from "@/lib/hooks/use-pos-stock-guard";
 import { createTabOrder } from "@/lib/mutations/tabs";
 import { normalizeProductSearchTerms } from "@/lib/products/search-terms";
+import { useOrganization } from "@/lib/queries/organizations";
 import { usePOSGroups, usePOSProducts, usePOSTopProducts } from "@/lib/queries/pos";
 import { cn } from "@/lib/utils";
 import { useMutation } from "@tanstack/react-query";
@@ -62,6 +65,14 @@ export function TabOrderComposer({ tabId, orderCart, onLaunched }: TabOrderCompo
 		resetAfterLaunch,
 	} = orderCart;
 
+	// Estoque: mesma regra do PDV. A reserva é o carrinho deste pedido; pedidos já lançados e não
+	// entregues não estão na tela, então a baixa na entrega continua sendo a palavra final.
+	const { data: organization } = useOrganization();
+	const { builderStock, checkDirectAdd, incrementShortage } = usePOSStockGuard({
+		lines: cart,
+		orgTracksStock: !!organization?.configuracao.preferencias.rastreamentoEstoque,
+	});
+
 	function goTo(next: TComposerStage, direction: "forward" | "back") {
 		directionRef.current = direction;
 		setStage(next);
@@ -80,7 +91,13 @@ export function TabOrderComposer({ tabId, orderCart, onLaunched }: TabOrderCompo
 	});
 
 	function addSimpleProduct(product: TBuilderProduct) {
+		const { saldoEstoque, shortage } = checkDirectAdd(product, { produtoId: product.id, nome: product.nome, quantidade: 1 });
+		if (shortage) {
+			toast.error(shortage);
+			return;
+		}
 		addItem({
+			saldoEstoque,
 			produtoId: product.id,
 			produtoVarianteId: null,
 			nome: product.nome,
@@ -111,13 +128,19 @@ export function TabOrderComposer({ tabId, orderCart, onLaunched }: TabOrderCompo
 		channel: "COMANDA",
 		ownerRef: composerRef,
 		blockedReason: stage.kind === "builder" ? "Conclua a montagem do item antes de ler outro código." : null,
-		onAddDirect: (item, { scaleReading }) => {
+		onAddDirect: (item, { product, variantId, scaleReading }) => {
 			// Pedido de conta soma por unidade; pesagem fracionada fica para o PDV.
 			if (scaleReading) {
 				toast.error("Etiqueta de balança não entra em pedido de conta. Lance o item pesado pelo PDV.");
 				return;
 			}
-			addItem(item);
+			const variant = variantId ? product.variantes.find((candidate) => candidate.id === variantId) : null;
+			const { saldoEstoque, shortage } = checkDirectAdd(variant ?? product, item);
+			if (shortage) {
+				toast.error(shortage);
+				return;
+			}
+			addItem({ ...item, saldoEstoque });
 		},
 		onOpenBuilder: ({ product, variantId }) => goTo({ kind: "builder", product, initialVariantId: variantId }, "forward"),
 	});
@@ -128,7 +151,7 @@ export function TabOrderComposer({ tabId, orderCart, onLaunched }: TabOrderCompo
 			tabId,
 			tabOrderId,
 			observacoes: observacoes || null,
-			itens: cart.map(({ cartKey: _cartKey, ...item }) => item),
+			itens: cart.map(({ cartKey: _cartKey, saldoEstoque: _saldoEstoque, ...item }) => item),
 		});
 	}
 
@@ -149,6 +172,7 @@ export function TabOrderComposer({ tabId, orderCart, onLaunched }: TabOrderCompo
 					<BuilderStage
 						product={stage.product}
 						initialVariantId={stage.initialVariantId ?? null}
+						stock={builderStock}
 						onBack={() => goTo({ kind: "catalog" }, "back")}
 						onConfirm={(item) => {
 							addItem(item);
@@ -187,8 +211,15 @@ export function TabOrderComposer({ tabId, orderCart, onLaunched }: TabOrderCompo
 											<button
 												type="button"
 												aria-label={`Adicionar 1 ${item.nome}`}
-												className="flex size-7 items-center justify-center"
-												onClick={() => changeQuantity(item.cartKey, 1)}
+												aria-disabled={!!incrementShortage(item)}
+												title={incrementShortage(item) ?? undefined}
+												className="flex size-7 items-center justify-center aria-disabled:opacity-40"
+												onClick={() => {
+													// No limite do saldo o "+" responde com o motivo em vez de ficar mudo.
+													const shortage = incrementShortage(item);
+													if (shortage) toast.error(shortage);
+													else changeQuantity(item.cartKey, 1);
+												}}
 											>
 												<Plus className="size-3" />
 											</button>
@@ -404,15 +435,17 @@ function GroupChip({ label, active, onClick }: { label: string; active: boolean;
 function BuilderStage({
 	product,
 	initialVariantId,
+	stock,
 	onBack,
 	onConfirm,
 }: {
 	product: TBuilderProduct;
 	initialVariantId: string | null;
+	stock: TBuilderStockContext;
 	onBack: () => void;
 	onConfirm: (item: TBuiltOrderItem) => void;
 }) {
-	const builder = useProductBuilder({ product, initialVariantId });
+	const builder = useProductBuilder({ product, initialVariantId, stock });
 
 	function handleConfirm() {
 		const item = builder.buildItem();
@@ -449,6 +482,7 @@ function BuilderStage({
 							onDecrement={() => builder.setQuantity(Math.max(1, builder.quantity - 1))}
 							onIncrement={() => builder.setQuantity(builder.quantity + 1)}
 							decrementDisabled={builder.quantity <= 1}
+							incrementDisabled={builder.maxQuantity !== null && builder.quantity >= builder.maxQuantity}
 						/>
 					</div>
 					<Button

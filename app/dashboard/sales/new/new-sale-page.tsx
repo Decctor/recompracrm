@@ -6,6 +6,7 @@ import ControlClient from "@/components/Modals/Clients/ControlClient";
 import BarcodeMatchPicker from "@/components/Modals/Sales/BarcodeMatchPicker";
 import type { TBuiltOrderItem } from "@/components/Products/ProductBuilderForm";
 import { usePOSBarcodeScan } from "@/lib/hooks/use-pos-barcode-scan";
+import { usePOSStockGuard } from "@/lib/hooks/use-pos-stock-guard";
 import type { TBarcodeScanResolution } from "@/lib/pos/barcode-scan-action";
 import { formatItemQuantity } from "@/lib/pos/scale-barcode";
 import { ConfirmSaleChange } from "@/components/Modals/Sales/ConfirmSaleChange";
@@ -122,6 +123,11 @@ export default function NewSalePage({
 	// No mobile o contexto vive num Sheet: fecha antes de abrir o menu de edição e reabre ao sair.
 	const [restoreContextSheet, setRestoreContextSheet] = useState(false);
 	const saleState = useSaleState({ organizationConfig: organizationConfiguration, contasFinanceiras: organizationFinancialAccounts });
+	// Estoque: grade, código de barras, builder e "+" do carrinho seguem a regra da baixa da venda.
+	const { builderStock, checkDirectAdd } = usePOSStockGuard({
+		lines: saleState.state.itens,
+		orgTracksStock: organizationConfiguration.preferencias.rastreamentoEstoque,
+	});
 
 	// Sessões de venda (caixa): resolve a sessão aberta do vendedor selecionado (escopo OPERADOR).
 	const salesSessionsConfig = organizationConfiguration.preferencias.sessoesVenda;
@@ -349,8 +355,14 @@ export default function NewSalePage({
 				return;
 			}
 
+			const { saldoEstoque, shortage } = checkDirectAdd(product, { produtoId: product.id, nome: product.nome, quantidade: 1 });
+			if (shortage) {
+				toast.error(shortage);
+				return;
+			}
 			addItem({
 				tempId: crypto.randomUUID(),
+				saldoEstoque,
 				produtoId: product.id,
 				produtoVarianteId: null,
 				nome: product.nome,
@@ -367,7 +379,7 @@ export default function NewSalePage({
 			});
 			toast.success(`${product.nome} adicionado ao carrinho.`);
 		},
-		[addItem],
+		[addItem, checkDirectAdd],
 	);
 
 	// Leitor de código de barras (modo teclado): o item lido entra direto no carrinho, somando na
@@ -376,13 +388,20 @@ export default function NewSalePage({
 	const addItemOrIncrement = saleState.addItemOrIncrement;
 	const addItemLine = saleState.addItem;
 	const handleScannedItem = useCallback(
-		(item: TBuiltOrderItem, { scaleReading }: TBarcodeScanResolution) => {
+		(item: TBuiltOrderItem, { product, variantId, scaleReading }: TBarcodeScanResolution) => {
+			const variant = variantId ? product.variantes.find((candidate) => candidate.id === variantId) : null;
+			const { saldoEstoque, shortage } = checkDirectAdd(variant ?? product, item);
+			if (shortage) {
+				toast.error(shortage);
+				return;
+			}
+			const line = { ...item, saldoEstoque, tempId: crypto.randomUUID() };
 			// Cada etiqueta de balança é uma pesagem própria: linha nova, nunca soma na existente.
-			if (scaleReading) addItemLine({ ...item, tempId: crypto.randomUUID() });
-			else addItemOrIncrement({ ...item, tempId: crypto.randomUUID() });
+			if (scaleReading) addItemLine(line);
+			else addItemOrIncrement(line);
 			toast.success(`${item.nome}${scaleReading ? ` (${formatItemQuantity(item.quantidade)})` : ""} adicionado ao carrinho.`);
 		},
-		[addItemOrIncrement, addItemLine],
+		[addItemOrIncrement, addItemLine, checkDirectAdd],
 	);
 	const handleScannedBuilder = useCallback(({ product, variantId }: TBarcodeScanResolution) => {
 		setBuilderVariantId(variantId);
@@ -677,6 +696,7 @@ export default function NewSalePage({
 					<ProductBuilderModal
 						product={builderProduct}
 						initialVariantId={builderVariantId}
+						stock={builderStock}
 						onAddToCart={saleState.addItem}
 						onClose={() => {
 							setBuilderProduct(null);

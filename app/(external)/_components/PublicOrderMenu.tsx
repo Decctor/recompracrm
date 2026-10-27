@@ -442,6 +442,9 @@ function ProductRow({
 		modificadores: [],
 	};
 	const simpleQuantity = complex ? 0 : getQuantity(simpleEntry.cartKey);
+	// Sem estoque (organização e item rastreando): aparece, mas não entra no pedido. Com variantes,
+	// só quando nenhuma tem saldo; a montagem marca as que faltam uma a uma.
+	const unavailable = !product.disponivel;
 
 	function handleTap() {
 		if (complex) return onOpenBuilder(product);
@@ -449,10 +452,11 @@ function ProductRow({
 	}
 
 	return (
-		<div className="flex items-center gap-3 rounded-xl border border-border bg-card p-2.5">
+		<div className={cn("flex items-center gap-3 rounded-xl border border-border bg-card p-2.5", unavailable && "opacity-60")}>
 			<button
 				type="button"
-				className="flex min-w-0 flex-1 items-center gap-3 rounded-lg text-left transition-colors active:bg-secondary/50"
+				disabled={unavailable}
+				className="flex min-w-0 flex-1 items-center gap-3 rounded-lg text-left transition-colors active:bg-secondary/50 disabled:cursor-not-allowed"
 				onClick={handleTap}
 			>
 				<ProductThumb
@@ -473,7 +477,9 @@ function ProductRow({
 				</div>
 			</button>
 
-			{complex ? (
+			{unavailable ? (
+				<span className="text-micro shrink-0 rounded-full bg-muted px-2.5 py-1 font-bold text-muted-foreground">Indisponível</span>
+			) : complex ? (
 				<Button
 					size="icon"
 					variant="outline"
