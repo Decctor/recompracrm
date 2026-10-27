@@ -82,7 +82,7 @@
 		"test:service-cards": "node --import tsx --test lib/tabs/service-card-codes.test.ts lib/tabs/service-card-print-layout.test.ts",
 		"test:tab-payments": "node --import tsx --test lib/tabs/partial-payments.test.ts",
 		"test:sales-sessions": "node --import tsx --test lib/sales-sessions/cash-refund-session-policy.test.ts lib/sales-sessions/seller-policy.test.ts lib/sales-sessions/session-method-lines.test.ts lib/sales-sessions/summarize-session-transactions.test.ts",
-		"test:product-pricing": "node --import tsx --test lib/products/price-snapshot.test.ts lib/products/pricing.test.ts lib/products/update-stamp.test.ts",
+		"test:product-pricing": "node --import tsx --test lib/products/price-snapshot.test.ts lib/products/pricing.test.ts lib/products/update-stamp.test.ts lib/products/products-filters-storage.test.ts",
 		"test:visual-kits": "node --import tsx --test lib/visual-kits/formats.test.ts lib/visual-kits/generation/file-names.test.ts lib/visual-kits/pieces/ean.test.ts lib/visual-kits/pieces/code128.test.ts lib/visual-kits/pieces/price-sticker.test.ts lib/products/barcode.test.ts",
 		"test:cashback-rewards-display": "node --import tsx --test lib/cashback/rewards-display-layout.test.ts",
 		"test:client-vinculation": "node --import tsx --test lib/clients/client-vinculation-flow.test.ts lib/clients/parse-client-search-intent.test.ts lib/clients/search-terms.test.ts lib/phone-search-patterns.test.ts",

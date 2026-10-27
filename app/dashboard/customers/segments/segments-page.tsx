@@ -56,6 +56,7 @@ import {
 	ShoppingCart,
 	UsersRound,
 	Filter,
+	FilterX,
 	Grid3X3,
 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -70,14 +71,28 @@ type SegmentsPageProps = {
 };
 export default function SegmentsPage({ user, orgRFMConfig }: SegmentsPageProps) {
 	const [configMenuIsOpen, setConfigMenuIsOpen] = useState(false);
+	// A listagem mora aqui, e não no bloco de clientes, porque a matriz também escreve no filtro de segmentação.
+	const clientsQuery = useClients({
+		initialFilters: {
+			statsPeriodAfter: dayjs().startOf("month").toDate(),
+			statsPeriodBefore: dayjs().endOf("month").toDate(),
+		},
+	});
+	const selectedSegments = clientsQuery.filters.segmentationTitles ?? [];
+	// Cada clique soma o segmento à listagem; clicar de novo num segmento já filtrado o retira.
+	const toggleSegment = (rfmLabel: string) =>
+		clientsQuery.updateFilters({
+			segmentationTitles: selectedSegments.includes(rfmLabel) ? selectedSegments.filter((label) => label !== rfmLabel) : [...selectedSegments, rfmLabel],
+			page: 1,
+		});
 	return (
 		<div className="w-full h-full flex flex-col gap-3">
 			<div className="flex w-full flex-col items-stretch gap-3 lg:flex-row">
 				<div className="w-full lg:w-1/2">
-					<SegmentsPageMatrixRFM onOpenConfig={() => setConfigMenuIsOpen(true)} />
+					<SegmentsPageMatrixRFM onOpenConfig={() => setConfigMenuIsOpen(true)} selectedSegments={selectedSegments} onToggleSegment={toggleSegment} />
 				</div>
 				<div className="w-full lg:w-1/2">
-					<SegmentsPageClients />
+					<SegmentsPageClients clientsQuery={clientsQuery} />
 				</div>
 			</div>
 			<SegmentsPageRFMHealth onOpenConfig={() => setConfigMenuIsOpen(true)} />
@@ -96,21 +111,8 @@ export default function SegmentsPage({ user, orgRFMConfig }: SegmentsPageProps) 
  *
  * CLIENTS RELATED COMPONENTS
  */
-function SegmentsPageClients() {
-	const {
-		data: clientsResult,
-		isSuccess,
-		isLoading,
-		isError,
-		error,
-		filters,
-		updateFilters,
-	} = useClients({
-		initialFilters: {
-			statsPeriodAfter: dayjs().startOf("month").toDate(),
-			statsPeriodBefore: dayjs().endOf("month").toDate(),
-		},
-	});
+function SegmentsPageClients({ clientsQuery }: { clientsQuery: ReturnType<typeof useClients> }) {
+	const { data: clientsResult, isSuccess, isLoading, isError, error, filters, updateFilters } = clientsQuery;
 	const clients = clientsResult?.clients;
 	const clientsShowing = clients ? clients.length : 0;
 	const clientsMatched = clientsResult?.clientsMatched || 0;
@@ -671,9 +673,12 @@ type RFMSegmentDetailContentProps = {
 	item: TRFMLabelledStats[number];
 	style: ReturnType<typeof getSegmentStyle>;
 	formatDecimal: (value: number, fractionDigits?: number) => string;
+	isSelected: boolean;
+	// Só no toque: lá o toque abre os detalhes, então filtrar precisa de um botão próprio.
+	onToggle?: () => void;
 };
 
-function RFMSegmentDetailContent({ item, style, formatDecimal }: RFMSegmentDetailContentProps) {
+function RFMSegmentDetailContent({ item, style, formatDecimal, isSelected, onToggle }: RFMSegmentDetailContentProps) {
 	return (
 		<div className="flex w-full flex-col gap-2">
 			<div className="flex items-center gap-2">
@@ -726,6 +731,17 @@ function RFMSegmentDetailContent({ item, style, formatDecimal }: RFMSegmentDetai
 					</p>
 				</div>
 			</div>
+			<div className="h-px w-full bg-border" />
+			{onToggle ? (
+				<Button variant={isSelected ? "secondary" : "default"} size="sm" className="w-full gap-1.5" onClick={onToggle}>
+					{isSelected ? <FilterX className="h-3.5 w-3.5 min-h-3.5 min-w-3.5" /> : <Filter className="h-3.5 w-3.5 min-h-3.5 min-w-3.5" />}
+					{isSelected ? "REMOVER DA LISTAGEM" : "FILTRAR LISTAGEM"}
+				</Button>
+			) : (
+				<p className="text-[0.7rem] text-muted-foreground">
+					{isSelected ? "Clique para remover este segmento da listagem." : "Clique para filtrar a listagem por este segmento."}
+				</p>
+			)}
 		</div>
 	);
 }
@@ -737,15 +753,37 @@ type RFMSegmentCellProps = {
 	prefersHoverInteraction: boolean;
 	openSegmentKey: string | null;
 	onOpenSegmentKeyChange: (key: string | null) => void;
+	isSelected: boolean;
+	// Com algum segmento filtrado, os demais esmaecem: a matriz mostra o que está na listagem.
+	hasSelection: boolean;
+	onToggle: () => void;
 };
 
-function RFMSegmentCell({ item, index, formatDecimal, prefersHoverInteraction, openSegmentKey, onOpenSegmentKeyChange }: RFMSegmentCellProps) {
+function RFMSegmentCell({
+	item,
+	index,
+	formatDecimal,
+	prefersHoverInteraction,
+	openSegmentKey,
+	onOpenSegmentKeyChange,
+	isSelected,
+	hasSelection,
+	onToggle,
+}: RFMSegmentCellProps) {
 	const style = getSegmentStyle(item.rfmLabel);
 	const layout = getSegmentLayout(item.rfmLabel);
 	const hasClipPath = !!layout.clipPath;
 	const isCompactSegment = RFM_COMPACT_SEGMENTS.has(item.rfmLabel);
 	const segmentKey = `${item.rfmLabel}-${index}`;
-	const detailContent = <RFMSegmentDetailContent item={item} style={style} formatDecimal={formatDecimal} />;
+	const detailContent = (
+		<RFMSegmentDetailContent
+			item={item}
+			style={style}
+			formatDecimal={formatDecimal}
+			isSelected={isSelected}
+			onToggle={prefersHoverInteraction ? undefined : onToggle}
+		/>
+	);
 	const detailPanelProps = {
 		align: "center" as const,
 		sideOffset: 8,
@@ -803,10 +841,14 @@ function RFMSegmentCell({ item, index, formatDecimal, prefersHoverInteraction, o
 			className={cn(
 				style.gradient,
 				"relative min-h-0 min-w-0 cursor-pointer overflow-hidden rounded-lg shadow-sm",
-				"transition-[box-shadow,filter] duration-200 lg:hover:scale-[1.02] lg:hover:shadow-md lg:hover:brightness-105",
+				"transition-[box-shadow,filter,opacity] duration-200 lg:hover:scale-[1.02] lg:hover:shadow-md lg:hover:brightness-105",
+				hasSelection && !isSelected && "opacity-40 lg:hover:opacity-80",
 				!hasClipPath && "flex flex-col items-center justify-center gap-0.5 p-0.5 sm:gap-1 sm:p-1 md:p-1.5 lg:gap-2 lg:p-3",
 				!prefersHoverInteraction && openSegmentKey === segmentKey && "ring-2 ring-inset ring-primary/70",
+				isSelected && "ring-2 ring-inset ring-foreground/80",
 			)}
+			aria-pressed={isSelected}
+			onClick={prefersHoverInteraction ? onToggle : undefined}
 			style={{
 				gridArea: item.gridArea,
 				zIndex: RFM_SEGMENT_Z_INDEX[item.rfmLabel] ?? 10,
@@ -843,7 +885,12 @@ function RFMSegmentCell({ item, index, formatDecimal, prefersHoverInteraction, o
 	);
 }
 
-function SegmentsPageMatrixRFM({ onOpenConfig }: { onOpenConfig: () => void }) {
+type SegmentsPageMatrixRFMProps = {
+	onOpenConfig: () => void;
+	selectedSegments: string[];
+	onToggleSegment: (rfmLabel: string) => void;
+};
+function SegmentsPageMatrixRFM({ onOpenConfig, selectedSegments, onToggleSegment }: SegmentsPageMatrixRFMProps) {
 	const queryClient = useQueryClient();
 
 	const [syncMenuIsOpen, setSyncMenuIsOpen] = useState(false);
@@ -884,7 +931,10 @@ function SegmentsPageMatrixRFM({ onOpenConfig }: { onOpenConfig: () => void }) {
 			<div className="flex w-full max-w-full items-center justify-center gap-1 self-center rounded-lg bg-primary/10 px-2 py-1 text-center text-[0.65rem] font-medium tracking-tight text-foreground/80">
 				<Info className="h-3 w-3 min-h-3 min-w-3 shrink-0" />
 				<span>
-					Análise RFM dos últimos 12 meses. {prefersHoverInteraction ? "Passe o mouse no bloco para detalhes." : "Toque no bloco para ver detalhes."}
+					Análise RFM dos últimos 12 meses.{" "}
+					{prefersHoverInteraction
+						? "Passe o mouse no bloco para detalhes e clique para filtrar a listagem."
+						: "Toque no bloco para ver detalhes e filtrar a listagem."}
 				</span>
 			</div>
 			<AspectRatio ratio={1}>
@@ -898,6 +948,9 @@ function SegmentsPageMatrixRFM({ onOpenConfig }: { onOpenConfig: () => void }) {
 							prefersHoverInteraction={prefersHoverInteraction}
 							openSegmentKey={openSegmentKey}
 							onOpenSegmentKeyChange={setOpenSegmentKey}
+							isSelected={selectedSegments.includes(item.rfmLabel)}
+							hasSelection={selectedSegments.length > 0}
+							onToggle={() => onToggleSegment(item.rfmLabel)}
 						/>
 					))}
 				</div>

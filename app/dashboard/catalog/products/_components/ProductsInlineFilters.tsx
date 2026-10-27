@@ -14,19 +14,22 @@ import {
 import { useSaleQueryFilterOptions } from "@/lib/queries/stats/utils";
 import { useSupplierOptions } from "@/lib/queries/suppliers";
 import type { TGetProductsDefaultInput } from "@/app/api/products/route";
-import { BadgeDollarSign, Calendar, ListFilter, Truck } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { BadgeDollarSign, Calendar, ListFilter, RotateCcw, Truck } from "lucide-react";
 
 type ProductsInlineFiltersProps = {
 	filters: TGetProductsDefaultInput;
 	updateFilters: (filters: Partial<TGetProductsDefaultInput>) => void;
 	// Fornecedores ficam atrás da permissão de visualizar compras.
 	showMainSupplierFilter?: boolean;
+	// Os filtros ficam gravados no dispositivo; presente só quando há algo fora do padrão para desfazer.
+	onReset?: () => void;
 };
 
 // Opção sintética do filtro de fornecedor principal: vira `withoutMainSupplier` na consulta.
 const WITHOUT_MAIN_SUPPLIER_OPTION = "__sem_fornecedor_principal__";
 
-export default function ProductsInlineFilters({ filters, updateFilters, showMainSupplierFilter = false }: ProductsInlineFiltersProps) {
+export default function ProductsInlineFilters({ filters, updateFilters, showMainSupplierFilter = false, onReset }: ProductsInlineFiltersProps) {
 	const { data: filterOptions } = useSaleQueryFilterOptions();
 	const { data: supplierOptionsResult } = useSupplierOptions({ enabled: showMainSupplierFilter });
 	const mainSupplierOptions = [
@@ -297,6 +300,12 @@ export default function ProductsInlineFilters({ filters, updateFilters, showMain
 					</InteractiveFilter.AddFilterSection>
 				</InteractiveFilter.AddFilterContent>
 			</InteractiveFilter.AddFilterRoot>
+			{onReset ? (
+				<Button variant="ghost" size="sm" className="flex items-center gap-1.5" onClick={onReset}>
+					<RotateCcw className="h-3 min-h-3 w-3 min-w-3" />
+					REDEFINIR FILTROS
+				</Button>
+			) : null}
 		</div>
 	);
 }

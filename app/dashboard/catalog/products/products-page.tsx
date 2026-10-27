@@ -25,6 +25,14 @@ import type { TAuthUserSession } from "@/lib/authentication/types";
 import { getErrorMessage } from "@/lib/errors";
 import { formatDateAsLocale, formatDecimalPlaces, formatToMoney } from "@/lib/formatting";
 import { appRoutes } from "@/lib/navigation/routes";
+import {
+	type TPersistedProductsFilters,
+	differsFromDefaultProductsFilters,
+	getDefaultProductsFilters,
+	getProductsFiltersStorageKey,
+	readStoredProductsFilters,
+	writeStoredProductsFilters,
+} from "@/lib/products/products-filters-storage";
 import { useProducts, useProductsOverallStats } from "@/lib/queries/products";
 import { cn } from "@/lib/utils";
 import type { TGetProductsDefaultInput, TGetProductsOutputDefault } from "@/app/api/products/route";
@@ -58,7 +66,7 @@ import {
 import Image from "next/image";
 import Link from "next/link";
 import { parseAsStringEnum, useQueryState } from "nuqs";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 
 const ExportProducts = dynamic(() => import("@/components/Modals/Products/ExportProducts"));
 
@@ -124,6 +132,32 @@ type ProductsDatabaseViewProps = {
 	organization: NonNullable<TAuthUserSession["membership"]>["organizacao"];
 };
 function ProductsDatabaseView({ user, userMembership, organization }: ProductsDatabaseViewProps) {
+	const storageKey = getProductsFiltersStorageKey({ organizationId: organization.id, userId: user.id });
+	// localStorage não existe no servidor: os filtros gravados entram depois do mount, antes da primeira
+	// consulta, para não buscar com o padrão e logo em seguida com o que o usuário deixou salvo.
+	const [stored, setStored] = useState<{ key: string; filters: Partial<TPersistedProductsFilters> } | null>(null);
+	useEffect(() => {
+		setStored({ key: storageKey, filters: readStoredProductsFilters(storageKey, new Date()) });
+	}, [storageKey]);
+
+	if (stored?.key !== storageKey) return <LoadingComponent />;
+	return (
+		<ProductsDatabaseList
+			key={storageKey}
+			user={user}
+			userMembership={userMembership}
+			organization={organization}
+			storageKey={storageKey}
+			storedFilters={stored.filters}
+		/>
+	);
+}
+
+type ProductsDatabaseListProps = ProductsDatabaseViewProps & {
+	storageKey: string;
+	storedFilters: Partial<TPersistedProductsFilters>;
+};
+function ProductsDatabaseList({ user, userMembership, organization, storageKey, storedFilters }: ProductsDatabaseListProps) {
 	const orgHasStockTracking = organization.configuracao.preferencias.rastreamentoEstoque;
 	const userHasPurchasesViewPermission = userMembership.permissoes.compras.visualizar;
 	const queryClient = useQueryClient();
@@ -141,22 +175,17 @@ function ProductsDatabaseView({ user, userMembership, organization }: ProductsDa
 		filters,
 		updateFilters,
 	} = useProducts({
-		initialFilters: {
-			search: [],
-			groups: [],
-			statsPeriodAfter: dayjs().startOf("month").toDate(),
-			statsPeriodBefore: dayjs().endOf("month").toDate(),
-			statsIntegrationsIds: [],
-			statsExcludedSalesIds: [],
-			statsTotalMin: null,
-			statsTotalMax: null,
-			stockStatus: [],
-			priceMin: null,
-			priceMax: null,
-			orderByField: "nome",
-			orderByDirection: "asc",
-		},
+		initialFilters: { search: [], ...getDefaultProductsFilters(new Date()), ...storedFilters },
 	});
+
+	useEffect(() => {
+		writeStoredProductsFilters(storageKey, filters, new Date());
+	}, [storageKey, filters]);
+
+	const canResetFilters = differsFromDefaultProductsFilters(filters, new Date());
+	const resetFilters = () => {
+		updateFilters({ ...getDefaultProductsFilters(new Date()), page: 1 }, true);
+	};
 
 	const products = productsResult?.products;
 	const productsShowing = products ? products.length : 0;
@@ -196,7 +225,12 @@ function ProductsDatabaseView({ user, userMembership, organization }: ProductsDa
 				itemsMatchedText={productsMatched > 0 ? `${productsMatched} produtos encontrados.` : `${productsMatched} produto encontrado.`}
 				itemsShowingText={productsShowing > 0 ? `Mostrando ${productsShowing} produtos.` : `Mostrando ${productsShowing} produto.`}
 			/>
-			<ProductsInlineFilters filters={filters} updateFilters={updateFilters} showMainSupplierFilter={userHasPurchasesViewPermission} />
+			<ProductsInlineFilters
+				filters={filters}
+				updateFilters={updateFilters}
+				showMainSupplierFilter={userHasPurchasesViewPermission}
+				onReset={canResetFilters ? resetFilters : undefined}
+			/>
 			{isLoading ? <LoadingComponent /> : null}
 			{isError ? <ErrorComponent msg={getErrorMessage(error)} /> : null}
 			{isSuccess && products ? (
