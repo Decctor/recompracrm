@@ -4,6 +4,7 @@ import { erpFlexDataConnector } from "./erp-flex";
 import { fetchIfoodImportBatch } from "./ifood";
 import { fetchNuvemshopImportBatch } from "./nuvemshop";
 import { fetchOnlineSoftwareImportBatch } from "./online-software";
+import { sqlViewsDataConnector } from "./sql-views";
 import type { TCanonicalImportBatch, TDataConnectorFetchInput, TDataConnectorKind } from "./types";
 
 export * from "./types";
@@ -61,6 +62,15 @@ async function fetchConnectorBatch(input: TDataConnectorFetchInput) {
 
 	if (input.config.tipo === "ERP-FLEX") {
 		return erpFlexDataConnector.fetchImportBatch({
+			organizationId: input.organizationId,
+			integrationId: input.integrationId,
+			config: input.config,
+			window: input.window,
+		});
+	}
+
+	if (input.config.tipo === "SQL-VIEWS") {
+		return sqlViewsDataConnector.fetchImportBatch({
 			organizationId: input.organizationId,
 			integrationId: input.integrationId,
 			config: input.config,

@@ -17,7 +17,16 @@ import { and, desc, eq, inArray } from "drizzle-orm";
  *     INTEGRAÇÃO, não por org; N conexões do mesmo tipo são suportadas, D5).
  */
 
-export const DATA_SOURCE_INTEGRATION_TYPES = ["ONLINE-SOFTWARE", "CARDAPIO-WEB", "NUVEM-SHOP", "IFOOD", "BLING", "ERP-FLEX", "PHIBO"] as const;
+export const DATA_SOURCE_INTEGRATION_TYPES = [
+	"ONLINE-SOFTWARE",
+	"CARDAPIO-WEB",
+	"NUVEM-SHOP",
+	"IFOOD",
+	"BLING",
+	"ERP-FLEX",
+	"SQL-VIEWS",
+	"PHIBO",
+] as const;
 export type TDataSourceIntegrationType = (typeof DATA_SOURCE_INTEGRATION_TYPES)[number];
 
 export type TDataSourceExecutor = DB | DBTransaction;
@@ -54,10 +63,7 @@ export async function getActiveDataSourceIntegrations({
 	organizationId?: string;
 	types?: readonly TDataSourceIntegrationType[];
 }): Promise<TDataSourceIntegration[]> {
-	const conditions = [
-		inArray(integrations.tipo, [...(types ?? DATA_SOURCE_INTEGRATION_TYPES)]),
-		eq(integrations.ativo, true),
-	];
+	const conditions = [inArray(integrations.tipo, [...(types ?? DATA_SOURCE_INTEGRATION_TYPES)]), eq(integrations.ativo, true)];
 	if (organizationId) conditions.push(eq(integrations.organizacaoId, organizationId));
 
 	const rows = await executor
@@ -84,11 +90,7 @@ export async function organizationHasActiveDataSource({
 		.select({ id: integrations.id })
 		.from(integrations)
 		.where(
-			and(
-				eq(integrations.organizacaoId, organizationId),
-				eq(integrations.ativo, true),
-				inArray(integrations.tipo, [...DATA_SOURCE_INTEGRATION_TYPES]),
-			),
+			and(eq(integrations.organizacaoId, organizationId), eq(integrations.ativo, true), inArray(integrations.tipo, [...DATA_SOURCE_INTEGRATION_TYPES])),
 		)
 		.limit(1);
 	return !!row;
@@ -103,6 +105,8 @@ export function deriveDataSourceRefExterno(config: TDataSourceIntegrationConfig)
 			return config.merchantId;
 		case "ERP-FLEX":
 			return config.database;
+		case "SQL-VIEWS":
+			return `${config.host}:${config.port}/${config.database}/${config.schema}#${config.storeId ?? "*"}`;
 		default:
 			// IFOOD (merchants ficam em configuracao.merchantIds, D3), BLING e ONLINE-SOFTWARE
 			// não carregam identificador estável de conta.
@@ -126,9 +130,9 @@ export async function assertDataSourceIdentityAvailable({
 	config: TDataSourceIntegrationConfig;
 	ignoreIntegrationId?: string;
 }): Promise<void> {
-	const activeSameType = (
-		await getActiveDataSourceIntegrations({ executor, organizationId, types: [config.tipo] })
-	).filter((row) => row.id !== ignoreIntegrationId);
+	const activeSameType = (await getActiveDataSourceIntegrations({ executor, organizationId, types: [config.tipo] })).filter(
+		(row) => row.id !== ignoreIntegrationId,
+	);
 	if (activeSameType.length === 0) return;
 
 	const refExterno = deriveDataSourceRefExterno(config);
@@ -184,10 +188,7 @@ async function findDataSourceRowForSameExternalAccount({
 			.where(and(eq(integrations.organizacaoId, organizationId), eq(integrations.tipo, "IFOOD")))
 			.orderBy(desc(integrations.ativo), desc(integrations.dataInsercao));
 		return (
-			rows.find(
-				(row): row is TIntegrationEntity =>
-					row.configuracao?.tipo === "IFOOD" && configsShareIfoodMerchants(row.configuracao, config),
-			) ?? null
+			rows.find((row): row is TIntegrationEntity => row.configuracao?.tipo === "IFOOD" && configsShareIfoodMerchants(row.configuracao, config)) ?? null
 		);
 	}
 
@@ -232,9 +233,7 @@ export async function connectDataSourceIntegration({
 		const [explicitTarget] = await executor
 			.select()
 			.from(integrations)
-			.where(
-				and(eq(integrations.id, reconnectIntegrationId), eq(integrations.organizacaoId, organizationId), eq(integrations.tipo, config.tipo)),
-			)
+			.where(and(eq(integrations.id, reconnectIntegrationId), eq(integrations.organizacaoId, organizationId), eq(integrations.tipo, config.tipo)))
 			.limit(1);
 		if (!explicitTarget) throw new Error("Conexão anterior não encontrada para reconexão.");
 

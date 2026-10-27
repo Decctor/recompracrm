@@ -368,6 +368,7 @@ export async function syncAuxiliaryEntities({
 				telefone: client.phone,
 				telefoneBase: client.basePhone,
 				email: client.email,
+				dataNascimento: client.birthDate ?? null,
 				localizacaoCep: client.location?.cep,
 				localizacaoEstado: location.estado,
 				localizacaoCidade: location.cidade,

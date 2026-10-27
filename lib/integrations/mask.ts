@@ -30,6 +30,7 @@ export function maskIntegrationConfig(config: TIntegrationConfig | null | undefi
 				refreshToken: config.refreshToken ? MASK : config.refreshToken,
 			};
 		case "ERP-FLEX":
+		case "SQL-VIEWS":
 			return { ...config, password: config.password ? MASK : config.password };
 		default:
 			return config;

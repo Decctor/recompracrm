@@ -31,6 +31,8 @@ export type TCanonicalClient = {
 	cpfCnpj?: string | null;
 	stateRegistration?: string | null;
 	email?: string | null;
+	/** Data de nascimento como dia civil (meia-noite UTC), o formato que as campanhas de aniversário leem. */
+	birthDate?: Date | null;
 	location?: {
 		cep?: string | null;
 		state?: string | null;
@@ -207,8 +209,25 @@ export type TDataConnector<TConfig extends TDataSourceIntegrationConfig = TDataS
 
 export type TListedSaleClassification = "ELEGIVEL" | "IGNORADO" | "DESCONHECIDO";
 export type TDataConnectorHistory<TConfig> = {
- describe: () => { supportsHistory: boolean; listIncludesStatus: boolean; supportsStatusFilterOnList: boolean; maxWindowDays: number | null; defaultStepDays: number; rateLimit: { perSecond: number | null; perDay: number | null } };
- listSales: (input: { config: TConfig; window: TCanonicalImportWindow; page: number }) => Promise<{ items: Array<{ sourceSaleId: string; statusText: string; occurredAt: Date | null }>; last: boolean; requests: number }>;
- classifyListedSale: (item: { statusText: string }) => TListedSaleClassification;
- buildBatchForSales: (input: { organizationId: string; integrationId: string; config: TConfig; window: TCanonicalImportWindow; sourceSaleIds: string[] }) => Promise<TCanonicalConnectorBatch & { requests: number }>;
+	describe: () => {
+		supportsHistory: boolean;
+		listIncludesStatus: boolean;
+		supportsStatusFilterOnList: boolean;
+		maxWindowDays: number | null;
+		defaultStepDays: number;
+		rateLimit: { perSecond: number | null; perDay: number | null };
+	};
+	listSales: (input: {
+		config: TConfig;
+		window: TCanonicalImportWindow;
+		page: number;
+	}) => Promise<{ items: Array<{ sourceSaleId: string; statusText: string; occurredAt: Date | null }>; last: boolean; requests: number }>;
+	classifyListedSale: (item: { statusText: string }) => TListedSaleClassification;
+	buildBatchForSales: (input: {
+		organizationId: string;
+		integrationId: string;
+		config: TConfig;
+		window: TCanonicalImportWindow;
+		sourceSaleIds: string[];
+	}) => Promise<TCanonicalConnectorBatch & { requests: number }>;
 };

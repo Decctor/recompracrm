@@ -157,6 +157,30 @@ export const ErpFlexIntegrationConfigSchema = z.object({
 });
 export type TErpFlexIntegrationConfig = z.infer<typeof ErpFlexIntegrationConfigSchema>;
 
+/**
+ * ERPs locais sem API que expõem os dados por views Postgres seguindo o contrato de views do
+ * RecompraCRM (`vw_recompra_*`, versão em `vw_recompra_metadados.contrato_versao`). Uma conexão
+ * por loja quando o ERP é multiloja: `storeId` filtra `loja_id` e vira parte da identidade
+ * (`refExterno`), então cada loja aparece como uma integração filtrável nas vendas.
+ */
+export const SqlViewsIntegrationConfigSchema = z.object({
+	tipo: z.literal("SQL-VIEWS"),
+	host: z.string({ required_error: "Host do banco não informado.", invalid_type_error: "Tipo não válido para o host do banco." }),
+	port: z.number({ required_error: "Porta do banco não informada.", invalid_type_error: "Tipo não válido para a porta do banco." }),
+	database: z.string({ required_error: "Nome do banco não informado.", invalid_type_error: "Tipo não válido para o nome do banco." }),
+	schema: z.string({ invalid_type_error: "Tipo não válido para o schema das views." }).optional().default("recompracrm"),
+	username: z.string({ required_error: "Usuário do banco não informado.", invalid_type_error: "Tipo não válido para o usuário do banco." }),
+	password: z.string({ required_error: "Senha do banco não informada.", invalid_type_error: "Tipo não válido para a senha do banco." }),
+	ssl: z.boolean({ invalid_type_error: "Tipo não válido para o uso de SSL." }).optional().default(false),
+	storeId: z.string({ invalid_type_error: "Tipo não válido para o ID da loja." }).optional().nullable().default(null),
+	/** Clientes genéricos do ERP ("CLIENTE PADRÃO"): a venda entra sem cliente. */
+	anonymousClientIds: z
+		.array(z.string({ invalid_type_error: "Tipo não válido para o ID de cliente anônimo." }))
+		.optional()
+		.default([]),
+});
+export type TSqlViewsIntegrationConfig = z.infer<typeof SqlViewsIntegrationConfigSchema>;
+
 /** Origem histórica local. Não possui credenciais nem polling. */
 export const PhiboIntegrationConfigSchema = z.object({
 	tipo: z.literal("PHIBO"),
@@ -171,6 +195,7 @@ export const DataSourceIntegrationConfigSchema = z.discriminatedUnion("tipo", [
 	IfoodIntegrationConfigSchema,
 	BlingIntegrationConfigSchema,
 	ErpFlexIntegrationConfigSchema,
+	SqlViewsIntegrationConfigSchema,
 	PhiboIntegrationConfigSchema,
 ]);
 export type TDataSourceIntegrationConfig = z.infer<typeof DataSourceIntegrationConfigSchema>;
@@ -184,6 +209,7 @@ export const IntegrationConfigSchema = z.discriminatedUnion("tipo", [
 	IfoodIntegrationConfigSchema,
 	BlingIntegrationConfigSchema,
 	ErpFlexIntegrationConfigSchema,
+	SqlViewsIntegrationConfigSchema,
 	PhiboIntegrationConfigSchema,
 ]);
 export type TIntegrationConfig = z.infer<typeof IntegrationConfigSchema>;

@@ -21,6 +21,7 @@ export const SALES_INTEGRATION_META: Record<TDataSourceIntegrationTipoEnum, TSal
 	IFOOD: { nome: "iFood", logo: IfoodLogo },
 	BLING: { nome: "Bling", logo: BlingLogo },
 	"ERP-FLEX": { nome: "ERPFlex", logo: ErpFlexLogo },
+	"SQL-VIEWS": { nome: "ERP (banco de dados)", logo: null },
 	PHIBO: { nome: "Phibo", logo: null },
 };
 
