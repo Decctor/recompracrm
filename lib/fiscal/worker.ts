@@ -6,10 +6,18 @@ import createHttpError from "http-errors";
 import { getErrorMessage } from "../errors";
 import { AUTO_EMISSION_SCHEDULE_GRACE_MINUTES } from "./constants";
 import { emitFiscalDocument, syncFiscalDocument } from "./documents";
+import { FiscalReadinessError } from "./errors";
 
 const MAX_ATTEMPTS = 6;
 // Backoff exponencial (minutos) por tentativa.
 const BACKOFF_MINUTES = [1, 5, 15, 60, 180, 360];
+// Consulta automatica de documentos em processamento: o webhook do provedor e o caminho normal de
+// atualizacao, e esta varredura e a rede de seguranca. Sem intervalo minimo, cada documento preso
+// em EM_PROCESSAMENTO era consultado no provedor a cada 2 minutos, indefinidamente.
+const SYNC_MIN_INTERVAL_MINUTES = 10;
+// Passado um dia, a SEFAZ ja respondeu ha muito; consulta de hora em hora.
+const SYNC_STALE_AFTER_HOURS = 24;
+const SYNC_STALE_INTERVAL_MINUTES = 60;
 const FISCAL_QUEUE_LOCK_NAMESPACE = 347_221;
 const FISCAL_QUEUE_LOCK_KEY = 1;
 
@@ -75,6 +83,16 @@ async function processFiscalQueueUnlocked({ limit = 25 }: { limit?: number } = {
 			// 409: outro processo (emissao manual ou worker concorrente) detem o lock de envio.
 			// Nao conta como falha nem reagenda; o dono do lock conclui o envio.
 			if (createHttpError.isHttpError(error) && error.statusCode === 409) continue;
+			// Pendencia de cadastro (cliente sem CPF/endereco, serie ou credencial ausente): falha antes
+			// do envio, sem avancar `tentativasEnvio`, entao o backoff nunca chegava ao limite e a nota
+			// era retentada para sempre. So uma correcao de dados resolve — como no enfileiramento,
+			// encerra a fila; a nova emissao parte da tela do documento.
+			if (error instanceof FiscalReadinessError) {
+				await scheduleNextAttempt(doc.id, null);
+				results.falhas++;
+				console.warn(`[FISCAL_WORKER] Documento ${doc.id} retirado da fila por pendencia de cadastro: ${getErrorMessage(error)}`);
+				continue;
+			}
 			const attempts = (doc.tentativasEnvio ?? 0) + 1;
 			const proxima = attempts < MAX_ATTEMPTS ? nextAttemptDate(attempts) : null;
 			await scheduleNextAttempt(doc.id, proxima);
@@ -83,8 +101,24 @@ async function processFiscalQueueUnlocked({ limit = 25 }: { limit?: number } = {
 		}
 	}
 
+	const syncCutoff = new Date(now.getTime() - SYNC_MIN_INTERVAL_MINUTES * 60_000);
+	const staleSyncCutoff = new Date(now.getTime() - SYNC_STALE_INTERVAL_MINUTES * 60_000);
+	const staleDocumentCutoff = new Date(now.getTime() - SYNC_STALE_AFTER_HOURS * 60 * 60_000);
 	const toSync = await db.query.fiscalOutboundDocuments.findMany({
-		where: (fields, operators) => operators.inArray(fields.statusInterno, ["EM_PROCESSAMENTO", "CANCELAMENTO_PENDENTE"]),
+		where: (fields, operators) =>
+			operators.and(
+				operators.inArray(fields.statusInterno, ["EM_PROCESSAMENTO", "CANCELAMENTO_PENDENTE"]),
+				operators.or(
+					operators.isNull(fields.dataUltimaSincronizacao),
+					operators.and(
+						// A idade vem da insercao, que num cancelamento e a da nota original, nao a do pedido:
+						// cancelamento pendente fica sempre na cadencia curta.
+						operators.or(operators.gt(fields.dataInsercao, staleDocumentCutoff), operators.eq(fields.statusInterno, "CANCELAMENTO_PENDENTE")),
+						operators.lte(fields.dataUltimaSincronizacao, syncCutoff),
+					),
+					operators.lte(fields.dataUltimaSincronizacao, staleSyncCutoff),
+				),
+			),
 		orderBy: (fields, operators) => operators.asc(fields.dataUltimaSincronizacao),
 		limit,
 	});
