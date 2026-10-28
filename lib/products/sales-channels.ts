@@ -230,3 +230,12 @@ export function projectAddOnReferencesToChannel<
 >(state: { channel: { exigirAdicionaisMinimos: boolean }; optionOverrides: TChannelOptionOverrides } | null | undefined, references: TReference[]) {
 	return channelAddOnOptions(state?.optionOverrides, channelAddOnReferences(state?.channel, resolveAddOnReferencesRules(references)));
 }
+
+/** Ordem relativa dos produtos; IDs ausentes seguem por nome e ID, sem alterar o array recebido. */
+export function sortProductsByChannelOrder<T extends { id: string; nome: string }>(produtos: T[], ordemProdutos: string[]) {
+	const positions = new Map(ordemProdutos.map((id, index) => [id, index]));
+	return [...produtos].sort(
+		(a, b) =>
+			(positions.get(a.id) ?? Infinity) - (positions.get(b.id) ?? Infinity) || a.nome.localeCompare(b.nome, "pt-BR") || a.id.localeCompare(b.id),
+	);
+}

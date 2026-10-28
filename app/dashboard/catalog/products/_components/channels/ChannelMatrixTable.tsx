@@ -13,7 +13,7 @@ import type {
 import { SPREADSHEET_TABLE_ATTR, type SpreadsheetGridBounds } from "@/lib/spreadsheet-navigation";
 import { cn } from "@/lib/utils";
 import type { TSalesChannelCatalogModeEnum } from "@/schemas/enums";
-import { Box, CornerDownRight, SquarePen } from "lucide-react";
+import { ChevronUp, ChevronDown, Box, CornerDownRight, SquarePen } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { type CSSProperties, type ReactNode, useMemo } from "react";
@@ -247,6 +247,8 @@ function basePriceOf(row: MatrixRow) {
 }
 
 type ChannelMatrixTableProps = {
+	reorderProductsEnabled: boolean;
+	moveProduct: (produtoId: string, direction: "up" | "down") => void;
 	produtos: TSalesChannelMatrixProduct[];
 	columns: TMatrixChannelColumn[];
 	/** Canal mostrado no cartão mobile (um por vez, escolhido pelo seletor de foco). */
@@ -254,13 +256,43 @@ type ChannelMatrixTableProps = {
 	accessors: TMatrixCellAccessors;
 };
 
-export default function ChannelMatrixTable({ produtos, columns, focusedColumn, accessors }: ChannelMatrixTableProps) {
+export default function ChannelMatrixTable({
+	produtos,
+	columns,
+	focusedColumn,
+	accessors,
+	reorderProductsEnabled,
+	moveProduct,
+}: ChannelMatrixTableProps) {
 	const rows = useMemo(() => buildRows(produtos), [produtos]);
 	const gridBounds: SpreadsheetGridBounds = useMemo(
 		() => ({ rowCount: rows.filter((row) => row.gridRow !== null).length, colCount: Math.max(columns.length, 1) }),
 		[columns.length, rows],
 	);
 	const style = gridStyle(columns.length);
+	const productPositions = new Map(produtos.map((product, index) => [product.id, index]));
+	const orderingControls = (row: MatrixRow) =>
+		row.variant ? null : (
+			<div className="flex shrink-0 items-center">
+				{(["up", "down"] as const).map((direction) => (
+					<Button
+						key={direction}
+						type="button"
+						variant="ghost"
+						size="icon"
+						className="h-8 w-8"
+						disabled={
+							!reorderProductsEnabled ||
+							(direction === "up" ? productPositions.get(row.product.id) === 0 : productPositions.get(row.product.id) === produtos.length - 1)
+						}
+						aria-label={`Mover ${row.product.nome} para ${direction === "up" ? "cima" : "baixo"} em ${focusedColumn?.label ?? "canal em foco"}`}
+						onClick={() => moveProduct(row.product.id, direction)}
+					>
+						{direction === "up" ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+					</Button>
+				))}
+			</div>
+		);
 
 	return (
 		<div {...{ [SPREADSHEET_TABLE_ATTR]: "true" }} className="flex w-full flex-col">
@@ -309,6 +341,7 @@ export default function ChannelMatrixTable({ produtos, columns, focusedColumn, a
 							style={style}
 						>
 							<div className="flex min-w-0 items-center justify-between gap-1">
+								{orderingControls(row)}
 								<RowIdentity row={row} compact />
 								{row.variant ? null : <ProductRegistryLink produto={row.product} />}
 							</div>
@@ -335,6 +368,7 @@ export default function ChannelMatrixTable({ produtos, columns, focusedColumn, a
 				{rows.map((row) => (
 					<div key={row.key} className={cn("flex flex-col gap-2 border-t border-border px-3 py-2.5", row.variant && "bg-muted/10")}>
 						<div className="flex items-start justify-between gap-2">
+							{orderingControls(row)}
 							<RowIdentity row={row} compact={false} />
 							<div className="flex shrink-0 items-center gap-2">
 								<span className="text-xs tabular-nums text-muted-foreground">{basePriceOf(row)}</span>

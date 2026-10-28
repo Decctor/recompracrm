@@ -12,6 +12,7 @@ import {
 	displayedMatrixGroups,
 	isInheritingCell,
 	moveGroupInOrder,
+	moveProductInOrder,
 	renameGroupInOrder,
 } from "@/lib/products/sales-channels-matrix";
 import type { TSalesChannelMatrix } from "@/lib/queries/sales-channels";
@@ -34,7 +35,12 @@ export type TSalesChannelMatrixState = {
 
 export function hydrateMatrixState(matrix: TSalesChannelMatrix): TSalesChannelMatrixState {
 	return {
-		channels: new Map(matrix.channels.map((channel) => [channel.id, { catalogoModo: channel.catalogoModo, ordemGrupos: channel.ordemGrupos }])),
+		channels: new Map(
+			matrix.channels.map((channel) => [
+				channel.id,
+				{ catalogoModo: channel.catalogoModo, ordemGrupos: channel.ordemGrupos, ordemProdutos: channel.ordemProdutos },
+			]),
+		),
 		cells: buildMatrixCellMap(matrix.settings),
 	};
 }
@@ -102,10 +108,31 @@ export function useInternalSalesChannelMatrixState({ initialState }: { initialSt
 		});
 	}, []);
 
+	const moveChannelProduct = useCallback(
+		({ canalVendaId, displayed, produtoId, direction }: { canalVendaId: string; displayed: string[]; produtoId: string; direction: "up" | "down" }) => {
+			patchChannel(canalVendaId, (channel) => ({
+				...channel,
+				ordemProdutos: moveProductInOrder({ ordemProdutos: channel.ordemProdutos, displayed, produtoId, direction }) ?? channel.ordemProdutos,
+			}));
+		},
+		[patchChannel],
+	);
+
 	const redefineState = useCallback((next: TSalesChannelMatrixState) => setState(next), []);
 	const resetState = useCallback(() => setState(initialState), [initialState]);
 
-	return { state, cycleAvailability, updatePrice, clearCell, setChannelCatalogMode, moveChannelGroup, syncRenamedGroup, redefineState, resetState };
+	return {
+		state,
+		cycleAvailability,
+		updatePrice,
+		clearCell,
+		setChannelCatalogMode,
+		moveChannelProduct,
+		moveChannelGroup,
+		syncRenamedGroup,
+		redefineState,
+		resetState,
+	};
 }
 export type TUseInternalSalesChannelMatrixState = ReturnType<typeof useInternalSalesChannelMatrixState>;
 
@@ -187,6 +214,7 @@ export function useSalesChannelMatrixEditor({ matrix, callbacks }: { matrix: TSa
 			updatePrice: wrapWithDirty(matrixState.updatePrice, markDirty),
 			clearCell: wrapWithDirty(matrixState.clearCell, markDirty),
 			setChannelCatalogMode: wrapWithDirty(matrixState.setChannelCatalogMode, markDirty),
+			moveChannelProduct: wrapWithDirty(matrixState.moveChannelProduct, markDirty),
 			moveChannelGroup: wrapWithDirty(matrixState.moveChannelGroup, markDirty),
 		}),
 		[markDirty, matrixState],

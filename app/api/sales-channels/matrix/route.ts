@@ -6,7 +6,7 @@ import { splitChannelSettingNodes, validateChannelSettingNodes } from "@/lib/pro
 import { productsTouchingChannels } from "@/lib/products/sales-channels-matrix";
 import { ensureSalesChannelsWithIntegrations } from "@/lib/integrations/ifood/sales-channels";
 import { SalesChannelCatalogModeEnum } from "@/schemas/enums";
-import { ProductChannelSettingSchema } from "@/schemas/sales-channels";
+import { ProductChannelSettingSchema, SalesChannelSchema } from "@/schemas/sales-channels";
 import { db } from "@/services/drizzle";
 import { catalogLinks, productChannelSettings, products, salesChannels } from "@/services/drizzle/schema";
 import { and, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
@@ -27,6 +27,7 @@ const MatrixChannelInputSchema = z.object({
 		})
 		.min(1, { message: "ID do canal de venda não informado." }),
 	catalogoModo: SalesChannelCatalogModeEnum.optional(),
+	ordemProdutos: SalesChannelSchema.shape.ordemProdutos.optional(),
 	ordemGrupos: z
 		.array(z.string({ invalid_type_error: "Tipo não válido para grupo do canal." }).trim().min(1, { message: "Grupo do canal sem nome." }))
 		.optional(),
@@ -63,6 +64,9 @@ const UpdateSalesChannelMatrixInputSchema = z
 			ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["products"], message: "Há produtos repetidos na matriz." });
 		}
 		for (const channel of data.channels) {
+			if (channel.ordemProdutos && new Set(channel.ordemProdutos).size !== channel.ordemProdutos.length) {
+				ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["channels"], message: "Há produtos repetidos na ordem de um canal." });
+			}
 			if (channel.ordemGrupos && new Set(channel.ordemGrupos).size !== channel.ordemGrupos.length) {
 				ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["channels"], message: "Há grupos repetidos na ordem de um canal." });
 			}
@@ -150,6 +154,7 @@ async function getSalesChannelMatrix({ orgId }: { orgId: string }) {
 				refExterno: channel.refExterno,
 				catalogoModo: channel.catalogoModo,
 				exigirAdicionaisMinimos: channel.exigirAdicionaisMinimos,
+				ordemProdutos: channel.ordemProdutos.filter((id) => productIds.has(id)),
 				ordemGrupos: channel.ordemGrupos.filter((grupo, index, list) => presentGroups.has(grupo) && list.indexOf(grupo) === index),
 			})),
 			products: matrixProducts,
@@ -173,7 +178,9 @@ async function updateSalesChannelMatrix({ orgId, input }: { orgId: string; input
 		throw new createHttpError.BadRequest("Um canal de venda não pertence à organização.");
 	}
 
-	const productIds = input.products.map((product) => product.produtoId);
+	const productIds = [
+		...new Set([...input.products.map((product) => product.produtoId), ...input.channels.flatMap((channel) => channel.ordemProdutos ?? [])]),
+	];
 	const ownedProducts = productIds.length
 		? await db.query.products.findMany({
 				where: and(eq(products.organizacaoId, orgId), inArray(products.id, productIds)),
@@ -182,6 +189,9 @@ async function updateSalesChannelMatrix({ orgId, input }: { orgId: string; input
 			})
 		: [];
 	const ownedProductById = new Map(ownedProducts.map((product) => [product.id, product]));
+	if (input.channels.some((channel) => channel.ordemProdutos?.some((id) => !ownedProductById.has(id)))) {
+		throw new createHttpError.BadRequest("Um produto da ordem não pertence à organização.");
+	}
 
 	// As mesmas regras do PUT unitário e do POST de produto, produto a produto: a grade precisa
 	// recusar o mesmo payload pelo mesmo motivo que a página do produto.
@@ -216,12 +226,13 @@ async function updateSalesChannelMatrix({ orgId, input }: { orgId: string; input
 
 	await db.transaction(async (tx) => {
 		for (const channel of input.channels) {
-			if (channel.catalogoModo === undefined && channel.ordemGrupos === undefined) continue;
+			if (channel.catalogoModo === undefined && channel.ordemGrupos === undefined && channel.ordemProdutos === undefined) continue;
 			await tx
 				.update(salesChannels)
 				.set({
 					...(channel.catalogoModo !== undefined ? { catalogoModo: channel.catalogoModo } : {}),
 					...(channel.ordemGrupos !== undefined ? { ordemGrupos: channel.ordemGrupos } : {}),
+					...(channel.ordemProdutos !== undefined ? { ordemProdutos: channel.ordemProdutos } : {}),
 					dataAtualizacao: new Date(),
 				})
 				.where(and(eq(salesChannels.id, channel.canalVendaId), eq(salesChannels.organizacaoId, orgId)));

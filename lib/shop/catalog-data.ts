@@ -1,4 +1,4 @@
-import { sortGroupsByChannelOrder } from "@/lib/products/sales-channels";
+import { sortGroupsByChannelOrder, sortProductsByChannelOrder } from "@/lib/products/sales-channels";
 import { loadChannelState } from "@/lib/products/sales-channels-store";
 import { getShopAvailability } from "@/lib/shop/availability";
 import { getMostOrderedShopProductIds, getShopCatalogProducts, orderProductsByIds } from "@/lib/shop/catalog";
@@ -89,7 +89,7 @@ export async function getShopCatalogData(orgId: string) {
 			proximaAbertura: availability.proximaAbertura?.toISOString() ?? null,
 		},
 		groups,
-		products: catalogProducts,
+		products: sortProductsByChannelOrder(catalogProducts, channelState?.channel.ordemProdutos ?? []),
 		blocks,
 	};
 }

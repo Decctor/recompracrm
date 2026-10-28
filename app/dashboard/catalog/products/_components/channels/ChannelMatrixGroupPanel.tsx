@@ -9,6 +9,8 @@ import { useState } from "react";
 import ChannelMatrixTable, { type TMatrixCellAccessors, type TMatrixChannelColumn } from "./ChannelMatrixTable";
 
 type ChannelMatrixGroupPanelProps = {
+	reorderProductsEnabled: boolean;
+	moveProduct: (produtoId: string, direction: "up" | "down") => void;
 	group: TMatrixGroup<TSalesChannelMatrixProduct>;
 	/** Posição na ordem do canal em foco. */
 	position: number;
@@ -31,6 +33,8 @@ type ChannelMatrixGroupPanelProps = {
  */
 export default function ChannelMatrixGroupPanel({
 	group,
+	reorderProductsEnabled,
+	moveProduct,
 	position,
 	focusedLabel,
 	canMoveUp,
@@ -103,7 +107,14 @@ export default function ChannelMatrixGroupPanel({
 				)}
 			</div>
 
-			<ChannelMatrixTable produtos={group.produtos} columns={columns} focusedColumn={focusedColumn} accessors={accessors} />
+			<ChannelMatrixTable
+				reorderProductsEnabled={reorderProductsEnabled}
+				moveProduct={moveProduct}
+				produtos={group.produtos}
+				columns={columns}
+				focusedColumn={focusedColumn}
+				accessors={accessors}
+			/>
 
 			{isRenaming ? (
 				<RenameProductGroup

@@ -142,7 +142,11 @@ function ChannelMatrixEditor({ matrix }: { matrix: TSalesChannelMatrix }) {
 	const [search, setSearch] = useState("");
 	const filteredProducts = useMemo(() => matrix.products.filter((product) => matchesSearch(product, search.trim())), [matrix.products, search]);
 	const focusedOrder = focusedChannel ? (editor.state.channels.get(focusedChannel.id)?.ordemGrupos ?? []) : [];
-	const groups = useMemo(() => groupMatrixProducts(filteredProducts, focusedOrder), [filteredProducts, focusedOrder]);
+	const focusedProductOrder = focusedChannel ? (editor.state.channels.get(focusedChannel.id)?.ordemProdutos ?? []) : [];
+	const groups = useMemo(
+		() => groupMatrixProducts(filteredProducts, focusedOrder, focusedProductOrder),
+		[filteredProducts, focusedOrder, focusedProductOrder],
+	);
 	const orderableGroups = groups.filter((group) => !group.ungrouped);
 	// A ordem exibida SEM o filtro de busca: mover um grupo com a busca ativa não pode apagar os
 	// grupos que a busca escondeu.
@@ -238,8 +242,8 @@ function ChannelMatrixEditor({ matrix }: { matrix: TSalesChannelMatrix }) {
 			) : null}
 
 			<p className="text-xs text-muted-foreground">
-				Disponibilidade e preço em branco herdam o cadastro do produto. Produtos com variantes precificam por variante. As setas dos grupos ordenam o
-				canal em foco; a loja usa essa ordem na vitrine.
+				Disponibilidade e preço em branco herdam o cadastro do produto. Produtos com variantes precificam por variante. As setas dos grupos e produtos
+				ordenam o canal em foco; a loja usa essa ordem na vitrine.
 			</p>
 
 			<div className="flex flex-col gap-3">
@@ -258,6 +262,11 @@ function ChannelMatrixEditor({ matrix }: { matrix: TSalesChannelMatrix }) {
 						moveGroup={(grupo, direction) => {
 							if (!focusedChannel) return;
 							editor.moveChannelGroup({ canalVendaId: focusedChannel.id, displayed: displayedOrder, grupo, direction });
+						}}
+						reorderProductsEnabled={!search.trim() && !!focusedChannel && !editor.isPending}
+						moveProduct={(produtoId, direction) => {
+							if (!focusedChannel || search.trim()) return;
+							editor.moveChannelProduct({ canalVendaId: focusedChannel.id, displayed: group.produtos.map((product) => product.id), produtoId, direction });
 						}}
 						renameGroup={editor.renameGroup}
 					/>

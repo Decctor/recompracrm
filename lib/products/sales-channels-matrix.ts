@@ -1,5 +1,5 @@
 import type { TSalesChannelCatalogModeEnum } from "@/schemas/enums";
-import { UNGROUPED_PRODUCTS_LABEL, type TChannelSettingNode, sortGroupsByChannelOrder } from "./sales-channels";
+import { UNGROUPED_PRODUCTS_LABEL, type TChannelSettingNode, sortGroupsByChannelOrder, sortProductsByChannelOrder } from "./sales-channels";
 
 /**
  * Helpers puros da matriz de canais (aba "Canais" de Produtos): a grade edita TODOS os produtos ×
@@ -79,8 +79,13 @@ export function diffMatrixCells({ baseline, draft }: { baseline: Map<string, TMa
 	return [...byProduct.entries()].map(([produtoId, settings]) => ({ produtoId, settings }));
 }
 
-export type TMatrixChannelDraft = { catalogoModo: TSalesChannelCatalogModeEnum; ordemGrupos: string[] };
-export type TMatrixChannelPatch = { canalVendaId: string; catalogoModo?: TSalesChannelCatalogModeEnum; ordemGrupos?: string[] };
+export type TMatrixChannelDraft = { catalogoModo: TSalesChannelCatalogModeEnum; ordemGrupos: string[]; ordemProdutos: string[] };
+export type TMatrixChannelPatch = {
+	canalVendaId: string;
+	catalogoModo?: TSalesChannelCatalogModeEnum;
+	ordemGrupos?: string[];
+	ordemProdutos?: string[];
+};
 
 function sameOrder(a: string[], b: string[]) {
 	return a.length === b.length && a.every((item, index) => item === b[index]);
@@ -101,7 +106,8 @@ export function diffMatrixChannels({
 		const patch: TMatrixChannelPatch = { canalVendaId };
 		if (before.catalogoModo !== after.catalogoModo) patch.catalogoModo = after.catalogoModo;
 		if (!sameOrder(before.ordemGrupos, after.ordemGrupos)) patch.ordemGrupos = after.ordemGrupos;
-		if (patch.catalogoModo !== undefined || patch.ordemGrupos !== undefined) patches.push(patch);
+		if (!sameOrder(before.ordemProdutos, after.ordemProdutos)) patch.ordemProdutos = after.ordemProdutos;
+		if (patch.catalogoModo !== undefined || patch.ordemGrupos !== undefined || patch.ordemProdutos !== undefined) patches.push(patch);
 	}
 	return patches;
 }
@@ -130,13 +136,14 @@ export function displayedMatrixGroups<TProduct extends { grupo: string }>(produt
 }
 
 /**
- * Painéis da grade: um por grupo, na ordem curada do canal focado, produtos em ordem alfabética
+ * Painéis da grade: um por grupo, na ordem curada do canal focado, produtos na ordem curada
  * dentro de cada um. O balde dos sem grupo vai por último — o mesmo "Outros" da loja pública.
  * Genérico sobre o produto porque a vitrine e a matriz carregam shapes diferentes.
  */
-export function groupMatrixProducts<TProduct extends { grupo: string; nome: string }>(
+export function groupMatrixProducts<TProduct extends { id: string; grupo: string; nome: string }>(
 	produtos: TProduct[],
 	ordemGrupos: string[],
+	ordemProdutos: string[] = [],
 ): TMatrixGroup<TProduct>[] {
 	const byGroup = new Map<string, TProduct[]>();
 	for (const produto of produtos) {
@@ -146,16 +153,16 @@ export function groupMatrixProducts<TProduct extends { grupo: string; nome: stri
 		else byGroup.set(key, [produto]);
 	}
 
-	const sortByName = (items: TProduct[]) => items.toSorted((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+	const sortProducts = (items: TProduct[]) => sortProductsByChannelOrder(items, ordemProdutos);
 	const groups: TMatrixGroup<TProduct>[] = displayedMatrixGroups(produtos, ordemGrupos).map((key) => ({
 		key,
 		label: key,
 		ungrouped: false,
-		produtos: sortByName(byGroup.get(key) ?? []),
+		produtos: sortProducts(byGroup.get(key) ?? []),
 	}));
 
 	const ungrouped = byGroup.get("");
-	if (ungrouped?.length) groups.push({ key: "", label: UNGROUPED_PRODUCTS_LABEL, ungrouped: true, produtos: sortByName(ungrouped) });
+	if (ungrouped?.length) groups.push({ key: "", label: UNGROUPED_PRODUCTS_LABEL, ungrouped: true, produtos: sortProducts(ungrouped) });
 
 	return groups;
 }
@@ -178,4 +185,24 @@ export function moveGroupInOrder({ displayed, grupo, direction }: { displayed: s
 /** Renomear para um grupo existente funde os dois: a posição que vale é a primeira. */
 export function renameGroupInOrder(ordemGrupos: string[], grupoAtual: string, grupoNovo: string) {
 	return ordemGrupos.map((grupo) => (grupo === grupoAtual ? grupoNovo : grupo)).filter((grupo, index, list) => list.indexOf(grupo) === index);
+}
+
+/** Troca apenas os espaços do grupo editado, preservando a ordem relativa dos demais. */
+export function moveProductInOrder({
+	ordemProdutos,
+	displayed,
+	produtoId,
+	direction,
+}: {
+	ordemProdutos: string[];
+	displayed: string[];
+	produtoId: string;
+	direction: "up" | "down";
+}) {
+	const next = moveGroupInOrder({ displayed, grupo: produtoId, direction });
+	if (!next) return null;
+	const members = new Set(displayed);
+	const order = [...new Set([...ordemProdutos, ...displayed])];
+	let index = 0;
+	return order.map((id) => (members.has(id) ? next[index++] : id));
 }

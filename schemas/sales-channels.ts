@@ -36,6 +36,15 @@ export const SalesChannelSchema = z.object({
 			invalid_type_error: "Tipo não válido para grupo da vitrine.",
 		}),
 	),
+	ordemProdutos: z.array(
+		z
+			.string({ required_error: "ID do produto não informado.", invalid_type_error: "Tipo não válido para ID do produto." })
+			.min(1, "ID do produto não informado."),
+		{
+			required_error: "Ordem dos produtos não informada.",
+			invalid_type_error: "Tipo não válido para ordem dos produtos.",
+		},
+	),
 	dataInsercao: z.date({
 		required_error: "Data de inserção não informada.",
 		invalid_type_error: "Tipo não válido para data de inserção.",

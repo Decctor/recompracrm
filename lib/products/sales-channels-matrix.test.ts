@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { sortProductsByChannelOrder } from "./sales-channels";
+import { SalesChannelSchema } from "@/schemas/sales-channels";
 import {
 	buildMatrixCellMap,
 	diffMatrixCells,
@@ -7,6 +9,7 @@ import {
 	groupMatrixProducts,
 	matrixNodeKey,
 	moveGroupInOrder,
+	moveProductInOrder,
 	parseMatrixNodeKey,
 	productsTouchingChannels,
 	renameGroupInOrder,
@@ -17,6 +20,30 @@ const P2 = "22222222-2222-4222-8222-222222222222";
 const V1 = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const POS = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const IFOOD = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+
+test("ordem vazia mantém fallback alfabético estável; IDs órfãos não afetam produtos", () => {
+	const produtos = [
+		{ id: "b", nome: "Água" },
+		{ id: "c", nome: "Bolo" },
+		{ id: "a", nome: "Água" },
+	];
+	assert.deepEqual(
+		sortProductsByChannelOrder(produtos, []).map((p) => p.id),
+		["a", "b", "c"],
+	);
+	assert.deepEqual(
+		sortProductsByChannelOrder(produtos, ["deleted", "c"]).map((p) => p.id),
+		["c", "a", "b"],
+	);
+});
+
+test("ordem de produtos aceita reset e recusa IDs vazios ou tipos inválidos", () => {
+	const schema = SalesChannelSchema.shape.ordemProdutos;
+	assert.deepEqual(schema.parse([]), []);
+	assert.equal(schema.safeParse([""]).success, false);
+	assert.equal(schema.safeParse([123]).success, false);
+	assert.equal(schema.safeParse("id").success, false);
+});
 
 test("a chave do nó é reversível, com variante nula representada por segmento vazio", () => {
 	assert.deepEqual(parseMatrixNodeKey(matrixNodeKey(P1, POS, null)), { produtoId: P1, canalVendaId: POS, produtoVarianteId: null });
@@ -65,12 +92,12 @@ test("um rascunho idêntico ao carregado produz patch vazio, mesmo com células 
 
 test("o diff de canais só inclui os campos que mudaram", () => {
 	const baseline = new Map([
-		[POS, { catalogoModo: "TODOS" as const, ordemGrupos: ["A", "B"] }],
-		[IFOOD, { catalogoModo: "SELECIONADOS" as const, ordemGrupos: [] }],
+		[POS, { catalogoModo: "TODOS" as const, ordemProdutos: [], ordemGrupos: ["A", "B"] }],
+		[IFOOD, { catalogoModo: "SELECIONADOS" as const, ordemProdutos: [], ordemGrupos: [] }],
 	]);
 	const draft = new Map([
-		[POS, { catalogoModo: "SELECIONADOS" as const, ordemGrupos: ["A", "B"] }],
-		[IFOOD, { catalogoModo: "SELECIONADOS" as const, ordemGrupos: ["X"] }],
+		[POS, { catalogoModo: "SELECIONADOS" as const, ordemProdutos: [], ordemGrupos: ["A", "B"] }],
+		[IFOOD, { catalogoModo: "SELECIONADOS" as const, ordemProdutos: [], ordemGrupos: ["X"] }],
 	]);
 	assert.deepEqual(diffMatrixChannels({ baseline, draft }), [
 		{ canalVendaId: POS, catalogoModo: "SELECIONADOS" },
@@ -89,11 +116,11 @@ test("só produtos que tocaram um canal iFood entram no push", () => {
 test("grupos seguem a ordem do canal, com a cauda alfabética e 'Outros' por último", () => {
 	const groups = groupMatrixProducts(
 		[
-			{ nome: "Zebra", grupo: "" },
-			{ nome: "Coxinha", grupo: "Salgados" },
-			{ nome: "Brigadeiro", grupo: "Doces" },
-			{ nome: "Água", grupo: "Bebidas" },
-			{ nome: "Bolo", grupo: "Doces" },
+			{ id: "Zebra", nome: "Zebra", grupo: "" },
+			{ id: "Coxinha", nome: "Coxinha", grupo: "Salgados" },
+			{ id: "Brigadeiro", nome: "Brigadeiro", grupo: "Doces" },
+			{ id: "Água", nome: "Água", grupo: "Bebidas" },
+			{ id: "Bolo", nome: "Bolo", grupo: "Doces" },
 		],
 		["Doces"],
 	);
@@ -118,4 +145,42 @@ test("mover um grupo materializa a ordem exibida inteira", () => {
 test("renomear para um grupo existente funde as duas entradas na primeira posição", () => {
 	assert.deepEqual(renameGroupInOrder(["A", "B", "C"], "C", "A"), ["A", "B"]);
 	assert.deepEqual(renameGroupInOrder(["A", "B"], "B", "D"), ["A", "D"]);
+});
+
+test("produto se move sem alterar ordem dos demais grupos e materializa a cauda", () => {
+	assert.deepEqual(moveProductInOrder({ ordemProdutos: ["a", "x", "b", "y"], displayed: ["a", "b", "c"], produtoId: "c", direction: "up" }), [
+		"a",
+		"x",
+		"c",
+		"y",
+		"b",
+	]);
+	assert.equal(moveProductInOrder({ ordemProdutos: [], displayed: ["a"], produtoId: "a", direction: "up" }), null);
+});
+test("ordem de produtos é patch independente por canal e aceita reset", () => {
+	const baseline = new Map([
+		[POS, { catalogoModo: "TODOS" as const, ordemGrupos: [], ordemProdutos: ["a"] }],
+		[IFOOD, { catalogoModo: "TODOS" as const, ordemGrupos: [], ordemProdutos: [] }],
+	]);
+	const draft = new Map(baseline);
+	draft.set(POS, { ...baseline.get(POS)!, ordemProdutos: [] });
+	assert.deepEqual(diffMatrixChannels({ baseline, draft }), [{ canalVendaId: POS, ordemProdutos: [] }]);
+	assert.deepEqual(baseline.get(POS)?.ordemProdutos, ["a"]);
+});
+test("ordem de produtos vale dentro do grupo, inclusive Outros, ignorando IDs órfãos", () => {
+	const products = [
+		{ id: "a", nome: "Água", grupo: "Bebidas" },
+		{ id: "b", nome: "Suco", grupo: "Bebidas" },
+		{ id: "c", nome: "Bolo", grupo: "Doces" },
+		{ id: "d", nome: "Outro", grupo: "" },
+	];
+	const groups = groupMatrixProducts(products, ["Doces"], ["missing", "b", "d", "c"]);
+	assert.deepEqual(
+		groups.map((g) => g.produtos.map((p) => p.id)),
+		[["c"], ["b", "a"], ["d"]],
+	);
+	assert.deepEqual(
+		products.map((p) => p.id),
+		["a", "b", "c", "d"],
+	);
 });

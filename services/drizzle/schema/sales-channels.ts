@@ -36,6 +36,8 @@ export const salesChannels = newTable(
 		// entrada pode ficar órfã quando o grupo é renomeado — a leitura poda contra os grupos que
 		// realmente existem, em vez de tentar manter a lista sincronizada a cada edição de produto.
 		ordemGrupos: text("ordem_grupos").array().notNull().default([]),
+		// IDs em ordem relativa dentro do grupo atual; ausentes seguem alfabeticamente.
+		ordemProdutos: text("ordem_produtos").array().notNull().default([]),
 		dataInsercao: timestamp("data_insercao").defaultNow().notNull(),
 		dataAtualizacao: timestamp("data_atualizacao").$onUpdate(() => new Date()),
 	},
