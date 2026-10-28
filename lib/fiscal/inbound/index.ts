@@ -176,8 +176,13 @@ async function autoManifestCiencia(organizationId: string, organization: TFiscal
 				operators.eq(fields.organizacaoId, organizationId),
 				operators.isNull(fields.manifestacaoAtual),
 				operators.isNotNull(fields.provedorDocumentoId),
-				// Sem data de emissao (resumo incompleto), a insercao e o limite inferior conhecido.
-				operators.gt(sql`coalesce(${fields.dataEmissao}, ${fields.dataInsercao})`, prazoCutoff),
+				// Sem data de emissao (resumo incompleto), a insercao e o limite inferior conhecido. Colunas
+				// tipadas, nao `coalesce`: comparada a uma expressao `sql`, a data vai crua ao driver, que
+				// recusa o `Date` e derrubava a consulta inteira.
+				operators.or(
+					operators.gt(fields.dataEmissao, prazoCutoff),
+					operators.and(operators.isNull(fields.dataEmissao), operators.gt(fields.dataInsercao, prazoCutoff)),
+				),
 			),
 		// Mais antigas primeiro: sao as mais perto de perder o prazo.
 		orderBy: (fields, operators) => operators.asc(sql`coalesce(${fields.dataEmissao}, ${fields.dataInsercao})`),
