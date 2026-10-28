@@ -38,7 +38,7 @@ import { useRFMLabelledStats } from "@/lib/queries/stats/rfm-labelled";
 import { cn } from "@/lib/utils";
 import type { TRFMLabelledStats } from "@/app/api/stats/sales-rfm-labelled/route";
 import type { TGetClientsInput, TGetClientsOutputDefault } from "@/app/api/clients/route";
-import { RFMLabels, type TRFMConfig, getRFMConfigByLabel } from "@/utils/rfm";
+import { NO_PURCHASES_RFM_LABEL, RFMLabels, type TRFMConfig, getRFMConfigByLabel } from "@/utils/rfm";
 import { AspectRatio } from "@radix-ui/react-aspect-ratio";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import dayjs from "dayjs";
@@ -901,6 +901,7 @@ type SegmentsPageMatrixRFMProps = {
 function SegmentsPageMatrixRFM({ onOpenConfig, selectedSegments, onToggleSegment }: SegmentsPageMatrixRFMProps) {
 	const queryClient = useQueryClient();
 
+	const [showNoPurchases, setShowNoPurchases] = useState(false);
 	const [syncMenuIsOpen, setSyncMenuIsOpen] = useState(false);
 	const [openSegmentKey, setOpenSegmentKey] = useState<string | null>(null);
 	const prefersHoverInteraction = useMediaQuery("(hover: hover) and (pointer: fine)");
@@ -947,22 +948,33 @@ function SegmentsPageMatrixRFM({ onOpenConfig, selectedSegments, onToggleSegment
 			</div>
 			<AspectRatio ratio={1}>
 				<div className="isolate grid h-full w-full grid-cols-5 grid-rows-5 gap-px sm:gap-0.5">
-					{rfmStats?.map((item, index) => (
-						<RFMSegmentCell
-							key={`${item.rfmLabel}-${index}`}
-							item={item}
-							index={index}
-							formatDecimal={formatDecimal}
-							prefersHoverInteraction={prefersHoverInteraction}
-							openSegmentKey={openSegmentKey}
-							onOpenSegmentKeyChange={setOpenSegmentKey}
-							isSelected={selectedSegments.includes(item.rfmLabel)}
-							hasSelection={selectedSegments.length > 0}
-							onToggle={() => onToggleSegment(item.rfmLabel)}
-						/>
-					))}
+					{rfmStats
+						?.filter((item) => item.rfmLabel !== NO_PURCHASES_RFM_LABEL)
+						.map((item, index) => (
+							<RFMSegmentCell
+								key={`${item.rfmLabel}-${index}`}
+								item={item}
+								index={index}
+								formatDecimal={formatDecimal}
+								prefersHoverInteraction={prefersHoverInteraction}
+								openSegmentKey={openSegmentKey}
+								onOpenSegmentKeyChange={setOpenSegmentKey}
+								isSelected={selectedSegments.includes(item.rfmLabel)}
+								hasSelection={selectedSegments.length > 0}
+								onToggle={() => onToggleSegment(item.rfmLabel)}
+							/>
+						))}
 				</div>
 			</AspectRatio>
+			<details onToggle={(event) => setShowNoPurchases(event.currentTarget.open)} className="rounded-lg border border-border bg-muted/30 p-3">
+				<summary className="cursor-pointer text-sm font-medium">
+					Sem compras registradas · {rfmStats?.find((item) => item.rfmLabel === NO_PURCHASES_RFM_LABEL)?.clientsQty ?? "—"} clientes
+				</summary>
+				<p className="mt-2 text-sm text-muted-foreground">
+					Clientes sem compras confirmadas registradas. Após a primeira compra, passam a ser classificados na matriz RFM.
+				</p>
+				{showNoPurchases ? <NoPurchasesClients /> : null}
+			</details>
 			{syncMenuIsOpen ? (
 				<SegmentsPageMatrixRFMSyncMenu
 					closeMenu={() => setSyncMenuIsOpen(false)}
@@ -1036,4 +1048,15 @@ function SegmentsPageMatrixRFMSyncMenu({ closeMenu, callbacks }: SegmentsPageMat
 			</ResponsiveMenu.Content>
 		</ResponsiveMenu.Root>
 	);
+}
+
+function NoPurchasesClients() {
+	const clientsQuery = useClients({
+		initialFilters: {
+			segmentationTitles: [NO_PURCHASES_RFM_LABEL],
+			statsPeriodAfter: dayjs().startOf("month").toDate(),
+			statsPeriodBefore: dayjs().endOf("month").toDate(),
+		},
+	});
+	return <SegmentsPageClients clientsQuery={clientsQuery} />;
 }

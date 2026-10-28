@@ -1,3 +1,4 @@
+import { NO_PURCHASES_RFM_LABEL } from "@/utils/rfm";
 import { appApiHandler } from "@/lib/app-api";
 import { runPagesRouteHandler, type PagesRouteHandler, type PagesRouteRequest, type PagesRouteResponse } from "@/lib/pages-route-compat";
 
@@ -187,6 +188,13 @@ const getSalesRFMLabelledRoute: PagesRouteHandler<GetResponse> = async (req, res
 	}
 
 	const gridItems = [
+		{
+			rfmLabel: NO_PURCHASES_RFM_LABEL,
+			backgroundCollor: "bg-slate-500",
+			gridArea: "",
+			clientsQty: clientsQtyBySegment[NO_PURCHASES_RFM_LABEL] || 0,
+			segmentPeriodStats: getSegmentPeriodStats(NO_PURCHASES_RFM_LABEL),
+		},
 		{
 			rfmLabel: "NÃO PODE PERDÊ-LOS",
 			backgroundCollor: "bg-blue-400",

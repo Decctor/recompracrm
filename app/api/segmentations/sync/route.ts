@@ -94,6 +94,7 @@ async function syncSegmentations({ input, session }: { input: TSyncSegmentations
 	const accumulatedResultsByClient = await db
 		.select({
 			clientId: clients.id,
+			hasConfirmedPurchase: sql<boolean>`exists (select 1 from ${sales} as purchase_history where purchase_history.cliente_id = ${clients.id} and purchase_history.organizacao_id = ${clients.organizacaoId} and purchase_history.status_venda = 'CONFIRMADA')`,
 			clientRFMCurrentLabel: clients.analiseRFMTitulo,
 			clientRFMLastLabelModification: clients.analiseRFMUltimaAlteracao,
 			totalPurchases: sql<number>`sum(${sales.valorTotal})`,
@@ -162,7 +163,12 @@ async function syncSegmentations({ input, session }: { input: TSyncSegmentations
 			const frequencyScore = configFrequency ? Number(configFrequency[0]) : 1;
 			const monetaryScore = configMonetary ? Number(configMonetary[0]) : 1;
 
-			const newRFMLabel = getRFMLabel({ monetary: monetaryScore, frequency: frequencyScore, recency: recencyScore });
+			const newRFMLabel = getRFMLabel({
+				monetary: monetaryScore,
+				frequency: frequencyScore,
+				recency: recencyScore,
+				hasConfirmedPurchase: results.hasConfirmedPurchase,
+			});
 
 			const hasClientChangedRFMLabels = results.clientRFMCurrentLabel !== newRFMLabel;
 			if (input.runCampaigns) {

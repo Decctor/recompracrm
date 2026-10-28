@@ -68,6 +68,8 @@ export type TRFMConfig = {
 	};
 };
 
+export const NO_PURCHASES_RFM_LABEL = "SEM COMPRAS REGISTRADAS";
+
 export const RFMLabels = [
 	{
 		text: "CAMPEÕES",
@@ -203,19 +205,35 @@ export const RFMLabels = [
 			[2, 1, 1], // Última tentativa
 		],
 	},
+	{ text: NO_PURCHASES_RFM_LABEL, backgroundCollor: "bg-slate-500", textCollor: "text-white", borderCollor: "border-slate-700", combinations: [] },
 ];
 
 export type TRFMLabelConfig = (typeof RFMLabels)[number];
 
 export const getRFMConfigByLabel = (label: string | null | undefined): TRFMLabelConfig => {
-	if (!label) {
-		return RFMLabels.find((item) => item.text === "PERDIDOS") ?? RFMLabels[0];
-	}
-
-	return RFMLabels.find((item) => item.text === label) ?? RFMLabels.find((item) => item.text === "PERDIDOS") ?? RFMLabels[0];
+	return (
+		RFMLabels.find((item) => item.text === label) ?? {
+			text: "NÃO DEFINIDO",
+			backgroundCollor: "bg-slate-500",
+			textCollor: "text-white",
+			borderCollor: "border-slate-700",
+			combinations: [],
+		}
+	);
 };
 
-export const getRFMLabel = ({ monetary, frequency, recency }: { monetary: number; frequency: number; recency: number }) => {
+export const getRFMLabel = ({
+	monetary,
+	frequency,
+	recency,
+	hasConfirmedPurchase = true,
+}: {
+	monetary: number;
+	frequency: number;
+	recency: number;
+	hasConfirmedPurchase?: boolean;
+}) => {
+	if (!hasConfirmedPurchase) return NO_PURCHASES_RFM_LABEL;
 	const valueScore = Math.round((frequency + monetary) / 2);
 
 	if (recency >= 4 && frequency >= 4 && monetary >= 4) return "CAMPEÕES";
