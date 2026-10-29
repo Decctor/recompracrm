@@ -9,7 +9,7 @@ import { useOrganizationSubscriptionStatus } from "@/lib/queries/organizations";
 import { LogOut } from "lucide-react";
 import Link from "next/link";
 
-const SUPPORT_WHATSAPP_URL = `https://wa.me/553499480791?text=${encodeURIComponent("Olá! Preciso de ajuda com a assinatura da minha loja no RecompraCRM.")}`;
+const SUPPORT_WHATSAPP_URL = `https://wa.me/553492465388?text=${encodeURIComponent("Olá! Preciso de ajuda com a assinatura da minha loja no RecompraCRM.")}`;
 
 type SubscriptionPageProps = {
 	/** Vem do server component: `useUserSession` bate em `/api/auth/session`, que não existe (404). */

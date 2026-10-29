@@ -1,6 +1,6 @@
 // Destinos dos CTAs da landing. Os links de WhatsApp são os mesmos que a landing anterior usava.
 
-const WHATSAPP_NUMBER = "553499480791";
+const WHATSAPP_NUMBER = "553492465388";
 
 function whatsapp(text: string) {
 	return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(text)}`;

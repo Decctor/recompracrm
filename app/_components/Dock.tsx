@@ -79,8 +79,8 @@ const LINKS: Record<TDockVariant, TDockLink[]> = {
 	],
 };
 
-const WHATSAPP_SPECIALIST = "https://wa.me/553499480791?text=Olá, gostaria de falar com um especialista do RecompraCRM.";
-const WHATSAPP_SUPPORT = "https://wa.me/553499480791?text=Olá, preciso de ajuda com o RecompraCRM.";
+const WHATSAPP_SPECIALIST = "https://wa.me/553492465388?text=Olá, gostaria de falar com um especialista do RecompraCRM.";
+const WHATSAPP_SUPPORT = "https://wa.me/553492465388?text=Olá, preciso de ajuda com o RecompraCRM.";
 const TRIAL = { label: "Testar 15 dias grátis", short: "Testar grátis", href: "/auth/signup" };
 const DEMO = { label: "Agendar demonstração", short: "Agendar demo", href: "#cta" };
 

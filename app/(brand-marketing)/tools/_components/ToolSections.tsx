@@ -73,7 +73,7 @@ export function ToolCta({ title, text, demoLabel, whatsappText, location }: Tool
 				<p className="mt-5 max-w-[580px] text-[18px] leading-[1.6] text-white/70 max-md:text-[16px]">{text}</p>
 				<div className="mt-9 flex flex-wrap justify-center gap-2.5">
 					<TrackedCta
-						href={`https://wa.me/553499480791?text=${encodeURIComponent(whatsappText)}`}
+						href={`https://wa.me/553492465388?text=${encodeURIComponent(whatsappText)}`}
 						ctaId={`${location}_demo`}
 						location={location}
 						className="inline-flex h-[52px] items-center gap-2 rounded-full bg-[#ffb900] px-6 text-[15px] font-semibold whitespace-nowrap text-[#171717] transition-colors hover:bg-[#ffc933]"

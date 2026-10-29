@@ -21,7 +21,7 @@ export const BRAND_NAV_LINKS: Pick<NavLinkProps, "href" | "label">[] = [
 	{ href: "/partnerships", label: "Parcerias" },
 ];
 
-const WHATSAPP_DEMO_URL = "https://wa.me/553499480791?text=Olá, gostaria de agendar uma demonstração.";
+const WHATSAPP_DEMO_URL = "https://wa.me/553492465388?text=Olá, gostaria de agendar uma demonstração.";
 
 type BrandHeaderProps = {
 	links?: Pick<NavLinkProps, "href" | "label">[];

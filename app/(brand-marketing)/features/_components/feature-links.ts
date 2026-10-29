@@ -1,4 +1,4 @@
-const WHATSAPP_NUMBER = "553499480791";
+const WHATSAPP_NUMBER = "553492465388";
 
 export const SIGNUP_HREF = "/auth/signup";
 export const PLANS_HREF = "/#planos";

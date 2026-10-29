@@ -1,4 +1,4 @@
-const WHATSAPP_NUMBER = "553499480791";
+const WHATSAPP_NUMBER = "553492465388";
 const WHATSAPP_ERP_TEXT = "Olá! Quero conhecer o ERP do RecompraCRM (PDV, nota fiscal, estoque e financeiro) para a minha loja.";
 
 export const ERP_WHATSAPP_URL = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(WHATSAPP_ERP_TEXT)}`;

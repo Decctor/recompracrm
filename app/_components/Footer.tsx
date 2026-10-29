@@ -52,7 +52,7 @@ export default function FooterV2() {
 							<motion.a
 								whileHover={{ scale: 1.03 }}
 								whileTap={{ scale: 0.97 }}
-								href="https://wa.me/553499480791?text=Olá, gostaria de falar com um especialista do RecompraCRM."
+								href="https://wa.me/553492465388?text=Olá, gostaria de falar com um especialista do RecompraCRM."
 								target="_blank"
 								rel="noopener noreferrer"
 								onClick={() =>

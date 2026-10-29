@@ -31,7 +31,7 @@ Moeda: BRL (R$). Cobrança mensal. Teste grátis de 15 dias, sem cartão de cré
 ## Redes e integração com ERP
 - Preço: sob consulta
 - Para redes de lojas ou operações que precisam de integração com ERP.
-- Contato: https://wa.me/553499480791
+- Contato: https://wa.me/553492465388
 
 ## Garantias (todos os planos)
 - Sem cartão de crédito para testar

@@ -3,7 +3,7 @@
 import { captureClientEvent } from "@/lib/analytics/posthog-client";
 import type { ReactNode } from "react";
 
-const HELP_SUPPORT_HREF = "https://wa.me/553499480791?text=Olá, preciso de ajuda com o RecompraCRM.";
+const HELP_SUPPORT_HREF = "https://wa.me/553492465388?text=Olá, preciso de ajuda com o RecompraCRM.";
 
 type SupportLinkProps = {
 	location: string;

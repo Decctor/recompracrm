@@ -4,5 +4,5 @@
 export const SIGNUP_HREF = "/auth/signup";
 
 export function buildWhatsappUrl(message: string) {
-	return `https://wa.me/553499480791?text=${encodeURIComponent(message)}`;
+	return `https://wa.me/553492465388?text=${encodeURIComponent(message)}`;
 }

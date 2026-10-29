@@ -1,7 +1,7 @@
 import { ArrowRight } from "lucide-react";
 import { TrackedCta } from "./TrackedCta";
 
-const WHATSAPP_DEMO = `https://wa.me/553499480791?text=${encodeURIComponent(
+const WHATSAPP_DEMO = `https://wa.me/553492465388?text=${encodeURIComponent(
 	"Olá! Vi os cases de clientes do RecompraCRM e quero agendar uma demonstração gratuita para a minha loja.",
 )}`;
 

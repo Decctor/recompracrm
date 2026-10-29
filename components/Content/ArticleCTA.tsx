@@ -10,7 +10,7 @@ type ArticleCTAProps = {
 // `id="cta"` é o destino do botão "Agendar demonstração" do Dock no artigo; `data-dock="dark"` faz o
 // Dock escurecer enquanto passa por cima do cartão.
 export function ArticleCTA({ headline, sub, buttonText, whatsappMessage }: ArticleCTAProps) {
-	const whatsappUrl = `https://wa.me/553499480791?text=${encodeURIComponent(whatsappMessage)}`;
+	const whatsappUrl = `https://wa.me/553492465388?text=${encodeURIComponent(whatsappMessage)}`;
 
 	return (
 		<section id="cta" data-dock="dark" className="my-14 scroll-mt-[110px] rounded-[28px] bg-[#0b1628] px-7 py-10 text-white sm:p-12">

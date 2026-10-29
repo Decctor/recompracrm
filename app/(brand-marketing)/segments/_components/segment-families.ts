@@ -39,7 +39,7 @@ export function segmentIllustration(slug: string) {
 export const SIGNUP_HREF = "/auth/signup";
 
 export function whatsappHref(text: string) {
-	return `https://wa.me/553499480791?text=${encodeURIComponent(text)}`;
+	return `https://wa.me/553492465388?text=${encodeURIComponent(text)}`;
 }
 
 export const HUB_WHATSAPP_MESSAGE = "Olá! Vi a página de segmentos do RecompraCRM e gostaria de agendar uma demonstração para a minha loja.";
