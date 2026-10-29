@@ -2,6 +2,7 @@ import type { TFiscalDocumentLifecycleStatusEnum, TFiscalDocumentTypeEnum, TPaym
 import { db } from "@/services/drizzle";
 
 export type TSaleErpTransaction = {
+	grupoPagamentoId?: string | null;
 	id: string;
 	/** Lançamento que originou a transação: chave de agrupamento das parcelas. */
 	lancamentoContabilId: string;
@@ -50,6 +51,7 @@ export async function loadSalesErpData({ orgId, saleIds }: { orgId: string; sale
 				transacoesFinanceiras: {
 					columns: {
 						id: true,
+						grupoPagamentoId: true,
 						valor: true,
 						tipo: true,
 						metodo: true,

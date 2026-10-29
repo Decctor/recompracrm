@@ -81,6 +81,23 @@ export async function processSaleAttendanceStatusChange(input: ProcessSaleAttend
 						transaction.tipo === "ENTRADA" && !transaction.dataEfetivacao && !["CANCELADO", "ESTORNADO"].includes(transaction.provedorStatus ?? ""),
 				);
 
+			// A charge still running on the terminal is settled only by its approval.
+			const inFlightAttempt =
+				pendingTransactions.length === 0
+					? null
+					: await tx.query.paymentAttempts.findFirst({
+							where: (fields, { and, eq, inArray }) =>
+								and(
+									eq(fields.organizacaoId, input.organization.id),
+									inArray(
+										fields.transacaoFinanceiraId,
+										pendingTransactions.map((transaction) => transaction.id),
+									),
+									inArray(fields.status, ["CRIADA", "PROCESSANDO"]),
+								),
+							columns: { id: true },
+						});
+			if (inFlightAttempt) throw new createHttpError.BadRequest("Confirme a cobrança no terminal integrado antes de efetivar os pagamentos da entrega.");
 			if (pendingTransactions.length === 0) throw new createHttpError.BadRequest("Não há pagamento pendente para efetivar.");
 			const settledTotal = sale.lancamentosContabeis
 				.flatMap((entry) => entry.transacoesFinanceiras)

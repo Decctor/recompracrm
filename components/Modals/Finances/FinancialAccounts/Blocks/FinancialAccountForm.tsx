@@ -8,6 +8,9 @@ import TextareaInput from "@/components/Inputs/TextareaInput";
 import ResponsiveMenuSection from "@/components/Utils/ResponsiveMenuSection";
 import { useAccountCharts, useFinancesAccounts } from "@/lib/queries/finances";
 import type { TFinancialAccountConfiguration } from "@/schemas/financial";
+import { PaymentMethodEnum } from "@/schemas/enums";
+import { PAYMENT_METHOD_LABELS } from "@/lib/payments/labels";
+import { getDefaultFinancialAccountReceipts } from "@/lib/finances/financial-account-configuration";
 import type { TFinancialAccountTypeEnum } from "@/schemas/enums";
 import type { TFinancialAccountFormState, TUseInternalFinancialAccountState } from "@/state-hooks/use-internal-financial-account-state";
 import { FinancialAccountTypeOptions } from "@/utils/select-options";
@@ -249,6 +252,37 @@ export default function FinancialAccountForm({
 					</div>
 				</ResponsiveMenuSection>
 			) : null}
+
+			<ResponsiveMenuSection title="RECEBIMENTOS" icon={<CreditCard className="size-4" />}>
+				<p className="text-sm text-muted-foreground">
+					Defina como os pagamentos recebidos nesta conta geram transações. Esta regra é aplicada automaticamente nas vendas.
+				</p>
+				{PaymentMethodEnum.options.map((method) => {
+					const receipts = state.configuracao.recebimentos ?? getDefaultFinancialAccountReceipts("TRANSACOES_PARCELADAS");
+					const rule = receipts.metodos.find((entry) => entry.metodo === method);
+					function changeBehavior(value: string) {
+						updateConfiguration({ recebimentos: { metodos: [
+							...receipts.metodos.filter((entry) => entry.metodo !== method),
+							...(value === "DESABILITADO" ? [] : [{ metodo: method, comportamentoParcelas: value as "TRANSACAO_UNICA" | "TRANSACOES_PARCELADAS" }]),
+						] } });
+					}
+					return <SelectInput
+						key={method}
+						label={PAYMENT_METHOD_LABELS[method]}
+						value={rule?.comportamentoParcelas ?? "DESABILITADO"}
+						options={[
+							{ id: "DESABILITADO", value: "DESABILITADO", label: "NÃO RECEBER NESTA CONTA" },
+							{ id: "TRANSACAO_UNICA", value: "TRANSACAO_UNICA", label: "TRANSAÇÃO ÚNICA — TOTAL NA CONFIRMAÇÃO" },
+							...(method === "CARTAO_CREDITO" ? [{ id: "TRANSACOES_PARCELADAS", value: "TRANSACOES_PARCELADAS", label: "TRANSAÇÕES PARCELADAS — BAIXA INDIVIDUAL" }] : []),
+						]}
+						resetOptionLabel="NÃO RECEBER NESTA CONTA"
+						handleChange={changeBehavior}
+						onReset={() => changeBehavior("DESABILITADO")}
+						editable={editable && !state.chaveSistema}
+					/>;
+				})}
+				<p className="text-xs text-muted-foreground">Terminais integrados aguardam aprovação e confirmam uma transação pelo total. Taxas e repasses não são calculados nesta configuração.</p>
+			</ResponsiveMenuSection>
 
 			{state.id ? (
 				<ResponsiveMenuSection title="STATUS" icon={<Banknote className="h-4 w-4" />}>

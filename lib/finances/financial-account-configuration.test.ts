@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
 	calculateFinancialAccountBalance,
 	getDefaultFinancialAccountConfiguration,
+	getDefaultFinancialAccountReceipts,
 	getLegacyBankFields,
 	isCashLikeFinancialAccountType,
 } from "./financial-account-configuration";
@@ -11,6 +12,7 @@ import type { TFinancialAccountConfiguration } from "@/schemas/financial";
 test("cria configuração de cartão com ciclo de fatura padrão", () => {
 	assert.deepEqual(getDefaultFinancialAccountConfiguration("CARTAO_CREDITO"), {
 		categoria: "CARTAO_CREDITO",
+		recebimentos: getDefaultFinancialAccountReceipts(),
 		limiteCredito: null,
 		diaFechamentoFatura: 25,
 		diaVencimentoFatura: 5,

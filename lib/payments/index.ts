@@ -37,7 +37,7 @@ export function getPaymentProvider(organization: Pick<TOrganizationEntity, "paga
 	}
 }
 
-export type { IPaymentProvider, TPaymentIntentResult, TPaymentSplit, TProcessPaymentsInput } from "./types";
+export type { IPaymentProvider, TPaymentIntentResult, TPaymentSplit, TResolvedPaymentSplit, TProcessPaymentsInput } from "./types";
 export type { TResolvedPaymentMethodDefault } from "./defaults";
 export {
 	CheckoutPaymentSplitSchema,

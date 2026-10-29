@@ -1328,3 +1328,6 @@ export const PreparationStationRuleCriterionEnum = z.enum(["GRUPO", "PRODUTO"], 
 	invalid_type_error: "Tipo não válido para critério da regra da estação.",
 });
 export type TPreparationStationRuleCriterionEnum = z.infer<typeof PreparationStationRuleCriterionEnum>;
+
+export const PaymentInstallmentBehaviorEnum = z.enum(["TRANSACAO_UNICA", "TRANSACOES_PARCELADAS"]);
+export type TPaymentInstallmentBehaviorEnum = z.infer<typeof PaymentInstallmentBehaviorEnum>;

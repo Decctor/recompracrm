@@ -13,7 +13,7 @@ import type { TBenefitRedemptionSurface } from "@/schemas/enums";
 import { processCouponRedemption } from "@/lib/coupons/redemption";
 import { processSaleCupomAutoPrintIfEligible, processSalePreparationTicketAutoPrintIfEligible } from "@/lib/desktop-agent/auto-print";
 import { createAssignedPaymentAttempt, normalizePaymentsForTerminal, resolvePaymentTerminalAssignments } from "@/lib/payment-attempts";
-import { type TPaymentSplit, getPaymentProvider } from "@/lib/payments";
+import { type TResolvedPaymentSplit, getPaymentProvider } from "@/lib/payments";
 import { buildSaleEntryTitle } from "@/lib/sales/entry-titles";
 import { validateSalesSessionSeller } from "@/lib/sales-sessions";
 import { writeDefaultAccountingEntryLines } from "@/lib/finances/accounting-entry-lines";
@@ -45,7 +45,7 @@ export type TProcessSaleConfirmationInput = {
 	organization: TOrganizationEntity;
 
 	saleId: string;
-	salePayments: TPaymentSplit[];
+	salePayments: TResolvedPaymentSplit[];
 	saleAuthorId: string | null;
 	saleClientId?: string | null;
 
@@ -275,6 +275,13 @@ export async function processSaleConfirmationInTransaction({ tx, input }: { tx: 
 	// Com recebimentos parciais (conta de atendimento), os pagamentos desta confirmação cobrem só o
 	// restante: a perna de cartão na maquininha e o troco são conferidos contra ele.
 	const remainingSaleTotal = Math.max(0, sale.valorTotal - (input.prepaidAmount ?? 0));
+	const paymentsTotalCents = input.salePayments.reduce((sum, payment) => sum + Math.round(payment.valor * 100), 0);
+	if (paymentsTotalCents < Math.round(remainingSaleTotal * 100)) {
+		throw new createHttpError.BadRequest("A soma dos pagamentos não cobre o total devido da venda.");
+	}
+	if (input.salePayments.some((payment) => payment.metodo === "FIADO_NOTA") && !sale.clienteId) {
+		throw new createHttpError.BadRequest("Identifique o cliente para registrar uma venda no fiado.");
+	}
 	const terminalAssignments = resolvePaymentTerminalAssignments({ payments: input.salePayments, saleTotal: remainingSaleTotal });
 	const salePayments = terminalAssignments.length > 0 ? normalizePaymentsForTerminal(input.salePayments) : input.salePayments;
 

@@ -1,3 +1,4 @@
+import { PaymentReceiptConditionsSchema } from "@/schemas/financial";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -16,6 +17,7 @@ function loadService(path: string, mocks: Record<string, unknown>) {
 		module,
 		exports: module.exports,
 		require: (id: string) => (id in mocks ? mocks[id] : id.startsWith("@/") ? {} : require(id)),
+		crypto: globalThis.crypto,
 		Date,
 		Map,
 		Set,
@@ -46,12 +48,13 @@ test("installments before a terminal payment retain their input payment associat
 	const { LocalPaymentProvider } = loadService("lib/payments/providers/local.ts", {
 		"@/lib/finances/financial-transaction-value": { normalizeFinancialTransactionValue: ({ valor }: { valor: number }) => ({ valor }) },
 		"@/services/drizzle/schema": { financialTransactions: {} },
+		"@/schemas/financial": { PaymentReceiptConditionsSchema },
 	});
 	const results = await new LocalPaymentProvider().processPayments(
 		{
 			pagamentos: [
-				{ metodo: "CARTAO_CREDITO", valor: 60, totalParcelas: 3, efetivacaoTipo: "PENDENTE" },
-				{ metodo: "CARTAO_DEBITO", valor: 40, dispositivoId: "terminal", efetivacaoTipo: "PENDENTE" },
+				{ metodo: "CARTAO_CREDITO", valor: 60, totalParcelas: 3, efetivacaoTipo: "PENDENTE", condicoesRecebimento: { versao: 1, comportamentoParcelas: "TRANSACOES_PARCELADAS", intervaloMeses: 1 } },
+				{ metodo: "CARTAO_DEBITO", valor: 40, dispositivoId: "terminal", efetivacaoTipo: "PENDENTE", condicoesRecebimento: { versao: 1, comportamentoParcelas: "TRANSACAO_UNICA", intervaloMeses: null } },
 			],
 		},
 		tx,

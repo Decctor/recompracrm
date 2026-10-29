@@ -18,6 +18,7 @@ export const SALE_CHANGE_TOLERANCE = 0.01;
 const REVERSED_STATUSES = new Set(["CANCELADO", "ESTORNADO"]);
 
 export type TSaleChangeablePayment = {
+	condicoesRecebimento?: { comportamentoParcelas: "TRANSACAO_UNICA" | "TRANSACOES_PARCELADAS" };
 	metodo: TPaymentMethodEnum;
 	valor: number;
 	efetivacaoTipo?: "IMEDIATA" | "PENDENTE" | null;
@@ -51,7 +52,7 @@ export function isImmediateSalePayment(payment: TSaleChangeablePayment) {
 	// entrar" e não impede o troco que sai do dinheiro recebido junto.
 	if (payment.dispositivoId) return true;
 	if ((payment.efetivacaoTipo ?? "IMEDIATA") !== "IMEDIATA") return false;
-	if (payment.metodo === "CARTAO_CREDITO" && (payment.totalParcelas ?? 1) > 1) return false;
+	if (payment.metodo === "CARTAO_CREDITO" && (payment.totalParcelas ?? 1) > 1 && payment.condicoesRecebimento?.comportamentoParcelas !== "TRANSACAO_UNICA") return false;
 	return true;
 }
 

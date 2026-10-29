@@ -9,7 +9,7 @@ import { cancelCouponRedemption } from "@/lib/coupons/redemption";
 import { getCouponCheckoutConditionIssue, readCouponCheckoutConditions } from "@/lib/coupons/conditions";
 import { ACCOUNTING_ENTRY_BALANCE_TOLERANCE, getAccountingEntryBalanceError } from "@/lib/finances/accounting-entry-balance";
 import { findActivePaymentAttemptForSale } from "@/lib/payment-attempts";
-import { type TPaymentSplit, getPaymentProvider } from "@/lib/payments";
+import { type TCheckoutPaymentSplit, getPaymentProvider, resolvePaymentFinancialAccounts } from "@/lib/payments";
 import { validateSalesSessionSeller } from "@/lib/sales-sessions";
 import { getSaleChangeTotal } from "@/lib/sales/sale-change";
 import { resolveSaleEditability } from "@/lib/sales/sale-editability";
@@ -93,7 +93,7 @@ export type TProcessConfirmedSaleEditInput = {
 	entregaLocalizacaoId?: string | null;
 	comandaNumero?: string | null;
 	// Splits novos APENAS para o restante não efetivado — o já recebido permanece intacto.
-	pagamentos: TPaymentSplit[];
+	pagamentos: Omit<TCheckoutPaymentSplit, "id">[];
 	// Já resolvido pela rota via resolveSaleFiscalEmissionOverride (null = herda a organização).
 	emissaoFiscalAutomatica: boolean | null;
 	emissaoFiscalDocumento?: TSaleFiscalDocument | null;
@@ -248,6 +248,11 @@ export async function processConfirmedSaleEditInTransaction({ tx, input }: { tx:
 	if (input.pagamentos.some((payment) => payment.dispositivoId)) {
 		throw new createHttpError.BadRequest("A cobrança na maquininha só pode ser atribuída na confirmação da venda.");
 	}
+
+	const resolvedPayments = await resolvePaymentFinancialAccounts({
+		organization: input.organization, payments: input.pagamentos, tx,
+		previousTransactions: sale.lancamentosContabeis.flatMap((entry) => entry.transacoesFinanceiras),
+	});
 
 	const existingItemsById = new Map(sale.itens.map((item) => [item.id, item]));
 
@@ -772,7 +777,7 @@ export async function processConfirmedSaleEditInTransaction({ tx, input }: { tx:
 						vendaId: input.saleId,
 						lancamentoContabilId: vendaEntry.id,
 						organizacaoId: organizationId,
-						pagamentos: input.pagamentos,
+						pagamentos: resolvedPayments,
 						autorId: input.saleAuthorId,
 						sessaoVendaId: input.sessaoVendaId ?? null,
 						saleLabel: vendaEntry.titulo,
@@ -798,7 +803,7 @@ export async function processConfirmedSaleEditInTransaction({ tx, input }: { tx:
 					tx,
 					organization: input.organization,
 					lancamentoContabilId: vendaEntry.id,
-					salePayments: input.pagamentos,
+					salePayments: resolvedPayments,
 					saleTotal: Math.max(0, valorTotal - keptNetTotal),
 					sessaoVendaId: input.sessaoVendaId ?? null,
 					autorId: input.saleAuthorId,

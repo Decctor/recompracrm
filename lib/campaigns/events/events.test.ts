@@ -26,6 +26,8 @@ import { recordCampaignOccurrence } from "./occurrences";
 import { recordPurchaseCampaignEvent } from "./purchases";
 import { recordSegmentationCampaignEvents } from "@/lib/campaigns/engine/segmentation";
 
+const SINGLE_RECEIPT = { versao: 1, comportamentoParcelas: "TRANSACAO_UNICA", intervaloMeses: null } as const;
+
 const snapshot = {
 	compraValor: 100,
 	comprasQuantidadeAnterior: 1,
@@ -106,7 +108,7 @@ async function confirm(saleId = "sale", overrides: Record<string, unknown> = {})
 				organization,
 				saleId,
 				saleAuthorId: null,
-				salePayments: [{ metodo: "DINHEIRO", valor: 120, efetivacaoTipo: "IMEDIATA" }],
+				salePayments: [{ metodo: "DINHEIRO", valor: 120, efetivacaoTipo: "IMEDIATA", condicoesRecebimento: SINGLE_RECEIPT }],
 				accountingEntryDebitAccountId: "debit",
 				accountingEntryCreditAccountId: "credit",
 				...overrides,
@@ -256,7 +258,7 @@ test("outer rollback removes confirmation, accounting, payments, cashback and ev
 					organization,
 					saleId: "sale",
 					saleAuthorId: null,
-					salePayments: [{ metodo: "DINHEIRO", valor: 100, efetivacaoTipo: "IMEDIATA" }],
+					salePayments: [{ metodo: "DINHEIRO", valor: 100, efetivacaoTipo: "IMEDIATA", condicoesRecebimento: SINGLE_RECEIPT }],
 					accountingEntryDebitAccountId: "debit",
 					accountingEntryCreditAccountId: "credit",
 				},

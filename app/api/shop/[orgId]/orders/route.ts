@@ -5,7 +5,7 @@ import { recomputeClientDuplicatesSafely } from "@/lib/clients/duplicates";
 import { getAvailableCouponsForClient } from "@/lib/coupons/availability";
 import { type TCouponCartItem, evaluateCouponAgainstCart } from "@/lib/coupons/engine";
 import { formatPhoneAsBase } from "@/lib/formatting";
-import { getOrganizationPaymentMethodsConfig } from "@/lib/payments";
+import { resolvePaymentFinancialAccounts } from "@/lib/payments";
 import { resolveCatalogOrderItem, type TResolvedCatalogOrderItem } from "@/lib/products/resolve-catalog-order-item";
 import { processSaleConfirmation } from "@/lib/sales/sale-processing";
 import {
@@ -641,28 +641,28 @@ async function createShopOrder(request: NextRequest) {
       !organizationSaleDefaults.creditoContaId) {
       throw new createHttpError.InternalServerError("A organização não possui contas padrão de vendas configuradas.");
     }
-    const paymentDefaults = getOrganizationPaymentMethodsConfig(organization.configuracao)[input.pagamento.metodo];
-    if (totalToPay > 0 && !paymentDefaults?.suportado)
-      throw new createHttpError.BadRequest("Método de pagamento não habilitado para esta organização.");
+    // Loja digital não tem operador para escolher conta: a resolução cai na padrão do método e
+    // aplica as condições de recebimento da conta, como em qualquer outro checkout.
+    const salePayments =
+      totalToPay > 0
+        ? await resolvePaymentFinancialAccounts({
+            organization,
+            payments: [
+              {
+                metodo: input.pagamento.metodo,
+                valor: totalToPay,
+                efetivacaoTipo: "PENDENTE",
+                dataPrevisao: new Date().toISOString(),
+                observacoes: input.pagamento.observacoes ?? metadata.pagamento.descricao,
+              },
+            ],
+          })
+        : [];
 
     await processSaleConfirmation({
       organization,
       saleId,
-      salePayments:
-        totalToPay > 0
-          ? [
-        {
-          metodo: input.pagamento.metodo,
-          valor: totalToPay,
-          efetivacaoTipo: "PENDENTE",
-          dataPrevisao: new Date(),
-          observacoes:
-            input.pagamento.observacoes ?? metadata.pagamento.descricao,
-          // Loja digital não tem operador para escolher conta — sempre a padrão do método.
-                contaFinanceiraId: paymentDefaults?.contaFinanceiraPadraoId ?? null,
-        },
-            ]
-          : [],
+      salePayments,
       saleAuthorId: null,
       saleClientId: client.id,
       saleCashbackProgramId: programId,

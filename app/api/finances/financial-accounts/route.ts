@@ -4,6 +4,7 @@ import type { TAuthUserSession } from "@/lib/authentication/types";
 import {
 	calculateFinancialAccountBalance,
 	getLegacyBankFields,
+	getDefaultFinancialAccountReceipts,
 	isCashLikeFinancialAccountType,
 } from "@/lib/finances/financial-account-configuration";
 import { canCreateFinances, canEditFinances, canViewFinances } from "@/lib/permissions/finances";
@@ -126,7 +127,7 @@ async function assertFinancialAccountRelations({
 	if (!paymentAccount) throw new createHttpError.BadRequest("A conta de pagamento padrão precisa ser uma conta ativa de caixa.");
 }
 
-function getFinancialAccountValues(financialAccount: TCreateFinancialAccountInput["financialAccount"]) {
+function getFinancialAccountValues(financialAccount: TCreateFinancialAccountInput["financialAccount"], previousReceipts?: TCreateFinancialAccountInput["financialAccount"]["configuracao"]["recebimentos"]) {
 	return {
 		nome: financialAccount.nome,
 		descricao: financialAccount.descricao ?? null,
@@ -136,7 +137,7 @@ function getFinancialAccountValues(financialAccount: TCreateFinancialAccountInpu
 		contaContabilId: financialAccount.contaContabilId ?? null,
 		saldoInicial: financialAccount.saldoInicial,
 		dataSaldoInicial: financialAccount.dataSaldoInicial,
-		configuracao: financialAccount.configuracao,
+		configuracao: { ...financialAccount.configuracao, recebimentos: financialAccount.configuracao.recebimentos ?? previousReceipts ?? getDefaultFinancialAccountReceipts() },
 		...getLegacyBankFields(financialAccount.configuracao),
 	};
 }
@@ -251,18 +252,22 @@ async function updateFinancialAccount({ input, session }: { input: TUpdateFinanc
 
 	const existing = await db.query.financialAccounts.findFirst({
 		where: and(eq(financialAccounts.id, input.financialAccountId), eq(financialAccounts.organizacaoId, orgId)),
-		columns: { id: true, chaveSistema: true, tipo: true, ativo: true },
+		columns: { id: true, chaveSistema: true, tipo: true, ativo: true, configuracao: true },
 	});
 	if (!existing) throw new createHttpError.NotFound("Conta financeira não encontrada.");
 	if (existing.chaveSistema && (existing.tipo !== input.financialAccount.tipo || !input.financialAccount.ativo)) {
 		throw new createHttpError.BadRequest("Contas financeiras gerenciadas pelo sistema não podem ter seu tipo ou status alterados.");
 	}
 
+	if (existing.chaveSistema && input.financialAccount.configuracao.recebimentos && JSON.stringify(input.financialAccount.configuracao.recebimentos) !== JSON.stringify(existing.configuracao.recebimentos)) {
+		throw new createHttpError.BadRequest("Os recebimentos de contas gerenciadas pelo sistema não podem ser alterados.");
+	}
+
 	await db.transaction(async (tx) => {
 		await assertFinancialAccountRelations({ tx, orgId, financialAccount: input.financialAccount });
 		await tx
 			.update(financialAccounts)
-			.set(getFinancialAccountValues(input.financialAccount))
+			.set(getFinancialAccountValues(input.financialAccount, existing.configuracao.recebimentos ?? getDefaultFinancialAccountReceipts("TRANSACOES_PARCELADAS")))
 			.where(and(eq(financialAccounts.id, input.financialAccountId), eq(financialAccounts.organizacaoId, orgId)));
 	});
 

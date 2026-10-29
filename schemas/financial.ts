@@ -9,6 +9,7 @@ import {
 	FiscalDocumentStatusEnum,
 	FiscalDocumentTypeEnum,
 	PaymentMethodEnum,
+	PaymentInstallmentBehaviorEnum,
 	StockMovementTypeEnum,
 } from "./enums";
 
@@ -118,8 +119,40 @@ export type TAccountingEntryLine = z.infer<typeof AccountingEntryLineSchema>;
 // FINANCIAL ACCOUNTS (Contas Financeiras)
 // ============================================================================
 
+export const FinancialAccountPaymentMethodConfigurationSchema = z.object({
+	metodo: PaymentMethodEnum,
+	comportamentoParcelas: PaymentInstallmentBehaviorEnum,
+}).superRefine((value, ctx) => {
+	if (value.metodo !== "CARTAO_CREDITO" && value.comportamentoParcelas === "TRANSACOES_PARCELADAS") {
+		ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["comportamentoParcelas"], message: "Somente cartão de crédito permite transações parceladas." });
+	}
+});
+
+const FinancialAccountReceiptsSchema = z.object({
+	metodos: z.array(FinancialAccountPaymentMethodConfigurationSchema, {
+		required_error: "Métodos de recebimento não informados.", invalid_type_error: "Tipo inválido para métodos de recebimento.",
+	}).superRefine((methods, ctx) => {
+		if (new Set(methods.map((method) => method.metodo)).size !== methods.length) {
+			ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Cada método de recebimento deve aparecer uma única vez." });
+		}
+	}),
+});
+
+export const PaymentReceiptConditionsSchema = z.object({
+	versao: z.literal(1),
+	comportamentoParcelas: PaymentInstallmentBehaviorEnum,
+	intervaloMeses: z.number({ required_error: "Intervalo das parcelas não informado.", invalid_type_error: "Tipo inválido para intervalo das parcelas." }).int().positive().nullable(),
+}).superRefine((value, ctx) => {
+	if ((value.comportamentoParcelas === "TRANSACOES_PARCELADAS" && value.intervaloMeses == null) ||
+		(value.comportamentoParcelas === "TRANSACAO_UNICA" && value.intervaloMeses !== null)) {
+		ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["intervaloMeses"], message: "Informe o intervalo das parcelas." });
+	}
+});
+export type TPaymentReceiptConditions = z.infer<typeof PaymentReceiptConditionsSchema>;
+
 const FinancialAccountConfigurationBankSchema = z.object({
 	categoria: z.literal("BANCO"),
+	recebimentos: FinancialAccountReceiptsSchema.optional(),
 	tipo: BankAccountTypeEnum.optional().nullable(),
 	codigo: z.string({ invalid_type_error: "Tipo não válido para o código do banco." }).optional().nullable(),
 	nome: z.string({ invalid_type_error: "Tipo não válido para o nome do banco." }).optional().nullable(),
@@ -130,10 +163,12 @@ const FinancialAccountConfigurationBankSchema = z.object({
 
 const FinancialAccountConfigurationCashSchema = z.object({
 	categoria: z.literal("CAIXA"),
+	recebimentos: FinancialAccountReceiptsSchema.optional(),
 });
 
 const FinancialAccountConfigurationDigitalWalletSchema = z.object({
 	categoria: z.literal("CARTEIRA_DIGITAL"),
+	recebimentos: FinancialAccountReceiptsSchema.optional(),
 	integracaoAtiva: z.boolean({ invalid_type_error: "Tipo não válido para integração ativa." }).optional(),
 	ultimaSincronizacao: z
 		.string({ invalid_type_error: "Tipo não válido para a última sincronização." })
@@ -144,6 +179,7 @@ const FinancialAccountConfigurationDigitalWalletSchema = z.object({
 
 const FinancialAccountConfigurationCreditCardSchema = z.object({
 	categoria: z.literal("CARTAO_CREDITO"),
+	recebimentos: FinancialAccountReceiptsSchema.optional(),
 	limiteCredito: z.number({ invalid_type_error: "Tipo não válido para o limite de crédito." }).nonnegative().optional().nullable(),
 	diaFechamentoFatura: z
 		.number({ required_error: "Dia de fechamento da fatura não informado.", invalid_type_error: "Tipo não válido para o dia de fechamento da fatura." })
@@ -163,10 +199,12 @@ const FinancialAccountConfigurationCreditCardSchema = z.object({
 
 const FinancialAccountConfigurationInvestmentSchema = z.object({
 	categoria: z.literal("INVESTIMENTO"),
+	recebimentos: FinancialAccountReceiptsSchema.optional(),
 });
 
 const FinancialAccountConfigurationOtherSchema = z.object({
 	categoria: z.literal("OUTRO"),
+	recebimentos: FinancialAccountReceiptsSchema.optional(),
 });
 
 export const FinancialAccountConfigurationSchema = z.discriminatedUnion("categoria", [
@@ -235,6 +273,8 @@ export const FinancialTransactionModifierMetadataSchema = z.object({
 export type TFinancialTransactionModifierMetadata = z.infer<typeof FinancialTransactionModifierMetadataSchema>;
 
 export const FinancialTransactionSchema = z.object({
+	grupoPagamentoId: z.string({ invalid_type_error: "Tipo inválido para grupo do pagamento." }).optional().nullable(),
+	condicoesRecebimento: PaymentReceiptConditionsSchema.optional().nullable(),
 	organizacaoId: z.string({
 		required_error: "ID da organizacao nao informado.",
 		invalid_type_error: "Tipo nao valido para o ID da organizacao.",

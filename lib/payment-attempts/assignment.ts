@@ -53,6 +53,6 @@ export function resolvePaymentTerminalAssignments({
 
 // A confirmação persiste o pagamento atribuído como pendente, sem data futura: a previsão é "agora,
 // assim que a maquininha aprovar".
-export function normalizePaymentsForTerminal(payments: TPaymentSplit[]): TPaymentSplit[] {
+export function normalizePaymentsForTerminal<T extends TPaymentSplit>(payments: T[]): T[] {
 	return payments.map((payment) => (payment.dispositivoId ? { ...payment, efetivacaoTipo: "PENDENTE", dataPrevisao: new Date() } : payment));
 }

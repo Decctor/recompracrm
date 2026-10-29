@@ -13,6 +13,8 @@ import { mapItemToCartItem } from "@/lib/sales/map-sale-to-sale-state";
 import { syncDraftItems } from "@/lib/sales/drafts/sync-draft-items";
 import { normalizeCouponGiftItem, roundCouponGiftCurrency } from "./gift-pricing";
 
+const SINGLE_RECEIPT = { versao: 1, comportamentoParcelas: "TRANSACAO_UNICA", intervaloMeses: null } as const;
+
 // Real PostgreSQL semantics in memory. No application .env or production database is loaded.
 const pg = new PGlite();
 const database = drizzle(pg, { schema });
@@ -151,7 +153,7 @@ function confirm(overrides: Partial<Parameters<typeof confirmSale>[0]["input"]> 
 				organization,
 				saleId: "sale",
 				saleAuthorId: null,
-				salePayments: [{ metodo: "DINHEIRO", valor: 26, efetivacaoTipo: "IMEDIATA" }],
+				salePayments: [{ metodo: "DINHEIRO", valor: 26, efetivacaoTipo: "IMEDIATA", condicoesRecebimento: SINGLE_RECEIPT }],
 				accountingEntryDebitAccountId: "debit",
 				accountingEntryCreditAccountId: "credit",
 				initialAttendanceStatus: "PRONTO",
@@ -276,7 +278,7 @@ test("sub-cent gift pricing leaves paid units and extras correct through confirm
 		},
 	});
 	await database.update(schema.sales).set({ valorTotal: 14.01, descontosTotal: 10 });
-	await confirm({ salePayments: [{ metodo: "DINHEIRO", valor: 14.01, efetivacaoTipo: "IMEDIATA" }] });
+	await confirm({ salePayments: [{ metodo: "DINHEIRO", valor: 14.01, efetivacaoTipo: "IMEDIATA", condicoesRecebimento: SINGLE_RECEIPT }] });
 	const row = await database.query.saleItems.findFirst({ with: { adicionais: true } });
 	assert.ok(row);
 	assert.equal(row.valorVendaTotalLiquido, 14.01);
@@ -424,7 +426,7 @@ test("gift confirmation rejects inconsistent sale totals and discounts without c
 	]) {
 		await database.update(schema.sales).set(values);
 		await assert.rejects(
-			confirm({ initialAttendanceStatus: "ENTREGUE", salePayments: [{ metodo: "DINHEIRO", valor: values.valorTotal, efetivacaoTipo: "IMEDIATA" }] }),
+			confirm({ initialAttendanceStatus: "ENTREGUE", salePayments: [{ metodo: "DINHEIRO", valor: values.valorTotal, efetivacaoTipo: "IMEDIATA", condicoesRecebimento: SINGLE_RECEIPT }] }),
 			/totais.*brinde/i,
 		);
 	}
@@ -451,7 +453,7 @@ test("gift confirmation reconciles delivery, general discounts, and discounts on
 	});
 	// 36 + 17 in item nets, minus gift 10 and general discount 2, plus delivery 5.
 	await database.update(schema.sales).set({ valorTotal: 46, descontosTotal: 12, acrescimosTotal: 5 });
-	await confirm({ salePayments: [{ metodo: "DINHEIRO", valor: 46, efetivacaoTipo: "IMEDIATA" }] });
+	await confirm({ salePayments: [{ metodo: "DINHEIRO", valor: 46, efetivacaoTipo: "IMEDIATA", condicoesRecebimento: SINGLE_RECEIPT }] });
 	assert.equal((await database.query.sales.findFirst())?.valorTotal, 46);
 	assert.equal((await database.query.accountingEntries.findFirst())?.valor, 46);
 	assert.equal((await database.query.financialTransactions.findFirst())?.valor, 46);
@@ -484,7 +486,7 @@ test("gift confirmation reconciles cashback redemption and accumulates only the 
 	const input = { saleCashbackProgramId: "program", saleCashbackRedemptionValue: 5, accumulateCashback: true };
 	// Omitting the cashback from stored discounts must roll its debit back too.
 	await database.update(schema.sales).set({ valorTotal: 31, descontosTotal: 10, acrescimosTotal: 5 });
-	await assert.rejects(confirm({ ...input, salePayments: [{ metodo: "DINHEIRO", valor: 31, efetivacaoTipo: "IMEDIATA" }] }), /totais.*brinde/i);
+	await assert.rejects(confirm({ ...input, salePayments: [{ metodo: "DINHEIRO", valor: 31, efetivacaoTipo: "IMEDIATA", condicoesRecebimento: SINGLE_RECEIPT }] }), /totais.*brinde/i);
 	assert.equal((await database.query.cashbackProgramBalances.findFirst())?.saldoValorDisponivel, 20);
 	assert.equal((await database.query.cashbackProgramTransactions.findMany()).length, 1);
 	await database.update(schema.sales).set({ valorTotal: 26, descontosTotal: 15 });

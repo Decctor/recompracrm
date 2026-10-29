@@ -3,7 +3,7 @@ import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { validateActiveSeller } from "@/lib/sellers/validate-active-seller";
 import type { TAuthUserSession } from "@/lib/authentication/types";
-import { CheckoutPaymentSplitSchema, resolvePaymentFinancialAccounts } from "@/lib/payments";
+import { CheckoutPaymentSplitSchema } from "@/lib/payments";
 import { resolveActiveSalesSession, validateSalesSessionSeller } from "@/lib/sales-sessions";
 import { resolveSaleEditability } from "@/lib/sales/sale-editability";
 import { authorizeSaleDiscount, computeSaleAggregatedDiscount } from "@/lib/sales/sale-discount-authorization";
@@ -155,6 +155,7 @@ async function getSaleForEdit({ input, session }: { input: TGetSaleForEditInput;
 							tipo: true,
 							metodo: true,
 							contaFinanceiraId: true,
+							grupoPagamentoId: true,
 							parcela: true,
 							totalParcelas: true,
 							dataEfetivacao: true,
@@ -267,7 +268,6 @@ async function editConfirmedSale({ input, session }: { input: TEditConfirmedSale
 		aprovacaoId: input.descontoAprovacaoId,
 	});
 
-	const salePayments = await resolvePaymentFinancialAccounts({ organization, payments: input.pagamentos });
 
 	const result = await db.transaction((tx) =>
 		processConfirmedSaleEditInTransaction({
@@ -286,7 +286,7 @@ async function editConfirmedSale({ input, session }: { input: TEditConfirmedSale
 				entregaModalidade: input.entregaModalidade,
 				entregaLocalizacaoId: input.entregaLocalizacaoId,
 				comandaNumero: input.comandaNumero,
-				pagamentos: salePayments,
+				pagamentos: input.pagamentos,
 				emissaoFiscalAutomatica,
 				emissaoFiscalDocumento: input.emissaoFiscalDocumento,
 				canChooseFiscalDocument: !!session.membership?.permissoes.fiscal.emitir,

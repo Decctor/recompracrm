@@ -13,7 +13,7 @@ import {
   uniqueIndex,
   varchar,
 } from "drizzle-orm/pg-core";
-import type { TFinancialAccountConfiguration } from "@/schemas/financial";
+import type { TFinancialAccountConfiguration, TPaymentReceiptConditions } from "@/schemas/financial";
 import { newTable } from "./common";
 import {
   accountChartNatureEnum,
@@ -393,6 +393,8 @@ export const financialTransactions = newTable(
     metodo: paymentMethodEnum("metodo").notNull(),
     dataPrevisao: timestamp("data_previsao").notNull(),
     dataEfetivacao: timestamp("data_efetivacao"),
+    grupoPagamentoId: varchar("grupo_pagamento_id", { length: 255 }),
+    condicoesRecebimento: jsonb("condicoes_recebimento").$type<TPaymentReceiptConditions | null>(),
     parcela: integer("parcela"),
     totalParcelas: integer("total_parcelas"),
     // Payment provider tracking (nullable, only populated when a provider is involved)
@@ -409,6 +411,7 @@ export const financialTransactions = newTable(
     dataInsercao: timestamp("data_insercao").defaultNow().notNull(),
   },
   (table) => ({
+    grupoPagamentoIdx: index("idx_financial_transactions_org_grupo_pagamento").on(table.organizacaoId, table.grupoPagamentoId),
     tentativaPagamentoIdx: uniqueIndex(
       "idx_financial_transactions_tentativa_pagamento",
     )

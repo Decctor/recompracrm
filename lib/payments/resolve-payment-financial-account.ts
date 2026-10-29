@@ -1,3 +1,5 @@
+import { PaymentReceiptConditionsSchema, type TPaymentReceiptConditions } from "@/schemas/financial";
+import type { TPaymentMethodEnum } from "@/schemas/enums";
 import createHttpError from "http-errors";
 import { and, eq, inArray } from "drizzle-orm";
 import { db, type DBTransaction } from "@/services/drizzle";
@@ -6,12 +8,13 @@ import type { TOrganizationEntity } from "@/services/drizzle/schema";
 import type { TOrganizationConfiguration } from "@/schemas/organizations";
 import { getOrganizationPaymentMethodsConfig } from "./defaults";
 import type { TCheckoutPaymentSplit } from "./schemas";
-import type { TPaymentSplit } from "./types";
+import { resolvePaymentReceiptConditions } from "./receipt-conditions";
+import type { TResolvedPaymentSplit, TPaymentSplit } from "./types";
 
 type TPaymentMethodsConfig = TOrganizationConfiguration["defaults"]["pagamentos"]["metodos"];
 
 type TResolvablePayment = Pick<TCheckoutPaymentSplit, "metodo" | "valor" | "efetivacaoTipo"> &
-	Partial<Pick<TCheckoutPaymentSplit, "totalParcelas" | "dataPrevisao" | "observacoes" | "contaFinanceiraId" | "dispositivoId">>;
+	Partial<Pick<TCheckoutPaymentSplit, "totalParcelas" | "dataPrevisao" | "observacoes" | "contaFinanceiraId" | "dispositivoId" | "transacaoOrigemId">>;
 
 /** Alguma configuração de método deixa o operador escolher a conta? */
 export function hasEditableFinancialAccountMethod(methodsConfig: TPaymentMethodsConfig): boolean {
@@ -73,7 +76,12 @@ export function resolvePaymentFinancialAccountsAgainstAccounts({
 			}
 		}
 
+		const accountId = payment.contaFinanceiraId ?? methodConfig.contaFinanceiraPadraoId ?? null;
+		if (accountId && !activeAccountIds.has(accountId)) {
+			throw new createHttpError.BadRequest("Conta financeira não encontrada ou inativa para esta organização.");
+		}
 		return {
+			transacaoOrigemId: payment.transacaoOrigemId,
 			metodo: payment.metodo,
 			valor: payment.valor,
 			totalParcelas: payment.totalParcelas ?? undefined,
@@ -94,30 +102,41 @@ export async function resolvePaymentFinancialAccounts({
 	organization,
 	payments,
 	tx,
+	previousTransactions = [],
 }: {
 	organization: Pick<TOrganizationEntity, "id" | "configuracao">;
 	payments: TResolvablePayment[];
 	tx?: DBTransaction;
-}): Promise<TPaymentSplit[]> {
+	// Trusted rows loaded by the editing service, scoped to this sale and organization.
+	previousTransactions?: { id: string; metodo: TPaymentMethodEnum; contaFinanceiraId: string | null; dataEfetivacao: Date | null; provedorStatus: string | null; tipo: string; condicoesRecebimento: TPaymentReceiptConditions | null; parcela: number | null; totalParcelas: number | null }[];
+}): Promise<TResolvedPaymentSplit[]> {
 	const methodsConfig = getOrganizationPaymentMethodsConfig(organization.configuracao);
-	const chosenAccountIds = [...new Set(payments.map((payment) => payment.contaFinanceiraId).filter((id): id is string => Boolean(id)))];
-
-	// Sem escolha explícita nenhuma consulta é feita — o caso de toda organização que não usa a feature.
-	if (chosenAccountIds.length === 0) {
-		return resolvePaymentFinancialAccountsAgainstAccounts({ methodsConfig, payments, activeAccountIds: new Set() });
-	}
-
+	const accountIds = [...new Set(payments.map((payment) => payment.contaFinanceiraId ?? methodsConfig[payment.metodo]?.contaFinanceiraPadraoId).filter((id): id is string => Boolean(id)))];
 	const executor = tx ?? db;
-	const accounts = await executor
-		.select({ id: financialAccounts.id })
+	const accounts = accountIds.length === 0 ? [] : await executor
+		.select({ id: financialAccounts.id, configuracao: financialAccounts.configuracao })
 		.from(financialAccounts)
-		.where(
-			and(eq(financialAccounts.organizacaoId, organization.id), eq(financialAccounts.ativo, true), inArray(financialAccounts.id, chosenAccountIds)),
-		);
-
-	return resolvePaymentFinancialAccountsAgainstAccounts({
-		methodsConfig,
-		payments,
-		activeAccountIds: new Set(accounts.map((account) => account.id)),
+		.where(and(eq(financialAccounts.organizacaoId, organization.id), eq(financialAccounts.ativo, true), inArray(financialAccounts.id, accountIds)));
+	const resolved = resolvePaymentFinancialAccountsAgainstAccounts({
+		methodsConfig, payments, activeAccountIds: new Set(accounts.map((account) => account.id)),
+	});
+	const usedReferences = new Set<string>();
+	return resolved.map((payment) => {
+		const previous = payment.transacaoOrigemId ? previousTransactions.find((row) => row.id === payment.transacaoOrigemId) : null;
+		if (payment.transacaoOrigemId && (!previous || previous.dataEfetivacao || previous.tipo !== "ENTRADA" || ["CANCELADO", "ESTORNADO"].includes(previous.provedorStatus ?? "") || usedReferences.has(previous.id))) {
+			throw new createHttpError.BadRequest("Transação de origem inválida para a edição deste pagamento.");
+		}
+		if (previous) usedReferences.add(previous.id);
+		const sameOperation = previous && previous.metodo === payment.metodo && previous.contaFinanceiraId === payment.contaFinanceiraId;
+		const previousConditions = sameOperation ? PaymentReceiptConditionsSchema.parse(previous.condicoesRecebimento ?? {
+			versao: 1,
+			comportamentoParcelas: previous.parcela != null && (previous.totalParcelas ?? 1) > 1 ? "TRANSACOES_PARCELADAS" : "TRANSACAO_UNICA",
+			intervaloMeses: previous.parcela != null && (previous.totalParcelas ?? 1) > 1 ? 1 : null,
+		}) : null;
+		return resolvePaymentReceiptConditions({
+			payment, previousConditions,
+			methodConfig: methodsConfig[payment.metodo],
+			accountConfiguration: accounts.find((account) => account.id === payment.contaFinanceiraId)?.configuracao ?? null,
+		});
 	});
 }

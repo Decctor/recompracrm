@@ -122,6 +122,7 @@ export function computeSaleFiscalStatus({ documents }: { documents: FiscalDocume
 const NON_EDITABLE_PAYMENT_STATUSES = new Set(["CANCELADO", "ESTORNADO"]);
 
 export type SalePaymentTransactionInput = {
+	grupoPagamentoId?: string | null;
 	id: string;
 	lancamentoContabilId: string;
 	titulo?: string | null;
@@ -201,6 +202,7 @@ export function isPaymentOverdue(payment: Pick<ClassifiedPayment, "dataEfetivaca
 
 function resolveInstallmentGroupId(transaction: SalePaymentTransactionInput): string | null {
 	if (!transaction.totalParcelas || transaction.totalParcelas <= 1) return null;
+	if (transaction.grupoPagamentoId) return transaction.parcela == null ? null : transaction.grupoPagamentoId;
 	return `${transaction.lancamentoContabilId}:${transaction.metodo}:${transaction.totalParcelas}`;
 }
 
@@ -321,7 +323,7 @@ export function groupSalePaymentsByMethod(payments: ClassifiedPayment[], now = n
 			// `totalParcelas` e a fonte de verdade: uma venda em 6x cujas parcelas futuras ainda nao
 			// foram lancadas deve continuar lendo "6x", e nao o numero de linhas ja existentes.
 			parcelasTotal: parcelas[0].totalParcelas ?? parcelas.length,
-			parcelasRecebidas: efetivadas.length,
+			parcelasRecebidas: parcelas[0].grupoParcelasId == null && efetivadas.length > 0 ? (parcelas[0].totalParcelas ?? 1) : efetivadas.length,
 			valorRecebido: efetivadas.reduce((acc, parcela) => acc + parcela.valor, 0),
 			proximoVencimento: vencimentosEmAberto[0] ?? null,
 			ultimoRecebimento: recebimentos[0] ?? null,

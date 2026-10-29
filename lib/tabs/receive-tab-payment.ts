@@ -1,5 +1,5 @@
 import { writeDefaultAccountingEntryLines } from "@/lib/finances/accounting-entry-lines";
-import { type TPaymentSplit, getPaymentProvider, resolvePaymentFinancialAccounts } from "@/lib/payments";
+import { type TResolvedPaymentSplit, getPaymentProvider, resolvePaymentFinancialAccounts } from "@/lib/payments";
 import { createAccountingEntry } from "@/lib/sales/sale-processing/create-accounting-entry";
 import { validateSalesSessionSeller } from "@/lib/sales-sessions";
 import type { TPaymentMethodEnum } from "@/schemas/enums";
@@ -84,7 +84,7 @@ export async function prepareTabPayment({ organization, input }: { organization:
 				contaFinanceiraId: input.payment.contaFinanceiraId ?? null,
 			},
 		],
-	})) as [TPaymentSplit];
+	})) as [TResolvedPaymentSplit];
 	return salePayment;
 }
 
@@ -100,7 +100,7 @@ export async function receiveTabPaymentInTransaction({
 	organization: TOrganizationEntity;
 	userId: string | null;
 	input: TReceiveTabPaymentInput;
-	salePayment: TPaymentSplit;
+	salePayment: TResolvedPaymentSplit;
 }) {
 	const organizationSaleDefaults = organization.configuracao.defaults.contabilidade.lancamentosPadrao.vendas;
 	const accountingEntryDebitAccountId = organizationSaleDefaults.debitoContaId;

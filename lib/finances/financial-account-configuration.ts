@@ -1,7 +1,16 @@
 import type { TFinancialAccountConfiguration } from "@/schemas/financial";
+import { PaymentMethodEnum } from "@/schemas/enums";
 import type { TFinancialAccountTypeEnum } from "@/schemas/enums";
 
+export function getDefaultFinancialAccountReceipts(creditBehavior: "TRANSACAO_UNICA" | "TRANSACOES_PARCELADAS" = "TRANSACAO_UNICA"): NonNullable<TFinancialAccountConfiguration["recebimentos"]> {
+	return { metodos: PaymentMethodEnum.options.map((metodo) => ({ metodo, comportamentoParcelas: metodo === "CARTAO_CREDITO" ? creditBehavior : "TRANSACAO_UNICA" })) };
+}
+
 export function getDefaultFinancialAccountConfiguration(tipo: TFinancialAccountTypeEnum): TFinancialAccountConfiguration {
+	return { ...getCategoryConfiguration(tipo), recebimentos: getDefaultFinancialAccountReceipts() };
+}
+
+function getCategoryConfiguration(tipo: TFinancialAccountTypeEnum): TFinancialAccountConfiguration {
 	switch (tipo) {
 		case "BANCO":
 			return {

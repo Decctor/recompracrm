@@ -10,6 +10,8 @@ export const CheckoutPaymentSplitSchema = z.object({
 		required_error: "ID do pagamento não informado.",
 		invalid_type_error: "Tipo não válido para ID do pagamento.",
 	}),
+	// Reference only: the server verifies ownership and reads the persisted conditions.
+	transacaoOrigemId: z.string({ invalid_type_error: "Tipo inválido para transação de origem." }).optional().nullable(),
 	metodo: PaymentMethodEnum,
 	valor: z.number({
 		required_error: "Valor do pagamento não informado.",
@@ -82,7 +84,7 @@ export function isCheckoutPaymentSplitValid(payment: TCheckoutPaymentSplit, cont
 
 export function getPaymentSummaryLabel(payment: TCheckoutPaymentSplit) {
 	if (isInstallmentPayment(payment)) {
-		return `${payment.totalParcelas} parcelas, primeira em ${payment.dataPrevisao ?? "N/A"}`;
+		return `Cartão em ${payment.totalParcelas} parcelas`;
 	}
 	if (payment.efetivacaoTipo === "IMEDIATA") return "Efetivado agora";
 	return `Previsto para ${payment.dataPrevisao ?? "N/A"}`;

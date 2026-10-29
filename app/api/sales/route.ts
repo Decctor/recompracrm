@@ -437,6 +437,7 @@ async function getSales({ input, sessionUser }: { input: TGetSalesInput; session
 						valor: true,
 						tipo: true,
 						metodo: true,
+						grupoPagamentoId: true,
 						parcela: true,
 						totalParcelas: true,
 						dataEfetivacao: true,

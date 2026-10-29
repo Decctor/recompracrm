@@ -155,3 +155,24 @@ test("parcelas futuras ainda não lançadas não encolhem o rótulo", () => {
 	assert.equal(groups[0].parcelasTotal, 6);
 	assert.equal(groups[0].parcelasRecebidas, 0);
 });
+
+test("grupos explícitos separam dois cartões com o mesmo número de parcelas", () => {
+	const groups = group([
+		transaction({ id: "a1", grupoPagamentoId: "a", parcela: 1, totalParcelas: 2 }),
+		transaction({ id: "a2", grupoPagamentoId: "a", parcela: 2, totalParcelas: 2 }),
+		transaction({ id: "b1", grupoPagamentoId: "b", parcela: 1, totalParcelas: 2 }),
+		transaction({ id: "b2", grupoPagamentoId: "b", parcela: 2, totalParcelas: 2 }),
+	]);
+	assert.equal(groups.length, 2);
+	assert.deepEqual(groups.map((entry) => entry.valor), [200, 200]);
+});
+
+test("cartão em transação única aprovado aparece integralmente recebido", () => {
+	const input = transaction({ id: "single", grupoPagamentoId: "single-group", parcela: null, totalParcelas: 3, valor: 600, dataEfetivacao: NOW });
+	const classified = classifySalePaymentTransactions([input]);
+	assert.equal(classified.todas[0].grupoParcelasId, null);
+	const [result] = group([input]);
+	assert.equal(result.parcelasTotal, 3);
+	assert.equal(result.parcelasRecebidas, 3);
+	assert.equal(result.valorRecebido, 600);
+});

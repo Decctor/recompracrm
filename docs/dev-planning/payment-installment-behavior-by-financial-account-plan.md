@@ -1,6 +1,6 @@
 # Planejamento — Parcelamento por conta financeira
 
-**Status:** Planejado; implementação não iniciada  
+**Status:** Implementado; migration `drizzle/0142_payment_receipt_conditions.sql` ainda não aplicada  
 **Data:** 29/10/2026
 
 ## Objetivo e diagnóstico
@@ -211,15 +211,38 @@ pagamento aprovado significa dinheiro disponível na conta bancária.
 
 ## Sequência de implementação
 
-- [ ] Fechar política de compatibilidade, métodos elegíveis e contas sem regra.
-- [ ] Criar enums, schemas, tipos internos e migration das transações.
-- [ ] Preparar configuração, defaults e preenchimento das contas existentes.
-- [ ] Implementar resolução e validação centralizadas no servidor.
-- [ ] Adaptar geração de transações e integração com terminais.
-- [ ] Adaptar criação/controle de contas para configurar a regra por método.
-- [ ] Ajustar textos e consumidores do checkout sem expor um novo controle ao operador.
-- [ ] Revisar agrupamento e demais consumidores financeiros.
-- [ ] Validar compatibilidade e ativar a regra após o preenchimento das contas.
+- [x] Fechar política de compatibilidade, métodos elegíveis e contas sem regra.
+- [x] Criar enums, schemas, tipos internos e migration das transações.
+- [x] Preparar configuração, defaults e preenchimento das contas existentes.
+- [x] Implementar resolução e validação centralizadas no servidor.
+- [x] Adaptar geração de transações e integração com terminais.
+- [x] Adaptar criação/controle de contas para configurar a regra por método.
+- [x] Ajustar textos e consumidores do checkout sem expor um novo controle ao operador.
+- [x] Revisar agrupamento e demais consumidores financeiros.
+- [ ] Aplicar a migration 0142 e então ajustar as contas que operam por adquirente para
+      `TRANSACAO_UNICA` no cartão de crédito.
+
+## Decisões de implementação
+
+- **Contas sem regra:** sem conta financeira, ou conta salva antes de `recebimentos`, o
+  servidor aplica o comportamento anterior (`TRANSACOES_PARCELADAS` no crédito,
+  `TRANSACAO_UNICA` nos demais). A migration preenche as contas existentes com a mesma
+  escolha; contas novas nascem com `TRANSACAO_UNICA`. Nada muda até a conta ser ajustada.
+- **Conta com lista explícita:** método ausente da lista de `recebimentos` é recusado
+  ("NÃO RECEBER NESTA CONTA" na configuração da conta).
+- **Conta padrão do método:** passa a ser validada como ativa e da organização, como a
+  escolha explícita já era.
+- **Terminal integrado:** sempre `TRANSACAO_UNICA` e pendente até a aprovação. Efetivação
+  manual (financeiro, conciliação, baixa na entrega) só é bloqueada enquanto a tentativa
+  está `CRIADA` ou `PROCESSANDO`; depois do resultado, o runbook de conciliação manual de
+  `lib/payment-attempts/README.md` continua valendo.
+- **Edição de venda:** o split reidratado carrega `transacaoOrigemId`. O servidor confere
+  que a transação pertence à venda, está pendente e não foi usada duas vezes, e reaproveita
+  as condições gravadas quando método e conta não mudaram.
+- **Previsão:** obrigatória quando há geração de parcelas; pagamento pendente único sem
+  previsão mantém o fallback "agora" do provider.
+- **Confirmação:** a soma dos pagamentos precisa cobrir o total devido calculado pelo
+  servidor; fiado exige cliente identificado.
 
 ## Critérios de aceite
 
@@ -232,5 +255,3 @@ pagamento aprovado significa dinheiro disponível na conta bancária.
 - Edição, cancelamento e estorno preservam integridade e não duplicam efeitos.
 - Vendas e transações anteriores mantêm seu comportamento histórico.
 - O operador não precisa compreender nem selecionar a regra no checkout.
-
-Este documento registra o plano; não implementa mudanças de produto ou de banco.

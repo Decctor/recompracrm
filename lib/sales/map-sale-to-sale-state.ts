@@ -120,6 +120,7 @@ function mapPendingPaymentsToSplits(
 		const groupPending = pending.filter((entry) => entry.grupoParcelasId === payment.grupoParcelasId);
 		splits.push({
 			id: crypto.randomUUID(),
+			transacaoOrigemId: payment.id,
 			// Transação já gravada: o valor é uma decisão tomada, não acompanha o total.
 			valorModo: "FIXO",
 			metodo: payment.metodo,
@@ -136,10 +137,11 @@ function mapPendingPaymentsToSplits(
 	for (const payment of pending.filter((entry) => !entry.grupoParcelasId)) {
 		splits.push({
 			id: crypto.randomUUID(),
+			transacaoOrigemId: payment.id,
 			valorModo: "FIXO",
 			metodo: payment.metodo,
 			valor: payment.valor,
-			totalParcelas: null,
+			totalParcelas: payment.totalParcelas,
 			efetivacaoTipo: "PENDENTE",
 			dataPrevisao: toDateInputValue(payment.dataPrevisao),
 			observacoes: null,

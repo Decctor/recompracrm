@@ -1,7 +1,9 @@
+import type { TPaymentReceiptConditions } from "@/schemas/financial";
 import type { TPaymentMethodEnum } from "@/schemas/enums";
 import type { DBTransaction } from "@/services/drizzle";
 
 export type TPaymentSplit = {
+	transacaoOrigemId?: string | null;
 	metodo: TPaymentMethodEnum;
 	valor: number;
 	totalParcelas?: number;
@@ -16,11 +18,15 @@ export type TPaymentSplit = {
 	dispositivoId?: string | null;
 };
 
+export type TResolvedPaymentSplit = TPaymentSplit & {
+	condicoesRecebimento: TPaymentReceiptConditions;
+};
+
 export type TProcessPaymentsInput = {
 	vendaId: string;
 	lancamentoContabilId: string;
 	organizacaoId: string;
-	pagamentos: TPaymentSplit[];
+	pagamentos: TResolvedPaymentSplit[];
 	autorId: string | null;
 	// Sessão de venda que recortou estes pagamentos (nullable). Carimbada em cada financialTransaction.
 	sessaoVendaId?: string | null;

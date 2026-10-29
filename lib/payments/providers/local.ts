@@ -1,4 +1,5 @@
 import dayjs from "dayjs";
+import { PaymentReceiptConditionsSchema } from "@/schemas/financial";
 import { normalizeFinancialTransactionValue } from "@/lib/finances/financial-transaction-value";
 import { db, type DBTransaction } from "@/services/drizzle";
 import { financialTransactions } from "@/services/drizzle/schema";
@@ -26,24 +27,29 @@ export class LocalPaymentProvider implements IPaymentProvider {
 			// terminal efetiva tudo de uma vez (lib/payment-attempts/consume.ts). Parcelas mensais
 			// no contas-a-receber são do crédito "a receber do emissor", não do terminal.
 			const isTerminalPayment = Boolean(pagamento.dispositivoId);
-			const isInstallmentPayment = !isTerminalPayment && pagamento.metodo === "CARTAO_CREDITO" && (pagamento.totalParcelas ?? 1) > 1;
+			const grupoPagamentoId = crypto.randomUUID();
+			const condicoesRecebimento = PaymentReceiptConditionsSchema.parse(pagamento.condicoesRecebimento);
+			const isInstallmentPayment = !isTerminalPayment && condicoesRecebimento.comportamentoParcelas === "TRANSACOES_PARCELADAS" && (pagamento.totalParcelas ?? 1) > 1;
 
 			if (isInstallmentPayment) {
 				const totalParcelas = pagamento.totalParcelas ?? 1;
 				const primeiraData = resolveDate(pagamento.dataPrevisao, now);
-				const valorParcelaBase = Number((pagamento.valor / totalParcelas).toFixed(2));
+				const totalCents = Math.round(pagamento.valor * 100);
+				const valorParcelaBase = Math.floor(totalCents / totalParcelas) / 100;
 				let valorAcumulado = 0;
 
 				for (let parcela = 1; parcela <= totalParcelas; parcela++) {
 					const valorParcela = parcela === totalParcelas ? Number((pagamento.valor - valorAcumulado).toFixed(2)) : valorParcelaBase;
 					valorAcumulado += valorParcela;
 					const dataPrevisao = dayjs(primeiraData)
-						.add(parcela - 1, "month")
+						.add((parcela - 1) * (condicoesRecebimento.intervaloMeses ?? 1), "month")
 						.toDate();
 
 					const [inserted] = await tx
 						.insert(financialTransactions)
 						.values({
+							grupoPagamentoId,
+							condicoesRecebimento,
 							organizacaoId: input.organizacaoId,
 							lancamentoContabilId: input.lancamentoContabilId,
 							contaFinanceiraId: pagamento.contaFinanceiraId ?? null,
@@ -82,6 +88,8 @@ export class LocalPaymentProvider implements IPaymentProvider {
 			const [inserted] = await tx
 				.insert(financialTransactions)
 				.values({
+					grupoPagamentoId,
+					condicoesRecebimento,
 					organizacaoId: input.organizacaoId,
 					lancamentoContabilId: input.lancamentoContabilId,
 					contaFinanceiraId: pagamento.contaFinanceiraId ?? null,

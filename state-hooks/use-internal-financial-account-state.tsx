@@ -41,7 +41,7 @@ export function useInternalFinancialAccountState({ initialState }: UseInternalFi
 	}, []);
 
 	const updateType = useCallback((tipo: TFinancialAccountTypeEnum) => {
-		setState((previous) => ({ ...previous, tipo, configuracao: getDefaultFinancialAccountConfiguration(tipo) }));
+		setState((previous) => ({ ...previous, tipo, configuracao: { ...getDefaultFinancialAccountConfiguration(tipo), recebimentos: previous.configuracao.recebimentos ?? getDefaultFinancialAccountConfiguration(tipo).recebimentos } }));
 	}, []);
 
 	const redefineState = useCallback((nextState: Partial<TFinancialAccountFormState>) => {

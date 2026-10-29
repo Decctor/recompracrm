@@ -37,9 +37,19 @@ export async function effectFinancialTransactionCore({
 	if (!transaction) throw new createHttpError.NotFound("Transação financeira não encontrada.");
 	if (transaction.dataEfetivacao) throw new createHttpError.BadRequest("Esta transação já está efetivada.");
 
+	// While the terminal still owns the charge, only its approval settles it. Once the attempt has an
+	// outcome, manual settlement stays available: it is the runbook for approvals that failed to
+	// consume (lib/payment-attempts/README.md) and the path bank reconciliation uses.
+	const inFlightAttempt = await db.query.paymentAttempts.findFirst({
+		where: (fields, { and, eq, inArray }) =>
+			and(eq(fields.organizacaoId, orgId), eq(fields.transacaoFinanceiraId, transactionId), inArray(fields.status, ["CRIADA", "PROCESSANDO"])),
+		columns: { id: true },
+	});
+	if (inFlightAttempt) throw new createHttpError.BadRequest("Esta cobrança está em andamento no terminal integrado. Aguarde a aprovação.");
+
 	if (contaFinanceiraId) {
 		const account = await db.query.financialAccounts.findFirst({
-			where: (fields, { and, eq }) => and(eq(fields.id, contaFinanceiraId), eq(fields.organizacaoId, orgId)),
+			where: (fields, { and, eq }) => and(eq(fields.id, contaFinanceiraId), eq(fields.organizacaoId, orgId), eq(fields.ativo, true)),
 			columns: { id: true },
 		});
 
