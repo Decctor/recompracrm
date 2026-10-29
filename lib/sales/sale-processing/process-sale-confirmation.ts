@@ -15,6 +15,7 @@ import { processSaleCupomAutoPrintIfEligible, processSalePreparationTicketAutoPr
 import { createAssignedPaymentAttempt, normalizePaymentsForTerminal, resolvePaymentTerminalAssignments } from "@/lib/payment-attempts";
 import { type TResolvedPaymentSplit, getPaymentProvider } from "@/lib/payments";
 import { buildSaleEntryTitle } from "@/lib/sales/entry-titles";
+import { SALE_CHANGE_TOLERANCE } from "@/lib/sales/sale-change";
 import { validateSalesSessionSeller } from "@/lib/sales-sessions";
 import { writeDefaultAccountingEntryLines } from "@/lib/finances/accounting-entry-lines";
 import { db, type DBTransaction } from "@/services/drizzle";
@@ -275,8 +276,10 @@ export async function processSaleConfirmationInTransaction({ tx, input }: { tx: 
 	// Com recebimentos parciais (conta de atendimento), os pagamentos desta confirmação cobrem só o
 	// restante: a perna de cartão na maquininha e o troco são conferidos contra ele.
 	const remainingSaleTotal = Math.max(0, sale.valorTotal - (input.prepaidAmount ?? 0));
+	// Same one-cent tolerance the tab close accepts (TAB_PAYMENT_TOLERANCE): a split rounded to cents
+	// can fall one cent short of the total, and the client already let it through.
 	const paymentsTotalCents = input.salePayments.reduce((sum, payment) => sum + Math.round(payment.valor * 100), 0);
-	if (paymentsTotalCents < Math.round(remainingSaleTotal * 100)) {
+	if (paymentsTotalCents + Math.round(SALE_CHANGE_TOLERANCE * 100) < Math.round(remainingSaleTotal * 100)) {
 		throw new createHttpError.BadRequest("A soma dos pagamentos não cobre o total devido da venda.");
 	}
 	if (input.salePayments.some((payment) => payment.metodo === "FIADO_NOTA") && !sale.clienteId) {
