@@ -200,6 +200,11 @@ export function usePosAvailableCoupons({
 					entregaModalidade: debouncedInput.entregaModalidade,
 				}),
 			enabled: !!debouncedInput.clienteId,
+			// Cada mudança no carrinho muda a chave; sem isso a lista some e reaparece a cada item,
+			// inclusive no meio do "adicionar grátis" do brinde. Só vale para o mesmo cliente: trocar
+			// de cliente nunca pode mostrar, nem por um instante, os cupons do anterior.
+			placeholderData: (previousData, previousQuery) =>
+				(previousQuery?.queryKey[1] as typeof debouncedInput | undefined)?.clienteId === debouncedInput.clienteId ? previousData : undefined,
 		}),
 		queryKey,
 	};

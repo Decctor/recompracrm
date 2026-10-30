@@ -240,7 +240,11 @@ export function evaluateCouponAgainstCart({
 	let giftItem: TCouponCartItem | undefined;
 	let giftDiscount = 0;
 	if (coupon.beneficioTipo === "BRINDE") {
-		if (cartItems.some((item) => !Number.isFinite(item.quantidade) || item.quantidade <= 0 || !Number.isFinite(item.valorVendaUnitario) || item.valorVendaUnitario < 0)) {
+		if (
+			cartItems.some(
+				(item) => !Number.isFinite(item.quantidade) || item.quantidade <= 0 || !Number.isFinite(item.valorVendaUnitario) || item.valorVendaUnitario < 0,
+			)
+		) {
 			return { elegivel: false, motivo: "O carrinho contém quantidade ou preço inválido. Atualize os itens para escolher o brinde." };
 		}
 		if (coupon.beneficioAplicacao !== "ITENS_ELEGIVEIS" || !targets.some((target) => target.papel === "BENEFICIADO")) {
@@ -258,8 +262,11 @@ export function evaluateCouponAgainstCart({
 			return { elegivel: false, motivo: "O item selecionado não está disponível como brinde neste carrinho." };
 		}
 		giftDiscount = giftItem.valorUnitarioBase ?? 0;
-		if (!Number.isFinite(giftDiscount) || giftDiscount <= 0 || giftDiscount > giftItem.valorVendaUnitario || (giftItem.valorDesconto ?? 0) !== 0) {
-			return { elegivel: false, motivo: "O brinde exige preço base válido e não pode ter outro desconto no item." };
+		if ((giftItem.valorDesconto ?? 0) !== 0) {
+			return { elegivel: false, motivo: "Este item já tem desconto. Remova o desconto para usá-lo como brinde." };
+		}
+		if (!Number.isFinite(giftDiscount) || giftDiscount <= 0 || giftDiscount > giftItem.valorVendaUnitario) {
+			return { elegivel: false, motivo: "O produto está sem preço de venda, então não há valor para conceder como brinde. Ajuste o preço no cadastro." };
 		}
 		giftDiscount = calculateCouponGiftDiscount({ ...giftItem, valorUnitarioBase: giftDiscount });
 		if (giftDiscount > roundCouponGiftCurrency(giftItem.quantidade * giftItem.valorVendaUnitario)) {
@@ -271,7 +278,11 @@ export function evaluateCouponAgainstCart({
 	const conditionIssue = getCouponCheckoutConditionIssue(coupon, context);
 	if (conditionIssue) return { elegivel: false, motivo: conditionIssue };
 
-	const grossTotal = cartItems.reduce((sum, item) => sum + (item === giftItem ? roundCouponGiftCurrency(item.quantidade * item.valorVendaUnitario) : item.quantidade * item.valorVendaUnitario), 0);
+	const grossTotal = cartItems.reduce(
+		(sum, item) =>
+			sum + (item === giftItem ? roundCouponGiftCurrency(item.quantidade * item.valorVendaUnitario) : item.quantidade * item.valorVendaUnitario),
+		0,
+	);
 	const cartGrossTotal = giftItem ? roundCurrency(grossTotal - giftDiscount) : grossTotal;
 	const cartTotalQuantity = cartItems.reduce((sum, item) => sum + item.quantidade, 0) - (giftItem ? 1 : 0);
 	const conditionItems = giftItem ? cartItems.map((item) => (item === giftItem ? { ...item, quantidade: item.quantidade - 1 } : item)) : cartItems;
