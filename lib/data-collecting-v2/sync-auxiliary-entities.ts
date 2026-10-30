@@ -2,7 +2,8 @@ import type { TCanonicalClient, TCanonicalImportBatch } from "@/lib/data-connect
 import { normalizeLocation } from "@/lib/geo/brazilian-locations";
 import { linkPartnerToClient } from "@/lib/partners/link-partner-to-client";
 import { catalogLinks, clients, partners, productAddOnOptions, productAddOns, productVariants, products, sellers } from "@/services/drizzle/schema";
-import { and, asc, eq, inArray, ne, or, sql } from "drizzle-orm";
+import { and, arrayOverlaps, asc, eq, inArray, ne, or, sql } from "drizzle-orm";
+import { indexCatalogLinksByExternalItemId } from "./catalog-link-index";
 import { collectBatchLookupKeys, normalizeClientName as normalizeName, type TBatchLookupKeys } from "./batch-lookup-keys";
 import type { TDataCollectingV2Executor, TResolvedAuxiliaryEntities, TResolvedClientForImport } from "./types";
 import { loadExternalIdentities, resolveExternalIdentity } from "@/lib/products/external-identities";
@@ -156,10 +157,17 @@ function loadCatalogLinks(tx: TDataCollectingV2Executor, organizationId: string,
 			eq(catalogLinks.organizacaoId, organizationId),
 			eq(catalogLinks.provider, "IFOOD"),
 			ne(catalogLinks.status, "DESVINCULADO"),
-			...(keys ? [inArray(catalogLinks.externoItemId, keys.productExternalItemIds)] : []),
+			...(keys
+				? [
+						or(
+							inArray(catalogLinks.externoItemId, keys.productExternalItemIds),
+							arrayOverlaps(catalogLinks.externoItemContextoIds, keys.productExternalItemIds),
+						),
+					]
+				: []),
 		),
 		orderBy: [asc(catalogLinks.dataInsercao), asc(catalogLinks.id)],
-		columns: { produtoId: true, produtoVarianteId: true, externoItemId: true },
+		columns: { produtoId: true, produtoVarianteId: true, externoItemId: true, externoItemContextoIds: true },
 	});
 }
 
@@ -427,20 +435,10 @@ export async function syncAuxiliaryEntities({
 	// impede a criação de produto duplicado quando o `externalCode` do provedor não bate com o
 	// `codigo` interno — origem do lixo "grupo iFood, preço nulo" no cadastro.
 	const links = await loadRows(mode, keys, (scope) => loadCatalogLinks(tx, organizationId, scope));
-	const indexLinks = (target: TResolvedAuxiliaryEntities["productsByExternalItemId"], rows: typeof links.rows) => {
-		for (const link of rows) {
-			if (!link.externoItemId || !link.produtoId) continue;
-			target.set(link.externoItemId, {
-				produtoId: link.produtoId,
-				produtoVarianteId: link.produtoVarianteId,
-				opcoes: [],
-			});
-		}
-	};
-	indexLinks(context.productsByExternalItemId, links.rows);
+	indexCatalogLinksByExternalItemId(context.productsByExternalItemId, links.rows);
 	if (audit && links.shadowRows) {
 		const shadow: TResolvedAuxiliaryEntities["productsByExternalItemId"] = new Map();
-		indexLinks(shadow, links.shadowRows);
+		indexCatalogLinksByExternalItemId(shadow, links.shadowRows);
 		auditLookups(
 			audit,
 			"productsByExternalItemId",

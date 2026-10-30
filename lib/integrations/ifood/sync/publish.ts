@@ -2,6 +2,7 @@ import { IFOOD_IMAGE_ALLOWED_TYPES } from "@/lib/integrations/ifood/catalog-type
 import { uploadIfoodImage } from "@/lib/integrations/ifood/image";
 import { upsertIfoodItem } from "@/lib/integrations/ifood/catalog-items";
 import { readIfoodItemDocument, writeIfoodItemDocument } from "@/lib/integrations/ifood/item-document";
+import { itemContextIdsOfFlat } from "./item-context-ids";
 import { resolveChannelAvailability, resolveChannelPrice, type TChannel } from "@/lib/products/sales-channels";
 import { loadChannelState } from "@/lib/products/sales-channels-store";
 import type { TCatalogLinkSnapshot } from "@/schemas/catalog-links";
@@ -229,7 +230,12 @@ export async function publishProductToIfood({
 				produtoId: node.produtoId,
 				produtoVarianteId: node.produtoVarianteId,
 			},
-			externalRefs: { externoItemId: itemId, externoProdutoId, externoCategoriaId: categoriaId },
+			externalRefs: {
+				externoItemId: itemId,
+				externoProdutoId,
+				externoCategoriaId: categoriaId,
+				externoItemContextoIds: flat ? itemContextIdsOfFlat(flat) : undefined,
+			},
 			autorId,
 		});
 

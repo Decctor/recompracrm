@@ -1,6 +1,7 @@
 import { getIfoodCatalogs, getIfoodItemFlat, listIfoodCategories } from "@/lib/integrations/ifood/catalog";
 import { resolveIfoodManagementContext } from "@/lib/integrations/ifood/context";
 import { collectIfoodOptionStates } from "@/lib/integrations/ifood/item-document";
+import { ensureItemContextIds, itemContextIdsOfFlat, recordItemContextIds } from "./item-context-ids";
 import { computeOptionDivergences, findUnlinkedAvailableOptions } from "./option-sync";
 import { scheduleAddOnGroupPush } from "./queue";
 import type { TIfoodItemDTO, TIfoodItemFlatDTO } from "@/lib/integrations/ifood/catalog-types";
@@ -195,11 +196,14 @@ export async function reconcileMerchantCatalog({ orgId, merchantId }: { orgId: s
 		// política pede e o produto tem grupos vinculados nesta loja — senão a comparação seria
 		// entre listas vazias.
 		let association: { desejada: TCatalogLinkOptionGroupAssociation[]; observada: TCatalogLinkOptionGroupAssociation[] } | null = null;
+		let contextIdsRead = false;
 		if (syncsComplementos(link.sincronizar) && link.produtoId && link.externoItemId) {
 			const desejada = associationSnapshot({ nodes: await addOnNodesFor(link.produtoId), links: addOnLinks });
 			if (desejada.length > 0 || (link.ultimoSnapshot?.gruposComplementos?.length ?? 0) > 0) {
 				const flat: TIfoodItemFlatDTO | null = await getIfoodItemFlat(context.client, merchantId, link.externoItemId).catch(() => null);
 				if (flat) {
+					contextIdsRead = true;
+					await recordItemContextIds(link, itemContextIdsOfFlat(flat));
 					const knownGroupIds = new Set(
 						allGroupLinks(addOnLinks)
 							.map((groupLink) => groupLink.externoOptionGroupId)
@@ -218,6 +222,9 @@ export async function reconcileMerchantCatalog({ orgId, merchantId }: { orgId: s
 				}
 			}
 		}
+
+		// Vínculo sem ids de contexto e sem `flat` lido acima: uma leitura, uma vez por vínculo.
+		if (!contextIdsRead) await ensureItemContextIds({ client: context.client, link });
 
 		const divergences = computeDivergences({ link, node, remote, association });
 		// Push recente: o remoto pode simplesmente ainda não ter propagado. Não marca divergência

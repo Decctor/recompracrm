@@ -161,6 +161,7 @@ const IfoodContextModifierResponseSchema = z
 		status: NullableString,
 		externalCode: NullableString,
 		price: IfoodItemPriceResponseSchema.optional().nullable(),
+		itemContextId: NullableString,
 	})
 	.passthrough();
 
@@ -186,6 +187,8 @@ export type TIfoodContextModifierDTO = {
 	preco: number | null;
 	status: string | null;
 	codigoExterno: string | null;
+	/** Id do item NESTE contexto — é ele, e não o id do item, que chega em `items[].id` dos pedidos. */
+	itemContextoId: string | null;
 };
 
 export function mapIfoodContextModifier(modifier: z.infer<typeof IfoodContextModifierResponseSchema>): TIfoodContextModifierDTO {
@@ -194,6 +197,7 @@ export function mapIfoodContextModifier(modifier: z.infer<typeof IfoodContextMod
 		preco: modifier.price?.value ?? null,
 		status: modifier.status,
 		codigoExterno: modifier.externalCode,
+		itemContextoId: modifier.itemContextId,
 	};
 }
 

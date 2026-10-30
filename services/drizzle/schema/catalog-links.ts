@@ -70,6 +70,13 @@ export const catalogLinks = newTable(
 		externoCategoriaId: varchar("externo_categoria_id", { length: 255 }),
 		externoOptionGroupId: varchar("externo_option_group_id", { length: 255 }),
 		externoOptionId: varchar("externo_option_id", { length: 255 }),
+		/**
+		 * Ids do item por contexto de catálogo (`contextModifiers[].itemContextId` do `/flat`). O
+		 * pedido do iFood identifica o item por ESTE id em `items[].id`, nunca por `externo_item_id`:
+		 * sem ele a ingestão só casa por `externalCode` e cria produto órfão quando o código diverge.
+		 * Lista porque o item pode estar em mais de um contexto (DEFAULT, WHITELABEL...).
+		 */
+		externoItemContextoIds: text("externo_item_contexto_ids").array().notNull().default([]),
 
 		/** Quais campos este vínculo sincroniza — o coração do "parcial por campo". */
 		sincronizar: jsonb("sincronizar").$type<TCatalogLinkSyncPolicy>().notNull(),
@@ -97,6 +104,7 @@ export const catalogLinks = newTable(
 		),
 		organizacaoStatusIdx: index("idx_catalog_links_org_status").on(table.organizacaoId, table.provider, table.merchantId, table.status),
 		produtoIdx: index("idx_catalog_links_produto").on(table.organizacaoId, table.produtoId),
+		externoItemContextoIdsIdx: index("idx_catalog_links_externo_item_contexto_ids").using("gin", table.externoItemContextoIds),
 		externalIdentityUnique: uniqueIndex("unq_catalog_links_external_identity").on(
 			table.organizacaoId,
 			table.integracaoId,

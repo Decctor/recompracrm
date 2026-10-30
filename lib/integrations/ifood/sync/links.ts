@@ -12,7 +12,7 @@ import {
 	productVariants,
 	type TCatalogLinkEntity,
 } from "@/services/drizzle/schema";
-import { and, eq, inArray, ne } from "drizzle-orm";
+import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import createHttpError from "http-errors";
 
 export type TCatalogLinkNode = {
@@ -30,6 +30,8 @@ export type TCatalogLinkExternalRefs = {
 	externoCategoriaId?: string | null;
 	externoOptionGroupId?: string | null;
 	externoOptionId?: string | null;
+	/** Ids de contexto do item (ver `item-context-ids.ts`). Ausente = não lidos agora. */
+	externoItemContextoIds?: string[];
 };
 
 /** Chave do nó interno, para casar vínculos com produtos/variantes em memória. */
@@ -191,11 +193,24 @@ export async function upsertCatalogLink({
 		produtoAddOnOpcaoId: node.produtoAddOnOpcaoId ?? null,
 		grupoInterno: node.grupoInterno ?? null,
 		...externalRefs,
+		externoItemContextoIds: externalRefs.externoItemContextoIds ?? [],
 		sincronizar: policy,
 		status: "PENDENTE" as const,
 		autorId: autorId ?? null,
 	};
-	const set = { ...externalRefs, sincronizar: policy, status: "PENDENTE" as const, ultimoErro: null, dataAtualizacao: new Date() };
+	// Sem ids lidos agora: mantém os gravados se o item remoto é o mesmo; revincular a OUTRO item
+	// zera, senão pedidos do item antigo continuariam caindo neste nó.
+	const contextIds = externalRefs.externoItemContextoIds?.length
+		? externalRefs.externoItemContextoIds
+		: sql`CASE WHEN ${catalogLinks.externoItemId} IS NOT DISTINCT FROM excluded.externo_item_id THEN ${catalogLinks.externoItemContextoIds} ELSE '{}'::text[] END`;
+	const set = {
+		...externalRefs,
+		externoItemContextoIds: contextIds,
+		sincronizar: policy,
+		status: "PENDENTE" as const,
+		ultimoErro: null,
+		dataAtualizacao: new Date(),
+	};
 
 	// Grupo e opção de complemento são muitos-para-um (drizzle/0116): o iFood pode ter N cópias do
 	// mesmo grupo interno (catálogo com um grupo por item), então a identidade é o registro REMOTO e o

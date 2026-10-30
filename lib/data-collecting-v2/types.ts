@@ -49,7 +49,8 @@ export type TResolvedAuxiliaryEntities = {
 	clientsByBasePhone: Map<string, TResolvedClientForImport>;
 	productsByCode: Map<string, string>;
 	/**
-	 * Vínculos de catálogo (catalog_links) por id do item remoto. É o casamento EXATO: o
+	 * Vínculos de catálogo (catalog_links) por id do item remoto E por id de contexto do item (o
+	 * que o iFood manda nos pedidos — ver `catalog-link-index.ts`). É o casamento EXATO: o
 	 * `codigo ↔ externalCode` continua como fallback, mas um item vinculado nunca depende dele.
 	 */
 	productsByExternalItemId: Map<string, TResolvedVariantForImport>;

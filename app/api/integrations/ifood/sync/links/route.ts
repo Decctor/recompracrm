@@ -3,6 +3,7 @@ import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { requireIntegrationManageSession, requireIntegrationViewSession } from "@/lib/integrations/ifood/sync/guards";
 import { resolveIfoodManagementContext } from "@/lib/integrations/ifood/context";
 import { linkAddOnGroup } from "@/lib/integrations/ifood/sync/add-ons";
+import { readItemContextIds } from "@/lib/integrations/ifood/sync/item-context-ids";
 import { listCatalogLinks, unlinkCatalogLink, updateCatalogLinkPolicy, upsertCatalogLink } from "@/lib/integrations/ifood/sync/links";
 import { ensureIfoodSalesChannel } from "@/lib/products/sales-channels-store";
 import { CatalogLinkSyncPolicySchema } from "@/schemas/catalog-links";
@@ -79,6 +80,13 @@ async function createCatalogLink({ orgId, userId, input }: { orgId: string; user
 		};
 	}
 
+	// O pedido identifica o item pelo id de contexto, não pelo `externoItemId` informado aqui.
+	const isItemLink = input.tipo === "PRODUTO" || input.tipo === "VARIANTE";
+	const externoItemContextoIds =
+		isItemLink && input.externoItemId
+			? await readItemContextIds({ client: context.client, merchantId: input.merchantId, itemId: input.externoItemId })
+			: undefined;
+
 	const link = await upsertCatalogLink({
 		orgId,
 		merchantId: input.merchantId,
@@ -95,6 +103,7 @@ async function createCatalogLink({ orgId, userId, input }: { orgId: string; user
 			externoCategoriaId: input.externoCategoriaId ?? null,
 			externoOptionGroupId: input.externoOptionGroupId ?? null,
 			externoOptionId: input.externoOptionId ?? null,
+			externoItemContextoIds,
 		},
 		sincronizar: input.sincronizar,
 		autorId: userId,

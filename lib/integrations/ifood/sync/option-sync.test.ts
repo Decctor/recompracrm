@@ -44,6 +44,7 @@ function link(patch: Partial<TCatalogLinkEntity> = {}): TCatalogLinkEntity {
 		externoCategoriaId: null,
 		externoOptionGroupId: "remote-group",
 		externoOptionId: "remote",
+		externoItemContextoIds: [],
 		sincronizar: policy,
 		status: "SINCRONIZADO",
 		ultimoSnapshot: { disponivel: false },

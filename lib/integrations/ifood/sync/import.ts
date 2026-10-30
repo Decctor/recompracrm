@@ -6,6 +6,7 @@ import type { AxiosInstance } from "axios";
 import { and, eq } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { ensureIfoodSalesChannel } from "@/lib/products/sales-channels-store";
+import { itemContextIdsOfFlat } from "./item-context-ids";
 import { upsertCatalogLink } from "./links";
 
 /**
@@ -86,7 +87,12 @@ export async function importIfoodItem({
 		orgId,
 		merchantId,
 		node: { tipo: "PRODUTO", produtoId },
-		externalRefs: { externoItemId: item.id, externoProdutoId: item.produtoId ?? null, externoCategoriaId: item.categoriaId ?? null },
+		externalRefs: {
+			externoItemId: item.id,
+			externoProdutoId: item.produtoId ?? null,
+			externoCategoriaId: item.categoriaId ?? null,
+			externoItemContextoIds: itemContextIdsOfFlat(item),
+		},
 		autorId,
 	});
 

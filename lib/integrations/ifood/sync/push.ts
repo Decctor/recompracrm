@@ -21,6 +21,7 @@ import {
 	recordAddOnLinksFromFlatItem,
 	resolveProductAddOnNodes,
 } from "./add-ons";
+import { ensureItemContextIds, itemContextIdsOfDocument, recordItemContextIds } from "./item-context-ids";
 import { markCatalogLinkError } from "./links";
 import { resolvePublishNodes, type TPublishNode, uploadIfoodImageFromUrl } from "./publish";
 
@@ -90,6 +91,8 @@ async function pushLink({
 	node: TPublishNode;
 	addOns: TMerchantAddOnContext;
 }): Promise<{ linkId: string; mudancas: TPushFieldChange[]; enviado: boolean; addOns: TMerchantAddOnContext }> {
+	// Independe de haver mudança: é o que deixa a ingestão de pedidos casar pelo vínculo.
+	await ensureItemContextIds({ client, link });
 	const changes = diffAgainstSnapshot(link, node);
 
 	// A associação com os grupos muda quando um grupo entra/sai ou min/max/ordem mudam. Grupos do
@@ -138,6 +141,7 @@ async function pushLink({
 	// então só o que o documento lido traz (agenda, preços por canal, peso) sobrevive.
 	if (associationChanged && link.externoItemId) {
 		const doc = await readIfoodItemDocument(client, link.merchantId, link.externoItemId);
+		await recordItemContextIds(link, itemContextIdsOfDocument(doc));
 		const { created } = applyAddOnAssociationToDocument({ doc, nodes: addOns.nodes, links: addOns.links, createUnlinked: neverAssociated });
 		await writeIfoodItemDocument(client, link.merchantId, doc);
 		if (created > 0) {
