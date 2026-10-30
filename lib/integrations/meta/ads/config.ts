@@ -47,6 +47,22 @@ export async function markMetaAdsIntegrationStatus({
 }) {
 	await db
 		.update(integrations)
-		.set({ status, ultimoErro: erro ?? null, dataUltimaSincronizacao: new Date() })
+		.set({ status, ultimoErro: erro ?? null })
 		.where(and(eq(integrations.id, integrationId), eq(integrations.tipo, "META_ADS")));
+}
+
+/**
+ * Executa uma leitura da Meta e, se ela falhar por credencial (401), marca a integração como
+ * EXPIRADO — a página passa a mostrar a reconexão em vez de falhar bloco a bloco. Outros erros só
+ * são repassados: um 429 ou uma falha pontual não dizem nada sobre a conexão.
+ */
+export async function withMetaAdsAccessTracking<T>(integrationId: string, run: () => Promise<T>): Promise<T> {
+	try {
+		return await run();
+	} catch (error) {
+		if (createHttpError.isHttpError(error) && error.status === 401) {
+			await markMetaAdsIntegrationStatus({ integrationId, status: "EXPIRADO", erro: error.message }).catch(() => undefined);
+		}
+		throw error;
+	}
 }

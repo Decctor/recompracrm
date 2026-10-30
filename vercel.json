@@ -88,6 +88,10 @@
 			"schedule": "0 */6 * * *"
 		},
 		{
+			"path": "/api/cron/meta-ads-catalog",
+			"schedule": "43 */6 * * *"
+		},
+		{
 			"path": "/api/cron/fiscal-queue",
 			"schedule": "*/2 * * * *"
 		},

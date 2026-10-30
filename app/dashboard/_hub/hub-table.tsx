@@ -29,6 +29,8 @@ export type THubTableColumn = {
 export type THubTableRow = {
 	id: string;
 	href?: string;
+	/** Ação da linha quando ela não navega: abrir um painel de detalhe, por exemplo. */
+	onSelect?: () => void;
 	/** Conteúdo por coluna. A primeira coluna é o título da linha no celular. */
 	cells: Record<string, ReactNode>;
 	/** Classe extra por célula — tom de atenção, ênfase. */
@@ -74,14 +76,17 @@ export function HubTable({ columns, rows }: HubTableProps) {
 					</>
 				);
 				const rowClassName = "flex w-full flex-col gap-1 border-border/60 border-b px-3 py-2.5 last:border-b-0 sm:grid sm:items-center sm:gap-2";
+				const interactiveClassName = "transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+				if (row.onSelect) {
+					return (
+						<button key={row.id} type="button" onClick={row.onSelect} style={template} className={cn(rowClassName, "text-left", interactiveClassName)}>
+							{body}
+						</button>
+					);
+				}
 				if (row.href) {
 					return (
-						<Link
-							key={row.id}
-							href={row.href}
-							style={template}
-							className={cn(rowClassName, "transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring")}
-						>
+						<Link key={row.id} href={row.href} style={template} className={cn(rowClassName, interactiveClassName)}>
 							{body}
 						</Link>
 					);
