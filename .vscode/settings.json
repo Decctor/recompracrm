@@ -1,5 +1,4 @@
 {
-	"typescript.tsdk": "node_modules\\typescript\\lib",
 	"editor.defaultFormatter": "oxc.oxc-vscode",
 	"notebook.defaultFormatter": "oxc.oxc-vscode",
 	"editor.formatOnSave": true,
@@ -14,6 +13,6 @@
 	"[typescriptreact]": {
 		"editor.defaultFormatter": "oxc.oxc-vscode",
 	},
-	"typescript.experimental.useTsgo": false,
-	"typescript.tsserver.maxTsServerMemory": 4096,
+	// TypeScript 7 não traz mais `tsserver.js`: o editor usa o servidor nativo (extensão TypeScript Native Preview).
+	"typescript.experimental.useTsgo": true,
 }
