@@ -1331,3 +1331,9 @@ export type TPreparationStationRuleCriterionEnum = z.infer<typeof PreparationSta
 
 export const PaymentInstallmentBehaviorEnum = z.enum(["TRANSACAO_UNICA", "TRANSACOES_PARCELADAS"]);
 export type TPaymentInstallmentBehaviorEnum = z.infer<typeof PaymentInstallmentBehaviorEnum>;
+
+// Catálogo de anúncios das contas de mídia paga (`media_ads`).
+export const MediaAdPlatformEnum = z.enum(["META"]);
+export type TMediaAdPlatformEnum = z.infer<typeof MediaAdPlatformEnum>;
+export const MediaAdMediaTypeEnum = z.enum(["IMAGEM", "VIDEO", "CARROSSEL", "DESCONHECIDO"]);
+export type TMediaAdMediaTypeEnum = z.infer<typeof MediaAdMediaTypeEnum>;

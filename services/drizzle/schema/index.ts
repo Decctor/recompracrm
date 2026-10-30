@@ -39,6 +39,7 @@ export * from "./platform-partnerships";
 export * from "./productions";
 export * from "./integrations";
 export * from "./audiences";
+export * from "./media-ads";
 export * from "./deal-onboarding";
 export * from "./deals";
 export * from "./service-cards";

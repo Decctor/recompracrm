@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MediaAdsCatalogSyncStateSchema } from "./media-ads";
 
 /**
  * Fundação de integrations (marketing/parceiros).
@@ -57,6 +58,9 @@ export const MetaAdsIntegrationConfigSchema = z.object({
 	capiTestEventCode: z.string({ invalid_type_error: "Tipo não válido para o código de teste do CAPI." }).optional(),
 	// Chaves de evento (minúsculas) que disparam envio server-side ao CAPI (ex.: ["purchase"]).
 	eventosCapi: z.array(z.string({ invalid_type_error: "Tipo não válido para evento do CAPI." })).optional(),
+
+	// Estado da sincronização do catálogo de anúncios (`media_ads`). Ausente até a primeira rodada.
+	catalogo: MediaAdsCatalogSyncStateSchema.optional(),
 });
 export type TMetaAdsIntegrationConfig = z.infer<typeof MetaAdsIntegrationConfigSchema>;
 

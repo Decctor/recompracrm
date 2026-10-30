@@ -113,6 +113,10 @@ export const integrationTypeEnum = pgEnum("integration_type", [
 ]);
 export const integrationStatusEnum = pgEnum("integration_status", ["CONECTADO", "EXPIRADO", "ERRO"]);
 
+// Catálogo de anúncios das contas de mídia paga (`media_ads`). Google Ads cabe depois como novo valor.
+export const mediaAdPlatformEnum = pgEnum("media_ad_platform", ["META"]);
+export const mediaAdMediaTypeEnum = pgEnum("media_ad_media_type", ["IMAGEM", "VIDEO", "CARROSSEL", "DESCONHECIDO"]);
+
 // Audiences (públicos) — status de sincronização de um destino (ex.: Custom Audience na Meta).
 export const audienceDestinationStatusEnum = pgEnum("audience_destination_status", ["PENDENTE", "SINCRONIZADO", "ERRO"]);
 

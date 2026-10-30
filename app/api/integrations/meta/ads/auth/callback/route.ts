@@ -1,10 +1,12 @@
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { syncMetaAdsCatalog } from "@/lib/integrations/meta/ads/catalog-sync";
 import { consumeOAuthRedirect } from "@/lib/integrations/oauth-redirect";
 import { META_ADS_SCOPES, META_GRAPH_API_VERSION } from "@/lib/integrations/meta/ads/types";
 import { db } from "@/services/drizzle";
 import { integrations, type TNewIntegrationEntity } from "@/services/drizzle/schema";
+import { eq } from "drizzle-orm";
 import { cookies } from "next/headers";
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse, after, type NextRequest } from "next/server";
 
 import { META_ADS_OAUTH_REDIRECT_COOKIE_NAME, META_ADS_OAUTH_STATE_COOKIE_NAME } from "../route";
 
@@ -106,7 +108,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 	const redirectPath = consumeOAuthRedirect(cookieStore, META_ADS_OAUTH_REDIRECT_COOKIE_NAME, FALLBACK_REDIRECT);
 
 	if (!code || !state || !storedState || state !== storedState) {
-		console.error("[ERROR] [META_ADS_OAUTH] validação de state falhou", { hasCode: !!code, hasState: !!state, hasStoredState: !!storedState, stateMatches: state === storedState });
+		console.error("[ERROR] [META_ADS_OAUTH] validação de state falhou", {
+			hasCode: !!code,
+			hasState: !!state,
+			hasStoredState: !!storedState,
+			stateMatches: state === storedState,
+		});
 		return redirectWithError(redirectPath, "Estado OAuth inválido. Tente conectar novamente.");
 	}
 
@@ -144,7 +151,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 	debugUrl.searchParams.set("access_token", `${clientId}|${clientSecret}`);
 	const debugData = await fetchMetaJson<MetaDebugTokenResponse>(debugUrl);
 	if ("error" in debugData || !debugData.data?.is_valid || !debugData.data.user_id) {
-		console.error("[ERROR] [META_ADS_OAUTH] debug_token inválido", { isValid: "error" in debugData ? undefined : debugData.data?.is_valid, hasUserId: "error" in debugData ? undefined : !!debugData.data?.user_id });
+		console.error("[ERROR] [META_ADS_OAUTH] debug_token inválido", {
+			isValid: "error" in debugData ? undefined : debugData.data?.is_valid,
+			hasUserId: "error" in debugData ? undefined : !!debugData.data?.user_id,
+		});
 		return redirectWithError(redirectPath, "Token da Meta inválido.");
 	}
 	const tokenData = debugData.data;
@@ -176,7 +186,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 	const existing = await db.query.integrations.findMany({
 		where: (fields, { and, eq }) => and(eq(fields.organizacaoId, organizacaoId), eq(fields.tipo, "META_ADS")),
 	});
-	const existingRefs = new Set(existing.map((integration) => integration.refExterno).filter(Boolean));
+	const existingByRef = new Map(existing.flatMap((integration) => (integration.refExterno ? [[integration.refExterno, integration] as const] : [])));
+	const existingRefs = new Set(existingByRef.keys());
 	console.log("[META_ADS_OAUTH] integrações META_ADS já existentes", { count: existing.length, refs: [...existingRefs] });
 
 	const newIntegrations: TNewIntegrationEntity[] = accounts.flatMap((account) => {
@@ -218,9 +229,43 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 		];
 	});
 
+	// Reconexão de uma conta já existente (token expirado, escopo novo): renova as credenciais e
+	// reativa a linha, preservando o resto da configuração (CAPI, estado do catálogo).
+	const reconnected: string[] = [];
+	for (const account of accounts) {
+		const adAccountId = normalizeAdAccountId(account);
+		const current = adAccountId ? existingByRef.get(adAccountId) : undefined;
+		if (!current || current.configuracao?.tipo !== "META_ADS") continue;
+		await db
+			.update(integrations)
+			.set({
+				ativo: true,
+				status: "CONECTADO",
+				ultimoErro: null,
+				dataDesativacao: null,
+				configuracao: { ...current.configuracao, accessToken, tokenExpiresAt, metaUserId, scopes },
+			})
+			.where(eq(integrations.id, current.id));
+		reconnected.push(current.id);
+	}
+
 	console.log("[META_ADS_OAUTH] integrações a inserir", { count: newIntegrations.length, refs: newIntegrations.map((i) => i.refExterno) });
-	if (newIntegrations.length > 0) await db.insert(integrations).values(newIntegrations);
-	else console.warn("[META_ADS_OAUTH] nenhuma integração nova para inserir — redirecionando como sucesso mesmo assim");
+	const inserted = newIntegrations.length > 0 ? await db.insert(integrations).values(newIntegrations).returning({ id: integrations.id }) : [];
+	if (inserted.length === 0 && reconnected.length === 0)
+		console.warn("[META_ADS_OAUTH] nenhuma integração nova ou reconectada — redirecionando como sucesso mesmo assim");
+
+	// Primeira leitura do catálogo depois da resposta: o redirect não espera a Meta.
+	const toSync = [...inserted.map((row) => row.id), ...reconnected];
+	after(async () => {
+		for (const integrationId of toSync) {
+			await syncMetaAdsCatalog({ integrationId, mode: "full" }).catch((error) =>
+				console.error("[ERROR] [META_ADS_OAUTH] Falha na primeira sincronização do catálogo:", {
+					integrationId,
+					message: error instanceof Error ? error.message : String(error),
+				}),
+			);
+		}
+	});
 
 	const successUrl = new URL(redirectPath, process.env.NEXT_PUBLIC_APP_URL);
 	successUrl.searchParams.set("connected", "meta-ads");
@@ -229,3 +274,4 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
