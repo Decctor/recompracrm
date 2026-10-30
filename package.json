@@ -17,6 +17,7 @@
 		"sync:org-sales-history": "tsx ./sync-org-sales-history.ts",
 		"import:ibpt": "tsx ./scripts/import-ibpt.ts",
 		"import:ibpt:api": "tsx ./scripts/import-ibpt-api.ts",
+		"typecheck": "tsrs --noEmit -p . --tsBuildInfoFile node_modules/.cache/tsrs/tsconfig.tsbuildinfo",
 		"lint": "oxlint --react-plugin --nextjs-plugin .",
 		"lint:fix": "oxlint --react-plugin --nextjs-plugin --fix .",
 		"format": "oxfmt --write .",
@@ -253,6 +254,7 @@
 		"server-only": "^0.0.1",
 		"shadcn": "^4.23.0",
 		"tailwindcss": "^4.1.16",
+		"tsrs": "0.20.1-ts7.1.0-beta",
 		"tsx": "^4.21.0",
 		"typescript": "^7.0.2"
 	},

@@ -5,6 +5,7 @@ This file documents the architectural patterns, conventions, and "tastes" of thi
 ## Tech Stack
 
 - **Package manager**: **npm** (`package-lock.json`). Never pnpm/yarn/bun — Vercel picks the package manager by lockfile, and a foreign one breaks the build on undeclared transitive imports. See *Package Manager* in AGENTS.md.
+- **Typecheck**: `npm run typecheck` — [tsrs](https://github.com/oxc-project/tsrs), the Rust port of tsc 7.1 (~5s full check vs ~35s for tsc; same diagnostics). It exits with code 2 on errors and keeps its own cache in `node_modules/.cache/tsrs`. The `typescript` package stays installed for Next.js and is the reference if tsrs ever disagrees.
 - **Framework**: Next.js 16 (App Router)
 - **Database**: PostgreSQL via Supabase, Drizzle ORM
 - **Auth**: Lucia (session-based), `admin: boolean` flag on users for platform admin access
