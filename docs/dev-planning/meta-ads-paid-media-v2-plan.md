@@ -1,6 +1,6 @@
 # Planejamento — Mídia paga v2 (Meta Ads)
 
-**Status:** Planejado, não iniciado
+**Status:** Implementado; migration `drizzle/0143_media_ads_catalog.sql` ainda não aplicada
 **Data:** 30/10/2026
 **Origem:** porte da nova UI de marketing do Syncroniza Control (`src/app/(main)/dashboard/marketing`, `src/components/marketing/**`, `src/lib/integrations/meta/ads/**`, `src/server/media-ads/**`), reescrita na linguagem visual e nas convenções do RecompraCRM.
 
@@ -169,11 +169,10 @@ Todas seguem o padrão do `CLAUDE.md`:
 | Rota | Entrada | Saída |
 |---|---|---|
 | `GET insights` (reescrita) | `integrationId, level (account\|campaign\|adset\|ad), since, until, comparingSince?, comparingUntil?, campaignId?` | `{ account \| rows }`, cada um com `comparativo` |
-| `GET series` (substitui `spend-series`) | `integrationId, level, entityId?, since, until, comparingSince?, comparingUntil?` | `{ atual: [{ data, metricas }], comparativo: [...] }`, com dias vazios preenchidos |
-| `GET funnel` | período | funil de conversão (`ConversionFunnelPanel`), vídeo, engajamento |
+| `GET series` (substitui `spend-series`) | `integrationId, level, entityId?, since, until, comparingSince?, comparingUntil?` | `{ current: [{ date, metrics }], comparing: [...] }`, com dias vazios preenchidos |
 | `GET breakdowns` | `type (demographics\|geography\|placements\|dayparting), período, adId?` | linhas + pivôs |
 | `GET hierarchy` | período, `campaignId?` | árvore com esqueleto do banco e métricas ao vivo |
-| `GET library` (reescrita) | `integrationId, status, campaignId?, mediaType?, search?, sort, page, withMetrics, período?` | `{ ads, pagination, catalogo: { sincronizadoEm, pendente } }` |
+| `GET library` (reescrita) | `integrationId, status, campaignId?, mediaType?, search?, sort, page, withMetrics, período?` | `{ ads, pagination, campaigns, catalog: { pending, lastAttemptAt, adsCount, truncated } }` |
 | `GET ad` (reescrita) | `id, período, comparativo?` | `{ byId: { anuncio (banco), resumo, diario, comparativo, rankings, video? } }` |
 | `POST catalog/sync` | `integrationId` | resumo da sincronização |
 
@@ -296,3 +295,10 @@ Quatro PRs, cada um utilizável sozinho:
 - **Limite de chamadas da Meta (BUC).** A página faz muito mais chamadas que hoje. As mitigações são as do Control: montagem tardia, deduplicação por chave, painel reaproveitando a cache e enriquecimentos que falham sem derrubar o bloco. O banco agora tira do caminho a biblioteca sem métricas, os nomes e status das campanhas e os criativos. Se ainda assim aparecer `429`, o próximo passo é um cache curto no servidor por `(integração, nível, período)`.
 - **Status defasado.** O catálogo pode ficar até 6h atrás para status e nomes. Isso é sinalizado na UI, e a sincronização manual resolve.
 - **Contas grandes.** Acima de 10 mil anúncios, o catálogo trunca e não marca removidos; isso fica registrado em `configuracao.catalogo.truncado`.
+
+## Notas da implementação
+
+- O funil de conversão não ganhou rota própria: as métricas ricas da conta (`GET insights?level=account`) já trazem funil, vídeo e engajamento, e a chave de query é a mesma do resumo.
+- O status da integração passa a refletir a Meta: um 401 marca `EXPIRADO`, e a reconexão pelo OAuth agora renova o token da conta existente (antes ela era ignorada como duplicada).
+- `HubTable` ganhou `onSelect` por linha, para abrir o painel de detalhe sem navegar.
+- Ficou para depois: listar Meta Ads em `/dashboard/integrations` e o cache curto no servidor (só se aparecer `429`).
