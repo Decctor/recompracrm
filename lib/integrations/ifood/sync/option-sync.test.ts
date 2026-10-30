@@ -54,6 +54,10 @@ function link(patch: Partial<TCatalogLinkEntity> = {}): TCatalogLinkEntity {
 		autorId: null,
 		dataInsercao: new Date(0),
 		dataAtualizacao: null,
+		integracaoId: null,
+		identidadeTipo: null,
+		identidadeValor: null,
+		protegido: false,
 		...patch,
 	};
 }

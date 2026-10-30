@@ -4,15 +4,14 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import test from "node:test";
 import { runInNewContext } from "node:vm";
-import ts from "typescript";
+import { transformSync } from "esbuild";
 
 // Execute the real service code with isolated database boundaries; no live payments or DB writes.
 function loadService(path: string, mocks: Record<string, unknown>) {
 	const module = { exports: {} as any };
 	const require = createRequire(import.meta.url);
-	const source = ts.transpileModule(readFileSync(path, "utf8"), {
-		compilerOptions: { module: ts.ModuleKind.CommonJS, esModuleInterop: true, target: ts.ScriptTarget.ES2022 },
-	}).outputText;
+	// esbuild, não o `typescript`: a partir do TypeScript 7 o pacote não expõe mais `transpileModule`.
+	const source = transformSync(readFileSync(path, "utf8"), { loader: "ts", format: "cjs", target: "es2022" }).code;
 	runInNewContext(source, {
 		module,
 		exports: module.exports,

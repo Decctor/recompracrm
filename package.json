@@ -244,9 +244,7 @@
 		"@types/react-dom": "19.2.3",
 		"@types/react-window": "^1.8.8",
 		"@types/ws": "^8.18.1",
-		"eslint": "^9.38.0",
-		"eslint-config-next": "^16.4.3",
-		"knip": "^5.66.4",
+		"knip": "^6.44.0",
 		"oxfmt": "^0.75.0",
 		"oxlint": "^1.55.0",
 		"pdfjs-dist": "^6.1.200",
@@ -256,7 +254,7 @@
 		"shadcn": "^4.23.0",
 		"tailwindcss": "^4.1.16",
 		"tsx": "^4.21.0",
-		"typescript": "^6.0.2"
+		"typescript": "^7.0.2"
 	},
 	"overrides": {
 		"@types/react": "19.2.14",
