@@ -37,7 +37,7 @@ Opções:
                 a cada iteração — os pedidos entram no banco e aparecem no painel de pedidos em ~30s.
                 Use este modo durante a homologação das etapas de pedido.
   --audit-file  Arquivo JSONL local com eventos, ACKs e resultados. Por padrão cria um arquivo
-                datado em .local-analysis/ifood-homologation/.
+                datado em ../recompracrm-tmpworks/ifood-homologation/.
 
 Encerre com Ctrl+C.
 `);
@@ -184,7 +184,8 @@ async function main() {
 	if (collect && !sendAck) throw new Error("--no-ack não pode ser combinado com --collect: o pipeline de ingestão sempre confirma os eventos.");
 	const defaultAuditFile = path.resolve(
 		process.cwd(),
-		".local-analysis",
+		"..",
+		"recompracrm-tmpworks",
 		"ifood-homologation",
 		`ifood-homologation-${new Date().toISOString().replaceAll(":", "-")}.jsonl`,
 	);

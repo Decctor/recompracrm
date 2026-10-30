@@ -93,7 +93,7 @@ async function main() {
 
 	if (confirm && report.length) {
 		// Snapshot da duplicata apagada, para auditoria/reversão manual.
-		const outPath = resolve(`./.local-analysis/ifood/fusoes-${new Date().toISOString().replace(/[:.]/g, "-")}.json`);
+		const outPath = resolve(`../recompracrm-tmpworks/ifood/fusoes-${new Date().toISOString().replace(/[:.]/g, "-")}.json`);
 		mkdirSync(dirname(outPath), { recursive: true });
 		writeFileSync(outPath, JSON.stringify(report, null, 2), { encoding: "utf-8" });
 		console.log(`\nSnapshot: ${outPath}`);

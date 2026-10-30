@@ -30,6 +30,6 @@ npm run test:product-identities
 node --env-file=.env --conditions=react-server --import tsx scripts/verify-product-external-identities.ts --organization-id <org>
 ```
 
-O backfill é específico aos arquivos privados da avaliação da Use e Abluse em `.local-analysis/phibo/`. Ele valida as organizações e as fontes, grava somente vínculos para destinos existentes e não move produtos, variantes, vendas ou saldos. A prévia é somente leitura; a aplicação bloqueia as tabelas relevantes e valida novamente o hash. O teste de integração cria fixtures, exercita fusão, repetição, conflitos, isolamento e o upsert legado do iFood, e reverte toda a transação.
+O backfill é específico aos arquivos privados da avaliação da Use e Abluse em `../recompracrm-tmpworks/phibo/`. Ele valida as organizações e as fontes, grava somente vínculos para destinos existentes e não move produtos, variantes, vendas ou saldos. A prévia é somente leitura; a aplicação bloqueia as tabelas relevantes e valida novamente o hash. O teste de integração cria fixtures, exercita fusão, repetição, conflitos, isolamento e o upsert legado do iFood, e reverte toda a transação.
 
 Aplicar a estrutura e os aliases no banco não atualiza um servidor já publicado: os sincronizadores e a rotina de fusão precisam executar a versão nova do código antes da unificação real.

@@ -186,7 +186,7 @@ function lerArgumento(nome: string, padrao: string): string {
 
 async function main() {
 	const organizacaoId = lerArgumento("org", ORGANIZACAO_ID_PADRAO);
-	const diretorio = resolve(lerArgumento("out", "./.local-analysis/congelatte"));
+	const diretorio = resolve(lerArgumento("out", "../recompracrm-tmpworks/congelatte"));
 	const arquivoReceitas = resolve(diretorio, "receitas-congelatte.json");
 	const arquivoMapeamento = resolve(diretorio, "mapeamento-produtos.json");
 	const sobrescrever = process.argv.includes("--sobrescrever");

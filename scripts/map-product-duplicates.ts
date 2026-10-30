@@ -474,7 +474,7 @@ async function carregarUso(organizacaoId: string, produtoIds: string[]) {
 
 async function main() {
 	const organizacaoId = getArgValue("org") ?? getArgValue("orgId") ?? ORGANIZACAO_ID_PADRAO;
-	const diretorio = resolve(getArgValue("out") ?? `./.local-analysis/product-duplicates/${organizacaoId}`);
+	const diretorio = resolve(getArgValue("out") ?? `../recompracrm-tmpworks/product-duplicates/${organizacaoId}`);
 	const arquivo = resolve(diretorio, "duplicatas.json");
 	const sobrescrever = process.argv.includes("--sobrescrever");
 

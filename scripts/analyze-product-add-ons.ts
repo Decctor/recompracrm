@@ -1,6 +1,6 @@
 /**
  * Inventário de grupos de adicionais por organização (registry + vínculos por produto).
- * Somente leitura — grava JSON em .local-analysis/product-add-ons/<org>/inventario.json
+ * Somente leitura — grava JSON em ../recompracrm-tmpworks/product-add-ons/<org>/inventario.json
  *
  * Uso: npx tsx ./scripts/analyze-product-add-ons.ts --org=27817d9a-cb04-4704-a1f4-15b81a3610d3
  */
@@ -61,7 +61,7 @@ function groupSignature(group: {
 
 async function main() {
 	const organizacaoId = getArgValue("org") ?? ORG_PADRAO;
-	const outDir = resolve(`./.local-analysis/product-add-ons/${organizacaoId}`);
+	const outDir = resolve(`../recompracrm-tmpworks/product-add-ons/${organizacaoId}`);
 	const outFile = resolve(outDir, "inventario.json");
 
 	const groups = await db.query.productAddOns.findMany({

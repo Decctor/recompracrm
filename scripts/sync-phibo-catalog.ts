@@ -48,8 +48,8 @@ assertCatalog(!(apply && options.has("--dry-run")), "Escolha prévia ou aplicaç
 const organizationId = options.get("--organization-id");
 assertCatalog(organizationId, "Informe --organization-id explicitamente.");
 assertCatalog(!apply || options.get("--expected-plan-hash"), "Aplicação exige --expected-plan-hash da prévia.");
-const sourcePath = path.resolve(options.get("--input") ?? ".local-analysis/phibo/phibo-catalogo-completo-2026-10-27.json");
-const outputPath = path.resolve(options.get("--output") ?? `.local-analysis/phibo/sync-catalogo-${apply ? "resultado" : "previa"}-2026-10-27.json`);
+const sourcePath = path.resolve(options.get("--input") ?? "../recompracrm-tmpworks/phibo/phibo-catalogo-completo-2026-10-27.json");
+const outputPath = path.resolve(options.get("--output") ?? `../recompracrm-tmpworks/phibo/sync-catalogo-${apply ? "resultado" : "previa"}-2026-10-27.json`);
 assertCatalog(sourcePath.toLowerCase() !== outputPath.toLowerCase(), "Relatório não pode sobrescrever a fonte.");
 
 async function snapshot(tx: DBTransaction, orgId: string): Promise<TPhiboAppCatalog> {

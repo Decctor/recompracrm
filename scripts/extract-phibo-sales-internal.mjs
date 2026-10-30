@@ -5,7 +5,7 @@ import path from "node:path";
 
 const base = "https://www.phibo-api.com.br";
 const pageUrl = "https://app.phibo.com.br/vendas/relacao-vendas";
-const localDir = path.resolve(".local-analysis/phibo");
+const localDir = path.resolve("../recompracrm-tmpworks/phibo");
 const profileDir = path.join(localDir, "chrome-profile");
 
 function date(value) {

@@ -32,7 +32,7 @@ async function main() {
 			);
 			console.log(JSON.stringify({ organizacao: organization.nome, pendentes: rows.length, aplicar: apply }));
 			if (!apply || !rows.length) return;
-			const backupPath = path.resolve(".local-analysis/barcodes", `${organizationId}-${Date.now()}.json`);
+			const backupPath = path.resolve("../recompracrm-tmpworks/barcodes", `${organizationId}-${Date.now()}.json`);
 			await mkdir(path.dirname(backupPath), { recursive: true });
 			await writeFile(backupPath, JSON.stringify({ organizacaoId: organizationId, data: new Date().toISOString(), produtos: rows }, null, 2), {
 				flag: "wx",

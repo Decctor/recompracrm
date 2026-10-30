@@ -4,7 +4,7 @@
  *
  * Uso:
  *   npm run parse:congelatte
- *   tsx scripts/parse-congelatte-recipes.ts --pdf ./receitas-congelatte.pdf --out ./.local-analysis/congelatte
+ *   tsx scripts/parse-congelatte-recipes.ts --pdf ./receitas-congelatte.pdf --out ../recompracrm-tmpworks/congelatte
  *
  * Como o PDF foi feito no Canva, a extracao "achatada" de texto vem com tracking
  * (letras separadas por espaco). Por isso lemos os itens posicionados do pdf.js e
@@ -481,7 +481,7 @@ function lerArgumento(nome: string, padrao: string): string {
 
 async function main() {
 	const caminhoPdf = resolve(lerArgumento("pdf", "./receitas-congelatte.pdf"));
-	const diretorioSaida = resolve(lerArgumento("out", "./.local-analysis/congelatte"));
+	const diretorioSaida = resolve(lerArgumento("out", "../recompracrm-tmpworks/congelatte"));
 	const arquivoSaida = resolve(diretorioSaida, "receitas-congelatte.json");
 	const arquivoCache = resolve(diretorioSaida, "paginas-extraidas.json");
 	const reusarExtracao = process.argv.includes("--reuse-extracao");

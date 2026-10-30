@@ -9,9 +9,9 @@ const getArg = (name: string) => {
 	const index = args.indexOf(name);
 	return index < 0 ? null : args[index + 1] ?? null;
 };
-const input = path.resolve(getArg("--input") ?? ".local-analysis/phibo/vendas-raw-2026-06-28-a-2026-09-28.json");
-const output = path.resolve(getArg("--output") ?? ".local-analysis/phibo/import-preview-2026-06-28-a-2026-09-28.json");
-const mappingPath = path.resolve(getArg("--mapping") ?? ".local-analysis/phibo/import-mapping.json");
+const input = path.resolve(getArg("--input") ?? "../recompracrm-tmpworks/phibo/vendas-raw-2026-06-28-a-2026-09-28.json");
+const output = path.resolve(getArg("--output") ?? "../recompracrm-tmpworks/phibo/import-preview-2026-06-28-a-2026-09-28.json");
+const mappingPath = path.resolve(getArg("--mapping") ?? "../recompracrm-tmpworks/phibo/import-mapping.json");
 const requestedOrgId = getArg("--organization-id");
 
 type Decision = { acao: "vincular"; destinoId: string; motivo: string } | { acao: "criar" | "revisar"; motivo: string };

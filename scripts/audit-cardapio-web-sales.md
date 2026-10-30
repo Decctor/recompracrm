@@ -27,7 +27,7 @@ mesmo que vinculadas à integração. O rótulo legado `FECHADO` equivale a `SN0
 - A API limita histórico a cinco requisições/minuto. Dezenas de milhares de detalhes
   podem levar horas. Interromper e retomar preserva o cache já coletado.
 
-Arquivos em `.local-analysis/congelatte-cardapio-web-2026-jan-aug/` (ignorados pelo Git):
+Arquivos em `../recompracrm-tmpworks/congelatte-cardapio-web-2026-jan-aug/` (ignorados pelo Git):
 
 - `history-<mês>-<página>.json` e `details/<id>.json`: evidência da origem.
 - `history-complete.json`: confirmação de coleta completa do histórico.

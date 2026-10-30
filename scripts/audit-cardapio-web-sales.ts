@@ -14,7 +14,7 @@ const INTEGRATION_ID = "50b56dfc-5807-441c-aa65-e882fa77b7d3";
 const ORGANIZATION_ID = "27817d9a-cb04-4704-a1f4-15b81a3610d3";
 const START = "2026-01-01T00:00:00-03:00";
 const END = "2026-09-01T00:00:00-03:00"; // exclusivo; 31/08 inteiro em São Paulo
-const outputDir = resolve(".local-analysis/congelatte-cardapio-web-2026-jan-aug");
+const outputDir = resolve("../recompracrm-tmpworks/congelatte-cardapio-web-2026-jan-aug");
 type TSummary = TGetCardapioWebOrderHistoryOutput["orders"][number];
 type TSale = {
 	id: string;

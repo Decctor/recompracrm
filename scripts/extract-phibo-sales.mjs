@@ -11,7 +11,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const ROOT = process.cwd();
-const LOCAL_DIR = path.join(ROOT, ".local-analysis", "phibo");
+const LOCAL_DIR = path.join(ROOT, "..", "recompracrm-tmpworks", "phibo");
 const URL = "https://app.phibo.com.br/vendas/relacao-vendas";
 
 function parseArgs(argv) {

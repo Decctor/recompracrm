@@ -51,7 +51,7 @@ function getArgValue(name: string) {
 function parseArgs(): TArgs {
 	const organizacaoId = getArgValue("org") ?? getArgValue("orgId") ?? ORGANIZACAO_PADRAO;
 	const planoPath =
-		getArgValue("in") ?? resolve(`./.local-analysis/product-duplicates/${organizacaoId}/fundir-produtos.json`);
+		getArgValue("in") ?? resolve(`../recompracrm-tmpworks/product-duplicates/${organizacaoId}/fundir-produtos.json`);
 	return {
 		apply: process.argv.includes("--apply"),
 		organizacaoId,

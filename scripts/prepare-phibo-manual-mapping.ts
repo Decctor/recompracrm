@@ -4,7 +4,7 @@ import path from "node:path";
 import { catalogHash, catalogId, catalogName, assertCatalog, parsePhiboCatalog } from "@/lib/products/phibo-catalog";
 
 const organizationId = "b75a88a2-ef7c-4ff5-a53c-4e227791cad3";
-const root = path.resolve(".local-analysis/phibo");
+const root = path.resolve("../recompracrm-tmpworks/phibo");
 type TOrigin = { produtoId: string; cor?: string; cores?: Record<string, string>; implicita?: string };
 type TDecision = {
 	modelo: number;

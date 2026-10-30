@@ -13,9 +13,9 @@ import type { TDataSourceIntegration } from "@/lib/integrations/data-sources";
 import { SaleIntegrationMetadataSchema } from "@/schemas/sales";
 
 const organizationId = "b75a88a2-ef7c-4ff5-a53c-4e227791cad3";
-const sourcePath = path.resolve(".local-analysis/phibo/vendas-raw-2026-06-28-a-2026-09-28.json");
-const mappingPath = path.resolve(".local-analysis/phibo/import-mapping.json");
-const reportPath = path.resolve(".local-analysis/phibo/import-result-2026-06-28-a-2026-09-28.json");
+const sourcePath = path.resolve("../recompracrm-tmpworks/phibo/vendas-raw-2026-06-28-a-2026-09-28.json");
+const mappingPath = path.resolve("../recompracrm-tmpworks/phibo/import-mapping.json");
+const reportPath = path.resolve("../recompracrm-tmpworks/phibo/import-result-2026-06-28-a-2026-09-28.json");
 const integrationRef = "phibo-historico";
 const args = process.argv.slice(2);
 const apply = args.includes("--apply");

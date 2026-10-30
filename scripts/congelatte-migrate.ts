@@ -9,8 +9,8 @@
  *   npm run migrate:congelatte -- --executar   (grava, em uma unica transacao)
  *
  * Entradas (geradas pelos passos anteriores):
- *   .local-analysis/congelatte/receitas-congelatte.json   -> npm run parse:congelatte
- *   .local-analysis/congelatte/mapeamento-produtos.json   -> npm run map:congelatte (revisado a mao)
+ *   ../recompracrm-tmpworks/congelatte/receitas-congelatte.json   -> npm run parse:congelatte
+ *   ../recompracrm-tmpworks/congelatte/mapeamento-produtos.json   -> npm run map:congelatte (revisado a mao)
  *
  * Idempotencia: produtos sao procurados por nome normalizado dentro da organizacao e
  * receitas por titulo. Rodar duas vezes nao duplica — o que ja existe e reaproveitado.
@@ -136,7 +136,7 @@ function lerArgumento(nome: string, padrao: string): string {
 }
 
 async function main() {
-	const diretorio = resolve(lerArgumento("out", "./.local-analysis/congelatte"));
+	const diretorio = resolve(lerArgumento("out", "../recompracrm-tmpworks/congelatte"));
 	const arquivoReceitas = resolve(diretorio, "receitas-congelatte.json");
 	const arquivoMapeamento = resolve(diretorio, "mapeamento-produtos.json");
 	const executar = process.argv.includes("--executar");

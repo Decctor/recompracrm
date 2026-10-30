@@ -7,9 +7,9 @@ Organização: Use e abluse (`b75a88a2-ef7c-4ff5-a53c-4e227791cad3`). A extraç�
 - Ativos: `GET https://www.phibo-api.com.br/estoque/listarProdutos?page=0&size=50&opcaoConsulta=6&status=1`.
 - Excluídos: mesma rota, com `opcaoConsulta=12&status=0`.
 - 2.702 EANs/IDs de estoque distintos, 757 modelos: 2.559 variações ativas e 143 excluídas.
-- Arquivo privado: `.local-analysis/phibo/phibo-catalogo-completo-2026-10-27.json`. Inclui os campos originais, URLs de consulta, páginas, totais, status e data da extração. Não inclui cookies ou headers de autenticação.
+- Arquivo privado: `../recompracrm-tmpworks/phibo/phibo-catalogo-completo-2026-10-27.json`. Inclui os campos originais, URLs de consulta, páginas, totais, status e data da extração. Não inclui cookies ou headers de autenticação.
 
-As rotas são internas e podem mudar. `scripts/extract-phibo-catalog-browser.js` instala o extrator no contexto da aba autenticada. Depois de instalado, fazer uma consulta na interface para observar a sessão e executar `await phiboCatalog.extract()`. A ferramenta gera um download completo; copiar o arquivo para `.local-analysis/phibo/`. O parser do importador valida ambos os status, todas as páginas e os filtros, contagens, EANs/IDs, preços e valores obrigatórios.
+As rotas são internas e podem mudar. `scripts/extract-phibo-catalog-browser.js` instala o extrator no contexto da aba autenticada. Depois de instalado, fazer uma consulta na interface para observar a sessão e executar `await phiboCatalog.extract()`. A ferramenta gera um download completo; copiar o arquivo para `../recompracrm-tmpworks/phibo/`. O parser do importador valida ambos os status, todas as páginas e os filtros, contagens, EANs/IDs, preços e valores obrigatórios.
 
 ## Regras de reconciliação
 
@@ -54,7 +54,7 @@ O app tinha 570 produtos e 1.144 variantes. A prévia identificou 738 modelos/2.
 
 O conjunto `Conjunto Calça + Blusa com amarração` usa o pai existente `717a1184-0e5b-4cd2-aaff-513836f173cd` e as seis combinações de origem: Marrom/P, Bege/P, Vermelho/M, Azul Celeste/M, Preto/G e Verde Escuro/G. O cadastro histórico avulso Vermelho/M permanece preservado até a etapa posterior.
 
-Relatórios e backups ficam em `.local-analysis/phibo/`, ignorados pelo Git. O projeto contém 14 testes específicos desta reconciliação. A checagem geral de preços identifica duas infrações preexistentes nos scripts temporários `tmp-giardino-pizza-sizes.ts` e `tmp-giardino-pizza-tiers.ts`; os caminhos de escrita deste sincronizador usam os helpers exigidos.
+Relatórios e backups ficam em `../recompracrm-tmpworks/phibo/`, ignorados pelo Git. O projeto contém 14 testes específicos desta reconciliação. A checagem geral de preços identifica duas infrações preexistentes nos scripts temporários `tmp-giardino-pizza-sizes.ts` e `tmp-giardino-pizza-tiers.ts`; os caminhos de escrita deste sincronizador usam os helpers exigidos.
 
 ## Resultado aplicado e conferido
 

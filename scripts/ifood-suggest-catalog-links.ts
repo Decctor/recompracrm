@@ -395,7 +395,7 @@ async function main() {
 		produtosAtivosSemItem: productsWithoutItem,
 	};
 
-	const outPath = resolve(getArgValue("out") ?? `./.local-analysis/ifood/vinculos-catalogo-${organization.slug}.json`);
+	const outPath = resolve(getArgValue("out") ?? `../recompracrm-tmpworks/ifood/vinculos-catalogo-${organization.slug}.json`);
 	mkdirSync(dirname(outPath), { recursive: true });
 	writeFileSync(outPath, JSON.stringify(output, null, 2), { encoding: "utf-8" });
 

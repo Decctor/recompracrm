@@ -381,7 +381,7 @@ function exportarFundir(arquivo: TArquivo, organizacaoId: string, dir: string) {
 
 function main() {
 	const organizacaoId = getArgValue("org") ?? ORGANIZACAO_PADRAO;
-	const path = resolve(getArgValue("in") ?? `./.local-analysis/product-duplicates/${organizacaoId}/duplicatas.json`);
+	const path = resolve(getArgValue("in") ?? `../recompracrm-tmpworks/product-duplicates/${organizacaoId}/duplicatas.json`);
 	if (!existsSync(path)) throw new Error(`Arquivo não encontrado: ${path}`);
 
 	const dir = resolve(path, "..");

@@ -350,7 +350,7 @@ async function main() {
 		grupos: groups,
 	};
 
-	const outPath = resolve(getArgValue("out") ?? `./.local-analysis/ifood/curadoria-complementos-${organization.slug}.json`);
+	const outPath = resolve(getArgValue("out") ?? `../recompracrm-tmpworks/ifood/curadoria-complementos-${organization.slug}.json`);
 	mkdirSync(dirname(outPath), { recursive: true });
 	writeFileSync(outPath, JSON.stringify(output, null, 2), { encoding: "utf-8" });
 

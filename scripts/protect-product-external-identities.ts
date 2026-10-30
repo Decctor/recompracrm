@@ -10,7 +10,7 @@ import { buildExternalIdentityLink, loadExternalIdentities, type TExternalIdenti
 const args = process.argv.slice(2);
 const organizationId = args[args.indexOf("--organization-id") + 1];
 assertCatalog(args.includes("--organization-id") && organizationId && !organizationId.startsWith("--"), "Informe --organization-id.");
-const root = ".local-analysis/phibo";
+const root = "../recompracrm-tmpworks/phibo";
 const output = `${root}/protecao-identidades-${args.includes("--apply") ? "aplicada" : "previa"}-2026-10-27.json`;
 
 async function main() {
