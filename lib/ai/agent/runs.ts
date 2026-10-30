@@ -51,17 +51,36 @@ export async function completeAgentRun(db: TDb, input: { runId: string; outputRe
 		.where(eq(aiAgentRuns.id, input.runId));
 }
 
-export async function failAgentRun(db: TDb, input: { runId: string; erro: string }) {
-	await db.update(aiAgentRuns).set({ status: "FALHA", erro: input.erro, dataFim: new Date() }).where(eq(aiAgentRuns.id, input.runId));
+export async function failAgentRun(db: TDb, input: { runId: string; erro: string; uso?: TAiAgentUsage | null }) {
+	await db
+		.update(aiAgentRuns)
+		.set({
+			status: "FALHA",
+			erro: input.erro,
+			dataFim: new Date(),
+			// Ausência de `uso` não mexe na coluna.
+			...(input.uso !== undefined ? { uso: input.uso } : {}),
+		})
+		.where(eq(aiAgentRuns.id, input.runId));
 }
 
 /**
- * Run supersedida: o turno terminou, mas a revalidação pré-entrega abortou o envio.
- * Sobrescreve o CONCLUIDO do turno de propósito — o estado final relevante é "não
- * entregue", e `uso` preserva o custo já gasto.
+ * Run interrompida antes da entrega.
+ *
+ * Dois caminhos: o turno foi abortado durante a geração (aí `uso` é o acumulado até o corte) ou
+ * o turno já tinha concluído e a revalidação pré-entrega descartou o envio. No segundo, omitir
+ * `uso` de propósito — o UPDATE não mexe na coluna e o custo do turno completo permanece.
  */
-export async function markAgentRunCancelled(db: TDb, input: { runId: string; reason: string }) {
-	await db.update(aiAgentRuns).set({ status: "CANCELADO", erro: input.reason, dataFim: new Date() }).where(eq(aiAgentRuns.id, input.runId));
+export async function markAgentRunCancelled(db: TDb, input: { runId: string; reason: string; uso?: TAiAgentUsage | null }) {
+	await db
+		.update(aiAgentRuns)
+		.set({
+			status: "CANCELADO",
+			erro: input.reason,
+			dataFim: new Date(),
+			...(input.uso !== undefined ? { uso: input.uso } : {}),
+		})
+		.where(eq(aiAgentRuns.id, input.runId));
 }
 
 /** Vínculo canônico execução → mensagem entregue ao cliente. */
