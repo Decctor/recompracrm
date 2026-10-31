@@ -23,6 +23,7 @@ import {
 	type TChatInboxQuickFilter,
 	type TChatInboxView,
 } from "@/schemas/enums";
+import { useSupabaseRealtimeAuth } from "@/components/Providers/SupabaseRealtimeAuth";
 import { createRealtimeChannel, supabaseClient } from "@/services/supabase";
 import { useMutation, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import {
@@ -246,6 +247,7 @@ function ChatSidebarContent({
 	const { view, status: statusFilter, priority: priorityFilter, quick: quickFilter } = inboxFilters;
 	const [search, setSearch] = useState("");
 	const queryClient = useQueryClient();
+	const realtimeAuth = useSupabaseRealtimeAuth();
 	const initialSubscriptionCompleteRef = useRef(false);
 	// Canal realtime fora do ar (erro, timeout ou fechado): a lista passa a atualizar por polling.
 	const [realtimeDown, setRealtimeDown] = useState(false);
@@ -262,6 +264,11 @@ function ChatSidebarContent({
 	queryKeyRef.current = queryKey;
 
 	useEffect(() => {
+		// Sem o JWT da organização o canal cairia na anon key.
+		if (!realtimeAuth.ready) {
+			if (realtimeAuth.failed) setRealtimeDown(true);
+			return;
+		}
 		// Rajadas de mensagens disparam vários UPDATEs em sequência; as contagens só precisam
 		// refletir o estado final.
 		let countsTimer: ReturnType<typeof setTimeout> | null = null;
@@ -374,7 +381,7 @@ function ChatSidebarContent({
 			initialSubscriptionCompleteRef.current = false;
 			void supabaseClient.removeChannel(channel);
 		};
-	}, [organizationId, queryClient]);
+	}, [organizationId, queryClient, realtimeAuth.ready, realtimeAuth.failed]);
 
 	// Contingência: com o canal fora do ar a lista não recebe mais eventos e `useChats` não refaz a
 	// busca sozinho (sem intervalo, sem refetch no foco), enquanto a pílula de não lidas segue

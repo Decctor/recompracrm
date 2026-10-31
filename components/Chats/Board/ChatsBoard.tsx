@@ -17,6 +17,7 @@ import { updateChatAssignment } from "@/lib/mutations/chats";
 import { useChatsBoard, type TChatBoardCard, type TChatBoardData, type TChatBoardFilters } from "@/lib/queries/chats-board";
 import { cn } from "@/lib/utils";
 import type { TChatAssignmentPriority, TChatAssignmentStatus } from "@/schemas/enums";
+import { useSupabaseRealtimeAuth } from "@/components/Providers/SupabaseRealtimeAuth";
 import { createRealtimeChannel, supabaseClient } from "@/services/supabase";
 import {
 	closestCorners,
@@ -68,6 +69,7 @@ export default function ChatsBoard({ organizationId, whatsappConnections, onOpen
 	const [pendingCardIds, setPendingCardIds] = useState<Set<string>>(new Set());
 	const [confirm, setConfirm] = useState<PendingConfirm | null>(null);
 	const queryClient = useQueryClient();
+	const realtimeAuth = useSupabaseRealtimeAuth();
 
 	// Um refetch no meio de um movimento otimista devolveria o card à coluna de origem.
 	const paused = pendingCardIds.size > 0 || confirm !== null;
@@ -91,6 +93,8 @@ export default function ChatsBoard({ organizationId, whatsappConnections, onOpen
 	// atendimento. Diferente da inbox, aqui não há patch cirúrgico que valha a pena: a
 	// posição do card depende do status e o total da coluna vem do servidor.
 	useEffect(() => {
+		// Sem o JWT da organização o canal cairia na anon key.
+		if (!realtimeAuth.ready) return;
 		// Nome único por inscrição: ver `createRealtimeChannel`.
 		const channel = createRealtimeChannel(`chats-board-${organizationId}`)
 			.on("postgres_changes", { event: "*", schema: "public", table: "ampmais_chat_assignments", filter: `organizacao_id=eq.${organizationId}` }, () => {
@@ -104,7 +108,7 @@ export default function ChatsBoard({ organizationId, whatsappConnections, onOpen
 		return () => {
 			void supabaseClient.removeChannel(channel);
 		};
-	}, [organizationId, queryClient]);
+	}, [organizationId, queryClient, realtimeAuth.ready]);
 
 	/**
 	 * Move o card entre colunas no cache, mantendo os totais coerentes com o que se vê.
