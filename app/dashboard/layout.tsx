@@ -2,6 +2,7 @@ import AppHeader from "@/components/Layouts/HeaderApp";
 import LoadingComponent from "@/components/Layouts/LoadingComponent";
 import { ActivationPanel } from "@/components/Onboarding/ActivationPanel";
 import { OrgColorsProvider } from "@/components/Providers/OrgColorsProvider";
+import { SupabaseRealtimeAuthProvider } from "@/components/Providers/SupabaseRealtimeAuth";
 import { AppSidebar } from "@/components/Sidebar/AppSidebar";
 import { SidebarInset } from "@/components/ui/sidebar";
 import { SidebarProvider } from "@/components/ui/sidebar";
@@ -41,8 +42,10 @@ const MainLayout = async ({ children }: { children: ReactNode }) => {
 							corSecundaria={user.membership.organizacao.corSecundaria}
 							corSecundariaForeground={user.membership.organizacao.corSecundariaForeground}
 						>
-							<AppHeader session={{ user: user.user, membership: user.membership }} />
-							{children}
+							<SupabaseRealtimeAuthProvider organizacaoId={user.membership.organizacao.id}>
+								<AppHeader session={{ user: user.user, membership: user.membership }} />
+								{children}
+							</SupabaseRealtimeAuthProvider>
 						</OrgColorsProvider>
 					</div>
 				</SidebarInset>
