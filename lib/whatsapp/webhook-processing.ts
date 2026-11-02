@@ -641,7 +641,7 @@ async function handleIncomingMessage(incomingMessage: ReturnType<typeof parseWeb
 			triggerMessageId: insertedMessage.messageId,
 			triggerMessageSentAt: insertedMessage.dataEnvio.toISOString(),
 		},
-		{ delayMs: resolveAiResponseDelayMs(agent.capacidades) },
+		{ delayMs: resolveAiResponseDelayMs(agent.capacidades, { conteudoTexto: incomingMessage.textContent ?? null }) },
 	);
 }
 

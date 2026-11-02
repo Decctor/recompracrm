@@ -400,7 +400,7 @@ async function handleIncomingMessage(body: Extract<TGatewayWebhookBody, { event:
 			triggerMessageId: insertedMessage.messageId,
 			triggerMessageSentAt: insertedMessage.dataEnvio.toISOString(),
 		},
-		{ delayMs: resolveAiResponseDelayMs(agent.capacidades) },
+		{ delayMs: resolveAiResponseDelayMs(agent.capacidades, { conteudoTexto: data.content.text ?? null }) },
 	);
 }
 

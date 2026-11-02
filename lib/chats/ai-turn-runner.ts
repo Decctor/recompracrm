@@ -1,4 +1,5 @@
 import { resolveChatDeliverer } from "@/lib/ai/agent/delivery";
+import { recordSkippedAgentRun } from "@/lib/ai/agent/runs";
 import { ensureOrganizationAgent } from "@/lib/ai/agent/provisioning";
 import { respondToChatWithAgent } from "@/lib/ai/agent/respond-to-chat";
 import { runTriageGate } from "@/lib/ai/triage/triage-gate";
@@ -6,6 +7,8 @@ import { AI_PRE_RUN_FAILURE_RELEASE_REASON, shouldReleaseAfterPreRunFailure } fr
 import { claimChatForAi, confirmAiResponseStillValid, confirmClientInAgentScope } from "@/lib/chats/ai-trigger";
 import { getCurrentChatAttendance, releaseChatAttendance } from "@/lib/chats/attendance-state";
 import { db } from "@/services/drizzle";
+import { chats } from "@/services/drizzle/schema";
+import { eq } from "drizzle-orm";
 
 /**
  * Turno de IA disparado por uma mensagem do cliente, independente do transporte que o
@@ -21,7 +24,9 @@ export type TAiTurnPayload = {
 	organizationId: string;
 	chatId: string;
 	triggerMessageId: string;
-	// ISO string: o payload atravessa JSON (fila) sem perder tipo.
+	// ISO string: o payload atravessa JSON (fila) sem perder tipo. Só para log: as checagens leem
+	// o horário de gravação da mensagem no banco — este é o `dataEnvio` do WhatsApp, em segundos
+	// inteiros, e comparar por ele fazia a resposta a uma saudação "responder" a pergunta seguinte.
 	triggerMessageSentAt: string;
 };
 
@@ -58,10 +63,26 @@ export async function runAiTurnForMessage(payload: TAiTurnPayload): Promise<void
 		organizationId: payload.organizationId,
 		chatId: payload.chatId,
 		messageId: payload.triggerMessageId,
-		messageDate: new Date(payload.triggerMessageSentAt),
 	});
 	if (!confirmation.shouldRespond) {
 		console.log("[AI_TURN] Resposta da IA abortada:", confirmation.reason);
+		// Depois do claim, toda decisão de não responder deixa rastro em `ai_agent_runs`: sem isso,
+		// uma pergunta pulada não tinha linha nenhuma e não havia como saber por quê. Acessório —
+		// uma falha aqui não muda a decisão.
+		try {
+			const chat = await db.query.chats.findFirst({ where: eq(chats.id, payload.chatId), columns: { clienteId: true } });
+			await recordSkippedAgentRun(db, {
+				organizacaoId: payload.organizationId,
+				agent,
+				gatilho: "CHAT_MENSAGEM",
+				chatId: payload.chatId,
+				clienteId: chat?.clienteId ?? null,
+				mensagemGatilhoId: payload.triggerMessageId,
+				reason: confirmation.reason,
+			});
+		} catch (error) {
+			console.error("[AI_TURN] Falha ao registrar o turno pulado:", error);
+		}
 		return;
 	}
 
