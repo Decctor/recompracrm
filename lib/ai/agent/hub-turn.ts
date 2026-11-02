@@ -1,7 +1,7 @@
-import { confirmAiResponseStillValid, confirmClientInAgentScope } from "@/lib/chats/ai-trigger";
+import { confirmAiResponseStillValid, confirmClientInAgentScope, findLatestClientMessage } from "@/lib/chats/ai-trigger";
 import { db } from "@/services/drizzle";
-import { chatMessages, chats } from "@/services/drizzle/schema";
-import { and, desc, eq } from "drizzle-orm";
+import { chats } from "@/services/drizzle/schema";
+import { and, eq } from "drizzle-orm";
 import { resolveChatDeliverer } from "./delivery";
 import { ensureOrganizationAgent } from "./provisioning";
 import { respondToChatWithAgent } from "./respond-to-chat";
@@ -52,19 +52,10 @@ export async function triggerAgentTurnFromHub({
 		const pendente = !chat.ultimaMensagemSaidaData || chat.ultimaMensagemEntradaData > chat.ultimaMensagemSaidaData;
 		if (!pendente) return;
 
-		const ultimaDoCliente = await db.query.chatMessages.findFirst({
-			where: and(eq(chatMessages.chatId, chatId), eq(chatMessages.autorTipo, "CLIENTE")),
-			orderBy: [desc(chatMessages.dataEnvio), desc(chatMessages.id)],
-			columns: { id: true, dataEnvio: true },
-		});
+		const ultimaDoCliente = await findLatestClientMessage({ chatId });
 		if (!ultimaDoCliente) return;
 
-		const confirmation = await confirmAiResponseStillValid({
-			organizationId: organizacaoId,
-			chatId,
-			messageId: ultimaDoCliente.id,
-			messageDate: ultimaDoCliente.dataEnvio,
-		});
+		const confirmation = await confirmAiResponseStillValid({ organizationId: organizacaoId, chatId, messageId: ultimaDoCliente.id });
 		if (!confirmation.shouldRespond) {
 			console.log("[AI_AGENT] [HUB_TURN] Resposta abortada:", confirmation.reason);
 			return;

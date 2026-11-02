@@ -305,6 +305,11 @@ export const chatMessages = newTable(
 		statusEntrega: chatMessageDeliveryStatusEnum("status_entrega").notNull().default("PENDENTE"),
 		provedorStatusDataAtualizacao: timestamp("provedor_status_data_atualizacao"),
 		dataEnvio: timestamp("data_envio").defaultNow().notNull(),
+		// Quando a mensagem chegou ao nosso banco — o relógio é nosso. `dataEnvio` de uma mensagem
+		// recebida é o timestamp do WhatsApp (segundos inteiros, hora do envio no celular), que pode
+		// ser anterior a uma resposta já gravada. Nulo em linhas anteriores à migration 0144: leia
+		// com `coalesce(data_insercao, data_envio)` (`chatMessageInsertedAt` em lib/chats/ai-trigger.ts).
+		dataInsercao: timestamp("data_insercao").defaultNow(),
 
 		/** @deprecated removido na migration 0053 — substituído por statusEntrega. */
 		status: chatMessageStatusEnum("status").default("ENVIADO"),

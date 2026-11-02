@@ -1,8 +1,9 @@
-import type { TAiAgentConfigSnapshot, TAiAgentUsage } from "@/schemas/ai-agents";
+import { parseJsonbWithFallback } from "@/lib/ai/shared/json";
+import { AiAgentCapabilitiesSchema, AiAgentModelConfigSchema, type TAiAgentConfigSnapshot, type TAiAgentUsage } from "@/schemas/ai-agents";
 import type { TAiAgentRunTriggerEnum } from "@/schemas/enums";
 import type { DB, DBTransaction } from "@/services/drizzle";
-import { aiAgentRuns } from "@/services/drizzle/schema";
-import { and, count, eq, gte } from "drizzle-orm";
+import { type TAiAgentEntity, aiAgentRuns } from "@/services/drizzle/schema";
+import { and, count, eq, gte, isNotNull, ne, or } from "drizzle-orm";
 
 type TDb = DB | DBTransaction;
 
@@ -64,6 +65,58 @@ export async function markAgentRunCancelled(db: TDb, input: { runId: string; rea
 	await db.update(aiAgentRuns).set({ status: "CANCELADO", erro: input.reason, dataFim: new Date() }).where(eq(aiAgentRuns.id, input.runId));
 }
 
+/**
+ * Snapshot da configuração sem a base de conhecimento: para runs que não chegam a montar o
+ * contexto (triagem, turno pulado). O que importa nelas é *por que* não houve turno.
+ */
+export function snapshotAgentConfigWithoutKnowledge(
+	agent: Pick<TAiAgentEntity, "instrucoes" | "modeloConfig" | "capacidades">,
+): TAiAgentConfigSnapshot {
+	return {
+		instrucoes: agent.instrucoes,
+		modeloConfig: parseJsonbWithFallback(AiAgentModelConfigSchema, agent.modeloConfig),
+		capacidades: parseJsonbWithFallback(AiAgentCapabilitiesSchema, agent.capacidades),
+		conhecimento: [],
+	};
+}
+
+/**
+ * Turno pulado antes de abrir a execução: fica uma run CANCELADO com o motivo em `erro`.
+ *
+ * Antes o turno só deixava um `console.log`, e uma pergunta que a IA decidiu não responder não
+ * tinha linha nenhuma em `ai_agent_runs` — indistinguível de um webhook que nunca chegou. Sem
+ * `dataInicio`: nunca rodou, e por isso não conta no teto diário (`countAgentRunsToday`).
+ */
+export async function recordSkippedAgentRun(
+	db: TDb,
+	input: {
+		organizacaoId: string;
+		agent: Pick<TAiAgentEntity, "id" | "instrucoes" | "modeloConfig" | "capacidades">;
+		gatilho: TAiAgentRunTriggerEnum;
+		chatId: string;
+		clienteId: string | null;
+		mensagemGatilhoId: string | null;
+		reason: string;
+	},
+) {
+	const [run] = await db
+		.insert(aiAgentRuns)
+		.values({
+			organizacaoId: input.organizacaoId,
+			agenteId: input.agent.id,
+			status: "CANCELADO",
+			gatilho: input.gatilho,
+			chatId: input.chatId,
+			clienteId: input.clienteId,
+			mensagemGatilhoId: input.mensagemGatilhoId,
+			configSnapshot: snapshotAgentConfigWithoutKnowledge(input.agent),
+			erro: input.reason,
+			dataFim: new Date(),
+		})
+		.returning({ id: aiAgentRuns.id });
+	return run ?? null;
+}
+
 /** Vínculo canônico execução → mensagem entregue ao cliente. */
 export async function linkAgentRunMessage(db: TDb, input: { runId: string; mensagemId: string }) {
 	await db.update(aiAgentRuns).set({ mensagemEnviadaId: input.mensagemId }).where(eq(aiAgentRuns.id, input.runId));
@@ -77,7 +130,14 @@ export async function countAgentRunsToday(db: TDb, organizacaoId: string): Promi
 	const [row] = await db
 		.select({ total: count() })
 		.from(aiAgentRuns)
-		.where(and(eq(aiAgentRuns.organizacaoId, organizacaoId), gte(aiAgentRuns.dataInsercao, inicioDoDia)));
+		.where(
+			and(
+				eq(aiAgentRuns.organizacaoId, organizacaoId),
+				gte(aiAgentRuns.dataInsercao, inicioDoDia),
+				// Turno pulado antes de rodar (`recordSkippedAgentRun`) não gastou nada: não consome o teto.
+				or(ne(aiAgentRuns.status, "CANCELADO"), isNotNull(aiAgentRuns.dataInicio)),
+			),
+		);
 
 	return Number(row?.total ?? 0);
 }

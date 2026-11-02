@@ -1,5 +1,5 @@
 import type { TAgentMessageDeliverer } from "@/lib/ai/agent/respond-to-chat";
-import { completeAgentRun, createAgentRun, failAgentRun, markAgentRunRunning } from "@/lib/ai/agent/runs";
+import { completeAgentRun, createAgentRun, failAgentRun, markAgentRunRunning, snapshotAgentConfigWithoutKnowledge } from "@/lib/ai/agent/runs";
 import { transferChatToHuman } from "@/lib/ai/agent/transfer-to-human";
 import { parseJsonbWithFallback } from "@/lib/ai/shared/json";
 import { isToolEnabled } from "@/lib/ai/tools/guards";
@@ -130,12 +130,7 @@ async function recordTriageOnlyRun(
 		chatId: input.chatId,
 		clienteId: chat?.clienteId ?? "",
 		mensagemGatilhoId: input.triggerMessageId,
-		configSnapshot: {
-			instrucoes: input.agent.instrucoes,
-			modeloConfig: parseJsonbWithFallback(AiAgentModelConfigSchema, input.agent.modeloConfig),
-			capacidades: input.capacidades,
-			conhecimento: [],
-		},
+		configSnapshot: { ...snapshotAgentConfigWithoutKnowledge(input.agent), capacidades: input.capacidades },
 		contextoEntradaSnapshot: { triagem: input.triagem },
 	});
 	await markAgentRunRunning(db, run.id);
