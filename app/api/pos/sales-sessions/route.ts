@@ -58,7 +58,13 @@ async function getSalesSessions({ input, session }: { input: TGetSalesSessionsIn
 		// composição do que `conferencias` congelou — nenhum movimento novo é carimbado numa sessão
 		// fechada, então recalcular aqui devolve os mesmos valores e serve o detalhe histórico.
 		// As pendências fiscais seguem junto: quem confere o caixa precisa vê-las tanto quanto quem fecha.
-		const [resumoEsperado, pendenciasFiscais, movimentosRows, pendenciasMaquininha] = await Promise.all([
+		//
+		// Lado oposto do parcial: a venda de uma conta fechada neste caixa pode ter sido recebida em
+		// parte noutro caixa (ou sem caixa). A lista de vendas mostra o total da venda, mas a gaveta
+		// daqui só recebeu o restante — o resumo precisa do valor líquido para bater com o esperado.
+		// Só depende das vendas já carregadas com a sessão, então sai na mesma ida das demais leituras.
+		const saleIds = found.vendas.map((venda) => venda.id);
+		const [resumoEsperado, pendenciasFiscais, movimentosRows, pendenciasMaquininha, partialsElsewhere] = await Promise.all([
 			computeSessionExpectedByMethod({ orgId, sessaoVendaId: found.id, saldoInicial: found.saldoInicial }),
 			db
 				.select({
@@ -118,16 +124,8 @@ async function getSalesSessions({ input, session }: { input: TGetSalesSessionsIn
 			// Cobranças na maquininha do turno ainda sem desfecho: quem fecha ou confere o caixa precisa
 			// vê-las ao lado das pendências fiscais.
 			listSessionPaymentTerminalPendencies({ orgId, sessaoVendaId: found.id }),
-		]);
-		const movimentos = movimentosRows.map(({ dataEfetivacao, dataPrevisao, ...movimento }) => ({ ...movimento, data: dataEfetivacao ?? dataPrevisao }));
-
-		// Lado oposto do parcial: a venda de uma conta fechada neste caixa pode ter sido recebida em
-		// parte noutro caixa (ou sem caixa). A lista de vendas mostra o total da venda, mas a gaveta
-		// daqui só recebeu o restante — o resumo precisa do valor líquido para bater com o esperado.
-		const saleIds = found.vendas.map((venda) => venda.id);
-		const partialsElsewhere =
 			saleIds.length > 0
-				? await db
+				? db
 						.select({ vendaId: tabPayments.vendaId, valor: sql<number>`coalesce(sum(${tabPayments.valor}), 0)` })
 						.from(tabPayments)
 						.where(
@@ -139,7 +137,10 @@ async function getSalesSessions({ input, session }: { input: TGetSalesSessionsIn
 							),
 						)
 						.groupBy(tabPayments.vendaId)
-				: [];
+				: [],
+		]);
+		const movimentos = movimentosRows.map(({ dataEfetivacao, dataPrevisao, ...movimento }) => ({ ...movimento, data: dataEfetivacao ?? dataPrevisao }));
+
 		const partialsBySale = new Map(partialsElsewhere.map((row) => [row.vendaId, Number(row.valor)]));
 		const vendas = found.vendas.map((venda) => {
 			const valorRecebidoOutroCaixa = Math.round((partialsBySale.get(venda.id) ?? 0) * 100) / 100;

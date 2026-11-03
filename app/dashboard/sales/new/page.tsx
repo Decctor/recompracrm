@@ -22,6 +22,16 @@ export default async function NewSale() {
 
 	// return redirect("/dashboard");
 	// DISABLED FOR NOW
+	// Decided from the session alone: an organization without ERP never pays for the queries below.
+	if (sessionUser.membership.organizacao.configuracao.recursos.erp.acesso === false) {
+		return (
+			<PlanRestrictionComponent
+				title="Acesso ao ERP"
+				message="Este recurso está indisponível para sua organização. Faça um upgrade para desbloquear todo o potencial."
+			/>
+		);
+	}
+
 	const organizationId = sessionUser.membership.organizacao.id;
 	const organizationConfiguration = sessionUser.membership.organizacao.configuracao as TOrganizationConfiguration;
 	const [organizationCashbackProgram, fiscalSettings, organizationFinancialAccounts] = await Promise.all([
@@ -32,14 +42,6 @@ export default async function NewSale() {
 		getSelectableFinancialAccounts({ organizationId, configuracao: organizationConfiguration }),
 	]);
 
-	if (sessionUser.membership.organizacao.configuracao.recursos.erp.acesso === false) {
-		return (
-			<PlanRestrictionComponent
-				title="Acesso ao ERP"
-				message="Este recurso está indisponível para sua organização. Faça um upgrade para desbloquear todo o potencial."
-			/>
-		);
-	}
 	return (
 		<NewSalePage
 			organizationId={organizationId}

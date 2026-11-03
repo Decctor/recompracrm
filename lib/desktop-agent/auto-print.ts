@@ -5,7 +5,7 @@ import { db } from "@/services/drizzle";
 import { organizations, sales, tabOrders, type TFiscalDocument, type TOrganizationEntity } from "@/services/drizzle/schema";
 import { and, eq } from "drizzle-orm";
 import { buildCupomVendaDados } from "./cupom-venda-data";
-import { enqueuePrintJob, organizationHasActivePrinterForFinalidade, organizationHasActivePrinterForPreparationStation } from "./print-jobs";
+import { enqueuePrintJob, loadPreparationStationPrinterResolver, organizationHasActivePrinterForFinalidade } from "./print-jobs";
 import { type TTicketPreparoBuildEntry, buildTicketPreparoDadosFromSale, buildTicketPreparoDadosFromTabOrder } from "./ticket-preparo-data";
 
 // Orquestradores de impressão automática (docs/dev-planning/auto-print-wiring-plan.md).
@@ -139,8 +139,10 @@ async function enqueuePreparationTicketJobs({
 }) {
 	const jobs: { estacaoId: string | null; jobId: string; created: boolean }[] = [];
 	const estacoesSemImpressora: string[] = [];
+	// Uma leitura das impressoras para todas as estações, em vez de uma por estação.
+	const servesPreparationStation = entries.some((entry) => entry.estacaoId) ? await loadPreparationStationPrinterResolver({ organizacaoId }) : null;
 	for (const { estacaoId, dados } of entries) {
-		if (estacaoId && !(await organizationHasActivePrinterForPreparationStation({ organizacaoId, estacaoId }))) {
+		if (estacaoId && !servesPreparationStation?.(estacaoId)) {
 			estacoesSemImpressora.push(estacaoId);
 			continue;
 		}
@@ -266,7 +268,14 @@ const DANFE_SIGNED_URL_EXPIRES_SECONDS = 48 * 60 * 60;
 
 // Chamado após persistAuthorizedAssets gravar o pdfStoragePath (cobre emissão e sync). Vale para
 // emissão automática E manual: a política é sobre a impressão, não sobre quem emitiu.
-export async function processFiscalDocumentDanfeAutoPrintIfEligible({ documento }: { documento: TFiscalDocument }) {
+export async function processFiscalDocumentDanfeAutoPrintIfEligible({
+	documento,
+	configuracao,
+}: {
+	documento: TFiscalDocument;
+	// Evita reler a organização quando o chamador (persistAuthorizedAssets) já a carregou.
+	configuracao?: TOrganizationEntity["configuracao"] | null;
+}) {
 	const organizacaoId = documento.organizacaoId;
 	try {
 		const finalidade = documento.tipo === "NFCE" ? ("DANFE_NFCE" as const) : documento.tipo === "NFE" ? ("DANFE_NFE" as const) : null;
@@ -274,8 +283,8 @@ export async function processFiscalDocumentDanfeAutoPrintIfEligible({ documento 
 		if (!documento.vendaId) return { status: "NAO_SOLICITADO" as const, reason: "DOCUMENTO_SEM_VENDA" as const };
 		if (!documento.pdfStoragePath) return { status: "NAO_SOLICITADO" as const, reason: "PDF_INDISPONIVEL" as const };
 
-		const configuracao = await resolveConfiguracao({ organizacaoId });
-		const rule = parsePrintPreferences(configuracao).automatica[finalidade];
+		const resolvedConfiguracao = await resolveConfiguracao({ organizacaoId, configuracao });
+		const rule = parsePrintPreferences(resolvedConfiguracao).automatica[finalidade];
 		if (!rule.habilitada) return { status: "NAO_SOLICITADO" as const, reason: "IMPRESSAO_AUTOMATICA_DESATIVADA" as const };
 
 		const sale = await db.query.sales.findFirst({

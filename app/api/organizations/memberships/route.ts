@@ -15,10 +15,13 @@ async function getUserMemberships(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
 
+	// Only the columns the response carries: the full organization row includes the POI QR code
+	// data URLs and the configuration jsonb, which this switcher (called on most page loads) never reads.
 	const memberships = await db.query.organizationMembers.findMany({
 		where: (fields, { eq }) => eq(fields.usuarioId, session.user.id),
+		columns: { id: true, permissoes: true, dataInsercao: true },
 		with: {
-			organizacao: true,
+			organizacao: { columns: { id: true, nome: true, cnpj: true, logoUrl: true } },
 		},
 		orderBy: (fields, { desc }) => desc(fields.dataInsercao),
 	});

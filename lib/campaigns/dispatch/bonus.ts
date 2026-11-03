@@ -5,14 +5,15 @@ import type { TInteractionContextMetadados } from "@/lib/message-templates";
 import type { TCashbackProgramAccumulationTypeEnum, TTimeDurationUnitsEnum } from "@/schemas/enums";
 import { type DBTransaction, db } from "@/services/drizzle";
 import { cashbackProgramBalances, cashbackPrograms, coupons } from "@/services/drizzle/schema";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 
 /**
  * Bônus de campanha (cashback/cupom) no envio — Fase 3 do redesign.
  *
  * O bônus é concedido na mesma transação que registra a interação, depois que o provedor aceitou
  * a mensagem. Como a mensagem precisa renderizar o código do cupom e o novo saldo ANTES do envio,
- * `projectCampaignSendContext` calcula o contexto projetado (sem escrever nada); a concessão real
+ * `loadCampaignSendContextInputs` (uma leitura por lote) + `projectCampaignSendContext` calculam o
+ * contexto projetado (sem escrever nada); a concessão real
  * (`grantCampaignBonusOnSend`) acontece só se o envio saiu. Não existe mais estorno: quem não
  * recebeu a mensagem nunca ganhou o bônus.
  */
@@ -84,35 +85,73 @@ export function computeCampaignCashbackAmount({ campaign, saleValue }: { campaig
 	return campaign.cashbackGeracaoValor;
 }
 
+type TCampaignSendBalance = {
+	saldoValorDisponivel: number;
+	saldoValorAcumuladoTotal: number;
+	saldoValorResgatadoTotal: number;
+};
+
+export type TCampaignSendContextInputs = {
+	balancesByClientId: Map<string, TCampaignSendBalance>;
+	couponContext: TProjectedCoupon;
+};
+
+/**
+ * Leituras do contexto de envio para um lote inteiro: o cupom é da campanha (igual para todo
+ * destinatário) e os saldos saem numa única consulta por `inArray`, em vez de duas consultas por
+ * destinatário. Só leitura; nada é gravado aqui.
+ */
+export async function loadCampaignSendContextInputs({
+	organizationId,
+	clientIds,
+	campaign,
+	now = new Date(),
+}: {
+	organizationId: string;
+	clientIds: string[];
+	campaign: TCampaignBonusConfig;
+	now?: Date;
+}): Promise<TCampaignSendContextInputs> {
+	const uniqueClientIds = [...new Set(clientIds)];
+	const [balances, couponContext] = await Promise.all([
+		uniqueClientIds.length > 0
+			? db.query.cashbackProgramBalances.findMany({
+					where: and(eq(cashbackProgramBalances.organizacaoId, organizationId), inArray(cashbackProgramBalances.clienteId, uniqueClientIds)),
+					columns: { clienteId: true, saldoValorDisponivel: true, saldoValorAcumuladoTotal: true, saldoValorResgatadoTotal: true },
+				})
+			: Promise.resolve([]),
+		projectCouponContext({ organizationId, campaign, now }),
+	]);
+
+	// Primeira linha por cliente, como o `findFirst` por destinatário fazia.
+	const balancesByClientId = new Map<string, TCampaignSendBalance>();
+	for (const { clienteId, ...balance } of balances) {
+		if (!balancesByClientId.has(clienteId)) balancesByClientId.set(clienteId, balance);
+	}
+	return { balancesByClientId, couponContext };
+}
+
 /**
  * Contexto de variáveis para renderizar a mensagem: contexto congelado no enfileiramento +
  * saldo atual do cliente + projeção do bônus que será concedido se o envio sair.
- * Só leitura; nada é gravado aqui.
+ * Puro: os saldos e o cupom vêm de `loadCampaignSendContextInputs`.
  */
-export async function projectCampaignSendContext({
-	organizationId,
+export function projectCampaignSendContext({
 	clientId,
 	campaign,
 	program,
 	baseContext,
 	saleValue,
-	now = new Date(),
+	inputs,
 }: {
-	organizationId: string;
 	clientId: string;
 	campaign: TCampaignBonusConfig;
 	program: TCampaignSendBonusProgram;
 	baseContext: TInteractionContextMetadados | null | undefined;
 	saleValue: number | null;
-	now?: Date;
-}): Promise<TInteractionContextMetadados> {
-	const [balance, couponContext] = await Promise.all([
-		db.query.cashbackProgramBalances.findFirst({
-			where: and(eq(cashbackProgramBalances.organizacaoId, organizationId), eq(cashbackProgramBalances.clienteId, clientId)),
-			columns: { saldoValorDisponivel: true, saldoValorAcumuladoTotal: true, saldoValorResgatadoTotal: true },
-		}),
-		projectCouponContext({ organizationId, campaign, now }),
-	]);
+	inputs: TCampaignSendContextInputs;
+}): TInteractionContextMetadados {
+	const balance = inputs.balancesByClientId.get(clientId);
 
 	// O saldo atual prevalece sobre o congelado no gatilho: entre o enfileiramento e o envio o
 	// cliente pode ter acumulado/resgatado, e a mensagem deve refletir o que ele verá na loja.
@@ -129,7 +168,7 @@ export async function projectCampaignSendContext({
 		compraCashbackNovoSaldo: (baseContext?.compraCashbackNovoSaldo ?? availableBalance) + bonusAmount,
 		cashbackTotalAcumuladoVida: accumulatedTotal + bonusAmount,
 		cashbackTotalResgatadoVida: redeemedTotal,
-		...couponContext,
+		...inputs.couponContext,
 	};
 }
 

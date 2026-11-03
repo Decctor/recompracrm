@@ -34,17 +34,19 @@ async function getProductFiscalProfiles({ input, session }: { input: TGetProduct
 	const userOrgId = userMembership.organizacao.id;
 
 	if (input.productId) {
-		const product = await db.query.products.findFirst({
-			where: and(eq(products.id, input.productId), eq(products.organizacaoId, userOrgId)),
-			columns: { id: true },
-		});
+		// Both reads are scoped to the organization; the product lookup only decides the 404.
+		const [product, productFiscalProfilesResult] = await Promise.all([
+			db.query.products.findFirst({
+				where: and(eq(products.id, input.productId), eq(products.organizacaoId, userOrgId)),
+				columns: { id: true },
+			}),
+			db.query.productFiscalProfiles.findMany({
+				where: (fields, { and, eq, isNull }) =>
+					and(eq(fields.produtoId, input.productId!), eq(fields.organizacaoId, userOrgId), isNull(fields.produtoVarianteId), eq(fields.ativo, true)),
+				orderBy: (fields, { desc }) => desc(fields.dataInsercao),
+			}),
+		]);
 		if (!product) throw new createHttpError.NotFound("Produto não encontrado.");
-
-		const productFiscalProfilesResult = await db.query.productFiscalProfiles.findMany({
-			where: (fields, { and, eq, isNull }) =>
-				and(eq(fields.produtoId, input.productId!), eq(fields.organizacaoId, userOrgId), isNull(fields.produtoVarianteId), eq(fields.ativo, true)),
-			orderBy: (fields, { desc }) => desc(fields.dataInsercao),
-		});
 
 		return {
 			data: {
@@ -180,6 +182,17 @@ async function assertProductFiscalProfileExists({
 	if (!profile) throw new createHttpError.NotFound("Perfil fiscal não encontrado.");
 }
 
+// Both lookups are read-only and independent; they run together, but the product's 404 keeps
+// precedence over the profile's, as when they ran in sequence.
+async function assertProductAndFiscalProfileExist(params: { productId: string; productFiscalProfileId: string; userOrgId: string }) {
+	const [productCheck, profileCheck] = await Promise.allSettled([
+		assertProductExists({ productId: params.productId, userOrgId: params.userOrgId }),
+		assertProductFiscalProfileExists(params),
+	]);
+	if (productCheck.status === "rejected") throw productCheck.reason;
+	if (profileCheck.status === "rejected") throw profileCheck.reason;
+}
+
 async function createProductFiscalProfile({ input, session }: { input: TCreateProductFiscalProfileInput; session: TAuthUserSession }) {
 	const userOrgId = assertFiscalConfigurePermission(session);
 	await assertProductExists({ productId: input.productId, userOrgId });
@@ -234,8 +247,7 @@ export const POST = appApiHandler({
 
 async function updateProductFiscalProfile({ input, session }: { input: TUpdateProductFiscalProfileInput; session: TAuthUserSession }) {
 	const userOrgId = assertFiscalConfigurePermission(session);
-	await assertProductExists({ productId: input.productId, userOrgId });
-	await assertProductFiscalProfileExists({
+	await assertProductAndFiscalProfileExist({
 		productId: input.productId,
 		productFiscalProfileId: input.productFiscalProfileId,
 		userOrgId,
@@ -289,8 +301,7 @@ export const PUT = appApiHandler({
 
 async function deleteProductFiscalProfile({ input, session }: { input: TDeleteProductFiscalProfileInput; session: TAuthUserSession }) {
 	const userOrgId = assertFiscalConfigurePermission(session);
-	await assertProductExists({ productId: input.productId, userOrgId });
-	await assertProductFiscalProfileExists({
+	await assertProductAndFiscalProfileExist({
 		productId: input.productId,
 		productFiscalProfileId: input.productFiscalProfileId,
 		userOrgId,

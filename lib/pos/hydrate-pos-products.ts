@@ -1,5 +1,5 @@
 import { projectAddOnReferencesToChannel } from "@/lib/products/sales-channels";
-import { channelNodePrice, channelProductFilter, loadChannelState } from "@/lib/products/sales-channels-store";
+import { channelNodePrice, channelProductFilter, loadChannelState, type TChannelState } from "@/lib/products/sales-channels-store";
 import { db } from "@/services/drizzle";
 import { products } from "@/services/drizzle/schema";
 import { and, eq, inArray, notInArray } from "drizzle-orm";
@@ -9,11 +9,25 @@ import { and, eq, inArray, notInArray } from "drizzle-orm";
  * adicionais ativos), para que qualquer lista de sugestão (mais pedidos, cross-sell) possa
  * fluir direto para os handlers de carrinho — produtos complexos abrem o builder modal.
  */
-export async function hydratePOSProducts({ orgId, productIds, canal = "POS" }: { orgId: string; productIds: string[]; canal?: "POS" | "COMANDA" }) {
+export async function hydratePOSProducts({
+	orgId,
+	productIds,
+	canal = "POS",
+	channelState: providedChannelState,
+}: {
+	orgId: string;
+	productIds: string[];
+	canal?: "POS" | "COMANDA";
+	/**
+	 * Estado do canal já carregado (ou em carregamento) pelo chamador, para não reler o mesmo canal
+	 * na mesma request. `undefined` = carrega aqui; `null` = o canal não existe. Precisa ser do `canal` acima.
+	 */
+	channelState?: TChannelState | null | Promise<TChannelState | null>;
+}) {
 	if (productIds.length === 0) return [];
 
 	// Disponibilidade e preço no canal: sugestões respeitam as mesmas linhas esparsas da grade.
-	const channelState = await loadChannelState({ orgId, canal });
+	const channelState = providedChannelState !== undefined ? await providedChannelState : await loadChannelState({ orgId, canal });
 	const conditions = [eq(products.organizacaoId, orgId), eq(products.ativo, true), eq(products.vendavel, true), inArray(products.id, productIds)];
 	if (channelState) {
 		const filter = channelProductFilter(channelState);

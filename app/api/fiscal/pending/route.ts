@@ -6,8 +6,12 @@ import createHttpError from "http-errors";
 import { NextRequest, NextResponse } from "next/server";
 
 async function getFiscalPending({ organizationId }: { organizationId: string }) {
-	const organizacao = await loadFiscalOrganization(organizationId);
-	const summary = await getFiscalPendingSummary({ organizationId, provider: organizacao?.fiscalProvedor });
+	// O provedor so condiciona a consulta de prazos: a leitura da organizacao corre junto com as
+	// demais consultas do resumo em vez de antes delas.
+	const summary = await getFiscalPendingSummary({
+		organizationId,
+		provider: loadFiscalOrganization(organizationId).then((organizacao) => organizacao?.fiscalProvedor),
+	});
 	return { data: summary, message: "Pendências fiscais encontradas com sucesso." };
 }
 export type TGetFiscalPendingOutput = Awaited<ReturnType<typeof getFiscalPending>>;

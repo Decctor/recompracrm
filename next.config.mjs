@@ -71,7 +71,15 @@ const nextConfig = {
 			})),
 		];
 	},
-	serverExternalPackages: ["@resvg/resvg-js"],
+	// satori: desde a 0.33 importa o `harfbuzzjs`, que lê o `hb.wasm` de `__dirname`. Empacotado,
+	// o `__dirname` vira `/ROOT/node_modules/harfbuzzjs` e o wasm não existe no deploy — a carga
+	// rejeitava sem handler e derrubava o processo ao fim de cada request (webhook do WhatsApp com
+	// p50 de ~240 ms para ~1 s a partir de 28/10). Externo, ele resolve o node_modules real; o wasm
+	// é carregado por caminho dinâmico, invisível ao trace, então entra explicitamente abaixo.
+	serverExternalPackages: ["@resvg/resvg-js", "satori"],
+	outputFileTracingIncludes: {
+		"/api/**/*": ["./node_modules/harfbuzzjs/hb.wasm"],
+	},
 	typescript: {
 		ignoreBuildErrors: true,
 	},

@@ -1,4 +1,5 @@
 import { ensureOrganizationAgent } from "@/lib/ai/agent/provisioning";
+import { settleAll } from "@/lib/async/settle-all";
 import { handleWhatsappDeliveryConfirmed, handleWhatsappStatusFailure } from "@/lib/campaigns/dispatch/interruption";
 import { captureSurveyReplySafely } from "@/lib/campaigns/surveys/capture";
 import { resolveAiResponseDelayMs } from "@/lib/chats/ai-trigger";
@@ -353,25 +354,28 @@ async function handleStatusUpdates(body: TMetaWebhookBody): Promise<void> {
 }
 
 async function handleStatusUpdate(statusUpdate: ReturnType<typeof parseWebhookStatusUpdates>[number]): Promise<void> {
-	await observeWhatsappPayment(statusUpdate);
-
 	const statusEntrega = mapProviderStatusToDeliveryStatus(statusUpdate.status);
-	if (statusEntrega) {
+
+	// As três gravações são independentes (telefone/onboarding, mensagem do chat, interação de
+	// campanha) e cada uma é idempotente por conta própria — guarda de timestamp, de rank e FOR
+	// UPDATE com rank —, então rodam juntas. `settleAll` espera as três antes de seguir: a
+	// avaliação de interrupção abaixo continua vendo todas aplicadas.
+	const [, , interactionUpdate] = await settleAll([
+		observeWhatsappPayment(statusUpdate),
 		// Sem regressão: a Meta entrega eventos fora de ordem, e um "sent" atrasado não
 		// pode rebaixar uma mensagem já marcada como lida.
-		await applyProviderDeliveryStatus({ statusEntrega, whatsappMessageId: statusUpdate.whatsappMessageId });
-	}
-
-	// Interações de campanha: mesmo ponto de aplicação do gateway interno (quota inclusa).
-	const interactionUpdate = await applyProviderStatusUpdate({
-		whatsappMessageId: statusUpdate.whatsappMessageId,
-		status: statusUpdate.status,
-		errorMessage: statusUpdate.errorMessage,
-		metadataPatch: {
-			...(statusUpdate.errors && statusUpdate.errors.length > 0 ? { whatsappErrors: statusUpdate.errors } : {}),
-			...(statusUpdate.pricing ? { cobrancaWhatsapp: { ...statusUpdate.pricing, atualizadoEm: new Date(statusUpdate.timestamp).toISOString() } } : {}),
-		},
-	});
+		statusEntrega ? applyProviderDeliveryStatus({ statusEntrega, whatsappMessageId: statusUpdate.whatsappMessageId }) : Promise.resolve(),
+		// Interações de campanha: mesmo ponto de aplicação do gateway interno (quota inclusa).
+		applyProviderStatusUpdate({
+			whatsappMessageId: statusUpdate.whatsappMessageId,
+			status: statusUpdate.status,
+			errorMessage: statusUpdate.errorMessage,
+			metadataPatch: {
+				...(statusUpdate.errors && statusUpdate.errors.length > 0 ? { whatsappErrors: statusUpdate.errors } : {}),
+				...(statusUpdate.pricing ? { cobrancaWhatsapp: { ...statusUpdate.pricing, atualizadoEm: new Date(statusUpdate.timestamp).toISOString() } } : {}),
+			},
+		}),
+	]);
 
 	// Interrupção de disparos: erro que se repetiria para todos bloqueia o número/interrompe o
 	// disparo; entrega confirmada depois de um bloqueio de número o desfaz.
@@ -507,47 +511,51 @@ async function handleIncomingMessage(incomingMessage: ReturnType<typeof parseWeb
 		return;
 	}
 
-	// Upsert pela chave natural: webhooks concorrentes criavam chats duplicados antes da 0052.
-	const { chatId, isNew } = await resolveIncomingChat({
-		organizacaoId,
-		clienteId: clientId,
-		whatsappTelefoneId: incomingMessage.whatsappPhoneNumberId,
-		whatsappConexaoId,
-		whatsappConexaoTelefoneId,
-	});
-	if (isNew) console.log("[WHATSAPP_WEBHOOK] New chat created:", chatId);
-
-	// Download and store media if present
-	let mediaData: {
-		storageId: string;
-		publicUrl: string;
-		mimeType: string;
-		fileSize: number;
-	} | null = null;
-
-	if (incomingMessage.mediaId && incomingMessage.mimeType) {
-		try {
-			mediaData = await downloadAndStoreWhatsappMedia({
-				mediaId: incomingMessage.mediaId,
-				mimeType: incomingMessage.mimeType,
-				filename: incomingMessage.filename,
+	const quotedWhatsappMessageId = incomingMessage.context?.quotedWhatsappMessageId;
+	const [{ chatId, mediaData }, quotedMessage] = await settleAll([
+		(async () => {
+			// Upsert pela chave natural: webhooks concorrentes criavam chats duplicados antes da 0052.
+			const { chatId, isNew } = await resolveIncomingChat({
 				organizacaoId,
-				chatId,
-				whatsappToken,
+				clienteId: clientId,
+				whatsappTelefoneId: incomingMessage.whatsappPhoneNumberId,
+				whatsappConexaoId,
+				whatsappConexaoTelefoneId,
 			});
-			console.log("[WHATSAPP_WEBHOOK] Media stored:", mediaData.storageId);
-		} catch (error) {
-			console.error("[WHATSAPP_WEBHOOK] Error downloading media:", error);
-		}
-	}
+			if (isNew) console.log("[WHATSAPP_WEBHOOK] New chat created:", chatId);
+
+			// Download and store media if present (o caminho no storage usa o chatId).
+			let mediaData: {
+				storageId: string;
+				publicUrl: string;
+				mimeType: string;
+				fileSize: number;
+			} | null = null;
+
+			if (incomingMessage.mediaId && incomingMessage.mimeType) {
+				try {
+					mediaData = await downloadAndStoreWhatsappMedia({
+						mediaId: incomingMessage.mediaId,
+						mimeType: incomingMessage.mimeType,
+						filename: incomingMessage.filename,
+						organizacaoId,
+						chatId,
+						whatsappToken,
+					});
+					console.log("[WHATSAPP_WEBHOOK] Media stored:", mediaData.storageId);
+				} catch (error) {
+					console.error("[WHATSAPP_WEBHOOK] Error downloading media:", error);
+				}
+			}
+			return { chatId, mediaData };
+		})(),
+		// Resposta a uma mensagem: o snapshot da citada é resolvido agora, para o painel continuar
+		// legível quando a original sair do histórico carregado. Leitura que só depende da
+		// organização e do wamid citado, então corre junto com o chat e a mídia.
+		quotedWhatsappMessageId ? resolveQuotedMessageByWhatsappId({ organizacaoId, whatsappMessageId: quotedWhatsappMessageId }) : Promise.resolve(null),
+	]);
 
 	const midiaTipo = incomingMessage.messageType;
-
-	// Resposta a uma mensagem: o snapshot da citada é resolvido agora, para o painel continuar
-	// legível quando a original sair do histórico carregado.
-	const quotedMessage = incomingMessage.context?.quotedWhatsappMessageId
-		? await resolveQuotedMessageByWhatsappId({ organizacaoId, whatsappMessageId: incomingMessage.context.quotedWhatsappMessageId })
-		: null;
 
 	const metadados: TChatMessageMetadata = {
 		...(incomingMessage.referral ? { whatsappReferral: incomingMessage.referral } : {}),
@@ -788,36 +796,44 @@ async function handleMessageEcho(messageEcho: ReturnType<typeof parseWebhookMess
 		return;
 	}
 
-	const { chatId } = await resolveIncomingChat({
-		organizacaoId,
-		clienteId: clientId,
-		whatsappTelefoneId: messageEcho.whatsappPhoneNumberId,
-		whatsappConexaoId,
-		whatsappConexaoTelefoneId,
-	});
-
-	// Download and store media if present
-	let mediaData: {
-		storageId: string;
-		publicUrl: string;
-		mimeType: string;
-		fileSize: number;
-	} | null = null;
-
-	if (messageEcho.mediaId && messageEcho.mimeType) {
-		try {
-			mediaData = await downloadAndStoreWhatsappMedia({
-				mediaId: messageEcho.mediaId,
-				mimeType: messageEcho.mimeType,
-				filename: messageEcho.filename,
+	const quotedWhatsappMessageId = messageEcho.context?.quotedWhatsappMessageId;
+	const [{ chatId, mediaData }, quotedMessage] = await settleAll([
+		(async () => {
+			const { chatId } = await resolveIncomingChat({
 				organizacaoId,
-				chatId,
-				whatsappToken,
+				clienteId: clientId,
+				whatsappTelefoneId: messageEcho.whatsappPhoneNumberId,
+				whatsappConexaoId,
+				whatsappConexaoTelefoneId,
 			});
-		} catch (error) {
-			console.error("[WHATSAPP_WEBHOOK] [ECHO] Error downloading media:", error);
-		}
-	}
+
+			// Download and store media if present (o caminho no storage usa o chatId).
+			let mediaData: {
+				storageId: string;
+				publicUrl: string;
+				mimeType: string;
+				fileSize: number;
+			} | null = null;
+
+			if (messageEcho.mediaId && messageEcho.mimeType) {
+				try {
+					mediaData = await downloadAndStoreWhatsappMedia({
+						mediaId: messageEcho.mediaId,
+						mimeType: messageEcho.mimeType,
+						filename: messageEcho.filename,
+						organizacaoId,
+						chatId,
+						whatsappToken,
+					});
+				} catch (error) {
+					console.error("[WHATSAPP_WEBHOOK] [ECHO] Error downloading media:", error);
+				}
+			}
+			return { chatId, mediaData };
+		})(),
+		// Leitura independente do chat e da mídia: corre junto com eles.
+		quotedWhatsappMessageId ? resolveQuotedMessageByWhatsappId({ organizacaoId, whatsappMessageId: quotedWhatsappMessageId }) : Promise.resolve(null),
+	]);
 
 	const midiaTipo = messageEcho.messageType;
 	const echoMetadados: TChatMessageMetadata = {};
@@ -826,12 +842,7 @@ async function handleMessageEcho(messageEcho: ReturnType<typeof parseWebhookMess
 	if (messageEcho.contacts && messageEcho.contacts.length > 0) echoMetadados.whatsappContacts = messageEcho.contacts;
 	if (messageEcho.context) {
 		echoMetadados.whatsappContext = messageEcho.context;
-		if (messageEcho.context.quotedWhatsappMessageId) {
-			echoMetadados.quotedMessage = await resolveQuotedMessageByWhatsappId({
-				organizacaoId,
-				whatsappMessageId: messageEcho.context.quotedWhatsappMessageId,
-			});
-		}
+		if (quotedMessage) echoMetadados.quotedMessage = quotedMessage;
 	}
 
 	// O echo marca o atendimento como EXTERNO ("atendido pelo telefone") — mas apenas se

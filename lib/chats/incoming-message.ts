@@ -1,4 +1,5 @@
 import { cancelScheduledFollowUp } from "@/lib/ai/agent/follow-up-cancel";
+import { settleAll } from "@/lib/async/settle-all";
 import { markChatAnswered, markChatAttendedExternally, markChatNeedsResponse } from "@/lib/chats/attendance-state";
 import { AI_AGENT_FOLLOW_UP_CANCEL_REASONS } from "@/schemas/ai-agents";
 import type { TChatMessageMetadata } from "@/schemas/chats";
@@ -159,15 +160,18 @@ export async function persistIncomingClientMessage(input: TPersistIncomingParams
 
 	if (!inserted) return null;
 
-	await markChatNeedsResponse(db, {
-		organizacaoId: input.organizacaoId,
-		chatId: input.chatId,
-		messageDate: inserted.dataEnvio,
-		now,
-	});
-
-	// O cliente falou: uma retomada agendada perdeu o motivo (o turno desta mensagem pode agendar outra).
-	await cancelScheduledFollowUp(db, { chatId: input.chatId, motivo: AI_AGENT_FOLLOW_UP_CANCEL_REASONS.CLIENTE_RESPONDEU });
+	// Tabelas distintas (atendimento e retomada) e nenhuma lê o que a outra grava: correm juntas,
+	// e as duas assentam antes de o chamador despachar o turno de IA.
+	await settleAll([
+		markChatNeedsResponse(db, {
+			organizacaoId: input.organizacaoId,
+			chatId: input.chatId,
+			messageDate: inserted.dataEnvio,
+			now,
+		}),
+		// O cliente falou: uma retomada agendada perdeu o motivo (o turno desta mensagem pode agendar outra).
+		cancelScheduledFollowUp(db, { chatId: input.chatId, motivo: AI_AGENT_FOLLOW_UP_CANCEL_REASONS.CLIENTE_RESPONDEU }),
+	]);
 
 	return { messageId: inserted.id, dataEnvio: inserted.dataEnvio };
 }

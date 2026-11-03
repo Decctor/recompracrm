@@ -1,6 +1,6 @@
 import { resolveAddOnUnitPrices, type TAddOnPricingSelection } from "@/lib/products/add-on-pricing";
 import { resolveChannelOptionPrice } from "@/lib/products/sales-channels";
-import { channelNodePrice, channelProductFilter, loadChannelState } from "@/lib/products/sales-channels-store";
+import { channelNodePrice, channelProductFilter, loadChannelState, type TChannelState } from "@/lib/products/sales-channels-store";
 import type { TProductAddOnPricingRuleEnum, TSalesChannelTypeEnum } from "@/schemas/enums";
 import { type DB, type DBTransaction, db } from "@/services/drizzle";
 import createHttpError from "http-errors";
@@ -81,6 +81,7 @@ async function loadCatalogPrices({
 	variantIds,
 	optionIds,
 	canal,
+	channelState: providedChannelState,
 	tx,
 }: {
 	orgId: string;
@@ -88,10 +89,16 @@ async function loadCatalogPrices({
 	variantIds: string[];
 	optionIds: string[];
 	canal?: TSalesChannelTypeEnum;
+	/** Estado do `canal` já carregado pelo chamador; `undefined` = carrega aqui. Ignorado sem `canal`. */
+	channelState?: TChannelState | null;
 	tx?: DB | DBTransaction;
 }): Promise<TCatalogPrices> {
 	const executor = tx ?? db;
-	const channelState = canal ? await loadChannelState({ orgId, canal, tx: executor }) : null;
+	const channelState = !canal
+		? null
+		: providedChannelState !== undefined
+			? providedChannelState
+			: await loadChannelState({ orgId, canal, tx: executor });
 	const channelFilter = channelState ? channelProductFilter(channelState) : null;
 
 	const [produtos, variantes, opcoes] = await Promise.all([
@@ -163,16 +170,20 @@ export async function validateSaleItemsPricing({
 	orgId,
 	itens,
 	canal,
+	channelState,
 	tx,
 }: {
 	orgId: string;
 	itens: TSaleItemPricingInput[];
 	canal?: TSalesChannelTypeEnum;
+	/** Estado do `canal` já carregado na mesma request, para não relê-lo. `undefined` = carrega aqui. */
+	channelState?: TChannelState | null;
 	tx?: DB | DBTransaction;
 }): Promise<void> {
 	const catalog = await loadCatalogPrices({
 		orgId,
 		canal,
+		channelState,
 		tx,
 		productIds: [...new Set(itens.map((item) => item.produtoId))],
 		variantIds: [...new Set(itens.map((item) => item.produtoVarianteId).filter((id): id is string => !!id))],

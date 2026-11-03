@@ -205,19 +205,26 @@ async function createQuote({ input, session }: { input: TCreateQuoteInput; sessi
 	if (!organizacaoId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
 	if (!session.membership?.permissoes.vendas.criar) throw new createHttpError.Forbidden("Você não possui permissão para criar orçamentos.");
 
-	const client = await db.query.clients.findFirst({
-		where: (fields, { and, eq }) => and(eq(fields.id, input.clientId), eq(fields.organizacaoId, organizacaoId)),
-		columns: { id: true },
-	});
+	// Cliente e conversa são leituras independentes: saem na mesma ida, e as checagens continuam na
+	// ordem de antes (cliente primeiro).
+	const chatId = input.chatId;
+	const [client, chat] = await Promise.all([
+		db.query.clients.findFirst({
+			where: (fields, { and, eq }) => and(eq(fields.id, input.clientId), eq(fields.organizacaoId, organizacaoId)),
+			columns: { id: true },
+		}),
+		chatId
+			? db.query.chats.findFirst({
+					where: (fields, { and, eq }) => and(eq(fields.id, chatId), eq(fields.organizacaoId, organizacaoId)),
+					columns: { id: true, clienteId: true },
+				})
+			: null,
+	]);
 	if (!client) throw new createHttpError.NotFound("Cliente não encontrado.");
 
 	// A conversa é rastreabilidade, não autorização: precisa existir na organização e pertencer ao
 	// mesmo cliente, senão o orçamento nasceria apontando para um atendimento alheio.
-	if (input.chatId) {
-		const chat = await db.query.chats.findFirst({
-			where: (fields, { and, eq }) => and(eq(fields.id, input.chatId as string), eq(fields.organizacaoId, organizacaoId)),
-			columns: { id: true, clienteId: true },
-		});
+	if (chatId) {
 		if (!chat) throw new createHttpError.NotFound("Conversa não encontrada.");
 		if (chat.clienteId !== input.clientId) throw new createHttpError.BadRequest("A conversa informada não pertence a este cliente.");
 	}

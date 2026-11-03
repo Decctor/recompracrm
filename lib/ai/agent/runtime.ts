@@ -188,14 +188,24 @@ export async function prepareAgentExecution({
 			: baseModelConfig;
 	const capacidades = assistencia ? narrowCapabilitiesForAssist(baseCapabilities) : baseCapabilities;
 
-	const dailyLimit = await getAgentDailyRunLimitState(database, { organizacaoId, maxRunsDiarios: capacidades.limites.maxRunsDiarios });
-	if (dailyLimit.reached) {
+	// Os dois freios são leituras independentes e correm juntos. A precedência do erro continua a
+	// de antes: o teto diário é avaliado (e lança) antes do teto de gasto.
+	const [dailyLimitResult, spendResult] = await Promise.allSettled([
+		getAgentDailyRunLimitState(database, { organizacaoId, maxRunsDiarios: capacidades.limites.maxRunsDiarios }),
+		// Segundo freio, em moeda: `recursos.iaAtendimento.limiteCreditos` como teto mensal estimado.
+		(async () => {
+			const organization = await database.query.organizations.findFirst({
+				where: eq(organizations.id, organizacaoId),
+				columns: { configuracao: true },
+			});
+			await assertAiSpendWithinLimit(database, { organizacaoId, configuracao: organization?.configuracao });
+		})(),
+	]);
+	if (dailyLimitResult.status === "rejected") throw dailyLimitResult.reason;
+	if (dailyLimitResult.value.reached) {
 		throw new AgentDailyRunLimitError(`Limite diário de ${capacidades.limites.maxRunsDiarios} execuções do agente atingido.`);
 	}
-
-	// Segundo freio, em moeda: `recursos.iaAtendimento.limiteCreditos` como teto mensal estimado.
-	const organization = await database.query.organizations.findFirst({ where: eq(organizations.id, organizacaoId), columns: { configuracao: true } });
-	await assertAiSpendWithinLimit(database, { organizacaoId, configuracao: organization?.configuracao });
+	if (spendResult.status === "rejected") throw spendResult.reason;
 
 	const [{ contexto: chatContext, clienteId }, knowledge, productGroups] = await Promise.all([
 		// A retomada lê o resumo acumulado mais as últimas mensagens: ela precisa lembrar do que

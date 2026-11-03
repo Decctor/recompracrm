@@ -13,31 +13,37 @@ type THeartbeatParams = {
 };
 // Qualquer principal autenticado pode reportar heartbeat — não exige scope específico.
 async function registerHeartbeat({ actor, versaoApp, plataforma }: THeartbeatParams) {
-	const principal = await db.query.accessPrincipals.findFirst({
-		where: eq(accessPrincipals.id, actor.principalId),
-		columns: { id: true, nome: true, status: true, metadados: true },
-	});
-
 	const now = new Date();
-	await db
-		.update(accessPrincipals)
-		.set({
-			ultimoAcesso: now,
-			dataAtualizacao: now,
-			metadados: {
-				...principal?.metadados,
-				...(versaoApp ? { versaoApp } : {}),
-				...(plataforma ? { plataforma } : {}),
-			},
-		})
-		.where(eq(accessPrincipals.id, actor.principalId));
-
-	const publishedVersion = actor.scopes.has("desktop-agent:configuration:read")
-		? await db.query.agentVersions.findFirst({
-				where: eq(agentVersions.publicada, true),
-				columns: { versao: true, sha256: true, tamanhoBytes: true, storagePath: true },
+	// The principal's read-then-write stays sequential (the write merges the metadata it read); the
+	// published agent version is an unrelated table and is looked up alongside it.
+	const touchPrincipal = async () => {
+		const principal = await db.query.accessPrincipals.findFirst({
+			where: eq(accessPrincipals.id, actor.principalId),
+			columns: { id: true, nome: true, status: true, metadados: true },
+		});
+		await db
+			.update(accessPrincipals)
+			.set({
+				ultimoAcesso: now,
+				dataAtualizacao: now,
+				metadados: {
+					...principal?.metadados,
+					...(versaoApp ? { versaoApp } : {}),
+					...(plataforma ? { plataforma } : {}),
+				},
 			})
-		: null;
+			.where(eq(accessPrincipals.id, actor.principalId));
+		return principal;
+	};
+	const [principal, publishedVersion] = await Promise.all([
+		touchPrincipal(),
+		actor.scopes.has("desktop-agent:configuration:read")
+			? db.query.agentVersions.findFirst({
+					where: eq(agentVersions.publicada, true),
+					columns: { versao: true, sha256: true, tamanhoBytes: true, storagePath: true },
+				})
+			: null,
+	]);
 
 	return {
 		data: {

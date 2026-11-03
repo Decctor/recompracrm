@@ -35,9 +35,14 @@ function groupKey(problem: TFiscalProblem) {
 	return problem.alvo.tipo === "NENHUM" || !problem.alvo.id ? `${problem.codigo}` : `${problem.alvo.tipo}:${problem.alvo.id}`;
 }
 
+type TFiscalPendingProvider = string | null | undefined;
+
 /**
  * Trabalho fiscal a fazer, agrupado pela causa e nao pelo documento: um perfil fiscal ausente
  * costuma travar dez vendas, e o operador quer resolver o produto uma vez.
+ *
+ * `provider` aceita a promessa da leitura da organizacao: so a consulta de prazos depende dele,
+ * entao as outras tres nao esperam essa ida ao banco.
  */
 export async function getFiscalPendingSummary({
 	organizationId,
@@ -45,7 +50,7 @@ export async function getFiscalPendingSummary({
 	now = new Date(),
 }: {
 	organizationId: string;
-	provider: string | null | undefined;
+	provider: TFiscalPendingProvider | PromiseLike<TFiscalPendingProvider>;
 	now?: Date;
 }) {
 	const lookbackStart = new Date(now.getTime() - PRODUCTS_WITHOUT_PROFILE_LOOKBACK_DAYS * 86_400_000);
@@ -70,17 +75,19 @@ export async function getFiscalPendingSummary({
 			orderBy: desc(fiscalOutboundDocuments.dataInsercao),
 			limit: FAILED_DOCUMENTS_LIMIT,
 		}),
-		provider === "MANUAL"
-			? Promise.resolve([])
-			: db.query.fiscalOutboundDocuments.findMany({
-					where: and(
-						eq(fiscalOutboundDocuments.organizacaoId, organizationId),
-						eq(fiscalOutboundDocuments.statusInterno, "AUTORIZADO"),
-						gte(fiscalOutboundDocuments.dataAutorizacao, widestWindowStart),
-					),
-					columns: { id: true, tipo: true, numero: true, vendaId: true, dataAutorizacao: true },
-					with: { venda: { columns: { valorTotal: true } } },
-				}),
+		Promise.resolve(provider).then((resolvedProvider) =>
+			resolvedProvider === "MANUAL"
+				? []
+				: db.query.fiscalOutboundDocuments.findMany({
+						where: and(
+							eq(fiscalOutboundDocuments.organizacaoId, organizationId),
+							eq(fiscalOutboundDocuments.statusInterno, "AUTORIZADO"),
+							gte(fiscalOutboundDocuments.dataAutorizacao, widestWindowStart),
+						),
+						columns: { id: true, tipo: true, numero: true, vendaId: true, dataAutorizacao: true },
+						with: { venda: { columns: { valorTotal: true } } },
+					}),
+		),
 		db
 			.select({
 				produtoId: products.id,

@@ -127,49 +127,51 @@ export async function buildChatRunContext(
 	db: TDb,
 	input: { organizacaoId: string; chatId: string; historyLimit?: number },
 ): Promise<{ contexto: TChatRunContext; clienteId: string }> {
-	const chat = await db.query.chats.findFirst({
-		where: and(eq(chats.id, input.chatId), eq(chats.organizacaoId, input.organizacaoId)),
-		columns: {
-			id: true,
-			clienteId: true,
-			whatsappJanelaDataExpiracao: true,
-			ultimaMensagemEntradaData: true,
-			ultimaMensagemSaidaData: true,
-		},
-		with: {
-			cliente: {
-				columns: {
-					id: true,
-					nome: true,
-					telefone: true,
-					email: true,
-					localizacaoCidade: true,
-					localizacaoEstado: true,
-					dataNascimento: true,
-				},
+	// As três leituras só dependem de `chatId` + `organizacaoId` da entrada (o chat encontrado tem
+	// o mesmo id), então correm juntas. Chat ausente segue lançando abaixo.
+	const [chat, messages, attendance] = await Promise.all([
+		db.query.chats.findFirst({
+			where: and(eq(chats.id, input.chatId), eq(chats.organizacaoId, input.organizacaoId)),
+			columns: {
+				id: true,
+				clienteId: true,
+				whatsappJanelaDataExpiracao: true,
+				ultimaMensagemEntradaData: true,
+				ultimaMensagemSaidaData: true,
 			},
-			whatsappConexao: { columns: { tipoConexao: true } },
-		},
-	});
+			with: {
+				cliente: {
+					columns: {
+						id: true,
+						nome: true,
+						telefone: true,
+						email: true,
+						localizacaoCidade: true,
+						localizacaoEstado: true,
+						dataNascimento: true,
+					},
+				},
+				whatsappConexao: { columns: { tipoConexao: true } },
+			},
+		}),
+		db.query.chatMessages.findMany({
+			where: and(eq(chatMessages.chatId, input.chatId), eq(chatMessages.organizacaoId, input.organizacaoId)),
+			orderBy: [desc(chatMessages.dataEnvio)],
+			limit: input.historyLimit ?? HISTORY_MESSAGE_LIMIT,
+			columns: {
+				autorTipo: true,
+				conteudoTexto: true,
+				conteudoMidiaTipo: true,
+				conteudoMidiaTextoProcessado: true,
+				conteudoMidiaTextoProcessadoResumo: true,
+				metadados: true,
+				dataEnvio: true,
+			},
+		}),
+		getCurrentChatAttendance(db, { organizacaoId: input.organizacaoId, chatId: input.chatId }),
+	]);
 
 	if (!chat) throw new Error("Chat não encontrado para montar o contexto do agente.");
-
-	const messages = await db.query.chatMessages.findMany({
-		where: and(eq(chatMessages.chatId, chat.id), eq(chatMessages.organizacaoId, input.organizacaoId)),
-		orderBy: [desc(chatMessages.dataEnvio)],
-		limit: input.historyLimit ?? HISTORY_MESSAGE_LIMIT,
-		columns: {
-			autorTipo: true,
-			conteudoTexto: true,
-			conteudoMidiaTipo: true,
-			conteudoMidiaTextoProcessado: true,
-			conteudoMidiaTextoProcessadoResumo: true,
-			metadados: true,
-			dataEnvio: true,
-		},
-	});
-
-	const attendance = await getCurrentChatAttendance(db, { organizacaoId: input.organizacaoId, chatId: chat.id });
 
 	const now = new Date();
 	const isWindowOpen = isWhatsappWindowOpen({

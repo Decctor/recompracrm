@@ -208,10 +208,19 @@ async function getSellers({ input, session }: GetSellersParams) {
 	if (havingConditions.length > 0) {
 		matchedSubquery.having(and(...havingConditions));
 	}
-	const statsBySellerMatchedCountResult = await db.select({ count: count() }).from(matchedSubquery.as("sq"));
-	const statsBySellerMatchedCount = statsBySellerMatchedCountResult[0]?.count ?? 0;
+	const loadSellers = (restrictToSellerIds?: string[]) =>
+		db.query.sellers.findMany({
+			where: and(
+				eq(sellers.organizacaoId, userOrgId),
+				...sellerQueryConditions,
+				restrictToSellerIds ? inArray(sellers.id, restrictToSellerIds) : undefined,
+			),
+		});
 
-	const statsBySeller = await db
+	// The matched count, the stats page and (without restrictive sales filters) the seller rows are
+	// independent reads; only the restricted seller lookup needs the stats page's ids.
+	const statsBySellerMatchedCountQuery = db.select({ count: count() }).from(matchedSubquery.as("sq"));
+	const statsBySellerQuery = db
 		.select({
 			sellerId: sellers.id,
 			totalSalesValue: sum(sales.valorTotal),
@@ -228,14 +237,13 @@ async function getSellers({ input, session }: GetSellersParams) {
 		.offset(skip)
 		.limit(PAGE_SIZE);
 
-	const sellerIds = statsBySeller.map((seller) => seller.sellerId);
-	const sellersResult = await db.query.sellers.findMany({
-		where: and(
-			eq(sellers.organizacaoId, userOrgId),
-			...sellerQueryConditions,
-			applyRestrictiveSalesFilters ? inArray(sellers.id, sellerIds) : undefined,
-		),
-	});
+	const [statsBySellerMatchedCountResult, statsBySeller, unrestrictedSellers] = await Promise.all([
+		statsBySellerMatchedCountQuery,
+		statsBySellerQuery,
+		applyRestrictiveSalesFilters ? null : loadSellers(),
+	]);
+	const statsBySellerMatchedCount = statsBySellerMatchedCountResult[0]?.count ?? 0;
+	const sellersResult = unrestrictedSellers ?? (await loadSellers(statsBySeller.map((seller) => seller.sellerId)));
 
 	const sellersWithStats = sellersResult.map((seller) => {
 		const stats = statsBySeller.find((s) => s.sellerId === seller.id);
@@ -360,15 +368,16 @@ async function createSeller({ input, session }: CreateSellerParams) {
 	const userOrgId = session.membership?.organizacao.id;
 	if (!userOrgId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
 
-	const existingSeller = await db.query.sellers.findFirst({
-		where: (fields, { and, eq }) => and(eq(fields.identificador, input.identificador), eq(fields.organizacaoId, userOrgId)),
-	});
+	const [existingSeller, existingPassword] = await Promise.all([
+		db.query.sellers.findFirst({
+			where: (fields, { and, eq }) => and(eq(fields.identificador, input.identificador), eq(fields.organizacaoId, userOrgId)),
+		}),
+		db.query.sellers.findFirst({
+			where: (fields, { and, eq }) => and(eq(fields.senhaOperador, input.senhaOperador), eq(fields.organizacaoId, userOrgId)),
+		}),
+	]);
 
 	if (existingSeller) throw new createHttpError.Conflict("Já existe um vendedor com este identificador nesta organização.");
-
-	const existingPassword = await db.query.sellers.findFirst({
-		where: (fields, { and, eq }) => and(eq(fields.senhaOperador, input.senhaOperador), eq(fields.organizacaoId, userOrgId)),
-	});
 
 	if (existingPassword) throw new createHttpError.Conflict("Já existe um vendedor utilizando esta senha do operador nesta organização.");
 
