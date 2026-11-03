@@ -1,4 +1,4 @@
-import { runAiTurnForMessage, type TAiTurnPayload } from "@/lib/chats/ai-turn-runner";
+import type { TAiTurnPayload } from "@/lib/chats/ai-turn-runner";
 
 /**
  * Transporte do turno de IA disparado por mensagem.
@@ -22,6 +22,11 @@ export async function dispatchAiTurn(payload: TAiTurnPayload, { delayMs }: { del
 		return;
 	}
 
-	await new Promise((resolve) => setTimeout(resolve, delayMs));
+	// Import dinâmico também aqui: o runner arrasta o grafo inteiro do agente (SDK de IA, tools,
+	// renderização de imagem do handoff), e o webhook só precisa dele no transporte inline.
+	const [{ runAiTurnForMessage }] = await Promise.all([
+		import("@/lib/chats/ai-turn-runner"),
+		new Promise((resolve) => setTimeout(resolve, delayMs)),
+	]);
 	await runAiTurnForMessage(payload);
 }

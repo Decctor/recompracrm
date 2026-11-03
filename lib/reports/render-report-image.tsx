@@ -1,7 +1,7 @@
 import { CampaignReportImage, SalesReportImage } from "@/components/Reports";
 import { Resvg } from "@resvg/resvg-js";
 import React from "react";
-import satori from "satori";
+import { loadSatori } from "@/lib/brand/load-satori";
 import { getReportFonts } from "./fonts";
 import type { TCampaignReportPayload, TSalesReportPayload } from "./types";
 
@@ -37,8 +37,8 @@ async function resolveLogoDataUrl(logoUrl: string | null) {
 }
 
 export async function renderReportSvg({ payload }: RenderReportImageOptions) {
-	const fonts = await getReportFonts();
-	const logoSrc = await resolveLogoDataUrl(payload.theme.logoUrl);
+	// Fontes, logo e o próprio satori são independentes: carregam juntos.
+	const [fonts, logoSrc, satori] = await Promise.all([getReportFonts(), resolveLogoDataUrl(payload.theme.logoUrl), loadSatori()]);
 
 	return satori(<SalesReportImage payload={payload} logoSrc={logoSrc} />, {
 		width: 1080,
@@ -63,8 +63,8 @@ export async function renderReportPng({ payload }: RenderReportImageOptions): Pr
 }
 
 export async function renderCampaignReportSvg({ payload }: RenderCampaignReportImageOptions) {
-	const fonts = await getReportFonts();
-	const logoSrc = await resolveLogoDataUrl(payload.theme.logoUrl);
+	// Fontes, logo e o próprio satori são independentes: carregam juntos.
+	const [fonts, logoSrc, satori] = await Promise.all([getReportFonts(), resolveLogoDataUrl(payload.theme.logoUrl), loadSatori()]);
 
 	return satori(<CampaignReportImage payload={payload} logoSrc={logoSrc} />, {
 		width: CAMPAIGN_REPORT_WIDTH,
