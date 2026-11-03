@@ -51,6 +51,13 @@ async function postWhatsappWebhookRoute(req: NextRequest) {
 	// no arquivamento propaga (500 via appApiHandler) e a Meta reentrega — melhor retry do
 	// provider do que payload perdido com 200 devolvido.
 	const tipo = classifyMetaWebhookBody(body);
+	// O dono do evento (só leitura, best-effort) é resolvido em paralelo com o arquivamento: o
+	// `runArchivedEventProcessing` o aguarda antes de processar, e assim já o encontra pronto em
+	// vez de gastar um round-trip sob o waitUntil. O `.catch` vazio só marca a promessa como
+	// tratada caso o arquivamento falhe antes de alguém aguardá-la; a falha real continua sendo
+	// registrada lá dentro, onde ela é aguardada.
+	const organizationIdPromise = resolveMetaWebhookOrganizationId(body);
+	organizationIdPromise.catch(() => {});
 	const archived = await archiveExternalEvent({
 		origem: "META-WHATSAPP",
 		tipo,
@@ -69,7 +76,7 @@ async function postWhatsappWebhookRoute(req: NextRequest) {
 		runArchivedEventProcessing({
 			eventId: archived.id,
 			run: () => processMetaWebhookBody(body),
-			resolveOrganizationId: () => resolveMetaWebhookOrganizationId(body),
+			resolveOrganizationId: () => organizationIdPromise,
 		}),
 	);
 	return NextResponse.json({ success: true }, { status: 200 });
