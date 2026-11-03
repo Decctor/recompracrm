@@ -667,13 +667,15 @@ function buildSaleProductLabelResolver(context: TFiscalSaleContext) {
 }
 
 async function buildSaleFiscalContext(input: TEmitirDocumentoInput): Promise<TFiscalSaleContext> {
-	const venda = await loadSaleForFiscal({
-		saleId: input.vendaId,
-		organizationId: input.organizacaoId,
-	});
+	// Venda e organizacao saem dos ids da entrada: leituras independentes, em paralelo.
+	const [venda, organizacao] = await Promise.all([
+		loadSaleForFiscal({
+			saleId: input.vendaId,
+			organizationId: input.organizacaoId,
+		}),
+		loadFiscalOrganization(input.organizacaoId),
+	]);
 	if (!venda) throw new createHttpError.NotFound("Venda nao encontrada para emissao fiscal.");
-
-	const organizacao = await loadFiscalOrganization(input.organizacaoId);
 	if (!organizacao) throw new createHttpError.NotFound("Organizacao nao encontrada para emissao fiscal.");
 	if (input.classificacaoPresencaExcepcional) {
 		if (input.origem !== "MANUAL") {
@@ -692,44 +694,54 @@ async function buildSaleFiscalContext(input: TEmitirDocumentoInput): Promise<TFi
 	}
 
 	const ambiente = organizacao.fiscalConfiguracao?.ambiente ?? "HOMOLOGACAO";
-	const resolvedOperation = await resolveOperationProfileForSale({
-		organizacaoId: input.organizacaoId,
-		tipoDocumento: input.tipo,
-		signals: {
-			canal: venda.canal,
-			entregaModalidade: venda.entregaModalidade,
-		},
-		operationProfileId: input.operationProfileId,
-		operacaoPadraoPorTipoId: organizacao.fiscalConfiguracao?.operacaoPadraoPorTipo?.[input.tipo] ?? null,
-		// Documento encadeado a um original e sempre devolucao: garante o perfil DEVOLUCAO
-		// mesmo quando o operationProfileId nao foi repassado (ex.: retentativa via worker).
-		finalidade: input.documentoOrigemId ? "DEVOLUCAO" : "NORMAL",
-	});
-	const operacao = input.classificacaoPresencaExcepcional
-		? {
-				...resolvedOperation,
-				presencaConsumidor: input.classificacaoPresencaExcepcional.presencaConsumidor,
-			}
-		: resolvedOperation;
-
-	const serie =
-		operacao.seriePadrao ??
-		(await findActiveFiscalSeries({
+	const resolveOperationAndSeries = async () => {
+		const resolvedOperation = await resolveOperationProfileForSale({
 			organizacaoId: input.organizacaoId,
 			tipoDocumento: input.tipo,
-			ambiente,
-		}));
-	if (!serie) throw readinessError("Serie fiscal nao configurada.", "SERIE_AUSENTE");
+			signals: {
+				canal: venda.canal,
+				entregaModalidade: venda.entregaModalidade,
+			},
+			operationProfileId: input.operationProfileId,
+			operacaoPadraoPorTipoId: organizacao.fiscalConfiguracao?.operacaoPadraoPorTipo?.[input.tipo] ?? null,
+			// Documento encadeado a um original e sempre devolucao: garante o perfil DEVOLUCAO
+			// mesmo quando o operationProfileId nao foi repassado (ex.: retentativa via worker).
+			finalidade: input.documentoOrigemId ? "DEVOLUCAO" : "NORMAL",
+		});
+		const operacao = input.classificacaoPresencaExcepcional
+			? {
+					...resolvedOperation,
+					presencaConsumidor: input.classificacaoPresencaExcepcional.presencaConsumidor,
+				}
+			: resolvedOperation;
 
-	const [perfisProdutos, pagamentos] = await Promise.all([
+		const serie =
+			operacao.seriePadrao ??
+			(await findActiveFiscalSeries({
+				organizacaoId: input.organizacaoId,
+				tipoDocumento: input.tipo,
+				ambiente,
+			}));
+		return { operacao, serie };
+	};
+
+	// Operacao/serie, perfis dos produtos e pagamentos dependem so da venda e da organizacao ja
+	// carregadas: as tres cadeias de leitura correm juntas. Nada aqui reserva numeracao.
+	const [{ operacao, serie }, perfisProdutos, pagamentos] = await Promise.all([
+		resolveOperationAndSeries(),
 		loadProductFiscalProfilesForSale(venda),
 		loadSalePayments({ saleId: venda.id, organizationId: input.organizacaoId }),
 	]);
-	const gruposTributarios = await loadTaxGroupsForProfiles(perfisProdutos);
-	const ibptRates = await loadIbptRatesForSale({
-		perfisProdutos,
-		uf: organizacao.fiscalConfiguracao?.endereco.uf,
-	});
+	if (!serie) throw readinessError("Serie fiscal nao configurada.", "SERIE_AUSENTE");
+
+	// Grupos tributarios e aliquotas IBPT dependem so dos perfis, nao um do outro.
+	const [gruposTributarios, ibptRates] = await Promise.all([
+		loadTaxGroupsForProfiles(perfisProdutos),
+		loadIbptRatesForSale({
+			perfisProdutos,
+			uf: organizacao.fiscalConfiguracao?.endereco.uf,
+		}),
+	]);
 
 	return {
 		venda,
@@ -780,31 +792,39 @@ function assertFiscalTaxationValid(context: TFiscalSaleContext) {
 	}
 }
 
-async function persistAuthorizedAssets(documento: typeof fiscalOutboundDocuments.$inferSelect, organizacaoId: string) {
+// `organizacao` evita reler a linha quando o chamador (emissao, sync) ja a tem em maos.
+async function persistAuthorizedAssets(
+	documento: typeof fiscalOutboundDocuments.$inferSelect,
+	organizacaoId: string,
+	loadedOrganization?: NonNullable<Awaited<ReturnType<typeof loadFiscalOrganization>>>,
+) {
 	if (documento.xmlStoragePath && documento.pdfStoragePath) return documento;
-	const organizacao = await loadFiscalOrganization(organizacaoId);
+	const organizacao = loadedOrganization ?? (await loadFiscalOrganization(organizacaoId));
 	if (!organizacao) return null;
 	const provider = resolveFiscalProvider(organizacao.fiscalProvedor);
 	const [xmlBuffer, pdfBuffer] = await Promise.all([
 		documento.xmlStoragePath ? null : provider.baixarXml(documento, organizacao),
 		documento.pdfStoragePath ? null : provider.baixarPdf(documento, organizacao),
 	]);
-	const xmlStoragePath = xmlBuffer
-		? await storeFiscalAsset({
-				documentoId: documento.id,
-				tipo: documento.tipo,
-				asset: "xml",
-				buffer: xmlBuffer,
-			})
-		: null;
-	const pdfStoragePath = pdfBuffer
-		? await storeFiscalAsset({
-				documentoId: documento.id,
-				tipo: documento.tipo,
-				asset: "pdf",
-				buffer: pdfBuffer,
-			})
-		: null;
+	// Caminhos distintos e deterministicos (upsert): os dois uploads sao independentes.
+	const [xmlStoragePath, pdfStoragePath] = await Promise.all([
+		xmlBuffer
+			? storeFiscalAsset({
+					documentoId: documento.id,
+					tipo: documento.tipo,
+					asset: "xml",
+					buffer: xmlBuffer,
+				})
+			: null,
+		pdfBuffer
+			? storeFiscalAsset({
+					documentoId: documento.id,
+					tipo: documento.tipo,
+					asset: "pdf",
+					buffer: pdfBuffer,
+				})
+			: null,
+	]);
 	const patched = await patchFiscalDocument(documento.id, {
 		xmlStoragePath: xmlStoragePath ?? undefined,
 		pdfStoragePath: pdfStoragePath ?? undefined,
@@ -812,7 +832,7 @@ async function persistAuthorizedAssets(documento: typeof fiscalOutboundDocuments
 	// Auto-print da DANFE: hook único para os dois caminhos de autorização (emissão e sync),
 	// depois do pdfStoragePath gravado. Nunca lança; idempotente por DANFE:<documentoId>.
 	if (patched?.pdfStoragePath) {
-		await processFiscalDocumentDanfeAutoPrintIfEligible({ documento: patched });
+		await processFiscalDocumentDanfeAutoPrintIfEligible({ documento: patched, configuracao: organizacao.configuracao });
 	}
 	return patched;
 }
@@ -990,19 +1010,23 @@ export async function emitFiscalDocument(input: TEmitirDocumentoInput) {
 			referencia,
 		});
 
-		await addFiscalDocumentEvent({
-			documentoFiscalId: documento.id,
-			tipo: "ENVIO_SOLICITADO",
-			descricao: "Envio ao provedor fiscal solicitado.",
-			autorId: input.autorId ?? null,
-		});
-
-		const provider = resolveFiscalProvider(context.organizacao.fiscalProvedor);
-		const latestDocument =
-			(await findFiscalDocumentByReference({
+		// O evento grava em fiscal_document_events e a releitura le o documento ja preparado:
+		// independentes, e ambos terminam antes da chamada ao provedor.
+		const [, latestDocumentByReference] = await Promise.all([
+			addFiscalDocumentEvent({
+				documentoFiscalId: documento.id,
+				tipo: "ENVIO_SOLICITADO",
+				descricao: "Envio ao provedor fiscal solicitado.",
+				autorId: input.autorId ?? null,
+			}),
+			findFiscalDocumentByReference({
 				organizacaoId: input.organizacaoId,
 				referencia,
-			})) ?? documento;
+			}),
+		]);
+
+		const provider = resolveFiscalProvider(context.organizacao.fiscalProvedor);
+		const latestDocument = latestDocumentByReference ?? documento;
 		const providerDetails = await provider.emitirDocumento(context, latestDocument);
 		const providerApplication = await applyProviderDocumentDetails(documento.id, providerDetails);
 		const updatedDocument = providerApplication.document;
@@ -1035,7 +1059,7 @@ export async function emitFiscalDocument(input: TEmitirDocumentoInput) {
 		}
 
 		if (providerDetails.statusInterno === "AUTORIZADO" && updatedDocument) {
-			await persistAuthorizedAssets(updatedDocument, context.organizacao.id);
+			await persistAuthorizedAssets(updatedDocument, context.organizacao.id, context.organizacao);
 		}
 
 		const finalDocument =
@@ -1074,13 +1098,16 @@ export async function emitFiscalDocument(input: TEmitirDocumentoInput) {
 }
 
 export async function syncFiscalDocument(input: TSyncDocumentInput) {
-	const documento = await getFiscalDocumentById({
-		documentId: input.documentId,
-		organizationId: input.organizationId,
-	});
+	// getFiscalDocumentById filtra por organizacaoId, entao documento.organizacaoId === input.organizationId:
+	// as duas leituras nao dependem uma da outra.
+	const [documento, organizacao] = await Promise.all([
+		getFiscalDocumentById({
+			documentId: input.documentId,
+			organizationId: input.organizationId,
+		}),
+		loadFiscalOrganization(input.organizationId),
+	]);
 	if (!documento) throw new createHttpError.NotFound("Documento fiscal nao encontrado.");
-
-	const organizacao = await loadFiscalOrganization(documento.organizacaoId);
 	if (!organizacao) throw new createHttpError.NotFound("Organizacao do documento fiscal nao encontrada.");
 
 	const provider = resolveFiscalProvider(organizacao.fiscalProvedor);
@@ -1123,7 +1150,7 @@ export async function syncFiscalDocument(input: TSyncDocumentInput) {
 	}
 
 	if (providerDetails.statusInterno === "AUTORIZADO" && updated) {
-		await persistAuthorizedAssets(updated, organizacao.id);
+		await persistAuthorizedAssets(updated, organizacao.id, organizacao);
 	}
 
 	return {

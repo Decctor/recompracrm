@@ -62,89 +62,91 @@ export async function buildCupomVendaDados({
 	vendaId: string;
 	draftAdjustments?: TSaleReceiptDraftAdjustments | null;
 }): Promise<TCupomVendaDados> {
-	const organization = await db.query.organizations.findFirst({
-		where: eq(organizations.id, organizacaoId),
-		columns: { nome: true, cnpj: true, telefone: true, logoUrl: true },
-	});
-	if (!organization) throw new createHttpError.NotFound("Organização não encontrada.");
-
-	const sale = await db.query.sales.findFirst({
-		where: and(eq(sales.id, vendaId), eq(sales.organizacaoId, organizacaoId)),
-		columns: {
-			id: true,
-			dataVenda: true,
-			statusVenda: true,
-			valorTotal: true,
-			descontosTotal: true,
-			acrescimosTotal: true,
-			clienteId: true,
-			vendedorNome: true,
-			observacoes: true,
-			integracaoMetadados: true,
-			rascunhoMetadados: true,
-			entregaModalidade: true,
-			comandaNumero: true,
-			tabId: true,
-		},
-		with: {
-			cliente: { columns: { id: true, nome: true, telefone: true } },
-			// Conta aberta: parciais já recebidos abatem do que o cupom de conferência pede.
-			pagamentosParciaisConta: { columns: { valor: true, status: true } },
-			entregaLocalizacao: {
-				columns: {
-					localizacaoCep: true,
-					localizacaoEstado: true,
-					localizacaoCidade: true,
-					localizacaoBairro: true,
-					localizacaoLogradouro: true,
-					localizacaoNumero: true,
-					localizacaoComplemento: true,
-				},
+	// Organização e venda saem dos ids da entrada: leituras independentes, em paralelo.
+	const [organization, sale] = await Promise.all([
+		db.query.organizations.findFirst({
+			where: eq(organizations.id, organizacaoId),
+			columns: { nome: true, cnpj: true, telefone: true, logoUrl: true },
+		}),
+		db.query.sales.findFirst({
+			where: and(eq(sales.id, vendaId), eq(sales.organizacaoId, organizacaoId)),
+			columns: {
+				id: true,
+				dataVenda: true,
+				statusVenda: true,
+				valorTotal: true,
+				descontosTotal: true,
+				acrescimosTotal: true,
+				clienteId: true,
+				vendedorNome: true,
+				observacoes: true,
+				integracaoMetadados: true,
+				rascunhoMetadados: true,
+				entregaModalidade: true,
+				comandaNumero: true,
+				tabId: true,
 			},
-			itens: {
-				columns: {
-					quantidade: true,
-					quantidadeCancelada: true,
-					valorVendaUnitario: true,
-					valorVendaTotalBruto: true,
-					valorTotalDesconto: true,
-					observacoes: true,
-					metadados: true,
-				},
-				with: {
-					produto: { columns: { nome: true } },
-					produtoVariante: { columns: { nome: true } },
-					adicionais: {
-						columns: { nome: true, quantidade: true, valorTotal: true },
-						with: { opcao: { columns: { id: true }, with: { produtoAddOn: { columns: { nome: true } } } } },
+			with: {
+				cliente: { columns: { id: true, nome: true, telefone: true } },
+				// Conta aberta: parciais já recebidos abatem do que o cupom de conferência pede.
+				pagamentosParciaisConta: { columns: { valor: true, status: true } },
+				entregaLocalizacao: {
+					columns: {
+						localizacaoCep: true,
+						localizacaoEstado: true,
+						localizacaoCidade: true,
+						localizacaoBairro: true,
+						localizacaoLogradouro: true,
+						localizacaoNumero: true,
+						localizacaoComplemento: true,
 					},
 				},
-			},
-			lancamentosContabeis: {
-				columns: { id: true },
-				with: {
-					transacoesFinanceiras: {
-						columns: {
-							id: true,
-							valor: true,
-							tipo: true,
-							metodo: true,
-							parcela: true,
-							totalParcelas: true,
-							dataEfetivacao: true,
-							dataPrevisao: true,
-							provedorStatus: true,
-							contaFinanceiraId: true,
-							modificadoresMetadata: true,
+				itens: {
+					columns: {
+						quantidade: true,
+						quantidadeCancelada: true,
+						valorVendaUnitario: true,
+						valorVendaTotalBruto: true,
+						valorTotalDesconto: true,
+						observacoes: true,
+						metadados: true,
+					},
+					with: {
+						produto: { columns: { nome: true } },
+						produtoVariante: { columns: { nome: true } },
+						adicionais: {
+							columns: { nome: true, quantidade: true, valorTotal: true },
+							with: { opcao: { columns: { id: true }, with: { produtoAddOn: { columns: { nome: true } } } } },
 						},
 					},
 				},
+				lancamentosContabeis: {
+					columns: { id: true },
+					with: {
+						transacoesFinanceiras: {
+							columns: {
+								id: true,
+								valor: true,
+								tipo: true,
+								metodo: true,
+								parcela: true,
+								totalParcelas: true,
+								dataEfetivacao: true,
+								dataPrevisao: true,
+								provedorStatus: true,
+								contaFinanceiraId: true,
+								modificadoresMetadata: true,
+							},
+						},
+					},
+				},
+				transacoesCashback: {
+					columns: { tipo: true, status: true, valor: true, resgateRecompensaId: true },
+				},
 			},
-			transacoesCashback: {
-				columns: { tipo: true, status: true, valor: true, resgateRecompensaId: true },
-			},
-		},
-	});
+		}),
+	]);
+	if (!organization) throw new createHttpError.NotFound("Organização não encontrada.");
 	if (!sale) throw new createHttpError.NotFound("Venda não encontrada.");
 	if (draftAdjustments && sale.statusVenda !== "ORCAMENTO") {
 		throw new createHttpError.BadRequest("Ajustes de cupom só valem para venda em aberto.");

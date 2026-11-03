@@ -176,11 +176,17 @@ export async function organizationHasActivePrinterForFinalidade({
 // job (acumularia EXPIRADO). Mesmo racional de ignorar `disponivel`: agent offline imprime ao
 // voltar, dentro do TTL — e o ticket sem estação da mesma org seguiria a mesma regra.
 export async function organizationHasActivePrinterForPreparationStation({ organizacaoId, estacaoId }: { organizacaoId: string; estacaoId: string }) {
+	const servesPreparationStation = await loadPreparationStationPrinterResolver({ organizacaoId });
+	return servesPreparationStation(estacaoId);
+}
+
+// Mesma guarda para várias estações com uma única leitura das impressoras ativas da organização.
+export async function loadPreparationStationPrinterResolver({ organizacaoId }: { organizacaoId: string }) {
 	const printers = await db.query.agentPrinters.findMany({
 		where: and(eq(agentPrinters.organizacaoId, organizacaoId), eq(agentPrinters.ativa, true)),
 		columns: { finalidades: true, estacoesPreparo: true },
 	});
-	return printers.some((printer) => printerServesPreparationStation({ printer, estacaoId }));
+	return (estacaoId: string) => printers.some((printer) => printerServesPreparationStation({ printer, estacaoId }));
 }
 
 // Impressora atende a estação: finalidade TICKET_PREPARO E a estação listada. `estacoesPreparo`
