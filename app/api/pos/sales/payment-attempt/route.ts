@@ -75,8 +75,17 @@ function buildAttemptView(attempt: TAttemptRow, now: Date) {
 async function getSalePaymentAttempt({ input, organizationId }: { input: TGetSalePaymentAttemptInput; organizationId: string }) {
 	const now = new Date();
 	if (input.saleId) {
-		const attempt = await fetchLatestAttempt({ organizationId, saleId: input.saleId });
-		const financial = attempt ? await getSaleFinancialState({ organizationId, saleId: input.saleId }) : null;
+		// Rota de polling: a tentativa e o estado financeiro só dependem do saleId, então saem na mesma
+		// ida. O estado financeiro só conta quando há tentativa — sem ela, nem o resultado nem um erro
+		// dele (ex.: 404 de venda inexistente) chegam à resposta, como quando ele nem era consultado.
+		const [attemptResult, financialResult] = await Promise.allSettled([
+			fetchLatestAttempt({ organizationId, saleId: input.saleId }),
+			getSaleFinancialState({ organizationId, saleId: input.saleId }),
+		]);
+		if (attemptResult.status === "rejected") throw attemptResult.reason;
+		const attempt = attemptResult.value;
+		if (attempt && financialResult.status === "rejected") throw financialResult.reason;
+		const financial = attempt && financialResult.status === "fulfilled" ? financialResult.value : null;
 		return {
 			data: {
 				bySale: attempt ? { attempt: buildAttemptView(attempt, now), pago: financial?.isFullyPaid ?? false } : null,

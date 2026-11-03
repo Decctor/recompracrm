@@ -135,26 +135,37 @@ async function confirmSale({ input, session }: { input: TConfirmSaleInput; sessi
 	if (sessaoObrigatoria && !input.sessaoVendaId) {
 		throw new createHttpError.BadRequest("Nenhum caixa aberto. Abra uma sessao de venda para continuar.");
 	}
+	const organizationSaleDefaults = organization.configuracao.defaults.contabilidade.lancamentosPadrao.vendas;
+	const accountingEntryDebitAccountId = input.contaDebitoId ?? organizationSaleDefaults.debitoContaId;
+	const accountingEntryCreditAccountId = input.contaCreditoId ?? organizationSaleDefaults.creditoContaId;
+	// Contas informadas no request precisam pertencer a organizacao (FK de accountingEntries e global por id).
+	const accountIds =
+		accountingEntryDebitAccountId && accountingEntryCreditAccountId
+			? [...new Set([accountingEntryDebitAccountId, accountingEntryCreditAccountId])]
+			: [];
+
+	// Caixa informado e contas contabeis sao leituras independentes: saem na mesma ida, e as checagens
+	// seguem na ordem de antes (caixa → contas padrao configuradas → contas da organizacao).
+	const [activeSession, validAccounts] = await Promise.all([
+		resolveActiveSalesSession({ orgId, sessaoVendaId: input.sessaoVendaId }),
+		accountIds.length > 0
+			? db.query.accountsCharts.findMany({
+					where: (fields, { and, eq, inArray }) => and(inArray(fields.id, accountIds), eq(fields.organizacaoId, orgId)),
+					columns: { id: true },
+				})
+			: [],
+	]);
+
 	let sessaoVendaId: string | null = null;
 	if (input.sessaoVendaId) {
-		const activeSession = await resolveActiveSalesSession({ orgId, sessaoVendaId: input.sessaoVendaId });
 		if (!activeSession) throw new createHttpError.BadRequest("Sessao de venda invalida ou nao esta aberta.");
 		validateSalesSessionSeller({ session: activeSession, vendedorId: saleDraft.vendedorId });
 		sessaoVendaId = activeSession.id;
 	}
 
-	const organizationSaleDefaults = organization.configuracao.defaults.contabilidade.lancamentosPadrao.vendas;
-	const accountingEntryDebitAccountId = input.contaDebitoId ?? organizationSaleDefaults.debitoContaId;
-	const accountingEntryCreditAccountId = input.contaCreditoId ?? organizationSaleDefaults.creditoContaId;
 	if (!accountingEntryDebitAccountId || !accountingEntryCreditAccountId) {
 		throw new createHttpError.InternalServerError("A organizacao nao possui contas padrao de vendas configuradas.");
 	}
-	// Contas informadas no request precisam pertencer a organizacao (FK de accountingEntries e global por id).
-	const accountIds = [...new Set([accountingEntryDebitAccountId, accountingEntryCreditAccountId])];
-	const validAccounts = await db.query.accountsCharts.findMany({
-		where: (fields, { and, eq, inArray }) => and(inArray(fields.id, accountIds), eq(fields.organizacaoId, orgId)),
-		columns: { id: true },
-	});
 	if (validAccounts.length !== accountIds.length) {
 		throw new createHttpError.BadRequest("Conta contabil invalida para esta organizacao.");
 	}

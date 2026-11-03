@@ -244,11 +244,17 @@ async function getSalesFulfillment({ input, orgId, policy }: { input: TGetSalesF
 		processingOriginFilter,
 	);
 
+	// Fila de pedidos a confirmar: pedidos de canal gerenciado ainda não confirmados no canal
+	// (iFood PLACED: statusVenda nulo + atendimento NAO_INICIADO). SLA de confirmação: 8 minutos.
+	const pendingConfirmationCutoff = new Date(Date.now() - PENDING_CONFIRMATION_VISIBILITY_HOURS * 60 * 60 * 1000);
+	const now = Date.now();
+
 	// Etapas ativas e concluidos recentes sao populacoes com regras opostas de recorte e de ordem, e
 	// por isso duas consultas em vez de um OR com ordenacao unica. As ativas sao a fila de trabalho:
 	// vem inteiras e em FIFO, porque o pedido mais velho e o mais urgente. Os concluidos sao
 	// comprovante: vem limitados e do mais novo para o mais velho, porque so o topo importa.
-	const [activeRows, deliveredRows, deliveredCount] = await Promise.all([
+	// As filas do canal gerenciado (a confirmar, disputas) nao dependem das demais: saem na mesma ida.
+	const [activeRows, deliveredRows, deliveredCount, pendingConfirmationRows, pendingDisputeRows] = await Promise.all([
 		db.query.sales.findMany({
 			where: and(
 				eq(sales.organizacaoId, orgId),
@@ -268,18 +274,8 @@ async function getSalesFulfillment({ input, orgId, policy }: { input: TGetSalesF
 			limit: DELIVERED_BUFFER_LIMIT,
 		}),
 		db.select({ value: count() }).from(sales).where(deliveredWhere),
-	]);
-
-	const cards = activeRows.map((sale) => mapSaleRowToFulfillmentCard(sale));
-	const deliveredCards = deliveredRows.map((sale) => mapSaleRowToFulfillmentCard(sale));
-	const deliveredTotal = deliveredCount[0]?.value ?? deliveredCards.length;
-
-	// Fila de pedidos a confirmar: pedidos de canal gerenciado ainda não confirmados no canal
-	// (iFood PLACED: statusVenda nulo + atendimento NAO_INICIADO). SLA de confirmação: 8 minutos.
-	const pendingConfirmationCutoff = new Date(Date.now() - PENDING_CONFIRMATION_VISIBILITY_HOURS * 60 * 60 * 1000);
-	const pendingConfirmation = policy.fulfillment
-		? (
-				await db.query.sales.findMany({
+		policy.fulfillment
+			? db.query.sales.findMany({
 					where: and(
 						eq(sales.organizacaoId, orgId),
 						eq(sales.processamentoOrigem, "EXTERNO"),
@@ -304,28 +300,12 @@ async function getSalesFulfillment({ input, orgId, policy }: { input: TGetSalesF
 					},
 					orderBy: desc(sales.dataVenda),
 				})
-			).map((sale) => ({
-				vendaId: sale.id,
-				orderId: sale.idExterno,
-				displayId: sale.documento,
-				valorTotal: sale.valorTotal,
-				entregaModalidade: sale.entregaModalidade,
-				observacoes: sale.observacoes,
-				dataVenda: sale.dataVenda,
-				integracao: sale.integracao,
-				cliente: sale.cliente,
-				quantidadeItens: sale.itens.length,
-				canal: "IFOOD" as const,
-			}))
-		: [];
-
-	// Fila de disputas de cancelamento abertas (Plataforma de Negociação — HANDSHAKE_DISPUTE):
-	// exigem resposta da loja antes do prazo, senão o canal executa a ação de timeout. Disputas
-	// expiradas saem da fila (o canal já decidiu); o bloco é encerrado pela ingestão no desfecho.
-	const now = Date.now();
-	const pendingDisputes = policy.fulfillment
-		? (
-				await db.query.sales.findMany({
+			: [],
+		// Fila de disputas de cancelamento abertas (Plataforma de Negociação — HANDSHAKE_DISPUTE):
+		// exigem resposta da loja antes do prazo, senão o canal executa a ação de timeout. Disputas
+		// expiradas saem da fila (o canal já decidiu); o bloco é encerrado pela ingestão no desfecho.
+		policy.fulfillment
+			? db.query.sales.findMany({
 					where: and(
 						eq(sales.organizacaoId, orgId),
 						eq(sales.processamentoOrigem, "EXTERNO"),
@@ -352,28 +332,48 @@ async function getSalesFulfillment({ input, orgId, policy }: { input: TGetSalesF
 					},
 					orderBy: desc(sales.dataVenda),
 				})
-			)
-				.map((sale) => {
-					const disputa = sale.integracaoMetadados?.disputaAberta;
-					if (!disputa) return null;
-					if (disputa.expiraEm && new Date(disputa.expiraEm).getTime() <= now) return null;
-					return {
-						vendaId: sale.id,
-						orderId: sale.idExterno,
-						displayId: sale.documento,
-						valorTotal: sale.valorTotal,
-						entregaModalidade: sale.entregaModalidade,
-						observacoes: sale.observacoes,
-						dataVenda: sale.dataVenda,
-						integracao: sale.integracao,
-						cliente: sale.cliente,
-						quantidadeItens: sale.itens.length,
-						canal: "IFOOD" as const,
-						disputa,
-					};
-				})
-				.filter((entry): entry is NonNullable<typeof entry> => entry !== null)
-		: [];
+			: [],
+	]);
+
+	const cards = activeRows.map((sale) => mapSaleRowToFulfillmentCard(sale));
+	const deliveredCards = deliveredRows.map((sale) => mapSaleRowToFulfillmentCard(sale));
+	const deliveredTotal = deliveredCount[0]?.value ?? deliveredCards.length;
+
+	const pendingConfirmation = pendingConfirmationRows.map((sale) => ({
+		vendaId: sale.id,
+		orderId: sale.idExterno,
+		displayId: sale.documento,
+		valorTotal: sale.valorTotal,
+		entregaModalidade: sale.entregaModalidade,
+		observacoes: sale.observacoes,
+		dataVenda: sale.dataVenda,
+		integracao: sale.integracao,
+		cliente: sale.cliente,
+		quantidadeItens: sale.itens.length,
+		canal: "IFOOD" as const,
+	}));
+
+	const pendingDisputes = pendingDisputeRows
+		.map((sale) => {
+			const disputa = sale.integracaoMetadados?.disputaAberta;
+			if (!disputa) return null;
+			if (disputa.expiraEm && new Date(disputa.expiraEm).getTime() <= now) return null;
+			return {
+				vendaId: sale.id,
+				orderId: sale.idExterno,
+				displayId: sale.documento,
+				valorTotal: sale.valorTotal,
+				entregaModalidade: sale.entregaModalidade,
+				observacoes: sale.observacoes,
+				dataVenda: sale.dataVenda,
+				integracao: sale.integracao,
+				cliente: sale.cliente,
+				quantidadeItens: sale.itens.length,
+				canal: "IFOOD" as const,
+				disputa,
+			};
+		})
+		.filter((entry): entry is NonNullable<typeof entry> => entry !== null);
 
 	return {
 		data: {

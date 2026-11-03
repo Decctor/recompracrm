@@ -2,6 +2,7 @@ import { normalizeProductBarcode } from "@/lib/products/barcode";
 import { db } from "@/services/drizzle";
 import { organizations, productVariants, products } from "@/services/drizzle/schema";
 import { and, eq, inArray, or, sql } from "drizzle-orm";
+import { loadChannelState, type TChannelState } from "@/lib/products/sales-channels-store";
 import { hydratePOSProducts, type THydratedPOSProduct } from "./hydrate-pos-products";
 import { DEFAULT_SCALE_BARCODE_CONFIG, normalizeScalePlu, readScaleBarcode, SCALE_BARCODE_LENGTH, type TScaleBarcodeReading } from "./scale-barcode";
 
@@ -85,17 +86,23 @@ export async function lookupPOSProductsByBarcode({
 	const forms = barcodeLookupForms(code);
 	if (forms.length === 0) return [];
 
+	// O estado do canal não depende de qual camada casou: é lido junto com a busca exata em vez de
+	// esperar por ela, e a hidratação o reaproveita. Num código sem match a leitura é descartada —
+	// o `catch` só impede uma rejeição não observada; quem aguarda a promessa ainda recebe o erro.
+	const channelState = loadChannelState({ orgId, canal });
+	channelState.catch(() => undefined);
+
 	// O código inteiro cadastrado ganha da leitura como balança: é o vínculo mais específico, e um
 	// EAN interno começando com 2 continua valendo mesmo com a balança ligada.
 	const exact = await findExactCandidates({ orgId, forms });
-	if (exact.length > 0) return hydrateMatches({ orgId, canal, ranked: exact, scaleReading: null });
+	if (exact.length > 0) return hydrateMatches({ orgId, canal, channelState, ranked: exact, scaleReading: null });
 
 	const scaleReading = await readOrganizationScaleBarcode({ orgId, code });
 	if (!scaleReading) return [];
 	const plu = normalizeScalePlu(scaleReading.plu);
 	if (!plu) return [];
 	const byPlu = await findPluCandidates({ orgId, plu });
-	return hydrateMatches({ orgId, canal, ranked: byPlu, scaleReading });
+	return hydrateMatches({ orgId, canal, channelState, ranked: byPlu, scaleReading });
 }
 
 const activeProductConditions = (orgId: string) => and(eq(products.organizacaoId, orgId), eq(products.ativo, true), eq(products.vendavel, true));
@@ -171,11 +178,13 @@ async function findPluCandidates({ orgId, plu }: { orgId: string; plu: string })
 async function hydrateMatches({
 	orgId,
 	canal,
+	channelState,
 	ranked,
 	scaleReading,
 }: {
 	orgId: string;
 	canal: "POS" | "COMANDA";
+	channelState: Promise<TChannelState | null>;
 	ranked: TRankedMatch[];
 	scaleReading: TScaleBarcodeReading | null;
 }): Promise<TBarcodeMatch[]> {
@@ -183,7 +192,7 @@ async function hydrateMatches({
 
 	// A hidratação aplica a disponibilidade e o preço do canal: um produto fora da vitrine do canal
 	// (ou a variante indisponível nele) some daqui como some da grade.
-	const hydrated = await hydratePOSProducts({ orgId, productIds: [...new Set(ranked.map((match) => match.productId))], canal });
+	const hydrated = await hydratePOSProducts({ orgId, productIds: [...new Set(ranked.map((match) => match.productId))], canal, channelState });
 	const byId = new Map(hydrated.map((product) => [product.id, product]));
 
 	const matches: TBarcodeMatch[] = [];

@@ -99,8 +99,14 @@ export async function syncShopSalesChannel({ orgId, produtos }: { orgId: string;
  *
  * `tx` quando a leitura acontece dentro de uma transação aberta (edição de venda, busca fuzzy do
  * PDV): pedir outra conexão ao `db` global enquanto a transação segura a sua trava o pool sob
- * concorrência. As duas leituras abaixo ficam serializadas numa transação — correto, só não
+ * concorrência. As leituras abaixo ficam serializadas numa transação — correto, só não
  * paralelo.
+ *
+ * Fora de transação, o canal interno (POS, COMANDA, SHOP) sai em uma ida ao banco: as linhas
+ * esparsas são lidas pela identidade do canal (join) junto com a própria linha do canal, em vez de
+ * esperar o `id` dela. Vale só para canal interno porque a identidade (org, canal, sem integração,
+ * sem ref) é única (`unq_sales_channels_identity` é NULLS NOT DISTINCT) — o join não mistura
+ * linhas de dois canais. Canal de integração (por `refExterno`) segue em duas idas.
  */
 export async function loadChannelState({
 	orgId,
@@ -116,28 +122,15 @@ export async function loadChannelState({
 	const executor = tx ?? db;
 	// Canais internos são identificados pela ausência de integração/ref; canais de integração
 	// (iFood) por merchant, já que preço e disponibilidade podem divergir entre lojas.
-	const channel = await executor.query.salesChannels.findFirst({
-		where: refExterno
-			? and(eq(salesChannels.organizacaoId, orgId), eq(salesChannels.canal, canal), eq(salesChannels.refExterno, refExterno))
-			: and(
-					eq(salesChannels.organizacaoId, orgId),
-					eq(salesChannels.canal, canal),
-					isNull(salesChannels.integracaoId),
-					isNull(salesChannels.refExterno),
-				),
-	});
-	if (!channel) return null;
+	const channelWhere = refExterno
+		? and(eq(salesChannels.organizacaoId, orgId), eq(salesChannels.canal, canal), eq(salesChannels.refExterno, refExterno))
+		: and(eq(salesChannels.organizacaoId, orgId), eq(salesChannels.canal, canal), isNull(salesChannels.integracaoId), isNull(salesChannels.refExterno));
 
-	const [overrides, optionRows] = await Promise.all([
-		executor.query.productChannelSettings.findMany({
-			where: eq(productChannelSettings.canalVendaId, channel.id),
-			columns: { produtoId: true, produtoVarianteId: true, disponivel: true, precoVenda: true },
-		}),
-		executor.query.productAddOnOptionChannelSettings.findMany({
-			where: eq(productAddOnOptionChannelSettings.canalVendaId, channel.id),
-			columns: { produtoAddOnOpcaoId: true, disponivel: true, precoDelta: true },
-		}),
-	]);
+	const { channel, overrides, optionRows } =
+		!refExterno && executor === db
+			? await loadInternalChannelRowsConcurrently({ channelWhere })
+			: await loadChannelRowsSequentially({ executor, channelWhere });
+	if (!channel) return null;
 
 	const productOverrides = new Map<string, { disponivel: boolean | null; precoVenda: number | null }>();
 	const variantOverrides = new Map<string, { disponivel: boolean | null; precoVenda: number | null }>();
@@ -154,6 +147,52 @@ export async function loadChannelState({
 	return { channel, productOverrides, variantOverrides, optionOverrides };
 }
 export type TChannelState = NonNullable<Awaited<ReturnType<typeof loadChannelState>>>;
+
+async function loadChannelRowsSequentially({ executor, channelWhere }: { executor: DB | DBTransaction; channelWhere: SQL | undefined }) {
+	const channel = await executor.query.salesChannels.findFirst({ where: channelWhere });
+	if (!channel) return { channel: null, overrides: [], optionRows: [] };
+
+	const [overrides, optionRows] = await Promise.all([
+		executor.query.productChannelSettings.findMany({
+			where: eq(productChannelSettings.canalVendaId, channel.id),
+			columns: { produtoId: true, produtoVarianteId: true, disponivel: true, precoVenda: true },
+		}),
+		executor.query.productAddOnOptionChannelSettings.findMany({
+			where: eq(productAddOnOptionChannelSettings.canalVendaId, channel.id),
+			columns: { produtoAddOnOpcaoId: true, disponivel: true, precoDelta: true },
+		}),
+	]);
+	return { channel, overrides, optionRows };
+}
+
+/** Só para canal interno, fora de transação — ver `loadChannelState`. Três leituras, uma ida. */
+async function loadInternalChannelRowsConcurrently({ channelWhere }: { channelWhere: SQL | undefined }) {
+	const [channel, overrides, optionRows] = await Promise.all([
+		db.query.salesChannels.findFirst({ where: channelWhere }),
+		db
+			.select({
+				produtoId: productChannelSettings.produtoId,
+				produtoVarianteId: productChannelSettings.produtoVarianteId,
+				disponivel: productChannelSettings.disponivel,
+				precoVenda: productChannelSettings.precoVenda,
+			})
+			.from(productChannelSettings)
+			.innerJoin(salesChannels, eq(salesChannels.id, productChannelSettings.canalVendaId))
+			.where(channelWhere),
+		db
+			.select({
+				produtoAddOnOpcaoId: productAddOnOptionChannelSettings.produtoAddOnOpcaoId,
+				disponivel: productAddOnOptionChannelSettings.disponivel,
+				precoDelta: productAddOnOptionChannelSettings.precoDelta,
+			})
+			.from(productAddOnOptionChannelSettings)
+			.innerJoin(salesChannels, eq(salesChannels.id, productAddOnOptionChannelSettings.canalVendaId))
+			.where(channelWhere),
+	]);
+	// Sem a linha do canal o estado é nulo, como no caminho sequencial — linhas órfãs não contam.
+	if (!channel) return { channel: null, overrides: [], optionRows: [] };
+	return { channel, overrides, optionRows };
+}
 
 /**
  * Presença de produtos no canal, em forma de filtro para a query: em SELECIONADOS só entram os

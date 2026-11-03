@@ -3,6 +3,7 @@ import { resolveSaleFiscalDocumentPreference } from "@/lib/fiscal/emission-docum
 import { resolvePaymentFinancialAccounts } from "@/lib/payments";
 import { hydratePOSProducts } from "@/lib/pos/hydrate-pos-products";
 import { resolveCatalogOrderItem } from "@/lib/products/resolve-catalog-order-item";
+import { loadChannelState, type TChannelState } from "@/lib/products/sales-channels-store";
 import { authorizeSaleDiscount, computeSaleAggregatedDiscount, consumeSaleDiscountApproval } from "@/lib/sales/sale-discount-authorization";
 import { type TSaleActor, getSaleActorOrganizationId, resolveActorFiscalEmission } from "@/lib/sales/sale-actor";
 import { validateSaleItemsPricing } from "@/lib/sales/sale-pricing-validation";
@@ -52,10 +53,19 @@ export type { TSaleActor } from "@/lib/sales/sale-actor";
  * loja (`resolveCatalogOrderItem`). Preço e presença no catálogo são da validação de preços; um
  * produto que a projeção não devolve fica com ela.
  */
-export async function validateSaleItemsAddOnRules({ orgId, itens }: { orgId: string; itens: TCreateAndConfirmSaleInput["itens"] }) {
+export async function validateSaleItemsAddOnRules({
+	orgId,
+	itens,
+	channelState,
+}: {
+	orgId: string;
+	itens: TCreateAndConfirmSaleInput["itens"];
+	/** Estado do canal POS já carregado na mesma request; `undefined` = a hidratação carrega. */
+	channelState?: TChannelState | null;
+}) {
 	const productIds = [...new Set(itens.map((item) => item.produtoId))];
 	if (productIds.length === 0) return;
-	const catalog = new Map((await hydratePOSProducts({ orgId, productIds })).map((product) => [product.id, product]));
+	const catalog = new Map((await hydratePOSProducts({ orgId, productIds, channelState })).map((product) => [product.id, product]));
 	for (const item of itens) {
 		const product = catalog.get(item.produtoId);
 		if (!product) continue;
@@ -79,9 +89,11 @@ export async function prepareSaleCreation({ actor, input }: { actor: TSaleActor;
 	}
 
 	// Nunca confie nos valores do cliente: recalcula os itens contra o catálogo antes de qualquer uso,
-	// e confere as escolhas de adicionais contra as regras dos grupos.
-	await validateSaleItemsPricing({ orgId, itens: input.itens, canal: "POS" });
-	await validateSaleItemsAddOnRules({ orgId, itens: input.itens });
+	// e confere as escolhas de adicionais contra as regras dos grupos. As duas validações leem o
+	// mesmo canal POS: carregado uma vez aqui em vez de uma vez em cada.
+	const posChannelState = await loadChannelState({ orgId, canal: "POS" });
+	await validateSaleItemsPricing({ orgId, itens: input.itens, canal: "POS", channelState: posChannelState });
+	await validateSaleItemsAddOnRules({ orgId, itens: input.itens, channelState: posChannelState });
 	input = { ...input, itens: input.itens.map((item) => normalizeCouponGiftItem(item, input.cupomResgate?.brinde)) };
 
 	// Resgate de recompensas: admissão + resolução autoritativa de cada prêmio contra o catálogo,
@@ -101,7 +113,9 @@ export async function prepareSaleCreation({ actor, input }: { actor: TSaleActor;
 	const productIds = [...new Set(input.itens.map((item) => item.produtoId))];
 	const variantIds = input.itens.map((item) => item.produtoVarianteId).filter((id): id is string => !!id);
 
-	const [produtosResult, variantesResult, organization] = await Promise.all([
+	// O caixa informado só depende do input: lido junto com a organização, mas validado depois dela,
+	// na mesma ordem de antes (organização → caixa obrigatório → caixa válido).
+	const [produtosResult, variantesResult, organization, requestedSalesSession] = await Promise.all([
 		productIds.length > 0
 			? db.query.products.findMany({
 					where: (fields, { inArray }) => inArray(fields.id, productIds),
@@ -115,6 +129,7 @@ export async function prepareSaleCreation({ actor, input }: { actor: TSaleActor;
 				})
 			: [],
 		db.query.organizations.findFirst({ where: (fields, { eq }) => eq(fields.id, orgId) }),
+		resolveActiveSalesSession({ orgId, sessaoVendaId: input.sessaoVendaId }),
 	]);
 
 	if (!organization) throw new createHttpError.NotFound("Organização não encontrada.");
@@ -138,10 +153,9 @@ export async function prepareSaleCreation({ actor, input }: { actor: TSaleActor;
 	}
 	let sessaoVendaId: string | null = null;
 	if (input.sessaoVendaId) {
-		const activeSession = await resolveActiveSalesSession({ orgId, sessaoVendaId: input.sessaoVendaId });
-		if (!activeSession) throw new createHttpError.BadRequest("Sessão de venda inválida ou não está aberta.");
-		validateSalesSessionSeller({ session: activeSession, vendedorId: input.vendedorId });
-		sessaoVendaId = activeSession.id;
+		if (!requestedSalesSession) throw new createHttpError.BadRequest("Sessão de venda inválida ou não está aberta.");
+		validateSalesSessionSeller({ session: requestedSalesSession, vendedorId: input.vendedorId });
+		sessaoVendaId = requestedSalesSession.id;
 	}
 
 	const organizationSaleDefaults = organization.configuracao.defaults.contabilidade.lancamentosPadrao.vendas;
