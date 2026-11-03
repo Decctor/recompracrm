@@ -7,6 +7,7 @@ import {
 } from "@/config";
 import { appApiHandler } from "@/lib/app-api";
 import { DEFAULT_SCALE_BARCODE_CONFIG } from "@/lib/pos/scale-barcode";
+import { DEFAULT_SERIAL_SCALE_CONFIG } from "@/lib/pos/serial-scale-protocol";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { db } from "@/services/drizzle";
 import { organizations } from "@/services/drizzle/schema";
@@ -157,6 +158,7 @@ async function generateCheckoutRoute(request: NextRequest) {
 						},
 					},
 					balanca: organization.configuracao.preferencias.balanca ?? DEFAULT_SCALE_BARCODE_CONFIG,
+					balancaCaixa: organization.configuracao.preferencias.balancaCaixa ?? DEFAULT_SERIAL_SCALE_CONFIG,
 				},
 				defaults: organization.configuracao.defaults,
 			},

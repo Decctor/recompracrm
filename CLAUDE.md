@@ -324,6 +324,18 @@ export function NewFoo({ closeModal, callbacks }: NewFooProps) {
 - Every screen that builds a cart from the grid mounts `usePOSBarcodeScan` and renders `BarcodeMatchPicker` for duplicates. The action mirrors the click: variants or add-ons open the builder (with the matched variant preselected via `initialVariantId`); a plain item goes straight to the cart through `addItemOrIncrement`, so scanning the same item three times is quantity 3, not three lines.
 - Duplicate barcodes are a warning (`ProductBarcodeConflictHint`, `GET /api/products/barcode-usage`), not a constraint — the POS resolves them with the picker.
 
+## POS Checkout Scale Conventions
+
+**Location**: `lib/pos/serial-scale-protocol.ts` (pure, tested), `lib/pos/serial-scale-connection.ts`, `lib/hooks/use-serial-scale.ts`, `lib/hooks/use-pos-scale-weighing.ts`
+
+- The checkout scale (e.g. Toledo Prix 3 Fit) is read **from the browser through Web Serial**, never through the desktop agent or the server: the agent's 2 s polling and a CRM round trip would add seconds to every weighing. Chrome/Edge desktop only; the UI says so instead of hiding the module.
+- The protocol is Toledo's: `ENQ` → `STX PPPPP ETX` (or `IIIII`/`NNNNN`/`SSSSS`), plus the Prix "protocolo A" long frame. Frames are found by delimiters, never by fixed offsets.
+- One connection per tab (`serialScale` singleton): the port is exclusive, and the POS screens share it across navigation. Live weight lives in its own store (`useSerialScaleLiveReading`) so that only the pill re-renders four times per second, not the POS page.
+- A weighing is accepted only as the same stable weight twice in a row, read **after** the click. A stale reading never counts, and the pill shows "SEM RESPOSTA" after 2 s without a frame.
+- A weighing reaches the cart through the same `onAddDirect` as a scale label (`scaleReading` with `tipoValor: "PESO"`): a new line every time, priced by the system, never summed into an existing line.
+- Sold by weight = `unidade` normalized to KG (`isSoldByWeight`; the column is free text). Products with variants are not weighed from the grid.
+- Serial parameters are org config (`preferencias.balancaCaixa`). The port itself is chosen per computer (a browser permission) and remembered in localStorage.
+
 ---
 
 ## Public Page Conventions

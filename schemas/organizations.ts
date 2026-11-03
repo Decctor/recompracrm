@@ -5,6 +5,7 @@ import {
 	OrganizationIntegrationTypeEnum,
 	PoiRegistrationFlowEnum,
 	ScaleBarcodeValueTypeEnum,
+	ScaleSerialParityEnum,
 } from "./enums";
 import { OrganizationFiscalConfigSchema } from "./fiscal";
 import { DataSourceIntegrationConfigSchema } from "./integrations";
@@ -12,6 +13,7 @@ import { ORGANIZATION_SLUG_INVALID_MESSAGE, ORGANIZATION_SLUG_REGEX } from "@/li
 import { normalizeEmail } from "@/lib/formatting";
 import { PaymentEffectivenessTypeEnum } from "@/lib/payments/schemas";
 import { DEFAULT_SCALE_BARCODE_CONFIG, parseScaleBarcodeMask } from "@/lib/pos/scale-barcode";
+import { DEFAULT_SERIAL_SCALE_CONFIG, SERIAL_SCALE_BAUD_RATES } from "@/lib/pos/serial-scale-protocol";
 
 /**
  * @deprecated As variantes vivem em `schemas/integrations.ts` (DataSourceIntegrationConfigSchema);
@@ -265,6 +267,36 @@ export const OrganizationScaleBarcodeConfigSchema = z
 	.default(DEFAULT_SCALE_BARCODE_CONFIG);
 export type TOrganizationScaleBarcodeConfig = z.infer<typeof OrganizationScaleBarcodeConfigSchema>;
 
+// Balança do caixa ligada ao computador (lib/pos/serial-scale-protocol.ts): o PDV lê o peso pela
+// porta serial do navegador. A porta em si é escolhida em cada computador; aqui fica só o que vale
+// para todas as balanças da organização — os parâmetros da serial e as casas do peso.
+export const OrganizationSerialScaleConfigSchema = z
+	.object({
+		habilitado: z.boolean({ invalid_type_error: "Tipo não válido para a habilitação da balança do caixa." }),
+		velocidade: z
+			.number({
+				required_error: "Velocidade da porta da balança não informada.",
+				invalid_type_error: "Tipo não válido para a velocidade da porta da balança.",
+			})
+			.int("A velocidade da porta deve ser um número inteiro.")
+			.refine((value) => (SERIAL_SCALE_BAUD_RATES as readonly number[]).includes(value), "Velocidade da porta da balança não suportada."),
+		bitsDados: z.union([z.literal(7), z.literal(8)], {
+			required_error: "Bits de dados da balança não informados.",
+			invalid_type_error: "Os bits de dados da balança devem ser 7 ou 8.",
+		}),
+		paridade: ScaleSerialParityEnum,
+		bitsParada: z.union([z.literal(1), z.literal(2)], {
+			required_error: "Bits de parada da balança não informados.",
+			invalid_type_error: "Os bits de parada da balança devem ser 1 ou 2.",
+		}),
+		casasDecimais: z.union([z.literal(2), z.literal(3)], {
+			required_error: "Casas decimais do peso não informadas.",
+			invalid_type_error: "O peso da balança tem 2 ou 3 casas decimais.",
+		}),
+	})
+	.default(DEFAULT_SERIAL_SCALE_CONFIG);
+export type TOrganizationSerialScaleConfig = z.infer<typeof OrganizationSerialScaleConfigSchema>;
+
 export const OrganizationConfigurationSchema = z.object({
 	recursos: z.object({
 		analytics: z.object({
@@ -406,6 +438,7 @@ export const OrganizationConfigurationSchema = z.object({
 			.default({ habilitado: false }),
 		impressoes: OrganizationPrintPreferencesSchema,
 		balanca: OrganizationScaleBarcodeConfigSchema,
+		balancaCaixa: OrganizationSerialScaleConfigSchema,
 	}),
 	defaults: OrganizationDefaultsSchema,
 });

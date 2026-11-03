@@ -3,6 +3,7 @@
 import BarcodeMatchPicker from "@/components/Modals/Sales/BarcodeMatchPicker";
 import type { TBuiltOrderItem } from "@/components/Products/ProductBuilderForm";
 import { usePOSBarcodeScan } from "@/lib/hooks/use-pos-barcode-scan";
+import { usePOSScaleWeighing } from "@/lib/hooks/use-pos-scale-weighing";
 import { usePOSStockGuard } from "@/lib/hooks/use-pos-stock-guard";
 import type { TBarcodeScanResolution } from "@/lib/pos/barcode-scan-action";
 import { formatItemQuantity } from "@/lib/pos/scale-barcode";
@@ -41,6 +42,7 @@ import CategoriesBar from "../../new/components/composition/CategoriesBar";
 import PaginationBlock from "../../new/components/composition/PaginationBlock";
 import ProductOrderingSelect from "../../new/components/composition/ProductOrderingSelect";
 import ProductsGridBlock from "../../new/components/composition/ProductsGridBlock";
+import CheckoutScalePill from "../../new/components/CheckoutScalePill";
 import SearchBlock from "../../new/components/composition/SearchBlock";
 import ViewModeToggle, { type ProductViewMode } from "../../new/components/composition/ViewModeToggle";
 
@@ -368,6 +370,13 @@ export default function EditSalePage({
 		onAddDirect: handleScannedItem,
 		onOpenBuilder: handleScannedBuilder,
 	});
+	// Balança do caixa: o botão de pesar do card lança a pesagem pelo mesmo caminho da etiqueta de
+	// balança (linha nova com a quantidade em kg).
+	const scaleWeighing = usePOSScaleWeighing({
+		config: organizationConfiguration.preferencias.balancaCaixa,
+		enabled: saleForEdit?.editabilidade.nivel === "TOTAL",
+		onAddDirect: handleScannedItem,
+	});
 
 	if (isLoading) return <LoadingComponent />;
 	if (isError) return <ErrorComponent msg={getErrorMessage(error)} />;
@@ -451,6 +460,7 @@ export default function EditSalePage({
 							</div>
 							<ProductOrderingSelect value={filters.ordering} onChange={handleOrderingChange} disabled={productsLoading} />
 							<ViewModeToggle value={viewMode} onChange={setViewMode} />
+							<CheckoutScalePill scale={scaleWeighing.scale} />
 						</div>
 						{/* A barra se encarrega do próprio skeleton: montá-la só depois do load a inseria na
 						    árvore com a grade já pintada e empurrava tudo para baixo. */}
@@ -472,6 +482,9 @@ export default function EditSalePage({
 							viewMode={viewMode}
 							orgTracksStock={organizationConfiguration.preferencias.rastreamentoEstoque}
 							onProductClick={handleProductClick}
+							canWeighProduct={scaleWeighing.canWeighProduct}
+							onWeighProduct={scaleWeighing.weighProduct}
+							weighingProductId={scaleWeighing.weighingProductId}
 						/>
 
 						{productsData ? (
