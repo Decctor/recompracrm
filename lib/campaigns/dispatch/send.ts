@@ -22,6 +22,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { chunkArray } from "../shared";
 import {
 	grantCampaignBonusOnSend,
+	loadCampaignSendContextInputs,
 	loadOrganizationCashbackProgramForSend,
 	projectCampaignSendContext,
 	type TCampaignSendBonusProgram,
@@ -343,7 +344,13 @@ async function sendReservedRecipients({
 	chatIdCache: TChatPromiseCache;
 	summary: TCampaignDispatchSendSummary;
 }): Promise<TCampaignDispatchInterruptionInput | null> {
-	const clientsById = await loadDeliveryClients(recipients.map((recipient) => recipient.clienteId));
+	const recipientClientIds = recipients.map((recipient) => recipient.clienteId);
+	// Batch-level reads: delivery clients, cashback balances and the campaign coupon, one query each
+	// instead of per recipient.
+	const [clientsById, sendContextInputs] = await Promise.all([
+		loadDeliveryClients(recipientClientIds),
+		loadCampaignSendContextInputs({ organizationId: dispatch.organizacaoId, clientIds: recipientClientIds, campaign }),
+	]);
 	// One guard per batch: the originating event is loaded and parsed once for all its recipients.
 	const eventGuard = createCampaignEventSendGuard();
 	const connection = campaign.whatsappConexaoTelefone?.conexao;
@@ -389,13 +396,13 @@ async function sendReservedRecipients({
 						return;
 					}
 					const client = clientsById.get(recipient.clienteId) ?? null;
-					const context = await projectCampaignSendContext({
-						organizationId: dispatch.organizacaoId,
+					const context = projectCampaignSendContext({
 						clientId: recipient.clienteId,
 						campaign,
 						program,
 						baseContext: recipient.contexto,
 						saleValue: recipient.contexto?.compraValor ?? null,
+						inputs: sendContextInputs,
 					});
 					const delivery = client
 						? await deliverCampaignMessage({
@@ -532,9 +539,9 @@ export async function runCampaignDispatchSend({
 		return { ...summary, finalized: true };
 	}
 
-	await touchDispatch(db, dispatchId, { status: "ENVIANDO" });
-
-	const [limits, program, hasHubAccess] = await Promise.all([
+	// The ENVIANDO write only has to land before the first claim; the per-run reads go with it.
+	const [, limits, program, hasHubAccess] = await Promise.all([
+		touchDispatch(db, dispatchId, { status: "ENVIANDO" }),
 		resolveSendQuotaLimits({ organizationId: dispatch.organizacaoId, campaignId: dispatch.campanhaId }),
 		loadOrganizationCashbackProgramForSend(dispatch.organizacaoId),
 		resolveOrganizationHubAccess(dispatch.organizacaoId),

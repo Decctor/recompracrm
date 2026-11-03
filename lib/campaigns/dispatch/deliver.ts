@@ -234,16 +234,19 @@ export async function deliverCampaignMessage(params: TCampaignDeliveryInput): Pr
 	const channelsSkipped: string[] = [];
 
 	try {
-		const organizationContext = await resolveOrganizationMessagingContext(organizationId);
-		const hasHubAccess = params.hasHubAccess ?? organizationContext.hasHubAccess;
 		// Resolve favorite and suggested product names in a single indexed lookup to avoid an extra round-trip on the hot path.
 		const productIdsToResolve = [client.metadataProdutoMaisCompradoId, client.metadataProdutoSugeridoId].filter(Boolean) as string[];
-		const resolvedProductNames = productIdsToResolve.length
-			? await db.query.products.findMany({
-					where: (fields, { inArray }) => inArray(fields.id, productIdsToResolve),
-					columns: { id: true, nome: true },
-				})
-			: [];
+		// Organization context and product names are independent reads; both settle before rendering.
+		const [organizationContext, resolvedProductNames] = await Promise.all([
+			resolveOrganizationMessagingContext(organizationId),
+			productIdsToResolve.length
+				? db.query.products.findMany({
+						where: (fields, { inArray }) => inArray(fields.id, productIdsToResolve),
+						columns: { id: true, nome: true },
+					})
+				: Promise.resolve([]),
+		]);
+		const hasHubAccess = params.hasHubAccess ?? organizationContext.hasHubAccess;
 		const productNameById = new Map(resolvedProductNames.map((product) => [product.id, product.nome]));
 		const clientFavoriteProduct = client.metadataProdutoMaisCompradoId ? (productNameById.get(client.metadataProdutoMaisCompradoId) ?? "") : "";
 		const clientSuggestedProduct = client.metadataProdutoSugeridoId ? (productNameById.get(client.metadataProdutoSugeridoId) ?? "") : "";

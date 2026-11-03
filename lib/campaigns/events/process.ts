@@ -71,16 +71,18 @@ export async function processCampaignEventInTransaction({
 export async function processCampaignEvent({ eventId }: { eventId: string }) {
 	try {
 		const dispatches = await db.transaction((tx) => processCampaignEventInTransaction({ tx, eventId }));
-		await publishEventDispatches(dispatches.filter((dispatch) => !dispatch.expand));
-		await Promise.all(
-			dispatches
+		// Send and expand publications target different dispatches and each one swallows its own
+		// failure (the clock's stale sweep republishes), so they go out together.
+		await Promise.all([
+			publishEventDispatches(dispatches.filter((dispatch) => !dispatch.expand)),
+			...dispatches
 				.filter((dispatch) => dispatch.created && dispatch.expand)
 				.map((dispatch) =>
 					publishCampaignDispatchExpand({ dispatchId: dispatch.dispatchId }).catch((error) =>
 						console.error("[CAMPAIGN_EVENTS] Falha ao publicar expansão.", error),
 					),
 				),
-		);
+		]);
 	} catch (error) {
 		await db
 			.update(campaignEvents)

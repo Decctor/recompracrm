@@ -1,3 +1,4 @@
+import { mapWithConcurrencySettled } from "@/lib/async/map-with-concurrency";
 import { releaseSendQuota } from "@/lib/interactions/send-counters";
 import { db } from "@/services/drizzle";
 import { campaignDispatchRecipients, campaignDispatches, campaigns } from "@/services/drizzle/schema";
@@ -25,6 +26,12 @@ import {
 
 const STALE_DISPATCH_MINUTES = 30;
 const STALE_RESERVATION_MINUTES = 15;
+// Each scheduled capture is its own short transaction (one INSERT ... ON CONFLICT DO NOTHING on a
+// per-campaign idempotency key), so captures never contend; the cap keeps them from draining the
+// instance's connection pool (max 10).
+const SCHEDULED_CAPTURE_CONCURRENCY = 4;
+// Queue publishes are idempotent HTTP calls with no DB work.
+const DUE_DISPATCH_PUBLISH_CONCURRENCY = 10;
 
 export type TCampaignDispatchClockSummary = {
 	scheduledEventsCaptured: number;
@@ -62,11 +69,15 @@ async function createScheduledDispatches(now: Date, summary: TCampaignDispatchCl
 		},
 	});
 
-	for (const campaign of dueCampaigns) {
-		if (!campaign.organizacaoId) continue;
+	const capturable = dueCampaigns.filter((campaign) => {
+		if (!campaign.organizacaoId) return false;
 		const isRecurrent = campaign.gatilhoTipo === "RECORRENTE";
-		if (isRecurrent && !shouldRecurrentCampaignRunOnDate(campaign, now)) continue;
+		return !isRecurrent || shouldRecurrentCampaignRunOnDate(campaign, now);
+	});
 
+	// Settled: as before, the first failure fails the tick, but captures already in flight finish
+	// before it is rethrown.
+	await mapWithConcurrencySettled(capturable, SCHEDULED_CAPTURE_CONCURRENCY, async (campaign) => {
 		const janelaReferencia = buildScheduledWindowReference({ dateKey, block: campaign.execucaoAgendadaBloco });
 		const eventId = await db.transaction((tx) =>
 			recordCampaignEvent({
@@ -90,7 +101,7 @@ async function createScheduledDispatches(now: Date, summary: TCampaignDispatchCl
 			}),
 		);
 		if (eventId) summary.scheduledEventsCaptured += 1;
-	}
+	});
 }
 
 async function publishDueEventDispatches(now: Date, summary: TCampaignDispatchClockSummary) {
@@ -107,10 +118,11 @@ async function publishDueEventDispatches(now: Date, summary: TCampaignDispatchCl
 		)
 		.returning({ id: campaignDispatches.id });
 
-	for (const dispatch of due) {
+	// Already flipped to ENFILEIRADA in bulk; a publish lost here is picked up by the stale sweep.
+	await mapWithConcurrencySettled(due, DUE_DISPATCH_PUBLISH_CONCURRENCY, async (dispatch) => {
 		await publishCampaignDispatchSend({ dispatchId: dispatch.id, generation: "clock" });
 		summary.dueEventDispatchesPublished += 1;
-	}
+	});
 }
 
 async function republishStaleDispatches(now: Date, summary: TCampaignDispatchClockSummary) {

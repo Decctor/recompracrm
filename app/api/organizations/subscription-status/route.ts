@@ -32,6 +32,17 @@ async function getSubscriptionStatus(): Promise<{ data: TSubscriptionStatusData;
 	const orgId = session.membership.organizacao.id;
 	const org = await db.query.organizations.findFirst({
 		where: (fields, { eq }) => eq(fields.id, orgId),
+		// Only what the access decision and the action read — the full row carries the POI QR code
+		// data URLs and the configuration jsonb, and this endpoint runs on most page loads.
+		columns: {
+			stripeCustomerId: true,
+			stripeSubscriptionStatus: true,
+			stripeSubscriptionStatusUltimaAlteracao: true,
+			periodoTesteInicio: true,
+			periodoTesteFim: true,
+			assinaturaPeriodoPagoFim: true,
+			assinaturaAcessoProvisorioFim: true,
+		},
 	});
 
 	if (!org) throw new createHttpError.NotFound("Organização não encontrada.");

@@ -51,12 +51,15 @@ export async function runCampaignDispatchExpand({ dispatchId }: { dispatchId: st
 	}
 
 	const now = new Date();
-	await db.update(campaignDispatches).set({ status: "RESOLVENDO", erro: null, dataAtualizacao: now }).where(eq(campaignDispatches.id, dispatchId));
-
-	const campaign = await db.query.campaigns.findFirst({
-		where: and(eq(campaigns.id, dispatch.campanhaId), eq(campaigns.organizacaoId, dispatch.organizacaoId)),
-		with: { segmentacoes: true },
-	});
+	// The status write and the campaign read touch different tables and neither depends on the
+	// other; both settle before any decision below.
+	const [, campaign] = await Promise.all([
+		db.update(campaignDispatches).set({ status: "RESOLVENDO", erro: null, dataAtualizacao: now }).where(eq(campaignDispatches.id, dispatchId)),
+		db.query.campaigns.findFirst({
+			where: and(eq(campaigns.id, dispatch.campanhaId), eq(campaigns.organizacaoId, dispatch.organizacaoId)),
+			with: { segmentacoes: true },
+		}),
+	]);
 	if (!campaign) {
 		await db
 			.update(campaignDispatches)
