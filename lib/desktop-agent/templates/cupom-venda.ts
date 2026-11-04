@@ -244,7 +244,9 @@ function renderAdicionaisRows(item: TCupomVendaItem, { separado }: { separado: b
 					})}${unitario}</span></td><td class="val sub-val">${valorLinha > 0 ? formatToMoney(valorLinha) : ""}</td></tr>`;
 				})
 				.join("");
-			return grupo ? `<tr class="sub"><td></td><td class="desc" colspan="2"><span class="grupo-adicionais">${escapeHtml(grupo)}</span></td></tr>${opcoesHtml}` : opcoesHtml;
+			return grupo
+				? `<tr class="sub"><td></td><td class="desc" colspan="2"><span class="grupo-adicionais">${escapeHtml(grupo)}</span></td></tr>${opcoesHtml}`
+				: opcoesHtml;
 		})
 		.join("");
 }
