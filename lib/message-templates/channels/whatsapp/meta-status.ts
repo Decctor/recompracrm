@@ -4,6 +4,7 @@ import { META_CATEGORY_TO_MESSAGE_TEMPLATE, mapMetaQualityToMessageTemplateQuali
 import type { TMetaTemplate, TMetaTemplateButton, TMetaTemplateComponent } from "./types";
 import { buildMessageTemplateMentionSpan, extractOrderedMessageTemplatePositions } from "../../parsing";
 import { getDefaultMessageTemplateVariableExample } from "../../variables";
+import { resolveMessageTemplateButtonPresetFromWhatsappUrl } from "../../buttons/presets";
 
 export function extractWhatsappTemplatePhoneMetadataFromMeta(metaTemplate: TMetaTemplate): TMessageTemplatePhoneMetadata {
 	return {
@@ -231,10 +232,25 @@ function extractLegacyBodyFromMetaComponent(component: TMetaTemplateComponent): 
 // A Meta devolve um botão de pesquisa como QUICK_REPLY comum: o vínculo campo/opção só existe
 // localmente. Um sync que reescrevesse `botoes` a partir da Meta apagaria a pesquisa — então o
 // botão local sobrevive quando a Meta confirma um quick reply com o mesmo texto na mesma posição.
-function extractButtonsFromMetaComponent(component: TMetaTemplateComponent, currentButtons: TMessageTemplateContent["botoes"] | null): TMessageTemplateContent["botoes"] {
+// Botões de preset voltam como URL dinâmica (`...clientId={{1}}`); rebaixá-los a URL fixa faz o
+// envio omitir o parâmetro do botão e a Meta recusar toda mensagem com 131008.
+function extractButtonsFromMetaComponent(
+	component: TMetaTemplateComponent,
+	currentButtons: TMessageTemplateContent["botoes"] | null,
+): TMessageTemplateContent["botoes"] {
 	return (component.buttons ?? []).map((button, index) => {
 		const localButton = currentButtons?.[index];
 		if (button.type === "QUICK_REPLY" && localButton?.tipo === "RESPOSTA_PESQUISA" && localButton.texto === button.text) return localButton;
+
+		const preset = button.type === "URL" && button.url ? resolveMessageTemplateButtonPresetFromWhatsappUrl(button.url) : null;
+		if (preset) {
+			const exemplo =
+				localButton?.tipo === "URL_PRESET" && localButton.preset === preset.id
+					? localButton.exemplo
+					: (button.example?.[0] ?? preset.resolveWhatsappParameterExample());
+			return { tipo: "URL_PRESET", preset: preset.id, texto: button.text, exemplo };
+		}
+
 		return extractButtonFromMetaButton(button);
 	});
 }

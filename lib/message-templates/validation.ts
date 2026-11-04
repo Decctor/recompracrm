@@ -9,6 +9,7 @@ import {
 import { convertHtmlToWhatsappText } from "./formatting";
 import { extractUnknownMessageTemplateVariables, getMessageTemplateVariableSources } from "./parsing";
 import { validateSurveyButtonsShape } from "./surveys";
+import { hasWhatsappUrlParameter } from "./buttons/presets";
 import type { TMessageTemplateValidationIssue, TMessageTemplateValidationResult } from "./types";
 
 function buildResult(issues: TMessageTemplateValidationIssue[]): TMessageTemplateValidationResult {
@@ -77,6 +78,15 @@ export function validateMessageTemplateForWhatsapp(content: TMessageTemplateCont
 			issues.push({
 				path: `conteudo.botoes.${index}.texto`,
 				message: `Texto do botão ${index + 1} excede ${MESSAGE_TEMPLATE_BUTTON_TEXT_MAX_LENGTH} caracteres.`,
+				severity: "error",
+			});
+		}
+		// O envio só preenche o parâmetro de botões URL_PRESET. Uma URL comum com `{{1}}` é aprovada
+		// pela Meta como dinâmica e toda mensagem é recusada com 131008 (parâmetro obrigatório ausente).
+		if (button.tipo === "URL" && hasWhatsappUrlParameter(button.url)) {
+			issues.push({
+				path: `conteudo.botoes.${index}.url`,
+				message: `O botão ${index + 1} tem uma variável na URL. Use um botão de link pré-definido (ex.: perfil do cliente) em vez de uma URL com {{ }}.`,
 				severity: "error",
 			});
 		}

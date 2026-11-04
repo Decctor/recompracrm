@@ -88,6 +88,32 @@ export function getMessageTemplateButtonPreset(presetId: string): TMessageTempla
 	return null;
 }
 
+const WHATSAPP_URL_PARAMETER = "{{1}}";
+const WHATSAPP_URL_PARAMETER_PLACEHOLDER = "__WHATSAPP_URL_PARAMETER__";
+
+export function hasWhatsappUrlParameter(url: string) {
+	return /\{\{\s*\w+\s*\}\}/.test(url);
+}
+
+// A Meta devolve um botão de preset como URL comum terminando em `{{1}}`: o vínculo com o preset só
+// existe localmente. Reconhece a URL gerada por `buildWhatsappTemplateUrl` (qualquer origem, qualquer
+// organização) para que um sync não rebaixe o botão a uma URL fixa que o envio nunca preenche.
+export function resolveMessageTemplateButtonPresetFromWhatsappUrl(url: string): TMessageTemplateButtonPreset | null {
+	if (!url.includes(WHATSAPP_URL_PARAMETER)) return null;
+
+	let parsed: URL;
+	try {
+		parsed = new URL(url.replace(WHATSAPP_URL_PARAMETER, WHATSAPP_URL_PARAMETER_PLACEHOLDER));
+	} catch {
+		return null;
+	}
+	if (parsed.pathname !== "/redirects") return null;
+	if (parsed.searchParams.get("clientId") !== WHATSAPP_URL_PARAMETER_PLACEHOLDER) return null;
+
+	const redirectType = parsed.searchParams.get("type");
+	return MESSAGE_TEMPLATE_BUTTON_PRESET_OPTIONS.find((preset) => preset.redirectType === redirectType) ?? null;
+}
+
 export function getDefaultAppOrigin() {
 	return process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_URL || "https://www.recompracrm.com.br";
 }
