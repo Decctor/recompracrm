@@ -3,7 +3,7 @@ import { campaignEvents } from "@/services/drizzle/schema";
 import { and, eq, gt, lt, sql } from "drizzle-orm";
 import { publishEventDispatches } from "@/lib/campaigns/engine";
 import { resolveCampaignEventHandler } from "./registry";
-import { publishCampaignDispatchExpand } from "@/lib/campaigns/dispatch/queue";
+import { publishCampaignDispatchExpand, resolveClockPublishDelaySeconds } from "@/lib/campaigns/dispatch/queue";
 import { CAMPAIGN_EVENT_MAX_AGE_MS, CAMPAIGN_EVENT_MAX_ATTEMPTS } from "./policy";
 import type { TCampaignEventDispatch } from "./types";
 
@@ -68,21 +68,10 @@ export async function processCampaignEventInTransaction({
 	return result.dispatches;
 }
 
-export async function processCampaignEvent({ eventId }: { eventId: string }) {
+/** Processa um evento e devolve os disparos criados, sem publicá-los. Falha registra a tentativa e relança. */
+async function processCampaignEventCollectingDispatches(eventId: string): Promise<TCampaignEventDispatch[]> {
 	try {
-		const dispatches = await db.transaction((tx) => processCampaignEventInTransaction({ tx, eventId }));
-		// Send and expand publications target different dispatches and each one swallows its own
-		// failure (the clock's stale sweep republishes), so they go out together.
-		await Promise.all([
-			publishEventDispatches(dispatches.filter((dispatch) => !dispatch.expand)),
-			...dispatches
-				.filter((dispatch) => dispatch.created && dispatch.expand)
-				.map((dispatch) =>
-					publishCampaignDispatchExpand({ dispatchId: dispatch.dispatchId }).catch((error) =>
-						console.error("[CAMPAIGN_EVENTS] Falha ao publicar expansão.", error),
-					),
-				),
-		]);
+		return await db.transaction((tx) => processCampaignEventInTransaction({ tx, eventId }));
 	} catch (error) {
 		await db
 			.update(campaignEvents)
@@ -94,4 +83,50 @@ export async function processCampaignEvent({ eventId }: { eventId: string }) {
 			.where(and(eq(campaignEvents.id, eventId), eq(campaignEvents.status, "PENDENTE")));
 		throw error;
 	}
+}
+
+/**
+ * Publica os disparos criados por um lote de eventos depois do commit: os envios imediatos em
+ * mensagens de lote, as expansões (campanhas agendadas) espaçadas. Nunca lança — cada falha de
+ * publicação deixa o disparo para a varredura de parados do relógio.
+ */
+export async function publishCampaignEventDispatches(dispatches: TCampaignEventDispatch[]) {
+	const expansions = dispatches.filter((dispatch) => dispatch.created && dispatch.expand);
+	await Promise.all([
+		publishEventDispatches(dispatches.filter((dispatch) => !dispatch.expand)),
+		...expansions.map((dispatch, index) =>
+			publishCampaignDispatchExpand({ dispatchId: dispatch.dispatchId, delaySeconds: resolveClockPublishDelaySeconds(index) }).catch((error) =>
+				console.error("[CAMPAIGN_EVENTS] Falha ao publicar expansão.", error),
+			),
+		),
+	]);
+}
+
+/**
+ * Consumer de uma mensagem de eventos. Em sequência, na ordem publicada (a do cliente), numa única
+ * instância. Uma falha não interrompe os demais: os disparos dos eventos bem-sucedidos são
+ * publicados e só então a falha sobe, para a fila reentregar — os eventos já processados não estão
+ * mais PENDENTE e recuam na hora.
+ */
+export async function processCampaignEventBatch({ eventIds }: { eventIds: string[] }) {
+	const dispatches: TCampaignEventDispatch[] = [];
+	const failed: { eventId: string; error: unknown }[] = [];
+	for (const eventId of eventIds) {
+		try {
+			dispatches.push(...(await processCampaignEventCollectingDispatches(eventId)));
+		} catch (error) {
+			failed.push({ eventId, error });
+		}
+	}
+	await publishCampaignEventDispatches(dispatches);
+	if (failed.length > 0) {
+		throw new Error(`Falha em ${failed.length} evento(s) do lote: ${failed.map((failure) => failure.eventId).join(", ")}.`, {
+			cause: failed[0]?.error,
+		});
+	}
+	return { processed: eventIds.length - failed.length, dispatches: dispatches.length };
+}
+
+export async function processCampaignEvent({ eventId }: { eventId: string }) {
+	return processCampaignEventBatch({ eventIds: [eventId] });
 }

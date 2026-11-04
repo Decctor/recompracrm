@@ -464,8 +464,8 @@ test("queue publication failure preserves the event and a later recovery sweep p
 	await publishPendingCampaignEvents({
 		...args,
 		now: new Date(args.now.getTime() + 60_001),
-		publish: async (id) => {
-			published.push(id);
+		publish: async (events) => {
+			published.push(...events.map((published) => published.id));
 		},
 	});
 	assert.deepEqual(published, [event.id]);
@@ -841,8 +841,8 @@ test("manual integration publication permission survives recovery and direct wor
 	const published: string[] = [];
 	await publishPendingCampaignEvents({
 		executor: asTransaction(database),
-		publish: async (id) => {
-			published.push(id);
+		publish: async (events) => {
+			published.push(...events.map((published) => published.id));
 		},
 	});
 	assert.deepEqual(published, []);
@@ -1202,13 +1202,26 @@ test("recovery publication pages through every pending event and keys each publi
 		await database.transaction((tx) => recordCampaignEvent({ tx: asTransaction(tx), input: eventInput({ chaveIdempotencia: `bulk:${index}` }) }));
 	}
 	const published: [string, number][] = [];
-	const collect = async (id: string, generation: number) => {
-		published.push([id, generation]);
+	const messages: { size: number; delaySeconds: number }[] = [];
+	const collect = async (events: { id: string; generation: number }[], { delaySeconds }: { delaySeconds: number }) => {
+		for (const event of events) published.push([event.id, event.generation]);
+		messages.push({ size: events.length, delaySeconds });
 	};
 	const at = new Date(Date.now() + 1000);
 	const first = await publishPendingCampaignEvents({ executor: asTransaction(database), enabled: true, now: at, limit: 40, publish: collect });
 	assert.equal(first.published, 150);
 	assert.equal(new Set(published.map(([id]) => id)).size, 150);
+	// Batched (pages of 40 → 25 + 15) instead of one message per event, spaced across the whole call.
+	assert.equal(first.messages, 8);
+	assert.ok(messages.every((message) => message.size <= 25));
+	assert.deepEqual(
+		messages.map((message) => message.delaySeconds),
+		[0, 0, 1, 1, 2, 2, 3, 3],
+	);
+	// The bump covers the message's delay: a row still waiting in the queue is not republished.
+	const lastBatchIds = published.slice(-25).map(([id]) => id);
+	const lastRow = await database.query.campaignEvents.findFirst({ where: eq(schema.campaignEvents.id, lastBatchIds[0] as string) });
+	assert.equal(lastRow?.proximaTentativa.getTime(), at.getTime() + 3000 + 60_000);
 	// Nothing is due again before the republish delay.
 	const again = await publishPendingCampaignEvents({
 		executor: asTransaction(database),
@@ -1220,7 +1233,7 @@ test("recovery publication pages through every pending event and keys each publi
 	const later = await publishPendingCampaignEvents({
 		executor: asTransaction(database),
 		enabled: true,
-		now: new Date(at.getTime() + 61_000),
+		now: new Date(at.getTime() + 64_000),
 		publish: collect,
 	});
 	assert.equal(later.published, 150);

@@ -1,5 +1,5 @@
 import { createCampaignDispatch, insertCampaignDispatchRecipients, type TCampaignDispatchRecipientInput } from "@/lib/campaigns/dispatch/create";
-import { publishCampaignDispatchSend } from "@/lib/campaigns/dispatch/queue";
+import { publishCampaignDispatchSendBatches } from "@/lib/campaigns/dispatch/queue";
 import { isDispatchDue, resolveEventDispatchScheduledAt, type TEventScheduleConfig } from "@/lib/campaigns/dispatch/schedule";
 import type { DBTransaction } from "@/services/drizzle";
 import { campaignDispatches } from "@/services/drizzle/schema";
@@ -83,16 +83,17 @@ export async function createEventCampaignDispatch({
 	return { dispatchId: dispatch.dispatchId, created: true, immediate, inserted, skipped };
 }
 
-// Publica os disparos imediatos criados na transação já commitada. Nunca lança: uma falha de
-// publicação deixa o disparo ENFILEIRADA, e o relógio o republica na varredura de parados.
+// Publica os disparos imediatos criados na transação já commitada, em mensagens de lote: um lote de
+// eventos (ex.: RFM) cria um disparo por cliente, e uma mensagem por disparo virava uma instância
+// por cliente. Nunca lança: uma falha de publicação deixa o disparo ENFILEIRADA, e o relógio o
+// republica na varredura de parados.
 export async function publishEventDispatches(results: TEventDispatchResult[]) {
 	const publishable = results.filter((result) => result.created && result.immediate && result.inserted > 0);
-	await Promise.all(
-		publishable.map((result) =>
-			publishCampaignDispatchSend({ dispatchId: result.dispatchId, generation: "event" }).catch((error) => {
-				console.error(`[CAMPAIGN_DISPATCH] Falha ao publicar o disparo de evento ${result.dispatchId}:`, error);
-			}),
-		),
-	);
+	if (publishable.length === 0) return 0;
+	try {
+		await publishCampaignDispatchSendBatches({ dispatchIds: publishable.map((result) => result.dispatchId), generation: "event" });
+	} catch (error) {
+		console.error(`[CAMPAIGN_DISPATCH] Falha ao publicar ${publishable.length} disparo(s) de evento:`, error);
+	}
 	return publishable.length;
 }

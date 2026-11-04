@@ -88,7 +88,7 @@
 		"test:sale-client-reassignment": "node --import tsx --test lib/sales/sale-client-reassignment-policy.test.ts",
 		"test:whatsapp-parsing": "node --import tsx --test lib/whatsapp/parsing.test.ts lib/whatsapp/connection-health-policy.test.ts lib/onboarding/payment-observation.test.ts",
 		"test:message-templates": "node --import tsx --test lib/message-templates/metadata.test.ts lib/message-templates/channels/whatsapp/meta-status.test.ts",
-		"test:campaign-dispatch": "node --import tsx --test lib/campaigns/dispatch/schedule.test.ts lib/campaigns/dispatch/interruption-policy.test.ts lib/http/rate-limit.test.ts",
+		"test:campaign-dispatch": "node --import tsx --test lib/campaigns/dispatch/schedule.test.ts lib/campaigns/dispatch/interruption-policy.test.ts lib/campaigns/dispatch/send-batch.test.ts lib/http/rate-limit.test.ts",
 		"test:geo": "node --import tsx --test lib/geo/brazilian-locations.test.ts lib/geo/address-parsing.test.ts lib/geo/viacep.test.ts",
 		"test:sales-channels": "node --import tsx --test lib/products/sales-channels.test.ts",
 		"test:tab-ordering": "node --import tsx --test lib/products/resolve-catalog-order-item.test.ts lib/products/add-on-rules.test.ts lib/products/add-on-pricing.test.ts",

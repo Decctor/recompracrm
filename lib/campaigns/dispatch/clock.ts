@@ -5,7 +5,12 @@ import { campaignDispatchRecipients, campaignDispatches, campaigns } from "@/ser
 import { and, eq, inArray, isNotNull, lte, or, sql } from "drizzle-orm";
 import { recordCampaignEvent } from "@/lib/campaigns/events/record";
 import { publishPendingCampaignEventsSafely } from "@/lib/campaigns/events/queue";
-import { publishCampaignDispatchExpand, publishCampaignDispatchSend, resolveClockPublishDelaySeconds } from "./queue";
+import {
+	publishCampaignDispatchExpand,
+	publishCampaignDispatchSend,
+	publishCampaignDispatchSendBatches,
+	resolveClockPublishDelaySeconds,
+} from "./queue";
 import {
 	buildScheduledWindowReference,
 	resolveDispatchScheduledAtForDate,
@@ -30,8 +35,6 @@ const STALE_RESERVATION_MINUTES = 15;
 // per-campaign idempotency key), so captures never contend; the cap keeps them from draining the
 // instance's connection pool (max 10).
 const SCHEDULED_CAPTURE_CONCURRENCY = 4;
-// Queue publishes are idempotent HTTP calls with no DB work.
-const DUE_DISPATCH_PUBLISH_CONCURRENCY = 10;
 
 export type TCampaignDispatchClockSummary = {
 	scheduledEventsCaptured: number;
@@ -119,13 +122,12 @@ async function publishDueEventDispatches(now: Date, summary: TCampaignDispatchCl
 		.returning({ id: campaignDispatches.id });
 
 	// Already flipped to ENFILEIRADA in bulk; a publish lost here is picked up by the stale sweep.
-	// Delayed event dispatches converge on the same time (e.g. "next day, 12:00"): published with
-	// no delay, each becomes a parallel consumer instance with its own pool. The delay spreads the
-	// deliveries; the publishes themselves can still run concurrently.
-	await mapWithConcurrencySettled(due, DUE_DISPATCH_PUBLISH_CONCURRENCY, async (dispatch, index) => {
-		await publishCampaignDispatchSend({ dispatchId: dispatch.id, generation: "clock", delaySeconds: resolveClockPublishDelaySeconds(index) });
-		summary.dueEventDispatchesPublished += 1;
-	});
+	// Delayed event dispatches converge on the same time (e.g. "next day, 12:00") and carry one
+	// recipient each: one message per dispatch made one parallel instance per client. Batched (25
+	// per message, spaced), the 41 of 2026-11-04 become 2 messages.
+	if (due.length === 0) return;
+	await publishCampaignDispatchSendBatches({ dispatchIds: due.map((dispatch) => dispatch.id), generation: "clock" });
+	summary.dueEventDispatchesPublished += due.length;
 }
 
 async function republishStaleDispatches(now: Date, summary: TCampaignDispatchClockSummary) {

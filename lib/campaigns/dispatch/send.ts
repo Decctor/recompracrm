@@ -489,11 +489,16 @@ export async function finalizeCampaignDispatchIfDone({ dispatchId }: { dispatchI
 export async function runCampaignDispatchSend({
 	dispatchId,
 	worker = 0,
+	deadlineAt,
 }: {
 	dispatchId: string;
 	worker?: number;
+	// Instante (ms) em que o envio para de reivindicar lotes e publica continuação. Um lote de
+	// disparos passa o seu, para que o último disparo não estoure o maxDuration do consumer.
+	deadlineAt?: number;
 }): Promise<TCampaignDispatchSendSummary> {
 	const startedAt = Date.now();
+	const budgetEndsAt = Math.min(startedAt + RUNTIME_BUDGET_MS, deadlineAt ?? Number.POSITIVE_INFINITY);
 	const summary: TCampaignDispatchSendSummary = {
 		dispatchId,
 		claimed: 0,
@@ -556,7 +561,7 @@ export async function runCampaignDispatchSend({
 		checkTemplateApproval: campaign.whatsappConexaoTelefone?.conexao.tipoConexao === "META_CLOUD_API",
 	};
 
-	while (Date.now() - startedAt < RUNTIME_BUDGET_MS) {
+	while (Date.now() < budgetEndsAt) {
 		// Relido a cada lote: um webhook ou outro worker pode ter bloqueado o número ou interrompido
 		// o disparo enquanto o lote anterior era enviado.
 		const block = await resolveCampaignDispatchSendBlock(sendBlockInput);
@@ -590,7 +595,7 @@ export async function runCampaignDispatchSend({
 		return summary;
 	}
 
-	if (Date.now() - startedAt >= RUNTIME_BUDGET_MS) {
+	if (Date.now() >= budgetEndsAt) {
 		const [remaining] = await db
 			.select({ total: sql<number>`count(*)::int` })
 			.from(campaignDispatchRecipients)
