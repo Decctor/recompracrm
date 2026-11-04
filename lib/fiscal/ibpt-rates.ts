@@ -1,6 +1,6 @@
 import { db } from "@/services/drizzle";
 import { fiscalIbptRates, organizations } from "@/services/drizzle/schema";
-import { eq, isNotNull, sql } from "drizzle-orm";
+import { eq, inArray, isNotNull, sql } from "drizzle-orm";
 
 const IBPT_API_BASE_URL = "https://api-ibpt.seunegocionanuvem.com.br/api_ibpt_json.php";
 const IBPT_MINIMUM_NCM_ROWS = 10_000;
@@ -9,6 +9,15 @@ const IBPT_REQUEST_TIMEOUT_MS = 20_000;
 
 export const IBPT_REFRESH_MAX_RETRIES = 3;
 export const IBPT_REFRESH_RETRY_BASE_DELAY_MS = 1_000;
+
+// How long emission keeps using the installed table after it expires. IBPT usually publishes the
+// next table around the 20th, before the current one ends, but it has run late: 26.2.B ended on
+// 31/10/2026 with no successor published on any source. A UF only ever has one installed version,
+// so filtering strictly by validity zeroed vTotTrib on every note instead of using the last
+// published values. Past the grace window the table counts as abandoned and stops being used; the
+// daily cron alert reports the deadline until then.
+export const IBPT_EXPIRED_TABLE_GRACE_DAYS = 60;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 export const IBPT_UFS = [
 	"AC",
@@ -265,6 +274,62 @@ async function persistIbptTable(snapshot: TIbptTableSnapshot): Promise<"ATUALIZA
 		}
 		return "ATUALIZADA";
 	});
+}
+
+// Oldest vigenciaFim emission still accepts at `now`.
+export function getIbptUsableVigenciaFimFloor(now: Date) {
+	return new Date(now.getTime() - IBPT_EXPIRED_TABLE_GRACE_DAYS * DAY_MS);
+}
+
+export type TIbptInstalledTable = { uf: TIbptUf; versao: string | null; vigenciaFim: Date | null };
+
+export type TIbptInstalledTableStatus =
+	| { status: "VIGENTE"; versao: string | null; vigenciaFim: Date }
+	| { status: "VENCIDA_EM_USO"; versao: string | null; vigenciaFim: Date; usoAte: Date }
+	| { status: "INDISPONIVEL"; versao: string | null; vigenciaFim: Date | null };
+
+// What emission is doing for a UF given its installed table. A table without vigenciaFim (manual
+// CSV import with an unparseable date) is used indefinitely by emission, so it counts as VIGENTE.
+export function resolveIbptInstalledTableStatus(installed: TIbptInstalledTable | null, now: Date): TIbptInstalledTableStatus {
+	if (!installed) return { status: "INDISPONIVEL", versao: null, vigenciaFim: null };
+	const { versao, vigenciaFim } = installed;
+	if (!vigenciaFim || vigenciaFim >= now) return { status: "VIGENTE", versao, vigenciaFim: vigenciaFim ?? now };
+	if (vigenciaFim >= getIbptUsableVigenciaFimFloor(now)) {
+		return { status: "VENCIDA_EM_USO", versao, vigenciaFim, usoAte: new Date(vigenciaFim.getTime() + IBPT_EXPIRED_TABLE_GRACE_DAYS * DAY_MS) };
+	}
+	return { status: "INDISPONIVEL", versao, vigenciaFim };
+}
+
+// Validity dates are date-only values stored at UTC midnight/end of day.
+function formatIbptDate(value: Date) {
+	const [year, month, day] = value.toISOString().slice(0, 10).split("-");
+	return `${day}/${month}/${year}`;
+}
+
+export function describeIbptEmissionImpact(uf: TIbptUf, status: TIbptInstalledTableStatus) {
+	const versao = status.versao ? ` (versão ${status.versao})` : "";
+	switch (status.status) {
+		case "VIGENTE":
+			return `${uf}: a tabela instalada${versao} segue vigente até ${formatIbptDate(status.vigenciaFim)}; a emissão não foi afetada.`;
+		case "VENCIDA_EM_USO":
+			return `${uf}: a tabela instalada${versao} venceu em ${formatIbptDate(status.vigenciaFim)} e segue em uso na emissão até ${formatIbptDate(status.usoAte)}. Depois disso, as notas sairão sem os tributos aproximados (Lei 12.741).`;
+		case "INDISPONIVEL":
+			return `${uf}: não há tabela IBPT utilizável${status.vigenciaFim ? `; a última instalada${versao} venceu em ${formatIbptDate(status.vigenciaFim)}` : ""}. As notas estão saindo sem os tributos aproximados (Lei 12.741).`;
+	}
+}
+
+export async function getInstalledIbptTables(ufs: TIbptUf[]): Promise<TIbptInstalledTable[]> {
+	if (ufs.length === 0) return [];
+	const rows = await db
+		.select({
+			uf: fiscalIbptRates.uf,
+			versao: sql<string | null>`max(${fiscalIbptRates.versao})`,
+			vigenciaFim: sql<Date | null>`max(${fiscalIbptRates.vigenciaFim})`.mapWith(fiscalIbptRates.vigenciaFim),
+		})
+		.from(fiscalIbptRates)
+		.where(inArray(fiscalIbptRates.uf, ufs))
+		.groupBy(fiscalIbptRates.uf);
+	return rows.map((row) => ({ uf: row.uf as TIbptUf, versao: row.versao, vigenciaFim: row.vigenciaFim }));
 }
 
 export function getIbptRetryDelayMs(attempt: number) {

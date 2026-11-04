@@ -24,6 +24,7 @@ import {
 	type TFiscalProblem,
 } from "./problems";
 import { computeSaleTaxation } from "./taxation-context";
+import { getIbptUsableVigenciaFimFloor } from "./ibpt-rates";
 import { assertFiscalDocumentActionAvailable } from "./document-actions";
 import { loadFiscalDocumentActions } from "./document-actions-loader";
 import { ManualFiscalProvider } from "./providers/manual";
@@ -537,8 +538,9 @@ async function loadIbptRatesForSale({ perfisProdutos, uf }: { perfisProdutos: { 
 			operators.and(
 				operators.eq(fields.uf, uf.toUpperCase()),
 				operators.inArray(fields.ncm, ncms),
-				// Ignora versoes da tabela IBPT com vigencia encerrada.
-				operators.or(operators.isNull(fields.vigenciaFim), operators.gte(fields.vigenciaFim, new Date())),
+				// Expired tables stay in use for a grace window: IBPT sometimes publishes late, and the
+				// alternative is vTotTrib = 0 on every note (see IBPT_EXPIRED_TABLE_GRACE_DAYS).
+				operators.or(operators.isNull(fields.vigenciaFim), operators.gte(fields.vigenciaFim, getIbptUsableVigenciaFimFloor(new Date()))),
 			),
 		orderBy: (fields, operators) => operators.desc(fields.vigenciaInicio),
 	});

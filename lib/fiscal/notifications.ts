@@ -5,7 +5,13 @@ import { db } from "@/services/drizzle";
 import { organizationMembers } from "@/services/drizzle/schema";
 import type { TOrganizationEntity } from "@/services/drizzle/schema";
 import type { TSaleEntity } from "@/services/drizzle/schema/sales";
-import type { TIbptRefreshFailure, TIbptUf } from "./ibpt-rates";
+import {
+	describeIbptEmissionImpact,
+	getInstalledIbptTables,
+	resolveIbptInstalledTableStatus,
+	type TIbptRefreshFailure,
+	type TIbptUf,
+} from "./ibpt-rates";
 import type { TFiscalPendingSummary } from "./pending";
 import { eq, isNotNull } from "drizzle-orm";
 
@@ -119,6 +125,22 @@ export async function notifyFiscalIbptRefreshFailure(failures: TIbptNotification
 
 		const details = failures.map((failure) => `${failure.uf ?? "GERAL"}: falha após ${failure.tentativas} tentativa(s) — ${failure.erro}`);
 		const safeDetails = details.map((detail) => `<li>${escapeHtml(detail)}</li>`).join("");
+		// "The installed tables were preserved" alone read as "nothing is affected", while an expired
+		// table may already be in its grace window, or past it with notes going out without vTotTrib.
+		const now = new Date();
+		// Best effort: when the lookup itself fails, send the alert without the section rather than
+		// lose it or claim there is no table.
+		const installedTables = await getInstalledIbptTables([...failedUfs]).catch((error) => {
+			console.error("[IBPT] Falha ao consultar as tabelas instaladas para o alerta.", error);
+			return null;
+		});
+		const impacts = installedTables
+			? [...failedUfs]
+					.sort()
+					.map((uf) => describeIbptEmissionImpact(uf, resolveIbptInstalledTableStatus(installedTables.find((table) => table.uf === uf) ?? null, now)))
+			: [];
+		const safeImpacts = impacts.map((impact) => `<li>${escapeHtml(impact)}</li>`).join("");
+		const closing = "Verifique a API de origem e execute a atualização manual se necessário.";
 		const result = await Promise.allSettled(
 			[...recipients].map(async (recipient) => {
 				const { error } = await resend.emails.send({
@@ -129,15 +151,17 @@ export async function notifyFiscalIbptRefreshFailure(failures: TIbptNotification
 						"A atualização automática da tabela IBPT falhou após as retentativas configuradas.",
 						"",
 						...details,
+						...(impacts.length > 0 ? ["", "Situação da emissão:", ...impacts] : []),
 						"",
-						"As tabelas instaladas anteriormente foram preservadas. Verifique a API de origem e execute a atualização manual se necessário.",
+						closing,
 					].join("\n"),
 					html: `
 						<div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.5;">
 							<h2 style="margin: 0 0 12px;">Falha na atualização da tabela IBPT</h2>
 							<p>A atualização automática falhou após as retentativas configuradas:</p>
 							<ul>${safeDetails}</ul>
-							<p>As tabelas instaladas anteriormente foram preservadas. Verifique a API de origem e execute a atualização manual se necessário.</p>
+							${impacts.length > 0 ? `<p>Situação da emissão:</p><ul>${safeImpacts}</ul>` : ""}
+							<p>${escapeHtml(closing)}</p>
 						</div>
 					`,
 				});
