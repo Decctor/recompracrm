@@ -2,9 +2,12 @@ import { getErrorMessage } from "@/lib/errors";
 import {
 	createScaleFrameParser,
 	createStableWeightConfirmer,
+	DEFAULT_SERIAL_SCALE_SETTINGS,
 	describeStableWeightFailure,
-	SCALE_ENQ,
+	SERIAL_SCALE_COMMAND_BYTES,
+	SERIAL_SCALE_DETECTION_FRAMINGS,
 	type TScaleFrame,
+	type TSerialScaleCommand,
 	type TSerialScaleSettings,
 } from "./serial-scale-protocol";
 import { getWebSerial, type TWebSerialPort, type TWebSerialPortInfo } from "./web-serial";
@@ -13,18 +16,37 @@ import { getWebSerial, type TWebSerialPort, type TWebSerialPortInfo } from "./we
 // serial é exclusiva — só um dono por vez — e as telas do PDV (nova venda, checkout, edição) se
 // revezam sem fechar e reabrir a porta a cada navegação.
 //
-// Enquanto alguém usa a balança, a porta fica aberta e o PDV pergunta o peso (ENQ) quatro vezes por
-// segundo: é o que mantém o peso "ao vivo" na tela e o que faz a pesagem do clique sair em ~0,5 s.
-// Pergunta e resposta são locais (cabo serial); não há servidor nem agente no caminho.
+// A balança é de cada computador, não da organização: o navegador autoriza a porta por computador, e
+// dois caixas da mesma loja podem ter balanças diferentes. O pareamento escolhe a porta, detecta o
+// protocolo (velocidade, enquadramento, comando) e guarda o perfil neste navegador. Computador sem
+// perfil não tem balança — o PDV não mostra nada dela.
+//
+// Enquanto alguém usa a balança, a porta fica aberta e o PDV pede o peso quatro vezes por segundo:
+// é o que mantém o peso "ao vivo" na tela e faz a pesagem do clique sair em ~0,5 s. Pedido e
+// resposta são locais (cabo serial); não há servidor nem agente no caminho.
 
-export type TSerialScaleStatus = "UNSUPPORTED" | "DISCONNECTED" | "CONNECTING" | "CONNECTED" | "ERROR";
+export type TSerialScaleStatus = "DISCONNECTED" | "CONNECTING" | "CONNECTED" | "ERROR";
+
+export type TSerialScalePairingOutcome =
+	| { kind: "FOUND"; settings: TSerialScaleSettings }
+	| { kind: "NOT_FOUND" }
+	/** O operador fechou o seletor de porta sem escolher. */
+	| { kind: "CANCELLED" }
+	| { kind: "FAILED"; error: string };
+
+export type TSerialScaleProfile = { settings: TSerialScaleSettings; port: TWebSerialPortInfo };
 
 export type TSerialScaleStatusSnapshot = {
 	status: TSerialScaleStatus;
+	/** Este computador tem balança pareada (perfil salvo). Sem perfil, o PDV não mostra nada. */
+	isPaired: boolean;
+	/** A balança respondeu desde que a porta abriu: é o "detectada" que libera os botões de pesar. */
+	hasAnswered: boolean;
+	settings: TSerialScaleSettings | null;
 	/** Mensagem para o operador quando a porta caiu ou não abriu. */
 	error: string | null;
-	/** Velocidade com que a porta está aberta agora (pode diferir da configurada durante a detecção). */
-	velocidade: number | null;
+	/** Detecção em andamento: o que está sendo testado agora ("4800 bps · ENQ"). */
+	detecting: string | null;
 };
 
 export type TSerialScaleLiveSnapshot = {
@@ -33,58 +55,50 @@ export type TSerialScaleLiveSnapshot = {
 	receivedAt: number | null;
 };
 
-export type TSerialScaleConnectMode =
-	/** Só reabre uma porta já autorizada neste navegador; nunca abre o seletor (não há gesto do usuário). */
-	| "AUTO"
-	/** Reabre a porta autorizada; sem nenhuma, abre o seletor. Precisa vir de um clique. */
-	| "INTERACTIVE"
-	/** Sempre abre o seletor, para trocar de porta. Precisa vir de um clique. */
-	| "CHOOSE";
-
 const POLL_INTERVAL_MS = 250;
+/** Linha de texto sem terminador é lida depois desse silêncio (ver `flush` do parser). */
+const LINE_IDLE_FLUSH_MS = 120;
 /** Folga ao sair de uma tela do PDV para outra antes de soltar a porta. */
 const RELEASE_GRACE_MS = 15_000;
 const DEFAULT_STABLE_TIMEOUT_MS = 5_000;
-const DETECT_WINDOW_MS = 1_500;
-const PORT_STORAGE_KEY = "recompra:balanca-caixa:porta";
+/** Silêncio inicial na detecção: quem transmite sem ser perguntado é modo contínuo. */
+const DETECT_LISTEN_MS = 400;
+const DETECT_COMMAND_MS = 600;
+/** Quadros válidos para aceitar uma combinação: um só poderia ser lixo da velocidade errada. */
+const DETECT_FRAMES_REQUIRED = 2;
+const PROFILE_STORAGE_KEY = "recompra:balanca-caixa:perfil";
 
 const PARITY: Record<TSerialScaleSettings["paridade"], "none" | "even" | "odd"> = { NENHUMA: "none", PAR: "even", IMPAR: "odd" };
+const DETECTION_COMMANDS: Exclude<TSerialScaleCommand, "CONTINUO">[] = ["ENQ", "W", "P"];
 
-function sameSettings(a: TSerialScaleSettings | null, b: TSerialScaleSettings) {
-	return (
-		!!a &&
-		a.velocidade === b.velocidade &&
-		a.bitsDados === b.bitsDados &&
-		a.paridade === b.paridade &&
-		a.bitsParada === b.bitsParada &&
-		a.casasDecimais === b.casasDecimais
-	);
-}
-
-function readStoredPortInfo(): TWebSerialPortInfo | null {
+function readStoredProfile(): TSerialScaleProfile | null {
 	try {
-		const raw = window.localStorage.getItem(PORT_STORAGE_KEY);
-		return raw ? (JSON.parse(raw) as TWebSerialPortInfo) : null;
+		if (typeof window === "undefined") return null;
+		const raw = window.localStorage.getItem(PROFILE_STORAGE_KEY);
+		if (!raw) return null;
+		const parsed = JSON.parse(raw) as Partial<TSerialScaleProfile>;
+		if (!parsed.settings || typeof parsed.settings.velocidade !== "number") return null;
+		return { settings: { ...DEFAULT_SERIAL_SCALE_SETTINGS, ...parsed.settings }, port: parsed.port ?? {} };
 	} catch {
 		return null;
 	}
 }
 
-function storePortInfo(info: TWebSerialPortInfo) {
+function writeStoredProfile(profile: TSerialScaleProfile | null) {
 	try {
-		window.localStorage.setItem(PORT_STORAGE_KEY, JSON.stringify(info));
+		if (profile) window.localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profile));
+		else window.localStorage.removeItem(PROFILE_STORAGE_KEY);
 	} catch {
-		// Sem storage, a próxima abertura pega a primeira porta autorizada; nada a fazer.
+		// Sem storage, o pareamento vale só até a aba fechar; nada a fazer.
 	}
 }
 
-function pickGrantedPort(ports: TWebSerialPort[]) {
+function pickGrantedPort(ports: TWebSerialPort[], info: TWebSerialPortInfo | undefined) {
 	if (ports.length === 0) return null;
-	const stored = readStoredPortInfo();
-	if (stored?.usbVendorId !== undefined) {
+	if (info?.usbVendorId !== undefined) {
 		const match = ports.find((port) => {
-			const info = port.getInfo();
-			return info.usbVendorId === stored.usbVendorId && info.usbProductId === stored.usbProductId;
+			const candidate = port.getInfo();
+			return candidate.usbVendorId === info.usbVendorId && candidate.usbProductId === info.usbProductId;
 		});
 		if (match) return match;
 	}
@@ -100,8 +114,18 @@ function describeOpenError(error: unknown) {
 	return `Não foi possível abrir a porta da balança: ${getErrorMessage(error)}`;
 }
 
+function describeAttempt(settings: TSerialScaleSettings) {
+	const parity = settings.paridade === "NENHUMA" ? "N" : settings.paridade === "PAR" ? "E" : "O";
+	return `${settings.velocidade} bps · ${settings.bitsDados}${parity}${settings.bitsParada} · ${settings.comando === "CONTINUO" ? "contínuo" : settings.comando}`;
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 class SerialScaleConnection {
-	private settings: TSerialScaleSettings | null = null;
+	private profile: TSerialScaleProfile | null = null;
+	private profileLoaded = false;
+	/** Parâmetros com que a porta está aberta agora (na detecção, a combinação em teste). */
+	private active: TSerialScaleSettings | null = null;
 	private port: TWebSerialPort | null = null;
 	private reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
 	private writer: WritableStreamDefaultWriter<Uint8Array> | null = null;
@@ -110,13 +134,21 @@ class SerialScaleConnection {
 	private session = 0;
 	private readLoopDone: Promise<void> = Promise.resolve();
 	private pollTimer: ReturnType<typeof setInterval> | null = null;
+	private flushTimer: ReturnType<typeof setTimeout> | null = null;
 	private releaseTimer: ReturnType<typeof setTimeout> | null = null;
 	private users = 0;
-	private detecting = false;
+	private isDetecting = false;
 	private pending: Promise<unknown> = Promise.resolve();
 	private serialListenersBound = false;
 
-	private statusSnapshot: TSerialScaleStatusSnapshot = { status: "DISCONNECTED", error: null, velocidade: null };
+	private statusSnapshot: TSerialScaleStatusSnapshot = {
+		status: "DISCONNECTED",
+		isPaired: false,
+		hasAnswered: false,
+		settings: null,
+		error: null,
+		detecting: null,
+	};
 	private liveSnapshot: TSerialScaleLiveSnapshot = { frame: null, receivedAt: null };
 	private statusListeners = new Set<() => void>();
 	private liveListeners = new Set<() => void>();
@@ -125,10 +157,14 @@ class SerialScaleConnection {
 	// ------------------------------------------------------------------ stores (useSyncExternalStore)
 
 	subscribeStatus = (listener: () => void) => {
+		this.ensureProfileLoaded();
 		this.statusListeners.add(listener);
 		return () => this.statusListeners.delete(listener);
 	};
-	getStatusSnapshot = () => this.statusSnapshot;
+	getStatusSnapshot = () => {
+		this.ensureProfileLoaded();
+		return this.statusSnapshot;
+	};
 
 	subscribeLive = (listener: () => void) => {
 		this.liveListeners.add(listener);
@@ -146,7 +182,20 @@ class SerialScaleConnection {
 		for (const listener of this.liveListeners) listener();
 	}
 
-	/** Serializa abrir/fechar/reconfigurar: duas aberturas simultâneas da mesma porta falham. */
+	private ensureProfileLoaded() {
+		if (this.profileLoaded || typeof window === "undefined") return;
+		this.profileLoaded = true;
+		this.profile = readStoredProfile();
+		this.statusSnapshot = { ...this.statusSnapshot, isPaired: !!this.profile, settings: this.profile?.settings ?? null };
+	}
+
+	private setProfile(profile: TSerialScaleProfile | null) {
+		this.profile = profile;
+		writeStoredProfile(profile);
+		this.setStatus({ isPaired: !!profile, settings: profile?.settings ?? null });
+	}
+
+	/** Serializa abrir/fechar/detectar: duas aberturas simultâneas da mesma porta falham. */
 	private enqueue<T>(task: () => Promise<T>): Promise<T> {
 		const run = this.pending.then(task, task);
 		this.pending = run.catch(() => undefined);
@@ -157,13 +206,14 @@ class SerialScaleConnection {
 
 	/** Marca um usuário da balança (uma tela montada). Devolve a função que o libera. */
 	retain() {
+		this.ensureProfileLoaded();
 		this.users += 1;
 		if (this.releaseTimer) {
 			clearTimeout(this.releaseTimer);
 			this.releaseTimer = null;
 		}
 		this.bindSerialEvents();
-		if (this.users === 1 && !this.port) void this.connect({ mode: "AUTO" });
+		if (this.users === 1 && !this.port && this.profile) void this.reconnect({ interactive: false });
 		let released = false;
 		return () => {
 			if (released) return;
@@ -177,66 +227,105 @@ class SerialScaleConnection {
 		};
 	}
 
-	/** Parâmetros da organização. Mudou com a porta aberta: reabre com os novos. */
-	configure(settings: TSerialScaleSettings) {
-		if (sameSettings(this.settings, settings)) return;
-		const firstSettings = this.settings === null;
-		this.settings = settings;
-		this.parser = createScaleFrameParser({ casasDecimais: settings.casasDecimais });
-		// Uma tela pediu a balança antes de a configuração chegar: a abertura automática fica para agora.
-		if (firstSettings && this.users > 0 && !this.port) {
-			void this.connect({ mode: "AUTO" });
-			return;
-		}
-		if (this.port && !this.detecting) {
-			const port = this.port;
-			void this.enqueue(async () => {
-				await this.closePort();
-				await this.openPort(port, settings);
-			});
-		}
-	}
-
-	async connect({ mode }: { mode: TSerialScaleConnectMode }): Promise<boolean> {
+	/**
+	 * Reabre a balança pareada. Sem clique (`interactive: false`) só funciona se o navegador ainda
+	 * guarda a autorização da porta; com clique, pede a porta de novo se a autorização sumiu.
+	 */
+	async reconnect({ interactive }: { interactive: boolean }): Promise<boolean> {
+		this.ensureProfileLoaded();
 		const serial = getWebSerial();
-		if (!serial) {
-			this.setStatus({ status: "UNSUPPORTED", error: null });
-			return false;
-		}
-		const settings = this.settings;
-		if (!settings) return false;
-		this.bindSerialEvents();
-
-		// O seletor precisa ser chamado ainda dentro do gesto do clique: nada de fila antes dele.
-		let chosen: TWebSerialPort | null = null;
+		const profile = this.profile;
+		if (!serial || !profile) return false;
+		if (this.port && this.statusSnapshot.status === "CONNECTED") return true;
+		let port: TWebSerialPort | null;
 		try {
-			if (mode === "CHOOSE") chosen = await serial.requestPort();
-			else {
-				if (this.port && this.statusSnapshot.status === "CONNECTED") return true;
-				chosen = pickGrantedPort(await serial.getPorts());
-				if (!chosen && mode === "INTERACTIVE") chosen = await serial.requestPort();
-			}
+			port = pickGrantedPort(await serial.getPorts(), profile.port);
+			if (!port && interactive) port = await serial.requestPort();
 		} catch (error) {
-			// O operador fechou o seletor sem escolher: não é erro de balança.
 			if (error instanceof Error && error.name === "NotFoundError") return false;
 			this.setStatus({ status: "ERROR", error: describeOpenError(error) });
 			return false;
 		}
-		if (!chosen) return false;
-		storePortInfo(chosen.getInfo());
-
-		const port = chosen;
+		if (!port) {
+			this.setStatus({ status: "DISCONNECTED", error: "A autorização da porta da balança foi removida neste navegador. Pareie de novo." });
+			return false;
+		}
+		const chosen = port;
 		return this.enqueue(async () => {
-			if (this.port === port && this.statusSnapshot.status === "CONNECTED") return true;
+			if (this.port === chosen && this.statusSnapshot.status === "CONNECTED") return true;
 			if (this.port) await this.closePort();
-			return this.openPort(port, this.settings ?? settings);
+			return this.openPort(chosen, profile.settings);
+		});
+	}
+
+	/**
+	 * Pareamento: escolhe a porta (precisa vir de um clique), procura o protocolo e guarda o perfil
+	 * deste computador. Sem resposta a nada, a porta fica aberta com o ponto de partida, para o
+	 * ajuste manual.
+	 */
+	async pair(): Promise<TSerialScalePairingOutcome> {
+		const serial = getWebSerial();
+		if (!serial) return { kind: "FAILED", error: "Este navegador não acessa a porta serial." };
+		this.bindSerialEvents();
+		// O seletor precisa ser chamado ainda dentro do gesto do clique: nada de fila antes dele.
+		let port: TWebSerialPort;
+		try {
+			port = await serial.requestPort();
+		} catch (error) {
+			if (error instanceof Error && error.name === "NotFoundError") return { kind: "CANCELLED" };
+			const message = describeOpenError(error);
+			this.setStatus({ status: "ERROR", error: message });
+			return { kind: "FAILED", error: message };
+		}
+		return this.enqueue(() => this.detectAndKeep(port));
+	}
+
+	/** Detecta de novo na porta já aberta (troca de balança, cabo, configuração da balança). */
+	redetect(): Promise<TSerialScalePairingOutcome> {
+		return this.enqueue(async () => {
+			const port = this.port;
+			if (!port) return { kind: "FAILED", error: "A balança não está conectada." };
+			return this.detectAndKeep(port);
+		});
+	}
+
+	private async detectAndKeep(port: TWebSerialPort): Promise<TSerialScalePairingOutcome> {
+		if (this.port) await this.closePort();
+		const found = await this.detectOn(port);
+		if (found) this.setProfile({ settings: found, port: port.getInfo() });
+		if (this.port !== port) await this.openPort(port, found ?? this.profile?.settings ?? DEFAULT_SERIAL_SCALE_SETTINGS);
+		if (found) return { kind: "FOUND", settings: found };
+		if (this.statusSnapshot.status === "ERROR") return { kind: "FAILED", error: this.statusSnapshot.error ?? "Não foi possível abrir a porta." };
+		return { kind: "NOT_FOUND" };
+	}
+
+	/** Ajuste manual (casas decimais, ou um protocolo que a detecção não achou): salva e reabre. */
+	updateSettings(partial: Partial<TSerialScaleSettings>) {
+		return this.enqueue(async () => {
+			const port = this.port;
+			const base = this.profile?.settings ?? this.active ?? DEFAULT_SERIAL_SCALE_SETTINGS;
+			const settings = { ...base, ...partial };
+			this.setProfile({ settings, port: port?.getInfo() ?? this.profile?.port ?? {} });
+			if (port) {
+				await this.closePort();
+				await this.openPort(port, settings);
+			}
+		});
+	}
+
+	/** Esquece a balança deste computador: o PDV deixa de mostrar qualquer coisa dela. */
+	forget() {
+		return this.enqueue(async () => {
+			await this.closePort();
+			this.setProfile(null);
+			this.setStatus({ status: "DISCONNECTED", error: null, hasAnswered: false });
 		});
 	}
 
 	disconnect() {
 		return this.enqueue(async () => {
 			await this.closePort();
-			this.setStatus({ status: "DISCONNECTED", error: null, velocidade: null });
+			this.setStatus({ status: "DISCONNECTED", error: null, hasAnswered: false });
 		});
 	}
 
@@ -247,13 +336,13 @@ class SerialScaleConnection {
 		this.serialListenersBound = true;
 		// Cabo reconectado (ou balança religada no USB): volta sozinho se alguém está usando.
 		serial.addEventListener("connect", () => {
-			if (this.users > 0 && !this.port) void this.connect({ mode: "AUTO" });
+			if (this.users > 0 && !this.port && this.profile) void this.reconnect({ interactive: false });
 		});
 		serial.addEventListener("disconnect", (event) => {
 			if (event.target !== this.port) return;
 			void this.enqueue(async () => {
 				await this.closePort();
-				this.setStatus({ status: "ERROR", error: "A balança foi desconectada do computador.", velocidade: null });
+				this.setStatus({ status: "ERROR", error: "A balança foi desconectada do computador.", hasAnswered: false });
 			});
 		});
 	}
@@ -270,17 +359,19 @@ class SerialScaleConnection {
 			});
 		} catch (error) {
 			this.port = null;
-			this.setStatus({ status: "ERROR", error: describeOpenError(error), velocidade: null });
+			this.active = null;
+			this.setStatus({ status: "ERROR", error: describeOpenError(error), hasAnswered: false });
 			return false;
 		}
 		this.port = port;
+		this.active = settings;
 		this.session += 1;
 		this.parser = createScaleFrameParser({ casasDecimais: settings.casasDecimais });
 		this.writer = port.writable?.getWriter() ?? null;
 		this.readLoopDone = this.readLoop(port, this.session);
 		this.startPolling();
 		this.setLive({ frame: null, receivedAt: null });
-		this.setStatus({ status: "CONNECTED", error: null, velocidade: settings.velocidade });
+		this.setStatus({ status: "CONNECTED", error: null, hasAnswered: false });
 		return true;
 	}
 
@@ -289,6 +380,8 @@ class SerialScaleConnection {
 		if (!port) return;
 		this.session += 1;
 		this.stopPolling();
+		if (this.flushTimer) clearTimeout(this.flushTimer);
+		this.flushTimer = null;
 		try {
 			await this.reader?.cancel();
 		} catch {
@@ -307,6 +400,7 @@ class SerialScaleConnection {
 			// Porta perdida (cabo puxado) não fecha; o navegador a descarta sozinho.
 		}
 		this.port = null;
+		this.active = null;
 		this.parser.reset();
 		this.setLive({ frame: null, receivedAt: null });
 	}
@@ -333,15 +427,25 @@ class SerialScaleConnection {
 		if (this.session === session && this.port === port) {
 			this.stopPolling();
 			this.port = null;
-			this.setStatus({ status: "ERROR", error: "A conexão com a balança caiu.", velocidade: null });
+			this.active = null;
+			this.setStatus({ status: "ERROR", error: "A conexão com a balança caiu.", hasAnswered: false });
 		}
 	}
 
 	private handleBytes(chunk: Uint8Array) {
-		const frames = this.parser.push(chunk);
+		this.emitFrames(this.parser.push(chunk));
+		if (this.flushTimer) clearTimeout(this.flushTimer);
+		this.flushTimer = setTimeout(() => {
+			this.flushTimer = null;
+			this.emitFrames(this.parser.flush());
+		}, LINE_IDLE_FLUSH_MS);
+	}
+
+	private emitFrames(frames: TScaleFrame[]) {
 		if (frames.length === 0) return;
 		for (const frame of frames) for (const listener of this.frameListeners) listener(frame);
 		this.setLive({ frame: frames[frames.length - 1], receivedAt: Date.now() });
+		if (!this.statusSnapshot.hasAnswered && !this.isDetecting) this.setStatus({ hasAnswered: true });
 	}
 
 	private startPolling() {
@@ -349,7 +453,7 @@ class SerialScaleConnection {
 		this.pollTimer = setInterval(() => {
 			// Aba em segundo plano não pesa nada; a balança descansa até o operador voltar.
 			if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
-			void this.sendEnq();
+			void this.sendCommand();
 		}, POLL_INTERVAL_MS);
 	}
 
@@ -358,11 +462,56 @@ class SerialScaleConnection {
 		this.pollTimer = null;
 	}
 
-	private async sendEnq() {
+	private async sendCommand(command: TSerialScaleCommand | undefined = this.active?.comando) {
+		if (!command || command === "CONTINUO") return;
 		try {
-			await this.writer?.write(Uint8Array.of(SCALE_ENQ));
+			await this.writer?.write(Uint8Array.of(SERIAL_SCALE_COMMAND_BYTES[command]));
 		} catch {
-			// Balança em modo contínuo ou porta caindo: a leitura decide o estado, não a escrita.
+			// Porta caindo: a leitura decide o estado, não a escrita.
+		}
+	}
+
+	/**
+	 * Testa as combinações conhecidas até a balança responder. Em cada enquadramento, primeiro só
+	 * escuta (modo contínuo), depois pede o peso com cada comando. Roda dentro da fila.
+	 */
+	private async detectOn(port: TWebSerialPort): Promise<TSerialScaleSettings | null> {
+		this.isDetecting = true;
+		const decimals = this.profile?.settings.casasDecimais ?? DEFAULT_SERIAL_SCALE_SETTINGS.casasDecimais;
+		try {
+			for (const framing of SERIAL_SCALE_DETECTION_FRAMINGS) {
+				const listening: TSerialScaleSettings = { ...framing, comando: "CONTINUO", casasDecimais: decimals };
+				this.setStatus({ detecting: describeAttempt(listening) });
+				if (!(await this.openPort(port, listening))) return null;
+				let frames = 0;
+				const onFrame = () => {
+					frames += 1;
+				};
+				this.frameListeners.add(onFrame);
+				try {
+					await sleep(DETECT_LISTEN_MS);
+					if (frames >= DETECT_FRAMES_REQUIRED) return listening;
+					for (const comando of DETECTION_COMMANDS) {
+						const attempt: TSerialScaleSettings = { ...listening, comando };
+						this.active = attempt;
+						this.setStatus({ detecting: describeAttempt(attempt) });
+						frames = 0;
+						const until = Date.now() + DETECT_COMMAND_MS;
+						while (Date.now() < until && frames < DETECT_FRAMES_REQUIRED) {
+							await this.sendCommand(comando);
+							await sleep(POLL_INTERVAL_MS / 2);
+						}
+						if (frames >= DETECT_FRAMES_REQUIRED) return attempt;
+					}
+				} finally {
+					this.frameListeners.delete(onFrame);
+				}
+				await this.closePort();
+			}
+			return null;
+		} finally {
+			this.isDetecting = false;
+			this.setStatus({ detecting: null, hasAnswered: false });
 		}
 	}
 
@@ -395,45 +544,7 @@ class SerialScaleConnection {
 				finish({ error: describeStableWeightFailure(confirmer.current()) ?? "A balança não respondeu." });
 			}, timeoutMs);
 			this.frameListeners.add(onFrame);
-			void this.sendEnq();
-		});
-	}
-
-	/**
-	 * Procura a velocidade em que a balança responde: reabre a porta em cada uma e espera qualquer
-	 * quadro válido. Devolve a que respondeu (e deixa a porta nela) ou `null`, voltando à configurada.
-	 */
-	detectBaudRate(candidates: readonly number[]): Promise<number | null> {
-		return this.enqueue(async () => {
-			const port = this.port;
-			const settings = this.settings;
-			if (!port || !settings) return null;
-			this.detecting = true;
-			try {
-				for (const velocidade of candidates) {
-					await this.closePort();
-					const opened = await this.openPort(port, { ...settings, velocidade });
-					if (!opened) continue;
-					const answered = await new Promise<boolean>((resolve) => {
-						const onFrame = () => {
-							clearTimeout(timer);
-							this.frameListeners.delete(onFrame);
-							resolve(true);
-						};
-						const timer = setTimeout(() => {
-							this.frameListeners.delete(onFrame);
-							resolve(false);
-						}, DETECT_WINDOW_MS);
-						this.frameListeners.add(onFrame);
-					});
-					if (answered) return velocidade;
-				}
-				await this.closePort();
-				await this.openPort(port, this.settings ?? settings);
-				return null;
-			} finally {
-				this.detecting = false;
-			}
+			void this.sendCommand();
 		});
 	}
 }

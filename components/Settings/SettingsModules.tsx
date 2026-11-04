@@ -199,12 +199,12 @@ export default function SettingsModules({ membership }: SettingsModulesProps) {
 
 					<ModuleCard
 						title="BALANÇA DO CAIXA"
-						description="Lê o peso da balança ligada ao computador do caixa: no PDV, o produto vendido por quilo ganha um botão de pesar."
+						description="Lê o peso da balança ligada ao computador do caixa. No computador com balança pareada, o produto vendido por quilo ganha um botão de pesar no PDV."
 						checked={balancaCaixa.habilitado}
 						onCheckedChange={(checked) => updateBalancaCaixa({ habilitado: checked })}
 						editable={canEdit}
 					>
-						<SettingsSerialScale balancaCaixa={balancaCaixa} updateBalancaCaixa={updateBalancaCaixa} editable={canEdit} />
+						<SettingsSerialScale />
 					</ModuleCard>
 				</>
 			) : null}

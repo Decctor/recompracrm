@@ -32,44 +32,16 @@ function useNow(intervalMs: number) {
 	return now;
 }
 
-function PillHelp({ title, children }: { title: string; children: React.ReactNode }) {
-	return (
-		<div className="flex flex-col gap-1.5 p-3 text-sm">
-			<p className="text-xs font-extrabold uppercase tracking-[0.08em] text-muted-foreground">{title}</p>
-			{children}
-		</div>
-	);
-}
-
 /**
- * Estado da balança do caixa ao lado da busca do PDV. Conectada, mostra o peso que está no prato
- * agora — o operador confere antes de tocar no botão de pesar do produto. Desconectada, é o botão
- * que autoriza a porta (a primeira vez precisa de um clique; depois a porta reabre sozinha).
+ * Estado da balança do caixa ao lado da busca do PDV. Só existe no computador que tem balança
+ * pareada (Configurações → Módulos → Balança do caixa): nos outros computadores da mesma loja — e em
+ * navegadores sem porta serial — a tela fica igual à de quem não usa balança.
+ *
+ * Conectada, mostra o peso que está no prato agora — o operador confere antes de tocar no botão de
+ * pesar do produto. Com problema, diz qual e oferece a reconexão.
  */
 export default function CheckoutScalePill({ scale }: { scale: TUseSerialScale }) {
-	if (!scale.isEnabled) return null;
-
-	if (!scale.isSupported) {
-		return (
-			<Popover>
-				<PopoverTrigger
-					render={
-						<Button type="button" variant="outline" size="sm" className="h-9 gap-1.5 text-xs text-muted-foreground">
-							<Weight className="h-3.5 w-3.5" />
-							BALANÇA INDISPONÍVEL
-						</Button>
-					}
-				/>
-				<PopoverContent align="end" className="w-72 p-0">
-					<PillHelp title="Balança do caixa">
-						<p className="text-muted-foreground">
-							Este navegador não acessa a porta serial. Use o Google Chrome ou o Microsoft Edge no computador ligado à balança.
-						</p>
-					</PillHelp>
-				</PopoverContent>
-			</Popover>
-		);
-	}
+	if (!scale.isActive || !scale.isPaired) return null;
 
 	if (scale.status === "CONNECTING") {
 		return (
@@ -84,14 +56,14 @@ export default function CheckoutScalePill({ scale }: { scale: TUseSerialScale })
 		return (
 			<Button
 				type="button"
-				variant={scale.status === "ERROR" ? "destructive-light" : "outline"}
+				variant="warning-light"
 				size="sm"
 				className="h-9 gap-1.5 text-xs"
-				title={scale.error ?? undefined}
-				onClick={() => void scale.connect("INTERACTIVE")}
+				title={scale.error ?? "A balança deste computador está desconectada."}
+				onClick={() => void scale.reconnect()}
 			>
 				<Weight className="h-3.5 w-3.5" />
-				CONECTAR BALANÇA
+				RECONECTAR BALANÇA
 			</Button>
 		);
 	}
@@ -123,27 +95,24 @@ function ConnectedScalePill({ scale }: { scale: TUseSerialScale }) {
 				}
 			/>
 			<PopoverContent align="end" className="w-80 p-0">
-				<PillHelp title="Balança do caixa">
+				<div className="flex flex-col gap-1.5 p-3 text-sm">
+					<p className="text-xs font-extrabold uppercase tracking-[0.08em] text-muted-foreground">Balança do caixa</p>
 					{isStale ? (
 						<p className="text-muted-foreground">
-							A porta está aberta, mas a balança não responde. Confira se ela está ligada, se o cabo serial está firme e se a velocidade em Configurações →
-							Módulos → Balança do caixa é a mesma da balança.
+							A porta está aberta, mas a balança não responde. Confira se ela está ligada e se o cabo está firme. Se a balança foi trocada, detecte de novo
+							em Configurações → Módulos → Balança do caixa.
 						</p>
 					) : (
 						<p className="text-muted-foreground">
 							Coloque o produto no prato e toque no botão de pesar do produto. O peso entra no carrinho quando estabiliza.
 						</p>
 					)}
-					{scale.velocidade ? <p className="text-xs text-muted-foreground">Porta aberta a {scale.velocidade} bps.</p> : null}
 					<div className="mt-1 flex flex-wrap gap-2">
-						<Button type="button" variant="outline" size="sm" onClick={() => void scale.connect("CHOOSE")}>
-							TROCAR PORTA
-						</Button>
 						<Button type="button" variant="ghost" size="sm" onClick={() => void scale.disconnect()}>
 							DESCONECTAR
 						</Button>
 					</div>
-				</PillHelp>
+				</div>
 			</PopoverContent>
 		</Popover>
 	);

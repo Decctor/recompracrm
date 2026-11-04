@@ -860,13 +860,6 @@ export const ScaleBarcodeValueTypeEnum = z.enum(["PRECO", "PESO"], {
 });
 export type TScaleBarcodeValueTypeEnum = z.infer<typeof ScaleBarcodeValueTypeEnum>;
 
-// Paridade da porta serial da balança do caixa (app-level: vive no jsonb de configuração).
-export const ScaleSerialParityEnum = z.enum(["NENHUMA", "PAR", "IMPAR"], {
-	required_error: "Paridade da balança não informada.",
-	invalid_type_error: "Tipo não válido para a paridade da balança.",
-});
-export type TScaleSerialParityEnum = z.infer<typeof ScaleSerialParityEnum>;
-
 // Politicas de serviceSettings (apenas app-level, nao sao pgEnum: vivem no jsonb de configuracoes).
 // COMANDA_CADASTRADA: codigo obrigatorio e restrito as comandas fixas cadastradas (serviceCards).
 export const TabIdentificationModeEnum = z.enum(["AUTOMATICA", "CODIGO_MANUAL", "COMANDA_CADASTRADA"]);

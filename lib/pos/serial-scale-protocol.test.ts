@@ -3,7 +3,9 @@ import test from "node:test";
 import {
 	createScaleFrameParser,
 	createStableWeightConfirmer,
+	describeSerialScaleSettings,
 	describeStableWeightFailure,
+	DEFAULT_SERIAL_SCALE_SETTINGS,
 	formatScaleWeight,
 	isSoldByWeight,
 	type TScaleFrame,
@@ -12,6 +14,11 @@ import {
 const STX = 0x02;
 const ETX = 0x03;
 const CR = 0x0d;
+const ESC = 0x1b;
+
+function ascii(text: string) {
+	return Array.from(text, (char) => char.charCodeAt(0));
+}
 
 function frame(payload: string, terminator = ETX) {
 	return [STX, ...Array.from(payload, (char) => char.charCodeAt(0)), terminator];
@@ -79,7 +86,61 @@ test("protocolo A das Prix: peso, movimento e casas pelo status", () => {
 
 test("conteúdo que não é peso não vira leitura", () => {
 	const parser = createScaleFrameParser({ casasDecimais: 3 });
-	assert.deepEqual(parser.push(bytes(frame("AB12"), frame("123456789012"))), []);
+	assert.deepEqual(parser.push(bytes(frame("AB12"), frame("123456789012"), ascii("OK\r\n"))), []);
+});
+
+test("Filizola e Digitron: mesmo quadro STX, casas pela configuração", () => {
+	assert.deepEqual(createScaleFrameParser({ casasDecimais: 3 }).push(bytes(frame("01250"))), [{ kind: "STABLE", weightKg: 1.25 }]);
+	// Digitron manda 6 posições com 2 casas.
+	assert.deepEqual(createScaleFrameParser({ casasDecimais: 2 }).push(bytes(frame("000125"))), [{ kind: "STABLE", weightKg: 1.25 }]);
+});
+
+test("Magna: linha de texto com kg terminada em LF", () => {
+	const parser = createScaleFrameParser({ casasDecimais: 3 });
+	assert.deepEqual(parser.push(Uint8Array.from(ascii(" 1.250 kg\r\n"))), [{ kind: "STABLE", weightKg: 1.25 }]);
+	assert.deepEqual(parser.push(Uint8Array.from(ascii("-0.020 kg\n"))), [{ kind: "NEGATIVE" }]);
+});
+
+test("LucasTec: bruto, tara e líquido na mesma linha — vale o líquido", () => {
+	const parser = createScaleFrameParser({ casasDecimais: 3 });
+	const line = [STX, ...ascii("0000 000001 20/06/05 50.00 kg B  0.60 kg T  49.40 kg L"), CR];
+	assert.deepEqual(parser.push(Uint8Array.from(line)), [{ kind: "STABLE", weightKg: 49.4 }]);
+});
+
+test("Urano: sequências ESC e linha sem terminador, lida quando a porta fica quieta", () => {
+	const parser = createScaleFrameParser({ casasDecimais: 3 });
+	const raw = [ESC, ...ascii("T1"), ESC, ...ascii("A13"), ESC, ...ascii("N0"), ESC, ...ascii("B * PESO: 5,10kg"), ESC, ...ascii("E")];
+	assert.deepEqual(parser.push(Uint8Array.from(raw)), []);
+	assert.deepEqual(parser.flush(), [{ kind: "STABLE", weightKg: 5.1 }]);
+});
+
+test("indicadores genéricos: ST estável, US instável, OL sobrecarga", () => {
+	const parser = createScaleFrameParser({ casasDecimais: 3 });
+	assert.deepEqual(parser.push(Uint8Array.from(ascii("ST,GS,+001.250kg\r\nUS,GS,+001.180kg\r\nOL,GS,+99.999kg\r\n"))), [
+		{ kind: "STABLE", weightKg: 1.25 },
+		{ kind: "UNSTABLE" },
+		{ kind: "OVERLOAD" },
+	]);
+});
+
+test("quadro numérico pela metade nunca é lido pelo flush", () => {
+	const parser = createScaleFrameParser({ casasDecimais: 3 });
+	assert.deepEqual(parser.push(Uint8Array.from([STX, 0x30, 0x30, 0x34])), []);
+	assert.deepEqual(parser.flush(), []);
+	assert.deepEqual(parser.push(Uint8Array.from([0x34, 0x36, ETX])), [{ kind: "STABLE", weightKg: 0.446 }]);
+});
+
+test("texto de 20 caracteres não é confundido com o protocolo A", () => {
+	const parser = createScaleFrameParser({ casasDecimais: 3 });
+	assert.deepEqual(parser.push(Uint8Array.from([STX, ...ascii("PESO:   1,250 kg   "), 0x41, CR])), [{ kind: "STABLE", weightKg: 1.25 }]);
+});
+
+test("resumo do perfil da balança", () => {
+	assert.equal(describeSerialScaleSettings(DEFAULT_SERIAL_SCALE_SETTINGS), "4800 bps · 8N1 · comando ENQ · 3 casas");
+	assert.equal(
+		describeSerialScaleSettings({ ...DEFAULT_SERIAL_SCALE_SETTINGS, velocidade: 2400, bitsDados: 7, paridade: "PAR", comando: "CONTINUO" }),
+		"2400 bps · 7E1 · contínuo · 3 casas",
+	);
 });
 
 test("pesagem só confirma com o mesmo peso estável duas vezes seguidas", () => {

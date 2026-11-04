@@ -6,7 +6,7 @@ import { useSerialScale } from "@/lib/hooks/use-serial-scale";
 import { resolveBarcodeScanAction, type TBarcodeScanAction, type TBarcodeScanResolution } from "@/lib/pos/barcode-scan-action";
 import { playScanFeedback } from "@/lib/pos/scan-feedback";
 import type { TScaleBarcodeReading } from "@/lib/pos/scale-barcode";
-import { DEFAULT_SERIAL_SCALE_CONFIG, isSoldByWeight, type TSerialScaleConfig } from "@/lib/pos/serial-scale-protocol";
+import { isSoldByWeight } from "@/lib/pos/serial-scale-protocol";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -14,7 +14,7 @@ type TPOSProduct = TGetPOSProductsOutput["data"]["products"][number];
 
 type UsePOSScaleWeighingOptions = {
 	/** `preferencias.balancaCaixa`; ausente em organizações anteriores ao módulo. */
-	config: TSerialScaleConfig | null | undefined;
+	config: { habilitado: boolean } | null | undefined;
 	enabled?: boolean;
 	/**
 	 * Mesmo destino da leitura de etiqueta de balança (`usePOSBarcodeScan.onAddDirect`): a pesagem
@@ -30,7 +30,7 @@ type UsePOSScaleWeighingOptions = {
  * do sistema — o mesmo cálculo da etiqueta de balança.
  */
 export function usePOSScaleWeighing({ config, enabled = true, onAddDirect }: UsePOSScaleWeighingOptions) {
-	const scale = useSerialScale({ config: config ?? DEFAULT_SERIAL_SCALE_CONFIG, enabled });
+	const scale = useSerialScale({ enabled: enabled && !!config?.habilitado });
 	const [weighingProductId, setWeighingProductId] = useState<string | null>(null);
 	const inFlightRef = useRef(false);
 	const onAddDirectRef = useRef(onAddDirect);
@@ -38,13 +38,15 @@ export function usePOSScaleWeighing({ config, enabled = true, onAddDirect }: Use
 		onAddDirectRef.current = onAddDirect;
 	}, [onAddDirect]);
 
-	const { isActive, connect, readStableWeight } = scale;
+	const { isDetected, readStableWeight } = scale;
 
+	// O botão de pesar só existe quando a balança deste computador respondeu: organização com o
+	// módulo ligado, mas num computador sem balança (ou com ela desligada), vê a grade de sempre.
 	// Produto com variações precisaria escolher a variação antes de pesar, e o builder não tem onde
 	// receber o peso: esses seguem pelo clique normal (ou pela etiqueta com o PLU na variação).
 	const canWeighProduct = useCallback(
-		(product: TPOSProduct) => isActive && product.variantes.length === 0 && isSoldByWeight(product.unidade),
-		[isActive],
+		(product: TPOSProduct) => isDetected && product.variantes.length === 0 && isSoldByWeight(product.unidade),
+		[isDetected],
 	);
 
 	const weighProduct = useCallback(
@@ -59,9 +61,6 @@ export function usePOSScaleWeighing({ config, enabled = true, onAddDirect }: Use
 					toast.error(`${product.nome} está sem preço de venda: não dá para lançar a pesagem.`);
 					return;
 				}
-				// Já conectada, volta na hora; sem porta autorizada, abre o seletor dentro deste clique.
-				const connected = await connect("INTERACTIVE");
-				if (!connected) return;
 				const weightKg = await readStableWeight();
 				const scaleReading: TScaleBarcodeReading = { plu: product.codigo, tipoValor: "PESO", valor: weightKg };
 				const resolution: TBarcodeScanResolution = { product, variantId: null, scaleReading };
@@ -81,7 +80,7 @@ export function usePOSScaleWeighing({ config, enabled = true, onAddDirect }: Use
 				setWeighingProductId(null);
 			}
 		},
-		[connect, readStableWeight],
+		[readStableWeight],
 	);
 
 	return { scale, canWeighProduct, weighProduct, weighingProductId };
