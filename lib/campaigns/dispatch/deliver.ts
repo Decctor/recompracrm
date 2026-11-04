@@ -7,6 +7,7 @@ import {
 	type TInteractionContextMetadados,
 	type TMessageTemplateRuntimeContext,
 } from "@/lib/message-templates";
+import { withRateLimitRetry } from "@/lib/http/rate-limit";
 import { getThrownWhatsappApiError, sendTemplateWhatsappMessage } from "@/lib/whatsapp";
 import type { ParsedWhatsappStatusError } from "@/lib/whatsapp/parsing";
 import { parseTemplatePayloadToGatewayContent, sendMessage } from "@/lib/whatsapp/internal-gateway";
@@ -17,6 +18,7 @@ import { db } from "@/services/drizzle";
 import type { TClientEntity, TMessageTemplate } from "@/services/drizzle/schema";
 import { chatMessages, chats } from "@/services/drizzle/schema";
 import { and, eq, sql } from "drizzle-orm";
+import { WHATSAPP_THROUGHPUT_RATE_LIMIT_CODES, acquireCampaignEmailSendSlot, acquireCampaignWhatsappSendSlot } from "./throttle";
 
 /**
  * Entrega de uma mensagem de campanha aos provedores (WhatsApp Cloud API / gateway interno e
@@ -338,10 +340,18 @@ export async function deliverCampaignMessage(params: TCampaignDeliveryInput): Pr
 					if (testing?.disableWhatsappCloudApi) {
 						whatsappMessageId = `test-whatsapp-message-${messageKey}`;
 					} else {
-						const sentWhatsappTemplateResponse = await sendTemplateWhatsappMessage({
-							fromPhoneNumberId: whatsappConnectionPhone.whatsappTelefoneId,
-							templatePayload: payload,
-							whatsappToken,
+						const fromPhoneNumberId = whatsappConnectionPhone.whatsappTelefoneId;
+						// Cada tentativa espera a vez do número: a nova tentativa também conta na vazão.
+						const sentWhatsappTemplateResponse = await withRateLimitRetry({
+							run: async () => {
+								await acquireCampaignWhatsappSendSlot(fromPhoneNumberId);
+								return sendTemplateWhatsappMessage({ fromPhoneNumberId, templatePayload: payload, whatsappToken });
+							},
+							classify: (outcome) => {
+								const code = "error" in outcome ? getThrownWhatsappApiError(outcome.error)?.code : null;
+								return { retry: code != null && WHATSAPP_THROUGHPUT_RATE_LIMIT_CODES.has(code) };
+							},
+							baseDelayMs: 2000,
 						});
 						whatsappMessageId = sentWhatsappTemplateResponse.whatsappMessageId;
 					}
@@ -401,6 +411,7 @@ export async function deliverCampaignMessage(params: TCampaignDeliveryInput): Pr
 					assunto: replaceMessageTemplateVariables(campaign.whatsappTemplate.conteudo.assunto, runtimeContext.variaveis),
 					preheader: replaceMessageTemplateVariables(campaign.whatsappTemplate.conteudo.preheader, runtimeContext.variaveis),
 				};
+				await acquireCampaignEmailSendSlot();
 				const emailResult = await sendEmailWithResend(
 					client.email,
 					EmailTemplate.MessageTemplate,

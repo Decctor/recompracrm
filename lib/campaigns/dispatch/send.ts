@@ -56,7 +56,8 @@ import { publishCampaignDispatchSend } from "./queue";
 
 export const CAMPAIGN_DISPATCH_SEND_BATCH_SIZE = 50;
 export const CAMPAIGN_DISPATCH_SEND_CONCURRENCY = 10;
-export const CAMPAIGN_DISPATCH_MAX_SEND_WORKERS = 4;
+// Ritmo por provedor e o teto de workers paralelos por disparo: ./throttle.ts.
+export { CAMPAIGN_DISPATCH_MAX_SEND_WORKERS } from "./throttle";
 const RUNTIME_BUDGET_MS = 240_000;
 
 export type TCampaignDispatchSendSummary = {

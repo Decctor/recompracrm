@@ -1,3 +1,4 @@
+import { parseRetryAfterHeader, withRateLimitRetry } from "@/lib/http/rate-limit";
 import { resend } from "@/services/resend";
 import MagicLinkTemplate from "@/services/resend/templates/MagicLink";
 import MessageTemplateEmail from "@/services/resend/templates/MessageTemplate";
@@ -79,11 +80,21 @@ export const sendEmailWithResend = async <T extends EmailTemplate>(
 ) => {
 	try {
 		const { templateComponent, subject } = getReactEmailTemplateAndSubject(template, props);
-		const { data, error } = await resend.emails.send({
-			from: buildResendFrom(config),
-			to: [to],
-			subject: subject,
-			react: templateComponent,
+		// O limite por segundo da Resend é da conta inteira (campanhas, magic links, convites): uma
+		// recusa 429 não processou nada, então repetir depois do retry-after é seguro.
+		const { data, error } = await withRateLimitRetry({
+			run: () =>
+				resend.emails.send({
+					from: buildResendFrom(config),
+					to: [to],
+					subject: subject,
+					react: templateComponent,
+				}),
+			classify: (outcome) =>
+				"result" in outcome && outcome.result.error?.name === "rate_limit_exceeded"
+					? { retry: true, retryAfterMs: parseRetryAfterHeader(outcome.result.headers?.["retry-after"]) }
+					: { retry: false },
+			maxAttempts: 4,
 		});
 		if (error) throw new Error(error.message);
 		return { success: true, data };
