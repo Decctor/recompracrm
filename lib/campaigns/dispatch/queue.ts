@@ -22,10 +22,27 @@ export const CampaignDispatchSendMessageSchema = z.object({
 });
 export type TCampaignDispatchSendMessage = z.infer<typeof CampaignDispatchSendMessageSchema>;
 
-export async function publishCampaignDispatchExpand({ dispatchId, attempt }: TCampaignDispatchExpandMessage & { attempt?: string }) {
+// Publicações por segundo quando o relógio solta muitos disparos de uma vez. A fila não limita a
+// concorrência dos consumers: cada mensagem publicada no mesmo instante vira uma instância em
+// paralelo, cada uma com seu pool de conexões. Em 04/11/2026 41 disparos de evento agendados para
+// 12:00 saíram juntos, ~45 instâncias abriram conexões ao mesmo tempo e o Supavisor recusou
+// clientes (limite de 200). Espaçadas, as mensagens caem em instâncias já quentes, uma após a outra.
+const CLOCK_PUBLISHES_PER_SECOND = 4;
+
+/** Atraso (s) da `index`-ésima publicação de uma rajada do relógio. */
+export function resolveClockPublishDelaySeconds(index: number) {
+	return Math.floor(index / CLOCK_PUBLISHES_PER_SECOND);
+}
+
+export async function publishCampaignDispatchExpand({
+	dispatchId,
+	attempt,
+	delaySeconds,
+}: TCampaignDispatchExpandMessage & { attempt?: string; delaySeconds?: number }) {
 	await send(CAMPAIGN_DISPATCH_EXPAND_TOPIC, { dispatchId } satisfies TCampaignDispatchExpandMessage, {
 		// Uma expansão por disparo; a varredura de parados passa um `attempt` para republicar.
 		idempotencyKey: attempt ? `expand-${dispatchId}-${attempt}` : `expand-${dispatchId}`,
+		...(delaySeconds ? { delaySeconds } : {}),
 	});
 }
 

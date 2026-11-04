@@ -5,7 +5,7 @@ import { campaignDispatchRecipients, campaignDispatches, campaigns } from "@/ser
 import { and, eq, inArray, isNotNull, lte, or, sql } from "drizzle-orm";
 import { recordCampaignEvent } from "@/lib/campaigns/events/record";
 import { publishPendingCampaignEventsSafely } from "@/lib/campaigns/events/queue";
-import { publishCampaignDispatchExpand, publishCampaignDispatchSend } from "./queue";
+import { publishCampaignDispatchExpand, publishCampaignDispatchSend, resolveClockPublishDelaySeconds } from "./queue";
 import {
 	buildScheduledWindowReference,
 	resolveDispatchScheduledAtForDate,
@@ -119,8 +119,11 @@ async function publishDueEventDispatches(now: Date, summary: TCampaignDispatchCl
 		.returning({ id: campaignDispatches.id });
 
 	// Already flipped to ENFILEIRADA in bulk; a publish lost here is picked up by the stale sweep.
-	await mapWithConcurrencySettled(due, DUE_DISPATCH_PUBLISH_CONCURRENCY, async (dispatch) => {
-		await publishCampaignDispatchSend({ dispatchId: dispatch.id, generation: "clock" });
+	// Delayed event dispatches converge on the same time (e.g. "next day, 12:00"): published with
+	// no delay, each becomes a parallel consumer instance with its own pool. The delay spreads the
+	// deliveries; the publishes themselves can still run concurrently.
+	await mapWithConcurrencySettled(due, DUE_DISPATCH_PUBLISH_CONCURRENCY, async (dispatch, index) => {
+		await publishCampaignDispatchSend({ dispatchId: dispatch.id, generation: "clock", delaySeconds: resolveClockPublishDelaySeconds(index) });
 		summary.dueEventDispatchesPublished += 1;
 	});
 }
@@ -133,12 +136,13 @@ async function republishStaleDispatches(now: Date, summary: TCampaignDispatchClo
 	});
 
 	const bucket = Math.floor(now.getTime() / (STALE_DISPATCH_MINUTES * 60_000));
-	for (const dispatch of stale) {
+	for (const [index, dispatch] of stale.entries()) {
 		await db.update(campaignDispatches).set({ dataAtualizacao: now }).where(eq(campaignDispatches.id, dispatch.id));
+		const delaySeconds = resolveClockPublishDelaySeconds(index);
 		if (dispatch.status === "RESOLVENDO" && dispatch.origem !== "EVENTO") {
-			await publishCampaignDispatchExpand({ dispatchId: dispatch.id, attempt: `stale-${bucket}` });
+			await publishCampaignDispatchExpand({ dispatchId: dispatch.id, attempt: `stale-${bucket}`, delaySeconds });
 		} else {
-			await publishCampaignDispatchSend({ dispatchId: dispatch.id, generation: `stale-${bucket}` });
+			await publishCampaignDispatchSend({ dispatchId: dispatch.id, generation: `stale-${bucket}`, delaySeconds });
 		}
 		summary.staleDispatchesRepublished += 1;
 	}
