@@ -194,11 +194,33 @@ function renderLinha(label: string, valor: string, { destaque, negativo }: { des
 	return `<div class="linha${destaque ? " destaque" : ""}"><span>${escapeHtml(label)}</span><span>${negativo ? "-" : ""}${escapeHtml(valor)}</span></div>`;
 }
 
-type TCupomVendaAdicional = NonNullable<NonNullable<TCupomVendaDados["venda"]["itens"]>[number]["adicionais"]>[number];
+type TCupomVendaItem = NonNullable<TCupomVendaDados["venda"]["itens"]>[number];
+type TCupomVendaAdicional = NonNullable<TCupomVendaItem["adicionais"]>[number];
 
-function renderAdicionalLabel(adicional: TCupomVendaAdicional) {
+function roundMoney(value: number) {
+	return Math.round(value * 100) / 100;
+}
+
+// O item de venda grava o unitário já com os adicionais (base + adicionais), e o valor do
+// adicional é por unidade do item. Imprimir esse total ao lado do nome fazia o cliente ler
+// "Cookie R$ 31,00" num cookie de R$ 17,00 com um adicional de R$ 14,00. Separando, a coluna
+// de valores mostra o preço do produto e o de cada adicional, e continua somando o subtotal.
+//
+// Retorna null quando não dá para separar: sem adicional cobrado, ou quando a conta fica
+// negativa — algumas importações de canal externo gravam o valor do adicional já multiplicado
+// pela quantidade do item, e aí a base derivada seria um número falso. Nesse caso o cupom
+// mantém o total na linha do item e o valor do adicional entre parênteses.
+export function splitCupomItemValues(item: Pick<TCupomVendaItem, "quantidade" | "valorTotal" | "adicionais">) {
+	const adicionaisPorUnidade = (item.adicionais ?? []).reduce((sum, adicional) => sum + (adicional.valorTotal ?? 0), 0);
+	if (adicionaisPorUnidade <= 0) return null;
+	const valorBase = roundMoney(item.valorTotal - item.quantidade * adicionaisPorUnidade);
+	if (valorBase < -0.005) return null;
+	return { valorBase: Math.max(0, valorBase) };
+}
+
+function renderAdicionalLabel(adicional: TCupomVendaAdicional, { comValor }: { comValor: boolean }) {
 	return `${adicional.quantidade && adicional.quantidade > 1 ? `${adicional.quantidade}x ` : ""}${escapeHtml(adicional.nome)}${
-		adicional.valorTotal ? ` (${formatToMoney(adicional.valorTotal)})` : ""
+		comValor && adicional.valorTotal ? ` (${formatToMoney(adicional.valorTotal)})` : ""
 	}`;
 }
 
@@ -206,15 +228,45 @@ function renderAdicionalLabel(adicional: TCupomVendaAdicional) {
 // açaí com três perguntas vira uma lista solta. Na mesma linha, a coluna estreita da descrição
 // quebrava grupo e opções juntos e, na térmica de 1 bit, os dois ficavam indistinguíveis.
 // Adicional sem grupo mantém o "+ nome" sem recuo extra.
-function renderAdicionaisHtml(adicionais: TCupomVendaAdicional[]) {
-	return groupSaleItemModifiers(adicionais, (adicional) => adicional.grupo)
+//
+// Cada adicional é uma linha da tabela para que o seu valor caia na coluna de valores, alinhado
+// com o do produto. Adicional gratuito fica sem valor.
+function renderAdicionaisRows(item: TCupomVendaItem, { separado }: { separado: boolean }) {
+	return groupSaleItemModifiers(item.adicionais ?? [], (adicional) => adicional.grupo)
 		.map(({ grupo, adicionais: doGrupo }) => {
 			const opcoesHtml = doGrupo
-				.map((adicional) => `<span class="adicional${grupo ? " agrupado" : ""}">+ ${renderAdicionalLabel(adicional)}</span>`)
+				.map((adicional) => {
+					const valorLinha = separado && adicional.valorTotal ? roundMoney(item.quantidade * adicional.valorTotal) : 0;
+					const unitario =
+						valorLinha > 0 && item.quantidade > 1 ? `<span class="mini fraco"> (${formatToMoney(adicional.valorTotal ?? 0)} un.)</span>` : "";
+					return `<tr class="sub"><td></td><td class="desc"><span class="adicional${grupo ? " agrupado" : ""}">+ ${renderAdicionalLabel(adicional, {
+						comValor: !separado,
+					})}${unitario}</span></td><td class="val sub-val">${valorLinha > 0 ? formatToMoney(valorLinha) : ""}</td></tr>`;
+				})
 				.join("");
-			return grupo ? `<span class="grupo-adicionais">${escapeHtml(grupo)}</span>${opcoesHtml}` : opcoesHtml;
+			return grupo ? `<tr class="sub"><td></td><td class="desc" colspan="2"><span class="grupo-adicionais">${escapeHtml(grupo)}</span></td></tr>${opcoesHtml}` : opcoesHtml;
 		})
 		.join("");
+}
+
+function renderItemRows(item: TCupomVendaItem) {
+	const split = splitCupomItemValues(item);
+	const valorLinha = split ? split.valorBase : item.valorTotal;
+	const valorUnitario = split ? roundMoney(split.valorBase / item.quantidade) : item.valorUnitario;
+	// Produto de preço zero que vale só pelos adicionais ("monte seu açaí"): a linha do produto
+	// fica sem valor em vez de imprimir R$ 0,00.
+	const mostrarValor = !split || valorLinha > 0;
+	const unitarioHtml =
+		mostrarValor && valorUnitario != null && item.quantidade > 1 ? `<span class="mini fraco"> (${formatToMoney(valorUnitario)} un.)</span>` : "";
+	return `<tr>
+				<td class="qtd">${item.quantidade}x</td>
+				<td class="desc">${escapeHtml(item.descricao)}${unitarioHtml}</td>
+				<td class="val">${mostrarValor ? formatToMoney(valorLinha) : ""}</td>
+			</tr>${item.adicionais?.length ? renderAdicionaisRows(item, { separado: !!split }) : ""}${
+				item.observacoes
+					? `<tr class="sub"><td></td><td class="desc" colspan="2"><span class="observacao">Obs.: ${escapeHtml(item.observacoes)}</span></td></tr>`
+					: ""
+			}`;
 }
 
 export function renderCupomVendaHtml(dados: TCupomVendaDados) {
@@ -280,19 +332,7 @@ export function renderCupomVendaHtml(dados: TCupomVendaDados) {
 		<p class="centro titulo-secao">ITENS DO PEDIDO</p>
 		<div class="sep fina"></div>
 		<table class="itens">
-			${venda.itens
-				.map(
-					(item) => `<tr>
-				<td class="qtd">${item.quantidade}x</td>
-				<td class="desc">${escapeHtml(item.descricao)}${
-					item.valorUnitario != null && item.quantidade > 1 ? `<span class="mini fraco"> (${formatToMoney(item.valorUnitario)} un.)</span>` : ""
-				}${
-					item.adicionais?.length ? renderAdicionaisHtml(item.adicionais) : ""
-				}${item.observacoes ? `<span class="observacao">Obs.: ${escapeHtml(item.observacoes)}</span>` : ""}</td>
-				<td class="val">${formatToMoney(item.valorTotal)}</td>
-			</tr>`,
-				)
-				.join("")}
+			${venda.itens.map(renderItemRows).join("")}
 		</table>`
 		: "";
 
@@ -410,6 +450,9 @@ p { margin: 0; }
 .itens .qtd { width: 8mm; }
 .itens .desc { padding-right: 1.5mm; word-break: break-word; }
 .itens .val { text-align: right; white-space: nowrap; }
+/* Linhas de adicional/observação pertencem ao item acima: sem o respiro entre itens. */
+.itens tr.sub td { padding: 0; }
+.itens .sub-val { font-size: 7.5pt; vertical-align: bottom; }
 .adicional { display: block; font-size: 7.5pt; padding-left: 2mm; }
 .adicional.agrupado { padding-left: 4mm; }
 .grupo-adicionais { display: block; margin-top: 0.8mm; padding-left: 2mm; font-size: 7pt; text-transform: uppercase; letter-spacing: 0.1mm; }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { renderCupomVendaHtml, type TCupomVendaDados } from "./cupom-venda";
+import { renderCupomVendaHtml, splitCupomItemValues, type TCupomVendaDados } from "./cupom-venda";
 
 function buildData(pagamentos: TCupomVendaDados["venda"]["pagamentos"]): TCupomVendaDados {
 	return {
@@ -136,14 +136,97 @@ test("agrupa os adicionais sob o nome do grupo e imprime a observação do item"
 		},
 	];
 	const html = renderCupomVendaHtml(dados);
-	assert.match(
-		html,
-		/<span class="grupo-adicionais">Escolha até 3 adicionais<\/span><span class="adicional agrupado">\+ Nutella<\/span><span class="adicional agrupado">\+ 2x Morango \(R\$ 4,00\)<\/span>/,
-	);
-	assert.match(html, /<span class="grupo-adicionais">Escolha seu gelato<\/span><span class="adicional agrupado">\+ Pistache Supremo<\/span>/);
+	const texto = toPlainText(html);
+	assert.match(texto, /Escolha até 3 adicionais \+ Nutella \+ 2x Morango R\$ 4,00 Escolha seu gelato \+ Pistache Supremo \+ Colher extra Obs\./);
+	assert.match(html, /<span class="grupo-adicionais">Escolha até 3 adicionais<\/span>/);
+	assert.match(html, /<span class="adicional agrupado">\+ Nutella<\/span>/);
 	// Sem grupo: sem cabeçalho, sem recuo extra, e sempre depois dos agrupados.
-	assert.match(html, /Pistache Supremo<\/span><span class="adicional">\+ Colher extra<\/span>/);
+	assert.match(html, /<span class="adicional">\+ Colher extra<\/span>/);
 	assert.match(html, /Obs\.: Quero leite ninho além dos selecionados/);
+});
+
+// Texto corrido do cupom, sem tags: as asserções de layout leem o que a térmica imprime.
+function toPlainText(html: string) {
+	return html
+		.replace(/<style>[\s\S]*?<\/style>/, "")
+		.replace(/<[^>]+>/g, " ")
+		.replace(/&nbsp;/g, " ")
+		.replace(/\s+/g, " ")
+		.trim();
+}
+
+function buildItemData(item: NonNullable<TCupomVendaDados["venda"]["itens"]>[number]) {
+	const dados = buildData([]);
+	dados.venda.itens = [item];
+	return dados;
+}
+
+test("imprime o preço do produto separado do preço dos adicionais", () => {
+	const html = renderCupomVendaHtml(
+		buildItemData({
+			descricao: "Cookie Tradicional de Chocolate",
+			quantidade: 1,
+			valorUnitario: 31,
+			valorTotal: 31,
+			adicionais: [{ grupo: "Que tal um cookie ou brownie?", nome: "Cookie de Ovomaltine", quantidade: 1, valorTotal: 14 }],
+		}),
+	);
+	const texto = toPlainText(html);
+	assert.match(texto, /1x Cookie Tradicional de Chocolate R\$ 17,00 Que tal um cookie ou brownie\? \+ Cookie de Ovomaltine R\$ 14,00/);
+	assert.doesNotMatch(texto, /R\$ 31,00 Que tal/);
+	assert.doesNotMatch(texto, /\(R\$ 14,00\)/);
+});
+
+test("multiplica base e adicionais pela quantidade do item, com o unitário de cada um", () => {
+	const texto = toPlainText(
+		renderCupomVendaHtml(
+			buildItemData({
+				descricao: "Cookie Tradicional de Chocolate",
+				quantidade: 2,
+				valorUnitario: 31,
+				valorTotal: 62,
+				adicionais: [{ grupo: null, nome: "Cookie de Ovomaltine", quantidade: 1, valorTotal: 14 }],
+			}),
+		),
+	);
+	assert.match(texto, /2x Cookie Tradicional de Chocolate \(R\$ 17,00 un\.\) R\$ 34,00 \+ Cookie de Ovomaltine \(R\$ 14,00 un\.\) R\$ 28,00/);
+});
+
+test("produto que vale só pelos adicionais não imprime R$ 0,00", () => {
+	const texto = toPlainText(
+		renderCupomVendaHtml(
+			buildItemData({
+				descricao: "Monte seu açaí",
+				quantidade: 1,
+				valorTotal: 20,
+				adicionais: [{ grupo: "Tamanho", nome: "500ml", quantidade: 1, valorTotal: 20 }],
+			}),
+		),
+	);
+	assert.match(texto, /1x Monte seu açaí Tamanho \+ 500ml R\$ 20,00/);
+	assert.doesNotMatch(texto, /R\$ 0,00/);
+});
+
+test("mantém o total na linha do item quando os adicionais não fecham com o total", () => {
+	// Importação que gravou o adicional já multiplicado pela quantidade do item: a base
+	// derivada ficaria negativa, então o cupom não inventa um preço de produto.
+	const texto = toPlainText(
+		renderCupomVendaHtml(
+			buildItemData({
+				descricao: "Pizza",
+				quantidade: 3,
+				valorTotal: 30,
+				adicionais: [{ grupo: null, nome: "Borda recheada", quantidade: 3, valorTotal: 15 }],
+			}),
+		),
+	);
+	assert.match(texto, /3x Pizza R\$ 30,00 \+ 3x Borda recheada \(R\$ 15,00\)/);
+});
+
+test("splitCupomItemValues não separa item sem adicional cobrado", () => {
+	assert.equal(splitCupomItemValues({ quantidade: 1, valorTotal: 10, adicionais: [] }), null);
+	assert.equal(splitCupomItemValues({ quantidade: 1, valorTotal: 10, adicionais: [{ nome: "Gelo", valorTotal: 0 }] }), null);
+	assert.deepEqual(splitCupomItemValues({ quantidade: 1, valorTotal: 31, adicionais: [{ nome: "Ovomaltine", valorTotal: 14 }] }), { valorBase: 17 });
 });
 
 test("destaca o troco a levar abaixo do pagamento em dinheiro na entrega", () => {
