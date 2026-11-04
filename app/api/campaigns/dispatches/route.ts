@@ -96,9 +96,11 @@ async function retryCampaignDispatch({ input, session }: { input: TRetryCampaign
 		// Mensagem de evento (pós-compra, aniversário) enviada dias depois perde o sentido.
 		throw new createHttpError.BadRequest("Disparos por evento interrompidos não são retomados: a mensagem perderia o momento do gatilho.");
 	}
-	// Retomar é o usuário dizendo "resolvi": o bloqueio do número que causou a interrupção cai. Se a
-	// Meta ainda recusar, o primeiro envio interrompe de novo.
-	if (isInterrupted && dispatch.interrupcao?.escopo === "NUMERO" && dispatch.campanha.whatsappConexaoTelefoneId) {
+	// Retomar é o usuário dizendo "resolvi": o bloqueio do número cai. Vale qualquer que seja o escopo
+	// que interrompeu o disparo — um 130429 síncrono pode interromper (DISPARO) antes de o 131042 do
+	// webhook bloquear o número, e o bloqueio ficaria sem saída. Se a Meta ainda recusar, o primeiro
+	// envio interrompe de novo.
+	if (isInterrupted && dispatch.campanha.whatsappConexaoTelefoneId) {
 		await clearWhatsappPhoneSendBlock({ phoneId: dispatch.campanha.whatsappConexaoTelefoneId });
 	}
 

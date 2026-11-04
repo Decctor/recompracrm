@@ -66,7 +66,8 @@ export type TWhatsappConnectionPhoneMetadados = {
 	};
 	// Erro da Meta que se repetiria em qualquer envio deste número (pagamento, conta restrita,
 	// credencial, número indisponível). Enquanto presente, nenhum disparo de campanha sai pelo
-	// número. Cai quando o usuário retoma um disparo interrompido por ele, ou quando a Meta
+	// número. Cai quando o usuário retoma um disparo interrompido, clica em "Já resolvi" no alerta
+	// da página de campanhas (/api/whatsapp-connections/send-block), ou quando a Meta
 	// confirma a entrega de uma mensagem enviada depois do bloqueio
 	// (lib/campaigns/dispatch/interruption.ts).
 	bloqueioEnvio?: {

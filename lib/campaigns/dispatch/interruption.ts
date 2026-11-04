@@ -380,7 +380,9 @@ export async function assertWhatsappPhoneCanSendCampaigns(phoneId: string | null
 	});
 	const block = phone?.metadados?.bloqueioEnvio;
 	if (!block) return;
-	throw new createHttpError.BadRequest(describePhoneSendBlock(block.motivo, block.codigo));
+	throw new createHttpError.BadRequest(
+		`${describePhoneSendBlock(block.motivo, block.codigo)} Se já resolveu, clique em "Já resolvi" no aviso do topo da página de campanhas.`,
+	);
 }
 
 export function describePhoneSendBlock(motivo: TCampaignDispatchInterruptionReasonEnum, codigo: number | null) {
