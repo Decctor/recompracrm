@@ -2,7 +2,8 @@ import { ProductSearchQuerySchema } from "@/schemas/product-search";
 import { z } from "zod";
 import { buildProductSearch, type ProductSearchDatabase } from "@/lib/products/search";
 import { getSalesIntegrationCondition } from "@/lib/sales/integration-filter";
-import { products, saleItems, sales, suppliers } from "@/services/drizzle/schema";
+import { getProductSalesLines } from "@/lib/products/product-sales-lines";
+import { products, sales, suppliers } from "@/services/drizzle/schema";
 import { and, asc, count, desc, eq, gte, inArray, isNull, lte, max, min, notInArray, or, type SQL, sql } from "drizzle-orm";
 
 export const GetProductsDefaultInputSchema = z.object({
@@ -183,20 +184,23 @@ export async function queryProductsList(
 	// join nas vendas que passam nos filtros. A forma anterior (products LEFT JOIN sale_items LEFT JOIN
 	// sales) levava o planejador a um lookup em `sales` por item (50k por requisição nesta org), e a
 	// contagem repetia tudo: ~760 ms de banco por requisição. Agora é uma agregação (~90 ms), uma vez.
+	// Linhas atribuídas a produto: adicional vinculado conta para o produto da opção
+	// (lib/products/product-sales-lines.ts).
+	const lines = getProductSalesLines({ organizationId: userOrgId });
 	const salesStatsSubquery = db
 		.select({
-			produtoId: saleItems.produtoId,
-			totalSalesValue: sql<number>`sum(${saleItems.valorVendaTotalLiquido})`.as("total_sales_value"),
-			totalSalesQty: sql<number>`sum(${saleItems.quantidade})`.as("total_sales_qty"),
-			totalCostValue: sql<number>`sum(${saleItems.valorCustoTotal})`.as("total_cost_value"),
+			produtoId: lines.produtoId,
+			totalSalesValue: sql<number>`sum(${lines.valorVendaTotalLiquido})`.as("total_sales_value"),
+			totalSalesQty: sql<number>`sum(${lines.quantidade})`.as("total_sales_qty"),
+			totalCostValue: sql<number>`sum(${lines.valorCustoTotal})`.as("total_cost_value"),
 			firstSaleDate: min(sales.dataVenda).as("first_sale_date"),
 			lastSaleDate: max(sales.dataVenda).as("last_sale_date"),
 			salesTotalSum: sql<number>`sum(${sales.valorTotal})`.as("sales_total_sum"),
 		})
-		.from(saleItems)
-		.innerJoin(sales, and(eq(sales.id, saleItems.vendaId), ...statsConditions))
-		.where(eq(saleItems.organizacaoId, userOrgId))
-		.groupBy(saleItems.produtoId)
+		.from(lines)
+		.innerJoin(sales, and(eq(sales.id, lines.vendaId), ...statsConditions))
+		.where(eq(lines.organizacaoId, userOrgId))
+		.groupBy(lines.produtoId)
 		.as("sales_stats");
 	if (input.statsTotalMin) statsTotalConditions.push(gte(salesStatsSubquery.salesTotalSum, input.statsTotalMin));
 	if (input.statsTotalMax) statsTotalConditions.push(lte(salesStatsSubquery.salesTotalSum, input.statsTotalMax));

@@ -3,7 +3,8 @@ import { runPagesRouteHandler, type PagesRouteHandler, type PagesRouteRequest, t
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { db } from "@/services/drizzle";
-import { products, saleItems, sales } from "@/services/drizzle/schema";
+import { getProductSalesLines } from "@/lib/products/product-sales-lines";
+import { products, sales } from "@/services/drizzle/schema";
 import { and, count, countDistinct, eq, gte, lte, sql, sum } from "drizzle-orm";
 import createHttpError from "http-errors";
 import z from "zod";
@@ -63,26 +64,30 @@ async function getProductsOverallStats({ input, session }: { input: TGetProducts
 	// 1. Total products count (all products in organization)
 	const totalProductsResult = await db.select({ count: count() }).from(products).where(eq(products.organizacaoId, userOrgId));
 
+	// Linhas atribuídas a produto: adicional vinculado conta para o produto da opção
+	// (lib/products/product-sales-lines.ts).
+	const lines = getProductSalesLines({ organizationId: userOrgId });
+
 	// 2. Active products (products sold in the period)
 	const saleConditions = [eq(sales.organizacaoId, userOrgId), eq(sales.statusVenda, "CONFIRMADA")];
 	if (periodAfter) saleConditions.push(gte(sales.dataVenda, periodAfter));
 	if (periodBefore) saleConditions.push(lte(sales.dataVenda, periodBefore));
 
 	const activeProductsResult = await db
-		.select({ count: countDistinct(saleItems.produtoId) })
-		.from(saleItems)
-		.innerJoin(sales, eq(saleItems.vendaId, sales.id))
-		.where(and(eq(saleItems.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), ...saleConditions));
+		.select({ count: countDistinct(lines.produtoId) })
+		.from(lines)
+		.innerJoin(sales, eq(lines.vendaId, sales.id))
+		.where(and(eq(lines.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), ...saleConditions));
 
 	// 3. Total revenue (sum of valorVendaTotalLiquido)
 	const revenueResult = await db
 		.select({
-			totalRevenue: sum(saleItems.valorVendaTotalLiquido),
-			totalCost: sum(saleItems.valorCustoTotal),
+			totalRevenue: sum(lines.valorVendaTotalLiquido),
+			totalCost: sum(lines.valorCustoTotal),
 		})
-		.from(saleItems)
-		.innerJoin(sales, eq(saleItems.vendaId, sales.id))
-		.where(and(eq(saleItems.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), ...saleConditions));
+		.from(lines)
+		.innerJoin(sales, eq(lines.vendaId, sales.id))
+		.where(and(eq(lines.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), ...saleConditions));
 
 	const totalRevenue = Number(revenueResult[0]?.totalRevenue ?? 0);
 	const totalCost = Number(revenueResult[0]?.totalCost ?? 0);
@@ -130,13 +135,13 @@ async function getProductsOverallStats({ input, session }: { input: TGetProducts
 
 	const turnoverData = await db
 		.select({
-			productId: saleItems.produtoId,
-			totalQtySold: sum(saleItems.quantidade),
+			productId: lines.produtoId,
+			totalQtySold: sum(lines.quantidade),
 		})
-		.from(saleItems)
-		.innerJoin(sales, eq(saleItems.vendaId, sales.id))
-		.where(and(eq(saleItems.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), ...saleConditions))
-		.groupBy(saleItems.produtoId);
+		.from(lines)
+		.innerJoin(sales, eq(lines.vendaId, sales.id))
+		.where(and(eq(lines.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), ...saleConditions))
+		.groupBy(lines.produtoId);
 
 	const turnoverMap = new Map(turnoverData.map((d) => [d.productId, Number(d.totalQtySold ?? 0)]));
 
@@ -216,19 +221,19 @@ async function getProductsOverallStats({ input, session }: { input: TGetProducts
 	const comparisonTotalProductsResult = await db.select({ count: count() }).from(products).where(eq(products.organizacaoId, userOrgId));
 
 	const comparisonActiveProductsResult = await db
-		.select({ count: countDistinct(saleItems.produtoId) })
-		.from(saleItems)
-		.innerJoin(sales, eq(saleItems.vendaId, sales.id))
-		.where(and(eq(saleItems.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), ...comparisonSaleConditions));
+		.select({ count: countDistinct(lines.produtoId) })
+		.from(lines)
+		.innerJoin(sales, eq(lines.vendaId, sales.id))
+		.where(and(eq(lines.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), ...comparisonSaleConditions));
 
 	const comparisonRevenueResult = await db
 		.select({
-			totalRevenue: sum(saleItems.valorVendaTotalLiquido),
-			totalCost: sum(saleItems.valorCustoTotal),
+			totalRevenue: sum(lines.valorVendaTotalLiquido),
+			totalCost: sum(lines.valorCustoTotal),
 		})
-		.from(saleItems)
-		.innerJoin(sales, eq(saleItems.vendaId, sales.id))
-		.where(and(eq(saleItems.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), ...comparisonSaleConditions));
+		.from(lines)
+		.innerJoin(sales, eq(lines.vendaId, sales.id))
+		.where(and(eq(lines.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), ...comparisonSaleConditions));
 
 	const comparisonTotalRevenue = Number(comparisonRevenueResult[0]?.totalRevenue ?? 0);
 	const comparisonTotalCost = Number(comparisonRevenueResult[0]?.totalCost ?? 0);
@@ -243,13 +248,13 @@ async function getProductsOverallStats({ input, session }: { input: TGetProducts
 
 	const comparisonTurnoverData = await db
 		.select({
-			productId: saleItems.produtoId,
-			totalQtySold: sum(saleItems.quantidade),
+			productId: lines.produtoId,
+			totalQtySold: sum(lines.quantidade),
 		})
-		.from(saleItems)
-		.innerJoin(sales, eq(saleItems.vendaId, sales.id))
-		.where(and(eq(saleItems.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), ...comparisonSaleConditions))
-		.groupBy(saleItems.produtoId);
+		.from(lines)
+		.innerJoin(sales, eq(lines.vendaId, sales.id))
+		.where(and(eq(lines.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), ...comparisonSaleConditions))
+		.groupBy(lines.produtoId);
 
 	const comparisonTurnoverMap = new Map(comparisonTurnoverData.map((d) => [d.productId, Number(d.totalQtySold ?? 0)]));
 

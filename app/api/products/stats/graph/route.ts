@@ -4,7 +4,8 @@ import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { getBestNumberOfPointsBetweenDates, getDateBuckets, getEvenlySpacedDates } from "@/lib/dates";
 import { db } from "@/services/drizzle";
-import { saleItems, sales } from "@/services/drizzle/schema";
+import { getProductSalesLines } from "@/lib/products/product-sales-lines";
+import { sales } from "@/services/drizzle/schema";
 import dayjs from "dayjs";
 import { and, countDistinct, eq, gte, lte, sql } from "drizzle-orm";
 import createHttpError from "http-errors";
@@ -79,18 +80,22 @@ async function getProductsGraph({ input, sessionUser }: { input: TGetProductsGra
 
 	const periodDateBuckets = getDateBuckets(periodDatesStrs);
 
+	// Linhas atribuídas a produto: adicional vinculado conta para o produto da opção
+	// (lib/products/product-sales-lines.ts).
+	const lines = getProductSalesLines({ organizationId: userOrgId });
+
 	// Graph Type: sales-value (total revenue over time)
 	if (input.graphType === "sales-value") {
 		const salesValue = await db
 			.select({
 				date: sql<string>`date_trunc('day', ${sales.dataVenda})::text`,
-				total: sql<number>`SUM(${saleItems.valorVendaTotalLiquido})`,
+				total: sql<number>`SUM(${lines.valorVendaTotalLiquido})`,
 			})
-			.from(saleItems)
-			.innerJoin(sales, eq(saleItems.vendaId, sales.id))
+			.from(lines)
+			.innerJoin(sales, eq(lines.vendaId, sales.id))
 			.where(
 				and(
-					eq(saleItems.organizacaoId, userOrgId),
+					eq(lines.organizacaoId, userOrgId),
 					eq(sales.organizacaoId, userOrgId),
 					gte(sales.dataVenda, period.after),
 					lte(sales.dataVenda, period.before),
@@ -131,13 +136,13 @@ async function getProductsGraph({ input, sessionUser }: { input: TGetProductsGra
 		const salesQuantity = await db
 			.select({
 				date: sql<string>`date_trunc('day', ${sales.dataVenda})::text`,
-				total: sql<number>`SUM(${saleItems.quantidade})`,
+				total: sql<number>`SUM(${lines.quantidade})`,
 			})
-			.from(saleItems)
-			.innerJoin(sales, eq(saleItems.vendaId, sales.id))
+			.from(lines)
+			.innerJoin(sales, eq(lines.vendaId, sales.id))
 			.where(
 				and(
-					eq(saleItems.organizacaoId, userOrgId),
+					eq(lines.organizacaoId, userOrgId),
 					eq(sales.organizacaoId, userOrgId),
 					gte(sales.dataVenda, period.after),
 					lte(sales.dataVenda, period.before),
@@ -178,13 +183,13 @@ async function getProductsGraph({ input, sessionUser }: { input: TGetProductsGra
 		const activeProducts = await db
 			.select({
 				date: sql<string>`date_trunc('day', ${sales.dataVenda})::text`,
-				total: countDistinct(saleItems.produtoId),
+				total: countDistinct(lines.produtoId),
 			})
-			.from(saleItems)
-			.innerJoin(sales, eq(saleItems.vendaId, sales.id))
+			.from(lines)
+			.innerJoin(sales, eq(lines.vendaId, sales.id))
 			.where(
 				and(
-					eq(saleItems.organizacaoId, userOrgId),
+					eq(lines.organizacaoId, userOrgId),
 					eq(sales.organizacaoId, userOrgId),
 					gte(sales.dataVenda, period.after),
 					lte(sales.dataVenda, period.before),
@@ -225,14 +230,14 @@ async function getProductsGraph({ input, sessionUser }: { input: TGetProductsGra
 		const marginData = await db
 			.select({
 				date: sql<string>`date_trunc('day', ${sales.dataVenda})::text`,
-				revenue: sql<number>`SUM(${saleItems.valorVendaTotalLiquido})`,
-				cost: sql<number>`SUM(${saleItems.valorCustoTotal})`,
+				revenue: sql<number>`SUM(${lines.valorVendaTotalLiquido})`,
+				cost: sql<number>`SUM(${lines.valorCustoTotal})`,
 			})
-			.from(saleItems)
-			.innerJoin(sales, eq(saleItems.vendaId, sales.id))
+			.from(lines)
+			.innerJoin(sales, eq(lines.vendaId, sales.id))
 			.where(
 				and(
-					eq(saleItems.organizacaoId, userOrgId),
+					eq(lines.organizacaoId, userOrgId),
 					eq(sales.organizacaoId, userOrgId),
 					gte(sales.dataVenda, period.after),
 					lte(sales.dataVenda, period.before),

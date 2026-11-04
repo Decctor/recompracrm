@@ -12,6 +12,7 @@ import ProductsChannelsView from "@/app/dashboard/catalog/products/_components/c
 import ProductsGraphs from "@/app/dashboard/catalog/products/_components/ProductsGraphs";
 import ProductsInlineFilters from "@/app/dashboard/catalog/products/_components/ProductsInlineFilters";
 import ProductsRanking from "@/app/dashboard/catalog/products/_components/ProductsRanking";
+import ProductAddOnsRanking from "@/app/dashboard/catalog/products/_components/ProductAddOnsRanking";
 import ProductsPortfolioAnalysisSection from "@/app/dashboard/catalog/products/portfolio-analysis-section";
 import StatUnitCard from "@/components/Stats/StatUnitCard";
 import GeneralPaginationComponent from "@/components/Utils/Pagination";
@@ -461,6 +462,7 @@ function ProductsStatsView() {
 					/>
 				</div>
 			</div>
+			<ProductAddOnsRanking periodAfter={filters.periodAfter ?? null} periodBefore={filters.periodBefore ?? null} />
 			<ProductsPortfolioAnalysisSection periodAfter={filters.periodAfter} periodBefore={filters.periodBefore} />
 		</div>
 	);

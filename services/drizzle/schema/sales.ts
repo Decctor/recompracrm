@@ -289,9 +289,26 @@ export const saleItemModifiers = newTable(
 		quantidade: doublePrecision("quantidade").default(1.0).notNull(),
 		valorUnitario: doublePrecision("valor_unitario").notNull(), // Price at moment of sale
 		valorTotal: doublePrecision("valor_total").notNull(), // Qty * UnitPrice
+
+		// SNAPSHOT DO PRODUTO VINCULADO À OPÇÃO (atribuição em estatísticas de produto).
+		// Preenchido pelo trigger `ampmais_snapshot_sale_item_modifier_product` (drizzle/0146) no
+		// INSERT, a partir de `product_add_on_options` — nenhum caminho de escrita precisa
+		// preencher. Congela o vínculo e o custo do momento da venda: religar a opção a outro
+		// produto depois não reescreve o histórico. Null = adicional sem produto ("Nutella"),
+		// cuja receita fica com o produto da linha. Ver `lib/products/product-sales-lines.ts`.
+		produtoId: varchar("produto_id", { length: 255 }).references(() => products.id, { onDelete: "set null" }),
+		produtoVarianteId: varchar("produto_variante_id", { length: 255 }).references(() => productVariants.id, { onDelete: "set null" }),
+		// Unidades do produto vinculado consumidas por unidade deste adicional (a mesma da baixa de estoque).
+		quantidadeConsumo: doublePrecision("quantidade_consumo"),
+		// Custo de UMA unidade do produto vinculado no momento da venda (variante, senão produto).
+		valorCustoUnitario: doublePrecision("valor_custo_unitario"),
 	},
 	(table) => ({
 		itemVendaIdIdx: index("idx_sale_item_modifiers_item_venda_id").on(table.itemVendaId),
+		// Só os adicionais vinculados entram na atribuição: parcial, fica pequeno.
+		produtoIdIdx: index("idx_sale_item_modifiers_produto_id")
+			.on(table.produtoId)
+			.where(sql`${table.produtoId} is not null`),
 	}),
 );
 
@@ -303,5 +320,13 @@ export const saleItemModifiersRelations = relations(saleItemModifiers, ({ one })
 	opcao: one(productAddOnOptions, {
 		fields: [saleItemModifiers.opcaoId],
 		references: [productAddOnOptions.id],
+	}),
+	produto: one(products, {
+		fields: [saleItemModifiers.produtoId],
+		references: [products.id],
+	}),
+	produtoVariante: one(productVariants, {
+		fields: [saleItemModifiers.produtoVarianteId],
+		references: [productVariants.id],
 	}),
 }));

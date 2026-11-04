@@ -1,3 +1,4 @@
+import { getProductSalesLines } from "@/lib/products/product-sales-lines";
 import { localDayKey } from "@/lib/operation-timezone";
 import { buildSalesStatsConditions, withinPeriod, type TSalesStatsFilters } from "@/lib/sales/stats-conditions";
 import { db } from "@/services/drizzle";
@@ -205,25 +206,28 @@ async function getProductsGrouped({
 	conditions: ReturnType<typeof buildSalesStatsConditions>;
 	period: TComparisonPeriod;
 }): Promise<TGroupedRow[]> {
+	// Linhas atribuídas a produto: adicional vinculado conta para o produto da opção
+	// (lib/products/product-sales-lines.ts).
+	const lines = getProductSalesLines({ organizationId: organizacaoId });
 	const rows = await db
 		.select({
 			id: products.id,
 			nome: products.nome,
 			avatarUrl: products.imagemCapaUrl,
 			// Vendas distintas, e não itens: um produto que entra duas vezes na mesma venda conta uma venda.
-			qtde: countDistinct(saleItems.vendaId),
-			total: sum(saleItems.valorVendaTotalLiquido),
+			qtde: countDistinct(lines.vendaId),
+			total: sum(lines.valorVendaTotalLiquido),
 		})
-		.from(saleItems)
-		.innerJoin(products, eq(saleItems.produtoId, products.id))
+		.from(lines)
+		.innerJoin(products, eq(lines.produtoId, products.id))
 		.where(
 			and(
-				eq(saleItems.organizacaoId, organizacaoId),
+				eq(lines.organizacaoId, organizacaoId),
 				exists(
 					db
 						.select({ id: sales.id })
 						.from(sales)
-						.where(and(eq(sales.id, saleItems.vendaId), ...conditions, ...withinPeriod(period))),
+						.where(and(eq(sales.id, lines.vendaId), ...conditions, ...withinPeriod(period))),
 				),
 			),
 		)

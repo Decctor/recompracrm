@@ -5,9 +5,10 @@ import { getSalesIntegrationCondition } from "@/lib/sales/integration-filter";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { ProductSchema } from "@/schemas/products";
 import { db } from "@/services/drizzle";
-import { clients, partners, products, saleItems, sales, sellers } from "@/services/drizzle/schema";
+import { getProductSalesLines } from "@/lib/products/product-sales-lines";
+import { clients, partners, products, saleItemModifiers, saleItems, sales, sellers } from "@/services/drizzle/schema";
 import dayjs from "dayjs";
-import { and, count, countDistinct, desc, eq, gte, inArray, isNotNull, lte, ne, sql, sum } from "drizzle-orm";
+import { and, count, countDistinct, desc, eq, gte, inArray, isNotNull, isNull, lte, ne, sql, sum } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { z } from "zod";
 
@@ -65,8 +66,10 @@ async function getProductStats({ session, input }: GetProductStatsParams) {
 	const periodAfterDate = input.periodAfter ? new Date(input.periodAfter) : undefined;
 	const periodBeforeDate = input.periodBefore ? new Date(input.periodBefore) : undefined;
 
-	// Build where conditions for saleItems and sales
-	const saleItemWhereConditions = [eq(saleItems.organizacaoId, userOrgId), eq(saleItems.produtoId, input.productId)] as const;
+	// Linhas atribuídas a produto: o produto aparece tanto como item quanto como adicional
+	// vinculado de outro item (lib/products/product-sales-lines.ts).
+	const lines = getProductSalesLines({ organizationId: userOrgId });
+	const saleItemWhereConditions = [eq(lines.organizacaoId, userOrgId), eq(lines.produtoId, input.productId)] as const;
 	const saleWhereConditions = [eq(sales.organizacaoId, userOrgId), eq(sales.statusVenda, "CONFIRMADA"), isNotNull(sales.dataVenda)] as const;
 
 	const saleWhere = and(
@@ -78,23 +81,23 @@ async function getProductStats({ session, input }: GetProductStatsParams) {
 		getSalesIntegrationCondition(input.integrationsIds),
 	);
 
-	const saleItemWhere = and(...saleItemWhereConditions, inArray(saleItems.vendaId, db.select({ id: sales.id }).from(sales).where(saleWhere)));
+	const saleItemWhere = and(...saleItemWhereConditions, inArray(lines.vendaId, db.select({ id: sales.id }).from(sales).where(saleWhere)));
 
 	const allTimeStatsResult = await db
 		.select({
-			quantidadeTotal: sum(saleItems.quantidade),
-			vendasQtdeTotal: countDistinct(saleItems.vendaId),
-			faturamentoBrutoTotal: sum(saleItems.valorVendaTotalBruto),
-			faturamentoLiquidoTotal: sum(saleItems.valorVendaTotalLiquido),
+			quantidadeTotal: sum(lines.quantidade),
+			vendasQtdeTotal: countDistinct(lines.vendaId),
+			faturamentoBrutoTotal: sum(lines.valorVendaTotalBruto),
+			faturamentoLiquidoTotal: sum(lines.valorVendaTotalLiquido),
 		})
-		.from(saleItems)
-		.innerJoin(sales, eq(saleItems.vendaId, sales.id))
+		.from(lines)
+		.innerJoin(sales, eq(lines.vendaId, sales.id))
 		.where(
 			and(
-				eq(saleItems.organizacaoId, userOrgId),
+				eq(lines.organizacaoId, userOrgId),
 				eq(sales.organizacaoId, userOrgId),
 				...saleWhereConditions,
-				eq(saleItems.produtoId, input.productId),
+				eq(lines.produtoId, input.productId),
 				input.sellerId ? eq(sales.vendedorId, input.sellerId) : undefined,
 				input.partnerId ? eq(sales.parceiroId, input.partnerId) : undefined,
 				getSalesIntegrationCondition(input.integrationsIds),
@@ -103,16 +106,16 @@ async function getProductStats({ session, input }: GetProductStatsParams) {
 	// Quantitative: Basic metrics
 	const totalStatsResult = await db
 		.select({
-			quantidadeTotal: sum(saleItems.quantidade),
-			vendasCount: countDistinct(saleItems.vendaId),
-			faturamentoBrutoTotal: sum(saleItems.valorVendaTotalBruto),
-			faturamentoLiquidoTotal: sum(saleItems.valorVendaTotalLiquido),
-			custoTotal: sum(saleItems.valorCustoTotal),
-			descontoTotal: sum(saleItems.valorTotalDesconto),
+			quantidadeTotal: sum(lines.quantidade),
+			vendasCount: countDistinct(lines.vendaId),
+			faturamentoBrutoTotal: sum(lines.valorVendaTotalBruto),
+			faturamentoLiquidoTotal: sum(lines.valorVendaTotalLiquido),
+			custoTotal: sum(lines.valorCustoTotal),
+			descontoTotal: sum(lines.valorTotalDesconto),
 		})
-		.from(saleItems)
-		.innerJoin(sales, eq(saleItems.vendaId, sales.id))
-		.where(and(eq(saleItems.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), saleItemWhere));
+		.from(lines)
+		.innerJoin(sales, eq(lines.vendaId, sales.id))
+		.where(and(eq(lines.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), saleItemWhere));
 
 	const totalStats = totalStatsResult[0];
 	const quantidadeTotal = totalStats?.quantidadeTotal ? Number(totalStats.quantidadeTotal) : 0;
@@ -121,6 +124,54 @@ async function getProductStats({ session, input }: GetProductStatsParams) {
 	const faturamentoLiquidoTotal = totalStats?.faturamentoLiquidoTotal ? Number(totalStats.faturamentoLiquidoTotal) : 0;
 	const custoTotal = totalStats?.custoTotal ? Number(totalStats.custoTotal) : 0;
 	const descontoTotal = totalStats?.descontoTotal ? Number(totalStats.descontoTotal) : 0;
+
+	// Composição: o que veio do produto vendido como item, o que veio dele como adicional
+	// vinculado de outro item, e — dentro das vendas como item — quanto foram adicionais SEM
+	// produto, que ficam com este produto por não terem para onde ir.
+	const byOriginResult = await db
+		.select({
+			origem: lines.origem,
+			quantidade: sum(lines.quantidade),
+			faturamentoLiquido: sum(lines.valorVendaTotalLiquido),
+		})
+		.from(lines)
+		.where(saleItemWhere)
+		.groupBy(lines.origem);
+	const asItem = byOriginResult.find((row) => row.origem === "ITEM");
+	const asAddOn = byOriginResult.find((row) => row.origem === "ADICIONAL");
+
+	const unlinkedAddOns = db
+		.select({
+			itemVendaId: saleItemModifiers.itemVendaId,
+			valorUnitario: sql<number>`sum(${saleItemModifiers.valorTotal})`.as("valor_unitario_sem_produto"),
+		})
+		.from(saleItemModifiers)
+		.innerJoin(saleItems, eq(saleItems.id, saleItemModifiers.itemVendaId))
+		.where(and(isNull(saleItemModifiers.produtoId), eq(saleItems.organizacaoId, userOrgId), eq(saleItems.produtoId, input.productId)))
+		.groupBy(saleItemModifiers.itemVendaId)
+		.as("adicionais_sem_produto");
+	// Mesma regra da atribuição: valor por unidade do item × quantidade, limitado ao bruto da
+	// linha, e o desconto repartido na proporção do bruto.
+	const unlinkedAddOnsResult = await db
+		.select({
+			faturamentoLiquido: sql<number>`sum(least(${saleItems.quantidade} * ${unlinkedAddOns.valorUnitario}, greatest(${saleItems.valorVendaTotalBruto}, 0)) * (case when ${saleItems.valorVendaTotalBruto} > 0 then ${saleItems.valorVendaTotalLiquido} / ${saleItems.valorVendaTotalBruto} else 0 end))`,
+		})
+		.from(saleItems)
+		.innerJoin(unlinkedAddOns, eq(unlinkedAddOns.itemVendaId, saleItems.id))
+		.where(
+			and(
+				eq(saleItems.organizacaoId, userOrgId),
+				eq(saleItems.produtoId, input.productId),
+				inArray(saleItems.vendaId, db.select({ id: sales.id }).from(sales).where(saleWhere)),
+			),
+		);
+	const composicao = {
+		quantidadeComoItem: Number(asItem?.quantidade ?? 0),
+		faturamentoComoItem: Number(asItem?.faturamentoLiquido ?? 0),
+		quantidadeComoAdicional: Number(asAddOn?.quantidade ?? 0),
+		faturamentoComoAdicional: Number(asAddOn?.faturamentoLiquido ?? 0),
+		faturamentoAdicionaisSemProduto: Number(unlinkedAddOnsResult[0]?.faturamentoLiquido ?? 0),
+	};
 
 	const margemBrutaTotal = faturamentoLiquidoTotal - custoTotal;
 	const margemBrutaPercentual = faturamentoLiquidoTotal > 0 ? (margemBrutaTotal / faturamentoLiquidoTotal) * 100 : 0;
@@ -131,16 +182,16 @@ async function getProductStats({ session, input }: GetProductStatsParams) {
 	// First and last sale dates (respecting filters)
 	const firstSaleResult = await db
 		.select({ data: sales.dataVenda })
-		.from(saleItems)
-		.innerJoin(sales, eq(saleItems.vendaId, sales.id))
-		.where(and(eq(saleItems.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), saleItemWhere))
+		.from(lines)
+		.innerJoin(sales, eq(lines.vendaId, sales.id))
+		.where(and(eq(lines.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), saleItemWhere))
 		.orderBy(sql`${sales.dataVenda} asc`)
 		.limit(1);
 	const lastSaleResult = await db
 		.select({ data: sales.dataVenda })
-		.from(saleItems)
-		.innerJoin(sales, eq(saleItems.vendaId, sales.id))
-		.where(and(eq(saleItems.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), saleItemWhere))
+		.from(lines)
+		.innerJoin(sales, eq(lines.vendaId, sales.id))
+		.where(and(eq(lines.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), saleItemWhere))
 		.orderBy(sql`${sales.dataVenda} desc`)
 		.limit(1);
 
@@ -152,10 +203,10 @@ async function getProductStats({ session, input }: GetProductStatsParams) {
 
 	// Unique clients count
 	const uniqueClientsResult = await db
-		.select({ count: countDistinct(saleItems.clienteId) })
-		.from(saleItems)
-		.innerJoin(sales, eq(saleItems.vendaId, sales.id))
-		.where(and(eq(saleItems.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), saleItemWhere));
+		.select({ count: countDistinct(lines.clienteId) })
+		.from(lines)
+		.innerJoin(sales, eq(lines.vendaId, sales.id))
+		.where(and(eq(lines.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), saleItemWhere));
 	const clientesUnicos = Number(uniqueClientsResult[0]?.count ?? 0);
 
 	// Seasonality: by day of month
@@ -163,12 +214,12 @@ async function getProductStats({ session, input }: GetProductStatsParams) {
 	const byDayOfMonthRaw = await db
 		.select({
 			dia: dayExpr,
-			quantidade: sum(saleItems.quantidade),
-			total: sum(saleItems.valorVendaTotalLiquido),
+			quantidade: sum(lines.quantidade),
+			total: sum(lines.valorVendaTotalLiquido),
 		})
-		.from(saleItems)
-		.innerJoin(sales, eq(saleItems.vendaId, sales.id))
-		.where(and(eq(saleItems.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), saleItemWhere))
+		.from(lines)
+		.innerJoin(sales, eq(lines.vendaId, sales.id))
+		.where(and(eq(lines.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), saleItemWhere))
 		.groupBy(dayExpr)
 		.orderBy(dayExpr);
 
@@ -177,12 +228,12 @@ async function getProductStats({ session, input }: GetProductStatsParams) {
 	const byMonthRaw = await db
 		.select({
 			mes: monthExpr,
-			quantidade: sum(saleItems.quantidade),
-			total: sum(saleItems.valorVendaTotalLiquido),
+			quantidade: sum(lines.quantidade),
+			total: sum(lines.valorVendaTotalLiquido),
 		})
-		.from(saleItems)
-		.innerJoin(sales, eq(saleItems.vendaId, sales.id))
-		.where(and(eq(saleItems.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), saleItemWhere))
+		.from(lines)
+		.innerJoin(sales, eq(lines.vendaId, sales.id))
+		.where(and(eq(lines.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), saleItemWhere))
 		.groupBy(monthExpr)
 		.orderBy(monthExpr);
 
@@ -191,29 +242,29 @@ async function getProductStats({ session, input }: GetProductStatsParams) {
 	const byWeekDayRaw = await db
 		.select({
 			diaSemana: weekDayExpr,
-			quantidade: sum(saleItems.quantidade),
-			total: sum(saleItems.valorVendaTotalLiquido),
+			quantidade: sum(lines.quantidade),
+			total: sum(lines.valorVendaTotalLiquido),
 		})
-		.from(saleItems)
-		.innerJoin(sales, eq(saleItems.vendaId, sales.id))
-		.where(and(eq(saleItems.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), saleItemWhere))
+		.from(lines)
+		.innerJoin(sales, eq(lines.vendaId, sales.id))
+		.where(and(eq(lines.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), saleItemWhere))
 		.groupBy(weekDayExpr)
 		.orderBy(weekDayExpr);
 
 	// Top 10 clients
 	const byClientTop10Raw = await db
 		.select({
-			clienteId: saleItems.clienteId,
+			clienteId: lines.clienteId,
 			clienteNome: clients.nome,
-			quantidade: sum(saleItems.quantidade),
-			total: sum(saleItems.valorVendaTotalLiquido),
+			quantidade: sum(lines.quantidade),
+			total: sum(lines.valorVendaTotalLiquido),
 		})
-		.from(saleItems)
-		.innerJoin(sales, eq(saleItems.vendaId, sales.id))
-		.leftJoin(clients, eq(saleItems.clienteId, clients.id))
-		.where(and(eq(saleItems.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), eq(clients.organizacaoId, userOrgId), saleItemWhere))
-		.groupBy(saleItems.clienteId, clients.nome)
-		.orderBy(desc(sql`sum(${saleItems.valorVendaTotalLiquido})`))
+		.from(lines)
+		.innerJoin(sales, eq(lines.vendaId, sales.id))
+		.leftJoin(clients, eq(lines.clienteId, clients.id))
+		.where(and(eq(lines.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), eq(clients.organizacaoId, userOrgId), saleItemWhere))
+		.groupBy(lines.clienteId, clients.nome)
+		.orderBy(desc(sql`sum(${lines.valorVendaTotalLiquido})`))
 		.limit(10);
 
 	// Top 10 sellers
@@ -221,15 +272,15 @@ async function getProductStats({ session, input }: GetProductStatsParams) {
 		.select({
 			vendedorId: sales.vendedorId,
 			vendedorNome: sellers.nome,
-			quantidade: sum(saleItems.quantidade),
-			total: sum(saleItems.valorVendaTotalLiquido),
+			quantidade: sum(lines.quantidade),
+			total: sum(lines.valorVendaTotalLiquido),
 		})
-		.from(saleItems)
-		.innerJoin(sales, eq(saleItems.vendaId, sales.id))
+		.from(lines)
+		.innerJoin(sales, eq(lines.vendaId, sales.id))
 		.leftJoin(sellers, eq(sales.vendedorId, sellers.id))
-		.where(and(eq(saleItems.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), eq(sellers.organizacaoId, userOrgId), saleItemWhere))
+		.where(and(eq(lines.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), eq(sellers.organizacaoId, userOrgId), saleItemWhere))
 		.groupBy(sales.vendedorId, sellers.nome)
-		.orderBy(desc(sql`sum(${saleItems.valorVendaTotalLiquido})`))
+		.orderBy(desc(sql`sum(${lines.valorVendaTotalLiquido})`))
 		.limit(10);
 
 	// Top 10 partners
@@ -237,42 +288,44 @@ async function getProductStats({ session, input }: GetProductStatsParams) {
 		.select({
 			parceiroId: sales.parceiroId,
 			parceiroNome: partners.nome,
-			quantidade: sum(saleItems.quantidade),
-			total: sum(saleItems.valorVendaTotalLiquido),
+			quantidade: sum(lines.quantidade),
+			total: sum(lines.valorVendaTotalLiquido),
 		})
-		.from(saleItems)
-		.innerJoin(sales, eq(saleItems.vendaId, sales.id))
+		.from(lines)
+		.innerJoin(sales, eq(lines.vendaId, sales.id))
 		.leftJoin(partners, eq(sales.parceiroId, partners.id))
-		.where(and(eq(saleItems.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), eq(partners.organizacaoId, userOrgId), saleItemWhere))
+		.where(and(eq(lines.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), eq(partners.organizacaoId, userOrgId), saleItemWhere))
 		.groupBy(sales.parceiroId, partners.nome)
-		.orderBy(desc(sql`sum(${saleItems.valorVendaTotalLiquido})`))
+		.orderBy(desc(sql`sum(${lines.valorVendaTotalLiquido})`))
 		.limit(10);
 
 	// Related products (basket analysis) - products sold together
 	const relatedProductsRaw = await db
 		.select({
-			produtoId: saleItems.produtoId,
+			produtoId: lines.produtoId,
 			produtoNome: products.nome,
 			produtoCodigo: products.codigo,
 			produtoGrupo: products.grupo,
-			frequencia: count(saleItems.id),
-			quantidade: sum(saleItems.quantidade),
-			total: sum(saleItems.valorVendaTotalLiquido),
+			frequencia: count(lines.itemVendaId),
+			quantidade: sum(lines.quantidade),
+			total: sum(lines.valorVendaTotalLiquido),
 		})
-		.from(saleItems)
+		.from(lines)
 		.innerJoin(
+			// Alias próprio: os campos das linhas saem sem qualificação (`"psl_venda_id"`) e o
+			// derivado com o mesmo nome deixaria a junção ambígua.
 			db
-				.select({ vendaId: saleItems.vendaId })
-				.from(saleItems)
-				.innerJoin(sales, eq(saleItems.vendaId, sales.id))
-				.where(and(eq(saleItems.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), saleItemWhere))
+				.select({ vendaId: sql<string>`${lines.vendaId}`.as("venda_com_produto_id") })
+				.from(lines)
+				.innerJoin(sales, eq(lines.vendaId, sales.id))
+				.where(and(eq(lines.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), saleItemWhere))
 				.as("vendas_com_produto"),
-			sql`${saleItems.vendaId} = vendas_com_produto.venda_id`,
+			sql`${lines.vendaId} = vendas_com_produto.venda_com_produto_id`,
 		)
-		.leftJoin(products, eq(saleItems.produtoId, products.id))
-		.where(and(eq(saleItems.organizacaoId, userOrgId), eq(products.organizacaoId, userOrgId), ne(saleItems.produtoId, input.productId)))
-		.groupBy(saleItems.produtoId, products.nome, products.codigo, products.grupo)
-		.orderBy(desc(sql`count(${saleItems.id})`))
+		.leftJoin(products, eq(lines.produtoId, products.id))
+		.where(and(eq(lines.organizacaoId, userOrgId), eq(products.organizacaoId, userOrgId), ne(lines.produtoId, input.productId)))
+		.groupBy(lines.produtoId, products.nome, products.codigo, products.grupo)
+		.orderBy(desc(sql`count(${lines.itemVendaId})`))
 		.limit(10);
 
 	// Margin analysis by seller
@@ -280,31 +333,31 @@ async function getProductStats({ session, input }: GetProductStatsParams) {
 		.select({
 			vendedorId: sales.vendedorId,
 			vendedorNome: sellers.nome,
-			faturamentoLiquido: sum(saleItems.valorVendaTotalLiquido),
-			custo: sum(saleItems.valorCustoTotal),
+			faturamentoLiquido: sum(lines.valorVendaTotalLiquido),
+			custo: sum(lines.valorCustoTotal),
 		})
-		.from(saleItems)
-		.innerJoin(sales, eq(saleItems.vendaId, sales.id))
+		.from(lines)
+		.innerJoin(sales, eq(lines.vendaId, sales.id))
 		.leftJoin(sellers, eq(sales.vendedorId, sellers.id))
-		.where(and(eq(saleItems.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), eq(sellers.organizacaoId, userOrgId), saleItemWhere))
+		.where(and(eq(lines.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), eq(sellers.organizacaoId, userOrgId), saleItemWhere))
 		.groupBy(sales.vendedorId, sellers.nome)
-		.orderBy(desc(sql`sum(${saleItems.valorVendaTotalLiquido}) - sum(${saleItems.valorCustoTotal})`))
+		.orderBy(desc(sql`sum(${lines.valorVendaTotalLiquido}) - sum(${lines.valorCustoTotal})`))
 		.limit(10);
 
 	// Margin analysis by client
 	const marginByClientRaw = await db
 		.select({
-			clienteId: saleItems.clienteId,
+			clienteId: lines.clienteId,
 			clienteNome: clients.nome,
-			faturamentoLiquido: sum(saleItems.valorVendaTotalLiquido),
-			custo: sum(saleItems.valorCustoTotal),
+			faturamentoLiquido: sum(lines.valorVendaTotalLiquido),
+			custo: sum(lines.valorCustoTotal),
 		})
-		.from(saleItems)
-		.innerJoin(sales, eq(saleItems.vendaId, sales.id))
-		.leftJoin(clients, eq(saleItems.clienteId, clients.id))
-		.where(and(eq(saleItems.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), eq(clients.organizacaoId, userOrgId), saleItemWhere))
-		.groupBy(saleItems.clienteId, clients.nome)
-		.orderBy(desc(sql`sum(${saleItems.valorVendaTotalLiquido}) - sum(${saleItems.valorCustoTotal})`))
+		.from(lines)
+		.innerJoin(sales, eq(lines.vendaId, sales.id))
+		.leftJoin(clients, eq(lines.clienteId, clients.id))
+		.where(and(eq(lines.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), eq(clients.organizacaoId, userOrgId), saleItemWhere))
+		.groupBy(lines.clienteId, clients.nome)
+		.orderBy(desc(sql`sum(${lines.valorVendaTotalLiquido}) - sum(${lines.valorCustoTotal})`))
 		.limit(10);
 
 	// Margin analysis by partner
@@ -312,27 +365,27 @@ async function getProductStats({ session, input }: GetProductStatsParams) {
 		.select({
 			parceiroId: sales.parceiroId,
 			parceiroNome: partners.nome,
-			faturamentoLiquido: sum(saleItems.valorVendaTotalLiquido),
-			custo: sum(saleItems.valorCustoTotal),
+			faturamentoLiquido: sum(lines.valorVendaTotalLiquido),
+			custo: sum(lines.valorCustoTotal),
 		})
-		.from(saleItems)
-		.innerJoin(sales, eq(saleItems.vendaId, sales.id))
+		.from(lines)
+		.innerJoin(sales, eq(lines.vendaId, sales.id))
 		.leftJoin(partners, eq(sales.parceiroId, partners.id))
-		.where(and(eq(saleItems.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), eq(partners.organizacaoId, userOrgId), saleItemWhere))
+		.where(and(eq(lines.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), eq(partners.organizacaoId, userOrgId), saleItemWhere))
 		.groupBy(sales.parceiroId, partners.nome)
-		.orderBy(desc(sql`sum(${saleItems.valorVendaTotalLiquido}) - sum(${saleItems.valorCustoTotal})`))
+		.orderBy(desc(sql`sum(${lines.valorVendaTotalLiquido}) - sum(${lines.valorCustoTotal})`))
 		.limit(10);
 
 	// Margin evolution over time (monthly)
 	const marginByMonthRaw = await db
 		.select({
 			mes: monthExpr,
-			faturamentoLiquido: sum(saleItems.valorVendaTotalLiquido),
-			custo: sum(saleItems.valorCustoTotal),
+			faturamentoLiquido: sum(lines.valorVendaTotalLiquido),
+			custo: sum(lines.valorCustoTotal),
 		})
-		.from(saleItems)
-		.innerJoin(sales, eq(saleItems.vendaId, sales.id))
-		.where(and(eq(saleItems.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), saleItemWhere))
+		.from(lines)
+		.innerJoin(sales, eq(lines.vendaId, sales.id))
+		.where(and(eq(lines.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), saleItemWhere))
 		.groupBy(monthExpr)
 		.orderBy(monthExpr);
 
@@ -371,6 +424,7 @@ async function getProductStats({ session, input }: GetProductStatsParams) {
 			descontoTotal,
 			percentualDescontoMedio,
 			faturamentoPorDia,
+			composicao,
 			resultadosAgrupados: {
 				dia: byDayOfMonthRaw.map((row) => ({
 					dia: Number(row.dia),

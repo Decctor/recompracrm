@@ -1,5 +1,6 @@
+import { getProductSalesLines } from "@/lib/products/product-sales-lines";
 import { db } from "@/services/drizzle";
-import { products, saleItems, sales } from "@/services/drizzle/schema";
+import { products, sales } from "@/services/drizzle/schema";
 import { and, desc, eq, gte, inArray, lte, sum } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { z } from "zod";
@@ -71,17 +72,19 @@ async function fetchRankingForPeriod({
 	if (periodBefore) saleConditions.push(lte(sales.dataVenda, periodBefore));
 
 	// Get products with sales in the period - group by product ID only
+	// Linhas atribuídas a produto: adicional vinculado conta para o produto da opção.
+	const lines = getProductSalesLines({ organizationId: organizacaoId });
 	const productsWithSales = await db
 		.select({
-			produtoId: saleItems.produtoId,
-			totalQuantity: sum(saleItems.quantidade),
-			totalRevenue: sum(saleItems.valorVendaTotalLiquido),
-			totalCost: sum(saleItems.valorCustoTotal),
+			produtoId: lines.produtoId,
+			totalQuantity: sum(lines.quantidade),
+			totalRevenue: sum(lines.valorVendaTotalLiquido),
+			totalCost: sum(lines.valorCustoTotal),
 		})
-		.from(saleItems)
-		.innerJoin(sales, eq(saleItems.vendaId, sales.id))
-		.where(and(...saleConditions, eq(saleItems.organizacaoId, organizacaoId)))
-		.groupBy(saleItems.produtoId);
+		.from(lines)
+		.innerJoin(sales, eq(lines.vendaId, sales.id))
+		.where(and(...saleConditions, eq(lines.organizacaoId, organizacaoId)))
+		.groupBy(lines.produtoId);
 
 	// Get product IDs
 	const productIds = productsWithSales.map((p) => p.produtoId);

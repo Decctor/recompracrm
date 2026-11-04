@@ -3,7 +3,8 @@ import { runPagesRouteHandler, type PagesRouteHandler, type PagesRouteRequest, t
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { resolveResultsScopeSellerIds } from "@/lib/permissions/results-scope";
 import { db } from "@/services/drizzle";
-import { clients, products, saleItems, sales } from "@/services/drizzle/schema";
+import { getProductSalesLines } from "@/lib/products/product-sales-lines";
+import { clients, products, sales } from "@/services/drizzle/schema";
 import dayjs from "dayjs";
 import { and, count, desc, eq, gte, inArray, isNotNull, lte, sql, sum } from "drizzle-orm";
 import createHttpError from "http-errors";
@@ -147,6 +148,10 @@ async function getSalesDetailedAnalysis({
 		scopeSellerIds ? inArray(sales.vendedorId, scopeSellerIds) : undefined,
 	);
 
+	// Ranking de produtos sobre linhas atribuídas a produto: adicional vinculado conta para o
+	// produto da opção (lib/products/product-sales-lines.ts).
+	const lines = getProductSalesLines({ organizationId: organizacaoId });
+
 	const [kpisResult, topClientsRaw, topProductsRaw] = await Promise.all([
 		db
 			.select({
@@ -174,15 +179,15 @@ async function getSalesDetailedAnalysis({
 				productId: products.id,
 				productName: products.nome,
 				productGroup: products.grupo,
-				quantity: sum(saleItems.quantidade),
-				total: sum(saleItems.valorVendaTotalLiquido),
+				quantity: sum(lines.quantidade),
+				total: sum(lines.valorVendaTotalLiquido),
 			})
-			.from(saleItems)
-			.innerJoin(sales, eq(saleItems.vendaId, sales.id))
-			.innerJoin(products, eq(saleItems.produtoId, products.id))
-			.where(and(eq(saleItems.organizacaoId, organizacaoId), eq(products.organizacaoId, organizacaoId), salesWhere))
+			.from(lines)
+			.innerJoin(sales, eq(lines.vendaId, sales.id))
+			.innerJoin(products, eq(lines.produtoId, products.id))
+			.where(and(eq(lines.organizacaoId, organizacaoId), eq(products.organizacaoId, organizacaoId), salesWhere))
 			.groupBy(products.id, products.nome, products.grupo)
-			.orderBy(desc(sql`sum(${saleItems.valorVendaTotalLiquido})`))
+			.orderBy(desc(sql`sum(${lines.valorVendaTotalLiquido})`))
 			.limit(25),
 	]);
 

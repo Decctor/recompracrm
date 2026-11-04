@@ -10,6 +10,7 @@ import type { TGetProductGraphInput, TGetProductGraphOutput } from "@/app/api/pr
 import type { TGetProductsBySearchInput, TGetProductsBySearchOutput } from "@/app/api/products/search/route";
 import type { TGetProductBarcodeUsageInput, TGetProductBarcodeUsageOutput } from "@/app/api/products/barcode-usage/route";
 import type { TGetProductStatsInput, TGetProductStatsOutput } from "@/app/api/products/stats/route";
+import type { TGetProductAddOnsRankingInput, TGetProductAddOnsRankingOutput } from "@/app/api/products/stats/add-ons/route";
 import type { TGetProductsGraphInput, TGetProductsGraphOutput } from "@/app/api/products/stats/graph/route";
 import type { TGetProductsOverallStatsInput, TGetProductsOverallStatsOutput } from "@/app/api/products/stats/overall/route";
 import type { TGetProductsRankingInput, TGetProductsRankingOutput } from "@/app/api/products/stats/ranking/route";
@@ -442,6 +443,29 @@ export function useProductsRanking(input: TGetProductsRankingInput) {
 		queryKey: ["products-ranking", input],
 		queryFn: () => fetchProductsRanking(input),
 	});
+}
+
+type TProductAddOnsRankingParams = {
+	periodAfter: Date | null;
+	periodBefore: Date | null;
+	rankingBy: NonNullable<TGetProductAddOnsRankingInput["rankingBy"]>;
+};
+
+async function fetchProductAddOnsRanking(params: TProductAddOnsRankingParams) {
+	const searchParams = new URLSearchParams();
+	if (params.periodAfter) searchParams.set("periodAfter", params.periodAfter.toISOString());
+	if (params.periodBefore) searchParams.set("periodBefore", params.periodBefore.toISOString());
+	searchParams.set("rankingBy", params.rankingBy);
+	const { data } = await axios.get<TGetProductAddOnsRankingOutput>(`/api/products/stats/add-ons?${searchParams.toString()}`);
+	return data.data;
+}
+
+export function useProductAddOnsRanking(params: TProductAddOnsRankingParams) {
+	const queryKey = ["product-add-ons-ranking", params];
+	return {
+		...useQuery({ queryKey, queryFn: () => fetchProductAddOnsRanking(params) }),
+		queryKey,
+	};
 }
 
 async function fetchProductsPortfolioAnalysis(input: TGetProductsPortfolioAnalysisInput) {

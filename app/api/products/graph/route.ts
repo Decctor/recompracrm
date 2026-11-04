@@ -5,7 +5,8 @@ import { getSalesIntegrationCondition } from "@/lib/sales/integration-filter";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { getBestNumberOfPointsBetweenDates, getDateBuckets, getEvenlySpacedDates } from "@/lib/dates";
 import { db } from "@/services/drizzle";
-import { products, saleItems, sales } from "@/services/drizzle/schema";
+import { getProductSalesLines } from "@/lib/products/product-sales-lines";
+import { products, sales } from "@/services/drizzle/schema";
 import dayjs from "dayjs";
 import { and, asc, countDistinct, eq, gte, inArray, isNotNull, lte, sql, sum } from "drizzle-orm";
 import createHttpError from "http-errors";
@@ -87,12 +88,16 @@ async function fetchProductGraph(input: TGetProductGraphInput, session: TAuthUse
 		before: input.periodBefore ? new Date(input.periodBefore) : undefined,
 	};
 
+	// Linhas atribuídas a produto: adicional vinculado conta para o produto da opção
+	// (lib/products/product-sales-lines.ts).
+	const lines = getProductSalesLines({ organizationId: userOrgId });
+
 	if (!currentPeriodAdjusted.after) {
 		const firstProductSale = await db
 			.select({ data: sales.dataVenda })
-			.from(saleItems)
-			.innerJoin(sales, eq(saleItems.vendaId, sales.id))
-			.where(and(eq(saleItems.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), eq(saleItems.produtoId, input.productId)))
+			.from(lines)
+			.innerJoin(sales, eq(lines.vendaId, sales.id))
+			.where(and(eq(lines.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), eq(lines.produtoId, input.productId)))
 			.orderBy(asc(sales.dataVenda))
 			.limit(1);
 		currentPeriodAdjusted.after = firstProductSale[0]?.data ?? undefined;
@@ -116,7 +121,7 @@ async function fetchProductGraph(input: TGetProductGraphInput, session: TAuthUse
 	const currentPeriodDateBuckets = getDateBuckets(currentPeriodDatesStrs);
 
 	// Build where conditions
-	const saleItemWhereConditions = [eq(saleItems.organizacaoId, userOrgId), eq(saleItems.produtoId, input.productId)];
+	const saleItemWhereConditions = [eq(lines.organizacaoId, userOrgId), eq(lines.produtoId, input.productId)];
 	const saleWhereConditions = [eq(sales.organizacaoId, userOrgId), eq(sales.statusVenda, "CONFIRMADA"), isNotNull(sales.dataVenda)];
 
 	const saleWhere = and(
@@ -128,20 +133,20 @@ async function fetchProductGraph(input: TGetProductGraphInput, session: TAuthUse
 		getSalesIntegrationCondition(input.integrationsIds),
 	);
 
-	const saleItemWhere = and(...saleItemWhereConditions, inArray(saleItems.vendaId, db.select({ id: sales.id }).from(sales).where(saleWhere)));
+	const saleItemWhere = and(...saleItemWhereConditions, inArray(lines.vendaId, db.select({ id: sales.id }).from(sales).where(saleWhere)));
 
 	// Fetch product sales grouped by day
 	const productSalesByDay = await db
 		.select({
 			dataVenda: sql<string>`date_trunc('day', ${sales.dataVenda})::text`,
-			quantidade: sum(saleItems.quantidade),
-			valorLiquido: sum(saleItems.valorVendaTotalLiquido),
-			custo: sum(saleItems.valorCustoTotal),
-			vendasCount: countDistinct(saleItems.vendaId),
+			quantidade: sum(lines.quantidade),
+			valorLiquido: sum(lines.valorVendaTotalLiquido),
+			custo: sum(lines.valorCustoTotal),
+			vendasCount: countDistinct(lines.vendaId),
 		})
-		.from(saleItems)
-		.innerJoin(sales, eq(saleItems.vendaId, sales.id))
-		.where(and(eq(saleItems.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), saleItemWhere))
+		.from(lines)
+		.innerJoin(sales, eq(lines.vendaId, sales.id))
+		.where(and(eq(lines.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), saleItemWhere))
 		.groupBy(sql`date_trunc('day', ${sales.dataVenda})`)
 		.orderBy(sql`date_trunc('day', ${sales.dataVenda})`);
 

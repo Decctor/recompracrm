@@ -1,5 +1,6 @@
+import { getProductSalesLines } from "@/lib/products/product-sales-lines";
 import { db } from "@/services/drizzle";
-import { products, saleItems, sales } from "@/services/drizzle/schema";
+import { products, sales } from "@/services/drizzle/schema";
 import {
 	buildDiscreteHistogram,
 	buildHistogram,
@@ -50,20 +51,22 @@ export async function getPortfolioAnalysis({
 	if (periodAfter) saleConditions.push(gte(sales.dataVenda, periodAfter));
 	if (periodBefore) saleConditions.push(lte(sales.dataVenda, periodBefore));
 
+	// Linhas atribuídas a produto: adicional vinculado conta para o produto da opção.
+	const lines = getProductSalesLines({ organizationId });
 	const [totalProductsResult, salesByProduct] = await Promise.all([
 		db.select({ count: count() }).from(products).where(eq(products.organizacaoId, organizationId)),
 		db
 			.select({
-				productId: saleItems.produtoId,
-				revenue: sql<number>`coalesce(sum(${saleItems.valorVendaTotalLiquido}), 0)`,
-				cost: sql<number>`coalesce(sum(${saleItems.valorCustoTotal}), 0)`,
-				quantity: sql<number>`coalesce(sum(${saleItems.quantidade}), 0)`,
-				saleCount: sql<number>`count(distinct ${saleItems.vendaId})`,
+				productId: lines.produtoId,
+				revenue: sql<number>`coalesce(sum(${lines.valorVendaTotalLiquido}), 0)`,
+				cost: sql<number>`coalesce(sum(${lines.valorCustoTotal}), 0)`,
+				quantity: sql<number>`coalesce(sum(${lines.quantidade}), 0)`,
+				saleCount: sql<number>`count(distinct ${lines.vendaId})`,
 			})
-			.from(saleItems)
-			.innerJoin(sales, eq(saleItems.vendaId, sales.id))
-			.where(and(eq(saleItems.organizacaoId, organizationId), ...saleConditions))
-			.groupBy(saleItems.produtoId),
+			.from(lines)
+			.innerJoin(sales, eq(lines.vendaId, sales.id))
+			.where(and(eq(lines.organizacaoId, organizationId), ...saleConditions))
+			.groupBy(lines.produtoId),
 	]);
 
 	const totalProducts = totalProductsResult[0]?.count ?? 0;

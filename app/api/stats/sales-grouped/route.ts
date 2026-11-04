@@ -7,7 +7,8 @@ import { getSalesIntegrationCondition } from "@/lib/sales/integration-filter";
 import { SalesGeneralStatsFiltersSchema, type TSaleStatsGeneralQueryParams } from "@/schemas/query-params-utils";
 
 import { db } from "@/services/drizzle";
-import { clients, partners, products, saleItems, sales, sellers } from "@/services/drizzle/schema";
+import { getProductSalesLines } from "@/lib/products/product-sales-lines";
+import { clients, partners, products, sales, sellers } from "@/services/drizzle/schema";
 import dayjs from "dayjs";
 import { and, count, countDistinct, eq, exists, gte, inArray, isNotNull, lte, max, min, notInArray, sql, sum } from "drizzle-orm";
 import createHttpError from "http-errors";
@@ -302,48 +303,51 @@ async function getSalesGroupedStats({ filters, organizacaoId }: GetSalesParams) 
 			avatarUrl: sellerInfo?.avatarUrl || null,
 		};
 	});
+	// Por item e por grupo de produto: linhas atribuídas a produto — adicional vinculado conta para
+	// o produto da opção (lib/products/product-sales-lines.ts).
+	const lines = getProductSalesLines({ organizationId: organizacaoId });
 	const resultsByItem = await db
 		.select({
 			id: products.id,
 			titulo: products.nome,
-			qtde: sum(saleItems.quantidade),
-			vendas: countDistinct(saleItems.vendaId),
-			total: sum(saleItems.valorVendaTotalLiquido),
+			qtde: sum(lines.quantidade),
+			vendas: countDistinct(lines.vendaId),
+			total: sum(lines.valorVendaTotalLiquido),
 		})
-		.from(saleItems)
+		.from(lines)
 		.where(
 			and(
-				eq(saleItems.organizacaoId, organizacaoId),
+				eq(lines.organizacaoId, organizacaoId),
 				exists(
 					db
 						.select({ id: sales.id })
 						.from(sales)
-						.where(and(eq(sales.id, saleItems.vendaId), ...conditions)),
+						.where(and(eq(sales.id, lines.vendaId), ...conditions)),
 				),
 			),
 		)
-		.innerJoin(products, eq(saleItems.produtoId, products.id))
+		.innerJoin(products, eq(lines.produtoId, products.id))
 		.groupBy(products.id, products.nome);
 
 	const resultsByItemGroup = await db
 		.select({
 			titulo: products.grupo,
-			qtde: sum(saleItems.quantidade),
-			total: sum(saleItems.valorVendaTotalLiquido),
+			qtde: sum(lines.quantidade),
+			total: sum(lines.valorVendaTotalLiquido),
 		})
-		.from(saleItems)
+		.from(lines)
 		.where(
 			and(
-				eq(saleItems.organizacaoId, organizacaoId),
+				eq(lines.organizacaoId, organizacaoId),
 				exists(
 					db
 						.select({ id: sales.id })
 						.from(sales)
-						.where(and(eq(sales.id, saleItems.vendaId), ...conditions)),
+						.where(and(eq(sales.id, lines.vendaId), ...conditions)),
 				),
 			),
 		)
-		.innerJoin(products, eq(saleItems.produtoId, products.id))
+		.innerJoin(products, eq(lines.produtoId, products.id))
 		.groupBy(products.grupo);
 
 	// Grouping by day of the month

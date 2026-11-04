@@ -148,6 +148,7 @@ export default function ProductStatsTab({ productId, enabled = true }: ProductSt
 							percentualDescontoMedio={stats.percentualDescontoMedio}
 							faturamentoBruto={stats.faturamentoBrutoTotal}
 						/>
+						<SalesCompositionAnalysis composicao={stats.composicao} />
 					</div>
 
 					{/* Product Graph */}
@@ -1115,6 +1116,43 @@ function DiscountAnalysis({
 					De <strong className="text-foreground">{formatToMoney(faturamentoBruto)}</strong> potenciais, {formatToMoney(descontoTotal)} foram descontados
 				</p>
 			</div>
+		</div>
+	);
+}
+
+// De onde vêm as vendas do produto: como item, como adicional vinculado de outro item, e quanto
+// do faturamento como item foram adicionais sem produto (que ficam com o produto da linha).
+// Só aparece quando há adicional envolvido — para a maioria dos produtos seria um bloco de zeros.
+function SalesCompositionAnalysis({ composicao }: { composicao: TGetProductStatsOutput["data"]["composicao"] }) {
+	const hasAddOnSales = composicao.quantidadeComoAdicional > 0 || composicao.faturamentoComoAdicional > 0;
+	const hasUnlinkedAddOns = composicao.faturamentoAdicionaisSemProduto > 0;
+	if (!hasAddOnSales && !hasUnlinkedAddOns) return null;
+	return (
+		<div className="bg-card border-border flex w-full flex-col gap-3 rounded-xl border px-3 py-4 shadow-2xs h-full">
+			<div className="flex items-center justify-between">
+				<h1 className="text-xs font-medium tracking-tight uppercase">COMPOSIÇÃO DAS VENDAS</h1>
+				<CirclePlus className="w-4 h-4 min-w-4 min-h-4" />
+			</div>
+			<div className="w-full flex items-center gap-4 flex-wrap">
+				<div className="flex items-end gap-1">
+					<p className="text-2xl font-bold text-[#15599a] dark:text-[#fead61]">{formatToMoney(composicao.faturamentoComoItem)}</p>
+					<span className="text-[0.65rem] font-medium tracking-tight">COMO ITEM ({formatDecimalPlaces(composicao.quantidadeComoItem)} UN.)</span>
+				</div>
+				{hasAddOnSales ? (
+					<div className="flex items-end gap-1">
+						<p className="text-2xl font-bold text-[#15599a] dark:text-[#fead61]">{formatToMoney(composicao.faturamentoComoAdicional)}</p>
+						<span className="text-[0.65rem] font-medium tracking-tight">
+							COMO ADICIONAL DE OUTROS PRODUTOS ({formatDecimalPlaces(composicao.quantidadeComoAdicional)} UN.)
+						</span>
+					</div>
+				) : null}
+			</div>
+			{hasUnlinkedAddOns ? (
+				<p className="text-sm text-center px-2 py-1 rounded-lg bg-primary/10 text-foreground w-fit self-center">
+					Das vendas como item, <strong className="text-foreground">{formatToMoney(composicao.faturamentoAdicionaisSemProduto)}</strong> foram adicionais
+					sem produto vinculado
+				</p>
+			) : null}
 		</div>
 	);
 }

@@ -2,8 +2,9 @@ import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { db } from "@/services/drizzle";
-import { partners, saleItems, sales } from "@/services/drizzle/schema";
-import { and, count, eq, gte, inArray, isNotNull, lte, notInArray, sql, sum } from "drizzle-orm";
+import { getProductSalesLines } from "@/lib/products/product-sales-lines";
+import { partners, sales } from "@/services/drizzle/schema";
+import { and, eq, gte, inArray, isNotNull, lte, notInArray, sql, sum } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
@@ -67,16 +68,21 @@ async function fetchRankingForPeriod({
 	if (periodBefore) saleConditions.push(lte(sales.dataVenda, periodBefore));
 
 	// Get partners with sales and margin data
+	// Linhas atribuídas a produto: o custo inclui o do produto vinculado a cada adicional
+	// (lib/products/product-sales-lines.ts). A receita é a mesma de sale_items.
+	const lines = getProductSalesLines({ organizationId: userOrgId });
 	const partnersWithMargin = await db
 		.select({
 			parceiroId: sales.parceiroId,
-			totalRevenue: sum(saleItems.valorVendaTotalLiquido),
-			totalCost: sum(saleItems.valorCustoTotal),
-			totalSalesQty: count(sales.id),
+			totalRevenue: sum(lines.valorVendaTotalLiquido),
+			totalCost: sum(lines.valorCustoTotal),
+			// Uma por linha de item, como antes (count(sales.id) sobre o join com sale_items): as
+			// linhas de adicional não entram na contagem.
+			totalSalesQty: sql<number>`count(*) filter (where ${lines.origem} = 'ITEM')`,
 		})
 		.from(sales)
-		.innerJoin(saleItems, eq(sales.id, saleItems.vendaId))
-		.where(and(...saleConditions, eq(saleItems.organizacaoId, userOrgId)))
+		.innerJoin(lines, eq(sales.id, lines.vendaId))
+		.where(and(...saleConditions, eq(lines.organizacaoId, userOrgId)))
 		.groupBy(sales.parceiroId);
 
 	// Get partner details

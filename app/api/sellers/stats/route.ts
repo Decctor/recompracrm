@@ -1,3 +1,4 @@
+import { getProductSalesLines } from "@/lib/products/product-sales-lines";
 import { appApiHandler } from "@/lib/app-api";
 import { runPagesRouteHandler, type PagesRouteHandler } from "@/lib/pages-route-compat";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
@@ -102,15 +103,18 @@ async function getSellerStats({ session, input }: GetSellerStatsParams) {
 	const totalSalesItems = totalSalesItemsResult[0]?.total ? Number(totalSalesItemsResult[0].total) : 0;
 
 	const avgSalesItemsPerSale = totalSalesItems / salesCount;
+	// Por grupo e por produto: linhas atribuídas a produto — adicional vinculado conta para o
+	// produto da opção (lib/products/product-sales-lines.ts).
+	const lines = getProductSalesLines({ organizationId: userOrgId });
 	// Quantitative: value sold by product category
 	const byProductGroupRaw = await db
-		.select({ grupo: products.grupo, total: sum(saleItems.valorVendaTotalLiquido), sales: countDistinct(saleItems.vendaId) })
-		.from(saleItems)
-		.innerJoin(sales, eq(saleItems.vendaId, sales.id))
-		.leftJoin(products, eq(saleItems.produtoId, products.id))
-		.where(and(eq(saleItems.organizacaoId, userOrgId), eq(products.organizacaoId, userOrgId), saleWhere))
+		.select({ grupo: products.grupo, total: sum(lines.valorVendaTotalLiquido), sales: countDistinct(lines.vendaId) })
+		.from(lines)
+		.innerJoin(sales, eq(lines.vendaId, sales.id))
+		.leftJoin(products, eq(lines.produtoId, products.id))
+		.where(and(eq(lines.organizacaoId, userOrgId), eq(products.organizacaoId, userOrgId), saleWhere))
 		.groupBy(products.grupo)
-		.orderBy(desc(sql`sum(${saleItems.valorVendaTotalLiquido})`))
+		.orderBy(desc(sql`sum(${lines.valorVendaTotalLiquido})`))
 		.limit(10);
 
 	// Qualitative: top clients (top 10)
@@ -131,18 +135,18 @@ async function getSellerStats({ session, input }: GetSellerStatsParams) {
 	// Qualitative: top products (top 10)
 	const byProductTop10Raw = await db
 		.select({
-			produtoId: saleItems.produtoId,
+			produtoId: lines.produtoId,
 			produtoNome: products.nome,
 			produtoGrupo: products.grupo,
-			qtde: sum(saleItems.quantidade),
-			total: sum(saleItems.valorVendaTotalLiquido),
+			qtde: sum(lines.quantidade),
+			total: sum(lines.valorVendaTotalLiquido),
 		})
-		.from(saleItems)
-		.innerJoin(sales, eq(saleItems.vendaId, sales.id))
-		.leftJoin(products, eq(saleItems.produtoId, products.id))
-		.where(and(eq(saleItems.organizacaoId, userOrgId), eq(products.organizacaoId, userOrgId), saleWhere))
-		.groupBy(saleItems.produtoId, products.nome, products.grupo)
-		.orderBy(desc(sql`sum(${saleItems.valorVendaTotalLiquido})`))
+		.from(lines)
+		.innerJoin(sales, eq(lines.vendaId, sales.id))
+		.leftJoin(products, eq(lines.produtoId, products.id))
+		.where(and(eq(lines.organizacaoId, userOrgId), eq(products.organizacaoId, userOrgId), saleWhere))
+		.groupBy(lines.produtoId, products.nome, products.grupo)
+		.orderBy(desc(sql`sum(${lines.valorVendaTotalLiquido})`))
 		.limit(10);
 
 	// Qualitative: grouped by day of month

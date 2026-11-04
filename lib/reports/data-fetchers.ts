@@ -1,3 +1,4 @@
+import { getProductSalesLines } from "@/lib/products/product-sales-lines";
 import { db } from "@/services/drizzle";
 import { clients, goals, goalsSellers, partners, products, saleItems, sales, sellers } from "@/services/drizzle/schema";
 import dayjs from "dayjs";
@@ -431,20 +432,23 @@ export async function getProductRankings({ after, before, organizacaoId }: Perio
 		lte(sales.dataVenda, before),
 	);
 
+	// Linhas atribuídas a produto: adicional vinculado conta para o produto da opção
+	// (lib/products/product-sales-lines.ts).
+	const lines = getProductSalesLines({ organizationId: organizacaoId });
 	const resultsByProduct = await db
 		.select({
 			produtoId: products.id,
 			produtoNome: products.nome,
 			produtoGrupo: products.grupo,
-			quantidade: sum(saleItems.quantidade),
-			total: sum(saleItems.valorVendaTotalLiquido),
+			quantidade: sum(lines.quantidade),
+			total: sum(lines.valorVendaTotalLiquido),
 		})
-		.from(saleItems)
-		.innerJoin(sales, eq(saleItems.vendaId, sales.id))
-		.innerJoin(products, eq(saleItems.produtoId, products.id))
+		.from(lines)
+		.innerJoin(sales, eq(lines.vendaId, sales.id))
+		.innerJoin(products, eq(lines.produtoId, products.id))
 		.where(and(saleWhere, eq(products.organizacaoId, organizacaoId)))
 		.groupBy(products.id, products.nome, products.grupo)
-		.orderBy(desc(sql`sum(${saleItems.valorVendaTotalLiquido})`))
+		.orderBy(desc(sql`sum(${lines.valorVendaTotalLiquido})`))
 		.limit(limit);
 
 	return resultsByProduct.map((product) => ({
@@ -471,18 +475,19 @@ export async function getProductGroupRankings({ after, before, organizacaoId }: 
 		lte(sales.dataVenda, before),
 	);
 
+	const lines = getProductSalesLines({ organizationId: organizacaoId });
 	const resultsByGroup = await db
 		.select({
 			grupo: products.grupo,
-			quantidade: sum(saleItems.quantidade),
-			total: sum(saleItems.valorVendaTotalLiquido),
+			quantidade: sum(lines.quantidade),
+			total: sum(lines.valorVendaTotalLiquido),
 		})
-		.from(saleItems)
-		.innerJoin(sales, eq(saleItems.vendaId, sales.id))
-		.innerJoin(products, eq(saleItems.produtoId, products.id))
+		.from(lines)
+		.innerJoin(sales, eq(lines.vendaId, sales.id))
+		.innerJoin(products, eq(lines.produtoId, products.id))
 		.where(and(saleWhere, eq(products.organizacaoId, organizacaoId)))
 		.groupBy(products.grupo)
-		.orderBy(desc(sql`sum(${saleItems.valorVendaTotalLiquido})`))
+		.orderBy(desc(sql`sum(${lines.valorVendaTotalLiquido})`))
 		.limit(limit);
 
 	return resultsByGroup.map((group) => ({
