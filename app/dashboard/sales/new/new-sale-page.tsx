@@ -401,7 +401,7 @@ export default function NewSalePage({
 			// Cada etiqueta de balança é uma pesagem própria: linha nova, nunca soma na existente.
 			if (scaleReading) addItemLine(line);
 			else addItemOrIncrement(line);
-			toast.success(`${item.nome}${scaleReading ? ` (${formatItemQuantity(item.quantidade)})` : ""} adicionado ao carrinho.`);
+			toast.success(`${item.nome}${scaleReading ? ` (${formatItemQuantity(item.quantidade)} kg)` : ""} adicionado ao carrinho.`);
 		},
 		[addItemOrIncrement, addItemLine, checkDirectAdd],
 	);

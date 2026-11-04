@@ -40,7 +40,8 @@ function ProductListRow({ product, orgTracksStock, onSelect, onWeigh, isWeighing
 	const displayPrice = getPOSDisplayPrice(product);
 	const priceLabel = formatToMoney(displayPrice.value);
 	const stockQuantity = resolvePOSProductStock({ product, orgTracksStock });
-	const soldByWeight = isSoldByWeight(product.unidade);
+	// "/kg" só no preço do próprio produto: o "A partir de" vem de uma variação, que pode ser bandeja ou caixa.
+	const pricedPerKg = displayPrice.type === "fixed" && isSoldByWeight(product.unidade);
 
 	// Com balança, o botão de pesar ocupa o lugar da afordância "+" (que fica invisível, guardando a
 	// largura): o preço segue alinhado com o das linhas sem balança.
@@ -93,7 +94,7 @@ function ProductListRow({ product, orgTracksStock, onSelect, onWeigh, isWeighing
 					{displayPrice.type === "starting-from" ? <span className="block text-micro text-muted-foreground">A partir de</span> : null}
 					<span className="block text-base font-extrabold leading-tight text-foreground">
 						{priceLabel}
-						{soldByWeight ? <span className="text-xs font-semibold text-muted-foreground">/kg</span> : null}
+						{pricedPerKg ? <span className="text-xs font-semibold text-muted-foreground">/kg</span> : null}
 					</span>
 				</div>
 

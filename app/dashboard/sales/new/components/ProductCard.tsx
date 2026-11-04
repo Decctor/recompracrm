@@ -33,7 +33,8 @@ function ProductCard({ product, orgTracksStock, onSelect, onWeigh, isWeighing = 
 	const displayPrice = getPOSDisplayPrice(product);
 	const priceLabel = formatToMoney(displayPrice.value);
 	const stockQuantity = resolvePOSProductStock({ product, orgTracksStock });
-	const soldByWeight = isSoldByWeight(product.unidade);
+	// "/kg" só no preço do próprio produto: o "A partir de" vem de uma variação, que pode ser bandeja ou caixa.
+	const pricedPerKg = displayPrice.type === "fixed" && isSoldByWeight(product.unidade);
 
 	// O botão de pesar é irmão do card, não filho: botão dentro de botão não é HTML válido e o toque
 	// no card (adicionar) não pode disparar a pesagem nem o contrário.
@@ -84,7 +85,7 @@ function ProductCard({ product, orgTracksStock, onSelect, onWeigh, isWeighing = 
 							{displayPrice.type === "starting-from" ? <span className="block text-micro text-muted-foreground">A partir de</span> : null}
 							<p className="truncate text-sm font-extrabold leading-tight text-foreground">
 								{priceLabel}
-								{soldByWeight ? <span className="text-micro font-semibold text-muted-foreground">/kg</span> : null}
+								{pricedPerKg ? <span className="text-micro font-semibold text-muted-foreground">/kg</span> : null}
 							</p>
 						</div>
 						{stockQuantity !== null ? <ProductStockChip quantity={stockQuantity} /> : null}
