@@ -10,6 +10,7 @@ import {
 	type TSerialScaleCommand,
 	type TSerialScaleSettings,
 } from "./serial-scale-protocol";
+import type { TSerialReadErrorCount, TSerialScaleDetectionAttempt } from "./serial-scale-diagnostics";
 import { getWebSerial, type TWebSerialPort, type TWebSerialPortInfo } from "./web-serial";
 
 // Conexão do navegador com a balança do caixa. Uma instância só por aba (`serialScale`): a porta
@@ -55,6 +56,17 @@ export type TSerialScaleLiveSnapshot = {
 	receivedAt: number | null;
 };
 
+export type TSerialScaleDiagnosticsSnapshot = {
+	/** Bytes recebidos desde que a porta abriu com os parâmetros atuais, reconhecidos ou não. */
+	totalBytes: number;
+	/** Os últimos bytes crus, para conferência na tela de pareamento. */
+	recentBytes: number[];
+	/** Erros não fatais de leitura (enquadramento, paridade, break) desde que a porta abriu. */
+	errors: TSerialReadErrorCount[];
+	/** Resultado por enquadramento da última detecção que não achou a balança; `null` sem detecção falha. */
+	detection: TSerialScaleDetectionAttempt[] | null;
+};
+
 const POLL_INTERVAL_MS = 250;
 /** Linha de texto sem terminador é lida depois desse silêncio (ver `flush` do parser). */
 const LINE_IDLE_FLUSH_MS = 120;
@@ -66,6 +78,10 @@ const DETECT_LISTEN_MS = 400;
 const DETECT_COMMAND_MS = 600;
 /** Quadros válidos para aceitar uma combinação: um só poderia ser lixo da velocidade errada. */
 const DETECT_FRAMES_REQUIRED = 2;
+/** Bytes crus guardados para o diagnóstico: o bastante para dois ou três quadros. */
+const RAW_SAMPLE_BYTES = 48;
+/** O diagnóstico só interessa à tela de pareamento: nada de renderizar a cada pedaço que chega. */
+const DIAGNOSTICS_PUBLISH_MS = 250;
 const PROFILE_STORAGE_KEY = "recompra:balanca-caixa:perfil";
 
 const PARITY: Record<TSerialScaleSettings["paridade"], "none" | "even" | "odd"> = { NENHUMA: "none", PAR: "even", IMPAR: "odd" };
@@ -114,9 +130,18 @@ function describeOpenError(error: unknown) {
 	return `Não foi possível abrir a porta da balança: ${getErrorMessage(error)}`;
 }
 
-function describeAttempt(settings: TSerialScaleSettings) {
+function describeFraming(settings: Pick<TSerialScaleSettings, "velocidade" | "bitsDados" | "paridade" | "bitsParada">) {
 	const parity = settings.paridade === "NENHUMA" ? "N" : settings.paridade === "PAR" ? "E" : "O";
-	return `${settings.velocidade} bps · ${settings.bitsDados}${parity}${settings.bitsParada} · ${settings.comando === "CONTINUO" ? "contínuo" : settings.comando}`;
+	return `${settings.velocidade} bps · ${settings.bitsDados}${parity}${settings.bitsParada}`;
+}
+
+function describeAttempt(settings: TSerialScaleSettings) {
+	return `${describeFraming(settings)} · ${settings.comando === "CONTINUO" ? "contínuo" : settings.comando}`;
+}
+
+function readErrorName(error: unknown) {
+	const name = (error as { name?: unknown } | null)?.name;
+	return typeof name === "string" && name ? name : "UnknownError";
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -150,8 +175,15 @@ class SerialScaleConnection {
 		detecting: null,
 	};
 	private liveSnapshot: TSerialScaleLiveSnapshot = { frame: null, receivedAt: null };
+	private diagnosticsSnapshot: TSerialScaleDiagnosticsSnapshot = { totalBytes: 0, recentBytes: [], errors: [], detection: null };
+	/** Contadores crus da abertura atual; viram `diagnosticsSnapshot` no máximo a cada 250 ms. */
+	private rawBytes: number[] = [];
+	private rawTotal = 0;
+	private rawErrors = new Map<string, number>();
+	private diagnosticsTimer: ReturnType<typeof setTimeout> | null = null;
 	private statusListeners = new Set<() => void>();
 	private liveListeners = new Set<() => void>();
+	private diagnosticsListeners = new Set<() => void>();
 	private frameListeners = new Set<(frame: TScaleFrame) => void>();
 
 	// ------------------------------------------------------------------ stores (useSyncExternalStore)
@@ -172,6 +204,12 @@ class SerialScaleConnection {
 	};
 	getLiveSnapshot = () => this.liveSnapshot;
 
+	subscribeDiagnostics = (listener: () => void) => {
+		this.diagnosticsListeners.add(listener);
+		return () => this.diagnosticsListeners.delete(listener);
+	};
+	getDiagnosticsSnapshot = () => this.diagnosticsSnapshot;
+
 	private setStatus(partial: Partial<TSerialScaleStatusSnapshot>) {
 		this.statusSnapshot = { ...this.statusSnapshot, ...partial };
 		for (const listener of this.statusListeners) listener();
@@ -180,6 +218,45 @@ class SerialScaleConnection {
 	private setLive(next: TSerialScaleLiveSnapshot) {
 		this.liveSnapshot = next;
 		for (const listener of this.liveListeners) listener();
+	}
+
+	private publishDiagnostics(partial: Partial<TSerialScaleDiagnosticsSnapshot> = {}) {
+		if (this.diagnosticsTimer) clearTimeout(this.diagnosticsTimer);
+		this.diagnosticsTimer = null;
+		this.diagnosticsSnapshot = {
+			...this.diagnosticsSnapshot,
+			totalBytes: this.rawTotal,
+			recentBytes: [...this.rawBytes],
+			errors: [...this.rawErrors].map(([name, count]) => ({ name, count })),
+			...partial,
+		};
+		for (const listener of this.diagnosticsListeners) listener();
+	}
+
+	private scheduleDiagnostics() {
+		if (this.diagnosticsTimer) return;
+		this.diagnosticsTimer = setTimeout(() => this.publishDiagnostics(), DIAGNOSTICS_PUBLISH_MS);
+	}
+
+	/** Cada abertura da porta (e cada combinação da detecção) começa o diagnóstico do zero. */
+	private resetRawCounters() {
+		this.rawBytes = [];
+		this.rawTotal = 0;
+		this.rawErrors = new Map();
+		this.publishDiagnostics();
+	}
+
+	private recordRawBytes(chunk: Uint8Array) {
+		this.rawTotal += chunk.length;
+		for (const byte of chunk) this.rawBytes.push(byte);
+		if (this.rawBytes.length > RAW_SAMPLE_BYTES) this.rawBytes = this.rawBytes.slice(-RAW_SAMPLE_BYTES);
+		this.scheduleDiagnostics();
+	}
+
+	private recordReadError(error: unknown) {
+		const name = readErrorName(error);
+		this.rawErrors.set(name, (this.rawErrors.get(name) ?? 0) + 1);
+		this.scheduleDiagnostics();
 	}
 
 	private ensureProfileLoaded() {
@@ -319,6 +396,7 @@ class SerialScaleConnection {
 			await this.closePort();
 			this.setProfile(null);
 			this.setStatus({ status: "DISCONNECTED", error: null, hasAnswered: false });
+			this.publishDiagnostics({ detection: null });
 		});
 	}
 
@@ -367,6 +445,7 @@ class SerialScaleConnection {
 		this.active = settings;
 		this.session += 1;
 		this.parser = createScaleFrameParser({ casasDecimais: settings.casasDecimais });
+		this.resetRawCounters();
 		this.writer = port.writable?.getWriter() ?? null;
 		this.readLoopDone = this.readLoop(port, this.session);
 		this.startPolling();
@@ -417,8 +496,10 @@ class SerialScaleConnection {
 					if (done) break;
 					if (value && this.session === session) this.handleBytes(value);
 				}
-			} catch {
-				// Erro não fatal: o próximo giro pega o novo `readable`.
+			} catch (error) {
+				// Erro não fatal: o próximo giro pega o novo `readable`. Vai para o diagnóstico — erro de
+				// enquadramento quer dizer que a linha tem sinal, só que noutra velocidade ou formato.
+				if (this.session === session) this.recordReadError(error);
 			} finally {
 				reader.releaseLock();
 				if (this.reader === reader) this.reader = null;
@@ -450,6 +531,7 @@ class SerialScaleConnection {
 	}
 
 	private handleBytes(chunk: Uint8Array) {
+		this.recordRawBytes(chunk);
 		this.emitFrames(this.parser.push(chunk));
 		if (this.flushTimer) clearTimeout(this.flushTimer);
 		this.flushTimer = setTimeout(() => {
@@ -491,24 +573,33 @@ class SerialScaleConnection {
 	/**
 	 * Testa as combinações conhecidas até a balança responder. Em cada enquadramento, primeiro só
 	 * escuta (modo contínuo), depois pede o peso com cada comando. Roda dentro da fila.
+	 *
+	 * Sem resposta, deixa no diagnóstico o que chegou em cada enquadramento: é o que separa "cabo ou
+	 * balança sem saída serial" (nada chegou) de "balança num formato desconhecido" (chegou lixo).
 	 */
 	private async detectOn(port: TWebSerialPort): Promise<TSerialScaleSettings | null> {
 		this.isDetecting = true;
+		this.publishDiagnostics({ detection: null });
 		const decimals = this.profile?.settings.casasDecimais ?? DEFAULT_SERIAL_SCALE_SETTINGS.casasDecimais;
+		const attempts: TSerialScaleDetectionAttempt[] = [];
+		let found: TSerialScaleSettings | null = null;
 		try {
 			for (const framing of SERIAL_SCALE_DETECTION_FRAMINGS) {
 				const listening: TSerialScaleSettings = { ...framing, comando: "CONTINUO", casasDecimais: decimals };
 				this.setStatus({ detecting: describeAttempt(listening) });
-				if (!(await this.openPort(port, listening))) return null;
+				if (!(await this.openPort(port, listening))) break;
 				let frames = 0;
+				let totalFrames = 0;
 				const onFrame = () => {
 					frames += 1;
+					totalFrames += 1;
 				};
 				this.frameListeners.add(onFrame);
 				try {
 					await sleep(DETECT_LISTEN_MS);
-					if (frames >= DETECT_FRAMES_REQUIRED) return listening;
-					for (const comando of DETECTION_COMMANDS) {
+					const unpromptedBytes = this.rawTotal;
+					if (frames >= DETECT_FRAMES_REQUIRED) found = listening;
+					for (const comando of found ? [] : DETECTION_COMMANDS) {
 						const attempt: TSerialScaleSettings = { ...listening, comando };
 						this.active = attempt;
 						this.setStatus({ detecting: describeAttempt(attempt) });
@@ -518,8 +609,20 @@ class SerialScaleConnection {
 							await this.sendCommand(comando);
 							await sleep(POLL_INTERVAL_MS / 2);
 						}
-						if (frames >= DETECT_FRAMES_REQUIRED) return attempt;
+						if (frames >= DETECT_FRAMES_REQUIRED) {
+							found = attempt;
+							break;
+						}
 					}
+					if (found) return found;
+					attempts.push({
+						label: describeFraming(framing),
+						bytes: this.rawTotal,
+						unpromptedBytes,
+						frames: totalFrames,
+						errors: [...this.rawErrors].map(([name, count]) => ({ name, count })),
+						sample: this.rawBytes.slice(0, 24),
+					});
 				} finally {
 					this.frameListeners.delete(onFrame);
 				}
@@ -529,6 +632,7 @@ class SerialScaleConnection {
 		} finally {
 			this.isDetecting = false;
 			this.setStatus({ detecting: null, hasAnswered: false });
+			this.publishDiagnostics({ detection: found ? null : attempts });
 		}
 	}
 

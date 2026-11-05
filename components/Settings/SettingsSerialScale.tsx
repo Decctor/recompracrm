@@ -16,6 +16,7 @@ import {
 import { ChevronDown, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import SerialScaleDiagnostics from "./SerialScaleDiagnostics";
 
 const BAUD_OPTIONS = SERIAL_SCALE_BAUD_RATES.map((rate) => ({ id: rate, value: String(rate), label: `${rate} bps` }));
 const DATA_BITS_OPTIONS = [7, 8].map((bits) => ({ id: bits, value: String(bits), label: `${bits} bits` }));
@@ -119,6 +120,15 @@ export default function SettingsSerialScale() {
 							{hasAnswered ? " — coloque um peso conhecido no prato e confira." : null}
 						</span>
 					</div>
+				) : isConnected ? (
+					// Detecção sem resposta: a porta continua aberta com o ponto de partida, para o ajuste
+					// manual e o diagnóstico. Não é "nenhuma balança" — é a balança que não respondeu.
+					<div className="flex flex-col gap-1">
+						<span className="text-base font-bold">{live.frame ? describeTestFrame(live.frame) : "A porta está aberta, mas a balança não respondeu."}</span>
+						<span className="text-muted-foreground text-xs">
+							{describeSerialScaleSettings(settings)} — ajuste os parâmetros abaixo ou confira o diagnóstico da porta.
+						</span>
+					</div>
 				) : (
 					<span className="text-muted-foreground text-sm">Nenhuma balança pareada neste computador.</span>
 				)}
@@ -144,6 +154,19 @@ export default function SettingsSerialScale() {
 								ESQUECER BALANÇA
 							</Button>
 						</>
+					) : isConnected ? (
+						<>
+							<Button type="button" variant="outline" size="sm" onClick={() => void redetect()} disabled={isBusy}>
+								{isBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+								DETECTAR DE NOVO
+							</Button>
+							<Button type="button" variant="outline" size="sm" onClick={() => void pair()} disabled={isBusy}>
+								TROCAR PORTA
+							</Button>
+							<Button type="button" variant="ghost" size="sm" onClick={() => void run(scale.disconnect)} disabled={isBusy}>
+								FECHAR PORTA
+							</Button>
+						</>
 					) : (
 						<Button type="button" variant="outline" size="sm" onClick={() => void pair()} disabled={isBusy}>
 							{isBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
@@ -153,7 +176,11 @@ export default function SettingsSerialScale() {
 				</div>
 			</div>
 
-			{scale.isPaired || showManual ? (
+			{!scale.detecting && !hasAnswered ? (
+				<SerialScaleDiagnostics isPortOpen={isConnected} portSettingsLabel={describeSerialScaleSettings(settings)} />
+			) : null}
+
+			{scale.isPaired || showManual || isConnected ? (
 				<div className="flex flex-col gap-2">
 					<button
 						type="button"

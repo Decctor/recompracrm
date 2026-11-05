@@ -1,6 +1,11 @@
 "use client";
 
-import { serialScale, type TSerialScaleLiveSnapshot, type TSerialScaleStatusSnapshot } from "@/lib/pos/serial-scale-connection";
+import {
+	serialScale,
+	type TSerialScaleDiagnosticsSnapshot,
+	type TSerialScaleLiveSnapshot,
+	type TSerialScaleStatusSnapshot,
+} from "@/lib/pos/serial-scale-connection";
 import type { TSerialScaleSettings } from "@/lib/pos/serial-scale-protocol";
 import { getWebSerial } from "@/lib/pos/web-serial";
 import { useCallback, useEffect, useSyncExternalStore } from "react";
@@ -14,6 +19,7 @@ const SERVER_STATUS: TSerialScaleStatusSnapshot = {
 	detecting: null,
 };
 const SERVER_LIVE: TSerialScaleLiveSnapshot = { frame: null, receivedAt: null };
+const SERVER_DIAGNOSTICS: TSerialScaleDiagnosticsSnapshot = { totalBytes: 0, recentBytes: [], errors: [], detection: null };
 
 function subscribeNothing() {
 	return () => {};
@@ -81,4 +87,9 @@ export type TUseSerialScale = ReturnType<typeof useSerialScale>;
 /** Último quadro lido e quando chegou. Só para quem exibe o peso ao vivo. */
 export function useSerialScaleLiveReading() {
 	return useSyncExternalStore(serialScale.subscribeLive, serialScale.getLiveSnapshot, () => SERVER_LIVE);
+}
+
+/** Bytes crus, erros de leitura e o relatório da última detecção falha. Só para a tela de pareamento. */
+export function useSerialScaleDiagnostics() {
+	return useSyncExternalStore(serialScale.subscribeDiagnostics, serialScale.getDiagnosticsSnapshot, () => SERVER_DIAGNOSTICS);
 }
