@@ -53,6 +53,7 @@ async function getFinancialTransactions({ input, session }: { input: TGetFinanci
 			with: {
 				contaFinanceira: { columns: { id: true, nome: true, tipo: true } },
 				autor: { columns: { id: true, nome: true, avatarUrl: true } },
+				efetivacaoAutor: { columns: { id: true, nome: true, avatarUrl: true } },
 				lancamentoContabil: { columns: { id: true, titulo: true, valor: true, valorPrevisto: true, anotacoes: true } },
 			},
 		});
@@ -110,6 +111,7 @@ async function getFinancialTransactions({ input, session }: { input: TGetFinanci
 			with: {
 				contaFinanceira: { columns: { id: true, nome: true, tipo: true } },
 				autor: { columns: { id: true, nome: true, avatarUrl: true } },
+				efetivacaoAutor: { columns: { id: true, nome: true, avatarUrl: true } },
 			},
 			orderBy: (fields, { desc }) => desc(fields.dataPrevisao),
 			limit: PAGE_SIZE,

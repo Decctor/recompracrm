@@ -169,7 +169,9 @@ export async function receiveStoreCredit({ orgId, authorId, clientId, receipt, a
 					contaFinanceiraId: targetAccountId ?? transaction.contaFinanceiraId,
 					sessaoVendaId: session?.id ?? transaction.sessaoVendaId,
 					provedorStatus: "APROVADO",
-					autorId: authorId,
+					// `autorId` continua sendo quem lançou a venda; quem recebeu fica na auditoria da efetivação.
+					efetivacaoAutorId: authorId,
+					efetivacaoOrigem: "MANUAL",
 				})
 				.where(and(eq(financialTransactions.id, transaction.id), eq(financialTransactions.organizacaoId, orgId)));
 
@@ -193,7 +195,8 @@ export async function receiveStoreCredit({ orgId, authorId, clientId, receipt, a
 					parcela: transaction.parcela,
 					totalParcelas: transaction.totalParcelas,
 					provedorStatus: "PENDENTE",
-					autorId: authorId,
+					// O saldo é a mesma dívida, só menor: mantém o autor do fiado original.
+					autorId: transaction.autorId,
 				});
 				titulosParciais += 1;
 			} else {

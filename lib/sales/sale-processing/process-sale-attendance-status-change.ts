@@ -3,10 +3,10 @@ import { db } from "@/services/drizzle";
 import { financialTransactions, saleItems, sales } from "@/services/drizzle/schema";
 import type { TOrganizationEntity } from "@/services/drizzle/schema";
 import type { TPaymentMethodEnum, TSaleAttendanceStatusEnum } from "@/schemas/enums";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { attendanceStatusRequiresPhysicalOut, isValidAttendanceTransition } from "./attendance";
-import { getSaleFinancialState } from "./get-sale-financial-state";
+import { resolveDeliveryPaymentCoverage } from "@/lib/sales/delivery-payment-coverage";
 import { processSaleAutomaticFiscalEmissionIfEligible } from "./process-sale-automatic-fiscal-emission";
 import { processSaleCashbackAccumulationIfEligible } from "./process-sale-cashback-accumulation";
 import { processStockDeduction } from "./process-stock-deduction";
@@ -67,19 +67,18 @@ export async function processSaleAttendanceStatusChange(input: ProcessSaleAttend
 	}
 
 	const requiresPhysicalOut = attendanceStatusRequiresPhysicalOut(input.targetStatus);
-	const financialState = requiresPhysicalOut ? await getSaleFinancialState({ organizationId: input.organization.id, saleId: input.saleId }) : null;
-	if (requiresPhysicalOut && !financialState?.isFullyPaid && !input.settlePendingPayment && !input.allowUnpaidDelivery) {
+	// Fiado em aberto cobre a entrega e nunca é efetivado por ela: sai pelo recebimento de fiado.
+	const coverage = requiresPhysicalOut
+		? resolveDeliveryPaymentCoverage({ transactions: sale.lancamentosContabeis.flatMap((entry) => entry.transacoesFinanceiras), saleTotal: sale.valorTotal })
+		: null;
+	const needsSettlement = coverage != null && !coverage.isCovered;
+	if (needsSettlement && !input.settlePendingPayment && !input.allowUnpaidDelivery) {
 		throw new createHttpError.BadRequest("Confirme o pagamento antes de entregar o pedido.");
 	}
 
 	await db.transaction(async (tx) => {
-		if (requiresPhysicalOut && input.settlePendingPayment && !financialState?.isFullyPaid) {
-			const pendingTransactions = sale.lancamentosContabeis
-				.flatMap((entry) => entry.transacoesFinanceiras)
-				.filter(
-					(transaction) =>
-						transaction.tipo === "ENTRADA" && !transaction.dataEfetivacao && !["CANCELADO", "ESTORNADO"].includes(transaction.provedorStatus ?? ""),
-				);
+		if (coverage && !coverage.isCovered && input.settlePendingPayment) {
+			const pendingTransactions = coverage.transacoesAReceber;
 
 			// A charge still running on the terminal is settled only by its approval.
 			const inFlightAttempt =
@@ -99,26 +98,22 @@ export async function processSaleAttendanceStatusChange(input: ProcessSaleAttend
 						});
 			if (inFlightAttempt) throw new createHttpError.BadRequest("Confirme a cobrança no terminal integrado antes de efetivar os pagamentos da entrega.");
 			if (pendingTransactions.length === 0) throw new createHttpError.BadRequest("Não há pagamento pendente para efetivar.");
-			const settledTotal = sale.lancamentosContabeis
-				.flatMap((entry) => entry.transacoesFinanceiras)
-				.filter(
-					(transaction) =>
-						transaction.tipo === "ENTRADA" && transaction.dataEfetivacao && !["CANCELADO", "ESTORNADO"].includes(transaction.provedorStatus ?? ""),
-				)
-				.reduce((sum, transaction) => sum + transaction.valor, 0);
-			const pendingTotal = pendingTransactions.reduce((sum, transaction) => sum + transaction.valor, 0);
-			if (settledTotal + pendingTotal < sale.valorTotal) throw new createHttpError.BadRequest("Os pagamentos registrados não cobrem o total da venda.");
+			if (!coverage.isCoverableBySettling) throw new createHttpError.BadRequest("Os pagamentos registrados não cobrem o total da venda.");
 
 			for (const transaction of pendingTransactions) {
+				// Só efetiva o que continua pendente: a lista veio de uma leitura sem trava, e um
+				// pagamento efetivado nesse meio-tempo mantém a data e a auditoria de quem o efetivou.
 				await tx
 					.update(financialTransactions)
 					.set({
 						dataEfetivacao: new Date(),
+						efetivacaoAutorId: input.authorId,
+						efetivacaoOrigem: input.authorId ? "MANUAL" : "SISTEMA",
 						contaFinanceiraId: input.financialAccountId ?? transaction.contaFinanceiraId,
 						metodo: input.paymentMethod ?? transaction.metodo,
 						provedorStatus: "APROVADO",
 					})
-					.where(eq(financialTransactions.id, transaction.id));
+					.where(and(eq(financialTransactions.id, transaction.id), isNull(financialTransactions.dataEfetivacao)));
 			}
 		}
 

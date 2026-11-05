@@ -105,6 +105,7 @@ async function main() {
 				.update(financialTransactions)
 				.set({
 					dataEfetivacao: row.dataCompetencia,
+					efetivacaoOrigem: "SISTEMA",
 					dataPrevisao: row.dataCompetencia,
 					provedorStatus: "APROVADO",
 				})

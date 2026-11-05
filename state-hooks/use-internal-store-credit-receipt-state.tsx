@@ -35,7 +35,8 @@ export function useInternalStoreCreditReceiptState({ titulos, initialState, init
 
 	const [state, setState] = useState<TStoreCreditReceiptState>(() => ({
 		valor: initialState?.valor ?? (tituloInicial ? tituloInicial.saldo : saldoTotal),
-		dataRecebimento: initialState?.dataRecebimento ?? formatDateForInputValue(new Date()),
+		// Data e hora: o padrão é o momento do registro, e o operador só mexe se recebeu antes.
+		dataRecebimento: initialState?.dataRecebimento ?? formatDateForInputValue(new Date(), "datetime"),
 		metodo: initialState?.metodo ?? "DINHEIRO",
 		contaFinanceiraId: initialState?.contaFinanceiraId ?? null,
 		sessaoVendaId: initialState?.sessaoVendaId ?? null,

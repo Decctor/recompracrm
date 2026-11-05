@@ -4,6 +4,7 @@ import type { TGetSalesFulfillmentOutputDefault, TPatchSalesFulfillmentInput, TS
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { resolveDeliveryPaymentCoverage } from "@/lib/sales/delivery-payment-coverage";
 import { getErrorMessage } from "@/lib/errors";
 import { patchSalesFulfillment, updateSaleAttendanceStatus } from "@/lib/mutations/sales";
 import { SALES_FULFILLMENT_QUERY_KEY, useSalesFulfillment } from "@/lib/queries/sales-fulfillment";
@@ -321,7 +322,8 @@ export default function FulfillmentBoard({ organizationId, organizationConfig, c
 	async function handleConfirmDelivery(card: TSalesFulfillmentCard) {
 		if (!pendingTransition) return;
 		await commitMove(card, pendingTransition.targetStatus, pendingTransition.previousStatus, {
-			settlePendingPayment: card.financeiro !== "RECEBIDA",
+			// Fiado em aberto já cobre a entrega: só pede efetivação quando falta pagamento de fato.
+			settlePendingPayment: !resolveDeliveryPaymentCoverage({ transactions: card.pagamentos, saleTotal: card.valorTotal }).isCovered,
 		});
 		setPendingTransition(null);
 	}

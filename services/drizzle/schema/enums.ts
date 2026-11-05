@@ -233,6 +233,17 @@ export const bankAccountTypeEnum = pgEnum("bank_account_type", ["CORRENTE", "POU
 
 export const financialTransactionTypeEnum = pgEnum("financial_transaction_type", ["ENTRADA", "SAIDA"]);
 
+// Como uma transação financeira foi efetivada (financial_transactions.efetivacao_origem):
+// IMEDIATA nasceu paga; MANUAL um usuário confirmou depois; INTEGRACAO um provedor externo
+// confirmou (terminal, canais); CONCILIACAO veio do extrato; SISTEMA rotina interna ou script.
+export const financialTransactionSettlementOriginEnum = pgEnum("financial_transaction_settlement_origin", [
+	"IMEDIATA",
+	"MANUAL",
+	"INTEGRACAO",
+	"CONCILIACAO",
+	"SISTEMA",
+]);
+
 export const accountingEntryOriginTypeEnum = pgEnum("accounting_entry_origin_type", [
 	"VENDA",
 	"COMPRA",

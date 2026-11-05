@@ -119,7 +119,7 @@ export function computeSaleFiscalStatus({ documents }: { documents: FiscalDocume
 	return "PENDENTE";
 }
 
-const NON_EDITABLE_PAYMENT_STATUSES = new Set(["CANCELADO", "ESTORNADO"]);
+export const NON_EDITABLE_PAYMENT_STATUSES = new Set(["CANCELADO", "ESTORNADO"]);
 
 export type SalePaymentTransactionInput = {
 	grupoPagamentoId?: string | null;

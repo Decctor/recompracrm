@@ -5,6 +5,7 @@ import {
 	AccountingEntryOriginTypeEnum,
 	BankAccountTypeEnum,
 	FinancialAccountTypeEnum,
+	FinancialTransactionSettlementOriginEnum,
 	FinancialTransactionTypeEnum,
 	FiscalDocumentStatusEnum,
 	FiscalDocumentTypeEnum,
@@ -313,6 +314,8 @@ export const FinancialTransactionSchema = z.object({
 		.optional()
 		.nullable()
 		.transform((val) => (val ? new Date(val) : null)),
+	efetivacaoAutorId: z.string({ invalid_type_error: "Tipo nao valido para o ID do autor da efetivacao." }).optional().nullable(),
+	efetivacaoOrigem: FinancialTransactionSettlementOriginEnum.optional().nullable(),
 	parcela: z.number({ invalid_type_error: "Tipo nao valido para o numero da parcela." }).optional().nullable(),
 	totalParcelas: z.number({ invalid_type_error: "Tipo nao valido para o total de parcelas." }).optional().nullable(),
 	autorId: z.string({ invalid_type_error: "Tipo nao valido para o ID do autor." }).optional().nullable(),

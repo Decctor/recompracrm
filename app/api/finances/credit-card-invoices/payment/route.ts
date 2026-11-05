@@ -203,6 +203,8 @@ async function createCreditCardPayment({ input, session }: { input: TCreateCredi
 					metodo: "TRANSFERENCIA",
 					dataPrevisao: payment.dataEfetivacao,
 					dataEfetivacao: payment.dataEfetivacao,
+					efetivacaoAutorId: session.user.id,
+					efetivacaoOrigem: "IMEDIATA",
 					autorId: session.user.id,
 				},
 				{
@@ -215,6 +217,8 @@ async function createCreditCardPayment({ input, session }: { input: TCreateCredi
 					metodo: "TRANSFERENCIA",
 					dataPrevisao: payment.dataVencimento,
 					dataEfetivacao: payment.dataEfetivacao,
+					efetivacaoAutorId: session.user.id,
+					efetivacaoOrigem: "IMEDIATA",
 					autorId: session.user.id,
 				},
 			])

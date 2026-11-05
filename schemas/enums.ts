@@ -231,6 +231,8 @@ export const BankAccountTypeEnum = z.enum(["CORRENTE", "POUPANCA", "PAGAMENTO"])
 export type TBankAccountTypeEnum = z.infer<typeof BankAccountTypeEnum>;
 export const FinancialTransactionTypeEnum = z.enum(["ENTRADA", "SAIDA"]);
 export type TFinancialTransactionTypeEnum = z.infer<typeof FinancialTransactionTypeEnum>;
+export const FinancialTransactionSettlementOriginEnum = z.enum(["IMEDIATA", "MANUAL", "INTEGRACAO", "CONCILIACAO", "SISTEMA"]);
+export type TFinancialTransactionSettlementOriginEnum = z.infer<typeof FinancialTransactionSettlementOriginEnum>;
 export const AccountingEntryOriginTypeEnum = z.enum([
 	"VENDA",
 	"COMPRA",

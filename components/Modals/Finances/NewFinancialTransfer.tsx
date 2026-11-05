@@ -1,6 +1,6 @@
 "use client";
 
-import DateInput from "@/components/Inputs/DateInput";
+import DateTimeInput from "@/components/Inputs/DateTimeInput";
 import NumberInput from "@/components/Inputs/NumberInput";
 import SelectInput from "@/components/Inputs/SelectInput";
 import TextareaInput from "@/components/Inputs/TextareaInput";
@@ -153,9 +153,9 @@ export default function NewFinancialTransfer({ closeMenu, callbacks }: NewFinanc
 					placeholder="Informe o valor da transferência..."
 					required
 				/>
-				<DateInput
-					label="DATA DA TRANSFERÊNCIA"
-					value={formatDateForInputValue(state.dataEfetivacao)}
+				<DateTimeInput
+					label="DATA E HORA DA TRANSFERÊNCIA"
+					value={formatDateForInputValue(state.dataEfetivacao, "datetime")}
 					handleChange={(value) => updateState({ dataEfetivacao: formatDateOnInputChange(value, "date") ?? state.dataEfetivacao })}
 					required
 				/>

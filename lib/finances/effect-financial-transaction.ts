@@ -1,8 +1,8 @@
 import { processSaleAutomaticFiscalEmissionIfEligible, processSaleCashbackAccumulationIfEligible } from "@/lib/sales/sale-processing";
-import type { TPaymentMethodEnum } from "@/schemas/enums";
+import type { TFinancialTransactionSettlementOriginEnum, TPaymentMethodEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
 import { financialTransactions } from "@/services/drizzle/schema";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import createHttpError from "http-errors";
 
 /**
@@ -17,6 +17,7 @@ export async function effectFinancialTransactionCore({
 	dataEfetivacao,
 	contaFinanceiraId,
 	metodo,
+	origem = "MANUAL",
 }: {
 	transactionId: string;
 	orgId: string;
@@ -24,6 +25,8 @@ export async function effectFinancialTransactionCore({
 	dataEfetivacao?: Date | null;
 	contaFinanceiraId?: string | null;
 	metodo?: TPaymentMethodEnum | null;
+	/** MANUAL no menu de efetivação; CONCILIACAO quando quem confirma é a conciliação bancária. */
+	origem?: Extract<TFinancialTransactionSettlementOriginEnum, "MANUAL" | "CONCILIACAO">;
 }) {
 	const transaction = await db.query.financialTransactions.findFirst({
 		where: (fields, { and, eq }) => and(eq(fields.id, transactionId), eq(fields.organizacaoId, orgId)),
@@ -65,14 +68,18 @@ export async function effectFinancialTransactionCore({
 		.update(financialTransactions)
 		.set({
 			dataEfetivacao: dataEfetivacao ?? new Date(),
+			efetivacaoAutorId: authorId,
+			efetivacaoOrigem: origem,
 			contaFinanceiraId: contaFinanceiraId ?? transaction.contaFinanceiraId,
 			metodo: effectiveMethod,
 			provedorStatus: "APROVADO",
 		})
-		.where(and(eq(financialTransactions.id, transactionId), eq(financialTransactions.organizacaoId, orgId)))
+		// `data_efetivacao IS NULL` no próprio UPDATE: a leitura acima não trava a linha, e outra
+		// efetivação concorrente (conciliação, recebimento) não pode ter a data e a auditoria sobrescritas.
+		.where(and(eq(financialTransactions.id, transactionId), eq(financialTransactions.organizacaoId, orgId), isNull(financialTransactions.dataEfetivacao)))
 		.returning({ id: financialTransactions.id });
 
-	if (!updated) throw new createHttpError.InternalServerError("Não foi possível efetivar a transação.");
+	if (!updated) throw new createHttpError.Conflict("Esta transação acabou de ser efetivada por outro caminho. Atualize a tela.");
 
 	const saleId = transaction.lancamentoContabil?.vendaId;
 	if (saleId) {

@@ -159,6 +159,7 @@ export async function processManagedSaleFinancials(
 			metodo: payment.metodo,
 			dataPrevisao: sale.occurredAt,
 			dataEfetivacao: isOnline ? sale.occurredAt : null,
+			efetivacaoOrigem: isOnline ? "INTEGRACAO" : null,
 			provedorReferencia: sale.sourceSaleId,
 			provedorStatus: isOnline ? PROVIDER_STATUS.APPROVED : PROVIDER_STATUS.PENDING,
 			autorId: null,
@@ -253,6 +254,7 @@ async function processManagedSaleChannelFees(
 			metodo: "OUTRO",
 			dataPrevisao: sale.occurredAt,
 			dataEfetivacao: sale.occurredAt,
+			efetivacaoOrigem: "INTEGRACAO",
 			provedorReferencia: sale.sourceSaleId,
 			provedorStatus: PROVIDER_STATUS.APPROVED,
 			autorId: null,
@@ -288,7 +290,7 @@ export async function settleManagedSaleOfflinePayments(tx: DBTransaction, { orga
 	for (const transaction of pendingOffline) {
 		await tx
 			.update(financialTransactions)
-			.set({ dataEfetivacao: new Date(), provedorStatus: PROVIDER_STATUS.APPROVED })
+			.set({ dataEfetivacao: new Date(), efetivacaoOrigem: "INTEGRACAO", provedorStatus: PROVIDER_STATUS.APPROVED })
 			.where(eq(financialTransactions.id, transaction.id));
 	}
 }
@@ -384,6 +386,7 @@ export async function cancelManagedSaleFinancials(tx: DBTransaction, { organizat
 					metodo: transaction.metodo,
 					dataPrevisao: new Date(),
 					dataEfetivacao: new Date(),
+					efetivacaoOrigem: "INTEGRACAO",
 					provedorReferencia: transaction.provedorReferencia,
 					provedorStatus: PROVIDER_STATUS.REVERSED,
 					autorId: null,

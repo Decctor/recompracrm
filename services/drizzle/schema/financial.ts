@@ -21,6 +21,7 @@ import {
   accountingEntryOriginTypeEnum,
   bankAccountTypeEnum,
   financialAccountTypeEnum,
+  financialTransactionSettlementOriginEnum,
   financialTransactionTypeEnum,
   fiscalDocumentEnvironmentEnum,
   fiscalDocumentLifecycleStatusEnum,
@@ -393,6 +394,11 @@ export const financialTransactions = newTable(
     metodo: paymentMethodEnum("metodo").notNull(),
     dataPrevisao: timestamp("data_previsao").notNull(),
     dataEfetivacao: timestamp("data_efetivacao"),
+    // Auditoria da efetivação: quem e por qual via a transação foi dada como paga. Gravados por
+    // todo caminho que define `dataEfetivacao`; ajustar uma transação já efetivada não os altera.
+    // Nulos nas efetivações anteriores à auditoria (a tela mostra "—").
+    efetivacaoAutorId: varchar("efetivacao_autor_id", { length: 255 }).references(() => users.id, { onDelete: "set null" }),
+    efetivacaoOrigem: financialTransactionSettlementOriginEnum("efetivacao_origem"),
     grupoPagamentoId: varchar("grupo_pagamento_id", { length: 255 }),
     condicoesRecebimento: jsonb("condicoes_recebimento").$type<TPaymentReceiptConditions | null>(),
     parcela: integer("parcela"),
@@ -456,6 +462,10 @@ export const financialTransactionsRelations = relations(
     }),
     autor: one(users, {
       fields: [financialTransactions.autorId],
+      references: [users.id],
+    }),
+    efetivacaoAutor: one(users, {
+      fields: [financialTransactions.efetivacaoAutorId],
       references: [users.id],
     }),
   }),

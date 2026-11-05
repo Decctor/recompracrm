@@ -1,7 +1,7 @@
 "use client";
 
 import type { TGetFinancialAccountsOutputDefault } from "@/app/api/finances/financial-accounts/route";
-import DateInput from "@/components/Inputs/DateInput";
+import DateTimeInput from "@/components/Inputs/DateTimeInput";
 import SelectInput from "@/components/Inputs/SelectInput";
 import ResponsiveMenuSection from "@/components/Utils/ResponsiveMenuSection";
 import type { TPaymentMethodEnum } from "@/schemas/enums";
@@ -57,7 +57,7 @@ export default function FinancialTransactionEffectBlock({
 
 	return (
 		<ResponsiveMenuSection title="EFETIVAÇÃO" icon={<CheckCircle2 className="h-4 w-4 min-h-4 min-w-4" />}>
-			<DateInput label="DATA DE EFETIVAÇÃO" value={effectDate} handleChange={setEffectDate} />
+			<DateTimeInput label="DATA E HORA DA EFETIVAÇÃO" value={effectDate} handleChange={setEffectDate} />
 			<SelectInput
 				label="CONTA FINANCEIRA"
 				value={selectedAccountId}

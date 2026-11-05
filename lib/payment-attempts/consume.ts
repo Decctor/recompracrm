@@ -1,6 +1,6 @@
 import { processSaleAutomaticFiscalEmissionIfEligible, processSaleCashbackAccumulationIfEligible } from "@/lib/sales/sale-processing";
 import { db } from "@/services/drizzle";
-import { financialTransactions, organizations, paymentAttempts } from "@/services/drizzle/schema";
+import { financialTransactions, organizations, paymentAttemptEvents, paymentAttempts } from "@/services/drizzle/schema";
 import { and, eq, sql } from "drizzle-orm";
 import { PaymentTerminalError } from "./errors";
 import { recordPaymentAttemptEvent } from "./events";
@@ -77,10 +77,25 @@ export async function consumeApprovedPaymentAttempt(params: TConsumeApprovedPaym
 
 		const now = new Date();
 		if (!transaction.dataEfetivacao) {
+			// O consumo normal chega pelo terminal (principalId do dispositivo, sem usuário). Quem conduziu
+			// a cobrança é o operador que a criou, registrado no evento de CRIACAO da tentativa.
+			const settlementAuthorId =
+				params.actorUserId ??
+				(
+					await tx
+						.select({ usuarioId: paymentAttemptEvents.usuarioId })
+						.from(paymentAttemptEvents)
+						.where(and(eq(paymentAttemptEvents.tentativaId, attempt.id), eq(paymentAttemptEvents.tipo, "CRIACAO")))
+						.limit(1)
+				)[0]?.usuarioId ??
+				null;
 			await tx
 				.update(financialTransactions)
 				.set({
 					dataEfetivacao: now,
+					// A adquirente confirmou; o operador que conduziu a cobrança fica como autor quando conhecido.
+					efetivacaoAutorId: settlementAuthorId,
+					efetivacaoOrigem: "INTEGRACAO",
 					provedorReferencia: attempt.atkProvedor ?? attempt.itkProvedor ?? null,
 					provedorStatus: "APROVADO",
 					tentativaPagamentoId: attempt.id,

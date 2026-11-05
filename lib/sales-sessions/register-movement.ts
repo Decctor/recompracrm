@@ -81,6 +81,8 @@ export async function registerSalesSessionMovement({
 				metodo: "DINHEIRO",
 				dataPrevisao: new Date(),
 				dataEfetivacao: new Date(),
+				efetivacaoAutorId: autorId,
+				efetivacaoOrigem: "IMEDIATA",
 				provedorStatus: "APROVADO",
 				autorId,
 			})

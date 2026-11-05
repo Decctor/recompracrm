@@ -100,6 +100,8 @@ export class LocalPaymentProvider implements IPaymentProvider {
 					metodo: pagamento.metodo,
 					dataPrevisao,
 					dataEfetivacao,
+					efetivacaoAutorId: isImmediate ? input.autorId : null,
+					efetivacaoOrigem: isImmediate ? "IMEDIATA" : null,
 					parcela: null,
 					totalParcelas: pagamento.totalParcelas ?? null,
 					provedorReferencia: null,

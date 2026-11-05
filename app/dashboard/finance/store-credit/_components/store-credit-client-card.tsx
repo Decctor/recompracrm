@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { getErrorMessage } from "@/lib/errors";
 import { getStoreCreditDaysOverdue } from "@/lib/finances/store-credit/aging";
 import { STORE_CREDIT_RECEIPT_ORIGIN } from "@/lib/finances/store-credit/constants";
+import { formatSettlementDate } from "@/lib/finances/settlement-audit";
 import { formatDateAsLocale, formatNameAsInitials, formatToMoney } from "@/lib/formatting";
 import { PAYMENT_METHOD_CHIP_LABELS } from "@/lib/payments/labels";
 import { type TStoreCreditOriginScope, useStoreCreditClientTitles } from "@/lib/queries/store-credit";
@@ -199,7 +200,7 @@ export function StoreCreditClientCard({ cliente, canReceive, originScope, onRece
 															</span>
 														) : (
 															<span className="text-green-700 dark:text-green-400">
-																Recebido em {formatDateAsLocale(titulo.dataEfetivacao)}
+																Recebido em {formatSettlementDate(titulo.dataEfetivacao)}
 																{quitadoViaBaixa ? ` em ${PAYMENT_METHOD_CHIP_LABELS[titulo.metodo as TPaymentMethodEnum] ?? titulo.metodo}` : ""}
 															</span>
 														)}

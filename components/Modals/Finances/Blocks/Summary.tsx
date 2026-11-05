@@ -4,6 +4,7 @@ import type { TGetFinancialTransactionsOutputById } from "@/app/api/finances/fin
 import ResponsiveMenuSection from "@/components/Utils/ResponsiveMenuSection";
 import { CHIP_XS_ICON_CLASS, Chip } from "@/components/ui/chip";
 import { formatDateAsLocale, formatToMoney } from "@/lib/formatting";
+import { formatSettlementDate, SETTLEMENT_ORIGIN_LABEL } from "@/lib/finances/settlement-audit";
 import { cn } from "@/lib/utils";
 import { FinancialTransactionTypeOptions, SalePaymentMethodsOptions } from "@/utils/select-options";
 import { AlertCircle, CheckCircle2, Clock, Receipt } from "lucide-react";
@@ -64,7 +65,15 @@ export default function FinancialTransactionSummaryBlock({ transaction }: Financ
 
 			<div className="flex w-full min-w-0 flex-col">
 				{transaction.dataPrevisao ? <DetailField label="Previsão" value={formatDateAsLocale(transaction.dataPrevisao)} /> : null}
-				{transaction.dataEfetivacao ? <DetailField label="Efetivação" value={formatDateAsLocale(transaction.dataEfetivacao)} /> : null}
+				{transaction.dataEfetivacao ? (
+					<>
+						<DetailField label="Efetivação" value={formatSettlementDate(transaction.dataEfetivacao)} />
+						{/* Efetivações anteriores à auditoria não registraram autor nem origem: "—", nunca um palpite. */}
+						<DetailField label="Efetivada por" value={transaction.efetivacaoAutor?.nome ?? "—"} />
+						<DetailField label="Via" value={transaction.efetivacaoOrigem ? SETTLEMENT_ORIGIN_LABEL[transaction.efetivacaoOrigem] : "—"} />
+					</>
+				) : null}
+				{transaction.autor ? <DetailField label="Lançada por" value={transaction.autor.nome} /> : null}
 				{paymentMethodConfig ? (
 					<DetailField label="Método">
 						<span className="flex items-center gap-1.5 text-sm font-medium">

@@ -81,9 +81,9 @@ function LoadedFinancialTransactionMenu({
 	callbacks,
 }: LoadedFinancialTransactionMenuProps) {
 	const queryClient = useQueryClient();
-	const [effectDate, setEffectDate] = useState<string | undefined>(() =>
-		formatDateForInputValue(transaction.dataEfetivacao ?? transaction.dataPrevisao),
-	);
+	// Pendente abre no momento atual, não na previsão: efetivar sem mexer no campo gravaria o
+	// vencimento como se fosse o dia do recebimento.
+	const [effectDate, setEffectDate] = useState<string | undefined>(() => formatDateForInputValue(transaction.dataEfetivacao ?? new Date(), "datetime"));
 	const [selectedAccountId, setSelectedAccountId] = useState<string | null>(() => transaction.contaFinanceira?.id ?? null);
 	const [selectedMethod, setSelectedMethod] = useState<TPaymentMethodEnum>(() =>
 		transaction.metodo === "A_DEFINIR" ? "DINHEIRO" : transaction.metodo,

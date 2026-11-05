@@ -181,8 +181,7 @@ function LoadedReceiveStoreCreditMenu({
 	function handleSubmit() {
 		if (validationError) return toast.error(validationError);
 
-		// Meio-dia (`natural`) e não início do dia: o recebimento precisa cair no dia que o operador
-		// escolheu, e a meia-noite local vira o dia anterior assim que a data atravessa o fuso.
+		// Data e hora local do operador, convertida para ISO: o recebimento guarda o horário real.
 		const dataRecebimento = formatDateOnInputChange(state.dataRecebimento, "string", "natural");
 		if (!dataRecebimento) return toast.error("Informe a data do recebimento.");
 

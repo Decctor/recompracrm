@@ -3,6 +3,7 @@ import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { TAuthUserSession } from "@/lib/authentication/types";
 import { canCreateFinances, canEditFinances, canViewFinances } from "@/lib/permissions/finances";
 import { getCreditCardForecastDate } from "@/lib/finances/credit-card";
+import { resolveSettlementAuditOnWrite } from "@/lib/finances/settlement-audit";
 import { normalizeFinancialTransactionValue } from "@/lib/finances/financial-transaction-value";
 import { getNextRecurringOccurrence } from "@/lib/finances/recurrence";
 import {
@@ -540,6 +541,7 @@ async function createAccountingEntry({ input, session }: { input: TCreateAccount
 						account: accountById.get(transaction.contaFinanceiraId ?? ""),
 						referenceDate: input.entry.dataCompetencia,
 					}),
+					...resolveSettlementAuditOnWrite({ isNew: true, nextDataEfetivacao: transaction.dataEfetivacao, authorId: session.user.id }),
 				})),
 			);
 		}
@@ -687,6 +689,28 @@ async function updateAccountingEntry({ input, session }: { input: TUpdateAccount
 			transactions: input.entryFinancialTransactions,
 		});
 
+		// Estado de efetivação atual das transações editadas: a auditoria só muda na passagem pendente ↔ paga.
+		// FOR UPDATE: sem a trava, uma conciliação que efetivasse a transação entre esta leitura e o
+		// update teria a auditoria dela sobrescrita como MANUAL por quem salvou o formulário.
+		const existingTransactionIds = input.entryFinancialTransactions.flatMap((transaction) => (transaction.id && !transaction.deletar ? [transaction.id] : []));
+		const existingSettlementById = new Map(
+			existingTransactionIds.length === 0
+				? []
+				: (
+						await tx
+							.select({ id: financialTransactions.id, dataEfetivacao: financialTransactions.dataEfetivacao })
+							.from(financialTransactions)
+							.where(
+								and(
+									inArray(financialTransactions.id, existingTransactionIds),
+									eq(financialTransactions.lancamentoContabilId, input.entryId),
+									eq(financialTransactions.organizacaoId, orgId),
+								),
+							)
+							.for("update")
+					).map((row) => [row.id, row.dataEfetivacao]),
+		);
+
 		for (const transaction of input.entryFinancialTransactions) {
 			if (transaction.id && transaction.deletar) {
 				await tx
@@ -704,12 +728,18 @@ async function updateAccountingEntry({ input, session }: { input: TUpdateAccount
 			if (transaction.id) {
 				await tx
 					.update(financialTransactions)
-					.set(
-						getTransactionValues(transaction, {
+					.set({
+						...getTransactionValues(transaction, {
 							account: accountById.get(transaction.contaFinanceiraId ?? ""),
 							referenceDate: input.entry.dataCompetencia,
 						}),
-					)
+						...resolveSettlementAuditOnWrite({
+							isNew: false,
+							previousDataEfetivacao: existingSettlementById.get(transaction.id) ?? null,
+							nextDataEfetivacao: transaction.dataEfetivacao,
+							authorId: session.user.id,
+						}),
+					})
 					.where(
 						and(
 							eq(financialTransactions.id, transaction.id),
@@ -728,6 +758,7 @@ async function updateAccountingEntry({ input, session }: { input: TUpdateAccount
 					account: accountById.get(transaction.contaFinanceiraId ?? ""),
 					referenceDate: input.entry.dataCompetencia,
 				}),
+				...resolveSettlementAuditOnWrite({ isNew: true, nextDataEfetivacao: transaction.dataEfetivacao, authorId: session.user.id }),
 			});
 		}
 

@@ -76,6 +76,7 @@ export async function confirmReconciliationMatch({ organizacaoId, autorId, match
 			dataEfetivacao: match.extratoTransacao.dataTransacao,
 			contaFinanceiraId: match.transacaoFinanceira.contaFinanceiraId ?? match.extratoTransacao.contaFinanceiraId,
 			metodo: match.transacaoFinanceira.metodo === "A_DEFINIR" && match.extratoTransacao.metodo ? match.extratoTransacao.metodo : null,
+			origem: "CONCILIACAO",
 		});
 		acao = "EFETIVADO";
 	}
@@ -218,6 +219,8 @@ export async function createEntryFromStatementLine({
 				metodo: linha.metodo ?? "OUTRO",
 				dataPrevisao: linha.dataTransacao,
 				dataEfetivacao: linha.dataTransacao,
+				efetivacaoAutorId: autorId,
+				efetivacaoOrigem: "CONCILIACAO",
 				autorId,
 			})
 			.returning({ id: financialTransactions.id });

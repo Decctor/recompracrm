@@ -56,6 +56,8 @@ export async function registerSaleChangeTransaction({
 			metodo: "DINHEIRO",
 			dataPrevisao: now,
 			dataEfetivacao: now,
+			efetivacaoAutorId: autorId,
+			efetivacaoOrigem: "IMEDIATA",
 			parcela: null,
 			totalParcelas: null,
 			provedorReferencia: null,

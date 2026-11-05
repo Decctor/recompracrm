@@ -49,6 +49,8 @@ export async function registerRefundCashMovement({
 			metodo: "DINHEIRO",
 			dataPrevisao: new Date(),
 			dataEfetivacao: new Date(),
+			efetivacaoAutorId: autorId,
+			efetivacaoOrigem: "IMEDIATA",
 			provedorStatus: "ESTORNADO",
 			autorId,
 		})

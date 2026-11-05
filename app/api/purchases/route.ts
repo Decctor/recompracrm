@@ -6,6 +6,7 @@ import { handleSimpleChildRowsProcessing } from "@/lib/db-utils";
 import { getAccountingEntryBalanceError } from "@/lib/finances/accounting-entry-balance";
 import { buildDefaultAccountingEntryLines, buildPurchaseAccountingEntryLines, syncAccountingEntryLines } from "@/lib/finances/accounting-entry-lines";
 import { normalizeFinancialTransactionValue } from "@/lib/finances/financial-transaction-value";
+import { resolveSettlementAuditOnWrite } from "@/lib/finances/settlement-audit";
 import { calculatePurchaseItemCost, centsToMoney, moneyToCents } from "@/lib/purchase/costing";
 import {
 	handlePurchaseItemStockProcessing,
@@ -308,6 +309,8 @@ const PurchaseAccountingEntryTransactionInputSchema = FinancialTransactionSchema
 	organizacaoId: true,
 	lancamentoContabilId: true,
 	autorId: true,
+	efetivacaoAutorId: true,
+	efetivacaoOrigem: true,
 	dataInsercao: true,
 });
 // Contas de débito/crédito, origem e autor são resolvidos no servidor a partir dos padrões da organização.
@@ -612,6 +615,7 @@ async function createPurchase({ input, session }: { input: TCreatePurchaseInput;
 			await tx.insert(financialTransactions).values(
 				payloadAccountingEntryTransactions.map((transaction) => ({
 					...normalizePurchaseFinancialTransaction(transaction),
+					...resolveSettlementAuditOnWrite({ isNew: true, nextDataEfetivacao: transaction.dataEfetivacao, authorId: session.user.id }),
 					lancamentoContabilId: insertedAccountingEntryId,
 					organizacaoId: userOrgId,
 					autorId: session.user.id,
@@ -900,6 +904,22 @@ async function syncPurchaseAccountingEntry({
 		});
 	}
 
+	// Estado de efetivação atual das transações editadas: a auditoria só muda na passagem pendente ↔ paga.
+	// FOR UPDATE: sem a trava, uma conciliação que efetivasse a transação entre esta leitura e o
+	// update teria a auditoria dela sobrescrita como MANUAL por quem salvou a compra.
+	const existingTransactionIds = payloadTransactions.flatMap((transaction) => (transaction.id && !transaction.deletar ? [transaction.id] : []));
+	const existingSettlementById = new Map(
+		existingTransactionIds.length === 0
+			? []
+			: (
+					await tx
+						.select({ id: financialTransactions.id, dataEfetivacao: financialTransactions.dataEfetivacao })
+						.from(financialTransactions)
+						.where(and(inArray(financialTransactions.id, existingTransactionIds), eq(financialTransactions.organizacaoId, orgId)))
+						.for("update")
+				).map((row) => [row.id, row.dataEfetivacao]),
+	);
+
 	await handleSimpleChildRowsProcessing({
 		trx: tx,
 		table: financialTransactions,
@@ -907,6 +927,14 @@ async function syncPurchaseAccountingEntry({
 		entities: payloadTransactions.map((transaction) => ({
 			...normalizePurchaseFinancialTransaction(transaction),
 			...(transaction.id ? {} : { autorId: userId }),
+			...(transaction.deletar
+				? {}
+				: resolveSettlementAuditOnWrite({
+						isNew: !transaction.id,
+						previousDataEfetivacao: transaction.id ? (existingSettlementById.get(transaction.id) ?? null) : null,
+						nextDataEfetivacao: transaction.dataEfetivacao,
+						authorId: userId,
+					})),
 		})),
 		fatherEntityKey: "lancamentoContabilId",
 		fatherEntityId: accountingEntryId,

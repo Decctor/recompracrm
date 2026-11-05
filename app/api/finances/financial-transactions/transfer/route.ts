@@ -160,6 +160,8 @@ async function createFinancialTransfer({ input, session }: { input: TCreateFinan
 					metodo: "TRANSFERENCIA",
 					dataPrevisao: transfer.dataEfetivacao,
 					dataEfetivacao: transfer.dataEfetivacao,
+					efetivacaoAutorId: session.user.id,
+					efetivacaoOrigem: "IMEDIATA",
 					autorId: session.user.id,
 				},
 				{
@@ -172,6 +174,8 @@ async function createFinancialTransfer({ input, session }: { input: TCreateFinan
 					metodo: "TRANSFERENCIA",
 					dataPrevisao: transfer.dataEfetivacao,
 					dataEfetivacao: transfer.dataEfetivacao,
+					efetivacaoAutorId: session.user.id,
+					efetivacaoOrigem: "IMEDIATA",
 					autorId: session.user.id,
 				},
 			])

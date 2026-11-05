@@ -2,7 +2,9 @@
 
 import type { TPatchSalesFulfillmentInput, TSalesFulfillmentCard } from "@/app/api/sales/fulfillment/route";
 import ResponsiveMenu from "@/components/Utils/ResponsiveMenu";
+import { STORE_CREDIT_METHOD } from "@/lib/finances/store-credit/constants";
 import { formatToMoney } from "@/lib/formatting";
+import { resolveDeliveryPaymentCoverage } from "@/lib/sales/delivery-payment-coverage";
 import type { TOrganizationConfiguration } from "@/schemas/organizations";
 import { CircleAlert, CircleCheck, Clock3 } from "lucide-react";
 import { QuickActionRow } from "./quick-actions/QuickActionRow";
@@ -39,8 +41,11 @@ export function StageTransitionConfirmationMenu({
 	onConfirmWithoutPayment,
 	onCancel,
 }: StageTransitionConfirmationMenuProps) {
-	const editablePayments = card.pagamentos.filter((payment) => payment.editavel);
-	const isPaid = card.financeiro === "RECEBIDA";
+	// Fiado em aberto cobre a entrega e fica para o recebimento de fiado: não é perguntado aqui.
+	const coverage = resolveDeliveryPaymentCoverage({ transactions: card.pagamentos, saleTotal: card.valorTotal });
+	const editablePayments = card.pagamentos.filter((payment) => payment.editavel && payment.metodo !== STORE_CREDIT_METHOD);
+	const isPaid = coverage.isCovered;
+	const hasOpenStoreCredit = coverage.valorFiadoEmAberto > 0;
 	const displayIdentifier = formatOrderIdentifier(card.idExterno);
 	const pendingPaymentsLabel = `${editablePayments.length} recebimento${editablePayments.length === 1 ? "" : "s"} pendente${editablePayments.length === 1 ? "" : "s"}`;
 
@@ -86,10 +91,12 @@ export function StageTransitionConfirmationMenu({
 			>
 				{isPaid ? <CircleCheck className="mt-0.5 h-4 w-4 shrink-0 text-success" /> : <CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-foreground" />}
 				<div className="flex min-w-0 flex-col gap-0.5">
-					<p className="font-bold">{isPaid ? "Pagamento recebido" : "Pagamento pendente"}</p>
+					<p className="font-bold">{isPaid ? (hasOpenStoreCredit ? "Venda no fiado" : "Pagamento recebido") : "Pagamento pendente"}</p>
 					<p className="text-xs leading-relaxed text-muted-foreground">
 						{isPaid
-							? "A confirmação concluirá o pedido e registrará a saída dos itens do estoque."
+							? hasOpenStoreCredit
+								? `${formatToMoney(coverage.valorFiadoEmAberto)} ficam em aberto no fiado do cliente. A confirmação concluirá o pedido e registrará a saída dos itens do estoque.`
+								: "A confirmação concluirá o pedido e registrará a saída dos itens do estoque."
 							: editablePayments.length > 0
 								? `${pendingPaymentsLabel}. Confirme como o valor foi recebido ou entregue sem receber.`
 								: "O pedido ainda não está totalmente recebido. Você pode receber e entregar ou concluir a entrega sem receber."}

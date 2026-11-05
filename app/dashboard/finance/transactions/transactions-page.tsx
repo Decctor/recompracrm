@@ -16,6 +16,7 @@ import LoadingComponent from "@/components/Layouts/LoadingComponent";
 import GeneralPaginationComponent from "@/components/Utils/Pagination";
 import { formatDateAsLocale, formatNameAsInitials, formatToMoney } from "@/lib/formatting";
 import { getErrorMessage } from "@/lib/errors";
+import { formatSettlementDate, SETTLEMENT_ORIGIN_LABEL } from "@/lib/finances/settlement-audit";
 import { useFinancesTransactions } from "@/lib/queries/finances";
 import { cn } from "@/lib/utils";
 import { FinancialAccountTypeOptions, FinancialTransactionTypeOptions, SalePaymentMethodsOptions } from "@/utils/select-options";
@@ -241,6 +242,20 @@ type TransactionCardProps = {
 	onOpenDetails: () => void;
 };
 
+function TransactionUserTag({ prefix, user }: { prefix: string; user: { nome: string | null; avatarUrl: string | null } }) {
+	return (
+		<div className="flex items-center gap-1">
+			<Avatar className="h-4 w-4">
+				<AvatarImage src={user.avatarUrl || undefined} alt={user.nome || "N/A"} />
+				<AvatarFallback className="text-[0.5rem]">{formatNameAsInitials(user.nome || "N/A")}</AvatarFallback>
+			</Avatar>
+			<span className="text-[0.65rem] text-muted-foreground">
+				{prefix} {user.nome}
+			</span>
+		</div>
+	);
+}
+
 function TransactionCard({ transaction, onOpenDetails }: TransactionCardProps) {
 	const typeConfig = useMemo(() => FinancialTransactionTypeOptions.find((o) => o.value === transaction.tipo) ?? null, [transaction.tipo]);
 
@@ -312,7 +327,10 @@ function TransactionCard({ transaction, onOpenDetails }: TransactionCardProps) {
 					{transaction.dataEfetivacao ? (
 						<div className={cn("flex items-center gap-1.5 text-[0.65rem] font-bold text-foreground")}>
 							<BsCalendarCheck className="h-3 min-h-3 w-3 min-w-3 text-green-600" />
-							<p className="text-xs font-medium tracking-tight uppercase">EFETIVADA: {formatDateAsLocale(transaction.dataEfetivacao)}</p>
+							<p className="text-xs font-medium tracking-tight uppercase">
+								EFETIVADA: {formatSettlementDate(transaction.dataEfetivacao)}
+								{transaction.efetivacaoOrigem ? ` · ${SETTLEMENT_ORIGIN_LABEL[transaction.efetivacaoOrigem]}` : null}
+							</p>
 						</div>
 					) : transaction.dataPrevisao ? (
 						<div className={cn("flex items-center gap-1.5 text-[0.65rem] font-bold text-foreground")}>
@@ -321,15 +339,8 @@ function TransactionCard({ transaction, onOpenDetails }: TransactionCardProps) {
 						</div>
 					) : null}
 
-					{transaction.autor ? (
-						<div className="flex items-center gap-1">
-							<Avatar className="h-4 w-4">
-								<AvatarImage src={transaction.autor.avatarUrl || undefined} alt={transaction.autor.nome || "N/A"} />
-								<AvatarFallback className="text-[0.5rem]">{formatNameAsInitials(transaction.autor.nome || "N/A")}</AvatarFallback>
-							</Avatar>
-							<span className="text-[0.65rem] text-muted-foreground">{transaction.autor.nome}</span>
-						</div>
-					) : null}
+					{transaction.autor ? <TransactionUserTag prefix="Lançada por" user={transaction.autor} /> : null}
+					{transaction.efetivacaoAutor ? <TransactionUserTag prefix="Efetivada por" user={transaction.efetivacaoAutor} /> : null}
 				</div>
 				<Button type="button" size="sm" variant="ghost" onClick={onOpenDetails} className="flex items-center gap-1.5">
 					<Pencil className="h-4 w-4 min-h-4 min-w-4" />

@@ -10,6 +10,8 @@ export const PurchaseAccountingEntryTransactionSchema = FinancialTransactionSche
 	organizacaoId: true,
 	lancamentoContabilId: true,
 	autorId: true,
+	efetivacaoAutorId: true,
+	efetivacaoOrigem: true,
 	dataInsercao: true,
 }).extend({
 	id: z.string({ invalid_type_error: "Tipo não válido para o ID da transação financeira da compra." }).optional(),

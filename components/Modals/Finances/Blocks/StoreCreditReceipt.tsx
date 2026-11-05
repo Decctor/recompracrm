@@ -4,6 +4,7 @@ import { HandCoins } from "lucide-react";
 import { useMemo } from "react";
 import type { TGetFinancialAccountsOutputDefault } from "@/app/api/finances/financial-accounts/route";
 import DateInput from "@/components/Inputs/DateInput";
+import DateTimeInput from "@/components/Inputs/DateTimeInput";
 import NumberInput from "@/components/Inputs/NumberInput";
 import SelectInput from "@/components/Inputs/SelectInput";
 import TextareaInput from "@/components/Inputs/TextareaInput";
@@ -86,8 +87,8 @@ export default function StoreCreditReceiptBlock({
 				</div>
 			</div>
 
-			<DateInput
-				label="DATA DO RECEBIMENTO"
+			<DateTimeInput
+				label="DATA E HORA DO RECEBIMENTO"
 				value={state.dataRecebimento}
 				handleChange={(value) => updateReceipt({ dataRecebimento: value })}
 				required
