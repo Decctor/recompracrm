@@ -18,9 +18,26 @@ type ProductsGridBlockProps = {
 	/** `preferencias.rastreamentoEstoque` da organização — sem o módulo, nenhum saldo é exibido. */
 	orgTracksStock: boolean;
 	onProductClick: (product: Product) => void;
+	/** Balança do caixa: decide quais produtos ganham o botão de pesar e o que o toque faz. */
+	canWeighProduct?: (product: Product) => boolean;
+	onWeighProduct?: (product: Product) => void;
+	weighingProductId?: string | null;
 };
 
-function ProductsGridBlock({ productsData, isLoading, isError, error, viewMode, orgTracksStock, onProductClick }: ProductsGridBlockProps) {
+function ProductsGridBlock({
+	productsData,
+	isLoading,
+	isError,
+	error,
+	viewMode,
+	orgTracksStock,
+	onProductClick,
+	canWeighProduct,
+	onWeighProduct,
+	weighingProductId = null,
+}: ProductsGridBlockProps) {
+	const weighHandler = (product: Product) => (onWeighProduct && canWeighProduct?.(product) ? onWeighProduct : undefined);
+
 	if (isLoading) return <LoadingComponent />;
 	if (isError) return <ErrorComponent msg={getErrorMessage(error)} />;
 
@@ -29,7 +46,14 @@ function ProductsGridBlock({ productsData, isLoading, isError, error, viewMode, 
 			return (
 				<div className="flex flex-col gap-2 pb-4 text-numeric">
 					{productsData.products.map((product) => (
-						<ProductListRow key={product.id} product={product} orgTracksStock={orgTracksStock} onSelect={onProductClick} />
+						<ProductListRow
+							key={product.id}
+							product={product}
+							orgTracksStock={orgTracksStock}
+							onSelect={onProductClick}
+							onWeigh={weighHandler(product)}
+							isWeighing={weighingProductId === product.id}
+						/>
 					))}
 				</div>
 			);
@@ -38,7 +62,14 @@ function ProductsGridBlock({ productsData, isLoading, isError, error, viewMode, 
 		return (
 			<div className="grid grid-cols-2 gap-2.5 pb-4 text-numeric sm:grid-cols-[repeat(auto-fill,minmax(9.5rem,10.5rem))] sm:justify-start">
 				{productsData.products.map((product) => (
-					<ProductCard key={product.id} product={product} orgTracksStock={orgTracksStock} onSelect={onProductClick} />
+					<ProductCard
+						key={product.id}
+						product={product}
+						orgTracksStock={orgTracksStock}
+						onSelect={onProductClick}
+						onWeigh={weighHandler(product)}
+						isWeighing={weighingProductId === product.id}
+					/>
 				))}
 			</div>
 		);

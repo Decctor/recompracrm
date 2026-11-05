@@ -12,6 +12,7 @@ import { ORGANIZATION_SLUG_INVALID_MESSAGE, ORGANIZATION_SLUG_REGEX } from "@/li
 import { normalizeEmail } from "@/lib/formatting";
 import { PaymentEffectivenessTypeEnum } from "@/lib/payments/schemas";
 import { DEFAULT_SCALE_BARCODE_CONFIG, parseScaleBarcodeMask } from "@/lib/pos/scale-barcode";
+import { DEFAULT_SERIAL_SCALE_CONFIG } from "@/lib/pos/serial-scale-protocol";
 
 /**
  * @deprecated As variantes vivem em `schemas/integrations.ts` (DataSourceIntegrationConfigSchema);
@@ -265,6 +266,18 @@ export const OrganizationScaleBarcodeConfigSchema = z
 	.default(DEFAULT_SCALE_BARCODE_CONFIG);
 export type TOrganizationScaleBarcodeConfig = z.infer<typeof OrganizationScaleBarcodeConfigSchema>;
 
+// Balança do caixa ligada ao computador (lib/pos/serial-scale-connection.ts). A organização só liga o
+// módulo: a balança, a porta e o protocolo são de cada computador (pareados e detectados nele).
+export const OrganizationSerialScaleConfigSchema = z
+	.object({
+		habilitado: z.boolean({
+			required_error: "Habilitação da balança do caixa não informada.",
+			invalid_type_error: "Tipo não válido para a habilitação da balança do caixa.",
+		}),
+	})
+	.default(DEFAULT_SERIAL_SCALE_CONFIG);
+export type TOrganizationSerialScaleConfig = z.infer<typeof OrganizationSerialScaleConfigSchema>;
+
 export const OrganizationConfigurationSchema = z.object({
 	recursos: z.object({
 		analytics: z.object({
@@ -406,6 +419,7 @@ export const OrganizationConfigurationSchema = z.object({
 			.default({ habilitado: false }),
 		impressoes: OrganizationPrintPreferencesSchema,
 		balanca: OrganizationScaleBarcodeConfigSchema,
+		balancaCaixa: OrganizationSerialScaleConfigSchema,
 	}),
 	defaults: OrganizationDefaultsSchema,
 });

@@ -8,12 +8,17 @@ import { getErrorMessage } from "@/lib/errors";
 import type { TOrganizationConfiguration } from "@/schemas/organizations";
 import { type PropsWithChildren, useEffect, useState } from "react";
 import { DEFAULT_SCALE_BARCODE_CONFIG } from "@/lib/pos/scale-barcode";
+import { DEFAULT_SERIAL_SCALE_CONFIG } from "@/lib/pos/serial-scale-protocol";
 import { useOrganizationSectionForm } from "./Organization/use-organization-section-form";
 import SettingsScaleBarcode from "./SettingsScaleBarcode";
 import SettingsSectionActions from "./SettingsSectionActions";
+import SettingsSerialScale from "./SettingsSerialScale";
 
 type TPreferences = TOrganizationConfiguration["preferencias"];
-type TModulesDraft = Pick<TPreferences, "carteirasClientes" | "rastreamentoEstoque" | "sessoesVenda" | "contasAtendimento" | "balanca">;
+type TModulesDraft = Pick<
+	TPreferences,
+	"carteirasClientes" | "rastreamentoEstoque" | "sessoesVenda" | "contasAtendimento" | "balanca" | "balancaCaixa"
+>;
 
 const EMPTY_SESSOES_VENDA = {
 	habilitado: false,
@@ -30,6 +35,7 @@ function toModulesDraft(preferencias: TPreferences): TModulesDraft {
 		sessoesVenda: preferencias.sessoesVenda ?? EMPTY_SESSOES_VENDA,
 		contasAtendimento: preferencias.contasAtendimento ?? { habilitado: false },
 		balanca: preferencias.balanca ?? DEFAULT_SCALE_BARCODE_CONFIG,
+		balancaCaixa: preferencias.balancaCaixa ?? DEFAULT_SERIAL_SCALE_CONFIG,
 	};
 }
 
@@ -105,6 +111,11 @@ export default function SettingsModules({ membership }: SettingsModulesProps) {
 	const balanca = draft.balanca ?? DEFAULT_SCALE_BARCODE_CONFIG;
 	function updateBalanca(partial: Partial<TPreferences["balanca"]>) {
 		setDraft((current) => (current ? { ...current, balanca: { ...(current.balanca ?? DEFAULT_SCALE_BARCODE_CONFIG), ...partial } } : current));
+	}
+
+	const balancaCaixa = draft.balancaCaixa ?? DEFAULT_SERIAL_SCALE_CONFIG;
+	function updateBalancaCaixa(partial: Partial<TPreferences["balancaCaixa"]>) {
+		setDraft((current) => (current ? { ...current, balancaCaixa: { ...(current.balancaCaixa ?? DEFAULT_SERIAL_SCALE_CONFIG), ...partial } } : current));
 	}
 
 	function updateSessoesVenda(partial: Partial<NonNullable<TPreferences["sessoesVenda"]>>) {
@@ -184,6 +195,16 @@ export default function SettingsModules({ membership }: SettingsModulesProps) {
 						editable={canEdit}
 					>
 						<SettingsScaleBarcode balanca={balanca} updateBalanca={updateBalanca} editable={canEdit} />
+					</ModuleCard>
+
+					<ModuleCard
+						title="BALANÇA DO CAIXA"
+						description="Lê o peso da balança ligada ao computador do caixa. No computador com balança pareada, o produto vendido por quilo ganha um botão de pesar no PDV."
+						checked={balancaCaixa.habilitado}
+						onCheckedChange={(checked) => updateBalancaCaixa({ habilitado: checked })}
+						editable={canEdit}
+					>
+						<SettingsSerialScale />
 					</ModuleCard>
 				</>
 			) : null}

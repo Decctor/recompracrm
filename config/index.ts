@@ -1,6 +1,7 @@
 import type { TOrganizationDefaults, TOrganizationConfiguration } from "@/schemas/organizations";
 import type { TUserPermissions } from "@/schemas/users";
 import { DEFAULT_SCALE_BARCODE_CONFIG } from "@/lib/pos/scale-barcode";
+import { DEFAULT_SERIAL_SCALE_CONFIG } from "@/lib/pos/serial-scale-protocol";
 import type { TOrganizationEntity } from "@/services/drizzle/schema";
 
 export const SESSION_COOKIE_NAME = "syncrono-session";
@@ -255,6 +256,7 @@ export const DEFAULT_ORGANIZATION_CONFIGURATION_PREFERENCES: TOrganizationConfig
 		},
 	},
 	balanca: DEFAULT_SCALE_BARCODE_CONFIG,
+	balancaCaixa: DEFAULT_SERIAL_SCALE_CONFIG,
 };
 
 const DEFAULT_PAYMENT_METHOD_CONFIGURATION: TOrganizationConfiguration["defaults"]["pagamentos"]["metodos"]["DINHEIRO"] = {

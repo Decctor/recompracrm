@@ -4,6 +4,7 @@ import type { TSalesOperationPermissions } from "@/lib/permissions/sales";
 import BarcodeMatchPicker from "@/components/Modals/Sales/BarcodeMatchPicker";
 import type { TBuiltOrderItem } from "@/components/Products/ProductBuilderForm";
 import { usePOSBarcodeScan } from "@/lib/hooks/use-pos-barcode-scan";
+import { usePOSScaleWeighing } from "@/lib/hooks/use-pos-scale-weighing";
 import { usePOSStockGuard } from "@/lib/hooks/use-pos-stock-guard";
 import type { TBarcodeScanResolution } from "@/lib/pos/barcode-scan-action";
 import { formatItemQuantity } from "@/lib/pos/scale-barcode";
@@ -40,6 +41,7 @@ import SaleSuccessPanel from "../../new/components/SaleSuccessPanel";
 import CategoriesBar from "../../new/components/composition/CategoriesBar";
 import PaginationBlock from "../../new/components/composition/PaginationBlock";
 import ProductsGridBlock from "../../new/components/composition/ProductsGridBlock";
+import CheckoutScalePill from "../../new/components/CheckoutScalePill";
 import SearchBlock from "../../new/components/composition/SearchBlock";
 import ViewModeToggle, { type ProductViewMode } from "../../new/components/composition/ViewModeToggle";
 import PricingDriftBanner from "./components/PricingDriftBanner";
@@ -403,7 +405,7 @@ export default function CheckoutPage({
 			// Cada etiqueta de balança é uma pesagem própria: linha nova, nunca soma na existente.
 			if (scaleReading) addItemLine(line);
 			else addItemOrIncrement(line);
-			toast.success(`${item.nome}${scaleReading ? ` (${formatItemQuantity(item.quantidade)})` : ""} adicionado ao carrinho.`);
+			toast.success(`${item.nome}${scaleReading ? ` (${formatItemQuantity(item.quantidade)} kg)` : ""} adicionado ao carrinho.`);
 		},
 		[addItemOrIncrement, addItemLine, checkDirectAdd],
 	);
@@ -417,6 +419,13 @@ export default function CheckoutPage({
 		ownerRef: pageRef,
 		onAddDirect: handleScannedItem,
 		onOpenBuilder: handleScannedBuilder,
+	});
+	// Balança do caixa: o botão de pesar do card lança a pesagem pelo mesmo caminho da etiqueta de
+	// balança (linha nova com a quantidade em kg).
+	const scaleWeighing = usePOSScaleWeighing({
+		config: organizationConfiguration.preferencias.balancaCaixa,
+		enabled: !saleState.state.success && !!draft,
+		onAddDirect: handleScannedItem,
 	});
 
 	if (saleState.state.success) {
@@ -529,6 +538,7 @@ export default function CheckoutPage({
 									<SearchBlock searchValue={searchValue} onSearchChange={handleSearchChange} isLoading={productsLoading} />
 								</div>
 								<ViewModeToggle value={viewMode} onChange={setViewMode} />
+								<CheckoutScalePill scale={scaleWeighing.scale} />
 							</div>
 							{/* A barra se encarrega do próprio skeleton: montá-la só depois do load a inseria na
 							    árvore com a grade já pintada e empurrava tudo para baixo. */}
@@ -550,6 +560,9 @@ export default function CheckoutPage({
 								viewMode={viewMode}
 								orgTracksStock={organizationConfiguration.preferencias.rastreamentoEstoque}
 								onProductClick={handleProductClick}
+								canWeighProduct={scaleWeighing.canWeighProduct}
+								onWeighProduct={scaleWeighing.weighProduct}
+								weighingProductId={scaleWeighing.weighingProductId}
 							/>
 							{productsData ? (
 								<PaginationBlock

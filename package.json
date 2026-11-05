@@ -47,7 +47,7 @@
 		"test:dedupe-add-on-options": "node --import tsx --test lib/products/dedupe-add-on-options.test.ts",
 		"test:manual-stock-movements": "node --import tsx --test lib/stock/manual-stock-movements.test.ts",
 		"test:stock-analytics": "node --import tsx --test lib/stock/analytics/analytics.test.ts",
-		"test:pos-barcode": "node --import tsx --test lib/pos/barcode-scan-detector.test.ts lib/pos/barcode-lookup.test.ts lib/pos/scale-barcode.test.ts",
+		"test:pos-barcode": "node --import tsx --test lib/pos/barcode-scan-detector.test.ts lib/pos/barcode-lookup.test.ts lib/pos/scale-barcode.test.ts lib/pos/serial-scale-protocol.test.ts",
 		"test:fiscal-errors": "node --import tsx --test lib/fiscal/errors.test.ts",
 		"test:nuvemshop-pagination": "node --import tsx --test lib/data-connectors/nuvemshop/pagination.test.ts",
 		"test:pos-stock": "node --import tsx --test lib/pos/stock-availability.test.ts lib/products/variant-axes.test.ts",

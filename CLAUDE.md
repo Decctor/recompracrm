@@ -324,6 +324,19 @@ export function NewFoo({ closeModal, callbacks }: NewFooProps) {
 - Every screen that builds a cart from the grid mounts `usePOSBarcodeScan` and renders `BarcodeMatchPicker` for duplicates. The action mirrors the click: variants or add-ons open the builder (with the matched variant preselected via `initialVariantId`); a plain item goes straight to the cart through `addItemOrIncrement`, so scanning the same item three times is quantity 3, not three lines.
 - Duplicate barcodes are a warning (`ProductBarcodeConflictHint`, `GET /api/products/barcode-usage`), not a constraint — the POS resolves them with the picker.
 
+## POS Checkout Scale Conventions
+
+**Location**: `lib/pos/serial-scale-protocol.ts` (pure, tested), `lib/pos/serial-scale-connection.ts`, `lib/hooks/use-serial-scale.ts`, `lib/hooks/use-pos-scale-weighing.ts`
+
+- The checkout scale is read **from the browser through Web Serial**, never through the desktop agent or the server: the agent's 2 s polling and a CRM round trip would add seconds to every weighing. Chrome/Edge desktop only.
+- **Brand-generic, not Toledo-only.** The parser accepts both families the Brazilian retail scales speak (reference: ACBr's scale drivers): `STX…ETX/CR` frames (Toledo, Filizola, Digitron, Elgin, the Prix "protocolo A") and text lines with `kg` (Urano, Magna, LucasTec, generic `ST,GS,…kg` indicators). The weight command is a setting: `ENQ`, `W` (Magellan), `P` (Magna) or none (continuous mode). Frames are found by delimiters, never by fixed offsets. A new brand means a new frame test, not a new parser.
+- **The scale belongs to the computer, not the organization.** `preferencias.balancaCaixa` is only the org toggle. Pairing (Settings → Módulos → Balança do caixa) picks the port and **detects** the framing, baud rate and command, then stores the profile in localStorage, next to the browser's own port permission. Two checkouts in the same store can have different scales.
+- **Nothing shows without a detected scale.** The POS pill appears only on a computer with a paired scale, and the weigh buttons only once that scale has answered since the port opened (`isDetected`). An org with the module on still sees its usual grid on a computer without a scale, on a tablet, or in a browser without Web Serial.
+- One connection per tab (`serialScale` singleton): the port is exclusive, and the POS screens share it across navigation. Live weight lives in its own store (`useSerialScaleLiveReading`) so that only the pill re-renders four times per second, not the POS page.
+- A weighing is accepted only as the same stable weight twice in a row, read **after** the click. A stale reading never counts, and the pill shows "SEM RESPOSTA" after 2 s without a frame.
+- A weighing reaches the cart through the same `onAddDirect` as a scale label (`scaleReading` with `tipoValor: "PESO"`): a new line every time, priced by the system, never summed into an existing line.
+- Sold by weight = `unidade` normalized to KG (`isSoldByWeight`; the column is free text). Products with variants are not weighed from the grid.
+
 ---
 
 ## Public Page Conventions

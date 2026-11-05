@@ -7,6 +7,7 @@ import ControlClient from "@/components/Modals/Clients/ControlClient";
 import BarcodeMatchPicker from "@/components/Modals/Sales/BarcodeMatchPicker";
 import type { TBuiltOrderItem } from "@/components/Products/ProductBuilderForm";
 import { usePOSBarcodeScan } from "@/lib/hooks/use-pos-barcode-scan";
+import { usePOSScaleWeighing } from "@/lib/hooks/use-pos-scale-weighing";
 import { usePOSStockGuard } from "@/lib/hooks/use-pos-stock-guard";
 import type { TBarcodeScanResolution } from "@/lib/pos/barcode-scan-action";
 import { formatItemQuantity } from "@/lib/pos/scale-barcode";
@@ -35,6 +36,7 @@ import { ShoppingCart } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import CheckoutPanel from "./components/CheckoutPanel";
+import CheckoutScalePill from "./components/CheckoutScalePill";
 import OpenQuotesPill from "./components/OpenQuotesPill";
 import PendingTerminalChargesPill from "./components/PendingTerminalChargesPill";
 import ProductBuilderModal from "./components/ProductBuilderModal";
@@ -402,7 +404,7 @@ export default function NewSalePage({
 			// Cada etiqueta de balança é uma pesagem própria: linha nova, nunca soma na existente.
 			if (scaleReading) addItemLine(line);
 			else addItemOrIncrement(line);
-			toast.success(`${item.nome}${scaleReading ? ` (${formatItemQuantity(item.quantidade)})` : ""} adicionado ao carrinho.`);
+			toast.success(`${item.nome}${scaleReading ? ` (${formatItemQuantity(item.quantidade)} kg)` : ""} adicionado ao carrinho.`);
 		},
 		[addItemOrIncrement, addItemLine, checkDirectAdd],
 	);
@@ -419,6 +421,13 @@ export default function NewSalePage({
 		ownerRef: pageRef,
 		onAddDirect: handleScannedItem,
 		onOpenBuilder: handleScannedBuilder,
+	});
+	// Balança do caixa: o botão de pesar do card lança a pesagem pelo mesmo caminho da etiqueta de
+	// balança (linha nova com a quantidade em kg).
+	const scaleWeighing = usePOSScaleWeighing({
+		config: organizationConfiguration.preferencias.balancaCaixa,
+		enabled: !saleState.state.success && !isCashGateBlocking,
+		onAddDirect: handleScannedItem,
 	});
 
 	const handleCreateDraft = () => {
@@ -596,6 +605,7 @@ export default function NewSalePage({
 							    a fila zera, sem ocupar espaço fixo da grade de produtos. */}
 							<OpenQuotesPill canViewQuotes={canViewSales} permissions={quotePermissions} cartItemCount={saleState.itemCount} />
 							<PendingTerminalChargesPill enabled={canViewSales} />
+							<CheckoutScalePill scale={scaleWeighing.scale} />
 						</div>
 						{/* A barra se encarrega do próprio skeleton: montá-la só depois do load a inseria na
 						    árvore com a grade já pintada e empurrava tudo para baixo. */}
@@ -617,6 +627,9 @@ export default function NewSalePage({
 							viewMode={viewMode}
 							orgTracksStock={organizationConfiguration.preferencias.rastreamentoEstoque}
 							onProductClick={handleProductClick}
+							canWeighProduct={scaleWeighing.canWeighProduct}
+							onWeighProduct={scaleWeighing.weighProduct}
+							weighingProductId={scaleWeighing.weighingProductId}
 						/>
 
 						{productsData ? (
