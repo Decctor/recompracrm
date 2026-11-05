@@ -1,4 +1,7 @@
+import { CHAT_PRIORITY_LABEL } from "@/components/Chats/Board/config";
 import CheckboxInput from "@/components/Inputs/CheckboxInput";
+import SelectInput from "@/components/Inputs/SelectInput";
+import { ChatAssignmentPriorityEnum, type TChatAssignmentPriority } from "@/schemas/enums";
 import type { TUseInternalAiAgentState } from "@/state-hooks/use-internal-ai-agent-state";
 
 type TriageBlockProps = {
@@ -51,6 +54,26 @@ export default function TriageBlock({ state, updateTriageSettings }: TriageBlock
 								Reclamações, negociações e perguntas dirigidas a alguém da equipe vão para um atendente sem o agente responder. Só vale com a transferência
 								para atendente habilitada.
 							</p>
+							{triagem.handoffDireto ? (
+								<div className="flex flex-col gap-1 pt-2">
+									<SelectInput
+										label="PRIORIDADE DAS RECLAMAÇÕES ENCAMINHADAS"
+										value={triagem.prioridadeReclamacao}
+										resetOptionLabel="Manter a prioridade atual"
+										options={ChatAssignmentPriorityEnum.options.map((prioridade) => ({
+											id: prioridade,
+											value: prioridade,
+											label: CHAT_PRIORITY_LABEL[prioridade],
+										}))}
+										handleChange={(value) => updateTriageSettings({ prioridadeReclamacao: value as TChatAssignmentPriority })}
+										onReset={() => updateTriageSettings({ prioridadeReclamacao: null })}
+									/>
+									<p className="text-xs text-muted-foreground">
+										O encaminhamento direto não passa pelo agente, então a prioridade definida nas instruções não vale aqui. Nas transferências feitas pelo
+										agente, a prioridade segue as instruções.
+									</p>
+								</div>
+							) : null}
 						</div>
 						<div className="flex flex-col gap-1">
 							<CheckboxInput

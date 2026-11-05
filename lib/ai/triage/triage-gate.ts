@@ -159,6 +159,8 @@ async function recordTriageOnlyRun(
 				input.triagem.intencao === "RECLAMACAO"
 					? "Cliente com reclamação ou problema; a IA encaminhou sem responder."
 					: "Conversa que exige decisão humana; a IA encaminhou sem responder.",
+			// Este caminho não lê as instruções da organização: a prioridade das reclamações vem da config.
+			prioridade: input.triagem.intencao === "RECLAMACAO" ? input.capacidades.triagem.prioridadeReclamacao : null,
 		});
 		// O aviso é entregue, mas não conta como resposta: quem recebeu o ticket ainda precisa atender.
 		await input.deliver({ mensagem: HANDOFF_NOTICE_MESSAGE, anexo: null, runId: run.id, agenteId: input.agent.id, manterPendente: true });

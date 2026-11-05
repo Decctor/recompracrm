@@ -9,6 +9,7 @@ import {
 	AiAgentStatusEnum,
 	AiAgentToolCallStatusEnum,
 	AiAgentToolNameEnum,
+	ChatAssignmentPriorityEnum,
 } from "./enums";
 
 /**
@@ -155,6 +156,9 @@ export const AiAgentCapabilitiesSchema = z
 				pularSemResposta: z.boolean({ invalid_type_error: "Tipo não válido para a chave de pular resposta." }).default(true),
 				handoffDireto: z.boolean({ invalid_type_error: "Tipo não válido para a chave de handoff direto." }).default(true),
 				modeloEconomico: z.boolean({ invalid_type_error: "Tipo não válido para a chave de modelo econômico." }).default(true),
+				// O handoff direto não passa pelo agente, então a prioridade que as instruções dão às
+				// reclamações não o alcança: ela vem daqui. null deixa a prioridade como está.
+				prioridadeReclamacao: ChatAssignmentPriorityEnum.nullable().default(null),
 			})
 			.default({}),
 		/**

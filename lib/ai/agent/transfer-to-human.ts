@@ -1,5 +1,6 @@
 import { transferChatAttendance, updateChatAttendanceSummary } from "@/lib/chats/attendance-state";
 import { notifyChatTransferRecipient } from "@/lib/chats/transfer-notification/notify";
+import type { TChatAssignmentPriority } from "@/schemas/enums";
 import type { DB, DBTransaction } from "@/services/drizzle";
 import { chats } from "@/services/drizzle/schema/chats";
 import { organizationMembers } from "@/services/drizzle/schema/organizations";
@@ -23,12 +24,15 @@ export async function transferChatToHuman({
 	chatId,
 	motivo,
 	resumoConversa,
+	prioridade = null,
 }: {
 	db: DB | DBTransaction;
 	organizacaoId: string;
 	chatId: string;
 	motivo: string;
 	resumoConversa: string;
+	/** null mantém a prioridade que o atendimento já tinha (ex.: definida por um humano). */
+	prioridade?: TChatAssignmentPriority | null;
 }): Promise<{ atendimentoId?: string; usuarioDestinoNome: string }> {
 	const chat = await db.query.chats.findFirst({
 		where: and(eq(chats.id, chatId), eq(chats.organizacaoId, organizacaoId)),
@@ -52,13 +56,14 @@ export async function transferChatToHuman({
 	if (candidates.length === 0) throw new Error("Nenhum usuário apto a receber transferências de atendimentos encontrado.");
 
 	const target = candidates[Math.floor(Math.random() * candidates.length)];
-	const summary = `[TRANSFERÊNCIA IA]\nMotivo: ${motivo}\n\nResumo da conversa:\n${resumoConversa}`;
+	const summary = `[TRANSFERÊNCIA IA]\nMotivo: ${motivo}${prioridade ? `\nPrioridade: ${prioridade}` : ""}\n\nResumo da conversa:\n${resumoConversa}`;
 
 	const attendance = await transferChatAttendance(db, {
 		organizacaoId,
 		chatId,
 		usuarioDestinoId: target.id,
 		motivo: `HUMAN_HANDOFF: ${motivo}`,
+		prioridade,
 		// As estatísticas contam `resultado = 'HUMAN_HANDOFF'`; nada gravava isso, e o card de
 		// handoffs ficava em zero. O ticket segue ativo com o humano e o resultado vale quando ele fechar.
 		resultado: "HUMAN_HANDOFF",

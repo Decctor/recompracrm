@@ -3,7 +3,7 @@ import test from "node:test";
 import { Experimental_EvaluationMockModelV4 } from "ai/test";
 import { decideTriageAction, type TMessageTriage, triageIncomingMessage } from "./message-triage";
 
-const settings = { habilitada: true, pularSemResposta: true, handoffDireto: true, modeloEconomico: true };
+const settings = { habilitada: true, pularSemResposta: true, handoffDireto: true, modeloEconomico: true, prioridadeReclamacao: null };
 
 const base: TMessageTriage = {
 	intencao: "PRECO_OU_PRODUTO",

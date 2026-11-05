@@ -1,3 +1,4 @@
+import { ChatAssignmentPriorityEnum } from "@/schemas/enums";
 import z from "zod";
 import { transferChatToHuman } from "../agent/transfer-to-human";
 import { defineAgentTool } from "./define-tool";
@@ -24,6 +25,13 @@ além de avisá-lo de que um atendente vai continuar.`,
 	inputSchema: z.object({
 		motivo: z.string().min(3).describe("Motivo objetivo da transferência (uma frase)."),
 		resumoConversa: z.string().min(10).describe("Resumo do que o cliente quer e do que já foi tratado, para o atendente humano."),
+		// Opcional e nulo por padrão: sem regra da empresa, o modelo não tem critério para priorizar,
+		// e uma fila em que tudo é ALTA não ordena nada.
+		prioridade: ChatAssignmentPriorityEnum.nullable()
+			.optional()
+			.describe(
+				"Prioridade do atendimento na fila da equipe. Preencha somente quando as instruções da empresa definirem uma prioridade para este caso; caso contrário, null.",
+			),
 	}),
 	async execute(input, context) {
 		// No playground não há atendente real para receber o chat de teste: simulamos o
@@ -32,7 +40,7 @@ além de avisá-lo de que um atendente vai continuar.`,
 			return {
 				success: true,
 				message: "Transferência simulada (playground). Em produção, o atendimento seria transferido a um atendente humano.",
-				result: { simulado: true, motivo: input.motivo },
+				result: { simulado: true, motivo: input.motivo, prioridade: input.prioridade ?? null },
 			};
 		}
 
@@ -56,6 +64,7 @@ além de avisá-lo de que um atendente vai continuar.`,
 			chatId: context.chat.id,
 			motivo: input.motivo,
 			resumoConversa: input.resumoConversa,
+			prioridade: input.prioridade ?? null,
 		});
 		if (atendimentoId) context.effects.handoffAttendanceId = atendimentoId;
 
