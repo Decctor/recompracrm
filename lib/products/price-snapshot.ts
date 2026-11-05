@@ -18,6 +18,23 @@ export type TSalePriceState = {
 	precoVendaAnterior: number | null;
 };
 
+/**
+ * Se o payload altera o preço de venda exibido (`precoVenda` ou o "De" de `precoVendaAnterior`).
+ * Reenviar o valor lido não conta: é o que o formulário faz quando a seção de preço não foi tocada.
+ * Usado para exigir `produtos.alterarPrecos` só de quem de fato muda preço.
+ */
+export function changesSalePrice({
+	current,
+	next,
+}: {
+	current: TSalePriceState;
+	next: { precoVenda?: number | null; precoVendaAnterior?: number | null };
+}) {
+	if (next.precoVenda !== undefined && !isSamePrice(next.precoVenda, current.precoVenda)) return true;
+	if (next.precoVendaAnterior !== undefined && !isSamePrice(next.precoVendaAnterior, current.precoVendaAnterior)) return true;
+	return false;
+}
+
 export type TSalePriceUpdate<TPreco extends number | null> = {
 	precoVenda: TPreco;
 	precoVendaAnterior?: number | null;

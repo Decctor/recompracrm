@@ -1,7 +1,7 @@
 import PlanRestrictionComponent from "@/components/Layouts/PlanRestrictionComponent";
 import { getCurrentSession } from "@/lib/authentication/session";
 import { requireDashboardCapability } from "@/lib/access/guards";
-import { canReviewSalesSession } from "@/lib/permissions/sales-sessions";
+import { resolveSalesOperationPermissions } from "@/lib/permissions/sales";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import CashSessionsPage from "./cash-sessions-page";
@@ -32,7 +32,7 @@ export default async function CashSessions() {
 	return (
 		<CashSessionsPage
 			sessionsConfig={{ requireOpeningFloat: !!sessoesVenda.exigirFundoTroco, blindCount: !!sessoesVenda.conferenciaCega }}
-			canReviewSessions={canReviewSalesSession(sessionUser.membership.permissoes)}
+			cashPermissions={resolveSalesOperationPermissions(sessionUser.membership.permissoes)}
 		/>
 	);
 }

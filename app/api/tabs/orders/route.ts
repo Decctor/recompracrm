@@ -3,6 +3,7 @@ import { requireERPSession } from "@/lib/authentication/erp-session";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { launchTabOrder, processTabOrderLaunchPostCommit } from "@/lib/tabs";
+import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import z from "zod";
 
@@ -71,6 +72,7 @@ export type TCreateTabOrderOutput = Awaited<ReturnType<typeof createTabOrder>>;
 
 async function createTabOrderRoute(request: NextRequest) {
 	const session = requireERPSession(await getCurrentSessionUncached());
+	if (!session.membership!.permissoes.vendas.criar) throw new createHttpError.Forbidden("Voce nao possui permissao para operar comandas.");
 
 	const body = await request.json();
 	const input = CreateTabOrderInputSchema.parse(body);

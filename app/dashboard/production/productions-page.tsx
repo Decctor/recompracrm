@@ -1,5 +1,6 @@
 "use client";
 
+import type { TProductionPermissions } from "@/lib/permissions/productions";
 import type { TGetProductionsOutputDefault } from "@/app/api/productions/route";
 import type { TGetProductionRecipesOutputDefault } from "@/app/api/productions/recipes/route";
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
@@ -88,7 +89,7 @@ function formatCountLabel(count: number, singular: string, plural: string) {
 	return `${count} ${count === 1 ? singular : plural}`;
 }
 
-export default function ProductionsPage() {
+export default function ProductionsPage({ permissions }: { permissions: TProductionPermissions }) {
 	const queryClient = useQueryClient();
 	const [newProductionModalIsOpen, setNewProductionModalIsOpen] = useState(false);
 	const [newRecipeModalIsOpen, setNewRecipeModalIsOpen] = useState(false);
@@ -145,14 +146,18 @@ export default function ProductionsPage() {
 				<TabsContent value="producoes" className="flex w-full flex-col gap-3">
 					<ProductionsTab
 						query={productionsQuery}
-						onCreate={() => setNewProductionModalIsOpen(true)}
-						onEdit={(productionId) => setEditingProductionId(productionId)}
-						onComplete={(productionId) => handleCompleteProductionMutation({ productionId })}
+						onCreate={permissions.criar ? () => setNewProductionModalIsOpen(true) : undefined}
+						onEdit={permissions.editar ? (productionId) => setEditingProductionId(productionId) : undefined}
+						onComplete={permissions.concluir ? (productionId) => handleCompleteProductionMutation({ productionId }) : undefined}
 						completionIsPending={productionCompletionIsPending}
 					/>
 				</TabsContent>
 				<TabsContent value="receitas" className="flex w-full flex-col gap-3">
-					<RecipesTab query={recipesQuery} onCreate={() => setNewRecipeModalIsOpen(true)} onEdit={(recipeId) => setEditingRecipeId(recipeId)} />
+					<RecipesTab
+						query={recipesQuery}
+						onCreate={permissions.criar ? () => setNewRecipeModalIsOpen(true) : undefined}
+						onEdit={permissions.editar ? (recipeId) => setEditingRecipeId(recipeId) : undefined}
+					/>
 				</TabsContent>
 
 				{newProductionModalIsOpen ? (
@@ -188,9 +193,10 @@ export default function ProductionsPage() {
 
 type ProductionsTabProps = {
 	query: ReturnType<typeof useProductions>;
-	onCreate: () => void;
-	onEdit: (productionId: string) => void;
-	onComplete: (productionId: string) => void;
+	// Callbacks ausentes = membro sem a permissão correspondente de `producao`: a ação não aparece.
+	onCreate?: () => void;
+	onEdit?: (productionId: string) => void;
+	onComplete?: (productionId: string) => void;
 	completionIsPending: boolean;
 };
 
@@ -209,10 +215,12 @@ function ProductionsTab({ query, onCreate, onEdit, onComplete, completionIsPendi
 					onChange={(event) => query.updateFilters({ search: event.target.value, page: 1 })}
 					className="grow rounded-xl"
 				/>
-				<Button className="flex w-full items-center gap-2 lg:w-auto" size="sm" onClick={onCreate}>
-					<Plus className="h-4 w-4" />
-					NOVA PRODUÇÃO
-				</Button>
+				{onCreate ? (
+					<Button className="flex w-full items-center gap-2 lg:w-auto" size="sm" onClick={onCreate}>
+						<Plus className="h-4 w-4" />
+						NOVA PRODUÇÃO
+					</Button>
+				) : null}
 			</div>
 
 			<GeneralPaginationComponent
@@ -232,8 +240,8 @@ function ProductionsTab({ query, onCreate, onEdit, onComplete, completionIsPendi
 						<ProductionCard
 							key={production.id}
 							production={production}
-							onEdit={() => onEdit(production.id)}
-							onComplete={() => onComplete(production.id)}
+							onEdit={onEdit ? () => onEdit(production.id) : undefined}
+							onComplete={onComplete ? () => onComplete(production.id) : undefined}
 							completionIsPending={completionIsPending}
 						/>
 					))
@@ -253,7 +261,9 @@ function ProductionsTab({ query, onCreate, onEdit, onComplete, completionIsPendi
 						</EmptyDescription>
 					</EmptyHeader>
 					<EmptyContent className="flex-row justify-center gap-2">
-						<Button onClick={onCreate}>CRIAR PRODUÇÃO</Button>
+						{onCreate ? (
+							<Button onClick={onCreate}>CRIAR PRODUÇÃO</Button>
+						) : null}
 					</EmptyContent>
 				</Empty>
 			) : null}
@@ -263,8 +273,8 @@ function ProductionsTab({ query, onCreate, onEdit, onComplete, completionIsPendi
 
 type RecipesTabProps = {
 	query: ReturnType<typeof useProductionRecipes>;
-	onCreate: () => void;
-	onEdit: (recipeId: string) => void;
+	onCreate?: () => void;
+	onEdit?: (recipeId: string) => void;
 };
 
 function RecipesTab({ query, onCreate, onEdit }: RecipesTabProps) {
@@ -282,10 +292,12 @@ function RecipesTab({ query, onCreate, onEdit }: RecipesTabProps) {
 					onChange={(event) => query.updateFilters({ search: event.target.value, page: 1 })}
 					className="grow rounded-xl"
 				/>
-				<Button className="flex w-full items-center gap-2 lg:w-auto" size="sm" onClick={onCreate}>
-					<Plus className="h-4 w-4" />
-					NOVA RECEITA
-				</Button>
+				{onCreate ? (
+					<Button className="flex w-full items-center gap-2 lg:w-auto" size="sm" onClick={onCreate}>
+						<Plus className="h-4 w-4" />
+						NOVA RECEITA
+					</Button>
+				) : null}
 			</div>
 
 			<GeneralPaginationComponent
@@ -301,7 +313,7 @@ function RecipesTab({ query, onCreate, onEdit }: RecipesTabProps) {
 			{query.isError ? <ErrorComponent msg={getErrorMessage(query.error)} /> : null}
 
 			{query.isSuccess && recipes.length > 0
-				? recipes.map((recipe) => <ProductionRecipeCard key={recipe.id} recipe={recipe} onEdit={() => onEdit(recipe.id)} />)
+				? recipes.map((recipe) => <ProductionRecipeCard key={recipe.id} recipe={recipe} onEdit={onEdit ? () => onEdit(recipe.id) : undefined} />)
 				: null}
 
 			{query.isSuccess && recipes.length === 0 ? (
@@ -318,7 +330,9 @@ function RecipesTab({ query, onCreate, onEdit }: RecipesTabProps) {
 						</EmptyDescription>
 					</EmptyHeader>
 					<EmptyContent className="flex-row justify-center gap-2">
-						<Button onClick={onCreate}>CRIAR RECEITA</Button>
+						{onCreate ? (
+							<Button onClick={onCreate}>CRIAR RECEITA</Button>
+						) : null}
 					</EmptyContent>
 				</Empty>
 			) : null}
@@ -328,8 +342,8 @@ function RecipesTab({ query, onCreate, onEdit }: RecipesTabProps) {
 
 type ProductionCardProps = {
 	production: TGetProductionsOutputDefault["productions"][number];
-	onEdit: () => void;
-	onComplete: () => void;
+	onEdit?: () => void;
+	onComplete?: () => void;
 	completionIsPending: boolean;
 };
 
@@ -389,16 +403,18 @@ function ProductionCard({ production, onEdit, onComplete, completionIsPending }:
 					) : null}
 				</div>
 				<div className="flex flex-wrap items-center gap-2">
-					{canComplete ? (
+					{canComplete && onComplete ? (
 						<Button variant="ghost-default" size="xs" onClick={onComplete} disabled={completionIsPending}>
 							<CheckCircle2 className="h-4 w-4" />
 							CONCLUIR
 						</Button>
 					) : null}
-					<Button variant="ghost" size="xs" onClick={onEdit}>
-						<Pencil className="h-4 w-4" />
-						EDITAR
-					</Button>
+					{onEdit ? (
+						<Button variant="ghost" size="xs" onClick={onEdit}>
+							<Pencil className="h-4 w-4" />
+							EDITAR
+						</Button>
+					) : null}
 					<ProductionCardActionsMenu production={production} onEdit={onEdit} />
 				</div>
 			</div>
@@ -408,7 +424,7 @@ function ProductionCard({ production, onEdit, onComplete, completionIsPending }:
 
 // Menu de ações rápidas da produção (mesmo padrão do módulo fiscal): impressão de etiquetas de
 // lote via agente desktop — uma etiqueta por saída da produção, montada no servidor.
-function ProductionCardActionsMenu({ production, onEdit }: { production: TGetProductionsOutputDefault["productions"][number]; onEdit: () => void }) {
+function ProductionCardActionsMenu({ production, onEdit }: { production: TGetProductionsOutputDefault["productions"][number]; onEdit?: () => void }) {
 	const { data: printers } = useAgentPrinters();
 	const canPrintLabels = organizationHasPrinterForFinalidade(printers, "ETIQUETA_LOTE") && production.saidas.length > 0;
 
@@ -431,10 +447,12 @@ function ProductionCardActionsMenu({ production, onEdit }: { production: TGetPro
 			<DropdownMenuContent align="end" className="w-56">
 				<DropdownMenuGroup>
 					<DropdownMenuLabel>Ações rápidas</DropdownMenuLabel>
-					<DropdownMenuItem onClick={onEdit}>
-						<Pencil className="h-4 w-4" />
-						EDITAR PRODUÇÃO
-					</DropdownMenuItem>
+					{onEdit ? (
+						<DropdownMenuItem onClick={onEdit}>
+							<Pencil className="h-4 w-4" />
+							EDITAR PRODUÇÃO
+						</DropdownMenuItem>
+					) : null}
 				</DropdownMenuGroup>
 				<DropdownMenuSeparator />
 				<DropdownMenuGroup>
@@ -460,7 +478,7 @@ function ProductionCardActionsMenu({ production, onEdit }: { production: TGetPro
 
 type ProductionRecipeCardProps = {
 	recipe: TGetProductionRecipesOutputDefault["recipes"][number];
-	onEdit: () => void;
+	onEdit?: () => void;
 };
 
 function ProductionRecipeCard({ recipe, onEdit }: ProductionRecipeCardProps) {
@@ -505,10 +523,12 @@ function ProductionRecipeCard({ recipe, onEdit }: ProductionRecipeCardProps) {
 				</div>
 				<div className="flex items-center gap-1">
 					<ProductionRecipePreparationMethodViewer recipeId={recipe.id} recipeTitle={recipe.titulo} />
-					<Button variant="ghost" size="xs" onClick={onEdit}>
-						<Pencil className="h-4 w-4" />
-						EDITAR
-					</Button>
+					{onEdit ? (
+						<Button variant="ghost" size="xs" onClick={onEdit}>
+							<Pencil className="h-4 w-4" />
+							EDITAR
+						</Button>
+					) : null}
 				</div>
 			</div>
 		</div>

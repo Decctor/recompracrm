@@ -1,3 +1,4 @@
+import { canViewInventory } from "@/lib/permissions/inventory";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import createHttpError from "http-errors";
 import { z } from "zod";
@@ -8,6 +9,13 @@ export function getSessionOrganizationId(session: TAuthUserSession | null) {
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
 	const organizationId = session.membership?.organizacao.id;
 	if (!organizationId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização.");
+	return organizationId;
+}
+
+/** Organização da sessão para os relatórios e análises de estoque: exige `estoque.visualizar`. */
+export function getInventoryReportOrganizationId(session: TAuthUserSession | null) {
+	const organizationId = getSessionOrganizationId(session);
+	if (!canViewInventory(session?.membership?.permissoes)) throw new createHttpError.Forbidden("Você não possui permissão para visualizar o estoque.");
 	return organizationId;
 }
 

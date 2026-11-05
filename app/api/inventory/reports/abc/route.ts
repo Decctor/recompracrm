@@ -2,7 +2,7 @@ import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { summarizeAbc } from "@/lib/stock/analytics/abc";
 import { getAbcRanking } from "@/lib/stock/analytics/queries";
-import { getSessionOrganizationId, parsePeriodSearchParams, StockReportPeriodInputSchema } from "@/lib/stock/analytics/route-helpers";
+import { getInventoryReportOrganizationId, parsePeriodSearchParams, StockReportPeriodInputSchema } from "@/lib/stock/analytics/route-helpers";
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -42,7 +42,7 @@ async function getStockReportAbc({ input, organizationId }: { input: TGetStockRe
 export type TGetStockReportAbcOutput = Awaited<ReturnType<typeof getStockReportAbc>>;
 
 async function getStockReportAbcRoute(request: NextRequest) {
-	const organizationId = getSessionOrganizationId(await getCurrentSessionUncached());
+	const organizationId = getInventoryReportOrganizationId(await getCurrentSessionUncached());
 	const searchParams = request.nextUrl.searchParams;
 	const input = GetStockReportAbcInputSchema.parse({ metric: searchParams.get("metric"), ...parsePeriodSearchParams(searchParams) });
 	const result = await getStockReportAbc({ input, organizationId });

@@ -687,7 +687,95 @@ export const OrganizationMemberPermissionsSchema = z.object({
 			})
 			.optional()
 			.nullable(),
+		// Caixa (sessões de venda) e configuração da operação de vendas (canais, estações de preparo,
+		// comandas, loja). Opcionais para não quebrar membros existentes; a
+		// semântica de ausência é resolvida em lib/permissions/sales.ts — não leia estas chaves direto.
+		operarCaixa: z
+			.boolean({ invalid_type_error: "Tipo não válido para a permissão de abertura e fechamento de caixa." })
+			.optional()
+			.nullable(),
+		movimentarCaixa: z
+			.boolean({ invalid_type_error: "Tipo não válido para a permissão de sangria e suprimento de caixa." })
+			.optional()
+			.nullable(),
+		conferirCaixa: z
+			.boolean({ invalid_type_error: "Tipo não válido para a permissão de conferência de caixa." })
+			.optional()
+			.nullable(),
+		configurar: z
+			.boolean({ invalid_type_error: "Tipo não válido para a permissão de configuração de vendas." })
+			.optional()
+			.nullable(),
 	}),
+	// Catálogo de produtos. Opcional para não quebrar membros existentes; a ausência é resolvida em
+	// lib/permissions/products.ts (antes desta chave o catálogo era aberto a todo membro).
+	produtos: z
+		.object({
+			visualizar: z.boolean({
+				required_error: "Permissão de visualização de produtos não informada.",
+				invalid_type_error: "Tipo não válido para a permissão de visualização de produtos.",
+			}),
+			criar: z.boolean({
+				required_error: "Permissão de criação de produtos não informada.",
+				invalid_type_error: "Tipo não válido para a permissão de criação de produtos.",
+			}),
+			editar: z.boolean({
+				required_error: "Permissão de edição de produtos não informada.",
+				invalid_type_error: "Tipo não válido para a permissão de edição de produtos.",
+			}),
+			alterarPrecos: z.boolean({
+				required_error: "Permissão de alteração de preços não informada.",
+				invalid_type_error: "Tipo não válido para a permissão de alteração de preços.",
+			}),
+		})
+		.optional()
+		.nullable(),
+	// Estoque. Opcional para não quebrar membros existentes; a ausência é resolvida em
+	// lib/permissions/inventory.ts (antes desta chave o estoque acompanhava empresa.visualizar).
+	estoque: z
+		.object({
+			visualizar: z.boolean({
+				required_error: "Permissão de visualização do estoque não informada.",
+				invalid_type_error: "Tipo não válido para a permissão de visualização do estoque.",
+			}),
+			movimentar: z.boolean({
+				required_error: "Permissão de movimentação de estoque não informada.",
+				invalid_type_error: "Tipo não válido para a permissão de movimentação de estoque.",
+			}),
+			ajustar: z.boolean({
+				required_error: "Permissão de ajuste de estoque não informada.",
+				invalid_type_error: "Tipo não válido para a permissão de ajuste de estoque.",
+			}),
+		})
+		.optional()
+		.nullable(),
+	// Produção. Opcional para não quebrar membros existentes; a ausência é resolvida em
+	// lib/permissions/productions.ts (antes desta chave a produção acompanhava empresa.visualizar).
+	producao: z
+		.object({
+			visualizar: z.boolean({
+				required_error: "Permissão de visualização da produção não informada.",
+				invalid_type_error: "Tipo não válido para a permissão de visualização da produção.",
+			}),
+			criar: z.boolean({
+				required_error: "Permissão de criação de produções não informada.",
+				invalid_type_error: "Tipo não válido para a permissão de criação de produções.",
+			}),
+			editar: z.boolean({
+				required_error: "Permissão de edição de produções não informada.",
+				invalid_type_error: "Tipo não válido para a permissão de edição de produções.",
+			}),
+			excluir: z.boolean({
+				required_error: "Permissão de exclusão de produções não informada.",
+				invalid_type_error: "Tipo não válido para a permissão de exclusão de produções.",
+			}),
+			concluir: z.boolean({
+				required_error: "Permissão de conclusão de produções não informada.",
+				invalid_type_error: "Tipo não válido para a permissão de conclusão de produções.",
+			}),
+		})
+		.optional()
+		.nullable(),
 	compras: z.object({
 		visualizar: z.boolean({
 			required_error: "Permissão de visualização de compras não informada.",

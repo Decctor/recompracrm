@@ -1,5 +1,6 @@
 ﻿"use client";
 
+import { resolveInventoryPermissions } from "@/lib/permissions/inventory";
 import ProductRegistryTab from "@/app/dashboard/catalog/products/[productId]/product-registry-tab";
 import ProductStatsTab from "@/app/dashboard/catalog/products/[productId]/product-stats-tab";
 import ProductStockTab from "@/app/dashboard/catalog/products/[productId]/product-stock-tab";
@@ -21,6 +22,7 @@ type ProductPageProps = {
 };
 
 export default function ProductPage({ user, userMembership, id }: ProductPageProps) {
+	const inventoryPermissions = resolveInventoryPermissions(userMembership.permissoes);
 	const [tab, setTab] = useQueryState("tab", parseAsStringEnum(["cadastro", "estatisticas", "estoque"]).withDefault("estatisticas"));
 	const queryClient = useQueryClient();
 	const { data: product, queryKey, isLoading, isError, error } = useProductById({ id });
@@ -49,10 +51,12 @@ export default function ProductPage({ user, userMembership, id }: ProductPagePro
 						<ChartBarIcon className="w-4 h-4 min-w-4 min-h-4" />
 						ESTATÍSTICAS
 					</TabsTrigger>
-					<TabsTrigger value="estoque">
-						<BoxesIcon className="w-4 h-4 min-w-4 min-h-4" />
-						ESTOQUE
-					</TabsTrigger>
+					{inventoryPermissions.visualizar ? (
+						<TabsTrigger value="estoque">
+							<BoxesIcon className="w-4 h-4 min-w-4 min-h-4" />
+							ESTOQUE
+						</TabsTrigger>
+					) : null}
 				</TabsList>
 				<TabsContent value="cadastro" className="mt-4">
 					<ProductRegistryTab
@@ -64,9 +68,11 @@ export default function ProductPage({ user, userMembership, id }: ProductPagePro
 				<TabsContent value="estatisticas" className="mt-4">
 					<ProductStatsTab productId={id} enabled={tab === "estatisticas"} />
 				</TabsContent>
-				<TabsContent value="estoque" className="mt-4">
-					<ProductStockTab product={product} enabled={tab === "estoque"} />
-				</TabsContent>
+				{inventoryPermissions.visualizar ? (
+					<TabsContent value="estoque" className="mt-4">
+						<ProductStockTab product={product} enabled={tab === "estoque"} canMoveInventory={inventoryPermissions.movimentar} />
+					</TabsContent>
+				) : null}
 			</Tabs>
 		</div>
 	);

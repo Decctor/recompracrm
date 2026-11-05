@@ -1,6 +1,7 @@
 import { appApiHandler } from "@/lib/app-api";
 import { requireERPSession } from "@/lib/authentication/erp-session";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { canConfigureSales } from "@/lib/permissions/sales";
 import { generatePublicToken, hashPublicToken } from "@/lib/tabs";
 import { findOpenTabByServiceCard, findServiceCard } from "@/lib/tabs/service-cards";
 import {
@@ -253,6 +254,7 @@ async function getServiceCardsRoute(request: NextRequest) {
 
 async function createServiceCardsRoute(request: NextRequest) {
 	const session = requireERPSession(await getCurrentSessionUncached());
+	if (!canConfigureSales(session.membership!.permissoes)) throw new createHttpError.Forbidden("Voce nao possui permissao para configurar comandas.");
 	const body = await request.json();
 	const input = CreateServiceCardsInputSchema.parse(body);
 	const result = await createServiceCards({ input, orgId: session.membership!.organizacao.id });
@@ -261,6 +263,7 @@ async function createServiceCardsRoute(request: NextRequest) {
 
 async function updateServiceCardRoute(request: NextRequest) {
 	const session = requireERPSession(await getCurrentSessionUncached());
+	if (!canConfigureSales(session.membership!.permissoes)) throw new createHttpError.Forbidden("Voce nao possui permissao para configurar comandas.");
 	const { searchParams } = new URL(request.url);
 	const body = await request.json();
 	const input = UpdateServiceCardInputSchema.parse({ ...body, id: searchParams.get("id") ?? body.id });
@@ -270,6 +273,7 @@ async function updateServiceCardRoute(request: NextRequest) {
 
 async function deleteServiceCardRoute(request: NextRequest) {
 	const session = requireERPSession(await getCurrentSessionUncached());
+	if (!canConfigureSales(session.membership!.permissoes)) throw new createHttpError.Forbidden("Voce nao possui permissao para configurar comandas.");
 	const { searchParams } = new URL(request.url);
 	const input = DeleteServiceCardInputSchema.parse({ id: searchParams.get("id") });
 	const result = await deleteServiceCard({ input, orgId: session.membership!.organizacao.id });

@@ -7,6 +7,7 @@ import OpenSalesSession from "@/components/Modals/Internal/SalesSessions/OpenSal
 import RegisterMovement from "@/components/Modals/Internal/SalesSessions/RegisterMovement";
 import { Button } from "@/components/ui/button";
 import { formatToMoney } from "@/lib/formatting";
+import type { TSalesOperationPermissions } from "@/lib/permissions/sales";
 import { cn } from "@/lib/utils";
 import dayjs from "dayjs";
 import { ArrowRightLeft, LockKeyhole, Wallet } from "lucide-react";
@@ -21,6 +22,8 @@ type Props = {
 	isLoading: boolean;
 	requireOpeningFloat: boolean;
 	blindCount: boolean;
+	// Resolvidas no servidor (lib/permissions/sales.ts); as rotas de caixa aplicam a mesma regra.
+	cashPermissions: Pick<TSalesOperationPermissions, "operarCaixa" | "movimentarCaixa">;
 	className?: string;
 	// Card compacto para viver dentro do checkout (coluna de 420px / Sheet do mobile): mesmas
 	// ações da barra, empilhadas em duas linhas em vez de espalhadas pela largura da página.
@@ -56,6 +59,7 @@ function CompactCashSessionCard({
 	isLoading,
 	requireOpeningFloat,
 	blindCount,
+	cashPermissions,
 	className,
 }: Props) {
 	const { setModal, modals } = useCashSessionModals({ session, requireOpeningFloat, blindCount });
@@ -105,24 +109,30 @@ function CompactCashSessionCard({
 			<div className="flex flex-wrap items-center justify-end gap-1.5">
 				{session ? (
 					<>
-						<Button variant="outline" size="xs" onClick={() => setModal("movement")} className="gap-1 bg-card">
-							<ArrowRightLeft className="h-3.5 w-3.5" />
-							MOVIMENTO
-						</Button>
-						<Button variant="outline" size="xs" onClick={() => setModal("close")} className="gap-1 bg-card">
-							<LockKeyhole className="h-3.5 w-3.5" />
-							FECHAR
-						</Button>
-						<Button variant="ghost" size="xs" onClick={() => setModal("open")} aria-label="Abrir outro caixa" title="Abrir outro caixa">
-							<Wallet className="h-3.5 w-3.5" />
-						</Button>
+						{cashPermissions.movimentarCaixa ? (
+							<Button variant="outline" size="xs" onClick={() => setModal("movement")} className="gap-1 bg-card">
+								<ArrowRightLeft className="h-3.5 w-3.5" />
+								MOVIMENTO
+							</Button>
+						) : null}
+						{cashPermissions.operarCaixa ? (
+							<>
+								<Button variant="outline" size="xs" onClick={() => setModal("close")} className="gap-1 bg-card">
+									<LockKeyhole className="h-3.5 w-3.5" />
+									FECHAR
+								</Button>
+								<Button variant="ghost" size="xs" onClick={() => setModal("open")} aria-label="Abrir outro caixa" title="Abrir outro caixa">
+									<Wallet className="h-3.5 w-3.5" />
+								</Button>
+							</>
+						) : null}
 					</>
-				) : (
+				) : cashPermissions.operarCaixa ? (
 					<Button size="xs" onClick={() => setModal("open")} className="gap-1">
 						<Wallet className="h-3.5 w-3.5" />
 						ABRIR CAIXA
 					</Button>
-				)}
+				) : null}
 			</div>
 			{modals}
 		</div>
@@ -134,7 +144,17 @@ export default function CashSessionBar(props: Props) {
 	return <FullCashSessionBar {...props} />;
 }
 
-function FullCashSessionBar({ session, sessions, activeSessionId, onSessionChange, isLoading, requireOpeningFloat, blindCount, className }: Props) {
+function FullCashSessionBar({
+	session,
+	sessions,
+	activeSessionId,
+	onSessionChange,
+	isLoading,
+	requireOpeningFloat,
+	blindCount,
+	cashPermissions,
+	className,
+}: Props) {
 	const { setModal, modals } = useCashSessionModals({ session, requireOpeningFloat, blindCount });
 	return (
 		<div
@@ -184,22 +204,24 @@ function FullCashSessionBar({ session, sessions, activeSessionId, onSessionChang
 						/>
 					</div>
 				) : null}
-				{session ? (
-					<>
-						<Button variant="ghost" size="sm" onClick={() => setModal("movement")} className="gap-1.5">
-							<ArrowRightLeft className="h-4 w-4" />
-							MOVIMENTO
-						</Button>
-						<Button variant="outline" size="sm" onClick={() => setModal("close")} className="gap-1.5">
-							<LockKeyhole className="h-4 w-4" />
-							FECHAR CAIXA
-						</Button>
-					</>
+				{session && cashPermissions.movimentarCaixa ? (
+					<Button variant="ghost" size="sm" onClick={() => setModal("movement")} className="gap-1.5">
+						<ArrowRightLeft className="h-4 w-4" />
+						MOVIMENTO
+					</Button>
 				) : null}
-				<Button size="sm" variant={session ? "ghost" : "default"} onClick={() => setModal("open")} className="gap-1.5">
-					<Wallet className="h-4 w-4" />
-					ABRIR CAIXA
-				</Button>
+				{session && cashPermissions.operarCaixa ? (
+					<Button variant="outline" size="sm" onClick={() => setModal("close")} className="gap-1.5">
+						<LockKeyhole className="h-4 w-4" />
+						FECHAR CAIXA
+					</Button>
+				) : null}
+				{cashPermissions.operarCaixa ? (
+					<Button size="sm" variant={session ? "ghost" : "default"} onClick={() => setModal("open")} className="gap-1.5">
+						<Wallet className="h-4 w-4" />
+						ABRIR CAIXA
+					</Button>
+				) : null}
 			</div>
 			{modals}
 		</div>

@@ -3,6 +3,7 @@ import { requireERPSession } from "@/lib/authentication/erp-session";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { linkTabClient } from "@/lib/tabs";
+import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import z from "zod";
 
@@ -25,6 +26,7 @@ export type TUpdateTabClientOutput = Awaited<ReturnType<typeof updateTabClient>>
 
 async function updateTabClientRoute(request: NextRequest) {
 	const session = requireERPSession(await getCurrentSessionUncached());
+	if (!session.membership!.permissoes.vendas.criar) throw new createHttpError.Forbidden("Voce nao possui permissao para operar comandas.");
 
 	const body = await request.json();
 	const input = UpdateTabClientInputSchema.parse(body);

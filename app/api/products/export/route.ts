@@ -1,4 +1,5 @@
 import { appApiHandler } from "@/lib/app-api";
+import { canViewProducts } from "@/lib/permissions/products";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { GetProductsDefaultInputSchema, queryProductsList } from "@/lib/products/list";
@@ -23,6 +24,7 @@ async function getProductsExport({ input, session }: { input: TGetProductsExport
 	const membership = session.membership;
 	if (!membership) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
 	if (membership.organizacao.assinaturaPlano === "ESSENCIAL") throw new createHttpError.Forbidden("Recurso indisponível no plano ESSENCIAL.");
+	if (!canViewProducts(membership.permissoes)) throw new createHttpError.Forbidden("Você não possui permissão para visualizar produtos.");
 	const orgId = membership.organizacao.id;
 	const canViewFiscal = !!membership.organizacao.configuracao.recursos.erp.acesso && !!membership.permissoes.fiscal.visualizar;
 	const canViewSuppliers = !!membership.permissoes.compras.visualizar;

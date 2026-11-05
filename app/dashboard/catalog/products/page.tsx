@@ -1,9 +1,10 @@
-import { getCurrentSession } from "@/lib/authentication/session";
+import { requireDashboardCapability } from "@/lib/access/guards";
 import { redirect } from "next/navigation";
 import ProductsPage from "./products-page";
 
 export default async function Products() {
-	const sessionUser = await getCurrentSession();
+	const { sessionUser, unauthorized } = await requireDashboardCapability("products");
+	if (unauthorized) return unauthorized;
 	if (!sessionUser) redirect("/auth/signin");
 
 	const userMembership = sessionUser.membership;

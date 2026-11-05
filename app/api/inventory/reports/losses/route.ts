@@ -4,7 +4,7 @@ import { bucketDailySeries, monthKeyOf, weekKeyOf } from "@/lib/stock/analytics/
 import { inferStockLossReason, STOCK_LOSS_REASONS, type TStockLossReason } from "@/lib/stock/analytics/loss-reasons";
 import { listLocalDayKeys } from "@/lib/stock/analytics/periods";
 import { getStockLosses } from "@/lib/stock/analytics/queries";
-import { getSessionOrganizationId, parsePeriodSearchParams, StockReportPeriodInputSchema } from "@/lib/stock/analytics/route-helpers";
+import { getInventoryReportOrganizationId, parsePeriodSearchParams, StockReportPeriodInputSchema } from "@/lib/stock/analytics/route-helpers";
 import { type NextRequest, NextResponse } from "next/server";
 import type { z } from "zod";
 
@@ -68,7 +68,7 @@ async function getStockReportLosses({ input, organizationId }: { input: TGetStoc
 export type TGetStockReportLossesOutput = Awaited<ReturnType<typeof getStockReportLosses>>;
 
 async function getStockReportLossesRoute(request: NextRequest) {
-	const organizationId = getSessionOrganizationId(await getCurrentSessionUncached());
+	const organizationId = getInventoryReportOrganizationId(await getCurrentSessionUncached());
 	const input = GetStockReportLossesInputSchema.parse(parsePeriodSearchParams(request.nextUrl.searchParams));
 	const result = await getStockReportLosses({ input, organizationId });
 	return NextResponse.json(result);

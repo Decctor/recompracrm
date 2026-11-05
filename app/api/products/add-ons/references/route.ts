@@ -4,6 +4,7 @@ import { db, type DBTransaction } from "@/services/drizzle";
 import createHttpError from "http-errors";
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { canEditProducts } from "@/lib/permissions/products";
 import { appApiHandler } from "@/lib/app-api";
 import { productAddOnReferences, productAddOns, productVariants, products } from "@/services/drizzle/schema";
 import { and, eq, isNull } from "drizzle-orm";
@@ -139,6 +140,7 @@ export type TCreateProductAddOnReferenceOutput = Awaited<ReturnType<typeof creat
 async function createProductAddOnReferenceRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você precisa estar autenticado para acessar esse recurso.");
+	if (!canEditProducts(session?.membership?.permissoes)) throw new createHttpError.Forbidden("Você não possui permissão para editar produtos.");
 	const input = CreateProductAddOnReferenceInputSchema.parse(await request.json());
 	const result = await createProductAddOnReference({ input, session });
 	return NextResponse.json(result, { status: 201 });
@@ -201,6 +203,7 @@ export type TDeleteProductAddOnReferenceOutput = Awaited<ReturnType<typeof delet
 async function deleteProductAddOnReferenceRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você precisa estar autenticado para acessar esse recurso.");
+	if (!canEditProducts(session?.membership?.permissoes)) throw new createHttpError.Forbidden("Você não possui permissão para editar produtos.");
 	const input = DeleteProductAddOnReferenceInputSchema.parse({
 		productId: request.nextUrl.searchParams.get("productId"),
 		productAddOnId: request.nextUrl.searchParams.get("productAddOnId"),

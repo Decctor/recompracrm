@@ -53,6 +53,7 @@ export type TCancelTabOutput = Awaited<ReturnType<typeof cancelTabOrOrder>>;
 
 async function cancelTabRoute(request: NextRequest) {
 	const session = requireERPSession(await getCurrentSessionUncached());
+	if (!session.membership!.permissoes.vendas.excluir) throw new createHttpError.Forbidden("Voce nao possui permissao para cancelar contas ou pedidos.");
 
 	const body = await request.json();
 	const input = CancelTabInputSchema.parse(body);

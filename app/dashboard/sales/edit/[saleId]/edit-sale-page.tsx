@@ -1,5 +1,6 @@
 "use client";
 
+import type { TSalesOperationPermissions } from "@/lib/permissions/sales";
 import BarcodeMatchPicker from "@/components/Modals/Sales/BarcodeMatchPicker";
 import type { TBuiltOrderItem } from "@/components/Products/ProductBuilderForm";
 import { usePOSBarcodeScan } from "@/lib/hooks/use-pos-barcode-scan";
@@ -93,6 +94,7 @@ type EditSalePageProps = {
 	organizationAutoFiscalCapable: boolean;
 	autoEmissionExceptions: TAutoEmissionExceptions;
 	canEmitFiscal: boolean;
+	cashPermissions: Pick<TSalesOperationPermissions, "operarCaixa" | "movimentarCaixa">;
 };
 
 export default function EditSalePage({
@@ -105,6 +107,7 @@ export default function EditSalePage({
 	organizationAutoFiscalCapable,
 	autoEmissionExceptions,
 	canEmitFiscal,
+	cashPermissions,
 }: EditSalePageProps) {
 	const router = useRouter();
 	const queryClient = useQueryClient();
@@ -422,6 +425,7 @@ export default function EditSalePage({
 			isLoading={cashLoading}
 			requireOpeningFloat={!!salesSessionsConfig?.exigirFundoTroco}
 			blindCount={!!salesSessionsConfig?.conferenciaCega}
+			cashPermissions={cashPermissions}
 		/>
 	) : null;
 

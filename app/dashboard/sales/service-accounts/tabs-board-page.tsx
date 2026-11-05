@@ -1,4 +1,5 @@
 "use client";
+import { useTabPermissions } from "./_components/tab-permissions";
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
 import { ControlServicePoint } from "@/components/Modals/Internal/ServicePoints/ControlServicePoint";
 import { NewServicePoint } from "@/components/Modals/Internal/ServicePoints/NewServicePoint";
@@ -74,12 +75,15 @@ function matchesCardFilter(card: TServiceCard, filter: TCardFilter, inUse: boole
 	return true;
 }
 
+const CONFIGURE_DENIED_MESSAGE = "Você não possui permissão para configurar mesas e comandas.";
+
 export default function TabsBoardPage({ organizationLogoUrl }: { organizationLogoUrl: string | null }) {
 	const router = useRouter();
 	const pathname = usePathname();
 	const searchParams = useSearchParams();
 	const queryClient = useQueryClient();
 	const now = useTickingNow();
+	const { canConfigure } = useTabPermissions();
 	const { data: settings } = useServiceSettings();
 	const { data: servicePoints, isLoading: pointsLoading, queryKey: pointsQueryKey } = useServicePoints();
 	const { data: tabs, isLoading: tabsLoading, isError, error, queryKey: tabsQueryKey } = useTabs();
@@ -317,7 +321,11 @@ export default function TabsBoardPage({ organizationLogoUrl }: { organizationLog
 		return (
 			<div className="flex w-full flex-col gap-3">
 				<div className="flex justify-end">
-					<ModuleActions contasHabilitadas={false} onOpenSettings={() => setActiveModal({ type: "configuracoes" })} onCreateTab={() => {}} />
+					<ModuleActions
+						contasHabilitadas={false}
+						onOpenSettings={canConfigure ? () => setActiveModal({ type: "configuracoes" }) : undefined}
+						onCreateTab={() => {}}
+					/>
 				</div>
 				{settings ? (
 					<div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-border py-10 text-center">
@@ -326,9 +334,11 @@ export default function TabsBoardPage({ organizationLogoUrl }: { organizationLog
 						<p className="max-w-md text-xs text-muted-foreground">
 							Configure o modo de atendimento (mesas, comandas ou ambos) para começar a abrir contas e acumular pedidos até o fechamento.
 						</p>
-						<Button size="sm" variant="secondary" className="mt-1" onClick={() => setActiveModal({ type: "configuracoes" })}>
-							CONFIGURAR
-						</Button>
+						{canConfigure ? (
+							<Button size="sm" variant="secondary" className="mt-1" onClick={() => setActiveModal({ type: "configuracoes" })}>
+								CONFIGURAR
+							</Button>
+						) : null}
 					</div>
 				) : (
 					<Skeleton className="h-40 w-full rounded-xl" />
@@ -368,7 +378,7 @@ export default function TabsBoardPage({ organizationLogoUrl }: { organizationLog
 						<OrderRequestsButton />
 						<ModuleActions
 							contasHabilitadas={contasHabilitadas}
-							onOpenSettings={() => setActiveModal({ type: "configuracoes" })}
+							onOpenSettings={canConfigure ? () => setActiveModal({ type: "configuracoes" }) : undefined}
 							onCreateTab={() => setActiveModal({ type: "nova-conta" })}
 						/>
 					</div>
@@ -431,7 +441,7 @@ export default function TabsBoardPage({ organizationLogoUrl }: { organizationLog
 								) : null}
 							</div>
 						) : null}
-						{effectiveMode === "por-mesa" ? (
+						{effectiveMode === "por-mesa" && canConfigure ? (
 							<div className="flex justify-end">
 								<Button size="sm" variant="outline" onClick={() => setActiveModal({ type: "novo-ponto" })}>
 									<Plus className="size-4" />
@@ -474,10 +484,12 @@ export default function TabsBoardPage({ organizationLogoUrl }: { organizationLog
 											Arquivo para gráfica
 										</Button>
 									) : null}
-									<Button size="sm" variant="outline" onClick={() => setActiveModal({ type: "nova-comanda" })}>
-										<Plus className="size-4" />
-										Nova comanda
-									</Button>
+									{canConfigure ? (
+										<Button size="sm" variant="outline" onClick={() => setActiveModal({ type: "nova-comanda" })}>
+											<Plus className="size-4" />
+											Nova comanda
+										</Button>
+									) : null}
 								</div>
 							</div>
 						) : null}
@@ -509,8 +521,8 @@ export default function TabsBoardPage({ organizationLogoUrl }: { organizationLog
 								selectedId={selectedId}
 								onSelect={selectTab}
 								onOpenFree={(codigo) => setActiveModal({ type: "nova-conta", codigo })}
-								onEditCard={(cardId) => setActiveModal({ type: "editar-comanda", cardId })}
-								onCreateCards={() => setActiveModal({ type: "nova-comanda" })}
+								onEditCard={(cardId) => (canConfigure ? setActiveModal({ type: "editar-comanda", cardId }) : toast.error(CONFIGURE_DENIED_MESSAGE))}
+								onCreateCards={() => (canConfigure ? setActiveModal({ type: "nova-comanda" }) : toast.error(CONFIGURE_DENIED_MESSAGE))}
 							/>
 						) : (
 							<PorMesa
@@ -522,8 +534,8 @@ export default function TabsBoardPage({ organizationLogoUrl }: { organizationLog
 								selectedId={selectedId}
 								onSelect={selectTab}
 								onOpenFree={(pointId) => setActiveModal({ type: "nova-conta", servicePointId: pointId })}
-								onEditPoint={(pointId) => setActiveModal({ type: "editar-ponto", pointId })}
-								onCreatePoint={() => setActiveModal({ type: "novo-ponto" })}
+								onEditPoint={(pointId) => (canConfigure ? setActiveModal({ type: "editar-ponto", pointId }) : toast.error(CONFIGURE_DENIED_MESSAGE))}
+								onCreatePoint={() => (canConfigure ? setActiveModal({ type: "novo-ponto" }) : toast.error(CONFIGURE_DENIED_MESSAGE))}
 							/>
 						)}
 					</div>
@@ -915,14 +927,17 @@ function ModuleActions({
 	onCreateTab,
 }: {
 	contasHabilitadas: boolean;
-	onOpenSettings: () => void;
+	// Ausente = membro sem `vendas.configurar`: a ação não aparece.
+	onOpenSettings?: () => void;
 	onCreateTab: () => void;
 }) {
 	return (
 		<ActionToolbar>
-			<ActionToolbar.Action icon={Settings2} onClick={onOpenSettings}>
-				MODO DE ATENDIMENTO
-			</ActionToolbar.Action>
+			{onOpenSettings ? (
+				<ActionToolbar.Action icon={Settings2} onClick={onOpenSettings}>
+					MODO DE ATENDIMENTO
+				</ActionToolbar.Action>
+			) : null}
 			{contasHabilitadas ? (
 				<ActionToolbar.Primary icon={Plus} onClick={onCreateTab}>
 					NOVA CONTA

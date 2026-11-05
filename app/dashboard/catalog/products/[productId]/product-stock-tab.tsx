@@ -48,6 +48,7 @@ type Product = NonNullable<TGetProductsOutput["data"]["byId"]>;
 type ProductStockTabProps = {
 	product: Product;
 	enabled?: boolean;
+	canMoveInventory: boolean;
 };
 
 // Mesmas faixas de saldo usadas nas páginas de Estoque e Produtos.
@@ -58,7 +59,7 @@ function getSaldoTone(quantidade: number) {
 	return "bg-blue-500 text-white dark:bg-blue-600";
 }
 
-export default function ProductStockTab({ product, enabled = true }: ProductStockTabProps) {
+export default function ProductStockTab({ product, enabled = true, canMoveInventory }: ProductStockTabProps) {
 	const variantesRastreadas = (product.variantes ?? []).filter((variante) => variante.rastreamentoEstoqueAtivo);
 	const rastreamentoAtivo = product.rastreamentoEstoqueAtivo || variantesRastreadas.length > 0;
 
@@ -85,7 +86,7 @@ export default function ProductStockTab({ product, enabled = true }: ProductStoc
 		);
 	}
 
-	return <TrackedProductStock product={product} variantesRastreadas={variantesRastreadas} enabled={enabled} />;
+	return <TrackedProductStock product={product} variantesRastreadas={variantesRastreadas} enabled={enabled} canMoveInventory={canMoveInventory} />;
 }
 
 const PERIOD_OPTIONS: { value: TProductStockAnalyticsPeriod; label: string }[] = [
@@ -98,10 +99,12 @@ function TrackedProductStock({
 	product,
 	variantesRastreadas,
 	enabled,
+	canMoveInventory,
 }: {
 	product: Product;
 	variantesRastreadas: NonNullable<Product["variantes"]>;
 	enabled: boolean;
+	canMoveInventory: boolean;
 }) {
 	const [period, setPeriod] = useState<TProductStockAnalyticsPeriod>(30);
 	const { data: analytics, isLoading, error } = useProductStockAnalytics({ productId: product.id, period, enabled });
@@ -159,7 +162,7 @@ function TrackedProductStock({
 
 			<CostPriceChart productId={product.id} unit={product.unidade} enabled={enabled} />
 			<ProductLotsSection productId={product.id} />
-			<ProductTransactionsSection product={product} enabled={enabled} />
+			<ProductTransactionsSection product={product} enabled={enabled} canMoveInventory={canMoveInventory} />
 			{/* Configuração, não análise: fica no fim da aba. */}
 			<StockDeductionModeSection
 				productId={product.id}
@@ -330,7 +333,7 @@ function ProductLotLine({ lot }: { lot: StockLot }) {
 	);
 }
 
-function ProductTransactionsSection({ product, enabled }: { product: Product; enabled?: boolean }) {
+function ProductTransactionsSection({ product, enabled, canMoveInventory }: { product: Product; enabled?: boolean; canMoveInventory: boolean }) {
 	const queryClient = useQueryClient();
 	const [newTransactionModalIsOpen, setNewTransactionModalIsOpen] = useState(false);
 	const { data, isLoading, isError, isSuccess, error, filters, updateFilters } = useProductStockTransactions({
@@ -345,10 +348,12 @@ function ProductTransactionsSection({ product, enabled }: { product: Product; en
 	return (
 		<div className="flex w-full flex-col gap-2">
 			<SectionHeader icon={History} title="Movimentações recentes">
-				<Button size="fit" variant="ghost" className="rounded-lg px-2 py-1 text-xs" onClick={() => setNewTransactionModalIsOpen(true)}>
-					<Plus className="h-3.5 w-3.5 min-h-3.5 min-w-3.5" />
-					NOVA MOVIMENTAÇÃO
-				</Button>
+				{canMoveInventory ? (
+					<Button size="fit" variant="ghost" className="rounded-lg px-2 py-1 text-xs" onClick={() => setNewTransactionModalIsOpen(true)}>
+						<Plus className="h-3.5 w-3.5 min-h-3.5 min-w-3.5" />
+						NOVA MOVIMENTAÇÃO
+					</Button>
+				) : null}
 			</SectionHeader>
 
 			<GeneralPaginationComponent

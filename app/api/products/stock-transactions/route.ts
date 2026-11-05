@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { canMoveInventory, canViewInventory } from "@/lib/permissions/inventory";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { applyStockMovement } from "@/lib/stock/apply-stock-movement";
 import { consumeStockLotsByFefo } from "@/lib/stock/consume-stock-lots-fefo";
@@ -149,6 +150,7 @@ export type TGetProductStockTransactionsOutputDefault = TGetProductStockTransact
 
 async function getProductStockTransactionsRoute(request: NextRequest) {
 	const session = getSessionWithOrg(await getCurrentSessionUncached());
+	if (!canViewInventory(session.membership?.permissoes)) throw new createHttpError.Forbidden("Você não possui permissão para visualizar o estoque.");
 	const searchParams = request.nextUrl.searchParams;
 	const input = GetProductStockTransactionsInputSchema.parse({
 		page: searchParams.get("page"),
@@ -476,6 +478,7 @@ export type TCreateStockTransactionsOutput = Awaited<ReturnType<typeof createSto
 
 async function createStockTransactionsRoute(request: NextRequest) {
 	const session = getSessionWithOrg(await getCurrentSessionUncached());
+	if (!canMoveInventory(session.membership?.permissoes)) throw new createHttpError.Forbidden("Você não possui permissão para lançar movimentações de estoque.");
 	const input = CreateStockTransactionsInputSchema.parse(await request.json());
 	const result = await createStockTransactions({ input, session });
 	return NextResponse.json(result);

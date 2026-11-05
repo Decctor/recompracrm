@@ -2,6 +2,8 @@ import { appApiHandler } from "@/lib/app-api";
 import { requireERPSession } from "@/lib/authentication/erp-session";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { schedulePushForProduct } from "@/lib/integrations/ifood/sync/queue";
+import { canChangeProductPrices, canEditProducts } from "@/lib/permissions/products";
+import { isSamePrice } from "@/lib/products/price-snapshot";
 import { splitChannelSettingNodes, validateChannelSettingNodes } from "@/lib/products/sales-channels";
 import { ensureSalesChannelsWithIntegrations } from "@/lib/integrations/ifood/sales-channels";
 import { db } from "@/services/drizzle";
@@ -86,7 +88,15 @@ async function getProductChannelSettings({ orgId, produtoId }: { orgId: string; 
 }
 export type TGetProductChannelSettingsOutput = Awaited<ReturnType<typeof getProductChannelSettings>>;
 
-async function updateProductChannelSettings({ orgId, input }: { orgId: string; input: TUpdateProductChannelSettingsInput }) {
+async function updateProductChannelSettings({
+	orgId,
+	input,
+	canChangePrices,
+}: {
+	orgId: string;
+	input: TUpdateProductChannelSettingsInput;
+	canChangePrices: boolean;
+}) {
 	const channelIds = [...new Set(input.settings.map((setting) => setting.canalVendaId))];
 	const [product, ownedChannels] = await Promise.all([
 		findProductInOrg({ orgId, produtoId: input.produtoId }),
@@ -106,6 +116,23 @@ async function updateProductChannelSettings({ orgId, input }: { orgId: string; i
 		variantIds: new Set(product.variantes.map((variant) => variant.id)),
 	});
 	if (validationError) throw new createHttpError.BadRequest(validationError);
+
+	// Preço por canal é preço de venda: quem não pode alterar preços ainda muda a disponibilidade,
+	// desde que o preço de cada nó enviado continue o que está gravado (nó limpo = preço volta a herdar).
+	if (!canChangePrices) {
+		const currentSettings = await db.query.productChannelSettings.findMany({
+			where: and(eq(productChannelSettings.organizacaoId, orgId), eq(productChannelSettings.produtoId, input.produtoId)),
+			columns: { canalVendaId: true, produtoVarianteId: true, precoVenda: true },
+		});
+		const currentPriceByNode = new Map(
+			currentSettings.map((setting) => [`${setting.canalVendaId}:${setting.produtoVarianteId ?? ""}`, setting.precoVenda ?? null]),
+		);
+		const changesPrice = input.settings.some(
+			(setting) =>
+				!isSamePrice(setting.precoVenda ?? null, currentPriceByNode.get(`${setting.canalVendaId}:${setting.produtoVarianteId ?? ""}`) ?? null),
+		);
+		if (changesPrice) throw new createHttpError.Forbidden("Você não possui permissão para alterar preços de venda.");
+	}
 
 	// Patch esparso: só os nós enviados mudam. Nó com os dois campos nulos volta a herdar (linha
 	// removida); nós ausentes do payload ficam intactos, para que uma tela por canal não apague
@@ -178,8 +205,10 @@ async function updateProductChannelSettingsRoute(request: NextRequest) {
 	const session = requireERPSession(await getCurrentSessionUncached());
 	const orgId = session.membership!.organizacao.id;
 
+	if (!canEditProducts(session.membership!.permissoes)) throw new createHttpError.Forbidden("Você não possui permissão para editar produtos.");
+
 	const input = UpdateProductChannelSettingsInputSchema.parse(await request.json());
-	const result = await updateProductChannelSettings({ orgId, input });
+	const result = await updateProductChannelSettings({ orgId, input, canChangePrices: canChangeProductPrices(session.membership!.permissoes) });
 	return NextResponse.json(result);
 }
 

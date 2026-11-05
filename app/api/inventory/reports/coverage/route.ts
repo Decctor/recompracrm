@@ -1,7 +1,7 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { getProductStockIndicators } from "@/lib/stock/analytics/product-indicators";
-import { getSessionOrganizationId, parsePeriodSearchParams, StockReportPeriodInputSchema } from "@/lib/stock/analytics/route-helpers";
+import { getInventoryReportOrganizationId, parsePeriodSearchParams, StockReportPeriodInputSchema } from "@/lib/stock/analytics/route-helpers";
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -53,7 +53,7 @@ async function getStockReportCoverage({ input, organizationId }: { input: TGetSt
 export type TGetStockReportCoverageOutput = Awaited<ReturnType<typeof getStockReportCoverage>>;
 
 async function getStockReportCoverageRoute(request: NextRequest) {
-	const organizationId = getSessionOrganizationId(await getCurrentSessionUncached());
+	const organizationId = getInventoryReportOrganizationId(await getCurrentSessionUncached());
 	const searchParams = request.nextUrl.searchParams;
 	const input = GetStockReportCoverageInputSchema.parse({ limit: searchParams.get("limit"), ...parsePeriodSearchParams(searchParams) });
 	const result = await getStockReportCoverage({ input, organizationId });

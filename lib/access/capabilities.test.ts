@@ -5,11 +5,13 @@ import { canAccessDashboardCapability, type TCapabilityContext } from "./capabil
 function createContext({
 	cashSessionsEnabled,
 	canViewSales,
+	canCreateSales = canViewSales,
 	canViewResults = false,
 	erpEnabled = true,
 }: {
 	cashSessionsEnabled: boolean;
 	canViewSales: boolean;
+	canCreateSales?: boolean;
 	canViewResults?: boolean;
 	erpEnabled?: boolean;
 }): TCapabilityContext {
@@ -21,7 +23,7 @@ function createContext({
 			},
 		},
 		permissions: {
-			vendas: { visualizar: canViewSales },
+			vendas: { visualizar: canViewSales, criar: canCreateSales },
 			resultados: { visualizar: canViewResults },
 		},
 	} as TCapabilityContext;
@@ -42,7 +44,11 @@ test("keeps cash sessions hidden without both the organization setting and sales
 	assert.equal(canAccessDashboardCapability("cashSessions", createContext({ cashSessionsEnabled: true, canViewSales: true })), true);
 });
 
-test("shows new sale only for sales members in ERP organizations", () => {
+test("shows new sale only for members who can create sales in ERP organizations", () => {
+	assert.equal(
+		canAccessDashboardCapability("newSale", createContext({ cashSessionsEnabled: false, canViewSales: true, canCreateSales: false })),
+		false,
+	);
 	assert.equal(canAccessDashboardCapability("newSale", createContext({ cashSessionsEnabled: false, canViewSales: true })), true);
 	assert.equal(
 		canAccessDashboardCapability("newSale", createContext({ cashSessionsEnabled: false, canViewSales: true, erpEnabled: false })),

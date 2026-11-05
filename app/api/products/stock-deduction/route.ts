@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { canEditProducts } from "@/lib/permissions/products";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { ProductStockDeductionModeEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
@@ -62,6 +63,7 @@ async function updateProductStockDeductionRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Voce nao esta autenticado.");
 	if (!session.membership) throw new createHttpError.Unauthorized("Voce precisa estar vinculado a uma organizacao.");
+	if (!canEditProducts(session.membership.permissoes)) throw new createHttpError.Forbidden("Você não possui permissão para editar produtos.");
 
 	const body = await request.json();
 	const input = UpdateProductStockDeductionInputSchema.parse(body);

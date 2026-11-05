@@ -1,5 +1,7 @@
 "use client";
 
+import { toast } from "sonner";
+import type { TInventoryPermissions } from "@/lib/permissions/inventory";
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
 import ConfirmStockRecount from "@/components/Modals/Internal/StockRecount/ConfirmStockRecount";
 import GeneralPaginationComponent from "@/components/Utils/Pagination";
@@ -20,9 +22,10 @@ import RecountTable from "./_components/RecountTable";
 
 type RecountPageProps = {
 	organizationId: string;
+	permissions: TInventoryPermissions;
 };
 
-export default function RecountPage({ organizationId }: RecountPageProps) {
+export default function RecountPage({ organizationId, permissions }: RecountPageProps) {
 	const queryClient = useQueryClient();
 	const { data, isLoading, isError, isSuccess, error, filters, updateFilters } = useStockRecountRows({});
 	const draft = useStockRecountDraft({ organizationId });
@@ -125,7 +128,8 @@ export default function RecountPage({ organizationId }: RecountPageProps) {
 					draft.count === 1 ? "1 item contado no rascunho — cobre todas as páginas" : `${draft.count} itens contados no rascunho — cobre todas as páginas`
 				}
 				applyButtonText="APLICAR RECONTAGEM"
-				onApply={() => setConfirmMenuIsOpen(true)}
+				// Sem `estoque.ajustar` o rascunho continua possível (conferência), mas aplicar fica com quem pode ajustar.
+				onApply={() => (permissions.ajustar ? setConfirmMenuIsOpen(true) : toast.error("Você não possui permissão para aplicar a recontagem."))}
 				onDiscard={draft.discardAll}
 			/>
 

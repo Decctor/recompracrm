@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { canOperateCashRegister } from "@/lib/permissions/sales";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { isUniqueViolationError } from "@/lib/db-utils";
 import { validateActiveSeller } from "@/lib/sellers/validate-active-seller";
@@ -62,6 +63,7 @@ async function openSalesSessionRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Voce nao esta autenticado.");
 	if (!session.membership) throw new createHttpError.Unauthorized("Voce precisa estar vinculado a uma organizacao.");
+	if (!canOperateCashRegister(session.membership.permissoes)) throw new createHttpError.Forbidden("Voce nao possui permissao para abrir o caixa.");
 	const input = OpenSalesSessionInputSchema.parse(await request.json());
 	return NextResponse.json(await openSalesSession({ input, session }));
 }

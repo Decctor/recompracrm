@@ -1,10 +1,12 @@
 import { appApiHandler } from "@/lib/app-api";
 import { requireERPSession } from "@/lib/authentication/erp-session";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { canConfigureSales } from "@/lib/permissions/sales";
 import { resolveServiceSettings } from "@/lib/tabs";
 import { ServiceSettingsConfigurationSchema } from "@/schemas/service-settings";
 import { db } from "@/services/drizzle";
 import { serviceSettings } from "@/services/drizzle/schema";
+import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import z from "zod";
 
@@ -59,6 +61,7 @@ async function getServiceSettingsRoute(_request: NextRequest) {
 
 async function updateServiceSettingsRoute(request: NextRequest) {
 	const session = requireERPSession(await getCurrentSessionUncached());
+	if (!canConfigureSales(session.membership!.permissoes)) throw new createHttpError.Forbidden("Voce nao possui permissao para configurar o atendimento.");
 	const body = await request.json();
 	const input = UpdateServiceSettingsInputSchema.parse(body);
 	const result = await updateServiceSettings({ input, orgId: session.membership!.organizacao.id });

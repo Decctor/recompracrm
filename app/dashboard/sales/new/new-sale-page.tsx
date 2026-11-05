@@ -1,5 +1,6 @@
 "use client";
 
+import type { TSalesOperationPermissions } from "@/lib/permissions/sales";
 import CashSessionBar from "@/components/CashSessions/CashSessionBar";
 import CashSessionGate from "@/components/CashSessions/CashSessionGate";
 import ControlClient from "@/components/Modals/Clients/ControlClient";
@@ -89,6 +90,7 @@ type NewSalePageProps = {
 	organizationAutoFiscalCapable: boolean;
 	autoEmissionExceptions: TAutoEmissionExceptions;
 	canEmitFiscal: boolean;
+	cashPermissions: Pick<TSalesOperationPermissions, "operarCaixa" | "movimentarCaixa">;
 	canConfigureFiscal?: boolean;
 	/** `vendas.visualizar` — gate da fila de orçamentos em aberto da organização. */
 	canViewSales: boolean;
@@ -103,6 +105,7 @@ export default function NewSalePage({
 	organizationAutoFiscalCapable,
 	autoEmissionExceptions,
 	canEmitFiscal,
+	cashPermissions,
 	canConfigureFiscal,
 	canViewSales,
 	quotePermissions,
@@ -533,6 +536,7 @@ export default function NewSalePage({
 					activeSessionId={activeSessionId}
 					onSessionChange={setActiveSessionId}
 					requireOpeningFloat={!!salesSessionsConfig?.exigirFundoTroco}
+					canOpenCashRegister={cashPermissions.operarCaixa}
 				/>
 			</div>
 		);
@@ -551,6 +555,7 @@ export default function NewSalePage({
 			isLoading={cashLoading}
 			requireOpeningFloat={!!salesSessionsConfig?.exigirFundoTroco}
 			blindCount={!!salesSessionsConfig?.conferenciaCega}
+			cashPermissions={cashPermissions}
 		/>
 	) : null;
 

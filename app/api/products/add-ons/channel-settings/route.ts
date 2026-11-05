@@ -3,6 +3,7 @@ import { applyAddOnChannelSettings } from "@/lib/products/add-on-channel-setting
 import { appApiHandler } from "@/lib/app-api";
 import { requireERPSession } from "@/lib/authentication/erp-session";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { canEditProducts } from "@/lib/permissions/products";
 import { scheduleAddOnGroupPush } from "@/lib/integrations/ifood/sync/queue";
 import { ensureSalesChannelsWithIntegrations } from "@/lib/integrations/ifood/sales-channels";
 import { db } from "@/services/drizzle";
@@ -77,6 +78,7 @@ async function getAddOnChannelSettingsRoute(request: NextRequest) {
 
 async function updateAddOnChannelSettingsRoute(request: NextRequest) {
 	const session = requireERPSession(await getCurrentSessionUncached());
+	if (!canEditProducts(session?.membership?.permissoes)) throw new createHttpError.Forbidden("Você não possui permissão para editar produtos.");
 	const orgId = session.membership!.organizacao.id;
 
 	const input = UpdateAddOnChannelSettingsInputSchema.parse(await request.json());

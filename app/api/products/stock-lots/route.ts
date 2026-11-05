@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { canViewInventory } from "@/lib/permissions/inventory";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { StockLotStatusEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
@@ -148,6 +149,7 @@ export type TGetProductStockLotsOutputDefault = Exclude<TGetProductStockLotsOutp
 
 async function getProductStockLotsRoute(request: NextRequest) {
 	const session = getSessionWithOrg(await getCurrentSessionUncached());
+	if (!canViewInventory(session.membership?.permissoes)) throw new createHttpError.Forbidden("Você não possui permissão para visualizar o estoque.");
 	const searchParams = request.nextUrl.searchParams;
 	const input = GetProductStockLotsInputSchema.parse({
 		id: searchParams.get("id"),

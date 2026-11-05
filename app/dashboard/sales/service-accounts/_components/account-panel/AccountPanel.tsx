@@ -1,4 +1,5 @@
 "use client";
+import { useTabPermissions } from "../tab-permissions";
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
 import { ChangeTabServiceCard } from "@/components/Modals/ServiceCards/ChangeTabServiceCard";
 import { Button } from "@/components/ui/button";
@@ -71,6 +72,7 @@ export function AccountPanel({ tabId, now, sheetTab, onSheetTabChange, transferT
 	const [pane, setPane] = useState<"conta" | "fechar" | "parcial">("conta");
 	const [transferOpen, setTransferOpen] = useState(false);
 	const [confirmingCancel, setConfirmingCancel] = useState(false);
+	const { canCancel } = useTabPermissions();
 	const [linkClientOpen, setLinkClientOpen] = useState(false);
 	const [changeCardOpen, setChangeCardOpen] = useState(false);
 	const orderCart = useTabOrderCart();
@@ -290,11 +292,15 @@ export function AccountPanel({ tabId, now, sheetTab, onSheetTabChange, transferT
 												Trocar comanda
 											</DropdownMenuItem>
 										) : null}
-										<DropdownMenuSeparator />
-										<DropdownMenuItem variant="destructive" onClick={() => setConfirmingCancel(true)}>
-											<Ban className="size-4" />
-											Cancelar conta
-										</DropdownMenuItem>
+										{canCancel ? (
+											<>
+												<DropdownMenuSeparator />
+												<DropdownMenuItem variant="destructive" onClick={() => setConfirmingCancel(true)}>
+													<Ban className="size-4" />
+													Cancelar conta
+												</DropdownMenuItem>
+											</>
+										) : null}
 									</DropdownMenuContent>
 								</DropdownMenu>
 							</>

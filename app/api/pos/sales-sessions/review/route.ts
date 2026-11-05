@@ -1,7 +1,7 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
-import { canReviewSalesSession } from "@/lib/permissions/sales-sessions";
+import { canReviewSalesSession } from "@/lib/permissions/sales";
 import { reviewSalesSession } from "@/lib/sales-sessions";
 import { ReviewSalesSessionInputSchema, type TReviewSalesSessionInput } from "@/schemas/sales-sessions";
 import createHttpError from "http-errors";

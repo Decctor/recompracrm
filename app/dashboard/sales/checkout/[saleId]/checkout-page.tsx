@@ -1,5 +1,6 @@
 "use client";
 
+import type { TSalesOperationPermissions } from "@/lib/permissions/sales";
 import BarcodeMatchPicker from "@/components/Modals/Sales/BarcodeMatchPicker";
 import type { TBuiltOrderItem } from "@/components/Products/ProductBuilderForm";
 import { usePOSBarcodeScan } from "@/lib/hooks/use-pos-barcode-scan";
@@ -87,6 +88,7 @@ type CheckoutPageProps = {
 	organizationAutoFiscalCapable: boolean;
 	autoEmissionExceptions: TAutoEmissionExceptions;
 	canEmitFiscal: boolean;
+	cashPermissions: Pick<TSalesOperationPermissions, "operarCaixa" | "movimentarCaixa">;
 };
 
 export default function CheckoutPage({
@@ -99,6 +101,7 @@ export default function CheckoutPage({
 	organizationAutoFiscalCapable,
 	autoEmissionExceptions,
 	canEmitFiscal,
+	cashPermissions,
 }: CheckoutPageProps) {
 	const router = useRouter();
 	const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
@@ -491,6 +494,7 @@ export default function CheckoutPage({
 						isLoading={cashLoading}
 						requireOpeningFloat={!!salesSessionsConfig?.exigirFundoTroco}
 						blindCount={!!salesSessionsConfig?.conferenciaCega}
+						cashPermissions={cashPermissions}
 					/>
 				) : null
 			}

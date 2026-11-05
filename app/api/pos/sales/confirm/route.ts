@@ -300,6 +300,9 @@ async function confirmSaleRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Voce nao esta autenticado.");
 	if (!session.membership) throw new createHttpError.Unauthorized("Voce precisa estar vinculado a uma organizacao.");
+	// Confirmar é registrar a venda; quem edita vendas também fecha o checkout de um orçamento (mesmo gate do PUT do rascunho).
+	if (!session.membership.permissoes.vendas.criar && !session.membership.permissoes.vendas.editar)
+		throw new createHttpError.Forbidden("Você não possui permissão para registrar vendas.");
 
 	const { searchParams } = new URL(request.url);
 	const body = await request.json();

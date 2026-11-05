@@ -1,3 +1,5 @@
+import { canConfigureSales } from "@/lib/permissions/sales";
+import { TabPermissionsProvider } from "./_components/tab-permissions";
 import { getCurrentSession } from "@/lib/authentication/session";
 import { requireDashboardCapability } from "@/lib/access/guards";
 import { appRoutes } from "@/lib/navigation/routes";
@@ -17,5 +19,9 @@ export default async function Tabs() {
 	const { unauthorized } = await requireDashboardCapability("serviceAccounts");
 	if (unauthorized) return unauthorized;
 
-	return <TabsBoardPage organizationLogoUrl={membership.organizacao.logoUrl ?? null} />;
+	return (
+		<TabPermissionsProvider canCancel={membership.permissoes.vendas.excluir} canConfigure={canConfigureSales(membership.permissoes)}>
+			<TabsBoardPage organizationLogoUrl={membership.organizacao.logoUrl ?? null} />
+		</TabPermissionsProvider>
+	);
 }

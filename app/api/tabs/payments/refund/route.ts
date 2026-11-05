@@ -38,6 +38,7 @@ export type TRefundTabPaymentOutput = Awaited<ReturnType<typeof refundTabPayment
 
 async function refundTabPaymentRoute(request: NextRequest) {
 	const session = requireERPSession(await getCurrentSessionUncached());
+	if (!session.membership!.permissoes.vendas.excluir) throw new createHttpError.Forbidden("Voce nao possui permissao para estornar pagamentos.");
 	const body = await request.json();
 	const input = RefundTabPaymentInputSchema.parse(body);
 	const result = await refundTabPaymentService({ input, session });

@@ -16,7 +16,7 @@ import {
 	naiveUtc,
 } from "@/lib/stock/analytics/queries";
 import { resolveReorderPoint } from "@/lib/stock/analytics/replenishment";
-import { getSessionOrganizationId } from "@/lib/stock/analytics/route-helpers";
+import { getInventoryReportOrganizationId } from "@/lib/stock/analytics/route-helpers";
 import { db } from "@/services/drizzle";
 import {
 	clients,
@@ -303,7 +303,7 @@ export type TGetProductStockAnalyticsOutput = Awaited<ReturnType<typeof getProdu
 export type TProductStockAnalytics = NonNullable<TGetProductStockAnalyticsOutput["data"]["analytics"]>;
 
 async function getProductStockAnalyticsRoute(request: NextRequest) {
-	const organizationId = getSessionOrganizationId(await getCurrentSessionUncached());
+	const organizationId = getInventoryReportOrganizationId(await getCurrentSessionUncached());
 	const searchParams = request.nextUrl.searchParams;
 	const input = GetProductStockAnalyticsInputSchema.parse({ productId: searchParams.get("productId"), period: searchParams.get("period") });
 	const result = await getProductStockAnalytics({ input, organizationId });

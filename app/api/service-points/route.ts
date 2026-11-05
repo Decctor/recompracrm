@@ -1,6 +1,7 @@
 import { appApiHandler } from "@/lib/app-api";
 import { requireERPSession } from "@/lib/authentication/erp-session";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { canConfigureSales } from "@/lib/permissions/sales";
 import { generatePublicToken, hashPublicToken } from "@/lib/tabs";
 import { ServicePointTypeEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
@@ -151,6 +152,7 @@ async function getServicePointsRoute(request: NextRequest) {
 
 async function createServicePointRoute(request: NextRequest) {
 	const session = requireERPSession(await getCurrentSessionUncached());
+	if (!canConfigureSales(session.membership!.permissoes)) throw new createHttpError.Forbidden("Voce nao possui permissao para configurar pontos de atendimento.");
 	const body = await request.json();
 	const input = CreateServicePointInputSchema.parse(body);
 	const result = await createServicePoint({ input, orgId: session.membership!.organizacao.id });
@@ -159,6 +161,7 @@ async function createServicePointRoute(request: NextRequest) {
 
 async function updateServicePointRoute(request: NextRequest) {
 	const session = requireERPSession(await getCurrentSessionUncached());
+	if (!canConfigureSales(session.membership!.permissoes)) throw new createHttpError.Forbidden("Voce nao possui permissao para configurar pontos de atendimento.");
 	const { searchParams } = new URL(request.url);
 	const body = await request.json();
 	const input = UpdateServicePointInputSchema.parse({ ...body, id: searchParams.get("id") ?? body.id });

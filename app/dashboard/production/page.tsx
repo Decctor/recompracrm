@@ -1,5 +1,6 @@
 import UnauthorizedPage from "@/components/Utils/UnauthorizedPage";
 import { requireDashboardCapability } from "@/lib/access/guards";
+import { resolveProductionPermissions } from "@/lib/permissions/productions";
 import { redirect } from "next/navigation";
 import ProductionsPage from "./productions-page";
 
@@ -13,5 +14,5 @@ export default async function Productions() {
 		return <UnauthorizedPage message="Oops, sua organização não possui acesso a este recurso." />;
 	}
 
-	return <ProductionsPage />;
+	return <ProductionsPage permissions={resolveProductionPermissions(sessionUser.membership.permissoes)} />;
 }

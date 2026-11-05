@@ -1,3 +1,4 @@
+import { resolveSalesOperationPermissions } from "@/lib/permissions/sales";
 import { getCurrentSession } from "@/lib/authentication/session";
 import { EMPTY_AUTO_EMISSION_EXCEPTIONS } from "@/lib/fiscal/auto-emission-policy";
 import { isOrganizationAutoFiscalCapable } from "@/lib/fiscal/auto-emission-capability";
@@ -9,6 +10,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import NewSalePage from "./new-sale-page";
 import PlanRestrictionComponent from "@/components/Layouts/PlanRestrictionComponent";
+import UnauthorizedPage from "@/components/Utils/UnauthorizedPage";
 
 export const metadata: Metadata = {
 	title: "Nova Venda - POS",
@@ -32,6 +34,11 @@ export default async function NewSale() {
 		);
 	}
 
+	// Mesmo gate da capability `newSale` e das rotas de criação/confirmação de venda do PDV.
+	if (!sessionUser.membership.permissoes.vendas.criar) {
+		return <UnauthorizedPage message="Você não possui permissão para registrar vendas." />;
+	}
+
 	const organizationId = sessionUser.membership.organizacao.id;
 	const organizationConfiguration = sessionUser.membership.organizacao.configuracao as TOrganizationConfiguration;
 	const [organizationCashbackProgram, fiscalSettings, organizationFinancialAccounts] = await Promise.all([
@@ -52,6 +59,7 @@ export default async function NewSale() {
 			organizationAutoFiscalCapable={isOrganizationAutoFiscalCapable(fiscalSettings)}
 			autoEmissionExceptions={fiscalSettings.fiscalConfiguracao?.emissaoAutomatica?.excecoes ?? EMPTY_AUTO_EMISSION_EXCEPTIONS}
 			canEmitFiscal={sessionUser.membership.permissoes.fiscal.emitir}
+			cashPermissions={resolveSalesOperationPermissions(sessionUser.membership.permissoes)}
 			canConfigureFiscal={sessionUser.membership.permissoes.fiscal.configurar}
 			canViewSales={sessionUser.membership.permissoes.vendas.visualizar ?? false}
 			quotePermissions={{

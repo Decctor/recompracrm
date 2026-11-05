@@ -180,6 +180,7 @@ async function getTabsRoute(request: NextRequest) {
 
 async function createTabRoute(request: NextRequest) {
 	const session = requireERPSession(await getCurrentSessionUncached());
+	if (!session.membership!.permissoes.vendas.criar) throw new createHttpError.Forbidden("Voce nao possui permissao para operar comandas.");
 	const body = await request.json();
 	const input = CreateTabInputSchema.parse(body);
 	const result = await createTab({ input, session });

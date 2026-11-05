@@ -25,6 +25,7 @@ export type TCreateAndConfirmSaleOutput = Awaited<ReturnType<typeof createAndCon
 // 3. Rota.
 async function createAndConfirmSaleRoute(request: NextRequest) {
 	const session = getSessionWithOrg(await getCurrentSessionUncached());
+	if (!session.membership!.permissoes.vendas.criar) throw new createHttpError.Forbidden("Você não possui permissão para registrar vendas.");
 	const body = await request.json();
 	const input = CreateAndConfirmSaleInputSchema.parse(body);
 	const result = await createAndConfirmSale({ input, session });

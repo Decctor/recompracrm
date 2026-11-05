@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { canViewInventory } from "@/lib/permissions/inventory";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { getProductStockLotLabels } from "@/lib/stock/product-stock-lot-labels";
 import createHttpError from "http-errors";
@@ -46,6 +47,7 @@ export type TCreateProductStockLotLabelsOutput = Awaited<ReturnType<typeof creat
 
 async function createProductStockLotLabelsRoute(request: NextRequest) {
 	const session = getSessionWithOrg(await getCurrentSessionUncached());
+	if (!canViewInventory(session.membership?.permissoes)) throw new createHttpError.Forbidden("Você não possui permissão para visualizar o estoque.");
 	const input = CreateProductStockLotLabelsInputSchema.parse(await request.json());
 	const result = await createProductStockLotLabels({ input, session, origin: request.nextUrl.origin });
 	return NextResponse.json(result);

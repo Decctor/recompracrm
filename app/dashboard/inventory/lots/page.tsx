@@ -1,10 +1,12 @@
+import { resolveInventoryPermissions } from "@/lib/permissions/inventory";
 import UnauthorizedPage from "@/components/Utils/UnauthorizedPage";
-import { getCurrentSession } from "@/lib/authentication/session";
+import { requireDashboardCapability } from "@/lib/access/guards";
 import { redirect } from "next/navigation";
 import StockLotsPage from "./lots-page";
 
 export default async function StockLots() {
-	const sessionUser = await getCurrentSession();
+	const { sessionUser, unauthorized } = await requireDashboardCapability("inventory");
+	if (unauthorized) return unauthorized;
 
 	if (!sessionUser) redirect("/auth/signin");
 	if (!sessionUser.membership) redirect("/onboarding");
@@ -12,5 +14,5 @@ export default async function StockLots() {
 		return <UnauthorizedPage message="Oops, sua organização não possui acesso a este recurso." />;
 	}
 
-	return <StockLotsPage />;
+	return <StockLotsPage permissions={resolveInventoryPermissions(sessionUser.membership.permissoes)} />;
 }

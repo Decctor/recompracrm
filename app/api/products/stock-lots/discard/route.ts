@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { canAdjustInventory } from "@/lib/permissions/inventory";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { applyStockMovement, isStockTrackingActive } from "@/lib/stock/apply-stock-movement";
 import { registerStockLossAccountingEntry, resolveStockLossUnitCost } from "@/lib/stock/stock-loss-accounting";
@@ -124,6 +125,7 @@ export type TDiscardProductStockLotOutput = Awaited<ReturnType<typeof discardPro
 
 async function discardProductStockLotRoute(request: NextRequest) {
 	const session = getSessionWithOrg(await getCurrentSessionUncached());
+	if (!canAdjustInventory(session.membership?.permissoes)) throw new createHttpError.Forbidden("Você não possui permissão para descartar lotes.");
 	const input = DiscardProductStockLotInputSchema.parse(await request.json());
 	const result = await discardProductStockLot({ input, session });
 	return NextResponse.json(result);

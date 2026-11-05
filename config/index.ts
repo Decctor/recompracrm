@@ -37,6 +37,10 @@ export const DEFAULT_ORGANIZATION_OWNER_PERMISSIONS: TUserPermissions = {
 		criar: true,
 		editar: true,
 		excluir: true,
+		operarCaixa: true,
+		movimentarCaixa: true,
+		conferirCaixa: true,
+		configurar: true,
 	},
 	compras: {
 		visualizar: true,
@@ -53,6 +57,24 @@ export const DEFAULT_ORGANIZATION_OWNER_PERMISSIONS: TUserPermissions = {
 	integracoes: {
 		visualizar: true,
 		gerenciar: true,
+	},
+	produtos: {
+		visualizar: true,
+		criar: true,
+		editar: true,
+		alterarPrecos: true,
+	},
+	estoque: {
+		visualizar: true,
+		movimentar: true,
+		ajustar: true,
+	},
+	producao: {
+		visualizar: true,
+		criar: true,
+		editar: true,
+		excluir: true,
+		concluir: true,
 	},
 };
 

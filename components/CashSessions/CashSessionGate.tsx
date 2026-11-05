@@ -8,9 +8,15 @@ import { Wallet } from "lucide-react";
 import { useState } from "react";
 
 type Session = TGetSalesSessionsOutputDefault["sessions"][number];
-type Props = { sessions: Session[]; activeSessionId: string | null; onSessionChange: (id: string | null) => void; requireOpeningFloat: boolean };
+type Props = {
+	sessions: Session[];
+	activeSessionId: string | null;
+	onSessionChange: (id: string | null) => void;
+	requireOpeningFloat: boolean;
+	canOpenCashRegister: boolean;
+};
 
-export default function CashSessionGate({ sessions, activeSessionId, onSessionChange, requireOpeningFloat }: Props) {
+export default function CashSessionGate({ sessions, activeSessionId, onSessionChange, requireOpeningFloat, canOpenCashRegister }: Props) {
 	const [isOpening, setIsOpening] = useState(false);
 	const hasOpenSessions = sessions.length > 0;
 	return (
@@ -24,7 +30,9 @@ export default function CashSessionGate({ sessions, activeSessionId, onSessionCh
 					<p className="text-sm text-muted-foreground">
 						{hasOpenSessions
 							? "Há mais de uma sessão aberta neste ponto. Escolha qual será usada nesta venda."
-							: "Nesta organização as vendas precisam ser registradas em uma sessão de caixa."}
+							: canOpenCashRegister
+								? "Nesta organização as vendas precisam ser registradas em uma sessão de caixa."
+								: "Nesta organização as vendas precisam de um caixa aberto. Peça a quem opera o caixa para abri-lo."}
 					</p>
 				</div>
 				{hasOpenSessions ? (
@@ -44,10 +52,12 @@ export default function CashSessionGate({ sessions, activeSessionId, onSessionCh
 						/>
 					</div>
 				) : null}
-				<Button className="w-full gap-1.5" variant={hasOpenSessions ? "outline" : "default"} onClick={() => setIsOpening(true)}>
-					<Wallet className="h-4 w-4" />
-					ABRIR OUTRO CAIXA
-				</Button>
+				{canOpenCashRegister ? (
+					<Button className="w-full gap-1.5" variant={hasOpenSessions ? "outline" : "default"} onClick={() => setIsOpening(true)}>
+						<Wallet className="h-4 w-4" />
+						ABRIR OUTRO CAIXA
+					</Button>
+				) : null}
 			</div>
 			{isOpening ? <OpenSalesSession closeModal={() => setIsOpening(false)} requireOpeningFloat={requireOpeningFloat} /> : null}
 		</div>

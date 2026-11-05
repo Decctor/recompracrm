@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { canCreateProductions, canDeleteProductions, canEditProductions } from "@/lib/permissions/productions";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { handleSimpleChildRowsProcessing } from "@/lib/db-utils";
 import { calculateValuation, getProductPricingMap } from "@/lib/productions/valuation";
@@ -407,6 +408,7 @@ async function getProductionRecipesRoute(request: NextRequest) {
 
 async function createProductionRecipeRoute(request: NextRequest) {
 	const session = getSessionWithOrg(await getCurrentSessionUncached());
+	if (!canCreateProductions(session.membership?.permissoes)) throw new createHttpError.Forbidden("Você não possui permissão para criar fichas técnicas.");
 	const input = CreateProductionRecipeInputSchema.parse(await request.json());
 	const result = await createProductionRecipe({ input, session });
 	return NextResponse.json(result, { status: 201 });
@@ -414,6 +416,7 @@ async function createProductionRecipeRoute(request: NextRequest) {
 
 async function updateProductionRecipeRoute(request: NextRequest) {
 	const session = getSessionWithOrg(await getCurrentSessionUncached());
+	if (!canEditProductions(session.membership?.permissoes)) throw new createHttpError.Forbidden("Você não possui permissão para editar fichas técnicas.");
 	const input = UpdateProductionRecipeInputSchema.parse(await request.json());
 	const result = await updateProductionRecipe({ input, session });
 	return NextResponse.json(result);
@@ -421,6 +424,7 @@ async function updateProductionRecipeRoute(request: NextRequest) {
 
 async function deleteProductionRecipeRoute(request: NextRequest) {
 	const session = getSessionWithOrg(await getCurrentSessionUncached());
+	if (!canDeleteProductions(session.membership?.permissoes)) throw new createHttpError.Forbidden("Você não possui permissão para excluir fichas técnicas.");
 	const input = DeleteProductionRecipeInputSchema.parse({
 		productionRecipeId: request.nextUrl.searchParams.get("productionRecipeId"),
 	});

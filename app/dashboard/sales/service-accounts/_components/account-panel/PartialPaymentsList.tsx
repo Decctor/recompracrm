@@ -1,4 +1,5 @@
 "use client";
+import { useTabPermissions } from "../tab-permissions";
 import type { TTabDetails } from "@/app/api/tabs/route";
 import { Button } from "@/components/ui/button";
 import { getErrorMessage } from "@/lib/errors";
@@ -33,6 +34,7 @@ function formatTime(value: string | Date) {
 
 export function PartialPaymentsList({ payments, isOpen, refresh }: PartialPaymentsListProps) {
 	const [refundingId, setRefundingId] = useState<string | null>(null);
+	const { canCancel } = useTabPermissions();
 	const active = payments.filter((payment) => payment.status === "ATIVO");
 	const total = active.reduce((sum, payment) => sum + payment.valor, 0);
 
@@ -92,7 +94,7 @@ export function PartialPaymentsList({ payments, isOpen, refresh }: PartialPaymen
 									<span className={cn("text-sm font-bold tabular-nums", refunded && "text-muted-foreground line-through")}>
 										{formatToMoney(payment.valor)}
 									</span>
-									{isOpen && !refunded && refundingId !== payment.id ? (
+									{canCancel && isOpen && !refunded && refundingId !== payment.id ? (
 										<Button
 											size="sm"
 											variant="ghost"

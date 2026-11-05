@@ -66,6 +66,7 @@ export type TCreateTabPaymentOutput = Awaited<ReturnType<typeof createTabPayment
 
 async function createTabPaymentRoute(request: NextRequest) {
 	const session = requireERPSession(await getCurrentSessionUncached());
+	if (!session.membership!.permissoes.vendas.criar) throw new createHttpError.Forbidden("Voce nao possui permissao para operar comandas.");
 	const body = await request.json();
 	const input = CreateTabPaymentInputSchema.parse(body);
 	const result = await createTabPayment({ input, session });

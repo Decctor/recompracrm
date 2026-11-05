@@ -1,3 +1,4 @@
+import { resolveInventoryPermissions } from "@/lib/permissions/inventory";
 import UnauthorizedPage from "@/components/Utils/UnauthorizedPage";
 import { requireDashboardCapability } from "@/lib/access/guards";
 import { redirect } from "next/navigation";
@@ -13,5 +14,5 @@ export default async function Recount() {
 		return <UnauthorizedPage message="Oops, sua organização não possui acesso a este recurso." />;
 	}
 
-	return <RecountPage organizationId={sessionUser.membership.organizacao.id} />;
+	return <RecountPage organizationId={sessionUser.membership.organizacao.id} permissions={resolveInventoryPermissions(sessionUser.membership.permissoes)} />;
 }

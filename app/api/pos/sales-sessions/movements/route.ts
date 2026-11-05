@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { canMoveCashRegister } from "@/lib/permissions/sales";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { registerSalesSessionMovement } from "@/lib/sales-sessions";
 import { RegisterSalesSessionMovementInputSchema, type TRegisterSalesSessionMovementInput } from "@/schemas/sales-sessions";
@@ -34,6 +35,7 @@ async function registerMovementRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Voce nao esta autenticado.");
 	if (!session.membership) throw new createHttpError.Unauthorized("Voce precisa estar vinculado a uma organizacao.");
+	if (!canMoveCashRegister(session.membership.permissoes)) throw new createHttpError.Forbidden("Voce nao possui permissao para registrar sangria ou suprimento.");
 
 	const body = await request.json();
 	const input = RegisterSalesSessionMovementInputSchema.parse(body);

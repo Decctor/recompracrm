@@ -1,5 +1,6 @@
 "use client";
 
+import type { TInventoryPermissions } from "@/lib/permissions/inventory";
 import DateIntervalInput from "@/components/Inputs/DateIntervalInput";
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
 import StatUnitCard from "@/components/Stats/StatUnitCard";
@@ -39,7 +40,7 @@ function isMovementFilterActive(active: TStockMovementTypeEnum[], filter: TStock
 	return JSON.stringify([...active].sort()) === JSON.stringify([...filter].sort());
 }
 
-export default function StockTransactionsPage() {
+export default function StockTransactionsPage({ permissions }: { permissions: TInventoryPermissions }) {
 	const queryClient = useQueryClient();
 	const [newTransactionModalIsOpen, setNewTransactionModalIsOpen] = useState(false);
 	const { data, isLoading, isError, isSuccess, error, filters, updateFilters } = useProductStockTransactions({
@@ -110,10 +111,12 @@ export default function StockTransactionsPage() {
 							})
 						}
 					/>
-					<Button size="sm" className="shrink-0" onClick={() => setNewTransactionModalIsOpen(true)}>
-						<Plus className="h-4 w-4 min-h-4 min-w-4" />
-						NOVA MOVIMENTAÇÃO
-					</Button>
+					{permissions.movimentar ? (
+						<Button size="sm" className="shrink-0" onClick={() => setNewTransactionModalIsOpen(true)}>
+							<Plus className="h-4 w-4 min-h-4 min-w-4" />
+							NOVA MOVIMENTAÇÃO
+						</Button>
+					) : null}
 					<Button variant="outline" size="sm" className="shrink-0" asChild>
 						<Link href={appRoutes.inventory.root()}>
 							<Boxes className="h-4 w-4 min-h-4 min-w-4" />

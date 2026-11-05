@@ -1,6 +1,7 @@
 import { appApiHandler } from "@/lib/app-api";
 import { requireOrgSession } from "@/lib/authentication/erp-session";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { canEditProducts } from "@/lib/permissions/products";
 import { db } from "@/services/drizzle";
 import { withProductUpdateStamp } from "@/lib/products/update-stamp";
 import { catalogLinks, couponTargets, preparationStationRules, products, salesChannels } from "@/services/drizzle/schema";
@@ -157,6 +158,7 @@ async function getProductGroupsRoute() {
 
 async function renameProductGroupRoute(request: NextRequest) {
 	const session = requireOrgSession(await getCurrentSessionUncached());
+	if (!canEditProducts(session?.membership?.permissoes)) throw new createHttpError.Forbidden("Você não possui permissão para editar produtos.");
 	const orgId = session.membership!.organizacao.id;
 
 	const input = RenameProductGroupInputSchema.parse(await request.json());

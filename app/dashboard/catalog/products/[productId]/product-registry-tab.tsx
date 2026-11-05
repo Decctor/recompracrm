@@ -1,5 +1,6 @@
 "use client";
 
+import { canAdjustInventory } from "@/lib/permissions/inventory";
 import type { TGetProductsOutputById } from "@/app/api/products/route";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import ProductAddOnsInformation from "./_components/AddOnsInformation";
@@ -28,7 +29,7 @@ export default function ProductRegistryTab({ sessionUserMembership, product, cal
 
 	return (
 		<div className="flex w-full flex-col gap-6">
-			<ProductGeneralInformation product={product} callbacks={callbacks} />
+			<ProductGeneralInformation product={product} callbacks={callbacks} canAdjustInventory={canAdjustInventory(sessionUserMembership.permissoes)} />
 			<PricesAndChannelsSection product={product} orgHasERPAccess={orgHasERPAccess} callbacks={callbacks} />
 			<MainSupplierSection product={product} userHasPurchasesViewPermission={userHasPurchasesViewPermission} callbacks={callbacks} />
 			<ProductVariantsInformation product={product} callbacks={callbacks} />

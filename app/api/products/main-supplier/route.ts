@@ -1,4 +1,5 @@
 import { appApiHandler } from "@/lib/app-api";
+import { canEditProducts } from "@/lib/permissions/products";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { db } from "@/services/drizzle";
@@ -42,6 +43,8 @@ async function updateProductMainSupplier({
 	// Escolher um fornecedor exige enxergar fornecedores (GET /api/suppliers usa a mesma permissão).
 	if (!session.membership?.permissoes.compras.visualizar)
 		throw new createHttpError.Unauthorized("Você não possui permissão para definir o fornecedor principal.");
+	// O fornecedor principal é um campo do cadastro do produto.
+	if (!canEditProducts(session.membership.permissoes)) throw new createHttpError.Forbidden("Você não possui permissão para editar produtos.");
 
 	if (input.fornecedorId) {
 		const supplierId = input.fornecedorId;

@@ -27,6 +27,7 @@
 		"db:migrate": "drizzle-kit migrate",
 		"db:studio": "drizzle-kit studio",
 		"backfill:shop-settings": "tsx ./scripts/backfill-shop-settings-configuration.ts",
+		"backfill:erp-permissions": "tsx ./scripts/backfill-erp-permissions.ts",
 		"backfill:shop-sales-channels": "tsx ./scripts/backfill-shop-sales-channels.ts",
 		"backfill:ifood-item-context-ids": "tsx ./scripts/backfill-ifood-item-context-ids.ts",
 		"backfill:onboarding-conclusao": "tsx ./scripts/backfill-onboarding-conclusao.ts",

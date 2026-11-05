@@ -1,7 +1,7 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { getLastOutflowByProduct, getStockPositions } from "@/lib/stock/analytics/queries";
-import { getSessionOrganizationId } from "@/lib/stock/analytics/route-helpers";
+import { getInventoryReportOrganizationId } from "@/lib/stock/analytics/route-helpers";
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -68,7 +68,7 @@ async function getStockReportIdle({ input, organizationId }: { input: TGetStockR
 export type TGetStockReportIdleOutput = Awaited<ReturnType<typeof getStockReportIdle>>;
 
 async function getStockReportIdleRoute(request: NextRequest) {
-	const organizationId = getSessionOrganizationId(await getCurrentSessionUncached());
+	const organizationId = getInventoryReportOrganizationId(await getCurrentSessionUncached());
 	const input = GetStockReportIdleInputSchema.parse({ limit: request.nextUrl.searchParams.get("limit") });
 	const result = await getStockReportIdle({ input, organizationId });
 	return NextResponse.json(result);

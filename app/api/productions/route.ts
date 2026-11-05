@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { canCreateProductions, canDeleteProductions, canEditProductions, canViewProductions } from "@/lib/permissions/productions";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { handleSimpleChildRowsProcessing } from "@/lib/db-utils";
 import { getProductionPricingItems, getProductPricingMap, resolveProductionValuation } from "@/lib/productions/valuation";
@@ -431,6 +432,7 @@ export type TDeleteProductionOutput = Awaited<ReturnType<typeof deleteProduction
 
 async function getProductionsRoute(request: NextRequest) {
 	const session = getSessionWithOrg(await getCurrentSessionUncached());
+	if (!canViewProductions(session.membership?.permissoes)) throw new createHttpError.Forbidden("Você não possui permissão para visualizar a produção.");
 	const searchParams = request.nextUrl.searchParams;
 	const input = GetProductionsInputSchema.parse({
 		id: searchParams.get("id"),
@@ -447,6 +449,7 @@ async function getProductionsRoute(request: NextRequest) {
 
 async function createProductionRoute(request: NextRequest) {
 	const session = getSessionWithOrg(await getCurrentSessionUncached());
+	if (!canCreateProductions(session.membership?.permissoes)) throw new createHttpError.Forbidden("Você não possui permissão para criar produções.");
 	const input = CreateProductionInputSchema.parse(await request.json());
 	const result = await createProduction({ input, session });
 	return NextResponse.json(result, { status: 201 });
@@ -454,6 +457,7 @@ async function createProductionRoute(request: NextRequest) {
 
 async function updateProductionRoute(request: NextRequest) {
 	const session = getSessionWithOrg(await getCurrentSessionUncached());
+	if (!canEditProductions(session.membership?.permissoes)) throw new createHttpError.Forbidden("Você não possui permissão para editar produções.");
 	const input = UpdateProductionInputSchema.parse(await request.json());
 	const result = await updateProduction({ input, session });
 	return NextResponse.json(result);
@@ -461,6 +465,7 @@ async function updateProductionRoute(request: NextRequest) {
 
 async function deleteProductionRoute(request: NextRequest) {
 	const session = getSessionWithOrg(await getCurrentSessionUncached());
+	if (!canDeleteProductions(session.membership?.permissoes)) throw new createHttpError.Forbidden("Você não possui permissão para excluir produções.");
 	const input = DeleteProductionInputSchema.parse({
 		productionId: request.nextUrl.searchParams.get("productionId"),
 	});

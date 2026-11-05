@@ -570,6 +570,7 @@ export type TUpdateSaleDraftOutput = Awaited<ReturnType<typeof updateSaleDraft>>
 
 async function createSaleDraftRoute(request: NextRequest) {
 	const session = getSessionWithOrg(await getCurrentSessionUncached());
+	if (!session.membership!.permissoes.vendas.criar) throw new createHttpError.Forbidden("Você não possui permissão para registrar vendas.");
 	const body = await request.json();
 	const input = CreateSaleDraftInputSchema.parse(body);
 	const result = await createSaleDraft({ input, session });
@@ -586,6 +587,9 @@ async function getSaleDraftRoute(request: NextRequest) {
 
 async function updateSaleDraftRoute(request: NextRequest) {
 	const session = getSessionWithOrg(await getCurrentSessionUncached());
+	// Rascunho/orçamento: quem registra vendas edita o próprio carrinho; quem edita vendas retoma orçamentos.
+	const { criar, editar } = session.membership!.permissoes.vendas;
+	if (!criar && !editar) throw new createHttpError.Forbidden("Você não possui permissão para alterar orçamentos.");
 	const { searchParams } = new URL(request.url);
 	const body = await request.json();
 	const input = UpdateSaleDraftInputSchema.parse({ ...body, id: searchParams.get("id") });

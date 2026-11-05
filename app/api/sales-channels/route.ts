@@ -1,6 +1,7 @@
 import { appApiHandler } from "@/lib/app-api";
 import { requireERPSession } from "@/lib/authentication/erp-session";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { canConfigureSales } from "@/lib/permissions/sales";
 import { ensureSalesChannelsWithIntegrations } from "@/lib/integrations/ifood/sales-channels";
 import { SalesChannelCatalogModeEnum, SalesChannelTypeEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
@@ -86,7 +87,7 @@ async function getSalesChannelsRoute() {
 async function updateSalesChannelRoute(request: NextRequest) {
 	const session = requireERPSession(await getCurrentSessionUncached());
 	// A tela desabilita o toggle sem esta permissão; sem a checagem aqui a regra valia só no cliente.
-	if (!session.membership!.permissoes.empresa.editar) {
+	if (!canConfigureSales(session.membership!.permissoes)) {
 		throw new createHttpError.Forbidden("Você não tem permissão para editar os canais de venda.");
 	}
 	const orgId = session.membership!.organizacao.id;

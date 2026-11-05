@@ -36,7 +36,9 @@ import {
 } from "@/services/drizzle/schema";
 import { and, asc, count, desc, eq, gt, gte, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { upsertProductAddOnOptions } from "@/lib/products/add-on-options";
-import { buildSalePriceUpdate } from "@/lib/products/price-snapshot";
+import { canAdjustInventory } from "@/lib/permissions/inventory";
+import { canChangeProductPrices, canCreateProducts, canEditProducts } from "@/lib/permissions/products";
+import { buildSalePriceUpdate, changesSalePrice } from "@/lib/products/price-snapshot";
 import { withProductUpdateStamp } from "@/lib/products/update-stamp";
 import { splitChannelSettingNodes, validateChannelSettingNodes } from "@/lib/products/sales-channels";
 import createHttpError from "http-errors";
@@ -837,6 +839,10 @@ async function updateProduct({ session, input }: { session: TAuthUserSession; in
 	if (!userMembership) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
 	const userOrgId = userMembership.organizacao.id;
 	const userHasFiscalConfigurePermission = userMembership.permissoes.fiscal.configurar;
+	if (!canEditProducts(userMembership.permissoes)) throw new createHttpError.Forbidden("Você não possui permissão para editar produtos.");
+	const userCanChangePrices = canChangeProductPrices(userMembership.permissoes);
+	// Editar o saldo pelo cadastro gera um AJUSTE no livro-razão: é a mesma autoridade da recontagem.
+	const userCanAdjustStock = canAdjustInventory(userMembership.permissoes);
 
 	const product = await db.query.products.findFirst({
 		where: and(eq(products.id, input.productId), eq(products.organizacaoId, userOrgId)),
@@ -852,6 +858,18 @@ async function updateProduct({ session, input }: { session: TAuthUserSession; in
 			.where(and(eq(products.id, input.productId), eq(products.organizacaoId, userOrgId)))
 			.for("update");
 		if (!currentProductState) throw new createHttpError.NotFound("Produto não encontrado.");
+		if (
+			!userCanChangePrices &&
+			changesSalePrice({
+				current: currentProductState,
+				next: { precoVenda: input.product.precoVenda, precoVendaAnterior: input.product.precoVendaAnterior },
+			})
+		) {
+			throw new createHttpError.Forbidden("Você não possui permissão para alterar preços de venda.");
+		}
+		if (!userCanAdjustStock && input.product.quantidade != null && input.product.quantidade !== (currentProductState.quantidade ?? 0)) {
+			throw new createHttpError.Forbidden("Você não possui permissão para ajustar o estoque.");
+		}
 
 		// `quantidade` fica fora do update direto: com rastreamento ativo, o saldo só muda via
 		// movimentação de estoque (abaixo), preservando o livro-razão.
@@ -970,6 +988,15 @@ async function updateProduct({ session, input }: { session: TAuthUserSession; in
 					.where(and(eq(productVariants.id, variantId), eq(productVariants.produtoId, input.productId), eq(productVariants.organizacaoId, userOrgId)))
 					.for("update");
 				if (!currentVariantState) throw new createHttpError.NotFound("Variante do produto não encontrada.");
+				if (
+					!userCanChangePrices &&
+					changesSalePrice({ current: currentVariantState, next: { precoVenda: variant.precoVenda, precoVendaAnterior: variant.precoVendaAnterior } })
+				) {
+					throw new createHttpError.Forbidden("Você não possui permissão para alterar preços de venda.");
+				}
+				if (!userCanAdjustStock && variant.quantidade !== (currentVariantState.quantidade ?? 0)) {
+					throw new createHttpError.Forbidden("Você não possui permissão para ajustar o estoque.");
+				}
 
 				await tx
 					.update(productVariants)
@@ -1208,6 +1235,8 @@ async function createProduct({ session, input }: { session: TAuthUserSession; in
 	if (!userMembership) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
 	const userOrgId = userMembership.organizacao.id;
 	const userHasFiscalConfigurePermission = userMembership.permissoes.fiscal.configurar;
+	// Inclui a criação a partir da importação de compra: cadastrar item novo no catálogo é ato de produtos.
+	if (!canCreateProducts(userMembership.permissoes)) throw new createHttpError.Forbidden("Você não possui permissão para criar produtos.");
 
 	console.log("[INFO] [CREATE PRODUCT] Input:", JSON.stringify(input, null, 2));
 

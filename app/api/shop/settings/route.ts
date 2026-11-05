@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { canConfigureSales } from "@/lib/permissions/sales";
 import { TAuthUserSession } from "@/lib/authentication/types";
 import { normalizeShopSettingsConfiguration } from "@/lib/shop/config";
 import { ShopModeEnum } from "@/schemas/enums";
@@ -132,6 +133,7 @@ export type TCreateShopSettingsOutput = Awaited<ReturnType<typeof createShopSett
 
 async function updateShopSettingsRoute(request: NextRequest) {
 	const session = getSessionWithOrg(await getCurrentSessionUncached());
+	if (!canConfigureSales(session.membership!.permissoes)) throw new createHttpError.Forbidden("Você não possui permissão para configurar a loja.");
 	const orgId = session.membership!.organizacao.id;
 	const body = await request.json();
 	const input = UpdateShopSettingsInputSchema.parse(body);

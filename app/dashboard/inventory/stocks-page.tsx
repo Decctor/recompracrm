@@ -1,4 +1,5 @@
 "use client";
+import type { TInventoryPermissions } from "@/lib/permissions/inventory";
 import ProductSearchInput from "@/components/Inputs/ProductSearchInput";
 
 import type { TGetProductsOutputStock } from "@/app/api/products/route";
@@ -39,7 +40,7 @@ import { useState } from "react";
 
 type StockProduct = TGetProductsOutputStock["products"][number];
 
-export default function StocksPage() {
+export default function StocksPage({ permissions }: { permissions: TInventoryPermissions }) {
 	const queryClient = useQueryClient();
 	const [recountingProductId, setRecountingProductId] = useState<string | null>(null);
 	const {
@@ -125,7 +126,7 @@ export default function StocksPage() {
 			{isError ? <ErrorComponent msg={getErrorMessage(error)} /> : null}
 
 			{isSuccess && products.length > 0
-				? products.map((product) => <StockProductCard key={product.id} product={product} onRecount={() => setRecountingProductId(product.id)} />)
+				? products.map((product) => <StockProductCard key={product.id} product={product} onRecount={permissions.ajustar ? () => setRecountingProductId(product.id) : undefined} />)
 				: null}
 
 			{recountingProductId ? (
@@ -171,7 +172,8 @@ function getSaldoTone(quantidade: number) {
 
 type StockProductCardProps = {
 	product: StockProduct;
-	onRecount: () => void;
+	// Ausente = membro sem `estoque.ajustar`: o botão não aparece.
+	onRecount?: () => void;
 };
 function StockProductCard({ product, onRecount }: StockProductCardProps) {
 	const quantidade = product.quantidade ?? 0;
@@ -259,10 +261,12 @@ function StockProductCard({ product, onRecount }: StockProductCardProps) {
 
 			{/* Ações */}
 			<div className="flex shrink-0 items-center justify-end gap-1">
-				<Button variant="ghost" size="sm" onClick={onRecount}>
-					<ClipboardList className="h-3.5 w-3.5 min-h-3.5 min-w-3.5" />
-					RECONTAR
-				</Button>
+				{onRecount ? (
+					<Button variant="ghost" size="sm" onClick={onRecount}>
+						<ClipboardList className="h-3.5 w-3.5 min-h-3.5 min-w-3.5" />
+						RECONTAR
+					</Button>
+				) : null}
 				<Button variant="ghost" size="sm" asChild>
 					<Link href={appRoutes.catalog.product(product.id)}>
 						<Info className="h-3.5 w-3.5 min-h-3.5 min-w-3.5" />

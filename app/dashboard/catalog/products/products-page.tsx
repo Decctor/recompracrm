@@ -1,4 +1,6 @@
 "use client";
+import { canCreateProducts } from "@/lib/permissions/products";
+import { canAdjustInventory } from "@/lib/permissions/inventory";
 import dynamic from "next/dynamic";
 import DateIntervalInput from "@/components/Inputs/DateIntervalInput";
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
@@ -213,9 +215,11 @@ function ProductsDatabaseList({ user, userMembership, organization, storageKey, 
 					<ActionToolbar.Action icon={FileSpreadsheet} onClick={() => setExportModalIsOpen(true)}>
 						EXPORTAR
 					</ActionToolbar.Action>
-					<ActionToolbar.Primary icon={Plus} onClick={() => setNewProductModalIsOpen(true)}>
-						NOVO PRODUTO
-					</ActionToolbar.Primary>
+					{canCreateProducts(userMembership.permissoes) ? (
+						<ActionToolbar.Primary icon={Plus} onClick={() => setNewProductModalIsOpen(true)}>
+							NOVO PRODUTO
+						</ActionToolbar.Primary>
+					) : null}
 				</ActionToolbar>
 			</div>
 			<GeneralPaginationComponent
@@ -243,7 +247,7 @@ function ProductsDatabaseList({ user, userMembership, organization, storageKey, 
 							periodAfter={filters.statsPeriodAfter}
 							periodBefore={filters.statsPeriodBefore}
 							showStockData={orgHasStockTracking}
-							onRecount={() => setRecountingProductId(product.id)}
+							onRecount={canAdjustInventory(userMembership.permissoes) ? () => setRecountingProductId(product.id) : undefined}
 						/>
 					))
 				) : (
@@ -503,7 +507,8 @@ function ProductCard({
 	periodAfter: Date | null;
 	periodBefore: Date | null;
 	showStockData: boolean;
-	onRecount: () => void;
+	// Ausente = membro sem `estoque.ajustar`: o botão não aparece.
+	onRecount?: () => void;
 }) {
 	const [showMoreMetrics, setShowMoreMetrics] = useState(false);
 	// Calculate stock status
@@ -621,7 +626,7 @@ function ProductCard({
 						</div>
 					</div>
 					<div className="flex items-center gap-1.5">
-						{showStockData ? (
+						{showStockData && onRecount ? (
 							<Button variant="ghost" className="flex items-center gap-1.5" size="sm" onClick={onRecount}>
 								<ClipboardList className="w-3 min-w-3 h-3 min-h-3" />
 								RECONTAR

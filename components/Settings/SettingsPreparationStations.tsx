@@ -1,5 +1,6 @@
 "use client";
 
+import { canConfigureSales } from "@/lib/permissions/sales";
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
 import LoadingComponent from "@/components/Layouts/LoadingComponent";
 import { PREPARATION_STATION_TICKET_SCOPE_LABELS } from "@/components/Modals/PreparationStations/Blocks/General";
@@ -40,7 +41,7 @@ export default function SettingsPreparationStations({ membership }: SettingsPrep
 	const [newStationModalIsOpen, setNewStationModalIsOpen] = useState(false);
 	const [controlStationId, setControlStationId] = useState<string | null>(null);
 
-	const canManage = membership.permissoes.empresa.editar;
+	const canManage = canConfigureSales(membership.permissoes);
 
 	const { mutate: mutateDelete, isPending: isDeleting } = useMutation({
 		mutationKey: ["delete-preparation-station"],

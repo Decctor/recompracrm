@@ -1,5 +1,6 @@
 "use client";
 
+import type { TSalesOperationPermissions } from "@/lib/permissions/sales";
 import type { TGetSalesSessionsOutputDefault } from "@/app/api/pos/sales-sessions/route";
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
 import LoadingComponent from "@/components/Layouts/LoadingComponent";
@@ -21,7 +22,7 @@ type StatusFilter = "TODAS" | "ABERTA" | "FECHADA" | "CONFERIDA" | "CANCELADA";
 
 type CashSessionsPageProps = {
 	sessionsConfig: { requireOpeningFloat: boolean; blindCount: boolean };
-	canReviewSessions: boolean;
+	cashPermissions: TSalesOperationPermissions;
 };
 
 const STATUS_CHIPS: { value: StatusFilter; label: string }[] = [
@@ -44,7 +45,7 @@ function StatusBadge({ status }: { status: SalesSessionRow["status"] }) {
 
 type ActiveModal = { type: "open" } | { type: "movement" | "close" | "detail"; sessionId: string } | null;
 
-export default function CashSessionsPage({ sessionsConfig, canReviewSessions }: CashSessionsPageProps) {
+export default function CashSessionsPage({ sessionsConfig, cashPermissions }: CashSessionsPageProps) {
 	const [modal, setModal] = useState<ActiveModal>(null);
 
 	const openSessions = useSalesSessions({ initialParams: { status: "ABERTA" } });
@@ -59,12 +60,14 @@ export default function CashSessionsPage({ sessionsConfig, canReviewSessions }: 
 
 	return (
 		<div className="flex w-full flex-col gap-6 p-1">
-			<div className="flex items-center justify-end">
-				<Button onClick={() => setModal({ type: "open" })} className="gap-1.5">
-					<Wallet className="h-4 w-4" />
-					ABRIR CAIXA
-				</Button>
-			</div>
+			{cashPermissions.operarCaixa ? (
+				<div className="flex items-center justify-end">
+					<Button onClick={() => setModal({ type: "open" })} className="gap-1.5">
+						<Wallet className="h-4 w-4" />
+						ABRIR CAIXA
+					</Button>
+				</div>
+			) : null}
 
 			{/* Caixas abertos */}
 			<section className="flex flex-col gap-3">
@@ -87,16 +90,22 @@ export default function CashSessionsPage({ sessionsConfig, canReviewSessions }: 
 									<span>Aberto em {dayjs(session.dataAbertura).format("DD/MM HH:mm")}</span>
 									<span>Fundo de troco {formatToMoney(session.saldoInicial)}</span>
 								</div>
-								<div className="flex items-center gap-2">
-									<Button variant="ghost" size="sm" className="flex-1 gap-1.5" onClick={() => setModal({ type: "movement", sessionId: session.id })}>
-										<ArrowRightLeft className="h-4 w-4" />
-										MOVIMENTO
-									</Button>
-									<Button size="sm" className="flex-1 gap-1.5" onClick={() => setModal({ type: "close", sessionId: session.id })}>
-										<LockKeyhole className="h-4 w-4" />
-										FECHAR CAIXA
-									</Button>
-								</div>
+								{cashPermissions.movimentarCaixa || cashPermissions.operarCaixa ? (
+									<div className="flex items-center gap-2">
+										{cashPermissions.movimentarCaixa ? (
+											<Button variant="ghost" size="sm" className="flex-1 gap-1.5" onClick={() => setModal({ type: "movement", sessionId: session.id })}>
+												<ArrowRightLeft className="h-4 w-4" />
+												MOVIMENTO
+											</Button>
+										) : null}
+										{cashPermissions.operarCaixa ? (
+											<Button size="sm" className="flex-1 gap-1.5" onClick={() => setModal({ type: "close", sessionId: session.id })}>
+												<LockKeyhole className="h-4 w-4" />
+												FECHAR CAIXA
+											</Button>
+										) : null}
+									</div>
+								) : null}
 							</div>
 						))}
 					</div>
@@ -196,7 +205,7 @@ export default function CashSessionsPage({ sessionsConfig, canReviewSessions }: 
 				<CloseSalesSession sessionId={modal.sessionId} closeModal={() => setModal(null)} blindCount={sessionsConfig.blindCount} />
 			) : null}
 			{modal?.type === "detail" ? (
-				<SalesSessionDetail sessionId={modal.sessionId} closeModal={() => setModal(null)} canReview={canReviewSessions} />
+				<SalesSessionDetail sessionId={modal.sessionId} closeModal={() => setModal(null)} canReview={cashPermissions.conferirCaixa} />
 			) : null}
 		</div>
 	);

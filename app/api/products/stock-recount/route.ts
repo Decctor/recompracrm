@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { canAdjustInventory, canViewInventory } from "@/lib/permissions/inventory";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { applyStockMovement } from "@/lib/stock/apply-stock-movement";
 import { consumeStockLotsByFefo } from "@/lib/stock/consume-stock-lots-fefo";
@@ -303,6 +304,7 @@ export type TGetStockRecountOutputRow = Exclude<TGetStockRecountOutput["data"]["
 
 async function getStockRecountRoute(request: NextRequest) {
 	const session = getSessionWithOrg(await getCurrentSessionUncached());
+	if (!canViewInventory(session.membership?.permissoes)) throw new createHttpError.Forbidden("Você não possui permissão para visualizar o estoque.");
 	const searchParams = request.nextUrl.searchParams;
 	const input = GetStockRecountInputSchema.parse({
 		page: searchParams.get("page"),
@@ -516,6 +518,7 @@ export type TApplyStockRecountOutput = Awaited<ReturnType<typeof applyStockRecou
 
 async function applyStockRecountRoute(request: NextRequest) {
 	const session = getSessionWithOrg(await getCurrentSessionUncached());
+	if (!canAdjustInventory(session.membership?.permissoes)) throw new createHttpError.Forbidden("Você não possui permissão para recontar o estoque.");
 	const input = ApplyStockRecountInputSchema.parse(await request.json());
 	const result = await applyStockRecount({ input, session });
 	return NextResponse.json(result);

@@ -1,3 +1,4 @@
+import { resolveSalesOperationPermissions } from "@/lib/permissions/sales";
 import { getCurrentSession } from "@/lib/authentication/session";
 import { appRoutes } from "@/lib/navigation/routes";
 import { EMPTY_AUTO_EMISSION_EXCEPTIONS } from "@/lib/fiscal/auto-emission-policy";
@@ -53,6 +54,7 @@ export default async function EditSale({ params }: { params: Promise<{ saleId: s
 			organizationAutoFiscalCapable={isOrganizationAutoFiscalCapable(fiscalSettings)}
 			autoEmissionExceptions={fiscalSettings.fiscalConfiguracao?.emissaoAutomatica?.excecoes ?? EMPTY_AUTO_EMISSION_EXCEPTIONS}
 			canEmitFiscal={sessionUser.membership.permissoes.fiscal.emitir}
+			cashPermissions={resolveSalesOperationPermissions(sessionUser.membership.permissoes)}
 		/>
 	);
 }

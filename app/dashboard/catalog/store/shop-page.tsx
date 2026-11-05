@@ -12,7 +12,7 @@ import { Clock3, Copy, ExternalLink, QrCode } from "lucide-react";
 import ShopSettingsEmptyState from "./components/ShopSettingsEmptyState";
 import ShopSettingsPanel from "./components/ShopSettingsPanel";
 
-export default function ShopPage({ slug }: { slug: string | null }) {
+export default function ShopPage({ slug, canConfigure }: { slug: string | null; canConfigure: boolean }) {
 	const { data: settings, isLoading, isError, error } = useShopSettings();
 
 	if (isLoading) return <LoadingComponent />;
@@ -64,7 +64,13 @@ export default function ShopPage({ slug }: { slug: string | null }) {
 				</div>
 			</div>
 
-			<ShopSettingsPanel settings={settings} />
+			{canConfigure ? (
+				<ShopSettingsPanel settings={settings} />
+			) : (
+				<p className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+					Você não possui permissão para configurar a loja digital.
+				</p>
+			)}
 		</div>
 	);
 }

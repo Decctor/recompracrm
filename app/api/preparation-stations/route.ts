@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { canConfigureSales } from "@/lib/permissions/sales";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { PreparationStationRuleSchema, PreparationStationSchema, type TPreparationStationRuleValue } from "@/schemas/preparation-stations";
 import { type DBTransaction, db } from "@/services/drizzle";
@@ -22,7 +23,7 @@ function getSessionOrganizationId(session: TAuthUserSession) {
 }
 
 function assertCanManageStations(session: TAuthUserSession) {
-	if (!session.membership?.permissoes.empresa.editar)
+	if (!canConfigureSales(session.membership?.permissoes))
 		throw new createHttpError.Forbidden("Você não possui permissão para gerenciar as estações de preparo da organização.");
 }
 

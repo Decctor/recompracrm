@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { canCompleteProductions } from "@/lib/permissions/productions";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { getItemUnitCost, getItemSalePrice, getProductPricingMap } from "@/lib/productions/valuation";
 import { applyStockMovement, isStockTrackingActive } from "@/lib/stock/apply-stock-movement";
@@ -224,6 +225,7 @@ export type TCompleteProductionOutput = Awaited<ReturnType<typeof completeProduc
 
 async function completeProductionRoute(request: NextRequest) {
 	const session = getSessionWithOrg(await getCurrentSessionUncached());
+	if (!canCompleteProductions(session.membership?.permissoes)) throw new createHttpError.Forbidden("Você não possui permissão para concluir produções.");
 	const input = CompleteProductionInputSchema.parse(await request.json());
 	const result = await completeProduction({ input, session });
 	return NextResponse.json(result);

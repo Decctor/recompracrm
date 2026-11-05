@@ -1,5 +1,6 @@
 "use client";
 
+import { canConfigureSales } from "@/lib/permissions/sales";
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
 import LoadingComponent from "@/components/Layouts/LoadingComponent";
 import { SALES_CHANNEL_LABELS, SalesChannelMark } from "@/components/SalesChannels/SalesChannelMark";
@@ -35,7 +36,7 @@ export default function SettingsSalesChannels({ membership }: SettingsSalesChann
 	const hasErpAccess = membership.organizacao.configuracao.recursos.erp.acesso;
 	const { data: channels, isLoading, isError, error, queryKey } = useSalesChannels({ enabled: hasErpAccess });
 	const queryClient = useQueryClient();
-	const canEdit = membership.permissoes.empresa.editar;
+	const canEdit = canConfigureSales(membership.permissoes);
 
 	const { mutate, isPending, variables } = useMutation({
 		mutationKey: ["update-sales-channel"],

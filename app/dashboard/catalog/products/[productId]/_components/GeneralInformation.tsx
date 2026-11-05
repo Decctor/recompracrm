@@ -17,6 +17,8 @@ import { useState } from "react";
 
 type ProductGeneralInformationProps = {
 	product: TGetProductsOutputById;
+	// RECONTAR passa pela rota de recontagem, que exige `estoque.ajustar`.
+	canAdjustInventory: boolean;
 	callbacks?: {
 		onMutate?: () => void;
 		onSuccess?: () => void;
@@ -33,7 +35,7 @@ type ProductGeneralInformationProps = {
  * ele aparece em leitura com o atalho de RECONTAR (que passa pela rota de recontagem, consumindo
  * lotes por FEFO) em vez de virar um campo qualquer do formulário.
  */
-export default function ProductGeneralInformation({ product, callbacks }: ProductGeneralInformationProps) {
+export default function ProductGeneralInformation({ product, callbacks, canAdjustInventory }: ProductGeneralInformationProps) {
 	const queryClient = useQueryClient();
 	const [recountModalIsOpen, setRecountModalIsOpen] = useState(false);
 	const editor = useProductCoreSectionEditor({ product, callbacks });
@@ -80,10 +82,12 @@ export default function ProductGeneralInformation({ product, callbacks }: Produc
 										label="QUANTIDADE"
 										value={product.quantidade != null ? formatDecimalPlaces(product.quantidade) : "NÃO INFORMADO"}
 									/>
-									<Button variant="ghost" size="xs" className="flex items-center gap-1" onClick={() => setRecountModalIsOpen(true)}>
-										<ClipboardList className="h-4 w-4 min-h-4 min-w-4" />
-										RECONTAR
-									</Button>
+									{canAdjustInventory ? (
+										<Button variant="ghost" size="xs" className="flex items-center gap-1" onClick={() => setRecountModalIsOpen(true)}>
+											<ClipboardList className="h-4 w-4 min-h-4 min-w-4" />
+											RECONTAR
+										</Button>
+									) : null}
 								</div>
 								<p className="text-xs text-muted-foreground">
 									O saldo muda apenas por movimentações e recontagens, para o histórico de estoque continuar fechando.

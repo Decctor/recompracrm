@@ -1,7 +1,7 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { getProductStockIndicators } from "@/lib/stock/analytics/product-indicators";
-import { getSessionOrganizationId, parsePeriodSearchParams, StockReportPeriodInputSchema } from "@/lib/stock/analytics/route-helpers";
+import { getInventoryReportOrganizationId, parsePeriodSearchParams, StockReportPeriodInputSchema } from "@/lib/stock/analytics/route-helpers";
 import { type NextRequest, NextResponse } from "next/server";
 import type { z } from "zod";
 
@@ -43,7 +43,7 @@ async function getStockReportReorder({ input, organizationId }: { input: TGetSto
 export type TGetStockReportReorderOutput = Awaited<ReturnType<typeof getStockReportReorder>>;
 
 async function getStockReportReorderRoute(request: NextRequest) {
-	const organizationId = getSessionOrganizationId(await getCurrentSessionUncached());
+	const organizationId = getInventoryReportOrganizationId(await getCurrentSessionUncached());
 	const input = GetStockReportReorderInputSchema.parse(parsePeriodSearchParams(request.nextUrl.searchParams));
 	const result = await getStockReportReorder({ input, organizationId });
 	return NextResponse.json(result);

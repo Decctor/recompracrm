@@ -1,6 +1,9 @@
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { resolveDiscountAuthority } from "@/lib/permissions/discounts";
 import { canViewFinances } from "@/lib/permissions/finances";
+import { canViewInventory } from "@/lib/permissions/inventory";
+import { canViewProductions } from "@/lib/permissions/productions";
+import { canViewProducts } from "@/lib/permissions/products";
 
 export const dashboardCapabilities = {
 	dashboard: "dashboard",
@@ -57,7 +60,6 @@ export function canAccessDashboardCapability(capability: TDashboardCapability, c
 
 	switch (capability) {
 		case "dashboard":
-		case "products":
 		case "customers":
 		case "segments":
 		case "pointOfInteraction":
@@ -65,14 +67,17 @@ export function canAccessDashboardCapability(capability: TDashboardCapability, c
 		// restrição, quando vier, mude num lugar só.
 		case "visualKits":
 			return true;
+		case "products":
+			return canViewProducts(permissions);
 		case "sales":
 			return permissions.vendas.visualizar;
 		// Resultados de vendas existem para qualquer organização com permissão de resultados; os blocos
 		// operacionais (recebimentos, fiscal) são condicionais ao ERP dentro da página.
 		case "salesResults":
 			return permissions.resultados.visualizar;
+		// Abrir o PDV é vender: as rotas de criação/confirmação exigem vendas.criar.
 		case "newSale":
-			return erp && permissions.vendas.visualizar;
+			return erp && permissions.vendas.criar;
 		case "cashSessions":
 			return permissions.vendas.visualizar && organization.configuracao.preferencias.sessoesVenda?.habilitado === true;
 		case "orders":
@@ -81,12 +86,14 @@ export function canAccessDashboardCapability(capability: TDashboardCapability, c
 		case "approvals":
 			return erp && resolveDiscountAuthority(permissions).aprovar;
 		case "serviceAccounts":
-			return erp && permissions.vendas.visualizar && organization.configuracao.preferencias.contasAtendimento?.habilitado === true;
+			// Operar contas é vender: abrir, lançar, receber e fechar exigem vendas.criar nas rotas de /api/tabs.
+			return erp && permissions.vendas.criar && organization.configuracao.preferencias.contasAtendimento?.habilitado === true;
 		case "purchases":
 			return erp && permissions.compras.visualizar;
 		case "production":
+			return erp && canViewProductions(permissions);
 		case "inventory":
-			return erp && permissions.empresa.visualizar;
+			return erp && canViewInventory(permissions);
 		case "portfolios":
 			return organization.configuracao.preferencias.carteirasClientes?.habilitado === true;
 		case "campaigns":

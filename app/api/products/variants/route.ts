@@ -17,7 +17,9 @@ import {
 } from "@/services/drizzle/schema";
 import { and, eq } from "drizzle-orm";
 import { upsertProductAddOnOptions, validateAndResolveAddOnOptionLink } from "@/lib/products/add-on-options";
-import { buildSalePriceUpdate } from "@/lib/products/price-snapshot";
+import { canAdjustInventory } from "@/lib/permissions/inventory";
+import { canChangeProductPrices, canEditProducts } from "@/lib/permissions/products";
+import { buildSalePriceUpdate, changesSalePrice } from "@/lib/products/price-snapshot";
 import { scheduleAddOnGroupPush } from "@/lib/integrations/ifood/sync/queue";
 import { editedAddOnGroupIds } from "@/lib/integrations/ifood/sync/option-sync";
 
@@ -290,6 +292,8 @@ async function createProductVariant({ input, session }: { input: TCreateProductV
 
 	const userOrgId = userMembership.organizacao.id;
 	const productId = input.productVariant.produtoId;
+	// Variante nova num produto existente é edição do produto.
+	if (!canEditProducts(userMembership.permissoes)) throw new createHttpError.Forbidden("Você não possui permissão para editar produtos.");
 
 	const product = await db.query.products.findFirst({
 		where: and(eq(products.id, productId), eq(products.organizacaoId, userOrgId)),
@@ -419,6 +423,7 @@ async function updateProductVariant({ input, session }: { input: TUpdateProductV
 	const userOrgId = userMembership.organizacao.id;
 	const productId = input.productVariant.produtoId;
 	const productVariantId = input.productVariantId;
+	if (!canEditProducts(userMembership.permissoes)) throw new createHttpError.Forbidden("Você não possui permissão para editar produtos.");
 
 	const product = await db.query.products.findFirst({
 		where: and(eq(products.id, productId), eq(products.organizacaoId, userOrgId)),
@@ -429,11 +434,27 @@ async function updateProductVariant({ input, session }: { input: TUpdateProductV
 	const transactionReturn = await db.transaction(async (tx) => {
 		// Preço atual lido com trava: base do snapshot do preço anterior.
 		const [existingVariant] = await tx
-			.select({ precoVenda: productVariants.precoVenda, precoVendaAnterior: productVariants.precoVendaAnterior })
+			.select({ precoVenda: productVariants.precoVenda, precoVendaAnterior: productVariants.precoVendaAnterior, quantidade: productVariants.quantidade })
 			.from(productVariants)
 			.where(and(eq(productVariants.id, productVariantId), eq(productVariants.produtoId, productId), eq(productVariants.organizacaoId, userOrgId)))
 			.for("update");
 		if (!existingVariant) throw new createHttpError.NotFound("Variante não encontrada.");
+		if (
+			!canChangeProductPrices(userMembership.permissoes) &&
+			changesSalePrice({
+				current: existingVariant,
+				next: { precoVenda: input.productVariant.precoVenda, precoVendaAnterior: input.productVariant.precoVendaAnterior },
+			})
+		) {
+			throw new createHttpError.Forbidden("Você não possui permissão para alterar preços de venda.");
+		}
+		if (
+			!canAdjustInventory(userMembership.permissoes) &&
+			input.productVariant.quantidade !== undefined &&
+			(input.productVariant.quantidade ?? 0) !== (existingVariant.quantidade ?? 0)
+		) {
+			throw new createHttpError.Forbidden("Você não possui permissão para ajustar o estoque.");
+		}
 
 		const [updatedVariant] = await tx
 			.update(productVariants)

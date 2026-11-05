@@ -6,6 +6,10 @@ import {
 	canViewFinances,
 } from "@/lib/permissions/finances";
 import { resolveDiscountAuthority } from "@/lib/permissions/discounts";
+import { resolveInventoryPermissions } from "@/lib/permissions/inventory";
+import { resolveProductionPermissions } from "@/lib/permissions/productions";
+import { resolveProductPermissions } from "@/lib/permissions/products";
+import { resolveSalesOperationPermissions, type TSalesOperationPermissions } from "@/lib/permissions/sales";
 import type { TOrganizationMemberPermissions } from "@/schemas/organizations";
 
 export const PERMISSION_ACTION_COLUMNS = [
@@ -173,7 +177,42 @@ function buildMembershipPermissionMatrix({ organizationHasERPAccess }: { organiz
 				extras: [
 					leaf("vendas.descontos.aplicar", "Aplicar descontos em vendas", "Vendas"),
 					leaf("vendas.descontos.aprovar", "Aprovar descontos de terceiros", "Vendas"),
+					leaf("vendas.operarCaixa", "Abrir e fechar o caixa", "Vendas"),
+					leaf("vendas.movimentarCaixa", "Registrar sangria e suprimento no caixa", "Vendas"),
+					leaf("vendas.conferirCaixa", "Conferir caixas fechados", "Vendas"),
+					leaf("vendas.configurar", "Configurar canais, estações de preparo, comandas e loja", "Vendas"),
 				],
+			}),
+			buildRow({
+				key: "produtos",
+				title: "Produtos",
+				cells: [
+					leaf("produtos.visualizar", "Visualizar produtos", "Produtos"),
+					leaf("produtos.criar", "Criar produtos", "Produtos"),
+					leaf("produtos.editar", "Editar produtos", "Produtos"),
+					null,
+				],
+				extras: [leaf("produtos.alterarPrecos", "Alterar preços de venda", "Produtos")],
+			}),
+			buildRow({
+				key: "estoque",
+				title: "Estoque",
+				cells: [leaf("estoque.visualizar", "Visualizar o estoque", "Estoque"), null, null, null],
+				extras: [
+					leaf("estoque.movimentar", "Lançar entradas e saídas de estoque", "Estoque"),
+					leaf("estoque.ajustar", "Recontar estoque e descartar lotes", "Estoque"),
+				],
+			}),
+			buildRow({
+				key: "producao",
+				title: "Produção",
+				cells: [
+					leaf("producao.visualizar", "Visualizar a produção", "Produção"),
+					leaf("producao.criar", "Criar produções e fichas técnicas", "Produção"),
+					leaf("producao.editar", "Editar produções e fichas técnicas", "Produção"),
+					leaf("producao.excluir", "Excluir produções e fichas técnicas", "Produção"),
+				],
+				extras: [leaf("producao.concluir", "Concluir produções (baixa de insumos e entrada no estoque)", "Produção")],
 			}),
 			buildRow({
 				key: "compras",
@@ -254,9 +293,21 @@ export function readMembershipPermissionValue(permissions: TOrganizationMemberPe
 			return resolveDiscountAuthority(permissions).aprovar;
 		case "atendimentos.receberTransferencias":
 			return !!permissions.atendimentos.receberTransferencias;
+		case "vendas.operarCaixa":
+		case "vendas.movimentarCaixa":
+		case "vendas.conferirCaixa":
+		case "vendas.configurar":
+			return resolveSalesOperationPermissions(permissions)[path.split(".")[1] as keyof TSalesOperationPermissions];
 		default:
+			if (path.startsWith("produtos.")) return readResolvedField(resolveProductPermissions(permissions), path);
+			if (path.startsWith("estoque.")) return readResolvedField(resolveInventoryPermissions(permissions), path);
+			if (path.startsWith("producao.")) return readResolvedField(resolveProductionPermissions(permissions), path);
 			return readNestedPermissionBoolean(permissions, path);
 	}
+}
+
+function readResolvedField(resolved: Record<string, boolean>, path: string): boolean {
+	return resolved[path.split(".")[1] as string] === true;
 }
 
 function readNestedPermissionBoolean(permissions: TOrganizationMemberPermissions, path: string): boolean {
@@ -289,6 +340,8 @@ function materializeDescontos(permissions: TOrganizationMemberPermissions) {
 	return resolveDiscountAuthority(permissions);
 }
 
+const SALES_OPERATION_PATHS = new Set(["vendas.operarCaixa", "vendas.movimentarCaixa", "vendas.conferirCaixa", "vendas.configurar"]);
+
 function writeMembershipPermissionValue(
 	permissions: TOrganizationMemberPermissions,
 	path: TMembershipPermissionPath,
@@ -307,6 +360,27 @@ function writeMembershipPermissionValue(
 		const financeiro = materializeFinanceiro(permissions);
 		const field = path.split(".")[1] as keyof typeof financeiro;
 		next.financeiro = { ...financeiro, [field]: value };
+		return next;
+	}
+
+	if (path.startsWith("produtos.")) {
+		next.produtos = { ...resolveProductPermissions(permissions), [path.split(".")[1] as string]: value };
+		return next;
+	}
+
+	if (path.startsWith("estoque.")) {
+		next.estoque = { ...resolveInventoryPermissions(permissions), [path.split(".")[1] as string]: value };
+		return next;
+	}
+
+	if (path.startsWith("producao.")) {
+		next.producao = { ...resolveProductionPermissions(permissions), [path.split(".")[1] as string]: value };
+		return next;
+	}
+
+	if (SALES_OPERATION_PATHS.has(path)) {
+		// Materializa as quatro chaves juntas: depois da primeira edição, nenhuma delas volta a depender do fallback.
+		next.vendas = { ...next.vendas, ...resolveSalesOperationPermissions(permissions), [path.split(".")[1] as string]: value };
 		return next;
 	}
 

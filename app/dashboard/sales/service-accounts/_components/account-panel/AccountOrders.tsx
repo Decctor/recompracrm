@@ -1,4 +1,5 @@
 "use client";
+import { useTabPermissions } from "../tab-permissions";
 import type { TTabDetails } from "@/app/api/tabs/route";
 import { Button } from "@/components/ui/button";
 import type { TBuiltOrderItem } from "@/components/Products/ProductBuilderForm";
@@ -41,6 +42,7 @@ type AccountOrdersProps = {
 };
 
 export function AccountOrders({ tab, now, refresh, onStartClose, onStartPartial, onRepeatItem }: AccountOrdersProps) {
+	const { canCancel } = useTabPermissions();
 	const isOpen = tab.status === "ABERTA";
 	const [confirmingOrderId, setConfirmingOrderId] = useState<string | null>(null);
 
@@ -153,17 +155,19 @@ export function AccountOrders({ tab, now, refresh, onStartClose, onStartPartial,
 														<Printer className="size-4" />
 													</Button>
 												) : null}
-												<Button
-													size="icon"
-													variant="ghost"
-													className="size-8 rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-													aria-label={`Cancelar pedido ${order.numero}`}
-													title="Cancelar pedido"
-													disabled={cancelPending}
-													onClick={() => setConfirmingOrderId(order.id)}
-												>
-													<Ban className="size-4" />
-												</Button>
+												{canCancel ? (
+													<Button
+														size="icon"
+														variant="ghost"
+														className="size-8 rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+														aria-label={`Cancelar pedido ${order.numero}`}
+														title="Cancelar pedido"
+														disabled={cancelPending}
+														onClick={() => setConfirmingOrderId(order.id)}
+													>
+														<Ban className="size-4" />
+													</Button>
+												) : null}
 											</div>
 										) : null}
 									</header>

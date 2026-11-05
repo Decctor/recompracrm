@@ -1,7 +1,7 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { getExpiringLots } from "@/lib/stock/analytics/queries";
-import { getSessionOrganizationId } from "@/lib/stock/analytics/route-helpers";
+import { getInventoryReportOrganizationId } from "@/lib/stock/analytics/route-helpers";
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -52,7 +52,7 @@ async function getStockReportExpirations({ input, organizationId }: { input: TGe
 export type TGetStockReportExpirationsOutput = Awaited<ReturnType<typeof getStockReportExpirations>>;
 
 async function getStockReportExpirationsRoute(request: NextRequest) {
-	const organizationId = getSessionOrganizationId(await getCurrentSessionUncached());
+	const organizationId = getInventoryReportOrganizationId(await getCurrentSessionUncached());
 	const input = GetStockReportExpirationsInputSchema.parse({ limit: request.nextUrl.searchParams.get("limit") });
 	const result = await getStockReportExpirations({ input, organizationId });
 	return NextResponse.json(result);

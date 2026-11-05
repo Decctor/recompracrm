@@ -1,5 +1,6 @@
 "use client";
 
+import type { TInventoryPermissions } from "@/lib/permissions/inventory";
 import type { TGetProductStockLotsDefaultInput, TGetProductStockLotsOutputDefault } from "@/app/api/products/stock-lots/route";
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
 import LoadingComponent from "@/components/Layouts/LoadingComponent";
@@ -57,7 +58,7 @@ function isStockLotFilterActive(filters: TGetProductStockLotsDefaultInput, filte
 	return JSON.stringify(filters.status ?? []) === JSON.stringify(filter.status) && (filters.dueInDays ?? null) === (filter.dueInDays ?? null);
 }
 
-export default function StockLotsPage() {
+export default function StockLotsPage({ permissions }: { permissions: TInventoryPermissions }) {
 	const queryClient = useQueryClient();
 	const [discardingStockLot, setDiscardingStockLot] = useState<TGetProductStockLotsOutputDefault["stockLots"][number] | null>(null);
 	const query = useProductStockLots({
@@ -111,7 +112,7 @@ export default function StockLotsPage() {
 							key={stockLot.id}
 							stockLot={stockLot}
 				onPrint={() => window.open(`${appRoutes.inventory.lotLabelsPreview()}?ids=${stockLot.id}`, "_blank", "noopener,noreferrer")}
-							onDiscard={() => setDiscardingStockLot(stockLot)}
+							onDiscard={permissions.ajustar ? () => setDiscardingStockLot(stockLot) : undefined}
 						/>
 					))
 				: null}
@@ -147,7 +148,8 @@ export default function StockLotsPage() {
 type StockLotCardProps = {
 	stockLot: TGetProductStockLotsOutputDefault["stockLots"][number];
 	onPrint: () => void;
-	onDiscard: () => void;
+	// Ausente = membro sem `estoque.ajustar`: o botão não aparece.
+	onDiscard?: () => void;
 };
 
 function StockLotCard({ stockLot, onPrint, onDiscard }: StockLotCardProps) {
@@ -210,7 +212,7 @@ function StockLotCard({ stockLot, onPrint, onDiscard }: StockLotCardProps) {
 						<Printer className="h-4 w-4" />
 						IMPRIMIR
 					</Button>
-					{canDiscard ? (
+					{canDiscard && onDiscard ? (
 						<Button variant="ghost-destructive" size="xs" onClick={onDiscard}>
 							<Trash2 className="h-4 w-4" />
 							DESCARTAR
