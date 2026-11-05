@@ -1,4 +1,5 @@
 import { sendTemplateWhatsappMessage, uploadMediaToWhatsapp } from "@/lib/whatsapp";
+import { getPlatformWhatsappSender } from "@/lib/whatsapp/platform-sender";
 import { WHATSAPP_REPORT_TEMPLATES } from "@/lib/whatsapp/templates";
 import type { DB, DBTransaction } from "@/services/drizzle";
 import { chats } from "@/services/drizzle/schema/chats";
@@ -38,9 +39,9 @@ export async function notifyChatTransferRecipient({
 	/** Texto completo do corpo (motivo + resumo). */
 	detalhes: string;
 }): Promise<boolean> {
-	const whatsappToken = process.env.META_ACCESS_TOKEN;
-	const fromPhoneNumberId = process.env.META_WHATSAPP_PHONE_NUMBER_ID;
-	if (!whatsappToken || !fromPhoneNumberId) return false;
+	const sender = getPlatformWhatsappSender();
+	if (!sender) return false;
+	const { fromPhoneNumberId, whatsappToken, graphApiBaseUrl } = sender;
 
 	try {
 		const [chat, target] = await Promise.all([
@@ -73,6 +74,7 @@ export async function notifyChatTransferRecipient({
 				mimeType: "image/png",
 				filename: `transferencia-${chat.id}.png`,
 				whatsappToken,
+				graphApiBaseUrl,
 			});
 			notificationPayload = WHATSAPP_REPORT_TEMPLATES.SERVICE_TRANSFER_NOTIFICATIONS_V2.getPayload({
 				templateKey: "SERVICE_TRANSFER_NOTIFICATIONS_V2",
@@ -94,7 +96,7 @@ export async function notifyChatTransferRecipient({
 			}).data;
 		}
 
-		await sendTemplateWhatsappMessage({ whatsappToken, fromPhoneNumberId, templatePayload: notificationPayload });
+		await sendTemplateWhatsappMessage({ whatsappToken, fromPhoneNumberId, graphApiBaseUrl, templatePayload: notificationPayload });
 		return true;
 	} catch (error) {
 		console.error("[ERROR] [CHATS] [TRANSFER_NOTIFICATION] Falha ao notificar o usuário:", error);

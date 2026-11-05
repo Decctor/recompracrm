@@ -4,6 +4,7 @@ import reportImageRenderer from "@/lib/reports/render-report-image";
 import { uploadReportImage } from "@/lib/reports/storage";
 import type { TCampaignReportPayload, TReportFrequency } from "@/lib/reports/types";
 import { sendTemplateWhatsappMessage } from "@/lib/whatsapp";
+import { getPlatformWhatsappSender, type TPlatformWhatsappSender } from "@/lib/whatsapp/platform-sender";
 import type { TemplatePayload } from "@/lib/whatsapp/templates";
 import { formatPhoneForInternalGateway, sanitizeTemplateParameter } from "@/lib/whatsapp/utils";
 import { db } from "@/services/drizzle";
@@ -140,17 +141,21 @@ type SendApprovedReportTemplateParams = {
 	recipientName: string;
 	frequency: TReportFrequency;
 	imageUrl: string;
-	whatsappPhoneNumberId: string;
-	whatsappToken: string;
+	sender: TPlatformWhatsappSender;
 };
+
+function requirePlatformWhatsappSender(): TPlatformWhatsappSender {
+	const sender = getPlatformWhatsappSender();
+	if (!sender) throw new createHttpError.InternalServerError("Número de WhatsApp da plataforma não configurado (META_WHATSAPP_PHONE_NUMBER_ID + SENDS_* ou META_ACCESS_TOKEN).");
+	return sender;
+}
 
 async function sendApprovedReportTemplate({
 	recipientPhone,
 	recipientName,
 	frequency,
 	imageUrl,
-	whatsappPhoneNumberId,
-	whatsappToken,
+	sender,
 }: SendApprovedReportTemplateParams) {
 	const templatePayload = buildApprovedReportTemplatePayload({
 		toPhoneNumber: recipientPhone,
@@ -159,9 +164,10 @@ async function sendApprovedReportTemplate({
 		imageUrl,
 	});
 	return sendTemplateWhatsappMessage({
-		fromPhoneNumberId: whatsappPhoneNumberId,
+		fromPhoneNumberId: sender.fromPhoneNumberId,
 		templatePayload,
-		whatsappToken,
+		whatsappToken: sender.whatsappToken,
+		graphApiBaseUrl: sender.graphApiBaseUrl,
 	});
 }
 
@@ -183,10 +189,7 @@ export async function runRecurrentSalesReportForRecipient({
 	forceSendEmptyReport = false,
 }: RunRecurrentSalesReportForRecipientParams) {
 	const logLabel = getReportLogLabel(frequency);
-	const whatsappToken = process.env.META_ACCESS_TOKEN;
-	const whatsappPhoneNumberId = process.env.META_WHATSAPP_PHONE_NUMBER_ID;
-	if (!whatsappToken) throw new createHttpError.InternalServerError("META_ACCESS_TOKEN não configurado.");
-	if (!whatsappPhoneNumberId) throw new createHttpError.InternalServerError("META_WHATSAPP_PHONE_NUMBER_ID não configurado.");
+	const sender = requirePlatformWhatsappSender();
 
 	const organization = await fetchReportOrganizationById(organizationId);
 	if (!organization) throw new createHttpError.NotFound(`Organização não encontrada: ${organizationId}.`);
@@ -225,8 +228,7 @@ export async function runRecurrentSalesReportForRecipient({
 		recipientName,
 		frequency,
 		imageUrl: publicUrl,
-		whatsappPhoneNumberId,
-		whatsappToken,
+		sender,
 	});
 
 	return {
@@ -268,10 +270,7 @@ export async function runRecurrentSalesReport({ frequency, referenceDate = new D
 			};
 		}
 
-		const whatsappToken = process.env.META_ACCESS_TOKEN;
-		const whatsappPhoneNumberId = process.env.META_WHATSAPP_PHONE_NUMBER_ID;
-		if (!whatsappToken) throw new createHttpError.InternalServerError("META_ACCESS_TOKEN não configurado.");
-		if (!whatsappPhoneNumberId) throw new createHttpError.InternalServerError("META_WHATSAPP_PHONE_NUMBER_ID não configurado.");
+		const sender = requirePlatformWhatsappSender();
 
 		const organizations = await fetchReportOrganizations();
 		console.log(`[INFO] [${logLabel}] Processing ${organizations.length} organizations`);
@@ -328,8 +327,7 @@ export async function runRecurrentSalesReport({ frequency, referenceDate = new D
 							recipientName: recipient.name,
 							frequency,
 							imageUrl: publicUrl,
-							whatsappPhoneNumberId,
-							whatsappToken,
+							sender,
 						});
 						allResults.push({
 							organizationId: organization.id,

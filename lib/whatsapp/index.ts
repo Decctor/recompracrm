@@ -3,12 +3,18 @@ import createHttpError from "http-errors";
 import type { TWhatsappTemplateSendPayload } from "@/lib/message-templates/channels/whatsapp/types";
 import { getWhatsappStatusErrorMessage, type ParsedWhatsappStatusError, parseWhatsappApiErrorBody } from "./parsing";
 
-const GRAPH_API_BASE_URL = "https://graph.facebook.com/v22.0";
+export const GRAPH_API_VERSION = "v22.0";
+const GRAPH_API_BASE_URL = `https://graph.facebook.com/${GRAPH_API_VERSION}`;
 
-function getMetaGraphAPIUrl(whatsappPhoneNumberId: string) {
+/**
+ * `graphApiBaseUrl` existe para o número da plataforma, que sai pelo Syncroniza Sends — um proxy
+ * transparente da Graph API (mesmos caminhos, corpos e respostas). Os números das organizações
+ * seguem direto na Meta e nunca passam esse parâmetro.
+ */
+function getMetaGraphAPIUrl(whatsappPhoneNumberId: string, graphApiBaseUrl: string = GRAPH_API_BASE_URL) {
 	return {
-		GRAPH_MESSAGES_API_URL: `https://graph.facebook.com/v22.0/${whatsappPhoneNumberId}/messages`,
-		GRAPH_MEDIA_API_URL: `https://graph.facebook.com/v22.0/${whatsappPhoneNumberId}/media`,
+		GRAPH_MESSAGES_API_URL: `${graphApiBaseUrl}/${whatsappPhoneNumberId}/messages`,
+		GRAPH_MEDIA_API_URL: `${graphApiBaseUrl}/${whatsappPhoneNumberId}/media`,
 	};
 }
 type SendBasicWhatsappMessageParams = {
@@ -88,6 +94,7 @@ type SendTemplateWhatsappMessageParams = {
 	fromPhoneNumberId: string;
 	templatePayload: TWhatsappTemplateSendPayload | Record<string, unknown>;
 	whatsappToken: string;
+	graphApiBaseUrl?: string;
 };
 
 type SendTemplateWhatsappMessageResponse = {
@@ -104,13 +111,14 @@ export async function sendTemplateWhatsappMessage({
 	fromPhoneNumberId,
 	templatePayload,
 	whatsappToken,
+	graphApiBaseUrl,
 }: SendTemplateWhatsappMessageParams): Promise<SendTemplateWhatsappMessageResponse> {
 	try {
 		if (!whatsappToken) {
 			throw new createHttpError.InternalServerError("WhatsApp auth token não configurado.");
 		}
 
-		const { GRAPH_MESSAGES_API_URL } = getMetaGraphAPIUrl(fromPhoneNumberId);
+		const { GRAPH_MESSAGES_API_URL } = getMetaGraphAPIUrl(fromPhoneNumberId, graphApiBaseUrl);
 		const response = await axios.post(GRAPH_MESSAGES_API_URL, templatePayload, {
 			headers: {
 				Authorization: `Bearer ${whatsappToken}`,
@@ -243,6 +251,7 @@ type UploadMediaToWhatsappParams = {
 	mimeType: string;
 	filename: string;
 	whatsappToken: string;
+	graphApiBaseUrl?: string;
 };
 
 type UploadMediaToWhatsappResponse = {
@@ -256,11 +265,12 @@ export async function uploadMediaToWhatsapp({
 	mimeType,
 	filename,
 	whatsappToken,
+	graphApiBaseUrl,
 }: UploadMediaToWhatsappParams): Promise<UploadMediaToWhatsappResponse> {
 	try {
 		console.log("[INFO] [WHATSAPP_MEDIA_UPLOAD] Uploading media:", filename, mimeType);
 
-		const { GRAPH_MEDIA_API_URL } = getMetaGraphAPIUrl(fromPhoneNumberId);
+		const { GRAPH_MEDIA_API_URL } = getMetaGraphAPIUrl(fromPhoneNumberId, graphApiBaseUrl);
 		const formData = new FormData();
 		formData.append("messaging_product", "whatsapp");
 

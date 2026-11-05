@@ -1,5 +1,6 @@
 import { EmailTemplate, sendEmailWithResend } from "@/lib/email";
 import { sendTemplateWhatsappMessage } from "@/lib/whatsapp";
+import { getPlatformWhatsappSender } from "@/lib/whatsapp/platform-sender";
 import { formatPhoneForInternalGateway, sanitizeTemplateParameter } from "@/lib/whatsapp/utils";
 import { renderAndUploadOrganizationInviteHeader } from "./invite-header/render";
 import {
@@ -52,10 +53,8 @@ async function sendOrganizationInviteWhatsapp({
 }: Pick<SendOrganizationInviteParams, "phone" | "invitationId" | "organizacaoId" | "invitedName" | "organizationName" | "organizationLogoUrl">) {
 	if (!phone?.trim()) return null;
 
-	const whatsappToken = process.env.META_ACCESS_TOKEN;
-	const whatsappPhoneNumberId = process.env.META_WHATSAPP_PHONE_NUMBER_ID;
-
-	if (!whatsappToken || !whatsappPhoneNumberId) {
+	const sender = getPlatformWhatsappSender();
+	if (!sender) {
 		console.warn("[WARN] [ORGANIZATION_INVITE_WHATSAPP] WhatsApp env vars not configured; skipping WhatsApp delivery.");
 		return null;
 	}
@@ -76,8 +75,9 @@ async function sendOrganizationInviteWhatsapp({
 	}
 
 	return sendTemplateWhatsappMessage({
-		fromPhoneNumberId: whatsappPhoneNumberId,
-		whatsappToken,
+		fromPhoneNumberId: sender.fromPhoneNumberId,
+		whatsappToken: sender.whatsappToken,
+		graphApiBaseUrl: sender.graphApiBaseUrl,
 		templatePayload: {
 			messaging_product: "whatsapp",
 			to: formatPhoneForInternalGateway(phone),

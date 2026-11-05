@@ -1,5 +1,6 @@
 import { EmailTemplate, sendEmailWithResend } from "@/lib/email";
 import { sendTemplateWhatsappMessage } from "@/lib/whatsapp";
+import { getPlatformWhatsappSender } from "@/lib/whatsapp/platform-sender";
 import type { TemplatePayload } from "@/lib/whatsapp/templates";
 import { formatPhoneForInternalGateway, sanitizeTemplateParameter } from "@/lib/whatsapp/utils";
 
@@ -73,21 +74,20 @@ async function sendMagicLinkEmail({ email, verificationToken, verificationCode, 
 async function sendMagicLinkWhatsapp({ phone, verificationCode }: Pick<SendMagicLinkVerificationParams, "phone" | "verificationCode">) {
 	if (!phone?.trim()) return null;
 
-	const whatsappToken = process.env.META_ACCESS_TOKEN;
-	const whatsappPhoneNumberId = process.env.META_WHATSAPP_PHONE_NUMBER_ID;
-
-	if (!whatsappToken || !whatsappPhoneNumberId) {
+	const sender = getPlatformWhatsappSender();
+	if (!sender) {
 		console.warn("[WARN] [AUTH_MAGIC_LINK_WHATSAPP] WhatsApp env vars not configured; skipping WhatsApp delivery.");
 		return null;
 	}
 
 	return sendTemplateWhatsappMessage({
-		fromPhoneNumberId: whatsappPhoneNumberId,
+		fromPhoneNumberId: sender.fromPhoneNumberId,
 		templatePayload: buildAuthenticationTemplatePayload({
 			toPhoneNumber: phone,
 			verificationCode,
 		}),
-		whatsappToken,
+		whatsappToken: sender.whatsappToken,
+		graphApiBaseUrl: sender.graphApiBaseUrl,
 	});
 }
 
