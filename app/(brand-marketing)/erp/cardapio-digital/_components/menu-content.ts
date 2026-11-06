@@ -78,10 +78,18 @@ export const MENU_FEATURES = [
 
 export const MENU_STORE_BULLETS = [
 	"Pedido entra confirmado no quadro de pedidos",
-	"Colunas Não iniciado, Em preparo, Pronto, Em entrega e Entregue",
+	"Etapas Não iniciado, Em preparo, Pronto e Em entrega",
 	"Pedidos do iFood no mesmo quadro",
+	"Concluídos das últimas 2 horas ao lado do quadro",
 	"Estoque baixa quando o pedido é entregue",
 	"NF-e emitida na entrega, se você ligar",
+];
+
+export const MENU_DETAILS_BULLETS = [
+	"Foto do produto, variação e adicionais de cada item",
+	"Endereço completo da entrega",
+	"Ligar ou chamar no WhatsApp com um toque",
+	"Situação do atendimento, do pagamento e da nota",
 ];
 
 export const MENU_COMPARISON = [

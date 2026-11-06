@@ -2,7 +2,8 @@ import { Boxes, Clock3, Layers, LayoutGrid, type LucideIcon, Palette, Truck } fr
 import Link from "next/link";
 import { CheckList } from "../../_components/CheckList";
 import { ScaledMock } from "../../_components/ScaledMock";
-import { MENU_COMPARISON, MENU_FEATURES, MENU_ORDER_STEPS, MENU_STORE_BULLETS } from "./menu-content";
+import { MENU_COMPARISON, MENU_DETAILS_BULLETS, MENU_FEATURES, MENU_ORDER_STEPS, MENU_STORE_BULLETS } from "./menu-content";
+import { OrderDetailsMock } from "./mocks/OrderDetailsMock";
 import { OrderTrackingMock } from "./mocks/OrderTrackingMock";
 import { OrdersBoardMock } from "./mocks/OrdersBoardMock";
 import { ShopCashbackMock } from "./mocks/ShopCashbackMock";
@@ -14,6 +15,9 @@ const H2 = "text-balance text-[48px] font-semibold leading-[1.05] tracking-[-0.0
 const LEAD = "mt-5 text-pretty text-[17px] leading-[1.6] text-[#5b6a70]";
 const SPLIT = "grid grid-cols-[repeat(auto-fit,minmax(min(100%,420px),1fr))] items-center gap-x-[72px] gap-y-12";
 const PANEL = "rounded-[28px] bg-[#eef2f6] p-10 max-md:rounded-[20px] max-md:p-5";
+
+const BOARD_LABEL =
+	"Quadro de pedidos com as etapas Não iniciado, Em preparo, Pronto e Em entrega, um pedido do iFood entre os da loja digital e a trilha de concluídos";
 
 const FEATURE_ICONS: Record<string, LucideIcon> = {
 	menu: LayoutGrid,
@@ -100,13 +104,41 @@ export function MenuStoreSide() {
 						</div>
 					</div>
 				</div>
-				<div className={`${PANEL} mt-6`}>
-					<ScaledMock
-						width={1080}
-						label="Quadro de pedidos com pedidos da loja digital e do iFood nas colunas Não iniciado, Em preparo, Pronto, Em entrega e Entregue"
-					>
+				{/* No celular, o quadro reduzido a 390px fica ilegível. Como no app, ele rola para o lado no
+				    tamanho real, uma coluna por vez. */}
+				<div className={`${PANEL} mt-6 max-md:hidden`}>
+					<ScaledMock width={1560} label={BOARD_LABEL}>
 						<OrdersBoardMock />
 					</ScaledMock>
+				</div>
+				<div className="mt-6 overflow-hidden rounded-[20px] bg-[#eef2f6] md:hidden">
+					<div role="img" aria-label={BOARD_LABEL} className="overflow-x-auto overscroll-x-contain p-3 [scrollbar-width:none]">
+						<div aria-hidden className="w-[1560px]">
+							<OrdersBoardMock />
+						</div>
+					</div>
+					<p className="px-4 pb-3 text-[13px] text-[#687a80]">Arraste para o lado para ver as outras etapas →</p>
+				</div>
+				<div className={`${SPLIT} mt-28 max-md:mt-20`}>
+					<div className={`${PANEL} flex justify-center max-[959px]:order-last`}>
+						<div className="w-full max-w-[560px]">
+							<ScaledMock
+								width={640}
+								label="Detalhes do pedido #1048 com os itens, a foto de cada produto, os adicionais, o endereço de entrega e o pagamento"
+							>
+								<OrderDetailsMock />
+							</ScaledMock>
+						</div>
+					</div>
+					<div className="max-w-[460px]">
+						<h3 className="text-balance text-[32px] font-semibold leading-[1.1] tracking-[-0.03em] max-md:text-[26px]">
+							Um clique no card abre o pedido inteiro.
+						</h3>
+						<p className={LEAD}>
+							A equipe confere cada item com a foto do produto e os adicionais escolhidos, vê o endereço e fala com o cliente sem sair do quadro.
+						</p>
+						<CheckList items={MENU_DETAILS_BULLETS} />
+					</div>
 				</div>
 			</div>
 		</section>

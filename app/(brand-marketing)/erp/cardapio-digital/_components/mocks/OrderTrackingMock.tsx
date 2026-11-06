@@ -1,5 +1,7 @@
 import { cn } from "@/lib/utils";
-import { Bike, ChefHat, House, MessageCircle, PackageCheck, Receipt } from "lucide-react";
+import { Bike, ChefHat, House, MessageCircle, Package, PackageCheck, Receipt, ShoppingBag } from "lucide-react";
+import Image from "next/image";
+import { getMockProductPhoto, mockProductPhotoSrc } from "../../../_components/mocks/product-photos";
 
 // Página de acompanhamento do pedido (app/shop/[slug]/pedidos/[token]) num celular, desenhada a
 // 410px. Etapas e textos copiados de public-order-page.tsx; cores da Gelateria Aurora, a mesma
@@ -15,6 +17,28 @@ const STAGES = [
 	{ label: "Entregue", icon: House },
 ];
 const CURRENT = 1;
+
+const ITEMS = [
+	{ photo: "pote-chocolate-belga", name: "Pote 1L Chocolate Belga", unit: "R$ 49,90", total: "R$ 49,90" },
+	{ photo: "milkshake", name: "Milkshake 400ml", unit: "R$ 22,00", total: "R$ 22,00" },
+];
+
+// Foto do item como na página real (size-16, object-cover); sem a foto baixada, o ícone de produto.
+function ItemPhoto({ slug }: { slug: string }) {
+	const src = mockProductPhotoSrc(slug, "square");
+	if (!src) {
+		return (
+			<div className="flex size-16 flex-none items-center justify-center rounded-xl border border-[#e3e8ea] bg-[#f2f4f4] text-[#687a80]">
+				<Package className="size-7" />
+			</div>
+		);
+	}
+	return (
+		<div className="relative size-16 flex-none overflow-hidden rounded-xl border border-[#e3e8ea] bg-[#f2f4f4]">
+			<Image src={src} alt={getMockProductPhoto(slug)?.alt ?? ""} fill sizes="64px" className="object-cover" />
+		</div>
+	);
+}
 
 export function OrderTrackingMock() {
 	return (
@@ -67,6 +91,30 @@ export function OrderTrackingMock() {
 						<span className="mt-3 flex h-10 items-center justify-center rounded-full bg-[#16a34a] text-[13px] font-bold text-white">
 							ENVIAR NO WHATSAPP
 						</span>
+					</div>
+
+					<div className="rounded-2xl border border-[#e3e8ea] bg-white shadow-[0_1px_rgba(0,0,0,0.05)]">
+						<div className="flex items-center justify-between border-b border-[#e3e8ea] px-4 py-3">
+							<div className="flex items-center gap-2">
+								<ShoppingBag className="size-4" style={{ color: BRAND }} />
+								<p className="text-[14px] font-black">Itens do pedido</p>
+							</div>
+							<span className="text-[11px] font-bold text-[#687a80]">{ITEMS.length} itens</span>
+						</div>
+						<div className="divide-y divide-[#e3e8ea]">
+							{ITEMS.map((item) => (
+								<div key={item.name} className="flex gap-3 px-4 py-3">
+									<ItemPhoto slug={item.photo} />
+									<div className="flex min-w-0 flex-1 items-start justify-between gap-3">
+										<div>
+											<p className="text-[13px] font-bold leading-snug">{item.name}</p>
+											<p className="mt-1 text-[11px] text-[#687a80]">1 × {item.unit}</p>
+										</div>
+										<p className="flex-none text-[13px] font-black">{item.total}</p>
+									</div>
+								</div>
+							))}
+						</div>
 					</div>
 
 					<div className="rounded-2xl bg-white p-4 shadow-[0_1px_rgba(0,0,0,0.05)]">
