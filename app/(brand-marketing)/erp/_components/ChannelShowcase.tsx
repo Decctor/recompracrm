@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import Link from "next/link";
 import { ChannelTabs } from "./ChannelTabs";
 import { CheckList } from "./CheckList";
 import { ScaledMock } from "./ScaledMock";
@@ -49,6 +50,9 @@ export function ChannelShowcase() {
 										um gestor.
 									</p>
 									<CheckList items={BALCAO_BULLETS} />
+									<Link href="/erp/pdv" className="mt-7 inline-flex text-[15px] font-medium text-[#24549c] hover:underline">
+										Conhecer o PDV em detalhe →
+									</Link>
 								</div>
 								<ScaledMock width={440} label="Resumo do checkout com desconto em cashback, limite do operador e total da venda">
 									<CheckoutSummaryMock />
