@@ -2,6 +2,7 @@ import { BLOG_POSTS } from "@/app/_content/blog-posts";
 import { FEATURE_PAGES } from "@/app/_content/feature-pages";
 import { INTEGRATION_PAGES } from "@/app/_content/integration-pages";
 import { SEGMENT_PAGES } from "@/app/_content/segment-pages";
+import { GLOSSARY_TERMS } from "@/app/_content/glossary";
 import { HELP_ARTICLES } from "@/app/_content/help-articles";
 import { LANDING_CASES } from "@/app/_content/cases";
 import { db } from "@/services/drizzle";
@@ -71,6 +72,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 		})),
 	];
 
+	const glossaryRoutes: MetadataRoute.Sitemap = [
+		{ url: `${BASE_URL}/glossary`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.8 },
+		...GLOSSARY_TERMS.map((term) => ({
+			url: `${BASE_URL}/glossary/${term.slug}`,
+			lastModified: new Date(),
+			changeFrequency: "monthly" as const,
+			priority: 0.75,
+		})),
+	];
+
 	const caseRoutes: MetadataRoute.Sitemap = [
 		{ url: `${BASE_URL}/cases`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.85 },
 		...LANDING_CASES.map((item) => ({
@@ -124,6 +135,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 		...featureRoutes,
 		...integrationRoutes,
 		...helpRoutes,
+		...glossaryRoutes,
 		...caseRoutes,
 		...toolRoutes,
 		...staticRoutes,

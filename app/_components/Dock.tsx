@@ -14,7 +14,19 @@ import { useCallback, useEffect, useState } from "react";
 // No artigo mostra "Lendo · <seção>" (lido de `[data-outline]`) e a barra de progresso
 // (medida em `[data-article]`).
 
-export type TDockVariant = "landing" | "erp" | "blog" | "artigo" | "product" | "cases" | "tools" | "integrations" | "help" | "partners" | "segments";
+export type TDockVariant =
+	| "landing"
+	| "erp"
+	| "blog"
+	| "artigo"
+	| "product"
+	| "cases"
+	| "tools"
+	| "integrations"
+	| "help"
+	| "partners"
+	| "segments"
+	| "glossary";
 
 type TDockLink = { label: string; id?: string; href?: string };
 
@@ -71,6 +83,11 @@ const LINKS: Record<TDockVariant, TDockLink[]> = {
 		{ label: "Cases", href: "/cases" },
 		{ label: "Planos", href: "/#planos" },
 	],
+	glossary: [
+		{ id: "termos", label: "Termos" },
+		{ label: "Blog", href: "/blog" },
+		{ label: "Ferramentas", href: "/tools/cashback-calculator" },
+	],
 	partners: [
 		{ id: "como-funciona-parceria", label: "Como funciona" },
 		{ id: "esquema-de-pagamento", label: "Pagamento" },
@@ -102,6 +119,7 @@ const CTA: Record<TDockVariant, Record<string, { label: string; short: string; h
 	cases: { _: DEMO },
 	segments: { _: DEMO },
 	tools: { _: TRIAL },
+	glossary: { _: TRIAL },
 	integrations: { _: TRIAL, cta: DEMO },
 	help: { _: { label: "Falar com o suporte", short: "Suporte", href: WHATSAPP_SUPPORT } },
 	partners: { _: { label: "Entrar no programa", short: "Participar", href: "/auth/signin?redirectTo=%2Fpartner-dashboard" } },
@@ -119,6 +137,7 @@ const TAG: Record<TDockVariant, string | null> = {
 	help: "Ajuda",
 	partners: "Parceiros",
 	segments: "Segmentos",
+	glossary: "Glossário",
 };
 // Página que contém as seções de cada área. Fora dela (num artigo de ajuda, num case), o link de
 // seção volta para lá em vez de apontar para uma âncora que não existe na página atual. Sem entrada,
@@ -131,6 +150,7 @@ const SECTIONS_PAGE: Partial<Record<TDockVariant, string>> = {
 	help: "/help",
 	partners: "/partnerships",
 	segments: "/segments",
+	glossary: "/glossary",
 };
 
 const HOME_HREF: Record<TDockVariant, string> = {
@@ -145,6 +165,7 @@ const HOME_HREF: Record<TDockVariant, string> = {
 	help: "/",
 	partners: "/",
 	segments: "/",
+	glossary: "/",
 };
 
 // Quanto mais links (e a etiqueta da área), mais cedo a barra recolhe para o menu. As classes
