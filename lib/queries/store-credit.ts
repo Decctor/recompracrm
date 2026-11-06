@@ -4,6 +4,8 @@ import dayjs from "dayjs";
 import { useState } from "react";
 import type { TGetStoreCreditOutput, TGetStoreCreditOutputByClient, TGetStoreCreditOutputDefault } from "@/app/api/finances/store-credit/route";
 import type { TGetStoreCreditStatsOutput } from "@/app/api/finances/store-credit/stats/route";
+import type { TGetStoreCreditPolicyOutput } from "@/app/api/finances/store-credit/policy/route";
+import type { TGetClientStoreCreditOutput } from "@/app/api/clients/store-credit/route";
 import { useDebounceMemo } from "@/lib/hooks/use-debounce";
 import type { TStoreCreditAgingBucket } from "@/lib/finances/store-credit/aging";
 import type { TStoreCreditSortDirection, TStoreCreditSortField, TStoreCreditStatus } from "@/lib/finances/store-credit/constants";
@@ -156,4 +158,45 @@ export function useStoreCreditStats({
  * Invalidação do módulo. A baixa mexe no financeiro inteiro (movimentações, saldos, DRE), então a
  * tela também chama `invalidateFinanceQueries` — estas chaves são as que só existem aqui.
  */
-export const STORE_CREDIT_QUERY_PREFIXES = [["store-credit-clients"], ["store-credit-client-titles"], ["store-credit-stats"]] as const;
+// `client-store-credit` entra porque a liberação mostra o saldo em aberto e o disponível: uma baixa
+// feita na página do cliente deixaria os dois números velhos ao lado do bloco que acabou de mudar.
+export const STORE_CREDIT_QUERY_PREFIXES = [
+	["store-credit-clients"],
+	["store-credit-client-titles"],
+	["store-credit-stats"],
+	["client-store-credit"],
+] as const;
+
+async function fetchClientStoreCredit(clientId: string) {
+	const searchParams = new URLSearchParams();
+	searchParams.set("clientId", clientId);
+	const { data } = await axios.get<TGetClientStoreCreditOutput>(`/api/clients/store-credit?${searchParams.toString()}`);
+	return data.data;
+}
+
+/**
+ * Liberação de fiado de um cliente (liberado, limite, em aberto, disponível) e se a organização
+ * exige liberação. Usada no cadastro e no checkout; `enabled` permite só buscar quando o fiado entra
+ * em jogo na venda.
+ */
+export function getClientStoreCreditQueryKey(clientId: string | null | undefined) {
+	return ["client-store-credit", clientId ?? null];
+}
+
+export function useClientStoreCredit({ clientId, enabled = true }: { clientId: string | null | undefined; enabled?: boolean }) {
+	const queryKey = getClientStoreCreditQueryKey(clientId);
+	return {
+		...useQuery({ queryKey, queryFn: () => fetchClientStoreCredit(clientId as string), enabled: enabled && !!clientId }),
+		queryKey,
+	};
+}
+
+async function fetchStoreCreditPolicy() {
+	const { data } = await axios.get<TGetStoreCreditPolicyOutput>("/api/finances/store-credit/policy");
+	return data.data;
+}
+
+export function useStoreCreditPolicy({ enabled = true }: { enabled?: boolean } = {}) {
+	const queryKey = ["store-credit-policy"];
+	return { ...useQuery({ queryKey, queryFn: fetchStoreCreditPolicy, enabled }), queryKey };
+}

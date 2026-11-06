@@ -60,6 +60,11 @@ export async function prepareTabPayment({ organization, input }: { organization:
 	if (input.payment.metodo === "CASHBACK") {
 		throw new createHttpError.BadRequest("Cashback nao pode ser usado num recebimento parcial. Use-o no fechamento da conta.");
 	}
+	// Parcial é "pagou a parte dele": imediato e sem cliente. Fiado é crédito para um cliente
+	// identificado (e sujeito à liberação) — só no fechamento da conta.
+	if (input.payment.metodo === "FIADO_NOTA") {
+		throw new createHttpError.BadRequest("Fiado nao pode ser usado num recebimento parcial. Use-o no fechamento da conta.");
+	}
 	if (!Number.isFinite(input.payment.valor) || input.payment.valor <= 0) {
 		throw new createHttpError.BadRequest("Valor de pagamento invalido.");
 	}

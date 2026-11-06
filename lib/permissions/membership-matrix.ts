@@ -2,6 +2,7 @@ import { canManageIntegrations, canViewIntegrations } from "@/lib/integrations/m
 import {
 	canCreateFinances,
 	canEditFinances,
+	canGrantStoreCredit,
 	canReconcileFinances,
 	canViewFinances,
 } from "@/lib/permissions/finances";
@@ -244,7 +245,10 @@ function buildMembershipPermissionMatrix({ organizationHasERPAccess }: { organiz
 					leaf("financeiro.editar", "Editar lançamentos financeiros", "Financeiro"),
 					null,
 				],
-				extras: [leaf("financeiro.conciliar", "Realizar conciliação bancária", "Financeiro")],
+				extras: [
+					leaf("financeiro.conciliar", "Realizar conciliação bancária", "Financeiro"),
+					leaf("financeiro.liberarFiado", "Liberar fiado para clientes e aprovar fiado fora do limite", "Financeiro"),
+				],
 			}),
 		);
 	}
@@ -287,6 +291,8 @@ export function readMembershipPermissionValue(permissions: TOrganizationMemberPe
 			return canEditFinances(permissions);
 		case "financeiro.conciliar":
 			return canReconcileFinances(permissions);
+		case "financeiro.liberarFiado":
+			return canGrantStoreCredit(permissions);
 		case "vendas.descontos.aplicar":
 			return resolveDiscountAuthority(permissions).aplicar;
 		case "vendas.descontos.aprovar":
@@ -333,6 +339,7 @@ function materializeFinanceiro(permissions: TOrganizationMemberPermissions) {
 		criar: canCreateFinances(permissions),
 		editar: canEditFinances(permissions),
 		conciliar: canReconcileFinances(permissions),
+		liberarFiado: canGrantStoreCredit(permissions),
 	};
 }
 

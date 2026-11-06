@@ -1,4 +1,5 @@
 import { normalizeCouponGiftItem, roundCouponGiftCurrency } from "@/lib/coupons/gift-pricing";
+import { enforceStoreCreditRelease } from "@/lib/finances/store-credit/authorization";
 import { resolveSaleFiscalDocumentPreference, type TSaleFiscalDocument } from "@/lib/fiscal/emission-document-policy";
 import { assertPOSFiscalEmissionReady } from "@/lib/fiscal/document-preview";
 import { resyncSaleCashbackAccumulation } from "@/lib/cashback/resync-sale-accumulation";
@@ -102,6 +103,8 @@ export type TProcessConfirmedSaleEditInput = {
 	removerCupom?: boolean;
 	// Aprovação de desconto já autorizada pela rota; consumida one-shot nesta transação.
 	descontoAprovacaoId?: string | null;
+	// Aprovação VENDA_FIADO para um fiado fora da regra; validada e consumida nesta transação.
+	storeCreditApprovalId?: string | null;
 	// Token de concorrência otimista: o total que o cliente viu ao carregar a edição.
 	valorTotalEsperado: number;
 	sessaoVendaId?: string | null;
@@ -768,6 +771,17 @@ export async function processConfirmedSaleEditInTransaction({ tx, input }: { tx:
 				or(isNull(financialTransactions.provedorStatus), notInArray(financialTransactions.provedorStatus, REVERSED_TRANSACTION_STATUSES)),
 			),
 		);
+
+	// Liberação de fiado: depois de apagar a agenda pendente, o saldo em aberto já não conta o
+	// fiado antigo desta venda — o limite avalia só o fiado novo contra o resto do cliente.
+	await enforceStoreCreditRelease({
+		tx,
+		organization: input.organization,
+		clienteId: sale.clienteId,
+		payments: input.pagamentos,
+		approvalId: input.storeCreditApprovalId,
+		vendaId: input.saleId,
+	});
 
 	const paymentProvider = getPaymentProvider(input.organization);
 	const paymentResults =

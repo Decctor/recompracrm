@@ -361,6 +361,7 @@ export function AccountPanel({ tabId, now, sheetTab, onSheetTabChange, transferT
 					itemsGross={activeItems.reduce((sum, item) => sum + item.valorVendaTotalBruto, 0)}
 					itemsDiscount={activeItems.reduce((sum, item) => sum + item.valorTotalDesconto, 0)}
 					vendedorId={tab.vendaRascunhoVendedorId}
+					clienteId={tab.cliente?.id ?? null}
 					draftSaleId={tab.vendaRascunhoId}
 					orderCount={activeOrders.length}
 					pendingOrders={tab.pedidos.filter((order) => isTabCloseBlockingOrderStatus(order.status))}

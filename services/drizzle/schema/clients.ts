@@ -1,5 +1,5 @@
 import { relations, sql } from "drizzle-orm";
-import { doublePrecision, index, integer, jsonb, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/pg-core";
+import { boolean, doublePrecision, index, integer, jsonb, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/pg-core";
 import { cashbackProgramBalances, cashbackProgramTransactions } from "./cashback-programs";
 import { newTable } from "./common";
 import { organizations } from "./organizations";
@@ -85,6 +85,16 @@ export const clients = newTable(
 		// autorVendedorId guarda o primeiro vendedor conhecido da venda que originou o cliente.
 		autorId: varchar("autor_id", { length: 255 }).references(() => users.id, { onDelete: "set null" }),
 		autorVendedorId: varchar("autor_vendedor_id", { length: 255 }).references(() => sellers.id, { onDelete: "set null" }),
+
+		// Liberação de fiado (crédito da loja ao cliente). Só vale quando a organização exige
+		// liberação (`preferencias.fiado.exigeLiberacao`); sem a exigência, qualquer cliente
+		// identificado compra fiado, como sempre. Liberado + limite nulo = sem limite. O limite é
+		// sobre o saldo EM ABERTO (lib/finances/store-credit/policy.ts), não sobre cada venda.
+		// Quem/quando é a trilha de auditoria da decisão de crédito.
+		fiadoLiberado: boolean("fiado_liberado").default(false).notNull(),
+		fiadoLimite: doublePrecision("fiado_limite"),
+		fiadoLiberadoPorId: varchar("fiado_liberado_por_id", { length: 255 }).references(() => users.id, { onDelete: "set null" }),
+		fiadoLiberadoEm: timestamp("fiado_liberado_em"),
 
 		dataNascimento: timestamp("data_nascimento"),
 		dataFundacao: timestamp("data_fundacao"),

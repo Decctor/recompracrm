@@ -41,6 +41,8 @@ const ConfirmSaleInputSchema = z.object({
 	sessaoVendaId: z.string({ invalid_type_error: "Tipo nao valido para o ID da sessao de venda." }).optional().nullable(),
 	// Aprovacao VENDA_DESCONTO exigida quando o desconto agregado do orcamento excede o teto do vendedor.
 	descontoAprovacaoId: z.string({ invalid_type_error: "Tipo nao valido para o ID da aprovacao de desconto." }).optional().nullable(),
+	// Aprovacao VENDA_FIADO para um fiado fora da regra de liberacao do cliente (consumida na confirmacao).
+	fiadoAprovacaoId: z.string({ invalid_type_error: "Tipo nao valido para o ID da liberacao de fiado." }).optional().nullable(),
 });
 export type TConfirmSaleInput = z.infer<typeof ConfirmSaleInputSchema>;
 
@@ -252,6 +254,7 @@ async function confirmSale({ input, session }: { input: TConfirmSaleInput; sessi
 		accountingEntryDebitAccountId,
 		accountingEntryCreditAccountId,
 		sessaoVendaId,
+		storeCreditApprovalId: input.fiadoAprovacaoId ?? null,
 	};
 
 	// Mesma transacao: item da recompensa + confirmacao + consumo one-shot da aprovacao de desconto.

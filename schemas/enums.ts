@@ -704,8 +704,13 @@ export type TActionApprovalDecisionMethodEnum = z.infer<typeof ActionApprovalDec
 
 // Tipos de ação aprovável. Deliberadamente NÃO é pgEnum: a coluna `tipo` é varchar para que novos
 // cenários de aprovação não custem migração de enum no Postgres.
-export const ActionApprovalTypeEnum = z.enum(["VENDA_DESCONTO", "AGENTE_ATIVAR_CAMPANHA", "AGENTE_SUBMETER_TEMPLATE"]);
+export const ActionApprovalTypeEnum = z.enum(["VENDA_DESCONTO", "VENDA_FIADO", "AGENTE_ATIVAR_CAMPANHA", "AGENTE_SUBMETER_TEMPLATE"]);
 export type TActionApprovalTypeEnum = z.infer<typeof ActionApprovalTypeEnum>;
+
+// Por que um fiado precisou de aprovação: o cliente não está liberado, ou o fiado desta venda
+// passa do limite disponível dele.
+export const StoreCreditApprovalReasonEnum = z.enum(["NAO_LIBERADO", "ACIMA_DO_LIMITE"]);
+export type TStoreCreditApprovalReasonEnum = z.infer<typeof StoreCreditApprovalReasonEnum>;
 
 // ============================================================================
 // AGENTES DE IA

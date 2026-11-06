@@ -1,10 +1,13 @@
 "use client";
 import SelectInput from "@/components/Inputs/SelectInput";
 import { DiscountApproval } from "@/components/Modals/Sales/DiscountApproval";
+import { StoreCreditApproval } from "@/components/Modals/Sales/StoreCreditApproval";
 import { AdjustmentRow, DiscountTotalHelpers } from "@/components/Sales/AdjustmentRow";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { getErrorMessage } from "@/lib/errors";
+import { STORE_CREDIT_METHOD } from "@/lib/finances/store-credit/constants";
+import { useStoreCreditGuard } from "@/lib/hooks/use-store-credit-guard";
 import { formatToMoney } from "@/lib/formatting";
 import { createManualPrintJob } from "@/lib/mutations/desktop-agent";
 import { closeTab } from "@/lib/mutations/tabs";
@@ -13,12 +16,13 @@ import { useSaleDiscountContext } from "@/lib/queries/action-approvals";
 import { organizationHasPrinterForFinalidade, useAgentPrinters } from "@/lib/queries/desktop-agent";
 import { useOrganization } from "@/lib/queries/organizations";
 import { usePOSFinancialAccounts } from "@/lib/queries/pos";
+import { getClientStoreCreditQueryKey } from "@/lib/queries/store-credit";
 import { getPaymentsToCharge, nextPaymentValueMode, promotePaymentToRemaining, resolvePaymentValues } from "@/lib/payments/payment-value-mode";
 import { DISCOUNT_PERCENT_PRESETS, EMPTY_SALE_ADJUSTMENT, SURCHARGE_PERCENT_PRESETS, type TSaleAdjustmentInput } from "@/lib/sales/sale-adjustments";
 import { resolveTabBalance } from "@/lib/tabs/partial-payments";
 import { cn } from "@/lib/utils";
 import type { TPaymentMethodEnum, TPaymentValueModeEnum } from "@/schemas/enums";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, CircleAlert, CircleCheck, HandCoins, Minus, PackageCheck, Plus, Printer, Receipt, Tag, Trash2, UsersRound } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -89,6 +93,8 @@ type ClosePaneProps = {
 	itemsDiscount: number;
 	/** Vendedor da venda rascunho: identidade avaliada pelo teto de desconto. */
 	vendedorId: string | null;
+	/** Cliente da conta: é dele o fiado que o fechamento registrar (regra de liberação de fiado). */
+	clienteId: string | null;
 	/** Venda rascunho da conta: é ela que o cupom imprime antes do fechamento. */
 	draftSaleId: string | null;
 	orderCount: number;
@@ -108,6 +114,7 @@ export function ClosePane({
 	itemsGross,
 	itemsDiscount,
 	vendedorId,
+	clienteId,
 	draftSaleId,
 	orderCount,
 	itemCount,
@@ -181,10 +188,15 @@ export function ClosePane({
 	const showReceiptOnClose = canPrintReceipt && !!organization;
 	const printReceiptOnClose = receiptOnCloseChoice ?? receiptOnCloseByDefault;
 
+	const queryClient = useQueryClient();
 	const { mutate, isPending } = useMutation({
 		mutationKey: ["close-tab", tabId],
 		mutationFn: closeTab,
 		onSuccess: (data, variables) => {
+			// O fiado do fechamento já conta no saldo em aberto do cliente.
+			if (clienteId && variables.pagamentos.some((payment) => payment.metodo === STORE_CREDIT_METHOD)) {
+				void queryClient.invalidateQueries({ queryKey: getClientStoreCreditQueryKey(clienteId) });
+			}
 			// A conta já fechou; um cupom pedido que não saiu vira só aviso.
 			const receiptPrint = data.data.receiptPrint;
 			if (variables.printReceipt && receiptPrint && receiptPrint.status !== "SOLICITADO") {
@@ -209,6 +221,16 @@ export function ClosePane({
 	const difference = roundCents(restante - paid);
 	const matches = !bloqueio && Math.abs(difference) <= 0.01;
 	const splitShare = Math.floor((restante / splitPeople) * 100) / 100;
+
+	// Liberação de fiado: mesma regra da confirmação, avaliada para o cliente da conta.
+	const storeCredit = useStoreCreditGuard({ clientId: clienteId, payments: effectivePayments });
+	const [isStoreCreditApprovalOpen, setIsStoreCreditApprovalOpen] = useState(false);
+	const [storeCreditApproval, setStoreCreditApproval] = useState<{ id: string; clienteId: string; valorFiado: number } | null>(null);
+	// A liberação só vale para o cliente e o fiado aprovados: mudou um deles, pede de novo.
+	const validStoreCreditApproval =
+		storeCreditApproval && storeCreditApproval.clienteId === clienteId && storeCreditApproval.valorFiado === storeCredit.valorFiado
+			? storeCreditApproval
+			: null;
 
 	function updatePayment(key: number, changes: Partial<TPaymentRow>) {
 		setPayments((prev) =>
@@ -239,12 +261,13 @@ export function ClosePane({
 		);
 	}
 
-	function submit(descontoAprovacaoId: string | null) {
+	function submit({ descontoAprovacaoId, fiadoAprovacaoId }: { descontoAprovacaoId: string | null; fiadoAprovacaoId: string | null }) {
 		mutate({
 			tabId,
 			descontoGeral: descontoGeral > 0 ? descontoGeral : null,
 			acrescimoGeral: acrescimoGeral > 0 ? acrescimoGeral : null,
 			descontoAprovacaoId,
+			fiadoAprovacaoId,
 			pagamentos: effectivePayments.map((payment) => ({
 				metodo: payment.metodo,
 				valor: payment.valor,
@@ -257,13 +280,25 @@ export function ClosePane({
 		});
 	}
 
-	function confirm() {
+	// As aprovações encadeiam: desconto primeiro, depois fiado. A que acabou de sair chega por
+	// argumento, porque o estado dela só existe no próximo render.
+	function confirm(approved?: { descontoAprovacaoId?: string; fiadoAprovacaoId?: string }) {
 		if (!matches) return;
-		if (discountRequiresApproval && !validDiscountApproval) {
+		const descontoAprovacaoId = approved?.descontoAprovacaoId ?? validDiscountApproval?.id ?? null;
+		if (discountRequiresApproval && !descontoAprovacaoId) {
 			setIsDiscountApprovalOpen(true);
 			return;
 		}
-		submit(validDiscountApproval?.id ?? null);
+		if (storeCredit.status === "VERIFICANDO") {
+			toast.info("Verificando a liberação de fiado do cliente. Tente novamente em instantes.");
+			return;
+		}
+		const fiadoAprovacaoId = approved?.fiadoAprovacaoId ?? validStoreCreditApproval?.id ?? null;
+		if (storeCredit.requiresApproval && !fiadoAprovacaoId) {
+			setIsStoreCreditApprovalOpen(true);
+			return;
+		}
+		submit({ descontoAprovacaoId, fiadoAprovacaoId });
 	}
 
 	return (
@@ -652,7 +687,7 @@ export function ClosePane({
 						<Switch checked={printReceiptOnClose} onCheckedChange={setReceiptOnCloseChoice} />
 					</label>
 				) : null}
-				<Button variant="brand" size="lg" disabled={!matches || isPending} onClick={confirm}>
+				<Button variant="brand" size="lg" disabled={!matches || isPending} onClick={() => confirm()}>
 					<Receipt className="size-4" />
 					{isPending
 						? "Fechando..."
@@ -678,7 +713,21 @@ export function ClosePane({
 					onApproved={(approvalRequestId) => {
 						setDiscountApproval({ id: approvalRequestId, ...aggregatedDiscount });
 						setIsDiscountApprovalOpen(false);
-						submit(approvalRequestId);
+						confirm({ descontoAprovacaoId: approvalRequestId });
+					}}
+				/>
+			) : null}
+
+			{isStoreCreditApprovalOpen && storeCredit.approvalPayload ? (
+				<StoreCreditApproval
+					payload={storeCredit.approvalPayload}
+					disponivel={storeCredit.disponivel}
+					denialText={storeCredit.denialText}
+					closeModal={() => setIsStoreCreditApprovalOpen(false)}
+					onApproved={(approvalRequestId) => {
+						setStoreCreditApproval({ id: approvalRequestId, clienteId: storeCredit.approvalPayload!.clienteId, valorFiado: storeCredit.valorFiado });
+						setIsStoreCreditApprovalOpen(false);
+						confirm({ fiadoAprovacaoId: approvalRequestId });
 					}}
 				/>
 			) : null}

@@ -1,4 +1,6 @@
+import { formatToMoney } from "@/lib/formatting";
 import { resolveDiscountAuthority } from "@/lib/permissions/discounts";
+import { canGrantStoreCredit } from "@/lib/permissions/finances";
 import type { TActionApprovalPayload } from "@/schemas/action-approvals";
 import type { TActionApprovalSummary } from "@/schemas/action-approvals";
 import type { TActionApprovalTypeEnum } from "@/schemas/enums";
@@ -46,6 +48,26 @@ export const actionApprovalHandlers: Record<TActionApprovalTypeEnum, TActionAppr
 				titulo: "Desconto acima do limite",
 				descricao: `Desconto de ${payload.descontoPercentual.toFixed(1).replace(".", ",")}% sobre uma venda de R$ ${payload.valorBase.toFixed(2).replace(".", ",")}.`,
 				valorPrincipal: payload.descontoSolicitado,
+			};
+		},
+	},
+	VENDA_FIADO: {
+		validarCriacao: ({ payload, permissoes }) => {
+			if (payload.tipo !== "VENDA_FIADO") throw new createHttpError.BadRequest("Payload não corresponde ao tipo da solicitação.");
+			if (!permissoes.vendas.criar) throw new createHttpError.Forbidden("Você não tem permissão para criar vendas.");
+			if (!(payload.valorSolicitado > 0)) throw new createHttpError.BadRequest("O valor do fiado solicitado deve ser maior que zero.");
+		},
+		autorizaDecisao: (permissoes) => canGrantStoreCredit(permissoes),
+		montarResumo: (payload) => {
+			if (payload.tipo !== "VENDA_FIADO") throw new createHttpError.BadRequest("Payload não corresponde ao tipo da solicitação.");
+			const posicao =
+				payload.motivo === "NAO_LIBERADO"
+					? "O cliente não está liberado para fiado."
+					: `Em aberto: ${formatToMoney(payload.saldoEmAberto)} de um limite de ${formatToMoney(payload.limite ?? 0)}.`;
+			return {
+				titulo: payload.motivo === "NAO_LIBERADO" ? "Fiado para cliente não liberado" : "Fiado acima do limite",
+				descricao: `Fiado de ${formatToMoney(payload.valorSolicitado)} para ${payload.clienteNome}. ${posicao}`,
+				valorPrincipal: payload.valorSolicitado,
 			};
 		},
 	},

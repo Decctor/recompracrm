@@ -86,6 +86,8 @@ export const CreateAndConfirmSaleInputSchema = z.object({
 	emissaoFiscalAutomatica: z.boolean({ invalid_type_error: "Tipo não válido para emissão fiscal automática." }).optional().nullable(),
 	// Aprovação VENDA_DESCONTO exigida quando o desconto agregado excede o teto do vendedor.
 	descontoAprovacaoId: z.string({ invalid_type_error: "Tipo não válido para o ID da aprovação de desconto." }).optional().nullable(),
+	// Aprovação VENDA_FIADO para um fiado fora da regra de liberação do cliente (consumida na confirmação).
+	fiadoAprovacaoId: z.string({ invalid_type_error: "Tipo não válido para o ID da liberação de fiado." }).optional().nullable(),
 	// Venda só-recompensas é permitida (carrinho vazio + recompensasResgate); a exigência de
 	// pelo menos um item quando não há recompensa é validada no service.
 	itens: z.array(SaleCheckoutItemInputSchema),

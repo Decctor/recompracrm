@@ -14,6 +14,10 @@ import { Button } from "@/components/ui/button";
 import CashSessionBar from "@/components/CashSessions/CashSessionBar";
 import MobileCheckoutBar from "../../_components/mobile-checkout-bar";
 import { DiscountApproval } from "@/components/Modals/Sales/DiscountApproval";
+import { StoreCreditApproval } from "@/components/Modals/Sales/StoreCreditApproval";
+import { STORE_CREDIT_METHOD } from "@/lib/finances/store-credit/constants";
+import { useStoreCreditGuard } from "@/lib/hooks/use-store-credit-guard";
+import { getClientStoreCreditQueryKey } from "@/lib/queries/store-credit";
 import { getErrorMessage } from "@/lib/errors";
 import type { TAutoEmissionExceptions } from "@/lib/fiscal/auto-emission-policy";
 import { formatToMoney, formatDateAsLocale } from "@/lib/formatting";
@@ -186,6 +190,27 @@ export default function EditSalePage({
 		}
 	}, [discountApproval, descontoAgregado]);
 
+	// Liberação de fiado: o cliente é o da venda (travado na edição). O servidor apaga a agenda
+	// pendente da venda antes de avaliar, então o fiado pendente dela sai do saldo em aberto aqui também.
+	const linkedClientId = saleState.state.cliente?.id ?? null;
+	const ownOpenStoreCredit = useMemo(
+		() =>
+			(saleForEdit?.pagamentos.todas ?? [])
+				.filter((payment) => payment.metodo === STORE_CREDIT_METHOD && payment.editavel)
+				.reduce((sum, payment) => sum + payment.valor, 0),
+		[saleForEdit],
+	);
+	const storeCredit = useStoreCreditGuard({ clientId: linkedClientId, payments: saleState.paymentsToCharge, ownOpenBalance: ownOpenStoreCredit });
+	const [isStoreCreditApprovalOpen, setIsStoreCreditApprovalOpen] = useState(false);
+	// A liberação vale para o cliente e o fiado aprovados: trocou o valor, invalida.
+	const [storeCreditApproval, setStoreCreditApproval] = useState<{ id: string; clienteId: string; valorFiado: number } | null>(null);
+	useEffect(() => {
+		if (!storeCreditApproval) return;
+		if (storeCreditApproval.clienteId !== linkedClientId || storeCreditApproval.valorFiado !== storeCredit.valorFiado) {
+			setStoreCreditApproval(null);
+		}
+	}, [storeCreditApproval, linkedClientId, storeCredit.valorFiado]);
+
 	const invalidateSaleQueries = useCallback(() => {
 		void queryClient.invalidateQueries({ queryKey: ["sales"] });
 		void queryClient.invalidateQueries({ queryKey: ["sales-by-id", saleId] });
@@ -197,8 +222,11 @@ export default function EditSalePage({
 	const { mutate: saveEdit, isPending: isSavingEdit } = useMutation({
 		mutationKey: ["edit-confirmed-sale", saleId],
 		mutationFn: editConfirmedSale,
-		onSuccess: (data) => {
+		onSuccess: (data, variables) => {
 			invalidateSaleQueries();
+			// O fiado da venda mudou (ou saiu): o saldo em aberto do cliente também.
+			const hadStoreCredit = ownOpenStoreCredit > 0 || variables.pagamentos.some((payment) => payment.metodo === STORE_CREDIT_METHOD);
+			if (linkedClientId && hadStoreCredit) void queryClient.invalidateQueries({ queryKey: getClientStoreCreditQueryKey(linkedClientId) });
 			toast.success(data.message);
 			if (data.data.fiscal?.status === "ERRO") {
 				toast.warning(`Venda atualizada, mas a emissão fiscal falhou: ${data.data.fiscal.error}`);
@@ -233,12 +261,13 @@ export default function EditSalePage({
 		},
 	});
 
-	const submitEdit = (descontoAprovacaoId: string | null) => {
+	const submitEdit = ({ descontoAprovacaoId, fiadoAprovacaoId }: { descontoAprovacaoId: string | null; fiadoAprovacaoId: string | null }) => {
 		if (!saleForEdit) return;
 		saveEdit({
 			saleId,
 			valorTotalEsperado: saleForEdit.venda.valorTotal,
 			descontoAprovacaoId,
+			fiadoAprovacaoId,
 			vendedorId: saleState.state.vendedorId,
 			vendedorNome: saleState.state.vendedorNome,
 			entregaModalidade: saleState.state.entregaModalidade,
@@ -265,16 +294,33 @@ export default function EditSalePage({
 		});
 	};
 
+	// As aprovações encadeiam: desconto primeiro, depois fiado. A que acabou de sair chega por
+	// argumento, porque o estado dela só existe no próximo render.
+	const proceedSaveEdit = (approved?: { descontoAprovacaoId?: string; fiadoAprovacaoId?: string }) => {
+		const descontoAprovacaoId = approved?.descontoAprovacaoId ?? discountApproval?.id ?? null;
+		if (discountRequiresApproval && !descontoAprovacaoId) {
+			setIsDiscountApprovalOpen(true);
+			return;
+		}
+		// Fiado fora da regra de liberação do cliente: pede a liberação de um gestor.
+		if (storeCredit.status === "VERIFICANDO") {
+			toast.info("Verificando a liberação de fiado do cliente. Tente novamente em instantes.");
+			return;
+		}
+		const fiadoAprovacaoId = approved?.fiadoAprovacaoId ?? storeCreditApproval?.id ?? null;
+		if (storeCredit.requiresApproval && !fiadoAprovacaoId) {
+			setIsStoreCreditApprovalOpen(true);
+			return;
+		}
+		submitEdit({ descontoAprovacaoId, fiadoAprovacaoId });
+	};
+
 	const handleSaveEdit = () => {
 		if (!saleState.isReadyForFinalize) {
 			toast.error("Complete entrega e pagamento do restante para salvar as alterações.");
 			return;
 		}
-		if (discountRequiresApproval && !discountApproval) {
-			setIsDiscountApprovalOpen(true);
-			return;
-		}
-		submitEdit(discountApproval?.id ?? null);
+		proceedSaveEdit();
 	};
 
 	const { data: groupsData, isLoading: groupsLoading } = usePOSGroups();
@@ -515,6 +561,7 @@ export default function EditSalePage({
 							autoEmissionExceptions={autoEmissionExceptions}
 							canEmitFiscal={canEmitFiscal}
 							discountAuthority={discountAuthority}
+							storeCredit={storeCredit}
 							onCreateDraft={() => {}}
 							onFinalizeSale={handleSaveEdit}
 							isFinalizingSale={isSavingEdit}
@@ -556,7 +603,21 @@ export default function EditSalePage({
 						onApproved={(approvalRequestId) => {
 							setDiscountApproval({ id: approvalRequestId, ...descontoAgregado });
 							setIsDiscountApprovalOpen(false);
-							submitEdit(approvalRequestId);
+							proceedSaveEdit({ descontoAprovacaoId: approvalRequestId });
+						}}
+					/>
+				) : null}
+
+				{isStoreCreditApprovalOpen && storeCredit.approvalPayload ? (
+					<StoreCreditApproval
+						payload={storeCredit.approvalPayload}
+						disponivel={storeCredit.disponivel}
+						denialText={storeCredit.denialText}
+						closeModal={() => setIsStoreCreditApprovalOpen(false)}
+						onApproved={(approvalRequestId) => {
+							setStoreCreditApproval({ id: approvalRequestId, clienteId: storeCredit.approvalPayload!.clienteId, valorFiado: storeCredit.valorFiado });
+							setIsStoreCreditApprovalOpen(false);
+							proceedSaveEdit({ fiadoAprovacaoId: approvalRequestId });
 						}}
 					/>
 				) : null}
@@ -581,6 +642,7 @@ export default function EditSalePage({
 					autoEmissionExceptions={autoEmissionExceptions}
 					canEmitFiscal={canEmitFiscal}
 					discountAuthority={discountAuthority}
+					storeCredit={storeCredit}
 					onCreateDraft={() => {}}
 					onFinalizeSale={handleSaveEdit}
 					isFinalizingSale={isSavingEdit}

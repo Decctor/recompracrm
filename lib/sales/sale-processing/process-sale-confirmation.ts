@@ -1,4 +1,5 @@
 import { normalizeCouponGiftItem, roundCouponGiftCurrency } from "@/lib/coupons/gift-pricing";
+import { enforceStoreCreditRelease } from "@/lib/finances/store-credit/authorization";
 import { accumulateCashbackForClient } from "@/lib/cashback/accumulation";
 import { assertPOSFiscalEmissionReady } from "@/lib/fiscal/document-preview";
 import { captureSaleCampaignEvent } from "@/lib/campaigns/events/handlers/sale-capture";
@@ -95,6 +96,9 @@ export type TProcessSaleConfirmationInput = {
 	// Soma dos parciais já recebidos: os pagamentos do fechamento cobrem só o restante, e o troco
 	// precisa ser calculado contra `valorTotal − prepaidAmount`, não contra o total.
 	prepaidAmount?: number | null;
+	// Aprovação VENDA_FIADO para um fiado fora da regra de liberação do cliente; validada e consumida
+	// (one-shot) dentro da transação por `enforceStoreCreditRelease`.
+	storeCreditApprovalId?: string | null;
 	// Pós-commit: decisão do operador sobre o cupom desta venda (switch do fechamento de conta).
 	// null/ausente = segue a regra de impressão automática da organização.
 	receiptPrintOverride?: boolean | null;
@@ -285,6 +289,16 @@ export async function processSaleConfirmationInTransaction({ tx, input }: { tx: 
 	if (input.salePayments.some((payment) => payment.metodo === "FIADO_NOTA") && !sale.clienteId) {
 		throw new createHttpError.BadRequest("Identifique o cliente para registrar uma venda no fiado.");
 	}
+	// Liberação de fiado: com a exigência ligada, só cliente liberado e dentro do limite — ou com
+	// uma aprovação VENDA_FIADO, consumida aqui. Antes de qualquer pagamento gravado.
+	await enforceStoreCreditRelease({
+		tx,
+		organization: input.organization,
+		clienteId: input.saleClientId ?? sale.clienteId,
+		payments: input.salePayments,
+		approvalId: input.storeCreditApprovalId,
+		vendaId: input.saleId,
+	});
 	const terminalAssignments = resolvePaymentTerminalAssignments({ payments: input.salePayments, saleTotal: remainingSaleTotal });
 	const salePayments = terminalAssignments.length > 0 ? normalizePaymentsForTerminal(input.salePayments) : input.salePayments;
 

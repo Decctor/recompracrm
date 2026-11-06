@@ -40,6 +40,8 @@ export type TCloseTabInput = {
 	acrescimoGeral?: number | null;
 	// Aprovação VENDA_DESCONTO já validada pelo chamador (authorizeSaleDiscount); consumida aqui.
 	descontoAprovacaoId?: string | null;
+	// Aprovação VENDA_FIADO para um fiado fora da regra; validada e consumida na confirmação.
+	fiadoAprovacaoId?: string | null;
 	// Entregar no fechamento os pedidos ainda em andamento, em vez de recusar. Explicito: sem a
 	// flag a API continua recusando, e nada e marcado como entregue por acidente.
 	entregarPedidosEmAndamento?: boolean | null;
@@ -241,6 +243,7 @@ export async function closeTabInTransaction({
 		prepaidAmount: jaPago,
 		receiptPrintOverride: input.printReceipt ?? null,
 		terminalAttempt,
+		storeCreditApprovalId: input.fiadoAprovacaoId ?? null,
 	};
 
 	// One-shot: a aprovação de desconto é consumida na mesma transação do fechamento.

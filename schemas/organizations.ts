@@ -420,6 +420,18 @@ export const OrganizationConfigurationSchema = z.object({
 		impressoes: OrganizationPrintPreferencesSchema,
 		balanca: OrganizationScaleBarcodeConfigSchema,
 		balancaCaixa: OrganizationSerialScaleConfigSchema,
+		// Política de fiado. Opcional (JSON antigo não tem a chave): ausente = sem exigência, e
+		// qualquer cliente identificado compra fiado. Leia por `requiresStoreCreditRelease`
+		// (lib/finances/store-credit/policy.ts), nunca direto — a semântica de ausência mora lá.
+		fiado: z
+			.object({
+				exigeLiberacao: z.boolean({
+					required_error: "Exigência de liberação de fiado não informada.",
+					invalid_type_error: "Tipo não válido para a exigência de liberação de fiado.",
+				}),
+			})
+			.optional()
+			.nullable(),
 	}),
 	defaults: OrganizationDefaultsSchema,
 });
@@ -847,6 +859,13 @@ export const OrganizationMemberPermissionsSchema = z.object({
 				required_error: "Permissão de conciliação bancária não informada.",
 				invalid_type_error: "Tipo não válido para a permissão de conciliação bancária.",
 			}),
+			// Decisão de crédito: definir quem compra fiado e até quanto, e aprovar fiado fora da
+			// regra no balcão. Opcional — ausente cai em `financeiro.editar` (lib/permissions/finances.ts).
+			liberarFiado: z
+				.boolean({
+					invalid_type_error: "Tipo não válido para a permissão de liberação de fiado.",
+				})
+				.optional(),
 		})
 		.optional()
 		.nullable(),

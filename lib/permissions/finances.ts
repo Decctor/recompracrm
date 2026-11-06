@@ -25,3 +25,13 @@ export function canReconcileFinances(permissoes: TOrganizationMemberPermissions 
 	if (!permissoes) return false;
 	return permissoes.financeiro?.conciliar ?? permissoes.empresa.editar ?? false;
 }
+
+/**
+ * Liberar fiado: definir quais clientes compram fiado e com que limite, e aprovar no balcão um
+ * fiado fora da regra. Sem a chave, acompanha quem edita o financeiro — o mesmo grupo que já
+ * recebia e dava baixa em fiados.
+ */
+export function canGrantStoreCredit(permissoes: TOrganizationMemberPermissions | null | undefined): boolean {
+	if (!permissoes) return false;
+	return permissoes.financeiro?.liberarFiado ?? canEditFinances(permissoes);
+}

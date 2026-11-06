@@ -1,7 +1,7 @@
 import dayjs from "dayjs";
 import { and, asc, count, eq, exists, gte, inArray, isNull, lte, ne, notInArray, or, type SQL, sql } from "drizzle-orm";
 import { formatAsNumber } from "@/lib/formatting";
-import { db } from "@/services/drizzle";
+import { type DB, type DBTransaction, db } from "@/services/drizzle";
 import { accountingEntries, clients, financialAccounts, financialTransactions, sales } from "@/services/drizzle/schema";
 import { bucketStoreCreditByAging, getStoreCreditAgingDueDateRange, type TStoreCreditAgingBucket } from "./aging";
 import {
@@ -584,3 +584,63 @@ export async function getStoreCreditStats({
 }
 
 export type TStoreCreditStats = Awaited<ReturnType<typeof getStoreCreditStats>>;
+
+/**
+ * Saldo de fiado em aberto de UM cliente — a grandeza que o limite de liberação limita
+ * (lib/finances/store-credit/policy.ts). Mesmo universo e mesma regra de "em aberto" da lista da
+ * aba Fiados, para o limite no balcão e o saldo na tela nunca divergirem.
+ *
+ * Aceita a transação do chamador: na confirmação da venda, o saldo precisa ser lido dentro da
+ * mesma transação que grava o fiado novo (e depois do lock do cliente), senão dois caixas leem o
+ * mesmo saldo e juntos estouram o limite.
+ */
+export async function getClientStoreCreditOpenBalance({
+	database = db,
+	organizacaoId,
+	clienteId,
+}: {
+	database?: DB | DBTransaction;
+	organizacaoId: string;
+	clienteId: string;
+}): Promise<number> {
+	const [row] = await database
+		.select({ saldoAberto: saldoAbertoExpression })
+		.from(financialTransactions)
+		.innerJoin(accountingEntries, eq(financialTransactions.lancamentoContabilId, accountingEntries.id))
+		.leftJoin(sales, eq(accountingEntries.vendaId, sales.id))
+		.where(and(...buildStoreCreditUniverseConditions(organizacaoId), eq(sales.clienteId, clienteId)));
+	return formatAsNumber(row?.saldoAberto ?? 0);
+}
+
+/**
+ * Quem já usou fiado na organização, com o saldo em aberto e o maior fiado de uma venda só — a base
+ * da pré-liberação ao ligar a exigência (lib/finances/store-credit/release.ts).
+ *
+ * O maior fiado é somado por venda, não por movimentação: a baixa parcial parte o título em linhas
+ * novas que herdam o lançamento (logo a venda), então a soma por venda reconstitui o valor original.
+ */
+export async function getStoreCreditHistoryByClient({ database = db, organizacaoId }: { database?: DB | DBTransaction; organizacaoId: string }) {
+	const perSale = database
+		.select({
+			clienteId: sql<string>`${sales.clienteId}`.as("cliente_id"),
+			totalVenda: sql<number>`sum(${financialTransactions.valor})`.as("total_venda"),
+			saldoVenda: sql<number>`sum(case when ${financialTransactions.dataEfetivacao} is null then ${financialTransactions.valor} else 0 end)`.as(
+				"saldo_venda",
+			),
+		})
+		.from(financialTransactions)
+		.innerJoin(accountingEntries, eq(financialTransactions.lancamentoContabilId, accountingEntries.id))
+		.leftJoin(sales, eq(accountingEntries.vendaId, sales.id))
+		.where(and(...buildStoreCreditUniverseConditions(organizacaoId), sql`${sales.clienteId} is not null`))
+		.groupBy(sales.clienteId, accountingEntries.id)
+		.as("fiado_por_venda");
+	const rows = await database
+		.select({
+			clienteId: perSale.clienteId,
+			saldoAberto: sql<number>`coalesce(sum(${perSale.saldoVenda}), 0)`,
+			maiorFiado: sql<number>`coalesce(max(${perSale.totalVenda}), 0)`,
+		})
+		.from(perSale)
+		.groupBy(perSale.clienteId);
+	return rows.map((row) => ({ clienteId: row.clienteId, saldoAberto: formatAsNumber(row.saldoAberto), maiorFiado: formatAsNumber(row.maiorFiado) }));
+}

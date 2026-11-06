@@ -36,6 +36,7 @@ import ExportStoreCredit from "@/components/Modals/Finances/ExportStoreCredit";
 import { ReceiveStoreCreditMenu } from "@/components/Modals/Finances/ReceiveStoreCreditMenu";
 import { StoreCreditAging } from "./_components/store-credit-aging";
 import { StoreCreditClientCard } from "./_components/store-credit-client-card";
+import { StoreCreditPolicyPanel } from "./_components/store-credit-policy-panel";
 
 type StoreCreditClient = TGetStoreCreditOutputDefault["clientes"][number];
 
@@ -194,6 +195,8 @@ export default function StoreCreditPage({ organizationId, canReceive }: { organi
 			</div>
 
 			<StoreCreditAging faixas={stats?.faixas} isLoading={statsLoading} />
+
+			<StoreCreditPolicyPanel />
 
 			<div className="flex flex-col gap-2 sm:flex-row">
 				<Input

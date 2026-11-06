@@ -5,6 +5,7 @@ import type { TAutoEmissionExceptions } from "@/lib/fiscal/auto-emission-policy"
 import { resolveAutoEmissionException } from "@/lib/fiscal/auto-emission-policy";
 import { useFiscalPreview } from "@/lib/queries/fiscal-preview";
 import type { TDiscountAuthority } from "@/lib/permissions/discounts";
+import type { TStoreCreditGuard } from "@/lib/hooks/use-store-credit-guard";
 import { useClientLocations } from "@/lib/queries/clients/locations";
 import type { ClassifiedPayment } from "@/lib/sales/utils";
 import { useSellersSimplified } from "@/lib/queries/sellers";
@@ -57,6 +58,8 @@ type CheckoutPanelProps = {
 	canEmitFiscal: boolean;
 	canConfigureFiscal?: boolean;
 	discountAuthority?: TDiscountAuthority | null;
+	// Liberação de fiado avaliada pela tela: alimenta a dica no cartão de fiado dos pagamentos.
+	storeCredit?: TStoreCreditGuard | null;
 	onCreateDraft: () => void;
 	onFinalizeSale: () => void;
 	isCreatingDraft?: boolean;
@@ -87,6 +90,7 @@ export default function CheckoutPanel({
 	canEmitFiscal,
 	canConfigureFiscal,
 	discountAuthority,
+	storeCredit,
 	onCreateDraft,
 	onFinalizeSale,
 	isCreatingDraft,
@@ -213,7 +217,7 @@ export default function CheckoutPanel({
 					onOpenNewLocation={() => setIsNewLocationOpen(true)}
 					onPreloadNewLocation={preloadNewClientLocation}
 				/>
-				<PaymentsSection saleState={saleState} pagamentosEfetivados={edit?.pagamentosEfetivados} allowTerminal={!edit} />
+				<PaymentsSection saleState={saleState} pagamentosEfetivados={edit?.pagamentosEfetivados} allowTerminal={!edit} storeCredit={storeCredit} />
 				<SummarySection
 					saleState={saleState}
 					organizationCashbackProgram={organizationCashbackProgram}

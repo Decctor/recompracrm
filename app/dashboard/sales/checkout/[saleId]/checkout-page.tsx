@@ -13,6 +13,10 @@ import { modifierPricesDiverge } from "@/lib/sales/sale-item-repricing";
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
 import { ConfirmSaleChange } from "@/components/Modals/Sales/ConfirmSaleChange";
 import { DiscountApproval } from "@/components/Modals/Sales/DiscountApproval";
+import { StoreCreditApproval } from "@/components/Modals/Sales/StoreCreditApproval";
+import { STORE_CREDIT_METHOD } from "@/lib/finances/store-credit/constants";
+import { useStoreCreditGuard } from "@/lib/hooks/use-store-credit-guard";
+import { getClientStoreCreditQueryKey } from "@/lib/queries/store-credit";
 import { Button } from "@/components/ui/button";
 import CashSessionBar from "@/components/CashSessions/CashSessionBar";
 import MobileCheckoutBar from "../../_components/mobile-checkout-bar";
@@ -30,7 +34,7 @@ import { mapSaleDraftToSaleState } from "@/lib/sales/map-sale-draft-to-sale-stat
 import type { TOrganizationConfiguration } from "@/schemas/organizations";
 import type { TCashbackProgramEntity } from "@/services/drizzle/schema";
 import { type TSaleFinancialAccountOption, type TUseSaleState, useSaleState } from "@/state-hooks/use-sale-state";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, PanelLeftClose, PanelLeftOpen, ShoppingCart } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -230,9 +234,23 @@ export default function CheckoutPage({
 		}
 	}, [discountApproval, descontoAgregado]);
 
+	// Liberação de fiado: mesma regra da confirmação, espelhada para pedir a aprovação antes do clique.
+	const linkedClientId = saleState.state.cliente?.id ?? null;
+	const storeCredit = useStoreCreditGuard({ clientId: linkedClientId, payments: saleState.paymentsToCharge });
+	const [isStoreCreditApprovalOpen, setIsStoreCreditApprovalOpen] = useState(false);
+	// A liberação vale para o cliente e o fiado aprovados: trocou o cliente ou o valor, invalida.
+	const [storeCreditApproval, setStoreCreditApproval] = useState<{ id: string; clienteId: string; valorFiado: number } | null>(null);
+	useEffect(() => {
+		if (!storeCreditApproval) return;
+		if (storeCreditApproval.clienteId !== linkedClientId || storeCreditApproval.valorFiado !== storeCredit.valorFiado) {
+			setStoreCreditApproval(null);
+		}
+	}, [storeCreditApproval, linkedClientId, storeCredit.valorFiado]);
+
+	const queryClient = useQueryClient();
 	const { mutate: confirm, isPending: isConfirming } = useMutation({
 		mutationKey: ["confirm-sale", saleId],
-		mutationFn: async (descontoAprovacaoId: string | null) => {
+		mutationFn: async ({ descontoAprovacaoId, fiadoAprovacaoId }: { descontoAprovacaoId: string | null; fiadoAprovacaoId: string | null }) => {
 			// Itens e metadados precisam estar persistidos antes de confirmar: a confirmação lê o
 			// rascunho gravado, não o payload. Se o PUT falhar, a confirmação nem chega a acontecer.
 			await updateSaleDraft({
@@ -273,6 +291,7 @@ export default function CheckoutPage({
 				cashbackProgramaId: organizationCashbackProgram?.id ?? null,
 				sessaoVendaId: activeSession?.id ?? null,
 				descontoAprovacaoId,
+				fiadoAprovacaoId,
 			});
 		},
 		onSuccess: (data) => {
@@ -282,6 +301,11 @@ export default function CheckoutPage({
 				toast.success(data.message);
 			}
 			setDiscountApproval(null);
+			setStoreCreditApproval(null);
+			// O fiado desta venda já conta no saldo em aberto do cliente.
+			if (linkedClientId && saleState.paymentsToCharge.some((payment) => payment.metodo === STORE_CREDIT_METHOD)) {
+				void queryClient.invalidateQueries({ queryKey: getClientStoreCreditQueryKey(linkedClientId) });
+			}
 			saleState.setSuccess({
 				mode: "FINALIZADA",
 				saleId,
@@ -314,12 +338,25 @@ export default function CheckoutPage({
 				? "Nenhum caixa aberto para o vendedor desta venda."
 				: null;
 
-	const proceedFinalizeSale = () => {
-		if (discountRequiresApproval && !discountApproval) {
+	// As aprovações encadeiam: desconto primeiro, depois fiado. A que acabou de sair chega por
+	// argumento, porque o estado dela só existe no próximo render.
+	const proceedFinalizeSale = (approved?: { descontoAprovacaoId?: string; fiadoAprovacaoId?: string }) => {
+		const descontoAprovacaoId = approved?.descontoAprovacaoId ?? discountApproval?.id ?? null;
+		if (discountRequiresApproval && !descontoAprovacaoId) {
 			setIsDiscountApprovalOpen(true);
 			return;
 		}
-		confirm(discountApproval?.id ?? null);
+		// Fiado fora da regra de liberação do cliente: pede a liberação de um gestor.
+		if (storeCredit.status === "VERIFICANDO") {
+			toast.info("Verificando a liberação de fiado do cliente. Tente novamente em instantes.");
+			return;
+		}
+		const fiadoAprovacaoId = approved?.fiadoAprovacaoId ?? storeCreditApproval?.id ?? null;
+		if (storeCredit.requiresApproval && !fiadoAprovacaoId) {
+			setIsStoreCreditApprovalOpen(true);
+			return;
+		}
+		confirm({ descontoAprovacaoId, fiadoAprovacaoId });
 	};
 
 	const handleFinalizeSale = () => {
@@ -485,6 +522,7 @@ export default function CheckoutPage({
 			autoEmissionExceptions={autoEmissionExceptions}
 			canEmitFiscal={canEmitFiscal}
 			discountAuthority={discountAuthority}
+			storeCredit={storeCredit}
 			onCreateDraft={() => {}}
 			onFinalizeSale={handleFinalizeSale}
 			isFinalizingSale={isConfirming}
@@ -615,7 +653,21 @@ export default function CheckoutPage({
 						onApproved={(approvalRequestId) => {
 							setDiscountApproval({ id: approvalRequestId, ...descontoAgregado });
 							setIsDiscountApprovalOpen(false);
-							confirm(approvalRequestId);
+							proceedFinalizeSale({ descontoAprovacaoId: approvalRequestId });
+						}}
+					/>
+				) : null}
+
+				{isStoreCreditApprovalOpen && storeCredit.approvalPayload ? (
+					<StoreCreditApproval
+						payload={storeCredit.approvalPayload}
+						disponivel={storeCredit.disponivel}
+						denialText={storeCredit.denialText}
+						closeModal={() => setIsStoreCreditApprovalOpen(false)}
+						onApproved={(approvalRequestId) => {
+							setStoreCreditApproval({ id: approvalRequestId, clienteId: storeCredit.approvalPayload!.clienteId, valorFiado: storeCredit.valorFiado });
+							setIsStoreCreditApprovalOpen(false);
+							proceedFinalizeSale({ fiadoAprovacaoId: approvalRequestId });
 						}}
 					/>
 				) : null}

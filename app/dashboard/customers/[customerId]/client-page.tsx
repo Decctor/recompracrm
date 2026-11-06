@@ -6,6 +6,7 @@ import ClientStatsTab from "./client-stats-tab";
 import ClientCashback from "@/components/Clients/ClientDetails/Blocks/ClientCashback";
 import ClientPurchases from "@/components/Clients/ClientDetails/Blocks/ClientPurchases";
 import ClientStoreCredit from "@/components/Clients/ClientDetails/Blocks/ClientStoreCredit";
+import ClientStoreCreditRelease from "@/components/Clients/ClientDetails/Blocks/ClientStoreCreditRelease";
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
 import LoadingComponent from "@/components/Layouts/LoadingComponent";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -104,7 +105,10 @@ export default function ClientPage({ id, canReconcileClients, organizationId, ca
 				<TabsContent value="compras" className="mt-4">
 					<div className="flex min-h-[520px] w-full flex-col gap-4">
 						{canViewStoreCredit ? (
-							<ClientStoreCredit clientId={id} clientName={client.nome} organizationId={organizationId} canReceive={canReceiveStoreCredit} />
+							<>
+								<ClientStoreCreditRelease clientId={id} />
+								<ClientStoreCredit clientId={id} clientName={client.nome} organizationId={organizationId} canReceive={canReceiveStoreCredit} />
+							</>
 						) : null}
 						<ClientPurchases clientId={id} />
 					</div>

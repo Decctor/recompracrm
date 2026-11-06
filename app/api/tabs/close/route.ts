@@ -32,6 +32,8 @@ const CloseTabInputSchema = z.object({
 		.nullable(),
 	// Aprovacao VENDA_DESCONTO exigida quando o desconto excede o teto do vendedor da conta.
 	descontoAprovacaoId: z.string({ invalid_type_error: "Tipo nao valido para o ID da aprovacao de desconto." }).optional().nullable(),
+	// Aprovacao VENDA_FIADO para um fiado fora da regra de liberacao do cliente (consumida na confirmacao).
+	fiadoAprovacaoId: z.string({ invalid_type_error: "Tipo nao valido para o ID da liberacao de fiado." }).optional().nullable(),
 	// Entregar no fechamento os pedidos ainda em andamento (sem a flag, eles bloqueiam o fechamento).
 	entregarPedidosEmAndamento: z.boolean({ invalid_type_error: "Tipo nao valido para entregar pedidos em andamento." }).optional().nullable(),
 	// Switch "Imprimir cupom ao fechar": true imprime mesmo sem a regra automatica, false suprime.
@@ -100,6 +102,7 @@ async function closeTabService({ input, session }: { input: TCloseTabRouteInput;
 			descontoGeral: input.descontoGeral,
 			acrescimoGeral: input.acrescimoGeral,
 			descontoAprovacaoId,
+			fiadoAprovacaoId: input.fiadoAprovacaoId ?? null,
 			entregarPedidosEmAndamento: input.entregarPedidosEmAndamento,
 			printReceipt: input.printReceipt,
 		},

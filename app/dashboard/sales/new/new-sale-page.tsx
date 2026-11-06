@@ -13,6 +13,10 @@ import type { TBarcodeScanResolution } from "@/lib/pos/barcode-scan-action";
 import { formatItemQuantity } from "@/lib/pos/scale-barcode";
 import { ConfirmSaleChange } from "@/components/Modals/Sales/ConfirmSaleChange";
 import { DiscountApproval } from "@/components/Modals/Sales/DiscountApproval";
+import { StoreCreditApproval } from "@/components/Modals/Sales/StoreCreditApproval";
+import { STORE_CREDIT_METHOD } from "@/lib/finances/store-credit/constants";
+import { useStoreCreditGuard } from "@/lib/hooks/use-store-credit-guard";
+import { getClientStoreCreditQueryKey } from "@/lib/queries/store-credit";
 import { getErrorMessage } from "@/lib/errors";
 import { formatToMoney } from "@/lib/formatting";
 import { cn } from "@/lib/utils";
@@ -183,6 +187,18 @@ export default function NewSalePage({
 		}
 	}, [discountApproval, descontoAgregado]);
 
+	// Liberação de fiado: mesma regra da confirmação, espelhada para pedir a aprovação antes do clique.
+	const storeCredit = useStoreCreditGuard({ clientId: linkedClientId, payments: saleState.paymentsToCharge });
+	const [isStoreCreditApprovalOpen, setIsStoreCreditApprovalOpen] = useState(false);
+	// A liberação vale para o cliente e o fiado aprovados: trocou o cliente ou o valor, invalida.
+	const [storeCreditApproval, setStoreCreditApproval] = useState<{ id: string; clienteId: string; valorFiado: number } | null>(null);
+	useEffect(() => {
+		if (!storeCreditApproval) return;
+		if (storeCreditApproval.clienteId !== linkedClientId || storeCreditApproval.valorFiado !== storeCredit.valorFiado) {
+			setStoreCreditApproval(null);
+		}
+	}, [storeCreditApproval, linkedClientId, storeCredit.valorFiado]);
+
 	// Unique product ids in the basket — drives cross-sell, stable against quantity changes.
 	const basketProductIds = useMemo(() => [...new Set(saleState.state.itens.map((item) => item.produtoId))], [saleState.state.itens]);
 
@@ -289,11 +305,16 @@ export default function NewSalePage({
 	const { mutate: finalizeSale, isPending: isFinalizingSale } = useMutation({
 		mutationKey: ["create-and-confirm-sale"],
 		mutationFn: createAndConfirmSale,
-		onSuccess: (data) => {
+		onSuccess: (data, variables) => {
 			if (data.data.confirmation.fiscal.status === "ERRO") {
 				toast.warning(`Venda finalizada, mas a emissao fiscal falhou: ${data.data.confirmation.fiscal.error}`);
 			}
 			setDiscountApproval(null);
+			setStoreCreditApproval(null);
+			// O fiado desta venda já conta no saldo em aberto do cliente.
+			if (variables.clienteId && variables.pagamentos.some((payment) => payment.metodo === STORE_CREDIT_METHOD)) {
+				void queryClient.invalidateQueries({ queryKey: getClientStoreCreditQueryKey(variables.clienteId) });
+			}
 			const tentativaPagamento = data.data.confirmation.tentativaPagamento;
 			if (tentativaPagamento) void queryClient.invalidateQueries({ queryKey: getPendingTerminalChargesQueryKey() });
 			saleState.setSuccess({
@@ -460,9 +481,10 @@ export default function NewSalePage({
 		});
 	};
 
-	const submitFinalizeSale = (descontoAprovacaoId: string | null) => {
+	const submitFinalizeSale = ({ descontoAprovacaoId, fiadoAprovacaoId }: { descontoAprovacaoId: string | null; fiadoAprovacaoId: string | null }) => {
 		finalizeSale({
 			descontoAprovacaoId,
+			fiadoAprovacaoId,
 			clienteId: saleState.state.cliente?.id ?? null,
 			vendedorId: saleState.state.vendedorId,
 			vendedorNome: saleState.state.vendedorNome,
@@ -496,14 +518,28 @@ export default function NewSalePage({
 		});
 	};
 
-	const proceedFinalizeSale = () => {
+	// As aprovações encadeiam: desconto primeiro, depois fiado. A que acabou de sair chega por
+	// argumento, porque o estado dela só existe no próximo render.
+	const proceedFinalizeSale = (approved?: { descontoAprovacaoId?: string; fiadoAprovacaoId?: string }) => {
 		// Desconto acima do teto do vendedor: abre o fluxo de aprovação (PIN ou remota) antes de finalizar.
-		if (discountRequiresApproval && !discountApproval) {
+		const descontoAprovacaoId = approved?.descontoAprovacaoId ?? discountApproval?.id ?? null;
+		if (discountRequiresApproval && !descontoAprovacaoId) {
 			setIsDiscountApprovalOpen(true);
 			return;
 		}
 
-		submitFinalizeSale(discountApproval?.id ?? null);
+		// Fiado fora da regra de liberação do cliente: pede a liberação de um gestor.
+		if (storeCredit.status === "VERIFICANDO") {
+			toast.info("Verificando a liberação de fiado do cliente. Tente novamente em instantes.");
+			return;
+		}
+		const fiadoAprovacaoId = approved?.fiadoAprovacaoId ?? storeCreditApproval?.id ?? null;
+		if (storeCredit.requiresApproval && !fiadoAprovacaoId) {
+			setIsStoreCreditApprovalOpen(true);
+			return;
+		}
+
+		submitFinalizeSale({ descontoAprovacaoId, fiadoAprovacaoId });
 	};
 
 	const handleFinalizeSale = () => {
@@ -681,6 +717,7 @@ export default function NewSalePage({
 							canEmitFiscal={canEmitFiscal}
 							canConfigureFiscal={canConfigureFiscal}
 							discountAuthority={discountAuthority}
+							storeCredit={storeCredit}
 							onCreateDraft={handleCreateDraft}
 							onFinalizeSale={handleFinalizeSale}
 							isCreatingDraft={isCreatingDraft}
@@ -742,7 +779,21 @@ export default function NewSalePage({
 						onApproved={(approvalRequestId) => {
 							setDiscountApproval({ id: approvalRequestId, ...descontoAgregado });
 							setIsDiscountApprovalOpen(false);
-							submitFinalizeSale(approvalRequestId);
+							proceedFinalizeSale({ descontoAprovacaoId: approvalRequestId });
+						}}
+					/>
+				) : null}
+
+				{isStoreCreditApprovalOpen && storeCredit.approvalPayload ? (
+					<StoreCreditApproval
+						payload={storeCredit.approvalPayload}
+						disponivel={storeCredit.disponivel}
+						denialText={storeCredit.denialText}
+						closeModal={() => setIsStoreCreditApprovalOpen(false)}
+						onApproved={(approvalRequestId) => {
+							setStoreCreditApproval({ id: approvalRequestId, clienteId: storeCredit.approvalPayload!.clienteId, valorFiado: storeCredit.valorFiado });
+							setIsStoreCreditApprovalOpen(false);
+							proceedFinalizeSale({ fiadoAprovacaoId: approvalRequestId });
 						}}
 					/>
 				) : null}
@@ -778,6 +829,7 @@ export default function NewSalePage({
 					canEmitFiscal={canEmitFiscal}
 					canConfigureFiscal={canConfigureFiscal}
 					discountAuthority={discountAuthority}
+					storeCredit={storeCredit}
 					onCreateDraft={handleCreateDraft}
 					onFinalizeSale={handleFinalizeSale}
 					isCreatingDraft={isCreatingDraft}

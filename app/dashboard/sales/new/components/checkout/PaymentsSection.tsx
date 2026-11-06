@@ -14,6 +14,8 @@ import { getPaymentInstallmentsOptions } from "@/lib/payments/defaults";
 import { getTodayDateInputValue, isPaymentTerminalMethod } from "@/lib/payments/schemas";
 import { type TPaymentTerminalListItem, usePaymentTerminals } from "@/lib/queries/payment-terminals";
 import { formatToMoney } from "@/lib/formatting";
+import { STORE_CREDIT_METHOD } from "@/lib/finances/store-credit/constants";
+import type { TStoreCreditGuard } from "@/lib/hooks/use-store-credit-guard";
 import { parseDecimalInput, useDecimalDraft } from "@/lib/hooks/use-decimal-draft";
 import type { ClassifiedPayment } from "@/lib/sales/utils";
 import type { TUseSaleState } from "@/state-hooks/use-sale-state";
@@ -27,13 +29,44 @@ type PaymentsSectionProps = {
 	pagamentosEfetivados?: Pick<ClassifiedPayment, "id" | "metodo" | "valor" | "parcela" | "totalParcelas">[];
 	// Cobrança na maquininha só nasce na confirmação (não na edição de venda confirmada).
 	allowTerminal?: boolean;
+	// Liberação de fiado do cliente, avaliada pela tela (a mesma avaliação que decide a aprovação).
+	storeCredit?: TStoreCreditGuard | null;
 };
 
 type PaymentCardProps = {
 	saleState: TUseSaleState;
 	payment: TUseSaleState["state"]["pagamentos"][number];
 	terminals: TPaymentTerminalListItem[];
+	storeCredit?: TStoreCreditGuard | null;
 };
+
+/**
+ * Uma linha sob o cartão de fiado: quanto o cliente ainda pode pendurar, ou por que vai precisar da
+ * liberação de um gestor. Só informa — editar o pagamento nunca é bloqueado aqui.
+ */
+function StoreCreditHint({ storeCredit }: { storeCredit: TStoreCreditGuard }) {
+	if (storeCredit.status === "INATIVO") return null;
+	if (storeCredit.status === "VERIFICANDO")
+		return <p className="text-micro text-right text-muted-foreground">Verificando a liberação de fiado do cliente...</p>;
+	if (storeCredit.status === "FALHOU") {
+		return <p className="text-micro text-right text-muted-foreground">Não foi possível verificar a liberação de fiado. A finalização confere.</p>;
+	}
+	if (storeCredit.denialText) {
+		return (
+			<p className="text-micro rounded-md bg-warning-surface px-2 py-1 text-right font-semibold text-warning-surface-foreground">
+				{storeCredit.denialText} A finalização pedirá a liberação de um gestor.
+			</p>
+		);
+	}
+	const limite = storeCredit.position?.fiadoLimite ?? null;
+	return (
+		<p className="text-micro text-right text-muted-foreground">
+			{storeCredit.disponivel === null || limite === null
+				? "Fiado sem limite para este cliente."
+				: `Disponível: ${formatToMoney(storeCredit.disponivel)} de ${formatToMoney(limite)}`}
+		</p>
+	);
+}
 
 // Regra do MVP (docs/10, decisão 4): um único pagamento em cartão cobrindo o total. O motivo
 // aparece no próprio botão em vez de sumir com ele — o operador entende o que precisa mudar.
@@ -45,7 +78,7 @@ function resolveTerminalBlockedReason(saleState: TUseSaleState, payment: Payment
 	return null;
 }
 
-function PaymentCard({ saleState, payment, terminals }: PaymentCardProps) {
+function PaymentCard({ saleState, payment, terminals, storeCredit }: PaymentCardProps) {
 	const paymentMethodConfig = saleState.organizationPaymentMethodsConfig[payment.metodo];
 	const selectedMethod = SalePaymentMethodsOptions.find((method) => method.value === payment.metodo);
 	const selectedForecastDate = payment.dataPrevisao ? new Date(payment.dataPrevisao) : undefined;
@@ -184,6 +217,7 @@ function PaymentCard({ saleState, payment, terminals }: PaymentCardProps) {
 			{isRemaining && payment.valor <= 0.01 ? (
 				<p className="text-micro text-right text-muted-foreground">Nada a cobrar: os outros pagamentos já cobrem o total.</p>
 			) : null}
+			{storeCredit && payment.metodo === STORE_CREDIT_METHOD ? <StoreCreditHint storeCredit={storeCredit} /> : null}
 
 			{shouldShowAccount || shouldShowInstallments || shouldShowTerminal || payment.efetivacaoTipo === "PENDENTE" ? (
 				<div className="w-full flex flex-wrap justify-end items-center gap-x-3 gap-y-1">
@@ -278,7 +312,7 @@ function PaymentCard({ saleState, payment, terminals }: PaymentCardProps) {
 	);
 }
 
-export default function PaymentsSection({ saleState, pagamentosEfetivados, allowTerminal = true }: PaymentsSectionProps) {
+export default function PaymentsSection({ saleState, pagamentosEfetivados, allowTerminal = true, storeCredit }: PaymentsSectionProps) {
 	const supportedMethodOptions = SalePaymentMethodsOptions.filter((method) => saleState.organizationPaymentMethodsConfig[method.value]?.suportado);
 	const hasSettledPayments = (pagamentosEfetivados?.length ?? 0) > 0;
 	// Uma consulta por checkout; organização sem maquininha recebe lista vazia e nenhum controle novo.
@@ -355,7 +389,7 @@ export default function PaymentsSection({ saleState, pagamentosEfetivados, allow
 			) : null}
 
 			{saleState.state.pagamentos.map((payment) => (
-				<PaymentCard key={payment.id} saleState={saleState} payment={payment} terminals={allowTerminal ? terminals : []} />
+				<PaymentCard key={payment.id} saleState={saleState} payment={payment} terminals={allowTerminal ? terminals : []} storeCredit={storeCredit} />
 			))}
 			{hasTerminalCharge ? (
 				<p className="text-[11px] text-muted-foreground">

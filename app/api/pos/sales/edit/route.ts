@@ -73,6 +73,8 @@ const EditConfirmedSaleInputSchema = z.object({
 	// Consentimento explícito para derrubar um cupom invalidado pelo carrinho editado.
 	removerCupom: z.boolean({ invalid_type_error: "Tipo não válido para remoção do cupom." }).optional(),
 	descontoAprovacaoId: z.string({ invalid_type_error: "Tipo não válido para o ID da aprovação de desconto." }).optional().nullable(),
+	// Aprovação VENDA_FIADO para um fiado fora da regra de liberação do cliente (consumida na confirmação).
+	fiadoAprovacaoId: z.string({ invalid_type_error: "Tipo não válido para o ID da liberação de fiado." }).optional().nullable(),
 	sessaoVendaId: z.string({ invalid_type_error: "Tipo não válido para o ID da sessão de venda." }).optional().nullable(),
 	itens: z.array(EditSaleItemInputSchema).min(1, { message: "Pelo menos um item é obrigatório." }),
 });
@@ -292,6 +294,7 @@ async function editConfirmedSale({ input, session }: { input: TEditConfirmedSale
 				canChooseFiscalDocument: !!session.membership?.permissoes.fiscal.emitir,
 				removerCupom: input.removerCupom,
 				descontoAprovacaoId,
+				storeCreditApprovalId: input.fiadoAprovacaoId ?? null,
 				valorTotalEsperado: input.valorTotalEsperado,
 				sessaoVendaId,
 			},

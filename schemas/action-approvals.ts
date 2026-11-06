@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DiscountLimitTypeEnum } from "./enums";
+import { DiscountLimitTypeEnum, StoreCreditApprovalReasonEnum } from "./enums";
 
 /**
  * Payloads das solicitações de aprovação de ação, discriminados por `tipo`.
@@ -33,6 +33,31 @@ export const VendaDescontoApprovalPayloadSchema = z.object({
 });
 export type TVendaDescontoApprovalPayload = z.infer<typeof VendaDescontoApprovalPayloadSchema>;
 
+/**
+ * Fiado fora da regra de liberação (lib/finances/store-credit/policy.ts): o gestor autoriza ESTE
+ * fiado — um valor, para um cliente —, sem mexer na liberação nem no limite do cadastro. Para
+ * mudar a regra do cliente, a decisão é no cadastro dele.
+ */
+export const VendaFiadoApprovalPayloadSchema = z.object({
+	tipo: z.literal("VENDA_FIADO"),
+	clienteId: z.string({ required_error: "ID do cliente não informado.", invalid_type_error: "Tipo não válido para o ID do cliente." }),
+	// Denormalizado para a fila de aprovações dizer de quem é o fiado sem buscar o cadastro.
+	clienteNome: z.string({ required_error: "Nome do cliente não informado.", invalid_type_error: "Tipo não válido para o nome do cliente." }),
+	// Fiado desta venda — o teto que a aprovação cobre no consumo.
+	valorSolicitado: z.number({
+		required_error: "Valor do fiado solicitado não informado.",
+		invalid_type_error: "Tipo não válido para o valor do fiado solicitado.",
+	}),
+	motivo: StoreCreditApprovalReasonEnum,
+	// Snapshot da posição do cliente no pedido (o gestor decide vendo isto; auditoria).
+	saldoEmAberto: z.number({
+		required_error: "Saldo de fiado em aberto não informado.",
+		invalid_type_error: "Tipo não válido para o saldo de fiado em aberto.",
+	}),
+	limite: z.number({ invalid_type_error: "Tipo não válido para o limite de fiado." }).nullable(),
+});
+export type TVendaFiadoApprovalPayload = z.infer<typeof VendaFiadoApprovalPayloadSchema>;
+
 export const AgentActivateCampaignApprovalPayloadSchema = z.object({
 	tipo: z.literal("AGENTE_ATIVAR_CAMPANHA"),
 	campanhaId: z.string({ required_error: "ID da campanha não informado." }),
@@ -50,6 +75,7 @@ export const AgentSubmitTemplateApprovalPayloadSchema = z.object({
 
 export const ActionApprovalPayloadSchema = z.discriminatedUnion("tipo", [
 	VendaDescontoApprovalPayloadSchema,
+	VendaFiadoApprovalPayloadSchema,
 	AgentActivateCampaignApprovalPayloadSchema,
 	AgentSubmitTemplateApprovalPayloadSchema,
 	// futuros: VendaCancelamentoPayloadSchema, CompraAcimaLimitePayloadSchema, ...
