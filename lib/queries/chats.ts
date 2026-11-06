@@ -32,18 +32,22 @@ function buildChatInboxSearchParams(params: TChatInboxQueryFilters) {
 	return searchParams;
 }
 
-async function fetchChats(params: TChatInboxQueryFilters & { quickFilter: TChatInboxQuickFilter; cursor?: TChatsCursor }) {
+// `signal`: quando o React Query descarta a busca (invalidação nova, troca de filtro, unmount), o
+// request é abortado no navegador em vez de seguir pendurado até o fim. O servidor pode ainda
+// concluir uma query que já começou; o que impede a rajada de requests é a coalescência dos
+// eventos realtime em `ChatSidebar`.
+async function fetchChats(params: TChatInboxQueryFilters & { quickFilter: TChatInboxQuickFilter; cursor?: TChatsCursor }, signal?: AbortSignal) {
 	const searchParams = buildChatInboxSearchParams(params);
 	if (params.quickFilter !== "TODAS") searchParams.set("quickFilter", params.quickFilter);
 	if (params.cursor) searchParams.set("cursor", params.cursor);
 
-	const { data } = await axios.get<TGetChatsOutput>(`/api/chats?${searchParams.toString()}`);
+	const { data } = await axios.get<TGetChatsOutput>(`/api/chats?${searchParams.toString()}`, { signal });
 	if (!data.data.default) throw new Error("Não foi possível carregar os chats.");
 	return data.data.default;
 }
 
-async function fetchChatInboxCounts(params: TChatInboxQueryFilters) {
-	const { data } = await axios.get<TGetChatInboxCountsOutput>(`/api/chats/inbox-counts?${buildChatInboxSearchParams(params).toString()}`);
+async function fetchChatInboxCounts(params: TChatInboxQueryFilters, signal?: AbortSignal) {
+	const { data } = await axios.get<TGetChatInboxCountsOutput>(`/api/chats/inbox-counts?${buildChatInboxSearchParams(params).toString()}`, { signal });
 	return data.data;
 }
 
@@ -117,7 +121,7 @@ export function useChats({ whatsappConexaoTelefoneId, view, search = "", status 
 
 	const query = useInfiniteQuery({
 		queryKey,
-		queryFn: ({ pageParam }) => fetchChats({ ...filters, quickFilter, cursor: pageParam ?? undefined }),
+		queryFn: ({ pageParam, signal }) => fetchChats({ ...filters, quickFilter, cursor: pageParam ?? undefined }, signal),
 		getNextPageParam: (lastPage) => lastPage.nextCursor,
 		initialPageParam: null as TChatsCursor,
 		refetchOnWindowFocus: false,
@@ -141,7 +145,7 @@ export function useChatInboxCounts({
 	const filters = { whatsappConexaoTelefoneId, view, search: debounced.search, status, priority };
 	const queryKey = [CHAT_INBOX_COUNTS_QUERY_KEY_ROOT, filters] as const;
 	return {
-		...useQuery({ queryKey, queryFn: () => fetchChatInboxCounts(filters), refetchOnWindowFocus: false, refetchInterval: 60_000 }),
+		...useQuery({ queryKey, queryFn: ({ signal }) => fetchChatInboxCounts(filters, signal), refetchOnWindowFocus: false, refetchInterval: 60_000 }),
 		queryKey,
 	};
 }

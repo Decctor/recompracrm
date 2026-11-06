@@ -6,6 +6,7 @@ import { chipVariants } from "@/components/ui/chip";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { createBurstCoalescer } from "@/lib/chats/burst-coalescer";
 import { chatsInboxParsers } from "@/lib/chats/inbox-url-state";
 import { isActiveAiRunStatus } from "@/lib/chats/ai-presence";
 import { mapRealtimeChatRow, type TRealtimeAiRunRow, type TRealtimeChatRow } from "@/lib/chats/realtime-mappers";
@@ -262,18 +263,29 @@ function ChatSidebarContent({
 	queryKeyRef.current = queryKey;
 
 	useEffect(() => {
-		// Rajadas de mensagens disparam vários UPDATEs em sequência; as contagens só precisam
-		// refletir o estado final.
-		let countsTimer: ReturnType<typeof setTimeout> | null = null;
+		// Um UPDATE em massa (o "marcar todas como lidas" em 438 chats, em 05/11/2026) chega aqui
+		// como um evento por linha. Invalidar a cada evento disparou um refetch da lista por linha em
+		// cada aba aberta da inbox, e os requests somados estouraram o limite de conexões do Supavisor
+		// (EMAXCONN), derrubando o app inteiro. Lista e contagens só precisam do estado final da
+		// rajada: uma invalidação por rajada, nunca uma por evento.
 		let disposed = false;
 		let hadFailure = false;
 		setRealtimeDown(false);
-		const scheduleCountsRefresh = () => {
-			if (countsTimer) return;
-			countsTimer = setTimeout(() => {
-				countsTimer = null;
-				void queryClient.invalidateQueries({ queryKey: [CHAT_INBOX_COUNTS_QUERY_KEY_ROOT] });
-			}, 800);
+		const countsRefresh = createBurstCoalescer(() => {
+			void queryClient.invalidateQueries({ queryKey: [CHAT_INBOX_COUNTS_QUERY_KEY_ROOT] });
+		});
+		const scheduleCountsRefresh = countsRefresh.schedule;
+		// "current" refaz só a key exibida; "all" alcança todas as keys de lista (uma mudança de
+		// atribuição move o chat entre views). Uma rajada mista resolve para a mais ampla.
+		let pendingListScope: "current" | "all" = "current";
+		const listRefresh = createBurstCoalescer(() => {
+			const scope = pendingListScope;
+			pendingListScope = "current";
+			void queryClient.invalidateQueries({ queryKey: scope === "all" ? ["chats"] : queryKeyRef.current });
+		});
+		const scheduleListRefresh = (scope: "current" | "all") => {
+			if (scope === "all") pendingListScope = "all";
+			listRefresh.schedule();
 		};
 
 		// Nome único por inscrição: ver `createRealtimeChannel`.
@@ -311,16 +323,16 @@ function ChatSidebarContent({
 						};
 					});
 
-					if (precisaInvalidar) void queryClient.invalidateQueries({ queryKey: queryKeyRef.current });
+					if (precisaInvalidar) scheduleListRefresh("current");
 				},
 			)
 			// Uma mudança de atribuição move o chat entre views: não dá para patchar no lugar.
 			.on("postgres_changes", { event: "*", schema: "public", table: "ampmais_chat_assignments", filter: `organizacao_id=eq.${organizationId}` }, () => {
-				void queryClient.invalidateQueries({ queryKey: ["chats"] });
+				scheduleListRefresh("all");
 				scheduleCountsRefresh();
 			})
 			.on("postgres_changes", { event: "INSERT", schema: "public", table: "ampmais_chats", filter: `organizacao_id=eq.${organizationId}` }, () => {
-				void queryClient.invalidateQueries({ queryKey: queryKeyRef.current });
+				scheduleListRefresh("current");
 				scheduleCountsRefresh();
 			})
 			// "IA respondendo" na linha da conversa: patch no lugar, sem invalidar — a run diz o chat e
@@ -364,13 +376,14 @@ function ChatSidebarContent({
 				}
 				initialSubscriptionCompleteRef.current = true;
 				hadFailure = false;
-				void queryClient.invalidateQueries({ queryKey: queryKeyRef.current });
+				scheduleListRefresh("current");
 				scheduleCountsRefresh();
 			});
 
 		return () => {
 			disposed = true;
-			if (countsTimer) clearTimeout(countsTimer);
+			countsRefresh.cancel();
+			listRefresh.cancel();
 			initialSubscriptionCompleteRef.current = false;
 			void supabaseClient.removeChannel(channel);
 		};
