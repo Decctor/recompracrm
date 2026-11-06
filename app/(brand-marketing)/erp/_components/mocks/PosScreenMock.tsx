@@ -32,7 +32,9 @@ import {
 	Wallet,
 	X,
 } from "lucide-react";
+import Image from "next/image";
 import { AdjustmentRow, CashbackDiscountBox, MOCK_CARD, SummaryTitle, TotalDock } from "./mock-parts";
+import { getMockProductPhoto, mockProductPhotoSrc } from "./product-photos";
 
 // Tela "Nova venda" do PDV (app/dashboard/sales/new), desenhada a 1280px de largura.
 
@@ -83,21 +85,29 @@ const SIDEBAR: { label: string; items: TSideItem[] }[] = [
 
 const CATEGORIES = ["Todos os grupos", "Potes", "Gelatos - O Mais Pedido", "Milkshakes", "Açaí", "Picolés", "+3"];
 
-type TProduct = { name: string; code: string; price: string; stock: number | null; from?: boolean; kind?: string };
+// Foto do card como no ProductCard do app (4:3, object-cover). Sem o arquivo baixado, o ícone de
+// produto sem foto, que é o que o app mostra nesse caso.
+function ProductPhoto({ slug }: { slug: string }) {
+	const src = mockProductPhotoSrc(slug);
+	if (!src) return <Package className="size-10 flex-none" />;
+	return <Image src={src} alt={getMockProductPhoto(slug)?.alt ?? ""} fill sizes="320px" className="object-cover" />;
+}
+
+type TProduct = { name: string; code: string; price: string; stock: number | null; from?: boolean; kind?: string; photo: string };
 
 const PRODUCTS: TProduct[] = [
-	{ name: "Pote 1L Chocolate Belga", code: "PT-001", price: "R$ 49,90", stock: 8 },
-	{ name: "Pote 1L Pistache", code: "PT-002", price: "R$ 54,90", stock: 23 },
-	{ name: "Pote 500ml Morango", code: "PT-014", price: "R$ 29,90", stock: 0 },
-	{ name: "Gelato", code: "GL-001", price: "R$ 14,00", stock: null, from: true, kind: "Variações" },
-	{ name: "Milkshake 400ml", code: "MK-400", price: "R$ 22,00", stock: 36 },
-	{ name: "Açaí 500ml", code: "AC-500", price: "R$ 24,00", stock: null, kind: "Adicionais" },
-	{ name: "Picolé de Limão", code: "PC-003", price: "R$ 9,00", stock: 64 },
-	{ name: "Casquinha", code: "CS-001", price: "R$ 7,00", stock: 120 },
-	{ name: "Affogato", code: "BB-010", price: "R$ 16,00", stock: null },
-	{ name: "Sundae Caramelo", code: "SD-002", price: "R$ 19,90", stock: 15 },
-	{ name: "Pote 1L Doce de Leite", code: "PT-006", price: "R$ 49,90", stock: 4 },
-	{ name: "Paleta de Morango", code: "PC-011", price: "R$ 12,00", stock: 41 },
+	{ name: "Pote 1L Chocolate Belga", code: "PT-001", price: "R$ 49,90", stock: 8, photo: "pote-chocolate-belga" },
+	{ name: "Pote 1L Pistache", code: "PT-002", price: "R$ 54,90", stock: 23, photo: "pote-pistache" },
+	{ name: "Pote 500ml Morango", code: "PT-014", price: "R$ 29,90", stock: 0, photo: "pote-morango" },
+	{ name: "Gelato", code: "GL-001", price: "R$ 14,00", stock: null, from: true, kind: "Variações", photo: "gelato" },
+	{ name: "Milkshake 400ml", code: "MK-400", price: "R$ 22,00", stock: 36, photo: "milkshake" },
+	{ name: "Açaí 500ml", code: "AC-500", price: "R$ 24,00", stock: null, kind: "Adicionais", photo: "acai" },
+	{ name: "Picolé de Limão", code: "PC-003", price: "R$ 9,00", stock: 64, photo: "picole-limao" },
+	{ name: "Casquinha", code: "CS-001", price: "R$ 7,00", stock: 120, photo: "casquinha" },
+	{ name: "Affogato", code: "BB-010", price: "R$ 16,00", stock: null, photo: "affogato" },
+	{ name: "Sundae Caramelo", code: "SD-002", price: "R$ 19,90", stock: 15, photo: "sundae-caramelo" },
+	{ name: "Pote 1L Doce de Leite", code: "PT-006", price: "R$ 49,90", stock: 4, photo: "pote-doce-de-leite" },
+	{ name: "Paleta de Morango", code: "PC-011", price: "R$ 12,00", stock: 41, photo: "paleta-morango" },
 ];
 
 const CART = [
@@ -205,8 +215,8 @@ function ProductGrid() {
 			<div className="grid grid-cols-4 gap-2">
 				{PRODUCTS.map((product) => (
 					<div key={product.code} className={cn("relative flex flex-col overflow-hidden", MOCK_CARD)}>
-						<div className="relative flex aspect-[4/3] items-center justify-center bg-[#fafafa] text-[#c3cacd]">
-							<Package className="size-10 flex-none" />
+						<div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden bg-[#fafafa] text-[#c3cacd]">
+							<ProductPhoto slug={product.photo} />
 							{product.kind ? (
 								<span className="absolute top-1.5 left-1.5 inline-flex items-center rounded-full border border-[#e3e8ea] bg-white/90 px-1.5 py-0.5 text-[11px] font-semibold text-[#0e1214]">
 									{product.kind}
