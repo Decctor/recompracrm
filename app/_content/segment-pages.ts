@@ -1,4 +1,5 @@
 import type { FAQItem } from "./blog-posts";
+import { SEGMENT_ERP, type SegmentErp } from "./segment-erp";
 
 // ----------------------------------------------------------------------------
 // Content model for segment landing pages (/segments/[slug]).
@@ -59,6 +60,8 @@ export type SegmentPage = {
 	seo: {
 		keywords: string[];
 	};
+	/** O lado ERP da página (seção "Sistema para …" e pergunta do FAQ). Ver segment-erp.ts. */
+	erp: SegmentErp;
 	relatedSlugs: string[];
 };
 
@@ -89,9 +92,27 @@ type SegmentPageConfig = {
 	relatedSlugs: string[];
 };
 
-const UPDATED_AT = "2026-07-11";
+const UPDATED_AT = "2026-11-06";
+
+const lowerFirst = (text: string) => text.charAt(0).toLowerCase() + text.slice(1);
+
+function buildErpFaq(config: SegmentPageConfig, erp: SegmentErp) {
+	const question = `Vocês têm ${erp.keyword}?`;
+	if (erp.fit === "COMPLETO") {
+		return {
+			question,
+			answer: `Sim. O ERP do RecompraCRM tem PDV, nota fiscal (NFC-e e NF-e), estoque e financeiro, no mesmo sistema do cashback. Para ${config.audience}, isso inclui: ${erp.modules.map(lowerFirst).join("; ")}.`,
+		};
+	}
+	return {
+		question,
+		answer: `${erp.staysInCurrentSystem ?? ""} ${erp.intro}`.trim(),
+	};
+}
 
 function createSegmentPage(config: SegmentPageConfig): SegmentPage {
+	const erp = SEGMENT_ERP[config.slug];
+	if (!erp) throw new Error(`Segmento sem conteúdo de ERP em segment-erp.ts: ${config.slug}`);
 	return {
 		slug: config.slug,
 		name: config.name,
@@ -161,6 +182,7 @@ function createSegmentPage(config: SegmentPageConfig): SegmentPage {
 				answer:
 					"O setup é feito em menos de um dia. A equipe do RecompraCRM configura o cashback, integra seus dados de venda e treina os atendentes. A partir da primeira venda registrada, você já começa a acumular dados de retenção e a acionar campanhas automáticas.",
 			},
+			buildErpFaq(config, erp),
 		],
 		cta: {
 			headline: "Pronto para fazer seus clientes voltarem?",
@@ -175,8 +197,10 @@ function createSegmentPage(config: SegmentPageConfig): SegmentPage {
 				`cashback ${config.name.toLowerCase()}`,
 				`fidelização ${config.name.toLowerCase()}`,
 				...config.keywords,
+				erp.keyword,
 			],
 		},
+		erp,
 		relatedSlugs: config.relatedSlugs,
 	};
 }
@@ -893,12 +917,12 @@ export const SEGMENT_PAGES: SegmentPage[] = [
 		family: "REDES_E_VAREJO",
 		title: "CRM para Rede de Lojas e Franquias",
 		metaDescription:
-			"Programa de fidelidade centralizado para redes de lojas e franquias: cashback, campanhas no WhatsApp e visão por unidade. Padronize a retenção. Agende uma demo.",
+			"Programa de fidelidade centralizado para redes de lojas e franquias: cashback, campanhas no WhatsApp e uma base de clientes única. Padronize a retenção. Agende uma demo.",
 		tagline: "CRM de fidelização para redes de lojas e franquias",
 		heroSubtitle:
 			"Um programa único para todas as unidades: o cliente acumula em uma loja, resgata em qualquer outra — e a matriz enxerga a retenção da rede inteira.",
 		answerBlock:
-			"O RecompraCRM é um CRM de fidelização para redes de lojas e franquias que centraliza cashback, campanhas de WhatsApp e análise RFM em um programa único. O cliente acumula e resgata em qualquer unidade, cada loja opera seu próprio PDI, e a matriz compara retenção, vendas e campanhas por unidade nos dashboards.",
+			"O RecompraCRM é um CRM de fidelização para redes de lojas e franquias que centraliza cashback, campanhas de WhatsApp e análise RFM em um programa único. O cliente acumula e resgata em qualquer loja da rede, todas alimentam a mesma base, e a matriz acompanha retenção, vendas e campanhas da rede num só painel.",
 		publishedAt: "2026-07-11",
 		cashbackPercent: "5%",
 		expirationDays: "60",
@@ -911,11 +935,11 @@ export const SEGMENT_PAGES: SegmentPage[] = [
 		whatsappUse:
 			"Campanhas centralizadas garantem que toda unidade se comunique com o mesmo padrão: recuperação de inativos, aniversário, segunda compra e cashback expirando rodam automaticamente para a base inteira, sem depender da iniciativa de cada gerente.",
 		rfmUse:
-			"O RFM consolidado mostra os melhores clientes da rede e também compara unidades: onde a recorrência é forte, onde a base está esfriando e qual loja precisa de ação primeiro.",
+			"O RFM consolidado mostra os melhores clientes da rede inteira, quem está esfriando e quem precisa de uma campanha de recuperação primeiro.",
 		pdiUse:
-			"Cada unidade opera seu próprio PDI no balcão, mas todas alimentam a mesma base de clientes. A matriz acompanha vendas, campanhas e retenção por loja nos dashboards, com visão individual e agregada.",
+			"Cada loja usa o Ponto de Interação no próprio balcão, e todas alimentam a mesma base de clientes. A matriz acompanha vendas, campanhas e retenção da rede num só painel, com o resultado de cada vendedor.",
 		result:
-			"Redes e franquias saem de ações isoladas por loja para uma máquina de retenção padronizada, com dados comparáveis entre unidades e uma base de clientes que pertence à marca.",
+			"Redes e franquias saem de ações isoladas por loja para uma máquina de retenção padronizada, com uma régua de retenção única e uma base de clientes que pertence à marca.",
 		keywords: ["crm rede de lojas", "fidelidade franquia", "programa de fidelidade multi-loja", "crm para franquias", "fidelização rede de lojas"],
 		relatedSlugs: ["varejo", "restaurantes", "supermercado-e-mercearia"],
 	}),

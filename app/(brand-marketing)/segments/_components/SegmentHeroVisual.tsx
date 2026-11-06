@@ -1,6 +1,6 @@
 import type { SegmentPage } from "@/app/_content/segment-pages";
 import { cn } from "@/lib/utils";
-import { CalendarClock, Check, Hourglass, MessageCircle, Store } from "lucide-react";
+import { CalendarClock, Check, Hourglass, MessageCircle, UserRound } from "lucide-react";
 import { capitalize, SEGMENT_FAMILY_THEMES } from "./segment-families";
 
 // Ilustração de produto do herói, uma por família visual. Os nomes e valores (Maria, as unidades)
@@ -16,7 +16,7 @@ export function SegmentHeroVisual({ page }: { page: SegmentPage }) {
 		case "CASA_E_OBRA":
 			return <ProjectJourney page={page} />;
 		case "REDES_E_VAREJO":
-			return <UnitsSales />;
+			return <SellersSales />;
 	}
 }
 
@@ -180,32 +180,34 @@ function ProjectJourney({ page }: { page: SegmentPage }) {
 	);
 }
 
-const UNITS = [
-	{ name: "Unidade Centro", value: "R$ 84.210", share: 100, meta: "412 clientes recorrentes" },
-	{ name: "Unidade Shopping", value: "R$ 71.930", share: 85, meta: "358 clientes recorrentes" },
-	{ name: "Unidade Bairro", value: "R$ 52.480", share: 62, meta: "271 clientes recorrentes" },
+// Vendas por vendedor (sales/results sellers-block): a visão por pessoa que o app tem. Não existe
+// visão por loja: lojas não são entidade do schema, então a rede inteira é uma base só.
+const SELLERS = [
+	{ name: "Ana Souza", value: "R$ 18.420", share: 100, meta: "214 vendas · ticket médio R$ 86,07" },
+	{ name: "Carlos Lima", value: "R$ 15.980", share: 87, meta: "187 vendas · ticket médio R$ 85,45" },
+	{ name: "Rafael Costa", value: "R$ 9.840", share: 53, meta: "121 vendas · ticket médio R$ 81,32" },
 ];
 
-function UnitsSales() {
+function SellersSales() {
 	return (
 		<div className="flex flex-col gap-3 rounded-[20px] border border-[rgba(14,18,20,0.06)] bg-white p-5 shadow-[0_30px_70px_-36px_rgba(16,24,40,0.35)] max-md:p-4">
 			<div className="flex items-center justify-between gap-3">
-				<span className="text-[12px] font-bold">VENDAS POR UNIDADE</span>
+				<span className="text-[12px] font-bold">VENDAS POR VENDEDOR</span>
 				<span className="text-[12px] text-[#687a80]">Outubro</span>
 			</div>
-			{UNITS.map((unit) => (
-				<div key={unit.name} className="flex flex-col gap-2 rounded-xl border border-[#e3e8ea] p-3">
+			{SELLERS.map((seller) => (
+				<div key={seller.name} className="flex flex-col gap-2 rounded-xl border border-[#e3e8ea] p-3">
 					<div className="flex justify-between gap-2">
 						<span className="flex items-center gap-2 text-[14px] font-semibold">
-							<Store className="size-[15px] flex-none text-[#24549c]" aria-hidden />
-							{unit.name}
+							<UserRound className="size-[15px] flex-none text-[#24549c]" aria-hidden />
+							{seller.name}
 						</span>
-						<span className="text-[14px] font-bold whitespace-nowrap">{unit.value}</span>
+						<span className="text-[14px] font-bold whitespace-nowrap">{seller.value}</span>
 					</div>
 					<span className="block h-2 overflow-hidden rounded-full bg-[#f2f4f4]">
-						<span className="block h-full rounded-full bg-[#24549c]" style={{ width: `${unit.share}%` }} />
+						<span className="block h-full rounded-full bg-[#24549c]" style={{ width: `${seller.share}%` }} />
 					</span>
-					<span className="text-[11px] text-[#687a80]">{unit.meta}</span>
+					<span className="text-[11px] text-[#687a80]">{seller.meta}</span>
 				</div>
 			))}
 		</div>

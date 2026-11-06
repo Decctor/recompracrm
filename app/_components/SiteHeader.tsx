@@ -113,11 +113,7 @@ function SiteHeaderRoot({ children, scrollThreshold = 24, className }: RootProps
 	return (
 		<SiteHeaderContext value={{ scrolled, mobileOpen, setMobileOpen, isHomePage, onNavigate }}>
 			<header
-				className={cn(
-					"fixed top-0 left-0 right-0 z-50 transition-all duration-300 ease-out",
-					scrolled ? "pt-3 px-3 lg:px-4" : "pt-0 px-0",
-					className,
-				)}
+				className={cn("fixed top-0 left-0 right-0 z-50 transition-all duration-300 ease-out", scrolled ? "pt-3 px-3 lg:px-4" : "pt-0 px-0", className)}
 			>
 				{children}
 			</header>
@@ -239,11 +235,7 @@ function SiteHeaderNavLink({ href, label, children, className }: NavLinkProps) {
 
 	if (isAnchor) {
 		return (
-			<a
-				href={isHomePage ? href : `/${href}`}
-				onClick={(e) => onNavigate(href, e, { isMobile: surface === "mobile" })}
-				className={cn(base, className)}
-			>
+			<a href={isHomePage ? href : `/${href}`} onClick={(e) => onNavigate(href, e, { isMobile: surface === "mobile" })} className={cn(base, className)}>
 				{content}
 			</a>
 		);

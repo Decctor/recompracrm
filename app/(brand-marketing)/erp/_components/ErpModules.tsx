@@ -1,3 +1,4 @@
+import Link from "next/link";
 import IfoodLogo from "@/utils/images/integrations/ifood-logo.png";
 import Image from "next/image";
 import { CheckList } from "./CheckList";
@@ -16,7 +17,7 @@ const FISCAL_BULLETS = [
 
 const STOCK_BULLETS = [
 	"Itens da nota vinculados aos seus produtos, com custo atualizado",
-	"Lotes com validade e aviso do que está para vencer",
+	"Lotes com validade e o filtro do que vence em 7 dias",
 	"Recontagem com o ajuste registrado e o motivo",
 	"Cada entrada, saída e devolução guarda o saldo antes e depois",
 ];
@@ -67,10 +68,13 @@ export function ErpModules() {
 						<p className={EYEBROW}>Compras e estoque</p>
 						<h3 className={H3}>A nota do fornecedor vira entrada no estoque.</h3>
 						<p className={LEAD}>
-							As notas emitidas contra o seu CNPJ chegam sozinhas em Notas recebidas. Você vincula os itens aos seus produtos e a entrada é feita a partir do
-							XML, com custo e lote.
+							Com o módulo fiscal ativo, as notas emitidas contra o seu CNPJ chegam sozinhas em Notas recebidas. Você vincula os itens aos seus produtos e a
+							entrada é feita a partir do XML, com custo e lote.
 						</p>
 						<CheckList items={STOCK_BULLETS} />
+						<Link href="/erp/estoque" className="mt-7 inline-flex text-[15px] font-medium text-[#24549c] hover:underline">
+							Conhecer o controle de estoque em detalhe →
+						</Link>
 					</div>
 				</div>
 
@@ -80,13 +84,21 @@ export function ErpModules() {
 							<p className={EYEBROW}>Financeiro</p>
 							<h3 className={H3}>Receitas, custos e resultado sem planilha paralela.</h3>
 						</div>
-						<p className="max-w-[520px] text-[16px] leading-[1.6] text-[#5b6a70]">
-							Cada venda gera o lançamento contábil e as transações de cada forma de pagamento. O plano de contas é criado na ativação e você ajusta como
-							quiser.
-						</p>
+						<div className="max-w-[520px]">
+							<p className="text-[16px] leading-[1.6] text-[#5b6a70]">
+								Cada venda gera o lançamento contábil e as transações de cada forma de pagamento. O plano de contas já vem criado na ativação, com custos,
+								despesas e perdas de estoque separados.
+							</p>
+							<Link href="/erp/financeiro" className="mt-4 inline-flex text-[15px] font-medium text-[#24549c] hover:underline">
+								Conhecer o financeiro em detalhe →
+							</Link>
+						</div>
 					</div>
 					<div className="rounded-[28px] bg-[#eef2f6] p-12 max-md:rounded-[20px] max-md:p-5">
-						<ScaledMock width={1040} label="Visão geral do financeiro com receitas, custos, despesas, resultado e o gráfico de fluxo de transações">
+						<ScaledMock
+							width={1040}
+							label="Visão geral do financeiro com receitas, custos, despesas e caixa líquido, e a cascata do faturamento ao resultado operacional"
+						>
 							<FinanceOverviewMock />
 						</ScaledMock>
 					</div>

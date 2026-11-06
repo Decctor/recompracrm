@@ -9,7 +9,11 @@ const GROUPS = [
 			{ label: "Recuperação", href: "/features/campanhas-whatsapp" },
 			{ label: "Ponto de Interação", href: "/features/ponto-de-interacao" },
 			{ label: "ERP", href: "/erp" },
-			{ label: "Planos", href: "/#planos" },
+			{ label: "PDV", href: "/erp/pdv" },
+			{ label: "Cardápio digital", href: "/erp/cardapio-digital" },
+			{ label: "Controle de estoque", href: "/erp/estoque" },
+			{ label: "Financeiro", href: "/erp/financeiro" },
+			{ label: "Planos", href: "/pricing" },
 		],
 	},
 	{

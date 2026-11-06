@@ -1,3 +1,4 @@
+import { SegmentErp } from "../_components/SegmentErp";
 import { getSegmentPage, SEGMENT_PAGES } from "@/app/_content/segment-pages";
 import { buildFAQPageJsonLd } from "@/components/Content/ArticleFAQ";
 import type { Metadata } from "next";
@@ -89,6 +90,7 @@ export default async function SegmentDetailPage({ params }: Props) {
 			<SegmentConfig page={page} />
 			<SegmentChallenge page={page} />
 			<SegmentPlaybook page={page} />
+			<SegmentErp page={page} />
 			<SegmentOutcome page={page} />
 			<SegmentFaq faqs={page.faqs} />
 			<SegmentRelated segments={relatedSegments} />

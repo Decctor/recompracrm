@@ -1,12 +1,22 @@
 import { Clock3, MapPin, MessageCircle, Package, Truck } from "lucide-react";
+import Image from "next/image";
+import { getMockProductPhoto, mockProductPhotoSrc } from "./product-photos";
 
 // Loja digital (app/shop/[slug]: ShopHeader + ProductCard) dentro de um celular, desenhada a 410px.
 
 const TOP_PRODUCTS = [
-	{ letter: "P", name: "Pote 1L Chocolate Belga", price: "R$ 49,90" },
-	{ letter: "G", name: "Gelato", price: "a partir de R$ 14,00" },
-	{ letter: "M", name: "Milkshake 400ml", price: "R$ 22,00" },
+	{ letter: "P", name: "Pote 1L Chocolate Belga", price: "R$ 49,90", photo: "pote-chocolate-belga" },
+	{ letter: "G", name: "Gelato", price: "a partir de R$ 14,00", photo: "gelato" },
+	{ letter: "M", name: "Milkshake 400ml", price: "R$ 22,00", photo: "milkshake" },
 ];
+
+// Card da loja como no app/shop (quadrado, object-cover). Sem o arquivo baixado, a inicial do
+// produto, que é o que a loja mostra para produto sem foto.
+function ShopProductPhoto({ slug, letter }: { slug: string; letter: string }) {
+	const src = mockProductPhotoSrc(slug, "square");
+	if (!src) return <span className="text-[30px] font-black text-[rgba(104,122,128,0.5)]">{letter}</span>;
+	return <Image src={src} alt={getMockProductPhoto(slug)?.alt ?? ""} fill sizes="180px" className="object-cover" />;
+}
 
 export function ShopPhoneMock() {
 	return (
@@ -61,8 +71,8 @@ export function ShopPhoneMock() {
 					<div className="flex gap-3 overflow-hidden">
 						{TOP_PRODUCTS.map((product) => (
 							<div key={product.name} className="flex w-[180px] flex-none flex-col overflow-hidden rounded-[14px] border border-[#e3e8ea] bg-white">
-								<div className="flex aspect-square items-center justify-center bg-[#f2f4f4]">
-									<span className="text-[30px] font-black text-[rgba(104,122,128,0.5)]">{product.letter}</span>
+								<div className="relative flex aspect-square items-center justify-center overflow-hidden bg-[#f2f4f4]">
+									<ShopProductPhoto slug={product.photo} letter={product.letter} />
 								</div>
 								<div className="flex flex-col gap-1 p-2.5">
 									<span className="text-[12px] font-semibold leading-[1.25]">{product.name}</span>

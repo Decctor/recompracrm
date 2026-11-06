@@ -94,9 +94,9 @@ export const FEATURE_PAGES: FeaturePage[] = [
 			{
 				type: "feature-highlight",
 				icon: "chart",
-				title: "Relatórios que revelam o ROI real do cashback",
+				title: "Relatórios que mostram quanto o cashback vende",
 				body:
-					"Através do painel de Business Intelligence do RecompraCRM, você acompanha em tempo real:\n\n• Quanto de cashback foi distribuído e resgatado por período\n• Quais clientes mais acumulam e mais resgatam\n• Taxa de retorno de clientes após acumular cashback\n• Comparativo de ticket médio: clientes com e sem cashback\n• ROI do programa — você vê exatamente quanto cada real de cashback gerou em receita",
+					"Através do painel de Business Intelligence do RecompraCRM, você acompanha em tempo real:\n\n• Quanto de cashback foi distribuído e resgatado por período\n• Quais clientes mais acumulam e mais resgatam\n• Taxa de resgate, cashback expirado e cashback prestes a expirar\n• Faturamento de clientes que já compravam e de clientes novos\n• Receita das vendas com cashback — quanto venderam os clientes que acumularam ou usaram o crédito",
 			},
 			{
 				type: "text",
@@ -140,7 +140,7 @@ export const FEATURE_PAGES: FeaturePage[] = [
 		headline: "Campanhas automáticas no WhatsApp que vendem enquanto você dorme",
 		shortName: "Campanhas no WhatsApp",
 		description:
-			"Crie campanhas segmentadas e automáticas no WhatsApp para sua loja. Reative clientes inativos, divulgue promoções e acompanhe o ROI de cada mensagem enviada.",
+			"Crie campanhas segmentadas e automáticas no WhatsApp para sua loja. Reative clientes inativos, divulgue promoções e acompanhe a receita atribuída a cada campanha.",
 		seo: {
 			keywords: [
 				"campanhas whatsapp varejo",
@@ -204,9 +204,9 @@ export const FEATURE_PAGES: FeaturePage[] = [
 			{
 				type: "feature-highlight",
 				icon: "chart",
-				title: "ROI de cada campanha — na ponta do lápis",
+				title: "Receita atribuída a cada campanha — na ponta do lápis",
 				body:
-					"O RecompraCRM rastreia o funil completo de cada campanha:\n\n• **Mensagens enviadas** → entregues → lidas → clientes que voltaram à loja → vendas atribuídas.\n• **Modelos de atribuição**: Last Touch, First Touch ou Linear — você escolhe como contabilizar as conversões.\n• **ROI em reais**: veja exatamente quanto de receita cada campanha gerou em relação ao custo.\n• **Tempo de conversão**: quanto tempo levou entre a mensagem e a compra na loja.\n\nChega de achismo. Cada real investido em WhatsApp é rastreável do envio até a venda.",
+					"O RecompraCRM rastreia o funil completo de cada campanha:\n\n• **Mensagens enviadas** → entregues → lidas → clientes que voltaram à loja → vendas atribuídas.\n• **Modelos de atribuição**: Last Touch, First Touch ou Linear — você escolhe como contabilizar as conversões.\n• **Receita atribuída**: quanto de receita cada campanha gerou dentro da janela de atribuição, e a receita incremental, além do ritmo normal de cada cliente.\n• **Tempo de conversão**: quanto tempo levou entre a mensagem e a compra na loja.\n\nChega de achismo. Cada real investido em WhatsApp é rastreável do envio até a venda.",
 			},
 			{
 				type: "feature-highlight",
@@ -219,7 +219,7 @@ export const FEATURE_PAGES: FeaturePage[] = [
 				type: "text",
 				heading: "Campanhas que escalam sem escalar a equipe",
 				body:
-					"O grande diferencial das campanhas automáticas é que elas funcionam 24/7, atendem milhares de clientes simultaneamente e não dependem de um funcionário para operar. Você configura a campanha uma vez e ela roda indefinidamente.\n\nPara lojas com múltiplas unidades, as campanhas são centralizadas e os resultados são consolidados no painel — facilitando a gestão e a tomada de decisão.\n\nNão importa se sua loja tem 100 ou 10.000 clientes cadastrados: a automação garante que cada um receba a mensagem certa, no momento certo.",
+					"O grande diferencial das campanhas automáticas é que elas funcionam 24/7, atendem milhares de clientes simultaneamente e não dependem de um funcionário para operar. Você configura a campanha uma vez e ela roda indefinidamente.\n\nNuma rede de lojas, as campanhas rodam de forma centralizada sobre a base inteira, com um só painel de resultados.\n\nNão importa se sua loja tem 100 ou 10.000 clientes cadastrados: a automação garante que cada um receba a mensagem certa, no momento certo.",
 			},
 		],
 		faqs: [
@@ -241,7 +241,7 @@ export const FEATURE_PAGES: FeaturePage[] = [
 			{
 				question: "Consigo medir o retorno de cada campanha?",
 				answer:
-					"Sim. O RecompraCRM mostra quantos clientes receberam, retornaram e compraram após cada campanha, além da receita gerada e do ROI. Você para de investir no achismo e sabe exatamente quais gatilhos e mensagens trazem mais vendas de volta.",
+					"Sim. O RecompraCRM mostra quantos clientes receberam, retornaram e compraram após cada campanha, além da receita atribuída e da receita incremental. Você para de investir no achismo e sabe exatamente quais gatilhos e mensagens trazem mais vendas de volta.",
 			},
 		],
 		cta: {
@@ -318,7 +318,7 @@ export const FEATURE_PAGES: FeaturePage[] = [
 				type: "text",
 				heading: "Funciona em qualquer dispositivo com navegador",
 				body:
-					"O PDI é uma aplicação web que roda no navegador — não precisa instalar nada. Funciona em tablets Android, iPads, notebooks ou qualquer computador. Basta acessar o link da sua loja e fazer login.\n\nPara lojas com múltiplas unidades, cada unidade tem seu próprio PDI com configurações específicas, mas todos os dados são consolidados no painel central. O gestor acompanha vendas de todas as unidades em tempo real.\n\nA configuração leva menos de um dia. Nossa equipe faz o setup remoto, treina os atendentes por vídeo e você já começa a operar imediatamente.",
+					"O PDI é uma aplicação web que roda no navegador — não precisa instalar nada. Funciona em tablets Android, iPads, notebooks ou qualquer computador. Basta acessar o link da sua loja e fazer login.\n\nNuma rede, cada balcão abre o mesmo PDI no próprio tablet, e todas as vendas alimentam a mesma base de clientes.\n\nA configuração leva menos de um dia. Nossa equipe faz o setup remoto, treina os atendentes por vídeo e você já começa a operar imediatamente.",
 			},
 		],
 		faqs: [
@@ -356,10 +356,14 @@ export const FEATURE_PAGES: FeaturePage[] = [
 		headline: "Inteligência de dados que mostra exatamente onde investir para vender mais",
 		shortName: "Business Intelligence",
 		description:
-			"Dashboards em tempo real, segmentação RFM automática, ROI de campanhas e ranking de vendedores. Tome decisões baseadas em dados, não em achismo.",
+			"Dashboards em tempo real, segmentação RFM automática, receita atribuída às campanhas e ranking de vendedores. Tome decisões baseadas em dados, não em achismo.",
 		seo: {
 			keywords: [
 				"análise rfm varejo",
+				"matriz rfm",
+				"análise rfm",
+				"segmentação rfm",
+				"segmentação de clientes",
 				"business intelligence varejo",
 				"segmentação clientes loja",
 				"dashboard vendas varejo",
@@ -396,7 +400,7 @@ export const FEATURE_PAGES: FeaturePage[] = [
 				icon: "calculator",
 				title: "Matriz RFM: 11 segmentos que revelam a saúde da sua base",
 				body:
-					"A análise RFM (Recência, Frequência e Valor Monetário) é a forma mais consagrada de entender quem são seus clientes. O RecompraCRM calcula automaticamente o score RFM de cada cliente e os agrupa em 11 segmentos:\n\n• **Campeões**: Compraram recentemente, compram com frequência e gastam muito. Seus melhores clientes.\n• **Clientes leais**: Compraram recentemente e têm bom histórico de frequência e valor.\n• **Potenciais clientes leais**: Bom valor e frequência, com a última compra um pouco mais distante.\n• **Clientes recentes**: Compraram há pouco tempo, mas ainda poucas vezes. Precisam de estímulo para voltar.\n• **Promissores**: Compraram recentemente, com frequência e valor ainda em formação.\n• **Precisam de atenção**: Histórico mediano e a última compra começando a ficar para trás.\n• **Prestes a dormir**: Engajamento baixo e recência caindo. Risco de perda.\n• **Em risco**: Bom histórico, mas não compram há bastante tempo.\n• **Não pode perdê-los**: Alto valor histórico e pouco engajamento recente. Prioridade de recuperação.\n• **Hibernando**: Compras antigas e espaçadas. Quase perdidos.\n• **Perdidos**: Sem interação significativa há muito tempo.\n\nO sistema atualiza os segmentos automaticamente a cada nova venda registrada.",
+					"A análise RFM (Recência, Frequência e Valor Monetário) é a forma mais consagrada de entender quem são seus clientes. O RecompraCRM calcula automaticamente o score RFM de cada cliente e os agrupa em 11 segmentos:\n\n• **Campeões**: Compraram recentemente, compram com frequência e gastam muito. Seus melhores clientes.\n• **Clientes leais**: Compraram recentemente e têm bom histórico de frequência e valor.\n• **Potenciais clientes leais**: Bom valor e frequência, com a última compra um pouco mais distante.\n• **Clientes recentes**: Compraram há pouco tempo, mas ainda poucas vezes. Precisam de estímulo para voltar.\n• **Promissores**: Compraram recentemente, com frequência e valor ainda em formação.\n• **Precisam de atenção**: Histórico mediano e a última compra começando a ficar para trás.\n• **Prestes a dormir**: Engajamento baixo e recência caindo. Risco de perda.\n• **Em risco**: Bom histórico, mas não compram há bastante tempo.\n• **Não pode perdê-los**: Alto valor histórico e pouco engajamento recente. Prioridade de recuperação.\n• **Hibernando**: Compras antigas e espaçadas. Quase perdidos.\n• **Perdidos**: Sem interação significativa há muito tempo.\n\nCada cliente recebe uma nota de 1 a 5 em recência, frequência e valor, calculada sobre as compras dos últimos 12 meses, e o sistema recalcula os segmentos automaticamente todo dia. Os cortes de cada nota podem ser ajustados nas configurações, e a tela de saúde da matriz compara a configuração atual com uma sugestão calculada pelos percentis da sua base.\n\nPara recortes mais finos, os **Públicos** combinam segmentos RFM com cidade e bairro, compradores de um produto e campos personalizados. E a entrada ou a permanência de um cliente num segmento pode disparar uma campanha automática no WhatsApp.",
 			},
 			{
 				type: "feature-highlight",
@@ -410,7 +414,7 @@ export const FEATURE_PAGES: FeaturePage[] = [
 				icon: "chart",
 				title: "Dashboards de receita, campanhas e equipe",
 				body:
-					"O painel de Business Intelligence reúne tudo em um só lugar:\n\n• **Receita**: Faturamento por período, ticket médio, número de vendas, comparativo mensal.\n• **Cashback**: Créditos distribuídos vs. resgatados, taxa de retorno, impacto no ticket médio.\n• **Campanhas**: Funil completo (envios → leituras → conversões → receita), ROI por campanha, tempo de conversão.\n• **Equipe**: Ranking de vendedores, volume de vendas por atendente, progresso em relação a metas.\n• **Clientes**: Distribuição por segmento RFM, ciclo de compra, produtos mais comprados por perfil.\n\nTodos os dados são atualizados em tempo real, a cada venda registrada no PDI.",
+					"O painel de Business Intelligence reúne tudo em um só lugar:\n\n• **Receita**: Faturamento por período, ticket médio, número de vendas, comparativo mensal.\n• **Cashback**: Cashback gerado, resgatado, expirado e expirando, taxa de resgate e vendas com cashback.\n• **Campanhas**: Funil completo (envios → leituras → conversões → receita), receita atribuída por campanha, tempo de conversão.\n• **Equipe**: Ranking de vendedores, volume de vendas por atendente, progresso em relação a metas.\n• **Clientes**: Distribuição por segmento RFM, ciclo de compra, produtos mais comprados por perfil.\n\nTodos os dados são atualizados em tempo real, a cada venda registrada no PDI.",
 			},
 			{
 				type: "feature-highlight",
@@ -423,14 +427,14 @@ export const FEATURE_PAGES: FeaturePage[] = [
 				type: "text",
 				heading: "De achismo a decisão baseada em dados",
 				body:
-					"O Business Intelligence do RecompraCRM foi desenhado para lojistas, não para analistas de dados. Cada dashboard é visual, intuitivo e mostra as informações que realmente importam para quem precisa decidir rápido.\n\nNão importa se você tem uma loja ou dez. Os dados de todas as unidades são consolidados automaticamente, permitindo comparações de desempenho entre filiais, identificação de melhores práticas e alocação inteligente de recursos.\n\nO resultado: menos decisões no escuro, mais ações direcionadas e um retorno sobre investimento visível em cada painel.",
+					"O Business Intelligence do RecompraCRM foi desenhado para lojistas, não para analistas de dados. Cada dashboard é visual, intuitivo e mostra as informações que realmente importam para quem precisa decidir rápido.\n\nOs números vêm direto das vendas: faturamento, ticket médio, clientes que voltaram, campanhas e vendedores, sem consolidar planilha nem esperar o fechamento do mês.\n\nO resultado: menos decisões no escuro, mais ações direcionadas e a receita de cada campanha visível no painel.",
 			},
 		],
 		faqs: [
 			{
 				question: "Que tipo de relatório o Business Intelligence do RecompraCRM oferece?",
 				answer:
-					"O painel mostra ticket médio, frequência de compra, receita por período, desempenho de cada campanha e ROI do cashback. Também identifica clientes em risco de abandono pela análise RFM. Tudo em tempo real, sem exportar planilhas nem depender de TI, para você ver onde investir para vender mais.",
+					"O painel mostra ticket médio, frequência de compra, receita por período, desempenho de cada campanha e a receita das vendas com cashback. Também identifica clientes em risco de abandono pela análise RFM. Tudo em tempo real, sem exportar planilhas nem depender de TI, para você ver onde investir para vender mais.",
 			},
 			{
 				question: "Preciso saber de análise de dados para usar?",
@@ -443,9 +447,19 @@ export const FEATURE_PAGES: FeaturePage[] = [
 					"RFM avalia cada cliente por Recência, Frequência e Valor gasto, agrupando-os em perfis como fiéis, em risco e inativos. Com isso você sabe exatamente quem merece atenção agora e direciona campanhas para reativar quem está prestes a parar de comprar.",
 			},
 			{
+				question: "Como os segmentos RFM são calculados?",
+				answer:
+					"Cada cliente recebe uma nota de 1 a 5 em recência (há quanto tempo comprou), frequência (quantas vezes) e valor (quanto gastou), considerando os últimos 12 meses. A combinação das três notas define o segmento, entre os 11 da matriz, e o cálculo roda automaticamente todo dia. Os cortes de cada nota podem ser ajustados, com uma sugestão baseada na distribuição da sua própria base.",
+			},
+			{
+				question: "Posso criar segmentos próprios além do RFM?",
+				answer:
+					"Pode. Os Públicos combinam segmentos RFM com localização (estado, cidade e bairro), os maiores compradores de um produto e campos personalizados do cadastro, com regras de todos, qualquer ou nenhum. Um público pode ser usado nas campanhas do WhatsApp e sincronizado com o Meta Ads.",
+			},
+			{
 				question: "Os dados ficam atualizados em tempo real?",
 				answer:
-					"Sim. Cada venda registrada no PDI alimenta o painel instantaneamente. Você acompanha o movimento do dia, o efeito de uma campanha recém-disparada e a evolução dos indicadores sem esperar fechamento de mês nem consolidação manual.",
+					"As vendas registradas no PDI ou no PDV do ERP entram no painel na hora; as que vêm de um sistema integrado entram a cada sincronização. A matriz RFM é recalculada uma vez por dia. Você acompanha o movimento do dia e o efeito de uma campanha sem esperar o fechamento do mês nem consolidar planilha.",
 			},
 		],
 		cta: {

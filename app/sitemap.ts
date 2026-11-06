@@ -2,6 +2,7 @@ import { BLOG_POSTS } from "@/app/_content/blog-posts";
 import { FEATURE_PAGES } from "@/app/_content/feature-pages";
 import { INTEGRATION_PAGES } from "@/app/_content/integration-pages";
 import { SEGMENT_PAGES } from "@/app/_content/segment-pages";
+import { GLOSSARY_TERMS } from "@/app/_content/glossary";
 import { HELP_ARTICLES } from "@/app/_content/help-articles";
 import { LANDING_CASES } from "@/app/_content/cases";
 import { db } from "@/services/drizzle";
@@ -71,6 +72,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 		})),
 	];
 
+	const glossaryRoutes: MetadataRoute.Sitemap = [
+		{ url: `${BASE_URL}/glossary`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.8 },
+		...GLOSSARY_TERMS.map((term) => ({
+			url: `${BASE_URL}/glossary/${term.slug}`,
+			lastModified: new Date(),
+			changeFrequency: "monthly" as const,
+			priority: 0.75,
+		})),
+	];
+
 	const caseRoutes: MetadataRoute.Sitemap = [
 		{ url: `${BASE_URL}/cases`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.85 },
 		...LANDING_CASES.map((item) => ({
@@ -88,7 +99,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
 	const staticRoutes: MetadataRoute.Sitemap = [
 		{ url: BASE_URL, lastModified: new Date(), changeFrequency: "weekly", priority: 1 },
+		{ url: `${BASE_URL}/pricing`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.95 },
 		{ url: `${BASE_URL}/erp`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.95 },
+		{ url: `${BASE_URL}/erp/pdv`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.9 },
+		{ url: `${BASE_URL}/erp/cardapio-digital`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.9 },
+		{ url: `${BASE_URL}/erp/estoque`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.9 },
+		{ url: `${BASE_URL}/erp/financeiro`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.9 },
+		{ url: `${BASE_URL}/solutions/programa-de-fidelidade`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.95 },
+		{ url: `${BASE_URL}/solutions/crm-para-varejo`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.95 },
 		{ url: `${BASE_URL}/presentation`, lastModified: new Date(), changeFrequency: "monthly", priority: 1 },
 		{ url: `${BASE_URL}/community`, lastModified: new Date(), changeFrequency: "weekly", priority: 0.9 },
 		{ url: `${BASE_URL}/community/courses`, lastModified: new Date(), changeFrequency: "weekly", priority: 0.8 },
@@ -124,6 +142,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 		...featureRoutes,
 		...integrationRoutes,
 		...helpRoutes,
+		...glossaryRoutes,
 		...caseRoutes,
 		...toolRoutes,
 		...staticRoutes,

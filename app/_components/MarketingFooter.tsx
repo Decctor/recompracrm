@@ -4,14 +4,18 @@ import Link from "next/link";
 
 const LINKS = [
 	{ label: "Produto", href: "/" },
+	{ label: "Programa de fidelidade", href: "/solutions/programa-de-fidelidade" },
+	{ label: "CRM para varejo", href: "/solutions/crm-para-varejo" },
 	{ label: "Funcionalidades", href: "/features/programa-de-cashback" },
 	{ label: "Cases", href: "/cases" },
+	{ label: "Preços", href: "/pricing" },
 	{ label: "Integrações", href: "/integrations" },
 	{ label: "ERP", href: "/erp" },
 	{ label: "Ferramentas", href: "/tools/cashback-calculator" },
 	{ label: "Blog", href: "/blog" },
 	{ label: "Ajuda", href: "/help" },
 	{ label: "Segmentos", href: "/segments" },
+	{ label: "Glossário", href: "/glossary" },
 	{ label: "Privacidade", href: "/legal" },
 ];
 

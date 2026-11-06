@@ -6,18 +6,28 @@ Feito para o varejo físico brasileiro: sorveterias, petshops, lojas de roupas, 
 
 Como funciona, em resumo:
 - **Cashback:** cada compra gera um crédito com validade, criando um motivo concreto para o cliente voltar antes de o crédito expirar. O cliente não baixa app nem carrega cartão — usa CPF ou telefone no balcão.
-- **Campanhas no WhatsApp:** mensagens automáticas disparadas por gatilhos de comportamento (aniversário, cliente sumido, cashback expirando, primeira compra), com segmentação por RFM e medição de ROI.
+- **Campanhas no WhatsApp:** mensagens automáticas disparadas por gatilhos de comportamento (aniversário, cliente sumido, cashback expirando, primeira compra), com segmentação por RFM e receita atribuída a cada campanha.
 - **Ponto de Interação (PDI):** um tablet ou totem no balcão onde o atendente registra a venda e o cliente vê e resgata o saldo de cashback em tempo real. Roda em qualquer tablet ou celular no navegador.
-- **Business Intelligence:** relatórios em tempo real de ticket médio, frequência, receita, ROI do cashback e clientes em risco de abandono.
+- **Business Intelligence:** relatórios em tempo real de ticket médio, frequência, receita, vendas com cashback e clientes em risco de abandono.
 
-Planos: dois caminhos com a mesma plataforma completa. **Plataforma** (self-service) por R$399,90/mês e **Plataforma + Gestor de Crescimento** (done-for-you, a equipe opera por você) por R$899,90/mês. Ambos com 15 dias grátis, sem cartão de crédito e sem taxa de setup.
+Planos: dois caminhos com a mesma plataforma. **Plataforma** (self-service) por R$399,90/mês ou R$3.839,90/ano, e **Plataforma + Gestor de Crescimento** (done-for-you, a equipe opera por você) por R$899,90/mês. Ambos com 15 dias grátis, sem cartão de crédito e sem taxa de setup. A caixa de entrada com agente de IA e o ERP são adicionais sob consulta.
 
 ## Páginas principais
 
 - [Página inicial](https://www.recompracrm.com.br): visão geral do produto, como funciona, planos e resultados.
+- [Preços](https://www.recompracrm.com.br/pricing): os planos, o que cada um inclui, os adicionais e as dúvidas de preço.
 - [Preços (machine-readable)](https://www.recompracrm.com.br/pricing.md): detalhamento dos planos, valores e inclusos.
 - [Segmentos](https://www.recompracrm.com.br/segments): programa de fidelidade aplicado a cada tipo de loja — restaurantes, delivery, pet shops, farmácias, moda e mais de 20 segmentos, com configuração sugerida de cashback por segmento.
+- [ERP](https://www.recompracrm.com.br/erp): PDV, NFC-e e NF-e, compras, estoque, financeiro, mesas e comandas e loja digital, integrados ao cashback.
+- [PDV](https://www.recompracrm.com.br/erp/pdv): frente de caixa no navegador com leitor de código de barras, balança, maquininha Stone, NFC-e e fechamento de caixa com conferência cega.
+- [Cardápio digital](https://www.recompracrm.com.br/erp/cardapio-digital): loja digital com link próprio para pedidos de entrega e retirada, sem comissão por pedido, com quadro de pedidos, acompanhamento pelo cliente e resgate de cashback no checkout.
+- [Controle de estoque](https://www.recompracrm.com.br/erp/estoque): estoque integrado ao PDV, com baixa automática nas vendas, entrada pelo XML da nota do fornecedor, lotes com validade, recontagem e relatórios de curva ABC, giro, ponto de pedido e estoque parado.
+- [Financeiro](https://www.recompracrm.com.br/erp/financeiro): financeiro integrado ao PDV e às compras — contas a pagar e receber, fiados, conciliação bancária por extrato importado, fluxo de caixa projetado e DRE gerencial por competência.
 - [Blog](https://www.recompracrm.com.br/blog): artigos sobre fidelização, cashback e retenção no varejo.
+- [Glossário](https://www.recompracrm.com.br/glossary): definições curtas dos termos de varejo, com fórmula e exemplo quando há conta — CRM, churn, cashback, LTV, CAC, ticket médio, markup, margem bruta, curva ABC, giro de estoque, matriz RFM, NPS, PDV e NFC-e.
+
+- [Programa de fidelidade](https://www.recompracrm.com.br/solutions/programa-de-fidelidade): como montar um programa de fidelidade para loja física — carimbo, pontos, cashback ou clube, a regra pela margem e o cartão fidelidade digital pelo telefone.
+- [CRM para varejo](https://www.recompracrm.com.br/solutions/crm-para-varejo): o que é um sistema de CRM para loja física — base de clientes formada a cada venda, perfil e segmentação RFM, campanhas no WhatsApp com receita atribuída e, como adicional, caixa de entrada com agente de IA.
 
 ## Funcionalidades
 

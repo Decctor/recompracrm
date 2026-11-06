@@ -16,6 +16,7 @@
 		"start": "next start",
 		"sync:org-sales-history": "tsx ./sync-org-sales-history.ts",
 		"import:ibpt": "tsx ./scripts/import-ibpt.ts",
+		"download:erp-mock-photos": "tsx ./scripts/download-erp-mock-photos.ts",
 		"import:ibpt:api": "tsx ./scripts/import-ibpt-api.ts",
 		"typecheck": "tsrs --noEmit -p . --tsBuildInfoFile node_modules/.cache/tsrs/tsconfig.tsbuildinfo",
 		"lint": "oxlint --react-plugin --nextjs-plugin .",

@@ -26,7 +26,7 @@ export function ErpContact() {
 						<ArrowRight className="size-4 flex-none" aria-hidden />
 					</TrackedCta>
 					<TrackedCta
-						href="/#planos"
+						href="/pricing"
 						ctaId="erp_contato_planos_crm"
 						location="erp_contato"
 						className="inline-flex h-12 items-center rounded-full border border-white/20 px-[22px] text-[15px] font-medium text-white transition-colors hover:bg-white/8"
