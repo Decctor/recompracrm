@@ -224,7 +224,7 @@ export function MenuComparison() {
 const ERP_MODULES = [
 	{ title: "PDV", text: "A frente de caixa com o mesmo cadastro de produtos, clientes e cashback.", href: "/erp/pdv" },
 	{ title: "Mesas e comandas", text: "Para o pedido feito no salão, com contas por mesa, comanda ou cliente.", href: "/erp#canais" },
-	{ title: "Estoque", text: "Entrada por XML, lotes com validade e a baixa de cada pedido entregue.", href: "/erp#compras" },
+	{ title: "Estoque", text: "Entrada por XML, lotes com validade e a baixa de cada pedido entregue.", href: "/erp/estoque" },
 	{ title: "Nota fiscal", text: "NF-e e NFC-e emitidas a partir da venda, com a fila de rejeições.", href: "/erp#fiscal" },
 ];
 

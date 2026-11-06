@@ -1,3 +1,4 @@
+import Link from "next/link";
 import IfoodLogo from "@/utils/images/integrations/ifood-logo.png";
 import Image from "next/image";
 import { CheckList } from "./CheckList";
@@ -16,7 +17,7 @@ const FISCAL_BULLETS = [
 
 const STOCK_BULLETS = [
 	"Itens da nota vinculados aos seus produtos, com custo atualizado",
-	"Lotes com validade e aviso do que está para vencer",
+	"Lotes com validade e o filtro do que vence em 7 dias",
 	"Recontagem com o ajuste registrado e o motivo",
 	"Cada entrada, saída e devolução guarda o saldo antes e depois",
 ];
@@ -67,10 +68,13 @@ export function ErpModules() {
 						<p className={EYEBROW}>Compras e estoque</p>
 						<h3 className={H3}>A nota do fornecedor vira entrada no estoque.</h3>
 						<p className={LEAD}>
-							As notas emitidas contra o seu CNPJ chegam sozinhas em Notas recebidas. Você vincula os itens aos seus produtos e a entrada é feita a partir do
-							XML, com custo e lote.
+							Com o módulo fiscal ativo, as notas emitidas contra o seu CNPJ chegam sozinhas em Notas recebidas. Você vincula os itens aos seus produtos e a
+							entrada é feita a partir do XML, com custo e lote.
 						</p>
 						<CheckList items={STOCK_BULLETS} />
+						<Link href="/erp/estoque" className="mt-7 inline-flex text-[15px] font-medium text-[#24549c] hover:underline">
+							Conhecer o controle de estoque em detalhe →
+						</Link>
 					</div>
 				</div>
 
