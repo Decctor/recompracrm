@@ -6,13 +6,13 @@
 
 import { Printer } from "lucide-react";
 import { BRAND } from "./_components/_shared";
-import { CasaVerdeProposal } from "./_components/casa-verde";
+import { EmporioDoBreuProposal } from "./_components/emporio-do-breu";
 
 /* -------------------------------------------------------------------------- */
 /*  Proposta ativa — troque aqui                                              */
 /* -------------------------------------------------------------------------- */
 
-const ActiveProposal = CasaVerdeProposal;
+const ActiveProposal = EmporioDoBreuProposal;
 
 /* -------------------------------------------------------------------------- */
 /*  Shell                                                                      */
