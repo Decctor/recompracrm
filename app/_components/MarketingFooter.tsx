@@ -13,6 +13,7 @@ const LINKS = [
 	{ label: "Blog", href: "/blog" },
 	{ label: "Ajuda", href: "/help" },
 	{ label: "Segmentos", href: "/segments" },
+	{ label: "Glossário", href: "/glossary" },
 	{ label: "Privacidade", href: "/legal" },
 ];
 
