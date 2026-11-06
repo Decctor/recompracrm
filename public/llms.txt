@@ -6,9 +6,9 @@ Feito para o varejo físico brasileiro: sorveterias, petshops, lojas de roupas, 
 
 Como funciona, em resumo:
 - **Cashback:** cada compra gera um crédito com validade, criando um motivo concreto para o cliente voltar antes de o crédito expirar. O cliente não baixa app nem carrega cartão — usa CPF ou telefone no balcão.
-- **Campanhas no WhatsApp:** mensagens automáticas disparadas por gatilhos de comportamento (aniversário, cliente sumido, cashback expirando, primeira compra), com segmentação por RFM e medição de ROI.
+- **Campanhas no WhatsApp:** mensagens automáticas disparadas por gatilhos de comportamento (aniversário, cliente sumido, cashback expirando, primeira compra), com segmentação por RFM e receita atribuída a cada campanha.
 - **Ponto de Interação (PDI):** um tablet ou totem no balcão onde o atendente registra a venda e o cliente vê e resgata o saldo de cashback em tempo real. Roda em qualquer tablet ou celular no navegador.
-- **Business Intelligence:** relatórios em tempo real de ticket médio, frequência, receita, ROI do cashback e clientes em risco de abandono.
+- **Business Intelligence:** relatórios em tempo real de ticket médio, frequência, receita, vendas com cashback e clientes em risco de abandono.
 
 Planos: dois caminhos com a mesma plataforma completa. **Plataforma** (self-service) por R$399,90/mês e **Plataforma + Gestor de Crescimento** (done-for-you, a equipe opera por você) por R$899,90/mês. Ambos com 15 dias grátis, sem cartão de crédito e sem taxa de setup.
 

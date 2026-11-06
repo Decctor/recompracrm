@@ -94,9 +94,9 @@ export const FEATURE_PAGES: FeaturePage[] = [
 			{
 				type: "feature-highlight",
 				icon: "chart",
-				title: "Relatórios que revelam o ROI real do cashback",
+				title: "Relatórios que mostram quanto o cashback vende",
 				body:
-					"Através do painel de Business Intelligence do RecompraCRM, você acompanha em tempo real:\n\n• Quanto de cashback foi distribuído e resgatado por período\n• Quais clientes mais acumulam e mais resgatam\n• Taxa de retorno de clientes após acumular cashback\n• Comparativo de ticket médio: clientes com e sem cashback\n• ROI do programa — você vê exatamente quanto cada real de cashback gerou em receita",
+					"Através do painel de Business Intelligence do RecompraCRM, você acompanha em tempo real:\n\n• Quanto de cashback foi distribuído e resgatado por período\n• Quais clientes mais acumulam e mais resgatam\n• Taxa de retorno de clientes após acumular cashback\n• Comparativo de ticket médio: clientes com e sem cashback\n• Receita das vendas com cashback — quanto venderam os clientes que acumularam ou usaram o crédito",
 			},
 			{
 				type: "text",
@@ -140,7 +140,7 @@ export const FEATURE_PAGES: FeaturePage[] = [
 		headline: "Campanhas automáticas no WhatsApp que vendem enquanto você dorme",
 		shortName: "Campanhas no WhatsApp",
 		description:
-			"Crie campanhas segmentadas e automáticas no WhatsApp para sua loja. Reative clientes inativos, divulgue promoções e acompanhe o ROI de cada mensagem enviada.",
+			"Crie campanhas segmentadas e automáticas no WhatsApp para sua loja. Reative clientes inativos, divulgue promoções e acompanhe a receita atribuída a cada campanha.",
 		seo: {
 			keywords: [
 				"campanhas whatsapp varejo",
@@ -204,9 +204,9 @@ export const FEATURE_PAGES: FeaturePage[] = [
 			{
 				type: "feature-highlight",
 				icon: "chart",
-				title: "ROI de cada campanha — na ponta do lápis",
+				title: "Receita atribuída a cada campanha — na ponta do lápis",
 				body:
-					"O RecompraCRM rastreia o funil completo de cada campanha:\n\n• **Mensagens enviadas** → entregues → lidas → clientes que voltaram à loja → vendas atribuídas.\n• **Modelos de atribuição**: Last Touch, First Touch ou Linear — você escolhe como contabilizar as conversões.\n• **ROI em reais**: veja exatamente quanto de receita cada campanha gerou em relação ao custo.\n• **Tempo de conversão**: quanto tempo levou entre a mensagem e a compra na loja.\n\nChega de achismo. Cada real investido em WhatsApp é rastreável do envio até a venda.",
+					"O RecompraCRM rastreia o funil completo de cada campanha:\n\n• **Mensagens enviadas** → entregues → lidas → clientes que voltaram à loja → vendas atribuídas.\n• **Modelos de atribuição**: Last Touch, First Touch ou Linear — você escolhe como contabilizar as conversões.\n• **Receita atribuída**: quanto de receita cada campanha gerou dentro da janela de atribuição, e a receita incremental, além do ritmo normal de cada cliente.\n• **Tempo de conversão**: quanto tempo levou entre a mensagem e a compra na loja.\n\nChega de achismo. Cada real investido em WhatsApp é rastreável do envio até a venda.",
 			},
 			{
 				type: "feature-highlight",
@@ -241,7 +241,7 @@ export const FEATURE_PAGES: FeaturePage[] = [
 			{
 				question: "Consigo medir o retorno de cada campanha?",
 				answer:
-					"Sim. O RecompraCRM mostra quantos clientes receberam, retornaram e compraram após cada campanha, além da receita gerada e do ROI. Você para de investir no achismo e sabe exatamente quais gatilhos e mensagens trazem mais vendas de volta.",
+					"Sim. O RecompraCRM mostra quantos clientes receberam, retornaram e compraram após cada campanha, além da receita atribuída e da receita incremental. Você para de investir no achismo e sabe exatamente quais gatilhos e mensagens trazem mais vendas de volta.",
 			},
 		],
 		cta: {
@@ -356,7 +356,7 @@ export const FEATURE_PAGES: FeaturePage[] = [
 		headline: "Inteligência de dados que mostra exatamente onde investir para vender mais",
 		shortName: "Business Intelligence",
 		description:
-			"Dashboards em tempo real, segmentação RFM automática, ROI de campanhas e ranking de vendedores. Tome decisões baseadas em dados, não em achismo.",
+			"Dashboards em tempo real, segmentação RFM automática, receita atribuída às campanhas e ranking de vendedores. Tome decisões baseadas em dados, não em achismo.",
 		seo: {
 			keywords: [
 				"análise rfm varejo",
@@ -410,7 +410,7 @@ export const FEATURE_PAGES: FeaturePage[] = [
 				icon: "chart",
 				title: "Dashboards de receita, campanhas e equipe",
 				body:
-					"O painel de Business Intelligence reúne tudo em um só lugar:\n\n• **Receita**: Faturamento por período, ticket médio, número de vendas, comparativo mensal.\n• **Cashback**: Créditos distribuídos vs. resgatados, taxa de retorno, impacto no ticket médio.\n• **Campanhas**: Funil completo (envios → leituras → conversões → receita), ROI por campanha, tempo de conversão.\n• **Equipe**: Ranking de vendedores, volume de vendas por atendente, progresso em relação a metas.\n• **Clientes**: Distribuição por segmento RFM, ciclo de compra, produtos mais comprados por perfil.\n\nTodos os dados são atualizados em tempo real, a cada venda registrada no PDI.",
+					"O painel de Business Intelligence reúne tudo em um só lugar:\n\n• **Receita**: Faturamento por período, ticket médio, número de vendas, comparativo mensal.\n• **Cashback**: Créditos distribuídos vs. resgatados, taxa de retorno, impacto no ticket médio.\n• **Campanhas**: Funil completo (envios → leituras → conversões → receita), receita atribuída por campanha, tempo de conversão.\n• **Equipe**: Ranking de vendedores, volume de vendas por atendente, progresso em relação a metas.\n• **Clientes**: Distribuição por segmento RFM, ciclo de compra, produtos mais comprados por perfil.\n\nTodos os dados são atualizados em tempo real, a cada venda registrada no PDI.",
 			},
 			{
 				type: "feature-highlight",
@@ -430,7 +430,7 @@ export const FEATURE_PAGES: FeaturePage[] = [
 			{
 				question: "Que tipo de relatório o Business Intelligence do RecompraCRM oferece?",
 				answer:
-					"O painel mostra ticket médio, frequência de compra, receita por período, desempenho de cada campanha e ROI do cashback. Também identifica clientes em risco de abandono pela análise RFM. Tudo em tempo real, sem exportar planilhas nem depender de TI, para você ver onde investir para vender mais.",
+					"O painel mostra ticket médio, frequência de compra, receita por período, desempenho de cada campanha e a receita das vendas com cashback. Também identifica clientes em risco de abandono pela análise RFM. Tudo em tempo real, sem exportar planilhas nem depender de TI, para você ver onde investir para vender mais.",
 			},
 			{
 				question: "Preciso saber de análise de dados para usar?",
