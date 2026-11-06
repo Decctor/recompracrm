@@ -1,4 +1,5 @@
 import type { FAQItem } from "./blog-posts";
+import { SEGMENT_ERP, type SegmentErp } from "./segment-erp";
 
 // ----------------------------------------------------------------------------
 // Content model for segment landing pages (/segments/[slug]).
@@ -59,6 +60,8 @@ export type SegmentPage = {
 	seo: {
 		keywords: string[];
 	};
+	/** O lado ERP da página (seção "Sistema para …" e pergunta do FAQ). Ver segment-erp.ts. */
+	erp: SegmentErp;
 	relatedSlugs: string[];
 };
 
@@ -89,9 +92,27 @@ type SegmentPageConfig = {
 	relatedSlugs: string[];
 };
 
-const UPDATED_AT = "2026-07-11";
+const UPDATED_AT = "2026-11-06";
+
+const lowerFirst = (text: string) => text.charAt(0).toLowerCase() + text.slice(1);
+
+function buildErpFaq(config: SegmentPageConfig, erp: SegmentErp) {
+	const question = `Vocês têm ${erp.keyword}?`;
+	if (erp.fit === "COMPLETO") {
+		return {
+			question,
+			answer: `Sim. O ERP do RecompraCRM tem PDV, nota fiscal (NFC-e e NF-e), estoque e financeiro, no mesmo sistema do cashback. Para ${config.audience}, isso inclui: ${erp.modules.map(lowerFirst).join("; ")}.`,
+		};
+	}
+	return {
+		question,
+		answer: `${erp.staysInCurrentSystem ?? ""} ${erp.intro}`.trim(),
+	};
+}
 
 function createSegmentPage(config: SegmentPageConfig): SegmentPage {
+	const erp = SEGMENT_ERP[config.slug];
+	if (!erp) throw new Error(`Segmento sem conteúdo de ERP em segment-erp.ts: ${config.slug}`);
 	return {
 		slug: config.slug,
 		name: config.name,
@@ -161,6 +182,7 @@ function createSegmentPage(config: SegmentPageConfig): SegmentPage {
 				answer:
 					"O setup é feito em menos de um dia. A equipe do RecompraCRM configura o cashback, integra seus dados de venda e treina os atendentes. A partir da primeira venda registrada, você já começa a acumular dados de retenção e a acionar campanhas automáticas.",
 			},
+			buildErpFaq(config, erp),
 		],
 		cta: {
 			headline: "Pronto para fazer seus clientes voltarem?",
@@ -175,8 +197,10 @@ function createSegmentPage(config: SegmentPageConfig): SegmentPage {
 				`cashback ${config.name.toLowerCase()}`,
 				`fidelização ${config.name.toLowerCase()}`,
 				...config.keywords,
+				erp.keyword,
 			],
 		},
+		erp,
 		relatedSlugs: config.relatedSlugs,
 	};
 }
