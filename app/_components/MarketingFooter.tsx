@@ -5,6 +5,7 @@ import Link from "next/link";
 const LINKS = [
 	{ label: "Produto", href: "/" },
 	{ label: "Programa de fidelidade", href: "/solutions/programa-de-fidelidade" },
+	{ label: "CRM para varejo", href: "/solutions/crm-para-varejo" },
 	{ label: "Funcionalidades", href: "/features/programa-de-cashback" },
 	{ label: "Cases", href: "/cases" },
 	{ label: "Integrações", href: "/integrations" },

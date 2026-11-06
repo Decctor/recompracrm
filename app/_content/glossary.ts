@@ -78,8 +78,8 @@ export const GLOSSARY_TERMS: GlossaryTerm[] = [
 		inRecompra: {
 			text:
 				"O RecompraCRM é um CRM de recompra para o varejo: liga cada venda ao cliente pelo telefone, classifica a base em segmentos RFM e aciona cashback e campanhas no WhatsApp para quem precisa voltar.",
-			href: "/",
-			label: "Conhecer o RecompraCRM",
+			href: "/solutions/crm-para-varejo",
+			label: "Ver o CRM para varejo",
 		},
 		related: ["fidelizacao", "matriz-rfm", "churn", "ltv"],
 		faqs: [

@@ -104,6 +104,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 		{ url: `${BASE_URL}/erp/cardapio-digital`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.9 },
 		{ url: `${BASE_URL}/erp/estoque`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.9 },
 		{ url: `${BASE_URL}/solutions/programa-de-fidelidade`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.95 },
+		{ url: `${BASE_URL}/solutions/crm-para-varejo`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.95 },
 		{ url: `${BASE_URL}/presentation`, lastModified: new Date(), changeFrequency: "monthly", priority: 1 },
 		{ url: `${BASE_URL}/community`, lastModified: new Date(), changeFrequency: "weekly", priority: 0.9 },
 		{ url: `${BASE_URL}/community/courses`, lastModified: new Date(), changeFrequency: "weekly", priority: 0.8 },

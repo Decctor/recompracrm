@@ -150,7 +150,7 @@ export function StockRecountMock() {
 					<p className="flex-1 text-[12px] text-[#687a80]">{counted} itens contados no rascunho — cobre todas as páginas</p>
 					<div className="flex items-center gap-2">
 						<span className="inline-flex h-8 items-center px-3 text-[12px] font-medium">DESCARTAR</span>
-						<span className="inline-flex h-8 items-center rounded-md bg-[#24549c] px-3 text-[12px] font-medium text-[#f5f9fd]">APLICAR RECONTAGEM</span>
+						<span className="inline-flex h-8 items-center rounded-md bg-[#171717] px-3 text-[12px] font-medium text-[#fafafa]">APLICAR RECONTAGEM</span>
 					</div>
 				</div>
 			</div>
