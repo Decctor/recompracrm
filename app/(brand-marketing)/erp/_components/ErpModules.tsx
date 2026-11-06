@@ -84,13 +84,21 @@ export function ErpModules() {
 							<p className={EYEBROW}>Financeiro</p>
 							<h3 className={H3}>Receitas, custos e resultado sem planilha paralela.</h3>
 						</div>
-						<p className="max-w-[520px] text-[16px] leading-[1.6] text-[#5b6a70]">
-							Cada venda gera o lançamento contábil e as transações de cada forma de pagamento. O plano de contas é criado na ativação e você ajusta como
-							quiser.
-						</p>
+						<div className="max-w-[520px]">
+							<p className="text-[16px] leading-[1.6] text-[#5b6a70]">
+								Cada venda gera o lançamento contábil e as transações de cada forma de pagamento. O plano de contas já vem criado na ativação, com custos,
+								despesas e perdas de estoque separados.
+							</p>
+							<Link href="/erp/financeiro" className="mt-4 inline-flex text-[15px] font-medium text-[#24549c] hover:underline">
+								Conhecer o financeiro em detalhe →
+							</Link>
+						</div>
 					</div>
 					<div className="rounded-[28px] bg-[#eef2f6] p-12 max-md:rounded-[20px] max-md:p-5">
-						<ScaledMock width={1040} label="Visão geral do financeiro com receitas, custos, despesas, resultado e o gráfico de fluxo de transações">
+						<ScaledMock
+							width={1040}
+							label="Visão geral do financeiro com receitas, custos, despesas e caixa líquido, e a cascata do faturamento ao resultado operacional"
+						>
 							<FinanceOverviewMock />
 						</ScaledMock>
 					</div>

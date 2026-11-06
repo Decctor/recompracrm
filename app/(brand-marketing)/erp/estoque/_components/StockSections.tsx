@@ -268,7 +268,7 @@ const ERP_MODULES = [
 		href: "/erp/cardapio-digital",
 	},
 	{ title: "Produções e receitas", text: "Ficha técnica que consome os insumos e gera lotes com validade.", href: "/erp#compras" },
-	{ title: "Financeiro", text: "A compra recebida vira conta a pagar, e a perda vira lançamento.", href: "/erp#financeiro" },
+	{ title: "Financeiro", text: "A compra recebida vira conta a pagar, e a perda vira lançamento.", href: "/erp/financeiro" },
 ];
 
 export function StockErpModules() {

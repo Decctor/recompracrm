@@ -12,6 +12,7 @@ const GROUPS = [
 			{ label: "PDV", href: "/erp/pdv" },
 			{ label: "Cardápio digital", href: "/erp/cardapio-digital" },
 			{ label: "Controle de estoque", href: "/erp/estoque" },
+			{ label: "Financeiro", href: "/erp/financeiro" },
 			{ label: "Planos", href: "/#planos" },
 		],
 	},

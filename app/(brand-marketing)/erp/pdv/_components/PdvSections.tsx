@@ -130,7 +130,7 @@ export function PdvCashback() {
 const ERP_MODULES = [
 	{ title: "Nota fiscal", text: "NFC-e e NF-e emitidas a partir da venda, com a fila de rejeições.", href: "/erp#fiscal" },
 	{ title: "Compras e estoque", text: "Entrada por XML, lotes com validade e o saldo de cada movimento.", href: "/erp/estoque" },
-	{ title: "Financeiro", text: "Contas, transações e o resultado do mês, sem conciliar à mão.", href: "/erp#financeiro" },
+	{ title: "Financeiro", text: "Contas a pagar e receber, conciliação do extrato e a DRE do período.", href: "/erp/financeiro" },
 	{ title: "Mesas, comandas e loja digital", text: "Os outros canais de venda, no mesmo cadastro de produtos e clientes.", href: "/erp#canais" },
 ];
 
