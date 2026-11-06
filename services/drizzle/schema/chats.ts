@@ -220,28 +220,32 @@ export type TNewChatAssignmentEntity = typeof chatAssignments.$inferInsert;
  * @deprecated Substituída por `chatAssignments`. A tabela é dropada na migration 0053.
  * Mantida no schema apenas para os backfills e para o código legado compilar até a Fase 3.
  */
-export const chatServices = newTable("chat_services", {
-	id: varchar("id", { length: 255 })
-		.primaryKey()
-		.$defaultFn(() => crypto.randomUUID()),
-	organizacaoId: varchar("organizacao_id", { length: 255 })
-		.references(() => organizations.id)
-		.notNull(),
-	chatId: varchar("chat_id", { length: 255 })
-		.references(() => chats.id, { onDelete: "cascade" })
-		.notNull(),
-	clienteId: varchar("cliente_id", { length: 255 })
-		.references(() => clients.id, { onDelete: "cascade" })
-		.notNull(),
-	responsavelTipo: chatServiceResponsibleTypeEnum("responsavel_tipo").notNull().default("USUÁRIO"),
-	responsavelUsuarioId: varchar("responsavel_usuario_id", { length: 255 }).references(() => users.id, {
-		onDelete: "set null",
-	}),
-	descricao: text("descricao").notNull(),
-	status: chatServiceStatusEnum("status").notNull().default("PENDENTE"),
-	dataInicio: timestamp("data_inicio").defaultNow().notNull(),
-	dataFim: timestamp("data_fim"),
-});
+export const chatServices = newTable(
+	"chat_services",
+	{
+		id: varchar("id", { length: 255 })
+			.primaryKey()
+			.$defaultFn(() => crypto.randomUUID()),
+		organizacaoId: varchar("organizacao_id", { length: 255 })
+			.references(() => organizations.id)
+			.notNull(),
+		chatId: varchar("chat_id", { length: 255 })
+			.references(() => chats.id, { onDelete: "cascade" })
+			.notNull(),
+		clienteId: varchar("cliente_id", { length: 255 })
+			.references(() => clients.id, { onDelete: "cascade" })
+			.notNull(),
+		responsavelTipo: chatServiceResponsibleTypeEnum("responsavel_tipo").notNull().default("USUÁRIO"),
+		responsavelUsuarioId: varchar("responsavel_usuario_id", { length: 255 }).references(() => users.id, {
+			onDelete: "set null",
+		}),
+		descricao: text("descricao").notNull(),
+		status: chatServiceStatusEnum("status").notNull().default("PENDENTE"),
+		dataInicio: timestamp("data_inicio").defaultNow().notNull(),
+		dataFim: timestamp("data_fim"),
+	},
+	(table) => [index("idx_chat_services_organizacao_id").on(table.organizacaoId)],
+);
 export const chatServicesRelations = relations(chatServices, ({ one }) => ({
 	chat: one(chats, {
 		fields: [chatServices.chatId],

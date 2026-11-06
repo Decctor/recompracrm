@@ -20,6 +20,7 @@ import {
 } from "@/lib/queries/chats";
 import { useChatTemplates } from "@/lib/queries/chat-templates";
 import { cn } from "@/lib/utils";
+import { useSupabaseRealtimeAuth } from "@/components/Providers/SupabaseRealtimeAuth";
 import { createRealtimeChannel, supabaseClient } from "@/services/supabase";
 import { useMutation, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { ArrowLeft, ChevronDown, Loader2, PanelRightClose, PanelRightOpen, Plus } from "lucide-react";
@@ -155,6 +156,7 @@ function formatDaySeparator(date: Date) {
 
 export function ChatThread({ chatId, organizationId, currentUser, quotePermissions, attendancePermissions, onBack, onOpenChat }: ChatThreadProps) {
 	const queryClient = useQueryClient();
+	const realtimeAuth = useSupabaseRealtimeAuth();
 	// Memoizada: é dependência da inscrição de realtime, e um array novo a cada render a refaria
 	// (cancelando o canal) a cada tique do relógio de 5s.
 	const queryKey = useMemo(() => getChatMessagesQueryKey(chatId), [chatId]);
@@ -313,6 +315,11 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 	}, [hasThread]);
 
 	useEffect(() => {
+		// Sem o JWT da organização o canal cairia na anon key.
+		if (!realtimeAuth.ready) {
+			if (realtimeAuth.failed) setRealtimeDown(true);
+			return;
+		}
 		let disposed = false;
 		let wasDown = false;
 		setRealtimeDown(false);
@@ -402,7 +409,7 @@ export function ChatThread({ chatId, organizationId, currentUser, quotePermissio
 			initialSubscriptionCompleteRef.current = false;
 			void supabaseClient.removeChannel(channel);
 		};
-	}, [chatId, queryClient, queryKey]);
+	}, [chatId, queryClient, queryKey, realtimeAuth.ready, realtimeAuth.failed]);
 
 	// Sem realtime, a thread só se atualizaria na próxima ação do usuário. Enquanto o canal está
 	// fora: refetch a cada 15s com a aba visível e ao voltar o foco para a janela.

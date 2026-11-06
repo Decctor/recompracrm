@@ -1,5 +1,6 @@
 "use client";
 
+import { useSupabaseRealtimeAuth } from "@/components/Providers/SupabaseRealtimeAuth";
 import { createRealtimeChannel, supabaseClient } from "@/services/supabase";
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import type { QueryKey } from "@tanstack/react-query";
@@ -56,6 +57,7 @@ export function useSupabaseRealtime<T extends Record<string, unknown>>({
 	invalidateQueries,
 }: UseSupabaseRealtimeOptions<T>) {
 	const queryClient = useQueryClient();
+	const { ready: realtimeReady } = useSupabaseRealtimeAuth();
 	const channelRef = useRef<ReturnType<typeof supabaseClient.channel> | null>(null);
 
 	// Use refs to store the latest callbacks and queries to avoid recreating the subscription
@@ -117,7 +119,8 @@ export function useSupabaseRealtime<T extends Record<string, unknown>>({
 	const filterString = useMemo(() => (filter ? `${filter.column}=eq.${filter.value}` : undefined), [filterColumn, filterValue]);
 
 	useEffect(() => {
-		if (!enabled) {
+		// Sem o JWT da organização o canal cairia na anon key. A inscrição espera o provider.
+		if (!enabled || !realtimeReady) {
 			// Cleanup if disabled
 			if (channelRef.current) {
 				supabaseClient.removeChannel(channelRef.current);
@@ -161,7 +164,7 @@ export function useSupabaseRealtime<T extends Record<string, unknown>>({
 			}
 		};
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [table, schema, event, filterColumn, filterValue, enabled, channelName, filterString]);
+	}, [table, schema, event, filterColumn, filterValue, enabled, realtimeReady, channelName, filterString]);
 
 	return {
 		unsubscribe: () => {

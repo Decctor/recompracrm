@@ -353,6 +353,8 @@ export const aiAgentFollowUps = newTable(
 			.where(sql`${table.status} = 'AGENDADA'`),
 		index("idx_ai_agent_follow_ups_due").on(table.status, table.agendadaPara),
 		index("idx_ai_agent_follow_ups_atendimento").on(table.atendimentoId),
+		// Policy de realtime (0145) compara organizacao_id com o claim do JWT.
+		index("idx_ai_agent_follow_ups_organizacao_id").on(table.organizacaoId),
 	],
 );
 export const aiAgentFollowUpsRelations = relations(aiAgentFollowUps, ({ one }) => ({
