@@ -1,28 +1,11 @@
 import { TrackedAnchor, TrackedLink } from "@/app/_components/ledger/TrackedLink";
 import { ArrowRight, Check } from "lucide-react";
 import type { ReactNode } from "react";
+import { CONSULTORIA_INCLUDED, PLATFORM_INCLUDED, PRICING, formatPlanPrice } from "@/app/_content/pricing";
 import { SIGNUP_HREF, WHATSAPP_CONSULTORIA, WHATSAPP_ERP } from "./links";
 import { Eyebrow, SectionTitle } from "./primitives";
 
-// Preços e listas iguais aos da landing anterior (app/_components/ledger/Pricing.tsx).
-
-const PLATFORM_INCLUDED = [
-	"Ponto de Interação (tablet + QR Code)",
-	"Programa de cashback configurável",
-	"WhatsApp automático ilimitado",
-	"Campanhas com filtro de audiência",
-	"Painel de clientes em risco (RFM)",
-	"Business Intelligence de vendas",
-	"Suporte humano incluso",
-];
-
-const CONSULTORIA_INCLUDED = [
-	"Um gestor de crescimento dedicado ao seu negócio",
-	"Importação e integração dos seus dados de venda",
-	"Criação e gestão das suas campanhas, ponta a ponta",
-	"Diagnóstico inicial com metas definidas junto com você",
-	"Relatório de resultado e acompanhamento todo mês",
-];
+// Preços e listas vêm de app/_content/pricing.ts, a mesma fonte da página /pricing e do checkout.
 
 function Price({ value }: { value: string }) {
 	return (
@@ -75,8 +58,8 @@ export function LandingPricing() {
 					<PlanCard>
 						<p className="text-[16px] font-semibold">Plataforma</p>
 						<p className="mt-1 text-[14px] text-[#687a80]">Você no controle.</p>
-						<Price value="399,90" />
-						<p className="mt-2 text-[13px] text-[#687a80]">15 dias grátis</p>
+						<Price value={formatPlanPrice(PRICING.platformMonthly)} />
+						<p className="mt-2 text-[13px] text-[#687a80]">{PRICING.trialDays} dias grátis</p>
 						<Included items={PLATFORM_INCLUDED} className="mt-7" />
 						<TrackedLink
 							href={SIGNUP_HREF}
@@ -97,7 +80,7 @@ export function LandingPricing() {
 							</span>
 						</div>
 						<p className="mt-1 text-[14px] text-[#687a80]">A gente opera por você.</p>
-						<Price value="899,90" />
+						<Price value={formatPlanPrice(PRICING.bundleMonthly)} />
 						<p className="mt-2 text-[13px] text-[#687a80]">Plataforma + consultoria</p>
 						<p className="mt-7 mb-2.5 text-[12px] font-semibold tracking-[0.04em] text-[#687a80] uppercase">Tudo da Plataforma, mais:</p>
 						<Included items={CONSULTORIA_INCLUDED} />

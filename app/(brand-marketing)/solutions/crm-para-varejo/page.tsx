@@ -8,7 +8,7 @@ import { CRM_FAQS, CRM_PATH } from "./_components/crm-content";
 const BASE_URL = "https://www.recompracrm.com.br";
 const title = "Sistema de CRM para varejo: clientes, WhatsApp e recompra";
 const description =
-	"Sistema de CRM para loja física: a base de clientes se forma a cada venda, a matriz RFM mostra quem está esfriando e as campanhas no WhatsApp trazem o cliente de volta. Caixa de entrada com agente de IA. Teste 15 dias grátis.";
+	"Sistema de CRM para loja física: a base de clientes se forma a cada venda, a matriz RFM mostra quem está esfriando e as campanhas no WhatsApp trazem o cliente de volta. Teste 15 dias grátis.";
 
 export const metadata: Metadata = {
 	title,

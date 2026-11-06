@@ -99,6 +99,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
 	const staticRoutes: MetadataRoute.Sitemap = [
 		{ url: BASE_URL, lastModified: new Date(), changeFrequency: "weekly", priority: 1 },
+		{ url: `${BASE_URL}/pricing`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.95 },
 		{ url: `${BASE_URL}/erp`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.95 },
 		{ url: `${BASE_URL}/erp/pdv`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.9 },
 		{ url: `${BASE_URL}/erp/cardapio-digital`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.9 },

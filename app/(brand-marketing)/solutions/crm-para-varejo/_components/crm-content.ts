@@ -11,7 +11,7 @@ import type { FAQItem } from "@/app/_content/blog-posts";
 //   localização, compradores de um produto e campos personalizados;
 // - campanhas por gatilho com receita atribuída e incremental (sem métrica de ROI e sem grupo de
 //   controle); e-mail só como acompanhante do WhatsApp; sem SMS;
-// - caixa de entrada compartilhada com agente de IA que consulta compras, produtos e cashback;
+// - caixa de entrada compartilhada com agente de IA (adicional sob consulta, fora do plano-base);
 // - API oficial do WhatsApp com o número da própria loja (a conexão não oficial existe, mas não é
 //   promovida aqui);
 // - carteiras de clientes por vendedor e metas; sem funil de oportunidades B2B e sem NPS.
@@ -73,7 +73,7 @@ export const CRM_FAQS: FAQItem[] = [
 	{
 		question: "O CRM funciona com o WhatsApp da minha loja?",
 		answer:
-			"Sim. A conexão é pela API oficial do WhatsApp (Cloud API da Meta), com o número da própria loja. As campanhas usam modelos de mensagem aprovados pela Meta, e as respostas dos clientes chegam na caixa de entrada compartilhada, onde a equipe e o agente de IA atendem.",
+			"Sim. A conexão é pela API oficial do WhatsApp (Cloud API da Meta), com o número da própria loja. As campanhas usam modelos de mensagem aprovados pela Meta. Para responder os clientes pelo sistema, a caixa de entrada compartilhada com o agente de IA é um adicional, liberado sob consulta.",
 	},
 	{
 		question: "Preciso trocar o sistema que uso hoje no caixa?",
@@ -98,6 +98,6 @@ export const CRM_FAQS: FAQItem[] = [
 	{
 		question: "Quanto custa o CRM?",
 		answer:
-			"O plano Plataforma custa R$ 399,90 por mês, e o Plataforma + Gestor de Crescimento, em que a equipe do RecompraCRM opera as campanhas, R$ 899,90 por mês. Os dois incluem a plataforma completa, com 15 dias grátis, sem cartão de crédito e sem taxa de setup.",
+			"O plano Plataforma custa R$ 399,90 por mês, e o Plataforma + Gestor de Crescimento, em que a equipe do RecompraCRM opera as campanhas, R$ 899,90 por mês. Os dois têm a mesma plataforma, com 15 dias grátis, sem cartão de crédito e sem taxa de setup. A caixa de entrada com o agente de IA é um adicional sob consulta.",
 	},
 ];

@@ -8,6 +8,7 @@ const LINKS = [
 	{ label: "CRM para varejo", href: "/solutions/crm-para-varejo" },
 	{ label: "Funcionalidades", href: "/features/programa-de-cashback" },
 	{ label: "Cases", href: "/cases" },
+	{ label: "Preços", href: "/pricing" },
 	{ label: "Integrações", href: "/integrations" },
 	{ label: "ERP", href: "/erp" },
 	{ label: "Ferramentas", href: "/tools/cashback-calculator" },
