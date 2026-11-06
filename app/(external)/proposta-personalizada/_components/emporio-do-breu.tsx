@@ -89,7 +89,7 @@ const GROWTH_LIST_MONTHLY = 500;
 const GROWTH_DISCOUNT = 200;
 const GROWTH_MONTHLY = GROWTH_LIST_MONTHLY - GROWTH_DISCOUNT;
 const FULL_MONTHLY = ERP_MONTHLY + GROWTH_MONTHLY;
-const IMPLEMENTATION_FEE = 600;
+const IMPLEMENTATION_FEE = 1000;
 
 function formatBRL(value: number) {
 	return value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
