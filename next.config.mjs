@@ -59,6 +59,8 @@ const nextConfig = {
 			{ source: "/segmentos/:slug*", destination: "/segments/:slug*", permanent: true },
 			// Ainda não há índice de ferramentas; a calculadora é a porta de entrada.
 			{ source: "/tools", destination: "/tools/cashback-calculator", permanent: false },
+			// Ainda não há índice de soluções; o programa de fidelidade é a única por enquanto.
+			{ source: "/solutions", destination: "/solutions/programa-de-fidelidade", permanent: false },
 			...legacyFeatureSlugs.map((slug) => ({
 				source: `/funcionalidades/${slug}`,
 				destination: `/features/${slug}`,

@@ -4,6 +4,7 @@ import Link from "next/link";
 
 const LINKS = [
 	{ label: "Produto", href: "/" },
+	{ label: "Programa de fidelidade", href: "/solutions/programa-de-fidelidade" },
 	{ label: "Funcionalidades", href: "/features/programa-de-cashback" },
 	{ label: "Cases", href: "/cases" },
 	{ label: "Integrações", href: "/integrations" },
