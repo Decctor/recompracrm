@@ -56,7 +56,7 @@ export const MOCK_PRODUCT_PHOTOS: TMockProductPhoto[] = [
 	{
 		slug: "gelato",
 		pexelsId: "3631",
-		source: pexels("3631"),
+		source: pexels("3631", "summer-dessert-sweet-ice-cream.jpg"),
 		alt: "Vitrine de gelatos de vários sabores",
 		photographer: "JÉSHOOTS",
 		pexelsUrl: "https://www.pexels.com/photo/dessert-ice-cream-summer-sweet-3631/",
