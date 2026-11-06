@@ -22,6 +22,8 @@ Planos: dois caminhos com a mesma plataforma completa. **Plataforma** (self-serv
 - [Cardápio digital](https://www.recompracrm.com.br/erp/cardapio-digital): loja digital com link próprio para pedidos de entrega e retirada, sem comissão por pedido, com quadro de pedidos, acompanhamento pelo cliente e resgate de cashback no checkout.
 - [Blog](https://www.recompracrm.com.br/blog): artigos sobre fidelização, cashback e retenção no varejo.
 
+- [Programa de fidelidade](https://www.recompracrm.com.br/solutions/programa-de-fidelidade): como montar um programa de fidelidade para loja física — carimbo, pontos, cashback ou clube, a regra pela margem e o cartão fidelidade digital pelo telefone.
+
 ## Funcionalidades
 
 - [Programa de Cashback](https://www.recompracrm.com.br/features/programa-de-cashback): como criar e configurar cashback para a sua loja.
