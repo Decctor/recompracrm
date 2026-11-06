@@ -4,6 +4,7 @@ import type { TGetSellerStatsInput, TGetSellerStatsOutput } from "@/app/api/sell
 import type { TGetSellersGraphInput, TGetSellersGraphOutput } from "@/app/api/sellers/stats/graph/route";
 import type { TGetSellersOverallStatsInput, TGetSellersOverallStatsOutput } from "@/app/api/sellers/stats/overall/route";
 import type { TGetSellersRankingInput, TGetSellersRankingOutput } from "@/app/api/sellers/stats/ranking/route";
+import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import { useState } from "react";
@@ -23,6 +24,7 @@ async function fetchSellers(input: TGetSellersDefaultInput) {
 		if (input.orderByField) searchParams.set("orderByField", input.orderByField);
 		if (input.orderByDirection) searchParams.set("orderByDirection", input.orderByDirection);
 		if (input.page) searchParams.set("page", input.page.toString());
+		if (input.pageSize) searchParams.set("pageSize", input.pageSize.toString());
 		if (input.activeOnly) searchParams.set("activeOnly", input.activeOnly.toString());
 		const { data } = await axios.get<TGetSellersOutput>(`/api/sellers?${searchParams.toString()}`);
 		const result = data.data.default;
@@ -62,6 +64,7 @@ type UseSellersParams = {
 export function useSellers({ initialFilters }: UseSellersParams) {
 	const [filters, setFilters] = useState<TGetSellersDefaultInput>({
 		page: initialFilters?.page || 1,
+		pageSize: initialFilters?.pageSize || DEFAULT_PAGE_SIZE,
 		sellersIds: initialFilters?.sellersIds || [],
 		statsIntegrationsIds: initialFilters?.statsIntegrationsIds || [],
 		statsExcludedSalesIds: initialFilters?.statsExcludedSalesIds || [],

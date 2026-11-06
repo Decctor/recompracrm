@@ -2,6 +2,7 @@ import type { TGetPartnersInput, TGetPartnersOutput } from "@/app/api/partners/r
 import type { TGetPartnersGraphInput, TGetPartnersGraphOutput } from "@/app/api/partners/stats/graph/route";
 import type { TGetPartnersOverallStatsInput, TGetPartnersOverallStatsOutput } from "@/app/api/partners/stats/overall/route";
 import type { TGetPartnersRankingInput, TGetPartnersRankingOutput } from "@/app/api/partners/stats/ranking/route";
+import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import { useState } from "react";
@@ -12,12 +13,14 @@ async function fetchPartners(input: TGetPartnersInput) {
 	if (input.search) searchParams.set("search", input.search);
 	if (input.statsPeriodAfter) searchParams.set("statsPeriodAfter", input.statsPeriodAfter.toISOString());
 	if (input.statsPeriodBefore) searchParams.set("statsPeriodBefore", input.statsPeriodBefore.toISOString());
-	if (input.statsIntegrationsIds && input.statsIntegrationsIds.length > 0) searchParams.set("statsIntegrationsIds", input.statsIntegrationsIds.join(","));
+	if (input.statsIntegrationsIds && input.statsIntegrationsIds.length > 0)
+		searchParams.set("statsIntegrationsIds", input.statsIntegrationsIds.join(","));
 	if (input.statsExcludedSalesIds && input.statsExcludedSalesIds.length > 0)
 		searchParams.set("statsExcludedSalesIds", input.statsExcludedSalesIds.join(","));
 	if (input.statsTotalMin) searchParams.set("statsTotalMin", input.statsTotalMin.toString());
 	if (input.statsTotalMax) searchParams.set("statsTotalMax", input.statsTotalMax.toString());
 	if (input.page) searchParams.set("page", input.page.toString());
+	if (input.pageSize) searchParams.set("pageSize", input.pageSize.toString());
 	const { data } = await axios.get<TGetPartnersOutput>(`/api/partners?${searchParams.toString()}`);
 	const result = data.data.default;
 	if (!result) throw new Error("Parceiros não encontrados.");
@@ -30,6 +33,7 @@ type UsePartnersParams = {
 export function usePartners({ initialParams }: UsePartnersParams) {
 	const [queryParams, setQueryParams] = useState<TGetPartnersInput>({
 		page: initialParams.page || 1,
+		pageSize: initialParams.pageSize || DEFAULT_PAGE_SIZE,
 		search: initialParams.search || "",
 		statsPeriodAfter: initialParams.statsPeriodAfter || null,
 		statsPeriodBefore: initialParams.statsPeriodBefore || null,

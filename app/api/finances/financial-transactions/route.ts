@@ -8,6 +8,7 @@ import { and, count, eq, gte, ilike, inArray, isNotNull, isNull, lte, or, type S
 import createHttpError from "http-errors";
 import { NextRequest, NextResponse } from "next/server";
 import z from "zod";
+import { DEFAULT_PAGE_SIZE, pageSizeInputSchema } from "@/lib/pagination";
 import { FinancialTransactionSchema } from "@/schemas/financial";
 import { FinancialTransactionTypeEnum, PaymentMethodEnum, TFinancialTransactionTypeEnum, TPaymentMethodEnum } from "@/schemas/enums";
 
@@ -22,6 +23,7 @@ const GetFinancialTransactionsInputSchema = z.object({
 		.optional()
 		.nullable(),
 	page: z.coerce.number().min(1).default(1),
+	pageSize: pageSizeInputSchema(),
 	search: z.string().optional().nullable(),
 	periodAfter: z
 		.string()
@@ -45,7 +47,7 @@ async function getFinancialTransactions({ input, session }: { input: TGetFinanci
 	const userOrgId = session.membership?.organizacao.id;
 	if (!userOrgId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
 
-	const { id, page, search, periodAfter, periodBefore, types, paymentMethods, statuses } = input;
+	const { id, page, pageSize, search, periodAfter, periodBefore, types, paymentMethods, statuses } = input;
 
 	if (id) {
 		const transaction = await db.query.financialTransactions.findFirst({
@@ -98,7 +100,7 @@ async function getFinancialTransactions({ input, session }: { input: TGetFinanci
 		}
 	}
 
-	const PAGE_SIZE = 25;
+	const PAGE_SIZE = pageSize ?? DEFAULT_PAGE_SIZE;
 	const skip = PAGE_SIZE * (page - 1);
 
 	const [countResult, transactionsResult] = await Promise.all([
@@ -145,6 +147,7 @@ async function getFinancialTransactionsRoute(request: NextRequest) {
 	const input = GetFinancialTransactionsInputSchema.parse({
 		id: searchParams.get("id") ?? undefined,
 		page: searchParams.get("page") ?? 1,
+		pageSize: searchParams.get("pageSize"),
 		search: searchParams.get("search") ?? undefined,
 		periodAfter: searchParams.get("periodAfter") ?? undefined,
 		periodBefore: searchParams.get("periodBefore") ?? undefined,

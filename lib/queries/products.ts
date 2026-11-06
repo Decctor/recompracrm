@@ -18,6 +18,7 @@ import { useInfiniteQuery, useQueries, useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import { useEffect, useMemo, useState } from "react";
 import { useDebounceMemo } from "../hooks/use-debounce";
+import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 import type { TGetProductMainSupplierSuggestionsOutput } from "@/app/api/products/main-supplier/suggestions/route";
 import type { TGetProductsPortfolioAnalysisInput, TGetProductsPortfolioAnalysisOutput } from "@/app/api/products/stats/portfolio-analysis/route";
 
@@ -62,6 +63,7 @@ type UseProductsParams = {
 export function useProducts({ initialFilters }: UseProductsParams) {
 	const { filters, updateFilters, debouncedFilters } = useProductSearchFilters<TGetProductsDefaultInput>({
 		page: initialFilters?.page || 1,
+		pageSize: initialFilters?.pageSize ?? DEFAULT_PAGE_SIZE,
 		search: initialFilters?.search || [],
 		groups: initialFilters?.groups || [],
 		statsSellerIds: initialFilters?.statsSellerIds || [],
@@ -99,6 +101,7 @@ async function fetchProductsStock(input: TGetProductsDefaultInput, signal?: Abor
 		const searchParams = new URLSearchParams();
 		searchParams.set("mode", "stock");
 		if (input.page) searchParams.set("page", input.page.toString());
+		if (input.pageSize) searchParams.set("pageSize", input.pageSize.toString());
 		if (input.search.length) searchParams.set("search", input.search.join(","));
 		if (input.groups && input.groups.length > 0) searchParams.set("groups", input.groups.join(","));
 		if (input.statsPeriodAfter) searchParams.set("statsPeriodAfter", input.statsPeriodAfter.toISOString());
@@ -128,6 +131,7 @@ type UseProductsStockParams = {
 export function useProductsStock({ initialFilters, enabled = true }: UseProductsStockParams = {}) {
 	const { filters, updateFilters, debouncedFilters } = useProductSearchFilters<TGetProductsDefaultInput>({
 		page: initialFilters?.page || 1,
+		pageSize: initialFilters?.pageSize ?? DEFAULT_PAGE_SIZE,
 		search: initialFilters?.search || [],
 		groups: initialFilters?.groups || [],
 		statsSellerIds: [],

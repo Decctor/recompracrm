@@ -2,6 +2,7 @@ import type { TGetOrganizationInput, TGetOrganizationsAdminOutput } from "@/app/
 import type { TGetOrganizationDeletionSummaryOutput } from "@/app/api/admin/organizations/deletion-summary/route";
 import type { TGetAdminStatsOutput } from "@/app/api/admin/stats/route";
 import type { TGetUsersAdminInput, TGetUsersAdminOutput } from "@/app/api/admin/users/route";
+import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import { useState } from "react";
@@ -16,6 +17,7 @@ async function fetchOrganizations(input: TGetOrganizationInput) {
 	const searchParams = new URLSearchParams();
 	if (input.id) searchParams.set("id", input.id);
 	if (input.page) searchParams.set("page", input.page.toString());
+	if (input.pageSize) searchParams.set("pageSize", input.pageSize.toString());
 	if (input.search) searchParams.set("search", input.search);
 
 	const queryString = searchParams.toString();
@@ -42,6 +44,7 @@ export function useAdminStats() {
 export function useOrganizations() {
 	const [params, setParams] = useState<TGetOrganizationInput>({
 		page: 1,
+		pageSize: DEFAULT_PAGE_SIZE,
 		search: null,
 	});
 
@@ -87,6 +90,7 @@ async function fetchAdminUsers(input: TGetUsersAdminInput) {
 	const searchParams = new URLSearchParams();
 	if (input.id) searchParams.set("id", input.id);
 	if (input.page) searchParams.set("page", input.page.toString());
+	if (input.pageSize) searchParams.set("pageSize", input.pageSize.toString());
 	if (input.search) searchParams.set("search", input.search);
 
 	const queryString = searchParams.toString();
@@ -106,6 +110,7 @@ async function fetchAdminUserById(id: string) {
 export function useAdminUsers() {
 	const [params, setParams] = useState<TGetUsersAdminInput>({
 		page: 1,
+		pageSize: DEFAULT_PAGE_SIZE,
 		search: null,
 	});
 

@@ -228,8 +228,10 @@ export default function FinanceEntriesPage() {
 				queryLoading={isLoading}
 				selectPage={(page) => updateFilters({ page })}
 				totalPages={totalPages}
-				itemsMatchedText={`${entriesMatched} ${entriesMatched === 1 ? "lançamento encontrado" : "lançamentos encontrados"}.`}
-				itemsShowingText={`Mostrando ${entries.length} ${entries.length === 1 ? "lançamento" : "lançamentos"}.`}
+				pageSize={filters.pageSize}
+				onPageSizeChange={(pageSize) => updateFilters({ pageSize, page: 1 })}
+				itemsMatchedText={entriesMatched === 1 ? "1 lançamento encontrado" : `${entriesMatched} lançamentos encontrados`}
+				itemsShowingText={`mostrando ${entries.length}`}
 			/>
 
 			{isLoading ? <LoadingComponent /> : null}

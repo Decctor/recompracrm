@@ -8,6 +8,7 @@ import axios from "axios";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useDebounceMemo } from "../hooks/use-debounce";
+import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 
 // ============================================================================
 // STATEMENT IMPORTS
@@ -59,12 +60,14 @@ export type TStatementTransactionsFilters = {
 	statuses: string[];
 	search: string;
 	page: number;
+	pageSize: number;
 };
 
 async function fetchStatementTransactions(filters: TStatementTransactionsFilters): Promise<TGetStatementTransactionsOutputDefault> {
 	const searchParams = new URLSearchParams();
 	searchParams.set("contaFinanceiraId", filters.contaFinanceiraId);
 	searchParams.set("page", filters.page.toString());
+	searchParams.set("pageSize", filters.pageSize.toString());
 	if (filters.search) searchParams.set("search", filters.search);
 	if (filters.statuses.length > 0) searchParams.set("statuses", filters.statuses.join(","));
 	const { data } = await axios.get<TGetStatementTransactionsOutput>(`/api/finances/reconciliation/statement-transactions?${searchParams.toString()}`);
@@ -83,6 +86,7 @@ export function useStatementTransactions({ contaFinanceiraId, initialParams }: U
 		statuses: initialParams?.statuses || [],
 		search: initialParams?.search || "",
 		page: initialParams?.page || 1,
+		pageSize: initialParams?.pageSize || DEFAULT_PAGE_SIZE,
 	});
 	function updateParams(newParams: Partial<TStatementTransactionsFilters>) {
 		setParams((prev) => ({ ...prev, ...newParams }));

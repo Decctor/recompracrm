@@ -208,8 +208,10 @@ export default function FinanceTransactionsPage() {
 				queryLoading={isLoading}
 				selectPage={(page) => updateFilters({ page })}
 				totalPages={totalPages}
-				itemsMatchedText={`${transactionsMatched} ${transactionsMatched === 1 ? "movimentação encontrada" : "movimentações encontradas"}.`}
-				itemsShowingText={`Mostrando ${transactions.length} ${transactions.length === 1 ? "movimentação" : "movimentações"}.`}
+				pageSize={filters.pageSize}
+				onPageSizeChange={(pageSize) => updateFilters({ pageSize, page: 1 })}
+				itemsMatchedText={transactionsMatched === 1 ? "1 movimentação encontrada" : `${transactionsMatched} movimentações encontradas`}
+				itemsShowingText={`mostrando ${transactions.length}`}
 			/>
 
 			{isLoading ? <LoadingComponent /> : null}

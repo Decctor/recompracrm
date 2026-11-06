@@ -1,14 +1,21 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
-import { getBestNumberOfPointsBetweenDates, getDateBuckets, getEvenlySpacedDates } from "@/lib/dates";
+import { getChartBuckets, type TChartBucket } from "@/lib/charts/period-buckets";
+import { chartBucketPositionSql } from "@/lib/charts/period-buckets-sql";
+import { OPERATION_TIMEZONE } from "@/lib/operation-timezone";
 import { db } from "@/services/drizzle";
 import { cashbackProgramBalances, cashbackProgramTransactions } from "@/services/drizzle/schema";
 import dayjs from "dayjs";
-import { and, asc, countDistinct, eq, gte, lte, sql, sum } from "drizzle-orm";
+import timezone from "dayjs/plugin/timezone";
+import utc from "dayjs/plugin/utc";
+import { and, asc, countDistinct, eq, gte, lte, sum } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import z from "zod";
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 const CashbackProgramsGraphInputSchema = z.object({
 	graphType: z.enum(["participants-growth", "total-cashback-generated", "total-cashback-rescued"]),
@@ -20,7 +27,7 @@ const CashbackProgramsGraphInputSchema = z.object({
 		.datetime({ message: "Formato de data inválido." })
 		.optional()
 		.nullable()
-		.transform((v) => (v ? dayjs(v).startOf("day").toDate() : undefined)),
+		.transform((v) => (v ? dayjs(v).tz(OPERATION_TIMEZONE).startOf("day").toDate() : undefined)),
 	periodBefore: z
 		.string({
 			required_error: "Período não informado.",
@@ -29,21 +36,38 @@ const CashbackProgramsGraphInputSchema = z.object({
 		.datetime({ message: "Formato de data inválido." })
 		.optional()
 		.nullable()
-		.transform((v) => (v ? dayjs(v).endOf("day").toDate() : undefined)),
+		.transform((v) => (v ? dayjs(v).tz(OPERATION_TIMEZONE).endOf("day").toDate() : undefined)),
 });
 export type TCashbackProgramsGraphInput = z.infer<typeof CashbackProgramsGraphInputSchema>;
+
+/**
+ * Lê as linhas agrupadas por intervalo (`chartBucketPositionSql`, 1-based) e transforma em valores
+ * acumulados, partindo do total anterior ao período.
+ */
+function accumulateBucketRows({
+	buckets,
+	rows,
+	initialTotal,
+}: {
+	buckets: TChartBucket[];
+	rows: Array<{ position: number; total: unknown }>;
+	initialTotal: number;
+}): Array<{ label: string; value: number }> {
+	const byPosition = new Map(rows.map((row) => [Number(row.position), row]));
+
+	// Transformar em valores acumulados
+	let accumulated = initialTotal;
+	return buckets.map((bucket, index) => {
+		accumulated += Number(byPosition.get(index + 1)?.total ?? 0);
+		return { label: bucket.label, value: accumulated };
+	});
+}
 
 // We will have graphs for:
 // - participants growth
 // - total (cummulative) cashback generated
 // - total (cummulative) cashback rescued
-async function getCashbackProgramsGraph({
-	input,
-	sessionUser,
-}: {
-	input: TCashbackProgramsGraphInput;
-	sessionUser: TAuthUserSession;
-}) {
+async function getCashbackProgramsGraph({ input, sessionUser }: { input: TCashbackProgramsGraphInput; sessionUser: TAuthUserSession }) {
 	const userOrgId = sessionUser.membership?.organizacao.id;
 	if (!userOrgId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
 
@@ -62,26 +86,18 @@ async function getCashbackProgramsGraph({
 			.where(eq(cashbackProgramBalances.organizacaoId, userOrgId))
 			.orderBy(asc(cashbackProgramBalances.dataInsercao))
 			.limit(1);
-		period.after = firstCashbackProgramAssociation[0]?.date ?? undefined;
-		if (!period.after) throw new createHttpError.BadRequest("Não foi possível encontrar a primeira associação do programa de cashback.");
+		const firstAssociationDate = firstCashbackProgramAssociation[0]?.date;
+		if (!firstAssociationDate) throw new createHttpError.BadRequest("Não foi possível encontrar a primeira associação do programa de cashback.");
+		// Começa no início do dia local, para o primeiro intervalo não sair cortado no instante exato da
+		// primeira associação.
+		period.after = dayjs(firstAssociationDate).tz(OPERATION_TIMEZONE).startOf("day").toDate();
 	}
 
 	if (!period.before) {
 		period.before = new Date();
 	}
 
-	const { points: bestNumberOfPointsForPeriodsDates, groupingFormat } = getBestNumberOfPointsBetweenDates({
-		startDate: period.after,
-		endDate: period.before,
-	});
-
-	const periodDatesStrs = getEvenlySpacedDates({
-		startDate: period.after,
-		endDate: period.before,
-		points: bestNumberOfPointsForPeriodsDates,
-	});
-
-	const periodDateBuckets = getDateBuckets(periodDatesStrs);
+	const buckets = getChartBuckets({ startDate: period.after, endDate: period.before });
 
 	if (input.graphType === "participants-growth") {
 		// Obter total de participantes ANTES do início do período
@@ -96,7 +112,7 @@ async function getCashbackProgramsGraph({
 
 		const participantsGrowth = await db
 			.select({
-				date: sql<string>`date_trunc('day', ${cashbackProgramBalances.dataInsercao})::text`,
+				position: chartBucketPositionSql(cashbackProgramBalances.dataInsercao, buckets),
 				total: countDistinct(cashbackProgramBalances.clienteId),
 			})
 			.from(cashbackProgramBalances)
@@ -107,37 +123,10 @@ async function getCashbackProgramsGraph({
 					lte(cashbackProgramBalances.dataInsercao, period.before),
 				),
 			)
-			.orderBy(sql`date_trunc('day', ${cashbackProgramBalances.dataInsercao})`)
-			.groupBy(sql`date_trunc('day', ${cashbackProgramBalances.dataInsercao})`);
-
-		const initialParticipantsGrowth = Object.fromEntries(periodDatesStrs.map((date) => [dayjs(date).format(groupingFormat), { value: 0 }]));
-
-		const participantsGrowthReduced = participantsGrowth.reduce((acc, current) => {
-			const saleDate = new Date(current.date);
-			const saleTime = saleDate.getTime();
-
-			const bucket = periodDateBuckets.find((b) => saleTime >= b.start && saleTime <= b.end);
-			if (!bucket) return acc;
-
-			const key = dayjs(bucket.key).format(groupingFormat);
-			if (!acc[key]) acc[key] = { value: 0 };
-
-			acc[key].value += Number(current.total);
-			return acc;
-		}, initialParticipantsGrowth);
-
-		// Transformar em valores acumulados
-		let accumulated = initialTotal;
-		const participantsGrowthGraph = Object.entries(participantsGrowthReduced).map(([key, value]) => {
-			accumulated += value.value;
-			return {
-				label: key,
-				value: accumulated,
-			};
-		});
+			.groupBy(chartBucketPositionSql(cashbackProgramBalances.dataInsercao, buckets));
 
 		return {
-			data: participantsGrowthGraph,
+			data: accumulateBucketRows({ buckets, rows: participantsGrowth, initialTotal }),
 		};
 	}
 
@@ -160,7 +149,7 @@ async function getCashbackProgramsGraph({
 
 		const totalCashbackGenerated = await db
 			.select({
-				date: sql<string>`date_trunc('day', ${cashbackProgramTransactions.dataInsercao})::text`,
+				position: chartBucketPositionSql(cashbackProgramTransactions.dataInsercao, buckets),
 				total: sum(cashbackProgramTransactions.valor),
 			})
 			.from(cashbackProgramTransactions)
@@ -172,37 +161,10 @@ async function getCashbackProgramsGraph({
 					lte(cashbackProgramTransactions.dataInsercao, period.before),
 				),
 			)
-			.orderBy(sql`date_trunc('day', ${cashbackProgramTransactions.dataInsercao})`)
-			.groupBy(sql`date_trunc('day', ${cashbackProgramTransactions.dataInsercao})`);
-
-		const initialTotalCashbackGenerated = Object.fromEntries(periodDatesStrs.map((date) => [dayjs(date).format(groupingFormat), { value: 0 }]));
-
-		const totalCashbackGeneratedReduced = totalCashbackGenerated.reduce((acc, current) => {
-			const saleDate = new Date(current.date);
-			const saleTime = saleDate.getTime();
-
-			const bucket = periodDateBuckets.find((b) => saleTime >= b.start && saleTime <= b.end);
-			if (!bucket) return acc;
-
-			const key = dayjs(bucket.key).format(groupingFormat);
-			if (!acc[key]) acc[key] = { value: 0 };
-
-			acc[key].value += Number(current.total);
-			return acc;
-		}, initialTotalCashbackGenerated);
-
-		// Transformar em valores acumulados
-		let accumulated = initialTotal;
-		const totalCashbackGeneratedGraph = Object.entries(totalCashbackGeneratedReduced).map(([key, value]) => {
-			accumulated += value.value;
-			return {
-				label: key,
-				value: accumulated,
-			};
-		});
+			.groupBy(chartBucketPositionSql(cashbackProgramTransactions.dataInsercao, buckets));
 
 		return {
-			data: totalCashbackGeneratedGraph,
+			data: accumulateBucketRows({ buckets, rows: totalCashbackGenerated, initialTotal }),
 		};
 	}
 
@@ -225,7 +187,7 @@ async function getCashbackProgramsGraph({
 
 		const totalCashbackRescued = await db
 			.select({
-				date: sql<string>`date_trunc('day', ${cashbackProgramTransactions.dataInsercao})::text`,
+				position: chartBucketPositionSql(cashbackProgramTransactions.dataInsercao, buckets),
 				total: sum(cashbackProgramTransactions.valor),
 			})
 			.from(cashbackProgramTransactions)
@@ -237,37 +199,10 @@ async function getCashbackProgramsGraph({
 					lte(cashbackProgramTransactions.dataInsercao, period.before),
 				),
 			)
-			.orderBy(sql`date_trunc('day', ${cashbackProgramTransactions.dataInsercao})`)
-			.groupBy(sql`date_trunc('day', ${cashbackProgramTransactions.dataInsercao})`);
-
-		const initialTotalCashbackRescued = Object.fromEntries(periodDatesStrs.map((date) => [dayjs(date).format(groupingFormat), { value: 0 }]));
-
-		const totalCashbackRescuedReduced = totalCashbackRescued.reduce((acc, current) => {
-			const saleDate = new Date(current.date);
-			const saleTime = saleDate.getTime();
-
-			const bucket = periodDateBuckets.find((b) => saleTime >= b.start && saleTime <= b.end);
-			if (!bucket) return acc;
-
-			const key = dayjs(bucket.key).format(groupingFormat);
-			if (!acc[key]) acc[key] = { value: 0 };
-
-			acc[key].value += Number(current.total);
-			return acc;
-		}, initialTotalCashbackRescued);
-
-		// Transformar em valores acumulados
-		let accumulated = initialTotal;
-		const totalCashbackRescuedGraph = Object.entries(totalCashbackRescuedReduced).map(([key, value]) => {
-			accumulated += value.value;
-			return {
-				label: key,
-				value: accumulated,
-			};
-		});
+			.groupBy(chartBucketPositionSql(cashbackProgramTransactions.dataInsercao, buckets));
 
 		return {
-			data: totalCashbackRescuedGraph,
+			data: accumulateBucketRows({ buckets, rows: totalCashbackRescued, initialTotal }),
 		};
 	}
 

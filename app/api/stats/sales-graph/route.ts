@@ -2,13 +2,9 @@ import { appApiHandler } from "@/lib/app-api";
 import { runPagesRouteHandler, type PagesRouteHandler, type PagesRouteRequest, type PagesRouteResponse } from "@/lib/pages-route-compat";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { getSalesIntegrationCondition } from "@/lib/sales/integration-filter";
-import {
-	getBestNumberOfPointsBetweenDates,
-	getDateBuckets,
-	getDayStringsBetweenDates,
-	getEvenlySpacedDates,
-	getYearStringsBetweenDates,
-} from "@/lib/dates";
+import { getChartBuckets, shiftChartBuckets, type TChartBucket } from "@/lib/charts/period-buckets";
+import { chartBucketPositionSql } from "@/lib/charts/period-buckets-sql";
+import { OPERATION_TIMEZONE } from "@/lib/operation-timezone";
 import { resolveGoalShareForWindow } from "@/lib/goals/pacing";
 import { buildOrganizationPacingCurve } from "@/lib/goals/resolve-active-goal-pacing";
 import { assertSellersIdsWithinResultsScope } from "@/lib/permissions/results-scope";
@@ -17,24 +13,17 @@ import { SalesGraphFilterSchema, type TSalesGraphFilters } from "@/schemas/query
 import { db } from "@/services/drizzle";
 import { clients, sales } from "@/services/drizzle/schema";
 import dayjs from "dayjs";
+import timezone from "dayjs/plugin/timezone";
+import utc from "dayjs/plugin/utc";
 import { and, eq, exists, gte, inArray, lte, notInArray, or, sql } from "drizzle-orm";
 import createHttpError from "http-errors";
 import type { z } from "zod";
 
+dayjs.extend(utc);
+dayjs.extend(timezone);
+
 export type TSalesGraphInput = z.infer<typeof SalesGraphFilterSchema>;
 
-type TSalesGraphReduced = {
-	[key: string]: {
-		ATUAL: {
-			qtde: number;
-			total: number;
-		};
-		ANTERIOR: {
-			qtde: number;
-			total: number;
-		};
-	};
-};
 export type TSalesGraphOutput = {
 	titulo: string;
 	ATUAL: {
@@ -52,100 +41,49 @@ async function fetchSalesGraph(filters: TSalesGraphFilters, organizacaoId: strin
 		after: new Date(filters.period.after),
 		before: new Date(filters.period.before),
 	};
+	const shiftToPreviousYear = (date: Date) => dayjs(date).subtract(1, "year").toDate();
 	const previousYearPeriodAjusted = {
-		after: dayjs(currentPeriodAjusted.after).subtract(1, "year").toDate(),
-		before: dayjs(currentPeriodAjusted.before).subtract(1, "year").toDate(),
+		after: shiftToPreviousYear(currentPeriodAjusted.after),
+		before: shiftToPreviousYear(currentPeriodAjusted.before),
 	};
-	const { points: bestNumberOfPointsForPeriodsDates, groupingFormat } = getBestNumberOfPointsBetweenDates({
-		startDate: currentPeriodAjusted.after,
-		endDate: currentPeriodAjusted.before,
-	});
-	const currentPeriodDatesStrs = getEvenlySpacedDates({
-		startDate: currentPeriodAjusted.after,
-		endDate: currentPeriodAjusted.before,
-		points: bestNumberOfPointsForPeriodsDates,
-	});
+	// Intervalos de calendário (um ano inteiro = 12 meses). O ano anterior usa os MESMOS intervalos
+	// deslocados, casados por posição: o ponto "03/2026" compara com março de 2025.
+	const currentPeriodBuckets = getChartBuckets({ startDate: currentPeriodAjusted.after, endDate: currentPeriodAjusted.before });
+	const previousYearPeriodBuckets = shiftChartBuckets(currentPeriodBuckets, shiftToPreviousYear);
 
-	const currentPeriodDateBuckets = getDateBuckets(currentPeriodDatesStrs);
+	const [currentPeriodSales, salesGoal, previousYearPeriodSales] = await Promise.all([
+		getSalesGrouped({
+			filters: { ...filters, period: { after: currentPeriodAjusted.after.toISOString(), before: currentPeriodAjusted.before.toISOString() } },
+			organizacaoId,
+			buckets: currentPeriodBuckets,
+		}),
+		getSalesGoal({ after: currentPeriodAjusted.after.toISOString(), before: currentPeriodAjusted.before.toISOString(), organizacaoId }),
+		getSalesGrouped({
+			filters: { ...filters, period: { after: previousYearPeriodAjusted.after.toISOString(), before: previousYearPeriodAjusted.before.toISOString() } },
+			organizacaoId,
+			buckets: previousYearPeriodBuckets,
+		}),
+	]);
 
-	const currentPeriodSales = await getSalesGrouped({
-		filters: {
-			...filters,
-			period: {
-				after: currentPeriodAjusted.after.toISOString(),
-				before: currentPeriodAjusted.before.toISOString(),
-			},
-		},
-		organizacaoId,
-	});
-
-	const salesGoal = await getSalesGoal({
-		after: currentPeriodAjusted.after.toISOString(),
-		before: currentPeriodAjusted.before.toISOString(),
-		organizacaoId,
-	});
-
-	const previousYearPeriodDatesStrs = getEvenlySpacedDates({
-		startDate: previousYearPeriodAjusted.after,
-		endDate: previousYearPeriodAjusted.before,
-		points: bestNumberOfPointsForPeriodsDates,
-	});
-
-	const previousYearPeriodDateBuckets = getDateBuckets(previousYearPeriodDatesStrs);
-
-	const previousYearPeriodSales = await getSalesGrouped({
-		filters: {
-			...filters,
-			period: {
-				after: previousYearPeriodAjusted.after.toISOString(),
-				before: previousYearPeriodAjusted.before.toISOString(),
-			},
-		},
-		organizacaoId,
-	});
-
-	const initialSalesReduced: TSalesGraphReduced = Object.fromEntries(
-		previousYearPeriodDatesStrs.map((date) => [dayjs(date).format(groupingFormat), { ATUAL: { qtde: 0, total: 0 }, ANTERIOR: { qtde: 0, total: 0 } }]),
-	);
-
-	const currentPeriodSalesReduced = currentPeriodSales.reduce((acc: TSalesGraphReduced, current) => {
-		const saleDate = new Date(current.dataVenda);
-		const saleTime = saleDate.getTime();
-		// Finding the correct - O(1) in average
-		const bucket = currentPeriodDateBuckets.find((b) => saleTime >= b.start && saleTime <= b.end);
-		if (!bucket) return acc;
-		// updating daily statistics
-		const key = dayjs(bucket.key).format(groupingFormat);
-		if (!acc[key]) acc[key] = { ATUAL: { qtde: 0, total: 0 }, ANTERIOR: { qtde: 0, total: 0 } };
-
-		acc[key].ATUAL.qtde += Number(current.quantidade);
-		acc[key].ATUAL.total += Number(current.valorTotal);
-		return acc;
-	}, initialSalesReduced);
-
-	const salesGraphReduced = previousYearPeriodSales.reduce((acc: TSalesGraphReduced, current) => {
-		const saleDate = new Date(current.dataVenda);
-		const saleTime = saleDate.getTime();
-		// Finding the correct - O(1) in average
-		const bucket = previousYearPeriodDateBuckets.find((b) => saleTime >= b.start && saleTime <= b.end);
-		if (!bucket) return acc;
-
-		// updating daily statistics
-		const key = dayjs(bucket.key).format(groupingFormat);
-
-		if (!acc[key]) acc[key] = { ATUAL: { qtde: 0, total: 0 }, ANTERIOR: { qtde: 0, total: 0 } };
-
-		acc[key].ANTERIOR.qtde += Number(current.quantidade);
-		acc[key].ANTERIOR.total += Number(current.valorTotal);
-		return acc;
-	}, currentPeriodSalesReduced);
-
-	const salesGraph: TSalesGraphOutput = Object.entries(salesGraphReduced).map(([key, value], i, arr) => ({
-		titulo: key,
-		ANTERIOR: value.ANTERIOR,
-		ATUAL: value.ATUAL,
-		meta: salesGoal / arr.length,
+	const salesGraph: TSalesGraphOutput = currentPeriodBuckets.map((bucket) => ({
+		titulo: bucket.label,
+		ATUAL: { qtde: 0, total: 0 },
+		ANTERIOR: { qtde: 0, total: 0 },
+		meta: currentPeriodBuckets.length > 0 ? salesGoal / currentPeriodBuckets.length : 0,
 	}));
+	// `posicao` é 1-based (0 = antes do primeiro intervalo).
+	for (const row of currentPeriodSales) {
+		const point = salesGraph[Number(row.posicao) - 1];
+		if (!point) continue;
+		point.ATUAL.qtde += Number(row.quantidade);
+		point.ATUAL.total += Number(row.valorTotal);
+	}
+	for (const row of previousYearPeriodSales) {
+		const point = salesGraph[Number(row.posicao) - 1];
+		if (!point) continue;
+		point.ANTERIOR.qtde += Number(row.quantidade);
+		point.ANTERIOR.total += Number(row.valorTotal);
+	}
 
 	return salesGraph;
 }
@@ -190,10 +128,12 @@ export const GET = appApiHandler({
 type GetSalesGroupedParams = {
 	filters: TSalesGraphFilters;
 	organizacaoId: string;
+	buckets: TChartBucket[];
 };
-async function getSalesGrouped({ filters, organizacaoId }: GetSalesGroupedParams) {
+async function getSalesGrouped({ filters, organizacaoId, buckets }: GetSalesGroupedParams) {
 	const ajustedAfter = filters.period.after ? dayjs(filters.period.after).toDate() : null;
-	const ajustedBefore = filters.period.before ? dayjs(filters.period.before).endOf("day").toDate() : null;
+	// Fim do dia em São Paulo — no fuso do servidor (UTC) o "fim do dia" avançava 21h no dia seguinte.
+	const ajustedBefore = filters.period.before ? dayjs(filters.period.before).tz(OPERATION_TIMEZONE).endOf("day").toDate() : null;
 	try {
 		const conditions = [eq(sales.organizacaoId, organizacaoId), eq(sales.statusVenda, "CONFIRMADA")];
 		if (ajustedAfter) conditions.push(gte(sales.dataVenda, ajustedAfter));
@@ -219,16 +159,17 @@ async function getSalesGrouped({ filters, organizacaoId }: GetSalesGroupedParams
 			);
 		if (filters.excludedSalesIds) conditions.push(notInArray(sales.id, filters.excludedSalesIds));
 
+		// Uma linha por intervalo do gráfico, já no calendário de São Paulo (não por dia UTC).
+		const bucketPosition = chartBucketPositionSql(sales.dataVenda, buckets);
 		const salesResult = await db
 			.select({
-				dataVenda: sql<string>`date_trunc('day', ${sales.dataVenda})::text`,
+				posicao: bucketPosition,
 				quantidade: sql<number>`count(*)`,
 				valorTotal: sql<number>`sum(${sales.valorTotal})`,
 			})
 			.from(sales)
 			.where(and(...conditions))
-			.groupBy(sql`date_trunc('day', ${sales.dataVenda})`)
-			.orderBy(sql`date_trunc('day', ${sales.dataVenda})`);
+			.groupBy(bucketPosition);
 
 		return salesResult;
 	} catch (error) {

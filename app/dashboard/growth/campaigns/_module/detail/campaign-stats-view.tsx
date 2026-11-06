@@ -18,6 +18,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { getErrorMessage } from "@/lib/errors";
 import { formatDateAsLocale, formatDecimalPlaces, formatToMoney } from "@/lib/formatting";
 import { retryCampaignInteraction } from "@/lib/mutations/campaigns";
+import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 import { useCampaignInteractionsLogs, useCampaignStats, useCampaignsConversions, useConversionQuality } from "@/lib/queries/campaigns";
 import { cn } from "@/lib/utils";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -435,6 +436,7 @@ function ConversionsSection({ campaignId, startDate, endDate }: { campaignId: st
 		initialFilters: {
 			campaignId,
 			page: 1,
+			pageSize: DEFAULT_PAGE_SIZE,
 			search: "",
 			types: [],
 			periodAfter: startDate,
@@ -504,8 +506,11 @@ function ConversionsSection({ campaignId, startDate, endDate }: { campaignId: st
 					queryLoading={isLoading}
 					selectPage={(page) => updateFilters({ page })}
 					totalPages={totalPages}
-					itemsMatchedText={`${conversionsMatched} ${conversionsMatched === 1 ? "conversão encontrada." : "conversões encontradas."}`}
-					itemsShowingText={`${items.length} ${items.length === 1 ? "conversão exibida." : "conversões exibidas."}`}
+					pageSize={filters.pageSize}
+					onPageSizeChange={(pageSize) => updateFilters({ pageSize, page: 1 })}
+					itemsMatchedText={conversionsMatched === 1 ? "1 conversão encontrada" : `${conversionsMatched} conversões encontradas`}
+					itemsShowingText={`mostrando ${items.length}`}
+					sticky={false}
 				/>
 				<div className="w-full flex flex-col gap-1.5 max-h-[500px] overflow-y-auto overscroll-y-auto scrollbar-thin scrollbar-track-primary/10 scrollbar-thumb-primary/30 px-2">
 					{isLoading ? <LoadingComponent /> : null}
@@ -561,6 +566,7 @@ function InteractionsSection({ campaignId }: { campaignId: string }) {
 	} = useCampaignInteractionsLogs({
 		initialFilters: {
 			page: 1,
+			pageSize: DEFAULT_PAGE_SIZE,
 			search: "",
 			status: [],
 			orderByField: "dataExecucao",
@@ -620,8 +626,11 @@ function InteractionsSection({ campaignId }: { campaignId: string }) {
 					queryLoading={isLoading}
 					selectPage={(page) => updateFilters({ page })}
 					totalPages={totalPages}
-					itemsMatchedText={`${interactionsMatched} ${interactionsMatched === 1 ? "interação encontrada." : "interações encontradas."}`}
-					itemsShowingText={`${items.length} ${items.length === 1 ? "interação exibida." : "interações exibidas."}`}
+					pageSize={filters.pageSize}
+					onPageSizeChange={(pageSize) => updateFilters({ pageSize, page: 1 })}
+					itemsMatchedText={interactionsMatched === 1 ? "1 interação encontrada" : `${interactionsMatched} interações encontradas`}
+					itemsShowingText={`mostrando ${items.length}`}
+					sticky={false}
 				/>
 				<div className="w-full flex flex-col gap-1.5 max-h-[500px] overflow-y-auto overscroll-y-auto scrollbar-thin scrollbar-track-primary/10 scrollbar-thumb-primary/30 px-2">
 					{isLoading ? <LoadingComponent /> : null}

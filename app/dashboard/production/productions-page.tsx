@@ -228,10 +228,9 @@ function ProductionsTab({ query, onCreate, onEdit, onComplete, completionIsPendi
 				queryLoading={query.isLoading}
 				selectPage={(page) => query.updateFilters({ page })}
 				totalPages={totalPages || 0}
-				itemsMatchedText={productionsMatched === 1 ? "1 produção encontrada." : `${productionsMatched} produções encontradas.`}
-				itemsShowingText={productionsShowing === 1 ? "Mostrando 1 produção." : `Mostrando ${productionsShowing} produções.`}
+				itemsMatchedText={productionsMatched === 1 ? "1 produção encontrada" : `${productionsMatched} produções encontradas`}
+				itemsShowingText={`mostrando ${productionsShowing}`}
 			/>
-
 			{query.isLoading ? <LoadingComponent /> : null}
 			{query.isError ? <ErrorComponent msg={getErrorMessage(query.error)} /> : null}
 
@@ -260,11 +259,7 @@ function ProductionsTab({ query, onCreate, onEdit, onComplete, completionIsPendi
 								: "Registre produções para controlar insumos consumidos e produtos gerados."}
 						</EmptyDescription>
 					</EmptyHeader>
-					<EmptyContent className="flex-row justify-center gap-2">
-						{onCreate ? (
-							<Button onClick={onCreate}>CRIAR PRODUÇÃO</Button>
-						) : null}
-					</EmptyContent>
+					<EmptyContent className="flex-row justify-center gap-2">{onCreate ? <Button onClick={onCreate}>CRIAR PRODUÇÃO</Button> : null}</EmptyContent>
 				</Empty>
 			) : null}
 		</>
@@ -305,10 +300,9 @@ function RecipesTab({ query, onCreate, onEdit }: RecipesTabProps) {
 				queryLoading={query.isLoading}
 				selectPage={(page) => query.updateFilters({ page })}
 				totalPages={totalPages || 0}
-				itemsMatchedText={recipesMatched === 1 ? "1 receita encontrada." : `${recipesMatched} receitas encontradas.`}
-				itemsShowingText={recipesShowing === 1 ? "Mostrando 1 receita." : `Mostrando ${recipesShowing} receitas.`}
+				itemsMatchedText={recipesMatched === 1 ? "1 receita encontrada" : `${recipesMatched} receitas encontradas`}
+				itemsShowingText={`mostrando ${recipesShowing}`}
 			/>
-
 			{query.isLoading ? <LoadingComponent /> : null}
 			{query.isError ? <ErrorComponent msg={getErrorMessage(query.error)} /> : null}
 
@@ -329,11 +323,7 @@ function RecipesTab({ query, onCreate, onEdit }: RecipesTabProps) {
 								: "Cadastre fichas técnicas para transformar insumos em produtos finais."}
 						</EmptyDescription>
 					</EmptyHeader>
-					<EmptyContent className="flex-row justify-center gap-2">
-						{onCreate ? (
-							<Button onClick={onCreate}>CRIAR RECEITA</Button>
-						) : null}
-					</EmptyContent>
+					<EmptyContent className="flex-row justify-center gap-2">{onCreate ? <Button onClick={onCreate}>CRIAR RECEITA</Button> : null}</EmptyContent>
 				</Empty>
 			) : null}
 		</>

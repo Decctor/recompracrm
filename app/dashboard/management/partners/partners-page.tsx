@@ -110,15 +110,17 @@ function PartnersDatabaseView({ user }: { user: TAuthUserSession["user"] }) {
 					NOVO PARCEIRO
 				</Button>
 			</div>
+			<PartnersInlineFilters queryParams={queryParams} updateQueryParams={updateQueryParams} />
 			<GeneralPaginationComponent
 				activePage={queryParams.page}
 				queryLoading={isLoading}
 				selectPage={(page) => updateQueryParams({ page })}
 				totalPages={totalPages || 0}
-				itemsMatchedText={partnersMatched > 0 ? `${partnersMatched} parceiros encontrados.` : `${partnersMatched} parceiro encontrado.`}
-				itemsShowingText={partnersShowing > 0 ? `Mostrando ${partnersShowing} parceiros.` : `Mostrando ${partnersShowing} parceiro.`}
+				pageSize={queryParams.pageSize}
+				onPageSizeChange={(pageSize) => updateQueryParams({ pageSize, page: 1 })}
+				itemsMatchedText={partnersMatched === 1 ? "1 parceiro encontrado" : `${partnersMatched} parceiros encontrados`}
+				itemsShowingText={`mostrando ${partnersShowing}`}
 			/>
-			<PartnersInlineFilters queryParams={queryParams} updateQueryParams={updateQueryParams} />
 			{isLoading ? <LoadingComponent /> : null}
 			{isError ? <ErrorComponent msg={getErrorMessage(error)} /> : null}
 			{isSuccess ? (
@@ -181,7 +183,9 @@ function PartnersInlineFilters({ queryParams, updateQueryParams }: PartnersInlin
 				</InteractiveFilter.Content>
 			</InteractiveFilter.Root>
 
-			{hasIntegrations ? <PartnersIntegrationsFilter queryParams={queryParams} updateQueryParams={updateQueryParams} options={integrationOptions} /> : null}
+			{hasIntegrations ? (
+				<PartnersIntegrationsFilter queryParams={queryParams} updateQueryParams={updateQueryParams} options={integrationOptions} />
+			) : null}
 			{hasTotal ? <PartnersTotalFilter queryParams={queryParams} updateQueryParams={updateQueryParams} /> : null}
 
 			<InteractiveFilter.AddFilterRoot className="w-fit">

@@ -1,4 +1,5 @@
 import { getErrorMessage } from "@/lib/errors";
+import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 import type { TFiscalInboundManifestEventEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
 import { fiscalInboundDocuments, fiscalInboundSyncStates, suppliers, type TFiscalInboundDocumentEntity } from "@/services/drizzle/schema";
@@ -19,7 +20,9 @@ const AUTO_CIENCIA_BATCH_SIZE = 50;
 const AUTO_CIENCIA_PRAZO_DIAS = 10;
 
 async function getOrCreateSyncState(organizacaoId: string) {
-	const existing = await db.query.fiscalInboundSyncStates.findFirst({ where: (fields, operators) => operators.eq(fields.organizacaoId, organizacaoId) });
+	const existing = await db.query.fiscalInboundSyncStates.findFirst({
+		where: (fields, operators) => operators.eq(fields.organizacaoId, organizacaoId),
+	});
 	if (existing) return existing;
 	const [created] = await db
 		.insert(fiscalInboundSyncStates)
@@ -95,7 +98,8 @@ export async function applyInboundSnapshot({
 	if (!snapshot.chaveAcesso) return { created: false };
 
 	const existing = await db.query.fiscalInboundDocuments.findFirst({
-		where: (fields, operators) => operators.and(operators.eq(fields.organizacaoId, organizationId), operators.eq(fields.chaveAcesso, snapshot.chaveAcesso)),
+		where: (fields, operators) =>
+			operators.and(operators.eq(fields.organizacaoId, organizationId), operators.eq(fields.chaveAcesso, snapshot.chaveAcesso)),
 	});
 
 	const provedor = organization.fiscalProvedor === "SPEDY" ? ("SPEDY" as const) : ("MANUAL" as const);
@@ -287,10 +291,7 @@ export async function pollInboundDocuments({ organizationId }: { organizationId:
 		}
 		checkpoint = result.checkpoint;
 		// Persiste o checkpoint a cada pagina: a varredura e retomavel de onde parou.
-		await db
-			.update(fiscalInboundSyncStates)
-			.set({ checkpoint, dataAtualizacao: new Date() })
-			.where(eq(fiscalInboundSyncStates.id, syncState.id));
+		await db.update(fiscalInboundSyncStates).set({ checkpoint, dataAtualizacao: new Date() }).where(eq(fiscalInboundSyncStates.id, syncState.id));
 		if (!result.hasMore) break;
 	}
 
@@ -358,8 +359,16 @@ export async function manifestInboundDocument({
 	};
 }
 
-export async function listInboundDocuments({ organizationId, page = 1 }: { organizationId: string; page?: number }) {
-	const PAGE_SIZE = 25;
+export async function listInboundDocuments({
+	organizationId,
+	page = 1,
+	pageSize = DEFAULT_PAGE_SIZE,
+}: {
+	organizationId: string;
+	page?: number;
+	pageSize?: number;
+}) {
+	const PAGE_SIZE = pageSize;
 	const offset = (page - 1) * PAGE_SIZE;
 	const whereClause = eq(fiscalInboundDocuments.organizacaoId, organizationId);
 
@@ -381,13 +390,7 @@ export async function listInboundDocuments({ organizationId, page = 1 }: { organ
 }
 
 // Baixa (e cacheia no storage) um asset da nota recebida sob demanda via provedor.
-async function fetchAndCacheInboundAsset({
-	doc,
-	asset,
-}: {
-	doc: TFiscalInboundDocumentEntity;
-	asset: "xml" | "pdf";
-}): Promise<ArrayBuffer | null> {
+async function fetchAndCacheInboundAsset({ doc, asset }: { doc: TFiscalInboundDocumentEntity; asset: "xml" | "pdf" }): Promise<ArrayBuffer | null> {
 	if (!doc.provedorDocumentoId) return null;
 	const organization = await loadFiscalOrganization(doc.organizacaoId);
 	if (!organization) return null;

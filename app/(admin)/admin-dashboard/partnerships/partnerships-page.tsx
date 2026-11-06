@@ -75,6 +75,7 @@ export default function PlatformPartnershipsAdminPage() {
 	if (partnersQuery.isError) return <ErrorComponent msg={getErrorMessage(partnersQuery.error)} />;
 
 	const partners = partnersQuery.data?.default?.partners ?? [];
+	const partnersMatched = partnersQuery.data?.default?.partnersMatched ?? 0;
 	const referrals = referralsQuery.data ?? [];
 	const commissions = commissionsQuery.data ?? [];
 	const payouts = payoutsQuery.data ?? [];
@@ -140,8 +141,10 @@ export default function PlatformPartnershipsAdminPage() {
 						queryLoading={partnersQuery.isLoading}
 						selectPage={(page) => partnersQuery.updateQueryParams({ page })}
 						totalPages={partnersQuery.data?.default?.totalPages ?? 0}
-						itemsMatchedText={`${partnersQuery.data?.default?.partnersMatched ?? 0} parceiros encontrados.`}
-						itemsShowingText={`Mostrando ${partners.length} parceiros.`}
+						pageSize={partnersQuery.queryParams.pageSize}
+						onPageSizeChange={(pageSize) => partnersQuery.updateQueryParams({ pageSize, page: 1 })}
+						itemsMatchedText={partnersMatched === 1 ? "1 parceiro encontrado" : `${partnersMatched} parceiros encontrados`}
+						itemsShowingText={`mostrando ${partners.length}`}
 					/>
 					<div className="flex flex-col gap-2">
 						{partners.map((partner) => (

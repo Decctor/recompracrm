@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { DEFAULT_PAGE_SIZE, pageSizeInputSchema } from "@/lib/pagination";
 import { createSimplifiedSearchCondition } from "@/lib/search";
 import { PlatformPartnerOnboardingSchema } from "@/schemas/platform-partnerships";
 import { db } from "@/services/drizzle";
@@ -18,6 +19,7 @@ const GetAdminPlatformPartnersInputSchema = z.object({
 		.optional()
 		.nullable()
 		.transform((value) => (value ? Number(value) : 1)),
+	pageSize: pageSizeInputSchema(),
 });
 export type TGetAdminPlatformPartnersInput = z.infer<typeof GetAdminPlatformPartnersInputSchema>;
 
@@ -59,7 +61,7 @@ async function getAdminPlatformPartners({ input }: { input: TGetAdminPlatformPar
 	if (input.search) conditions.push(createSimplifiedSearchCondition(platformPartners.nome, input.search));
 	if (input.status) conditions.push(eq(platformPartners.status, input.status as typeof platformPartners.$inferSelect.status));
 
-	const PAGE_SIZE = 25;
+	const PAGE_SIZE = input.pageSize ?? DEFAULT_PAGE_SIZE;
 	const skip = PAGE_SIZE * (input.page - 1);
 	const partnersMatchedResult = await db
 		.select({ count: count(platformPartners.id) })
@@ -175,6 +177,7 @@ async function getAdminPlatformPartnersRoute(request: NextRequest) {
 		search: searchParams.get("search"),
 		status: searchParams.get("status"),
 		page: searchParams.get("page"),
+		pageSize: searchParams.get("pageSize"),
 	});
 	const result = await getAdminPlatformPartners({ input });
 	return NextResponse.json(result);

@@ -29,7 +29,9 @@ export default function ClientWhatsappButton({ telefone, className }: ClientWhat
 							className,
 						)}
 					>
-						<WhatsappIcon className="size-3.5" />
+						{/* Proporcional ao botão (que os chamadores redimensionam) e deslocado para cima/direita:
+						    o rabo do balão no canto inferior esquerdo puxa o peso visual para lá. */}
+						<WhatsappIcon className="size-[55%] translate-x-[4%] -translate-y-[4%]" />
 					</a>
 				}
 			/>

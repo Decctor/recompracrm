@@ -27,6 +27,16 @@ export default function AdminDealsBlock() {
 					className="w-full sm:w-72"
 				/>
 			</div>
+			<GeneralPaginationComponent
+				activePage={params.page}
+				totalPages={data?.totalPages || 0}
+				selectPage={(page) => updateParams({ page })}
+				queryLoading={isLoading}
+				pageSize={params.pageSize}
+				onPageSizeChange={(pageSize) => updateParams({ pageSize, page: 1 })}
+				itemsMatchedText={data?.dealsMatched === 1 ? "1 deal encontrado" : `${data?.dealsMatched || 0} deals encontrados`}
+				itemsShowingText={`mostrando ${deals?.length || 0}`}
+			/>
 			{isLoading ? <LoadingComponent /> : null}
 			{error ? <ErrorComponent msg="Erro ao carregar deals" /> : null}
 			{deals ? (
@@ -42,14 +52,6 @@ export default function AdminDealsBlock() {
 					</div>
 				)
 			) : null}
-			<GeneralPaginationComponent
-				activePage={params.page}
-				totalPages={data?.totalPages || 0}
-				selectPage={(page) => updateParams({ page })}
-				queryLoading={isLoading}
-				itemsMatchedText={`${data?.dealsMatched || 0} deals encontrados.`}
-				itemsShowingText={`Mostrando ${deals?.length || 0} deals.`}
-			/>
 		</div>
 	);
 }

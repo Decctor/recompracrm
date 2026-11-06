@@ -7,6 +7,7 @@ import LoadingComponent from "@/components/Layouts/LoadingComponent";
 import GeneralPaginationComponent from "@/components/Utils/Pagination";
 import { Input } from "@/components/ui/input";
 import { getErrorMessage } from "@/lib/errors";
+import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 import { useCampaignsConversions } from "@/lib/queries/campaigns";
 import { cn } from "@/lib/utils";
 import { ShoppingCart } from "lucide-react";
@@ -32,6 +33,7 @@ export function CampaignStatsConversionsBlock({ startDate, endDate }: CampaignSt
 		initialFilters: {
 			campaignId: undefined,
 			page: 1,
+			pageSize: DEFAULT_PAGE_SIZE,
 			search: "",
 			types: [],
 			periodAfter: startDate ?? undefined,
@@ -111,8 +113,11 @@ export function CampaignStatsConversionsBlock({ startDate, endDate }: CampaignSt
 				queryLoading={isLoading}
 				selectPage={(page) => updateFilters({ page })}
 				totalPages={totalPages}
-				itemsMatchedText={`${conversionsMatched} ${conversionsMatched === 1 ? "conversão encontrada." : "conversões encontradas."}`}
-				itemsShowingText={`${items.length} ${items.length === 1 ? "conversão exibida." : "conversões exibidas."}`}
+				pageSize={filters.pageSize}
+				onPageSizeChange={(pageSize) => updateFilters({ pageSize, page: 1 })}
+				itemsMatchedText={conversionsMatched === 1 ? "1 conversão encontrada" : `${conversionsMatched} conversões encontradas`}
+				itemsShowingText={`mostrando ${items.length}`}
+				sticky={false}
 			/>
 
 			<div className="w-full flex flex-col gap-1.5 max-h-[520px] overflow-y-auto overscroll-y-auto scrollbar-thin scrollbar-track-primary/10 scrollbar-thumb-primary/30">

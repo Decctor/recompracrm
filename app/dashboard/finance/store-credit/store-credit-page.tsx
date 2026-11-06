@@ -320,8 +320,10 @@ export default function StoreCreditPage({ organizationId, canReceive }: { organi
 				queryLoading={isLoading}
 				selectPage={(page) => updateFilters({ page })}
 				totalPages={totalPages}
-				itemsMatchedText={`${clientesMatched} ${clientesMatched === 1 ? "cliente encontrado" : "clientes encontrados"}.`}
-				itemsShowingText={`Mostrando ${clientes.length} ${clientes.length === 1 ? "cliente" : "clientes"}.`}
+				pageSize={filters.pageSize}
+				onPageSizeChange={(pageSize) => updateFilters({ pageSize, page: 1 })}
+				itemsMatchedText={clientesMatched === 1 ? "1 cliente encontrado" : `${clientesMatched} clientes encontrados`}
+				itemsShowingText={`mostrando ${clientes.length}`}
 			/>
 
 			{isLoading ? <LoadingComponent /> : null}

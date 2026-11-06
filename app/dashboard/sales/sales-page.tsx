@@ -232,10 +232,11 @@ export function SalesHistoryView({
 				queryLoading={isLoading}
 				selectPage={(page) => updateParams({ page })}
 				totalPages={totalPages || 0}
-				itemsMatchedText={salesMatched > 0 ? `${salesMatched} vendas encontradas.` : `${salesMatched} venda encontrada.`}
-				itemsShowingText={salesShowing > 0 ? `Mostrando ${salesShowing} vendas.` : `Mostrando ${salesShowing} venda.`}
+				pageSize={urlState.pageSize}
+				onPageSizeChange={(pageSize) => updateParams({ pageSize, page: 1 })}
+				itemsMatchedText={salesMatched === 1 ? "1 venda encontrada" : `${salesMatched} vendas encontradas`}
+				itemsShowingText={`mostrando ${salesShowing}`}
 			/>
-
 			{isLoading ? <LoadingComponent /> : null}
 			{isError ? <ErrorComponent msg={getErrorMessage(error)} /> : null}
 			{isSuccess && sales ? (

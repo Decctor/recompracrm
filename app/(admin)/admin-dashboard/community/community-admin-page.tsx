@@ -83,8 +83,10 @@ export default function CommunityAdminPage() {
 					queryLoading={isLoading}
 					selectPage={(page) => updateParams({ page })}
 					totalPages={totalPages || 0}
-					itemsMatchedText={coursesMatched > 0 ? `${coursesMatched} cursos encontrados.` : `${coursesMatched} curso encontrado.`}
-					itemsShowingText={coursesShowing > 0 ? `Mostrando ${coursesShowing} cursos.` : `Mostrando ${coursesShowing} curso.`}
+					pageSize={params.pageSize}
+					onPageSizeChange={(pageSize) => updateParams({ pageSize, page: 1 })}
+					itemsMatchedText={coursesMatched === 1 ? "1 curso encontrado" : `${coursesMatched} cursos encontrados`}
+					itemsShowingText={`mostrando ${coursesShowing}`}
 				/>
 				<div className="w-full flex items-start flex-wrap gap-x-3 gap-y-1">
 					{isLoading ? <LoadingComponent /> : null}
@@ -117,8 +119,10 @@ export default function CommunityAdminPage() {
 					queryLoading={materialsIsLoading}
 					selectPage={(page) => updateMaterialsParams({ page })}
 					totalPages={materialsTotalPages || 0}
-					itemsMatchedText={materialsMatched > 0 ? `${materialsMatched} materiais encontrados.` : `${materialsMatched} material encontrado.`}
-					itemsShowingText={materialsShowing > 0 ? `Mostrando ${materialsShowing} materiais.` : `Mostrando ${materialsShowing} material.`}
+					pageSize={materialsParams.pageSize}
+					onPageSizeChange={(pageSize) => updateMaterialsParams({ pageSize, page: 1 })}
+					itemsMatchedText={materialsMatched === 1 ? "1 material encontrado" : `${materialsMatched} materiais encontrados`}
+					itemsShowingText={`mostrando ${materialsShowing}`}
 				/>
 				<div className="w-full flex items-start flex-wrap gap-x-3 gap-y-1">
 					{materialsIsLoading ? <LoadingComponent /> : null}

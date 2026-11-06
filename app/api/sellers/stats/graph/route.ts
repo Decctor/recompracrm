@@ -2,13 +2,20 @@ import { appApiHandler } from "@/lib/app-api";
 import { runPagesRouteHandler, type PagesRouteHandler, type PagesRouteRequest, type PagesRouteResponse } from "@/lib/pages-route-compat";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
-import { getBestNumberOfPointsBetweenDates, getDateBuckets, getEvenlySpacedDates } from "@/lib/dates";
+import { getChartBuckets } from "@/lib/charts/period-buckets";
+import { chartBucketPositionSql } from "@/lib/charts/period-buckets-sql";
+import { OPERATION_TIMEZONE } from "@/lib/operation-timezone";
 import { db } from "@/services/drizzle";
 import { sales } from "@/services/drizzle/schema";
 import dayjs from "dayjs";
-import { and, count, countDistinct, eq, gte, isNotNull, lte, sql } from "drizzle-orm";
+import timezone from "dayjs/plugin/timezone";
+import utc from "dayjs/plugin/utc";
+import { and, countDistinct, eq, gte, isNotNull, lte, sql } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { z } from "zod";
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 const GetSellersGraphInputSchema = z.object({
 	graphType: z.enum(["sales-value", "sales-quantity", "active-sellers", "average-ticket"], {
@@ -23,7 +30,7 @@ const GetSellersGraphInputSchema = z.object({
 		.datetime({ message: "Formato de data inválido." })
 		.optional()
 		.nullable()
-		.transform((v) => (v ? dayjs(v).startOf("day").toDate() : undefined)),
+		.transform((v) => (v ? dayjs(v).tz(OPERATION_TIMEZONE).startOf("day").toDate() : undefined)),
 	periodBefore: z
 		.string({
 			required_error: "Período não informado.",
@@ -32,7 +39,7 @@ const GetSellersGraphInputSchema = z.object({
 		.datetime({ message: "Formato de data inválido." })
 		.optional()
 		.nullable()
-		.transform((v) => (v ? dayjs(v).endOf("day").toDate() : undefined)),
+		.transform((v) => (v ? dayjs(v).tz(OPERATION_TIMEZONE).endOf("day").toDate() : undefined)),
 });
 
 export type TGetSellersGraphInput = z.infer<typeof GetSellersGraphInputSchema>;
@@ -66,155 +73,58 @@ async function getSellersGraph({ input, sessionUser }: { input: TGetSellersGraph
 		period.before = new Date();
 	}
 
-	const { points: bestNumberOfPointsForPeriodsDates, groupingFormat } = getBestNumberOfPointsBetweenDates({
-		startDate: period.after,
-		endDate: period.before,
-	});
-
-	const periodDatesStrs = getEvenlySpacedDates({
-		startDate: period.after,
-		endDate: period.before,
-		points: bestNumberOfPointsForPeriodsDates,
-	});
-
-	const periodDateBuckets = getDateBuckets(periodDatesStrs);
+	const buckets = getChartBuckets({ startDate: period.after, endDate: period.before });
+	if (buckets.length === 0) return { data: [] };
+	const bucketPosition = chartBucketPositionSql(sales.dataVenda, buckets);
+	const periodSalesWhere = and(
+		eq(sales.organizacaoId, userOrgId),
+		isNotNull(sales.dataVenda),
+		gte(sales.dataVenda, period.after),
+		lte(sales.dataVenda, period.before),
+		eq(sales.statusVenda, "CONFIRMADA"),
+	);
 
 	// Graph Type: sales-value (total revenue over time)
 	if (input.graphType === "sales-value") {
 		const salesValue = await db
-			.select({
-				date: sql<string>`date_trunc('day', ${sales.dataVenda})::text`,
-				total: sql<number>`SUM(${sales.valorTotal})`,
-			})
+			.select({ position: bucketPosition, total: sql<number>`SUM(${sales.valorTotal})` })
 			.from(sales)
-			.where(
-				and(
-					eq(sales.organizacaoId, userOrgId),
-					isNotNull(sales.dataVenda),
-					gte(sales.dataVenda, period.after),
-					lte(sales.dataVenda, period.before),
-					eq(sales.statusVenda, "CONFIRMADA"),
-				),
-			)
-			.orderBy(sql`date_trunc('day', ${sales.dataVenda})`)
-			.groupBy(sql`date_trunc('day', ${sales.dataVenda})`);
-
-		const initialSalesValue = Object.fromEntries(periodDatesStrs.map((date) => [dayjs(date).format(groupingFormat), { value: 0 }]));
-
-		const salesValueReduced = salesValue.reduce((acc, current) => {
-			const saleDate = new Date(current.date);
-			const saleTime = saleDate.getTime();
-
-			const bucket = periodDateBuckets.find((b) => saleTime >= b.start && saleTime <= b.end);
-			if (!bucket) return acc;
-
-			const key = dayjs(bucket.key).format(groupingFormat);
-			if (!acc[key]) acc[key] = { value: 0 };
-
-			acc[key].value += Number(current.total ?? 0);
-			return acc;
-		}, initialSalesValue);
-
-		const salesValueGraph = Object.entries(salesValueReduced).map(([key, value]) => ({
-			label: key,
-			value: value.value,
-		}));
+			.where(periodSalesWhere)
+			.groupBy(bucketPosition);
+		const byPosition = new Map(salesValue.map((row) => [Number(row.position), row]));
 
 		return {
-			data: salesValueGraph,
+			data: buckets.map((bucket, index) => ({ label: bucket.label, value: Number(byPosition.get(index + 1)?.total ?? 0) })),
 		};
 	}
 
 	// Graph Type: sales-quantity (total sales count over time)
 	if (input.graphType === "sales-quantity") {
 		const salesQuantity = await db
-			.select({
-				date: sql<string>`date_trunc('day', ${sales.dataVenda})::text`,
-				total: sql<number>`COUNT(${sales.id})`,
-			})
+			.select({ position: bucketPosition, total: sql<number>`COUNT(${sales.id})` })
 			.from(sales)
-			.where(
-				and(
-					eq(sales.organizacaoId, userOrgId),
-					isNotNull(sales.dataVenda),
-					gte(sales.dataVenda, period.after),
-					lte(sales.dataVenda, period.before),
-					eq(sales.statusVenda, "CONFIRMADA"),
-				),
-			)
-			.orderBy(sql`date_trunc('day', ${sales.dataVenda})`)
-			.groupBy(sql`date_trunc('day', ${sales.dataVenda})`);
-
-		const initialSalesQuantity = Object.fromEntries(periodDatesStrs.map((date) => [dayjs(date).format(groupingFormat), { value: 0 }]));
-
-		const salesQuantityReduced = salesQuantity.reduce((acc, current) => {
-			const saleDate = new Date(current.date);
-			const saleTime = saleDate.getTime();
-
-			const bucket = periodDateBuckets.find((b) => saleTime >= b.start && saleTime <= b.end);
-			if (!bucket) return acc;
-
-			const key = dayjs(bucket.key).format(groupingFormat);
-			if (!acc[key]) acc[key] = { value: 0 };
-
-			acc[key].value += Number(current.total ?? 0);
-			return acc;
-		}, initialSalesQuantity);
-
-		const salesQuantityGraph = Object.entries(salesQuantityReduced).map(([key, value]) => ({
-			label: key,
-			value: value.value,
-		}));
+			.where(periodSalesWhere)
+			.groupBy(bucketPosition);
+		const byPosition = new Map(salesQuantity.map((row) => [Number(row.position), row]));
 
 		return {
-			data: salesQuantityGraph,
+			data: buckets.map((bucket, index) => ({ label: bucket.label, value: Number(byPosition.get(index + 1)?.total ?? 0) })),
 		};
 	}
 
 	// Graph Type: active-sellers (unique sellers who sold per period)
 	if (input.graphType === "active-sellers") {
+		// Distintos por intervalo, no banco: somar os distintos de cada dia contaria o mesmo vendedor
+		// uma vez por dia em que vendeu nos pontos de semana e de mês.
 		const activeSellers = await db
-			.select({
-				date: sql<string>`date_trunc('day', ${sales.dataVenda})::text`,
-				total: countDistinct(sales.vendedorId),
-			})
+			.select({ position: bucketPosition, total: countDistinct(sales.vendedorId) })
 			.from(sales)
-			.where(
-				and(
-					eq(sales.organizacaoId, userOrgId),
-					isNotNull(sales.dataVenda),
-					isNotNull(sales.vendedorId),
-					gte(sales.dataVenda, period.after),
-					lte(sales.dataVenda, period.before),
-					eq(sales.statusVenda, "CONFIRMADA"),
-				),
-			)
-			.orderBy(sql`date_trunc('day', ${sales.dataVenda})`)
-			.groupBy(sql`date_trunc('day', ${sales.dataVenda})`);
-
-		const initialActiveSellers = Object.fromEntries(periodDatesStrs.map((date) => [dayjs(date).format(groupingFormat), { value: 0 }]));
-
-		const activeSellersReduced = activeSellers.reduce((acc, current) => {
-			const saleDate = new Date(current.date);
-			const saleTime = saleDate.getTime();
-
-			const bucket = periodDateBuckets.find((b) => saleTime >= b.start && saleTime <= b.end);
-			if (!bucket) return acc;
-
-			const key = dayjs(bucket.key).format(groupingFormat);
-			if (!acc[key]) acc[key] = { value: 0 };
-
-			acc[key].value += Number(current.total);
-			return acc;
-		}, initialActiveSellers);
-
-		const activeSellersGraph = Object.entries(activeSellersReduced).map(([key, value]) => ({
-			label: key,
-			value: value.value,
-		}));
+			.where(and(periodSalesWhere, isNotNull(sales.vendedorId)))
+			.groupBy(bucketPosition);
+		const byPosition = new Map(activeSellers.map((row) => [Number(row.position), row]));
 
 		return {
-			data: activeSellersGraph,
+			data: buckets.map((bucket, index) => ({ label: bucket.label, value: Number(byPosition.get(index + 1)?.total ?? 0) })),
 		};
 	}
 
@@ -222,50 +132,22 @@ async function getSellersGraph({ input, sessionUser }: { input: TGetSellersGraph
 	if (input.graphType === "average-ticket") {
 		const ticketData = await db
 			.select({
-				date: sql<string>`date_trunc('day', ${sales.dataVenda})::text`,
+				position: bucketPosition,
 				totalRevenue: sql<number>`SUM(${sales.valorTotal})`,
 				salesCount: sql<number>`COUNT(${sales.id})`,
 			})
 			.from(sales)
-			.where(
-				and(
-					eq(sales.organizacaoId, userOrgId),
-					isNotNull(sales.dataVenda),
-					gte(sales.dataVenda, period.after),
-					lte(sales.dataVenda, period.before),
-					eq(sales.statusVenda, "CONFIRMADA"),
-				),
-			)
-			.orderBy(sql`date_trunc('day', ${sales.dataVenda})`)
-			.groupBy(sql`date_trunc('day', ${sales.dataVenda})`);
-
-		const initialTicket = Object.fromEntries(periodDatesStrs.map((date) => [dayjs(date).format(groupingFormat), { revenue: 0, count: 0 }]));
-
-		const ticketReduced = ticketData.reduce((acc, current) => {
-			const saleDate = new Date(current.date);
-			const saleTime = saleDate.getTime();
-
-			const bucket = periodDateBuckets.find((b) => saleTime >= b.start && saleTime <= b.end);
-			if (!bucket) return acc;
-
-			const key = dayjs(bucket.key).format(groupingFormat);
-			if (!acc[key]) acc[key] = { revenue: 0, count: 0 };
-
-			acc[key].revenue += Number(current.totalRevenue ?? 0);
-			acc[key].count += Number(current.salesCount ?? 0);
-			return acc;
-		}, initialTicket);
-
-		const ticketGraph = Object.entries(ticketReduced).map(([key, value]) => {
-			const averageTicket = value.count > 0 ? value.revenue / value.count : 0;
-			return {
-				label: key,
-				value: averageTicket,
-			};
-		});
+			.where(periodSalesWhere)
+			.groupBy(bucketPosition);
+		const byPosition = new Map(ticketData.map((row) => [Number(row.position), row]));
 
 		return {
-			data: ticketGraph,
+			data: buckets.map((bucket, index) => {
+				const row = byPosition.get(index + 1);
+				const revenue = Number(row?.totalRevenue ?? 0);
+				const salesCount = Number(row?.salesCount ?? 0);
+				return { label: bucket.label, value: salesCount > 0 ? revenue / salesCount : 0 };
+			}),
 		};
 	}
 

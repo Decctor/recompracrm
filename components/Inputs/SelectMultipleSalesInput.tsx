@@ -115,6 +115,19 @@ function MultipleSalesSelectInput<T>({
 	const renderContent = () => (
 		<Command shouldFilter={false} className="w-full">
 			<CommandInput placeholder="Filtre o item desejado..." value={params.search} onValueChange={(value) => updateParams({ search: value })} />
+			{!isLoading && !isError ? (
+				<GeneralPaginationComponent
+					activePage={params.page}
+					queryLoading={isLoading}
+					selectPage={(page) => updateParams({ page })}
+					totalPages={totalPages}
+					itemsMatchedText={salesMatched === 1 ? "1 venda encontrada" : `${salesMatched} vendas encontradas`}
+					itemsShowingText={`mostrando ${salesShowing}`}
+					// Fora do CommandList, que rola sozinho: a barra já fica à vista acima das opções.
+					sticky={false}
+					className="p-2"
+				/>
+			) : null}
 			<CommandList>
 				<CommandGroup>
 					<CommandItem value="reset-selection-option" onSelect={() => resetState()} className="cursor-pointer">
@@ -134,18 +147,6 @@ function MultipleSalesSelectInput<T>({
 
 				{!isLoading && !isError && (
 					<>
-						<div className="p-2">
-							<GeneralPaginationComponent
-								activePage={params.page}
-								queryLoading={isLoading}
-								selectPage={(page) => updateParams({ page })}
-								totalPages={totalPages}
-								itemsMatchedText={salesMatched > 1 ? `${salesMatched} vendas encontradas.` : `${salesMatched} venda encontrada.`}
-								itemsShowingText={salesShowing > 1 ? `Mostrando ${salesShowing} vendas.` : `Mostrando ${salesShowing} venda.`}
-								showSteppersText={false}
-								pageIconSize={"sm"}
-							/>
-						</div>
 						<CommandGroup>
 							{isSuccess && sales?.length === 0 && <div className="p-2 text-center text-sm italic text-foreground">Sem opções disponíveis.</div>}
 							{sales?.map((item) => (

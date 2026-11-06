@@ -11,6 +11,7 @@ import {
 } from "@/lib/fiscal/exceptional-presence";
 import { blocksNewManualFiscalEmission } from "@/lib/fiscal/manual-emission-policy";
 import { loadFiscalOrganization } from "@/lib/fiscal/settings";
+import { DEFAULT_PAGE_SIZE, pageSizeInputSchema } from "@/lib/pagination";
 import { FiscalDocumentTypeEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
 import createHttpError from "http-errors";
@@ -33,6 +34,7 @@ const GetFiscalDocumentsInputSchema = FiscalDocumentsFiltersSchema.extend({
 		.optional()
 		.nullable(),
 	page: z.coerce.number().min(1).default(1),
+	pageSize: pageSizeInputSchema(),
 });
 export type TGetFiscalDocumentsInput = z.infer<typeof GetFiscalDocumentsInputSchema>;
 
@@ -75,6 +77,7 @@ async function getFiscalDocuments({ input }: { input: TGetFiscalDocumentsInput }
 		listFiscalDocuments({
 			organizacaoId: orgId,
 			page: input.page,
+			pageSize: input.pageSize ?? DEFAULT_PAGE_SIZE,
 			filters: input,
 		}),
 		loadFiscalOrganization(orgId),
@@ -100,6 +103,7 @@ async function getFiscalDocumentsRoute(request: NextRequest) {
 	const input = GetFiscalDocumentsInputSchema.parse({
 		documentId: searchParams.get("documentId") ?? undefined,
 		page: searchParams.get("page") ?? 1,
+		pageSize: searchParams.get("pageSize"),
 		search: searchParams.get("search") ?? undefined,
 		statusInterno: searchParams.get("statusInterno") ?? undefined,
 		tipos: searchParams.get("tipos") ?? undefined,

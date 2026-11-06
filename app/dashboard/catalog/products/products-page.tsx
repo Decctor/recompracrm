@@ -222,19 +222,21 @@ function ProductsDatabaseList({ user, userMembership, organization, storageKey, 
 					) : null}
 				</ActionToolbar>
 			</div>
-			<GeneralPaginationComponent
-				activePage={filters.page}
-				queryLoading={isLoading}
-				selectPage={(page) => updateFilters({ page })}
-				totalPages={totalPages || 0}
-				itemsMatchedText={productsMatched > 0 ? `${productsMatched} produtos encontrados.` : `${productsMatched} produto encontrado.`}
-				itemsShowingText={productsShowing > 0 ? `Mostrando ${productsShowing} produtos.` : `Mostrando ${productsShowing} produto.`}
-			/>
 			<ProductsInlineFilters
 				filters={filters}
 				updateFilters={updateFilters}
 				showMainSupplierFilter={userHasPurchasesViewPermission}
 				onReset={canResetFilters ? resetFilters : undefined}
+			/>
+			<GeneralPaginationComponent
+				activePage={filters.page}
+				queryLoading={isLoading}
+				selectPage={(page) => updateFilters({ page })}
+				totalPages={totalPages || 0}
+				pageSize={filters.pageSize}
+				onPageSizeChange={(pageSize) => updateFilters({ pageSize, page: 1 })}
+				itemsMatchedText={productsMatched === 1 ? "1 produto encontrado" : `${productsMatched} produtos encontrados`}
+				itemsShowingText={`mostrando ${productsShowing}`}
 			/>
 			{isLoading ? <LoadingComponent /> : null}
 			{isError ? <ErrorComponent msg={getErrorMessage(error)} /> : null}

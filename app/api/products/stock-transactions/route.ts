@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { pageSizeInputSchema } from "@/lib/pagination";
 import { canMoveInventory, canViewInventory } from "@/lib/permissions/inventory";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { applyStockMovement } from "@/lib/stock/apply-stock-movement";
@@ -14,7 +15,7 @@ import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
-const PAGE_SIZE = 50;
+const DEFAULT_TRANSACTIONS_PAGE_SIZE = 50;
 
 const GetProductStockTransactionsInputSchema = z.object({
 	page: z
@@ -22,6 +23,7 @@ const GetProductStockTransactionsInputSchema = z.object({
 		.optional()
 		.nullable()
 		.transform((value) => (value ? Number(value) : 1)),
+	pageSize: pageSizeInputSchema(DEFAULT_TRANSACTIONS_PAGE_SIZE),
 	search: z.string({ invalid_type_error: "Tipo inválido para busca." }).optional().nullable(),
 	types: z
 		.string({ invalid_type_error: "Tipo inválido para tipo de movimentação." })
@@ -59,18 +61,18 @@ function getSessionWithOrg(session: TAuthUserSession | null) {
 
 // A movimentação registra `quantidade` sempre positiva; a direção (entrada/saída) é
 // derivada do saldo. Reflete corretamente inclusive AJUSTE, que pode ir para qualquer lado.
-function resolveTransactionDirection<
-	TTransaction extends { saldoAnterior: number | null; saldoPosterior: number | null; quantidade: number },
->(transaction: TTransaction): "ENTRADA" | "SAIDA" | "NEUTRO" {
+function resolveTransactionDirection<TTransaction extends { saldoAnterior: number | null; saldoPosterior: number | null; quantidade: number }>(
+	transaction: TTransaction,
+): "ENTRADA" | "SAIDA" | "NEUTRO" {
 	const delta = (transaction.saldoPosterior ?? 0) - (transaction.saldoAnterior ?? 0);
 	if (delta > 0) return "ENTRADA";
 	if (delta < 0) return "SAIDA";
 	return "NEUTRO";
 }
 
-function enrichStockTransaction<
-	TTransaction extends { saldoAnterior: number | null; saldoPosterior: number | null; quantidade: number },
->(transaction: TTransaction) {
+function enrichStockTransaction<TTransaction extends { saldoAnterior: number | null; saldoPosterior: number | null; quantidade: number }>(
+	transaction: TTransaction,
+) {
 	return {
 		...transaction,
 		direcao: resolveTransactionDirection(transaction),
@@ -80,6 +82,7 @@ function enrichStockTransaction<
 async function getProductStockTransactions({ input, session }: { input: TGetProductStockTransactionsInput; session: TAuthUserSession }) {
 	const organizationId = session.membership?.organizacao.id;
 	if (!organizationId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização.");
+	const PAGE_SIZE = input.pageSize ?? DEFAULT_TRANSACTIONS_PAGE_SIZE;
 
 	const conditions = [eq(productStockTransactions.organizacaoId, organizationId)];
 	if (input.productId) conditions.push(eq(productStockTransactions.produtoId, input.productId));
@@ -154,6 +157,7 @@ async function getProductStockTransactionsRoute(request: NextRequest) {
 	const searchParams = request.nextUrl.searchParams;
 	const input = GetProductStockTransactionsInputSchema.parse({
 		page: searchParams.get("page"),
+		pageSize: searchParams.get("pageSize"),
 		search: searchParams.get("search"),
 		types: searchParams.get("types"),
 		origin: searchParams.get("origin"),
@@ -250,7 +254,12 @@ async function lockStockEntity({
 	productVariantId?: string | null;
 }) {
 	const [product] = await tx
-		.select({ nome: products.nome, quantidade: products.quantidade, precoCusto: products.precoCusto, rastreamentoEstoqueAtivo: products.rastreamentoEstoqueAtivo })
+		.select({
+			nome: products.nome,
+			quantidade: products.quantidade,
+			precoCusto: products.precoCusto,
+			rastreamentoEstoqueAtivo: products.rastreamentoEstoqueAtivo,
+		})
 		.from(products)
 		.where(and(eq(products.id, productId), eq(products.organizacaoId, organizationId)))
 		.for("update");
@@ -309,9 +318,7 @@ async function createStockTransactions({ input, session }: { input: TCreateStock
 			// Lançamento manual nunca leva o saldo a negativo: se o saldo do app está abaixo do real,
 			// o caminho é a recontagem, não uma saída que esconde a divergência.
 			if (saldoPosterior < -QUANTITY_EPSILON) {
-				throw new createHttpError.BadRequest(
-					`Saldo insuficiente para "${entity.nome}": disponível ${saldoAnterior}, informado ${item.quantity}.`,
-				);
+				throw new createHttpError.BadRequest(`Saldo insuficiente para "${entity.nome}": disponível ${saldoAnterior}, informado ${item.quantity}.`);
 			}
 
 			const base = { produtoId: item.productId, produtoVarianteId: item.productVariantId ?? null, saldoAnterior, saldoPosterior };
@@ -478,7 +485,8 @@ export type TCreateStockTransactionsOutput = Awaited<ReturnType<typeof createSto
 
 async function createStockTransactionsRoute(request: NextRequest) {
 	const session = getSessionWithOrg(await getCurrentSessionUncached());
-	if (!canMoveInventory(session.membership?.permissoes)) throw new createHttpError.Forbidden("Você não possui permissão para lançar movimentações de estoque.");
+	if (!canMoveInventory(session.membership?.permissoes))
+		throw new createHttpError.Forbidden("Você não possui permissão para lançar movimentações de estoque.");
 	const input = CreateStockTransactionsInputSchema.parse(await request.json());
 	const result = await createStockTransactions({ input, session });
 	return NextResponse.json(result);

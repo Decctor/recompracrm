@@ -17,7 +17,7 @@ import {
 import { db } from "@/services/drizzle";
 import { clients, sales } from "@/services/drizzle/schema";
 import { clientLocations, clientTagReferences } from "@/services/drizzle/schema/clients";
-import { and, asc, count, desc, eq, gte, inArray, lte, max, min, notInArray, sql, sum } from "drizzle-orm";
+import { type SQL, and, asc, count, desc, eq, gte, inArray, isNotNull, lte, max, min, notInArray, sql, sum } from "drizzle-orm";
 import createHttpError from "http-errors";
 import z from "zod";
 import { NextRequest, NextResponse } from "next/server";
@@ -25,6 +25,7 @@ import { handleSimpleChildRowsProcessing } from "@/lib/db-utils";
 import { resolveValidatedAuthorSeller } from "@/lib/clients/authorship";
 import { recomputeClientDuplicatesSafely } from "@/lib/clients/duplicates";
 import { normalizeSocialProfile, normalizeWebsiteUrl } from "@/lib/socials";
+import { DEFAULT_PAGE_SIZE, pageSizeInputSchema } from "@/lib/pagination";
 
 const GetClientsInputSchema = z.object({
 	// By ID params
@@ -41,6 +42,7 @@ const GetClientsInputSchema = z.object({
 			required_error: "Páginação não informada.",
 		})
 		.transform((val) => Number(val)),
+	pageSize: pageSizeInputSchema(),
 	search: z
 		.string({
 			invalid_type_error: "Tipo não válido para busca.",
@@ -89,6 +91,24 @@ const GetClientsInputSchema = z.object({
 		.optional()
 		.nullable()
 		.transform((v) => (v ? v.split(",") : [])),
+	// Valor gasto pelo cliente: soma das vendas confirmadas dentro do período de estatísticas (o mesmo
+	// recorte de `statsPeriod*`, integrações e vendas excluídas). Sem período, é o total da vida toda.
+	statsTotalMin: z
+		.string({
+			invalid_type_error: "Tipo não válido para o valor gasto mínimo.",
+		})
+		.optional()
+		.nullable()
+		.transform((v) => parseOptionalAmount(v))
+		.optional(),
+	statsTotalMax: z
+		.string({
+			invalid_type_error: "Tipo não válido para o valor gasto máximo.",
+		})
+		.optional()
+		.nullable()
+		.transform((v) => parseOptionalAmount(v))
+		.optional(),
 	// Aniversários dentro de um intervalo de datas do calendário. O ano das datas só define o
 	// tamanho da janela; o casamento é por MM-DD, então o filtro serve tanto para "o mês inteiro"
 	// quanto para "de hoje até tal dia" — inclusive atravessando a virada do ano (28/12 → 05/01).
@@ -185,7 +205,16 @@ async function getClientsPage({
 		if (keys.has("02-28") && keys.has("03-01")) keys.add("02-29");
 		clientConditions.push(inArray(sql`to_char(${clients.dataNascimento}, 'MM-DD')`, [...keys]));
 	}
-	const PAGE_SIZE = 25;
+	const statsConditions = [eq(sales.organizacaoId, userOrgId), eq(sales.statusVenda, "CONFIRMADA")];
+	if (input.statsPeriodAfter) statsConditions.push(gte(sales.dataVenda, input.statsPeriodAfter));
+	if (input.statsPeriodBefore) statsConditions.push(lte(sales.dataVenda, input.statsPeriodBefore));
+	const integrationCondition = getSalesIntegrationCondition(input.statsIntegrationsIds);
+	if (integrationCondition) statsConditions.push(integrationCondition);
+	if (input.statsExcludedSalesIds && input.statsExcludedSalesIds.length > 0) statsConditions.push(notInArray(sales.id, input.statsExcludedSalesIds));
+	const spentCondition = buildSpentRangeCondition({ database, statsConditions, min: input.statsTotalMin, max: input.statsTotalMax });
+	if (spentCondition) clientConditions.push(spentCondition);
+
+	const PAGE_SIZE = input.pageSize ?? DEFAULT_PAGE_SIZE;
 	const skip = PAGE_SIZE * (input.page - 1);
 
 	const [{ clientsMatched }] = await database
@@ -208,13 +237,6 @@ async function getClientsPage({
 			},
 		};
 	}
-
-	const statsConditions = [eq(sales.organizacaoId, userOrgId), eq(sales.statusVenda, "CONFIRMADA")];
-	if (input.statsPeriodAfter) statsConditions.push(gte(sales.dataVenda, input.statsPeriodAfter));
-	if (input.statsPeriodBefore) statsConditions.push(lte(sales.dataVenda, input.statsPeriodBefore));
-	const integrationCondition = getSalesIntegrationCondition(input.statsIntegrationsIds);
-	if (integrationCondition) statsConditions.push(integrationCondition);
-	if (input.statsExcludedSalesIds && input.statsExcludedSalesIds.length > 0) statsConditions.push(notInArray(sales.id, input.statsExcludedSalesIds));
 
 	const statsSelection = {
 		clientId: sales.clienteId,
@@ -383,6 +405,49 @@ export type TGetClientsOutput = Awaited<ReturnType<typeof getClients>>;
 export type TGetClientsOutputDefault = Exclude<TGetClientsOutput["data"]["default"], null>;
 export type TGetClientsOutputById = Exclude<TGetClientsOutput["data"]["byId"], null>;
 
+function parseOptionalAmount(value: string | null | undefined) {
+	if (value === null || value === undefined || value.trim() === "") return null;
+	const parsed = Number(value);
+	return Number.isFinite(parsed) ? parsed : null;
+}
+
+/**
+ * Restringe os clientes pela soma das vendas no recorte de estatísticas.
+ *
+ * Agrega as vendas uma vez (hash por cliente) em vez de uma subconsulta correlacionada por cliente.
+ * Quem não comprou no recorte gastou 0: sem mínimo positivo, esses clientes continuam valendo, então
+ * a condição vira "excluir quem passou do máximo" — daí o `NOT IN`, e o `cliente_id IS NOT NULL`
+ * que impede uma venda sem cliente de anular o `NOT IN` inteiro.
+ */
+function buildSpentRangeCondition({
+	database,
+	statsConditions,
+	min,
+	max,
+}: {
+	database: ClientSearchDatabase;
+	statsConditions: SQL[];
+	min: number | null | undefined;
+	max: number | null | undefined;
+}) {
+	const hasMin = min != null && min > 0;
+	const hasMax = max != null;
+	if (!hasMin && !hasMax) return null;
+	const spent = sql`COALESCE(SUM(${sales.valorTotal}), 0)`;
+	const spendingClients = (having: SQL) =>
+		database
+			.select({ id: sales.clienteId })
+			.from(sales)
+			.where(and(...statsConditions, isNotNull(sales.clienteId)))
+			.groupBy(sales.clienteId)
+			.having(having);
+	if (hasMin) {
+		const having = hasMax ? sql`${spent} >= ${min} AND ${spent} <= ${max}` : sql`${spent} >= ${min}`;
+		return inArray(clients.id, spendingClients(having));
+	}
+	return notInArray(clients.id, spendingClients(sql`${spent} > ${max}`));
+}
+
 const getClientsRoute = async (req: NextRequest) => {
 	const sessionUser = await getCurrentSessionUncached();
 
@@ -393,6 +458,7 @@ const getClientsRoute = async (req: NextRequest) => {
 	const input = GetClientsInputSchema.parse({
 		id: searchParams.get("id") ?? undefined,
 		page: searchParams.get("page") ?? undefined,
+		pageSize: searchParams.get("pageSize"),
 		search: searchParams.get("search") ?? undefined,
 		acquisitionChannels: searchParams.get("acquisitionChannels") ?? undefined,
 		segmentationTitles: searchParams.get("segmentationTitles") ?? undefined,
@@ -400,6 +466,8 @@ const getClientsRoute = async (req: NextRequest) => {
 		statsPeriodBefore: searchParams.get("statsPeriodBefore") ?? undefined,
 		statsIntegrationsIds: searchParams.get("statsIntegrationsIds") ?? undefined,
 		statsExcludedSalesIds: searchParams.get("statsExcludedSalesIds") ?? undefined,
+		statsTotalMin: searchParams.get("statsTotalMin") ?? undefined,
+		statsTotalMax: searchParams.get("statsTotalMax") ?? undefined,
 		birthdaysPeriodAfter: searchParams.get("birthdaysPeriodAfter") ?? undefined,
 		birthdaysPeriodBefore: searchParams.get("birthdaysPeriodBefore") ?? undefined,
 		orderByField: searchParams.get("orderByField") ?? undefined,

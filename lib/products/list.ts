@@ -1,4 +1,5 @@
 import { ProductSearchQuerySchema } from "@/schemas/product-search";
+import { pageSizeInputSchema } from "@/lib/pagination";
 import { z } from "zod";
 import { buildProductSearch, type ProductSearchDatabase } from "@/lib/products/search";
 import { getSalesIntegrationCondition } from "@/lib/sales/integration-filter";
@@ -13,6 +14,7 @@ export const GetProductsDefaultInputSchema = z.object({
 			invalid_type_error: "Tipo inválido para página.",
 		})
 		.transform((val) => Number(val)),
+	pageSize: pageSizeInputSchema(),
 
 	search: ProductSearchQuerySchema,
 	groups: z

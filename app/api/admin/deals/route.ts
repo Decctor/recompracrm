@@ -1,6 +1,7 @@
 import { AppSubscriptionPlans, DEAL_PLAN_KEY } from "@/config";
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { DEFAULT_PAGE_SIZE, pageSizeInputSchema } from "@/lib/pagination";
 import {
 	countDealLicencasUtilizadas,
 	dealHasBlockingSubscription,
@@ -37,6 +38,7 @@ const GetDealsInputSchema = z.object({
 		.optional()
 		.nullable()
 		.transform((v) => (v ? Number(v) : 1)),
+	pageSize: pageSizeInputSchema(),
 	search: z.string({ invalid_type_error: "Tipo inválido para busca." }).optional().nullable(),
 });
 export type TGetDealsInput = z.infer<typeof GetDealsInputSchema>;
@@ -98,7 +100,7 @@ async function getDeals({ input }: { input: TGetDealsInput }) {
 	}
 	const whereCondition = conditions.length > 0 ? conditions[0] : undefined;
 
-	const PAGE_SIZE = 25;
+	const PAGE_SIZE = input.pageSize ?? DEFAULT_PAGE_SIZE;
 	const skip = PAGE_SIZE * (input.page - 1);
 
 	const dealsMatchedResult = await db
@@ -148,6 +150,7 @@ async function getDealsRoute(request: NextRequest) {
 	const input = GetDealsInputSchema.parse({
 		id: searchParams.get("id"),
 		page: searchParams.get("page"),
+		pageSize: searchParams.get("pageSize"),
 		search: searchParams.get("search"),
 	});
 	const result = await getDeals({ input });

@@ -9,6 +9,7 @@ import GeneralPaginationComponent from "@/components/Utils/Pagination";
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
 import { TGetMessageTemplatesOutputDefault } from "@/app/api/message-templates/route";
 import { getErrorMessage } from "@/lib/errors";
+import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 import { formatDateAsLocale } from "@/lib/formatting";
 import { BsCalendarPlus } from "react-icons/bs";
 import { TemplatePhoneHoverItem } from "@/components/MessageTemplates/TemplatePhoneHoverItem";
@@ -55,7 +56,7 @@ export default function CommunicationTemplatesPage({
 		params,
 		queryKey,
 		updateParams,
-	} = useMessageTemplates({ initialParams: { search: "", page: 1 } });
+	} = useMessageTemplates({ initialParams: { search: "", page: 1, pageSize: DEFAULT_PAGE_SIZE } });
 	const templates = templatesResult?.messageTemplates ?? [];
 	const templatesMatched = templatesResult?.messageTemplatesMatched ?? 0;
 	const totalPages = templatesResult?.totalPages ?? 0;
@@ -117,16 +118,17 @@ export default function CommunicationTemplatesPage({
 					onChange={(e) => updateParams({ search: e.target.value })}
 					className="w-full rounded-xl"
 				/>
-
-				<GeneralPaginationComponent
-					activePage={params.page ?? 1}
-					queryLoading={isLoading}
-					selectPage={(page) => updateParams({ page })}
-					totalPages={totalPages ?? 0}
-					itemsMatchedText={`${templatesMatched} ${templatesMatched === 1 ? "template encontrado." : "templates encontrados."}`}
-					itemsShowingText={`${templates.length} ${templates.length === 1 ? "template exibido." : "templates exibidos."}`}
-				/>
 			</div>
+			<GeneralPaginationComponent
+				activePage={params.page ?? 1}
+				queryLoading={isLoading}
+				selectPage={(page) => updateParams({ page })}
+				totalPages={totalPages ?? 0}
+				pageSize={params.pageSize}
+				onPageSizeChange={(pageSize) => updateParams({ pageSize, page: 1 })}
+				itemsMatchedText={templatesMatched === 1 ? "1 template encontrado" : `${templatesMatched} templates encontrados`}
+				itemsShowingText={`mostrando ${templates.length}`}
+			/>
 			{isLoading ? <p className="w-full flex items-center justify-center animate-pulse">Carregando templates...</p> : null}
 			{isError ? <ErrorComponent msg={getErrorMessage(error)} /> : null}
 			{isSuccess ? (

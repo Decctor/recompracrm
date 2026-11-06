@@ -127,15 +127,17 @@ function SellersDatabaseView({ user, membership }: { user: TAuthUserSession["use
 					NOVO VENDEDOR
 				</Button>
 			</div>
+			<SellersInlineFilters filters={filters} updateFilters={updateFilters} />
 			<GeneralPaginationComponent
 				activePage={filters.page}
 				queryLoading={isLoading}
 				selectPage={(page) => updateFilters({ page })}
 				totalPages={totalPages || 0}
-				itemsMatchedText={sellersMatched > 0 ? `${sellersMatched} vendedores encontrados.` : `${sellersMatched} vendedor encontrado.`}
-				itemsShowingText={sellersShowing > 0 ? `Mostrando ${sellersShowing} vendedores.` : `Mostrando ${sellersShowing} vendedor.`}
+				pageSize={filters.pageSize}
+				onPageSizeChange={(pageSize) => updateFilters({ pageSize, page: 1 })}
+				itemsMatchedText={sellersMatched === 1 ? "1 vendedor encontrado" : `${sellersMatched} vendedores encontrados`}
+				itemsShowingText={`mostrando ${sellersShowing}`}
 			/>
-			<SellersInlineFilters filters={filters} updateFilters={updateFilters} />
 
 			{isLoading ? <LoadingComponent /> : null}
 			{isError ? <ErrorComponent msg={getErrorMessage(error)} /> : null}

@@ -12,6 +12,7 @@ import { and, asc, count, desc, eq, inArray, isNotNull, or, sql } from "drizzle-
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import z from "zod";
+import { DEFAULT_PAGE_SIZE, pageSizeInputSchema } from "@/lib/pagination";
 
 const orderByFieldSchema = z.enum(["dataExecucao", "dataEnvio"]);
 const orderByDirectionSchema = z.enum(["asc", "desc"]);
@@ -24,6 +25,7 @@ const GetCampaignInteractionsInputSchema = z.object({
 		.optional()
 		.nullable()
 		.transform((val) => (val ? Number(val) : 1)),
+	pageSize: pageSizeInputSchema(),
 	search: z
 		.string({
 			invalid_type_error: "Tipo não válido para busca.",
@@ -48,7 +50,7 @@ async function getCampaignInteractions({ input, session }: { input: TGetCampaign
 	const userOrgId = session.membership?.organizacao.id;
 	if (!userOrgId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
 
-	const PAGE_SIZE = 25;
+	const PAGE_SIZE = input.pageSize ?? DEFAULT_PAGE_SIZE;
 	const safePage = Number.isFinite(input.page) && input.page > 0 ? input.page : 1;
 	const skip = PAGE_SIZE * (safePage - 1);
 	const conditions = [
@@ -277,6 +279,7 @@ const getCampaignInteractionsRoute = async (request: NextRequest) => {
 	const searchParams = request.nextUrl.searchParams;
 	const input = GetCampaignInteractionsInputSchema.parse({
 		page: searchParams.get("page") ?? undefined,
+		pageSize: searchParams.get("pageSize"),
 		search: searchParams.get("search") ?? undefined,
 		status: searchParams.get("status") ?? undefined,
 		orderByField: searchParams.get("orderByField") ?? undefined,

@@ -23,6 +23,7 @@ import createHttpError from "http-errors";
 import { NextRequest, NextResponse } from "next/server";
 import z from "zod";
 import dayjs from "dayjs";
+import { DEFAULT_PAGE_SIZE, pageSizeInputSchema } from "@/lib/pagination";
 
 const AccountingEntryTransactionStatusSchema = z.enum(["PAGO", "PARCIALMENTE_PAGO", "PENDENTE", "SEM_TRANSACOES"]);
 export type TAccountingEntryTransactionStatus = z.infer<typeof AccountingEntryTransactionStatusSchema>;
@@ -39,6 +40,7 @@ const GetAccountingEntriesInputSchema = z.object({
 		.optional()
 		.nullable()
 		.transform((v) => (v ? Number(v) : 1)),
+	pageSize: pageSizeInputSchema(),
 	search: z.string({ invalid_type_error: "Tipo inválido para busca." }).optional().nullable(),
 	periodAfter: z
 		.string({ invalid_type_error: "Tipo inválido para período." })
@@ -88,7 +90,7 @@ async function getAccountingEntries({ input, session }: { input: TGetAccountingE
 	const userOrgId = session.membership?.organizacao.id;
 	if (!userOrgId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
 
-	const { id, page, search, periodAfter, periodBefore, originTypes, transactionStatuses, sortOrder } = input;
+	const { id, page, pageSize, search, periodAfter, periodBefore, originTypes, transactionStatuses, sortOrder } = input;
 
 	if (id) {
 		const entry = await db.query.accountingEntries.findFirst({
@@ -159,7 +161,7 @@ async function getAccountingEntries({ input, session }: { input: TGetAccountingE
 		conditions.push(or(...statusConditions)!);
 	}
 
-	const PAGE_SIZE = 25;
+	const PAGE_SIZE = pageSize ?? DEFAULT_PAGE_SIZE;
 	const skip = PAGE_SIZE * (page - 1);
 
 	const [countResult, entriesResult] = await Promise.all([
@@ -213,6 +215,7 @@ async function getAccountingEntriesRoute(request: NextRequest) {
 	const input = GetAccountingEntriesInputSchema.parse({
 		id: searchParams.get("id") ?? undefined,
 		page: searchParams.get("page") ?? undefined,
+		pageSize: searchParams.get("pageSize"),
 		search: searchParams.get("search") ?? undefined,
 		periodAfter: searchParams.get("periodAfter") ?? undefined,
 		periodBefore: searchParams.get("periodBefore") ?? undefined,
@@ -692,7 +695,9 @@ async function updateAccountingEntry({ input, session }: { input: TUpdateAccount
 		// Estado de efetivação atual das transações editadas: a auditoria só muda na passagem pendente ↔ paga.
 		// FOR UPDATE: sem a trava, uma conciliação que efetivasse a transação entre esta leitura e o
 		// update teria a auditoria dela sobrescrita como MANUAL por quem salvou o formulário.
-		const existingTransactionIds = input.entryFinancialTransactions.flatMap((transaction) => (transaction.id && !transaction.deletar ? [transaction.id] : []));
+		const existingTransactionIds = input.entryFinancialTransactions.flatMap((transaction) =>
+			transaction.id && !transaction.deletar ? [transaction.id] : [],
+		);
 		const existingSettlementById = new Map(
 			existingTransactionIds.length === 0
 				? []

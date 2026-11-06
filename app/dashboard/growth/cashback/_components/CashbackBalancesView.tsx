@@ -74,8 +74,8 @@ export default function CashbackBalancesView({ terminology }: { terminology: TCa
 				queryLoading={isLoading}
 				selectPage={(page) => updateFilters({ page })}
 				totalPages={totalPages}
-				itemsMatchedText={`${balancesMatched} ${balancesMatched === 1 ? "saldo encontrado" : "saldos encontrados"}.`}
-				itemsShowingText={`Mostrando ${balances.length} ${balances.length === 1 ? "saldo" : "saldos"}.`}
+				itemsMatchedText={balancesMatched === 1 ? "1 saldo encontrado" : `${balancesMatched} saldos encontrados`}
+				itemsShowingText={`mostrando ${balances.length}`}
 			/>
 
 			{isLoading ? (

@@ -11,10 +11,10 @@ import { type SQL, and, count, countDistinct, eq, inArray, or, sum } from "drizz
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import z from "zod";
+import { DEFAULT_PAGE_SIZE, pageSizeInputSchema } from "@/lib/pagination";
 
 const CouponTargetInputSchema = CouponTargetSchema;
 const CouponAudienceInputSchema = CouponAudienceSchema;
-
 
 const GetCouponsInputSchema = z.object({
 	id: z.string({ invalid_type_error: "Tipo inválido para o ID do cupom." }).optional().nullable(),
@@ -23,6 +23,7 @@ const GetCouponsInputSchema = z.object({
 		.optional()
 		.nullable()
 		.transform((value) => (value ? Number(value) : 1)),
+	pageSize: pageSizeInputSchema(),
 	search: z.string({ invalid_type_error: "Tipo inválido para busca." }).optional().nullable(),
 	activeOnly: z
 		.string({ invalid_type_error: "Tipo inválido para ativo." })
@@ -98,16 +99,14 @@ async function getCoupons({ input, session }: { input: TGetCouponsInput; session
 		};
 	}
 
-	const PAGE_SIZE = 25;
+	const PAGE_SIZE = input.pageSize ?? DEFAULT_PAGE_SIZE;
 	const page = input.page || 1;
 	const conditions: SQL[] = [eq(coupons.organizacaoId, organizationId)];
 	// Busca por título OU código: o formulário rápido de cupom do construtor de campanhas usa o
 	// código para avisar sobre colisão antes de o usuário chegar na Revisão.
 	if (input.search?.trim()) {
 		const term = input.search;
-		conditions.push(
-			or(createSimplifiedSearchCondition(coupons.titulo, term), createSimplifiedSearchCondition(coupons.codigo, term)) as SQL,
-		);
+		conditions.push(or(createSimplifiedSearchCondition(coupons.titulo, term), createSimplifiedSearchCondition(coupons.codigo, term)) as SQL);
 	}
 	if (input.activeOnly) conditions.push(eq(coupons.ativo, true));
 
@@ -173,6 +172,7 @@ async function getCouponsRoute(request: NextRequest) {
 	const input = GetCouponsInputSchema.parse({
 		id: request.nextUrl.searchParams.get("id") ?? undefined,
 		page: request.nextUrl.searchParams.get("page") ?? undefined,
+		pageSize: request.nextUrl.searchParams.get("pageSize"),
 		search: request.nextUrl.searchParams.get("search") ?? undefined,
 		activeOnly: request.nextUrl.searchParams.get("activeOnly") ?? undefined,
 	});

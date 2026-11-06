@@ -2,16 +2,19 @@ import type { TGetStockRecountOutput, TGetStockRecountOutputDefault } from "@/ap
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import { useState } from "react";
+import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 import { useDebounceMemo } from "./../hooks/use-debounce";
 
 export type TStockRecountRowsFilters = {
 	page: number;
+	pageSize: number;
 	search: string;
 };
 
 async function fetchStockRecountRows(filters: TStockRecountRowsFilters) {
 	const searchParams = new URLSearchParams();
 	if (filters.page) searchParams.set("page", filters.page.toString());
+	if (filters.pageSize) searchParams.set("pageSize", filters.pageSize.toString());
 	if (filters.search) searchParams.set("search", filters.search);
 
 	const { data } = await axios.get<TGetStockRecountOutput>(`/api/products/stock-recount?${searchParams.toString()}`);
@@ -26,6 +29,7 @@ type UseStockRecountRowsParams = {
 export function useStockRecountRows({ initialFilters }: UseStockRecountRowsParams = {}) {
 	const [filters, setFilters] = useState<TStockRecountRowsFilters>({
 		page: initialFilters?.page ?? 1,
+		pageSize: initialFilters?.pageSize ?? DEFAULT_PAGE_SIZE,
 		search: initialFilters?.search ?? "",
 	});
 

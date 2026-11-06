@@ -1,5 +1,6 @@
 import { processFiscalDocumentDanfeAutoPrintIfEligible } from "@/lib/desktop-agent/auto-print";
 import { getSaleChangeTotal, netSaleChangeFromPayments } from "@/lib/sales/sale-change";
+import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 import { isValidCpfCnpj } from "@/lib/validation";
 import { db } from "@/services/drizzle";
 import { fiscalDocumentEvents, fiscalOutboundDocuments, sales } from "@/services/drizzle/schema";
@@ -118,13 +119,15 @@ export async function getFiscalDocumentDetailsById({ documentId, organizationId 
 export async function listFiscalDocuments({
 	organizacaoId,
 	page = 1,
+	pageSize = DEFAULT_PAGE_SIZE,
 	filters,
 }: {
 	organizacaoId: string;
 	page?: number;
+	pageSize?: number;
 	filters: Partial<TFiscalDocumentsFilters>;
 }) {
-	const PAGE_SIZE = 25;
+	const PAGE_SIZE = pageSize;
 	const offset = (page - 1) * PAGE_SIZE;
 	const whereClause = and(...buildFiscalDocumentsConditions({ organizationId: organizacaoId, filters }));
 

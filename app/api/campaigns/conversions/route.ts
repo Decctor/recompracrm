@@ -9,6 +9,7 @@ import { and, asc, count, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import z from "zod";
+import { DEFAULT_PAGE_SIZE, pageSizeInputSchema } from "@/lib/pagination";
 
 const conversionTypeFilterSchema = z.enum(["AQUISICAO", "REATIVACAO", "ACELERACAO", "REGULAR", "ATRASADA"]);
 
@@ -19,6 +20,7 @@ const GetCampaignConversionsInputSchema = z.object({
 		.optional()
 		.nullable()
 		.transform((val) => (val ? Number(val) : 1)),
+	pageSize: pageSizeInputSchema(),
 	search: z.string({ invalid_type_error: "Tipo não válido para busca." }).optional().nullable(),
 	types: z
 		.string({ invalid_type_error: "Tipo não válido para tipos de conversão." })
@@ -39,18 +41,11 @@ const GetCampaignConversionsInputSchema = z.object({
 });
 export type TGetCampaignConversionsInput = z.infer<typeof GetCampaignConversionsInputSchema>;
 
-const PAGE_SIZE = 25;
-
-async function getCampaignConversions({
-	input,
-	session,
-}: {
-	input: TGetCampaignConversionsInput;
-	session: TAuthUserSession;
-}) {
+async function getCampaignConversions({ input, session }: { input: TGetCampaignConversionsInput; session: TAuthUserSession }) {
 	const userOrgId = session.membership?.organizacao.id;
 	if (!userOrgId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
 
+	const PAGE_SIZE = input.pageSize ?? DEFAULT_PAGE_SIZE;
 	const safePage = Number.isFinite(input.page) && input.page > 0 ? input.page : 1;
 	const skip = PAGE_SIZE * (safePage - 1);
 
@@ -147,8 +142,9 @@ const getCampaignConversionsRoute = async (request: NextRequest) => {
 	const input = GetCampaignConversionsInputSchema.parse({
 		campaignId: searchParams.get("campaignId") ?? undefined,
 		page: searchParams.get("page") ?? undefined,
+		pageSize: searchParams.get("pageSize"),
 		search: searchParams.get("search") ?? undefined,
-		type: searchParams.get("type") ?? undefined,
+		types: searchParams.get("types") ?? undefined,
 		periodAfter: searchParams.get("periodAfter") ?? undefined,
 		periodBefore: searchParams.get("periodBefore") ?? undefined,
 	});

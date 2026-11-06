@@ -3,6 +3,7 @@ import type { TGetAgendaOutput } from "@/app/api/client-portfolios/agenda/route"
 import type { TGetClientPortfolioOutput } from "@/app/api/client-portfolios/route";
 import type { TGetPortfolioOutput } from "@/app/api/client-portfolios/portfolio/route";
 import type { TGetClientPortfolioStatsOutput } from "@/app/api/client-portfolios/stats/route";
+import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import dayjs from "dayjs";
@@ -42,6 +43,7 @@ export function useClientPortfolioStats({ vendedorId }: { vendedorId: string | n
 type TPortfolioFilters = {
 	segmento: string | null;
 	page: number;
+	pageSize: number;
 };
 
 async function fetchPortfolio({ vendedorId, filters }: { vendedorId: string | null; filters: TPortfolioFilters }) {
@@ -49,12 +51,13 @@ async function fetchPortfolio({ vendedorId, filters }: { vendedorId: string | nu
 	if (vendedorId) searchParams.set("vendedorId", vendedorId);
 	if (filters.segmento) searchParams.set("segmento", filters.segmento);
 	if (filters.page) searchParams.set("page", filters.page.toString());
+	if (filters.pageSize) searchParams.set("pageSize", filters.pageSize.toString());
 	const { data } = await axios.get<TGetPortfolioOutput>(`/api/client-portfolios/portfolio?${searchParams.toString()}`);
 	return data.data;
 }
 
 export function usePortfolio({ vendedorId }: { vendedorId: string | null }) {
-	const [filters, setFilters] = useState<TPortfolioFilters>({ segmento: null, page: 1 });
+	const [filters, setFilters] = useState<TPortfolioFilters>({ segmento: null, page: 1, pageSize: DEFAULT_PAGE_SIZE });
 	function updateFilters(newFilters: Partial<TPortfolioFilters>) {
 		setFilters((prevFilters) => ({ ...prevFilters, ...newFilters }));
 	}

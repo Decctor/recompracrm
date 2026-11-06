@@ -1,5 +1,6 @@
 import type { TGetClientsInput } from "@/app/api/clients/route";
 import { appRoutes } from "@/lib/navigation/routes";
+import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 import { createSerializer, parseAsArrayOf, parseAsInteger, parseAsIsoDateTime, parseAsString, parseAsStringEnum } from "nuqs";
 
 /**
@@ -11,6 +12,7 @@ import { createSerializer, parseAsArrayOf, parseAsInteger, parseAsIsoDateTime, p
  */
 export const clientsDatabaseParsers = {
 	page: parseAsInteger.withDefault(1),
+	pageSize: parseAsInteger.withDefault(DEFAULT_PAGE_SIZE),
 	search: parseAsString.withDefault(""),
 	acquisitionChannels: parseAsArrayOf(parseAsString).withDefault([]),
 	segmentationTitles: parseAsArrayOf(parseAsString).withDefault([]),

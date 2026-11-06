@@ -1,7 +1,17 @@
 import type { TGetSalesInput } from "@/app/api/sales/route";
 import { appRoutes } from "@/lib/navigation/routes";
+import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 import { DeliveryModeEnum, PaymentMethodEnum, SaleFinancialDerivedStatusEnum, SaleFiscalDerivedStatusEnum, SaleStatusEnum } from "@/schemas/enums";
-import { createSerializer, parseAsArrayOf, parseAsBoolean, parseAsFloat, parseAsInteger, parseAsIsoDateTime, parseAsString, parseAsStringEnum } from "nuqs";
+import {
+	createSerializer,
+	parseAsArrayOf,
+	parseAsBoolean,
+	parseAsFloat,
+	parseAsInteger,
+	parseAsIsoDateTime,
+	parseAsString,
+	parseAsStringEnum,
+} from "nuqs";
 
 /**
  * Filtros do histórico de vendas como estado na URL (nuqs). Uma única definição serve ao
@@ -11,6 +21,7 @@ import { createSerializer, parseAsArrayOf, parseAsBoolean, parseAsFloat, parseAs
  */
 export const salesHistoryParsers = {
 	page: parseAsInteger.withDefault(1),
+	pageSize: parseAsInteger.withDefault(DEFAULT_PAGE_SIZE),
 	search: parseAsString.withDefault(""),
 	periodAfter: parseAsIsoDateTime,
 	periodBefore: parseAsIsoDateTime,

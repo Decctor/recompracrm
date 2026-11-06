@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { DEFAULT_PAGE_SIZE, pageSizeInputSchema } from "@/lib/pagination";
 import { canAdjustInventory, canViewInventory } from "@/lib/permissions/inventory";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { applyStockMovement } from "@/lib/stock/apply-stock-movement";
@@ -11,8 +12,6 @@ import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
-const PAGE_SIZE = 25;
-
 // Chave composta de uma entidade recontável: "produtoId" (saldo do produto) ou
 // "produtoId::varianteId" (saldo de uma variante rastreada).
 const ENTITY_KEY_SEPARATOR = "::";
@@ -23,6 +22,7 @@ const GetStockRecountInputSchema = z.object({
 		.optional()
 		.nullable()
 		.transform((value) => (value ? Number(value) : 1)),
+	pageSize: pageSizeInputSchema(),
 	search: z.string({ invalid_type_error: "Tipo inválido para busca." }).optional().nullable(),
 	// Modo "byEntityIds": saldos frescos das chaves informadas, para o passo de confirmação.
 	entityIds: z
@@ -161,6 +161,7 @@ function expandRecountRows(
 async function getStockRecountRows({ input, session }: { input: TGetStockRecountInput; session: TAuthUserSession }) {
 	const organizationId = session.membership?.organizacao.id;
 	if (!organizationId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização.");
+	const PAGE_SIZE = input.pageSize ?? DEFAULT_PAGE_SIZE;
 
 	// Modo "byEntityIds": saldos frescos para o passo de confirmação. Chaves ausentes na resposta
 	// significam entidade indisponível (excluída ou de outra organização).
@@ -308,6 +309,7 @@ async function getStockRecountRoute(request: NextRequest) {
 	const searchParams = request.nextUrl.searchParams;
 	const input = GetStockRecountInputSchema.parse({
 		page: searchParams.get("page"),
+		pageSize: searchParams.get("pageSize"),
 		search: searchParams.get("search"),
 		entityIds: searchParams.get("entityIds"),
 		productId: searchParams.get("productId"),

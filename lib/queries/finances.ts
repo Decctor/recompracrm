@@ -10,6 +10,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import dayjs from "dayjs";
 import { useDebounceMemo } from "../hooks/use-debounce";
+import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 import type { TGetAccountChartsInputDefault, TGetAccountChartsOutput } from "@/app/api/finances/account-charts/route";
 
 // ============================================================================
@@ -90,6 +91,7 @@ export function useFinancesOverallStats({ initialParams, enabled = true }: UseFi
 async function fetchAccountingEntries(filters: TGetAccountingEntriesInput) {
 	const searchParams = new URLSearchParams();
 	searchParams.set("page", filters.page.toString());
+	if (filters.pageSize) searchParams.set("pageSize", filters.pageSize.toString());
 	if (filters.search) searchParams.set("search", filters.search);
 	if (filters.periodAfter) searchParams.set("periodAfter", filters.periodAfter.toISOString());
 	if (filters.periodBefore) searchParams.set("periodBefore", filters.periodBefore.toISOString());
@@ -129,6 +131,7 @@ type UseFinancesAccountingEntriesParams = {
 export function useFinancesAccountingEntries({ initialFilters }: UseFinancesAccountingEntriesParams) {
 	const [filters, setFilters] = useState<TGetAccountingEntriesInput>({
 		page: initialFilters?.page || 1,
+		pageSize: initialFilters?.pageSize || DEFAULT_PAGE_SIZE,
 		search: initialFilters?.search || "",
 		periodAfter: initialFilters?.periodAfter || null,
 		periodBefore: initialFilters?.periodBefore || null,
@@ -175,6 +178,7 @@ export function useFinancialTransactionById(id: string) {
 
 type FinancialTransactionsFilters = {
 	page: number;
+	pageSize: number;
 	search: string;
 	periodAfter: Date | null;
 	periodBefore: Date | null;
@@ -186,6 +190,7 @@ type FinancialTransactionsFilters = {
 async function fetchFinancialTransactions(filters: FinancialTransactionsFilters) {
 	const searchParams = new URLSearchParams();
 	searchParams.set("page", filters.page.toString());
+	searchParams.set("pageSize", filters.pageSize.toString());
 	if (filters.search) searchParams.set("search", filters.search);
 	if (filters.periodAfter) searchParams.set("periodAfter", filters.periodAfter.toISOString());
 	if (filters.periodBefore) searchParams.set("periodBefore", filters.periodBefore.toISOString());
@@ -204,6 +209,7 @@ type UseFinancesTransactionsParams = {
 export function useFinancesTransactions({ initialFilters }: UseFinancesTransactionsParams) {
 	const [filters, setFilters] = useState<FinancialTransactionsFilters>({
 		page: initialFilters?.page || 1,
+		pageSize: initialFilters?.pageSize || DEFAULT_PAGE_SIZE,
 		search: initialFilters?.search || "",
 		periodAfter: initialFilters?.periodAfter || null,
 		periodBefore: initialFilters?.periodBefore || null,

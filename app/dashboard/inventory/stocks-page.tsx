@@ -112,10 +112,11 @@ export default function StocksPage({ permissions }: { permissions: TInventoryPer
 				queryLoading={isLoading}
 				selectPage={(page) => updateFilters({ page })}
 				totalPages={totalPages || 0}
-				itemsMatchedText={productsMatched === 1 ? "1 produto encontrado." : `${productsMatched} produtos encontrados.`}
-				itemsShowingText={productsShowing === 1 ? "Mostrando 1 produto." : `Mostrando ${productsShowing} produtos.`}
+				pageSize={filters.pageSize}
+				onPageSizeChange={(pageSize) => updateFilters({ pageSize, page: 1 })}
+				itemsMatchedText={productsMatched === 1 ? "1 produto encontrado" : `${productsMatched} produtos encontrados`}
+				itemsShowingText={`mostrando ${productsShowing}`}
 			/>
-
 			{isLoading ? (
 				<div className="flex flex-col gap-2">
 					{Array.from({ length: 6 }).map((_, index) => (
@@ -126,7 +127,9 @@ export default function StocksPage({ permissions }: { permissions: TInventoryPer
 			{isError ? <ErrorComponent msg={getErrorMessage(error)} /> : null}
 
 			{isSuccess && products.length > 0
-				? products.map((product) => <StockProductCard key={product.id} product={product} onRecount={permissions.ajustar ? () => setRecountingProductId(product.id) : undefined} />)
+				? products.map((product) => (
+						<StockProductCard key={product.id} product={product} onRecount={permissions.ajustar ? () => setRecountingProductId(product.id) : undefined} />
+					))
 				: null}
 
 			{recountingProductId ? (

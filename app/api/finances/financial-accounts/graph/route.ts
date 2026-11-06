@@ -1,15 +1,22 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
-import { getBestNumberOfPointsBetweenDates, getDateBuckets, getEvenlySpacedDates } from "@/lib/dates";
+import { getChartBuckets, getChartGranularity, type TChartBucket } from "@/lib/charts/period-buckets";
+import { chartBucketPositionSql } from "@/lib/charts/period-buckets-sql";
+import { OPERATION_TIMEZONE } from "@/lib/operation-timezone";
 import { canViewFinances } from "@/lib/permissions/finances";
 import { db } from "@/services/drizzle";
 import { financialAccounts, financialTransactions } from "@/services/drizzle/schema";
 import dayjs from "dayjs";
+import timezone from "dayjs/plugin/timezone";
+import utc from "dayjs/plugin/utc";
 import { and, eq, gte, isNotNull, lte, sql } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 const GetFinancialAccountGraphInputSchema = z.object({
 	contaFinanceiraId: z.string({
@@ -21,53 +28,43 @@ const GetFinancialAccountGraphInputSchema = z.object({
 		.datetime({ message: "Formato de data inválido." })
 		.optional()
 		.nullable()
-		.transform((v) => (v ? dayjs(v).startOf("day").toDate() : undefined)),
+		.transform((v) => (v ? dayjs(v).tz(OPERATION_TIMEZONE).startOf("day").toDate() : undefined)),
 	endDate: z
 		.string({ invalid_type_error: "Tipo inválido para período." })
 		.datetime({ message: "Formato de data inválido." })
 		.optional()
 		.nullable()
-		.transform((v) => (v ? dayjs(v).endOf("day").toDate() : undefined)),
+		.transform((v) => (v ? dayjs(v).tz(OPERATION_TIMEZONE).endOf("day").toDate() : undefined)),
 	comparingStartDate: z
 		.string({ invalid_type_error: "Tipo inválido para período de comparação." })
 		.datetime({ message: "Formato de data inválido." })
 		.optional()
 		.nullable()
-		.transform((v) => (v ? dayjs(v).startOf("day").toDate() : undefined)),
+		.transform((v) => (v ? dayjs(v).tz(OPERATION_TIMEZONE).startOf("day").toDate() : undefined)),
 	comparingEndDate: z
 		.string({ invalid_type_error: "Tipo inválido para período de comparação." })
 		.datetime({ message: "Formato de data inválido." })
 		.optional()
 		.nullable()
-		.transform((v) => (v ? dayjs(v).endOf("day").toDate() : undefined)),
+		.transform((v) => (v ? dayjs(v).tz(OPERATION_TIMEZONE).endOf("day").toDate() : undefined)),
 });
 
 export type TGetFinancialAccountGraphInput = z.infer<typeof GetFinancialAccountGraphInputSchema>;
 
 async function getGraphDataForPeriod({
 	period,
-	bucketCount,
-	groupingFormat,
+	buckets,
 	userOrgId,
 	contaFinanceiraId,
 }: {
 	period: { after: Date; before: Date };
-	bucketCount: number;
-	groupingFormat: string;
+	buckets: TChartBucket[];
 	userOrgId: string;
 	contaFinanceiraId: string;
 }): Promise<Array<{ label: string; entries: number; exits: number }>> {
-	const periodDates = getEvenlySpacedDates({
-		startDate: period.after,
-		endDate: period.before,
-		points: bucketCount,
-	});
-
-	const periodDateBuckets = getDateBuckets(periodDates);
-
 	const transactionData = await db
 		.select({
-			date: sql<string>`date_trunc('day', ${financialTransactions.dataEfetivacao})::text`,
+			position: chartBucketPositionSql(financialTransactions.dataEfetivacao, buckets),
 			entries: sql<number>`COALESCE(SUM(CASE WHEN ${financialTransactions.tipo} = 'ENTRADA' THEN ${financialTransactions.valor} ELSE 0 END), 0)`,
 			exits: sql<number>`COALESCE(SUM(CASE WHEN ${financialTransactions.tipo} = 'SAIDA' THEN ${financialTransactions.valor} ELSE 0 END), 0)`,
 		})
@@ -81,31 +78,13 @@ async function getGraphDataForPeriod({
 				lte(financialTransactions.dataEfetivacao, period.before),
 			),
 		)
-		.orderBy(sql`date_trunc('day', ${financialTransactions.dataEfetivacao})`)
-		.groupBy(sql`date_trunc('day', ${financialTransactions.dataEfetivacao})`);
+		.groupBy(chartBucketPositionSql(financialTransactions.dataEfetivacao, buckets));
 
-	const initialData = Object.fromEntries(periodDates.map((date) => [dayjs(date).format(groupingFormat), { entries: 0, exits: 0 }]));
-
-	const dataReduced = transactionData.reduce((acc, current) => {
-		const itemDate = new Date(current.date);
-		const itemTime = itemDate.getTime();
-
-		const bucket = periodDateBuckets.find((b) => itemTime >= b.start && itemTime <= b.end);
-		if (!bucket) return acc;
-
-		const key = dayjs(bucket.key).format(groupingFormat);
-		if (!acc[key]) acc[key] = { entries: 0, exits: 0 };
-
-		acc[key].entries += Number(current.entries);
-		acc[key].exits += Number(current.exits);
-		return acc;
-	}, initialData);
-
-	return Object.entries(dataReduced).map(([key, value]) => ({
-		label: key,
-		entries: value.entries,
-		exits: value.exits,
-	}));
+	const byPosition = new Map(transactionData.map((row) => [Number(row.position), row]));
+	return buckets.map((bucket, index) => {
+		const row = byPosition.get(index + 1);
+		return { label: bucket.label, entries: Number(row?.entries ?? 0), exits: Number(row?.exits ?? 0) };
+	});
 }
 
 async function getFinancialAccountGraph({ input, session }: { input: TGetFinancialAccountGraphInput; session: TAuthUserSession }) {
@@ -118,19 +97,16 @@ async function getFinancialAccountGraph({ input, session }: { input: TGetFinanci
 	if (!account) throw new createHttpError.NotFound("Conta financeira não encontrada.");
 
 	const period = {
-		after: input.startDate ?? dayjs().subtract(30, "days").startOf("day").toDate(),
-		before: input.endDate ?? dayjs().endOf("day").toDate(),
+		after: input.startDate ?? dayjs().tz(OPERATION_TIMEZONE).subtract(30, "days").startOf("day").toDate(),
+		before: input.endDate ?? dayjs().tz(OPERATION_TIMEZONE).endOf("day").toDate(),
 	};
 
-	const { points: bucketCount, groupingFormat } = getBestNumberOfPointsBetweenDates({
-		startDate: period.after,
-		endDate: period.before,
-	});
+	// Granularidade decidida pelo período PRINCIPAL; a comparação usa a mesma, casada por posição.
+	const granularity = getChartGranularity({ startDate: period.after, endDate: period.before });
 
 	const mainData = await getGraphDataForPeriod({
 		period: { after: period.after, before: period.before },
-		bucketCount,
-		groupingFormat,
+		buckets: getChartBuckets({ startDate: period.after, endDate: period.before, granularity }),
 		userOrgId,
 		contaFinanceiraId: input.contaFinanceiraId,
 	});
@@ -139,8 +115,7 @@ async function getFinancialAccountGraph({ input, session }: { input: TGetFinanci
 	if (input.comparingStartDate && input.comparingEndDate) {
 		comparisonData = await getGraphDataForPeriod({
 			period: { after: input.comparingStartDate, before: input.comparingEndDate },
-			bucketCount,
-			groupingFormat,
+			buckets: getChartBuckets({ startDate: input.comparingStartDate, endDate: input.comparingEndDate, granularity }),
 			userOrgId,
 			contaFinanceiraId: input.contaFinanceiraId,
 		});

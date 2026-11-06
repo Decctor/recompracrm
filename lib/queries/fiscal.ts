@@ -8,6 +8,7 @@ import type { TGetFiscalTaxGroupsOutput } from "@/app/api/fiscal/tax-groups/rout
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import { useState } from "react";
+import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 import { buildFiscalDocumentsSearchParams, type TFiscalDocumentsFiltersState } from "../fiscal/document-filters";
 import { useDebounceMemo } from "../hooks/use-debounce";
 
@@ -30,11 +31,13 @@ export function useFiscalSettings({ enabled = true }: { enabled?: boolean } = {}
 
 type FiscalDocumentsFilters = TFiscalDocumentsFiltersState & {
 	page: number;
+	pageSize: number;
 };
 
-async function fetchFiscalDocuments({ page, ...filters }: FiscalDocumentsFilters) {
+async function fetchFiscalDocuments({ page, pageSize, ...filters }: FiscalDocumentsFilters) {
 	const searchParams = buildFiscalDocumentsSearchParams(filters);
 	if (page) searchParams.set("page", page.toString());
+	if (pageSize) searchParams.set("pageSize", pageSize.toString());
 	const { data } = await axios.get<TGetFiscalDocumentsOutput>(`/api/fiscal/documents?${searchParams.toString()}`);
 	const result = data.data.default;
 	if (!result) throw new Error("Oops, houve um erro ao buscar os documentos fiscais.");
@@ -52,6 +55,7 @@ async function fetchFiscalDocumentById({ documentId }: { documentId: string }) {
 export function useFiscalDocuments() {
 	const [filters, setFilters] = useState<FiscalDocumentsFilters>({
 		page: 1,
+		pageSize: DEFAULT_PAGE_SIZE,
 		search: "",
 		statusInterno: [],
 		tipos: [],
@@ -215,9 +219,10 @@ export function useFiscalTaxGroupById({ id }: { id: string }) {
 	};
 }
 
-async function fetchFiscalInboundDocuments({ page }: { page: number }) {
+async function fetchFiscalInboundDocuments({ page, pageSize }: { page: number; pageSize: number }) {
 	const searchParams = new URLSearchParams();
 	searchParams.set("page", page.toString());
+	if (pageSize) searchParams.set("pageSize", pageSize.toString());
 	const { data } = await axios.get<TGetInboundDocumentsOutput>(`/api/fiscal/inbound?${searchParams.toString()}`);
 	const result = data.data.default;
 	if (!result) throw new Error("Oops, houve um erro ao buscar as notas recebidas.");
@@ -225,14 +230,17 @@ async function fetchFiscalInboundDocuments({ page }: { page: number }) {
 }
 export function useFiscalInboundDocuments() {
 	const [page, setPage] = useState(1);
-	const queryKey = ["fiscal-inbound-documents", page];
+	const [pageSize, setPageSize] = useState<number>(DEFAULT_PAGE_SIZE);
+	const queryKey = ["fiscal-inbound-documents", page, pageSize];
 	return {
 		...useQuery({
 			queryKey,
-			queryFn: () => fetchFiscalInboundDocuments({ page }),
+			queryFn: () => fetchFiscalInboundDocuments({ page, pageSize }),
 		}),
 		queryKey,
 		page,
 		setPage,
+		pageSize,
+		setPageSize,
 	};
 }

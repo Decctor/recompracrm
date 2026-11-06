@@ -1,6 +1,7 @@
 import { appApiHandler } from "@/lib/app-api";
 import { runPagesRouteHandler, type PagesRouteHandler, type PagesRouteRequest, type PagesRouteResponse } from "@/lib/pages-route-compat";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { DEFAULT_PAGE_SIZE, pageSizeInputSchema } from "@/lib/pagination";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { getSalesIntegrationCondition } from "@/lib/sales/integration-filter";
 import { SellerSchema } from "@/schemas/sellers";
@@ -18,6 +19,7 @@ const GetSellersDefaultInputSchema = z.object({
 		})
 		.default("1")
 		.transform((val) => Number(val)),
+	pageSize: pageSizeInputSchema(),
 	search: z
 		.string({
 			required_error: "Busca não informada.",
@@ -193,7 +195,7 @@ async function getSellers({ input, session }: GetSellersParams) {
 			break;
 	}
 
-	const PAGE_SIZE = 25;
+	const PAGE_SIZE = input.pageSize ?? DEFAULT_PAGE_SIZE;
 	const skip = PAGE_SIZE * (input.page - 1);
 
 	const matchedSubquery = db
@@ -279,6 +281,8 @@ const getSellersHandler: PagesRouteHandler<TGetSellersOutput> = async (req, res)
 	console.log("[INFO] [GET SELLERS] Query params:", req.query);
 	const input = GetSellersInputSchema.parse({
 		id: req.query.id as string | undefined,
+		page: req.query.page as string | undefined,
+		pageSize: req.query.pageSize as string | undefined,
 		search: req.query.search as string | undefined,
 		statsPeriodAfter: req.query.statsPeriodAfter as string | undefined,
 		statsPeriodBefore: req.query.statsPeriodBefore as string | undefined,

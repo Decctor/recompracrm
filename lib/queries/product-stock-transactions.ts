@@ -1,7 +1,4 @@
-import type {
-	TGetProductStockTransactionsDefaultInput,
-	TGetProductStockTransactionsOutput,
-} from "@/app/api/products/stock-transactions/route";
+import type { TGetProductStockTransactionsDefaultInput, TGetProductStockTransactionsOutput } from "@/app/api/products/stock-transactions/route";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import { useState } from "react";
@@ -10,6 +7,7 @@ import { useDebounceMemo } from "./../hooks/use-debounce";
 async function fetchProductStockTransactions(input: TGetProductStockTransactionsDefaultInput) {
 	const searchParams = new URLSearchParams();
 	if (input.page) searchParams.set("page", input.page.toString());
+	if (input.pageSize) searchParams.set("pageSize", input.pageSize.toString());
 	if (input.search) searchParams.set("search", input.search);
 	if (input.types.length > 0) searchParams.set("types", input.types.join(","));
 	if (input.origin) searchParams.set("origin", input.origin);
@@ -31,6 +29,8 @@ type UseProductStockTransactionsParams = {
 export function useProductStockTransactions({ initialFilters, enabled = true }: UseProductStockTransactionsParams = {}) {
 	const [filters, setFilters] = useState<TGetProductStockTransactionsDefaultInput>({
 		page: initialFilters?.page ?? 1,
+		// Mesmo padrão da rota.
+		pageSize: initialFilters?.pageSize ?? 50,
 		search: initialFilters?.search ?? "",
 		types: initialFilters?.types ?? [],
 		origin: initialFilters?.origin ?? null,

@@ -1,5 +1,6 @@
 import { TGetPurchasesByIdInput, TGetPurchasesDefaultInput, TGetPurchasesOutput } from "@/app/api/purchases/route";
 import axios from "axios";
+import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 import { useState } from "react";
 import { useDebounceMemo } from "../hooks/use-debounce";
 import { useQuery } from "@tanstack/react-query";
@@ -7,6 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 async function fetchPurchases(input: TGetPurchasesDefaultInput) {
 	const searchParams = new URLSearchParams();
 	if (input.page) searchParams.set("page", input.page.toString());
+	if (input.pageSize) searchParams.set("pageSize", input.pageSize.toString());
 	if (input.search) searchParams.set("search", input.search);
 	if (input.status.length > 0) searchParams.set("status", input.status.join(","));
 	const { data } = await axios.get<TGetPurchasesOutput>(`/api/purchases?${searchParams.toString()}`);
@@ -21,6 +23,7 @@ type UsePurchasesParams = {
 export function usePurchases({ initialFilters }: UsePurchasesParams) {
 	const [filters, setFilters] = useState<TGetPurchasesDefaultInput>({
 		page: initialFilters?.page || 1,
+		pageSize: initialFilters?.pageSize ?? DEFAULT_PAGE_SIZE,
 		search: initialFilters?.search || "",
 		status: initialFilters?.status || [],
 	});

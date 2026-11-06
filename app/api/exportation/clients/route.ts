@@ -104,7 +104,20 @@ async function fetchClientExportation(req: PagesRouteRequest, userOrgId: string)
 		where: and(...conditions),
 	});
 
-	return clientsResult.map((client) => {
+	// Faixa de valor gasto no período (ou na vida toda, sem período) — a mesma que filtra a listagem.
+	const spentMin = filters.total.min ?? null;
+	const spentMax = filters.total.max ?? null;
+	const isPeriodFiltered = !!(filters.period.after && filters.period.before);
+	const clientsInSpentRange =
+		spentMin == null && spentMax == null
+			? clientsResult
+			: clientsResult.filter((client) => {
+					const results = isPeriodFiltered ? inPeriodAccumulatedResultsMap.get(client.id) : allTimeAccumulatedResultsMap.get(client.id);
+					const spent = Number(results?.totalPurchases ?? 0);
+					return (spentMin == null || spent >= spentMin) && (spentMax == null || spent <= spentMax);
+				});
+
+	return clientsInSpentRange.map((client) => {
 		const isPeriodDefined = filters.period.after && filters.period.before;
 		const allTimeAccumulatedClientResults = allTimeAccumulatedResultsMap.get(client.id);
 		const inPeriodAccumulatedClientResults = isPeriodDefined ? inPeriodAccumulatedResultsMap.get(client.id) : allTimeAccumulatedClientResults;

@@ -82,8 +82,8 @@ export default function CampaignDispatchesSection({ campaignId }: { campaignId: 
 				queryLoading={isLoading}
 				selectPage={setPage}
 				totalPages={data?.totalPages ?? 0}
-				itemsMatchedText={`${data?.dispatchesMatched ?? 0} ${data?.dispatchesMatched === 1 ? "disparo encontrado." : "disparos encontrados."}`}
-				itemsShowingText={`${items.length} ${items.length === 1 ? "disparo exibido." : "disparos exibidos."}`}
+				itemsMatchedText={data?.dispatchesMatched === 1 ? "1 disparo encontrado" : `${data?.dispatchesMatched ?? 0} disparos encontrados`}
+				itemsShowingText={`mostrando ${items.length}`}
 			/>
 			<div className="flex w-full flex-col gap-1.5">
 				{isLoading ? <LoadingComponent /> : null}

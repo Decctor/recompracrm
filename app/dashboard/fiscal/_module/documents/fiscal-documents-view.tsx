@@ -139,10 +139,10 @@ export function FiscalDocumentsView({ permissions }: FiscalDocumentsViewProps) {
 				queryLoading={isLoading}
 				selectPage={(page) => updateFilters({ page })}
 				totalPages={totalPages || 0}
-				itemsMatchedText={
-					documentsMatched > 0 ? `${documentsMatched} documentos fiscais encontrados.` : `${documentsMatched} documento fiscal encontrado.`
-				}
-				itemsShowingText={documentsShowing > 0 ? `Mostrando ${documentsShowing} documentos fiscais.` : `Mostrando ${documentsShowing} documento fiscal.`}
+				pageSize={filters.pageSize}
+				onPageSizeChange={(pageSize) => updateFilters({ pageSize, page: 1 })}
+				itemsMatchedText={documentsMatched === 1 ? "1 documento fiscal encontrado" : `${documentsMatched} documentos fiscais encontrados`}
+				itemsShowingText={`mostrando ${documentsShowing}`}
 			/>
 			{isLoading ? <LoadingComponent /> : null}
 			{isError ? <ErrorComponent msg={getErrorMessage(error)} /> : null}

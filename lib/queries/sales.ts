@@ -6,11 +6,13 @@ import type { TSalesSimplifiedSearchQueryParams } from "@/schemas/sales";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import { useState } from "react";
+import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 
 /** Query string do histórico a partir do input; a exportação reaproveita para mandar os mesmos filtros. */
 export function buildSalesSearchParams(input: Omit<TGetSalesInput, "id">) {
 	const searchParams = new URLSearchParams();
 	if (input.page) searchParams.set("page", input.page.toString());
+	if (input.pageSize) searchParams.set("pageSize", input.pageSize.toString());
 	if (input.search) searchParams.set("search", input.search);
 	if (input.periodAfter) searchParams.set("periodAfter", input.periodAfter.toISOString());
 	if (input.periodBefore) searchParams.set("periodBefore", input.periodBefore.toISOString());
@@ -45,6 +47,7 @@ type UseSalesParams = {
 export function useSales({ initialParams }: UseSalesParams) {
 	const [params, setParams] = useState<TGetSalesInput>({
 		page: initialParams.page || 1,
+		pageSize: initialParams.pageSize ?? DEFAULT_PAGE_SIZE,
 		search: initialParams.search || "",
 		periodAfter: initialParams.periodAfter || null,
 		periodBefore: initialParams.periodBefore || null,

@@ -7,9 +7,11 @@ import type { TGetStoreCreditStatsOutput } from "@/app/api/finances/store-credit
 import { useDebounceMemo } from "@/lib/hooks/use-debounce";
 import type { TStoreCreditAgingBucket } from "@/lib/finances/store-credit/aging";
 import type { TStoreCreditSortDirection, TStoreCreditSortField, TStoreCreditStatus } from "@/lib/finances/store-credit/constants";
+import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 
 export type TStoreCreditClientsFilters = {
 	page: number;
+	pageSize: number;
 	search: string;
 	statuses: TStoreCreditStatus[];
 	agingBuckets: TStoreCreditAgingBucket[];
@@ -30,6 +32,7 @@ export function hasStoreCreditOriginScope(scope: TStoreCreditOriginScope | null 
 async function fetchStoreCreditClients(filters: TStoreCreditClientsFilters): Promise<TGetStoreCreditOutputDefault> {
 	const searchParams = new URLSearchParams();
 	searchParams.set("page", filters.page.toString());
+	searchParams.set("pageSize", filters.pageSize.toString());
 	if (filters.search.trim()) searchParams.set("search", filters.search.trim());
 	if (filters.statuses.length > 0) searchParams.set("statuses", filters.statuses.join(","));
 	if (filters.agingBuckets.length > 0) searchParams.set("agingBuckets", filters.agingBuckets.join(","));
@@ -51,6 +54,7 @@ async function fetchStoreCreditClients(filters: TStoreCreditClientsFilters): Pro
 export function useStoreCreditClients({ initialFilters }: { initialFilters?: Partial<TStoreCreditClientsFilters> } = {}) {
 	const [filters, setFilters] = useState<TStoreCreditClientsFilters>({
 		page: initialFilters?.page ?? 1,
+		pageSize: initialFilters?.pageSize ?? DEFAULT_PAGE_SIZE,
 		search: initialFilters?.search ?? "",
 		statuses: initialFilters?.statuses ?? ["EM_ABERTO"],
 		agingBuckets: initialFilters?.agingBuckets ?? [],

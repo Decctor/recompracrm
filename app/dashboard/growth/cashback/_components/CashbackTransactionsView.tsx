@@ -138,8 +138,8 @@ export default function CashbackTransactionsView({ terminology }: { terminology:
 				queryLoading={isLoading}
 				selectPage={(page) => updateFilters({ page })}
 				totalPages={totalPages}
-				itemsMatchedText={`${transactionsMatched} ${transactionsMatched === 1 ? "transação encontrada" : "transações encontradas"}.`}
-				itemsShowingText={`Mostrando ${transactions.length} ${transactions.length === 1 ? "transação" : "transações"}.`}
+				itemsMatchedText={transactionsMatched === 1 ? "1 transação encontrada" : `${transactionsMatched} transações encontradas`}
+				itemsShowingText={`mostrando ${transactions.length}`}
 			/>
 
 			{isLoading ? (

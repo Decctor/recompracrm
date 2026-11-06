@@ -156,10 +156,11 @@ export default function StockTransactionsPage({ permissions }: { permissions: TI
 				queryLoading={isLoading}
 				selectPage={(page) => updateFilters({ page })}
 				totalPages={totalPages || 0}
-				itemsMatchedText={transactionsMatched === 1 ? "1 movimentação encontrada." : `${transactionsMatched} movimentações encontradas.`}
-				itemsShowingText={transactions.length === 1 ? "Mostrando 1 movimentação." : `Mostrando ${transactions.length} movimentações.`}
+				pageSize={filters.pageSize}
+				onPageSizeChange={(pageSize) => updateFilters({ pageSize, page: 1 })}
+				itemsMatchedText={transactionsMatched === 1 ? "1 movimentação encontrada" : `${transactionsMatched} movimentações encontradas`}
+				itemsShowingText={`mostrando ${transactions.length}`}
 			/>
-
 			{isLoading ? (
 				<div className="flex flex-col gap-2">
 					{Array.from({ length: 8 }).map((_, index) => (
@@ -176,11 +177,11 @@ export default function StockTransactionsPage({ permissions }: { permissions: TI
 			{isSuccess && transactions.length === 0 ? (
 				<Empty>
 					<EmptyHeader>
-						<EmptyMedia variant="icon">
-							{filters.search || filters.types.length > 0 || filters.origin ? <PackageSearch /> : <ArrowLeftRight />}
-						</EmptyMedia>
+						<EmptyMedia variant="icon">{filters.search || filters.types.length > 0 || filters.origin ? <PackageSearch /> : <ArrowLeftRight />}</EmptyMedia>
 						<EmptyTitle>
-							{filters.search || filters.types.length > 0 || filters.origin ? "Nenhuma movimentação corresponde aos filtros" : "Nenhuma movimentação no período"}
+							{filters.search || filters.types.length > 0 || filters.origin
+								? "Nenhuma movimentação corresponde aos filtros"
+								: "Nenhuma movimentação no período"}
 						</EmptyTitle>
 						<EmptyDescription>
 							{filters.search || filters.types.length > 0 || filters.origin

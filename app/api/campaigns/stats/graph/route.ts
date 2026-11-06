@@ -2,14 +2,21 @@ import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { CAMPAIGN_SENT_INTERACTION_STATUSES } from "@/lib/campaigns/utils";
-import { getBestNumberOfPointsBetweenDates, getDateBuckets, getEvenlySpacedDates } from "@/lib/dates";
+import { getChartBuckets, getChartGranularity, type TChartBucket } from "@/lib/charts/period-buckets";
+import { chartBucketPositionSql } from "@/lib/charts/period-buckets-sql";
+import { OPERATION_TIMEZONE } from "@/lib/operation-timezone";
 import { db } from "@/services/drizzle";
 import { campaignConversions, interactions } from "@/services/drizzle/schema";
 import dayjs from "dayjs";
-import { and, asc, count, eq, gte, inArray, lte, sql, sum } from "drizzle-orm";
+import timezone from "dayjs/plugin/timezone";
+import utc from "dayjs/plugin/utc";
+import { and, asc, count, eq, gte, inArray, lte, sum } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 const GetCampaignGraphInputSchema = z.object({
 	graphType: z.enum(["interactions", "conversions", "revenue"], {
@@ -25,7 +32,7 @@ const GetCampaignGraphInputSchema = z.object({
 		.datetime({ message: "Formato de data inválido." })
 		.optional()
 		.nullable()
-		.transform((v) => (v ? dayjs(v).startOf("day").toDate() : undefined)),
+		.transform((v) => (v ? dayjs(v).tz(OPERATION_TIMEZONE).startOf("day").toDate() : undefined)),
 	endDate: z
 		.string({
 			required_error: "Período não informado.",
@@ -34,7 +41,7 @@ const GetCampaignGraphInputSchema = z.object({
 		.datetime({ message: "Formato de data inválido." })
 		.optional()
 		.nullable()
-		.transform((v) => (v ? dayjs(v).endOf("day").toDate() : undefined)),
+		.transform((v) => (v ? dayjs(v).tz(OPERATION_TIMEZONE).endOf("day").toDate() : undefined)),
 	comparingStartDate: z
 		.string({
 			required_error: "Período de comparação não informado.",
@@ -43,7 +50,7 @@ const GetCampaignGraphInputSchema = z.object({
 		.datetime({ message: "Formato de data inválido." })
 		.optional()
 		.nullable()
-		.transform((v) => (v ? dayjs(v).startOf("day").toDate() : undefined)),
+		.transform((v) => (v ? dayjs(v).tz(OPERATION_TIMEZONE).startOf("day").toDate() : undefined)),
 	comparingEndDate: z
 		.string({
 			required_error: "Período de comparação não informado.",
@@ -52,39 +59,35 @@ const GetCampaignGraphInputSchema = z.object({
 		.datetime({ message: "Formato de data inválido." })
 		.optional()
 		.nullable()
-		.transform((v) => (v ? dayjs(v).endOf("day").toDate() : undefined)),
+		.transform((v) => (v ? dayjs(v).tz(OPERATION_TIMEZONE).endOf("day").toDate() : undefined)),
 });
 
 export type TGetCampaignGraphInput = z.infer<typeof GetCampaignGraphInputSchema>;
 
+/** Série do gráfico a partir das linhas agrupadas por intervalo (`chartBucketPositionSql`, 1-based). */
+function toBucketSeries(buckets: TChartBucket[], rows: Array<{ position: number; total: unknown }>): Array<{ label: string; value: number }> {
+	const byPosition = new Map(rows.map((row) => [Number(row.position), row]));
+	return buckets.map((bucket, index) => ({ label: bucket.label, value: Number(byPosition.get(index + 1)?.total ?? 0) }));
+}
+
 async function getGraphDataForPeriod({
 	graphType,
 	period,
-	bucketCount,
-	groupingFormat,
+	buckets,
 	userOrgId,
 	campanhaId,
 }: {
 	graphType: "interactions" | "conversions" | "revenue";
 	period: { after: Date; before: Date };
-	bucketCount: number;
-	groupingFormat: string;
+	buckets: TChartBucket[];
 	userOrgId: string;
 	campanhaId?: string | null;
 }): Promise<Array<{ label: string; value: number }>> {
-	const periodDatesStrs = getEvenlySpacedDates({
-		startDate: period.after,
-		endDate: period.before,
-		points: bucketCount,
-	});
-
-	const periodDateBuckets = getDateBuckets(periodDatesStrs);
-
 	// Graph Type: interactions (message interactions per period)
 	if (graphType === "interactions") {
 		const interactionData = await db
 			.select({
-				date: sql<string>`date_trunc('day', ${interactions.dataEnvio})::text`,
+				position: chartBucketPositionSql(interactions.dataEnvio, buckets),
 				total: count(interactions.id),
 			})
 			.from(interactions)
@@ -98,36 +101,16 @@ async function getGraphDataForPeriod({
 					...(campanhaId ? [eq(interactions.campanhaId, campanhaId)] : []),
 				),
 			)
-			.orderBy(sql`date_trunc('day', ${interactions.dataEnvio})`)
-			.groupBy(sql`date_trunc('day', ${interactions.dataEnvio})`);
+			.groupBy(chartBucketPositionSql(interactions.dataEnvio, buckets));
 
-		const initialData = Object.fromEntries(periodDatesStrs.map((date) => [dayjs(date).format(groupingFormat), { value: 0 }]));
-
-		const dataReduced = interactionData.reduce((acc, current) => {
-			const itemDate = new Date(current.date);
-			const itemTime = itemDate.getTime();
-
-			const bucket = periodDateBuckets.find((b) => itemTime >= b.start && itemTime <= b.end);
-			if (!bucket) return acc;
-
-			const key = dayjs(bucket.key).format(groupingFormat);
-			if (!acc[key]) acc[key] = { value: 0 };
-
-			acc[key].value += Number(current.total);
-			return acc;
-		}, initialData);
-
-		return Object.entries(dataReduced).map(([key, value]) => ({
-			label: key,
-			value: value.value,
-		}));
+		return toBucketSeries(buckets, interactionData);
 	}
 
 	// Graph Type: conversions (conversions per period)
 	if (graphType === "conversions") {
 		const conversionData = await db
 			.select({
-				date: sql<string>`date_trunc('day', ${campaignConversions.dataConversao})::text`,
+				position: chartBucketPositionSql(campaignConversions.dataConversao, buckets),
 				total: count(campaignConversions.id),
 			})
 			.from(campaignConversions)
@@ -139,36 +122,16 @@ async function getGraphDataForPeriod({
 					...(campanhaId ? [eq(campaignConversions.campanhaId, campanhaId)] : []),
 				),
 			)
-			.orderBy(sql`date_trunc('day', ${campaignConversions.dataConversao})`)
-			.groupBy(sql`date_trunc('day', ${campaignConversions.dataConversao})`);
+			.groupBy(chartBucketPositionSql(campaignConversions.dataConversao, buckets));
 
-		const initialData = Object.fromEntries(periodDatesStrs.map((date) => [dayjs(date).format(groupingFormat), { value: 0 }]));
-
-		const dataReduced = conversionData.reduce((acc, current) => {
-			const itemDate = new Date(current.date);
-			const itemTime = itemDate.getTime();
-
-			const bucket = periodDateBuckets.find((b) => itemTime >= b.start && itemTime <= b.end);
-			if (!bucket) return acc;
-
-			const key = dayjs(bucket.key).format(groupingFormat);
-			if (!acc[key]) acc[key] = { value: 0 };
-
-			acc[key].value += Number(current.total);
-			return acc;
-		}, initialData);
-
-		return Object.entries(dataReduced).map(([key, value]) => ({
-			label: key,
-			value: value.value,
-		}));
+		return toBucketSeries(buckets, conversionData);
 	}
 
 	// Graph Type: revenue (revenue per period)
 	if (graphType === "revenue") {
 		const revenueData = await db
 			.select({
-				date: sql<string>`date_trunc('day', ${campaignConversions.dataConversao})::text`,
+				position: chartBucketPositionSql(campaignConversions.dataConversao, buckets),
 				total: sum(campaignConversions.atribuicaoReceita),
 			})
 			.from(campaignConversions)
@@ -180,29 +143,9 @@ async function getGraphDataForPeriod({
 					...(campanhaId ? [eq(campaignConversions.campanhaId, campanhaId)] : []),
 				),
 			)
-			.orderBy(sql`date_trunc('day', ${campaignConversions.dataConversao})`)
-			.groupBy(sql`date_trunc('day', ${campaignConversions.dataConversao})`);
+			.groupBy(chartBucketPositionSql(campaignConversions.dataConversao, buckets));
 
-		const initialData = Object.fromEntries(periodDatesStrs.map((date) => [dayjs(date).format(groupingFormat), { value: 0 }]));
-
-		const dataReduced = revenueData.reduce((acc, current) => {
-			const itemDate = new Date(current.date);
-			const itemTime = itemDate.getTime();
-
-			const bucket = periodDateBuckets.find((b) => itemTime >= b.start && itemTime <= b.end);
-			if (!bucket) return acc;
-
-			const key = dayjs(bucket.key).format(groupingFormat);
-			if (!acc[key]) acc[key] = { value: 0 };
-
-			acc[key].value += Number(current.total ?? 0);
-			return acc;
-		}, initialData);
-
-		return Object.entries(dataReduced).map(([key, value]) => ({
-			label: key,
-			value: value.value,
-		}));
+		return toBucketSeries(buckets, revenueData);
 	}
 
 	return [];
@@ -227,38 +170,35 @@ async function getCampaignGraph({ input, session }: { input: TGetCampaignGraphIn
 			.where(eq(interactions.organizacaoId, userOrgId))
 			.orderBy(asc(interactions.dataEnvio))
 			.limit(1);
-		period.after = firstInteraction[0]?.date ?? undefined;
-		if (!period.after) throw new createHttpError.BadRequest("Não foi possível encontrar a primeira interação cadastrada.");
+		const firstInteractionDate = firstInteraction[0]?.date;
+		if (!firstInteractionDate) throw new createHttpError.BadRequest("Não foi possível encontrar a primeira interação cadastrada.");
+		// Começa no início do dia local, para o primeiro intervalo não sair cortado no instante exato da
+		// primeira interação.
+		period.after = dayjs(firstInteractionDate).tz(OPERATION_TIMEZONE).startOf("day").toDate();
 	}
 
 	if (!period.before) {
 		period.before = new Date();
 	}
 
-	// Calculate bucket config from MAIN period
-	const { points: bestNumberOfPointsForPeriodsDates, groupingFormat } = getBestNumberOfPointsBetweenDates({
-		startDate: period.after,
-		endDate: period.before,
-	});
+	// Granularidade decidida pelo período PRINCIPAL; a comparação usa a mesma, casada por posição.
+	const granularity = getChartGranularity({ startDate: period.after, endDate: period.before });
 
 	// Get main period data
 	const mainData = await getGraphDataForPeriod({
 		graphType: input.graphType,
 		period: { after: period.after, before: period.before },
-		bucketCount: bestNumberOfPointsForPeriodsDates,
-		groupingFormat,
+		buckets: getChartBuckets({ startDate: period.after, endDate: period.before, granularity }),
 		userOrgId,
 		campanhaId: input.campanhaId,
 	});
 
-	// If comparison period exists, get comparison data with SAME bucket count
 	let comparisonData: Array<{ label: string; value: number }> | null = null;
 	if (input.comparingStartDate && input.comparingEndDate) {
 		comparisonData = await getGraphDataForPeriod({
 			graphType: input.graphType,
 			period: { after: input.comparingStartDate, before: input.comparingEndDate },
-			bucketCount: bestNumberOfPointsForPeriodsDates,
-			groupingFormat,
+			buckets: getChartBuckets({ startDate: input.comparingStartDate, endDate: input.comparingEndDate, granularity }),
 			userOrgId,
 			campanhaId: input.campanhaId,
 		});

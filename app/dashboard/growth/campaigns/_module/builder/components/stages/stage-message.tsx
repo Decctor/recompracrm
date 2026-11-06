@@ -6,11 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import GeneralPaginationComponent from "@/components/Utils/Pagination";
-import {
-	buildClonedMessageTemplateName,
-	getMessageTemplateLibraryEntries,
-	type TOnboardingTemplateVariant,
-} from "@/config/message-template-library";
+import { buildClonedMessageTemplateName, getMessageTemplateLibraryEntries, type TOnboardingTemplateVariant } from "@/config/message-template-library";
 import { validateTemplateForTrigger } from "@/lib/message-templates";
 import { getSurveyFieldId } from "@/lib/message-templates/surveys";
 import { buildSurveyButtonsForField, useSurveyCustomFields } from "@/components/MessageTemplates/SurveyButtonEditor";
@@ -216,7 +212,9 @@ export default function StageMessage({ organizationId, organizationName, organiz
 						cabecalho: null,
 						corpo: {
 							conteudo: `Olá {{clientName}}, queremos a sua opinião: ${surveyField.titulo.toLowerCase()}? Toque na opção abaixo.`,
-							parametros: [{ identificadorInterno: "clientName", identificadorExterno: "1", exemplo: getDefaultMessageTemplateVariableExample("clientName") }],
+							parametros: [
+								{ identificadorInterno: "clientName", identificadorExterno: "1", exemplo: getDefaultMessageTemplateVariableExample("clientName") },
+							],
 						},
 						rodape: null,
 						botoes: buildSurveyButtonsForField(surveyField).slice(0, 10),
@@ -292,61 +290,55 @@ export default function StageMessage({ organizationId, organizationName, organiz
 				</div>
 			) : (
 				<>
+					<GeneralPaginationComponent
+						activePage={currentPage}
+						totalPages={totalPages}
+						selectPage={handleSelectPage}
+						// `handleSelectPage` já rola a seção de templates para o topo.
+						scrollToTopOnChange={false}
+						queryLoading={isFetching}
+						itemsMatchedText={matchedCount === 1 ? "1 template encontrado" : `${matchedCount} templates encontrados`}
+						itemsShowingText={compatibleTemplates.length === 1 ? "1 compatível com o gatilho" : `${compatibleTemplates.length} compatíveis com o gatilho`}
+					/>
 					<div
 						className={cn(
 							"grid grid-cols-1 gap-3 motion-safe:transition-opacity motion-safe:duration-150 md:grid-cols-2 xl:grid-cols-3",
 							isPlaceholderData && "opacity-60",
 						)}
 					>
-					{compatibleTemplates.map((template) => (
-						<TemplateCard
-							key={template.id}
-							template={template}
-							selectedPhoneId={campaign.whatsappConexaoTelefoneId ?? ""}
-							isSelected={campaign.whatsappTemplateId === template.id}
-							onSelect={() => updateCampaign({ whatsappTemplateId: template.id })}
-							onEdit={() => setEditTemplateId(template.id)}
-						/>
-					))}
+						{compatibleTemplates.map((template) => (
+							<TemplateCard
+								key={template.id}
+								template={template}
+								selectedPhoneId={campaign.whatsappConexaoTelefoneId ?? ""}
+								isSelected={campaign.whatsappTemplateId === template.id}
+								onSelect={() => updateCampaign({ whatsappTemplateId: template.id })}
+								onEdit={() => setEditTemplateId(template.id)}
+							/>
+						))}
 
-					<button
-						type="button"
-						onClick={openCreateDraft}
-						className="flex h-full min-h-[240px] flex-col items-start justify-center gap-2.5 rounded-xl border border-dashed border-primary/45 bg-primary/[0.04] p-4 text-left transition-colors hover:bg-primary/10"
-					>
-						<span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-							<Plus className="h-4 w-4" />
-						</span>
-						<span className="flex flex-col gap-1">
-							<span className="text-sm font-semibold tracking-tight">
-								{isSurveyCampaign ? "Criar template da pesquisa" : "Criar template para esta campanha"}
+						<button
+							type="button"
+							onClick={openCreateDraft}
+							className="flex h-full min-h-[240px] flex-col items-start justify-center gap-2.5 rounded-xl border border-dashed border-primary/45 bg-primary/[0.04] p-4 text-left transition-colors hover:bg-primary/10"
+						>
+							<span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+								<Plus className="h-4 w-4" />
 							</span>
-							<span className="text-xs leading-relaxed text-muted-foreground">
-								{isSurveyCampaign
-									? surveyField
-										? `Abre o construtor com um botão para cada opção de "${surveyField.titulo}". Ao salvar, o template entra para aprovação da Meta e fica selecionado aqui.`
-										: "Volte à etapa de Gatilho e escolha o campo da pergunta para gerar os botões automaticamente."
-									: "Abre o construtor de templates, já com as variáveis que este gatilho preenche. Ao salvar, o template entra para aprovação da Meta e fica selecionado aqui."}
+							<span className="flex flex-col gap-1">
+								<span className="text-sm font-semibold tracking-tight">
+									{isSurveyCampaign ? "Criar template da pesquisa" : "Criar template para esta campanha"}
+								</span>
+								<span className="text-xs leading-relaxed text-muted-foreground">
+									{isSurveyCampaign
+										? surveyField
+											? `Abre o construtor com um botão para cada opção de "${surveyField.titulo}". Ao salvar, o template entra para aprovação da Meta e fica selecionado aqui.`
+											: "Volte à etapa de Gatilho e escolha o campo da pergunta para gerar os botões automaticamente."
+										: "Abre o construtor de templates, já com as variáveis que este gatilho preenche. Ao salvar, o template entra para aprovação da Meta e fica selecionado aqui."}
+								</span>
 							</span>
-						</span>
-					</button>
+						</button>
 					</div>
-
-					<GeneralPaginationComponent
-						activePage={currentPage}
-						totalPages={totalPages}
-						selectPage={handleSelectPage}
-						queryLoading={isFetching}
-						pageIconSize="sm"
-						showSteppersText={false}
-						showExplanation={false}
-						itemsMatchedText={`${matchedCount} ${matchedCount === 1 ? "template encontrado." : "templates encontrados."}`}
-						itemsShowingText={
-							compatibleTemplates.length === 1
-								? "1 compatível com o gatilho nesta página."
-								: `${compatibleTemplates.length} compatíveis com o gatilho nesta página.`
-						}
-					/>
 				</>
 			)}
 
@@ -406,7 +398,6 @@ export default function StageMessage({ organizationId, organizationName, organiz
 					</Tooltip>
 				</TooltipProvider>
 			) : null}
-
 		</div>
 	);
 

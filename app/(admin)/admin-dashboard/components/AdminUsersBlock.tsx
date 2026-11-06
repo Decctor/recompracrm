@@ -27,6 +27,16 @@ export default function AdminUsersBlock() {
 					className="w-full sm:w-72"
 				/>
 			</div>
+			<GeneralPaginationComponent
+				activePage={params.page}
+				totalPages={data?.totalPages || 0}
+				selectPage={(page) => updateParams({ page })}
+				queryLoading={isLoading}
+				pageSize={params.pageSize}
+				onPageSizeChange={(pageSize) => updateParams({ pageSize, page: 1 })}
+				itemsMatchedText={data?.usersMatched === 1 ? "1 usuário encontrado" : `${data?.usersMatched || 0} usuários encontrados`}
+				itemsShowingText={`mostrando ${users?.length || 0}`}
+			/>
 			{isLoading ? <LoadingComponent /> : null}
 			{error ? <ErrorComponent msg="Erro ao carregar usuários" /> : null}
 			{users ? (
@@ -42,14 +52,6 @@ export default function AdminUsersBlock() {
 					</div>
 				)
 			) : null}
-			<GeneralPaginationComponent
-				activePage={params.page}
-				totalPages={data?.totalPages || 0}
-				selectPage={(page) => updateParams({ page })}
-				queryLoading={isLoading}
-				itemsMatchedText={`${data?.usersMatched || 0} usuários encontrados.`}
-				itemsShowingText={`Mostrando ${users?.length || 0} usuários.`}
-			/>
 		</div>
 	);
 }

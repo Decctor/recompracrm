@@ -67,8 +67,8 @@ export default function ProductVinculation({ handleSelection, closeModal }: Prod
 										queryLoading={isLoading}
 										selectPage={(page) => updateParams({ page })}
 										totalPages={totalPages || 0}
-										itemsMatchedText={productsMatched > 0 ? `${productsMatched} produtos encontrados.` : `${productsMatched} produto encontrado.`}
-										itemsShowingText={productsShowing > 0 ? `Mostrando ${productsShowing} produtos.` : `Mostrando ${productsShowing} produto.`}
+										itemsMatchedText={productsMatched === 1 ? "1 produto encontrado" : `${productsMatched} produtos encontrados`}
+										itemsShowingText={`mostrando ${productsShowing}`}
 									/>
 									{products ? (
 										products.length > 0 ? (

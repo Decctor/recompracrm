@@ -5,6 +5,7 @@ import type { TGetAdminPlatformPartnersInput, TGetAdminPlatformPartnersOutput } 
 import type { TGetPlatformPartnerDashboardOutput } from "@/app/api/platform-partner/dashboard/route";
 import type { TGetPlatformPartnerMeOutput } from "@/app/api/platform-partner/me/route";
 import type { TGetPlatformPartnerPayoutsOutput } from "@/app/api/platform-partner/payouts/route";
+import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import { useState } from "react";
@@ -55,6 +56,7 @@ async function fetchAdminPlatformPartners(input: TGetAdminPlatformPartnersInput)
 	if (input.search) searchParams.set("search", input.search);
 	if (input.status) searchParams.set("status", input.status);
 	if (input.page) searchParams.set("page", input.page.toString());
+	if (input.pageSize) searchParams.set("pageSize", input.pageSize.toString());
 	const { data } = await axios.get<TGetAdminPlatformPartnersOutput>(`/api/admin/platform-partners?${searchParams.toString()}`);
 	return data.data;
 }
@@ -65,6 +67,7 @@ export function useAdminPlatformPartners({ initialParams }: { initialParams?: Pa
 		search: initialParams?.search ?? "",
 		status: initialParams?.status ?? null,
 		page: initialParams?.page ?? 1,
+		pageSize: initialParams?.pageSize ?? DEFAULT_PAGE_SIZE,
 	});
 	const debouncedParams = useDebounceMemo(queryParams, 400);
 	const queryKey = ["admin-platform-partners", debouncedParams];

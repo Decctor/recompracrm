@@ -266,8 +266,10 @@ export default function FinanceReconciliationPage() {
 				queryLoading={isLoading}
 				selectPage={(page) => updateParams({ page })}
 				totalPages={totalPages}
-				itemsMatchedText={`${transactionsMatched} ${transactionsMatched === 1 ? "linha encontrada" : "linhas encontradas"}.`}
-				itemsShowingText={`Mostrando ${transactions.length} ${transactions.length === 1 ? "linha" : "linhas"}.`}
+				pageSize={params.pageSize}
+				onPageSizeChange={(pageSize) => updateParams({ pageSize, page: 1 })}
+				itemsMatchedText={transactionsMatched === 1 ? "1 linha encontrada" : `${transactionsMatched} linhas encontradas`}
+				itemsShowingText={`mostrando ${transactions.length}`}
 			/>
 
 			{isLoading ? <LoadingComponent /> : null}

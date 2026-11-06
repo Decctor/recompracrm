@@ -71,23 +71,22 @@ export default function CouponsPage({ user: _user }: CouponsPageProps) {
 				queryLoading={isLoading}
 				selectPage={(page) => updateQueryParams({ page })}
 				totalPages={totalPages || 0}
-				itemsMatchedText={couponsMatched !== 1 ? `${couponsMatched} cupons encontrados.` : `${couponsMatched} cupom encontrado.`}
-				itemsShowingText={couponsShowing !== 1 ? `Mostrando ${couponsShowing} cupons.` : `Mostrando ${couponsShowing} cupom.`}
+				pageSize={queryParams.pageSize}
+				onPageSizeChange={(pageSize) => updateQueryParams({ pageSize, page: 1 })}
+				itemsMatchedText={couponsMatched === 1 ? "1 cupom encontrado" : `${couponsMatched} cupons encontrados`}
+				itemsShowingText={`mostrando ${couponsShowing}`}
 			/>
 			{isLoading ? <LoadingComponent /> : null}
 			{isError ? <ErrorComponent msg={getErrorMessage(error)} /> : null}
 			{isSuccess ? (
 				<div className="w-full flex flex-col gap-1.5">
 					{coupons && coupons.length > 0 ? (
-						coupons.map((coupon) => (
-							<CouponCard key={coupon.id} coupon={coupon} handleDeleteClick={(id) => handleDeleteCouponMutation({ id })} />
-						))
+						coupons.map((coupon) => <CouponCard key={coupon.id} coupon={coupon} handleDeleteClick={(id) => handleDeleteCouponMutation({ id })} />)
 					) : (
 						<p className="w-full flex items-center justify-center">Nenhum cupom encontrado</p>
 					)}
 				</div>
 			) : null}
-
 		</div>
 	);
 }
@@ -101,13 +100,7 @@ function formatCouponBenefit(coupon: TGetCouponsOutputDefault["coupons"][number]
 	return "BRINDE";
 }
 
-function CouponCard({
-	coupon,
-	handleDeleteClick,
-}: {
-	coupon: TGetCouponsOutputDefault["coupons"][number];
-	handleDeleteClick: (id: string) => void;
-}) {
+function CouponCard({ coupon, handleDeleteClick }: { coupon: TGetCouponsOutputDefault["coupons"][number]; handleDeleteClick: (id: string) => void }) {
 	const activeAudiences = coupon.audiencias ?? [];
 	return (
 		<div className={cn("bg-card border-border flex w-full flex-col gap-1 rounded-xl border px-3 py-4 shadow-2xs", !coupon.ativo && "opacity-60")}>

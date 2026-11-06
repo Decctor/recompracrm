@@ -55,7 +55,16 @@ export function Portfolio({ sellerId }: PortfolioProps) {
 						);
 					})}
 				</div>
-
+				<GeneralPaginationComponent
+					activePage={filters.page}
+					totalPages={data?.pagination.totalPages ?? 0}
+					selectPage={(page) => updateFilters({ page })}
+					queryLoading={isLoading}
+					pageSize={filters.pageSize}
+					onPageSizeChange={(pageSize) => updateFilters({ pageSize, page: 1 })}
+					itemsMatchedText={data?.pagination.total === 1 ? "1 cliente encontrado" : `${data?.pagination.total ?? 0} clientes encontrados`}
+					itemsShowingText={`mostrando ${data?.carteira.length ?? 0}`}
+				/>
 				{isLoading ? <LoadingComponent /> : null}
 				{error ? <ErrorComponent msg={getErrorMessage(error)} /> : null}
 
@@ -127,12 +136,6 @@ export function Portfolio({ sellerId }: PortfolioProps) {
 								</div>
 							);
 						})}
-						<GeneralPaginationComponent
-							activePage={filters.page}
-							totalPages={data.pagination.totalPages}
-							selectPage={(page) => updateFilters({ page })}
-							queryLoading={isLoading}
-						/>
 					</div>
 				) : null}
 

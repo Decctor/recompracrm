@@ -40,6 +40,7 @@
 		"backfill:fiscal-freight-rejections": "tsx --conditions=react-server ./scripts/backfill-fiscal-freight-rejections.ts",
 		"repair:fiscal-provider-history": "tsx --conditions=react-server ./scripts/repair-fiscal-provider-history.ts",
 		"retry:fiscal-document": "tsx --conditions=react-server ./scripts/retry-fiscal-document.ts",
+		"export:fiscal-assets": "tsx --conditions=react-server ./scripts/export-fiscal-assets.ts",
 		"backfill:stripe-control-metadata": "tsx ./scripts/backfill-stripe-control-metadata.ts",
 		"backfill:organization-slugs": "tsx ./scripts/backfill-organization-slugs.ts",
 		"dedupe:product-add-ons": "tsx ./scripts/dedupe-product-add-ons.ts",

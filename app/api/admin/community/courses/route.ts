@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { DEFAULT_PAGE_SIZE, pageSizeInputSchema } from "@/lib/pagination";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { handleAdminSimpleChildRowsProcessing } from "@/lib/db-utils";
 import { createSimplifiedSearchCondition } from "@/lib/search";
@@ -26,6 +27,7 @@ const GetCommunityCoursesInputSchema = z.object({
 			invalid_type_error: "Tipo não válido para página.",
 		})
 		.transform((v) => Number(v)),
+	pageSize: pageSizeInputSchema(),
 	search: z
 		.string({
 			required_error: "Busca não informada.",
@@ -79,7 +81,7 @@ async function getCommunityCourses({ input }: { input: TGetCommunityCoursesInput
 		if (!communityCourse) throw new createHttpError.NotFound("Curso não encontrado.");
 		return { data: { byId: communityCourse, default: null }, message: "Curso obtido com sucesso." };
 	}
-	const PAGE_SIZE = 25;
+	const PAGE_SIZE = input.pageSize ?? DEFAULT_PAGE_SIZE;
 	const { page, search, status, periodFilter, periodAfter, periodBefore } = input;
 
 	const conditions = [];
@@ -155,6 +157,7 @@ async function getCommunityCoursesRoute(request: NextRequest) {
 	const input = GetCommunityCoursesInputSchema.parse({
 		id: searchParams.get("id") ?? undefined,
 		page: searchParams.get("page") ?? 1,
+		pageSize: searchParams.get("pageSize"),
 		search: searchParams.get("search") ?? undefined,
 		status: searchParams.get("status") ?? undefined,
 		periodFilter: searchParams.get("periodFilter") ?? undefined,

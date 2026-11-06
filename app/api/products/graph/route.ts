@@ -3,14 +3,21 @@ import { runPagesRouteHandler, type PagesRouteHandler, type PagesRouteRequest, t
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { getSalesIntegrationCondition } from "@/lib/sales/integration-filter";
 import type { TAuthUserSession } from "@/lib/authentication/types";
-import { getBestNumberOfPointsBetweenDates, getDateBuckets, getEvenlySpacedDates } from "@/lib/dates";
+import { getChartBuckets } from "@/lib/charts/period-buckets";
+import { chartBucketPositionSql } from "@/lib/charts/period-buckets-sql";
+import { OPERATION_TIMEZONE } from "@/lib/operation-timezone";
 import { db } from "@/services/drizzle";
 import { getProductSalesLines } from "@/lib/products/product-sales-lines";
 import { products, sales } from "@/services/drizzle/schema";
 import dayjs from "dayjs";
-import { and, asc, countDistinct, eq, gte, inArray, isNotNull, lte, sql, sum } from "drizzle-orm";
+import timezone from "dayjs/plugin/timezone";
+import utc from "dayjs/plugin/utc";
+import { and, asc, countDistinct, eq, gte, inArray, isNotNull, lte, sum } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { z } from "zod";
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 const GetProductGraphInputSchema = z.object({
 	productId: z.string({
@@ -52,15 +59,6 @@ const GetProductGraphInputSchema = z.object({
 
 export type TGetProductGraphInput = z.infer<typeof GetProductGraphInputSchema>;
 
-type TProductGraphReduced = {
-	[key: string]: {
-		quantidade: number;
-		valorLiquido: number;
-		custo: number;
-		vendasCount: number;
-	};
-};
-
 export type TGetProductGraphOutput = {
 	data: Array<{
 		titulo: string;
@@ -83,9 +81,11 @@ async function fetchProductGraph(input: TGetProductGraphInput, session: TAuthUse
 	});
 	if (!product) throw new createHttpError.NotFound("Produto não encontrado.");
 
+	// Dia inteiro no fuso da operação: o seletor manda o último dia à meia-noite, o que deixava esse
+	// dia fora do filtro e virava um intervalo de 1 ms no fim do gráfico.
 	const currentPeriodAdjusted = {
-		after: input.periodAfter ? new Date(input.periodAfter) : undefined,
-		before: input.periodBefore ? new Date(input.periodBefore) : undefined,
+		after: input.periodAfter ? dayjs(input.periodAfter).tz(OPERATION_TIMEZONE).startOf("day").toDate() : undefined,
+		before: input.periodBefore ? dayjs(input.periodBefore).tz(OPERATION_TIMEZONE).endOf("day").toDate() : undefined,
 	};
 
 	// Linhas atribuídas a produto: adicional vinculado conta para o produto da opção
@@ -107,18 +107,9 @@ async function fetchProductGraph(input: TGetProductGraphInput, session: TAuthUse
 	if (!currentPeriodAdjusted.before) {
 		currentPeriodAdjusted.before = new Date();
 	}
-	const { points: bestNumberOfPointsForPeriodsDates, groupingFormat } = getBestNumberOfPointsBetweenDates({
-		startDate: currentPeriodAdjusted.after,
-		endDate: currentPeriodAdjusted.before,
-	});
-
-	const currentPeriodDatesStrs = getEvenlySpacedDates({
-		startDate: currentPeriodAdjusted.after,
-		endDate: currentPeriodAdjusted.before,
-		points: bestNumberOfPointsForPeriodsDates,
-	});
-
-	const currentPeriodDateBuckets = getDateBuckets(currentPeriodDatesStrs);
+	const buckets = getChartBuckets({ startDate: currentPeriodAdjusted.after, endDate: currentPeriodAdjusted.before });
+	if (buckets.length === 0) return { data: [] };
+	const bucketPosition = chartBucketPositionSql(sales.dataVenda, buckets);
 
 	// Build where conditions
 	const saleItemWhereConditions = [eq(lines.organizacaoId, userOrgId), eq(lines.produtoId, input.productId)];
@@ -135,10 +126,10 @@ async function fetchProductGraph(input: TGetProductGraphInput, session: TAuthUse
 
 	const saleItemWhere = and(...saleItemWhereConditions, inArray(lines.vendaId, db.select({ id: sales.id }).from(sales).where(saleWhere)));
 
-	// Fetch product sales grouped by day
-	const productSalesByDay = await db
+	// Fetch product sales grouped by chart bucket
+	const productSalesByBucket = await db
 		.select({
-			dataVenda: sql<string>`date_trunc('day', ${sales.dataVenda})::text`,
+			position: bucketPosition,
 			quantidade: sum(lines.quantidade),
 			valorLiquido: sum(lines.valorVendaTotalLiquido),
 			custo: sum(lines.valorCustoTotal),
@@ -147,44 +138,23 @@ async function fetchProductGraph(input: TGetProductGraphInput, session: TAuthUse
 		.from(lines)
 		.innerJoin(sales, eq(lines.vendaId, sales.id))
 		.where(and(eq(lines.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), saleItemWhere))
-		.groupBy(sql`date_trunc('day', ${sales.dataVenda})`)
-		.orderBy(sql`date_trunc('day', ${sales.dataVenda})`);
+		.groupBy(bucketPosition);
+	const byPosition = new Map(productSalesByBucket.map((row) => [Number(row.position), row]));
 
-	// Initialize reduced data structure
-	const initialProductGraphReduced: TProductGraphReduced = Object.fromEntries(
-		currentPeriodDatesStrs.map((date) => [dayjs(date).format(groupingFormat), { quantidade: 0, valorLiquido: 0, custo: 0, vendasCount: 0 }]),
-	);
-
-	// Reduce product sales into buckets
-	const productGraphReduced = productSalesByDay.reduce((acc: TProductGraphReduced, current) => {
-		const saleDate = new Date(current.dataVenda);
-		const saleTime = saleDate.getTime();
-
-		// Find the correct bucket
-		const bucket = currentPeriodDateBuckets.find((b) => saleTime >= b.start && saleTime <= b.end);
-		if (!bucket) return acc;
-
-		const key = dayjs(bucket.key).format(groupingFormat);
-		if (!acc[key]) acc[key] = { quantidade: 0, valorLiquido: 0, custo: 0, vendasCount: 0 };
-
-		acc[key].quantidade += Number(current.quantidade ?? 0);
-		acc[key].valorLiquido += Number(current.valorLiquido ?? 0);
-		acc[key].custo += Number(current.custo ?? 0);
-		acc[key].vendasCount += Number(current.vendasCount ?? 0);
-
-		return acc;
-	}, initialProductGraphReduced);
-
-	// Transform into output format
-	const productGraph = Object.entries(productGraphReduced).map(([key, value]) => {
-		const margem = value.valorLiquido - value.custo;
-		const margemPercentual = value.valorLiquido > 0 ? (margem / value.valorLiquido) * 100 : 0;
-		const ticketMedio = value.vendasCount > 0 ? value.valorLiquido / value.vendasCount : 0;
+	const productGraph: TGetProductGraphOutput["data"] = buckets.map((bucket, index) => {
+		const row = byPosition.get(index + 1);
+		const quantidade = Number(row?.quantidade ?? 0);
+		const valorLiquido = Number(row?.valorLiquido ?? 0);
+		const custo = Number(row?.custo ?? 0);
+		const vendasCount = Number(row?.vendasCount ?? 0);
+		const margem = valorLiquido - custo;
+		const margemPercentual = valorLiquido > 0 ? (margem / valorLiquido) * 100 : 0;
+		const ticketMedio = vendasCount > 0 ? valorLiquido / vendasCount : 0;
 
 		return {
-			titulo: key,
-			quantidade: value.quantidade,
-			valorLiquido: value.valorLiquido,
+			titulo: bucket.label,
+			quantidade,
+			valorLiquido,
 			margem,
 			margemPercentual,
 			ticketMedio,

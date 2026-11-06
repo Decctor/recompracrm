@@ -5,6 +5,7 @@ import type { TGetClientStatsInput, TGetClientStatsOutput } from "@/app/api/clie
 import type { TGetClientsGraphInput, TGetClientsGraphOutput } from "@/app/api/clients/stats/graph/route";
 import type { TGetClientsOverallStatsInput, TGetClientsOverallStatsOutput } from "@/app/api/clients/stats/overall/route";
 import type { TGetClientsRankingInput, TGetClientsRankingOutput } from "@/app/api/clients/stats/ranking/route";
+import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import { useCallback, useMemo, useState } from "react";
@@ -22,11 +23,14 @@ async function fetchClients(input: TGetClientsInput) {
 		if (input.statsPeriodBefore) searchParams.set("statsPeriodBefore", input.statsPeriodBefore.toISOString());
 		if (input.statsIntegrationsIds.length > 0) searchParams.set("statsIntegrationsIds", input.statsIntegrationsIds.join(","));
 		if (input.statsExcludedSalesIds.length > 0) searchParams.set("statsExcludedSalesIds", input.statsExcludedSalesIds.join(","));
+		if (input.statsTotalMin != null) searchParams.set("statsTotalMin", input.statsTotalMin.toString());
+		if (input.statsTotalMax != null) searchParams.set("statsTotalMax", input.statsTotalMax.toString());
 		if (input.birthdaysPeriodAfter) searchParams.set("birthdaysPeriodAfter", input.birthdaysPeriodAfter.toISOString());
 		if (input.birthdaysPeriodBefore) searchParams.set("birthdaysPeriodBefore", input.birthdaysPeriodBefore.toISOString());
 		if (input.orderByField) searchParams.set("orderByField", input.orderByField);
 		if (input.orderByDirection) searchParams.set("orderByDirection", input.orderByDirection);
 		if (input.page) searchParams.set("page", input.page.toString());
+		if (input.pageSize) searchParams.set("pageSize", input.pageSize.toString());
 		const { data } = await axios.get<TGetClientsOutput>(`/api/clients?${searchParams.toString()}`);
 
 		if (!data.data.default) throw new Error("Clientes não encontrados.");
@@ -96,11 +100,14 @@ export function useClients({ initialFilters }: UseClientsParams) {
 		statsPeriodBefore: initialFilters?.statsPeriodBefore || null,
 		statsIntegrationsIds: initialFilters?.statsIntegrationsIds || [],
 		statsExcludedSalesIds: initialFilters?.statsExcludedSalesIds || [],
+		statsTotalMin: initialFilters?.statsTotalMin ?? null,
+		statsTotalMax: initialFilters?.statsTotalMax ?? null,
 		birthdaysPeriodAfter: initialFilters?.birthdaysPeriodAfter || null,
 		birthdaysPeriodBefore: initialFilters?.birthdaysPeriodBefore || null,
 		orderByField: initialFilters?.orderByField || "nome",
 		orderByDirection: initialFilters?.orderByDirection || "asc",
 		page: initialFilters?.page || 1,
+		pageSize: initialFilters?.pageSize || DEFAULT_PAGE_SIZE,
 	});
 	function updateFilters(newFilters: Partial<TGetClientsInput>) {
 		setFilters((prevFilters) => ({ ...prevFilters, ...newFilters }));

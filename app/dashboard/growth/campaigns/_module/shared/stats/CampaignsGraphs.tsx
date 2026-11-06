@@ -189,7 +189,7 @@ export default function CampaignsGraphs({ startDate, endDate, comparingStartDate
 										axisLine={false}
 										minTickGap={24}
 										tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-										tickFormatter={(value) => value.slice(0, 10)}
+										tickFormatter={(value) => value.slice(0, 12)}
 									/>
 									<YAxis
 										width={graphType === "revenue" ? 52 : 36}

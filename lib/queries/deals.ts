@@ -1,5 +1,6 @@
 import type { TGetDealsInput, TGetDealsOutput } from "@/app/api/admin/deals/route";
 import type { TGetAvailableDealLicenseOutput } from "@/app/api/deals/available-license/route";
+import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import { useState } from "react";
@@ -9,6 +10,7 @@ async function fetchAdminDeals(input: TGetDealsInput) {
 	const searchParams = new URLSearchParams();
 	if (input.id) searchParams.set("id", input.id);
 	if (input.page) searchParams.set("page", input.page.toString());
+	if (input.pageSize) searchParams.set("pageSize", input.pageSize.toString());
 	if (input.search) searchParams.set("search", input.search);
 
 	const queryString = searchParams.toString();
@@ -28,6 +30,7 @@ async function fetchAdminDealById(id: string) {
 export function useAdminDeals() {
 	const [params, setParams] = useState<TGetDealsInput>({
 		page: 1,
+		pageSize: DEFAULT_PAGE_SIZE,
 		search: null,
 	});
 

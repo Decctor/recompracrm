@@ -19,7 +19,9 @@ export default async function AdminDashboardLayout({ children }: AdminDashboardL
 	return (
 		<div className="font-outfit min-h-svh bg-background text-foreground">
 			<Suspense fallback={<LoadingComponent />}>
-				<main className="flex min-h-svh flex-col gap-3 overflow-y-auto p-6 pb-28">
+				{/* Quem rola é a janela: `overflow-y-auto` aqui criaria um contexto de rolagem que nunca rola e
+				    impediria a barra de paginação (sticky) de grudar no topo. */}
+				<main className="flex min-h-svh flex-col gap-3 overflow-x-clip p-6 pb-28">
 					<AppHeader showSidebarTrigger={false} />
 					{children}
 				</main>

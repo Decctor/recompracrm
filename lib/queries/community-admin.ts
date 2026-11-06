@@ -2,6 +2,7 @@ import type { TGetCommunityCoursesInput, TGetCommunityCoursesOutput } from "@/ap
 import type { TGetCommunityLessonsOutput } from "@/app/api/admin/community/lessons/route";
 import type { TGetCommunityMaterialsInput, TGetCommunityMaterialsOutput } from "@/app/api/admin/community/materials/route";
 import type { TGetCommunityCourseSectionsOutput } from "@/app/api/admin/community/sections/route";
+import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import { useState } from "react";
@@ -62,6 +63,7 @@ export function useAdminCommunityLessonById({ lessonId }: { lessonId: string }) 
 async function fetchAdminCommunityCourses(input: TGetCommunityCoursesInput) {
 	const searchParams = new URLSearchParams();
 	searchParams.set("page", String(input.page));
+	if (input.pageSize) searchParams.set("pageSize", String(input.pageSize));
 	if (input.search?.trim()) searchParams.set("search", input.search.trim());
 	if (input.status && input.status.length > 0) searchParams.set("status", input.status.join(","));
 	if (input.periodFilter) searchParams.set("periodFilter", input.periodFilter);
@@ -80,6 +82,7 @@ type TUseAdminCommunityCoursesParams = {
 export function useAdminCommunityCourses({ initialParams }: TUseAdminCommunityCoursesParams) {
 	const [params, setParams] = useState<TGetCommunityCoursesInput>({
 		page: initialParams?.page || 1,
+		pageSize: initialParams?.pageSize || DEFAULT_PAGE_SIZE,
 		search: initialParams?.search || "",
 		status: initialParams?.status || [],
 		periodFilter: initialParams?.periodFilter || null,
@@ -122,6 +125,7 @@ export function useAdminCommunityMaterialById({ materialId }: { materialId: stri
 async function fetchAdminCommunityMaterials(input: TGetCommunityMaterialsInput) {
 	const searchParams = new URLSearchParams();
 	searchParams.set("page", String(input.page));
+	if (input.pageSize) searchParams.set("pageSize", String(input.pageSize));
 	if (input.search?.trim()) searchParams.set("search", input.search.trim());
 	if (input.status && input.status.length > 0) searchParams.set("status", input.status.join(","));
 	if (input.tipo && input.tipo.length > 0) searchParams.set("tipo", input.tipo.join(","));
@@ -141,6 +145,7 @@ type TUseAdminCommunityMaterialsParams = {
 export function useAdminCommunityMaterials({ initialParams }: TUseAdminCommunityMaterialsParams) {
 	const [params, setParams] = useState<TGetCommunityMaterialsInput>({
 		page: initialParams?.page || 1,
+		pageSize: initialParams?.pageSize || DEFAULT_PAGE_SIZE,
 		search: initialParams?.search || "",
 		status: initialParams?.status || [],
 		tipo: initialParams?.tipo || [],

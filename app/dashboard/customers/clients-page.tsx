@@ -154,15 +154,17 @@ function ClientsDatabaseView() {
 					</Button>
 				</div>
 			</div>
+			<ClientsInlineFilters filters={filters} updateFilters={updateFilters} />
 			<GeneralPaginationComponent
 				activePage={filters.page}
 				queryLoading={isLoading}
 				selectPage={(page) => updateFilters({ page })}
 				totalPages={totalPages || 0}
-				itemsMatchedText={clientsMatched > 0 ? `${clientsMatched} clientes encontrados.` : `${clientsMatched} cliente encontrado.`}
-				itemsShowingText={clientsShowing > 0 ? `Mostrando ${clientsShowing} clientes.` : `Mostrando ${clientsShowing} cliente.`}
+				pageSize={filters.pageSize}
+				onPageSizeChange={(pageSize) => updateFilters({ pageSize, page: 1 })}
+				itemsMatchedText={clientsMatched === 1 ? `${clientsMatched} cliente encontrado` : `${clientsMatched} clientes encontrados`}
+				itemsShowingText={`mostrando ${clientsShowing}`}
 			/>
-			<ClientsInlineFilters filters={filters} updateFilters={updateFilters} />
 			{isLoading ? <LoadingComponent /> : null}
 			{isError ? <ErrorComponent msg={getErrorMessage(error)} /> : null}
 			{isSuccess && clients ? (

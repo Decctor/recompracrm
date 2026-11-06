@@ -2,14 +2,21 @@ import { appApiHandler } from "@/lib/app-api";
 import { runPagesRouteHandler, type PagesRouteHandler, type PagesRouteRequest, type PagesRouteResponse } from "@/lib/pages-route-compat";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
-import { getBestNumberOfPointsBetweenDates, getDateBuckets, getEvenlySpacedDates } from "@/lib/dates";
+import { getChartBuckets } from "@/lib/charts/period-buckets";
+import { chartBucketPositionSql } from "@/lib/charts/period-buckets-sql";
+import { OPERATION_TIMEZONE } from "@/lib/operation-timezone";
 import { db } from "@/services/drizzle";
 import { getProductSalesLines } from "@/lib/products/product-sales-lines";
 import { sales } from "@/services/drizzle/schema";
 import dayjs from "dayjs";
+import timezone from "dayjs/plugin/timezone";
+import utc from "dayjs/plugin/utc";
 import { and, countDistinct, eq, gte, lte, sql } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { z } from "zod";
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 const GetProductsGraphInputSchema = z.object({
 	graphType: z.enum(["sales-value", "sales-quantity", "active-products", "margin"], {
@@ -24,7 +31,7 @@ const GetProductsGraphInputSchema = z.object({
 		.datetime({ message: "Formato de data inválido." })
 		.optional()
 		.nullable()
-		.transform((v) => (v ? dayjs(v).startOf("day").toDate() : undefined)),
+		.transform((v) => (v ? dayjs(v).tz(OPERATION_TIMEZONE).startOf("day").toDate() : undefined)),
 	periodBefore: z
 		.string({
 			required_error: "Período não informado.",
@@ -33,7 +40,7 @@ const GetProductsGraphInputSchema = z.object({
 		.datetime({ message: "Formato de data inválido." })
 		.optional()
 		.nullable()
-		.transform((v) => (v ? dayjs(v).endOf("day").toDate() : undefined)),
+		.transform((v) => (v ? dayjs(v).tz(OPERATION_TIMEZONE).endOf("day").toDate() : undefined)),
 });
 
 export type TGetProductsGraphInput = z.infer<typeof GetProductsGraphInputSchema>;
@@ -67,161 +74,63 @@ async function getProductsGraph({ input, sessionUser }: { input: TGetProductsGra
 		period.before = new Date();
 	}
 
-	const { points: bestNumberOfPointsForPeriodsDates, groupingFormat } = getBestNumberOfPointsBetweenDates({
-		startDate: period.after,
-		endDate: period.before,
-	});
-
-	const periodDatesStrs = getEvenlySpacedDates({
-		startDate: period.after,
-		endDate: period.before,
-		points: bestNumberOfPointsForPeriodsDates,
-	});
-
-	const periodDateBuckets = getDateBuckets(periodDatesStrs);
+	const buckets = getChartBuckets({ startDate: period.after, endDate: period.before });
+	if (buckets.length === 0) return { data: [] };
+	const bucketPosition = chartBucketPositionSql(sales.dataVenda, buckets);
 
 	// Linhas atribuídas a produto: adicional vinculado conta para o produto da opção
 	// (lib/products/product-sales-lines.ts).
 	const lines = getProductSalesLines({ organizationId: userOrgId });
+	const periodLinesWhere = and(
+		eq(lines.organizacaoId, userOrgId),
+		eq(sales.organizacaoId, userOrgId),
+		gte(sales.dataVenda, period.after),
+		lte(sales.dataVenda, period.before),
+		eq(sales.statusVenda, "CONFIRMADA"),
+	);
 
 	// Graph Type: sales-value (total revenue over time)
 	if (input.graphType === "sales-value") {
 		const salesValue = await db
-			.select({
-				date: sql<string>`date_trunc('day', ${sales.dataVenda})::text`,
-				total: sql<number>`SUM(${lines.valorVendaTotalLiquido})`,
-			})
+			.select({ position: bucketPosition, total: sql<number>`SUM(${lines.valorVendaTotalLiquido})` })
 			.from(lines)
 			.innerJoin(sales, eq(lines.vendaId, sales.id))
-			.where(
-				and(
-					eq(lines.organizacaoId, userOrgId),
-					eq(sales.organizacaoId, userOrgId),
-					gte(sales.dataVenda, period.after),
-					lte(sales.dataVenda, period.before),
-					eq(sales.statusVenda, "CONFIRMADA"),
-				),
-			)
-			.orderBy(sql`date_trunc('day', ${sales.dataVenda})`)
-			.groupBy(sql`date_trunc('day', ${sales.dataVenda})`);
-
-		const initialSalesValue = Object.fromEntries(periodDatesStrs.map((date) => [dayjs(date).format(groupingFormat), { value: 0 }]));
-
-		const salesValueReduced = salesValue.reduce((acc, current) => {
-			const saleDate = new Date(current.date);
-			const saleTime = saleDate.getTime();
-
-			const bucket = periodDateBuckets.find((b) => saleTime >= b.start && saleTime <= b.end);
-			if (!bucket) return acc;
-
-			const key = dayjs(bucket.key).format(groupingFormat);
-			if (!acc[key]) acc[key] = { value: 0 };
-
-			acc[key].value += Number(current.total ?? 0);
-			return acc;
-		}, initialSalesValue);
-
-		const salesValueGraph = Object.entries(salesValueReduced).map(([key, value]) => ({
-			label: key,
-			value: value.value,
-		}));
+			.where(periodLinesWhere)
+			.groupBy(bucketPosition);
+		const byPosition = new Map(salesValue.map((row) => [Number(row.position), row]));
 
 		return {
-			data: salesValueGraph,
+			data: buckets.map((bucket, index) => ({ label: bucket.label, value: Number(byPosition.get(index + 1)?.total ?? 0) })),
 		};
 	}
 
 	// Graph Type: sales-quantity (total units sold over time)
 	if (input.graphType === "sales-quantity") {
 		const salesQuantity = await db
-			.select({
-				date: sql<string>`date_trunc('day', ${sales.dataVenda})::text`,
-				total: sql<number>`SUM(${lines.quantidade})`,
-			})
+			.select({ position: bucketPosition, total: sql<number>`SUM(${lines.quantidade})` })
 			.from(lines)
 			.innerJoin(sales, eq(lines.vendaId, sales.id))
-			.where(
-				and(
-					eq(lines.organizacaoId, userOrgId),
-					eq(sales.organizacaoId, userOrgId),
-					gte(sales.dataVenda, period.after),
-					lte(sales.dataVenda, period.before),
-					eq(sales.statusVenda, "CONFIRMADA"),
-				),
-			)
-			.orderBy(sql`date_trunc('day', ${sales.dataVenda})`)
-			.groupBy(sql`date_trunc('day', ${sales.dataVenda})`);
-
-		const initialSalesQuantity = Object.fromEntries(periodDatesStrs.map((date) => [dayjs(date).format(groupingFormat), { value: 0 }]));
-
-		const salesQuantityReduced = salesQuantity.reduce((acc, current) => {
-			const saleDate = new Date(current.date);
-			const saleTime = saleDate.getTime();
-
-			const bucket = periodDateBuckets.find((b) => saleTime >= b.start && saleTime <= b.end);
-			if (!bucket) return acc;
-
-			const key = dayjs(bucket.key).format(groupingFormat);
-			if (!acc[key]) acc[key] = { value: 0 };
-
-			acc[key].value += Number(current.total ?? 0);
-			return acc;
-		}, initialSalesQuantity);
-
-		const salesQuantityGraph = Object.entries(salesQuantityReduced).map(([key, value]) => ({
-			label: key,
-			value: value.value,
-		}));
+			.where(periodLinesWhere)
+			.groupBy(bucketPosition);
+		const byPosition = new Map(salesQuantity.map((row) => [Number(row.position), row]));
 
 		return {
-			data: salesQuantityGraph,
+			data: buckets.map((bucket, index) => ({ label: bucket.label, value: Number(byPosition.get(index + 1)?.total ?? 0) })),
 		};
 	}
 
 	// Graph Type: active-products (unique products sold per period)
 	if (input.graphType === "active-products") {
 		const activeProducts = await db
-			.select({
-				date: sql<string>`date_trunc('day', ${sales.dataVenda})::text`,
-				total: countDistinct(lines.produtoId),
-			})
+			.select({ position: bucketPosition, total: countDistinct(lines.produtoId) })
 			.from(lines)
 			.innerJoin(sales, eq(lines.vendaId, sales.id))
-			.where(
-				and(
-					eq(lines.organizacaoId, userOrgId),
-					eq(sales.organizacaoId, userOrgId),
-					gte(sales.dataVenda, period.after),
-					lte(sales.dataVenda, period.before),
-					eq(sales.statusVenda, "CONFIRMADA"),
-				),
-			)
-			.orderBy(sql`date_trunc('day', ${sales.dataVenda})`)
-			.groupBy(sql`date_trunc('day', ${sales.dataVenda})`);
-
-		const initialActiveProducts = Object.fromEntries(periodDatesStrs.map((date) => [dayjs(date).format(groupingFormat), { value: 0 }]));
-
-		const activeProductsReduced = activeProducts.reduce((acc, current) => {
-			const saleDate = new Date(current.date);
-			const saleTime = saleDate.getTime();
-
-			const bucket = periodDateBuckets.find((b) => saleTime >= b.start && saleTime <= b.end);
-			if (!bucket) return acc;
-
-			const key = dayjs(bucket.key).format(groupingFormat);
-			if (!acc[key]) acc[key] = { value: 0 };
-
-			acc[key].value += Number(current.total);
-			return acc;
-		}, initialActiveProducts);
-
-		const activeProductsGraph = Object.entries(activeProductsReduced).map(([key, value]) => ({
-			label: key,
-			value: value.value,
-		}));
+			.where(periodLinesWhere)
+			.groupBy(bucketPosition);
+		const byPosition = new Map(activeProducts.map((row) => [Number(row.position), row]));
 
 		return {
-			data: activeProductsGraph,
+			data: buckets.map((bucket, index) => ({ label: bucket.label, value: Number(byPosition.get(index + 1)?.total ?? 0) })),
 		};
 	}
 
@@ -229,52 +138,23 @@ async function getProductsGraph({ input, sessionUser }: { input: TGetProductsGra
 	if (input.graphType === "margin") {
 		const marginData = await db
 			.select({
-				date: sql<string>`date_trunc('day', ${sales.dataVenda})::text`,
+				position: bucketPosition,
 				revenue: sql<number>`SUM(${lines.valorVendaTotalLiquido})`,
 				cost: sql<number>`SUM(${lines.valorCustoTotal})`,
 			})
 			.from(lines)
 			.innerJoin(sales, eq(lines.vendaId, sales.id))
-			.where(
-				and(
-					eq(lines.organizacaoId, userOrgId),
-					eq(sales.organizacaoId, userOrgId),
-					gte(sales.dataVenda, period.after),
-					lte(sales.dataVenda, period.before),
-					eq(sales.statusVenda, "CONFIRMADA"),
-				),
-			)
-			.orderBy(sql`date_trunc('day', ${sales.dataVenda})`)
-			.groupBy(sql`date_trunc('day', ${sales.dataVenda})`);
-
-		const initialMargin = Object.fromEntries(periodDatesStrs.map((date) => [dayjs(date).format(groupingFormat), { revenue: 0, cost: 0 }]));
-
-		const marginReduced = marginData.reduce((acc, current) => {
-			const saleDate = new Date(current.date);
-			const saleTime = saleDate.getTime();
-
-			const bucket = periodDateBuckets.find((b) => saleTime >= b.start && saleTime <= b.end);
-			if (!bucket) return acc;
-
-			const key = dayjs(bucket.key).format(groupingFormat);
-			if (!acc[key]) acc[key] = { revenue: 0, cost: 0 };
-
-			acc[key].revenue += Number(current.revenue ?? 0);
-			acc[key].cost += Number(current.cost ?? 0);
-			return acc;
-		}, initialMargin);
-
-		const marginGraph = Object.entries(marginReduced).map(([key, value]) => {
-			const marginValue = value.revenue - value.cost;
-			const marginPercentage = value.revenue > 0 ? (marginValue / value.revenue) * 100 : 0;
-			return {
-				label: key,
-				value: marginPercentage,
-			};
-		});
+			.where(periodLinesWhere)
+			.groupBy(bucketPosition);
+		const byPosition = new Map(marginData.map((row) => [Number(row.position), row]));
 
 		return {
-			data: marginGraph,
+			data: buckets.map((bucket, index) => {
+				const row = byPosition.get(index + 1);
+				const revenue = Number(row?.revenue ?? 0);
+				const marginValue = revenue - Number(row?.cost ?? 0);
+				return { label: bucket.label, value: revenue > 0 ? (marginValue / revenue) * 100 : 0 };
+			}),
 		};
 	}
 

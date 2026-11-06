@@ -5,7 +5,8 @@ import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { StoreCreditFiltersSchema } from "@/lib/finances/store-credit/filters";
-import { getStoreCreditClients, getStoreCreditClientTitles } from "@/lib/finances/store-credit/queries";
+import { getStoreCreditClients, getStoreCreditClientTitles, STORE_CREDIT_PAGE_SIZE } from "@/lib/finances/store-credit/queries";
+import { pageSizeInputSchema } from "@/lib/pagination";
 import { canViewFinances } from "@/lib/permissions/finances";
 
 const GetStoreCreditInputSchema = StoreCreditFiltersSchema.extend({
@@ -20,6 +21,7 @@ const GetStoreCreditInputSchema = StoreCreditFiltersSchema.extend({
 		.optional()
 		.nullable()
 		.transform((value) => (value ? Number(value) : 1)),
+	pageSize: pageSizeInputSchema(STORE_CREDIT_PAGE_SIZE),
 });
 export type TGetStoreCreditInput = z.infer<typeof GetStoreCreditInputSchema>;
 
@@ -49,6 +51,7 @@ async function getStoreCredit({ input, session }: { input: TGetStoreCreditInput;
 		sortField: input.sortField,
 		sortDirection: input.sortDirection,
 		page: input.page,
+		pageSize: input.pageSize ?? STORE_CREDIT_PAGE_SIZE,
 		originAfter: input.originAfter,
 		originBefore: input.originBefore,
 	});
@@ -70,6 +73,7 @@ async function getStoreCreditRoute(request: NextRequest) {
 		clientId: searchParams.get("clientId"),
 		includeSettled: searchParams.get("includeSettled"),
 		page: searchParams.get("page"),
+		pageSize: searchParams.get("pageSize"),
 		search: searchParams.get("search"),
 		statuses: searchParams.get("statuses"),
 		agingBuckets: searchParams.get("agingBuckets"),

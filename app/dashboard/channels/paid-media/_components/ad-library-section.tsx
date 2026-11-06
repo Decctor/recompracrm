@@ -216,6 +216,17 @@ export function AdLibrarySection({ integrationId, canManage }: { integrationId: 
 					</Callout.Root>
 				) : null}
 
+				{library.data && library.data.pagination.totalPages > 1 ? (
+					<GeneralPaginationComponent
+						activePage={filters.page}
+						totalPages={library.data.pagination.totalPages}
+						selectPage={(page) => setFilters((previous) => ({ ...previous, page }))}
+						queryLoading={library.isFetching}
+						itemsMatchedText={library.data.pagination.total === 1 ? "1 anúncio encontrado" : `${library.data.pagination.total} anúncios encontrados`}
+						itemsShowingText={`mostrando ${ads.length}`}
+					/>
+				) : null}
+
 				{library.isLoading ? (
 					<Panel.Loading rows={6} />
 				) : library.isError ? (
@@ -264,19 +275,6 @@ export function AdLibrarySection({ integrationId, canManage }: { integrationId: 
 						/>
 					</div>
 				)}
-
-				{library.data && library.data.pagination.totalPages > 1 ? (
-					<GeneralPaginationComponent
-						activePage={filters.page}
-						totalPages={library.data.pagination.totalPages}
-						selectPage={(page) => setFilters((previous) => ({ ...previous, page }))}
-						queryLoading={library.isFetching}
-						itemsMatchedText={`${library.data.pagination.total} anúncios encontrados`}
-						itemsShowingText={`Mostrando ${ads.length} anúncios`}
-						showSteppersText={false}
-						pageIconSize="sm"
-					/>
-				) : null}
 			</Section.Body>
 		</Section.Root>
 	);

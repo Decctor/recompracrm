@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { DEFAULT_PAGE_SIZE, pageSizeInputSchema } from "@/lib/pagination";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { getSalesIntegrationCondition } from "@/lib/sales/integration-filter";
 import { formatPhoneAsBase } from "@/lib/formatting";
@@ -110,6 +111,7 @@ const GetPartnersInputSchema = z.object({
 		.optional()
 		.nullable()
 		.transform((val) => (val ? Number(val) : 1)),
+	pageSize: pageSizeInputSchema(),
 	search: z.string({ invalid_type_error: "Tipo não válido para busca." }).optional().nullable(),
 	statsPeriodAfter: z
 		.string({ invalid_type_error: "Tipo não válido para data de inserção do parceiro." })
@@ -203,7 +205,7 @@ async function getPartners({ input, session }: { input: TGetPartnersInput; sessi
 		applyRestrictiveSalesFilters = true;
 	}
 
-	const PAGE_SIZE = 25;
+	const PAGE_SIZE = input.pageSize ?? DEFAULT_PAGE_SIZE;
 	const skip = PAGE_SIZE * (input.page - 1);
 
 	const matchedSubquery = db
@@ -284,6 +286,7 @@ const getPartnersRoute = async (request: NextRequest) => {
 	const input = GetPartnersInputSchema.parse({
 		search: searchParams.get("search") ?? undefined,
 		page: searchParams.get("page") ?? undefined,
+		pageSize: searchParams.get("pageSize"),
 		id: searchParams.get("id") ?? undefined,
 		statsPeriodAfter: searchParams.get("statsPeriodAfter") ?? undefined,
 		statsPeriodBefore: searchParams.get("statsPeriodBefore") ?? undefined,

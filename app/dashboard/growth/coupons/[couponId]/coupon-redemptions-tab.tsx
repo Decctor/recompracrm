@@ -106,6 +106,19 @@ export default function CouponRedemptionsTab({ coupon, enabled }: CouponRedempti
 					</div>
 				</div>
 
+				{data && data.totalPages > 1 ? (
+					<GeneralPaginationComponent
+						activePage={queryParams.page ?? 1}
+						totalPages={data.totalPages}
+						selectPage={(page) => updateQueryParams({ page })}
+						queryLoading={isLoading}
+						itemsMatchedText={
+							data.redemptionsMatched === 1 ? "1 resgate encontrado" : `${formatDecimalPlaces(data.redemptionsMatched)} resgates encontrados`
+						}
+						itemsShowingText={`mostrando ${formatDecimalPlaces(data.resgates.length)}`}
+					/>
+				) : null}
+
 				{isLoading ? <LoadingComponent /> : null}
 				{isError ? <ErrorComponent msg={getErrorMessage(error)} /> : null}
 
@@ -193,18 +206,6 @@ export default function CouponRedemptionsTab({ coupon, enabled }: CouponRedempti
 								: "Este cupom ainda não foi resgatado."}
 						</p>
 					)
-				) : null}
-
-				{data && data.totalPages > 1 ? (
-					<GeneralPaginationComponent
-						activePage={queryParams.page ?? 1}
-						totalPages={data.totalPages}
-						selectPage={(page) => updateQueryParams({ page })}
-						queryLoading={isLoading}
-						itemsMatchedText={`${formatDecimalPlaces(data.redemptionsMatched)} resgates encontrados.`}
-						itemsShowingText={`Mostrando ${formatDecimalPlaces(data.resgates.length)} resgates.`}
-						pageIconSize="sm"
-					/>
 				) : null}
 			</Section.Body>
 		</Section.Root>

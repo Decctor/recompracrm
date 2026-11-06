@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { DEFAULT_PAGE_SIZE, pageSizeInputSchema } from "@/lib/pagination";
 import { createSimplifiedSearchCondition } from "@/lib/search";
 import { CommunityAssetSchema, CommunityMaterialSchema } from "@/schemas/community-pipeline";
 import { db } from "@/services/drizzle";
@@ -20,6 +21,7 @@ const GetCommunityMaterialsInputSchema = z.object({
 		required_error: "Página não informada.",
 		invalid_type_error: "Tipo não válido para página.",
 	}),
+	pageSize: pageSizeInputSchema(),
 	search: z
 		.string({
 			required_error: "Busca não informada.",
@@ -101,7 +103,7 @@ async function getCommunityMaterials({ input }: { input: TGetCommunityMaterialsI
 		return { data: { byId: communityMaterial, default: null }, message: "Material obtido com sucesso." };
 	}
 
-	const PAGE_SIZE = 25;
+	const PAGE_SIZE = input.pageSize ?? DEFAULT_PAGE_SIZE;
 	const { page, search, status, tipo, periodFilter, periodAfter, periodBefore } = input;
 
 	const conditions = [];
@@ -173,6 +175,7 @@ async function getCommunityMaterialsRoute(request: NextRequest) {
 	const input = GetCommunityMaterialsInputSchema.parse({
 		id: searchParams.get("id") ?? undefined,
 		page: searchParams.get("page") ?? 1,
+		pageSize: searchParams.get("pageSize"),
 		search: searchParams.get("search") ?? undefined,
 		status: searchParams.get("status") ?? undefined,
 		tipo: searchParams.get("tipo") ?? undefined,

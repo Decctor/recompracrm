@@ -10,12 +10,14 @@ import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import { useState } from "react";
 import { useDebounceMemo } from "../hooks/use-debounce";
+import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 
 async function fetchCoupons(input: TGetCouponsInput) {
 	const searchParams = new URLSearchParams();
 	if (input.search) searchParams.set("search", input.search);
 	if (input.activeOnly) searchParams.set("activeOnly", "true");
 	if (input.page) searchParams.set("page", input.page.toString());
+	if (input.pageSize) searchParams.set("pageSize", input.pageSize.toString());
 	const { data } = await axios.get<TGetCouponsOutput>(`/api/coupons?${searchParams.toString()}`);
 	const result = data.data.default;
 	if (!result) throw new Error("Cupons não encontrados.");
@@ -29,6 +31,7 @@ export function useCoupons({ initialParams }: UseCouponsParams = {}) {
 	const [queryParams, setQueryParams] = useState<TGetCouponsInput>({
 		id: null,
 		page: initialParams?.page || 1,
+		pageSize: initialParams?.pageSize || DEFAULT_PAGE_SIZE,
 		search: initialParams?.search || "",
 		activeOnly: initialParams?.activeOnly || false,
 	});

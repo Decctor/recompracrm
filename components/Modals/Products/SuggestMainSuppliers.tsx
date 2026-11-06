@@ -119,8 +119,8 @@ export default function SuggestMainSuppliers({ closeModal, callbacks }: SuggestM
 							updatePage(nextPage);
 						}}
 						totalPages={data?.totalPages ?? 0}
-						itemsMatchedText={`${data?.total ?? 0} produto(s) com sugestão.`}
-						itemsShowingText={`Mostrando ${suggestions.length} produto(s).`}
+						itemsMatchedText={data?.total === 1 ? "1 produto com sugestão" : `${data?.total ?? 0} produtos com sugestão`}
+						itemsShowingText={`mostrando ${suggestions.length}`}
 					/>
 					<label className="flex w-fit cursor-pointer items-center gap-2 text-xs font-medium">
 						<Checkbox

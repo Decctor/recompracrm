@@ -61,20 +61,11 @@ export default function GoalsPage({ user }: GoalsPageProps) {
 				</TabsContent>
 
 				<TabsContent value="metas">
-					<GoalsListingView
-						onEdit={(id) => setEditGoalModal({ id, isOpen: true })}
-						onCreateGoal={() => setNewGoalModalIsOpen(true)}
-					/>
+					<GoalsListingView onEdit={(id) => setEditGoalModal({ id, isOpen: true })} onCreateGoal={() => setNewGoalModalIsOpen(true)} />
 				</TabsContent>
 			</Tabs>
 
-			{newGoalModalIsOpen ? (
-				<NewGoal
-					user={user}
-					closeModal={() => setNewGoalModalIsOpen(false)}
-					callbacks={{ onSettled: handleOnSettled }}
-				/>
-			) : null}
+			{newGoalModalIsOpen ? <NewGoal user={user} closeModal={() => setNewGoalModalIsOpen(false)} callbacks={{ onSettled: handleOnSettled }} /> : null}
 			{editGoalModal.id && editGoalModal.isOpen ? (
 				<ControlGoal
 					goalId={editGoalModal.id}
@@ -114,8 +105,8 @@ function GoalsListingView({ onEdit, onCreateGoal }: GoalsListingViewProps) {
 							queryLoading={isLoading}
 							selectPage={setPage}
 							totalPages={totalPages}
-							itemsMatchedText={`${goalsMatched} ${goalsMatched === 1 ? "meta encontrada" : "metas encontradas"}.`}
-							itemsShowingText={`Mostrando ${goals.length} ${goals.length === 1 ? "meta" : "metas"}.`}
+							itemsMatchedText={goalsMatched === 1 ? "1 meta encontrada" : `${goalsMatched} metas encontradas`}
+							itemsShowingText={`mostrando ${goals.length}`}
 						/>
 						<div className="w-full flex flex-col gap-3">
 							{goals.map((goal) => (

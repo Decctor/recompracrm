@@ -1,6 +1,7 @@
 import { appApiHandler } from "@/lib/app-api";
 import { runPagesRouteHandler, type PagesRouteHandler } from "@/lib/pages-route-compat";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { DEFAULT_PAGE_SIZE, pageSizeInputSchema } from "@/lib/pagination";
 import { applyCashbackRedemptionFIFO } from "@/lib/cashback/redemption";
 import { reverseSaleCashback } from "@/lib/cashback/reverse-sale-cashback";
 import type { TAuthUserSession } from "@/lib/authentication/types";
@@ -59,6 +60,7 @@ const GetSalesInputSchema = SalesHistoryFiltersSchema.extend({
 		})
 		.default("1")
 		.transform((val) => (val ? Number(val) : 1)),
+	pageSize: pageSizeInputSchema(),
 });
 
 export type TGetSalesInput = z.infer<typeof GetSalesInputSchema>;
@@ -243,7 +245,7 @@ function buildSaleErpDetail({
 }
 
 async function getSales({ input, sessionUser }: { input: TGetSalesInput; sessionUser: TAuthUserSession }) {
-	const PAGE_SIZE = 25;
+	const PAGE_SIZE = input.pageSize ?? DEFAULT_PAGE_SIZE;
 	const userOrgId = sessionUser.membership?.organizacao.id;
 	if (!userOrgId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
 	const { id, clientId } = input;

@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { DEFAULT_PAGE_SIZE, pageSizeInputSchema } from "@/lib/pagination";
 import { createSimplifiedEmailSearchCondition, createSimplifiedPhoneSearchCondition, createSimplifiedSearchCondition } from "@/lib/search";
 import { UserSchema } from "@/schemas/users";
 import { db } from "@/services/drizzle";
@@ -36,6 +37,7 @@ const GetUsersAdminInputSchema = z.object({
 		.optional()
 		.nullable()
 		.transform((value) => (value ? Number(value) : 1)),
+	pageSize: pageSizeInputSchema(),
 	search: z
 		.string({
 			invalid_type_error: "Tipo inválido para busca.",
@@ -87,7 +89,7 @@ async function getUsersAdmin({ input }: { input: TGetUsersAdminInput }) {
 		);
 	}
 
-	const PAGE_SIZE = 25;
+	const PAGE_SIZE = input.pageSize ?? DEFAULT_PAGE_SIZE;
 	const skip = PAGE_SIZE * (input.page - 1);
 	const limit = PAGE_SIZE;
 
@@ -145,6 +147,7 @@ async function getUsersAdminRoute(request: NextRequest) {
 	const input = GetUsersAdminInputSchema.parse({
 		id: searchParams.get("id"),
 		page: searchParams.get("page"),
+		pageSize: searchParams.get("pageSize"),
 		search: searchParams.get("search"),
 	});
 	const result = await getUsersAdmin({ input });

@@ -99,10 +99,9 @@ export default function StockLotsPage({ permissions }: { permissions: TInventory
 				queryLoading={query.isLoading}
 				selectPage={(page) => query.updateFilters({ page })}
 				totalPages={totalPages || 0}
-				itemsMatchedText={stockLotsMatched === 1 ? "1 lote encontrado." : `${stockLotsMatched} lotes encontrados.`}
-				itemsShowingText={stockLots.length === 1 ? "Mostrando 1 lote." : `Mostrando ${stockLots.length} lotes.`}
+				itemsMatchedText={stockLotsMatched === 1 ? "1 lote encontrado" : `${stockLotsMatched} lotes encontrados`}
+				itemsShowingText={`mostrando ${stockLots.length}`}
 			/>
-
 			{query.isLoading ? <LoadingComponent /> : null}
 			{query.isError ? <ErrorComponent msg={getErrorMessage(query.error)} /> : null}
 
@@ -111,7 +110,7 @@ export default function StockLotsPage({ permissions }: { permissions: TInventory
 						<StockLotCard
 							key={stockLot.id}
 							stockLot={stockLot}
-				onPrint={() => window.open(`${appRoutes.inventory.lotLabelsPreview()}?ids=${stockLot.id}`, "_blank", "noopener,noreferrer")}
+							onPrint={() => window.open(`${appRoutes.inventory.lotLabelsPreview()}?ids=${stockLot.id}`, "_blank", "noopener,noreferrer")}
 							onDiscard={permissions.ajustar ? () => setDiscardingStockLot(stockLot) : undefined}
 						/>
 					))

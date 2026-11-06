@@ -8,6 +8,7 @@ import { TSyncSegmentationsInput } from "@/app/api/segmentations/sync/route";
 import { buildSalesIntegrationFilterOptions } from "@/components/Sales/sales-integration-filter-options";
 import CheckboxInput from "@/components/Inputs/CheckboxInput";
 import MultipleSalesSelectInput from "@/components/Inputs/SelectMultipleSalesInput";
+import ClientWhatsappButton from "@/components/Clients/ClientWhatsappButton";
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
 import LoadingComponent from "@/components/Layouts/LoadingComponent";
 import EditRFMConfig from "@/components/Modals/RFMConfig/EditRFMConfig";
@@ -27,6 +28,7 @@ import { appRoutes } from "@/lib/navigation/routes";
 import {
 	formatInteractiveCountSummary,
 	formatInteractiveDateRangeSummary,
+	formatInteractiveNumberRangeSummary,
 	formatInteractiveOptionSummary,
 } from "@/components/ui/interactive-filter-formatting";
 import { syncSegmentations } from "@/lib/mutations/segmentations";
@@ -36,6 +38,7 @@ import { useSaleQueryFilterOptions } from "@/lib/queries/stats/utils";
 import { useMediaQuery } from "@/lib/hooks/use-media-query";
 import { useRFMLabelledStats } from "@/lib/queries/stats/rfm-labelled";
 import { cn } from "@/lib/utils";
+import { buildWhatsappChatUrl } from "@/lib/whatsapp/utils";
 import type { TRFMLabelledStats } from "@/app/api/stats/sales-rfm-labelled/route";
 import type { TGetClientsInput, TGetClientsOutputDefault } from "@/app/api/clients/route";
 import { NO_PURCHASES_RFM_LABEL, RFMLabels, type TRFMConfig, getRFMConfigByLabel } from "@/utils/rfm";
@@ -134,7 +137,7 @@ function SegmentsPageClients({ clientsQuery }: { clientsQuery: ReturnType<typeof
 					},
 					phone: filters.search ?? "",
 					rfmTitles: filters.segmentationTitles,
-					total: { min: null, max: null },
+					total: { min: filters.statsTotalMin ?? null, max: filters.statsTotalMax ?? null },
 				},
 			});
 			getExcelFromJSON(data, `CLIENTES ${dayjs().format("DD-MM-YYYY")}`);
@@ -161,15 +164,17 @@ function SegmentsPageClients({ clientsQuery }: { clientsQuery: ReturnType<typeof
 			</div>
 
 			<SegmentsClientsInlineFilters filters={filters} updateFilters={updateFilters} />
+			<GeneralPaginationComponent
+				activePage={filters.page}
+				queryLoading={isLoading}
+				selectPage={(page) => updateFilters({ page })}
+				totalPages={totalPages || 0}
+				pageSize={filters.pageSize}
+				onPageSizeChange={(pageSize) => updateFilters({ pageSize, page: 1 })}
+				itemsMatchedText={clientsMatched === 1 ? "1 cliente encontrado" : `${clientsMatched} clientes encontrados`}
+				itemsShowingText={`mostrando ${clientsShowing}`}
+			/>
 			<div className="w-full flex-1 max-h-[700px] flex flex-col gap-2 overflow-y-auto overscroll-y-auto scrollbar-thin scrollbar-track-primary/10 scrollbar-thumb-primary/30 px-2">
-				<GeneralPaginationComponent
-					activePage={filters.page}
-					queryLoading={isLoading}
-					selectPage={(page) => updateFilters({ page })}
-					totalPages={totalPages || 0}
-					itemsMatchedText={clientsMatched > 0 ? `${clientsMatched} clientes encontrados.` : `${clientsMatched} cliente encontrado.`}
-					itemsShowingText={clientsShowing > 0 ? `Mostrando ${clientsShowing} clientes.` : `Mostrando ${clientsShowing} cliente.`}
-				/>
 				{isLoading ? <LoadingComponent /> : null}
 				{isError ? <ErrorComponent msg={getErrorMessage(error)} /> : null}
 				{isSuccess && clients ? (
@@ -211,6 +216,10 @@ function SegmentsClientsInlineFilters({ filters, updateFilters }: SegmentsClient
 	const hasSegmentationTitles = (filters.segmentationTitles ?? []).length > 0;
 	const hasIntegrations = (filters.statsIntegrationsIds ?? []).length > 0;
 	const hasExcludedSales = (filters.statsExcludedSalesIds ?? []).length > 0;
+	const hasSpentRange = filters.statsTotalMin != null || filters.statsTotalMax != null;
+	const updateSpentRange = ({ greaterThan, lessThan }: { greaterThan?: number | null; lessThan?: number | null }) =>
+		updateFilters({ statsTotalMin: greaterThan ?? null, statsTotalMax: lessThan ?? null, page: 1 });
+	const clearSpentRange = () => updateFilters({ statsTotalMin: null, statsTotalMax: null, page: 1 });
 
 	return (
 		<div className="flex w-full flex-wrap items-center gap-2">
@@ -261,6 +270,21 @@ function SegmentsClientsInlineFilters({ filters, updateFilters }: SegmentsClient
 					onClear={() => updateFilters({ statsIntegrationsIds: [], page: 1 })}
 				/>
 			) : null}
+			{hasSpentRange ? (
+				<InteractiveFilter.Root className="w-fit">
+					<InteractiveFilter.Trigger>
+						<InteractiveFilter.Icon>
+							<BadgeDollarSign className="h-4 w-4" />
+							<InteractiveFilter.Label>VALOR GASTO</InteractiveFilter.Label>
+						</InteractiveFilter.Icon>
+						<InteractiveFilter.Value>{formatInteractiveNumberRangeSummary(filters.statsTotalMin, filters.statsTotalMax)}</InteractiveFilter.Value>
+						<InteractiveFilter.Clear onClear={clearSpentRange} />
+					</InteractiveFilter.Trigger>
+					<InteractiveFilter.Content className="w-80 p-0">
+						<SegmentsSpentRangeContent filters={filters} onChange={updateSpentRange} onClear={clearSpentRange} />
+					</InteractiveFilter.Content>
+				</InteractiveFilter.Root>
+			) : null}
 			{hasExcludedSales ? <SegmentsExcludedSalesFilter filters={filters} updateFilters={updateFilters} /> : null}
 
 			<InteractiveFilter.AddFilterRoot className="w-fit">
@@ -303,6 +327,11 @@ function SegmentsClientsInlineFilters({ filters, updateFilters }: SegmentsClient
 								/>
 							</InteractiveFilter.AddFilterItem>
 						) : null}
+						{!hasSpentRange ? (
+							<InteractiveFilter.AddFilterItem id="spentRange" label="VALOR GASTO" icon={<BadgeDollarSign className="h-4 w-4" />}>
+								<SegmentsSpentRangeContent filters={filters} onChange={updateSpentRange} onClear={clearSpentRange} />
+							</InteractiveFilter.AddFilterItem>
+						) : null}
 						{!hasExcludedSales ? (
 							<InteractiveFilter.AddFilterItem id="excludedSales" label="VENDAS EXCLUÍDAS" icon={<Filter className="h-4 w-4" />}>
 								<SegmentsExcludedSalesFilterContent filters={filters} updateFilters={updateFilters} />
@@ -311,6 +340,31 @@ function SegmentsClientsInlineFilters({ filters, updateFilters }: SegmentsClient
 					</InteractiveFilter.AddFilterSection>
 				</InteractiveFilter.AddFilterContent>
 			</InteractiveFilter.AddFilterRoot>
+		</div>
+	);
+}
+
+/** Faixa do valor gasto: soma das vendas confirmadas no PERÍODO escolhido; sem período, a vida toda. */
+function SegmentsSpentRangeContent({
+	filters,
+	onChange,
+	onClear,
+}: {
+	filters: TGetClientsInput;
+	onChange: (value: { greaterThan?: number | null; lessThan?: number | null }) => void;
+	onClear: () => void;
+}) {
+	const scope = filters.statsPeriodAfter || filters.statsPeriodBefore ? "no período selecionado" : "em todo o histórico";
+	return (
+		<div className="flex flex-col">
+			<p className="px-3 pt-3 text-xs text-muted-foreground">Total gasto pelo cliente {scope}, em vendas confirmadas.</p>
+			<InteractiveFilter.NumberRangeContent
+				value={{ greaterThan: filters.statsTotalMin, lessThan: filters.statsTotalMax }}
+				onChange={onChange}
+				onClear={onClear}
+				minPlaceholder="Mínimo (R$)"
+				maxPlaceholder="Máximo (R$)"
+			/>
 		</div>
 	);
 }
@@ -391,6 +445,34 @@ function formatUltimaCompraRecenciaPhrase(ultimaCompra: Date | string | null | u
 	return `Última compra: há ${days} dias`;
 }
 
+/** Telefone clicável: abre a conversa com o cliente no WhatsApp. Sem número discável, só o texto. */
+function SegmentsClientPhone({ telefone }: { telefone: string | null }) {
+	const whatsappUrl = buildWhatsappChatUrl(telefone);
+	if (!whatsappUrl) {
+		return (
+			<span className="inline-flex items-center gap-1">
+				<Phone className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+				<span className="tabular-nums">{telefone || "NÃO DEFINIDO"}</span>
+			</span>
+		);
+	}
+	return (
+		<span className="inline-flex items-center gap-1">
+			<a
+				href={whatsappUrl}
+				target="_blank"
+				rel="noopener noreferrer"
+				title="Conversar no WhatsApp"
+				className="inline-flex items-center gap-1 rounded-sm underline-offset-2 transition-colors hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+			>
+				<Phone className="size-3.5 shrink-0" aria-hidden />
+				<span className="tabular-nums">{telefone}</span>
+			</a>
+			<ClientWhatsappButton telefone={telefone} className="size-5 min-w-5" />
+		</span>
+	);
+}
+
 function SegmentsPageClientCard({ client, period }: SegmentsPageClientCardProps) {
 	const rfmRecencia = client.analiseRFMNotasRecencia?.trim();
 	const rfmFrequencia = client.analiseRFMNotasFrequencia?.trim();
@@ -416,10 +498,7 @@ function SegmentsPageClientCard({ client, period }: SegmentsPageClientCardProps)
 				<div className="min-w-0 flex-1 space-y-1.5">
 					<p className="truncate text-sm font-semibold tracking-tight text-foreground">{client.nome}</p>
 					<div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.65rem] text-muted-foreground">
-						<span className="inline-flex items-center gap-1">
-							<Phone className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-							<span className="tabular-nums">{client.telefone}</span>
-						</span>
+						<SegmentsClientPhone telefone={client.telefone} />
 						{client.email ? (
 							<span className="inline-flex min-w-0 items-center gap-1">
 								<Mail className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />

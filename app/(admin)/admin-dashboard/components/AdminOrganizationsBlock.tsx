@@ -31,6 +31,16 @@ export default function AdminOrganizationsBlock({ user }: TAdminOrganizationsBlo
 					className="w-full sm:w-64"
 				/>
 			</div>
+			<GeneralPaginationComponent
+				activePage={params.page}
+				totalPages={data?.totalPages || 0}
+				selectPage={(page) => updateParams({ page })}
+				queryLoading={isLoading}
+				pageSize={params.pageSize}
+				onPageSizeChange={(pageSize) => updateParams({ pageSize, page: 1 })}
+				itemsMatchedText={data?.organizationsMatched === 1 ? "1 organização encontrada" : `${data?.organizationsMatched || 0} organizações encontradas`}
+				itemsShowingText={`mostrando ${organizations?.length || 0}`}
+			/>
 			{isLoading ? <LoadingComponent /> : null}
 			{error ? <ErrorComponent msg="Erro ao carregar organizações" /> : null}
 			{organizations ? (
@@ -51,14 +61,6 @@ export default function AdminOrganizationsBlock({ user }: TAdminOrganizationsBlo
 					</div>
 				)
 			) : null}
-			<GeneralPaginationComponent
-				activePage={params.page}
-				totalPages={data?.totalPages || 0}
-				selectPage={(page) => updateParams({ page })}
-				queryLoading={isLoading}
-				itemsMatchedText={`${data?.organizationsMatched || 0} organizações encontradas.`}
-				itemsShowingText={`Mostrando ${organizations?.length || 0} organizações.`}
-			/>
 		</div>
 	);
 }

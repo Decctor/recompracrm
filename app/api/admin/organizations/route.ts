@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { DEFAULT_PAGE_SIZE, pageSizeInputSchema } from "@/lib/pagination";
 import { deleteAllOrganizationData, organizationHasBlockingSubscription, removeOrganizationStoredObjects } from "@/lib/organizations/deletion";
 import { isValidOrganizationSlug, ORGANIZATION_SLUG_INVALID_MESSAGE } from "@/lib/organizations/slug";
 import { getUniqueOrganizationSlug, isOrganizationSlugTaken } from "@/lib/organizations/slug-server";
@@ -51,7 +52,7 @@ async function getOrganizations({ input }: { input: TGetOrganizationInput }) {
 		conditions.push(createSimplifiedSearchCondition(organizations.nome, input.search));
 	}
 
-	const PAGE_SIZE = 25;
+	const PAGE_SIZE = input.pageSize ?? DEFAULT_PAGE_SIZE;
 	const skip = PAGE_SIZE * (input.page - 1);
 	const limit = PAGE_SIZE;
 
@@ -130,6 +131,7 @@ const GetOrganizationInputSchema = z.object({
 		.optional()
 		.nullable()
 		.transform((value) => (value ? Number(value) : 1)),
+	pageSize: pageSizeInputSchema(),
 	search: z
 		.string({
 			invalid_type_error: "Tipo inválido para busca.",
@@ -148,6 +150,7 @@ async function getOrganizationsRoute(request: NextRequest) {
 	const input = GetOrganizationInputSchema.parse({
 		id: searchParams.get("id"),
 		page: searchParams.get("page"),
+		pageSize: searchParams.get("pageSize"),
 		search: searchParams.get("search"),
 	});
 	const result = await getOrganizations({ input });

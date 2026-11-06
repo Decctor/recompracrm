@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/interactive-filter-formatting";
 import { Input } from "@/components/ui/input";
 import { getErrorMessage } from "@/lib/errors";
+import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 import { useCampaignInteractionsLogs } from "@/lib/queries/campaigns";
 import { InteractionsSentStatusOptions } from "@/utils/select-options";
 import { ListFilter } from "lucide-react";
@@ -28,6 +29,7 @@ export function CampaignsInteractionsView() {
 	} = useCampaignInteractionsLogs({
 		initialFilters: {
 			page: 1,
+			pageSize: DEFAULT_PAGE_SIZE,
 			search: "",
 			status: [],
 			orderByField: "dataExecucao",
@@ -62,8 +64,10 @@ export function CampaignsInteractionsView() {
 				queryLoading={isLoading}
 				selectPage={(page) => updateFilters({ page })}
 				totalPages={totalPages}
-				itemsMatchedText={`${interactionsMatched} ${interactionsMatched === 1 ? "interação encontrada." : "interações encontradas."}`}
-				itemsShowingText={`${interactionsShowing} ${interactionsShowing === 1 ? "interação exibida." : "interações exibidas."}`}
+				pageSize={filters.pageSize}
+				onPageSizeChange={(pageSize) => updateFilters({ pageSize, page: 1 })}
+				itemsMatchedText={interactionsMatched === 1 ? "1 interação encontrada" : `${interactionsMatched} interações encontradas`}
+				itemsShowingText={`mostrando ${interactionsShowing}`}
 			/>
 
 			{isLoading ? <LoadingComponent /> : null}

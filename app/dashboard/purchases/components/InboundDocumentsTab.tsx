@@ -51,7 +51,7 @@ type TManifestDialogState = { inboundId: string; evento: TFiscalInboundManifestE
 
 export default function InboundDocumentsTab() {
 	const queryClient = useQueryClient();
-	const { data, isLoading, isError, isSuccess, error, queryKey, page, setPage } = useFiscalInboundDocuments();
+	const { data, isLoading, isError, isSuccess, error, queryKey, page, setPage, pageSize, setPageSize } = useFiscalInboundDocuments();
 	const documents = data?.documents ?? [];
 	const totalPages = data?.totalPages ?? 0;
 	const matched = data?.documentsMatched ?? 0;
@@ -108,30 +108,35 @@ export default function InboundDocumentsTab() {
 				queryLoading={isLoading}
 				selectPage={(p) => setPage(p)}
 				totalPages={totalPages || 0}
-				itemsMatchedText={`${matched} nota(s) recebida(s).`}
-				itemsShowingText={`Mostrando ${documents.length} nota(s).`}
+				pageSize={pageSize}
+				onPageSizeChange={(nextPageSize) => {
+					setPageSize(nextPageSize);
+					setPage(1);
+				}}
+				itemsMatchedText={matched === 1 ? "1 nota recebida" : `${matched} notas recebidas`}
+				itemsShowingText={`mostrando ${documents.length}`}
 			/>
 			{isLoading ? <LoadingComponent /> : null}
 			{isError ? <ErrorComponent msg={getErrorMessage(error)} /> : null}
-			{isSuccess
-				? documents.length > 0
-					? documents.map((doc) => (
-							<InboundDocumentCard
-								key={doc.id}
-								doc={doc}
-								isPending={isPending}
-								onManifest={(inboundId, evento) => {
-									setJustificativa("");
-									setManifestDialog({ inboundId, evento });
-								}}
-							/>
-						))
-					: (
-							<div className="flex items-center justify-center py-10">
-								<p className="text-sm text-muted-foreground">Nenhuma nota recebida. As notas dos seus fornecedores aparecem aqui automaticamente.</p>
-							</div>
-						)
-				: null}
+			{isSuccess ? (
+				documents.length > 0 ? (
+					documents.map((doc) => (
+						<InboundDocumentCard
+							key={doc.id}
+							doc={doc}
+							isPending={isPending}
+							onManifest={(inboundId, evento) => {
+								setJustificativa("");
+								setManifestDialog({ inboundId, evento });
+							}}
+						/>
+					))
+				) : (
+					<div className="flex items-center justify-center py-10">
+						<p className="text-sm text-muted-foreground">Nenhuma nota recebida. As notas dos seus fornecedores aparecem aqui automaticamente.</p>
+					</div>
+				)
+			) : null}
 			<Dialog open={manifestDialog !== null} onOpenChange={(open) => !open && setManifestDialog(null)}>
 				<DialogContent>
 					<DialogHeader>
@@ -186,7 +191,9 @@ function InboundDocumentCard({ doc, isPending, onManifest }: InboundDocumentCard
 						</span>
 					)}
 					{doc.manifestacaoAtual ? (
-						<span className="rounded bg-secondary px-2 py-0.5 text-[10px] font-bold uppercase tracking-tight">{MANIFEST_LABELS[doc.manifestacaoAtual]}</span>
+						<span className="rounded bg-secondary px-2 py-0.5 text-[10px] font-bold uppercase tracking-tight">
+							{MANIFEST_LABELS[doc.manifestacaoAtual]}
+						</span>
 					) : (
 						<span className="rounded bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-tight text-amber-700">SEM MANIFESTAÇÃO</span>
 					)}
@@ -194,7 +201,9 @@ function InboundDocumentCard({ doc, isPending, onManifest }: InboundDocumentCard
 				</div>
 			</div>
 			<div className="flex w-full items-center gap-3 flex-wrap text-[0.7rem] font-medium text-muted-foreground">
-				<span title={doc.chaveAcesso} className="font-mono">{doc.chaveAcesso}</span>
+				<span title={doc.chaveAcesso} className="font-mono">
+					{doc.chaveAcesso}
+				</span>
 				{doc.emitenteCnpj ? <span>CNPJ {doc.emitenteCnpj}</span> : null}
 				{typeof doc.valorTotal === "number" ? <span>R$ {doc.valorTotal.toFixed(2)}</span> : null}
 				{doc.dataEmissao ? <span>{formatDateAsLocale(doc.dataEmissao, true)}</span> : null}
@@ -206,10 +215,18 @@ function InboundDocumentCard({ doc, isPending, onManifest }: InboundDocumentCard
 				) : null}
 			</div>
 			<div className="flex w-full items-center gap-1.5 flex-wrap">
-				<Button variant="ghost" size="xs" disabled={isPending} onClick={() => onManifest(doc.id, "CIENCIA")}>Ciência</Button>
-				<Button variant="ghost" size="xs" disabled={isPending} onClick={() => onManifest(doc.id, "CONFIRMACAO")}>Confirmar</Button>
-				<Button variant="ghost" size="xs" disabled={isPending} onClick={() => onManifest(doc.id, "DESCONHECIMENTO")}>Desconhecer</Button>
-				<Button variant="ghost" size="xs" disabled={isPending} onClick={() => onManifest(doc.id, "NAO_REALIZADA")}>Não realizada</Button>
+				<Button variant="ghost" size="xs" disabled={isPending} onClick={() => onManifest(doc.id, "CIENCIA")}>
+					Ciência
+				</Button>
+				<Button variant="ghost" size="xs" disabled={isPending} onClick={() => onManifest(doc.id, "CONFIRMACAO")}>
+					Confirmar
+				</Button>
+				<Button variant="ghost" size="xs" disabled={isPending} onClick={() => onManifest(doc.id, "DESCONHECIMENTO")}>
+					Desconhecer
+				</Button>
+				<Button variant="ghost" size="xs" disabled={isPending} onClick={() => onManifest(doc.id, "NAO_REALIZADA")}>
+					Não realizada
+				</Button>
 				{canDownloadXml ? (
 					<Button
 						variant="ghost"

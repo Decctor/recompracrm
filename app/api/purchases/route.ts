@@ -1,6 +1,7 @@
 import { resolveAccountingDefaultAccountIds } from "@/lib/finances/resolve-accounting-default-accounts";
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { DEFAULT_PAGE_SIZE, pageSizeInputSchema } from "@/lib/pagination";
 import { TAuthUserSession } from "@/lib/authentication/types";
 import { handleSimpleChildRowsProcessing } from "@/lib/db-utils";
 import { getAccountingEntryBalanceError } from "@/lib/finances/accounting-entry-balance";
@@ -64,6 +65,7 @@ const GetPurchasesInputSchema = z.object({
 			message: "Página deve ser maior que 0.",
 			path: ["page"],
 		}),
+	pageSize: pageSizeInputSchema(),
 	search: z
 		.string({
 			required_error: "Busca não informada.",
@@ -222,7 +224,7 @@ async function getPurchases({ input, session }: { input: TGetPurchasesInput; ses
 	if (status && status.length > 0) {
 		conditions.push(inArray(purchases.status, status as TPurchaseStatusEnum[]));
 	}
-	const PAGE_SIZE = 25;
+	const PAGE_SIZE = input.pageSize ?? DEFAULT_PAGE_SIZE;
 	const skip = PAGE_SIZE * (page - 1);
 	const limit = PAGE_SIZE;
 
@@ -281,6 +283,7 @@ async function getPurchasesRoute(request: NextRequest) {
 	const input = GetPurchasesInputSchema.parse({
 		id: searchParams.get("id") ?? undefined,
 		page: searchParams.get("page") ?? undefined,
+		pageSize: searchParams.get("pageSize"),
 		search: searchParams.get("search") ?? undefined,
 		status: searchParams.get("status") ?? undefined,
 	});
@@ -1045,7 +1048,11 @@ async function updatePurchase({ input, session }: { input: TUpdatePurchaseInput;
 			});
 			await tx
 				.update(purchases)
-				.set({ ...payloadPurchase, documentosImportados: buildPurchaseImportedDocumentsSnapshot(input.importedDocuments), dataUltimaAtualizacao: new Date() })
+				.set({
+					...payloadPurchase,
+					documentosImportados: buildPurchaseImportedDocumentsSnapshot(input.importedDocuments),
+					dataUltimaAtualizacao: new Date(),
+				})
 				.where(and(eq(purchases.id, purchaseId), eq(purchases.organizacaoId, userOrgId)));
 			// O congelamento vale para os itens (que geraram lotes), não para a programação de pagamento:
 			// reprogramar um pagamento após o recebimento é o caso de uso principal.

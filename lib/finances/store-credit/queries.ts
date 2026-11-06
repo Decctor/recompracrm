@@ -104,6 +104,7 @@ export type TStoreCreditClientsFilters = TStoreCreditOriginPeriod & {
 	sortField?: TStoreCreditSortField;
 	sortDirection?: TStoreCreditSortDirection;
 	page?: number;
+	pageSize?: number;
 };
 
 function buildStoreCreditHavingConditions({
@@ -152,7 +153,16 @@ function buildStoreCreditHavingConditions({
  * cliente numa página e o resto na seguinte, com os totais da linha errados nas duas.
  */
 export async function getStoreCreditClients(filters: TStoreCreditClientsFilters) {
-	const { organizacaoId, search, statuses = [], agingBuckets = [], sortField = "saldo", sortDirection = "desc", page = 1 } = filters;
+	const {
+		organizacaoId,
+		search,
+		statuses = [],
+		agingBuckets = [],
+		sortField = "saldo",
+		sortDirection = "desc",
+		page = 1,
+		pageSize = STORE_CREDIT_PAGE_SIZE,
+	} = filters;
 	const referenceDate = new Date();
 
 	const whereConditions = buildStoreCreditUniverseConditions(organizacaoId);
@@ -244,8 +254,8 @@ export async function getStoreCreditClients(filters: TStoreCreditClientsFilters)
 			.from(matchedSubquery),
 		buildGroupedQuery()
 			.orderBy(orderByExpression)
-			.limit(STORE_CREDIT_PAGE_SIZE)
-			.offset(STORE_CREDIT_PAGE_SIZE * (page - 1)),
+			.limit(pageSize)
+			.offset(pageSize * (page - 1)),
 	]);
 
 	const clientesMatched = matchedRows[0]?.count ?? 0;
@@ -267,7 +277,7 @@ export async function getStoreCreditClients(filters: TStoreCreditClientsFilters)
 			};
 		}),
 		clientesMatched,
-		totalPages: Math.ceil(clientesMatched / STORE_CREDIT_PAGE_SIZE),
+		totalPages: Math.ceil(clientesMatched / pageSize),
 		/** Totais do recorte inteiro — o que a linha de resumo acima da lista mostra. */
 		resumo: {
 			clientes: clientesMatched,
@@ -385,10 +395,7 @@ export async function getStoreCreditTitlesForExport({
 				.where(and(...whereConditions, extraCondition))
 				.groupBy(sales.clienteId)
 				.having(and(...havingConditions));
-		const clientMatch = or(
-			inArray(sales.clienteId, matchedClients()),
-			and(isNull(sales.clienteId), exists(matchedClients(isNull(sales.clienteId)))),
-		);
+		const clientMatch = or(inArray(sales.clienteId, matchedClients()), and(isNull(sales.clienteId), exists(matchedClients(isNull(sales.clienteId)))));
 		if (clientMatch) titleConditions.push(clientMatch);
 	}
 	if (!includeSettled) titleConditions.push(isNull(financialTransactions.dataEfetivacao));

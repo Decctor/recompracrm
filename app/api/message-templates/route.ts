@@ -24,6 +24,7 @@ import { getOrganizationWhatsappPhoneIds, getOrganizationWhatsappPhones } from "
 import { validateSurveyButtons } from "@/lib/message-templates/survey-validation";
 import { assertTemplateButtonsNotFrozen } from "@/lib/message-templates/survey-guards";
 import { createSimplifiedSearchCondition } from "@/lib/search";
+import { DEFAULT_PAGE_SIZE, pageSizeInputSchema } from "@/lib/pagination";
 
 // `metadados` é derivado das submissões à Meta e dos webhooks, nunca do cliente: aceitá-lo no payload
 // permitiria que uma aba aberta antes de uma desconexão regravasse entradas de telefones já removidos.
@@ -185,7 +186,12 @@ export async function updateMessageTemplate({ input, organizationId }: { input: 
 	assertMessageTemplateValidForWhatsapp(content);
 	if (input.messageTemplate.conteudo) {
 		await validateSurveyButtons({ organizationId, content });
-		await assertTemplateButtonsNotFrozen({ organizationId, templateId: existingTemplate.id, currentContent: existingTemplate.conteudo, nextContent: content });
+		await assertTemplateButtonsNotFrozen({
+			organizationId,
+			templateId: existingTemplate.id,
+			currentContent: existingTemplate.conteudo,
+			nextContent: content,
+		});
 	}
 	console.log("[UPDATE_MESSAGE_TEMPLATE] Content post-normalization:", JSON.stringify(content, null, 2));
 
@@ -307,10 +313,6 @@ async function deleteMessageTemplateRoute(request: NextRequest) {
 	return NextResponse.json(result, { status: 200 });
 }
 
-const DEFAULT_PAGE_SIZE = 25;
-/** Teto da janela que um consumidor pode pedir de uma vez. */
-const MAX_PAGE_SIZE = 100;
-
 export const GetMessageTemplatesInputSchema = z.object({
 	id: z
 		.string({
@@ -329,17 +331,7 @@ export const GetMessageTemplatesInputSchema = z.object({
 		})
 		.optional()
 		.nullable(),
-	pageSize: z
-		.union([z.string(), z.number()])
-		.nullable()
-		.transform((value) => {
-			const parsed = value === null || value === "" ? DEFAULT_PAGE_SIZE : Number(value);
-			if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_PAGE_SIZE;
-			return Math.min(Math.trunc(parsed), MAX_PAGE_SIZE);
-		})
-		// `.optional()` por último mantém a CHAVE opcional no tipo inferido — com o `.transform()`
-		// por fora, todo consumidor existente passaria a ser obrigado a informar `pageSize`.
-		.optional(),
+	pageSize: pageSizeInputSchema(),
 });
 export type TGetMessageTemplatesInput = z.infer<typeof GetMessageTemplatesInputSchema>;
 

@@ -2,6 +2,7 @@ import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { resolveClientPortfolioSeller } from "@/lib/client-portfolios/resolve-seller";
+import { DEFAULT_PAGE_SIZE, pageSizeInputSchema } from "@/lib/pagination";
 import { db } from "@/services/drizzle";
 import { clientSellerReferences, clients } from "@/services/drizzle/schema";
 import dayjs from "dayjs";
@@ -10,8 +11,6 @@ import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import z from "zod";
 
-const DEFAULT_PAGE_SIZE = 25;
-const MAX_PAGE_SIZE = 100;
 const MIN_PURCHASES_FOR_RELIABLE_CYCLE = 3;
 
 const GetPortfolioInputSchema = z.object({
@@ -30,16 +29,13 @@ const GetPortfolioInputSchema = z.object({
 		.optional()
 		.nullable()
 		.transform((v) => (v ? Math.max(1, Number(v)) : 1)),
-	limit: z
-		.string({ invalid_type_error: "Tipo inválido para limite." })
-		.optional()
-		.nullable()
-		.transform((v) => (v ? Math.min(MAX_PAGE_SIZE, Math.max(1, Number(v))) : DEFAULT_PAGE_SIZE)),
+	pageSize: pageSizeInputSchema(),
 });
 export type TGetPortfolioInput = z.infer<typeof GetPortfolioInputSchema>;
 
 async function getPortfolio({ input, session }: { input: TGetPortfolioInput; session: TAuthUserSession }) {
 	const { organizacaoId, seller } = await resolveClientPortfolioSeller({ session, explicitSellerId: input.vendedorId });
+	const PAGE_SIZE = input.pageSize ?? DEFAULT_PAGE_SIZE;
 
 	const baseConditions = [
 		eq(clientSellerReferences.organizacaoId, organizacaoId),
@@ -86,8 +82,8 @@ async function getPortfolio({ input, session }: { input: TGetPortfolioInput; ses
 		.innerJoin(clients, eq(clientSellerReferences.clienteId, clients.id))
 		.where(where)
 		.orderBy(desc(clientSellerReferences.scoreVinculo))
-		.limit(input.limit)
-		.offset((input.page - 1) * input.limit);
+		.limit(PAGE_SIZE)
+		.offset((input.page - 1) * PAGE_SIZE);
 
 	const now = dayjs();
 	const carteira = rows.map((row) => {
@@ -119,7 +115,7 @@ async function getPortfolio({ input, session }: { input: TGetPortfolioInput; ses
 			carteiraTotal,
 			pagination: {
 				total: filteredTotal,
-				totalPages: Math.max(1, Math.ceil(filteredTotal / input.limit)),
+				totalPages: Math.max(1, Math.ceil(filteredTotal / PAGE_SIZE)),
 				page: input.page,
 			},
 		},
@@ -140,7 +136,7 @@ async function getPortfolioRoute(request: NextRequest) {
 		vendedorId: searchParams.get("vendedorId"),
 		segmento: searchParams.get("segmento"),
 		page: searchParams.get("page"),
-		limit: searchParams.get("limit"),
+		pageSize: searchParams.get("pageSize"),
 	});
 	const result = await getPortfolio({ input, session });
 	return NextResponse.json(result, { status: 200 });

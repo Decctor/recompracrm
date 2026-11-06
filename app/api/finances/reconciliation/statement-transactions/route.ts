@@ -10,12 +10,14 @@ import { and, count, eq, gte, ilike, inArray, lte } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import z from "zod";
+import { DEFAULT_PAGE_SIZE, pageSizeInputSchema } from "@/lib/pagination";
 
 const GetStatementTransactionsInputSchema = z.object({
 	id: z.string({ invalid_type_error: "Tipo inválido para o ID da linha do extrato." }).optional().nullable(),
 	contaFinanceiraId: z.string({ invalid_type_error: "Tipo inválido para o ID da conta financeira." }).optional().nullable(),
 	importacaoId: z.string({ invalid_type_error: "Tipo inválido para o ID da importação." }).optional().nullable(),
 	page: z.coerce.number().min(1).default(1),
+	pageSize: pageSizeInputSchema(),
 	search: z.string().optional().nullable(),
 	statuses: z.string().optional().nullable(),
 	periodAfter: z
@@ -86,7 +88,7 @@ async function getStatementTransactions({ input, session }: { input: TGetStateme
 	if (input.periodBefore) conditions.push(lte(financialStatementTransactions.dataTransacao, input.periodBefore));
 	if (statusesArr.length > 0) conditions.push(inArray(financialStatementTransactions.status, statusesArr));
 
-	const PAGE_SIZE = 25;
+	const PAGE_SIZE = input.pageSize ?? DEFAULT_PAGE_SIZE;
 	const [countResult, transactions, statusCounts] = await Promise.all([
 		db
 			.select({ count: count() })
@@ -147,6 +149,7 @@ async function getStatementTransactionsRoute(request: NextRequest) {
 		contaFinanceiraId: searchParams.get("contaFinanceiraId") ?? undefined,
 		importacaoId: searchParams.get("importacaoId") ?? undefined,
 		page: searchParams.get("page") ?? 1,
+		pageSize: searchParams.get("pageSize"),
 		search: searchParams.get("search") ?? undefined,
 		statuses: searchParams.get("statuses") ?? undefined,
 		periodAfter: searchParams.get("periodAfter") ?? undefined,

@@ -75,16 +75,18 @@ export default function ClientPurchases({ clientId }: ClientPurchasesProps) {
 				<h1 className="text-sm font-bold tracking-tight uppercase">Compras do Cliente</h1>
 			</div>
 			<ClientPurchasesInlineFilters filters={purchasesParams} updateFilters={updatePurchasesParams} />
-			<div className="shrink-0">
-				<GeneralPaginationComponent
-					activePage={purchasesParams.page}
-					queryLoading={isPurchasesLoading}
-					selectPage={(page) => updatePurchasesParams({ page })}
-					totalPages={purchasesTotalPages}
-					itemsMatchedText={purchasesMatched > 1 ? `${purchasesMatched} compras encontradas.` : `${purchasesMatched} compra encontrada.`}
-					itemsShowingText={purchasesShowing > 1 ? `Mostrando ${purchasesShowing} compras.` : `Mostrando ${purchasesShowing} compra.`}
-				/>
-			</div>
+			{/* Fora da área com overflow: dentro dela o sticky prenderia na própria área, que cresce com a lista e não rola. */}
+			<GeneralPaginationComponent
+				activePage={purchasesParams.page}
+				queryLoading={isPurchasesLoading}
+				selectPage={(page) => updatePurchasesParams({ page })}
+				totalPages={purchasesTotalPages}
+				pageSize={purchasesParams.pageSize}
+				onPageSizeChange={(pageSize) => updatePurchasesParams({ pageSize, page: 1 })}
+				itemsMatchedText={purchasesMatched === 1 ? "1 compra encontrada" : `${purchasesMatched} compras encontradas`}
+				itemsShowingText={`mostrando ${purchasesShowing}`}
+				className="shrink-0"
+			/>
 			<div className="scrollbar-thin scrollbar-track-primary/10 scrollbar-thumb-primary/30 min-h-0 flex-1 flex flex-col overflow-y-auto gap-3">
 				{isPurchasesLoading ? <LoadingComponent /> : null}
 				{isPurchasesError ? <ErrorComponent msg={getErrorMessage(purchasesError)} /> : null}

@@ -86,6 +86,7 @@ async function fetchCampaignInteractionsLogs(input: TGetCampaignInteractionsInpu
 	try {
 		const searchParams = new URLSearchParams();
 		if (input.page) searchParams.set("page", input.page.toString());
+		if (input.pageSize) searchParams.set("pageSize", input.pageSize.toString());
 		if (input.search) searchParams.set("search", input.search);
 		if (input.status && input.status.length > 0) searchParams.set("status", input.status.join(","));
 		if (input.orderByField) searchParams.set("orderByField", input.orderByField);
@@ -276,6 +277,7 @@ async function fetchCampaignsConversions({ input }: { input: TGetCampaignConvers
 		const searchParams = new URLSearchParams();
 		if (input.campaignId) searchParams.set("campaignId", input.campaignId);
 		if (input.page) searchParams.set("page", input.page.toString());
+		if (input.pageSize) searchParams.set("pageSize", input.pageSize.toString());
 		if (input.search) searchParams.set("search", input.search);
 		if (input.types && input.types.length > 0) searchParams.set("types", input.types.join(","));
 		if (input.periodAfter) searchParams.set("periodAfter", input.periodAfter.toISOString());

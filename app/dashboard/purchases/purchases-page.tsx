@@ -45,53 +45,53 @@ export default function PurchasesPage({ membership }: PurchasesPageProps) {
 				</TabsTrigger>
 			</TabsList>
 			<TabsContent value="compras" className="w-full flex flex-col gap-3">
-			<div className="w-full flex items-center gap-2 flex-col-reverse lg:flex-row">
-				<Input
-					value={filters.search ?? ""}
-					placeholder="Pesquisar compra..."
-					onChange={(e) => updateFilters({ search: e.target.value })}
-					className="grow rounded-xl"
-				/>
+				<div className="w-full flex items-center gap-2 flex-col-reverse lg:flex-row">
+					<Input
+						value={filters.search ?? ""}
+						placeholder="Pesquisar compra..."
+						onChange={(e) => updateFilters({ search: e.target.value })}
+						className="grow rounded-xl"
+					/>
 
-				<Button className="flex items-center gap-2" size="sm" asChild>
-					<Link href={appRoutes.newPurchase()}>
-						<Plus className="w-4 h-4 min-w-4 min-h-4" />
-						NOVA COMPRA
-					</Link>
-				</Button>
-			</div>
-			<GeneralPaginationComponent
-				activePage={filters.page}
-				queryLoading={isLoading}
-				selectPage={(page) => updateFilters({ page })}
-				totalPages={purchasesTotalPages || 0}
-				itemsMatchedText={purchasesMatched > 0 ? `${purchasesMatched} compras encontradas.` : `${purchasesMatched} compra encontrada.`}
-				itemsShowingText={purchasesShowing > 0 ? `Mostrando ${purchasesShowing} compras.` : `Mostrando ${purchasesShowing} compra.`}
-			/>
-			{isLoading ? <LoadingComponent /> : null}
-			{isError ? <ErrorComponent msg={getErrorMessage(error)} /> : null}
-			{isSuccess && purchases ? (
-				purchases.length > 0 ? (
-					purchases.map((purchase, index: number) => (
-						<PurchasePageCard key={purchase.id} purchase={purchase} />
-					))
-				) : (
-					<Empty>
-						<EmptyHeader>
-							<EmptyMedia variant="icon">
-								<ShoppingCart />
-							</EmptyMedia>
-							<EmptyTitle>Nenhuma compra encontrada</EmptyTitle>
-							<EmptyDescription>Você não tem nenhuma compra ainda. Comece criando sua primeira compra.</EmptyDescription>
-						</EmptyHeader>
-						<EmptyContent className="flex-row justify-center gap-2">
-							<Button asChild>
-								<Link href={appRoutes.newPurchase()}>CRIAR NOVA COMPRA</Link>
-							</Button>
-						</EmptyContent>
-					</Empty>
-				)
-			) : null}
+					<Button className="flex items-center gap-2" size="sm" asChild>
+						<Link href={appRoutes.newPurchase()}>
+							<Plus className="w-4 h-4 min-w-4 min-h-4" />
+							NOVA COMPRA
+						</Link>
+					</Button>
+				</div>
+				<GeneralPaginationComponent
+					activePage={filters.page}
+					queryLoading={isLoading}
+					selectPage={(page) => updateFilters({ page })}
+					totalPages={purchasesTotalPages || 0}
+					pageSize={filters.pageSize}
+					onPageSizeChange={(pageSize) => updateFilters({ pageSize, page: 1 })}
+					itemsMatchedText={purchasesMatched === 1 ? "1 compra encontrada" : `${purchasesMatched} compras encontradas`}
+					itemsShowingText={`mostrando ${purchasesShowing}`}
+				/>
+				{isLoading ? <LoadingComponent /> : null}
+				{isError ? <ErrorComponent msg={getErrorMessage(error)} /> : null}
+				{isSuccess && purchases ? (
+					purchases.length > 0 ? (
+						purchases.map((purchase, index: number) => <PurchasePageCard key={purchase.id} purchase={purchase} />)
+					) : (
+						<Empty>
+							<EmptyHeader>
+								<EmptyMedia variant="icon">
+									<ShoppingCart />
+								</EmptyMedia>
+								<EmptyTitle>Nenhuma compra encontrada</EmptyTitle>
+								<EmptyDescription>Você não tem nenhuma compra ainda. Comece criando sua primeira compra.</EmptyDescription>
+							</EmptyHeader>
+							<EmptyContent className="flex-row justify-center gap-2">
+								<Button asChild>
+									<Link href={appRoutes.newPurchase()}>CRIAR NOVA COMPRA</Link>
+								</Button>
+							</EmptyContent>
+						</Empty>
+					)
+				) : null}
 			</TabsContent>
 			<TabsContent value="notas-recebidas" className="w-full">
 				<InboundDocumentsTab />

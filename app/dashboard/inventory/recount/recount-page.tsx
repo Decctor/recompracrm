@@ -90,10 +90,11 @@ export default function RecountPage({ organizationId, permissions }: RecountPage
 				queryLoading={isLoading}
 				selectPage={(page) => updateFilters({ page })}
 				totalPages={totalPages || 0}
-				itemsMatchedText={productsMatched === 1 ? "1 produto encontrado." : `${productsMatched} produtos encontrados.`}
-				itemsShowingText={rows.length === 1 ? "Mostrando 1 item." : `Mostrando ${rows.length} itens.`}
+				pageSize={filters.pageSize}
+				onPageSizeChange={(pageSize) => updateFilters({ pageSize, page: 1 })}
+				itemsMatchedText={productsMatched === 1 ? "1 produto encontrado" : `${productsMatched} produtos encontrados`}
+				itemsShowingText={rows.length === 1 ? "mostrando 1 item" : `mostrando ${rows.length} itens`}
 			/>
-
 			{isLoading ? (
 				<div className="flex flex-col gap-2">
 					{Array.from({ length: 8 }).map((_, index) => (

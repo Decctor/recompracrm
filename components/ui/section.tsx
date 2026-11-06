@@ -38,9 +38,11 @@ type SectionRootProps = {
  */
 function SectionRoot({ className, children }: SectionRootProps) {
 	return (
+		// `overflow-clip`, não `hidden`: recorta igual, mas não vira contexto de rolagem — com `hidden`,
+		// qualquer `sticky` lá dentro (ex.: a barra de paginação) para de grudar na tela.
 		<section
 			data-slot="section"
-			className={cn("flex w-full flex-col gap-6 overflow-hidden rounded-xl border border-border bg-card px-3 py-4 shadow-xs", className)}
+			className={cn("flex w-full flex-col gap-6 overflow-clip rounded-xl border border-border bg-card px-3 py-4 shadow-xs", className)}
 		>
 			{children}
 		</section>

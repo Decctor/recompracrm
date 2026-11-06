@@ -361,10 +361,11 @@ function ProductTransactionsSection({ product, enabled, canMoveInventory }: { pr
 				queryLoading={isLoading}
 				selectPage={(page) => updateFilters({ page })}
 				totalPages={totalPages || 0}
-				itemsMatchedText={transactionsMatched === 1 ? "1 movimentação registrada." : `${transactionsMatched} movimentações registradas.`}
-				itemsShowingText={transactions.length === 1 ? "Mostrando 1 movimentação." : `Mostrando ${transactions.length} movimentações.`}
+				pageSize={filters.pageSize}
+				onPageSizeChange={(pageSize) => updateFilters({ pageSize, page: 1 })}
+				itemsMatchedText={transactionsMatched === 1 ? "1 movimentação registrada" : `${transactionsMatched} movimentações registradas`}
+				itemsShowingText={`mostrando ${transactions.length}`}
 			/>
-
 			{isLoading ? (
 				<div className="flex flex-col gap-2">
 					{Array.from({ length: 4 }).map((_, index) => (

@@ -5,6 +5,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { appApiHandler } from "@/lib/app-api";
 import { runPagesRouteHandler, type PagesRouteHandler } from "@/lib/pages-route-compat";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 import { scheduleAddOnGroupPush, schedulePushForProduct } from "@/lib/integrations/ifood/sync/queue";
 import { editedAddOnGroupIds } from "@/lib/integrations/ifood/sync/option-sync";
 import type { TAuthUserSession } from "@/lib/authentication/types";
@@ -70,7 +71,7 @@ const STOCK_OUTBOUND_MOVEMENT_TYPES = ["SAIDA", "SAIDA_PRODUCAO", "DESCARTE"] as
 // (entradas/saídas) dentro do período filtrado e o lote ativo prioritário (FEFO — vence primeiro) com a contagem de lotes ativos.
 async function getProductsStockView({ input, userOrgId }: { input: TGetProductsDefaultInput; userOrgId: string }, db: ProductSearchDatabase) {
 	const now = new Date();
-	const PAGE_SIZE = 25;
+	const PAGE_SIZE = input.pageSize ?? DEFAULT_PAGE_SIZE;
 	const skip = PAGE_SIZE * (input.page - 1);
 
 	const conditions = buildProductFilterConditions(input, userOrgId);
@@ -376,7 +377,7 @@ async function queryProducts({ input, session }: GetProductsParams, db: ProductS
 		return getProductsStockView({ input, userOrgId }, db);
 	}
 
-	return queryProductsList({ input, userOrgId }, db);
+	return queryProductsList({ input, userOrgId, pageSize: input.pageSize ?? DEFAULT_PAGE_SIZE }, db);
 }
 
 export type TGetProductsOutput = Awaited<ReturnType<typeof getProducts>>;
@@ -390,6 +391,7 @@ async function getProductsRoute(request: NextRequest) {
 
 	const input = GetProductsInputSchema.parse({
 		page: request.nextUrl.searchParams.get("page") ?? undefined,
+		pageSize: request.nextUrl.searchParams.get("pageSize"),
 		id: request.nextUrl.searchParams.get("id") ?? undefined,
 		search: request.nextUrl.searchParams.get("search") ?? undefined,
 		groups: request.nextUrl.searchParams.get("groups") ?? undefined,
