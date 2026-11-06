@@ -44,24 +44,25 @@ import {
 	Users,
 	Wallet,
 } from "lucide-react";
+import Image from "next/image";
 import type { ReactNode } from "react";
 import { FaWhatsapp } from "react-icons/fa6";
 import { Sheet, SheetFooter } from "./_shared";
 
 /* -------------------------------------------------------------------------- */
-/*  Paleta BREU — verde de hortifruti + laranja de fruta como acento           */
+/*  Paleta BREU — madeira do barril, cobre da gravura e creme (extraída da logo) */
 /* -------------------------------------------------------------------------- */
 
 const BRAND = {
-	green: "#2E6B30",
-	greenDeep: "#18431B",
-	lime: "#D4ECA0",
-	// Verde-folha legível como texto sobre fundos claros (~6:1)
-	limeText: "#3D6B12",
-	orange: "#F29233",
-	// Laranja escurecido — legível como texto sobre fundos claros (~5:1)
-	orangeText: "#A04E0A",
-	peach: "#FFF3E6",
+	wood: "#5A3722",
+	woodDeep: "#2E1C12",
+	wheat: "#F0DFC2",
+	// Marrom-cobre legível como texto sobre fundos claros (~7:1)
+	wheatText: "#7A4E28",
+	copper: "#C8915A",
+	// Cobre escurecido — legível como texto sobre fundos claros (~5.7:1)
+	copperText: "#8A5A2B",
+	cream: "#FBF5EC",
 	ink: "#171717",
 	border: "#E5E5E5",
 	surface: "#F5F5F5",
@@ -76,7 +77,7 @@ function hexToRgba(hex: string, alpha: number) {
 }
 
 const heroGradient = {
-	backgroundImage: `linear-gradient(135deg, ${BRAND.green} 0%, ${BRAND.greenDeep} 100%)`,
+	backgroundImage: `linear-gradient(135deg, ${BRAND.wood} 0%, ${BRAND.woodDeep} 100%)`,
 };
 
 /* -------------------------------------------------------------------------- */
@@ -126,8 +127,8 @@ export function EmporioDoBreuProposal() {
 /*  Primitivos locais                                                          */
 /* -------------------------------------------------------------------------- */
 
-function Eyebrow({ children, tone = "green" }: { children: ReactNode; tone?: "green" | "orange" | "white" }) {
-	const color = tone === "orange" ? BRAND.orangeText : tone === "white" ? "rgba(255,255,255,0.75)" : BRAND.green;
+function Eyebrow({ children, tone = "wood" }: { children: ReactNode; tone?: "wood" | "copper" | "white" }) {
+	const color = tone === "copper" ? BRAND.copperText : tone === "white" ? "rgba(255,255,255,0.75)" : BRAND.wood;
 	return (
 		<span className="text-[0.68rem] font-extrabold uppercase tracking-[0.28em]" style={{ color }}>
 			{children}
@@ -138,7 +139,7 @@ function Eyebrow({ children, tone = "green" }: { children: ReactNode; tone?: "gr
 function SectionLabel({ icon: Icon, text }: { icon: LucideIcon; text: string }) {
 	return (
 		<div className="mb-3 flex items-center gap-2.5">
-			<div className="flex h-9 w-9 items-center justify-center rounded-xl" style={{ backgroundColor: hexToRgba(BRAND.green, 0.1), color: BRAND.green }}>
+			<div className="flex h-9 w-9 items-center justify-center rounded-xl" style={{ backgroundColor: hexToRgba(BRAND.wood, 0.1), color: BRAND.wood }}>
 				<Icon className="h-[18px] w-[18px]" />
 			</div>
 			<h2 className="text-lg font-black uppercase leading-none tracking-tight text-neutral-900">{text}</h2>
@@ -151,7 +152,7 @@ function SheetHeader({
 	icon: Icon,
 	title,
 	lead,
-	iconColor = BRAND.green,
+	iconColor = BRAND.wood,
 }: {
 	eyebrow: ReactNode;
 	icon: LucideIcon;
@@ -168,7 +169,7 @@ function SheetHeader({
 				<Icon className="h-8 w-8" />
 			</div>
 			<div className="min-w-0">
-				{typeof eyebrow === "string" ? <Eyebrow tone="orange">{eyebrow}</Eyebrow> : eyebrow}
+				{typeof eyebrow === "string" ? <Eyebrow tone="copper">{eyebrow}</Eyebrow> : eyebrow}
 				<h2 className="mt-1 text-[2.3rem] font-black leading-[1.02] tracking-tight text-balance">{title}</h2>
 				<p className="mt-2.5 max-w-xl text-[0.98rem] leading-relaxed text-neutral-600">{lead}</p>
 			</div>
@@ -181,7 +182,7 @@ function BenefitRow({ children }: { children: ReactNode }) {
 		<li className="flex items-start gap-2.5">
 			<span
 				className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full"
-				style={{ backgroundColor: hexToRgba(BRAND.green, 0.1), color: BRAND.green }}
+				style={{ backgroundColor: hexToRgba(BRAND.wood, 0.1), color: BRAND.wood }}
 			>
 				<Check className="h-3 w-3" strokeWidth={3.5} />
 			</span>
@@ -192,8 +193,8 @@ function BenefitRow({ children }: { children: ReactNode }) {
 
 function TakeawayStrip({ children }: { children: ReactNode }) {
 	return (
-		<div className="mt-auto mb-10 flex items-center gap-3.5 rounded-2xl px-6 py-4" style={{ backgroundColor: hexToRgba(BRAND.green, 0.07) }}>
-			<span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl text-white" style={{ backgroundColor: BRAND.green }}>
+		<div className="mt-auto mb-10 flex items-center gap-3.5 rounded-2xl px-6 py-4" style={{ backgroundColor: hexToRgba(BRAND.wood, 0.07) }}>
+			<span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl text-white" style={{ backgroundColor: BRAND.wood }}>
 				<ArrowRight className="h-5 w-5" />
 			</span>
 			<p className="text-[0.95rem] leading-snug text-neutral-700">
@@ -222,29 +223,10 @@ function DeviceFrame({ children, className = "" }: { children: ReactNode; classN
 	);
 }
 
-/* Marca BREU tipográfica — a proposta não depende do arquivo da logo */
-function BreuMark({ size = "md", onDark = false }: { size?: "sm" | "md" | "lg"; onDark?: boolean }) {
-	const word = size === "lg" ? "text-[5.2rem]" : size === "md" ? "text-[1.4rem]" : "text-[0.95rem]";
-	const tag = size === "lg" ? "text-[0.85rem] tracking-[0.32em]" : size === "md" ? "text-[0.5rem] tracking-[0.22em]" : "text-[0.42rem] tracking-[0.2em]";
+function BreuLogo({ px, className = "" }: { px: number; className?: string }) {
 	return (
-		<div className="flex flex-col leading-none">
-			<span className={`${word} font-black tracking-tight`} style={{ color: onDark ? "#fff" : BRAND.greenDeep }}>
-				BREU
-			</span>
-			<span className={`${tag} mt-1 font-extrabold uppercase`} style={{ color: onDark ? BRAND.lime : BRAND.orangeText }}>
-				Empório & Frutaria
-			</span>
-		</div>
-	);
-}
-
-function BreuBadge({ px = 36, rounded = "rounded-lg" }: { px?: number; rounded?: string }) {
-	return (
-		<div
-			className={`flex flex-shrink-0 items-center justify-center ${rounded} font-black text-white ring-1 ring-white/25`}
-			style={{ width: px, height: px, backgroundColor: BRAND.orange, fontSize: px * 0.42 }}
-		>
-			B
+		<div className={`relative flex-shrink-0 ${className}`} style={{ width: px, height: px }}>
+			<Image src="/logo-emporio-do-breu.webp" alt="BREU Empório e Frutaria" fill sizes={`${px}px`} className="object-contain" />
 		</div>
 	);
 }
@@ -256,18 +238,18 @@ function BreuBadge({ px = 36, rounded = "rounded-lg" }: { px?: number; rounded?:
 function CoverSheet() {
 	return (
 		<Sheet className="text-white">
-			<div className="relative flex h-full flex-1 flex-col justify-between px-14 py-16" style={{ backgroundColor: BRAND.green }}>
+			<div className="relative flex h-full flex-1 flex-col justify-between px-14 py-16" style={{ backgroundColor: BRAND.wood }}>
 				<div
 					className="pointer-events-none absolute inset-0 opacity-[0.1]"
 					style={{ backgroundImage: "radial-gradient(circle, #fff 1.2px, transparent 1.2px)", backgroundSize: "22px 22px" }}
 				/>
 				<div
 					className="pointer-events-none absolute -right-44 -top-44 h-[560px] w-[560px] rounded-full opacity-45"
-					style={{ background: `radial-gradient(circle, ${BRAND.orange} 0%, transparent 62%)` }}
+					style={{ background: `radial-gradient(circle, ${BRAND.copper} 0%, transparent 62%)` }}
 				/>
 				<div
 					className="pointer-events-none absolute -bottom-56 -left-36 h-[500px] w-[500px] rounded-full opacity-50"
-					style={{ background: `radial-gradient(circle, ${BRAND.greenDeep} 0%, transparent 62%)` }}
+					style={{ background: `radial-gradient(circle, ${BRAND.woodDeep} 0%, transparent 62%)` }}
 				/>
 
 				{/* topo */}
@@ -286,19 +268,22 @@ function CoverSheet() {
 				{/* centro */}
 				<div className="relative z-10 max-w-2xl">
 					<Eyebrow tone="white">Preparada com exclusividade para</Eyebrow>
-					<div className="mt-6">
-						<BreuMark size="lg" onDark />
+					<div className="mt-6 flex items-center gap-6">
+						<BreuLogo px={210} className="drop-shadow-[0_24px_40px_rgba(0,0,0,0.55)]" />
+						<div className="flex flex-col gap-1.5">
+							<span className="text-[0.72rem] font-extrabold uppercase tracking-[0.25em] text-white/55">Há mais de 40 anos</span>
+							<span className="text-[1.05rem] font-bold text-white/85">Av. 17 · Ituiutaba/MG</span>
+						</div>
 					</div>
-					<p className="mt-4 text-sm font-bold uppercase tracking-[0.2em] text-white/60">Desde 1983 · Ituiutaba/MG</p>
 					<h1 className="mt-9 text-[2.9rem] font-black leading-[0.98] tracking-tight text-balance">
 						Do caixa à fidelização,
 						<br />
-						<span style={{ color: BRAND.lime }}>tudo no mesmo sistema.</span>
+						<span style={{ color: BRAND.wheat }}>tudo no mesmo sistema.</span>
 					</h1>
 					<div className="mt-6 flex flex-wrap gap-2">
 						<span
 							className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-extrabold uppercase tracking-wide"
-							style={{ backgroundColor: BRAND.lime, color: BRAND.greenDeep }}
+							style={{ backgroundColor: BRAND.wheat, color: BRAND.woodDeep }}
 						>
 							<Store className="h-4 w-4" /> ERP com CRM incluso
 						</span>
@@ -358,7 +343,7 @@ function StartingPointSheet() {
 				<h2 className="mt-4 max-w-3xl text-[2.7rem] font-black leading-[1.02] tracking-tight text-balance">
 					O BREU já tem clientes fiéis e uma marca querida.
 					<br />
-					<span style={{ color: BRAND.green }}>Falta um sistema à altura.</span>
+					<span style={{ color: BRAND.wood }}>Falta um sistema à altura.</span>
 				</h2>
 				<p className="mt-5 max-w-2xl text-[1.02rem] leading-relaxed text-neutral-600">
 					Frescor diário, preço competitivo e um relacionamento que vai além do balcão. O que hoje acontece no grupo VIP, no Instagram e na memória da
@@ -370,7 +355,7 @@ function StartingPointSheet() {
 						<div key={stat.value} className="flex flex-col gap-3 rounded-2xl border border-neutral-200 bg-white p-6">
 							<div
 								className="flex h-11 w-11 items-center justify-center rounded-xl"
-								style={{ backgroundColor: hexToRgba(BRAND.green, 0.1), color: BRAND.green }}
+								style={{ backgroundColor: hexToRgba(BRAND.wood, 0.1), color: BRAND.wood }}
 							>
 								<stat.icon className="h-5 w-5" />
 							</div>
@@ -386,8 +371,8 @@ function StartingPointSheet() {
 					<SubHeading>O que o BREU já faz — e o sistema potencializa</SubHeading>
 					<div className="grid grid-cols-4 gap-3">
 						{ALREADY_DOING.map((item) => (
-							<div key={item.title} className="flex flex-col gap-2 rounded-2xl p-4" style={{ backgroundColor: BRAND.peach }}>
-								<item.icon className="h-5 w-5" style={{ color: BRAND.orangeText }} />
+							<div key={item.title} className="flex flex-col gap-2 rounded-2xl p-4" style={{ backgroundColor: BRAND.cream }}>
+								<item.icon className="h-5 w-5" style={{ color: BRAND.copperText }} />
 								<h4 className="text-[0.82rem] font-black leading-tight text-neutral-900">{item.title}</h4>
 								<p className="text-[0.72rem] leading-snug text-neutral-600">{item.body}</p>
 							</div>
@@ -404,13 +389,13 @@ function StartingPointSheet() {
 								A oferta vai para o grupo, a venda vai para o caixa — e não dá para saber quem comprou, o quê, nem quem parou de vir.
 							</p>
 						</div>
-						<div className="flex items-center justify-center px-2" style={{ backgroundColor: hexToRgba(BRAND.green, 0.06) }}>
-							<div className="flex h-11 w-11 items-center justify-center rounded-full text-white" style={{ backgroundColor: BRAND.green }}>
+						<div className="flex items-center justify-center px-2" style={{ backgroundColor: hexToRgba(BRAND.wood, 0.06) }}>
+							<div className="flex h-11 w-11 items-center justify-center rounded-full text-white" style={{ backgroundColor: BRAND.wood }}>
 								<ArrowRight className="h-5 w-5" />
 							</div>
 						</div>
-						<div className="flex flex-col justify-center gap-2 p-7" style={{ backgroundColor: hexToRgba(BRAND.lime, 0.45) }}>
-							<span className="text-[0.7rem] font-extrabold uppercase tracking-[0.2em]" style={{ color: BRAND.limeText }}>
+						<div className="flex flex-col justify-center gap-2 p-7" style={{ backgroundColor: hexToRgba(BRAND.wheat, 0.45) }}>
+							<span className="text-[0.7rem] font-extrabold uppercase tracking-[0.2em]" style={{ color: BRAND.wheatText }}>
 								Com o ERP RecompraCRM
 							</span>
 							<p className="text-[1.05rem] font-extrabold leading-snug text-neutral-900">
@@ -463,7 +448,7 @@ function CheckoutSheet() {
 						<div key={c.title} className="flex flex-col gap-2 rounded-2xl border border-neutral-200 bg-white p-4">
 							<div
 								className="flex h-10 w-10 items-center justify-center rounded-xl"
-								style={{ backgroundColor: hexToRgba(BRAND.green, 0.1), color: BRAND.green }}
+								style={{ backgroundColor: hexToRgba(BRAND.wood, 0.1), color: BRAND.wood }}
 							>
 								<c.icon className="h-5 w-5" />
 							</div>
@@ -490,11 +475,11 @@ function CheckoutSheet() {
 						</div>
 						<div
 							className="rounded-2xl border border-dashed p-5"
-							style={{ borderColor: hexToRgba(BRAND.orange, 0.7), backgroundColor: BRAND.peach }}
+							style={{ borderColor: hexToRgba(BRAND.copper, 0.7), backgroundColor: BRAND.cream }}
 						>
 							<div className="mb-1.5 flex items-center gap-2">
-								<Receipt className="h-4 w-4" style={{ color: BRAND.orangeText }} />
-								<span className="text-[0.7rem] font-black uppercase tracking-wider" style={{ color: BRAND.orangeText }}>
+								<Receipt className="h-4 w-4" style={{ color: BRAND.copperText }} />
+								<span className="text-[0.7rem] font-black uppercase tracking-wider" style={{ color: BRAND.copperText }}>
 									Orçamento para eventos
 								</span>
 							</div>
@@ -526,7 +511,7 @@ function PosMock() {
 			<div className="overflow-hidden rounded-[18px] bg-white">
 				<div className="flex items-center justify-between px-4 py-3 text-white" style={heroGradient}>
 					<div className="flex items-center gap-2">
-						<BreuBadge px={30} />
+						<BreuLogo px={32} />
 						<div className="flex flex-col leading-none">
 							<span className="text-[0.78rem] font-extrabold">BREU · Nova venda</span>
 							<span className="text-[0.58rem] font-medium text-white/60">Caixa 01 · balcão</span>
@@ -544,7 +529,7 @@ function PosMock() {
 								className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg"
 								style={
 									item.scale
-										? { backgroundColor: hexToRgba(BRAND.orange, 0.15), color: BRAND.orangeText }
+										? { backgroundColor: hexToRgba(BRAND.copper, 0.15), color: BRAND.copperText }
 										: { backgroundColor: BRAND.surface, color: BRAND.ink }
 								}
 							>
@@ -559,20 +544,20 @@ function PosMock() {
 					))}
 				</div>
 
-				<div className="mx-4 mt-1 flex items-center gap-2.5 rounded-xl px-3 py-2.5" style={{ backgroundColor: hexToRgba(BRAND.lime, 0.45) }}>
+				<div className="mx-4 mt-1 flex items-center gap-2.5 rounded-xl px-3 py-2.5" style={{ backgroundColor: hexToRgba(BRAND.wheat, 0.45) }}>
 					<div
 						className="flex h-8 w-8 items-center justify-center rounded-full text-[0.65rem] font-black"
-						style={{ backgroundColor: "#fff", color: BRAND.green }}
+						style={{ backgroundColor: "#fff", color: BRAND.wood }}
 					>
 						JR
 					</div>
 					<div className="flex min-w-0 flex-1 flex-col leading-tight">
 						<span className="text-[0.72rem] font-extrabold text-neutral-900">Juliana Rocha</span>
-						<span className="text-[0.58rem] font-semibold" style={{ color: BRAND.limeText }}>
+						<span className="text-[0.58rem] font-semibold" style={{ color: BRAND.wheatText }}>
 							R$ 6,40 de cashback disponível
 						</span>
 					</div>
-					<span className="rounded-full bg-white px-2 py-0.5 text-[0.54rem] font-black uppercase" style={{ color: BRAND.green }}>
+					<span className="rounded-full bg-white px-2 py-0.5 text-[0.54rem] font-black uppercase" style={{ color: BRAND.wood }}>
 						Usar
 					</span>
 				</div>
@@ -584,7 +569,7 @@ function PosMock() {
 					</div>
 					<div
 						className="flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-[0.72rem] font-extrabold uppercase text-white"
-						style={{ backgroundColor: BRAND.green }}
+						style={{ backgroundColor: BRAND.wood }}
 					>
 						<FileCheck2 className="h-4 w-4" /> Finalizar · NFC-e
 					</div>
@@ -655,7 +640,7 @@ function BackOfficeSheet() {
 				{/* cadeia da venda */}
 				<div className="mt-8 flex items-center gap-3 rounded-2xl px-5 py-4" style={heroGradient}>
 					<span className="flex flex-shrink-0 items-center gap-2 rounded-xl bg-white px-3.5 py-2.5 text-[0.78rem] font-black text-neutral-900">
-						<Receipt className="h-4 w-4" style={{ color: BRAND.green }} /> 1 venda
+						<Receipt className="h-4 w-4" style={{ color: BRAND.wood }} /> 1 venda
 					</span>
 					<ArrowRight className="h-4 w-4 flex-shrink-0 text-white/60" />
 					<div className="grid flex-1 grid-cols-4 gap-2">
@@ -664,7 +649,7 @@ function BackOfficeSheet() {
 								key={o.label}
 								className="flex items-center justify-center gap-1.5 rounded-xl bg-white/12 px-2 py-2.5 text-center text-[0.7rem] font-extrabold leading-tight text-white ring-1 ring-white/20"
 							>
-								<o.icon className="h-3.5 w-3.5 flex-shrink-0" style={{ color: BRAND.lime }} />
+								<o.icon className="h-3.5 w-3.5 flex-shrink-0" style={{ color: BRAND.wheat }} />
 								{o.label}
 							</span>
 						))}
@@ -677,7 +662,7 @@ function BackOfficeSheet() {
 							<div className="flex items-center gap-2.5">
 								<div
 									className="flex h-9 w-9 items-center justify-center rounded-xl"
-									style={{ backgroundColor: hexToRgba(BRAND.green, 0.1), color: BRAND.green }}
+									style={{ backgroundColor: hexToRgba(BRAND.wood, 0.1), color: BRAND.wood }}
 								>
 									<block.icon className="h-[18px] w-[18px]" />
 								</div>
@@ -686,7 +671,7 @@ function BackOfficeSheet() {
 							<ul className="flex flex-col gap-2">
 								{block.points.map((p) => (
 									<li key={p} className="flex items-start gap-2">
-										<Check className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" style={{ color: BRAND.limeText }} strokeWidth={3} />
+										<Check className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" style={{ color: BRAND.wheatText }} strokeWidth={3} />
 										<span className="text-[0.76rem] leading-snug text-neutral-700">{p}</span>
 									</li>
 								))}
@@ -700,7 +685,7 @@ function BackOfficeSheet() {
 						<SubHeading>Frescor sob controle</SubHeading>
 						<div className="flex flex-col gap-2 rounded-2xl border border-neutral-200 bg-white p-4">
 							<div className="mb-1 flex items-center gap-2">
-								<AlarmClock className="h-4 w-4" style={{ color: BRAND.orangeText }} />
+								<AlarmClock className="h-4 w-4" style={{ color: BRAND.copperText }} />
 								<span className="text-[0.68rem] font-black uppercase tracking-wide text-neutral-900">Lotes próximos do vencimento</span>
 							</div>
 							{EXPIRING_LOTS.map((lot) => (
@@ -715,8 +700,8 @@ function BackOfficeSheet() {
 										className="rounded-full px-2 py-0.5 text-[0.56rem] font-black uppercase tracking-wide"
 										style={
 											lot.urgent
-												? { backgroundColor: hexToRgba(BRAND.orange, 0.2), color: BRAND.orangeText }
-												: { backgroundColor: hexToRgba(BRAND.lime, 0.6), color: BRAND.limeText }
+												? { backgroundColor: BRAND.wood, color: "#fff" }
+												: { backgroundColor: BRAND.wheat, color: BRAND.wheatText }
 										}
 									>
 										{lot.when}
@@ -772,7 +757,7 @@ function CrmSheet() {
 						<div key={f.title} className="flex flex-col gap-2 rounded-2xl border border-neutral-200 bg-white p-4">
 							<div
 								className="flex h-9 w-9 items-center justify-center rounded-xl"
-								style={{ backgroundColor: hexToRgba(BRAND.lime, 0.6), color: BRAND.greenDeep }}
+								style={{ backgroundColor: hexToRgba(BRAND.wheat, 0.6), color: BRAND.woodDeep }}
 							>
 								<f.icon className="h-[18px] w-[18px]" />
 							</div>
@@ -820,7 +805,7 @@ function WhatsappCampaignMock() {
 		<DeviceFrame className="max-w-[320px] overflow-hidden">
 			<div className="overflow-hidden rounded-[18px]" style={{ backgroundColor: "#e6ddd4" }}>
 				<div className="flex items-center gap-3 px-4 py-3 text-white" style={{ backgroundColor: "#075E54" }}>
-					<BreuBadge px={34} rounded="rounded-full" />
+					<BreuLogo px={36} />
 					<div className="flex flex-col leading-none">
 						<span className="text-[0.84rem] font-bold">BREU Empório & Frutaria</span>
 						<span className="text-[0.6rem] text-white/70">conta comercial</span>
@@ -844,7 +829,7 @@ function WhatsappCampaignMock() {
 					</div>
 					<div
 						className="mt-1 self-center rounded-full px-3 py-1 text-[0.58rem] font-black uppercase tracking-wide text-white shadow"
-						style={{ backgroundColor: BRAND.green }}
+						style={{ backgroundColor: BRAND.wood }}
 					>
 						Convertido · compra de R$ 53,47
 					</div>
@@ -881,17 +866,17 @@ function GrowthManagerSheet() {
 				<SheetHeader
 					eyebrow={
 						<div className="flex items-center gap-2">
-							<Eyebrow tone="orange">Add-on</Eyebrow>
+							<Eyebrow tone="copper">Add-on</Eyebrow>
 							<span
 								className="rounded-full px-2.5 py-0.5 text-[0.58rem] font-black uppercase tracking-wider text-white"
-								style={{ backgroundColor: BRAND.orangeText }}
+								style={{ backgroundColor: BRAND.copperText }}
 							>
 								R$ {formatBRL(GROWTH_DISCOUNT)} de desconto
 							</span>
 						</div>
 					}
 					icon={HeartHandshake}
-					iconColor={BRAND.orangeText}
+					iconColor={BRAND.copperText}
 					title="Gestor de Crescimento"
 					lead="O sistema entrega as ferramentas. O gestor garante que elas virem venda: a gente planeja, cria, dispara e otimiza as campanhas do BREU — e a equipe segue focada no balcão."
 				/>
@@ -904,11 +889,11 @@ function GrowthManagerSheet() {
 								<div className="flex items-center gap-2">
 									<span
 										className="flex h-6 w-6 items-center justify-center rounded-full text-[0.65rem] font-black text-white"
-										style={{ backgroundColor: BRAND.green }}
+										style={{ backgroundColor: BRAND.wood }}
 									>
 										{i + 1}
 									</span>
-									<step.icon className="h-4 w-4" style={{ color: BRAND.orangeText }} />
+									<step.icon className="h-4 w-4" style={{ color: BRAND.copperText }} />
 								</div>
 								<h4 className="text-[0.78rem] font-black uppercase leading-tight tracking-tight text-neutral-900">{step.title}</h4>
 								<p className="text-[0.7rem] leading-snug text-neutral-600">{step.body}</p>
@@ -921,10 +906,10 @@ function GrowthManagerSheet() {
 					<SubHeading>Exemplos de calendário para o BREU</SubHeading>
 					<div className="grid grid-cols-3 gap-3">
 						{SEASONAL_CAMPAIGNS.map((c) => (
-							<div key={c.title} className="flex gap-3 rounded-2xl p-4" style={{ backgroundColor: BRAND.peach }}>
+							<div key={c.title} className="flex gap-3 rounded-2xl p-4" style={{ backgroundColor: BRAND.cream }}>
 								<span
 									className="flex h-fit flex-shrink-0 whitespace-nowrap rounded-lg px-2 py-1 text-[0.58rem] font-black uppercase tracking-wide text-white"
-									style={{ backgroundColor: BRAND.green }}
+									style={{ backgroundColor: BRAND.wood }}
 								>
 									{c.when}
 								</span>
@@ -1015,7 +1000,7 @@ function ImplementationSheet() {
 						<div key={item.title} className="flex items-start gap-3.5">
 							<div
 								className="mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl"
-								style={{ backgroundColor: hexToRgba(BRAND.lime, 0.6), color: BRAND.greenDeep }}
+								style={{ backgroundColor: hexToRgba(BRAND.wheat, 0.6), color: BRAND.woodDeep }}
 							>
 								<item.icon className="h-5 w-5" />
 							</div>
@@ -1036,10 +1021,10 @@ function ImplementationSheet() {
 					</div>
 				</div>
 
-				<div className="mt-8 rounded-2xl border border-dashed p-5" style={{ borderColor: hexToRgba(BRAND.orange, 0.7), backgroundColor: BRAND.peach }}>
+				<div className="mt-8 rounded-2xl border border-dashed p-5" style={{ borderColor: hexToRgba(BRAND.copper, 0.7), backgroundColor: BRAND.cream }}>
 					<div className="mb-3 flex items-center gap-2">
-						<ClipboardCheck className="h-4 w-4" style={{ color: BRAND.orangeText }} />
-						<span className="text-[0.7rem] font-black uppercase tracking-wider" style={{ color: BRAND.orangeText }}>
+						<ClipboardCheck className="h-4 w-4" style={{ color: BRAND.copperText }} />
+						<span className="text-[0.7rem] font-black uppercase tracking-wider" style={{ color: BRAND.copperText }}>
 							O que precisamos do BREU
 						</span>
 					</div>
@@ -1057,13 +1042,13 @@ function ImplementationSheet() {
 
 				<div
 					className="mt-6 flex items-center gap-4 rounded-2xl px-6 py-5"
-					style={{ backgroundColor: hexToRgba(BRAND.green, 0.08), border: `1px solid ${hexToRgba(BRAND.green, 0.25)}` }}
+					style={{ backgroundColor: hexToRgba(BRAND.wood, 0.08), border: `1px solid ${hexToRgba(BRAND.wood, 0.25)}` }}
 				>
-					<div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl text-white" style={{ backgroundColor: BRAND.green }}>
+					<div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl text-white" style={{ backgroundColor: BRAND.wood }}>
 						<Rocket className="h-6 w-6" />
 					</div>
 					<div className="min-w-0 flex-1">
-						<h4 className="text-[0.92rem] font-black uppercase tracking-tight" style={{ color: BRAND.green }}>
+						<h4 className="text-[0.92rem] font-black uppercase tracking-tight" style={{ color: BRAND.wood }}>
 							R$ {formatBRL(IMPLEMENTATION_FEE)} · uma única vez
 						</h4>
 						<p className="text-[0.84rem] leading-snug text-neutral-700">
@@ -1082,15 +1067,15 @@ function GoLiveStep({ step, last }: { step: { n: string; title: string; body: st
 		<>
 			<div
 				className="flex flex-col gap-1 rounded-2xl p-4"
-				style={last ? { backgroundColor: BRAND.green, color: "#fff" } : { backgroundColor: BRAND.surface, color: BRAND.ink }}
+				style={last ? { backgroundColor: BRAND.wood, color: "#fff" } : { backgroundColor: BRAND.surface, color: BRAND.ink }}
 			>
-				<span className="text-[0.62rem] font-black tracking-wider" style={{ color: last ? BRAND.lime : BRAND.orangeText }}>
+				<span className="text-[0.62rem] font-black tracking-wider" style={{ color: last ? BRAND.wheat : BRAND.copperText }}>
 					{step.n}
 				</span>
 				<span className="text-[0.84rem] font-black leading-tight">{step.title}</span>
 				<span className={`text-[0.68rem] leading-snug ${last ? "text-white/80" : "text-neutral-600"}`}>{step.body}</span>
 			</div>
-			{last ? null : <ArrowRight className="h-4 w-4 self-center" style={{ color: BRAND.orangeText }} />}
+			{last ? null : <ArrowRight className="h-4 w-4 self-center" style={{ color: BRAND.copperText }} />}
 		</>
 	);
 }
@@ -1161,9 +1146,9 @@ function InvestmentSheet() {
 				<div className="grid grid-cols-2 gap-4">
 					<div
 						className="flex items-start gap-3 rounded-xl px-5 py-3.5"
-						style={{ backgroundColor: BRAND.peach, border: `1px solid ${hexToRgba(BRAND.orange, 0.5)}` }}
+						style={{ backgroundColor: BRAND.cream, border: `1px solid ${hexToRgba(BRAND.copper, 0.5)}` }}
 					>
-						<BadgeCheck className="mt-0.5 h-4 w-4 flex-shrink-0" style={{ color: BRAND.orangeText }} />
+						<BadgeCheck className="mt-0.5 h-4 w-4 flex-shrink-0" style={{ color: BRAND.copperText }} />
 						<p className="text-[0.78rem] leading-snug text-neutral-700">
 							<strong>R$ {formatBRL(GROWTH_DISCOUNT)} de desconto por mês</strong> no Gestor de Crescimento: de R$ {formatBRL(GROWTH_LIST_MONTHLY)} por R${" "}
 							{formatBRL(GROWTH_MONTHLY)}, contratado junto com o ERP.
@@ -1171,9 +1156,9 @@ function InvestmentSheet() {
 					</div>
 					<div
 						className="flex items-start gap-3 rounded-xl px-5 py-3.5"
-						style={{ backgroundColor: hexToRgba(BRAND.green, 0.06), border: `1px dashed ${hexToRgba(BRAND.green, 0.35)}` }}
+						style={{ backgroundColor: hexToRgba(BRAND.wood, 0.06), border: `1px dashed ${hexToRgba(BRAND.wood, 0.35)}` }}
 					>
-						<ShieldCheck className="mt-0.5 h-4 w-4 flex-shrink-0" style={{ color: BRAND.green }} />
+						<ShieldCheck className="mt-0.5 h-4 w-4 flex-shrink-0" style={{ color: BRAND.wood }} />
 						<p className="text-[0.78rem] leading-snug text-neutral-700">
 							<strong>Sem surpresa.</strong> A implantação é cobrada uma única vez. A mensalidade cobre sistema, hospedagem, atualizações e suporte humano.
 						</p>
@@ -1186,7 +1171,7 @@ function InvestmentSheet() {
 						className="absolute inset-0 opacity-[0.12]"
 						style={{ backgroundImage: "radial-gradient(circle, #fff 1px, transparent 1px)", backgroundSize: "16px 16px" }}
 					/>
-					<div className="absolute right-0 top-0 h-full w-2" style={{ backgroundColor: BRAND.orange }} />
+					<div className="absolute right-0 top-0 h-full w-2" style={{ backgroundColor: BRAND.copper }} />
 					<div className="relative z-10 flex flex-col gap-4">
 						<div className="flex items-center gap-2">
 							<Star className="h-5 w-5" fill="currentColor" />
@@ -1254,13 +1239,13 @@ function InvestmentCard({
 		<div
 			className="relative flex flex-col gap-4 rounded-2xl bg-white p-6"
 			style={{
-				border: highlight ? `2px solid ${BRAND.orange}` : "1px solid #e5e5e5",
-				boxShadow: highlight ? `0 10px 30px -12px ${hexToRgba(BRAND.orangeText, 0.45)}` : undefined,
+				border: highlight ? `2px solid ${BRAND.copper}` : "1px solid #e5e5e5",
+				boxShadow: highlight ? `0 10px 30px -12px ${hexToRgba(BRAND.copperText, 0.45)}` : undefined,
 			}}
 		>
 			<span
 				className="absolute -top-3 right-5 inline-flex items-center gap-1 rounded-full px-3 py-1 text-[0.6rem] font-black uppercase tracking-wider"
-				style={highlight ? { backgroundColor: BRAND.orange, color: BRAND.ink } : { backgroundColor: BRAND.green, color: "#fff" }}
+				style={highlight ? { backgroundColor: BRAND.copper, color: BRAND.ink } : { backgroundColor: BRAND.wood, color: "#fff" }}
 			>
 				{tag}
 			</span>
@@ -1281,7 +1266,7 @@ function InvestmentCard({
 					</span>
 				)}
 				<div className="flex items-end gap-1">
-					<span className="text-3xl font-black tracking-tight tabular-nums" style={{ color: BRAND.green }}>
+					<span className="text-3xl font-black tracking-tight tabular-nums" style={{ color: BRAND.wood }}>
 						{price}
 					</span>
 					<span className="mb-1 text-[0.75rem] font-semibold text-neutral-400">{period}</span>
@@ -1298,7 +1283,7 @@ function InvestmentCard({
 							{excluded ? (
 								<Minus className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-neutral-400" />
 							) : (
-								<Check className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" style={{ color: BRAND.limeText }} />
+								<Check className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" style={{ color: BRAND.wheatText }} />
 							)}
 							<span className={`text-[0.74rem] leading-snug ${excluded ? "text-neutral-500" : "text-neutral-700"}`}>{feature}</span>
 						</li>
