@@ -4,7 +4,7 @@ import { isOrganizationStaffPhone, resolveClientPhoneBase } from "@/lib/chats/st
 import { AiAgentCapabilitiesSchema, AiAgentScopeSchema, isClientExplicitlyIncludedInAgentScope, isClientInAgentScope } from "@/schemas/ai-agents";
 import type { TAiAgentRunTriggerEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
-import { aiAgentRuns, chatMessages, chats } from "@/services/drizzle/schema";
+import { aiAgentRuns, aiAgents, chatMessages, chats } from "@/services/drizzle/schema";
 import { type SQL, and, asc, eq, gt, gte, inArray, ne, sql } from "drizzle-orm";
 import { type AnyPgColumn, alias } from "drizzle-orm/pg-core";
 import {
@@ -87,6 +87,23 @@ export function resolveAiResponseDelayMs(capacidades: unknown, { conteudoTexto =
 		esperaHumanoMs: parsed.atendimento.esperaHumanoMs,
 		conteudoTexto,
 	});
+}
+
+/**
+ * `inatividadeHoras` do agente da organização, para a ingestão aplicar a fronteira entre
+ * atendimentos (`markChatNeedsResponse`).
+ *
+ * Só leitura, sem provisionar: o caminho é o quente do webhook. Sem agente, ou com ele pausado, a
+ * regra não vale — é uma regra da IA, e quem não tem a IA atendendo não deve ver a conversa da
+ * equipe virar um atendimento sem dono.
+ */
+export async function resolveAgentInactivityHours({ organizationId }: { organizationId: string }): Promise<number | null> {
+	const agent = await db.query.aiAgents.findFirst({
+		where: eq(aiAgents.organizacaoId, organizationId),
+		columns: { status: true, capacidades: true },
+	});
+	if (!agent || agent.status !== "ATIVO") return null;
+	return parseJsonbWithFallback(AiAgentCapabilitiesSchema, agent.capacidades).atendimento.inatividadeHoras;
 }
 
 /**

@@ -1,3 +1,4 @@
+import { UNANSWERED_ATTENDANCE_TAKEOVER_REASON } from "@/lib/chats/attendance-policy";
 import { getCurrentChatAttendance } from "@/lib/chats/attendance-state";
 import { isWhatsappWindowOpen } from "@/lib/chats/whatsapp-window-status";
 import type { DB, DBTransaction } from "@/services/drizzle";
@@ -27,7 +28,7 @@ export type TChatRunContext = {
 		aniversario: Date | null;
 	};
 	conversa: Array<{ autor: string; texto: string; dataEnvio: Date | null }>;
-	atendimento: { status: string; responsavelTipo: string; resumo: string | null } | null;
+	atendimento: { status: string; responsavelTipo: string; resumo: string | null; transferenciaMotivo: string | null } | null;
 	tempo: {
 		agora: string;
 		fusoHorario: string;
@@ -224,7 +225,14 @@ export async function buildChatRunContext(
 					dataEnvio: message.dataEnvio,
 				}))
 				.filter((message) => message.texto.length > 0),
-			atendimento: attendance ? { status: attendance.status, responsavelTipo: attendance.responsavelTipo, resumo: attendance.resumo } : null,
+			atendimento: attendance
+				? {
+						status: attendance.status,
+						responsavelTipo: attendance.responsavelTipo,
+						resumo: attendance.resumo,
+						transferenciaMotivo: attendance.transferenciaMotivo,
+					}
+				: null,
 			tempo: {
 				agora: now.toISOString(),
 				fusoHorario: "America/Sao_Paulo (BRT, UTC-03:00)",
@@ -283,6 +291,14 @@ Escreva uma única mensagem curta e natural que retome a conversa sem pressionar
 Se, relendo a conversa, retomar não fizer sentido (o cliente já comprou, já recusou, reclamou, ou disse que não quer contato), devolva "mensagem" null e explique no "resumoAtendimento".`;
 }
 
+/**
+ * O agente assumiu porque o atendente que conduzia a conversa não respondeu a tempo
+ * (`esperaResponsavelMs`). Sem este aviso ele leria as mensagens da equipe como se fossem dele e
+ * poderia desmentir um combinado, ou prometer o que só o atendente pode cumprir.
+ */
+const UNANSWERED_COVERAGE_NOTE =
+	"- Você assumiu esta conversa porque o atendente da equipe que a conduzia não respondeu a tempo. As mensagens anteriores da equipe são dele: respeite o que ele combinou, não o contradiga e não repita o que ele já disse. Se o pedido depende de algo que só ele pode resolver, diga ao cliente que a equipe vai retomar e transfira se puder.";
+
 /** Serializa o contexto para o prompt do turno. */
 export function formatChatRunContext(context: TChatRunContext, options: TChatRunContextOptions = {}): string {
 	const client = context.cliente;
@@ -300,7 +316,7 @@ export function formatChatRunContext(context: TChatRunContext, options: TChatRun
 	const attendanceBlock = context.atendimento
 		? `\n## Atendimento em aberto\n- Status: ${context.atendimento.status}\n- Responsável: ${context.atendimento.responsavelTipo}${
 				context.atendimento.resumo ? `\n- Resumo acumulado: ${context.atendimento.resumo}` : ""
-			}\n`
+			}${context.atendimento.transferenciaMotivo === UNANSWERED_ATTENDANCE_TAKEOVER_REASON ? `\n${UNANSWERED_COVERAGE_NOTE}` : ""}\n`
 		: "";
 
 	return `## Cliente

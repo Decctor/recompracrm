@@ -188,6 +188,10 @@
 			"schedule": "*/5 * * * *"
 		},
 		{
+			"path": "/api/cron/cover-unanswered-attendances",
+			"schedule": "*/2 * * * *"
+		},
+		{
 			"path": "/api/cron/generate-recurring-entries",
 			"schedule": "20 0 * * *"
 		},

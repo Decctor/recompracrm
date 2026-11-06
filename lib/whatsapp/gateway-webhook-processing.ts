@@ -1,6 +1,6 @@
 import { ensureOrganizationAgent } from "@/lib/ai/agent/provisioning";
 import { captureSurveyReplySafely } from "@/lib/campaigns/surveys/capture";
-import { resolveAiResponseDelayMs } from "@/lib/chats/ai-trigger";
+import { resolveAgentInactivityHours, resolveAiResponseDelayMs } from "@/lib/chats/ai-trigger";
 import { dispatchAiTurn } from "@/lib/chats/ai-turn-dispatch";
 import { processChatMessageMedia } from "@/lib/chats/media-processing";
 import {
@@ -334,10 +334,19 @@ async function handleIncomingMessage(body: Extract<TGatewayWebhookBody, { event:
 	else if (data.content.mediaType === "video") midiaTipo = "VIDEO";
 	else if (data.content.mediaType === "audio") midiaTipo = "AUDIO";
 
+	// Capability de plano. Antes só `hubAtendimentos.acesso` era checado, e o atendimento por
+	// IA rodava para qualquer organização com um número habilitado.
+	const hasAiServiceAccess = connection.organizacao?.configuracao?.recursos?.iaAtendimento?.acesso ?? false;
+	// A fronteira entre atendimentos por inatividade é regra do agente: só vale onde ele atende. Uma
+	// resposta de pesquisa não é o cliente voltando a conversar.
+	const inatividadeHoras =
+		allowsAIService && hasAiServiceAccess && !surveyReply.captured ? await resolveAgentInactivityHours({ organizationId: organizacaoId }) : null;
+
 	const insertedMessage = await persistIncomingClientMessage({
 		organizacaoId,
 		chatId,
 		clienteId: clientId,
+		inatividadeHoras,
 		// O Gateway Interno não tem janela de 24h: a sessão do WhatsApp Web é o limite.
 		tipoConexao: "INTERNAL_GATEWAY",
 		whatsappMessageId: data.whatsappMessageId,
@@ -347,7 +356,14 @@ async function handleIncomingMessage(body: Extract<TGatewayWebhookBody, { event:
 		metadados: {
 			gatewayInterno: { sessaoId: sessionId },
 			...(surveyReply.captured
-				? { pesquisaResposta: { campanhaId: surveyReply.campanhaId, campoId: surveyReply.campoId, opcaoValor: surveyReply.opcaoValor, opcaoTitulo: surveyReply.opcaoTitulo } }
+				? {
+						pesquisaResposta: {
+							campanhaId: surveyReply.campanhaId,
+							campoId: surveyReply.campoId,
+							opcaoValor: surveyReply.opcaoValor,
+							opcaoTitulo: surveyReply.opcaoTitulo,
+						},
+					}
 				: {}),
 		},
 	});
@@ -376,9 +392,6 @@ async function handleIncomingMessage(body: Extract<TGatewayWebhookBody, { event:
 	// O cliente respondeu a uma pergunta, não abriu uma conversa: sem turno do agente.
 	if (surveyReply.captured) return;
 
-	// Capability de plano. Antes só `hubAtendimentos.acesso` era checado, e o atendimento por
-	// IA rodava para qualquer organização com um número habilitado.
-	const hasAiServiceAccess = connection.organizacao?.configuracao?.recursos?.iaAtendimento?.acesso ?? false;
 	if (!hasAiServiceAccess) {
 		console.log("[INTERNAL_WHATSAPP_WEBHOOK] Recurso de atendimento com IA indisponível para a organização:", organizacaoId);
 		return;

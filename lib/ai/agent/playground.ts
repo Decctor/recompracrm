@@ -147,7 +147,14 @@ export async function getPlaygroundState({ organizacaoId, chatId }: { organizaca
 
 	return {
 		mensagens: messages,
-		atendimento: attendance ? { status: attendance.status, responsavelTipo: attendance.responsavelTipo, resumo: attendance.resumo } : null,
+		atendimento: attendance
+			? {
+					status: attendance.status,
+					responsavelTipo: attendance.responsavelTipo,
+					resumo: attendance.resumo,
+					transferenciaMotivo: attendance.transferenciaMotivo,
+				}
+			: null,
 		ultimaExecucao: lastRun,
 		execucaoAtiva: lastRun ? lastRun.status === "PENDENTE" || lastRun.status === "RODANDO" : false,
 	};

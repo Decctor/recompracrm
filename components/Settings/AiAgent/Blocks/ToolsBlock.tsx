@@ -60,6 +60,44 @@ const TOOLS: Array<{ name: TAiAgentToolNameEnum; title: string; description: str
 	},
 ];
 
+/** Valor do select para um campo numérico anulável: `null` vira a opção "desligado". */
+const OFF_OPTION_VALUE = "DESLIGADO";
+
+type TNullableNumberOption = { id: string; value: string; label: string };
+
+const INACTIVITY_OPTIONS: TNullableNumberOption[] = [
+	{ id: "4", value: "4", label: "4 horas sem conversa" },
+	{ id: "6", value: "6", label: "6 horas sem conversa" },
+	{ id: "8", value: "8", label: "8 horas sem conversa" },
+	{ id: "12", value: "12", label: "12 horas sem conversa" },
+	{ id: "24", value: "24", label: "24 horas sem conversa" },
+	// Sem a regra, quem encerra é o cron de inatividade (`close-stale-attendances`).
+	{ id: OFF_OPTION_VALUE, value: OFF_OPTION_VALUE, label: "Só no encerramento automático (36 horas)" },
+];
+
+const OWNER_WAIT_OPTIONS: TNullableNumberOption[] = [
+	{ id: OFF_OPTION_VALUE, value: OFF_OPTION_VALUE, label: "Nunca assumir" },
+	{ id: "300000", value: "300000", label: "5 minutos" },
+	{ id: "600000", value: "600000", label: "10 minutos" },
+	{ id: "900000", value: "900000", label: "15 minutos" },
+	{ id: "1800000", value: "1800000", label: "30 minutos" },
+	{ id: "3600000", value: "3600000", label: "60 minutos" },
+];
+
+function toOptionValue(value: number | null): string {
+	return value === null ? OFF_OPTION_VALUE : String(value);
+}
+
+function fromOptionValue(value: string): number | null {
+	return value === OFF_OPTION_VALUE ? null : Number(value);
+}
+
+/** Um valor gravado fora da lista (via API ou versão antiga da tela) ainda aparece selecionado. */
+function withCurrentOption(options: TNullableNumberOption[], current: number | null, label: (value: number) => string) {
+	if (current === null || options.some((option) => option.value === String(current))) return options;
+	return [...options, { id: String(current), value: String(current), label: label(current) }];
+}
+
 export default function ToolsBlock({
 	state,
 	diagnosticoComercial,
@@ -212,6 +250,38 @@ export default function ToolsBlock({
 							<p className="text-xs text-muted-foreground">Entre 1 e 5 minutos sem resposta da equipe antes de o agente assumir.</p>
 						</div>
 					) : null}
+				</div>
+
+				<div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+					<div className="flex flex-col gap-1">
+						<SelectInput
+							label="NOVO ATENDIMENTO APÓS"
+							value={toOptionValue(atendimento.inatividadeHoras)}
+							resetOptionLabel="Selecione"
+							options={withCurrentOption(INACTIVITY_OPTIONS, atendimento.inatividadeHoras, (hours) => `${hours} horas sem conversa`)}
+							handleChange={(value) => updateAttendanceSettings({ inatividadeHoras: fromOptionValue(value) })}
+							onReset={() => updateAttendanceSettings({ inatividadeHoras: 12 })}
+						/>
+						<p className="text-xs text-muted-foreground">
+							Quando o cliente volta depois desse tempo, começa um atendimento novo e o agente responde, mesmo que a conversa anterior tenha sido com a
+							equipe ou pelo celular.
+						</p>
+					</div>
+
+					<div className="flex flex-col gap-1">
+						<SelectInput
+							label="SE O RESPONSÁVEL NÃO RESPONDER EM"
+							value={toOptionValue(atendimento.esperaResponsavelMs)}
+							resetOptionLabel="Selecione"
+							options={withCurrentOption(OWNER_WAIT_OPTIONS, atendimento.esperaResponsavelMs, (ms) => `${Math.round(ms / 60000)} minutos`)}
+							handleChange={(value) => updateAttendanceSettings({ esperaResponsavelMs: fromOptionValue(value) })}
+							onReset={() => updateAttendanceSettings({ esperaResponsavelMs: null })}
+						/>
+						<p className="text-xs text-muted-foreground">
+							Com a conversa nas mãos de alguém da equipe (no hub ou pelo celular), o agente assume e responde a mensagem que ficou esse tempo sem resposta.
+							Uma conversa que o próprio agente transferiu só volta para ele depois que alguém da equipe respondeu.
+						</p>
+					</div>
 				</div>
 
 				<div className="grid grid-cols-1 gap-4 md:grid-cols-3">

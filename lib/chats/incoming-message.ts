@@ -105,7 +105,15 @@ type TPersistIncomingParams = {
  * Devolve `null` quando a mensagem já existe (reentrega do provedor, índice 0057): nesse
  * caso todo o efeito colateral já aconteceu na primeira entrega e nada downstream deve rodar.
  */
-export async function persistIncomingClientMessage(input: TPersistIncomingParams) {
+export async function persistIncomingClientMessage(
+	input: TPersistIncomingParams & {
+		/**
+		 * `capacidades.atendimento.inatividadeHoras` do agente, quando ele atende este chat: o cliente que
+		 * volta depois desse silêncio abre um atendimento novo. Ausente = a regra não vale aqui.
+		 */
+		inatividadeHoras?: number | null;
+	},
+) {
 	const now = input.now ?? new Date();
 
 	// Mensagem e denormalização do chat na mesma transação: se o UPDATE falhasse depois do INSERT, a
@@ -167,6 +175,7 @@ export async function persistIncomingClientMessage(input: TPersistIncomingParams
 			organizacaoId: input.organizacaoId,
 			chatId: input.chatId,
 			messageDate: inserted.dataEnvio,
+			inatividadeHoras: input.inatividadeHoras,
 			now,
 		}),
 		// O cliente falou: uma retomada agendada perdeu o motivo (o turno desta mensagem pode agendar outra).

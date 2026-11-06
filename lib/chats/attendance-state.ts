@@ -3,6 +3,7 @@ import type { DB, DBTransaction } from "@/services/drizzle";
 import { aiAgentFollowUps, chatAssignments, chats } from "@/services/drizzle/schema";
 import { AI_AGENT_FOLLOW_UP_CANCEL_REASONS } from "@/schemas/ai-agents";
 import { cancelScheduledFollowUp, cancelScheduledFollowUpsForChats } from "@/lib/ai/agent/follow-up-cancel";
+import { UNANSWERED_ATTENDANCE_TAKEOVER_REASON, isAttendanceInactive } from "@/lib/chats/attendance-policy";
 import { and, eq, inArray, lt, notExists, notInArray, sql } from "drizzle-orm";
 
 /**
@@ -97,9 +98,49 @@ async function ensureCurrentAttendance(
 	return getCurrentChatAttendance(db, input);
 }
 
-/** Mensagem recebida do cliente: reabre a pendência do atendimento. */
-export async function markChatNeedsResponse(db: TAttendanceDb, input: { organizacaoId: string; chatId: string; messageDate: Date; now?: Date }) {
+/**
+ * Encerra um atendimento parado para que a mensagem que chegou abra outro. Compare-and-set sobre o
+ * status: dois webhooks da mesma rajada podem chegar aqui juntos, e só um encerra.
+ */
+async function closeInactiveAttendance(db: TAttendanceDb, input: { attendanceId: string; chatId: string; now: Date }) {
+	const [closed] = await db
+		.update(chatAssignments)
+		.set({
+			status: "ENCERRADO",
+			// Mesmo par do cron de inatividade: resultado INATIVIDADE (sem sobrescrever um já gravado) e
+			// `encerradoPorUsuarioId` nulo é o que distingue o fechamento automático do manual.
+			resultado: sql`COALESCE(${chatAssignments.resultado}, 'INATIVIDADE')`,
+			dataEncerramento: input.now,
+			dataLiberacao: input.now,
+		})
+		.where(and(eq(chatAssignments.id, input.attendanceId), notInArray(chatAssignments.status, CLOSED_ATTENDANCE_STATUSES)))
+		.returning({ id: chatAssignments.id });
+
+	if (closed) await cancelScheduledFollowUp(db, { chatId: input.chatId, motivo: AI_AGENT_FOLLOW_UP_CANCEL_REASONS.ATENDIMENTO_ENCERRADO });
+	return !!closed;
+}
+
+/**
+ * Mensagem recebida do cliente: reabre a pendência do atendimento.
+ *
+ * Com `inatividadeHoras`, é também a fronteira entre atendimentos: se o atual ficou parado por mais
+ * que isso, ele é encerrado e a mensagem abre um novo, sem dono. É o que deixa o agente atender o
+ * cliente que volta na manhã seguinte a uma conversa com a equipe ou pelo celular — sem esperar o
+ * cron de 36h, que varre de hora em hora sem saber que o cliente voltou.
+ */
+export async function markChatNeedsResponse(
+	db: TAttendanceDb,
+	input: { organizacaoId: string; chatId: string; messageDate: Date; inatividadeHoras?: number | null; now?: Date },
+) {
 	const now = input.now ?? new Date();
+
+	if (input.inatividadeHoras) {
+		const previous = await getCurrentChatAttendance(db, input);
+		if (previous && isAttendanceInactive({ attendance: previous, messageDate: input.messageDate, inatividadeHoras: input.inatividadeHoras })) {
+			await closeInactiveAttendance(db, { attendanceId: previous.id, chatId: input.chatId, now });
+		}
+	}
+
 	const current = await ensureCurrentAttendance(db, { ...input, now, status: "ABERTO" });
 	if (!current) return null;
 
@@ -409,6 +450,63 @@ export async function assignChatAttendanceToAgent(
 		.returning();
 
 	return updated ?? null;
+}
+
+/**
+ * O agente assume uma conversa da equipe porque o responsável não respondeu dentro de
+ * `esperaResponsavelMs` (cron `cover-unanswered-attendances`).
+ *
+ * Compare-and-set sobre o dono **e** a pendência observados: o UPDATE só casa se a conversa ainda
+ * é de quem lemos e a mensagem do cliente continua sem resposta. Se o atendente respondeu (ou outra
+ * pessoa assumiu) entre a leitura e o UPDATE, zero linhas casam e o agente não entra — responder
+ * por cima de um humano que acabou de falar é o pior defeito possível aqui.
+ *
+ * `atribuidoPorUsuarioId` vai a nulo (nenhum humano entregou a conversa) e o motivo registra a
+ * cobertura, para a trilha e para o prompt do turno saberem por que o agente está ali.
+ */
+export async function claimUnansweredAttendanceForAgent(
+	db: TAttendanceDb,
+	input: {
+		organizacaoId: string;
+		attendanceId: string;
+		agenteId: string;
+		observed: {
+			responsavelTipo: (typeof chatAssignments.$inferSelect)["responsavelTipo"];
+			responsavelUsuarioId: string | null;
+			dataUltimaEntradaCliente: Date;
+		};
+		now?: Date;
+	},
+) {
+	const now = input.now ?? new Date();
+
+	const [claimed] = await db
+		.update(chatAssignments)
+		.set({
+			responsavelTipo: "AGENTE",
+			responsavelUsuarioId: null,
+			responsavelAgenteId: input.agenteId,
+			atribuidoPorUsuarioId: null,
+			transferidoParaUsuarioId: null,
+			transferenciaMotivo: UNANSWERED_ATTENDANCE_TAKEOVER_REASON,
+			dataAtribuicao: now,
+			status: "ABERTO",
+			dataLiberacao: null,
+		})
+		.where(
+			and(
+				eq(chatAssignments.id, input.attendanceId),
+				eq(chatAssignments.organizacaoId, input.organizacaoId),
+				notInArray(chatAssignments.status, CLOSED_ATTENDANCE_STATUSES),
+				eq(chatAssignments.responsavelTipo, input.observed.responsavelTipo),
+				sql`${chatAssignments.responsavelUsuarioId} is not distinct from ${input.observed.responsavelUsuarioId}`,
+				eq(chatAssignments.dataUltimaEntradaCliente, input.observed.dataUltimaEntradaCliente),
+				sql`(${chatAssignments.dataUltimaResposta} is null or ${chatAssignments.dataUltimaResposta} < ${chatAssignments.dataUltimaEntradaCliente})`,
+			),
+		)
+		.returning();
+
+	return claimed ?? null;
 }
 
 export async function transferChatAttendance(

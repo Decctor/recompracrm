@@ -212,6 +212,26 @@ export const AiAgentCapabilitiesSchema = z
 					.min(30000, "A espera pela equipe mínima é 30 segundos.")
 					.max(300000, "A espera pela equipe máxima é 5 minutos.")
 					.default(180000),
+				// Silêncio que encerra o atendimento: o cliente que volta depois disso abre um atendimento
+				// novo, sem dono, e o agente pode atender — mesmo que o anterior fosse da equipe ou do
+				// celular. null deixa só o cron de 36h encerrar (`lib/chats/attendance-policy.ts`).
+				inatividadeHoras: z
+					.number({ invalid_type_error: "Tipo não válido para as horas de inatividade." })
+					.int("As horas de inatividade devem ser inteiras.")
+					.min(1, "O mínimo é 1 hora de inatividade.")
+					.max(36, "O máximo é 36 horas de inatividade.")
+					.nullable()
+					.default(12),
+				// Com a conversa nas mãos de alguém da equipe (hub ou celular), quanto a mensagem do cliente
+				// pode ficar sem resposta antes de o agente assumir. null = nunca assume. Desligada por
+				// padrão: tirar a conversa de alguém é decisão da organização.
+				esperaResponsavelMs: z
+					.number({ invalid_type_error: "Tipo não válido para a espera pelo responsável." })
+					.int("A espera pelo responsável deve ser inteira.")
+					.min(300000, "A espera pelo responsável mínima é 5 minutos.")
+					.max(3600000, "A espera pelo responsável máxima é 60 minutos.")
+					.nullable()
+					.default(null),
 			})
 			.default({}),
 	})
