@@ -19,6 +19,7 @@ Planos: dois caminhos com a mesma plataforma completa. **Plataforma** (self-serv
 - [Segmentos](https://www.recompracrm.com.br/segments): programa de fidelidade aplicado a cada tipo de loja — restaurantes, delivery, pet shops, farmácias, moda e mais de 20 segmentos, com configuração sugerida de cashback por segmento.
 - [ERP](https://www.recompracrm.com.br/erp): PDV, NFC-e e NF-e, compras, estoque, financeiro, mesas e comandas e loja digital, integrados ao cashback.
 - [PDV](https://www.recompracrm.com.br/erp/pdv): frente de caixa no navegador com leitor de código de barras, balança, maquininha Stone, NFC-e e fechamento de caixa com conferência cega.
+- [Cardápio digital](https://www.recompracrm.com.br/erp/cardapio-digital): loja digital com link próprio para pedidos de entrega e retirada, sem comissão por pedido, com quadro de pedidos, acompanhamento pelo cliente e resgate de cashback no checkout.
 - [Blog](https://www.recompracrm.com.br/blog): artigos sobre fidelização, cashback e retenção no varejo.
 
 ## Funcionalidades

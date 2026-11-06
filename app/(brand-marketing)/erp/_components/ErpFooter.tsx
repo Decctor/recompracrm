@@ -10,6 +10,7 @@ const GROUPS = [
 			{ label: "Ponto de Interação", href: "/features/ponto-de-interacao" },
 			{ label: "ERP", href: "/erp" },
 			{ label: "PDV", href: "/erp/pdv" },
+			{ label: "Cardápio digital", href: "/erp/cardapio-digital" },
 			{ label: "Planos", href: "/#planos" },
 		],
 	},

@@ -17,7 +17,7 @@ const BALCAO_BULLETS = [
 const LOJA_BULLETS = [
 	"Link próprio, com capa, logo e as cores da sua marca",
 	"Retirada e entrega, com prazo e pedido mínimo",
-	"Pedidos chegam para a equipe confirmar e preparar",
+	"Pedidos chegam confirmados no quadro da equipe",
 	"Quem compra pela loja entra na base e no cashback",
 ];
 
@@ -67,10 +67,13 @@ export function ChannelShowcase() {
 								<div className="max-w-[440px]">
 									<h3 className={H3}>Uma loja com o seu link, as suas cores e o seu cardápio.</h3>
 									<p className={LEAD}>
-										O cliente escolhe os produtos, define retirada ou entrega e envia o pedido. A equipe confirma no painel e a venda segue o mesmo caminho do
-										balcão.
+										O cliente escolhe os produtos, define retirada ou entrega e envia o pedido. A equipe prepara pelo quadro de pedidos e a venda segue o mesmo
+										caminho do balcão.
 									</p>
 									<CheckList items={LOJA_BULLETS} />
+									<Link href="/erp/cardapio-digital" className="mt-7 inline-flex text-[15px] font-medium text-[#24549c] hover:underline">
+										Conhecer o cardápio digital em detalhe →
+									</Link>
 								</div>
 							</div>
 						),
