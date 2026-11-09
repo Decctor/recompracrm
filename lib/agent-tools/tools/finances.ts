@@ -70,9 +70,9 @@ export const getFinancialAccountsTool = defineAgentTool({
 		[
 			"Lista as contas financeiras da organização (caixa, banco, carteira digital, cartão).",
 			"`ehClearingDeCanal` marca contas de repasse de canal (ex.: iFood): dinheiro ali está em posse do canal até o repasse e NUNCA aparece em extrato bancário da loja.",
-			"É o ponto de partida da conciliação: descubra aqui o `contaFinanceiraId` antes de importar um extrato ou filtrar transações.",
+			"O `contaFinanceiraId` usado na importação de extratos e no filtro de transações vem desta lista.",
 			"Não retorna saldos — saldo é pergunta de relatório, não desta listagem.",
-			actor.mode === "PLATAFORMA" ? "Informe `organizacaoId` (id ou slug)." : "",
+			actor.mode === "PLATAFORMA" ? "`organizacaoId` (id ou slug) escolhe a organização." : "",
 		]
 			.filter(Boolean)
 			.join(" "),
@@ -125,11 +125,11 @@ export const getFinancialTransactionsTool = defineAgentTool({
 			"Semântica que importa: `origem: 'TROCO'` é dinheiro devolvido ao cliente (SAÍDA) e abate o método que o devolveu;",
 			"`origem: 'TAXA_CANAL'` é taxa retida pelo canal; `conta.ehClearingDeCanal: true` significa dinheiro em posse do canal (ex.: iFood), que não aparece em extrato da loja.",
 			"O período filtra por `coalesce(dataEfetivacao, dataPrevisao)`. Todas as datas saem em hora LOCAL da operação (America/Sao_Paulo), prontas para comparar com extratos.",
-			"Para conciliar: use `apenasSemConciliacao` e case por valor + proximidade de horário; com valores repetidos, resolva a atribuição globalmente pelo menor delta (execute código), nunca linha a linha na ordem.",
-			"Use os agregados do período em vez de somar as linhas devolvidas, que são só uma página.",
-			`Devolve no máximo ${MAX_LIMIT} transações por chamada (padrão ${DEFAULT_LIMIT}); use \`pagina\` para avançar.`,
+			"`apenasSemConciliacao` restringe às transações ainda sem conciliação.",
+			"Os agregados devolvidos cobrem o período inteiro; as linhas são só uma página.",
+			`Devolve no máximo ${MAX_LIMIT} transações por chamada (padrão ${DEFAULT_LIMIT}); \`pagina\` avança.`,
 			PERIOD_DESCRIPTION,
-			actor.mode === "PLATAFORMA" ? "Informe `organizacaoId` (id ou slug)." : "",
+			actor.mode === "PLATAFORMA" ? "`organizacaoId` (id ou slug) escolhe a organização." : "",
 		]
 			.filter(Boolean)
 			.join(" "),
@@ -278,7 +278,7 @@ export const getStatementTransactionsTool = defineAgentTool({
 			"A idempotência é por conta + conteúdo: reimportar o mesmo extrato não duplica linhas, então esta é a fonte da verdade do que já foi importado.",
 			"Datas em hora LOCAL da operação (America/Sao_Paulo).",
 			PERIOD_DESCRIPTION,
-			actor.mode === "PLATAFORMA" ? "Informe `organizacaoId` (id ou slug)." : "",
+			actor.mode === "PLATAFORMA" ? "`organizacaoId` (id ou slug) escolhe a organização." : "",
 		]
 			.filter(Boolean)
 			.join(" "),

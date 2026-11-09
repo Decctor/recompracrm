@@ -40,8 +40,8 @@ export const HELP_ARTICLES: THelpArticle[] = [
 		connectorCode: "AGENT_CLAUDE",
 		readingTime: "2 min",
 		stepCount: 6,
-		updatedAt: "2026-08-30",
-		requirements: ["Uma conta ativa no Claude", "Acesso ao RecompraCRM", "Permissão para acessar a organização desejada"],
+		updatedAt: "2026-11-09",
+		requirements: ["Uma conta ativa no Claude", "Acesso ao RecompraCRM", "Permissão para editar a empresa na organização desejada"],
 		connection: { label: "Endereço MCP", value: "https://www.recompracrm.com.br/api/mcp" },
 		steps: [
 			{
@@ -123,6 +123,7 @@ export const HELP_ARTICLES: THelpArticle[] = [
 				"Quais foram os resultados comerciais deste mês?",
 				"Quais clientes estão há mais tempo sem comprar?",
 				"Quais produtos tiveram melhor desempenho no período?",
+				"Como foi o tempo de primeira resposta no WhatsApp nesta semana?",
 			],
 		},
 		faqs: [
@@ -130,6 +131,16 @@ export const HELP_ARTICLES: THelpArticle[] = [
 				question: "O Claude não conseguiu encontrar o servidor. O que fazer?",
 				answer:
 					"Confirme se você usou exatamente https://www.recompracrm.com.br/api/mcp. O endereço sem www redireciona e pode impedir a detecção automática.",
+			},
+			{
+				question: "Quais dados o Claude consegue acessar?",
+				answer:
+					"Só o que você liberar na autorização: resultados comerciais, vendas, clientes, produtos, campanhas, financeiro, templates de WhatsApp e atendimentos. Telefone, e-mail e CPF/CNPJ dos clientes aparecem mascarados. Cada consulta fica registrada na auditoria da organização.",
+			},
+			{
+				question: "O Claude não encontra minhas conversas de atendimento. Por quê?",
+				answer:
+					"A leitura de atendimentos depende da permissão Consultar atendimentos e conversas e do hub de Atendimentos habilitado na organização. Conexões criadas antes dessa permissão existir não a recebem automaticamente: desvincule e vincule novamente, ou ative a permissão na conexão em Configurações e Conexões de IA.",
 			},
 			{
 				question: "Selecionei a organização errada. Como corrigir?",

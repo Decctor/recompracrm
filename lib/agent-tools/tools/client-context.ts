@@ -22,9 +22,9 @@ export const clientContextTool = defineAgentTool({
 			"Retrato completo de um cliente: histórico de compras (quantidade, valor, ticket médio, intervalo médio entre compras e",
 			"próxima compra estimada), saldo de cashback e quanto expira em 30 dias, cupons disponíveis, produtos preferidos,",
 			"produto sugerido para cross-sell, tags e as últimas compras.",
-			"É a ferramenta para decidir se e como abordar um cliente. Use `search_clients` antes para achar o `clienteId`.",
+			"Reúne o necessário para decidir se e como abordar um cliente. O `clienteId` vem de `search_clients`.",
 			canReadClientPii(actor) ? "Telefone e e-mail vêm completos." : "Telefone e e-mail vêm mascarados nesta conexão.",
-			actor.mode === "PLATAFORMA" ? "Informe `organizacaoId` (id ou slug) para escolher a organização." : "",
+			actor.mode === "PLATAFORMA" ? "`organizacaoId` (id ou slug) escolhe a organização." : "",
 		]
 			.filter(Boolean)
 			.join(" "),

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { listAllAgentTools } from "@/lib/agent-tools/registry";
 import type { TAgentActorContext } from "@/lib/agent-tools/types";
 import type { NextRequest } from "next/server";
 import { MCP_LATEST_PROTOCOL_VERSION } from "./protocol";
@@ -251,4 +252,22 @@ test("ferramenta fora dos scopes é indistinguível de inexistente", async () =>
 	assert.ok(negada && "error" in negada);
 	assert.ok(inexistente && "error" in inexistente);
 	assert.equal(negada.error.code, inexistente.error.code);
+});
+
+test("tools/list marca leitura como read-only e toda escrita como destrutiva", async () => {
+	const actor = createActor({ scopes: new Set(listAllAgentTools().flatMap((tool) => tool.scopes)) });
+	const response = await handleMcpMessage({ message: { jsonrpc: "2.0", id: 18, method: "tools/list" }, actor, request });
+	const tools = resultOf(response).tools as Array<{ name: string; title?: string; annotations: { readOnlyHint: boolean; destructiveHint: boolean } }>;
+	const mutating = new Set(
+		listAllAgentTools()
+			.filter((tool) => tool.mutates)
+			.map((tool) => tool.name),
+	);
+	assert.ok(mutating.size > 0);
+	for (const tool of tools) {
+		// O Connectors Directory recusa ferramenta sem título ou com anotação incoerente.
+		assert.ok(tool.title, `${tool.name} sem título`);
+		assert.equal(tool.annotations.readOnlyHint, !mutating.has(tool.name), tool.name);
+		assert.equal(tool.annotations.destructiveHint, mutating.has(tool.name), tool.name);
+	}
 });

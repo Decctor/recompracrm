@@ -36,9 +36,9 @@ export const platformSearchOrganizationsTool = defineAgentTool({
 		[
 			"Busca organizações da plataforma inteira por nome, slug, plano ou status de assinatura, e permite filtrar por",
 			"tempo sem venda — o filtro para trabalho de retenção e risco de churn.",
-			"Devolve o slug de cada organização: use-o como `organizacaoId` nas demais ferramentas, é mais confiável que o UUID.",
+			"Devolve o slug de cada organização, aceito como `organizacaoId` nas demais ferramentas e mais estável que o UUID.",
 			`Devolve no máximo ${MAX_LIMIT} organizações por chamada, com o total encontrado.`,
-			"Para o retrato completo de uma delas, chame `platform_get_organization_health`.",
+			"O retrato completo de uma organização está em `platform_get_organization_health`.",
 		].join(" "),
 	execute: async (input) => {
 		const limite = input.limite ?? DEFAULT_LIMIT;
@@ -117,8 +117,8 @@ export const platformOrganizationHealthTool = defineAgentTool({
 		[
 			"Retrato de conta de uma organização: assinatura e plano, quando o período pago termina, quantos usuários tem,",
 			"e o uso no período — vendas e faturamento, clientes cadastrados, campanhas ativas e interações enviadas.",
-			"É a ferramenta de retenção e expansão: responde 'esta conta está saudável?' antes de uma conversa comercial.",
-			"Para os números comerciais completos da organização use `get_commercial_results` com o mesmo `organizacaoId`.",
+			"Responde se a conta está saudável, para retenção e expansão.",
+			"Os números comerciais completos da organização estão em `get_commercial_results` com o mesmo `organizacaoId`.",
 			PERIOD_DESCRIPTION,
 		].join(" "),
 	execute: async (input, actor) => {
@@ -228,7 +228,7 @@ export const platformAggregateMetricsTool = defineAgentTool({
 			"Números agregados da plataforma inteira: total de organizações e usuários, organizações criadas no período,",
 			"quantas estão ativas (venderam no período), a distribuição por plano e por status de assinatura,",
 			"e o volume total transacionado.",
-			"É a visão de topo — para trabalhar uma conta específica, use `platform_search_organizations`.",
+			"É a visão de topo; contas específicas são encontradas por `platform_search_organizations`.",
 			PERIOD_DESCRIPTION,
 		].join(" "),
 	execute: async (input) => {

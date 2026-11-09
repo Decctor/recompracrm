@@ -30,7 +30,7 @@ export const listCampaignsTool = defineAgentTool({
 			"quantas segmentações alcança e se gera cashback.",
 			"É o índice das campanhas — devolve a configuração de cada uma, não os resultados de envio e conversão.",
 			`Devolve no máximo ${MAX_LIMIT} campanhas por chamada, acompanhadas do total encontrado.`,
-			actor.mode === "PLATAFORMA" ? "Informe `organizacaoId` (id ou slug) para escolher a organização." : "",
+			actor.mode === "PLATAFORMA" ? "`organizacaoId` (id ou slug) escolhe a organização." : "",
 		]
 			.filter(Boolean)
 			.join(" "),

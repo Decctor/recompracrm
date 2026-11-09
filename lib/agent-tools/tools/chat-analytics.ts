@@ -46,7 +46,7 @@ export const chatAnalyticsTool = defineAgentTool({
 			"A fila (`filaAgora`) ignora o período: é sempre o presente.",
 			"Os principais números vêm comparados ao período anterior de mesma duração.",
 			"Com `incluirAtendentes` (padrão: sim), traz o ranking por atendente. Nele, `encerrados` e `mensagensEnviadas` são exatos; carteira, resolvidos e tempos creditam o responsável ATUAL do atendimento (transferências não deixam histórico).",
-			"Use para o diagnóstico geral; para achar os atendimentos que puxam a mediana para cima use `list_chat_attendances`, e para ler a conversa use `get_chat_messages`.",
+			"Os atendimentos individuais estão em `list_chat_attendances` e as conversas em `get_chat_messages`.",
 			"Campo ausente (p90 com amostra pequena, percentual sem base) significa sem dado, nunca zero.",
 			PERIOD_DESCRIPTION,
 			platformOrganizationHint(actor.mode),

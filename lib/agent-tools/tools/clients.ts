@@ -31,11 +31,11 @@ export const searchClientsTool = defineAgentTool({
 			"Busca clientes da organização por nome, telefone, documento, categoria RFM ou tempo desde a última compra.",
 			"Devolve o resumo de cada cliente: total de compras, valor acumulado, ticket médio, categoria RFM e data da última compra.",
 			"Sem nenhum filtro, lista os clientes que compraram mais recentemente.",
-			`Devolve no máximo ${MAX_LIMIT} clientes por chamada, sempre acompanhados do total encontrado — refine os filtros em vez de paginar.`,
+			`Devolve no máximo ${MAX_LIMIT} clientes por chamada, sempre acompanhados do total encontrado; não há paginação.`,
 			canReadClientPii(actor)
 				? "Telefone, e-mail e CPF/CNPJ vêm completos."
 				: "Telefone, e-mail e CPF/CNPJ vêm mascarados: esta conexão não tem permissão para dados de contato.",
-			actor.mode === "PLATAFORMA" ? "Informe `organizacaoId` (id ou slug) para escolher a organização." : "",
+			actor.mode === "PLATAFORMA" ? "`organizacaoId` (id ou slug) escolhe a organização." : "",
 		]
 			.filter(Boolean)
 			.join(" "),

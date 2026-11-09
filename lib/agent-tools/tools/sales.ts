@@ -32,13 +32,12 @@ export const getSalesTool = defineAgentTool({
 	describe: (actor) =>
 		[
 			"Lista vendas individuais do período, com valor, desconto, vendedor, canal e cliente.",
-			"Esta é a ferramenta para perguntas sobre vendas específicas — 'as maiores vendas da semana', 'o que o vendedor X vendeu ontem'.",
-			"Para totais, médias e comparação com o período anterior use `get_commercial_results`, que agrega no banco em vez de somar linhas.",
-			"O padrão considera apenas vendas confirmadas; passe `status` para ver rascunhos ou canceladas.",
+			"Cobre perguntas sobre vendas específicas, como as maiores vendas da semana ou o que um vendedor vendeu ontem.",
+			"Totais, médias e comparação com o período anterior, agregados no banco, estão em `get_commercial_results`.",
+			"O padrão considera apenas vendas confirmadas; `status` permite ver rascunhos ou canceladas.",
 			PERIOD_DESCRIPTION,
-			`Devolve no máximo ${MAX_LIMIT} vendas por chamada, acompanhadas do total e da soma do período inteiro —`,
-			"use esses agregados em vez de somar as linhas devolvidas, que são só uma página.",
-			actor.mode === "PLATAFORMA" ? "Informe `organizacaoId` (id ou slug) para escolher a organização." : "",
+			`Devolve no máximo ${MAX_LIMIT} vendas por chamada, junto com o total de vendas e a soma de valor do período inteiro; as linhas devolvidas são só uma página.`,
+			actor.mode === "PLATAFORMA" ? "`organizacaoId` (id ou slug) escolhe a organização." : "",
 		]
 			.filter(Boolean)
 			.join(" "),

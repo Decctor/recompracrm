@@ -24,12 +24,12 @@ export const campaignResultsTool = defineAgentTool({
 		[
 			"Resultado de envio e conversão de **uma** campanha no período: interações enviadas, clientes alcançados, entregas e falhas,",
 			"conversões, taxa de conversão, receita atribuída e tempo médio até a conversão.",
-			"Use `list_campaigns` antes para obter o `campanhaId` — esta ferramenta atende uma campanha por chamada.",
+			"Atende uma campanha por chamada; o `campanhaId` vem de `list_campaigns`.",
 			"Duas leituras diferentes de conversão: `conversoes`/`receitaAtribuida` contam tudo que aconteceu depois do envio,",
 			"enquanto `conversoesIncrementais`/`receitaIncremental` descontam o que provavelmente teria acontecido de qualquer jeito.",
-			"Para avaliar se a campanha valeu a pena, cite a incremental.",
+			"A leitura incremental é a que mede o efeito da campanha.",
 			PERIOD_DESCRIPTION,
-			actor.mode === "PLATAFORMA" ? "Informe `organizacaoId` (id ou slug) para escolher a organização." : "",
+			actor.mode === "PLATAFORMA" ? "`organizacaoId` (id ou slug) escolhe a organização." : "",
 		]
 			.filter(Boolean)
 			.join(" "),
