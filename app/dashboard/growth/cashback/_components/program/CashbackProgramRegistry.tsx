@@ -3,6 +3,7 @@
 import CashbackProgramsAccumulationBlock from "@/components/Modals/CashbackPrograms/Blocks/Accumulation";
 import CashbackProgramsExpirationBlock from "@/components/Modals/CashbackPrograms/Blocks/Expiration";
 import CashbackProgramsGeneralBlock from "@/components/Modals/CashbackPrograms/Blocks/General";
+import CashbackProgramsPaymentMethodsBlock from "@/components/Modals/CashbackPrograms/Blocks/PaymentMethods";
 import CashbackProgramsRedemptionBlock from "@/components/Modals/CashbackPrograms/Blocks/Redemption";
 import CashbackProgramsRedemptionSurfacesBlock from "@/components/Modals/CashbackPrograms/Blocks/RedemptionSurfaces";
 import SectionApplyBar from "@/components/Utils/SectionApplyBar";
@@ -12,7 +13,7 @@ import { Section } from "@/components/ui/section";
 import type { TCashbackProgram, TCashbackProgramSection } from "@/lib/cashback/program-registry-state";
 import { formatCashbackValue } from "@/lib/formatting";
 import { type TUseCashbackProgramSectionEditor, useCashbackProgramSectionEditor } from "@/state-hooks/use-cashback-program-section-editor";
-import { ArrowRight, LayoutGrid, MapPin, Percent, PiggyBank } from "lucide-react";
+import { ArrowRight, LayoutGrid, MapPin, Percent, PiggyBank, Wallet } from "lucide-react";
 import type { ReactNode } from "react";
 
 type TRegistryCallbacks = {
@@ -41,6 +42,7 @@ export default function CashbackProgramRegistry({ program, userOrgHasIntegration
 			</div>
 			<div className="flex w-full flex-col gap-3">
 				<AccumulationSection program={program} callbacks={callbacks} userOrgHasIntegration={userOrgHasIntegration} />
+				<PaymentMethodsSection program={program} callbacks={callbacks} />
 				<SurfacesSection program={program} callbacks={callbacks} />
 			</div>
 		</div>
@@ -115,6 +117,15 @@ function AccumulationSection({ program, callbacks, userOrgHasIntegration }: Sect
 				updateCashbackProgram={editor.updateCashbackProgram}
 			/>
 			<CashbackProgramsExpirationBlock embedded cashbackProgram={editor.draft} updateCashbackProgram={editor.updateCashbackProgram} />
+		</ProgramSection>
+	);
+}
+
+function PaymentMethodsSection({ program, callbacks }: SectionProps) {
+	const editor = useSectionEditor(program, "paymentMethods", callbacks);
+	return (
+		<ProgramSection icon={<Wallet />} title="Formas de pagamento" editor={editor}>
+			<CashbackProgramsPaymentMethodsBlock embedded cashbackProgram={editor.draft} updateCashbackProgram={editor.updateCashbackProgram} />
 		</ProgramSection>
 	);
 }

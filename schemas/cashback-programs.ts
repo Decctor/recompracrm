@@ -1,11 +1,32 @@
 import z from "zod";
 import {
+	CashbackAccrualMomentEnum,
+	CashbackAccrualPaymentMethodEnum,
 	CashbackProgramAccumulationTypeEnum,
 	CashbackProgramRedemptionLimitTypeEnum,
 	CashbackProgramTerminologyEnum,
 	CashbackProgramTransactionStatusEnum,
 	CashbackProgramTransactionTypeEnum,
 } from "./enums";
+
+export const CashbackPaymentAccrualRuleSchema = z.object({
+	pontua: z.boolean({
+		required_error: "Informe se a forma de pagamento pontua.",
+		invalid_type_error: "Tipo não válido para a regra de pontuação da forma de pagamento.",
+	}),
+	momento: CashbackAccrualMomentEnum,
+});
+export type TCashbackPaymentAccrualRule = z.infer<typeof CashbackPaymentAccrualRuleSchema>;
+
+/**
+ * Regras de acúmulo por forma de pagamento. `null` = programa sem regras: cada caminho de acúmulo
+ * segue o comportamento de antes das regras. Forma ausente num mapa configurado = pontua na venda
+ * (`DEFAULT_CASHBACK_PAYMENT_ACCRUAL_RULE` em lib/cashback/payment-accrual.ts).
+ */
+export const CashbackPaymentAccrualRulesSchema = z.record(CashbackAccrualPaymentMethodEnum, CashbackPaymentAccrualRuleSchema, {
+	invalid_type_error: "Tipo não válido para as regras de acúmulo por forma de pagamento.",
+});
+export type TCashbackPaymentAccrualRules = z.infer<typeof CashbackPaymentAccrualRulesSchema>;
 
 export const CashbackProgramSchema = z.object({
 	ativo: z
@@ -68,6 +89,9 @@ export const CashbackProgramSchema = z.object({
 			invalid_type_error: "Tipo não válido para a permissão de acumulação via ponto de integração.",
 		})
 		.default(false),
+	// Sem default de propósito: o PUT espalha o payload no UPDATE, e um chamador que omite o campo
+	// (undefined) não pode apagar as regras gravadas. null explícito = remover as regras.
+	acumuloRegrasPagamento: CashbackPaymentAccrualRulesSchema.optional().nullable(),
 	// Superfícies de resgate — ver o comentário das colunas em services/drizzle/schema/cashback-programs.ts.
 	// Default true: payload antigo (onboarding, scripts) que omite o campo preserva o comportamento vigente.
 	resgatePermitirViaPos: z

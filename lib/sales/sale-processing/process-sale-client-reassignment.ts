@@ -1,10 +1,12 @@
+import { hasCashbackPaymentAccrualRules, resolveSaleAccrual } from "@/lib/cashback/payment-accrual";
+import { loadSaleAccrualPayments } from "@/lib/cashback/sale-accrual-payments";
 import { previewSaleCashbackTransfer, saleHasBuyerAccumulation, transferSaleCashbackAccumulation } from "@/lib/cashback/transfer-sale-accumulation";
 import { recomputeClientDerivedDataSafely } from "@/lib/clients/recompute";
 import { lockClientPurchaseHistory } from "@/lib/coupons/purchase-history";
 import { buildSaleEntryTitle } from "@/lib/sales/entry-titles";
 import { resolveSaleClientReassignmentPolicy, type TSaleClientReassignmentDocument } from "@/lib/sales/sale-client-reassignment-policy";
 import { db, type DBTransaction } from "@/services/drizzle";
-import { accountingEntries, campaignConversions, clients, couponRedemptions, saleItems, sales } from "@/services/drizzle/schema";
+import { accountingEntries, campaignConversions, cashbackPrograms, clients, couponRedemptions, saleItems, sales } from "@/services/drizzle/schema";
 import type { TOrganizationEntity } from "@/services/drizzle/schema";
 import { and, eq, sql } from "drizzle-orm";
 import createHttpError from "http-errors";
@@ -125,6 +127,23 @@ async function resolveNextClientAccumulationEligibility({
 	if (sale.statusVenda !== "CONFIRMADA") return false;
 	if (sale.clienteId && (await saleHasBuyerAccumulation({ tx, organizationId, saleId: sale.id, clientId: sale.clienteId }))) return true;
 	const financialState = await getSaleFinancialState({ tx, organizationId, saleId: sale.id });
+	// Com regras por forma de pagamento, "pontuável" substitui "totalmente paga": a venda pode pontuar
+	// antes da quitação (forma na venda) ou nunca (nenhuma forma pontua).
+	const program = await tx.query.cashbackPrograms.findFirst({
+		where: and(eq(cashbackPrograms.organizacaoId, organizationId), eq(cashbackPrograms.ativo, true)),
+		columns: { acumuloRegrasPagamento: true },
+	});
+	if (program && hasCashbackPaymentAccrualRules(program)) {
+		const payments = await loadSaleAccrualPayments({ executor: tx, organizationId, saleId: sale.id });
+		const decision = resolveSaleAccrual({
+			saleTotal: financialState.saleTotal,
+			saleDate: new Date(),
+			payments,
+			rules: program.acumuloRegrasPagamento,
+			requireCoverage: true,
+		});
+		return decision.status === "PONTUAVEL";
+	}
 	return financialState.isFullyPaid;
 }
 

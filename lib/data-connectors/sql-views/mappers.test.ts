@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isPlaceholderPhone, mapSqlViewsSale, toCanonicalSqlViewsImportBatch } from "./mappers";
-import type { TSqlViewsClientRow, TSqlViewsProductRow, TSqlViewsSaleItemRow, TSqlViewsSaleRow } from "./types";
+import { isPlaceholderPhone, mapSqlViewsSale, mapSqlViewsSalePayment, toCanonicalSqlViewsImportBatch } from "./mappers";
+import type { TSqlViewsClientRow, TSqlViewsProductRow, TSqlViewsSaleItemRow, TSqlViewsSalePaymentRow, TSqlViewsSaleRow } from "./types";
 
 function buildSale(overrides: Partial<TSqlViewsSaleRow> = {}): TSqlViewsSaleRow {
 	return {
@@ -190,4 +190,64 @@ test("telefone fictício é ignorado e o próximo telefone real assume", () => {
 	assert.equal(onlyPlaceholder.client?.phone, "");
 	assert.equal(onlyPlaceholder.client?.externalId, "20214");
 	assert.equal(placeholderThenReal.client?.basePhone, "3499726796");
+});
+
+function buildPayment(overrides: Partial<TSqlViewsSalePaymentRow> = {}): TSqlViewsSalePaymentRow {
+	return {
+		pagamento_id: "PAG-1",
+		venda_id: "1-500",
+		forma_pagamento: "PIX",
+		forma_pagamento_original: "PIX",
+		valor: 18,
+		parcelas: 1,
+		pago_online: false,
+		troco_para: null,
+		...overrides,
+	};
+}
+
+test("fonte sem view de pagamentos: venda chega com payments null", () => {
+	const sale = mapSqlViewsSale({ sale: buildSale(), items: [buildItem()], client: buildClient(), anonymousClientIds: [] });
+	assert.equal(sale.payments, null);
+});
+
+test("pagamento usa a forma da fonte quando a integração não traduz o rótulo", () => {
+	const payment = mapSqlViewsSalePayment(buildPayment(), {});
+	assert.deepEqual(payment, { metodo: "PIX", valor: 18, pagoOnline: false, descricao: "PIX", trocoPara: null, formaOriginal: "PIX" });
+});
+
+test("tradução da integração vence a forma da fonte, comparando o rótulo normalizado", () => {
+	const mapping = { tef: "CARTAO_CREDITO" as const, "Subsídio": "OUTRO" as const, CONVENIO: "FIADO_NOTA" as const };
+	assert.equal(mapSqlViewsSalePayment(buildPayment({ forma_pagamento: "OUTRO", forma_pagamento_original: "TEF" }), mapping).metodo, "CARTAO_CREDITO");
+	assert.equal(mapSqlViewsSalePayment(buildPayment({ forma_pagamento: "OUTRO", forma_pagamento_original: "SUBSIDIO" }), mapping).metodo, "OUTRO");
+	assert.equal(mapSqlViewsSalePayment(buildPayment({ forma_pagamento: "OUTRO", forma_pagamento_original: " Convênio " }), mapping).metodo, "FIADO_NOTA");
+});
+
+test("forma da fonte fora do enum vira OUTRO", () => {
+	assert.equal(mapSqlViewsSalePayment(buildPayment({ forma_pagamento: "CHEQUE", forma_pagamento_original: "CHEQUE" }), {}).metodo, "OUTRO");
+});
+
+test("batch distribui pagamentos por venda; venda sem linha na view recebe lista vazia", () => {
+	const batch = toCanonicalSqlViewsImportBatch({
+		organizationId: "org-1",
+		window: { startDate: new Date("2026-10-27T00:00:00.000Z"), endDate: new Date("2026-10-28T00:00:00.000Z") },
+		sales: [buildSale(), buildSale({ venda_id: "1-501", status_codigo: "CANCELADA" })],
+		items: [buildItem()],
+		clients: [],
+		products: [],
+		anonymousClientIds: [],
+		payments: [
+			buildPayment({ forma_pagamento: "DINHEIRO", forma_pagamento_original: "DINHEIRO", valor: 50, troco_para: null }),
+			buildPayment({ pagamento_id: "PAG-2", forma_pagamento: "DINHEIRO", forma_pagamento_original: "DINHEIRO", valor: -32, troco_para: 50 }),
+		],
+		paymentMethodMapping: {},
+	});
+	assert.deepEqual(
+		batch.sales[0].payments?.map((payment) => [payment.metodo, payment.valor, payment.trocoPara]),
+		[
+			["DINHEIRO", 50, null],
+			["DINHEIRO", -32, 50],
+		],
+	);
+	assert.deepEqual(batch.sales[1].payments, []);
 });

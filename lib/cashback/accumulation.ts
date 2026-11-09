@@ -22,20 +22,29 @@ type TProgramSnapshot = {
 	expiracaoRegraValidadeValor: number;
 };
 
+/**
+ * `accrualBase`: parte da venda que pontua pelas regras por forma de pagamento
+ * (lib/cashback/payment-accrual.ts). O mínimo do programa continua valendo sobre o total da venda.
+ */
 export function calculateAccumulatedCashbackValue({
 	accumulationType,
 	accumulationValue,
 	minimumSaleValue,
 	saleValue,
+	accrualBase,
 }: {
 	accumulationType: string;
 	accumulationValue: number;
 	minimumSaleValue: number;
 	saleValue: number;
+	accrualBase?: number | null;
 }) {
 	if (saleValue < minimumSaleValue) return 0;
+	// Só com regras: sem `accrualBase`, um FIXO sobre venda de valor zero segue pontuando como antes.
+	if (accrualBase != null && accrualBase <= 0) return 0;
+	const base = accrualBase ?? saleValue;
 	if (accumulationType === "FIXO") return accumulationValue;
-	if (accumulationType === "PERCENTUAL") return (saleValue * accumulationValue) / 100;
+	if (accumulationType === "PERCENTUAL") return (base * accumulationValue) / 100;
 	return 0;
 }
 
@@ -81,6 +90,7 @@ export async function accumulateCashbackForClient({
 	operatorSellerId,
 	program,
 	accumulationValueOverride,
+	accrualBase,
 	createdAt,
 	metadata,
 }: {
@@ -93,6 +103,8 @@ export async function accumulateCashbackForClient({
 	operatorSellerId?: string | null;
 	program: TProgramSnapshot;
 	accumulationValueOverride?: number | null;
+	/** Base pelas regras por forma de pagamento; ausente = o total da venda. */
+	accrualBase?: number | null;
 	createdAt?: Date;
 	metadata?: Record<string, unknown>;
 }) {
@@ -135,6 +147,7 @@ export async function accumulateCashbackForClient({
 		accumulationValue: accumulationValueToUse,
 		minimumSaleValue: program.acumuloRegraValorMinimo,
 		saleValue,
+		accrualBase,
 	});
 
 	if (accumulatedValue <= 0) {

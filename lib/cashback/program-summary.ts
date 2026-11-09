@@ -1,5 +1,8 @@
 import { formatCashbackValue, formatDecimalPlaces, formatToMoney, getCashbackUnitLabel } from "@/lib/formatting";
 import type { TCashbackProgramDraft } from "@/lib/cashback/program-registry-state";
+import { PAYMENT_METHOD_LABELS } from "@/lib/payments/labels";
+import type { TCashbackPaymentAccrualRule } from "@/schemas/cashback-programs";
+import type { TPaymentMethodEnum } from "@/schemas/enums";
 
 type TCashbackProgramSummaryInput = Pick<
 	TCashbackProgramDraft,
@@ -12,7 +15,20 @@ type TCashbackProgramSummaryInput = Pick<
 	| "modalidadeRecompensasPermitida"
 	| "resgateLimiteTipo"
 	| "resgateLimiteValor"
+	| "acumuloRegrasPagamento"
 >;
+
+/** "Não pontua: Outro. Pontua só quando pago: Fiado / nota." — vazio quando nada foge do padrão. */
+function describePaymentAccrualRules(rules: TCashbackProgramSummaryInput["acumuloRegrasPagamento"]) {
+	if (!rules) return "";
+	const entries = Object.entries(rules) as [TPaymentMethodEnum, TCashbackPaymentAccrualRule][];
+	const notScoring = entries.filter(([, rule]) => !rule.pontua).map(([metodo]) => PAYMENT_METHOD_LABELS[metodo]);
+	const onSettlement = entries.filter(([, rule]) => rule.pontua && rule.momento === "NA_QUITACAO").map(([metodo]) => PAYMENT_METHOD_LABELS[metodo]);
+	const parts: string[] = [];
+	if (notScoring.length > 0) parts.push(`Não pontua: ${notScoring.join(", ")}.`);
+	if (onSettlement.length > 0) parts.push(`Pontua só quando pago: ${onSettlement.join(", ")}.`);
+	return parts.join(" ");
+}
 
 /**
  * O programa lido em voz alta, em uma ou duas frases: "Cliente ganha 5% de cada venda acima de
@@ -51,5 +67,6 @@ export function describeCashbackProgram(program: TCashbackProgramSummaryInput) {
 			? `Resgata ${redemptionModes.join(" ou ")}.`
 			: `Nenhuma forma de resgate ligada: o cliente acumula ${unit} mas não tem como usar.`;
 
-	return `${firstSentence} ${secondSentence}`;
+	const paymentRules = describePaymentAccrualRules(program.acumuloRegrasPagamento);
+	return [firstSentence, paymentRules, secondSentence].filter(Boolean).join(" ");
 }

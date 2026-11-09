@@ -2,6 +2,8 @@ import type { DBTransaction } from "@/services/drizzle";
 import { cashbackProgramBalances, cashbackProgramTransactions, cashbackPrograms } from "@/services/drizzle/schema";
 import { and, eq } from "drizzle-orm";
 import { calculateAccumulatedCashbackValue } from "./accumulation";
+import { hasCashbackPaymentAccrualRules } from "./payment-accrual";
+import { computeInternalSaleAccrualBase } from "./sale-accrual-payments";
 
 /**
  * Ressincroniza os ACÚMULOs de cashback de uma venda após edição de valor.
@@ -56,12 +58,17 @@ export async function resyncSaleCashbackAccumulation({
 			continue;
 		}
 
+		// Com regras por forma de pagamento, a base é recalculada sobre os pagamentos já editados.
+		const accrualBase = hasCashbackPaymentAccrualRules(program)
+			? await computeInternalSaleAccrualBase({ executor: tx, organizationId, saleId, saleTotal: newSaleValue, rules: program.acumuloRegrasPagamento })
+			: null;
 		const newValue = normalizeValue(
 			calculateAccumulatedCashbackValue({
 				accumulationType: program.acumuloTipo,
 				accumulationValue: program.acumuloValor,
 				minimumSaleValue: program.acumuloRegraValorMinimo,
 				saleValue: newSaleValue,
+				accrualBase,
 			}),
 		);
 		const delta = normalizeValue(newValue - transaction.valor);

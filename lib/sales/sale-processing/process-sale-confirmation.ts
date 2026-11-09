@@ -1,6 +1,8 @@
 import { normalizeCouponGiftItem, roundCouponGiftCurrency } from "@/lib/coupons/gift-pricing";
 import { enforceStoreCreditRelease } from "@/lib/finances/store-credit/authorization";
 import { accumulateCashbackForClient } from "@/lib/cashback/accumulation";
+import { hasCashbackPaymentAccrualRules, resolveSaleAccrual } from "@/lib/cashback/payment-accrual";
+import { loadSaleAccrualPayments } from "@/lib/cashback/sale-accrual-payments";
 import { assertPOSFiscalEmissionReady } from "@/lib/fiscal/document-preview";
 import { captureSaleCampaignEvent } from "@/lib/campaigns/events/handlers/sale-capture";
 import { publishPendingCampaignEventsSafely } from "@/lib/campaigns/events/queue";
@@ -736,18 +738,39 @@ export async function processSaleConfirmationInTransaction({ tx, input }: { tx: 
 			if (!program) return null;
 			cashbackProgramId = program.id;
 
+			// Sem regras por forma de pagamento: pontua o total na confirmação, como sempre. Com regras,
+			// só o que já é pontuável agora; o resto fica para processSaleCashbackAccumulationIfEligible,
+			// chamado quando o pagamento é efetivado ou o fiado é recebido.
+			let accrualBase: number | null = null;
+			let paymentRulesMetadata: Record<string, unknown> = {};
+			if (hasCashbackPaymentAccrualRules(program)) {
+				const payments = await loadSaleAccrualPayments({ executor: tx, organizationId: input.organization.id, saleId: input.saleId });
+				const decision = resolveSaleAccrual({
+					saleTotal: sale.valorTotal,
+					saleDate: confirmedAt,
+					payments,
+					rules: program.acumuloRegrasPagamento,
+					requireCoverage: true,
+				});
+				if (decision.status !== "PONTUAVEL") return null;
+				accrualBase = decision.base;
+				paymentRulesMetadata = { regrasPagamento: { base: decision.base, metodos: decision.metodos } };
+			}
+
 			return accumulateCashbackForClient({
 				tx,
 				orgId: input.organization.id,
 				clientId,
 				saleId: input.saleId,
 				saleValue: sale.valorTotal,
+				accrualBase,
 				operatorId: input.saleAuthorId,
 				operatorSellerId: sale.vendedorId,
 				program,
 				metadata: {
 					origem: "POS",
 					processamentoOrigem: sale.processamentoOrigem,
+					...paymentRulesMetadata,
 				},
 			});
 		})();

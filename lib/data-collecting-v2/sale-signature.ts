@@ -53,6 +53,7 @@ export function computeSaleImportSignature({
 	saleValues,
 	resolvedItems,
 	saleItemRewritePolicy,
+	payments,
 }: {
 	/** Retorno de `buildSaleValues` — já inclui IDs resolvidos, statuses mapeados e metadados. */
 	saleValues: Record<string, unknown>;
@@ -60,11 +61,19 @@ export function computeSaleImportSignature({
 	resolvedItems: unknown[];
 	/** Mudança de política do conector também deve invalidar a assinatura. */
 	saleItemRewritePolicy: string;
+	/**
+	 * Pagamentos do canônico, quando a fonte os informa. Não são persistidos na venda, mas as regras
+	 * de acúmulo de cashback os leem: uma mudança neles (quitação, tradução de forma) precisa
+	 * reprocessar a venda. `null`/ausente não entra no hash, então conectores sem pagamentos mantêm
+	 * as assinaturas existentes (sem reprocesso geral nem bump de versão).
+	 */
+	payments?: unknown[] | null;
 }): string {
 	const canonical = JSON.stringify({
 		saleValues: canonicalize(saleValues),
 		items: canonicalize(resolvedItems),
 		saleItemRewritePolicy,
+		payments: payments == null ? undefined : canonicalize(payments),
 	});
 	return `${SALE_SIGNATURE_VERSION}:${createHash("sha256").update(canonical).digest("hex")}`;
 }

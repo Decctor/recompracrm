@@ -7,7 +7,9 @@ import {
 	calculateAccumulatedCashbackValue,
 	notReversedByClientReassignment,
 } from "./accumulation";
+import { hasCashbackPaymentAccrualRules } from "./payment-accrual";
 import { reverseSaleCashback } from "./reverse-sale-cashback";
+import { computeInternalSaleAccrualBase } from "./sale-accrual-payments";
 
 /**
  * Cashback de uma venda reatribuída de um cliente para outro.
@@ -127,7 +129,7 @@ export async function previewSaleCashbackTransfer({
 			? null
 			: await tx.query.cashbackPrograms.findFirst({
 					where: and(eq(cashbackPrograms.organizacaoId, organizationId), eq(cashbackPrograms.ativo, true)),
-					columns: { acumuloTipo: true, acumuloValor: true, acumuloRegraValorMinimo: true },
+					columns: { acumuloTipo: true, acumuloValor: true, acumuloRegraValorMinimo: true, acumuloRegrasPagamento: true },
 				});
 		if (program) {
 			acumuloPrevisto = calculateAccumulatedCashbackValue({
@@ -135,6 +137,9 @@ export async function previewSaleCashbackTransfer({
 				accumulationValue: program.acumuloValor,
 				minimumSaleValue: program.acumuloRegraValorMinimo,
 				saleValue,
+				accrualBase: hasCashbackPaymentAccrualRules(program)
+					? await computeInternalSaleAccrualBase({ executor: tx, organizationId, saleId, saleTotal: saleValue, rules: program.acumuloRegrasPagamento })
+					: null,
 			});
 		}
 	}
@@ -190,6 +195,9 @@ export async function transferSaleCashbackAccumulation({
 				clientId: nextClientId,
 				saleId,
 				saleValue,
+				accrualBase: hasCashbackPaymentAccrualRules(program)
+					? await computeInternalSaleAccrualBase({ executor: tx, organizationId, saleId, saleTotal: saleValue, rules: program.acumuloRegrasPagamento })
+					: null,
 				operatorId: operatorId ?? null,
 				operatorSellerId: operatorSellerId ?? null,
 				program,

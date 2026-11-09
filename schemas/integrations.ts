@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PaymentMethodEnum } from "./enums";
 import { MediaAdsCatalogSyncStateSchema } from "./media-ads";
 
 /**
@@ -182,6 +183,19 @@ export const SqlViewsIntegrationConfigSchema = z.object({
 		.array(z.string({ invalid_type_error: "Tipo não válido para o ID de cliente anônimo." }))
 		.optional()
 		.default([]),
+	/**
+	 * Tradução das formas de pagamento da fonte: `forma_pagamento_original` (normalizada em
+	 * maiúsculas, sem acento) → `PaymentMethodEnum`. Sem entrada, vale a `forma_pagamento` que a
+	 * própria fonte mandou. Existe porque a tradução da fonte pode perder informação (TEF, CARTÃO e
+	 * SUBSÍDIO chegam todos como OUTRO). Lida pelas regras de acúmulo de cashback.
+	 */
+	paymentMethodMapping: z
+		.record(
+			z.string({ invalid_type_error: "Tipo não válido para a forma de pagamento original." }),
+			PaymentMethodEnum,
+		)
+		.optional()
+		.default({}),
 });
 export type TSqlViewsIntegrationConfig = z.infer<typeof SqlViewsIntegrationConfigSchema>;
 
