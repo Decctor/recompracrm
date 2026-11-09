@@ -402,6 +402,10 @@ export default function LegalPage() {
 												<strong>Prestadores de Suporte:</strong> Quando necessário para resolução de problemas técnicos;
 											</li>
 											<li>
+												<strong>Assistentes de IA autorizados pelo Cliente:</strong> Quando o Cliente conecta o RecompraCRM a um assistente de IA, nos termos do
+												item 3.6;
+											</li>
+											<li>
 												<strong>Autoridades Legais:</strong> Quando exigido por lei ou ordem judicial.
 											</li>
 										</ul>
@@ -412,7 +416,40 @@ export default function LegalPage() {
 									</div>
 
 									<div>
-										<h3 className="text-lg font-bold text-gray-900 mb-2">3.6. Segurança da Informação</h3>
+										<h3 className="text-lg font-bold text-gray-900 mb-2">3.6. Conexões com Assistentes de IA (MCP)</h3>
+										<p className="mb-2">
+											O Cliente pode conectar o RecompraCRM a assistentes de IA de terceiros, como o Claude (Anthropic) e o ChatGPT (OpenAI), pelo protocolo MCP
+											(Model Context Protocol). Nessa integração:
+										</p>
+										<ul className="list-disc list-inside space-y-2 ml-4 mb-4">
+											<li>
+												<strong>Autorização:</strong> a conexão só é criada por um usuário do Cliente com permissão de edição da organização, que escolhe a
+												organização e as permissões concedidas (por exemplo, consultar vendas, clientes, campanhas, financeiro ou atendimentos). A conexão pode
+												ser revogada a qualquer momento nas configurações da organização, com efeito imediato;
+											</li>
+											<li>
+												<strong>Dados compartilhados:</strong> o assistente recebe apenas o resultado das consultas que fizer dentro das permissões concedidas, o
+												que pode incluir dados comerciais, o histórico de compras de clientes finais e, com a permissão de atendimentos, o conteúdo das conversas
+												de WhatsApp. Telefone, e-mail e CPF/CNPJ de clientes finais são mascarados, salvo concessão expressa de permissão específica;
+											</li>
+											<li>
+												<strong>Alterações:</strong> ações que modificam dados criam rascunhos ou sugestões. A ativação de campanhas e o envio de templates à Meta
+												exigem aprovação humana dentro do RecompraCRM;
+											</li>
+											<li>
+												<strong>Registro:</strong> cada consulta fica registrada na auditoria da organização (ferramenta utilizada, data e registros retornados).
+												O RecompraCRM recebe apenas os parâmetros de cada consulta, nunca o conteúdo da conversa entre o usuário e o assistente;
+											</li>
+											<li>
+												<strong>Tratamento pelo provedor do assistente:</strong> os dados entregues ao assistente passam a ser tratados também pelo provedor
+												escolhido pelo Cliente, inclusive fora do Brasil, conforme os termos e a política de privacidade desse provedor. Como controlador, o
+												Cliente decide se e com qual assistente compartilha os dados.
+											</li>
+										</ul>
+									</div>
+
+									<div>
+										<h3 className="text-lg font-bold text-gray-900 mb-2">3.7. Segurança da Informação</h3>
 										<p className="mb-2">Implementamos rigorosas medidas de segurança para proteger os dados:</p>
 										<ul className="list-disc list-inside space-y-2 ml-4">
 											<li>
@@ -437,7 +474,7 @@ export default function LegalPage() {
 									</div>
 
 									<div>
-										<h3 className="text-lg font-bold text-gray-900 mb-2">3.7. Retenção de Dados</h3>
+										<h3 className="text-lg font-bold text-gray-900 mb-2">3.8. Retenção de Dados</h3>
 										<p className="mb-2">Os dados são retidos pelos seguintes períodos:</p>
 										<ul className="list-disc list-inside space-y-2 ml-4 mb-4">
 											<li>
@@ -460,7 +497,7 @@ export default function LegalPage() {
 									</div>
 
 									<div>
-										<h3 className="text-lg font-bold text-gray-900 mb-2">3.8. Direitos dos Titulares de Dados</h3>
+										<h3 className="text-lg font-bold text-gray-900 mb-2">3.9. Direitos dos Titulares de Dados</h3>
 										<p className="mb-2">Conforme a LGPD, os titulares de dados (usuários e clientes finais) têm direito a:</p>
 										<ul className="list-disc list-inside space-y-2 ml-4 mb-4">
 											<li>Confirmação da existência de tratamento de seus dados pessoais;</li>
