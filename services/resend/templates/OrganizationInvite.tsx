@@ -4,51 +4,132 @@ import * as React from "react";
 type OrganizationInviteTemplateProps = {
 	inviteLink: string;
 	invitedName: string;
+	inviterName?: string | null;
+	inviterEmail?: string | null;
 	organizationName?: string | null;
+	organizationLogoUrl?: string | null;
 	expiresInHours: number;
 };
 
-const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_URL || "";
+/**
+ * Origem fixa de produção: imagens e links do rodapé precisam ser absolutos e
+ * apontar para o mesmo domínio do remetente. Ler de env aqui já gerou URL
+ * relativa (imagem quebrada) quando a variável não estava definida.
+ */
+const EMAIL_ASSETS_ORIGIN = "https://recompracrm.com.br";
+// PNG porque cliente de e-mail não renderiza SVG de forma confiável. Lockup *-badge
+// porque o fundo é claro: o `color-on-dark` some aqui (ver BrandLogo).
+const BRAND_LOGO_URL = `${EMAIL_ASSETS_ORIGIN}/email/recompracrm-horizontal-badge.png`;
+const BRAND_LOGO_WIDTH = 176;
+const BRAND_LOGO_HEIGHT = 35;
 
-export default function OrganizationInviteTemplate({ inviteLink, invitedName, organizationName, expiresInHours }: OrganizationInviteTemplateProps) {
-	const orgLabel = organizationName ? `da ${organizationName}` : "da organização";
+function formatHours(hours: number) {
+	return hours === 1 ? "1 hora" : `${hours} horas`;
+}
+
+function getFirstName(name: string) {
+	return name.trim().split(/\s+/)[0] ?? name;
+}
+
+export function buildOrganizationInviteSubject({
+	inviterName,
+	organizationName,
+}: Pick<OrganizationInviteTemplateProps, "inviterName" | "organizationName">) {
+	const organizationLabel = organizationName?.trim() || "uma equipe";
+	const inviter = inviterName?.trim();
+	if (inviter) return `${inviter} convidou você para ${organizationLabel} no RecompraCRM`;
+	return `Convite para ${organizationLabel} no RecompraCRM`;
+}
+
+export default function OrganizationInviteTemplate({
+	inviteLink,
+	invitedName,
+	inviterName,
+	inviterEmail,
+	organizationName,
+	organizationLogoUrl,
+	expiresInHours,
+}: OrganizationInviteTemplateProps) {
+	const organization = organizationName?.trim() || "sua equipe";
+	const inviter = inviterName?.trim() || null;
+	const expiresLabel = formatHours(expiresInHours);
+	const organizationInitial = organization.charAt(0).toUpperCase();
+
 	return (
-		<Html>
-			<Head />
-			<Preview>Convite para participar {orgLabel} no RecompraCRM</Preview>
+		<Html lang="pt-BR">
+			<Head>
+				<meta name="color-scheme" content="light" />
+				<meta name="supported-color-schemes" content="light" />
+			</Head>
+			<Preview>
+				{inviter ? `${inviter} convidou você para ${organization}.` : `Você recebeu um convite para ${organization}.`} O convite vale por {expiresLabel}.
+			</Preview>
 			<Body style={main}>
 				<Container style={container}>
-					<Section style={header}>
-						<Img src={`${baseUrl}/logo.png`} width="150" height="auto" alt="RecompraCRM" style={logo} />
+					<Section style={brandRow}>
+						<Img src={BRAND_LOGO_URL} width={BRAND_LOGO_WIDTH} height={BRAND_LOGO_HEIGHT} alt="RecompraCRM" style={brandLogo} />
 					</Section>
 
-					<Section style={content}>
-						<Heading style={h1}>Você recebeu um convite</Heading>
-						<Text style={text}>Olá, {invitedName}!</Text>
-						<Text style={text}>Você foi convidado(a) para participar {orgLabel} no <strong>RecompraCRM</strong>.</Text>
-						<Text style={text}>Clique no botão abaixo para aceitar o convite:</Text>
+					<Section style={card}>
+						<Section style={organizationRow}>
+							{organizationLogoUrl ? (
+								<Img src={organizationLogoUrl} width="56" height="56" alt={organization} style={organizationLogo} />
+							) : (
+								<div style={organizationFallback}>{organizationInitial}</div>
+							)}
+						</Section>
 
-						<Section style={buttonContainer}>
+						<Text style={eyebrow}>Convite para a equipe</Text>
+						<Heading as="h1" style={h1}>
+							{organization}
+						</Heading>
+
+						<Text style={text}>Olá, {getFirstName(invitedName)}.</Text>
+						<Text style={text}>
+							{inviter ? (
+								<>
+									<strong style={strong}>{inviter}</strong> convidou você para acessar <strong style={strong}>{organization}</strong> no RecompraCRM.
+								</>
+							) : (
+								<>
+									Você recebeu um convite para acessar <strong style={strong}>{organization}</strong> no RecompraCRM.
+								</>
+							)}{" "}
+							Aceite o convite para entrar no painel da equipe com este e-mail.
+						</Text>
+
+						<Section style={buttonRow}>
 							<Button style={button} href={inviteLink}>
 								Aceitar convite
 							</Button>
 						</Section>
 
-						<Text style={footerText}>
-							Este convite expira em <strong>{expiresInHours} hora(s)</strong>.
-							<br />
-							Se você não esperava este email, pode ignorá-lo com segurança.
-						</Text>
+						<Text style={expiry}>O convite vale por {expiresLabel}. Depois disso, peça um novo a quem convidou você.</Text>
+
+						<Hr style={divider} />
+
+						<Text style={fallbackLabel}>Se o botão não funcionar, copie e cole este endereço no navegador:</Text>
+						<Link href={inviteLink} style={fallbackLink}>
+							{inviteLink}
+						</Link>
 					</Section>
 
-					<Hr style={hr} />
-
 					<Section style={footer}>
-						<Text style={footerCopyright}>
-							RecompraCRM © {new Date().getFullYear()}
-							<br />
-							<Link href={baseUrl} style={link}>
-								{baseUrl.replace(/^https?:\/\//, "")}
+						<Text style={footerText}>
+							{inviter ? (
+								<>
+									Você recebeu este e-mail porque {inviter}
+									{inviterEmail ? ` (${inviterEmail})` : ""} convidou este endereço para {organization}. Para tirar dúvidas, basta responder a este e-mail.
+								</>
+							) : (
+								<>Você recebeu este e-mail porque este endereço foi convidado para {organization}.</>
+							)}{" "}
+							Se não reconhece o convite, ignore esta mensagem: nenhum acesso é criado sem o seu aceite.
+						</Text>
+						<Text style={footerBrand}>
+							RecompraCRM ·{" "}
+							<Link href={EMAIL_ASSETS_ORIGIN} style={footerLink}>
+								recompracrm.com.br
 							</Link>
 						</Text>
 					</Section>
@@ -58,91 +139,154 @@ export default function OrganizationInviteTemplate({ inviteLink, invitedName, or
 	);
 }
 
-const main = {
-	backgroundColor: "#f6f9fc",
-	fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Ubuntu,sans-serif',
+const BRAND_BLUE = "#24549C";
+const INK = "#111827";
+const BODY_TEXT = "#374151";
+const MUTED = "#6b7280";
+const HAIRLINE = "#e5e7eb";
+
+const main: React.CSSProperties = {
+	backgroundColor: "#f3f5f9",
+	fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif',
+	margin: 0,
+	padding: "32px 0",
 };
 
-const container = {
-	backgroundColor: "#ffffff",
+const container: React.CSSProperties = {
+	maxWidth: "520px",
 	margin: "0 auto",
-	padding: "40px 20px",
-	marginBottom: "64px",
+	padding: "0 16px",
 };
 
-const header = {
-	padding: "20px 0",
-	textAlign: "center" as const,
+const brandRow: React.CSSProperties = {
+	padding: "0 4px 20px",
 };
 
-const logo = {
-	margin: "0 auto",
+const brandLogo: React.CSSProperties = {
 	display: "block",
 };
 
-const content = {
-	padding: "0 20px",
+const card: React.CSSProperties = {
+	backgroundColor: "#ffffff",
+	border: `1px solid ${HAIRLINE}`,
+	borderRadius: "12px",
+	padding: "32px",
 };
 
-const h1 = {
-	color: "#1a1a1a",
+const organizationRow: React.CSSProperties = {
+	marginBottom: "20px",
+};
+
+const organizationLogo: React.CSSProperties = {
+	display: "block",
+	borderRadius: "12px",
+	border: `1px solid ${HAIRLINE}`,
+	objectFit: "cover",
+};
+
+const organizationFallback: React.CSSProperties = {
+	width: "56px",
+	height: "56px",
+	lineHeight: "56px",
+	borderRadius: "12px",
+	backgroundColor: BRAND_BLUE,
+	color: "#ffffff",
 	fontSize: "24px",
-	fontWeight: "600",
-	lineHeight: "32px",
-	margin: "30px 0",
-	textAlign: "center" as const,
+	fontWeight: 700,
+	textAlign: "center",
 };
 
-const text = {
-	color: "#4a4a4a",
-	fontSize: "16px",
-	lineHeight: "26px",
-	textAlign: "center" as const,
-	margin: "16px 0",
-};
-
-const buttonContainer = {
-	textAlign: "center" as const,
-	margin: "32px 0",
-};
-
-const button = {
-	backgroundColor: "#24549C",
-	borderRadius: "6px",
-	color: "#fff",
-	fontSize: "16px",
-	fontWeight: "600",
-	textDecoration: "none",
-	textAlign: "center" as const,
-	display: "inline-block",
-	padding: "12px 32px",
-	boxShadow: "0 4px 6px rgba(36, 84, 156, 0.2)",
-};
-
-const footerText = {
-	color: "#8898aa",
+const eyebrow: React.CSSProperties = {
+	color: MUTED,
 	fontSize: "12px",
+	fontWeight: 600,
+	letterSpacing: "0.06em",
+	textTransform: "uppercase",
 	lineHeight: "16px",
-	textAlign: "center" as const,
-	margin: "32px 0 0",
+	margin: "0 0 6px",
 };
 
-const hr = {
-	borderColor: "#e6ebf1",
-	margin: "20px 0",
+const h1: React.CSSProperties = {
+	color: INK,
+	fontSize: "24px",
+	fontWeight: 700,
+	lineHeight: "30px",
+	margin: "0 0 24px",
 };
 
-const footer = {
-	textAlign: "center" as const,
+const text: React.CSSProperties = {
+	color: BODY_TEXT,
+	fontSize: "15px",
+	lineHeight: "24px",
+	margin: "0 0 14px",
 };
 
-const footerCopyright = {
-	color: "#8898aa",
-	fontSize: "12px",
+const strong: React.CSSProperties = {
+	color: INK,
+	fontWeight: 600,
+};
+
+const buttonRow: React.CSSProperties = {
+	margin: "26px 0 18px",
+};
+
+const button: React.CSSProperties = {
+	backgroundColor: BRAND_BLUE,
+	borderRadius: "8px",
+	color: "#ffffff",
+	fontSize: "15px",
+	fontWeight: 600,
+	textDecoration: "none",
+	display: "inline-block",
+	padding: "13px 28px",
+};
+
+const expiry: React.CSSProperties = {
+	color: MUTED,
+	fontSize: "13px",
 	lineHeight: "20px",
+	margin: 0,
 };
 
-const link = {
-	color: "#24549C",
+const divider: React.CSSProperties = {
+	borderColor: HAIRLINE,
+	margin: "24px 0 16px",
+};
+
+const fallbackLabel: React.CSSProperties = {
+	color: MUTED,
+	fontSize: "12px",
+	lineHeight: "18px",
+	margin: "0 0 4px",
+};
+
+const fallbackLink: React.CSSProperties = {
+	color: BRAND_BLUE,
+	fontSize: "12px",
+	lineHeight: "18px",
+	wordBreak: "break-all",
+	textDecoration: "underline",
+};
+
+const footer: React.CSSProperties = {
+	padding: "20px 4px 0",
+};
+
+const footerText: React.CSSProperties = {
+	color: MUTED,
+	fontSize: "12px",
+	lineHeight: "18px",
+	margin: "0 0 10px",
+};
+
+const footerBrand: React.CSSProperties = {
+	color: MUTED,
+	fontSize: "12px",
+	lineHeight: "18px",
+	margin: 0,
+};
+
+const footerLink: React.CSSProperties = {
+	color: MUTED,
 	textDecoration: "underline",
 };

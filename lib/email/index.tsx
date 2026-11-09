@@ -2,7 +2,8 @@ import { parseRetryAfterHeader, withRateLimitRetry } from "@/lib/http/rate-limit
 import { resend } from "@/services/resend";
 import MagicLinkTemplate from "@/services/resend/templates/MagicLink";
 import MessageTemplateEmail from "@/services/resend/templates/MessageTemplate";
-import OrganizationInviteTemplate from "@/services/resend/templates/OrganizationInvite";
+import OrganizationInviteTemplate, { buildOrganizationInviteSubject } from "@/services/resend/templates/OrganizationInvite";
+import { render, toPlainText } from "@react-email/render";
 import type { ComponentProps } from "react";
 
 export enum EmailTemplate {
@@ -23,6 +24,7 @@ type SendEmailWithResendConfig = {
 		name?: string | null;
 		prefix?: string | null;
 	};
+	replyTo?: string | null;
 };
 
 const RESEND_FROM_DOMAIN = "recompracrm.com.br";
@@ -38,7 +40,8 @@ function sanitizeSenderPrefix(value: string | null | undefined) {
 }
 
 function sanitizeSenderName(value: string | null | undefined) {
-	return (value?.trim() || "RecompraCRM").replace(/[<>"]/g, "");
+	// Vírgula e ponto e vírgula separam endereços no cabeçalho From: um nome com eles sem aspas vira dois remetentes.
+	return (value?.trim() || "RecompraCRM").replace(/[<>",;]/g, "");
 }
 
 function buildResendFrom(config?: SendEmailWithResendConfig) {
@@ -50,16 +53,17 @@ function buildResendFrom(config?: SendEmailWithResendConfig) {
 function getReactEmailTemplateAndSubject<T extends EmailTemplate>(template: T, props: PropsMap[NoInfer<T>]) {
 	switch (template) {
 		case EmailTemplate.AuthMagicLink:
-			console.log(props);
 			return {
 				templateComponent: <MagicLinkTemplate {...(props as PropsMap[EmailTemplate.AuthMagicLink])} />,
 				subject: "Aqui está seu link de acesso ao RecompraCRM.",
 			};
-		case EmailTemplate.OrganizationInvite:
+		case EmailTemplate.OrganizationInvite: {
+			const inviteProps = props as PropsMap[EmailTemplate.OrganizationInvite];
 			return {
-				templateComponent: <OrganizationInviteTemplate {...(props as PropsMap[EmailTemplate.OrganizationInvite])} />,
-				subject: "Você recebeu um convite para acessar o RecompraCRM.",
+				templateComponent: <OrganizationInviteTemplate {...inviteProps} />,
+				subject: buildOrganizationInviteSubject(inviteProps),
 			};
+		}
 		case EmailTemplate.MessageTemplate: {
 			const messageTemplateProps = props as PropsMap[EmailTemplate.MessageTemplate];
 			return {
@@ -80,6 +84,11 @@ export const sendEmailWithResend = async <T extends EmailTemplate>(
 ) => {
 	try {
 		const { templateComponent, subject } = getReactEmailTemplateAndSubject(template, props);
+		// Renderiza uma vez e manda as duas partes: o SDK, com `react`, envia só HTML, e e-mail sem
+		// text/plain pesa contra a entrega nos filtros de spam.
+		const html = await render(templateComponent);
+		const text = toPlainText(html);
+		const replyTo = config?.replyTo?.trim() || undefined;
 		// O limite por segundo da Resend é da conta inteira (campanhas, magic links, convites): uma
 		// recusa 429 não processou nada, então repetir depois do retry-after é seguro.
 		const { data, error } = await withRateLimitRetry({
@@ -88,7 +97,9 @@ export const sendEmailWithResend = async <T extends EmailTemplate>(
 					from: buildResendFrom(config),
 					to: [to],
 					subject: subject,
-					react: templateComponent,
+					html,
+					text,
+					...(replyTo ? { replyTo } : {}),
 				}),
 			classify: (outcome) =>
 				"result" in outcome && outcome.result.error?.name === "rate_limit_exceeded"

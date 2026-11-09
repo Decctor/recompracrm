@@ -21,6 +21,8 @@ type SendOrganizationInviteParams = {
 	organizationName: string | null;
 	organizationLogoUrl?: string | null;
 	invitedName: string;
+	inviterName?: string | null;
+	inviterEmail?: string | null;
 	email: string;
 	phone?: string | null;
 };
@@ -33,14 +35,34 @@ async function sendOrganizationInviteEmail({
 	email,
 	invitationId,
 	invitedName,
+	inviterName,
+	inviterEmail,
 	organizationName,
-}: Pick<SendOrganizationInviteParams, "email" | "invitationId" | "invitedName" | "organizationName">) {
-	return sendEmailWithResend(email, EmailTemplate.OrganizationInvite, {
-		inviteLink: buildOrganizationInviteAcceptUrl({ origin: getAppOrigin(), invitationId }),
-		invitedName,
-		organizationName,
-		expiresInHours: ORGANIZATION_INVITE_EXPIRES_IN_HOURS,
-	});
+	organizationLogoUrl,
+}: Pick<
+	SendOrganizationInviteParams,
+	"email" | "invitationId" | "invitedName" | "inviterName" | "inviterEmail" | "organizationName" | "organizationLogoUrl"
+>) {
+	const inviter = inviterName?.trim() || null;
+	return sendEmailWithResend(
+		email,
+		EmailTemplate.OrganizationInvite,
+		{
+			inviteLink: buildOrganizationInviteAcceptUrl({ origin: getAppOrigin(), invitationId }),
+			invitedName,
+			inviterName: inviter,
+			inviterEmail,
+			organizationName,
+			organizationLogoUrl,
+			expiresInHours: ORGANIZATION_INVITE_EXPIRES_IN_HOURS,
+		},
+		{
+			// "Fulano via RecompraCRM" mostra uma pessoa conhecida na caixa de entrada, e a resposta
+			// vai para quem convidou — um convite de remetente anônimo é o formato clássico de phishing.
+			from: { name: inviter ? `${inviter} via RecompraCRM` : "RecompraCRM", prefix: "convites" },
+			replyTo: inviterEmail,
+		},
+	);
 }
 
 async function sendOrganizationInviteWhatsapp({
@@ -136,11 +158,21 @@ export async function sendOrganizationInvite({
 	organizationName,
 	organizationLogoUrl,
 	invitedName,
+	inviterName,
+	inviterEmail,
 	email,
 	phone,
 }: SendOrganizationInviteParams) {
 	const [emailResult, whatsappResult] = await Promise.allSettled([
-		sendOrganizationInviteEmail({ email, invitationId, invitedName, organizationName }),
+		sendOrganizationInviteEmail({
+			email,
+			invitationId,
+			invitedName,
+			inviterName,
+			inviterEmail,
+			organizationName,
+			organizationLogoUrl,
+		}),
 		sendOrganizationInviteWhatsapp({
 			phone,
 			invitationId,

@@ -55,6 +55,8 @@ async function createOrganizationMembershipInvitation({
 		organizationName: session.membership?.organizacao.nome ?? null,
 		organizationLogoUrl: session.membership?.organizacao.logoUrl ?? null,
 		invitedName: invitation.nome,
+		inviterName: session.user.nome,
+		inviterEmail: session.user.email,
 		email: invitation.email,
 		phone: invitation.telefone,
 	});
