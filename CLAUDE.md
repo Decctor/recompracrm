@@ -15,7 +15,7 @@ This file documents the architectural patterns, conventions, and "tastes" of thi
 - **Validation**: Zod
 - **Video**: Mux (`@mux/mux-node` server, `@mux/mux-player-react` client)
 - **File storage**: Supabase Storage
-- **Payments**: Stripe
+- **Payments**: Stripe — two accounts for platform billing, see *Platform Billing (Stripe) Conventions*
 - **Rich text**: Tiptap v3
 - **Toasts**: Sonner
 - **Icons**: lucide-react
@@ -336,6 +336,22 @@ export function NewFoo({ closeModal, callbacks }: NewFooProps) {
 - A weighing is accepted only as the same stable weight twice in a row, read **after** the click. A stale reading never counts, and the pill shows "SEM RESPOSTA" after 2 s without a frame.
 - A weighing reaches the cart through the same `onAddDirect` as a scale label (`scaleReading` with `tipoValor: "PESO"`): a new line every time, priced by the system, never summed into an existing line.
 - Sold by weight = `unidade` normalized to KG (`isSoldByWeight`; the column is free text). Products with variants are not weighed from the grid.
+
+---
+
+## Platform Billing (Stripe) Conventions
+
+**Location**: `services/stripe/index.ts`, `lib/subscriptions/`, `app/api/integrations/stripe/`
+
+- **Two Stripe accounts bill the platform, and nothing migrates between them.** `SYNCRONIZA` is the original MEI account; the first subscriptions were born there and keep renewing there. `RECOMPRACRM` is the CNPJ account and takes every new sale. A customer, its prices and its subscription live in one account forever.
+- **The row says which account.** `organizations.stripeConta` and `deals.stripeConta` record the account that owns `stripeCustomerId`. Every Stripe call about an existing customer, subscription, checkout session or price uses `getStripeClient(resolveStripeAccount(row.stripeConta))`. There is no exported default client on purpose: a single client is how a legacy subscriber's portal or cancellation would hit the wrong account.
+- `resolveStripeAccount(null)` is `SYNCRONIZA`, never the sales account. A null with a customer only exists from before the column (migration 0149 backfilled them). The sales account changes, the customer does not.
+- **Only creating a new customer reads the sales account** (`getStripeSalesAccount()`, from `STRIPE_SALES_ACCOUNT`, default `SYNCRONIZA`). Write `stripeConta` in the same update as `stripeCustomerId`. A customer from another account with no chargeable subscription is replaced by a new one in the sales account, and the old one is abandoned. A deal's dedicated price is recreated too, because prices do not cross accounts.
+- **No second subscription.** While `hasChargeableStripeSubscription` holds (`active`, `trialing`, `past_due`, `unpaid`), checkout is refused. Plan and payment changes go through the billing portal, in the account where the subscription lives.
+- **One webhook URL, two senders.** Both accounts deliver to `/api/integrations/stripe/webhook`. `constructStripeWebhookEvent` tries each signing secret, and the one that validates names the account. The handler calls Stripe back with that account's client. Local lookups go by customer ID alone, which is unique across Stripe.
+- **Env vars:** unprefixed `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SIGNATURE_SECRET` belong to `SYNCRONIZA`; `STRIPE_RECOMPRACRM_SECRET_KEY` / `STRIPE_RECOMPRACRM_WEBHOOK_SIGNATURE_SECRET` to `RECOMPRACRM`. The `NEXT_PUBLIC_STRIPE_*_PRICE_ID` vars are the **sales account's** prices, so they differ per Vercel environment: Production uses the RecompraCRM prices, while Preview and Development stay on Syncroniza with no `STRIPE_SALES_ACCOUNT`. Changing the sales account means changing its price IDs in the same deploy; they are inlined at build.
+- **Invoice lines no longer carry `price`** (API 2025-03-31+). The price ID is in `line.pricing.price_details.price`, and each webhook endpoint renders events in its own API version, so read both shapes. Yearly is detected by the billed period, not `price.recurring`. Price-ID comparisons must include the legacy account's IDs (`SYNCRONIZA_CONSULTORIA_PRICE_ID` in the webhook), or old invoices are misread.
+- The `RECOMPRACRM` account is shared with the `recompracrm-chats` app (`chats_*` products, its own portal configuration). This app's portal sessions use the account's **default** configuration; don't make another one default.
 
 ---
 

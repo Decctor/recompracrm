@@ -130,6 +130,7 @@ When building a new admin feature, create files in this order:
 - **Don't import React Query hooks in mutation files.** Mutations are plain async functions; hooks go in components.
 - **Don't write page-level inline editing UIs.** All CRUD goes through modals (`ResponsiveMenu`).
 - **Don't write `precoVenda` of `products`/`productVariants` directly in an update.** Spread `buildSalePriceUpdate` (`lib/products/price-snapshot.ts`) into the `.set(...)`, reading the current `precoVenda`/`precoVendaAnterior` first (inside the transaction, `FOR UPDATE` when the route already locks). It records the previous price that promotions ("De / Por") are inferred from. `npm run test:product-pricing` fails on a write path that skips it.
+- **Don't call Stripe without knowing which account owns the object.** Platform billing spans two Stripe accounts (`SYNCRONIZA` legacy, `RECOMPRACRM` for new sales). Use `getStripeClient(resolveStripeAccount(row.stripeConta))` for anything that already exists; only creating a customer uses `getStripeSalesAccount()`, and it writes `stripeConta` alongside `stripeCustomerId`. Never compare invoice prices against the current env price IDs alone. See *Platform Billing (Stripe) Conventions* in CLAUDE.md.
 - **Don't translate entity fields when they enter a function signature or an API payload.** A computed block attached to an entity extends it, so it stays Portuguese: `valores.custoTotal`, not `valuation.totalCost`. Type and function **names** are English; their **fields** follow the data. See *Portuguese vs. English* in CLAUDE.md.
 
 ---
@@ -145,6 +146,8 @@ When building a new admin feature, create files in this order:
 | `getErrorMessage`                 | `/lib/errors.ts`                 | Extracts readable error message from any error                                 |
 | `uploadFile`                      | `/lib/files-storage/index.ts`    | Uploads file to Supabase Storage                                               |
 | `createMuxDirectUpload`           | `/lib/mux/upload.ts`             | Creates Mux direct upload URL                                                  |
+| `getStripeClient`                 | `/services/stripe/index.ts`      | Stripe client for one account; pair with `resolveStripeAccount(stripeConta)`   |
+| `getStripeSalesAccount`           | `/services/stripe/index.ts`      | Account where new customers are created (`STRIPE_SALES_ACCOUNT`)               |
 
 ---
 
