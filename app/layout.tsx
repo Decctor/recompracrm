@@ -28,7 +28,8 @@ export const metadata: Metadata = {
 		template: "%s | RecompraCRM",
 	},
 	description: siteMetaDescription,
-	icons: [{ rel: "icon", url: "/icon.png" }],
+	// Ícones vêm das convenções de arquivo do App Router (app/favicon.ico, app/icon.png,
+	// app/apple-icon.png): o Next gera as tags com tamanho e tipo a partir dos próprios arquivos.
 	robots: { index: true, follow: true },
 	openGraph: {
 		type: "website",
