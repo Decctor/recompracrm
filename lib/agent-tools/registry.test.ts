@@ -33,6 +33,17 @@ test("cada scope revela apenas as suas ferramentas", () => {
 		listToolsForActor(createActor({ scopes: new Set(["agent:products:read"]) })).map((tool) => tool.name),
 		["search_products", "get_product_performance"],
 	);
+	assert.deepEqual(
+		listToolsForActor(createActor({ scopes: new Set(["agent:chats:read"]) })).map((tool) => tool.name),
+		["get_chat_analytics", "list_chat_attendances", "search_chats", "get_chat_messages", "search_chat_messages"],
+	);
+});
+
+test("ferramentas de atendimento são somente leitura", () => {
+	// Ler conversa não pode virar responder conversa por acidente de registro.
+	const chatTools = listAllAgentTools().filter((tool) => tool.scopes.includes("agent:chats:read"));
+	assert.equal(chatTools.length, 5);
+	assert.ok(chatTools.every((tool) => !tool.mutates && tool.scopes.length === 1));
 });
 
 test("nem todos os scopes fazem um ator ORG enxergar as ferramentas de plataforma", () => {

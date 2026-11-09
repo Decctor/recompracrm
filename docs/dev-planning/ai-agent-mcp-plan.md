@@ -94,6 +94,11 @@ default possível. A agregação cross-org chega com as ferramentas `platform_*`
 | `get_product_performance` | ambos | `agent:products:read` | `lib/products/ranking` |
 | `list_campaigns` | ambos | `agent:campaigns:read` | tabela `campaigns` |
 | `get_campaign_results` | ambos | `agent:campaigns:read` | `lib/campaigns/stats` |
+| `get_chat_analytics` | ambos | `agent:chats:read` | `lib/chats/stats/overview` + `lib/chats/stats/agents` |
+| `list_chat_attendances` | ambos | `agent:chats:read` | `chat_assignments` + janela de mensagens |
+| `search_chats` | ambos | `agent:chats:read` | `chats` + atendimento corrente (`currentChatAssignmentJoin`) |
+| `get_chat_messages` | ambos | `agent:chats:read` | `chat_messages` |
+| `search_chat_messages` | ambos | `agent:chats:read` | `lib/search` (`unaccent_immutable`) |
 | `platform_search_organizations` | plataforma | `platform:organizations:read` | `organizations` + `max(sales.dataVenda)` |
 | `platform_get_organization_health` | plataforma | `platform:organizations:read` | assinatura + uso agregado |
 | `platform_get_aggregate_metrics` | plataforma | `platform:metrics:read` | agregados da base |
@@ -103,6 +108,10 @@ funções — `lib/sales/overall-stats`, `lib/clients/context`, `lib/campaigns/s
 `lib/products/ranking`. Cada extração trocou `{ input, session }` por `{ input, organizacaoId }`;
 as rotas passaram a derivar a organização e delegar. Número que não bate entre o painel e o agente
 vale menos que número nenhum.
+
+As estatísticas de atendimento seguiram o mesmo caminho: `lib/chats/stats/overview` e
+`lib/chats/stats/agents` saíram de `GET /api/chats/stats/{overview,agents}`, e `get_chat_analytics`
+devolve os números da tela Atendimentos > Estatísticas, com as mesmas coortes.
 
 Em modo plataforma as ferramentas de organização são **as mesmas**, com `organizacaoId`
 obrigatório. Não existem gêmeas administrativas: é o que `resolveOrganizationScope` compra.
@@ -168,6 +177,46 @@ Cada `tools/call` grava um `access_event` do tipo `CHAMADA_AGENTE` (quem, qual f
 organização — nunca o resultado), e esses eventos sustentam o rate limiting de 120 chamadas por
 minuto **por principal**. Por principal e não por IP: o IP é o do provedor de LLM, compartilhado
 por todos os clientes, e limitar por ele puniria organizações inocentes.
+
+### Atendimentos (`tools/chat-analytics.ts`, `tools/chats.ts`)
+
+Existem para que a organização rode a própria auditoria de atendimento com o agente dela — e com
+os tokens dela. O desenho vai **do agregado ao caso**, em três unidades:
+
+- **Estatística** (`get_chat_analytics`): o diagnóstico, comparado ao período anterior.
+- **Atendimento** (`list_chat_attendances`): o ticket, com as métricas dele. É a unidade do
+  benchmark — filtros e ordenações servem para montar uma amostra (os mais lentos, os sem
+  resposta, os handoffs da IA, e um grupo de controle recente). `resumoDoFiltro` agrega o
+  conjunto inteiro, não a página.
+- **Conversa** (`search_chats`, `get_chat_messages`, `search_chat_messages`): o estado atual de cada
+  conversa, a leitura (inteira ou recortada a um atendimento) e a busca literal por evidência.
+
+Decisões:
+
+- **A listagem não traz amostra de mensagens, só a prévia da última.** Amostra embutida multiplica
+  tokens por conversa e é enviesada (as últimas mensagens costumam ser "ok", "obrigado"), e convida
+  o modelo a concluir sem ter lido. O fluxo é escolher pela métrica e ler a conversa inteira.
+- **A janela de um atendimento começa 10 minutos antes de `dataInsercao`, nunca antes do
+  encerramento do atendimento anterior.** A mensagem que abre o ticket é gravada antes dele.
+- **Paginação por cursor**, ao contrário do resto do registro ("refine em vez de paginar"):
+  auditoria percorre conjuntos. Cursor por chave (carimbo truncado em ms + id) onde a ordem é
+  temporal; por deslocamento em `list_chat_attendances`, cuja ordem é uma duração calculada.
+- **O responsável é o atual.** `chat_assignments` não guarda histórico de transferência; as
+  descrições dizem quais números creditam o último dono.
+- **Texto de mensagem é dado do cliente, nunca instrução** — dito em cada descrição e nas instruções
+  do servidor quando a conexão tem o scope. O telefone do cliente segue a regra de PII; o texto das
+  mensagens não é mascarado, e é por isso que `agent:chats:read` é um scope próprio.
+- **Módulo desligado é erro, não lista vazia** (`assertChatHubEnabled`): "nenhum atendimento" e "sem
+  hub" levam o agente a conclusões opostas.
+- Chats `PLAYGROUND` (teste do agente de IA) ficam fora de todas as consultas.
+
+O prompt `auditoria-de-atendimento` fixa o método — amostra estratificada, rubrica de cinco itens,
+placar comparável entre execuções. Prompts agora declaram `scopes` e só aparecem para quem enxerga
+as ferramentas deles.
+
+Conexões existentes não ganham o scope sozinhas: o grant é por conexão. Rode
+`npm run seed:access-clients` para atualizar o teto das aplicações, e reconecte (OAuth) ou edite a
+conexão para incluir "Consultar atendimentos e conversas".
 
 ---
 

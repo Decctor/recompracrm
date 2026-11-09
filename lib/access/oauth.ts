@@ -40,6 +40,7 @@ export const OAUTH_SUPPORTED_SCOPES: string[] = [
 	"agent:finances:reconcile",
 	"agent:members:read",
 	"agent:message-templates:read",
+	"agent:chats:read",
 	"agent:campaigns:write",
 	"agent:campaigns:activate",
 	"agent:message-templates:write",

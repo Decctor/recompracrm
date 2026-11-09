@@ -3,8 +3,8 @@ import { listAllAgentTools } from "@/lib/agent-tools/registry";
 import { readResourceForActor, CURRENT_ORGANIZATION_RESOURCE_URI } from "@/lib/agent-tools/resources";
 import type { TAgentActorContext } from "@/lib/agent-tools/types";
 import { connection, db } from "@/services/drizzle";
-import { clients, campaigns, organizations } from "@/services/drizzle/schema";
-import { eq, or } from "drizzle-orm";
+import { chats, clients, campaigns, organizations } from "@/services/drizzle/schema";
+import { and, desc, eq, or } from "drizzle-orm";
 
 /**
  * Executa cada ferramenta do agente contra o banco real.
@@ -36,6 +36,7 @@ const ALL_SCOPES = new Set([
 	"agent:clients:pii",
 	"agent:products:read",
 	"agent:campaigns:read",
+	"agent:chats:read",
 	"platform:organizations:read",
 	"platform:metrics:read",
 ]);
@@ -80,6 +81,13 @@ async function main() {
 		limit: 1,
 	});
 
+	const [sampleChat] = await db.query.chats.findMany({
+		where: and(eq(chats.organizacaoId, organization.id), eq(chats.origem, "WHATSAPP")),
+		columns: { id: true },
+		orderBy: [desc(chats.ultimaMensagemData)],
+		limit: 1,
+	});
+
 	const organizacaoId = asPlatform ? organization.slug : undefined;
 	const argumentsByTool: Record<string, Record<string, unknown>> = {
 		get_commercial_results: { organizacaoId },
@@ -91,6 +99,11 @@ async function main() {
 		get_product_performance: { organizacaoId, limite: 3 },
 		list_campaigns: { organizacaoId, limite: 3 },
 		get_campaign_results: { organizacaoId, campanhaId: sampleCampaign?.id },
+		get_chat_analytics: { organizacaoId },
+		list_chat_attendances: { organizacaoId, limite: 3, ordenacao: "PRIMEIRA_RESPOSTA_MAIS_LENTA" },
+		search_chats: { organizacaoId, limite: 3 },
+		get_chat_messages: { organizacaoId, chatId: sampleChat?.id, limite: 5 },
+		search_chat_messages: { organizacaoId, termo: "obrigad", limite: 3 },
 		platform_search_organizations: { limite: 3 },
 		platform_get_organization_health: { organizacaoId: organization.slug },
 		platform_get_aggregate_metrics: {},
@@ -114,6 +127,11 @@ async function main() {
 		// Falta de amostra não é falha da ferramenta — é falta de dado nesta organização.
 		if (tool.name === "get_client_context" && !sampleClient) {
 			console.log(`  ⊘ ${tool.name} — sem cliente nesta organização`);
+			skipped++;
+			continue;
+		}
+		if (tool.name === "get_chat_messages" && !sampleChat) {
+			console.log(`  ⊘ ${tool.name} — sem conversa nesta organização`);
 			skipped++;
 			continue;
 		}

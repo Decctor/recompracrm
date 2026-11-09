@@ -7,6 +7,8 @@ import {
 	updateCampaignDraftTool,
 	validateCampaignDraftTool,
 } from "./tools/campaign-mutations";
+import { chatAnalyticsTool } from "./tools/chat-analytics";
+import { getChatMessagesTool, listChatAttendancesTool, searchChatMessagesTool, searchChatsTool } from "./tools/chats";
 import { clientContextTool } from "./tools/client-context";
 import { commercialResultsTool } from "./tools/commercial-results";
 import { listCampaignsTool } from "./tools/campaigns";
@@ -68,6 +70,12 @@ const AGENT_TOOLS = [
 	updateCampaignDraftTool,
 	activateCampaignTool,
 	listMembersTool,
+	// Hub de atendimentos: do agregado ao caso — estatística, lista, conversa, busca literal.
+	chatAnalyticsTool,
+	listChatAttendancesTool,
+	searchChatsTool,
+	getChatMessagesTool,
+	searchChatMessagesTool,
 	listMessageTemplatesTool,
 	getMessageTemplateTool,
 	createMessageTemplateDraftTool,

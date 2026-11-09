@@ -165,6 +165,12 @@ export const ACCESS_SCOPE_CATALOG: Record<TAccessScopeEnum, TAccessScopeDescript
 		description: "Listar membros da organização para atribuir responsabilidades de negócio.",
 		group: "AGENTE_IA",
 	},
+	"agent:chats:read": {
+		label: "Consultar atendimentos e conversas",
+		description:
+			"Ver as estatísticas do hub de atendimentos (tempo de resposta, fila, atendentes) e ler as conversas com os clientes, incluindo o texto das mensagens e as transcrições de áudio.",
+		group: "AGENTE_IA",
+	},
 	"agent:campaigns:write": {
 		label: "Criar e editar rascunhos de campanha",
 		description: "Criar e alterar campanhas sem ativá-las ou realizar envios.",
