@@ -423,6 +423,9 @@ export const fiscalProviderEnum = pgEnum("fiscal_provider", ["MANUAL", "SPEDY"])
 
 export const paymentProviderEnum = pgEnum("payment_provider", ["LOCAL", "MERCADO_PAGO", "STRIPE_CONNECT", "PAGARME"]);
 
+// Conta Stripe da própria plataforma (assinaturas do app) — ver services/stripe.
+export const stripeAccountEnum = pgEnum("stripe_account", ["SYNCRONIZA", "RECOMPRACRM"]);
+
 export const poiTransactionRequestStatusEnum = pgEnum("poi_transaction_request_status", ["PENDENTE", "PROCESSANDO", "APROVADO", "REJEITADO", "ERRO"]);
 
 export const poiTransactionRequestTypeEnum = pgEnum("poi_transaction_request_type", ["NOVA_TRANSACAO"]);

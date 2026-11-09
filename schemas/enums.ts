@@ -479,6 +479,10 @@ export type TPaymentValueModeEnum = z.infer<typeof PaymentValueModeEnum>;
 export const PaymentProviderEnum = z.enum(["LOCAL", "MERCADO_PAGO", "STRIPE_CONNECT", "PAGARME"]);
 export type TPaymentProviderEnum = z.infer<typeof PaymentProviderEnum>;
 
+// Conta Stripe da própria plataforma (assinaturas do app) — ver services/stripe.
+export const StripeAccountEnum = z.enum(["SYNCRONIZA", "RECOMPRACRM"]);
+export type TStripeAccountEnum = z.infer<typeof StripeAccountEnum>;
+
 // ============================================================================
 // TENTATIVAS DE PAGAMENTO (terminal SmartPOS) — recompracrm-pos-android/docs/03 e 05.
 // Enum próprio de adquirente: `PaymentProviderEnum` acima descreve o gateway da organização; a

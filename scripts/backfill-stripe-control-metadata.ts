@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { connection, db } from "@/services/drizzle";
 import { organizations } from "@/services/drizzle/schema";
-import { stripe } from "@/services/stripe";
+import { getStripeClient, resolveStripeAccount } from "@/services/stripe";
 import { isNotNull } from "drizzle-orm";
 
 /**
@@ -26,7 +26,7 @@ async function main() {
 
 	const rows = await db.query.organizations.findMany({
 		where: isNotNull(organizations.stripeCustomerId),
-		columns: { id: true, nome: true, email: true, telefone: true, stripeCustomerId: true },
+		columns: { id: true, nome: true, email: true, telefone: true, stripeConta: true, stripeCustomerId: true },
 	});
 
 	console.log(`${rows.length} organização(ões) com customer Stripe${apply ? "" : " [DRY RUN — use --apply para gravar]"}`);
@@ -51,7 +51,7 @@ async function main() {
 		}
 
 		try {
-			await stripe.customers.update(organization.stripeCustomerId, { metadata });
+			await getStripeClient(resolveStripeAccount(organization.stripeConta)).customers.update(organization.stripeCustomerId, { metadata });
 			updated++;
 		} catch (error) {
 			failed++;

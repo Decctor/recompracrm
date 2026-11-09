@@ -1,4 +1,5 @@
 import { AppSubscriptionPlans, type TAppSubscriptionPlanKey } from "@/config";
+import { hasChargeableStripeSubscription } from "@/lib/subscriptions/stripe-status";
 import type { TDealStatusEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
 import { deals, organizations, type TDealEntity } from "@/services/drizzle/schema";
@@ -166,6 +167,5 @@ export async function findDealByStripeCustomerId(customerId: string) {
 
 // Um deal "bloqueia" alterações destrutivas quando tem assinatura Stripe em estado cobrável.
 export function dealHasBlockingSubscription(deal: Pick<TDealEntity, "stripeSubscriptionStatus">) {
-	if (!deal.stripeSubscriptionStatus) return false;
-	return ["active", "trialing", "past_due", "unpaid"].includes(deal.stripeSubscriptionStatus);
+	return hasChargeableStripeSubscription(deal.stripeSubscriptionStatus);
 }

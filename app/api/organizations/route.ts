@@ -38,7 +38,7 @@ import {
 	sellers,
 	utils,
 } from "@/services/drizzle/schema";
-import { stripe } from "@/services/stripe";
+import { getStripeClient, getStripeSalesAccount } from "@/services/stripe";
 import { eq } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { generateOrganizationPoiQrCodes, getAppBaseUrl } from "@/lib/organizations/poi-qr-codes";
@@ -441,6 +441,8 @@ async function createOrganization({
 	const customerEmail = organization.email || sessionUser.email;
 	if (!customerEmail) throw new createHttpError.BadRequest("Email é necessário para criar assinatura.");
 
+	const salesAccount = getStripeSalesAccount();
+	const stripe = getStripeClient(salesAccount);
 	const stripeCustomer = await stripe.customers.create({
 		email: customerEmail,
 		name: organization.nome,
@@ -489,6 +491,7 @@ async function createOrganization({
 					defaults: organizationDefaults,
 				},
 				stripeCustomerId: stripeCustomer.id,
+				stripeConta: salesAccount,
 				assinaturaPlano: planName,
 			})
 			.where(eq(organizations.id, insertedOrgId));

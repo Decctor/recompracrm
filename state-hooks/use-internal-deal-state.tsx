@@ -7,6 +7,7 @@ const DealStateSchema = z.object({
 		// planoBase não é escolhido pelo admin: o servidor grava DEAL_PLAN_KEY na criação.
 		planoBase: true,
 		status: true,
+		stripeConta: true,
 		stripePriceId: true,
 		stripeCustomerId: true,
 		stripeSubscriptionId: true,

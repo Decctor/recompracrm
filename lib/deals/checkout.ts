@@ -1,9 +1,9 @@
 import { AppSubscriptionPlans, type TAppSubscriptionPlanKey } from "@/config";
-import { getDealPlanKey } from "@/lib/deals";
+import { dealHasBlockingSubscription, getDealPlanKey } from "@/lib/deals";
 import { getAppBaseUrl } from "@/lib/organizations/poi-qr-codes";
 import { db } from "@/services/drizzle";
 import { deals, type TDealEntity } from "@/services/drizzle/schema";
-import { stripe } from "@/services/stripe";
+import { getStripeClient, getStripeSalesAccount, resolveStripeAccount } from "@/services/stripe";
 import { eq } from "drizzle-orm";
 import createHttpError from "http-errors";
 
@@ -36,7 +36,8 @@ async function resolvePlanStripeProductId(planKey: TAppSubscriptionPlanKey) {
 	const priceId = AppSubscriptionPlans[planKey].pricing.monthly.stripePriceId;
 	if (!priceId) throw new createHttpError.InternalServerError("Price mensal do Stripe não configurado para o plano base do deal.");
 
-	const price = await stripe.prices.retrieve(priceId);
+	// Os price IDs da configuração são os da conta de vendas.
+	const price = await getStripeClient(getStripeSalesAccount()).prices.retrieve(priceId);
 	const productId = typeof price.product === "string" ? price.product : price.product.id;
 	if (!productId) throw new createHttpError.InternalServerError("Não foi possível resolver o produto do Stripe do plano base do deal.");
 
@@ -52,7 +53,17 @@ export async function ensureDealStripeCheckout(deal: TDealEntity) {
 
 	const controlMetadata = buildDealControlMetadata(deal);
 
-	let stripeCustomerId = deal.stripeCustomerId;
+	// Customer, price e sessão precisam estar na conta de vendas. Os de outra conta (deal criado
+	// antes da virada e nunca pago) são abandonados e recriados aqui. Com assinatura cobrável o
+	// checkout não se reemite: ela continua na conta onde vive.
+	const salesAccount = getStripeSalesAccount();
+	const stripe = getStripeClient(salesAccount);
+	const belongsToSalesAccount = !!deal.stripeCustomerId && resolveStripeAccount(deal.stripeConta) === salesAccount;
+	if (deal.stripeCustomerId && !belongsToSalesAccount && dealHasBlockingSubscription(deal)) {
+		throw new createHttpError.BadRequest("Este deal possui uma assinatura ativa em outra conta Stripe — não é possível emitir um novo checkout.");
+	}
+
+	let stripeCustomerId = belongsToSalesAccount ? deal.stripeCustomerId : null;
 	if (!stripeCustomerId) {
 		const customer = await stripe.customers.create({
 			email: deal.emailObtentor,
@@ -65,7 +76,7 @@ export async function ensureDealStripeCheckout(deal: TDealEntity) {
 
 	// Price dedicado sobre o produto do plano base: o valor negociado fica visível e
 	// auditável no dashboard do Stripe, e a fatura sai como "N × plano" numa única assinatura.
-	let stripePriceId = deal.stripePriceId;
+	let stripePriceId = belongsToSalesAccount ? deal.stripePriceId : null;
 	if (!stripePriceId) {
 		// Resolvido só aqui: reemitir o checkout de um deal que já tem price não toca o Stripe à toa.
 		const price = await stripe.prices.create({
@@ -97,6 +108,7 @@ export async function ensureDealStripeCheckout(deal: TDealEntity) {
 	await db
 		.update(deals)
 		.set({
+			stripeConta: salesAccount,
 			stripeCustomerId,
 			stripePriceId,
 			stripeCheckoutSessionId: checkoutSession.id,
@@ -111,7 +123,8 @@ export async function ensureDealStripeCheckout(deal: TDealEntity) {
 export async function reissueDealCheckout(deal: TDealEntity) {
 	if (deal.stripeCheckoutSessionId) {
 		try {
-			await stripe.checkout.sessions.expire(deal.stripeCheckoutSessionId);
+			// A sessão anterior vive na conta do deal, que pode não ser mais a de vendas.
+			await getStripeClient(resolveStripeAccount(deal.stripeConta)).checkout.sessions.expire(deal.stripeCheckoutSessionId);
 		} catch (error) {
 			console.warn("[WARN] [DEAL_CHECKOUT] Falha ao expirar checkout anterior do deal:", deal.id, error);
 		}

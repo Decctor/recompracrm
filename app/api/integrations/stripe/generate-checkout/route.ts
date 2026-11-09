@@ -11,7 +11,8 @@ import { DEFAULT_SERIAL_SCALE_CONFIG } from "@/lib/pos/serial-scale-protocol";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { db } from "@/services/drizzle";
 import { organizations } from "@/services/drizzle/schema";
-import { stripe } from "@/services/stripe";
+import { hasChargeableStripeSubscription } from "@/lib/subscriptions/stripe-status";
+import { getStripeClient, getStripeSalesAccount, resolveStripeAccount } from "@/services/stripe";
 import { eq } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
@@ -78,12 +79,30 @@ async function generateCheckoutRoute(request: NextRequest) {
 		lineItems.push({ price: CONSULTORIA_ADDON.stripePriceId, quantity: 1 });
 	}
 
-	// Check if org already has a Stripe customer or create one
-	let stripeCustomerId = organization.stripeCustomerId;
+	// Um checkout novo criaria uma segunda assinatura ao lado da que ainda cobra.
+	if (hasChargeableStripeSubscription(organization.stripeSubscriptionStatus)) {
+		throw new createHttpError.BadRequest("Esta organização já possui uma assinatura. Para trocar de plano ou de forma de pagamento, use o portal de cobrança.");
+	}
+
+	// O checkout nasce na conta de vendas. Um customer de outra conta (o da SYNCRONIZA, de uma
+	// assinatura já encerrada) não serve: o price e a sessão precisam estar na mesma conta que ele.
+	// Esse customer é abandonado — sem assinatura cobrável, nada mais acontece nele.
+	const salesAccount = getStripeSalesAccount();
+	const stripe = getStripeClient(salesAccount);
+	let stripeCustomerId = organization.stripeCustomerId && resolveStripeAccount(organization.stripeConta) === salesAccount ? organization.stripeCustomerId : null;
 
 	if (!stripeCustomerId) {
 		const customerEmail = organization.email || session.user.email;
 		if (!customerEmail) throw new createHttpError.BadRequest("Email é necessário para criar assinatura.");
+
+		if (organization.stripeCustomerId) {
+			console.log("[INFO] [GENERATE_CHECKOUT] Customer de outra conta Stripe substituído:", {
+				organizationId: userOrgId,
+				previousCustomerId: organization.stripeCustomerId,
+				previousAccount: resolveStripeAccount(organization.stripeConta),
+				salesAccount,
+			});
+		}
 
 		const stripeCustomer = await stripe.customers.create({
 			email: customerEmail,
@@ -101,6 +120,7 @@ async function generateCheckoutRoute(request: NextRequest) {
 			.update(organizations)
 			.set({
 				stripeCustomerId: stripeCustomerId,
+				stripeConta: salesAccount,
 			})
 			.where(eq(organizations.id, userOrgId));
 	} else {

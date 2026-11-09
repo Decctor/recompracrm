@@ -12,12 +12,17 @@ import {
 } from "@/lib/platform-partnerships/constants";
 import { db } from "@/services/drizzle";
 import { organizations, platformPartnerCommissions, platformPartnerReferrals } from "@/services/drizzle/schema";
-import { stripe } from "@/services/stripe";
+import { constructStripeWebhookEvent, getStripeClient } from "@/services/stripe";
 import { waitUntil } from "@vercel/functions";
 import { and, count, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { headers } from "next/headers";
 import { type NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
+
+// Price da consultoria na conta SYNCRONIZA. Congelado desde que as vendas passaram para a
+// RECOMPRACRM, mas as assinaturas antigas continuam faturando com ele — sem reconhecê-lo, a
+// consultoria entraria na base comissionável do parceiro.
+const SYNCRONIZA_CONSULTORIA_PRICE_ID = "price_1TeyrbJu49WpVubjENhMHgzK";
 
 const allowedStripeEvents: Stripe.Event.Type[] = [
 	"customer.subscription.created",
@@ -45,13 +50,13 @@ export async function POST(req: NextRequest) {
 
 	if (!signature) return NextResponse.json({}, { status: 400 });
 
-	let event: Stripe.Event;
-	try {
-		event = stripe.webhooks.constructEvent(body, signature, process.env.STRIPE_WEBHOOK_SIGNATURE_SECRET as string);
-	} catch (error) {
-		console.log("[STRIPE HOOK] Invalid event signature", error);
+	// As duas contas Stripe entregam nesta URL; o segredo que valida a assinatura diz de qual veio.
+	const verified = constructStripeWebhookEvent({ body, signature });
+	if (!verified) {
+		console.log("[STRIPE HOOK] Invalid event signature");
 		return NextResponse.json({}, { status: 400 });
 	}
+	const { event, account } = verified;
 
 	if (!allowedStripeEvents.includes(event.type)) return NextResponse.json({ received: true });
 
@@ -64,7 +69,7 @@ export async function POST(req: NextRequest) {
 		runArchivedEventProcessing({
 			eventId: archivedEventId,
 			run: async () => {
-				await processEvent(event);
+				await processEvent({ event, stripe: getStripeClient(account) });
 			},
 			resolveOrganizationId: () => resolveEventOrganizationId(event),
 		}),
@@ -85,13 +90,15 @@ async function resolveEventOrganizationId(event: Stripe.Event): Promise<string |
 	return organization?.id ?? null;
 }
 
-async function processEvent(event: Stripe.Event) {
+// Customer IDs são únicos em toda a Stripe, então o lookup local por customer não precisa da
+// conta. Ela só importa para chamar a API de volta: `stripe` é o client da conta que emitiu o evento.
+async function processEvent({ event, stripe }: { event: Stripe.Event; stripe: Stripe }) {
 	if (event.type === "invoice.paid" || event.type === "invoice.payment_succeeded") {
 		return await handleInvoicePaid(event.data.object as Stripe.Invoice);
 	}
 
 	if (event.type === "checkout.session.completed") {
-		return await handleCheckoutSessionCompleted(event.data.object as Stripe.Checkout.Session);
+		return await handleCheckoutSessionCompleted({ session: event.data.object as Stripe.Checkout.Session, stripe });
 	}
 
 	if (event.type === "checkout.session.async_payment_succeeded" || event.type === "checkout.session.async_payment_failed") {
@@ -226,14 +233,28 @@ function getInvoiceLineAmount(line: Stripe.InvoiceLineItem) {
 	return typeof amount === "number" ? amount : 0;
 }
 
+// Desde a API 2025-03-31 a linha não traz mais `price`: o ID vem em pricing.price_details.price.
+// Os dois formatos são lidos porque cada endpoint de webhook renderiza o evento na própria versão.
 function getInvoiceLinePriceId(line: Stripe.InvoiceLineItem) {
-	const lineRecord = line as unknown as { price?: { id?: string | null; recurring?: { interval?: string | null } | null } | null };
-	return lineRecord.price?.id ?? null;
+	const lineRecord = line as unknown as {
+		pricing?: { price_details?: { price?: string | { id?: string } | null } | null } | null;
+		price?: { id?: string | null } | null;
+	};
+	const price = lineRecord.pricing?.price_details?.price;
+	if (typeof price === "string") return price;
+	return price?.id ?? lineRecord.price?.id ?? null;
 }
 
-function getInvoiceLineRecurringInterval(line: Stripe.InvoiceLineItem) {
+// A linha não carrega mais o intervalo do price. O período cobrado diz o mesmo: um ciclo anual
+// cobre ~365 dias, um mensal no máximo 31. Proração de troca de plano gera período menor e conta
+// como mensal — a mesma leitura conservadora de antes.
+const YEARLY_LINE_MIN_PERIOD_SECONDS = 300 * 24 * 60 * 60;
+
+function isYearlyInvoiceLine(line: Stripe.InvoiceLineItem) {
 	const lineRecord = line as unknown as { price?: { recurring?: { interval?: string | null } | null } | null };
-	return lineRecord.price?.recurring?.interval ?? null;
+	if (lineRecord.price?.recurring?.interval) return lineRecord.price.recurring.interval === "year";
+	const { start, end } = line.period ?? {};
+	return typeof start === "number" && typeof end === "number" && end - start >= YEARLY_LINE_MIN_PERIOD_SECONDS;
 }
 
 function buildInvoiceSnapshot(invoice: Stripe.Invoice) {
@@ -252,7 +273,7 @@ function buildInvoiceSnapshot(invoice: Stripe.Invoice) {
 			id: line.id,
 			amount: getInvoiceLineAmount(line),
 			priceId: getInvoiceLinePriceId(line),
-			interval: getInvoiceLineRecurringInterval(line),
+			interval: isYearlyInvoiceLine(line) ? "year" : "month",
 			description: line.description,
 			period: line.period,
 		})),
@@ -269,7 +290,7 @@ function addDays(date: Date, days: number) {
 // Para boleto, "completed" significa boleto EMITIDO, não pago — a assinatura fica `incomplete`
 // até a compensação. Abre a janela de acesso otimista com data absoluta local; a consolidação
 // financeira é exclusiva do invoice.paid.
-async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) {
+async function handleCheckoutSessionCompleted({ session, stripe }: { session: Stripe.Checkout.Session; stripe: Stripe }) {
 	if (session.mode !== "subscription") return;
 	// Cartão (e PIX instantâneo) confirmam na hora: o invoice.paid consolida, nada a fazer aqui.
 	if (session.payment_status === "paid") return;
@@ -286,7 +307,7 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) 
 	if (!organization) return;
 
 	const subscriptionId = typeof session.subscription === "string" ? session.subscription : (session.subscription?.id ?? null);
-	const boletoExpiresAt = subscriptionId ? await findBoletoVoucherExpiresAt(subscriptionId) : null;
+	const boletoExpiresAt = subscriptionId ? await findBoletoVoucherExpiresAt({ subscriptionId, stripe }) : null;
 
 	// Vencimento real do boleto + folga de compensação. Sem vencimento conhecido (PIX aguardando
 	// confirmação, ou falha na leitura do voucher), janela-teto curta — sempre uma data absoluta,
@@ -308,7 +329,7 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) 
 // caminho é invoice.payments[].payment.payment_intent; em versões anteriores era
 // invoice.payment_intent — lemos os dois formatos defensivamente, no mesmo idioma dos helpers
 // de invoice acima. Falha em qualquer passo → null (o chamador usa a janela-teto).
-async function findBoletoVoucherExpiresAt(subscriptionId: string): Promise<Date | null> {
+async function findBoletoVoucherExpiresAt({ subscriptionId, stripe }: { subscriptionId: string; stripe: Stripe }): Promise<Date | null> {
 	try {
 		const subscription = await stripe.subscriptions.retrieve(subscriptionId);
 		const latestInvoice = (subscription as unknown as { latest_invoice?: string | { id?: string } | null }).latest_invoice;
@@ -390,7 +411,7 @@ async function handleInvoicePaid(invoice: Stripe.Invoice) {
 	});
 	if (!referral || referral.partner.status !== "ATIVO") return;
 
-	const consultoriaPriceId = CONSULTORIA_ADDON.stripePriceId;
+	const consultoriaPriceIds = new Set([CONSULTORIA_ADDON.stripePriceId, SYNCRONIZA_CONSULTORIA_PRICE_ID].filter(Boolean));
 	let valorConsultoriaCentavos = 0;
 	let valorBaseComissionavelCentavos = 0;
 	let hasYearlyLine = false;
@@ -398,13 +419,13 @@ async function handleInvoicePaid(invoice: Stripe.Invoice) {
 	for (const line of invoice.lines.data) {
 		const amount = getInvoiceLineAmount(line);
 		const priceId = getInvoiceLinePriceId(line);
-		if (consultoriaPriceId && priceId === consultoriaPriceId) {
+		if (priceId && consultoriaPriceIds.has(priceId)) {
 			valorConsultoriaCentavos += amount;
 			continue;
 		}
 
 		valorBaseComissionavelCentavos += amount;
-		if (getInvoiceLineRecurringInterval(line) === "year") hasYearlyLine = true;
+		if (isYearlyInvoiceLine(line)) hasYearlyLine = true;
 	}
 
 	if (valorBaseComissionavelCentavos <= 0) return;

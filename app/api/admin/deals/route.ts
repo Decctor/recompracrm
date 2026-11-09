@@ -23,7 +23,7 @@ import { createSimplifiedSearchCondition } from "@/lib/search";
 import { DealSchema } from "@/schemas/deals";
 import { db } from "@/services/drizzle";
 import { deals, organizations } from "@/services/drizzle/schema";
-import { stripe } from "@/services/stripe";
+import { getStripeClient, resolveStripeAccount } from "@/services/stripe";
 import { count, eq, or } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
@@ -377,6 +377,7 @@ async function updateDeal({ input, userId }: { input: TUpdateDealInput; userId: 
 	}
 
 	// CANCELAR
+	const stripe = getStripeClient(resolveStripeAccount(deal.stripeConta));
 	if (deal.stripeSubscriptionId && dealHasBlockingSubscription(deal)) {
 		// O webhook também processará o customer.subscription.deleted, mas sincronizamos
 		// localmente para resposta imediata no painel.

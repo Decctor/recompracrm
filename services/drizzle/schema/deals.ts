@@ -1,7 +1,7 @@
 import { relations } from "drizzle-orm";
 import { index, integer, text, timestamp, varchar } from "drizzle-orm/pg-core";
 import { newTable } from "./common";
-import { dealIntervaloEnum, dealStatusEnum } from "./enums";
+import { dealIntervaloEnum, dealStatusEnum, stripeAccountEnum } from "./enums";
 import { organizations } from "./organizations";
 import { users } from "./users";
 
@@ -32,6 +32,8 @@ export const deals = newTable(
 		// Stripe — assinatura única que cobre todas as licenças do deal. As orgs vinculadas
 		// NÃO recebem estes IDs (só o status replicado): o customer/subscription pertence ao
 		// comprador, e copiá-los quebraria o lookup do webhook e vazaria o billing portal.
+		// Conta Stripe dona do customer, do price e da assinatura do deal. Nulo enquanto não há customer.
+		stripeConta: stripeAccountEnum("stripe_conta"),
 		stripePriceId: text("stripe_price_id"),
 		stripeCustomerId: text("stripe_customer_id"),
 		stripeSubscriptionId: text("stripe_subscription_id"),

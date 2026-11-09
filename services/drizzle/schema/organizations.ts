@@ -9,7 +9,7 @@ import { relations } from "drizzle-orm";
 import { boolean, integer, jsonb, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/pg-core";
 import { newTable } from "./common";
 import { deals } from "./deals";
-import { defaultDataSourceEnum, fiscalProviderEnum, organizationIntegrationTypeEnum, paymentProviderEnum } from "./enums";
+import { defaultDataSourceEnum, fiscalProviderEnum, organizationIntegrationTypeEnum, paymentProviderEnum, stripeAccountEnum } from "./enums";
 import { sellers } from "./sellers";
 import { users } from "./users";
 
@@ -43,6 +43,9 @@ export const organizations = newTable(
 		// Marks the moment the deep onboarding flow was concluded. Null = onboarding in progress (dashboard is gated, user is bounced back).
 		dataOnboardingConclusao: timestamp("data_onboarding_conclusao"),
 		// Stripe
+		// Conta Stripe dona do customer/assinatura abaixo. Toda chamada sobre eles usa o client
+		// dessa conta (services/stripe). Nulo enquanto não há customer.
+		stripeConta: stripeAccountEnum("stripe_conta"),
 		stripeCustomerId: text("stripe_customer_id"),
 		stripeSubscriptionId: text("stripe_subscription_id"),
 		stripeSubscriptionStatus: text("stripe_subscription_status"),

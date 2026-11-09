@@ -2,7 +2,7 @@ import { appApiHandler } from "@/lib/app-api";
 import { assertCronAuthorized } from "@/lib/cron/assert-cron-authorized";
 import { clearProvisionalAccess, consolidatePaidAccess } from "@/lib/subscriptions/access";
 import { db } from "@/services/drizzle";
-import { stripe } from "@/services/stripe";
+import { getStripeClient, resolveStripeAccount } from "@/services/stripe";
 import { type NextRequest, NextResponse } from "next/server";
 
 // Retaguarda dos webhooks Stripe (plano: docs/dev-planning/stripe-boleto-plan.md): a checagem
@@ -30,7 +30,7 @@ async function reconcileSubscriptions() {
 				lt(fields.assinaturaAcessoProvisorioFim, now),
 				or(isNull(fields.assinaturaPeriodoPagoFim), lt(fields.assinaturaPeriodoPagoFim, now)),
 			),
-		columns: { id: true, stripeSubscriptionId: true, assinaturaAcessoProvisorioFim: true },
+		columns: { id: true, stripeConta: true, stripeSubscriptionId: true, assinaturaAcessoProvisorioFim: true },
 	});
 
 	console.log(`[SUBSCRIPTION_RECONCILIATION] ${staleOrganizations.length} organizações com janela provisória vencida.`);
@@ -43,6 +43,7 @@ async function reconcileSubscriptions() {
 				continue;
 			}
 
+			const stripe = getStripeClient(resolveStripeAccount(organization.stripeConta));
 			const subscription = await stripe.subscriptions.retrieve(organization.stripeSubscriptionId);
 			const latestInvoice = (subscription as unknown as { latest_invoice?: string | { id?: string } | null }).latest_invoice;
 			const invoiceId = typeof latestInvoice === "string" ? latestInvoice : (latestInvoice?.id ?? null);

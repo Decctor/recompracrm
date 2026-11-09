@@ -1,5 +1,5 @@
 import z from "zod";
-import { DealIntervaloEnum, DealStatusEnum } from "./enums";
+import { DealIntervaloEnum, DealStatusEnum, StripeAccountEnum } from "./enums";
 
 // Deal personalizado (venda B2B multi-licença): uma assinatura Stripe única cobre
 // quantidadeLicencas organizações. Espelha a tabela ampmais_deals.
@@ -36,6 +36,7 @@ export const DealSchema = z.object({
 		.min(100, "O valor unitário mínimo é R$ 1,00."),
 	intervalo: DealIntervaloEnum,
 	status: DealStatusEnum,
+	stripeConta: StripeAccountEnum.optional().nullable(),
 	stripePriceId: z.string({ invalid_type_error: "Tipo não válido para o price do Stripe." }).optional().nullable(),
 	stripeCustomerId: z.string({ invalid_type_error: "Tipo não válido para o customer do Stripe." }).optional().nullable(),
 	stripeSubscriptionId: z.string({ invalid_type_error: "Tipo não válido para a subscription do Stripe." }).optional().nullable(),
