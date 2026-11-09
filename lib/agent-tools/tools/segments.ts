@@ -19,10 +19,10 @@ export const listSegmentsTool = defineAgentTool({
 		[
 			"Como a base de clientes desta organização está dividida: a distribuição RFM (quantos clientes em cada categoria,",
 			"por exemplo Campeões, Em risco, Hibernando) e os públicos salvos que as campanhas usam.",
-			"Chame esta ferramenta **antes** de falar de grupos de clientes: as categorias RFM são definidas pela organização e",
-			"variam entre elas — não invente nomes de segmento nem assuma que uma categoria existe aqui.",
+			"As categorias RFM são definidas por organização e variam entre elas: esta lista é a referência das categorias e",
+			"públicos que existem nesta organização.",
 			"`clientesSemCategoria` são clientes que a análise RFM ainda não classificou, normalmente por falta de histórico.",
-			actor.mode === "PLATAFORMA" ? "Informe `organizacaoId` (id ou slug) para escolher a organização." : "",
+			actor.mode === "PLATAFORMA" ? "`organizacaoId` (id ou slug) escolhe a organização." : "",
 		]
 			.filter(Boolean)
 			.join(" "),

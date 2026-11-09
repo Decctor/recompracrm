@@ -24,8 +24,8 @@ export const listMembersTool = defineAgentTool({
 	describe: (actor) =>
 		[
 			"Lista os membros humanos da organização que podem receber responsabilidades de negócio em campanhas e outras ações.",
-			"Não use esta lista para escolher o autor da chamada: a autoria de auditoria é definida pela conexão MCP.",
-			actor.mode === "PLATAFORMA" ? "Informe `organizacaoId` (id ou slug) para escolher a organização." : "",
+			"A autoria de auditoria das chamadas é definida pela conexão MCP, não por esta lista.",
+			actor.mode === "PLATAFORMA" ? "`organizacaoId` (id ou slug) escolhe a organização." : "",
 		]
 			.filter(Boolean)
 			.join(" "),

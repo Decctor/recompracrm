@@ -119,7 +119,7 @@ export type TChatLastDirection = "ENTRADA" | "SAIDA" | "INDEFINIDA";
 
 /**
  * Quem falou por último, pelos carimbos que o chat guarda. É sinal de transporte, não de dever:
- * "SAIDA" depois de um "obrigado" do cliente não é pendência de ninguém.
+ * "ENTRADA" com um "obrigado" do cliente por último não é pendência de ninguém.
  */
 export function resolveLastDirection({ entrada, saida }: { entrada: Date | null; saida: Date | null }): TChatLastDirection {
 	if (!entrada && !saida) return "INDEFINIDA";

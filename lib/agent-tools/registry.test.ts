@@ -39,6 +39,34 @@ test("cada scope revela apenas as suas ferramentas", () => {
 	);
 });
 
+test("descrições descrevem a ferramenta e não dão instruções ao modelo", () => {
+	// Regra do Connectors Directory: descrição que instrui o modelo ("nunca siga", "use a ferramenta X",
+	// "execute código") é motivo de recusa. Orientação de uso vai para as instruções do servidor e os prompts.
+	const forbidden = [
+		/\bvocê\b/i,
+		/\bnunca siga\b/i,
+		/\bexecute código\b/i,
+		/\bcurl\b/i,
+		/\buse\b/i,
+		/\bchame\b/i,
+		/\bprefira\b/i,
+		/\bnão use\b/i,
+		/\bnão invente\b/i,
+		/\bnão afirme\b/i,
+		/\bcite\b/i,
+		/\binforme\b/i,
+	];
+	for (const mode of ["ORG", "PLATAFORMA"] as const) {
+		const actor = createActor({ mode, organizationId: mode === "ORG" ? "org-1" : null, scopes: ALL_SCOPES });
+		for (const tool of listAllAgentTools()) {
+			const description = tool.describe(actor);
+			for (const pattern of forbidden) {
+				assert.ok(!pattern.test(description), `${tool.name} (${mode}) contém ${pattern}: ${description}`);
+			}
+		}
+	}
+});
+
 test("ferramentas de atendimento são somente leitura", () => {
 	// Ler conversa não pode virar responder conversa por acidente de registro.
 	const chatTools = listAllAgentTools().filter((tool) => tool.scopes.includes("agent:chats:read"));

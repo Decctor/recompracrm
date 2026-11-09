@@ -63,7 +63,7 @@ export const listMessageTemplatesTool = defineAgentTool({
 		pagina: z.number({ invalid_type_error: "Tipo inválido para a página." }).int().positive().optional().nullable(),
 	}),
 	describe: (actor) =>
-		`Lista templates locais com status de aprovação e qualidade calculados por telefone conectado. ${actor.mode === "PLATAFORMA" ? "Informe `organizacaoId` (id ou slug)." : ""}`,
+		`Lista templates locais com status de aprovação e qualidade calculados por telefone conectado. ${actor.mode === "PLATAFORMA" ? "`organizacaoId` (id ou slug) escolhe a organização." : ""}`,
 	execute: async (input, actor) => {
 		const organizationId = await resolveOrganizationScope(actor, input.organizacaoId);
 		return getMessageTemplates({ input: { id: null, search: input.busca, page: input.pagina ?? 1 }, organizationId });
@@ -79,7 +79,7 @@ export const getMessageTemplateTool = defineAgentTool({
 		messageTemplateId: z.string({ required_error: "ID do template não informado.", invalid_type_error: "Tipo inválido para o ID do template." }),
 	}),
 	describe: (actor) =>
-		`Retorna conteúdo, alerta, status e qualidade por telefone de um template. ${actor.mode === "PLATAFORMA" ? "Informe `organizacaoId` (id ou slug)." : ""}`,
+		`Retorna conteúdo, alerta, status e qualidade por telefone de um template. ${actor.mode === "PLATAFORMA" ? "`organizacaoId` (id ou slug) escolhe a organização." : ""}`,
 	execute: async (input, actor) => {
 		const organizationId = await resolveOrganizationScope(actor, input.organizacaoId);
 		return getMessageTemplates({ input: { id: input.messageTemplateId, search: null, page: 1 }, organizationId });
@@ -97,7 +97,7 @@ export const createMessageTemplateDraftTool = defineAgentTool({
 		.merge(TemplateMediaReferenceInputSchema)
 		.merge(AgentMutationControlInputSchema),
 	describe: (actor) =>
-		`Cria somente um rascunho local; não envia nada à Meta. Para cabeçalho gerado, envie a imagem com as ferramentas de mídia e informe apenas \`conteudoMidiaCaminho\`; nunca informe uma URL. ${actor.mode === "PLATAFORMA" ? "Informe `organizacaoId` (id ou slug)." : ""}`,
+		`Cria somente um rascunho local; não envia nada à Meta. O cabeçalho de mídia aceita apenas um \`conteudoMidiaCaminho\` devolvido pelas ferramentas de mídia; URLs são recusadas. ${actor.mode === "PLATAFORMA" ? "`organizacaoId` (id ou slug) escolhe a organização." : ""}`,
 	execute: async (input, actor) => {
 		const organizationId = await resolveOrganizationScope(actor, input.organizacaoId);
 		const authorId = await resolveResponsibleUser(actor, organizationId);
@@ -125,7 +125,7 @@ export const updateMessageTemplateDraftTool = defineAgentTool({
 		.merge(TemplateMediaReferenceInputSchema)
 		.merge(AgentMutationControlInputSchema),
 	describe: (actor) =>
-		`Atualiza somente um template ainda não submetido à Meta; não cria nem altera recursos remotos. Para trocar mídia, informe apenas \`conteudoMidiaCaminho\`; URLs fornecidas pelo agente são recusadas. ${actor.mode === "PLATAFORMA" ? "Informe `organizacaoId` (id ou slug)." : ""}`,
+		`Atualiza somente um template ainda não submetido à Meta; não cria nem altera recursos remotos. A mídia é trocada por um novo \`conteudoMidiaCaminho\`; URLs são recusadas. ${actor.mode === "PLATAFORMA" ? "`organizacaoId` (id ou slug) escolhe a organização." : ""}`,
 	execute: async (input, actor) => {
 		const organizationId = await resolveOrganizationScope(actor, input.organizacaoId);
 		await resolveResponsibleUser(actor, organizationId);
@@ -160,7 +160,7 @@ export const listWhatsappTemplateDestinationsTool = defineAgentTool({
 	modes: ["ORG", "PLATAFORMA"],
 	inputSchema: OrganizationInputSchema,
 	describe: (actor) =>
-		`Lista os números de WhatsApp conectados que podem receber a submissão de um template. ${actor.mode === "PLATAFORMA" ? "Informe `organizacaoId` (id ou slug)." : ""}`,
+		`Lista os números de WhatsApp conectados que podem receber a submissão de um template. ${actor.mode === "PLATAFORMA" ? "`organizacaoId` (id ou slug) escolhe a organização." : ""}`,
 	execute: async (input, actor) => {
 		const organizationId = await resolveOrganizationScope(actor, input.organizacaoId);
 		const phones = await getOrganizationWhatsappPhones(organizationId);
@@ -185,7 +185,7 @@ export const submitMessageTemplateForApprovalTool = defineAgentTool({
 		aprovacaoId: z.string({ invalid_type_error: "Tipo inválido para o ID da aprovação." }).optional().nullable(),
 	}),
 	describe: (actor) =>
-		`Solicita aprovação humana ou, com \`aprovacaoId\` já aprovado, submete um template a um telefone/WABA da Meta. A submissão inicia análise; não significa aprovação. ${actor.mode === "PLATAFORMA" ? "Informe `organizacaoId` (id ou slug)." : ""}`,
+		`Solicita aprovação humana ou, com \`aprovacaoId\` já aprovado, submete um template a um telefone/WABA da Meta. A submissão inicia análise; não significa aprovação. ${actor.mode === "PLATAFORMA" ? "`organizacaoId` (id ou slug) escolhe a organização." : ""}`,
 	execute: async (input, actor) => {
 		const organizationId = await resolveOrganizationScope(actor, input.organizacaoId);
 		const requesterId = await resolveResponsibleUser(actor, organizationId);
@@ -259,7 +259,7 @@ export const syncMessageTemplateStatusTool = defineAgentTool({
 		telefoneId: z.string({ required_error: "ID do telefone não informado." }),
 	}),
 	describe: (actor) =>
-		`Consulta a Meta e atualiza localmente o status, a qualidade e o conteúdo retornado para um telefone. ${actor.mode === "PLATAFORMA" ? "Informe `organizacaoId` (id ou slug)." : ""}`,
+		`Consulta a Meta e atualiza localmente o status, a qualidade e o conteúdo retornado para um telefone. ${actor.mode === "PLATAFORMA" ? "`organizacaoId` (id ou slug) escolhe a organização." : ""}`,
 	execute: async (input, actor) => {
 		const organizationId = await resolveOrganizationScope(actor, input.organizacaoId);
 		await syncMessageTemplatePhone({ input: { messageTemplateId: input.messageTemplateId, telefoneId: input.telefoneId }, organizationId });

@@ -38,7 +38,7 @@ export const commercialResultsTool = defineAgentTool({
 			"Considera apenas vendas confirmadas.",
 			PERIOD_DESCRIPTION,
 			actor.mode === "PLATAFORMA"
-				? "Esta é uma conexão de plataforma: informe `organizacaoId` (id ou slug) para escolher a organização."
+				? "Conexão de plataforma: `organizacaoId` (id ou slug) escolhe a organização."
 				: "Sempre responde sobre a organização desta conexão.",
 		].join(" "),
 	execute: async (input, actor) => {

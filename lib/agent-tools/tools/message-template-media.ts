@@ -29,15 +29,15 @@ export const createMessageTemplateMediaUploadTool = defineAgentTool({
 			.number({ required_error: "Tamanho do arquivo não informado.", invalid_type_error: "Tipo inválido para o tamanho do arquivo." })
 			.int()
 			.positive()
-			.describe("Tamanho EXATO do arquivo em bytes (ex.: `wc -c arquivo.png`). O PUT é recusado se os bytes recebidos não baterem."),
+			.describe("Tamanho exato do arquivo em bytes. O PUT é recusado se os bytes recebidos não baterem."),
 		sha256: z
 			.string({ invalid_type_error: "Tipo inválido para o SHA-256." })
 			.optional()
 			.nullable()
-			.describe("SHA-256 hex do arquivo (ex.: `sha256sum arquivo.png`). Opcional, mas garante que corrupção no caminho seja detectada."),
+			.describe("SHA-256 hex do arquivo. Opcional; com ele, corrupção no caminho é detectada."),
 	}),
 	describe: (actor) =>
-		`Prepara o upload de uma imagem JPEG/PNG (até 4 MB) que só existe no seu ambiente: devolve uma \`uploadUrl\` NESTE domínio + \`token\`. Envie os bytes crus com \`curl -X PUT -H "Authorization: Bearer <token>" --data-binary @arquivo <uploadUrl>\` e depois chame complete_message_template_media_upload com o \`uploadId\`. Para imagem já hospedada, prefira upload_message_template_media com \`conteudoUrl\`. ${actor.mode === "PLATAFORMA" ? "Informe `organizacaoId` (id ou slug)." : ""}`,
+		`Prepara o upload de uma imagem JPEG/PNG (até 4 MB) a partir de um arquivo local: devolve uma \`uploadUrl\` neste mesmo domínio e um \`token\`. O upload é um PUT dos bytes crus na \`uploadUrl\` com o cabeçalho \`Authorization: Bearer <token>\`, concluído por complete_message_template_media_upload com o \`uploadId\`. Imagens já hospedadas têm o caminho mais curto em upload_message_template_media com \`conteudoUrl\`. ${actor.mode === "PLATAFORMA" ? "`organizacaoId` (id ou slug) escolhe a organização." : ""}`,
 	execute: async (input, actor) => {
 		const organizationId = await resolveOrganizationScope(actor, input.organizacaoId);
 		const responsibleUserId = await resolveResponsibleUser(actor, organizationId);
@@ -69,7 +69,7 @@ export const completeMessageTemplateMediaUploadTool = defineAgentTool({
 		uploadId: z.string({ required_error: "ID do upload não informado." }).min(1),
 	}),
 	describe: (actor) =>
-		`Conclui o upload iniciado por create_message_template_media_upload (após o PUT dos bytes na \`uploadUrl\`) e devolve o \`conteudoMidiaCaminho\` validado, pronto para usar no cabeçalho de um template. Não é necessário depois de upload_message_template_media, que já devolve o caminho validado. ${actor.mode === "PLATAFORMA" ? "Informe `organizacaoId` (id ou slug)." : ""}`,
+		`Conclui o upload iniciado por create_message_template_media_upload (após o PUT dos bytes na \`uploadUrl\`) e devolve o \`conteudoMidiaCaminho\` validado, pronto para usar no cabeçalho de um template. Não é necessário depois de upload_message_template_media, que já devolve o caminho validado. ${actor.mode === "PLATAFORMA" ? "`organizacaoId` (id ou slug) escolhe a organização." : ""}`,
 	execute: async (input, actor) => {
 		const organizationId = await resolveOrganizationScope(actor, input.organizacaoId);
 		await resolveResponsibleUser(actor, organizationId);
@@ -116,7 +116,7 @@ export const uploadMessageTemplateMediaTool = defineAgentTool({
 		mimeType: z.enum(["image/jpeg", "image/png"]).optional().nullable(),
 	}),
 	describe: (actor) =>
-		`Envia uma imagem JPEG/PNG (até 5 MB) e devolve o \`conteudoMidiaCaminho\` já validado, pronto para usar no cabeçalho de um template. Informe \`conteudoUrl\` de uma imagem pública https (preferido: o servidor baixa os bytes) OU \`conteudoBase64\` para um arquivo pequeno que só existe localmente (gerar base64 é lento; evite acima de ~200 KB — para arquivos locais maiores, use create_message_template_media_upload). ${actor.mode === "PLATAFORMA" ? "Informe `organizacaoId` (id ou slug)." : ""}`,
+		`Envia uma imagem JPEG/PNG (até 5 MB) e devolve o \`conteudoMidiaCaminho\` já validado, pronto para usar no cabeçalho de um template. Aceita \`conteudoUrl\` de uma imagem pública https (o servidor baixa os bytes) ou \`conteudoBase64\` com o arquivo; base64 fica lento acima de ~200 KB, e arquivos locais maiores têm o fluxo de create_message_template_media_upload. ${actor.mode === "PLATAFORMA" ? "`organizacaoId` (id ou slug) escolhe a organização." : ""}`,
 	execute: async (input, actor) => {
 		const organizationId = await resolveOrganizationScope(actor, input.organizacaoId);
 		await resolveResponsibleUser(actor, organizationId);

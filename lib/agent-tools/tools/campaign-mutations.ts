@@ -29,7 +29,7 @@ export const getCampaignConfigurationTool = defineAgentTool({
 		campanhaId: z.string({ required_error: "ID da campanha não informado.", invalid_type_error: "Tipo inválido para o ID da campanha." }),
 	}),
 	describe: (actor) =>
-		`Retorna a configuração completa e as segmentações de uma campanha. ${actor.mode === "PLATAFORMA" ? "Informe `organizacaoId` (id ou slug)." : ""}`,
+		`Retorna a configuração completa e as segmentações de uma campanha. ${actor.mode === "PLATAFORMA" ? "`organizacaoId` (id ou slug) escolhe a organização." : ""}`,
 	execute: async (input, actor) => {
 		const organizacaoId = await resolveOrganizationScope(actor, input.organizacaoId);
 		const campaign = await db.query.campaigns.findFirst({
@@ -50,7 +50,7 @@ export const createCampaignDraftTool = defineAgentTool({
 	mutates: true,
 	inputSchema: CreateCampaignInputSchema.merge(OrganizationInputSchema).merge(AgentMutationControlInputSchema),
 	describe: (actor) =>
-		`Cria uma campanha obrigatoriamente inativa. Valida gatilho, template, limites, cashback, cupom e segmentações. ${actor.mode === "PLATAFORMA" ? "Informe `organizacaoId` (id ou slug)." : ""}`,
+		`Cria uma campanha obrigatoriamente inativa. Valida gatilho, template, limites, cashback, cupom e segmentações. ${actor.mode === "PLATAFORMA" ? "`organizacaoId` (id ou slug) escolhe a organização." : ""}`,
 	execute: async (input, actor) => {
 		const organizacaoId = await resolveOrganizationScope(actor, input.organizacaoId);
 		const authorId = await resolveResponsibleUser(actor, organizacaoId);
@@ -69,7 +69,7 @@ export const validateCampaignDraftTool = defineAgentTool({
 	modes: ["ORG", "PLATAFORMA"],
 	inputSchema: CreateCampaignInputSchema.merge(OrganizationInputSchema),
 	describe: (actor) =>
-		`Valida uma configuração de campanha sem persistir nem ativar nada. ${actor.mode === "PLATAFORMA" ? "Informe `organizacaoId` (id ou slug)." : ""}`,
+		`Valida uma configuração de campanha sem persistir nem ativar nada. ${actor.mode === "PLATAFORMA" ? "`organizacaoId` (id ou slug) escolhe a organização." : ""}`,
 	execute: async (input, actor) => {
 		const organizationId = await resolveOrganizationScope(actor, input.organizacaoId);
 		// Validacao pura: autor e data nao sao persistidos, so completam o formato da campanha.
@@ -90,7 +90,7 @@ export const updateCampaignDraftTool = defineAgentTool({
 	mutates: true,
 	inputSchema: UpdateCampaignInputSchema.merge(OrganizationInputSchema).merge(AgentMutationControlInputSchema),
 	describe: (actor) =>
-		`Atualiza somente uma campanha inativa e não pode ativá-la. ${actor.mode === "PLATAFORMA" ? "Informe `organizacaoId` (id ou slug)." : ""}`,
+		`Atualiza somente uma campanha inativa e não pode ativá-la. ${actor.mode === "PLATAFORMA" ? "`organizacaoId` (id ou slug) escolhe a organização." : ""}`,
 	execute: async (input, actor) => {
 		const organizacaoId = await resolveOrganizationScope(actor, input.organizacaoId);
 		await resolveResponsibleUser(actor, organizacaoId);
@@ -120,7 +120,7 @@ export const activateCampaignTool = defineAgentTool({
 		aprovacaoId: z.string({ invalid_type_error: "Tipo inválido para o ID da aprovação." }).optional().nullable(),
 	}),
 	describe: (actor) =>
-		`Solicita aprovação humana para ativar uma campanha ou consome uma aprovação já concedida. Sem \`aprovacaoId\`, apenas cria a solicitação e não ativa nada. ${actor.mode === "PLATAFORMA" ? "Informe `organizacaoId` (id ou slug)." : ""}`,
+		`Solicita aprovação humana para ativar uma campanha ou consome uma aprovação já concedida. Sem \`aprovacaoId\`, apenas cria a solicitação e não ativa nada. ${actor.mode === "PLATAFORMA" ? "`organizacaoId` (id ou slug) escolhe a organização." : ""}`,
 	execute: async (input, actor) => {
 		const organizationId = await resolveOrganizationScope(actor, input.organizacaoId);
 		const requesterId = await resolveResponsibleUser(actor, organizationId);

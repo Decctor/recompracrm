@@ -64,12 +64,12 @@ export const createStatementImportTool = defineAgentTool({
 	}),
 	describe: (actor) =>
 		[
-			"Registra como importação de extrato as linhas que você transcreveu de um comprovante (print, PDF, foto de maquininha), na conta financeira indicada.",
-			'Transcreva fielmente: valor exato, hora local ("YYYY-MM-DD HH:mm:ss") e o nome do pagador em `descricao` — o sentido vai em `tipo`, o valor é sempre positivo.',
+			"Registra como importação de extrato linhas transcritas de um comprovante (print, PDF, foto de maquininha), na conta financeira indicada.",
+			'Cada linha leva o valor exato (sempre positivo), a hora local ("YYYY-MM-DD HH:mm:ss"), o sentido em `tipo` e o nome do pagador em `descricao`.',
 			"Idempotente por conteúdo: linhas idênticas já importadas (mesma conta, data, valor, tipo e descrição) são puladas, então reenviar o mesmo comprovante não duplica.",
-			"Por padrão roda o motor de matching automático sobre as linhas novas (sugestões AUTOMATICO/HEURISTICO/IA); revise depois as que continuarem PENDENTES com `get_statement_transactions` e proponha os vínculos restantes com `suggest_reconciliation_matches`.",
+			"Por padrão roda o motor de matching automático sobre as linhas novas (sugestões AUTOMATICO/HEURISTICO/IA). As linhas que continuarem PENDENTES aparecem em `get_statement_transactions`, e vínculos adicionais são registrados por `suggest_reconciliation_matches`.",
 			"Nada aqui confirma conciliação — sugestões são confirmadas por um humano no painel.",
-			actor.mode === "PLATAFORMA" ? "Informe `organizacaoId` (id ou slug)." : "",
+			actor.mode === "PLATAFORMA" ? "`organizacaoId` (id ou slug) escolhe a organização." : "",
 		]
 			.filter(Boolean)
 			.join(" "),
@@ -178,10 +178,10 @@ export const suggestReconciliationMatchesTool = defineAgentTool({
 	describe: (actor) =>
 		[
 			"Registra vínculos linha de extrato ↔ transação financeira como SUGESTÕES (tipo IA), que um humano confirma ou rejeita na tela de conciliação — esta ferramenta nunca concilia nada sozinha.",
-			"Sugira apenas pares em que você tem convicção (valor igual e horário próximo); informe `confianca` (0..1).",
-			"Com valores repetidos no mesmo dia, resolva a atribuição globalmente pelo menor delta de horário (execute código) antes de sugerir — o pareamento linha a linha na ordem do extrato erra.",
+			"Cada sugestão leva uma `confianca` (0..1).",
+			"Com valores repetidos no mesmo dia, o par correto é o de menor diferença de horário considerando o conjunto inteiro, não a ordem das linhas do extrato.",
 			"Um par que já existe (sugerido, confirmado ou rejeitado) não é sobrescrito e volta como `PAR_JA_EXISTENTE`.",
-			actor.mode === "PLATAFORMA" ? "Informe `organizacaoId` (id ou slug)." : "",
+			actor.mode === "PLATAFORMA" ? "`organizacaoId` (id ou slug) escolhe a organização." : "",
 		]
 			.filter(Boolean)
 			.join(" "),

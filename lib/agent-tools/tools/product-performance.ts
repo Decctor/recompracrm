@@ -33,10 +33,10 @@ export const productPerformanceTool = defineAgentTool({
 			"Ranking de produtos no período por faturamento, quantidade vendida ou margem, com a posição e os números do",
 			"período anterior de mesma duração e a variação de posição (`variacaoPosicao`: positivo = subiu no ranking).",
 			"Responde 'o que mais vendeu', 'o que carrega margem' e 'o que caiu' — é sobre o que **foi vendido**.",
-			"Para consultar o catálogo (preço, estoque, o que existe) use `search_products`.",
+			"O catálogo em si (preço, estoque, o que existe) está em `search_products`.",
 			PERIOD_DESCRIPTION,
 			`Devolve no máximo ${MAX_LIMIT} produtos por chamada.`,
-			actor.mode === "PLATAFORMA" ? "Informe `organizacaoId` (id ou slug) para escolher a organização." : "",
+			actor.mode === "PLATAFORMA" ? "`organizacaoId` (id ou slug) escolhe a organização." : "",
 		]
 			.filter(Boolean)
 			.join(" "),
