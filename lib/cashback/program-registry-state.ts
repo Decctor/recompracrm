@@ -3,7 +3,7 @@ import { NO_CASHBACK_REDEMPTION_SURFACE_MESSAGE, hasAnyCashbackRedemptionSurface
 
 export type TCashbackProgram = Exclude<TGetCashbackProgramOutput["data"], null>;
 export type TCashbackProgramDraft = TUpdateCashbackProgramInput["cashbackProgram"];
-export type TCashbackProgramSection = "general" | "accumulation" | "redemption" | "surfaces";
+export type TCashbackProgramSection = "general" | "accumulation" | "paymentMethods" | "redemption" | "surfaces";
 
 /**
  * Campos que cada seção da aba Meu Programa edita. Quem não está na lista da seção vai para a API
@@ -21,6 +21,7 @@ const SECTION_FIELDS: Record<TCashbackProgramSection, (keyof TCashbackProgramDra
 		"acumuloPermitirViaPontoIntegracao",
 		"expiracaoRegraValidadeValor",
 	],
+	paymentMethods: ["acumuloRegrasPagamento"],
 	redemption: ["modalidadeDescontosPermitida", "resgateLimiteTipo", "resgateLimiteValor", "modalidadeRecompensasPermitida"],
 	surfaces: ["resgatePermitirViaPos", "resgatePermitirViaPontoIntegracao", "resgatePermitirViaLojaDigital"],
 };
@@ -39,6 +40,7 @@ export function mapCashbackProgramToDraft(program: TCashbackProgram): TCashbackP
 		acumuloRegraValorMinimo: program.acumuloRegraValorMinimo,
 		acumuloPermitirViaIntegracao: program.acumuloPermitirViaIntegracao,
 		acumuloPermitirViaPontoIntegracao: program.acumuloPermitirViaPontoIntegracao,
+		acumuloRegrasPagamento: program.acumuloRegrasPagamento ?? null,
 		resgatePermitirViaPos: program.resgatePermitirViaPos,
 		resgatePermitirViaPontoIntegracao: program.resgatePermitirViaPontoIntegracao,
 		resgatePermitirViaLojaDigital: program.resgatePermitirViaLojaDigital,
@@ -81,6 +83,10 @@ export function getCashbackProgramSectionBlockReason({ draft, section }: { draft
 		const limit = draft.resgateLimiteValor ?? 0;
 		if (!(limit > 0)) return "Defina o valor do limite por compra, ou escolha SEM LIMITE.";
 		if (draft.resgateLimiteTipo === "PERCENTUAL" && limit > 100) return "O limite percentual não passa de 100%.";
+	}
+	if (section === "paymentMethods" && draft.acumuloRegrasPagamento) {
+		const rules = Object.values(draft.acumuloRegrasPagamento);
+		if (rules.length > 0 && rules.every((rule) => !rule.pontua)) return "Com nenhuma forma pontuando, nenhuma venda gera saldo. Desligue as regras ou marque ao menos uma.";
 	}
 	if (section === "surfaces" && !hasAnyCashbackRedemptionSurface(draft)) return NO_CASHBACK_REDEMPTION_SURFACE_MESSAGE;
 	return null;

@@ -7,13 +7,16 @@ import type {
 	TCanonicalProduct,
 	TCanonicalSale,
 	TCanonicalSaleItem,
+	TCanonicalSalePayment,
 	TCanonicalSeller,
 } from "../types";
+import { PaymentMethodEnum, type TPaymentMethodEnum } from "@/schemas/enums";
 import {
 	SQL_VIEWS_ANONYMOUS_CLIENT_NAMES,
 	type TSqlViewsClientRow,
 	type TSqlViewsProductRow,
 	type TSqlViewsSaleItemRow,
+	type TSqlViewsSalePaymentRow,
 	type TSqlViewsSaleRow,
 } from "./types";
 
@@ -174,16 +177,45 @@ function mapDeliveryMode(value: string | null): TCanonicalDeliveryMode {
 	return normalized && DELIVERY_MODES.has(normalized) ? normalized : null;
 }
 
+/** Chave da tradução de formas: maiúsculas, sem acento, espaços colapsados ("Convênio " → "CONVENIO"). */
+export function normalizePaymentFormLabel(value: string) {
+	return normalizeName(value).replace(/\s+/g, " ");
+}
+
+/**
+ * Forma da fonte → `PaymentMethodEnum`: a tradução configurada na integração para o rótulo original
+ * vence; sem ela, a forma que a própria fonte mandou; forma fora do enum vira OUTRO.
+ */
+export function mapSqlViewsSalePayment(payment: TSqlViewsSalePaymentRow, paymentMethodMapping: Record<string, TPaymentMethodEnum>): TCanonicalSalePayment {
+	const original = payment.forma_pagamento_original ?? payment.forma_pagamento;
+	const normalizedMapping = Object.fromEntries(Object.entries(paymentMethodMapping).map(([label, metodo]) => [normalizePaymentFormLabel(label), metodo]));
+	const configured = original ? normalizedMapping[normalizePaymentFormLabel(original)] : undefined;
+	const sourceMethod = PaymentMethodEnum.safeParse(payment.forma_pagamento?.toUpperCase());
+	return {
+		metodo: configured ?? (sourceMethod.success ? sourceMethod.data : "OUTRO"),
+		valor: payment.valor,
+		pagoOnline: payment.pago_online ?? false,
+		descricao: original,
+		trocoPara: payment.troco_para,
+		formaOriginal: original,
+	};
+}
+
 export function mapSqlViewsSale({
 	sale,
 	items,
 	client,
 	anonymousClientIds,
+	payments = null,
+	paymentMethodMapping = {},
 }: {
 	sale: TSqlViewsSaleRow;
 	items: TSqlViewsSaleItemRow[];
 	client: TSqlViewsClientRow | null | undefined;
 	anonymousClientIds: string[];
+	/** null = a fonte não expõe a view de pagamentos. */
+	payments?: TSqlViewsSalePaymentRow[] | null;
+	paymentMethodMapping?: Record<string, TPaymentMethodEnum>;
 }): TCanonicalSale {
 	const canonicalItems = items.map(mapSqlViewsSaleItem);
 	const status = sale.status_codigo?.toUpperCase() ?? null;
@@ -217,6 +249,7 @@ export function mapSqlViewsSale({
 		items: canonicalItems,
 		isValidSale,
 		isCanceled,
+		payments: payments ? payments.map((payment) => mapSqlViewsSalePayment(payment, paymentMethodMapping)) : null,
 		raw: sale,
 	};
 }
@@ -239,6 +272,8 @@ export function toCanonicalSqlViewsImportBatch({
 	clients,
 	products,
 	anonymousClientIds,
+	payments = null,
+	paymentMethodMapping = {},
 }: {
 	organizationId: string;
 	window: TCanonicalImportWindow;
@@ -247,10 +282,17 @@ export function toCanonicalSqlViewsImportBatch({
 	clients: TSqlViewsClientRow[];
 	products: TSqlViewsProductRow[];
 	anonymousClientIds: string[];
+	/** null = a fonte não expõe a view de pagamentos; toda venda chega com `payments = null`. */
+	payments?: TSqlViewsSalePaymentRow[] | null;
+	paymentMethodMapping?: Record<string, TPaymentMethodEnum>;
 }): TCanonicalConnectorBatch {
 	const itemsBySaleId = new Map<string, TSqlViewsSaleItemRow[]>();
 	for (const item of [...items].sort((left, right) => left.sequencia - right.sequencia)) {
 		itemsBySaleId.set(item.venda_id, [...(itemsBySaleId.get(item.venda_id) ?? []), item]);
+	}
+	const paymentsBySaleId = new Map<string, TSqlViewsSalePaymentRow[]>();
+	for (const payment of payments ?? []) {
+		paymentsBySaleId.set(payment.venda_id, [...(paymentsBySaleId.get(payment.venda_id) ?? []), payment]);
 	}
 	const clientsById = new Map(clients.map((client) => [client.cliente_id, client]));
 
@@ -260,6 +302,8 @@ export function toCanonicalSqlViewsImportBatch({
 			items: itemsBySaleId.get(sale.venda_id) ?? [],
 			client: sale.cliente_id ? clientsById.get(sale.cliente_id) : null,
 			anonymousClientIds,
+			payments: payments ? (paymentsBySaleId.get(sale.venda_id) ?? []) : null,
+			paymentMethodMapping,
 		}),
 	);
 

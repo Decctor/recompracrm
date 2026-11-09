@@ -48,6 +48,7 @@ export function useCashbackProgramState({ initialState }: TUseCashbackProgramSta
 				acumuloRegraValorMinimo: initialState?.cashbackProgram?.acumuloRegraValorMinimo ?? 0,
 				acumuloPermitirViaIntegracao: initialState?.cashbackProgram?.acumuloPermitirViaIntegracao ?? false,
 				acumuloPermitirViaPontoIntegracao: initialState?.cashbackProgram?.acumuloPermitirViaPontoIntegracao ?? false,
+				acumuloRegrasPagamento: initialState?.cashbackProgram?.acumuloRegrasPagamento ?? null,
 				resgatePermitirViaPos: initialState?.cashbackProgram?.resgatePermitirViaPos ?? true,
 				resgatePermitirViaPontoIntegracao: initialState?.cashbackProgram?.resgatePermitirViaPontoIntegracao ?? true,
 				resgatePermitirViaLojaDigital: initialState?.cashbackProgram?.resgatePermitirViaLojaDigital ?? true,

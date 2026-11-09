@@ -662,18 +662,6 @@ export async function processConfirmedSaleEditInTransaction({ tx, input }: { tx:
 		});
 	}
 
-	// Acúmulo de cashback: ajusta em place quando intocado; caso contrário registra desatualização.
-	const cashbackAccumulationResync =
-		sale.clienteId != null
-			? await resyncSaleCashbackAccumulation({
-					tx,
-					organizationId,
-					saleId: input.saleId,
-					newSaleValue: valorTotal,
-					reason: "Edição de venda",
-				})
-			: { ajustados: 0, desatualizados: 0 };
-
 	// ------------------------------------------------------------------
 	// Venda: dinheiro + cabeçalho + log de edição em rascunhoMetadados.edicoes[].
 	// ------------------------------------------------------------------
@@ -703,7 +691,27 @@ export async function processConfirmedSaleEditInTransaction({ tx, input }: { tx:
 		itensAtualizados,
 		itensRemovidos,
 		cupomRemovido,
-		cashbackAcumuloDesatualizado: cashbackAccumulationResync.desatualizados > 0,
+		// Preenchido depois do resync do cashback, que roda com os pagamentos já regravados.
+		cashbackAcumuloDesatualizado: false,
+	};
+	const nextDraftMetadata = {
+		...previousDraftMetadata,
+		descontoGeral: descontosGerais,
+		taxaEntrega: deliveryFee,
+		...(previousShopMetadata
+			? {
+					shop: {
+						...previousShopMetadata,
+						entrega: {
+							...previousShopDelivery,
+							modalidade: resolvedDeliveryMode,
+							taxa: deliveryFee,
+						},
+					},
+				}
+			: {}),
+		cupom: cupomRemovido ? null : (previousDraftMetadata.cupom ?? null),
+		edicoes: [...previousEditions, editionLogEntry],
 	};
 
 	await tx
@@ -723,25 +731,7 @@ export async function processConfirmedSaleEditInTransaction({ tx, input }: { tx:
 			observacoes: input.observacoes ?? sale.observacoes,
 			emissaoFiscalAutomatica: input.emissaoFiscalAutomatica,
 			emissaoFiscalDocumento,
-			rascunhoMetadados: {
-				...previousDraftMetadata,
-				descontoGeral: descontosGerais,
-				taxaEntrega: deliveryFee,
-				...(previousShopMetadata
-					? {
-							shop: {
-								...previousShopMetadata,
-								entrega: {
-									...previousShopDelivery,
-									modalidade: resolvedDeliveryMode,
-									taxa: deliveryFee,
-								},
-							},
-						}
-					: {}),
-				cupom: cupomRemovido ? null : (previousDraftMetadata.cupom ?? null),
-				edicoes: [...previousEditions, editionLogEntry],
-			},
+			rascunhoMetadados: nextDraftMetadata,
 		})
 		.where(and(eq(sales.id, input.saleId), eq(sales.organizacaoId, organizationId)));
 
@@ -837,6 +827,30 @@ export async function processConfirmedSaleEditInTransaction({ tx, input }: { tx:
 	});
 	if (balanceError) {
 		throw new createHttpError.BadRequest(`${balanceError} Ajuste os pagamentos para cobrir o novo total da venda.`);
+	}
+
+	// Acúmulo de cashback: ajusta em place quando intocado; caso contrário registra desatualização.
+	// Depois dos pagamentos: com regras por forma de pagamento, a base sai dos pagamentos novos.
+	const cashbackAccumulationResync =
+		sale.clienteId != null
+			? await resyncSaleCashbackAccumulation({
+					tx,
+					organizationId,
+					saleId: input.saleId,
+					newSaleValue: valorTotal,
+					reason: "Edição de venda",
+				})
+			: { ajustados: 0, desatualizados: 0 };
+	if (cashbackAccumulationResync.desatualizados > 0) {
+		await tx
+			.update(sales)
+			.set({
+				rascunhoMetadados: {
+					...nextDraftMetadata,
+					edicoes: [...previousEditions, { ...editionLogEntry, cashbackAcumuloDesatualizado: true }],
+				},
+			})
+			.where(and(eq(sales.id, input.saleId), eq(sales.organizacaoId, organizationId)));
 	}
 
 	return {

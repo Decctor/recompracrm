@@ -1,5 +1,5 @@
 import { Client, types as pgTypes } from "pg";
-import type { z } from "zod";
+import { z } from "zod";
 import type { TCanonicalImportWindow } from "../types";
 import {
 	SQL_VIEWS,
@@ -8,6 +8,7 @@ import {
 	SqlViewsMetadataRowSchema,
 	SqlViewsProductRowSchema,
 	SqlViewsSaleItemRowSchema,
+	SqlViewsSalePaymentRowSchema,
 	SqlViewsSaleRowSchema,
 	type TSqlViewsConfig,
 } from "./types";
@@ -129,6 +130,22 @@ export async function fetchSqlViewsSales({
 
 export function fetchSqlViewsSaleItems(session: TSqlViewsSession, saleIds: string[]) {
 	return queryByIds(session, SqlViewsSaleItemRowSchema, SQL_VIEWS.saleItems, "venda_id", saleIds);
+}
+
+const ViewExistsRowSchema = z.object({ exists: z.boolean() });
+
+/** Views opcionais do contrato (ex.: pagamentos): o conector se adapta ao que a fonte expõe. */
+export async function sqlViewsViewExists(session: TSqlViewsSession, viewName: string) {
+	const [row] = await session.query(
+		ViewExistsRowSchema,
+		`select exists (select 1 from information_schema.views where table_schema = $1 and table_name = $2) as "exists"`,
+		[session.schema, viewName],
+	);
+	return row?.exists ?? false;
+}
+
+export function fetchSqlViewsSalePayments(session: TSqlViewsSession, saleIds: string[]) {
+	return queryByIds(session, SqlViewsSalePaymentRowSchema, SQL_VIEWS.salePayments, "venda_id", saleIds);
 }
 
 export function fetchSqlViewsClients(session: TSqlViewsSession, clientIds: string[]) {

@@ -155,3 +155,25 @@ test("mudança do ID resolvido do cliente altera a assinatura", () => {
 	input.saleValues.clienteId = "client-2";
 	assert.notEqual(computeSaleImportSignature(input), base);
 });
+
+test("pagamentos ausentes ou null preservam a assinatura de conectores sem pagamentos", () => {
+	const input = buildInput();
+	const baseline = computeSaleImportSignature(input);
+	assert.equal(computeSaleImportSignature({ ...input, payments: null }), baseline);
+	assert.equal(computeSaleImportSignature({ ...input, payments: undefined }), baseline);
+});
+
+test("mudança de forma ou quitação de pagamento altera a assinatura; a ordem de chegada não", () => {
+	const input = buildInput();
+	const cash = { metodo: "DINHEIRO", valor: 100.5, pagoOnline: false };
+	const card = { metodo: "CARTAO_CREDITO", valor: 50, pagoOnline: false };
+	const signature = computeSaleImportSignature({ ...input, payments: [cash, card] });
+
+	assert.notEqual(signature, computeSaleImportSignature(input));
+	assert.equal(computeSaleImportSignature({ ...input, payments: [card, cash] }), signature);
+	assert.notEqual(computeSaleImportSignature({ ...input, payments: [cash, { ...card, metodo: "OUTRO" }] }), signature);
+	assert.notEqual(
+		computeSaleImportSignature({ ...input, payments: [cash, { ...card, quitadoEm: new Date("2026-08-10T00:00:00.000Z") }] }),
+		signature,
+	);
+});

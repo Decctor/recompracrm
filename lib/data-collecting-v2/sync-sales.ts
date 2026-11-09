@@ -407,6 +407,7 @@ export async function syncSales({
 			saleValues,
 			resolvedItems: itemRows,
 			saleItemRewritePolicy: batch.policies.saleItemRewritePolicy,
+			payments: sale.payments,
 		});
 		// Assinatura igual prova que a transação de import deste exato estado já commitou —
 		// nenhuma escrita é necessária. Canal gerenciado nunca pula: applyManagedSaleDeliveryEffects

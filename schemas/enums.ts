@@ -88,6 +88,10 @@ export const CashbackProgramTerminologyEnum = z.enum(["DINHEIRO", "PONTOS"]);
 export type TCashbackProgramTerminologyEnum = z.infer<typeof CashbackProgramTerminologyEnum>;
 export const CashbackProgramRedemptionLimitTypeEnum = z.enum(["FIXO", "PERCENTUAL"]);
 export type TCashbackProgramRedemptionLimitTypeEnum = z.infer<typeof CashbackProgramRedemptionLimitTypeEnum>;
+// Quando um pagamento passa a pontuar: na data da venda ou na data em que foi quitado.
+// Ver docs/cashback-payment-accrual-rules-design.md.
+export const CashbackAccrualMomentEnum = z.enum(["NA_VENDA", "NA_QUITACAO"]);
+export type TCashbackAccrualMomentEnum = z.infer<typeof CashbackAccrualMomentEnum>;
 
 // Superfície onde um benefício (cashback, recompensa, cupom) é PEDIDO — não o canal da venda
 // (`sales.canal`, POS|SHOP|COMANDA|IFOOD). Os dois conjuntos não coincidem: o ponto de
@@ -414,6 +418,10 @@ export const PaymentMethodEnum = z.enum([
 	"OUTRO",
 ]);
 export type TPaymentMethodEnum = z.infer<typeof PaymentMethodEnum>;
+// Formas que recebem regra de acúmulo no programa de cashback. `A_DEFINIR` fica de fora: é um
+// pagamento ainda sem forma, que segura o acúmulo até ser definido.
+export const CashbackAccrualPaymentMethodEnum = PaymentMethodEnum.exclude(["A_DEFINIR"]);
+export type TCashbackAccrualPaymentMethodEnum = z.infer<typeof CashbackAccrualPaymentMethodEnum>;
 
 export const DeliveryModeEnum = z.enum(["PRESENCIAL", "RETIRADA", "ENTREGA", "COMANDA"]);
 export type TDeliveryModeEnum = z.infer<typeof DeliveryModeEnum>;

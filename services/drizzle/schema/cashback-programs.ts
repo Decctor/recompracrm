@@ -16,6 +16,7 @@ import { productVariants, products } from "./products";
 import { sales } from "./sales";
 import { sellers } from "./sellers";
 import { users } from "./users";
+import type { TCashbackPaymentAccrualRules } from "@/schemas/cashback-programs";
 
 export const cashbackPrograms = newTable("cashback_programs", {
 	id: varchar("id", { length: 255 })
@@ -37,6 +38,11 @@ export const cashbackPrograms = newTable("cashback_programs", {
 	// Configurations for accumulation source
 	acumuloPermitirViaIntegracao: boolean("acumulo_permitir_via_integracao").notNull().default(false),
 	acumuloPermitirViaPontoIntegracao: boolean("acumulo_permitir_via_ponto_integracao").notNull().default(false),
+	// Regras de acúmulo por forma de pagamento (pontua? na venda ou na quitação?). Null = programa sem
+	// regras, e cada caminho de acúmulo segue o comportamento anterior a elas. Jsonb e não tabela
+	// filha: regra pequena, fechada, editada sempre com o programa. Ver
+	// docs/cashback-payment-accrual-rules-design.md e lib/cashback/payment-accrual.ts.
+	acumuloRegrasPagamento: jsonb("acumulo_regras_pagamento").$type<TCashbackPaymentAccrualRules | null>(),
 	// Superfícies de resgate (desconto em cashback E recompensa): o programa decide onde o cliente
 	// pode resgatar — mesmo desenho dos cupons (`coupons.resgate_permitir_via_*`). Mora no
 	// programa, e não em `sales_channels`, porque superfície ≠ canal de venda (o POI resgata sem

@@ -4,11 +4,13 @@ import {
 	fetchSqlViewsMetadata,
 	fetchSqlViewsProducts,
 	fetchSqlViewsSaleItems,
+	fetchSqlViewsSalePayments,
 	fetchSqlViewsSales,
+	sqlViewsViewExists,
 	withSqlViewsSession,
 } from "./client";
 import { isSqlViewsAnonymousClient, toCanonicalSqlViewsImportBatch } from "./mappers";
-import { SqlViewsConfigSchema } from "./types";
+import { SQL_VIEWS, SqlViewsConfigSchema } from "./types";
 
 const LOG_PREFIX = "[SQL_VIEWS_SYNC]";
 
@@ -31,13 +33,14 @@ export const sqlViewsDataConnector: TDataConnector = {
 			mark("metadata");
 			const sales = await fetchSqlViewsSales({ session, window, storeId: parsedConfig.storeId });
 			mark("vendas");
-			if (sales.length === 0) return { metadata, sales, items: [], clients: [], products: [] };
+			if (sales.length === 0) return { metadata, sales, items: [], clients: [], products: [], payments: null };
 
-			const items = await fetchSqlViewsSaleItems(
-				session,
-				sales.map((sale) => sale.venda_id),
-			);
+			const saleIds = sales.map((sale) => sale.venda_id);
+			const items = await fetchSqlViewsSaleItems(session, saleIds);
 			mark("itens");
+			// View opcional: fonte sem pagamentos segue com `payments = null` (acúmulo pelo total).
+			const payments = (await sqlViewsViewExists(session, SQL_VIEWS.salePayments)) ? await fetchSqlViewsSalePayments(session, saleIds) : null;
+			mark("pagamentos");
 			const clientIds = sales
 				.filter(
 					(sale) =>
@@ -55,12 +58,12 @@ export const sqlViewsDataConnector: TDataConnector = {
 				productIds.length > 0 ? fetchSqlViewsProducts(session, productIds) : [],
 			]);
 			mark("clientesProdutos");
-			return { metadata, sales, items, clients, products };
+			return { metadata, sales, items, clients, products, payments };
 		});
 		mark("fim");
 
 		console.log(
-			`${LOG_PREFIX} org=${organizationId} integração=${integrationId} loja=${parsedConfig.storeId ?? "*"} sistema="${rows.metadata.sistema_nome ?? "N/A"}" contrato=${rows.metadata.contrato_versao}: ${rows.sales.length} venda(s), ${rows.items.length} item(ns), ${rows.clients.length} cliente(s), ${rows.products.length} produto(s) em ${Date.now() - startedAt}ms.`,
+			`${LOG_PREFIX} org=${organizationId} integração=${integrationId} loja=${parsedConfig.storeId ?? "*"} sistema="${rows.metadata.sistema_nome ?? "N/A"}" contrato=${rows.metadata.contrato_versao}: ${rows.sales.length} venda(s), ${rows.items.length} item(ns), ${rows.payments ? `${rows.payments.length} pagamento(s)` : "sem view de pagamentos"}, ${rows.clients.length} cliente(s), ${rows.products.length} produto(s) em ${Date.now() - startedAt}ms.`,
 			{ fasesMs: phases },
 		);
 
@@ -72,6 +75,8 @@ export const sqlViewsDataConnector: TDataConnector = {
 			clients: rows.clients,
 			products: rows.products,
 			anonymousClientIds: parsedConfig.anonymousClientIds,
+			payments: rows.payments,
+			paymentMethodMapping: parsedConfig.paymentMethodMapping,
 		});
 	},
 };

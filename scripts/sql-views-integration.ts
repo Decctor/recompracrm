@@ -6,6 +6,11 @@ import { recomputeClientMetricsForOrganization } from "@/lib/clients/recompute-m
 import { persistCanonicalBatch } from "@/lib/data-collecting-v2";
 import { bulkPersistHistoricalBatch } from "@/lib/integrations/import-jobs/bulk-persist";
 import { sqlViewsDataConnector } from "@/lib/data-connectors/sql-views";
+import { sqlViewsViewExists, withSqlViewsSession } from "@/lib/data-connectors/sql-views/client";
+import { mapSqlViewsSalePayment, normalizePaymentFormLabel } from "@/lib/data-connectors/sql-views/mappers";
+import { SQL_VIEWS } from "@/lib/data-connectors/sql-views/types";
+import { PaymentMethodEnum, type TPaymentMethodEnum } from "@/schemas/enums";
+import { z } from "zod";
 import { connectDataSourceIntegration, isUsableDataSourceIntegration } from "@/lib/integrations/data-sources";
 import { SqlViewsIntegrationConfigSchema, type TSqlViewsIntegrationConfig } from "@/schemas/integrations";
 import { connection, db } from "@/services/drizzle";
@@ -31,6 +36,12 @@ dayjs.extend(minMax);
  *            HISTORICO (sem cashback, campanhas nem atribuição). Idempotente: venda inalterada é
  *            pulada, então rodar de novo retoma de onde parou.
  *   activate Liga a conexão (--integration) para o cron de 5 minutos.
+ *   payment-methods
+ *            Tradução das formas de pagamento da fonte (--integration, ou --org para todas as conexões
+ *            SQL-VIEWS da organização). Sem --map, só lista as formas vistas nos últimos
+ *            --payment-days (30) com a forma da fonte, a tradução gravada e a forma efetiva. Com
+ *            --map "TEF=CARTAO_CREDITO" (repetível) grava a tradução; "TEF=" remove. As regras de
+ *            acúmulo de cashback leem a forma efetiva (docs/cashback-payment-accrual-rules-design.md).
  *
  * Ordem: connect → backfill → activate. Ativar antes do histórico faz toda primeira venda
  * importada de um cliente parecer primeira compra (campanhas e cashback disparam sobre ela).
@@ -61,6 +72,8 @@ const { positionals, values } = parseArgs({
 		to: { type: "string" },
 		days: { type: "string", default: "1" },
 		"step-days": { type: "string", default: "30" },
+		map: { type: "string", multiple: true, default: [] },
+		"payment-days": { type: "string", default: "30" },
 	},
 });
 
@@ -241,13 +254,101 @@ async function runBackfill() {
 	console.log("[BACKFILL] Concluído.", totals);
 }
 
+const PaymentFormUsageRowSchema = z.object({
+	forma_pagamento: z.string().nullable(),
+	forma_pagamento_original: z.string().nullable(),
+	pagamentos: z.coerce.number(),
+	valor: z.coerce.number(),
+});
+
+function parseMappingFlags() {
+	const changes: Record<string, TPaymentMethodEnum | null> = {};
+	for (const entry of values.map ?? []) {
+		const separator = entry.indexOf("=");
+		if (separator <= 0) throw new Error(`--map inválido: "${entry}". Use "FORMA_ORIGINAL=METODO" ou "FORMA_ORIGINAL=" para remover.`);
+		const label = normalizePaymentFormLabel(entry.slice(0, separator));
+		const rawMethod = entry.slice(separator + 1).trim().toUpperCase();
+		if (!rawMethod) {
+			changes[label] = null;
+			continue;
+		}
+		const method = PaymentMethodEnum.safeParse(rawMethod);
+		if (!method.success) throw new Error(`Método "${rawMethod}" inválido. Use um de: ${PaymentMethodEnum.options.join(", ")}.`);
+		changes[label] = method.data;
+	}
+	return changes;
+}
+
+async function loadPaymentMethodTargets() {
+	if (values.integration) return [await loadSqlViewsIntegration(values.integration)];
+	if (!values.org) throw new Error("Informe --integration ou --org.");
+	const rows = await db.query.integrations.findMany({ where: eq(integrations.organizacaoId, values.org) });
+	const targets = rows.filter((row) => isUsableDataSourceIntegration(row) && row.configuracao.tipo === "SQL-VIEWS");
+	if (targets.length === 0) throw new Error(`Nenhuma conexão SQL-VIEWS na organização ${values.org}.`);
+	return targets;
+}
+
+async function runPaymentMethods() {
+	const changes = parseMappingFlags();
+	const days = Number(values["payment-days"]);
+	for (const integration of await loadPaymentMethodTargets()) {
+		const config = SqlViewsIntegrationConfigSchema.parse(integration.configuracao);
+		const mapping: Record<string, TPaymentMethodEnum> = Object.fromEntries(Object.entries(config.paymentMethodMapping).map(([label, method]) => [normalizePaymentFormLabel(label), method]));
+		if (Object.keys(changes).length > 0) {
+			for (const [label, method] of Object.entries(changes)) {
+				if (method) mapping[label] = method;
+				else delete mapping[label];
+			}
+			await db
+				.update(integrations)
+				.set({ configuracao: { ...config, paymentMethodMapping: mapping } })
+				.where(eq(integrations.id, integration.id));
+		}
+
+		const usage = await withSqlViewsSession(config, async (session) => {
+			if (!(await sqlViewsViewExists(session, SQL_VIEWS.salePayments))) return null;
+			const storeFilter = config.storeId ? "and v.loja_id = $2" : "";
+			return session.query(
+				PaymentFormUsageRowSchema,
+				`select p.forma_pagamento, p.forma_pagamento_original, count(*) as pagamentos, coalesce(sum(p.valor), 0) as valor
+				from "${session.schema}"."${SQL_VIEWS.salePayments}" p
+				join "${session.schema}"."${SQL_VIEWS.sales}" v on v.venda_id = p.venda_id
+				where v.data_venda >= now() - ($1 || ' days')::interval ${storeFilter}
+				group by 1, 2 order by 3 desc`,
+				config.storeId ? [String(days), config.storeId] : [String(days)],
+			);
+		});
+
+		console.log(`\n${integration.apelido ?? integration.id} (${integration.id}) — loja ${config.storeId ?? "*"}`);
+		if (Object.keys(changes).length > 0) console.log("Tradução gravada:", mapping);
+		if (!usage) {
+			console.log("  A fonte não expõe a view de pagamentos: as vendas pontuam pelo total.");
+			continue;
+		}
+		console.table(
+			usage.map((row) => ({
+				original: row.forma_pagamento_original,
+				fonte: row.forma_pagamento,
+				traducao: row.forma_pagamento_original ? (mapping[normalizePaymentFormLabel(row.forma_pagamento_original)] ?? "—") : "—",
+				efetiva: mapSqlViewsSalePayment(
+					{ pagamento_id: null, venda_id: "-", forma_pagamento: row.forma_pagamento, forma_pagamento_original: row.forma_pagamento_original, valor: 0, parcelas: 1, pago_online: false, troco_para: null },
+					mapping,
+				).metodo,
+				pagamentos: row.pagamentos,
+				valor: Number(row.valor.toFixed(2)),
+			})),
+		);
+	}
+}
+
 async function main() {
 	const [command] = positionals;
 	if (command === "fetch") await runFetch();
 	else if (command === "connect") await runConnect();
 	else if (command === "backfill") await runBackfill();
 	else if (command === "activate") await runActivate();
-	else throw new Error('Comando inválido. Use "fetch", "connect", "backfill" ou "activate".');
+	else if (command === "payment-methods") await runPaymentMethods();
+	else throw new Error('Comando inválido. Use "fetch", "connect", "backfill", "activate" ou "payment-methods".');
 }
 
 main()

@@ -1,4 +1,5 @@
 import { accumulateCashbackForClient } from "@/lib/cashback/accumulation";
+import { resolveIntegratedSaleAccrual } from "@/lib/cashback/payment-accrual";
 import { reverseSaleCashback } from "@/lib/cashback/reverse-sale-cashback";
 import { recordPurchaseCampaignEvent } from "@/lib/campaigns/events/purchases";
 import type { TEventDispatchResult } from "@/lib/campaigns/engine";
@@ -86,6 +87,7 @@ export async function processDataCollectingV2Effects({
 					acumuloRegraValorMinimo: true,
 					expiracaoRegraValidadeValor: true,
 					acumuloPermitirViaIntegracao: true,
+					acumuloRegrasPagamento: true,
 				},
 			})
 		: undefined;
@@ -141,15 +143,30 @@ export async function processDataCollectingV2Effects({
 			});
 		}
 
-		if (cashbackProgram?.ativo && cashbackProgram.acumuloPermitirViaIntegracao && persistedSale.becameValid && persistedSale.clientId) {
+		// Regras por forma de pagamento: sem regras ou sem pagamentos da fonte, o total na data da venda
+		// (comportamento anterior); com ambos, só a parte paga em formas que pontuam, ou nada.
+		const integratedAccrual =
+			cashbackProgram?.ativo && cashbackProgram.acumuloPermitirViaIntegracao && persistedSale.becameValid && persistedSale.clientId
+				? resolveIntegratedSaleAccrual({
+						rules: cashbackProgram.acumuloRegrasPagamento,
+						saleTotal: persistedSale.sale.totalValue,
+						saleDate: persistedSale.sale.occurredAt,
+						payments: persistedSale.sale.payments,
+					})
+				: null;
+
+		if (cashbackProgram && integratedAccrual && persistedSale.clientId) {
+			const paymentRulesMetadata = integratedAccrual.metodos ? { regrasPagamento: { base: integratedAccrual.base, metodos: integratedAccrual.metodos } } : undefined;
 			const buyerAccumulation = await accumulateCashbackForClient({
 				tx,
 				orgId: organizationId,
 				clientId: persistedSale.clientId,
 				saleId: persistedSale.id,
 				saleValue: persistedSale.sale.totalValue,
+				accrualBase: integratedAccrual.base,
 				program: cashbackProgram,
-				createdAt: persistedSale.sale.occurredAt,
+				createdAt: integratedAccrual.momento,
+				metadata: paymentRulesMetadata,
 			});
 
 			if (buyerAccumulation.transactionId && !buyerAccumulation.alreadyProcessed) {
@@ -180,12 +197,14 @@ export async function processDataCollectingV2Effects({
 					clientId: persistedSale.partnerClientId,
 					saleId: persistedSale.id,
 					saleValue: persistedSale.sale.totalValue,
+					accrualBase: integratedAccrual.base,
 					program: cashbackProgram,
 					accumulationValueOverride: cashbackProgram.acumuloValorParceiro,
-					createdAt: persistedSale.sale.occurredAt,
+					createdAt: integratedAccrual.momento,
 					metadata: {
 						ator: "PARCEIRO",
 						clienteCompradorId: persistedSale.clientId,
+						...paymentRulesMetadata,
 					},
 				});
 

@@ -110,6 +110,17 @@ export type TCanonicalSalePayment = {
 	 * para quem entrega — não gera transação de troco. Ausente quando não há troco a levar.
 	 */
 	trocoPara?: number | null;
+	/**
+	 * Rótulo cru da forma na fonte (ex.: "TEF", "SUBSIDIO", "CONVENIO"), antes da tradução para
+	 * `metodo`. Auditoria da tradução de formas da integração.
+	 */
+	formaOriginal?: string | null;
+	/**
+	 * Quitação informada pela fonte, lida pelas regras de acúmulo de cashback
+	 * (lib/cashback/payment-accrual.ts): Date = quitado; null = em aberto; ausente = a fonte não
+	 * informa, e vale a data da venda.
+	 */
+	quitadoEm?: Date | null;
 };
 
 export type TCanonicalSaleItem = {

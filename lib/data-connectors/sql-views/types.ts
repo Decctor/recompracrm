@@ -14,6 +14,8 @@ export const SQL_VIEWS = {
 	products: "vw_recompra_produtos",
 	sales: "vw_recompra_vendas",
 	saleItems: "vw_recompra_venda_itens",
+	/** Opcional no contrato 1.x: sem a view, as vendas chegam sem pagamentos (`payments = null`). */
+	salePayments: "vw_recompra_venda_pagamentos",
 } as const;
 
 /** Nomes genéricos que ERPs usam para venda sem cliente identificado. */
@@ -104,6 +106,33 @@ export const SqlViewsSaleItemRowSchema = z.object({
 	unidade: NullableTextSchema,
 });
 export type TSqlViewsSaleItemRow = z.infer<typeof SqlViewsSaleItemRowSchema>;
+
+/**
+ * Uma linha por pagamento. `forma_pagamento` é a tradução da fonte para `PaymentMethodEnum`, que pode
+ * perder informação (a ATMA manda TEF, CARTÃO e SUBSÍDIO como OUTRO); `forma_pagamento_original` é o
+ * rótulo cru, chave da tradução configurável da integração. Troco vem como linha negativa de
+ * dinheiro com `troco_para`. `data_quitacao` ainda não é lida: sem o caminho de acúmulo adiado
+ * (fase 7 de docs/cashback-payment-accrual-rules-design.md), um convênio em aberto nunca pontuaria.
+ */
+export const SqlViewsSalePaymentRowSchema = z.object({
+	pagamento_id: NullableTextSchema,
+	venda_id: RequiredIdSchema,
+	forma_pagamento: NullableTextSchema,
+	forma_pagamento_original: NullableTextSchema,
+	valor: NumericSchema,
+	parcelas: NumericSchema,
+	pago_online: z.boolean().optional().nullable(),
+	troco_para: z
+		.union([z.string(), z.number()])
+		.optional()
+		.nullable()
+		.transform((value) => {
+			if (value === null || value === undefined || value === "") return null;
+			const numberValue = Number(value);
+			return Number.isFinite(numberValue) ? numberValue : null;
+		}),
+});
+export type TSqlViewsSalePaymentRow = z.infer<typeof SqlViewsSalePaymentRowSchema>;
 
 export const SqlViewsClientRowSchema = z.object({
 	cliente_id: RequiredIdSchema,

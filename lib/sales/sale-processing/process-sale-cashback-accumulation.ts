@@ -1,4 +1,6 @@
 import { accumulateCashbackForClient, notReversedByClientReassignment } from "@/lib/cashback/accumulation";
+import { hasCashbackPaymentAccrualRules, resolveSaleAccrual } from "@/lib/cashback/payment-accrual";
+import { loadSaleAccrualPayments } from "@/lib/cashback/sale-accrual-payments";
 import { db } from "@/services/drizzle";
 import { cashbackProgramTransactions, cashbackPrograms } from "@/services/drizzle/schema";
 import { and, eq } from "drizzle-orm";
@@ -8,6 +10,14 @@ import { captureSaleCampaignEvent } from "@/lib/campaigns/events/handlers/sale-c
 import { publishPendingCampaignEventsSafely } from "@/lib/campaigns/events/queue";
 import { waitUntil } from "@vercel/functions";
 
+/**
+ * Acúmulo adiado de uma venda interna (loja, fiado recebido, pagamento efetivado depois da
+ * confirmação). Chamado a cada evento que pode tornar a venda pontuável; idempotente por venda.
+ *
+ * - Programa sem regras por forma de pagamento: pontua o total quando a venda fica RECEBIDA
+ *   (comportamento anterior às regras).
+ * - Com regras: `resolveSaleAccrual` sobre os pagamentos da venda, exigindo que cubram o total.
+ */
 export async function processSaleCashbackAccumulationIfEligible({
 	organizationId,
 	saleId,
@@ -17,7 +27,7 @@ export async function processSaleCashbackAccumulationIfEligible({
 	saleId: string;
 	authorId?: string | null;
 }) {
-	const [sale, financialState] = await Promise.all([
+	const [sale, program] = await Promise.all([
 		db.query.sales.findFirst({
 			where: (fields, { and, eq }) => and(eq(fields.id, saleId), eq(fields.organizacaoId, organizationId)),
 			columns: {
@@ -28,14 +38,23 @@ export async function processSaleCashbackAccumulationIfEligible({
 				canal: true,
 				processamentoOrigem: true,
 				statusVenda: true,
+				dataVenda: true,
 			},
 		}),
-		getSaleFinancialState({ organizationId, saleId }),
+		db.query.cashbackPrograms.findFirst({
+			where: and(eq(cashbackPrograms.organizacaoId, organizationId), eq(cashbackPrograms.ativo, true)),
+		}),
 	]);
 
 	if (!sale) throw new createHttpError.NotFound("Venda não encontrada.");
-	if (!sale.clienteId || sale.statusVenda !== "CONFIRMADA" || !financialState.isFullyPaid) return null;
+	if (!sale.clienteId || sale.statusVenda !== "CONFIRMADA" || !program) return null;
 	const clientId = sale.clienteId;
+	const usesPaymentRules = hasCashbackPaymentAccrualRules(program);
+
+	if (!usesPaymentRules) {
+		const financialState = await getSaleFinancialState({ organizationId, saleId });
+		if (!financialState.isFullyPaid) return null;
+	}
 
 	const accumulation = await db.transaction(async (tx) => {
 		// Do cliente ATUAL da venda: um acúmulo revertido por reatribuição (cliente anterior) não
@@ -52,10 +71,21 @@ export async function processSaleCashbackAccumulationIfEligible({
 		});
 		if (existing) return { transactionId: existing.id, alreadyProcessed: true };
 
-		const program = await tx.query.cashbackPrograms.findFirst({
-			where: and(eq(cashbackPrograms.organizacaoId, organizationId), eq(cashbackPrograms.ativo, true)),
-		});
-		if (!program) return null;
+		let accrualBase: number | null = null;
+		let paymentRulesMetadata: Record<string, unknown> = {};
+		if (usesPaymentRules) {
+			const payments = await loadSaleAccrualPayments({ executor: tx, organizationId, saleId });
+			const decision = resolveSaleAccrual({
+				saleTotal: sale.valorTotal,
+				saleDate: sale.dataVenda ?? new Date(),
+				payments,
+				rules: program.acumuloRegrasPagamento,
+				requireCoverage: true,
+			});
+			if (decision.status !== "PONTUAVEL") return null;
+			accrualBase = decision.base;
+			paymentRulesMetadata = { regrasPagamento: { base: decision.base, metodos: decision.metodos } };
+		}
 
 		const result = await accumulateCashbackForClient({
 			tx,
@@ -63,12 +93,14 @@ export async function processSaleCashbackAccumulationIfEligible({
 			clientId,
 			saleId,
 			saleValue: sale.valorTotal,
+			accrualBase,
 			operatorId: authorId ?? null,
 			operatorSellerId: sale.vendedorId,
 			program,
 			metadata: {
 				origem: sale.canal ?? "INTERNO",
 				processamentoOrigem: sale.processamentoOrigem,
+				...paymentRulesMetadata,
 			},
 		});
 
