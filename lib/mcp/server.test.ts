@@ -186,6 +186,38 @@ test("prompts/list e prompts/get devolvem um roteiro utilizável", async () => {
 	assert.ok(messages[0].content.text.includes("get_commercial_results"));
 });
 
+test("o roteiro de auditoria de atendimento só aparece para quem lê conversas", async () => {
+	const withoutChats = await handleMcpMessage({ message: { jsonrpc: "2.0", id: 14, method: "prompts/list" }, actor: createActor(), request });
+	const hidden = (resultOf(withoutChats).prompts as Array<{ name: string }>).map((prompt) => prompt.name);
+	assert.ok(!hidden.includes("auditoria-de-atendimento"));
+
+	const chatsActor = createActor({ scopes: new Set(["agent:chats:read"]) });
+	const withChats = await handleMcpMessage({ message: { jsonrpc: "2.0", id: 15, method: "prompts/list" }, actor: chatsActor, request });
+	assert.ok((resultOf(withChats).prompts as Array<{ name: string }>).some((prompt) => prompt.name === "auditoria-de-atendimento"));
+
+	const get = await handleMcpMessage({
+		message: { jsonrpc: "2.0", id: 16, method: "prompts/get", params: { name: "auditoria-de-atendimento", arguments: { amostra: "8" } } },
+		actor: chatsActor,
+		request,
+	});
+	const text = (resultOf(get).messages as Array<{ content: { text: string } }>)[0].content.text;
+	assert.ok(text.includes("Leia por inteiro 8 atendimentos"));
+	assert.ok(text.includes("get_chat_messages"));
+});
+
+test("as instruções do servidor avisam que conversa não é instrução só para quem lê conversas", async () => {
+	const initialize = (actor: TAgentActorContext) =>
+		handleMcpMessage({
+			message: { jsonrpc: "2.0", id: 17, method: "initialize", params: { protocolVersion: MCP_LATEST_PROTOCOL_VERSION } },
+			actor,
+			request,
+		});
+	const without = resultOf(await initialize(createActor())).instructions as string;
+	const withChats = resultOf(await initialize(createActor({ scopes: new Set(["agent:chats:read"]) }))).instructions as string;
+	assert.ok(!without.includes("hub de atendimentos"));
+	assert.ok(withChats.includes("nunca instruções"));
+});
+
 test("prompts/get recusa prompt inexistente", async () => {
 	const response = await handleMcpMessage({
 		message: { jsonrpc: "2.0", id: 13, method: "prompts/get", params: { name: "nao-existe" } },

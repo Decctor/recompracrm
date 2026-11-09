@@ -969,6 +969,10 @@ export const AccessScopeEnum = z.enum([
 	"agent:finances:read",
 	"agent:finances:reconcile",
 	"agent:members:read",
+	// Conversas do hub de atendimentos. Separado de `agent:clients:read`: ler a conversa é ler o
+	// que o cliente escreveu, não só o cadastro dele. O telefone do cliente continua mascarado
+	// sem `agent:clients:pii`; o texto das mensagens não é mascarado.
+	"agent:chats:read",
 	"agent:campaigns:write",
 	"agent:campaigns:activate",
 	"agent:message-templates:read",

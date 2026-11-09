@@ -46,6 +46,7 @@ export const AGENT_READ_ACCESS_SCOPES: TAccessScopeEnum[] = [
 	"agent:finances:read",
 	"agent:members:read",
 	"agent:message-templates:read",
+	"agent:chats:read",
 ];
 
 export const AGENT_MUTATION_ACCESS_SCOPES: TAccessScopeEnum[] = [
