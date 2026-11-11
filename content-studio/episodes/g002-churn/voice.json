@@ -5,731 +5,711 @@
 	"maxPauseSeconds": 0.16,
 	"tempo": 1.18,
 	"spoken": {
-		"RecompraCRM": "Recompra cê érre ême",
+		"RecompraCRM": "RecompraCêÉrreÊme",
 		"markup": "márcap",
 		"Markup": "Márcap",
-		"churn": "tchârn",
-		"Churn": "Tchârn",
+		"churn": "tchurn",
+		"Churn": "Tchurn",
 		"ABC": "á bê cê",
 		"ticket": "tíquete",
 		"Ticket": "Tíquete"
 	},
-	"durationSeconds": 45.479,
+	"durationSeconds": 45.558,
 	"words": [
 		{
 			"text": "Meus",
 			"start": 0.042,
-			"end": 0.381
+			"end": 0.314
 		},
 		{
 			"text": "clientes",
-			"start": 0.381,
-			"end": 0.788
+			"start": 0.314,
+			"end": 0.653
 		},
 		{
 			"text": "são",
-			"start": 0.788,
-			"end": 0.992
+			"start": 0.653,
+			"end": 0.856
 		},
 		{
 			"text": "fiéis",
-			"start": 0.992,
-			"end": 1.534
+			"start": 0.856,
+			"end": 1.398
 		},
 		{
 			"text": "ninguém",
-			"start": 1.669,
-			"end": 2.076
+			"start": 1.534,
+			"end": 1.941
 		},
 		{
 			"text": "nunca",
-			"start": 2.076,
-			"end": 2.415
+			"start": 1.941,
+			"end": 2.28
 		},
 		{
 			"text": "cancelou",
-			"start": 2.415,
-			"end": 2.89
+			"start": 2.28,
+			"end": 2.754
 		},
 		{
 			"text": "nada",
-			"start": 2.89,
-			"end": 3.364
+			"start": 2.754,
+			"end": 3.297
 		},
 		{
 			"text": "Márcia",
-			"start": 3.5,
+			"start": 3.432,
 			"end": 4.042
 		},
 		{
 			"text": "no",
-			"start": 4.11,
-			"end": 4.246
+			"start": 4.178,
+			"end": 4.381
 		},
 		{
 			"text": "varejo",
-			"start": 4.246,
-			"end": 4.585
+			"start": 4.381,
+			"end": 4.788
 		},
 		{
 			"text": "ninguém",
-			"start": 4.585,
-			"end": 5.059
+			"start": 4.788,
+			"end": 5.263
 		},
 		{
 			"text": "cancela",
-			"start": 5.059,
-			"end": 5.669
+			"start": 5.263,
+			"end": 5.805
 		},
 		{
 			"text": "O",
-			"start": 5.805,
-			"end": 5.873
+			"start": 5.941,
+			"end": 6.076
 		},
 		{
 			"text": "cliente",
-			"start": 5.873,
-			"end": 6.212
+			"start": 6.076,
+			"end": 6.347
 		},
 		{
 			"text": "só",
-			"start": 6.212,
-			"end": 6.483
+			"start": 6.347,
+			"end": 6.686
 		},
 		{
 			"text": "para",
-			"start": 6.483,
-			"end": 6.619
+			"start": 6.686,
+			"end": 6.89
 		},
 		{
 			"text": "de",
-			"start": 6.619,
-			"end": 6.754
+			"start": 6.89,
+			"end": 6.958
 		},
 		{
 			"text": "vir",
-			"start": 6.754,
-			"end": 7.161
+			"start": 6.958,
+			"end": 7.432
 		},
 		{
 			"text": "Isso",
-			"start": 7.297,
-			"end": 7.5
+			"start": 7.568,
+			"end": 7.771
 		},
 		{
 			"text": "é",
-			"start": 7.5,
-			"end": 7.568
+			"start": 7.771,
+			"end": 7.839
 		},
 		{
-			"text": "tchârn",
-			"start": 7.568,
-			"end": 7.975
+			"text": "tchurn",
+			"start": 7.839,
+			"end": 8.381
 		},
 		{
 			"text": "a",
-			"start": 8.11,
-			"end": 8.246
+			"start": 8.517,
+			"end": 8.585
 		},
 		{
 			"text": "porcentagem",
-			"start": 8.246,
-			"end": 8.788
+			"start": 8.585,
+			"end": 9.195
 		},
 		{
 			"text": "de",
-			"start": 8.788,
-			"end": 8.788
-		},
-		{
-			"text": "clientes",
-			"start": 8.856,
-			"end": 9.127
-		},
-		{
-			"text": "que",
-			"start": 9.127,
+			"start": 9.195,
 			"end": 9.263
 		},
 		{
-			"text": "deixam",
+			"text": "clientes",
 			"start": 9.263,
-			"end": 9.534
+			"end": 9.669
+		},
+		{
+			"text": "que",
+			"start": 9.669,
+			"end": 9.737
+		},
+		{
+			"text": "deixam",
+			"start": 9.737,
+			"end": 10.076
 		},
 		{
 			"text": "de",
-			"start": 9.534,
-			"end": 9.602
+			"start": 10.076,
+			"end": 10.212
 		},
 		{
 			"text": "comprar",
-			"start": 9.602,
-			"end": 9.941
-		},
-		{
-			"text": "num",
-			"start": 9.941,
-			"end": 10.008
-		},
-		{
-			"text": "período",
-			"start": 10.008,
+			"start": 10.212,
 			"end": 10.551
 		},
 		{
+			"text": "num",
+			"start": 10.551,
+			"end": 10.619
+		},
+		{
+			"text": "período",
+			"start": 10.619,
+			"end": 11.093
+		},
+		{
 			"text": "Sem",
-			"start": 10.686,
-			"end": 10.958
+			"start": 11.229,
+			"end": 11.5
 		},
 		{
 			"text": "contrato",
-			"start": 10.958,
-			"end": 11.432
-		},
-		{
-			"text": "você",
-			"start": 11.568,
-			"end": 11.703
-		},
-		{
-			"text": "define",
-			"start": 11.703,
+			"start": 11.5,
 			"end": 12.042
 		},
 		{
+			"text": "você",
+			"start": 12.178,
+			"end": 12.381
+		},
+		{
+			"text": "define",
+			"start": 12.381,
+			"end": 12.653
+		},
+		{
 			"text": "um",
-			"start": 12.042,
-			"end": 12.11
-		},
-		{
-			"text": "prazo",
-			"start": 12.11,
-			"end": 12.449
-		},
-		{
-			"text": "Quem",
-			"start": 12.585,
+			"start": 12.653,
 			"end": 12.788
 		},
 		{
-			"text": "comprava",
+			"text": "prazo",
 			"start": 12.788,
-			"end": 13.127
+			"end": 13.195
+		},
+		{
+			"text": "Quem",
+			"start": 13.331,
+			"end": 13.534
+		},
+		{
+			"text": "comprava",
+			"start": 13.534,
+			"end": 13.873
 		},
 		{
 			"text": "todo",
-			"start": 13.127,
-			"end": 13.466
-		},
-		{
-			"text": "mês",
-			"start": 13.466,
-			"end": 13.873
-		},
-		{
-			"text": "e",
 			"start": 13.873,
-			"end": 13.873
-		},
-		{
-			"text": "passou",
-			"start": 13.873,
-			"end": 14.144
-		},
-		{
-			"text": "de",
-			"start": 14.144,
 			"end": 14.212
 		},
 		{
-			"text": "noventa",
+			"text": "mês",
 			"start": 14.212,
+			"end": 14.619
+		},
+		{
+			"text": "e",
+			"start": 14.619,
 			"end": 14.686
 		},
 		{
-			"text": "dias",
+			"text": "passou",
 			"start": 14.686,
-			"end": 14.89
-		},
-		{
-			"text": "sem",
-			"start": 14.89,
 			"end": 15.025
 		},
 		{
-			"text": "voltar",
+			"text": "de",
 			"start": 15.025,
+			"end": 15.093
+		},
+		{
+			"text": "noventa",
+			"start": 15.093,
 			"end": 15.568
 		},
 		{
+			"text": "dias",
+			"start": 15.568,
+			"end": 15.839
+		},
+		{
+			"text": "sem",
+			"start": 15.907,
+			"end": 16.11
+		},
+		{
+			"text": "voltar",
+			"start": 16.11,
+			"end": 16.72
+		},
+		{
 			"text": "saiu",
-			"start": 15.636,
-			"end": 16.246
+			"start": 16.72,
+			"end": 17.331
 		},
 		{
 			"text": "A",
-			"start": 16.381,
-			"end": 16.449
+			"start": 17.466,
+			"end": 17.534
 		},
 		{
 			"text": "conta",
-			"start": 16.449,
-			"end": 16.924
+			"start": 17.534,
+			"end": 18.008
 		},
 		{
 			"text": "mil",
-			"start": 17.059,
-			"end": 17.398
+			"start": 18.144,
+			"end": 18.483
 		},
 		{
 			"text": "clientes",
-			"start": 17.398,
-			"end": 17.737
+			"start": 18.483,
+			"end": 18.822
 		},
 		{
 			"text": "ativos",
-			"start": 17.737,
-			"end": 18.144
-		},
-		{
-			"text": "em",
-			"start": 18.144,
-			"end": 18.212
-		},
-		{
-			"text": "janeiro",
-			"start": 18.212,
-			"end": 18.686
-		},
-		{
-			"text": "cento",
 			"start": 18.822,
 			"end": 19.229
 		},
 		{
-			"text": "e",
+			"text": "em",
 			"start": 19.229,
-			"end": 19.297
+			"end": 19.364
 		},
 		{
-			"text": "vinte",
-			"start": 19.297,
-			"end": 19.5
-		},
-		{
-			"text": "sumiram",
-			"start": 19.568,
-			"end": 20.042
-		},
-		{
-			"text": "até",
-			"start": 20.042,
-			"end": 20.246
-		},
-		{
-			"text": "abril",
-			"start": 20.246,
-			"end": 20.788
-		},
-		{
-			"text": "Tchârn",
-			"start": 20.924,
-			"end": 21.263
-		},
-		{
-			"text": "de",
-			"start": 21.263,
-			"end": 21.331
-		},
-		{
-			"text": "doze",
-			"start": 21.331,
-			"end": 21.737
-		},
-		{
-			"text": "por",
-			"start": 21.737,
-			"end": 21.873
+			"text": "janeiro",
+			"start": 19.364,
+			"end": 19.771
 		},
 		{
 			"text": "cento",
-			"start": 21.873,
-			"end": 22.415
-		},
-		{
-			"text": "Cento",
-			"start": 22.551,
-			"end": 23.025
+			"start": 19.907,
+			"end": 20.314
 		},
 		{
 			"text": "e",
-			"start": 23.025,
-			"end": 23.161
+			"start": 20.314,
+			"end": 20.381
 		},
 		{
 			"text": "vinte",
-			"start": 23.161,
-			"end": 23.5
-		},
-		{
-			"text": "clientes",
-			"start": 23.5,
-			"end": 23.975
+			"start": 20.381,
+			"end": 20.72
 		},
 		{
 			"text": "sumiram",
-			"start": 23.975,
-			"end": 24.653
+			"start": 20.72,
+			"end": 21.127
 		},
 		{
-			"text": "e",
-			"start": 24.653,
-			"end": 24.788
+			"text": "até",
+			"start": 21.127,
+			"end": 21.398
 		},
 		{
-			"text": "eu",
-			"start": 24.788,
-			"end": 24.924
+			"text": "abril",
+			"start": 21.398,
+			"end": 21.873
 		},
 		{
-			"text": "nem",
-			"start": 24.924,
-			"end": 25.195
+			"text": "Tchurn",
+			"start": 22.008,
+			"end": 22.347
 		},
 		{
-			"text": "percebi",
-			"start": 25.195,
-			"end": 25.737
+			"text": "de",
+			"start": 22.347,
+			"end": 22.415
 		},
 		{
-			"text": "E",
-			"start": 25.873,
-			"end": 26.008
-		},
-		{
-			"text": "cada",
-			"start": 26.008,
-			"end": 26.28
-		},
-		{
-			"text": "um",
-			"start": 26.28,
-			"end": 26.347
-		},
-		{
-			"text": "que",
-			"start": 26.347,
-			"end": 26.483
-		},
-		{
-			"text": "some",
-			"start": 26.483,
-			"end": 26.89
-		},
-		{
-			"text": "você",
-			"start": 26.958,
-			"end": 27.161
-		},
-		{
-			"text": "precisa",
-			"start": 27.161,
-			"end": 27.5
-		},
-		{
-			"text": "trocar",
-			"start": 27.5,
-			"end": 27.839
+			"text": "doze",
+			"start": 22.415,
+			"end": 22.89
 		},
 		{
 			"text": "por",
-			"start": 27.839,
-			"end": 27.907
+			"start": 22.89,
+			"end": 23.025
 		},
 		{
-			"text": "um",
-			"start": 27.907,
-			"end": 27.975
+			"text": "cento",
+			"start": 23.025,
+			"end": 23.432
 		},
 		{
-			"text": "cliente",
-			"start": 27.975,
-			"end": 28.381
-		},
-		{
-			"text": "novo",
-			"start": 28.381,
-			"end": 28.653
-		},
-		{
-			"text": "só",
-			"start": 28.653,
-			"end": 28.924
-		},
-		{
-			"text": "pra",
-			"start": 28.924,
-			"end": 29.059
-		},
-		{
-			"text": "empatar",
-			"start": 29.059,
-			"end": 29.602
-		},
-		{
-			"text": "No",
-			"start": 29.737,
-			"end": 29.873
-		},
-		{
-			"text": "Recompra",
-			"start": 29.873,
-			"end": 30.347
-		},
-		{
-			"text": "cê",
-			"start": 30.347,
-			"end": 30.686
-		},
-		{
-			"text": "érre",
-			"start": 30.686,
-			"end": 31.432
-		},
-		{
-			"text": "ême",
-			"start": 31.432,
-			"end": 31.432
-		},
-		{
-			"text": "quem",
-			"start": 31.5,
-			"end": 31.636
-		},
-		{
-			"text": "está",
-			"start": 31.636,
-			"end": 31.839
-		},
-		{
-			"text": "em",
-			"start": 31.839,
-			"end": 31.907
-		},
-		{
-			"text": "risco",
-			"start": 31.907,
-			"end": 32.246
+			"text": "Cento",
+			"start": 23.568,
+			"end": 24.11
 		},
 		{
 			"text": "e",
-			"start": 32.246,
-			"end": 32.246
+			"start": 24.11,
+			"end": 24.11
 		},
 		{
-			"text": "quem",
-			"start": 32.246,
-			"end": 32.517
+			"text": "vinte",
+			"start": 24.11,
+			"end": 24.517
 		},
 		{
-			"text": "já",
-			"start": 32.517,
-			"end": 32.585
+			"text": "clientes",
+			"start": 24.517,
+			"end": 24.924
 		},
 		{
-			"text": "sumiu",
-			"start": 32.585,
-			"end": 32.992
-		},
-		{
-			"text": "aparece",
-			"start": 33.059,
-			"end": 33.534
-		},
-		{
-			"text": "separado",
-			"start": 33.534,
-			"end": 34.212
+			"text": "sumiram",
+			"start": 24.924,
+			"end": 25.534
 		},
 		{
 			"text": "e",
-			"start": 34.347,
-			"end": 34.415
+			"start": 25.669,
+			"end": 25.805
 		},
 		{
-			"text": "a",
-			"start": 34.415,
-			"end": 34.483
+			"text": "eu",
+			"start": 25.805,
+			"end": 25.873
 		},
 		{
-			"text": "campanha",
-			"start": 34.483,
-			"end": 34.89
+			"text": "nem",
+			"start": 25.873,
+			"end": 26.212
 		},
 		{
-			"text": "chama",
-			"start": 34.958,
-			"end": 35.229
-		},
-		{
-			"text": "sozinha",
-			"start": 35.229,
-			"end": 35.975
-		},
-		{
-			"text": "Pra",
-			"start": 36.11,
-			"end": 36.246
-		},
-		{
-			"text": "não",
-			"start": 36.246,
-			"end": 36.449
-		},
-		{
-			"text": "esquecer",
-			"start": 36.449,
-			"end": 37.195
-		},
-		{
-			"text": "tchârn",
-			"start": 37.263,
-			"end": 37.737
-		},
-		{
-			"text": "é",
-			"start": 37.737,
-			"end": 37.873
-		},
-		{
-			"text": "quem",
-			"start": 37.873,
-			"end": 38.076
-		},
-		{
-			"text": "parou",
-			"start": 38.076,
-			"end": 38.28
-		},
-		{
-			"text": "de",
-			"start": 38.28,
-			"end": 38.415
-		},
-		{
-			"text": "comprar",
-			"start": 38.415,
-			"end": 39.025
+			"text": "percebi",
+			"start": 26.212,
+			"end": 27.093
 		},
 		{
 			"text": "E",
-			"start": 39.093,
-			"end": 39.229
+			"start": 27.229,
+			"end": 27.297
 		},
 		{
-			"text": "dá",
-			"start": 39.229,
-			"end": 39.432
+			"text": "cada",
+			"start": 27.297,
+			"end": 27.568
+		},
+		{
+			"text": "um",
+			"start": 27.568,
+			"end": 27.703
+		},
+		{
+			"text": "que",
+			"start": 27.703,
+			"end": 27.771
+		},
+		{
+			"text": "some",
+			"start": 27.771,
+			"end": 28.314
+		},
+		{
+			"text": "você",
+			"start": 28.381,
+			"end": 28.585
+		},
+		{
+			"text": "precisa",
+			"start": 28.585,
+			"end": 28.924
+		},
+		{
+			"text": "trocar",
+			"start": 28.924,
+			"end": 29.263
+		},
+		{
+			"text": "por",
+			"start": 29.263,
+			"end": 29.398
+		},
+		{
+			"text": "um",
+			"start": 29.398,
+			"end": 29.466
+		},
+		{
+			"text": "cliente",
+			"start": 29.466,
+			"end": 29.805
+		},
+		{
+			"text": "novo",
+			"start": 29.805,
+			"end": 30.144
+		},
+		{
+			"text": "só",
+			"start": 30.144,
+			"end": 30.483
 		},
 		{
 			"text": "pra",
-			"start": 39.432,
-			"end": 39.5
+			"start": 30.483,
+			"end": 30.619
 		},
 		{
-			"text": "chamar",
-			"start": 39.5,
-			"end": 39.907
+			"text": "empatar",
+			"start": 30.619,
+			"end": 31.161
 		},
 		{
-			"text": "antes",
-			"start": 39.907,
-			"end": 40.178
+			"text": "No",
+			"start": 31.297,
+			"end": 31.432
 		},
 		{
-			"text": "de",
-			"start": 40.178,
-			"end": 40.246
+			"text": "RecompraCêÉrreÊme",
+			"start": 31.568,
+			"end": 32.517
 		},
 		{
-			"text": "sumir",
-			"start": 40.246,
-			"end": 40.788
+			"text": "quem",
+			"start": 32.517,
+			"end": 32.72
 		},
 		{
-			"text": "Salva",
-			"start": 40.924,
-			"end": 41.263
+			"text": "está",
+			"start": 32.72,
+			"end": 32.924
 		},
 		{
-			"text": "o",
-			"start": 41.263,
-			"end": 41.263
+			"text": "em",
+			"start": 32.924,
+			"end": 32.992
 		},
 		{
-			"text": "vídeo",
-			"start": 41.263,
-			"end": 41.669
+			"text": "risco",
+			"start": 32.992,
+			"end": 33.331
 		},
 		{
 			"text": "e",
-			"start": 41.669,
-			"end": 41.737
+			"start": 33.331,
+			"end": 33.398
+		},
+		{
+			"text": "quem",
+			"start": 33.398,
+			"end": 33.534
+		},
+		{
+			"text": "já",
+			"start": 33.534,
+			"end": 33.602
+		},
+		{
+			"text": "sumiu",
+			"start": 33.602,
+			"end": 34.008
+		},
+		{
+			"text": "aparece",
+			"start": 34.144,
+			"end": 34.619
+		},
+		{
+			"text": "separado",
+			"start": 34.619,
+			"end": 35.297
+		},
+		{
+			"text": "e",
+			"start": 35.432,
+			"end": 35.5
+		},
+		{
+			"text": "a",
+			"start": 35.5,
+			"end": 35.568
+		},
+		{
+			"text": "campanha",
+			"start": 35.568,
+			"end": 35.975
+		},
+		{
+			"text": "chama",
+			"start": 35.975,
+			"end": 36.246
+		},
+		{
+			"text": "sozinha",
+			"start": 36.246,
+			"end": 36.924
+		},
+		{
+			"text": "Pra",
+			"start": 37.059,
+			"end": 37.195
+		},
+		{
+			"text": "não",
+			"start": 37.195,
+			"end": 37.331
+		},
+		{
+			"text": "esquecer",
+			"start": 37.331,
+			"end": 37.941
+		},
+		{
+			"text": "tchurn",
+			"start": 38.008,
+			"end": 38.415
+		},
+		{
+			"text": "é",
+			"start": 38.415,
+			"end": 38.483
+		},
+		{
+			"text": "quem",
+			"start": 38.483,
+			"end": 38.686
+		},
+		{
+			"text": "parou",
+			"start": 38.686,
+			"end": 39.025
+		},
+		{
+			"text": "de",
+			"start": 39.025,
+			"end": 39.093
+		},
+		{
+			"text": "comprar",
+			"start": 39.093,
+			"end": 39.703
+		},
+		{
+			"text": "E",
+			"start": 39.703,
+			"end": 39.839
+		},
+		{
+			"text": "dá",
+			"start": 39.839,
+			"end": 39.975
+		},
+		{
+			"text": "pra",
+			"start": 39.975,
+			"end": 40.042
+		},
+		{
+			"text": "chamar",
+			"start": 40.042,
+			"end": 40.449
+		},
+		{
+			"text": "antes",
+			"start": 40.517,
+			"end": 40.788
+		},
+		{
+			"text": "de",
+			"start": 40.788,
+			"end": 40.856
+		},
+		{
+			"text": "sumir",
+			"start": 40.856,
+			"end": 41.331
+		},
+		{
+			"text": "Salva",
+			"start": 41.466,
+			"end": 41.873
+		},
+		{
+			"text": "o",
+			"start": 41.873,
+			"end": 41.873
+		},
+		{
+			"text": "vídeo",
+			"start": 41.873,
+			"end": 42.28
+		},
+		{
+			"text": "e",
+			"start": 42.28,
+			"end": 42.347
 		},
 		{
 			"text": "confere",
-			"start": 41.737,
-			"end": 42.144
+			"start": 42.347,
+			"end": 42.754
 		},
 		{
 			"text": "o",
-			"start": 42.144,
-			"end": 42.144
+			"start": 42.754,
+			"end": 42.754
 		},
 		{
 			"text": "glossário",
-			"start": 42.144,
-			"end": 42.551
+			"start": 42.754,
+			"end": 43.229
 		},
 		{
 			"text": "completo",
-			"start": 42.551,
-			"end": 43.093
+			"start": 43.229,
+			"end": 43.703
 		},
 		{
 			"text": "no",
-			"start": 43.093,
-			"end": 43.161
+			"start": 43.703,
+			"end": 43.771
 		},
 		{
 			"text": "link",
-			"start": 43.161,
-			"end": 43.364
+			"start": 43.771,
+			"end": 43.975
 		},
 		{
 			"text": "da",
-			"start": 43.364,
-			"end": 43.5
+			"start": 43.975,
+			"end": 44.11
 		},
 		{
 			"text": "bio",
-			"start": 43.5,
-			"end": 43.907
+			"start": 44.11,
+			"end": 44.381
 		},
 		{
 			"text": "Segue",
-			"start": 44.042,
-			"end": 44.449
+			"start": 44.517,
+			"end": 44.856
 		},
 		{
-			"text": "o",
-			"start": 44.449,
-			"end": 44.449
-		},
-		{
-			"text": "Caramelo",
-			"start": 44.449,
-			"end": 45.127
+			"text": "aí",
+			"start": 44.856,
+			"end": 45.195
 		}
 	]
 }

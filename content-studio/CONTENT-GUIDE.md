@@ -24,7 +24,7 @@ cinco barras), igual ao `icon-badge`.
   exclamação, "Olha só!", "Calma, Márcia!". A voz é animada e rápida (ver `voice.config.json`).
 - É quem explica o jeito certo. Nunca zomba do lojista: o erro é comum, não burro.
 - Bordão: "Eu vi tudo daqui da porta." Ele entra respondendo ao dono, nunca se apresentando.
-- Bordão de saída: "Segue o Caramelo pra ver a próxima!"
+- Bordão de saída: "Segue aí!" (curto, no imperativo, falando com quem assiste; nunca "Segue o Caramelo")
 - Por que um cachorro: cachorro é **fiel** e **sempre volta**. É o cliente que todo lojista quer.
 
 **Os lojistas** — um por segmento, sempre com nome e uma loja concreta. Cometem o erro do episódio
@@ -60,7 +60,7 @@ Personagens novos só entram no elenco depois de desenhados em `src/characters/`
 4. **Toda afirmação com número leva `source`.** Sem fonte, a frase não entra.
 5. **A tela do produto** que faz exatamente aquilo (nunca o painel genérico).
 6. **CTA** para uma ferramenta grátis (`/tools/cashback-calculator`, `/tools/whatsapp-cost`) ou
-   para o teste de 15 dias, e "Segue o Caramelo pra ver a próxima!".
+   para o teste de 15 dias, e "Segue aí!".
 
 ## Formato "glossário" (`format: "glossario"`, 35–45 s)
 
@@ -77,7 +77,7 @@ salvamento é o sinal que esse tipo de conteúdo ganha, e a cola é o motivo par
 4. **Onde o equívoco dói**: a conta que mostra o prejuízo (desconto, margem, cliente perdido). O dono
    reage.
 5. **A cola** (`kind: "recap"`): de 2 a 4 linhas "TERMO → o que lembrar".
-6. **CTA**: "Salva o vídeo e confere o glossário completo no link da bio. Segue o Caramelo!".
+6. **CTA**: "Salva o vídeo e confere o glossário completo no link da bio. Segue aí!".
 
 Regras próprias:
 
@@ -85,8 +85,10 @@ Regras próprias:
   verbete (definição, fórmula, exemplo). O verbete é a fonte; o vídeo é o resumo.
 - **Tela do produto só se o verbete tiver `inRecompra`.** Markup e CAC não são calculados pelo
   produto: esses episódios não mostram o RecompraCRM. O lint recusa.
+- A marca se fala numa palavra só: "RecompraCRM" vai para a voz como "RecompraCêÉrreÊme". Separar
+  as letras ("Recompra cê érre ême") faz a voz soletrar com pausa entre elas.
 - Termo em inglês ou sigla ganha pronúncia em `voice.config.json` → `spoken` ("markup" → "márcap",
-  "churn" → "tchârn", "ABC" → "á bê cê", "ticket" → "tíquete"); a legenda continua com a grafia certa.
+  "churn" → "tchurn", "ABC" → "á bê cê", "ticket" → "tíquete"); a legenda continua com a grafia certa.
 - Os números do exemplo são os do verbete (loja hipotética), e a fonte diz isso: "Exemplo hipotético
   do glossário: …". Uma conta derivada do exemplo leva "Conta com …".
 
