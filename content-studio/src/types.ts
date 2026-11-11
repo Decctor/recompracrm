@@ -10,7 +10,7 @@ export const SpeakerEnum = z.enum(["dog", "owner"]);
 export const OwnerPoseEnum = z.enum(["idle", "sign", "phone", "worried"]);
 export const ShotEnum = z.enum(["owner", "both", "dog", "app", "outro"]);
 /**
- * Telas do produto. Só as de IMPLEMENTED_SCREENS já têm desenho (SCREENS em src/ui/screens.tsx; as
+ * Telas do produto. Só as de IMPLEMENTED_SCREENS têm print (episodes/_screens, tools/capture-screens.ts) e roteiro de destaque (SPECS em src/ui/screens.tsx; as
  * duas listas andam juntas); as outras recusam o render.
  */
 export const AppScreenEnum = z.enum(["cashback-settings", "campaign-whatsapp", "rfm-segments", "product-abc", "dashboard-ticket"]);

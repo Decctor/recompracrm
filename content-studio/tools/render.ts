@@ -40,7 +40,8 @@ if (frames) {
 		await renderStill({ composition, serveUrl, output: file, frame, inputProps, browserExecutable, chromeMode, imageFormat: "jpeg", jpegQuality: 85 });
 		files.push(file);
 	}
-	execFileSync("ffmpeg", ["-v", "error", "-y", ...files.flatMap((f) => ["-i", f]), "-filter_complex", `${files.map((_, i) => `[${i}]scale=360:-1[s${i}]`).join(";")};${files.map((_, i) => `[s${i}]`).join("")}hstack=inputs=${files.length}`, path.join(dir, "frames.jpg")]);
+	const stack = files.length > 1 ? `;${files.map((_, i) => `[s${i}]`).join("")}hstack=inputs=${files.length}` : "";
+	execFileSync("ffmpeg", ["-v", "error", "-y", ...files.flatMap((f) => ["-i", f]), "-filter_complex", `${files.map((_, i) => `[${i}]scale=360:-1${files.length > 1 ? `[s${i}]` : ""}`).join(";")}${stack}`, path.join(dir, "frames.jpg")]);
 	console.log(`Quadros ${frames.join(", ")} em ${path.join(dir, "frames.jpg")}`);
 } else if (stills) {
 	const script = ScriptSchema.parse(JSON.parse(readFileSync(path.join(root, "episodes", episodeId, "script.json"), "utf8")));

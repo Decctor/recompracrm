@@ -7,7 +7,7 @@ import { buildTimeline, chunkCaptions, mouthOpenness, wordTime } from "./timelin
 import { COLORS, DISPLAY_FONT, FLOOR_Y, WIDTH } from "./theme";
 import type { TBeat, TScript, TShot, TVoice } from "./types";
 import { AppHeadline } from "./ui/AppScreen";
-import { SCREENS } from "./ui/screens";
+import { RealScreen } from "./ui/screens";
 import { Caption, Card, Counter, SeriesBadge, SourcePill, TopLabel } from "./ui/Overlays";
 
 export type TReelProps = { episodeId: string; script: TScript | null; voice: TVoice | null };
@@ -104,15 +104,14 @@ export function Reel({ episodeId, script, voice }: TReelProps) {
 			{beat.shot === "app" && beat.app ? (
 				<>
 					<AppHeadline text={beat.app.headline} frame={beatFrame} />
-					{(() => {
-						const Screen = SCREENS[beat.app.screen];
-						if (!Screen) return null;
-						const cue = (word: string) => {
+					<RealScreen
+						screen={beat.app.screen}
+						frame={beatFrame}
+						cue={(word: string) => {
 							const at = wordTime(timed, word);
 							return at === null ? null : Math.round((at - timed.start) * fps);
-						};
-						return <Screen frame={beatFrame} cue={cue} />;
-					})()}
+						}}
+					/>
 				</>
 			) : beat.label ? (
 				<TopLabel text={beat.label} frame={overlayFrame} />
