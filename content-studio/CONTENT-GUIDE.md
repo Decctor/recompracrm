@@ -85,8 +85,10 @@ Regras próprias:
   verbete (definição, fórmula, exemplo). O verbete é a fonte; o vídeo é o resumo.
 - **Tela do produto só se o verbete tiver `inRecompra`.** Markup e CAC não são calculados pelo
   produto: esses episódios não mostram o RecompraCRM. O lint recusa.
-- Termo em inglês ganha pronúncia em `voice.config.json` → `spoken` ("markup" → "márcap"); a
-  legenda continua com a grafia certa.
+- Termo em inglês ou sigla ganha pronúncia em `voice.config.json` → `spoken` ("markup" → "márcap",
+  "churn" → "tchârn", "ABC" → "á bê cê", "ticket" → "tíquete"); a legenda continua com a grafia certa.
+- Os números do exemplo são os do verbete (loja hipotética), e a fonte diz isso: "Exemplo hipotético
+  do glossário: …". Uma conta derivada do exemplo leva "Conta com …".
 
 Outros formatos (ainda sem template de vídeo):
 

@@ -1,0 +1,214 @@
+{
+	"id": "g004-ticket-medio",
+	"title": "Vendi mais e faturei menos",
+	"format": "glossario",
+	"glossary": {
+		"slug": "ticket-medio",
+		"term": "TICKET MÉDIO"
+	},
+	"segment": "sorveteria",
+	"scene": "sorveteria",
+	"owner": {
+		"name": "Márcia",
+		"look": "marcia"
+	},
+	"beats": [
+		{
+			"say": "Vendi mais esse mês… e faturei menos!",
+			"speaker": "owner",
+			"tone": "annoyed, confused, complaining fast",
+			"label": "MAIS VENDAS, MENOS FATURAMENTO?",
+			"shot": "owner",
+			"owner": {
+				"pose": "idle",
+				"mood": "annoyed"
+			}
+		},
+		{
+			"say": "Olha o ticket médio, Márcia! Eu vi muita gente levando menos.",
+			"speaker": "dog",
+			"label": "OLHA O TICKET MÉDIO",
+			"shot": "both",
+			"owner": {
+				"pose": "idle",
+				"mood": "annoyed"
+			},
+			"dog": {
+				"pose": "sit",
+				"mood": "explain"
+			}
+		},
+		{
+			"say": "Ticket médio é o valor médio de cada venda: quanto cada cliente gasta por visita.",
+			"speaker": "dog",
+			"label": "O QUE É TICKET MÉDIO",
+			"shot": "dog",
+			"dog": {
+				"pose": "point",
+				"mood": "explain"
+			},
+			"card": {
+				"kind": "term",
+				"term": "Ticket médio",
+				"tag": "vendas e margem",
+				"definition": "O valor médio de cada venda: quanto o cliente gasta por visita."
+			}
+		},
+		{
+			"say": "É o faturamento dividido pelo número de vendas. Mês passado: quarenta e oito mil em mil e duzentas vendas. Quarenta reais.",
+			"speaker": "dog",
+			"label": "A FÓRMULA",
+			"shot": "dog",
+			"dog": {
+				"pose": "point",
+				"mood": "happy"
+			},
+			"card": {
+				"kind": "formula",
+				"expression": "Ticket = faturamento ÷ vendas",
+				"highlight": [
+					"Ticket"
+				],
+				"example": "R$ 48.000 ÷ 1.200 = R$ 40"
+			},
+			"source": "Loja hipotética: R$ 48.000 em 1.200 vendas"
+		},
+		{
+			"say": "Este mês: mil e trezentas vendas, mas quarenta e cinco mil e quinhentos. Trinta e cinco reais.",
+			"speaker": "dog",
+			"tone": "dramatic, surprised, fast",
+			"label": "ESTE MÊS",
+			"shot": "dog",
+			"dog": {
+				"pose": "point",
+				"mood": "worried"
+			},
+			"card": {
+				"kind": "math",
+				"rows": [
+					{
+						"label": "Faturamento",
+						"value": "R$ 45.500"
+					},
+					{
+						"label": "Vendas",
+						"value": "÷ 1.300"
+					},
+					{
+						"label": "Ticket",
+						"value": "R$ 35,00",
+						"strong": true,
+						"bad": true
+					}
+				]
+			},
+			"source": "Conta da loja hipotética: R$ 45.500 em 1.300 vendas"
+		},
+		{
+			"say": "Cinco reais a menos em cada venda?!",
+			"speaker": "owner",
+			"tone": "shocked, disbelief",
+			"label": "−R$ 5 POR VENDA",
+			"shot": "owner",
+			"owner": {
+				"pose": "worried",
+				"mood": "worried"
+			},
+			"card": {
+				"kind": "stat",
+				"value": "−R$ 5",
+				"caption": "em cada uma das 1.300 vendas",
+				"mark": "cross"
+			},
+			"source": "Conta da loja hipotética: R$ 45.500 em 1.300 vendas"
+		},
+		{
+			"say": "Pra subir: combo, adicional no caixa e cashback que só vale acima de um valor.",
+			"speaker": "dog",
+			"label": "COMO SUBIR O TICKET",
+			"shot": "dog",
+			"dog": {
+				"pose": "sit",
+				"mood": "happy"
+			},
+			"card": {
+				"kind": "compare",
+				"rows": [
+					{
+						"text": "Combo e kit",
+						"mark": "check"
+					},
+					{
+						"text": "Adicional no caixa",
+						"mark": "check"
+					},
+					{
+						"text": "Cashback com valor mínimo",
+						"mark": "check"
+					}
+				]
+			}
+		},
+		{
+			"say": "O painel do RecompraCRM mostra o ticket médio da loja e de cada vendedor, contra o mês anterior.",
+			"speaker": "dog",
+			"shot": "app",
+			"owner": {
+				"pose": "phone",
+				"mood": "happy"
+			},
+			"app": {
+				"headline": "TICKET MÉDIO NO PAINEL DO",
+				"screen": "dashboard-ticket"
+			}
+		},
+		{
+			"say": "Pra não esquecer: ticket é faturamento dividido por vendas. E ele cai sem fazer barulho.",
+			"speaker": "dog",
+			"label": "SALVA ESSA COLA",
+			"shot": "dog",
+			"dog": {
+				"pose": "sit",
+				"mood": "happy"
+			},
+			"card": {
+				"kind": "recap",
+				"title": "COLA RÁPIDA",
+				"rows": [
+					{
+						"term": "TICKET",
+						"text": "faturamento ÷ vendas"
+					},
+					{
+						"term": "OLHAR",
+						"text": "junto com as vendas"
+					},
+					{
+						"term": "SUBIR",
+						"text": "combo e adicional"
+					}
+				]
+			}
+		},
+		{
+			"say": "Salva o vídeo e confere o glossário completo no link da bio. Segue o Caramelo!",
+			"speaker": "dog",
+			"label": "GLOSSÁRIO NO LINK DA BIO",
+			"shot": "outro",
+			"dog": {
+				"pose": "wave",
+				"mood": "happy"
+			}
+		}
+	],
+	"instagram": {
+		"caption": "Vendeu mais e faturou menos? Olha o ticket médio 📖\nTicket médio é o faturamento dividido pelo número de vendas. Numa loja hipotética: R$ 48.000 em 1.200 vendas dão R$ 40; no mês seguinte, R$ 45.500 em 1.300 vendas dão R$ 35. Mais gente no caixa, cada um levando R$ 5 a menos. Combo, adicional no caixa e cashback com valor mínimo ajudam a subir.\nQual é o ticket médio da sua loja?\nGlossário completo no link da bio.",
+		"hashtags": [
+			"#varejo",
+			"#ticketmedio",
+			"#vendas",
+			"#gestao",
+			"#pequenonegocio"
+		]
+	}
+}

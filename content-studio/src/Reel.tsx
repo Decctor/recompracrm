@@ -6,7 +6,8 @@ import { Sorveteria } from "./scene/Sorveteria";
 import { buildTimeline, chunkCaptions, mouthOpenness, wordTime } from "./timeline";
 import { COLORS, DISPLAY_FONT, FLOOR_Y, WIDTH } from "./theme";
 import type { TBeat, TScript, TShot, TVoice } from "./types";
-import { AppHeadline, CashbackSettingsPhone } from "./ui/AppScreen";
+import { AppHeadline } from "./ui/AppScreen";
+import { SCREENS } from "./ui/screens";
 import { Caption, Card, Counter, SeriesBadge, SourcePill, TopLabel } from "./ui/Overlays";
 
 export type TReelProps = { episodeId: string; script: TScript | null; voice: TVoice | null };
@@ -103,14 +104,15 @@ export function Reel({ episodeId, script, voice }: TReelProps) {
 			{beat.shot === "app" && beat.app ? (
 				<>
 					<AppHeadline text={beat.app.headline} frame={beatFrame} />
-					<CashbackSettingsPhone
-						frame={beatFrame}
-						highlight={appHighlight(timed, t)}
-						notifyAt={(() => {
-							const at = wordTime(timed, "aviso");
+					{(() => {
+						const Screen = SCREENS[beat.app.screen];
+						if (!Screen) return null;
+						const cue = (word: string) => {
+							const at = wordTime(timed, word);
 							return at === null ? null : Math.round((at - timed.start) * fps);
-						})()}
-					/>
+						};
+						return <Screen frame={beatFrame} cue={cue} />;
+					})()}
 				</>
 			) : beat.label ? (
 				<TopLabel text={beat.label} frame={overlayFrame} />
@@ -131,20 +133,6 @@ export function Reel({ episodeId, script, voice }: TReelProps) {
 			{beat.source ? <SourcePill text={beat.source} frame={beatFrame} /> : null}
 		</AbsoluteFill>
 	);
-}
-
-function appHighlight(beat: ReturnType<typeof buildTimeline>["beats"][number], t: number) {
-	const order: Array<["percentual" | "validade" | "whatsapp", string]> = [
-		["percentual", "percentual"],
-		["validade", "validade"],
-		["whatsapp", "aviso"],
-	];
-	let current: "percentual" | "validade" | "whatsapp" | null = null;
-	for (const [key, word] of order) {
-		const at = wordTime(beat, word);
-		if (at !== null && t >= at) current = key;
-	}
-	return current;
 }
 
 function Actor({ placement, width, height, enterFrame, children }: { placement: { x: number; scale: number }; width: number; height: number; enterFrame: number; children: React.ReactNode }) {

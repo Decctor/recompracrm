@@ -22,6 +22,11 @@
 	"spoken": {
 		"RecompraCRM": "Recompra cê érre ême",
 		"markup": "márcap",
-		"Markup": "Márcap"
+		"Markup": "Márcap",
+		"churn": "tchârn",
+		"Churn": "Tchârn",
+		"ABC": "á bê cê",
+		"ticket": "tíquete",
+		"Ticket": "Tíquete"
 	}
 }

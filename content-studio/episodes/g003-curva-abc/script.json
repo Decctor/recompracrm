@@ -1,0 +1,197 @@
+{
+	"id": "g003-curva-abc",
+	"title": "Falta o que vende, sobra o que não vende",
+	"format": "glossario",
+	"glossary": {
+		"slug": "curva-abc",
+		"term": "CURVA ABC"
+	},
+	"segment": "sorveteria",
+	"scene": "sorveteria",
+	"owner": {
+		"name": "Márcia",
+		"look": "marcia"
+	},
+	"beats": [
+		{
+			"say": "Faltou o picolé que mais vende… e sobrou sabor que ninguém pede!",
+			"speaker": "owner",
+			"tone": "annoyed, frustrated, complaining fast",
+			"label": "FALTA O QUE VENDE, SOBRA O QUE NÃO?",
+			"shot": "owner",
+			"owner": {
+				"pose": "idle",
+				"mood": "annoyed"
+			}
+		},
+		{
+			"say": "Calma, Márcia! Isso se resolve com curva ABC.",
+			"speaker": "dog",
+			"label": "CURVA ABC",
+			"shot": "both",
+			"owner": {
+				"pose": "idle",
+				"mood": "annoyed"
+			},
+			"dog": {
+				"pose": "sit",
+				"mood": "happy"
+			}
+		},
+		{
+			"say": "Curva ABC é a classificação dos produtos pelo quanto cada um fatura.",
+			"speaker": "dog",
+			"label": "O QUE É CURVA ABC",
+			"shot": "dog",
+			"dog": {
+				"pose": "point",
+				"mood": "explain"
+			},
+			"card": {
+				"kind": "term",
+				"term": "Curva ABC",
+				"tag": "estoque e ERP",
+				"definition": "A classificação dos produtos pela participação no faturamento."
+			}
+		},
+		{
+			"say": "Ordena do que mais fatura pro que menos. Até oitenta por cento do faturamento, é A. Até noventa e cinco, é B. O resto é C.",
+			"speaker": "dog",
+			"label": "A, B E C",
+			"shot": "dog",
+			"dog": {
+				"pose": "point",
+				"mood": "explain"
+			},
+			"card": {
+				"kind": "math",
+				"rows": [
+					{
+						"label": "Classe A",
+						"value": "até 80%"
+					},
+					{
+						"label": "Classe B",
+						"value": "até 95%"
+					},
+					{
+						"label": "Classe C",
+						"value": "o resto"
+					}
+				]
+			},
+			"source": "Convenção 80/15/5 sobre o faturamento acumulado"
+		},
+		{
+			"say": "Numa loja com quinhentos produtos, noventa fazem oitenta por cento do faturamento.",
+			"speaker": "dog",
+			"label": "POUCOS FAZEM QUASE TUDO",
+			"shot": "dog",
+			"dog": {
+				"pose": "point",
+				"mood": "happy"
+			},
+			"card": {
+				"kind": "stat",
+				"value": "90",
+				"caption": "de 500 produtos fazem 80% do faturamento"
+			},
+			"source": "Loja hipotética do glossário: 500 produtos"
+		},
+		{
+			"say": "Só noventa?! E eu deixo faltar justo esses!",
+			"speaker": "owner",
+			"tone": "shocked, disbelief",
+			"label": "SÓ 90?!",
+			"shot": "owner",
+			"owner": {
+				"pose": "worried",
+				"mood": "worried"
+			}
+		},
+		{
+			"say": "Por isso item A não pode faltar nunca. E item C pode ter estoque bem menor.",
+			"speaker": "dog",
+			"label": "ONDE NÃO PODE FALTAR",
+			"shot": "dog",
+			"dog": {
+				"pose": "sit",
+				"mood": "explain"
+			},
+			"card": {
+				"kind": "compare",
+				"rows": [
+					{
+						"text": "Item A: estoque de segurança",
+						"mark": "check"
+					},
+					{
+						"text": "Item C: comprar sob demanda",
+						"mark": "check"
+					}
+				]
+			}
+		},
+		{
+			"say": "No ERP do RecompraCRM, cada produto mostra a posição na curva, e dá pra filtrar o catálogo por classe.",
+			"speaker": "dog",
+			"shot": "app",
+			"owner": {
+				"pose": "phone",
+				"mood": "happy"
+			},
+			"app": {
+				"headline": "CURVA ABC DE CADA PRODUTO NO",
+				"screen": "product-abc"
+			}
+		},
+		{
+			"say": "Pra não esquecer: A não pode faltar, C não precisa sobrar.",
+			"speaker": "dog",
+			"label": "SALVA ESSA COLA",
+			"shot": "dog",
+			"dog": {
+				"pose": "sit",
+				"mood": "happy"
+			},
+			"card": {
+				"kind": "recap",
+				"title": "COLA RÁPIDA",
+				"rows": [
+					{
+						"term": "A",
+						"text": "nunca pode faltar"
+					},
+					{
+						"term": "B",
+						"text": "acompanhar de perto"
+					},
+					{
+						"term": "C",
+						"text": "estoque menor"
+					}
+				]
+			}
+		},
+		{
+			"say": "Salva o vídeo e confere o glossário completo no link da bio. Segue o Caramelo!",
+			"speaker": "dog",
+			"label": "GLOSSÁRIO NO LINK DA BIO",
+			"shot": "outro",
+			"dog": {
+				"pose": "wave",
+				"mood": "happy"
+			}
+		}
+	],
+	"instagram": {
+		"caption": "Faltou o que mais vende e sobrou o que ninguém pede? 📖\nCurva ABC é a classificação dos produtos pela participação no faturamento: os A somam até ~80%, os B até ~95% e os C são o resto. Numa loja hipotética com 500 produtos, 90 itens fazem 80% do faturamento. Item A não pode faltar; item C pode ter estoque menor.\nQual produto da sua loja nunca pode faltar?\nGlossário completo no link da bio.",
+		"hashtags": [
+			"#varejo",
+			"#curvaabc",
+			"#gestaodeestoque",
+			"#estoque",
+			"#pequenonegocio"
+		]
+	}
+}

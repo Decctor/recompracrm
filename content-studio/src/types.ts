@@ -9,9 +9,13 @@ export const MoodEnum = z.enum(["happy", "hopeful", "worried", "explain", "annoy
 export const SpeakerEnum = z.enum(["dog", "owner"]);
 export const OwnerPoseEnum = z.enum(["idle", "sign", "phone", "worried"]);
 export const ShotEnum = z.enum(["owner", "both", "dog", "app", "outro"]);
-/** Telas do produto. Só as de IMPLEMENTED_SCREENS já têm desenho (src/ui/AppScreen.tsx); as outras recusam o render. */
-export const AppScreenEnum = z.enum(["cashback-settings", "campaign-whatsapp", "rfm-segments"]);
-export const IMPLEMENTED_SCREENS: Array<z.infer<typeof AppScreenEnum>> = ["cashback-settings"];
+/**
+ * Telas do produto. Só as de IMPLEMENTED_SCREENS já têm desenho (SCREENS em src/ui/screens.tsx; as
+ * duas listas andam juntas); as outras recusam o render.
+ */
+export const AppScreenEnum = z.enum(["cashback-settings", "campaign-whatsapp", "rfm-segments", "product-abc", "dashboard-ticket"]);
+export type TAppScreen = z.infer<typeof AppScreenEnum>;
+export const IMPLEMENTED_SCREENS: TAppScreen[] = ["cashback-settings", "rfm-segments", "product-abc", "dashboard-ticket"];
 export const MarkEnum = z.enum(["check", "cross"]);
 
 const MathCardSchema = z.object({

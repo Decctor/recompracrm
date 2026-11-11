@@ -15,10 +15,13 @@ desenho e nicho próprios.
 |---|---|---|---|
 | 001 Desconto de 10% × cashback de 5% | ✓ (diálogo) | ✓ duas vozes | `npm run render -- 001-desconto-vs-cashback` |
 | 002 Promoção pra base toda no WhatsApp | ✓ | — | falta a tela `campaign-whatsapp` |
-| 003 Os 20% que pagam as contas | ✓ | — | falta a tela `rfm-segments` |
-| 004 Seu Jorge sumiu | ✓ | — | falta a tela `rfm-segments` |
+| 003 Os 20% que pagam as contas | ✓ | — | pronto para voz e render |
+| 004 Seu Jorge sumiu | ✓ | — | pronto para voz e render |
 | 005 Crédito que vale um ano | ✓ | — | pronto para voz e render |
 | g001 Glossário: markup | ✓ | ✓ duas vozes | `npm run render -- g001-markup` |
+| g002 Glossário: churn | ✓ | ✓ duas vozes | tela `rfm-segments` |
+| g003 Glossário: curva ABC | ✓ | ✓ duas vozes | tela `product-abc` |
+| g004 Glossário: ticket médio | ✓ | ✓ duas vozes | tela `dashboard-ticket` |
 
 ## Rodar
 
