@@ -4,7 +4,9 @@ import { z } from "zod";
 // Campos de dado em português (é o que o roteirista lê e escreve), nomes de código em inglês.
 
 export const DogPoseEnum = z.enum(["sit", "point", "wave"]);
-export const MoodEnum = z.enum(["happy", "hopeful", "worried", "explain"]);
+export const MoodEnum = z.enum(["happy", "hopeful", "worried", "explain", "annoyed"]);
+/** Quem fala o passo: o Caramelo (narrador) ou o dono da loja do episódio. */
+export const SpeakerEnum = z.enum(["dog", "owner"]);
 export const OwnerPoseEnum = z.enum(["idle", "sign", "phone", "worried"]);
 export const ShotEnum = z.enum(["owner", "both", "dog", "app", "outro"]);
 /** Telas do produto. Só as de IMPLEMENTED_SCREENS já têm desenho (src/ui/AppScreen.tsx); as outras recusam o render. */
@@ -40,8 +42,11 @@ const CompareCardSchema = z.object({
 export const CardSchema = z.discriminatedUnion("kind", [MathCardSchema, StatCardSchema, CompareCardSchema]);
 
 export const BeatSchema = z.object({
-	/** O que o Caramelo fala, com números por extenso. A legenda mostra exatamente isto. */
+	/** A fala do passo, com números por extenso. A legenda mostra exatamente isto. */
 	say: z.string().min(1),
+	speaker: SpeakerEnum.default("dog"),
+	/** Direção de atuação para a voz, em inglês e curta ("annoyed, complaining fast"). Não aparece na tela. */
+	tone: z.string().optional(),
 	/** Rótulo do topo, em maiúsculas, com dígitos. */
 	label: z.string().optional(),
 	shot: ShotEnum,
@@ -70,7 +75,6 @@ export const ScriptSchema = z.object({
 
 export const VoiceSchema = z.object({
 	provider: z.string(),
-	voiceId: z.string(),
 	/** Palavras do roteiro trocadas antes da síntese ("RecompraCRM" → "Recompra cê érre ême"). */
 	spoken: z.record(z.string()).default({}),
 	durationSeconds: z.number(),
@@ -85,3 +89,4 @@ export type TMood = z.infer<typeof MoodEnum>;
 export type TDogPose = z.infer<typeof DogPoseEnum>;
 export type TOwnerPose = z.infer<typeof OwnerPoseEnum>;
 export type TShot = z.infer<typeof ShotEnum>;
+export type TSpeaker = z.infer<typeof SpeakerEnum>;

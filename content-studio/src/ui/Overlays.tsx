@@ -100,7 +100,8 @@ export function Caption({ chunk, time, frame }: { chunk: TCaptionChunk; time: nu
 						<span
 							key={`${word.text}-${i}`}
 							style={{
-								color: active ? COLORS.gold : "#ffffff",
+								// Fala do dono em rosa, do Caramelo em dourado: dá para seguir o diálogo sem som.
+								color: active ? (word.speaker === "owner" ? "#ff9ec4" : COLORS.gold) : "#ffffff",
 								WebkitTextStroke: `14px ${COLORS.cobaltDark}`,
 								paintOrder: "stroke fill",
 								textShadow: "0 8px 0 rgba(10,25,50,0.35)",

@@ -1,11 +1,18 @@
 {
 	"provider": "fishaudio",
 	"endpoint": "/text-to-speech/timestamps",
-	"voiceId": "4819cef1d2ea49deae4f3adf8dfe94e3",
-	"voiceNote": "Voz da biblioteca licenciada da Fish Audio, só para o piloto. Antes de publicar, troque por uma voz da marca (clone de alguém da equipe com autorização, ou locutor contratado).",
-	"model": "s2.1-pro",
-	"temperature": 0.7,
-	"speed": 1.05,
+	"model": "drama-3",
+	"speed": 1.2,
+	"maxPauseSeconds": 0.16,
+	"tempo": 1.18,
+	"tempoNote": "O drama-3 alonga as palavras de efeito e quase ignora o speed; o ritmo final vem do tempo (atempo do ffmpeg, sem mudar o tom).",
+	"note": "Vozes da biblioteca licenciada da Fish Audio, só para o piloto. Antes de publicar, troque por vozes que a marca controle (clone autorizado ou locutor contratado).",
+	"voices": {
+		"dog": { "voiceId": "4819cef1d2ea49deae4f3adf8dfe94e3", "tone": "excited, upbeat, fast, smiling, playful" },
+		"owners": {
+			"marcia": { "voiceId": "6fbaf5cf18744f4aa1fbcdf94fdbc609", "tone": "expressive, natural, fast" }
+		}
+	},
 	"spoken": {
 		"RecompraCRM": "Recompra cê érre ême"
 	}

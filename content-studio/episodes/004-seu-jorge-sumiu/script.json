@@ -14,17 +14,19 @@
 	},
 	"beats": [
 		{
-			"say": "O Seu Jorge vinha toda sexta buscar o pote de flocos. Fazia anos.",
-			"label": "TODA SEXTA",
+			"say": "O Seu Jorge vinha toda sexta… e sumiu faz quarenta e sete dias!",
+			"speaker": "owner",
+			"tone": "worried, sad, fast",
+			"label": "SEU CLIENTE FIEL SUMIU?",
 			"shot": "owner",
 			"owner": {
 				"pose": "idle",
-				"mood": "happy"
-			},
-			"counter": "7"
+				"mood": "worried"
+			}
 		},
 		{
-			"say": "Eu senti falta primeiro. Já são quarenta e sete dias sem ele passar por essa porta.",
+			"say": "Eu senti falta primeiro, Márcia! Mas calma: quarenta e sete dias sozinho não diz nada.",
+			"speaker": "dog",
 			"label": "47 DIAS",
 			"shot": "both",
 			"owner": {
@@ -38,7 +40,8 @@
 			"counter": "47"
 		},
 		{
-			"say": "Quarenta e sete dias não diz nada sozinho. Pra quem vem uma vez por mês, é só um atraso.",
+			"say": "Pra quem vem uma vez por mês, é só um atraso.",
+			"speaker": "dog",
 			"label": "DEPENDE DO RITMO",
 			"shot": "dog",
 			"dog": {
@@ -63,6 +66,7 @@
 		},
 		{
 			"say": "Mas o Seu Jorge vinha a cada sete dias. Ele já sumiu quase sete vezes o ritmo dele.",
+			"speaker": "dog",
 			"label": "O RITMO DO SEU JORGE",
 			"shot": "dog",
 			"dog": {
@@ -88,7 +92,24 @@
 			"counter": "47"
 		},
 		{
+			"say": "Quase sete vezes?! Eu tenho que chamar ele hoje!",
+			"speaker": "owner",
+			"tone": "alarmed, decisive",
+			"label": "CHAMA HOJE",
+			"shot": "both",
+			"owner": {
+				"pose": "phone",
+				"mood": "worried"
+			},
+			"dog": {
+				"pose": "sit",
+				"mood": "happy"
+			},
+			"counter": "47"
+		},
+		{
 			"say": "É hora de chamar. Pelo nome, com um motivo: quinze reais de crédito até domingo, só pra quem esfriou.",
+			"speaker": "dog",
 			"label": "CHAMA PELO NOME",
 			"shot": "dog",
 			"dog": {
@@ -112,6 +133,7 @@
 		},
 		{
 			"say": "No RecompraCRM, quando um cliente entra no grupo em risco, a campanha manda a mensagem e o crédito sozinha.",
+			"speaker": "dog",
 			"label": "NO RECOMPRACRM",
 			"shot": "app",
 			"owner": {
@@ -125,6 +147,7 @@
 		},
 		{
 			"say": "Quem é o Seu Jorge da sua loja? Conta aqui. E segue o Caramelo!",
+			"speaker": "dog",
 			"label": "QUEM É O SEU?",
 			"shot": "outro",
 			"dog": {

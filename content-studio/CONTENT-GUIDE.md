@@ -19,14 +19,17 @@ o RecompraCRM. O produto entra no final, como o jeito mais fácil de fazer aquil
 entrar e sair, lembra de quem não aparece há tempo, e por isso entende de recompra melhor que
 qualquer consultor. Lenço azul RecompraCRM com uma plaquinha dourada em forma de moeda.
 
-- Fala em primeira pessoa, frases curtas, português do balcão ("pra", "tá", "a gente").
+- Fala em primeira pessoa, frases curtas, português do balcão ("pra", "tá", "a gente"), com energia:
+  exclamação, "Olha só!", "Calma, Márcia!". A voz é animada e rápida (ver `voice.config.json`).
 - É quem explica o jeito certo. Nunca zomba do lojista: o erro é comum, não burro.
-- Bordão de apresentação (usar nos primeiros episódios): "Eu sou o Caramelo, e daqui da porta eu vejo tudo."
+- Bordão: "Eu vi tudo daqui da porta." Ele entra respondendo ao dono, nunca se apresentando.
 - Bordão de saída: "Segue o Caramelo pra ver a próxima!"
 - Por que um cachorro: cachorro é **fiel** e **sempre volta**. É o cliente que todo lojista quer.
 
 **Os lojistas** — um por segmento, sempre com nome e uma loja concreta. Cometem o erro do episódio
-com boa intenção.
+com boa intenção **e falam com a própria voz**: abrem o episódio reclamando e reagem no meio
+("Pera… um terço do meu lucro?!"). O diálogo é o que segura quem assiste; um monólogo do Caramelo
+vira aula.
 
 | Nome | Loja | Segmento (`app/_content/segment-pages.ts`) |
 |---|---|---|
@@ -39,11 +42,18 @@ com boa intenção.
 
 Personagens novos só entram no elenco depois de desenhados em `src/characters/`.
 
-## A forma de um episódio (formato "balcão", 40–60 s)
+## A forma de um episódio (formato "balcão", 30–50 s)
 
-1. **Gancho (até 4 s)**: segmento + mês/momento + o erro em andamento. "Julho, sorveteria vazia, e a
-   Márcia pendurou a placa: dez por cento de desconto em tudo."
-2. **O Caramelo entra** e mostra a conta, o dado ou o jeito certo, em 3 a 6 passos.
+1. **Gancho (até 3,5 s): o dono reclama do problema, na voz dele.** Uma frase que o lojista que
+   assiste já disse em voz alta: "Dei dez por cento de desconto em tudo, a loja lotou… e o lucro
+   sumiu!". O rótulo do topo devolve a reclamação como **pergunta a quem assiste**: "DEU DESCONTO E
+   O LUCRO SUMIU?". No quadro 0 já estão o dono irritado, o rótulo e o adereço do erro (a placa de
+   10%); sem contador nem cartão. Nada de apresentar personagem, nada de contexto antes do problema.
+   O que não funciona como gancho: cenário ("Julho, sorveteria vazia…"), apresentação ("Eu sou o
+   Caramelo…"), dado solto ("88% dos brasileiros…").
+2. **O Caramelo responde** ("Calma, Márcia! Eu vi tudo daqui da porta.") e mostra a conta, o dado
+   ou o jeito certo, em 3 a 6 passos curtos. **O dono reage pelo menos uma vez** no meio, com a
+   surpresa ou a dúvida que quem assiste teria ("E quando esse crédito me custa?").
 3. **Um contador** acompanha a tensão do episódio (`LUCRO POR PICOLÉ R$ 3,00 → R$ 2,00`,
    `CLIENTES QUE VOLTARAM 0/3`, `DIAS SEM COMPRAR 47`).
 4. **Toda afirmação com número leva `source`.** Sem fonte, a frase não entra.
@@ -67,6 +77,10 @@ Outros formatos (ainda sem template de vídeo):
   aprovação de quem responde pelos contratos. Nunca nome, cidade ou número que identifique um cliente.
 - **Proibido**: promessa de faturamento ("dobre suas vendas"), orientação fiscal ou jurídica que não
   venha de fonte oficial, citar concorrente pelo nome, piada com o cliente final.
+- **Cada passo diz quem fala** (`speaker`: `dog` ou `owner`) e pode trazer `tone`, a direção de
+  atuação em inglês curto ("annoyed, complaining fast", "shocked, disbelief"). Sem `tone`, vale o da
+  voz em `voice.config.json`. O dono só fala quando está em cena.
+- **Frases de até ~12 palavras.** Fala longa vira legenda longa e a voz perde o ritmo.
 - **Números falados por extenso** no `say` ("dez por cento"), com dígitos no `label` e nos cards
   ("10%"). A legenda mostra exatamente o que é dito.
 - **Uma ideia por vídeo.** Se o roteiro precisa de "e também", vira dois episódios.

@@ -13,7 +13,7 @@ desenho e nicho próprios.
 
 | Episódio | Roteiro | Voz | Vídeo |
 |---|---|---|---|
-| 001 Desconto de 10% × cashback de 5% | ✓ | ✓ | `npm run render -- 001-desconto-vs-cashback` |
+| 001 Desconto de 10% × cashback de 5% | ✓ (diálogo) | ✓ duas vozes | `npm run render -- 001-desconto-vs-cashback` |
 | 002 Promoção pra base toda no WhatsApp | ✓ | — | falta a tela `campaign-whatsapp` |
 | 003 Os 20% que pagam as contas | ✓ | — | falta a tela `rfm-segments` |
 | 004 Seu Jorge sumiu | ✓ | — | falta a tela `rfm-segments` |
@@ -31,10 +31,12 @@ npm run render -- 001-desconto-vs-cashback            # out/001-desconto-vs-cash
 
 ## Custos e licenças
 
-- **Voz:** Fish Audio via Monid, ~US$ 0,01 por episódio, com o tempo de cada palavra. A voz atual
-  (`voice.config.json`) é da biblioteca licenciada, **só para o piloto**: antes de publicar, use uma
-  voz que a marca controle (clone autorizado de alguém da equipe ou locutor contratado). A voz é tão
-  marca quanto o Caramelo.
+- **Voz:** Fish Audio `drama-3` via Monid, duas vozes (Caramelo e o dono) numa chamada, com direção
+  de atuação por fala e o tempo de cada palavra: ~US$ 0,07 por episódio. As vozes atuais
+  (`voice.config.json`) são da biblioteca licenciada, **só para o piloto**: antes de publicar, use
+  vozes que a marca controle (clone autorizado de alguém da equipe ou locutor contratado). As vozes
+  "animadas" mais usadas da biblioteca pública são clones de pessoas reais (narradores, políticos,
+  dubladores) e ficam de fora.
 - **Remotion:** gratuito para pessoa física, empresas de até 3 funcionários e avaliação. Acima
   disso, a Syncroniza precisa da Company License antes de publicar em produção
   (https://www.remotion.dev/license).

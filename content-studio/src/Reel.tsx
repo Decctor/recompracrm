@@ -55,8 +55,13 @@ export function Reel({ episodeId, script, voice }: TReelProps) {
 	const showChunk = chunk && t <= chunk.end + 0.5 ? chunk : null;
 	const chunkFrame = showChunk ? frame - Math.round(showChunk.start * fps) : 0;
 
-	const ownerEnters = !previous?.owner || previous.shot !== beat.shot;
-	const dogEnters = !previous?.dog || previous.shot !== beat.shot;
+	// No primeiro passo tudo já está em cena no quadro 0: é o gancho e a capa do Reel.
+	const ownerEnters = beatIndex > 0 && (!previous?.owner || previous.shot !== beat.shot);
+	const dogEnters = beatIndex > 0 && (!previous?.dog || previous.shot !== beat.shot);
+	const overlayFrame = beatIndex === 0 ? beatFrame + 20 : beatFrame;
+	// Soco de câmera e tremida quando o dono reclama no gancho.
+	const hookPunch = beatIndex === 0 ? interpolate(frame, [0, 10], [1.12, 1], { extrapolateRight: "clamp", easing: Easing.out(Easing.back(2)) }) : 1;
+	const hookShake = beatIndex === 0 && beat.owner?.mood === "annoyed" ? Math.sin(frame * 2.1) * interpolate(frame, [0, 14], [10, 0], { extrapolateRight: "clamp" }) : 0;
 	const dogVisible = Boolean(beat.dog && layout.dog);
 	const ownerVisible = Boolean(beat.owner && layout.owner);
 	// No close da dona com cartão, ela vai para a esquerda e o cartão fica à direita.
@@ -72,13 +77,13 @@ export function Reel({ episodeId, script, voice }: TReelProps) {
 			<AbsoluteFill
 				style={{
 					transformOrigin: `${cam.focusX}px ${cam.focusY}px`,
-					transform: `scale(${cam.scale * drift})`,
+					transform: `translateX(${hookShake}px) scale(${cam.scale * drift * hookPunch})`,
 				}}
 			>
 				<Sorveteria />
 				{ownerVisible && beat.owner && ownerPlacement ? (
 					<Actor placement={ownerPlacement} width={500} height={1000} enterFrame={ownerEnters ? beatFrame : 99}>
-						<Marcia pose={beat.owner.pose} mood={beat.owner.mood} frame={frame} />
+						<Marcia pose={beat.owner.pose} mood={beat.owner.mood} frame={frame} mouth={mouthOpenness(timeline.words, t, "owner")} />
 					</Actor>
 				) : null}
 				{dogVisible && beat.dog && layout.dog ? (
@@ -86,7 +91,7 @@ export function Reel({ episodeId, script, voice }: TReelProps) {
 						<Caramelo
 							pose={beat.dog.pose}
 							mood={beat.dog.mood}
-							mouth={mouthOpenness(timeline.words, t)}
+							mouth={mouthOpenness(timeline.words, t, "dog")}
 							frame={frame}
 							gesture={spring({ frame: beatFrame - 4, fps, config: { damping: 12, stiffness: 140 } })}
 						/>
@@ -108,18 +113,18 @@ export function Reel({ episodeId, script, voice }: TReelProps) {
 					/>
 				</>
 			) : beat.label ? (
-				<TopLabel text={beat.label} frame={beatFrame} />
+				<TopLabel text={beat.label} frame={overlayFrame} />
 			) : null}
 
 			{script.counter && counterValue ? (
-				<Counter label={script.counter.label} better={script.counter.better} value={counterValue} previous={previousCounter} frame={beatFrame} />
+				<Counter label={script.counter.label} better={script.counter.better} value={counterValue} previous={previousCounter} frame={overlayFrame} />
 			) : null}
 
-			{beat.card ? <Card card={beat.card} frame={beatFrame} layout={beat.shot === "dog" || beat.shot === "owner" ? "right" : "top"} /> : null}
+			{beat.card ? <Card card={beat.card} frame={overlayFrame} layout={beat.shot === "dog" || beat.shot === "owner" ? "right" : "top"} /> : null}
 
 			{beat.shot === "outro" ? <FollowButton frame={beatFrame} /> : null}
 
-			{showChunk ? <Caption chunk={showChunk} time={t} frame={chunkFrame} /> : null}
+			{showChunk ? <Caption chunk={showChunk} time={t} frame={beatIndex === 0 && chunkFrame < 20 ? chunkFrame + 20 : chunkFrame} /> : null}
 			{beat.source ? <SourcePill text={beat.source} frame={beatFrame} /> : null}
 		</AbsoluteFill>
 	);
