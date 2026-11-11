@@ -8,9 +8,10 @@ import { importPurchaseComposition } from "@/lib/mutations/purchases";
 import { isAcceptedImportFile, prepareImportFilePayload } from "@/lib/purchase/import-files";
 import type { TPurchaseImportStageEnum, TPurchaseImportStageStatusEnum } from "@/schemas/enums";
 import { usePurchaseState, type TPurchaseAccountingEntryTransaction, type TUsePurchaseState } from "@/state-hooks/use-purchase-state";
-import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import {
+	buildImportedPurchaseTitle,
 	createReviewLines,
 	getLineIssue,
 	type TImportDocument,
@@ -19,6 +20,7 @@ import {
 	type TReviewLine,
 } from "../helpers/review-lines";
 import { nextStage, prevStage, type TBuilderStageId } from "../helpers/stages";
+import { fetchInboundXmlFile, takeInboundReading } from "../../inbound/inbound-reading";
 import type { TNewSupplierDraft } from "../helpers/submit";
 import type { TBuilderOrigin, TBuilderReadStatus } from "../helpers/validation";
 
@@ -106,7 +108,16 @@ function mergeImportResults(results: TImportResult[]) {
 	};
 }
 
-export function BuilderProvider({ initialStage, children }: { initialStage: TBuilderStageId; children: ReactNode }) {
+export function BuilderProvider({
+	initialStage,
+	inboundId = null,
+	children,
+}: {
+	initialStage: TBuilderStageId;
+	/** Nota recebida (SEFAZ) que origina a compra: o construtor já abre com ela lida. */
+	inboundId?: string | null;
+	children: ReactNode;
+}) {
 	const purchaseState = usePurchaseState({ initialState: {} });
 	const { state, updatePurchase, updateAccountingEntry, redefineState } = purchaseState;
 
@@ -164,13 +175,7 @@ export function BuilderProvider({ initialStage, children }: { initialStage: TBui
 			const nextLines = results.flatMap((result) => createReviewLines(result, () => crypto.randomUUID()));
 			const documento = merged.documento;
 			const supplierName = merged.fornecedor?.existente?.nome ?? merged.fornecedor?.extraido?.nome ?? null;
-			const title = supplierName
-				? documento?.numero
-					? `Compra ${supplierName} - NF ${documento.numero}`
-					: `Compra ${supplierName}`
-				: documento?.numero
-					? `Compra - NF ${documento.numero}`
-					: "";
+			const title = buildImportedPurchaseTitle({ supplierName, documentNumber: documento?.numero ?? null });
 			const emissionDate = toDate(documento?.dataEmissao);
 			const entryValue = documento ? (documento.valorTotal ?? documento.somaItens) : 0;
 			const filled = new Set<TReadFieldKey>();
@@ -310,6 +315,36 @@ export function BuilderProvider({ initialStage, children }: { initialStage: TBui
 		applyImport(results, pending.length);
 		setReadStatus("done");
 	}, [files, applyImport]);
+
+	// Vindo de "Registrar compra" numa nota recebida: a leitura feita na gaveta entra direto; sem ela
+	// (página recarregada), o XML é baixado e lido de novo, como se o operador o tivesse enviado.
+	const inboundStartedRef = useRef(false);
+	const [autoReadPending, setAutoReadPending] = useState(false);
+	useEffect(() => {
+		if (!inboundId || inboundStartedRef.current) return;
+		inboundStartedRef.current = true;
+		setOrigin("document");
+		const handoff = takeInboundReading(inboundId);
+		if (handoff) {
+			setFiles([
+				{ id: crypto.randomUUID(), file: handoff.file, status: "done", stages: {}, errorMessage: null, itemCount: handoff.result.itens.length },
+			]);
+			applyImport([handoff.result], 1);
+			setReadStatus("done");
+			return;
+		}
+		fetchInboundXmlFile({ inboundId })
+			.then((file) => {
+				setFiles([{ id: crypto.randomUUID(), file, status: "pending", stages: {}, errorMessage: null, itemCount: null }]);
+				setAutoReadPending(true);
+			})
+			.catch((error) => toast.error(getErrorMessage(error)));
+	}, [inboundId, applyImport]);
+	useEffect(() => {
+		if (!autoReadPending || files.length === 0) return;
+		setAutoReadPending(false);
+		void startReading();
+	}, [autoReadPending, files, startReading]);
 
 	const cancelReading = useCallback(() => {
 		abortRef.current?.abort();

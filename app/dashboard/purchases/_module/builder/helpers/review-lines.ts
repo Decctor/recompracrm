@@ -49,6 +49,24 @@ export type TReviewLineStatus = "ignored" | "pending" | "ready";
 
 export const REVIEW_ISSUE_ORDER: TReviewIssue[] = ["unmapped", "suggested", "unit", "tax"];
 
+/** Título sugerido para a compra lida de um documento: fornecedor e número da nota, quando houver. */
+export function buildImportedPurchaseTitle({ supplierName, documentNumber }: { supplierName: string | null; documentNumber: string | null }) {
+	if (supplierName) return documentNumber ? `Compra ${supplierName} - NF ${documentNumber}` : `Compra ${supplierName}`;
+	return documentNumber ? `Compra - NF ${documentNumber}` : "";
+}
+
+/** Quantas linhas lidas já estão prontas e o que falta decidir, por tipo de pendência. */
+export function summarizeReviewLines(lines: TReviewLine[]) {
+	const issues: Record<TReviewIssue, number> = { unmapped: 0, suggested: 0, unit: 0, tax: 0 };
+	let ready = 0;
+	for (const line of lines) {
+		const issue = getLineIssue(line);
+		if (issue) issues[issue] += 1;
+		else if (line.incluir) ready += 1;
+	}
+	return { ready, issues, pending: issues.unmapped + issues.suggested + issues.unit + issues.tax };
+}
+
 export function createReviewLines(result: TImportResult, createId: () => string): TReviewLine[] {
 	return result.itens.map((item) => ({
 		...item,

@@ -16,8 +16,9 @@ import {
 	type TPurchaseItemStockOperation,
 } from "@/lib/purchase-processing/process-purchase-item-stock";
 import { upsertSupplierProductMappings } from "@/lib/purchase/supplier-product-mappings";
+import { syncInboundDocumentsPurchaseLink } from "@/lib/fiscal/inbound/purchase-link";
 import { createSimplifiedSearchCondition } from "@/lib/search";
-import { PurchaseStatusEnum, TPurchaseStatusEnum } from "@/schemas/enums";
+import { PurchaseOriginEnum, PurchaseStatusEnum, type TPurchaseOriginEnum, type TPurchaseStatusEnum } from "@/schemas/enums";
 import { AccountingEntrySchema, FinancialTransactionSchema } from "@/schemas/financial";
 import { ProductSchema } from "@/schemas/products";
 import { SupplierProductMappingSchema, SupplierSchema } from "@/schemas/suppliers";
@@ -35,11 +36,12 @@ import {
 	organizations,
 	products,
 	productStockLots,
+	purchaseItems,
 	purchases,
 	supplierProductMappings,
 	suppliers,
 } from "@/services/drizzle/schema";
-import { and, count, eq, inArray, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, or, sql, type SQL } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { NextResponse, type NextRequest } from "next/server";
 import z from "zod";
@@ -83,12 +85,68 @@ const GetPurchasesInputSchema = z.object({
 		.refine((val) => (val.length > 0 ? val.every((v) => PurchaseStatusEnum.safeParse(v).success) : true), {
 			message: "Status inválido.",
 			path: ["status"],
-		}),
+		})
+		.transform((val) => val as TPurchaseStatusEnum[]),
+	// Data da compra: a do pedido quando informada, senão a do cadastro.
+	periodAfter: z
+		.string({ invalid_type_error: "Tipo não válido para o início do período." })
+		.optional()
+		.nullable()
+		.transform((val) => (val ? new Date(val) : null)),
+	periodBefore: z
+		.string({ invalid_type_error: "Tipo não válido para o fim do período." })
+		.optional()
+		.nullable()
+		.transform((val) => (val ? new Date(val) : null)),
+	supplierIds: z
+		.string({ invalid_type_error: "Tipo não válido para fornecedores." })
+		.optional()
+		.nullable()
+		.transform((val) => (val ? val.split(",") : [])),
+	origins: z
+		.string({ invalid_type_error: "Tipo não válido para origem da compra." })
+		.optional()
+		.nullable()
+		.transform((val) => (val ? val.split(",") : []))
+		.refine((val) => val.every((v) => PurchaseOriginEnum.safeParse(v).success), { message: "Origem inválida.", path: ["origins"] })
+		.transform((val) => val as TPurchaseOriginEnum[]),
+	valueMin: z
+		.string({ invalid_type_error: "Tipo não válido para valor mínimo." })
+		.optional()
+		.nullable()
+		.transform((val) => (val ? Number(val) : null)),
+	valueMax: z
+		.string({ invalid_type_error: "Tipo não válido para valor máximo." })
+		.optional()
+		.nullable()
+		.transform((val) => (val ? Number(val) : null)),
+	orderByField: z
+		.enum(["dataInsercao", "pedidoData", "valor", "titulo"], { invalid_type_error: "Tipo não válido para ordenação." })
+		.optional()
+		.nullable()
+		.transform((val) => val ?? "dataInsercao"),
+	orderByDirection: z
+		.enum(["asc", "desc"], { invalid_type_error: "Tipo não válido para direção da ordenação." })
+		.optional()
+		.nullable()
+		.transform((val) => val ?? "desc"),
 });
 export type TGetPurchasesInput = z.infer<typeof GetPurchasesInputSchema>;
 
 export type TGetPurchasesByIdInput = Pick<TGetPurchasesInput, "id">;
 export type TGetPurchasesDefaultInput = Omit<TGetPurchasesInput, "id">;
+
+/**
+ * Valor da compra para listagem, filtro e ordenação: o do lançamento contábil (o que se paga) e, em
+ * compras antigas sem lançamento, a soma financeira dos itens.
+ */
+const purchaseValueSql = sql<number>`coalesce(
+	(select ${accountingEntries.valor} from ${accountingEntries} where ${accountingEntries.id} = ${purchases.lancamentoContabilId}),
+	(select sum(coalesce(${purchaseItems.valorTotalLiquido}, ${purchaseItems.valorTotalBruto})) from ${purchaseItems} where ${purchaseItems.compraId} = ${purchases.id}),
+	0
+)`;
+/** Data da compra: a do pedido quando informada, senão a do cadastro. */
+const purchaseDateSql = sql`coalesce(${purchases.pedidoData}, ${purchases.dataInsercao})`;
 
 async function getPurchases({ input, session }: { input: TGetPurchasesInput; session: TAuthUserSession }) {
 	const userOrgId = session.membership?.organizacao.id;
@@ -207,54 +265,94 @@ async function getPurchases({ input, session }: { input: TGetPurchasesInput; ses
 
 	const { page, search, status } = input;
 
-	const conditions = [];
-
-	conditions.push(eq(purchases.organizacaoId, userOrgId));
+	const conditions: SQL[] = [eq(purchases.organizacaoId, userOrgId)];
 	if (search && search.trim().length > 0) {
-		conditions.push(
-			or(
-				createSimplifiedSearchCondition(purchases.titulo, search),
-				createSimplifiedSearchCondition(purchases.idExterno, search),
-				createSimplifiedSearchCondition(purchases.pedidoFornecedorNome, search),
-				createSimplifiedSearchCondition(purchases.transporteTransportadoraNome, search),
-			),
-		);
+		const term = search.trim();
+		const digits = term.replace(/[^0-9]/g, "");
+		const searchConditions: SQL[] = [
+			createSimplifiedSearchCondition(purchases.titulo, term),
+			createSimplifiedSearchCondition(purchases.idExterno, term),
+			createSimplifiedSearchCondition(purchases.pedidoFornecedorNome, term),
+			createSimplifiedSearchCondition(purchases.transporteTransportadoraNome, term),
+		];
+		// Número da nota e chave de acesso vivem no snapshot dos documentos importados; CNPJ é guardado formatado.
+		if (digits.length >= 3) {
+			searchConditions.push(
+				sql`exists (select 1 from jsonb_array_elements(coalesce(${purchases.documentosImportados} -> 'documentos', '[]'::jsonb)) as doc where regexp_replace(coalesce(doc ->> 'numero', ''), '[^0-9]', '', 'g') like ${`%${digits}%`} or coalesce(doc ->> 'chaveAcesso', '') like ${`%${digits}%`})`,
+				sql`regexp_replace(coalesce(${purchases.pedidoFornecedorCnpj}, ''), '[^0-9]', '', 'g') like ${`%${digits}%`}`,
+			);
+		}
+		const searchCondition = or(...searchConditions);
+		if (searchCondition) conditions.push(searchCondition);
 	}
+	if (status && status.length > 0) conditions.push(inArray(purchases.status, status));
+	if (input.supplierIds.length > 0) conditions.push(inArray(purchases.fornecedorId, input.supplierIds));
+	if (input.origins.length === 1) {
+		const hasDocuments = sql`jsonb_array_length(coalesce(${purchases.documentosImportados} -> 'documentos', '[]'::jsonb)) > 0`;
+		conditions.push(input.origins[0] === "DOCUMENTO" ? hasDocuments : sql`not (${hasDocuments})`);
+	}
+	if (input.periodAfter) conditions.push(sql`${purchaseDateSql} >= ${input.periodAfter.toISOString()}`);
+	if (input.periodBefore) conditions.push(sql`${purchaseDateSql} <= ${input.periodBefore.toISOString()}`);
+	if (input.valueMin != null) conditions.push(sql`${purchaseValueSql} >= ${input.valueMin}`);
+	if (input.valueMax != null) conditions.push(sql`${purchaseValueSql} <= ${input.valueMax}`);
 
-	if (status && status.length > 0) {
-		conditions.push(inArray(purchases.status, status as TPurchaseStatusEnum[]));
-	}
 	const PAGE_SIZE = input.pageSize ?? DEFAULT_PAGE_SIZE;
 	const skip = PAGE_SIZE * (page - 1);
-	const limit = PAGE_SIZE;
+	const direction = input.orderByDirection === "asc" ? asc : desc;
+	const orderExpression =
+		input.orderByField === "valor"
+			? direction(purchaseValueSql)
+			: input.orderByField === "pedidoData"
+				? direction(purchaseDateSql)
+				: input.orderByField === "titulo"
+					? direction(purchases.titulo)
+					: direction(purchases.dataInsercao);
 
-	const purchasesMatchedResult = await db
-		.select({ count: count() })
-		.from(purchases)
-		.where(and(...conditions));
+	// Página primeiro (só ids e valor), relações depois: o valor é uma expressão correlacionada, e o
+	// `findMany` apelida a tabela raiz, o que quebraria a referência dentro das subconsultas.
+	const [purchasesMatchedResult, pageRows] = await Promise.all([
+		db
+			.select({ count: count() })
+			.from(purchases)
+			.where(and(...conditions)),
+		db
+			.select({ id: purchases.id, valorTotal: purchaseValueSql })
+			.from(purchases)
+			.where(and(...conditions))
+			.orderBy(orderExpression, desc(purchases.id))
+			.limit(PAGE_SIZE)
+			.offset(skip),
+	]);
 	const purchasesMatched = purchasesMatchedResult[0]?.count ?? 0;
 
-	const purchasesResult = await db.query.purchases.findMany({
-		where: and(...conditions),
-		with: {
-			itens: {
-				columns: {
-					id: true,
-					snapshotProdutoDescricao: true,
-					quantidade: true,
-				},
-			},
-			autor: {
-				columns: {
-					id: true,
-					nome: true,
-					avatarUrl: true,
-				},
-			},
-		},
-		orderBy: (fields, { desc }) => desc(fields.dataInsercao),
-		limit,
-		offset: skip,
+	const pageIds = pageRows.map((row) => row.id);
+	const hydrated =
+		pageIds.length > 0
+			? await db.query.purchases.findMany({
+					where: and(eq(purchases.organizacaoId, userOrgId), inArray(purchases.id, pageIds)),
+					with: {
+						fornecedor: { columns: { id: true, nome: true } },
+						itens: {
+							columns: {
+								id: true,
+								snapshotProdutoDescricao: true,
+								quantidade: true,
+							},
+						},
+						autor: {
+							columns: {
+								id: true,
+								nome: true,
+								avatarUrl: true,
+							},
+						},
+					},
+				})
+			: [];
+	const hydratedById = new Map(hydrated.map((purchase) => [purchase.id, purchase]));
+	const purchasesResult = pageRows.flatMap((row) => {
+		const purchase = hydratedById.get(row.id);
+		return purchase ? [{ ...purchase, valorTotal: Number(row.valorTotal ?? 0) }] : [];
 	});
 
 	const totalPages = Math.ceil(purchasesMatched / PAGE_SIZE);
@@ -286,6 +384,14 @@ async function getPurchasesRoute(request: NextRequest) {
 		pageSize: searchParams.get("pageSize"),
 		search: searchParams.get("search") ?? undefined,
 		status: searchParams.get("status") ?? undefined,
+		periodAfter: searchParams.get("periodAfter"),
+		periodBefore: searchParams.get("periodBefore"),
+		supplierIds: searchParams.get("supplierIds"),
+		origins: searchParams.get("origins"),
+		valueMin: searchParams.get("valueMin"),
+		valueMax: searchParams.get("valueMax"),
+		orderByField: searchParams.get("orderByField"),
+		orderByDirection: searchParams.get("orderByDirection"),
 	});
 	const result = await getPurchases({ input, session });
 	return NextResponse.json(result);
@@ -640,6 +746,13 @@ async function createPurchase({ input, session }: { input: TCreatePurchaseInput;
 
 		if (supplierId && supplierProductMappingsInput.length > 0)
 			await upsertSupplierProductMappings({ trx: tx, organizationId: userOrgId, supplierId, mappings: supplierProductMappingsInput });
+
+		await syncInboundDocumentsPurchaseLink({
+			trx: tx,
+			organizationId: userOrgId,
+			purchaseId: insertedPurchaseId,
+			importedDocuments: input.importedDocuments ?? [],
+		});
 
 		return {
 			data: { insertedPurchaseId },
@@ -1067,6 +1180,8 @@ async function updatePurchase({ input, session }: { input: TUpdatePurchaseInput;
 				purchaseIsReceived: true,
 				synchronizeLines: false,
 			});
+			if (input.importedDocuments)
+				await syncInboundDocumentsPurchaseLink({ trx: tx, organizationId: userOrgId, purchaseId, importedDocuments: input.importedDocuments });
 			return {
 				data: { updatedPurchaseId: purchaseId },
 				message: "Compra atualizada com sucesso.",
@@ -1109,6 +1224,9 @@ async function updatePurchase({ input, session }: { input: TUpdatePurchaseInput;
 				item,
 			});
 		}
+
+		if (input.importedDocuments)
+			await syncInboundDocumentsPurchaseLink({ trx: tx, organizationId: userOrgId, purchaseId, importedDocuments: input.importedDocuments });
 
 		return {
 			data: { updatedPurchaseId: purchaseId },

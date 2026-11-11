@@ -2,10 +2,10 @@ import type { TGetFiscalDocumentsOutput } from "@/app/api/fiscal/documents/route
 import type { TGetFiscalOperationProfilesOutput } from "@/app/api/fiscal/operation-profiles/route";
 import type { TGetFiscalSeriesOutput } from "@/app/api/fiscal/series/route";
 import type { TGetFiscalSettingsOutput } from "@/app/api/fiscal/settings/route";
-import type { TGetInboundDocumentsOutput } from "@/app/api/fiscal/inbound/route";
+import type { TGetInboundDocumentsInput, TGetInboundDocumentsOutput } from "@/app/api/fiscal/inbound/route";
 import type { TGetFiscalPendingOutput } from "@/app/api/fiscal/pending/route";
 import type { TGetFiscalTaxGroupsOutput } from "@/app/api/fiscal/tax-groups/route";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import { useState } from "react";
 import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
@@ -219,28 +219,61 @@ export function useFiscalTaxGroupById({ id }: { id: string }) {
 	};
 }
 
-async function fetchFiscalInboundDocuments({ page, pageSize }: { page: number; pageSize: number }) {
+export type TFiscalInboundDocumentsFilters = Omit<TGetInboundDocumentsInput, "page" | "pageSize">;
+
+export const DEFAULT_FISCAL_INBOUND_FILTERS: TFiscalInboundDocumentsFilters = {
+	search: "",
+	// A aba é uma fila de trabalho: abre no que ainda precisa virar compra.
+	registrationStatuses: ["A_REGISTRAR"],
+	periodAfter: null,
+	periodBefore: null,
+	supplierIds: [],
+	manifestations: [],
+	valueMin: null,
+	valueMax: null,
+};
+
+async function fetchFiscalInboundDocuments({ page, pageSize, filters }: { page: number; pageSize: number; filters: TFiscalInboundDocumentsFilters }) {
 	const searchParams = new URLSearchParams();
 	searchParams.set("page", page.toString());
 	if (pageSize) searchParams.set("pageSize", pageSize.toString());
+	if (filters.search) searchParams.set("search", filters.search);
+	if (filters.registrationStatuses.length > 0) searchParams.set("registrationStatuses", filters.registrationStatuses.join(","));
+	if (filters.periodAfter) searchParams.set("periodAfter", filters.periodAfter.toISOString());
+	if (filters.periodBefore) searchParams.set("periodBefore", filters.periodBefore.toISOString());
+	if (filters.supplierIds.length > 0) searchParams.set("supplierIds", filters.supplierIds.join(","));
+	if (filters.manifestations.length > 0) searchParams.set("manifestations", filters.manifestations.join(","));
+	if (filters.valueMin != null) searchParams.set("valueMin", filters.valueMin.toString());
+	if (filters.valueMax != null) searchParams.set("valueMax", filters.valueMax.toString());
 	const { data } = await axios.get<TGetInboundDocumentsOutput>(`/api/fiscal/inbound?${searchParams.toString()}`);
 	const result = data.data.default;
 	if (!result) throw new Error("Oops, houve um erro ao buscar as notas recebidas.");
 	return result;
 }
-export function useFiscalInboundDocuments() {
+export function useFiscalInboundDocuments({ enabled = true }: { enabled?: boolean } = {}) {
 	const [page, setPage] = useState(1);
 	const [pageSize, setPageSize] = useState<number>(DEFAULT_PAGE_SIZE);
-	const queryKey = ["fiscal-inbound-documents", page, pageSize];
+	const [filters, setFilters] = useState<TFiscalInboundDocumentsFilters>(DEFAULT_FISCAL_INBOUND_FILTERS);
+	function updateFilters(next: Partial<TFiscalInboundDocumentsFilters>) {
+		setFilters((previous) => ({ ...previous, ...next }));
+		setPage(1);
+	}
+	const debouncedSearch = useDebounceMemo({ search: filters.search }, 500);
+	const finalFilters = { ...filters, ...debouncedSearch };
+	const queryKey = ["fiscal-inbound-documents", page, pageSize, finalFilters];
 	return {
 		...useQuery({
 			queryKey,
-			queryFn: () => fetchFiscalInboundDocuments({ page, pageSize }),
+			queryFn: () => fetchFiscalInboundDocuments({ page, pageSize, filters: finalFilters }),
+			placeholderData: keepPreviousData,
+			enabled,
 		}),
 		queryKey,
 		page,
 		setPage,
 		pageSize,
 		setPageSize,
+		filters,
+		updateFilters,
 	};
 }
