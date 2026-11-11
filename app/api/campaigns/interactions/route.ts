@@ -8,6 +8,7 @@ import { db } from "@/services/drizzle";
 import { clients } from "@/services/drizzle/schema/clients";
 import { interactions } from "@/services/drizzle/schema/interactions";
 import { products } from "@/services/drizzle/schema/products";
+import { campaignDispatchRecipients, campaignDispatches } from "@/services/drizzle/schema/campaign-dispatches";
 import { and, asc, count, desc, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
@@ -153,11 +154,13 @@ async function getCampaignInteractions({ input, session }: { input: TGetCampaign
 				columns: {
 					id: true,
 					titulo: true,
+					gatilhoTipo: true,
 				},
 				with: {
 					whatsappTemplate: {
 						columns: {
 							id: true,
+							nome: true,
 							conteudo: true,
 						},
 					},
@@ -193,11 +196,28 @@ async function getCampaignInteractions({ input, session }: { input: TGetCampaign
 			: [];
 	const productNameById = new Map(resolvedProducts.map((product) => [product.id, product.nome]));
 
+	// The dispatch (rodada) each interaction came from, through the outbox row that created it.
+	// Interactions from before the dispatch pipeline have no recipient row and get `disparo: null`.
+	const dispatchRows = await db
+		.select({
+			interacaoId: campaignDispatchRecipients.interacaoId,
+			id: campaignDispatches.id,
+			origem: campaignDispatches.origem,
+			janelaReferencia: campaignDispatches.janelaReferencia,
+			dataAgendada: campaignDispatches.dataAgendada,
+			dataInsercao: campaignDispatches.dataInsercao,
+		})
+		.from(campaignDispatchRecipients)
+		.innerJoin(campaignDispatches, eq(campaignDispatches.id, campaignDispatchRecipients.dispatchId))
+		.where(and(eq(campaignDispatchRecipients.organizacaoId, userOrgId), inArray(campaignDispatchRecipients.interacaoId, interactionIds)));
+	const dispatchByInteractionId = new Map(dispatchRows.map(({ interacaoId, ...dispatch }) => [interacaoId, dispatch] as const));
+
 	const enrichedInteractions = interactionsResult.map((interaction) => {
 		const { metadataProdutoMaisCompradoId, metadataProdutoSugeridoId, ...clientColumns } = interaction.cliente;
 
 		return {
 			...interaction,
+			disparo: dispatchByInteractionId.get(interaction.id) ?? null,
 			cliente: {
 				...clientColumns,
 				metadataProdutoMaisCompradoNome: metadataProdutoMaisCompradoId ? (productNameById.get(metadataProdutoMaisCompradoId) ?? null) : null,

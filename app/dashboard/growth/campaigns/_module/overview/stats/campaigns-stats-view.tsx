@@ -8,6 +8,7 @@ import { CampaignStatsConversionsBlock } from "@/app/dashboard/growth/campaigns/
 import { CampaignTriggerDistributionBlock } from "@/app/dashboard/growth/campaigns/_module/shared/stats/CampaignTriggerDistributionBlock";
 import DateIntervalInput from "@/components/Inputs/DateIntervalInput";
 import StatUnitCard from "@/components/Stats/StatUnitCard";
+import { resolveCampaignStatsComparisonPeriod } from "@/lib/campaigns/stats-period";
 import { formatDecimalPlaces, formatToMoney } from "@/lib/formatting";
 import { useCampaignStatsOverall, useConversionQuality } from "@/lib/queries/campaigns";
 import dayjs from "dayjs";
@@ -27,10 +28,7 @@ export function CampaignsStatsView() {
 	const [comparingFilters, setComparingFilters] = useState<{
 		startDate: Date | null;
 		endDate: Date | null;
-	}>({
-		startDate: initialStartDate.subtract(1, "month").toDate(),
-		endDate: initialEndDate.subtract(1, "month").toDate(),
-	});
+	}>(() => resolveCampaignStatsComparisonPeriod({ startDate: initialStartDate.toDate(), endDate: initialEndDate.toDate() }));
 	const { data: analytics, isLoading: analyticsLoading } = useCampaignStatsOverall({
 		startDate: filters.startDate ?? undefined,
 		endDate: filters.endDate ?? undefined,
@@ -70,13 +68,7 @@ export function CampaignsStatsView() {
 
 						// Auto-update comparison period
 						if (newStartDate && newEndDate) {
-							const diffDays = dayjs(newEndDate).diff(dayjs(newStartDate), "day");
-							setComparingFilters({
-								startDate: dayjs(newStartDate)
-									.subtract(diffDays + 1, "day")
-									.toDate(),
-								endDate: dayjs(newStartDate).subtract(1, "day").toDate(),
-							});
+							setComparingFilters(resolveCampaignStatsComparisonPeriod({ startDate: newStartDate, endDate: newEndDate }));
 						}
 					}}
 				/>

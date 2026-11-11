@@ -62,12 +62,14 @@ async function fetchRankingForPeriod({
 	userOrgId: string;
 }) {
 	// Get all campaigns
+	// A campaign created after the period did not exist in it, so it gets no position there.
 	const allCampaigns = await db.query.campaigns.findMany({
-		where: eq(campaigns.organizacaoId, userOrgId),
+		where: and(eq(campaigns.organizacaoId, userOrgId), endDate ? lte(campaigns.dataInsercao, endDate) : undefined),
 		columns: {
 			id: true,
 			titulo: true,
 			ativo: true,
+			gatilhoTipo: true,
 		},
 	});
 
@@ -144,6 +146,7 @@ async function fetchRankingForPeriod({
 			campanhaId: campaign.id,
 			titulo: campaign.titulo,
 			ativo: campaign.ativo,
+			gatilhoTipo: campaign.gatilhoTipo,
 			interacoes,
 			conversoes: conversionData.conversions,
 			receita: conversionData.revenue,
@@ -166,8 +169,9 @@ async function fetchRankingForPeriod({
 		sortedStats.sort((a, b) => b.receita - a.receita);
 	}
 
-	// Take top 10 and add rank
-	return sortedStats.slice(0, 10).map((item, index) => ({
+	// Every campaign is ranked (the overview shows the full table), so the comparison period
+	// also has a position for each one and `rankDelta` is only null for campaigns that did not exist.
+	return sortedStats.map((item, index) => ({
 		...item,
 		rank: index + 1,
 	}));

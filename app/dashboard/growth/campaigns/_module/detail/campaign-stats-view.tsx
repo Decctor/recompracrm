@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { getErrorMessage } from "@/lib/errors";
+import { resolveCampaignStatsComparisonPeriod } from "@/lib/campaigns/stats-period";
 import { formatDateAsLocale, formatDecimalPlaces, formatToMoney } from "@/lib/formatting";
 import { retryCampaignInteraction } from "@/lib/mutations/campaigns";
 import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
@@ -63,10 +64,9 @@ export default function CampaignStatsView({ campaignId }: CampaignStatsViewProps
 		startDate: initialStartDate,
 		endDate: initialEndDate,
 	});
-	const [comparingFilters, setComparingFilters] = useState<{ startDate: Date; endDate: Date }>({
-		startDate: dayjs().startOf("month").subtract(1, "month").toDate(),
-		endDate: dayjs().endOf("month").subtract(1, "month").toDate(),
-	});
+	const [comparingFilters, setComparingFilters] = useState<{ startDate: Date; endDate: Date }>(() =>
+		resolveCampaignStatsComparisonPeriod({ startDate: initialStartDate, endDate: initialEndDate }),
+	);
 
 	const { data: performance } = useCampaignStats({
 		campaignId,
@@ -88,13 +88,7 @@ export default function CampaignStatsView({ campaignId }: CampaignStatsViewProps
 		const newStart = value.after ? new Date(value.after) : filters.startDate;
 		const newEnd = value.before ? new Date(value.before) : filters.endDate;
 		setFilters({ startDate: newStart, endDate: newEnd });
-		const diffDays = dayjs(newEnd).diff(dayjs(newStart), "day");
-		setComparingFilters({
-			startDate: dayjs(newStart)
-				.subtract(diffDays + 1, "day")
-				.toDate(),
-			endDate: dayjs(newStart).subtract(1, "day").toDate(),
-		});
+		setComparingFilters(resolveCampaignStatsComparisonPeriod({ startDate: newStart, endDate: newEnd }));
 	};
 
 	return (

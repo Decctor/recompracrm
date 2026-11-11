@@ -120,3 +120,70 @@ export function resolveDispatchScheduledAtForDate({ date, block }: { date: Date;
 export function isDispatchDue({ scheduledAt, now }: { scheduledAt: Date | null; now: Date }) {
 	return scheduledAt == null || scheduledAt.getTime() <= now.getTime();
 }
+
+// Gatilhos com data marcada: rodam uma vez, no dia de referência, no bloco da campanha.
+const DATED_TRIGGER_REFERENCE_KEYS = {
+	"USO-UNICO": "gatilhoUsoUnicoDataReferencia",
+	"PROMOCAO-PRODUTOS": "gatilhoPromocaoDataReferencia",
+	PESQUISA: "gatilhoPesquisaDataReferencia",
+} as const;
+
+// Uma recorrência mensal no dia 31 pode passar meses sem cair; um ano cobre qualquer cadência.
+const RECURRENT_LOOKAHEAD_DAYS = 400;
+
+export type TNextDispatchCampaign = TRecurrentScheduleConfig & {
+	ativo: boolean;
+	gatilhoTipo: string;
+	execucaoAgendadaBloco: TInteractionCronTimeBlock | string;
+	gatilhoUsoUnicoDataReferencia: string | null;
+	gatilhoPromocaoDataReferencia: string | null;
+	gatilhoPesquisaDataReferencia: string | null;
+};
+
+export type TNextDispatch =
+	// Uma rodada de evento já criada, esperando a hora (atraso configurado).
+	| { fonte: "DISPARO_AGENDADO"; data: Date }
+	// Data marcada ou recorrência: a próxima janela em que o relógio vai rodar a campanha.
+	| { fonte: "AGENDA"; data: Date }
+	// Gatilho de evento sem rodada pendente: só existe quando o evento acontecer.
+	| { fonte: "PROXIMO_EVENTO"; data: null }
+	// Inativa, ou data marcada que já passou.
+	| { fonte: null; data: null };
+
+/**
+ * Próximo disparo de uma campanha, para o "Próximo disparo" da configuração. Só promete o que o
+ * relógio de fato vai fazer: um gatilho de evento não tem próxima data até o evento acontecer.
+ */
+export function resolveNextDispatch({
+	campaign,
+	pendingDispatchAt,
+	now,
+}: {
+	campaign: TNextDispatchCampaign;
+	// Menor `dataAgendada` futura entre os disparos PENDENTE da campanha.
+	pendingDispatchAt: Date | null;
+	now: Date;
+}): TNextDispatch {
+	if (!campaign.ativo) return { fonte: null, data: null };
+	if (pendingDispatchAt && pendingDispatchAt.getTime() > now.getTime()) return { fonte: "DISPARO_AGENDADO", data: pendingDispatchAt };
+
+	const block = campaign.execucaoAgendadaBloco as TInteractionCronTimeBlock;
+	const datedKey = DATED_TRIGGER_REFERENCE_KEYS[campaign.gatilhoTipo as keyof typeof DATED_TRIGGER_REFERENCE_KEYS];
+	if (datedKey) {
+		const dateKey = campaign[datedKey];
+		if (!dateKey) return { fonte: null, data: null };
+		const at = resolveDateForWindow({ dateKey, block });
+		return at.getTime() > now.getTime() ? { fonte: "AGENDA", data: at } : { fonte: null, data: null };
+	}
+
+	if (campaign.gatilhoTipo === "RECORRENTE") {
+		const today = dayjs(now).tz(INTERACTIONS_CRON_TIMEZONE).startOf("day");
+		for (let offset = 0; offset <= RECURRENT_LOOKAHEAD_DAYS; offset++) {
+			const at = resolveDateForWindow({ dateKey: today.add(offset, "day").format("YYYY-MM-DD"), block });
+			if (at.getTime() > now.getTime() && shouldRecurrentCampaignRunOnDate(campaign, at)) return { fonte: "AGENDA", data: at };
+		}
+		return { fonte: null, data: null };
+	}
+
+	return { fonte: "PROXIMO_EVENTO", data: null };
+}

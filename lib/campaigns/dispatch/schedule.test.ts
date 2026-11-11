@@ -5,6 +5,7 @@ import {
 	isDispatchDue,
 	resolveDateForWindow,
 	resolveEventDispatchScheduledAt,
+	resolveNextDispatch,
 	resolveScheduledWindowsForNow,
 	shouldRecurrentCampaignRunOnDate,
 } from "./schedule";
@@ -81,4 +82,58 @@ test("disparo de evento: sem atraso é imediato; com atraso cai no bloco da camp
 	assert.equal(isDispatchDue({ scheduledAt, now: saoPauloNoon }), false);
 	assert.equal(isDispatchDue({ scheduledAt, now: new Date("2026-09-19T12:00:00.000Z") }), true);
 	assert.equal(isDispatchDue({ scheduledAt: null, now: saoPauloNoon }), true);
+});
+
+const nextDispatchCampaign = {
+	ativo: true,
+	gatilhoTipo: "RECORRENTE",
+	execucaoAgendadaBloco: "09:00",
+	gatilhoUsoUnicoDataReferencia: null,
+	gatilhoPromocaoDataReferencia: null,
+	gatilhoPesquisaDataReferencia: null,
+	recorrenciaTipo: "SEMANAL",
+	recorrenciaIntervalo: 1,
+	recorrenciaDiasSemana: "[1]", // segunda-feira
+	recorrenciaDiasMes: null,
+	dataInsercao: new Date("2026-09-01T12:00:00.000Z"),
+};
+
+test("próximo disparo: recorrência semanal cai na próxima segunda, no bloco da campanha", () => {
+	const next = resolveNextDispatch({ campaign: nextDispatchCampaign, pendingDispatchAt: null, now: saoPauloNoon });
+	assert.equal(next.fonte, "AGENDA");
+	assert.equal(next.data?.toISOString(), "2026-09-21T12:00:00.000Z");
+});
+
+test("próximo disparo: bloco de hoje ainda por vir conta como hoje", () => {
+	const next = resolveNextDispatch({
+		campaign: { ...nextDispatchCampaign, recorrenciaTipo: "DIARIO", execucaoAgendadaBloco: "14:00" },
+		pendingDispatchAt: null,
+		now: saoPauloNoon,
+	});
+	assert.equal(next.data?.toISOString(), "2026-09-17T17:00:00.000Z");
+});
+
+test("próximo disparo: data marcada já passada não promete nada", () => {
+	const campaign = { ...nextDispatchCampaign, gatilhoTipo: "USO-UNICO", gatilhoUsoUnicoDataReferencia: "2026-09-16" };
+	assert.deepEqual(resolveNextDispatch({ campaign, pendingDispatchAt: null, now: saoPauloNoon }), { fonte: null, data: null });
+	const upcoming = resolveNextDispatch({
+		campaign: { ...campaign, gatilhoUsoUnicoDataReferencia: "2026-09-18" },
+		pendingDispatchAt: null,
+		now: saoPauloNoon,
+	});
+	assert.equal(upcoming.data?.toISOString(), "2026-09-18T12:00:00.000Z");
+});
+
+test("próximo disparo: evento sem rodada pendente espera o evento; com rodada pendente, usa a dela", () => {
+	const campaign = { ...nextDispatchCampaign, gatilhoTipo: "NOVA-COMPRA" };
+	assert.deepEqual(resolveNextDispatch({ campaign, pendingDispatchAt: null, now: saoPauloNoon }), { fonte: "PROXIMO_EVENTO", data: null });
+	const pendingAt = new Date("2026-09-20T12:00:00.000Z");
+	assert.deepEqual(resolveNextDispatch({ campaign, pendingDispatchAt: pendingAt, now: saoPauloNoon }), { fonte: "DISPARO_AGENDADO", data: pendingAt });
+});
+
+test("próximo disparo: campanha inativa não tem próximo disparo", () => {
+	assert.deepEqual(resolveNextDispatch({ campaign: { ...nextDispatchCampaign, ativo: false }, pendingDispatchAt: null, now: saoPauloNoon }), {
+		fonte: null,
+		data: null,
+	});
 });

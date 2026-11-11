@@ -48,7 +48,9 @@ async function getConversionQuality({ input, session }: { input: TGetConversionQ
 		.select({
 			tipoConversao: campaignConversions.tipoConversao,
 			total: count(campaignConversions.id),
-			receitaTotal: sum(campaignConversions.vendaValor),
+			// Attributed revenue, so the per-type rows add up to the "receita atribuída" headline
+			// (they only coincide with the sale amount while last-touch is the only model).
+			receitaTotal: sum(campaignConversions.atribuicaoReceita),
 			receitaIncremental: sumIncrementalRevenueExpr,
 		})
 		.from(campaignConversions)
@@ -64,13 +66,7 @@ async function getConversionQuality({ input, session }: { input: TGetConversionQ
 			avgDiasAntecipados: sql<number>`AVG(${campaignConversions.deltaFrequencia}) FILTER (WHERE ${campaignConversions.deltaFrequencia} > 0)`,
 		})
 		.from(campaignConversions)
-		.where(
-			and(
-				...baseConditions,
-				eq(campaignConversions.cicloCompraConfiavel, true),
-				isNotNull(campaignConversions.deltaFrequencia),
-			),
-		);
+		.where(and(...baseConditions, eq(campaignConversions.cicloCompraConfiavel, true), isNotNull(campaignConversions.deltaFrequencia)));
 
 	// Get monetary impact metrics
 	const monetaryMetrics = await db
@@ -81,18 +77,13 @@ async function getConversionQuality({ input, session }: { input: TGetConversionQ
 			avgAumentoValor: sql<number>`AVG(${campaignConversions.deltaMonetarioPercentual}) FILTER (WHERE ${campaignConversions.deltaMonetarioPercentual} > 0)`,
 		})
 		.from(campaignConversions)
-		.where(
-			and(
-				...baseConditions,
-				isNotNull(campaignConversions.deltaMonetarioPercentual),
-			),
-		);
+		.where(and(...baseConditions, isNotNull(campaignConversions.deltaMonetarioPercentual)));
 
 	// Get overall totals
 	const totals = await db
 		.select({
 			totalConversoes: count(campaignConversions.id),
-			totalReceita: sum(campaignConversions.vendaValor),
+			totalReceita: sum(campaignConversions.atribuicaoReceita),
 			totalReceitaIncremental: sumIncrementalRevenueExpr,
 			conversoesIncrementais: sql<number>`COUNT(*) FILTER (WHERE ${incrementalRevenueExpr} > 0)`,
 			avgTicketConversao: avg(campaignConversions.vendaValor),

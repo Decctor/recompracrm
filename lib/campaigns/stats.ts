@@ -2,7 +2,7 @@ import { CAMPAIGN_SENT_INTERACTION_STATUSES } from "@/lib/campaigns/utils";
 import { countIncrementalConversionsExpr, sumIncrementalRevenueExpr } from "@/lib/conversions/incremental";
 import { getSendQuotaStatus } from "@/lib/interactions/send-counters";
 import { db } from "@/services/drizzle";
-import { campaignConversions, campaigns, interactions } from "@/services/drizzle/schema";
+import { campaignConversions, campaignDispatchRecipients, campaigns, interactions } from "@/services/drizzle/schema";
 import dayjs from "dayjs";
 import { and, avg, count, countDistinct, eq, gte, inArray, lte, sum } from "drizzle-orm";
 import createHttpError from "http-errors";
@@ -59,7 +59,7 @@ export async function getCampaignStats({ input, organizacaoId }: { input: TGetCa
 		lte(interactions.dataInsercao, input.endDate),
 	];
 
-	const [interactionsResult, deliveryResult, conversionsResult, weeklyLimitResult] = await Promise.all([
+	const [interactionsResult, deliveryResult, sendFailuresResult, conversionsResult, weeklyLimitResult] = await Promise.all([
 		db
 			.select({
 				total: count(interactions.id),
@@ -75,6 +75,21 @@ export async function getCampaignStats({ input, organizacaoId }: { input: TGetCa
 			.from(interactions)
 			.where(and(...dateRangeConditions, inArray(interactions.statusEnvio, ["ENVIADO", "ENTREGUE", "LIDO", "FALHOU"])))
 			.groupBy(interactions.statusEnvio),
+		// Send-time failures: the provider refused the message, so no interaction exists and only the
+		// outbox row records it. Disjoint from the interactions marked FALHOU above (failures Meta
+		// reports after sending), which is why the two are summed, never deduplicated.
+		db
+			.select({ total: count(campaignDispatchRecipients.id) })
+			.from(campaignDispatchRecipients)
+			.where(
+				and(
+					eq(campaignDispatchRecipients.campanhaId, input.campaignId),
+					eq(campaignDispatchRecipients.organizacaoId, organizacaoId),
+					eq(campaignDispatchRecipients.status, "FALHOU"),
+					gte(campaignDispatchRecipients.dataInsercao, input.startDate),
+					lte(campaignDispatchRecipients.dataInsercao, input.endDate),
+				),
+			),
 		db
 			.select({
 				total: count(campaignConversions.id),
@@ -102,7 +117,9 @@ export async function getCampaignStats({ input, organizacaoId }: { input: TGetCa
 
 	const totalEntregues = deliveryResult.filter((r) => r.statusEnvio === "ENTREGUE" || r.statusEnvio === "LIDO").reduce((acc, r) => acc + r.total, 0);
 
-	const totalFalhas = deliveryResult.find((r) => r.statusEnvio === "FALHOU")?.total ?? 0;
+	const totalFalhasPosEnvio = deliveryResult.find((r) => r.statusEnvio === "FALHOU")?.total ?? 0;
+	const totalFalhasEnvio = sendFailuresResult[0]?.total ?? 0;
+	const totalFalhas = totalFalhasEnvio + totalFalhasPosEnvio;
 
 	const conversoes = conversionsResult[0]?.total ?? 0;
 	const receitaAtribuida = Number(conversionsResult[0]?.receitaTotal ?? 0);
@@ -126,6 +143,8 @@ export async function getCampaignStats({ input, organizacaoId }: { input: TGetCa
 			clientesAlcancados,
 			totalEntregues,
 			totalFalhas,
+			totalFalhasEnvio,
+			totalFalhasPosEnvio,
 			conversoes,
 			conversoesIncrementais,
 			clientesConvertidos,
