@@ -20,9 +20,8 @@ o app não importa nada daqui. Leia o `CONTENT-GUIDE.md` antes de escrever qualq
    - `label` e cartões: dígitos (`R$ 10`, `10%`).
    - Todo número afirmado leva `source`. Conta própria vale, dizendo a conta.
    - Último passo: `shot: "outro"`. Um passo `shot: "app"` mostra a tela do produto que faz aquilo.
-3. **Conferir.** `npm run lint -- <id>`. Corrija todo erro. Aviso de tela não desenhada: desenhe a
-   tela em `src/ui/screens.tsx` (registre em `SCREENS`, `AppScreenEnum` e `IMPLEMENTED_SCREENS`), ou troque
-   a tela. Cada tela destaca o trecho certo com `cue("palavra")`: escreva a fala do passo com as
+3. **Conferir.** `npm run lint -- <id>`. Corrija todo erro. Aviso de tela que ainda não existe: veja
+   "Telas do produto" abaixo, ou troque a tela. Cada tela destaca o trecho certo com `cue("palavra")`: escreva a fala do passo com as
    palavras que a tela espera (ex.: "risco", "campanha" na matriz RFM).
 4. **Voz.** `npm run tts-request -- <id>` imprime a chamada. Rode-a com a ferramenta `monid_run`
    do Monid (provider, endpoint, input, tag e maxCost exatamente como impressos) e espere com
@@ -44,6 +43,26 @@ o app não importa nada daqui. Leia o `CONTENT-GUIDE.md` antes de escrever qualq
 Sem rede para o Chrome do Remotion, exporte o navegador da máquina antes do render:
 `REMOTION_BROWSER_EXECUTABLE=/opt/pw-browsers/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell`.
 
+## Telas do produto (1:1)
+
+A tela do passo `app` é **o app de verdade**, nunca desenhada: um print da página inteira, na largura
+de um celular, dos componentes reais do RecompraCRM com os números do episódio.
+
+- `app/content-studio-screens/` (no app, só em desenvolvimento) monta a página real dentro da moldura
+  do dashboard, troca a URL para a rota real (o cabeçalho tira o título dela) e responde cada GET com
+  uma fixture tipada pelo tipo de saída da própria rota (`fixtures/`). Pedido sem fixture aparece no
+  console como `[content-studio] sem fixture: GET /api/...`.
+- `npm run capture-screens [-- <tela>]` sobe o `next dev` sozinho, tira o print
+  (`episodes/_screens/<tela>.png`) e guarda onde estão os elementos a destacar
+  (`episodes/_screens/manifest.json`; marcas em `CAPTURES`, `tools/capture-screens.ts`).
+- `src/ui/screens.tsx` (`SPECS`) diz onde a tela abre e qual palavra da fala rola e acende cada marca.
+  Escreva a fala do passo com essas palavras.
+
+Tela nova: registre a página em `app/content-studio-screens/screens.tsx`, escreva as fixtures até o
+console parar de reclamar e o typecheck da raiz passar, adicione as marcas em `CAPTURES`, o roteiro
+em `SPECS`, o nome em `AppScreenEnum`/`IMPLEMENTED_SCREENS`, e rode `capture-screens`. Mudou a
+interface do app? Rode `capture-screens` de novo antes do próximo render.
+
 ## Onde mexer
 
 | Quero… | Arquivo |
@@ -53,7 +72,7 @@ Sem rede para o Chrome do Remotion, exporte o navegador da máquina antes do ren
 | novo cenário | `src/scene/<Cena>.tsx` + `scene` em `src/types.ts` |
 | posição dos personagens e câmera por plano | `SHOTS` em `src/Reel.tsx` |
 | legenda, rótulo, contador, cartões, fonte | `src/ui/Overlays.tsx` |
-| tela do produto (uma por função; `SCREENS` + `IMPLEMENTED_SCREENS`) | `src/ui/screens.tsx` |
+| tela do produto (print do app real) | `app/content-studio-screens/` + `tools/capture-screens.ts` + `src/ui/screens.tsx` |
 | tempo das falas e quebra de legenda | `src/timeline.ts` |
 | vozes, velocidade, pausa máxima e pronúncia ("RecompraCRM" → "RecompraCêÉrreÊme", numa palavra só) | `voice.config.json` |
 

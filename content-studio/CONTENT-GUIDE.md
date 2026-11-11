@@ -58,7 +58,8 @@ Personagens novos só entram no elenco depois de desenhados em `src/characters/`
 3. **Um contador** acompanha a tensão do episódio (`LUCRO POR PICOLÉ R$ 3,00 → R$ 2,00`,
    `CLIENTES QUE VOLTARAM 0/3`, `DIAS SEM COMPRAR 47`).
 4. **Toda afirmação com número leva `source`.** Sem fonte, a frase não entra.
-5. **A tela do produto** que faz exatamente aquilo (nunca o painel genérico).
+5. **A tela do produto** que faz exatamente aquilo (nunca o painel genérico): a tela real do app,
+   com os números do episódio, nunca uma imitação desenhada.
 6. **CTA** para uma ferramenta grátis (`/tools/cashback-calculator`, `/tools/whatsapp-cost`) ou
    para o teste de 15 dias, e "Segue aí!".
 
