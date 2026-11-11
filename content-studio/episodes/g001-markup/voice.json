@@ -5,11 +5,16 @@
 	"maxPauseSeconds": 0.16,
 	"tempo": 1.18,
 	"spoken": {
-		"RecompraCRM": "Recompra cê érre ême",
+		"RecompraCRM": "RecompraCêÉrreÊme",
 		"markup": "márcap",
-		"Markup": "Márcap"
+		"Markup": "Márcap",
+		"churn": "tchurn",
+		"Churn": "Tchurn",
+		"ABC": "á bê cê",
+		"ticket": "tíquete",
+		"Ticket": "Tíquete"
 	},
-	"durationSeconds": 39.027,
+	"durationSeconds": 39.993,
 	"words": [
 		{
 			"text": "Cem",
@@ -24,642 +29,637 @@
 		{
 			"text": "cento",
 			"start": 0.449,
-			"end": 0.788
+			"end": 0.72
 		},
 		{
 			"text": "em",
-			"start": 0.788,
-			"end": 0.856
+			"start": 0.72,
+			"end": 0.788
 		},
 		{
 			"text": "cima",
-			"start": 0.856,
-			"end": 1.195
+			"start": 0.788,
+			"end": 1.059
 		},
 		{
 			"text": "do",
-			"start": 1.195,
-			"end": 1.263
+			"start": 1.059,
+			"end": 1.127
 		},
 		{
 			"text": "custo",
-			"start": 1.263,
-			"end": 1.737
+			"start": 1.127,
+			"end": 1.602
 		},
 		{
 			"text": "lucro",
-			"start": 1.873,
-			"end": 2.212
+			"start": 1.737,
+			"end": 2.076
 		},
 		{
 			"text": "de",
-			"start": 2.212,
-			"end": 2.347
+			"start": 2.076,
+			"end": 2.212
 		},
 		{
 			"text": "cem",
-			"start": 2.347,
-			"end": 2.686
+			"start": 2.212,
+			"end": 2.483
 		},
 		{
 			"text": "por",
-			"start": 2.686,
-			"end": 2.822
+			"start": 2.483,
+			"end": 2.619
 		},
 		{
 			"text": "cento",
-			"start": 2.822,
-			"end": 3.161
+			"start": 2.619,
+			"end": 2.958
 		},
 		{
 			"text": "né",
-			"start": 3.161,
-			"end": 3.5
+			"start": 2.958,
+			"end": 3.161
 		},
 		{
 			"text": "Não",
-			"start": 3.636,
-			"end": 3.975
+			"start": 3.297,
+			"end": 3.636
 		},
 		{
 			"text": "Márcia",
-			"start": 3.975,
+			"start": 3.636,
 			"end": 4.381
 		},
 		{
 			"text": "Márcap",
-			"start": 4.517,
+			"start": 4.381,
 			"end": 4.924
 		},
 		{
 			"text": "não",
 			"start": 4.924,
-			"end": 5.127
+			"end": 5.059
 		},
 		{
 			"text": "é",
-			"start": 5.127,
-			"end": 5.195
+			"start": 5.059,
+			"end": 5.127
 		},
 		{
 			"text": "lucro",
-			"start": 5.195,
-			"end": 5.669
+			"start": 5.127,
+			"end": 5.602
 		},
 		{
 			"text": "Vem",
-			"start": 5.805,
-			"end": 6.076
+			"start": 5.737,
+			"end": 5.941
 		},
 		{
 			"text": "que",
-			"start": 6.076,
-			"end": 6.076
+			"start": 5.941,
+			"end": 6.008
 		},
 		{
 			"text": "eu",
+			"start": 6.008,
+			"end": 6.076
+		},
+		{
+			"text": "te",
 			"start": 6.076,
 			"end": 6.144
 		},
 		{
-			"text": "te",
-			"start": 6.144,
-			"end": 6.212
-		},
-		{
 			"text": "explico",
-			"start": 6.212,
-			"end": 6.551
+			"start": 6.144,
+			"end": 6.415
 		},
 		{
 			"text": "rapidinho",
-			"start": 6.551,
-			"end": 7.161
+			"start": 6.415,
+			"end": 7.025
 		},
 		{
 			"text": "Márcap",
-			"start": 7.297,
-			"end": 7.907
-		},
-		{
-			"text": "é",
-			"start": 7.907,
+			"start": 7.161,
 			"end": 7.975
 		},
 		{
-			"text": "o",
+			"text": "é",
 			"start": 7.975,
 			"end": 8.042
 		},
 		{
-			"text": "número",
+			"text": "o",
 			"start": 8.042,
-			"end": 8.314
+			"end": 8.11
+		},
+		{
+			"text": "número",
+			"start": 8.11,
+			"end": 8.449
 		},
 		{
 			"text": "que",
-			"start": 8.314,
-			"end": 8.381
+			"start": 8.449,
+			"end": 8.517
 		},
 		{
 			"text": "multiplica",
-			"start": 8.381,
-			"end": 8.788
+			"start": 8.517,
+			"end": 9.059
 		},
 		{
 			"text": "o",
-			"start": 8.788,
-			"end": 8.924
-		},
-		{
-			"text": "custo",
-			"start": 8.924,
+			"start": 9.059,
 			"end": 9.195
 		},
 		{
-			"text": "pra",
+			"text": "custo",
 			"start": 9.195,
-			"end": 9.331
+			"end": 9.534
 		},
 		{
-			"text": "chegar",
-			"start": 9.331,
+			"text": "pra",
+			"start": 9.534,
 			"end": 9.602
 		},
 		{
-			"text": "no",
+			"text": "chegar",
 			"start": 9.602,
-			"end": 9.737
+			"end": 9.873
+		},
+		{
+			"text": "no",
+			"start": 9.873,
+			"end": 10.008
 		},
 		{
 			"text": "preço",
-			"start": 9.737,
-			"end": 9.941
+			"start": 10.008,
+			"end": 10.28
 		},
 		{
 			"text": "de",
-			"start": 9.941,
-			"end": 10.076
+			"start": 10.28,
+			"end": 10.347
 		},
 		{
 			"text": "venda",
-			"start": 10.076,
-			"end": 10.415
-		},
-		{
-			"text": "Pote",
-			"start": 10.551,
+			"start": 10.347,
 			"end": 10.822
 		},
 		{
+			"text": "Pote",
+			"start": 10.958,
+			"end": 11.229
+		},
+		{
 			"text": "de",
-			"start": 10.822,
-			"end": 10.89
+			"start": 11.229,
+			"end": 11.297
 		},
 		{
 			"text": "um",
-			"start": 10.89,
-			"end": 10.958
+			"start": 11.297,
+			"end": 11.432
 		},
 		{
 			"text": "litro",
-			"start": 10.958,
-			"end": 11.364
+			"start": 11.432,
+			"end": 11.839
 		},
 		{
 			"text": "custa",
-			"start": 11.5,
-			"end": 11.771
+			"start": 11.839,
+			"end": 12.11
 		},
 		{
 			"text": "vinte",
-			"start": 11.771,
-			"end": 12.246
+			"start": 12.11,
+			"end": 12.653
 		},
 		{
 			"text": "Márcap",
-			"start": 12.381,
-			"end": 12.856
-		},
-		{
-			"text": "de",
-			"start": 12.856,
-			"end": 12.992
-		},
-		{
-			"text": "cem",
-			"start": 12.992,
-			"end": 13.263
-		},
-		{
-			"text": "por",
-			"start": 13.263,
+			"start": 12.788,
 			"end": 13.331
 		},
 		{
-			"text": "cento",
+			"text": "de",
 			"start": 13.331,
-			"end": 13.737
+			"end": 13.398
 		},
 		{
-			"text": "é",
-			"start": 13.737,
-			"end": 13.873
+			"text": "cem",
+			"start": 13.398,
+			"end": 13.669
 		},
 		{
-			"text": "vezes",
-			"start": 13.873,
+			"text": "por",
+			"start": 13.669,
+			"end": 13.805
+		},
+		{
+			"text": "cento",
+			"start": 13.805,
 			"end": 14.28
 		},
 		{
-			"text": "dois",
+			"text": "é",
 			"start": 14.28,
-			"end": 14.686
+			"end": 14.415
 		},
 		{
-			"text": "Preço",
-			"start": 14.822,
+			"text": "vezes",
+			"start": 14.415,
+			"end": 14.89
+		},
+		{
+			"text": "dois",
+			"start": 14.89,
 			"end": 15.297
 		},
 		{
+			"text": "Preço",
+			"start": 15.432,
+			"end": 15.975
+		},
+		{
 			"text": "quarenta",
-			"start": 15.364,
-			"end": 15.771
+			"start": 15.975,
+			"end": 16.449
 		},
 		{
 			"text": "reais",
-			"start": 15.771,
-			"end": 16.314
+			"start": 16.449,
+			"end": 16.992
 		},
 		{
 			"text": "Agora",
-			"start": 16.449,
-			"end": 16.924
+			"start": 17.127,
+			"end": 17.534
 		},
 		{
 			"text": "a",
-			"start": 16.924,
-			"end": 16.924
+			"start": 17.534,
+			"end": 17.534
 		},
 		{
 			"text": "margem",
-			"start": 16.992,
-			"end": 17.398
+			"start": 17.534,
+			"end": 17.941
 		},
 		{
 			"text": "o",
-			"start": 17.534,
-			"end": 17.602
+			"start": 18.076,
+			"end": 18.144
 		},
 		{
 			"text": "que",
-			"start": 17.602,
-			"end": 17.737
+			"start": 18.144,
+			"end": 18.28
 		},
 		{
 			"text": "sobra",
-			"start": 17.737,
-			"end": 18.076
-		},
-		{
-			"text": "dividido",
-			"start": 18.076,
-			"end": 18.551
-		},
-		{
-			"text": "pelo",
-			"start": 18.551,
+			"start": 18.28,
 			"end": 18.754
 		},
 		{
-			"text": "preço",
-			"start": 18.754,
-			"end": 19.161
+			"text": "dividido",
+			"start": 18.89,
+			"end": 19.364
 		},
 		{
-			"text": "Vinte",
-			"start": 19.297,
+			"text": "pelo",
+			"start": 19.364,
 			"end": 19.636
 		},
 		{
-			"text": "de",
+			"text": "preço",
 			"start": 19.636,
-			"end": 19.771
+			"end": 20.042
+		},
+		{
+			"text": "Vinte",
+			"start": 20.178,
+			"end": 20.585
+		},
+		{
+			"text": "de",
+			"start": 20.585,
+			"end": 20.653
 		},
 		{
 			"text": "quarenta",
-			"start": 19.771,
-			"end": 20.314
+			"start": 20.653,
+			"end": 21.263
 		},
 		{
 			"text": "cinquenta",
-			"start": 20.314,
-			"end": 20.924
+			"start": 21.263,
+			"end": 21.873
 		},
 		{
 			"text": "por",
-			"start": 20.924,
-			"end": 21.059
+			"start": 21.873,
+			"end": 22.008
 		},
 		{
 			"text": "cento",
-			"start": 21.059,
-			"end": 21.466
+			"start": 22.008,
+			"end": 22.347
 		},
 		{
 			"text": "Cinquenta",
-			"start": 21.602,
-			"end": 22.619
-		},
-		{
-			"text": "E",
-			"start": 22.754,
-			"end": 22.822
-		},
-		{
-			"text": "eu",
-			"start": 22.822,
-			"end": 22.958
-		},
-		{
-			"text": "ainda",
-			"start": 22.958,
-			"end": 23.229
-		},
-		{
-			"text": "pago",
-			"start": 23.229,
+			"start": 22.483,
 			"end": 23.432
 		},
 		{
-			"text": "imposto",
-			"start": 23.432,
-			"end": 23.975
+			"text": "E",
+			"start": 23.568,
+			"end": 23.703
 		},
 		{
-			"text": "e",
-			"start": 23.975,
+			"text": "eu",
+			"start": 23.703,
+			"end": 23.771
+		},
+		{
+			"text": "ainda",
+			"start": 23.771,
 			"end": 24.042
 		},
 		{
-			"text": "aluguel",
+			"text": "pago",
 			"start": 24.042,
-			"end": 24.517
+			"end": 24.246
 		},
 		{
-			"text": "com",
-			"start": 24.517,
-			"end": 24.653
-		},
-		{
-			"text": "isso",
-			"start": 24.653,
-			"end": 25.127
-		},
-		{
-			"text": "Pois",
-			"start": 25.263,
-			"end": 25.466
-		},
-		{
-			"text": "é",
-			"start": 25.466,
-			"end": 25.941
-		},
-		{
-			"text": "E",
-			"start": 25.941,
-			"end": 26.008
-		},
-		{
-			"text": "desconto",
-			"start": 26.008,
-			"end": 26.483
-		},
-		{
-			"text": "sai",
-			"start": 26.483,
-			"end": 26.686
-		},
-		{
-			"text": "da",
-			"start": 26.686,
-			"end": 26.754
-		},
-		{
-			"text": "margem",
-			"start": 26.754,
-			"end": 27.161
-		},
-		{
-			"text": "Trinta",
-			"start": 27.297,
-			"end": 27.568
-		},
-		{
-			"text": "por",
-			"start": 27.568,
-			"end": 27.703
-		},
-		{
-			"text": "cento",
-			"start": 27.703,
-			"end": 27.975
-		},
-		{
-			"text": "de",
-			"start": 27.975,
-			"end": 28.042
-		},
-		{
-			"text": "desconto",
-			"start": 28.042,
-			"end": 28.449
-		},
-		{
-			"text": "nesse",
-			"start": 28.449,
-			"end": 28.72
-		},
-		{
-			"text": "pote",
-			"start": 28.72,
-			"end": 28.992
-		},
-		{
-			"text": "leva",
-			"start": 28.992,
-			"end": 29.195
-		},
-		{
-			"text": "mais",
-			"start": 29.195,
-			"end": 29.466
-		},
-		{
-			"text": "da",
-			"start": 29.466,
-			"end": 29.534
-		},
-		{
-			"text": "metade",
-			"start": 29.534,
-			"end": 30.076
-		},
-		{
-			"text": "do",
-			"start": 30.076,
-			"end": 30.144
-		},
-		{
-			"text": "que",
-			"start": 30.144,
-			"end": 30.212
-		},
-		{
-			"text": "sobrava",
-			"start": 30.212,
-			"end": 30.822
-		},
-		{
-			"text": "Pra",
-			"start": 30.958,
-			"end": 31.093
-		},
-		{
-			"text": "não",
-			"start": 31.093,
-			"end": 31.161
-		},
-		{
-			"text": "esquecer",
-			"start": 31.161,
-			"end": 31.771
-		},
-		{
-			"text": "márcap",
-			"start": 31.839,
-			"end": 32.314
-		},
-		{
-			"text": "é",
-			"start": 32.381,
-			"end": 32.449
-		},
-		{
-			"text": "sobre",
-			"start": 32.449,
-			"end": 32.72
-		},
-		{
-			"text": "o",
-			"start": 32.72,
-			"end": 32.788
-		},
-		{
-			"text": "custo",
-			"start": 32.788,
-			"end": 33.195
-		},
-		{
-			"text": "margem",
-			"start": 33.331,
-			"end": 33.805
-		},
-		{
-			"text": "é",
-			"start": 33.873,
-			"end": 33.941
-		},
-		{
-			"text": "sobre",
-			"start": 33.941,
-			"end": 34.212
-		},
-		{
-			"text": "o",
-			"start": 34.212,
-			"end": 34.28
-		},
-		{
-			"text": "preço",
-			"start": 34.28,
-			"end": 34.686
-		},
-		{
-			"text": "Salva",
-			"start": 34.822,
-			"end": 35.161
-		},
-		{
-			"text": "o",
-			"start": 35.161,
-			"end": 35.161
-		},
-		{
-			"text": "vídeo",
-			"start": 35.161,
-			"end": 35.5
+			"text": "imposto",
+			"start": 24.246,
+			"end": 24.788
 		},
 		{
 			"text": "e",
-			"start": 35.568,
-			"end": 35.636
+			"start": 24.788,
+			"end": 24.788
 		},
 		{
-			"text": "confere",
-			"start": 35.636,
-			"end": 36.042
+			"text": "aluguel",
+			"start": 24.788,
+			"end": 25.127
 		},
 		{
-			"text": "o",
-			"start": 36.042,
-			"end": 36.11
+			"text": "com",
+			"start": 25.263,
+			"end": 26.008
 		},
 		{
-			"text": "glossário",
-			"start": 36.11,
-			"end": 36.517
+			"text": "isso",
+			"start": 26.008,
+			"end": 26.008
 		},
 		{
-			"text": "completo",
-			"start": 36.517,
-			"end": 36.992
+			"text": "Pois",
+			"start": 26.144,
+			"end": 26.347
 		},
 		{
-			"text": "no",
-			"start": 36.992,
-			"end": 37.059
+			"text": "é",
+			"start": 26.347,
+			"end": 26.822
 		},
 		{
-			"text": "link",
-			"start": 37.059,
-			"end": 37.263
+			"text": "E",
+			"start": 26.822,
+			"end": 26.89
+		},
+		{
+			"text": "desconto",
+			"start": 26.89,
+			"end": 27.364
+		},
+		{
+			"text": "sai",
+			"start": 27.364,
+			"end": 27.5
 		},
 		{
 			"text": "da",
-			"start": 37.263,
-			"end": 37.398
+			"start": 27.5,
+			"end": 27.636
 		},
 		{
-			"text": "bio",
-			"start": 37.398,
-			"end": 37.737
+			"text": "margem",
+			"start": 27.636,
+			"end": 27.975
 		},
 		{
-			"text": "Segue",
-			"start": 37.873,
-			"end": 38.212
+			"text": "Trinta",
+			"start": 28.11,
+			"end": 28.449
+		},
+		{
+			"text": "por",
+			"start": 28.449,
+			"end": 28.585
+		},
+		{
+			"text": "cento",
+			"start": 28.585,
+			"end": 28.856
+		},
+		{
+			"text": "de",
+			"start": 28.924,
+			"end": 28.992
+		},
+		{
+			"text": "desconto",
+			"start": 28.992,
+			"end": 29.398
+		},
+		{
+			"text": "nesse",
+			"start": 29.398,
+			"end": 29.669
+		},
+		{
+			"text": "pote",
+			"start": 29.669,
+			"end": 30.008
+		},
+		{
+			"text": "leva",
+			"start": 30.144,
+			"end": 30.347
+		},
+		{
+			"text": "mais",
+			"start": 30.347,
+			"end": 30.686
+		},
+		{
+			"text": "da",
+			"start": 30.686,
+			"end": 30.754
+		},
+		{
+			"text": "metade",
+			"start": 30.754,
+			"end": 31.161
+		},
+		{
+			"text": "do",
+			"start": 31.161,
+			"end": 31.229
+		},
+		{
+			"text": "que",
+			"start": 31.229,
+			"end": 31.297
+		},
+		{
+			"text": "sobrava",
+			"start": 31.297,
+			"end": 31.907
+		},
+		{
+			"text": "Pra",
+			"start": 32.042,
+			"end": 32.178
+		},
+		{
+			"text": "não",
+			"start": 32.178,
+			"end": 32.246
+		},
+		{
+			"text": "esquecer",
+			"start": 32.246,
+			"end": 32.924
+		},
+		{
+			"text": "márcap",
+			"start": 32.924,
+			"end": 33.398
+		},
+		{
+			"text": "é",
+			"start": 33.398,
+			"end": 33.466
+		},
+		{
+			"text": "sobre",
+			"start": 33.466,
+			"end": 33.737
 		},
 		{
 			"text": "o",
-			"start": 38.212,
-			"end": 38.212
+			"start": 33.737,
+			"end": 33.805
 		},
 		{
-			"text": "Caramelo",
-			"start": 38.212,
-			"end": 38.754
+			"text": "custo",
+			"start": 33.805,
+			"end": 34.347
+		},
+		{
+			"text": "margem",
+			"start": 34.415,
+			"end": 34.822
+		},
+		{
+			"text": "é",
+			"start": 34.89,
+			"end": 35.025
+		},
+		{
+			"text": "sobre",
+			"start": 35.025,
+			"end": 35.229
+		},
+		{
+			"text": "o",
+			"start": 35.229,
+			"end": 35.297
+		},
+		{
+			"text": "preço",
+			"start": 35.297,
+			"end": 35.771
+		},
+		{
+			"text": "Salva",
+			"start": 35.907,
+			"end": 36.314
+		},
+		{
+			"text": "o",
+			"start": 36.314,
+			"end": 36.314
+		},
+		{
+			"text": "vídeo",
+			"start": 36.314,
+			"end": 36.653
+		},
+		{
+			"text": "e",
+			"start": 36.72,
+			"end": 36.72
+		},
+		{
+			"text": "confere",
+			"start": 36.72,
+			"end": 37.127
+		},
+		{
+			"text": "o",
+			"start": 37.127,
+			"end": 37.195
+		},
+		{
+			"text": "glossário",
+			"start": 37.195,
+			"end": 37.602
+		},
+		{
+			"text": "completo",
+			"start": 37.602,
+			"end": 38.076
+		},
+		{
+			"text": "no",
+			"start": 38.076,
+			"end": 38.144
+		},
+		{
+			"text": "link",
+			"start": 38.144,
+			"end": 38.415
+		},
+		{
+			"text": "da",
+			"start": 38.415,
+			"end": 38.483
+		},
+		{
+			"text": "bio",
+			"start": 38.483,
+			"end": 38.89
+		},
+		{
+			"text": "Segue",
+			"start": 39.025,
+			"end": 39.364
+		},
+		{
+			"text": "aí",
+			"start": 39.364,
+			"end": 39.771
 		}
 	]
 }

@@ -55,7 +55,7 @@ Sem rede para o Chrome do Remotion, exporte o navegador da máquina antes do ren
 | legenda, rótulo, contador, cartões, fonte | `src/ui/Overlays.tsx` |
 | tela do produto (uma por função; `SCREENS` + `IMPLEMENTED_SCREENS`) | `src/ui/screens.tsx` |
 | tempo das falas e quebra de legenda | `src/timeline.ts` |
-| vozes, velocidade, pausa máxima e pronúncia ("RecompraCRM" → "Recompra cê érre ême") | `voice.config.json` |
+| vozes, velocidade, pausa máxima e pronúncia ("RecompraCRM" → "RecompraCêÉrreÊme", numa palavra só) | `voice.config.json` |
 
 Regras do desenho: personagens e cenários são SVG desenhados em código (nada de imagem gerada por
 episódio), com contorno `COLORS.outline`, paleta de `src/theme.ts`, e o cenário sem texto atrás da

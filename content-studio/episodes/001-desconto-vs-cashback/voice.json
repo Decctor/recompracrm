@@ -5,64 +5,71 @@
 	"maxPauseSeconds": 0.16,
 	"tempo": 1.18,
 	"spoken": {
-		"RecompraCRM": "Recompra cê érre ême"
+		"RecompraCRM": "RecompraCêÉrreÊme",
+		"markup": "márcap",
+		"Markup": "Márcap",
+		"churn": "tchurn",
+		"Churn": "Tchurn",
+		"ABC": "á bê cê",
+		"ticket": "tíquete",
+		"Ticket": "Tíquete"
 	},
-	"durationSeconds": 44.722,
+	"durationSeconds": 43.598,
 	"words": [
 		{
 			"text": "A",
 			"start": 0.042,
-			"end": 0.11
+			"end": 0.178
 		},
 		{
 			"text": "loja",
-			"start": 0.11,
-			"end": 0.381
+			"start": 0.178,
+			"end": 0.517
 		},
 		{
 			"text": "lotou",
-			"start": 0.381,
-			"end": 0.924
-		},
-		{
-			"text": "e",
-			"start": 1.059,
+			"start": 0.517,
 			"end": 1.127
 		},
 		{
-			"text": "o",
+			"text": "e",
 			"start": 1.195,
-			"end": 1.195
+			"end": 1.263
+		},
+		{
+			"text": "o",
+			"start": 1.331,
+			"end": 1.331
 		},
 		{
 			"text": "lucro",
-			"start": 1.195,
-			"end": 1.602
+			"start": 1.331,
+			"end": 1.737
 		},
 		{
 			"text": "sumiu",
-			"start": 1.602,
-			"end": 2.144
+			"start": 1.737,
+			"end": 2.347
 		},
 		{
 			"text": "Calma",
-			"start": 2.28,
-			"end": 2.686
+			"start": 2.483,
+			"end": 2.754
 		},
 		{
 			"text": "Márcia",
-			"start": 2.686,
-			"end": 3.161
+			"start": 2.754,
+			"end": 3.229
 		},
 		{
 			"text": "Dez",
-			"start": 3.297,
+			"start": 3.364,
 			"end": 3.636
 		},
 		{
 			"text": "por",
 			"start": 3.636,
-			"end": 3.703
+			"end": 3.771
 		},
 		{
 			"text": "cento",
@@ -77,507 +84,507 @@
 		{
 			"text": "tudo",
 			"start": 4.11,
-			"end": 4.72
+			"end": 4.653
 		},
 		{
 			"text": "Eu",
+			"start": 4.788,
+			"end": 4.856
+		},
+		{
+			"text": "vi",
 			"start": 4.856,
 			"end": 4.992
 		},
 		{
-			"text": "vi",
-			"start": 4.992,
-			"end": 5.127
-		},
-		{
 			"text": "daqui",
-			"start": 5.127,
-			"end": 5.398
+			"start": 4.992,
+			"end": 5.263
 		},
 		{
 			"text": "da",
-			"start": 5.398,
-			"end": 5.534
+			"start": 5.263,
+			"end": 5.331
 		},
 		{
 			"text": "porta",
-			"start": 5.534,
-			"end": 5.941
+			"start": 5.331,
+			"end": 5.805
 		},
 		{
 			"text": "Olha",
-			"start": 6.076,
-			"end": 6.347
+			"start": 5.941,
+			"end": 6.144
 		},
 		{
 			"text": "a",
-			"start": 6.347,
-			"end": 6.347
+			"start": 6.144,
+			"end": 6.144
 		},
 		{
 			"text": "conta",
-			"start": 6.347,
-			"end": 6.619
+			"start": 6.144,
+			"end": 6.347
 		},
 		{
 			"text": "do",
-			"start": 6.619,
-			"end": 6.754
+			"start": 6.347,
+			"end": 6.415
 		},
 		{
 			"text": "picolé",
-			"start": 6.754,
-			"end": 7.229
+			"start": 6.415,
+			"end": 6.89
 		},
 		{
 			"text": "Custa",
-			"start": 7.364,
-			"end": 7.703
+			"start": 7.025,
+			"end": 7.297
 		},
 		{
 			"text": "sete",
-			"start": 7.703,
-			"end": 8.11
+			"start": 7.297,
+			"end": 7.975
 		},
 		{
 			"text": "você",
+			"start": 8.042,
+			"end": 8.246
+		},
+		{
+			"text": "vende",
 			"start": 8.246,
 			"end": 8.517
 		},
 		{
-			"text": "vende",
-			"start": 8.517,
-			"end": 8.788
-		},
-		{
 			"text": "por",
-			"start": 8.788,
-			"end": 8.992
+			"start": 8.517,
+			"end": 8.653
 		},
 		{
 			"text": "dez",
-			"start": 8.992,
-			"end": 9.534
+			"start": 8.653,
+			"end": 9.195
 		},
 		{
 			"text": "sobram",
-			"start": 9.602,
-			"end": 10.076
+			"start": 9.195,
+			"end": 9.669
 		},
 		{
 			"text": "três",
-			"start": 10.076,
-			"end": 10.415
+			"start": 9.669,
+			"end": 9.941
 		},
 		{
 			"text": "de",
-			"start": 10.415,
+			"start": 9.941,
+			"end": 10.008
+		},
+		{
+			"text": "lucro",
+			"start": 10.008,
 			"end": 10.483
 		},
 		{
-			"text": "lucro",
-			"start": 10.483,
-			"end": 11.025
-		},
-		{
 			"text": "Com",
-			"start": 11.161,
-			"end": 11.364
+			"start": 10.619,
+			"end": 10.822
 		},
 		{
 			"text": "dez",
-			"start": 11.364,
-			"end": 11.703
+			"start": 10.822,
+			"end": 11.093
 		},
 		{
 			"text": "por",
-			"start": 11.703,
-			"end": 11.839
+			"start": 11.093,
+			"end": 11.229
 		},
 		{
 			"text": "cento",
-			"start": 11.839,
-			"end": 12.11
+			"start": 11.229,
+			"end": 11.432
 		},
 		{
 			"text": "de",
-			"start": 12.11,
-			"end": 12.178
+			"start": 11.432,
+			"end": 11.568
 		},
 		{
 			"text": "desconto",
-			"start": 12.178,
-			"end": 12.856
+			"start": 11.568,
+			"end": 12.11
 		},
 		{
 			"text": "sai",
-			"start": 12.924,
-			"end": 13.263
+			"start": 12.246,
+			"end": 12.585
 		},
 		{
 			"text": "por",
-			"start": 13.263,
-			"end": 13.398
+			"start": 12.585,
+			"end": 12.72
 		},
 		{
 			"text": "nove",
-			"start": 13.398,
-			"end": 13.873
+			"start": 12.72,
+			"end": 13.127
 		},
 		{
 			"text": "Sobram",
-			"start": 14.008,
-			"end": 14.415
+			"start": 13.263,
+			"end": 13.669
 		},
 		{
 			"text": "dois",
-			"start": 14.415,
-			"end": 15.025
+			"start": 13.669,
+			"end": 14.415
 		},
 		{
 			"text": "Pera",
-			"start": 15.161,
-			"end": 15.5
+			"start": 14.551,
+			"end": 14.89
 		},
 		{
 			"text": "um",
-			"start": 15.636,
-			"end": 15.839
+			"start": 15.025,
+			"end": 15.229
 		},
 		{
 			"text": "terço",
-			"start": 15.839,
-			"end": 16.246
+			"start": 15.229,
+			"end": 15.636
 		},
 		{
 			"text": "do",
-			"start": 16.246,
-			"end": 16.381
+			"start": 15.636,
+			"end": 15.703
 		},
 		{
 			"text": "meu",
-			"start": 16.381,
-			"end": 16.517
+			"start": 15.703,
+			"end": 15.975
 		},
 		{
 			"text": "lucro",
-			"start": 16.517,
-			"end": 17.195
+			"start": 15.975,
+			"end": 16.585
 		},
 		{
 			"text": "Em",
-			"start": 17.331,
-			"end": 17.602
+			"start": 16.72,
+			"end": 16.924
 		},
 		{
 			"text": "toda",
-			"start": 17.602,
-			"end": 17.805
+			"start": 16.924,
+			"end": 17.263
 		},
 		{
 			"text": "venda",
-			"start": 17.805,
-			"end": 18.28
+			"start": 17.263,
+			"end": 17.669
 		},
 		{
 			"text": "Até",
-			"start": 18.415,
-			"end": 18.686
+			"start": 17.805,
+			"end": 18.144
 		},
 		{
 			"text": "de",
-			"start": 18.686,
-			"end": 18.822
+			"start": 18.144,
+			"end": 18.28
 		},
 		{
 			"text": "quem",
-			"start": 18.822,
-			"end": 19.025
+			"start": 18.28,
+			"end": 18.483
 		},
 		{
 			"text": "ia",
-			"start": 19.025,
-			"end": 19.093
+			"start": 18.483,
+			"end": 18.551
 		},
 		{
 			"text": "comprar",
-			"start": 19.093,
-			"end": 19.432
+			"start": 18.551,
+			"end": 18.89
 		},
 		{
 			"text": "de",
-			"start": 19.432,
-			"end": 19.568
+			"start": 18.89,
+			"end": 19.025
 		},
 		{
 			"text": "qualquer",
-			"start": 19.636,
-			"end": 19.975
+			"start": 19.093,
+			"end": 19.5
 		},
 		{
 			"text": "jeito",
-			"start": 19.975,
-			"end": 20.381
+			"start": 19.5,
+			"end": 19.975
 		},
 		{
 			"text": "Agora",
-			"start": 20.517,
-			"end": 20.788
+			"start": 20.11,
+			"end": 20.449
 		},
 		{
 			"text": "troca",
-			"start": 20.788,
-			"end": 21.059
+			"start": 20.449,
+			"end": 20.788
 		},
 		{
 			"text": "por",
-			"start": 21.059,
-			"end": 21.263
+			"start": 20.788,
+			"end": 20.924
 		},
 		{
 			"text": "cinco",
-			"start": 21.263,
-			"end": 21.669
+			"start": 20.924,
+			"end": 21.331
 		},
 		{
 			"text": "por",
-			"start": 21.669,
-			"end": 21.737
+			"start": 21.331,
+			"end": 21.466
 		},
 		{
 			"text": "cento",
-			"start": 21.737,
-			"end": 22.008
+			"start": 21.466,
+			"end": 21.669
 		},
 		{
 			"text": "de",
-			"start": 22.008,
-			"end": 22.076
+			"start": 21.669,
+			"end": 21.873
 		},
 		{
 			"text": "cashback",
-			"start": 22.076,
-			"end": 22.754
+			"start": 21.873,
+			"end": 22.483
 		},
 		{
 			"text": "você",
-			"start": 22.89,
-			"end": 23.161
+			"start": 22.619,
+			"end": 22.822
 		},
 		{
 			"text": "cobra",
-			"start": 23.161,
-			"end": 23.432
+			"start": 22.822,
+			"end": 23.161
 		},
 		{
 			"text": "os",
-			"start": 23.432,
+			"start": 23.161,
+			"end": 23.229
+		},
+		{
+			"text": "dez",
+			"start": 23.229,
 			"end": 23.5
 		},
 		{
-			"text": "dez",
-			"start": 23.5,
-			"end": 23.703
-		},
-		{
 			"text": "reais",
-			"start": 23.703,
-			"end": 24.178
+			"start": 23.5,
+			"end": 23.907
 		},
 		{
 			"text": "e",
-			"start": 24.314,
-			"end": 24.449
+			"start": 24.042,
+			"end": 24.178
 		},
 		{
 			"text": "o",
-			"start": 24.449,
-			"end": 24.517
+			"start": 24.178,
+			"end": 24.178
 		},
 		{
 			"text": "cliente",
-			"start": 24.517,
-			"end": 24.856
+			"start": 24.178,
+			"end": 24.517
 		},
 		{
 			"text": "leva",
-			"start": 24.856,
-			"end": 24.992
+			"start": 24.517,
+			"end": 24.72
 		},
 		{
 			"text": "cinquenta",
-			"start": 24.992,
-			"end": 25.534
+			"start": 24.72,
+			"end": 25.263
 		},
 		{
 			"text": "centavos",
-			"start": 25.534,
-			"end": 25.941
+			"start": 25.263,
+			"end": 25.737
 		},
 		{
 			"text": "pra",
-			"start": 25.941,
-			"end": 26.076
+			"start": 25.737,
+			"end": 25.941
 		},
 		{
 			"text": "próxima",
-			"start": 26.076,
-			"end": 26.483
+			"start": 25.941,
+			"end": 26.28
 		},
 		{
 			"text": "visita",
-			"start": 26.483,
-			"end": 26.958
+			"start": 26.28,
+			"end": 26.822
 		},
 		{
 			"text": "E",
-			"start": 27.093,
-			"end": 27.161
+			"start": 26.958,
+			"end": 27.093
 		},
 		{
 			"text": "quando",
-			"start": 27.161,
-			"end": 27.432
+			"start": 27.093,
+			"end": 27.297
 		},
 		{
 			"text": "esse",
-			"start": 27.432,
-			"end": 27.636
+			"start": 27.297,
+			"end": 27.432
 		},
 		{
 			"text": "crédito",
-			"start": 27.636,
-			"end": 28.042
+			"start": 27.432,
+			"end": 27.839
 		},
 		{
 			"text": "me",
-			"start": 28.042,
-			"end": 28.178
+			"start": 27.839,
+			"end": 27.975
 		},
 		{
 			"text": "custa",
-			"start": 28.178,
-			"end": 28.653
+			"start": 27.975,
+			"end": 28.517
 		},
 		{
 			"text": "Só",
-			"start": 28.788,
-			"end": 29.127
+			"start": 28.653,
+			"end": 28.924
 		},
 		{
 			"text": "quando",
-			"start": 29.127,
-			"end": 29.263
+			"start": 28.924,
+			"end": 29.059
 		},
 		{
 			"text": "ele",
-			"start": 29.263,
-			"end": 29.398
+			"start": 29.059,
+			"end": 29.195
 		},
 		{
 			"text": "volta",
-			"start": 29.398,
-			"end": 29.805
+			"start": 29.195,
+			"end": 29.602
 		},
 		{
 			"text": "Que",
-			"start": 29.941,
-			"end": 30.008
+			"start": 29.737,
+			"end": 29.805
 		},
 		{
 			"text": "é",
-			"start": 30.008,
-			"end": 30.076
+			"start": 29.805,
+			"end": 29.873
 		},
 		{
 			"text": "exatamente",
-			"start": 30.076,
-			"end": 30.754
+			"start": 29.873,
+			"end": 30.619
 		},
 		{
 			"text": "o",
-			"start": 30.754,
-			"end": 30.754
+			"start": 30.619,
+			"end": 30.686
 		},
 		{
 			"text": "que",
-			"start": 30.754,
-			"end": 30.822
+			"start": 30.686,
+			"end": 30.754
 		},
 		{
 			"text": "você",
-			"start": 30.822,
-			"end": 31.093
+			"start": 30.754,
+			"end": 30.958
 		},
 		{
 			"text": "quer",
-			"start": 31.093,
-			"end": 31.771
+			"start": 30.958,
+			"end": 31.432
 		},
 		{
 			"text": "E",
-			"start": 31.771,
-			"end": 31.907
+			"start": 31.568,
+			"end": 31.636
 		},
 		{
 			"text": "quase",
-			"start": 31.907,
-			"end": 32.246
+			"start": 31.636,
+			"end": 32.042
 		},
 		{
 			"text": "nove",
-			"start": 32.246,
-			"end": 32.585
+			"start": 32.042,
+			"end": 32.381
 		},
 		{
 			"text": "em",
-			"start": 32.585,
-			"end": 32.585
+			"start": 32.381,
+			"end": 32.449
 		},
 		{
 			"text": "cada",
-			"start": 32.585,
-			"end": 32.856
+			"start": 32.449,
+			"end": 32.653
 		},
 		{
 			"text": "dez",
-			"start": 32.856,
-			"end": 33.059
+			"start": 32.653,
+			"end": 32.992
 		},
 		{
 			"text": "brasileiros",
-			"start": 33.059,
-			"end": 33.602
-		},
-		{
-			"text": "já",
-			"start": 33.602,
+			"start": 32.992,
 			"end": 33.669
 		},
 		{
-			"text": "usam",
+			"text": "já",
 			"start": 33.737,
-			"end": 34.008
+			"end": 33.941
+		},
+		{
+			"text": "usam",
+			"start": 33.941,
+			"end": 34.144
 		},
 		{
 			"text": "programa",
-			"start": 34.008,
-			"end": 34.347
+			"start": 34.144,
+			"end": 34.483
 		},
 		{
 			"text": "de",
-			"start": 34.347,
-			"end": 34.415
+			"start": 34.483,
+			"end": 34.551
 		},
 		{
 			"text": "fidelidade",
-			"start": 34.415,
-			"end": 34.958
+			"start": 34.551,
+			"end": 35.161
 		},
 		{
 			"text": "Percentual",
-			"start": 35.093,
-			"end": 35.975
+			"start": 35.297,
+			"end": 36.042
 		},
 		{
 			"text": "validade",
@@ -587,137 +594,117 @@
 		{
 			"text": "e",
 			"start": 36.72,
-			"end": 36.856
+			"end": 36.788
 		},
 		{
 			"text": "aviso",
-			"start": 36.856,
-			"end": 37.195
+			"start": 36.788,
+			"end": 37.127
 		},
 		{
 			"text": "de",
-			"start": 37.195,
+			"start": 37.127,
 			"end": 37.263
 		},
 		{
 			"text": "saldo",
 			"start": 37.263,
-			"end": 37.602
+			"end": 37.534
 		},
 		{
 			"text": "no",
-			"start": 37.602,
-			"end": 37.737
+			"start": 37.534,
+			"end": 37.669
 		},
 		{
 			"text": "WhatsApp",
-			"start": 37.737,
-			"end": 38.212
+			"start": 37.669,
+			"end": 38.144
 		},
 		{
 			"text": "tudo",
-			"start": 38.347,
+			"start": 38.28,
+			"end": 38.551
+		},
+		{
+			"text": "no",
+			"start": 38.551,
 			"end": 38.619
 		},
 		{
-			"text": "no",
-			"start": 38.619,
-			"end": 38.754
-		},
-		{
-			"text": "Recompra",
+			"text": "RecompraCêÉrreÊme",
 			"start": 38.754,
-			"end": 39.229
-		},
-		{
-			"text": "cê",
-			"start": 39.229,
-			"end": 39.636
-		},
-		{
-			"text": "érre",
-			"start": 39.636,
-			"end": 40.246
-		},
-		{
-			"text": "ême",
-			"start": 40.246,
-			"end": 40.246
+			"end": 39.568
 		},
 		{
 			"text": "Faz",
-			"start": 40.381,
-			"end": 40.585
+			"start": 39.703,
+			"end": 39.907
 		},
 		{
 			"text": "a",
-			"start": 40.585,
-			"end": 40.653
+			"start": 39.907,
+			"end": 39.975
 		},
 		{
 			"text": "conta",
-			"start": 40.653,
-			"end": 40.924
+			"start": 39.975,
+			"end": 40.246
 		},
 		{
 			"text": "da",
-			"start": 40.924,
-			"end": 40.992
+			"start": 40.246,
+			"end": 40.314
 		},
 		{
 			"text": "sua",
-			"start": 40.992,
-			"end": 41.127
+			"start": 40.314,
+			"end": 40.517
 		},
 		{
 			"text": "loja",
-			"start": 41.195,
-			"end": 41.466
+			"start": 40.517,
+			"end": 40.856
 		},
 		{
 			"text": "calculadora",
-			"start": 41.602,
-			"end": 42.212
+			"start": 40.992,
+			"end": 41.602
 		},
 		{
 			"text": "no",
-			"start": 42.212,
-			"end": 42.28
+			"start": 41.602,
+			"end": 41.669
 		},
 		{
 			"text": "link",
-			"start": 42.28,
-			"end": 42.551
+			"start": 41.669,
+			"end": 41.941
 		},
 		{
 			"text": "da",
-			"start": 42.551,
-			"end": 42.686
+			"start": 41.941,
+			"end": 42.008
 		},
 		{
 			"text": "bio",
-			"start": 42.686,
-			"end": 43.093
+			"start": 42.008,
+			"end": 42.347
 		},
 		{
 			"text": "E",
-			"start": 43.229,
-			"end": 43.364
+			"start": 42.483,
+			"end": 42.551
 		},
 		{
 			"text": "segue",
-			"start": 43.364,
-			"end": 43.703
+			"start": 42.551,
+			"end": 42.89
 		},
 		{
-			"text": "o",
-			"start": 43.703,
-			"end": 43.771
-		},
-		{
-			"text": "Caramelo",
-			"start": 43.771,
-			"end": 44.381
+			"text": "aí",
+			"start": 42.89,
+			"end": 43.297
 		}
 	]
 }
