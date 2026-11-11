@@ -117,7 +117,7 @@ async function getCampaignConversions({ input, session }: { input: TGetCampaignC
 				columns: { id: true, nome: true },
 			},
 			campanha: {
-				columns: { id: true, titulo: true },
+				columns: { id: true, titulo: true, gatilhoTipo: true },
 			},
 		},
 	});

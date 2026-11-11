@@ -5,7 +5,7 @@ import { clearWhatsappPhoneSendBlock } from "@/lib/campaigns/dispatch/interrupti
 import { publishCampaignDispatchExpand, publishCampaignDispatchSend } from "@/lib/campaigns/dispatch/queue";
 import { CampaignDispatchSkipReasonEnum, type TCampaignDispatchSkipReasonEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
-import { campaignDispatchRecipients, campaignDispatches } from "@/services/drizzle/schema";
+import { campaignDispatchRecipients, campaignDispatches, interactions } from "@/services/drizzle/schema";
 import { and, count, desc, eq, inArray, sql } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
@@ -56,9 +56,29 @@ async function getCampaignDispatches({ input, session }: { input: TGetCampaignDi
 					.where(and(inArray(campaignDispatchRecipients.dispatchId, dispatchIds), eq(campaignDispatchRecipients.status, "PULADA")))
 					.groupBy(campaignDispatchRecipients.dispatchId, campaignDispatchRecipients.motivoPulo)
 			: [];
+	// Failures Meta reports after the send: the recipient row stays ENVIADA and only its interaction
+	// turns FALHOU, so `totalFalhados` (send-time failures, the ones "Reenviar falhas" requeues)
+	// never sees them. Counted apart so the row can show both without mixing what the retry covers.
+	const postSendFailureRows =
+		dispatchIds.length > 0
+			? await db
+					.select({ dispatchId: campaignDispatchRecipients.dispatchId, qtde: sql<number>`count(*)::int` })
+					.from(campaignDispatchRecipients)
+					.innerJoin(interactions, eq(interactions.id, campaignDispatchRecipients.interacaoId))
+					.where(
+						and(
+							inArray(campaignDispatchRecipients.dispatchId, dispatchIds),
+							eq(campaignDispatchRecipients.status, "ENVIADA"),
+							eq(interactions.statusEnvio, "FALHOU"),
+						),
+					)
+					.groupBy(campaignDispatchRecipients.dispatchId)
+			: [];
+	const postSendFailuresByDispatchId = new Map(postSendFailureRows.map((row) => [row.dispatchId, Number(row.qtde)]));
 
 	const items = dispatches.map((dispatch) => ({
 		...dispatch,
+		totalFalhasPosEnvio: postSendFailuresByDispatchId.get(dispatch.id) ?? 0,
 		pulosPorMotivo: skipRows
 			.filter((row) => row.dispatchId === dispatch.id && row.motivoPulo)
 			.map((row) => ({ motivo: row.motivoPulo as TCampaignDispatchSkipReasonEnum, qtde: Number(row.qtde) })),

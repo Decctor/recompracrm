@@ -5,6 +5,7 @@ import { appRoutes } from "@/lib/navigation/routes";
 import CampaignConfigView from "@/app/dashboard/growth/campaigns/_module/detail/campaign-config-view";
 import CampaignSurveyResultsView from "@/app/dashboard/growth/campaigns/_module/detail/campaign-survey-results-view";
 import PauseCampaignDialog from "@/app/dashboard/growth/campaigns/_module/detail/components/pause-campaign-dialog";
+import { getTriggerMeta } from "@/app/dashboard/growth/campaigns/_module/builder/helpers/triggers";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
@@ -15,7 +16,7 @@ import { updateCampaign } from "@/lib/mutations/campaigns";
 import { useCampaignById } from "@/lib/queries/campaigns";
 import { cn } from "@/lib/utils";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Check, Database, ListChecks, Pause, PlayIcon, TrendingUp } from "lucide-react";
+import { ArrowLeft, Check, Database, ListChecks, Megaphone, Pause, PlayIcon, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { parseAsStringEnum, useQueryState } from "nuqs";
 import { useState } from "react";
@@ -52,6 +53,8 @@ export default function CampaignResultPage({ campaignId, sessionUser, sessionUse
 	// Pesquisas abrem nas respostas: é o que o usuário veio ver.
 	const isSurvey = campaign.gatilhoTipo === "PESQUISA";
 	const activeView = viewMode ?? (isSurvey ? "survey" : "stats");
+	const trigger = getTriggerMeta(campaign.gatilhoTipo);
+	const TriggerIcon = trigger?.icon ?? Megaphone;
 
 	return (
 		<div className="flex h-full w-full flex-col gap-3">
@@ -63,11 +66,22 @@ export default function CampaignResultPage({ campaignId, sessionUser, sessionUse
 					</Link>
 				</Button>
 				<div className="flex w-full flex-col items-start justify-between gap-3 lg:flex-row">
-					<div className="flex flex-col items-start">
-						<h1 className="text-lg font-bold tracking-tight">{campaign.titulo}</h1>
-						{campaign.descricao ? <p className="text-sm font-medium tracking-tight text-muted-foreground">{campaign.descricao}</p> : null}
+					<div className="flex min-w-0 items-center gap-3">
+						<span className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-border bg-card" aria-hidden>
+							<TriggerIcon className="size-5 min-h-5 min-w-5" />
+						</span>
+						<div className="flex min-w-0 flex-col items-start">
+							<h1 className="text-lg font-bold tracking-tight">{campaign.titulo}</h1>
+							{campaign.descricao ? <p className="text-sm font-medium tracking-tight text-muted-foreground">{campaign.descricao}</p> : null}
+						</div>
 					</div>
-					<div className="flex items-center gap-2">
+					<div className="flex flex-wrap items-center gap-2">
+						{trigger ? (
+							<span className="flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-1.5 text-[0.65rem] font-bold tracking-tight uppercase">
+								<TriggerIcon className="size-3.5 min-h-3.5 min-w-3.5" />
+								{trigger.label}
+							</span>
+						) : null}
 						{campaign.ativo ? (
 							<>
 								<div className={cn("flex items-center gap-1.5 rounded-xl px-3 py-1.5 bg-green-500 text-white")}>

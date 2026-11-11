@@ -1,5 +1,7 @@
 import type { TGetCampaignConversionsInput, TGetCampaignConversionsOutput } from "@/app/api/campaigns/conversions/route";
 import type { TGetCampaignDispatchesInput, TGetCampaignDispatchesOutput } from "@/app/api/campaigns/dispatches/route";
+import type { TGetCampaignNextDispatchOutput } from "@/app/api/campaigns/dispatches/next/route";
+import type { TGetCampaignDispatchRecipientsInput, TGetCampaignDispatchRecipientsOutput } from "@/app/api/campaigns/dispatches/recipients/route";
 import type { TGetCampaignInteractionsInput, TGetCampaignInteractionsOutput } from "@/app/api/campaigns/interactions/route";
 import type { TGetCampaignsInput, TGetCampaignsOutput } from "@/app/api/campaigns/route";
 import type { TGetCampaignStatsInput, TGetCampaignStatsOutput } from "@/app/api/campaigns/stats/by-campaign/route";
@@ -391,6 +393,50 @@ export function useCampaignDispatches(input: TGetCampaignDispatchesInput) {
 	const queryKey = ["campaign-dispatches", input] as const;
 	return {
 		...useQuery({ queryKey, queryFn: async () => await fetchCampaignDispatches(input), refetchInterval: 30_000 }),
+		queryKey,
+	};
+}
+
+async function fetchCampaignDispatchRecipients(input: TGetCampaignDispatchRecipientsInput) {
+	const searchParams = new URLSearchParams();
+	searchParams.set("dispatchId", input.dispatchId);
+	if (input.situation) searchParams.set("situation", input.situation);
+	if (input.search) searchParams.set("search", input.search);
+	if (input.page && input.page > 1) searchParams.set("page", input.page.toString());
+	const { data } = await axios.get<TGetCampaignDispatchRecipientsOutput>(`/api/campaigns/dispatches/recipients?${searchParams.toString()}`);
+	return data.data;
+}
+
+export function useCampaignDispatchRecipients({ dispatchId, enabled = true }: { dispatchId: string; enabled?: boolean }) {
+	const [params, setParams] = useState<Omit<TGetCampaignDispatchRecipientsInput, "dispatchId">>({ situation: null, search: null, page: 1 });
+	function updateParams(newParams: Partial<Omit<TGetCampaignDispatchRecipientsInput, "dispatchId">>) {
+		// Changing the tab or the search goes back to the first page.
+		setParams((prev) => ({ ...prev, page: 1, ...newParams }));
+	}
+	const debouncedParams = useDebounceMemo(params, 500);
+	const queryKey = ["campaign-dispatch-recipients", dispatchId, debouncedParams] as const;
+	return {
+		...useQuery({
+			queryKey,
+			queryFn: async () => await fetchCampaignDispatchRecipients({ dispatchId, ...debouncedParams }),
+			enabled,
+			placeholderData: (previous) => previous,
+		}),
+		queryKey,
+		params,
+		updateParams,
+	};
+}
+
+async function fetchCampaignNextDispatch(campaignId: string) {
+	const { data } = await axios.get<TGetCampaignNextDispatchOutput>(`/api/campaigns/dispatches/next?campaignId=${campaignId}`);
+	return data.data;
+}
+
+export function useCampaignNextDispatch({ campaignId }: { campaignId: string }) {
+	const queryKey = ["campaign-next-dispatch", campaignId] as const;
+	return {
+		...useQuery({ queryKey, queryFn: async () => await fetchCampaignNextDispatch(campaignId) }),
 		queryKey,
 	};
 }
