@@ -79,7 +79,7 @@ export function Caption({ chunk, time, frame }: { chunk: TCaptionChunk; time: nu
 	const { fps } = useVideoConfig();
 	const appear = pop(frame, fps);
 	return (
-		<div style={{ position: "absolute", top: 1290, left: 60, right: 60, display: "flex", justifyContent: "center" }}>
+		<div style={{ position: "absolute", top: 1450, left: 60, right: 60, display: "flex", justifyContent: "center" }}>
 			<div
 				style={{
 					transform: `scale(${0.85 + appear * 0.15})`,
@@ -120,7 +120,7 @@ export function SourcePill({ text, frame }: { text: string; frame: number }) {
 	const { fps } = useVideoConfig();
 	const appear = pop(frame, fps, 6);
 	return (
-		<div style={{ position: "absolute", top: 1430, left: 0, right: 0, display: "flex", justifyContent: "center", opacity: appear }}>
+		<div style={{ position: "absolute", top: 1565, left: 0, right: 0, display: "flex", justifyContent: "center", opacity: appear }}>
 			<div
 				style={{
 					background: "#ffffff",

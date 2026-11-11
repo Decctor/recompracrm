@@ -17,7 +17,8 @@ o RecompraCRM. O produto entra no final, como o jeito mais fácil de fazer aquil
 
 **Caramelo** — o narrador. Vira-lata caramelo, cachorro da loja, deitado na porta. Vê todo cliente
 entrar e sair, lembra de quem não aparece há tempo, e por isso entende de recompra melhor que
-qualquer consultor. Lenço azul RecompraCRM com uma plaquinha dourada em forma de moeda.
+qualquer consultor. Coleira azul da marca com a plaquinha que é o ícone do RecompraCRM (o círculo azul com as
+cinco barras), igual ao `icon-badge`.
 
 - Fala em primeira pessoa, frases curtas, português do balcão ("pra", "tá", "a gente"), com energia:
   exclamação, "Olha só!", "Calma, Márcia!". A voz é animada e rápida (ver `voice.config.json`).
