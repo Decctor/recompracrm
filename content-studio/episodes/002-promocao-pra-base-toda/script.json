@@ -1,0 +1,172 @@
+{
+	"id": "002-promocao-pra-base-toda",
+	"title": "Promoção pra base inteira no WhatsApp × aviso de saldo",
+	"format": "balcao",
+	"segment": "sorveteria",
+	"scene": "sorveteria",
+	"owner": {
+		"name": "Márcia",
+		"look": "marcia"
+	},
+	"counter": {
+		"label": "WHATSAPP NO MÊS",
+		"better": "down"
+	},
+	"beats": [
+		{
+			"say": "Dois mil contatos no WhatsApp, e a Márcia mandando promoção pra todo mundo. Duas vezes por mês.",
+			"label": "2.000 CONTATOS, 2× POR MÊS",
+			"shot": "owner",
+			"owner": {
+				"pose": "phone",
+				"mood": "hopeful"
+			},
+			"counter": "R$ 0"
+		},
+		{
+			"say": "Daqui da porta eu vi a conta chegar.",
+			"label": "A CONTA DA META",
+			"shot": "both",
+			"owner": {
+				"pose": "phone",
+				"mood": "worried"
+			},
+			"dog": {
+				"pose": "sit",
+				"mood": "worried"
+			},
+			"counter": "R$ 0"
+		},
+		{
+			"say": "Mensagem de marketing custa uns trinta e dois centavos cada. Quatro mil mensagens: quase mil e trezentos reais.",
+			"label": "MARKETING",
+			"shot": "dog",
+			"dog": {
+				"pose": "point",
+				"mood": "worried"
+			},
+			"card": {
+				"kind": "math",
+				"rows": [
+					{
+						"label": "Mensagens",
+						"value": "4.000"
+					},
+					{
+						"label": "Cada uma",
+						"value": "R$ 0,3217"
+					},
+					{
+						"label": "No mês",
+						"value": "R$ 1.286,80",
+						"strong": true,
+						"bad": true
+					}
+				]
+			},
+			"source": "Tabela de preços da Meta para o Brasil, out/2026",
+			"counter": "R$ 1.286,80"
+		},
+		{
+			"say": "Agora, um aviso de saldo: seu cashback vence sexta. Isso é mensagem de utilidade, e custa três centavos e meio.",
+			"label": "UTILIDADE",
+			"shot": "dog",
+			"dog": {
+				"pose": "point",
+				"mood": "happy"
+			},
+			"card": {
+				"kind": "math",
+				"rows": [
+					{
+						"label": "Mensagens",
+						"value": "2.000"
+					},
+					{
+						"label": "Cada uma",
+						"value": "R$ 0,035"
+					},
+					{
+						"label": "No mês",
+						"value": "R$ 70,00",
+						"strong": true
+					}
+				]
+			},
+			"source": "Tabela de preços da Meta para o Brasil, out/2026",
+			"counter": "R$ 70,00"
+		},
+		{
+			"say": "Marketing sai umas nove vezes mais caro. E o aviso de saldo ainda dá um motivo de verdade pra voltar.",
+			"label": "≈ 9× MAIS CARO",
+			"shot": "dog",
+			"dog": {
+				"pose": "sit",
+				"mood": "explain"
+			},
+			"card": {
+				"kind": "stat",
+				"value": "≈ 9×",
+				"caption": "marketing custa mais que utilidade"
+			},
+			"source": "Tabela de preços da Meta para o Brasil, out/2026",
+			"counter": "R$ 70,00"
+		},
+		{
+			"say": "Só não coloca promoção no aviso: aí a Meta cobra como marketing.",
+			"label": "AVISO SEM PROMOÇÃO",
+			"shot": "dog",
+			"dog": {
+				"pose": "point",
+				"mood": "explain"
+			},
+			"card": {
+				"kind": "compare",
+				"rows": [
+					{
+						"text": "Seu cashback de R$ 12 vence sexta",
+						"mark": "check"
+					},
+					{
+						"text": "…e hoje tem 20% em tudo!",
+						"mark": "cross"
+					}
+				]
+			},
+			"source": "Meta for Developers, categorias de modelo",
+			"counter": "R$ 70,00"
+		},
+		{
+			"say": "O aviso de cashback vencendo dispara sozinho no RecompraCRM, só pra quem tem saldo.",
+			"label": "NO RECOMPRACRM",
+			"shot": "app",
+			"owner": {
+				"pose": "phone",
+				"mood": "happy"
+			},
+			"app": {
+				"headline": "AVISO DE SALDO AUTOMÁTICO NO",
+				"screen": "campaign-whatsapp"
+			}
+		},
+		{
+			"say": "Quanto custa o WhatsApp da sua loja? Tem calculadora no link da bio. E segue o Caramelo!",
+			"label": "CALCULA O SEU",
+			"shot": "outro",
+			"dog": {
+				"pose": "wave",
+				"mood": "happy"
+			}
+		}
+	],
+	"instagram": {
+		"caption": "Promoção pra base inteira, duas vezes por mês 📲\nNa tabela da Meta para o Brasil (out/2026), mensagem de marketing custa R$ 0,3217 e de utilidade R$ 0,035: 4.000 promoções dão R$ 1.286,80, e um aviso de saldo pra 2.000 clientes dá R$ 70. Só não misture promoção no aviso, ou ele é cobrado como marketing.\nQuantas mensagens sua loja manda por mês?\nCalculadora de custo do WhatsApp no link da bio.",
+		"hashtags": [
+			"#varejo",
+			"#whatsappbusiness",
+			"#cashback",
+			"#sorveteria",
+			"#pequenonegocio"
+		]
+	}
+}

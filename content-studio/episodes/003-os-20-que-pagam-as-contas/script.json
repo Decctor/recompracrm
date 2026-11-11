@@ -1,0 +1,120 @@
+{
+	"id": "003-os-20-que-pagam-as-contas",
+	"title": "Os 20% que pagam as contas (e metade deles some)",
+	"format": "balcao",
+	"segment": "sorveteria",
+	"scene": "sorveteria",
+	"owner": {
+		"name": "Márcia",
+		"look": "marcia"
+	},
+	"beats": [
+		{
+			"say": "A Márcia trata todo cliente igual. Bonito. Mas a conta não é igual.",
+			"label": "TODO CLIENTE IGUAL?",
+			"shot": "owner",
+			"owner": {
+				"pose": "idle",
+				"mood": "happy"
+			}
+		},
+		{
+			"say": "Eu conheço todo mundo que passa por essa porta. E tem uma turma que aparece toda semana.",
+			"label": "A TURMA DE SEMPRE",
+			"shot": "both",
+			"owner": {
+				"pose": "idle",
+				"mood": "hopeful"
+			},
+			"dog": {
+				"pose": "sit",
+				"mood": "happy"
+			}
+		},
+		{
+			"say": "Em estudo com várias marcas, os vinte por cento que mais compram fizeram de sessenta e cinco a setenta e três por cento das vendas.",
+			"label": "OS 20% DO TOPO",
+			"shot": "dog",
+			"dog": {
+				"pose": "point",
+				"mood": "explain"
+			},
+			"card": {
+				"kind": "stat",
+				"value": "65–73%",
+				"caption": "das vendas vêm dos 20% que mais compram"
+			},
+			"source": "Kim, Singh e Winer, 2017"
+		},
+		{
+			"say": "Só que metade desse grupo do topo já não está lá no ano seguinte.",
+			"label": "E METADE SOME",
+			"shot": "dog",
+			"dog": {
+				"pose": "sit",
+				"mood": "worried"
+			},
+			"card": {
+				"kind": "stat",
+				"value": "½",
+				"caption": "dos maiores compradores sai do topo no ano seguinte",
+				"mark": "cross"
+			},
+			"source": "Sharp, Romaniuk e Graham, 2019"
+		},
+		{
+			"say": "Então não basta saber quem são os melhores. Tem que perceber quem está esfriando, antes de virar ex-cliente.",
+			"label": "QUEM ESTÁ ESFRIANDO?",
+			"shot": "dog",
+			"dog": {
+				"pose": "point",
+				"mood": "explain"
+			},
+			"card": {
+				"kind": "compare",
+				"rows": [
+					{
+						"text": "Mensagem igual pra base toda",
+						"mark": "cross"
+					},
+					{
+						"text": "Atenção pra quem parou de vir",
+						"mark": "check"
+					}
+				]
+			}
+		},
+		{
+			"say": "No RecompraCRM, a matriz separa sozinha os campeões de quem está em risco.",
+			"label": "NO RECOMPRACRM",
+			"shot": "app",
+			"owner": {
+				"pose": "phone",
+				"mood": "happy"
+			},
+			"app": {
+				"headline": "CAMPEÕES E CLIENTES EM RISCO NO",
+				"screen": "rfm-segments"
+			}
+		},
+		{
+			"say": "Você sabe quem são os seus vinte por cento? Conta aqui. E segue o Caramelo!",
+			"label": "QUEM SÃO OS SEUS?",
+			"shot": "outro",
+			"dog": {
+				"pose": "wave",
+				"mood": "happy"
+			}
+		}
+	],
+	"instagram": {
+		"caption": "Todo cliente é igual? Na conta, não 🍦\nEm estudo com várias marcas, os 20% que mais compram fizeram de 65% a 73% das vendas (Kim, Singh e Winer, 2017). E metade desse grupo sai do topo no ano seguinte (Sharp, Romaniuk e Graham, 2019). Não basta saber quem são: tem que ver quem está esfriando.\nVocê sabe quem são os seus 20%?\nLink na bio.",
+		"hashtags": [
+			"#varejo",
+			"#fidelizacao",
+			"#crm",
+			"#sorveteria",
+			"#pequenonegocio"
+		]
+	}
+}
