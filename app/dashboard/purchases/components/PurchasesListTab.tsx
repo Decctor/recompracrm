@@ -9,7 +9,7 @@ import GeneralPaginationComponent from "@/components/Utils/Pagination";
 import { getErrorMessage } from "@/lib/errors";
 import { appRoutes } from "@/lib/navigation/routes";
 import { DEFAULT_PURCHASES_FILTERS, usePurchases } from "@/lib/queries/purchases";
-import { ShoppingCart } from "lucide-react";
+import { Plus, ShoppingCart } from "lucide-react";
 import Link from "next/link";
 import PurchaseListCard from "./PurchaseListCard";
 import PurchasesInlineFilters from "./PurchasesInlineFilters";
@@ -31,12 +31,22 @@ export default function PurchasesListTab({ canCreate }: { canCreate: boolean }) 
 	return (
 		<div className="flex w-full flex-col gap-3">
 			<div className="flex w-full flex-col gap-2">
-				<Input
-					value={filters.search ?? ""}
-					placeholder="Pesquisar por título, fornecedor ou nº da nota..."
-					onChange={(event) => updateFilters({ search: event.target.value, page: 1 })}
-					className="rounded-full"
-				/>
+				<div className="flex w-full flex-col-reverse items-center gap-2 lg:flex-row">
+					<Input
+						value={filters.search ?? ""}
+						placeholder="Pesquisar por título, fornecedor ou nº da nota..."
+						onChange={(event) => updateFilters({ search: event.target.value, page: 1 })}
+						className="grow rounded-xl"
+					/>
+					{canCreate ? (
+						<Button className="flex w-full items-center gap-2 lg:w-fit" size="sm" asChild>
+							<Link href={appRoutes.newPurchase()}>
+								<Plus className="h-4 w-4 min-h-4 min-w-4" />
+								NOVA COMPRA
+							</Link>
+						</Button>
+					) : null}
+				</div>
 				<PurchasesInlineFilters filters={filters} updateFilters={updateFilters} />
 			</div>
 			<GeneralPaginationComponent

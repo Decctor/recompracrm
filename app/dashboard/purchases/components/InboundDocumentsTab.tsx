@@ -133,16 +133,16 @@ export default function InboundDocumentsTab({ canCreatePurchase, canManifest }: 
 		<div className="flex w-full flex-col gap-3">
 			<InboundGuide />
 			<div className="flex w-full flex-col gap-2">
-				<div className="flex items-center gap-2">
+				<div className="flex w-full flex-col-reverse items-center gap-2 lg:flex-row">
 					<Input
 						value={filters.search ?? ""}
 						placeholder="Pesquisar por fornecedor, CNPJ, nº ou chave da nota..."
 						onChange={(event) => updateFilters({ search: event.target.value })}
-						className="rounded-full"
+						className="grow rounded-xl"
 					/>
-					<Button variant="outline" className="shrink-0 rounded-full" disabled={syncPending} onClick={() => requestSync()}>
+					<Button variant="outline" size="sm" className="flex w-full items-center gap-2 lg:w-fit" disabled={syncPending} onClick={() => requestSync()}>
 						<RefreshCcw className={cn("h-3.5 w-3.5", syncPending && "animate-spin")} />
-						Sincronizar
+						SINCRONIZAR AGORA
 					</Button>
 				</div>
 				<InboundDocumentsInlineFilters filters={filters} updateFilters={updateFilters} lastSync={data?.ultimaSincronizacao ?? null} />

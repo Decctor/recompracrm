@@ -67,7 +67,7 @@ export default function PurchaseListCard({ purchase }: { purchase: TPurchaseList
 		<Link
 			href={appRoutes.purchase(purchase.id)}
 			className={cn(
-				"group flex w-full flex-wrap items-center gap-x-5 gap-y-3.5 rounded-3xl border border-border bg-card px-4 py-4 shadow-2xs transition-[box-shadow,border-color] hover:border-primary/35 hover:shadow-sm sm:px-[18px]",
+				"group flex w-full flex-wrap items-center gap-x-5 gap-y-3.5 rounded-3xl border border-border bg-card px-4 py-4 shadow-2xs transition-all hover:border-border hover:shadow-sm sm:px-[18px]",
 				isDraft && "border-dashed",
 			)}
 		>

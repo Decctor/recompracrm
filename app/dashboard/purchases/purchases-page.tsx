@@ -1,10 +1,7 @@
 "use client";
-import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { TAuthUserSession } from "@/lib/authentication/types";
-import { appRoutes } from "@/lib/navigation/routes";
-import { Plus, ShoppingCart, Truck } from "lucide-react";
-import Link from "next/link";
+import { ShoppingCart, Truck } from "lucide-react";
 import { parseAsStringEnum, useQueryState } from "nuqs";
 import InboundDocumentsTab from "./components/InboundDocumentsTab";
 import PurchasesListTab from "./components/PurchasesListTab";
@@ -26,31 +23,19 @@ export default function PurchasesPage({ membership }: PurchasesPageProps) {
 	const tab: TPurchasesTab = canSeeInbound ? tabParam : "compras";
 
 	return (
-		<Tabs value={tab} onValueChange={(value) => void setTab(value as TPurchasesTab)} className="flex w-full flex-col gap-4 tabular-nums">
-			<div className="flex flex-wrap items-center justify-between gap-3">
-				{canSeeInbound ? (
-					<TabsList className="h-11 rounded-[18px] bg-muted p-1">
-						<TabsTrigger value="compras" className="h-9 gap-2 rounded-[14px] px-3.5 text-sm font-semibold">
-							<ShoppingCart className="h-4 w-4 min-h-4 min-w-4" />
-							Compras
-						</TabsTrigger>
-						<TabsTrigger value="notas" className="h-9 gap-2 rounded-[14px] px-3.5 text-sm font-semibold">
-							<Truck className="h-4 w-4 min-h-4 min-w-4" />
-							Notas recebidas
-						</TabsTrigger>
-					</TabsList>
-				) : (
-					<span />
-				)}
-				{canCreatePurchase ? (
-					<Button asChild className="h-10 rounded-2xl px-[18px] font-bold shadow-sm">
-						<Link href={appRoutes.newPurchase()}>
-							<Plus className="h-4 w-4 min-h-4 min-w-4" />
-							Nova compra
-						</Link>
-					</Button>
-				) : null}
-			</div>
+		<Tabs value={tab} onValueChange={(value) => void setTab(value as TPurchasesTab)} className="flex w-full flex-col gap-3 tabular-nums">
+			{canSeeInbound ? (
+				<TabsList variant="page">
+					<TabsTrigger value="compras">
+						<ShoppingCart className="h-4 w-4 min-h-4 min-w-4" />
+						COMPRAS
+					</TabsTrigger>
+					<TabsTrigger value="notas">
+						<Truck className="h-4 w-4 min-h-4 min-w-4" />
+						NOTAS RECEBIDAS
+					</TabsTrigger>
+				</TabsList>
+			) : null}
 			<TabsContent value="compras" className="w-full">
 				<PurchasesListTab canCreate={canCreatePurchase} />
 			</TabsContent>
