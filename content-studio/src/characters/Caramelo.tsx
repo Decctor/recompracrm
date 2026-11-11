@@ -90,16 +90,17 @@ export function Caramelo({ pose, mood, mouth, frame, gesture }: CarameloProps) {
 
 				{/* cabeça */}
 				<g transform={`rotate(${headTilt} 300 430)`}>
-					<Bandana />
+					<Collar t={t} />
 
 					{/* orelha em pé (esquerda), com a pontinha dobrada */}
 					<g transform={`rotate(${-6 - earDrop * 38 + Math.sin(t * 3) * 2} 205 215)`}>
 						<path d="M168,236 C150,170 150,110 172,86 C198,104 238,150 262,196 Z" fill={FUR_DARK} {...STROKE} />
 						<path d="M172,86 C186,96 198,108 206,120 C190,122 178,116 172,86 Z" fill={FUR} {...STROKE} strokeWidth={5} />
 					</g>
-					{/* orelha caída (direita) */}
-					<g transform={`rotate(${4 + earDrop * 14 + Math.sin(t * 2.6 + 1) * 3} 395 205)`}>
-						<path d="M352,176 C410,160 470,190 480,250 C488,300 470,336 446,330 C430,300 404,250 352,226 Z" fill={FUR_DARK} {...STROKE} />
+					{/* orelha em pé (direita): espelho da esquerda, com movimento próprio para não parecerem coladas */}
+					<g transform={`rotate(${6 + earDrop * 38 + Math.sin(t * 2.6 + 1) * 2.5} 395 215)`}>
+						<path d="M432,236 C450,170 450,110 428,86 C402,104 362,150 338,196 Z" fill={FUR_DARK} {...STROKE} />
+						<path d="M428,86 C414,96 402,108 394,120 C410,122 422,116 428,86 Z" fill={FUR} {...STROKE} strokeWidth={5} />
 					</g>
 
 					<path d="M300,140 C402,140 462,204 462,292 C462,382 394,432 300,432 C206,432 138,382 138,292 C138,204 198,140 300,140 Z" fill={FUR} {...STROKE} />
@@ -122,16 +123,34 @@ export function Caramelo({ pose, mood, mouth, frame, gesture }: CarameloProps) {
 	);
 }
 
-function Bandana() {
+// Barras do ícone da marca (utils/svgs/logos/icon-badge-color.svg), na geometria original de 175×175.
+const BRAND_BARS = [
+	{ x: 34.6179, y: 73.6611, h: 27.6792, fill: "#E7000B" },
+	{ x: 56.4456, y: 55.208, h: 64.5848, fill: "#ffffff" },
+	{ x: 78.2736, y: 69.0479, h: 36.9056, fill: "#E7000B" },
+	{ x: 100.101, y: 55.208, h: 64.5848, fill: COLORS.gold },
+	{ x: 121.929, y: 73.6611, h: 27.6792, fill: "#ffffff" },
+];
+
+/** Coleira azul com a plaquinha que é o ícone da marca: círculo azul e as cinco barras do símbolo. */
+function Collar({ t }: { t: number }) {
+	const tagR = 44;
+	const swing = Math.sin(t * 2.2) * 4;
 	return (
 		<g>
-			<path d="M206,408 C250,430 350,430 394,408 L388,446 C350,462 250,462 212,446 Z" fill={COLORS.cobalt} {...STROKE} />
-			<path d="M236,440 L300,528 L364,440 Z" fill={COLORS.cobalt} {...STROKE} />
-			<circle cx={300} cy={492} r={27} fill={COLORS.gold} {...STROKE} strokeWidth={6} />
-			<circle cx={300} cy={492} r={17} fill="none" stroke={COLORS.goldDark} strokeWidth={4} />
-			{/* seta de volta: o cliente que retorna */}
-			<path d="M291,486 A10,10 0 1 1 296,501" fill="none" stroke={COLORS.goldDark} strokeWidth={4} strokeLinecap="round" />
-			<path d="M286,481 L291,487 L297,482" fill="none" stroke={COLORS.goldDark} strokeWidth={4} strokeLinecap="round" strokeLinejoin="round" />
+			<path d="M208,408 C250,432 350,432 392,408 L388,444 C350,464 250,464 212,444 Z" fill={COLORS.cobalt} {...STROKE} />
+			{/* pesponto dourado */}
+			<path d="M216,428 C254,448 346,448 384,428" fill="none" stroke={COLORS.gold} strokeWidth={4} strokeDasharray="10 9" strokeLinecap="round" />
+			<g transform={`rotate(${swing} 300 456)`}>
+				<circle cx={300} cy={460} r={11} fill="none" stroke="#c9d1d4" strokeWidth={6} />
+				<circle cx={300} cy={460 + 8 + tagR} r={tagR + 5} fill="#ffffff" {...STROKE} strokeWidth={6} />
+				<g transform={`translate(300 ${460 + 8 + tagR}) scale(${(tagR * 2) / 175}) translate(-87.5 -87.5)`}>
+					<rect width={175} height={175} rx={87.5} fill={COLORS.cobalt} />
+					{BRAND_BARS.map((bar) => (
+						<rect key={bar.x} x={bar.x} y={bar.y} width={18.4528} height={bar.h} rx={9.22641} fill={bar.fill} />
+					))}
+				</g>
+			</g>
 		</g>
 	);
 }
