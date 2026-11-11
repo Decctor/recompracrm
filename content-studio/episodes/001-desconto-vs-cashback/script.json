@@ -4,117 +4,253 @@
 	"format": "balcao",
 	"segment": "sorveteria",
 	"scene": "sorveteria",
-	"owner": { "name": "Márcia", "look": "marcia" },
-	"counter": { "label": "LUCRO POR PICOLÉ" },
+	"owner": {
+		"name": "Márcia",
+		"look": "marcia"
+	},
+	"counter": {
+		"label": "LUCRO POR PICOLÉ"
+	},
 	"beats": [
 		{
-			"say": "Julho, sorveteria vazia, e a Márcia pendurou a placa: dez por cento de desconto em tudo.",
-			"label": "SORVETERIA EM JULHO",
+			"say": "A loja lotou… e o lucro sumiu!",
+			"speaker": "owner",
+			"tone": "annoyed, frustrated, complaining fast",
+			"label": "DEU DESCONTO E O LUCRO SUMIU?",
 			"shot": "owner",
-			"owner": { "pose": "sign", "mood": "hopeful" },
-			"counter": "R$ 3,00"
+			"owner": {
+				"pose": "sign",
+				"mood": "annoyed"
+			}
 		},
 		{
-			"say": "Eu sou o Caramelo, e daqui da porta eu vejo tudo. Veio gente? Veio.",
-			"label": "VEIO GENTE?",
+			"say": "Calma, Márcia! Dez por cento em tudo? Eu vi daqui da porta. Olha a conta do picolé!",
+			"speaker": "dog",
+			"label": "EU VI TUDO DAQUI DA PORTA",
 			"shot": "both",
-			"owner": { "pose": "idle", "mood": "happy" },
-			"dog": { "pose": "sit", "mood": "happy" },
-			"counter": "R$ 3,00"
+			"owner": {
+				"pose": "idle",
+				"mood": "annoyed"
+			},
+			"dog": {
+				"pose": "sit",
+				"mood": "happy"
+			}
 		},
 		{
-			"say": "Mas olha o picolé. Ele custa sete reais pra ela e sai por dez. Sobram três de lucro.",
+			"say": "Custa sete, você vende por dez: sobram três de lucro.",
+			"speaker": "dog",
 			"label": "PICOLÉ DE R$ 10",
 			"shot": "dog",
-			"dog": { "pose": "point", "mood": "explain" },
+			"dog": {
+				"pose": "point",
+				"mood": "explain"
+			},
 			"card": {
 				"kind": "math",
 				"rows": [
-					{ "label": "Preço", "value": "R$ 10,00" },
-					{ "label": "Custo", "value": "− R$ 7,00" },
-					{ "label": "Lucro", "value": "R$ 3,00", "strong": true }
+					{
+						"label": "Preço",
+						"value": "R$ 10,00"
+					},
+					{
+						"label": "Custo",
+						"value": "− R$ 7,00"
+					},
+					{
+						"label": "Lucro",
+						"value": "R$ 3,00",
+						"strong": true
+					}
 				]
 			},
 			"counter": "R$ 3,00"
 		},
 		{
-			"say": "Com o desconto, ele sai por nove. Sobram dois.",
+			"say": "Com dez por cento de desconto, sai por nove. Sobram dois!",
+			"speaker": "dog",
+			"tone": "dramatic, surprised, fast",
 			"label": "COM 10% DE DESCONTO",
 			"shot": "dog",
-			"dog": { "pose": "point", "mood": "worried" },
+			"dog": {
+				"pose": "point",
+				"mood": "worried"
+			},
 			"card": {
 				"kind": "math",
 				"rows": [
-					{ "label": "Preço", "value": "R$ 9,00" },
-					{ "label": "Custo", "value": "− R$ 7,00" },
-					{ "label": "Lucro", "value": "R$ 2,00", "strong": true, "bad": true }
+					{
+						"label": "Preço",
+						"value": "R$ 9,00"
+					},
+					{
+						"label": "Custo",
+						"value": "− R$ 7,00"
+					},
+					{
+						"label": "Lucro",
+						"value": "R$ 2,00",
+						"strong": true,
+						"bad": true
+					}
 				]
 			},
 			"counter": "R$ 2,00"
 		},
 		{
-			"say": "Um terço do lucro foi embora. Em toda venda, até de quem ia comprar de qualquer jeito.",
-			"label": "EM TODA VENDA",
+			"say": "Pera… um terço do meu lucro?!",
+			"speaker": "owner",
+			"tone": "shocked, disbelief",
+			"label": "−⅓ DO LUCRO",
 			"shot": "owner",
-			"owner": { "pose": "idle", "mood": "worried" },
-			"card": { "kind": "stat", "value": "−⅓", "caption": "do lucro, em cada picolé", "mark": "cross" },
+			"owner": {
+				"pose": "worried",
+				"mood": "worried"
+			},
+			"card": {
+				"kind": "stat",
+				"value": "−⅓",
+				"caption": "do lucro, em cada picolé",
+				"mark": "cross"
+			},
 			"source": "Conta com custo de R$ 7 e preço de R$ 10",
 			"counter": "R$ 2,00"
 		},
 		{
-			"say": "Agora, com cinco por cento de cashback: ela cobra os dez reais, e o cliente leva cinquenta centavos de crédito pra próxima visita.",
-			"label": "AGORA, CASHBACK DE 5%",
+			"say": "Em toda venda! Até de quem ia comprar de qualquer jeito.",
+			"speaker": "dog",
+			"label": "EM TODA VENDA",
+			"shot": "both",
+			"owner": {
+				"pose": "worried",
+				"mood": "worried"
+			},
+			"dog": {
+				"pose": "sit",
+				"mood": "explain"
+			},
+			"counter": "R$ 2,00"
+		},
+		{
+			"say": "Agora troca por cinco por cento de cashback: você cobra os dez reais, e o cliente leva cinquenta centavos pra próxima visita.",
+			"speaker": "dog",
+			"label": "TROCA POR 5% DE CASHBACK",
 			"shot": "dog",
-			"dog": { "pose": "point", "mood": "happy" },
+			"dog": {
+				"pose": "point",
+				"mood": "happy"
+			},
 			"card": {
 				"kind": "math",
 				"rows": [
-					{ "label": "Preço", "value": "R$ 10,00" },
-					{ "label": "Lucro hoje", "value": "R$ 3,00", "strong": true },
-					{ "label": "Crédito pra próxima", "value": "R$ 0,50", "accent": true }
+					{
+						"label": "Preço",
+						"value": "R$ 10,00"
+					},
+					{
+						"label": "Lucro hoje",
+						"value": "R$ 3,00",
+						"strong": true
+					},
+					{
+						"label": "Crédito pra próxima",
+						"value": "R$ 0,50",
+						"accent": true
+					}
 				]
 			},
 			"counter": "R$ 3,00"
 		},
 		{
-			"say": "E esse crédito só custa quando o cliente volta. Que é justamente o que a Márcia quer.",
+			"say": "E quando esse crédito me custa?",
+			"speaker": "owner",
+			"tone": "curious, suspicious",
+			"label": "E QUANDO ISSO CUSTA?",
+			"shot": "both",
+			"owner": {
+				"pose": "idle",
+				"mood": "hopeful"
+			},
+			"dog": {
+				"pose": "sit",
+				"mood": "happy"
+			},
+			"counter": "R$ 3,00"
+		},
+		{
+			"say": "Só quando ele volta. Que é exatamente o que você quer!",
+			"speaker": "dog",
 			"label": "SÓ CUSTA SE ELE VOLTAR",
 			"shot": "dog",
-			"dog": { "pose": "sit", "mood": "explain" },
+			"dog": {
+				"pose": "sit",
+				"mood": "happy"
+			},
 			"card": {
 				"kind": "compare",
 				"rows": [
-					{ "text": "Desconto: paga a venda de hoje", "mark": "cross" },
-					{ "text": "Cashback: paga a volta", "mark": "check" }
+					{
+						"text": "Desconto: paga a venda de hoje",
+						"mark": "cross"
+					},
+					{
+						"text": "Cashback: paga a volta",
+						"mark": "check"
+					}
 				]
 			},
 			"counter": "R$ 3,00"
 		},
 		{
-			"say": "E quase nove em cada dez brasileiros já usam algum programa de fidelidade.",
+			"say": "E quase nove em cada dez brasileiros já usam programa de fidelidade.",
+			"speaker": "dog",
 			"label": "O CLIENTE JÁ ESPERA",
 			"shot": "dog",
-			"dog": { "pose": "sit", "mood": "happy" },
-			"card": { "kind": "stat", "value": "88,3%", "caption": "dos brasileiros usam programas de fidelidade" },
+			"dog": {
+				"pose": "point",
+				"mood": "explain"
+			},
+			"card": {
+				"kind": "stat",
+				"value": "88,3%",
+				"caption": "dos brasileiros usam programas de fidelidade"
+			},
 			"source": "ABEMF/Valuenet, 2025",
 			"counter": "R$ 3,00"
 		},
 		{
-			"say": "Percentual, validade do crédito e aviso de saldo no WhatsApp: tudo isso você configura no RecompraCRM.",
+			"say": "Percentual, validade e aviso de saldo no WhatsApp: tudo no RecompraCRM.",
+			"speaker": "dog",
 			"label": "NO RECOMPRACRM",
 			"shot": "app",
-			"owner": { "pose": "phone", "mood": "happy" },
-			"app": { "headline": "CASHBACK CONFIGURADO NO", "screen": "cashback-settings" }
+			"owner": {
+				"pose": "phone",
+				"mood": "happy"
+			},
+			"app": {
+				"headline": "CASHBACK CONFIGURADO NO",
+				"screen": "cashback-settings"
+			}
 		},
 		{
-			"say": "Quer fazer a conta da sua loja? A calculadora tá no link da bio. E segue o Caramelo pra ver a próxima!",
+			"say": "Faz a conta da sua loja: calculadora no link da bio. E segue o Caramelo!",
+			"speaker": "dog",
 			"label": "FAZ A CONTA DA SUA LOJA",
 			"shot": "outro",
-			"dog": { "pose": "wave", "mood": "happy" }
+			"dog": {
+				"pose": "wave",
+				"mood": "happy"
+			}
 		}
 	],
 	"instagram": {
-		"caption": "Julho, sorveteria vazia, e a placa de 10% em tudo 🍦\nNo picolé de R$ 10 que custa R$ 7, o desconto leva um terço do lucro de toda venda, até de quem ia comprar de qualquer jeito. Com 5% de cashback, a loja cobra o preço cheio e o crédito de R$ 0,50 só custa quando o cliente volta.\nNa sua loja, o que traz mais gente: desconto ou cashback?\nCalculadora de cashback no link da bio.",
-		"hashtags": ["#varejo", "#fidelizacao", "#cashback", "#sorveteria", "#pequenonegocio"]
+		"caption": "Deu 10% de desconto em tudo, a loja lotou… e o lucro sumiu? 🍦\nNo picolé de R$ 10 que custa R$ 7, o desconto leva um terço do lucro de toda venda, até de quem ia comprar de qualquer jeito. Com 5% de cashback, a loja cobra o preço cheio e o crédito de R$ 0,50 só custa quando o cliente volta.\nNa sua loja, o que traz mais gente: desconto ou cashback?\nCalculadora de cashback no link da bio.",
+		"hashtags": [
+			"#varejo",
+			"#fidelizacao",
+			"#cashback",
+			"#sorveteria",
+			"#pequenonegocio"
+		]
 	}
 }

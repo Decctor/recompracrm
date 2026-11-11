@@ -14,17 +14,19 @@
 	},
 	"beats": [
 		{
-			"say": "A Márcia quis ser boazinha: cashback que vale um ano inteiro.",
-			"label": "VALE 1 ANO",
+			"say": "Dei cashback que vale um ano inteiro… e ninguém volta pra usar!",
+			"speaker": "owner",
+			"tone": "annoyed, frustrated, complaining fast",
+			"label": "DEU CASHBACK E NINGUÉM VOLTA?",
 			"shot": "owner",
 			"owner": {
 				"pose": "idle",
-				"mood": "hopeful"
-			},
-			"counter": "365 dias"
+				"mood": "annoyed"
+			}
 		},
 		{
-			"say": "Resultado? Ninguém tem pressa. Eu fico na porta esperando, e nada.",
+			"say": "Claro, Márcia! Com um ano de prazo, ninguém tem pressa. Eu fico na porta esperando, e nada.",
+			"speaker": "dog",
 			"label": "NINGUÉM TEM PRESSA",
 			"shot": "both",
 			"owner": {
@@ -39,6 +41,7 @@
 		},
 		{
 			"say": "A validade tem que acompanhar o ritmo de compra. Se o cliente volta a cada trinta dias, quarenta e cinco dias de prazo cria pressa sem parecer armadilha.",
+			"speaker": "dog",
 			"label": "PRAZO = RITMO + FOLGA",
 			"shot": "dog",
 			"dog": {
@@ -66,7 +69,24 @@
 			"counter": "45 dias"
 		},
 		{
+			"say": "Quarenta e cinco dias? Não vai parecer pegadinha?",
+			"speaker": "owner",
+			"tone": "doubtful, curious",
+			"label": "NÃO É PEGADINHA?",
+			"shot": "both",
+			"owner": {
+				"pose": "idle",
+				"mood": "hopeful"
+			},
+			"dog": {
+				"pose": "sit",
+				"mood": "happy"
+			},
+			"counter": "45 dias"
+		},
+		{
 			"say": "E avisa antes de vencer. Aviso de saldo é mensagem de utilidade, umas nove vezes mais barata que marketing.",
+			"speaker": "dog",
 			"label": "AVISA ANTES",
 			"shot": "dog",
 			"dog": {
@@ -83,6 +103,7 @@
 		},
 		{
 			"say": "Crédito com prazo curto e aviso na hora certa. É isso que traz o cliente de volta.",
+			"speaker": "dog",
 			"label": "PRAZO CURTO + AVISO",
 			"shot": "dog",
 			"dog": {
@@ -106,6 +127,7 @@
 		},
 		{
 			"say": "Percentual, validade e aviso de saldo no WhatsApp: você ajusta tudo no RecompraCRM.",
+			"speaker": "dog",
 			"label": "NO RECOMPRACRM",
 			"shot": "app",
 			"owner": {
@@ -119,6 +141,7 @@
 		},
 		{
 			"say": "Quanto tempo vale o crédito na sua loja? Conta aqui. E segue o Caramelo!",
+			"speaker": "dog",
 			"label": "E NA SUA LOJA?",
 			"shot": "outro",
 			"dog": {

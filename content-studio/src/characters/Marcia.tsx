@@ -20,9 +20,9 @@ const POSES: Record<TOwnerPose, { left: Angles; right: Angles }> = {
 	worried: { left: { shoulder: 7, elbow: -4 }, right: { shoulder: 28, elbow: 142 } },
 };
 
-type MarciaProps = { pose: TOwnerPose; mood: TMood; frame: number; signText?: string };
+type MarciaProps = { pose: TOwnerPose; mood: TMood; frame: number; mouth?: number; signText?: string };
 
-export function Marcia({ pose, mood, frame, signText = "10% OFF\nEM TUDO" }: MarciaProps) {
+export function Marcia({ pose, mood, frame, mouth = 0, signText = "10% OFF\nEM TUDO" }: MarciaProps) {
 	const t = frame / 30;
 	const sway = Math.sin(t * 1.6) * 1.2;
 	const blink = (frame + 40) % 110 < 5 ? 0.12 : 1;
@@ -53,7 +53,7 @@ export function Marcia({ pose, mood, frame, signText = "10% OFF\nEM TUDO" }: Mar
 
 				{/* pescoço e cabeça */}
 				<rect x={228} y={404} width={44} height={50} rx={14} fill={SKIN_DARK} />
-				<Head mood={mood} blink={blink} t={t} />
+				<Head mood={mood} blink={blink} t={t} mouth={mouth} />
 
 				{/* braço direito (na frente) */}
 				<Arm side="right" angles={angles.right} hand={handProp} />
@@ -89,20 +89,36 @@ function Phone() {
 	);
 }
 
-function Head({ mood, blink, t }: { mood: TMood; blink: number; t: number }) {
-	const tilt = mood === "worried" ? 5 : mood === "hopeful" ? -3 : Math.sin(t * 1.3) * 1.5;
+function Head({ mood, blink, t, mouth }: { mood: TMood; blink: number; t: number; mouth: number }) {
+	const tilt = mood === "worried" ? 5 : mood === "hopeful" ? -3 : mood === "annoyed" ? -2 + Math.sin(t * 6) * 1.5 : Math.sin(t * 1.3) * 1.5;
 	const brows: Record<TMood, [string, string]> = {
 		happy: ["M196,300 Q212,290 228,298", "M272,298 Q288,290 304,300"],
 		hopeful: ["M196,296 Q212,282 228,292", "M272,292 Q288,282 304,296"],
 		worried: ["M196,292 Q214,292 230,306", "M270,306 Q286,292 304,292"],
 		explain: ["M196,300 Q212,294 228,300", "M272,294 Q288,284 304,292"],
+		annoyed: ["M196,290 Q214,296 232,308", "M268,308 Q286,296 304,290"],
 	};
 	const mouths: Record<TMood, ReactNode> = {
 		happy: <path d="M222,378 Q250,410 278,378 Z" fill="#7a2330" {...STROKE} strokeWidth={5} />,
 		hopeful: <path d="M226,380 Q250,398 274,380" fill="none" {...STROKE} strokeWidth={6} />,
 		worried: <path d="M228,390 Q239,380 250,388 Q261,396 272,386" fill="none" {...STROKE} strokeWidth={6} />,
 		explain: <path d="M230,384 Q250,394 270,384" fill="none" {...STROKE} strokeWidth={6} />,
+		annoyed: <path d="M228,392 Q250,380 272,392" fill="none" {...STROKE} strokeWidth={6} />,
 	};
+	// Falando: boca aberta que acompanha as sílabas (mesma conta do Caramelo).
+	const h = 6 + 30 * mouth;
+	const tense = mood === "worried" || mood === "annoyed";
+	const talking = mouth > 0.08 && tense ? (
+		<g>
+			{/* boca em "O": fala de susto ou reclamação, nunca sorrindo */}
+			<ellipse cx={250} cy={388} rx={12 + 6 * mouth} ry={5 + 14 * mouth} fill="#7a2330" {...STROKE} strokeWidth={5} />
+		</g>
+	) : mouth > 0.08 ? (
+		<g>
+			<path d={`M226,380 Q250,386 274,380 Q272,${380 + h} 250,${382 + h} Q228,${380 + h} 226,380 Z`} fill="#7a2330" {...STROKE} strokeWidth={5} />
+			<ellipse cx={250} cy={378 + h * 0.85} rx={11} ry={Math.min(h * 0.28, 8)} fill="#f07c8a" />
+		</g>
+	) : null;
 	return (
 		<g transform={`rotate(${tilt} 250 420)`}>
 			{/* coque com prendedor dourado */}
@@ -126,7 +142,7 @@ function Head({ mood, blink, t }: { mood: TMood; blink: number; t: number }) {
 				<path d={brows[mood][1]} />
 			</g>
 			<path d="M250,346 Q244,362 252,364" fill="none" stroke={SKIN_DARK} strokeWidth={5} strokeLinecap="round" />
-			{mouths[mood]}
+			{talking ?? mouths[mood]}
 			<circle cx={146} cy={366} r={6} fill={COLORS.gold} />
 			<circle cx={354} cy={366} r={6} fill={COLORS.gold} />
 		</g>

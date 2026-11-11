@@ -14,18 +14,20 @@
 	},
 	"beats": [
 		{
-			"say": "Dois mil contatos no WhatsApp, e a Márcia mandando promoção pra todo mundo. Duas vezes por mês.",
-			"label": "2.000 CONTATOS, 2× POR MÊS",
+			"say": "A conta do WhatsApp veio uma fortuna!",
+			"speaker": "owner",
+			"tone": "annoyed, frustrated, complaining fast",
+			"label": "A CONTA DO WHATSAPP VEIO ALTA?",
 			"shot": "owner",
 			"owner": {
 				"pose": "phone",
-				"mood": "hopeful"
-			},
-			"counter": "R$ 0"
+				"mood": "annoyed"
+			}
 		},
 		{
-			"say": "Daqui da porta eu vi a conta chegar.",
-			"label": "A CONTA DA META",
+			"say": "Eu vi daqui da porta, Márcia! Promoção pra dois mil contatos, duas vezes por mês. Bora fazer a conta.",
+			"speaker": "dog",
+			"label": "2.000 CONTATOS, 2× POR MÊS",
 			"shot": "both",
 			"owner": {
 				"pose": "phone",
@@ -34,11 +36,11 @@
 			"dog": {
 				"pose": "sit",
 				"mood": "worried"
-			},
-			"counter": "R$ 0"
+			}
 		},
 		{
 			"say": "Mensagem de marketing custa uns trinta e dois centavos cada. Quatro mil mensagens: quase mil e trezentos reais.",
+			"speaker": "dog",
 			"label": "MARKETING",
 			"shot": "dog",
 			"dog": {
@@ -69,6 +71,7 @@
 		},
 		{
 			"say": "Agora, um aviso de saldo: seu cashback vence sexta. Isso é mensagem de utilidade, e custa três centavos e meio.",
+			"speaker": "dog",
 			"label": "UTILIDADE",
 			"shot": "dog",
 			"dog": {
@@ -98,6 +101,7 @@
 		},
 		{
 			"say": "Marketing sai umas nove vezes mais caro. E o aviso de saldo ainda dá um motivo de verdade pra voltar.",
+			"speaker": "dog",
 			"label": "≈ 9× MAIS CARO",
 			"shot": "dog",
 			"dog": {
@@ -113,7 +117,24 @@
 			"counter": "R$ 70,00"
 		},
 		{
+			"say": "Nove vezes?! E eu mandando promoção pra todo mundo…",
+			"speaker": "owner",
+			"tone": "shocked, then embarrassed",
+			"label": "9× MAIS CARO?!",
+			"shot": "both",
+			"owner": {
+				"pose": "phone",
+				"mood": "worried"
+			},
+			"dog": {
+				"pose": "sit",
+				"mood": "explain"
+			},
+			"counter": "R$ 70,00"
+		},
+		{
 			"say": "Só não coloca promoção no aviso: aí a Meta cobra como marketing.",
+			"speaker": "dog",
 			"label": "AVISO SEM PROMOÇÃO",
 			"shot": "dog",
 			"dog": {
@@ -138,6 +159,7 @@
 		},
 		{
 			"say": "O aviso de cashback vencendo dispara sozinho no RecompraCRM, só pra quem tem saldo.",
+			"speaker": "dog",
 			"label": "NO RECOMPRACRM",
 			"shot": "app",
 			"owner": {
@@ -151,6 +173,7 @@
 		},
 		{
 			"say": "Quanto custa o WhatsApp da sua loja? Tem calculadora no link da bio. E segue o Caramelo!",
+			"speaker": "dog",
 			"label": "CALCULA O SEU",
 			"shot": "outro",
 			"dog": {

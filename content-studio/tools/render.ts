@@ -1,6 +1,8 @@
 // Renderiza um episódio.
 //   npm run render -- 001-desconto-vs-cashback            → out/001-desconto-vs-cashback.mp4
 //   npm run render -- 001-desconto-vs-cashback --stills   → out/<id>/beat-NN.jpg + contact-sheet.jpg
+//   npm run render -- 001-desconto-vs-cashback --frames 0,8,30  → out/<id>/frame-N.jpg + frames.jpg
+//     (o quadro 0 é a capa e o gancho: confira sempre)
 // O modo --stills tira um quadro do meio de cada passo: é o que se revisa antes do vídeo inteiro.
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync } from "node:fs";
@@ -13,6 +15,8 @@ import { ScriptSchema, VoiceSchema } from "../src/types";
 const root = path.resolve(import.meta.dirname, "..");
 const episodeId = process.argv[2];
 const stills = process.argv.includes("--stills");
+const framesArg = process.argv.indexOf("--frames");
+const frames = framesArg > 0 ? process.argv[framesArg + 1].split(",").map(Number) : null;
 if (!episodeId) {
 	console.error("Uso: npm run render -- <episodeId> [--stills]");
 	process.exit(1);
@@ -27,7 +31,18 @@ const composition = await selectComposition({ serveUrl, id: "Reel", inputProps, 
 const outDir = path.join(root, "out");
 mkdirSync(outDir, { recursive: true });
 
-if (stills) {
+if (frames) {
+	const dir = path.join(outDir, episodeId);
+	mkdirSync(dir, { recursive: true });
+	const files = [];
+	for (const frame of frames) {
+		const file = path.join(dir, `frame-${frame}.jpg`);
+		await renderStill({ composition, serveUrl, output: file, frame, inputProps, browserExecutable, chromeMode, imageFormat: "jpeg", jpegQuality: 85 });
+		files.push(file);
+	}
+	execFileSync("ffmpeg", ["-v", "error", "-y", ...files.flatMap((f) => ["-i", f]), "-filter_complex", `${files.map((_, i) => `[${i}]scale=360:-1[s${i}]`).join(";")};${files.map((_, i) => `[s${i}]`).join("")}hstack=inputs=${files.length}`, path.join(dir, "frames.jpg")]);
+	console.log(`Quadros ${frames.join(", ")} em ${path.join(dir, "frames.jpg")}`);
+} else if (stills) {
 	const script = ScriptSchema.parse(JSON.parse(readFileSync(path.join(root, "episodes", episodeId, "script.json"), "utf8")));
 	const voice = VoiceSchema.parse(JSON.parse(readFileSync(path.join(root, "episodes", episodeId, "voice.json"), "utf8")));
 	const timeline = buildTimeline(script, voice);

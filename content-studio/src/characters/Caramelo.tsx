@@ -31,7 +31,7 @@ export function Caramelo({ pose, mood, mouth, frame, gesture }: CarameloProps) {
 	const headTilt = mood === "explain" ? -5 + Math.sin(t * 1.4) * 1.5 : mood === "worried" ? 4 : Math.sin(t * 1.7) * 2;
 	const blinkPhase = (frame + 17) % 96;
 	const blink = blinkPhase < 5 ? 0.12 : 1;
-	const earDrop = mood === "worried" ? 1 : 0;
+	const earDrop = mood === "worried" ? 1 : mood === "annoyed" ? 0.5 : 0;
 
 	// Pata do lado direito da tela: em pé (0°), apontando para cima-direita, ou acenando.
 	const raise = pose === "sit" ? 0 : gesture;
@@ -165,6 +165,7 @@ function Brows({ mood }: { mood: TMood }) {
 		hopeful: ["M216,222 Q238,208 260,216", "M340,216 Q362,208 384,222"],
 		worried: ["M216,216 Q240,214 262,236", "M338,236 Q360,214 384,216"],
 		explain: ["M216,226 Q238,220 260,226", "M340,214 Q362,200 384,212"],
+		annoyed: ["M216,214 Q240,222 262,234", "M338,234 Q360,222 384,214"],
 	};
 	return (
 		<g fill="none" stroke={COLORS.outline} strokeWidth={8} strokeLinecap="round">

@@ -4,7 +4,10 @@
 import { existsSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { IMPLEMENTED_SCREENS } from "../src/types";
-import { EPISODES, narrationFor, readScript, readVoiceConfig } from "./lib";
+import { applySpoken, EPISODES, narrationFor, readScript, readVoiceConfig } from "./lib";
+
+/** Ritmo final (drama-3 + pausas encurtadas + tempo 1.18), medido no episódio 001: 773 caracteres em 45,7 s. */
+const CHARS_PER_SECOND = 17;
 
 const only = process.argv[2];
 const ids = only ? [only] : readdirSync(EPISODES).filter((d) => existsSync(path.join(EPISODES, d, "script.json")));
@@ -32,9 +35,19 @@ for (const id of ids) {
 		if ((beat.shot === "dog" || beat.shot === "outro") && !beat.dog) problems.push(`${n}: plano "${beat.shot}" sem o Caramelo`);
 	});
 	if (script.beats[script.beats.length - 1].shot !== "outro") problems.push(`o último passo deve ser "outro" (CTA + seguir)`);
+	script.beats.forEach((beat, i) => {
+		if (beat.speaker === "owner" && !beat.owner) problems.push(`passo ${i + 1}: o dono fala mas não está em cena`);
+	});
+	// Gancho: abre com o problema na boca do dono, em até ~3,5 s, e o rótulo é uma pergunta ao espectador.
+	const hook = script.beats[0];
+	if (hook.speaker !== "owner") warnings.push("o gancho não é o dono reclamando do problema");
+	if (!hook.label?.trim().endsWith("?")) warnings.push("o rótulo do gancho não é uma pergunta para quem assiste");
+	const hookSeconds = applySpoken(hook.say, config.spoken).length / CHARS_PER_SECOND;
+	if (hookSeconds > 3.8) warnings.push(`gancho longo: ~${hookSeconds.toFixed(1)} s (alvo: até 3,5 s)`);
+	if (hook.counter || hook.card) warnings.push("o gancho tem contador ou cartão: deixe só o rótulo e o dono em cena");
 	if (!script.beats.some((b) => b.shot === "app")) warnings.push("nenhum passo mostra o produto");
-	const seconds = narrationFor(script, config.spoken).length / 15.5;
-	if (seconds < 35 || seconds > 65) warnings.push(`duração estimada ${seconds.toFixed(0)} s (alvo: 40–60 s)`);
+	const seconds = narrationFor(script, config.spoken).length / CHARS_PER_SECOND;
+	if (seconds < 25 || seconds > 55) warnings.push(`duração estimada ${seconds.toFixed(0)} s (alvo: 30–50 s)`);
 	const hasVoice = existsSync(path.join(EPISODES, id, "voice.json"));
 	console.log(`${problems.length ? "✗" : "✓"} ${id} · ~${seconds.toFixed(0)} s · ${hasVoice ? "com voz" : "sem voz"}`);
 	for (const p of problems) console.log(`   erro: ${p}`);

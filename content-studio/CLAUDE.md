@@ -11,7 +11,10 @@ o app não importa nada daqui. Leia o `CONTENT-GUIDE.md` antes de escrever qualq
    arquivos; não invente estatística.
 2. **Roteiro.** Crie `episodes/<NNN-slug>/script.json` seguindo `src/types.ts` (`ScriptSchema`).
    Copie a estrutura de `episodes/001-desconto-vs-cashback/script.json`.
-   - `say`: o que o Caramelo fala. Números **por extenso**. A legenda mostra exatamente isto.
+   - Passo 1 é o gancho: o dono reclamando (`speaker: "owner"`, `tone` irritado), rótulo em forma
+     de pergunta para quem assiste. Veja "A forma de um episódio" no guia.
+   - `say`: a fala; `speaker`: quem fala (`dog` ou `owner`); `tone`: direção de atuação em inglês.
+     Números **por extenso**. A legenda mostra exatamente o `say`.
    - `label` e cartões: dígitos (`R$ 10`, `10%`).
    - Todo número afirmado leva `source`. Conta própria vale, dizendo a conta.
    - Último passo: `shot: "outro"`. Um passo `shot: "app"` mostra a tela do produto que faz aquilo.
@@ -19,11 +22,15 @@ o app não importa nada daqui. Leia o `CONTENT-GUIDE.md` antes de escrever qualq
    tela em `src/ui/AppScreen.tsx` e inclua em `IMPLEMENTED_SCREENS` (`src/types.ts`), ou troque a tela.
 4. **Voz.** `npm run tts-request -- <id>` imprime a chamada. Rode-a com a ferramenta `monid_run`
    do Monid (provider, endpoint, input, tag e maxCost exatamente como impressos) e espere com
-   `monid_get_run` até `COMPLETED`. Salve o resultado completo do run num arquivo JSON e rode
+   `monid_get_run` até `COMPLETED`. Salve o resultado do run num arquivo JSON (se ele vier no
+   contexto em vez de num arquivo, basta `output.segments` e `output.audio.download_link`) e rode
    `npm run save-voice -- <id> <arquivo>`: baixa `voice.mp3` e escreve `voice.json` com o tempo de
-   cada palavra. O link do áudio expira em ~1 h; se expirar, chame `monid_get_run` de novo.
-   Custo: ~US$ 0,015 por 1.000 caracteres (~US$ 0,01 por episódio).
-5. **Revisar quadros.** `npm run render -- <id> --stills` gera um quadro por passo e
+   cada palavra, já com as pausas longas encurtadas para `maxPauseSeconds`. O link do áudio expira
+   em ~1 h; se expirar, chame `monid_get_run` de novo. Modelo `drama-3`, diálogo com duas vozes numa
+   chamada só: ~US$ 0,05 por 1.000 caracteres (~US$ 0,07 por episódio). O `s2.1-pro` recusa duas
+   vozes na mesma chamada ("Reference audio too long").
+5. **Revisar quadros.** `npm run render -- <id> --frames 0` mostra a capa e o gancho (o quadro 0
+   precisa ter o dono irritado, o adereço do erro e o rótulo-pergunta). `--stills` gera um quadro por passo e
    `out/<id>/contact-sheet.jpg`. **Abra a contact sheet e olhe**: texto cortado, cartão cobrindo
    rosto, legenda em cima do gesto, número errado. Corrija e repita.
 6. **Vídeo.** `npm run render -- <id>` → `out/<id>.mp4` (1080×1920, 30 fps, H.264 + AAC, ~1,5 min
@@ -44,7 +51,7 @@ Sem rede para o Chrome do Remotion, exporte o navegador da máquina antes do ren
 | legenda, rótulo, contador, cartões, fonte | `src/ui/Overlays.tsx` |
 | tela do produto | `src/ui/AppScreen.tsx` |
 | tempo das falas e quebra de legenda | `src/timeline.ts` |
-| voz e pronúncia ("RecompraCRM" → "Recompra cê érre ême") | `voice.config.json` |
+| vozes, velocidade, pausa máxima e pronúncia ("RecompraCRM" → "Recompra cê érre ême") | `voice.config.json` |
 
 Regras do desenho: personagens e cenários são SVG desenhados em código (nada de imagem gerada por
 episódio), com contorno `COLORS.outline`, paleta de `src/theme.ts`, e o cenário sem texto atrás da

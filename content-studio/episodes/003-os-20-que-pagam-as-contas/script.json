@@ -10,16 +10,19 @@
 	},
 	"beats": [
 		{
-			"say": "A Márcia trata todo cliente igual. Bonito. Mas a conta não é igual.",
-			"label": "TODO CLIENTE IGUAL?",
+			"say": "Trato todo cliente igual… e todo mês some cliente bom!",
+			"speaker": "owner",
+			"tone": "annoyed, frustrated, complaining fast",
+			"label": "TODO MÊS SOME CLIENTE BOM?",
 			"shot": "owner",
 			"owner": {
 				"pose": "idle",
-				"mood": "happy"
+				"mood": "annoyed"
 			}
 		},
 		{
-			"say": "Eu conheço todo mundo que passa por essa porta. E tem uma turma que aparece toda semana.",
+			"say": "Eu conheço todo mundo que passa por essa porta, Márcia. E tem uma turma que aparece toda semana.",
+			"speaker": "dog",
 			"label": "A TURMA DE SEMPRE",
 			"shot": "both",
 			"owner": {
@@ -33,6 +36,7 @@
 		},
 		{
 			"say": "Em estudo com várias marcas, os vinte por cento que mais compram fizeram de sessenta e cinco a setenta e três por cento das vendas.",
+			"speaker": "dog",
 			"label": "OS 20% DO TOPO",
 			"shot": "dog",
 			"dog": {
@@ -48,6 +52,7 @@
 		},
 		{
 			"say": "Só que metade desse grupo do topo já não está lá no ano seguinte.",
+			"speaker": "dog",
 			"label": "E METADE SOME",
 			"shot": "dog",
 			"dog": {
@@ -63,7 +68,23 @@
 			"source": "Sharp, Romaniuk e Graham, 2019"
 		},
 		{
+			"say": "Metade?! E eu nem percebo quando eles param de vir!",
+			"speaker": "owner",
+			"tone": "shocked, worried",
+			"label": "METADE?!",
+			"shot": "both",
+			"owner": {
+				"pose": "worried",
+				"mood": "worried"
+			},
+			"dog": {
+				"pose": "sit",
+				"mood": "explain"
+			}
+		},
+		{
 			"say": "Então não basta saber quem são os melhores. Tem que perceber quem está esfriando, antes de virar ex-cliente.",
+			"speaker": "dog",
 			"label": "QUEM ESTÁ ESFRIANDO?",
 			"shot": "dog",
 			"dog": {
@@ -86,6 +107,7 @@
 		},
 		{
 			"say": "No RecompraCRM, a matriz separa sozinha os campeões de quem está em risco.",
+			"speaker": "dog",
 			"label": "NO RECOMPRACRM",
 			"shot": "app",
 			"owner": {
@@ -99,6 +121,7 @@
 		},
 		{
 			"say": "Você sabe quem são os seus vinte por cento? Conta aqui. E segue o Caramelo!",
+			"speaker": "dog",
 			"label": "QUEM SÃO OS SEUS?",
 			"shot": "outro",
 			"dog": {

@@ -1,6 +1,6 @@
-import type { TScript, TVoice } from "./types";
+import type { TScript, TSpeaker, TVoice } from "./types";
 
-export type TTimedWord = { text: string; start: number; end: number; beat: number };
+export type TTimedWord = { text: string; start: number; end: number; beat: number; speaker: TSpeaker };
 export type TTimedBeat = { index: number; start: number; end: number; words: TTimedWord[] };
 export type TCaptionChunk = { words: TTimedWord[]; start: number; end: number };
 export type TTimeline = { beats: TTimedBeat[]; words: TTimedWord[]; duration: number };
@@ -47,7 +47,7 @@ export function buildTimeline(script: TScript, voice: TVoice): TTimeline {
 			const first = voiceWords[Math.min(match, voiceWords.length - 1)];
 			const last = voiceWords[Math.min(match + tokens.length - 1, voiceWords.length - 1)];
 			cursor = match + tokens.length;
-			words.push({ text, beat: beatIndex, start: first.start, end: Math.max(last.end, first.start + 0.08) });
+			words.push({ text, beat: beatIndex, speaker: beat.speaker, start: first.start, end: Math.max(last.end, first.start + 0.08) });
 		}
 	});
 
@@ -82,9 +82,9 @@ export function chunkCaptions(beat: TTimedBeat): TCaptionChunk[] {
 	return chunks;
 }
 
-/** Abertura da boca (0–1) num instante: uma "sílaba" a cada ~2,6 letras da palavra falada. */
-export function mouthOpenness(words: TTimedWord[], t: number) {
-	const word = words.find((w) => t >= w.start && t <= w.end);
+/** Abertura da boca (0–1) de quem fala num instante: uma "sílaba" a cada ~2,6 letras da palavra. */
+export function mouthOpenness(words: TTimedWord[], t: number, speaker: TSpeaker) {
+	const word = words.find((w) => w.speaker === speaker && t >= w.start && t <= w.end);
 	if (!word) return 0;
 	const syllables = Math.max(1, Math.round(bareWord(word.text).length / 2.6));
 	const progress = (t - word.start) / Math.max(0.05, word.end - word.start);
