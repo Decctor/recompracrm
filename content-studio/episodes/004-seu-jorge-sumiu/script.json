@@ -1,0 +1,146 @@
+{
+	"id": "004-seu-jorge-sumiu",
+	"title": "Seu Jorge sumiu: o ritmo de cada cliente",
+	"format": "balcao",
+	"segment": "sorveteria",
+	"scene": "sorveteria",
+	"owner": {
+		"name": "Márcia",
+		"look": "marcia"
+	},
+	"counter": {
+		"label": "DIAS SEM O SEU JORGE",
+		"better": "down"
+	},
+	"beats": [
+		{
+			"say": "O Seu Jorge vinha toda sexta buscar o pote de flocos. Fazia anos.",
+			"label": "TODA SEXTA",
+			"shot": "owner",
+			"owner": {
+				"pose": "idle",
+				"mood": "happy"
+			},
+			"counter": "7"
+		},
+		{
+			"say": "Eu senti falta primeiro. Já são quarenta e sete dias sem ele passar por essa porta.",
+			"label": "47 DIAS",
+			"shot": "both",
+			"owner": {
+				"pose": "idle",
+				"mood": "worried"
+			},
+			"dog": {
+				"pose": "sit",
+				"mood": "worried"
+			},
+			"counter": "47"
+		},
+		{
+			"say": "Quarenta e sete dias não diz nada sozinho. Pra quem vem uma vez por mês, é só um atraso.",
+			"label": "DEPENDE DO RITMO",
+			"shot": "dog",
+			"dog": {
+				"pose": "point",
+				"mood": "explain"
+			},
+			"card": {
+				"kind": "math",
+				"rows": [
+					{
+						"label": "Cliente do mês",
+						"value": "47 ÷ 30"
+					},
+					{
+						"label": "Atraso",
+						"value": "1,6×",
+						"strong": true
+					}
+				]
+			},
+			"counter": "47"
+		},
+		{
+			"say": "Mas o Seu Jorge vinha a cada sete dias. Ele já sumiu quase sete vezes o ritmo dele.",
+			"label": "O RITMO DO SEU JORGE",
+			"shot": "dog",
+			"dog": {
+				"pose": "point",
+				"mood": "worried"
+			},
+			"card": {
+				"kind": "math",
+				"rows": [
+					{
+						"label": "Seu Jorge",
+						"value": "47 ÷ 7"
+					},
+					{
+						"label": "Atraso",
+						"value": "6,7×",
+						"strong": true,
+						"bad": true
+					}
+				]
+			},
+			"source": "Conta com a frequência de cada cliente",
+			"counter": "47"
+		},
+		{
+			"say": "É hora de chamar. Pelo nome, com um motivo: quinze reais de crédito até domingo, só pra quem esfriou.",
+			"label": "CHAMA PELO NOME",
+			"shot": "dog",
+			"dog": {
+				"pose": "sit",
+				"mood": "happy"
+			},
+			"card": {
+				"kind": "compare",
+				"rows": [
+					{
+						"text": "Promoção pra todo mundo",
+						"mark": "cross"
+					},
+					{
+						"text": "R$ 15 até domingo, só pra quem sumiu",
+						"mark": "check"
+					}
+				]
+			},
+			"counter": "47"
+		},
+		{
+			"say": "No RecompraCRM, quando um cliente entra no grupo em risco, a campanha manda a mensagem e o crédito sozinha.",
+			"label": "NO RECOMPRACRM",
+			"shot": "app",
+			"owner": {
+				"pose": "phone",
+				"mood": "happy"
+			},
+			"app": {
+				"headline": "CLIENTE EM RISCO, MENSAGEM AUTOMÁTICA NO",
+				"screen": "rfm-segments"
+			}
+		},
+		{
+			"say": "Quem é o Seu Jorge da sua loja? Conta aqui. E segue o Caramelo!",
+			"label": "QUEM É O SEU?",
+			"shot": "outro",
+			"dog": {
+				"pose": "wave",
+				"mood": "happy"
+			}
+		}
+	],
+	"instagram": {
+		"caption": "Seu Jorge vinha toda sexta. Faz 47 dias 🐶\nPra quem compra uma vez por mês, 47 dias é atraso. Pra quem vinha a cada 7, é quase 7 vezes o próprio ritmo: hora de chamar pelo nome, com um motivo só pra quem esfriou.\nQuem é o Seu Jorge da sua loja?\nLink na bio.",
+		"hashtags": [
+			"#varejo",
+			"#fidelizacao",
+			"#clientefiel",
+			"#sorveteria",
+			"#pequenonegocio"
+		]
+	}
+}

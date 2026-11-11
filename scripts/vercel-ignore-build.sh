@@ -42,9 +42,10 @@ if [ -z "$CHANGED" ]; then
 	exit 1
 fi
 
-# Só documentação e configuração de agentes: Markdown fora de public/ e as pastas de agentes e docs.
+# Só documentação, configuração de agentes e o content-studio (projeto de vídeo à parte, não vai para o site):
+# Markdown fora de public/ e as pastas de agentes, docs e content-studio.
 # public/*.md é servido pelo site (ex.: public/pricing.md), então conta como mudança do app.
-RELEVANT=$(printf '%s\n' "$CHANGED" | grep -Ev '^(docs|\.claude|\.agents|\.cursor)/' | grep -Ev '\.md$')
+RELEVANT=$(printf '%s\n' "$CHANGED" | grep -Ev '^(docs|content-studio|\.claude|\.agents|\.cursor)/' | grep -Ev '\.md$')
 PUBLIC_MARKDOWN=$(printf '%s\n' "$CHANGED" | grep -E '^public/.*\.md$')
 
 if [ -z "$RELEVANT" ] && [ -z "$PUBLIC_MARKDOWN" ]; then

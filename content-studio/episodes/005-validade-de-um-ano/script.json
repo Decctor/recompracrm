@@ -1,0 +1,140 @@
+{
+	"id": "005-validade-de-um-ano",
+	"title": "Crédito que vale um ano não faz ninguém voltar",
+	"format": "balcao",
+	"segment": "sorveteria",
+	"scene": "sorveteria",
+	"owner": {
+		"name": "Márcia",
+		"look": "marcia"
+	},
+	"counter": {
+		"label": "VALIDADE DO CRÉDITO",
+		"better": "down"
+	},
+	"beats": [
+		{
+			"say": "A Márcia quis ser boazinha: cashback que vale um ano inteiro.",
+			"label": "VALE 1 ANO",
+			"shot": "owner",
+			"owner": {
+				"pose": "idle",
+				"mood": "hopeful"
+			},
+			"counter": "365 dias"
+		},
+		{
+			"say": "Resultado? Ninguém tem pressa. Eu fico na porta esperando, e nada.",
+			"label": "NINGUÉM TEM PRESSA",
+			"shot": "both",
+			"owner": {
+				"pose": "idle",
+				"mood": "worried"
+			},
+			"dog": {
+				"pose": "sit",
+				"mood": "worried"
+			},
+			"counter": "365 dias"
+		},
+		{
+			"say": "A validade tem que acompanhar o ritmo de compra. Se o cliente volta a cada trinta dias, quarenta e cinco dias de prazo cria pressa sem parecer armadilha.",
+			"label": "PRAZO = RITMO + FOLGA",
+			"shot": "dog",
+			"dog": {
+				"pose": "point",
+				"mood": "explain"
+			},
+			"card": {
+				"kind": "math",
+				"rows": [
+					{
+						"label": "Volta a cada",
+						"value": "30 dias"
+					},
+					{
+						"label": "Folga",
+						"value": "+ 15 dias"
+					},
+					{
+						"label": "Validade",
+						"value": "45 dias",
+						"strong": true
+					}
+				]
+			},
+			"counter": "45 dias"
+		},
+		{
+			"say": "E avisa antes de vencer. Aviso de saldo é mensagem de utilidade, umas nove vezes mais barata que marketing.",
+			"label": "AVISA ANTES",
+			"shot": "dog",
+			"dog": {
+				"pose": "point",
+				"mood": "happy"
+			},
+			"card": {
+				"kind": "stat",
+				"value": "≈ 9×",
+				"caption": "mais barato que uma mensagem de marketing"
+			},
+			"source": "Tabela de preços da Meta para o Brasil, out/2026",
+			"counter": "45 dias"
+		},
+		{
+			"say": "Crédito com prazo curto e aviso na hora certa. É isso que traz o cliente de volta.",
+			"label": "PRAZO CURTO + AVISO",
+			"shot": "dog",
+			"dog": {
+				"pose": "sit",
+				"mood": "happy"
+			},
+			"card": {
+				"kind": "compare",
+				"rows": [
+					{
+						"text": "Vale 1 ano, sem aviso",
+						"mark": "cross"
+					},
+					{
+						"text": "Vale 45 dias, com aviso",
+						"mark": "check"
+					}
+				]
+			},
+			"counter": "45 dias"
+		},
+		{
+			"say": "Percentual, validade e aviso de saldo no WhatsApp: você ajusta tudo no RecompraCRM.",
+			"label": "NO RECOMPRACRM",
+			"shot": "app",
+			"owner": {
+				"pose": "phone",
+				"mood": "happy"
+			},
+			"app": {
+				"headline": "VALIDADE E AVISO NO",
+				"screen": "cashback-settings"
+			}
+		},
+		{
+			"say": "Quanto tempo vale o crédito na sua loja? Conta aqui. E segue o Caramelo!",
+			"label": "E NA SUA LOJA?",
+			"shot": "outro",
+			"dog": {
+				"pose": "wave",
+				"mood": "happy"
+			}
+		}
+	],
+	"instagram": {
+		"caption": "Cashback que vale um ano inteiro… e ninguém volta 🍦\nA validade do crédito acompanha o ritmo de compra: se o cliente volta a cada 30 dias, 45 dias de prazo cria pressa sem parecer armadilha. E o aviso de saldo é mensagem de utilidade, cerca de 9× mais barata que marketing (tabela da Meta, out/2026).\nQuanto tempo vale o crédito na sua loja?\nLink na bio.",
+		"hashtags": [
+			"#varejo",
+			"#cashback",
+			"#fidelizacao",
+			"#sorveteria",
+			"#pequenonegocio"
+		]
+	}
+}
