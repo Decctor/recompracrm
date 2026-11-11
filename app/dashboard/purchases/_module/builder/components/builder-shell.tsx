@@ -26,10 +26,10 @@ import NextStepBar from "./next-step-bar";
 
 const stageParser = parseAsStringEnum<TBuilderStageId>([...BUILDER_STAGE_IDS]);
 
-export default function PurchaseBuilderShell() {
+export default function PurchaseBuilderShell({ inboundId = null }: { inboundId?: string | null }) {
 	// Builder state lives only in the browser, so a reload always starts over at the origin.
 	return (
-		<BuilderProvider initialStage="origin">
+		<BuilderProvider initialStage="origin" inboundId={inboundId}>
 			<PurchaseBuilderContent />
 		</BuilderProvider>
 	);
@@ -65,6 +65,7 @@ function PurchaseBuilderContent() {
 			markClean();
 			toast.success(data.message);
 			void invalidateFinanceQueries(queryClient);
+			void queryClient.invalidateQueries({ queryKey: ["fiscal-inbound-documents"] });
 			await queryClient.invalidateQueries({ queryKey: ["purchases"] });
 			router.push(backToUrl);
 		},

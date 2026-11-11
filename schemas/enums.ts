@@ -339,6 +339,11 @@ export type TFiscalInboundManifestEventEnum = z.infer<typeof FiscalInboundManife
 // Situacao de uma nota recebida na SEFAZ (antes varchar livre vindo do provedor).
 export const FiscalInboundSituacaoEnum = z.enum(["AUTORIZADA", "DENEGADA", "CANCELADA"]);
 export type TFiscalInboundSituacaoEnum = z.infer<typeof FiscalInboundSituacaoEnum>;
+
+// Situação de uma nota recebida diante das compras: derivada (situação SEFAZ + manifestação + compra
+// vinculada), nunca gravada. `lib/fiscal/inbound/registration-status.ts` é a fonte única da regra.
+export const FiscalInboundRegistrationStatusEnum = z.enum(["A_REGISTRAR", "REGISTRADA", "DESCONSIDERADA", "CANCELADA"]);
+export type TFiscalInboundRegistrationStatusEnum = z.infer<typeof FiscalInboundRegistrationStatusEnum>;
 export const StockMovementTypeEnum = z.enum([
 	"ENTRADA_AQUISICAO",
 	"SAIDA",
@@ -428,6 +433,10 @@ export type TDeliveryModeEnum = z.infer<typeof DeliveryModeEnum>;
 
 export const PurchaseStatusEnum = z.enum(["RASCUNHO", "CONFIRMADA", "RECEBIMENTO_PARCIAL", "RECEBIDA", "CANCELADA"]);
 export type TPurchaseStatusEnum = z.infer<typeof PurchaseStatusEnum>;
+
+// Como a compra nasceu: lida de um documento (NF-e, PDF, foto) ou digitada. Derivada de `documentosImportados`.
+export const PurchaseOriginEnum = z.enum(["DOCUMENTO", "MANUAL"]);
+export type TPurchaseOriginEnum = z.infer<typeof PurchaseOriginEnum>;
 
 export const PurchaseCostModifierKeyEnum = z.enum([
 	"DESCONTO",

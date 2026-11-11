@@ -1,14 +1,16 @@
 import { getErrorMessage } from "@/lib/errors";
 import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
-import type { TFiscalInboundManifestEventEnum } from "@/schemas/enums";
+import { createSimplifiedSearchCondition } from "@/lib/search";
+import type { TFiscalInboundManifestEventEnum, TFiscalInboundRegistrationStatusEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
-import { fiscalInboundDocuments, fiscalInboundSyncStates, suppliers, type TFiscalInboundDocumentEntity } from "@/services/drizzle/schema";
-import { asc, eq, sql } from "drizzle-orm";
+import { fiscalInboundDocuments, fiscalInboundSyncStates, purchases, suppliers, type TFiscalInboundDocumentEntity } from "@/services/drizzle/schema";
+import { and, asc, desc, eq, gte, inArray, isNull, like, lte, or, sql, type SQL } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { loadFiscalOrganization } from "../settings";
 import { downloadStoredFiscalAsset, getFiscalAssetContentType, storeFiscalAsset } from "../storage";
 import type { TFiscalOrganization } from "../types";
 import { resolveInboundProvider } from "./providers";
+import { INBOUND_WITHOUT_MANIFEST_FILTER, parseAccessKeyNumber, resolveInboundRegistrationStatus } from "./registration-status";
 import type { IFiscalInboundProvider, TInboundDocumentSnapshot, TInboundManifestState } from "./types";
 
 const MAX_PAGES = 10;
@@ -351,42 +353,142 @@ export async function manifestInboundDocument({
 	);
 	await persistManifestReadback(doc.id, evento, result.manifestacao);
 
+	// Ciência e confirmação liberam o XML completo, mas a SEFAZ o redistribui quando quer — às vezes em
+	// segundos, às vezes em horas. Uma consulta imediata cobre o caso rápido (quem clicou "Dar ciência e
+	// registrar" segue direto para a compra); o resto fica com a reconciliação do cron.
+	let completo = doc.completo;
+	if (!completo && (evento === "CIENCIA" || evento === "CONFIRMACAO") && provider.getDocument) {
+		try {
+			const snapshot = await provider.getDocument({ provedorDocumentoId: doc.provedorDocumentoId, chaveAcesso: doc.chaveAcesso }, organization);
+			if (snapshot?.completo) {
+				await applyInboundSnapshot({ organizationId, snapshot, provider, organization });
+				completo = true;
+			}
+		} catch (error) {
+			console.warn(`[FISCAL_INBOUND] Consulta pos-manifestacao da nota ${doc.chaveAcesso} falhou: ${getErrorMessage(error)}`);
+		}
+	}
+
 	return {
 		inboundId: doc.id,
 		evento: result.manifestacao?.evento ?? evento,
 		protocolo: result.manifestacao?.protocolo ?? null,
 		data: result.manifestacao?.data ?? null,
+		completo,
 	};
 }
+
+// Mesma regra de `resolveInboundRegistrationStatus`, em SQL, para filtrar e contar no banco. Exige o
+// LEFT JOIN de `purchases` pela `compraId`.
+const inboundRegistrationStatusSql = sql<TFiscalInboundRegistrationStatusEnum>`case
+	when ${fiscalInboundDocuments.situacao} in ('CANCELADA', 'DENEGADA') then 'CANCELADA'
+	when ${purchases.id} is not null and ${purchases.status} <> 'CANCELADA' then 'REGISTRADA'
+	when ${fiscalInboundDocuments.manifestacaoAtual} in ('DESCONHECIMENTO', 'NAO_REALIZADA') then 'DESCONSIDERADA'
+	else 'A_REGISTRAR'
+end`;
+const inboundDateSql = sql`coalesce(${fiscalInboundDocuments.dataEmissao}, ${fiscalInboundDocuments.dataInsercao})`;
+
+export type TListInboundDocumentsFilters = {
+	search?: string | null;
+	registrationStatuses?: TFiscalInboundRegistrationStatusEnum[];
+	periodAfter?: Date | null;
+	periodBefore?: Date | null;
+	supplierIds?: string[];
+	manifestations?: (TFiscalInboundManifestEventEnum | typeof INBOUND_WITHOUT_MANIFEST_FILTER)[];
+	valueMin?: number | null;
+	valueMax?: number | null;
+};
 
 export async function listInboundDocuments({
 	organizationId,
 	page = 1,
 	pageSize = DEFAULT_PAGE_SIZE,
+	filters = {},
 }: {
 	organizationId: string;
 	page?: number;
 	pageSize?: number;
+	filters?: TListInboundDocumentsFilters;
 }) {
 	const PAGE_SIZE = pageSize;
 	const offset = (page - 1) * PAGE_SIZE;
-	const whereClause = eq(fiscalInboundDocuments.organizacaoId, organizationId);
 
-	const [documents, [{ count }]] = await Promise.all([
-		db.query.fiscalInboundDocuments.findMany({
-			where: whereClause,
-			with: { fornecedor: { columns: { id: true, nome: true, cpfCnpj: true } } },
-			orderBy: (fields, operators) => [operators.desc(fields.dataInsercao)],
-			offset,
-			limit: PAGE_SIZE,
-		}),
+	const conditions: SQL[] = [eq(fiscalInboundDocuments.organizacaoId, organizationId)];
+	const term = filters.search?.trim() ?? "";
+	if (term.length > 0) {
+		const digits = term.replace(/[^0-9]/g, "");
+		const searchConditions: SQL[] = [createSimplifiedSearchCondition(fiscalInboundDocuments.emitenteNome, term)];
+		// CNPJ e chave são guardados só com dígitos; o número da nota está dentro da chave.
+		if (digits.length >= 3) {
+			searchConditions.push(like(fiscalInboundDocuments.emitenteCnpj, `%${digits}%`), like(fiscalInboundDocuments.chaveAcesso, `%${digits}%`));
+		}
+		const searchCondition = or(...searchConditions);
+		if (searchCondition) conditions.push(searchCondition);
+	}
+	if (filters.registrationStatuses && filters.registrationStatuses.length > 0)
+		conditions.push(inArray(inboundRegistrationStatusSql, filters.registrationStatuses));
+	if (filters.periodAfter) conditions.push(sql`${inboundDateSql} >= ${filters.periodAfter.toISOString()}`);
+	if (filters.periodBefore) conditions.push(sql`${inboundDateSql} <= ${filters.periodBefore.toISOString()}`);
+	if (filters.supplierIds && filters.supplierIds.length > 0) conditions.push(inArray(fiscalInboundDocuments.fornecedorId, filters.supplierIds));
+	if (filters.manifestations && filters.manifestations.length > 0) {
+		const events = filters.manifestations.filter((value): value is TFiscalInboundManifestEventEnum => value !== INBOUND_WITHOUT_MANIFEST_FILTER);
+		const manifestConditions: SQL[] = [];
+		if (events.length > 0) manifestConditions.push(inArray(fiscalInboundDocuments.manifestacaoAtual, events));
+		if (filters.manifestations.includes(INBOUND_WITHOUT_MANIFEST_FILTER)) manifestConditions.push(isNull(fiscalInboundDocuments.manifestacaoAtual));
+		const manifestCondition = or(...manifestConditions);
+		if (manifestCondition) conditions.push(manifestCondition);
+	}
+	if (filters.valueMin != null) conditions.push(gte(fiscalInboundDocuments.valorTotal, filters.valueMin));
+	if (filters.valueMax != null) conditions.push(lte(fiscalInboundDocuments.valorTotal, filters.valueMax));
+	const whereClause = and(...conditions);
+
+	// Página primeiro (só ids), relações depois: o status derivado depende do LEFT JOIN da compra, que o
+	// `findMany` não expressa no `where`.
+	const [pageRows, [{ count }], syncState] = await Promise.all([
+		db
+			.select({ id: fiscalInboundDocuments.id })
+			.from(fiscalInboundDocuments)
+			.leftJoin(purchases, eq(purchases.id, fiscalInboundDocuments.compraId))
+			.where(whereClause)
+			.orderBy(desc(inboundDateSql), desc(fiscalInboundDocuments.id))
+			.limit(PAGE_SIZE)
+			.offset(offset),
 		db
 			.select({ count: sql<number>`count(*)::int` })
 			.from(fiscalInboundDocuments)
+			.leftJoin(purchases, eq(purchases.id, fiscalInboundDocuments.compraId))
 			.where(whereClause),
+		db.query.fiscalInboundSyncStates.findFirst({
+			where: (fields, operators) => operators.eq(fields.organizacaoId, organizationId),
+			columns: { ultimaSincronizacao: true },
+		}),
 	]);
 
-	return { documents, documentsMatched: count ?? 0, totalPages: Math.ceil((count ?? 0) / PAGE_SIZE) };
+	const pageIds = pageRows.map((row) => row.id);
+	const hydrated =
+		pageIds.length > 0
+			? await db.query.fiscalInboundDocuments.findMany({
+					where: and(eq(fiscalInboundDocuments.organizacaoId, organizationId), inArray(fiscalInboundDocuments.id, pageIds)),
+					columns: { resumoPayload: false, eventosPayload: false },
+					with: {
+						fornecedor: { columns: { id: true, nome: true, cpfCnpj: true } },
+						compra: { columns: { id: true, titulo: true, status: true } },
+					},
+				})
+			: [];
+	const hydratedById = new Map(hydrated.map((doc) => [doc.id, doc]));
+	const documents = pageIds.flatMap((id) => {
+		const doc = hydratedById.get(id);
+		if (!doc) return [];
+		return [{ ...doc, ...parseAccessKeyNumber(doc.chaveAcesso), situacaoRegistro: resolveInboundRegistrationStatus(doc) }];
+	});
+
+	return {
+		documents,
+		documentsMatched: count ?? 0,
+		totalPages: Math.ceil((count ?? 0) / PAGE_SIZE),
+		ultimaSincronizacao: syncState?.ultimaSincronizacao ?? null,
+	};
 }
 
 // Baixa (e cacheia no storage) um asset da nota recebida sob demanda via provedor.

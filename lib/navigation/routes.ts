@@ -26,6 +26,7 @@ export const appRoutes = {
 	approvals: () => "/dashboard/approvals",
 	purchases: () => "/dashboard/purchases",
 	newPurchase: () => "/dashboard/purchases/new",
+	newPurchaseFromInbound: (inboundId: string) => `/dashboard/purchases/new?inboundId=${encodeURIComponent(inboundId)}`,
 	purchase: (purchaseId: string) => `/dashboard/purchases/${purchaseId}`,
 	production: () => "/dashboard/production",
 	inventory: {
