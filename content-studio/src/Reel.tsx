@@ -7,7 +7,7 @@ import { buildTimeline, chunkCaptions, mouthOpenness, wordTime } from "./timelin
 import { COLORS, DISPLAY_FONT, FLOOR_Y, WIDTH } from "./theme";
 import type { TBeat, TScript, TShot, TVoice } from "./types";
 import { AppHeadline, CashbackSettingsPhone } from "./ui/AppScreen";
-import { Caption, Card, Counter, SourcePill, TopLabel } from "./ui/Overlays";
+import { Caption, Card, Counter, SeriesBadge, SourcePill, TopLabel } from "./ui/Overlays";
 
 export type TReelProps = { episodeId: string; script: TScript | null; voice: TVoice | null };
 
@@ -116,6 +116,9 @@ export function Reel({ episodeId, script, voice }: TReelProps) {
 				<TopLabel text={beat.label} frame={overlayFrame} />
 			) : null}
 
+			{script.format === "glossario" && script.glossary && beat.shot !== "app" && beat.shot !== "outro" ? (
+				<SeriesBadge term={script.glossary.term} frame={beatIndex === 0 ? 30 : 99} />
+			) : null}
 			{script.counter && counterValue ? (
 				<Counter label={script.counter.label} better={script.counter.better} value={counterValue} previous={previousCounter} frame={overlayFrame} />
 			) : null}

@@ -1,0 +1,206 @@
+{
+	"id": "g001-markup",
+	"title": "Markup de 100% não é lucro de 100%",
+	"format": "glossario",
+	"glossary": {
+		"slug": "markup",
+		"term": "MARKUP"
+	},
+	"segment": "sorveteria",
+	"scene": "sorveteria",
+	"owner": {
+		"name": "Márcia",
+		"look": "marcia"
+	},
+	"beats": [
+		{
+			"say": "Cem por cento em cima do custo: lucro de cem por cento, né?",
+			"speaker": "owner",
+			"tone": "proud, confident, fast",
+			"label": "MARKUP 100% = LUCRO 100%?",
+			"shot": "owner",
+			"owner": {
+				"pose": "idle",
+				"mood": "hopeful"
+			}
+		},
+		{
+			"say": "Não, Márcia! Markup não é lucro. Vem que eu te explico rapidinho.",
+			"speaker": "dog",
+			"label": "MARKUP ≠ LUCRO",
+			"shot": "both",
+			"owner": {
+				"pose": "idle",
+				"mood": "worried"
+			},
+			"dog": {
+				"pose": "sit",
+				"mood": "happy"
+			}
+		},
+		{
+			"say": "Markup é o número que multiplica o custo pra chegar no preço de venda.",
+			"speaker": "dog",
+			"label": "O QUE É MARKUP",
+			"shot": "dog",
+			"dog": {
+				"pose": "point",
+				"mood": "explain"
+			},
+			"card": {
+				"kind": "term",
+				"term": "Markup",
+				"tag": "vendas e margem",
+				"definition": "O índice que multiplica o custo para chegar ao preço de venda."
+			}
+		},
+		{
+			"say": "Pote de um litro: custa vinte. Markup de cem por cento é vezes dois. Preço: quarenta reais.",
+			"speaker": "dog",
+			"label": "A FÓRMULA",
+			"shot": "dog",
+			"dog": {
+				"pose": "point",
+				"mood": "happy"
+			},
+			"card": {
+				"kind": "formula",
+				"expression": "Preço = custo × markup",
+				"highlight": [
+					"markup"
+				],
+				"example": "R$ 20 × 2 = R$ 40"
+			}
+		},
+		{
+			"say": "Agora a margem: o que sobra, dividido pelo preço. Vinte de quarenta: cinquenta por cento.",
+			"speaker": "dog",
+			"label": "E A MARGEM?",
+			"shot": "dog",
+			"dog": {
+				"pose": "point",
+				"mood": "explain"
+			},
+			"card": {
+				"kind": "math",
+				"rows": [
+					{
+						"label": "Preço",
+						"value": "R$ 40,00"
+					},
+					{
+						"label": "Custo",
+						"value": "− R$ 20,00"
+					},
+					{
+						"label": "Sobra",
+						"value": "R$ 20,00"
+					},
+					{
+						"label": "Margem",
+						"value": "50%",
+						"strong": true
+					}
+				]
+			},
+			"source": "Conta com custo de R$ 20 e preço de R$ 40"
+		},
+		{
+			"say": "Cinquenta?! E eu ainda pago imposto e aluguel com isso!",
+			"speaker": "owner",
+			"tone": "shocked, disbelief",
+			"label": "METADE DO QUE ELA ACHAVA",
+			"shot": "owner",
+			"owner": {
+				"pose": "worried",
+				"mood": "worried"
+			},
+			"card": {
+				"kind": "stat",
+				"value": "50%",
+				"caption": "de margem, antes de imposto e aluguel",
+				"mark": "cross"
+			},
+			"source": "Conta com custo de R$ 20 e preço de R$ 40"
+		},
+		{
+			"say": "Pois é! E desconto sai da margem. Trinta por cento de desconto nesse pote leva mais da metade do que sobrava.",
+			"speaker": "dog",
+			"tone": "dramatic, surprised, fast",
+			"label": "DESCONTO SAI DA MARGEM",
+			"shot": "dog",
+			"dog": {
+				"pose": "point",
+				"mood": "worried"
+			},
+			"card": {
+				"kind": "math",
+				"rows": [
+					{
+						"label": "Com 30% off",
+						"value": "R$ 28,00"
+					},
+					{
+						"label": "Custo",
+						"value": "− R$ 20,00"
+					},
+					{
+						"label": "Sobra",
+						"value": "R$ 8,00",
+						"strong": true,
+						"bad": true
+					}
+				]
+			},
+			"source": "Conta com custo de R$ 20 e preço de R$ 40"
+		},
+		{
+			"say": "Pra não esquecer: markup é sobre o custo, margem é sobre o preço.",
+			"speaker": "dog",
+			"label": "SALVA ESSA COLA",
+			"shot": "dog",
+			"dog": {
+				"pose": "sit",
+				"mood": "happy"
+			},
+			"card": {
+				"kind": "recap",
+				"title": "COLA RÁPIDA",
+				"rows": [
+					{
+						"term": "MARKUP",
+						"text": "multiplica o custo"
+					},
+					{
+						"term": "MARGEM",
+						"text": "sobra ÷ preço"
+					},
+					{
+						"term": "DESCONTO",
+						"text": "sai da margem"
+					}
+				]
+			}
+		},
+		{
+			"say": "Salva o vídeo e confere o glossário completo no link da bio. Segue o Caramelo!",
+			"speaker": "dog",
+			"label": "GLOSSÁRIO NO LINK DA BIO",
+			"shot": "outro",
+			"dog": {
+				"pose": "wave",
+				"mood": "happy"
+			}
+		}
+	],
+	"instagram": {
+		"caption": "Markup de 100% é lucro de 100%? Não 📖\nMarkup é o índice que multiplica o custo para chegar ao preço: um pote que custa R$ 20, com markup de 100% (índice 2), sai por R$ 40. A margem é o que sobra dividido pelo preço: R$ 20 de R$ 40, ou seja, 50%, e ainda antes de imposto e despesas. E desconto sai da margem: 30% off nesse pote deixa só R$ 8.\nVocê forma preço com markup ou com margem?\nGlossário completo no link da bio.",
+		"hashtags": [
+			"#varejo",
+			"#markup",
+			"#precificacao",
+			"#margemdelucro",
+			"#pequenonegocio"
+		]
+	}
+}

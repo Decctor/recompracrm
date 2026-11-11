@@ -1,7 +1,7 @@
 // Confere os roteiros contra o CONTENT-GUIDE.md antes de gastar com voz e render:
 //   npm run lint            → todos os episódios
 //   npm run lint -- 003-…   → um episódio
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { IMPLEMENTED_SCREENS } from "../src/types";
 import { applySpoken, EPISODES, narrationFor, readScript, readVoiceConfig } from "./lib";
@@ -12,6 +12,16 @@ const CHARS_PER_SECOND = 17;
 const only = process.argv[2];
 const ids = only ? [only] : readdirSync(EPISODES).filter((d) => existsSync(path.join(EPISODES, d, "script.json")));
 const config = readVoiceConfig();
+const glossarySource = readFileSync(path.join(EPISODES, "..", "..", "app", "_content", "glossary.ts"), "utf8");
+
+/** O trecho de um verbete em glossary.ts, do seu slug até o próximo. */
+function glossaryEntry(slug: string | undefined) {
+	if (!slug) return null;
+	const start = glossarySource.indexOf(`slug: "${slug}"`);
+	if (start < 0) return null;
+	const next = glossarySource.indexOf("slug: \"", start + 1);
+	return glossarySource.slice(start, next < 0 ? undefined : next);
+}
 let errors = 0;
 
 for (const id of ids) {
@@ -45,7 +55,16 @@ for (const id of ids) {
 	const hookSeconds = applySpoken(hook.say, config.spoken).length / CHARS_PER_SECOND;
 	if (hookSeconds > 3.8) warnings.push(`gancho longo: ~${hookSeconds.toFixed(1)} s (alvo: até 3,5 s)`);
 	if (hook.counter || hook.card) warnings.push("o gancho tem contador ou cartão: deixe só o rótulo e o dono em cena");
-	if (!script.beats.some((b) => b.shot === "app")) warnings.push("nenhum passo mostra o produto");
+	if (script.format === "balcao" && !script.beats.some((b) => b.shot === "app")) warnings.push("nenhum passo mostra o produto");
+	if (script.format === "glossario") {
+		const entry = glossaryEntry(script.glossary?.slug);
+		if (!entry) problems.push(`glossário: "${script.glossary?.slug ?? "(sem glossary.slug)"}" não existe em app/_content/glossary.ts`);
+		if (!script.beats.some((b) => b.card?.kind === "term")) problems.push("glossário: falta o cartão do verbete (kind: term)");
+		if (!script.beats.some((b) => b.card?.kind === "recap")) warnings.push("glossário: falta a cola para salvar (kind: recap)");
+		// O verbete diz quando o produto faz algo com o termo (`inRecompra`); sem isso, nada de tela do produto.
+		if (entry && !entry.includes("inRecompra") && script.beats.some((b) => b.shot === "app"))
+			problems.push("glossário: o verbete não tem inRecompra, então o produto não faz nada com esse termo; tire o passo app");
+	}
 	const seconds = narrationFor(script, config.spoken).length / CHARS_PER_SECOND;
 	if (seconds < 25 || seconds > 55) warnings.push(`duração estimada ${seconds.toFixed(0)} s (alvo: 30–50 s)`);
 	const hasVoice = existsSync(path.join(EPISODES, id, "voice.json"));

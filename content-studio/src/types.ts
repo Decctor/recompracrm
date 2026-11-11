@@ -39,7 +39,31 @@ const CompareCardSchema = z.object({
 	rows: z.array(z.object({ text: z.string(), mark: MarkEnum })),
 });
 
-export const CardSchema = z.discriminatedUnion("kind", [MathCardSchema, StatCardSchema, CompareCardSchema]);
+/** Verbete: o termo e a definição curta, como num dicionário (formato glossário). */
+const TermCardSchema = z.object({
+	kind: z.literal("term"),
+	term: z.string(),
+	/** Linha pequena sob o termo: a categoria do glossário ou o nome por extenso da sigla. */
+	tag: z.string().optional(),
+	definition: z.string(),
+});
+
+/** Fórmula em uma linha, com as palavras de `highlight` em destaque e um exemplo opcional embaixo. */
+const FormulaCardSchema = z.object({
+	kind: z.literal("formula"),
+	expression: z.string(),
+	highlight: z.array(z.string()).default([]),
+	example: z.string().optional(),
+});
+
+/** Cola para salvar: termo em destaque e o que lembrar dele, em uma linha cada. */
+const RecapCardSchema = z.object({
+	kind: z.literal("recap"),
+	title: z.string().default("COLA RÁPIDA"),
+	rows: z.array(z.object({ term: z.string(), text: z.string() })).min(2).max(4),
+});
+
+export const CardSchema = z.discriminatedUnion("kind", [MathCardSchema, StatCardSchema, CompareCardSchema, TermCardSchema, FormulaCardSchema, RecapCardSchema]);
 
 export const BeatSchema = z.object({
 	/** A fala do passo, com números por extenso. A legenda mostra exatamente isto. */
@@ -63,7 +87,10 @@ export const BeatSchema = z.object({
 export const ScriptSchema = z.object({
 	id: z.string(),
 	title: z.string(),
-	format: z.enum(["balcao"]),
+	/** "balcao": um erro de loja e o jeito certo. "glossario": um termo de app/_content/glossary.ts em 40 s. */
+	format: z.enum(["balcao", "glossario"]),
+	/** Só no formato glossário: o verbete de app/_content/glossary.ts que o episódio explica. */
+	glossary: z.object({ slug: z.string(), term: z.string() }).optional(),
 	segment: z.string(),
 	scene: z.enum(["sorveteria"]),
 	owner: z.object({ name: z.string(), look: z.enum(["marcia"]) }),

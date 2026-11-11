@@ -10,7 +10,9 @@ o app não importa nada daqui. Leia o `CONTENT-GUIDE.md` antes de escrever qualq
    `app/_content/glossary.ts`, `app/_content/segment-pages.ts`. Use os números e as fontes desses
    arquivos; não invente estatística.
 2. **Roteiro.** Crie `episodes/<NNN-slug>/script.json` seguindo `src/types.ts` (`ScriptSchema`).
-   Copie a estrutura de `episodes/001-desconto-vs-cashback/script.json`.
+   Copie a estrutura de `episodes/001-desconto-vs-cashback/script.json` (formato balcão) ou de
+   `episodes/g001-markup/script.json` (formato glossário: `g<NNN>-<slug do verbete>`; regras na
+   seção "Formato glossário" do guia).
    - Passo 1 é o gancho: o dono reclamando (`speaker: "owner"`, `tone` irritado), rótulo em forma
      de pergunta para quem assiste. Veja "A forma de um episódio" no guia.
    - `say`: a fala; `speaker`: quem fala (`dog` ou `owner`); `tone`: direção de atuação em inglês.

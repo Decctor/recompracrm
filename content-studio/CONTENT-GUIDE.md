@@ -61,11 +61,36 @@ Personagens novos só entram no elenco depois de desenhados em `src/characters/`
 6. **CTA** para uma ferramenta grátis (`/tools/cashback-calculator`, `/tools/whatsapp-cost`) ou
    para o teste de 15 dias, e "Segue o Caramelo pra ver a próxima!".
 
+## Formato "glossário" (`format: "glossario"`, 35–45 s)
+
+Um termo de `app/_content/glossary.ts` por episódio, com o mesmo elenco. A série tem selo próprio
+(📖 GLOSSÁRIO DO CARAMELO + o termo, no lugar do contador) e termina numa **cola para salvar**:
+salvamento é o sinal que esse tipo de conteúdo ganha, e a cola é o motivo para salvar.
+
+1. **Gancho: o dono diz o equívoco comum com convicção**, em até 3,5 s ("Cem por cento em cima do
+   custo: lucro de cem por cento, né?"). O rótulo devolve como pergunta: "MARKUP DE 100% = LUCRO
+   DE 100%?". Quem assiste também acha isso, e quer saber se está errado.
+2. **O Caramelo corrige** e mostra o verbete (`card.kind: "term"`, a definição curta do glossário).
+3. **A fórmula** (`kind: "formula"`) com um exemplo de loja, sempre hipotético, com números
+   redondos.
+4. **Onde o equívoco dói**: a conta que mostra o prejuízo (desconto, margem, cliente perdido). O dono
+   reage.
+5. **A cola** (`kind: "recap"`): de 2 a 4 linhas "TERMO → o que lembrar".
+6. **CTA**: "Salva o vídeo e confere o glossário completo no link da bio. Segue o Caramelo!".
+
+Regras próprias:
+
+- `glossary.slug` precisa existir em `app/_content/glossary.ts`, e o vídeo não pode contradizer o
+  verbete (definição, fórmula, exemplo). O verbete é a fonte; o vídeo é o resumo.
+- **Tela do produto só se o verbete tiver `inRecompra`.** Markup e CAC não são calculados pelo
+  produto: esses episódios não mostram o RecompraCRM. O lint recusa.
+- Termo em inglês ganha pronúncia em `voice.config.json` → `spoken` ("markup" → "márcap"); a
+  legenda continua com a grafia certa.
+
 Outros formatos (ainda sem template de vídeo):
 
 - **Confissão** (20–30 s, sem hashtag): o lojista fala de um hábito que todo mundo tem. "Também tem
   cliente que só aparece quando tem promoção? Conta aqui."
-- **Glossário em 45 s**: um termo de `app/_content/glossary.ts` com a fórmula e um exemplo de loja.
 - **Carrossel "vale a pena?"**: comparações de ferramenta ou prática, nunca de concorrente nomeado.
 
 ## Regras de conteúdo
