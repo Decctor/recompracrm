@@ -17,7 +17,7 @@ export async function fetchMetaAdsInsightRowsPaged(path: string, params: Record<
 	rows.push(...(first.data ?? []));
 	let nextUrl = first.paging?.next;
 	while (nextUrl) {
-		const page = await metaGraphGetByFullUrl<MetaAdsInsightsResponse>(nextUrl);
+		const page = await metaGraphGetByFullUrl<MetaAdsInsightsResponse>(nextUrl, accessToken);
 		rows.push(...(page.data ?? []));
 		nextUrl = page.paging?.next;
 	}

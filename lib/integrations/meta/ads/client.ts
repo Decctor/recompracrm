@@ -79,8 +79,17 @@ export async function metaGraphDelete<T>(path: string, params: Record<string, st
 	return parseMetaResponse<T>(response, `${path} (delete)`);
 }
 
-/** Segue `paging.next` da Graph API (a URL já inclui credenciais quando fornecida pela Meta). */
-export async function metaGraphGetByFullUrl<T>(nextUrl: string): Promise<T> {
-	const response = await fetch(nextUrl);
+/**
+ * Segue `paging.next` da Graph API. O token vai no header, e a Meta só repete na URL de paginação
+ * o `access_token` que veio na query — sem o header, a página 2 em diante falha com
+ * "An access token is required to request this resource." (código 104).
+ * Só segue URLs da própria Graph API, para o token nunca ir a outro host.
+ */
+export async function metaGraphGetByFullUrl<T>(nextUrl: string, accessToken: string): Promise<T> {
+	const url = new URL(nextUrl);
+	if (url.protocol !== "https:" || url.hostname !== "graph.facebook.com") {
+		throw new createHttpError.InternalServerError("URL de paginação inesperada da Meta.");
+	}
+	const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
 	return parseMetaResponse<T>(response, "paged");
 }

@@ -1,11 +1,14 @@
 "use client";
 
+import DateInput from "@/components/Inputs/DateInput";
 import ClientGeneralBlock from "@/components/Modals/Clients/Blocks/General";
 import ClientLocationsBlock from "@/components/Modals/Clients/Blocks/Locations";
 import { Button } from "@/components/ui/button";
+import ResponsiveMenuSection from "@/components/Utils/ResponsiveMenuSection";
+import { formatDateForInputValue, formatDateOnInputChange } from "@/lib/formatting";
 import { getClientSearchIntentLabel, parseClientSearchIntent } from "@/lib/clients/parse-client-search-intent";
 import type { TUseClientState } from "@/state-hooks/use-client-state";
-import { ArrowLeft, UserRound } from "lucide-react";
+import { ArrowLeft, Cake, UserRound } from "lucide-react";
 import { useEffect } from "react";
 
 type ClientVinculationCreationFormProps = {
@@ -54,6 +57,15 @@ export default function ClientVinculationCreationForm({
 					</p>
 				</div>
 				<ClientGeneralBlock client={state.client} updateClient={updateClient} />
+				<ResponsiveMenuSection title="ANIVERSÁRIO" icon={<Cake className="h-4 min-h-4 w-4 min-w-4" />}>
+					<div className="grid w-full grid-cols-1 gap-2 md:grid-cols-2">
+						<DateInput
+							label="DATA DE NASCIMENTO"
+							value={formatDateForInputValue(state.client.dataNascimento)}
+							handleChange={(value) => updateClient({ dataNascimento: formatDateOnInputChange(value, "date") })}
+						/>
+					</div>
+				</ResponsiveMenuSection>
 				<ClientLocationsBlock
 					locations={state.clientLocations}
 					addClientLocation={addClientLocation}

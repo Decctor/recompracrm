@@ -77,7 +77,7 @@ export async function fetchMetaAdsCatalog(params: {
 	rows.push(...(first.data ?? []));
 	let nextUrl = first.paging?.next;
 	while (nextUrl && rows.length < META_ADS_CATALOG_MAX_ADS) {
-		const page = await metaGraphGetByFullUrl<TPage<TMetaAdsLibraryRow>>(nextUrl);
+		const page = await metaGraphGetByFullUrl<TPage<TMetaAdsLibraryRow>>(nextUrl, params.config.accessToken);
 		rows.push(...(page.data ?? []));
 		nextUrl = page.paging?.next;
 	}
@@ -113,7 +113,7 @@ async function fetchAllNodes(config: TMetaAdsIntegrationConfigWithToken, edge: "
 	const rows = [...(first.data ?? [])];
 	let nextUrl = first.paging?.next;
 	for (let pages = 1; nextUrl && pages < MAX_NODE_PAGES; pages++) {
-		const page = await metaGraphGetByFullUrl<TPage<TMetaAdsCatalogNode>>(nextUrl);
+		const page = await metaGraphGetByFullUrl<TPage<TMetaAdsCatalogNode>>(nextUrl, config.accessToken);
 		rows.push(...(page.data ?? []));
 		nextUrl = page.paging?.next;
 	}
