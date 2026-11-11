@@ -236,7 +236,7 @@ export function Card({ card, frame, layout }: { card: TCard; frame: number; layo
 		return (
 			<div style={{ ...shell, background: "#fffdf6", paddingLeft: 64, overflow: "hidden" }}>
 				<div style={{ position: "absolute", left: 34, top: 0, bottom: 0, width: 4, background: "#f2a7a7" }} />
-				<div style={{ fontSize: 96, fontWeight: 800, lineHeight: 1, color: COLORS.cobalt }}>{card.term}</div>
+				<div style={{ fontSize: Math.min(96, Math.floor(500 / (0.52 * card.term.length))), fontWeight: 800, lineHeight: 1, color: COLORS.cobalt, whiteSpace: "nowrap" }}>{card.term}</div>
 				{card.tag ? <div style={{ fontSize: 30, fontWeight: 700, fontStyle: "italic", color: "#687a80", marginTop: 6 }}>{card.tag}</div> : null}
 				<div style={{ height: 6, width: 120, background: COLORS.gold, borderRadius: 3, margin: "14px 0 16px" }} />
 				<div style={{ fontSize: 44, fontWeight: 700, lineHeight: 1.18, opacity: pop(frame, fps, 10) }}>{card.definition}</div>
@@ -250,7 +250,7 @@ export function Card({ card, frame, layout }: { card: TCard; frame: number; layo
 		return (
 			<div style={{ ...shell, textAlign: "center" }}>
 				<div style={{ fontSize: 30, fontWeight: 800, color: "#687a80", letterSpacing: 2 }}>FÓRMULA</div>
-				<div style={{ fontSize: 50, fontWeight: 800, lineHeight: 1.25, whiteSpace: "nowrap" }}>
+				<div style={{ fontSize: Math.min(50, Math.floor(530 / (0.5 * card.expression.length))), fontWeight: 800, lineHeight: 1.25, whiteSpace: "nowrap" }}>
 					{words.map((word, i) =>
 						card.highlight.includes(word) ? (
 							<span key={i} style={{ background: COLORS.gold, borderRadius: 14, padding: "0 12px" }}>
@@ -262,7 +262,7 @@ export function Card({ card, frame, layout }: { card: TCard; frame: number; layo
 					)}
 				</div>
 				{card.example ? (
-					<div style={{ marginTop: 16, paddingTop: 14, borderTop: "4px dashed #c9d6e8", fontSize: 54, fontWeight: 800, color: COLORS.cobalt, opacity: exampleIn, transform: `translateY(${(1 - exampleIn) * 20}px)` }}>
+					<div style={{ marginTop: 16, paddingTop: 14, borderTop: "4px dashed #c9d6e8", fontSize: Math.min(54, Math.floor(530 / (0.5 * card.example.length))), whiteSpace: "nowrap", fontWeight: 800, color: COLORS.cobalt, opacity: exampleIn, transform: `translateY(${(1 - exampleIn) * 20}px)` }}>
 						{card.example}
 					</div>
 				) : null}
@@ -325,7 +325,7 @@ export function SeriesBadge({ term, frame }: { term: string; frame: number }) {
 			}}
 		>
 			<div style={{ fontSize: 30, fontWeight: 800, color: COLORS.gold, lineHeight: 1.1, letterSpacing: 2 }}>📖 GLOSSÁRIO</div>
-			<div style={{ fontSize: 60, fontWeight: 800, lineHeight: 1.15 }}>{term}</div>
+			<div style={{ fontSize: Math.min(60, Math.floor(280 / (0.56 * term.length))), fontWeight: 800, lineHeight: 1.15, whiteSpace: "nowrap" }}>{term}</div>
 		</div>
 	);
 }

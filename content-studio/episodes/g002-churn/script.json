@@ -1,0 +1,205 @@
+{
+	"id": "g002-churn",
+	"title": "Ninguém cancelou não quer dizer que ninguém saiu",
+	"format": "glossario",
+	"glossary": {
+		"slug": "churn",
+		"term": "CHURN"
+	},
+	"segment": "sorveteria",
+	"scene": "sorveteria",
+	"owner": {
+		"name": "Márcia",
+		"look": "marcia"
+	},
+	"beats": [
+		{
+			"say": "Meus clientes são fiéis: ninguém nunca cancelou nada!",
+			"speaker": "owner",
+			"tone": "proud, confident, fast",
+			"label": "NINGUÉM CANCELOU = NINGUÉM SAIU?",
+			"shot": "owner",
+			"owner": {
+				"pose": "idle",
+				"mood": "hopeful"
+			}
+		},
+		{
+			"say": "Márcia, no varejo ninguém cancela. O cliente só para de vir.",
+			"speaker": "dog",
+			"label": "NINGUÉM AVISA",
+			"shot": "both",
+			"owner": {
+				"pose": "idle",
+				"mood": "worried"
+			},
+			"dog": {
+				"pose": "sit",
+				"mood": "explain"
+			}
+		},
+		{
+			"say": "Isso é churn: a porcentagem de clientes que deixam de comprar num período.",
+			"speaker": "dog",
+			"label": "O QUE É CHURN",
+			"shot": "dog",
+			"dog": {
+				"pose": "point",
+				"mood": "explain"
+			},
+			"card": {
+				"kind": "term",
+				"term": "Churn",
+				"tag": "clientes e fidelização",
+				"definition": "A porcentagem de clientes que deixam de comprar em um período."
+			}
+		},
+		{
+			"say": "Sem contrato, você define um prazo. Quem comprava todo mês e passou de noventa dias sem voltar, saiu.",
+			"speaker": "dog",
+			"label": "O PRAZO DE INATIVIDADE",
+			"shot": "dog",
+			"dog": {
+				"pose": "point",
+				"mood": "explain"
+			},
+			"card": {
+				"kind": "math",
+				"rows": [
+					{
+						"label": "Compra a cada",
+						"value": "30 dias"
+					},
+					{
+						"label": "Sem vir há",
+						"value": "90 dias",
+						"strong": true,
+						"bad": true
+					}
+				]
+			}
+		},
+		{
+			"say": "A conta: mil clientes ativos em janeiro, cento e vinte sumiram até abril. Churn de doze por cento.",
+			"speaker": "dog",
+			"label": "A FÓRMULA",
+			"shot": "dog",
+			"dog": {
+				"pose": "point",
+				"mood": "happy"
+			},
+			"card": {
+				"kind": "formula",
+				"expression": "Churn = pararam ÷ ativos",
+				"highlight": [
+					"Churn"
+				],
+				"example": "120 ÷ 1.000 = 12%"
+			},
+			"source": "Loja hipotética do glossário: 1.000 clientes, 90 dias"
+		},
+		{
+			"say": "Cento e vinte clientes sumiram e eu nem percebi?!",
+			"speaker": "owner",
+			"tone": "shocked, disbelief",
+			"label": "120 SUMIRAM",
+			"shot": "owner",
+			"owner": {
+				"pose": "worried",
+				"mood": "worried"
+			},
+			"card": {
+				"kind": "stat",
+				"value": "120",
+				"caption": "clientes sumiram no trimestre",
+				"mark": "cross"
+			},
+			"source": "Loja hipotética do glossário: 1.000 clientes, 90 dias"
+		},
+		{
+			"say": "E cada um que some, você precisa trocar por um cliente novo só pra empatar.",
+			"speaker": "dog",
+			"tone": "dramatic, serious, fast",
+			"label": "TROCAR SÓ PRA EMPATAR",
+			"shot": "dog",
+			"dog": {
+				"pose": "sit",
+				"mood": "worried"
+			},
+			"card": {
+				"kind": "compare",
+				"rows": [
+					{
+						"text": "Correr atrás de cliente novo",
+						"mark": "cross"
+					},
+					{
+						"text": "Chamar quem está esfriando",
+						"mark": "check"
+					}
+				]
+			}
+		},
+		{
+			"say": "No RecompraCRM, quem está em risco e quem já sumiu aparece separado, e a campanha chama sozinha.",
+			"speaker": "dog",
+			"shot": "app",
+			"owner": {
+				"pose": "phone",
+				"mood": "happy"
+			},
+			"app": {
+				"headline": "QUEM ESTÁ SUMINDO, NO",
+				"screen": "rfm-segments"
+			}
+		},
+		{
+			"say": "Pra não esquecer: churn é quem parou de comprar. E dá pra chamar antes de sumir.",
+			"speaker": "dog",
+			"label": "SALVA ESSA COLA",
+			"shot": "dog",
+			"dog": {
+				"pose": "sit",
+				"mood": "happy"
+			},
+			"card": {
+				"kind": "recap",
+				"title": "COLA RÁPIDA",
+				"rows": [
+					{
+						"term": "CHURN",
+						"text": "quem parou de comprar"
+					},
+					{
+						"term": "PRAZO",
+						"text": "ritmo de compra + folga"
+					},
+					{
+						"term": "AÇÃO",
+						"text": "chamar antes de sumir"
+					}
+				]
+			}
+		},
+		{
+			"say": "Salva o vídeo e confere o glossário completo no link da bio. Segue o Caramelo!",
+			"speaker": "dog",
+			"label": "GLOSSÁRIO NO LINK DA BIO",
+			"shot": "outro",
+			"dog": {
+				"pose": "wave",
+				"mood": "happy"
+			}
+		}
+	],
+	"instagram": {
+		"caption": "Ninguém cancelou… então ninguém saiu? 📖\nNo varejo não existe cancelamento: churn é a porcentagem de clientes que deixam de comprar em um período, e quem passa do prazo de inatividade sem voltar já saiu. Numa loja com 1.000 clientes ativos, 120 sem comprar há mais de 90 dias dão churn de 12% no trimestre (exemplo hipotético).\nQuantos dias sem comprar, na sua loja, é cliente perdido?\nGlossário completo no link da bio.",
+		"hashtags": [
+			"#varejo",
+			"#churn",
+			"#fidelizacao",
+			"#clientefiel",
+			"#pequenonegocio"
+		]
+	}
+}

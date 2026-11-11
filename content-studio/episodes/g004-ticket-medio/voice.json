@@ -1,0 +1,740 @@
+{
+	"provider": "fishaudio",
+	"model": "drama-3",
+	"speed": 1.2,
+	"maxPauseSeconds": 0.16,
+	"tempo": 1.18,
+	"spoken": {
+		"RecompraCRM": "Recompra cê érre ême",
+		"markup": "márcap",
+		"Markup": "Márcap",
+		"churn": "tchârn",
+		"Churn": "Tchârn",
+		"ABC": "á bê cê",
+		"ticket": "tíquete",
+		"Ticket": "Tíquete"
+	},
+	"durationSeconds": 45.74,
+	"words": [
+		{
+			"text": "Vendi",
+			"start": 0.042,
+			"end": 0.517
+		},
+		{
+			"text": "mais",
+			"start": 0.517,
+			"end": 0.788
+		},
+		{
+			"text": "esse",
+			"start": 0.788,
+			"end": 0.992
+		},
+		{
+			"text": "mês",
+			"start": 0.992,
+			"end": 1.398
+		},
+		{
+			"text": "e",
+			"start": 1.534,
+			"end": 1.602
+		},
+		{
+			"text": "faturei",
+			"start": 1.602,
+			"end": 2.008
+		},
+		{
+			"text": "menos",
+			"start": 2.008,
+			"end": 2.686
+		},
+		{
+			"text": "Olha",
+			"start": 2.822,
+			"end": 2.958
+		},
+		{
+			"text": "o",
+			"start": 2.958,
+			"end": 2.958
+		},
+		{
+			"text": "tíquete",
+			"start": 2.958,
+			"end": 3.297
+		},
+		{
+			"text": "médio",
+			"start": 3.297,
+			"end": 3.5
+		},
+		{
+			"text": "Márcia",
+			"start": 3.5,
+			"end": 3.907
+		},
+		{
+			"text": "Eu",
+			"start": 4.042,
+			"end": 4.178
+		},
+		{
+			"text": "vi",
+			"start": 4.178,
+			"end": 4.314
+		},
+		{
+			"text": "muita",
+			"start": 4.314,
+			"end": 4.653
+		},
+		{
+			"text": "gente",
+			"start": 4.653,
+			"end": 4.924
+		},
+		{
+			"text": "levando",
+			"start": 4.924,
+			"end": 5.195
+		},
+		{
+			"text": "menos",
+			"start": 5.195,
+			"end": 5.805
+		},
+		{
+			"text": "Tíquete",
+			"start": 5.941,
+			"end": 6.28
+		},
+		{
+			"text": "médio",
+			"start": 6.28,
+			"end": 6.619
+		},
+		{
+			"text": "é",
+			"start": 6.686,
+			"end": 6.754
+		},
+		{
+			"text": "o",
+			"start": 6.754,
+			"end": 6.822
+		},
+		{
+			"text": "valor",
+			"start": 6.822,
+			"end": 7.093
+		},
+		{
+			"text": "médio",
+			"start": 7.093,
+			"end": 7.432
+		},
+		{
+			"text": "de",
+			"start": 7.432,
+			"end": 7.568
+		},
+		{
+			"text": "cada",
+			"start": 7.568,
+			"end": 7.839
+		},
+		{
+			"text": "venda",
+			"start": 7.839,
+			"end": 8.314
+		},
+		{
+			"text": "quanto",
+			"start": 8.449,
+			"end": 8.72
+		},
+		{
+			"text": "cada",
+			"start": 8.788,
+			"end": 8.992
+		},
+		{
+			"text": "cliente",
+			"start": 8.992,
+			"end": 9.331
+		},
+		{
+			"text": "gasta",
+			"start": 9.331,
+			"end": 9.669
+		},
+		{
+			"text": "por",
+			"start": 9.669,
+			"end": 9.805
+		},
+		{
+			"text": "visita",
+			"start": 9.805,
+			"end": 10.347
+		},
+		{
+			"text": "É",
+			"start": 10.483,
+			"end": 10.619
+		},
+		{
+			"text": "o",
+			"start": 10.619,
+			"end": 10.686
+		},
+		{
+			"text": "faturamento",
+			"start": 10.686,
+			"end": 11.297
+		},
+		{
+			"text": "dividido",
+			"start": 11.297,
+			"end": 11.771
+		},
+		{
+			"text": "pelo",
+			"start": 11.771,
+			"end": 11.975
+		},
+		{
+			"text": "número",
+			"start": 11.975,
+			"end": 12.246
+		},
+		{
+			"text": "de",
+			"start": 12.246,
+			"end": 12.381
+		},
+		{
+			"text": "vendas",
+			"start": 12.381,
+			"end": 12.924
+		},
+		{
+			"text": "Mês",
+			"start": 13.059,
+			"end": 13.331
+		},
+		{
+			"text": "passado",
+			"start": 13.331,
+			"end": 13.873
+		},
+		{
+			"text": "quarenta",
+			"start": 14.008,
+			"end": 14.483
+		},
+		{
+			"text": "e",
+			"start": 14.483,
+			"end": 14.619
+		},
+		{
+			"text": "oito",
+			"start": 14.619,
+			"end": 14.822
+		},
+		{
+			"text": "mil",
+			"start": 14.822,
+			"end": 15.161
+		},
+		{
+			"text": "em",
+			"start": 15.161,
+			"end": 15.297
+		},
+		{
+			"text": "mil",
+			"start": 15.297,
+			"end": 15.636
+		},
+		{
+			"text": "e",
+			"start": 15.636,
+			"end": 15.703
+		},
+		{
+			"text": "duzentas",
+			"start": 15.703,
+			"end": 16.178
+		},
+		{
+			"text": "vendas",
+			"start": 16.178,
+			"end": 16.72
+		},
+		{
+			"text": "Quarenta",
+			"start": 16.856,
+			"end": 17.263
+		},
+		{
+			"text": "reais",
+			"start": 17.263,
+			"end": 17.873
+		},
+		{
+			"text": "Este",
+			"start": 18.008,
+			"end": 18.28
+		},
+		{
+			"text": "mês",
+			"start": 18.28,
+			"end": 18.822
+		},
+		{
+			"text": "mil",
+			"start": 18.89,
+			"end": 19.229
+		},
+		{
+			"text": "e",
+			"start": 19.229,
+			"end": 19.229
+		},
+		{
+			"text": "trezentas",
+			"start": 19.297,
+			"end": 19.771
+		},
+		{
+			"text": "vendas",
+			"start": 19.771,
+			"end": 20.314
+		},
+		{
+			"text": "mas",
+			"start": 20.449,
+			"end": 20.653
+		},
+		{
+			"text": "quarenta",
+			"start": 20.653,
+			"end": 21.195
+		},
+		{
+			"text": "e",
+			"start": 21.195,
+			"end": 21.263
+		},
+		{
+			"text": "cinco",
+			"start": 21.263,
+			"end": 21.669
+		},
+		{
+			"text": "mil",
+			"start": 21.669,
+			"end": 21.941
+		},
+		{
+			"text": "e",
+			"start": 21.941,
+			"end": 22.008
+		},
+		{
+			"text": "quinhentos",
+			"start": 22.008,
+			"end": 22.822
+		},
+		{
+			"text": "Trinta",
+			"start": 22.958,
+			"end": 23.229
+		},
+		{
+			"text": "e",
+			"start": 23.229,
+			"end": 23.297
+		},
+		{
+			"text": "cinco",
+			"start": 23.297,
+			"end": 23.703
+		},
+		{
+			"text": "reais",
+			"start": 23.703,
+			"end": 24.246
+		},
+		{
+			"text": "Cinco",
+			"start": 24.381,
+			"end": 24.856
+		},
+		{
+			"text": "reais",
+			"start": 24.856,
+			"end": 25.195
+		},
+		{
+			"text": "a",
+			"start": 25.195,
+			"end": 25.263
+		},
+		{
+			"text": "menos",
+			"start": 25.263,
+			"end": 25.669
+		},
+		{
+			"text": "em",
+			"start": 25.669,
+			"end": 25.805
+		},
+		{
+			"text": "cada",
+			"start": 25.805,
+			"end": 26.144
+		},
+		{
+			"text": "venda",
+			"start": 26.144,
+			"end": 26.89
+		},
+		{
+			"text": "Pra",
+			"start": 27.025,
+			"end": 27.161
+		},
+		{
+			"text": "subir",
+			"start": 27.161,
+			"end": 27.703
+		},
+		{
+			"text": "combo",
+			"start": 27.771,
+			"end": 28.246
+		},
+		{
+			"text": "adicional",
+			"start": 28.246,
+			"end": 28.72
+		},
+		{
+			"text": "no",
+			"start": 28.72,
+			"end": 28.856
+		},
+		{
+			"text": "caixa",
+			"start": 28.856,
+			"end": 29.127
+		},
+		{
+			"text": "e",
+			"start": 29.263,
+			"end": 29.263
+		},
+		{
+			"text": "cashback",
+			"start": 29.263,
+			"end": 29.805
+		},
+		{
+			"text": "que",
+			"start": 29.805,
+			"end": 29.873
+		},
+		{
+			"text": "só",
+			"start": 29.873,
+			"end": 30.008
+		},
+		{
+			"text": "vale",
+			"start": 30.008,
+			"end": 30.212
+		},
+		{
+			"text": "acima",
+			"start": 30.212,
+			"end": 30.551
+		},
+		{
+			"text": "de",
+			"start": 30.551,
+			"end": 30.619
+		},
+		{
+			"text": "um",
+			"start": 30.619,
+			"end": 30.686
+		},
+		{
+			"text": "valor",
+			"start": 30.686,
+			"end": 31.161
+		},
+		{
+			"text": "O",
+			"start": 31.297,
+			"end": 31.364
+		},
+		{
+			"text": "painel",
+			"start": 31.364,
+			"end": 31.703
+		},
+		{
+			"text": "do",
+			"start": 31.703,
+			"end": 31.771
+		},
+		{
+			"text": "Recompra",
+			"start": 31.771,
+			"end": 32.178
+		},
+		{
+			"text": "cê",
+			"start": 32.178,
+			"end": 32.314
+		},
+		{
+			"text": "érre",
+			"start": 32.449,
+			"end": 32.856
+		},
+		{
+			"text": "ême",
+			"start": 32.856,
+			"end": 32.856
+		},
+		{
+			"text": "mostra",
+			"start": 32.924,
+			"end": 33.263
+		},
+		{
+			"text": "o",
+			"start": 33.263,
+			"end": 33.263
+		},
+		{
+			"text": "tíquete",
+			"start": 33.263,
+			"end": 33.602
+		},
+		{
+			"text": "médio",
+			"start": 33.602,
+			"end": 33.873
+		},
+		{
+			"text": "da",
+			"start": 33.873,
+			"end": 33.941
+		},
+		{
+			"text": "loja",
+			"start": 33.941,
+			"end": 34.28
+		},
+		{
+			"text": "e",
+			"start": 34.28,
+			"end": 34.347
+		},
+		{
+			"text": "de",
+			"start": 34.347,
+			"end": 34.551
+		},
+		{
+			"text": "cada",
+			"start": 34.551,
+			"end": 34.754
+		},
+		{
+			"text": "vendedor",
+			"start": 34.754,
+			"end": 35.364
+		},
+		{
+			"text": "contra",
+			"start": 35.5,
+			"end": 35.703
+		},
+		{
+			"text": "o",
+			"start": 35.771,
+			"end": 35.771
+		},
+		{
+			"text": "mês",
+			"start": 35.771,
+			"end": 35.907
+		},
+		{
+			"text": "anterior",
+			"start": 35.907,
+			"end": 36.449
+		},
+		{
+			"text": "Pra",
+			"start": 36.585,
+			"end": 36.72
+		},
+		{
+			"text": "não",
+			"start": 36.72,
+			"end": 36.856
+		},
+		{
+			"text": "esquecer",
+			"start": 36.856,
+			"end": 37.534
+		},
+		{
+			"text": "tíquete",
+			"start": 37.602,
+			"end": 38.076
+		},
+		{
+			"text": "é",
+			"start": 38.076,
+			"end": 38.144
+		},
+		{
+			"text": "faturamento",
+			"start": 38.144,
+			"end": 38.754
+		},
+		{
+			"text": "dividido",
+			"start": 38.754,
+			"end": 39.093
+		},
+		{
+			"text": "por",
+			"start": 39.093,
+			"end": 39.229
+		},
+		{
+			"text": "vendas",
+			"start": 39.229,
+			"end": 39.703
+		},
+		{
+			"text": "E",
+			"start": 39.839,
+			"end": 39.975
+		},
+		{
+			"text": "ele",
+			"start": 39.975,
+			"end": 40.11
+		},
+		{
+			"text": "cai",
+			"start": 40.11,
+			"end": 40.314
+		},
+		{
+			"text": "sem",
+			"start": 40.314,
+			"end": 40.585
+		},
+		{
+			"text": "fazer",
+			"start": 40.585,
+			"end": 40.856
+		},
+		{
+			"text": "barulho",
+			"start": 40.856,
+			"end": 41.331
+		},
+		{
+			"text": "Salva",
+			"start": 41.466,
+			"end": 41.805
+		},
+		{
+			"text": "o",
+			"start": 41.805,
+			"end": 41.873
+		},
+		{
+			"text": "vídeo",
+			"start": 41.873,
+			"end": 42.212
+		},
+		{
+			"text": "e",
+			"start": 42.28,
+			"end": 42.347
+		},
+		{
+			"text": "confere",
+			"start": 42.347,
+			"end": 42.686
+		},
+		{
+			"text": "o",
+			"start": 42.686,
+			"end": 42.686
+		},
+		{
+			"text": "glossário",
+			"start": 42.754,
+			"end": 43.093
+		},
+		{
+			"text": "completo",
+			"start": 43.093,
+			"end": 43.568
+		},
+		{
+			"text": "no",
+			"start": 43.568,
+			"end": 43.636
+		},
+		{
+			"text": "link",
+			"start": 43.636,
+			"end": 43.839
+		},
+		{
+			"text": "da",
+			"start": 43.839,
+			"end": 43.975
+		},
+		{
+			"text": "bio",
+			"start": 43.975,
+			"end": 44.381
+		},
+		{
+			"text": "Segue",
+			"start": 44.517,
+			"end": 44.856
+		},
+		{
+			"text": "o",
+			"start": 44.856,
+			"end": 44.856
+		},
+		{
+			"text": "Caramelo",
+			"start": 44.856,
+			"end": 45.398
+		}
+	]
+}

@@ -21,7 +21,9 @@ o app não importa nada daqui. Leia o `CONTENT-GUIDE.md` antes de escrever qualq
    - Todo número afirmado leva `source`. Conta própria vale, dizendo a conta.
    - Último passo: `shot: "outro"`. Um passo `shot: "app"` mostra a tela do produto que faz aquilo.
 3. **Conferir.** `npm run lint -- <id>`. Corrija todo erro. Aviso de tela não desenhada: desenhe a
-   tela em `src/ui/AppScreen.tsx` e inclua em `IMPLEMENTED_SCREENS` (`src/types.ts`), ou troque a tela.
+   tela em `src/ui/screens.tsx` (registre em `SCREENS`, `AppScreenEnum` e `IMPLEMENTED_SCREENS`), ou troque
+   a tela. Cada tela destaca o trecho certo com `cue("palavra")`: escreva a fala do passo com as
+   palavras que a tela espera (ex.: "risco", "campanha" na matriz RFM).
 4. **Voz.** `npm run tts-request -- <id>` imprime a chamada. Rode-a com a ferramenta `monid_run`
    do Monid (provider, endpoint, input, tag e maxCost exatamente como impressos) e espere com
    `monid_get_run` até `COMPLETED`. Salve o resultado do run num arquivo JSON (se ele vier no
@@ -51,7 +53,7 @@ Sem rede para o Chrome do Remotion, exporte o navegador da máquina antes do ren
 | novo cenário | `src/scene/<Cena>.tsx` + `scene` em `src/types.ts` |
 | posição dos personagens e câmera por plano | `SHOTS` em `src/Reel.tsx` |
 | legenda, rótulo, contador, cartões, fonte | `src/ui/Overlays.tsx` |
-| tela do produto | `src/ui/AppScreen.tsx` |
+| tela do produto (uma por função; `SCREENS` + `IMPLEMENTED_SCREENS`) | `src/ui/screens.tsx` |
 | tempo das falas e quebra de legenda | `src/timeline.ts` |
 | vozes, velocidade, pausa máxima e pronúncia ("RecompraCRM" → "Recompra cê érre ême") | `voice.config.json` |
 
