@@ -19,112 +19,97 @@ function parseDaysJson(value: string | null | undefined): number[] {
 	}
 }
 
-export function getTriggerConfigSummary(campaign: TGetCampaignsOutputById): string[] {
-	const lines: string[] = [];
+/** Um item da configuração do gatilho. Sem `label`, é uma frase que se explica sozinha. */
+export type TTriggerConfigItem = { label: string | null; value: string };
+
+function dispatchDate(value: string | null | undefined): TTriggerConfigItem {
+	return { label: "Data do disparo", value: value ? dayjs(value).format("DD/MM/YYYY") : "Não definida" };
+}
+
+export function getTriggerConfigSummary(campaign: TGetCampaignsOutputById): TTriggerConfigItem[] {
+	const lines: TTriggerConfigItem[] = [];
 
 	switch (campaign.gatilhoTipo) {
 		case "USO-UNICO":
-			lines.push(
-				campaign.gatilhoUsoUnicoDataReferencia
-					? `Disparo em ${dayjs(campaign.gatilhoUsoUnicoDataReferencia).format("DD/MM/YYYY")}`
-					: "Data de disparo não definida",
-			);
+			lines.push(dispatchDate(campaign.gatilhoUsoUnicoDataReferencia));
 			break;
 		case "PROMOCAO-PRODUTOS": {
-			lines.push(
-				campaign.gatilhoPromocaoDataReferencia
-					? `Disparo em ${dayjs(campaign.gatilhoPromocaoDataReferencia).format("DD/MM/YYYY")}`
-					: "Data de disparo não definida",
-			);
+			lines.push(dispatchDate(campaign.gatilhoPromocaoDataReferencia));
 			const promotionProducts = campaign.gatilhoPromocaoProdutos ?? [];
-			lines.push(promotionProducts.length > 0 ? `${promotionProducts.length} produto(s) na promoção` : "Nenhum produto selecionado");
+			lines.push({ label: "Produtos", value: promotionProducts.length > 0 ? `${promotionProducts.length} na promoção` : "Nenhum selecionado" });
 			const withOverride = promotionProducts.filter((promotionProduct) => promotionProduct.precoPromocional != null).length;
-			if (withOverride > 0) lines.push(`${withOverride} com preço promocional definido`);
+			if (withOverride > 0) lines.push({ label: "Preço promocional", value: `${withOverride} produto(s)` });
 			break;
 		}
-		case "PESQUISA": {
-			lines.push(
-				campaign.gatilhoPesquisaDataReferencia
-					? `Disparo em ${dayjs(campaign.gatilhoPesquisaDataReferencia).format("DD/MM/YYYY")}`
-					: "Data de disparo não definida",
-			);
-			lines.push(campaign.pesquisaCampo ? `Pergunta: ${campaign.pesquisaCampo.titulo}` : "Campo da pesquisa não definido");
+		case "PESQUISA":
+			lines.push(dispatchDate(campaign.gatilhoPesquisaDataReferencia));
+			lines.push({ label: "Pergunta", value: campaign.pesquisaCampo ? campaign.pesquisaCampo.titulo : "Campo não definido" });
 			break;
-		}
 		case "RECORRENTE": {
 			const freqLabel =
 				RecurrenceFrequencyOptions.find((option) => option.value === campaign.recorrenciaTipo)?.label ?? campaign.recorrenciaTipo ?? "Não definida";
-			const interval = campaign.recorrenciaIntervalo ?? 1;
-			lines.push(`${freqLabel}, a cada ${interval} intervalo(s)`);
+			lines.push({ label: "Frequência", value: freqLabel });
+			lines.push({ label: "Intervalo", value: `A cada ${campaign.recorrenciaIntervalo ?? 1}` });
 			if (campaign.recorrenciaTipo === "SEMANAL") {
 				const days = parseDaysJson(campaign.recorrenciaDiasSemana);
 				const labels = days.map((day) => DaysOfWeekOptions.find((option) => option.value === day)?.label ?? String(day));
-				lines.push(labels.length > 0 ? `Dias: ${labels.join(", ")}` : "Nenhum dia da semana selecionado");
+				lines.push({ label: "Dias da semana", value: labels.length > 0 ? labels.join(", ") : "Nenhum selecionado" });
 			}
 			if (campaign.recorrenciaTipo === "MENSAL") {
 				const days = parseDaysJson(campaign.recorrenciaDiasMes);
-				lines.push(days.length > 0 ? `Dias do mês: ${days.join(", ")}` : "Nenhum dia do mês selecionado");
+				lines.push({ label: "Dias do mês", value: days.length > 0 ? days.join(", ") : "Nenhum selecionado" });
 			}
 			break;
 		}
 		case "NOVA-COMPRA":
-			lines.push(
-				campaign.gatilhoNovaCompraValorMinimo != null
-					? `Valor mínimo: ${formatToMoney(campaign.gatilhoNovaCompraValorMinimo)}`
-					: "Qualquer valor de compra",
-			);
+			lines.push({
+				label: "Valor mínimo da compra",
+				value: campaign.gatilhoNovaCompraValorMinimo != null ? formatToMoney(campaign.gatilhoNovaCompraValorMinimo) : "Qualquer valor",
+			});
 			break;
 		case "PRIMEIRA-COMPRA":
-			lines.push("Dispara na primeira compra do cliente");
+			lines.push({ label: null, value: "Dispara na primeira compra do cliente." });
 			break;
 		case "PERMANÊNCIA-SEGMENTAÇÃO": {
 			const duration = formatDuration(campaign.gatilhoTempoPermanenciaValor, campaign.gatilhoTempoPermanenciaMedida);
-			lines.push(duration ? `Permanência: ${duration}` : "Tempo de permanência não definido");
+			lines.push({ label: "Permanência", value: duration ?? "Não definida" });
 			break;
 		}
 		case "ENTRADA-SEGMENTAÇÃO":
-			lines.push("Dispara ao entrar na segmentação selecionada");
+			lines.push({ label: null, value: "Dispara ao entrar na segmentação selecionada." });
 			break;
 		case "CASHBACK-ACUMULADO": {
 			if (campaign.gatilhoNovoCashbackAcumuladoValorMinimo != null) {
-				lines.push(`Novo cashback mín.: ${formatToMoney(campaign.gatilhoNovoCashbackAcumuladoValorMinimo)}`);
+				lines.push({ label: "Novo cashback mínimo", value: formatToMoney(campaign.gatilhoNovoCashbackAcumuladoValorMinimo) });
 			}
 			if (campaign.gatilhoTotalCashbackAcumuladoValorMinimo != null) {
-				lines.push(`Total acumulado mín.: ${formatToMoney(campaign.gatilhoTotalCashbackAcumuladoValorMinimo)}`);
+				lines.push({ label: "Total acumulado mínimo", value: formatToMoney(campaign.gatilhoTotalCashbackAcumuladoValorMinimo) });
 			}
-			if (lines.length === 0) lines.push("Dispara em qualquer novo cashback acumulado");
+			if (lines.length === 0) lines.push({ label: null, value: "Dispara em qualquer novo cashback acumulado." });
 			break;
 		}
 		case "CASHBACK-EXPIRANDO": {
-			const antecedencia = formatDuration(
-				campaign.gatilhoCashbackExpirandoAntecedenciaValor,
-				campaign.gatilhoCashbackExpirandoAntecedenciaMedida,
-			);
-			if (antecedencia) lines.push(`Antecedência: ${antecedencia}`);
+			const antecedencia = formatDuration(campaign.gatilhoCashbackExpirandoAntecedenciaValor, campaign.gatilhoCashbackExpirandoAntecedenciaMedida);
+			if (antecedencia) lines.push({ label: "Antecedência", value: antecedencia });
 			if (campaign.gatilhoCashbackExpirandoValorMinimo != null) {
-				lines.push(`Valor mínimo para avisar: ${formatToMoney(campaign.gatilhoCashbackExpirandoValorMinimo)}`);
+				lines.push({ label: "Valor mínimo para avisar", value: formatToMoney(campaign.gatilhoCashbackExpirandoValorMinimo) });
 			}
 			break;
 		}
 		case "QUANTIDADE-TOTAL-COMPRAS":
-			lines.push(
-				campaign.gatilhoQuantidadeTotalCompras
-					? `${campaign.gatilhoQuantidadeTotalCompras} compra(s) acumuladas`
-					: "Quantidade não definida",
-			);
+			lines.push({
+				label: "Compras acumuladas",
+				value: campaign.gatilhoQuantidadeTotalCompras ? String(campaign.gatilhoQuantidadeTotalCompras) : "Não definida",
+			});
 			break;
 		case "VALOR-TOTAL-COMPRAS":
-			lines.push(
-				campaign.gatilhoValorTotalCompras
-					? `Valor total: ${formatToMoney(campaign.gatilhoValorTotalCompras)}`
-					: "Valor não definido",
-			);
+			lines.push({ label: "Valor total", value: campaign.gatilhoValorTotalCompras ? formatToMoney(campaign.gatilhoValorTotalCompras) : "Não definido" });
 			break;
 		case "PIOR-DIA-VENDAS":
-			lines.push("Calculado automaticamente pelo dia mais fraco das últimas 8 semanas");
+			lines.push({ label: null, value: "Calculado automaticamente pelo dia mais fraco das últimas 8 semanas." });
 			break;
 		case "ANIVERSARIO_CLIENTE":
-			lines.push("Dispara no aniversário do cliente (antes/depois configurado no envio)");
+			lines.push({ label: null, value: "Dispara no aniversário do cliente (antes ou depois, conforme o envio)." });
 			break;
 		default:
 			break;

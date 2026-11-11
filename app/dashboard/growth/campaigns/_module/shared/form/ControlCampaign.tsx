@@ -18,11 +18,11 @@ import { updateCampaign } from "@/lib/mutations/campaigns";
 import { useCampaignState, type TUseCampaignState } from "@/state-hooks/use-campaign-state";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { TextIcon } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { toast } from "sonner";
 import { buildCampaignStateFromEntity, buildCampaignUpdatePayload } from "./utils";
-import { useCampaignById } from "@/lib/queries/campaigns";
+import { useCampaignById, useCampaignStats } from "@/lib/queries/campaigns";
 
 type ControlCampaignProps = {
 	sessionUser: TAuthUserSession["user"];
@@ -116,7 +116,7 @@ export default function ControlCampaign({
 			) : null}
 			{section === "audience" ? <AudienceSection controller={controller} /> : null}
 			{section === "effects" ? <EffectsSection controller={controller} /> : null}
-			{section === "settings" ? <SettingsSection controller={controller} /> : null}
+			{section === "settings" ? <SettingsSection controller={controller} campaignId={campaignId} /> : null}
 		</ResponsiveMenu>
 	);
 }
@@ -195,13 +195,25 @@ function EffectsSection({ controller }: SharedSectionProps) {
 	);
 }
 
-function SettingsSection({ controller }: SharedSectionProps) {
+function SettingsSection({ controller, campaignId }: SharedSectionProps & { campaignId: string }) {
 	const { state, updateCampaign } = controller;
+	// A cota ignora o período: só lê o ledger da semana (e do dia) corrente.
+	const [today] = useState(() => new Date());
+	const { data: stats } = useCampaignStats({ campaignId, startDate: today, endDate: today });
+	const weeklyQuota = stats?.quota.find((window) => window.tipo === "SEMANAL");
+	const dailyQuota = stats?.quota.find((window) => window.tipo === "DIARIO");
+	const weeklyUsage = weeklyQuota
+		? {
+				campaignUsed: weeklyQuota.campanha.usados,
+				organizationWeeklyLimit: weeklyQuota.organizacao.limite,
+				organizationDailyLimit: dailyQuota?.organizacao.limite ?? null,
+			}
+		: null;
 
 	return (
 		<>
 			<CampaignsConversionBlock campaign={state.campaign} updateCampaign={updateCampaign} />
-			<CampaignsConfigBlock campaign={state.campaign} updateCampaign={updateCampaign} />
+			<CampaignsConfigBlock campaign={state.campaign} updateCampaign={updateCampaign} weeklyUsage={weeklyUsage} />
 		</>
 	);
 }
