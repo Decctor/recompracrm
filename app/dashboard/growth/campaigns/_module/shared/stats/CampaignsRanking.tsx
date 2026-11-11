@@ -1,211 +1,174 @@
 "use client";
+
 import type { TGetCampaignRankingInput } from "@/app/api/campaigns/stats/ranking/route";
-import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { getTriggerMeta } from "@/app/dashboard/growth/campaigns/_module/builder/helpers/triggers";
+import { Section } from "@/components/ui/section";
 import { formatDecimalPlaces, formatToMoney } from "@/lib/formatting";
+import { appRoutes } from "@/lib/navigation/routes";
 import { useCampaignRanking } from "@/lib/queries/campaigns";
 import { cn } from "@/lib/utils";
-import { ArrowDown, ArrowUp, BadgeDollarSign, Crown, MessageCircle, Minus, MousePointerClick, TrendingUp } from "lucide-react";
+import { ArrowDown, ArrowUp, BadgeDollarSign, Crown, Megaphone, MousePointerClick, TrendingUp } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
+
+type TRankingBy = NonNullable<TGetCampaignRankingInput["rankingBy"]>;
+
+const RANKING_OPTIONS: { value: TRankingBy; label: string; icon: typeof BadgeDollarSign }[] = [
+	{ value: "revenue", label: "Receita", icon: BadgeDollarSign },
+	{ value: "conversions", label: "Conversões", icon: MousePointerClick },
+	{ value: "conversion-rate", label: "Taxa", icon: TrendingUp },
+];
+
+const PODIUM_CLASSES = ["bg-[#FFB900] text-white", "bg-slate-400 text-white", "bg-orange-600 text-white"];
 
 type CampaignsRankingProps = {
 	startDate: Date | null;
 	endDate: Date | null;
-	comparingStartDate?: Date | null;
-	comparingEndDate?: Date | null;
+	comparingStartDate: Date | null;
+	comparingEndDate: Date | null;
 };
 
-export default function CampaignsRanking({ startDate, endDate, comparingStartDate, comparingEndDate }: CampaignsRankingProps) {
-	const [rankingBy, setRankingBy] = useState<TGetCampaignRankingInput["rankingBy"]>("revenue");
+function PositionDelta({ delta }: { delta: number | null }) {
+	if (delta == null || delta === 0) {
+		return <span className="rounded-md bg-muted px-1.5 py-0.5 text-[0.65rem] font-bold text-muted-foreground">–</span>;
+	}
+	const up = delta > 0;
+	const Icon = up ? ArrowUp : ArrowDown;
+	return (
+		<span
+			className={cn(
+				"inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[0.65rem] font-bold tabular-nums",
+				up ? "bg-green-100 text-green-700 dark:bg-green-500/15 dark:text-green-400" : "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-400",
+			)}
+		>
+			<Icon className="size-3 min-h-3 min-w-3" />
+			{up ? "+" : "-"}
+			{Math.abs(delta)}
+		</span>
+	);
+}
 
-	const { data: rankingData, isLoading: rankingLoading } = useCampaignRanking({
-		rankingBy,
-		startDate: startDate ?? null,
-		endDate: endDate ?? null,
-		comparingStartDate: comparingStartDate ?? null,
-		comparingEndDate: comparingEndDate ?? null,
-	});
+/** Todas as campanhas do período, ordenadas pelo critério escolhido, com a variação de posição. */
+export default function CampaignsRanking({ startDate, endDate, comparingStartDate, comparingEndDate }: CampaignsRankingProps) {
+	const [rankingBy, setRankingBy] = useState<TRankingBy>("revenue");
+	const { data: ranking, isLoading } = useCampaignRanking({ rankingBy, startDate, endDate, comparingStartDate, comparingEndDate });
+	const items = ranking ?? [];
+
+	const barValue = (item: (typeof items)[number]) =>
+		rankingBy === "revenue" ? item.receita : rankingBy === "conversions" ? item.conversoes : item.taxaConversao;
+	const maxBar = Math.max(...items.map(barValue), 1);
+	const formatPrimary = (item: (typeof items)[number]) =>
+		rankingBy === "revenue"
+			? formatToMoney(item.receita)
+			: rankingBy === "conversions"
+				? formatDecimalPlaces(item.conversoes)
+				: `${formatDecimalPlaces(item.taxaConversao)}%`;
+	const primaryLabel = RANKING_OPTIONS.find((option) => option.value === rankingBy)?.label ?? "";
 
 	return (
-		<div className="w-full flex flex-col gap-2 py-2 h-full">
-			<div className="bg-card border-border flex w-full h-full flex-col gap-3 rounded-xl border px-3 py-4 shadow-2xs">
-				<div className="flex items-center justify-between gap-2 flex-wrap shrink-0">
-					<h1 className="text-xs font-medium tracking-tight uppercase">RANKING DE CAMPANHAS - TOP 10</h1>
-					<div className="flex items-center gap-2">
-						<TooltipProvider>
-							<Tooltip>
-								<TooltipTrigger
-									render={
-										<Button
-											variant={rankingBy === "revenue" ? "default" : "ghost"}
-											size="fit"
-											className="rounded-lg p-2"
-											onClick={() => setRankingBy("revenue")}
-										>
-											<BadgeDollarSign className="h-4 min-h-4 w-4 min-w-4" />
-										</Button>
-									}
-								/>
-								<TooltipContent>
-									<p>Ordenar por Receita</p>
-								</TooltipContent>
-							</Tooltip>
-							<Tooltip>
-								<TooltipTrigger
-									render={
-										<Button
-											variant={rankingBy === "conversions" ? "default" : "ghost"}
-											size="fit"
-											className="rounded-lg p-2"
-											onClick={() => setRankingBy("conversions")}
-										>
-											<MousePointerClick className="h-4 min-h-4 w-4 min-w-4" />
-										</Button>
-									}
-								/>
-								<TooltipContent>
-									<p>Ordenar por Conversões</p>
-								</TooltipContent>
-							</Tooltip>
-							<Tooltip>
-								<TooltipTrigger
-									render={
-										<Button
-											variant={rankingBy === "conversion-rate" ? "default" : "ghost"}
-											size="fit"
-											className="rounded-lg p-2"
-											onClick={() => setRankingBy("conversion-rate")}
-										>
-											<TrendingUp className="h-4 min-h-4 w-4 min-w-4" />
-										</Button>
-									}
-								/>
-								<TooltipContent>
-									<p>Ordenar por Taxa de Conversão</p>
-								</TooltipContent>
-							</Tooltip>
-						</TooltipProvider>
+		<Section.Root className="h-full">
+			<Section.Header>
+				<Section.Icon>
+					<Crown />
+				</Section.Icon>
+				<Section.Title>Ranking de campanhas</Section.Title>
+				<Section.Count>{items.length}</Section.Count>
+				<Section.Actions>
+					<div className="flex items-center gap-1" role="group" aria-label="Critério do ranking">
+						{RANKING_OPTIONS.map((option) => {
+							const Icon = option.icon;
+							const active = option.value === rankingBy;
+							return (
+								<button
+									key={option.value}
+									type="button"
+									aria-pressed={active}
+									onClick={() => setRankingBy(option.value)}
+									className={cn(
+										"flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[0.7rem] font-semibold transition-colors",
+										active ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-secondary",
+									)}
+								>
+									<Icon className="size-3.5 min-h-3.5 min-w-3.5" />
+									{option.label}
+								</button>
+							);
+						})}
 					</div>
+				</Section.Actions>
+			</Section.Header>
+			<Section.Bleed className="max-h-[560px] overflow-y-auto">
+				<div className="hidden grid-cols-[2rem_minmax(0,1fr)_5rem_4.5rem_minmax(9rem,12rem)_3rem] items-center gap-3 border-b border-border bg-muted/40 px-4 py-2 text-[0.65rem] font-bold text-muted-foreground uppercase lg:grid">
+					<span>#</span>
+					<span>Campanha</span>
+					<span className="text-right">Interações</span>
+					<span className="text-right">Taxa</span>
+					<span>{primaryLabel}</span>
+					<span className="text-right">Pos.</span>
 				</div>
-				<div className="flex w-full flex-1 flex-col gap-2 overflow-auto scrollbar-thin scrollbar-track-primary/10 scrollbar-thumb-primary/30 min-h-0">
-					{rankingLoading ? (
-						<div className="flex w-full items-center justify-center py-8">
-							<p className="text-sm text-muted-foreground">Carregando ranking...</p>
-						</div>
-					) : rankingData && rankingData.length > 0 ? (
-						rankingData.map((campaign) => (
-							<div
-								key={campaign.campanhaId}
-								className={cn(
-									"bg-card border-border flex w-full flex-col gap-2 rounded-xl border px-3 py-3 shadow-2xs",
-									campaign.rank === 1 && "border-yellow-500/50 bg-yellow-500/5",
-									campaign.rank === 2 && "border-gray-400/50 bg-gray-400/5",
-									campaign.rank === 3 && "border-orange-600/50 bg-orange-600/5",
-								)}
-							>
-								<div className="w-full flex items-start justify-between gap-2 flex-wrap">
-									<div className="flex items-center gap-2 flex-wrap">
-										{campaign.rank <= 3 ? (
-											<Crown
-												className={cn(
-													"w-5 h-5 min-w-5 min-h-5",
-													campaign.rank === 1 && "text-yellow-500",
-													campaign.rank === 2 && "text-gray-400",
-													campaign.rank === 3 && "text-orange-600",
-												)}
-											/>
-										) : (
-											<div className="w-6 h-6 min-w-6 min-h-6 rounded-full bg-primary/10 flex items-center justify-center">
-												<span className="text-xs font-bold">{campaign.rank}</span>
-											</div>
+				{isLoading ? (
+					<div className="flex flex-col gap-2 p-4">
+						{[0, 1, 2, 3].map((index) => (
+							<div key={index} className="h-10 animate-pulse rounded-lg bg-muted/40" />
+						))}
+					</div>
+				) : items.length === 0 ? (
+					<p className="px-4 py-8 text-center text-sm text-muted-foreground">Nenhuma campanha no período.</p>
+				) : (
+					<ol className="divide-y divide-border">
+						{items.map((item, index) => {
+							const trigger = getTriggerMeta(item.gatilhoTipo);
+							const TriggerIcon = trigger?.icon ?? Megaphone;
+							const barWidth = (barValue(item) / maxBar) * 100;
+							return (
+								<li
+									key={item.campanhaId}
+									className="grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-4 py-2.5 lg:grid-cols-[2rem_minmax(0,1fr)_5rem_4.5rem_minmax(9rem,12rem)_3rem]"
+								>
+									<span
+										className={cn(
+											"flex size-6 items-center justify-center rounded-full text-[0.7rem] font-bold tabular-nums",
+											PODIUM_CLASSES[index] ?? "bg-muted text-foreground",
 										)}
-										<div className="flex items-start flex-col gap-1">
-											<div className="flex items-center gap-2">
-												<h1 className="text-xs font-bold tracking-tight lg:text-sm">{campaign.titulo}</h1>
-												{campaign.rankDelta !== null && campaign.rankDelta !== 0 && (
-													<div
-														className={cn(
-															"flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[0.65rem] font-bold",
-															campaign.rankDelta > 0 && "bg-green-500/10 text-green-600 dark:text-green-400",
-															campaign.rankDelta < 0 && "bg-red-500/10 text-red-600 dark:text-red-400",
-														)}
-													>
-														{campaign.rankDelta > 0 ? (
-															<>
-																<ArrowUp className="w-3 h-3 min-w-3 min-h-3" />
-																<span>+{campaign.rankDelta}</span>
-															</>
-														) : (
-															<>
-																<ArrowDown className="w-3 h-3 min-w-3 min-h-3" />
-																<span>{campaign.rankDelta}</span>
-															</>
-														)}
-													</div>
-												)}
-												{campaign.rankDelta === 0 && (
-													<div className="flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[0.65rem] font-bold bg-gray-500/10 text-gray-600 dark:text-gray-400">
-														<Minus className="w-3 h-3 min-w-3 min-h-3" />
-													</div>
-												)}
-											</div>
-											<div className="flex items-center gap-2 flex-wrap">
-												<div className="flex items-center gap-1">
-													<MessageCircle className="w-3 h-3 min-w-3 min-h-3 text-muted-foreground" />
-													<span className="text-[0.65rem] text-muted-foreground">{formatDecimalPlaces(campaign.interacoes)} interações</span>
-												</div>
-												<div className="flex items-center gap-1">
-													<TrendingUp className="w-3 h-3 min-w-3 min-h-3 text-muted-foreground" />
-													<span className="text-[0.65rem] text-muted-foreground">{formatDecimalPlaces(campaign.taxaConversao)}% taxa</span>
-												</div>
-											</div>
+									>
+										{item.rank}
+									</span>
+									<div className="flex min-w-0 items-center gap-2.5">
+										<span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-border bg-muted/40">
+											<TriggerIcon className="size-4 min-h-4 min-w-4" />
+										</span>
+										<div className="flex min-w-0 flex-col">
+											<Link href={appRoutes.growth.campaign(item.campanhaId)} className="truncate text-sm font-bold hover:underline">
+												{item.titulo}
+											</Link>
+											<span className="truncate text-[0.7rem] text-muted-foreground">{trigger?.label ?? "Campanha"}</span>
 										</div>
 									</div>
-									<div className="flex items-center gap-3 flex-wrap">
-										{rankingBy === "revenue" ? (
-											<div className="flex flex-col items-end gap-1">
-												<div className={cn("flex items-center gap-1.5 rounded-md px-2 py-1.5 text-[0.65rem] font-bold bg-primary/10 text-foreground")}>
-													<BadgeDollarSign className="w-3 min-w-3 h-3 min-h-3" />
-													<p className="text-xs font-bold tracking-tight uppercase">{formatToMoney(campaign.receita)}</p>
-												</div>
-												{campaign.receitaComparison !== null && (
-													<p className="text-[0.60rem] text-muted-foreground">Anterior: {formatToMoney(campaign.receitaComparison)}</p>
-												)}
-											</div>
-										) : null}
-										{rankingBy === "conversions" ? (
-											<div className="flex flex-col items-end gap-1">
-												<div className={cn("flex items-center gap-1.5 rounded-md px-2 py-1.5 text-[0.65rem] font-bold bg-primary/10 text-foreground")}>
-													<MousePointerClick className="w-3 min-w-3 h-3 min-h-3" />
-													<p className="text-xs font-bold tracking-tight uppercase">{formatDecimalPlaces(campaign.conversoes)}</p>
-												</div>
-												{campaign.conversoesComparison !== null && (
-													<p className="text-[0.60rem] text-muted-foreground">Anterior: {formatDecimalPlaces(campaign.conversoesComparison)}</p>
-												)}
-											</div>
-										) : null}
-										{rankingBy === "conversion-rate" ? (
-											<div className="flex flex-col items-end gap-1">
-												<div className={cn("flex items-center gap-1.5 rounded-md px-2 py-1.5 text-[0.65rem] font-bold bg-primary/10 text-foreground")}>
-													<TrendingUp className="w-3 min-w-3 h-3 min-h-3" />
-													<p className="text-xs font-bold tracking-tight uppercase">{formatDecimalPlaces(campaign.taxaConversao)}%</p>
-												</div>
-												{campaign.taxaConversaoComparison !== null && (
-													<p className="text-[0.60rem] text-muted-foreground">Anterior: {formatDecimalPlaces(campaign.taxaConversaoComparison)}%</p>
-												)}
-											</div>
-										) : null}
+									<span className="text-right text-sm tabular-nums lg:hidden">
+										<strong>{formatPrimary(item)}</strong>
+									</span>
+									<span className="col-span-3 flex flex-wrap items-center gap-x-3 pl-11 text-[0.7rem] text-muted-foreground tabular-nums lg:hidden">
+										<span>{formatDecimalPlaces(item.interacoes)} interações</span>
+										<span>{formatDecimalPlaces(item.taxaConversao)}% taxa</span>
+										<PositionDelta delta={item.rankDelta} />
+									</span>
+									<span className="hidden text-right text-sm text-muted-foreground tabular-nums lg:block">{formatDecimalPlaces(item.interacoes)}</span>
+									<span className="hidden text-right text-sm text-muted-foreground tabular-nums lg:block">{formatDecimalPlaces(item.taxaConversao)}%</span>
+									<div className="hidden items-center gap-2 lg:flex">
+										<div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+											<div className="h-full rounded-full bg-primary" style={{ width: `${barWidth}%` }} />
+										</div>
+										<span className="shrink-0 text-right text-sm font-bold tabular-nums">{formatPrimary(item)}</span>
 									</div>
-								</div>
-							</div>
-						))
-					) : (
-						<div className="flex w-full items-center justify-center py-8">
-							<p className="text-sm text-muted-foreground">Nenhuma campanha encontrada para o período selecionado.</p>
-						</div>
-					)}
-				</div>
-			</div>
-		</div>
+									<span className="hidden justify-end lg:flex">
+										<PositionDelta delta={item.rankDelta} />
+									</span>
+								</li>
+							);
+						})}
+					</ol>
+				)}
+			</Section.Bleed>
+		</Section.Root>
 	);
 }

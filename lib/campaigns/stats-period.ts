@@ -73,3 +73,21 @@ export function resolveCampaignStatsComparisonPeriod({ startDate, endDate }: TSt
 		endDate: start.subtract(1, "day").endOf("day").toDate(),
 	};
 }
+
+/** Nome curto do período para legendas: "Novembro" para um mês inteiro, "01/11 – 15/11" no resto. */
+export function formatCampaignStatsPeriodLabel({ startDate, endDate }: TStatsPeriod): string {
+	const start = dayjs(startDate);
+	const end = dayjs(endDate);
+	if (start.isSame(start.startOf("month"), "day") && end.isSame(start.endOf("month"), "day")) {
+		const month = start.toDate().toLocaleDateString("pt-BR", { month: "long" });
+		return month.charAt(0).toUpperCase() + month.slice(1);
+	}
+	return `${start.format("DD/MM")} – ${end.format("DD/MM")}`;
+}
+
+/** Faixa completa para o "Comparado com 01/10 – 31/10/2026". */
+export function formatCampaignStatsPeriodRange({ startDate, endDate }: TStatsPeriod): string {
+	const start = dayjs(startDate);
+	const end = dayjs(endDate);
+	return `${start.format(start.year() === end.year() ? "DD/MM" : "DD/MM/YYYY")} – ${end.format("DD/MM/YYYY")}`;
+}

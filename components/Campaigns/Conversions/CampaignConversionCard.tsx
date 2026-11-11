@@ -6,16 +6,20 @@ import { Chip } from "@/components/ui/chip";
 import { formatDateAsLocale, formatDecimalPlaces, formatToMoney } from "@/lib/formatting";
 import { appRoutes } from "@/lib/navigation/routes";
 import { cn } from "@/lib/utils";
-import { Calendar, Clock, RefreshCw, TrendingDown, TrendingUp, UserPlus, UserRound } from "lucide-react";
+import { getTriggerMeta } from "@/app/dashboard/growth/campaigns/_module/builder/helpers/triggers";
+import { ArrowLeftRight, Calendar, Clock, Megaphone, RefreshCw, TrendingDown, TrendingUp, UserPlus, UserRound, Zap } from "lucide-react";
 import Link from "next/link";
-import { createContext, use, type ReactNode } from "react";
+import { createContext, use, type ComponentType, type ReactNode } from "react";
 
-export const CONVERSION_TYPE_CONFIG: Record<string, { label: string; bgClass: string; textClass: string }> = {
-	AQUISICAO: { label: "Aquisição", bgClass: "bg-green-500", textClass: "text-green-600 dark:text-green-400" },
-	REATIVACAO: { label: "Reativação", bgClass: "bg-blue-500", textClass: "text-blue-600 dark:text-blue-400" },
-	ACELERACAO: { label: "Aceleração", bgClass: "bg-yellow-500", textClass: "text-yellow-600 dark:text-yellow-400" },
-	REGULAR: { label: "Regular", bgClass: "bg-gray-400", textClass: "text-gray-600 dark:text-gray-400" },
-	ATRASADA: { label: "Atrasada", bgClass: "bg-red-500", textClass: "text-red-600 dark:text-red-400" },
+export const CONVERSION_TYPE_CONFIG: Record<
+	string,
+	{ label: string; bgClass: string; textClass: string; icon: ComponentType<{ className?: string }> }
+> = {
+	AQUISICAO: { label: "Aquisição", bgClass: "bg-green-500", textClass: "text-green-600 dark:text-green-400", icon: UserPlus },
+	REATIVACAO: { label: "Reativação", bgClass: "bg-blue-500", textClass: "text-blue-600 dark:text-blue-400", icon: RefreshCw },
+	ACELERACAO: { label: "Aceleração", bgClass: "bg-yellow-500", textClass: "text-yellow-600 dark:text-yellow-400", icon: Zap },
+	REGULAR: { label: "Regular", bgClass: "bg-gray-400", textClass: "text-gray-600 dark:text-gray-400", icon: ArrowLeftRight },
+	ATRASADA: { label: "Atrasada", bgClass: "bg-red-500", textClass: "text-red-600 dark:text-red-400", icon: Clock },
 };
 
 export type TCampaignConversion = TGetCampaignConversionsOutputItems[number];
@@ -47,14 +51,13 @@ function CampaignConversionCardCampaignLink() {
 	const campaign = conversion.campanha;
 
 	if (!campaign?.id || !campaign.titulo) return null;
+	const TriggerIcon = getTriggerMeta(campaign.gatilhoTipo)?.icon ?? Megaphone;
 
 	return (
 		<div className="border-border flex items-center gap-2 border-b pb-1.5">
 			<span className="shrink-0 text-[0.6rem] font-medium text-muted-foreground uppercase">Campanha</span>
-			<Link
-				href={appRoutes.growth.campaign(campaign.id)}
-				className="min-w-0 truncate text-[0.7rem] font-semibold text-foreground hover:underline"
-			>
+			<TriggerIcon className="size-3.5 min-h-3.5 min-w-3.5 shrink-0 text-muted-foreground" />
+			<Link href={appRoutes.growth.campaign(campaign.id)} className="min-w-0 truncate text-[0.7rem] font-semibold text-foreground hover:underline">
 				{campaign.titulo}
 			</Link>
 		</div>
@@ -75,16 +78,19 @@ function CampaignConversionCardMetadata({ children }: { children: ReactNode }) {
 
 function CampaignConversionCardConversionType() {
 	const { conversion } = useCampaignConversionCard();
-	const config = CONVERSION_TYPE_CONFIG[conversion.tipoConversao ?? ""] ?? {
-		label: conversion.tipoConversao ?? "Desconhecido",
-		bgClass: "bg-gray-400",
-		textClass: "text-gray-600",
-	};
+	const config = CONVERSION_TYPE_CONFIG[conversion.tipoConversao ?? ""];
+	const label = config?.label ?? conversion.tipoConversao ?? "Desconhecido";
+	const Icon = config?.icon;
 
 	return (
-		<Chip.Root size="md" shape="md" className={cn("border-transparent text-white", config.bgClass)}>
+		<Chip.Root size="md" shape="md" className={cn("border-transparent text-white", config?.bgClass ?? "bg-gray-400")}>
+			{Icon ? (
+				<Chip.Icon>
+					<Icon />
+				</Chip.Icon>
+			) : null}
 			<Chip.Label caps weight="bold">
-				{config.label}
+				{label}
 			</Chip.Label>
 		</Chip.Root>
 	);
