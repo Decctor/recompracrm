@@ -18,6 +18,7 @@ desenho e nicho próprios.
 | 003 Os 20% que pagam as contas | ✓ | — | falta a tela `rfm-segments` |
 | 004 Seu Jorge sumiu | ✓ | — | falta a tela `rfm-segments` |
 | 005 Crédito que vale um ano | ✓ | — | pronto para voz e render |
+| g001 Glossário: markup | ✓ | ✓ duas vozes | `npm run render -- g001-markup` |
 
 ## Rodar
 

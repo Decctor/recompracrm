@@ -8,12 +8,20 @@
 	"tempoNote": "O drama-3 alonga as palavras de efeito e quase ignora o speed; o ritmo final vem do tempo (atempo do ffmpeg, sem mudar o tom).",
 	"note": "Vozes da biblioteca licenciada da Fish Audio, só para o piloto. Antes de publicar, troque por vozes que a marca controle (clone autorizado ou locutor contratado).",
 	"voices": {
-		"dog": { "voiceId": "4819cef1d2ea49deae4f3adf8dfe94e3", "tone": "excited, upbeat, fast, smiling, playful" },
+		"dog": {
+			"voiceId": "4819cef1d2ea49deae4f3adf8dfe94e3",
+			"tone": "excited, upbeat, fast, smiling, playful"
+		},
 		"owners": {
-			"marcia": { "voiceId": "6fbaf5cf18744f4aa1fbcdf94fdbc609", "tone": "expressive, natural, fast" }
+			"marcia": {
+				"voiceId": "6fbaf5cf18744f4aa1fbcdf94fdbc609",
+				"tone": "expressive, natural, fast"
+			}
 		}
 	},
 	"spoken": {
-		"RecompraCRM": "Recompra cê érre ême"
+		"RecompraCRM": "Recompra cê érre ême",
+		"markup": "márcap",
+		"Markup": "Márcap"
 	}
 }

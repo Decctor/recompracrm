@@ -231,6 +231,62 @@ export function Card({ card, frame, layout }: { card: TCard; frame: number; layo
 		);
 	}
 
+	if (card.kind === "term") {
+		// Página de dicionário: papel creme com margem vermelha.
+		return (
+			<div style={{ ...shell, background: "#fffdf6", paddingLeft: 64, overflow: "hidden" }}>
+				<div style={{ position: "absolute", left: 34, top: 0, bottom: 0, width: 4, background: "#f2a7a7" }} />
+				<div style={{ fontSize: 96, fontWeight: 800, lineHeight: 1, color: COLORS.cobalt }}>{card.term}</div>
+				{card.tag ? <div style={{ fontSize: 30, fontWeight: 700, fontStyle: "italic", color: "#687a80", marginTop: 6 }}>{card.tag}</div> : null}
+				<div style={{ height: 6, width: 120, background: COLORS.gold, borderRadius: 3, margin: "14px 0 16px" }} />
+				<div style={{ fontSize: 44, fontWeight: 700, lineHeight: 1.18, opacity: pop(frame, fps, 10) }}>{card.definition}</div>
+			</div>
+		);
+	}
+
+	if (card.kind === "formula") {
+		const words = card.expression.split(/(\s+)/);
+		const exampleIn = pop(frame, fps, 18);
+		return (
+			<div style={{ ...shell, textAlign: "center" }}>
+				<div style={{ fontSize: 30, fontWeight: 800, color: "#687a80", letterSpacing: 2 }}>FÓRMULA</div>
+				<div style={{ fontSize: 50, fontWeight: 800, lineHeight: 1.25, whiteSpace: "nowrap" }}>
+					{words.map((word, i) =>
+						card.highlight.includes(word) ? (
+							<span key={i} style={{ background: COLORS.gold, borderRadius: 14, padding: "0 12px" }}>
+								{word}
+							</span>
+						) : (
+							<span key={i}>{word}</span>
+						),
+					)}
+				</div>
+				{card.example ? (
+					<div style={{ marginTop: 16, paddingTop: 14, borderTop: "4px dashed #c9d6e8", fontSize: 54, fontWeight: 800, color: COLORS.cobalt, opacity: exampleIn, transform: `translateY(${(1 - exampleIn) * 20}px)` }}>
+						{card.example}
+					</div>
+				) : null}
+			</div>
+		);
+	}
+
+	if (card.kind === "recap") {
+		return (
+			<div style={{ ...shell, background: "#fffdf6", display: "flex", flexDirection: "column", gap: 18 }}>
+				<div style={{ fontSize: 34, fontWeight: 800, color: COLORS.cobalt, letterSpacing: 1 }}>📌 {card.title}</div>
+				{card.rows.map((row, i) => {
+					const rowPop = pop(frame, fps, 8 + i * 12);
+					return (
+						<div key={row.term} style={{ display: "flex", alignItems: "center", gap: 18, opacity: rowPop, transform: `translateX(${(1 - rowPop) * 40}px)` }}>
+							<span style={{ flex: "none", background: COLORS.cobalt, color: "#ffffff", borderRadius: 14, padding: "6px 16px 0", fontSize: 34, fontWeight: 800 }}>{row.term}</span>
+							<span style={{ fontSize: 42, fontWeight: 700, lineHeight: 1.1 }}>{row.text}</span>
+						</div>
+					);
+				})}
+			</div>
+		);
+	}
+
 	return (
 		<div style={{ ...shell, display: "flex", flexDirection: "column", gap: 22 }}>
 			{card.rows.map((row, i) => {
@@ -242,6 +298,34 @@ export function Card({ card, frame, layout }: { card: TCard; frame: number; layo
 					</div>
 				);
 			})}
+		</div>
+	);
+}
+
+/** Selo da série no lugar do contador: diz de cara que é o glossário e qual o termo do episódio. */
+export function SeriesBadge({ term, frame }: { term: string; frame: number }) {
+	const { fps } = useVideoConfig();
+	const appear = pop(frame, fps);
+	return (
+		<div
+			style={{
+				position: "absolute",
+				top: 270,
+				right: 50,
+				width: 300,
+				background: COLORS.cobalt,
+				borderRadius: 24,
+				padding: "14px 18px 6px",
+				textAlign: "center",
+				fontFamily: DISPLAY_FONT,
+				color: "#ffffff",
+				boxShadow: "0 8px 0 rgba(23,58,110,0.25)",
+				transform: `scale(${0.7 + appear * 0.3})`,
+				opacity: appear,
+			}}
+		>
+			<div style={{ fontSize: 30, fontWeight: 800, color: COLORS.gold, lineHeight: 1.1, letterSpacing: 2 }}>📖 GLOSSÁRIO</div>
+			<div style={{ fontSize: 60, fontWeight: 800, lineHeight: 1.15 }}>{term}</div>
 		</div>
 	);
 }
