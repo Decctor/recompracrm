@@ -40,9 +40,9 @@ export function RelationshipTab({ context }: { context: TCapabilityContext }) {
 	const canViewCampaigns = canAccessDashboardCapability("campaigns", context);
 
 	return (
-		<div className="grid w-full items-start gap-3 xl:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
+		<div className="grid w-full grid-cols-1 items-start gap-3 xl:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
 			<div className="flex min-w-0 flex-col gap-3">
-				<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+				<div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
 					<BaseTile />
 					<RepurchaseTile />
 					{canViewCashback ? <CashbackUsageTile /> : null}
@@ -215,7 +215,7 @@ function SegmentMovement() {
 								);
 							})}
 						</div>
-						<ul className="grid gap-x-4 gap-y-2 sm:grid-cols-2 xl:grid-cols-4">
+						<ul className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2 xl:grid-cols-4">
 							{segmentos.map((segment) => (
 								<li key={segment.segmento} className="flex min-w-0">
 									{/* Cada item leva à lista real: o banco de dados de clientes já filtrado pelo

@@ -29,9 +29,9 @@ export function OperationsTab({ context }: { context: TCapabilityContext }) {
 	const canViewTabs = canAccessDashboardCapability("serviceAccounts", context);
 
 	return (
-		<div className="grid w-full items-start gap-3 xl:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
+		<div className="grid w-full grid-cols-1 items-start gap-3 xl:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
 			<div className="flex min-w-0 flex-col gap-3">
-				<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+				<div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
 					{canViewFinance ? <OverdueTile /> : null}
 					{canViewFiscal ? <FiscalTile /> : null}
 					{canViewTabs ? <OpenTabsTile /> : null}

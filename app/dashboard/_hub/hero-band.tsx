@@ -63,7 +63,7 @@ function HeroBandCard({ canViewGoals, canCreateGoals, risk }: Omit<HeroBandProps
 	const goal = canViewGoals ? (goals.data?.activeGoal ?? null) : null;
 
 	return (
-		<div className="grid w-full gap-3 lg:grid-cols-[minmax(0,1fr)_18.75rem]">
+		<div className="grid w-full grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_18.75rem]">
 			<section
 				className="flex min-w-0 flex-col gap-3 rounded-xl px-5 py-5 text-white"
 				style={{ backgroundColor: band }}

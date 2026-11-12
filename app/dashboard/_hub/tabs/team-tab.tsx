@@ -24,7 +24,7 @@ export function TeamTab({ context, scopeSellersIds }: { context: TCapabilityCont
 	const canViewPortfolios = canAccessDashboardCapability("portfolios", context);
 
 	return (
-		<div className="grid w-full items-start gap-3 xl:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
+		<div className="grid w-full grid-cols-1 items-start gap-3 xl:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
 			{canViewSales ? <SellerRanking scopeSellersIds={scopeSellersIds} /> : null}
 			{canViewPortfolios ? <PortfolioRoutine /> : null}
 		</div>

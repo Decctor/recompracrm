@@ -130,14 +130,16 @@ function ClientsDatabaseView() {
 	const handleOnSettled = async () => await queryClient.invalidateQueries({ queryKey: queryKey });
 	return (
 		<div className="w-full flex flex-col gap-3">
-			<div className="w-full flex items-center gap-2">
+			{/* No celular a busca ocupa a linha inteira e as ações descem para a linha de baixo: lado a
+			    lado, os três botões espremiam o campo até virar uma pílula vazia e ainda vazavam a tela. */}
+			<div className="w-full flex flex-col gap-2 sm:flex-row sm:items-center">
 				<Input
 					value={filters.search ?? ""}
 					placeholder="Pesquisar cliente..."
 					onChange={(e) => updateFilters({ search: e.target.value })}
-					className="grow rounded-xl"
+					className="w-full min-w-0 grow rounded-xl"
 				/>
-				<div className="flex items-center gap-2">
+				<div className="flex flex-wrap items-center justify-end gap-2 sm:shrink-0 sm:flex-nowrap">
 					<Button variant="ghost" className="flex items-center gap-2" size="sm" onClick={() => setExportClientsModalIsOpen(true)}>
 						<FileSpreadsheet className="w-4 h-4 min-w-4 min-h-4" />
 						EXPORTAR
