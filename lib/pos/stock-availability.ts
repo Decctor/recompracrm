@@ -50,6 +50,27 @@ export function resolveCartLineStock(lines: (TReservingLine & { saldoEstoque?: n
 	return { stock, available: resolveAvailableStock({ stock, reserved: countReservedStock(lines, key) }) };
 }
 
+/**
+ * Quantidade digitada para uma linha do carrinho, limitada ao saldo. As outras linhas do mesmo
+ * produto/variante continuam reservando; a própria linha libera o que reservava. Diminuir sempre
+ * passa — mesmo quando o saldo já está estourado (snapshot antigo), baixar a linha só ajuda.
+ */
+export function clampCartLineQuantity(
+	lines: (TReservingLine & { saldoEstoque?: number | null })[],
+	line: TReservingLine & { nome: string },
+	requested: number,
+) {
+	if (requested <= line.quantidade) return { quantidade: requested, shortage: null };
+	const { stock, available } = resolveCartLineStock(lines, line);
+	if (stock === null || available === null) return { quantidade: requested, shortage: null };
+	const delivered = line.quantidadeEntregue ?? 0;
+	const ownReserve = Math.max(0, line.quantidade - delivered);
+	const max = Math.floor(delivered + ownReserve + available + QUANTITY_TOLERANCE);
+	if (requested <= max) return { quantidade: requested, shortage: null };
+	const shortage = stock <= QUANTITY_TOLERANCE ? `Sem estoque: ${line.nome}.` : `${line.nome}: só ${formatItemQuantity(stock)} em estoque.`;
+	return { quantidade: Math.max(line.quantidade, max), shortage };
+}
+
 /** Motivo para não somar mais uma unidade a uma linha do carrinho, ou `null` quando cabe. */
 export function describeCartIncrementShortage(lines: (TReservingLine & { saldoEstoque?: number | null })[], line: TStockKey & { nome: string }) {
 	const { stock, available } = resolveCartLineStock(lines, line);

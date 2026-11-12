@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+	clampCartLineQuantity,
 	countReservedStock,
 	describeCartIncrementShortage,
 	describeStockShortage,
@@ -57,4 +58,35 @@ test("mais uma unidade na linha: cabe, esgotou ou passa do saldo", () => {
 	assert.equal(describeCartIncrementShortage([line("marrom-p", 3, { saldoEstoque: 3 })], key), "Moletom P: só 3 em estoque.");
 	assert.equal(describeCartIncrementShortage([line("marrom-p", 1, { saldoEstoque: 0 })], key), "Sem estoque: Moletom P.");
 	assert.equal(describeCartIncrementShortage([line("marrom-p", 9)], key), null);
+});
+
+test("quantidade digitada: cabe, limita ao saldo descontando as outras linhas", () => {
+	const nome = "Moletom P";
+	const own = { ...line("marrom-p", 1, { saldoEstoque: 10 }), nome };
+	assert.deepEqual(clampCartLineQuantity([own], own, 10), { quantidade: 10, shortage: null });
+	assert.deepEqual(clampCartLineQuantity([own], own, 100), { quantidade: 10, shortage: "Moletom P: só 10 em estoque." });
+
+	const other = line("marrom-p", 4, { saldoEstoque: 10 });
+	assert.deepEqual(clampCartLineQuantity([other, own], own, 100), { quantidade: 6, shortage: "Moletom P: só 10 em estoque." });
+	assert.deepEqual(clampCartLineQuantity([other, own], own, 6), { quantidade: 6, shortage: null });
+});
+
+test("quantidade digitada: diminuir sempre passa; sem saldo não sobe; sem snapshot não limita", () => {
+	const nome = "Moletom P";
+	const over = { ...line("marrom-p", 5, { saldoEstoque: 3 }), nome };
+	assert.deepEqual(clampCartLineQuantity([over], over, 2), { quantidade: 2, shortage: null });
+	assert.deepEqual(clampCartLineQuantity([over], over, 8), { quantidade: 5, shortage: "Moletom P: só 3 em estoque." });
+
+	const empty = { ...line("marrom-p", 1, { saldoEstoque: 0 }), nome };
+	assert.deepEqual(clampCartLineQuantity([empty], empty, 3), { quantidade: 1, shortage: "Sem estoque: Moletom P." });
+
+	const untracked = { ...line("marrom-p", 1), nome };
+	assert.deepEqual(clampCartLineQuantity([untracked], untracked, 500), { quantidade: 500, shortage: null });
+});
+
+test("quantidade digitada na edição: a parte entregue não conta contra o saldo", () => {
+	const nome = "Moletom P";
+	const edited = { ...line("marrom-p", 3, { quantidadeEntregue: 2, saldoEstoque: 4 }), nome };
+	// Reserva 1 (3 − 2 entregues); disponível 3 → pode reservar 4 → total 6.
+	assert.deepEqual(clampCartLineQuantity([edited], edited, 9), { quantidade: 6, shortage: "Moletom P: só 4 em estoque." });
 });

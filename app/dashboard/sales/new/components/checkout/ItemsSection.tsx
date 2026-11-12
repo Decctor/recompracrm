@@ -4,11 +4,11 @@ import { Input } from "@/components/ui/input";
 import type { TUseSaleState } from "@/state-hooks/use-sale-state";
 import { Minus, Package, Plus, ShoppingCart, StickyNote, Trash2 } from "lucide-react";
 import Image from "next/image";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { formatToMoney } from "@/lib/formatting";
 import { formatItemQuantity } from "@/lib/pos/scale-barcode";
-import { describeCartIncrementShortage } from "@/lib/pos/stock-availability";
+import { clampCartLineQuantity, describeCartIncrementShortage } from "@/lib/pos/stock-availability";
 import { toast } from "sonner";
 import type { TCartItem } from "@/state-hooks/use-sale-state";
 
@@ -18,6 +18,14 @@ type ItemsSectionProps = {
 
 export default function ItemsSection({ saleState }: ItemsSectionProps) {
 	const itemCount = saleState.state.itens.length;
+
+	// Quantidade digitada: limita ao saldo (as outras linhas do mesmo produto seguem reservando) e
+	// avisa o motivo, do mesmo jeito que o "+" faz no limite.
+	function commitTypedQuantity(item: TCartItem, requested: number) {
+		const { quantidade, shortage } = clampCartLineQuantity(saleState.state.itens, item, requested);
+		if (shortage) toast.error(shortage);
+		if (quantidade !== item.quantidade) saleState.updateItemQuantity(item.tempId, quantidade);
+	}
 
 	return (
 		<div className="bg-card border-border flex w-full flex-col gap-3 rounded-xl border px-3 py-3 shadow-2xs">
@@ -48,6 +56,7 @@ export default function ItemsSection({ saleState }: ItemsSectionProps) {
 						isGift={saleState.state.cupomResgate?.brinde?.itemChave === item.tempId}
 						incrementShortage={describeCartIncrementShortage(saleState.state.itens, item)}
 						onUpdateQuantity={saleState.updateItemQuantity}
+						onCommitTypedQuantity={(requested) => commitTypedQuantity(item, requested)}
 						onUpdateObservacoes={saleState.updateItemObservacoes}
 						onRemove={saleState.removeItem}
 					/>
@@ -69,11 +78,13 @@ type CartItemRowProps = {
 	/** Motivo para o "+" não somar (saldo do produto/variante já todo no carrinho). */
 	incrementShortage: string | null;
 	onUpdateQuantity: (tempId: string, quantidade: number) => void;
+	/** Quantidade digitada no stepper, já validada como inteiro ≥ 1; o pai limita ao saldo. */
+	onCommitTypedQuantity: (quantidade: number) => void;
 	onUpdateObservacoes: (tempId: string, observacoes: string) => void;
 	onRemove: (tempId: string) => void;
 };
 
-function CartItemRow({ isGift, item, incrementShortage, onUpdateQuantity, onUpdateObservacoes, onRemove }: CartItemRowProps) {
+function CartItemRow({ isGift, item, incrementShortage, onUpdateQuantity, onCommitTypedQuantity, onUpdateObservacoes, onRemove }: CartItemRowProps) {
 	const hasDiscount = item.valorDesconto > 0;
 	// Recompensa resgatada: quantidade fixa e sem remoção pelo carrinho. O débito de saldo já está
 	// no ledger — desfazê-lo exige remover a recompensa no resumo (venda em edição: cancelar).
@@ -176,7 +187,7 @@ function CartItemRow({ isGift, item, incrementShortage, onUpdateQuantity, onUpda
 						>
 							<Minus className="w-3 h-3" />
 						</button>
-						<span className="w-8 border-x border-border text-center text-sm font-bold tabular-nums leading-7">{item.quantidade}</span>
+						<QuantityField value={item.quantidade} onCommit={onCommitTypedQuantity} />
 						{/* No limite do saldo o "+" esmaece, mas responde com o motivo em vez de ficar mudo. */}
 						<button
 							type="button"
@@ -199,5 +210,69 @@ function CartItemRow({ isGift, item, incrementShortage, onUpdateQuantity, onUpda
 				</div>
 			</div>
 		</div>
+	);
+}
+
+// Teto de dígitos: protege contra um código de barras que caia aqui e não seja removido pelo leitor
+// (EAN-8 já tem 8 dígitos), sem limitar venda real no balcão.
+const TYPED_QUANTITY_PATTERN = /^\d{1,5}$/;
+
+type QuantityFieldProps = {
+	value: number;
+	onCommit: (quantidade: number) => void;
+};
+
+/**
+ * Número do stepper editável: toca, digita, confirma. O rascunho fica local até Enter ou sair do
+ * campo, para o carrinho nunca ver os passos intermediários (vazio, 1, 10…) nem recalcular total e
+ * saldo a cada tecla. Esc descarta. O texto não é filtrado enquanto se digita de propósito: o leitor
+ * de código remove o que digitou comparando o texto cru do campo.
+ */
+function QuantityField({ value, onCommit }: QuantityFieldProps) {
+	const [draft, setDraft] = useState<string | null>(null);
+	const discardRef = useRef(false);
+	const text = draft ?? String(value);
+
+	function commit() {
+		const typed = draft?.trim() ?? "";
+		setDraft(null);
+		if (discardRef.current) {
+			discardRef.current = false;
+			return;
+		}
+		if (!TYPED_QUANTITY_PATTERN.test(typed)) return;
+		const quantidade = Number(typed);
+		if (quantidade < 1 || quantidade === value) return;
+		onCommit(quantidade);
+	}
+
+	return (
+		<input
+			type="text"
+			inputMode="numeric"
+			enterKeyHint="done"
+			autoComplete="off"
+			aria-label="Quantidade"
+			value={text}
+			onFocus={(event) => {
+				setDraft(String(value));
+				// Selecionado, o primeiro dígito substitui o "1" em vez de virar "11".
+				event.currentTarget.select();
+			}}
+			onChange={(event) => setDraft(event.target.value)}
+			onBlur={commit}
+			onKeyDown={(event) => {
+				if (event.key === "Enter") {
+					event.preventDefault();
+					event.currentTarget.blur();
+				} else if (event.key === "Escape") {
+					event.preventDefault();
+					discardRef.current = true;
+					event.currentTarget.blur();
+				}
+			}}
+			style={{ width: `calc(${Math.max(2, text.length)}ch + 1rem)` }}
+			className="h-7 cursor-text border-x border-border bg-transparent text-center text-sm font-bold tabular-nums outline-none transition-colors hover:bg-muted focus:bg-primary/10 focus:text-primary"
+		/>
 	);
 }
