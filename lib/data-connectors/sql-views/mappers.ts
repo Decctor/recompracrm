@@ -1,4 +1,5 @@
 import { formatPhoneAsBase, formatToCEP, formatToCPForCNPJ, formatToPhone } from "@/lib/formatting";
+import { RECORD_ONLY_INTEGRATION_CHANNELS } from "@/lib/sales/fulfillment-channels/policy";
 import type {
 	TCanonicalClient,
 	TCanonicalConnectorBatch,
@@ -10,10 +11,17 @@ import type {
 	TCanonicalSalePayment,
 	TCanonicalSeller,
 } from "../types";
-import { PaymentMethodEnum, type TPaymentMethodEnum } from "@/schemas/enums";
+import {
+	PaymentMethodEnum,
+	type TPaymentMethodEnum,
+	type TSqlViewsClientPhoneFieldEnum,
+	type TSqlViewsPaymentTranslationEnum,
+} from "@/schemas/enums";
+import type { TSaleIntegrationMetadata } from "@/schemas/sales";
 import {
 	SQL_VIEWS_ANONYMOUS_CLIENT_NAMES,
 	type TSqlViewsClientRow,
+	type TSqlViewsMetadataRow,
 	type TSqlViewsProductRow,
 	type TSqlViewsSaleItemRow,
 	type TSqlViewsSalePaymentRow,
@@ -28,11 +36,7 @@ const CHANNEL_LABELS: Record<string, string> = {
 };
 
 function normalizeName(value: string) {
-	return value
-		.normalize("NFD")
-		.replace(/[̀-ͯ]/g, "")
-		.trim()
-		.toUpperCase();
+	return value.normalize("NFD").replace(/[̀-ͯ]/g, "").trim().toUpperCase();
 }
 
 const ANONYMOUS_CLIENT_NAMES = new Set(SQL_VIEWS_ANONYMOUS_CLIENT_NAMES);
@@ -65,14 +69,21 @@ export function isPlaceholderPhone(basePhone: string) {
 	return subscriber.length >= 8 && /^(\d)\1+$/.test(subscriber);
 }
 
-function pickClientPhone(candidates: Array<string | null | undefined>) {
-	for (const candidate of candidates) {
-		const basePhone = formatPhoneAsBase(candidate ?? "");
-		if (basePhone && !isPlaceholderPhone(basePhone)) return { rawPhone: candidate as string, basePhone };
+/** Primeiro telefone aproveitável, na ordem: cadastro, secundário do cadastro, linha da venda. */
+function pickClientPhone({ sale, client }: { sale: TSqlViewsSaleRow; client: TSqlViewsClientRow | null | undefined }) {
+	const candidates: Array<{ field: TSqlViewsClientPhoneFieldEnum; value: string | null | undefined }> = [
+		{ field: "TELEFONE", value: client?.telefone },
+		{ field: "TELEFONE_SECUNDARIO", value: client?.telefone_secundario },
+		{ field: "CLIENTE_TELEFONE", value: sale.cliente_telefone },
+	];
+	for (const { field, value } of candidates) {
+		const basePhone = formatPhoneAsBase(value ?? "");
+		if (basePhone && !isPlaceholderPhone(basePhone)) return { rawPhone: value as string, basePhone, field };
 	}
-	return { rawPhone: "", basePhone: "" };
+	return { rawPhone: "", basePhone: "", field: null };
 }
 
+/** Cliente canônico e a coluna de onde saiu o telefone (`phoneField`, null sem telefone). */
 export function mapSqlViewsClient({
 	sale,
 	client,
@@ -81,14 +92,14 @@ export function mapSqlViewsClient({
 	sale: TSqlViewsSaleRow;
 	client: TSqlViewsClientRow | null | undefined;
 	anonymousClientIds: string[];
-}): TCanonicalClient | null {
+}): { client: TCanonicalClient | null; phoneField: TSqlViewsClientPhoneFieldEnum | null } {
 	const name = client?.nome || client?.nome_fantasia || sale.cliente_nome;
-	if (isSqlViewsAnonymousClient({ clientId: sale.cliente_id, name, anonymousClientIds })) return null;
+	if (isSqlViewsAnonymousClient({ clientId: sale.cliente_id, name, anonymousClientIds })) return { client: null, phoneField: null };
 
-	const { rawPhone, basePhone } = pickClientPhone([client?.telefone, client?.telefone_secundario, sale.cliente_telefone]);
+	const { rawPhone, basePhone, field } = pickClientPhone({ sale, client });
 	const birthDate = client?.data_nascimento ? new Date(`${client.data_nascimento}T00:00:00.000Z`) : null;
 
-	return {
+	const canonicalClient: TCanonicalClient = {
 		externalId: sale.cliente_id,
 		name: name || (basePhone ? `CLIENTE ${basePhone}` : `CLIENTE ${sale.cliente_id}`),
 		phone: basePhone ? formatToPhone(rawPhone) : "",
@@ -109,6 +120,7 @@ export function mapSqlViewsClient({
 				}
 			: undefined,
 	};
+	return { client: canonicalClient, phoneField: field };
 }
 
 export function mapSqlViewsSeller(sale: TSqlViewsSaleRow): TCanonicalSeller | null {
@@ -186,18 +198,89 @@ export function normalizePaymentFormLabel(value: string) {
  * Forma da fonte → `PaymentMethodEnum`: a tradução configurada na integração para o rótulo original
  * vence; sem ela, a forma que a própria fonte mandou; forma fora do enum vira OUTRO.
  */
-export function mapSqlViewsSalePayment(payment: TSqlViewsSalePaymentRow, paymentMethodMapping: Record<string, TPaymentMethodEnum>): TCanonicalSalePayment {
+export function translateSqlViewsPaymentMethod(
+	payment: TSqlViewsSalePaymentRow,
+	paymentMethodMapping: Record<string, TPaymentMethodEnum>,
+): { original: string | null; metodo: TPaymentMethodEnum; traducao: TSqlViewsPaymentTranslationEnum } {
 	const original = payment.forma_pagamento_original ?? payment.forma_pagamento;
-	const normalizedMapping = Object.fromEntries(Object.entries(paymentMethodMapping).map(([label, metodo]) => [normalizePaymentFormLabel(label), metodo]));
+	const normalizedMapping = Object.fromEntries(
+		Object.entries(paymentMethodMapping).map(([label, metodo]) => [normalizePaymentFormLabel(label), metodo]),
+	);
 	const configured = original ? normalizedMapping[normalizePaymentFormLabel(original)] : undefined;
+	if (configured) return { original, metodo: configured, traducao: "MAPEAMENTO_INTEGRACAO" };
 	const sourceMethod = PaymentMethodEnum.safeParse(payment.forma_pagamento?.toUpperCase());
+	if (sourceMethod.success) return { original, metodo: sourceMethod.data, traducao: "FONTE" };
+	return { original, metodo: "OUTRO", traducao: "PADRAO_OUTRO" };
+}
+
+export function mapSqlViewsSalePayment(
+	payment: TSqlViewsSalePaymentRow,
+	paymentMethodMapping: Record<string, TPaymentMethodEnum>,
+): TCanonicalSalePayment {
+	const { original, metodo } = translateSqlViewsPaymentMethod(payment, paymentMethodMapping);
 	return {
-		metodo: configured ?? (sourceMethod.success ? sourceMethod.data : "OUTRO"),
+		metodo,
 		valor: payment.valor,
 		pagoOnline: payment.pago_online ?? false,
 		descricao: original,
 		trocoPara: payment.troco_para,
 		formaOriginal: original,
+	};
+}
+
+/**
+ * `sales.integracaoMetadados` da venda vinda das views: a base comum preenchida de forma neutra
+ * (venda de balcão do ERP: sem frete, desconto de canal nem taxa) e o bloco `sqlViews` com os
+ * dados de entrada de cada decisão da importação. `pagamentos` só existe quando a fonte expõe a
+ * view de pagamentos, e cada forma entra como a fonte mandou, já traduzida para `metodo`.
+ */
+function buildSqlViewsIntegrationMetadata({
+	sale,
+	source,
+	phoneField,
+	payments,
+	canonicalPayments,
+	paymentMethodMapping,
+}: {
+	sale: TSqlViewsSaleRow;
+	source: TSqlViewsMetadataRow | null;
+	phoneField: TSqlViewsClientPhoneFieldEnum | null;
+	payments: TSqlViewsSalePaymentRow[] | null;
+	canonicalPayments: TCanonicalSalePayment[] | null;
+	paymentMethodMapping: Record<string, TPaymentMethodEnum>;
+}): TSaleIntegrationMetadata {
+	return {
+		versao: 1,
+		canal: RECORD_ONLY_INTEGRATION_CHANNELS.SQL_VIEWS,
+		entrega: { realizadaPor: null, valorFrete: 0 },
+		descontos: { loja: 0, patrocinados: [] },
+		taxasCanal: [],
+		// Opcional só presente com valor: a assinatura de importação omite chaves ausentes.
+		...(canonicalPayments
+			? {
+					pagamentos: {
+						prePago: 0,
+						pendente: 0,
+						metodos: canonicalPayments.map(({ metodo, valor, pagoOnline, descricao, trocoPara }) => ({
+							metodo,
+							valor,
+							pagoOnline,
+							descricao: descricao ?? null,
+							...(trocoPara ? { trocoPara } : {}),
+						})),
+					},
+				}
+			: {}),
+		sqlViews: {
+			sistema: source?.sistema_nome ?? null,
+			contratoVersao: source?.contrato_versao ?? null,
+			lojaId: sale.loja_id,
+			statusCodigo: sale.status_codigo,
+			statusOriginal: sale.status_original,
+			clienteId: sale.cliente_id,
+			telefoneCampo: phoneField,
+			formasPagamento: payments?.map((payment) => translateSqlViewsPaymentMethod(payment, paymentMethodMapping)) ?? null,
+		},
 	};
 }
 
@@ -208,6 +291,7 @@ export function mapSqlViewsSale({
 	anonymousClientIds,
 	payments = null,
 	paymentMethodMapping = {},
+	source = null,
 }: {
 	sale: TSqlViewsSaleRow;
 	items: TSqlViewsSaleItemRow[];
@@ -216,12 +300,16 @@ export function mapSqlViewsSale({
 	/** null = a fonte não expõe a view de pagamentos. */
 	payments?: TSqlViewsSalePaymentRow[] | null;
 	paymentMethodMapping?: Record<string, TPaymentMethodEnum>;
+	/** Linha de `vw_recompra_metadados` do lote (sistema e versão do contrato). */
+	source?: TSqlViewsMetadataRow | null;
 }): TCanonicalSale {
 	const canonicalItems = items.map(mapSqlViewsSaleItem);
 	const status = sale.status_codigo?.toUpperCase() ?? null;
 	const isCanceled = status === "CANCELADA";
 	const isValidSale = status === "CONCLUIDA" && sale.valor_total > 0;
 	const channel = sale.canal ? (CHANNEL_LABELS[sale.canal.toUpperCase()] ?? sale.canal) : null;
+	const { client: canonicalClient, phoneField } = mapSqlViewsClient({ sale, client, anonymousClientIds });
+	const canonicalPayments = payments ? payments.map((payment) => mapSqlViewsSalePayment(payment, paymentMethodMapping)) : null;
 
 	return {
 		sourceSaleId: sale.venda_id,
@@ -243,13 +331,14 @@ export function mapSqlViewsSale({
 		statusText: sale.status_original || status || "N/A",
 		type: "VENDA",
 		occurredAt: sale.data_venda,
-		client: mapSqlViewsClient({ sale, client, anonymousClientIds }),
+		client: canonicalClient,
 		seller: mapSqlViewsSeller(sale),
 		partner: null,
 		items: canonicalItems,
 		isValidSale,
 		isCanceled,
-		payments: payments ? payments.map((payment) => mapSqlViewsSalePayment(payment, paymentMethodMapping)) : null,
+		payments: canonicalPayments,
+		integrationMetadata: buildSqlViewsIntegrationMetadata({ sale, source, phoneField, payments, canonicalPayments, paymentMethodMapping }),
 		raw: sale,
 	};
 }
@@ -274,6 +363,7 @@ export function toCanonicalSqlViewsImportBatch({
 	anonymousClientIds,
 	payments = null,
 	paymentMethodMapping = {},
+	source = null,
 }: {
 	organizationId: string;
 	window: TCanonicalImportWindow;
@@ -285,6 +375,7 @@ export function toCanonicalSqlViewsImportBatch({
 	/** null = a fonte não expõe a view de pagamentos; toda venda chega com `payments = null`. */
 	payments?: TSqlViewsSalePaymentRow[] | null;
 	paymentMethodMapping?: Record<string, TPaymentMethodEnum>;
+	source?: TSqlViewsMetadataRow | null;
 }): TCanonicalConnectorBatch {
 	const itemsBySaleId = new Map<string, TSqlViewsSaleItemRow[]>();
 	for (const item of [...items].sort((left, right) => left.sequencia - right.sequencia)) {
@@ -304,6 +395,7 @@ export function toCanonicalSqlViewsImportBatch({
 			anonymousClientIds,
 			payments: payments ? (paymentsBySaleId.get(sale.venda_id) ?? []) : null,
 			paymentMethodMapping,
+			source,
 		}),
 	);
 

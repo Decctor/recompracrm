@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { isPlaceholderPhone, mapSqlViewsSale, mapSqlViewsSalePayment, toCanonicalSqlViewsImportBatch } from "./mappers";
+import { getManagedChannelIntegrationMetadata } from "@/lib/sales/fulfillment-channels/policy";
+import { SaleIntegrationMetadataSchema } from "@/schemas/sales";
 import type { TSqlViewsClientRow, TSqlViewsProductRow, TSqlViewsSaleItemRow, TSqlViewsSalePaymentRow, TSqlViewsSaleRow } from "./types";
 
 function buildSale(overrides: Partial<TSqlViewsSaleRow> = {}): TSqlViewsSaleRow {
@@ -217,10 +219,13 @@ test("pagamento usa a forma da fonte quando a integração não traduz o rótulo
 });
 
 test("tradução da integração vence a forma da fonte, comparando o rótulo normalizado", () => {
-	const mapping = { tef: "CARTAO_CREDITO" as const, "Subsídio": "OUTRO" as const, CONVENIO: "FIADO_NOTA" as const };
+	const mapping = { tef: "CARTAO_CREDITO" as const, Subsídio: "OUTRO" as const, CONVENIO: "FIADO_NOTA" as const };
 	assert.equal(mapSqlViewsSalePayment(buildPayment({ forma_pagamento: "OUTRO", forma_pagamento_original: "TEF" }), mapping).metodo, "CARTAO_CREDITO");
 	assert.equal(mapSqlViewsSalePayment(buildPayment({ forma_pagamento: "OUTRO", forma_pagamento_original: "SUBSIDIO" }), mapping).metodo, "OUTRO");
-	assert.equal(mapSqlViewsSalePayment(buildPayment({ forma_pagamento: "OUTRO", forma_pagamento_original: " Convênio " }), mapping).metodo, "FIADO_NOTA");
+	assert.equal(
+		mapSqlViewsSalePayment(buildPayment({ forma_pagamento: "OUTRO", forma_pagamento_original: " Convênio " }), mapping).metodo,
+		"FIADO_NOTA",
+	);
 });
 
 test("forma da fonte fora do enum vira OUTRO", () => {
@@ -250,4 +255,90 @@ test("batch distribui pagamentos por venda; venda sem linha na view recebe lista
 		],
 	);
 	assert.deepEqual(batch.sales[1].payments, []);
+});
+
+test("integracaoMetadados registra a fonte e as entradas das decisões, com base comum neutra", () => {
+	const sale = mapSqlViewsSale({
+		sale: buildSale(),
+		items: [buildItem()],
+		client: buildClient({ telefone: "3400000000", telefone_secundario: "34999726796" }),
+		anonymousClientIds: [],
+		payments: [
+			buildPayment({ forma_pagamento: "OUTRO", forma_pagamento_original: "CONVENIO", valor: 10 }),
+			buildPayment({ pagamento_id: "PAG-2", forma_pagamento: "PIX", forma_pagamento_original: "PIX", valor: 5 }),
+			buildPayment({ pagamento_id: "PAG-3", forma_pagamento: "CHEQUE", forma_pagamento_original: "CHEQUE", valor: 3 }),
+		],
+		paymentMethodMapping: { Convênio: "FIADO_NOTA" },
+		source: { contrato_versao: "1.2", sistema_nome: "ATMA", fuso_horario: null, ultima_venda_em: null, ultima_atualizacao_em: null, gerado_em: null },
+	});
+
+	assert.deepEqual(sale.integrationMetadata, {
+		versao: 1,
+		canal: "SQL_VIEWS",
+		entrega: { realizadaPor: null, valorFrete: 0 },
+		descontos: { loja: 0, patrocinados: [] },
+		taxasCanal: [],
+		pagamentos: {
+			prePago: 0,
+			pendente: 0,
+			metodos: [
+				{ metodo: "FIADO_NOTA", valor: 10, pagoOnline: false, descricao: "CONVENIO" },
+				{ metodo: "PIX", valor: 5, pagoOnline: false, descricao: "PIX" },
+				{ metodo: "OUTRO", valor: 3, pagoOnline: false, descricao: "CHEQUE" },
+			],
+		},
+		sqlViews: {
+			sistema: "ATMA",
+			contratoVersao: "1.2",
+			lojaId: "1",
+			statusCodigo: "CONCLUIDA",
+			statusOriginal: "ENVIADO",
+			clienteId: "20214",
+			telefoneCampo: "TELEFONE_SECUNDARIO",
+			formasPagamento: [
+				{ original: "CONVENIO", metodo: "FIADO_NOTA", traducao: "MAPEAMENTO_INTEGRACAO" },
+				{ original: "PIX", metodo: "PIX", traducao: "FONTE" },
+				{ original: "CHEQUE", metodo: "OUTRO", traducao: "PADRAO_OUTRO" },
+			],
+		},
+	});
+});
+
+test("sem view de pagamentos não há bloco pagamentos; cliente anônimo não tem telefone escolhido", () => {
+	const sale = mapSqlViewsSale({
+		sale: buildSale({ cliente_id: "30015372", cliente_nome: "CLIENTE PADRÃO", cliente_telefone: "34999998888" }),
+		items: [],
+		client: null,
+		anonymousClientIds: [],
+	});
+
+	assert.equal("pagamentos" in (sale.integrationMetadata ?? {}), false);
+	assert.equal(sale.integrationMetadata?.sqlViews?.formasPagamento, null);
+	assert.equal(sale.integrationMetadata?.sqlViews?.clienteId, "30015372");
+	assert.equal(sale.integrationMetadata?.sqlViews?.telefoneCampo, null);
+	assert.equal(sale.integrationMetadata?.sqlViews?.sistema, null);
+});
+
+test("telefone da linha da venda é registrado quando o cliente não está na view de clientes", () => {
+	const sale = mapSqlViewsSale({ sale: buildSale(), items: [], client: undefined, anonymousClientIds: [] });
+	assert.equal(sale.integrationMetadata?.sqlViews?.telefoneCampo, "CLIENTE_TELEFONE");
+});
+
+test("metadados do SQL-VIEWS não ligam o tratamento de canal gerenciado", () => {
+	const sale = mapSqlViewsSale({ sale: buildSale(), items: [], client: buildClient(), anonymousClientIds: [], payments: [buildPayment()] });
+	assert.equal(getManagedChannelIntegrationMetadata(sale.integrationMetadata), null);
+	const ifoodLike = { ...sale.integrationMetadata!, canal: "IFOOD", sqlViews: undefined };
+	assert.equal(getManagedChannelIntegrationMetadata(ifoodLike), ifoodLike);
+	assert.equal(getManagedChannelIntegrationMetadata(null), null);
+});
+
+test("metadados gerados passam no schema da coluna", () => {
+	const sale = mapSqlViewsSale({
+		sale: buildSale(),
+		items: [buildItem()],
+		client: buildClient(),
+		anonymousClientIds: [],
+		payments: [buildPayment({ troco_para: 50 })],
+	});
+	assert.doesNotThrow(() => SaleIntegrationMetadataSchema.parse(sale.integrationMetadata));
 });

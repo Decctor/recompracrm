@@ -14,6 +14,7 @@ import {
 import { allocateFiscalFreight } from "./freight-allocation";
 import { allocateFiscalHeaderDiscount, resolveFiscalHeaderDiscount } from "./header-discount";
 import { resolveFiscalOtherCharges } from "./other-charges";
+import { getManagedChannelIntegrationMetadata } from "@/lib/sales/fulfillment-channels/policy";
 import { resolveFiscalShopDeliveryFee } from "@/lib/shop/config";
 import type { TFiscalSaleContext } from "./types";
 
@@ -103,7 +104,7 @@ export function computeSaleTaxation(context: TFiscalSaleContext): TSaleTaxation 
 	const extraErrors: TFiscalValidationError[] = [];
 	// Frete de canal gerenciado: entrega propria (LOJA) e receita da loja e compoe a NF; entrega
 	// feita pelo canal fica fora. A taxa da loja digital tambem e sempre receita da loja.
-	const integracaoMetadados = context.venda.integracaoMetadados;
+	const integracaoMetadados = getManagedChannelIntegrationMetadata(context.venda.integracaoMetadados);
 	const vFreteCanal = integracaoMetadados?.entrega.realizadaPor === "LOJA" ? Math.max(integracaoMetadados.entrega.valorFrete, 0) : 0;
 	const vFreteLoja = resolveFiscalShopDeliveryFee({
 		rascunhoMetadados: context.venda.rascunhoMetadados,

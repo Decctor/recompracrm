@@ -77,6 +77,7 @@ export const sqlViewsDataConnector: TDataConnector = {
 			anonymousClientIds: parsedConfig.anonymousClientIds,
 			payments: rows.payments,
 			paymentMethodMapping: parsedConfig.paymentMethodMapping,
+			source: rows.metadata,
 		});
 	},
 };

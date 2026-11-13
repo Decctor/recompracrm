@@ -1,4 +1,5 @@
 import { processFiscalDocumentDanfeAutoPrintIfEligible } from "@/lib/desktop-agent/auto-print";
+import { getManagedChannelIntegrationMetadata } from "@/lib/sales/fulfillment-channels/policy";
 import { getSaleChangeTotal, netSaleChangeFromPayments } from "@/lib/sales/sale-change";
 import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 import { isValidCpfCnpj } from "@/lib/validation";
@@ -776,7 +777,11 @@ function assertFiscalTaxationValid(context: TFiscalSaleContext) {
 	// Era exatamente essa divergencia (guarda no liquido, nota no bruto) que deixava passar a
 	// rejeicao 865 quando um desconto de cabecalho nao chegava ao vDesc. Canal gerenciado fica
 	// fora: buildFiscalPaymentsForManagedSale reconstroi os pagamentos para somar o vNF.
-	if (!context.venda.integracaoMetadados && context.operacao.finalidade !== "DEVOLUCAO" && context.pagamentos.length > 0) {
+	if (
+		!getManagedChannelIntegrationMetadata(context.venda.integracaoMetadados) &&
+		context.operacao.finalidade !== "DEVOLUCAO" &&
+		context.pagamentos.length > 0
+	) {
 		const paymentTotal = context.pagamentos.reduce((total, payment) => total + payment.valor, 0);
 		if (paymentTotal + 0.01 < taxation.totais.vNF) {
 			throw readinessError(

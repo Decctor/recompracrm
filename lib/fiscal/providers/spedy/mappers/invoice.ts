@@ -1,6 +1,7 @@
 import { buildFiscalPaymentsForManagedSale } from "@/lib/fiscal/managed-sale-payments";
 import { computeSaleTaxation } from "@/lib/fiscal/taxation-context";
 import type { TFiscalSaleContext } from "@/lib/fiscal/types";
+import { getManagedChannelIntegrationMetadata } from "@/lib/sales/fulfillment-channels/policy";
 import type { TFiscalDocument } from "@/services/drizzle/schema";
 import { mapFiscalEnvironmentToSpedy } from "../status";
 import type { TSpedyCreateInvoicePayload } from "../types";
@@ -100,7 +101,7 @@ export function mapSaleContextToSpedyInvoicePayload(context: TFiscalSaleContext,
 	const isReturn = context.operacao.finalidade === "DEVOLUCAO";
 	// Canal gerenciado (fase 5/C2): pagamentos fiscais reconstruídos para somar exatamente o vNF
 	// (transações cruas somam o valor cheio do pedido → vTroco artificial na NFC-e).
-	const integracaoMetadados = context.venda.integracaoMetadados;
+	const integracaoMetadados = getManagedChannelIntegrationMetadata(context.venda.integracaoMetadados);
 	const fiscalPayments = integracaoMetadados
 		? buildFiscalPaymentsForManagedSale({ payments: context.pagamentos, integracaoMetadados, fiscalTotal: taxation.totais.vNF })
 		: context.pagamentos;

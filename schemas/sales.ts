@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { SaleNatureEnum } from "./enums";
+import { PaymentMethodEnum, SaleNatureEnum, SqlViewsClientPhoneFieldEnum, SqlViewsPaymentTranslationEnum } from "./enums";
 
 const SaleItemSchema = z.object({
 	codigo: z.string({}),
@@ -140,6 +140,36 @@ export const SaleIntegrationMetadataSchema = z.object({
 					),
 				}),
 			),
+		})
+		.optional(),
+	/**
+	 * O que as views do ERP (conector SQL-VIEWS) disseram da venda e não cabe nas colunas: o
+	 * suficiente para refazer as decisões da importação (venda válida, cliente anônimo, telefone
+	 * escolhido, base do cashback) a partir dos dados de entrada, sem gravar veredito.
+	 */
+	sqlViews: z
+		.object({
+			/** `vw_recompra_metadados.sistema_nome` e `contrato_versao` no momento da importação. */
+			sistema: z.string({ invalid_type_error: "Tipo não válido para o sistema de origem." }).nullable(),
+			contratoVersao: z.string({ invalid_type_error: "Tipo não válido para a versão do contrato de views." }).nullable(),
+			lojaId: z.string({ invalid_type_error: "Tipo não válido para a loja de origem." }).nullable(),
+			/** Status normalizado pela view (CONCLUIDA/CANCELADA/…) e o rótulo cru do ERP. */
+			statusCodigo: z.string({ invalid_type_error: "Tipo não válido para o status da venda na origem." }).nullable(),
+			statusOriginal: z.string({ invalid_type_error: "Tipo não válido para o status original da venda." }).nullable(),
+			/** `cliente_id` da venda, mesmo quando o cliente foi tratado como anônimo. */
+			clienteId: z.string({ invalid_type_error: "Tipo não válido para o cliente de origem." }).nullable(),
+			/** Coluna de onde saiu o telefone do cliente; null = sem cliente ou nenhum telefone aproveitável. */
+			telefoneCampo: SqlViewsClientPhoneFieldEnum.nullable(),
+			/** Tradução de cada forma da fonte para `metodo`. null = a fonte não expõe a view de pagamentos. */
+			formasPagamento: z
+				.array(
+					z.object({
+						original: z.string({ invalid_type_error: "Tipo não válido para a forma de pagamento original." }).nullable(),
+						metodo: PaymentMethodEnum,
+						traducao: SqlViewsPaymentTranslationEnum,
+					}),
+				)
+				.nullable(),
 		})
 		.optional(),
 	/** Rota temporária de contato do iFood. Nunca deve virar telefone cadastral do cliente. */

@@ -1369,3 +1369,10 @@ export const MediaAdPlatformEnum = z.enum(["META"]);
 export type TMediaAdPlatformEnum = z.infer<typeof MediaAdPlatformEnum>;
 export const MediaAdMediaTypeEnum = z.enum(["IMAGEM", "VIDEO", "CARROSSEL", "DESCONHECIDO"]);
 export type TMediaAdMediaTypeEnum = z.infer<typeof MediaAdMediaTypeEnum>;
+
+// Conector SQL-VIEWS: de onde saiu o telefone do cliente (colunas das views, na ordem de prioridade).
+export const SqlViewsClientPhoneFieldEnum = z.enum(["TELEFONE", "TELEFONE_SECUNDARIO", "CLIENTE_TELEFONE"]);
+export type TSqlViewsClientPhoneFieldEnum = z.infer<typeof SqlViewsClientPhoneFieldEnum>;
+// Conector SQL-VIEWS: quem decidiu o `metodo` de um pagamento da fonte.
+export const SqlViewsPaymentTranslationEnum = z.enum(["MAPEAMENTO_INTEGRACAO", "FONTE", "PADRAO_OUTRO"]);
+export type TSqlViewsPaymentTranslationEnum = z.infer<typeof SqlViewsPaymentTranslationEnum>;

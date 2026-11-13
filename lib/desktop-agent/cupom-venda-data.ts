@@ -1,4 +1,5 @@
 import { calculateAccumulatedCashbackValue } from "@/lib/cashback/accumulation";
+import { getManagedChannelIntegrationMetadata } from "@/lib/sales/fulfillment-channels/policy";
 import { getSaleChangeTotal } from "@/lib/sales/sale-change";
 import { formatModifierGroupName } from "@/lib/sales/sale-item-modifier-groups";
 import { POS_REWARD_SALE_ITEM_ORIGIN } from "@/lib/sales/sale-reward-redemption";
@@ -237,7 +238,7 @@ export async function buildCupomVendaDados({
 		}
 		pagamentosAgrupados.set(chave, { metodo: pagamento.metodo, valor: pagamento.valor, parcelas: pagamento.totalParcelas ?? null, pago });
 	}
-	const pagamentosCanal = sale.integracaoMetadados?.pagamentos?.metodos ?? [];
+	const pagamentosCanal = getManagedChannelIntegrationMetadata(sale.integracaoMetadados)?.pagamentos?.metodos ?? [];
 	const pagamentosCupom: TCupomVendaDados["venda"]["pagamentos"] =
 		pagamentosCanal.length > 0
 			? pagamentosCanal.map((pagamento) => ({

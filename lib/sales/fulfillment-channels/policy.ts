@@ -1,4 +1,5 @@
 import type { TOrganizationConfiguration } from "@/schemas/organizations";
+import type { TSaleIntegrationMetadata } from "@/schemas/sales";
 
 /**
  * Política de canal para vendas de integrações (fase 3 do plano iFood/fulfillment):
@@ -36,4 +37,22 @@ const MANAGED_FULFILLMENT_SALE_MODELS = new Set(["IFOOD"]);
 export function isManagedFulfillmentSaleModel(modelo: string | null | undefined): boolean {
 	if (!modelo) return false;
 	return MANAGED_FULFILLMENT_SALE_MODELS.has(modelo.toUpperCase());
+}
+
+/**
+ * Canais que gravam `integracaoMetadados` só como registro da fonte (auditoria das decisões da
+ * importação), sem frete, patrocínio nem pagamentos do canal a tratar. Venda deles é venda comum
+ * para o fiscal e para o cupom.
+ */
+export const RECORD_ONLY_INTEGRATION_CHANNELS = { SQL_VIEWS: "SQL_VIEWS" } as const;
+const RECORD_ONLY_INTEGRATION_CHANNEL_SET = new Set<string>(Object.values(RECORD_ONLY_INTEGRATION_CHANNELS));
+
+/**
+ * `integracaoMetadados` que carregam o tratamento de canal gerenciado. Ter a coluna preenchida
+ * não basta: o fiscal desliga desconto de cabeçalho e `vOutro` e reconstrói os pagamentos para
+ * venda de canal, e o cupom imprime COBRAR/PAGO_CANAL — nada disso vale para um registro da fonte.
+ */
+export function getManagedChannelIntegrationMetadata(metadata: TSaleIntegrationMetadata | null | undefined): TSaleIntegrationMetadata | null {
+	if (!metadata || RECORD_ONLY_INTEGRATION_CHANNEL_SET.has(metadata.canal)) return null;
+	return metadata;
 }
