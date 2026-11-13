@@ -13,6 +13,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Section } from "@/components/ui/section";
+import { hasSaleOriginDetails, SaleOriginDetails } from "@/components/Sales/SaleOriginDetails";
+import { SalesIntegrationPill } from "@/components/Sales/SalesIntegrationPill";
+import type { TSaleIntegrationMetadata } from "@/schemas/sales";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { getAgeFromBirthdayDate } from "@/lib/dates";
 import { getErrorMessage } from "@/lib/errors";
@@ -65,6 +68,7 @@ import {
 	UserRoundPen,
 	Wallet,
 	SquareArrowOutUpRight,
+	Plug,
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -164,6 +168,8 @@ export default function SaleByIdPage({
 					<SaleBenefitsSection cashbackTransactions={sale.transacoesCashback} couponRedemptions={sale.resgatesCupom} />
 				</div>
 			</div>
+			{/* Origem: o que o canal/ERP disse da venda (`integracaoMetadados`). Só vendas de canal com renderizador. */}
+			{hasSaleOriginDetails(sale.integracaoMetadados) ? <SaleOriginSection sale={sale} metadados={sale.integracaoMetadados} /> : null}
 			{/* ERP Section: só existe para organizações com o módulo (a API devolve erp: null nas demais). */}
 			{sale.erp ? (
 				<div className="w-full flex flex-col lg:flex-row gap-4 lg:items-stretch">
@@ -186,6 +192,25 @@ export default function SaleByIdPage({
 			{/* Sale Items Section */}
 			<SaleItemsSection items={sale.itens} />
 		</div>
+	);
+}
+
+function SaleOriginSection({ sale, metadados }: { sale: TGetSalesOutputById; metadados: TSaleIntegrationMetadata }) {
+	return (
+		<Section.Root>
+			<Section.Header>
+				<Section.Icon>
+					<Plug />
+				</Section.Icon>
+				<Section.Title>Origem da venda</Section.Title>
+				<Section.Actions>
+					<SalesIntegrationPill integracao={sale.integracao} />
+				</Section.Actions>
+			</Section.Header>
+			<Section.Bleed>
+				<SaleOriginDetails metadados={metadados} variant="full" />
+			</Section.Bleed>
+		</Section.Root>
 	);
 }
 
@@ -1281,7 +1306,9 @@ function SaleDeleteButton({ sale, userCanDeleteSales }: { sale: TGetSalesOutputB
 							<DialogTitle>Excluir venda?</DialogTitle>
 						</div>
 						<DialogDescription>
-							Essa ação exclui a venda permanentemente, reverte os efeitos de cashback vinculados e remove conversões de campanha associadas à venda. Em vendas canceladas, os lançamentos contábeis e movimentos de caixa estornados também podem ser excluídos; a conferência da sessão será recalculada.
+							Essa ação exclui a venda permanentemente, reverte os efeitos de cashback vinculados e remove conversões de campanha associadas à venda. Em
+							vendas canceladas, os lançamentos contábeis e movimentos de caixa estornados também podem ser excluídos; a conferência da sessão será
+							recalculada.
 						</DialogDescription>
 					</DialogHeader>
 

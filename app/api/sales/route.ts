@@ -517,6 +517,20 @@ async function getSales({ input, sessionUser }: { input: TGetSalesInput; session
 			? []
 			: await db.query.sales.findMany({
 					where: inArray(sales.id, salesPageIds),
+					// Colunas explícitas: sem elas a página trazia a linha inteira de cada venda
+					// (`assinaturaExterna`, `capiMetadados`, `rascunhoMetadados`, documento fiscal da
+					// origem…) que nenhum card lê — custo de egress do banco e de payload a cada página.
+					columns: {
+						id: true,
+						dataVenda: true,
+						valorTotal: true,
+						natureza: true,
+						statusVenda: true,
+						processamentoOrigem: true,
+						entregaModalidade: true,
+						// Detalhe da origem (hover da pílula de integração): ~0,3–0,8 KB por venda integrada.
+						integracaoMetadados: true,
+					},
 					with: {
 						integracao: {
 							columns: {

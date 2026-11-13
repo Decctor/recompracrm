@@ -314,7 +314,7 @@ function SaleCard({ sale }: { sale: TGetSalesOutputByClientId["sales"][number] }
 							<Tag className="w-3 h-3" />
 							<span>{sale.natureza}</span>
 						</div>
-						<SalesIntegrationPill integracao={sale.integracao} />
+						<SalesIntegrationPill integracao={sale.integracao} metadados={sale.integracaoMetadados} />
 					</div>
 				</div>
 

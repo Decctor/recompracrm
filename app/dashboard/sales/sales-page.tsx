@@ -523,7 +523,7 @@ function SaleCard({
 							{sale.itens.length} {sale.itens.length === 1 ? "item" : "itens"}
 						</SaleChip>
 						<SaleStatusChip statusVenda={sale.statusVenda} />
-						<SalesIntegrationPill integracao={sale.integracao} />
+						<SalesIntegrationPill integracao={sale.integracao} metadados={sale.integracaoMetadados} />
 						<SaleErpSummaryChips sale={sale} />
 					</div>
 				</div>

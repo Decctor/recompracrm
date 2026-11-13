@@ -6,7 +6,10 @@ import IfoodLogo from "@/utils/images/integrations/ifood-logo.png";
 import NuvemshopLogo from "@/utils/images/integrations/nuvemshop-logo.png";
 import OnlineSoftwareLogo from "@/utils/images/integrations/online-software-logo.png";
 import Image, { type StaticImageData } from "next/image";
+import { HoverOrPopover } from "@/components/ui/hover-or-popover";
 import { cn } from "@/lib/utils";
+import type { TSaleIntegrationMetadata } from "@/schemas/sales";
+import { hasSaleOriginDetails, SaleOriginDetails } from "./SaleOriginDetails";
 
 type TSalesIntegrationPillMeta = {
 	nome: string;
@@ -40,6 +43,11 @@ export type TSalesIntegrationPillValue =
 
 type SalesIntegrationPillProps = {
 	integracao: TSalesIntegrationPillValue;
+	/**
+	 * `sales.integracaoMetadados`. Quando o canal tem renderizador, a pílula abre o detalhe da origem
+	 * (hover no desktop, toque no mobile). Ausente ou sem renderizador, a pílula é só o rótulo.
+	 */
+	metadados?: TSaleIntegrationMetadata | null;
 	className?: string;
 };
 
@@ -48,7 +56,7 @@ type SalesIntegrationPillProps = {
  * O logo comunica o provedor de relance; o apelido identifica a conexão concreta quando há mais
  * de uma conta do mesmo provedor. Sem apelido, o nome do provedor vira o fallback legível.
  */
-export function SalesIntegrationPill({ integracao, className }: SalesIntegrationPillProps) {
+export function SalesIntegrationPill({ integracao, metadados, className }: SalesIntegrationPillProps) {
 	if (!integracao) return null;
 	if (!DataSourceIntegrationTipoEnum.options.includes(integracao.tipo as TDataSourceIntegrationTipoEnum)) return null;
 
@@ -58,12 +66,15 @@ export function SalesIntegrationPill({ integracao, className }: SalesIntegration
 	const label = getSalesIntegrationLabel({ tipo: integracao.tipo as TDataSourceIntegrationTipoEnum, apelido: integracao.apelido });
 	const accessibleLabel = integracao.apelido?.trim() ? `${meta.nome}: ${integracao.apelido.trim()}` : meta.nome;
 
-	return (
+	const withDetails = hasSaleOriginDetails(metadados);
+	const pill = (
 		<span
-			title={accessibleLabel}
+			title={withDetails ? undefined : accessibleLabel}
 			aria-label={`Origem: ${accessibleLabel}`}
+			tabIndex={withDetails ? 0 : undefined}
 			className={cn(
 				"inline-flex min-w-0 max-w-[12rem] items-center gap-1.5 rounded-full border border-border/60 bg-secondary/70 px-2 py-0.5 text-[0.65rem] font-semibold leading-4 text-foreground/80",
+				withDetails && "cursor-help transition-colors hover:border-border hover:bg-secondary focus-visible:outline-2 focus-visible:outline-ring",
 				className,
 			)}
 		>
@@ -74,5 +85,18 @@ export function SalesIntegrationPill({ integracao, className }: SalesIntegration
 			) : null}
 			<span className="truncate">{label}</span>
 		</span>
+	);
+
+	if (!withDetails) return pill;
+	return (
+		<HoverOrPopover
+			trigger={pill}
+			nativeButton={false}
+			align="start"
+			className="w-80 max-w-[calc(100vw-2rem)] overflow-hidden p-0"
+			hoverOpenDelay={250}
+		>
+			<SaleOriginDetails metadados={metadados} variant="compact" />
+		</HoverOrPopover>
 	);
 }
