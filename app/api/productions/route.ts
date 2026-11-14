@@ -6,14 +6,21 @@ import { handleSimpleChildRowsProcessing } from "@/lib/db-utils";
 import { getProductionPricingItems, getProductPricingMap, resolveProductionValuation } from "@/lib/productions/valuation";
 import { ProductionBaseSchema, ProductionInputSchema, ProductionOutputBaseSchema } from "@/schemas/productions";
 import { db } from "@/services/drizzle";
-import { productionInputs, productionOutputs, productions, productVariants, products } from "@/services/drizzle/schema";
-import { ProductionOriginEnum, ProductionStatusEnum } from "@/schemas/enums";
-import { and, count, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import { productStockLots, productionInputs, productionOutputs, productionRecipes, productions, productVariants, products, users } from "@/services/drizzle/schema";
+import {
+	ProductionCompositionEnum,
+	ProductionOriginEnum,
+	ProductionStatusEnum,
+	ProductionsSortFieldEnum,
+	SortDirectionEnum,
+} from "@/schemas/enums";
+import { type SQL, and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
-const PAGE_SIZE = 20;
+const DEFAULT_PAGE_SIZE = 20;
+const MAX_PAGE_SIZE = 50;
 const LOCKED_STATUSES = ["CONCLUIDA", "CANCELADA"] as const;
 
 const GetProductionsInputSchema = z.object({
@@ -46,6 +53,34 @@ const GetProductionsInputSchema = z.object({
 		.optional()
 		.nullable()
 		.transform((value) => (value ? new Date(value) : null)),
+	recipeIds: z
+		.string({ invalid_type_error: "Tipo inválido para receitas." })
+		.optional()
+		.nullable()
+		.transform((value) => (value ? value.split(",") : [])),
+	compositions: z
+		.string({ invalid_type_error: "Tipo inválido para composição." })
+		.optional()
+		.nullable()
+		.transform((value) => (value ? value.split(",") : []))
+		.pipe(z.array(ProductionCompositionEnum)),
+	orderBy: z
+		.string({ invalid_type_error: "Tipo inválido para ordenação." })
+		.optional()
+		.nullable()
+		.transform((value) => value || "DATA")
+		.pipe(ProductionsSortFieldEnum),
+	orderByDirection: z
+		.string({ invalid_type_error: "Tipo inválido para direção de ordenação." })
+		.optional()
+		.nullable()
+		.transform((value) => value || "desc")
+		.pipe(SortDirectionEnum),
+	pageSize: z
+		.string({ invalid_type_error: "Tipo inválido para tamanho da página." })
+		.optional()
+		.nullable()
+		.transform((value) => Math.min(Math.max(value ? Number(value) || DEFAULT_PAGE_SIZE : DEFAULT_PAGE_SIZE, 1), MAX_PAGE_SIZE)),
 });
 export type TGetProductionsInput = z.infer<typeof GetProductionsInputSchema>;
 export type TGetProductionByIdInput = Pick<TGetProductionsInput, "id">;
@@ -209,8 +244,15 @@ async function getProductions({ input, session }: { input: TGetProductionsInput;
 					with: {
 						produto: true,
 						produtoVariante: true,
+						lote: { columns: { id: true, codigoLote: true, dataValidade: true, quantidadeAtual: true } },
 					},
-					orderBy: (fields, { asc }) => asc(fields.id),
+					// Saldo reincorporado primeiro: é a primeira linha pesada na tela de produção.
+					orderBy: (fields, { asc, desc }) => [desc(fields.reincorporado), asc(fields.id)],
+				},
+				// Lotes gerados na conclusão — base das etiquetas.
+				lotes: {
+					columns: { id: true, codigoLote: true, produtoId: true, produtoVarianteId: true, quantidadeInicial: true, dataValidade: true },
+					orderBy: (fields, { asc }) => asc(fields.codigoLote),
 				},
 				saidas: {
 					with: {
@@ -239,12 +281,60 @@ async function getProductions({ input, session }: { input: TGetProductionsInput;
 		};
 	}
 
-	const conditions = [eq(productions.organizacaoId, organizationId)];
-	if (input.search) conditions.push(sql`${productions.titulo} ILIKE '%' || ${input.search} || '%'`);
+	// A consulta relacional reescreve toda coluna do `where`/`orderBy` para o alias da tabela raiz — por
+	// isso as subconsultas referenciam as outras tabelas por alias literal, e só `productions` por coluna.
+	const hasReincorporatedInput = sql`EXISTS (SELECT 1 FROM ${productionInputs} pi WHERE pi.producao_id = ${productions.id} AND pi.reincorporado = true)`;
+
+	const conditions: (SQL | undefined)[] = [eq(productions.organizacaoId, organizationId)];
+	if (input.search) {
+		const term = `%${input.search}%`;
+		conditions.push(
+			or(
+				sql`${productions.titulo} ILIKE ${term}`,
+				sql`EXISTS (SELECT 1 FROM ${productionRecipes} pr WHERE pr.id = ${productions.receitaId} AND pr.titulo ILIKE ${term})`,
+				sql`EXISTS (SELECT 1 FROM ${users} u WHERE u.id = ${productions.autorId} AND u.nome ILIKE ${term})`,
+			),
+		);
+	}
 	if (input.status.length > 0) conditions.push(inArray(productions.status, input.status));
 	if (input.origem.length > 0) conditions.push(inArray(productions.origem, input.origem));
+	if (input.recipeIds.length > 0) conditions.push(inArray(productions.receitaId, input.recipeIds));
+	if (input.compositions.length > 0) {
+		conditions.push(
+			or(
+				...input.compositions.map((composition) => {
+					if (composition === "RECEITA") return isNotNull(productions.receitaId);
+					if (composition === "MANUAL") return isNull(productions.receitaId);
+					return hasReincorporatedInput;
+				}),
+			),
+		);
+	}
 	if (input.periodAfter) conditions.push(gte(productions.dataInsercao, input.periodAfter));
 	if (input.periodBefore) conditions.push(lte(productions.dataInsercao, input.periodBefore));
+
+	// Custo e margem só existem gravados nas concluídas (snapshot); as demais ficam por último em
+	// qualquer direção — projetá-las pelo catálogo exigiria valorar toda a base para ordenar.
+	const direction = input.orderByDirection === "asc" ? asc : desc;
+	const nullsLast = (expression: SQL) => sql`${expression} ${sql.raw(input.orderByDirection === "asc" ? "ASC" : "DESC")} NULLS LAST`;
+	const orderByExpressions: SQL[] = (() => {
+		switch (input.orderBy) {
+			case "TITULO":
+				return [direction(productions.titulo)];
+			case "SAIDA":
+				return [
+					direction(
+						sql`(SELECT COALESCE(SUM(COALESCE(po.quantidade_real, po.quantidade_prevista, 0)), 0) FROM ${productionOutputs} po WHERE po.producao_id = ${productions.id})`,
+					),
+				];
+			case "CUSTO":
+				return [nullsLast(sql`${productions.custoTotal}`)];
+			case "MARGEM":
+				return [nullsLast(sql`(${productions.retornoEsperado} - ${productions.custoTotal})`)];
+			default:
+				return [direction(sql`COALESCE(${productions.dataInicio}, ${productions.dataInsercao})`)];
+		}
+	})();
 
 	const [totalResult, productionsResult] = await Promise.all([
 		db
@@ -254,14 +344,20 @@ async function getProductions({ input, session }: { input: TGetProductionsInput;
 		db.query.productions.findMany({
 			where: and(...conditions),
 			with: {
-				receita: { columns: { id: true, titulo: true } },
+				receita: { columns: { id: true, titulo: true, imagemCapaUrl: true, capaIcone: true, capaCor: true } },
 				autor: { columns: { id: true, nome: true, avatarUrl: true } },
 				entradas: true,
-				saidas: true,
+				saidas: {
+					with: {
+						produto: { columns: { id: true, nome: true, unidade: true } },
+						produtoVariante: { columns: { id: true, nome: true } },
+					},
+					orderBy: (fields, { asc }) => asc(fields.id),
+				},
 			},
-			orderBy: (fields, { desc }) => desc(fields.dataInsercao),
-			limit: PAGE_SIZE,
-			offset: (input.page - 1) * PAGE_SIZE,
+			orderBy: [...orderByExpressions, desc(productions.dataInsercao), asc(productions.id)],
+			limit: input.pageSize,
+			offset: (input.page - 1) * input.pageSize,
 		}),
 	]);
 
@@ -283,7 +379,7 @@ async function getProductions({ input, session }: { input: TGetProductionsInput;
 			default: {
 				productions: productionsWithValuation,
 				productionsMatched,
-				totalPages: Math.max(1, Math.ceil(productionsMatched / PAGE_SIZE)),
+				totalPages: Math.max(1, Math.ceil(productionsMatched / input.pageSize)),
 			},
 		},
 		message: "Produções encontradas com sucesso.",
@@ -292,6 +388,34 @@ async function getProductions({ input, session }: { input: TGetProductionsInput;
 export type TGetProductionsOutput = Awaited<ReturnType<typeof getProductions>>;
 export type TGetProductionsOutputById = Exclude<TGetProductionsOutput["data"]["byId"], undefined>;
 export type TGetProductionsOutputDefault = Exclude<TGetProductionsOutput["data"]["default"], undefined>;
+
+/** Saldo reincorporado com lote escolhido: o lote precisa ser da organização, do mesmo produto e estar ativo. */
+async function validateProductionInputLots({
+	organizationId,
+	inputs,
+}: {
+	organizationId: string;
+	inputs: (ProductionItemInput & { loteId?: string | null })[];
+}) {
+	const pinnedInputs = inputs.filter((item) => !item.deletar && item.loteId);
+	if (pinnedInputs.length === 0) return;
+
+	const lotIds = [...new Set(pinnedInputs.map((item) => item.loteId as string))];
+	const lots = await db.query.productStockLots.findMany({
+		where: and(inArray(productStockLots.id, lotIds), eq(productStockLots.organizacaoId, organizationId)),
+		columns: { id: true, produtoId: true, produtoVarianteId: true, status: true },
+	});
+	const lotsById = new Map(lots.map((lot) => [lot.id, lot]));
+
+	for (const item of pinnedInputs) {
+		const lot = lotsById.get(item.loteId as string);
+		if (!lot) throw new createHttpError.BadRequest("Lote do insumo não encontrado.");
+		if (lot.produtoId !== item.produtoId || (lot.produtoVarianteId ?? null) !== (item.produtoVarianteId ?? null)) {
+			throw new createHttpError.BadRequest("Lote do insumo não pertence ao produto informado.");
+		}
+		if (lot.status !== "ATIVO") throw new createHttpError.BadRequest("Lote do insumo não está ativo.");
+	}
+}
 
 async function createProduction({ input, session }: { input: TCreateProductionInput; session: TAuthUserSession }) {
 	const organizationId = session.membership?.organizacao.id;
@@ -303,12 +427,15 @@ async function createProduction({ input, session }: { input: TCreateProductionIn
 		inputs: input.productionInputs,
 		outputs: input.productionOutputs,
 	});
+	await validateProductionInputLots({ organizationId, inputs: input.productionInputs });
 
 	return await db.transaction(async (tx) => {
 		const [insertedProduction] = await tx
 			.insert(productions)
 			.values({
 				...input.production,
+				// Criada já em produção (construtor → "Iniciar produção"): o relógio começa agora.
+				dataInicio: input.production.dataInicio ?? (input.production.status === "EM_PRODUCAO" ? new Date() : null),
 				organizacaoId: organizationId,
 				autorId: userId,
 			})
@@ -335,7 +462,6 @@ async function createProduction({ input, session }: { input: TCreateProductionIn
 				})),
 			);
 		}
-		console.log("[DEBUG] [CREATE PRODUCTION] Production created successfully with ID:", insertedProduction.id);
 		return {
 			data: {
 				insertedId: insertedProduction.id,
@@ -355,6 +481,7 @@ async function updateProduction({ input, session }: { input: TUpdateProductionIn
 		inputs: input.productionInputs,
 		outputs: input.productionOutputs,
 	});
+	await validateProductionInputLots({ organizationId, inputs: input.productionInputs });
 
 	return await db.transaction(async (tx) => {
 		const currentProduction = await tx.query.productions.findFirst({
@@ -442,6 +569,11 @@ async function getProductionsRoute(request: NextRequest) {
 		origem: searchParams.get("origem"),
 		periodAfter: searchParams.get("periodAfter"),
 		periodBefore: searchParams.get("periodBefore"),
+		recipeIds: searchParams.get("recipeIds"),
+		compositions: searchParams.get("compositions"),
+		orderBy: searchParams.get("orderBy"),
+		orderByDirection: searchParams.get("orderByDirection"),
+		pageSize: searchParams.get("pageSize"),
 	});
 	const result = await getProductions({ input, session });
 	return NextResponse.json(result);

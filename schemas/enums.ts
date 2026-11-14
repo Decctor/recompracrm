@@ -370,6 +370,21 @@ export const ProductionStatusEnum = z.enum(["RASCUNHO", "PLANEJADA", "EM_PRODUCA
 export type TProductionStatusEnum = z.infer<typeof ProductionStatusEnum>;
 export const ProductionOriginEnum = z.enum(["MANUAL", "PEDIDO", "AGENDADA"]);
 export type TProductionOriginEnum = z.infer<typeof ProductionOriginEnum>;
+// Filtro de "origem" da listagem de produções: deriva de `receitaId` e das entradas reincorporadas,
+// não do `origem` (que diz quem criou a produção: manual, pedido ou agenda).
+export const ProductionCompositionEnum = z.enum(["RECEITA", "MANUAL", "SALDO_REINCORPORADO"], {
+	invalid_type_error: "Tipo inválido para composição da produção.",
+});
+export type TProductionCompositionEnum = z.infer<typeof ProductionCompositionEnum>;
+export const ProductionsSortFieldEnum = z.enum(["DATA", "TITULO", "SAIDA", "CUSTO", "MARGEM"], {
+	invalid_type_error: "Tipo inválido para ordenação de produções.",
+});
+export type TProductionsSortFieldEnum = z.infer<typeof ProductionsSortFieldEnum>;
+export const ProductionRecipesSortFieldEnum = z.enum(["ULTIMA_PRODUCAO", "MARGEM", "CUSTO", "NOME"], {
+	invalid_type_error: "Tipo inválido para ordenação de receitas.",
+});
+export type TProductionRecipesSortFieldEnum = z.infer<typeof ProductionRecipesSortFieldEnum>;
+export const SortDirectionEnum = z.enum(["asc", "desc"], { invalid_type_error: "Tipo inválido para direção de ordenação." });
 export const StockLotStatusEnum = z.enum(["ATIVO", "ESGOTADO", "VENCIDO", "DESCARTADO"]);
 export type TStockLotStatusEnum = z.infer<typeof StockLotStatusEnum>;
 // Tipo de eixo de variante (TEXTO simples, COR com swatch, NUMERO).

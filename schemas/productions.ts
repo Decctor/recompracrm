@@ -50,6 +50,27 @@ export const ProductionRecipeBaseSchema = z.object({
 		.nonnegative({ message: "Previsão de tempo da receita não pode ser negativa." })
 		.optional()
 		.nullable(),
+	imagemCapaUrl: z
+		.string({
+			invalid_type_error: "Tipo não válido para imagem de capa da receita.",
+		})
+		.optional()
+		.nullable(),
+	capaIcone: z
+		.string({
+			invalid_type_error: "Tipo não válido para ícone de capa da receita.",
+		})
+		.optional()
+		.nullable(),
+	capaCor: z
+		.number({
+			invalid_type_error: "Tipo não válido para cor de capa da receita.",
+		})
+		.int({ message: "Cor de capa da receita deve ser um número inteiro." })
+		.min(0, { message: "Cor de capa da receita inválida." })
+		.max(359, { message: "Cor de capa da receita inválida." })
+		.optional()
+		.nullable(),
 	ativo: z
 		.boolean({
 			required_error: "Status da receita não informado.",
@@ -279,6 +300,18 @@ export const ProductionInputSchema = z.object({
 			invalid_type_error: "Tipo não válido para quantidade real do insumo.",
 		})
 		.nonnegative({ message: "Quantidade real do insumo não pode ser negativa." })
+		.optional()
+		.nullable(),
+	reincorporado: z
+		.boolean({
+			invalid_type_error: "Tipo não válido para saldo reincorporado.",
+		})
+		// Ausente = falso (default da coluna); opcional para não obrigar todo formulário a enviá-lo.
+		.optional(),
+	loteId: z
+		.string({
+			invalid_type_error: "Tipo não válido para ID do lote do insumo.",
+		})
 		.optional()
 		.nullable(),
 	/** Snapshot preenchido pelo servidor na conclusão — removido via `.omit()` nas rotas de escrita. */

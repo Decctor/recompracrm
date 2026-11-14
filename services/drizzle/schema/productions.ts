@@ -1,9 +1,9 @@
 import { relations } from "drizzle-orm";
-import { boolean, doublePrecision, index, text, timestamp, varchar } from "drizzle-orm/pg-core";
+import { boolean, doublePrecision, index, integer, text, timestamp, varchar } from "drizzle-orm/pg-core";
 import { newTable } from "./common";
 import { productionOriginEnum, productionStatusEnum, timeDurationUnitsEnum } from "./enums";
 import { organizations } from "./organizations";
-import { productVariants, products } from "./products";
+import { productStockLots, productVariants, products } from "./products";
 import { saleItems, sales } from "./sales";
 import { users } from "./users";
 
@@ -22,6 +22,12 @@ export const productionRecipes = newTable(
 		modoPreparo: text("modo_preparo"),
 		previsaoTempoMedida: timeDurationUnitsEnum("previsao_tempo_medida"),
 		previsaoTempoValor: doublePrecision("previsao_tempo_valor"),
+		/** Foto da receita. Quando ausente, a capa é desenhada com `capaIcone` sobre `capaCor`. */
+		imagemCapaUrl: text("imagem_capa_url"),
+		/** Ícone da capa — chave da lista curada em `lib/productions/recipe-cover.ts`. */
+		capaIcone: text("capa_icone"),
+		/** Matiz (0–359) da cor da capa — ver `lib/productions/recipe-cover.ts`. */
+		capaCor: integer("capa_cor"),
 		ativo: boolean("ativo").default(true).notNull(),
 		dataInsercao: timestamp("data_insercao").defaultNow().notNull(),
 	},
@@ -190,6 +196,7 @@ export const productionsRelations = relations(productions, ({ one, many }) => ({
 	}),
 	entradas: many(productionInputs),
 	saidas: many(productionOutputs),
+	lotes: many(productStockLots),
 }));
 
 export type TProductionEntity = typeof productions.$inferSelect;
@@ -212,12 +219,21 @@ export const productionInputs = newTable(
 			.references(() => products.id, { onDelete: "cascade" }),
 		produtoVarianteId: varchar("produto_variante_id", { length: 255 }).references(() => productVariants.id, { onDelete: "set null" }),
 		quantidadePrevista: doublePrecision("quantidade_prevista"),
+		/** Nula até o item ser conferido na pesagem — é o que marca o item como conferido. */
 		quantidadeReal: doublePrecision("quantidade_real"),
+		/**
+		 * Saldo já produzido da própria saída que volta como insumo ("reincorporar saldo"). Marca a linha
+		 * para o selo da listagem, o filtro de origem e a estatística de saldo reincorporado.
+		 */
+		reincorporado: boolean("reincorporado").default(false).notNull(),
+		/** Lote de onde o insumo é baixado na conclusão. Sem lote, a baixa segue FEFO e depois o saldo geral. */
+		loteId: varchar("lote_id", { length: 255 }).references(() => productStockLots.id, { onDelete: "set null" }),
 		/** Custo unitário congelado na conclusão — lotes consumidos quando há rastreio, catálogo no resto. */
 		custoUnitario: doublePrecision("custo_unitario"),
 	},
 	(table) => ({
 		producaoIdx: index("idx_production_inputs_producao").on(table.producaoId),
+		loteIdx: index("idx_production_inputs_lote").on(table.loteId),
 		produtoIdx: index("idx_production_inputs_produto").on(table.produtoId),
 	}),
 );
@@ -234,6 +250,10 @@ export const productionInputsRelations = relations(productionInputs, ({ one }) =
 	produtoVariante: one(productVariants, {
 		fields: [productionInputs.produtoVarianteId],
 		references: [productVariants.id],
+	}),
+	lote: one(productStockLots, {
+		fields: [productionInputs.loteId],
+		references: [productStockLots.id],
 	}),
 }));
 

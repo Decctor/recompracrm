@@ -4,7 +4,8 @@ import type {
 	TGetProductionRecipesDefaultInput,
 	TGetProductionRecipesOutput,
 } from "@/app/api/productions/recipes/route";
-import { useQuery } from "@tanstack/react-query";
+import type { TGetProductionStatsInput, TGetProductionStatsOutput } from "@/app/api/productions/stats/route";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import { useState } from "react";
 import { useDebounceMemo } from "./../hooks/use-debounce";
@@ -17,6 +18,11 @@ async function fetchProductions(input: TGetProductionsDefaultInput) {
 	if (input.origem.length > 0) searchParams.set("origem", input.origem.join(","));
 	if (input.periodAfter) searchParams.set("periodAfter", input.periodAfter.toISOString());
 	if (input.periodBefore) searchParams.set("periodBefore", input.periodBefore.toISOString());
+	if (input.recipeIds.length > 0) searchParams.set("recipeIds", input.recipeIds.join(","));
+	if (input.compositions.length > 0) searchParams.set("compositions", input.compositions.join(","));
+	if (input.orderBy) searchParams.set("orderBy", input.orderBy);
+	if (input.orderByDirection) searchParams.set("orderByDirection", input.orderByDirection);
+	if (input.pageSize) searchParams.set("pageSize", input.pageSize.toString());
 
 	const { data } = await axios.get<TGetProductionsOutput>(`/api/productions?${searchParams.toString()}`);
 	const result = data.data.default;
@@ -35,6 +41,11 @@ export function useProductions({ initialFilters }: UseProductionsParams = {}) {
 		origem: initialFilters?.origem ?? [],
 		periodAfter: initialFilters?.periodAfter ?? null,
 		periodBefore: initialFilters?.periodBefore ?? null,
+		recipeIds: initialFilters?.recipeIds ?? [],
+		compositions: initialFilters?.compositions ?? [],
+		orderBy: initialFilters?.orderBy ?? "DATA",
+		orderByDirection: initialFilters?.orderByDirection ?? "desc",
+		pageSize: initialFilters?.pageSize ?? 10,
 	});
 
 	function updateFilters(newFilters: Partial<TGetProductionsDefaultInput>) {
@@ -85,6 +96,9 @@ async function fetchProductionRecipes(input: TGetProductionRecipesDefaultInput) 
 	if (input.page) searchParams.set("page", input.page.toString());
 	if (input.search) searchParams.set("search", input.search);
 	if (input.activeOnly !== undefined && input.activeOnly !== null) searchParams.set("activeOnly", String(input.activeOnly));
+	if (input.orderBy) searchParams.set("orderBy", input.orderBy);
+	if (input.orderByDirection) searchParams.set("orderByDirection", input.orderByDirection);
+	if (input.pageSize) searchParams.set("pageSize", input.pageSize.toString());
 
 	const { data } = await axios.get<TGetProductionRecipesOutput>(`/api/productions/recipes?${searchParams.toString()}`);
 	const result = data.data.default;
@@ -100,6 +114,9 @@ export function useProductionRecipes({ initialFilters }: UseProductionRecipesPar
 		page: initialFilters?.page ?? 1,
 		search: initialFilters?.search ?? "",
 		activeOnly: initialFilters?.activeOnly ?? true,
+		orderBy: initialFilters?.orderBy ?? "ULTIMA_PRODUCAO",
+		orderByDirection: initialFilters?.orderByDirection ?? "desc",
+		pageSize: initialFilters?.pageSize ?? 50,
 	});
 
 	function updateFilters(newFilters: Partial<TGetProductionRecipesDefaultInput>) {
@@ -140,6 +157,37 @@ export function useProductionRecipeById({ id }: TGetProductionRecipeByIdInput) {
 			queryKey,
 			queryFn: () => fetchProductionRecipeById({ id }),
 			enabled: !!id,
+		}),
+		queryKey,
+	};
+}
+
+async function fetchProductionStats(input: TGetProductionStatsInput) {
+	const searchParams = new URLSearchParams();
+	searchParams.set("periodAfter", input.periodAfter.toISOString());
+	searchParams.set("periodBefore", input.periodBefore.toISOString());
+	if (input.comparingPeriodAfter) searchParams.set("comparingPeriodAfter", input.comparingPeriodAfter.toISOString());
+	if (input.comparingPeriodBefore) searchParams.set("comparingPeriodBefore", input.comparingPeriodBefore.toISOString());
+	if (input.recipeIds.length > 0) searchParams.set("recipeIds", input.recipeIds.join(","));
+
+	const { data } = await axios.get<TGetProductionStatsOutput>(`/api/productions/stats?${searchParams.toString()}`);
+	return data.data;
+}
+
+export function useProductionStats(input: TGetProductionStatsInput) {
+	const queryKey = [
+		"production-stats",
+		input.periodAfter.toISOString(),
+		input.periodBefore.toISOString(),
+		input.comparingPeriodAfter?.toISOString() ?? null,
+		input.comparingPeriodBefore?.toISOString() ?? null,
+		input.recipeIds,
+	];
+	return {
+		...useQuery({
+			queryKey,
+			queryFn: () => fetchProductionStats(input),
+			placeholderData: keepPreviousData,
 		}),
 		queryKey,
 	};

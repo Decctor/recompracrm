@@ -126,3 +126,76 @@ export async function consumeStockLotsByFefo({
 
 	return consumedLots;
 }
+
+type ConsumeStockLotByIdParams = Omit<ConsumeStockLotsByFefoParams, "allowPartial"> & { loteId: string };
+
+/**
+ * Baixa de um lote escolhido (ex.: saldo reincorporado numa produção). Consome até o saldo atual do
+ * lote e devolve `null` quando o lote não está mais disponível — o chamador decide o que fazer com o
+ * restante (a conclusão de produção segue para FEFO e depois para o saldo geral).
+ */
+export async function consumeStockLotById({
+	trx,
+	organizationId,
+	userId,
+	loteId,
+	produtoId,
+	produtoVarianteId,
+	quantidade,
+	reason,
+	movementType = "SAIDA",
+	unitCost = null,
+	links,
+	origin = "SISTEMA",
+}: ConsumeStockLotByIdParams): Promise<TConsumedStockLot | null> {
+	if (quantidade <= 0) throw new createHttpError.BadRequest("Quantidade para consumo por lote deve ser maior que zero.");
+
+	const lot = await trx.query.productStockLots.findFirst({
+		where: and(eq(productStockLots.id, loteId), eq(productStockLots.organizacaoId, organizationId)),
+	});
+	if (!lot) return null;
+	if (lot.produtoId !== produtoId || (lot.produtoVarianteId ?? null) !== (produtoVarianteId ?? null)) {
+		throw new createHttpError.BadRequest("Lote informado não pertence ao produto consumido.");
+	}
+	if (lot.status !== "ATIVO" || lot.quantidadeAtual <= 0) return null;
+
+	const quantityToConsume = Math.min(quantidade, lot.quantidadeAtual);
+	const nextQuantity = lot.quantidadeAtual - quantityToConsume;
+
+	const movement = await applyStockMovement({
+		trx,
+		organizationId,
+		userId,
+		produtoId: lot.produtoId,
+		produtoVarianteId: lot.produtoVarianteId,
+		signedQuantity: -quantityToConsume,
+		movementType,
+		reason,
+		unitCost,
+		links: {
+			...links,
+			loteId: lot.id,
+		},
+		validateSufficientStock: true,
+		origin,
+	});
+
+	await trx
+		.update(productStockLots)
+		.set({
+			quantidadeAtual: nextQuantity,
+			status: nextQuantity <= 0 ? "ESGOTADO" : lot.status,
+		})
+		.where(and(eq(productStockLots.id, lot.id), eq(productStockLots.organizacaoId, organizationId)));
+
+	return {
+		loteId: lot.id,
+		codigoLote: lot.codigoLote,
+		quantidadeConsumida: quantityToConsume,
+		quantidadeAnterior: lot.quantidadeAtual,
+		quantidadePosterior: nextQuantity,
+		dataValidade: lot.dataValidade,
+		unitCost: movement.previousUnitCost,
+		applied: movement.applied,
+	};
+}

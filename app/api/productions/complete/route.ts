@@ -4,7 +4,7 @@ import { canCompleteProductions } from "@/lib/permissions/productions";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { getItemUnitCost, getItemSalePrice, getProductPricingMap } from "@/lib/productions/valuation";
 import { applyStockMovement, isStockTrackingActive } from "@/lib/stock/apply-stock-movement";
-import { consumeStockLotsByFefo } from "@/lib/stock/consume-stock-lots-fefo";
+import { consumeStockLotById, consumeStockLotsByFefo, type TConsumedStockLot } from "@/lib/stock/consume-stock-lots-fefo";
 import { db } from "@/services/drizzle";
 import { productStockLots, productionInputs, productionOutputs, productions } from "@/services/drizzle/schema";
 import { and, eq } from "drizzle-orm";
@@ -43,6 +43,11 @@ async function completeProduction({ input, session }: { input: TCompleteProducti
 		if (production.status === "CONCLUIDA") throw new createHttpError.BadRequest("Produção já concluída.");
 		if (production.status === "CANCELADA") throw new createHttpError.BadRequest("Produção cancelada não pode ser concluída.");
 
+		// Saídas são o que entra no estoque e o que mede o rendimento: precisam ser conferidas (pesadas),
+		// nunca assumidas pelo previsto. Insumos não conferidos, ao contrário, são baixados pelo previsto.
+		if (production.saidas.some((output) => output.quantidadeReal == null)) {
+			throw new createHttpError.BadRequest("Confira (pese) todas as saídas antes de concluir a produção.");
+		}
 		const outputsWithRealQuantity = production.saidas.filter((output) => (output.quantidadeReal ?? 0) > 0);
 		if (outputsWithRealQuantity.length === 0) throw new createHttpError.BadRequest("Informe ao menos uma saída real para concluir a produção.");
 
@@ -56,7 +61,15 @@ async function completeProduction({ input, session }: { input: TCompleteProducti
 
 		let consumedCostTotal = 0;
 		for (const inputItem of production.entradas) {
-			const realQuantity = inputItem.quantidadeReal ?? 0;
+			// Insumo não conferido na pesagem é baixado pela quantidade prevista — e ela é gravada como real,
+			// para que a produção concluída nunca fique com item sem quantidade.
+			const realQuantity = inputItem.quantidadeReal ?? inputItem.quantidadePrevista ?? 0;
+			if (inputItem.quantidadeReal == null) {
+				await tx
+					.update(productionInputs)
+					.set({ quantidadeReal: realQuantity })
+					.where(and(eq(productionInputs.id, inputItem.id), eq(productionInputs.organizacaoId, organizationId)));
+			}
 			if (realQuantity <= 0) continue;
 
 			// Quanto da quantidade consumida teve custo real apurado (lote ou custo médio anterior).
@@ -64,22 +77,48 @@ async function completeProduction({ input, session }: { input: TCompleteProducti
 			let inputCostTotal = 0;
 			let costedQuantity = 0;
 
-			const consumedLots = await consumeStockLotsByFefo({
-				trx: tx,
-				organizationId,
-				userId,
-				produtoId: inputItem.produtoId,
-				produtoVarianteId: inputItem.produtoVarianteId,
-				quantidade: realQuantity,
-				movementType: "SAIDA_PRODUCAO",
-				reason: "Consumo de insumo em produção",
-				unitCost: null,
-				links: {
-					producaoId: production.id,
-					producaoEntradaId: inputItem.id,
-				},
-				allowPartial: true,
-			});
+			const consumptionLinks = {
+				producaoId: production.id,
+				producaoEntradaId: inputItem.id,
+			};
+			const consumedLots: TConsumedStockLot[] = [];
+
+			// Lote escolhido no construtor (saldo reincorporado) sai primeiro; o que passar dele segue FEFO.
+			if (inputItem.loteId) {
+				const pinnedLot = await consumeStockLotById({
+					trx: tx,
+					organizationId,
+					userId,
+					loteId: inputItem.loteId,
+					produtoId: inputItem.produtoId,
+					produtoVarianteId: inputItem.produtoVarianteId,
+					quantidade: realQuantity,
+					movementType: "SAIDA_PRODUCAO",
+					reason: "Consumo de saldo reincorporado em produção",
+					unitCost: null,
+					links: consumptionLinks,
+				});
+				if (pinnedLot) consumedLots.push(pinnedLot);
+			}
+
+			const pinnedQuantity = consumedLots.reduce((total, lot) => total + lot.quantidadeConsumida, 0);
+			if (realQuantity - pinnedQuantity > 0) {
+				consumedLots.push(
+					...(await consumeStockLotsByFefo({
+						trx: tx,
+						organizationId,
+						userId,
+						produtoId: inputItem.produtoId,
+						produtoVarianteId: inputItem.produtoVarianteId,
+						quantidade: realQuantity - pinnedQuantity,
+						movementType: "SAIDA_PRODUCAO",
+						reason: "Consumo de insumo em produção",
+						unitCost: null,
+						links: consumptionLinks,
+						allowPartial: true,
+					})),
+				);
+			}
 
 			const consumedFromLots = consumedLots.reduce((total, lot) => total + lot.quantidadeConsumida, 0);
 			for (const lot of consumedLots) {

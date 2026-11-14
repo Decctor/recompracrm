@@ -7,6 +7,8 @@ import type {
 	TUpdateProductionOutput,
 } from "@/app/api/productions/route";
 import type { TCompleteProductionInput, TCompleteProductionOutput } from "@/app/api/productions/complete/route";
+import type { TWeighProductionItemInput, TWeighProductionItemOutput } from "@/app/api/productions/items/route";
+import type { TStartProductionInput, TStartProductionOutput } from "@/app/api/productions/start/route";
 import type {
 	TCreateProductionRecipeInput,
 	TCreateProductionRecipeOutput,
@@ -19,6 +21,16 @@ import axios from "axios";
 
 export async function completeProduction(input: TCompleteProductionInput) {
 	const { data } = await axios.post<TCompleteProductionOutput>("/api/productions/complete", input);
+	return data;
+}
+
+export async function startProduction(input: TStartProductionInput) {
+	const { data } = await axios.post<TStartProductionOutput>("/api/productions/start", input);
+	return data;
+}
+
+export async function weighProductionItem(input: TWeighProductionItemInput) {
+	const { data } = await axios.patch<TWeighProductionItemOutput>("/api/productions/items", input);
 	return data;
 }
 
