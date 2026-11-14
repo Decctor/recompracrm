@@ -264,7 +264,8 @@ export type TCompleteProductionOutput = Awaited<ReturnType<typeof completeProduc
 
 async function completeProductionRoute(request: NextRequest) {
 	const session = getSessionWithOrg(await getCurrentSessionUncached());
-	if (!canCompleteProductions(session.membership?.permissoes)) throw new createHttpError.Forbidden("Você não possui permissão para concluir produções.");
+	if (!canCompleteProductions(session.membership?.permissoes))
+		throw new createHttpError.Forbidden("Você não possui permissão para concluir produções.");
 	const input = CompleteProductionInputSchema.parse(await request.json());
 	const result = await completeProduction({ input, session });
 	return NextResponse.json(result);

@@ -71,7 +71,8 @@ async function weighProductionItemRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
 	if (!session.membership) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização.");
-	if (!canEditProductions(session.membership.permissoes)) throw new createHttpError.Forbidden("Você não possui permissão para pesar itens da produção.");
+	if (!canEditProductions(session.membership.permissoes))
+		throw new createHttpError.Forbidden("Você não possui permissão para pesar itens da produção.");
 	const input = WeighProductionItemInputSchema.parse(await request.json());
 	const result = await weighProductionItem({ input, session });
 	return NextResponse.json(result);

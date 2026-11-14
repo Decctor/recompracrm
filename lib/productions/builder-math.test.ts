@@ -47,7 +47,12 @@ test("itens previstos trazem a linha de saldo primeiro, ligada ao lote", () => {
 	});
 	assert.equal(items.entradas.length, 3);
 	assert.deepEqual(
-		{ produtoId: items.entradas[0].produtoId, reincorporado: items.entradas[0].reincorporado, loteId: items.entradas[0].loteId, q: items.entradas[0].quantidadePrevista },
+		{
+			produtoId: items.entradas[0].produtoId,
+			reincorporado: items.entradas[0].reincorporado,
+			loteId: items.entradas[0].loteId,
+			q: items.entradas[0].quantidadePrevista,
+		},
 		{ produtoId: "gelato", reincorporado: true, loteId: "lote-1", q: 1.2 },
 	);
 	assert.equal(items.entradas[1].quantidadePrevista, 3.192);

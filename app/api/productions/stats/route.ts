@@ -248,8 +248,14 @@ async function getProductionStats({ input, session }: { input: TGetProductionSta
 	const [currentProductions, comparisonProductions, inProgressResult, cancelledResult] = await Promise.all([
 		loadCompletedProductions({ organizationId, period, recipeIds: input.recipeIds }),
 		loadCompletedProductions({ organizationId, period: comparisonPeriod, recipeIds: input.recipeIds }),
-		db.select({ total: count(productions.id) }).from(productions).where(statusConditions("EM_PRODUCAO")),
-		db.select({ total: count(productions.id) }).from(productions).where(statusConditions("CANCELADA")),
+		db
+			.select({ total: count(productions.id) })
+			.from(productions)
+			.where(statusConditions("EM_PRODUCAO")),
+		db
+			.select({ total: count(productions.id) })
+			.from(productions)
+			.where(statusConditions("CANCELADA")),
 	]);
 
 	const currentDescribed = currentProductions.map(describeProduction);

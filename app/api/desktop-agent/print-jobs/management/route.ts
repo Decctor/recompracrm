@@ -185,30 +185,43 @@ async function createManualPrintJob({ input, organizacaoId, solicitadoPorId, sol
 			columns: { id: true, titulo: true, dataInicio: true, dataConclusao: true, dataInsercao: true },
 			with: {
 				saidas: {
-					columns: { id: true, quantidadeReal: true, quantidadePrevista: true, dataValidade: true },
+					columns: { id: true, produtoId: true, produtoVarianteId: true, quantidadeReal: true, quantidadePrevista: true, dataValidade: true },
 					with: {
 						produto: { columns: { nome: true } },
 						produtoVariante: { columns: { nome: true } },
 					},
+					orderBy: (fields, { asc }) => asc(fields.id),
+				},
+				// Lotes de estoque criados na conclusão: a etiqueta precisa do mesmo código que o estoque mostra.
+				lotes: {
+					columns: { id: true, codigoLote: true, produtoId: true, produtoVarianteId: true, quantidadeInicial: true, dataValidade: true },
+					orderBy: (fields, { asc }) => asc(fields.codigoLote),
 				},
 			},
 		});
 		if (!production) throw new createHttpError.NotFound("Produção não encontrada.");
 		if (production.saidas.length === 0) throw new createHttpError.BadRequest("A produção não possui saídas para etiquetar.");
 
-		// Uma etiqueta por saída da produção; o código do lote deriva da produção.
-		const loteCodigo = production.id.slice(0, 8).toUpperCase();
+		// Uma etiqueta por saída. O código vem do lote de estoque da saída (mesmo produto/variante e
+		// quantidade); saída sem lote (produto sem rastreio) cai no código derivado da produção.
+		const fallbackLotCode = production.id.slice(0, 8).toUpperCase();
+		const unmatchedLots = [...production.lotes];
 		const dataFabricacao = production.dataConclusao ?? production.dataInicio ?? production.dataInsercao;
 
 		const jobs = [];
 		for (const saida of production.saidas) {
+			const sameItem = (lot: (typeof unmatchedLots)[number]) =>
+				lot.produtoId === saida.produtoId && (lot.produtoVarianteId ?? null) === (saida.produtoVarianteId ?? null);
+			const exactIndex = unmatchedLots.findIndex((lot) => sameItem(lot) && lot.quantidadeInicial === saida.quantidadeReal);
+			const lotIndex = exactIndex >= 0 ? exactIndex : unmatchedLots.findIndex(sameItem);
+			const lot = lotIndex >= 0 ? unmatchedLots.splice(lotIndex, 1)[0] : null;
 			const dados: TEtiquetaLoteDados = {
 				organizacao: { nome: organization.nome },
 				etiqueta: {
 					produtoNome: [saida.produto?.nome, saida.produtoVariante?.nome].filter(Boolean).join(" - ") || production.titulo,
-					loteCodigo,
+					loteCodigo: lot?.codigoLote ?? fallbackLotCode,
 					dataFabricacao,
-					dataValidade: saida.dataValidade,
+					dataValidade: lot?.dataValidade ?? saida.dataValidade,
 					quantidade: saida.quantidadeReal ?? saida.quantidadePrevista,
 				},
 			};

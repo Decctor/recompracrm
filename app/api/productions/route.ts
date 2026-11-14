@@ -6,14 +6,17 @@ import { handleSimpleChildRowsProcessing } from "@/lib/db-utils";
 import { getProductionPricingItems, getProductPricingMap, resolveProductionValuation } from "@/lib/productions/valuation";
 import { ProductionBaseSchema, ProductionInputSchema, ProductionOutputBaseSchema } from "@/schemas/productions";
 import { db } from "@/services/drizzle";
-import { productStockLots, productionInputs, productionOutputs, productionRecipes, productions, productVariants, products, users } from "@/services/drizzle/schema";
 import {
-	ProductionCompositionEnum,
-	ProductionOriginEnum,
-	ProductionStatusEnum,
-	ProductionsSortFieldEnum,
-	SortDirectionEnum,
-} from "@/schemas/enums";
+	productStockLots,
+	productionInputs,
+	productionOutputs,
+	productionRecipes,
+	productions,
+	productVariants,
+	products,
+	users,
+} from "@/services/drizzle/schema";
+import { ProductionCompositionEnum, ProductionOriginEnum, ProductionStatusEnum, ProductionsSortFieldEnum, SortDirectionEnum } from "@/schemas/enums";
 import { type SQL, and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
@@ -559,7 +562,8 @@ export type TDeleteProductionOutput = Awaited<ReturnType<typeof deleteProduction
 
 async function getProductionsRoute(request: NextRequest) {
 	const session = getSessionWithOrg(await getCurrentSessionUncached());
-	if (!canViewProductions(session.membership?.permissoes)) throw new createHttpError.Forbidden("Você não possui permissão para visualizar a produção.");
+	if (!canViewProductions(session.membership?.permissoes))
+		throw new createHttpError.Forbidden("Você não possui permissão para visualizar a produção.");
 	const searchParams = request.nextUrl.searchParams;
 	const input = GetProductionsInputSchema.parse({
 		id: searchParams.get("id"),

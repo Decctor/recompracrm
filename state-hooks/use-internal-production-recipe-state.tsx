@@ -3,7 +3,13 @@ import { useCallback, useState } from "react";
 import { z } from "zod";
 
 const ProductionRecipeStateSchema = z.object({
-	productionRecipe: ProductionRecipeBaseSchema.omit({ organizacaoId: true, dataInsercao: true }),
+	productionRecipe: ProductionRecipeBaseSchema.omit({ organizacaoId: true, dataInsercao: true }).extend({
+		/** Foto escolhida e ainda não enviada: o upload acontece ao salvar, e a URL vai em `imagemCapaUrl`. */
+		imagemCapaHolder: z.object({
+			file: z.instanceof(File).optional().nullable(),
+			previewUrl: z.string().optional().nullable(),
+		}),
+	}),
 	productionRecipeInputs: z.array(
 		ProductionRecipeInputSchema.omit({ organizacaoId: true, receitaId: true }).extend({
 			id: z.string().optional().nullable(),
@@ -57,7 +63,11 @@ const ProductionRecipeStateSchema = z.object({
 export type TProductionRecipeState = z.infer<typeof ProductionRecipeStateSchema>;
 
 type UseInternalProductionRecipeStateProps = {
-	initialState?: Partial<TProductionRecipeState>;
+	initialState?: {
+		productionRecipe?: Partial<TProductionRecipeState["productionRecipe"]>;
+		productionRecipeInputs?: TProductionRecipeState["productionRecipeInputs"];
+		productionRecipeOutputs?: TProductionRecipeState["productionRecipeOutputs"];
+	};
 };
 
 const DEFAULT_RECIPE: TProductionRecipeState["productionRecipe"] = {
@@ -66,7 +76,11 @@ const DEFAULT_RECIPE: TProductionRecipeState["productionRecipe"] = {
 	modoPreparo: null,
 	previsaoTempoMedida: null,
 	previsaoTempoValor: null,
+	imagemCapaUrl: null,
+	capaIcone: null,
+	capaCor: null,
 	ativo: true,
+	imagemCapaHolder: { file: null, previewUrl: null },
 };
 
 export function useInternalProductionRecipeState({ initialState }: UseInternalProductionRecipeStateProps) {
@@ -74,15 +88,29 @@ export function useInternalProductionRecipeState({ initialState }: UseInternalPr
 		productionRecipe: {
 			...DEFAULT_RECIPE,
 			...initialState?.productionRecipe,
+			imagemCapaHolder: {
+				file: initialState?.productionRecipe?.imagemCapaHolder?.file ?? null,
+				previewUrl: initialState?.productionRecipe?.imagemCapaHolder?.previewUrl ?? null,
+			},
 		},
 		productionRecipeInputs: initialState?.productionRecipeInputs ?? [],
 		productionRecipeOutputs: initialState?.productionRecipeOutputs ?? [],
 	});
 
-	const updateProductionRecipe = useCallback((productionRecipe: Partial<TProductionRecipeState["productionRecipe"]>) => {
+	const updateProductionRecipe = useCallback((productionRecipe: Partial<Omit<TProductionRecipeState["productionRecipe"], "imagemCapaHolder">>) => {
 		setState((prev) => ({
 			...prev,
 			productionRecipe: { ...prev.productionRecipe, ...productionRecipe },
+		}));
+	}, []);
+
+	const updateProductionRecipeCoverHolder = useCallback((holder: Partial<TProductionRecipeState["productionRecipe"]["imagemCapaHolder"]>) => {
+		setState((prev) => ({
+			...prev,
+			productionRecipe: {
+				...prev.productionRecipe,
+				imagemCapaHolder: { ...prev.productionRecipe.imagemCapaHolder, ...holder },
+			},
 		}));
 	}, []);
 
@@ -167,6 +195,7 @@ export function useInternalProductionRecipeState({ initialState }: UseInternalPr
 	return {
 		state,
 		updateProductionRecipe,
+		updateProductionRecipeCoverHolder,
 		addProductionRecipeInput,
 		updateProductionRecipeInput,
 		removeProductionRecipeInput,

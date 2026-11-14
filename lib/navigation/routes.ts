@@ -32,8 +32,7 @@ export const appRoutes = {
 	productions: {
 		history: () => "/dashboard/production",
 		/** Construtor de produção; com `recipeId`, abre já com a receita escolhida ("PRODUZIR" no card). */
-		new: (recipeId?: string | null) =>
-			recipeId ? `/dashboard/production/new?recipeId=${encodeURIComponent(recipeId)}` : "/dashboard/production/new",
+		new: (recipeId?: string | null) => (recipeId ? `/dashboard/production/new?recipeId=${encodeURIComponent(recipeId)}` : "/dashboard/production/new"),
 		detail: (productionId: string) => `/dashboard/production/${productionId}`,
 		recipes: () => "/dashboard/production/recipes",
 		stats: () => "/dashboard/production/stats",
