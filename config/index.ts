@@ -902,7 +902,22 @@ export const AppRoutes = [
 	{
 		path: "/dashboard/production",
 		title: "Produções",
-		description: "Painel de acompanhamento e gestão das produções do seu negócio.",
+		description: "Acompanhe e gerencie as produções do seu negócio.",
+	},
+	{
+		path: "/dashboard/production/new",
+		title: "Nova produção",
+		description: "Escolha a receita, defina a quantidade e inicie a produção.",
+	},
+	{
+		path: "/dashboard/production/recipes",
+		title: "Receitas",
+		description: "Fichas técnicas usadas para iniciar produções.",
+	},
+	{
+		path: "/dashboard/production/stats",
+		title: "Estatísticas de produção",
+		description: "Resultado, rendimento e consumo das produções no período.",
 	},
 	{
 		path: "/dashboard/inventory",

@@ -21,6 +21,7 @@ import {
 	ChartNoAxesColumnIncreasing,
 	CircleHelp,
 	CirclePlay,
+	CirclePlus,
 	ClipboardList,
 	Columns3,
 	CreditCard,
@@ -29,6 +30,7 @@ import {
 	Goal,
 	Grid3X3,
 	Handshake,
+	History,
 	Home,
 	Kanban,
 	Layers,
@@ -68,6 +70,8 @@ export type TSidebarItem = {
 	id: string;
 	capability?: TDashboardCapability;
 	activeMatch?: "exact" | "prefix";
+	/** Rotas-filhas que pertencem a outro sub-item: com `prefix`, não ativam este (ex.: Histórico vs. Receitas). */
+	activeExclude?: string[];
 	title: string;
 	url: string | null;
 	icon: React.ReactNode;
@@ -198,7 +202,43 @@ export const AppSidebarConfig: TSidebarConfigItemWithAccess[] = [
 				title: "Produções",
 				url: appRoutes.production(),
 				icon: <Factory className="size-4" />,
-				items: null,
+				items: [
+					{
+						id: "production-new",
+						capability: "production",
+						activeMatch: "exact",
+						title: "Nova produção",
+						url: appRoutes.productions.new(),
+						icon: <CirclePlus className="size-4" />,
+						items: null,
+					},
+					{
+						id: "production-history",
+						capability: "production",
+						// O detalhe (/production/[id]) pertence ao Histórico; as demais sub-rotas, não.
+						activeExclude: [appRoutes.productions.new(), appRoutes.productions.recipes(), appRoutes.productions.stats()],
+						title: "Histórico",
+						url: appRoutes.productions.history(),
+						icon: <History className="size-4" />,
+						items: null,
+					},
+					{
+						id: "production-recipes",
+						capability: "production",
+						title: "Receitas",
+						url: appRoutes.productions.recipes(),
+						icon: <ClipboardList className="size-4" />,
+						items: null,
+					},
+					{
+						id: "production-stats",
+						capability: "production",
+						title: "Estatísticas",
+						url: appRoutes.productions.stats(),
+						icon: <ChartNoAxesColumnIncreasing className="size-4" />,
+						items: null,
+					},
+				],
 			},
 			{
 				id: "products",

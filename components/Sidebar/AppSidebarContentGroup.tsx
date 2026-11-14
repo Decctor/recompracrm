@@ -18,10 +18,11 @@ import { ChevronRight } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { TSidebarConfigItem, TSidebarItem } from "./AppSidebar";
 
-function isPathActive(pathname: string, url: string | null, activeMatch: "exact" | "prefix" = "prefix") {
+function isPathActive(pathname: string, url: string | null, activeMatch: "exact" | "prefix" = "prefix", activeExclude?: string[]) {
 	if (!url) return false;
 	if (pathname === url) return true;
 	if (activeMatch === "exact") return false;
+	if (activeExclude?.some((excluded) => pathname === excluded || pathname.startsWith(`${excluded}/`))) return false;
 	return pathname.startsWith(`${url}/`);
 }
 
@@ -43,7 +44,7 @@ export default AppSidebarContentGroup;
 function AppSidebarContentGroupItem({ item }: { item: TSidebarItem }) {
 	const pathname = usePathname();
 	const { state, setOpen } = useSidebar();
-	const childIsActive = item.items?.some((subItem) => isPathActive(pathname, subItem.url, subItem.activeMatch)) ?? false;
+	const childIsActive = item.items?.some((subItem) => isPathActive(pathname, subItem.url, subItem.activeMatch, subItem.activeExclude)) ?? false;
 	const itemIsActive = isPathActive(pathname, item.url, item.activeMatch);
 	const routeIsActive = childIsActive || itemIsActive;
 	const [isOpen, setIsOpen] = useState(routeIsActive);
@@ -79,7 +80,7 @@ function AppSidebarContentGroupItem({ item }: { item: TSidebarItem }) {
 						<SidebarMenuSub>
 							{item.items.map((subItem) => (
 								<SidebarMenuSubItem key={subItem.id}>
-									<SidebarMenuSubButton asChild isActive={isPathActive(pathname, subItem.url, subItem.activeMatch)}>
+									<SidebarMenuSubButton asChild isActive={isPathActive(pathname, subItem.url, subItem.activeMatch, subItem.activeExclude)}>
 										{subItem.url ? (
 											<Link href={subItem.url}>
 												<span className="truncate">{subItem.title}</span>

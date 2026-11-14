@@ -5,11 +5,11 @@ import type { TGetProductionsOutputDefault } from "@/app/api/productions/route";
 import type { TGetProductionRecipesOutputDefault } from "@/app/api/productions/recipes/route";
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
 import LoadingComponent from "@/components/Layouts/LoadingComponent";
-import ControlProduction from "@/components/Modals/Internal/Productions/ControlProduction";
-import ControlProductionRecipe from "@/components/Modals/Internal/Productions/ControlProductionRecipe";
-import NewProduction from "@/components/Modals/Internal/Productions/NewProduction";
-import NewProductionRecipe from "@/components/Modals/Internal/Productions/NewProductionRecipe";
-import ProductionRecipePreparationMethodViewer from "@/components/Modals/Internal/Productions/ProductionRecipePreparationMethodViewer";
+import ControlProduction from "@/components/Modals/Productions/ControlProduction";
+import ControlProductionRecipe from "@/components/Modals/Productions/ControlProductionRecipe";
+import NewProduction from "@/components/Modals/Productions/NewProduction";
+import NewProductionRecipe from "@/components/Modals/Productions/NewProductionRecipe";
+import ProductionRecipePreparationMethodViewer from "@/components/Modals/Productions/ProductionRecipePreparationMethodViewer";
 import GeneralPaginationComponent from "@/components/Utils/Pagination";
 import { Button } from "@/components/ui/button";
 import {
