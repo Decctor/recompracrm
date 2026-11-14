@@ -28,6 +28,14 @@ async function getPoiTransactionRequests({ input, orgId }: { input: TGetPoiTrans
 					nome: true,
 					telefone: true,
 				},
+				// Saldo e moeda do programa: a aprovação de uma recompensa avulsa pede ao operador quanto
+				// debitar, e ele precisa ver o que o cliente tem (e se são pontos ou reais).
+				with: {
+					saldos: {
+						columns: { saldoValorDisponivel: true },
+						with: { programa: { columns: { terminologia: true } } },
+					},
+				},
 			},
 			operadorAprovadorVendedor: {
 				columns: {
