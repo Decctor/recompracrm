@@ -6,9 +6,21 @@ import { recomputeClientMetricsForOrganization } from "@/lib/clients/recompute-m
 import { persistCanonicalBatch } from "@/lib/data-collecting-v2";
 import { bulkPersistHistoricalBatch } from "@/lib/integrations/import-jobs/bulk-persist";
 import { sqlViewsDataConnector } from "@/lib/data-connectors/sql-views";
-import { sqlViewsViewExists, withSqlViewsSession } from "@/lib/data-connectors/sql-views/client";
-import { mapSqlViewsSalePayment, normalizePaymentFormLabel } from "@/lib/data-connectors/sql-views/mappers";
-import { SQL_VIEWS } from "@/lib/data-connectors/sql-views/types";
+import {
+	fetchSqlViewsClients,
+	fetchSqlViewsMetadata,
+	fetchSqlViewsSalePayments,
+	fetchSqlViewsSales,
+	sqlViewsViewExists,
+	withSqlViewsSession,
+} from "@/lib/data-connectors/sql-views/client";
+import {
+	isSqlViewsAnonymousClient,
+	mapSqlViewsSale,
+	mapSqlViewsSalePayment,
+	normalizePaymentFormLabel,
+} from "@/lib/data-connectors/sql-views/mappers";
+import { SQL_VIEWS, type TSqlViewsSalePaymentRow } from "@/lib/data-connectors/sql-views/types";
 import { PaymentMethodEnum, type TPaymentMethodEnum } from "@/schemas/enums";
 import { z } from "zod";
 import { connectDataSourceIntegration, isUsableDataSourceIntegration } from "@/lib/integrations/data-sources";
@@ -35,6 +47,11 @@ dayjs.extend(minMax);
  *   backfill Carga histórica de uma conexão (--integration, --from, [--to], [--step-days 30]), em modo
  *            HISTORICO (sem cashback, campanhas nem atribuição). Idempotente: venda inalterada é
  *            pulada, então rodar de novo retoma de onde parou.
+ *   backfill-metadata
+ *            Preenche só `integracao_metadados` das vendas já importadas (--integration, ou --org para
+ *            todas as conexões SQL-VIEWS da organização; --from, [--to], [--step-days 30], [--dry-run]).
+ *            Lê vendas, pagamentos e telefones do cadastro — sem itens nem produtos — e grava só a
+ *            coluna, nas vendas em que ela está vazia. Sem cashback, cliente, item nem métricas.
  *   activate Liga a conexão (--integration) para o cron de 5 minutos.
  *   payment-methods
  *            Tradução das formas de pagamento da fonte (--integration, ou --org para todas as conexões
@@ -74,6 +91,7 @@ const { positionals, values } = parseArgs({
 		"step-days": { type: "string", default: "30" },
 		map: { type: "string", multiple: true, default: [] },
 		"payment-days": { type: "string", default: "30" },
+		"dry-run": { type: "boolean", default: false },
 	},
 });
 
@@ -254,6 +272,119 @@ async function runBackfill() {
 	console.log("[BACKFILL] Concluído.", totals);
 }
 
+/** Vendas por UPDATE: um parâmetro jsonb só, então o limite é o tamanho do lote, não o de parâmetros. */
+const METADATA_BACKFILL_SALES_PER_UPDATE = 1000;
+
+/**
+ * Preenche `integracao_metadados` das vendas já importadas, sem passar pelo sync: lê das views só o
+ * que os metadados usam (vendas, pagamentos e telefones do cadastro — nada de itens nem produtos),
+ * mapeia com o mesmo `mapSqlViewsSale` e grava só essa coluna, em lote. Não toca em cliente,
+ * produto, item, cashback nem métricas.
+ *
+ * `is null` no UPDATE: retomável, e nunca sobrescreve o que o sync contínuo já gravou nas vendas
+ * recentes — por isso dispensa o lock da conexão e convive com o cron.
+ *
+ * A assinatura de importação (`assinatura_externa`) não é recalculada: isso exigiria resolver
+ * cliente, vendedor, produtos e itens, justamente o custo evitado aqui. Se o sync voltar a ler uma
+ * dessas vendas, ela é regravada uma vez, sem efeitos (não "vira" válida de novo).
+ */
+async function runBackfillMetadata() {
+	if (!values.from) throw new Error("Informe --from (YYYY-MM-DD).");
+	const dryRun = values["dry-run"];
+	const stepDays = Number(values["step-days"]);
+	const lastDay = values.to ? dayjs.tz(values.to, TIMEZONE) : dayjs().tz(TIMEZONE);
+	const targets = await loadPaymentMethodTargets();
+	const totals = { read: 0, missing: 0, updated: 0 };
+	const startedAt = Date.now();
+
+	for (const integration of targets) {
+		const config = SqlViewsIntegrationConfigSchema.parse(integration.configuracao);
+		const label = `${integration.apelido ?? integration.id} (loja ${config.storeId ?? "*"})`;
+		console.log(`\n[BACKFILL_METADATA] ${label}${dryRun ? " — DRY RUN" : ""}`);
+
+		await withSqlViewsSession(config, async (session) => {
+			const source = await fetchSqlViewsMetadata(session);
+			const hasPaymentsView = await sqlViewsViewExists(session, SQL_VIEWS.salePayments);
+			if (!hasPaymentsView) console.log("  Fonte sem view de pagamentos: formasPagamento = null.");
+
+			for (let windowStart = dayjs.tz(values.from, TIMEZONE); !windowStart.isAfter(lastDay, "day"); windowStart = windowStart.add(stepDays, "day")) {
+				const windowEnd = dayjs.min(windowStart.add(stepDays - 1, "day"), lastDay)!;
+				const window = { startDate: windowStart.startOf("day").toDate(), endDate: windowEnd.endOf("day").toDate() };
+				const windowStartedAt = Date.now();
+
+				const saleRows = await fetchSqlViewsSales({ session, window, storeId: config.storeId });
+				const saleIds = saleRows.map((sale) => sale.venda_id);
+				const paymentRows = hasPaymentsView && saleIds.length > 0 ? await fetchSqlViewsSalePayments(session, saleIds) : null;
+				const clientIds = saleRows
+					.filter(
+						(sale) =>
+							!!sale.cliente_id &&
+							!isSqlViewsAnonymousClient({ clientId: sale.cliente_id, name: sale.cliente_nome, anonymousClientIds: config.anonymousClientIds }),
+					)
+					.map((sale) => sale.cliente_id as string);
+				const clientRows = clientIds.length > 0 ? await fetchSqlViewsClients(session, clientIds) : [];
+
+				const clientsById = new Map(clientRows.map((client) => [client.cliente_id, client]));
+				const paymentsBySaleId = new Map<string, TSqlViewsSalePaymentRow[]>();
+				for (const payment of paymentRows ?? []) paymentsBySaleId.set(payment.venda_id, [...(paymentsBySaleId.get(payment.venda_id) ?? []), payment]);
+
+				// Mesmo mapper do sync, sem itens: os metadados não dependem deles.
+				const entries = saleRows.map((sale) => ({
+					id_externo: sale.venda_id,
+					metadados: mapSqlViewsSale({
+						sale,
+						items: [],
+						client: sale.cliente_id ? clientsById.get(sale.cliente_id) : null,
+						anonymousClientIds: config.anonymousClientIds,
+						payments: paymentRows ? (paymentsBySaleId.get(sale.venda_id) ?? []) : null,
+						paymentMethodMapping: config.paymentMethodMapping,
+						source,
+					}).integrationMetadata,
+				}));
+
+				let windowMissing = 0;
+				let windowUpdated = 0;
+				for (let offset = 0; offset < entries.length; offset += METADATA_BACKFILL_SALES_PER_UPDATE) {
+					const payload = JSON.stringify(entries.slice(offset, offset + METADATA_BACKFILL_SALES_PER_UPDATE));
+					if (dryRun) {
+						const [row] = await connection<{ faltando: number }[]>`
+							select count(*)::int as faltando
+							from ampmais_sales s
+							join jsonb_to_recordset(${payload}::jsonb) as v(id_externo text, metadados jsonb) on v.id_externo = s.id_externo
+							where s.organizacao_id = ${integration.organizacaoId} and s.integracao_id = ${integration.id}
+								and s.integracao_metadados is null`;
+						windowMissing += row?.faltando ?? 0;
+						continue;
+					}
+					const updated = await connection`
+						update ampmais_sales s
+						set integracao_metadados = v.metadados
+						from jsonb_to_recordset(${payload}::jsonb) as v(id_externo text, metadados jsonb)
+						where s.organizacao_id = ${integration.organizacaoId} and s.integracao_id = ${integration.id}
+							and s.id_externo = v.id_externo
+							and s.integracao_metadados is null`;
+					windowUpdated += updated.count;
+				}
+
+				totals.read += saleRows.length;
+				totals.missing += windowMissing;
+				totals.updated += windowUpdated;
+				const elapsedSeconds = (Date.now() - startedAt) / 1000;
+				console.log(
+					`  ${windowStart.format("YYYY-MM-DD")}..${windowEnd.format("YYYY-MM-DD")}: ${saleRows.length} venda(s) lida(s), ${
+						dryRun ? `${windowMissing} sem metadados` : `${windowUpdated} atualizada(s)`
+					} em ${((Date.now() - windowStartedAt) / 1000).toFixed(1)}s. Acumulado: ${totals.read} lida(s) em ${Math.round(elapsedSeconds)}s (${(totals.read / Math.max(elapsedSeconds, 1)).toFixed(0)} venda(s)/s).`,
+				);
+			}
+		});
+	}
+
+	console.log(
+		"\n[BACKFILL_METADATA] Concluído.",
+		dryRun ? { lidas: totals.read, semMetadados: totals.missing } : { lidas: totals.read, atualizadas: totals.updated },
+	);
+}
+
 const PaymentFormUsageRowSchema = z.object({
 	forma_pagamento: z.string().nullable(),
 	forma_pagamento_original: z.string().nullable(),
@@ -267,7 +398,10 @@ function parseMappingFlags() {
 		const separator = entry.indexOf("=");
 		if (separator <= 0) throw new Error(`--map inválido: "${entry}". Use "FORMA_ORIGINAL=METODO" ou "FORMA_ORIGINAL=" para remover.`);
 		const label = normalizePaymentFormLabel(entry.slice(0, separator));
-		const rawMethod = entry.slice(separator + 1).trim().toUpperCase();
+		const rawMethod = entry
+			.slice(separator + 1)
+			.trim()
+			.toUpperCase();
 		if (!rawMethod) {
 			changes[label] = null;
 			continue;
@@ -293,7 +427,9 @@ async function runPaymentMethods() {
 	const days = Number(values["payment-days"]);
 	for (const integration of await loadPaymentMethodTargets()) {
 		const config = SqlViewsIntegrationConfigSchema.parse(integration.configuracao);
-		const mapping: Record<string, TPaymentMethodEnum> = Object.fromEntries(Object.entries(config.paymentMethodMapping).map(([label, method]) => [normalizePaymentFormLabel(label), method]));
+		const mapping: Record<string, TPaymentMethodEnum> = Object.fromEntries(
+			Object.entries(config.paymentMethodMapping).map(([label, method]) => [normalizePaymentFormLabel(label), method]),
+		);
 		if (Object.keys(changes).length > 0) {
 			for (const [label, method] of Object.entries(changes)) {
 				if (method) mapping[label] = method;
@@ -331,7 +467,16 @@ async function runPaymentMethods() {
 				fonte: row.forma_pagamento,
 				traducao: row.forma_pagamento_original ? (mapping[normalizePaymentFormLabel(row.forma_pagamento_original)] ?? "—") : "—",
 				efetiva: mapSqlViewsSalePayment(
-					{ pagamento_id: null, venda_id: "-", forma_pagamento: row.forma_pagamento, forma_pagamento_original: row.forma_pagamento_original, valor: 0, parcelas: 1, pago_online: false, troco_para: null },
+					{
+						pagamento_id: null,
+						venda_id: "-",
+						forma_pagamento: row.forma_pagamento,
+						forma_pagamento_original: row.forma_pagamento_original,
+						valor: 0,
+						parcelas: 1,
+						pago_online: false,
+						troco_para: null,
+					},
 					mapping,
 				).metodo,
 				pagamentos: row.pagamentos,
@@ -348,7 +493,8 @@ async function main() {
 	else if (command === "backfill") await runBackfill();
 	else if (command === "activate") await runActivate();
 	else if (command === "payment-methods") await runPaymentMethods();
-	else throw new Error('Comando inválido. Use "fetch", "connect", "backfill", "activate" ou "payment-methods".');
+	else if (command === "backfill-metadata") await runBackfillMetadata();
+	else throw new Error('Comando inválido. Use "fetch", "connect", "backfill", "backfill-metadata", "activate" ou "payment-methods".');
 }
 
 main()
