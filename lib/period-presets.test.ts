@@ -5,6 +5,7 @@ import {
 	UPCOMING_PERIOD_PRESETS,
 	buildComparisonPeriodPresets,
 	matchPeriodPreset,
+	toFullDayRange,
 	type TPeriodPreset,
 } from "./period-presets";
 
@@ -132,5 +133,34 @@ describe("matchPeriodPreset", () => {
 	it("devolve null para um recorte que não é atalho", () => {
 		const match = matchPeriodPreset(REPORT_PERIOD_PRESETS, { after: local(2026, 9, 3), before: local(2026, 9, 9, true) }, reference);
 		assert.equal(match, null);
+	});
+});
+
+describe("toFullDayRange", () => {
+	const midnight = (day: number) => new Date(2026, 10, day);
+
+	it("um dia só (primeiro clique: from = to = meia-noite) cobre o dia inteiro", () => {
+		const range = toFullDayRange({ from: midnight(12), to: midnight(12) });
+		assert.deepEqual(range.from, new Date(2026, 10, 12, 0, 0, 0, 0));
+		assert.deepEqual(range.to, new Date(2026, 10, 12, 23, 59, 59, 999));
+	});
+
+	it("intervalo vai do início do primeiro ao fim do último dia", () => {
+		const range = toFullDayRange({ from: midnight(10), to: midnight(14) });
+		assert.deepEqual(range.from, new Date(2026, 10, 10, 0, 0, 0, 0));
+		assert.deepEqual(range.to, new Date(2026, 10, 14, 23, 59, 59, 999));
+	});
+
+	it("sem fim, vale o dia do início", () => {
+		assert.deepEqual(toFullDayRange({ from: midnight(12) }).to, new Date(2026, 10, 12, 23, 59, 59, 999));
+	});
+
+	it("idempotente: um atalho (já em dias inteiros) passa igual", () => {
+		const today = REPORT_PERIOD_PRESETS[0].getValue(new Date(2026, 10, 12, 15, 30));
+		assert.deepEqual(toFullDayRange(today), today);
+	});
+
+	it("seleção desfeita continua vazia", () => {
+		assert.deepEqual(toFullDayRange(undefined), { from: undefined, to: undefined });
 	});
 });

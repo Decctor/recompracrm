@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils";
 import { formatInteractiveDateRangeSummary } from "@/components/ui/interactive-filter-formatting";
+import { toFullDayRange } from "@/lib/period-presets";
 import { ptBR } from "date-fns/locale";
 import { Calendar as CalendarIcon } from "lucide-react";
 import { useId } from "react";
@@ -48,7 +49,11 @@ function DateIntervalInput({ label, labelClassName, className, value, handleChan
 						locale={ptBR}
 						defaultMonth={value?.after}
 						selected={{ from: value.after, to: value.before }}
-						onSelect={(value) => handleChange({ after: value?.from, before: value?.to })}
+						// Dias inteiros: sem isso um dia só vira [00:00, 00:00] e o filtro não acha nada.
+						onSelect={(value) => {
+							const range = toFullDayRange(value);
+							handleChange({ after: range.from, before: range.to });
+						}}
 						numberOfMonths={2}
 					/>
 				</PopoverContent>

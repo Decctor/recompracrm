@@ -6,7 +6,7 @@ import { ArrowDownNarrowWide, ArrowUpNarrowWide, Check, ChevronLeft, X } from "l
 import * as React from "react";
 
 import { useMediaQuery } from "@/lib/hooks/use-media-query";
-import { REPORT_PERIOD_PRESETS, type TPeriodPreset } from "@/lib/period-presets";
+import { REPORT_PERIOD_PRESETS, toFullDayRange, type TPeriodPreset } from "@/lib/period-presets";
 import { cn } from "@/lib/utils";
 
 import { Button } from "./button";
@@ -664,7 +664,8 @@ function InteractiveFilterDateRangeContent({
 				locale={locale}
 				defaultMonth={value.from}
 				selected={{ from: value.from, to: value.to }}
-				onSelect={(selectedValue) => onChange({ from: selectedValue?.from, to: selectedValue?.to })}
+				// Dias inteiros, como os atalhos: sem isso um dia só vira [00:00, 00:00] e o filtro não acha nada.
+				onSelect={(selectedValue) => onChange(toFullDayRange(selectedValue))}
 				numberOfMonths={resolvedNumberOfMonths}
 			/>
 		</div>

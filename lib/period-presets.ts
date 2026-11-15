@@ -17,6 +17,21 @@ export type TPeriodPreset = {
 	getValue: (referenceDate: Date) => { from: Date; to: Date };
 };
 
+/**
+ * Intervalo escolhido no calendário, em dias inteiros. O calendário devolve datas à meia-noite — e o
+ * primeiro clique já devolve `{ from: dia, to: dia }` —, então um dia só virava o instante
+ * [00:00, 00:00] e o filtro não achava nada. Aqui o início vai para 00:00 e o fim para 23:59:59.999,
+ * como nos atalhos acima. Sem `to`, o intervalo é o próprio dia de `from`.
+ */
+export function toFullDayRange(range: { from?: Date | null; to?: Date | null } | null | undefined): { from?: Date; to?: Date } {
+	const from = range?.from ?? undefined;
+	const to = range?.to ?? from;
+	return {
+		from: from ? dayjs(from).startOf("day").toDate() : undefined,
+		to: to ? dayjs(to).endOf("day").toDate() : undefined,
+	};
+}
+
 function startOfWeek(referenceDate: Date) {
 	const day = dayjs(referenceDate).startOf("day");
 	return day.subtract(day.day(), "day");
