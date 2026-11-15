@@ -131,8 +131,9 @@ type ConsumeStockLotByIdParams = Omit<ConsumeStockLotsByFefoParams, "allowPartia
 
 /**
  * Baixa de um lote escolhido (ex.: saldo reincorporado numa produção). Consome até o saldo atual do
- * lote e devolve `null` quando o lote não está mais disponível — o chamador decide o que fazer com o
- * restante (a conclusão de produção segue para FEFO e depois para o saldo geral).
+ * lote e devolve `null` quando o lote não está mais disponível (esgotado, inativo ou vencido) — o
+ * chamador decide o que fazer com o restante (a conclusão de produção segue para FEFO e depois para o
+ * saldo geral).
  */
 export async function consumeStockLotById({
 	trx,
@@ -158,6 +159,9 @@ export async function consumeStockLotById({
 		throw new createHttpError.BadRequest("Lote informado não pertence ao produto consumido.");
 	}
 	if (lot.status !== "ATIVO" || lot.quantidadeAtual <= 0) return null;
+	// Vencido depois de escolhido (produção planejada e concluída dias depois): não baixa — a mesma regra
+	// do FEFO, que nunca consome lote vencido. O chamador segue para os lotes válidos.
+	if (lot.dataValidade && lot.dataValidade <= new Date()) return null;
 
 	const quantityToConsume = Math.min(quantidade, lot.quantidadeAtual);
 	const nextQuantity = lot.quantidadeAtual - quantityToConsume;

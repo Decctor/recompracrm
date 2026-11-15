@@ -21,7 +21,7 @@ O detalhe pertence ao Histórico no sidebar (`activeExclude` no item). Todas as 
 
 1. **Capa da receita**: `imagemCapaUrl` (foto) desde o início, mais `capaIcone` + `capaCor` (matiz
    0–359) como capa desenhada quando não há foto. Receitas antigas caem num ícone padrão e numa matiz
-   derivada do id (`lib/productions/recipe-cover.ts`). Componente: `_components/recipe-cover.tsx`.
+   derivada do id (`lib/productions/recipe-cover.ts`). Componente: `components/Productions/RecipeCover.tsx`.
 2. **Conferido = `quantidadeReal` preenchida.** Não existe flag nem timestamp de conferência. O
    construtor grava só `quantidadePrevista`; a pesagem grava `quantidadeReal`; "Redefinir" volta a nulo.
 3. **Saídas sempre exigem conferência.** Concluir falha se alguma saída não foi pesada. Insumos não

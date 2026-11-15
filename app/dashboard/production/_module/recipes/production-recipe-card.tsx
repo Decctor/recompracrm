@@ -1,7 +1,7 @@
 "use client";
 
 import type { TGetProductionRecipesOutputDefault } from "@/app/api/productions/recipes/route";
-import { RecipeCover } from "@/app/dashboard/production/_components/recipe-cover";
+import { RecipeCover } from "@/components/Productions/RecipeCover";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";

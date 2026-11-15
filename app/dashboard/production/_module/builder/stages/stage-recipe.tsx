@@ -7,7 +7,7 @@ import { useProductionRecipes } from "@/lib/queries/productions";
 import { cn } from "@/lib/utils";
 import type { TTimeDurationUnitsEnum } from "@/schemas/enums";
 import { Check, Clock, FilePenLine, RefreshCcw, Search } from "lucide-react";
-import { RecipeCover } from "../../../_components/recipe-cover";
+import { RecipeCover } from "@/components/Productions/RecipeCover";
 import { useBuilder, type TRecipeListItem } from "../components/builder-provider";
 import { formatDuration, formatQuantity } from "../helpers/format";
 
@@ -40,7 +40,7 @@ export default function StageRecipe() {
 
 			{isError ? <p className="rounded-xl bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive">{getErrorMessage(error)}</p> : null}
 
-			<div className="grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-4">
+			<div className="grid grid-cols-[repeat(auto-fill,minmax(min(230px,100%),1fr))] gap-4">
 				{isLoading
 					? ["a", "b", "c", "d"].map((key) => <Skeleton key={key} className="h-[260px] rounded-3xl" />)
 					: recipes.map((recipe) => (

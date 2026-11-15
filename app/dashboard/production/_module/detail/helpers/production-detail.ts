@@ -65,11 +65,6 @@ export function formatQuantity(value: number | null | undefined, unit: string) {
 	return `${formatQuantityNumber(value, unit)} ${unit}`.trim();
 }
 
-/** Valor do visor da pesagem: sempre com duas casas, como o buffer de centésimos. */
-export function formatPadValue(value: number) {
-	return value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
 export function getItemName(item: TProductionInputRow | TProductionOutputRow) {
 	const productName = item.produto?.nome ?? "Produto";
 	return item.produtoVariante?.nome ? `${productName} · ${item.produtoVariante.nome}` : productName;
@@ -163,17 +158,6 @@ export function getNextWeighKey(order: ReturnType<typeof getWeighOrder>, current
 export function hasPendingAfter(order: ReturnType<typeof getWeighOrder>, current: TWeighItemKey) {
 	const index = order.findIndex((entry) => entry.kind === current.kind && entry.id === current.id);
 	return order.slice(index + 1).some((entry) => !entry.weighed);
-}
-
-/**
- * Tecla do teclado numérico sobre o buffer de centésimos (valor = buffer / 100): zeros à esquerda
- * caem, e o buffer para em 7 dígitos (99.999,99). "0" num buffer vazio vira zero digitado — é como se
- * registra um insumo que não foi usado (sem isso, confirmar lançaria o previsto).
- */
-export function pressPadKey(buffer: string, key: string) {
-	const next = (buffer + key).replace(/^0+/, "");
-	if (next.length > 7) return buffer;
-	return next || "0";
 }
 
 /** O que a conclusão exige e o que ela vai assumir — base do botão e da dica do cabeçalho. */

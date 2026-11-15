@@ -1,7 +1,7 @@
 "use client";
 
 import type { TGetProductionStatsOutput } from "@/app/api/productions/stats/route";
-import { RecipeCover } from "@/app/dashboard/production/_components/recipe-cover";
+import { RecipeCover } from "@/components/Productions/RecipeCover";
 import { Section } from "@/components/ui/section";
 import { formatDecimalPlaces, formatToMoney } from "@/lib/formatting";
 import { cn } from "@/lib/utils";

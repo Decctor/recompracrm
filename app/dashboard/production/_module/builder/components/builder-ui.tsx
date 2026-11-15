@@ -122,7 +122,7 @@ export function QuantityStepper({
 			<button type="button" aria-label={decreaseLabel} className={buttonClass} disabled={value <= min} onClick={() => onChange(clamp(value - step))}>
 				<Minus className="h-5 w-5" />
 			</button>
-			<label className={cn("flex items-baseline justify-center gap-1.5 px-2", large ? "min-w-[160px]" : "min-w-[92px]")}>
+			<label className={cn("flex items-baseline justify-center gap-1.5 px-2", large ? "min-w-[96px] sm:min-w-[160px]" : "min-w-[92px]")}>
 				<span className="sr-only">{inputLabel}</span>
 				<input
 					inputMode="decimal"

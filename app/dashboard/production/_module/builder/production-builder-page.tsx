@@ -23,7 +23,9 @@ type ProductionBuilderPageProps = {
  */
 export default function ProductionBuilderPage({ initialRecipeId }: ProductionBuilderPageProps) {
 	return (
-		<BuilderProvider initialRecipeId={initialRecipeId}>
+		// A chave recomeça o construtor quando o link muda (`/new?recipeId=X` → "Nova produção" no menu):
+		// a página é a mesma, e sem ela a receita e as quantidades anteriores ficariam na tela.
+		<BuilderProvider key={initialRecipeId ?? "blank"} initialRecipeId={initialRecipeId}>
 			<ProductionBuilderContent />
 		</BuilderProvider>
 	);

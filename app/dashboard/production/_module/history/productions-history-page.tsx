@@ -17,9 +17,7 @@ import { useEffect, useState } from "react";
 import ProductionListCard from "./production-list-card";
 import ProductionsInlineFilters, { DEFAULT_PRODUCTIONS_SORT } from "./productions-inline-filters";
 
-/** O servidor corta a página em 50; o seletor padrão oferece 25/50/100. */
 const DEFAULT_PAGE_SIZE = 25;
-const MAX_PAGE_SIZE = 50;
 
 function getThisMonthPeriod() {
 	const preset = REPORT_PERIOD_PRESETS.find((item) => item.id === "this-month");
@@ -95,7 +93,7 @@ export default function ProductionsHistoryPage({ permissions }: { permissions: T
 				selectPage={(page) => updateFilters({ page })}
 				totalPages={data?.totalPages ?? 0}
 				pageSize={filters.pageSize}
-				onPageSizeChange={(pageSize) => updateFilters({ pageSize: Math.min(pageSize, MAX_PAGE_SIZE), page: 1 })}
+				onPageSizeChange={(pageSize) => updateFilters({ pageSize, page: 1 })}
 				itemsMatchedText={productionsMatched === 1 ? "1 produção encontrada" : `${productionsMatched} produções encontradas`}
 				itemsShowingText={`mostrando ${productions.length}`}
 			/>

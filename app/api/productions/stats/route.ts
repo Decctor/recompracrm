@@ -104,7 +104,7 @@ async function loadCompletedProductions({
 				},
 			},
 			saidas: {
-				columns: { id: true, quantidadePrevista: true, quantidadeReal: true },
+				columns: { id: true, quantidadePrevista: true, quantidadeReal: true, valorUnitarioVenda: true },
 				with: { produto: { columns: { unidade: true } } },
 				orderBy: (fields, { asc }) => asc(fields.id),
 			},
@@ -113,24 +113,37 @@ async function loadCompletedProductions({
 }
 type TCompletedProduction = Awaited<ReturnType<typeof loadCompletedProductions>>[number];
 
-/** Números de uma produção concluída, já na unidade da sua saída principal. */
+/**
+ * Números de uma produção concluída, na unidade da sua saída principal. Volume, rendimento e perda
+ * contam só as saídas nessa unidade: numa receita que rende kg de massa e un de pão, somar as duas
+ * daria um número sem unidade. Custo e valor são da produção inteira.
+ */
 function describeProduction(production: TCompletedProduction) {
 	const unidade = normalizeUnit(production.saidas[0]?.produto.unidade);
-	const previsto = production.saidas.reduce((total, output) => total + (output.quantidadePrevista ?? 0), 0);
-	const real = production.saidas.reduce((total, output) => total + (output.quantidadeReal ?? 0), 0);
+	const sameUnitOutputs = production.saidas.filter((output) => normalizeUnit(output.produto.unidade) === unidade);
+	const previsto = sameUnitOutputs.reduce((total, output) => total + (output.quantidadePrevista ?? 0), 0);
+	const real = sameUnitOutputs.reduce((total, output) => total + (output.quantidadeReal ?? 0), 0);
 	const custo = production.custoTotal ?? 0;
 	const valor = production.retornoEsperado ?? 0;
 	const perda = previsto > 0 ? Math.max(previsto - real, 0) : 0;
+	// Parte do custo que cabe às saídas da unidade principal, pela fatia delas no valor produzido
+	// (snapshot da conclusão). Sem valor apurado, ou com uma unidade só, o custo é todo delas.
+	const outputValue = (outputs: typeof production.saidas) =>
+		outputs.reduce((total, output) => total + (output.quantidadeReal ?? 0) * (output.valorUnitarioVenda ?? 0), 0);
+	const totalOutputValue = outputValue(production.saidas);
+	const custoUnidade =
+		sameUnitOutputs.length === production.saidas.length || totalOutputValue <= 0 ? custo : custo * (outputValue(sameUnitOutputs) / totalOutputValue);
 	return {
 		unidade,
 		previsto,
 		real,
 		custo,
+		custoUnidade,
 		valor,
 		rendimento: previsto > 0 ? real / previsto : null,
 		perda,
 		// A perda custa o que a produção custou por unidade de saída: insumo que não virou produto.
-		custoPerda: real > 0 ? perda * (custo / real) : perda > 0 ? custo : 0,
+		custoPerda: real > 0 ? perda * (custoUnidade / real) : perda > 0 ? custoUnidade : 0,
 		saldoReincorporado: production.entradas
 			.filter((input) => input.reincorporado)
 			.reduce((total, input) => total + (input.quantidadeReal ?? input.quantidadePrevista ?? 0), 0),
@@ -171,7 +184,7 @@ function summarize(described: ReturnType<typeof describeProduction>[]) {
 
 	const mainUnit = [...productionsByUnit.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
 	const mainUnitVolume = mainUnit ? (volumes.get(mainUnit) ?? 0) : 0;
-	const mainUnitCost = described.filter((item) => item.unidade === mainUnit).reduce((total, item) => total + item.custo, 0);
+	const mainUnitCost = described.filter((item) => item.unidade === mainUnit).reduce((total, item) => total + item.custoUnidade, 0);
 	const margem = valorProduzido - custoProducao;
 
 	return {

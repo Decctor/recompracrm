@@ -1,6 +1,6 @@
 "use client";
 
-import { RecipeCover } from "@/app/dashboard/production/_components/recipe-cover";
+import { RecipeCover } from "@/components/Productions/RecipeCover";
 import { InteractiveFilter, type InteractiveFilterDateRange, type InteractiveFilterOption } from "@/components/ui/interactive-filter";
 import { formatInteractiveDateRangeSummary, formatInteractiveOptionSummary } from "@/components/ui/interactive-filter-formatting";
 import { CAMPAIGN_STATS_PERIOD_PRESETS, matchCampaignStatsPeriodPreset, type TStatsPeriod } from "@/lib/campaigns/stats-period";

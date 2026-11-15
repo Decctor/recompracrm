@@ -1,7 +1,7 @@
 "use client";
 
 import type { TGetProductionsOutputDefault } from "@/app/api/productions/route";
-import { RecipeCover } from "@/app/dashboard/production/_components/recipe-cover";
+import { RecipeCover } from "@/components/Productions/RecipeCover";
 import { formatToMoney } from "@/lib/formatting";
 import { appRoutes } from "@/lib/navigation/routes";
 import { getProductionItemQuantity } from "@/lib/productions/valuation";
@@ -102,8 +102,8 @@ export default function ProductionListCard({ production, now }: { production: TP
 				</div>
 			</div>
 
-			<div className="flex min-w-0 flex-[1_1_340px] items-center gap-5">
-				<div className="flex min-w-[150px] max-w-[280px] flex-auto flex-col gap-2.5">
+			<div className="flex min-w-0 flex-[1_1_340px] flex-wrap items-center gap-x-4 gap-y-3 sm:gap-x-5">
+				<div className="flex min-w-0 max-w-[280px] flex-auto flex-col gap-2.5 sm:min-w-[150px]">
 					<div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
 						<span className={cn("inline-flex items-center gap-1.5 rounded-full py-[3px] pl-2 pr-2.5 text-xs font-bold", meta.chipClassName)}>
 							<StatusIcon className="h-3.5 w-3.5" />
@@ -118,7 +118,7 @@ export default function ProductionListCard({ production, now }: { production: TP
 					</div>
 				</div>
 				<div className="ml-auto flex items-center gap-4">
-					<div className="flex min-w-[120px] flex-col items-end gap-0.5">
+					<div className="flex flex-col items-end gap-0.5 sm:min-w-[120px]">
 						<span
 							className={cn("whitespace-nowrap text-[17px] font-extrabold tracking-tight tabular-nums", isCancelled && "text-muted-foreground line-through")}
 						>

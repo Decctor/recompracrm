@@ -1,5 +1,5 @@
 import { ProductionRecipeBaseSchema, ProductionRecipeInputSchema, ProductionRecipeOutputBaseSchema } from "@/schemas/productions";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { z } from "zod";
 
 const ProductionRecipeStateSchema = z.object({
@@ -96,6 +96,14 @@ export function useInternalProductionRecipeState({ initialState }: UseInternalPr
 		productionRecipeInputs: initialState?.productionRecipeInputs ?? [],
 		productionRecipeOutputs: initialState?.productionRecipeOutputs ?? [],
 	});
+
+	// A prévia da foto escolhida é um `blob:` que vive até ser revogado: solta a anterior quando a foto é
+	// trocada ou removida, e a última quando o modal fecha.
+	const coverPreviewUrl = state.productionRecipe.imagemCapaHolder.previewUrl;
+	useEffect(() => {
+		if (!coverPreviewUrl?.startsWith("blob:")) return;
+		return () => URL.revokeObjectURL(coverPreviewUrl);
+	}, [coverPreviewUrl]);
 
 	const updateProductionRecipe = useCallback((productionRecipe: Partial<Omit<TProductionRecipeState["productionRecipe"], "imagemCapaHolder">>) => {
 		setState((prev) => ({

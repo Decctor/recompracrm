@@ -131,7 +131,7 @@ export default function ProductionDetailHeader({ production, primaryAction, onEd
 					</div>
 				</div>
 				{primaryAction || onEdit || onCancel ? (
-					<div className="flex flex-col items-end gap-1.5">
+					<div className="flex w-full flex-col items-stretch gap-1.5 sm:w-auto sm:items-end">
 						<div className="flex items-center gap-2">
 							{onEdit || onCancel ? (
 								<DropdownMenu>
@@ -165,14 +165,14 @@ export default function ProductionDetailHeader({ production, primaryAction, onEd
 									loading={primaryAction.loading}
 									disabled={primaryAction.disabled}
 									onClick={primaryAction.onClick}
-									className="h-14 min-w-[260px] gap-2 rounded-full px-6 text-base font-bold"
+									className="h-14 min-w-0 flex-1 gap-2 rounded-full px-6 text-base font-bold sm:min-w-[260px] sm:flex-none"
 								>
 									<primaryAction.icon className="h-5 w-5" />
 									{primaryAction.label}
 								</LoadingButton>
 							) : null}
 						</div>
-						{primaryAction ? <span className="max-w-sm text-right text-xs text-muted-foreground">{primaryAction.hint}</span> : null}
+						{primaryAction ? <span className="max-w-sm text-xs text-muted-foreground sm:text-right">{primaryAction.hint}</span> : null}
 					</div>
 				) : null}
 			</div>

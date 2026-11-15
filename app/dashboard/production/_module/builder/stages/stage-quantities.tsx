@@ -29,7 +29,7 @@ export default function StageQuantities() {
 
 	if (recipeLoading || !plan || !quantities) {
 		return (
-			<div className="grid items-start gap-3.5 lg:grid-cols-[minmax(0,1fr)_380px]">
+			<div className="grid grid-cols-1 items-start gap-3.5 lg:grid-cols-[minmax(0,1fr)_380px]">
 				<div className="flex flex-col gap-3.5">
 					<Skeleton className="h-[150px] rounded-2xl" />
 					<Skeleton className="h-[220px] rounded-2xl" />
@@ -40,7 +40,7 @@ export default function StageQuantities() {
 	}
 
 	return (
-		<div className="grid items-start gap-3.5 lg:grid-cols-[minmax(0,1fr)_380px]">
+		<div className="grid grid-cols-1 items-start gap-3.5 lg:grid-cols-[minmax(0,1fr)_380px]">
 			<div className="flex min-w-0 flex-col gap-3.5">
 				<TargetCard plan={plan} target={quantities.target} />
 				<ReincorporationCard plan={plan} />
@@ -146,7 +146,7 @@ function ReincorporationCard({ plan }: { plan: TRecipePlan }) {
 
 			{plan.reincOn ? (
 				<>
-					<div className="grid gap-4 border-t border-border pt-3 sm:grid-cols-[auto_minmax(0,1fr)]">
+					<div className="grid grid-cols-1 gap-4 border-t border-border pt-3 sm:grid-cols-[auto_minmax(0,1fr)]">
 						<div className="flex flex-col gap-1.5">
 							<OverlineLabel>Quantidade</OverlineLabel>
 							<QuantityStepper
@@ -185,7 +185,7 @@ function ReincorporationCard({ plan }: { plan: TRecipePlan }) {
 							</div>
 						</div>
 					</div>
-					<div className="grid gap-2 sm:grid-cols-2">
+					<div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
 						<RadioCard
 							selected={reinc.modo === "MANTER_RENDIMENTO"}
 							onClick={() => updateReinc({ modo: "MANTER_RENDIMENTO" })}

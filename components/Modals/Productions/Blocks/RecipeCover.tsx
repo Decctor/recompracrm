@@ -1,11 +1,6 @@
 "use client";
 
-import {
-	RECIPE_COVER_ICON_COMPONENTS,
-	RECIPE_COVER_TONE_CLASSES,
-	RecipeCover,
-	recipeCoverStyle,
-} from "@/app/dashboard/production/_components/recipe-cover";
+import { RECIPE_COVER_ICON_COMPONENTS, RECIPE_COVER_TONE_CLASSES, RecipeCover, recipeCoverStyle } from "@/components/Productions/RecipeCover";
 import { Button } from "@/components/ui/button";
 import ResponsiveMenuSection from "@/components/Utils/ResponsiveMenuSection";
 import { RECIPE_COVER_HUES, RECIPE_COVER_ICONS, resolveRecipeCover } from "@/lib/productions/recipe-cover";

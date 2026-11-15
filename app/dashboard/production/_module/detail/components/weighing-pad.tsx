@@ -3,22 +3,19 @@
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Delete, Lock } from "lucide-react";
 import { useEffect, useEffectEvent, useState } from "react";
+import { allowsFractionalQuantity, formatPadValue, getPadKeys, parsePadBuffer, pressPadKey } from "@/lib/productions/weighing-pad";
 import { cn } from "@/lib/utils";
 import {
-	formatPadValue,
 	formatQuantity,
 	getItemName,
 	getItemUnit,
 	isWeighed,
-	pressPadKey,
 	type TProductionInputRow,
 	type TProductionOutputRow,
 	type TWeighItemKind,
 } from "../helpers/production-detail";
 import { PlannedChip } from "./items-panel";
 import { PanelEmptyState } from "./panel-empty-state";
-
-const PAD_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "00", "0", "back"] as const;
 
 type WeighingPadProps = {
 	current: { kind: TWeighItemKind; item: TProductionInputRow | TProductionOutputRow };
@@ -30,16 +27,19 @@ type WeighingPadProps = {
 };
 
 /**
- * Teclado da pesagem. Os dígitos enchem um buffer de centésimos (valor = buffer / 100). Vazio, o visor
- * mostra o previsto (ou o já pesado) em tom apagado, e confirmar grava esse valor.
+ * Teclado da pesagem. O visor mostra o que foi digitado, com vírgula decimal só em unidades fracionáveis
+ * (`lib/productions/weighing-pad.ts`). Vazio, mostra o previsto (ou o já pesado) em tom apagado, e
+ * confirmar grava esse valor.
  */
 export function WeighingPad({ current, pendingAfter, onConfirm, onReset }: WeighingPadProps) {
 	const [buffer, setBuffer] = useState("");
 	const { kind, item } = current;
 	const unit = getItemUnit(item);
 	const weighed = isWeighed(item);
+	const allowDecimal = allowsFractionalQuantity(unit);
+	const padKeys = getPadKeys(allowDecimal);
 	const fallbackValue = item.quantidadeReal ?? item.quantidadePrevista ?? 0;
-	const typedValue = buffer !== "" ? Number.parseInt(buffer, 10) / 100 : null;
+	const typedValue = parsePadBuffer(buffer);
 	const padKind = kind === "SAIDA" ? "Saída" : "reincorporado" in item && item.reincorporado ? "Saldo reincorporado" : "Insumo";
 
 	// Trocar de item descarta o que estava digitado.
@@ -61,18 +61,17 @@ export function WeighingPad({ current, pendingAfter, onConfirm, onReset }: Weigh
 		if (weighed) onReset();
 	}
 
-	// Teclado físico (ou balança que digita): dígitos, Backspace e Enter, fora de campos de texto e diálogos.
+	// Teclado físico (ou balança que digita): dígitos, separador decimal, Backspace e Enter, fora de campos
+	// de texto e diálogos.
 	const handleKeyDown = useEffectEvent((event: KeyboardEvent) => {
 		if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
 		const target = event.target as HTMLElement | null;
 		if (target && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))) return;
 		if (document.querySelector("[role='dialog'], [role='alertdialog']")) return;
-		if (/^\d$/.test(event.key)) {
+		if (/^[\d.,]$/.test(event.key) || event.key === "Backspace") {
 			event.preventDefault();
-			setBuffer((previous) => pressPadKey(previous, event.key));
-		} else if (event.key === "Backspace") {
-			event.preventDefault();
-			setBuffer((previous) => previous.slice(0, -1));
+			const key = event.key === "Backspace" ? "back" : event.key;
+			setBuffer((previous) => pressPadKey(previous, key, { allowDecimal }));
 		} else if (event.key === "Enter" && !(target instanceof HTMLButtonElement)) {
 			event.preventDefault();
 			confirm();
@@ -104,7 +103,7 @@ export function WeighingPad({ current, pendingAfter, onConfirm, onReset }: Weigh
 							buffer !== "" || weighed ? "text-foreground" : "text-muted-foreground",
 						)}
 					>
-						{formatPadValue(typedValue ?? fallbackValue)}
+						{buffer !== "" ? buffer : formatPadValue(fallbackValue, allowDecimal)}
 					</span>
 					<span className="text-base font-semibold text-muted-foreground">{unit}</span>
 				</output>
@@ -117,12 +116,12 @@ export function WeighingPad({ current, pendingAfter, onConfirm, onReset }: Weigh
 				</span>
 			</div>
 			<div className="grid grid-cols-3 gap-2">
-				{PAD_KEYS.map((key) => (
+				{padKeys.map((key) => (
 					<button
 						key={key}
 						type="button"
-						aria-label={key === "back" ? "Apagar" : key}
-						onClick={() => setBuffer((previous) => (key === "back" ? previous.slice(0, -1) : pressPadKey(previous, key)))}
+						aria-label={key === "back" ? "Apagar" : key === "," ? "Vírgula" : key}
+						onClick={() => setBuffer((previous) => pressPadKey(previous, key, { allowDecimal }))}
 						className="flex h-[60px] items-center justify-center rounded-xl border border-border bg-card text-2xl font-semibold shadow-xs transition-colors hover:bg-muted/40 active:bg-muted"
 					>
 						{key === "back" ? <Delete className="h-5.5 w-5.5" /> : key}

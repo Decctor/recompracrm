@@ -32,6 +32,15 @@ async function completeProduction({ input, session }: { input: TCompleteProducti
 	if (!organizationId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização.");
 
 	return await db.transaction(async (tx) => {
+		// Trava a produção antes de ler o status: dois "Concluir" simultâneos (toque duplo, duas abas) não
+		// podem ambos ver "em produção" e baixar os insumos duas vezes. O segundo espera o primeiro terminar
+		// e então lê CONCLUIDA.
+		await tx
+			.select({ id: productions.id })
+			.from(productions)
+			.where(and(eq(productions.id, input.productionId), eq(productions.organizacaoId, organizationId)))
+			.for("update");
+
 		const production = await tx.query.productions.findFirst({
 			where: (fields, { and, eq }) => and(eq(fields.id, input.productionId), eq(fields.organizacaoId, organizationId)),
 			with: {

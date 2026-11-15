@@ -114,7 +114,7 @@ export default function ProductionRecipesPage({ permissions }: { permissions: TP
 				{isError ? <ErrorComponent msg={getErrorMessage(error)} /> : null}
 				{isSuccess ? (
 					recipes.length > 0 ? (
-						<div className="grid w-full grid-cols-[repeat(auto-fill,minmax(250px,1fr))] gap-4">
+						<div className="grid w-full grid-cols-[repeat(auto-fill,minmax(min(250px,100%),1fr))] gap-4">
 							{recipes.map((recipe) => (
 								<ProductionRecipeCard
 									key={recipe.id}

@@ -4,7 +4,7 @@
  * ícone padrão e numa matiz derivada do id, estável entre renders e telas.
  *
  * As chaves de ícone são nomes do lucide e viajam como dado; o mapa para componente fica em
- * `app/dashboard/production/_components/recipe-cover.tsx`. Uma chave desconhecida (ícone removido
+ * `components/Productions/RecipeCover.tsx`. Uma chave desconhecida (ícone removido
  * da lista) cai no padrão em vez de quebrar a validação de receitas já salvas.
  */
 

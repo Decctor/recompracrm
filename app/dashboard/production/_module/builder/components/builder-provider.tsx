@@ -170,13 +170,18 @@ export function BuilderProvider({ initialRecipeId, children }: { initialRecipeId
 	const pickRecipe = useCallback((item: TRecipeListItem) => {
 		setSelection({ kind: "recipe", recipeId: item.id, preview: item });
 		setQuantitiesState(null);
+		// Título, início e conclusão ajustados à mão valiam para a receita anterior.
 		setTitleOverride(null);
+		setStartOverride(null);
+		setEndOverride(null);
 		setStage("quantities");
 	}, []);
 
 	const pickManual = useCallback(() => {
 		setSelection({ kind: "manual" });
 		setTitleOverride(null);
+		setStartOverride(null);
+		setEndOverride(null);
 		setStage("quantities");
 	}, []);
 

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import ResponsiveMenuSection from "@/components/Utils/ResponsiveMenuSection";
 import { formatDateForInputValue } from "@/lib/formatting";
 import { CalendarClock, ClipboardList, ListChecks, Repeat } from "lucide-react";
-import { RecipeCover } from "../../../_components/recipe-cover";
+import { RecipeCover } from "@/components/Productions/RecipeCover";
 import { ValuationChips } from "../../../_components/valuation-chips";
 import { useBuilder } from "../components/builder-provider";
 import { AutoBadge, BuilderCard, FieldLabel, StaticField } from "../components/builder-ui";
@@ -23,7 +23,7 @@ export default function StageReview() {
 	const isManual = selection?.kind === "manual";
 
 	return (
-		<div className="grid items-start gap-3.5 lg:grid-cols-[minmax(0,1fr)_380px]">
+		<div className="grid grid-cols-1 items-start gap-3.5 lg:grid-cols-[minmax(0,1fr)_380px]">
 			<BuilderCard className="gap-5">
 				<ResponsiveMenuSection title="DADOS GERAIS" icon={<ClipboardList className="h-4 w-4" />}>
 					<div className="flex flex-col gap-1">
@@ -52,7 +52,7 @@ export default function StageReview() {
 				</ResponsiveMenuSection>
 
 				<ResponsiveMenuSection title="PRAZOS" icon={<CalendarClock className="h-4 w-4" />}>
-					<div className="grid gap-3 sm:grid-cols-2">
+					<div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
 						<div className="flex flex-col gap-1">
 							<FieldLabel badge={<AutoBadge show={startIsAuto} label="Agora" />}>INÍCIO</FieldLabel>
 							<DateTimeInput

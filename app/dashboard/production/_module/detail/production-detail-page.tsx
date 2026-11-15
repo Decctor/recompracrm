@@ -68,6 +68,8 @@ export default function ProductionDetailPage({ permissions, productionId }: Prod
 			queryClient.invalidateQueries({ queryKey }),
 			queryClient.invalidateQueries({ queryKey: ["productions"] }),
 			queryClient.invalidateQueries({ queryKey: ["production-recipes"] }),
+			// O byId da receita traz os lotes de saldo que o construtor oferece: a conclusão os consome.
+			queryClient.invalidateQueries({ queryKey: ["production-recipe-by-id"] }),
 			queryClient.invalidateQueries({ queryKey: ["production-stats"] }),
 		]);
 	}

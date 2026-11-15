@@ -23,8 +23,11 @@ import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 const DEFAULT_PAGE_SIZE = 20;
-const MAX_PAGE_SIZE = 50;
+/** O maior tamanho que o seletor de página oferece (`PAGE_SIZE_OPTIONS`). */
+const MAX_PAGE_SIZE = 100;
 const LOCKED_STATUSES = ["CONCLUIDA", "CANCELADA"] as const;
+/** Produções ainda abertas: aparecem em todo período em que estavam abertas, não só no de criação. */
+const OPEN_STATUSES = ["RASCUNHO", "PLANEJADA", "EM_PRODUCAO"] as const;
 
 const GetProductionsInputSchema = z.object({
 	id: z.string({ invalid_type_error: "Tipo inválido para ID da produção." }).optional().nullable(),
@@ -313,8 +316,19 @@ async function getProductions({ input, session }: { input: TGetProductionsInput;
 			),
 		);
 	}
-	if (input.periodAfter) conditions.push(gte(productions.dataInsercao, input.periodAfter));
-	if (input.periodBefore) conditions.push(lte(productions.dataInsercao, input.periodBefore));
+	// O período pega o que foi criado nele e o que estava aberto nele: uma produção em andamento (ou
+	// planejada) criada antes do início continua aparecendo — virar o mês não a tira do balcão.
+	if (input.periodAfter || input.periodBefore) {
+		const createdInPeriod = and(
+			input.periodAfter ? gte(productions.dataInsercao, input.periodAfter) : undefined,
+			input.periodBefore ? lte(productions.dataInsercao, input.periodBefore) : undefined,
+		);
+		const openDuringPeriod = and(
+			inArray(productions.status, OPEN_STATUSES),
+			input.periodBefore ? lte(productions.dataInsercao, input.periodBefore) : undefined,
+		);
+		conditions.push(or(createdInPeriod, openDuringPeriod));
+	}
 
 	// Custo e margem só existem gravados nas concluídas (snapshot); as demais ficam por último em
 	// qualquer direção — projetá-las pelo catálogo exigiria valorar toda a base para ordenar.
