@@ -4,7 +4,7 @@ import type { TGetProductionsOutputDefault } from "@/app/api/productions/route";
 import { RecipeCover } from "@/components/Productions/RecipeCover";
 import { formatToMoney } from "@/lib/formatting";
 import { appRoutes } from "@/lib/navigation/routes";
-import { getProductionItemQuantity } from "@/lib/productions/valuation";
+import { getProductionItemQuantity } from "@/lib/productions/item-quantity";
 import { cn } from "@/lib/utils";
 import dayjs from "dayjs";
 import { ChevronRight, RefreshCcw } from "lucide-react";

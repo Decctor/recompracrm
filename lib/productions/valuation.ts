@@ -1,6 +1,9 @@
 import { type DBTransaction, db } from "@/services/drizzle";
 import { productVariants, products } from "@/services/drizzle/schema";
 import { and, eq, inArray } from "drizzle-orm";
+import { getProductionItemQuantity } from "./item-quantity";
+
+export { getProductionItemQuantity };
 
 /**
  * Valoração de receitas e produções.
@@ -191,11 +194,6 @@ type ProductionValuationSource = {
 	entradas: (TPricedItem & { quantidadePrevista: number | null; quantidadeReal: number | null })[];
 	saidas: (TPricedItem & { quantidadePrevista: number | null; quantidadeReal: number | null })[];
 };
-
-/** Quantidade que vale para valoração: a real quando já informada, senão a prevista. */
-export function getProductionItemQuantity(item: { quantidadePrevista: number | null; quantidadeReal: number | null }) {
-	return item.quantidadeReal ?? item.quantidadePrevista ?? 0;
-}
 
 /**
  * Itens cujos preços precisam ser carregados. Vazio quando a produção já tem snapshot — nesse caso
