@@ -16,7 +16,7 @@ export type TBuilderRecipe = TGetProductionRecipesOutputById;
 export type TReincorporationState = {
 	on: boolean;
 	quantidade: number;
-	/** Nulo = "Sem lote específico" (baixa pelo saldo geral). */
+	/** Nulo = "Sem lote específico" (baixa pelo saldo geral) ou produto sem controle de estoque. */
 	loteId: string | null;
 	modo: TReincorporationMode;
 };
@@ -73,13 +73,23 @@ export function buildRecipePlan({ recipe, quantities, start }: { recipe: TBuilde
 	const lots = recipe.saldo?.lotes ?? [];
 	const lotsTotal = lots.reduce((total, lot) => total + lot.quantidadeAtual, 0);
 	const saldoGeral = Math.max(recipe.saldo?.saldoGeral ?? 0, 0);
-	const canReincorporate = !!primaryOutput && (lots.length > 0 || saldoGeral > 0);
+	// Com controle de estoque, o saldo é o que o estoque tem — informar mais faria a conclusão falhar por
+	// saldo insuficiente. Sem controle, não há o que validar (como em qualquer insumo sem controle): o
+	// saldo é informado livremente e a conclusão não baixa nada dele.
+	const tracksStock = recipe.saldo?.rastreamentoEstoqueAtivo ?? false;
+	const canReincorporate = !!primaryOutput && (!tracksStock || lots.length > 0 || saldoGeral > 0);
 
 	const { target, reinc } = quantities;
-	const lot = reinc.loteId ? (lots.find((item) => item.id === reinc.loteId) ?? null) : null;
-	const maxSaldo = roundQuantity(lot ? lot.quantidadeAtual : Math.max(saldoGeral, lotsTotal));
+	const lot = tracksStock && reinc.loteId ? (lots.find((item) => item.id === reinc.loteId) ?? null) : null;
+	/** Nulo = sem limite (produto sem controle de estoque). */
+	const maxSaldo = tracksStock ? roundQuantity(lot ? lot.quantidadeAtual : Math.max(saldoGeral, lotsTotal)) : null;
 	const reincOn = canReincorporate && reinc.on;
-	const saldo = reincOn ? Math.min(reinc.quantidade, maxSaldo) : 0;
+	const saldo = reincOn ? (maxSaldo == null ? Math.max(reinc.quantidade, 0) : Math.min(reinc.quantidade, maxSaldo)) : 0;
+	// Saldo fora do estoque não tem custo de lote: a conclusão usa o preço de custo do catálogo, e sem
+	// ele o saldo entra de graça — a produção fica com custo menor do que teve.
+	const leftoverCatalogCost = recipe.saldo?.custoUnitario ?? null;
+	const untrackedLeftover = reincOn && !tracksStock && saldo > 0;
+	const untrackedLeftoverWithoutCost = untrackedLeftover && !(leftoverCatalogCost != null && leftoverCatalogCost > 0);
 
 	const escala = scaleRecipe({
 		rendimentoReceita: rendimento,
@@ -116,9 +126,11 @@ export function buildRecipePlan({ recipe, quantities, start }: { recipe: TBuilde
 				: null,
 	}));
 
-	// Estimativa: a receita é valorada no rendimento base. O saldo entra pelo custo unitário da saída.
-	const unitCost = rendimento > 0 ? recipe.valores.custoTotal / rendimento : 0;
-	const custoTotal = recipe.valores.custoTotal * escala.fatorInsumos + escala.quantidadeSaldo * unitCost;
+	// Estimativa: a receita é valorada no rendimento base. O saldo de estoque entra pelo custo unitário
+	// da saída; o saldo sem controle, pelo custo de catálogo — o mesmo que a conclusão vai gravar.
+	const recipeUnitCost = rendimento > 0 ? recipe.valores.custoTotal / rendimento : 0;
+	const leftoverUnitCost = tracksStock ? recipeUnitCost : (leftoverCatalogCost ?? 0);
+	const custoTotal = recipe.valores.custoTotal * escala.fatorInsumos + escala.quantidadeSaldo * leftoverUnitCost;
 	const retornoEsperado = recipe.valores.retornoEsperado * escala.fatorSaidas;
 	const margem = retornoEsperado - custoTotal;
 	const valores: TPlanValuation = {
@@ -126,7 +138,7 @@ export function buildRecipePlan({ recipe, quantities, start }: { recipe: TBuilde
 		retornoEsperado,
 		margem,
 		margemPercentual: retornoEsperado > 0 ? (margem / retornoEsperado) * 100 : null,
-		custoCompleto: recipe.valores.custoCompleto,
+		custoCompleto: recipe.valores.custoCompleto && !untrackedLeftoverWithoutCost,
 		retornoCompleto: recipe.valores.retornoCompleto,
 		origemValores: "PROJECAO",
 	};
@@ -144,6 +156,11 @@ export function buildRecipePlan({ recipe, quantities, start }: { recipe: TBuilde
 		lot,
 		saldoGeral,
 		maxSaldo,
+		tracksStock,
+		/** Saldo reincorporado de produto sem controle de estoque: só registro, nada é baixado. */
+		untrackedLeftover,
+		/** …e sem preço de custo: entra com custo zero. */
+		untrackedLeftoverWithoutCost,
 		canReincorporate,
 		reincOn,
 		escala,

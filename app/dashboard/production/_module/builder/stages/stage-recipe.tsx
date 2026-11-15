@@ -98,10 +98,10 @@ function RecipeCard({ recipe, selected, onPick }: { recipe: TRecipeListItem; sel
 						{duration}
 					</span>
 				) : null}
-				{recipe.saldoLotes > 0 ? (
+				{recipe.saldoDisponivel > 0 ? (
 					<span className="absolute top-3 right-3 inline-flex items-center gap-1 rounded-full bg-warning-surface px-2.5 py-1 text-xs font-semibold text-warning-surface-foreground">
 						<RefreshCcw className="h-3 w-3" />
-						Saldo {formatQuantity(recipe.saldoLotes, unit)}
+						Saldo {formatQuantity(recipe.saldoDisponivel, unit)}
 					</span>
 				) : null}
 				{selected ? (

@@ -108,18 +108,20 @@ function ReincorporationCard({ plan }: { plan: TRecipePlan }) {
 	const unit = plan.unit;
 	const outputName = plan.saidas[0]?.nome ?? plan.primaryOutput.produto.nome;
 	const saldoStep = getQuantitySteps(unit).saldo;
-	const lotOptions = [
-		...plan.lots.map((lot) => {
-			const vence = formatDayMonth(lot.dataValidade);
-			return {
-				id: lot.id as string | null,
-				title: lot.codigoLote ?? "Lote sem código",
-				description: `${formatQuantity(lot.quantidadeAtual, unit)}${vence ? ` · vence ${vence}` : ""}`,
-				max: lot.quantidadeAtual,
-			};
-		}),
-		{ id: null, title: "Sem lote específico", description: "Baixa pelo saldo geral", max: plan.maxSaldo },
-	];
+	const lotOptions = !plan.tracksStock
+		? []
+		: [
+				...plan.lots.map((lot) => {
+					const vence = formatDayMonth(lot.dataValidade);
+					return {
+						id: lot.id as string | null,
+						title: lot.codigoLote ?? "Lote sem código",
+						description: `${formatQuantity(lot.quantidadeAtual, unit)}${vence ? ` · vence ${vence}` : ""}`,
+						max: lot.quantidadeAtual,
+					};
+				}),
+				{ id: null, title: "Sem lote específico", description: "Baixa pelo saldo geral", max: plan.maxSaldo ?? 0 },
+			];
 
 	return (
 		<BuilderCard>
@@ -135,7 +137,9 @@ function ReincorporationCard({ plan }: { plan: TRecipePlan }) {
 					<BigToggle
 						checked={plan.reincOn}
 						label="Reincorporar saldo"
-						onChange={(on) => updateReinc(on && reinc.quantidade <= 0 ? { on, quantidade: Math.min(saldoStep, plan.maxSaldo) } : { on })}
+						onChange={(on) =>
+							updateReinc(on && reinc.quantidade <= 0 ? { on, quantidade: plan.maxSaldo == null ? saldoStep : Math.min(saldoStep, plan.maxSaldo) } : { on })
+						}
 					/>
 				) : null}
 			</div>
@@ -155,35 +159,43 @@ function ReincorporationCard({ plan }: { plan: TRecipePlan }) {
 								unit={unit}
 								step={saldoStep}
 								min={0}
-								max={plan.maxSaldo}
+								max={plan.maxSaldo ?? undefined}
 								onChange={(quantidade) => updateReinc({ quantidade })}
 								decreaseLabel="Menos saldo"
 								increaseLabel="Mais saldo"
 								inputLabel="Quantidade de saldo"
 							/>
 							<span className="text-xs text-muted-foreground">
-								{plan.lot ? `Lote com ${formatQuantity(plan.lot.quantidadeAtual, unit)}` : `Até ${formatQuantity(plan.maxSaldo, unit)} do saldo geral`}
+								{!plan.tracksStock || plan.maxSaldo == null
+									? "Informe o saldo que vai entrar na produção."
+									: plan.lot
+										? `Lote com ${formatQuantity(plan.lot.quantidadeAtual, unit)}`
+										: `Até ${formatQuantity(plan.maxSaldo, unit)} do saldo geral`}
 							</span>
 						</div>
-						<div className="flex min-w-0 flex-col gap-1.5">
-							<OverlineLabel>Lote (opcional)</OverlineLabel>
-							<div className="flex flex-wrap gap-1.5">
-								{lotOptions.map((option) => (
-									<OptionTile
-										key={option.id ?? "sem-lote"}
-										selected={option.id === (plan.lot?.id ?? null)}
-										title={option.title}
-										description={option.description}
-										onClick={() =>
-											updateReinc({
-												loteId: option.id,
-												quantidade: Math.min(reinc.quantidade > 0 ? reinc.quantidade : option.max, option.max),
-											})
-										}
-									/>
-								))}
+						{!plan.tracksStock ? (
+							<UntrackedLeftoverNotice outputName={outputName} withoutCost={plan.untrackedLeftoverWithoutCost} />
+						) : (
+							<div className="flex min-w-0 flex-col gap-1.5">
+								<OverlineLabel>Lote (opcional)</OverlineLabel>
+								<div className="flex flex-wrap gap-1.5">
+									{lotOptions.map((option) => (
+										<OptionTile
+											key={option.id ?? "sem-lote"}
+											selected={option.id === (plan.lot?.id ?? null)}
+											title={option.title}
+											description={option.description}
+											onClick={() =>
+												updateReinc({
+													loteId: option.id,
+													quantidade: Math.min(reinc.quantidade > 0 ? reinc.quantidade : option.max, option.max),
+												})
+											}
+										/>
+									))}
+								</div>
 							</div>
-						</div>
+						)}
 					</div>
 					<div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
 						<RadioCard
@@ -202,6 +214,28 @@ function ReincorporationCard({ plan }: { plan: TRecipePlan }) {
 				</>
 			) : null}
 		</BuilderCard>
+	);
+}
+
+/**
+ * Saldo de produto sem controle de estoque: nada a validar nem a baixar, como qualquer insumo sem
+ * controle. O aviso existe para ninguém achar que o estoque foi atualizado — e para o custo, que sem
+ * preço de custo no catálogo fica zerado.
+ */
+function UntrackedLeftoverNotice({ outputName, withoutCost }: { outputName: string; withoutCost: boolean }) {
+	return (
+		<div className="flex min-w-0 flex-col gap-1.5">
+			<OverlineLabel>Estoque</OverlineLabel>
+			<div className="flex flex-col gap-1 rounded-xl bg-muted/60 px-3 py-2.5 text-[13px] leading-snug">
+				<span className="font-semibold">Produto sem controle de estoque — nada será baixado.</span>
+				<span className="text-muted-foreground">O saldo de {outputName} entra só como registro desta produção, sem lote.</span>
+			</div>
+			{withoutCost ? (
+				<p className="rounded-xl bg-warning-surface px-3 py-2 text-[13px] leading-snug text-warning-surface-foreground">
+					{outputName} não tem preço de custo: o saldo entra com custo zero e a produção fica com custo menor do que teve.
+				</p>
+			) : null}
+		</div>
 	);
 }
 
@@ -229,7 +263,7 @@ function PreviewPanel({ plan }: { plan: TRecipePlan }) {
 							<span className="flex min-w-0 flex-1 flex-col">
 								<span className="text-sm font-medium">{outputName}</span>
 								<span className="text-[11px] text-warning-surface-foreground">
-									Saldo · {plan.lot?.codigoLote ?? (plan.lot ? "Lote sem código" : "Sem lote específico")}
+									Saldo · {!plan.tracksStock ? "Sem controle de estoque" : (plan.lot?.codigoLote ?? (plan.lot ? "Lote sem código" : "Sem lote específico"))}
 								</span>
 							</span>
 							<span className="whitespace-nowrap text-[15px] font-bold">{formatQuantity(saldo, plan.unit)}</span>

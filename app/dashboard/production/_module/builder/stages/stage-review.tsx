@@ -127,8 +127,15 @@ function ReviewSummary() {
 			{saldo > 0 ? (
 				<SummaryRow
 					label="Saldo reincorporado"
-					value={`${formatQuantity(saldo, plan.unit)} · ${plan.lot ? (plan.lot.codigoLote ?? "lote sem código") : "sem lote"}`}
+					value={`${formatQuantity(saldo, plan.unit)} · ${
+						!plan.tracksStock ? "sem controle de estoque" : plan.lot ? (plan.lot.codigoLote ?? "lote sem código") : "sem lote"
+					}`}
 				/>
+			) : null}
+			{plan.untrackedLeftoverWithoutCost ? (
+				<p className="rounded-xl bg-warning-surface px-3 py-2 text-[13px] leading-snug text-warning-surface-foreground">
+					Custo do saldo não apurado: o produto não tem preço de custo, então a produção ficará com custo menor.
+				</p>
 			) : null}
 			<SummaryRow label="Insumos" value={`${plan.insumos.length} · ${reduction > 0 ? `reduzidos ${formatPercent(reduction)}` : "conforme receita"}`} />
 			<SummaryRow

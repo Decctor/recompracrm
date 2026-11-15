@@ -3,7 +3,7 @@ import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { canCreateProductions, canDeleteProductions, canEditProductions } from "@/lib/permissions/productions";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { handleSimpleChildRowsProcessing } from "@/lib/db-utils";
-import { calculateValuation, getProductPricingMap } from "@/lib/productions/valuation";
+import { calculateValuation, getItemUnitCost, getProductPricingMap } from "@/lib/productions/valuation";
 import { ProductionRecipeBaseSchema, ProductionRecipeInputSchema, ProductionRecipeOutputBaseSchema } from "@/schemas/productions";
 import { db } from "@/services/drizzle";
 import { getPrimaryRecipeOutput } from "@/lib/productions/builder-math";
@@ -205,6 +205,14 @@ async function validateRecipeItemsOrganization({
 }
 
 type TStockKey = { produtoId: string; produtoVarianteId?: string | null };
+
+type TStockHolder = {
+	produto: { quantidade: number | null; rastreamentoEstoqueAtivo: boolean | null };
+	produtoVariante: { quantidade: number | null; rastreamentoEstoqueAtivo: boolean | null } | null;
+};
+/** Com variante, vale o controle da variante — a mesma regra de `isStockTrackingActive`. */
+const tracksStock = (item: TStockHolder) => !!(item.produtoVariante ?? item.produto).rastreamentoEstoqueAtivo;
+const getStockQuantity = (item: TStockHolder) => (item.produtoVariante ?? item.produto).quantidade;
 const stockKey = (item: TStockKey) => `${item.produtoId}::${item.produtoVarianteId ?? ""}`;
 
 /** Lotes ativos, com saldo e dentro da validade — o que pode ser reincorporado numa produção. */
@@ -289,23 +297,30 @@ async function getProductionRecipes({ input, session }: { input: TGetProductionR
 		// Receita é molde, não fato consumado: a valoração é sempre pelos preços vigentes no catálogo.
 		const pricingMap = await getProductPricingMap({ organizationId, items: [...recipe.insumos, ...recipe.saidas] });
 
-		// Saldo da saída principal — o que o construtor oferece para reincorporar.
+		// Saldo da saída principal — o que o construtor oferece para reincorporar. Sem controle de estoque
+		// não há lote nem saldo a consultar: o saldo é só informado, e a conclusão não baixa nada dele.
 		const primaryOutput = getPrimaryRecipeOutput(recipe.saidas);
+		const primaryOutputTracksStock = primaryOutput ? tracksStock(primaryOutput) : false;
 		const saldo = primaryOutput
 			? {
-					lotes: await db.query.productStockLots.findMany({
-						where: and(
-							availableLotConditions(organizationId),
-							eq(productStockLots.produtoId, primaryOutput.produtoId),
-							primaryOutput.produtoVarianteId
-								? eq(productStockLots.produtoVarianteId, primaryOutput.produtoVarianteId)
-								: isNull(productStockLots.produtoVarianteId),
-						),
-						columns: { id: true, codigoLote: true, quantidadeAtual: true, dataValidade: true, dataFabricacao: true },
-						orderBy: (fields, { asc }) => [sql`${fields.dataValidade} ASC NULLS LAST`, asc(fields.dataInsercao)],
-					}),
+					rastreamentoEstoqueAtivo: primaryOutputTracksStock,
+					/** Custo de catálogo da saída: é por ele que a conclusão custeia saldo que não vem de lote. */
+					custoUnitario: getItemUnitCost({ item: primaryOutput, pricingMap }),
+					lotes: !primaryOutputTracksStock
+						? []
+						: await db.query.productStockLots.findMany({
+								where: and(
+									availableLotConditions(organizationId),
+									eq(productStockLots.produtoId, primaryOutput.produtoId),
+									primaryOutput.produtoVarianteId
+										? eq(productStockLots.produtoVarianteId, primaryOutput.produtoVarianteId)
+										: isNull(productStockLots.produtoVarianteId),
+								),
+								columns: { id: true, codigoLote: true, quantidadeAtual: true, dataValidade: true, dataFabricacao: true },
+								orderBy: (fields, { asc }) => [sql`${fields.dataValidade} ASC NULLS LAST`, asc(fields.dataInsercao)],
+							}),
 					/** Saldo geral do produto/variante, para "Sem lote específico". */
-					saldoGeral: (primaryOutput.produtoVariante ? primaryOutput.produtoVariante.quantidade : primaryOutput.produto.quantidade) ?? 0,
+					saldoGeral: primaryOutputTracksStock ? (getStockQuantity(primaryOutput) ?? 0) : 0,
 				}
 			: null;
 
@@ -359,7 +374,10 @@ async function getProductionRecipes({ input, session }: { input: TGetProductionR
 			insumos: { columns: { id: true, produtoId: true, produtoVarianteId: true, quantidade: true } },
 			saidas: {
 				columns: { id: true, produtoId: true, produtoVarianteId: true, quantidade: true, prazoValidadeMedida: true, prazoValidadeValor: true },
-				with: { produto: { columns: { id: true, nome: true, unidade: true } } },
+				with: {
+					produto: { columns: { id: true, nome: true, unidade: true, quantidade: true, rastreamentoEstoqueAtivo: true } },
+					produtoVariante: { columns: { id: true, quantidade: true, rastreamentoEstoqueAtivo: true } },
+				},
 				orderBy: (fields, { asc }) => asc(fields.id),
 			},
 		},
@@ -383,8 +401,13 @@ async function getProductionRecipes({ input, session }: { input: TGetProductionR
 			valores: calculateValuation({ inputs: recipe.insumos, outputs: recipe.saidas, pricingMap }),
 			producoes: stats?.producoes ?? 0,
 			dataUltimaProducao: stats?.dataUltimaProducao ?? null,
-			/** Saldo em lotes da saída principal — selo "Saldo" no construtor. */
-			saldoLotes: primaryOutput ? (lotBalances.get(stockKey(primaryOutput)) ?? 0) : 0,
+			/**
+			 * Saldo em estoque da saída principal — selo "Saldo" no construtor. O saldo geral já inclui os
+			 * lotes; o maior dos dois cobre um saldo geral defasado. Zero sem controle de estoque: não há
+			 * saldo conhecido, embora o construtor ainda deixe informar um.
+			 */
+			saldoDisponivel:
+				primaryOutput && tracksStock(primaryOutput) ? Math.max(getStockQuantity(primaryOutput) ?? 0, lotBalances.get(stockKey(primaryOutput)) ?? 0) : 0,
 		};
 	});
 
