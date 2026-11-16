@@ -4,10 +4,9 @@ import SelectProductWithVariants, { type TSelectProductWithVariantsValue } from 
 import TextInput from "@/components/Inputs/TextInput";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { formatToMoney } from "@/lib/formatting";
-import { inferPackFactorFromDescription, unitsAreEquivalent } from "@/lib/purchase/units";
+import { formatConversionFactor, parseConversionFactor, suggestConversionFactor, unitsAreEquivalent } from "@/lib/purchase/units";
 import { cn } from "@/lib/utils";
 import type { TPurchaseCostTreatmentEnum } from "@/schemas/enums";
 import { ArrowRight, Check, CheckCheck, EyeOff, FileText, Link2, List, Minus, PackagePlus, Search, Sparkles } from "lucide-react";
@@ -15,6 +14,7 @@ import { useMemo, useState } from "react";
 import {
 	applyTaxTreatment,
 	buildNewProductDraft,
+	getLineInternalUnit,
 	getLineIssue,
 	getLineTotal,
 	getPendingModifierIndex,
@@ -24,12 +24,13 @@ import {
 } from "../helpers/review-lines";
 import { useBuilder } from "../components/builder-provider";
 import { RadioCard, StatusPill, TONE_CLASSES } from "../components/builder-ui";
+import { buildConversionTarget, ConversionField, toStoredFactor, type TConversionTarget } from "../components/conversion-field";
 import { ISSUE_META } from "../helpers/issue-meta";
 
 const ISSUE_QUESTIONS: Record<TReviewIssue, string> = {
 	unmapped: "Este item não existe no seu catálogo",
 	suggested: "É este o produto?",
-	unit: "Quantas unidades vêm em cada embalagem?",
+	unit: "Qual a proporção entre as unidades?",
 	tax: "Como tratar este tributo?",
 };
 
@@ -166,20 +167,24 @@ function QueuePanel({
 	const [productDraft, setProductDraft] = useState<TNewProductDraft>(() => line.produtoNovo ?? buildNewProductDraft(line, crypto.randomUUID()));
 	const [linkPick, setLinkPick] = useState<TSelectProductWithVariantsValue>(null);
 	const [pickingOther, setPickingOther] = useState(false);
-	const [fatorDraft, setFatorDraft] = useState("");
+	// The typed factor belongs to the product/unit it was typed for: switching either falls back to the new default.
+	const [factorInput, setFactorInput] = useState<{ target: string; text: string } | null>(null);
 	const [taxDraft, setTaxDraft] = useState<TPurchaseCostTreatmentEnum | null>(null);
 	const [applyToWholeDocument, setApplyToWholeDocument] = useState(true);
 	const [remember, setRemember] = useState(line.lembrarVinculo);
 
 	const modifierIndex = getPendingModifierIndex(line);
 	const modifier = modifierIndex === -1 ? null : (line.modificadoresCusto?.[modifierIndex] ?? null);
-	const fator = Number(fatorDraft.replace(",", "."));
+	const conversion = resolveConversionTarget({ line, issue, mode, productDraft, linkPick, pickingOther });
+	const factorText =
+		conversion && factorInput?.target === conversion.key ? factorInput.text : formatConversionFactor(conversion?.defaultFactor ?? null);
+	const fator = parseConversionFactor(factorText);
 	const canRemember =
 		!!(line.codigoFornecedor?.trim() || line.ean?.trim()) && issue !== "tax" && !(issue === "unmapped" && mode === "ignore") && !!supplierName;
 
-	const ready =
+	const decided =
 		issue === "unit"
-			? fator > 0
+			? true
 			: issue === "tax"
 				? !!taxDraft
 				: issue === "unmapped"
@@ -187,6 +192,9 @@ function QueuePanel({
 					: issue === "suggested"
 						? !pickingOther || !!linkPick?.product
 						: true;
+	// Every path that lands on a product answers the proportion in the same step, never in a later one.
+	const ready = decided && (!conversion || fator !== null);
+	const factorPatch = conversion ? toStoredFactor({ line, unit: conversion.unit, fator }) : null;
 
 	const confirmLabel =
 		issue === "suggested"
@@ -218,8 +226,8 @@ function QueuePanel({
 			produtoNovo: null,
 			manualOverride: true,
 			divergenciaUnidade: !equivalent,
-			fatorConversaoSugerido: equivalent ? null : inferPackFactorFromDescription(line.descricao),
-			fatorConversao: null,
+			fatorConversaoSugerido: suggestConversionFactor({ descricao: line.descricao, documentUnit: line.unidade, productUnit: pick.product.unidade }),
+			fatorConversao: factorPatch,
 		};
 	}
 
@@ -230,10 +238,10 @@ function QueuePanel({
 		if (issue === "unmapped") {
 			if (mode === "ignore") patch = { incluir: false };
 			else if (mode === "create")
-				patch = { produtoNovo: { ...productDraft, nome: productDraft.nome.trim() }, manualOverride: true, fatorConversao: null };
+				patch = { produtoNovo: { ...productDraft, nome: productDraft.nome.trim() }, manualOverride: true, fatorConversao: factorPatch };
 			else if (linkPick?.product) patch = linkPatch(linkPick);
 		} else if (issue === "suggested") {
-			patch = pickingOther && linkPick?.product ? linkPatch(linkPick) : { vinculoConfirmado: true };
+			patch = pickingOther && linkPick?.product ? linkPatch(linkPick) : { vinculoConfirmado: true, fatorConversao: factorPatch };
 		} else if (issue === "unit") {
 			patch = { fatorConversao: fator };
 		} else if (issue === "tax" && taxDraft) {
@@ -248,6 +256,15 @@ function QueuePanel({
 	const meta = ISSUE_META[issue];
 	const internalUnit = line.produto?.unidade ?? line.produtoNovo?.unidade ?? "UN";
 	const linkedName = line.produto?.nome ?? line.produtoNovo?.nome ?? "";
+	const conversionField = conversion ? (
+		<ConversionField
+			line={line}
+			conversion={conversion}
+			text={factorText}
+			onChange={(text) => setFactorInput({ target: conversion.key, text })}
+			autoFocus={issue === "unit"}
+		/>
+	) : null;
 
 	return (
 		<div className="flex flex-col gap-3.5">
@@ -308,6 +325,7 @@ function QueuePanel({
 						<NewProductForm draft={productDraft} onChange={(patch) => setProductDraft((previous) => ({ ...previous, ...patch }))} />
 					) : null}
 					{mode === "link" ? <ProductPicker value={linkPick} initialSearch={line.descricao.split(" ")[0] ?? ""} onChange={setLinkPick} /> : null}
+					{conversionField}
 				</div>
 			) : null}
 
@@ -373,42 +391,15 @@ function QueuePanel({
 					)}
 				</div>
 			) : null}
+			{issue === "suggested" ? conversionField : null}
 
 			{issue === "unit" ? (
-				<div className="flex flex-col gap-3 rounded-xl border border-border p-3.5">
+				<div className="flex flex-col gap-2.5">
 					<p className="text-xs leading-relaxed">
 						Vinculado a <strong>{linkedName}</strong>, que você estoca em <strong>{internalUnit}</strong>. A nota fatura em{" "}
 						<strong>{line.unidade ?? "outra unidade"}</strong>.
 					</p>
-					<div className="flex items-center gap-2 text-sm font-medium">
-						<span>1 {line.unidade ?? "UN"} =</span>
-						<Input
-							value={fatorDraft}
-							onChange={(event) => setFatorDraft(event.target.value.replace(/[^\d.,]/g, ""))}
-							placeholder="?"
-							inputMode="decimal"
-							className="h-9 w-20 text-center font-semibold"
-							autoFocus
-						/>
-						<span>{internalUnit}</span>
-					</div>
-					{!fatorDraft && line.fatorConversaoSugerido ? (
-						<button
-							type="button"
-							onClick={() => setFatorDraft(String(line.fatorConversaoSugerido))}
-							className={cn("flex w-fit items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold", TONE_CLASSES.info)}
-						>
-							<Sparkles className="h-3 w-3" />
-							Usar {line.fatorConversaoSugerido} ·{" "}
-							{line.matchTipo === "MAPEADO" && !line.manualOverride ? "aprendido nas notas anteriores" : "lido na descrição do item"}
-						</button>
-					) : null}
-					<div className="flex justify-between gap-2 rounded-md bg-muted/70 px-2.5 py-2 text-xs">
-						<span className="text-muted-foreground">Entra no estoque como</span>
-						<span className="font-mono font-semibold">
-							{fator > 0 ? `${line.quantidade * fator} ${internalUnit} × ${formatToMoney(line.valorUnitario / fator)}` : "—"}
-						</span>
-					</div>
+					{conversionField}
 				</div>
 			) : null}
 
@@ -458,6 +449,40 @@ function QueuePanel({
 			</div>
 		</div>
 	);
+}
+
+/**
+ * The product the line is about to land on, if any. What the proportion starts at is decided by
+ * `buildConversionTarget`, the same rule the "Ajustar proporção" dialog uses.
+ */
+function resolveConversionTarget({
+	line,
+	issue,
+	mode,
+	productDraft,
+	linkPick,
+	pickingOther,
+}: {
+	line: TReviewLine;
+	issue: TReviewIssue;
+	mode: TUnmappedMode;
+	productDraft: TNewProductDraft;
+	linkPick: TSelectProductWithVariantsValue;
+	pickingOther: boolean;
+}): TConversionTarget | null {
+	if (issue === "unmapped") {
+		if (mode === "create") return buildConversionTarget({ line, unit: productDraft.unidade.trim() || null, productKey: "new", isLineProduct: false });
+		if (mode === "link" && linkPick?.product)
+			return buildConversionTarget({ line, unit: linkPick.product.unidade ?? null, productKey: linkPick.product.id, isLineProduct: false });
+		return null;
+	}
+	if (issue === "suggested") {
+		if (!pickingOther) return buildConversionTarget({ line, unit: line.produto?.unidade ?? null, productKey: line.produto?.id ?? "line", isLineProduct: true });
+		if (!linkPick?.product) return null;
+		return buildConversionTarget({ line, unit: linkPick.product.unidade ?? null, productKey: linkPick.product.id, isLineProduct: false });
+	}
+	if (issue === "unit") return buildConversionTarget({ line, unit: getLineInternalUnit(line), productKey: "line", isLineProduct: true });
+	return null;
 }
 
 function NoteField({ label, value, strong }: { label: string; value: string; strong?: boolean }) {

@@ -5,7 +5,7 @@ import { and, eq, inArray, or, sql } from "drizzle-orm";
 import { gateway, generateText, Output } from "ai";
 import { z } from "zod";
 import type { TExtractedCompositionItem } from "./import";
-import { inferPackFactorFromDescription, unitsAreEquivalent } from "./units";
+import { suggestConversionFactor, unitsAreEquivalent } from "./units";
 
 export type TCompositionMatchType = "MAPEADO" | "CODIGO" | "SUGERIDO" | "NAO_MAPEADO";
 
@@ -42,7 +42,7 @@ function applyUnitReconciliation(item: TMatchedCompositionItem, mappedFactor?: n
 		item.fatorConversaoSugerido = mappedFactor;
 		return;
 	}
-	item.fatorConversaoSugerido = equivalent ? null : inferPackFactorFromDescription(item.descricao);
+	item.fatorConversaoSugerido = suggestConversionFactor({ descricao: item.descricao, documentUnit: item.unidade, productUnit: item.produto.unidade });
 }
 
 const PRODUCT_INFO_COLUMNS = {

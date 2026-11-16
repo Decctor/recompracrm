@@ -12,6 +12,7 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { formatNameAsInitials, formatToMoney } from "@/lib/formatting";
+import { describeConvertedLine } from "@/lib/purchase/units";
 import { cn } from "@/lib/utils";
 import { ArrowRight, BadgeDollarSign, Check, CircleCheck, Ellipsis, EyeOff, ListTodo, Plus, Undo2 } from "lucide-react";
 import { useState } from "react";
@@ -21,6 +22,7 @@ import { useBuilder } from "../components/builder-provider";
 import { StatusPill, TONE_CLASSES } from "../components/builder-ui";
 import { useBuilderSummary } from "../components/use-builder-summary";
 import { ISSUE_META } from "../helpers/issue-meta";
+import AdjustConversionDialog from "../components/adjust-conversion-dialog";
 import ItemsQueue from "./items-queue";
 
 const MATCH_LABELS: Record<TReviewLine["matchTipo"], string> = {
@@ -71,6 +73,8 @@ function ReviewTable() {
 	const { pendingLines, readyCount, ignoredCount } = useBuilderSummary();
 	const [filter, setFilter] = useState<TFilter>("all");
 	const [showManualItems, setShowManualItems] = useState(false);
+	const [adjustingLineId, setAdjustingLineId] = useState<string | null>(null);
+	const adjustingLine = adjustingLineId ? (lines.find((line) => line.id === adjustingLineId) ?? null) : null;
 	const includedLines = lines.filter((line) => line.incluir);
 	const linesTotal = includedLines.reduce((total, line) => total + getLineTotal(line), 0);
 	const supplierName = importData?.fornecedor?.existente?.nome ?? importData?.fornecedor?.extraido?.nome ?? null;
@@ -166,6 +170,7 @@ function ReviewTable() {
 						onExclude={() => updateLine(line.id, { incluir: false })}
 						onToggleRemember={() => updateLine(line.id, { lembrarVinculo: !line.lembrarVinculo })}
 						onUnlink={() => unlinkLine(line)}
+						onAdjustConversion={() => setAdjustingLineId(line.id)}
 					/>
 				))}
 				{visibleLines.length === 0 ? (
@@ -181,6 +186,18 @@ function ReviewTable() {
 					</div>
 				</div>
 			</div>
+
+			{adjustingLine ? (
+				<AdjustConversionDialog
+					key={adjustingLine.id}
+					line={adjustingLine}
+					rememberedFor={
+						adjustingLine.lembrarVinculo && (adjustingLine.codigoFornecedor?.trim() || adjustingLine.ean?.trim()) ? supplierName : null
+					}
+					onClose={() => setAdjustingLineId(null)}
+					onSave={(fatorConversao) => updateLine(adjustingLine.id, { fatorConversao })}
+				/>
+			) : null}
 
 			{showManualItems || manualItemsCount > 0 ? (
 				<div className="flex flex-col gap-1.5">
@@ -200,7 +217,9 @@ function ReviewTable() {
 function getProductMeta(line: TReviewLine) {
 	const unit = line.produto?.unidade ?? line.produtoNovo?.unidade ?? line.unidade ?? "UN";
 	const fator = line.fatorConversao && line.fatorConversao > 0 ? line.fatorConversao : null;
-	const quantity = fator ? `${line.quantidade * fator} ${unit} × ${formatToMoney(line.valorUnitario / fator)}` : `${line.quantidade} ${unit}`;
+	const quantity = fator
+		? describeConvertedLine({ quantidade: line.quantidade, valorUnitario: line.valorUnitario, fatorConversao: fator, unit })
+		: `${line.quantidade} ${unit}`;
 	if (line.produtoNovo) return `Novo produto · ${quantity}`;
 	const issue = getLineIssue(line);
 	if (issue === "suggested") return `Sugestão · ${quantity}`;
@@ -217,6 +236,7 @@ function ReviewRow({
 	onExclude,
 	onToggleRemember,
 	onUnlink,
+	onAdjustConversion,
 }: {
 	line: TReviewLine;
 	supplierName: string | null;
@@ -225,6 +245,7 @@ function ReviewRow({
 	onExclude: () => void;
 	onToggleRemember: () => void;
 	onUnlink: () => void;
+	onAdjustConversion: () => void;
 }) {
 	const status = getLineStatus(line);
 	const issue = getLineIssue(line);
@@ -306,6 +327,7 @@ function ReviewRow({
 									Lembrar para {supplierName ?? "este fornecedor"}
 								</DropdownMenuCheckboxItem>
 							) : null}
+							{line.produto || line.produtoNovo ? <DropdownMenuItem onClick={onAdjustConversion}>Ajustar proporção</DropdownMenuItem> : null}
 							{line.produto || line.produtoNovo ? <DropdownMenuItem onClick={onUnlink}>Trocar produto</DropdownMenuItem> : null}
 							<DropdownMenuSeparator />
 							<DropdownMenuItem onClick={onExclude}>Não incluir</DropdownMenuItem>
