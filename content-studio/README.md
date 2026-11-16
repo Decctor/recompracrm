@@ -19,19 +19,45 @@ desenho e nicho próprios.
 | 004 Seu Jorge sumiu | ✓ | — | pronto para voz e render |
 | 005 Crédito que vale um ano | ✓ | — | pronto para voz e render |
 | g001 Glossário: markup | ✓ | ✓ duas vozes | `npm run render -- g001-markup` |
-| g002 Glossário: churn | ✓ | ✓ duas vozes | tela `rfm-segments` |
-| g003 Glossário: curva ABC | ✓ | ✓ duas vozes | tela `product-abc` |
-| g004 Glossário: ticket médio | ✓ | ✓ duas vozes | tela `dashboard-ticket` |
+| g002 Glossário: churn | ✓ | ✓ duas vozes | `npm run render -- g002-churn` |
+| g003 Glossário: curva ABC | ✓ | ✓ duas vozes | `npm run render -- g003-curva-abc` |
+| g004 Glossário: ticket médio | ✓ | ✓ duas vozes | `npm run render -- g004-ticket-medio` |
 
-## Rodar
+## Reproduzir os vídeos
+
+Tudo o que os vídeos usam está no git: roteiros, vozes (`voice.mp3` + `voice.json`), os prints das
+telas (`episodes/_screens/`) e o código. Para só renderizar, não precisa de Monid nem do app rodando.
+
+Precisa de Node 22+ e `ffmpeg` no PATH (as revisões `--stills`/`--frames` montam as imagens com ele).
 
 ```bash
 cd content-studio
 npm install
-npm run lint                                  # confere os roteiros
-npm run render -- 001-desconto-vs-cashback --stills   # um quadro por passo, para revisar
-npm run render -- 001-desconto-vs-cashback            # out/001-desconto-vs-cashback.mp4
+npm run lint                                   # confere os roteiros
+npm run render -- g002-churn --stills          # um quadro por passo, para revisar
+npm run render -- g002-churn                   # out/g002-churn.mp4
 ```
+
+O Remotion baixa o próprio Chrome headless no primeiro render. Sem rede para isso, aponte para um
+Chrome da máquina com `REMOTION_BROWSER_EXECUTABLE=/caminho/do/chrome-headless-shell`.
+
+### Refazer os prints das telas (só quando a interface do app mudar)
+
+```bash
+npm install                                    # na raiz do repositório: o app e o Playwright
+npx playwright install chromium                # se o Playwright ainda não tiver navegador
+cd content-studio
+npm run capture-screens                        # sobe o next dev na porta 3100 e fotografa as 4 telas
+```
+
+Não precisa de banco nem de `.env`: a rota `/content-studio-screens` só existe em desenvolvimento e
+responde as APIs com as fixtures de `app/content-studio-screens/fixtures/`. Detalhes em `CLAUDE.md`,
+seção "Telas do produto".
+
+### Gerar uma voz nova (só ao mudar a fala)
+
+Precisa de uma conta no Monid (Fish Audio `drama-3`, ~US$ 0,07 por episódio). Passo a passo em
+`CLAUDE.md`, item "Voz".
 
 ## Custos e licenças
 
@@ -50,4 +76,5 @@ npm run render -- 001-desconto-vs-cashback            # out/001-desconto-vs-cash
 ## Fora do app
 
 Esta pasta tem `package.json` próprio e fica fora do `tsconfig`, do `oxlint` e do build da Vercel
-do app (ver `scripts/vercel-ignore-build.sh`). `out/` e `node_modules/` não vão para o git.
+do app (ver `scripts/vercel-ignore-build.sh`). `out/` e `node_modules/` não vão para o git. A única
+parte dentro do app é `app/content-studio-screens/`, que responde 404 fora de `next dev`.

@@ -9,7 +9,7 @@ import { DEMO_PRODUCT, DEMO_PRODUCT_ID } from "./fixtures/product";
 import { DEMO_PRICE_COST_HISTORY, DEMO_RECIPES, DEMO_STOCK_ANALYTICS, DEMO_STOCK_LOTS, DEMO_STOCK_TRANSACTIONS } from "./fixtures/stock";
 import { DEMO_GOALS_STATS, DEMO_GROUPED_SALES, DEMO_OVERALL_SALES, DEMO_SALES_GRAPH } from "./fixtures/sales";
 import { DEMO_SALES_RESULTS } from "./fixtures/sales-results";
-import { DEMO_EMPTY_CLIENTS, DEMO_RFM_LABELLED, DEMO_SALE_FILTER_OPTIONS } from "./fixtures/rfm";
+import { DEMO_EMPTY_CLIENTS, DEMO_RFM_HEALTH, DEMO_RFM_LABELLED, DEMO_SALE_FILTER_OPTIONS } from "./fixtures/rfm";
 import { DEMO_SESSION } from "./fixtures/session";
 
 import type { TGetSubscriptionStatusOutput } from "@/app/api/organizations/subscription-status/route";
@@ -31,6 +31,7 @@ mockApi("/api/cashback-programs", () => ({ data: DEMO_CASHBACK_PROGRAM, message:
 mockApi("/api/stats/sales-rfm-labelled", () => ({ data: DEMO_RFM_LABELLED }));
 mockApi("/api/stats/sales-query-params", () => ({ data: DEMO_SALE_FILTER_OPTIONS }));
 mockApi("/api/clients", () => DEMO_EMPTY_CLIENTS);
+mockApi("/api/segmentations/rfm-health", () => DEMO_RFM_HEALTH);
 mockApi("/api/products", () => ({ data: { byId: DEMO_PRODUCT, default: undefined, stock: undefined } }));
 mockApi("/api/products/stock-analytics", () => DEMO_STOCK_ANALYTICS);
 mockApi("/api/products/stock-lots", () => DEMO_STOCK_LOTS);

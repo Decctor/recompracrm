@@ -117,15 +117,25 @@ async function startDevServer(): Promise<ChildProcess> {
 		stdio: ["ignore", "pipe", "pipe"],
 		detached: true,
 	});
+	// Guarda o fim da saída do servidor: se ele cair, o erro mostra o porquê.
+	let output = "";
+	const tail = () => output.split("\n").slice(-25).join("\n");
+	server.stderr?.on("data", (chunk: Buffer) => {
+		output = (output + chunk.toString()).slice(-8000);
+	});
 	await new Promise<void>((resolve, reject) => {
-		const timer = setTimeout(() => reject(new Error("next dev não ficou pronto em 120 s")), 120_000);
+		const timer = setTimeout(() => reject(new Error(`next dev não ficou pronto em 120 s:\n${tail()}`)), 120_000);
 		server.stdout?.on("data", (chunk: Buffer) => {
+			output = (output + chunk.toString()).slice(-8000);
 			if (chunk.toString().includes("Ready")) {
 				clearTimeout(timer);
 				resolve();
 			}
 		});
-		server.on("exit", (code) => reject(new Error(`next dev saiu com código ${code}`)));
+		server.on("exit", (code) => reject(new Error(`next dev saiu com código ${code}:\n${tail()}`)));
+	});
+	server.on("exit", (code) => {
+		if (code) console.error(`next dev caiu (código ${code}):\n${tail()}`);
 	});
 	return server;
 }
@@ -173,7 +183,12 @@ async function main() {
 		}
 	} finally {
 		await browser.close();
-		if (server?.pid) process.kill(-server.pid);
+		// O servidor pode já ter caído; o erro que importa é o de cima, não o do kill.
+		if (server?.pid && server.exitCode === null) {
+			try {
+				process.kill(-server.pid);
+			} catch {}
+		}
 	}
 	writeFileSync(manifestPath, `${JSON.stringify(manifest, null, "\t")}\n`);
 }
