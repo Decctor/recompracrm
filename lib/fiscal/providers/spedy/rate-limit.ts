@@ -1,5 +1,11 @@
 import type { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from "axios";
 
+declare module "axios" {
+	interface AxiosRequestConfig {
+		spedySkip429Retry?: boolean;
+	}
+}
+
 // A Spedy documenta 60 requisicoes/minuto e no maximo 5/segundo por chave. Um intervalo
 // conservador de 1,1s respeita as duas janelas e deixa margem para variacao de relogio/rede.
 export const SPEDY_REQUEST_INTERVAL_MS = 1_100;
@@ -55,7 +61,7 @@ export function attachSpedyRateLimit(client: AxiosInstance, apiKey: string): Axi
 
 	client.interceptors.response.use(undefined, async (error: AxiosError) => {
 		const config = error.config as TSpedyRetryRequestConfig | undefined;
-		if (!config || error.response?.status !== 429) throw error;
+		if (!config || config.spedySkip429Retry || error.response?.status !== 429) throw error;
 
 		const attempt = (config.spedy429RetryAttempt ?? 0) + 1;
 		if (attempt > SPEDY_MAX_429_RETRIES) throw error;

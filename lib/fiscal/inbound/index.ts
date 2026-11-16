@@ -11,6 +11,7 @@ import { downloadStoredFiscalAsset, getFiscalAssetContentType, storeFiscalAsset 
 import type { TFiscalOrganization } from "../types";
 import { resolveInboundProvider } from "./providers";
 import { INBOUND_WITHOUT_MANIFEST_FILTER, parseAccessKeyNumber, resolveInboundRegistrationStatus } from "./registration-status";
+import { requestSyncWithCooldown } from "./sync-cooldown";
 import type { IFiscalInboundProvider, TInboundDocumentSnapshot, TInboundManifestState } from "./types";
 
 const MAX_PAGES = 10;
@@ -240,32 +241,49 @@ async function reconcilePendingCompleteDocuments(organizationId: string, organiz
 
 // Consulta a telemetria de sync do provedor e dispara sync sob demanda respeitando a janela
 // de rate limit da autoridade (SEFAZ). Falhas aqui nao impedem a listagem.
-async function maybeRequestProviderSync(syncStateId: string, organization: TFiscalOrganization, provider: IFiscalInboundProvider) {
-	try {
-		if (provider.getSyncStatus) {
-			const status = await provider.getSyncStatus(organization);
-			if (status) {
-				await db
-					.update(fiscalInboundSyncStates)
-					.set({
-						ultimaSincronizacao: status.lastSyncAt,
-						proximaSincronizacaoPermitida: status.nextAllowedSyncAt,
-						ultimoDesfecho: status.outcome,
-						ultimaMensagem: status.mensagem,
-						dataAtualizacao: new Date(),
-					})
-					.where(eq(fiscalInboundSyncStates.id, syncStateId));
-				if (status.nextAllowedSyncAt && status.nextAllowedSyncAt.getTime() > Date.now()) return;
-			}
-		}
-		if (!provider.requestSync) return;
-		const result = await provider.requestSync(organization);
-		if (!result.accepted && result.retryAfterSeconds) {
+async function requestProviderSync(syncStateId: string, organization: TFiscalOrganization, provider: IFiscalInboundProvider) {
+	const requestSync = provider.requestSync;
+	if (!requestSync) throw new createHttpError.BadRequest("Sincronização sob demanda indisponível para o provedor fiscal atual.");
+	let reservation: Date;
+	return requestSyncWithCooldown({
+		reserve: async (until) => {
+			reservation = until;
+			// UPDATE condicional é atômico entre instâncias: cron e dashboard disputam
+			// a mesma janela. Nenhuma transação permanece aberta durante a chamada HTTP.
+			const [claimed] = await db
+				.update(fiscalInboundSyncStates)
+				.set({ proximaSincronizacaoPermitida: until, dataAtualizacao: new Date() })
+				.where(
+					and(
+						eq(fiscalInboundSyncStates.id, syncStateId),
+						or(isNull(fiscalInboundSyncStates.proximaSincronizacaoPermitida), lte(fiscalInboundSyncStates.proximaSincronizacaoPermitida, new Date())),
+					),
+				)
+				.returning({ id: fiscalInboundSyncStates.id });
+			if (claimed) return { acquired: true, nextAllowedSyncAt: until };
+			const current = await db.query.fiscalInboundSyncStates.findFirst({ where: eq(fiscalInboundSyncStates.id, syncStateId) });
+			return { acquired: false, nextAllowedSyncAt: current?.proximaSincronizacaoPermitida ?? null };
+		},
+		persist: async (nextAllowedSyncAt, status) => {
 			await db
 				.update(fiscalInboundSyncStates)
-				.set({ proximaSincronizacaoPermitida: new Date(Date.now() + result.retryAfterSeconds * 1000), dataAtualizacao: new Date() })
-				.where(eq(fiscalInboundSyncStates.id, syncStateId));
-		}
+				.set({
+					proximaSincronizacaoPermitida: nextAllowedSyncAt,
+					...(status ? { ultimaSincronizacao: status.lastSyncAt, ultimoDesfecho: status.outcome, ultimaMensagem: status.mensagem } : {}),
+					dataAtualizacao: new Date(),
+				})
+				.where(and(eq(fiscalInboundSyncStates.id, syncStateId), eq(fiscalInboundSyncStates.proximaSincronizacaoPermitida, reservation)));
+		},
+		getStatus: () => provider.getSyncStatus?.(organization) ?? Promise.resolve(null),
+		request: () => requestSync.call(provider, organization),
+		onStatusError: (error) => console.warn(`[FISCAL_INBOUND] Falha ao consultar status (org ${organization.id}): ${getErrorMessage(error)}`),
+	});
+}
+
+async function maybeRequestProviderSync(syncStateId: string, organization: TFiscalOrganization, provider: IFiscalInboundProvider) {
+	if (!provider.requestSync) return;
+	try {
+		await requestProviderSync(syncStateId, organization, provider);
 	} catch (error) {
 		console.warn(`[FISCAL_INBOUND] Falha ao sincronizar com o provedor (org ${organization.id}): ${getErrorMessage(error)}`);
 	}
@@ -460,7 +478,7 @@ export async function listInboundDocuments({
 			.where(whereClause),
 		db.query.fiscalInboundSyncStates.findFirst({
 			where: (fields, operators) => operators.eq(fields.organizacaoId, organizationId),
-			columns: { ultimaSincronizacao: true },
+			columns: { ultimaSincronizacao: true, proximaSincronizacaoPermitida: true },
 		}),
 	]);
 
@@ -488,6 +506,7 @@ export async function listInboundDocuments({
 		documentsMatched: count ?? 0,
 		totalPages: Math.ceil((count ?? 0) / PAGE_SIZE),
 		ultimaSincronizacao: syncState?.ultimaSincronizacao ?? null,
+		proximaSincronizacaoPermitida: syncState?.proximaSincronizacaoPermitida?.toISOString() ?? null,
 	};
 }
 
@@ -541,13 +560,6 @@ export async function requestInboundSyncNow({ organizationId }: { organizationId
 	if (!provider.requestSync) throw new createHttpError.BadRequest("Sincronizacao sob demanda indisponivel para o provedor fiscal atual.");
 
 	const syncState = await getOrCreateSyncState(organizationId);
-	const result = await provider.requestSync(organization);
-	const nextAllowedSyncAt = !result.accepted && result.retryAfterSeconds ? new Date(Date.now() + result.retryAfterSeconds * 1000) : null;
-	if (nextAllowedSyncAt) {
-		await db
-			.update(fiscalInboundSyncStates)
-			.set({ proximaSincronizacaoPermitida: nextAllowedSyncAt, dataAtualizacao: new Date() })
-			.where(eq(fiscalInboundSyncStates.id, syncState.id));
-	}
-	return { accepted: result.accepted, nextAllowedSyncAt };
+	const result = await requestProviderSync(syncState.id, organization, provider);
+	return { accepted: result.accepted, nextAllowedSyncAt: result.nextAllowedSyncAt?.toISOString() ?? null };
 }

@@ -1,4 +1,5 @@
 "use client";
+import type { TGetInboundDocumentsOutputDefault } from "@/app/api/fiscal/inbound/route";
 import TextareaInput from "@/components/Inputs/TextareaInput";
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
 import LoadingComponent from "@/components/Layouts/LoadingComponent";
@@ -12,12 +13,13 @@ import { DEFAULT_FISCAL_INBOUND_FILTERS, useFiscalInboundDocuments } from "@/lib
 import { cn } from "@/lib/utils";
 import type { TFiscalInboundManifestEventEnum } from "@/schemas/enums";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Inbox, RefreshCcw, X } from "lucide-react";
+import { Inbox, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import RegisterPurchaseFromInboundDrawer, { type TRegisterInboundTarget } from "../_module/inbound/RegisterPurchaseFromInboundDrawer";
 import InboundDocumentCard, { formatInboundIssueDate, type TInboundDocument } from "./InboundDocumentCard";
 import InboundDocumentsInlineFilters from "./InboundDocumentsInlineFilters";
+import InboundSyncButton from "./InboundSyncButton";
 
 const MANIFEST_DIALOG_COPY: Record<TFiscalInboundManifestEventEnum, { title: string; description: string; requiresJustification: boolean }> = {
 	CIENCIA: {
@@ -105,11 +107,18 @@ export default function InboundDocumentsTab({ canCreatePurchase, canManifest }: 
 		mutationKey: ["request-inbound-sync"],
 		mutationFn: requestInboundSyncMutation,
 		onSuccess: (res) => {
+			// Aplicar o horário já retornado antes do refetch evita um novo clique no intervalo.
+			queryClient.setQueriesData<TGetInboundDocumentsOutputDefault>({ queryKey: ["fiscal-inbound-documents"] }, (previous) =>
+				previous ? { ...previous, proximaSincronizacaoPermitida: res.data.nextAllowedSyncAt } : previous,
+			);
 			if (res.data.accepted) toast.success(res.message);
 			else toast.warning(res.message);
 			void invalidateInbound();
 		},
-		onError: (err) => toast.error(getErrorMessage(err)),
+		onError: (err) => {
+			toast.error(getErrorMessage(err));
+			void invalidateInbound();
+		},
 	});
 
 	const dialogCopy = manifestDialog ? MANIFEST_DIALOG_COPY[manifestDialog.evento] : null;
@@ -140,10 +149,12 @@ export default function InboundDocumentsTab({ canCreatePurchase, canManifest }: 
 						onChange={(event) => updateFilters({ search: event.target.value })}
 						className="grow rounded-xl"
 					/>
-					<Button variant="outline" size="sm" className="flex w-full items-center gap-2 lg:w-fit" disabled={syncPending} onClick={() => requestSync()}>
-						<RefreshCcw className={cn("h-3.5 w-3.5", syncPending && "animate-spin")} />
-						SINCRONIZAR AGORA
-					</Button>
+					<InboundSyncButton
+						nextAllowedSyncAt={data?.proximaSincronizacaoPermitida ?? null}
+						pending={syncPending}
+						unavailable={!isSuccess}
+						onSync={() => requestSync()}
+					/>
 				</div>
 				<InboundDocumentsInlineFilters filters={filters} updateFilters={updateFilters} lastSync={data?.ultimaSincronizacao ?? null} />
 			</div>

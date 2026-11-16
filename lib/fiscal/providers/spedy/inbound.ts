@@ -6,12 +6,14 @@ import type {
 	TInboundManifestResult,
 	TInboundProviderRef,
 	TInboundSyncStatus,
+	TInboundSyncRequestResult,
 } from "@/lib/fiscal/inbound/types";
 import type { TFiscalOrganization } from "@/lib/fiscal/types";
 import type { TFiscalInboundManifestEventEnum, TFiscalInboundSituacaoEnum } from "@/schemas/enums";
 import axios from "axios";
 import createHttpError from "http-errors";
 import { getSpedyCompanyClient } from "./client";
+import { parseSpedySyncCooldown, parseSpedySyncDate } from "./sync-response";
 import type {
 	TSpedyInboundInvoice,
 	TSpedyInboundInvoicePage,
@@ -205,17 +207,19 @@ export class SpedyInboundProvider implements IFiscalInboundProvider {
 		return data;
 	}
 
-	async requestSync(organization: TFiscalOrganization): Promise<{ accepted: boolean; retryAfterSeconds?: number | null }> {
+	async requestSync(organization: TFiscalOrganization): Promise<TInboundSyncRequestResult> {
 		const client = getSpedyCompanyClient(organization);
 		try {
-			await client.post("/v1/inbound-product-invoices/sync");
-			return { accepted: true };
+			const response = await client.post("/v1/inbound-product-invoices/sync", undefined, {
+				spedySkip429Retry: true,
+				timeout: 10_000,
+				signal: AbortSignal.timeout(10_000),
+			});
+			return { accepted: true, ...parseSpedySyncCooldown(response.data, response.headers["retry-after"]) };
 		} catch (error) {
 			// Rate limit vem da SEFAZ, nao e falha nossa: devolve a janela para o core reagendar.
 			if (axios.isAxiosError(error) && error.response?.status === 429) {
-				const body = error.response.data as { retryAfterSeconds?: number | null } | undefined;
-				const headerRetryAfter = Number(error.response.headers?.["retry-after"]);
-				return { accepted: false, retryAfterSeconds: body?.retryAfterSeconds ?? (Number.isFinite(headerRetryAfter) ? headerRetryAfter : null) };
+				return { accepted: false, ...parseSpedySyncCooldown(error.response.data, error.response.headers?.["retry-after"]) };
 			}
 			logSpedyError("Erro ao solicitar sincronizacao de notas recebidas.", error);
 			throw error;
@@ -224,10 +228,14 @@ export class SpedyInboundProvider implements IFiscalInboundProvider {
 
 	async getSyncStatus(organization: TFiscalOrganization): Promise<TInboundSyncStatus | null> {
 		const client = getSpedyCompanyClient(organization);
-		const { data } = await client.get<TSpedyInboundSyncStatus>("/v1/inbound-product-invoices/sync-status");
+		const { data } = await client.get<TSpedyInboundSyncStatus>("/v1/inbound-product-invoices/sync-status", {
+			spedySkip429Retry: true,
+			timeout: 10_000,
+			signal: AbortSignal.timeout(10_000),
+		});
 		return {
-			lastSyncAt: parseDate(data.lastSyncAt),
-			nextAllowedSyncAt: parseDate(data.nextAllowedSyncAt),
+			lastSyncAt: parseSpedySyncDate(data.lastSyncAt),
+			nextAllowedSyncAt: parseSpedySyncDate(data.nextAllowedSyncAt),
 			outcome: data.lastAttemptOutcome ?? null,
 			mensagem: data.lastAttemptMessage ?? null,
 		};

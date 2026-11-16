@@ -10,7 +10,7 @@ async function requestInboundSync({ orgId }: { orgId: string }) {
 		data: result,
 		message: result.accepted
 			? "Sincronização solicitada. As novas notas aparecem em alguns minutos."
-			: "A SEFAZ limita a frequência de consultas. Tente novamente mais tarde.",
+			: "Uma consulta já foi solicitada ou está no intervalo de espera. Aguarde o horário indicado para consultar novamente.",
 	};
 }
 export type TRequestInboundSyncOutput = Awaited<ReturnType<typeof requestInboundSync>>;

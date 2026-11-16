@@ -55,6 +55,12 @@ export type TInboundSyncStatus = {
 	mensagem: string | null;
 };
 
+export type TInboundSyncRequestResult = {
+	accepted: boolean;
+	retryAfterSeconds?: number | null;
+	nextAllowedSyncAt?: Date | null;
+};
+
 // Referencia minima para operar um documento junto ao provedor.
 export type TInboundProviderRef = {
 	provedorDocumentoId?: string | null;
@@ -69,7 +75,7 @@ export interface IFiscalInboundProvider {
 	getDocument?(doc: TInboundProviderRef, organization: TFiscalOrganization): Promise<TInboundDocumentSnapshot | null>;
 	downloadXml?(doc: TInboundProviderRef, organization: TFiscalOrganization): Promise<ArrayBuffer | null>;
 	downloadPdf?(doc: TInboundProviderRef, organization: TFiscalOrganization): Promise<ArrayBuffer | null>;
-	requestSync?(organization: TFiscalOrganization): Promise<{ accepted: boolean; retryAfterSeconds?: number | null }>;
+	requestSync?(organization: TFiscalOrganization): Promise<TInboundSyncRequestResult>;
 	getSyncStatus?(organization: TFiscalOrganization): Promise<TInboundSyncStatus | null>;
 }
 
