@@ -6,6 +6,11 @@ import CampaignConfigView from "@/app/dashboard/growth/campaigns/_module/detail/
 import CampaignSurveyResultsView from "@/app/dashboard/growth/campaigns/_module/detail/campaign-survey-results-view";
 import PauseCampaignDialog from "@/app/dashboard/growth/campaigns/_module/detail/components/pause-campaign-dialog";
 import { getTriggerMeta } from "@/app/dashboard/growth/campaigns/_module/builder/helpers/triggers";
+import {
+	CAMPAIGN_ACTIVATION_DENIED_HINT,
+	canEditCampaign,
+	useCampaignPermissions,
+} from "@/app/dashboard/growth/campaigns/_module/shared/campaign-permissions";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
@@ -30,6 +35,7 @@ type CampaignResultPageProps = {
 
 export default function CampaignResultPage({ campaignId, sessionUser, sessionUserOrg }: CampaignResultPageProps) {
 	const queryClient = useQueryClient();
+	const campaignPermissions = useCampaignPermissions();
 	const [viewMode, setViewMode] = useQueryState("view", parseAsStringEnum(["stats", "config", "survey"]));
 	const [pauseDialogOpen, setPauseDialogOpen] = useState(false);
 
@@ -82,7 +88,20 @@ export default function CampaignResultPage({ campaignId, sessionUser, sessionUse
 								{trigger.label}
 							</span>
 						) : null}
-						{campaign.ativo ? (
+						{!campaignPermissions.ativar ? (
+							<>
+								<div
+									className={cn(
+										"flex items-center gap-1.5 rounded-xl px-3 py-1.5",
+										campaign.ativo ? "bg-green-500 text-white" : "bg-muted text-muted-foreground",
+									)}
+								>
+									{campaign.ativo ? <Check className="h-4 min-h-4 w-4 min-w-4" /> : <Pause className="h-4 min-h-4 w-4 min-w-4" />}
+									<p className="text-[0.65rem] font-bold tracking-tight uppercase">{campaign.ativo ? "ATIVA" : "INATIVA"}</p>
+								</div>
+								<p className="text-[0.65rem] font-medium tracking-tight text-muted-foreground">{CAMPAIGN_ACTIVATION_DENIED_HINT}</p>
+							</>
+						) : campaign.ativo ? (
 							<>
 								<div className={cn("flex items-center gap-1.5 rounded-xl px-3 py-1.5 bg-green-500 text-white")}>
 									<Check className="h-4 min-h-4 w-4 min-w-4" />
@@ -135,7 +154,12 @@ export default function CampaignResultPage({ campaignId, sessionUser, sessionUse
 					<CampaignStatsView campaignId={campaignId} />
 				</TabsContent>
 				<TabsContent value="config" className="flex flex-col gap-3">
-					<CampaignConfigView campaign={campaign} sessionUser={sessionUser} sessionUserOrg={sessionUserOrg} />
+					<CampaignConfigView
+						campaign={campaign}
+						sessionUser={sessionUser}
+						sessionUserOrg={sessionUserOrg}
+						canEdit={canEditCampaign(campaignPermissions, campaign)}
+					/>
 				</TabsContent>
 			</Tabs>
 

@@ -1,11 +1,7 @@
 import { canManageIntegrations, canViewIntegrations } from "@/lib/integrations/mask";
-import {
-	canCreateFinances,
-	canEditFinances,
-	canGrantStoreCredit,
-	canReconcileFinances,
-	canViewFinances,
-} from "@/lib/permissions/finances";
+import { canCreateFinances, canEditFinances, canGrantStoreCredit, canReconcileFinances, canViewFinances } from "@/lib/permissions/finances";
+import { resolveCampaignPermissions } from "@/lib/permissions/campaigns";
+import { resolveCashbackPermissions } from "@/lib/permissions/cashback";
 import { resolveDiscountAuthority } from "@/lib/permissions/discounts";
 import { resolveInventoryPermissions } from "@/lib/permissions/inventory";
 import { resolveProductionPermissions } from "@/lib/permissions/productions";
@@ -119,13 +115,16 @@ function buildMembershipPermissionMatrix({ organizationHasERPAccess }: { organiz
 			cells: [leaf("resultados.visualizar", "Visualizar resultados", "Resultados"), null, null, null],
 			extras: [],
 		}),
-		// Transversal: vale para catálogo, estoque, produção e resultados. Fica fora da coluna "Ver"
-		// para que liberar "Ver" em todos os módulos não libere custo junto.
+		// Transversal: vale para catálogo, estoque, produção, resultados e clientes. Fica fora da coluna
+		// "Ver" para que liberar "Ver" em todos os módulos não libere custo nem a base de clientes junto.
 		buildRow({
 			key: "dadosSensiveis",
 			title: "Dados sensíveis",
 			cells: [null, null, null, null],
-			extras: [leaf("dadosSensiveis.visualizarCustos", "Ver custos, margens e valor de estoque", "Dados sensíveis")],
+			extras: [
+				leaf("dadosSensiveis.visualizarCustos", "Ver custos, margens e valor de estoque", "Dados sensíveis"),
+				leaf("dadosSensiveis.exportarClientes", "Exportar a base de clientes", "Dados sensíveis"),
+			],
 		}),
 		buildRow({
 			key: "metas",
@@ -159,6 +158,18 @@ function buildMembershipPermissionMatrix({ organizationHasERPAccess }: { organiz
 				leaf("atendimentos.finalizar", "Finalizar atendimentos", "Atendimentos"),
 			],
 			extras: [leaf("atendimentos.receberTransferencias", "Receber transferências de atendimentos", "Atendimentos")],
+		}),
+		buildRow({
+			key: "campanhas",
+			title: "Campanhas",
+			cells: [leaf("campanhas.visualizar", "Visualizar campanhas", "Campanhas"), null, leaf("campanhas.editar", "Editar campanhas", "Campanhas"), null],
+			extras: [leaf("campanhas.ativar", "Ativar, pausar e reenviar campanhas", "Campanhas")],
+		}),
+		buildRow({
+			key: "cashback",
+			title: "Programa de cashback",
+			cells: [leaf("cashback.visualizar", "Visualizar o programa de cashback", "Programa de cashback"), null, null, null],
+			extras: [leaf("cashback.configurar", "Configurar regras e prêmios do programa de cashback", "Programa de cashback")],
 		}),
 		buildRow({
 			key: "integracoes",
@@ -273,13 +284,7 @@ export function getAllMembershipPermissionPaths({ organizationHasERPAccess }: { 
 	return getMembershipPermissionMatrix({ organizationHasERPAccess }).flatMap((row) => row.paths);
 }
 
-export function filterMembershipPermissionMatrix({
-	search,
-	organizationHasERPAccess,
-}: {
-	search: string;
-	organizationHasERPAccess: boolean;
-}) {
+export function filterMembershipPermissionMatrix({ search, organizationHasERPAccess }: { search: string; organizationHasERPAccess: boolean }) {
 	const term = normalize(search.trim());
 	const matrix = getMembershipPermissionMatrix({ organizationHasERPAccess });
 	if (!term) return matrix;
@@ -314,8 +319,11 @@ export function readMembershipPermissionValue(permissions: TOrganizationMemberPe
 		case "vendas.configurar":
 			return resolveSalesOperationPermissions(permissions)[path.split(".")[1] as keyof TSalesOperationPermissions];
 		case "dadosSensiveis.visualizarCustos":
-			return resolveSensitiveDataPermissions(permissions).visualizarCustos;
+		case "dadosSensiveis.exportarClientes":
+			return readResolvedField(resolveSensitiveDataPermissions(permissions), path);
 		default:
+			if (path.startsWith("campanhas.")) return readResolvedField(resolveCampaignPermissions(permissions), path);
+			if (path.startsWith("cashback.")) return readResolvedField(resolveCashbackPermissions(permissions), path);
 			if (path.startsWith("produtos.")) return readResolvedField(resolveProductPermissions(permissions), path);
 			if (path.startsWith("estoque.")) return readResolvedField(resolveInventoryPermissions(permissions), path);
 			if (path.startsWith("producao.")) return readResolvedField(resolveProductionPermissions(permissions), path);
@@ -393,6 +401,16 @@ function writeMembershipPermissionValue(
 
 	if (path.startsWith("producao.")) {
 		next.producao = { ...resolveProductionPermissions(permissions), [path.split(".")[1] as string]: value };
+		return next;
+	}
+
+	if (path.startsWith("campanhas.")) {
+		next.campanhas = { ...resolveCampaignPermissions(permissions), [path.split(".")[1] as string]: value };
+		return next;
+	}
+
+	if (path.startsWith("cashback.")) {
+		next.cashback = { ...resolveCashbackPermissions(permissions), [path.split(".")[1] as string]: value };
 		return next;
 	}
 

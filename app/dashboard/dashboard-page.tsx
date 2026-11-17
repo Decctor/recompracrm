@@ -6,6 +6,7 @@ import { canAccessDashboardCapability } from "@/lib/access/capabilities";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { formatDecimalPlaces, formatToMoney } from "@/lib/formatting";
 import { appRoutes } from "@/lib/navigation/routes";
+import { resolveGoalPermissions } from "@/lib/permissions/goals";
 import { useRecentSegmentChanges } from "@/lib/queries/dashboard-hub";
 import { LayoutDashboard } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -127,7 +128,7 @@ export function DashboardPage({ user, userOrg, membership, scopeSellersIds }: Da
 				</Empty>
 			) : (
 				<>
-					<HeroBand canViewSales={canViewSales} canViewGoals={canViewGoals} canCreateGoals={membership.permissoes.resultados.criarMetas} risk={risk} />
+					<HeroBand canViewSales={canViewSales} canViewGoals={canViewGoals} canCreateGoals={resolveGoalPermissions(membership.permissoes).criar} risk={risk} />
 					<TabBar tabs={tabs} active={activeTab} onSelect={setTab} badges={badges} hint={hint} />
 					{activeTab === "relacionamento" ? <RelationshipTab context={context} /> : null}
 					{activeTab === "operacao" ? <OperationsTab context={context} /> : null}

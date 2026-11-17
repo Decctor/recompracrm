@@ -66,8 +66,10 @@ import { ClientsGeographicMap } from "@/components/Stats/ClientsGeographicMap";
 type ClientsPageProps = {
 	user: TAuthUserSession["user"];
 	canReconcileClients: boolean;
+	/** dadosSensiveis.exportarClientes: sem ela o botão de exportar some. */
+	canExportClients: boolean;
 };
-export default function ClientsPage({ user, canReconcileClients }: ClientsPageProps) {
+export default function ClientsPage({ user, canReconcileClients, canExportClients }: ClientsPageProps) {
 	const [viewMode, setViewMode] = useQueryState("view", parseAsStringEnum(["stats", "database"]));
 	return (
 		<div className="w-full h-full flex flex-col gap-3">
@@ -89,14 +91,14 @@ export default function ClientsPage({ user, canReconcileClients }: ClientsPagePr
 					<ClientsStatsView />
 				</TabsContent>
 				<TabsContent value="database">
-					<ClientsDatabaseView />
+					<ClientsDatabaseView canExportClients={canExportClients} />
 				</TabsContent>
 			</Tabs>
 		</div>
 	);
 }
 
-function ClientsDatabaseView() {
+function ClientsDatabaseView({ canExportClients }: { canExportClients: boolean }) {
 	const queryClient = useQueryClient();
 	const [newClientModalIsOpen, setNewClientModalIsOpen] = useState<boolean>(false);
 	const [exportClientsModalIsOpen, setExportClientsModalIsOpen] = useState<boolean>(false);
@@ -140,10 +142,12 @@ function ClientsDatabaseView() {
 					className="w-full min-w-0 grow rounded-xl"
 				/>
 				<div className="flex flex-wrap items-center justify-end gap-2 sm:shrink-0 sm:flex-nowrap">
-					<Button variant="ghost" className="flex items-center gap-2" size="sm" onClick={() => setExportClientsModalIsOpen(true)}>
-						<FileSpreadsheet className="w-4 h-4 min-w-4 min-h-4" />
-						EXPORTAR
-					</Button>
+					{canExportClients ? (
+						<Button variant="ghost" className="flex items-center gap-2" size="sm" onClick={() => setExportClientsModalIsOpen(true)}>
+							<FileSpreadsheet className="w-4 h-4 min-w-4 min-h-4" />
+							EXPORTAR
+						</Button>
+					) : null}
 					<Button variant={"ghost"} className="flex items-center gap-2" size="sm" asChild>
 						<Link href={appRoutes.customers.import()}>
 							<FileSpreadsheet className="w-4 h-4 min-w-4 min-h-4" />

@@ -44,6 +44,8 @@ type CampaignConfigViewProps = {
 	campaign: TGetCampaignsOutputById;
 	sessionUser: TAuthUserSession["user"];
 	sessionUserOrg: NonNullable<TAuthUserSession["membership"]>["organizacao"];
+	/** `campanhas.editar`, mais `campanhas.ativar` quando a campanha está no ar. Sem ela a visão é só leitura. */
+	canEdit: boolean;
 	onEditCallbacks?: {
 		onMutate?: () => void;
 		onSuccess?: () => void;
@@ -142,7 +144,7 @@ function EditAction({ onClick }: { onClick: () => void }) {
 	);
 }
 
-export default function CampaignConfigView({ campaign, sessionUser, sessionUserOrg, onEditCallbacks }: CampaignConfigViewProps) {
+export default function CampaignConfigView({ campaign, sessionUser, sessionUserOrg, canEdit, onEditCallbacks }: CampaignConfigViewProps) {
 	const [openSection, setOpenSection] = useState<OpenSection>(null);
 
 	const category = getCategoryById(getCategoryFromTrigger(campaign.gatilhoTipo));
@@ -180,9 +182,7 @@ export default function CampaignConfigView({ campaign, sessionUser, sessionUserO
 						<TextIcon />
 					</Section.Icon>
 					<Section.Title>Informações gerais</Section.Title>
-					<Section.Actions>
-						<EditAction onClick={() => setOpenSection("general")} />
-					</Section.Actions>
+					<Section.Actions>{canEdit ? <EditAction onClick={() => setOpenSection("general")} /> : null}</Section.Actions>
 				</Section.Header>
 				<Section.Body>
 					<div className="flex flex-col gap-4">
@@ -237,9 +237,7 @@ export default function CampaignConfigView({ campaign, sessionUser, sessionUserO
 							<Filter />
 						</Section.Icon>
 						<Section.Title>Público</Section.Title>
-						<Section.Actions>
-							<EditAction onClick={() => setOpenSection("audience")} />
-						</Section.Actions>
+						<Section.Actions>{canEdit ? <EditAction onClick={() => setOpenSection("audience")} /> : null}</Section.Actions>
 					</Section.Header>
 					<Section.Body>
 						<ConfigGrid>
@@ -267,9 +265,7 @@ export default function CampaignConfigView({ campaign, sessionUser, sessionUserO
 						<SendHorizonal />
 					</Section.Icon>
 					<Section.Title>Mensagem & envio</Section.Title>
-					<Section.Actions>
-						<EditAction onClick={() => setOpenSection("send")} />
-					</Section.Actions>
+					<Section.Actions>{canEdit ? <EditAction onClick={() => setOpenSection("send")} /> : null}</Section.Actions>
 				</Section.Header>
 				<Section.Body>
 					<div className="grid w-full grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
@@ -299,6 +295,7 @@ export default function CampaignConfigView({ campaign, sessionUser, sessionUserO
 						<div className="lg:border-l lg:border-border lg:pl-6">
 							<CampaignTemplateSwitcher
 								campaign={campaign}
+								canEdit={canEdit}
 								organization={{ id: sessionUserOrg.id, nome: sessionUserOrg.nome, logoUrl: sessionUserOrg.logoUrl }}
 								organizationTheme={organizationTheme}
 							/>
@@ -314,9 +311,7 @@ export default function CampaignConfigView({ campaign, sessionUser, sessionUserO
 							<Coins />
 						</Section.Icon>
 						<Section.Title>Efeitos / cashback</Section.Title>
-						<Section.Actions>
-							<EditAction onClick={() => setOpenSection("effects")} />
-						</Section.Actions>
+						<Section.Actions>{canEdit ? <EditAction onClick={() => setOpenSection("effects")} /> : null}</Section.Actions>
 					</Section.Header>
 					<Section.Body>
 						<ConfigGrid>
@@ -367,9 +362,7 @@ export default function CampaignConfigView({ campaign, sessionUser, sessionUserO
 							<Settings2 />
 						</Section.Icon>
 						<Section.Title>Conversão & ajustes</Section.Title>
-						<Section.Actions>
-							<EditAction onClick={() => setOpenSection("settings")} />
-						</Section.Actions>
+						<Section.Actions>{canEdit ? <EditAction onClick={() => setOpenSection("settings")} /> : null}</Section.Actions>
 					</Section.Header>
 					<Section.Body>
 						<ConfigGrid>
@@ -398,7 +391,7 @@ export default function CampaignConfigView({ campaign, sessionUser, sessionUserO
 				</Section.Root>
 			</div>
 
-			{openSection ? (
+			{openSection && canEdit ? (
 				<ControlCampaign
 					sessionUser={sessionUser}
 					sessionUserOrg={sessionUserOrg}

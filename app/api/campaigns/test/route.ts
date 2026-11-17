@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { assertCanEditCampaigns } from "@/lib/campaigns/access";
 import { loadPromotionProductCandidates, resolvePromotionMetadataByClientId } from "@/lib/campaigns/promotion-suggestion";
 import { deliverCampaignMessage } from "@/lib/campaigns/dispatch/deliver";
 import type { TInteractionContextMetadados } from "@/lib/message-templates";
@@ -199,6 +200,7 @@ export type TTestCampaignOutput = Awaited<ReturnType<typeof testCampaign>>;
 const testCampaignRoute = async (request: NextRequest) => {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você precisa estar autenticado para acessar esse recurso.");
+	assertCanEditCampaigns(session);
 
 	const userOrgId = session.membership?.organizacao.id;
 	if (!userOrgId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");

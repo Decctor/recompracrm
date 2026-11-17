@@ -1,6 +1,8 @@
 import { requireDashboardCapability } from "@/lib/access/guards";
+import { resolveCampaignPermissions } from "@/lib/permissions/campaigns";
 import { redirect } from "next/navigation";
 import CampaignResultPage from "@/app/dashboard/growth/campaigns/_module/detail/campaign-detail-page";
+import { CampaignPermissionsProvider } from "@/app/dashboard/growth/campaigns/_module/shared/campaign-permissions";
 
 export default async function CampaignResultServerPage({ params }: { params: Promise<{ campaignId: string }> }) {
 	const { campaignId } = await params;
@@ -9,5 +11,9 @@ export default async function CampaignResultServerPage({ params }: { params: Pro
 	const sessionUser = access.sessionUser;
 	if (!sessionUser) redirect("/auth/signin");
 	if (!sessionUser.membership) redirect("/onboarding");
-	return <CampaignResultPage campaignId={campaignId} sessionUser={sessionUser.user} sessionUserOrg={sessionUser.membership.organizacao} />;
+	return (
+		<CampaignPermissionsProvider permissions={resolveCampaignPermissions(sessionUser.membership.permissoes)}>
+			<CampaignResultPage campaignId={campaignId} sessionUser={sessionUser.user} sessionUserOrg={sessionUser.membership.organizacao} />
+		</CampaignPermissionsProvider>
+	);
 }

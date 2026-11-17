@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { canConfigureCashback } from "@/lib/permissions/cashback";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { CashbackProgramSchema } from "@/schemas/cashback-programs";
 import { db } from "@/services/drizzle";
@@ -63,6 +64,7 @@ export type TUpsertOnboardingCashbackOutput = Awaited<ReturnType<typeof upsertOn
 async function upsertOnboardingCashbackRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	if (!canConfigureCashback(session.membership?.permissoes)) throw new createHttpError.Forbidden("Você não possui permissão para configurar o programa de cashback.");
 	const input = UpsertOnboardingCashbackInputSchema.parse(await request.json());
 	const result = await upsertOnboardingCashback({ input, session });
 	if (session.membership) await reconcileOnboardingCampaigns({ executor: db, organizationId: session.membership.organizacao.id });

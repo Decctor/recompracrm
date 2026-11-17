@@ -14,7 +14,7 @@ import type { TCashbackProgram, TCashbackProgramSection } from "@/lib/cashback/p
 import { formatCashbackValue } from "@/lib/formatting";
 import { type TUseCashbackProgramSectionEditor, useCashbackProgramSectionEditor } from "@/state-hooks/use-cashback-program-section-editor";
 import { ArrowRight, LayoutGrid, MapPin, Percent, PiggyBank, Wallet } from "lucide-react";
-import type { ReactNode } from "react";
+import { createContext, type ReactNode, useContext } from "react";
 
 type TRegistryCallbacks = {
 	onMutate?: () => void;
@@ -25,6 +25,8 @@ type CashbackProgramRegistryProps = {
 	program: TCashbackProgram;
 	userOrgHasIntegration: boolean;
 	onManagePrizes: () => void;
+	/** cashback.configurar: sem ela as seções ficam só leitura (campos desabilitados, sem barra de aplicar). */
+	canConfigure: boolean;
 	callbacks: TRegistryCallbacks;
 };
 
@@ -33,21 +35,34 @@ type CashbackProgramRegistryProps = {
  * e cliente. Substitui o modal `ControlCashbackProgram`, que abria seis blocos por cima da página
  * para mudar um número e devolvia a tela com `window.location.reload()`.
  */
-export default function CashbackProgramRegistry({ program, userOrgHasIntegration, onManagePrizes, callbacks }: CashbackProgramRegistryProps) {
+export default function CashbackProgramRegistry({ program, userOrgHasIntegration, onManagePrizes, canConfigure, callbacks }: CashbackProgramRegistryProps) {
 	return (
-		<div className="grid w-full grid-cols-1 items-start gap-3 xl:grid-cols-2">
+		<ReadOnlyContext.Provider value={!canConfigure}>
 			<div className="flex w-full flex-col gap-3">
-				<GeneralSection program={program} callbacks={callbacks} />
-				<RedemptionSection program={program} callbacks={callbacks} onManagePrizes={onManagePrizes} />
+				{!canConfigure ? (
+					<Callout.Root tone="info">
+						<Callout.Title>Somente leitura</Callout.Title>
+						<Callout.Description>Você pode consultar o programa, mas alterar regras e recompensas exige permissão de configuração.</Callout.Description>
+					</Callout.Root>
+				) : null}
+				<div className="grid w-full grid-cols-1 items-start gap-3 xl:grid-cols-2">
+					<div className="flex w-full flex-col gap-3">
+						<GeneralSection program={program} callbacks={callbacks} />
+						<RedemptionSection program={program} callbacks={callbacks} onManagePrizes={onManagePrizes} />
+					</div>
+					<div className="flex w-full flex-col gap-3">
+						<AccumulationSection program={program} callbacks={callbacks} userOrgHasIntegration={userOrgHasIntegration} />
+						<PaymentMethodsSection program={program} callbacks={callbacks} />
+						<SurfacesSection program={program} callbacks={callbacks} />
+					</div>
+				</div>
 			</div>
-			<div className="flex w-full flex-col gap-3">
-				<AccumulationSection program={program} callbacks={callbacks} userOrgHasIntegration={userOrgHasIntegration} />
-				<PaymentMethodsSection program={program} callbacks={callbacks} />
-				<SurfacesSection program={program} callbacks={callbacks} />
-			</div>
-		</div>
+		</ReadOnlyContext.Provider>
 	);
 }
+
+// Só leitura chega às seções por contexto: são cinco, e cada uma só repassa para `ProgramSection`.
+const ReadOnlyContext = createContext(false);
 
 type SectionProps = { program: TCashbackProgram; callbacks: TRegistryCallbacks };
 
@@ -62,6 +77,7 @@ function ProgramSection({
 	editor: TUseCashbackProgramSectionEditor;
 	children: ReactNode;
 }) {
+	const readOnly = useContext(ReadOnlyContext);
 	return (
 		<Section.Root>
 			<Section.Header>
@@ -69,15 +85,20 @@ function ProgramSection({
 				<Section.Title>{title}</Section.Title>
 			</Section.Header>
 			<Section.Body>
-				{children}
-				<SectionApplyBar
-					isDirty={editor.isDirty}
-					isPending={editor.isPending}
-					disabled={!!editor.blockReason}
-					disabledReason={editor.blockReason}
-					onApply={editor.apply}
-					onDiscard={editor.discard}
-				/>
+				{/* `fieldset disabled` desliga inputs e botões nativos (inclusive os gatilhos de selects e switches). */}
+				<fieldset disabled={readOnly} className="m-0 flex min-w-0 flex-col gap-3 border-0 p-0">
+					{children}
+				</fieldset>
+				{readOnly ? null : (
+					<SectionApplyBar
+						isDirty={editor.isDirty}
+						isPending={editor.isPending}
+						disabled={!!editor.blockReason}
+						disabledReason={editor.blockReason}
+						onApply={editor.apply}
+						onDiscard={editor.discard}
+					/>
+				)}
 			</Section.Body>
 		</Section.Root>
 	);

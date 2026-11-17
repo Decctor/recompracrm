@@ -73,8 +73,10 @@ import SegmentsPageRFMHealth from "./rfm-health-section";
 type SegmentsPageProps = {
 	user: TAuthUserSession["user"];
 	orgRFMConfig: TRFMConfig | null;
+	/** dadosSensiveis.exportarClientes: sem ela o botão de exportar some (a rota recusa). */
+	canExportClients: boolean;
 };
-export default function SegmentsPage({ user, orgRFMConfig }: SegmentsPageProps) {
+export default function SegmentsPage({ user, orgRFMConfig, canExportClients }: SegmentsPageProps) {
 	const [configMenuIsOpen, setConfigMenuIsOpen] = useState(false);
 	// A listagem mora aqui, e não no bloco de clientes, porque a matriz também escreve no filtro de segmentação.
 	const clientsQuery = useClients({
@@ -94,10 +96,15 @@ export default function SegmentsPage({ user, orgRFMConfig }: SegmentsPageProps) 
 		<div className="w-full h-full flex flex-col gap-3">
 			<div className="flex w-full flex-col items-stretch gap-3 lg:flex-row">
 				<div className="w-full lg:w-1/2">
-					<SegmentsPageMatrixRFM onOpenConfig={() => setConfigMenuIsOpen(true)} selectedSegments={selectedSegments} onToggleSegment={toggleSegment} />
+					<SegmentsPageMatrixRFM
+						onOpenConfig={() => setConfigMenuIsOpen(true)}
+						selectedSegments={selectedSegments}
+						onToggleSegment={toggleSegment}
+						canExportClients={canExportClients}
+					/>
 				</div>
 				<div className="w-full lg:w-1/2">
-					<SegmentsPageClients clientsQuery={clientsQuery} />
+					<SegmentsPageClients clientsQuery={clientsQuery} canExportClients={canExportClients} />
 				</div>
 			</div>
 			<SegmentsPageRFMHealth onOpenConfig={() => setConfigMenuIsOpen(true)} />
@@ -116,7 +123,7 @@ export default function SegmentsPage({ user, orgRFMConfig }: SegmentsPageProps) 
  *
  * CLIENTS RELATED COMPONENTS
  */
-function SegmentsPageClients({ clientsQuery }: { clientsQuery: ReturnType<typeof useClients> }) {
+function SegmentsPageClients({ clientsQuery, canExportClients }: { clientsQuery: ReturnType<typeof useClients>; canExportClients: boolean }) {
 	const { data: clientsResult, isSuccess, isLoading, isError, error, filters, updateFilters } = clientsQuery;
 	const clients = clientsResult?.clients;
 	const clientsShowing = clients ? clients.length : 0;
@@ -156,10 +163,12 @@ function SegmentsPageClients({ clientsQuery }: { clientsQuery: ReturnType<typeof
 					<h1 className="text-xs font-medium tracking-tight uppercase">CLIENTES</h1>
 				</div>
 				<div className="flex items-center gap-2">
-					<Button variant="ghost" size="sm" className="flex items-center gap-2" onClick={handleExportData}>
-						<Download className="w-4 h-4 min-w-4 min-h-4" />
-						EXPORTAR
-					</Button>
+					{canExportClients ? (
+						<Button variant="ghost" size="sm" className="flex items-center gap-2" onClick={handleExportData}>
+							<Download className="w-4 h-4 min-w-4 min-h-4" />
+							EXPORTAR
+						</Button>
+					) : null}
 				</div>
 			</div>
 
@@ -976,8 +985,9 @@ type SegmentsPageMatrixRFMProps = {
 	onOpenConfig: () => void;
 	selectedSegments: string[];
 	onToggleSegment: (rfmLabel: string) => void;
+	canExportClients: boolean;
 };
-function SegmentsPageMatrixRFM({ onOpenConfig, selectedSegments, onToggleSegment }: SegmentsPageMatrixRFMProps) {
+function SegmentsPageMatrixRFM({ onOpenConfig, selectedSegments, onToggleSegment, canExportClients }: SegmentsPageMatrixRFMProps) {
 	const queryClient = useQueryClient();
 
 	const [showNoPurchases, setShowNoPurchases] = useState(false);
@@ -1052,7 +1062,7 @@ function SegmentsPageMatrixRFM({ onOpenConfig, selectedSegments, onToggleSegment
 				<p className="mt-2 text-sm text-muted-foreground">
 					Clientes sem compras confirmadas registradas. Após a primeira compra, passam a ser classificados na matriz RFM.
 				</p>
-				{showNoPurchases ? <NoPurchasesClients /> : null}
+				{showNoPurchases ? <NoPurchasesClients canExportClients={canExportClients} /> : null}
 			</details>
 			{syncMenuIsOpen ? (
 				<SegmentsPageMatrixRFMSyncMenu
@@ -1129,7 +1139,7 @@ function SegmentsPageMatrixRFMSyncMenu({ closeMenu, callbacks }: SegmentsPageMat
 	);
 }
 
-function NoPurchasesClients() {
+function NoPurchasesClients({ canExportClients }: { canExportClients: boolean }) {
 	const clientsQuery = useClients({
 		initialFilters: {
 			segmentationTitles: [NO_PURCHASES_RFM_LABEL],
@@ -1137,5 +1147,5 @@ function NoPurchasesClients() {
 			statsPeriodBefore: dayjs().endOf("month").toDate(),
 		},
 	});
-	return <SegmentsPageClients clientsQuery={clientsQuery} />;
+	return <SegmentsPageClients clientsQuery={clientsQuery} canExportClients={canExportClients} />;
 }

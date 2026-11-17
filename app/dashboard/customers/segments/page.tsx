@@ -1,5 +1,6 @@
 import UnauthenticatedPage from "@/components/Utils/UnauthenticatedPage";
 import { getCurrentSession } from "@/lib/authentication/session";
+import { canExportClients } from "@/lib/permissions/sensitive-data";
 import { redirect } from "next/navigation";
 import SegmentsPage from "./segments-page";
 import { db } from "@/services/drizzle";
@@ -18,5 +19,7 @@ export default async function Segments() {
 		where: and(eq(utils.identificador, "CONFIG_RFM"), eq(utils.organizacaoId, orgId)),
 	});
 	const orgRFMConfig = rfmConfig?.valor.identificador === "CONFIG_RFM" ? rfmConfig.valor : null;
-	return <SegmentsPage user={sessionUser.user} orgRFMConfig={orgRFMConfig} />;
+	return (
+		<SegmentsPage user={sessionUser.user} orgRFMConfig={orgRFMConfig} canExportClients={canExportClients(sessionUser.membership?.permissoes)} />
+	);
 }

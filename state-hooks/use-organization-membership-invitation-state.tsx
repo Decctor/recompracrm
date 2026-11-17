@@ -83,6 +83,16 @@ export function useOrganizationMembershipInvitationState() {
 				},
 				dadosSensiveis: {
 					visualizarCustos: true,
+					exportarClientes: false,
+				},
+				campanhas: {
+					visualizar: true,
+					editar: true,
+					ativar: false,
+				},
+				cashback: {
+					visualizar: true,
+					configurar: false,
 				},
 			},
 		},

@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { canExportClients } from "@/lib/permissions/sensitive-data";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { loadSalesErpData } from "@/lib/sales/erp-data";
 import { groupSaleChangeByMethod } from "@/lib/sales/sale-change";
@@ -50,6 +51,9 @@ async function getSalesExport({ input, sessionUser }: { input: TGetSalesExportIn
 	// organização; a permissão fiscal do membro gateia só a metade fiscal.
 	const orgHasERPAccess = !!sessionUser.membership?.organizacao.configuracao?.recursos?.erp?.acesso;
 	const userCanViewFiscal = orgHasERPAccess && !!sessionUser.membership?.permissoes.fiscal.visualizar;
+	// A planilha de vendas segue liberada; os contatos do cliente (telefone, CPF/CNPJ, e-mail) só
+	// saem para quem pode exportar a base de clientes — senão a exportação de vendas a substituiria.
+	const userCanExportClients = canExportClients(sessionUser.membership?.permissoes);
 
 	const conditions = buildSalesHistoryConditions({ filters: { ...input, clientId: null }, orgId, orgHasERPAccess });
 	const where = and(...conditions);
@@ -155,6 +159,8 @@ async function getSalesExport({ input, sessionUser }: { input: TGetSalesExportIn
 		return [
 			{
 				...saleFields,
+				cliente:
+					saleFields.cliente && !userCanExportClients ? { ...saleFields.cliente, telefone: null, cpfCnpj: null, email: null } : saleFields.cliente,
 				itensQuantidade: itens.length,
 				composicaoResumo: buildSaleCompositionSummary(itens),
 				erp,

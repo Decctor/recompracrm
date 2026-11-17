@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { assertCanViewCampaigns } from "@/lib/campaigns/access";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { incrementalRevenueExpr, sumIncrementalRevenueExpr } from "@/lib/conversions/incremental";
 import { db } from "@/services/drizzle";
@@ -164,6 +165,7 @@ export type TGetConversionQualityOutput = Awaited<ReturnType<typeof getConversio
 const getConversionQualityRoute = async (request: NextRequest) => {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você precisa estar autenticado para acessar esse recurso.");
+	assertCanViewCampaigns(session);
 
 	const searchParams = request.nextUrl.searchParams;
 	const input = GetConversionQualityInputSchema.parse({

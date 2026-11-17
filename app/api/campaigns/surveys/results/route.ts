@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { assertCanViewCampaigns } from "@/lib/campaigns/access";
 import { GetCampaignSurveyResultsInputSchema, getCampaignSurveyResults } from "@/lib/campaigns/surveys/results";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
@@ -9,6 +10,7 @@ export type { TGetCampaignSurveyResultsInput, TGetCampaignSurveyResultsOutput } 
 const getCampaignSurveyResultsRoute = async (request: NextRequest) => {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você precisa estar autenticado para acessar esse recurso.");
+	assertCanViewCampaigns(session);
 	const organizationId = session.membership?.organizacao.id;
 	if (!organizationId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
 

@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { assertCanViewCampaigns } from "@/lib/campaigns/access";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { resolveNextDispatch } from "@/lib/campaigns/dispatch/schedule";
 import { db } from "@/services/drizzle";
@@ -61,6 +62,7 @@ export type TGetCampaignNextDispatchOutput = Awaited<ReturnType<typeof getCampai
 async function getCampaignNextDispatchRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você precisa estar autenticado para acessar esse recurso.");
+	assertCanViewCampaigns(session);
 	const input = GetCampaignNextDispatchInputSchema.parse({
 		campaignId: request.nextUrl.searchParams.get("campaignId") ?? undefined,
 	});

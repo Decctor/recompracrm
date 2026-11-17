@@ -16,6 +16,8 @@ import { toast } from "sonner";
 
 type CashbackProgramHeaderProps = {
 	program: TCashbackProgram;
+	/** cashback.configurar: sem ela não há como pausar nem ativar o programa. */
+	canConfigure: boolean;
 	callbacks: {
 		onMutate?: () => void;
 		onSettled?: () => void;
@@ -29,7 +31,7 @@ type CashbackProgramHeaderProps = {
  * Pausar pede confirmação e ativar não: pausado, o programa para acúmulo, resgate e cashback de
  * campanha (todos checam `ativo`); ativar só devolve o que já estava configurado.
  */
-export default function CashbackProgramHeader({ program, callbacks }: CashbackProgramHeaderProps) {
+export default function CashbackProgramHeader({ program, canConfigure, callbacks }: CashbackProgramHeaderProps) {
 	const [pauseDialogIsOpen, setPauseDialogIsOpen] = useState(false);
 
 	const { mutate: setActive, isPending } = useMutation({
@@ -69,7 +71,7 @@ export default function CashbackProgramHeader({ program, callbacks }: CashbackPr
 				<p className="max-w-[75ch] text-sm text-muted-foreground text-numeric">{describeCashbackProgram(program)}</p>
 			</div>
 			<div className="flex shrink-0 items-center gap-2">
-				{program.ativo ? (
+				{!canConfigure ? null : program.ativo ? (
 					<Button variant="outline" size="sm" disabled={isPending} onClick={() => setPauseDialogIsOpen(true)}>
 						<Pause className="h-4 w-4" />
 						PAUSAR PROGRAMA

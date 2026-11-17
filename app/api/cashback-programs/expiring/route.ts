@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { canViewCashback } from "@/lib/permissions/cashback";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { db } from "@/services/drizzle";
 import { cashbackProgramTransactions, cashbackPrograms, clients } from "@/services/drizzle/schema";
@@ -81,6 +82,7 @@ export type TGetExpiringCashbackOutput = Awaited<ReturnType<typeof getExpiringCa
 async function getExpiringCashbackRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	if (!canViewCashback(session.membership?.permissoes)) throw new createHttpError.Forbidden("Você não possui permissão para visualizar o programa de cashback.");
 	const input = GetExpiringCashbackInputSchema.parse({ days: request.nextUrl.searchParams.get("days") });
 	const result = await getExpiringCashback({ input, session });
 	return NextResponse.json(result);

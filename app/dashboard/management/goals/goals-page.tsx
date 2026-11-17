@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger, tabsPageToolbarActionsClassName, tabsPageToolbarClassName } from "@/components/ui/tabs";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { getErrorMessage } from "@/lib/errors";
+import type { TGoalPermissions } from "@/lib/permissions/goals";
 import { useGoals } from "@/lib/queries/goals";
 import { useQueryClient } from "@tanstack/react-query";
 import { LayoutDashboard, Plus, Target } from "lucide-react";
@@ -20,8 +21,10 @@ import { useState } from "react";
 
 type GoalsPageProps = {
 	user: TAuthUserSession["user"];
+	/** Criar e editar seguem as permissões de metas; o servidor também as confere. */
+	goalPermissions: TGoalPermissions;
 };
-export default function GoalsPage({ user }: GoalsPageProps) {
+export default function GoalsPage({ user, goalPermissions }: GoalsPageProps) {
 	const queryClient = useQueryClient();
 	const [viewMode, setViewMode] = useQueryState("view", parseAsStringEnum(["dashboard", "metas"]));
 	const [newGoalModalIsOpen, setNewGoalModalIsOpen] = useState<boolean>(false);
@@ -48,12 +51,14 @@ export default function GoalsPage({ user }: GoalsPageProps) {
 							Metas
 						</TabsTrigger>
 					</TabsList>
-					<div className={tabsPageToolbarActionsClassName}>
-						<Button className="flex items-center gap-2" size="sm" onClick={() => setNewGoalModalIsOpen(true)}>
-							<Plus className="w-4 h-4 min-w-4 min-h-4" />
-							NOVA META
-						</Button>
-					</div>
+					{goalPermissions.criar ? (
+						<div className={tabsPageToolbarActionsClassName}>
+							<Button className="flex items-center gap-2" size="sm" onClick={() => setNewGoalModalIsOpen(true)}>
+								<Plus className="w-4 h-4 min-w-4 min-h-4" />
+								NOVA META
+							</Button>
+						</div>
+					) : null}
 				</div>
 
 				<TabsContent value="dashboard">
@@ -61,7 +66,10 @@ export default function GoalsPage({ user }: GoalsPageProps) {
 				</TabsContent>
 
 				<TabsContent value="metas">
-					<GoalsListingView onEdit={(id) => setEditGoalModal({ id, isOpen: true })} onCreateGoal={() => setNewGoalModalIsOpen(true)} />
+					<GoalsListingView
+						onEdit={goalPermissions.editar ? (id) => setEditGoalModal({ id, isOpen: true }) : null}
+						onCreateGoal={goalPermissions.criar ? () => setNewGoalModalIsOpen(true) : null}
+					/>
 				</TabsContent>
 			</Tabs>
 
@@ -79,8 +87,8 @@ export default function GoalsPage({ user }: GoalsPageProps) {
 }
 
 type GoalsListingViewProps = {
-	onEdit: (id: string) => void;
-	onCreateGoal: () => void;
+	onEdit: ((id: string) => void) | null;
+	onCreateGoal: (() => void) | null;
 };
 function GoalsListingView({ onEdit, onCreateGoal }: GoalsListingViewProps) {
 	const [page, setPage] = useState(1);

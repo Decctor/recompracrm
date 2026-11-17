@@ -1,5 +1,6 @@
 import ClientsEmptyState from "@/components/Clients/ClientsEmptyState";
 import { requireDashboardCapability } from "@/lib/access/guards";
+import { canExportClients } from "@/lib/permissions/sensitive-data";
 import { db } from "@/services/drizzle";
 import { redirect } from "next/navigation";
 import ClientsPage from "./clients-page";
@@ -25,5 +26,11 @@ export default async function CommercialClients() {
 	}
 
 	const canReconcileClients = sessionUser.membership?.permissoes.empresa.editar ?? false;
-	return <ClientsPage user={sessionUser.user} canReconcileClients={canReconcileClients} />;
+	return (
+		<ClientsPage
+			user={sessionUser.user}
+			canReconcileClients={canReconcileClients}
+			canExportClients={canExportClients(sessionUser.membership?.permissoes)}
+		/>
+	);
 }

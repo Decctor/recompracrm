@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { canConfigureCashback, canViewCashback } from "@/lib/permissions/cashback";
 import { TAuthUserSession } from "@/lib/authentication/types";
 import { CashbackProgramPrizeSchema } from "@/schemas/cashback-programs";
 import { db } from "@/services/drizzle";
@@ -167,6 +168,7 @@ export type TGetCashbackProgramPrizesOutputById = Exclude<TGetCashbackProgramPri
 const getCashbackProgramPrizesRoute = async (request: NextRequest) => {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você precisa estar autenticado para acessar esse recurso.");
+	if (!canViewCashback(session.membership?.permissoes)) throw new createHttpError.Forbidden("Você não possui permissão para visualizar o programa de cashback.");
 
 	const searchParams = request.nextUrl.searchParams;
 	const input = GetCashbackProgramPrizesInputSchema.parse({
@@ -226,6 +228,7 @@ export type TCreateCashbackProgramPrizeOutputInsertedId = Exclude<TCreateCashbac
 const createCashbackProgramPrizeRoute = async (request: NextRequest) => {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você precisa estar autenticado para acessar esse recurso.");
+	if (!canConfigureCashback(session.membership?.permissoes)) throw new createHttpError.Forbidden("Você não possui permissão para configurar o programa de cashback.");
 
 	const input = CreateCashbackProgramPrizeInputSchema.parse(await request.json());
 	const response = await createCashbackProgramPrize({ input, session });
@@ -291,6 +294,7 @@ export type TUpdateCashbackProgramPrizeOutputUpdatedId = Exclude<TUpdateCashback
 const updateCashbackProgramPrizeRoute = async (request: NextRequest) => {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você precisa estar autenticado para acessar esse recurso.");
+	if (!canConfigureCashback(session.membership?.permissoes)) throw new createHttpError.Forbidden("Você não possui permissão para configurar o programa de cashback.");
 
 	const input = UpdateCashbackProgramPrizeInputSchema.parse(await request.json());
 	const response = await updateCashbackProgramPrize({ input, session });
@@ -357,6 +361,7 @@ export type TDeleteCashbackProgramPrizeOutput = Awaited<ReturnType<typeof delete
 const deleteCashbackProgramPrizeRoute = async (request: NextRequest) => {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você precisa estar autenticado para acessar esse recurso.");
+	if (!canConfigureCashback(session.membership?.permissoes)) throw new createHttpError.Forbidden("Você não possui permissão para configurar o programa de cashback.");
 
 	const input = DeleteCashbackProgramPrizeInputSchema.parse({ id: request.nextUrl.searchParams.get("id") ?? undefined });
 	const response = await deleteCashbackProgramPrize({ input, session });

@@ -6,7 +6,8 @@ import { organizationMembers, organizationMembershipInvitations } from "@/servic
 import { and, eq, gt, isNull, sql } from "drizzle-orm";
 
 // Backfill das permissões granulares do ERP (caixa, configuração de vendas, produtos, estoque e
-// produção) e de dados sensíveis (custos e margens). Roda depois do deploy que introduz chaves novas; o fallback em lib/permissions/* cobre
+// produção), de dados sensíveis (custos e margens, exportação de clientes) e do CRM (campanhas,
+// programa de cashback). Roda depois do deploy que introduz chaves novas; o fallback em lib/permissions/* cobre
 // o intervalo até lá e quem ficar de fora. Grava exatamente o que o fallback já resolvia, então
 // ninguém ganha nem perde acesso — a partir daí o gestor restringe pela tela de permissões.
 //
@@ -56,10 +57,7 @@ async function main() {
 					.update(organizationMembershipInvitations)
 					.set({ permissoes: next })
 					.where(
-						and(
-							eq(organizationMembershipInvitations.id, id),
-							sql`${organizationMembershipInvitations.permissoes} = ${JSON.stringify(previous)}::jsonb`,
-						),
+						and(eq(organizationMembershipInvitations.id, id), sql`${organizationMembershipInvitations.permissoes} = ${JSON.stringify(previous)}::jsonb`),
 					)
 					.returning({ id: organizationMembershipInvitations.id });
 				return updated.length;

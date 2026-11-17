@@ -79,6 +79,16 @@ export const DEFAULT_ORGANIZATION_OWNER_PERMISSIONS: TUserPermissions = {
 	},
 	dadosSensiveis: {
 		visualizarCustos: true,
+		exportarClientes: true,
+	},
+	campanhas: {
+		visualizar: true,
+		editar: true,
+		ativar: true,
+	},
+	cashback: {
+		visualizar: true,
+		configurar: true,
 	},
 };
 

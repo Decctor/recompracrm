@@ -8,6 +8,7 @@ import {
 	QUOTA_SKIP_REASONS,
 	formatDispatchMoment,
 } from "@/app/dashboard/growth/campaigns/_module/detail/helpers/dispatch-labels";
+import { useCampaignPermissions } from "@/app/dashboard/growth/campaigns/_module/shared/campaign-permissions";
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
 import LoadingComponent from "@/components/Layouts/LoadingComponent";
 import GeneralPaginationComponent from "@/components/Utils/Pagination";
@@ -111,6 +112,8 @@ function DispatchProgressBar({ dispatch }: { dispatch: TGetCampaignDispatchesOut
 }
 
 function CampaignDispatchRow({ dispatch }: { dispatch: TGetCampaignDispatchesOutputItems[number] }) {
+	// Reexecutar, reenviar e retomar mandam mensagens de novo: exigem `campanhas.ativar`.
+	const { ativar: canResend } = useCampaignPermissions();
 	const queryClient = useQueryClient();
 	const status = DISPATCH_STATUS_LABELS[dispatch.status];
 	const { mutate: handleRetry, isPending } = useMutation({
@@ -128,11 +131,11 @@ function CampaignDispatchRow({ dispatch }: { dispatch: TGetCampaignDispatchesOut
 	const isStuck =
 		(dispatch.status === "ENFILEIRADA" || dispatch.status === "ENVIANDO" || dispatch.status === "RESOLVENDO") &&
 		Date.now() - new Date(dispatch.dataAtualizacao).getTime() > 30 * 60_000;
-	const canRetry = dispatch.status === "FALHOU" || (dispatch.status === "CONCLUIDA" && dispatch.totalFalhados > 0) || isStuck;
-	const canRetryQuotaSkips = quotaSkips > 0 && dispatch.status === "CONCLUIDA";
+	const canRetry = canResend && (dispatch.status === "FALHOU" || (dispatch.status === "CONCLUIDA" && dispatch.totalFalhados > 0) || isStuck);
+	const canRetryQuotaSkips = canResend && quotaSkips > 0 && dispatch.status === "CONCLUIDA";
 	const isInterrupted = dispatch.status === "INTERROMPIDA" && !!dispatch.motivoInterrupcao;
 	// Evento interrompido não é retomado: a mensagem perderia o momento do gatilho.
-	const canResume = isInterrupted && dispatch.origem !== "EVENTO";
+	const canResume = canResend && isInterrupted && dispatch.origem !== "EVENTO";
 	const notContacted = (dispatch.pulosPorMotivo.find((skip) => skip.motivo === "ENVIO_INTERROMPIDO")?.qtde ?? 0) + dispatch.totalFalhados;
 	const timestamp = dispatch.dataConclusao
 		? `concluído em ${formatDateAsLocale(dispatch.dataConclusao, true)}`

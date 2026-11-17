@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { assertCanViewCampaigns } from "@/lib/campaigns/access";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { previewCampaignAudience } from "@/lib/campaigns/filters";
 import { CampaignFiltersSchema } from "@/schemas/campaigns";
@@ -50,6 +51,7 @@ export type TPreviewAudienceOutput = Awaited<ReturnType<typeof previewAudience>>
 async function previewAudienceRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	assertCanViewCampaigns(session);
 
 	const input = PreviewAudienceInputSchema.parse(await request.json());
 	const result = await previewAudience({ input, session });

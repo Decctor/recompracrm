@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger, tabsPageToolbarActionsClassNa
 import { Database, MessageCircle, MessageCircleIcon, Plus, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { parseAsStringEnum, useQueryState } from "nuqs";
+import { useCampaignPermissions } from "../shared/campaign-permissions";
 import { BlockedPhonesAlert } from "./blocked-phones-alert";
 import { CampaignsDatabaseView } from "./database/campaigns-database-view";
 import { CampaignsInteractionsView } from "./interactions/campaigns-interactions-view";
@@ -19,14 +20,17 @@ type CampaignsPageProps = {
 };
 
 function CampaignModuleActions() {
+	const campaignPermissions = useCampaignPermissions();
 	return (
 		<ActionToolbar>
 			<ActionToolbar.Action asChild icon={Plus}>
 				<Link href="/dashboard/communication/builder">NOVO TEMPLATE</Link>
 			</ActionToolbar.Action>
-			<ActionToolbar.Primary asChild icon={Plus}>
-				<Link href={appRoutes.growth.newCampaign()}>NOVA CAMPANHA</Link>
-			</ActionToolbar.Primary>
+			{campaignPermissions.editar ? (
+				<ActionToolbar.Primary asChild icon={Plus}>
+					<Link href={appRoutes.growth.newCampaign()}>NOVA CAMPANHA</Link>
+				</ActionToolbar.Primary>
+			) : null}
 		</ActionToolbar>
 	);
 }

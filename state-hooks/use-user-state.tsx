@@ -110,6 +110,16 @@ export function useUserState() {
 				},
 				dadosSensiveis: {
 					visualizarCustos: false,
+					exportarClientes: false,
+				},
+				campanhas: {
+					visualizar: false,
+					editar: false,
+					ativar: false,
+				},
+				cashback: {
+					visualizar: false,
+					configurar: false,
 				},
 			},
 		},

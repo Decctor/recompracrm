@@ -1,6 +1,7 @@
 "use client";
 
 import type { TGetCampaignsInput, TGetCampaignsOutputDefault } from "@/app/api/campaigns/route";
+import { canEditCampaign, useCampaignPermissions } from "@/app/dashboard/growth/campaigns/_module/shared/campaign-permissions";
 import TestCampaign from "@/app/dashboard/growth/campaigns/_module/shared/form/TestCampaign";
 import DateIntervalInput from "@/components/Inputs/DateIntervalInput";
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
@@ -283,6 +284,7 @@ export function CampaignsDatabaseView() {
 }
 
 function CampaignsPageCampaignCard({ campaign, onTestCampaign }: { campaign: TGetCampaignsOutputDefault[number]; onTestCampaign: () => void }) {
+	const campaignPermissions = useCampaignPermissions();
 	const stats = campaign.estatisticas ?? {
 		envios: 0,
 		entregues: 0,
@@ -413,16 +415,20 @@ function CampaignsPageCampaignCard({ campaign, onTestCampaign }: { campaign: TGe
 					/>
 				</div>
 				<div className="flex items-center gap-1.5">
-					<Button variant="ghost" className="flex items-center gap-1.5" size="sm" onClick={onTestCampaign}>
-						<Send className="w-3 min-w-3 h-3 min-h-3" />
-						TESTAR
-					</Button>
-					<Button variant="ghost" className="flex items-center gap-1.5" size="sm" asChild>
-						<Link href={`${appRoutes.growth.campaign(campaign.id)}?view=config`}>
-							<PencilIcon className="w-3 min-w-3 h-3 min-h-3" />
-							EDITAR
-						</Link>
-					</Button>
+					{campaignPermissions.editar ? (
+						<Button variant="ghost" className="flex items-center gap-1.5" size="sm" onClick={onTestCampaign}>
+							<Send className="w-3 min-w-3 h-3 min-h-3" />
+							TESTAR
+						</Button>
+					) : null}
+					{canEditCampaign(campaignPermissions, campaign) ? (
+						<Button variant="ghost" className="flex items-center gap-1.5" size="sm" asChild>
+							<Link href={`${appRoutes.growth.campaign(campaign.id)}?view=config`}>
+								<PencilIcon className="w-3 min-w-3 h-3 min-h-3" />
+								EDITAR
+							</Link>
+						</Button>
+					) : null}
 					<Button variant="link" className="flex items-center gap-1.5" size="sm" asChild>
 						<Link href={appRoutes.growth.campaign(campaign.id)}>
 							<AreaChart className="w-3 min-w-3 h-3 min-h-3" />

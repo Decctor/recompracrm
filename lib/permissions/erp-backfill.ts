@@ -1,3 +1,5 @@
+import { resolveCampaignPermissions } from "@/lib/permissions/campaigns";
+import { resolveCashbackPermissions } from "@/lib/permissions/cashback";
 import { resolveInventoryPermissions } from "@/lib/permissions/inventory";
 import { resolveProductionPermissions } from "@/lib/permissions/productions";
 import { resolveProductPermissions } from "@/lib/permissions/products";
@@ -8,7 +10,7 @@ import type { TOrganizationMemberPermissions } from "@/schemas/organizations";
 /**
  * Grava no JSONB as permissões do ERP que hoje vêm do fallback (`vendas.operarCaixa`,
  * `vendas.movimentarCaixa`, `vendas.conferirCaixa`, `vendas.configurar`, `produtos`, `estoque`,
- * `producao`, `dadosSensiveis`), com o valor que o fallback já resolve — ou seja, o que o membro já conseguia fazer.
+ * `producao`, `dadosSensiveis`) e do CRM (`campanhas`, `cashback`), com o valor que o fallback já resolve — ou seja, o que o membro já conseguia fazer.
  *
  * Só preenche o que falta: chave presente (mesmo `false`) é escolha de quem administra e nunca é
  * sobrescrita. Por isso rodar duas vezes é inofensivo. Devolve `null` quando não há nada a gravar.
@@ -38,8 +40,23 @@ export function materializeERPPermissions(permissoes: TOrganizationMemberPermiss
 		changed = true;
 	}
 
-	if (!next.dadosSensiveis) {
-		next.dadosSensiveis = resolveSensitiveDataPermissions(permissoes);
+	// Chave a chave: `dadosSensiveis` pode existir só com `visualizarCustos` (backfill anterior).
+	const sensitiveData = resolveSensitiveDataPermissions(permissoes);
+	const storedSensitiveData = next.dadosSensiveis;
+	if (!storedSensitiveData || storedSensitiveData.exportarClientes == null) {
+		next.dadosSensiveis = {
+			visualizarCustos: storedSensitiveData?.visualizarCustos ?? sensitiveData.visualizarCustos,
+			exportarClientes: sensitiveData.exportarClientes,
+		};
+		changed = true;
+	}
+
+	if (!next.campanhas) {
+		next.campanhas = resolveCampaignPermissions(permissoes);
+		changed = true;
+	}
+	if (!next.cashback) {
+		next.cashback = resolveCashbackPermissions(permissoes);
 		changed = true;
 	}
 

@@ -1,4 +1,5 @@
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { assertCanViewCampaigns } from "@/lib/campaigns/access";
 import { TAuthUserSession } from "@/lib/authentication/types";
 import { computeWorstSalesDayOfWeek } from "@/lib/campaigns/utils";
 import { db } from "@/services/drizzle";
@@ -23,6 +24,7 @@ async function previewWorstSalesDayRoute(request: NextRequest) {
 	console.log("[INFO] Running previewWorstSalesDayRoute");
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	assertCanViewCampaigns(session);
 	console.log("[INFO] Running previewWorstSalesDayRoute");
 	const result = await previewWorstSalesDay(session);
 	return NextResponse.json(result);

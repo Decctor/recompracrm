@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { canViewCashback } from "@/lib/permissions/cashback";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { createSimplifiedSearchCondition } from "@/lib/search";
 import { db } from "@/services/drizzle";
@@ -189,6 +190,9 @@ async function getCashbackProgramTransactionsRoute(request: NextRequest) {
 		periodAfter: searchParams.get("periodAfter"),
 		periodBefore: searchParams.get("periodBefore"),
 	});
+	// Saldo/extrato de um cliente é leitura operacional (PDV, ficha do cliente); a listagem da base é o módulo.
+	if (!input.clientId && !canViewCashback(session.membership?.permissoes))
+		throw new createHttpError.Forbidden("Você não possui permissão para visualizar o programa de cashback.");
 	const result = await getCashbackProgramTransactions({ input, session });
 	return NextResponse.json(result, { status: 200 });
 }

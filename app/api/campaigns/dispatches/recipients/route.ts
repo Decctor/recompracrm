@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { assertCanViewCampaigns } from "@/lib/campaigns/access";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { buildPhoneSearchPatterns } from "@/lib/formatting";
 import { createSimplifiedSearchCondition } from "@/lib/search";
@@ -132,6 +133,7 @@ export type TGetCampaignDispatchRecipientsOutputItems = TGetCampaignDispatchReci
 async function getCampaignDispatchRecipientsRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você precisa estar autenticado para acessar esse recurso.");
+	assertCanViewCampaigns(session);
 	const searchParams = request.nextUrl.searchParams;
 	const input = GetCampaignDispatchRecipientsInputSchema.parse({
 		dispatchId: searchParams.get("dispatchId") ?? undefined,

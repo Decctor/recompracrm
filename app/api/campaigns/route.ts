@@ -1,5 +1,12 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import {
+	assertCanActivateCampaigns,
+	assertCanEditCampaigns,
+	assertCanViewCampaigns,
+	CAMPAIGN_ACTIVATION_FORBIDDEN_MESSAGE,
+} from "@/lib/campaigns/access";
+import { campaignWriteRequiresActivation, canActivateCampaigns } from "@/lib/permissions/campaigns";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { assertWhatsappPhoneCanSendCampaigns } from "@/lib/campaigns/dispatch/interruption";
 import { CAMPAIGN_SENT_INTERACTION_STATUSES } from "@/lib/campaigns/utils";
@@ -312,9 +319,12 @@ export type TCreateCampaignOutput = Awaited<ReturnType<typeof createCampaign>>;
 const createCampaignRoute = async (request: NextRequest) => {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você precisa estar autenticado para acessar esse recurso.");
+	assertCanEditCampaigns(session);
 
 	const input = await request.json();
 	const parsedInput = CreateCampaignWithInlineCouponInputSchema.parse(input);
+	// Nascer ativa é colocar no ar: exige a mesma permissão de ativar.
+	if (parsedInput.campaign.ativo) assertCanActivateCampaigns(session);
 	const organizationId = session.membership?.organizacao.id;
 	if (!organizationId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
 	const result = await createCampaign({ input: parsedInput, organizationId, authorId: session.user.id });
@@ -562,6 +572,7 @@ export type TGetCampaignsOutputById = Exclude<TGetCampaignsOutput["data"]["byId"
 const getCampaignsRoute = async (request: NextRequest) => {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você precisa estar autenticado para acessar esse recurso.");
+	assertCanViewCampaigns(session);
 
 	const searchParams = request.nextUrl.searchParams;
 	const triggerTypesParam = searchParams.get("triggerTypes");
@@ -609,8 +620,30 @@ export const UpdateCampaignInputSchema = z.object({
 });
 export type TUpdateCampaignInput = z.infer<typeof UpdateCampaignInputSchema>;
 
-export async function updateCampaign({ input, organizationId: userOrgId }: { input: TUpdateCampaignInput; organizationId: string }) {
+export async function updateCampaign({
+	input,
+	organizationId: userOrgId,
+	canActivate = false,
+}: {
+	input: TUpdateCampaignInput;
+	organizationId: string;
+	/**
+	 * `campanhas.ativar` de quem edita (lib/permissions/campaigns.ts). Omitido = não pode: o MCP só
+	 * edita rascunhos inativos e mantém inativos, então nunca precisa dela.
+	 */
+	canActivate?: boolean;
+}) {
 	const campaignId = input.campaignId;
+
+	const existing = await db.query.campaigns.findFirst({
+		where: and(eq(campaigns.id, campaignId), eq(campaigns.organizacaoId, userOrgId)),
+		columns: { ativo: true },
+	});
+	if (!existing) throw new createHttpError.NotFound("Campanha não encontrada.");
+	// Ativar, pausar ou mexer numa campanha no ar muda o que os clientes recebem.
+	if (!canActivate && campaignWriteRequiresActivation({ wasActive: existing.ativo, willBeActive: input.campaign.ativo })) {
+		throw new createHttpError.Forbidden(CAMPAIGN_ACTIVATION_FORBIDDEN_MESSAGE);
+	}
 
 	// Validate recurrent campaign settings
 	validateRecurrentCampaign(input.campaign as z.infer<typeof CampaignSchema>);
@@ -650,13 +683,7 @@ export async function updateCampaign({ input, organizationId: userOrgId }: { inp
 	await validateCampaignCouponGenerationSettings(input.campaign, userOrgId);
 
 	// Só a ativação é barrada: editar uma campanha já ativa com o número bloqueado continua possível.
-	if (input.campaign.ativo) {
-		const existing = await db.query.campaigns.findFirst({
-			where: and(eq(campaigns.id, campaignId), eq(campaigns.organizacaoId, userOrgId)),
-			columns: { ativo: true },
-		});
-		if (!existing?.ativo) await assertWhatsappPhoneCanSendCampaigns(input.campaign.whatsappConexaoTelefoneId);
-	}
+	if (input.campaign.ativo && !existing.ativo) await assertWhatsappPhoneCanSendCampaigns(input.campaign.whatsappConexaoTelefoneId);
 
 	return await db.transaction(async (trx) => {
 		console.log("[INFO] [UPDATE-CAMPAIGN] Starting to update campaign...", {
@@ -710,13 +737,14 @@ export type TUpdateCampaignOutput = Awaited<ReturnType<typeof updateCampaign>>;
 const updateCampaignRoute = async (request: NextRequest) => {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você precisa estar autenticado para acessar esse recurso.");
+	assertCanEditCampaigns(session);
 
 	const input = await request.json();
 	const parsedInput = UpdateCampaignInputSchema.parse(input);
 	console.log("[INFO] [UPDATE-CAMPAIGN] Parsed input:", parsedInput);
 	const organizationId = session.membership?.organizacao.id;
 	if (!organizationId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
-	const result = await updateCampaign({ input: parsedInput, organizationId });
+	const result = await updateCampaign({ input: parsedInput, organizationId, canActivate: canActivateCampaigns(session.membership?.permissoes) });
 	return NextResponse.json(result, { status: 200 });
 };
 export const PUT = appApiHandler({

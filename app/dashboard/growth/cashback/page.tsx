@@ -1,4 +1,5 @@
 import { requireDashboardCapability } from "@/lib/access/guards";
+import { canConfigureCashback } from "@/lib/permissions/cashback";
 import { db } from "@/services/drizzle";
 import { redirect } from "next/navigation";
 import CashbackProgramsPage from "./control-cashback-programs-page";
@@ -33,6 +34,7 @@ export default async function CashbackPrograms() {
 			},
 		},
 	});
-	if (!cashbackProgram) return <NewCashbackProgramsPage user={sessionUser.user} userOrg={userOrg} />;
-	return <CashbackProgramsPage userOrg={userOrg} cashbackProgram={cashbackProgram} />;
+	const canConfigure = canConfigureCashback(sessionUser.membership?.permissoes);
+	if (!cashbackProgram) return <NewCashbackProgramsPage user={sessionUser.user} userOrg={userOrg} canConfigure={canConfigure} />;
+	return <CashbackProgramsPage userOrg={userOrg} cashbackProgram={cashbackProgram} canConfigure={canConfigure} />;
 }

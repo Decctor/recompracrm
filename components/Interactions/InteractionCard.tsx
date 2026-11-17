@@ -26,6 +26,8 @@ export type TInteractionCardInteraction = TGetCampaignInteractionsOutputItems[nu
 
 type InteractionCardContextValue = {
 	interaction: TInteractionCardInteraction;
+	/** Reenviar manda a mensagem de novo: exige `campanhas.ativar` (lib/permissions/campaigns.ts). */
+	canRetry: boolean;
 };
 
 const InteractionCardContext = createContext<InteractionCardContextValue | null>(null);
@@ -38,8 +40,16 @@ function useInteractionCard() {
 	return context;
 }
 
-function InteractionCardProvider({ interaction, children }: { interaction: TInteractionCardInteraction; children: ReactNode }) {
-	return <InteractionCardContext value={{ interaction }}>{children}</InteractionCardContext>;
+function InteractionCardProvider({
+	interaction,
+	canRetry,
+	children,
+}: {
+	interaction: TInteractionCardInteraction;
+	canRetry: boolean;
+	children: ReactNode;
+}) {
+	return <InteractionCardContext value={{ interaction, canRetry }}>{children}</InteractionCardContext>;
 }
 
 function InteractionCardFrame({ children, className }: { children: ReactNode; className?: string }) {
@@ -489,7 +499,7 @@ function InteractionCardSentStatus() {
 }
 
 function InteractionCardRetryButton({ layout = "inline" }: { layout?: "inline" | "toolbar" }) {
-	const { interaction } = useInteractionCard();
+	const { interaction, canRetry } = useInteractionCard();
 	const queryClient = useQueryClient();
 	const { mutate: handleRetryInteraction, isPending: retryIsPending } = useMutation({
 		mutationKey: ["retry-campaign-interaction", interaction.id],
@@ -505,7 +515,7 @@ function InteractionCardRetryButton({ layout = "inline" }: { layout?: "inline" |
 		},
 	});
 
-	if (interaction.statusEnvio !== "FALHOU") return null;
+	if (interaction.statusEnvio !== "FALHOU" || !canRetry) return null;
 
 	return (
 		<Button

@@ -15,6 +15,7 @@ import {
 import { CampaignConversionCard, CONVERSION_TYPE_CONFIG } from "@/components/Campaigns/Conversions/CampaignConversionCard";
 import ClientHoverCard from "@/components/Clients/ClientHoverCard";
 import DateIntervalInput from "@/components/Inputs/DateIntervalInput";
+import { useCampaignPermissions } from "@/app/dashboard/growth/campaigns/_module/shared/campaign-permissions";
 import { InteractionCard } from "@/components/Interactions/InteractionCard";
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
 import LoadingComponent from "@/components/Layouts/LoadingComponent";
@@ -592,6 +593,7 @@ function InteractionsSection({ campaignId }: { campaignId: string }) {
 }
 
 function InteractionLogCard({ interaction }: { interaction: TGetCampaignInteractionsOutputItems[number] }) {
+	const campaignPermissions = useCampaignPermissions();
 	const queryClient = useQueryClient();
 	const [expanded, setExpanded] = useState(false);
 	const { mutate: handleRetryInteraction, isPending: retryIsPending } = useMutation({
@@ -612,7 +614,7 @@ function InteractionLogCard({ interaction }: { interaction: TGetCampaignInteract
 	const templateName = interaction.campanha?.whatsappTemplate?.nome;
 
 	return (
-		<InteractionCard.Provider interaction={interaction}>
+		<InteractionCard.Provider interaction={interaction} canRetry={campaignPermissions.ativar}>
 			<div className="flex w-full flex-col gap-2 rounded-xl border border-border bg-card px-3 py-3 shadow-2xs">
 				<div className="flex w-full flex-wrap items-center justify-between gap-2">
 					<ClientHoverCard clientId={interaction.cliente.id}>
@@ -624,7 +626,7 @@ function InteractionLogCard({ interaction }: { interaction: TGetCampaignInteract
 					<div className="flex items-center gap-1.5">
 						<InteractionCard.MessagePreview />
 						<InteractionCard.DataForNerds />
-						{failed ? (
+						{failed && campaignPermissions.ativar ? (
 							<Button
 								size="sm"
 								variant="outline"

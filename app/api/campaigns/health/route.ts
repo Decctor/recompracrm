@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { assertCanViewCampaigns } from "@/lib/campaigns/access";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { getOrganizationSendQuotaUsage } from "@/lib/interactions/send-counters";
 import { db } from "@/services/drizzle";
@@ -81,6 +82,7 @@ export type TGetCampaignsHealthOutput = Awaited<ReturnType<typeof getCampaignsHe
 async function getCampaignsHealthRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	assertCanViewCampaigns(session);
 	const input = GetCampaignsHealthInputSchema.parse({ dayStart: request.nextUrl.searchParams.get("dayStart") });
 	const result = await getCampaignsHealth({ input, session });
 	return NextResponse.json(result);

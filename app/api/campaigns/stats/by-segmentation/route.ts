@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { assertCanViewCampaigns } from "@/lib/campaigns/access";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { db } from "@/services/drizzle";
 import { campaignConversions, campaigns, campaignSegmentations } from "@/services/drizzle/schema";
@@ -141,6 +142,7 @@ export type TGetStatsBySegmentationOutput = Awaited<ReturnType<typeof getStatsBy
 const getStatsBySegmentationRoute = async (request: NextRequest) => {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você precisa estar autenticado para acessar esse recurso.");
+	assertCanViewCampaigns(session);
 
 	const searchParams = request.nextUrl.searchParams;
 	const input = GetStatsBySegmentationInputSchema.parse({

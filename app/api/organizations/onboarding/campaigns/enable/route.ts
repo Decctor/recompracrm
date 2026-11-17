@@ -2,6 +2,7 @@ import { captureServerEvent } from "@/lib/analytics/posthog-server";
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
+import { assertCanActivateCampaigns } from "@/lib/campaigns/access";
 import { getJourney, reconcileOnboardingCampaigns, updateJourneyProgress } from "@/lib/onboarding";
 import { db } from "@/services/drizzle";
 import { campaigns } from "@/services/drizzle/schema";
@@ -32,13 +33,17 @@ async function enableOnboardingCampaigns({ input, session }: { input: TEnableOnb
 	}
 
 	await db.transaction(async (tx) => {
-	await updateJourneyProgress({
-		executor: tx,
-		organizationId: organizacaoId,
-		produto: "CRM",
-		respostas: { campanhasComEnvioHabilitado: Array.from(current) },
-	});
-	if (!input.habilitar && input.chaves.length) await tx.update(campaigns).set({ ativo: false }).where(and(eq(campaigns.organizacaoId, organizacaoId), inArray(campaigns.chavePreset, input.chaves)));
+		await updateJourneyProgress({
+			executor: tx,
+			organizationId: organizacaoId,
+			produto: "CRM",
+			respostas: { campanhasComEnvioHabilitado: Array.from(current) },
+		});
+		if (!input.habilitar && input.chaves.length)
+			await tx
+				.update(campaigns)
+				.set({ ativo: false })
+				.where(and(eq(campaigns.organizacaoId, organizacaoId), inArray(campaigns.chavePreset, input.chaves)));
 	});
 
 	const { readiness, changes } = await reconcileOnboardingCampaigns({ executor: db, organizationId: organizacaoId });
@@ -69,6 +74,8 @@ export type TEnableOnboardingCampaignsOutput = Awaited<ReturnType<typeof enableO
 async function enableOnboardingCampaignsRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	// Liberar ou suspender envios é ativar/pausar campanhas.
+	assertCanActivateCampaigns(session);
 	const input = EnableOnboardingCampaignsInputSchema.parse(await request.json());
 	const result = await enableOnboardingCampaigns({ input, session });
 	return NextResponse.json(result);

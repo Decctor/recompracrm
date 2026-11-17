@@ -1,4 +1,6 @@
 import type { TAuthUserSession } from "@/lib/authentication/types";
+import { canViewCampaigns } from "@/lib/permissions/campaigns";
+import { canViewCashback } from "@/lib/permissions/cashback";
 import { resolveDiscountAuthority } from "@/lib/permissions/discounts";
 import { canViewFinances } from "@/lib/permissions/finances";
 import { canViewInventory } from "@/lib/permissions/inventory";
@@ -99,9 +101,9 @@ export function canAccessDashboardCapability(capability: TDashboardCapability, c
 		case "campaigns":
 		case "audiences":
 		case "coupons":
-			return organization.configuracao.recursos.campanhas.acesso;
+			return organization.configuracao.recursos.campanhas.acesso && canViewCampaigns(permissions);
 		case "cashback":
-			return organization.configuracao.recursos.programasCashback.acesso;
+			return organization.configuracao.recursos.programasCashback.acesso && canViewCashback(permissions);
 		case "finance":
 			return erp && canViewFinances(permissions);
 		case "fiscal":

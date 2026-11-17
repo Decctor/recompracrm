@@ -1,6 +1,7 @@
 import { appApiHandler } from "@/lib/app-api";
 import { runPagesRouteHandler, type PagesRouteHandler, type PagesRouteRequest, type PagesRouteResponse } from "@/lib/pages-route-compat";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { resolveGoalPermissions } from "@/lib/permissions/goals";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { handleSimpleChildRowsProcessing } from "@/lib/db-utils";
 import { resolveActiveGoalPacing } from "@/lib/goals/resolve-active-goal-pacing";
@@ -222,6 +223,8 @@ export type TGetGoalsOutputDefaultGoal = TGetGoalsOutputDefault["goals"][number]
 const getGoalsHandler: PagesRouteHandler<TGetGoalsOutput> = async (req, res) => {
 	const sessionUser = await getCurrentSessionUncached();
 	if (!sessionUser) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	if (!resolveGoalPermissions(sessionUser.membership?.permissoes).visualizar)
+		throw new createHttpError.Forbidden("Você não possui permissão para visualizar metas.");
 
 	const input = GetGoalsInputSchema.parse(req.query);
 	const goals = await getGoals({ input, session: sessionUser });
@@ -281,6 +284,8 @@ export type TCreateGoalOutputInsertedId = Exclude<TCreateGoalOutput["data"]["ins
 const createGoalHandler: PagesRouteHandler<TCreateGoalOutput> = async (req, res) => {
 	const sessionUser = await getCurrentSessionUncached();
 	if (!sessionUser) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	if (!resolveGoalPermissions(sessionUser.membership?.permissoes).criar)
+		throw new createHttpError.Forbidden("Você não possui permissão para criar metas.");
 
 	const input = CreateGoalInputSchema.parse(req.body);
 	const goal = await createGoal({ input, session: sessionUser });
@@ -357,6 +362,8 @@ export type TUpdateGoalOutput = Awaited<ReturnType<typeof updateGoal>>;
 const updateGoalHandler: PagesRouteHandler<TUpdateGoalOutput> = async (req, res) => {
 	const sessionUser = await getCurrentSessionUncached();
 	if (!sessionUser) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	if (!resolveGoalPermissions(sessionUser.membership?.permissoes).editar)
+		throw new createHttpError.Forbidden("Você não possui permissão para editar metas.");
 	const input = UpdateGoalInputSchema.parse(req.body);
 	const goal = await updateGoal({ input, session: sessionUser });
 	return res.status(200).json(goal);
@@ -405,6 +412,8 @@ export type TDeleteGoalOutputDeletedId = Exclude<TDeleteGoalOutput["data"]["dele
 const deleteGoalHandler: PagesRouteHandler<TDeleteGoalOutput> = async (req, res) => {
 	const sessionUser = await getCurrentSessionUncached();
 	if (!sessionUser) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	if (!resolveGoalPermissions(sessionUser.membership?.permissoes).excluir)
+		throw new createHttpError.Forbidden("Você não possui permissão para excluir metas.");
 	const input = DeleteGoalInputSchema.parse(req.query);
 	const goal = await deleteGoal({ input, session: sessionUser });
 	return res.status(200).json(goal);

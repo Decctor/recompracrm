@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { canConfigureCashback } from "@/lib/permissions/cashback";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { db } from "@/services/drizzle";
 import { cashbackProgramPrizes } from "@/services/drizzle/schema";
@@ -41,6 +42,7 @@ export type TRestoreCashbackProgramPrizeOutput = Awaited<ReturnType<typeof resto
 async function restoreCashbackProgramPrizeRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você precisa estar autenticado para acessar esse recurso.");
+	if (!canConfigureCashback(session.membership?.permissoes)) throw new createHttpError.Forbidden("Você não possui permissão para configurar o programa de cashback.");
 
 	const input = RestoreCashbackProgramPrizeInputSchema.parse(await request.json());
 	const result = await restoreCashbackProgramPrize({ input, session });

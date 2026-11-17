@@ -1,6 +1,7 @@
 import { NO_CASHBACK_REDEMPTION_SURFACE_MESSAGE, hasAnyCashbackRedemptionSurface } from "@/lib/cashback/redemption-policy";
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { canConfigureCashback } from "@/lib/permissions/cashback";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { CashbackProgramPrizeSchema, CashbackProgramSchema } from "@/schemas/cashback-programs";
 import { db } from "@/services/drizzle";
@@ -141,6 +142,7 @@ export type TCreateCashbackProgramOutput = Awaited<ReturnType<typeof createCashb
 const createCashbackProgramRoute = async (request: NextRequest) => {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	if (!canConfigureCashback(session.membership?.permissoes)) throw new createHttpError.Forbidden("Você não possui permissão para configurar o programa de cashback.");
 	const payload = await request.json();
 	const input = CreateCashbackProgramInputSchema.parse(payload);
 	const result = await createCashbackProgram({ input, session });
@@ -188,6 +190,7 @@ export type TUpdateCashbackProgramOutput = Awaited<ReturnType<typeof updateCashb
 const updateCashbackProgramRoute = async (request: NextRequest) => {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	if (!canConfigureCashback(session.membership?.permissoes)) throw new createHttpError.Forbidden("Você não possui permissão para configurar o programa de cashback.");
 	const payload = await request.json();
 	const input = UpdateCashbackProgramInputSchema.parse(payload);
 	const result = await updateCashbackProgram({ input, session });

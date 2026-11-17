@@ -716,22 +716,10 @@ export const OrganizationMemberPermissionsSchema = z.object({
 		// Caixa (sessões de venda) e configuração da operação de vendas (canais, estações de preparo,
 		// comandas, loja). Opcionais para não quebrar membros existentes; a
 		// semântica de ausência é resolvida em lib/permissions/sales.ts — não leia estas chaves direto.
-		operarCaixa: z
-			.boolean({ invalid_type_error: "Tipo não válido para a permissão de abertura e fechamento de caixa." })
-			.optional()
-			.nullable(),
-		movimentarCaixa: z
-			.boolean({ invalid_type_error: "Tipo não válido para a permissão de sangria e suprimento de caixa." })
-			.optional()
-			.nullable(),
-		conferirCaixa: z
-			.boolean({ invalid_type_error: "Tipo não válido para a permissão de conferência de caixa." })
-			.optional()
-			.nullable(),
-		configurar: z
-			.boolean({ invalid_type_error: "Tipo não válido para a permissão de configuração de vendas." })
-			.optional()
-			.nullable(),
+		operarCaixa: z.boolean({ invalid_type_error: "Tipo não válido para a permissão de abertura e fechamento de caixa." }).optional().nullable(),
+		movimentarCaixa: z.boolean({ invalid_type_error: "Tipo não válido para a permissão de sangria e suprimento de caixa." }).optional().nullable(),
+		conferirCaixa: z.boolean({ invalid_type_error: "Tipo não válido para a permissão de conferência de caixa." }).optional().nullable(),
+		configurar: z.boolean({ invalid_type_error: "Tipo não válido para a permissão de configuração de vendas." }).optional().nullable(),
 	}),
 	// Catálogo de produtos. Opcional para não quebrar membros existentes; a ausência é resolvida em
 	// lib/permissions/products.ts (antes desta chave o catálogo era aberto a todo membro).
@@ -813,6 +801,50 @@ export const OrganizationMemberPermissionsSchema = z.object({
 			visualizarCustos: z.boolean({
 				required_error: "Permissão de visualização de custos e margens não informada.",
 				invalid_type_error: "Tipo não válido para a permissão de visualização de custos e margens.",
+			}),
+			// Exportar a base de clientes (nome, telefone, e-mail, documento) para arquivo. Opcional porque
+			// chegou depois de `visualizarCustos`: a ausência cai em `empresa.editar`.
+			exportarClientes: z
+				.boolean({
+					required_error: "Permissão de exportação da base de clientes não informada.",
+					invalid_type_error: "Tipo não válido para a permissão de exportação da base de clientes.",
+				})
+				.optional()
+				.nullable(),
+		})
+		.optional()
+		.nullable(),
+	// Campanhas (e, por ora, cupons e públicos). Opcional para não quebrar membros existentes; a
+	// ausência é resolvida em lib/permissions/campaigns.ts. Não leia direto.
+	campanhas: z
+		.object({
+			visualizar: z.boolean({
+				required_error: "Permissão de visualização de campanhas não informada.",
+				invalid_type_error: "Tipo não válido para a permissão de visualização de campanhas.",
+			}),
+			editar: z.boolean({
+				required_error: "Permissão de edição de campanhas não informada.",
+				invalid_type_error: "Tipo não válido para a permissão de edição de campanhas.",
+			}),
+			// Ativar, pausar, editar campanha ativa e reexecutar disparos: tudo o que muda o que sai para os clientes.
+			ativar: z.boolean({
+				required_error: "Permissão de ativação de campanhas não informada.",
+				invalid_type_error: "Tipo não válido para a permissão de ativação de campanhas.",
+			}),
+		})
+		.optional()
+		.nullable(),
+	// Programa de cashback. Opcional; a ausência é resolvida em lib/permissions/cashback.ts. O resgate
+	// não depende daqui: na venda exige `vendas.criar`, no ponto de interação a senha do operador.
+	cashback: z
+		.object({
+			visualizar: z.boolean({
+				required_error: "Permissão de visualização do programa de cashback não informada.",
+				invalid_type_error: "Tipo não válido para a permissão de visualização do programa de cashback.",
+			}),
+			configurar: z.boolean({
+				required_error: "Permissão de configuração do programa de cashback não informada.",
+				invalid_type_error: "Tipo não válido para a permissão de configuração do programa de cashback.",
 			}),
 		})
 		.optional()

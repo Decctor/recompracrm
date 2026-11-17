@@ -1,5 +1,6 @@
 "use client";
 
+import { useCampaignPermissions } from "@/app/dashboard/growth/campaigns/_module/shared/campaign-permissions";
 import { InteractionCard } from "@/components/Interactions/InteractionCard";
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
 import LoadingComponent from "@/components/Layouts/LoadingComponent";
@@ -18,6 +19,7 @@ import { InteractionsSentStatusOptions } from "@/utils/select-options";
 import { ListFilter } from "lucide-react";
 
 export function CampaignsInteractionsView() {
+	const campaignPermissions = useCampaignPermissions();
 	const {
 		data: interactionsResult,
 		isLoading,
@@ -76,7 +78,7 @@ export function CampaignsInteractionsView() {
 				<div className="flex w-full min-w-0 flex-col gap-2">
 					{interactionsItems.length > 0 ? (
 						interactionsItems.map((interaction) => (
-							<InteractionCard.Provider key={interaction.id} interaction={interaction}>
+							<InteractionCard.Provider key={interaction.id} interaction={interaction} canRetry={campaignPermissions.ativar}>
 								<InteractionCard.ListItem />
 							</InteractionCard.Provider>
 						))

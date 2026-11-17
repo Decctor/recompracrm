@@ -23,13 +23,15 @@ type CampaignTemplateSwitcherProps = {
 	campaign: TGetCampaignsOutputById;
 	organization: { id: string; nome: string; logoUrl: string | null };
 	organizationTheme: TOrganizationTemplateTheme;
+	/** Trocar o template salva a campanha: sem permissão de editá-la, só o preview aparece. */
+	canEdit: boolean;
 };
 
 /**
  * Preview do template da campanha com a troca no próprio lugar. Só lista templates cujas variáveis
  * o gatilho consegue preencher, e o status de cada um é o do remetente da campanha.
  */
-export function CampaignTemplateSwitcher({ campaign, organization, organizationTheme }: CampaignTemplateSwitcherProps) {
+export function CampaignTemplateSwitcher({ campaign, organization, organizationTheme, canEdit }: CampaignTemplateSwitcherProps) {
 	const queryClient = useQueryClient();
 	const [pickerOpen, setPickerOpen] = useState(false);
 	const [showNewTemplate, setShowNewTemplate] = useState(false);
@@ -77,19 +79,21 @@ export function CampaignTemplateSwitcher({ campaign, organization, organizationT
 			<div className="flex flex-wrap items-center gap-2">
 				<Eye className="size-4 min-h-4 min-w-4 text-muted-foreground" />
 				<h3 className="text-sm font-semibold tracking-tighter text-foreground/80">PREVIEW DO TEMPLATE</h3>
-				<div className="ml-auto flex items-center gap-1.5">
-					<Button size="xs" variant="outline" onClick={() => setPickerOpen((value) => !value)} className="flex items-center gap-1">
-						{pickerOpen ? <X className="size-3.5" /> : <ArrowLeftRight className="size-3.5" />}
-						{pickerOpen ? "FECHAR" : "TROCAR TEMPLATE"}
-					</Button>
-					<Button size="xs" onClick={() => setShowNewTemplate(true)} className="flex items-center gap-1">
-						<Plus className="size-3.5" />
-						NOVO TEMPLATE
-					</Button>
-				</div>
+				{canEdit ? (
+					<div className="ml-auto flex items-center gap-1.5">
+						<Button size="xs" variant="outline" onClick={() => setPickerOpen((value) => !value)} className="flex items-center gap-1">
+							{pickerOpen ? <X className="size-3.5" /> : <ArrowLeftRight className="size-3.5" />}
+							{pickerOpen ? "FECHAR" : "TROCAR TEMPLATE"}
+						</Button>
+						<Button size="xs" onClick={() => setShowNewTemplate(true)} className="flex items-center gap-1">
+							<Plus className="size-3.5" />
+							NOVO TEMPLATE
+						</Button>
+					</div>
+				) : null}
 			</div>
 
-			{pickerOpen ? (
+			{pickerOpen && canEdit ? (
 				<div className="flex flex-col gap-2">
 					<div className="relative">
 						<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />

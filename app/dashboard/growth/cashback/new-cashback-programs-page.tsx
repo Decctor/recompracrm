@@ -9,9 +9,11 @@ import { useState } from "react";
 type NewCashbackProgramsPageProps = {
 	user: TAuthUserSession["user"];
 	userOrg: Exclude<TAuthUserSession["membership"], null>["organizacao"];
+	/** cashback.configurar: sem ela não há como criar o programa — fica o aviso. */
+	canConfigure: boolean;
 };
 
-export default function NewCashbackProgramsPage({ user, userOrg }: NewCashbackProgramsPageProps) {
+export default function NewCashbackProgramsPage({ user, userOrg, canConfigure }: NewCashbackProgramsPageProps) {
 	const [newCashbackProgramModalIsOpen, setNewCashbackProgramModalIsOpen] = useState<boolean>(false);
 
 	return (
@@ -24,16 +26,20 @@ export default function NewCashbackProgramsPage({ user, userOrg }: NewCashbackPr
 					<div className="space-y-2">
 						<CardTitle className="text-xl">Programa de Cashback não configurado</CardTitle>
 						<CardDescription className="text-base max-w-sm mx-auto">
-							Você ainda não definiu as regras do seu programa de fidelidade. Configure agora para começar a recompensar seus clientes.
+							{canConfigure
+								? "Você ainda não definiu as regras do seu programa de fidelidade. Configure agora para começar a recompensar seus clientes."
+								: "O programa de fidelidade ainda não foi configurado. Peça a quem administra a empresa para configurá-lo."}
 						</CardDescription>
 					</div>
 				</CardHeader>
-				<CardContent className="flex flex-col items-center justify-center pb-8 pt-4">
-					<Button size={"lg"} className="flex items-center gap-2 font-semibold" onClick={() => setNewCashbackProgramModalIsOpen(true)}>
-						<Settings className="w-4 h-4" />
-						CONFIGURAR PROGRAMA
-					</Button>
-				</CardContent>
+				{canConfigure ? (
+					<CardContent className="flex flex-col items-center justify-center pb-8 pt-4">
+						<Button size={"lg"} className="flex items-center gap-2 font-semibold" onClick={() => setNewCashbackProgramModalIsOpen(true)}>
+							<Settings className="w-4 h-4" />
+							CONFIGURAR PROGRAMA
+						</Button>
+					</CardContent>
+				) : null}
 			</Card>
 
 			{newCashbackProgramModalIsOpen ? (

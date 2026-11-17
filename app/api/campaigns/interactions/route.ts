@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { assertCanActivateCampaigns, assertCanViewCampaigns } from "@/lib/campaigns/access";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { recordCampaignOccurrence } from "@/lib/campaigns/events/occurrences";
 import { publishPendingCampaignEventsSafely } from "@/lib/campaigns/events/queue";
@@ -295,6 +296,7 @@ export type TRetryCampaignInteractionOutput = Awaited<ReturnType<typeof retryCam
 const getCampaignInteractionsRoute = async (request: NextRequest) => {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você precisa estar autenticado para acessar esse recurso.");
+	assertCanViewCampaigns(session);
 
 	const searchParams = request.nextUrl.searchParams;
 	const input = GetCampaignInteractionsInputSchema.parse({
@@ -313,6 +315,8 @@ const getCampaignInteractionsRoute = async (request: NextRequest) => {
 const retryCampaignInteractionRoute = async (request: NextRequest) => {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você precisa estar autenticado para acessar esse recurso.");
+	// Reenviar uma interação manda a mensagem de novo ao cliente.
+	assertCanActivateCampaigns(session);
 
 	const body = await request.json();
 	const input = RetryCampaignInteractionInputSchema.parse(body);

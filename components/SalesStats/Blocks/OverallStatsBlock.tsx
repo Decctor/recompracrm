@@ -1,3 +1,4 @@
+import { resolveGoalPermissions } from "@/lib/permissions/goals";
 import { canViewCosts } from "@/lib/permissions/sensitive-data";
 import GoalPaceChip from "@/components/Goals/GoalPaceChip";
 import { useOrgColors } from "@/components/Providers/OrgColorsProvider";
@@ -24,6 +25,8 @@ type OverallStatsBlockProps = {
 };
 function OverallStatsBlock({ user, userMembership, userOrg, generalQueryParams }: OverallStatsBlockProps) {
 	const isUserAllowedToSeeSensitiveData = canViewCosts(userMembership.permissoes);
+	// O ritmo vem de /api/goals/stats, que exige `visualizarMetas`: sem ela o chip nem consulta.
+	const canViewGoals = resolveGoalPermissions(userMembership.permissoes).visualizar;
 	const [queryParams, setQueryParams] = useState<TSaleStatsGeneralQueryParams>(generalQueryParams);
 	const { getPrimaryGradientStyle } = useOrgColors();
 
@@ -39,7 +42,7 @@ function OverallStatsBlock({ user, userMembership, userOrg, generalQueryParams }
 				<div className="flex flex-wrap items-center justify-between gap-2">
 					<h1 className="text-xs font-medium tracking-tight uppercase">ACOMPANHAMENTO DE META DO PERÍODO</h1>
 					<div className="flex items-center gap-2">
-						<ActiveGoalPaceChip />
+						{canViewGoals ? <ActiveGoalPaceChip /> : null}
 						<VscDiffAdded size={12} />
 					</div>
 				</div>

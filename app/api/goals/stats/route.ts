@@ -1,6 +1,7 @@
 import { appApiHandler } from "@/lib/app-api";
 import { runPagesRouteHandler, type PagesRouteHandler } from "@/lib/pages-route-compat";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { resolveGoalPermissions } from "@/lib/permissions/goals";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { resolveActiveGoalPacing } from "@/lib/goals/resolve-active-goal-pacing";
 import { db } from "@/services/drizzle";
@@ -162,6 +163,8 @@ export type TGetGoalsStatsHistoricoItem = TGetGoalsStatsOutput["data"]["historic
 const getGoalsStatsHandler: PagesRouteHandler<TGetGoalsStatsOutput> = async (req, res) => {
 	const sessionUser = await getCurrentSessionUncached();
 	if (!sessionUser) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	if (!resolveGoalPermissions(sessionUser.membership?.permissoes).visualizar)
+		throw new createHttpError.Forbidden("Você não possui permissão para visualizar metas.");
 	const data = await getGoalsStats({ session: sessionUser });
 	return res.status(200).json(data);
 };

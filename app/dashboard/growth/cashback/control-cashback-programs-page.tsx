@@ -25,6 +25,8 @@ type TCashbackView = (typeof VIEWS)[number];
 type CashbackProgramsPageProps = {
 	userOrg: Exclude<TAuthUserSession["membership"], null>["organizacao"];
 	cashbackProgram: Exclude<TGetCashbackProgramOutput["data"], null>;
+	/** cashback.configurar: sem ela a página é só leitura. */
+	canConfigure: boolean;
 };
 
 /**
@@ -32,7 +34,7 @@ type CashbackProgramsPageProps = {
  * vive no React Query: cada seção aplicada invalida a consulta e a página inteira (cabeçalho,
  * frase-resumo, aba Recompensas) se atualiza sem recarregar.
  */
-export default function CashbackProgramsPage({ userOrg, cashbackProgram: initialCashbackProgram }: CashbackProgramsPageProps) {
+export default function CashbackProgramsPage({ userOrg, cashbackProgram: initialCashbackProgram, canConfigure }: CashbackProgramsPageProps) {
 	const queryClient = useQueryClient();
 	const [viewMode, setViewMode] = useQueryState("view", parseAsStringEnum([...VIEWS]));
 	const { data, queryKey, isError, error } = useCashbackProgram({ initialData: initialCashbackProgram });
@@ -52,7 +54,7 @@ export default function CashbackProgramsPage({ userOrg, cashbackProgram: initial
 
 	return (
 		<div className="w-full h-full flex flex-col gap-4">
-			<CashbackProgramHeader program={cashbackProgram} callbacks={callbacks} />
+			<CashbackProgramHeader program={cashbackProgram} canConfigure={canConfigure} callbacks={callbacks} />
 			{isError ? <ErrorComponent msg={getErrorMessage(error)} /> : null}
 			<Tabs value={currentView} onValueChange={(value: string) => setViewMode(value as TCashbackView)}>
 				<TabsList variant="page">
@@ -93,12 +95,18 @@ export default function CashbackProgramsPage({ userOrg, cashbackProgram: initial
 						program={cashbackProgram}
 						userOrgHasIntegration={userOrgHasIntegration}
 						onManagePrizes={() => setViewMode("prizes")}
+						canConfigure={canConfigure}
 						callbacks={callbacks}
 					/>
 				</TabsContent>
 				{prizesEnabled ? (
 					<TabsContent value="prizes" className="flex flex-col gap-3">
-						<CashbackPrizesView organizationId={userOrg.id} programId={cashbackProgram.id} terminology={cashbackProgram.terminologia} />
+						<CashbackPrizesView
+							organizationId={userOrg.id}
+							programId={cashbackProgram.id}
+							terminology={cashbackProgram.terminologia}
+							canConfigure={canConfigure}
+						/>
 					</TabsContent>
 				) : null}
 			</Tabs>

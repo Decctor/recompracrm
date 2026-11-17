@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { assertCanViewCampaigns } from "@/lib/campaigns/access";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { CAMPAIGN_SENT_INTERACTION_STATUSES } from "@/lib/campaigns/utils";
 import { db } from "@/services/drizzle";
@@ -129,6 +130,7 @@ export type TGetCampaignFunnelOutput = Awaited<ReturnType<typeof getCampaignFunn
 const getCampaignFunnelRoute = async (request: NextRequest) => {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você precisa estar autenticado para acessar esse recurso.");
+	assertCanViewCampaigns(session);
 
 	const searchParams = request.nextUrl.searchParams;
 	const input = GetCampaignFunnelInputSchema.parse({

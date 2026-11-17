@@ -158,6 +158,16 @@ export function useOrganizationState() {
 				},
 				dadosSensiveis: {
 					visualizarCustos: true,
+					exportarClientes: true,
+				},
+				campanhas: {
+					visualizar: true,
+					editar: true,
+					ativar: true,
+				},
+				cashback: {
+					visualizar: true,
+					configurar: true,
 				},
 			},
 		},

@@ -5,7 +5,8 @@ import { motion } from "framer-motion";
 import { BadgeDollarSign, CheckCircle2, Plus, Sparkles, Target, Users } from "lucide-react";
 
 type GoalsEmptyStateProps = {
-	onCreateGoal: () => void;
+	/** Ausente para quem não pode criar metas: o convite some. */
+	onCreateGoal?: (() => void) | null;
 };
 
 export default function GoalsEmptyState({ onCreateGoal }: GoalsEmptyStateProps) {
@@ -63,10 +64,12 @@ export default function GoalsEmptyState({ onCreateGoal }: GoalsEmptyStateProps) 
 							</div>
 						))}
 					</div>
-					<Button className="w-full gap-2 mt-1" onClick={onCreateGoal}>
-						<Plus className="w-4 h-4" />
-						Criar primeira meta
-					</Button>
+					{onCreateGoal ? (
+						<Button className="w-full gap-2 mt-1" onClick={onCreateGoal}>
+							<Plus className="w-4 h-4" />
+							Criar primeira meta
+						</Button>
+					) : null}
 				</div>
 			</motion.div>
 		</motion.div>

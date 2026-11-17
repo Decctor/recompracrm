@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { assertCanActivateCampaigns, assertCanViewCampaigns } from "@/lib/campaigns/access";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { clearWhatsappPhoneSendBlock } from "@/lib/campaigns/dispatch/interruption";
 import { publishCampaignDispatchExpand, publishCampaignDispatchSend } from "@/lib/campaigns/dispatch/queue";
@@ -195,6 +196,7 @@ export type TRetryCampaignDispatchOutput = Awaited<ReturnType<typeof retryCampai
 async function getCampaignDispatchesRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você precisa estar autenticado para acessar esse recurso.");
+	assertCanViewCampaigns(session);
 	const searchParams = request.nextUrl.searchParams;
 	const input = GetCampaignDispatchesInputSchema.parse({
 		campaignId: searchParams.get("campaignId") ?? undefined,
@@ -207,6 +209,8 @@ async function getCampaignDispatchesRoute(request: NextRequest) {
 async function retryCampaignDispatchRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você precisa estar autenticado para acessar esse recurso.");
+	// Reexecutar um disparo manda mensagens de novo: é colocar a campanha no ar.
+	assertCanActivateCampaigns(session);
 	const input = RetryCampaignDispatchInputSchema.parse(await request.json());
 	const result = await retryCampaignDispatch({ input, session });
 	return NextResponse.json(result);

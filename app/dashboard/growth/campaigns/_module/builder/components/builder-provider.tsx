@@ -3,7 +3,7 @@
 import type { TCampaignInlineCouponInput } from "@/schemas/coupons";
 import type { TCampaignTriggerTypeEnum } from "@/schemas/enums";
 import { useCampaignState, type TUseCampaignState } from "@/state-hooks/use-campaign-state";
-import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { type TBuilderCategoryId, getCategoryFromTrigger } from "../helpers/categories";
 import { type TBuilderStageId, nextStage as getNext, prevStage as getPrev } from "../helpers/stages";
 import { getTriggerDefaultsPatch } from "../helpers/trigger-defaults";
@@ -54,12 +54,19 @@ export type BuilderProviderProps = {
 	mode: TBuilderMode;
 	initialCategory: TBuilderCategoryId | null;
 	initialStage: TBuilderStageId;
+	/** `campanhas.ativar`: sem ela a campanha nasce como rascunho (o estado padrão é ativa). */
+	canActivate: boolean;
 	children: ReactNode;
 };
 
-export function BuilderProvider({ mode, initialCategory, initialStage, children }: BuilderProviderProps) {
+export function BuilderProvider({ mode, initialCategory, initialStage, canActivate, children }: BuilderProviderProps) {
 	const campaignState = useCampaignState();
 	const { updateCampaign } = campaignState;
+
+	// Direto no estado (sem marcar como alterado): é o ponto de partida, não uma edição do usuário.
+	useEffect(() => {
+		if (!canActivate) updateCampaign({ ativo: false });
+	}, [canActivate, updateCampaign]);
 
 	const [selectedCategory, setSelectedCategoryState] = useState<TBuilderCategoryId | null>(initialCategory);
 	const [currentStage, setCurrentStageState] = useState<TBuilderStageId>(initialStage);

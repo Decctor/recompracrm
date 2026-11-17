@@ -1,6 +1,7 @@
 import { appApiHandler } from "@/lib/app-api";
 import { runPagesRouteHandler, type PagesRouteHandler, type PagesRouteRequest, type PagesRouteResponse } from "@/lib/pages-route-compat";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { canExportClients } from "@/lib/permissions/sensitive-data";
 import { formatDateAsLocale, formatToMoney } from "@/lib/formatting";
 import { ClientSearchQueryParams, type TClient } from "@/schemas/clients";
 import { db } from "@/services/drizzle";
@@ -193,6 +194,8 @@ const handleClientsExportation: PagesRouteHandler<{
 
 	const userOrgId = sessionUser.membership?.organizacao.id;
 	if (!userOrgId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
+	if (!canExportClients(sessionUser.membership?.permissoes))
+		throw new createHttpError.Forbidden("Você não possui permissão para exportar a base de clientes.");
 
 	const data = await fetchClientExportation(req, userOrgId);
 

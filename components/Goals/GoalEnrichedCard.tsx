@@ -137,7 +137,8 @@ function SellerRow({ vendedor, goal }: SellerRowProps) {
 
 type GoalEnrichedCardProps = {
 	goal: TGetGoalsOutputDefaultGoal;
-	onEdit: (id: string) => void;
+	/** Ausente para quem não pode editar metas: o botão some. */
+	onEdit?: ((id: string) => void) | null;
 };
 
 export default function GoalEnrichedCard({ goal, onEdit }: GoalEnrichedCardProps) {
@@ -159,10 +160,12 @@ export default function GoalEnrichedCard({ goal, onEdit }: GoalEnrichedCardProps
 						    adiantada nem atrasada, e uma futura ainda não começou. */}
 						{goal.ritmo ? <GoalPaceChip situacao={goal.ritmo.situacao} diferenca={goal.ritmo.diferenca} size="sm" /> : null}
 					</div>
-					<Button variant="ghost" size="sm" className="flex items-center gap-1.5 h-7 px-2" onClick={() => onEdit(goal.id)}>
-						<Pencil className="w-3 h-3" />
-						EDITAR
-					</Button>
+					{onEdit ? (
+						<Button variant="ghost" size="sm" className="flex items-center gap-1.5 h-7 px-2" onClick={() => onEdit(goal.id)}>
+							<Pencil className="w-3 h-3" />
+							EDITAR
+						</Button>
+					) : null}
 				</div>
 
 				{/* Metric bars */}

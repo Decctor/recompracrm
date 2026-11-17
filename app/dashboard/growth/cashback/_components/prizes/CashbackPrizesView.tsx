@@ -50,9 +50,11 @@ type CashbackPrizesViewProps = {
 	organizationId: string;
 	programId: string;
 	terminology: TCashbackProgramTerminologyEnum;
+	/** cashback.configurar: sem ela a lista é só leitura (criar, editar, ativar, arquivar e restaurar somem). */
+	canConfigure: boolean;
 };
 
-export default function CashbackPrizesView({ organizationId, programId, terminology }: CashbackPrizesViewProps) {
+export default function CashbackPrizesView({ organizationId, programId, terminology, canConfigure }: CashbackPrizesViewProps) {
 	const queryClient = useQueryClient();
 	const { data: prizes, queryKey, isLoading, isError, error } = useCashbackProgramPrizes({ programId });
 
@@ -181,10 +183,12 @@ export default function CashbackPrizesView({ organizationId, programId, terminol
 						<Printer className="h-4 w-4" />
 						IMPRIMIR RESUMO
 					</Button>
-					<Button size="sm" disabled={isCreating} onClick={() => requestOpenEditor({ prizeId: "NEW", focus: "produto" })}>
-						<Plus className="h-4 w-4" />
-						ADICIONAR
-					</Button>
+					{canConfigure ? (
+						<Button size="sm" disabled={isCreating} onClick={() => requestOpenEditor({ prizeId: "NEW", focus: "produto" })}>
+							<Plus className="h-4 w-4" />
+							ADICIONAR
+						</Button>
+					) : null}
 				</Section.Actions>
 			</Section.Header>
 
@@ -267,12 +271,14 @@ export default function CashbackPrizesView({ organizationId, programId, terminol
 								Recompensas são produtos que o cliente troca por {getCashbackUnitLabel(terminology)} no tablet, no PDV e na loja.
 							</EmptyDescription>
 						</EmptyHeader>
-						<EmptyContent>
-							<Button size="sm" onClick={() => requestOpenEditor({ prizeId: "NEW", focus: "produto" })}>
-								<Plus className="h-4 w-4" />
-								ADICIONAR PRIMEIRA RECOMPENSA
-							</Button>
-						</EmptyContent>
+						{canConfigure ? (
+							<EmptyContent>
+								<Button size="sm" onClick={() => requestOpenEditor({ prizeId: "NEW", focus: "produto" })}>
+									<Plus className="h-4 w-4" />
+									ADICIONAR PRIMEIRA RECOMPENSA
+								</Button>
+							</EmptyContent>
+						) : null}
 					</Empty>
 				) : null}
 
@@ -318,6 +324,7 @@ export default function CashbackPrizesView({ organizationId, programId, terminol
 							prize={prize}
 							terminology={terminology}
 							isRestoring={isRestoring}
+							canConfigure={canConfigure}
 							onEdit={(focus) => requestOpenEditor({ prizeId: prize.id, focus })}
 							onToggleActive={() => toggleActive(prize)}
 							onDelete={() => setDeletingPrize(prize)}
@@ -351,14 +358,17 @@ type PrizeRowProps = {
 	prize: TPrize;
 	terminology: TCashbackProgramTerminologyEnum;
 	isRestoring: boolean;
+	canConfigure: boolean;
 	onEdit: (focus: TPrizeEditorFocus) => void;
 	onToggleActive: () => void;
 	onDelete: () => void;
 	onRestore: () => void;
 };
 
-function PrizeRow({ prize, terminology, isRestoring, onEdit, onToggleActive, onDelete, onRestore }: PrizeRowProps) {
+function PrizeRow({ prize, terminology, isRestoring, canConfigure, onEdit, onToggleActive, onDelete, onRestore }: PrizeRowProps) {
 	const isArchived = !!prize.dataArquivamento;
+	// Sem `cashback.configurar` a linha só mostra: nada abre o editor.
+	const isReadOnly = isArchived || !canConfigure;
 	const linkedName = prize.produtoVariante && prize.produto ? `${prize.produto.nome} · ${prize.produtoVariante.nome}` : (prize.produto?.nome ?? null);
 	const imageUrl = prize.imagemCapaUrl || prize.produtoVariante?.imagemCapaUrl || prize.produto?.imagemCapaUrl || null;
 	// O título nasce do nome do produto; repetir o mesmo texto embaixo era o ruído da tela antiga.
@@ -376,10 +386,10 @@ function PrizeRow({ prize, terminology, isRestoring, onEdit, onToggleActive, onD
 		>
 			<button
 				type="button"
-				onClick={() => (isArchived ? null : onEdit("produto"))}
-				disabled={isArchived}
+				onClick={() => (isReadOnly ? null : onEdit("produto"))}
+				disabled={isReadOnly}
 				className="flex min-w-0 grow items-center gap-3 rounded-lg text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-default"
-				aria-label={isArchived ? prize.titulo : `Editar ${prize.titulo}`}
+				aria-label={isReadOnly ? prize.titulo : `Editar ${prize.titulo}`}
 			>
 				<span className={cn("relative h-11 w-11 shrink-0 overflow-hidden rounded-lg border border-border bg-muted", !prize.ativo && "opacity-60")}>
 					{imageUrl ? (
@@ -419,9 +429,9 @@ function PrizeRow({ prize, terminology, isRestoring, onEdit, onToggleActive, onD
 
 			<button
 				type="button"
-				disabled={isArchived}
+				disabled={isReadOnly}
 				onClick={() => onEdit("valor")}
-				title={isArchived ? undefined : "Alterar valor"}
+				title={isReadOnly ? undefined : "Alterar valor"}
 				className={cn(
 					"shrink-0 rounded-full border px-2.5 py-1 text-xs font-bold whitespace-nowrap outline-none transition-colors duration-150 focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-default",
 					prize.ativo ? "border-brand/35 bg-brand/15 text-foreground enabled:hover:bg-brand/25" : "border-border bg-transparent text-muted-foreground",
@@ -430,7 +440,7 @@ function PrizeRow({ prize, terminology, isRestoring, onEdit, onToggleActive, onD
 				{formatCashbackValue(prize.valor, terminology).toUpperCase()}
 			</button>
 
-			{isArchived ? (
+			{!canConfigure ? null : isArchived ? (
 				<Button variant="ghost" size="sm" disabled={isRestoring} onClick={onRestore}>
 					<ArchiveRestore className="h-4 w-4" />
 					RESTAURAR

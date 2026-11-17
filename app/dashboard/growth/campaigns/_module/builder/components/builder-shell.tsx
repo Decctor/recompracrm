@@ -16,6 +16,7 @@ import { validateStage } from "../helpers/validation";
 import { useQueryState } from "nuqs";
 import BuilderHeader from "./builder-header";
 import BuilderStepper from "./builder-stepper";
+import { useCampaignPermissions } from "@/app/dashboard/growth/campaigns/_module/shared/campaign-permissions";
 import { BuilderProvider, useBuilderCampaign, useBuilderCouponDraft, useBuilderUi } from "./builder-provider";
 import StageAudience from "./stages/stage-audience";
 import StageEffects from "./stages/stage-effects";
@@ -35,9 +36,10 @@ export default function BuilderShell({ membership }: BuilderShellProps) {
 
 	const initialCategory: TBuilderCategoryId | null = categoryParam ?? null;
 	const initialStage: TBuilderStageId = initialCategory ? (stageParam ?? "trigger") : "trigger";
+	const campaignPermissions = useCampaignPermissions();
 
 	return (
-		<BuilderProvider mode="create" initialCategory={initialCategory} initialStage={initialStage}>
+		<BuilderProvider mode="create" initialCategory={initialCategory} initialStage={initialStage} canActivate={campaignPermissions.ativar}>
 			<BuilderShellContent membership={membership} />
 		</BuilderProvider>
 	);
@@ -74,7 +76,7 @@ function BuilderShellContent({ membership }: BuilderShellProps) {
 			markClean();
 			toast.success(data.message);
 			await queryClient.invalidateQueries({ queryKey: ["campaigns"] });
-		router.push(`${appRoutes.growth.campaigns()}?view=database`);
+			router.push(`${appRoutes.growth.campaigns()}?view=database`);
 		},
 		onError: (error) => toast.error(getErrorMessage(error)),
 	});
@@ -136,9 +138,7 @@ function BuilderShellContent({ membership }: BuilderShellProps) {
 				{currentStage === "audience" ? <StageAudience validation={activeValidation} /> : null}
 				{currentStage === "effects" ? <StageEffects validation={activeValidation} /> : null}
 				{currentStage === "settings" ? <StageSettings validation={activeValidation} /> : null}
-				{currentStage === "review" ? (
-					<StageReview validation={activeValidation} finalLoading={createIsPending} onSubmit={handleSubmit} />
-				) : null}
+				{currentStage === "review" ? <StageReview validation={activeValidation} finalLoading={createIsPending} onSubmit={handleSubmit} /> : null}
 			</div>
 		</div>
 	);

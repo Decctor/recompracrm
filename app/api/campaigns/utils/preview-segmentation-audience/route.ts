@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { assertCanViewCampaigns } from "@/lib/campaigns/access";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { db } from "@/services/drizzle";
 import { clients } from "@/services/drizzle/schema";
@@ -50,6 +51,7 @@ export type TPreviewSegmentationAudienceOutput = Awaited<ReturnType<typeof previ
 async function previewSegmentationAudienceRoute(_request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	assertCanViewCampaigns(session);
 	const result = await previewSegmentationAudience(session);
 	return NextResponse.json(result);
 }

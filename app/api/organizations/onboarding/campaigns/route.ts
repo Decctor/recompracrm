@@ -4,6 +4,7 @@ import { captureServerEvent } from "@/lib/analytics/posthog-server";
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
+import { assertCanActivateCampaigns, assertCanEditCampaigns } from "@/lib/campaigns/access";
 import { getJourney, reconcileOnboardingCampaigns, updateJourneyProgress } from "@/lib/onboarding";
 import { db } from "@/services/drizzle";
 import { campaignSegmentations, campaigns, interactions } from "@/services/drizzle/schema";
@@ -175,7 +176,10 @@ export type TSeedOnboardingCampaignsOutput = Awaited<ReturnType<typeof seedOnboa
 async function seedOnboardingCampaignsRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	assertCanEditCampaigns(session);
 	const input = SeedOnboardingCampaignsInputSchema.parse(await request.json());
+	// Pedir a liberação dos envios junto com a criação é colocar as campanhas no ar.
+	if (input.enableSendingKeys.length > 0) assertCanActivateCampaigns(session);
 	const result = await seedOnboardingCampaigns({ input, session });
 	return NextResponse.json(result);
 }

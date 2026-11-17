@@ -6,6 +6,8 @@ import type { TOrganizationMemberPermissions } from "@/schemas/organizations";
  * herda essa escolha. Não leia `permissoes.dadosSensiveis` nem `resultados.visualizarSensiveis`
  * diretamente fora deste arquivo.
  *
+ * `exportarClientes` governa a saída da base de clientes para arquivo (telefone, e-mail, documento).
+ *
  * `visualizarCustos` governa custo de produto (unitário e médio), margem, lucro, CMV e valor de
  * estoque em qualquer tela. Quem não tem a permissão recebe esses campos como `null` do servidor, e
  * as escritas que carregam custo (cadastro de produto, entrada de estoque) mantêm o valor atual em
@@ -13,17 +15,26 @@ import type { TOrganizationMemberPermissions } from "@/schemas/organizations";
  */
 export type TSensitiveDataPermissions = {
 	visualizarCustos: boolean;
+	exportarClientes: boolean;
 };
 
 export function resolveSensitiveDataPermissions(permissoes: TOrganizationMemberPermissions | null | undefined): TSensitiveDataPermissions {
-	if (!permissoes) return { visualizarCustos: false };
+	if (!permissoes) return { visualizarCustos: false, exportarClientes: false };
 	return {
 		visualizarCustos: permissoes.dadosSensiveis?.visualizarCustos ?? permissoes.resultados.visualizarSensiveis,
+		// Chegou depois de `visualizarCustos`: o objeto pode existir sem ela. Antes, exportar era livre para
+		// qualquer membro; a ausência fica com quem administra a empresa.
+		exportarClientes: permissoes.dadosSensiveis?.exportarClientes ?? permissoes.empresa.editar,
 	};
 }
 
 export function canViewCosts(permissoes: TOrganizationMemberPermissions | null | undefined): boolean {
 	return resolveSensitiveDataPermissions(permissoes).visualizarCustos;
+}
+
+/** Exportar a base de clientes (contatos e documentos) para arquivo. */
+export function canExportClients(permissoes: TOrganizationMemberPermissions | null | undefined): boolean {
+	return resolveSensitiveDataPermissions(permissoes).exportarClientes;
 }
 
 /**
