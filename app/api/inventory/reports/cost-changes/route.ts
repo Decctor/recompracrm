@@ -1,7 +1,7 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { getPurchaseEntries, type TPurchaseEntryRow } from "@/lib/stock/analytics/queries";
-import { getInventoryReportOrganizationId, parsePeriodSearchParams, StockReportPeriodInputSchema } from "@/lib/stock/analytics/route-helpers";
+import { getInventoryCostReportOrganizationId, parsePeriodSearchParams, StockReportPeriodInputSchema } from "@/lib/stock/analytics/route-helpers";
 import { db } from "@/services/drizzle";
 import { productVariants, products } from "@/services/drizzle/schema";
 import { and, eq, inArray } from "drizzle-orm";
@@ -103,7 +103,8 @@ async function getStockReportCostChanges({ input, organizationId }: { input: TGe
 export type TGetStockReportCostChangesOutput = Awaited<ReturnType<typeof getStockReportCostChanges>>;
 
 async function getStockReportCostChangesRoute(request: NextRequest) {
-	const organizationId = getInventoryReportOrganizationId(await getCurrentSessionUncached());
+	// Relatório inteiramente ao custo: exige `dadosSensiveis.visualizarCustos`.
+	const organizationId = getInventoryCostReportOrganizationId(await getCurrentSessionUncached());
 	const searchParams = request.nextUrl.searchParams;
 	const input = GetStockReportCostChangesInputSchema.parse({ limit: searchParams.get("limit"), ...parsePeriodSearchParams(searchParams) });
 	const result = await getStockReportCostChanges({ input, organizationId });

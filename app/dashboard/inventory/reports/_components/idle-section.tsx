@@ -9,9 +9,11 @@ import { MetricLabel, ReportSection, ReportSectionState } from "./report-section
 /** Do âmbar claro ao escuro conforme o tempo parado. */
 const BUCKET_COLORS = ["bg-[#e3b042]", "bg-[#c98a2c]", "bg-[#9a691e]"];
 
-export function IdleSection() {
+export function IdleSection({ canViewCosts }: { canViewCosts: boolean }) {
 	const { data, isLoading, error } = useStockReportIdle({ limit: 6 });
-	const maxBucket = Math.max(1, ...(data?.faixas.map((bucket) => bucket.valor) ?? []));
+	// Sem acesso a custos o servidor manda os valores como `null`: as barras passam a medir produtos.
+	const bucketMeasure = (bucket: { valor: number | null; produtos: number }) => (canViewCosts ? (bucket.valor ?? 0) : bucket.produtos);
+	const maxBucket = Math.max(1, ...(data?.faixas.map(bucketMeasure) ?? []));
 
 	return (
 		<ReportSection id="parado" icon={Hourglass} title="Estoque parado" description="Produtos com saldo e sem nenhuma saída há mais de 30 dias.">
@@ -25,24 +27,39 @@ export function IdleSection() {
 					<div className="flex flex-wrap gap-4">
 						<div className="flex flex-[1_1_260px] flex-col gap-2">
 							<div className="bg-card border-border flex flex-col gap-1 rounded-xl border px-3.5 py-4 shadow-2xs">
-								<span className="text-xs font-medium uppercase tracking-tight">Capital parado</span>
-								<span className="text-info text-2xl font-bold tabular-nums">{formatMoney(data.capitalParado)}</span>
-								<span className="text-muted-foreground text-xs">
-									{formatQuantity(data.produtos)} {data.produtos === 1 ? "produto" : "produtos"} · {formatFraction(data.percentualImobilizado)} do valor
-									imobilizado
-								</span>
+								{data.capitalParado != null && data.percentualImobilizado != null ? (
+									<>
+										<span className="text-xs font-medium uppercase tracking-tight">Capital parado</span>
+										<span className="text-info text-2xl font-bold tabular-nums">{formatMoney(data.capitalParado)}</span>
+										<span className="text-muted-foreground text-xs">
+											{formatQuantity(data.produtos)} {data.produtos === 1 ? "produto" : "produtos"} · {formatFraction(data.percentualImobilizado)} do
+											valor imobilizado
+										</span>
+									</>
+								) : (
+									<>
+										<span className="text-xs font-medium uppercase tracking-tight">Produtos parados</span>
+										<span className="text-info text-2xl font-bold tabular-nums">{formatQuantity(data.produtos)}</span>
+										<span className="text-muted-foreground text-xs">Com saldo e sem saída há mais de 30 dias</span>
+									</>
+								)}
 							</div>
 							{data.faixas.map((bucket, index) => (
 								<div key={bucket.faixa} className="flex flex-col gap-1 px-0.5 py-1">
 									<div className="flex justify-between text-xs">
 										<span className="font-semibold">{bucket.rotulo}</span>
 										<span className="text-muted-foreground">
-											{formatQuantity(bucket.produtos)} {bucket.produtos === 1 ? "produto" : "produtos"} ·{" "}
-											<b className="text-foreground">{formatMoney(bucket.valor)}</b>
+											{formatQuantity(bucket.produtos)} {bucket.produtos === 1 ? "produto" : "produtos"}
+											{bucket.valor != null ? (
+												<>
+													{" "}
+													· <b className="text-foreground">{formatMoney(bucket.valor)}</b>
+												</>
+											) : null}
 										</span>
 									</div>
 									<div className="bg-muted h-2 overflow-hidden rounded-full">
-										<div className={cn("h-full rounded-full", BUCKET_COLORS[index])} style={{ width: `${(bucket.valor / maxBucket) * 100}%` }} />
+										<div className={cn("h-full rounded-full", BUCKET_COLORS[index])} style={{ width: `${(bucketMeasure(bucket) / maxBucket) * 100}%` }} />
 									</div>
 								</div>
 							))}
@@ -73,10 +90,12 @@ export function IdleSection() {
 											{formatQuantity(item.saldo)} {item.unidade.toLowerCase()}
 										</span>
 									</div>
-									<div className="flex w-[90px] flex-col items-end gap-0.5">
-										<MetricLabel>Valor parado</MetricLabel>
-										<span className="text-sm font-bold tabular-nums">{formatMoney(item.valor)}</span>
-									</div>
+									{item.valor != null ? (
+										<div className="flex w-[90px] flex-col items-end gap-0.5">
+											<MetricLabel>Valor parado</MetricLabel>
+											<span className="text-sm font-bold tabular-nums">{formatMoney(item.valor)}</span>
+										</div>
+									) : null}
 								</div>
 							))}
 						</div>

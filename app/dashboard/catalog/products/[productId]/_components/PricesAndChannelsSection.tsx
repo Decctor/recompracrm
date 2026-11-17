@@ -20,6 +20,8 @@ import { BadgeDollarSign, Percent } from "lucide-react";
 type PricesAndChannelsSectionProps = {
 	product: TGetProductsOutputById;
 	orgHasERPAccess: boolean;
+	// dadosSensiveis.visualizarCustos: sem ela, custo e margem não aparecem (o servidor ignora o custo enviado).
+	canViewCosts: boolean;
 	callbacks?: {
 		onMutate?: () => void;
 		onSuccess?: () => void;
@@ -36,7 +38,7 @@ type PricesAndChannelsSectionProps = {
  * A herança é explícita: sem linha no canal vale o modo do canal (e o preço base); a linha da
  * variante só restringe dentro de produto visível.
  */
-export default function PricesAndChannelsSection({ product, orgHasERPAccess, callbacks }: PricesAndChannelsSectionProps) {
+export default function PricesAndChannelsSection({ product, orgHasERPAccess, canViewCosts, callbacks }: PricesAndChannelsSectionProps) {
 	const { data, isLoading, isError } = useProductChannelSettings({ produtoId: product.id, enabled: orgHasERPAccess });
 	const merchantNames = useIfoodMerchantNames({ enabled: !!data?.channels.some((channel) => channel.canal === "IFOOD") });
 	const editor = useProductPricingSectionEditor({ product, channelData: data, callbacks });
@@ -59,15 +61,17 @@ export default function PricesAndChannelsSection({ product, orgHasERPAccess, cal
 				<div className="flex w-full flex-col gap-3">
 					<h2 className="text-xs leading-none tracking-tight">PREÇOS BASE</h2>
 					<div className="flex w-full items-center gap-2 lg:flex-row">
-						<div className="w-full lg:w-1/2">
-							<NumberInput
-								label="PREÇO DE CUSTO"
-								value={precoCusto}
-								placeholder="Preencha aqui o preço de custo do produto."
-								handleChange={(value) => editor.updateBasePrices({ precoCusto: value })}
-							/>
-						</div>
-						<div className="w-full lg:w-1/2">
+						{canViewCosts ? (
+							<div className="w-full lg:w-1/2">
+								<NumberInput
+									label="PREÇO DE CUSTO"
+									value={precoCusto}
+									placeholder="Preencha aqui o preço de custo do produto."
+									handleChange={(value) => editor.updateBasePrices({ precoCusto: value })}
+								/>
+							</div>
+						) : null}
+						<div className={canViewCosts ? "w-full lg:w-1/2" : "w-full"}>
 							<NumberInput
 								label="PREÇO DE VENDA"
 								value={precoVenda}
@@ -81,7 +85,7 @@ export default function PricesAndChannelsSection({ product, orgHasERPAccess, cal
 						value={editor.basePrices.precoVendaAnterior}
 						onChange={(precoVendaAnterior) => editor.updateBasePrices({ precoVendaAnterior })}
 					/>
-					<DataList.Line icon={<Percent className="h-4 w-4" />} label="MARGEM DE LUCRO" value={marginLabel} />
+					{canViewCosts ? <DataList.Line icon={<Percent className="h-4 w-4" />} label="MARGEM DE LUCRO" value={marginLabel} /> : null}
 				</div>
 
 				{orgHasERPAccess ? (

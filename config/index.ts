@@ -77,6 +77,9 @@ export const DEFAULT_ORGANIZATION_OWNER_PERMISSIONS: TUserPermissions = {
 		excluir: true,
 		concluir: true,
 	},
+	dadosSensiveis: {
+		visualizarCustos: true,
+	},
 };
 
 export const DEFAULT_ORGANIZATION_RFM_CONFIG = {

@@ -225,3 +225,21 @@ export async function getProductsRanking({ input, organizacaoId }: { input: TGet
 }
 
 export type TGetProductsRankingOutput = Awaited<ReturnType<typeof getProductsRanking>>;
+
+/**
+ * Ranking para quem não vê custos (dadosSensiveis.visualizarCustos): margem é faturamento − custo,
+ * então sai como `null` — junto com a da comparação. O agente de IA chama `getProductsRanking`
+ * direto e não passa por aqui.
+ */
+export function maskProductsRankingCosts(output: TGetProductsRankingOutput, canViewCosts: boolean) {
+	return {
+		data: output.data.map((item) => ({
+			...item,
+			totalMargin: canViewCosts ? item.totalMargin : null,
+			marginPercentage: canViewCosts ? item.marginPercentage : null,
+			totalMarginComparison: canViewCosts ? item.totalMarginComparison : null,
+			marginPercentageComparison: canViewCosts ? item.marginPercentageComparison : null,
+		})),
+	};
+}
+export type TGetProductsRankingMaskedOutput = ReturnType<typeof maskProductsRankingCosts>;

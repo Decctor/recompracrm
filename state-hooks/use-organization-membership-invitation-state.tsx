@@ -81,6 +81,9 @@ export function useOrganizationMembershipInvitationState() {
 					excluir: false,
 					concluir: false,
 				},
+				dadosSensiveis: {
+					visualizarCustos: true,
+				},
 			},
 		},
 	};

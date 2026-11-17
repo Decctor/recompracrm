@@ -1,6 +1,7 @@
 "use client";
 
 import { canAdjustInventory } from "@/lib/permissions/inventory";
+import { canViewCosts } from "@/lib/permissions/sensitive-data";
 import type { TGetProductsOutputById } from "@/app/api/products/route";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import ProductAddOnsInformation from "./_components/AddOnsInformation";
@@ -26,13 +27,19 @@ export default function ProductRegistryTab({ sessionUserMembership, product, cal
 	const userHasFiscalViewPermission = sessionUserMembership?.permissoes.fiscal.visualizar;
 	const userHasFiscalConfigurePermission = sessionUserMembership?.permissoes.fiscal.configurar;
 	const userHasPurchasesViewPermission = sessionUserMembership?.permissoes.compras.visualizar;
+	const userCanViewCosts = canViewCosts(sessionUserMembership.permissoes);
 
 	return (
 		<div className="flex w-full flex-col gap-6">
 			<ProductGeneralInformation product={product} callbacks={callbacks} canAdjustInventory={canAdjustInventory(sessionUserMembership.permissoes)} />
-			<PricesAndChannelsSection product={product} orgHasERPAccess={orgHasERPAccess} callbacks={callbacks} />
+			<PricesAndChannelsSection
+				product={product}
+				orgHasERPAccess={orgHasERPAccess}
+				canViewCosts={userCanViewCosts}
+				callbacks={callbacks}
+			/>
 			<MainSupplierSection product={product} userHasPurchasesViewPermission={userHasPurchasesViewPermission} callbacks={callbacks} />
-			<ProductVariantsInformation product={product} callbacks={callbacks} />
+			<ProductVariantsInformation product={product} canViewCosts={userCanViewCosts} callbacks={callbacks} />
 			<ProductAddOnsInformation product={product} callbacks={callbacks} />
 			{orgHasERPAccess ? (
 				<ProductFiscalProfilesInformation

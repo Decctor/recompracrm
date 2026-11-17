@@ -10,9 +10,10 @@ import type { ReactNode } from "react";
 
 type ValuationChipsProps = {
 	valores: {
-		custoTotal: number;
+		/** `null` para quem não vê custos (dadosSensiveis.visualizarCustos): o chip some, junto com o da margem. */
+		custoTotal: number | null;
 		retornoEsperado: number;
-		margem: number;
+		margem: number | null;
 		margemPercentual: number | null;
 		custoCompleto: boolean;
 		retornoCompleto: boolean;
@@ -34,11 +35,12 @@ const ORIGIN_HINT: Record<TValuationOrigin, string> = {
  */
 export function ValuationChips({ valores }: ValuationChipsProps) {
 	const isProjection = valores.origemValores === "PROJECAO";
-	const marginIsNegative = valores.margem < 0;
+	const marginIsNegative = valores.margem != null && valores.margem < 0;
 	const originHint = buildOriginHint(valores);
 
 	return (
 		<>
+			{valores.custoTotal != null ? (
 			<ValuationChip
 				variant="muted"
 				isProjection={isProjection}
@@ -50,6 +52,7 @@ export function ValuationChips({ valores }: ValuationChipsProps) {
 						: `Custo dos insumos, subestimado: há insumo sem preço de custo cadastrado. ${originHint}`
 				}
 			/>
+			) : null}
 			<ValuationChip
 				variant="muted"
 				isProjection={isProjection}
@@ -61,6 +64,7 @@ export function ValuationChips({ valores }: ValuationChipsProps) {
 						: `Retorno esperado das saídas, subestimado: há saída sem preço de venda cadastrado. ${originHint}`
 				}
 			/>
+			{valores.margem != null ? (
 			<ValuationChip
 				variant={marginIsNegative ? "destructive" : "success"}
 				isProjection={isProjection}
@@ -70,6 +74,7 @@ export function ValuationChips({ valores }: ValuationChipsProps) {
 				}`}
 				tooltip={`Retorno esperado menos custo dos insumos. ${originHint}`}
 			/>
+			) : null}
 		</>
 	);
 }

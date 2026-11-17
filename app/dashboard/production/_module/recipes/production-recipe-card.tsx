@@ -159,6 +159,21 @@ function CoverChip({ className, children }: { className?: string; children: Reac
  * pelo catálogo, daí o tracejado.
  */
 function RecipeValuationChips({ valores }: { valores: TProductionRecipeListItem["valores"] }) {
+	// Sem permissão de ver custos (custo e margem chegam `null`), o card mostra só o retorno esperado.
+	if (valores.custoTotal == null || valores.margem == null) {
+		return (
+			<ValuationChip
+				variant="muted"
+				icon={valores.retornoCompleto ? <TrendingUp /> : <AlertTriangle />}
+				label={`RETORNO: ${formatToMoney(valores.retornoEsperado)}`}
+				tooltip={
+					valores.retornoCompleto
+						? "Retorno esperado das saídas pelos preços atuais do catálogo."
+						: "Retorno esperado das saídas, subestimado: há saída sem preço de venda cadastrado."
+				}
+			/>
+		);
+	}
 	const marginIsNegative = valores.margem < 0;
 	const margin = valores.margemPercentual !== null ? `${formatDecimalPlaces(valores.margemPercentual, 0, 1)}%` : "—";
 

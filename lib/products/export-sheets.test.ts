@@ -81,6 +81,16 @@ test("omits unauthorized fiscal and supplier sections", () => {
 	assert.equal("FORNECEDOR PRINCIPAL" in sheets[0].rows[0], false);
 });
 
+test("omits cost columns when the route withholds cost", () => {
+	const { precoCusto: _withheld, ...withoutCost } = product;
+	const sheets = buildProductExportSheets([withoutCost as TProductExportEntry]);
+	assert.equal("PREÇO DE CUSTO" in sheets[0].rows[0], false);
+	assert.equal("CUSTO DAS VENDAS NO PERÍODO" in sheets[0].rows[0], false);
+	assert.equal("PREÇO DE CUSTO" in sheets[1].rows[0], false);
+	const withCost = buildProductExportSheets([product]);
+	assert.equal("PREÇO DE CUSTO" in withCost[0].rows[0], true);
+});
+
 test("keeps products without profiles and variants", () => {
 	const sheets = buildProductExportSheets([{ ...product, variantes: [], ncm: "00000000", perfisFiscais: [] }]);
 	assert.equal(sheets[0].rows.length, 1);

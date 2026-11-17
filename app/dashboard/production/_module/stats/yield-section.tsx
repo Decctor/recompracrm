@@ -73,7 +73,7 @@ function SideTile({
 }
 
 /** Saída real sobre a prevista de cada produção concluída, em quatro faixas, mais a perda e quanto ela custou. */
-export function YieldSection({ stats }: { stats: TStatsData }) {
+export function YieldSection({ stats, canViewCosts }: { stats: TStatsData; canViewCosts: boolean }) {
 	const { evaluatedCount, bands } = stats.yield;
 	const mainUnit = stats.summary.current.unidadePrincipal;
 	const mainLoss = quantityInUnit(stats.summary.current.perdas, mainUnit);
@@ -131,6 +131,7 @@ export function YieldSection({ stats }: { stats: TStatsData }) {
 					</div>
 					<div className="flex flex-col border-t border-border sm:flex-row lg:flex-col lg:border-t-0 lg:border-l">
 						<SideTile label="Perda total" icon={Scale} value={mainUnit ? formatUnitQuantity(mainLoss, mainUnit) : "—"} hint="Saída abaixo do previsto" />
+						{canViewCosts && lossCost != null ? (
 						<SideTile
 							label="Custo da perda"
 							icon={Coins}
@@ -139,6 +140,7 @@ export function YieldSection({ stats }: { stats: TStatsData }) {
 							hint="Insumos sem retorno em saída"
 							className="border-t sm:border-t-0 sm:border-l lg:border-t lg:border-l-0"
 						/>
+						) : null}
 					</div>
 				</div>
 			</Section.Bleed>

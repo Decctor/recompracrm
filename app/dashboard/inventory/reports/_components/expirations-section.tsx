@@ -19,14 +19,14 @@ function formatValidity(epoch: number) {
 	return `${String(date.getUTCDate()).padStart(2, "0")}/${String(date.getUTCMonth() + 1).padStart(2, "0")}/${date.getUTCFullYear()}`;
 }
 
-export function ExpirationsSection() {
+export function ExpirationsSection({ canViewCosts }: { canViewCosts: boolean }) {
 	const { data, isLoading, error } = useStockReportExpirations({ limit: 12 });
 	return (
 		<ReportSection
 			id="vencimentos"
 			icon={CalendarClock}
 			title="Vencimentos de lotes"
-			description="Lotes ativos por prazo até a validade, com o valor em risco ao custo do lote."
+			description={canViewCosts ? "Lotes ativos por prazo até a validade, com o valor em risco ao custo do lote." : "Lotes ativos por prazo até a validade."}
 		>
 			<ReportSectionState isLoading={isLoading} error={error} skeletonClassName="h-40">
 				{data ? (
@@ -38,7 +38,7 @@ export function ExpirationsSection() {
 									<span className="text-[22px] font-bold tabular-nums">
 										{formatQuantity(bucket.lotes)} {bucket.lotes === 1 ? "lote" : "lotes"}
 									</span>
-									<span className="text-xs font-medium">{formatMoney(bucket.valor)} em risco</span>
+									{bucket.valor != null ? <span className="text-xs font-medium">{formatMoney(bucket.valor)} em risco</span> : null}
 								</div>
 							))}
 						</div>
@@ -64,7 +64,7 @@ export function ExpirationsSection() {
 												<span className="text-xs font-medium">{lot.varianteNome ? `${lot.produtoNome} · ${lot.varianteNome}` : lot.produtoNome}</span>
 											</div>
 											<div className="flex items-center gap-3">
-												<span className="text-xs font-semibold tabular-nums">{formatMoney(lot.valor)}</span>
+												{lot.valor != null ? <span className="text-xs font-semibold tabular-nums">{formatMoney(lot.valor)}</span> : null}
 												<div
 													className={cn(
 														"inline-flex items-center gap-1 text-xs font-medium",

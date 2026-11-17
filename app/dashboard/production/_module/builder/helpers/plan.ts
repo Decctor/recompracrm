@@ -57,9 +57,10 @@ export function getRecipeDefaults(recipe: TBuilderRecipe): TRecipeQuantities {
 }
 
 export type TPlanValuation = {
-	custoTotal: number;
+	/** `null` quando a receita chegou sem custo (quem não vê custos — dadosSensiveis.visualizarCustos). */
+	custoTotal: number | null;
 	retornoEsperado: number;
-	margem: number;
+	margem: number | null;
 	margemPercentual: number | null;
 	custoCompleto: boolean;
 	retornoCompleto: boolean;
@@ -71,6 +72,10 @@ export function buildRecipePlan({ recipe, quantities, start }: { recipe: TBuilde
 	const rendimento = primaryOutput?.quantidade ?? 0;
 	const unit = primaryOutput?.produto.unidade ?? "UN";
 	const lots = recipe.saldo?.lotes ?? [];
+	// A API manda custo e margem como `null` para quem não vê custos: o plano não estima custo nem
+	// avisa de custo ausente — a ausência é da permissão, não do cadastro.
+	const recipeCostTotal = recipe.valores.custoTotal;
+	const costsVisible = recipeCostTotal != null;
 	const lotsTotal = lots.reduce((total, lot) => total + lot.quantidadeAtual, 0);
 	const saldoGeral = Math.max(recipe.saldo?.saldoGeral ?? 0, 0);
 	// Com controle de estoque, o saldo é o que o estoque tem — informar mais faria a conclusão falhar por
@@ -89,7 +94,7 @@ export function buildRecipePlan({ recipe, quantities, start }: { recipe: TBuilde
 	// ele o saldo entra de graça — a produção fica com custo menor do que teve.
 	const leftoverCatalogCost = recipe.saldo?.custoUnitario ?? null;
 	const untrackedLeftover = reincOn && !tracksStock && saldo > 0;
-	const untrackedLeftoverWithoutCost = untrackedLeftover && !(leftoverCatalogCost != null && leftoverCatalogCost > 0);
+	const untrackedLeftoverWithoutCost = costsVisible && untrackedLeftover && !(leftoverCatalogCost != null && leftoverCatalogCost > 0);
 
 	const escala = scaleRecipe({
 		rendimentoReceita: rendimento,
@@ -128,16 +133,20 @@ export function buildRecipePlan({ recipe, quantities, start }: { recipe: TBuilde
 
 	// Estimativa: a receita é valorada no rendimento base. O saldo de estoque entra pelo custo unitário
 	// da saída; o saldo sem controle, pelo custo de catálogo — o mesmo que a conclusão vai gravar.
-	const recipeUnitCost = rendimento > 0 ? recipe.valores.custoTotal / rendimento : 0;
-	const leftoverUnitCost = tracksStock ? recipeUnitCost : (leftoverCatalogCost ?? 0);
-	const custoTotal = recipe.valores.custoTotal * escala.fatorInsumos + escala.quantidadeSaldo * leftoverUnitCost;
 	const retornoEsperado = recipe.valores.retornoEsperado * escala.fatorSaidas;
-	const margem = retornoEsperado - custoTotal;
+	let custoTotal: number | null = null;
+	let margem: number | null = null;
+	if (recipeCostTotal != null) {
+		const recipeUnitCost = rendimento > 0 ? recipeCostTotal / rendimento : 0;
+		const leftoverUnitCost = tracksStock ? recipeUnitCost : (leftoverCatalogCost ?? 0);
+		custoTotal = recipeCostTotal * escala.fatorInsumos + escala.quantidadeSaldo * leftoverUnitCost;
+		margem = retornoEsperado - custoTotal;
+	}
 	const valores: TPlanValuation = {
 		custoTotal,
 		retornoEsperado,
 		margem,
-		margemPercentual: retornoEsperado > 0 ? (margem / retornoEsperado) * 100 : null,
+		margemPercentual: margem != null && retornoEsperado > 0 ? (margem / retornoEsperado) * 100 : null,
 		custoCompleto: recipe.valores.custoCompleto && !untrackedLeftoverWithoutCost,
 		retornoCompleto: recipe.valores.retornoCompleto,
 		origemValores: "PROJECAO",

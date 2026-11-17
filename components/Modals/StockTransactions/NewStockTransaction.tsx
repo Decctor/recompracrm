@@ -28,6 +28,8 @@ type NewStockTransactionProps = {
 	product?: TStockTransactionProductSource | null;
 	productVariantId?: string | null;
 	initialType?: TManualStockMovementTypeEnum;
+	// `dadosSensiveis.visualizarCustos` (lib/permissions/sensitive-data.ts), resolvido no servidor da página.
+	canViewCosts: boolean;
 	callbacks?: {
 		onMutate?: (variables: TCreateStockTransactionsInput) => void;
 		onSuccess?: () => void;
@@ -84,7 +86,14 @@ function buildCreateStockTransactionsInput(state: TStockTransactionState): TCrea
 	};
 }
 
-export default function NewStockTransaction({ closeModal, product, productVariantId, initialType, callbacks }: NewStockTransactionProps) {
+export default function NewStockTransaction({
+	closeModal,
+	product,
+	productVariantId,
+	initialType,
+	canViewCosts,
+	callbacks,
+}: NewStockTransactionProps) {
 	const initialState = useMemo(
 		() => ({ type: initialType ?? "SAIDA", items: buildInitialItems(product, productVariantId) }),
 		[initialType, product, productVariantId],
@@ -140,6 +149,7 @@ export default function NewStockTransaction({ closeModal, product, productVarian
 				addItem={addItem}
 				updateItem={updateItem}
 				removeItem={removeItem}
+				canViewCosts={canViewCosts}
 			/>
 			{state.type === "DESCARTE" ? (
 				<p className="text-muted-foreground text-xs">

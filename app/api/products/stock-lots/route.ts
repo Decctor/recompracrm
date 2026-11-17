@@ -1,6 +1,7 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { canViewInventory } from "@/lib/permissions/inventory";
+import { canViewCosts, maskCost } from "@/lib/permissions/sensitive-data";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { StockLotStatusEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
@@ -47,6 +48,7 @@ function getSessionWithOrg(session: TAuthUserSession | null) {
 async function getProductStockLots({ input, session }: { input: TGetProductStockLotsInput; session: TAuthUserSession }) {
 	const organizationId = session.membership?.organizacao.id;
 	if (!organizationId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização.");
+	const canViewLotCosts = canViewCosts(session.membership?.permissoes);
 
 	if (input.id) {
 		const stockLot = await db.query.productStockLots.findFirst({
@@ -54,15 +56,16 @@ async function getProductStockLots({ input, session }: { input: TGetProductStock
 			with: {
 				produto: true,
 				produtoVariante: true,
-				producao: true,
-				compra: true,
+				// Só o vínculo: a linha completa traz a valoração da produção e os totais da compra.
+				producao: { columns: { id: true, titulo: true } },
+				compra: { columns: { id: true, titulo: true } },
 			},
 		});
 		if (!stockLot) throw new createHttpError.NotFound("Lote não encontrado.");
 
 		return {
 			data: {
-				byId: enrichStockLot(stockLot),
+				byId: maskStockLotCosts(enrichStockLot(stockLot), canViewLotCosts),
 				default: undefined,
 			},
 			message: "Lote encontrado com sucesso.",
@@ -135,7 +138,7 @@ async function getProductStockLots({ input, session }: { input: TGetProductStock
 		data: {
 			byId: undefined,
 			default: {
-				stockLots: lotsResult.map(enrichStockLot),
+				stockLots: lotsResult.map((stockLot) => maskStockLotCosts(enrichStockLot(stockLot), canViewLotCosts)),
 				stockLotsMatched,
 				totalPages: Math.max(1, Math.ceil(stockLotsMatched / PAGE_SIZE)),
 			},
@@ -178,6 +181,20 @@ function enrichStockLot<TStockLot extends { status: string; dataValidade: Date |
 		...stockLot,
 		statusEfetivo,
 		diasAteValidade,
+	};
+}
+
+/** Custo do produto/variante do lote: `null` para quem não vê custos (dadosSensiveis.visualizarCustos). */
+function maskStockLotCosts<
+	TStockLot extends { produto: { precoCusto: number | null } | null; produtoVariante: { precoCusto: number | null } | null },
+>(stockLot: TStockLot, canView: boolean): TStockLot {
+	if (canView) return stockLot;
+	return {
+		...stockLot,
+		produto: stockLot.produto ? { ...stockLot.produto, precoCusto: maskCost(stockLot.produto.precoCusto, canView) } : stockLot.produto,
+		produtoVariante: stockLot.produtoVariante
+			? { ...stockLot.produtoVariante, precoCusto: maskCost(stockLot.produtoVariante.precoCusto, canView) }
+			: stockLot.produtoVariante,
 	};
 }
 

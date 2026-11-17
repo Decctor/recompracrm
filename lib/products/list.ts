@@ -1,6 +1,7 @@
 import { ProductSearchQuerySchema } from "@/schemas/product-search";
 import { pageSizeInputSchema } from "@/lib/pagination";
 import { z } from "zod";
+import { maskCost } from "@/lib/permissions/sensitive-data";
 import { buildProductSearch, type ProductSearchDatabase } from "@/lib/products/search";
 import { getSalesIntegrationCondition } from "@/lib/sales/integration-filter";
 import { getProductSalesLines } from "@/lib/products/product-sales-lines";
@@ -163,8 +164,10 @@ export function buildProductFilterConditions(input: TGetProductsDefaultInput, us
 	return conditions;
 }
 
+// `canViewCosts` (dadosSensiveis.visualizarCustos): sem ela, custo de cadastro e custo das vendas
+// saem como `null` — a margem do período é derivada deles, então some junto na tela.
 export async function queryProductsList(
-	{ input, userOrgId, pageSize = 25 }: { input: TGetProductsDefaultInput; userOrgId: string; pageSize?: number },
+	{ input, userOrgId, pageSize = 25, canViewCosts }: { input: TGetProductsDefaultInput; userOrgId: string; pageSize?: number; canViewCosts: boolean },
 	db: ProductSearchDatabase,
 ) {
 	const productQueryConditions = buildProductFilterConditions(input, userOrgId);
@@ -374,7 +377,7 @@ export async function queryProductsList(
 			grupo: row.grupo,
 			imagemCapaUrl: row.imagemCapaUrl,
 			precoVenda: row.precoVenda,
-			precoCusto: row.precoCusto,
+			precoCusto: maskCost(row.precoCusto, canViewCosts),
 			quantidade: row.quantidade,
 			organizacaoId: row.organizacaoId,
 			dataUltimaSincronizacao: row.dataUltimaSincronizacao,
@@ -382,7 +385,7 @@ export async function queryProductsList(
 			estatisticas: {
 				vendasValorTotal: totalSales,
 				vendasQtdeTotal: row.totalSalesQty ? Number(row.totalSalesQty) : 0,
-				vendasCustoTotal: row.totalCostValue ? Number(row.totalCostValue) : 0,
+				vendasCustoTotal: maskCost(row.totalCostValue ? Number(row.totalCostValue) : 0, canViewCosts),
 				dataPrimeiraVenda: row.firstSaleDate ?? null,
 				dataUltimaVenda: row.lastSaleDate ?? null,
 				curvaABC: row.curvaABC,

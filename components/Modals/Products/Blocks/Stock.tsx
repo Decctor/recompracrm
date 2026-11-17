@@ -9,23 +9,33 @@ type ProductStateStockBlockProps = {
 	product: TProductCoreState;
 	updateProduct: TUseProductCoreState["updateProduct"];
 	showPricing?: boolean;
+	/** dadosSensiveis.visualizarCustos; só pesa com `showPricing`. Ausente = não vê, o lado seguro. */
+	canViewCosts?: boolean;
 	embedded?: boolean;
 };
 
-export default function ProductStateStockBlock({ product, updateProduct, showPricing = false, embedded = false }: ProductStateStockBlockProps) {
+export default function ProductStateStockBlock({
+	product,
+	updateProduct,
+	showPricing = false,
+	canViewCosts = false,
+	embedded = false,
+}: ProductStateStockBlockProps) {
 	const formContent = (
 		<div className="w-full flex flex-col gap-3">
 			{showPricing ? (
 				<div className="w-full flex items-center gap-2 lg:flex-row">
-					<div className="w-full lg:w-1/2">
-						<NumberInput
-							label="PREÇO DE CUSTO"
-							value={product.precoCusto ?? null}
-							placeholder="Preencha aqui o preço de custo do produto."
-							handleChange={(value) => updateProduct({ precoCusto: value })}
-						/>
-					</div>
-					<div className="w-full lg:w-1/2">
+					{canViewCosts ? (
+						<div className="w-full lg:w-1/2">
+							<NumberInput
+								label="PREÇO DE CUSTO"
+								value={product.precoCusto ?? null}
+								placeholder="Preencha aqui o preço de custo do produto."
+								handleChange={(value) => updateProduct({ precoCusto: value })}
+							/>
+						</div>
+					) : null}
+					<div className={canViewCosts ? "w-full lg:w-1/2" : "w-full"}>
 						<NumberInput
 							label="PREÇO DE VENDA"
 							value={product.precoVenda ?? null}

@@ -9,6 +9,8 @@ import { GitBranch } from "lucide-react";
 type ProductVariantsInformationProps = {
 	product: TGetProductsOutputById;
 	sectionWrapperClassName?: string;
+	// dadosSensiveis.visualizarCustos: sem ela, o custo da variante não aparece nem é exigido.
+	canViewCosts: boolean;
 	callbacks: {
 		onMutate?: () => void;
 		onSuccess?: () => void;
@@ -17,7 +19,7 @@ type ProductVariantsInformationProps = {
 	};
 };
 
-export default function ProductVariantsInformation({ product, sectionWrapperClassName, callbacks }: ProductVariantsInformationProps) {
+export default function ProductVariantsInformation({ product, sectionWrapperClassName, canViewCosts, callbacks }: ProductVariantsInformationProps) {
 	const editor = useProductVariationsSectionEditor({ product, callbacks });
 
 	return (
@@ -51,6 +53,7 @@ export default function ProductVariantsInformation({ product, sectionWrapperClas
 					updateVariant={editor.updateProductVariant}
 					updateVariantImageHolder={editor.updateProductVariantImageHolder}
 					removeVariant={editor.removeProductVariant}
+					canViewCosts={canViewCosts}
 				/>
 				<SectionApplyBar isDirty={editor.isDirty} isPending={editor.isPending} onApply={editor.apply} onDiscard={editor.discard} />
 			</Section.Body>

@@ -4,7 +4,7 @@ import ErrorComponent from "@/components/Layouts/ErrorComponent";
 import LoadingComponent from "@/components/Layouts/LoadingComponent";
 import { CAMPAIGN_STATS_PERIOD_PRESETS, resolveCampaignStatsComparisonPeriod, type TStatsPeriod } from "@/lib/campaigns/stats-period";
 import { getErrorMessage } from "@/lib/errors";
-import type { TProductionPermissions } from "@/lib/permissions/productions";
+import type { TProductionPagePermissions } from "../../_lib/require-production-access";
 import { useProductionStats } from "@/lib/queries/productions";
 import { cn } from "@/lib/utils";
 import { useMemo, useState } from "react";
@@ -15,15 +15,16 @@ import { StatsToolbar } from "./stats-toolbar";
 import { YieldSection } from "./yield-section";
 
 type ProductionStatsPageProps = {
-	/** A rota já exige `visualizar`; nada aqui depende das demais permissões. */
-	permissions: TProductionPermissions;
+	/** A rota já exige `visualizar`; daqui só importa `visualizarCustos`, que esconde custo e margem. */
+	permissions: TProductionPagePermissions;
 };
 
 /**
  * Estatísticas de produção: resultado do período contra o anterior, rendimento, ranking de receitas e
  * insumos consumidos. Uma consulta só alimenta todos os blocos — tudo sai das produções concluídas.
  */
-export default function ProductionStatsPage(_props: ProductionStatsPageProps) {
+export default function ProductionStatsPage({ permissions }: ProductionStatsPageProps) {
+	const canViewCosts = permissions.visualizarCustos;
 	const [period, setPeriod] = useState<TStatsPeriod>(() => CAMPAIGN_STATS_PERIOD_PRESETS[0].getValue(new Date()));
 	const [recipeIds, setRecipeIds] = useState<string[]>([]);
 	const comparingPeriod = useMemo(() => resolveCampaignStatsComparisonPeriod(period), [period]);
@@ -49,11 +50,11 @@ export default function ProductionStatsPage(_props: ProductionStatsPageProps) {
 			{isError && !stats ? <ErrorComponent msg={getErrorMessage(error)} /> : null}
 			{stats ? (
 				<div className={cn("flex w-full flex-col gap-3 transition-opacity", isPlaceholderData && "opacity-60")} aria-busy={isPlaceholderData}>
-					<ResultSection stats={stats} period={period} comparingPeriod={comparingPeriod} />
-					<YieldSection stats={stats} />
+					<ResultSection stats={stats} period={period} comparingPeriod={comparingPeriod} canViewCosts={canViewCosts} />
+					<YieldSection stats={stats} canViewCosts={canViewCosts} />
 					<div className="grid w-full grid-cols-1 items-start gap-3 2xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
 						<RecipesRanking ranking={stats.ranking} />
-						<InputsConsumed inputs={stats.inputs} />
+						<InputsConsumed inputs={stats.inputs} canViewCosts={canViewCosts} />
 					</div>
 				</div>
 			) : null}

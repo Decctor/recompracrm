@@ -12,7 +12,7 @@ import { MetricLabel, ReportSection, ReportSectionState } from "./report-section
 
 const INITIAL_ROWS = 6;
 
-export function ReorderSection({ period }: { period: TStockReportPeriod }) {
+export function ReorderSection({ period, canViewCosts }: { period: TStockReportPeriod; canViewCosts: boolean }) {
 	const [expanded, setExpanded] = useState(false);
 	const { data, isLoading, error } = useStockReportReorder({ period });
 	const rows = data ? (expanded ? data.itens : data.itens.slice(0, INITIAL_ROWS)) : [];
@@ -26,8 +26,14 @@ export function ReorderSection({ period }: { period: TStockReportPeriod }) {
 			actions={
 				data && data.total.produtos > 0 ? (
 					<span className="text-xs font-semibold">
-						{formatQuantity(data.total.produtos)} {data.total.produtos === 1 ? "produto" : "produtos"} ·{" "}
-						<span className="text-info">{formatMoney(data.total.valorSugerido)}</span> em compras sugeridas
+						{formatQuantity(data.total.produtos)} {data.total.produtos === 1 ? "produto" : "produtos"}
+						{/* Compra sugerida ao custo médio: `null` para quem não vê custos. */}
+						{canViewCosts && data.total.valorSugerido != null ? (
+							<>
+								{" "}
+								· <span className="text-info">{formatMoney(data.total.valorSugerido)}</span> em compras sugeridas
+							</>
+						) : null}
 					</span>
 				) : null
 			}

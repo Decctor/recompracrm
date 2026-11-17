@@ -59,12 +59,13 @@ export type TGetPortfolioAnalysisResult = {
 	topRevenueConcentration: TTopRevenueConcentrationItem[];
 	metrics: {
 		revenue: import("@/utils/analytics").TMetricSummary;
-		margin: import("@/utils/analytics").TMetricSummary;
+		// `null` para quem não vê custos (dadosSensiveis.visualizarCustos).
+		margin: import("@/utils/analytics").TMetricSummary | null;
 		saleFrequency: import("@/utils/analytics").TMetricSummary;
 	};
 	histograms: {
 		revenue: import("@/utils/analytics").THistogram;
-		margin: import("@/utils/analytics").THistogram;
+		margin: import("@/utils/analytics").THistogram | null;
 		saleFrequency: import("@/utils/analytics").TDiscreteHistogramBucket[];
 	};
 };

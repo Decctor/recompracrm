@@ -16,7 +16,8 @@ import {
 	naiveUtc,
 } from "@/lib/stock/analytics/queries";
 import { resolveReorderPoint } from "@/lib/stock/analytics/replenishment";
-import { getInventoryReportOrganizationId } from "@/lib/stock/analytics/route-helpers";
+import { getInventoryReportAccess } from "@/lib/stock/analytics/route-helpers";
+import { maskCost } from "@/lib/permissions/sensitive-data";
 import { db } from "@/services/drizzle";
 import {
 	clients,
@@ -80,7 +81,16 @@ export type TProductStockEventOrigin = { tipo: "COMPRA" | "VENDA" | "PRODUCAO" |
  * O saldo é o do produto somado ao das variantes rastreadas. A série e o saldo antes/depois dos
  * eventos são reconstruídos de trás para frente a partir do saldo atual.
  */
-async function getProductStockAnalytics({ input, organizationId }: { input: TGetProductStockAnalyticsInput; organizationId: string }) {
+async function getProductStockAnalytics({
+	input,
+	organizationId,
+	canViewCosts,
+}: {
+	input: TGetProductStockAnalyticsInput;
+	organizationId: string;
+	// Custo dos eventos (compra, produção, descarte) só para quem vê custos.
+	canViewCosts: boolean;
+}) {
 	const now = new Date();
 	const after = addDays(now, -input.period);
 	const [position] = await getStockPositions({ organizationId, productIds: [input.productId] });
@@ -243,11 +253,11 @@ async function getProductStockAnalytics({ input, organizationId }: { input: TGet
 				quantidade,
 				saldoAnterior: totalBefore(group.indexes[0]),
 				saldoPosterior: totalAfter[group.indexes[group.indexes.length - 1]],
-				custoUnitario,
+				custoUnitario: maskCost(custoUnitario, canViewCosts),
 				origens,
 				motivo,
 				operador: first.operadorNome ?? (first.origem === "SISTEMA" ? "Sistema" : null),
-				custoCompraAnterior: group.tipo === "COMPRA" && first.compraId ? (previousPurchaseCost.get(first.compraId) ?? null) : null,
+				custoCompraAnterior: maskCost(group.tipo === "COMPRA" && first.compraId ? (previousPurchaseCost.get(first.compraId) ?? null) : null, canViewCosts),
 				multiploConsumo: group.tipo === "VENDA" && consumo.consumoMedioDia > 0 ? Math.abs(quantidade) / consumo.consumoMedioDia : null,
 			};
 		})
@@ -303,10 +313,10 @@ export type TGetProductStockAnalyticsOutput = Awaited<ReturnType<typeof getProdu
 export type TProductStockAnalytics = NonNullable<TGetProductStockAnalyticsOutput["data"]["analytics"]>;
 
 async function getProductStockAnalyticsRoute(request: NextRequest) {
-	const organizationId = getInventoryReportOrganizationId(await getCurrentSessionUncached());
+	const { organizationId, canViewCosts } = getInventoryReportAccess(await getCurrentSessionUncached());
 	const searchParams = request.nextUrl.searchParams;
 	const input = GetProductStockAnalyticsInputSchema.parse({ productId: searchParams.get("productId"), period: searchParams.get("period") });
-	const result = await getProductStockAnalytics({ input, organizationId });
+	const result = await getProductStockAnalytics({ input, organizationId, canViewCosts });
 	return NextResponse.json(result);
 }
 

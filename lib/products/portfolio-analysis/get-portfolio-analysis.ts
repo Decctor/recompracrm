@@ -41,8 +41,11 @@ function buildTopRevenueConcentration(activeProducts: TProductWithPeriodMetrics[
 export async function getPortfolioAnalysis({
 	input,
 	organizationId,
+	canViewCosts,
 }: {
 	input: TGetPortfolioAnalysisInput;
+	// dadosSensiveis.visualizarCustos: sem ela, métricas, histograma e achados de margem não saem.
+	canViewCosts: boolean;
 	organizationId: string;
 }): Promise<TGetPortfolioAnalysisResult> {
 	const { periodAfter, periodBefore } = input;
@@ -91,13 +94,14 @@ export async function getPortfolioAnalysis({
 	const marginMetrics = summarizeMetric(marginValues);
 	const saleFrequencyMetrics = summarizeMetric(saleFrequencyValues);
 
+	// Achados de margem dizem quanto o produto custa (ex.: "vendeu abaixo do custo"): só para quem vê custos.
 	const findings = buildPortfolioAnalysisFindings({
 		totalProducts,
 		activeProducts,
 		abcDistribution,
 		revenueMetrics,
 		marginMetrics,
-	});
+	}).filter((finding) => canViewCosts || !finding.id.startsWith("margem"));
 
 	const analysisSummary = buildPortfolioAnalysisSummary(findings, totalProducts, activeCount);
 
@@ -129,12 +133,12 @@ export async function getPortfolioAnalysis({
 		topRevenueConcentration: buildTopRevenueConcentration(activeProducts),
 		metrics: {
 			revenue: revenueMetrics,
-			margin: marginMetrics,
+			margin: canViewCosts ? marginMetrics : null,
 			saleFrequency: saleFrequencyMetrics,
 		},
 		histograms: {
 			revenue: buildLogHistogram(revenueValues, { clipToPercentile: 95 }),
-			margin: buildHistogram(marginValues, 15),
+			margin: canViewCosts ? buildHistogram(marginValues, 15) : null,
 			saleFrequency: buildDiscreteHistogram(saleFrequencyValues, [
 				{ label: "1", min: 1, max: 1 },
 				{ label: "2", min: 2, max: 2 },

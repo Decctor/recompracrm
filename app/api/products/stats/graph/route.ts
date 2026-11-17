@@ -7,6 +7,7 @@ import { chartBucketPositionSql } from "@/lib/charts/period-buckets-sql";
 import { OPERATION_TIMEZONE } from "@/lib/operation-timezone";
 import { db } from "@/services/drizzle";
 import { getProductSalesLines } from "@/lib/products/product-sales-lines";
+import { canViewCosts } from "@/lib/permissions/sensitive-data";
 import { sales } from "@/services/drizzle/schema";
 import dayjs from "dayjs";
 import timezone from "dayjs/plugin/timezone";
@@ -134,8 +135,9 @@ async function getProductsGraph({ input, sessionUser }: { input: TGetProductsGra
 		};
 	}
 
-	// Graph Type: margin (profit margin evolution over time)
+	// Graph Type: margin (profit margin evolution over time). Série inteira é custo: exige dadosSensiveis.visualizarCustos.
 	if (input.graphType === "margin") {
+		if (!canViewCosts(sessionUser.membership?.permissoes)) throw new createHttpError.Forbidden("Você não tem permissão para ver custos.");
 		const marginData = await db
 			.select({
 				position: bucketPosition,

@@ -15,14 +15,15 @@ import { LossesSection } from "./_components/losses-section";
 import { ReorderSection } from "./_components/reorder-section";
 import { SummarySection } from "./_components/summary-section";
 
-const SECTIONS: { id: string; label: string; icon: LucideIcon }[] = [
+// `costOnly`: relatórios inteiramente ao custo (a rota devolve 403 sem `dadosSensiveis.visualizarCustos`).
+const SECTIONS: { id: string; label: string; icon: LucideIcon; costOnly?: boolean }[] = [
 	{ id: "resumo", label: "Resumo", icon: Boxes },
 	{ id: "abc", label: "Curva ABC", icon: ChartPie },
 	{ id: "giro", label: "Giro e cobertura", icon: RefreshCw },
 	{ id: "reposicao", label: "Ponto de pedido", icon: Repeat },
 	{ id: "parado", label: "Estoque parado", icon: Hourglass },
-	{ id: "custos", label: "Custos", icon: TrendingUp },
-	{ id: "perdas", label: "Perdas", icon: Trash2 },
+	{ id: "custos", label: "Custos", icon: TrendingUp, costOnly: true },
+	{ id: "perdas", label: "Perdas", icon: Trash2, costOnly: true },
 	{ id: "vencimentos", label: "Vencimentos", icon: CalendarClock },
 ];
 
@@ -36,7 +37,8 @@ type TPeriodDays = (typeof PERIODS)[number]["value"];
 /** Altura da barra fixa de navegação: a seção ativa é a última cujo topo passou dela. */
 const NAV_OFFSET = 140;
 
-export default function StockReportsPage() {
+export default function StockReportsPage({ canViewCosts }: { canViewCosts: boolean }) {
+	const sections = useMemo(() => SECTIONS.filter((section) => canViewCosts || !section.costOnly), [canViewCosts]);
 	const [periodDays, setPeriodDays] = useState<TPeriodDays>(30);
 	const [activeSection, setActiveSection] = useState(SECTIONS[0].id);
 
@@ -57,8 +59,8 @@ export default function StockReportsPage() {
 
 	useEffect(() => {
 		function handleScroll() {
-			let current = SECTIONS[0].id;
-			for (const section of SECTIONS) {
+			let current = sections[0].id;
+			for (const section of sections) {
 				const element = document.getElementById(section.id);
 				if (element && element.getBoundingClientRect().top < NAV_OFFSET) current = section.id;
 			}
@@ -66,7 +68,7 @@ export default function StockReportsPage() {
 		}
 		window.addEventListener("scroll", handleScroll, { passive: true });
 		return () => window.removeEventListener("scroll", handleScroll);
-	}, []);
+	}, [sections]);
 
 	function scrollToSection(id: string) {
 		const element = document.getElementById(id);
@@ -78,7 +80,7 @@ export default function StockReportsPage() {
 		<div className="flex w-full flex-col gap-3">
 			<div className="bg-background/95 sticky top-2 z-30 flex flex-wrap items-center justify-between gap-2 py-1.5 backdrop-blur-sm">
 				<nav aria-label="Seções do relatório" className="bg-muted/70 flex max-w-full items-center gap-1 overflow-x-auto rounded-[10px] p-1 sm:flex-wrap">
-					{SECTIONS.map((section) => {
+					{sections.map((section) => {
 						const active = activeSection === section.id;
 						return (
 							<a
@@ -108,14 +110,14 @@ export default function StockReportsPage() {
 			</div>
 
 			<div className="flex flex-col gap-10 pb-10 text-sm">
-				<SummarySection period={period} periodLabel={periodLabel} />
+				<SummarySection period={period} periodLabel={periodLabel} canViewCosts={canViewCosts} />
 				<AbcSection period={period} />
 				<CoverageSection period={period} />
-				<ReorderSection period={period} />
-				<IdleSection />
-				<CostChangesSection period={period} />
-				<LossesSection period={period} />
-				<ExpirationsSection />
+				<ReorderSection period={period} canViewCosts={canViewCosts} />
+				<IdleSection canViewCosts={canViewCosts} />
+				{canViewCosts ? <CostChangesSection period={period} /> : null}
+				{canViewCosts ? <LossesSection period={period} /> : null}
+				<ExpirationsSection canViewCosts={canViewCosts} />
 			</div>
 		</div>
 	);

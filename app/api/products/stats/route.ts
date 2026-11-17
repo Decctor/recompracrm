@@ -6,6 +6,7 @@ import type { TAuthUserSession } from "@/lib/authentication/types";
 import { ProductSchema } from "@/schemas/products";
 import { db } from "@/services/drizzle";
 import { getProductSalesLines } from "@/lib/products/product-sales-lines";
+import { canViewCosts, maskCost } from "@/lib/permissions/sensitive-data";
 import { clients, partners, products, saleItemModifiers, saleItems, sales, sellers } from "@/services/drizzle/schema";
 import dayjs from "dayjs";
 import { and, count, countDistinct, desc, eq, gte, inArray, isNotNull, isNull, lte, ne, sql, sum } from "drizzle-orm";
@@ -57,6 +58,8 @@ type GetProductStatsParams = {
 async function getProductStats({ session, input }: GetProductStatsParams) {
 	const userOrgId = session.membership?.organizacao.id;
 	if (!userOrgId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
+	// Custo, margem e análise de margem só para quem vê custos (dadosSensiveis.visualizarCustos).
+	const canViewCost = canViewCosts(session.membership?.permissoes);
 
 	const product = await db.query.products.findFirst({
 		where: and(eq(products.id, input.productId), eq(products.organizacaoId, userOrgId)),
@@ -329,7 +332,9 @@ async function getProductStats({ session, input }: GetProductStatsParams) {
 		.limit(10);
 
 	// Margin analysis by seller
-	const marginBySellerRaw = await db
+	const marginBySellerRaw = !canViewCost
+		? []
+		: await db
 		.select({
 			vendedorId: sales.vendedorId,
 			vendedorNome: sellers.nome,
@@ -345,7 +350,9 @@ async function getProductStats({ session, input }: GetProductStatsParams) {
 		.limit(10);
 
 	// Margin analysis by client
-	const marginByClientRaw = await db
+	const marginByClientRaw = !canViewCost
+		? []
+		: await db
 		.select({
 			clienteId: lines.clienteId,
 			clienteNome: clients.nome,
@@ -361,7 +368,9 @@ async function getProductStats({ session, input }: GetProductStatsParams) {
 		.limit(10);
 
 	// Margin analysis by partner
-	const marginByPartnerRaw = await db
+	const marginByPartnerRaw = !canViewCost
+		? []
+		: await db
 		.select({
 			parceiroId: sales.parceiroId,
 			parceiroNome: partners.nome,
@@ -377,7 +386,9 @@ async function getProductStats({ session, input }: GetProductStatsParams) {
 		.limit(10);
 
 	// Margin evolution over time (monthly)
-	const marginByMonthRaw = await db
+	const marginByMonthRaw = !canViewCost
+		? []
+		: await db
 		.select({
 			mes: monthExpr,
 			faturamentoLiquido: sum(lines.valorVendaTotalLiquido),
@@ -416,9 +427,9 @@ async function getProductStats({ session, input }: GetProductStatsParams) {
 			clientesUnicos,
 			faturamentoBrutoTotal,
 			faturamentoLiquidoTotal,
-			custoTotal,
-			margemBrutaTotal,
-			margemBrutaPercentual,
+			custoTotal: maskCost(custoTotal, canViewCost),
+			margemBrutaTotal: maskCost(margemBrutaTotal, canViewCost),
+			margemBrutaPercentual: maskCost(margemBrutaPercentual, canViewCost),
 			valorMedioPorUnidade,
 			ticketMedio,
 			descontoTotal,
@@ -469,7 +480,10 @@ async function getProductStats({ session, input }: GetProductStatsParams) {
 					total: row.total ? Number(row.total) : 0,
 				})),
 			},
-			analiseMargem: {
+			// Análise inteira é custo: sem a permissão nem é consultada.
+			analiseMargem: !canViewCost
+				? null
+				: {
 				porVendedor: marginBySellerRaw.map((row) => ({
 					vendedorId: row.vendedorId,
 					vendedorNome: row.vendedorNome ?? null,

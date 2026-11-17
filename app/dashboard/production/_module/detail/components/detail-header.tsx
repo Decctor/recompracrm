@@ -283,9 +283,11 @@ function CompletionBanner({ production }: { production: TProductionById }) {
 					{plannedYield > 0 ? ` (${Math.round((realYield / plannedYield) * 100)}% do previsto)` : null}
 				</span>
 			) : null}
-			<span className="text-sm">
-				Custo final <b>{formatToMoney(production.valores.custoTotal)}</b>
-			</span>
+			{production.valores.custoTotal != null ? (
+				<span className="text-sm">
+					Custo final <b>{formatToMoney(production.valores.custoTotal)}</b>
+				</span>
+			) : null}
 		</div>
 	);
 }

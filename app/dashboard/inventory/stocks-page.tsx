@@ -40,7 +40,7 @@ import { useState } from "react";
 
 type StockProduct = TGetProductsOutputStock["products"][number];
 
-export default function StocksPage({ permissions }: { permissions: TInventoryPermissions }) {
+export default function StocksPage({ permissions, canViewCosts }: { permissions: TInventoryPermissions; canViewCosts: boolean }) {
 	const queryClient = useQueryClient();
 	const [recountingProductId, setRecountingProductId] = useState<string | null>(null);
 	const {
@@ -128,7 +128,12 @@ export default function StocksPage({ permissions }: { permissions: TInventoryPer
 
 			{isSuccess && products.length > 0
 				? products.map((product) => (
-						<StockProductCard key={product.id} product={product} onRecount={permissions.ajustar ? () => setRecountingProductId(product.id) : undefined} />
+						<StockProductCard
+							key={product.id}
+							product={product}
+							canViewCosts={canViewCosts}
+							onRecount={permissions.ajustar ? () => setRecountingProductId(product.id) : undefined}
+						/>
 					))
 				: null}
 
@@ -177,8 +182,10 @@ type StockProductCardProps = {
 	product: StockProduct;
 	// Ausente = membro sem `estoque.ajustar`: o botão não aparece.
 	onRecount?: () => void;
+	// `dadosSensiveis.visualizarCustos`: sem ele a métrica de custo some (o servidor manda `null`).
+	canViewCosts: boolean;
 };
-function StockProductCard({ product, onRecount }: StockProductCardProps) {
+function StockProductCard({ product, onRecount, canViewCosts }: StockProductCardProps) {
 	const quantidade = product.quantidade ?? 0;
 	const saldoTone = getSaldoTone(quantidade);
 	const { entradas, saidas } = product.movimentacao;
@@ -228,9 +235,11 @@ function StockProductCard({ product, onRecount }: StockProductCardProps) {
 					{product.precoVenda ? formatToMoney(product.precoVenda) : "—"}
 				</Metric>
 
-				<Metric label="Custo unit." icon={<BadgeDollarSign className="h-3.5 w-3.5" />} muted>
-					{product.precoCusto ? formatToMoney(product.precoCusto) : "—"}
-				</Metric>
+				{canViewCosts ? (
+					<Metric label="Custo unit." icon={<BadgeDollarSign className="h-3.5 w-3.5" />} muted>
+						{product.precoCusto ? formatToMoney(product.precoCusto) : "—"}
+					</Metric>
+				) : null}
 
 				<Metric label="Entradas" icon={<ArrowUpRight className="h-3.5 w-3.5 text-green-600" />} tone={entradas > 0 ? "text-green-600" : undefined}>
 					{entradas > 0 ? `+${formatDecimalPlaces(entradas)}` : "0"}

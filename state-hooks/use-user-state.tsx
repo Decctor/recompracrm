@@ -108,6 +108,9 @@ export function useUserState() {
 					excluir: false,
 					concluir: false,
 				},
+				dadosSensiveis: {
+					visualizarCustos: false,
+				},
 			},
 		},
 	};

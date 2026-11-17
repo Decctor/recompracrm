@@ -39,6 +39,8 @@ import { and, asc, count, desc, eq, gt, gte, inArray, isNull, lt, lte, or, sql }
 import { upsertProductAddOnOptions } from "@/lib/products/add-on-options";
 import { canAdjustInventory } from "@/lib/permissions/inventory";
 import { canChangeProductPrices, canCreateProducts, canEditProducts } from "@/lib/permissions/products";
+import { acceptIncomingCost, canViewCosts, maskCost } from "@/lib/permissions/sensitive-data";
+import { redactCatalogCosts } from "@/lib/products/cost-visibility";
 import { buildSalePriceUpdate, changesSalePrice } from "@/lib/products/price-snapshot";
 import { withProductUpdateStamp } from "@/lib/products/update-stamp";
 import { splitChannelSettingNodes, validateChannelSettingNodes } from "@/lib/products/sales-channels";
@@ -69,7 +71,10 @@ const STOCK_OUTBOUND_MOVEMENT_TYPES = ["SAIDA", "SAIDA_PRODUCAO", "DESCARTE"] as
 // Constrói as condições de filtro sobre a tabela de produtos, compartilhadas entre o modo "default" e "stock".
 // Modo "stock": visão operacional de estoque. Retorna, por produto, o saldo atual, o preço unitário, a movimentação
 // (entradas/saídas) dentro do período filtrado e o lote ativo prioritário (FEFO — vence primeiro) com a contagem de lotes ativos.
-async function getProductsStockView({ input, userOrgId }: { input: TGetProductsDefaultInput; userOrgId: string }, db: ProductSearchDatabase) {
+async function getProductsStockView(
+	{ input, userOrgId, canViewCost }: { input: TGetProductsDefaultInput; userOrgId: string; canViewCost: boolean },
+	db: ProductSearchDatabase,
+) {
 	const now = new Date();
 	const PAGE_SIZE = input.pageSize ?? DEFAULT_PAGE_SIZE;
 	const skip = PAGE_SIZE * (input.page - 1);
@@ -251,7 +256,7 @@ async function getProductsStockView({ input, userOrgId }: { input: TGetProductsD
 			imagemCapaUrl: product.imagemCapaUrl,
 			quantidade: product.quantidade,
 			precoVenda: product.precoVenda,
-			precoCusto: product.precoCusto,
+			precoCusto: maskCost(product.precoCusto, canViewCost),
 			rastreamentoEstoqueAtivo: product.rastreamentoEstoqueAtivo ?? false,
 			movimentacao,
 			loteAtivo,
@@ -269,7 +274,8 @@ async function getProductsStockView({ input, userOrgId }: { input: TGetProductsD
 				totalPages: Math.ceil(productsMatched / PAGE_SIZE),
 				resumo: {
 					totalEmEstoque: Number(resumoRow[0]?.totalEmEstoque ?? 0),
-					valorImobilizado: Number(resumoRow[0]?.valorImobilizado ?? 0),
+					// Valor imobilizado é quantidade × custo: some junto com o custo (dadosSensiveis.visualizarCustos).
+					valorImobilizado: maskCost(Number(resumoRow[0]?.valorImobilizado ?? 0), canViewCost),
 					produtosSemEstoque: Number(resumoRow[0]?.produtosSemEstoque ?? 0),
 					produtosComEstoque: Number(resumoRow[0]?.produtosComEstoque ?? 0),
 					lotesVencendo7Dias: Number(vencendoResult[0]?.count ?? 0),
@@ -287,6 +293,8 @@ async function getProducts({ input, session }: GetProductsParams) {
 async function queryProducts({ input, session }: GetProductsParams, db: ProductSearchDatabase) {
 	const userOrgId = session.membership?.organizacao.id;
 	if (!userOrgId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
+	// Custo de catálogo, valor imobilizado e custo das vendas só saem para quem vê custos.
+	const canViewCost = canViewCosts(session.membership?.permissoes);
 
 	console.log("[INFO] [GET PRODUCTS] Input:", input);
 
@@ -365,7 +373,8 @@ async function queryProducts({ input, session }: GetProductsParams, db: ProductS
 
 		return {
 			data: {
-				byId: product,
+				// Inclui as linhas aninhadas (variantes, opções de adicional com produto/variante).
+				byId: redactCatalogCosts(product, canViewCost),
 				default: undefined,
 				stock: undefined,
 			},
@@ -374,10 +383,10 @@ async function queryProducts({ input, session }: GetProductsParams, db: ProductS
 
 	// Modo "stock": visão operacional de estoque (delega para o helper dedicado).
 	if (input.mode === "stock") {
-		return getProductsStockView({ input, userOrgId }, db);
+		return getProductsStockView({ input, userOrgId, canViewCost }, db);
 	}
 
-	return queryProductsList({ input, userOrgId, pageSize: input.pageSize ?? DEFAULT_PAGE_SIZE }, db);
+	return queryProductsList({ input, userOrgId, pageSize: input.pageSize ?? DEFAULT_PAGE_SIZE, canViewCosts: canViewCost }, db);
 }
 
 export type TGetProductsOutput = Awaited<ReturnType<typeof getProducts>>;
@@ -845,6 +854,8 @@ async function updateProduct({ session, input }: { session: TAuthUserSession; in
 	const userCanChangePrices = canChangeProductPrices(userMembership.permissoes);
 	// Editar o saldo pelo cadastro gera um AJUSTE no livro-razão: é a mesma autoridade da recontagem.
 	const userCanAdjustStock = canAdjustInventory(userMembership.permissoes);
+	// Quem não vê custo recebeu `precoCusto: null` no formulário; devolvê-lo apagaria o custo cadastrado.
+	const userCanViewCosts = canViewCosts(userMembership.permissoes);
 
 	const product = await db.query.products.findFirst({
 		where: and(eq(products.id, input.productId), eq(products.organizacaoId, userOrgId)),
@@ -895,7 +906,7 @@ async function updateProduct({ session, input }: { session: TAuthUserSession; in
 						// `undefined` = a seção não edita preço: nada de reverter para o valor lido nem de snapshot.
 						next: { precoVenda: input.product.precoVenda, precoVendaAnterior: input.product.precoVendaAnterior },
 					}),
-					precoCusto: input.product.precoCusto,
+					precoCusto: acceptIncomingCost(input.product.precoCusto, userCanViewCosts),
 					codigoBarras: input.product.codigoBarras,
 					conteudoQuantidade: input.product.conteudoQuantidade,
 					conteudoUnidade: input.product.conteudoUnidade,
@@ -1010,7 +1021,7 @@ async function updateProduct({ session, input }: { session: TAuthUserSession; in
 							current: currentVariantState,
 							next: { precoVenda: variant.precoVenda, precoVendaAnterior: variant.precoVendaAnterior },
 						}),
-						precoCusto: variant.precoCusto,
+						precoCusto: acceptIncomingCost(variant.precoCusto, userCanViewCosts),
 						codigoBarras: variant.codigoBarras,
 						conteudoQuantidade: variant.conteudoQuantidade,
 						rastreamentoEstoqueAtivo: variant.rastreamentoEstoqueAtivo,
@@ -1051,7 +1062,7 @@ async function updateProduct({ session, input }: { session: TAuthUserSession; in
 						codigo: variant.codigo,
 						imagemCapaUrl: variant.imagemCapaUrl,
 						precoVenda: variant.precoVenda,
-						precoCusto: variant.precoCusto,
+						precoCusto: acceptIncomingCost(variant.precoCusto, userCanViewCosts),
 						codigoBarras: variant.codigoBarras,
 						conteudoQuantidade: variant.conteudoQuantidade,
 						quantidade: variant.quantidade,
@@ -1239,6 +1250,8 @@ async function createProduct({ session, input }: { session: TAuthUserSession; in
 	const userHasFiscalConfigurePermission = userMembership.permissoes.fiscal.configurar;
 	// Inclui a criação a partir da importação de compra: cadastrar item novo no catálogo é ato de produtos.
 	if (!canCreateProducts(userMembership.permissoes)) throw new createHttpError.Forbidden("Você não possui permissão para criar produtos.");
+	// Quem não vê custo cadastra sem custo: o campo nem aparece no formulário dessa pessoa.
+	const userCanViewCosts = canViewCosts(userMembership.permissoes);
 
 	console.log("[INFO] [CREATE PRODUCT] Input:", JSON.stringify(input, null, 2));
 
@@ -1286,7 +1299,7 @@ async function createProduct({ session, input }: { session: TAuthUserSession; in
 				grupo: input.product.grupo,
 				imagemCapaUrl: input.product.imagemCapaUrl,
 				precoVenda: input.product.precoVenda,
-				precoCusto: input.product.precoCusto,
+				precoCusto: acceptIncomingCost(input.product.precoCusto, userCanViewCosts),
 				codigoBarras: input.product.codigoBarras,
 				conteudoQuantidade: input.product.conteudoQuantidade,
 				conteudoUnidade: input.product.conteudoUnidade,
@@ -1374,7 +1387,7 @@ async function createProduct({ session, input }: { session: TAuthUserSession; in
 					codigo: variant.codigo,
 					imagemCapaUrl: variant.imagemCapaUrl,
 					precoVenda: variant.precoVenda,
-					precoCusto: variant.precoCusto,
+					precoCusto: acceptIncomingCost(variant.precoCusto, userCanViewCosts),
 					codigoBarras: variant.codigoBarras,
 					conteudoQuantidade: variant.conteudoQuantidade,
 					quantidade: variant.quantidade,

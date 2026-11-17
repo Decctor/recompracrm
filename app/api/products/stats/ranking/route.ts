@@ -1,12 +1,20 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { runPagesRouteHandler, type PagesRouteHandler } from "@/lib/pages-route-compat";
-import { GetProductsRankingInputSchema, getProductsRanking, type TGetProductsRankingOutput } from "@/lib/products/ranking";
+import { canViewCosts } from "@/lib/permissions/sensitive-data";
+import {
+	GetProductsRankingInputSchema,
+	getProductsRanking,
+	maskProductsRankingCosts,
+	type TGetProductsRankingMaskedOutput,
+} from "@/lib/products/ranking";
 import createHttpError from "http-errors";
 
-export type { TGetProductsRankingInput, TGetProductsRankingOutput } from "@/lib/products/ranking";
+export type { TGetProductsRankingInput } from "@/lib/products/ranking";
+// O cliente recebe o ranking já mascarado: margens anuláveis para quem não vê custos.
+export type TGetProductsRankingOutput = TGetProductsRankingMaskedOutput;
 
-const getProductsRankingRoute: PagesRouteHandler<TGetProductsRankingOutput> = async (req, res) => {
+const getProductsRankingRoute: PagesRouteHandler<TGetProductsRankingMaskedOutput> = async (req, res) => {
 	const sessionUser = await getCurrentSessionUncached();
 	if (!sessionUser) throw new createHttpError.Unauthorized("Você não está autenticado.");
 	console.log("[INFO] [GET PRODUCTS RANKING] Starting:", {
@@ -24,8 +32,11 @@ const getProductsRankingRoute: PagesRouteHandler<TGetProductsRankingOutput> = as
 	const organizacaoId = sessionUser.membership?.organizacao.id;
 	if (!organizacaoId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
 
+	const userCanViewCosts = canViewCosts(sessionUser.membership?.permissoes);
+	if (!userCanViewCosts && input.rankingBy === "sales-total-margin") throw new createHttpError.Forbidden("Você não tem permissão para ver custos.");
+
 	const data = await getProductsRanking({ input, organizacaoId });
-	return res.status(200).json(data);
+	return res.status(200).json(maskProductsRankingCosts(data, userCanViewCosts));
 };
 
 const routeHandlers = {

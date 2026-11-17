@@ -12,9 +12,11 @@ type ProductsRankingProps = {
 	periodBefore: Date | null;
 	comparingPeriodAfter?: Date | null;
 	comparingPeriodBefore?: Date | null;
+	// dadosSensiveis.visualizarCustos: sem ela não há ordenação por margem (a rota a recusa e anula as margens).
+	canViewCosts: boolean;
 };
 
-export default function ProductsRanking({ periodAfter, periodBefore, comparingPeriodAfter, comparingPeriodBefore }: ProductsRankingProps) {
+export default function ProductsRanking({ periodAfter, periodBefore, comparingPeriodAfter, comparingPeriodBefore, canViewCosts }: ProductsRankingProps) {
 	const [rankingBy, setRankingBy] = useState<TGetProductsRankingInput["rankingBy"]>("sales-total-value");
 
 	const { data: rankingData, isLoading: rankingLoading } = useProductsRanking({
@@ -46,13 +48,15 @@ export default function ProductsRanking({ periodAfter, periodBefore, comparingPe
 							>
 								<CirclePlus className="h-4 min-h-4 w-4 min-w-4" />
 							</Ranking.SortButton>
-							<Ranking.SortButton
-								active={rankingBy === "sales-total-margin"}
-								onClick={() => setRankingBy("sales-total-margin")}
-								tooltip="Ordenar por Margem"
-							>
-								<TrendingUp className="h-4 min-h-4 w-4 min-w-4" />
-							</Ranking.SortButton>
+							{canViewCosts ? (
+								<Ranking.SortButton
+									active={rankingBy === "sales-total-margin"}
+									onClick={() => setRankingBy("sales-total-margin")}
+									tooltip="Ordenar por Margem"
+								>
+									<TrendingUp className="h-4 min-h-4 w-4 min-w-4" />
+								</Ranking.SortButton>
+							) : null}
 						</Ranking.Actions>
 					</Ranking.Header>
 					<Ranking.List>
@@ -79,7 +83,7 @@ export default function ProductsRanking({ periodAfter, periodBefore, comparingPe
 											}
 										: {
 												icon: TrendingUp,
-												value: `${formatDecimalPlaces(product.marginPercentage)}%`,
+												value: product.marginPercentage !== null ? `${formatDecimalPlaces(product.marginPercentage)}%` : "—",
 												comparison:
 													product.marginPercentageComparison !== null
 														? `${formatDecimalPlaces(product.marginPercentageComparison)}%`

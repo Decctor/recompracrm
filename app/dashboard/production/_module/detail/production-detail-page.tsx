@@ -8,7 +8,7 @@ import { getErrorMessage } from "@/lib/errors";
 import { createManualPrintJob } from "@/lib/mutations/desktop-agent";
 import { completeProduction, deleteProduction, startProduction, weighProductionItem } from "@/lib/mutations/productions";
 import { appRoutes } from "@/lib/navigation/routes";
-import type { TProductionPermissions } from "@/lib/permissions/productions";
+import type { TProductionPagePermissions } from "../../_lib/require-production-access";
 import { organizationHasPrinterForFinalidade, useAgentPrinters } from "@/lib/queries/desktop-agent";
 import { useProductionById } from "@/lib/queries/productions";
 import { showSuccessActionToast } from "@/lib/toasts/show-action-toast";
@@ -44,7 +44,7 @@ const PANEL_TABS: Record<TDetailPanel, { label: string; icon: LucideIcon }> = {
 };
 
 type ProductionDetailPageProps = {
-	permissions: TProductionPermissions;
+	permissions: TProductionPagePermissions;
 	productionId: string;
 };
 

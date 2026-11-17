@@ -1,5 +1,6 @@
 "use client";
 
+import { canViewCosts } from "@/lib/permissions/sensitive-data";
 import { CommercialStatsSection } from "@/components/Stats/CommercialStatsSection";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { TAuthUserSession } from "@/lib/authentication/types";
@@ -70,7 +71,7 @@ export default function SalesResultsPage({ user, userOrg, membership, scopeSelle
 					<TabsContent value="operacional">
 						<OperationalResultsView
 							hasResultsScope={Boolean(membership.permissoes.resultados.escopo && membership.permissoes.resultados.escopo.length > 0)}
-							canViewSensitive={membership.permissoes.resultados.visualizarSensiveis}
+							canViewSensitive={canViewCosts(membership.permissoes)}
 						/>
 					</TabsContent>
 				) : null}

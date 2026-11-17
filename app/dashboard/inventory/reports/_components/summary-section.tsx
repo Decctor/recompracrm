@@ -3,21 +3,27 @@
 import StatUnitCard from "@/components/Stats/StatUnitCard";
 import { formatDecimalPlaces, formatToMoney } from "@/lib/formatting";
 import { type TStockReportPeriod, useStockReportSummary } from "@/lib/queries/inventory-reports";
+import { cn } from "@/lib/utils";
 import { AlertTriangle, BadgeDollarSign, Boxes, CalendarClock } from "lucide-react";
 import { ReportSection, ReportSectionState } from "./report-section";
 import { StockValueChart } from "./stock-value-chart";
 
-export function SummarySection({ period, periodLabel }: { period: TStockReportPeriod; periodLabel: string }) {
+export function SummarySection({ period, periodLabel, canViewCosts }: { period: TStockReportPeriod; periodLabel: string; canViewCosts: boolean }) {
 	const { data, isLoading, error } = useStockReportSummary({ period });
 	const previousLabel = `HÁ ${periodLabel.toUpperCase()}`;
 	const units = (n: number) => `${formatDecimalPlaces(n, 0, 0)} un`;
 	const count = (n: number) => formatDecimalPlaces(n, 0, 0);
 
 	return (
-		<ReportSection id="resumo" icon={Boxes} title="Resumo" description="Retrato do estoque hoje e a evolução do capital imobilizado no período.">
+		<ReportSection
+			id="resumo"
+			icon={Boxes}
+			title="Resumo"
+			description={canViewCosts ? "Retrato do estoque hoje e a evolução do capital imobilizado no período." : "Retrato do estoque hoje."}
+		>
 			<ReportSectionState isLoading={isLoading} error={error} skeletonClassName="h-28">
 				{data ? (
-					<div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+					<div className={cn("grid grid-cols-1 gap-3 sm:grid-cols-2", data.valorImobilizado ? "xl:grid-cols-4" : "xl:grid-cols-3")}>
 						<StatUnitCard
 							title="Em estoque"
 							subtitle={`${count(data.produtosComSaldo)} produtos com saldo`}
@@ -26,15 +32,18 @@ export function SummarySection({ period, periodLabel }: { period: TStockReportPe
 							previous={{ value: data.emEstoque.anterior, format: units }}
 							previousLabel={previousLabel}
 						/>
-						<StatUnitCard
-							title="Valor imobilizado"
-							subtitle="Saldo × custo unitário"
-							icon={<BadgeDollarSign className="size-4 min-h-4 min-w-4" />}
-							current={{ value: data.valorImobilizado.atual, format: formatToMoney }}
-							previous={{ value: data.valorImobilizado.anterior, format: formatToMoney }}
-							previousLabel={previousLabel}
-							lowerIsBetter
-						/>
+						{/* Ao custo: o servidor manda `null` para quem não vê custos. */}
+						{data.valorImobilizado ? (
+							<StatUnitCard
+								title="Valor imobilizado"
+								subtitle="Saldo × custo unitário"
+								icon={<BadgeDollarSign className="size-4 min-h-4 min-w-4" />}
+								current={{ value: data.valorImobilizado.atual, format: formatToMoney }}
+								previous={{ value: data.valorImobilizado.anterior, format: formatToMoney }}
+								previousLabel={previousLabel}
+								lowerIsBetter
+							/>
+						) : null}
 						<StatUnitCard
 							title="Sem estoque"
 							subtitle="Produtos zerados"
@@ -62,7 +71,7 @@ export function SummarySection({ period, periodLabel }: { period: TStockReportPe
 					</div>
 				) : null}
 			</ReportSectionState>
-			<StockValueChart period={period} />
+			{canViewCosts ? <StockValueChart period={period} /> : null}
 		</ReportSection>
 	);
 }

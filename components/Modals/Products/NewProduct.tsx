@@ -7,6 +7,7 @@ import type { TCreateProductInput } from "@/app/api/products/route";
 import { type TProductState, useProductState } from "@/state-hooks/use-product-state";
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { canViewCosts } from "@/lib/permissions/sensitive-data";
 import ProductAddOnsBlock from "./Blocks/AddOns";
 import ProductGeneralBlock from "./Blocks/General";
 import ProductStateOptionsBlock from "./Blocks/Options";
@@ -31,6 +32,8 @@ export default function NewProduct({ user, userMembership, closeModal, callbacks
 	const userHasFiscalConfigurePermission = userMembership.permissoes.fiscal.configurar;
 	// Sem o módulo de ERP não há canais de venda: o bloco não é montado e o payload segue sem a matriz.
 	const orgHasERPAccess = userMembership.organizacao.configuracao.recursos.erp.acesso;
+	// Sem dadosSensiveis.visualizarCustos o produto nasce sem custo: o campo nem aparece.
+	const userCanViewCosts = canViewCosts(userMembership.permissoes);
 	const {
 		state,
 		updateProduct,
@@ -245,8 +248,13 @@ export default function NewProduct({ user, userMembership, closeModal, callbacks
 			closeMenu={closeModal}
 			dialogVariant="md"
 		>
-			<ProductGeneralBlock product={state.product} updateProduct={updateProduct} updateProductImageHolder={updateProductImageHolder} />
-			<ProductStockBlock product={state.product} updateProduct={updateProduct} />
+			<ProductGeneralBlock
+				product={state.product}
+				updateProduct={updateProduct}
+				updateProductImageHolder={updateProductImageHolder}
+				canViewCosts={userCanViewCosts}
+			/>
+			<ProductStockBlock product={state.product} updateProduct={updateProduct} canViewCosts={userCanViewCosts} />
 			<ProductStateOptionsBlock
 				options={state.productOptions}
 				variants={state.productVariants}
@@ -266,6 +274,7 @@ export default function NewProduct({ user, userMembership, closeModal, callbacks
 				updateVariant={updateProductVariant}
 				removeVariant={removeProductVariant}
 				updateVariantImageHolder={updateProductVariantImageHolder}
+				canViewCosts={userCanViewCosts}
 			/>
 			{orgHasERPAccess ? (
 				<ProductSalesChannelsBlock

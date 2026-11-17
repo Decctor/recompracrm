@@ -1,3 +1,5 @@
+import { canViewCosts } from "@/lib/permissions/sensitive-data";
+import { redactCatalogCosts } from "@/lib/products/cost-visibility";
 import { AddOnOptionChannelSettingInputSchema } from "@/schemas/product-add-on-channel-settings";
 import { applyAddOnChannelSettings } from "@/lib/products/add-on-channel-settings";
 import { requireERPSession } from "@/lib/authentication/erp-session";
@@ -168,7 +170,8 @@ async function getProductAddOnsRoute(request: NextRequest) {
 		activeOnly: request.nextUrl.searchParams.get("activeOnly"),
 	});
 	const result = await getProductAddOns({ input, session });
-	return NextResponse.json(result);
+	// Opções trazem `produto`/`produtoVariante` completos: o custo vai só para quem vê custos.
+	return NextResponse.json(redactCatalogCosts(result, canViewCosts(session.membership?.permissoes)));
 }
 
 export const GET = appApiHandler({

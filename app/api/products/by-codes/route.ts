@@ -1,3 +1,5 @@
+import { canViewCosts } from "@/lib/permissions/sensitive-data";
+import { redactCatalogCosts } from "@/lib/products/cost-visibility";
 import { appApiHandler } from "@/lib/app-api";
 import { runPagesRouteHandler, type PagesRouteHandler, type PagesRouteRequest, type PagesRouteResponse } from "@/lib/pages-route-compat";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
@@ -27,7 +29,7 @@ async function getProductsByCodes({ input, session }: { input: TGetProductsByCod
 	});
 
 	return {
-		data: products,
+		data: redactCatalogCosts(products, canViewCosts(session.membership?.permissoes)),
 		message: "Produtos encontrados com sucesso.",
 	};
 }

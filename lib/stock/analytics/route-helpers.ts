@@ -1,4 +1,5 @@
 import { canViewInventory } from "@/lib/permissions/inventory";
+import { canViewCosts } from "@/lib/permissions/sensitive-data";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import createHttpError from "http-errors";
 import { z } from "zod";
@@ -16,6 +17,25 @@ export function getSessionOrganizationId(session: TAuthUserSession | null) {
 export function getInventoryReportOrganizationId(session: TAuthUserSession | null) {
 	const organizationId = getSessionOrganizationId(session);
 	if (!canViewInventory(session?.membership?.permissoes)) throw new createHttpError.Forbidden("Você não possui permissão para visualizar o estoque.");
+	return organizationId;
+}
+
+/**
+ * Organização e acesso a custos para os relatórios com algum valor ao custo (valor parado, em risco,
+ * compra sugerida, valor imobilizado): quem não vê custos recebe esses campos como `null`.
+ */
+export function getInventoryReportAccess(session: TAuthUserSession | null) {
+	const organizationId = getInventoryReportOrganizationId(session);
+	return { organizationId, canViewCosts: canViewCosts(session?.membership?.permissoes) };
+}
+
+/**
+ * Organização para os relatórios que são inteiramente sobre custo (valor imobilizado, variação de
+ * custo de compra, perdas valorizadas): sem `dadosSensiveis.visualizarCustos`, não há o que mostrar.
+ */
+export function getInventoryCostReportOrganizationId(session: TAuthUserSession | null) {
+	const organizationId = getInventoryReportOrganizationId(session);
+	if (!canViewCosts(session?.membership?.permissoes)) throw new createHttpError.Forbidden("Você não tem permissão para ver custos.");
 	return organizationId;
 }
 

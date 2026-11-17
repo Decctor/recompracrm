@@ -19,6 +19,8 @@ import { and, eq } from "drizzle-orm";
 import { upsertProductAddOnOptions, validateAndResolveAddOnOptionLink } from "@/lib/products/add-on-options";
 import { canAdjustInventory } from "@/lib/permissions/inventory";
 import { canChangeProductPrices, canEditProducts } from "@/lib/permissions/products";
+import { acceptIncomingCost, canViewCosts } from "@/lib/permissions/sensitive-data";
+import { redactCatalogCosts } from "@/lib/products/cost-visibility";
 import { buildSalePriceUpdate, changesSalePrice } from "@/lib/products/price-snapshot";
 import { scheduleAddOnGroupPush } from "@/lib/integrations/ifood/sync/queue";
 import { editedAddOnGroupIds } from "@/lib/integrations/ifood/sync/option-sync";
@@ -42,6 +44,7 @@ export type TGetProductVariantsInput = z.infer<typeof GetProductVariantsInputSch
 async function getProductVariants({ input, session }: { input: TGetProductVariantsInput; session: TAuthUserSession }) {
 	const userOrgId = session.membership?.organizacao.id;
 	if (!userOrgId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
+	const canViewCost = canViewCosts(session.membership?.permissoes);
 
 	if (input.productId) {
 		const productVariantsResult = await db.query.productVariants.findMany({
@@ -50,7 +53,7 @@ async function getProductVariants({ input, session }: { input: TGetProductVarian
 
 		return {
 			data: {
-				byProductId: productVariantsResult,
+				byProductId: redactCatalogCosts(productVariantsResult, canViewCost),
 				byId: undefined,
 			},
 			message: "Variantes do produto recuperadas com sucesso.",
@@ -83,7 +86,7 @@ async function getProductVariants({ input, session }: { input: TGetProductVarian
 		return {
 			data: {
 				byProductId: undefined,
-				byId: productVariantResult,
+				byId: redactCatalogCosts(productVariantResult, canViewCost),
 			},
 			message: "Variante recuperada com sucesso.",
 		};
@@ -294,6 +297,8 @@ async function createProductVariant({ input, session }: { input: TCreateProductV
 	const productId = input.productVariant.produtoId;
 	// Variante nova num produto existente é edição do produto.
 	if (!canEditProducts(userMembership.permissoes)) throw new createHttpError.Forbidden("Você não possui permissão para editar produtos.");
+	// Sem ver custo, o formulário trouxe `precoCusto: null`: mantém o que está cadastrado.
+	const userCanViewCosts = canViewCosts(userMembership.permissoes);
 
 	const product = await db.query.products.findFirst({
 		where: and(eq(products.id, productId), eq(products.organizacaoId, userOrgId)),
@@ -311,7 +316,7 @@ async function createProductVariant({ input, session }: { input: TCreateProductV
 				codigo: input.productVariant.codigo,
 				imagemCapaUrl: input.productVariant.imagemCapaUrl,
 				precoVenda: input.productVariant.precoVenda,
-				precoCusto: input.productVariant.precoCusto,
+				precoCusto: acceptIncomingCost(input.productVariant.precoCusto, userCanViewCosts),
 				codigoBarras: input.productVariant.codigoBarras,
 				conteudoQuantidade: input.productVariant.conteudoQuantidade,
 				quantidade: input.productVariant.quantidade,
@@ -424,6 +429,8 @@ async function updateProductVariant({ input, session }: { input: TUpdateProductV
 	const productId = input.productVariant.produtoId;
 	const productVariantId = input.productVariantId;
 	if (!canEditProducts(userMembership.permissoes)) throw new createHttpError.Forbidden("Você não possui permissão para editar produtos.");
+	// Sem ver custo, o formulário trouxe `precoCusto: null`: mantém o que está cadastrado.
+	const userCanViewCosts = canViewCosts(userMembership.permissoes);
 
 	const product = await db.query.products.findFirst({
 		where: and(eq(products.id, productId), eq(products.organizacaoId, userOrgId)),
@@ -466,7 +473,7 @@ async function updateProductVariant({ input, session }: { input: TUpdateProductV
 					current: existingVariant,
 					next: { precoVenda: input.productVariant.precoVenda, precoVendaAnterior: input.productVariant.precoVendaAnterior },
 				}),
-				precoCusto: input.productVariant.precoCusto,
+				precoCusto: acceptIncomingCost(input.productVariant.precoCusto, userCanViewCosts),
 				codigoBarras: input.productVariant.codigoBarras,
 				conteudoQuantidade: input.productVariant.conteudoQuantidade,
 				quantidade: input.productVariant.quantidade,

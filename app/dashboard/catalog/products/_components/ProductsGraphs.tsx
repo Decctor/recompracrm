@@ -40,9 +40,11 @@ function CustomProductsTooltip({ active, payload, valueFormatter, metricLabel }:
 type ProductsGraphsProps = {
 	periodAfter: Date | null;
 	periodBefore: Date | null;
+	// dadosSensiveis.visualizarCustos: sem ela a série de margem nem é oferecida (a rota a recusa).
+	canViewCosts: boolean;
 };
 
-export default function ProductsGraphs({ periodAfter, periodBefore }: ProductsGraphsProps) {
+export default function ProductsGraphs({ periodAfter, periodBefore, canViewCosts }: ProductsGraphsProps) {
 	const [graphType, setGraphType] = useState<TGetProductsGraphInput["graphType"]>("sales-value");
 
 	const { data: graphData, isLoading: graphLoading } = useProductsGraph({
@@ -140,18 +142,20 @@ export default function ProductsGraphs({ periodAfter, periodBefore }: ProductsGr
 									<p>Produtos Ativos por Período</p>
 								</TooltipContent>
 							</Tooltip>
-							<Tooltip>
-								<TooltipTrigger
-									render={
-										<Button variant={graphType === "margin" ? "default" : "ghost"} size="fit" className="rounded-lg p-2" onClick={() => setGraphType("margin")}>
-											<TrendingUp className="h-4 min-h-4 w-4 min-w-4" />
-										</Button>
-									}
-								/>
-								<TooltipContent>
-									<p>Evolução da Margem</p>
-								</TooltipContent>
-							</Tooltip>
+							{canViewCosts ? (
+								<Tooltip>
+									<TooltipTrigger
+										render={
+											<Button variant={graphType === "margin" ? "default" : "ghost"} size="fit" className="rounded-lg p-2" onClick={() => setGraphType("margin")}>
+												<TrendingUp className="h-4 min-h-4 w-4 min-w-4" />
+											</Button>
+										}
+									/>
+									<TooltipContent>
+										<p>Evolução da Margem</p>
+									</TooltipContent>
+								</Tooltip>
+							) : null}
 						</TooltipProvider>
 					</div>
 				</div>

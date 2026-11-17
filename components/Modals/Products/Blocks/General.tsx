@@ -22,6 +22,11 @@ type ProductStateGeneralBlockProps = {
 	/** Id do produto em edição, para o aviso de código de barras duplicado ignorar o próprio cadastro. */
 	productId?: string | null;
 	showPricing?: boolean;
+	/**
+	 * dadosSensiveis.visualizarCustos. Só pesa com `showPricing`: sem ela o preço de custo some do
+	 * formulário (o servidor também ignora o custo enviado). Ausente = não vê, o lado seguro.
+	 */
+	canViewCosts?: boolean;
 	embedded?: boolean;
 };
 
@@ -31,6 +36,7 @@ export default function ProductStateGeneralBlock({
 	updateProductImageHolder,
 	productId = null,
 	showPricing = true,
+	canViewCosts = false,
 	embedded = false,
 }: ProductStateGeneralBlockProps) {
 	const imageInputId = useId();
@@ -131,15 +137,17 @@ export default function ProductStateGeneralBlock({
 
 				{showPricing ? (
 					<div className="w-full flex items-center gap-2 lg:flex-row">
-						<div className="w-full lg:w-1/2">
-							<NumberInput
-								label="PREÇO DE CUSTO"
-								value={product.precoCusto ?? null}
-								placeholder="Preencha aqui o preço de custo do produto."
-								handleChange={(value) => updateProduct({ precoCusto: value })}
-							/>
-						</div>
-						<div className="w-full lg:w-1/2">
+						{canViewCosts ? (
+							<div className="w-full lg:w-1/2">
+								<NumberInput
+									label="PREÇO DE CUSTO"
+									value={product.precoCusto ?? null}
+									placeholder="Preencha aqui o preço de custo do produto."
+									handleChange={(value) => updateProduct({ precoCusto: value })}
+								/>
+							</div>
+						) : null}
+						<div className={canViewCosts ? "w-full lg:w-1/2" : "w-full"}>
 							<NumberInput
 								label="PREÇO DE VENDA"
 								value={product.precoVenda ?? null}

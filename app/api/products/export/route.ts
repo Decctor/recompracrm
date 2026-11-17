@@ -1,5 +1,7 @@
 import { appApiHandler } from "@/lib/app-api";
 import { canViewProducts } from "@/lib/permissions/products";
+import { canViewCosts } from "@/lib/permissions/sensitive-data";
+import { redactCatalogCosts } from "@/lib/products/cost-visibility";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { GetProductsDefaultInputSchema, queryProductsList } from "@/lib/products/list";
@@ -28,8 +30,10 @@ async function getProductsExport({ input, session }: { input: TGetProductsExport
 	const orgId = membership.organizacao.id;
 	const canViewFiscal = !!membership.organizacao.configuracao.recursos.erp.acesso && !!membership.permissoes.fiscal.visualizar;
 	const canViewSuppliers = !!membership.permissoes.compras.visualizar;
+	// Mesmo padrão de fiscal/fornecedores: sem a permissão as colunas de custo nem existem na planilha.
+	const canViewCost = canViewCosts(membership.permissoes);
 	return withProductSearch(db, input.search, async (database) => {
-		const result = await queryProductsList({ input, userOrgId: orgId, pageSize: 200 }, database);
+		const result = await queryProductsList({ input, userOrgId: orgId, pageSize: 200, canViewCosts: canViewCost }, database);
 		const listed = result.data.default;
 		const ids = listed.products.map((product) => product.id);
 		const hydrated = ids.length
@@ -94,17 +98,18 @@ async function getProductsExport({ input, session }: { input: TGetProductsExport
 			entries.push(profile);
 			profilesByProductId.set(profile.produtoId, entries);
 		}
-		const byId = new Map(hydrated.map((product) => [product.id, product]));
+		const byId = new Map(redactCatalogCosts(hydrated, canViewCost).map((product) => [product.id, product]));
 		const rows = listed.products.flatMap((product) => {
 			const details = byId.get(product.id);
 			if (!details) return [];
-			const { fornecedorPrincipal, ncm, ...fields } = product;
+			const { fornecedorPrincipal, ncm, precoCusto, ...fields } = product;
 			const detailFields = details;
 			return [
 				{
 					...fields,
 					...detailFields,
 					...(canViewSuppliers ? { fornecedorPrincipal } : {}),
+					...(canViewCost ? { precoCusto } : {}),
 					...(canViewFiscal ? { ncm, perfisFiscais: profilesByProductId.get(product.id) ?? [] } : {}),
 				},
 			];
@@ -114,7 +119,7 @@ async function getProductsExport({ input, session }: { input: TGetProductsExport
 				rows,
 				totalPages: input.page === 1 ? listed.totalPages : null,
 				totalMatched: input.page === 1 ? listed.productsMatched : null,
-				permissoes: { fiscal: canViewFiscal, fornecedores: canViewSuppliers },
+				permissoes: { fiscal: canViewFiscal, fornecedores: canViewSuppliers, custos: canViewCost },
 			},
 			message: "Produtos carregados com sucesso.",
 		};

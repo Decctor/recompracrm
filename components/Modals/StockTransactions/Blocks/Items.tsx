@@ -93,9 +93,19 @@ type StockTransactionItemsBlockProps = {
 	addItem: TUseInternalStockTransactionState["addItem"];
 	updateItem: TUseInternalStockTransactionState["updateItem"];
 	removeItem: TUseInternalStockTransactionState["removeItem"];
+	// `dadosSensiveis.visualizarCustos`: sem ele a entrada não pede custo (o servidor também o ignora).
+	canViewCosts: boolean;
 };
 
-export default function StockTransactionItemsBlock({ type, items, lockedProduct, addItem, updateItem, removeItem }: StockTransactionItemsBlockProps) {
+export default function StockTransactionItemsBlock({
+	type,
+	items,
+	lockedProduct,
+	addItem,
+	updateItem,
+	removeItem,
+	canViewCosts,
+}: StockTransactionItemsBlockProps) {
 	return (
 		<ResponsiveMenuSection
 			title="ITENS"
@@ -118,6 +128,7 @@ export default function StockTransactionItemsBlock({ type, items, lockedProduct,
 					canRemove={!lockedProduct && items.length > 1}
 					updateItem={updateItem}
 					removeItem={removeItem}
+					canViewCosts={canViewCosts}
 				/>
 			))}
 		</ResponsiveMenuSection>
@@ -131,9 +142,10 @@ type StockTransactionItemCardProps = {
 	canRemove: boolean;
 	updateItem: TUseInternalStockTransactionState["updateItem"];
 	removeItem: TUseInternalStockTransactionState["removeItem"];
+	canViewCosts: boolean;
 };
 
-function StockTransactionItemCard({ type, item, lockedProduct, canRemove, updateItem, removeItem }: StockTransactionItemCardProps) {
+function StockTransactionItemCard({ type, item, lockedProduct, canRemove, updateItem, removeItem, canViewCosts }: StockTransactionItemCardProps) {
 	const inflow = isManualStockInflow(type);
 	const produto = item.produto;
 	const quantity = item.quantity ?? 0;
@@ -216,14 +228,16 @@ function StockTransactionItemCard({ type, item, lockedProduct, canRemove, update
 							/>
 						</div>
 						{inflow ? (
-							<div className="w-full sm:w-1/2">
-								<NumberInput
-									label="CUSTO UNITÁRIO"
-									placeholder={produto.precoCusto != null ? `Atual: ${formatToMoney(produto.precoCusto)}` : "Opcional"}
-									value={item.unitCost}
-									handleChange={(value) => updateItem(item.key, { unitCost: value })}
-								/>
-							</div>
+							canViewCosts ? (
+								<div className="w-full sm:w-1/2">
+									<NumberInput
+										label="CUSTO UNITÁRIO"
+										placeholder={produto.precoCusto != null ? `Atual: ${formatToMoney(produto.precoCusto)}` : "Opcional"}
+										value={item.unitCost}
+										handleChange={(value) => updateItem(item.key, { unitCost: value })}
+									/>
+								</div>
+							) : null
 						) : (
 							<div className="w-full sm:w-1/2">
 								<StockLotSelect
@@ -269,7 +283,7 @@ function StockTransactionItemCard({ type, item, lockedProduct, canRemove, update
 							{formatDecimalPlaces(projectedBalance ?? 0)} {produto.unidade}
 						</span>
 						{insufficient ? <span className="text-destructive font-medium">Saldo insuficiente para esta saída.</span> : null}
-						{inflow && item.unitCost == null ? <span className="text-muted-foreground">Sem custo informado, o custo médio atual é mantido.</span> : null}
+						{inflow && canViewCosts && item.unitCost == null ? <span className="text-muted-foreground">Sem custo informado, o custo médio atual é mantido.</span> : null}
 					</div>
 				</>
 			) : null}

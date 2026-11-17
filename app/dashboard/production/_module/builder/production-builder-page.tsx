@@ -1,6 +1,6 @@
 "use client";
 
-import type { TProductionPermissions } from "@/lib/permissions/productions";
+import type { TProductionPagePermissions } from "../../_lib/require-production-access";
 import { appRoutes } from "@/lib/navigation/routes";
 import { useRouter } from "next/navigation";
 import BuilderHeader from "./components/builder-header";
@@ -13,7 +13,7 @@ import StageReview from "./stages/stage-review";
 
 type ProductionBuilderPageProps = {
 	/** A página já exige `criar`; as permissões ficam disponíveis para as etapas. */
-	permissions: TProductionPermissions;
+	permissions: TProductionPagePermissions;
 	initialRecipeId: string | null;
 };
 

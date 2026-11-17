@@ -2,6 +2,7 @@ import { appApiHandler } from "@/lib/app-api";
 import { runPagesRouteHandler, type PagesRouteHandler } from "@/lib/pages-route-compat";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { assertSellersIdsWithinResultsScope } from "@/lib/permissions/results-scope";
+import { canViewCosts } from "@/lib/permissions/sensitive-data";
 import { getOverallSaleGoal, getOverallStats, type TOverallSalesStats } from "@/lib/sales/overall-stats";
 import { SalesGeneralStatsFiltersSchema } from "@/schemas/query-params-utils";
 import createHttpError from "http-errors";
@@ -40,7 +41,8 @@ const getSalesOverallStatsRoute: PagesRouteHandler<GetResponse> = async (req, re
 	const overallStats: TOverallSalesStats = {
 		faturamentoMetaPorcentagem: (stats.faturamento.atual / overallSaleGoal) * 100,
 		faturamento: stats.faturamento,
-		margemBruta: stats.margemBruta,
+		// Margem é faturamento − custo: quem não vê custo não recebe o número (o bloco já não a exibe).
+		margemBruta: canViewCosts(userOrgMembership.permissoes) ? stats.margemBruta : { atual: 0, anterior: undefined },
 		faturamentoMeta: overallSaleGoal,
 		qtdeVendas: stats.qtdeVendas,
 		ticketMedio: stats.ticketMedio,

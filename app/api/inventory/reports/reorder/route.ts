@@ -1,7 +1,8 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { getProductStockIndicators } from "@/lib/stock/analytics/product-indicators";
-import { getInventoryReportOrganizationId, parsePeriodSearchParams, StockReportPeriodInputSchema } from "@/lib/stock/analytics/route-helpers";
+import { maskCost } from "@/lib/permissions/sensitive-data";
+import { getInventoryReportAccess, parsePeriodSearchParams, StockReportPeriodInputSchema } from "@/lib/stock/analytics/route-helpers";
 import { type NextRequest, NextResponse } from "next/server";
 import type { z } from "zod";
 
@@ -10,9 +11,17 @@ export type TGetStockReportReorderInput = z.infer<typeof GetStockReportReorderIn
 
 /**
  * Produtos no ou abaixo do ponto de pedido, do mais crítico (saldo ÷ ponto de pedido menor) para o
- * menos, com a compra sugerida valorizada ao custo médio atual.
+ * menos, com a compra sugerida valorizada ao custo médio atual (`null` para quem não vê custos).
  */
-async function getStockReportReorder({ input, organizationId }: { input: TGetStockReportReorderInput; organizationId: string }) {
+async function getStockReportReorder({
+	input,
+	organizationId,
+	canViewCosts,
+}: {
+	input: TGetStockReportReorderInput;
+	organizationId: string;
+	canViewCosts: boolean;
+}) {
 	const indicators = await getProductStockIndicators({ organizationId, after: input.periodAfter, before: input.periodBefore });
 	const itens = indicators
 		.filter((item) => item.abaixoPontoPedido)
@@ -30,11 +39,17 @@ async function getStockReportReorder({ input, organizationId }: { input: TGetSto
 			prazoReposicaoDias: item.prazoReposicaoDias,
 			prazoReposicaoOrigem: item.prazoReposicaoOrigem,
 			sugestao: item.sugestao,
-			valorSugerido: item.sugestao * item.custoUnitario,
+			valorSugerido: maskCost(item.sugestao * item.custoUnitario, canViewCosts),
 		}));
 	return {
 		data: {
-			total: { produtos: itens.length, valorSugerido: itens.reduce((sum, item) => sum + item.valorSugerido, 0) },
+			total: {
+				produtos: itens.length,
+				valorSugerido: maskCost(
+					itens.reduce((sum, item) => sum + (item.valorSugerido ?? 0), 0),
+					canViewCosts,
+				),
+			},
 			itens,
 		},
 		message: "Produtos para reposição obtidos com sucesso.",
@@ -43,9 +58,9 @@ async function getStockReportReorder({ input, organizationId }: { input: TGetSto
 export type TGetStockReportReorderOutput = Awaited<ReturnType<typeof getStockReportReorder>>;
 
 async function getStockReportReorderRoute(request: NextRequest) {
-	const organizationId = getInventoryReportOrganizationId(await getCurrentSessionUncached());
+	const { organizationId, canViewCosts } = getInventoryReportAccess(await getCurrentSessionUncached());
 	const input = GetStockReportReorderInputSchema.parse(parsePeriodSearchParams(request.nextUrl.searchParams));
-	const result = await getStockReportReorder({ input, organizationId });
+	const result = await getStockReportReorder({ input, organizationId, canViewCosts });
 	return NextResponse.json(result);
 }
 

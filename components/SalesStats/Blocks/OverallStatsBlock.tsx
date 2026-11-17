@@ -1,3 +1,4 @@
+import { canViewCosts } from "@/lib/permissions/sensitive-data";
 import GoalPaceChip from "@/components/Goals/GoalPaceChip";
 import { useOrgColors } from "@/components/Providers/OrgColorsProvider";
 import { GoalTrackingBar } from "@/components/Stats/GoalTrackingBar";
@@ -22,7 +23,7 @@ type OverallStatsBlockProps = {
 	generalQueryParams: TSaleStatsGeneralQueryParams;
 };
 function OverallStatsBlock({ user, userMembership, userOrg, generalQueryParams }: OverallStatsBlockProps) {
-	const isUserAllowedToSeeSensitiveData = userMembership.permissoes.resultados.visualizarSensiveis;
+	const isUserAllowedToSeeSensitiveData = canViewCosts(userMembership.permissoes);
 	const [queryParams, setQueryParams] = useState<TSaleStatsGeneralQueryParams>(generalQueryParams);
 	const { getPrimaryGradientStyle } = useOrgColors();
 

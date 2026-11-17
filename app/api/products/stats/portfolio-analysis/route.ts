@@ -1,3 +1,4 @@
+import { canViewCosts } from "@/lib/permissions/sensitive-data";
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { getPortfolioAnalysis, type TGetPortfolioAnalysisResult } from "@/lib/products/portfolio-analysis";
@@ -40,7 +41,7 @@ async function getProductsPortfolioAnalysisRoute(request: NextRequest) {
 		periodBefore: request.nextUrl.searchParams.get("periodBefore"),
 	});
 
-	const data = await getPortfolioAnalysis({ input, organizationId: userOrgId });
+	const data = await getPortfolioAnalysis({ input, organizationId: userOrgId, canViewCosts: canViewCosts(session.membership?.permissoes) });
 
 	return NextResponse.json({
 		data,

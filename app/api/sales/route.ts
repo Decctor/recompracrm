@@ -1,6 +1,7 @@
 import { appApiHandler } from "@/lib/app-api";
 import { runPagesRouteHandler, type PagesRouteHandler } from "@/lib/pages-route-compat";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { canViewCosts, maskCost } from "@/lib/permissions/sensitive-data";
 import { DEFAULT_PAGE_SIZE, pageSizeInputSchema } from "@/lib/pagination";
 import { applyCashbackRedemptionFIFO } from "@/lib/cashback/redemption";
 import { reverseSaleCashback } from "@/lib/cashback/reverse-sale-cashback";
@@ -463,6 +464,18 @@ async function getSales({ input, sessionUser }: { input: TGetSalesInput; session
 			transacoes,
 		});
 		const { documentosFiscais, ...saleWithoutFiscalDocuments } = sale;
+		// Custo da venda e dos itens: nenhuma tela de venda o exibe, mas a resposta também não o leva
+		// a quem não vê custos (dadosSensiveis.visualizarCustos).
+		const userCanViewCosts = canViewCosts(sessionUser.membership?.permissoes);
+		const saleWithMaskedCosts = {
+			...saleWithoutFiscalDocuments,
+			custoTotal: maskCost(saleWithoutFiscalDocuments.custoTotal, userCanViewCosts),
+			itens: saleWithoutFiscalDocuments.itens.map((item) => ({
+				...item,
+				valorCustoUnitario: maskCost(item.valorCustoUnitario, userCanViewCosts),
+				valorCustoTotal: maskCost(item.valorCustoTotal, userCanViewCosts),
+			})),
+		};
 		const userCanViewFiscal = !!sessionUser.membership?.permissoes.fiscal.visualizar;
 		const documentosFiscaisDecorados = orgHasERPAccess
 			? await decorateSaleFiscalDocuments({ documents: documentosFiscais, organizationId: userOrgId, userCanViewFiscal })
@@ -471,7 +484,7 @@ async function getSales({ input, sessionUser }: { input: TGetSalesInput; session
 			data: {
 				default: null,
 				byId: {
-					...saleWithoutFiscalDocuments,
+					...saleWithMaskedCosts,
 					resgatesCupom,
 					editabilidade,
 					erp: orgHasERPAccess

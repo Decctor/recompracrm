@@ -1,7 +1,8 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { getExpiringLots } from "@/lib/stock/analytics/queries";
-import { getInventoryReportOrganizationId } from "@/lib/stock/analytics/route-helpers";
+import { maskCost } from "@/lib/permissions/sensitive-data";
+import { getInventoryReportAccess } from "@/lib/stock/analytics/route-helpers";
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -25,16 +26,26 @@ const GetStockReportExpirationsInputSchema = z.object({
 export type TGetStockReportExpirationsInput = z.infer<typeof GetStockReportExpirationsInputSchema>;
 
 /**
- * Lotes ativos com saldo por prazo até a validade, com o valor em risco ao custo do lote. Retrato de
+ * Lotes ativos com saldo por prazo até a validade, com o valor em risco ao custo do lote (`null` para
+ * quem não vê custos). Retrato de
  * hoje: não depende do período. `diasAteValidade` segue a mesma conta da Visão geral (teto da
  * diferença em dias), então "vencido" é `<= 0`.
  */
-async function getStockReportExpirations({ input, organizationId }: { input: TGetStockReportExpirationsInput; organizationId: string }) {
+async function getStockReportExpirations({
+	input,
+	organizationId,
+	canViewCosts,
+}: {
+	input: TGetStockReportExpirationsInput;
+	organizationId: string;
+	canViewCosts: boolean;
+}) {
 	const now = Date.now();
 	const lots = await getExpiringLots({ organizationId, until: new Date(now + HORIZON_DAYS * 86_400_000) });
 	const enriched = lots.map((lot) => ({
 		...lot,
-		valor: lot.quantidadeAtual * lot.custoUnitario,
+		custoUnitario: maskCost(lot.custoUnitario, canViewCosts),
+		valor: maskCost(lot.quantidadeAtual * lot.custoUnitario, canViewCosts),
 		diasAteValidade: Math.ceil((lot.dataValidade - now) / 86_400_000),
 	}));
 
@@ -42,7 +53,15 @@ async function getStockReportExpirations({ input, organizationId }: { input: TGe
 		data: {
 			faixas: EXPIRATION_BUCKETS.map((bucket) => {
 				const items = enriched.filter((lot) => lot.diasAteValidade > bucket.min && lot.diasAteValidade <= bucket.max);
-				return { faixa: bucket.faixa, rotulo: bucket.rotulo, lotes: items.length, valor: items.reduce((sum, lot) => sum + lot.valor, 0) };
+				return {
+					faixa: bucket.faixa,
+					rotulo: bucket.rotulo,
+					lotes: items.length,
+					valor: maskCost(
+						items.reduce((sum, lot) => sum + (lot.valor ?? 0), 0),
+						canViewCosts,
+					),
+				};
 			}),
 			lotes: enriched.filter((lot) => lot.diasAteValidade <= LIST_HORIZON_DAYS).slice(0, input.limit),
 		},
@@ -52,9 +71,9 @@ async function getStockReportExpirations({ input, organizationId }: { input: TGe
 export type TGetStockReportExpirationsOutput = Awaited<ReturnType<typeof getStockReportExpirations>>;
 
 async function getStockReportExpirationsRoute(request: NextRequest) {
-	const organizationId = getInventoryReportOrganizationId(await getCurrentSessionUncached());
+	const { organizationId, canViewCosts } = getInventoryReportAccess(await getCurrentSessionUncached());
 	const input = GetStockReportExpirationsInputSchema.parse({ limit: request.nextUrl.searchParams.get("limit") });
-	const result = await getStockReportExpirations({ input, organizationId });
+	const result = await getStockReportExpirations({ input, organizationId, canViewCosts });
 	return NextResponse.json(result);
 }
 

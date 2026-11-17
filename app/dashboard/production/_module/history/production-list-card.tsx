@@ -49,6 +49,11 @@ function getStatusCaption(production: TProductionListItem, now: number) {
 function getValuationLine(production: TProductionListItem) {
 	if (production.status === "CANCELADA") return "sem baixa de estoque";
 	const { valores } = production;
+	// Sem permissão de ver custos, custo e margem chegam `null`: a linha fica só com o retorno esperado.
+	if (valores.custoTotal == null) {
+		const returnLine = `retorno ${formatToMoney(valores.retornoEsperado)}`;
+		return valores.origemValores === "SNAPSHOT" ? returnLine : `previsto · ${returnLine}`;
+	}
 	const margin = valores.margemPercentual !== null ? `${Math.round(valores.margemPercentual)}%` : "—";
 	const line = `custo ${formatToMoney(valores.custoTotal)} · margem ${margin}`;
 	// Só a concluída tem valores congelados; as demais são projeção pelo catálogo.

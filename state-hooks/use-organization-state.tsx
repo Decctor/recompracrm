@@ -156,6 +156,9 @@ export function useOrganizationState() {
 					excluir: true,
 					concluir: true,
 				},
+				dadosSensiveis: {
+					visualizarCustos: true,
+				},
 			},
 		},
 		mainUserAvatarHolder: {

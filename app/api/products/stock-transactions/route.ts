@@ -2,6 +2,7 @@ import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { pageSizeInputSchema } from "@/lib/pagination";
 import { canMoveInventory, canViewInventory } from "@/lib/permissions/inventory";
+import { acceptIncomingCost, canViewCosts, maskCost } from "@/lib/permissions/sensitive-data";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { applyStockMovement } from "@/lib/stock/apply-stock-movement";
 import { consumeStockLotsByFefo } from "@/lib/stock/consume-stock-lots-fefo";
@@ -70,11 +71,22 @@ function resolveTransactionDirection<TTransaction extends { saldoAnterior: numbe
 	return "NEUTRO";
 }
 
-function enrichStockTransaction<TTransaction extends { saldoAnterior: number | null; saldoPosterior: number | null; quantidade: number }>(
-	transaction: TTransaction,
-) {
+function enrichStockTransaction<
+	TTransaction extends {
+		saldoAnterior: number | null;
+		saldoPosterior: number | null;
+		quantidade: number;
+		custoUnitarioMovimentado: number | null;
+		custoUnitarioAnterior: number | null;
+		custoUnitarioPosterior: number | null;
+	},
+>(transaction: TTransaction, canViewTransactionCosts: boolean) {
 	return {
 		...transaction,
+		// Custo movimentado e custo médio antes/depois: `null` para quem não vê custos.
+		custoUnitarioMovimentado: maskCost(transaction.custoUnitarioMovimentado, canViewTransactionCosts),
+		custoUnitarioAnterior: maskCost(transaction.custoUnitarioAnterior, canViewTransactionCosts),
+		custoUnitarioPosterior: maskCost(transaction.custoUnitarioPosterior, canViewTransactionCosts),
 		direcao: resolveTransactionDirection(transaction),
 	};
 }
@@ -135,7 +147,7 @@ async function getProductStockTransactions({ input, session }: { input: TGetProd
 	return {
 		data: {
 			default: {
-				transactions: transactionsResult.map(enrichStockTransaction),
+				transactions: transactionsResult.map((transaction) => enrichStockTransaction(transaction, canViewCosts(session.membership?.permissoes))),
 				transactionsMatched,
 				totalPages: Math.max(1, Math.ceil(transactionsMatched / PAGE_SIZE)),
 				resumo: {
@@ -302,6 +314,7 @@ async function createStockTransactions({ input, session }: { input: TCreateStock
 	if (!organizationId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização.");
 
 	const inflow = isManualStockInflow(input.type);
+	const canViewMovementCosts = canViewCosts(session.membership?.permissoes);
 
 	return await db.transaction(async (tx) => {
 		const items = [];
@@ -352,7 +365,8 @@ async function createStockTransactions({ input, session }: { input: TCreateStock
 					signedQuantity,
 					movementType: input.type,
 					reason: input.reason,
-					unitCost: item.unitCost ?? null,
+					// Quem não vê custos não informa custo: a entrada segue sem custo e mantém o custo médio atual.
+					unitCost: acceptIncomingCost(item.unitCost ?? null, canViewMovementCosts) ?? null,
 					links: { loteId },
 					origin: "MANUAL",
 				});
@@ -468,7 +482,11 @@ async function createStockTransactions({ input, session }: { input: TCreateStock
 						})
 					: null;
 
-			items.push({ ...base, lotesAfetados, perda });
+			items.push({
+				...base,
+				lotesAfetados,
+				perda: perda ? { ...perda, valor: maskCost(perda.valor, canViewMovementCosts), custoUnitario: maskCost(perda.custoUnitario, canViewMovementCosts) } : null,
+			});
 		}
 
 		const lossEntries = items.filter((item) => item.perda?.lancamentoContabilId).length;

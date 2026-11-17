@@ -1,5 +1,6 @@
 import UnauthorizedPage from "@/components/Utils/UnauthorizedPage";
 import { requireDashboardCapability } from "@/lib/access/guards";
+import { canViewCosts } from "@/lib/permissions/sensitive-data";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import StockReportsPage from "./reports-page";
@@ -19,5 +20,5 @@ export default async function StockReports() {
 		return <UnauthorizedPage message="Oops, sua organização não possui acesso a este recurso." />;
 	}
 
-	return <StockReportsPage />;
+	return <StockReportsPage canViewCosts={canViewCosts(sessionUser.membership.permissoes)} />;
 }

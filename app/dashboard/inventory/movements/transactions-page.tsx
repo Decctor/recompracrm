@@ -40,7 +40,7 @@ function isMovementFilterActive(active: TStockMovementTypeEnum[], filter: TStock
 	return JSON.stringify([...active].sort()) === JSON.stringify([...filter].sort());
 }
 
-export default function StockTransactionsPage({ permissions }: { permissions: TInventoryPermissions }) {
+export default function StockTransactionsPage({ permissions, canViewCosts }: { permissions: TInventoryPermissions; canViewCosts: boolean }) {
 	const queryClient = useQueryClient();
 	const [newTransactionModalIsOpen, setNewTransactionModalIsOpen] = useState(false);
 	const { data, isLoading, isError, isSuccess, error, filters, updateFilters } = useProductStockTransactions({
@@ -195,6 +195,7 @@ export default function StockTransactionsPage({ permissions }: { permissions: TI
 			{newTransactionModalIsOpen ? (
 				<NewStockTransaction
 					closeModal={() => setNewTransactionModalIsOpen(false)}
+					canViewCosts={canViewCosts}
 					callbacks={{
 						onSuccess: () => {
 							queryClient.invalidateQueries({ queryKey: ["product-stock-transactions"] });

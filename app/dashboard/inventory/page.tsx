@@ -1,6 +1,7 @@
 import { resolveInventoryPermissions } from "@/lib/permissions/inventory";
 import UnauthorizedPage from "@/components/Utils/UnauthorizedPage";
 import { requireDashboardCapability } from "@/lib/access/guards";
+import { canViewCosts } from "@/lib/permissions/sensitive-data";
 import { redirect } from "next/navigation";
 import StocksPage from "./stocks-page";
 
@@ -14,5 +15,10 @@ export default async function Stocks() {
 		return <UnauthorizedPage message="Oops, sua organização não possui acesso a este recurso." />;
 	}
 
-	return <StocksPage permissions={resolveInventoryPermissions(sessionUser.membership.permissoes)} />;
+	return (
+		<StocksPage
+			permissions={resolveInventoryPermissions(sessionUser.membership.permissoes)}
+			canViewCosts={canViewCosts(sessionUser.membership.permissoes)}
+		/>
+	);
 }

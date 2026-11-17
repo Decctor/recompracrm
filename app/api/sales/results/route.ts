@@ -1,3 +1,4 @@
+import { canViewCosts } from "@/lib/permissions/sensitive-data";
 import { appApiHandler } from "@/lib/app-api";
 import { requireERPSession } from "@/lib/authentication/erp-session";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
@@ -57,7 +58,7 @@ async function getSalesResultsHandler({ input, session }: { input: TGetSalesResu
 			channels: input.channels,
 			excludedFinancialAccountIds: input.excludedFinancialAccountIds,
 		},
-		includeSensitive: membership.permissoes.resultados.visualizarSensiveis,
+		includeSensitive: canViewCosts(membership.permissoes),
 	});
 
 	return { data: results, message: "Resultados de vendas calculados com sucesso." };

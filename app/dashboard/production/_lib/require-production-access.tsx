@@ -1,8 +1,16 @@
 import UnauthorizedPage from "@/components/Utils/UnauthorizedPage";
 import { requireDashboardCapability } from "@/lib/access/guards";
 import { resolveProductionPermissions, type TProductionPermissions } from "@/lib/permissions/productions";
+import { canViewCosts } from "@/lib/permissions/sensitive-data";
 import { redirect } from "next/navigation";
 import type { ReactElement } from "react";
+
+/**
+ * Permissões que as telas de Produções recebem: as do módulo mais `visualizarCustos`
+ * (dadosSensiveis), que decide se custo e margem aparecem. A API já manda esses campos como `null`
+ * para quem não vê custos; a flag serve para a tela esconder blocos e ordenações inteiros.
+ */
+export type TProductionPagePermissions = TProductionPermissions & { visualizarCustos: boolean };
 
 /**
  * Guarda comum das páginas de Produções: capability `production`, organização com ERP e, quando
@@ -14,7 +22,7 @@ export async function requireProductionAccess({
 }: {
 	permission?: keyof TProductionPermissions;
 	deniedMessage?: string;
-} = {}): Promise<{ permissions: TProductionPermissions; blocked: null } | { permissions: null; blocked: ReactElement }> {
+} = {}): Promise<{ permissions: TProductionPagePermissions; blocked: null } | { permissions: null; blocked: ReactElement }> {
 	const { sessionUser, unauthorized } = await requireDashboardCapability("production");
 	if (unauthorized) return { permissions: null, blocked: unauthorized };
 
@@ -28,5 +36,5 @@ export async function requireProductionAccess({
 	if (permission && !permissions[permission]) {
 		return { permissions: null, blocked: <UnauthorizedPage message={deniedMessage ?? "Você não possui permissão para acessar esta página."} /> };
 	}
-	return { permissions, blocked: null };
+	return { permissions: { ...permissions, visualizarCustos: canViewCosts(sessionUser.membership.permissoes) }, blocked: null };
 }

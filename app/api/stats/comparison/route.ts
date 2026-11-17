@@ -1,3 +1,4 @@
+import { canViewCosts } from "@/lib/permissions/sensitive-data";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { appApiHandler } from "@/lib/app-api";
 import { resolveResultsScopeSellerIds } from "@/lib/permissions/results-scope";
@@ -112,7 +113,7 @@ async function getSalesComparisonRoute(request: NextRequest) {
 		input,
 		organizacaoId,
 		scopeSellerIds,
-		canViewSensitive: membership.permissoes.resultados.visualizarSensiveis,
+		canViewSensitive: canViewCosts(membership.permissoes),
 	});
 	return NextResponse.json(result);
 }

@@ -4,6 +4,7 @@ import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { db } from "@/services/drizzle";
 import { getProductSalesLines } from "@/lib/products/product-sales-lines";
+import { canViewCosts, maskCost } from "@/lib/permissions/sensitive-data";
 import { products, sales } from "@/services/drizzle/schema";
 import { and, count, countDistinct, eq, gte, lte, sql, sum } from "drizzle-orm";
 import createHttpError from "http-errors";
@@ -60,6 +61,8 @@ async function getProductsOverallStats({ input, session }: { input: TGetProducts
 	});
 
 	const { periodAfter, periodBefore, comparingPeriodAfter, comparingPeriodBefore } = input;
+	// Margem média e valor do estoque derivam do custo: `null` para quem não vê custos.
+	const canViewCost = canViewCosts(session.membership?.permissoes);
 
 	// 1. Total products count (all products in organization)
 	const totalProductsResult = await db.select({ count: count() }).from(products).where(eq(products.organizacaoId, userOrgId));
@@ -185,7 +188,7 @@ async function getProductsOverallStats({ input, session }: { input: TGetProducts
 					comparison: null,
 				},
 				averageMargin: {
-					current: averageMarginPercentage,
+					current: maskCost(averageMarginPercentage, canViewCost),
 					comparison: null,
 				},
 				stockHealth: {
@@ -202,7 +205,7 @@ async function getProductsOverallStats({ input, session }: { input: TGetProducts
 					comparison: null,
 				},
 				totalInventoryValue: {
-					current: totalInventoryValue,
+					current: maskCost(totalInventoryValue, canViewCost),
 					comparison: null,
 				},
 				atRiskInventory: {
@@ -295,8 +298,8 @@ async function getProductsOverallStats({ input, session }: { input: TGetProducts
 				comparison: comparisonTotalRevenue,
 			},
 			averageMargin: {
-				current: averageMarginPercentage,
-				comparison: comparisonAverageMarginPercentage,
+				current: maskCost(averageMarginPercentage, canViewCost),
+				comparison: maskCost(comparisonAverageMarginPercentage, canViewCost),
 			},
 			stockHealth: {
 				current: {
@@ -317,8 +320,8 @@ async function getProductsOverallStats({ input, session }: { input: TGetProducts
 				comparison: comparisonAverageTurnoverDays,
 			},
 			totalInventoryValue: {
-				current: totalInventoryValue,
-				comparison: totalInventoryValue,
+				current: maskCost(totalInventoryValue, canViewCost),
+				comparison: maskCost(totalInventoryValue, canViewCost),
 			},
 			atRiskInventory: {
 				current: atRiskCount,

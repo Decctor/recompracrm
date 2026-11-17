@@ -16,6 +16,8 @@ import { PRODUCTION_STATUS_META, PRODUCTION_STATUS_ORDER } from "./production-st
 type ProductionsInlineFiltersProps = {
 	filters: TGetProductionsDefaultInput;
 	updateFilters: (filters: Partial<TGetProductionsDefaultInput>) => void;
+	/** Sem `dadosSensiveis.visualizarCustos` não há ordenação por custo nem por margem (a API também a ignora). */
+	canViewCosts: boolean;
 };
 
 const STATUS_OPTIONS = PRODUCTION_STATUS_ORDER.map((status) => ({
@@ -31,6 +33,8 @@ const COMPOSITION_OPTIONS = [
 	{ id: "SALDO_REINCORPORADO", value: "SALDO_REINCORPORADO", label: "COM SALDO REINCORPORADO" },
 ] satisfies InteractiveFilterOption<TProductionCompositionEnum>[];
 
+const COST_SORT_FIELDS: TProductionsSortFieldEnum[] = ["CUSTO", "MARGEM"];
+
 const ORDER_FIELD_OPTIONS = [
 	{ id: "DATA", value: "DATA", label: "DATA DE INÍCIO" },
 	{ id: "TITULO", value: "TITULO", label: "TÍTULO" },
@@ -41,7 +45,8 @@ const ORDER_FIELD_OPTIONS = [
 
 export const DEFAULT_PRODUCTIONS_SORT = { field: "DATA", direction: "desc" } satisfies InteractiveFilterSortValue<TProductionsSortFieldEnum>;
 
-export default function ProductionsInlineFilters({ filters, updateFilters }: ProductionsInlineFiltersProps) {
+export default function ProductionsInlineFilters({ filters, updateFilters, canViewCosts }: ProductionsInlineFiltersProps) {
+	const orderFieldOptions = canViewCosts ? ORDER_FIELD_OPTIONS : ORDER_FIELD_OPTIONS.filter((option) => !COST_SORT_FIELDS.includes(option.value));
 	// Receitas arquivadas continuam no filtro: produções antigas ainda apontam para elas.
 	const { data: recipesResult } = useProductionRecipes({
 		initialFilters: { activeOnly: false, orderBy: "NOME", orderByDirection: "asc", pageSize: 100 },
@@ -133,7 +138,7 @@ export default function ProductionsInlineFilters({ filters, updateFilters }: Pro
 							<ArrowDownUp className="h-4 w-4" />
 							<InteractiveFilter.Label>ORDENAR POR</InteractiveFilter.Label>
 						</InteractiveFilter.Icon>
-						<InteractiveFilter.Value>{formatInteractiveSortFieldSummary(ORDER_FIELD_OPTIONS, sortValue.field)}</InteractiveFilter.Value>
+						<InteractiveFilter.Value>{formatInteractiveSortFieldSummary(orderFieldOptions, sortValue.field)}</InteractiveFilter.Value>
 						<InteractiveFilter.SortDirectionToggle
 							direction={sortValue.direction}
 							onDirectionChange={(direction) => setSort({ ...sortValue, direction })}
@@ -141,7 +146,7 @@ export default function ProductionsInlineFilters({ filters, updateFilters }: Pro
 						<InteractiveFilter.Clear onClear={() => setSort(DEFAULT_PRODUCTIONS_SORT)} label="Limpar ordenação" />
 					</InteractiveFilter.Trigger>
 					<InteractiveFilter.Content className="w-72 p-0">
-						<InteractiveFilter.SortContent fieldOptions={ORDER_FIELD_OPTIONS} value={sortValue} onChange={setSort} />
+						<InteractiveFilter.SortContent fieldOptions={orderFieldOptions} value={sortValue} onChange={setSort} />
 					</InteractiveFilter.Content>
 				</InteractiveFilter.Root>
 			) : null}
@@ -166,7 +171,7 @@ export default function ProductionsInlineFilters({ filters, updateFilters }: Pro
 							) : null}
 							{!hasSort ? (
 								<InteractiveFilter.AddFilterItem id="sort" label="ORDENAR POR" icon={<ArrowDownUp className="h-4 w-4" />}>
-									<InteractiveFilter.SortContent fieldOptions={ORDER_FIELD_OPTIONS} value={sortValue} onChange={setSort} />
+									<InteractiveFilter.SortContent fieldOptions={orderFieldOptions} value={sortValue} onChange={setSort} />
 								</InteractiveFilter.AddFilterItem>
 							) : null}
 						</InteractiveFilter.AddFilterSection>

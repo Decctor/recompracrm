@@ -802,6 +802,21 @@ export const OrganizationMemberPermissionsSchema = z.object({
 		})
 		.optional()
 		.nullable(),
+	// Dados sensíveis, transversais aos módulos: quem tem acesso a uma tela não necessariamente vê
+	// o que custa. Opcional para não quebrar membros existentes; a ausência é resolvida em
+	// lib/permissions/sensitive-data.ts (cai em `resultados.visualizarSensiveis`, a chave que
+	// escondia custo e margem antes desta existir). Não leia direto.
+	dadosSensiveis: z
+		.object({
+			// Custo de produto (unitário e médio), margem, lucro, CMV e valor de estoque — no catálogo,
+			// estoque, produção e resultados. Compras e DRE seguem as permissões dos próprios módulos.
+			visualizarCustos: z.boolean({
+				required_error: "Permissão de visualização de custos e margens não informada.",
+				invalid_type_error: "Tipo não válido para a permissão de visualização de custos e margens.",
+			}),
+		})
+		.optional()
+		.nullable(),
 	compras: z.object({
 		visualizar: z.boolean({
 			required_error: "Permissão de visualização de compras não informada.",

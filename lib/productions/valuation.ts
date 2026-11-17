@@ -52,6 +52,37 @@ export type TProductionValuation = TValuation & {
 	dataSnapshotValores: Date | null;
 };
 
+/**
+ * Valoração como sai da API: custo e margem viram `null` para quem não vê custos
+ * (`dadosSensiveis.visualizarCustos`, lib/permissions/sensitive-data.ts). Margem é retorno − custo,
+ * então esconder só o custo não basta. O retorno esperado sai do preço de venda e continua visível.
+ */
+export type TMaskedValuation<T extends TValuation = TValuation> = Omit<T, "custoTotal" | "margem" | "margemPercentual"> & {
+	custoTotal: number | null;
+	margem: number | null;
+	margemPercentual: number | null;
+};
+
+export function maskValuationCosts<T extends TValuation>(valuation: T, canViewCosts: boolean): TMaskedValuation<T> {
+	if (canViewCosts) return valuation;
+	return { ...valuation, custoTotal: null, margem: null, margemPercentual: null };
+}
+
+type TItemWithProductCosts = {
+	produto: { precoCusto: number | null };
+	produtoVariante: { precoCusto: number | null } | null;
+};
+
+/** Item de receita/produção que carrega produto e variante completos: tira o custo de catálogo deles. */
+export function maskItemProductCosts<T extends TItemWithProductCosts>(item: T, canViewCosts: boolean): T {
+	if (canViewCosts) return item;
+	return {
+		...item,
+		produto: { ...item.produto, precoCusto: null },
+		produtoVariante: item.produtoVariante ? { ...item.produtoVariante, precoCusto: null } : null,
+	};
+}
+
 /** Chave de preço por produto + variante. A variante manda quando existe. */
 export function buildPricingKey(produtoId: string, produtoVarianteId?: string | null) {
 	return `${produtoId}::${produtoVarianteId ?? ""}`;

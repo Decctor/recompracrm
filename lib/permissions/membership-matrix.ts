@@ -11,6 +11,7 @@ import { resolveInventoryPermissions } from "@/lib/permissions/inventory";
 import { resolveProductionPermissions } from "@/lib/permissions/productions";
 import { resolveProductPermissions } from "@/lib/permissions/products";
 import { resolveSalesOperationPermissions, type TSalesOperationPermissions } from "@/lib/permissions/sales";
+import { resolveSensitiveDataPermissions } from "@/lib/permissions/sensitive-data";
 import type { TOrganizationMemberPermissions } from "@/schemas/organizations";
 
 export const PERMISSION_ACTION_COLUMNS = [
@@ -116,7 +117,15 @@ function buildMembershipPermissionMatrix({ organizationHasERPAccess }: { organiz
 			key: "resultados",
 			title: "Resultados",
 			cells: [leaf("resultados.visualizar", "Visualizar resultados", "Resultados"), null, null, null],
-			extras: [leaf("resultados.visualizarSensiveis", "Visualizar dados sensíveis de resultados", "Resultados")],
+			extras: [],
+		}),
+		// Transversal: vale para catálogo, estoque, produção e resultados. Fica fora da coluna "Ver"
+		// para que liberar "Ver" em todos os módulos não libere custo junto.
+		buildRow({
+			key: "dadosSensiveis",
+			title: "Dados sensíveis",
+			cells: [null, null, null, null],
+			extras: [leaf("dadosSensiveis.visualizarCustos", "Ver custos, margens e valor de estoque", "Dados sensíveis")],
 		}),
 		buildRow({
 			key: "metas",
@@ -304,6 +313,8 @@ export function readMembershipPermissionValue(permissions: TOrganizationMemberPe
 		case "vendas.conferirCaixa":
 		case "vendas.configurar":
 			return resolveSalesOperationPermissions(permissions)[path.split(".")[1] as keyof TSalesOperationPermissions];
+		case "dadosSensiveis.visualizarCustos":
+			return resolveSensitiveDataPermissions(permissions).visualizarCustos;
 		default:
 			if (path.startsWith("produtos.")) return readResolvedField(resolveProductPermissions(permissions), path);
 			if (path.startsWith("estoque.")) return readResolvedField(resolveInventoryPermissions(permissions), path);
@@ -382,6 +393,11 @@ function writeMembershipPermissionValue(
 
 	if (path.startsWith("producao.")) {
 		next.producao = { ...resolveProductionPermissions(permissions), [path.split(".")[1] as string]: value };
+		return next;
+	}
+
+	if (path.startsWith("dadosSensiveis.")) {
+		next.dadosSensiveis = { ...resolveSensitiveDataPermissions(permissions), [path.split(".")[1] as string]: value };
 		return next;
 	}
 

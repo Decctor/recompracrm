@@ -1,6 +1,7 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { canAdjustInventory } from "@/lib/permissions/inventory";
+import { canViewCosts, maskCost } from "@/lib/permissions/sensitive-data";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { applyStockMovement, isStockTrackingActive } from "@/lib/stock/apply-stock-movement";
 import { registerStockLossAccountingEntry, resolveStockLossUnitCost } from "@/lib/stock/stock-loss-accounting";
@@ -113,7 +114,12 @@ async function discardProductStockLot({ input, session }: { input: TDiscardProdu
 		return {
 			data: {
 				discardedId: updatedLot.id,
-				perda,
+				// Valor e custo da perda: `null` para quem não vê custos (o lançamento contábil é gerado igual).
+				perda: {
+					...perda,
+					valor: maskCost(perda.valor, canViewCosts(session.membership?.permissoes)),
+					custoUnitario: maskCost(perda.custoUnitario, canViewCosts(session.membership?.permissoes)),
+				},
 			},
 			message: perda.lancamentoContabilId
 				? "Descarte de lote registrado com sucesso. Lançamento contábil de perda gerado."

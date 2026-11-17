@@ -1,3 +1,5 @@
+import { canViewCosts } from "@/lib/permissions/sensitive-data";
+import { redactCatalogCosts } from "@/lib/products/cost-visibility";
 import { buildProductSearch, withProductSearch, type ProductSearchDatabase } from "@/lib/products/search";
 import { ProductSearchQuerySchema } from "@/schemas/product-search";
 import { NextResponse, type NextRequest } from "next/server";
@@ -101,7 +103,9 @@ async function getProductsBySearchRoute(request: NextRequest) {
 
 	const input = GetProductsBySearchInputSchema.parse(Object.fromEntries(request.nextUrl.searchParams));
 	const data = await getProductsBySearch({ input, userOrgId });
-	return NextResponse.json(data);
+	// Linhas completas de produto/variante: o custo só vai para quem vê custos (compras e estoque
+	// usam-no apenas para sugerir o valor unitário, e sem ele o campo fica em branco).
+	return NextResponse.json(redactCatalogCosts(data, canViewCosts(sessionUser.membership?.permissoes)));
 }
 
 export const GET = appApiHandler({ GET: getProductsBySearchRoute });

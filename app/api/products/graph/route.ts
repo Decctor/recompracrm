@@ -8,6 +8,7 @@ import { chartBucketPositionSql } from "@/lib/charts/period-buckets-sql";
 import { OPERATION_TIMEZONE } from "@/lib/operation-timezone";
 import { db } from "@/services/drizzle";
 import { getProductSalesLines } from "@/lib/products/product-sales-lines";
+import { canViewCosts, maskCost } from "@/lib/permissions/sensitive-data";
 import { products, sales } from "@/services/drizzle/schema";
 import dayjs from "dayjs";
 import timezone from "dayjs/plugin/timezone";
@@ -64,8 +65,9 @@ export type TGetProductGraphOutput = {
 		titulo: string;
 		quantidade: number;
 		valorLiquido: number;
-		margem: number;
-		margemPercentual: number;
+		// `null` para quem não vê custos (dadosSensiveis.visualizarCustos): margem é faturamento − custo.
+		margem: number | null;
+		margemPercentual: number | null;
 		ticketMedio: number;
 	}>;
 };
@@ -73,6 +75,7 @@ export type TGetProductGraphOutput = {
 async function fetchProductGraph(input: TGetProductGraphInput, session: TAuthUserSession) {
 	const userOrgId = session.membership?.organizacao.id;
 	if (!userOrgId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
+	const canViewCost = canViewCosts(session.membership?.permissoes);
 
 	console.log("[INFO] [FETCH PRODUCT GRAPH] Input:", input);
 	// Verify product exists
@@ -155,8 +158,8 @@ async function fetchProductGraph(input: TGetProductGraphInput, session: TAuthUse
 			titulo: bucket.label,
 			quantidade,
 			valorLiquido,
-			margem,
-			margemPercentual,
+			margem: maskCost(margem, canViewCost),
+			margemPercentual: maskCost(margemPercentual, canViewCost),
 			ticketMedio,
 		};
 	});

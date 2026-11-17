@@ -12,7 +12,7 @@ import { formatInteractiveSortFieldSummary, isInteractiveSortActive } from "@/co
 import { TooltipProvider } from "@/components/ui/tooltip";
 import GeneralPaginationComponent from "@/components/Utils/Pagination";
 import { getErrorMessage } from "@/lib/errors";
-import type { TProductionPermissions } from "@/lib/permissions/productions";
+import type { TProductionPagePermissions } from "../../_lib/require-production-access";
 import { useProductionRecipes } from "@/lib/queries/productions";
 import type { TProductionRecipesSortFieldEnum } from "@/schemas/enums";
 import { useQueryClient } from "@tanstack/react-query";
@@ -28,16 +28,22 @@ const ORDER_FIELD_OPTIONS = [
 	{ id: "NOME", value: "NOME", label: "NOME" },
 ] satisfies InteractiveFilterOption<TProductionRecipesSortFieldEnum>[];
 
+// Custo e margem chegam `null` para quem não vê custos (dadosSensiveis): ordenar por eles não faz sentido.
+const COST_SORT_FIELDS: TProductionRecipesSortFieldEnum[] = ["CUSTO", "MARGEM"];
+
 const DEFAULT_SORT = { field: "ULTIMA_PRODUCAO", direction: "desc" } satisfies InteractiveFilterSortValue<TProductionRecipesSortFieldEnum>;
 
 /** Organizações têm dezenas de receitas: a grade cabe numa página só (o servidor aceita até 100). */
 const RECIPES_PAGE_SIZE = 100;
 
-export default function ProductionRecipesPage({ permissions }: { permissions: TProductionPermissions }) {
+export default function ProductionRecipesPage({ permissions }: { permissions: TProductionPagePermissions }) {
 	const queryClient = useQueryClient();
 	const [newRecipeModalIsOpen, setNewRecipeModalIsOpen] = useState(false);
 	const [editingRecipeId, setEditingRecipeId] = useState<string | null>(null);
 	const [preparationMethodRecipe, setPreparationMethodRecipe] = useState<{ id: string; titulo: string } | null>(null);
+	const orderFieldOptions = permissions.visualizarCustos
+		? ORDER_FIELD_OPTIONS
+		: ORDER_FIELD_OPTIONS.filter((option) => !COST_SORT_FIELDS.includes(option.value));
 
 	const { data, isLoading, isError, isSuccess, error, filters, updateFilters, queryKey } = useProductionRecipes({
 		initialFilters: { pageSize: RECIPES_PAGE_SIZE },
@@ -87,7 +93,7 @@ export default function ProductionRecipesPage({ permissions }: { permissions: TP
 									<ArrowDownUp className="h-4 w-4" />
 									<InteractiveFilter.Label>ORDENAR POR</InteractiveFilter.Label>
 								</InteractiveFilter.Icon>
-								<InteractiveFilter.Value>{formatInteractiveSortFieldSummary(ORDER_FIELD_OPTIONS, sortValue.field)}</InteractiveFilter.Value>
+								<InteractiveFilter.Value>{formatInteractiveSortFieldSummary(orderFieldOptions, sortValue.field)}</InteractiveFilter.Value>
 								<InteractiveFilter.SortDirectionToggle
 									direction={sortValue.direction}
 									onDirectionChange={(direction) => setSort({ ...sortValue, direction })}
@@ -97,7 +103,7 @@ export default function ProductionRecipesPage({ permissions }: { permissions: TP
 								) : null}
 							</InteractiveFilter.Trigger>
 							<InteractiveFilter.Content className="w-72 p-0">
-								<InteractiveFilter.SortContent fieldOptions={ORDER_FIELD_OPTIONS} value={sortValue} onChange={setSort} />
+								<InteractiveFilter.SortContent fieldOptions={orderFieldOptions} value={sortValue} onChange={setSort} />
 							</InteractiveFilter.Content>
 						</InteractiveFilter.Root>
 					</div>

@@ -2,12 +2,13 @@ import { resolveInventoryPermissions } from "@/lib/permissions/inventory";
 import { resolveProductionPermissions } from "@/lib/permissions/productions";
 import { resolveProductPermissions } from "@/lib/permissions/products";
 import { resolveSalesOperationPermissions } from "@/lib/permissions/sales";
+import { resolveSensitiveDataPermissions } from "@/lib/permissions/sensitive-data";
 import type { TOrganizationMemberPermissions } from "@/schemas/organizations";
 
 /**
  * Grava no JSONB as permissões do ERP que hoje vêm do fallback (`vendas.operarCaixa`,
  * `vendas.movimentarCaixa`, `vendas.conferirCaixa`, `vendas.configurar`, `produtos`, `estoque`,
- * `producao`), com o valor que o fallback já resolve — ou seja, o que o membro já conseguia fazer.
+ * `producao`, `dadosSensiveis`), com o valor que o fallback já resolve — ou seja, o que o membro já conseguia fazer.
  *
  * Só preenche o que falta: chave presente (mesmo `false`) é escolha de quem administra e nunca é
  * sobrescrita. Por isso rodar duas vezes é inofensivo. Devolve `null` quando não há nada a gravar.
@@ -34,6 +35,11 @@ export function materializeERPPermissions(permissoes: TOrganizationMemberPermiss
 	}
 	if (!next.producao) {
 		next.producao = resolveProductionPermissions(permissoes);
+		changed = true;
+	}
+
+	if (!next.dadosSensiveis) {
+		next.dadosSensiveis = resolveSensitiveDataPermissions(permissoes);
 		changed = true;
 	}
 

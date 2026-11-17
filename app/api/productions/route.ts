@@ -3,7 +3,14 @@ import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { canCreateProductions, canDeleteProductions, canEditProductions, canViewProductions } from "@/lib/permissions/productions";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { handleSimpleChildRowsProcessing } from "@/lib/db-utils";
-import { getProductionPricingItems, getProductPricingMap, resolveProductionValuation } from "@/lib/productions/valuation";
+import { canViewCosts, maskCost } from "@/lib/permissions/sensitive-data";
+import {
+	getProductionPricingItems,
+	getProductPricingMap,
+	maskItemProductCosts,
+	maskValuationCosts,
+	resolveProductionValuation,
+} from "@/lib/productions/valuation";
 import { ProductionBaseSchema, ProductionInputSchema, ProductionOutputBaseSchema } from "@/schemas/productions";
 import { db } from "@/services/drizzle";
 import {
@@ -239,6 +246,9 @@ async function validateProductionItemsOrganization({
 async function getProductions({ input, session }: { input: TGetProductionsInput; session: TAuthUserSession }) {
 	const organizationId = session.membership?.organizacao.id;
 	if (!organizationId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização.");
+	// Custo (snapshot, unitário dos insumos e de catálogo dos produtos) e margem saem como `null` para
+	// quem não vê custos — calculados aqui, nunca enviados.
+	const showCosts = canViewCosts(session.membership?.permissoes);
 
 	if (input.id) {
 		const production = await db.query.productions.findFirst({
@@ -279,7 +289,13 @@ async function getProductions({ input, session }: { input: TGetProductionsInput;
 			data: {
 				byId: {
 					...production,
-					valores: resolveProductionValuation({ production, pricingMap }),
+					custoTotal: maskCost(production.custoTotal, showCosts),
+					entradas: production.entradas.map((entrada) => ({
+						...maskItemProductCosts(entrada, showCosts),
+						custoUnitario: maskCost(entrada.custoUnitario, showCosts),
+					})),
+					saidas: production.saidas.map((saida) => maskItemProductCosts(saida, showCosts)),
+					valores: maskValuationCosts(resolveProductionValuation({ production, pricingMap }), showCosts),
 				},
 				default: undefined,
 			},
@@ -344,9 +360,12 @@ async function getProductions({ input, session }: { input: TGetProductionsInput;
 						sql`(SELECT COALESCE(SUM(COALESCE(po.quantidade_real, po.quantidade_prevista, 0)), 0) FROM ${productionOutputs} po WHERE po.producao_id = ${productions.id})`,
 					),
 				];
+			// Ordenar por custo ou margem revelaria a ordem deles: sem a permissão, cai na ordem padrão.
 			case "CUSTO":
+				if (!showCosts) return [direction(sql`COALESCE(${productions.dataInicio}, ${productions.dataInsercao})`)];
 				return [nullsLast(sql`${productions.custoTotal}`)];
 			case "MARGEM":
+				if (!showCosts) return [direction(sql`COALESCE(${productions.dataInicio}, ${productions.dataInsercao})`)];
 				return [nullsLast(sql`(${productions.retornoEsperado} - ${productions.custoTotal})`)];
 			default:
 				return [direction(sql`COALESCE(${productions.dataInicio}, ${productions.dataInsercao})`)];
@@ -387,7 +406,9 @@ async function getProductions({ input, session }: { input: TGetProductionsInput;
 	});
 	const productionsWithValuation = productionsResult.map((production) => ({
 		...production,
-		valores: resolveProductionValuation({ production, pricingMap }),
+		custoTotal: maskCost(production.custoTotal, showCosts),
+		entradas: production.entradas.map((entrada) => ({ ...entrada, custoUnitario: maskCost(entrada.custoUnitario, showCosts) })),
+		valores: maskValuationCosts(resolveProductionValuation({ production, pricingMap }), showCosts),
 	}));
 
 	return {

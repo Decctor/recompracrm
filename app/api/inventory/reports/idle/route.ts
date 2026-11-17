@@ -1,7 +1,8 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { getLastOutflowByProduct, getStockPositions } from "@/lib/stock/analytics/queries";
-import { getInventoryReportOrganizationId } from "@/lib/stock/analytics/route-helpers";
+import { maskCost } from "@/lib/permissions/sensitive-data";
+import { getInventoryReportAccess } from "@/lib/stock/analytics/route-helpers";
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -24,9 +25,11 @@ export type TGetStockReportIdleInput = z.infer<typeof GetStockReportIdleInputSch
 
 /**
  * Estoque parado: produtos com saldo e sem saída de consumo há mais de 30 dias. Produto que nunca
- * teve saída conta desde o cadastro. É um retrato de hoje, não depende do período.
+ * teve saída conta desde o cadastro. É um retrato de hoje, não depende do período. Valores ao custo
+ * (capital parado, participação no imobilizado, valor por faixa e por item) voltam `null` para quem
+ * não vê custos.
  */
-async function getStockReportIdle({ input, organizationId }: { input: TGetStockReportIdleInput; organizationId: string }) {
+async function getStockReportIdle({ input, organizationId, canViewCosts }: { input: TGetStockReportIdleInput; organizationId: string; canViewCosts: boolean }) {
 	const now = Date.now();
 	const [positions, lastOutflows] = await Promise.all([getStockPositions({ organizationId }), getLastOutflowByProduct({ organizationId })]);
 	const totalValue = positions.reduce((sum, position) => sum + position.valor, 0);
@@ -53,14 +56,22 @@ async function getStockReportIdle({ input, organizationId }: { input: TGetStockR
 	const capitalParado = idle.reduce((sum, item) => sum + item.valor, 0);
 	return {
 		data: {
-			capitalParado,
+			capitalParado: maskCost(capitalParado, canViewCosts),
 			produtos: idle.length,
-			percentualImobilizado: totalValue > 0 ? capitalParado / totalValue : 0,
+			percentualImobilizado: maskCost(totalValue > 0 ? capitalParado / totalValue : 0, canViewCosts),
 			faixas: IDLE_BUCKETS.map((bucket) => {
 				const items = idle.filter((item) => item.diasSemSaida > bucket.min && item.diasSemSaida <= bucket.max);
-				return { faixa: bucket.faixa, rotulo: bucket.rotulo, produtos: items.length, valor: items.reduce((sum, item) => sum + item.valor, 0) };
+				return {
+					faixa: bucket.faixa,
+					rotulo: bucket.rotulo,
+					produtos: items.length,
+					valor: maskCost(
+						items.reduce((sum, item) => sum + item.valor, 0),
+						canViewCosts,
+					),
+				};
 			}),
-			itens: idle.slice(0, input.limit),
+			itens: idle.slice(0, input.limit).map((item) => ({ ...item, valor: maskCost(item.valor, canViewCosts) })),
 		},
 		message: "Estoque parado obtido com sucesso.",
 	};
@@ -68,9 +79,9 @@ async function getStockReportIdle({ input, organizationId }: { input: TGetStockR
 export type TGetStockReportIdleOutput = Awaited<ReturnType<typeof getStockReportIdle>>;
 
 async function getStockReportIdleRoute(request: NextRequest) {
-	const organizationId = getInventoryReportOrganizationId(await getCurrentSessionUncached());
+	const { organizationId, canViewCosts } = getInventoryReportAccess(await getCurrentSessionUncached());
 	const input = GetStockReportIdleInputSchema.parse({ limit: request.nextUrl.searchParams.get("limit") });
-	const result = await getStockReportIdle({ input, organizationId });
+	const result = await getStockReportIdle({ input, organizationId, canViewCosts });
 	return NextResponse.json(result);
 }
 

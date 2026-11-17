@@ -1,5 +1,6 @@
 "use client";
 import { canCreateProducts } from "@/lib/permissions/products";
+import { canViewCosts } from "@/lib/permissions/sensitive-data";
 import { canAdjustInventory } from "@/lib/permissions/inventory";
 import dynamic from "next/dynamic";
 import DateIntervalInput from "@/components/Inputs/DateIntervalInput";
@@ -113,7 +114,7 @@ export default function ProductsPage({ user, userOrg, userMembership }: Products
 					</TabsTrigger>
 				</TabsList>
 				<TabsContent value="stats">
-					<ProductsStatsView />
+					<ProductsStatsView canViewCosts={canViewCosts(userMembership.permissoes)} />
 				</TabsContent>
 				<TabsContent value="database">
 					<ProductsDatabaseView user={user} userMembership={userMembership} organization={userOrg} />
@@ -284,7 +285,8 @@ function ProductsDatabaseList({ user, userMembership, organization, storageKey, 
 	);
 }
 
-function ProductsStatsView() {
+// canViewCosts (dadosSensiveis.visualizarCustos): esconde as visões de margem — o servidor já as recusa.
+function ProductsStatsView({ canViewCosts }: { canViewCosts: boolean }) {
 	const initialStartDate = dayjs().startOf("month");
 	const initialEndDate = dayjs().endOf("month");
 	const [filters, setFilters] = useState<TGetProductsOverallStatsInput>({
@@ -372,22 +374,25 @@ function ProductsStatsView() {
 							: undefined
 					}
 				/>
-				<StatUnitCard
-					title="MARGEM MÉDIA"
-					icon={<TrendingUp className="w-4 h-4 min-w-4 min-h-4" />}
-					current={{
-						value: productsOverallStats?.averageMargin.current || 0,
-						format: (n) => `${formatDecimalPlaces(n)}%`,
-					}}
-					previous={
-						productsOverallStats?.averageMargin.comparison
-							? {
-									value: productsOverallStats?.averageMargin.comparison || 0,
-									format: (n) => `${formatDecimalPlaces(n)}%`,
-								}
-							: undefined
-					}
-				/>
+				{/* `null` = membro sem dadosSensiveis.visualizarCustos: a margem nem aparece. */}
+				{productsOverallStats?.averageMargin.current !== null ? (
+					<StatUnitCard
+						title="MARGEM MÉDIA"
+						icon={<TrendingUp className="w-4 h-4 min-w-4 min-h-4" />}
+						current={{
+							value: productsOverallStats?.averageMargin.current || 0,
+							format: (n) => `${formatDecimalPlaces(n)}%`,
+						}}
+						previous={
+							productsOverallStats?.averageMargin.comparison
+								? {
+										value: productsOverallStats?.averageMargin.comparison || 0,
+										format: (n) => `${formatDecimalPlaces(n)}%`,
+									}
+								: undefined
+						}
+					/>
+				) : null}
 			</div>
 			<div className="w-full flex items-start flex-col lg:flex-row gap-3">
 				<StatUnitCard
@@ -457,7 +462,7 @@ function ProductsStatsView() {
 			</div>
 			<div className="w-full flex items-start flex-col lg:flex-row gap-3 h-[550px]">
 				<div className="w-full lg:w-1/2 h-full min-h-0">
-					<ProductsGraphs periodAfter={filters.periodAfter} periodBefore={filters.periodBefore} />
+					<ProductsGraphs periodAfter={filters.periodAfter} periodBefore={filters.periodBefore} canViewCosts={canViewCosts} />
 				</div>
 				<div className="w-full lg:w-1/2 h-full min-h-0">
 					<ProductsRanking
@@ -465,6 +470,7 @@ function ProductsStatsView() {
 						periodBefore={filters.periodBefore}
 						comparingPeriodAfter={filters.comparingPeriodAfter}
 						comparingPeriodBefore={filters.comparingPeriodBefore}
+						canViewCosts={canViewCosts}
 					/>
 				</div>
 			</div>
@@ -573,7 +579,9 @@ function ProductCard({
 
 	const vendasQtde = product.estatisticas.vendasQtdeTotal;
 	const vendasValor = product.estatisticas.vendasValorTotal;
-	const vendasCusto = product.estatisticas.vendasCustoTotal;
+	// `null` = membro sem dadosSensiveis.visualizarCustos: margem, custo e lucro nem aparecem.
+	const costVisible = product.estatisticas.vendasCustoTotal !== null;
+	const vendasCusto = product.estatisticas.vendasCustoTotal ?? 0;
 	const hasSales = vendasQtde > 0;
 	// Custo zerado quase sempre significa produto sem custo cadastrado no ERP — exibir "—" evita uma margem de 100% falsa
 	const hasCost = vendasCusto > 0;
@@ -652,7 +660,13 @@ function ProductCard({
 					<div
 						className={cn(
 							"grid w-full gap-x-2 gap-y-2 border-t border-border pt-2",
-							showStockData ? "grid-cols-3 lg:grid-cols-6" : "grid-cols-2 lg:grid-cols-4",
+							showStockData
+								? costVisible
+									? "grid-cols-3 lg:grid-cols-6"
+									: "grid-cols-3 lg:grid-cols-5"
+								: costVisible
+									? "grid-cols-2 lg:grid-cols-4"
+									: "grid-cols-3",
 						)}
 					>
 						{showStockData ? (
@@ -720,34 +734,40 @@ function ProductCard({
 						<ProductStatCell label="Faturamento" tooltip="Faturamento total no período">
 							<ProductStatValue>{formatToMoney(vendasValor)}</ProductStatValue>
 						</ProductStatCell>
-						<ProductStatCell
-							label="Margem"
-							tooltip={margem !== null ? "Margem bruta do período: (faturamento − custo) ÷ faturamento" : hasSales ? noCostTooltip : noSalesTooltip}
-						>
-							<ProductStatValue className={cn(margem !== null && margem < 0 && "text-red-600 dark:text-red-500")}>
-								{margem !== null ? `${formatDecimalPlaces(margem)}%` : null}
-							</ProductStatValue>
-						</ProductStatCell>
+						{costVisible ? (
+							<ProductStatCell
+								label="Margem"
+								tooltip={margem !== null ? "Margem bruta do período: (faturamento − custo) ÷ faturamento" : hasSales ? noCostTooltip : noSalesTooltip}
+							>
+								<ProductStatValue className={cn(margem !== null && margem < 0 && "text-red-600 dark:text-red-500")}>
+									{margem !== null ? `${formatDecimalPlaces(margem)}%` : null}
+								</ProductStatValue>
+							</ProductStatCell>
+						) : null}
 					</div>
 					{showMoreMetrics ? (
-						<div className="grid w-full grid-cols-2 lg:grid-cols-5 gap-x-2 gap-y-2 rounded-lg bg-muted/40 p-2">
+						<div className={cn("grid w-full grid-cols-2 gap-x-2 gap-y-2 rounded-lg bg-muted/40 p-2", costVisible ? "lg:grid-cols-5" : "lg:grid-cols-2")}>
 							<ProductStatCell label="Preço médio" tooltip={precoMedio !== null ? "Faturamento ÷ quantidade vendida no período" : noSalesTooltip}>
 								<ProductStatValue>{precoMedio !== null ? formatToMoney(precoMedio) : null}</ProductStatValue>
 							</ProductStatCell>
-							<ProductStatCell
-								label="Custo médio"
-								tooltip={custoMedio !== null ? "Custo total ÷ quantidade vendida no período" : hasSales ? noCostTooltip : noSalesTooltip}
-							>
-								<ProductStatValue>{custoMedio !== null ? formatToMoney(custoMedio) : null}</ProductStatValue>
-							</ProductStatCell>
-							<ProductStatCell label="Custo total" tooltip={hasCost ? "Custo dos itens vendidos no período" : hasSales ? noCostTooltip : noSalesTooltip}>
-								<ProductStatValue>{hasCost ? formatToMoney(vendasCusto) : null}</ProductStatValue>
-							</ProductStatCell>
-							<ProductStatCell label="Lucro" tooltip={lucro !== null ? "Faturamento − custo no período" : hasSales ? noCostTooltip : noSalesTooltip}>
-								<ProductStatValue className={cn(lucro !== null && lucro < 0 && "text-red-600 dark:text-red-500")}>
-									{lucro !== null ? formatToMoney(lucro) : null}
-								</ProductStatValue>
-							</ProductStatCell>
+							{costVisible ? (
+								<>
+									<ProductStatCell
+										label="Custo médio"
+										tooltip={custoMedio !== null ? "Custo total ÷ quantidade vendida no período" : hasSales ? noCostTooltip : noSalesTooltip}
+									>
+										<ProductStatValue>{custoMedio !== null ? formatToMoney(custoMedio) : null}</ProductStatValue>
+									</ProductStatCell>
+									<ProductStatCell label="Custo total" tooltip={hasCost ? "Custo dos itens vendidos no período" : hasSales ? noCostTooltip : noSalesTooltip}>
+										<ProductStatValue>{hasCost ? formatToMoney(vendasCusto) : null}</ProductStatValue>
+									</ProductStatCell>
+									<ProductStatCell label="Lucro" tooltip={lucro !== null ? "Faturamento − custo no período" : hasSales ? noCostTooltip : noSalesTooltip}>
+										<ProductStatValue className={cn(lucro !== null && lucro < 0 && "text-red-600 dark:text-red-500")}>
+											{lucro !== null ? formatToMoney(lucro) : null}
+										</ProductStatValue>
+									</ProductStatCell>
+								</>
+							) : null}
 							<ProductStatCell label="Última venda" tooltip="Data da última venda do produto no período">
 								<ProductStatValue>{product.estatisticas.dataUltimaVenda ? formatDateAsLocale(product.estatisticas.dataUltimaVenda) : null}</ProductStatValue>
 							</ProductStatCell>

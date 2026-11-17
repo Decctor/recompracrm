@@ -4,6 +4,7 @@ import type { TAuthUserSession } from "@/lib/authentication/types";
 import { resolveCampaignStatsComparisonPeriod } from "@/lib/campaigns/stats-period";
 import { findChartBucketIndex, getChartBuckets, getChartGranularity } from "@/lib/charts/period-buckets";
 import { canViewProductions } from "@/lib/permissions/productions";
+import { canViewCosts, maskCost } from "@/lib/permissions/sensitive-data";
 import { db } from "@/services/drizzle";
 import { productions } from "@/services/drizzle/schema";
 import { and, count, eq, gte, inArray, lte } from "drizzle-orm";
@@ -206,6 +207,22 @@ function summarize(described: ReturnType<typeof describeProduction>[]) {
 	};
 }
 
+/**
+ * Resumo como sai da API: custo da produção, margem, custo por unidade e custo da perda viram `null`
+ * para quem não vê custos (dadosSensiveis.visualizarCustos). Volume, rendimento, perda em quantidade e
+ * valor produzido (preço de venda) continuam.
+ */
+function maskSummaryCosts(summary: ReturnType<typeof summarize>, showCosts: boolean) {
+	return {
+		...summary,
+		custoProducao: maskCost(summary.custoProducao, showCosts),
+		margem: maskCost(summary.margem, showCosts),
+		margemPercentual: maskCost(summary.margemPercentual, showCosts),
+		custoPorUnidadePrincipal: maskCost(summary.custoPorUnidadePrincipal, showCosts),
+		custoPerda: maskCost(summary.custoPerda, showCosts),
+	};
+}
+
 function yieldBand(ratio: number): TYieldBand {
 	return (YIELD_BANDS.find((band) => ratio >= band.min) ?? YIELD_BANDS[YIELD_BANDS.length - 1]).id;
 }
@@ -244,6 +261,7 @@ async function getProductionStats({ input, session }: { input: TGetProductionSta
 	if (!organizationId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização.");
 	if (input.periodAfter > input.periodBefore) throw new createHttpError.BadRequest("Período inválido.");
 
+	const showCosts = canViewCosts(session.membership?.permissoes);
 	const period = { startDate: input.periodAfter, endDate: input.periodBefore };
 	const comparisonPeriod =
 		input.comparingPeriodAfter && input.comparingPeriodBefore
@@ -368,7 +386,12 @@ async function getProductionStats({ input, session }: { input: TGetProductionSta
 			inputsByProduct.set(key, current);
 		}
 	}
-	const inputs = [...inputsByProduct.values()].map(({ producoes, ...item }) => ({ ...item, producoes: producoes.size }));
+	// `valor` dos insumos é custo (quantidade × custo unitário congelado na conclusão).
+	const inputs = [...inputsByProduct.values()].map(({ producoes, ...item }) => ({
+		...item,
+		valor: maskCost(item.valor, showCosts),
+		producoes: producoes.size,
+	}));
 
 	return {
 		data: {
@@ -376,11 +399,11 @@ async function getProductionStats({ input, session }: { input: TGetProductionSta
 			comparisonPeriod,
 			summary: {
 				current: {
-					...currentSummary,
+					...maskSummaryCosts(currentSummary, showCosts),
 					inProgressCount: Number(inProgressResult[0]?.total ?? 0),
 					cancelledCount: Number(cancelledResult[0]?.total ?? 0),
 				},
-				comparison: comparisonSummary,
+				comparison: maskSummaryCosts(comparisonSummary, showCosts),
 			},
 			series: { granularity, points: series },
 			yield: { evaluatedCount, bands: yieldBands },

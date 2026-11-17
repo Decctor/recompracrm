@@ -420,9 +420,10 @@ function HistogramsBlock({ data }: { data: TPortfolioAnalysisData }) {
 	return (
 		<section className="flex w-full flex-col gap-3 border-t border-border pt-5">
 			<SectionHeader title="Distribuição estatística" description="Faturamento, margem e frequência de venda entre produtos ativos" />
-			<div className="grid grid-cols-1 lg:grid-cols-3 gap-x-8 gap-y-6">
+			<div className={cn("grid grid-cols-1 gap-x-8 gap-y-6", data.histograms.margin && data.metrics.margin ? "lg:grid-cols-3" : "lg:grid-cols-2")}>
 				<RevenueHistogram histogram={data.histograms.revenue} metric={data.metrics.revenue} />
-				<MarginHistogram histogram={data.histograms.margin} metric={data.metrics.margin} />
+				{/* `null` = membro sem dadosSensiveis.visualizarCustos: o histograma de margem não existe. */}
+				{data.histograms.margin && data.metrics.margin ? <MarginHistogram histogram={data.histograms.margin} metric={data.metrics.margin} /> : null}
 				<SaleFrequencyHistogram histogram={data.histograms.saleFrequency} metric={data.metrics.saleFrequency} />
 			</div>
 		</section>
@@ -493,8 +494,8 @@ function MarginHistogram({
 	histogram,
 	metric,
 }: {
-	histogram: TPortfolioAnalysisData["histograms"]["margin"];
-	metric: TPortfolioAnalysisData["metrics"]["margin"];
+	histogram: NonNullable<TPortfolioAnalysisData["histograms"]["margin"]>;
+	metric: NonNullable<TPortfolioAnalysisData["metrics"]["margin"]>;
 }) {
 	const chartData = useMemo(() => buildContinuousChartData(histogram.bins, (value) => `${formatDecimalPlaces(value, 0)}%`), [histogram.bins]);
 

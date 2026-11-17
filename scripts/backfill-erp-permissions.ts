@@ -3,10 +3,10 @@ import { materializeERPPermissions } from "@/lib/permissions/erp-backfill";
 import type { TOrganizationMemberPermissions } from "@/schemas/organizations";
 import { connection, db } from "@/services/drizzle";
 import { organizationMembers, organizationMembershipInvitations } from "@/services/drizzle/schema";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, gt, isNull, sql } from "drizzle-orm";
 
 // Backfill das permissões granulares do ERP (caixa, configuração de vendas, produtos, estoque e
-// produção). Roda uma vez depois do deploy que as introduziu; o fallback em lib/permissions/* cobre
+// produção) e de dados sensíveis (custos e margens). Roda depois do deploy que introduz chaves novas; o fallback em lib/permissions/* cobre
 // o intervalo até lá e quem ficar de fora. Grava exatamente o que o fallback já resolvia, então
 // ninguém ganha nem perde acesso — a partir daí o gestor restringe pela tela de permissões.
 //
@@ -41,7 +41,7 @@ async function main() {
 			},
 		},
 		{
-			// Convites ainda não aceitos: viram membership com estas permissões.
+			// Convites ainda aceitáveis: viram membership com estas permissões. Expirados não importam.
 			label: "convites pendentes",
 			rows: await db
 				.select({
@@ -50,7 +50,7 @@ async function main() {
 					permissoes: organizationMembershipInvitations.permissoes,
 				})
 				.from(organizationMembershipInvitations)
-				.where(isNull(organizationMembershipInvitations.dataEfetivacao)),
+				.where(and(isNull(organizationMembershipInvitations.dataEfetivacao), gt(organizationMembershipInvitations.dataExpiracao, new Date()))),
 			update: async ({ id, previous, next }) => {
 				const updated = await db
 					.update(organizationMembershipInvitations)
@@ -71,8 +71,16 @@ async function main() {
 		let pending = 0;
 		let written = 0;
 		let skipped = 0;
+		let malformed = 0;
 
 		for (const row of target.rows) {
+			// JSONB anterior à estrutura atual (sem `vendas`/`empresa`/`resultados`): não há de onde
+			// resolver o fallback. Fica registrado em vez de derrubar a execução.
+			if (!row.permissoes?.vendas || !row.permissoes?.empresa || !row.permissoes?.resultados) {
+				malformed += 1;
+				console.warn(`[${target.label}] ${row.id} (org ${row.organizacaoId}) tem permissões sem a estrutura base; ignorado.`);
+				continue;
+			}
 			const next = materializeERPPermissions(row.permissoes);
 			if (!next) continue;
 			pending += 1;
@@ -88,9 +96,11 @@ async function main() {
 		}
 
 		if (apply) {
-			console.log(`[${target.label}] ${written} atualizado(s), ${skipped} pulado(s), ${target.rows.length - pending} já completo(s).`);
+			console.log(
+				`[${target.label}] ${written} atualizado(s), ${skipped} pulado(s), ${malformed} ignorado(s), ${target.rows.length - pending - malformed} já completo(s).`,
+			);
 		} else {
-			console.log(`[${target.label}] ${pending} de ${target.rows.length} seriam atualizado(s).`);
+			console.log(`[${target.label}] ${pending} de ${target.rows.length} seriam atualizado(s), ${malformed} ignorado(s).`);
 		}
 	}
 

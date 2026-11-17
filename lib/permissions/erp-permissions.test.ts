@@ -13,6 +13,7 @@ import {
 import { resolveProductionPermissions } from "./productions";
 import { resolveProductPermissions } from "./products";
 import { resolveSalesOperationPermissions } from "./sales";
+import { acceptIncomingCost, canViewCosts, maskCost } from "./sensitive-data";
 
 /** Membro "antigo": JSONB sem nenhuma das chaves novas do ERP. */
 function legacyMember({
@@ -77,6 +78,7 @@ test("backfill writes the fallback values and never overrides an explicit choice
 	assert.deepEqual(next.estoque, { visualizar: true, movimentar: false, ajustar: false });
 	assert.deepEqual(next.produtos, { visualizar: true, criar: true, editar: true, alterarPrecos: true });
 	assert.deepEqual(next.producao, { visualizar: true, criar: true, editar: true, excluir: true, concluir: true });
+	assert.deepEqual(next.dadosSensiveis, { visualizarCustos: false });
 	assert.equal(member.vendas.movimentarCaixa, undefined, "input must not be mutated");
 
 	// Nada muda de efeito: o que o membro resolve antes e depois do backfill é igual.
@@ -109,4 +111,33 @@ test("organization owners get every ERP permission", () => {
 	for (const path of getAllMembershipPermissionPaths({ organizationHasERPAccess: true })) {
 		assert.equal(readMembershipPermissionValue(DEFAULT_ORGANIZATION_OWNER_PERMISSIONS, path), true, path);
 	}
+});
+
+test("cost visibility inherits resultados.visualizarSensiveis until the new key is set", () => {
+	const hidden = legacyMember();
+	assert.equal(canViewCosts(hidden), false);
+
+	const sensitive = legacyMember();
+	sensitive.resultados.visualizarSensiveis = true;
+	assert.equal(canViewCosts(sensitive), true);
+	assert.deepEqual(materializeERPPermissions(sensitive)?.dadosSensiveis, { visualizarCustos: true });
+
+	// A chave nova manda, nos dois sentidos — e a antiga deixa de importar.
+	const granted = applyMembershipPermissionChanges(hidden, [{ path: "dadosSensiveis.visualizarCustos", value: true }]);
+	assert.equal(canViewCosts(granted), true);
+	assert.equal(granted.resultados.visualizarSensiveis, false);
+	const revoked = applyMembershipPermissionChanges(sensitive, [{ path: "dadosSensiveis.visualizarCustos", value: false }]);
+	assert.equal(canViewCosts(revoked), false);
+	assert.equal(readMembershipPermissionValue(revoked, "dadosSensiveis.visualizarCustos"), false);
+
+	// O caminho existe também para organizações sem ERP: margem aparece nos resultados de qualquer uma.
+	assert.ok(getAllMembershipPermissionPaths({ organizationHasERPAccess: false }).includes("dadosSensiveis.visualizarCustos"));
+	assert.ok(!getAllMembershipPermissionPaths({ organizationHasERPAccess: true }).includes("resultados.visualizarSensiveis"));
+});
+
+test("cost masking: null on read, untouched on write", () => {
+	assert.equal(maskCost(12.5, true), 12.5);
+	assert.equal(maskCost(12.5, false), null);
+	assert.equal(acceptIncomingCost(null, true), null);
+	assert.equal(acceptIncomingCost(null, false), undefined);
 });

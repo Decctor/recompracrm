@@ -26,9 +26,11 @@ type ResultSectionProps = {
 	stats: TStatsData;
 	period: TStatsPeriod;
 	comparingPeriod: TStatsPeriod;
+	/** Sem `dadosSensiveis.visualizarCustos` a API manda custo e margem `null`: os blocos somem. */
+	canViewCosts: boolean;
 };
 
-export function ResultSection({ stats, period, comparingPeriod }: ResultSectionProps) {
+export function ResultSection({ stats, period, comparingPeriod, canViewCosts }: ResultSectionProps) {
 	const current = stats.summary.current;
 	const comparison = stats.summary.comparison;
 	const mainUnit = current.unidadePrincipal;
@@ -39,7 +41,7 @@ export function ResultSection({ stats, period, comparingPeriod }: ResultSectionP
 	const previousText = (formatted: string) => (hasComparison ? `${previousPrefix}: ${formatted}` : "Sem dados no período anterior");
 	const formatMainUnit = (value: number) => (mainUnit ? formatUnitQuantity(value, mainUnit) : "—");
 
-	const costShare = current.valorProduzido > 0 ? (current.custoProducao / current.valorProduzido) * 100 : null;
+	const costShare = current.custoProducao != null && current.valorProduzido > 0 ? (current.custoProducao / current.valorProduzido) * 100 : null;
 	const costPerUnit =
 		current.custoPorUnidadePrincipal != null && mainUnit ? `${formatToMoney(current.custoPorUnidadePrincipal)}/${formatUnitLabel(mainUnit)}` : "—";
 
@@ -71,6 +73,8 @@ export function ResultSection({ stats, period, comparingPeriod }: ResultSectionP
 							previous={hasComparison ? comparison.valorProduzido : null}
 							previousText={previousText(formatToMoney(comparison.valorProduzido))}
 						/>
+						{canViewCosts && current.margem != null && current.custoProducao != null ? (
+							<>
 						<MarginSplitBar margin={current.margem} total={current.valorProduzido} />
 						<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
 							<SplitFigure
@@ -89,6 +93,8 @@ export function ResultSection({ stats, period, comparingPeriod }: ResultSectionP
 								hint={`${costShare != null ? `${formatDecimalPlaces(costShare, 1, 1)}%` : "—"} do valor · ${costPerUnit}`}
 							/>
 						</div>
+							</>
+						) : null}
 					</div>
 					<ProductionTrendChart
 						series={stats.series}

@@ -49,6 +49,8 @@ type ProductStockTabProps = {
 	product: Product;
 	enabled?: boolean;
 	canMoveInventory: boolean;
+	// dadosSensiveis.visualizarCustos: sem ela o gráfico de custo × preço nem é montado.
+	canViewCosts: boolean;
 };
 
 // Mesmas faixas de saldo usadas nas páginas de Estoque e Produtos.
@@ -59,7 +61,7 @@ function getSaldoTone(quantidade: number) {
 	return "bg-blue-500 text-white dark:bg-blue-600";
 }
 
-export default function ProductStockTab({ product, enabled = true, canMoveInventory }: ProductStockTabProps) {
+export default function ProductStockTab({ product, enabled = true, canMoveInventory, canViewCosts }: ProductStockTabProps) {
 	const variantesRastreadas = (product.variantes ?? []).filter((variante) => variante.rastreamentoEstoqueAtivo);
 	const rastreamentoAtivo = product.rastreamentoEstoqueAtivo || variantesRastreadas.length > 0;
 
@@ -86,7 +88,15 @@ export default function ProductStockTab({ product, enabled = true, canMoveInvent
 		);
 	}
 
-	return <TrackedProductStock product={product} variantesRastreadas={variantesRastreadas} enabled={enabled} canMoveInventory={canMoveInventory} />;
+	return (
+		<TrackedProductStock
+			product={product}
+			variantesRastreadas={variantesRastreadas}
+			enabled={enabled}
+			canMoveInventory={canMoveInventory}
+			canViewCosts={canViewCosts}
+		/>
+	);
 }
 
 const PERIOD_OPTIONS: { value: TProductStockAnalyticsPeriod; label: string }[] = [
@@ -100,11 +110,13 @@ function TrackedProductStock({
 	variantesRastreadas,
 	enabled,
 	canMoveInventory,
+	canViewCosts,
 }: {
 	product: Product;
 	variantesRastreadas: NonNullable<Product["variantes"]>;
 	enabled: boolean;
 	canMoveInventory: boolean;
+	canViewCosts: boolean;
 }) {
 	const [period, setPeriod] = useState<TProductStockAnalyticsPeriod>(30);
 	const { data: analytics, isLoading, error } = useProductStockAnalytics({ productId: product.id, period, enabled });
@@ -160,9 +172,10 @@ function TrackedProductStock({
 			{error ? <ErrorComponent msg={getErrorMessage(error)} /> : null}
 			{analytics ? <StockAnalyticsOverview analytics={analytics} period={period} /> : null}
 
-			<CostPriceChart productId={product.id} unit={product.unidade} enabled={enabled} />
+			{/* Custo, preço e margem: o painel é sobre custo, então quem não vê custos não o recebe. */}
+			{canViewCosts ? <CostPriceChart productId={product.id} unit={product.unidade} enabled={enabled} /> : null}
 			<ProductLotsSection productId={product.id} />
-			<ProductTransactionsSection product={product} enabled={enabled} canMoveInventory={canMoveInventory} />
+			<ProductTransactionsSection product={product} enabled={enabled} canMoveInventory={canMoveInventory} canViewCosts={canViewCosts} />
 			{/* Configuração, não análise: fica no fim da aba. */}
 			<StockDeductionModeSection
 				productId={product.id}
@@ -333,7 +346,17 @@ function ProductLotLine({ lot }: { lot: StockLot }) {
 	);
 }
 
-function ProductTransactionsSection({ product, enabled, canMoveInventory }: { product: Product; enabled?: boolean; canMoveInventory: boolean }) {
+function ProductTransactionsSection({
+	product,
+	enabled,
+	canMoveInventory,
+	canViewCosts,
+}: {
+	product: Product;
+	enabled?: boolean;
+	canMoveInventory: boolean;
+	canViewCosts: boolean;
+}) {
 	const queryClient = useQueryClient();
 	const [newTransactionModalIsOpen, setNewTransactionModalIsOpen] = useState(false);
 	const { data, isLoading, isError, isSuccess, error, filters, updateFilters } = useProductStockTransactions({
@@ -396,6 +419,7 @@ function ProductTransactionsSection({ product, enabled, canMoveInventory }: { pr
 			{newTransactionModalIsOpen ? (
 				<NewStockTransaction
 					product={product}
+					canViewCosts={canViewCosts}
 					closeModal={() => setNewTransactionModalIsOpen(false)}
 					callbacks={{
 						onSuccess: () => {

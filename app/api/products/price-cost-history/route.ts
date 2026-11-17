@@ -4,6 +4,7 @@ import { localDayKey } from "@/lib/operation-timezone";
 import { addDays, toLocalDayKey } from "@/lib/stock/analytics/periods";
 import { getPurchaseEntries, naiveUtc } from "@/lib/stock/analytics/queries";
 import { derivePriceHistory } from "@/lib/stock/analytics/price-history";
+import { canViewCosts, maskCost } from "@/lib/permissions/sensitive-data";
 import { getSessionOrganizationId } from "@/lib/stock/analytics/route-helpers";
 import { db } from "@/services/drizzle";
 import { products, saleItems, sales } from "@/services/drizzle/schema";
@@ -28,8 +29,19 @@ export type TGetProductPriceCostHistoryInput = z.infer<typeof GetProductPriceCos
  * - Preço: derivado das vendas (preço bruto mais frequente por dia, ver `derivePriceHistory`), já que
  *   o histórico de cadastro guarda só a alteração anterior. Considera as vendas do produto sem
  *   variante — variantes têm preço próprio.
+ *
+ * Sem `dadosSensiveis.visualizarCustos`, só o preço sai: as compras (série de custo), o custo e a
+ * margem voltam vazios/`null`.
  */
-async function getProductPriceCostHistory({ input, organizationId }: { input: TGetProductPriceCostHistoryInput; organizationId: string }) {
+async function getProductPriceCostHistory({
+	input,
+	organizationId,
+	canViewCosts,
+}: {
+	input: TGetProductPriceCostHistoryInput;
+	organizationId: string;
+	canViewCosts: boolean;
+}) {
 	const now = new Date();
 	const windowStart = addDays(now, -HISTORY_DAYS);
 	const product = await db.query.products.findFirst({
@@ -113,17 +125,19 @@ async function getProductPriceCostHistory({ input, organizationId }: { input: TG
 		data: {
 			inicio: windowStart.getTime(),
 			fim: now.getTime(),
-			compras,
+			compras: canViewCosts ? compras : [],
 			precos: prices.alteracoes,
 			resumo: {
-				custoInicio,
-				custoAtual,
+				custoInicio: maskCost(custoInicio, canViewCosts),
+				custoAtual: maskCost(custoAtual, canViewCosts),
 				precoInicio: prices.precoInicio,
 				precoAtual: currentPrice,
-				margemInicio: marginAt(prices.precoInicio, custoInicio),
-				margemAtual: marginAt(currentPrice, custoAtual),
-				custoMedioPonderado:
+				margemInicio: maskCost(marginAt(prices.precoInicio, custoInicio), canViewCosts),
+				margemAtual: maskCost(marginAt(currentPrice, custoAtual), canViewCosts),
+				custoMedioPonderado: maskCost(
 					windowQuantity > 0 ? compras.reduce((sum, purchase) => sum + purchase.quantidade * purchase.custoUnitario, 0) / windowQuantity : null,
+					canViewCosts,
+				),
 				quantidadeCompras: compras.length,
 			},
 		},
@@ -133,9 +147,10 @@ async function getProductPriceCostHistory({ input, organizationId }: { input: TG
 export type TGetProductPriceCostHistoryOutput = Awaited<ReturnType<typeof getProductPriceCostHistory>>;
 
 async function getProductPriceCostHistoryRoute(request: NextRequest) {
-	const organizationId = getSessionOrganizationId(await getCurrentSessionUncached());
+	const session = await getCurrentSessionUncached();
+	const organizationId = getSessionOrganizationId(session);
 	const input = GetProductPriceCostHistoryInputSchema.parse({ productId: request.nextUrl.searchParams.get("productId") });
-	const result = await getProductPriceCostHistory({ input, organizationId });
+	const result = await getProductPriceCostHistory({ input, organizationId, canViewCosts: canViewCosts(session?.membership?.permissoes) });
 	return NextResponse.json(result);
 }
 

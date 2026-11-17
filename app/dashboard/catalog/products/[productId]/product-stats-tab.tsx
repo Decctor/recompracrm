@@ -40,9 +40,11 @@ import { toast } from "sonner";
 type ProductStatsTabProps = {
 	productId: string;
 	enabled?: boolean;
+	// dadosSensiveis.visualizarCustos: sem ela o servidor devolve margem/custo como null e os blocos somem.
+	canViewCosts: boolean;
 };
 
-export default function ProductStatsTab({ productId, enabled = true }: ProductStatsTabProps) {
+export default function ProductStatsTab({ productId, enabled = true, canViewCosts }: ProductStatsTabProps) {
 	const {
 		data: stats,
 		isLoading,
@@ -127,15 +129,17 @@ export default function ProductStatsTab({ productId, enabled = true }: ProductSt
 								current={{ value: stats.faturamentoLiquidoTotal || 0, format: (n) => formatToMoney(n) }}
 								className="w-full lg:w-1/4"
 							/>
-							<StatUnitCard
-								title="Margem Bruta"
-								icon={<TrendingUp className="w-4 h-4 min-w-4 min-h-4" />}
-								current={{
-									value: stats.margemBrutaTotal || 0,
-									format: (n) => `${formatToMoney(n)} (${formatDecimalPlaces(stats.margemBrutaPercentual)}%)`,
-								}}
-								className="w-full lg:w-1/4"
-							/>
+							{stats.margemBrutaTotal != null ? (
+								<StatUnitCard
+									title="Margem Bruta"
+									icon={<TrendingUp className="w-4 h-4 min-w-4 min-h-4" />}
+									current={{
+										value: stats.margemBrutaTotal,
+										format: (n) => `${formatToMoney(n)} (${formatDecimalPlaces(stats.margemBrutaPercentual ?? 0)}%)`,
+									}}
+									className="w-full lg:w-1/4"
+								/>
+							) : null}
 							<StatUnitCard
 								title="Faturamento/Dia"
 								icon={<ChartBar className="w-4 h-4 min-w-4 min-h-4" />}
@@ -153,6 +157,7 @@ export default function ProductStatsTab({ productId, enabled = true }: ProductSt
 
 					{/* Product Graph */}
 					<ProductGraphBlock
+						canViewCosts={canViewCosts}
 						productId={productId}
 						periodAfter={filters.periodAfter}
 						periodBefore={filters.periodBefore}
@@ -189,12 +194,14 @@ export default function ProductStatsTab({ productId, enabled = true }: ProductSt
 
 					{/* Advanced Analysis */}
 					<div className="flex w-full flex-col lg:flex-row gap-2 items-stretch">
-						<div className="w-full lg:w-1/2">
+						<div className={stats.analiseMargem ? "w-full lg:w-1/2" : "w-full"}>
 							<GroupedByRelatedProducts data={stats.resultadosAgrupados.produtosRelacionados} />
 						</div>
-						<div className="w-full lg:w-1/2">
-							<MarginAnalysis data={stats.analiseMargem} />
-						</div>
+						{stats.analiseMargem ? (
+							<div className="w-full lg:w-1/2">
+								<MarginAnalysis data={stats.analiseMargem} />
+							</div>
+						) : null}
 					</div>
 				</>
 			) : null}
@@ -1001,7 +1008,9 @@ function GroupedByRelatedProducts({ data }: { data: TGetProductStatsOutput["data
 	);
 }
 
-function MarginAnalysis({ data }: { data: TGetProductStatsOutput["data"]["analiseMargem"] }) {
+type TMarginAnalysis = NonNullable<TGetProductStatsOutput["data"]["analiseMargem"]>;
+
+function MarginAnalysis({ data }: { data: TMarginAnalysis }) {
 	const [viewMode, setViewMode] = useState<"seller" | "client" | "partner">("seller");
 
 	const currentData = viewMode === "seller" ? data.porVendedor : viewMode === "client" ? data.porCliente : data.porParceiro;
@@ -1012,9 +1021,9 @@ function MarginAnalysis({ data }: { data: TGetProductStatsOutput["data"]["analis
 	}: {
 		index: number;
 		item:
-			| TGetProductStatsOutput["data"]["analiseMargem"]["porVendedor"][number]
-			| TGetProductStatsOutput["data"]["analiseMargem"]["porCliente"][number]
-			| TGetProductStatsOutput["data"]["analiseMargem"]["porParceiro"][number];
+			| TMarginAnalysis["porVendedor"][number]
+			| TMarginAnalysis["porCliente"][number]
+			| TMarginAnalysis["porParceiro"][number];
 	}) {
 		const name =
 			"vendedorNome" in item ? item.vendedorNome : "clienteNome" in item ? item.clienteNome : "parceiroNome" in item ? item.parceiroNome : "N/A";
@@ -1159,6 +1168,7 @@ function SalesCompositionAnalysis({ composicao }: { composicao: TGetProductStats
 
 // Product Graph Component
 function ProductGraphBlock({
+	canViewCosts,
 	productId,
 	periodAfter,
 	periodBefore,
@@ -1166,6 +1176,7 @@ function ProductGraphBlock({
 	partnerId,
 	integrationsIds,
 }: {
+	canViewCosts: boolean;
 	productId: string;
 	periodAfter: string | null | undefined;
 	periodBefore: string | null | undefined;
@@ -1192,8 +1203,7 @@ function ProductGraphBlock({
 				PERÍODO: item.titulo,
 				QUANTIDADE: item.quantidade,
 				"VALOR LÍQUIDO": item.valorLiquido,
-				"MARGEM (R$)": item.margem,
-				"MARGEM (%)": item.margemPercentual,
+				...(canViewCosts ? { "MARGEM (R$)": item.margem, "MARGEM (%)": item.margemPercentual } : {}),
 				"TICKET MÉDIO": item.ticketMedio,
 			}));
 			getExcelFromJSON(exportationJSON, "PRODUTO_EVOLUÇÃO.xlsx");
@@ -1285,23 +1295,25 @@ function ProductGraphBlock({
 									<p>Quantidade</p>
 								</TooltipContent>
 							</Tooltip>
-							<Tooltip>
-								<TooltipTrigger
-									render={
-										<Button
-											variant={graphMetric === "margemPercentual" ? "default" : "ghost"}
-											size="fit"
-											className="rounded-lg p-2"
-											onClick={() => setGraphMetric("margemPercentual")}
-										>
-											<Percent className="h-4 min-h-4 w-4 min-w-4" />
-										</Button>
-									}
-								/>
-								<TooltipContent>
-									<p>Margem %</p>
-								</TooltipContent>
-							</Tooltip>
+							{canViewCosts ? (
+								<Tooltip>
+									<TooltipTrigger
+										render={
+											<Button
+												variant={graphMetric === "margemPercentual" ? "default" : "ghost"}
+												size="fit"
+												className="rounded-lg p-2"
+												onClick={() => setGraphMetric("margemPercentual")}
+											>
+												<Percent className="h-4 min-h-4 w-4 min-w-4" />
+											</Button>
+										}
+									/>
+									<TooltipContent>
+										<p>Margem %</p>
+									</TooltipContent>
+								</Tooltip>
+							) : null}
 							<Tooltip>
 								<TooltipTrigger
 									render={

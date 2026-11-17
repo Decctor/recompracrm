@@ -7,6 +7,8 @@ const date = (value: string | Date | null) => (value ? (formatDateAsLocale(value
 export function buildProductExportSheets(products: TProductExportEntry[]) {
 	const fiscal = products.some((product) => "perfisFiscais" in product);
 	const suppliers = products.some((product) => "fornecedorPrincipal" in product);
+	// A rota só manda `precoCusto` para quem vê custos (dadosSensiveis.visualizarCustos).
+	const costs = products.some((product) => "precoCusto" in product);
 	const identity = (product: TProductExportEntry) => ({ "ID DO PRODUTO": product.id, "CÓDIGO DO PRODUTO": product.codigo, PRODUTO: product.nome });
 	const sheets = [
 		{
@@ -21,7 +23,7 @@ export function buildProductExportSheets(products: TProductExportEntry[]) {
 				ATIVO: yesNo(product.ativo),
 				VENDÁVEL: yesNo(product.vendavel),
 				"PREÇO DE VENDA": product.precoVenda,
-				"PREÇO DE CUSTO": product.precoCusto,
+				...(costs ? { "PREÇO DE CUSTO": product.precoCusto ?? null } : {}),
 				ESTOQUE: product.quantidade,
 				"RASTREAMENTO DE ESTOQUE": yesNo(product.rastreamentoEstoqueAtivo),
 				...(suppliers ? { "FORNECEDOR PRINCIPAL": product.fornecedorPrincipal?.nome ?? "" } : {}),
@@ -30,7 +32,7 @@ export function buildProductExportSheets(products: TProductExportEntry[]) {
 					: {}),
 				"VALOR VENDIDO NO PERÍODO": product.estatisticas.vendasValorTotal,
 				"QUANTIDADE VENDIDA NO PERÍODO": product.estatisticas.vendasQtdeTotal,
-				"CUSTO DAS VENDAS NO PERÍODO": product.estatisticas.vendasCustoTotal,
+				...(costs ? { "CUSTO DAS VENDAS NO PERÍODO": product.estatisticas.vendasCustoTotal } : {}),
 				"CURVA ABC": product.estatisticas.curvaABC,
 				"PRIMEIRA VENDA NO PERÍODO": date(product.estatisticas.dataPrimeiraVenda),
 				"ÚLTIMA VENDA NO PERÍODO": date(product.estatisticas.dataUltimaVenda),
@@ -49,7 +51,7 @@ export function buildProductExportSheets(products: TProductExportEntry[]) {
 					"CÓDIGO DA VARIANTE": variant.codigo ?? "",
 					"CÓDIGO DE BARRAS": variant.codigoBarras ?? "",
 					"PREÇO DE VENDA": variant.precoVenda,
-					"PREÇO DE CUSTO": variant.precoCusto,
+					...(costs ? { "PREÇO DE CUSTO": variant.precoCusto } : {}),
 					ESTOQUE: variant.quantidade,
 					ATIVO: yesNo(variant.ativo),
 					"RASTREAMENTO DE ESTOQUE": yesNo(variant.rastreamentoEstoqueAtivo),

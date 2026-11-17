@@ -3,7 +3,14 @@ import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { canCreateProductions, canDeleteProductions, canEditProductions } from "@/lib/permissions/productions";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { handleSimpleChildRowsProcessing } from "@/lib/db-utils";
-import { calculateValuation, getItemUnitCost, getProductPricingMap } from "@/lib/productions/valuation";
+import { canViewCosts, maskCost } from "@/lib/permissions/sensitive-data";
+import {
+	calculateValuation,
+	getItemUnitCost,
+	getProductPricingMap,
+	maskItemProductCosts,
+	maskValuationCosts,
+} from "@/lib/productions/valuation";
 import { ProductionRecipeBaseSchema, ProductionRecipeInputSchema, ProductionRecipeOutputBaseSchema } from "@/schemas/productions";
 import { db } from "@/services/drizzle";
 import { getPrimaryRecipeOutput } from "@/lib/productions/builder-math";
@@ -271,6 +278,10 @@ async function getRecipeProductionStats({ organizationId, recipeIds }: { organiz
 async function getProductionRecipes({ input, session }: { input: TGetProductionRecipesInput; session: TAuthUserSession }) {
 	const organizationId = session.membership?.organizacao.id;
 	if (!organizationId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização.");
+	// Custo dos insumos, custo de catálogo dos produtos e margem saem como `null` para quem não vê
+	// custos. A leitura de receitas não exige permissão de produção (o cadastro de produto a usa), mas
+	// o custo segue a regra de dados sensíveis em qualquer caminho.
+	const showCosts = canViewCosts(session.membership?.permissoes);
 
 	if (input.id) {
 		const recipe = await db.query.productionRecipes.findFirst({
@@ -305,7 +316,7 @@ async function getProductionRecipes({ input, session }: { input: TGetProductionR
 			? {
 					rastreamentoEstoqueAtivo: primaryOutputTracksStock,
 					/** Custo de catálogo da saída: é por ele que a conclusão custeia saldo que não vem de lote. */
-					custoUnitario: getItemUnitCost({ item: primaryOutput, pricingMap }),
+					custoUnitario: maskCost(getItemUnitCost({ item: primaryOutput, pricingMap }), showCosts),
 					lotes: !primaryOutputTracksStock
 						? []
 						: await db.query.productStockLots.findMany({
@@ -328,7 +339,9 @@ async function getProductionRecipes({ input, session }: { input: TGetProductionR
 			data: {
 				byId: {
 					...recipe,
-					valores: calculateValuation({ inputs: recipe.insumos, outputs: recipe.saidas, pricingMap }),
+					insumos: recipe.insumos.map((insumo) => maskItemProductCosts(insumo, showCosts)),
+					saidas: recipe.saidas.map((saida) => maskItemProductCosts(saida, showCosts)),
+					valores: maskValuationCosts(calculateValuation({ inputs: recipe.insumos, outputs: recipe.saidas, pricingMap }), showCosts),
 					saldo,
 				},
 				default: undefined,
@@ -398,7 +411,7 @@ async function getProductionRecipes({ input, session }: { input: TGetProductionR
 		const stats = productionStats.get(recipe.id);
 		return {
 			...recipe,
-			valores: calculateValuation({ inputs: recipe.insumos, outputs: recipe.saidas, pricingMap }),
+			valores: maskValuationCosts(calculateValuation({ inputs: recipe.insumos, outputs: recipe.saidas, pricingMap }), showCosts),
 			producoes: stats?.producoes ?? 0,
 			dataUltimaProducao: stats?.dataUltimaProducao ?? null,
 			/**

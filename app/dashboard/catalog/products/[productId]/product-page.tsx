@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { resolveInventoryPermissions } from "@/lib/permissions/inventory";
+import { canViewCosts } from "@/lib/permissions/sensitive-data";
 import ProductRegistryTab from "@/app/dashboard/catalog/products/[productId]/product-registry-tab";
 import ProductStatsTab from "@/app/dashboard/catalog/products/[productId]/product-stats-tab";
 import ProductStockTab from "@/app/dashboard/catalog/products/[productId]/product-stock-tab";
@@ -23,6 +24,8 @@ type ProductPageProps = {
 
 export default function ProductPage({ user, userMembership, id }: ProductPageProps) {
 	const inventoryPermissions = resolveInventoryPermissions(userMembership.permissoes);
+	// O servidor já devolve custo/margem como null; o flag só decide o que a tela nem desenha.
+	const userCanViewCosts = canViewCosts(userMembership.permissoes);
 	const [tab, setTab] = useQueryState("tab", parseAsStringEnum(["cadastro", "estatisticas", "estoque"]).withDefault("estatisticas"));
 	const queryClient = useQueryClient();
 	const { data: product, queryKey, isLoading, isError, error } = useProductById({ id });
@@ -66,11 +69,16 @@ export default function ProductPage({ user, userMembership, id }: ProductPagePro
 					/>
 				</TabsContent>
 				<TabsContent value="estatisticas" className="mt-4">
-					<ProductStatsTab productId={id} enabled={tab === "estatisticas"} />
+					<ProductStatsTab productId={id} enabled={tab === "estatisticas"} canViewCosts={userCanViewCosts} />
 				</TabsContent>
 				{inventoryPermissions.visualizar ? (
 					<TabsContent value="estoque" className="mt-4">
-						<ProductStockTab product={product} enabled={tab === "estoque"} canMoveInventory={inventoryPermissions.movimentar} />
+						<ProductStockTab
+								product={product}
+								enabled={tab === "estoque"}
+								canMoveInventory={inventoryPermissions.movimentar}
+								canViewCosts={userCanViewCosts}
+							/>
 					</TabsContent>
 				) : null}
 			</Tabs>

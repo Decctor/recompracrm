@@ -9,7 +9,7 @@ import GeneralPaginationComponent from "@/components/Utils/Pagination";
 import { getErrorMessage } from "@/lib/errors";
 import { appRoutes } from "@/lib/navigation/routes";
 import { REPORT_PERIOD_PRESETS } from "@/lib/period-presets";
-import type { TProductionPermissions } from "@/lib/permissions/productions";
+import type { TProductionPagePermissions } from "../../_lib/require-production-access";
 import { useProductions } from "@/lib/queries/productions";
 import { Factory, Plus } from "lucide-react";
 import Link from "next/link";
@@ -35,7 +35,7 @@ function useMinuteClock() {
 	return now;
 }
 
-export default function ProductionsHistoryPage({ permissions }: { permissions: TProductionPermissions }) {
+export default function ProductionsHistoryPage({ permissions }: { permissions: TProductionPagePermissions }) {
 	const now = useMinuteClock();
 	const { data, isLoading, isError, isSuccess, error, filters, updateFilters } = useProductions({
 		initialFilters: { ...getThisMonthPeriod(), pageSize: DEFAULT_PAGE_SIZE },
@@ -85,7 +85,7 @@ export default function ProductionsHistoryPage({ permissions }: { permissions: T
 					/>
 					{newProductionButton}
 				</div>
-				<ProductionsInlineFilters filters={filters} updateFilters={updateFilters} />
+				<ProductionsInlineFilters filters={filters} updateFilters={updateFilters} canViewCosts={permissions.visualizarCustos} />
 			</div>
 			<GeneralPaginationComponent
 				activePage={filters.page}

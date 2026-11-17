@@ -86,3 +86,15 @@ test("com controle de estoque: o lote escolhido limita a quantidade", () => {
 	assert.equal(plan.maxSaldo, 1.5);
 	assert.equal(plan.items.entradas[0].loteId, "L1");
 });
+
+test("sem permissão de ver custos: custo e margem nulos, sem aviso de custo ausente", () => {
+	const base = buildRecipe({ rastreamentoEstoqueAtivo: false, custoUnitario: null });
+	const recipe = { ...base, valores: { ...base.valores, custoTotal: null, margem: null, margemPercentual: null } } as unknown as TBuilderRecipe;
+	const plan = buildRecipePlan({ recipe, quantities: reinc(4), start });
+	assert.equal(plan.untrackedLeftover, true);
+	assert.equal(plan.untrackedLeftoverWithoutCost, false);
+	assert.equal(plan.valores.custoTotal, null);
+	assert.equal(plan.valores.margem, null);
+	assert.equal(plan.valores.margemPercentual, null);
+	assert.equal(plan.valores.retornoEsperado, 100);
+});

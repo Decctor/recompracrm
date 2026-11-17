@@ -1,7 +1,8 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { getProductMovementSummaries, getStockDeltasByDay, getStockPositions, naiveUtc } from "@/lib/stock/analytics/queries";
-import { getInventoryReportOrganizationId, parsePeriodSearchParams, StockReportPeriodInputSchema } from "@/lib/stock/analytics/route-helpers";
+import { maskCost } from "@/lib/permissions/sensitive-data";
+import { getInventoryReportAccess, parsePeriodSearchParams, StockReportPeriodInputSchema } from "@/lib/stock/analytics/route-helpers";
 import { db } from "@/services/drizzle";
 import { productStockLots } from "@/services/drizzle/schema";
 import { sql } from "drizzle-orm";
@@ -14,9 +15,18 @@ export type TGetStockReportSummaryInput = z.infer<typeof GetStockReportSummaryIn
 /**
  * Resumo do estoque hoje e no início do período. Unidades, valor e produtos zerados no início são
  * reconstruídos desfazendo as movimentações do período. Lotes vencendo não têm histórico
- * reconstruível (o saldo do lote não é versionado), então a comparação volta `null`.
+ * reconstruível (o saldo do lote não é versionado), então a comparação volta `null`. O valor
+ * imobilizado volta `null` para quem não vê custos.
  */
-async function getStockReportSummary({ input, organizationId }: { input: TGetStockReportSummaryInput; organizationId: string }) {
+async function getStockReportSummary({
+	input,
+	organizationId,
+	canViewCosts,
+}: {
+	input: TGetStockReportSummaryInput;
+	organizationId: string;
+	canViewCosts: boolean;
+}) {
 	const now = new Date();
 	const in7Days = new Date(now.getTime() + 7 * 86_400_000);
 	const [positions, movement, deltasByDay, expiringLots] = await Promise.all([
@@ -55,7 +65,7 @@ async function getStockReportSummary({ input, organizationId }: { input: TGetSto
 	return {
 		data: {
 			emEstoque: { atual: unitsNow, anterior: unitsBefore },
-			valorImobilizado: { atual: valueNow, anterior: valueNow - valueDelta },
+			valorImobilizado: maskCost({ atual: valueNow, anterior: valueNow - valueDelta }, canViewCosts),
 			semEstoque: { atual: zeroNow, anterior: zeroBefore },
 			lotesVencendo7Dias: { atual: expiringLots[0]?.total ?? 0, anterior: null as number | null },
 			produtosComSaldo: withBalance,
@@ -67,9 +77,9 @@ async function getStockReportSummary({ input, organizationId }: { input: TGetSto
 export type TGetStockReportSummaryOutput = Awaited<ReturnType<typeof getStockReportSummary>>;
 
 async function getStockReportSummaryRoute(request: NextRequest) {
-	const organizationId = getInventoryReportOrganizationId(await getCurrentSessionUncached());
+	const { organizationId, canViewCosts } = getInventoryReportAccess(await getCurrentSessionUncached());
 	const input = GetStockReportSummaryInputSchema.parse(parsePeriodSearchParams(request.nextUrl.searchParams));
-	const result = await getStockReportSummary({ input, organizationId });
+	const result = await getStockReportSummary({ input, organizationId, canViewCosts });
 	return NextResponse.json(result);
 }
 
