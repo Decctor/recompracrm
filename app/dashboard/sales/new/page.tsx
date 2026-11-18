@@ -1,3 +1,4 @@
+import { canManageClientBase } from "@/lib/permissions/clients";
 import { resolveSalesOperationPermissions } from "@/lib/permissions/sales";
 import { getCurrentSession } from "@/lib/authentication/session";
 import { EMPTY_AUTO_EMISSION_EXCEPTIONS } from "@/lib/fiscal/auto-emission-policy";
@@ -59,6 +60,7 @@ export default async function NewSale() {
 			organizationAutoFiscalCapable={isOrganizationAutoFiscalCapable(fiscalSettings)}
 			autoEmissionExceptions={fiscalSettings.fiscalConfiguracao?.emissaoAutomatica?.excecoes ?? EMPTY_AUTO_EMISSION_EXCEPTIONS}
 			canEmitFiscal={sessionUser.membership.permissoes.fiscal.emitir}
+			canCreateClientTags={canManageClientBase(sessionUser.membership.permissoes)}
 			cashPermissions={resolveSalesOperationPermissions(sessionUser.membership.permissoes)}
 			canConfigureFiscal={sessionUser.membership.permissoes.fiscal.configurar}
 			canViewSales={sessionUser.membership.permissoes.vendas.visualizar ?? false}

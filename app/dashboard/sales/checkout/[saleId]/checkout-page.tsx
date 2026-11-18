@@ -94,6 +94,8 @@ type CheckoutPageProps = {
 	organizationAutoFiscalCapable: boolean;
 	autoEmissionExceptions: TAutoEmissionExceptions;
 	canEmitFiscal: boolean;
+	/** `clientes.gerenciarBase`: criar etiqueta nova ao editar o cliente vinculado. */
+	canCreateClientTags: boolean;
 	cashPermissions: Pick<TSalesOperationPermissions, "operarCaixa" | "movimentarCaixa">;
 };
 
@@ -107,6 +109,7 @@ export default function CheckoutPage({
 	organizationAutoFiscalCapable,
 	autoEmissionExceptions,
 	canEmitFiscal,
+	canCreateClientTags,
 	cashPermissions,
 }: CheckoutPageProps) {
 	const router = useRouter();
@@ -521,6 +524,7 @@ export default function CheckoutPage({
 			organizationAutoFiscalCapable={organizationAutoFiscalCapable}
 			autoEmissionExceptions={autoEmissionExceptions}
 			canEmitFiscal={canEmitFiscal}
+			canCreateClientTags={canCreateClientTags}
 			discountAuthority={discountAuthority}
 			storeCredit={storeCredit}
 			onCreateDraft={() => {}}

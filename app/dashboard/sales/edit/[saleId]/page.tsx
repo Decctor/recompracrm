@@ -1,3 +1,4 @@
+import { canManageClientBase } from "@/lib/permissions/clients";
 import { resolveSalesOperationPermissions } from "@/lib/permissions/sales";
 import { getCurrentSession } from "@/lib/authentication/session";
 import { appRoutes } from "@/lib/navigation/routes";
@@ -54,6 +55,7 @@ export default async function EditSale({ params }: { params: Promise<{ saleId: s
 			organizationAutoFiscalCapable={isOrganizationAutoFiscalCapable(fiscalSettings)}
 			autoEmissionExceptions={fiscalSettings.fiscalConfiguracao?.emissaoAutomatica?.excecoes ?? EMPTY_AUTO_EMISSION_EXCEPTIONS}
 			canEmitFiscal={sessionUser.membership.permissoes.fiscal.emitir}
+			canCreateClientTags={canManageClientBase(sessionUser.membership.permissoes)}
 			cashPermissions={resolveSalesOperationPermissions(sessionUser.membership.permissoes)}
 		/>
 	);

@@ -98,8 +98,13 @@ export function DashboardPage({ user, userOrg, membership, scopeSellersIds }: Da
 	};
 
 	const firstName = user.nome?.trim().split(/\s+/)[0] ?? "";
-	// Sem resultados e sem ERP e sem carteiras, não sobra nenhuma leitura para montar o painel.
-	const hasContent = canViewSales || tabs.length > 1 || canViewClients;
+	// Sem resultados, sem ERP e sem carteiras, só sobra Relacionamento, que tem leitura se o membro vê
+	// clientes, campanhas, cashback ou atendimentos (os blocos e a régua do dia da aba).
+	const hasContent =
+		canViewSales ||
+		tabs.length > 1 ||
+		canViewClients ||
+		(["campaigns", "cashback", "whatsapp"] as const).some((capability) => canAccessDashboardCapability(capability, context));
 
 	return (
 		// `text-numeric` no painel inteiro: todo número daqui para baixo herda figuras alinhadas, sem

@@ -83,6 +83,8 @@ type SaleByIdPageProps = {
 	userCanDeleteSales: boolean;
 	userCanEditSales: boolean;
 	userCanReconcileClients: boolean;
+	/** `clientes.visualizar`: a pílula de duplicados lê /api/clients/duplicates. */
+	userCanViewClients: boolean;
 	userCanViewFinances: boolean;
 	userFiscalPermissions: {
 		view: boolean;
@@ -119,6 +121,7 @@ export default function SaleByIdPage({
 	userCanDeleteSales,
 	userCanEditSales,
 	userCanReconcileClients,
+	userCanViewClients,
 	userCanViewFinances,
 	userFiscalPermissions,
 }: SaleByIdPageProps) {
@@ -157,7 +160,7 @@ export default function SaleByIdPage({
 					<SaleOverviewSection sale={sale} />
 				</div>
 				<div className="w-full lg:w-1/2 flex">
-					<ClientSection sale={sale} canReconcile={userCanReconcileClients} canEditSales={userCanEditSales} />
+					<ClientSection sale={sale} canViewClients={userCanViewClients} canReconcile={userCanReconcileClients} canEditSales={userCanEditSales} />
 				</div>
 			</div>
 			<div className="w-full flex flex-col lg:flex-row gap-4 lg:items-stretch">
@@ -299,7 +302,17 @@ function SaleOverviewSection({ sale }: { sale: TGetSalesOutputById }) {
 	);
 }
 
-function ClientSection({ sale, canReconcile, canEditSales }: { sale: TGetSalesOutputById; canReconcile: boolean; canEditSales: boolean }) {
+function ClientSection({
+	sale,
+	canViewClients,
+	canReconcile,
+	canEditSales,
+}: {
+	sale: TGetSalesOutputById;
+	canViewClients: boolean;
+	canReconcile: boolean;
+	canEditSales: boolean;
+}) {
 	const client = sale.cliente;
 	const [reassignIsOpen, setReassignIsOpen] = useState(false);
 	// A ação mora no painel do CLIENTE porque é ele que ela muda — e é aqui que o estado vazio
@@ -363,7 +376,7 @@ function ClientSection({ sale, canReconcile, canEditSales }: { sale: TGetSalesOu
 						<CircleUser className="w-4 h-4 text-muted-foreground" />
 						<h3 className="text-sm font-semibold tracking-tighter text-foreground/80">NOME</h3>
 						<h3 className="text-sm font-semibold tracking-tight">{client.nome}</h3>
-						<ClientDuplicatePill entityType="client" entityId={client.id} canReconcile={canReconcile} />
+						{canViewClients ? <ClientDuplicatePill entityType="client" entityId={client.id} canReconcile={canReconcile} /> : null}
 					</div>
 
 					{/* Phone */}

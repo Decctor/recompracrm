@@ -1,6 +1,7 @@
 import { appApiHandler } from "@/lib/app-api";
 import { runPagesRouteHandler, type PagesRouteHandler, type PagesRouteRequest, type PagesRouteResponse } from "@/lib/pages-route-compat";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { canViewClients } from "@/lib/permissions/clients";
 import { canExportClients } from "@/lib/permissions/sensitive-data";
 import { formatDateAsLocale, formatToMoney } from "@/lib/formatting";
 import { ClientSearchQueryParams, type TClient } from "@/schemas/clients";
@@ -195,6 +196,8 @@ const handleClientsExportation: PagesRouteHandler<{
 
 	const userOrgId = sessionUser.membership?.organizacao.id;
 	if (!userOrgId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
+	// Mesmas duas condições de /api/clients/export: exportar exige também enxergar a base.
+	if (!canViewClients(sessionUser.membership?.permissoes)) throw new createHttpError.Forbidden("Você não possui permissão para visualizar clientes.");
 	if (!canExportClients(sessionUser.membership?.permissoes))
 		throw new createHttpError.Forbidden("Você não possui permissão para exportar a base de clientes.");
 

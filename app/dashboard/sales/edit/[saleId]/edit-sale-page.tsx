@@ -100,6 +100,8 @@ type EditSalePageProps = {
 	organizationAutoFiscalCapable: boolean;
 	autoEmissionExceptions: TAutoEmissionExceptions;
 	canEmitFiscal: boolean;
+	/** `clientes.gerenciarBase`: criar etiqueta nova ao editar o cliente vinculado. */
+	canCreateClientTags: boolean;
 	cashPermissions: Pick<TSalesOperationPermissions, "operarCaixa" | "movimentarCaixa">;
 };
 
@@ -113,6 +115,7 @@ export default function EditSalePage({
 	organizationAutoFiscalCapable,
 	autoEmissionExceptions,
 	canEmitFiscal,
+	canCreateClientTags,
 	cashPermissions,
 }: EditSalePageProps) {
 	const router = useRouter();
@@ -560,6 +563,7 @@ export default function EditSalePage({
 							organizationAutoFiscalCapable={organizationAutoFiscalCapable}
 							autoEmissionExceptions={autoEmissionExceptions}
 							canEmitFiscal={canEmitFiscal}
+							canCreateClientTags={canCreateClientTags}
 							discountAuthority={discountAuthority}
 							storeCredit={storeCredit}
 							onCreateDraft={() => {}}
@@ -641,6 +645,7 @@ export default function EditSalePage({
 					organizationAutoFiscalCapable={organizationAutoFiscalCapable}
 					autoEmissionExceptions={autoEmissionExceptions}
 					canEmitFiscal={canEmitFiscal}
+					canCreateClientTags={canCreateClientTags}
 					discountAuthority={discountAuthority}
 					storeCredit={storeCredit}
 					onCreateDraft={() => {}}

@@ -57,9 +57,9 @@ async function fetchRelationshipPulse(days: number) {
 	return data.data;
 }
 
-export function useRelationshipPulse({ days = 30, enabled = true }: { days?: number; enabled?: boolean } = {}) {
+export function useRelationshipPulse({ days = 30 }: { days?: number } = {}) {
 	const queryKey = ["clients-relationship-pulse", days];
-	return { ...useQuery({ queryKey, queryFn: () => fetchRelationshipPulse(days), enabled }), queryKey };
+	return { ...useQuery({ queryKey, queryFn: () => fetchRelationshipPulse(days) }), queryKey };
 }
 
 async function fetchCashbackUsage(days: number) {
@@ -77,9 +77,9 @@ async function fetchSegmentDistribution(days: number) {
 	return data.data;
 }
 
-export function useSegmentDistribution({ days = 30, enabled = true }: { days?: number; enabled?: boolean } = {}) {
+export function useSegmentDistribution({ days = 30 }: { days?: number } = {}) {
 	const queryKey = ["segmentations-distribution", days];
-	return { ...useQuery({ queryKey, queryFn: () => fetchSegmentDistribution(days), enabled }), queryKey };
+	return { ...useQuery({ queryKey, queryFn: () => fetchSegmentDistribution(days) }), queryKey };
 }
 
 async function fetchTeamRoutine(dayStart: Date) {

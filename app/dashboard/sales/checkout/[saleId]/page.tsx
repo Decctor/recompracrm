@@ -1,3 +1,4 @@
+import { canManageClientBase } from "@/lib/permissions/clients";
 import { resolveSalesOperationPermissions } from "@/lib/permissions/sales";
 import { requireDashboardCapability } from "@/lib/access/guards";
 import { EMPTY_AUTO_EMISSION_EXCEPTIONS } from "@/lib/fiscal/auto-emission-policy";
@@ -45,6 +46,7 @@ export default async function Checkout({ params }: { params: Promise<{ saleId: s
 			organizationAutoFiscalCapable={isOrganizationAutoFiscalCapable(fiscalSettings)}
 			autoEmissionExceptions={fiscalSettings.fiscalConfiguracao?.emissaoAutomatica?.excecoes ?? EMPTY_AUTO_EMISSION_EXCEPTIONS}
 			canEmitFiscal={sessionUser.membership.permissoes.fiscal.emitir}
+			canCreateClientTags={canManageClientBase(sessionUser.membership.permissoes)}
 			cashPermissions={resolveSalesOperationPermissions(sessionUser.membership.permissoes)}
 		/>
 	);
