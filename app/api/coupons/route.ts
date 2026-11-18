@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { assertCanEditCampaigns, assertCanViewCampaigns } from "@/lib/campaigns/access";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { handleSimpleChildRowsProcessing } from "@/lib/db-utils";
 import { assertCouponCoherence, insertCouponWithinTransaction } from "@/lib/coupons/creation";
@@ -169,6 +170,7 @@ export type TGetCouponsOutputDefault = Exclude<TGetCouponsOutput["data"]["defaul
 async function getCouponsRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	assertCanViewCampaigns(session);
 	const input = GetCouponsInputSchema.parse({
 		id: request.nextUrl.searchParams.get("id") ?? undefined,
 		page: request.nextUrl.searchParams.get("page") ?? undefined,
@@ -214,6 +216,7 @@ export type TCreateCouponOutput = Awaited<ReturnType<typeof createCoupon>>;
 async function createCouponRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	assertCanEditCampaigns(session);
 	const payload = await request.json();
 	const input = CreateCouponInputSchema.parse(payload);
 	const result = await createCoupon({ input, session });
@@ -312,6 +315,7 @@ export type TUpdateCouponOutput = Awaited<ReturnType<typeof updateCoupon>>;
 async function updateCouponRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	assertCanEditCampaigns(session);
 	const payload = await request.json();
 	const input = UpdateCouponInputSchema.parse(payload);
 	const result = await updateCoupon({ input, session });
@@ -351,6 +355,7 @@ export type TDeleteCouponOutput = Awaited<ReturnType<typeof deleteCoupon>>;
 async function deleteCouponRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	assertCanEditCampaigns(session);
 	const input = DeleteCouponInputSchema.parse({ id: request.nextUrl.searchParams.get("id") ?? undefined });
 	const result = await deleteCoupon({ input, session });
 	return NextResponse.json(result, { status: 200 });

@@ -11,6 +11,10 @@ import { useMemo } from "react";
 
 type ClientRegistryTabProps = {
 	client: TClientRegistryClient;
+	/** Sem clientes.editar: os campos aparecem, mas desabilitados (a rota recusaria aplicar). */
+	readOnly?: boolean;
+	/** clientes.gerenciarBase: criar etiqueta nova no bloco de relacionamento. */
+	canCreateTags: boolean;
 	callbacks: {
 		onMutate?: () => void;
 		onSuccess?: () => void;
@@ -27,7 +31,7 @@ type ClientRegistryTabProps = {
  * o destaque âmbar marca o que ainda não foi preenchido de verdade, e não some enquanto o usuário
  * digita — some quando ele aplica.
  */
-export default function ClientRegistryTab({ client, callbacks }: ClientRegistryTabProps) {
+export default function ClientRegistryTab({ client, readOnly = false, canCreateTags, callbacks }: ClientRegistryTabProps) {
 	const identificationEditor = useClientSectionEditor({ client, section: "identification", callbacks });
 	const contactEditor = useClientSectionEditor({ client, section: "contact", callbacks });
 	const addressesEditor = useClientSectionEditor({ client, section: "addresses", callbacks });
@@ -37,14 +41,21 @@ export default function ClientRegistryTab({ client, callbacks }: ClientRegistryT
 	const missingFields = useMemo(() => getClientRegistryCompleteness(mapClientToState(client)).camposFaltantes, [client]);
 
 	return (
-		<div className="flex w-full flex-col gap-6">
+		// `fieldset disabled` desliga de uma vez todo controle nativo das seções (inputs, selects e a barra
+		// de aplicar), sem espalhar uma flag por cada campo.
+		<fieldset disabled={readOnly} className="flex w-full min-w-0 flex-col gap-6">
+			{readOnly ? <p className="text-xs text-muted-foreground">Você pode consultar o cadastro, mas não tem permissão para editar clientes.</p> : null}
 			<ClientIdentificationSection editor={identificationEditor} idExterno={client.idExterno ?? null} missingFields={missingFields} />
 			<ClientContactSection editor={contactEditor} missingFields={missingFields} />
 			<ClientAddressesSection editor={addressesEditor} missingFields={missingFields} />
 			<div className="grid w-full grid-cols-1 gap-6 lg:grid-cols-2">
 				<ClientFiscalSection editor={fiscalEditor} />
-				<ClientRelationshipSection editor={relationshipEditor} consentimentoMarketingData={client.consentimentoMarketingData ?? null} />
+				<ClientRelationshipSection
+					editor={relationshipEditor}
+					consentimentoMarketingData={client.consentimentoMarketingData ?? null}
+					canCreateTags={canCreateTags}
+				/>
 			</div>
-		</div>
+		</fieldset>
 	);
 }

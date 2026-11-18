@@ -37,8 +37,10 @@ import { BsCalendar } from "react-icons/bs";
 
 type PartnersPageProps = {
 	user: TAuthUserSession["user"];
+	/** Parceiros são cadastro da empresa: criar e editar seguem empresa.editar (a API recusa sem ela). */
+	canEditPartners: boolean;
 };
-export default function PartnersPage({ user }: PartnersPageProps) {
+export default function PartnersPage({ user, canEditPartners }: PartnersPageProps) {
 	const [viewMode, setViewMode] = useQueryState("view", parseAsStringEnum(["stats", "database"]));
 
 	return (
@@ -58,14 +60,14 @@ export default function PartnersPage({ user }: PartnersPageProps) {
 					<PartnersStatsView />
 				</TabsContent>
 				<TabsContent value="database">
-					<PartnersDatabaseView user={user} />
+					<PartnersDatabaseView user={user} canEditPartners={canEditPartners} />
 				</TabsContent>
 			</Tabs>
 		</div>
 	);
 }
 
-function PartnersDatabaseView({ user }: { user: TAuthUserSession["user"] }) {
+function PartnersDatabaseView({ user, canEditPartners }: { user: TAuthUserSession["user"]; canEditPartners: boolean }) {
 	const queryClient = useQueryClient();
 	const [newPartnerModalIsOpen, setNewPartnerModalIsOpen] = useState<boolean>(false);
 	const [editPartnerModalId, setEditPartnerModalId] = useState<string | null>(null);
@@ -105,10 +107,12 @@ function PartnersDatabaseView({ user }: { user: TAuthUserSession["user"] }) {
 					className="grow rounded-xl"
 				/>
 
-				<Button className="flex items-center gap-2" size="sm" onClick={() => setNewPartnerModalIsOpen(true)}>
-					<Plus className="w-4 h-4 min-w-4 min-h-4" />
-					NOVO PARCEIRO
-				</Button>
+				{canEditPartners ? (
+					<Button className="flex items-center gap-2" size="sm" onClick={() => setNewPartnerModalIsOpen(true)}>
+						<Plus className="w-4 h-4 min-w-4 min-h-4" />
+						NOVO PARCEIRO
+					</Button>
+				) : null}
 			</div>
 			<PartnersInlineFilters queryParams={queryParams} updateQueryParams={updateQueryParams} />
 			<GeneralPaginationComponent
@@ -126,7 +130,9 @@ function PartnersDatabaseView({ user }: { user: TAuthUserSession["user"] }) {
 			{isSuccess ? (
 				<div className="w-full flex flex-col gap-1.5">
 					{partners && partners.length > 0 ? (
-						partners.map((partner) => <PartnersPagePartnerCard key={partner.id} partner={partner} handleEditClick={setEditPartnerModalId} />)
+						partners.map((partner) => (
+							<PartnersPagePartnerCard key={partner.id} partner={partner} handleEditClick={canEditPartners ? setEditPartnerModalId : null} />
+						))
 					) : (
 						<p className="w-full flex items-center justify-center">Nenhum parceiro encontrado</p>
 					)}
@@ -411,7 +417,8 @@ function PartnersPagePartnerCard({
 	handleEditClick,
 }: {
 	partner: TGetPartnersOutputDefault["partners"][number];
-	handleEditClick: (id: string) => void;
+	/** Ausente quando o membro não pode editar parceiros (empresa.editar). */
+	handleEditClick: ((id: string) => void) | null;
 }) {
 	return (
 		<div className={cn("bg-card border-border flex w-full flex-col gap-1 rounded-xl border px-3 py-4 shadow-2xs")}>
@@ -469,17 +476,12 @@ function PartnersPagePartnerCard({
 					<BsCalendar className="w-3 min-w-3 h-3 min-h-3" />
 					<p className="text-xs font-medium tracking-tight uppercase">ÚLTIMA VENDA: {formatDateAsLocale(partner.estatisticas.dataUltimaVenda)}</p>
 				</div>
-				<Button
-					variant="ghost"
-					className="flex items-center gap-1.5"
-					size="sm"
-					onClick={(e) => {
-						handleEditClick(partner.id);
-					}}
-				>
-					<Pencil className="w-3 min-w-3 h-3 min-h-3" />
-					EDITAR
-				</Button>
+				{handleEditClick ? (
+					<Button variant="ghost" className="flex items-center gap-1.5" size="sm" onClick={() => handleEditClick(partner.id)}>
+						<Pencil className="w-3 min-w-3 h-3 min-h-3" />
+						EDITAR
+					</Button>
+				) : null}
 			</div>
 		</div>
 	);

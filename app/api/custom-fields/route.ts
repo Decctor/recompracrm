@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { assertCanManageClientBase } from "@/lib/clients/access";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { resolveNativeCustomField } from "@/lib/custom-fields/native-catalog";
 import { assertCustomFieldNotUsedByActiveSurvey, assertCustomFieldOptionsNotFrozen } from "@/lib/message-templates/survey-guards";
@@ -89,10 +90,7 @@ const CreateCustomFieldInputSchema = z.object({
 		titulo: true,
 		tipo: true,
 	}).extend({
-		titulo: z
-			.string({ invalid_type_error: "Tipo não válido para o título do campo personalizado." })
-			.optional()
-			.nullable(),
+		titulo: z.string({ invalid_type_error: "Tipo não válido para o título do campo personalizado." }).optional().nullable(),
 		tipo: CustomFieldTypeEnum.optional().nullable(),
 	}),
 });
@@ -151,6 +149,9 @@ export type TCreateCustomFieldOutput = Awaited<ReturnType<typeof createCustomFie
 async function createCustomFieldRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	// Campos personalizados são o formulário da base inteira (cadastro, ponto de interação, campanhas):
+	// configurar é clientes.gerenciarBase. A leitura fica aberta porque esses formulários a usam.
+	assertCanManageClientBase(session);
 	const payload = await request.json();
 	const input = CreateCustomFieldInputSchema.parse(payload);
 	const result = await createCustomField({ input, session });
@@ -237,6 +238,7 @@ export type TUpdateCustomFieldOutput = Awaited<ReturnType<typeof updateCustomFie
 async function updateCustomFieldRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	assertCanManageClientBase(session);
 	const payload = await request.json();
 	const input = UpdateCustomFieldInputSchema.parse(payload);
 	const result = await updateCustomField({ input, session });
@@ -277,6 +279,7 @@ export type TDeleteCustomFieldOutput = Awaited<ReturnType<typeof deleteCustomFie
 async function deleteCustomFieldRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	assertCanManageClientBase(session);
 	const input = DeleteCustomFieldInputSchema.parse({ id: request.nextUrl.searchParams.get("id") ?? undefined });
 	const result = await deleteCustomField({ input, session });
 	return NextResponse.json(result, { status: 200 });

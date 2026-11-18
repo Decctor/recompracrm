@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { assertCanViewClients } from "@/lib/clients/access";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { db } from "@/services/drizzle";
 import {
@@ -137,6 +138,7 @@ export type TGetClientDuplicateComparisonOutput = Awaited<ReturnType<typeof getC
 async function getClientDuplicateComparisonRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	assertCanViewClients(session);
 
 	const input = GetClientDuplicateComparisonInputSchema.parse({ pairId: request.nextUrl.searchParams.get("pairId") });
 	const result = await getClientDuplicateComparison({ input, session });

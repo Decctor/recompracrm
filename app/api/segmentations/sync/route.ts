@@ -13,6 +13,7 @@ import createHttpError from "http-errors";
 import { formatDurationMs } from "@/lib/formatting";
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { assertCanManageClientBase } from "@/lib/clients/access";
 import { appApiHandler } from "@/lib/app-api";
 
 type TRFMClientUpdateEntry = {
@@ -260,6 +261,8 @@ export type TSyncSegmentationsOutput = Awaited<ReturnType<typeof syncSegmentatio
 async function syncSegmentationsRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você precisa estar autenticado para acessar esse recurso.");
+	// Reprocessar a matriz RFM regrava o segmento de toda a base (e pode disparar campanhas): gestão da base.
+	assertCanManageClientBase(session);
 	const searchParams = request.nextUrl.searchParams;
 
 	const input = SyncSegmentationsInputSchema.parse({

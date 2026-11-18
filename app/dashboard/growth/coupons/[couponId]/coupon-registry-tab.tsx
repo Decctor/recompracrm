@@ -8,6 +8,8 @@ import CouponRulesAndValiditySection from "./_components/RulesAndValiditySection
 
 type CouponRegistryTabProps = {
 	coupon: TGetCouponsOutputById;
+	/** Sem `campanhas.editar` o cadastro é só leitura: os campos e as barras de aplicar ficam desabilitados. */
+	canEdit: boolean;
 	callbacks: {
 		onMutate?: () => void;
 		onSuccess?: () => void;
@@ -22,13 +24,13 @@ type CouponRegistryTabProps = {
  * Substitui o modal `ControlCoupon`: abrir um formulário de seis blocos por cima da página para
  * corrigir um teto de desconto escondia justamente o número que motivou a correção.
  */
-export default function CouponRegistryTab({ coupon, callbacks }: CouponRegistryTabProps) {
+export default function CouponRegistryTab({ coupon, canEdit, callbacks }: CouponRegistryTabProps) {
 	return (
-		<div className="flex w-full flex-col gap-6">
+		<fieldset disabled={!canEdit} className="flex w-full min-w-0 flex-col gap-6">
 			<CouponGeneralSection coupon={coupon} callbacks={callbacks} />
 			<CouponBenefitSection coupon={coupon} callbacks={callbacks} />
 			<CouponRulesAndValiditySection coupon={coupon} callbacks={callbacks} />
 			<CouponAudienceAndTargetsSection coupon={coupon} callbacks={callbacks} />
-		</div>
+		</fieldset>
 	);
 }

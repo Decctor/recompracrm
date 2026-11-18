@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { assertCanViewClients } from "@/lib/clients/access";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { INTERACTIONS_CRON_TIMEZONE } from "@/lib/campaigns/time-blocks";
 import { db } from "@/services/drizzle";
@@ -59,6 +60,7 @@ export type TGetClientBirthdaysOutput = Awaited<ReturnType<typeof getClientBirth
 async function getClientBirthdaysRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	assertCanViewClients(session);
 	const input = GetClientBirthdaysInputSchema.parse({ days: request.nextUrl.searchParams.get("days") });
 	const result = await getClientBirthdays({ input, session });
 	return NextResponse.json(result);

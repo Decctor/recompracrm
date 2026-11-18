@@ -63,7 +63,12 @@ async function fetchRankingForPeriod({
 	userOrgId: string;
 }) {
 	// Build sale conditions
-	const saleConditions = [eq(sales.organizacaoId, userOrgId), isNotNull(sales.dataVenda), isNotNull(sales.parceiroId), eq(sales.statusVenda, "CONFIRMADA")];
+	const saleConditions = [
+		eq(sales.organizacaoId, userOrgId),
+		isNotNull(sales.dataVenda),
+		isNotNull(sales.parceiroId),
+		eq(sales.statusVenda, "CONFIRMADA"),
+	];
 	if (periodAfter) saleConditions.push(gte(sales.dataVenda, periodAfter));
 	if (periodBefore) saleConditions.push(lte(sales.dataVenda, periodBefore));
 
@@ -247,6 +252,7 @@ export type TGetPartnersRankingOutput = Awaited<ReturnType<typeof getPartnersRan
 const getPartnersRankingRoute = async (request: NextRequest) => {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	if (!session.membership?.permissoes.empresa.visualizar) throw new createHttpError.Forbidden("Você não possui permissão para visualizar parceiros.");
 
 	const searchParams = await request.nextUrl.searchParams;
 	const input = GetPartnersRankingInputSchema.parse({

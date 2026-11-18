@@ -36,7 +36,8 @@ function chartAxisTick(fontSize: number) {
 }
 
 type SegmentsPageRFMHealthProps = {
-	onOpenConfig: () => void;
+	/** Ausente sem clientes.gerenciarBase: some o ajuste da configuração e a aplicação das sugestões. */
+	onOpenConfig: (() => void) | null;
 };
 
 const CLASSIFICATION_STYLES: Record<TRFMHealthData["healthScore"]["classification"], { container: string; icon: string; label: string }> = {
@@ -96,19 +97,21 @@ export default function SegmentsPageRFMHealth({ onOpenConfig }: SegmentsPageRFMH
 					</div>
 					<p className="text-[0.7rem] text-muted-foreground">Diagnóstico estatístico da matriz RFM nos últimos 12 meses.</p>
 				</div>
-				<Button variant="ghost" size="sm" className="flex items-center gap-2" onClick={onOpenConfig}>
-					<Settings2 className="w-4 h-4 min-w-4 min-h-4" />
-					AJUSTAR CONFIGURAÇÃO
-				</Button>
+				{onOpenConfig ? (
+					<Button variant="ghost" size="sm" className="flex items-center gap-2" onClick={onOpenConfig}>
+						<Settings2 className="w-4 h-4 min-w-4 min-h-4" />
+						AJUSTAR CONFIGURAÇÃO
+					</Button>
+				) : null}
 			</div>
 			{isLoading ? <LoadingComponent /> : null}
 			{isError ? <ErrorComponent msg={getErrorMessage(error)} /> : null}
-			{data ? <RFMHealthContent data={data} /> : null}
+			{data ? <RFMHealthContent data={data} canApplySuggestions={!!onOpenConfig} /> : null}
 		</div>
 	);
 }
 
-function RFMHealthContent({ data }: { data: TRFMHealthData }) {
+function RFMHealthContent({ data, canApplySuggestions }: { data: TRFMHealthData; canApplySuggestions: boolean }) {
 	if (data.totalClients === 0) {
 		return (
 			<div className="w-full py-12 flex flex-col items-center justify-center gap-2 text-center">
@@ -129,7 +132,7 @@ function RFMHealthContent({ data }: { data: TRFMHealthData }) {
 				<DistributionBlock distribution={data.labelDistribution} totalClients={data.totalClients} />
 			</div>
 			<HistogramsBlock data={data} />
-			<ConfigComparisonBlock rfmConfig={data.rfmConfig} suggestedConfig={data.suggestedConfig} />
+			{canApplySuggestions ? <ConfigComparisonBlock rfmConfig={data.rfmConfig} suggestedConfig={data.suggestedConfig} /> : null}
 		</div>
 	);
 }

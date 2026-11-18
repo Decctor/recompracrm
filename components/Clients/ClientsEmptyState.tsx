@@ -8,7 +8,8 @@ import Link from "next/link";
 import { FaWhatsapp } from "react-icons/fa6";
 import { appRoutes } from "@/lib/navigation/routes";
 
-export default function ClientsEmptyState() {
+/** `canImport`: clientes.gerenciarBase. Sem ela o botão de importação some (a rota recusa). */
+export default function ClientsEmptyState({ canImport }: { canImport: boolean }) {
 	const containerVariants = {
 		hidden: { opacity: 0 },
 		visible: {
@@ -69,16 +70,20 @@ export default function ClientsEmptyState() {
 								</div>
 							))}
 						</div>
-						<Button
-							className="w-full gap-2 h-11 text-base shadow-lg shadow-[#24549C]/20 hover:shadow-[#24549C]/40 transition-all text-white hover:text-white"
-							style={{ backgroundColor: "#24549C" }}
-							asChild
-						>
-							<Link href={appRoutes.customers.import()}>
-								Ir para importação
-								<ArrowRight className="w-4 h-4 ml-1" />
-							</Link>
-						</Button>
+						{canImport ? (
+							<Button
+								className="w-full gap-2 h-11 text-base shadow-lg shadow-[#24549C]/20 hover:shadow-[#24549C]/40 transition-all text-white hover:text-white"
+								style={{ backgroundColor: "#24549C" }}
+								asChild
+							>
+								<Link href={appRoutes.customers.import()}>
+									Ir para importação
+									<ArrowRight className="w-4 h-4 ml-1" />
+								</Link>
+							</Button>
+						) : (
+							<p className="text-sm text-muted-foreground">Peça a quem administra a empresa para importar a base de clientes.</p>
+						)}
 					</CardContent>
 
 					<div className="absolute -top-12 -right-12 w-32 h-32 bg-linear-to-br from-[#24549C]/10 to-transparent rounded-full blur-2xl group-hover:from-[#24549C]/20 transition-all duration-500" />

@@ -37,6 +37,11 @@ type MessageTemplateBuilderProps = {
 	organizationPrimaryForeground: string | null;
 	organizationSecondaryColor: string | null;
 	organizationSecondaryForeground: string | null;
+	/**
+	 * comunicacao.publicar: sem ela o template é salvo sem ir para a Meta (a API recusaria o envio); quem
+	 * tem a permissão envia depois pela tela de templates.
+	 */
+	canPublish: boolean;
 };
 const categoryOptions: TTemplateCategory[] = ["MARKETING", "UTILIDADE", "AUTENTICAÇÃO"];
 const statusOptions: TTemplateStatus[] = ["RASCUNHO", "ATIVO", "ARQUIVADO"];
@@ -60,6 +65,7 @@ export default function MessageTemplateBuilder({
 	organizationPrimaryForeground,
 	organizationSecondaryColor,
 	organizationSecondaryForeground,
+	canPublish,
 }: MessageTemplateBuilderProps) {
 	const router = useRouter();
 	const {
@@ -138,7 +144,7 @@ export default function MessageTemplateBuilder({
 		return submitMessageMutation({
 			messageTemplateId: template?.id || null,
 			messageTemplate: state.messageTemplate,
-			submitWhatsapp: true,
+			submitWhatsapp: canPublish,
 		});
 	}
 	return (
@@ -158,7 +164,7 @@ export default function MessageTemplateBuilder({
 						CANCELAR
 					</Button>
 					<LoadingButton type="button" className="gap-2" loading={isCreatingMessageTemplate} onClick={handleSave}>
-						<Save className="h-4 w-4" /> SALVAR TEMPLATE
+						<Save className="h-4 w-4" /> {canPublish ? "SALVAR TEMPLATE" : "SALVAR SEM ENVIAR À META"}
 					</LoadingButton>
 				</div>
 			</div>

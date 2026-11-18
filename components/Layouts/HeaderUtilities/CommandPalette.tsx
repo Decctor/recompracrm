@@ -11,6 +11,7 @@ import { canAccessDashboardCapability, type TDashboardCapability } from "@/lib/a
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { useDebouncedText } from "@/lib/hooks/use-debounced-text";
 import { appRoutes } from "@/lib/navigation/routes";
+import { canCreateClients, canManageClientBase } from "@/lib/permissions/clients";
 import { useGlobalSearch } from "@/lib/queries/global-search";
 import { cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
@@ -45,16 +46,36 @@ const ENTITY_CAPABILITY: Record<TGlobalSearchEntityType, TDashboardCapability> =
 };
 
 type TQuickActionModal = "newClient" | "newProduct" | "newSeller";
-type TQuickAction = { key: string; rotulo: string; icon: React.ElementType; capability: TDashboardCapability } & (
-	| { kind: "modal"; modal: TQuickActionModal }
-	| { kind: "route"; url: string }
-);
+type TQuickAction = {
+	key: string;
+	rotulo: string;
+	icon: React.ElementType;
+	capability: TDashboardCapability;
+	/** Além de ver o módulo, a ação de criar exige a permissão de escrita dele. */
+	allowed?: (permissions: NonNullable<TAuthUserSession["membership"]>["permissoes"]) => boolean;
+} & ({ kind: "modal"; modal: TQuickActionModal } | { kind: "route"; url: string });
 
 const QUICK_ACTIONS: TQuickAction[] = [
 	{ key: "new-sale", rotulo: "Nova venda", icon: ScanBarcode, capability: "newSale", kind: "route", url: appRoutes.sales.new() },
-	{ key: "new-client", rotulo: "Novo cliente", icon: UsersRound, capability: "customers", kind: "modal", modal: "newClient" },
+	{
+		key: "new-client",
+		rotulo: "Novo cliente",
+		icon: UsersRound,
+		capability: "customers",
+		allowed: canCreateClients,
+		kind: "modal",
+		modal: "newClient",
+	},
 	{ key: "new-product", rotulo: "Novo produto", icon: Package, capability: "products", kind: "modal", modal: "newProduct" },
-	{ key: "new-seller", rotulo: "Novo vendedor", icon: UserRound, capability: "sellers", kind: "modal", modal: "newSeller" },
+	{
+		key: "new-seller",
+		rotulo: "Novo vendedor",
+		icon: UserRound,
+		capability: "sellers",
+		allowed: (permissions) => permissions.usuarios.editar,
+		kind: "modal",
+		modal: "newSeller",
+	},
 ];
 
 /** Achata a árvore da sidebar em destinos navegáveis: pai com url + filhos, sem duplicar o pai que só agrupa. */
@@ -113,7 +134,10 @@ export function CommandPalette({ user, membership }: CommandPaletteProps) {
 		[capabilityContext],
 	);
 	const quickActions = useMemo(
-		() => QUICK_ACTIONS.filter((action) => canAccessDashboardCapability(action.capability, capabilityContext)),
+		() =>
+			QUICK_ACTIONS.filter(
+				(action) => canAccessDashboardCapability(action.capability, capabilityContext) && (action.allowed?.(capabilityContext.permissions) ?? true),
+			),
 		[capabilityContext],
 	);
 	const navigationItems = useMemo(
@@ -307,7 +331,11 @@ export function CommandPalette({ user, membership }: CommandPaletteProps) {
 			</Dialog>
 
 			{activeModal === "newClient" ? (
-				<NewClient closeModal={() => setActiveModal(null)} callbacks={{ onSettled: () => invalidateEntityQueries("client") }} />
+				<NewClient
+					closeModal={() => setActiveModal(null)}
+					canCreateTags={canManageClientBase(capabilityContext.permissions)}
+					callbacks={{ onSettled: () => invalidateEntityQueries("client") }}
+				/>
 			) : null}
 			{activeModal === "newProduct" ? (
 				<NewProduct

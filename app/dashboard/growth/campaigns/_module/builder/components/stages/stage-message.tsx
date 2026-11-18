@@ -1,5 +1,6 @@
 "use client";
 
+import { useCommunicationPermissions } from "@/components/MessageTemplates/communication-permissions";
 import ControlMessageTemplate from "@/components/Modals/MessageTemplates/ControlMessageTemplate";
 import NewMessageTemplate from "@/components/Modals/MessageTemplates/NewMessageTemplate";
 import { Button } from "@/components/ui/button";
@@ -55,6 +56,8 @@ export default function StageMessage({ organizationId, organizationName, organiz
 	const { state, updateCampaign } = useBuilderCampaign();
 	const { campaign } = state;
 
+	// Criar, clonar da biblioteca e editar templates seguem comunicacao.editar; escolher um existente, não.
+	const { editar: canEditTemplates } = useCommunicationPermissions();
 	const [showLibrary, setShowLibrary] = useState(false);
 	const [createDraft, setCreateDraft] = useState<{ initialState?: TCreateDraftInitialState } | null>(null);
 	const [editTemplateId, setEditTemplateId] = useState<string | null>(null);
@@ -313,57 +316,61 @@ export default function StageMessage({ organizationId, organizationName, organiz
 								selectedPhoneId={campaign.whatsappConexaoTelefoneId ?? ""}
 								isSelected={campaign.whatsappTemplateId === template.id}
 								onSelect={() => updateCampaign({ whatsappTemplateId: template.id })}
-								onEdit={() => setEditTemplateId(template.id)}
+								onEdit={canEditTemplates ? () => setEditTemplateId(template.id) : undefined}
 							/>
 						))}
 
-						<button
-							type="button"
-							onClick={openCreateDraft}
-							className="flex h-full min-h-[240px] flex-col items-start justify-center gap-2.5 rounded-xl border border-dashed border-primary/45 bg-primary/[0.04] p-4 text-left transition-colors hover:bg-primary/10"
-						>
-							<span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-								<Plus className="h-4 w-4" />
-							</span>
-							<span className="flex flex-col gap-1">
-								<span className="text-sm font-semibold tracking-tight">
-									{isSurveyCampaign ? "Criar template da pesquisa" : "Criar template para esta campanha"}
+						{canEditTemplates ? (
+							<button
+								type="button"
+								onClick={openCreateDraft}
+								className="flex h-full min-h-[240px] flex-col items-start justify-center gap-2.5 rounded-xl border border-dashed border-primary/45 bg-primary/[0.04] p-4 text-left transition-colors hover:bg-primary/10"
+							>
+								<span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+									<Plus className="h-4 w-4" />
 								</span>
-								<span className="text-xs leading-relaxed text-muted-foreground">
-									{isSurveyCampaign
-										? surveyField
-											? `Abre o construtor com um botão para cada opção de "${surveyField.titulo}". Ao salvar, o template entra para aprovação da Meta e fica selecionado aqui.`
-											: "Volte à etapa de Gatilho e escolha o campo da pergunta para gerar os botões automaticamente."
-										: "Abre o construtor de templates, já com as variáveis que este gatilho preenche. Ao salvar, o template entra para aprovação da Meta e fica selecionado aqui."}
+								<span className="flex flex-col gap-1">
+									<span className="text-sm font-semibold tracking-tight">
+										{isSurveyCampaign ? "Criar template da pesquisa" : "Criar template para esta campanha"}
+									</span>
+									<span className="text-xs leading-relaxed text-muted-foreground">
+										{isSurveyCampaign
+											? surveyField
+												? `Abre o construtor com um botão para cada opção de "${surveyField.titulo}". Ao salvar, o template entra para aprovação da Meta e fica selecionado aqui.`
+												: "Volte à etapa de Gatilho e escolha o campo da pergunta para gerar os botões automaticamente."
+											: "Abre o construtor de templates, já com as variáveis que este gatilho preenche. Ao salvar, o template entra para aprovação da Meta e fica selecionado aqui."}
+									</span>
 								</span>
-							</span>
-						</button>
+							</button>
+						) : null}
 					</div>
 				</>
 			)}
 
-			<div className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-muted px-3 py-2.5">
-				<span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-background text-primary">
-					<Library className="h-4 w-4" />
-				</span>
-				<div className="flex min-w-0 flex-1 flex-col gap-px">
-					<p className="text-[13px] font-semibold tracking-tight">Biblioteca RecompraCRM</p>
-					<p className="text-xs text-muted-foreground">
-						{libraryEntries.length === 0
-							? "Nenhum modelo pronto serve para este gatilho."
-							: `${libraryEntries.length} ${libraryEntries.length === 1 ? "modelo pronto" : "modelos prontos"} para clonar e editar.`}
-					</p>
+			{canEditTemplates ? (
+				<div className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-muted px-3 py-2.5">
+					<span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-background text-primary">
+						<Library className="h-4 w-4" />
+					</span>
+					<div className="flex min-w-0 flex-1 flex-col gap-px">
+						<p className="text-[13px] font-semibold tracking-tight">Biblioteca RecompraCRM</p>
+						<p className="text-xs text-muted-foreground">
+							{libraryEntries.length === 0
+								? "Nenhum modelo pronto serve para este gatilho."
+								: `${libraryEntries.length} ${libraryEntries.length === 1 ? "modelo pronto" : "modelos prontos"} para clonar e editar.`}
+						</p>
+					</div>
+					<Button
+						type="button"
+						size="sm"
+						variant="outline"
+						onClick={() => setShowLibrary(true)}
+						className="flex shrink-0 items-center gap-1.5 rounded-full"
+					>
+						VER BIBLIOTECA
+					</Button>
 				</div>
-				<Button
-					type="button"
-					size="sm"
-					variant="outline"
-					onClick={() => setShowLibrary(true)}
-					className="flex shrink-0 items-center gap-1.5 rounded-full"
-				>
-					VER BIBLIOTECA
-				</Button>
-			</div>
+			) : null}
 
 			{hiddenTemplates.length > 0 ? (
 				<TooltipProvider>

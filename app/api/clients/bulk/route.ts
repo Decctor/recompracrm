@@ -1,6 +1,7 @@
 import { appApiHandler } from "@/lib/app-api";
 import { runPagesRouteHandler, type PagesRouteHandler, type PagesRouteRequest, type PagesRouteResponse } from "@/lib/pages-route-compat";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { assertCanManageClientBase } from "@/lib/clients/access";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { formatPhoneAsBase, formatStringAsOnlyDigits, formatToCPForCNPJ, formatToPhone } from "@/lib/formatting";
 import { BulkClientImportInputSchema, type TBulkClientImportInput } from "@/schemas/clients";
@@ -335,6 +336,7 @@ const bulkCreateClientsRoute: PagesRouteHandler<PostResponse> = async (req, res)
 
 	const userOrgId = sessionUser.membership?.organizacao.id;
 	if (!userOrgId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
+	assertCanManageClientBase(sessionUser);
 
 	const input = BulkClientImportInputSchema.parse(req.body) as TBulkClientImportInput;
 

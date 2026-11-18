@@ -5,6 +5,7 @@ import TemplateCard from "@/app/dashboard/growth/campaigns/_module/builder/compo
 import TemplateStatusBadge from "@/app/dashboard/growth/campaigns/_module/builder/components/message/template-status-badge";
 import { buildCampaignStateFromEntity, buildCampaignUpdatePayload } from "@/app/dashboard/growth/campaigns/_module/shared/form/utils";
 import TemplatePreview from "@/components/MessageTemplates/TemplatePreview";
+import { useCommunicationPermissions } from "@/components/MessageTemplates/communication-permissions";
 import ControlMessageTemplate from "@/components/Modals/MessageTemplates/ControlMessageTemplate";
 import NewMessageTemplate from "@/components/Modals/MessageTemplates/NewMessageTemplate";
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,7 @@ type CampaignTemplateSwitcherProps = {
  */
 export function CampaignTemplateSwitcher({ campaign, organization, organizationTheme, canEdit }: CampaignTemplateSwitcherProps) {
 	const queryClient = useQueryClient();
+	const { editar: canEditTemplates } = useCommunicationPermissions();
 	const [pickerOpen, setPickerOpen] = useState(false);
 	const [showNewTemplate, setShowNewTemplate] = useState(false);
 	const [editTemplateId, setEditTemplateId] = useState<string | null>(null);
@@ -85,10 +87,12 @@ export function CampaignTemplateSwitcher({ campaign, organization, organizationT
 							{pickerOpen ? <X className="size-3.5" /> : <ArrowLeftRight className="size-3.5" />}
 							{pickerOpen ? "FECHAR" : "TROCAR TEMPLATE"}
 						</Button>
-						<Button size="xs" onClick={() => setShowNewTemplate(true)} className="flex items-center gap-1">
-							<Plus className="size-3.5" />
-							NOVO TEMPLATE
-						</Button>
+						{canEditTemplates ? (
+							<Button size="xs" onClick={() => setShowNewTemplate(true)} className="flex items-center gap-1">
+								<Plus className="size-3.5" />
+								NOVO TEMPLATE
+							</Button>
+						) : null}
 					</div>
 				) : null}
 			</div>
@@ -115,7 +119,7 @@ export function CampaignTemplateSwitcher({ campaign, organization, organizationT
 									if (isPending || template.id === campaign.whatsappTemplateId) return;
 									switchTemplate(template.id);
 								}}
-								onEdit={() => setEditTemplateId(template.id)}
+								onEdit={canEditTemplates ? () => setEditTemplateId(template.id) : undefined}
 							/>
 						))}
 						{compatibleTemplates.length === 0 ? (

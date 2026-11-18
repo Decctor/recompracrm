@@ -2,6 +2,8 @@ import { requireDashboardCapability } from "@/lib/access/guards";
 import { appRoutes } from "@/lib/navigation/routes";
 import { resolveCampaignPermissions } from "@/lib/permissions/campaigns";
 import { redirect } from "next/navigation";
+import { CommunicationPermissionsProvider } from "@/components/MessageTemplates/communication-permissions";
+import { resolveCommunicationPermissions } from "@/lib/permissions/communication";
 import BuilderShell from "@/app/dashboard/growth/campaigns/_module/builder/components/builder-shell";
 import { CampaignPermissionsProvider } from "@/app/dashboard/growth/campaigns/_module/shared/campaign-permissions";
 
@@ -18,7 +20,9 @@ export default async function CampaignBuilderPage() {
 
 	return (
 		<CampaignPermissionsProvider permissions={permissions}>
-			<BuilderShell membership={sessionUser.membership} />
+			<CommunicationPermissionsProvider permissions={resolveCommunicationPermissions(sessionUser.membership.permissoes)}>
+				<BuilderShell membership={sessionUser.membership} />
+			</CommunicationPermissionsProvider>
 		</CampaignPermissionsProvider>
 	);
 }

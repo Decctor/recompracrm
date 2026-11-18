@@ -1,0 +1,459 @@
+import type { TAuthUserSession } from "@/lib/authentication/types";
+import { INTERACTIONS_CRON_TIMEZONE } from "@/lib/campaigns/time-blocks";
+import dayjs from "dayjs";
+import { getSalesIntegrationCondition } from "@/lib/sales/integration-filter";
+import { type ClientSearchDatabase, type TClientSearch, withClientSearch } from "@/lib/clients/search";
+import { parseClientSearchTerm } from "@/lib/clients/search-terms";
+import { db } from "@/services/drizzle";
+import { clients, sales } from "@/services/drizzle/schema";
+import { type SQL, and, asc, count, desc, eq, gte, inArray, isNotNull, lte, max, min, notInArray, sql, sum } from "drizzle-orm";
+import createHttpError from "http-errors";
+import z from "zod";
+import { DEFAULT_PAGE_SIZE, pageSizeInputSchema } from "@/lib/pagination";
+
+/**
+ * Listagem de clientes (e o cliente por ID) que `GET /api/clients` e a exportação
+ * (`GET /api/clients/export`) compartilham: os mesmos filtros produzem as mesmas linhas.
+ */
+export const GetClientsInputSchema = z.object({
+	// By ID params
+	id: z
+		.string({
+			invalid_type_error: "Tipo não válido para ID do cliente.",
+		})
+		.optional()
+		.nullable(),
+	// General params
+	page: z
+		.string({
+			invalid_type_error: "Tipo não válido para páginação.",
+			required_error: "Páginação não informada.",
+		})
+		.transform((val) => Number(val)),
+	pageSize: pageSizeInputSchema(),
+	search: z
+		.string({
+			invalid_type_error: "Tipo não válido para busca.",
+		})
+		.optional()
+		.nullable(),
+	acquisitionChannels: z
+		.string({
+			invalid_type_error: "Tipo não válido para canal de aquisição.",
+		})
+		.optional()
+		.nullable()
+		.transform((v) => (v ? v.split(",") : [])),
+	segmentationTitles: z
+		.string({
+			invalid_type_error: "Tipo não válido para título de segmentação.",
+		})
+		.optional()
+		.nullable()
+		.transform((v) => (v ? v.split(",") : [])),
+	statsPeriodAfter: z
+		.string({
+			invalid_type_error: "Tipo não válido para data de inserção do cliente.",
+		})
+		.optional()
+		.nullable()
+		.transform((val) => (val ? new Date(val) : null)),
+	statsPeriodBefore: z
+		.string({
+			invalid_type_error: "Tipo não válido para data de inserção do cliente.",
+		})
+		.optional()
+		.nullable()
+		.transform((val) => (val ? new Date(val) : null)),
+	statsIntegrationsIds: z
+		.string({
+			invalid_type_error: "Tipo não válido para os IDs de integração.",
+		})
+		.optional()
+		.nullable()
+		.transform((v) => (v ? v.split(",") : [])),
+	statsExcludedSalesIds: z
+		.string({
+			invalid_type_error: "Tipo não válido para ID da venda.",
+		})
+		.optional()
+		.nullable()
+		.transform((v) => (v ? v.split(",") : [])),
+	// Valor gasto pelo cliente: soma das vendas confirmadas dentro do período de estatísticas (o mesmo
+	// recorte de `statsPeriod*`, integrações e vendas excluídas). Sem período, é o total da vida toda.
+	statsTotalMin: z
+		.string({
+			invalid_type_error: "Tipo não válido para o valor gasto mínimo.",
+		})
+		.optional()
+		.nullable()
+		.transform((v) => parseOptionalAmount(v))
+		.optional(),
+	statsTotalMax: z
+		.string({
+			invalid_type_error: "Tipo não válido para o valor gasto máximo.",
+		})
+		.optional()
+		.nullable()
+		.transform((v) => parseOptionalAmount(v))
+		.optional(),
+	// Aniversários dentro de um intervalo de datas do calendário. O ano das datas só define o
+	// tamanho da janela; o casamento é por MM-DD, então o filtro serve tanto para "o mês inteiro"
+	// quanto para "de hoje até tal dia" — inclusive atravessando a virada do ano (28/12 → 05/01).
+	birthdaysPeriodAfter: z
+		.string({
+			invalid_type_error: "Tipo não válido para o início do período de aniversários.",
+		})
+		.optional()
+		.nullable()
+		.transform((val) => (val ? new Date(val) : null)),
+	birthdaysPeriodBefore: z
+		.string({
+			invalid_type_error: "Tipo não válido para o fim do período de aniversários.",
+		})
+		.optional()
+		.nullable()
+		.transform((val) => (val ? new Date(val) : null)),
+	// `relevancia` (e a ausência de ordenação) só vale com busca: sem termo, a lista cai em `nome`.
+	orderByField: z
+		.enum(["relevancia", "nome", "comprasValorTotal", "comprasQtdeTotal", "primeiraCompraData", "ultimaCompraData"])
+		.optional()
+		.nullable(),
+	orderByDirection: z.enum(["asc", "desc"]).optional().nullable(),
+});
+export type TGetClientsInput = z.infer<typeof GetClientsInputSchema>;
+
+/** Query string da listagem → input. Compartilhado pela listagem e pela exportação. */
+export function parseGetClientsSearchParams(searchParams: URLSearchParams): TGetClientsInput {
+	return GetClientsInputSchema.parse({
+		id: searchParams.get("id") ?? undefined,
+		page: searchParams.get("page") ?? undefined,
+		pageSize: searchParams.get("pageSize"),
+		search: searchParams.get("search") ?? undefined,
+		acquisitionChannels: searchParams.get("acquisitionChannels") ?? undefined,
+		segmentationTitles: searchParams.get("segmentationTitles") ?? undefined,
+		statsPeriodAfter: searchParams.get("statsPeriodAfter") ?? undefined,
+		statsPeriodBefore: searchParams.get("statsPeriodBefore") ?? undefined,
+		statsIntegrationsIds: searchParams.get("statsIntegrationsIds") ?? undefined,
+		statsExcludedSalesIds: searchParams.get("statsExcludedSalesIds") ?? undefined,
+		statsTotalMin: searchParams.get("statsTotalMin") ?? undefined,
+		statsTotalMax: searchParams.get("statsTotalMax") ?? undefined,
+		birthdaysPeriodAfter: searchParams.get("birthdaysPeriodAfter") ?? undefined,
+		birthdaysPeriodBefore: searchParams.get("birthdaysPeriodBefore") ?? undefined,
+		orderByField: searchParams.get("orderByField") ?? undefined,
+		orderByDirection: searchParams.get("orderByDirection") ?? undefined,
+	});
+}
+
+export async function getClients({ input, session }: { input: TGetClientsInput; session: TAuthUserSession }) {
+	const userOrgId = session.membership?.organizacao.id;
+	if (!userOrgId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
+
+	if ("id" in input && input.id) {
+		const clientId = input.id;
+		if (!clientId) throw new createHttpError.BadRequest("ID do cliente não informado.");
+
+		const client = await db.query.clients.findFirst({
+			where: (fields, { and, eq }) => and(eq(fields.id, clientId), eq(fields.organizacaoId, userOrgId)),
+			with: {
+				localizacoes: true,
+				tagReferencias: {
+					with: {
+						tag: true,
+					},
+				},
+			},
+		});
+		if (!client) throw new createHttpError.NotFound("Cliente não encontrado.");
+		return {
+			data: {
+				byId: client,
+				default: null,
+			},
+			message: "Cliente encontrado com sucesso.",
+		};
+	}
+
+	// Regras de casamento e relevância em `lib/clients/search.ts`, as mesmas do vínculo de cliente.
+	// Com palavra para aproximação, tudo abaixo roda na transação do limiar trigram.
+	const term = parseClientSearchTerm(input.search);
+	return withClientSearch(db, { organizacaoId: userOrgId, term }, (database, search) => getClientsPage({ input, userOrgId, database, search }));
+}
+
+async function getClientsPage({
+	input,
+	userOrgId,
+	database,
+	search,
+}: {
+	input: TGetClientsInput;
+	userOrgId: string;
+	database: ClientSearchDatabase;
+	search: TClientSearch | null;
+}) {
+	// First, we start fetching clients with their purchases...
+	const clientConditions = [eq(clients.organizacaoId, userOrgId)];
+
+	if (search?.condition) clientConditions.push(search.condition);
+	if (input.acquisitionChannels && input.acquisitionChannels.length > 0) {
+		clientConditions.push(inArray(clients.canalAquisicao, input.acquisitionChannels));
+	}
+	if (input.segmentationTitles && input.segmentationTitles.length > 0) {
+		clientConditions.push(inArray(clients.analiseRFMTitulo, input.segmentationTitles));
+	}
+	if (input.birthdaysPeriodAfter && input.birthdaysPeriodBefore) {
+		// Enumera os dias do intervalo no fuso do cron de interações — o mesmo "hoje" da rota
+		// `/api/clients/birthdays` e da campanha de aniversário — e casa por MM-DD. É a enumeração
+		// que faz a virada do ano funcionar sem caso especial. Teto de 366 dias: além disso a
+		// janela já cobre o calendário inteiro.
+		const start = dayjs(input.birthdaysPeriodAfter).tz(INTERACTIONS_CRON_TIMEZONE).startOf("day");
+		const end = dayjs(input.birthdaysPeriodBefore).tz(INTERACTIONS_CRON_TIMEZONE).startOf("day");
+		const totalDays = Math.min(Math.max(end.diff(start, "day") + 1, 1), 366);
+		const keys = new Set(Array.from({ length: totalDays }, (_, index) => start.add(index, "day").format("MM-DD")));
+		// Ano não bissexto nunca enumera 29/02, mas quem nasceu nesse dia pertence a qualquer
+		// janela que atravesse o fim de fevereiro.
+		if (keys.has("02-28") && keys.has("03-01")) keys.add("02-29");
+		clientConditions.push(inArray(sql`to_char(${clients.dataNascimento}, 'MM-DD')`, [...keys]));
+	}
+	const statsConditions = [eq(sales.organizacaoId, userOrgId), eq(sales.statusVenda, "CONFIRMADA")];
+	if (input.statsPeriodAfter) statsConditions.push(gte(sales.dataVenda, input.statsPeriodAfter));
+	if (input.statsPeriodBefore) statsConditions.push(lte(sales.dataVenda, input.statsPeriodBefore));
+	const integrationCondition = getSalesIntegrationCondition(input.statsIntegrationsIds);
+	if (integrationCondition) statsConditions.push(integrationCondition);
+	if (input.statsExcludedSalesIds && input.statsExcludedSalesIds.length > 0) statsConditions.push(notInArray(sales.id, input.statsExcludedSalesIds));
+	const spentCondition = buildSpentRangeCondition({ database, statsConditions, min: input.statsTotalMin, max: input.statsTotalMax });
+	if (spentCondition) clientConditions.push(spentCondition);
+
+	const PAGE_SIZE = input.pageSize ?? DEFAULT_PAGE_SIZE;
+	const skip = PAGE_SIZE * (input.page - 1);
+
+	const [{ clientsMatched }] = await database
+		.select({
+			clientsMatched: count(),
+		})
+		.from(clients)
+		.where(and(...clientConditions));
+
+	const totalPages = Math.ceil(clientsMatched / PAGE_SIZE);
+	if (clientsMatched === 0) {
+		return {
+			data: {
+				byId: undefined,
+				default: {
+					clients: [],
+					clientsMatched,
+					totalPages,
+				},
+			},
+		};
+	}
+
+	const statsSelection = {
+		clientId: sales.clienteId,
+		totalPurchasesValue: sum(sales.valorTotal).as("totalPurchasesValue"),
+		totalPurchasesQty: count(sales.id).as("totalPurchasesQty"),
+		firstPurchaseDate: min(sales.dataVenda).as("firstPurchaseDate"),
+		lastPurchaseDate: max(sales.dataVenda).as("lastPurchaseDate"),
+	};
+	type TClientPageStats = {
+		clientId: string;
+		totalPurchasesValue: number | string | null;
+		totalPurchasesQty: number | string | null;
+		firstPurchaseDate: Date | null;
+		lastPurchaseDate: Date | null;
+	};
+
+	// `clients.id` como último critério: sem um desempate único, OFFSET/LIMIT pode repetir ou pular
+	// clientes homônimos entre páginas.
+	const direction = input.orderByDirection === "desc" ? desc : asc;
+	// Com busca, o padrão é o mais parecido primeiro; a direção não se aplica à relevância.
+	const orderByField = input.orderByField ?? "relevancia";
+	const relevance = orderByField === "relevancia" ? (search?.relevance ?? null) : null;
+
+	let paginatedClientsWithStats: TClientPageStats[];
+	if (orderByField === "nome" || orderByField === "relevancia") {
+		// Ordenação por nome (ou relevância) não depende das estatísticas: pagina os clientes primeiro
+		// e agrega as vendas (LATERAL, via índice de cliente_id) só para as 25 linhas da página, em vez
+		// de agregar todas as vendas da organização a cada requisição. Uma consulta só: com a função
+		// longe do banco, uma ida a mais custa mais do que a agregação economizada.
+		const clientsPage = database
+			.select({ id: clients.id, nome: clients.nome, relevancia: (relevance ?? sql<number>`0`).as("relevancia") })
+			.from(clients)
+			.where(and(...clientConditions))
+			.orderBy(...(relevance ? [desc(relevance), asc(clients.nome)] : [direction(clients.nome)]), asc(clients.id))
+			.offset(skip)
+			.limit(PAGE_SIZE)
+			.as("clients_page");
+		const pageStats = database
+			.select({
+				totalPurchasesValue: statsSelection.totalPurchasesValue,
+				totalPurchasesQty: statsSelection.totalPurchasesQty,
+				firstPurchaseDate: statsSelection.firstPurchaseDate,
+				lastPurchaseDate: statsSelection.lastPurchaseDate,
+			})
+			.from(sales)
+			.where(and(...statsConditions, eq(sales.clienteId, clientsPage.id)))
+			.as("stats_by_client");
+		paginatedClientsWithStats = await database
+			.select({
+				clientId: clientsPage.id,
+				totalPurchasesValue: sql<number>`COALESCE(${pageStats.totalPurchasesValue}, 0)`,
+				totalPurchasesQty: sql<number>`COALESCE(${pageStats.totalPurchasesQty}, 0)`,
+				firstPurchaseDate: pageStats.firstPurchaseDate,
+				lastPurchaseDate: pageStats.lastPurchaseDate,
+			})
+			.from(clientsPage)
+			.leftJoinLateral(pageStats, sql`true`)
+			.orderBy(...(relevance ? [desc(clientsPage.relevancia), asc(clientsPage.nome)] : [direction(clientsPage.nome)]), asc(clientsPage.id));
+	} else {
+		// Ordenação por estatística exige agregar as vendas de todos os clientes candidatos. Com busca
+		// textual o conjunto é pequeno e vale restringir a agregação a ele; sem busca, restringir só
+		// piora o plano (merge join por idx_sales_client_id varrendo vendas de outras organizações).
+		const scopedStatsConditions = search
+			? [
+					...statsConditions,
+					inArray(
+						sales.clienteId,
+						database
+							.select({ id: clients.id })
+							.from(clients)
+							.where(and(...clientConditions)),
+					),
+				]
+			: statsConditions;
+		const statsByClientSubquery = database
+			.select(statsSelection)
+			.from(sales)
+			.where(and(...scopedStatsConditions))
+			.groupBy(sales.clienteId)
+			.as("stats_by_client");
+
+		let orderByClause = asc(clients.nome);
+		switch (orderByField) {
+			case "comprasValorTotal":
+				orderByClause = direction(sql`COALESCE(${statsByClientSubquery.totalPurchasesValue}, 0)`);
+				break;
+			case "comprasQtdeTotal":
+				orderByClause = direction(sql`COALESCE(${statsByClientSubquery.totalPurchasesQty}, 0)`);
+				break;
+			case "primeiraCompraData":
+				orderByClause = direction(sql`COALESCE(${statsByClientSubquery.firstPurchaseDate}, '1900-01-01'::timestamp)`);
+				break;
+			case "ultimaCompraData":
+				orderByClause = direction(sql`COALESCE(${statsByClientSubquery.lastPurchaseDate}, '1900-01-01'::timestamp)`);
+				break;
+		}
+
+		paginatedClientsWithStats = await database
+			.select({
+				clientId: clients.id,
+				totalPurchasesValue: sql<number>`COALESCE(${statsByClientSubquery.totalPurchasesValue}, 0)`,
+				totalPurchasesQty: sql<number>`COALESCE(${statsByClientSubquery.totalPurchasesQty}, 0)`,
+				firstPurchaseDate: statsByClientSubquery.firstPurchaseDate,
+				lastPurchaseDate: statsByClientSubquery.lastPurchaseDate,
+			})
+			.from(clients)
+			.leftJoin(statsByClientSubquery, eq(clients.id, statsByClientSubquery.clientId))
+			.where(and(...clientConditions))
+			.orderBy(orderByClause, asc(clients.nome), asc(clients.id))
+			.offset(skip)
+			.limit(PAGE_SIZE);
+	}
+	const clientIds = paginatedClientsWithStats.map((client) => client.clientId);
+	if (clientIds.length === 0) {
+		return {
+			data: {
+				byId: undefined,
+				default: {
+					clients: [],
+					clientsMatched,
+					totalPages,
+				},
+			},
+		};
+	}
+
+	const clientsResult = await database.query.clients.findMany({
+		where: inArray(clients.id, clientIds),
+		with: {
+			saldos: true,
+		},
+	});
+
+	const clientsMap = new Map(clientsResult.map((client) => [client.id, client]));
+	const statsMap = new Map(paginatedClientsWithStats.map((client) => [client.clientId, client]));
+
+	const clientsWithStats = clientIds
+		.map((clientId) => {
+			const client = clientsMap.get(clientId);
+			const stats = statsMap.get(clientId);
+			if (!client) return null;
+
+			return {
+				...client,
+				estatisticas: {
+					comprasValorTotal: stats?.totalPurchasesValue ? Number(stats.totalPurchasesValue) : 0,
+					comprasQtdeTotal: stats?.totalPurchasesQty ? Number(stats.totalPurchasesQty) : 0,
+					primeiraCompraData: stats?.firstPurchaseDate ? stats.firstPurchaseDate : null,
+					ultimaCompraData: stats?.lastPurchaseDate ? stats.lastPurchaseDate : null,
+				},
+			};
+		})
+		.filter((client): client is NonNullable<typeof client> => !!client);
+	return {
+		data: {
+			byId: undefined,
+			default: {
+				clients: clientsWithStats,
+				clientsMatched,
+				totalPages,
+			},
+		},
+	};
+}
+export type TGetClientsOutput = Awaited<ReturnType<typeof getClients>>;
+export type TGetClientsOutputDefault = Exclude<TGetClientsOutput["data"]["default"], null>;
+export type TGetClientsOutputById = Exclude<TGetClientsOutput["data"]["byId"], null>;
+
+function parseOptionalAmount(value: string | null | undefined) {
+	if (value === null || value === undefined || value.trim() === "") return null;
+	const parsed = Number(value);
+	return Number.isFinite(parsed) ? parsed : null;
+}
+
+/**
+ * Restringe os clientes pela soma das vendas no recorte de estatísticas.
+ *
+ * Agrega as vendas uma vez (hash por cliente) em vez de uma subconsulta correlacionada por cliente.
+ * Quem não comprou no recorte gastou 0: sem mínimo positivo, esses clientes continuam valendo, então
+ * a condição vira "excluir quem passou do máximo" — daí o `NOT IN`, e o `cliente_id IS NOT NULL`
+ * que impede uma venda sem cliente de anular o `NOT IN` inteiro.
+ */
+function buildSpentRangeCondition({
+	database,
+	statsConditions,
+	min,
+	max,
+}: {
+	database: ClientSearchDatabase;
+	statsConditions: SQL[];
+	min: number | null | undefined;
+	max: number | null | undefined;
+}) {
+	const hasMin = min != null && min > 0;
+	const hasMax = max != null;
+	if (!hasMin && !hasMax) return null;
+	const spent = sql`COALESCE(SUM(${sales.valorTotal}), 0)`;
+	const spendingClients = (having: SQL) =>
+		database
+			.select({ id: sales.clienteId })
+			.from(sales)
+			.where(and(...statsConditions, isNotNull(sales.clienteId)))
+			.groupBy(sales.clienteId)
+			.having(having);
+	if (hasMin) {
+		const having = hasMax ? sql`${spent} >= ${min} AND ${spent} <= ${max}` : sql`${spent} >= ${min}`;
+		return inArray(clients.id, spendingClients(having));
+	}
+	return notInArray(clients.id, spendingClients(sql`${spent} > ${max}`));
+}

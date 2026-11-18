@@ -2,6 +2,8 @@ import { canManageIntegrations, canViewIntegrations } from "@/lib/integrations/m
 import { canCreateFinances, canEditFinances, canGrantStoreCredit, canReconcileFinances, canViewFinances } from "@/lib/permissions/finances";
 import { resolveCampaignPermissions } from "@/lib/permissions/campaigns";
 import { resolveCashbackPermissions } from "@/lib/permissions/cashback";
+import { resolveClientPermissions } from "@/lib/permissions/clients";
+import { resolveCommunicationPermissions } from "@/lib/permissions/communication";
 import { resolveDiscountAuthority } from "@/lib/permissions/discounts";
 import { resolveInventoryPermissions } from "@/lib/permissions/inventory";
 import { resolveProductionPermissions } from "@/lib/permissions/productions";
@@ -160,10 +162,32 @@ function buildMembershipPermissionMatrix({ organizationHasERPAccess }: { organiz
 			extras: [leaf("atendimentos.receberTransferencias", "Receber transferências de atendimentos", "Atendimentos")],
 		}),
 		buildRow({
+			key: "clientes",
+			title: "Clientes",
+			cells: [
+				leaf("clientes.visualizar", "Visualizar clientes", "Clientes"),
+				leaf("clientes.criar", "Criar clientes", "Clientes"),
+				leaf("clientes.editar", "Editar clientes", "Clientes"),
+				null,
+			],
+			extras: [leaf("clientes.gerenciarBase", "Gerenciar a base (importar, mesclar, excluir, tags, campos, segmentações e carteiras)", "Clientes")],
+		}),
+		buildRow({
 			key: "campanhas",
 			title: "Campanhas",
 			cells: [leaf("campanhas.visualizar", "Visualizar campanhas", "Campanhas"), null, leaf("campanhas.editar", "Editar campanhas", "Campanhas"), null],
 			extras: [leaf("campanhas.ativar", "Ativar, pausar e reenviar campanhas", "Campanhas")],
+		}),
+		buildRow({
+			key: "comunicacao",
+			title: "Comunicação",
+			cells: [
+				leaf("comunicacao.visualizar", "Visualizar templates e kits visuais", "Comunicação"),
+				null,
+				leaf("comunicacao.editar", "Editar templates e kits visuais", "Comunicação"),
+				null,
+			],
+			extras: [leaf("comunicacao.publicar", "Enviar templates para aprovação da Meta e sincronizar", "Comunicação")],
 		}),
 		buildRow({
 			key: "cashback",
@@ -324,6 +348,8 @@ export function readMembershipPermissionValue(permissions: TOrganizationMemberPe
 		default:
 			if (path.startsWith("campanhas.")) return readResolvedField(resolveCampaignPermissions(permissions), path);
 			if (path.startsWith("cashback.")) return readResolvedField(resolveCashbackPermissions(permissions), path);
+			if (path.startsWith("clientes.")) return readResolvedField(resolveClientPermissions(permissions), path);
+			if (path.startsWith("comunicacao.")) return readResolvedField(resolveCommunicationPermissions(permissions), path);
 			if (path.startsWith("produtos.")) return readResolvedField(resolveProductPermissions(permissions), path);
 			if (path.startsWith("estoque.")) return readResolvedField(resolveInventoryPermissions(permissions), path);
 			if (path.startsWith("producao.")) return readResolvedField(resolveProductionPermissions(permissions), path);
@@ -411,6 +437,16 @@ function writeMembershipPermissionValue(
 
 	if (path.startsWith("cashback.")) {
 		next.cashback = { ...resolveCashbackPermissions(permissions), [path.split(".")[1] as string]: value };
+		return next;
+	}
+
+	if (path.startsWith("clientes.")) {
+		next.clientes = { ...resolveClientPermissions(permissions), [path.split(".")[1] as string]: value };
+		return next;
+	}
+
+	if (path.startsWith("comunicacao.")) {
+		next.comunicacao = { ...resolveCommunicationPermissions(permissions), [path.split(".")[1] as string]: value };
 		return next;
 	}
 

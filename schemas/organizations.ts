@@ -849,6 +849,51 @@ export const OrganizationMemberPermissionsSchema = z.object({
 		})
 		.optional()
 		.nullable(),
+	// Base de clientes. Opcional; a ausência é resolvida em lib/permissions/clients.ts (ver, criar e
+	// editar seguem liberados; gerenciar a base cai em `empresa.editar`). Não leia direto. Criar cliente
+	// dentro de venda, PDV, ponto de interação ou atendimento não passa por aqui.
+	clientes: z
+		.object({
+			visualizar: z.boolean({
+				required_error: "Permissão de visualização de clientes não informada.",
+				invalid_type_error: "Tipo não válido para a permissão de visualização de clientes.",
+			}),
+			criar: z.boolean({
+				required_error: "Permissão de criação de clientes não informada.",
+				invalid_type_error: "Tipo não válido para a permissão de criação de clientes.",
+			}),
+			editar: z.boolean({
+				required_error: "Permissão de edição de clientes não informada.",
+				invalid_type_error: "Tipo não válido para a permissão de edição de clientes.",
+			}),
+			// Importar, mesclar, excluir, editar em massa, tags, campos personalizados, segmentações e carteiras.
+			gerenciarBase: z.boolean({
+				required_error: "Permissão de gerenciamento da base de clientes não informada.",
+				invalid_type_error: "Tipo não válido para a permissão de gerenciamento da base de clientes.",
+			}),
+		})
+		.optional()
+		.nullable(),
+	// Comunicação: templates de mensagem e kits visuais. Opcional; a ausência é resolvida em
+	// lib/permissions/communication.ts. Não leia direto.
+	comunicacao: z
+		.object({
+			visualizar: z.boolean({
+				required_error: "Permissão de visualização da comunicação não informada.",
+				invalid_type_error: "Tipo não válido para a permissão de visualização da comunicação.",
+			}),
+			editar: z.boolean({
+				required_error: "Permissão de edição da comunicação não informada.",
+				invalid_type_error: "Tipo não válido para a permissão de edição da comunicação.",
+			}),
+			// Enviar templates para aprovação da Meta e sincronizar o status.
+			publicar: z.boolean({
+				required_error: "Permissão de publicação de templates não informada.",
+				invalid_type_error: "Tipo não válido para a permissão de publicação de templates.",
+			}),
+		})
+		.optional()
+		.nullable(),
 	compras: z.object({
 		visualizar: z.boolean({
 			required_error: "Permissão de visualização de compras não informada.",

@@ -19,7 +19,7 @@ type ClientDuplicatePillProps = {
  * Pill de possível duplicidade nas páginas de detalhe (cliente, venda).
  * Só renderiza quando há pares pendentes; clicar abre o diálogo de
  * reconciliação. Ver e comparar é livre; descartar/mesclar exige a permissão
- * de gestão da empresa (empresa.editar).
+ * de gestão da base (clientes.gerenciarBase).
  */
 export function ClientDuplicatePill({ entityType, entityId, canReconcile }: ClientDuplicatePillProps) {
 	const [dialogOpen, setDialogOpen] = useState(false);

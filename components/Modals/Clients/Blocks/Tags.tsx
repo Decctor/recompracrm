@@ -25,6 +25,11 @@ type ClientTagsProps = {
 	removeClientTag: TUseClientState["removeClientTag"];
 	/** Dentro de uma `Section` do cadastro o cabeçalho já existe; aqui só o conteúdo. */
 	embedded?: boolean;
+	/**
+	 * Criar etiqueta nova muda o vocabulário da base (clientes.gerenciarBase). Sem ela, aplicar e remover
+	 * etiquetas existentes continua livre; a criação inline some.
+	 */
+	canCreateTags: boolean;
 };
 
 type ClientTagDraft = {
@@ -87,7 +92,7 @@ function getBestClientTagMatch<T extends { titulo: string }>(searchValue: string
 	}, null);
 }
 
-export default function ClientTags({ tags, addClientTag, removeClientTag, embedded = false }: ClientTagsProps) {
+export default function ClientTags({ tags, addClientTag, removeClientTag, embedded = false, canCreateTags }: ClientTagsProps) {
 	const queryClient = useQueryClient();
 	const { data: clientTags = [], queryKey } = useClientTags();
 	const [search, setSearch] = useState("");
@@ -113,10 +118,10 @@ export default function ClientTags({ tags, addClientTag, removeClientTag, embedd
 		bestSubmitMatch && bestSubmitMatch.score >= CLIENT_TAG_MATCH_THRESHOLD && (!hasExactMatch || bestSubmitMatch.score === 1)
 			? bestSubmitMatch.tag
 			: null;
-	const showCreateInline = normalizedSearch.length > 0 && !submitMatchedTag && !hasExactMatch;
+	const showCreateInline = canCreateTags && normalizedSearch.length > 0 && !submitMatchedTag && !hasExactMatch;
 	const enterSubmitHint = submitMatchedTag
 		? `Enter para adicionar "${submitMatchedTag.titulo}"`
-		: normalizedSearch && !hasExactMatch
+		: canCreateTags && normalizedSearch && !hasExactMatch
 			? `Enter para criar "${search.trim()}"`
 			: null;
 
@@ -184,7 +189,7 @@ export default function ClientTags({ tags, addClientTag, removeClientTag, embedd
 			handleAddExistingTag(submitMatchedTag);
 			return;
 		}
-		if (!hasExactMatch) handleCreateTag();
+		if (canCreateTags && !hasExactMatch) handleCreateTag();
 	}
 
 	function handleSearchKeyDown(event: KeyboardEvent<HTMLInputElement>) {
@@ -234,7 +239,7 @@ export default function ClientTags({ tags, addClientTag, removeClientTag, embedd
 								setDraft((prev) => ({ ...prev, titulo: event.target.value }));
 							}}
 							onKeyDown={handleSearchKeyDown}
-							placeholder="Buscar ou criar etiqueta..."
+							placeholder={canCreateTags ? "Buscar ou criar etiqueta..." : "Buscar etiqueta..."}
 							className="min-w-0 flex-1 bg-transparent text-sm outline-hidden placeholder:text-muted-foreground/70"
 						/>
 					</div>

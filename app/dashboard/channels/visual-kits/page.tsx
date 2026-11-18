@@ -1,4 +1,5 @@
 import { requireDashboardCapability } from "@/lib/access/guards";
+import { canEditCommunication } from "@/lib/permissions/communication";
 import { redirect } from "next/navigation";
 import VisualKitsPage from "./_module/overview/visual-kits-page";
 
@@ -7,5 +8,5 @@ export default async function VisualKits() {
 	if (unauthorized) return unauthorized;
 	if (!sessionUser) redirect("/auth/signin");
 	if (!sessionUser.membership) redirect("/onboarding");
-	return <VisualKitsPage />;
+	return <VisualKitsPage canEdit={canEditCommunication(sessionUser.membership.permissoes)} />;
 }

@@ -20,6 +20,8 @@ type ViewMessageTemplatePhoneProps = {
 	messageTemplateId: string;
 	telefoneId: string;
 	closeMenu: () => void;
+	/** comunicacao.publicar: sincronizar e excluir o vínculo falam com a Meta. Sem ela, a seção de ações some. */
+	canPublish: boolean;
 	callbacks?: {
 		onMutate?: () => void;
 		onSuccess?: () => void;
@@ -28,7 +30,7 @@ type ViewMessageTemplatePhoneProps = {
 	};
 };
 
-export function ViewMessageTemplatePhone({ messageTemplateId, telefoneId, closeMenu, callbacks }: ViewMessageTemplatePhoneProps) {
+export function ViewMessageTemplatePhone({ messageTemplateId, telefoneId, closeMenu, canPublish, callbacks }: ViewMessageTemplatePhoneProps) {
 	const {
 		data: template,
 		isLoading: isTemplateLoading,
@@ -161,31 +163,33 @@ export function ViewMessageTemplatePhone({ messageTemplateId, telefoneId, closeM
 
 									<TemplatePreview content={template.conteudo} />
 
-									<ResponsiveMenuSection title="AÇÕES" icon={<Settings size={15} />}>
-										<div className="flex w-full flex-col items-center justify-center gap-x-3 gap-y-3 lg:flex-row">
-											{phoneMetadata.idExterno ? (
-												<LoadingButton
-													onClick={() => handleSync({ messageTemplateId, telefoneId })}
-													variant="ghost-brand"
-													size="sm"
-													loading={isSyncing}
-													disabled={isSyncing}
-												>
-													SINCRONIZAR TEMPLATE
-												</LoadingButton>
-											) : null}
+									{canPublish ? (
+										<ResponsiveMenuSection title="AÇÕES" icon={<Settings size={15} />}>
+											<div className="flex w-full flex-col items-center justify-center gap-x-3 gap-y-3 lg:flex-row">
+												{phoneMetadata.idExterno ? (
+													<LoadingButton
+														onClick={() => handleSync({ messageTemplateId, telefoneId })}
+														variant="ghost-brand"
+														size="sm"
+														loading={isSyncing}
+														disabled={isSyncing}
+													>
+														SINCRONIZAR TEMPLATE
+													</LoadingButton>
+												) : null}
 
-											<LoadingButton
-												onClick={() => handleDelete({ messageTemplateId, telefoneId, deleteFromMeta: true })}
-												variant="destructive"
-												size="sm"
-												loading={isDeleting}
-												disabled={isDeleting}
-											>
-												EXCLUIR VÍNCULO
-											</LoadingButton>
-										</div>
-									</ResponsiveMenuSection>
+												<LoadingButton
+													onClick={() => handleDelete({ messageTemplateId, telefoneId, deleteFromMeta: true })}
+													variant="destructive"
+													size="sm"
+													loading={isDeleting}
+													disabled={isDeleting}
+												>
+													EXCLUIR VÍNCULO
+												</LoadingButton>
+											</div>
+										</ResponsiveMenuSection>
+									) : null}
 								</div>
 							) : null}
 						</>

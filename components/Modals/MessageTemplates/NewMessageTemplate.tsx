@@ -1,6 +1,7 @@
 "use client";
 
 import ResponsiveMenu from "@/components/Utils/ResponsiveMenu";
+import { useCommunicationPermissions } from "@/components/MessageTemplates/communication-permissions";
 import { MessageTemplateComposer } from "@/components/MessageTemplates";
 import type { TCreateMessageTemplateOutput } from "@/app/api/message-templates/route";
 import { getErrorMessage } from "@/lib/errors";
@@ -28,14 +29,9 @@ type NewMessageTemplateProps = {
 	};
 };
 
-function NewMessageTemplate({
-	closeModal,
-	organizationId,
-	organizationName,
-	organizationLogoUrl,
-	initialState,
-	callbacks,
-}: NewMessageTemplateProps) {
+function NewMessageTemplate({ closeModal, organizationId, organizationName, organizationLogoUrl, initialState, callbacks }: NewMessageTemplateProps) {
+	// Sem comunicacao.publicar o template é salvo sem ir para a Meta: a API recusaria o envio.
+	const { publicar: canPublish } = useCommunicationPermissions();
 	const messageTemplateState = useMessageTemplateState({ organizationName, initialState });
 	const { state, resetState, unknownVariables } = messageTemplateState;
 
@@ -67,7 +63,7 @@ function NewMessageTemplate({
 
 		handleCreateMessageTemplate({
 			messageTemplate: state.messageTemplate,
-			submitWhatsapp: true,
+			submitWhatsapp: canPublish,
 		});
 	}
 

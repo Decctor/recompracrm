@@ -22,7 +22,10 @@ type TClientTab = (typeof CLIENT_TABS)[number];
 
 type ClientPageProps = {
 	id: string;
+	/** clientes.gerenciarBase: mesclar e descartar duplicados. */
 	canReconcileClients: boolean;
+	/** clientes.editar: sem ela a aba CADASTRO fica só leitura. */
+	canEditClient: boolean;
 	organizationId: string;
 	canViewStoreCredit: boolean;
 	canReceiveStoreCredit: boolean;
@@ -36,7 +39,14 @@ type ClientPageProps = {
  * CASHBACK deixaram de dividir uma linha de 2/3 + 1/3 — cada um ocupa a tela inteira, que é o que a
  * listagem de compras com filtros precisava desde o começo.
  */
-export default function ClientPage({ id, canReconcileClients, organizationId, canViewStoreCredit, canReceiveStoreCredit }: ClientPageProps) {
+export default function ClientPage({
+	id,
+	canReconcileClients,
+	canEditClient,
+	organizationId,
+	canViewStoreCredit,
+	canReceiveStoreCredit,
+}: ClientPageProps) {
 	const [tab, setTab] = useQueryState("tab", parseAsStringEnum([...CLIENT_TABS]).withDefault("estatisticas"));
 	const queryClient = useQueryClient();
 
@@ -90,7 +100,12 @@ export default function ClientPage({ id, canReconcileClients, organizationId, ca
 				</TabsList>
 
 				<TabsContent value="cadastro" className="mt-4">
-					<ClientRegistryTab client={client} callbacks={{ onMutate: handleOnMutate, onSettled: handleOnSettled }} />
+					<ClientRegistryTab
+						client={client}
+						readOnly={!canEditClient}
+						canCreateTags={canReconcileClients}
+						callbacks={{ onMutate: handleOnMutate, onSettled: handleOnSettled }}
+					/>
 				</TabsContent>
 				<TabsContent value="estatisticas" className="mt-4">
 					<ClientStatsTab

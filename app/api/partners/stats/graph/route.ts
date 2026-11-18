@@ -163,6 +163,7 @@ export type TGetPartnersGraphOutput = Awaited<ReturnType<typeof getPartnersGraph
 const getPartnersGraphRoute = async (request: NextRequest) => {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	if (!session.membership?.permissoes.empresa.visualizar) throw new createHttpError.Forbidden("Você não possui permissão para visualizar parceiros.");
 
 	const searchParams = await request.nextUrl.searchParams;
 	const input = GetPartnersGraphInputSchema.parse({

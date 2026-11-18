@@ -169,6 +169,17 @@ export function useOrganizationState() {
 					visualizar: true,
 					configurar: true,
 				},
+				clientes: {
+					visualizar: true,
+					criar: true,
+					editar: true,
+					gerenciarBase: true,
+				},
+				comunicacao: {
+					visualizar: true,
+					editar: true,
+					publicar: true,
+				},
 			},
 		},
 		mainUserAvatarHolder: {

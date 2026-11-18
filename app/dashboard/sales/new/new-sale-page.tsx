@@ -96,6 +96,8 @@ type NewSalePageProps = {
 	organizationAutoFiscalCapable: boolean;
 	autoEmissionExceptions: TAutoEmissionExceptions;
 	canEmitFiscal: boolean;
+	/** `clientes.gerenciarBase`: criar etiqueta nova ao editar o cliente vinculado. */
+	canCreateClientTags: boolean;
 	cashPermissions: Pick<TSalesOperationPermissions, "operarCaixa" | "movimentarCaixa">;
 	canConfigureFiscal?: boolean;
 	/** `vendas.visualizar` — gate da fila de orçamentos em aberto da organização. */
@@ -111,6 +113,7 @@ export default function NewSalePage({
 	organizationAutoFiscalCapable,
 	autoEmissionExceptions,
 	canEmitFiscal,
+	canCreateClientTags,
 	cashPermissions,
 	canConfigureFiscal,
 	canViewSales,
@@ -715,6 +718,7 @@ export default function NewSalePage({
 							organizationAutoFiscalCapable={organizationAutoFiscalCapable}
 							autoEmissionExceptions={autoEmissionExceptions}
 							canEmitFiscal={canEmitFiscal}
+							canCreateClientTags={canCreateClientTags}
 							canConfigureFiscal={canConfigureFiscal}
 							discountAuthority={discountAuthority}
 							storeCredit={storeCredit}
@@ -744,7 +748,12 @@ export default function NewSalePage({
 				) : null}
 
 				{linkedClientId && isEditingClient ? (
-					<ControlClient clientId={linkedClientId} closeModal={handleCloseClientEdit} callbacks={{ onSuccess: () => void handleClientEdited() }} />
+					<ControlClient
+						clientId={linkedClientId}
+						canCreateTags={canCreateClientTags}
+						closeModal={handleCloseClientEdit}
+						callbacks={{ onSuccess: () => void handleClientEdited() }}
+					/>
 				) : null}
 
 				{builderProduct ? (
@@ -827,6 +836,7 @@ export default function NewSalePage({
 					organizationAutoFiscalCapable={organizationAutoFiscalCapable}
 					autoEmissionExceptions={autoEmissionExceptions}
 					canEmitFiscal={canEmitFiscal}
+					canCreateClientTags={canCreateClientTags}
 					canConfigureFiscal={canConfigureFiscal}
 					discountAuthority={discountAuthority}
 					storeCredit={storeCredit}

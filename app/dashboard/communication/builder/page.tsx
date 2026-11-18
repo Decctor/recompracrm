@@ -1,4 +1,5 @@
 import { getCurrentSession } from "@/lib/authentication/session";
+import { resolveCommunicationPermissions } from "@/lib/permissions/communication";
 import { redirect } from "next/navigation";
 import MessageTemplateBuilder from "./_components/message-template-builder";
 import { getMessageTemplateById } from "./_lib";
@@ -13,6 +14,9 @@ export default async function MessageTemplateBuilderPage({ searchParams }: Messa
 	const authSession = await getCurrentSession();
 	if (!authSession) redirect("/auth/signin");
 	if (!authSession.membership) redirect("/onboarding");
+	const permissions = resolveCommunicationPermissions(authSession.membership.permissoes);
+	// Sem `comunicacao.editar` não há o que construir: a API recusaria o salvamento.
+	if (!permissions.editar) redirect("/dashboard/communication");
 
 	try {
 		const { templateId } = await searchParams;
@@ -27,6 +31,7 @@ export default async function MessageTemplateBuilderPage({ searchParams }: Messa
 				organizationPrimaryForeground={authSession.membership.organizacao.corPrimariaForeground}
 				organizationSecondaryColor={authSession.membership.organizacao.corSecundaria}
 				organizationSecondaryForeground={authSession.membership.organizacao.corSecundariaForeground}
+				canPublish={permissions.publicar}
 			/>
 		);
 	} catch (error) {

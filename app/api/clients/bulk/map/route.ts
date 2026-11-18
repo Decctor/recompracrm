@@ -1,4 +1,7 @@
 import { appApiHandler } from "@/lib/app-api";
+import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { assertCanManageClientBase } from "@/lib/clients/access";
+import createHttpError from "http-errors";
 import { runPagesRouteHandler, type PagesRouteHandler, type PagesRouteRequest, type PagesRouteResponse } from "@/lib/pages-route-compat";
 import { generateText, gateway, Output } from "ai";
 import { z } from "zod";
@@ -125,6 +128,10 @@ function sanitizeMapOutput({ headers, output }: { headers: string[]; output: TBu
 }
 
 const mapClientsSheetRoute: PagesRouteHandler<TMapClientsSheetOutput> = async (req, res) => {
+	// Etapa da importação (e chamada paga ao modelo): mesma permissão de importar.
+	const sessionUser = await getCurrentSessionUncached();
+	if (!sessionUser) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	assertCanManageClientBase(sessionUser);
 	const input = BulkClientsMapInputSchema.parse(req.body);
 	const heuristicResult = runHeuristicMapping(input.headers);
 

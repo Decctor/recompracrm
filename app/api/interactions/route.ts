@@ -2,6 +2,7 @@ import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { createManualInteraction, resolvePlannedInteraction } from "@/lib/interactions/create";
+import { assertCanEditClients } from "@/lib/clients/access";
 import { InteractionChannelEnum, InteractionDirectionEnum, InteractionLifecycleStatusEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
 import { interactions } from "@/services/drizzle/schema";
@@ -196,6 +197,8 @@ async function createInteractionRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
 	if (!session.membership) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização.");
+	// Registrar um contato (ou agendar/resolver um retorno) escreve no histórico do cliente: clientes.editar.
+	assertCanEditClients(session);
 
 	const body = await request.json();
 	const input = CreateInteractionInputSchema.parse(body);
@@ -242,6 +245,7 @@ async function resolveInteractionRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
 	if (!session.membership) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização.");
+	assertCanEditClients(session);
 
 	const body = await request.json();
 	const input = ResolveInteractionInputSchema.parse(body);

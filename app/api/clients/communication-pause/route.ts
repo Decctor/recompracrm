@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { assertCanEditClients } from "@/lib/clients/access";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { db } from "@/services/drizzle";
 import { cancelScheduledFollowUpsForChats } from "@/lib/ai/agent/follow-up-cancel";
@@ -75,6 +76,8 @@ async function updateCommunicationPauseRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
 	if (!session.membership) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização.");
+	// Pausa é por cliente (não em massa), registrada junto do contato na carteira: edição do cliente.
+	assertCanEditClients(session);
 
 	const body = await request.json();
 	const input = UpdateCommunicationPauseInputSchema.parse(body);

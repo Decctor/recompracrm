@@ -1,6 +1,7 @@
 import { appApiHandler } from "@/lib/app-api";
 import { runPagesRouteHandler, type PagesRouteHandler, type PagesRouteRequest, type PagesRouteResponse } from "@/lib/pages-route-compat";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { assertCanViewClients } from "@/lib/clients/access";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { db } from "@/services/drizzle";
 import { clients, sales } from "@/services/drizzle/schema";
@@ -204,6 +205,7 @@ export type TGetClientsRankingOutput = Awaited<ReturnType<typeof getClientsRanki
 const getClientsRankingRoute: PagesRouteHandler<TGetClientsRankingOutput> = async (req, res) => {
 	const sessionUser = await getCurrentSessionUncached();
 	if (!sessionUser) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	assertCanViewClients(sessionUser);
 
 	const input = GetClientsRankingInputSchema.parse({
 		periodAfter: (req.query.periodAfter as string | undefined) ?? null,

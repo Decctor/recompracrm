@@ -1,6 +1,7 @@
 import { appApiHandler } from "@/lib/app-api";
 import { runPagesRouteHandler, type PagesRouteHandler, type PagesRouteRequest, type PagesRouteResponse } from "@/lib/pages-route-compat";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { assertCanViewClients } from "@/lib/clients/access";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { getChartBuckets, getChartGranularity, type TChartBucket } from "@/lib/charts/period-buckets";
 import { chartBucketPositionSql } from "@/lib/charts/period-buckets-sql";
@@ -224,6 +225,7 @@ export type TGetClientsGraphOutput = Awaited<ReturnType<typeof getClientsGraph>>
 const getClientsGraphRoute: PagesRouteHandler<TGetClientsGraphOutput> = async (req, res) => {
 	const sessionUser = await getCurrentSessionUncached();
 	if (!sessionUser) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	assertCanViewClients(sessionUser);
 
 	const input = GetClientsGraphInputSchema.parse({
 		graphType: req.query.graphType as "new-clients" | "clients-growth" | "active-clients",

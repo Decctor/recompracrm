@@ -6,6 +6,8 @@ import { OrganizationMemberPermissionsSchema } from "@/schemas/organizations";
 import { materializeERPPermissions } from "./erp-backfill";
 import { campaignWriteRequiresActivation, resolveCampaignPermissions } from "./campaigns";
 import { resolveCashbackPermissions } from "./cashback";
+import { canLookupClients, canRegisterClients, canUpdateClientRecords, resolveClientPermissions } from "./clients";
+import { resolveCommunicationPermissions } from "./communication";
 import { resolveInventoryPermissions } from "./inventory";
 import { applyMembershipPermissionChanges, getAllMembershipPermissionPaths, readMembershipPermissionValue } from "./membership-matrix";
 import { resolveProductionPermissions } from "./productions";
@@ -85,6 +87,8 @@ test("backfill writes the fallback values and never overrides an explicit choice
 	assert.deepEqual(next.dadosSensiveis, { visualizarCustos: false, exportarClientes: false });
 	assert.deepEqual(next.campanhas, { visualizar: true, editar: true, ativar: false });
 	assert.deepEqual(next.cashback, { visualizar: true, configurar: false });
+	assert.deepEqual(next.clientes, { visualizar: true, criar: true, editar: true, gerenciarBase: false });
+	assert.deepEqual(next.comunicacao, { visualizar: true, editar: true, publicar: false });
 	assert.equal(member.vendas.movimentarCaixa, undefined, "input must not be mutated");
 
 	// Nada muda de efeito: o que o membro resolve antes e depois do backfill é igual.
@@ -204,4 +208,80 @@ test("touching a live campaign requires activation", () => {
 	assert.equal(campaignWriteRequiresActivation({ wasActive: false, willBeActive: true }), true);
 	assert.equal(campaignWriteRequiresActivation({ wasActive: true, willBeActive: false }), true);
 	assert.equal(campaignWriteRequiresActivation({ wasActive: true, willBeActive: true }), true);
+});
+
+test("CRM phase 2: clients and communication keep viewing and day-to-day open, management falls back to empresa.editar", () => {
+	const operator = legacyMember();
+	assert.deepEqual(resolveClientPermissions(operator), { visualizar: true, criar: true, editar: true, gerenciarBase: false });
+	assert.deepEqual(resolveCommunicationPermissions(operator), { visualizar: true, editar: true, publicar: false });
+
+	const manager = legacyMember({ empresa: { visualizar: true, editar: true } });
+	assert.deepEqual(resolveClientPermissions(manager), { visualizar: true, criar: true, editar: true, gerenciarBase: true });
+	assert.deepEqual(resolveCommunicationPermissions(manager), { visualizar: true, editar: true, publicar: true });
+
+	// Chave explícita vence o fallback, nos dois sentidos — inclusive false nas chaves "abertas".
+	const restricted = applyMembershipPermissionChanges(manager, [
+		{ path: "clientes.gerenciarBase", value: false },
+		{ path: "clientes.editar", value: false },
+		{ path: "comunicacao.publicar", value: false },
+	]);
+	assert.deepEqual(restricted.clientes, { visualizar: true, criar: true, editar: false, gerenciarBase: false });
+	assert.deepEqual(restricted.comunicacao, { visualizar: true, editar: true, publicar: false });
+	assert.equal(readMembershipPermissionValue(restricted, "clientes.gerenciarBase"), false);
+	assert.equal(readMembershipPermissionValue(restricted, "comunicacao.publicar"), false);
+	assert.equal(restricted.empresa.editar, true);
+
+	const granted = applyMembershipPermissionChanges(operator, [
+		{ path: "clientes.gerenciarBase", value: true },
+		{ path: "comunicacao.publicar", value: true },
+	]);
+	assert.equal(resolveClientPermissions(granted).gerenciarBase, true);
+	assert.equal(resolveCommunicationPermissions(granted).publicar, true);
+	assert.equal(granted.empresa.editar, false);
+
+	for (const path of [
+		"clientes.visualizar",
+		"clientes.criar",
+		"clientes.editar",
+		"clientes.gerenciarBase",
+		"comunicacao.visualizar",
+		"comunicacao.editar",
+		"comunicacao.publicar",
+	]) {
+		assert.ok(getAllMembershipPermissionPaths({ organizationHasERPAccess: false }).includes(path), path);
+	}
+});
+
+test("client lookup and registration stay open to the sale and chat flows", () => {
+	const seller = legacyMember();
+	seller.clientes = { visualizar: false, criar: false, editar: false, gerenciarBase: false };
+	seller.atendimentos = { visualizar: false, iniciar: false, responder: false, finalizar: false };
+	// Quem vende acha, cadastra e ajusta o cliente da venda mesmo sem o módulo de clientes.
+	assert.equal(canLookupClients(seller), true);
+	assert.equal(canRegisterClients(seller), true);
+	assert.equal(canUpdateClientRecords(seller), true);
+
+	const attendant = legacyMember({ vendas: { visualizar: false, criar: false, editar: false, excluir: false } });
+	attendant.clientes = { visualizar: false, criar: false, editar: false, gerenciarBase: false };
+	assert.equal(canLookupClients(attendant), true);
+	assert.equal(canRegisterClients(attendant), false);
+	assert.equal(canUpdateClientRecords(attendant), false);
+
+	attendant.atendimentos.visualizar = false;
+	assert.equal(canLookupClients(attendant), false);
+});
+
+test("backfill materializes clientes and comunicacao without changing access and never overrides", () => {
+	const manager = legacyMember({ empresa: { visualizar: true, editar: true } });
+	manager.comunicacao = { visualizar: true, editar: false, publicar: false };
+
+	const next = materializeERPPermissions(manager);
+	assert.ok(next);
+	assert.deepEqual(next.clientes, { visualizar: true, criar: true, editar: true, gerenciarBase: true });
+	assert.deepEqual(next.comunicacao, { visualizar: true, editar: false, publicar: false }, "explicit choice is kept");
+	for (const path of getAllMembershipPermissionPaths({ organizationHasERPAccess: true })) {
+		assert.equal(readMembershipPermissionValue(next, path), readMembershipPermissionValue(manager, path), path);
+	}
+	assert.equal(materializeERPPermissions(next), null, "second run is a no-op");
+	assert.equal(OrganizationMemberPermissionsSchema.safeParse(next).success, true);
 });

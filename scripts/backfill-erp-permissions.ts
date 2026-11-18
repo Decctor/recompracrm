@@ -7,7 +7,7 @@ import { and, eq, gt, isNull, sql } from "drizzle-orm";
 
 // Backfill das permissões granulares do ERP (caixa, configuração de vendas, produtos, estoque e
 // produção), de dados sensíveis (custos e margens, exportação de clientes) e do CRM (campanhas,
-// programa de cashback). Roda depois do deploy que introduz chaves novas; o fallback em lib/permissions/* cobre
+// programa de cashback, base de clientes e comunicação). Roda depois do deploy que introduz chaves novas; o fallback em lib/permissions/* cobre
 // o intervalo até lá e quem ficar de fora. Grava exatamente o que o fallback já resolvia, então
 // ninguém ganha nem perde acesso — a partir daí o gestor restringe pela tela de permissões.
 //

@@ -90,6 +90,17 @@ export const DEFAULT_ORGANIZATION_OWNER_PERMISSIONS: TUserPermissions = {
 		visualizar: true,
 		configurar: true,
 	},
+	clientes: {
+		visualizar: true,
+		criar: true,
+		editar: true,
+		gerenciarBase: true,
+	},
+	comunicacao: {
+		visualizar: true,
+		editar: true,
+		publicar: true,
+	},
 };
 
 export const DEFAULT_ORGANIZATION_RFM_CONFIG = {

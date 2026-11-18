@@ -60,7 +60,8 @@ export function DashboardPage({ user, userOrg, membership, scopeSellersIds }: Da
 	// volta para Relacionamento é sempre válido, porque ela existe para toda organização.
 	const activeTab = tabs.includes(tab) ? tab : "relacionamento";
 
-	const cooling = useRecentSegmentChanges({ days: COOLING_WINDOW_DAYS });
+	const canViewClients = canAccessDashboardCapability("customers", context);
+	const cooling = useRecentSegmentChanges({ days: COOLING_WINDOW_DAYS, enabled: canViewClients });
 	const operations = useOperationsPending(context);
 
 	const risk: HeroRisk | null =
@@ -79,7 +80,7 @@ export function DashboardPage({ user, userOrg, membership, scopeSellersIds }: Da
 						label: `em risco: ${formatDecimalPlaces(cooling.data.total)} ${cooling.data.total === 1 ? "cliente esfriando" : "clientes esfriando"}`,
 						href: appRoutes.customers.segments(),
 					}
-				: cooling.isPending
+				: canViewClients && cooling.isPending
 					? { value: "", label: "", href: appRoutes.customers.segments(), isPending: true }
 					: null;
 
@@ -97,8 +98,13 @@ export function DashboardPage({ user, userOrg, membership, scopeSellersIds }: Da
 	};
 
 	const firstName = user.nome?.trim().split(/\s+/)[0] ?? "";
-	// Sem resultados e sem ERP e sem carteiras, não sobra nenhuma leitura para montar o painel.
-	const hasContent = canViewSales || tabs.length > 1 || canAccessDashboardCapability("customers", context);
+	// Sem resultados, sem ERP e sem carteiras, só sobra Relacionamento, que tem leitura se o membro vê
+	// clientes, campanhas, cashback ou atendimentos (os blocos e a régua do dia da aba).
+	const hasContent =
+		canViewSales ||
+		tabs.length > 1 ||
+		canViewClients ||
+		(["campaigns", "cashback", "whatsapp"] as const).some((capability) => canAccessDashboardCapability(capability, context));
 
 	return (
 		// `text-numeric` no painel inteiro: todo número daqui para baixo herda figuras alinhadas, sem
@@ -128,7 +134,12 @@ export function DashboardPage({ user, userOrg, membership, scopeSellersIds }: Da
 				</Empty>
 			) : (
 				<>
-					<HeroBand canViewSales={canViewSales} canViewGoals={canViewGoals} canCreateGoals={resolveGoalPermissions(membership.permissoes).criar} risk={risk} />
+					<HeroBand
+						canViewSales={canViewSales}
+						canViewGoals={canViewGoals}
+						canCreateGoals={resolveGoalPermissions(membership.permissoes).criar}
+						risk={risk}
+					/>
 					<TabBar tabs={tabs} active={activeTab} onSelect={setTab} badges={badges} hint={hint} />
 					{activeTab === "relacionamento" ? <RelationshipTab context={context} /> : null}
 					{activeTab === "operacao" ? <OperationsTab context={context} /> : null}

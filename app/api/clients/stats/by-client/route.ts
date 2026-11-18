@@ -1,6 +1,7 @@
 import { appApiHandler } from "@/lib/app-api";
 import { runPagesRouteHandler, type PagesRouteHandler, type PagesRouteRequest, type PagesRouteResponse } from "@/lib/pages-route-compat";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { assertCanViewClients } from "@/lib/clients/access";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import type { TUserSession } from "@/schemas/users";
 import { db } from "@/services/drizzle";
@@ -248,6 +249,7 @@ export type TGetClientStatsOutput = Awaited<ReturnType<typeof getClientStats>>;
 const getClientStatsHandler: PagesRouteHandler<TGetClientStatsOutput> = async (req, res) => {
 	const sessionUser = await getCurrentSessionUncached();
 	if (!sessionUser) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	assertCanViewClients(sessionUser);
 	const input = GetClientStatsInputSchema.parse({
 		clientId: req.query.clientId as string,
 		periodAfter: (req.query.periodAfter as string | undefined) ?? null,

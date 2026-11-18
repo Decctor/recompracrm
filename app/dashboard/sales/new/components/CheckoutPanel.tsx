@@ -57,6 +57,8 @@ type CheckoutPanelProps = {
 	autoEmissionExceptions: TAutoEmissionExceptions;
 	canEmitFiscal: boolean;
 	canConfigureFiscal?: boolean;
+	/** `clientes.gerenciarBase`: criar etiqueta nova ao editar o cliente da nota. */
+	canCreateClientTags?: boolean;
 	discountAuthority?: TDiscountAuthority | null;
 	// Liberação de fiado avaliada pela tela: alimenta a dica no cartão de fiado dos pagamentos.
 	storeCredit?: TStoreCreditGuard | null;
@@ -89,6 +91,7 @@ export default function CheckoutPanel({
 	autoEmissionExceptions,
 	canEmitFiscal,
 	canConfigureFiscal,
+	canCreateClientTags = false,
 	discountAuthority,
 	storeCredit,
 	onCreateDraft,
@@ -264,6 +267,7 @@ export default function CheckoutPanel({
 			{isFiscalClientEditOpen && saleState.state.cliente ? (
 				<ControlClient
 					clientId={saleState.state.cliente.id}
+					canCreateTags={canCreateClientTags}
 					closeModal={() => setIsFiscalClientEditOpen(false)}
 					callbacks={{
 						onSuccess: () => {

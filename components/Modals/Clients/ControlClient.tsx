@@ -18,6 +18,8 @@ import { useEffect } from "react";
 type ControlClientProps = {
 	clientId: string;
 	closeModal: () => void;
+	/** clientes.gerenciarBase: permite criar etiqueta nova no bloco de tags. Ausente = não cria. */
+	canCreateTags?: boolean;
 	callbacks?: {
 		onMutate?: () => void;
 		onSuccess?: () => void;
@@ -26,7 +28,7 @@ type ControlClientProps = {
 	};
 };
 
-function ControlClient({ clientId, closeModal, callbacks }: ControlClientProps) {
+function ControlClient({ clientId, closeModal, canCreateTags = false, callbacks }: ControlClientProps) {
 	const { data: client, isLoading, isError, error } = useClientById({ id: clientId });
 	const {
 		state,
@@ -137,7 +139,7 @@ function ControlClient({ clientId, closeModal, callbacks }: ControlClientProps) 
 				updateClientLocation={updateClientLocation}
 				removeClientLocation={removeClientLocation}
 			/>
-			<ClientTagsBlock tags={state.clientTags} addClientTag={addClientTag} removeClientTag={removeClientTag} />
+			<ClientTagsBlock tags={state.clientTags} addClientTag={addClientTag} removeClientTag={removeClientTag} canCreateTags={canCreateTags} />
 		</ResponsiveMenu>
 	);
 }

@@ -26,9 +26,9 @@ async function fetchRecentSegmentChanges(days: number) {
 	return data.data;
 }
 
-export function useRecentSegmentChanges({ days = 7 }: { days?: number } = {}) {
+export function useRecentSegmentChanges({ days = 7, enabled = true }: { days?: number; enabled?: boolean } = {}) {
 	const queryKey = ["segmentations-recent-changes", days];
-	return { ...useQuery({ queryKey, queryFn: () => fetchRecentSegmentChanges(days) }), queryKey };
+	return { ...useQuery({ queryKey, queryFn: () => fetchRecentSegmentChanges(days), enabled }), queryKey };
 }
 
 async function fetchClientBirthdays(days: number) {
@@ -36,9 +36,9 @@ async function fetchClientBirthdays(days: number) {
 	return data.data;
 }
 
-export function useClientBirthdays({ days = 7 }: { days?: number } = {}) {
+export function useClientBirthdays({ days = 7, enabled = true }: { days?: number; enabled?: boolean } = {}) {
 	const queryKey = ["clients-birthdays", days];
-	return { ...useQuery({ queryKey, queryFn: () => fetchClientBirthdays(days) }), queryKey };
+	return { ...useQuery({ queryKey, queryFn: () => fetchClientBirthdays(days), enabled }), queryKey };
 }
 
 async function fetchCampaignsHealth(dayStart: Date) {

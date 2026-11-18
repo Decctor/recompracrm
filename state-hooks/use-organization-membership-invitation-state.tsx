@@ -94,6 +94,17 @@ export function useOrganizationMembershipInvitationState() {
 					visualizar: true,
 					configurar: false,
 				},
+				clientes: {
+					visualizar: true,
+					criar: true,
+					editar: true,
+					gerenciarBase: false,
+				},
+				comunicacao: {
+					visualizar: true,
+					editar: true,
+					publicar: false,
+				},
 			},
 		},
 	};

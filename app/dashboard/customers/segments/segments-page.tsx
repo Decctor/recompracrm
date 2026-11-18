@@ -75,8 +75,10 @@ type SegmentsPageProps = {
 	orgRFMConfig: TRFMConfig | null;
 	/** dadosSensiveis.exportarClientes: sem ela o botão de exportar some (a rota recusa). */
 	canExportClients: boolean;
+	/** clientes.gerenciarBase: configurar e sincronizar a matriz RFM. Sem ela a página é só leitura. */
+	canManageClientBase: boolean;
 };
-export default function SegmentsPage({ user, orgRFMConfig, canExportClients }: SegmentsPageProps) {
+export default function SegmentsPage({ user, orgRFMConfig, canExportClients, canManageClientBase }: SegmentsPageProps) {
 	const [configMenuIsOpen, setConfigMenuIsOpen] = useState(false);
 	// A listagem mora aqui, e não no bloco de clientes, porque a matriz também escreve no filtro de segmentação.
 	const clientsQuery = useClients({
@@ -97,7 +99,7 @@ export default function SegmentsPage({ user, orgRFMConfig, canExportClients }: S
 			<div className="flex w-full flex-col items-stretch gap-3 lg:flex-row">
 				<div className="w-full lg:w-1/2">
 					<SegmentsPageMatrixRFM
-						onOpenConfig={() => setConfigMenuIsOpen(true)}
+						onOpenConfig={canManageClientBase ? () => setConfigMenuIsOpen(true) : null}
 						selectedSegments={selectedSegments}
 						onToggleSegment={toggleSegment}
 						canExportClients={canExportClients}
@@ -107,7 +109,7 @@ export default function SegmentsPage({ user, orgRFMConfig, canExportClients }: S
 					<SegmentsPageClients clientsQuery={clientsQuery} canExportClients={canExportClients} />
 				</div>
 			</div>
-			<SegmentsPageRFMHealth onOpenConfig={() => setConfigMenuIsOpen(true)} />
+			<SegmentsPageRFMHealth onOpenConfig={canManageClientBase ? () => setConfigMenuIsOpen(true) : null} />
 			{configMenuIsOpen ? (
 				orgRFMConfig ? (
 					<EditRFMConfig user={user} rfmConfig={orgRFMConfig} closeModal={() => setConfigMenuIsOpen(false)} />
@@ -982,7 +984,8 @@ function RFMSegmentCell({
 }
 
 type SegmentsPageMatrixRFMProps = {
-	onOpenConfig: () => void;
+	/** Ausente sem clientes.gerenciarBase: somem CONFIGURAR e SINCRONIZAR. */
+	onOpenConfig: (() => void) | null;
 	selectedSegments: string[];
 	onToggleSegment: (rfmLabel: string) => void;
 	canExportClients: boolean;
@@ -1016,14 +1019,18 @@ function SegmentsPageMatrixRFM({ onOpenConfig, selectedSegments, onToggleSegment
 					<h1 className="text-xs font-medium tracking-tight uppercase">MATRIZ RFM</h1>
 				</div>
 				<div className="flex items-center gap-2 flex-wrap justify-center lg:justify-end">
-					<Button variant="ghost" size="sm" className="flex items-center gap-2 text-[0.6rem] lg:text-sm" onClick={onOpenConfig}>
-						<Settings2 className="w-3 h-3 min-w-3 min-h-3 lg:w-4 lg:h-4 lg:min-w-4 lg:min-h-4" />
-						CONFIGURAR
-					</Button>
-					<Button variant="ghost" size="sm" className="flex items-center gap-2 text-[0.6rem] lg:text-sm" onClick={() => setSyncMenuIsOpen(true)}>
-						<RefreshCcw className="w-3 h-3 min-w-3 min-h-3 lg:w-4 lg:h-4 lg:min-w-4 lg:min-h-4" />
-						SINCRONIZAR
-					</Button>
+					{onOpenConfig ? (
+						<>
+							<Button variant="ghost" size="sm" className="flex items-center gap-2 text-[0.6rem] lg:text-sm" onClick={onOpenConfig}>
+								<Settings2 className="w-3 h-3 min-w-3 min-h-3 lg:w-4 lg:h-4 lg:min-w-4 lg:min-h-4" />
+								CONFIGURAR
+							</Button>
+							<Button variant="ghost" size="sm" className="flex items-center gap-2 text-[0.6rem] lg:text-sm" onClick={() => setSyncMenuIsOpen(true)}>
+								<RefreshCcw className="w-3 h-3 min-w-3 min-h-3 lg:w-4 lg:h-4 lg:min-w-4 lg:min-h-4" />
+								SINCRONIZAR
+							</Button>
+						</>
+					) : null}
 				</div>
 			</div>
 			<div className="flex w-full max-w-full items-center justify-center gap-1 self-center rounded-lg bg-primary/10 px-2 py-1 text-center text-[0.65rem] font-medium tracking-tight text-foreground/80">

@@ -10,12 +10,36 @@ import { captureOnboardingEvent } from "./analytics";
  * os envios; desliga quando uma dependência regrediu. Nunca toca campanhas sem `chavePreset`.
  * Idempotente: chamada em toda mudança de dependência (telefone conectado, template aprovado,
  * pagamento confirmado, liberação do usuário) e no fim do seed.
+ *
+ * `canActivate` é a permissão de quem disparou a reconciliação (`campanhas.ativar`). Quando falsa, a
+ * reconciliação só desliga: uma campanha pronta e liberada antes continua parada até alguém com a
+ * permissão reconciliar (ou o próximo evento de sistema). Caminhos de sistema (webhooks, jobs) não
+ * têm membro e mantêm o padrão `true`.
  */
-export async function reconcileOnboardingCampaigns({ executor, organizationId }: { executor: DB | DBTransaction; organizationId: string }) {
-	const connections = await executor.query.whatsappConnections.findMany({ where: eq(whatsappConnections.organizacaoId, organizationId), with: { telefones: true } });
-	const connection = connections.find((item) => item.telefones.length && (item.tipoConexao === "INTERNAL_GATEWAY" ? item.gatewayStatus === "connected" : !item.dataExpiracao || item.dataExpiracao > new Date()));
+export async function reconcileOnboardingCampaigns({
+	executor,
+	organizationId,
+	canActivate = true,
+}: {
+	executor: DB | DBTransaction;
+	organizationId: string;
+	canActivate?: boolean;
+}) {
+	const connections = await executor.query.whatsappConnections.findMany({
+		where: eq(whatsappConnections.organizacaoId, organizationId),
+		with: { telefones: true },
+	});
+	const connection = connections.find(
+		(item) =>
+			item.telefones.length &&
+			(item.tipoConexao === "INTERNAL_GATEWAY" ? item.gatewayStatus === "connected" : !item.dataExpiracao || item.dataExpiracao > new Date()),
+	);
 	const phone = connection?.telefones[0];
-	if (phone) await executor.update(campaigns).set({ whatsappConexaoTelefoneId: phone.id }).where(and(eq(campaigns.organizacaoId, organizationId), isNotNull(campaigns.chavePreset), isNull(campaigns.whatsappConexaoTelefoneId)));
+	if (phone)
+		await executor
+			.update(campaigns)
+			.set({ whatsappConexaoTelefoneId: phone.id })
+			.where(and(eq(campaigns.organizacaoId, organizationId), isNotNull(campaigns.chavePreset), isNull(campaigns.whatsappConexaoTelefoneId)));
 	const readiness = await getOnboardingReadiness({ executor, organizationId });
 	const changes: Array<{ id: string; chave: string; ativo: boolean }> = [];
 	for (const campaign of readiness.campanhas) {
@@ -23,6 +47,7 @@ export async function reconcileOnboardingCampaigns({ executor, organizationId }:
 		const shouldBeActive = campaign.pronta && enabled;
 		const isActive = campaign.estado === "ATIVA";
 		if (shouldBeActive === isActive) continue;
+		if (shouldBeActive && !canActivate) continue;
 		await executor
 			.update(campaigns)
 			.set({ ativo: shouldBeActive })

@@ -1,5 +1,5 @@
-import UnauthenticatedPage from "@/components/Utils/UnauthenticatedPage";
-import { getCurrentSession } from "@/lib/authentication/session";
+import { requireDashboardCapability } from "@/lib/access/guards";
+import { canManageClientBase } from "@/lib/permissions/clients";
 import { canExportClients } from "@/lib/permissions/sensitive-data";
 import { redirect } from "next/navigation";
 import SegmentsPage from "./segments-page";
@@ -9,7 +9,9 @@ import { and } from "drizzle-orm";
 import { eq } from "drizzle-orm";
 
 export default async function Segments() {
-	const sessionUser = await getCurrentSession();
+	const access = await requireDashboardCapability("segments");
+	if (access.unauthorized) return access.unauthorized;
+	const sessionUser = access.sessionUser;
 	if (!sessionUser) redirect("/auth/signin");
 
 	const orgId = sessionUser.membership?.organizacao.id;
@@ -20,6 +22,11 @@ export default async function Segments() {
 	});
 	const orgRFMConfig = rfmConfig?.valor.identificador === "CONFIG_RFM" ? rfmConfig.valor : null;
 	return (
-		<SegmentsPage user={sessionUser.user} orgRFMConfig={orgRFMConfig} canExportClients={canExportClients(sessionUser.membership?.permissoes)} />
+		<SegmentsPage
+			user={sessionUser.user}
+			orgRFMConfig={orgRFMConfig}
+			canExportClients={canExportClients(sessionUser.membership?.permissoes)}
+			canManageClientBase={canManageClientBase(sessionUser.membership?.permissoes)}
+		/>
 	);
 }

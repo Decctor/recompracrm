@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { assertCanEditCommunication, assertCanPickMessageTemplates, assertCanPublishCommunication } from "@/lib/communication/access";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { lockConnectedWhatsappPhone, mergeMessageTemplatePhoneMetadataSql } from "@/lib/db-utils";
 import { MessageTemplateSchema } from "@/schemas/message-templates";
@@ -10,6 +11,8 @@ import createHttpError from "http-errors";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import z from "zod";
+import { isDeepStrictEqual } from "node:util";
+import { canPublishCommunication } from "@/lib/permissions/communication";
 import {
 	applyWhatsappSubmissionResultToMetadata,
 	assertMessageTemplateValidForWhatsapp,
@@ -25,6 +28,11 @@ import { validateSurveyButtons } from "@/lib/message-templates/survey-validation
 import { assertTemplateButtonsNotFrozen } from "@/lib/message-templates/survey-guards";
 import { createSimplifiedSearchCondition } from "@/lib/search";
 import { DEFAULT_PAGE_SIZE, pageSizeInputSchema } from "@/lib/pagination";
+
+// JSONB devolve as chaves em outra ordem e sem `undefined`: compara a forma serializada, não o objeto cru.
+function toPlainJson(value: unknown) {
+	return JSON.parse(JSON.stringify(value ?? null));
+}
 
 // `metadados` é derivado das submissões à Meta e dos webhooks, nunca do cliente: aceitá-lo no payload
 // permitiria que uma aba aberta antes de uma desconexão regravasse entradas de telefones já removidos.
@@ -157,8 +165,11 @@ export type TCreateMessageTemplateOutput = Awaited<ReturnType<typeof createMessa
 async function createMessageTemplateRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	assertCanEditCommunication(session);
 	const payload = await request.json();
 	const input = CreateMessageTemplateInputSchema.parse(payload);
+	// Criar já enviando para a Meta é publicar; sem `publicar`, o cliente manda `submitWhatsapp: false`.
+	if (input.submitWhatsapp) assertCanPublishCommunication(session);
 	const organizationId = session.membership?.organizacao.id;
 	if (!organizationId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
 	const result = await createMessageTemplate({ input, organizationId, authorId: session.user.id });
@@ -172,11 +183,35 @@ export const UpdateMessageTemplateInputSchema = z.object({
 });
 export type TUpdateMessageTemplateInput = z.infer<typeof UpdateMessageTemplateInputSchema>;
 
-export async function updateMessageTemplate({ input, organizationId }: { input: TUpdateMessageTemplateInput; organizationId: string }) {
+export async function updateMessageTemplate({
+	input,
+	organizationId,
+	canPublish = true,
+}: {
+	input: TUpdateMessageTemplateInput;
+	organizationId: string;
+	/** `comunicacao.publicar` de quem edita. Sem ela, um template já enviado à Meta não muda de conteúdo nem de categoria. */
+	canPublish?: boolean;
+}) {
 	const existingTemplate = await db.query.messageTemplates.findFirst({
 		where: and(eq(messageTemplates.id, input.messageTemplateId), eq(messageTemplates.organizacaoId, organizationId)),
 	});
 	if (!existingTemplate) throw new createHttpError.NotFound("Template não encontrado.");
+	if (!canPublish && Object.keys(existingTemplate.metadados.porNumeroTelefone).length > 0) {
+		// Campanhas e atendimentos montam o envio a partir do conteúdo local contra o template aprovado na
+		// Meta: mudar o conteúdo sem reenviar desalinha os dois. Só quem publica pode fazer isso.
+		const contentChanged =
+			!!input.messageTemplate.conteudo &&
+			!isDeepStrictEqual(
+				toPlainJson(normalizeMessageTemplateContentParameters(input.messageTemplate.conteudo)),
+				toPlainJson(normalizeMessageTemplateContentParameters(existingTemplate.conteudo)),
+			);
+		const categoryChanged = !!input.messageTemplate.categoria && input.messageTemplate.categoria !== existingTemplate.categoria;
+		if (contentChanged || categoryChanged)
+			throw new createHttpError.Forbidden(
+				"Este template já foi enviado à Meta. Alterar o conteúdo ou a categoria exige a permissão de publicar templates.",
+			);
+	}
 
 	console.log("[UPDATE_MESSAGE_TEMPLATE] Content pre-normalization:", JSON.stringify(input.messageTemplate.conteudo, null, 2));
 
@@ -266,10 +301,13 @@ export type TUpdateMessageTemplateOutput = Awaited<ReturnType<typeof updateMessa
 async function updateMessageTemplateRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	assertCanEditCommunication(session);
 	const input = UpdateMessageTemplateInputSchema.parse(await request.json());
+	// Mesma condição de `updateMessageTemplate` para reenviar à Meta: só conteúdo ou categoria disparam o envio.
+	if (input.submitWhatsapp && (input.messageTemplate.conteudo || input.messageTemplate.categoria)) assertCanPublishCommunication(session);
 	const organizationId = session.membership?.organizacao.id;
 	if (!organizationId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
-	const result = await updateMessageTemplate({ input, organizationId });
+	const result = await updateMessageTemplate({ input, organizationId, canPublish: canPublishCommunication(session.membership?.permissoes) });
 	return NextResponse.json(result, { status: 200 });
 }
 
@@ -309,6 +347,9 @@ async function deleteMessageTemplateRoute(request: NextRequest) {
 		id: request.nextUrl.searchParams.get("id") ?? undefined,
 		deleteFromMeta: request.nextUrl.searchParams.get("deleteFromMeta") ?? undefined,
 	});
+	assertCanEditCommunication(session);
+	// Excluir também na Meta (o padrão) mexe no que está aprovado lá: publicar.
+	if (input.deleteFromMeta) assertCanPublishCommunication(session);
 	const result = await deleteMessageTemplate({ input, session });
 	return NextResponse.json(result, { status: 200 });
 }
@@ -401,6 +442,8 @@ export type TGetMessageTemplatesOutputById = Exclude<TGetMessageTemplatesOutput[
 async function getMessageTemplatesRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	// A lista também alimenta os seletores do builder de campanhas e do hub de atendimentos.
+	assertCanPickMessageTemplates(session);
 	const input = GetMessageTemplatesInputSchema.parse({
 		id: request.nextUrl.searchParams.get("id") ?? undefined,
 		search: request.nextUrl.searchParams.get("search") ?? undefined,
