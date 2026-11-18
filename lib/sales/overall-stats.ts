@@ -1,9 +1,10 @@
+import { countPeriodDays } from "@/lib/period-presets";
 import { getSalesIntegrationCondition } from "@/lib/sales/integration-filter";
 import type { TSaleStatsGeneralQueryParams } from "@/schemas/query-params-utils";
 import { db } from "@/services/drizzle";
 import { clients, saleItems, sales } from "@/services/drizzle/schema";
 import dayjs from "dayjs";
-import { and, count, eq, exists, gte, inArray, isNull, lt, lte, notInArray, sum } from "drizzle-orm";
+import { type SQL, and, count, eq, exists, gte, inArray, isNull, lt, lte, notInArray, sum } from "drizzle-orm";
 
 /**
  * Agregações de resultado comercial do período, extraídas de `app/api/stats/sales-overall/route.ts`
@@ -14,6 +15,8 @@ import { and, count, eq, exists, gte, inArray, isNull, lt, lte, notInArray, sum 
  */
 
 export type TOverallSalesStats = {
+	/** O recorte contra o qual os `anterior` foram calculados; `null` quando não houve comparação. */
+	periodoComparacao: { after: string; before: string; dias: number } | null;
 	faturamentoMeta: number;
 	faturamentoMetaPorcentagem: number;
 	faturamento: {
@@ -124,8 +127,79 @@ export async function getOverallSaleGoal({ after, before, organizacaoId }: GetOv
 	}
 }
 
-export async function getOverallStats(filters: TSaleStatsGeneralQueryParams, organizacaoId: string) {
-	const conditions = [eq(sales.organizacaoId, organizacaoId), eq(sales.statusVenda, "CONFIRMADA")];
+type TStatsPeriod = { after: Date; before: Date };
+
+/** Totais de um período sob as mesmas condições — chamado para o período base e para o de comparação. */
+async function getPeriodTotals({ conditions, organizacaoId, period }: { conditions: SQL[]; organizacaoId: string; period: TStatsPeriod }) {
+	const periodConditions = [...conditions, gte(sales.dataVenda, period.after), lte(sales.dataVenda, period.before)];
+
+	const [salesTotalsResult, itemsTotalsResult, existingClientsResult, newClientsResult, nonIdentifiedResult] = await Promise.all([
+		db
+			.select({ qtde: count(sales.id), valorTotal: sum(sales.valorTotal), custoTotal: sum(sales.custoTotal) })
+			.from(sales)
+			.where(and(...periodConditions)),
+		db
+			.select({ total: sum(saleItems.quantidade) })
+			.from(saleItems)
+			.where(
+				and(
+					eq(saleItems.organizacaoId, organizacaoId),
+					inArray(
+						saleItems.vendaId,
+						db
+							.select({ id: sales.id })
+							.from(sales)
+							.where(and(...periodConditions)),
+					),
+				),
+			),
+		// Composição do faturamento: clientes que já compravam, clientes novos no período e vendas sem cliente.
+		db
+			.select({ total: sum(sales.valorTotal) })
+			.from(sales)
+			.innerJoin(clients, eq(sales.clienteId, clients.id))
+			.where(and(...periodConditions, eq(clients.organizacaoId, organizacaoId), lt(clients.primeiraCompraData, period.after))),
+		db
+			.select({ total: sum(sales.valorTotal) })
+			.from(sales)
+			.innerJoin(clients, eq(sales.clienteId, clients.id))
+			.where(
+				and(
+					...periodConditions,
+					eq(clients.organizacaoId, organizacaoId),
+					gte(clients.primeiraCompraData, period.after),
+					lte(clients.primeiraCompraData, period.before),
+				),
+			),
+		db
+			.select({ total: sum(sales.valorTotal) })
+			.from(sales)
+			.leftJoin(clients, eq(sales.clienteId, clients.id))
+			.where(and(...periodConditions, isNull(clients.id))),
+	]);
+
+	const toNumber = (value: string | null | undefined) => (value ? Number(value) : 0);
+	return {
+		qtdeVendas: salesTotalsResult[0]?.qtde ?? 0,
+		valorTotal: toNumber(salesTotalsResult[0]?.valorTotal),
+		custoTotal: toNumber(salesTotalsResult[0]?.custoTotal),
+		qtdeItens: toNumber(itemsTotalsResult[0]?.total),
+		clientesRecorrentes: toNumber(existingClientsResult[0]?.total),
+		novosClientes: toNumber(newClientsResult[0]?.total),
+		naoIdentificados: toNumber(nonIdentifiedResult[0]?.total),
+		dias: countPeriodDays(period),
+	};
+}
+
+/**
+ * Resultado comercial do período e, quando informado, do período de comparação.
+ *
+ * Quem chama escolhe com o que comparar: o painel manda as datas resolvidas no navegador (a regra
+ * escolhida pelo usuário, em hora local) e o agente manda o período anterior de mesma duração. Sem
+ * `comparisonPeriod`, nenhuma métrica traz `anterior`.
+ */
+export async function getOverallStats(filters: TSaleStatsGeneralQueryParams, organizacaoId: string, comparisonPeriod?: TStatsPeriod | null) {
+	const conditions: SQL[] = [eq(sales.organizacaoId, organizacaoId), eq(sales.statusVenda, "CONFIRMADA")];
 
 	if (filters.total.min) conditions.push(gte(sales.valorTotal, filters.total.min));
 	if (filters.total.max) conditions.push(lte(sales.valorTotal, filters.total.max));
@@ -145,275 +219,65 @@ export async function getOverallStats(filters: TSaleStatsGeneralQueryParams, org
 		);
 	if (filters.excludedSalesIds) conditions.push(notInArray(sales.id, filters.excludedSalesIds));
 
-	const totalSalesStatsResult = await db
-		.select({
-			qtde: count(sales.id),
-			valorTotal: sum(sales.valorTotal),
-			custoTotal: sum(sales.custoTotal),
-		})
-		.from(sales)
-		.where(
-			and(
-				...conditions,
-				filters.period.after ? gte(sales.dataVenda, new Date(filters.period.after)) : undefined,
-				filters.period.before ? lte(sales.dataVenda, new Date(filters.period.before)) : undefined,
-			),
-		);
+	const period = { after: new Date(filters.period.after), before: new Date(filters.period.before) };
+	const [current, previous] = await Promise.all([
+		getPeriodTotals({ conditions, organizacaoId, period }),
+		comparisonPeriod ? getPeriodTotals({ conditions, organizacaoId, period: comparisonPeriod }) : null,
+	]);
 
-	const totalSalesStats = totalSalesStatsResult[0];
-
-	const totalSalesQty = totalSalesStats.qtde;
-	const totalSalesValorTotal = totalSalesStats.valorTotal ? Number(totalSalesStats.valorTotal) : 0;
-	const totalSalesCustoTotal = totalSalesStats.custoTotal ? Number(totalSalesStats.custoTotal) : 0;
-
-	console.log("[INFO] [GET_OVERALL_STATS] Total sales items stats result: ", { totalSalesValorTotal, totalSalesCustoTotal });
-	const totalSalesItemsStatsResult = await db
-		.select({
-			total: sum(saleItems.quantidade),
-		})
-		.from(saleItems)
-		.where(
-			and(
-				eq(saleItems.organizacaoId, organizacaoId),
-				inArray(
-					saleItems.vendaId,
-					db
-						.select({ id: sales.id })
-						.from(sales)
-						.where(
-							and(
-								...conditions,
-								filters.period.after ? gte(sales.dataVenda, new Date(filters.period.after)) : undefined,
-								filters.period.before ? lte(sales.dataVenda, new Date(filters.period.before)) : undefined,
-							),
-						),
-				),
-			),
-		);
-
-	const totalSalesItemsStats = totalSalesItemsStatsResult[0];
-	const totalSalesItemsQty = totalSalesItemsStats.total ? Number(totalSalesItemsStats.total) : 0;
-
-	const periodAfter = filters.period.after ? new Date(filters.period.after) : null;
-	const periodBefore = filters.period.before ? new Date(filters.period.before) : null;
-
-	// Revenue breakdown: existing clients, new clients, non-identified (ao consumidor)
-	const existingClientsRevenueResult =
-		periodAfter && periodBefore
-			? await db
-					.select({ total: sum(sales.valorTotal) })
-					.from(sales)
-					.innerJoin(clients, eq(sales.clienteId, clients.id))
-					.where(
-						and(
-							...conditions,
-							eq(clients.organizacaoId, organizacaoId),
-							gte(sales.dataVenda, periodAfter),
-							lte(sales.dataVenda, periodBefore),
-							lt(clients.primeiraCompraData, periodAfter),
-						),
-					)
-			: null;
-	const newClientsRevenueResult =
-		periodAfter && periodBefore
-			? await db
-					.select({ total: sum(sales.valorTotal) })
-					.from(sales)
-					.innerJoin(clients, eq(sales.clienteId, clients.id))
-					.where(
-						and(
-							...conditions,
-							eq(clients.organizacaoId, organizacaoId),
-							gte(sales.dataVenda, periodAfter),
-							lte(sales.dataVenda, periodBefore),
-							gte(clients.primeiraCompraData, periodAfter),
-							lte(clients.primeiraCompraData, periodBefore),
-						),
-					)
-			: null;
-	const nonIdentifiedRevenueResult =
-		periodAfter && periodBefore
-			? await db
-					.select({ total: sum(sales.valorTotal) })
-					.from(sales)
-					.leftJoin(clients, eq(sales.clienteId, clients.id))
-					.where(and(...conditions, gte(sales.dataVenda, periodAfter), lte(sales.dataVenda, periodBefore), isNull(clients.id)))
-			: null;
-
-	const existingClientsRevenue = existingClientsRevenueResult?.[0]?.total ? Number(existingClientsRevenueResult[0].total) : 0;
-	const newClientsRevenue = newClientsRevenueResult?.[0]?.total ? Number(newClientsRevenueResult[0].total) : 0;
-	const nonIdentifiedRevenue = nonIdentifiedRevenueResult?.[0]?.total ? Number(nonIdentifiedRevenueResult[0].total) : 0;
-	const revenuePercentage = (val: number) => (totalSalesValorTotal > 0 ? (val / totalSalesValorTotal) * 100 : 0);
-
-	if (!filters.period.after && !filters.period.before) {
-		return {
-			faturamento: {
-				atual: totalSalesValorTotal,
-				anterior: undefined,
-			},
-			margemBruta: {
-				atual: totalSalesValorTotal - totalSalesCustoTotal,
-				anterior: undefined,
-			},
-			qtdeVendas: {
-				atual: totalSalesQty,
-				anterior: undefined,
-			},
-			qtdeItensVendidos: {
-				atual: totalSalesItemsQty,
-				anterior: undefined,
-			},
-			itensPorVendaMedio: {
-				atual: totalSalesItemsQty / totalSalesQty,
-				anterior: undefined,
-			},
-			ticketMedio: {
-				atual: totalSalesValorTotal / totalSalesQty,
-				anterior: undefined,
-			},
-			valorDiarioVendido: {
-				atual: totalSalesValorTotal / dayjs(filters.period.before).diff(dayjs(filters.period.after), "days"),
-				anterior: undefined,
-			},
-			faturamentoViaClientesRecorrentes: {
-				atual: existingClientsRevenue,
-				anterior: undefined,
-				porcentagem: revenuePercentage(existingClientsRevenue),
-			},
-			faturamentoViaNovosClientes: {
-				atual: newClientsRevenue,
-				anterior: undefined,
-				porcentagem: revenuePercentage(newClientsRevenue),
-			},
-			faturamentoViaClientesNaoIdentificados: {
-				atual: nonIdentifiedRevenue,
-				anterior: undefined,
-				porcentagem: revenuePercentage(nonIdentifiedRevenue),
-			},
-		};
-	}
-
-	const dateDiff = dayjs(filters.period.before).diff(dayjs(filters.period.after), "days");
-	const previousPeriodAfter = dayjs(filters.period.after).subtract(dateDiff, "days").toDate();
-	const previousPeriodBefore = dayjs(filters.period.before).subtract(dateDiff, "days").toDate();
-
-	const previousTotalSalesStatsResult = await db
-		.select({
-			qtde: count(sales.id),
-			valorTotal: sum(sales.valorTotal),
-			custoTotal: sum(sales.custoTotal),
-		})
-		.from(sales)
-		.where(and(...conditions, gte(sales.dataVenda, previousPeriodAfter), lte(sales.dataVenda, previousPeriodBefore)));
-
-	const previousTotalSalesStats = previousTotalSalesStatsResult[0];
-
-	const previousTotalSalesQty = previousTotalSalesStats.qtde;
-	const previousTotalSalesValorTotal = previousTotalSalesStats.valorTotal ? Number(previousTotalSalesStats.valorTotal) : 0;
-	const previousTotalSalesCustoTotal = previousTotalSalesStats.custoTotal ? Number(previousTotalSalesStats.custoTotal) : 0;
-
-	const previousTotalSalesItemsStatsResult = await db
-		.select({
-			total: sum(saleItems.quantidade),
-		})
-		.from(saleItems)
-		.where(
-			and(
-				eq(saleItems.organizacaoId, organizacaoId),
-				inArray(
-					saleItems.vendaId,
-					db
-						.select({ id: sales.id })
-						.from(sales)
-						.where(and(...conditions, gte(sales.dataVenda, previousPeriodAfter), lte(sales.dataVenda, previousPeriodBefore))),
-				),
-			),
-		);
-
-	const previousTotalSalesItemsStats = previousTotalSalesItemsStatsResult[0];
-	const previousTotalSalesItemsQty = previousTotalSalesItemsStats.total ? Number(previousTotalSalesItemsStats.total) : 0;
-
-	// Revenue breakdown - período anterior
-	const prevExistingClientsRevenueResult = await db
-		.select({ total: sum(sales.valorTotal) })
-		.from(sales)
-		.innerJoin(clients, eq(sales.clienteId, clients.id))
-		.where(
-			and(
-				...conditions,
-				eq(clients.organizacaoId, organizacaoId),
-				gte(sales.dataVenda, previousPeriodAfter),
-				lte(sales.dataVenda, previousPeriodBefore),
-				lt(clients.primeiraCompraData, previousPeriodAfter),
-			),
-		);
-	const prevNewClientsRevenueResult = await db
-		.select({ total: sum(sales.valorTotal) })
-		.from(sales)
-		.innerJoin(clients, eq(sales.clienteId, clients.id))
-		.where(
-			and(
-				...conditions,
-				eq(clients.organizacaoId, organizacaoId),
-				gte(sales.dataVenda, previousPeriodAfter),
-				lte(sales.dataVenda, previousPeriodBefore),
-				gte(clients.primeiraCompraData, previousPeriodAfter),
-				lte(clients.primeiraCompraData, previousPeriodBefore),
-			),
-		);
-	const prevNonIdentifiedRevenueResult = await db
-		.select({ total: sum(sales.valorTotal) })
-		.from(sales)
-		.leftJoin(clients, eq(sales.clienteId, clients.id))
-		.where(and(...conditions, gte(sales.dataVenda, previousPeriodAfter), lte(sales.dataVenda, previousPeriodBefore), isNull(clients.id)));
-
-	const prevExistingClientsRevenue = prevExistingClientsRevenueResult[0]?.total ? Number(prevExistingClientsRevenueResult[0].total) : 0;
-	const prevNewClientsRevenue = prevNewClientsRevenueResult[0]?.total ? Number(prevNewClientsRevenueResult[0].total) : 0;
-	const prevNonIdentifiedRevenue = prevNonIdentifiedRevenueResult[0]?.total ? Number(prevNonIdentifiedRevenueResult[0].total) : 0;
+	const revenuePercentage = (val: number) => (current.valorTotal > 0 ? (val / current.valorTotal) * 100 : 0);
 
 	return {
+		periodoComparacao: comparisonPeriod
+			? {
+					after: comparisonPeriod.after.toISOString(),
+					before: comparisonPeriod.before.toISOString(),
+					dias: previous?.dias ?? countPeriodDays(comparisonPeriod),
+				}
+			: null,
 		faturamento: {
-			atual: totalSalesValorTotal,
-			anterior: previousTotalSalesValorTotal,
+			atual: current.valorTotal,
+			anterior: previous?.valorTotal,
 		},
 		margemBruta: {
-			atual: totalSalesValorTotal - totalSalesCustoTotal,
-			anterior: previousTotalSalesValorTotal - previousTotalSalesCustoTotal,
+			atual: current.valorTotal - current.custoTotal,
+			anterior: previous ? previous.valorTotal - previous.custoTotal : undefined,
 		},
 		qtdeVendas: {
-			atual: totalSalesQty,
-			anterior: previousTotalSalesQty,
+			atual: current.qtdeVendas,
+			anterior: previous?.qtdeVendas,
 		},
 		qtdeItensVendidos: {
-			atual: totalSalesItemsQty,
-			anterior: previousTotalSalesItemsQty,
+			atual: current.qtdeItens,
+			anterior: previous?.qtdeItens,
 		},
 		itensPorVendaMedio: {
-			atual: totalSalesItemsQty / totalSalesQty,
-			anterior: previousTotalSalesItemsQty / previousTotalSalesQty,
+			atual: current.qtdeItens / current.qtdeVendas,
+			anterior: previous ? previous.qtdeItens / previous.qtdeVendas : undefined,
 		},
 		ticketMedio: {
-			atual: totalSalesValorTotal / totalSalesQty,
-			anterior: previousTotalSalesValorTotal / previousTotalSalesQty,
+			atual: current.valorTotal / current.qtdeVendas,
+			anterior: previous ? previous.valorTotal / previous.qtdeVendas : undefined,
 		},
+		// Cada lado divide pelos próprios dias: um recorte personalizado pode ter outra duração.
 		valorDiarioVendido: {
-			atual: totalSalesValorTotal / dateDiff,
-			anterior: previousTotalSalesValorTotal / dateDiff,
+			atual: current.valorTotal / current.dias,
+			anterior: previous ? previous.valorTotal / previous.dias : undefined,
 		},
 		faturamentoViaClientesRecorrentes: {
-			atual: existingClientsRevenue,
-			anterior: prevExistingClientsRevenue,
-			porcentagem: revenuePercentage(existingClientsRevenue),
+			atual: current.clientesRecorrentes,
+			anterior: previous?.clientesRecorrentes,
+			porcentagem: revenuePercentage(current.clientesRecorrentes),
 		},
 		faturamentoViaNovosClientes: {
-			atual: newClientsRevenue,
-			anterior: prevNewClientsRevenue,
-			porcentagem: revenuePercentage(newClientsRevenue),
+			atual: current.novosClientes,
+			anterior: previous?.novosClientes,
+			porcentagem: revenuePercentage(current.novosClientes),
 		},
 		faturamentoViaClientesNaoIdentificados: {
-			atual: nonIdentifiedRevenue,
-			anterior: prevNonIdentifiedRevenue,
-			porcentagem: revenuePercentage(nonIdentifiedRevenue),
+			atual: current.naoIdentificados,
+			anterior: previous?.naoIdentificados,
+			porcentagem: revenuePercentage(current.naoIdentificados),
 		},
 	};
 }

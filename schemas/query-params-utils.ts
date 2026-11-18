@@ -42,3 +42,12 @@ export type TSalesGraphFilters = z.infer<typeof SalesGraphFilterSchema>;
 
 export const SalesGeneralStatsFiltersSchema = SalesStatsGeneralQueryParamsSchema;
 export type TSalesGeneralStatsFilters = z.infer<typeof SalesGeneralStatsFiltersSchema>;
+
+/**
+ * Filtros da visão geral de vendas mais o recorte de comparação, já resolvido no navegador (a regra
+ * escolhida pelo usuário, em hora local). Sem ele, a visão geral não calcula `anterior`.
+ */
+export const SalesOverallStatsFiltersSchema = SalesStatsGeneralQueryParamsSchema.extend({
+	comparisonPeriod: PeriodQueryParamSchema.optional().nullable(),
+});
+export type TSalesOverallStatsFilters = z.infer<typeof SalesOverallStatsFiltersSchema>;

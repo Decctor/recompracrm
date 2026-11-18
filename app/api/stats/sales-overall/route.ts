@@ -4,7 +4,7 @@ import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { assertSellersIdsWithinResultsScope } from "@/lib/permissions/results-scope";
 import { canViewCosts } from "@/lib/permissions/sensitive-data";
 import { getOverallSaleGoal, getOverallStats, type TOverallSalesStats } from "@/lib/sales/overall-stats";
-import { SalesGeneralStatsFiltersSchema } from "@/schemas/query-params-utils";
+import { SalesOverallStatsFiltersSchema } from "@/schemas/query-params-utils";
 import createHttpError from "http-errors";
 
 // As agregações vivem em `lib/sales/overall-stats` (compartilhadas com o agente de IA); o tipo
@@ -22,7 +22,7 @@ const getSalesOverallStatsRoute: PagesRouteHandler<GetResponse> = async (req, re
 	const userOrgId = userOrgMembership?.organizacao.id;
 	if (!userOrgId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
 
-	const filters = SalesGeneralStatsFiltersSchema.parse(req.body);
+	const { comparisonPeriod, ...filters } = SalesOverallStatsFiltersSchema.parse(req.body);
 
 	await assertSellersIdsWithinResultsScope({
 		organizacaoId: userOrgId,
@@ -37,8 +37,13 @@ const getSalesOverallStatsRoute: PagesRouteHandler<GetResponse> = async (req, re
 		organizacaoId: userOrgId,
 	});
 
-	const stats = await getOverallStats(filters, userOrgId);
+	const stats = await getOverallStats(
+		filters,
+		userOrgId,
+		comparisonPeriod ? { after: new Date(comparisonPeriod.after), before: new Date(comparisonPeriod.before) } : null,
+	);
 	const overallStats: TOverallSalesStats = {
+		periodoComparacao: stats.periodoComparacao,
 		faturamentoMetaPorcentagem: (stats.faturamento.atual / overallSaleGoal) * 100,
 		faturamento: stats.faturamento,
 		// Margem é faturamento − custo: quem não vê custo não recebe o número (o bloco já não a exibe).

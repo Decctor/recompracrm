@@ -4,15 +4,14 @@ import ErrorComponent from "@/components/Layouts/ErrorComponent";
 import LoadingComponent from "@/components/Layouts/LoadingComponent";
 import { StatEmptyState } from "@/components/SalesStats/StatEmptyState";
 import { CommercialInlineFilters } from "@/components/Stats/CommercialInlineFilters";
-import { InteractiveFilter } from "@/components/ui/interactive-filter";
-import { formatInteractiveDateRangeSummary } from "@/components/ui/interactive-filter-formatting";
+import { ComparisonPeriodFilter } from "@/components/Stats/ComparisonPeriodFilter";
 import { getErrorMessage } from "@/lib/errors";
-import { buildComparisonPeriodPresets, matchPeriodPreset } from "@/lib/period-presets";
+import { COMPARISON_PRESET_IDS, DEFAULT_COMPARISON_PRESET_ID, type TComparisonSelection, resolveComparisonPeriod } from "@/lib/period-presets";
 import { useSalesComparison } from "@/lib/queries/stats/comparison";
 import type { TSaleStatsGeneralQueryParams } from "@/schemas/query-params-utils";
 import dayjs from "dayjs";
-import { ChartNoAxesColumnIncreasing, GitCompare } from "lucide-react";
-import { parseAsArrayOf, parseAsFloat, parseAsIsoDateTime, parseAsString, useQueryStates } from "nuqs";
+import { ChartNoAxesColumnIncreasing } from "lucide-react";
+import { parseAsArrayOf, parseAsFloat, parseAsIsoDateTime, parseAsString, parseAsStringLiteral, useQueryStates } from "nuqs";
 import { ComparisonChartBlock } from "./comparison-chart-block";
 import { ComparisonRankingsBlock } from "./comparison-rankings-block";
 import { ComparisonSummaryBlock } from "./comparison-summary-block";
@@ -27,15 +26,16 @@ const defaultAfter = dayjs().startOf("month").toDate();
 const defaultBefore = dayjs().endOf("day").toDate();
 
 /**
- * Comparativo de dois períodos. O período base e os filtros são os mesmos da análise comercial; o
- * período de comparação acompanha o base ("período anterior") até o usuário fixar outro, e tudo
- * vive na URL para que a comparação possa ser compartilhada.
+ * Comparativo de dois períodos. O período base e os filtros são os mesmos da análise comercial, e
+ * tudo vive na URL para que a comparação possa ser compartilhada. Uma regra (`compare`) acompanha o
+ * período base; só o recorte personalizado (`compareAfter`/`compareBefore`) fixa datas.
  */
 export function ComparisonView({ scopeSellersIds }: ComparisonViewProps) {
 	const [params, setParams] = useQueryStates(
 		{
 			after: parseAsIsoDateTime.withDefault(defaultAfter),
 			before: parseAsIsoDateTime.withDefault(defaultBefore),
+			compare: parseAsStringLiteral(COMPARISON_PRESET_IDS),
 			compareAfter: parseAsIsoDateTime,
 			compareBefore: parseAsIsoDateTime,
 			sellersIds: parseAsArrayOf(parseAsString).withDefault([]),
@@ -49,16 +49,20 @@ export function ComparisonView({ scopeSellersIds }: ComparisonViewProps) {
 	);
 
 	const base = { after: params.after, before: params.before };
-	const comparisonPresets = buildComparisonPeriodPresets(base);
-	const isComparisonPinned = params.compareAfter !== null && params.compareBefore !== null;
-	const comparacao =
+	const comparisonSelection: TComparisonSelection =
 		params.compareAfter !== null && params.compareBefore !== null
-			? { after: params.compareAfter, before: params.compareBefore }
-			: (() => {
-					const previous = comparisonPresets[0].getValue(new Date());
-					return { after: previous.from, before: previous.to };
-				})();
-	const matchedComparisonPreset = matchPeriodPreset(comparisonPresets, comparacao);
+			? { kind: "custom", after: params.compareAfter, before: params.compareBefore }
+			: { kind: "preset", presetId: params.compare ?? DEFAULT_COMPARISON_PRESET_ID };
+	// O "agora" vai ao minuto: a chave da consulta não muda a cada render.
+	const referenceDate = dayjs().startOf("minute").toDate();
+	// Sem "sem comparação" aqui, a seleção sempre resolve num recorte.
+	const comparacao = resolveComparisonPeriod(comparisonSelection, base, referenceDate) ?? base;
+
+	function updateComparison(next: TComparisonSelection) {
+		if (next.kind === "custom") void setParams({ compare: null, compareAfter: next.after, compareBefore: next.before });
+		else if (next.kind === "preset")
+			void setParams({ compare: next.presetId === DEFAULT_COMPARISON_PRESET_ID ? null : next.presetId, compareAfter: null, compareBefore: null });
+	}
 
 	const queryParams: TSaleStatsGeneralQueryParams = {
 		period: { after: params.after.toISOString(), before: params.before.toISOString() },
@@ -97,30 +101,7 @@ export function ComparisonView({ scopeSellersIds }: ComparisonViewProps) {
 	return (
 		<div className="flex w-full flex-col gap-4">
 			<CommercialInlineFilters scopeSellersIds={scopeSellersIds} queryParams={queryParams} updateQueryParams={updateQueryParams}>
-				<InteractiveFilter.Root className="w-fit">
-					<InteractiveFilter.Trigger>
-						<InteractiveFilter.Icon>
-							<GitCompare className="h-4 w-4" />
-							<InteractiveFilter.Label>COMPARAR COM</InteractiveFilter.Label>
-						</InteractiveFilter.Icon>
-						<InteractiveFilter.Value>
-							{matchedComparisonPreset ? matchedComparisonPreset.label : formatInteractiveDateRangeSummary(comparacao.after, comparacao.before)}
-						</InteractiveFilter.Value>
-						{isComparisonPinned ? <InteractiveFilter.Clear onClear={() => void setParams({ compareAfter: null, compareBefore: null })} /> : null}
-					</InteractiveFilter.Trigger>
-					<InteractiveFilter.Content className="w-auto p-0">
-						<InteractiveFilter.DateRangeContent
-							value={{ from: comparacao.after, to: comparacao.before }}
-							presets={comparisonPresets}
-							onChange={(period) =>
-								void setParams({
-									compareAfter: period.from ? dayjs(period.from).startOf("day").toDate() : comparacao.after,
-									compareBefore: period.to ? dayjs(period.to).endOf("day").toDate() : comparacao.before,
-								})
-							}
-						/>
-					</InteractiveFilter.Content>
-				</InteractiveFilter.Root>
+				<ComparisonPeriodFilter base={base} referenceDate={referenceDate} value={comparisonSelection} onChange={updateComparison} />
 			</CommercialInlineFilters>
 
 			{isLoading ? (

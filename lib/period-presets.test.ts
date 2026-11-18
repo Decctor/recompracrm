@@ -4,7 +4,9 @@ import {
 	REPORT_PERIOD_PRESETS,
 	UPCOMING_PERIOD_PRESETS,
 	buildComparisonPeriodPresets,
+	countPeriodDays,
 	matchPeriodPreset,
+	resolveComparisonPeriod,
 	toFullDayRange,
 	type TPeriodPreset,
 } from "./period-presets";
@@ -94,6 +96,7 @@ describe("UPCOMING_PERIOD_PRESETS", () => {
 
 describe("buildComparisonPeriodPresets", () => {
 	const base = { after: local(2026, 9, 1), before: local(2026, 9, 15, true) };
+	const afterOctober = new Date(2026, 10, 5, 10, 0, 0, 0);
 
 	it("período anterior tem a mesma duração e termina 1ms antes do base", () => {
 		const { from, to } = preset(buildComparisonPeriodPresets(base), "previous-period").getValue(reference);
@@ -113,14 +116,68 @@ describe("buildComparisonPeriodPresets", () => {
 	it("período anterior de um mês de 31 dias são 31 dias, não o mês de calendário anterior", () => {
 		// Para "setembro inteiro" existe o atalho de mês anterior; este é literal na duração.
 		const month = { after: local(2026, 9, 1), before: local(2026, 9, 31, true) };
-		const { from, to } = preset(buildComparisonPeriodPresets(month), "previous-period").getValue(reference);
+		const { from, to } = preset(buildComparisonPeriodPresets(month), "previous-period").getValue(afterOctober);
 		assert.deepEqual([from, to], [local(2026, 7, 31), local(2026, 8, 30, true)]);
 	});
 
 	it("mesmo período do mês anterior de um mês inteiro é o mês de calendário anterior inteiro", () => {
 		const month = { after: local(2026, 9, 1), before: local(2026, 9, 31, true) };
-		const { from, to } = preset(buildComparisonPeriodPresets(month), "same-period-previous-month").getValue(reference);
+		const { from, to } = preset(buildComparisonPeriodPresets(month), "same-period-previous-month").getValue(afterOctober);
 		assert.deepEqual([from, to], [local(2026, 8, 1), local(2026, 8, 30, true)]);
+	});
+
+	it("período em curso: a comparação para no mesmo instante do outro mês, não no fim do dia", () => {
+		// "Este mês" às 16:18 do dia 18: o dia de hoje está pela metade, o de outubro também tem de estar.
+		const now = new Date(2026, 10, 18, 16, 18, 0, 0);
+		const thisMonth = { after: local(2026, 10, 1), before: local(2026, 10, 18, true) };
+		const { from, to } = preset(buildComparisonPeriodPresets(thisMonth), "same-period-previous-month").getValue(now);
+		assert.deepEqual([from, to], [local(2026, 9, 1), new Date(2026, 9, 18, 16, 18, 0, 0)]);
+	});
+
+	it("período em curso: o período anterior tem a duração decorrida até agora", () => {
+		const now = new Date(2026, 10, 2, 12, 0, 0, 0);
+		const thisMonth = { after: local(2026, 10, 1), before: local(2026, 10, 2, true) };
+		const { from, to } = preset(buildComparisonPeriodPresets(thisMonth), "previous-period").getValue(now);
+		// 36h decorridas → as 36h antes de 01/11 (a janela termina 1ms antes do início do base).
+		assert.deepEqual([from, to], [new Date(2026, 9, 30, 11, 59, 59, 999), new Date(2026, 9, 31, 23, 59, 59, 999)]);
+	});
+
+	it("1º a 17 de novembro, já encerrado, compara com 1º a 17 de outubro", () => {
+		const base = { after: local(2026, 10, 1), before: local(2026, 10, 17, true) };
+		const { from, to } = preset(buildComparisonPeriodPresets(base), "same-period-previous-month").getValue(new Date(2026, 10, 18, 16, 18));
+		assert.deepEqual([from, to], [local(2026, 9, 1), local(2026, 9, 17, true)]);
+	});
+});
+
+describe("resolveComparisonPeriod", () => {
+	const base = { after: local(2026, 10, 1), before: local(2026, 10, 17, true) };
+	const now = new Date(2026, 10, 18, 16, 18);
+
+	it("atalho guarda a regra: as datas acompanham o período base", () => {
+		const selection = { kind: "preset", presetId: "same-period-previous-month" } as const;
+		assert.deepEqual(resolveComparisonPeriod(selection, base, now), { after: local(2026, 9, 1), before: local(2026, 9, 17, true) });
+		const otherBase = { after: local(2026, 8, 10), before: local(2026, 8, 20, true) };
+		assert.deepEqual(resolveComparisonPeriod(selection, otherBase, now), { after: local(2026, 7, 10), before: local(2026, 7, 20, true) });
+	});
+
+	it("personalizado devolve as próprias datas, e sem comparação devolve null", () => {
+		const custom = { kind: "custom", after: local(2026, 0, 3), before: local(2026, 0, 9, true) } as const;
+		assert.deepEqual(resolveComparisonPeriod(custom, base, now), { after: custom.after, before: custom.before });
+		assert.equal(resolveComparisonPeriod({ kind: "none" }, base, now), null);
+	});
+});
+
+describe("countPeriodDays", () => {
+	it("conta 1º a 17 como 17 dias, não 16", () => {
+		assert.equal(countPeriodDays({ after: local(2026, 10, 1), before: local(2026, 10, 17, true) }), 17);
+	});
+
+	it("um dia só é um dia", () => {
+		assert.equal(countPeriodDays({ after: local(2026, 10, 1), before: local(2026, 10, 1, true) }), 1);
+	});
+
+	it("o dia em curso conta como um dia", () => {
+		assert.equal(countPeriodDays({ after: local(2026, 9, 1), before: new Date(2026, 9, 18, 16, 18) }), 18);
 	});
 });
 
