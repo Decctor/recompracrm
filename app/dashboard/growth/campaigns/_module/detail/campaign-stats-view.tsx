@@ -1,5 +1,6 @@
 "use client";
 import type { TGetCampaignInteractionsOutputItems } from "@/app/api/campaigns/interactions/route";
+import type { TGetCampaignStatsOutput } from "@/app/api/campaigns/stats/by-campaign/route";
 import type { TGetConversionQualityOutput } from "@/app/api/campaigns/stats/conversion-quality/route";
 import { getTriggerMeta } from "@/app/dashboard/growth/campaigns/_module/builder/helpers/triggers";
 import CampaignDispatchesSection from "@/app/dashboard/growth/campaigns/_module/detail/components/campaign-dispatches-section";
@@ -48,6 +49,7 @@ import {
 	CircleCheck,
 	CircleX,
 	Clock,
+	Coins,
 	Code,
 	Diamond,
 	FileText,
@@ -221,7 +223,13 @@ export default function CampaignStatsView({ campaignId }: CampaignStatsViewProps
 
 			<div className="grid w-full grid-cols-1 items-start gap-3 lg:grid-cols-2">
 				<InteractionsSection campaignId={campaignId} />
-				<ConversionsSection campaignId={campaignId} startDate={period.startDate} endDate={period.endDate} />
+				<ConversionsSection
+					campaignId={campaignId}
+					startDate={period.startDate}
+					endDate={period.endDate}
+					totalConversions={conversoes}
+					benefitsSummary={performance?.beneficiosUtilizados}
+				/>
 			</div>
 		</div>
 	);
@@ -367,7 +375,22 @@ function ImpactBar({ icon: Icon, title, value, valueClassName, positive, negativ
 	);
 }
 
-function ConversionsSection({ campaignId, startDate, endDate }: { campaignId: string; startDate: Date; endDate: Date }) {
+type TBenefitsSummary = TGetCampaignStatsOutput["data"]["beneficiosUtilizados"];
+type TBenefitFilter = "CUPOM_CAMPANHA" | "CASHBACK";
+
+function ConversionsSection({
+	campaignId,
+	startDate,
+	endDate,
+	totalConversions,
+	benefitsSummary,
+}: {
+	campaignId: string;
+	startDate: Date;
+	endDate: Date;
+	totalConversions: number;
+	benefitsSummary: TBenefitsSummary | undefined;
+}) {
 	const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
 
 	const {
@@ -385,6 +408,7 @@ function ConversionsSection({ campaignId, startDate, endDate }: { campaignId: st
 			pageSize: DEFAULT_PAGE_SIZE,
 			search: "",
 			types: [],
+			benefits: [],
 			periodAfter: startDate,
 			periodBefore: endDate,
 		},
@@ -405,6 +429,11 @@ function ConversionsSection({ campaignId, startDate, endDate }: { campaignId: st
 		updateFilters({ types: next as typeof filters.types, page: 1 });
 	};
 
+	const toggleBenefit = (key: TBenefitFilter) => {
+		const current = filters.benefits ?? [];
+		updateFilters({ benefits: current.includes(key) ? current.filter((k) => k !== key) : [...current, key], page: 1 });
+	};
+
 	return (
 		<Section.Root>
 			<Section.Header>
@@ -415,6 +444,12 @@ function ConversionsSection({ campaignId, startDate, endDate }: { campaignId: st
 				<Section.Count>{formatDecimalPlaces(conversionsMatched)}</Section.Count>
 			</Section.Header>
 			<Section.Body>
+				<ConversionBenefitsSummary
+					summary={benefitsSummary}
+					totalConversions={totalConversions}
+					selected={filters.benefits ?? []}
+					onToggle={toggleBenefit}
+				/>
 				<div className="relative">
 					<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
 					<Input
@@ -468,6 +503,7 @@ function ConversionsSection({ campaignId, startDate, endDate }: { campaignId: st
 											<CampaignConversionCard.MetricDivider />
 											<CampaignConversionCard.AttributedRevenue />
 										</CampaignConversionCard.Metrics>
+										<CampaignConversionCard.Benefits />
 										<CampaignConversionCard.Impacts>
 											<CampaignConversionCard.FrequencyImpact />
 											<CampaignConversionCard.TicketImpact />
@@ -493,6 +529,83 @@ function ConversionsSection({ campaignId, startDate, endDate }: { campaignId: st
 				/>
 			</Section.Body>
 		</Section.Root>
+	);
+}
+
+/**
+ * How many conversions show proof of use: the campaign's own coupon redeemed in the sale, or a
+ * cashback redemption. Each tile filters the list below. A tile with no use in the period is not
+ * rendered, so campaigns without a coupon or a cashback angle show nothing here.
+ */
+function ConversionBenefitsSummary({
+	summary,
+	totalConversions,
+	selected,
+	onToggle,
+}: {
+	summary: TBenefitsSummary | undefined;
+	totalConversions: number;
+	selected: TBenefitFilter[];
+	onToggle: (key: TBenefitFilter) => void;
+}) {
+	if (!summary) return null;
+	const tiles = [
+		summary.cupomCampanha.conversoes > 0
+			? {
+					key: "CUPOM_CAMPANHA" as const,
+					icon: Ticket,
+					title: "Usaram o cupom da campanha",
+					value: summary.cupomCampanha.conversoes,
+					hint: `${formatToMoney(summary.cupomCampanha.receita)} em vendas · ${formatToMoney(summary.cupomCampanha.desconto)} de desconto`,
+				}
+			: null,
+		summary.cashback.conversoes > 0
+			? {
+					key: "CASHBACK" as const,
+					icon: Coins,
+					title: "Resgataram cashback",
+					value: summary.cashback.conversoes,
+					hint: `${formatToMoney(summary.cashback.receita)} em vendas${
+						summary.cashback.conversoesComCashbackCampanha > 0
+							? ` · ${formatDecimalPlaces(summary.cashback.conversoesComCashbackCampanha)} com cashback gerado pela campanha`
+							: ""
+					}`,
+				}
+			: null,
+	].filter((tile): tile is NonNullable<typeof tile> => !!tile);
+	if (tiles.length === 0) return null;
+
+	return (
+		<div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+			{tiles.map((tile) => {
+				const Icon = tile.icon;
+				const active = selected.includes(tile.key);
+				return (
+					<button
+						key={tile.key}
+						type="button"
+						aria-pressed={active}
+						onClick={() => onToggle(tile.key)}
+						className={cn(
+							"flex min-w-0 flex-col gap-1 rounded-xl border px-3 py-2.5 text-left transition-colors",
+							active ? "border-primary bg-primary/10" : "border-border bg-card hover:bg-secondary",
+						)}
+					>
+						<span className="flex items-center gap-1.5 text-[0.65rem] font-bold text-muted-foreground uppercase">
+							<Icon className="size-3.5 min-h-3.5 min-w-3.5" />
+							{tile.title}
+						</span>
+						<span className="text-lg leading-none font-extrabold tabular-nums">
+							{formatDecimalPlaces(tile.value)}
+							<span className="ml-1 text-xs font-medium text-muted-foreground">
+								de {formatDecimalPlaces(totalConversions)} ({formatDecimalPlaces(percentage(tile.value, totalConversions))}%)
+							</span>
+						</span>
+						<span className="text-[0.7rem] text-muted-foreground">{tile.hint}</span>
+					</button>
+				);
+			})}
+		</div>
 	);
 }
 

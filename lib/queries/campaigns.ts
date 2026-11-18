@@ -282,6 +282,7 @@ async function fetchCampaignsConversions({ input }: { input: TGetCampaignConvers
 		if (input.pageSize) searchParams.set("pageSize", input.pageSize.toString());
 		if (input.search) searchParams.set("search", input.search);
 		if (input.types && input.types.length > 0) searchParams.set("types", input.types.join(","));
+		if (input.benefits && input.benefits.length > 0) searchParams.set("benefits", input.benefits.join(","));
 		if (input.periodAfter) searchParams.set("periodAfter", input.periodAfter.toISOString());
 		if (input.periodBefore) searchParams.set("periodBefore", input.periodBefore.toISOString());
 		const { data } = await axios.get<TGetCampaignConversionsOutput>(`/api/campaigns/conversions?${searchParams.toString()}`);

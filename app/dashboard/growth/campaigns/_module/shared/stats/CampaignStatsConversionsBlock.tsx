@@ -38,6 +38,7 @@ export function CampaignStatsConversionsBlock({ startDate, endDate }: CampaignSt
 			pageSize: DEFAULT_PAGE_SIZE,
 			search: "",
 			types: [],
+			benefits: [],
 			periodAfter: startDate ?? undefined,
 			periodBefore: endDate ?? undefined,
 		},
@@ -134,6 +135,7 @@ export function CampaignStatsConversionsBlock({ startDate, endDate }: CampaignSt
 											<CampaignConversionCard.MetricDivider />
 											<CampaignConversionCard.AttributedRevenue />
 										</CampaignConversionCard.Metrics>
+										<CampaignConversionCard.Benefits />
 										<CampaignConversionCard.Impacts>
 											<CampaignConversionCard.FrequencyImpact />
 											<CampaignConversionCard.TicketImpact />

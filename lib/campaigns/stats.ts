@@ -1,10 +1,16 @@
+import {
+	conversionCampaignCouponDiscountSql,
+	conversionUsedCampaignCashbackSql,
+	conversionUsedCampaignCouponSql,
+	conversionUsedCashbackSql,
+} from "@/lib/campaigns/conversion-benefits";
 import { CAMPAIGN_SENT_INTERACTION_STATUSES } from "@/lib/campaigns/utils";
 import { countIncrementalConversionsExpr, sumIncrementalRevenueExpr } from "@/lib/conversions/incremental";
 import { getSendQuotaStatus } from "@/lib/interactions/send-counters";
 import { db } from "@/services/drizzle";
 import { campaignConversions, campaignDispatchRecipients, campaigns, interactions } from "@/services/drizzle/schema";
 import dayjs from "dayjs";
-import { and, avg, count, countDistinct, eq, gte, inArray, lte, sum } from "drizzle-orm";
+import { and, avg, count, countDistinct, eq, gte, inArray, lte, sql, sum } from "drizzle-orm";
 import createHttpError from "http-errors";
 import z from "zod";
 
@@ -99,6 +105,15 @@ export async function getCampaignStats({ input, organizacaoId }: { input: TGetCa
 				tempoMedioMinutos: avg(campaignConversions.tempoParaConversaoMinutos),
 				clientesConvertidos: countDistinct(campaignConversions.clienteId),
 				ticketMedio: avg(campaignConversions.vendaValor),
+				conversoesComCupomCampanha: sql<number>`count(*) filter (where ${conversionUsedCampaignCouponSql})`.mapWith(Number),
+				receitaComCupomCampanha:
+					sql<number>`coalesce(sum(${campaignConversions.atribuicaoReceita}) filter (where ${conversionUsedCampaignCouponSql}), 0)`.mapWith(Number),
+				descontoCupomCampanha: sql<number>`coalesce(sum(${conversionCampaignCouponDiscountSql}), 0)`.mapWith(Number),
+				conversoesComCashback: sql<number>`count(*) filter (where ${conversionUsedCashbackSql})`.mapWith(Number),
+				receitaComCashback: sql<number>`coalesce(sum(${campaignConversions.atribuicaoReceita}) filter (where ${conversionUsedCashbackSql}), 0)`.mapWith(
+					Number,
+				),
+				conversoesComCashbackCampanha: sql<number>`count(*) filter (where ${conversionUsedCampaignCashbackSql})`.mapWith(Number),
 			})
 			.from(campaignConversions)
 			.where(
@@ -153,6 +168,20 @@ export async function getCampaignStats({ input, organizacaoId }: { input: TGetCa
 			receitaIncremental: Math.round(receitaIncremental * 100) / 100,
 			tempoMedioConversaoHoras: Math.round(tempoMedioConversaoHoras * 100) / 100,
 			ticketMedioConversao: Math.round(ticketMedioConversao * 100) / 100,
+			// What the converted sales used (lib/campaigns/conversion-benefits.ts). The campaign coupon is
+			// direct evidence; the rest of the conversions are last-touch correlation.
+			beneficiosUtilizados: {
+				cupomCampanha: {
+					conversoes: conversionsResult[0]?.conversoesComCupomCampanha ?? 0,
+					receita: Math.round((conversionsResult[0]?.receitaComCupomCampanha ?? 0) * 100) / 100,
+					desconto: Math.round((conversionsResult[0]?.descontoCupomCampanha ?? 0) * 100) / 100,
+				},
+				cashback: {
+					conversoes: conversionsResult[0]?.conversoesComCashback ?? 0,
+					receita: Math.round((conversionsResult[0]?.receitaComCashback ?? 0) * 100) / 100,
+					conversoesComCashbackCampanha: conversionsResult[0]?.conversoesComCashbackCampanha ?? 0,
+				},
+			},
 			// Quota por janela (dia e semana), organização e campanha, lida do ledger de contadores.
 			quota: weeklyLimitResult,
 			limiteSemanal: {
