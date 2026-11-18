@@ -91,6 +91,7 @@ export default async function NewSalePage({
 			terminologia: true,
 			modalidadeDescontosPermitida: true,
 			modalidadeRecompensasPermitida: true,
+			modalidadeRecompensaAvulsaPermitida: true,
 			acumuloPermitirViaPontoIntegracao: true,
 			resgatePermitirViaPontoIntegracao: true,
 		},
@@ -101,6 +102,7 @@ export default async function NewSalePage({
 		terminologia: cashbackProgramConfig?.terminologia ?? "DINHEIRO",
 		modalidadeDescontosPermitida: cashbackProgramConfig?.modalidadeDescontosPermitida ?? true,
 		modalidadeRecompensasPermitida: cashbackProgramConfig?.modalidadeRecompensasPermitida ?? false,
+		modalidadeRecompensaAvulsaPermitida: cashbackProgramConfig?.modalidadeRecompensaAvulsaPermitida ?? false,
 		// Sem programa ativo não há acúmulo nem resgate a permitir — fail-closed, igual ao 403 da API de transação.
 		acumuloPermitirViaPontoIntegracao: cashbackProgramConfig?.acumuloPermitirViaPontoIntegracao ?? false,
 		resgatePermitirViaPontoIntegracao: cashbackProgramConfig?.resgatePermitirViaPontoIntegracao ?? false,

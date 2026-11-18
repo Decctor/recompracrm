@@ -3,6 +3,12 @@ import { appApiHandler } from "@/lib/app-api";
 import { recomputeClientDuplicatesSafely } from "@/lib/clients/duplicates";
 import { accumulateCashbackForClient, calculateAccumulatedCashbackValue, ensureCashbackBalanceForClient } from "@/lib/cashback/accumulation";
 import { type TValidatedPrizeForRedemption, validatePrizeForRedemption } from "@/lib/cashback/prizes";
+import {
+	FREE_FORM_REWARD_DESCRIPTION_MAX_LENGTH,
+	getFreeFormRewardBlockReason,
+	isFreeFormRewardAllowed,
+	normalizeFreeFormRewardDescription,
+} from "@/lib/point-of-interaction/free-form-reward";
 import { resolvePoiPrizeLines } from "@/lib/point-of-interaction/prize-lines";
 import { normalizeRewardRedemptionLines } from "@/lib/sales/sale-reward-snapshot";
 import { applyCashbackRedemptionFIFO } from "@/lib/cashback/redemption";
@@ -121,6 +127,25 @@ export const CreatePointOfInteractionTransactionInputSchema = z.object({
 			})
 			.optional()
 			.nullable(),
+		// Recompensa avulsa: prêmio sem item de catálogo, descrito pelo operador. Não combina com
+		// recompensas do catálogo, cupom nem desconto em cashback. `valor` é o débito na moeda do
+		// programa; ausente no pedido feito pelo celular do cliente (o operador informa na aprovação).
+		freeFormReward: z
+			.object({
+				descricao: z
+					.string({
+						required_error: "Descrição da recompensa avulsa não informada.",
+						invalid_type_error: "Tipo não válido para a descrição da recompensa avulsa.",
+					})
+					.max(FREE_FORM_REWARD_DESCRIPTION_MAX_LENGTH, `A descrição da recompensa passa de ${FREE_FORM_REWARD_DESCRIPTION_MAX_LENGTH} caracteres.`),
+				valor: z
+					.number({ invalid_type_error: "Tipo não válido para o valor da recompensa avulsa." })
+					.positive("O valor da recompensa avulsa deve ser maior que zero.")
+					.optional()
+					.nullable(),
+			})
+			.optional()
+			.nullable(),
 		coupon: z
 			.object({
 				cupomId: z.string({
@@ -176,6 +201,8 @@ export type TCreatePointOfInteractionTransactionOutput = {
 		transactionRedemptionId?: string | null;
 		transactionRedemptionIds?: string[];
 		transactionCouponRedemptionId?: string | null;
+		// Recompensa avulsa resgatada, com o valor efetivamente debitado (o do operador, na aprovação).
+		freeFormReward?: { descricao: string; valor: number } | null;
 		clientAccumulatedCashbackValue: number;
 		clientNewOverallAvailableBalance: number | null;
 		visualClientAccumulatedCashbackValue: number;
@@ -197,12 +224,15 @@ type TPreparePointOfInteractionTransactionParams = {
 		operatorConfirmedSaleValue?: number | null;
 		// Desconto do cupom MANUAL informado pelo operador na aprovação da solicitação.
 		operatorCouponDiscountValue?: number | null;
+		// Débito da recompensa avulsa informado pelo operador na aprovação (o celular não o envia).
+		operatorFreeFormRewardValue?: number | null;
 		operatorSellerId?: string | null;
 		operatorUserId?: string | null;
 	};
 };
 
-async function preparePointOfInteractionTransaction({ input, operatorContext, tx }: TPreparePointOfInteractionTransactionParams) {
+// Exportada para os testes de integração (lib/point-of-interaction/free-form-reward.integration.test.ts).
+export async function preparePointOfInteractionTransaction({ input, operatorContext, tx }: TPreparePointOfInteractionTransactionParams) {
 	console.log(`[POI ${input.orgId}] [NEW_TRANSACTION]`, input);
 	const result = await (async () => {
 		const program = await tx.query.cashbackPrograms.findFirst({
@@ -241,18 +271,40 @@ async function preparePointOfInteractionTransaction({ input, operatorContext, tx
 			const normalizedLines = normalizeRewardRedemptionLines(prizeLines.map((line) => ({ recompensaId: line.prizeId, quantidade: line.quantity })));
 			if (normalizedLines.erro !== null) throw new createHttpError.BadRequest(normalizedLines.erro);
 		}
+		// Transactions only require redemption processing when cashback is applied and has a positive value
+		const requestedCashbackRedemption = input.sale.cashback.aplicar && input.sale.cashback.valor > 0;
+
+		// Recompensa avulsa: só ledger (um RESGATE com a descrição), sem venda e sem acúmulo — um
+		// resgate não é compra, e uma venda de R$ 0 sem itens contaria compra, mexeria no RFM e
+		// dispararia campanhas de primeira compra. Valor: o do operador na aprovação, senão o do totem.
+		const requestedFreeFormReward = input.sale.freeFormReward ?? null;
+		const isFreeFormRedemption = requestedFreeFormReward !== null;
+		const freeFormRewardDescription = requestedFreeFormReward ? normalizeFreeFormRewardDescription(requestedFreeFormReward.descricao) : null;
+		const freeFormRewardValue = requestedFreeFormReward
+			? (operatorContext?.operatorFreeFormRewardValue ?? requestedFreeFormReward.valor ?? null)
+			: null;
+		if (requestedFreeFormReward) {
+			if (isPrizeRedemption) throw new createHttpError.BadRequest("A recompensa avulsa não pode ser combinada com recompensas do catálogo.");
+			if (input.sale.coupon) throw new createHttpError.BadRequest("Cupons não podem ser combinados com recompensa avulsa.");
+			if (requestedCashbackRedemption) throw new createHttpError.BadRequest("A recompensa avulsa não pode ser combinada com desconto em cashback.");
+			if (!isFreeFormRewardAllowed(program)) throw new createHttpError.Forbidden("Recompensa avulsa não habilitada no programa.");
+			const freeFormBlockReason = getFreeFormRewardBlockReason({ descricao: requestedFreeFormReward.descricao, valor: freeFormRewardValue });
+			if (freeFormBlockReason) throw new createHttpError.BadRequest(freeFormBlockReason);
+		}
+
 		// Prize redemptions do not generate cashback, even when accumulation via POI is enabled.
-		const transactionRequiresAccumulationProcessing = cashbackProgramIsActive && program.acumuloPermitirViaPontoIntegracao && !isPrizeRedemption;
+		const transactionRequiresAccumulationProcessing =
+			cashbackProgramIsActive && program.acumuloPermitirViaPontoIntegracao && !isPrizeRedemption && !isFreeFormRedemption;
 		// Registro de vendas do POI é config EXPLÍCITA (D8), não derivação do estado das
 		// integrações — org com fonte de dados ativa pode manter o POI coletando balcão.
 		// Fallback para org criada entre o deploy e o backfill (poiConfiguracao nula): comportamento
 		// legado — registra quando não há fonte de dados ativa. Removível na fase de limpeza.
 		const transactionRequiresSaleProcessing =
-			program.organizacao.poiConfiguracao?.vendas.registroAtivo ??
-			!(await organizationHasActiveDataSource({ executor: tx, organizationId: input.orgId }));
-		// Transactions only require redemption processing when cashback is applied and has a positive value
-		const requestedCashbackRedemption = input.sale.cashback.aplicar && input.sale.cashback.valor > 0;
-		if (!cashbackProgramIsActive && (requestedCashbackRedemption || isPrizeRedemption)) {
+			!isFreeFormRedemption &&
+			(program.organizacao.poiConfiguracao?.vendas.registroAtivo ??
+				!(await organizationHasActiveDataSource({ executor: tx, organizationId: input.orgId })));
+		const requestedAnyRedemption = requestedCashbackRedemption || isPrizeRedemption || isFreeFormRedemption;
+		if (!cashbackProgramIsActive && requestedAnyRedemption) {
 			throw new createHttpError.BadRequest("Programa de cashback inativo. Resgates não estão disponíveis.");
 		}
 		// Resgate pelo POI é config explícita do programa (superfície PONTO_INTERACAO da política
@@ -260,13 +312,12 @@ async function preparePointOfInteractionTransaction({ input, operatorContext, tx
 		// desconto em cashback ou recompensa — falha alto: pular em silêncio cobraria o preço cheio
 		// de um cliente que espera o desconto.
 		const redemptionSurfaceBlockReason = getCashbackRedemptionBlockReason({ program, surface: "PONTO_INTERACAO" });
-		if (redemptionSurfaceBlockReason && (requestedCashbackRedemption || isPrizeRedemption)) {
+		if (redemptionSurfaceBlockReason && requestedAnyRedemption) {
 			throw new createHttpError.Forbidden(redemptionSurfaceBlockReason);
 		}
 		// Recompensa dirige o resgate explicitamente (o kiosk também espelha o débito em `cashback`,
 		// mas a regra não pode depender desse espelho).
-		const transactionRequiresRedemptionProcessing =
-			cashbackProgramIsActive && program.resgatePermitirViaPontoIntegracao && (requestedCashbackRedemption || isPrizeRedemption);
+		const transactionRequiresRedemptionProcessing = cashbackProgramIsActive && program.resgatePermitirViaPontoIntegracao && requestedAnyRedemption;
 		console.log("[POI] [TRANSACTION_FLAGS]", {
 			transactionRequiresAccumulationProcessing,
 			transactionRequiresSaleProcessing,
@@ -467,8 +518,14 @@ async function preparePointOfInteractionTransaction({ input, operatorContext, tx
 		const prizesRedemptionValue = validatedPrizes.reduce((sum, entry) => sum + entry.prize.valor * entry.quantity, 0);
 		const prizesCost = validatedPrizes.reduce((sum, entry) => sum + entry.prize.precoCusto * entry.quantity, 0);
 
-		const effectiveSaleValue = isPrizeRedemption ? prizesSaleValue : input.sale.valor;
-		const effectiveRedemptionValue = isPrizeRedemption ? prizesRedemptionValue : input.sale.cashback.aplicar ? input.sale.cashback.valor : 0;
+		const effectiveSaleValue = isPrizeRedemption ? prizesSaleValue : isFreeFormRedemption ? 0 : input.sale.valor;
+		const effectiveRedemptionValue = isPrizeRedemption
+			? prizesRedemptionValue
+			: isFreeFormRedemption
+				? (freeFormRewardValue ?? 0)
+				: input.sale.cashback.aplicar
+					? input.sale.cashback.valor
+					: 0;
 
 		// COUPON VALIDATION + REDEMPTION (if requested)
 		// Fase 1: 1 cupom por transação, não combinável com resgate de recompensa.
@@ -530,20 +587,22 @@ async function preparePointOfInteractionTransaction({ input, operatorContext, tx
 		if (transactionRequiresRedemptionProcessing) {
 			visualClientNewOverallAvailableBalance -= effectiveRedemptionValue;
 		}
-		visualClientAccumulatedCashbackValue = cashbackProgramIsActive
-			? calculateAccumulatedCashbackValue({
-					accumulationType: program.acumuloTipo,
-					accumulationValue: program.acumuloValor,
-					minimumSaleValue: program.acumuloRegraValorMinimo,
-					saleValue: effectiveSaleValue,
-				})
-			: 0;
+		// Recompensa avulsa não acumula: sem isso um acúmulo FIXO "simularia" pontos sobre a venda de R$ 0.
+		visualClientAccumulatedCashbackValue =
+			cashbackProgramIsActive && !isFreeFormRedemption
+				? calculateAccumulatedCashbackValue({
+						accumulationType: program.acumuloTipo,
+						accumulationValue: program.acumuloValor,
+						minimumSaleValue: program.acumuloRegraValorMinimo,
+						saleValue: effectiveSaleValue,
+					})
+				: 0;
 		visualClientNewOverallAvailableBalance += visualClientAccumulatedCashbackValue;
 
 		// THIRD STEP: Processing cashback redemption (if applicable)
 		if (transactionRequiresRedemptionProcessing) {
-			// Skip redemption limit checks for prize redemptions (limits only apply to cash discounts)
-			if (!isPrizeRedemption) {
+			// Skip redemption limit checks for prize redemptions, catalog or free-form (limits only apply to cash discounts)
+			if (!isPrizeRedemption && !isFreeFormRedemption) {
 				if (program.resgateLimiteTipo && program.resgateLimiteValor !== null) {
 					let maxAllowedRedemption: number;
 
@@ -567,9 +626,19 @@ async function preparePointOfInteractionTransaction({ input, operatorContext, tx
 
 			// Um RESGATE por linha (recompensa) ou um único para o desconto em cashback. O FIFO relê e
 			// persiste o saldo a cada chamada; cada linha guarda o próprio consumoFifo para a reversão.
-			const redemptionLines: Array<{ value: number; prize: TValidatedPrizeForRedemption | null; quantity: number }> = isPrizeRedemption
-				? validatedPrizes.map((entry) => ({ value: entry.prize.valor * entry.quantity, prize: entry.prize, quantity: entry.quantity }))
-				: [{ value: effectiveRedemptionValue, prize: null, quantity: 1 }];
+			const redemptionLines: Array<{
+				value: number;
+				prize: TValidatedPrizeForRedemption | null;
+				quantity: number;
+				freeFormDescription: string | null;
+			}> = isPrizeRedemption
+				? validatedPrizes.map((entry) => ({
+						value: entry.prize.valor * entry.quantity,
+						prize: entry.prize,
+						quantity: entry.quantity,
+						freeFormDescription: null,
+					}))
+				: [{ value: effectiveRedemptionValue, prize: null, quantity: 1, freeFormDescription: freeFormRewardDescription }];
 			for (const line of redemptionLines) {
 				const redemptionResult = await applyCashbackRedemptionFIFO({
 					tx,
@@ -605,6 +674,8 @@ async function preparePointOfInteractionTransaction({ input, operatorContext, tx
 						// Prize redemption fields: total da linha; unitário e quantidade em metadados.
 						resgateRecompensaId: line.prize?.id ?? null,
 						resgateRecompensaValor: line.prize ? line.value : null,
+						// Recompensa avulsa: sem id de catálogo, a descrição é o único registro do que saiu.
+						resgateRecompensaDescricao: line.freeFormDescription,
 						metadados: {
 							consumoFifo: redemptionResult.consumedFromAccumulations,
 							...(line.prize ? { recompensa: { quantidade: line.quantity, valorUnitario: line.prize.valor } } : {}),
@@ -831,6 +902,10 @@ async function preparePointOfInteractionTransaction({ input, operatorContext, tx
 			transactionRedemptionId,
 			transactionRedemptionIds,
 			transactionCouponRedemptionId,
+			freeFormReward:
+				freeFormRewardDescription !== null && freeFormRewardValue !== null && transactionRedemptionIds.length > 0
+					? { descricao: freeFormRewardDescription, valor: freeFormRewardValue }
+					: null,
 			clientAccumulatedCashbackValue: clientNewAccumulatedCashbackValue,
 			clientNewOverallAvailableBalance: clientCashbackAvailableBalance,
 			visualClientAccumulatedCashbackValue,
@@ -855,6 +930,7 @@ async function preparePointOfInteractionTransaction({ input, operatorContext, tx
 			transactionRedemptionId: result.transactionRedemptionId,
 			transactionRedemptionIds: result.transactionRedemptionIds,
 			transactionCouponRedemptionId: result.transactionCouponRedemptionId,
+			freeFormReward: result.freeFormReward,
 			clientAccumulatedCashbackValue: result.clientAccumulatedCashbackValue,
 			clientNewOverallAvailableBalance: result.clientNewOverallAvailableBalance,
 			visualClientAccumulatedCashbackValue: result.visualClientAccumulatedCashbackValue,

@@ -7,7 +7,7 @@ import { MAX_REWARD_REDEMPTION_QUANTITY_PER_LINE } from "@/lib/sales/sale-reward
 import type { TCashbackProgramTerminologyEnum } from "@/schemas/enums";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, ArrowRight, Gift, LayoutGrid, List, ShoppingCart } from "lucide-react";
+import { ArrowLeft, ArrowRight, Gift, LayoutGrid, List, PencilLine, ShoppingCart } from "lucide-react";
 import Image from "next/image";
 import React from "react";
 import type { TPrize } from "../../_shared/types";
@@ -29,6 +29,8 @@ type PrizeSelectionStepProps = {
 	onSetQuantity: (prizeId: string, quantity: number) => void;
 	onContinue: () => void;
 	onContinueWithoutPrize: () => void;
+	/** Recompensa avulsa (fora do catálogo). Ausente quando o programa não a permite. */
+	onChooseFreeFormReward?: () => void;
 };
 
 export function PrizeSelectionStep({
@@ -41,6 +43,7 @@ export function PrizeSelectionStep({
 	onSetQuantity,
 	onContinue,
 	onContinueWithoutPrize,
+	onChooseFreeFormReward,
 }: PrizeSelectionStepProps) {
 	const [viewMode, setViewMode] = React.useState<"categories" | "list">("list");
 	const [selectedCategory, setSelectedCategory] = React.useState<string | null>(null);
@@ -84,6 +87,8 @@ export function PrizeSelectionStep({
 	const hasSelection = selectedUnits > 0;
 
 	const showToggle = prizes.length > SHOW_TOGGLE_THRESHOLD || categories.length > 1;
+	// Programa só com recompensa avulsa (nenhum prêmio cadastrado): sem vitrine nem cesta, só a entrada avulsa.
+	const hasCatalog = prizes.length > 0;
 
 	const handleViewModeChange = (mode: "categories" | "list") => {
 		setViewMode(mode);
@@ -127,8 +132,12 @@ export function PrizeSelectionStep({
 				</div>
 			) : null}
 			<div className="text-center space-y-2 short:space-y-0.5">
-				<h2 className="text-xl short:text-lg font-extrabold tracking-tight">Escolha as recompensas</h2>
-				<p className="text-muted-foreground short:text-xs">Toque para adicionar. A mesma recompensa pode ser resgatada mais de uma vez.</p>
+				<h2 className="text-xl short:text-lg font-extrabold tracking-tight">{hasCatalog ? "Escolha as recompensas" : "Resgatar uma recompensa"}</h2>
+				<p className="text-muted-foreground short:text-xs">
+					{hasCatalog
+						? "Toque para adicionar. A mesma recompensa pode ser resgatada mais de uma vez."
+						: "Descreva a recompensa e o valor a debitar do saldo."}
+				</p>
 				<div className="flex items-center justify-center gap-x-4 gap-y-1 flex-wrap text-sm short:text-xs">
 					<p className="text-muted-foreground">
 						Saldo disponível: <span className="font-bold">{formatCashbackValue(availableBalance, terminology)}</span>
@@ -227,30 +236,53 @@ export function PrizeSelectionStep({
 				<div className="flex flex-col gap-2 short:gap-1.5">{sortedPrizes.map(renderPrizeCard)}</div>
 			)}
 
-			{/* Rodapé fixo da cesta: o totem pode ter uma lista longa e o CONTINUAR precisa estar sempre à mão. */}
-			<div className="sticky bottom-0 z-10 -mx-2 px-2 pt-2 pb-1 bg-gradient-to-t from-card via-card to-transparent">
-				<div className="flex items-center justify-between gap-3 short:gap-2 rounded-2xl short:rounded-xl border border-brand/20 bg-card shadow-md p-3 short:p-2">
-					<div className="flex flex-col min-w-0">
-						<span className="text-[0.65rem] short:text-[0.6rem] font-black uppercase tracking-widest text-muted-foreground">
-							{hasSelection ? `${selectedUnits} ${selectedUnits === 1 ? "unidade selecionada" : "unidades selecionadas"}` : "Nenhuma recompensa selecionada"}
-						</span>
-						<span className="font-black text-lg short:text-base text-brand leading-tight">{formatCashbackValue(totalDebit, terminology)}</span>
-						{hasSelection && (
-							<span className="text-[0.65rem] short:text-[0.6rem] text-muted-foreground">Valor comercial: {formatToMoney(totalCommercialValue)}</span>
-						)}
+			{onChooseFreeFormReward ? (
+				<button
+					type="button"
+					onClick={onChooseFreeFormReward}
+					className="w-full flex items-center gap-4 short:gap-2 rounded-2xl short:rounded-xl border-2 border-dashed border-brand-secondary/40 bg-brand-secondary/5 p-4 short:p-2 text-left transition-colors hover:border-brand-secondary hover:bg-brand-secondary/10 cursor-pointer"
+				>
+					<div className="flex w-14 h-14 short:w-10 short:h-10 min-w-14 short:min-w-10 items-center justify-center rounded-xl short:rounded-lg bg-brand-secondary text-brand-secondary-foreground">
+						<PencilLine className="w-6 h-6 short:w-4 short:h-4" />
 					</div>
-					<Button
-						type="button"
-						size="lg"
-						disabled={!hasSelection}
-						onClick={onContinue}
-						className="rounded-2xl short:rounded-lg h-12 short:h-11 px-6 short:px-4 text-base short:text-sm font-bold shadow-sm shrink-0"
-					>
-						CONTINUAR
-						<ArrowRight className="ml-2 w-5 h-5 short:w-4 short:h-4" />
-					</Button>
+					<div className="flex-1 min-w-0">
+						<h3 className="font-bold text-sm short:text-xs tracking-tight">{hasCatalog ? "Outra recompensa" : "Nova recompensa"}</h3>
+						<p className="text-xs short:text-[0.65rem] text-muted-foreground">
+							{hasCatalog ? "Não está na lista? " : ""}Descreva o prêmio e o valor é confirmado pelo operador.
+						</p>
+					</div>
+					<ArrowRight className="w-5 h-5 short:w-4 short:h-4 text-brand-secondary shrink-0" />
+				</button>
+			) : null}
+
+			{/* Rodapé fixo da cesta: o totem pode ter uma lista longa e o CONTINUAR precisa estar sempre à mão. */}
+			{hasCatalog ? (
+				<div className="sticky bottom-0 z-10 -mx-2 px-2 pt-2 pb-1 bg-gradient-to-t from-card via-card to-transparent">
+					<div className="flex items-center justify-between gap-3 short:gap-2 rounded-2xl short:rounded-xl border border-brand/20 bg-card shadow-md p-3 short:p-2">
+						<div className="flex flex-col min-w-0">
+							<span className="text-[0.65rem] short:text-[0.6rem] font-black uppercase tracking-widest text-muted-foreground">
+								{hasSelection
+									? `${selectedUnits} ${selectedUnits === 1 ? "unidade selecionada" : "unidades selecionadas"}`
+									: "Nenhuma recompensa selecionada"}
+							</span>
+							<span className="font-black text-lg short:text-base text-brand leading-tight">{formatCashbackValue(totalDebit, terminology)}</span>
+							{hasSelection && (
+								<span className="text-[0.65rem] short:text-[0.6rem] text-muted-foreground">Valor comercial: {formatToMoney(totalCommercialValue)}</span>
+							)}
+						</div>
+						<Button
+							type="button"
+							size="lg"
+							disabled={!hasSelection}
+							onClick={onContinue}
+							className="rounded-2xl short:rounded-lg h-12 short:h-11 px-6 short:px-4 text-base short:text-sm font-bold shadow-sm shrink-0"
+						>
+							CONTINUAR
+							<ArrowRight className="ml-2 w-5 h-5 short:w-4 short:h-4" />
+						</Button>
+					</div>
 				</div>
-			</div>
+			) : null}
 		</div>
 	);
 }

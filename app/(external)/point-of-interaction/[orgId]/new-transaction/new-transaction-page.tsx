@@ -7,6 +7,7 @@ import { getErrorMessage } from "@/lib/errors";
 import { formatCashbackValue } from "@/lib/formatting";
 import { createPoiTransactionRequest } from "@/lib/mutations/poi-transaction-requests";
 import { createPointOfInteractionSale } from "@/lib/mutations/sales";
+import { getFreeFormRewardBlockReason, isFreeFormRewardAllowed } from "@/lib/point-of-interaction/free-form-reward";
 import { sumPoiPrizeSaleValue, sumPoiPrizeValue } from "@/lib/point-of-interaction/prize-lines";
 import {
 	getPoiSaleValueForConfirmation,
@@ -23,7 +24,7 @@ import {
 	type TPointOfInteractionNewSaleState,
 } from "@/state-hooks/use-point-of-interaction-new-public-transaction-request";
 import { useMutation } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, BadgePercent, Check, Gift, Lock, ShoppingCart, Tag } from "lucide-react";
+import { ArrowLeft, ArrowRight, BadgePercent, Check, Gift, Lock, PencilLine, ShoppingCart, Tag } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -41,6 +42,8 @@ import {
 } from "../_shared/helpers/cashback-calculations";
 import type { TPrize, TSelectedPrize, TStepDefinition } from "../_shared/types";
 import { CouponSelectionBlock } from "./components/coupon-selection-block";
+import { FreeFormRewardConfirmationStep } from "./components/free-form-reward-confirmation-step";
+import { FreeFormRewardStep } from "./components/free-form-reward-step";
 import { CashbackStep } from "./components/kiosk/cashback-step";
 import { ConfirmationStep as KioskConfirmationStep } from "./components/kiosk/confirmation-step";
 import { ModeSelectionStep } from "./components/kiosk/mode-selection-step";
@@ -84,6 +87,19 @@ const PRIZE_SALE_ONLY_STEPS_MOBILE: TStepDefinition[] = [
 	{ id: 2, label: "VENDA", icon: Tag },
 ];
 
+// Recompensa avulsa: mesma forma do "apenas pontuar" — no mobile o passo de detalhes já envia a
+// solicitação (o débito é do operador, na aprovação); no totem a senha confirma no passo 3.
+const FREE_FORM_STEPS: TStepDefinition[] = [
+	{ id: 1, label: "RECOMPENSAS", icon: Gift },
+	{ id: 2, label: "DETALHES", icon: PencilLine },
+	{ id: 3, label: "CONFIRMAÇÃO", icon: Lock },
+];
+
+const FREE_FORM_STEPS_MOBILE: TStepDefinition[] = [
+	{ id: 1, label: "RECOMPENSAS", icon: Gift },
+	{ id: 2, label: "DETALHES", icon: PencilLine },
+];
+
 // Tolerância de ponto flutuante ao comparar o valor da recompensa com o saldo restante.
 const BALANCE_EPSILON = 0.0001;
 
@@ -97,6 +113,7 @@ type NewSaleContentProps = {
 		terminologia: TCashbackProgramTerminologyEnum;
 		modalidadeDescontosPermitida: boolean;
 		modalidadeRecompensasPermitida: boolean;
+		modalidadeRecompensaAvulsaPermitida: boolean;
 		acumuloPermitirViaPontoIntegracao: boolean;
 		resgatePermitirViaPontoIntegracao: boolean;
 		poiConfirmacaoValorObrigatoria: boolean;
@@ -118,6 +135,7 @@ export default function NewSaleContent({ org, clientId, prizes, initialOperatorP
 		updatePrizeRedemptions,
 		addPrizeRedemption,
 		setPrizeRedemptionQuantity,
+		updateFreeFormReward,
 		updateCoupon,
 		updateOperatorIdentifier,
 		updateOperatorConfirmedSaleValue,
@@ -131,7 +149,9 @@ export default function NewSaleContent({ org, clientId, prizes, initialOperatorP
 	// modo recompensa nem opção de aplicar saldo — resta o caminho de puro acúmulo.
 	const isRedemptionAllowedViaPoi = org.resgatePermitirViaPontoIntegracao;
 	const isDiscountModeAllowed = org.modalidadeDescontosPermitida;
-	const isPrizeModeAllowed = org.modalidadeRecompensasPermitida && hasPrizes && isRedemptionAllowedViaPoi;
+	// Recompensa avulsa: o modo recompensa existe mesmo sem nenhum prêmio cadastrado.
+	const isFreeFormRewardAllowedViaPoi = isRedemptionAllowedViaPoi && isFreeFormRewardAllowed(org);
+	const isPrizeModeAllowed = org.modalidadeRecompensasPermitida && (hasPrizes || isFreeFormRewardAllowedViaPoi) && isRedemptionAllowedViaPoi;
 	const shouldShowFlowModeSelection = isDiscountModeAllowed && isPrizeModeAllowed;
 
 	// Programa só de recompensas (descontos desligados): `effectiveFlowMode` força o modo prêmio e
@@ -153,7 +173,9 @@ export default function NewSaleContent({ org, clientId, prizes, initialOperatorP
 		return null;
 	});
 	const [showModeSelection, setShowModeSelection] = React.useState(false);
-	const [prizeFlowIntent, setPrizeFlowIntent] = React.useState<"redeem" | "sale-only" | null>(startsInPrizeSaleOnly ? "sale-only" : null);
+	const [prizeFlowIntent, setPrizeFlowIntent] = React.useState<"redeem" | "sale-only" | "free-form" | null>(
+		startsInPrizeSaleOnly ? "sale-only" : null,
+	);
 
 	// Coupon flow state (display info; the payload holds only cupomId + valorDesconto)
 	const [selectedCoupon, setSelectedCoupon] = React.useState<TPoiAvailableCoupon | null>(null);
@@ -161,9 +183,10 @@ export default function NewSaleContent({ org, clientId, prizes, initialOperatorP
 	const effectiveFlowMode: "discount" | "prize" = shouldShowFlowModeSelection ? (flowMode ?? "discount") : isPrizeModeAllowed ? "prize" : "discount";
 	const isPrizeMode = effectiveFlowMode === "prize";
 	const isPrizeSaleOnlyFlow = isPrizeMode && prizeFlowIntent === "sale-only";
-	const isPrizeRedeemFlow = isPrizeMode && !isPrizeSaleOnlyFlow;
+	const isFreeFormFlow = isPrizeMode && prizeFlowIntent === "free-form";
+	const isPrizeRedeemFlow = isPrizeMode && !isPrizeSaleOnlyFlow && !isFreeFormFlow;
 	const isMobileMode = mode === "mobile";
-	const baseTotalSteps = isPrizeMode ? (isPrizeSaleOnlyFlow ? 3 : 2) : 3;
+	const baseTotalSteps = isPrizeMode ? (isPrizeSaleOnlyFlow || isFreeFormFlow ? 3 : 2) : 3;
 	// No mobile o passo de confirmação do operador não existe (a solicitação vai para a fila da loja),
 	// exceto no resgate de recompensas: o passo 2 é a revisão da cesta antes do envio.
 	const totalSteps = isMobileMode && !isPrizeRedeemFlow ? baseTotalSteps - 1 : baseTotalSteps;
@@ -315,6 +338,11 @@ export default function NewSaleContent({ org, clientId, prizes, initialOperatorP
 		if (isPrizeSaleOnlyFlow && currentStep === 2 && state.sale.valor <= 0) {
 			return toast.error("Digite o valor da venda.");
 		}
+		// Recompensa avulsa: step 2 = detalhes. No celular só a descrição (o débito é do operador).
+		if (isFreeFormFlow && currentStep === 2) {
+			const freeFormBlockReason = getFreeFormRewardBlockReasonForState();
+			if (freeFormBlockReason) return toast.error(freeFormBlockReason);
+		}
 		// After sale value in discount mode, pre-fill cashback
 		if (!isPrizeMode && currentStep === 1) {
 			updateCashback({
@@ -347,6 +375,17 @@ export default function NewSaleContent({ org, clientId, prizes, initialOperatorP
 		setCurrentStep((prev) => Math.min(prev + 1, totalSteps));
 	};
 
+	function getFreeFormRewardBlockReasonForState() {
+		const freeFormReward = state.sale.freeFormReward;
+		if (!freeFormReward) return "Descreva a recompensa.";
+		return getFreeFormRewardBlockReason({
+			descricao: freeFormReward.descricao,
+			// O celular não define o débito: só a descrição é validada aqui.
+			valor: isMobileMode ? 1 : freeFormReward.valor,
+			availableBalance: isMobileMode ? null : availableCashback,
+		});
+	}
+
 	const handleSelectFlowMode = (mode: "discount" | "prize") => {
 		if ((mode === "discount" && !isDiscountModeAllowed) || (mode === "prize" && !isPrizeModeAllowed)) {
 			return;
@@ -362,6 +401,7 @@ export default function NewSaleContent({ org, clientId, prizes, initialOperatorP
 		setFlowMode(mode);
 		setPrizeFlowIntent(null);
 		updatePrizeRedemptions([]);
+		updateFreeFormReward(null);
 		updateCashback({ aplicar: false, valor: 0 });
 		updateSale({ valor: 0 });
 		setSelectedCoupon(null);
@@ -376,6 +416,7 @@ export default function NewSaleContent({ org, clientId, prizes, initialOperatorP
 	const handleAddPrize = (prize: TPrize) => {
 		if (prize.valor > remainingCashback + BALANCE_EPSILON) return;
 		setPrizeFlowIntent("redeem");
+		updateFreeFormReward(null);
 		addPrizeRedemption({ id: prize.id, valor: prize.valor, valorVenda: prize.valorVenda });
 		playAction();
 	};
@@ -405,8 +446,20 @@ export default function NewSaleContent({ org, clientId, prizes, initialOperatorP
 	const handleContinueWithoutPrize = () => {
 		setPrizeFlowIntent("sale-only");
 		updatePrizeRedemptions([]);
+		updateFreeFormReward(null);
 		updateCashback({ aplicar: false, valor: 0 });
 		updateSale({ valor: 0 });
+		playAction();
+		setCurrentStep(2);
+	};
+
+	// Recompensa avulsa: sai a cesta do catálogo, entra a descrição. Não combina com prêmios do catálogo.
+	const handleChooseFreeFormReward = () => {
+		setPrizeFlowIntent("free-form");
+		updatePrizeRedemptions([]);
+		updateCashback({ aplicar: false, valor: 0 });
+		updateSale({ valor: 0 });
+		updateFreeFormReward({ descricao: "", valor: null });
 		playAction();
 		setCurrentStep(2);
 	};
@@ -448,6 +501,17 @@ export default function NewSaleContent({ org, clientId, prizes, initialOperatorP
 			createRequestMutation({ payload });
 			return;
 		}
+		if (payload.sale.freeFormReward) {
+			const freeFormBlockReason = getFreeFormRewardBlockReason({
+				descricao: payload.sale.freeFormReward.descricao,
+				valor: payload.sale.freeFormReward.valor,
+				availableBalance: availableCashback,
+			});
+			if (freeFormBlockReason) {
+				toast.error(freeFormBlockReason);
+				return;
+			}
+		}
 		if (poiSaleRequiresValueConfirmation(org.poiConfirmacaoValorObrigatoria, payload.sale)) {
 			if (payload.operatorConfirmedSaleValue == null) {
 				toast.error("Confirme o valor final da venda.");
@@ -486,14 +550,19 @@ export default function NewSaleContent({ org, clientId, prizes, initialOperatorP
 		? isPrizeMode
 			? isPrizeSaleOnlyFlow
 				? PRIZE_SALE_ONLY_STEPS_MOBILE
-				: PRIZE_STEPS_MOBILE
+				: isFreeFormFlow
+					? FREE_FORM_STEPS_MOBILE
+					: PRIZE_STEPS_MOBILE
 			: DISCOUNT_STEPS_MOBILE
 		: isPrizeMode
 			? isPrizeSaleOnlyFlow
 				? PRIZE_SALE_ONLY_STEPS
-				: PRIZE_STEPS
+				: isFreeFormFlow
+					? FREE_FORM_STEPS
+					: PRIZE_STEPS
 			: DISCOUNT_STEPS;
-	const confirmationStep = isMobileMode ? totalSteps : isPrizeMode ? (isPrizeSaleOnlyFlow ? 3 : 2) : 3;
+	const confirmationStep = isMobileMode ? totalSteps : isPrizeMode ? (isPrizeSaleOnlyFlow || isFreeFormFlow ? 3 : 2) : 3;
+	const freeFormReward = state.sale.freeFormReward;
 	const isSubmitting = isCreatingSale || isCreatingRequest;
 
 	return (
@@ -617,6 +686,32 @@ export default function NewSaleContent({ org, clientId, prizes, initialOperatorP
 								onSetQuantity={handleSetPrizeQuantity}
 								onContinue={handleContinueWithPrizes}
 								onContinueWithoutPrize={handleContinueWithoutPrize}
+								onChooseFreeFormReward={isFreeFormRewardAllowedViaPoi ? handleChooseFreeFormReward : undefined}
+							/>
+						)}
+						{/* Recompensa avulsa: Step 2 = descrição (+ débito, no totem) */}
+						{!showModeSelection && isFreeFormFlow && currentStep === 2 && freeFormReward && (
+							<FreeFormRewardStep
+								mode={mode}
+								terminology={org.terminologia}
+								availableBalance={availableCashback}
+								descricao={freeFormReward.descricao}
+								valor={freeFormReward.valor}
+								onChange={(changes) => updateFreeFormReward({ ...freeFormReward, ...changes })}
+								onSubmit={handleNextStep}
+							/>
+						)}
+						{/* Recompensa avulsa: Step 3 = confirmação do operador (totem apenas) */}
+						{!showModeSelection && isFreeFormFlow && currentStep === 3 && !isMobileMode && freeFormReward && (
+							<FreeFormRewardConfirmationStep
+								clientName={state.client.nome || client?.nome || ""}
+								descricao={freeFormReward.descricao}
+								valor={freeFormReward.valor ?? 0}
+								availableBalance={availableCashback}
+								terminology={org.terminologia}
+								operatorIdentifier={state.operatorIdentifier}
+								onOperatorIdentifierChange={updateOperatorIdentifier}
+								onSubmit={submitTransaction}
 							/>
 						)}
 						{/* Prize sale-only: Step 2 = Sale Value */}
@@ -738,8 +833,43 @@ export default function NewSaleContent({ org, clientId, prizes, initialOperatorP
 							/>
 						)}
 
+						{/* Recompensa avulsa success: o débito vem do servidor (no celular, foi o operador quem definiu). */}
+						{!showModeSelection && isFreeFormFlow && currentStep === finalSuccessStep && successData && (
+							<SuccessCelebration
+								title="Resgate realizado!"
+								subtitle="A recompensa foi resgatada com sucesso."
+								stats={[
+									{
+										label: "NOVO SALDO TOTAL",
+										value: successData.visualClientNewOverallAvailableBalance ?? successData.clientNewOverallAvailableBalance ?? 0,
+										variant: "brand",
+										formatValue: (value) => formatCashbackValue(value, org.terminologia),
+									},
+								]}
+								primaryAction={{ label: "Nova venda", onClick: handleReset }}
+								secondaryAction={{
+									label: "Voltar ao início",
+									onClick: handleGoToHub,
+								}}
+							>
+								<div className="bg-brand-secondary/5 border border-brand-secondary/20 rounded-2xl short:rounded-xl w-full max-w-xl p-4 short:p-2 flex items-center gap-4 short:gap-2">
+									<div className="flex w-14 h-14 short:w-10 short:h-10 min-w-14 short:min-w-10 items-center justify-center rounded-xl short:rounded-lg bg-brand-secondary text-brand-secondary-foreground">
+										<Gift className="w-6 h-6 short:w-4 short:h-4" />
+									</div>
+									<div className="flex-1 min-w-0 text-left">
+										<h3 className="font-bold text-sm short:text-xs tracking-tight break-words">
+											{successData.freeFormReward?.descricao ?? freeFormReward?.descricao ?? "Recompensa"}
+										</h3>
+										<p className="font-black text-lg short:text-base text-brand-secondary">
+											{formatCashbackValue(successData.freeFormReward?.valor ?? freeFormReward?.valor ?? 0, org.terminologia)}
+										</p>
+									</div>
+								</div>
+							</SuccessCelebration>
+						)}
+
 						{/* Prize mode success */}
-						{!showModeSelection && isPrizeMode && currentStep === finalSuccessStep && successData && (
+						{!showModeSelection && isPrizeMode && !isFreeFormFlow && currentStep === finalSuccessStep && successData && (
 							<SuccessCelebration
 								title={selectedPrizes.length > 0 ? "Resgate realizado!" : "Venda registrada!"}
 								subtitle={
@@ -831,6 +961,11 @@ export default function NewSaleContent({ org, clientId, prizes, initialOperatorP
 											if (isPrizeSaleOnlyFlow && currentStep === 2) {
 												setPrizeFlowIntent(null);
 												updateSale({ valor: 0 });
+											}
+											// Voltar dos detalhes da recompensa avulsa desfaz a escolha; da confirmação, mantém o que foi digitado.
+											if (isFreeFormFlow && currentStep === 2) {
+												setPrizeFlowIntent(null);
+												updateFreeFormReward(null);
 											}
 											setCurrentStep((p) => p - 1);
 										}}

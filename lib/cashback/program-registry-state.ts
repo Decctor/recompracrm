@@ -22,7 +22,13 @@ const SECTION_FIELDS: Record<TCashbackProgramSection, (keyof TCashbackProgramDra
 		"expiracaoRegraValidadeValor",
 	],
 	paymentMethods: ["acumuloRegrasPagamento"],
-	redemption: ["modalidadeDescontosPermitida", "resgateLimiteTipo", "resgateLimiteValor", "modalidadeRecompensasPermitida"],
+	redemption: [
+		"modalidadeDescontosPermitida",
+		"resgateLimiteTipo",
+		"resgateLimiteValor",
+		"modalidadeRecompensasPermitida",
+		"modalidadeRecompensaAvulsaPermitida",
+	],
 	surfaces: ["resgatePermitirViaPos", "resgatePermitirViaPontoIntegracao", "resgatePermitirViaLojaDigital"],
 };
 
@@ -34,6 +40,7 @@ export function mapCashbackProgramToDraft(program: TCashbackProgram): TCashbackP
 		terminologia: program.terminologia,
 		modalidadeDescontosPermitida: program.modalidadeDescontosPermitida,
 		modalidadeRecompensasPermitida: program.modalidadeRecompensasPermitida,
+		modalidadeRecompensaAvulsaPermitida: program.modalidadeRecompensaAvulsaPermitida,
 		acumuloTipo: program.acumuloTipo,
 		acumuloValor: program.acumuloValor,
 		acumuloValorParceiro: program.acumuloValorParceiro,
@@ -67,6 +74,8 @@ export function buildCashbackProgramSectionUpdateInput({
 		cashbackProgram.resgateLimiteTipo = null;
 		cashbackProgram.resgateLimiteValor = null;
 	}
+	// A recompensa avulsa é sub-modalidade da troca por recompensas: sem ela, não fica ligada à toa.
+	if (!cashbackProgram.modalidadeRecompensasPermitida) cashbackProgram.modalidadeRecompensaAvulsaPermitida = false;
 	return { cashbackProgramId: program.id, cashbackProgram };
 }
 
@@ -86,7 +95,8 @@ export function getCashbackProgramSectionBlockReason({ draft, section }: { draft
 	}
 	if (section === "paymentMethods" && draft.acumuloRegrasPagamento) {
 		const rules = Object.values(draft.acumuloRegrasPagamento);
-		if (rules.length > 0 && rules.every((rule) => !rule.pontua)) return "Com nenhuma forma pontuando, nenhuma venda gera saldo. Desligue as regras ou marque ao menos uma.";
+		if (rules.length > 0 && rules.every((rule) => !rule.pontua))
+			return "Com nenhuma forma pontuando, nenhuma venda gera saldo. Desligue as regras ou marque ao menos uma.";
 	}
 	if (section === "surfaces" && !hasAnyCashbackRedemptionSurface(draft)) return NO_CASHBACK_REDEMPTION_SURFACE_MESSAGE;
 	return null;

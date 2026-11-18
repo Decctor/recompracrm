@@ -79,6 +79,7 @@ async function fixCashbackValues() {
 						// Fields to track the reward given for the redemption
 						resgateRecompensaId: transaction.resgateRecompensaId,
 						resgateRecompensaValor: transaction.resgateRecompensaValor,
+						resgateRecompensaDescricao: transaction.resgateRecompensaDescricao,
 						operadorId: transaction.operadorId,
 						operadorVendedorId: transaction.operadorVendedorId,
 						campanhaId: transaction.campanhaId,
@@ -109,6 +110,7 @@ async function fixCashbackValues() {
 						// Fields to track the reward given for the redemption
 						resgateRecompensaId: transaction.resgateRecompensaId,
 						resgateRecompensaValor: transaction.resgateRecompensaValor,
+						resgateRecompensaDescricao: transaction.resgateRecompensaDescricao,
 						operadorId: transaction.operadorId,
 						operadorVendedorId: transaction.operadorVendedorId,
 						campanhaId: transaction.campanhaId,
@@ -137,6 +139,7 @@ async function fixCashbackValues() {
 						// Fields to track the reward given for the redemption
 						resgateRecompensaId: transaction.resgateRecompensaId,
 						resgateRecompensaValor: transaction.resgateRecompensaValor,
+						resgateRecompensaDescricao: transaction.resgateRecompensaDescricao,
 						operadorId: transaction.operadorId,
 						operadorVendedorId: transaction.operadorVendedorId,
 						campanhaId: transaction.campanhaId,
@@ -165,6 +168,7 @@ async function fixCashbackValues() {
 						// Fields to track the reward given for the redemption
 						resgateRecompensaId: transaction.resgateRecompensaId,
 						resgateRecompensaValor: transaction.resgateRecompensaValor,
+						resgateRecompensaDescricao: transaction.resgateRecompensaDescricao,
 						operadorId: transaction.operadorId,
 						operadorVendedorId: transaction.operadorVendedorId,
 						campanhaId: transaction.campanhaId,
