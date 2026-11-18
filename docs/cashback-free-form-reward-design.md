@@ -1,6 +1,6 @@
 # Cashback — Recompensa avulsa
 
-> Implementado. Migração `drizzle/0151_cashback_free_form_reward.sql` (aplicação manual).
+> Implementado. Migração `drizzle/0152_cashback_free_form_reward.sql` (aplicação manual).
 > Contexto: uma organização com programa em pontos troca prêmios que variam demais para manter
 > cadastrados. Pediu um resgate "como o de recompensa", mas em que o valor é digitado na hora.
 
@@ -38,8 +38,9 @@ validador. A recompensa avulsa não toca o catálogo.
 - **Sem venda, sem acúmulo, sem limite de resgate** (o limite é do desconto em dinheiro). Sem
   confirmação de valor de venda (`poiSaleRequiresValueConfirmation`).
 - **Não combina** com recompensas do catálogo, cupom ou desconto em cashback.
-- O evento de campanha continua sendo gravado como `TRANSACAO_CASHBACK` com `contabilizarCompra: false`,
-  como qualquer resgate sem venda.
+- **Sem evento de campanha.** O evento de compra do POI é `COMPRA_CONFIRMADA`, e `contabilizarCompra: false`
+  só zera os totais: `PRIMEIRA-COMPRA` (cliente sem compras) e `NOVA-COMPRA` sem valor mínimo
+  disparariam um "obrigado pela compra" para uma troca de pontos. A recompensa avulsa não grava evento.
 - O estorno usa o `consumoFifo` gravado na transação, como os demais resgates.
 
 ## Fluxos

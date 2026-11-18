@@ -862,8 +862,11 @@ export async function preparePointOfInteractionTransaction({ input, operatorCont
 			}
 		}
 
+		// Recompensa avulsa não é compra: o evento é COMPRA_CONFIRMADA e, mesmo com contabilizarCompra
+		// false, PRIMEIRA-COMPRA (cliente sem compras) e NOVA-COMPRA sem valor mínimo disparariam.
 		const shouldProcessPurchaseCampaigns =
-			transactionRequiresSaleProcessing || transactionRequiresAccumulationProcessing || transactionRequiresRedemptionProcessing;
+			!isFreeFormRedemption &&
+			(transactionRequiresSaleProcessing || transactionRequiresAccumulationProcessing || transactionRequiresRedemptionProcessing);
 
 		let campaignEventId: string | null = null;
 		if (shouldProcessPurchaseCampaigns && clientId) {

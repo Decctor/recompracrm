@@ -8,7 +8,7 @@
 -- `modalidade_recompensa_avulsa_permitida` é sub-modalidade da troca por recompensas: só vale com
 -- `modalidade_recompensas_permitida` ligada. Default false: nenhum programa existente muda.
 --
--- Aplicar com: npx tsx ./scripts/apply-sql-migration.ts drizzle/0151_cashback_free_form_reward.sql
+-- Aplicar com: npx tsx ./scripts/apply-sql-migration.ts drizzle/0152_cashback_free_form_reward.sql
 -- Idempotente (IF NOT EXISTS). Coluna boolean com default constante e coluna text nullable: só
 -- metadado, sem reescrever as tabelas.
 SET LOCAL lock_timeout = '5s';

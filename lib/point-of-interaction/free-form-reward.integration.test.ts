@@ -89,7 +89,10 @@ before(async () => {
 	process.env.RESEND_API_KEY = "re_test_unused";
 	process.env.STRIPE_SECRET_KEY = "sk_test_unused";
 	process.env.SUPABASE_DB_URL = "postgres://unused:unused@127.0.0.1:1/unused";
-	process.env.CAMPAIGN_EVENTS_ENABLED = "false";
+	// Captura ligada: os testes conferem se o evento de compra é gravado. A publicação só roda no
+	// afterCommit, que o teste não chama, então nada sai para a fila.
+	process.env.CAMPAIGN_EVENTS_ENABLED = "true";
+	delete process.env.CAMPAIGN_EVENTS_ORGANIZATIONS;
 	({ preparePointOfInteractionTransaction: prepareTransaction } = await import("@/app/api/point-of-interaction/new-transaction/route"));
 	const statements = await generateMigration(generateDrizzleJson({}), generateDrizzleJson({ ...schema, ...enums }));
 	for (const statement of statements) {
@@ -172,6 +175,8 @@ test("totem: debita o valor digitado, grava a descrição e não cria venda nem 
 	assert.equal(balance?.saldoValorResgatadoTotal, 300);
 	const [client] = await database.select().from(schema.clients).where(eq(schema.clients.id, "client"));
 	assert.equal(client?.metadataTotalCompras ?? 0, 0, "resgate não conta como compra");
+	// Cliente sem compras: um evento COMPRA_CONFIRMADA dispararia PRIMEIRA-COMPRA / NOVA-COMPRA.
+	assert.equal((await database.select().from(schema.campaignEvents)).length, 0, "nenhum evento de campanha");
 });
 
 test("aprovação: o débito é o do operador, o pedido do celular só descreve", async () => {
@@ -225,4 +230,5 @@ test("controle: a mesma configuração sem recompensa avulsa registra venda e ac
 	assert.equal(result.freeFormReward, null);
 	assert.equal((await database.select().from(schema.sales)).length, 1);
 	assert.equal((await readTransactions("ACÚMULO")).length, 2);
+	assert.equal((await database.select().from(schema.campaignEvents)).length, 1, "a venda grava o evento de compra");
 });
