@@ -36,6 +36,7 @@
 		"backfill:whatsapp-edit-placeholders": "tsx ./scripts/backfill-whatsapp-edit-placeholders.ts",
 		"reprocess:chat-media": "tsx ./scripts/reprocess-failed-chat-media.ts",
 		"backfill:poi-conversion-attribution": "tsx ./scripts/backfill-poi-conversion-attribution.ts",
+		"backfill:internal-sale-conversion-attribution": "tsx ./scripts/backfill-internal-sale-conversion-attribution.ts",
 		"backfill:poi-sales-processing-source": "tsx ./scripts/backfill-poi-sales-processing-source.ts",
 		"backfill:online-software-sales": "tsx ./scripts/backfill-online-software-sales.ts",
 		"backfill:cashback-prize-organizacao": "tsx ./scripts/backfill-cashback-prize-organizacao.ts",
