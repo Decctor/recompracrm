@@ -9,5 +9,5 @@ type PartnersPageProps = {
 export default async function Partners({ user }: PartnersPageProps) {
 	const sessionUser = await getCurrentSession();
 	if (!sessionUser) redirect("/auth/signin");
-	return <PartnersPage user={sessionUser.user} />;
+	return <PartnersPage user={sessionUser.user} canEditPartners={sessionUser.membership?.permissoes.empresa.editar ?? false} />;
 }

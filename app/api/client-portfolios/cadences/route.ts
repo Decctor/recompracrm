@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { assertCanManageClientBase } from "@/lib/clients/access";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { DEFAULT_SEGMENT_CADENCES, getEffectiveSegmentCadences } from "@/lib/client-portfolios/cadence";
 import { db } from "@/services/drizzle";
@@ -122,8 +123,8 @@ async function updateSegmentCadencesRoute(request: NextRequest) {
 	if (!session.membership) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização.");
 	if (!session.membership.organizacao.configuracao.preferencias.carteirasClientes?.habilitado)
 		throw new createHttpError.Forbidden("O módulo de carteira de clientes não está habilitado para esta organização.");
-	if (!session.membership.permissoes.empresa.editar)
-		throw new createHttpError.Forbidden("Você não tem permissão para editar as cadências de comunicação.");
+	// Cadências valem para todas as carteiras: gestão da base (clientes.gerenciarBase).
+	assertCanManageClientBase(session);
 
 	const body = await request.json();
 	const input = UpdateSegmentCadencesInputSchema.parse(body);

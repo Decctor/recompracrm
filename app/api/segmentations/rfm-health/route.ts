@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { assertCanViewClients } from "@/lib/clients/access";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { db } from "@/services/drizzle";
 import { sales, utils } from "@/services/drizzle/schema";
@@ -58,7 +59,10 @@ function percentile(values: number[], percentileValue: number) {
 }
 
 function summarizeMetric(values: number[]) {
-	const percentilesMap = Object.fromEntries(PERCENTILES.map((p) => [`p${p}`, percentile(values, p)])) as Record<`p${(typeof PERCENTILES)[number]}`, number | null>;
+	const percentilesMap = Object.fromEntries(PERCENTILES.map((p) => [`p${p}`, percentile(values, p)])) as Record<
+		`p${(typeof PERCENTILES)[number]}`,
+		number | null
+	>;
 	const sum = values.reduce((acc, value) => acc + value, 0);
 	const average = values.length > 0 ? sum / values.length : null;
 	const median = percentile(values, 50);
@@ -403,7 +407,8 @@ function buildAlerts({
 			id: "monetario-outliers",
 			severity: "info",
 			title: "Distribuição monetária assimétrica.",
-			description: "A média monetária é muito superior à mediana, sugerindo poucos clientes com gasto desproporcional. Faixas baseadas em média ficam distorcidas.",
+			description:
+				"A média monetária é muito superior à mediana, sugerindo poucos clientes com gasto desproporcional. Faixas baseadas em média ficam distorcidas.",
 		});
 	}
 
@@ -426,7 +431,8 @@ function buildAlerts({
 			id: "recencia-sobreposicao",
 			severity: "warning",
 			title: "Faixas de recência se sobrepõem.",
-			description: "Algumas faixas de recência têm valores que se cruzam. Isso faz com que o score atribuído seja sempre o primeiro encontrado, mascarando o restante.",
+			description:
+				"Algumas faixas de recência têm valores que se cruzam. Isso faz com que o score atribuído seja sempre o primeiro encontrado, mascarando o restante.",
 		});
 	}
 
@@ -437,7 +443,8 @@ function buildAlerts({
 			id: "topo-vazio",
 			severity: "warning",
 			title: "Quase ninguém na faixa de topo (CAMPEÕES + CLIENTES LEAIS).",
-			description: "Menos de 5% da base alcança as faixas de topo. Pode ser que os limites superiores estejam altos demais para a realidade da organização.",
+			description:
+				"Menos de 5% da base alcança as faixas de topo. Pode ser que os limites superiores estejam altos demais para a realidade da organização.",
 		});
 	}
 
@@ -487,6 +494,7 @@ function buildHealthScore(alerts: TAlert[], totalClients: number) {
 async function getRFMHealthRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você precisa estar autenticado para acessar esse recurso.");
+	assertCanViewClients(session);
 
 	const input = GetRFMHealthInputSchema.parse({
 		months: request.nextUrl.searchParams.get("months"),

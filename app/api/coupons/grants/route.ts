@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { assertCanEditCampaigns, assertCanViewCampaigns } from "@/lib/campaigns/access";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { db } from "@/services/drizzle";
 import { couponGrants, couponRedemptions, coupons } from "@/services/drizzle/schema";
@@ -57,6 +58,7 @@ export type TGetCouponGrantsOutput = Awaited<ReturnType<typeof getCouponGrants>>
 async function getCouponGrantsRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	assertCanViewCampaigns(session);
 	const input = GetCouponGrantsInputSchema.parse({
 		couponId: request.nextUrl.searchParams.get("couponId") ?? undefined,
 		page: request.nextUrl.searchParams.get("page") ?? undefined,
@@ -133,6 +135,7 @@ export type TCreateCouponGrantsOutput = Awaited<ReturnType<typeof createCouponGr
 async function createCouponGrantsRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	assertCanEditCampaigns(session);
 	const payload = await request.json();
 	const input = CreateCouponGrantsInputSchema.parse(payload);
 	const result = await createCouponGrants({ input, session });
@@ -175,6 +178,7 @@ export type TDeleteCouponGrantOutput = Awaited<ReturnType<typeof deleteCouponGra
 async function deleteCouponGrantRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	assertCanEditCampaigns(session);
 	const input = DeleteCouponGrantInputSchema.parse({ id: request.nextUrl.searchParams.get("id") ?? undefined });
 	const result = await deleteCouponGrant({ input, session });
 	return NextResponse.json(result, { status: 200 });

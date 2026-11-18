@@ -121,6 +121,17 @@ export function useUserState() {
 					visualizar: false,
 					configurar: false,
 				},
+				clientes: {
+					visualizar: false,
+					criar: false,
+					editar: false,
+					gerenciarBase: false,
+				},
+				comunicacao: {
+					visualizar: false,
+					editar: false,
+					publicar: false,
+				},
 			},
 		},
 	};

@@ -62,14 +62,20 @@ import { Pencil } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import NewClient from "@/components/Modals/Clients/NewClient";
 import ExportClients from "@/components/Modals/Clients/ExportClients";
+import type { TClientPermissions } from "@/lib/permissions/clients";
 import { ClientsGeographicMap } from "@/components/Stats/ClientsGeographicMap";
 type ClientsPageProps = {
 	user: TAuthUserSession["user"];
-	canReconcileClients: boolean;
+	/**
+	 * Permissões de clientes do membro (lib/permissions/clients.ts), resolvidas no servidor. Sem `criar`
+	 * some o NOVO CLIENTE, sem `editar` some o EDITAR, sem `gerenciarBase` somem importar e a fila de
+	 * reconciliação de duplicados. A tela só esconde; quem barra é a API.
+	 */
+	permissions: TClientPermissions;
 	/** dadosSensiveis.exportarClientes: sem ela o botão de exportar some. */
 	canExportClients: boolean;
 };
-export default function ClientsPage({ user, canReconcileClients, canExportClients }: ClientsPageProps) {
+export default function ClientsPage({ user, permissions, canExportClients }: ClientsPageProps) {
 	const [viewMode, setViewMode] = useQueryState("view", parseAsStringEnum(["stats", "database"]));
 	return (
 		<div className="w-full h-full flex flex-col gap-3">
@@ -85,20 +91,20 @@ export default function ClientsPage({ user, canReconcileClients, canExportClient
 							Banco de Dados
 						</TabsTrigger>
 					</TabsList>
-					<ClientReconciliationQueue canReconcile={canReconcileClients} />
+					<ClientReconciliationQueue canReconcile={permissions.gerenciarBase} />
 				</div>
 				<TabsContent value="stats">
 					<ClientsStatsView />
 				</TabsContent>
 				<TabsContent value="database">
-					<ClientsDatabaseView canExportClients={canExportClients} />
+					<ClientsDatabaseView permissions={permissions} canExportClients={canExportClients} />
 				</TabsContent>
 			</Tabs>
 		</div>
 	);
 }
 
-function ClientsDatabaseView({ canExportClients }: { canExportClients: boolean }) {
+function ClientsDatabaseView({ permissions, canExportClients }: { permissions: TClientPermissions; canExportClients: boolean }) {
 	const queryClient = useQueryClient();
 	const [newClientModalIsOpen, setNewClientModalIsOpen] = useState<boolean>(false);
 	const [exportClientsModalIsOpen, setExportClientsModalIsOpen] = useState<boolean>(false);
@@ -148,16 +154,20 @@ function ClientsDatabaseView({ canExportClients }: { canExportClients: boolean }
 							EXPORTAR
 						</Button>
 					) : null}
-					<Button variant={"ghost"} className="flex items-center gap-2" size="sm" asChild>
-						<Link href={appRoutes.customers.import()}>
-							<FileSpreadsheet className="w-4 h-4 min-w-4 min-h-4" />
-							IMPORTAR
-						</Link>
-					</Button>
-					<Button className="flex items-center gap-2" size="sm" onClick={() => setNewClientModalIsOpen(true)}>
-						<Plus className="w-4 h-4 min-w-4 min-h-4" />
-						NOVO CLIENTE
-					</Button>
+					{permissions.gerenciarBase ? (
+						<Button variant={"ghost"} className="flex items-center gap-2" size="sm" asChild>
+							<Link href={appRoutes.customers.import()}>
+								<FileSpreadsheet className="w-4 h-4 min-w-4 min-h-4" />
+								IMPORTAR
+							</Link>
+						</Button>
+					) : null}
+					{permissions.criar ? (
+						<Button className="flex items-center gap-2" size="sm" onClick={() => setNewClientModalIsOpen(true)}>
+							<Plus className="w-4 h-4 min-w-4 min-h-4" />
+							NOVO CLIENTE
+						</Button>
+					) : null}
 				</div>
 			</div>
 			<ClientsInlineFilters filters={filters} updateFilters={updateFilters} />
@@ -175,7 +185,9 @@ function ClientsDatabaseView({ canExportClients }: { canExportClients: boolean }
 			{isError ? <ErrorComponent msg={getErrorMessage(error)} /> : null}
 			{isSuccess && clients ? (
 				clients.length > 0 ? (
-					clients.map((client, index: number) => <ClientPageCard key={client.id} client={client} handleEditClick={() => setEditingClientId(client.id)} />)
+					clients.map((client, index: number) => (
+						<ClientPageCard key={client.id} client={client} handleEditClick={permissions.editar ? () => setEditingClientId(client.id) : null} />
+					))
 				) : (
 					<p className="w-full tracking-tight text-center">Nenhum cliente encontrado.</p>
 				)
@@ -183,6 +195,7 @@ function ClientsDatabaseView({ canExportClients }: { canExportClients: boolean }
 			{editingClientId ? (
 				<ControlClient
 					clientId={editingClientId}
+					canCreateTags={permissions.gerenciarBase}
 					closeModal={() => setEditingClientId(null)}
 					callbacks={{
 						onMutate: handleOnMutate,
@@ -191,7 +204,11 @@ function ClientsDatabaseView({ canExportClients }: { canExportClients: boolean }
 				/>
 			) : null}
 			{newClientModalIsOpen ? (
-				<NewClient closeModal={() => setNewClientModalIsOpen(false)} callbacks={{ onMutate: handleOnMutate, onSettled: handleOnSettled }} />
+				<NewClient
+					closeModal={() => setNewClientModalIsOpen(false)}
+					canCreateTags={permissions.gerenciarBase}
+					callbacks={{ onMutate: handleOnMutate, onSettled: handleOnSettled }}
+				/>
 			) : null}
 			{exportClientsModalIsOpen ? <ExportClients filters={filters} closeModal={() => setExportClientsModalIsOpen(false)} /> : null}
 		</div>
@@ -680,7 +697,7 @@ function ClientsStatsView() {
 
 type ClientCardProps = {
 	client: TGetClientsOutputDefault["clients"][number];
-	handleEditClick: () => void;
+	handleEditClick: (() => void) | null;
 };
 function ClientPageCard({ client, handleEditClick }: ClientCardProps) {
 	const clientCashbackBalance = client.saldos.length > 0 ? client.saldos[0] : null;
@@ -752,10 +769,12 @@ function ClientPageCard({ client, handleEditClick }: ClientCardProps) {
 					) : null}
 				</div>
 				<div className="flex items-center gap-3">
-					<Button variant="ghost" className="flex items-center gap-1.5" size="sm" onClick={handleEditClick}>
-						<Pencil className="w-3 min-w-3 h-3 min-h-3" />
-						EDITAR
-					</Button>
+					{handleEditClick ? (
+						<Button variant="ghost" className="flex items-center gap-1.5" size="sm" onClick={handleEditClick}>
+							<Pencil className="w-3 min-w-3 h-3 min-h-3" />
+							EDITAR
+						</Button>
+					) : null}
 					<Button variant="link" className="flex items-center gap-1.5" size="sm" asChild>
 						<Link href={appRoutes.customers.details(client.id)}>
 							<Info className="w-3 min-w-3 h-3 min-h-3" />

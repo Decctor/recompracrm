@@ -19,12 +19,17 @@ import { downloadVisualKitZip, kitZipName, visualKitPieceFolder } from "@/lib/vi
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Download, LoaderCircle, Package, Palette, Pencil, Plus, RefreshCw, Trash2, TriangleAlert } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { toast } from "sonner";
 
 type TVisualKitListItem = TGetVisualKitsOutputDefault[number];
 
-export default function VisualKitsPage() {
+type VisualKitsPageProps = {
+	/** comunicacao.editar: sem ela a lista é só leitura (baixar os kits gerados continua liberado). */
+	canEdit: boolean;
+};
+
+export default function VisualKitsPage({ canEdit }: VisualKitsPageProps) {
 	const { data: kits, isLoading, isError, error, queryKey } = useVisualKits();
 	const [kitToDelete, setKitToDelete] = useState<TVisualKitListItem | null>(null);
 
@@ -37,11 +42,13 @@ export default function VisualKitsPage() {
 						{kits ? (kits.length === 1 ? "1 kit salvo" : `${kits.length} kits salvos`) : "Kits de etiquetas, encartes e posts com os preços do catálogo."}
 					</p>
 				</div>
-				<ActionToolbar>
-					<ActionToolbar.Primary asChild icon={Plus}>
-						<Link href={appRoutes.channels.newVisualKit()}>NOVO KIT</Link>
-					</ActionToolbar.Primary>
-				</ActionToolbar>
+				{canEdit ? (
+					<ActionToolbar>
+						<ActionToolbar.Primary asChild icon={Plus}>
+							<Link href={appRoutes.channels.newVisualKit()}>NOVO KIT</Link>
+						</ActionToolbar.Primary>
+					</ActionToolbar>
+				) : null}
 			</div>
 
 			{isLoading ? (
@@ -61,18 +68,20 @@ export default function VisualKitsPage() {
 						<EmptyTitle>Nenhum kit ainda</EmptyTitle>
 						<EmptyDescription>Monte etiquetas, encartes, posts e stories de uma vez, com os mesmos produtos e preços.</EmptyDescription>
 					</EmptyHeader>
-					<Button asChild>
-						<Link href={appRoutes.channels.newVisualKit()}>
-							<Plus className="h-4 w-4" />
-							NOVO KIT
-						</Link>
-					</Button>
+					{canEdit ? (
+						<Button asChild>
+							<Link href={appRoutes.channels.newVisualKit()}>
+								<Plus className="h-4 w-4" />
+								NOVO KIT
+							</Link>
+						</Button>
+					) : null}
 				</Empty>
 			) : null}
 
 			<div className="flex flex-col gap-2">
 				{kits?.map((kit) => (
-					<VisualKitCard key={kit.id} kit={kit} onDelete={() => setKitToDelete(kit)} />
+					<VisualKitCard key={kit.id} kit={kit} canEdit={canEdit} onDelete={() => setKitToDelete(kit)} />
 				))}
 			</div>
 
@@ -81,7 +90,7 @@ export default function VisualKitsPage() {
 	);
 }
 
-function VisualKitCard({ kit, onDelete }: { kit: TVisualKitListItem; onDelete: () => void }) {
+function VisualKitCard({ kit, canEdit, onDelete }: { kit: TVisualKitListItem; canEdit: boolean; onDelete: () => void }) {
 	const updatedAt = kit.dataAtualizacao ?? kit.dataInsercao;
 	const pieceLabel = kit.formatos.length === 1 ? "1 peça" : `${kit.formatos.length} peças`;
 	const productLabel = kit.quantidadeItens === 1 ? "1 produto" : `${kit.quantidadeItens} produtos`;
@@ -90,7 +99,7 @@ function VisualKitCard({ kit, onDelete }: { kit: TVisualKitListItem; onDelete: (
 
 	return (
 		<div className="flex w-full flex-col gap-3 rounded-2xl border border-border bg-card p-4 transition-colors hover:border-brand/30 lg:flex-row lg:items-center">
-			<Link href={appRoutes.channels.visualKit(kit.id)} className="flex min-w-0 flex-1 items-start gap-3">
+			<KitCardBody href={canEdit ? appRoutes.channels.visualKit(kit.id) : null}>
 				<span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand">
 					<Package className="h-5 w-5" />
 				</span>
@@ -135,9 +144,9 @@ function VisualKitCard({ kit, onDelete }: { kit: TVisualKitListItem; onDelete: (
 						})}
 					</span>
 				</span>
-			</Link>
+			</KitCardBody>
 			<div className="flex shrink-0 flex-wrap items-center gap-1 self-end lg:self-center">
-				{isGenerated && changed > 0 ? (
+				{canEdit && isGenerated && changed > 0 ? (
 					<Button type="button" variant="brand" size="sm" asChild>
 						<Link href={`${appRoutes.channels.visualKit(kit.id)}?stage=review`}>
 							<RefreshCw className="h-3.5 w-3.5" />
@@ -146,17 +155,32 @@ function VisualKitCard({ kit, onDelete }: { kit: TVisualKitListItem; onDelete: (
 					</Button>
 				) : null}
 				{isGenerated ? <DownloadKitButton kitId={kit.id} kitName={kit.nome} /> : null}
-				<Button type="button" variant="ghost" size="sm" asChild>
-					<Link href={appRoutes.channels.visualKit(kit.id)}>
-						<Pencil className="h-3.5 w-3.5" />
-						EDITAR
-					</Link>
-				</Button>
-				<Button type="button" variant="ghost" size="sm" onClick={onDelete} aria-label={`Excluir ${kit.nome}`}>
-					<Trash2 className="h-3.5 w-3.5" />
-				</Button>
+				{canEdit ? (
+					<>
+						<Button type="button" variant="ghost" size="sm" asChild>
+							<Link href={appRoutes.channels.visualKit(kit.id)}>
+								<Pencil className="h-3.5 w-3.5" />
+								EDITAR
+							</Link>
+						</Button>
+						<Button type="button" variant="ghost" size="sm" onClick={onDelete} aria-label={`Excluir ${kit.nome}`}>
+							<Trash2 className="h-3.5 w-3.5" />
+						</Button>
+					</>
+				) : null}
 			</div>
 		</div>
+	);
+}
+
+/** Corpo do card: leva ao construtor para quem edita; para os demais é só informação. */
+function KitCardBody({ href, children }: { href: string | null; children: ReactNode }) {
+	const className = "flex min-w-0 flex-1 items-start gap-3";
+	if (!href) return <div className={className}>{children}</div>;
+	return (
+		<Link href={href} className={className}>
+			{children}
+		</Link>
 	);
 }
 

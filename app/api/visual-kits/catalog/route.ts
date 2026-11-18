@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { assertCanViewCommunication } from "@/lib/communication/access";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { loadVisualKitCatalog } from "@/lib/visual-kits/catalog";
 import { ProductSearchQuerySchema } from "@/schemas/product-search";
@@ -50,6 +51,7 @@ export type TGetVisualKitCatalogOutput = Awaited<ReturnType<typeof getVisualKitC
 async function getVisualKitCatalogRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	assertCanViewCommunication(session);
 	const searchParams = request.nextUrl.searchParams;
 	const input = GetVisualKitCatalogInputSchema.parse({
 		search: searchParams.get("search"),

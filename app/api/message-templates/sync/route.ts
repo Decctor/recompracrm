@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { assertCanPublishCommunication } from "@/lib/communication/access";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { lockConnectedWhatsappPhone, mergeMessageTemplatePhoneMetadataSql } from "@/lib/db-utils";
 import { db } from "@/services/drizzle";
@@ -9,7 +10,12 @@ import createHttpError from "http-errors";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import z from "zod";
-import { buildRemoteTemplateIndexes, buildWhatsappTemplateSyncPatch, listMetaTemplatesForPhone, resolveRemoteTemplate } from "@/lib/message-templates";
+import {
+	buildRemoteTemplateIndexes,
+	buildWhatsappTemplateSyncPatch,
+	listMetaTemplatesForPhone,
+	resolveRemoteTemplate,
+} from "@/lib/message-templates";
 import { getOrganizationWhatsappPhones, type TOrganizationWhatsappPhone } from "@/lib/whatsapp/organization-phones";
 
 const SYNC_LOG_PREFIX = "[MESSAGE_TEMPLATES_SYNC]";
@@ -209,6 +215,7 @@ export type TSyncMessageTemplatesOutput = Awaited<ReturnType<typeof syncMessageT
 async function syncMessageTemplatesRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	assertCanPublishCommunication(session);
 	const input = SyncMessageTemplatesInputSchema.parse(await request.json());
 	const result = await syncMessageTemplates({ input, session });
 	return NextResponse.json(result, { status: 200 });

@@ -17,6 +17,8 @@ import { toast } from "sonner";
 
 type CouponDetailHeaderProps = {
 	coupon: TGetCouponsOutputById;
+	/** campanhas.editar: sem ela ativar/desativar e excluir somem (a API recusa). */
+	canEdit: boolean;
 	callbacks?: { onSettled?: () => void };
 };
 
@@ -57,7 +59,7 @@ function HeaderScoreCard({ icon, label, value, hint }: { icon: React.ReactNode; 
  * e a resposta não deveria depender de qual aba está aberta. Os números são de vida toda — e não do
  * período filtrado na aba de estatísticas — justamente para não mudarem quando o filtro muda.
  */
-export default function CouponDetailHeader({ coupon, callbacks }: CouponDetailHeaderProps) {
+export default function CouponDetailHeader({ coupon, canEdit, callbacks }: CouponDetailHeaderProps) {
 	const router = useRouter();
 	const queryClient = useQueryClient();
 	const { impacto } = coupon;
@@ -138,30 +140,32 @@ export default function CouponDetailHeader({ coupon, callbacks }: CouponDetailHe
 						</span>
 					</div>
 
-					<div className="flex flex-wrap items-center gap-2 pt-0.5">
-						<LoadingButton
-							type="button"
-							variant="outline"
-							size="sm"
-							className="flex items-center gap-1.5"
-							loading={toggleIsPending}
-							onClick={() => handleToggleActive()}
-						>
-							{coupon.ativo ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
-							{coupon.ativo ? "DESATIVAR" : "ATIVAR"}
-						</LoadingButton>
-						<Button
-							type="button"
-							variant="ghost"
-							size="sm"
-							className="flex items-center gap-1.5 text-destructive"
-							disabled={deleteIsPending}
-							onClick={() => handleDeleteCoupon({ id: coupon.id })}
-						>
-							<Trash2 className="h-3.5 w-3.5" />
-							EXCLUIR
-						</Button>
-					</div>
+					{canEdit ? (
+						<div className="flex flex-wrap items-center gap-2 pt-0.5">
+							<LoadingButton
+								type="button"
+								variant="outline"
+								size="sm"
+								className="flex items-center gap-1.5"
+								loading={toggleIsPending}
+								onClick={() => handleToggleActive()}
+							>
+								{coupon.ativo ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+								{coupon.ativo ? "DESATIVAR" : "ATIVAR"}
+							</LoadingButton>
+							<Button
+								type="button"
+								variant="ghost"
+								size="sm"
+								className="flex items-center gap-1.5 text-destructive"
+								disabled={deleteIsPending}
+								onClick={() => handleDeleteCoupon({ id: coupon.id })}
+							>
+								<Trash2 className="h-3.5 w-3.5" />
+								EXCLUIR
+							</Button>
+						</div>
+					) : null}
 				</div>
 
 				<div className="flex w-full shrink-0 flex-col gap-2 lg:w-[420px]">

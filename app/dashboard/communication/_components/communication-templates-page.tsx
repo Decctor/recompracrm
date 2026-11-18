@@ -24,10 +24,16 @@ import TestMessageTemplate from "@/components/Modals/MessageTemplates/TestMessag
 import { ViewMessageTemplatePhone } from "@/components/Modals/MessageTemplates/ViewMessageTemplatePhone";
 import { LoadingButton } from "@/components/loading-button";
 import { createMessageTemplatePhone, syncMessageTemplates } from "@/lib/mutations/message-templates";
+import type { TCommunicationPermissions } from "@/lib/permissions/communication";
 import { toast } from "sonner";
 type CommunicationTemplatesPageProps = {
 	organizationName: string;
 	showNewTemplateAction?: boolean;
+	/**
+	 * Permissões de comunicação do membro (lib/permissions/communication.ts), resolvidas por quem monta a
+	 * tela. Sem `editar` somem criar, editar e testar; sem `publicar` somem sincronizar e enviar à Meta.
+	 */
+	permissions: TCommunicationPermissions;
 };
 
 function getWhatsappConnectionPhones(whatsappConnections: TGetWhatsappConnectionsOutput["data"]) {
@@ -44,6 +50,7 @@ type TGetWhatsappConnectionPhones = ReturnType<typeof getWhatsappConnectionPhone
 export default function CommunicationTemplatesPage({
 	organizationName: _organizationName,
 	showNewTemplateAction = true,
+	permissions,
 }: CommunicationTemplatesPageProps) {
 	const queryClient = useQueryClient();
 	const { data: whatsappConnections } = useWhatsappConnections();
@@ -66,6 +73,8 @@ export default function CommunicationTemplatesPage({
 		() => (whatsappConnections ?? []).some((connection) => connection.tipoConexao === "META_CLOUD_API"),
 		[whatsappConnections],
 	);
+	const showSyncAction = hasMetaCloudApiConnection && permissions.publicar;
+	const showCreateAction = showNewTemplateAction && permissions.editar;
 	const handleOnMutate = async () => await queryClient.cancelQueries({ queryKey });
 	const handleOnSettled = async () => await queryClient.invalidateQueries({ queryKey });
 	const { mutate: syncTemplatesMutation, isPending: isSyncingTemplates } = useMutation({
@@ -87,9 +96,9 @@ export default function CommunicationTemplatesPage({
 	return (
 		<div className="flex h-full w-full flex-col gap-3">
 			<div className="flex w-full flex-col gap-3">
-				{hasMetaCloudApiConnection || showNewTemplateAction ? (
+				{showSyncAction || showCreateAction ? (
 					<div className="flex w-full items-center justify-end gap-2">
-						{hasMetaCloudApiConnection ? (
+						{showSyncAction ? (
 							<LoadingButton
 								size="sm"
 								variant="secondary"
@@ -102,7 +111,7 @@ export default function CommunicationTemplatesPage({
 								SINCRONIZAR TEMPLATES
 							</LoadingButton>
 						) : null}
-						{showNewTemplateAction ? (
+						{showCreateAction ? (
 							<Button size="sm" asChild>
 								<Link href="/dashboard/communication/builder" className="flex items-center gap-2">
 									<Plus className="h-4 w-4 min-h-4 min-w-4" />
@@ -140,6 +149,7 @@ export default function CommunicationTemplatesPage({
 								template={template}
 								callbacks={{ onMutate: handleOnMutate, onSettled: handleOnSettled }}
 								whatsappConnectionPhones={whatsappConnectionPhones}
+								permissions={permissions}
 							/>
 						))
 					) : (
@@ -154,6 +164,7 @@ export default function CommunicationTemplatesPage({
 type TemplateCardProps = {
 	template: TGetMessageTemplatesOutputDefault["messageTemplates"][number];
 	whatsappConnectionPhones: TGetWhatsappConnectionPhones;
+	permissions: TCommunicationPermissions;
 	callbacks: {
 		onMutate?: () => void;
 		onSuccess?: () => void;
@@ -162,7 +173,7 @@ type TemplateCardProps = {
 	};
 };
 
-function TemplateCard({ template, whatsappConnectionPhones, callbacks }: TemplateCardProps) {
+function TemplateCard({ template, whatsappConnectionPhones, permissions, callbacks }: TemplateCardProps) {
 	const [testingTemplate, setTestingTemplate] = useState(false);
 	const [pendingPhoneId, setPendingPhoneId] = useState<string | null>(null);
 	const [viewPhoneTelefoneId, setViewPhoneTelefoneId] = useState<string | null>(null);
@@ -301,9 +312,7 @@ function TemplateCard({ template, whatsappConnectionPhones, callbacks }: Templat
 															}
 														: null
 												}
-												onAdd={() => {
-													createPhoneMutation({ messageTemplateId: template.id, telefoneId: telefone.phoneId });
-												}}
+												onAdd={permissions.publicar ? () => createPhoneMutation({ messageTemplateId: template.id, telefoneId: telefone.phoneId }) : undefined}
 												onView={setViewPhoneTelefoneId}
 												isAdding={pendingPhoneId === telefone.phoneId}
 											/>
@@ -332,7 +341,7 @@ function TemplateCard({ template, whatsappConnectionPhones, callbacks }: Templat
 					<p className="text-xs font-medium text-foreground/80">{formatDateAsLocale(template.dataInsercao, true)}</p>
 				</div>
 				{/** GENERAL TEMPLATES ARE NOT EDITABLE (THOSE WITHOUT ORGANIZATION ID) */}
-				{template.organizacaoId ? (
+				{template.organizacaoId && permissions.editar ? (
 					<div className="flex items-center gap-1">
 						<Button variant="ghost" className="flex items-center gap-1.5" size="sm" onClick={() => setTestingTemplate(true)}>
 							<Send className="w-3 min-w-3 h-3 min-h-3" />
@@ -352,6 +361,7 @@ function TemplateCard({ template, whatsappConnectionPhones, callbacks }: Templat
 					messageTemplateId={template.id}
 					telefoneId={viewPhoneTelefoneId}
 					closeMenu={() => setViewPhoneTelefoneId(null)}
+					canPublish={permissions.publicar}
 					callbacks={callbacks}
 				/>
 			) : null}

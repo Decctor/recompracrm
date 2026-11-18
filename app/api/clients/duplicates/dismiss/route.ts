@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { assertCanManageClientBase } from "@/lib/clients/access";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { db } from "@/services/drizzle";
 import { clientDuplicateCandidates } from "@/services/drizzle/schema";
@@ -42,10 +43,8 @@ export type TDismissClientDuplicateOutput = Awaited<ReturnType<typeof dismissCli
 async function dismissClientDuplicateRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
-	// Ver e comparar é livre; descartar e mesclar exigem gestão da empresa.
-	if (!session.membership?.permissoes.empresa.editar) {
-		throw new createHttpError.Forbidden("Você não possui permissão para reconciliar clientes.");
-	}
+	// Ver e comparar segue clientes.visualizar; descartar e mesclar são gestão da base.
+	assertCanManageClientBase(session);
 
 	const payload = await request.json();
 	const input = DismissClientDuplicateInputSchema.parse(payload);

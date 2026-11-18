@@ -4,7 +4,11 @@ import ErrorComponent from "@/components/Layouts/ErrorComponent";
 import LoadingComponent from "@/components/Layouts/LoadingComponent";
 import EditSeller from "@/components/Modals/Sellers/EditSeller";
 import { WeeklyRevenueHeatmap } from "@/components/SalesStats/Blocks/WeeklyRevenueHeatmap";
-import { SellerResultsByMonthBlock, SellerResultsByMonthDayBlock, SellerResultsByWeekDayBlock } from "@/components/SellerStats/Blocks/PeriodHeatmapBlocks";
+import {
+	SellerResultsByMonthBlock,
+	SellerResultsByMonthDayBlock,
+	SellerResultsByWeekDayBlock,
+} from "@/components/SellerStats/Blocks/PeriodHeatmapBlocks";
 import { SellerTopClientsBlock, SellerTopProductGroupsBlock, SellerTopProductsBlock } from "@/components/SellerStats/Blocks/TopRankingBlocks";
 import { GoalTrackingCard } from "@/components/Stats/GoalTrackingBar";
 import StatUnitCard from "@/components/Stats/StatUnitCard";
@@ -22,8 +26,10 @@ import { BsCart, BsTicketPerforated } from "react-icons/bs";
 type SellerPageProps = {
 	user: TAuthUserSession["user"];
 	id: string;
+	/** usuarios.editar: sem ela o botão de editar some (a API recusa). */
+	canEditSeller: boolean;
 };
-export default function SellerPage({ user, id }: SellerPageProps) {
+export default function SellerPage({ user, id, canEditSeller }: SellerPageProps) {
 	const [editSellerMenuIsOpen, setEditSellerMenuIsOpen] = useState<boolean>(false);
 	const {
 		data: stats,
@@ -66,10 +72,12 @@ export default function SellerPage({ user, id }: SellerPageProps) {
 						<div className="flex flex-col gap-2 grow">
 							<div className="w-full flex items-center justify-between gap-2">
 								<h1 className="text-lg font-bold tracking-tight">{stats.vendedor.nome}</h1>
-								<Button variant="ghost" className="flex items-center gap-2" onClick={() => setEditSellerMenuIsOpen(true)}>
-									<Pencil className="w-4 min-w-4 h-4 min-h-4" />
-									EDITAR
-								</Button>
+								{canEditSeller ? (
+									<Button variant="ghost" className="flex items-center gap-2" onClick={() => setEditSellerMenuIsOpen(true)}>
+										<Pencil className="w-4 min-w-4 h-4 min-h-4" />
+										EDITAR
+									</Button>
+								) : null}
 							</div>
 							<div className="flex items-center gap-2">
 								<Code className="w-4 min-w-4 h-4 min-h-4" />

@@ -1,4 +1,5 @@
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
+import { canManageClientBase } from "@/lib/permissions/clients";
 import { requireDashboardCapability } from "@/lib/access/guards";
 import { canViewFinances } from "@/lib/permissions/finances";
 import { redirect } from "next/navigation";
@@ -21,7 +22,7 @@ export default async function SalePage({ params }: { params: Promise<{ saleId: s
 	const userHasFiscalCancelPermission = sessionUser.membership.permissoes.fiscal.cancelar;
 	const userCanDeleteSales = sessionUser.membership.permissoes.vendas.excluir;
 	const userCanEditSales = sessionUser.membership.permissoes.vendas.editar;
-	const userCanReconcileClients = sessionUser.membership.permissoes.empresa.editar;
+	const userCanReconcileClients = canManageClientBase(sessionUser.membership.permissoes);
 	// Só para decidir se o pagamento vira link para o lançamento contábil: a seção de pagamentos
 	// aparece com o módulo de ERP, mas `/dashboard/finance/entries` exige permissão do financeiro.
 	const userCanViewFinances = canViewFinances(sessionUser.membership.permissoes);

@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { assertCanPublishCommunication } from "@/lib/communication/access";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { lockConnectedWhatsappPhone, mergeMessageTemplatePhoneMetadataSql, removeMessageTemplatePhoneMetadataSql } from "@/lib/db-utils";
 import { db } from "@/services/drizzle";
@@ -83,6 +84,8 @@ export type TCreateMessageTemplatePhoneOutput = Awaited<ReturnType<typeof create
 async function createMessageTemplatePhoneRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	// Vincular, sincronizar ou desvincular um telefone é falar com a Meta em nome da organização: publicar.
+	assertCanPublishCommunication(session);
 	const input = MessageTemplatePhoneInputSchema.parse(await request.json());
 	const organizationId = session.membership?.organizacao.id;
 	if (!organizationId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
@@ -124,6 +127,7 @@ export type TSyncMessageTemplatePhoneOutput = Awaited<ReturnType<typeof syncMess
 async function syncMessageTemplatePhoneRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	assertCanPublishCommunication(session);
 	const input = MessageTemplatePhoneInputSchema.parse(await request.json());
 	const organizationId = session.membership?.organizacao.id;
 	if (!organizationId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
@@ -151,6 +155,7 @@ export type TDeleteMessageTemplatePhoneOutput = Awaited<ReturnType<typeof delete
 async function deleteMessageTemplatePhoneRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	assertCanPublishCommunication(session);
 	const input = DeleteMessageTemplatePhoneInputSchema.parse({
 		messageTemplateId: request.nextUrl.searchParams.get("messageTemplateId") ?? undefined,
 		telefoneId: request.nextUrl.searchParams.get("telefoneId") ?? undefined,

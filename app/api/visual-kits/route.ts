@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { assertCanEditCommunication, assertCanViewCommunication } from "@/lib/communication/access";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { sortVisualKitFormats, VISUAL_KIT_FORMATS } from "@/lib/visual-kits/formats";
 import { deleteStoredFile } from "@/lib/files/service";
@@ -152,6 +153,7 @@ export type TGetVisualKitsOutputDefault = Exclude<TGetVisualKitsOutput["data"]["
 async function getVisualKitsRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	assertCanViewCommunication(session);
 	const input = GetVisualKitsInputSchema.parse({ id: request.nextUrl.searchParams.get("id") ?? undefined });
 	const result = await getVisualKits({ input, session });
 	return NextResponse.json(result, { status: 200 });
@@ -316,6 +318,7 @@ export type TCreateVisualKitOutput = Awaited<ReturnType<typeof createVisualKit>>
 async function createVisualKitRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	assertCanEditCommunication(session);
 	const input = CreateVisualKitInputSchema.parse(await request.json());
 	const result = await createVisualKit({ input, session });
 	return NextResponse.json(result, { status: 201 });
@@ -360,6 +363,7 @@ export type TUpdateVisualKitOutput = Awaited<ReturnType<typeof updateVisualKit>>
 async function updateVisualKitRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	assertCanEditCommunication(session);
 	const input = UpdateVisualKitInputSchema.parse(await request.json());
 	const result = await updateVisualKit({ input, session });
 	return NextResponse.json(result, { status: 200 });
@@ -399,6 +403,7 @@ export type TDeleteVisualKitOutput = Awaited<ReturnType<typeof deleteVisualKit>>
 async function deleteVisualKitRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	assertCanEditCommunication(session);
 	const input = DeleteVisualKitInputSchema.parse({ id: request.nextUrl.searchParams.get("id") ?? undefined });
 	const result = await deleteVisualKit({ input, session });
 	return NextResponse.json(result, { status: 200 });

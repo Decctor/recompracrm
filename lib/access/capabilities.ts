@@ -1,6 +1,8 @@
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { canViewCampaigns } from "@/lib/permissions/campaigns";
 import { canViewCashback } from "@/lib/permissions/cashback";
+import { canViewClients } from "@/lib/permissions/clients";
+import { canViewCommunication } from "@/lib/permissions/communication";
 import { resolveDiscountAuthority } from "@/lib/permissions/discounts";
 import { canViewFinances } from "@/lib/permissions/finances";
 import { canViewInventory } from "@/lib/permissions/inventory";
@@ -62,13 +64,14 @@ export function canAccessDashboardCapability(capability: TDashboardCapability, c
 
 	switch (capability) {
 		case "dashboard":
+		case "pointOfInteraction":
+			return true;
+		// Comunicação visual: sem restrição de plano por enquanto; a permissão do membro é comunicacao.visualizar.
+		case "visualKits":
+			return canViewCommunication(permissions);
 		case "customers":
 		case "segments":
-		case "pointOfInteraction":
-		// Comunicação visual: sem restrição de plano por enquanto — a capability existe para que a
-		// restrição, quando vier, mude num lugar só.
-		case "visualKits":
-			return true;
+			return canViewClients(permissions);
 		case "products":
 			return canViewProducts(permissions);
 		case "sales":

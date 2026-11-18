@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { assertCanViewClients } from "@/lib/clients/access";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { db } from "@/services/drizzle";
 import { clients, sales } from "@/services/drizzle/schema";
@@ -135,6 +136,7 @@ export type TGetRelationshipPulseOutput = Awaited<ReturnType<typeof getRelations
 async function getRelationshipPulseRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	assertCanViewClients(session);
 	const input = GetRelationshipPulseInputSchema.parse({ days: request.nextUrl.searchParams.get("days") });
 	const result = await getRelationshipPulse({ input, session });
 	return NextResponse.json(result);

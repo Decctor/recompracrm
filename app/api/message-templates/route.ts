@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { assertCanEditCommunication, assertCanPickMessageTemplates, assertCanPublishCommunication } from "@/lib/communication/access";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { lockConnectedWhatsappPhone, mergeMessageTemplatePhoneMetadataSql } from "@/lib/db-utils";
 import { MessageTemplateSchema } from "@/schemas/message-templates";
@@ -157,8 +158,11 @@ export type TCreateMessageTemplateOutput = Awaited<ReturnType<typeof createMessa
 async function createMessageTemplateRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	assertCanEditCommunication(session);
 	const payload = await request.json();
 	const input = CreateMessageTemplateInputSchema.parse(payload);
+	// Criar já enviando para a Meta é publicar; sem `publicar`, o cliente manda `submitWhatsapp: false`.
+	if (input.submitWhatsapp) assertCanPublishCommunication(session);
 	const organizationId = session.membership?.organizacao.id;
 	if (!organizationId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
 	const result = await createMessageTemplate({ input, organizationId, authorId: session.user.id });
@@ -266,7 +270,10 @@ export type TUpdateMessageTemplateOutput = Awaited<ReturnType<typeof updateMessa
 async function updateMessageTemplateRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	assertCanEditCommunication(session);
 	const input = UpdateMessageTemplateInputSchema.parse(await request.json());
+	// Mesma condição de `updateMessageTemplate` para reenviar à Meta: só conteúdo ou categoria disparam o envio.
+	if (input.submitWhatsapp && (input.messageTemplate.conteudo || input.messageTemplate.categoria)) assertCanPublishCommunication(session);
 	const organizationId = session.membership?.organizacao.id;
 	if (!organizationId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
 	const result = await updateMessageTemplate({ input, organizationId });
@@ -309,6 +316,9 @@ async function deleteMessageTemplateRoute(request: NextRequest) {
 		id: request.nextUrl.searchParams.get("id") ?? undefined,
 		deleteFromMeta: request.nextUrl.searchParams.get("deleteFromMeta") ?? undefined,
 	});
+	assertCanEditCommunication(session);
+	// Excluir também na Meta (o padrão) mexe no que está aprovado lá: publicar.
+	if (input.deleteFromMeta) assertCanPublishCommunication(session);
 	const result = await deleteMessageTemplate({ input, session });
 	return NextResponse.json(result, { status: 200 });
 }
@@ -401,6 +411,8 @@ export type TGetMessageTemplatesOutputById = Exclude<TGetMessageTemplatesOutput[
 async function getMessageTemplatesRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	// A lista também alimenta os seletores do builder de campanhas e do hub de atendimentos.
+	assertCanPickMessageTemplates(session);
 	const input = GetMessageTemplatesInputSchema.parse({
 		id: request.nextUrl.searchParams.get("id") ?? undefined,
 		search: request.nextUrl.searchParams.get("search") ?? undefined,

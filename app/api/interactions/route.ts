@@ -2,6 +2,7 @@ import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { createManualInteraction, resolvePlannedInteraction } from "@/lib/interactions/create";
+import { canEditClients } from "@/lib/permissions/clients";
 import { InteractionChannelEnum, InteractionDirectionEnum, InteractionLifecycleStatusEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
 import { interactions } from "@/services/drizzle/schema";
@@ -13,6 +14,7 @@ import z from "zod";
 
 const DEFAULT_PAGE_SIZE = 25;
 const MAX_PAGE_SIZE = 100;
+const INTERACTION_WRITE_FORBIDDEN_MESSAGE = "Você não possui permissão para editar clientes.";
 
 // ============================================================================
 // GET — timeline de interações por cliente ou por vendedor
@@ -196,6 +198,8 @@ async function createInteractionRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
 	if (!session.membership) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização.");
+	// Registrar um contato (ou agendar/resolver um retorno) escreve no histórico do cliente: clientes.editar.
+	if (!canEditClients(session.membership.permissoes)) throw new createHttpError.Forbidden(INTERACTION_WRITE_FORBIDDEN_MESSAGE);
 
 	const body = await request.json();
 	const input = CreateInteractionInputSchema.parse(body);
@@ -242,6 +246,7 @@ async function resolveInteractionRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
 	if (!session.membership) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização.");
+	if (!canEditClients(session.membership.permissoes)) throw new createHttpError.Forbidden(INTERACTION_WRITE_FORBIDDEN_MESSAGE);
 
 	const body = await request.json();
 	const input = ResolveInteractionInputSchema.parse(body);

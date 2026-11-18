@@ -1,4 +1,5 @@
 "use client";
+import { canManageClientBase } from "@/lib/permissions/clients";
 
 import type { TGetCustomFieldsOutputDefault } from "@/app/api/custom-fields/route";
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
@@ -31,7 +32,8 @@ type SettingsCustomFieldsProps = {
  * prontos do catálogo são ativados com um clique e ganham segmentação e write-through de graça.
  */
 export default function SettingsCustomFields({ membership }: SettingsCustomFieldsProps) {
-	const canEdit = membership.permissoes.empresa.editar;
+	// Configurar campos personalizados é gestão da base (clientes.gerenciarBase), o mesmo que a rota exige.
+	const canEdit = canManageClientBase(membership.permissoes);
 	const queryClient = useQueryClient();
 	const { data, isLoading, isError, error } = useCustomFields({ entidade: "CLIENTE" });
 	const [newFieldOpen, setNewFieldOpen] = useState(false);
@@ -47,7 +49,9 @@ export default function SettingsCustomFields({ membership }: SettingsCustomField
 
 	const enableNativeFieldMutation = useMutation({
 		mutationFn: (chave: string) =>
-			createCustomField({ customField: { entidade: "CLIENTE", chaveNativa: chave, titulo: null, tipo: null, descricao: null, opcoes: null, ativo: true } }),
+			createCustomField({
+				customField: { entidade: "CLIENTE", chaveNativa: chave, titulo: null, tipo: null, descricao: null, opcoes: null, ativo: true },
+			}),
 		onSuccess: async (response) => {
 			toast.success(response.message);
 			await invalidate();

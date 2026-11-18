@@ -1,6 +1,7 @@
 "use client";
 
 import ResponsiveMenu from "@/components/Utils/ResponsiveMenu";
+import { useCommunicationPermissions } from "@/components/MessageTemplates/communication-permissions";
 import { MessageTemplateComposer } from "@/components/MessageTemplates";
 import { getErrorMessage } from "@/lib/errors";
 import { updateMessageTemplate } from "@/lib/mutations/message-templates";
@@ -34,6 +35,8 @@ function ControlMessageTemplate({
 	callbacks,
 }: ControlMessageTemplateProps) {
 	const { data: messageTemplate, isLoading, isError, error } = useMessageTemplateById({ id: messageTemplateId });
+	// Sem comunicacao.publicar o template é salvo sem ir para a Meta: a API recusaria o envio.
+	const { publicar: canPublish } = useCommunicationPermissions();
 	const messageTemplateState = useMessageTemplateState({ organizationName });
 	const { state, resetState, redefineState, unknownVariables } = messageTemplateState;
 
@@ -66,7 +69,7 @@ function ControlMessageTemplate({
 		handleUpdateMessageTemplate({
 			messageTemplateId,
 			messageTemplate: state.messageTemplate,
-			submitWhatsapp: true,
+			submitWhatsapp: canPublish,
 		});
 	}
 

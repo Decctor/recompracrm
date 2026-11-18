@@ -15,6 +15,8 @@ import ClientTagsBlock from "./Blocks/Tags";
 
 type NewClientProps = {
 	closeModal: () => void;
+	/** clientes.gerenciarBase: permite criar etiqueta nova no bloco de tags. Ausente = não cria. */
+	canCreateTags?: boolean;
 	callbacks?: {
 		onMutate?: () => void;
 		onSuccess?: () => void;
@@ -31,7 +33,7 @@ function buildCreateClientInput(input: TCreateClientInput): TCreateClientInput {
 	};
 }
 
-function NewClient({ closeModal, callbacks }: NewClientProps) {
+function NewClient({ closeModal, canCreateTags = false, callbacks }: NewClientProps) {
 	const { state, updateClient, addClientLocation, updateClientLocation, removeClientLocation, resetState, addClientTag, removeClientTag } =
 		useClientState();
 
@@ -113,7 +115,7 @@ function NewClient({ closeModal, callbacks }: NewClientProps) {
 				updateClientLocation={updateClientLocation}
 				removeClientLocation={removeClientLocation}
 			/>
-			<ClientTagsBlock tags={state.clientTags} addClientTag={addClientTag} removeClientTag={removeClientTag} />
+			<ClientTagsBlock tags={state.clientTags} addClientTag={addClientTag} removeClientTag={removeClientTag} canCreateTags={canCreateTags} />
 		</ResponsiveMenu>
 	);
 }

@@ -38,16 +38,18 @@ const WINDOW_DAYS = 30;
 export function RelationshipTab({ context }: { context: TCapabilityContext }) {
 	const canViewCashback = canAccessDashboardCapability("cashback", context);
 	const canViewCampaigns = canAccessDashboardCapability("campaigns", context);
+	// Base, recompra e segmentos são leituras do módulo de clientes (clientes.visualizar).
+	const canViewClients = canAccessDashboardCapability("customers", context);
 
 	return (
 		<div className="grid w-full grid-cols-1 items-start gap-3 xl:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
 			<div className="flex min-w-0 flex-col gap-3">
 				<div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-					<BaseTile />
-					<RepurchaseTile />
+					{canViewClients ? <BaseTile /> : null}
+					{canViewClients ? <RepurchaseTile /> : null}
 					{canViewCashback ? <CashbackUsageTile /> : null}
 				</div>
-				<SegmentMovement />
+				{canViewClients ? <SegmentMovement /> : null}
 				{canViewCampaigns ? <CampaignsPanel /> : null}
 			</div>
 			<TalkToTodayRail context={context} />
@@ -318,6 +320,7 @@ function TalkToTodayRail({ context }: { context: TCapabilityContext }) {
 	const canViewChats = canAccessDashboardCapability("whatsapp", context);
 	const canViewPortfolios = canAccessDashboardCapability("portfolios", context);
 	const canViewCashback = canAccessDashboardCapability("cashback", context);
+	const canViewClients = canAccessDashboardCapability("customers", context);
 
 	const dayKey = useDayKey();
 	const today = useMemo(() => resolveTodayRange(dayKey), [dayKey]);
@@ -326,15 +329,15 @@ function TalkToTodayRail({ context }: { context: TCapabilityContext }) {
 	const chats = useChatsStatsOverview({ period: chatsPeriod, enabled: canViewChats });
 	const routine = useTeamRoutine({ dayStart: today.after.toDate(), enabled: canViewPortfolios });
 	const cashback = useExpiringCashback({ days: WINDOW_DAYS });
-	const birthdays = useClientBirthdays({ days: 7 });
-	const cooling = useRecentSegmentChanges({ days: 7 });
+	const birthdays = useClientBirthdays({ days: 7, enabled: canViewClients });
+	const cooling = useRecentSegmentChanges({ days: 7, enabled: canViewClients });
 
 	const semResposta = canViewChats ? (chats.data?.volume.semPrimeiraResposta ?? 0) : 0;
 	const pendentes = canViewPortfolios ? Math.max((routine.data?.previstos ?? 0) - (routine.data?.feitos ?? 0), 0) : 0;
 	const atrasados = canViewPortfolios ? (routine.data?.atrasados ?? 0) : 0;
 	const cashbackTotal = canViewCashback ? (cashback.data?.total ?? { valor: 0, clientes: 0 }) : { valor: 0, clientes: 0 };
 	const cashbackTerminology = cashback.data?.terminologia ?? "DINHEIRO";
-	const aniversariantes = birthdays.data?.clientes ?? [];
+	const aniversariantes = canViewClients ? (birthdays.data?.clientes ?? []) : [];
 	const esperando = semResposta + pendentes + atrasados + aniversariantes.length;
 
 	return (
@@ -409,7 +412,7 @@ function TalkToTodayRail({ context }: { context: TCapabilityContext }) {
 					/>
 				) : null}
 
-				<CoolingClients query={cooling} />
+				{canViewClients ? <CoolingClients query={cooling} /> : null}
 			</Panel.Bleed>
 		</Panel>
 	);

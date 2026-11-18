@@ -1,6 +1,7 @@
 import { appApiHandler } from "@/lib/app-api";
 import { runPagesRouteHandler, type PagesRouteHandler, type PagesRouteRequest, type PagesRouteResponse } from "@/lib/pages-route-compat";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { assertCanManageClientBase, assertCanViewClients } from "@/lib/clients/access";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { UtilsRFMSchema } from "@/schemas/utils";
 import { db } from "@/services/drizzle";
@@ -31,6 +32,7 @@ export type TGetRFMConfigOutput = Awaited<ReturnType<typeof getRFMConfig>>;
 const getRFMConfigRoute: PagesRouteHandler<TGetRFMConfigOutput> = async (req, res) => {
 	const sessionUser = await getCurrentSessionUncached();
 	if (!sessionUser) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	assertCanViewClients(sessionUser);
 
 	const result = await getRFMConfig({ sessionUser });
 	return res.status(200).json(result);
@@ -77,6 +79,8 @@ export type TUpdateRFMConfigOutput = Awaited<ReturnType<typeof updateRFMConfig>>
 const updateRFMConfigRoute: PagesRouteHandler<TUpdateRFMConfigOutput> = async (req, res) => {
 	const sessionUser = await getCurrentSessionUncached();
 	if (!sessionUser) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	// A configuração RFM define os segmentos da base inteira: clientes.gerenciarBase.
+	assertCanManageClientBase(sessionUser);
 
 	const input = UpdateRFMConfigInputSchema.parse(req.body);
 	const result = await updateRFMConfig({ sessionUser, input });
@@ -124,6 +128,7 @@ export type TCreateRFMConfigOutput = Awaited<ReturnType<typeof createRFMConfig>>
 const createRFMConfigRoute: PagesRouteHandler<TCreateRFMConfigOutput> = async (req, res) => {
 	const sessionUser = await getCurrentSessionUncached();
 	if (!sessionUser) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	assertCanManageClientBase(sessionUser);
 
 	const input = CreateRFMConfigInputSchema.parse(req.body);
 	const result = await createRFMConfig({ sessionUser, input });

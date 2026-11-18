@@ -19,8 +19,10 @@ import { toast } from "sonner";
 
 type CouponsPageProps = {
 	user: TAuthUserSession["user"];
+	/** Cupons seguem `campanhas.editar`: sem ela, criar e excluir somem (a API recusa). */
+	canEditCoupons: boolean;
 };
-export default function CouponsPage({ user: _user }: CouponsPageProps) {
+export default function CouponsPage({ user: _user, canEditCoupons }: CouponsPageProps) {
 	const queryClient = useQueryClient();
 	const {
 		data: couponsResult,
@@ -59,12 +61,14 @@ export default function CouponsPage({ user: _user }: CouponsPageProps) {
 					onChange={(e) => updateQueryParams({ search: e.target.value, page: 1 })}
 					className="grow rounded-xl"
 				/>
-				<Button className="flex items-center gap-2" size="sm" asChild>
-					<Link href={appRoutes.growth.newCoupon()}>
-						<Plus className="w-4 h-4 min-w-4 min-h-4" />
-						NOVO CUPOM
-					</Link>
-				</Button>
+				{canEditCoupons ? (
+					<Button className="flex items-center gap-2" size="sm" asChild>
+						<Link href={appRoutes.growth.newCoupon()}>
+							<Plus className="w-4 h-4 min-w-4 min-h-4" />
+							NOVO CUPOM
+						</Link>
+					</Button>
+				) : null}
 			</div>
 			<GeneralPaginationComponent
 				activePage={queryParams.page}
@@ -81,7 +85,9 @@ export default function CouponsPage({ user: _user }: CouponsPageProps) {
 			{isSuccess ? (
 				<div className="w-full flex flex-col gap-1.5">
 					{coupons && coupons.length > 0 ? (
-						coupons.map((coupon) => <CouponCard key={coupon.id} coupon={coupon} handleDeleteClick={(id) => handleDeleteCouponMutation({ id })} />)
+						coupons.map((coupon) => (
+							<CouponCard key={coupon.id} coupon={coupon} handleDeleteClick={canEditCoupons ? (id) => handleDeleteCouponMutation({ id }) : null} />
+						))
 					) : (
 						<p className="w-full flex items-center justify-center">Nenhum cupom encontrado</p>
 					)}
@@ -100,7 +106,13 @@ function formatCouponBenefit(coupon: TGetCouponsOutputDefault["coupons"][number]
 	return "BRINDE";
 }
 
-function CouponCard({ coupon, handleDeleteClick }: { coupon: TGetCouponsOutputDefault["coupons"][number]; handleDeleteClick: (id: string) => void }) {
+function CouponCard({
+	coupon,
+	handleDeleteClick,
+}: {
+	coupon: TGetCouponsOutputDefault["coupons"][number];
+	handleDeleteClick: ((id: string) => void) | null;
+}) {
 	const activeAudiences = coupon.audiencias ?? [];
 	return (
 		<div className={cn("bg-card border-border flex w-full flex-col gap-1 rounded-xl border px-3 py-4 shadow-2xs", !coupon.ativo && "opacity-60")}>
@@ -152,10 +164,12 @@ function CouponCard({ coupon, handleDeleteClick }: { coupon: TGetCouponsOutputDe
 						DETALHES
 					</Link>
 				</Button>
-				<Button variant="ghost" className="flex items-center gap-1.5 text-destructive" size="sm" onClick={() => handleDeleteClick(coupon.id)}>
-					<Trash2 className="w-3 min-w-3 h-3 min-h-3" />
-					EXCLUIR
-				</Button>
+				{handleDeleteClick ? (
+					<Button variant="ghost" className="flex items-center gap-1.5 text-destructive" size="sm" onClick={() => handleDeleteClick(coupon.id)}>
+						<Trash2 className="w-3 min-w-3 h-3 min-h-3" />
+						EXCLUIR
+					</Button>
+				) : null}
 			</div>
 		</div>
 	);

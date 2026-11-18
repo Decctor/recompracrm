@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { assertCanEditCommunication } from "@/lib/communication/access";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { createDirectUploadIntake } from "@/lib/files/intake";
 import { mapWithConcurrency } from "@/lib/async/map-with-concurrency";
@@ -93,6 +94,7 @@ export type TCreateVisualKitUploadsOutput = Awaited<ReturnType<typeof createVisu
 async function createVisualKitUploadsRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	assertCanEditCommunication(session);
 	const input = CreateVisualKitUploadsInputSchema.parse(await request.json());
 	const result = await createVisualKitUploads({ input, session });
 	return NextResponse.json(result, { status: 200 });

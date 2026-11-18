@@ -1,4 +1,5 @@
 import SelectInput from "@/components/Inputs/SelectInput";
+import { useCommunicationPermissions } from "@/components/MessageTemplates/communication-permissions";
 import ControlMessageTemplate from "@/components/Modals/MessageTemplates/ControlMessageTemplate";
 import NewMessageTemplate from "@/components/Modals/MessageTemplates/NewMessageTemplate";
 import TemplatePreview from "@/components/MessageTemplates/TemplatePreview";
@@ -40,6 +41,7 @@ export default function CampaignsActionBlock({
 	campaign,
 	updateCampaign,
 }: CampaignsActionBlockProps) {
+	const { editar: canEditTemplates } = useCommunicationPermissions();
 	const [showCreateTemplate, setShowCreateTemplate] = useState(false);
 	const [editTemplateId, setEditTemplateId] = useState<string | null>(null);
 	const queryClient = useQueryClient();
@@ -197,17 +199,19 @@ export default function CampaignsActionBlock({
 							</HoverCard>
 						) : null}
 
-						{selectedTemplate ? (
+						{selectedTemplate && canEditTemplates ? (
 							<Button type="button" size="sm" variant="ghost" className="flex items-center gap-1.5" onClick={() => setEditTemplateId(selectedTemplate.id)}>
 								<Pencil className="h-3.5 w-3.5" />
 								EDITAR
 							</Button>
 						) : null}
 
-						<Button type="button" size="sm" variant="ghost" className="flex items-center gap-1.5" onClick={() => setShowCreateTemplate(true)}>
-							<Plus className="h-3.5 w-3.5" />
-							CRIAR
-						</Button>
+						{canEditTemplates ? (
+							<Button type="button" size="sm" variant="ghost" className="flex items-center gap-1.5" onClick={() => setShowCreateTemplate(true)}>
+								<Plus className="h-3.5 w-3.5" />
+								CRIAR
+							</Button>
+						) : null}
 					</div>
 
 					{hiddenCount > 0 ? (

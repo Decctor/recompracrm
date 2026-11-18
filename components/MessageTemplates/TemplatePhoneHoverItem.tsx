@@ -14,7 +14,8 @@ type TemplatePhoneHoverItemProps = {
 		status: TMessageTemplatePhoneStatusEnum;
 		qualidade: TMessageTemplatePhoneQualityEnum;
 	} | null;
-	onAdd: () => void;
+	/** Ausente quando o membro não pode enviar o template à Meta (comunicacao.publicar). */
+	onAdd?: () => void;
 	onView: (id: string) => void;
 	isAdding?: boolean;
 };
@@ -69,6 +70,8 @@ export function TemplatePhoneHoverItem({ phoneLabel, templatePhone, onAdd, onVie
 							<span className="sr-only">Ver detalhes</span>
 						</Button>
 					</div>
+				) : !onAdd ? (
+					<span className="text-[0.65rem] font-medium text-muted-foreground">NÃO ENVIADO</span>
 				) : (
 					<LoadingButton type="button" onClick={onAdd} variant="outline" size="xs" className="flex items-center gap-1.5 text-xs" loading={isAdding}>
 						<Plus className="h-3 w-3" />

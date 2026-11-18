@@ -6,6 +6,7 @@ import createHttpError from "http-errors";
 import z from "zod";
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { assertCanManageClientBase } from "@/lib/clients/access";
 import { appApiHandler } from "@/lib/app-api";
 import { TAuthUserSession } from "@/lib/authentication/types";
 
@@ -69,6 +70,9 @@ export type TCreateClientTagOutput = Awaited<ReturnType<typeof createClientTagSe
 async function createClientTagRoute(req: NextRequest) {
 	const sessionUser = await getCurrentSessionUncached();
 	if (!sessionUser) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	// Criar e renomear tags muda o vocabulário da base inteira: clientes.gerenciarBase. Aplicar uma tag
+	// existente a um cliente é edição do cliente (PUT /api/clients).
+	assertCanManageClientBase(sessionUser);
 
 	const input = await req.json();
 	const validatedInput = CreateClientTagInputSchema.parse(input);
@@ -111,6 +115,7 @@ export type TUpdateClientTagOutput = Awaited<ReturnType<typeof updateClientTagSe
 async function updateClientTagRoute(req: NextRequest) {
 	const sessionUser = await getCurrentSessionUncached();
 	if (!sessionUser) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	assertCanManageClientBase(sessionUser);
 
 	const input = await req.json();
 	const validatedInput = UpdateClientTagInputSchema.parse(input);

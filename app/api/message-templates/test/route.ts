@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { assertCanEditCommunication } from "@/lib/communication/access";
 import { EmailTemplate, sendEmailWithResend } from "@/lib/email";
 import {
 	buildWhatsappTemplateSendPayload,
@@ -212,6 +213,7 @@ async function testMessageTemplateRoute(request: NextRequest) {
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
 	const organizationId = session.membership?.organizacao.id;
 	if (!organizationId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
+	assertCanEditCommunication(session);
 
 	const input = TestMessageTemplateInputSchema.parse(await request.json());
 	const result = await testMessageTemplate({ input, organizationId });

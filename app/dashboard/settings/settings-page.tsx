@@ -15,6 +15,8 @@ import SettingsSegments from "@/components/Settings/SettingsSegments";
 import SettingsUsers from "@/components/Settings/SettingsUsers";
 import SettingsWhatsAppConnection from "@/components/Settings/SettingsWhatsAppConnection";
 import type { TAuthUserSession } from "@/lib/authentication/types";
+import { canManageClientBase } from "@/lib/permissions/clients";
+import { resolveCommunicationPermissions } from "@/lib/permissions/communication";
 import { parseAsStringLiteral, useQueryState } from "nuqs";
 import SettingsNavRail from "./_components/settings-nav-rail";
 import { DEFAULT_SETTINGS_VIEW, SETTINGS_VIEWS, getSettingsLocation, isSettingsSectionAccessible } from "./_components/settings-navigation";
@@ -58,13 +60,18 @@ export default function SettingsPage({ user, membership }: SettingsPageProps) {
 						{view === "users" ? <SettingsUsers user={user} membership={membership} /> : null}
 						{view === "devices" ? <SettingsDevices user={user} membership={membership} /> : null}
 						{view === "meta-oauth" ? <SettingsWhatsAppConnection user={user} /> : null}
-						{view === "message-templates" ? <CommunicationTemplatesPage organizationName={membership.organizacao.nome} /> : null}
+						{view === "message-templates" ? (
+							<CommunicationTemplatesPage
+								organizationName={membership.organizacao.nome}
+								permissions={resolveCommunicationPermissions(membership.permissoes)}
+							/>
+						) : null}
 						{view === "outbound" ? <SettingsOutbound membership={membership} /> : null}
 						{view === "ai-agent" ? <SettingsAiAgent membership={membership} /> : null}
 						{view === "ai-connections" ? <SettingsAiConnections membership={membership} /> : null}
 						{view === "integration" ? <SettingsIntegration user={user} membership={membership} /> : null}
 						{view === "finances" ? <SettingsFinances membership={membership} /> : null}
-						{view === "segments" ? <SettingsSegments user={user} /> : null}
+						{view === "segments" ? <SettingsSegments user={user} canManageClientBase={canManageClientBase(membership.permissoes)} /> : null}
 						{view === "custom-fields" ? <SettingsCustomFields membership={membership} /> : null}
 					</>
 				) : (

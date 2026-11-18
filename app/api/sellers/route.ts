@@ -300,6 +300,8 @@ const getSellersHandler: PagesRouteHandler<TGetSellersOutput> = async (req, res)
 	return res.status(200).json(data);
 };
 
+const SELLER_EDIT_FORBIDDEN_MESSAGE = "Você não possui permissão para editar vendedores.";
+
 const UpdateSellerInputSchema = z.object({
 	sellerId: z.string({
 		required_error: "ID do vendedor não informado.",
@@ -355,6 +357,9 @@ export type TUpdateSellerOutput = Awaited<ReturnType<typeof updateSeller>>;
 const updateSellerHandler: PagesRouteHandler<TUpdateSellerOutput> = async (req, res) => {
 	const sessionUser = await getCurrentSessionUncached();
 	if (!sessionUser) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	// Vendedor é cadastro de equipe (senha de operador, comissão): segue usuarios.editar. A leitura fica
+	// aberta porque o PDV, a venda e o ponto de interação listam vendedores.
+	if (!sessionUser.membership?.permissoes.usuarios.editar) throw new createHttpError.Forbidden(SELLER_EDIT_FORBIDDEN_MESSAGE);
 	const input = UpdateSellerInputSchema.parse(req.body);
 	const data = await updateSeller({ input, session: sessionUser });
 	return res.status(200).json(data);
@@ -406,6 +411,7 @@ export type TCreateSellerOutput = Awaited<ReturnType<typeof createSeller>>;
 const createSellerHandler: PagesRouteHandler<TCreateSellerOutput> = async (req, res) => {
 	const sessionUser = await getCurrentSessionUncached();
 	if (!sessionUser) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	if (!sessionUser.membership?.permissoes.usuarios.editar) throw new createHttpError.Forbidden(SELLER_EDIT_FORBIDDEN_MESSAGE);
 
 	const input = CreateSellerInputSchema.parse(req.body);
 	const data = await createSeller({ input, session: sessionUser });

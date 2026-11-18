@@ -90,6 +90,8 @@ function SellersDatabaseView({ user, membership }: { user: TAuthUserSession["use
 	const queryClient = useQueryClient();
 	const [newSellerModalIsOpen, setNewSellerModalIsOpen] = useState(false);
 	const [editSellerId, setEditSellerId] = useState<string | null>(null);
+	// Vendedor é cadastro de equipe: criar e editar seguem usuarios.editar (a API recusa sem ela).
+	const canEditSellers = membership.permissoes.usuarios.editar;
 	const {
 		data: sellersResult,
 		queryKey,
@@ -122,10 +124,12 @@ function SellersDatabaseView({ user, membership }: { user: TAuthUserSession["use
 					onChange={(event) => updateFilters({ search: event.target.value, page: 1 })}
 					className="grow rounded-xl"
 				/>
-				<Button className="flex items-center gap-2" size="sm" onClick={() => setNewSellerModalIsOpen(true)}>
-					<Plus className="w-4 h-4 min-w-4 min-h-4" />
-					NOVO VENDEDOR
-				</Button>
+				{canEditSellers ? (
+					<Button className="flex items-center gap-2" size="sm" onClick={() => setNewSellerModalIsOpen(true)}>
+						<Plus className="w-4 h-4 min-w-4 min-h-4" />
+						NOVO VENDEDOR
+					</Button>
+				) : null}
 			</div>
 			<SellersInlineFilters filters={filters} updateFilters={updateFilters} />
 			<GeneralPaginationComponent
@@ -150,6 +154,7 @@ function SellersDatabaseView({ user, membership }: { user: TAuthUserSession["use
 								seller={seller}
 								handleEditClick={setEditSellerId}
 								userHasEditPermission={
+									canEditSellers &&
 									membership.permissoes.resultados.visualizar &&
 									(!membership.permissoes.resultados.escopo || membership.permissoes.resultados.escopo?.includes(seller.id))
 								}

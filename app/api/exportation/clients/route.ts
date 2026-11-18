@@ -19,7 +19,8 @@ async function fetchClientExportation(req: PagesRouteRequest, userOrgId: string)
 	const ajustedBefore = filters.period.before ? dayjs(filters.period.before).endOf("day").toDate() : null;
 
 	const utilsRFMReturn = await db.query.utils.findFirst({
-		where: eq(utils.identificador, "CONFIG_RFM"),
+		// Sem o filtro de organização, a primeira matriz RFM do banco (de qualquer organização) era usada.
+		where: and(eq(utils.identificador, "CONFIG_RFM"), eq(utils.organizacaoId, userOrgId)),
 	});
 	const rfmConfig = utilsRFMReturn?.valor.identificador === "CONFIG_RFM" ? utilsRFMReturn.valor : null;
 

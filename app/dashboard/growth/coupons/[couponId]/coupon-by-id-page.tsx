@@ -24,7 +24,12 @@ type TCouponTab = (typeof TABS)[number];
  * cadastro é o que se abre depois, para ajustar o que os números mostraram. Cada aba carrega a
  * própria consulta e só quando está visível (`enabled`), então abrir a página não dispara as três.
  */
-export default function CouponByIdPage({ couponId }: { couponId: string }) {
+type CouponByIdPageProps = {
+	couponId: string;
+	/** Cupons seguem `campanhas.editar`: sem ela o cadastro fica só leitura e ativar/excluir somem. */
+	canEdit: boolean;
+};
+export default function CouponByIdPage({ couponId, canEdit }: CouponByIdPageProps) {
 	const [tab, setTab] = useQueryState("tab", parseAsStringEnum([...TABS]).withDefault("estatisticas"));
 	const queryClient = useQueryClient();
 	const { data: coupon, queryKey, isLoading, isError, error } = useCouponById({ couponId });
@@ -40,7 +45,7 @@ export default function CouponByIdPage({ couponId }: { couponId: string }) {
 
 	return (
 		<div className="flex w-full max-w-full grow flex-col gap-6 overflow-x-hidden bg-background py-3">
-			<CouponDetailHeader coupon={coupon} callbacks={{ onSettled: handleOnSettled }} />
+			<CouponDetailHeader coupon={coupon} canEdit={canEdit} callbacks={{ onSettled: handleOnSettled }} />
 			<Tabs value={activeTab} onValueChange={(value) => setTab(value as TCouponTab)}>
 				<TabsList variant="page">
 					<TabsTrigger value="cadastro">
@@ -62,7 +67,7 @@ export default function CouponByIdPage({ couponId }: { couponId: string }) {
 					</TabsTrigger>
 				</TabsList>
 				<TabsContent value="cadastro" className="mt-4">
-					<CouponRegistryTab coupon={coupon} callbacks={{ onMutate: handleOnMutate, onSettled: handleOnSettled }} />
+					<CouponRegistryTab coupon={coupon} canEdit={canEdit} callbacks={{ onMutate: handleOnMutate, onSettled: handleOnSettled }} />
 				</TabsContent>
 				<TabsContent value="estatisticas" className="mt-4">
 					<CouponStatsTab coupon={coupon} enabled={activeTab === "estatisticas"} />

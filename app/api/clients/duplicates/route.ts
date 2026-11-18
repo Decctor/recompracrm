@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { assertCanViewClients } from "@/lib/clients/access";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { recomputeClientDuplicatesForClient } from "@/lib/clients/duplicates";
 import { ClientDuplicateSignalTypeEnum, ClientDuplicateStatusEnum } from "@/schemas/enums";
@@ -193,6 +194,7 @@ export type TGetClientDuplicatesOutput = Awaited<ReturnType<typeof getClientDupl
 async function getClientDuplicatesRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	assertCanViewClients(session);
 
 	const searchParams = request.nextUrl.searchParams;
 	const input = GetClientDuplicatesInputSchema.parse({

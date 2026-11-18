@@ -1,6 +1,7 @@
 import { appApiHandler } from "@/lib/app-api";
 import { runPagesRouteHandler, type PagesRouteHandler, type PagesRouteRequest, type PagesRouteResponse } from "@/lib/pages-route-compat";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { assertCanLookupClients, assertCanUpdateClientRecords } from "@/lib/clients/access";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { CLIENT_LOCATION_STREET_REQUIRED_MESSAGE, ClientLocationSchema, hasClientLocationStreet } from "@/schemas/clients";
 import { db } from "@/services/drizzle";
@@ -180,6 +181,8 @@ export type TUpdateClientLocationOutput = Awaited<ReturnType<typeof updateClient
 
 const getClientLocationsRoute: PagesRouteHandler<TGetClientLocationsOutput | TGetClientLocationByIdOutput> = async (req, res) => {
 	const { session } = getSessionWithOrg(await getCurrentSessionUncached());
+	// Endereços do cliente também servem à entrega na venda: quem localiza clientes para operar lê.
+	assertCanLookupClients(session);
 
 	if (req.query.id) {
 		const input = GetClientLocationByIdInputSchema.parse({ id: req.query.id });
@@ -194,6 +197,8 @@ const getClientLocationsRoute: PagesRouteHandler<TGetClientLocationsOutput | TGe
 
 const createClientLocationRoute: PagesRouteHandler<TCreateClientLocationOutput> = async (req, res) => {
 	const { session } = getSessionWithOrg(await getCurrentSessionUncached());
+	// Novo endereço é edição do cadastro, também feita de dentro da venda: ver canUpdateClientRecords.
+	assertCanUpdateClientRecords(session);
 	const input = CreateClientLocationInputSchema.parse(req.body);
 	const result = await createClientLocation({ input, session });
 	return res.status(201).json(result);
@@ -201,6 +206,7 @@ const createClientLocationRoute: PagesRouteHandler<TCreateClientLocationOutput> 
 
 const updateClientLocationRoute: PagesRouteHandler<TUpdateClientLocationOutput> = async (req, res) => {
 	const { session } = getSessionWithOrg(await getCurrentSessionUncached());
+	assertCanUpdateClientRecords(session);
 	const input = UpdateClientLocationInputSchema.parse({ ...(req.body as Record<string, unknown>), id: req.query.id });
 	const result = await updateClientLocation({ input, session });
 	return res.status(200).json(result);

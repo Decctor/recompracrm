@@ -20,7 +20,8 @@ type TemplateCardProps = {
 	selectedPhoneId: string;
 	isSelected: boolean;
 	onSelect: () => void;
-	onEdit: () => void;
+	/** Ausente quando o membro não pode editar templates (comunicacao.editar). */
+	onEdit?: () => void;
 };
 
 const VISIBLE_VARIABLES = 2;
@@ -78,22 +79,22 @@ export default function TemplateCard({ template, selectedPhoneId, isSelected, on
 						</span>
 					))}
 					{hiddenParametersCount > 0 ? (
-						<span className="rounded-full border border-border px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
-							+{hiddenParametersCount}
-						</span>
+						<span className="rounded-full border border-border px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">+{hiddenParametersCount}</span>
 					) : null}
 				</div>
-				<button
-					type="button"
-					aria-label={`Editar ${template.nome}`}
-					onClick={(event) => {
-						event.stopPropagation();
-						onEdit();
-					}}
-					className="flex h-6.5 w-6.5 shrink-0 items-center justify-center rounded-full p-1 text-muted-foreground transition-colors hover:bg-muted"
-				>
-					<Pencil className="h-3.5 w-3.5" />
-				</button>
+				{onEdit ? (
+					<button
+						type="button"
+						aria-label={`Editar ${template.nome}`}
+						onClick={(event) => {
+							event.stopPropagation();
+							onEdit();
+						}}
+						className="flex h-6.5 w-6.5 shrink-0 items-center justify-center rounded-full p-1 text-muted-foreground transition-colors hover:bg-muted"
+					>
+						<Pencil className="h-3.5 w-3.5" />
+					</button>
+				) : null}
 			</div>
 
 			{isSelected ? (

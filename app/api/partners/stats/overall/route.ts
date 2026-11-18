@@ -161,6 +161,7 @@ export type TGetPartnersOverallStatsOutput = Awaited<ReturnType<typeof getPartne
 const getPartnersOverallStatsRoute = async (request: NextRequest) => {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	if (!session.membership?.permissoes.empresa.visualizar) throw new createHttpError.Forbidden("Você não possui permissão para visualizar parceiros.");
 
 	const searchParams = await request.nextUrl.searchParams;
 	const input = GetPartnersOverallStatsInputSchema.parse({

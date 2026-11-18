@@ -13,10 +13,12 @@ import { Lock, Megaphone } from "lucide-react";
 type ClientRelationshipSectionProps = {
 	editor: TUseClientSectionEditor;
 	consentimentoMarketingData: Date | string | null;
+	/** clientes.gerenciarBase: criar etiqueta nova. */
+	canCreateTags: boolean;
 };
 
 /** Como o cliente chegou, como a loja o classifica e o que a equipe precisa lembrar sobre ele. */
-export default function ClientRelationshipSection({ editor, consentimentoMarketingData }: ClientRelationshipSectionProps) {
+export default function ClientRelationshipSection({ editor, consentimentoMarketingData, canCreateTags }: ClientRelationshipSectionProps) {
 	const { state, updateClient, addClientTag, removeClientTag } = editor;
 
 	return (
@@ -39,7 +41,7 @@ export default function ClientRelationshipSection({ editor, consentimentoMarketi
 
 				<div className="flex w-full flex-col gap-1.5">
 					<h3 className="text-foreground/80 text-sm font-medium tracking-tight">TAGS</h3>
-					<ClientTagsBlock embedded tags={state.clientTags} addClientTag={addClientTag} removeClientTag={removeClientTag} />
+					<ClientTagsBlock embedded tags={state.clientTags} addClientTag={addClientTag} removeClientTag={removeClientTag} canCreateTags={canCreateTags} />
 				</div>
 
 				<TextareaInput

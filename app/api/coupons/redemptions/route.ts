@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { assertCanViewCampaigns } from "@/lib/campaigns/access";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { CouponRedemptionSourceEnum, CouponRedemptionStatusEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
@@ -165,6 +166,7 @@ export type TGetCouponRedemptionsOutputItem = TGetCouponRedemptionsOutput["data"
 async function getCouponRedemptionsRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	assertCanViewCampaigns(session);
 	const input = GetCouponRedemptionsInputSchema.parse({
 		couponId: request.nextUrl.searchParams.get("couponId") ?? undefined,
 		page: request.nextUrl.searchParams.get("page") ?? undefined,

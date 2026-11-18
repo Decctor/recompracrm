@@ -11,5 +11,5 @@ export default async function Seller({ params }: { params: Promise<{ sellerId: s
 	if (access.unauthorized) return access.unauthorized;
 	const sessionUser = access.sessionUser;
 	if (!sessionUser) redirect("/auth/signin");
-	return <SellerPage user={sessionUser.user} id={sellerId} />;
+	return <SellerPage user={sessionUser.user} id={sellerId} canEditSeller={sessionUser.membership?.permissoes.usuarios.editar ?? false} />;
 }

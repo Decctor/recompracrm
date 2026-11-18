@@ -1,6 +1,7 @@
 import { appApiHandler } from "@/lib/app-api";
 import { mapWithConcurrencySettled } from "@/lib/async/map-with-concurrency";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { assertCanEditCommunication } from "@/lib/communication/access";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { completeDirectUpload, consumeUpload } from "@/lib/files/intake";
 import { deleteStoredFile } from "@/lib/files/service";
@@ -195,6 +196,7 @@ export type TCompleteVisualKitGenerationOutput = Awaited<ReturnType<typeof compl
 async function completeVisualKitGenerationRoute(request: NextRequest) {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	assertCanEditCommunication(session);
 	const input = CompleteVisualKitGenerationInputSchema.parse(await request.json());
 	const result = await completeVisualKitGeneration({ input, session });
 	return NextResponse.json(result, { status: 200 });

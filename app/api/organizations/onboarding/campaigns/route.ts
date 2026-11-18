@@ -5,6 +5,7 @@ import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { assertCanActivateCampaigns, assertCanEditCampaigns } from "@/lib/campaigns/access";
+import { canActivateCampaigns } from "@/lib/permissions/campaigns";
 import { getJourney, reconcileOnboardingCampaigns, updateJourneyProgress } from "@/lib/onboarding";
 import { db } from "@/services/drizzle";
 import { campaignSegmentations, campaigns, interactions } from "@/services/drizzle/schema";
@@ -148,7 +149,12 @@ async function seedOnboardingCampaigns({ input, session }: { input: TSeedOnboard
 		});
 	}
 
-	const { readiness } = await reconcileOnboardingCampaigns({ executor: db, organizationId: organizacaoId });
+	// Envios liberados antes (por outra pessoa) não entram no ar pela mão de quem não pode ativar.
+	const { readiness } = await reconcileOnboardingCampaigns({
+		executor: db,
+		organizationId: organizacaoId,
+		canActivate: canActivateCampaigns(session.membership?.permissoes),
+	});
 
 	for (const item of seeded) {
 		try {

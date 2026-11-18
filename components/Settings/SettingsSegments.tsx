@@ -13,9 +13,11 @@ import { Button } from "../ui/button";
 
 type SettingsSegmentsProps = {
 	user: TAuthUserSession["user"];
+	/** clientes.gerenciarBase: definir e editar a matriz RFM. Sem ela a configuração é só leitura. */
+	canManageClientBase: boolean;
 };
 
-export default function SettingsSegments({ user }: SettingsSegmentsProps) {
+export default function SettingsSegments({ user, canManageClientBase }: SettingsSegmentsProps) {
 	const { data, isLoading, isError, isSuccess, error } = useRFMConfigQuery();
 	const [editRFMConfigMenuIsOpen, setEditRFMConfigMenuIsOpen] = useState(false);
 	const [newRFMConfigMenuIsOpen, setNewRFMConfigMenuIsOpen] = useState(false);
@@ -27,7 +29,7 @@ export default function SettingsSegments({ user }: SettingsSegmentsProps) {
 			{hasRFMConfigDefined ? (
 				<div className="w-full flex flex-col gap-6">
 					<div className="flex items-center justify-end border-b pb-4">
-						<Button size="sm" className="flex items-center gap-2" onClick={() => setEditRFMConfigMenuIsOpen(true)}>
+						<Button size="sm" className="flex items-center gap-2" disabled={!canManageClientBase} onClick={() => setEditRFMConfigMenuIsOpen(true)}>
 							<Edit className="h-4 w-4" />
 							EDITAR MATRIZ
 						</Button>
@@ -115,7 +117,7 @@ export default function SettingsSegments({ user }: SettingsSegmentsProps) {
 							Sua organização ainda não possui uma matriz RFM definida. Configure-a para começar a segmentar seus clientes de forma inteligente.
 						</p>
 					</div>
-					<Button onClick={() => setNewRFMConfigMenuIsOpen(true)} size="lg" className="gap-2 px-8">
+					<Button onClick={() => setNewRFMConfigMenuIsOpen(true)} size="lg" className="gap-2 px-8" disabled={!canManageClientBase}>
 						<Plus className="h-5 w-5" />
 						DEFINIR CONFIGURAÇÃO RFM
 					</Button>

@@ -91,7 +91,8 @@ export type TCreatePartnerOutput = Awaited<ReturnType<typeof createPartner>>;
 const createPartnerRoute = async (request: NextRequest) => {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
-	// if (!session.user.permissoes.parceiros.criar) throw new createHttpError.BadRequest("Você não possui permissão para acessar esse recurso.");
+	// Parceiros são cadastro da empresa: escrever segue empresa.editar; ler, empresa.visualizar (capability `partners`).
+	if (!session.membership?.permissoes.empresa.editar) throw new createHttpError.Forbidden("Você não possui permissão para editar parceiros.");
 	const payload = await request.json();
 	const input = CreatePartnerInputSchema.parse(payload);
 	const result = await createPartner({ input, session });
@@ -281,7 +282,7 @@ export type TGetPartnersOutputById = Exclude<TGetPartnersOutput["data"]["byId"],
 const getPartnersRoute = async (request: NextRequest) => {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
-	// if (!session.user.permissoes.parceiros.criar) throw new createHttpError.BadRequest("Você não possui permissão para acessar esse recurso.");
+	if (!session.membership?.permissoes.empresa.visualizar) throw new createHttpError.Forbidden("Você não possui permissão para visualizar parceiros.");
 	const searchParams = await request.nextUrl.searchParams;
 	const input = GetPartnersInputSchema.parse({
 		search: searchParams.get("search") ?? undefined,
@@ -382,7 +383,7 @@ export type TUpdatePartnerOutput = Awaited<ReturnType<typeof updatePartner>>;
 const updatePartnerRoute = async (request: NextRequest) => {
 	const session = await getCurrentSessionUncached();
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
-	// if (!session.user.permissoes.parceiros.criar) throw new createHttpError.BadRequest("Você não possui permissão para acessar esse recurso.");
+	if (!session.membership?.permissoes.empresa.editar) throw new createHttpError.Forbidden("Você não possui permissão para editar parceiros.");
 	const payload = await request.json();
 	const input = UpdatePartnerInputSchema.parse(payload);
 	const result = await updatePartner({ input, session });
