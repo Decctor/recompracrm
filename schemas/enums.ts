@@ -1239,6 +1239,19 @@ export const ClientDuplicateStatusEnum = z.enum(["PENDENTE", "DESCARTADO", "MESC
 });
 export type TClientDuplicateStatusEnum = z.infer<typeof ClientDuplicateStatusEnum>;
 
+/**
+ * Motivos das sugestões do menu de mesclagem (lib/clients/merge-suggestions.ts). Mais ousados que
+ * os sinais da fila (ClientDuplicateSignalTypeEnum) e nunca persistidos: existem só na resposta.
+ */
+export const ClientMergeSuggestionReasonEnum = z.enum(
+	["CPF_CNPJ", "TELEFONE", "TELEFONE_PARECIDO", "EMAIL", "NOME_IGUAL", "NOME_ABREVIADO", "NOME_SEMELHANTE"],
+	{
+		required_error: "Motivo da sugestão de mesclagem não informado.",
+		invalid_type_error: "Tipo não válido para o motivo da sugestão de mesclagem.",
+	},
+);
+export type TClientMergeSuggestionReasonEnum = z.infer<typeof ClientMergeSuggestionReasonEnum>;
+
 export const OnboardingProductEnum = z.enum(["CRM", "ERP"], {
 	required_error: "Produto do onboarding não informado.",
 	invalid_type_error: "Tipo não válido para o produto do onboarding.",

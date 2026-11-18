@@ -2,6 +2,7 @@
 
 import type { TGetClientStatsOutput } from "@/app/api/clients/stats/by-client/route";
 import { ClientDuplicatePill } from "@/components/Clients/duplicates/ClientDuplicatePill";
+import { ClientMergeMenu } from "@/components/Clients/duplicates/ClientMergeMenu";
 import { useOrgColors } from "@/components/Providers/OrgColorsProvider";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,9 +15,11 @@ import { formatDecimalPlaces, formatToMoney } from "@/lib/formatting";
 import { appRoutes } from "@/lib/navigation/routes";
 import { cn } from "@/lib/utils";
 import { getRFMConfigByLabel } from "@/utils/rfm";
-import { ArrowLeft, BadgeDollarSign, CirclePlus, Grid3X3, UserRound } from "lucide-react";
+import { ArrowLeft, BadgeDollarSign, CirclePlus, Grid3X3, Merge, UserRound } from "lucide-react";
 import Link from "next/link";
-import { useMemo, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
+import { useMemo, useState, type ReactNode } from "react";
 import { BsTicketPerforated } from "react-icons/bs";
 
 type ClientDetailHeaderProps = {
@@ -39,6 +42,9 @@ type ClientDetailHeaderProps = {
 export default function ClientDetailHeader({ client, totals, canReconcileClients }: ClientDetailHeaderProps) {
 	const rfmConfig = getRFMConfigByLabel(client.analiseRFMTitulo);
 	const completeness = useMemo(() => getClientRegistryCompleteness(mapClientToState(client)), [client]);
+	const [mergeMenuIsOpen, setMergeMenuIsOpen] = useState(false);
+	const router = useRouter();
+	const queryClient = useQueryClient();
 
 	return (
 		<div className="flex w-full flex-col gap-4">
@@ -64,6 +70,12 @@ export default function ClientDetailHeader({ client, totals, canReconcileClients
 							</div>
 						) : null}
 						<ClientDuplicatePill entityType="client" entityId={client.id} canReconcile={canReconcileClients} />
+						{canReconcileClients ? (
+							<Button variant="ghost" size="sm" className="h-7 gap-1.5 px-2 text-xs" onClick={() => setMergeMenuIsOpen(true)}>
+								<Merge className="h-3.5 w-3.5 min-h-3.5 min-w-3.5" />
+								MESCLAR CADASTRO
+							</Button>
+						) : null}
 					</div>
 
 					<div className="flex w-full max-w-lg items-center gap-2.5">
@@ -94,6 +106,20 @@ export default function ClientDetailHeader({ client, totals, canReconcileClients
 					/>
 				</div>
 			</div>
+
+			{mergeMenuIsOpen ? (
+				<ClientMergeMenu
+					client={{ id: client.id, nome: client.nome }}
+					canReconcile={canReconcileClients}
+					closeMenu={() => setMergeMenuIsOpen(false)}
+					onMerged={({ keeperId, sourceId }) => {
+						// Esta página era do cadastro removido: leva ao mantido. Se ficou, as abas (compras,
+						// cashback, estatísticas) ganharam o histórico do outro — recarrega tudo.
+						if (sourceId === client.id) router.push(appRoutes.customers.details(keeperId));
+						else void queryClient.invalidateQueries();
+					}}
+				/>
+			) : null}
 		</div>
 	);
 }
