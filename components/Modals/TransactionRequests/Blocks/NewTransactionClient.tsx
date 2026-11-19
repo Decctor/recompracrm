@@ -1,11 +1,14 @@
 import type { TClientByLookupOutput } from "@/app/api/clients/lookup/route";
 import type { TRedemptionLimit } from "@/app/(external)/point-of-interaction/[orgId]/_shared/types";
 import DateInput from "@/components/Inputs/DateInput";
+import ClientLocationAddressPaste from "@/components/Clients/ClientLocationAddressPaste";
 import SelectInput from "@/components/Inputs/SelectInput";
 import TextInput from "@/components/Inputs/TextInput";
 import { Checkbox } from "@/components/ui/checkbox";
 import ResponsiveMenuSection from "@/components/Utils/ResponsiveMenuSection";
 import { formatCashbackValue, formatNameAsInitials, formatToCPForCNPJ, formatToPhone } from "@/lib/formatting";
+import { useClientLocationAutofill } from "@/lib/hooks/use-client-location-autofill";
+import { useOrganizationRegion } from "@/lib/queries/organizations";
 import { useSellersSimplified } from "@/lib/queries/sellers";
 import { cn } from "@/lib/utils";
 import type { TCashbackProgramTerminologyEnum } from "@/schemas/enums";
@@ -15,6 +18,7 @@ import type {
 } from "@/state-hooks/use-point-of-interaction-new-internal-transaction-request";
 import { Check, ChevronDown, ChevronRight, Loader2, Plus, UserRound } from "lucide-react";
 import { useState } from "react";
+import { BrazilianCitiesOptionsFromUF, BrazilianStatesOptions } from "@/utils/states-cities";
 
 export const CLIENT_PHONE_COMPLETE_LENGTH = 15;
 
@@ -238,72 +242,86 @@ function NewClientMoreData({ client, updateClient }: { client: TClientState; upd
 						>
 							{isAddressOpen ? <ChevronDown className="size-4 min-w-4" /> : <ChevronRight className="size-4 min-w-4" />}
 							<span className="text-sm font-semibold">Endereço</span>
-							<span className="truncate text-xs text-muted-foreground">CEP, cidade, bairro, rua…</span>
+							<span className="truncate text-xs text-muted-foreground">Pelo CEP ou colando o endereço completo</span>
 						</button>
-						{isAddressOpen ? (
-							<div className="grid grid-cols-1 gap-3 border-t border-dashed border-border p-3 md:grid-cols-6">
-								<div className="md:col-span-2">
-									<TextInput
-										label="CEP"
-										placeholder="00000-000"
-										value={client.localizacaoCep ?? ""}
-										handleChange={(value) => updateClient({ localizacaoCep: value || null })}
-									/>
-								</div>
-								<div className="md:col-span-1">
-									<TextInput
-										label="UF"
-										placeholder="SP"
-										maxLength={2}
-										value={client.localizacaoEstado ?? ""}
-										handleChange={(value) => updateClient({ localizacaoEstado: value.toUpperCase() || null })}
-									/>
-								</div>
-								<div className="md:col-span-3">
-									<TextInput
-										label="CIDADE"
-										placeholder="Cidade"
-										value={client.localizacaoCidade ?? ""}
-										handleChange={(value) => updateClient({ localizacaoCidade: value || null })}
-									/>
-								</div>
-								<div className="md:col-span-2">
-									<TextInput
-										label="BAIRRO"
-										placeholder="Bairro"
-										value={client.localizacaoBairro ?? ""}
-										handleChange={(value) => updateClient({ localizacaoBairro: value || null })}
-									/>
-								</div>
-								<div className="md:col-span-3">
-									<TextInput
-										label="LOGRADOURO"
-										placeholder="Rua, avenida..."
-										value={client.localizacaoLogradouro ?? ""}
-										handleChange={(value) => updateClient({ localizacaoLogradouro: value || null })}
-									/>
-								</div>
-								<div className="md:col-span-1">
-									<TextInput
-										label="NÚMERO"
-										placeholder="Nº"
-										value={client.localizacaoNumero ?? ""}
-										handleChange={(value) => updateClient({ localizacaoNumero: value || null })}
-									/>
-								</div>
-								<div className="md:col-span-6">
-									<TextInput
-										label="COMPLEMENTO"
-										placeholder="Opcional"
-										value={client.localizacaoComplemento ?? ""}
-										handleChange={(value) => updateClient({ localizacaoComplemento: value || null })}
-									/>
-								</div>
-							</div>
-						) : null}
+						{isAddressOpen ? <NewClientAddress client={client} updateClient={updateClient} /> : null}
 					</div>
 				</div>
 			) : null}
+		</div>
+	);
+}
+
+/**
+ * Endereço do cliente novo com o mesmo preenchimento automático dos outros formulários de cliente:
+ * CEP completo busca rua, bairro, cidade e estado (e leva o foco ao número); um endereço colado
+ * (WhatsApp, Maps, etiqueta) é lido pelo parser local e, quando ele não tem certeza, pela IA.
+ * A região da organização só ajuda a reconhecer a cidade do texto — não preenche nada sozinha.
+ */
+function NewClientAddress({ client, updateClient }: { client: TClientState; updateClient: NewTransactionClientProps["updateClient"] }) {
+	const { data: organizationRegion = null } = useOrganizationRegion();
+	const autofill = useClientLocationAutofill({ location: client, updateLocation: updateClient, defaultRegion: organizationRegion });
+	return (
+		<div className="flex flex-col gap-3 border-t border-dashed border-border p-3">
+			<ClientLocationAddressPaste autofill={autofill} />
+			<div className="grid grid-cols-1 gap-3 md:grid-cols-6">
+				<div className="md:col-span-2">
+					<TextInput label="CEP" placeholder="00000-000" inputMode="numeric" value={client.localizacaoCep ?? ""} handleChange={autofill.handleCepChange} />
+				</div>
+				<div className="md:col-span-2">
+					<SelectInput
+						label="ESTADO"
+						value={client.localizacaoEstado ?? null}
+						options={BrazilianStatesOptions}
+						handleChange={autofill.handleStateChange}
+						onReset={() => updateClient({ localizacaoEstado: null, localizacaoCidade: null })}
+						resetOptionLabel="NÃO DEFINIDO"
+					/>
+				</div>
+				<div className="md:col-span-2">
+					<SelectInput
+						label="CIDADE"
+						value={client.localizacaoCidade ?? null}
+						options={BrazilianCitiesOptionsFromUF(client.localizacaoEstado ?? "")}
+						handleChange={(value) => updateClient({ localizacaoCidade: value || null })}
+						onReset={() => updateClient({ localizacaoCidade: null })}
+						resetOptionLabel="NÃO DEFINIDO"
+					/>
+				</div>
+				<div className="md:col-span-2">
+					<TextInput
+						label="BAIRRO"
+						placeholder="Bairro"
+						value={client.localizacaoBairro ?? ""}
+						handleChange={(value) => updateClient({ localizacaoBairro: value || null })}
+					/>
+				</div>
+				<div className="md:col-span-3">
+					<TextInput
+						label="LOGRADOURO"
+						placeholder="Rua, avenida..."
+						value={client.localizacaoLogradouro ?? ""}
+						handleChange={(value) => updateClient({ localizacaoLogradouro: value || null })}
+					/>
+				</div>
+				<div className="md:col-span-1">
+					<TextInput
+						id={autofill.numberInputId}
+						label="NÚMERO"
+						placeholder="Nº"
+						value={client.localizacaoNumero ?? ""}
+						handleChange={(value) => updateClient({ localizacaoNumero: value || null })}
+					/>
+				</div>
+				<div className="md:col-span-6">
+					<TextInput
+						label="COMPLEMENTO"
+						placeholder="Apartamento, bloco, referência..."
+						value={client.localizacaoComplemento ?? ""}
+						handleChange={(value) => updateClient({ localizacaoComplemento: value || null })}
+					/>
+				</div>
+			</div>
 		</div>
 	);
 }
