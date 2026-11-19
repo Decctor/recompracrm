@@ -1,4 +1,5 @@
 "use client";
+import { SimplesCreditSettings, SimplesCreditRates } from "./components/simples-credit-settings";
 
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
 import LoadingComponent from "@/components/Layouts/LoadingComponent";
@@ -132,6 +133,7 @@ export function FiscalConfigurationView({ canEdit }: FiscalConfigurationViewProp
 							<AutoEmissionPaymentMethodExceptions fiscalConfig={state.fiscalConfiguracao} updateFiscalConfig={updateFiscalConfig} />
 						</>
 					) : null}
+					<SimplesCreditSettings fiscalConfig={state.fiscalConfiguracao} updateFiscalConfig={updateFiscalConfig} disabled={!canEdit} />
 					<InboundDfeSettings fiscalConfig={state.fiscalConfiguracao} updateFiscalConfig={updateFiscalConfig} />
 					<ExceptionalPresenceClassificationSettings fiscalConfig={state.fiscalConfiguracao} updateFiscalConfig={updateFiscalConfig} disabled={!canEdit} />
 				</Section.Body>
@@ -145,6 +147,7 @@ export function FiscalConfigurationView({ canEdit }: FiscalConfigurationViewProp
 			<CompanyFiscalSeries />
 			<CompanyFiscalOperationProfiles />
 			<CompanyFiscalTaxGroups />
+			<SimplesCreditRates enabled={!!data?.fiscalConfiguracao?.operacoesRevenda?.habilitada} canEdit={canEdit} />
 		</div>
 	);
 }

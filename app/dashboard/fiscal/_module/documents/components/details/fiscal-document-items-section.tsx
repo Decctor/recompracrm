@@ -73,6 +73,12 @@ export function FiscalDocumentItemsSection({ items, totals, productNames }: Fisc
 									<ItemCode label="CSOSN" value={item.csosn} />
 									<ItemCode label="Qtde" value={item.quantidade != null ? String(item.quantidade) : null} align="right" />
 									<span className="text-right text-sm font-bold tabular-nums">{money(item.valorTotal)}</span>
+									{item.valorCredito != null ? (
+										<span className="col-span-full text-xs text-muted-foreground">
+											Crédito de ICMS: {money(item.valorCredito)}
+											{item.percentualCredito != null ? ` (${item.percentualCredito.toLocaleString("pt-BR", { maximumFractionDigits: 4 })}%)` : ""}
+										</span>
+									) : null}
 								</div>
 							);
 						})}

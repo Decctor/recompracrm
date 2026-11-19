@@ -1,3 +1,10 @@
+import type { TFiscalCreditCart } from "@/schemas/fiscal";
+import { computeSaleTaxation, type TSaleTaxation } from "./taxation-context";
+import { inArray, and, eq } from "drizzle-orm";
+import { productFiscalProfiles, fiscalTaxGroups } from "@/services/drizzle/schema";
+import type { TFiscalSaleChoices } from "@/schemas/fiscal";
+import { getFiscalCreditChoiceProblems, getFiscalCreditCompetence } from "./simples-credit";
+import { loadCurrentFiscalCreditRates } from "./credit-rates";
 import { db } from "@/services/drizzle";
 import type { TDeliveryModeEnum } from "@/schemas/enums";
 import { isValidCpfCnpj } from "@/lib/validation";
@@ -11,7 +18,8 @@ import { resolveAutoEmissionException } from "./auto-emission-policy";
 import type { TOrganizationEntity } from "@/services/drizzle/schema";
 import type { TPaymentMethodEnum } from "@/schemas/enums";
 
-export type TFiscalPreviewInput = {
+export type TFiscalPreviewInput = TFiscalSaleChoices & {
+	cart?: TFiscalCreditCart;
 	organizationId: string;
 	clienteId?: string | null;
 	entregaLocalizacaoId?: string | null;
@@ -37,6 +45,7 @@ export async function getFiscalDocumentConfiguration({
 	const problemas: string[] = [];
 	let serie: string | null = null;
 	let perfil: string | null = null;
+	let consumidorFinal: boolean | null = null;
 	if (!isOrganizationFiscalDocumentCapable(organization, tipo))
 		problemas.push(`Credenciais ou certificado de ${tipo === "NFE" ? "NF-e" : "NFC-e"} não configurados.`);
 	if (config?.spedy?.certificado?.validTo && new Date(config.spedy.certificado.validTo) <= new Date())
@@ -50,6 +59,7 @@ export async function getFiscalDocumentConfiguration({
 			operacaoPadraoPorTipoId: config?.operacaoPadraoPorTipo?.[tipo],
 		});
 		perfil = operation.nome;
+		consumidorFinal = operation.consumidorFinal;
 		const series =
 			operation.seriePadrao ??
 			(await findActiveFiscalSeries({ organizacaoId: organization.id, tipoDocumento: tipo, ambiente: config?.ambiente ?? "HOMOLOGACAO", database }));
@@ -60,11 +70,11 @@ export async function getFiscalDocumentConfiguration({
 		if (!createHttpError.isHttpError(error) || error.statusCode >= 500) throw error;
 		problemas.push(error.message);
 	}
-	return { tipo, configurado: problemas.length === 0, serie, perfil, problemas };
+	return { tipo, configurado: problemas.length === 0, serie, perfil, problemas, consumidorFinal };
 }
 
 export async function getFiscalDocumentPreview(input: TFiscalPreviewInput, database: TFiscalReadDatabase = db) {
-	const [organization, client, sale] = await Promise.all([
+	const [organization, initialClient, sale] = await Promise.all([
 		loadFiscalOrganization(input.organizationId, database),
 		input.clienteId
 			? database.query.clients.findFirst({ where: (f, o) => o.and(o.eq(f.id, input.clienteId!), o.eq(f.organizacaoId, input.organizationId)) })
@@ -72,21 +82,26 @@ export async function getFiscalDocumentPreview(input: TFiscalPreviewInput, datab
 		input.saleId
 			? database.query.sales.findFirst({
 					where: (f, o) => o.and(o.eq(f.id, input.saleId!), o.eq(f.organizacaoId, input.organizationId)),
-					columns: { id: true, canal: true },
-					with: { documentosFiscais: { columns: { id: true, tipo: true, statusInterno: true } } },
+					with: { itens: true, documentosFiscais: { columns: { id: true, tipo: true, statusInterno: true } } },
 				})
 			: null,
 	]);
 	if (!organization) throw new createHttpError.NotFound("Organização não encontrada.");
+	const client =
+		initialClient ??
+		(input.clienteId === undefined && sale?.clienteId
+			? await database.query.clients.findFirst({ where: (f, o) => o.and(o.eq(f.id, sale.clienteId!), o.eq(f.organizacaoId, input.organizationId)) })
+			: null);
 	if (input.clienteId && !client) throw new createHttpError.NotFound("Cliente não encontrado nesta organização.");
 	if (input.saleId && !sale) throw new createHttpError.NotFound("Venda não encontrada nesta organização.");
+	const locationId = input.entregaLocalizacaoId === undefined ? sale?.entregaLocalizacaoId : input.entregaLocalizacaoId;
 	const location =
-		input.entregaLocalizacaoId && client
+		locationId && client
 			? await database.query.clientLocations.findFirst({
-					where: (f, o) => o.and(o.eq(f.id, input.entregaLocalizacaoId!), o.eq(f.clienteId, client.id), o.eq(f.organizacaoId, input.organizationId)),
+					where: (f, o) => o.and(o.eq(f.id, locationId!), o.eq(f.clienteId, client.id), o.eq(f.organizacaoId, input.organizationId)),
 				})
 			: null;
-	if (input.entregaLocalizacaoId && !location) throw new createHttpError.NotFound("Endereço não encontrado para este cliente.");
+	if (locationId && !location) throw new createHttpError.NotFound("Endereço não encontrado para este cliente.");
 	const address = location ?? client;
 	const cpfCnpjValid = isValidCpfCnpj(client?.cpfCnpj ?? "");
 	const addressComplete =
@@ -111,14 +126,112 @@ export async function getFiscalDocumentPreview(input: TFiscalPreviewInput, datab
 		return { ...option, disponivel: problemas.length === 0, problemas, problemasCliente };
 	});
 	const tipo = selectFiscalDocumentType({
-		requested: input.emissaoFiscalDocumento,
+		requested: input.emissaoFiscalDocumento === undefined ? sale?.emissaoFiscalDocumento : input.emissaoFiscalDocumento,
 		signals,
 		nfeConfigured: opcoes.find((option) => option.tipo === "NFE")!.configurado,
 	});
 	const selected = opcoes.find((option) => option.tipo === tipo)!;
 	const preferred = resolveAutoDocumentType(signals);
 	const documentoExistente = sale?.documentosFiscais.find((document) => !["CANCELADO", "INUTILIZADO"].includes(document.statusInterno ?? "")) ?? null;
+	const creditoHabilitado = !!organization.fiscalConfiguracao?.operacoesRevenda?.habilitada && tipo === "NFE";
+	const competencia = getFiscalCreditCompetence();
+	const escolhas = {
+		fiscalDestinacao: input.fiscalDestinacao !== undefined ? input.fiscalDestinacao : (sale?.fiscalDestinacao ?? null),
+		fiscalCreditoIcms: input.fiscalCreditoIcms !== undefined ? input.fiscalCreditoIcms : (sale?.fiscalCreditoIcms ?? null),
+	};
+	const problemasCredito = getFiscalCreditChoiceProblems({
+		enabled: creditoHabilitado,
+		tipo,
+		choices: escolhas,
+		regimeTributario: organization.fiscalConfiguracao?.regimeTributario ?? 1,
+		cpfCnpj: client?.cpfCnpj,
+		indicador: client?.indicadorInscricaoEstadual,
+	});
+	const percentuais = creditoHabilitado ? await loadCurrentFiscalCreditRates(input.organizationId, competencia) : [];
+	let calculo: TSaleTaxation["credito"] | null = null;
+	let itensCredito: { produtoId: string; csosn: string; percentual: number | null; valor: number | null }[] = [];
+	if (creditoHabilitado && (input.cart || sale)) {
+		try {
+			const operation = await resolveOperationProfileForSale({
+				organizacaoId: organization.id,
+				tipoDocumento: "NFE",
+				signals,
+				operacaoPadraoPorTipoId: organization.fiscalConfiguracao?.operacaoPadraoPorTipo?.NFE,
+				database,
+			});
+			const cart = input.cart;
+			const items = cart
+				? cart.itens.map((item, index) => ({
+						...item,
+						id: String(index),
+						produtoVarianteId: item.produtoVarianteId ?? null,
+						valorVendaTotalLiquido: item.valorVendaTotalBruto - item.valorTotalDesconto,
+						metadados: null,
+					}))
+				: sale!.itens;
+			const ids = [...new Set(items.map((item) => item.produtoId))];
+			const profiles = ids.length
+				? await database.query.productFiscalProfiles.findMany({
+						where: and(eq(productFiscalProfiles.organizacaoId, organization.id), inArray(productFiscalProfiles.produtoId, ids)),
+					})
+				: [];
+			const groupIds = [...new Set(profiles.map((p) => p.grupoTributarioId).filter((id): id is string => !!id))];
+			const groups = groupIds.length
+				? await database.query.fiscalTaxGroups.findMany({
+						where: and(eq(fiscalTaxGroups.organizacaoId, organization.id), inArray(fiscalTaxGroups.id, groupIds)),
+						with: { regras: true },
+					})
+				: [];
+			const taxation = computeSaleTaxation({
+				organizacao: organization,
+				operacao: operation,
+				perfisProdutos: profiles,
+				gruposTributarios: groups,
+				ibptRates: [],
+				percentuaisCredito: percentuais,
+				destinatarioSnapshot: client
+					? { cpfCnpj: client.cpfCnpj, indicadorInscricaoEstadual: client.indicadorInscricaoEstadual, endereco: { estado: address?.localizacaoEstado } }
+					: null,
+				venda: {
+					itens: items,
+					valorTotal: cart?.valorTotal ?? sale!.valorTotal,
+					descontosTotal: cart?.descontosTotal ?? sale?.descontosTotal ?? null,
+					acrescimosTotal: cart?.acrescimosTotal ?? sale?.acrescimosTotal ?? null,
+					entregaModalidade: input.entregaModalidade,
+					integracaoMetadados: cart ? null : (sale?.integracaoMetadados ?? null),
+					rascunhoMetadados: cart ? { shop: { entrega: { taxa: cart.taxaEntrega } } } : (sale?.rascunhoMetadados ?? null),
+					...escolhas,
+				},
+			});
+			problemasCredito.splice(
+				0,
+				problemasCredito.length,
+				...new Set([...problemasCredito, ...taxation.erros.filter((e) => e.severidade === "ERRO").map((e) => e.mensagem)]),
+			);
+			calculo = taxation.credito;
+			itensCredito = taxation.itens.map(({ result }) => ({
+				produtoId: result.produtoId,
+				csosn: result.icms.csosn,
+				percentual: result.icms.pCredSN,
+				valor: result.icms.vCredICMSSN,
+			}));
+		} catch (error) {
+			if (!createHttpError.isHttpError(error)) throw error;
+			problemasCredito.push(error.message);
+		}
+	}
+
 	return {
+		creditoIcms: {
+			habilitado: creditoHabilitado,
+			destinacaoSugerida: selected.consumidorFinal === false ? ("REVENDA_INDUSTRIALIZACAO" as const) : ("CONSUMO_FINAL" as const),
+			competencia,
+			escolhas,
+			calculo,
+			itens: itensCredito,
+			percentuais: percentuais.map((p) => ({ grupoTributarioId: p.grupoTributarioId, percentual: p.percentual })),
+			problemas: problemasCredito,
+		},
 		tipo,
 		serie: selected.serie,
 		perfil: selected.perfil,

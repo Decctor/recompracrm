@@ -15,7 +15,12 @@ async function requireOrgSession() {
 	return { session, orgId };
 }
 
-const FiscalTaxGroupInputSchema = FiscalTaxGroupSchema.omit({ organizacaoId: true, dataInsercao: true });
+const FiscalTaxGroupInputSchema = FiscalTaxGroupSchema.omit({ organizacaoId: true, dataInsercao: true }).superRefine((group, ctx) => {
+	if (group.csosnComCredito && !["101", "201"].includes(group.csosnComCredito))
+		ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["csosnComCredito"], message: "O tratamento com crédito deve utilizar CSOSN 101 ou 201." });
+	if (group.csosnSemCredito && !["102", "202"].includes(group.csosnSemCredito))
+		ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["csosnSemCredito"], message: "O tratamento sem crédito deve utilizar CSOSN 102 ou 202." });
+});
 const FiscalTaxGroupRuleInputSchema = FiscalTaxGroupRuleSchema.omit({ grupoTributarioId: true, organizacaoId: true, dataInsercao: true }).extend({
 	id: z.string({ invalid_type_error: "Tipo não valido para o ID da regra." }).optional(),
 	deletar: z.boolean({ invalid_type_error: "Tipo não valido para deletar regra." }).optional(),
@@ -90,7 +95,8 @@ async function createFiscalTaxGroupRoute(request: NextRequest) {
 	const { session } = await requireOrgSession();
 	const sessionMembership = session.membership;
 	if (!sessionMembership) throw new createHttpError.Unauthorized("Você precisa estar autenticado para acessar esse recurso.");
-	if (!sessionMembership.permissoes.fiscal.configurar) throw new createHttpError.Forbidden("Oops, você não possui permissão para configurar grupos tributarios.");
+	if (!sessionMembership.permissoes.fiscal.configurar)
+		throw new createHttpError.Forbidden("Oops, você não possui permissão para configurar grupos tributarios.");
 
 	const payload = await request.json();
 	const input = CreateFiscalTaxGroupInputSchema.parse(payload);
@@ -130,7 +136,8 @@ async function updateFiscalTaxGroupRoute(request: NextRequest) {
 	const { session } = await requireOrgSession();
 	const sessionMembership = session.membership;
 	if (!sessionMembership) throw new createHttpError.Unauthorized("Você precisa estar autenticado para acessar esse recurso.");
-	if (!sessionMembership.permissoes.fiscal.configurar) throw new createHttpError.Forbidden("Oops, você não possui permissão para configurar grupos tributarios.");
+	if (!sessionMembership.permissoes.fiscal.configurar)
+		throw new createHttpError.Forbidden("Oops, você não possui permissão para configurar grupos tributarios.");
 
 	const payload = await request.json();
 	const input = UpdateFiscalTaxGroupInputSchema.parse(payload);

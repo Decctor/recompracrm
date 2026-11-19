@@ -53,6 +53,24 @@ function target(tipo: TFiscalProblemTargetType, id: string | null = null, rotulo
  * que a tela mostra quando aquela causa aparece — a mensagem original do erro e preservada.
  */
 export const FISCAL_PROBLEM_SPECS = {
+	CREDITO_SN_REVISAO: {
+		codigo: "CREDITO_SN_REVISAO",
+		origem: "VALIDACAO",
+		categoria: "TRIBUTARIO",
+		acaoSugerida: "Revise a destinação e o crédito na emissão manual desta venda.",
+		alvo: "VENDA",
+		reenviavel: true,
+		resolvidoAutomaticamente: false,
+	},
+	CREDITO_SN_CONFIGURACAO: {
+		codigo: "CREDITO_SN_CONFIGURACAO",
+		origem: "VALIDACAO",
+		categoria: "TRIBUTARIO",
+		acaoSugerida: "Configure os tratamentos do grupo e o percentual da competência antes de reenviar.",
+		alvo: "CONFIGURACAO_FISCAL",
+		reenviavel: true,
+		resolvidoAutomaticamente: false,
+	},
 	CONFIGURACAO_FISCAL_INCOMPLETA: {
 		codigo: "CONFIGURACAO_FISCAL_INCOMPLETA",
 		origem: "PRONTIDAO",
@@ -269,6 +287,14 @@ export function buildValidationProblems(
 	return errors
 		.filter((error) => error.severidade === "ERRO")
 		.map((error) => {
+			// Códigos do crédito por operação. CREDITO_SN_AUSENTE fica de fora: é o erro do percentual fixo
+			// do grupo (recurso desligado) e se resolve no grupo tributário, não nos percentuais por competência.
+			if (error.codigo.startsWith("CREDITO_SN_") && error.codigo !== "CREDITO_SN_AUSENTE") {
+				const config = ["CREDITO_SN_COMPETENCIA_AUSENTE", "CREDITO_SN_ENQUADRAMENTO_AUSENTE", "CREDITO_SN_TRATAMENTO_NAO_SUPORTADO"].includes(
+					error.codigo,
+				);
+				return buildFiscalProblem(config ? "CREDITO_SN_CONFIGURACAO" : "CREDITO_SN_REVISAO", { mensagem: error.mensagem });
+			}
 			const code: TFiscalProblemCode =
 				error.codigo === "PERFIL_FISCAL_AUSENTE"
 					? "PERFIL_FISCAL_AUSENTE"

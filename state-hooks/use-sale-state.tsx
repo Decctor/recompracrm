@@ -1,3 +1,4 @@
+import { FiscalSaleChoicesSchema } from "@/schemas/fiscal";
 import { normalizeCouponGiftItem, roundCouponGiftCurrency } from "@/lib/coupons/gift-pricing";
 import { CouponGiftSelectionSchema } from "@/schemas/coupons";
 import { SaleFiscalDocumentSchema } from "@/schemas/fiscal";
@@ -206,6 +207,7 @@ export const SaleStateSchema = z.object({
 	cupomResgate: SaleAppliedCouponSchema.optional().nullable(),
 	recompensasResgate: z.array(SaleRewardRedemptionSchema).default([]),
 	// Override tri-state da emissão fiscal automática. null = herda a preferência da organização.
+	...FiscalSaleChoicesSchema.shape,
 	emissaoFiscalDocumento: SaleFiscalDocumentSchema.default(null),
 	emissaoFiscalAutomatica: z.boolean({ invalid_type_error: "Tipo não válido para emissão fiscal automática." }).nullable().default(null),
 	success: SaleSuccessSchema,
@@ -271,6 +273,8 @@ export function getDefaultSaleState(initialState?: Partial<TSaleState>): TSaleSt
 		cupomResgate: initialState?.cupomResgate ?? null,
 		recompensasResgate: initialState?.recompensasResgate ?? [],
 		emissaoFiscalAutomatica: initialState?.emissaoFiscalAutomatica ?? null,
+		fiscalDestinacao: initialState?.fiscalDestinacao,
+		fiscalCreditoIcms: initialState?.fiscalCreditoIcms,
 		emissaoFiscalDocumento: initialState?.emissaoFiscalDocumento ?? null,
 		success: initialState?.success ?? null,
 	};
@@ -646,6 +650,9 @@ export const useSaleState = ({ initialState, organizationConfig, contasFinanceir
 		setState((prev) => ({ ...prev, cupomResgate, recompensasResgate: cupomResgate ? [] : prev.recompensasResgate }));
 	}, []);
 
+	const setFiscalChoices = useCallback((patch: Pick<TSaleState, "fiscalDestinacao" | "fiscalCreditoIcms">) => {
+		setState((prev) => ({ ...prev, ...patch }));
+	}, []);
 	const setEmissaoFiscalDocumento = useCallback((emissaoFiscalDocumento: TSaleState["emissaoFiscalDocumento"]) => {
 		setState((prev) => ({ ...prev, emissaoFiscalDocumento }));
 	}, []);
@@ -838,6 +845,7 @@ export const useSaleState = ({ initialState, organizationConfig, contasFinanceir
 		recompensasResgateTotal,
 		setCupomResgate,
 		setEmissaoFiscalAutomatica,
+		setFiscalChoices,
 		setEmissaoFiscalDocumento,
 		setSuccess,
 		clearSuccess,

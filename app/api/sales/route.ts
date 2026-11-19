@@ -178,7 +178,12 @@ async function decorateSaleFiscalDocuments({
 }): Promise<(SaleErpDetailDocument & TFiscalDocumentDecoration)[]> {
 	if (!userCanViewFiscal || documents.length === 0) return [];
 	const organization = await loadFiscalOrganization(organizationId);
-	return decorateFiscalDocuments({ documents, organizationId, provider: organization?.fiscalProvedor });
+	return decorateFiscalDocuments({
+		documents,
+		organizationId,
+		provider: organization?.fiscalProvedor,
+		resaleCreditEnabled: !!organization?.fiscalConfiguracao?.operacoesRevenda?.habilitada,
+	});
 }
 
 /**

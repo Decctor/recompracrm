@@ -1,3 +1,4 @@
+import { resolveFiscalProductProfile } from "@/lib/fiscal/product-profile";
 import { buildFiscalPaymentsForManagedSale } from "@/lib/fiscal/managed-sale-payments";
 import { computeSaleTaxation } from "@/lib/fiscal/taxation-context";
 import type { TFiscalSaleContext } from "@/lib/fiscal/types";
@@ -71,7 +72,10 @@ function mapReceiver(snapshot: TFiscalSaleContext["destinatarioSnapshot"], isHom
 	return {
 		name: isHomologacao ? NOME_DESTINATARIO_HOMOLOGACAO : nomeReal,
 		federalTaxNumber: onlyDigits(String(snapshot.cpfCnpj ?? "")),
-		stateTaxNumber: mapTaxRegistration(typeof snapshot.inscricaoEstadual === "string" ? snapshot.inscricaoEstadual : null),
+		stateTaxNumber:
+			snapshot.indicadorInscricaoEstadual === "CONTRIBUINTE_ISENTO"
+				? "ISENTO"
+				: mapTaxRegistration(typeof snapshot.inscricaoEstadual === "string" ? snapshot.inscricaoEstadual : null),
 		email: nonEmptyString(typeof snapshot.email === "string" ? snapshot.email : null),
 		// O XSD da NF-e recusa espaco no inicio ou no fim de campo String (rejeicao de schema em
 		// xLgr/xBairro/xCpl). Endereco digitado pelo cliente chega com espaco sobrando e com
@@ -96,6 +100,7 @@ function mapReceiver(snapshot: TFiscalSaleContext["destinatarioSnapshot"], isHom
 }
 
 export function mapSaleContextToSpedyInvoicePayload(context: TFiscalSaleContext, documento: TFiscalDocument): TSpedyCreateInvoicePayload {
+	if (context.payloadCongelado) return context.payloadCongelado;
 	const taxation = computeSaleTaxation(context);
 	const isNfce = documento.tipo === "NFCE";
 	const isReturn = context.operacao.finalidade === "DEVOLUCAO";
@@ -111,9 +116,14 @@ export function mapSaleContextToSpedyInvoicePayload(context: TFiscalSaleContext,
 	// venda datava a NF-e no passado e a SEFAZ nao autoriza dhEmi retroativa: emitir hoje uma
 	// venda de 21 dias atras voltava sem autorizacao. Uma nota e emitida no instante em que e
 	// transmitida; a data do fato gerador e informacao de negocio, nao dhEmi.
-	const emissaoAgora = new Date().toISOString();
+	const emissaoAgora = (context.dataCalculo ?? new Date()).toISOString();
 	const ambienteSpedy = mapFiscalEnvironmentToSpedy(context.organizacao.fiscalConfiguracao?.ambiente);
 	const presenceType = mapPresenceType(context.operacao.presencaConsumidor);
+	// Ao preencher infCpl explicitamente, preserva a estimativa IBPT já calculada para a nota.
+	const approximateTaxMessage =
+		taxation.totais.vTotTrib > 0
+			? `Valor Aprox. Tributos ${taxation.totais.vTotTrib.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} (${(taxation.totais.vNF > 0 ? (taxation.totais.vTotTrib / taxation.totais.vNF) * 100 : 0).toFixed(2).replace(".", ",")}%) Fonte IBPT.`
+			: "";
 
 	return {
 		// Escopo de idempotencia na Spedy: (referencia, numero, tentativa). Criar com um integrationId
@@ -136,12 +146,13 @@ export function mapSaleContextToSpedyInvoicePayload(context: TFiscalSaleContext,
 		operationDate: emissaoAgora,
 		destination: isNfce ? "internal" : mapDestinationType(taxation.scenario.escopo),
 		presenceType,
-		isFinalCustomer: context.operacao.consumidorFinal,
+		isFinalCustomer: taxation.scenario.consumidorFinal,
+		additionalInformation: taxation.credito.mensagem ? [taxation.credito.mensagem, approximateTaxMessage].filter(Boolean).join(" ") : undefined,
 		environmentType: ambienteSpedy,
 		receiver: mapReceiver(context.destinatarioSnapshot, ambienteSpedy === "development"),
 		transport: buildSpedyTransport({ presenceType, fiscalConfiguracao: context.organizacao.fiscalConfiguracao }),
 		items: taxation.itens.map(({ item, result, valorFrete, valorOutros, valorDesconto }, index) => {
-			const perfil = context.perfisProdutos.find((profile) => profile.produtoId === item.produtoId);
+			const perfil = resolveFiscalProductProfile(context.perfisProdutos, item);
 			return {
 				code: item.produtoId,
 				gtinCode: "SEM GTIN",

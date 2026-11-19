@@ -283,6 +283,8 @@ export default function NewSalePage({
 					})),
 					rascunhoMetadados: saleState.getDraftMetadata(),
 					emissaoFiscalAutomatica: saleState.state.emissaoFiscalAutomatica,
+					fiscalDestinacao: saleState.state.fiscalDestinacao,
+					fiscalCreditoIcms: saleState.state.fiscalCreditoIcms,
 					emissaoFiscalDocumento: saleState.state.emissaoFiscalDocumento,
 				});
 				saleState.setSuccess({
@@ -479,6 +481,8 @@ export default function NewSalePage({
 			})),
 			rascunhoMetadados: saleState.getDraftMetadata(),
 			emissaoFiscalAutomatica: saleState.state.emissaoFiscalAutomatica,
+			fiscalDestinacao: saleState.state.fiscalDestinacao,
+			fiscalCreditoIcms: saleState.state.fiscalCreditoIcms,
 			emissaoFiscalDocumento: saleState.state.emissaoFiscalDocumento,
 			itens: mapItemsToApi(saleState),
 		});
@@ -516,6 +520,8 @@ export default function NewSalePage({
 				quantidade: recompensa.quantidade,
 			})),
 			emissaoFiscalAutomatica: saleState.state.emissaoFiscalAutomatica,
+			fiscalDestinacao: saleState.state.fiscalDestinacao,
+			fiscalCreditoIcms: saleState.state.fiscalCreditoIcms,
 			emissaoFiscalDocumento: saleState.state.emissaoFiscalDocumento,
 			itens: mapItemsToApi(saleState),
 		});

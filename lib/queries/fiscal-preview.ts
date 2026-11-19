@@ -3,9 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 
 export async function fetchFiscalPreview(input: TGetFiscalPreviewInput, signal?: AbortSignal) {
-	const params = new URLSearchParams();
-	for (const [key, value] of Object.entries(input)) if (value) params.set(key, value);
-	const { data } = await axios.get<TGetFiscalPreviewOutput>(`/api/pos/fiscal-preview?${params}`, { signal });
+	const { data } = await axios.post<TGetFiscalPreviewOutput>("/api/pos/fiscal-preview", input, { signal });
 	return data.data;
 }
 

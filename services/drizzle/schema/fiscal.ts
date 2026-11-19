@@ -1,5 +1,5 @@
 import { relations, sql } from "drizzle-orm";
-import { boolean, doublePrecision, index, integer, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/pg-core";
+import { boolean, check, doublePrecision, index, integer, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/pg-core";
 import { newTable } from "./common";
 import {
 	fiscalClientTaxIndicatorEnum,
@@ -113,6 +113,8 @@ export const fiscalTaxGroups = newTable(
 			.notNull(),
 		nome: varchar("nome", { length: 255 }).notNull(),
 		descricao: text("descricao"),
+		csosnComCredito: fiscalIcmsCsosnEnum("csosn_com_credito"),
+		csosnSemCredito: fiscalIcmsCsosnEnum("csosn_sem_credito"),
 		// ICMS (Simples Nacional) - defaults intraestaduais
 		csosn: fiscalIcmsCsosnEnum("csosn").notNull().default("102"),
 		aliquotaIcms: doublePrecision("aliquota_icms").notNull().default(0),
@@ -434,3 +436,39 @@ export type TFiscalInboundDocumentEntity = typeof fiscalInboundDocuments.$inferS
 export type TNewFiscalInboundDocumentEntity = typeof fiscalInboundDocuments.$inferInsert;
 export type TFiscalInboundSyncStateEntity = typeof fiscalInboundSyncStates.$inferSelect;
 export type TNewFiscalInboundSyncStateEntity = typeof fiscalInboundSyncStates.$inferInsert;
+
+// Revisões imutáveis: a mais recente por grupo/competência é a vigente.
+export const fiscalCreditRates = newTable(
+	"fiscal_credit_rates",
+	{
+		id: varchar("id", { length: 255 })
+			.primaryKey()
+			.$defaultFn(() => crypto.randomUUID()),
+		organizacaoId: varchar("organizacao_id", { length: 255 })
+			.notNull()
+			.references(() => organizations.id, { onDelete: "cascade" }),
+		grupoTributarioId: varchar("grupo_tributario_id", { length: 255 })
+			.notNull()
+			.references(() => fiscalTaxGroups.id, { onDelete: "cascade" }),
+		competencia: varchar("competencia", { length: 7 }).notNull(),
+		percentual: doublePrecision("percentual").notNull(),
+		observacao: text("observacao"),
+		autorId: varchar("autor_id", { length: 255 }).references(() => users.id, { onDelete: "set null" }),
+		dataInsercao: timestamp("data_insercao", { withTimezone: true })
+			.default(sql`clock_timestamp()`)
+			.notNull(),
+	},
+	(table) => ({
+		competenciaCheck: check("fiscal_credit_rates_competence_check", sql`${table.competencia} ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'`),
+		percentualCheck: check("fiscal_credit_rates_percentage_check", sql`${table.percentual} > 0 AND ${table.percentual} <= 100`),
+		lookupIdx: index("idx_fiscal_credit_rates_lookup").on(table.organizacaoId, table.grupoTributarioId, table.competencia, table.dataInsercao),
+	}),
+);
+export type TFiscalCreditRateEntity = typeof fiscalCreditRates.$inferSelect;
+
+export const fiscalCreditRatesRelations = relations(fiscalCreditRates, ({ one }) => ({
+	organizacao: one(organizations, { fields: [fiscalCreditRates.organizacaoId], references: [organizations.id] }),
+	grupoTributario: one(fiscalTaxGroups, { fields: [fiscalCreditRates.grupoTributarioId], references: [fiscalTaxGroups.id] }),
+	autor: one(users, { fields: [fiscalCreditRates.autorId], references: [users.id] }),
+}));
+export type TNewFiscalCreditRateEntity = typeof fiscalCreditRates.$inferInsert;

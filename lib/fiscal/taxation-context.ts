@@ -1,3 +1,6 @@
+import { resolveFiscalProductProfile } from "./product-profile";
+import { resolveEffectiveTaxConfig } from "./engine/rules";
+import { buildSimplesCreditSummary, getFiscalCreditChoiceProblems, getFiscalCreditCompetence, resolveSimplesCreditConfig } from "./simples-credit";
 import type { TFiscalClientTaxIndicatorEnum } from "@/schemas/enums";
 import {
 	aggregateItemErrors,
@@ -18,19 +21,45 @@ import { getManagedChannelIntegrationMetadata } from "@/lib/sales/fulfillment-ch
 import { resolveFiscalShopDeliveryFee } from "@/lib/shop/config";
 import type { TFiscalSaleContext } from "./types";
 
-function readDestinatarioUf(context: TFiscalSaleContext): string | null {
+export type TFiscalTaxationItem = Pick<
+	TFiscalSaleContext["venda"]["itens"][number],
+	| "id"
+	| "produtoVarianteId"
+	| "valorVendaTotalLiquido"
+	| "produtoId"
+	| "quantidade"
+	| "valorVendaUnitario"
+	| "valorVendaTotalBruto"
+	| "valorTotalDesconto"
+	| "metadados"
+>;
+export type TFiscalTaxationContext = Omit<TFiscalSaleContext, "venda" | "serie" | "pagamentos"> & {
+	venda: Pick<
+		TFiscalSaleContext["venda"],
+		| "integracaoMetadados"
+		| "rascunhoMetadados"
+		| "entregaModalidade"
+		| "acrescimosTotal"
+		| "valorTotal"
+		| "descontosTotal"
+		| "fiscalDestinacao"
+		| "fiscalCreditoIcms"
+	> & { itens: TFiscalTaxationItem[] };
+};
+
+function readDestinatarioUf(context: TFiscalTaxationContext): string | null {
 	const snapshot = context.destinatarioSnapshot as { endereco?: { estado?: string | null } } | null;
 	const uf = snapshot?.endereco?.estado;
 	return uf ? String(uf).toUpperCase() : null;
 }
 
-function readDestinatarioIndicador(context: TFiscalSaleContext): TFiscalClientTaxIndicatorEnum {
+function readDestinatarioIndicador(context: TFiscalTaxationContext): TFiscalClientTaxIndicatorEnum {
 	const snapshot = context.destinatarioSnapshot as { indicadorInscricaoEstadual?: TFiscalClientTaxIndicatorEnum | null } | null;
 	return snapshot?.indicadorInscricaoEstadual ?? "NAO_CONTRIBUINTE";
 }
 
 // Monta o cenario fiscal (mesmo para todos os itens do documento) a partir do contexto da venda.
-export function buildSaleScenario(context: TFiscalSaleContext): TFiscalTaxScenario {
+export function buildSaleScenario(context: TFiscalTaxationContext): TFiscalTaxScenario {
 	const fiscalConfig = context.organizacao.fiscalConfiguracao;
 	const ufOrigem = (fiscalConfig?.endereco.uf ?? "").toUpperCase();
 	// NFC-e (mod 65) e sempre operacao interna (idDest = 1, CFOP 5xxx): o endereco do cliente
@@ -44,7 +73,13 @@ export function buildSaleScenario(context: TFiscalSaleContext): TFiscalTaxScenar
 		ufOrigem,
 		ufDestino,
 		escopo,
-		consumidorFinal: context.operacao.consumidorFinal,
+		consumidorFinal:
+			context.organizacao.fiscalConfiguracao?.operacoesRevenda?.habilitada &&
+			context.operacao.tipoDocumento === "NFE" &&
+			context.operacao.finalidade === "NORMAL" &&
+			context.venda.fiscalDestinacao
+				? context.venda.fiscalDestinacao === "CONSUMO_FINAL"
+				: context.operacao.consumidorFinal,
 		finalidade: context.operacao.finalidade,
 		indicadorDestinatario: readDestinatarioIndicador(context),
 	};
@@ -81,7 +116,7 @@ function buildFallbackGroup(organizacaoId: string): TFiscalTaxGroupWithRules {
 }
 
 export type TSaleItemTaxation = {
-	item: TFiscalSaleContext["venda"]["itens"][number];
+	item: TFiscalTaxationItem;
 	result: TItemTaxResult;
 	valorFrete: number;
 	// Parcela do acrescimo nao-frete (vOutro) rateada no item.
@@ -96,12 +131,28 @@ export type TSaleTaxation = {
 	itens: TSaleItemTaxation[];
 	totais: TDocumentTaxTotals;
 	erros: TFiscalValidationError[];
+	credito: ReturnType<typeof buildSimplesCreditSummary> & { competencia: string };
 };
 
 // Calcula a tributacao de toda a venda. Fonte unica usada tanto pela validacao quanto pelos mappers.
-export function computeSaleTaxation(context: TFiscalSaleContext): TSaleTaxation {
+export function computeSaleTaxation(context: TFiscalTaxationContext): TSaleTaxation {
 	const scenario = buildSaleScenario(context);
 	const extraErrors: TFiscalValidationError[] = [];
+	const enabled =
+		!!context.organizacao.fiscalConfiguracao?.operacoesRevenda?.habilitada &&
+		context.operacao.tipoDocumento === "NFE" &&
+		context.operacao.finalidade === "NORMAL";
+	const competencia = getFiscalCreditCompetence(context.dataCalculo);
+	if (enabled)
+		for (const mensagem of getFiscalCreditChoiceProblems({
+			enabled,
+			tipo: context.operacao.tipoDocumento,
+			choices: context.venda,
+			regimeTributario: scenario.regimeTributario,
+			cpfCnpj: context.destinatarioSnapshot?.cpfCnpj as string | undefined,
+			indicador: scenario.indicadorDestinatario,
+		}))
+			extraErrors.push({ codigo: "CREDITO_SN_DECISAO_INVALIDA", severidade: "ERRO", mensagem });
 	// Frete de canal gerenciado: entrega propria (LOJA) e receita da loja e compoe a NF; entrega
 	// feita pelo canal fica fora. A taxa da loja digital tambem e sempre receita da loja.
 	const integracaoMetadados = getManagedChannelIntegrationMetadata(context.venda.integracaoMetadados);
@@ -154,7 +205,7 @@ export function computeSaleTaxation(context: TFiscalSaleContext): TSaleTaxation 
 
 	const itens = context.venda.itens.map((item, index) => {
 		const valorDesconto = item.valorTotalDesconto + headerDiscountByItem[index];
-		const perfil = context.perfisProdutos.find((profile) => profile.produtoId === item.produtoId);
+		const perfil = resolveFiscalProductProfile(context.perfisProdutos, item);
 		const grupo = perfil?.grupoTributarioId ? context.gruposTributarios.find((g) => g.id === perfil.grupoTributarioId) : undefined;
 
 		if (!perfil) {
@@ -184,7 +235,20 @@ export function computeSaleTaxation(context: TFiscalSaleContext): TSaleTaxation 
 			baseValue: item.valorVendaTotalBruto - valorDesconto + freightByItem[index] + otherChargesByItem[index],
 		});
 
+		const rate = context.percentuaisCredito?.find((r) => r.grupoTributarioId === grupoEfetivo.id && r.competencia === competencia);
+		const configOverride = enabled
+			? resolveSimplesCreditConfig({
+					config: resolveEffectiveTaxConfig(grupoEfetivo, scenario),
+					scenario,
+					decision: context.venda.fiscalCreditoIcms,
+					group: grupoEfetivo,
+					rate,
+					produtoId: item.produtoId,
+					errors: extraErrors,
+				})
+			: undefined;
 		const result = computeItemTaxation({
+			configOverride,
 			scenario,
 			group: grupoEfetivo,
 			item: {
@@ -200,6 +264,9 @@ export function computeSaleTaxation(context: TFiscalSaleContext): TSaleTaxation 
 			},
 			vTotTrib,
 		});
+		// No fluxo por operação o percentual vem da competência e a falta dele já foi reportada como
+		// CREDITO_SN_COMPETENCIA_AUSENTE; o erro do percentual fixo do grupo seria uma duplicata.
+		if (configOverride) result.erros = result.erros.filter((error) => error.codigo !== "CREDITO_SN_AUSENTE");
 
 		return { item, result, valorFrete: freightByItem[index], valorOutros: otherChargesByItem[index], valorDesconto };
 	});
@@ -210,5 +277,18 @@ export function computeSaleTaxation(context: TFiscalSaleContext): TSaleTaxation 
 	);
 	const erros = [...extraErrors, ...aggregateItemErrors(itens.map(({ result }) => result))];
 
-	return { scenario, itens, totais, erros };
+	const credito = buildSimplesCreditSummary(itens.map(({ result }) => result));
+	if (credito.mensagem.length > 4800)
+		erros.push({
+			codigo: "CREDITO_SN_TEXTO_EXCEDIDO",
+			severidade: "ERRO",
+			mensagem: "A discriminação do crédito excede o limite das informações complementares. Revise a configuração dos grupos tributários.",
+		});
+	if (enabled && context.venda.fiscalCreditoIcms === "COM_CREDITO" && credito.parcelas.length === 0 && erros.length === 0)
+		erros.push({
+			codigo: "CREDITO_SN_SEM_ITENS",
+			severidade: "ERRO",
+			mensagem: "Nenhum item desta nota permite crédito. Revise o tratamento fiscal ou selecione sem crédito.",
+		});
+	return { scenario, itens, totais, erros, credito: { ...credito, competencia } };
 }

@@ -1,4 +1,5 @@
 "use client";
+import { FiscalDocumentCreditSection } from "./details/fiscal-document-credit-section";
 
 import type { TGetFiscalDocumentsOutputById } from "@/app/api/fiscal/documents/route";
 import LoadingComponent from "@/components/Layouts/LoadingComponent";
@@ -137,6 +138,7 @@ export function FiscalDocumentDetails({
 					<FiscalDocumentIdentificationPanel document={document} />
 					<FiscalDocumentEventsTimeline events={events} />
 				</div>
+				<FiscalDocumentCreditSection snapshot={document.snapshotOrigemVenda} />
 				<FiscalDocumentItemsSection items={payloadItems} totals={taxTotals} productNames={productNames} />
 				<FiscalDocumentSupportSection document={document} payload={providerPayload} response={providerResponse} messages={messages} />
 				{runner.modals}

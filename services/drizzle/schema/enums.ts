@@ -684,3 +684,6 @@ export const visualKitFormatEnum = pgEnum("visual_kit_format", [
 export const visualKitOutputEnum = pgEnum("visual_kit_output", ["PDF", "PDF_ETIQUETADORA", "PNG", "JPG"]);
 
 export const campaignEventStatusEnum = pgEnum("campaign_event_status", ["PENDENTE", "PROCESSADA", "DESCARTADA"]);
+
+export const fiscalSaleDestinationEnum = pgEnum("fiscal_sale_destination", ["REVENDA_INDUSTRIALIZACAO", "CONSUMO_FINAL"]);
+export const fiscalCreditDecisionEnum = pgEnum("fiscal_credit_decision", ["NAO_CONFIRMADO", "SEM_CREDITO", "COM_CREDITO"]);

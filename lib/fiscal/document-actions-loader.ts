@@ -19,6 +19,7 @@ type DecoratableDocument = TFiscalDocumentForActions & {
 };
 
 export type TFiscalDocumentDecoration = {
+	revisaoCreditoIcms?: boolean;
 	acoes: TFiscalDocumentAction[];
 	problemas: TFiscalProblem[];
 };
@@ -41,11 +42,13 @@ export async function decorateFiscalDocuments<T extends DecoratableDocument>({
 	documents,
 	organizationId,
 	provider,
+	resaleCreditEnabled = false,
 	now = new Date(),
 }: {
 	documents: T[];
 	organizationId: string;
 	provider: string | null | undefined;
+	resaleCreditEnabled?: boolean;
 	now?: Date;
 }): Promise<Array<T & TFiscalDocumentDecoration>> {
 	if (documents.length === 0) return [];
@@ -81,6 +84,7 @@ export async function decorateFiscalDocuments<T extends DecoratableDocument>({
 
 	return documents.map((document) => ({
 		...document,
+		revisaoCreditoIcms: resaleCreditEnabled && document.tipo === "NFE" && !("documentoOrigemId" in document && document.documentoOrigemId),
 		acoes: resolveFiscalDocumentActions({
 			document,
 			now,

@@ -218,6 +218,8 @@ export function mapSaleForEditToSaleState(
 			};
 		}),
 		emissaoFiscalAutomatica: venda.emissaoFiscalAutomatica ?? null,
+		fiscalDestinacao: venda.fiscalDestinacao,
+		fiscalCreditoIcms: venda.fiscalCreditoIcms,
 		emissaoFiscalDocumento: venda.emissaoFiscalDocumento ?? null,
 	};
 }

@@ -112,7 +112,7 @@ export function useFiscalDocumentActionRunner({
 				case "REENVIAR":
 					// Documento encerrado: nova emissao para a venda (com as opcoes de presenca). Documento
 					// com falha: o mesmo documento volta para a fila.
-					if (isFiscalDocumentClosed(document.statusInterno)) setOpenModal("EMITIR_NOVAMENTE");
+					if (isFiscalDocumentClosed(document.statusInterno) || document.revisaoCreditoIcms) setOpenModal("EMITIR_NOVAMENTE");
 					else retryDocument({ documentIds: [document.id] });
 					return;
 				case "SINCRONIZAR":
@@ -126,7 +126,7 @@ export function useFiscalDocumentActionRunner({
 					return;
 			}
 		},
-		[actions, document.id, document.statusInterno, openAsset, retryDocument, syncDocument],
+		[actions, document.id, document.statusInterno, document.revisaoCreditoIcms, openAsset, retryDocument, syncDocument],
 	);
 
 	const closeModal = useCallback(() => setOpenModal(null), []);
@@ -175,6 +175,8 @@ export function useFiscalDocumentActionRunner({
 					tipo={document.tipo}
 					entregaModalidade={document.venda?.entregaModalidade}
 					exceptionalPresenceEnabled={exceptionalPresenceEnabled}
+					// Calculado no servidor com a configuração viva: só NF-e de venda com o recurso ligado.
+					resaleCreditEnabled={!!document.revisaoCreditoIcms}
 					canConfigureFiscal={permissions.configurar}
 					closeMenu={closeModal}
 				/>

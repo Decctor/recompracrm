@@ -1,4 +1,7 @@
 "use client";
+import { FiscalCreditChoices } from "@/components/Fiscal/FiscalCreditChoices";
+import { useFiscalPreview } from "@/lib/queries/fiscal-preview";
+import { useInternalFiscalDocumentState } from "@/state-hooks/use-internal-fiscal-document-state";
 
 import ResponsiveMenu from "@/components/Utils/ResponsiveMenu";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -11,7 +14,7 @@ import { cn } from "@/lib/utils";
 import type { TDeliveryModeEnum, TFiscalDocumentTypeEnum } from "@/schemas/enums";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, ReceiptText } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 type TEmissionMode = "REGULAR" | "PRESENCIAL_EXCEPCIONAL";
@@ -21,6 +24,8 @@ type ManualFiscalEmissionProps = {
 	tipo?: Extract<TFiscalDocumentTypeEnum, "NFCE" | "NFE">;
 	entregaModalidade?: TDeliveryModeEnum | null;
 	exceptionalPresenceEnabled: boolean;
+	// Crédito de ICMS por operação ligado na organização. Desligado, a emissão não consulta a prévia.
+	resaleCreditEnabled: boolean;
 	canConfigureFiscal: boolean;
 	closeMenu: () => void;
 };
@@ -30,10 +35,45 @@ export default function ManualFiscalEmission({
 	tipo,
 	entregaModalidade,
 	exceptionalPresenceEnabled,
+	resaleCreditEnabled,
 	canConfigureFiscal,
 	closeMenu,
 }: ManualFiscalEmissionProps) {
 	const queryClient = useQueryClient();
+	const { state: fiscalState, updateDocument } = useInternalFiscalDocumentState({ initialState: { vendaId: saleId, tipo } });
+	const preview = useFiscalPreview(
+		{
+			saleId,
+			entregaModalidade: entregaModalidade ?? "PRESENCIAL",
+			emissaoFiscalDocumento: tipo,
+			fiscalDestinacao: fiscalState.fiscalDestinacao,
+			fiscalCreditoIcms: fiscalState.fiscalCreditoIcms,
+		},
+		resaleCreditEnabled,
+	);
+	const credit = preview.data?.creditoIcms;
+	useEffect(() => {
+		if (!credit?.habilitado || fiscalState.fiscalDestinacao !== undefined) return;
+		const destination = credit.escolhas.fiscalDestinacao ?? credit.destinacaoSugerida;
+		updateDocument({
+			fiscalDestinacao: destination,
+			fiscalCreditoIcms: credit.escolhas.fiscalCreditoIcms ?? (destination === "CONSUMO_FINAL" ? "SEM_CREDITO" : "NAO_CONFIRMADO"),
+		});
+	}, [
+		credit?.habilitado,
+		credit?.destinacaoSugerida,
+		credit?.escolhas.fiscalDestinacao,
+		credit?.escolhas.fiscalCreditoIcms,
+		fiscalState.fiscalDestinacao,
+		updateDocument,
+	]);
+	const choices = {
+		fiscalDestinacao: fiscalState.fiscalDestinacao === undefined ? credit?.escolhas.fiscalDestinacao : fiscalState.fiscalDestinacao,
+		fiscalCreditoIcms: fiscalState.fiscalCreditoIcms === undefined ? credit?.escolhas.fiscalCreditoIcms : fiscalState.fiscalCreditoIcms,
+	};
+	// Só o fluxo de crédito depende da prévia; sem ele a emissão segue como antes.
+	const creditBlocked =
+		resaleCreditEnabled && (preview.isLoading || preview.isError || (!!credit?.habilitado && (preview.isFetching || credit.problemas.length > 0)));
 	const [mode, setMode] = useState<TEmissionMode>("REGULAR");
 	const [justification, setJustification] = useState("");
 	const [acknowledged, setAcknowledged] = useState(false);
@@ -66,6 +106,7 @@ export default function ManualFiscalEmission({
 			mutation.mutate({
 				vendaId: saleId,
 				tipo,
+				...(credit?.habilitado ? choices : {}),
 				classificacaoPresencialExcepcional: {
 					confirmada: true,
 					justificativa: normalizedJustification,
@@ -73,7 +114,7 @@ export default function ManualFiscalEmission({
 			});
 			return;
 		}
-		mutation.mutate({ vendaId: saleId, tipo });
+		mutation.mutate({ vendaId: saleId, tipo, ...(credit?.habilitado ? choices : {}) });
 	};
 
 	return (
@@ -82,7 +123,7 @@ export default function ManualFiscalEmission({
 			menuDescription="Revise como a presença do consumidor será informada antes de enviar o documento fiscal."
 			menuActionButtonText={mode === "PRESENCIAL_EXCEPCIONAL" ? "CONFIRMAR E EMITIR" : "EMITIR DOCUMENTO"}
 			menuActionButtonVariant={mode === "PRESENCIAL_EXCEPCIONAL" ? "destructive" : "default"}
-			menuActionButtonDisabled={mode === "PRESENCIAL_EXCEPCIONAL" && !exceptionalModeIsValid}
+			menuActionButtonDisabled={creditBlocked || (mode === "PRESENCIAL_EXCEPCIONAL" && !exceptionalModeIsValid)}
 			menuCancelButtonText="VOLTAR"
 			actionFunction={emitDocument}
 			actionIsLoading={mutation.isPending}
@@ -91,6 +132,32 @@ export default function ManualFiscalEmission({
 			lockClose={mutation.isPending}
 		>
 			<div className="space-y-4">
+				{preview.isError ? (
+					<p role="alert" className="text-sm text-destructive">
+						{getErrorMessage(preview.error)}
+					</p>
+				) : null}
+				{credit?.habilitado ? (
+					<div className="flex flex-col gap-3">
+						<FiscalCreditChoices value={choices} onChange={updateDocument} disabled={mutation.isPending} />
+						{choices.fiscalCreditoIcms === "COM_CREDITO" && credit.calculo ? (
+							<p className="text-sm">
+								Crédito previsto: {credit.calculo.valorTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} · Competência{" "}
+								{credit.competencia} · {credit.calculo.parcelas.map((p) => `${p.percentual}%`).join(", ")}
+							</p>
+						) : null}
+						{credit.problemas.map((problem) => (
+							<p key={problem} role="status" className="text-sm text-destructive">
+								{problem}
+							</p>
+						))}
+						{canConfigureFiscal ? (
+							<a className="text-sm underline" href="/dashboard/fiscal?view=configuration&section=credit-rates" target="_blank" rel="noreferrer">
+								Configurar percentuais e grupos tributários
+							</a>
+						) : null}
+					</div>
+				) : null}
 				<button
 					type="button"
 					onClick={() => setMode("REGULAR")}

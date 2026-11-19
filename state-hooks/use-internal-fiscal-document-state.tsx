@@ -1,10 +1,12 @@
 "use client";
+import { FiscalSaleChoicesSchema } from "@/schemas/fiscal";
 
 import { FiscalDocumentTypeEnum } from "@/schemas/enums";
 import { useCallback, useState } from "react";
 import { z } from "zod";
 
 const InternalFiscalDocumentStateSchema = z.object({
+	...FiscalSaleChoicesSchema.shape,
 	vendaId: z.string({ invalid_type_error: "Tipo nao valido para o ID da venda." }).default(""),
 	tipo: FiscalDocumentTypeEnum.default("NFCE"),
 });
@@ -13,6 +15,8 @@ type TInternalFiscalDocumentState = z.infer<typeof InternalFiscalDocumentStateSc
 
 export function useInternalFiscalDocumentState({ initialState }: { initialState: Partial<TInternalFiscalDocumentState> }) {
 	const [state, setState] = useState<TInternalFiscalDocumentState>({
+		fiscalDestinacao: initialState.fiscalDestinacao,
+		fiscalCreditoIcms: initialState.fiscalCreditoIcms,
 		vendaId: initialState.vendaId ?? "",
 		tipo: initialState.tipo ?? "NFCE",
 	});
@@ -27,6 +31,8 @@ export function useInternalFiscalDocumentState({ initialState }: { initialState:
 
 	const resetState = useCallback(() => {
 		setState({
+			fiscalDestinacao: initialState.fiscalDestinacao,
+			fiscalCreditoIcms: initialState.fiscalCreditoIcms,
 			vendaId: initialState.vendaId ?? "",
 			tipo: initialState.tipo ?? "NFCE",
 		});

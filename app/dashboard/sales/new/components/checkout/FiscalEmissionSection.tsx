@@ -1,3 +1,4 @@
+import { FiscalCreditChoices } from "@/components/Fiscal/FiscalCreditChoices";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -30,7 +31,7 @@ import {
 	WandSparklesIcon,
 	Wrench,
 } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 
 type FiscalEmissionSectionProps = {
 	preview: ReturnType<typeof useFiscalPreview>;
@@ -92,6 +93,22 @@ function FiscalEmissionSectionContent({
 	canConfigureFiscal,
 }: Omit<FiscalEmissionSectionProps, "organizationAutoFiscalCapable"> & { canConfigureFiscal: boolean }) {
 	const [profileMenuProductId, setProfileMenuProductId] = useState<string | null>(null);
+	const creditEnabled = !!preview.data?.creditoIcms.habilitado;
+	const suggestedDestination = preview.data?.creditoIcms.destinacaoSugerida;
+	useEffect(() => {
+		if (!canEmitFiscal || !creditEnabled || !suggestedDestination || saleState.state.fiscalDestinacao !== undefined) return;
+		saleState.setFiscalChoices({
+			fiscalDestinacao: suggestedDestination,
+			fiscalCreditoIcms: saleState.state.fiscalCreditoIcms ?? (suggestedDestination === "CONSUMO_FINAL" ? "SEM_CREDITO" : "NAO_CONFIRMADO"),
+		});
+	}, [
+		canEmitFiscal,
+		creditEnabled,
+		suggestedDestination,
+		saleState.state.fiscalDestinacao,
+		saleState.state.fiscalCreditoIcms,
+		saleState.setFiscalChoices,
+	]);
 
 	// Mesma regra do servidor: exceções só valem quando a venda herda a preferência da organização.
 	const exception = resolveAutoEmissionException({
@@ -178,6 +195,25 @@ function FiscalEmissionSectionContent({
 				</div>
 			</div>
 
+			{preview.data?.creditoIcms.habilitado && !preview.data.documentoExistente ? (
+				<div className="flex flex-col gap-3">
+					<FiscalCreditChoices value={saleState.state} onChange={saleState.setFiscalChoices} disabled={locked} />
+					{saleState.state.fiscalCreditoIcms === "COM_CREDITO" ? (
+						<p className="text-xs text-muted-foreground">
+							Competência {preview.data.creditoIcms.competencia}. Percentuais configurados:{" "}
+							{preview.data.creditoIcms.percentuais.map((p) => `${p.percentual}%`).join(", ") || "Nenhum"}.{" "}
+							{preview.data.creditoIcms.calculo
+								? `Crédito previsto: ${preview.data.creditoIcms.calculo.valorTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}.`
+								: "Selecione os itens para calcular a prévia."}
+						</p>
+					) : null}
+					{preview.data.creditoIcms.problemas.map((problem) => (
+						<p key={problem} role="status" className="text-xs text-muted-foreground">
+							{problem} A venda pode ser registrada e a emissão ficará pendente.
+						</p>
+					))}
+				</div>
+			) : null}
 			{efetivo && preview.isError ? (
 				<p role="status" className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
 					<TriangleAlertIcon className="size-3.5 shrink-0 text-destructive" />

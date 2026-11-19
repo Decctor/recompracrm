@@ -292,6 +292,8 @@ export default function EditSalePage({
 				observacoes: payment.observacoes,
 			})),
 			emissaoFiscalAutomatica: saleState.state.emissaoFiscalAutomatica,
+			fiscalDestinacao: saleState.state.fiscalDestinacao,
+			fiscalCreditoIcms: saleState.state.fiscalCreditoIcms,
 			emissaoFiscalDocumento: saleState.state.emissaoFiscalDocumento,
 			itens: mapItemsToApi(saleState, deletedItemIds),
 		});

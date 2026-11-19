@@ -1,3 +1,6 @@
+import { db } from "@/services/drizzle";
+import { fiscalOutboundDocuments } from "@/services/drizzle/schema";
+import { and, eq } from "drizzle-orm";
 import type {
 	IFiscalProvider,
 	TCancelDocumentInput,
@@ -40,13 +43,19 @@ async function getSpedyInvoice(documento: TFiscalDocument, organizacao: TFiscalO
 export async function emitSpedyDocument(context: TFiscalSaleContext, documento: TFiscalDocument): Promise<TProviderDocumentDetails> {
 	const client = getSpedyCompanyClient(context.organizacao);
 	const basePath = getInvoiceBasePath(documento);
-	const payload = mapSaleContextToSpedyInvoicePayload(context, documento);
+	const prepared = mapSaleContextToSpedyInvoicePayload(context, documento);
+	const previous = documento.provedorPayload ? JSON.parse(documento.provedorPayload) : null;
+	const payload = previous?.integrationId === prepared.integrationId ? previous : prepared;
+	await db
+		.update(fiscalOutboundDocuments)
+		.set({ provedorPayload: JSON.stringify(payload) })
+		.where(and(eq(fiscalOutboundDocuments.id, documento.id), eq(fiscalOutboundDocuments.organizacaoId, context.organizacao.id)));
 
 	try {
 		const { data } = await client.post<TSpedyInvoiceResponse>(basePath, payload);
 		let response = data;
 		if (data.status === "created") {
-			await client.post(`${basePath}/${data.id}/issue`, { effectiveDate: new Date().toISOString() });
+			await client.post(`${basePath}/${data.id}/issue`, { effectiveDate: payload.effectiveDate });
 			response = await fetchSpedyInvoice(client, { tipo: documento.tipo, provedorDocumentoId: data.id });
 		}
 		return {

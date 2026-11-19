@@ -50,6 +50,8 @@ export type TFiscalProblemCta =
  * completa e o que resta.
  */
 export function resolveFiscalProblemCta(problem: TFiscalProblem, context: { vendaId?: string | null } = {}): TFiscalProblemCta {
+	if (problem.codigo === "CREDITO_SN_CONFIGURACAO")
+		return { kind: "link", label: "Configurar crédito de ICMS", href: "/dashboard/fiscal?view=configuration&section=credit-rates" };
 	const { alvo } = problem;
 	switch (alvo.tipo) {
 		case "PRODUTO":

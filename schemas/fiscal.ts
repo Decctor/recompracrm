@@ -1,6 +1,8 @@
 import { AUTO_EMISSION_MAX_DELAY_MINUTES } from "@/lib/fiscal/constants";
 import { z } from "zod";
 import {
+	FiscalSaleDestinationEnum,
+	FiscalCreditDecisionEnum,
 	FiscalClientTaxIndicatorEnum,
 	FiscalDocumentEnvironmentEnum,
 	FiscalDocumentEventTypeEnum,
@@ -135,7 +137,38 @@ export const FiscalCertificateMetadataSchema = z.object({
 });
 export type TFiscalCertificateMetadata = z.infer<typeof FiscalCertificateMetadataSchema>;
 
+export const FiscalSaleChoicesSchema = z.object({
+	fiscalDestinacao: FiscalSaleDestinationEnum.optional().nullable(),
+	fiscalCreditoIcms: FiscalCreditDecisionEnum.optional().nullable(),
+});
+export type TFiscalSaleChoices = z.infer<typeof FiscalSaleChoicesSchema>;
+
+export const FiscalCreditRateInputSchema = z.object({
+	competencia: z
+		.string({ required_error: "Competência não informada.", invalid_type_error: "Competência inválida." })
+		.regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Informe a competência no formato AAAA-MM."),
+	percentual: z
+		.number({ required_error: "Percentual não informado.", invalid_type_error: "Percentual inválido." })
+		.finite()
+		.gt(0)
+		.max(100)
+		.refine((value) => Number(value.toFixed(4)) === value, "Informe o percentual com no máximo quatro casas decimais."),
+	observacao: z
+		.string({ required_error: "Observação não informada.", invalid_type_error: "Observação inválida." })
+		.trim()
+		.max(1000)
+		.optional()
+		.nullable(),
+});
+
 export const OrganizationFiscalConfigSchema = z.object({
+	operacoesRevenda: z
+		.object({
+			habilitada: z
+				.boolean({ required_error: "Habilitação de revenda não informada.", invalid_type_error: "Habilitação de revenda inválida." })
+				.default(false),
+		})
+		.optional(),
 	ambiente: FiscalDocumentEnvironmentEnum.default("HOMOLOGACAO"),
 	regimeTributario: z
 		.number({
@@ -440,6 +473,8 @@ export const ProductFiscalProfileSchema = z.object({
 export type TProductFiscalProfile = z.infer<typeof ProductFiscalProfileSchema>;
 
 export const FiscalTaxGroupSchema = z.object({
+	csosnComCredito: FiscalIcmsCsosnEnum.optional().nullable(),
+	csosnSemCredito: FiscalIcmsCsosnEnum.optional().nullable(),
 	organizacaoId: z.string({
 		required_error: "ID da organizacao não informado.",
 		invalid_type_error: "Tipo não valido para o ID da organizacao.",
@@ -789,3 +824,29 @@ export const FiscalClientProfileSchema = z.object({
 		.nullable(),
 });
 export type TFiscalClientProfile = z.infer<typeof FiscalClientProfileSchema>;
+
+// Somente prévia: o servidor de emissão sempre relê valores e perfis autoritativos.
+const FiscalPreviewNumberSchema = z
+	.number({ required_error: "Valor da prévia não informado.", invalid_type_error: "Valor da prévia inválido." })
+	.finite()
+	.nonnegative();
+export const FiscalCreditCartSchema = z.object({
+	itens: z
+		.array(
+			z.object({
+				produtoId: z.string({ required_error: "Produto não informado.", invalid_type_error: "Produto inválido." }),
+				produtoVarianteId: z.string({ required_error: "Variante não informada.", invalid_type_error: "Variante inválida." }).optional().nullable(),
+				quantidade: FiscalPreviewNumberSchema,
+				valorVendaUnitario: FiscalPreviewNumberSchema,
+				valorVendaTotalBruto: FiscalPreviewNumberSchema,
+				valorTotalDesconto: FiscalPreviewNumberSchema,
+			}),
+			{ required_error: "Itens não informados.", invalid_type_error: "Itens inválidos." },
+		)
+		.max(500),
+	valorTotal: FiscalPreviewNumberSchema,
+	descontosTotal: FiscalPreviewNumberSchema,
+	acrescimosTotal: FiscalPreviewNumberSchema,
+	taxaEntrega: FiscalPreviewNumberSchema,
+});
+export type TFiscalCreditCart = z.infer<typeof FiscalCreditCartSchema>;

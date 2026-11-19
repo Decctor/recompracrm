@@ -33,6 +33,8 @@ export default function ControlFiscalTaxGroup({ taxGroupId, closeModal, callback
 				nome: taxGroup.nome,
 				descricao: taxGroup.descricao,
 				csosn: taxGroup.csosn,
+				csosnComCredito: taxGroup.csosnComCredito,
+				csosnSemCredito: taxGroup.csosnSemCredito,
 				aliquotaIcms: taxGroup.aliquotaIcms,
 				percentualReducaoBc: taxGroup.percentualReducaoBc,
 				modalidadeBc: taxGroup.modalidadeBc,

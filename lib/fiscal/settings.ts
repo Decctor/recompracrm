@@ -40,6 +40,8 @@ export async function updateFiscalSettings({
 	fiscalConfiguracao: TOrganizationFiscalConfig;
 }) {
 	const parsedConfig = OrganizationFiscalConfigSchema.parse(fiscalConfiguracao);
+	if (parsedConfig.operacoesRevenda?.habilitada && parsedConfig.regimeTributario !== 1)
+		throw new createHttpError.BadRequest("O fluxo de crédito por operação exige emitente no Simples Nacional (CRT 1).");
 	if (fiscalEmissaoAutomatica) {
 		if (fiscalProvedor !== "SPEDY") {
 			throw new createHttpError.BadRequest("Emissao fiscal automatica exige provedor Spedy.");

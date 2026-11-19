@@ -1,3 +1,6 @@
+import { restoreFiscalCreditContext, snapshotFiscalCreditContext } from "./credit-attempt";
+import { loadCurrentFiscalCreditRates } from "./credit-rates";
+import { getFiscalCreditCompetence } from "./simples-credit";
 import { processFiscalDocumentDanfeAutoPrintIfEligible } from "@/lib/desktop-agent/auto-print";
 import { getManagedChannelIntegrationMetadata } from "@/lib/sales/fulfillment-channels/policy";
 import { getSaleChangeTotal, netSaleChangeFromPayments } from "@/lib/sales/sale-change";
@@ -672,7 +675,7 @@ function buildSaleProductLabelResolver(context: TFiscalSaleContext) {
 	return (produtoId: string) => labels.get(produtoId) ?? null;
 }
 
-async function buildSaleFiscalContext(input: TEmitirDocumentoInput): Promise<TFiscalSaleContext> {
+export async function buildSaleFiscalContext(input: TEmitirDocumentoInput): Promise<TFiscalSaleContext> {
 	// Venda e organizacao saem dos ids da entrada: leituras independentes, em paralelo.
 	const [venda, organizacao] = await Promise.all([
 		loadSaleForFiscal({
@@ -699,6 +702,11 @@ async function buildSaleFiscalContext(input: TEmitirDocumentoInput): Promise<TFi
 		}
 	}
 
+	const enabledCredit = !!organizacao.fiscalConfiguracao?.operacoesRevenda?.habilitada;
+	if (enabledCredit && input.tipo === "NFE" && !input.documentoOrigemId) {
+		if (input.fiscalDestinacao !== undefined) venda.fiscalDestinacao = input.fiscalDestinacao ?? null;
+		if (input.fiscalCreditoIcms !== undefined) venda.fiscalCreditoIcms = input.fiscalCreditoIcms ?? null;
+	}
 	const ambiente = organizacao.fiscalConfiguracao?.ambiente ?? "HOMOLOGACAO";
 	const resolveOperationAndSeries = async () => {
 		const resolvedOperation = await resolveOperationProfileForSale({
@@ -741,15 +749,21 @@ async function buildSaleFiscalContext(input: TEmitirDocumentoInput): Promise<TFi
 	if (!serie) throw readinessError("Serie fiscal nao configurada.", "SERIE_AUSENTE");
 
 	// Grupos tributarios e aliquotas IBPT dependem so dos perfis, nao um do outro.
-	const [gruposTributarios, ibptRates] = await Promise.all([
+	const dataCalculo = new Date();
+	const [gruposTributarios, ibptRates, percentuaisCredito] = await Promise.all([
 		loadTaxGroupsForProfiles(perfisProdutos),
 		loadIbptRatesForSale({
 			perfisProdutos,
 			uf: organizacao.fiscalConfiguracao?.endereco.uf,
 		}),
+		enabledCredit && input.tipo === "NFE"
+			? loadCurrentFiscalCreditRates(input.organizacaoId, getFiscalCreditCompetence(dataCalculo))
+			: Promise.resolve([]),
 	]);
 
 	return {
+		dataCalculo,
+		percentuaisCredito,
 		venda,
 		organizacao,
 		serie,
@@ -847,6 +861,22 @@ async function persistAuthorizedAssets(
 	return patched;
 }
 
+// A destinacao e o credito declarados na emissao manual passam a ser os da venda: reabrir ou editar
+// a venda mostra a mesma decisao e uma retentativa automatica recalcula com ela, nao com a antiga.
+// Grava antes das validacoes, porque a declaracao vale mesmo quando a nota ainda tem pendencias.
+async function persistManualFiscalCreditChoices(input: TEmitirDocumentoInput, context: TFiscalSaleContext) {
+	if (input.origem !== "MANUAL" || input.tipo !== "NFE" || input.documentoOrigemId) return;
+	if (!context.organizacao.fiscalConfiguracao?.operacoesRevenda?.habilitada) return;
+	const patch: Partial<Pick<typeof sales.$inferInsert, "fiscalDestinacao" | "fiscalCreditoIcms">> = {};
+	if (input.fiscalDestinacao !== undefined) patch.fiscalDestinacao = context.venda.fiscalDestinacao;
+	if (input.fiscalCreditoIcms !== undefined) patch.fiscalCreditoIcms = context.venda.fiscalCreditoIcms;
+	if (Object.keys(patch).length === 0) return;
+	await db
+		.update(sales)
+		.set(patch)
+		.where(and(eq(sales.id, input.vendaId), eq(sales.organizacaoId, input.organizacaoId)));
+}
+
 // Parte "preparar": cria/atualiza o rascunho, valida prontidao e tributacao, reserva numeracao
 // e marca PRONTO_PARA_ENVIO. NAO chama o provedor. Compartilhada pela emissao sincrona e pela fila.
 async function prepareFiscalDocumentForSend({
@@ -858,6 +888,17 @@ async function prepareFiscalDocumentForSend({
 	documento: typeof fiscalOutboundDocuments.$inferSelect;
 	referencia: string;
 }): Promise<TFiscalSaleContext> {
+	if (input.origem === "AUTOMATICA" && documento.snapshotOrigemVenda && documento.provedorPayload && documento.numero && !documento.codigoRejeicao) {
+		const liveOrganization = await loadFiscalOrganization(input.organizacaoId);
+		if (!liveOrganization) throw new createHttpError.NotFound("Organização não encontrada.");
+		const frozen = restoreFiscalCreditContext(documento.snapshotOrigemVenda, liveOrganization, input.vendaId);
+		if (frozen) {
+			// Conta o reenvio para respeitar o teto da fila, preservando o integrationId do payload.
+			await patchFiscalDocument(documento.id, { tentativasEnvio: (documento.tentativasEnvio ?? 0) + 1 });
+			return { ...frozen, payloadCongelado: JSON.parse(documento.provedorPayload) };
+		}
+	}
+
 	if (input.classificacaoPresencaExcepcional) {
 		await patchFiscalDocument(documento.id, {
 			presencaConsumidorDeclarada: input.classificacaoPresencaExcepcional.presencaConsumidor,
@@ -892,6 +933,7 @@ async function prepareFiscalDocumentForSend({
 		});
 	}
 	const context = await buildSaleFiscalContext(input);
+	await persistManualFiscalCreditChoices(input, context);
 	assertFiscalReadiness(context);
 	assertFiscalTaxationValid(context);
 	// Rejeicoes nao-reenviaveis (ex.: 204/539, duplicidade) exigem numeracao nova: reutilizar
@@ -900,9 +942,17 @@ async function prepareFiscalDocumentForSend({
 	const mustAdvanceNumber = !!documento.numero && !!rejectionInfo && !rejectionInfo.reenviavel;
 	const reservedNumber = documento.numero && !mustAdvanceNumber ? Number(documento.numero) : await reserveFiscalSeriesNumber(context.serie.id);
 
+	const previousCredit = documento.snapshotOrigemVenda ? JSON.parse(documento.snapshotOrigemVenda).creditoIcms : null;
+	const sameAutomaticChoice =
+		input.origem === "AUTOMATICA" &&
+		previousCredit?.fiscalDestinacao === context.venda.fiscalDestinacao &&
+		previousCredit?.fiscalCreditoIcms === context.venda.fiscalCreditoIcms;
+	const creditAuthorId = input.autorId ?? (sameAutomaticChoice ? previousCredit?.autorId : null) ?? null;
+	const creditDeclaredAt = sameAutomaticChoice ? (previousCredit?.dataDeclaracao ?? context.dataCalculo) : context.dataCalculo;
 	await patchFiscalDocument(documento.id, {
 		codigoRejeicao: null,
 		problemas: null,
+		provedorPayload: null,
 		statusInterno: "PRONTO_PARA_ENVIO",
 		ambiente: context.organizacao.fiscalConfiguracao?.ambiente ?? "HOMOLOGACAO",
 		referencia,
@@ -913,6 +963,16 @@ async function prepareFiscalDocumentForSend({
 			venda: context.venda,
 			destinatario: context.destinatarioSnapshot,
 			classificacaoPresencaExcepcional: context.classificacaoPresencaExcepcional,
+			creditoIcms: {
+				fiscalDestinacao: context.venda.fiscalDestinacao,
+				fiscalCreditoIcms: context.venda.fiscalCreditoIcms,
+				...computeSaleTaxation(context).credito,
+				percentuais: context.percentuaisCredito,
+				autorId: creditAuthorId,
+				origem: input.origem,
+				dataDeclaracao: creditDeclaredAt,
+			},
+			contextoFiscal: snapshotFiscalCreditContext(context),
 		}),
 		tentativasEnvio: (documento.tentativasEnvio ?? 0) + 1,
 	});
@@ -921,6 +981,14 @@ async function prepareFiscalDocumentForSend({
 		documentoFiscalId: documento.id,
 		tipo: "CRIADO",
 		descricao: `Documento fiscal preparado para emissao ${input.origem.toLowerCase()}.`,
+		payload: context.organizacao.fiscalConfiguracao?.operacoesRevenda?.habilitada
+			? {
+					fiscalDestinacao: context.venda.fiscalDestinacao,
+					fiscalCreditoIcms: context.venda.fiscalCreditoIcms,
+					creditoIcms: computeSaleTaxation(context).credito,
+					autorDeclaracaoId: creditAuthorId,
+				}
+			: undefined,
 		autorId: input.autorId ?? null,
 	});
 

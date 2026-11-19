@@ -6,12 +6,19 @@ import { mapSaleForEditToSaleState } from "./map-sale-to-sale-state";
 
 test("reabrir orçamento ou edição preserva o modelo explícito e a emissão desligada", () => {
 	for (const emissaoFiscalDocumento of [null, "NFE", "NFCE"] as const) {
-		const sale = { itens: [], emissaoFiscalDocumento, emissaoFiscalAutomatica: false, rascunhoMetadados: null } as unknown as Parameters<
-			typeof mapSaleDraftToSaleState
-		>[0];
+		const sale = {
+			itens: [],
+			fiscalDestinacao: "REVENDA_INDUSTRIALIZACAO",
+			fiscalCreditoIcms: "COM_CREDITO",
+			emissaoFiscalDocumento,
+			emissaoFiscalAutomatica: false,
+			rascunhoMetadados: null,
+		} as unknown as Parameters<typeof mapSaleDraftToSaleState>[0];
 		const draftState = getDefaultSaleState(mapSaleDraftToSaleState(sale));
 		assert.equal(draftState.emissaoFiscalDocumento, emissaoFiscalDocumento);
 		assert.equal(draftState.emissaoFiscalAutomatica, false);
+		assert.equal(draftState.fiscalDestinacao, "REVENDA_INDUSTRIALIZACAO");
+		assert.equal(draftState.fiscalCreditoIcms, "COM_CREDITO");
 		const editData = {
 			venda: sale,
 			pagamentos: { todas: [] },
@@ -25,6 +32,8 @@ test("reabrir orçamento ou edição preserva o modelo explícito e a emissão d
 		);
 		assert.equal(editState.emissaoFiscalDocumento, emissaoFiscalDocumento);
 		assert.equal(editState.emissaoFiscalAutomatica, false);
+		assert.equal(editState.fiscalDestinacao, "REVENDA_INDUSTRIALIZACAO");
+		assert.equal(editState.fiscalCreditoIcms, "COM_CREDITO");
 	}
 });
 
@@ -32,4 +41,6 @@ test("nova venda começa no automático e não herda a escolha da venda anterior
 	assert.equal(getDefaultSaleState({ emissaoFiscalDocumento: "NFE" }).emissaoFiscalDocumento, "NFE");
 	assert.equal(getDefaultSaleState().emissaoFiscalDocumento, null);
 	assert.equal(getDefaultSaleState().emissaoFiscalAutomatica, null);
+	assert.equal(getDefaultSaleState().fiscalDestinacao, undefined);
+	assert.equal(getDefaultSaleState().fiscalCreditoIcms, undefined);
 });

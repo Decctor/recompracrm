@@ -32,6 +32,8 @@ export function useFiscalTaxGroupState({ initialState }: UseFiscalTaxGroupStateP
 				nome: initialState?.fiscalTaxGroup?.nome ?? "",
 				descricao: initialState?.fiscalTaxGroup?.descricao ?? "",
 				csosn: initialState?.fiscalTaxGroup?.csosn ?? "102",
+				csosnComCredito: initialState?.fiscalTaxGroup?.csosnComCredito ?? null,
+				csosnSemCredito: initialState?.fiscalTaxGroup?.csosnSemCredito ?? null,
 				aliquotaIcms: initialState?.fiscalTaxGroup?.aliquotaIcms ?? 0,
 				percentualReducaoBc: initialState?.fiscalTaxGroup?.percentualReducaoBc ?? 0,
 				modalidadeBc: initialState?.fiscalTaxGroup?.modalidadeBc ?? 3,

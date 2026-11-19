@@ -270,6 +270,8 @@ export default function CheckoutPage({
 				cashbackResgate: saleState.state.cashbackResgate,
 				cupomResgate: saleState.state.cupomResgate,
 				emissaoFiscalAutomatica: saleState.state.emissaoFiscalAutomatica,
+				fiscalDestinacao: saleState.state.fiscalDestinacao,
+				fiscalCreditoIcms: saleState.state.fiscalCreditoIcms,
 				emissaoFiscalDocumento: saleState.state.emissaoFiscalDocumento,
 				rascunhoMetadados: {
 					...(draft?.rascunhoMetadados as Record<string, unknown> | null),

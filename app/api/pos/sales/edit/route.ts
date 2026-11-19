@@ -1,3 +1,4 @@
+import { FiscalSaleChoicesSchema } from "@/schemas/fiscal";
 import { SaleFiscalDocumentSchema } from "@/schemas/fiscal";
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
@@ -68,6 +69,7 @@ const EditConfirmedSaleInputSchema = z.object({
 	taxaEntrega: z.number({ invalid_type_error: "Tipo não válido para taxa de entrega." }).nonnegative().optional(),
 	// Splits novos APENAS para o restante não efetivado (vazio quando nada resta a pagar).
 	pagamentos: z.array(CheckoutPaymentSplitSchema.omit({ id: true })),
+	...FiscalSaleChoicesSchema.shape,
 	emissaoFiscalDocumento: SaleFiscalDocumentSchema.optional(),
 	emissaoFiscalAutomatica: z.boolean({ invalid_type_error: "Tipo não válido para emissão fiscal automática." }).optional().nullable(),
 	// Consentimento explícito para derrubar um cupom invalidado pelo carrinho editado.
@@ -119,6 +121,8 @@ async function getSaleForEdit({ input, session }: { input: TGetSaleForEditInput;
 			observacoes: true,
 			rascunhoMetadados: true,
 			emissaoFiscalAutomatica: true,
+			fiscalDestinacao: true,
+			fiscalCreditoIcms: true,
 			emissaoFiscalDocumento: true,
 			dataVenda: true,
 		},
@@ -270,7 +274,6 @@ async function editConfirmedSale({ input, session }: { input: TEditConfirmedSale
 		aprovacaoId: input.descontoAprovacaoId,
 	});
 
-
 	const result = await db.transaction((tx) =>
 		processConfirmedSaleEditInTransaction({
 			tx,
@@ -290,6 +293,8 @@ async function editConfirmedSale({ input, session }: { input: TEditConfirmedSale
 				comandaNumero: input.comandaNumero,
 				pagamentos: input.pagamentos,
 				emissaoFiscalAutomatica,
+				fiscalDestinacao: input.fiscalDestinacao,
+				fiscalCreditoIcms: input.fiscalCreditoIcms,
 				emissaoFiscalDocumento: input.emissaoFiscalDocumento,
 				canChooseFiscalDocument: !!session.membership?.permissoes.fiscal.emitir,
 				removerCupom: input.removerCupom,

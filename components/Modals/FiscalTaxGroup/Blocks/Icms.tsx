@@ -1,3 +1,4 @@
+import { useFiscalSettings } from "@/lib/queries/fiscal";
 import CheckboxInput from "@/components/Inputs/CheckboxInput";
 import NumberInput from "@/components/Inputs/NumberInput";
 import SelectInput from "@/components/Inputs/SelectInput";
@@ -24,6 +25,8 @@ type FiscalTaxGroupIcmsBlockProps = {
 	updateFiscalTaxGroup: TUseFiscalTaxGroupState["updateFiscalTaxGroup"];
 };
 export default function FiscalTaxGroupIcmsBlock({ fiscalTaxGroup, updateFiscalTaxGroup }: FiscalTaxGroupIcmsBlockProps) {
+	const settings = useFiscalSettings();
+	const creditEnabled = !!settings.data?.fiscalConfiguracao?.operacoesRevenda?.habilitada;
 	const csosnPermiteCredito = fiscalTaxGroup.csosn === "101" || fiscalTaxGroup.csosn === "201";
 	return (
 		<ResponsiveMenuSection title="ICMS (SIMPLES NACIONAL)" icon={<Percent className="h-4 min-h-4 w-4 min-w-4" />}>
@@ -55,13 +58,37 @@ export default function FiscalTaxGroupIcmsBlock({ fiscalTaxGroup, updateFiscalTa
 				</div>
 			</div>
 
-			{csosnPermiteCredito ? (
+			{csosnPermiteCredito && !creditEnabled ? (
 				<NumberInput
 					label="% CRÉDITO DO SIMPLES NACIONAL"
 					value={fiscalTaxGroup.percentualCreditoSn}
 					placeholder="Ex.: 2.5"
 					handleChange={(value) => updateFiscalTaxGroup({ percentualCreditoSn: value })}
 				/>
+			) : null}
+
+			{creditEnabled ? (
+				<>
+					<p className="text-xs text-muted-foreground">
+						No fluxo por operação, o percentual vem do histórico por competência. O percentual fixo do grupo e das regras não será utilizado.
+					</p>
+					<SelectInput
+						label="CSOSN PARA OPERAÇÃO COM CRÉDITO"
+						value={fiscalTaxGroup.csosnComCredito ?? null}
+						options={CSOSN_OPTIONS.filter((option) => ["101", "201"].includes(option.id))}
+						resetOptionLabel="NÃO CONFIGURADO"
+						handleChange={(value) => updateFiscalTaxGroup({ csosnComCredito: value as TFiscalIcmsCsosnEnum })}
+						onReset={() => updateFiscalTaxGroup({ csosnComCredito: null })}
+					/>
+					<SelectInput
+						label="CSOSN PARA OPERAÇÃO SEM CRÉDITO"
+						value={fiscalTaxGroup.csosnSemCredito ?? null}
+						options={CSOSN_OPTIONS.filter((option) => ["102", "202"].includes(option.id))}
+						resetOptionLabel="NÃO CONFIGURADO"
+						handleChange={(value) => updateFiscalTaxGroup({ csosnSemCredito: value as TFiscalIcmsCsosnEnum })}
+						onReset={() => updateFiscalTaxGroup({ csosnSemCredito: null })}
+					/>
+				</>
 			) : null}
 
 			<NumberInput

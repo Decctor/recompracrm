@@ -1,3 +1,4 @@
+import { loadFiscalOrganization } from "@/lib/fiscal/settings";
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { getErrorMessage } from "@/lib/errors";
@@ -35,6 +36,7 @@ async function retryFiscalDocuments({
 	authorId: string;
 }) {
 	const resultados: RetryOutcome[] = [];
+	const organization = await loadFiscalOrganization(organizationId);
 	for (const documentId of new Set(input.documentIds)) {
 		const documento = await getFiscalDocumentById({ documentId, organizationId });
 		if (!documento) {
@@ -48,6 +50,15 @@ async function retryFiscalDocuments({
 				sucesso: false,
 				statusInterno: documento.statusInterno,
 				mensagem: reenviar.motivoIndisponivel ?? "Reenvio indisponível.",
+			});
+			continue;
+		}
+		if (organization?.fiscalConfiguracao?.operacoesRevenda?.habilitada && documento.tipo === "NFE" && !documento.documentoOrigemId) {
+			resultados.push({
+				documentoId: documento.id,
+				sucesso: false,
+				statusInterno: documento.statusInterno,
+				mensagem: "Abra o documento e revise a destinação e o crédito na emissão manual antes de reenviar.",
 			});
 			continue;
 		}

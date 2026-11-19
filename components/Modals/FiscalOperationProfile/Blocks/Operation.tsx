@@ -1,3 +1,4 @@
+import { useFiscalSettings } from "@/lib/queries/fiscal";
 import CheckboxInput from "@/components/Inputs/CheckboxInput";
 import SelectInput from "@/components/Inputs/SelectInput";
 import TextInput from "@/components/Inputs/TextInput";
@@ -33,6 +34,8 @@ export default function FiscalOperationProfileOperationBlock({
 	fiscalOperationProfile,
 	updateFiscalOperationProfile,
 }: FiscalOperationProfileOperationBlockProps) {
+	const settings = useFiscalSettings();
+	const resaleEnabled = !!settings.data?.fiscalConfiguracao?.operacoesRevenda?.habilitada;
 	return (
 		<ResponsiveMenuSection title="PARÂMETROS DA OPERAÇÃO" icon={<Flag className="h-4 min-h-4 w-4 min-w-4" />}>
 			<p className="text-sm font-medium text-muted-foreground">
@@ -80,15 +83,29 @@ export default function FiscalOperationProfileOperationBlock({
 				</div>
 			</div>
 
-			<div className="w-full flex items-center justify-center">
-				<CheckboxInput
-					checked={fiscalOperationProfile.consumidorFinal}
-					labelTrue="OPERAÇÃO DESTINADA AO CONSUMIDOR FINAL"
-					labelFalse="OPERAÇÃO NÃO DESTINADA AO CONSUMIDOR FINAL"
-					handleChange={(value) => updateFiscalOperationProfile({ consumidorFinal: value })}
-					justify="justify-center"
+			{resaleEnabled ? (
+				<SelectInput
+					label="DESTINAÇÃO PADRÃO DA COMPRA"
+					value={fiscalOperationProfile.consumidorFinal ? "CONSUMO_FINAL" : "REVENDA_INDUSTRIALIZACAO"}
+					options={[
+						{ id: "REVENDA_INDUSTRIALIZACAO", value: "REVENDA_INDUSTRIALIZACAO", label: "Revenda ou industrialização" },
+						{ id: "CONSUMO_FINAL", value: "CONSUMO_FINAL", label: "Uso ou consumo final" },
+					]}
+					resetOptionLabel="CONSUMO FINAL"
+					handleChange={(value) => updateFiscalOperationProfile({ consumidorFinal: value === "CONSUMO_FINAL" })}
+					onReset={() => updateFiscalOperationProfile({ consumidorFinal: true })}
 				/>
-			</div>
+			) : (
+				<div className="w-full flex items-center justify-center">
+					<CheckboxInput
+						checked={fiscalOperationProfile.consumidorFinal}
+						labelTrue="OPERAÇÃO DESTINADA AO CONSUMIDOR FINAL"
+						labelFalse="OPERAÇÃO NÃO DESTINADA AO CONSUMIDOR FINAL"
+						handleChange={(value) => updateFiscalOperationProfile({ consumidorFinal: value })}
+						justify="justify-center"
+					/>
+				</div>
+			)}
 		</ResponsiveMenuSection>
 	);
 }

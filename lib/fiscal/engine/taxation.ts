@@ -185,16 +185,17 @@ export type TComputeItemTaxationInput = {
 	group: TFiscalTaxGroupWithRules;
 	// Valor aproximado dos tributos (Lei 12.741). Resolvido externamente (tabela IBPT / provedor).
 	vTotTrib?: number;
+	configOverride?: TEffectiveTaxConfig;
 };
 
-export function computeItemTaxation({ scenario, item, group, vTotTrib }: TComputeItemTaxationInput): TItemTaxResult {
+export function computeItemTaxation({ scenario, item, group, vTotTrib, configOverride }: TComputeItemTaxationInput): TItemTaxResult {
 	const erros: TFiscalValidationError[] = [];
 	// Frete e outras despesas (vOutro) cobrados do destinatario compoem a base tributavel do item.
 	// O rateio e feito antes desta etapa para manter bases, itens e totais do documento coerentes.
 	const baseLiquida = round2(item.valorBruto - item.valorDesconto + (item.valorFrete ?? 0) + (item.valorOutros ?? 0));
 	const origemCodigo = mapOrigemToCodigo(item.origemMercadoria);
 
-	const config = resolveEffectiveTaxConfig(group, scenario);
+	const config = configOverride ?? resolveEffectiveTaxConfig(group, scenario);
 
 	const cfopBase = resolveRuleCfopOverride(group, scenario) ?? item.cfopBase;
 	const cfop = resolveCfop({ cfopBase, ufOrigem: scenario.ufOrigem, ufDestino: scenario.ufDestino });

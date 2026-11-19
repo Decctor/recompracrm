@@ -125,9 +125,28 @@ export default function CheckoutPanel({
 		{
 			saleId: fiscalSaleId,
 			canal: fiscalChannel,
-			clienteId: saleState.state.cliente?.id,
+			cart:
+				saleState.state.fiscalDestinacao || saleState.state.fiscalCreditoIcms
+					? {
+							itens: saleState.state.itens.map((item) => ({
+								produtoId: item.produtoId,
+								produtoVarianteId: item.produtoVarianteId,
+								quantidade: item.quantidade,
+								valorVendaUnitario: item.valorUnitarioFinal,
+								valorVendaTotalBruto: item.valorTotalBruto,
+								valorTotalDesconto: item.valorDesconto,
+							})),
+							valorTotal: saleState.valorFinal,
+							descontosTotal: saleState.totalDescontoItens + saleState.state.descontoGeral + saleState.cupomDesconto + saleState.state.cashbackResgate,
+							acrescimosTotal: saleState.acrescimosTotal,
+							taxaEntrega: saleState.state.taxaEntrega,
+						}
+					: undefined,
+			clienteId: saleState.state.cliente?.id ?? null,
 			entregaModalidade: saleState.state.entregaModalidade,
 			entregaLocalizacaoId: saleState.state.entregaModalidade === "ENTREGA" ? saleState.state.entregaLocalizacaoId : null,
+			fiscalDestinacao: saleState.state.fiscalDestinacao,
+			fiscalCreditoIcms: saleState.state.fiscalCreditoIcms,
 			emissaoFiscalDocumento: saleState.state.emissaoFiscalDocumento,
 		},
 		fiscalControlsVisible && fiscalEnabled,

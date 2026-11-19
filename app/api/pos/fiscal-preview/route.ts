@@ -1,3 +1,5 @@
+import { FiscalCreditCartSchema } from "@/schemas/fiscal";
+import { FiscalSaleChoicesSchema } from "@/schemas/fiscal";
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
@@ -9,6 +11,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 const GetFiscalPreviewInputSchema = z.object({
+	...FiscalSaleChoicesSchema.shape,
+	cart: FiscalCreditCartSchema.optional(),
 	clienteId: z.string({ required_error: "Cliente não informado.", invalid_type_error: "Cliente inválido." }).optional().nullable(),
 	entregaLocalizacaoId: z.string({ required_error: "Endereço não informado.", invalid_type_error: "Endereço inválido." }).optional().nullable(),
 	entregaModalidade: DeliveryModeEnum.default("PRESENCIAL"),
@@ -45,7 +49,16 @@ async function getFiscalPreviewRoute(request: NextRequest) {
 		canal: params.get("canal"),
 		emissaoFiscalDocumento: params.get("emissaoFiscalDocumento"),
 		saleId: params.get("saleId"),
+		fiscalDestinacao: params.get("fiscalDestinacao") ?? undefined,
+		fiscalCreditoIcms: params.get("fiscalCreditoIcms") ?? undefined,
 	});
 	return NextResponse.json(await getFiscalPreview({ input, session }));
 }
 export const GET = appApiHandler({ GET: getFiscalPreviewRoute });
+
+async function postFiscalPreviewRoute(request: NextRequest) {
+	const session = await getCurrentSessionUncached();
+	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
+	return NextResponse.json(await getFiscalPreview({ input: GetFiscalPreviewInputSchema.parse(await request.json()), session }));
+}
+export const POST = appApiHandler({ POST: postFiscalPreviewRoute });

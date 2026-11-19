@@ -39,6 +39,8 @@ export function mapSaleDraftToSaleState(sale: TSaleDraft): Partial<TSaleState> {
 	const taxaEntrega = Math.min(metadata?.taxaEntrega ?? readShopDeliveryFee(sale.rascunhoMetadados), sale.acrescimosTotal ?? 0);
 
 	return {
+		fiscalDestinacao: sale.fiscalDestinacao,
+		fiscalCreditoIcms: sale.fiscalCreditoIcms,
 		emissaoFiscalDocumento: sale.emissaoFiscalDocumento ?? null,
 		emissaoFiscalAutomatica: sale.emissaoFiscalAutomatica ?? null,
 		modoCliente: sale.cliente ? "VINCULADO" : "CONSUMIDOR",

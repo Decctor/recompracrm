@@ -8,7 +8,9 @@ import type {
 } from "@/schemas/enums";
 import type { TFiscalTaxGroupEntity, TFiscalTaxGroupRuleEntity } from "@/services/drizzle/schema";
 
-export type TFiscalTaxGroupWithRules = TFiscalTaxGroupEntity & {
+export type TFiscalTaxGroupWithRules = Omit<TFiscalTaxGroupEntity, "csosnComCredito" | "csosnSemCredito"> & {
+	csosnComCredito?: TFiscalTaxGroupEntity["csosnComCredito"];
+	csosnSemCredito?: TFiscalTaxGroupEntity["csosnSemCredito"];
 	regras: TFiscalTaxGroupRuleEntity[];
 };
 

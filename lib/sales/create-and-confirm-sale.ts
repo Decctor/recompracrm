@@ -1,3 +1,4 @@
+import { resolveSaleFiscalChoices } from "@/lib/fiscal/sale-credit-choices";
 import { normalizeCouponGiftItem, roundCouponGiftCurrency } from "@/lib/coupons/gift-pricing";
 import { resolveSaleFiscalDocumentPreference } from "@/lib/fiscal/emission-document-policy";
 import { resolvePaymentFinancialAccounts } from "@/lib/payments";
@@ -134,6 +135,7 @@ export async function prepareSaleCreation({ actor, input }: { actor: TSaleActor;
 
 	if (!organization) throw new createHttpError.NotFound("Organização não encontrada.");
 
+	input = { ...input, ...resolveSaleFiscalChoices({ requested: input, canEmit: !!session?.membership?.permissoes.fiscal.emitir }) };
 	const emissaoFiscalDocumento = resolveSaleFiscalDocumentPreference({
 		requested: input.emissaoFiscalDocumento,
 		canEmit: !!session?.membership?.permissoes.fiscal.emitir,
@@ -219,6 +221,8 @@ export async function prepareSaleCreation({ actor, input }: { actor: TSaleActor;
 		organization,
 		validatedRewards,
 		emissaoFiscalAutomatica,
+		fiscalDestinacao: input.fiscalDestinacao,
+		fiscalCreditoIcms: input.fiscalCreditoIcms,
 		emissaoFiscalDocumento,
 		sessaoVendaId,
 		accountingEntryDebitAccountId,
@@ -284,6 +288,8 @@ export async function persistSaleCreation({
 			processamentoOrigem: "INTERNO",
 			statusVenda: "ORCAMENTO",
 			emissaoFiscalAutomatica: prepared.emissaoFiscalAutomatica,
+			fiscalDestinacao: prepared.fiscalDestinacao,
+			fiscalCreditoIcms: prepared.fiscalCreditoIcms,
 			emissaoFiscalDocumento: prepared.emissaoFiscalDocumento,
 		})
 		.returning({ id: sales.id });

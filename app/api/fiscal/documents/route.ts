@@ -1,3 +1,4 @@
+import { FiscalSaleChoicesSchema } from "@/schemas/fiscal";
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { emitFiscalDocument, getFiscalDocumentDetailsById, listFiscalDocumentEvents, listFiscalDocuments } from "@/lib/fiscal/documents";
@@ -60,6 +61,7 @@ async function getFiscalDocuments({ input }: { input: TGetFiscalDocumentsInput }
 			documents: [document],
 			organizationId: orgId,
 			provider: organizacao?.fiscalProvedor,
+			resaleCreditEnabled: !!organizacao?.fiscalConfiguracao?.operacoesRevenda?.habilitada,
 		});
 		return {
 			data: {
@@ -86,6 +88,7 @@ async function getFiscalDocuments({ input }: { input: TGetFiscalDocumentsInput }
 		documents: result.documents,
 		organizationId: orgId,
 		provider: organizacao?.fiscalProvedor,
+		resaleCreditEnabled: !!organizacao?.fiscalConfiguracao?.operacoesRevenda?.habilitada,
 	});
 	return {
 		data: {
@@ -116,6 +119,7 @@ async function getFiscalDocumentsRoute(request: NextRequest) {
 }
 
 const EmitFiscalDocumentInputSchema = z.object({
+	...FiscalSaleChoicesSchema.shape,
 	vendaId: z.string({
 		required_error: "ID da venda não informado.",
 		invalid_type_error: "Tipo não válido para o ID da venda.",
@@ -204,6 +208,8 @@ async function createFiscalDocument({ input }: { input: TEmitFiscalDocumentInput
 		organizacaoId: orgId,
 		autorId: session.user.id,
 		origem: "MANUAL",
+		fiscalDestinacao: input.fiscalDestinacao,
+		fiscalCreditoIcms: input.fiscalCreditoIcms,
 		classificacaoPresencaExcepcional: input.classificacaoPresencialExcepcional
 			? {
 					presencaConsumidor: "OPERACAO_PRESENCIAL",

@@ -1,3 +1,4 @@
+import { fiscalSaleDestinationEnum, fiscalCreditDecisionEnum } from "./enums";
 import type { TSaleCapiMetadata, TSaleIntegrationMetadata } from "@/schemas/sales";
 import { relations, sql } from "drizzle-orm";
 import { boolean, check, doublePrecision, index, jsonb, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/pg-core";
@@ -92,6 +93,8 @@ export const sales = newTable(
 		// true/false = decisão explícita da venda (respeitada tanto no confirm quanto na entrega).
 		emissaoFiscalAutomatica: boolean("emissao_fiscal_automatica"),
 		// NULL = automático; escolha explícita preservada até a emissão.
+		fiscalDestinacao: fiscalSaleDestinationEnum("fiscal_destinacao"),
+		fiscalCreditoIcms: fiscalCreditDecisionEnum("fiscal_credito_icms"),
 		emissaoFiscalDocumento: fiscalDocumentTypeEnum("emissao_fiscal_documento").$type<"NFE" | "NFCE">(),
 		// ERP: horário PARA O QUAL a emissão fiscal automática foi agendada (atraso configurado em
 		// fiscalConfiguracao.emissaoAutomatica.atrasoMinutos) — não o momento em que o agendamento

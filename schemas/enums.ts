@@ -1413,3 +1413,14 @@ export type TSqlViewsClientPhoneFieldEnum = z.infer<typeof SqlViewsClientPhoneFi
 // Conector SQL-VIEWS: quem decidiu o `metodo` de um pagamento da fonte.
 export const SqlViewsPaymentTranslationEnum = z.enum(["MAPEAMENTO_INTEGRACAO", "FONTE", "PADRAO_OUTRO"]);
 export type TSqlViewsPaymentTranslationEnum = z.infer<typeof SqlViewsPaymentTranslationEnum>;
+
+export const FiscalSaleDestinationEnum = z.enum(["REVENDA_INDUSTRIALIZACAO", "CONSUMO_FINAL"], {
+	required_error: "Destinação fiscal não informada.",
+	invalid_type_error: "Destinação fiscal inválida.",
+});
+export const FiscalCreditDecisionEnum = z.enum(["NAO_CONFIRMADO", "SEM_CREDITO", "COM_CREDITO"], {
+	required_error: "Decisão de crédito não informada.",
+	invalid_type_error: "Decisão de crédito inválida.",
+});
+export type TFiscalSaleDestinationEnum = z.infer<typeof FiscalSaleDestinationEnum>;
+export type TFiscalCreditDecisionEnum = z.infer<typeof FiscalCreditDecisionEnum>;

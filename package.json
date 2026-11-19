@@ -53,6 +53,7 @@
 		"test:stock-analytics": "node --import tsx --test lib/stock/analytics/analytics.test.ts",
 		"test:pos-barcode": "node --import tsx --test lib/pos/barcode-scan-detector.test.ts lib/pos/barcode-lookup.test.ts lib/pos/scale-barcode.test.ts lib/pos/serial-scale-protocol.test.ts lib/pos/serial-scale-diagnostics.test.ts",
 		"test:client-duplicates": "node --import tsx --test lib/clients/name-duplicate-query.test.ts lib/clients/merge-suggestions.test.ts",
+		"test:fiscal-credit": "node --import tsx --test lib/fiscal/simples-credit.test.ts",
 		"test:fiscal-errors": "node --import tsx --test lib/fiscal/errors.test.ts",
 		"test:fiscal-inbound-sync": "node --import tsx --test lib/fiscal/inbound/sync-cooldown.test.ts lib/fiscal/providers/spedy/sync-response.test.ts lib/fiscal/providers/spedy/rate-limit.test.ts",
 		"test:nuvemshop-pagination": "node --import tsx --test lib/data-connectors/nuvemshop/pagination.test.ts",
@@ -106,7 +107,7 @@
 		"test:product-pricing": "node --import tsx --test lib/products/price-snapshot.test.ts lib/products/pricing.test.ts lib/products/update-stamp.test.ts lib/products/products-filters-storage.test.ts",
 		"test:visual-kits": "node --import tsx --test lib/visual-kits/formats.test.ts lib/visual-kits/generation/file-names.test.ts lib/visual-kits/pieces/ean.test.ts lib/visual-kits/pieces/code128.test.ts lib/visual-kits/pieces/price-sticker.test.ts lib/products/barcode.test.ts",
 		"test:cashback-payment-accrual": "node --import tsx --test lib/cashback/payment-accrual.test.ts lib/data-connectors/sql-views/mappers.test.ts lib/data-collecting-v2/sale-signature.test.ts",
-		"test:cashback-rewards-display":"node --import tsx --test lib/cashback/rewards-display-layout.test.ts",
+		"test:cashback-rewards-display": "node --import tsx --test lib/cashback/rewards-display-layout.test.ts",
 		"test:client-vinculation": "node --import tsx --test lib/clients/client-vinculation-flow.test.ts lib/clients/parse-client-search-intent.test.ts lib/clients/search-terms.test.ts lib/phone-search-patterns.test.ts",
 		"test:poi-free-form-reward": "node --conditions=react-server --import tsx --test lib/point-of-interaction/free-form-reward.integration.test.ts",
 		"test:coupons": "node --conditions=react-server --import tsx --test lib/coupons/engine.test.ts lib/coupons/conditions.test.ts lib/coupons/gifts.test.ts lib/coupons/gifts.integration.test.ts",
@@ -273,14 +274,14 @@
 	"overrides": {
 		"@types/react": "19.2.14",
 		"@types/react-dom": "19.2.3",
+		"@vercel/cli-config": {
+			"zod": "^4.6.7"
+		},
 		"axios": "1.21.0",
 		"esbuild": ">=0.25.0",
 		"minimatch": ">=10.2.1",
 		"next": {
 			"postcss": "8.5.32"
-		},
-		"@vercel/cli-config": {
-			"zod": "^4.6.7"
 		},
 		"satori": {
 			"fflate": "^0.7.5"

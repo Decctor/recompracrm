@@ -25,6 +25,8 @@ export type TFiscalDocumentPayloadItemView = {
 	valorUnitario: number | null;
 	valorTotal: number | null;
 	csosn: string | null;
+	percentualCredito?: number | null;
+	valorCredito?: number | null;
 };
 
 export type TFiscalDocumentSaleItemView = {
@@ -178,6 +180,16 @@ function readCode(value: unknown): string | null {
 	return typeof value === "number" && Number.isFinite(value) ? String(value) : readString(value);
 }
 
+function extractCreditFromImposto(imposto: unknown): { percentualCredito?: number | null; valorCredito?: number | null } {
+	const icms = readRecord(readRecord(imposto)?.ICMS);
+	if (!icms) return {};
+	for (const value of Object.values(icms)) {
+		const node = readRecord(value);
+		if (readNumber(node?.vCredICMSSN) != null) return { percentualCredito: readNumber(node?.pCredSN), valorCredito: readNumber(node?.vCredICMSSN) };
+	}
+	return {};
+}
+
 export function extractPayloadItems(payload: JsonRecord | null): TFiscalDocumentPayloadItemView[] {
 	const infNFe = readRecord(payload?.infNFe);
 	if (!infNFe) {
@@ -196,6 +208,12 @@ export function extractPayloadItems(payload: JsonRecord | null): TFiscalDocument
 				valorUnitario: readNumber(record.unitAmount),
 				valorTotal: readNumber(record.totalAmount),
 				csosn: readCode(readRecord(readRecord(record.taxes)?.icms)?.csosn),
+				...(readNumber(readRecord(readRecord(record.taxes)?.icms)?.snCreditAmount) != null
+					? {
+							percentualCredito: readNumber(readRecord(readRecord(record.taxes)?.icms)?.snCreditRate),
+							valorCredito: readNumber(readRecord(readRecord(record.taxes)?.icms)?.snCreditAmount),
+						}
+					: {}),
 			};
 		});
 	}
@@ -215,6 +233,7 @@ export function extractPayloadItems(payload: JsonRecord | null): TFiscalDocument
 			valorUnitario: readNumber(prod.vUnCom),
 			valorTotal: readNumber(prod.vProd),
 			csosn: extractCsosnFromImposto(record.imposto),
+			...extractCreditFromImposto(record.imposto),
 		};
 	});
 }

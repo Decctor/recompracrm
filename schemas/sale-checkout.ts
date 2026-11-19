@@ -1,3 +1,4 @@
+import { FiscalSaleChoicesSchema } from "@/schemas/fiscal";
 import { SaleFiscalDocumentSchema } from "@/schemas/fiscal";
 import { CheckoutPaymentSplitSchema } from "@/lib/payments";
 import { saleRewardRedemptionInputFields } from "@/schemas/cashback-programs";
@@ -82,6 +83,7 @@ export const CreateAndConfirmSaleInputSchema = z.object({
 	...saleRewardRedemptionInputFields,
 	sessaoVendaId: z.string({ invalid_type_error: "Tipo não válido para o ID da sessão de venda." }).optional().nullable(),
 	// Override tri-state da emissão fiscal automática. null/ausente = herda a preferência da organização.
+	...FiscalSaleChoicesSchema.shape,
 	emissaoFiscalDocumento: SaleFiscalDocumentSchema.optional(),
 	emissaoFiscalAutomatica: z.boolean({ invalid_type_error: "Tipo não válido para emissão fiscal automática." }).optional().nullable(),
 	// Aprovação VENDA_DESCONTO exigida quando o desconto agregado excede o teto do vendedor.

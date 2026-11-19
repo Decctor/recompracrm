@@ -89,9 +89,17 @@ type SalesPageProps = {
 	canEmitFiscal: boolean;
 	canConfigureFiscal: boolean;
 	exceptionalPresenceEnabled: boolean;
+	resaleCreditEnabled: boolean;
 };
 
-export default function SalesPage({ organization, canEditSales, canEmitFiscal, canConfigureFiscal, exceptionalPresenceEnabled }: SalesPageProps) {
+export default function SalesPage({
+	organization,
+	canEditSales,
+	canEmitFiscal,
+	canConfigureFiscal,
+	exceptionalPresenceEnabled,
+	resaleCreditEnabled,
+}: SalesPageProps) {
 	return (
 		<div className="flex h-full w-full flex-col gap-3">
 			<div className="flex items-center justify-end">
@@ -102,6 +110,7 @@ export default function SalesPage({ organization, canEditSales, canEmitFiscal, c
 				canEmitFiscal={canEmitFiscal}
 				canConfigureFiscal={canConfigureFiscal}
 				exceptionalPresenceEnabled={exceptionalPresenceEnabled}
+				resaleCreditEnabled={resaleCreditEnabled}
 				orgHasERPAccess={organization.configuracao.recursos.erp.acesso}
 			/>
 		</div>
@@ -186,12 +195,14 @@ export function SalesHistoryView({
 	canEmitFiscal,
 	canConfigureFiscal,
 	exceptionalPresenceEnabled,
+	resaleCreditEnabled,
 	orgHasERPAccess,
 }: {
 	canEditSales: boolean;
 	canEmitFiscal: boolean;
 	canConfigureFiscal: boolean;
 	exceptionalPresenceEnabled: boolean;
+	resaleCreditEnabled: boolean;
 	orgHasERPAccess: boolean;
 }) {
 	// Filtros na URL (nuqs): compartilháveis e alvo de links de outras telas (ex.: resultados).
@@ -249,6 +260,7 @@ export function SalesHistoryView({
 							canEmitFiscal={canEmitFiscal}
 							canConfigureFiscal={canConfigureFiscal}
 							exceptionalPresenceEnabled={exceptionalPresenceEnabled}
+							resaleCreditEnabled={resaleCreditEnabled}
 						/>
 					))
 				) : (
@@ -491,12 +503,14 @@ function SaleCard({
 	canEmitFiscal,
 	canConfigureFiscal,
 	exceptionalPresenceEnabled,
+	resaleCreditEnabled,
 }: {
 	sale: TGetSalesOutputDefault["sales"][number];
 	canEditSales: boolean;
 	canEmitFiscal: boolean;
 	canConfigureFiscal: boolean;
 	exceptionalPresenceEnabled: boolean;
+	resaleCreditEnabled: boolean;
 }) {
 	// O orçamento é a única linha do histórico que ainda não é dinheiro. A borda lateral marca isso
 	// na varredura vertical, antes de qualquer selo ser lido.
@@ -690,6 +704,7 @@ function SaleCard({
 						canEmitFiscal={canEmitFiscal}
 						canConfigureFiscal={canConfigureFiscal}
 						exceptionalPresenceEnabled={exceptionalPresenceEnabled}
+						resaleCreditEnabled={resaleCreditEnabled}
 					/>
 					<QuoteCheckoutButton sale={sale} canEditSales={canEditSales} />
 					<Button variant="link" className="flex items-center gap-1.5 h-auto shrink-0 p-0" size="sm" asChild>
@@ -733,11 +748,13 @@ function ManualFiscalEmissionButton({
 	canEmitFiscal,
 	canConfigureFiscal,
 	exceptionalPresenceEnabled,
+	resaleCreditEnabled,
 }: {
 	sale: TGetSalesOutputDefault["sales"][number];
 	canEmitFiscal: boolean;
 	canConfigureFiscal: boolean;
 	exceptionalPresenceEnabled: boolean;
+	resaleCreditEnabled: boolean;
 }) {
 	const [menuOpen, setMenuOpen] = useState(false);
 	const fiscalStatus = sale.erp?.fiscal.status;
@@ -756,6 +773,7 @@ function ManualFiscalEmissionButton({
 					saleId={sale.id}
 					entregaModalidade={sale.entregaModalidade}
 					exceptionalPresenceEnabled={exceptionalPresenceEnabled}
+					resaleCreditEnabled={resaleCreditEnabled}
 					canConfigureFiscal={canConfigureFiscal}
 					closeMenu={() => setMenuOpen(false)}
 				/>

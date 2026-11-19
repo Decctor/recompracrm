@@ -1,3 +1,5 @@
+import { resolveSaleFiscalChoices } from "@/lib/fiscal/sale-credit-choices";
+import type { TFiscalSaleChoices } from "@/schemas/fiscal";
 import { normalizeCouponGiftItem, roundCouponGiftCurrency } from "@/lib/coupons/gift-pricing";
 import { enforceStoreCreditRelease } from "@/lib/finances/store-credit/authorization";
 import { resolveSaleFiscalDocumentPreference, type TSaleFiscalDocument } from "@/lib/fiscal/emission-document-policy";
@@ -97,6 +99,8 @@ export type TProcessConfirmedSaleEditInput = {
 	pagamentos: Omit<TCheckoutPaymentSplit, "id">[];
 	// Já resolvido pela rota via resolveSaleFiscalEmissionOverride (null = herda a organização).
 	emissaoFiscalAutomatica: boolean | null;
+	fiscalDestinacao?: TFiscalSaleChoices["fiscalDestinacao"];
+	fiscalCreditoIcms?: TFiscalSaleChoices["fiscalCreditoIcms"];
 	emissaoFiscalDocumento?: TSaleFiscalDocument | null;
 	canChooseFiscalDocument?: boolean;
 	// Consentimento explícito para derrubar um cupom invalidado pelo carrinho editado.
@@ -190,6 +194,15 @@ export async function processConfirmedSaleEditInTransaction({ tx, input }: { tx:
 	});
 	if (!sale) throw new createHttpError.NotFound("Venda não encontrada.");
 
+	input = {
+		...input,
+		...resolveSaleFiscalChoices({
+			requested: input,
+			current: sale,
+			canEmit: input.canChooseFiscalDocument ?? false,
+			documents: sale.documentosFiscais,
+		}),
+	};
 	const emissaoFiscalDocumento = resolveSaleFiscalDocumentPreference({
 		requested: input.emissaoFiscalDocumento,
 		current: sale.emissaoFiscalDocumento,
@@ -205,6 +218,8 @@ export async function processConfirmedSaleEditInTransaction({ tx, input }: { tx:
 			entregaLocalizacaoId:
 				(input.entregaModalidade ?? sale.entregaModalidade) === "ENTREGA" ? (input.entregaLocalizacaoId ?? sale.entregaLocalizacaoId) : null,
 			canal: sale.canal,
+			fiscalDestinacao: input.fiscalDestinacao,
+			fiscalCreditoIcms: input.fiscalCreditoIcms,
 			emissaoFiscalDocumento,
 			emissaoFiscalAutomatica: input.emissaoFiscalAutomatica,
 			metodos: input.pagamentos.filter((payment) => payment.valor > 0).map((payment) => payment.metodo),
@@ -253,7 +268,9 @@ export async function processConfirmedSaleEditInTransaction({ tx, input }: { tx:
 	}
 
 	const resolvedPayments = await resolvePaymentFinancialAccounts({
-		organization: input.organization, payments: input.pagamentos, tx,
+		organization: input.organization,
+		payments: input.pagamentos,
+		tx,
 		previousTransactions: sale.lancamentosContabeis.flatMap((entry) => entry.transacoesFinanceiras),
 	});
 
@@ -457,7 +474,15 @@ export async function processConfirmedSaleEditInTransaction({ tx, input }: { tx:
 	// ------------------------------------------------------------------
 	// Recompute do dinheiro da venda (mesmas fórmulas da criação).
 	// ------------------------------------------------------------------
-	const valorBaseItens = activeItems.reduce((sum, item) => sum + (giftAllocation && giftAllocation.itemId === item.id ? normalizeCouponGiftItem(item, { itemChave: giftAllocation.itemId, quantidade: 1 }, item.id).valorTotalLiquido : item.valorTotalLiquido), 0) + rewardValorBase;
+	const valorBaseItens =
+		activeItems.reduce(
+			(sum, item) =>
+				sum +
+				(giftAllocation && giftAllocation.itemId === item.id
+					? normalizeCouponGiftItem(item, { itemChave: giftAllocation.itemId, quantidade: 1 }, item.id).valorTotalLiquido
+					: item.valorTotalLiquido),
+			0,
+		) + rewardValorBase;
 	const descontosGerais = input.descontosTotal ?? 0;
 	const acrescimosGerais = input.acrescimosTotal ?? 0;
 	const descontosVenda = descontosGerais + cupomDesconto + cashbackResgate;
@@ -636,7 +661,9 @@ export async function processConfirmedSaleEditInTransaction({ tx, input }: { tx:
 			.set({
 				valorTotalDesconto: giftedItem.valorDesconto + giftAllocation.valorDesconto,
 				valorVendaTotalBruto: roundCouponGiftCurrency(giftedItem.quantidade * giftedItem.valorUnitarioFinal),
-				valorVendaTotalLiquido: roundCouponGiftCurrency(roundCouponGiftCurrency(giftedItem.quantidade * giftedItem.valorUnitarioFinal) - giftedItem.valorDesconto - giftAllocation.valorDesconto),
+				valorVendaTotalLiquido: roundCouponGiftCurrency(
+					roundCouponGiftCurrency(giftedItem.quantidade * giftedItem.valorUnitarioFinal) - giftedItem.valorDesconto - giftAllocation.valorDesconto,
+				),
 				metadados: {
 					...buildItemMetadataSnapshot(giftedItem),
 					itemChave: readCouponItemIdentity(original),
@@ -730,6 +757,8 @@ export async function processConfirmedSaleEditInTransaction({ tx, input }: { tx:
 			comandaNumero: input.entregaModalidade === "COMANDA" ? (input.comandaNumero ?? sale.comandaNumero) : null,
 			observacoes: input.observacoes ?? sale.observacoes,
 			emissaoFiscalAutomatica: input.emissaoFiscalAutomatica,
+			fiscalDestinacao: input.fiscalDestinacao,
+			fiscalCreditoIcms: input.fiscalCreditoIcms,
 			emissaoFiscalDocumento,
 			rascunhoMetadados: nextDraftMetadata,
 		})

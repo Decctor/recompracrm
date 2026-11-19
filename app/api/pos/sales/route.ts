@@ -1,3 +1,5 @@
+import { resolveSaleFiscalChoices } from "@/lib/fiscal/sale-credit-choices";
+import { FiscalSaleChoicesSchema } from "@/schemas/fiscal";
 import { readCouponItemIdentity } from "@/lib/coupons/gifts";
 import { normalizeCouponGiftItem, roundCouponGiftCurrency } from "@/lib/coupons/gift-pricing";
 import { SaleFiscalDocumentSchema } from "@/schemas/fiscal";
@@ -77,6 +79,7 @@ const CreateSaleDraftInputSchema = z.object({
 	...saleRewardRedemptionInputFields,
 	rascunhoMetadados: z.unknown().optional().nullable(),
 	// Override tri-state da emissão fiscal automática. null/ausente = herda a preferência da organização.
+	...FiscalSaleChoicesSchema.shape,
 	emissaoFiscalDocumento: SaleFiscalDocumentSchema.optional(),
 	emissaoFiscalAutomatica: z.boolean({ invalid_type_error: "Tipo não válido para emissão fiscal automática." }).optional().nullable(),
 	// Rascunho só-recompensas é permitido (carrinho vazio + recompensasResgate); a exigência de
@@ -106,6 +109,7 @@ const UpdateSaleDraftInputSchema = z.object({
 	...saleRewardRedemptionInputFields,
 	rascunhoMetadados: z.unknown().optional().nullable(),
 	// Override tri-state da emissão fiscal automática. Ausente = não altera; null = herda a organização.
+	...FiscalSaleChoicesSchema.shape,
 	emissaoFiscalDocumento: SaleFiscalDocumentSchema.optional(),
 	emissaoFiscalAutomatica: z.boolean({ invalid_type_error: "Tipo não válido para emissão fiscal automática." }).optional().nullable(),
 	// Ausente = não mexe nos itens (o PDV salva rascunho sem reenviá-los). Presente = a lista passa a
@@ -154,6 +158,7 @@ async function createSaleDraft({ input, session }: { input: TCreateSaleDraftInpu
 		surface: "POS",
 	});
 
+	input = { ...input, ...resolveSaleFiscalChoices({ requested: input, canEmit: !!session.membership?.permissoes.fiscal.emitir }) };
 	const emissaoFiscalDocumento = resolveSaleFiscalDocumentPreference({
 		requested: input.emissaoFiscalDocumento,
 		canEmit: !!session.membership?.permissoes.fiscal.emitir,
@@ -248,6 +253,8 @@ async function createSaleDraft({ input, session }: { input: TCreateSaleDraftInpu
 				processamentoOrigem: "INTERNO",
 				statusVenda: "ORCAMENTO",
 				emissaoFiscalAutomatica,
+				fiscalDestinacao: input.fiscalDestinacao,
+				fiscalCreditoIcms: input.fiscalCreditoIcms,
 				emissaoFiscalDocumento,
 			})
 			.returning({ id: sales.id });
@@ -452,11 +459,13 @@ async function updateSaleDraft({ input, session }: { input: TUpdateSaleDraftInpu
 	const valorBaseItens = input.itens
 		? input.itens.reduce((sum, item) => sum + item.valorTotalLiquido, 0)
 		: existing.itens.reduce(
-				(sum, item) => sum + normalizeCouponGiftItem(
-					{ valorTotalBruto: item.valorVendaTotalBruto, valorTotalLiquido: item.valorVendaTotalLiquido },
-					input.cupomResgate?.brinde,
-					readCouponItemIdentity(item),
-				).valorTotalLiquido,
+				(sum, item) =>
+					sum +
+					normalizeCouponGiftItem(
+						{ valorTotalBruto: item.valorVendaTotalBruto, valorTotalLiquido: item.valorVendaTotalLiquido },
+						input.cupomResgate?.brinde,
+						readCouponItemIdentity(item),
+					).valorTotalLiquido,
 				0,
 			);
 	const descontosGerais = input.descontosTotal ?? 0;
@@ -504,7 +513,12 @@ async function updateSaleDraft({ input, session }: { input: TUpdateSaleDraftInpu
 
 	await db.transaction(async (tx) => {
 		const [lockedSale] = await tx
-			.select({ statusVenda: sales.statusVenda, emissaoFiscalDocumento: sales.emissaoFiscalDocumento })
+			.select({
+				statusVenda: sales.statusVenda,
+				fiscalDestinacao: sales.fiscalDestinacao,
+				fiscalCreditoIcms: sales.fiscalCreditoIcms,
+				emissaoFiscalDocumento: sales.emissaoFiscalDocumento,
+			})
 			.from(sales)
 			.where(and(eq(sales.id, input.id), eq(sales.organizacaoId, orgId)))
 			.for("update");
@@ -513,6 +527,10 @@ async function updateSaleDraft({ input, session }: { input: TUpdateSaleDraftInpu
 			where: (f, o) => o.and(o.eq(f.vendaId, input.id), o.eq(f.organizacaoId, orgId)),
 			columns: { statusInterno: true },
 		});
+		input = {
+			...input,
+			...resolveSaleFiscalChoices({ requested: input, current: lockedSale, canEmit: !!session.membership?.permissoes.fiscal.emitir, documents }),
+		};
 		const emissaoFiscalDocumento = resolveSaleFiscalDocumentPreference({
 			requested: input.emissaoFiscalDocumento,
 			current: lockedSale.emissaoFiscalDocumento,
@@ -552,6 +570,8 @@ async function updateSaleDraft({ input, session }: { input: TUpdateSaleDraftInpu
 					...buildRewardSnapshotsMetadataKeys(recompensasPersistidas),
 				},
 				emissaoFiscalAutomatica,
+				fiscalDestinacao: input.fiscalDestinacao,
+				fiscalCreditoIcms: input.fiscalCreditoIcms,
 				emissaoFiscalDocumento,
 			})
 			.where(eq(sales.id, input.id));
