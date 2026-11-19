@@ -1,5 +1,6 @@
 import { getCashbackRedemptionBlockReason } from "@/lib/cashback/redemption-policy";
 import { appApiHandler } from "@/lib/app-api";
+import { resolveValidatedAuthorSeller } from "@/lib/clients/authorship";
 import { recomputeClientDuplicatesSafely } from "@/lib/clients/duplicates";
 import { accumulateCashbackForClient, calculateAccumulatedCashbackValue, ensureCashbackBalanceForClient } from "@/lib/cashback/accumulation";
 import { type TValidatedPrizeForRedemption, validatePrizeForRedemption } from "@/lib/cashback/prizes";
@@ -20,6 +21,7 @@ import { isValidCpfCnpj } from "@/lib/validation";
 import { evaluateCouponAgainstSaleValue } from "@/lib/coupons/engine";
 import { processCouponRedemption } from "@/lib/coupons/redemption";
 import { countPreviousConfirmedPurchases, lockClientPurchaseHistory } from "@/lib/coupons/purchase-history";
+import { ClientSchema } from "@/schemas/clients";
 import { DeliveryModeEnum } from "@/schemas/enums";
 import { resolvePoiActorContext } from "@/lib/access/poi-actor";
 import { organizationHasActiveDataSource } from "@/lib/integrations/data-sources";
@@ -69,7 +71,26 @@ export const CreatePointOfInteractionTransactionInputSchema = z.object({
 				invalid_type_error: "Tipo não válido para telefone.",
 			}),
 		})
+		// Dados opcionais do cadastro feito na própria transação ("Mais dados do cliente"). Só valem
+		// quando o cliente é criado aqui; um cliente existente nunca é alterado por este payload.
+		.merge(
+			ClientSchema.pick({
+				email: true,
+				autorVendedorId: true,
+				localizacaoCep: true,
+				localizacaoEstado: true,
+				localizacaoCidade: true,
+				localizacaoBairro: true,
+				localizacaoLogradouro: true,
+				localizacaoNumero: true,
+				localizacaoComplemento: true,
+			}),
+		)
+		// `.optional()` por fora do transform: quem não manda a data (totem, celular) não precisa da chave.
+		.extend({ dataNascimento: ClientSchema.shape.dataNascimento.optional() })
 		.describe("O cliente que realizou a transação."),
+	// Aceite explícito de marketing (LGPD) no cadastro feito aqui. Só `true` grava a data.
+	marketingConsent: z.boolean({ invalid_type_error: "Tipo não válido para o consentimento de marketing." }).optional().nullable(),
 	sale: z.object({
 		entregaModalidade: DeliveryModeEnum.optional().nullable(),
 		valor: z
@@ -390,16 +411,31 @@ export async function preparePointOfInteractionTransaction({ input, operatorCont
 
 			if (input.client.cpfCnpj && !isValidCpfCnpj(input.client.cpfCnpj)) throw new createHttpError.BadRequest("CPF/CNPJ inválido.");
 
+			// "Quem atendeu" escolhido no cadastro; sem ele, o autor é o operador da transação.
+			const clientAuthorSellerId = input.client.autorVendedorId
+				? await resolveValidatedAuthorSeller({ trx: tx, organizacaoId: input.orgId, vendedorId: input.client.autorVendedorId })
+				: operator.id;
+
 			const insertedClientResponse = await tx
 				.insert(clients)
 				.values({
 					organizacaoId: input.orgId,
 					autorId: operatorMembershipUser?.id ?? null,
-					autorVendedorId: operator.id,
+					autorVendedorId: clientAuthorSellerId,
 					nome: input.client.nome,
 					cpfCnpj: input.client.cpfCnpj ?? null,
 					telefone: input.client.telefone,
 					telefoneBase: clientPhoneAsBase,
+					email: input.client.email?.trim() || null,
+					dataNascimento: input.client.dataNascimento ?? null,
+					localizacaoCep: input.client.localizacaoCep || null,
+					localizacaoEstado: input.client.localizacaoEstado || null,
+					localizacaoCidade: input.client.localizacaoCidade || null,
+					localizacaoBairro: input.client.localizacaoBairro || null,
+					localizacaoLogradouro: input.client.localizacaoLogradouro || null,
+					localizacaoNumero: input.client.localizacaoNumero || null,
+					localizacaoComplemento: input.client.localizacaoComplemento || null,
+					consentimentoMarketingData: input.marketingConsent === true ? new Date() : null,
 					canalAquisicao: "PONTO DE INTERAÇÃO",
 					analiseRFMTitulo: "CLIENTES RECENTES",
 				})

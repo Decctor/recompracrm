@@ -22,10 +22,7 @@ export async function approvePoiTransactionRequest(input: TApprovePoiTransaction
 	return data;
 }
 
-export async function rejectPoiTransactionRequest({ requestId, input }: { requestId: string; input?: TRejectPoiTransactionRequestInput }) {
-	const { data } = await axios.post<TRejectPoiTransactionRequestOutput>(
-		`/api/point-of-interaction/transaction-requests/management/reject?requestId=${requestId}`,
-		input ?? {},
-	);
+export async function rejectPoiTransactionRequest(input: TRejectPoiTransactionRequestInput) {
+	const { data } = await axios.post<TRejectPoiTransactionRequestOutput>("/api/point-of-interaction/transaction-requests/management/reject", input);
 	return data;
 }

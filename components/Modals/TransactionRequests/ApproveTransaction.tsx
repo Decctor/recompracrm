@@ -1,6 +1,7 @@
 "use client";
 import { ResponsiveMenuAnimatedBody } from "@/components/Utils/ResponsiveMenuAnimatedBody";
 import { LoadingButton } from "@/components/loading-button";
+import { PoiBalanceUsageBar, POI_OPERATION_KINDS, type TPoiOperationKind } from "@/components/PointOfInteraction/operation-kinds";
 import ResponsiveMenu from "@/components/Utils/ResponsiveMenu";
 
 import { SaleValueConfirmationInput } from "@/app/(external)/point-of-interaction/[orgId]/_shared/components/sale-value-confirmation-input";
@@ -17,7 +18,7 @@ import { cn } from "@/lib/utils";
 import { useMutation } from "@tanstack/react-query";
 import { REGEXP_ONLY_DIGITS } from "input-otp";
 import type { TCashbackProgramTerminologyEnum } from "@/schemas/enums";
-import { AlertTriangle, Gift } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
 
@@ -48,9 +49,13 @@ type TApproveTransactionFreeFormReward = {
 
 type ApproveTransactionProps = {
 	requestId: string;
+	/** Tipo da operação pedida: dá a cor e o ícone da faixa do topo. */
+	kind: TPoiOperationKind;
 	clientDisplayName?: string;
 	valorBruto: number;
 	valorFinal: number;
+	/** Saldo usado pela solicitação (desconto ou recompensas do catálogo). */
+	valorResgate: number;
 	/** Cupom solicitado na transação (quando MANUAL sem valor, o operador informa o desconto aqui). */
 	coupon?: TApproveTransactionCoupon | null;
 	/** Recompensa avulsa: o operador define aqui quanto debitar do saldo. Sem venda, sem valor a conferir. */
@@ -82,9 +87,11 @@ function HighlightedMoney({ value }: { value: number }) {
 
 export function ApproveTransaction({
 	requestId,
+	kind,
 	clientDisplayName,
 	valorBruto,
 	valorFinal,
+	valorResgate,
 	coupon,
 	freeFormReward,
 	hasLinkedSeller,
@@ -130,10 +137,6 @@ export function ApproveTransaction({
 			toast.error(`Confirme que o valor de ${formatToMoney(valorFinal)} está correto antes de aprovar.`);
 			return;
 		}
-		console.log({
-			requiresSaleValueConfirmation,
-			operatorConfirmedSaleValue,
-		});
 		const code = operatorPassword;
 		if (requiresSaleValueConfirmation && operatorConfirmedSaleValue == null) {
 			toast.error("Confirme o valor final da venda.");
@@ -220,6 +223,7 @@ export function ApproveTransaction({
 				</ResponsiveMenu.Header>
 				<ResponsiveMenuAnimatedBody stateKey="content" className="overflow-x-hidden overflow-y-auto">
 					<div className="flex w-full min-w-0 flex-col gap-4 overflow-x-hidden py-2">
+						<ApproveTransactionKindBanner kind={kind} />
 						{freeFormReward ? (
 							<FreeFormRewardApproval freeFormReward={freeFormReward} value={operatorFreeFormRewardValue} onChange={setOperatorFreeFormRewardValue} />
 						) : (
@@ -228,7 +232,17 @@ export function ApproveTransaction({
 								<span className="text-[0.65rem] font-bold uppercase tracking-widest text-muted-foreground">Valor a aprovar</span>
 								<HighlightedMoney value={valorFinal} />
 								{hasDiscount ? (
-									<span className="text-[0.7rem] font-medium text-muted-foreground">Bruto: {formatToMoney(valorBruto)} · com desconto/resgate aplicado</span>
+									<span className="text-[0.7rem] font-medium text-muted-foreground">
+										Bruto {formatToMoney(valorBruto)}
+										{valorResgate > 0 ? (
+											<>
+												{" · "}
+												<span className={cn("font-semibold", POI_OPERATION_KINDS[kind].classes.amount)}>resgate − {formatToMoney(valorResgate)}</span>
+											</>
+										) : (
+											" · com desconto aplicado"
+										)}
+									</span>
 								) : null}
 							</div>
 						)}
@@ -319,11 +333,37 @@ export function ApproveTransaction({
 				<ResponsiveMenu.Footer>
 					<ResponsiveMenu.Close variant="outline">CANCELAR</ResponsiveMenu.Close>
 					<LoadingButton loading={isPending} onClick={handleApprove}>
-						APROVAR
+						{freeFormReward && operatorFreeFormRewardValue
+							? `APROVAR E DEBITAR ${formatCashbackValue(operatorFreeFormRewardValue, freeFormReward.terminologia)}`
+							: "APROVAR"}
 					</LoadingButton>
 				</ResponsiveMenu.Footer>
 			</ResponsiveMenu.Content>
 		</ResponsiveMenu.Root>
+	);
+}
+
+const KIND_BANNER_SUBTITLES: Record<TPoiOperationKind, string> = {
+	"sale-only": "Registra a venda",
+	discount: "Registra a venda e usa saldo como desconto",
+	prize: "Troca saldo por recompensas do catálogo",
+	"free-form": "Você define o débito. Nenhuma venda é registrada.",
+};
+
+/** Faixa do topo: o tipo da solicitação na mesma cor e ícone da fila e da nova transação. */
+function ApproveTransactionKindBanner({ kind }: { kind: TPoiOperationKind }) {
+	const meta = POI_OPERATION_KINDS[kind];
+	const Icon = meta.icon;
+	return (
+		<div className={cn("flex w-full items-center gap-3 rounded-2xl border px-3.5 py-2.5", meta.classes.surface)}>
+			<span className={cn("flex size-8 min-w-8 items-center justify-center rounded-lg", meta.classes.iconTile)}>
+				<Icon className="size-4" />
+			</span>
+			<span className="flex min-w-0 flex-col">
+				<span className={cn("text-sm font-semibold", meta.classes.title)}>{meta.label}</span>
+				<span className={cn("text-xs", meta.classes.text)}>{KIND_BANNER_SUBTITLES[kind]}</span>
+			</span>
+		</div>
 	);
 }
 
@@ -341,19 +381,21 @@ function FreeFormRewardApproval({
 	onChange: (value: number | null) => void;
 }) {
 	const { terminologia, saldoDisponivel } = freeFormReward;
+	const meta = POI_OPERATION_KINDS["free-form"];
 	const isPoints = terminologia === "PONTOS";
 	const balanceAfter = saldoDisponivel != null && value != null ? saldoDisponivel - value : null;
 	const exceedsBalance = balanceAfter != null && balanceAfter < -0.0001;
 	return (
-		<div className="flex w-full flex-col gap-3 rounded-2xl border border-brand/20 bg-brand/5 px-4 py-4">
-			<div className="flex items-start gap-3">
-				<div className="flex h-10 w-10 min-h-10 min-w-10 items-center justify-center rounded-md bg-brand/10">
-					<Gift className="h-5 w-5 text-brand" />
-				</div>
-				<div className="flex min-w-0 flex-col gap-0.5">
-					<span className="text-[0.65rem] font-bold uppercase tracking-widest text-muted-foreground">Recompensa avulsa</span>
-					<p className="text-sm font-bold break-words">{freeFormReward.descricao}</p>
-				</div>
+		<div
+			className={cn(
+				"flex w-full flex-col gap-3 rounded-2xl border px-4 py-4",
+				exceedsBalance ? "border-red-300 bg-red-50 dark:border-red-900/60 dark:bg-red-950/30" : meta.classes.surface,
+			)}
+		>
+			<div className="flex min-w-0 flex-col gap-0.5">
+				<span className={cn("text-[0.65rem] font-bold uppercase tracking-widest", meta.classes.text)}>Pedido do cliente</span>
+				<p className="text-base font-semibold break-words">“{freeFormReward.descricao}”</p>
+				<span className="text-xs text-muted-foreground">Confira se é isso que sai do balcão.</span>
 			</div>
 			<div className="flex flex-col gap-1">
 				<Label htmlFor="poi-approve-free-form-value" className="text-xs font-medium tracking-tight text-foreground/80">
@@ -373,15 +415,25 @@ function FreeFormRewardApproval({
 						onChange(event.target.value !== "" && Number.isFinite(inputValue) && inputValue > 0 ? inputValue : null);
 					}}
 				/>
-				{saldoDisponivel != null ? (
-					<p className={cn("text-[0.7rem]", exceedsBalance ? "font-bold text-red-600" : "text-muted-foreground")}>
-						Saldo do cliente: {formatCashbackValue(saldoDisponivel, terminologia)}
-						{balanceAfter != null ? (exceedsBalance ? " · saldo insuficiente" : ` · fica ${formatCashbackValue(balanceAfter, terminologia)}`) : null}
-					</p>
-				) : (
-					<p className="text-[0.7rem] text-muted-foreground">Combine o valor com o cliente. Só o saldo é debitado, sem registrar venda.</p>
-				)}
 			</div>
+			{saldoDisponivel != null ? (
+				<div className="flex flex-col gap-1.5">
+					<PoiBalanceUsageBar kind="free-form" used={value ?? 0} available={saldoDisponivel} />
+					<div
+						className={cn(
+							"flex flex-wrap justify-between gap-x-3 text-xs",
+							exceedsBalance ? "font-semibold text-red-700 dark:text-red-400" : "text-foreground/80",
+						)}
+					>
+						<span>
+							Saldo do cliente <strong>{formatCashbackValue(saldoDisponivel, terminologia)}</strong>
+						</span>
+						<span>{exceedsBalance ? "saldo insuficiente" : balanceAfter != null ? `fica ${formatCashbackValue(balanceAfter, terminologia)}` : null}</span>
+					</div>
+				</div>
+			) : (
+				<p className="text-[0.7rem] text-muted-foreground">Combine o valor com o cliente. Só o saldo é debitado, sem registrar venda.</p>
+			)}
 		</div>
 	);
 }

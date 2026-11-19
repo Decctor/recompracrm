@@ -70,7 +70,8 @@ export async function createPointOfInteractionSale(input: TCreatePointOfInteract
 		if (!input.client.nome && !input.client.id) {
 			throw new Error("Cliente não informado.");
 		}
-		if (!input.sale.valor || input.sale.valor <= 0) {
+		// Recompensa avulsa não tem venda: o valor é zero e o que importa é o débito.
+		if (!input.sale.freeFormReward && (!input.sale.valor || input.sale.valor <= 0)) {
 			throw new Error("Valor da venda deve ser positivo.");
 		}
 		if (!input.operatorIdentifier) {

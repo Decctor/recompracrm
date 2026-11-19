@@ -2,7 +2,12 @@ import type {
 	TCreatePointOfInteractionTransactionOutput,
 	TCreatePointOfInteractionTransactionRequestInput,
 } from "@/app/api/point-of-interaction/new-transaction/route";
-import type { TDeliveryModeEnum, TPoiTransactionRequestStatusEnum } from "@/schemas/enums";
+import {
+	POI_TRANSACTION_REJECTION_REASON_LABELS,
+	type TDeliveryModeEnum,
+	type TPoiTransactionRejectionReasonEnum,
+	type TPoiTransactionRequestStatusEnum,
+} from "@/schemas/enums";
 import { normalizeFreeFormRewardDescription } from "./free-form-reward";
 import { resolvePoiPrizeLines, sumPoiPrizeSaleValue, sumPoiPrizeValue } from "./prize-lines";
 
@@ -48,7 +53,25 @@ export type TPoiTransactionRequestSummary = {
 	} | null;
 	resultadoProcessamento?: TCreatePointOfInteractionTransactionOutput["data"] | null;
 	statusPublico?: TPoiTransactionRequestStatusEnum;
+	// Motivo escolhido pelo operador ao rejeitar. O cliente o lê na tela de espera do celular.
+	// Ausente em rejeições anteriores ao motivo obrigatório.
+	rejeicao?: TPoiTransactionRejection | null;
 };
+
+export const POI_REJECTION_NOTE_MAX_LENGTH = 200;
+
+export type TPoiTransactionRejection = {
+	motivo: TPoiTransactionRejectionReasonEnum;
+	observacao: string | null;
+};
+
+/** Texto que o cliente lê quando a solicitação é rejeitada. Sem motivo (rejeições antigas), o texto genérico. */
+export function getPoiRejectionPublicMessage(rejeicao: TPoiTransactionRejection | null | undefined) {
+	if (!rejeicao) return "Sua solicitação não foi aprovada pelo operador. Tente novamente no balcão.";
+	const reasonLabel = POI_TRANSACTION_REJECTION_REASON_LABELS[rejeicao.motivo] ?? POI_TRANSACTION_REJECTION_REASON_LABELS.OUTRO;
+	const observacao = rejeicao.observacao?.trim();
+	return observacao ? `Solicitação não aprovada: ${reasonLabel}. ${observacao}` : `Solicitação não aprovada: ${reasonLabel}.`;
+}
 
 export type TPoiPrizeInfoById = Record<string, { titulo?: string | null; imagemCapaUrl?: string | null }>;
 
