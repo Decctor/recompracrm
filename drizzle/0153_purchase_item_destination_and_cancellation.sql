@@ -14,7 +14,7 @@
 -- Nenhum backfill: conta nula é o comportamento de antes (tudo no estoque), e nenhuma transação
 -- existente fica cancelada.
 --
--- Aplicar com: npx tsx ./scripts/apply-sql-migration.ts drizzle/0152_purchase_item_destination_and_cancellation.sql
+-- Aplicar com: npx tsx ./scripts/apply-sql-migration.ts drizzle/0153_purchase_item_destination_and_cancellation.sql
 -- Idempotente.
 --
 -- lock_timeout: financial_transactions e accounting_entries são quentes (PDV, terminal, conciliação).
