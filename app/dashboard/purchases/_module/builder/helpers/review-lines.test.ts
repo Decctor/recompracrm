@@ -6,7 +6,9 @@ import {
 	buildSupplierProductMappings,
 	getLineIssue,
 	getLineStatus,
+	getSharedLinesDestination,
 	resolveNewProducts,
+	setLineDestination,
 	type TReviewLine,
 } from "./review-lines";
 
@@ -41,6 +43,7 @@ function line(overrides: Partial<TReviewLine> = {}): TReviewLine {
 		extraidoValorUnitario: 10,
 		documentoRef: "doc-1",
 		origemImportacao: "XML",
+		contaContabilId: null,
 		...overrides,
 	};
 }
@@ -106,4 +109,32 @@ test("a tax treatment can be applied to the same tax across the whole invoice", 
 	const all = applyTaxTreatment({ lines, lineId: "a", modifierIndex: 0, tratamento: "CUSTO_ESTOQUE", applyToWholeDocument: true });
 	assert.equal(all[1].modificadoresCusto?.[0].tratamento, "CUSTO_ESTOQUE");
 	assert.equal(all[1].modificadoresCusto?.[1].tratamento, null);
+});
+
+test("a line with its own destination leaves stock: new product stops tracking it and taxes become cost", () => {
+	const ipi = { chave: "IMPOSTOS_IPI" as const, valorCentavos: 100, efeito: "ACRESCIMO" as const, tratamento: "CREDITO_TRIBUTARIO" as const };
+	const freight = { chave: "FRETE" as const, valorCentavos: 50, efeito: "ACRESCIMO" as const, tratamento: null };
+	const base = line({ produto: null, modificadoresCusto: [ipi, freight] });
+	const withDraft = { ...base, produtoNovo: buildNewProductDraft(base, "new-1") };
+	assert.equal(withDraft.produtoNovo.rastreamentoEstoqueAtivo, true);
+
+	const maintenance = setLineDestination(withDraft, "manutencao");
+	assert.equal(maintenance.contaContabilId, "manutencao");
+	assert.equal(maintenance.produtoNovo?.rastreamentoEstoqueAtivo, false);
+	assert.equal(maintenance.produtoNovo?.vendavel, false);
+	assert.equal(maintenance.modificadoresCusto?.[0].tratamento, "CUSTO_ESTOQUE");
+	// Only taxes are moved to cost; other modifiers keep waiting for the operator.
+	assert.equal(maintenance.modificadoresCusto?.[1].tratamento, null);
+
+	const back = setLineDestination(maintenance, null);
+	assert.equal(back.contaContabilId, null);
+	assert.equal(back.produtoNovo?.rastreamentoEstoqueAtivo, true);
+	assert.equal(buildNewProductDraft(maintenance, "new-2").rastreamentoEstoqueAtivo, false);
+});
+
+test("shared destination is the common one, or undefined when lines disagree", () => {
+	assert.equal(getSharedLinesDestination([line({ id: "a" }), line({ id: "b" })]), null);
+	assert.equal(getSharedLinesDestination([line({ id: "a", contaContabilId: "m" }), line({ id: "b", contaContabilId: "m" })]), "m");
+	assert.equal(getSharedLinesDestination([line({ id: "a", contaContabilId: "m" }), line({ id: "b" })]), undefined);
+	assert.equal(getSharedLinesDestination([line({ id: "a", contaContabilId: "m" }), line({ id: "b", incluir: false })]), "m");
 });

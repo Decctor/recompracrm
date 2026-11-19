@@ -1,9 +1,12 @@
 "use client";
 
 import { StageShell } from "@/app/dashboard/growth/campaigns/_module/builder/components/stage-shell";
+import { getPurchaseDestinationLabel } from "@/app/dashboard/purchases/components/PurchaseDestinationSelect";
+import { getPurchaseItemsTotal } from "@/components/Modals/Purchases/Blocks/Items";
+import { usePurchaseDestinationAccounts } from "@/lib/queries/purchases";
 import { formatDateAsLocale, formatToMoney } from "@/lib/formatting";
-import { Boxes, Brain, Building2, FileText, PackagePlus, ShoppingCart, Truck, Wallet, type LucideIcon } from "lucide-react";
-import { resolveNewProducts } from "../helpers/review-lines";
+import { Boxes, Brain, Building2, FileText, PackagePlus, Receipt, ShoppingCart, Truck, Wallet, type LucideIcon } from "lucide-react";
+import { getLineTotal, resolveNewProducts } from "../helpers/review-lines";
 import type { TBuilderStageId } from "../helpers/stages";
 import { BUILDER_STAGES } from "../helpers/stages";
 import { useBuilder } from "../components/builder-provider";
@@ -26,6 +29,18 @@ export default function StageReview({ onSubmit, submitting }: { onSubmit: () => 
 			).length
 		: 0;
 	const documento = importData?.documento ?? null;
+	const { data: destinationAccounts } = usePurchaseDestinationAccounts();
+
+	// Quanto vai para cada destino. Nulo = estoque; as demais contas não passam pelo estoque.
+	const destinationTotals = new Map<string | null, { count: number; total: number }>();
+	const addToDestination = (destination: string | null, total: number) => {
+		const current = destinationTotals.get(destination) ?? { count: 0, total: 0 };
+		destinationTotals.set(destination, { count: current.count + 1, total: current.total + total });
+	};
+	for (const line of lines) if (line.incluir) addToDestination(line.contaContabilId ?? null, getLineTotal(line));
+	for (const item of state.purchaseItems) if (!item.deletar) addToDestination(item.contaContabilId ?? null, getPurchaseItemsTotal([item]));
+	const stockItemsCount = destinationTotals.get(null)?.count ?? 0;
+	const ownDestinations = [...destinationTotals].filter((entry): entry is [string, { count: number; total: number }] => entry[0] !== null);
 
 	const cards: { icon: LucideIcon; label: string; main: string; sub: string; stage: TBuilderStageId }[] = [
 		{
@@ -84,12 +99,18 @@ export default function StageReview({ onSubmit, submitting }: { onSubmit: () => 
 		icon: FileText,
 		text: `Criar o lançamento contábil de ${formatToMoney(entry.valor)}${activeTransactions.length ? ` com ${activeTransactions.length} ${activeTransactions.length === 1 ? "transação" : "transações"} a pagar` : ""}.`,
 	});
-	effects.push({
-		icon: Boxes,
-		text: received
-			? `Dar entrada de ${summary.itemsCount} ${summary.itemsCount === 1 ? "item" : "itens"} no estoque agora e travar a composição.`
-			: "Dar entrada no estoque somente quando você registrar o recebimento.",
-	});
+	for (const [accountId, destination] of ownDestinations)
+		effects.push({
+			icon: Receipt,
+			text: `Lançar ${formatToMoney(destination.total)} (${destination.count} ${destination.count === 1 ? "item" : "itens"}) em ${getPurchaseDestinationLabel(accountId, destinationAccounts)}, sem entrada no estoque${received ? "" : ", ao registrar o recebimento"}.`,
+		});
+	if (stockItemsCount > 0)
+		effects.push({
+			icon: Boxes,
+			text: received
+				? `Dar entrada de ${stockItemsCount} ${stockItemsCount === 1 ? "item" : "itens"} no estoque agora e travar a composição.`
+				: "Dar entrada no estoque somente quando você registrar o recebimento.",
+		});
 
 	return (
 		<StageShell>

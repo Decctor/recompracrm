@@ -166,6 +166,62 @@ Para todo lançamento:
 soma dos débitos = soma dos créditos = valor do lançamento
 ```
 
+## Destino do item
+
+Todo item de compra é um produto — a entidade dos bens físicos —, mas nem todo produto comprado vira estoque. Material de manutenção, reforma ou uso e consumo é comprado com nota e entra na compra como qualquer outro item, só que o custo dele vai direto para uma conta própria.
+
+O destino é escolhido **na entrada da nota**, item a item (`purchase_items.conta_contabil_id`). Não existe destino padrão por produto, por fornecedor nem por organização além do de sempre: nulo é o débito padrão de compras (a conta de estoque). A tela oferece "Destino da nota" para preencher todos os itens de uma vez e o seletor por linha para a nota mista.
+
+**Regra central: o item só movimenta estoque quando o destino é o estoque.** Com conta própria, o recebimento não gera saldo, custo médio nem lote, e o custo do item (`valorTotalCusto`: mercadoria + modificadores `CUSTO_ESTOQUE`) é debitado na conta escolhida em vez da conta de estoque. Assim o saldo físico (quantidade × custo médio) e a conta de estoque nunca divergem.
+
+| Destino              | Estoque físico          | Débito do custo do item         |
+| -------------------- | ----------------------- | ------------------------------- |
+| nulo (estoque)       | entrada, custo médio, lote | `debitoContaId` (Estoques)   |
+| conta de despesa     | nenhum                  | a conta (ex.: Manutenção e Reparos) |
+| conta de ativo       | nenhum                  | a conta (ex.: Benfeitorias)     |
+
+- Só contas de natureza ativo, custo ou despesa são aceitas. Escolher a própria conta de estoque grava nulo, para que a decisão de estoque dependa só do item gravado — nunca de uma configuração que pode mudar entre o recebimento e um cancelamento.
+- O recebimento e o estorno leem o destino **gravado** no item, então entrada e saída de estoque ficam simétricas.
+- Produto novo criado por um item fora do estoque nasce sem rastreio de estoque e não vendável. A disponibilidade para venda é decidida na compra, produto a produto, e o padrão é não vendável.
+- Tributos de item fora do estoque: a tela passa IPI, ICMS-ST e FCP-ST marcados como crédito (ou sem tratamento) para `CUSTO_ESTOQUE`, que no item fora do estoque significa custo debitado na conta de destino. Material de uso e consumo não dá crédito de ICMS/IPI, e o crédito de ativo imobilizado (CIAP) não é apurado aqui. É sugestão da tela; a regra concreta deve ser confirmada com a contabilidade.
+- Compra recebida: os itens continuam congelados, com uma exceção — trocar a conta de um item **entre contas fora do estoque** (manutenção → benfeitorias) só refaz as linhas contábeis. Entrar ou sair do estoque exige cancelar e refazer a compra.
+
+Exemplo de nota mista:
+
+```text
+Débito — Estoques                      R$ 800
+Débito — Manutenção e Reparos          R$ 150
+Débito — Benfeitorias                  R$  50
+Crédito — Fornecedores                 R$ 1.000
+```
+
+O plano de contas padrão traz Imobilizado (1.6, com Máquinas, Móveis e Equipamentos 1.6.1 e Benfeitorias em Imóveis de Terceiros 1.6.2), Manutenção e Reparos (6.6) e Material de Uso e Consumo (6.7). Organizações anteriores recebem essas contas por `scripts/provision-purchase-destination-accounts.ts`, que só cria contas cujo código está livre.
+
+## Cancelamento
+
+`POST /api/purchases/cancel` (o `PUT` recusa a transição para `CANCELADA`). Cancelar:
+
+1. desfaz a entrada de estoque dos itens que entraram no estoque (exige lotes intactos);
+2. estorna o lançamento **linha a linha** (`buildReversalAccountingEntryLines`): cada linha volta com a natureza invertida, na mesma conta — inverter só o par legado perderia as pernas de destino próprio e de tributos;
+3. aplica a decisão escolhida para cada parcela.
+
+| Parcela  | Opções                                                                                   |
+| -------- | ---------------------------------------------------------------------------------------- |
+| Pendente | `CANCELAR` — deixa de ser devida · `MANTER` — continua devida (multa, valor negociado)    |
+| Paga     | `DEVOLUCAO` — o fornecedor devolve, vira entrada prevista · `PERDA` — o valor não volta  |
+
+O que fica com a organização sem contrapartida (`MANTER` + `PERDA`) é o **custo do cancelamento**: o estorno não o devolve a Fornecedores e o debita na conta escolhida (padrão: a conta de despesas do período de compras). O estorno mantém o valor do lançamento original e continua balanceado:
+
+```text
+Compra de R$ 1.000 em manutenção, R$ 400 pagos e assumidos como perda, R$ 600 pendentes cancelados
+
+Estorno: Crédito — Manutenção e Reparos   R$ 1.000
+         Débito  — Fornecedores           R$   600
+         Débito  — Despesa do cancelamento R$   400
+```
+
+A parcela pendente cancelada ganha `data_cancelamento` e sai de contas a pagar/receber, fluxo de caixa, conciliação e estatísticas, mas continua no histórico do lançamento. Só parcela pendente é cancelada: dinheiro que já se moveu vira devolução ou perda. As devoluções nascem como transações de entrada pendentes no lançamento de estorno (`accounting_entries.compra_id`, origem `ESTORNO`).
+
 ## Importação documental
 
 XML de NF-e é interpretado deterministicamente e nunca enviado a um modelo de IA. PDF e imagem usam o extrator visual existente, mas ambos produzem a mesma forma normalizada.
@@ -184,6 +240,9 @@ O snapshot **não** guarda bucket nem caminho: o objeto privado é localizado po
 - Rateio fecha exatamente em centavos.
 - Compra recebida não aceita alteração silenciosa de custos.
 - Linhas contábeis sempre se balanceiam.
+- Item com destino próprio debita a conta escolhida e não gera linha de estoque.
+- Estorno inverte cada linha e retém o custo do cancelamento sem desbalancear.
+- Resolução de parcela incompatível com o estado dela (pendente × paga) é recusada.
 - XML malformado, com DTD ou entidade customizada é rejeitado.
 
 ## Manutenção

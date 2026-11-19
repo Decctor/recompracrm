@@ -12,7 +12,7 @@ import { DEFAULT_PAGE_SIZE, pageSizeInputSchema } from "@/lib/pagination";
 import { FinancialTransactionSchema } from "@/schemas/financial";
 import { FinancialTransactionTypeEnum, PaymentMethodEnum, TFinancialTransactionTypeEnum, TPaymentMethodEnum } from "@/schemas/enums";
 
-const VALID_STATUSES = ["pendente", "efetivada", "em-atraso"] as const;
+const VALID_STATUSES = ["pendente", "efetivada", "em-atraso", "cancelada"] as const;
 export type TFinancialTransactionStatus = (typeof VALID_STATUSES)[number];
 
 const GetFinancialTransactionsInputSchema = z.object({
@@ -84,15 +84,26 @@ async function getFinancialTransactions({ input, session }: { input: TGetFinanci
 	if (statusesArr.length > 0) {
 		const statusConditions: SQL<unknown>[] = [];
 		if (statusesArr.includes("pendente")) {
-			const c = and(isNull(financialTransactions.dataEfetivacao), gte(financialTransactions.dataPrevisao, now));
+			const c = and(
+				isNull(financialTransactions.dataEfetivacao),
+				isNull(financialTransactions.dataCancelamento),
+				gte(financialTransactions.dataPrevisao, now),
+			);
 			if (c) statusConditions.push(c);
 		}
 		if (statusesArr.includes("efetivada")) {
 			statusConditions.push(isNotNull(financialTransactions.dataEfetivacao));
 		}
 		if (statusesArr.includes("em-atraso")) {
-			const c = and(isNull(financialTransactions.dataEfetivacao), lte(financialTransactions.dataPrevisao, now));
+			const c = and(
+				isNull(financialTransactions.dataEfetivacao),
+				isNull(financialTransactions.dataCancelamento),
+				lte(financialTransactions.dataPrevisao, now),
+			);
 			if (c) statusConditions.push(c);
+		}
+		if (statusesArr.includes("cancelada")) {
+			statusConditions.push(isNotNull(financialTransactions.dataCancelamento));
 		}
 		if (statusConditions.length > 0) {
 			const orCondition = or(...statusConditions);
@@ -177,6 +188,7 @@ async function updateFinancialTransaction({ input, orgId }: { input: TUpdateFina
 	});
 
 	if (!transaction) throw new createHttpError.NotFound("Transação financeira não encontrada.");
+	if (transaction.dataCancelamento) throw new createHttpError.BadRequest("Transação cancelada não pode ser alterada.");
 	if (!transaction.dataEfetivacao) {
 		throw new createHttpError.BadRequest("Transação ainda não efetivada. Efetive antes de ajustar os dados.");
 	}

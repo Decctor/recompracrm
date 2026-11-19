@@ -4,6 +4,7 @@ import type {
 	TImportPurchaseCompositionStageEvent,
 	TImportPurchaseCompositionStreamEvent,
 } from "@/app/api/purchases/import-composition/route";
+import type { TCancelPurchaseInput, TCancelPurchaseOutput } from "@/app/api/purchases/cancel/route";
 import { TCreatePurchaseInput, TCreatePurchaseOutput, TUpdatePurchaseInput, TUpdatePurchaseOutput } from "@/app/api/purchases/route";
 import axios from "axios";
 
@@ -14,6 +15,12 @@ export async function createPurchase(input: TCreatePurchaseInput) {
 
 export async function updatePurchase(input: TUpdatePurchaseInput) {
 	const { data } = await axios.put<TUpdatePurchaseOutput>("/api/purchases", input);
+	return data;
+}
+
+/** Cancela a compra: estorna o lançamento e aplica a resolução escolhida para cada parcela. */
+export async function cancelPurchase(input: TCancelPurchaseInput) {
+	const { data } = await axios.post<TCancelPurchaseOutput>("/api/purchases/cancel", input);
 	return data;
 }
 

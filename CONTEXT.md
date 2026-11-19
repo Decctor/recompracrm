@@ -70,6 +70,14 @@ Decisão contábil aplicada a um modificador: capitalizar no custo do estoque, r
 
 Valor imutável atribuído ao item quando a compra é recebida. Inclui o valor líquido da mercadoria e os modificadores tratados como custo de estoque; alimenta o custo médio móvel do produto ou variante.
 
+### Destino do item da compra (`purchaseItemDestination`)
+
+Conta contábil que recebe o custo de um item de compra, escolhida na entrada da nota. Nula significa estoque (o padrão): o item entra no saldo, no custo médio e em lote. Preenchida (manutenção, reforma, uso e consumo, imobilizado), o item continua sendo um produto, mas não entra no estoque — o custo vai direto para a conta.
+
+### Cancelamento de compra (`purchaseCancellation`)
+
+Estorno linha a linha do lançamento da compra mais uma decisão por parcela: pendente é cancelada ou mantida; paga volta como devolução a receber ou fica como perda. Parcelas mantidas e perdas formam o custo do cancelamento, reconhecido numa conta própria.
+
 ### Documento importado da compra (`purchaseImportedDocument`)
 
 Snapshot da origem documental de uma compra, como NF-e XML, PDF ou imagem. Preserva identificação, totais declarados, hash e referência privada ao arquivo, sem adquirir ciclo de vida próprio fora da compra.

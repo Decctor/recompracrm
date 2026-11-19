@@ -15,6 +15,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { TONE_CLASSES } from "../../builder/components/builder-ui";
 import type { TPurchaseById } from "../helpers/hydrate";
+import CancelPurchaseDialog from "./cancel-purchase-dialog";
 
 type PurchaseDetailHeaderProps = {
 	purchase: TPurchaseById;
@@ -25,7 +26,6 @@ type PurchaseDetailHeaderProps = {
 	itemsMatchValue: boolean;
 	hasUnsavedChanges: boolean;
 	onReceive: (receivedAt: Date) => void;
-	onCancel: () => void;
 };
 
 function formatShortDateTime(value: Date | string | null | undefined) {
@@ -48,7 +48,6 @@ export default function PurchaseDetailHeader({
 	itemsMatchValue,
 	hasUnsavedChanges,
 	onReceive,
-	onCancel,
 }: PurchaseDetailHeaderProps) {
 	const [receiveOpen, setReceiveOpen] = useState(false);
 	const [cancelOpen, setCancelOpen] = useState(false);
@@ -156,7 +155,10 @@ export default function PurchaseDetailHeader({
 			{isCancelled ? (
 				<div className={cn("flex w-full max-w-2xl items-center gap-2 rounded-lg px-3 py-2 text-xs", TONE_CLASSES.bad)}>
 					<XCircle className="h-4 w-4 shrink-0" />
-					Compra cancelada. Ela não pode mais ser editada.
+					<span>
+						Compra cancelada{purchase.dataCancelamento ? ` em ${formatDateAsLocale(purchase.dataCancelamento)}` : ""}. Ela não pode mais ser editada.
+						{purchase.cancelamentoMotivo ? ` Motivo: ${purchase.cancelamentoMotivo}` : ""}
+					</span>
 				</div>
 			) : (
 				<ol className="flex w-full max-w-2xl items-center" aria-label="Situação da compra">
@@ -226,34 +228,7 @@ export default function PurchaseDetailHeader({
 				</DialogContent>
 			</Dialog>
 
-			<Dialog open={cancelOpen} onOpenChange={setCancelOpen}>
-				<DialogContent className="max-w-md">
-					<DialogHeader>
-						<DialogTitle>Cancelar compra?</DialogTitle>
-						<DialogDescription>
-							{isReceived
-								? "A entrada no estoque é estornada e os lotes são descartados. Só é possível se nenhum lote desta compra foi usado."
-								: "A compra deixa de valer e não poderá mais ser editada."}{" "}
-							O lançamento contábil e as transações não são apagados.
-						</DialogDescription>
-					</DialogHeader>
-					<DialogFooter>
-						<Button variant="outline" onClick={() => setCancelOpen(false)}>
-							VOLTAR
-						</Button>
-						<LoadingButton
-							variant="destructive"
-							loading={isSaving}
-							onClick={() => {
-								onCancel();
-								setCancelOpen(false);
-							}}
-						>
-							CANCELAR COMPRA
-						</LoadingButton>
-					</DialogFooter>
-				</DialogContent>
-			</Dialog>
+			{cancelOpen ? <CancelPurchaseDialog purchase={purchase} open={cancelOpen} onOpenChange={setCancelOpen} /> : null}
 		</div>
 	);
 }

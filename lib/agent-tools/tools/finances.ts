@@ -9,7 +9,7 @@ import {
 	financialTransactions,
 	sales,
 } from "@/services/drizzle/schema";
-import { and, asc, count, eq, gte, lte, notExists, sql, sum, type SQL } from "drizzle-orm";
+import { and, asc, count, eq, gte, isNull, lte, notExists, sql, sum, type SQL } from "drizzle-orm";
 import z from "zod";
 import { resolveOrganizationScope } from "../organization-scope";
 import { PERIOD_DESCRIPTION, PeriodInputSchema, resolvePeriod } from "../period";
@@ -154,6 +154,7 @@ export const getFinancialTransactionsTool = defineAgentTool({
 		if (input.vendaId) conditions.push(eq(accountingEntries.vendaId, input.vendaId));
 		if (!input.incluirCanceladas) {
 			conditions.push(sql`coalesce(${financialTransactions.provedorStatus}, '') not in ('CANCELADO', 'ESTORNADO')`);
+			conditions.push(isNull(financialTransactions.dataCancelamento));
 		}
 		if (input.apenasSemConciliacao) {
 			conditions.push(
@@ -187,6 +188,7 @@ export const getFinancialTransactionsTool = defineAgentTool({
 					titulo: financialTransactions.titulo,
 					provedorStatus: financialTransactions.provedorStatus,
 					dataEfetivacao: financialTransactions.dataEfetivacao,
+					dataCancelamento: financialTransactions.dataCancelamento,
 					dataPrevisao: financialTransactions.dataPrevisao,
 					parcela: financialTransactions.parcela,
 					totalParcelas: financialTransactions.totalParcelas,
@@ -243,6 +245,7 @@ export const getFinancialTransactionsTool = defineAgentTool({
 				titulo: row.titulo,
 				provedorStatus: row.provedorStatus,
 				dataEfetivacao: formatOperationLocalDateTime(row.dataEfetivacao),
+				dataCancelamento: formatOperationLocalDateTime(row.dataCancelamento),
 				dataPrevisao: formatOperationLocalDateTime(row.dataPrevisao),
 				parcela: row.parcela,
 				totalParcelas: row.totalParcelas,

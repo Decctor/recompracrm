@@ -1,3 +1,8 @@
+import {
+	getPurchaseDestinationLabel,
+	PurchaseDestinationSelect,
+	type TPurchaseDestinationAccounts,
+} from "@/app/dashboard/purchases/components/PurchaseDestinationSelect";
 import DateInput from "@/components/Inputs/DateInput";
 import SelectProductWithVariants, { type TSelectProductWithVariantsValue } from "@/components/Inputs/SelectProductWithVariants";
 import DeleteRowButton from "@/components/Spreadsheet/DeleteRowButton";
@@ -9,6 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Input } from "@/components/ui/input";
 import { formatDateForInputValue, formatDateOnInputChange, formatNameAsInitials, formatToMoney } from "@/lib/formatting";
 import { calculatePurchaseItemCost, resolvePurchaseCostModifierSnapshot } from "@/lib/purchase/costing";
+import { adjustTaxTreatmentsForDestination, purchaseItemEntersStock } from "@/lib/purchase/destination";
 import {
 	consumeProgrammaticSpreadsheetFocus,
 	handleSpreadsheetNavigationKeyDown,
@@ -47,6 +53,11 @@ type PurchaseItemsBlockProps = {
 	importedDocuments?: TUsePurchaseState["state"]["purchase"]["documentosImportados"];
 	/** When the purchase is already received, items are frozen to preserve the lots they spawned. */
 	locked?: boolean;
+	/**
+	 * Contas de destino do custo. Informadas, cada item ganha o seletor de destino (estoque ou uma conta
+	 * própria). Com a compra travada, só itens fora do estoque trocam de conta. Ver lib/purchase/destination.ts.
+	 */
+	destinationAccounts?: TPurchaseDestinationAccounts;
 };
 
 type TPurchaseItemState = TUsePurchaseState["state"]["purchaseItems"][number];
@@ -63,6 +74,7 @@ export default function PurchaseItemsBlock({
 	fornecedorId = null,
 	importedDocuments,
 	locked = false,
+	destinationAccounts,
 }: PurchaseItemsBlockProps) {
 	const [importModalIsOpen, setImportModalIsOpen] = useState(false);
 	const visibleItems = useMemo(() => purchaseItems.map((item, index) => ({ item, index })).filter(({ item }) => !item.deletar), [purchaseItems]);
@@ -124,6 +136,7 @@ export default function PurchaseItemsBlock({
 							key={item.id ?? `${item.produtoId}-${item.produtoVarianteId ?? "produto"}-${index}`}
 							item={item}
 							locked={locked}
+							destinationAccounts={destinationAccounts}
 							gridRow={rowIndex}
 							gridBounds={gridBounds}
 							handleUpdate={(updatedItem) => updatePurchaseItem({ index, item: normalizeItemValues({ ...item, ...updatedItem }) })}
@@ -154,15 +167,20 @@ export default function PurchaseItemsBlock({
 type PurchaseCompositionTableItemProps = {
 	item: TPurchaseItemState;
 	locked: boolean;
+	destinationAccounts?: TPurchaseDestinationAccounts;
 	gridRow: number;
 	gridBounds: SpreadsheetGridBounds;
 	handleUpdate: (item: Partial<TPurchaseItemState>) => void;
 	handleRemove: () => void;
 };
 
-function PurchaseCompositionTableItem({ item, locked, gridRow, gridBounds, handleUpdate, handleRemove }: PurchaseCompositionTableItemProps) {
+function PurchaseCompositionTableItem({ item, locked, destinationAccounts, gridRow, gridBounds, handleUpdate, handleRemove }: PurchaseCompositionTableItemProps) {
 	const rowTotal = getItemTotal(item);
 	const lots = item.lotes ?? [];
+	const entersStock = purchaseItemEntersStock(item);
+	const destination = destinationAccounts ? (
+		<PurchaseItemDestinationControl item={item} locked={locked} accounts={destinationAccounts} handleUpdate={handleUpdate} />
+	) : null;
 
 	return (
 		<div className="border-t border-border first:border-t-0">
@@ -175,7 +193,7 @@ function PurchaseCompositionTableItem({ item, locked, gridRow, gridBounds, handl
 							<ProductCell item={item} gridRow={gridRow} gridCol={PURCHASE_ITEM_GRID_COL.PRODUCT} gridBounds={gridBounds} onChange={handleUpdate} />
 						)}
 					</div>
-					<PurchaseItemExpiryControl item={item} locked={locked} lots={lots} handleUpdate={handleUpdate} />
+					{entersStock ? <PurchaseItemExpiryControl item={item} locked={locked} lots={lots} handleUpdate={handleUpdate} /> : null}
 					<PurchaseItemCostModifiersControl item={item} locked={locked} handleUpdate={handleUpdate} />
 				</div>
 				<p className="w-[9%] truncate px-2 text-center text-muted-foreground">{item.produto.unidade || "UN"}</p>
@@ -251,12 +269,13 @@ function PurchaseCompositionTableItem({ item, locked, gridRow, gridBounds, handl
 					)}
 				</div>
 			</div>
+			{destination ? <div className="hidden items-center gap-2 px-3 pb-2 lg:flex">{destination}</div> : null}
 
 			<div className="flex w-full flex-col gap-2 p-2 lg:hidden">
 				<div className="flex w-full items-start justify-between gap-2">
 					<div className="min-w-0 flex-1">{locked ? <StaticProductLabel item={item} /> : <ProductCell item={item} onChange={handleUpdate} />}</div>
 					<div className="flex shrink-0 items-center gap-1.5">
-						<PurchaseItemExpiryControl item={item} locked={locked} lots={lots} handleUpdate={handleUpdate} />
+						{entersStock ? <PurchaseItemExpiryControl item={item} locked={locked} lots={lots} handleUpdate={handleUpdate} /> : null}
 						<PurchaseItemCostModifiersControl item={item} locked={locked} handleUpdate={handleUpdate} />
 						{locked ? (
 							<Lock className="mt-1 h-3.5 w-3.5 text-muted-foreground" />
@@ -314,11 +333,53 @@ function PurchaseCompositionTableItem({ item, locked, gridRow, gridBounds, handl
 						</MobileEditableField>
 					)}
 				</div>
+				{destination}
 				<div className="flex w-full items-center justify-between gap-2 rounded-md bg-muted/50 px-2 py-1.5">
 					<span className="text-[0.65rem] font-medium uppercase text-muted-foreground">Total</span>
 					<span className="font-mono text-xs font-medium tabular-nums">{rowTotal > 0 ? formatToMoney(rowTotal) : "-"}</span>
 				</div>
 			</div>
+		</div>
+	);
+}
+
+/**
+ * Para onde vai o custo do item. Fora do estoque o item não gera saldo nem lote (a validade some) e os
+ * tributos passam a compor o custo. Recebida, a compra só deixa trocar entre contas próprias: entrar ou
+ * sair do estoque mexeria em saldo já movimentado.
+ */
+function PurchaseItemDestinationControl({
+	item,
+	locked,
+	accounts,
+	handleUpdate,
+}: {
+	item: TPurchaseItemState;
+	locked: boolean;
+	accounts: TPurchaseDestinationAccounts;
+	handleUpdate: (item: Partial<TPurchaseItemState>) => void;
+}) {
+	const entersStock = purchaseItemEntersStock(item);
+	function changeDestination(contaContabilId: string | null) {
+		const nextEntersStock = contaContabilId == null;
+		const snapshot = item.modificadoresCusto ?? null;
+		handleUpdate({
+			contaContabilId,
+			dataValidade: nextEntersStock ? item.dataValidade : null,
+			modificadoresCusto: snapshot
+				? { ...snapshot, modificadores: adjustTaxTreatmentsForDestination({ modifiers: snapshot.modificadores, entersStock: nextEntersStock }) }
+				: snapshot,
+		});
+	}
+	return (
+		<div className="flex min-w-0 items-center gap-2">
+			<span className="shrink-0 text-[0.65rem] font-medium uppercase text-muted-foreground">Destino</span>
+			{locked && entersStock ? (
+				<span className="text-xs text-muted-foreground">{getPurchaseDestinationLabel(item.contaContabilId, accounts)}</span>
+			) : (
+				<PurchaseDestinationSelect value={item.contaContabilId} onChange={changeDestination} accounts={accounts} allowStock={!locked} />
+			)}
+			{!entersStock ? <span className="hidden text-[0.7rem] text-muted-foreground sm:inline">Não entra no estoque.</span> : null}
 		</div>
 	);
 }

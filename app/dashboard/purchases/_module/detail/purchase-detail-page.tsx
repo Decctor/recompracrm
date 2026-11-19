@@ -98,14 +98,12 @@ export default function PurchaseDetailPage({ membership, purchaseId }: PurchaseD
 	const balanceError = getAccountingEntryBalanceError({ entryValue, transactions: state.lancamentoContabil.transacoes });
 	const transactionsRemaining = Math.round((entryValue - getActiveTransactionsTotal(state.lancamentoContabil.transacoes)) * 100) / 100;
 
-	/** Saves the whole page. Status changes (receive, cancel) go through here too, with any pending edits. */
+	/** Saves the whole page. Receiving goes through here too, with any pending edits; cancelling has its own flow. */
 	function save(purchaseOverrides: Partial<TPurchaseState["purchase"]> = {}) {
 		const nextPurchase = { ...state.purchase, ...purchaseOverrides };
-		if (nextPurchase.status !== "CANCELADA") {
-			if (balanceError) return toast.error(balanceError);
-			if (!isReceived && nextPurchase.status === "RECEBIDA" && !itemsMatchValue)
-				return toast.error(`O valor efetivo precisa ser igual ao total dos itens (${formatToMoney(itemsTotal)}) para receber a compra.`);
-		}
+		if (balanceError) return toast.error(balanceError);
+		if (!isReceived && nextPurchase.status === "RECEBIDA" && !itemsMatchValue)
+			return toast.error(`O valor efetivo precisa ser igual ao total dos itens (${formatToMoney(itemsTotal)}) para receber a compra.`);
 		savePurchase({
 			purchaseId,
 			purchase: nextPurchase,
@@ -133,8 +131,6 @@ export default function PurchaseDetailPage({ membership, purchaseId }: PurchaseD
 				itemsMatchValue={itemsMatchValue}
 				hasUnsavedChanges={isDirty}
 				onReceive={(receivedAt) => save({ status: "RECEBIDA", entregaDataRecebimentoEfetivacao: receivedAt })}
-				// A receipt date is only valid on RECEBIDA; the server's cancel path also clears it.
-				onCancel={() => save({ status: "CANCELADA", entregaDataRecebimentoEfetivacao: null })}
 			/>
 			<Tabs value={tab} onValueChange={(value) => setTab(value as TDetailTab)}>
 				<TabsList variant="page">
@@ -150,10 +146,25 @@ export default function PurchaseDetailPage({ membership, purchaseId }: PurchaseD
 					<RegistryTab purchase={purchase} editor={editor} editable={canEdit} />
 				</TabsContent>
 				<TabsContent value="itens" className="mt-4">
-					<ItemsTab purchase={purchase} editor={editor} baseline={baseline} editable={canEdit && !isReceived} isReceived={isReceived} />
+					<ItemsTab
+						purchase={purchase}
+						editor={editor}
+						baseline={baseline}
+						editable={canEdit && !isReceived}
+						isReceived={isReceived}
+						canReclassify={canEdit && isReceived}
+					/>
 				</TabsContent>
 				<TabsContent value="financeiro" className="mt-4">
-					<FinanceTab editor={editor} editable={canEdit} isReceived={isReceived} itemsTotal={itemsTotal} />
+					<FinanceTab
+						editor={editor}
+						editable={canEdit}
+						isReceived={isReceived}
+						itemsTotal={itemsTotal}
+						cancelledTransactionsCount={
+							isCancelled ? (purchase.lancamentoContabil?.transacoesFinanceiras ?? []).filter((transaction) => !!transaction.dataCancelamento).length : null
+						}
+					/>
 				</TabsContent>
 				<TabsContent value="documentos" className="mt-4">
 					<DocumentsTab purchase={purchase} state={state} />

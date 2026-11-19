@@ -1,6 +1,7 @@
 import { DBTransaction } from "@/services/drizzle";
 import { productStockLots, productStockTransactions, productVariants, products, purchaseItems } from "@/services/drizzle/schema";
 import { calculatePurchaseItemCost } from "@/lib/purchase/costing";
+import { purchaseItemEntersStock } from "@/lib/purchase/destination";
 import { isStockTrackingActive } from "@/lib/stock/apply-stock-movement";
 import type { TPurchaseCostModifiersSnapshot } from "@/schemas/purchases";
 import { and, eq, sql } from "drizzle-orm";
@@ -31,6 +32,10 @@ export type TPurchaseItemInput = {
 	externoFatorConversao?: number | null;
 	anotacoes?: string | null;
 	dataValidade?: Date | null;
+	// Conta de destino do custo. Nulo = estoque (padrão de compras da organização). Só o item de
+	// estoque movimenta saldo e gera lote; os demais são reconhecidos direto na conta. Ver
+	// lib/purchase/destination.ts.
+	contaContabilId?: string | null;
 };
 
 type HandlePurchaseItemStockProcessingParams = {
@@ -81,16 +86,17 @@ export async function handlePurchaseItemStockProcessing({
 		}
 
 		const persistedItemId = await persistPurchaseItemRow({ trx, organizationId, purchaseId, item });
-		await applyStockEntry({
-			trx,
-			organizationId,
-			userId,
-			purchaseId,
-			purchaseItemId: persistedItemId,
-			item,
-			unitCost,
-			reason: reasonOverride?.entry ?? DEFAULT_REASONS.receiving,
-		});
+		if (purchaseItemEntersStock(item))
+			await applyStockEntry({
+				trx,
+				organizationId,
+				userId,
+				purchaseId,
+				purchaseItemId: persistedItemId,
+				item,
+				unitCost,
+				reason: reasonOverride?.entry ?? DEFAULT_REASONS.receiving,
+			});
 		return;
 	}
 
@@ -100,22 +106,25 @@ export async function handlePurchaseItemStockProcessing({
 			return;
 		}
 
+		// O destino gravado decide o estorno, nunca o do payload: entrada e saída ficam simétricas.
 		const previousItem = await loadPreviousItem({ trx, organizationId, itemId: item.id! });
-		await applyStockExit({
-			trx,
-			organizationId,
-			userId,
-			purchaseId,
-			purchaseItemId: previousItem.id,
-			produtoId: previousItem.produtoId,
-			produtoVarianteId: previousItem.produtoVarianteId,
-			quantidade: previousItem.quantidade,
-			unitCost: resolveUnitCost(previousItem),
-			reason: reasonOverride?.exit ?? DEFAULT_REASONS.unreceiving,
-		});
-		// Reverse the lot spawned by this item's receipt. The route only allows un-receiving while lots
-		// are pristine, so zeroing here keeps the FEFO sub-ledger in sync with products.quantidade.
-		await discardPurchaseItemLot({ trx, organizationId, purchaseItemId: previousItem.id });
+		if (purchaseItemEntersStock(previousItem)) {
+			await applyStockExit({
+				trx,
+				organizationId,
+				userId,
+				purchaseId,
+				purchaseItemId: previousItem.id,
+				produtoId: previousItem.produtoId,
+				produtoVarianteId: previousItem.produtoVarianteId,
+				quantidade: previousItem.quantidade,
+				unitCost: resolveUnitCost(previousItem),
+				reason: reasonOverride?.exit ?? DEFAULT_REASONS.unreceiving,
+			});
+			// Reverse the lot spawned by this item's receipt. The route only allows un-receiving while lots
+			// are pristine, so zeroing here keeps the FEFO sub-ledger in sync with products.quantidade.
+			await discardPurchaseItemLot({ trx, organizationId, purchaseItemId: previousItem.id });
+		}
 
 		if (shouldDelete) {
 			await deletePurchaseItemRow({ trx, organizationId, itemId: item.id! });
@@ -128,32 +137,34 @@ export async function handlePurchaseItemStockProcessing({
 	if (operation === "UPDATING_RECEIVED") {
 		if (!isExisting) {
 			const persistedItemId = await persistPurchaseItemRow({ trx, organizationId, purchaseId, item });
-			await applyStockEntry({
-				trx,
-				organizationId,
-				userId,
-				purchaseId,
-				purchaseItemId: persistedItemId,
-				item,
-				unitCost,
-				reason: reasonOverride?.entry ?? DEFAULT_REASONS.receiving,
-			});
+			if (purchaseItemEntersStock(item))
+				await applyStockEntry({
+					trx,
+					organizationId,
+					userId,
+					purchaseId,
+					purchaseItemId: persistedItemId,
+					item,
+					unitCost,
+					reason: reasonOverride?.entry ?? DEFAULT_REASONS.receiving,
+				});
 			return;
 		}
 
 		const previousItem = await loadPreviousItem({ trx, organizationId, itemId: item.id! });
-		await applyStockExit({
-			trx,
-			organizationId,
-			userId,
-			purchaseId,
-			purchaseItemId: previousItem.id,
-			produtoId: previousItem.produtoId,
-			produtoVarianteId: previousItem.produtoVarianteId,
-			quantidade: previousItem.quantidade,
-			unitCost: resolveUnitCost(previousItem),
-			reason: reasonOverride?.exit ?? DEFAULT_REASONS.rollbackForUpdate,
-		});
+		if (purchaseItemEntersStock(previousItem))
+			await applyStockExit({
+				trx,
+				organizationId,
+				userId,
+				purchaseId,
+				purchaseItemId: previousItem.id,
+				produtoId: previousItem.produtoId,
+				produtoVarianteId: previousItem.produtoVarianteId,
+				quantidade: previousItem.quantidade,
+				unitCost: resolveUnitCost(previousItem),
+				reason: reasonOverride?.exit ?? DEFAULT_REASONS.rollbackForUpdate,
+			});
 
 		if (shouldDelete) {
 			await deletePurchaseItemRow({ trx, organizationId, itemId: item.id! });
@@ -161,16 +172,17 @@ export async function handlePurchaseItemStockProcessing({
 		}
 
 		await persistPurchaseItemRow({ trx, organizationId, purchaseId, item });
-		await applyStockEntry({
-			trx,
-			organizationId,
-			userId,
-			purchaseId,
-			purchaseItemId: item.id!,
-			item,
-			unitCost,
-			reason: reasonOverride?.entry ?? DEFAULT_REASONS.reapplyForUpdate,
-		});
+		if (purchaseItemEntersStock(item))
+			await applyStockEntry({
+				trx,
+				organizationId,
+				userId,
+				purchaseId,
+				purchaseItemId: item.id!,
+				item,
+				unitCost,
+				reason: reasonOverride?.entry ?? DEFAULT_REASONS.reapplyForUpdate,
+			});
 		return;
 	}
 
@@ -295,6 +307,7 @@ async function persistPurchaseItemRow({ trx, organizationId, purchaseId, item }:
 				externoFatorConversao: item.externoFatorConversao ?? null,
 				anotacoes: item.anotacoes ?? null,
 				dataValidade: item.dataValidade ?? null,
+				contaContabilId: item.contaContabilId ?? null,
 			})
 			.where(and(eq(purchaseItems.id, item.id), eq(purchaseItems.organizacaoId, organizationId)));
 		return item.id;
@@ -325,6 +338,7 @@ async function persistPurchaseItemRow({ trx, organizationId, purchaseId, item }:
 			externoFatorConversao: item.externoFatorConversao ?? null,
 			anotacoes: item.anotacoes ?? null,
 			dataValidade: item.dataValidade ?? null,
+			contaContabilId: item.contaContabilId ?? null,
 		})
 		.returning({ id: purchaseItems.id });
 

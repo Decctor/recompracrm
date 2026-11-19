@@ -144,6 +144,8 @@ export async function runStatementMatching({
 		where: and(
 			eq(financialTransactions.organizacaoId, organizacaoId),
 			or(eq(financialTransactions.contaFinanceiraId, contaFinanceiraId), isNull(financialTransactions.contaFinanceiraId)),
+			// Parcela cancelada nunca vai aparecer no extrato: não é candidata.
+			isNull(financialTransactions.dataCancelamento),
 			gte(financialTransactions.dataPrevisao, new Date(windowStart.getTime() - 90 * DAY_MS)),
 			lte(financialTransactions.dataPrevisao, windowEnd),
 		),

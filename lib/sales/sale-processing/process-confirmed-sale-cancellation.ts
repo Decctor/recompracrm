@@ -117,9 +117,15 @@ export async function processConfirmedSaleCancellation({
 		}
 
 		for (const transaction of sale.lancamentosContabeis.flatMap((entry) => entry.transacoesFinanceiras)) {
+			// `provedorStatus` segue sendo o que os leitores de venda (fiado, fatura de cartão) consultam;
+			// `dataCancelamento` é o que tira a parcela pendente de contas a receber e do fluxo de caixa.
+			const cancelsPending = !transaction.dataEfetivacao && !transaction.dataCancelamento;
 			await tx
 				.update(financialTransactions)
-				.set({ provedorStatus: transaction.dataEfetivacao ? "ESTORNADO" : "CANCELADO" })
+				.set({
+					provedorStatus: transaction.dataEfetivacao ? "ESTORNADO" : "CANCELADO",
+					...(cancelsPending ? { dataCancelamento: new Date(), cancelamentoMotivo: `Venda cancelada: ${reason}`, cancelamentoAutorId: authorId } : {}),
+				})
 				.where(eq(financialTransactions.id, transaction.id));
 		}
 		// Venda de conta: os recebimentos parciais vivem no mesmo lançamento (já estornado acima);

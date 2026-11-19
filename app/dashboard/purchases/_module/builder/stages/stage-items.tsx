@@ -1,6 +1,7 @@
 "use client";
 
 import { StageShell } from "@/app/dashboard/growth/campaigns/_module/builder/components/stage-shell";
+import { PurchaseDestinationSelect, type TPurchaseDestinationAccounts } from "@/app/dashboard/purchases/components/PurchaseDestinationSelect";
 import PurchaseItemsBlock from "@/components/Modals/Purchases/Blocks/Items";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,11 +13,13 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { formatNameAsInitials, formatToMoney } from "@/lib/formatting";
+import { adjustTaxTreatmentsForDestination } from "@/lib/purchase/destination";
+import { usePurchaseDestinationAccounts } from "@/lib/queries/purchases";
 import { describeConvertedLine } from "@/lib/purchase/units";
 import { cn } from "@/lib/utils";
 import { ArrowRight, BadgeDollarSign, Check, CircleCheck, Ellipsis, EyeOff, ListTodo, Plus, Undo2 } from "lucide-react";
 import { useState } from "react";
-import { getLineIssue, getLineStatus, getLineTotal, type TReviewLine } from "../helpers/review-lines";
+import { getLineIssue, getLineStatus, getLineTotal, getSharedLinesDestination, setLineDestination, type TReviewLine } from "../helpers/review-lines";
 import { BUILDER_STAGES } from "../helpers/stages";
 import { useBuilder } from "../components/builder-provider";
 import { StatusPill, TONE_CLASSES } from "../components/builder-ui";
@@ -37,6 +40,7 @@ type TFilter = "all" | "pending" | "ready" | "ignored";
 export default function StageItems() {
 	const { origin, back, next, queueOpen, state, addPurchaseItem, updatePurchaseItem, removePurchaseItem } = useBuilder();
 	const { activeValidation } = useBuilderSummary();
+	const { data: destinationAccounts } = usePurchaseDestinationAccounts();
 	const stage = BUILDER_STAGES.items;
 
 	return (
@@ -55,6 +59,7 @@ export default function StageItems() {
 						addPurchaseItem={addPurchaseItem}
 						updatePurchaseItem={updatePurchaseItem}
 						removePurchaseItem={removePurchaseItem}
+						destinationAccounts={destinationAccounts}
 					/>
 				)}
 			</StageShell.Body>
@@ -69,7 +74,8 @@ export default function StageItems() {
 }
 
 function ReviewTable() {
-	const { lines, updateLine, openQueue, importData, state, addPurchaseItem, updatePurchaseItem, removePurchaseItem } = useBuilder();
+	const { lines, updateLine, setLines, openQueue, importData, state, addPurchaseItem, updatePurchaseItem, removePurchaseItem } = useBuilder();
+	const { data: destinationAccounts } = usePurchaseDestinationAccounts();
 	const { pendingLines, readyCount, ignoredCount } = useBuilderSummary();
 	const [filter, setFilter] = useState<TFilter>("all");
 	const [showManualItems, setShowManualItems] = useState(false);
@@ -87,6 +93,31 @@ function ReviewTable() {
 		{ id: "ready", label: "Prontos", count: readyCount, dot: "bg-green-600" },
 		{ id: "ignored", label: "Não incluídos", count: ignoredCount, dot: "bg-muted-foreground/40" },
 	];
+
+	/** "Destino da nota": aplica a todas as linhas incluídas e aos itens adicionados à mão. */
+	function applyDestinationToDocument(contaContabilId: string | null) {
+		setLines((previous) => previous.map((line) => (line.incluir ? setLineDestination(line, contaContabilId) : line)));
+		const entersStock = contaContabilId == null;
+		state.purchaseItems.forEach((item, index) => {
+			if (item.deletar) return;
+			const snapshot = item.modificadoresCusto ?? null;
+			updatePurchaseItem({
+				index,
+				item: {
+					...item,
+					contaContabilId,
+					dataValidade: entersStock ? item.dataValidade : null,
+					modificadoresCusto: snapshot
+						? { ...snapshot, modificadores: adjustTaxTreatmentsForDestination({ modifiers: snapshot.modificadores, entersStock }) }
+						: snapshot,
+				},
+			});
+		});
+	}
+	const manualDestinations = state.purchaseItems.filter((item) => !item.deletar).map((item) => item.contaContabilId ?? null);
+	const linesDestination = getSharedLinesDestination(lines);
+	const documentDestination =
+		linesDestination !== undefined && manualDestinations.every((destination) => destination === linesDestination) ? linesDestination : undefined;
 
 	function unlinkLine(line: TReviewLine) {
 		updateLine(line.id, {
@@ -146,17 +177,34 @@ function ReviewTable() {
 						</button>
 					))}
 				</div>
-				<Button type="button" variant="outline" size="xs" className="flex items-center gap-1.5" onClick={() => setShowManualItems(true)}>
-					<Plus className="h-3.5 w-3.5" />
-					ADICIONAR ITEM
-				</Button>
+				<div className="flex flex-wrap items-center gap-2">
+					<div className="flex items-center gap-1.5">
+						<span className="text-[0.68rem] font-medium uppercase text-muted-foreground">Destino da nota</span>
+						<PurchaseDestinationSelect
+							value={documentDestination ?? null}
+							placeholder={documentDestination === undefined ? "Vários destinos" : undefined}
+							onChange={applyDestinationToDocument}
+							accounts={destinationAccounts}
+						/>
+					</div>
+					<Button type="button" variant="outline" size="xs" className="flex items-center gap-1.5" onClick={() => setShowManualItems(true)}>
+						<Plus className="h-3.5 w-3.5" />
+						ADICIONAR ITEM
+					</Button>
+				</div>
 			</div>
+			{documentDestination !== null ? (
+				<p className="-mt-1 text-xs text-muted-foreground">
+					Itens com outro destino que não o estoque não entram no saldo nem geram lote: o custo vai direto para a conta escolhida, e os tributos
+					destacados entram nesse custo.
+				</p>
+			) : null}
 
 			<div className="flex w-full flex-col overflow-hidden rounded-md border border-border">
 				<div className="hidden min-h-9 items-center gap-2 border-b border-border bg-muted/60 px-3 py-1.5 text-[0.68rem] font-medium uppercase text-muted-foreground lg:grid lg:grid-cols-[136px_minmax(0,1.2fr)_minmax(0,1fr)_96px_164px]">
 					<span>Situação</span>
 					<span>Na nota</span>
-					<span>No seu estoque</span>
+					<span>No seu catálogo</span>
 					<span className="text-right">Total</span>
 					<span />
 				</div>
@@ -171,6 +219,8 @@ function ReviewTable() {
 						onToggleRemember={() => updateLine(line.id, { lembrarVinculo: !line.lembrarVinculo })}
 						onUnlink={() => unlinkLine(line)}
 						onAdjustConversion={() => setAdjustingLineId(line.id)}
+						destinationAccounts={destinationAccounts}
+						onDestination={(contaContabilId) => setLines((previous) => previous.map((item) => (item.id === line.id ? setLineDestination(item, contaContabilId) : item)))}
 					/>
 				))}
 				{visibleLines.length === 0 ? (
@@ -207,6 +257,7 @@ function ReviewTable() {
 						addPurchaseItem={addPurchaseItem}
 						updatePurchaseItem={updatePurchaseItem}
 						removePurchaseItem={removePurchaseItem}
+						destinationAccounts={destinationAccounts}
 					/>
 				</div>
 			) : null}
@@ -237,6 +288,8 @@ function ReviewRow({
 	onToggleRemember,
 	onUnlink,
 	onAdjustConversion,
+	destinationAccounts,
+	onDestination,
 }: {
 	line: TReviewLine;
 	supplierName: string | null;
@@ -246,6 +299,8 @@ function ReviewRow({
 	onToggleRemember: () => void;
 	onUnlink: () => void;
 	onAdjustConversion: () => void;
+	destinationAccounts: TPurchaseDestinationAccounts | undefined;
+	onDestination: (contaContabilId: string | null) => void;
 }) {
 	const status = getLineStatus(line);
 	const issue = getLineIssue(line);
@@ -296,6 +351,14 @@ function ReviewRow({
 				<div className="flex min-w-0 flex-col gap-px">
 					<span className={cn("text-xs font-medium leading-snug", !productName && "text-destructive")}>{productName ?? "Nenhum produto vinculado"}</span>
 					<span className="text-[0.7rem] text-muted-foreground">{productName ? getProductMeta(line) : "Crie ou vincule para incluir"}</span>
+					{status !== "ignored" ? (
+						<PurchaseDestinationSelect
+							value={line.contaContabilId}
+							onChange={onDestination}
+							accounts={destinationAccounts}
+							className="mt-0.5 h-6 w-fit max-w-[200px] px-2 text-[0.68rem]"
+						/>
+					) : null}
 				</div>
 			</div>
 			<span className="text-right font-mono text-xs font-medium lg:text-right">{formatToMoney(getLineTotal(line))}</span>

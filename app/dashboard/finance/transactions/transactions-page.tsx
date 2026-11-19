@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useQueryState } from "nuqs";
-import { AlertCircle, ArrowRight, ArrowRightLeft, CalendarDays, CheckCircle2, Clock, DollarSign, ListFilter, Pencil, Wallet } from "lucide-react";
+import { AlertCircle, ArrowRight, ArrowRightLeft, Ban, CalendarDays, CheckCircle2, Clock, DollarSign, ListFilter, Pencil, Wallet } from "lucide-react";
 import type { TGetFinancialTransactionsOutputDefault } from "@/app/api/finances/financial-transactions/route";
 import FinancialTransactionMenu from "@/components/Modals/Finances/FinancialTransactionMenu";
 import NewFinancialTransfer from "@/components/Modals/Finances/NewFinancialTransfer";
@@ -40,6 +40,12 @@ const TRANSACTION_STATUS_OPTIONS = [
 		value: "em-atraso",
 		label: "EM ATRASO",
 		icon: <AlertCircle className="w-4 h-4 text-red-600" />,
+	},
+	{
+		id: "cancelada",
+		value: "cancelada",
+		label: "CANCELADA",
+		icon: <Ban className="w-4 h-4 text-muted-foreground" />,
 	},
 ];
 
@@ -263,14 +269,16 @@ function TransactionCard({ transaction, onOpenDetails }: TransactionCardProps) {
 
 	const now = new Date();
 	const isEffective = !!transaction.dataEfetivacao;
-	const isOverdue = !isEffective && transaction.dataPrevisao && new Date(transaction.dataPrevisao) < now;
+	const isCancelled = !isEffective && !!transaction.dataCancelamento;
+	const isOverdue = !isEffective && !isCancelled && transaction.dataPrevisao && new Date(transaction.dataPrevisao) < now;
 	const statusConfig = useMemo(() => {
+		if (isCancelled) return { label: "CANCELADA", className: "bg-muted text-muted-foreground", icon: <Ban className="w-3 h-3" /> };
 		return {
 			label: isEffective ? "EFETIVADA" : isOverdue ? "EM ATRASO" : "PENDENTE",
 			className: isEffective ? "bg-green-100 text-green-700" : isOverdue ? "bg-red-100 text-red-700" : "bg-blue-100 text-blue-700",
 			icon: isEffective ? <CheckCircle2 className="w-3 h-3" /> : isOverdue ? <AlertCircle className="w-3 h-3" /> : <Clock className="w-3 h-3" />,
 		};
-	}, [isEffective, isOverdue]);
+	}, [isEffective, isOverdue, isCancelled]);
 
 	const paymentMethodConfig = useMemo(() => {
 		return SalePaymentMethodsOptions.find((o) => o.value === transaction.metodo) ?? null;

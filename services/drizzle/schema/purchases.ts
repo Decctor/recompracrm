@@ -2,7 +2,7 @@ import type { TPurchaseCostModifiersSnapshot, TPurchaseImportedDocumentsSnapshot
 import { doublePrecision, jsonb, numeric, text, timestamp, varchar } from "drizzle-orm/pg-core";
 import { newTable } from "./common";
 import { organizations } from "./organizations";
-import { accountingEntries, fiscalOutboundDocuments } from "./financial";
+import { accountingEntries, accountsCharts, fiscalOutboundDocuments } from "./financial";
 import { users } from "./users";
 import { relations } from "drizzle-orm";
 import { products, productStockLots, productStockTransactions, productVariants } from "./products";
@@ -41,6 +41,12 @@ export const purchases = newTable("purchases", {
 	entregaDataEnvio: timestamp("entrega_data_envio"),
 	entregaDataRecebimentoPrevisao: timestamp("entrega_data_recebimento_previsao"),
 	entregaDataRecebimentoEfetivacao: timestamp("entrega_data_recebimento_efetivacao"),
+
+	// Cancelamento (POST /api/purchases/cancel): quando, por quem e por quê. O estorno contábil fica em
+	// `accounting_entries.compra_id` com origem ESTORNO.
+	dataCancelamento: timestamp("data_cancelamento"),
+	cancelamentoMotivo: text("cancelamento_motivo"),
+	cancelamentoAutorId: varchar("cancelamento_autor_id", { length: 255 }).references(() => users.id, { onDelete: "set null" }),
 
 	dataInsercao: timestamp("data_insercao").defaultNow().notNull(),
 	dataEfetivacao: timestamp("data_efetivacao"),
@@ -117,6 +123,13 @@ export const purchaseItems = newTable("purchase_items", {
 	// Perishable control: when informed, receiving this item generates a traceable stock lot.
 	dataValidade: timestamp("data_validade"),
 
+	// Conta contábil de destino do custo do item, escolhida na entrada da nota. Nulo = estoque (o débito
+	// padrão de compras da organização) e só então o item movimenta saldo e gera lote. Preenchida, o
+	// custo vai direto para a conta (manutenção, imobilizado, uso e consumo) e o estoque não é tocado.
+	// O servidor grava nulo quando a conta escolhida é a própria conta de estoque, para que a decisão
+	// de estoque nunca dependa de uma configuração que pode mudar. Ver lib/purchase/destination.ts.
+	contaContabilId: varchar("conta_contabil_id", { length: 255 }).references(() => accountsCharts.id),
+
 	dataInsercao: timestamp("data_insercao").defaultNow().notNull(),
 });
 
@@ -136,6 +149,10 @@ export const purchaseItemsRelations = relations(purchaseItems, ({ one, many }) =
 	produtoVariante: one(productVariants, {
 		fields: [purchaseItems.produtoVarianteId],
 		references: [productVariants.id],
+	}),
+	contaContabil: one(accountsCharts, {
+		fields: [purchaseItems.contaContabilId],
+		references: [accountsCharts.id],
 	}),
 	transacoes: many(productStockTransactions),
 	lotes: many(productStockLots),

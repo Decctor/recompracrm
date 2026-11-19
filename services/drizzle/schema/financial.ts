@@ -130,6 +130,12 @@ export const accountingEntries = newTable(
       (): AnyPgColumn => productStockLots.id,
       { onDelete: "set null" },
     ),
+    // Compra que originou o lançamento quando ele não é o próprio lançamento da compra
+    // (`purchases.lancamento_contabil_id`) — hoje, o estorno do cancelamento.
+    compraId: varchar("compra_id", { length: 255 }).references(
+      (): AnyPgColumn => purchases.id,
+      { onDelete: "set null" },
+    ),
     origemTipo: accountingEntryOriginTypeEnum("origem_tipo").notNull(),
     titulo: text("titulo").notNull(),
     anotacoes: text("anotacoes"),
@@ -155,6 +161,7 @@ export const accountingEntries = newTable(
     ),
     vendaIdIdx: index("idx_accounting_entries_venda_id").on(table.vendaId),
     loteIdIdx: index("idx_accounting_entries_lote_id").on(table.loteId),
+    compraIdIdx: index("idx_accounting_entries_compra_id").on(table.compraId),
     dataCompetenciaIdx: index("idx_accounting_entries_data_competencia").on(
       table.dataCompetencia,
     ),
@@ -256,6 +263,10 @@ export const accountingEntriesRelations = relations(
     lote: one(productStockLots, {
       fields: [accountingEntries.loteId],
       references: [productStockLots.id],
+    }),
+    compra: one(purchases, {
+      fields: [accountingEntries.compraId],
+      references: [purchases.id],
     }),
     contaDebito: one(accountsCharts, {
       fields: [accountingEntries.idContaDebito],
@@ -399,6 +410,12 @@ export const financialTransactions = newTable(
     // Nulos nas efetivações anteriores à auditoria (a tela mostra "—").
     efetivacaoAutorId: varchar("efetivacao_autor_id", { length: 255 }).references(() => users.id, { onDelete: "set null" }),
     efetivacaoOrigem: financialTransactionSettlementOriginEnum("efetivacao_origem"),
+    // Cancelamento: só uma transação pendente é cancelada (o dinheiro que já se moveu não se desfaz
+    // por aqui — vira devolução ou perda na origem). Cancelada, ela sai de contas a pagar/receber,
+    // do fluxo de caixa e da conciliação, mas continua no histórico do lançamento.
+    dataCancelamento: timestamp("data_cancelamento"),
+    cancelamentoMotivo: text("cancelamento_motivo"),
+    cancelamentoAutorId: varchar("cancelamento_autor_id", { length: 255 }).references(() => users.id, { onDelete: "set null" }),
     grupoPagamentoId: varchar("grupo_pagamento_id", { length: 255 }),
     condicoesRecebimento: jsonb("condicoes_recebimento").$type<TPaymentReceiptConditions | null>(),
     parcela: integer("parcela"),

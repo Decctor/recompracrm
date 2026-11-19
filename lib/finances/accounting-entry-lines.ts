@@ -15,9 +15,16 @@ export type TAccountingEntryLineInput = {
 
 export type TPurchaseAccountingAmounts = {
 	valorFinanceiro: number;
+	/** Custo dos itens que entram no estoque (destino padrão). */
 	valorCustoEstoque: number;
 	valorCreditoTributario: number;
 	valorDespesaPeriodo: number;
+	/**
+	 * Custo dos itens com destino próprio (manutenção, imobilizado, uso e consumo…), somado por conta.
+	 * É o mesmo custo capitalizável do item (`valorTotalCusto`), só que debitado na conta escolhida na
+	 * entrada da nota em vez da conta de estoque. Ver lib/purchase/destination.ts.
+	 */
+	custosPorDestino?: { contaContabilId: string; valor: number }[];
 };
 
 export type TPurchaseAccountingAccounts = {
@@ -103,6 +110,19 @@ export function buildPurchaseAccountingEntryLines({
 		description: "Custo de estoque da compra",
 		treatment: "CUSTO_ESTOQUE",
 	});
+	for (const destination of amounts.custosPorDestino ?? []) {
+		const valueCents = moneyToCents(destination.valor);
+		if (valueCents === 0) continue;
+		if (valueCents < 0) throw new Error("Valores contábeis por destino não podem ser negativos.");
+		lines.push({
+			contaContabilId: destination.contaContabilId,
+			natureza: "DEBITO",
+			valor: centsToMoney(valueCents),
+			descricao: "Custo da compra com destino próprio",
+			ordem: order++,
+			metadados: { origem: "COMPRA", tratamento: "CUSTO_ESTOQUE", destino: "CONTA_PROPRIA" },
+		});
+	}
 	appendDebit({
 		accountId: accounts.creditoTributarioContaId,
 		value: amounts.valorCreditoTributario,
@@ -126,6 +146,74 @@ export function buildPurchaseAccountingEntryLines({
 
 	assertAccountingEntryLinesBalanced({ entryValue: amounts.valorFinanceiro, lines });
 	return lines;
+}
+
+/**
+ * Linhas do estorno de um lançamento: cada linha original volta com a natureza invertida, na mesma
+ * conta e no mesmo valor — o que funciona para partidas compostas (compra com estoque, destinos
+ * próprios e tributos), onde inverter só o par débito/crédito legado perderia as demais pernas.
+ *
+ * `retained` é a parte do valor que o estorno NÃO devolve à contrapartida e reconhece numa conta
+ * própria (no cancelamento de compra: parcelas pagas sem devolução e parcelas mantidas — o custo do
+ * cancelamento). Ela é descontada dos débitos que revertem os créditos originais (a contrapartida,
+ * ex. Fornecedores) e vira um débito na conta informada. O estorno continua balanceado e com o mesmo
+ * valor do lançamento original.
+ */
+export function buildReversalAccountingEntryLines({
+	lines,
+	retained,
+}: {
+	lines: Pick<TAccountingEntryLineInput, "contaContabilId" | "natureza" | "valor" | "descricao" | "metadados">[];
+	retained?: { contaContabilId: string; valor: number; descricao: string } | null;
+}): { entryValue: number; lines: TAccountingEntryLineInput[] } {
+	const reversed = lines.map((line) => ({
+		contaContabilId: line.contaContabilId,
+		natureza: line.natureza === "DEBITO" ? ("CREDITO" as const) : ("DEBITO" as const),
+		valueCents: moneyToCents(line.valor),
+		descricao: line.descricao ? `Estorno: ${line.descricao}` : "Estorno",
+		metadados: { ...(line.metadados ?? {}), estorno: true },
+		revertsCounterpart: line.natureza === "CREDITO",
+	}));
+	const entryCents = reversed.filter((line) => line.natureza === "CREDITO").reduce((total, line) => total + line.valueCents, 0);
+
+	const retainedTotalCents = retained ? moneyToCents(retained.valor) : 0;
+	if (retainedTotalCents < 0) throw new Error("O valor retido no estorno não pode ser negativo.");
+	if (retainedTotalCents > entryCents) throw new Error("O valor retido no estorno não pode passar do valor do lançamento.");
+	let remainingCents = retainedTotalCents;
+	for (const line of reversed) {
+		if (remainingCents === 0) break;
+		if (!line.revertsCounterpart) continue;
+		const taken = Math.min(line.valueCents, remainingCents);
+		line.valueCents -= taken;
+		remainingCents -= taken;
+	}
+
+	const result: TAccountingEntryLineInput[] = [];
+	let order = 0;
+	for (const line of reversed) {
+		if (line.valueCents === 0) continue;
+		result.push({
+			contaContabilId: line.contaContabilId,
+			natureza: line.natureza,
+			valor: centsToMoney(line.valueCents),
+			descricao: line.descricao,
+			ordem: order++,
+			metadados: line.metadados,
+		});
+	}
+	if (retained && retainedTotalCents > 0)
+		result.push({
+			contaContabilId: retained.contaContabilId,
+			natureza: "DEBITO",
+			valor: centsToMoney(retainedTotalCents),
+			descricao: retained.descricao,
+			ordem: order++,
+			metadados: { estorno: true, retido: true },
+		});
+
+	const entryValue = centsToMoney(entryCents);
+	assertAccountingEntryLinesBalanced({ entryValue, lines: result });
+	return { entryValue, lines: result };
 }
 
 /**

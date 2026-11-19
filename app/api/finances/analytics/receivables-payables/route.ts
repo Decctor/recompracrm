@@ -66,7 +66,13 @@ async function getFinancesReceivablesPayables({ input, session }: { input: TGetF
 					dataPrevisao: financialTransactions.dataPrevisao,
 				})
 				.from(financialTransactions)
-				.where(and(eq(financialTransactions.organizacaoId, organizationId), isNull(financialTransactions.dataEfetivacao))),
+				.where(
+					and(
+						eq(financialTransactions.organizacaoId, organizationId),
+						isNull(financialTransactions.dataEfetivacao),
+						isNull(financialTransactions.dataCancelamento),
+					),
+				),
 			db
 				.select({
 					tipo: financialTransactions.tipo,
@@ -154,19 +160,20 @@ async function getFinancesReceivablesPayables({ input, session }: { input: TGetF
 					and(
 						eq(financialTransactions.organizacaoId, organizationId),
 						isNull(financialTransactions.dataEfetivacao),
+						isNull(financialTransactions.dataCancelamento),
 						gte(financialTransactions.dataPrevisao, calendarStart.toDate()),
 						lte(financialTransactions.dataPrevisao, calendarEnd.toDate()),
 					),
 				)
 				.orderBy(financialTransactions.dataPrevisao),
-			// Pendente em D = já lançada até D e não efetivada até D.
+			// Pendente em D = já lançada até D, não efetivada até D e não cancelada até D.
 			db
 				.select(
 					Object.fromEntries(
 						snapshotDates.flatMap((date, index) => {
 							// ISO, não Date: o driver postgres-js do drizzle não serializa Date em `sql` cru.
 							const at = date.toISOString();
-							const pendingAt = sql`${financialTransactions.dataInsercao} <= ${at} AND (${financialTransactions.dataEfetivacao} IS NULL OR ${financialTransactions.dataEfetivacao} > ${at})`;
+							const pendingAt = sql`${financialTransactions.dataInsercao} <= ${at} AND (${financialTransactions.dataEfetivacao} IS NULL OR ${financialTransactions.dataEfetivacao} > ${at}) AND (${financialTransactions.dataCancelamento} IS NULL OR ${financialTransactions.dataCancelamento} > ${at})`;
 							return [
 								[
 									`receber${index}`,

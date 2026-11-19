@@ -1,5 +1,10 @@
 "use client";
 
+import {
+	getPurchaseDestinationLabel,
+	PurchaseDestinationSelect,
+	type TPurchaseDestinationAccounts,
+} from "@/app/dashboard/purchases/components/PurchaseDestinationSelect";
 import SelectProductWithVariants, { type TSelectProductWithVariantsValue } from "@/components/Inputs/SelectProductWithVariants";
 import { createEmptyPurchaseItem, getPurchaseItemsTotal, normalizeItemValues } from "@/components/Modals/Purchases/Blocks/Items";
 import ImportCompositionWithAI from "@/components/Modals/Purchases/Blocks/Utils/ImportCompositionWithAI";
@@ -7,6 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Section } from "@/components/ui/section";
 import { formatNameAsInitials, formatToMoney } from "@/lib/formatting";
+import { adjustTaxTreatmentsForDestination, purchaseItemEntersStock } from "@/lib/purchase/destination";
+import { usePurchaseDestinationAccounts } from "@/lib/queries/purchases";
 import { cn } from "@/lib/utils";
 import type { TPurchaseState, TUsePurchaseState } from "@/state-hooks/use-purchase-state";
 import { BadgeDollarSign, Lock, Plus, ReceiptText, Ruler, ShoppingCart, Sparkles, Trash2 } from "lucide-react";
@@ -42,10 +49,13 @@ type ItemsTabProps = {
 	baseline: TPurchaseState;
 	editable: boolean;
 	isReceived: boolean;
+	/** Compra recebida, mas o usuário pode editar: itens fora do estoque ainda trocam de conta. */
+	canReclassify: boolean;
 };
 
-export default function ItemsTab({ purchase, editor, baseline, editable, isReceived }: ItemsTabProps) {
+export default function ItemsTab({ purchase, editor, baseline, editable, isReceived, canReclassify }: ItemsTabProps) {
 	const { state, updatePurchaseItem, removePurchaseItem, addPurchaseItem, updatePurchase, updateAccountingEntry } = editor;
+	const { data: destinationAccounts } = usePurchaseDestinationAccounts();
 	const [importOpen, setImportOpen] = useState(false);
 	const [adding, setAdding] = useState(false);
 	const visibleItems = state.purchaseItems.map((item, index) => ({ item, index })).filter(({ item }) => !item.deletar);
@@ -77,7 +87,7 @@ export default function ItemsTab({ purchase, editor, baseline, editable, isRecei
 					<Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
 					<p className="leading-relaxed">
 						Compra recebida — os itens estão travados para preservar os lotes gerados. Para corrigir, cancele a compra (se os lotes ainda não foram usados)
-						ou ajuste diretamente pelo estoque.
+						ou ajuste diretamente pelo estoque. Itens que não entraram no estoque ainda podem trocar de conta.
 					</p>
 				</div>
 			) : null}
@@ -99,7 +109,27 @@ export default function ItemsTab({ purchase, editor, baseline, editable, isRecei
 							original={item.id ? (baseline.purchaseItems.find((candidate) => candidate.id === item.id) ?? null) : null}
 							editable={editable}
 							isReceived={isReceived}
+							canReclassify={canReclassify}
+							destinationAccounts={destinationAccounts}
 							onQuantity={(quantidade) => updatePurchaseItem({ index, item: normalizeItemValues({ ...item, quantidade }) })}
+							onDestination={(contaContabilId) => {
+								// Recebida, só a conta muda: valores e tributos estão congelados.
+								if (isReceived) return updatePurchaseItem({ index, item: { ...item, contaContabilId } });
+								const entersStock = contaContabilId == null;
+								const snapshot = item.modificadoresCusto ?? null;
+								updatePurchaseItem({
+									index,
+									item: normalizeItemValues({
+										...item,
+										contaContabilId,
+										// Fora do estoque não há lote: a validade deixa de valer.
+										dataValidade: entersStock ? item.dataValidade : null,
+										modificadoresCusto: snapshot
+											? { ...snapshot, modificadores: adjustTaxTreatmentsForDestination({ modifiers: snapshot.modificadores, entersStock }) }
+											: snapshot,
+									}),
+								});
+							}}
 							onRemove={() => removePurchaseItem({ index })}
 						/>
 					))}
@@ -144,20 +174,30 @@ function ItemRow({
 	original,
 	editable,
 	isReceived,
+	canReclassify,
+	destinationAccounts,
 	onQuantity,
+	onDestination,
 	onRemove,
 }: {
 	item: TPurchaseItemState;
 	original: TPurchaseItemState | null;
 	editable: boolean;
 	isReceived: boolean;
+	canReclassify: boolean;
+	destinationAccounts: TPurchaseDestinationAccounts | undefined;
 	onQuantity: (quantidade: number) => void;
+	onDestination: (contaContabilId: string | null) => void;
 	onRemove: () => void;
 }) {
+	const entersStock = purchaseItemEntersStock(item);
+	const destinationChanged = !!original && (original.contaContabilId ?? null) !== (item.contaContabilId ?? null);
+	// Antes do recebimento qualquer destino; depois, só trocar entre contas fora do estoque.
+	const destinationEditable = editable || (canReclassify && !entersStock);
 	const [draft, setDraft] = useState<string | null>(null);
 	const name = item.snapshotProdutoDescricao || item.produto?.nome || "Produto";
 	const unit = item.produto?.unidade ?? "UN";
-	const changed = !!original && original.quantidade !== item.quantidade;
+	const changed = (!!original && original.quantidade !== item.quantidade) || destinationChanged;
 	const isNew = !item.id;
 	const lots = (item.lotes ?? []).map((lot) => lot.codigoLote).filter(Boolean);
 	const meta = isReceived
@@ -179,9 +219,20 @@ function ItemRow({
 				<span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border border-border bg-muted text-[0.6rem] font-semibold text-muted-foreground">
 					{formatNameAsInitials(name)}
 				</span>
-				<div className="flex min-w-0 flex-col">
+				<div className="flex min-w-0 flex-col gap-0.5">
 					<span className="truncate font-medium">{name}</span>
 					{meta ? <span className="text-[0.65rem] text-muted-foreground">{meta}</span> : null}
+					{destinationEditable ? (
+						<PurchaseDestinationSelect
+							value={item.contaContabilId}
+							onChange={onDestination}
+							accounts={destinationAccounts}
+							allowStock={editable}
+							className="h-6 w-fit max-w-[220px] px-2 text-[0.68rem]"
+						/>
+					) : !entersStock ? (
+						<span className="text-[0.65rem] font-medium text-brand">Destino: {getPurchaseDestinationLabel(item.contaContabilId, destinationAccounts)}</span>
+					) : null}
 				</div>
 				{getItemTags(item).map((tag) => (
 					<span
