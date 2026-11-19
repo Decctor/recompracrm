@@ -76,6 +76,18 @@ export const RecompraCRMDefaultAccountCharts: TOnboardingAccountChartNode[] = [
 			// mercadoria: são um ativo contra o fisco. Ver docs/domain/purchase-costing.md.
 			{ key: "tributos_recuperar", nome: "Tributos a Recuperar", codigo: "1.4", natureza: "ATIVO" },
 			{ key: "outros_ativos", nome: "Outros Ativos", codigo: "1.5", natureza: "ATIVO" },
+			// Destinos de compra que não são estoque nem despesa: bens de uso da loja e reformas que valorizam
+			// ou prolongam a vida do imóvel. Ver lib/purchase/destination.ts.
+			{
+				key: "imobilizado",
+				nome: "Imobilizado",
+				codigo: "1.6",
+				natureza: "ATIVO",
+				children: [
+					{ key: "maquinas_moveis_equipamentos", nome: "Máquinas, Móveis e Equipamentos", codigo: "1.6.1", natureza: "ATIVO" },
+					{ key: "benfeitorias_imoveis_terceiros", nome: "Benfeitorias em Imóveis de Terceiros", codigo: "1.6.2", natureza: "ATIVO" },
+				],
+			},
 		],
 	},
 	{
@@ -134,6 +146,10 @@ export const RecompraCRMDefaultAccountCharts: TOnboardingAccountChartNode[] = [
 			{ key: "despesas_comerciais", nome: "Despesas Comerciais", codigo: "6.3", natureza: "DESPESA" },
 			{ key: "despesas_financeiras", nome: "Despesas Financeiras", codigo: "6.4", natureza: "DESPESA" },
 			{ key: "perdas_estoque", nome: "Perdas de Estoque", codigo: "6.5", natureza: "DESPESA" },
+			// Destinos de compra reconhecidos direto no resultado: conserto e manutenção da loja, e material
+			// consumido na operação (limpeza, escritório) que não vira estoque.
+			{ key: "manutencao_reparos", nome: "Manutenção e Reparos", codigo: "6.6", natureza: "DESPESA" },
+			{ key: "material_uso_consumo", nome: "Material de Uso e Consumo", codigo: "6.7", natureza: "DESPESA" },
 		],
 	},
 ];

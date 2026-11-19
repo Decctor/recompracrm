@@ -1,4 +1,5 @@
 import { TGetPurchasesByIdInput, TGetPurchasesDefaultInput, TGetPurchasesOutput } from "@/app/api/purchases/route";
+import type { TGetPurchaseDestinationAccountsOutput } from "@/app/api/purchases/destination-accounts/route";
 import axios from "axios";
 import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 import { useState } from "react";
@@ -83,5 +84,23 @@ export function usePurchaseById({ id }: TGetPurchasesByIdInput) {
 			queryFn: () => fetchPurchaseById({ id }),
 		}),
 		queryKey: ["purchase-by-id", id],
+	};
+}
+
+async function fetchPurchaseDestinationAccounts() {
+	const { data } = await axios.get<TGetPurchaseDestinationAccountsOutput>("/api/purchases/destination-accounts");
+	return data.data;
+}
+
+/** Contas que podem receber o custo de um item de compra, com a conta de estoque (destino padrão). */
+export function usePurchaseDestinationAccounts({ enabled = true }: { enabled?: boolean } = {}) {
+	return {
+		...useQuery({
+			queryKey: ["purchase-destination-accounts"],
+			queryFn: fetchPurchaseDestinationAccounts,
+			enabled,
+			staleTime: 5 * 60 * 1000,
+		}),
+		queryKey: ["purchase-destination-accounts"],
 	};
 }

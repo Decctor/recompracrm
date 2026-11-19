@@ -269,7 +269,8 @@ Lendo a disponibilidade (quando o campo vem):
 		// Escopo (tenant/ativo/grupo) separado da faixa de preço: quando a busca dá vazio, é a
 		// faixa de preço o filtro que o modelo mais manda errado — e o diagnóstico precisa
 		// reconsultar o escopo sem ela para apontar o culpado.
-		const scopeConditions = [eq(products.organizacaoId, organizacaoId)];
+		// Só o que se vende: insumos e material de uso interno (vendavel = false) nunca chegam ao cliente.
+		const scopeConditions = [eq(products.organizacaoId, organizacaoId), eq(products.vendavel, true)];
 		if (activeOnly) scopeConditions.push(eq(products.ativo, true));
 		if (queryInput.grupo) scopeConditions.push(createSimplifiedEqualityCondition(products.grupo, queryInput.grupo));
 

@@ -453,6 +453,15 @@ export type TPurchaseStatusEnum = z.infer<typeof PurchaseStatusEnum>;
 export const PurchaseOriginEnum = z.enum(["DOCUMENTO", "MANUAL"]);
 export type TPurchaseOriginEnum = z.infer<typeof PurchaseOriginEnum>;
 
+// O que fazer com cada parcela ao cancelar uma compra (POST /api/purchases/cancel).
+// Pendente: CANCELAR (deixa de ser devida) | MANTER (continua devida — multa, valor negociado).
+// Paga: DEVOLUCAO (o fornecedor devolve: vira entrada prevista) | PERDA (não volta: fica como custo).
+export const PurchaseCancellationTransactionResolutionEnum = z.enum(["CANCELAR", "MANTER", "DEVOLUCAO", "PERDA"], {
+	required_error: "Resolução da parcela não informada.",
+	invalid_type_error: "Tipo não válido para a resolução da parcela.",
+});
+export type TPurchaseCancellationTransactionResolutionEnum = z.infer<typeof PurchaseCancellationTransactionResolutionEnum>;
+
 export const PurchaseCostModifierKeyEnum = z.enum([
 	"DESCONTO",
 	"FRETE",

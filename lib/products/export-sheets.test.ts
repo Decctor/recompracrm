@@ -117,6 +117,7 @@ test("serializes arrays, dates and zero bounds without empty query values", () =
 		groups: [],
 		priceMin: 0,
 		trackedOnly: false,
+		sellability: [],
 		statsPeriodAfter: new Date("2026-10-01T00:00:00Z"),
 		page: 2,
 	});

@@ -16,6 +16,9 @@ import {
 	type TPurchaseItemStockOperation,
 } from "@/lib/purchase-processing/process-purchase-item-stock";
 import { upsertSupplierProductMappings } from "@/lib/purchase/supplier-product-mappings";
+import { canReclassifyReceivedPurchaseItem } from "@/lib/purchase/destination";
+import { resolvePurchaseItemDestinations } from "@/lib/purchase/resolve-item-destinations";
+import { assertPurchaseLotsArePristine, isPurchaseConsideredReceived } from "@/lib/purchase-processing/purchase-state";
 import { syncInboundDocumentsPurchaseLink } from "@/lib/fiscal/inbound/purchase-link";
 import { createSimplifiedSearchCondition } from "@/lib/search";
 import { PurchaseOriginEnum, PurchaseStatusEnum, type TPurchaseOriginEnum, type TPurchaseStatusEnum } from "@/schemas/enums";
@@ -35,7 +38,6 @@ import {
 	financialTransactions,
 	organizations,
 	products,
-	productStockLots,
 	purchaseItems,
 	purchases,
 	supplierProductMappings,
@@ -454,10 +456,12 @@ const CreatePurchaseInputSchema = z.object({
 				codigoBarras: true,
 				unidade: true,
 				ncm: true,
-				vendavel: true,
 				rastreamentoEstoqueAtivo: true,
 				precoCusto: true,
 			}).extend({
+				// Produto que nasce de uma compra não é vendável até alguém decidir que é: a escolha é feita
+				// na compra, produto a produto. Omitido, vale falso (o default do banco é verdadeiro).
+				vendavel: z.boolean({ invalid_type_error: "Tipo não válido para se o novo produto é vendável." }).optional().default(false),
 				id: z
 					.string({ required_error: "ID do novo produto não informado.", invalid_type_error: "Tipo não válido para o ID do novo produto." })
 					.uuid("ID do novo produto inválido."),
@@ -556,16 +560,21 @@ async function assertReceivedPurchaseEntryValueUnchanged({
 		throw new createHttpError.BadRequest("O valor efetivo de uma compra recebida não pode ser alterado. Cancele a compra para corrigir.");
 }
 
+// O custo capitalizável do item (`valorTotalCusto`) vai para a conta de estoque ou, quando o item tem
+// destino próprio, para a conta escolhida na entrada da nota. Ver lib/purchase/destination.ts.
 function getPurchaseAccountingAmounts(items: TPurchaseItemInput[]) {
 	let financialCents = 0;
 	let inventoryCents = 0;
 	let taxCreditCents = 0;
 	let periodExpenseCents = 0;
+	const destinationCents = new Map<string, number>();
 	for (const item of items) {
 		if (item.deletar) continue;
 		const result = calculatePurchaseItemCost(item);
 		financialCents += moneyToCents(result.valorTotalLiquido);
-		inventoryCents += moneyToCents(result.valorTotalCusto);
+		const costCents = moneyToCents(result.valorTotalCusto);
+		if (item.contaContabilId) destinationCents.set(item.contaContabilId, (destinationCents.get(item.contaContabilId) ?? 0) + costCents);
+		else inventoryCents += costCents;
 		taxCreditCents += moneyToCents(result.valorTotalCreditoTributario);
 		periodExpenseCents += moneyToCents(result.valorTotalDespesaPeriodo);
 	}
@@ -574,6 +583,7 @@ function getPurchaseAccountingAmounts(items: TPurchaseItemInput[]) {
 		valorCustoEstoque: centsToMoney(inventoryCents),
 		valorCreditoTributario: centsToMoney(taxCreditCents),
 		valorDespesaPeriodo: centsToMoney(periodExpenseCents),
+		custosPorDestino: [...destinationCents].map(([contaContabilId, cents]) => ({ contaContabilId, valor: centsToMoney(cents) })),
 	};
 }
 
@@ -633,10 +643,6 @@ async function syncPurchaseAccountingLines({
 	});
 }
 
-function isPurchaseConsideredReceived(purchase: { status: TPurchaseStatusEnum; entregaDataRecebimentoEfetivacao?: Date | null }) {
-	return purchase.status === "RECEBIDA" && !!purchase.entregaDataRecebimentoEfetivacao;
-}
-
 async function createPurchase({ input, session }: { input: TCreatePurchaseInput; session: TAuthUserSession }) {
 	const userOrgId = session.membership?.organizacao.id;
 	if (!userOrgId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
@@ -674,6 +680,12 @@ async function createPurchase({ input, session }: { input: TCreatePurchaseInput;
 		if (newProducts.length > 0) await insertPurchaseNewProducts({ trx: tx, organizationId: userOrgId, newProducts });
 		// Primeiro o lançamento contábil, já que a compra referencia ele
 		const { debitAccountId, creditAccountId } = await resolvePurchaseAccountingAccountIds({ trx: tx, orgId: userOrgId });
+		const purchaseItemsWithDestinations = await resolvePurchaseItemDestinations({
+			trx: tx,
+			organizationId: userOrgId,
+			resolveInventoryAccountId: async () => debitAccountId,
+			items: normalizedPurchaseItems,
+		});
 		const insertedAccountingEntry = await tx
 			.insert(accountingEntries)
 			.values({
@@ -696,7 +708,7 @@ async function createPurchase({ input, session }: { input: TCreatePurchaseInput;
 			expectedValue: accountingEntryFields.valorPrevisto,
 			debitAccountId,
 			creditAccountId,
-			items: normalizedPurchaseItems,
+			items: purchaseItemsWithDestinations,
 			purchaseIsReceived: isPurchaseConsideredReceived(payloadPurchase),
 		});
 
@@ -733,7 +745,7 @@ async function createPurchase({ input, session }: { input: TCreatePurchaseInput;
 
 		const operation: TPurchaseItemStockOperation = isPurchaseConsideredReceived(payloadPurchase) ? "RECEIVING" : "UPDATING_UNRECEIVED";
 
-		for (const item of normalizedPurchaseItems) {
+		for (const item of purchaseItemsWithDestinations) {
 			await handlePurchaseItemStockProcessing({
 				trx: tx,
 				organizationId: userOrgId,
@@ -893,7 +905,7 @@ function resolvePurchaseTransition(
 	return "UPDATING_UNRECEIVED";
 }
 
-type PreviousPurchaseItem = TPurchaseItemInput & { id: string; produtoVarianteId: string | null };
+type PreviousPurchaseItem = TPurchaseItemInput & { id: string; produtoVarianteId: string | null; contaContabilId: string | null };
 type PayloadPurchaseItem = TUpdatePurchaseInput["purchaseItems"][number];
 
 // A received purchase freezes its items: once lots were spawned we don't allow silent add/remove/edit,
@@ -926,25 +938,16 @@ function assertReceivedPurchaseItemsUnchanged({
 			JSON.stringify(normalizedPrevious.modificadoresCusto) !== JSON.stringify(normalizedPayload.modificadoresCusto) ||
 			(normalizedPrevious.dataValidade?.getTime() ?? null) !== (normalizedPayload.dataValidade?.getTime() ?? null);
 		if (changed) throw new createHttpError.BadRequest("Não é possível alterar itens de uma compra já recebida. Cancele a compra para corrigir.");
+		// Trocar a conta de um item fora do estoque é só reclassificação contábil e continua permitido;
+		// entrar ou sair do estoque mexeria em saldo e lotes de uma compra congelada.
+		if (!canReclassifyReceivedPurchaseItem({ previous: previous.contaContabilId, next: item.contaContabilId }))
+			throw new createHttpError.BadRequest(
+				"Não é possível mover um item já recebido entre o estoque e outra conta. Cancele a compra para corrigir.",
+			);
 	}
 	const activePayloadCount = payloadItems.filter((item) => !item.deletar).length;
 	if (activePayloadCount !== previousItems.length)
 		throw new createHttpError.BadRequest("Não é possível alterar a composição de itens de uma compra já recebida.");
-}
-
-// Stock effects of a received purchase are only reversible while every lot it spawned is still pristine
-// (untouched quantity and ATIVO). Once a lot is consumed/discarded/expired, un-receiving or cancelling
-// would break the FEFO sub-ledger, so we block it and point the user to the stock-lot flows.
-async function assertPurchaseLotsArePristine({ tx, organizationId, purchaseId }: { tx: DBTransaction; organizationId: string; purchaseId: string }) {
-	const lots = await tx.query.productStockLots.findMany({
-		where: and(eq(productStockLots.compraId, purchaseId), eq(productStockLots.organizacaoId, organizationId)),
-		columns: { quantidadeInicial: true, quantidadeAtual: true, status: true },
-	});
-	const anyTouched = lots.some((lot) => lot.status !== "ATIVO" || lot.quantidadeAtual < lot.quantidadeInicial);
-	if (anyTouched)
-		throw new createHttpError.Conflict(
-			"Há lotes desta compra já consumidos ou descartados. Ajuste o estoque pelos lotes antes de reabrir ou cancelar a compra.",
-		);
 }
 
 /**
@@ -1087,64 +1090,18 @@ async function updatePurchase({ input, session }: { input: TUpdatePurchaseInput;
 		if (previousPurchase.status === "CANCELADA" && payloadPurchase.status !== "CANCELADA")
 			throw new createHttpError.BadRequest("Não é possível reabrir uma compra cancelada.");
 
-		const isCancelTransition = payloadPurchase.status === "CANCELADA" && previousPurchase.status !== "CANCELADA";
-
-		if (isCancelTransition) {
-			const wasReceived = isPurchaseConsideredReceived(previousPurchase);
-			if (wasReceived) {
-				await assertPurchaseLotsArePristine({ tx, organizationId: userOrgId, purchaseId });
-				for (const previousItem of previousPurchase.itens) {
-					await handlePurchaseItemStockProcessing({
-						trx: tx,
-						organizationId: userOrgId,
-						userId: session.user.id,
-						purchaseId,
-						operation: "UNRECEIVING",
-						item: {
-							id: previousItem.id,
-							deletar: false,
-							produtoId: previousItem.produtoId,
-							produtoVarianteId: previousItem.produtoVarianteId,
-							snapshotProdutoDescricao: previousItem.snapshotProdutoDescricao,
-							snapshotProdutoCodigo: previousItem.snapshotProdutoCodigo,
-							quantidade: previousItem.quantidade,
-							valorUnitarioBruto: previousItem.valorUnitarioBruto,
-							valorUnitarioLiquido: previousItem.valorUnitarioLiquido,
-							valorTotalBruto: previousItem.valorTotalBruto,
-							valorTotalLiquido: previousItem.valorTotalLiquido,
-							descontosTotal: previousItem.descontosTotal,
-							acrescimosTotal: previousItem.acrescimosTotal,
-							modificadoresCusto: previousItem.modificadoresCusto,
-							valorTotalCusto: previousItem.valorTotalCusto,
-							valorUnitarioCusto: previousItem.valorUnitarioCusto,
-							externoQtde: previousItem.externoQtde,
-							externoValor: previousItem.externoValor,
-							externoUnidade: previousItem.externoUnidade,
-							externoFatorConversao: previousItem.externoFatorConversao,
-							anotacoes: previousItem.anotacoes,
-						},
-						reasonOverride: { exit: "Rollback - compra cancelada" },
-					});
-				}
-			}
-
-			await tx
-				.update(purchases)
-				.set({
-					...payloadPurchase,
-					entregaDataRecebimentoEfetivacao: null,
-					dataUltimaAtualizacao: new Date(),
-				})
-				.where(and(eq(purchases.id, purchaseId), eq(purchases.organizacaoId, userOrgId)));
-
-			return {
-				data: { updatedPurchaseId: purchaseId },
-				message: "Compra cancelada com sucesso.",
-			};
-		}
+		// Cancelar tem fluxo próprio (estorno contábil e decisão sobre cada parcela): POST /api/purchases/cancel.
+		if (payloadPurchase.status === "CANCELADA" && previousPurchase.status !== "CANCELADA")
+			throw new createHttpError.BadRequest("Use o cancelamento da compra para cancelá-la.");
+		if (previousPurchase.status === "CANCELADA") throw new createHttpError.BadRequest("Uma compra cancelada não pode mais ser editada.");
 
 		const operation = resolvePurchaseTransition(previousPurchase, payloadPurchase);
-		const normalizedPurchaseItems = normalizePurchaseItems(payloadPurchaseItems);
+		const normalizedPurchaseItems = await resolvePurchaseItemDestinations({
+			trx: tx,
+			organizationId: userOrgId,
+			resolveInventoryAccountId: async () => (await resolvePurchaseAccountingAccountIds({ trx: tx, orgId: userOrgId })).debitAccountId,
+			items: normalizePurchaseItems(payloadPurchaseItems),
+		});
 		if (operation === "RECEIVING") assertPurchaseEntryMatchesItems({ entryValue: payloadAccountingEntry.valor, items: normalizedPurchaseItems });
 
 		// Received purchase staying received: items are frozen. Reprocessing them here would roll back and
@@ -1167,6 +1124,17 @@ async function updatePurchase({ input, session }: { input: TUpdatePurchaseInput;
 					dataUltimaAtualizacao: new Date(),
 				})
 				.where(and(eq(purchases.id, purchaseId), eq(purchases.organizacaoId, userOrgId)));
+			// Reclassificação de itens fora do estoque (ex.: manutenção → benfeitorias): grava a conta nova e
+			// refaz as linhas. Valores e itens seguem congelados, então só a distribuição dos débitos muda.
+			const previousDestinationById = new Map(previousPurchase.itens.map((item) => [item.id, item.contaContabilId]));
+			const reclassifiedItems = normalizedPurchaseItems.filter(
+				(item) => item.id && (previousDestinationById.get(item.id) ?? null) !== (item.contaContabilId ?? null),
+			);
+			for (const item of reclassifiedItems)
+				await tx
+					.update(purchaseItems)
+					.set({ contaContabilId: item.contaContabilId ?? null })
+					.where(and(eq(purchaseItems.id, item.id as string), eq(purchaseItems.organizacaoId, userOrgId)));
 			// O congelamento vale para os itens (que geraram lotes), não para a programação de pagamento:
 			// reprogramar um pagamento após o recebimento é o caso de uso principal.
 			await syncPurchaseAccountingEntry({
@@ -1178,7 +1146,7 @@ async function updatePurchase({ input, session }: { input: TUpdatePurchaseInput;
 				payload: payloadAccountingEntry,
 				items: normalizedPurchaseItems,
 				purchaseIsReceived: true,
-				synchronizeLines: false,
+				synchronizeLines: reclassifiedItems.length > 0,
 			});
 			if (input.importedDocuments)
 				await syncInboundDocumentsPurchaseLink({ trx: tx, organizationId: userOrgId, purchaseId, importedDocuments: input.importedDocuments });

@@ -145,7 +145,14 @@ async function getAccountingEntries({ input, session }: { input: TGetAccountingE
 		const entryIdsWithPendingTransactions = db
 			.select({ id: financialTransactions.lancamentoContabilId })
 			.from(financialTransactions)
-			.where(and(eq(financialTransactions.organizacaoId, userOrgId), isNull(financialTransactions.dataEfetivacao)));
+			// Parcela cancelada não está pendente: deixou de ser devida.
+			.where(
+				and(
+					eq(financialTransactions.organizacaoId, userOrgId),
+					isNull(financialTransactions.dataEfetivacao),
+					isNull(financialTransactions.dataCancelamento),
+				),
+			);
 		const statusConditions = transactionStatuses.map((status) => {
 			switch (status) {
 				case "SEM_TRANSACOES":

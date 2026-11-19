@@ -19,9 +19,11 @@ type FinanceTabProps = {
 	editable: boolean;
 	isReceived: boolean;
 	itemsTotal: number;
+	/** Compra cancelada: quantas parcelas foram canceladas com ela (as demais seguem no Financeiro). */
+	cancelledTransactionsCount?: number | null;
 };
 
-export default function FinanceTab({ editor, editable, isReceived, itemsTotal }: FinanceTabProps) {
+export default function FinanceTab({ editor, editable, isReceived, itemsTotal, cancelledTransactionsCount = null }: FinanceTabProps) {
 	const { state, updateAccountingEntry, addAccountingEntryTransaction, updateAccountingEntryTransaction, removeAccountingEntryTransaction } = editor;
 	const entry = state.lancamentoContabil;
 	const activeTransactions = entry.transacoes.filter((transaction) => !transaction.deletar);
@@ -121,10 +123,21 @@ export default function FinanceTab({ editor, editable, isReceived, itemsTotal }:
 					<Section.Count>{activeTransactions.length}</Section.Count>
 				</Section.Header>
 				<Section.Body>
-					<p className="-mt-3 text-xs text-muted-foreground">
-						{isReceived ? "A programação de pagamento continua editável depois do recebimento. " : ""}As transações precisam somar o{" "}
-						<strong className="font-semibold text-foreground/80">VALOR EFETIVO</strong>.
-					</p>
+					{cancelledTransactionsCount !== null ? (
+						<p className={cn("-mt-3 flex gap-1.5 rounded-md px-3 py-2 text-xs", TONE_CLASSES.warn)}>
+							<CircleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+							Compra cancelada: o lançamento foi estornado
+							{cancelledTransactionsCount > 0
+								? ` e ${cancelledTransactionsCount} ${cancelledTransactionsCount === 1 ? "parcela pendente foi cancelada" : "parcelas pendentes foram canceladas"}`
+								: ""}
+							. Parcelas mantidas e devoluções a receber seguem em Financeiro › Transações.
+						</p>
+					) : (
+						<p className="-mt-3 text-xs text-muted-foreground">
+							{isReceived ? "A programação de pagamento continua editável depois do recebimento. " : ""}As transações precisam somar o{" "}
+							<strong className="font-semibold text-foreground/80">VALOR EFETIVO</strong>.
+						</p>
+					)}
 					<PurchaseTransactionsTable
 						entryValue={entry.valor}
 						competenceDate={entry.dataCompetencia}

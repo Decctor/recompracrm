@@ -39,6 +39,7 @@ export async function effectFinancialTransactionCore({
 
 	if (!transaction) throw new createHttpError.NotFound("Transação financeira não encontrada.");
 	if (transaction.dataEfetivacao) throw new createHttpError.BadRequest("Esta transação já está efetivada.");
+	if (transaction.dataCancelamento) throw new createHttpError.BadRequest("Esta transação foi cancelada e não pode ser efetivada.");
 
 	// While the terminal still owns the charge, only its approval settles it. Once the attempt has an
 	// outcome, manual settlement stays available: it is the runbook for approvals that failed to
@@ -76,7 +77,14 @@ export async function effectFinancialTransactionCore({
 		})
 		// `data_efetivacao IS NULL` no próprio UPDATE: a leitura acima não trava a linha, e outra
 		// efetivação concorrente (conciliação, recebimento) não pode ter a data e a auditoria sobrescritas.
-		.where(and(eq(financialTransactions.id, transactionId), eq(financialTransactions.organizacaoId, orgId), isNull(financialTransactions.dataEfetivacao)))
+		.where(
+			and(
+				eq(financialTransactions.id, transactionId),
+				eq(financialTransactions.organizacaoId, orgId),
+				isNull(financialTransactions.dataEfetivacao),
+				isNull(financialTransactions.dataCancelamento),
+			),
+		)
 		.returning({ id: financialTransactions.id });
 
 	if (!updated) throw new createHttpError.Conflict("Esta transação acabou de ser efetivada por outro caminho. Atualize a tela.");

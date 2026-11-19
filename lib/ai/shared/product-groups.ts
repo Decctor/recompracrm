@@ -21,7 +21,8 @@ export async function listActiveProductGroups(db: TDb, organizacaoId: string): P
 	const rows = await db
 		.select({ grupo: products.grupo, quantidade: count() })
 		.from(products)
-		.where(and(eq(products.organizacaoId, organizacaoId), eq(products.ativo, true)))
+		// Grupos do que se vende: um grupo só de insumos não deve aparecer para o agente oferecer.
+		.where(and(eq(products.organizacaoId, organizacaoId), eq(products.ativo, true), eq(products.vendavel, true)))
 		.groupBy(products.grupo)
 		.orderBy(desc(sql`count(*)`))
 		.limit(MAX_GROUPS);

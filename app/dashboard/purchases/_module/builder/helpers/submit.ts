@@ -63,6 +63,7 @@ export function buildPurchaseItemsFromLines(lines: TReviewLine[], productIdByLin
 				externoUnidade: line.unidade,
 				externoFatorConversao: line.fatorConversao,
 				anotacoes: `Importado via ${line.origemImportacao}: ${line.descricao}`,
+				contaContabilId: line.contaContabilId,
 			}),
 		];
 	});

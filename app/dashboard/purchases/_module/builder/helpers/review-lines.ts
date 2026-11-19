@@ -1,5 +1,6 @@
 import type { TImportPurchaseCompositionOutput } from "@/app/api/purchases/import-composition/route";
 import type { TPurchaseCostTreatmentEnum } from "@/schemas/enums";
+import { adjustTaxTreatmentsForDestination } from "@/lib/purchase/destination";
 import { convertLineToProductUnit, unitsAreEquivalent } from "@/lib/purchase/units";
 
 export type TImportResult = TImportPurchaseCompositionOutput["data"];
@@ -42,6 +43,11 @@ export type TReviewLine = TImportedLine & {
 	extraidoValorUnitario: number;
 	documentoRef: string;
 	origemImportacao: "XML" | "IA";
+	/**
+	 * Conta de destino do custo. Nulo = estoque (o padrão). Preenchida, o item não entra no estoque e o
+	 * custo vai direto para a conta (manutenção, reforma, uso e consumo). Ver lib/purchase/destination.ts.
+	 */
+	contaContabilId: string | null;
 };
 
 export type TReviewIssue = "unmapped" | "suggested" | "unit" | "tax";
@@ -82,7 +88,35 @@ export function createReviewLines(result: TImportResult, createId: () => string)
 		extraidoValorUnitario: item.valorUnitario,
 		documentoRef: result.documento.importado.referencia,
 		origemImportacao: result.documento.origem,
+		contaContabilId: null,
 	}));
+}
+
+/**
+ * Muda o destino do custo de uma linha e o que depende dele: fora do estoque, o produto novo nasce sem
+ * rastreio de estoque e não vendável, e os tributos passam a compor o custo (sem crédito). De volta ao
+ * estoque, o produto novo volta a rastrear estoque — a compra é quem dá a entrada.
+ */
+export function setLineDestination(line: TReviewLine, contaContabilId: string | null): TReviewLine {
+	const entersStock = contaContabilId == null;
+	return {
+		...line,
+		contaContabilId,
+		produtoNovo: line.produtoNovo
+			? entersStock
+				? { ...line.produtoNovo, rastreamentoEstoqueAtivo: true }
+				: { ...line.produtoNovo, rastreamentoEstoqueAtivo: false, vendavel: false }
+			: null,
+		modificadoresCusto: line.modificadoresCusto ? adjustTaxTreatmentsForDestination({ modifiers: line.modificadoresCusto, entersStock }) : line.modificadoresCusto,
+	};
+}
+
+/** Destino comum às linhas incluídas: a conta (ou nulo = estoque) quando todas concordam, `undefined` quando divergem. */
+export function getSharedLinesDestination(lines: TReviewLine[]): string | null | undefined {
+	const included = lines.filter((line) => line.incluir);
+	if (included.length === 0) return null;
+	const first = included[0]?.contaContabilId ?? null;
+	return included.every((line) => (line.contaContabilId ?? null) === first) ? first : undefined;
 }
 
 /** Internal unit of the line: the linked product's, or the draft's. */
@@ -142,9 +176,10 @@ export function buildNewProductDraft(line: TReviewLine, id: string): TNewProduct
 		unidade: line.unidade?.trim() || "UN",
 		ncm: line.ncm?.trim() ?? "",
 		// Purchases mostly bring raw material: born outside the sales surfaces, but with stock
-		// tracking on — the purchase itself gives the first stock entry.
+		// tracking on — the purchase itself gives the first stock entry. A line with its own
+		// destination (maintenance, renovation…) never enters stock, so its product doesn't track it.
 		vendavel: false,
-		rastreamentoEstoqueAtivo: true,
+		rastreamentoEstoqueAtivo: line.contaContabilId == null,
 	};
 }
 

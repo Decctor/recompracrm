@@ -83,7 +83,7 @@
 		"sync:data-collecting": "tsx --conditions=react-server ./scripts/sync-data-collecting.ts",
 		"simulate:sale-taxes": "tsx --conditions=react-server ./scripts/simulate-todays-sale-taxes.ts",
 		"test:data-collecting-template-vars": "tsx ./scripts/validate-data-collecting-template-variables.ts",
-		"test:purchases": "node --import tsx --test lib/purchase/import-xml.test.ts lib/purchase/units.test.ts app/dashboard/purchases/_module/builder/helpers/review-lines.test.ts lib/fiscal/inbound/registration-status.test.ts",
+		"test:purchases": "node --import tsx --test lib/purchase/import-xml.test.ts lib/purchase/units.test.ts app/dashboard/purchases/_module/builder/helpers/review-lines.test.ts lib/fiscal/inbound/registration-status.test.ts lib/finances/accounting-entry-lines.test.ts lib/purchase-processing/purchase-cancellation.test.ts",
 		"test:goals": "node --import tsx --test lib/goals/pacing.test.ts lib/operation-timezone.test.ts",
 		"test:period-presets": "node --import tsx --test lib/period-presets.test.ts",
 		"test:productions": "node --import tsx --test lib/productions/builder-math.test.ts lib/productions/weighing-pad.test.ts app/dashboard/production/_module/builder/helpers/plan.test.ts",

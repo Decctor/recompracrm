@@ -53,6 +53,12 @@ soma dos débitos = soma dos créditos = valor do lançamento
 
 As transações financeiras continuam representando parcelas e liquidações e devem reconciliar com o valor de face do lançamento.
 
+### Destino do item (adendo, 2026-11-18)
+
+O valor-base do item deixa de ir sempre para a conta de estoque. Cada item tem uma conta de destino opcional, `purchase_items.conta_contabil_id`, escolhida na entrada da nota; nula, vale o débito padrão de compras. O custo do item (`valorTotalCusto`) é debitado na conta de destino, e **só o item sem conta própria movimenta estoque** — saldo físico e conta de estoque nunca divergem. O destino é classificação contábil (conta + natureza), coerente com a decisão de não haver enum de chaves para linhas: não existe "finalidade" paralela ao plano de contas. Não há destino padrão por produto, fornecedor ou organização.
+
+O cancelamento de compra passa a estornar o lançamento linha a linha e a resolver cada parcela (cancelar, manter, devolução a receber, perda); o que fica sem contrapartida é reconhecido como custo do cancelamento numa conta escolhida. Transações financeiras ganham estado de cancelada (`data_cancelamento`). Detalhes em [`docs/domain/purchase-costing.md`](../domain/purchase-costing.md).
+
 ## Motivos
 
 - Modificadores e documentos são snapshots pertencentes à compra, sem ciclo de vida independente; JSONB preserva sua localidade sem criar tabelas rasas.

@@ -89,6 +89,7 @@ async function getFinancesCashFlow({ input, session }: { input: TGetFinancesCash
 				and(
 					eq(financialTransactions.organizacaoId, organizationId),
 					isNull(financialTransactions.dataEfetivacao),
+					isNull(financialTransactions.dataCancelamento),
 					lte(financialTransactions.dataPrevisao, horizonEnd.toDate()),
 				),
 			),

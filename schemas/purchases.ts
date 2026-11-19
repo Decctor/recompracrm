@@ -252,6 +252,8 @@ export const PurchaseItemSchema = z.object({
 		.optional()
 		.nullable()
 		.transform((val) => (val ? new Date(val) : null)),
+	// Conta contábil de destino do custo. Nulo = estoque. Ver lib/purchase/destination.ts.
+	contaContabilId: z.string({ invalid_type_error: "Tipo não válido para a conta de destino do item da compra." }).optional().nullable(),
 	dataInsercao: z
 		.string({ invalid_type_error: "Tipo não válido para a data de inserção." })
 		.datetime({ message: "Tipo não válido para a data de inserção." })

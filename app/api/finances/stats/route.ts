@@ -254,7 +254,10 @@ async function getFinancesOverallStats({ input, session }: { input: TGetFinances
 			and(
 				eq(fields.organizacaoId, userOrgId),
 				ne(fields.metodo, FINANCIAL_TRANSFER_METHOD),
-				or(isNull(fields.dataEfetivacao), and(gte(fields.dataEfetivacao, periodAfter), lte(fields.dataEfetivacao, periodBefore))),
+				or(
+					and(isNull(fields.dataEfetivacao), isNull(fields.dataCancelamento)),
+					and(gte(fields.dataEfetivacao, periodAfter), lte(fields.dataEfetivacao, periodBefore)),
+				),
 			),
 		columns: {
 			tipo: true,
