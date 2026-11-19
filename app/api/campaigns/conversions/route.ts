@@ -1,6 +1,7 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { assertCanViewCampaigns } from "@/lib/campaigns/access";
+import { CONVERSION_BENEFIT_FILTERS, getConversionBenefits } from "@/lib/campaigns/conversion-benefits";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { createSimplifiedSearchCondition } from "@/lib/search";
 import { db } from "@/services/drizzle";
@@ -13,6 +14,7 @@ import z from "zod";
 import { DEFAULT_PAGE_SIZE, pageSizeInputSchema } from "@/lib/pagination";
 
 const conversionTypeFilterSchema = z.enum(["AQUISICAO", "REATIVACAO", "ACELERACAO", "REGULAR", "ATRASADA"]);
+const conversionBenefitFilterSchema = z.enum(["CUPOM_CAMPANHA", "CASHBACK"]);
 
 const GetCampaignConversionsInputSchema = z.object({
 	campaignId: z.string({ invalid_type_error: "Tipo não válido para ID da campanha." }).optional().nullable(),
@@ -29,6 +31,13 @@ const GetCampaignConversionsInputSchema = z.object({
 		.nullable()
 		.transform((v) => (v ? v.split(",") : []))
 		.pipe(z.array(conversionTypeFilterSchema)),
+	// Conversions whose sale used the campaign's coupon and/or redeemed cashback (all must hold).
+	benefits: z
+		.string({ invalid_type_error: "Tipo não válido para benefícios utilizados." })
+		.optional()
+		.nullable()
+		.transform((v) => (v ? v.split(",") : []))
+		.pipe(z.array(conversionBenefitFilterSchema)),
 	periodAfter: z
 		.string()
 		.optional()
@@ -59,6 +68,8 @@ async function getCampaignConversions({ input, session }: { input: TGetCampaignC
 	if (input.types && input.types.length > 0) {
 		baseConditions.push(inArray(campaignConversions.tipoConversao, input.types));
 	}
+
+	for (const benefit of new Set(input.benefits)) baseConditions.push(CONVERSION_BENEFIT_FILTERS[benefit]);
 
 	// Search by client name
 	if (input.search && input.search.trim().length > 0) {
@@ -101,6 +112,8 @@ async function getCampaignConversions({ input, session }: { input: TGetCampaignC
 		where: inArray(campaignConversions.id, conversionIds),
 		columns: {
 			id: true,
+			vendaId: true,
+			campanhaId: true,
 			clienteId: true,
 			vendaValor: true,
 			atribuicaoReceita: true,
@@ -123,7 +136,8 @@ async function getCampaignConversions({ input, session }: { input: TGetCampaignC
 		},
 	});
 
-	const conversionsMap = new Map(conversionsResult.map((c) => [c.id, c]));
+	const benefits = await getConversionBenefits({ organizationId: userOrgId, conversions: conversionsResult });
+	const conversionsMap = new Map(conversionsResult.map((c) => [c.id, { ...c, beneficios: benefits.get(c.id) ?? { cupom: null, cashback: null } }]));
 	const orderedItems = conversionIds.map((id) => conversionsMap.get(id)).filter((c): c is NonNullable<typeof c> => !!c);
 
 	return {
@@ -147,6 +161,7 @@ const getCampaignConversionsRoute = async (request: NextRequest) => {
 		pageSize: searchParams.get("pageSize"),
 		search: searchParams.get("search") ?? undefined,
 		types: searchParams.get("types") ?? undefined,
+		benefits: searchParams.get("benefits") ?? undefined,
 		periodAfter: searchParams.get("periodAfter") ?? undefined,
 		periodBefore: searchParams.get("periodBefore") ?? undefined,
 	});

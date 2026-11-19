@@ -78,6 +78,20 @@ export default function CashbackProgramsRedemptionBlock({ cashbackProgram, updat
 					handleChange={(value) => updateCashbackProgram({ modalidadeRecompensasPermitida: value })}
 				/>
 				<p className="text-xs text-muted-foreground">Produtos que o cliente leva trocando {unitLabel}. São cadastrados na aba Recompensas.</p>
+				{cashbackProgram.modalidadeRecompensasPermitida ? (
+					<div className="w-full flex flex-col gap-1 pl-4 pt-1">
+						<CheckboxInput
+							checked={cashbackProgram.modalidadeRecompensaAvulsaPermitida ?? false}
+							labelTrue="PERMITIR RECOMPENSA AVULSA NO PONTO DE INTERAÇÃO"
+							labelFalse="PERMITIR RECOMPENSA AVULSA NO PONTO DE INTERAÇÃO"
+							handleChange={(value) => updateCashbackProgram({ modalidadeRecompensaAvulsaPermitida: value })}
+						/>
+						<p className="text-xs text-muted-foreground">
+							Para prêmios que não estão cadastrados: o operador descreve o que o cliente leva e quantos {unitLabel} debitar. Só debita o saldo, sem
+							registrar venda.
+						</p>
+					</div>
+				) : null}
 			</div>
 		</CashbackProgramBlockShell>
 	);

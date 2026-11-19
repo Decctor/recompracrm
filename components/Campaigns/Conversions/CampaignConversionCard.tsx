@@ -3,11 +3,24 @@
 import type { TGetCampaignConversionsOutputItems } from "@/app/api/campaigns/conversions/route";
 import ClientHoverCard from "@/components/Clients/ClientHoverCard";
 import { Chip } from "@/components/ui/chip";
-import { formatDateAsLocale, formatDecimalPlaces, formatToMoney } from "@/lib/formatting";
+import { formatCashbackValue, formatDateAsLocale, formatDecimalPlaces, formatToMoney } from "@/lib/formatting";
 import { appRoutes } from "@/lib/navigation/routes";
 import { cn } from "@/lib/utils";
 import { getTriggerMeta } from "@/app/dashboard/growth/campaigns/_module/builder/helpers/triggers";
-import { ArrowLeftRight, Calendar, Clock, Megaphone, RefreshCw, TrendingDown, TrendingUp, UserPlus, UserRound, Zap } from "lucide-react";
+import {
+	ArrowLeftRight,
+	Calendar,
+	Clock,
+	Coins,
+	Megaphone,
+	RefreshCw,
+	Ticket,
+	TrendingDown,
+	TrendingUp,
+	UserPlus,
+	UserRound,
+	Zap,
+} from "lucide-react";
 import Link from "next/link";
 import { createContext, use, type ComponentType, type ReactNode } from "react";
 
@@ -249,6 +262,50 @@ function CampaignConversionCardTicketImpact() {
 	);
 }
 
+/**
+ * What the sale used: the campaign's own coupon is the direct proof that the message drove the
+ * purchase; cashback matters for campaigns that remind clients of their balance. Renders nothing
+ * when the sale used neither.
+ */
+function CampaignConversionCardBenefits() {
+	const { conversion } = useCampaignConversionCard();
+	const { cupom, cashback } = conversion.beneficios;
+	if (!cupom && !cashback) return null;
+
+	const cashbackLabel = cashback
+		? cashback.recompensas.length > 0
+			? `Resgatou ${cashback.recompensas.join(", ")}`
+			: `Usou ${formatCashbackValue(cashback.valorResgatado, cashback.terminologia)}`
+		: null;
+
+	return (
+		<div className="flex flex-wrap items-center gap-1.5">
+			{cupom ? (
+				<Chip.Root variant={cupom.daCampanha ? "success" : "secondary"} size="sm" shape="md" title={`Código ${cupom.codigo}`}>
+					<Chip.Icon>
+						<Ticket />
+					</Chip.Icon>
+					<Chip.Label weight="semibold">
+						{cupom.daCampanha ? "Cupom da campanha" : "Cupom"}: {cupom.titulo}
+						{cupom.valorDesconto > 0 ? ` · −${formatToMoney(cupom.valorDesconto)}` : ""}
+					</Chip.Label>
+				</Chip.Root>
+			) : null}
+			{cashback && cashbackLabel ? (
+				<Chip.Root variant={cashback.daCampanha ? "success" : "info"} size="sm" shape="md">
+					<Chip.Icon>
+						<Coins />
+					</Chip.Icon>
+					<Chip.Label weight="semibold">
+						{cashbackLabel}
+						{cashback.daCampanha ? " · gerado pela campanha" : ""}
+					</Chip.Label>
+				</Chip.Root>
+			) : null}
+		</div>
+	);
+}
+
 export const CampaignConversionCard = {
 	Provider: CampaignConversionCardProvider,
 	Frame: CampaignConversionCardFrame,
@@ -265,6 +322,7 @@ export const CampaignConversionCard = {
 	MetricDivider: CampaignConversionCardMetricDivider,
 	SaleValue: CampaignConversionCardSaleValue,
 	AttributedRevenue: CampaignConversionCardAttributedRevenue,
+	Benefits: CampaignConversionCardBenefits,
 	Impacts: CampaignConversionCardImpacts,
 	FrequencyImpact: CampaignConversionCardFrequencyImpact,
 	TicketImpact: CampaignConversionCardTicketImpact,

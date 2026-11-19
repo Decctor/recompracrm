@@ -1,5 +1,6 @@
 import type { TGetClientDuplicatesOutput } from "@/app/api/clients/duplicates/route";
 import type { TGetClientDuplicateComparisonOutput } from "@/app/api/clients/duplicates/comparison/route";
+import type { TGetClientMergeSuggestionsOutput } from "@/app/api/clients/duplicates/suggestions/route";
 import type { TClientDuplicateSignalTypeEnum } from "@/schemas/enums";
 import { keepPreviousData, useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import axios from "axios";
@@ -79,20 +80,46 @@ export function usePendingClientDuplicatesCount() {
 	};
 }
 
-async function fetchClientDuplicateComparison(pairId: string) {
+/** Alvo da comparação: um par da fila, ou dois clientes escolhidos à mão (menu de mesclagem). */
+export type TClientComparisonTarget = { pairId: string } | { clientIds: [string, string] };
+
+async function fetchClientDuplicateComparison(target: TClientComparisonTarget) {
 	const searchParams = new URLSearchParams();
-	searchParams.set("pairId", pairId);
+	if ("pairId" in target) searchParams.set("pairId", target.pairId);
+	else searchParams.set("clientIds", target.clientIds.join(","));
 	const { data } = await axios.get<TGetClientDuplicateComparisonOutput>(`/api/clients/duplicates/comparison?${searchParams.toString()}`);
 	return data.data;
 }
 
-export function useClientDuplicateComparison({ pairId }: { pairId: string }) {
+export function useClientDuplicateComparison({ target }: { target: TClientComparisonTarget | null }) {
+	const queryKey = ["client-duplicate-comparison", target && ("pairId" in target ? target.pairId : target.clientIds.join(","))];
 	return {
 		...useQuery({
-			queryKey: ["client-duplicate-comparison", pairId],
-			queryFn: () => fetchClientDuplicateComparison(pairId),
-			enabled: !!pairId,
+			queryKey,
+			queryFn: () => fetchClientDuplicateComparison(target as TClientComparisonTarget),
+			enabled: !!target,
 		}),
-		queryKey: ["client-duplicate-comparison", pairId],
+		queryKey,
+	};
+}
+
+async function fetchClientMergeSuggestions(clientId: string) {
+	const searchParams = new URLSearchParams();
+	searchParams.set("clientId", clientId);
+	const { data } = await axios.get<TGetClientMergeSuggestionsOutput>(`/api/clients/duplicates/suggestions?${searchParams.toString()}`);
+	return data.data.suggestions;
+}
+
+export function useClientMergeSuggestions({ clientId }: { clientId: string }) {
+	const queryKey = ["client-merge-suggestions", clientId];
+	return {
+		...useQuery({
+			queryKey,
+			queryFn: () => fetchClientMergeSuggestions(clientId),
+			// Varre a base da organização: não refaz a cada foco de janela.
+			staleTime: 60_000,
+			refetchOnWindowFocus: false,
+		}),
+		queryKey,
 	};
 }

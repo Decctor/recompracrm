@@ -9,13 +9,15 @@ import { Input } from "@/components/ui/input";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { Label } from "@/components/ui/label";
 import { getErrorMessage } from "@/lib/errors";
-import { formatDecimalPlaces, formatToMoney } from "@/lib/formatting";
+import { formatCashbackValue, formatDecimalPlaces, formatToMoney, getCashbackUnitLabel } from "@/lib/formatting";
 import { approvePoiTransactionRequest } from "@/lib/mutations/poi-transaction-requests";
+import { getFreeFormRewardBlockReason } from "@/lib/point-of-interaction/free-form-reward";
 import { saleValuesMatch } from "@/lib/point-of-interaction/sale-value-confirmation";
 import { cn } from "@/lib/utils";
 import { useMutation } from "@tanstack/react-query";
 import { REGEXP_ONLY_DIGITS } from "input-otp";
-import { AlertTriangle } from "lucide-react";
+import type { TCashbackProgramTerminologyEnum } from "@/schemas/enums";
+import { AlertTriangle, Gift } from "lucide-react";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
 
@@ -35,6 +37,15 @@ type TApproveTransactionCoupon = {
 	condicoesTexto: string | null;
 };
 
+type TApproveTransactionFreeFormReward = {
+	descricao: string;
+	/** Débito sugerido no pedido; nulo quando o cliente só descreveu o prêmio (pedido pelo celular). */
+	valor: number | null;
+	/** Saldo atual do cliente, quando conhecido. */
+	saldoDisponivel: number | null;
+	terminologia: TCashbackProgramTerminologyEnum;
+};
+
 type ApproveTransactionProps = {
 	requestId: string;
 	clientDisplayName?: string;
@@ -42,6 +53,8 @@ type ApproveTransactionProps = {
 	valorFinal: number;
 	/** Cupom solicitado na transação (quando MANUAL sem valor, o operador informa o desconto aqui). */
 	coupon?: TApproveTransactionCoupon | null;
+	/** Recompensa avulsa: o operador define aqui quanto debitar do saldo. Sem venda, sem valor a conferir. */
+	freeFormReward?: TApproveTransactionFreeFormReward | null;
 	/** Quando ausente, é obrigatório informar a senha do operador (vendedor). */
 	hasLinkedSeller: boolean;
 	requiresOperatorPassword: boolean;
@@ -73,6 +86,7 @@ export function ApproveTransaction({
 	valorBruto,
 	valorFinal,
 	coupon,
+	freeFormReward,
 	hasLinkedSeller,
 	requiresOperatorPassword,
 	requiresSaleValueConfirmation,
@@ -83,8 +97,10 @@ export function ApproveTransaction({
 	const [operatorConfirmedSaleValue, setOperatorConfirmedSaleValue] = useState<number | null>(null);
 	const [operatorCouponDiscountValue, setOperatorCouponDiscountValue] = useState<number | null>(null);
 	const [highValueConfirmed, setHighValueConfirmed] = useState(false);
+	const [operatorFreeFormRewardValue, setOperatorFreeFormRewardValue] = useState<number | null>(freeFormReward?.valor ?? null);
 
-	const requiresHighValueConfirmation = valorFinal >= HIGH_VALUE_CONFIRMATION_THRESHOLD;
+	// Recompensa avulsa não tem venda: o valor em reais a conferir é zero, o que importa é o débito.
+	const requiresHighValueConfirmation = !freeFormReward && valorFinal >= HIGH_VALUE_CONFIRMATION_THRESHOLD;
 	const hasDiscount = valorBruto > valorFinal;
 	// Cupom MANUAL enviado sem valor: o desconto é definido pelo operador na aprovação.
 	const requiresCouponDiscountInput = !!coupon && coupon.validacaoModo === "MANUAL" && !coupon.valorDesconto;
@@ -127,6 +143,17 @@ export function ApproveTransaction({
 			toast.error("O valor confirmado não corresponde ao valor da venda.");
 			return;
 		}
+		if (freeFormReward) {
+			const freeFormBlockReason = getFreeFormRewardBlockReason({
+				descricao: freeFormReward.descricao,
+				valor: operatorFreeFormRewardValue,
+				availableBalance: freeFormReward.saldoDisponivel,
+			});
+			if (freeFormBlockReason) {
+				toast.error(freeFormBlockReason);
+				return;
+			}
+		}
 		if (requiresCouponDiscountInput) {
 			if (!operatorCouponDiscountValue || operatorCouponDiscountValue <= 0) {
 				toast.error("Informe o valor do desconto do cupom (validação do operador).");
@@ -151,8 +178,11 @@ export function ApproveTransaction({
 			operatorIdentifier: code.length === OPERATOR_PASSWORD_LENGTH ? code : undefined,
 			operatorConfirmedSaleValue: requiresSaleValueConfirmation ? operatorConfirmedSaleValue : undefined,
 			operatorCouponDiscountValue: requiresCouponDiscountInput ? operatorCouponDiscountValue : undefined,
+			operatorFreeFormRewardValue: freeFormReward ? operatorFreeFormRewardValue : undefined,
 		});
 	}, [
+		freeFormReward,
+		operatorFreeFormRewardValue,
 		hasLinkedSeller,
 		highValueConfirmed,
 		mutate,
@@ -190,14 +220,18 @@ export function ApproveTransaction({
 				</ResponsiveMenu.Header>
 				<ResponsiveMenuAnimatedBody stateKey="content" className="overflow-x-hidden overflow-y-auto">
 					<div className="flex w-full min-w-0 flex-col gap-4 overflow-x-hidden py-2">
-						{/* Valor em destaque: o operador deve conferir o valor no momento da aprovação. */}
-						<div className="flex w-full flex-col items-center gap-1 rounded-2xl border border-brand/20 bg-brand/5 px-4 py-5 text-center">
-							<span className="text-[0.65rem] font-bold uppercase tracking-widest text-muted-foreground">Valor a aprovar</span>
-							<HighlightedMoney value={valorFinal} />
-							{hasDiscount ? (
-								<span className="text-[0.7rem] font-medium text-muted-foreground">Bruto: {formatToMoney(valorBruto)} · com desconto/resgate aplicado</span>
-							) : null}
-						</div>
+						{freeFormReward ? (
+							<FreeFormRewardApproval freeFormReward={freeFormReward} value={operatorFreeFormRewardValue} onChange={setOperatorFreeFormRewardValue} />
+						) : (
+							// Valor em destaque: o operador deve conferir o valor no momento da aprovação.
+							<div className="flex w-full flex-col items-center gap-1 rounded-2xl border border-brand/20 bg-brand/5 px-4 py-5 text-center">
+								<span className="text-[0.65rem] font-bold uppercase tracking-widest text-muted-foreground">Valor a aprovar</span>
+								<HighlightedMoney value={valorFinal} />
+								{hasDiscount ? (
+									<span className="text-[0.7rem] font-medium text-muted-foreground">Bruto: {formatToMoney(valorBruto)} · com desconto/resgate aplicado</span>
+								) : null}
+							</div>
+						)}
 
 						{requiresHighValueConfirmation ? (
 							<label
@@ -290,5 +324,64 @@ export function ApproveTransaction({
 				</ResponsiveMenu.Footer>
 			</ResponsiveMenu.Content>
 		</ResponsiveMenu.Root>
+	);
+}
+
+/**
+ * Recompensa avulsa na aprovação: o que o cliente pediu (como ele descreveu) e quanto debitar,
+ * contra o saldo atual. O débito é do operador — o celular do cliente não define valor.
+ */
+function FreeFormRewardApproval({
+	freeFormReward,
+	value,
+	onChange,
+}: {
+	freeFormReward: TApproveTransactionFreeFormReward;
+	value: number | null;
+	onChange: (value: number | null) => void;
+}) {
+	const { terminologia, saldoDisponivel } = freeFormReward;
+	const isPoints = terminologia === "PONTOS";
+	const balanceAfter = saldoDisponivel != null && value != null ? saldoDisponivel - value : null;
+	const exceedsBalance = balanceAfter != null && balanceAfter < -0.0001;
+	return (
+		<div className="flex w-full flex-col gap-3 rounded-2xl border border-brand/20 bg-brand/5 px-4 py-4">
+			<div className="flex items-start gap-3">
+				<div className="flex h-10 w-10 min-h-10 min-w-10 items-center justify-center rounded-md bg-brand/10">
+					<Gift className="h-5 w-5 text-brand" />
+				</div>
+				<div className="flex min-w-0 flex-col gap-0.5">
+					<span className="text-[0.65rem] font-bold uppercase tracking-widest text-muted-foreground">Recompensa avulsa</span>
+					<p className="text-sm font-bold break-words">{freeFormReward.descricao}</p>
+				</div>
+			</div>
+			<div className="flex flex-col gap-1">
+				<Label htmlFor="poi-approve-free-form-value" className="text-xs font-medium tracking-tight text-foreground/80">
+					{`VALOR A DEBITAR (${getCashbackUnitLabel(terminologia, { uppercase: true })})`}
+					<span className="text-red-500">*</span>
+				</Label>
+				<Input
+					id="poi-approve-free-form-value"
+					type="number"
+					inputMode={isPoints ? "numeric" : "decimal"}
+					min={0}
+					step={isPoints ? 1 : 0.01}
+					placeholder={isPoints ? "Ex: 500" : "Ex: 25,00"}
+					value={value ?? ""}
+					onChange={(event) => {
+						const inputValue = Number(event.target.value);
+						onChange(event.target.value !== "" && Number.isFinite(inputValue) && inputValue > 0 ? inputValue : null);
+					}}
+				/>
+				{saldoDisponivel != null ? (
+					<p className={cn("text-[0.7rem]", exceedsBalance ? "font-bold text-red-600" : "text-muted-foreground")}>
+						Saldo do cliente: {formatCashbackValue(saldoDisponivel, terminologia)}
+						{balanceAfter != null ? (exceedsBalance ? " · saldo insuficiente" : ` · fica ${formatCashbackValue(balanceAfter, terminologia)}`) : null}
+					</p>
+				) : (
+					<p className="text-[0.7rem] text-muted-foreground">Combine o valor com o cliente. Só o saldo é debitado, sem registrar venda.</p>
+				)}
+			</div>
+		</div>
 	);
 }

@@ -381,6 +381,42 @@ test("events older than a day are discarded rather than backfilled", async () =>
 	assert.equal((await database.query.campaignDispatches.findMany()).length, 0);
 });
 
+test("confirmation attributes the sale to the last campaign message delivered inside its window", async () => {
+	const daysAgo = (days: number) => new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+	await campaign("older", { gatilhoTipo: "USO-UNICO" });
+	await campaign("latest", { gatilhoTipo: "USO-UNICO" });
+	await campaign("failed", { gatilhoTipo: "USO-UNICO" });
+	await campaign("expired", { gatilhoTipo: "USO-UNICO", atribuicaoJanelaDias: 1 });
+	const message = (id: string, campanhaId: string, dataExecucao: Date, statusEnvio: string) =>
+		seed(schema.interactions, { id, organizacaoId: "org", clienteId: "client", campanhaId, tipo: "ENVIO-MENSAGEM", statusEnvio, dataExecucao });
+	await message("older-message", "older", daysAgo(5), "LIDO");
+	await message("latest-message", "latest", daysAgo(3), "ENTREGUE");
+	// Newer than the winner, but never delivered or already outside its own one-day window.
+	await message("failed-message", "failed", daysAgo(1), "FALHOU");
+	await message("expired-message", "expired", daysAgo(2), "ENTREGUE");
+
+	await confirm();
+
+	const conversions = await database.query.campaignConversions.findMany();
+	assert.deepEqual(
+		conversions.map((conversion) => [conversion.campanhaId, conversion.interacaoId, conversion.atribuicaoReceita]),
+		[["latest", "latest-message", 100]],
+	);
+	const sale = await database.query.sales.findFirst({ where: eq(schema.sales.id, "sale") });
+	assert.equal(sale?.atribuicaoProcessada, true);
+	assert.equal(sale?.atribuicaoAplicavel, true);
+	assert.equal(sale?.atribuicaoCampanhaPrincipalId, "latest");
+	assert.equal(sale?.atribuicaoCampanhaConversaoId, conversions[0]?.id);
+});
+
+test("confirmation without a recent campaign message marks the sale processed and not attributable", async () => {
+	await confirm();
+	assert.equal((await database.query.campaignConversions.findMany()).length, 0);
+	const sale = await database.query.sales.findFirst({ where: eq(schema.sales.id, "sale") });
+	assert.equal(sale?.atribuicaoProcessada, true);
+	assert.equal(sale?.atribuicaoAplicavel, false);
+});
+
 test("anonymous sales and disabled capture keep confirmation functional without events", async () => {
 	await database.update(schema.sales).set({ clienteId: null }).where(eq(schema.sales.id, "sale"));
 	await confirm();

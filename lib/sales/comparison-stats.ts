@@ -1,5 +1,6 @@
 import { getProductSalesLines } from "@/lib/products/product-sales-lines";
 import { localDayKey } from "@/lib/operation-timezone";
+import { countPeriodDays } from "@/lib/period-presets";
 import { buildSalesStatsConditions, withinPeriod, type TSalesStatsFilters } from "@/lib/sales/stats-conditions";
 import { db } from "@/services/drizzle";
 import { clients, products, saleItems, sales, sellers } from "@/services/drizzle/schema";
@@ -81,10 +82,6 @@ function toNumber(value: unknown) {
 	return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function countDays(period: TComparisonPeriod) {
-	return Math.max(dayjs(period.before).startOf("day").diff(dayjs(period.after).startOf("day"), "day") + 1, 1);
-}
-
 async function getPeriodTotals({
 	organizacaoId,
 	conditions,
@@ -149,7 +146,7 @@ async function getPeriodTotals({
 		custo: toNumber(totalsRow?.custo),
 		qtdeVendas: toNumber(totalsRow?.qtde),
 		qtdeItensVendidos: toNumber(itemsRow?.total),
-		dias: countDays(period),
+		dias: countPeriodDays(period),
 		faturamentoClientesRecorrentes: toNumber(recurrentRow?.total),
 		faturamentoNovosClientes: toNumber(newRow?.total),
 		faturamentoNaoIdentificados: toNumber(unidentifiedRow?.total),
@@ -168,7 +165,7 @@ async function getPeriodDailySeries({ conditions, period }: { conditions: Return
 	const byDay = new Map(rows.map((row) => [row.data, { qtde: toNumber(row.qtde), total: toNumber(row.total) }]));
 
 	// Dias sem venda entram zerados: uma série com buracos desloca o alinhamento com o outro período.
-	const days = countDays(period);
+	const days = countPeriodDays(period);
 	const start = dayjs(period.after).startOf("day");
 	return Array.from({ length: days }, (_, index) => {
 		const data = start.add(index, "day").format("YYYY-MM-DD");

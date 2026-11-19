@@ -2,6 +2,7 @@ import { resolveGoalPermissions } from "@/lib/permissions/goals";
 import { canViewCosts } from "@/lib/permissions/sensitive-data";
 import GoalPaceChip from "@/components/Goals/GoalPaceChip";
 import { useOrgColors } from "@/components/Providers/OrgColorsProvider";
+import { formatComparisonPeriodSummary } from "@/components/Stats/ComparisonPeriodFilter";
 import { GoalTrackingBar } from "@/components/Stats/GoalTrackingBar";
 import { useGoalsStats } from "@/lib/queries/goals";
 import StatUnitCard from "@/components/Stats/StatUnitCard";
@@ -9,9 +10,9 @@ import type { TAuthUserSession } from "@/lib/authentication/types";
 import { formatDecimalPlaces, formatToMoney } from "@/lib/formatting";
 import { useOverallSalesStats } from "@/lib/queries/stats/overall";
 import type { TOverallSalesStats } from "@/app/api/stats/sales-overall/route";
-import type { TSaleStatsGeneralQueryParams } from "@/schemas/query-params-utils";
+import type { TSaleStatsGeneralQueryParams, TSalesOverallStatsFilters } from "@/schemas/query-params-utils";
 import { BadgeDollarSign, Percent, ShoppingBag, UserRoundX } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
 import { BsCart } from "react-icons/bs";
 import { BsFileEarmarkText, BsTicketPerforated } from "react-icons/bs";
 import { VscDiffAdded } from "react-icons/vsc";
@@ -22,20 +23,31 @@ type OverallStatsBlockProps = {
 	userMembership: NonNullable<TAuthUserSession["membership"]>;
 	userOrg: NonNullable<TAuthUserSession["membership"]>["organizacao"];
 	generalQueryParams: TSaleStatsGeneralQueryParams;
+	/** Recorte já resolvido pelo filtro "comparar com"; `null` = sem comparação. */
+	comparisonPeriod: { after: string; before: string } | null;
 };
-function OverallStatsBlock({ user, userMembership, userOrg, generalQueryParams }: OverallStatsBlockProps) {
+function OverallStatsBlock({ user, userMembership, userOrg, generalQueryParams, comparisonPeriod }: OverallStatsBlockProps) {
 	const isUserAllowedToSeeSensitiveData = canViewCosts(userMembership.permissoes);
 	// O ritmo vem de /api/goals/stats, que exige `visualizarMetas`: sem ela o chip nem consulta.
 	const canViewGoals = resolveGoalPermissions(userMembership.permissoes).visualizar;
-	const [queryParams, setQueryParams] = useState<TSaleStatsGeneralQueryParams>(generalQueryParams);
 	const { getPrimaryGradientStyle } = useOrgColors();
 
+	const comparisonAfter = comparisonPeriod?.after ?? null;
+	const comparisonBefore = comparisonPeriod?.before ?? null;
+	const queryParams = useMemo<TSalesOverallStatsFilters>(
+		() => ({
+			...generalQueryParams,
+			comparisonPeriod: comparisonAfter && comparisonBefore ? { after: comparisonAfter, before: comparisonBefore } : null,
+		}),
+		[generalQueryParams, comparisonAfter, comparisonBefore],
+	);
 	const [debouncedQueryParams] = useDebounce(queryParams, 1000);
 
-	const { data: overallStats, isLoading: overallStatsLoading } = useOverallSalesStats(debouncedQueryParams);
-	useEffect(() => {
-		setQueryParams(generalQueryParams);
-	}, [generalQueryParams]);
+	const { data: overallStats } = useOverallSalesStats(debouncedQueryParams);
+	// O rótulo vem da resposta, não do filtro: diz contra o que os números na tela foram calculados.
+	const previousLabel = overallStats?.periodoComparacao
+		? `EM ${formatComparisonPeriodSummary(overallStats.periodoComparacao.after, overallStats.periodoComparacao.before)}`
+		: undefined;
 	return (
 		<div className="w-full flex flex-col gap-2 py-2">
 			<div className="bg-card border-border flex w-full flex-col gap-1 rounded-xl border px-3 py-4 shadow-2xs">
@@ -58,9 +70,13 @@ function OverallStatsBlock({ user, userMembership, userOrg, generalQueryParams }
 				</div>
 			</div>
 			{userOrg?.assinaturaPlano === "ESSENCIAL" ? (
-				<OverallStatsBlockStarter overallStats={overallStats} />
+				<OverallStatsBlockStarter overallStats={overallStats} previousLabel={previousLabel} />
 			) : (
-				<OverallStatsBlockPlus overallStats={overallStats} isUserAllowedToSeeSensitiveData={isUserAllowedToSeeSensitiveData} />
+				<OverallStatsBlockPlus
+					overallStats={overallStats}
+					previousLabel={previousLabel}
+					isUserAllowedToSeeSensitiveData={isUserAllowedToSeeSensitiveData}
+				/>
 			)}
 		</div>
 	);
@@ -85,11 +101,13 @@ export default OverallStatsBlock;
 
 type OverallStatsBlockStarterProps = {
 	overallStats: TOverallSalesStats | undefined;
+	previousLabel: string | undefined;
 };
-function RevenueBreakdownRow({ overallStats }: { overallStats: TOverallSalesStats | undefined }) {
+function RevenueBreakdownRow({ overallStats, previousLabel }: OverallStatsBlockStarterProps) {
 	return (
 		<div className="flex w-full flex-col items-center justify-around gap-2 lg:flex-row">
 			<StatUnitCard
+				previousLabel={previousLabel}
 				title="FATURAMENTO POR CLIENTES EXISTENTES"
 				icon={<BadgeDollarSign className="w-4 h-4 min-w-4 min-h-4" />}
 				current={{
@@ -110,6 +128,7 @@ function RevenueBreakdownRow({ overallStats }: { overallStats: TOverallSalesStat
 				className="w-full lg:w-1/3"
 			/>
 			<StatUnitCard
+				previousLabel={previousLabel}
 				title="FATURAMENTO POR CLIENTES NOVOS"
 				icon={<BadgeDollarSign className="w-4 h-4 min-w-4 min-h-4" />}
 				current={{
@@ -130,6 +149,7 @@ function RevenueBreakdownRow({ overallStats }: { overallStats: TOverallSalesStat
 				className="w-full lg:w-1/3"
 			/>
 			<StatUnitCard
+				previousLabel={previousLabel}
 				title="FATURAMENTO AO CONSUMIDOR"
 				icon={<UserRoundX className="w-4 h-4 min-w-4 min-h-4" />}
 				current={{
@@ -155,86 +175,97 @@ function RevenueBreakdownRow({ overallStats }: { overallStats: TOverallSalesStat
 	);
 }
 
-function OverallStatsBlockStarter({ overallStats }: OverallStatsBlockStarterProps) {
+function OverallStatsBlockStarter({ overallStats, previousLabel }: OverallStatsBlockStarterProps) {
 	return (
 		<>
 			<div className="flex w-full flex-col items-center justify-around gap-2 lg:flex-row">
 				<StatUnitCard
+					previousLabel={previousLabel}
 					title="Número de Vendas"
 					icon={<VscDiffAdded className="w-4 h-4 min-w-4 min-h-4" />}
 					current={{ value: overallStats?.qtdeVendas.atual || 0, format: (n) => formatDecimalPlaces(n) }}
 					previous={
-						overallStats?.qtdeVendas.anterior ? { value: overallStats?.qtdeVendas.anterior || 0, format: (n) => formatDecimalPlaces(n) } : undefined
+						overallStats?.qtdeVendas.anterior != null ? { value: overallStats.qtdeVendas.anterior, format: (n) => formatDecimalPlaces(n) } : undefined
 					}
 					className="w-full lg:w-1/2"
 				/>
 				<StatUnitCard
+					previousLabel={previousLabel}
 					title="Faturamento"
 					icon={<BsFileEarmarkText className="w-4 h-4 min-w-4 min-h-4" />}
 					current={{ value: overallStats?.faturamento.atual || 0, format: (n) => formatToMoney(n) }}
-					previous={overallStats?.faturamento.anterior ? { value: overallStats.faturamento.anterior || 0, format: (n) => formatToMoney(n) } : undefined}
+					previous={overallStats?.faturamento.anterior != null ? { value: overallStats.faturamento.anterior, format: (n) => formatToMoney(n) } : undefined}
 					className="w-full lg:w-1/2"
 				/>
 			</div>
 			<div className="flex w-full flex-col items-center justify-around gap-2 lg:flex-row">
 				<StatUnitCard
+					previousLabel={previousLabel}
 					title="Ticket Médio"
 					icon={<BsTicketPerforated className="w-4 h-4 min-w-4 min-h-4" />}
 					current={{ value: overallStats?.ticketMedio.atual || 0, format: (n) => formatToMoney(n) }}
-					previous={overallStats?.ticketMedio.anterior ? { value: overallStats.ticketMedio.anterior || 0, format: (n) => formatToMoney(n) } : undefined}
+					previous={overallStats?.ticketMedio.anterior != null ? { value: overallStats.ticketMedio.anterior, format: (n) => formatToMoney(n) } : undefined}
 					className="w-full lg:w-1/2"
 				/>
 				<StatUnitCard
+					previousLabel={previousLabel}
 					title="Valor Diário Vendido"
 					icon={<BsCart className="w-4 h-4 min-w-4 min-h-4" />}
 					current={{ value: overallStats?.valorDiarioVendido.atual || 0, format: (n) => formatToMoney(n) }}
 					previous={
-						overallStats?.valorDiarioVendido.anterior
-							? { value: overallStats.valorDiarioVendido.anterior || 0, format: (n) => formatToMoney(n) }
+						overallStats?.valorDiarioVendido.anterior != null
+							? { value: overallStats.valorDiarioVendido.anterior, format: (n) => formatToMoney(n) }
 							: undefined
 					}
 					className="w-full lg:w-1/2"
 				/>
 			</div>
-			<RevenueBreakdownRow overallStats={overallStats} />
+			<RevenueBreakdownRow overallStats={overallStats} previousLabel={previousLabel} />
 		</>
 	);
 }
 
 type OverallStatsBlockPlusProps = {
 	overallStats: TOverallSalesStats | undefined;
+	previousLabel: string | undefined;
 	isUserAllowedToSeeSensitiveData: boolean;
 };
-function OverallStatsBlockPlus({ overallStats, isUserAllowedToSeeSensitiveData }: OverallStatsBlockPlusProps) {
+function OverallStatsBlockPlus({ overallStats, previousLabel, isUserAllowedToSeeSensitiveData }: OverallStatsBlockPlusProps) {
 	return (
 		<>
 			<div className="flex w-full flex-col items-center justify-around gap-2 lg:flex-row">
 				<StatUnitCard
+					previousLabel={previousLabel}
 					title="Número de Vendas"
 					icon={<VscDiffAdded className="w-4 h-4 min-w-4 min-h-4" />}
 					current={{ value: overallStats?.qtdeVendas.atual || 0, format: (n) => formatDecimalPlaces(n) }}
 					previous={
-						overallStats?.qtdeVendas.anterior ? { value: overallStats?.qtdeVendas.anterior || 0, format: (n) => formatDecimalPlaces(n) } : undefined
+						overallStats?.qtdeVendas.anterior != null ? { value: overallStats.qtdeVendas.anterior, format: (n) => formatDecimalPlaces(n) } : undefined
 					}
 					className={isUserAllowedToSeeSensitiveData ? "w-full lg:w-1/4" : "w-full lg:w-1/2"}
 				/>
 				<StatUnitCard
+					previousLabel={previousLabel}
 					title="Faturamento"
 					icon={<BsFileEarmarkText className="w-4 h-4 min-w-4 min-h-4" />}
 					current={{ value: overallStats?.faturamento.atual || 0, format: (n) => formatToMoney(n) }}
-					previous={overallStats?.faturamento.anterior ? { value: overallStats.faturamento.anterior || 0, format: (n) => formatToMoney(n) } : undefined}
+					previous={overallStats?.faturamento.anterior != null ? { value: overallStats.faturamento.anterior, format: (n) => formatToMoney(n) } : undefined}
 					className={isUserAllowedToSeeSensitiveData ? "w-full lg:w-1/4" : "w-full lg:w-1/2"}
 				/>
 				{isUserAllowedToSeeSensitiveData ? (
 					<>
 						<StatUnitCard
+							previousLabel={previousLabel}
 							title="Margem Bruta"
 							icon={<BsFileEarmarkText className="w-4 h-4 min-w-4 min-h-4" />}
 							current={{ value: overallStats?.margemBruta.atual || 0, format: (n) => formatToMoney(n) }}
-							previous={overallStats?.margemBruta.anterior ? { value: overallStats.margemBruta.anterior || 0, format: (n) => formatToMoney(n) } : undefined}
+							previous={
+								overallStats?.margemBruta.anterior != null ? { value: overallStats.margemBruta.anterior, format: (n) => formatToMoney(n) } : undefined
+							}
 							className="w-full lg:w-1/4"
 						/>
 						<StatUnitCard
+							previousLabel={previousLabel}
 							title="Margem"
 							icon={<Percent className="w-4 h-4 min-w-4 min-h-4" />}
 							current={{
@@ -242,9 +273,9 @@ function OverallStatsBlockPlus({ overallStats, isUserAllowedToSeeSensitiveData }
 								format: (n) => formatDecimalPlaces(n),
 							}}
 							previous={
-								overallStats?.margemBruta.anterior && overallStats?.faturamento.anterior
+								overallStats?.margemBruta.anterior != null && overallStats.faturamento.anterior
 									? {
-											value: (100 * (overallStats.margemBruta.anterior || 0)) / (overallStats.faturamento.anterior || 0),
+											value: (100 * overallStats.margemBruta.anterior) / overallStats.faturamento.anterior,
 											format: (n) => formatDecimalPlaces(n),
 										}
 									: undefined
@@ -256,37 +287,39 @@ function OverallStatsBlockPlus({ overallStats, isUserAllowedToSeeSensitiveData }
 			</div>
 			<div className="flex w-full flex-col items-center justify-around gap-2 lg:flex-row">
 				<StatUnitCard
+					previousLabel={previousLabel}
 					title="Ticket Médio"
 					icon={<BsTicketPerforated className="w-4 h-4 min-w-4 min-h-4" />}
 					current={{ value: overallStats?.ticketMedio.atual || 0, format: (n) => formatToMoney(n) }}
-					previous={overallStats?.ticketMedio.anterior ? { value: overallStats.ticketMedio.anterior || 0, format: (n) => formatToMoney(n) } : undefined}
+					previous={overallStats?.ticketMedio.anterior != null ? { value: overallStats.ticketMedio.anterior, format: (n) => formatToMoney(n) } : undefined}
 					className="w-full lg:w-1/3"
 				/>
 				<StatUnitCard
+					previousLabel={previousLabel}
 					title="Valor Diário Vendido"
 					icon={<BsCart className="w-4 h-4 min-w-4 min-h-4" />}
 					current={{ value: overallStats?.valorDiarioVendido.atual || 0, format: (n) => formatToMoney(n) }}
 					previous={
-						overallStats?.valorDiarioVendido.anterior
-							? { value: overallStats.valorDiarioVendido.anterior || 0, format: (n) => formatToMoney(n) }
+						overallStats?.valorDiarioVendido.anterior != null
+							? { value: overallStats.valorDiarioVendido.anterior, format: (n) => formatToMoney(n) }
 							: undefined
 					}
 					className="w-full lg:w-1/3"
 				/>
 				<StatUnitCard
+					previousLabel={previousLabel}
 					title="Média de Itens por Venda"
 					icon={<ShoppingBag className="w-4 h-4 min-w-4 min-h-4" />}
 					current={{ value: overallStats?.itensPorVendaMedio.atual || 0, format: (n) => formatDecimalPlaces(n) }}
 					previous={
-						overallStats?.itensPorVendaMedio.anterior
-							? { value: overallStats.itensPorVendaMedio.anterior || 0, format: (n) => formatDecimalPlaces(n) }
+						overallStats?.itensPorVendaMedio.anterior != null
+							? { value: overallStats.itensPorVendaMedio.anterior, format: (n) => formatDecimalPlaces(n) }
 							: undefined
 					}
 					className="w-full lg:w-1/3"
 				/>
 			</div>
-			<RevenueBreakdownRow overallStats={overallStats} />
+			<RevenueBreakdownRow overallStats={overallStats} previousLabel={previousLabel} />
 		</>
 	);
 }
-

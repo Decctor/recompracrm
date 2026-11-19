@@ -5,6 +5,7 @@ import { hasCashbackPaymentAccrualRules, resolveSaleAccrual } from "@/lib/cashba
 import { loadSaleAccrualPayments } from "@/lib/cashback/sale-accrual-payments";
 import { assertPOSFiscalEmissionReady } from "@/lib/fiscal/document-preview";
 import { captureSaleCampaignEvent } from "@/lib/campaigns/events/handlers/sale-capture";
+import { processConversionAttribution } from "@/lib/conversions/attribution";
 import { publishPendingCampaignEventsSafely } from "@/lib/campaigns/events/queue";
 import { waitUntil } from "@vercel/functions";
 import { applyCashbackRedemptionFIFO } from "@/lib/cashback/redemption";
@@ -650,17 +651,19 @@ export async function processSaleConfirmationInTransaction({ tx, input }: { tx: 
 					// ainda não incluem o brinde. Não confirme valores financeiros divergentes:
 					// contabilidade, pagamentos e acúmulo usam sale.valorTotal nesta transação.
 					const itemNetTotal = sale.itens.reduce(
-						(sum, item) => sum + normalizeCouponGiftItem(
-							{
-								quantidade: item.quantidade,
-								valorUnitarioFinal: item.valorVendaUnitario,
-								valorTotalBruto: item.valorVendaTotalBruto,
-								valorDesconto: item.valorTotalDesconto,
-								valorTotalLiquido: item.valorVendaTotalLiquido,
-							},
-							evaluation.brinde,
-							readCouponItemIdentity(item),
-						).valorTotalLiquido,
+						(sum, item) =>
+							sum +
+							normalizeCouponGiftItem(
+								{
+									quantidade: item.quantidade,
+									valorUnitarioFinal: item.valorVendaUnitario,
+									valorTotalBruto: item.valorVendaTotalBruto,
+									valorDesconto: item.valorTotalDesconto,
+									valorTotalLiquido: item.valorVendaTotalLiquido,
+								},
+								evaluation.brinde,
+								readCouponItemIdentity(item),
+							).valorTotalLiquido,
 						0,
 					);
 					const discountsTotal = sale.descontosTotal ?? 0;
@@ -672,7 +675,9 @@ export async function processSaleConfirmationInTransaction({ tx, input }: { tx: 
 						discountsTotal + 0.000001 < evaluation.valorDesconto + redemptionValue ||
 						Math.abs(sale.valorTotal - expectedTotal) > 0.000001
 					) {
-						throw new createHttpError.BadRequest("Os totais da venda não correspondem ao brinde aplicado. Reaplique o cupom e salve o carrinho antes de confirmar.");
+						throw new createHttpError.BadRequest(
+							"Os totais da venda não correspondem ao brinde aplicado. Reaplique o cupom e salve o carrinho antes de confirmar.",
+						);
 					}
 				}
 				discountValue = evaluation.valorDesconto;
@@ -709,7 +714,9 @@ export async function processSaleConfirmationInTransaction({ tx, input }: { tx: 
 					.set({
 						valorTotalDesconto: giftedItem.valorTotalDesconto + discountValue,
 						valorVendaTotalBruto: roundCouponGiftCurrency(giftedItem.quantidade * giftedItem.valorVendaUnitario),
-						valorVendaTotalLiquido: roundCouponGiftCurrency(roundCouponGiftCurrency(giftedItem.quantidade * giftedItem.valorVendaUnitario) - giftedItem.valorTotalDesconto - discountValue),
+						valorVendaTotalLiquido: roundCouponGiftCurrency(
+							roundCouponGiftCurrency(giftedItem.quantidade * giftedItem.valorVendaUnitario) - giftedItem.valorTotalDesconto - discountValue,
+						),
 						metadados: { ...(giftedItem.metadados as Record<string, unknown>), cupomBrindeDesconto: discountValue },
 					})
 					.where(and(eq(saleItems.id, giftedItem.id), eq(saleItems.organizacaoId, input.organization.id)));
@@ -785,6 +792,19 @@ export async function processSaleConfirmationInTransaction({ tx, input }: { tx: 
 		accumulation: cashbackAccumulationResult,
 		programId: cashbackProgramId,
 	});
+
+	// Conversion attribution is the same step the POI and integrations run when a sale arrives. This
+	// path (POS, tab, shop) went without it, so campaigns of organizations selling through it reported
+	// no conversions at all. The status compare-and-set above makes it run once per sale.
+	if (clientId) {
+		await processConversionAttribution(tx, {
+			vendaId: input.saleId,
+			clienteId: clientId,
+			organizacaoId: input.organization.id,
+			valorVenda: sale.valorTotal,
+			dataVenda: confirmedAt,
+		});
+	}
 
 	return {
 		vendaId: input.saleId,

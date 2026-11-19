@@ -60,6 +60,17 @@ export const PointOfInteractionNewSaleStateSchema = z.object({
 					quantity: z.number().int().min(1),
 				}),
 			),
+			// Recompensa avulsa (sem catálogo): o que o cliente leva e quanto debitar. `valor` fica nulo no
+			// celular do cliente — quem define o débito é o operador, na aprovação.
+			freeFormReward: z
+				.object({
+					descricao: z.string({
+						required_error: "Descrição da recompensa avulsa não informada.",
+						invalid_type_error: "Tipo não válido para a descrição da recompensa avulsa.",
+					}),
+					valor: z.number({ invalid_type_error: "Tipo não válido para o valor da recompensa avulsa." }).nullable(),
+				})
+				.nullable(),
 			// Cupom selecionado: em cupons AUTOMATICA o valorDesconto vem do servidor;
 			// em cupons MANUAL ele é informado pelo operador (na confirmação do totem ou na aprovação da solicitação).
 			coupon: z
@@ -92,7 +103,15 @@ export function usePointOfInteractionNewSaleState(initialOrgId: string, initialI
 	const [state, setState] = useState<TPointOfInteractionNewSaleState>({
 		orgId: initialOrgId,
 		client: { id: null, nome: "", cpfCnpj: null, telefone: "" },
-		sale: { valor: 0, entregaModalidade: "PRESENCIAL", cashback: { aplicar: false, valor: 0 }, partnerCode: null, prizeRedemptions: [], coupon: null },
+		sale: {
+			valor: 0,
+			entregaModalidade: "PRESENCIAL",
+			cashback: { aplicar: false, valor: 0 },
+			partnerCode: null,
+			prizeRedemptions: [],
+			freeFormReward: null,
+			coupon: null,
+		},
 		operatorIdentifier: "",
 		operatorConfirmedSaleValue: null,
 		interfaceMode: initialInterfaceMode,
@@ -145,6 +164,13 @@ export function usePointOfInteractionNewSaleState(initialOrgId: string, initialI
 		}));
 	}, []);
 
+	const updateFreeFormReward = useCallback((freeFormReward: TPointOfInteractionNewSaleState["sale"]["freeFormReward"]) => {
+		setState((prev) => ({
+			...prev,
+			sale: { ...prev.sale, freeFormReward },
+		}));
+	}, []);
+
 	const updateCoupon = useCallback((coupon: TPointOfInteractionNewSaleState["sale"]["coupon"]) => {
 		setState((prev) => ({
 			...prev,
@@ -181,7 +207,15 @@ export function usePointOfInteractionNewSaleState(initialOrgId: string, initialI
 		setState({
 			orgId: initialOrgId,
 			client: { id: null, nome: "", cpfCnpj: null, telefone: "" },
-			sale: { valor: 0, entregaModalidade: "PRESENCIAL", cashback: { aplicar: false, valor: 0 }, partnerCode: null, prizeRedemptions: [], coupon: null },
+			sale: {
+				valor: 0,
+				entregaModalidade: "PRESENCIAL",
+				cashback: { aplicar: false, valor: 0 },
+				partnerCode: null,
+				prizeRedemptions: [],
+				freeFormReward: null,
+				coupon: null,
+			},
 			operatorIdentifier: "",
 			operatorConfirmedSaleValue: null,
 			interfaceMode: initialInterfaceMode,
@@ -202,6 +236,7 @@ export function usePointOfInteractionNewSaleState(initialOrgId: string, initialI
 		updatePrizeRedemptions,
 		addPrizeRedemption,
 		setPrizeRedemptionQuantity,
+		updateFreeFormReward,
 		updateCoupon,
 		updateOperatorIdentifier,
 		updateOperatorConfirmedSaleValue,

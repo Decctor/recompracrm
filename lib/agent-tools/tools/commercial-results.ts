@@ -1,3 +1,4 @@
+import { resolveComparisonPeriod } from "@/lib/period-presets";
 import { getOverallSaleGoal, getOverallStats } from "@/lib/sales/overall-stats";
 import z from "zod";
 import { resolveOrganizationScope } from "../organization-scope";
@@ -54,8 +55,15 @@ export const commercialResultsTool = defineAgentTool({
 			excludedSalesIds: [],
 		};
 
+		// Período anterior de mesma duração, imediatamente antes do início — sem sobrepor o período.
+		const comparisonPeriod = resolveComparisonPeriod(
+			{ kind: "preset", presetId: "previous-period" },
+			{ after: periodo.after, before: periodo.before },
+			new Date(),
+		);
+
 		const [stats, meta] = await Promise.all([
-			getOverallStats(filters, organizacaoId),
+			getOverallStats(filters, organizacaoId, comparisonPeriod),
 			getOverallSaleGoal({ after: periodo.inicio, before: periodo.fim, organizacaoId }),
 		]);
 
@@ -64,6 +72,7 @@ export const commercialResultsTool = defineAgentTool({
 		// comportamento certo aqui: "não houve venda" e "ticket médio zero" são coisas diferentes.
 		return {
 			periodo: { inicio: periodo.inicio, fim: periodo.fim },
+			periodoAnterior: comparisonPeriod ? { inicio: comparisonPeriod.after.toISOString(), fim: comparisonPeriod.before.toISOString() } : undefined,
 			faturamento: describeMetric(stats.faturamento.atual, stats.faturamento.anterior),
 			margemBruta: describeMetric(stats.margemBruta.atual, stats.margemBruta.anterior),
 			ticketMedio: describeMetric(stats.ticketMedio.atual, stats.ticketMedio.anterior),

@@ -62,6 +62,8 @@ type TTransaction = {
 	expiracaoData: Date | null;
 	operadorVendedor: { id: string; nome: string } | null;
 	resgateRecompensa: { id: string; titulo: string; imagemCapaUrl: string | null } | null;
+	// Recompensa avulsa (ponto de interação): sem item de catálogo, só a descrição do operador.
+	resgateRecompensaDescricao: string | null;
 	cliente: { id: string; nome: string };
 	venda: {
 		id: string;
@@ -105,6 +107,7 @@ async function getCashbackProgramTransactions({ input, session }: { input: TGetC
 						createSimplifiedSearchCondition(clients.nome, input.search),
 						createSimplifiedSearchCondition(sellers.nome, input.search),
 						createSimplifiedSearchCondition(cashbackProgramPrizes.titulo, input.search),
+						createSimplifiedSearchCondition(cashbackProgramTransactions.resgateRecompensaDescricao, input.search),
 						createSimplifiedSearchCondition(products.nome, input.search),
 					),
 				),
@@ -150,6 +153,7 @@ async function getCashbackProgramTransactions({ input, session }: { input: TGetC
 			expiracaoData: transaction.expiracaoData,
 			operadorVendedor: transaction.operadorVendedor,
 			resgateRecompensa: transaction.resgateRecompensa,
+			resgateRecompensaDescricao: transaction.resgateRecompensaDescricao,
 			cliente: transaction.cliente,
 			venda: transaction.venda
 				? {

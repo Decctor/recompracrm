@@ -59,6 +59,15 @@ export const CashbackProgramSchema = z.object({
 			invalid_type_error: "Tipo não válido para a modalidade de recompensas permitida do programa de cashback.",
 		})
 		.default(false),
+	// Recompensa avulsa (ponto de interação): sub-modalidade da troca por recompensas. Sem default de
+	// propósito, como `acumuloRegrasPagamento`: o PUT espalha o payload no UPDATE, e um chamador que
+	// omite o campo (onboarding, scripts) não pode desligá-la. A coluna tem default false.
+	modalidadeRecompensaAvulsaPermitida: z
+		.boolean({
+			required_error: "Modalidade de recompensa avulsa permitida do programa de cashback não informada.",
+			invalid_type_error: "Tipo não válido para a modalidade de recompensa avulsa permitida do programa de cashback.",
+		})
+		.optional(),
 	acumuloTipo: CashbackProgramAccumulationTypeEnum,
 	acumuloValor: z.number({
 		required_error: "Valor de acumulação do programa de cashback não informado.",

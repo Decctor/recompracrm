@@ -31,6 +31,10 @@ export const cashbackPrograms = newTable("cashback_programs", {
 	terminologia: cashbackProgramTerminologyEnum("terminologia").notNull().default("DINHEIRO"),
 	modalidadeDescontosPermitida: boolean("modalidade_descontos_permitida").notNull().default(true),
 	modalidadeRecompensasPermitida: boolean("modalidade_recompensas_permitida").notNull().default(false),
+	// Recompensa avulsa: o operador descreve o prêmio e digita o valor a debitar, sem item de catálogo.
+	// Sub-modalidade da troca por recompensas (só vale com ela ligada) e exclusiva do ponto de
+	// interação. Vive só no ledger, sem venda. Ver docs/cashback-free-form-reward-design.md.
+	modalidadeRecompensaAvulsaPermitida: boolean("modalidade_recompensa_avulsa_permitida").notNull().default(false),
 	acumuloTipo: cashbackProgramAccumulationTypeEnum().notNull().default("FIXO"),
 	acumuloValor: doublePrecision("acumulo_valor").notNull().default(0),
 	acumuloValorParceiro: doublePrecision("acumulo_valor_parceiro").notNull().default(0),
@@ -178,6 +182,8 @@ export const cashbackProgramTransactions = newTable(
 		// Fields to track the reward given for the redemption
 		resgateRecompensaId: varchar("resgate_recompensa_id", { length: 255 }).references(() => cashbackProgramPrizes.id),
 		resgateRecompensaValor: doublePrecision("resgate_recompensa_valor"),
+		// Recompensa avulsa (sem `resgateRecompensaId`): o que o cliente levou, como o operador descreveu.
+		resgateRecompensaDescricao: text("resgate_recompensa_descricao"),
 
 		operadorId: varchar("operador_id", { length: 255 }).references(() => users.id, { onDelete: "set null" }),
 		operadorVendedorId: varchar("operador_vendedor_id", { length: 255 }).references(() => sellers.id, { onDelete: "set null" }),

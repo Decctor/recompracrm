@@ -40,6 +40,8 @@ export type TCashbackTransactionCardData = {
 	cliente?: { id: string; nome: string } | null;
 	operadorVendedor?: { id: string; nome: string } | null;
 	resgateRecompensa?: { id: string; titulo: string; imagemCapaUrl: string | null } | null;
+	/** Recompensa avulsa: sem item de catálogo, a descrição é o que identifica o prêmio. */
+	resgateRecompensaDescricao?: string | null;
 	venda?: {
 		id: string;
 		valorTotal: number;
@@ -209,7 +211,8 @@ const ICON_SIZE = {
 /** Glifo do tipo; um resgate de prêmio com imagem mostra a imagem do prêmio no lugar do glifo. */
 function Icon({ size = "sm", className }: { size?: keyof typeof ICON_SIZE; className?: string }) {
 	const { transaction, presentation } = useCashbackTransaction();
-	const Glyph = transaction.tipo === "RESGATE" && transaction.resgateRecompensa ? Gift : TONE_ICON[presentation.tone];
+	const isPrizeRedemption = transaction.tipo === "RESGATE" && (!!transaction.resgateRecompensa || !!transaction.resgateRecompensaDescricao);
+	const Glyph = isPrizeRedemption ? Gift : TONE_ICON[presentation.tone];
 	const prizeImage = transaction.tipo === "RESGATE" ? transaction.resgateRecompensa?.imagemCapaUrl : null;
 	return (
 		<span
@@ -395,6 +398,9 @@ function DetailsSheet() {
 					</DetailsRow>
 				) : null}
 				{transaction.resgateRecompensa ? <DetailsRow label="Prêmio">{transaction.resgateRecompensa.titulo}</DetailsRow> : null}
+				{!transaction.resgateRecompensa && transaction.resgateRecompensaDescricao ? (
+					<DetailsRow label="Prêmio (avulso)">{transaction.resgateRecompensaDescricao}</DetailsRow>
+				) : null}
 				{transaction.venda ? (
 					<>
 						<DetailsRow label="Venda">#{transaction.venda.id.slice(0, 8)}</DetailsRow>

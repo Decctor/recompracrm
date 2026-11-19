@@ -1,9 +1,9 @@
 import type { TOverallSalesStats } from "@/app/api/stats/sales-overall/route";
-import type { TSaleStatsGeneralQueryParams } from "@/schemas/query-params-utils";
+import type { TSalesOverallStatsFilters } from "@/schemas/query-params-utils";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 
-async function fetchOverallSalesStats(filters: TSaleStatsGeneralQueryParams) {
+async function fetchOverallSalesStats(filters: TSalesOverallStatsFilters) {
 	try {
 		const searchParams = new URLSearchParams();
 		searchParams.set("payload", JSON.stringify(filters));
@@ -15,7 +15,7 @@ async function fetchOverallSalesStats(filters: TSaleStatsGeneralQueryParams) {
 	}
 }
 
-export function useOverallSalesStats(filters: TSaleStatsGeneralQueryParams) {
+export function useOverallSalesStats(filters: TSalesOverallStatsFilters) {
 	return useQuery({
 		queryKey: ["overall-sales-stats", filters],
 		queryFn: async () => await fetchOverallSalesStats(filters),

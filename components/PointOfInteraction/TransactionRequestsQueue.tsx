@@ -4,7 +4,7 @@ import type { TGetPoiTransactionRequestsOutput } from "@/app/api/point-of-intera
 import { ApproveTransaction } from "@/components/Modals/TransactionRequests/ApproveTransaction";
 import { Button } from "@/components/ui/button";
 import { getErrorMessage } from "@/lib/errors";
-import { formatDateAsLocale, formatToMoney } from "@/lib/formatting";
+import { formatCashbackValue, formatDateAsLocale, formatToMoney } from "@/lib/formatting";
 import { usePoiTransactionRequestsRealtime } from "@/lib/hooks/use-supabase-realtime";
 import { rejectPoiTransactionRequest } from "@/lib/mutations/poi-transaction-requests";
 import { readPoiSummaryPrizes, type TPoiTransactionRequestSummary } from "@/lib/point-of-interaction/transaction-requests";
@@ -31,6 +31,13 @@ type TApprovalCoupon = {
 	condicoesTexto: string | null;
 };
 
+type TApprovalFreeFormReward = {
+	descricao: string;
+	valor: number | null;
+	saldoDisponivel: number | null;
+	terminologia: "DINHEIRO" | "PONTOS";
+};
+
 type ApprovalTarget = {
 	requestId: string;
 	clientDisplayName: string;
@@ -38,6 +45,7 @@ type ApprovalTarget = {
 	valorFinal: number;
 	requiresSaleValueConfirmation: boolean;
 	coupon: TApprovalCoupon | null;
+	freeFormReward: TApprovalFreeFormReward | null;
 };
 
 export function PointOfInteractionTransactionRequestsQueue({
@@ -91,7 +99,7 @@ export function PointOfInteractionTransactionRequestsQueue({
 						<PoiTransactionRequestCard
 							key={request.id}
 							request={request}
-							onApprove={({ valorBruto, valorFinal, isRewardMode, coupon }) =>
+							onApprove={({ valorBruto, valorFinal, isRewardMode, coupon, freeFormReward }) =>
 								setApprovalTarget({
 									requestId: request.id,
 									clientDisplayName: request.cliente?.nome ?? "Cliente não identificado",
@@ -99,6 +107,7 @@ export function PointOfInteractionTransactionRequestsQueue({
 									valorFinal,
 									requiresSaleValueConfirmation: poiConfirmacaoValorObrigatoria && !isRewardMode,
 									coupon,
+									freeFormReward,
 								})
 							}
 							onReject={() => rejectRequest(request.id)}
@@ -115,6 +124,7 @@ export function PointOfInteractionTransactionRequestsQueue({
 					valorBruto={approvalTarget.valorBruto}
 					valorFinal={approvalTarget.valorFinal}
 					coupon={approvalTarget.coupon}
+					freeFormReward={approvalTarget.freeFormReward}
 					hasLinkedSeller={hasLinkedSeller}
 					requiresOperatorPassword={poiConfirmacaoValorObrigatoria}
 					requiresSaleValueConfirmation={approvalTarget.requiresSaleValueConfirmation}
@@ -138,7 +148,13 @@ function PoiTransactionRequestCard({
 	disabled,
 }: {
 	request: TGetPoiTransactionRequestsOutput["data"]["requests"][number];
-	onApprove: (data: { valorBruto: number; valorFinal: number; isRewardMode: boolean; coupon: TApprovalCoupon | null }) => void;
+	onApprove: (data: {
+		valorBruto: number;
+		valorFinal: number;
+		isRewardMode: boolean;
+		coupon: TApprovalCoupon | null;
+		freeFormReward: TApprovalFreeFormReward | null;
+	}) => void;
 	onReject: () => void;
 	disabled: boolean;
 }) {
@@ -155,6 +171,17 @@ function PoiTransactionRequestCard({
 			}
 		: null;
 	const isRewardMode = resumo?.venda?.modo === "RECOMPENSA";
+	// Saldo e moeda do programa do cliente: o operador define o débito da recompensa avulsa contra eles.
+	const clientBalance = request.cliente?.saldos?.[0] ?? null;
+	const terminology = clientBalance?.programa?.terminologia ?? "DINHEIRO";
+	const freeFormReward: TApprovalFreeFormReward | null = resumo?.recompensaAvulsa
+		? {
+				descricao: resumo.recompensaAvulsa.descricao,
+				valor: resumo.recompensaAvulsa.valor ?? null,
+				saldoDisponivel: clientBalance?.saldoValorDisponivel ?? null,
+				terminologia: terminology,
+			}
+		: null;
 
 	// Uma linha por recompensa (formato atual ou legado singular, via helper). `transacaoResgate`
 	// aponta para UMA recompensa (FK única): serve só de fallback para a primeira linha quando o
@@ -226,6 +253,24 @@ function PoiTransactionRequestCard({
 				</div>
 			) : null}
 
+			{freeFormReward ? (
+				<div className="flex items-center gap-2.5 rounded-lg border border-purple-200 bg-purple-50 px-3 py-2 dark:border-purple-800/40 dark:bg-purple-900/10">
+					<div className="flex h-10 w-10 min-h-10 min-w-10 items-center justify-center rounded-md bg-purple-100 dark:bg-purple-900/30">
+						<Gift className="h-5 w-5 text-purple-500" />
+					</div>
+					<div className="flex min-w-0 flex-col gap-0.5">
+						<p className="text-[0.65rem] font-semibold uppercase tracking-tight text-purple-700 dark:text-purple-300">Recompensa avulsa</p>
+						<p className="text-xs font-bold break-words text-purple-900 dark:text-purple-100">{freeFormReward.descricao}</p>
+						<p className="text-[0.65rem] text-muted-foreground">
+							{freeFormReward.valor != null
+								? `Débito: ${formatCashbackValue(freeFormReward.valor, terminology)}`
+								: "Débito a informar pelo operador na aprovação"}
+							{freeFormReward.saldoDisponivel != null ? ` · Saldo: ${formatCashbackValue(freeFormReward.saldoDisponivel, terminology)}` : null}
+						</p>
+					</div>
+				</div>
+			) : null}
+
 			{isRewardMode && prizeRows.length > 0 && (
 				<div className="flex flex-col gap-2 rounded-lg border border-purple-200 bg-purple-50 px-3 py-2 dark:border-purple-800/40 dark:bg-purple-900/10">
 					<p className="text-[0.65rem] font-semibold uppercase tracking-tight text-purple-700 dark:text-purple-300">
@@ -261,9 +306,11 @@ function PoiTransactionRequestCard({
 					<div className={cn("flex items-center gap-1.5 text-[0.65rem] font-bold text-foreground")}>
 						<BadgePercent className="w-4 min-w-4 h-4 min-h-4" />
 						<p className="text-xs font-medium tracking-tight uppercase">
-							{isRewardMode
-								? `RESGATE: ${resumo?.venda?.valorResgate ?? 0} créditos`
-								: `RESGATE: ${formatToMoney(resumo?.venda?.valorResgate ?? 0)}`}
+							{freeFormReward
+								? `RESGATE: ${freeFormReward.valor != null ? formatCashbackValue(freeFormReward.valor, terminology) : "A DEFINIR"}`
+								: isRewardMode
+									? `RESGATE: ${resumo?.venda?.valorResgate ?? 0} créditos`
+									: `RESGATE: ${formatToMoney(resumo?.venda?.valorResgate ?? 0)}`}
 						</p>
 					</div>
 					<div className={cn("flex items-center gap-1.5 text-[0.65rem] font-bold text-foreground")}>
@@ -287,6 +334,7 @@ function PoiTransactionRequestCard({
 								valorFinal: resumo?.venda?.valorFinal ?? 0,
 								isRewardMode,
 								coupon: requestCoupon,
+								freeFormReward,
 							})
 						}
 					>

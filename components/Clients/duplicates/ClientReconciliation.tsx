@@ -8,7 +8,7 @@ import ResponsiveMenuSection from "@/components/Utils/ResponsiveMenuSection";
 import { getErrorMessage } from "@/lib/errors";
 import { formatDateAsLocale, formatToMoney } from "@/lib/formatting";
 import { dismissClientDuplicate, mergeClientDuplicate } from "@/lib/mutations/client-duplicates";
-import { useClientDuplicateComparison } from "@/lib/queries/client-duplicates";
+import { type TClientComparisonTarget, useClientDuplicateComparison } from "@/lib/queries/client-duplicates";
 import { cn } from "@/lib/utils";
 import type { TGetClientDuplicateComparisonOutput } from "@/app/api/clients/duplicates/comparison/route";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -105,6 +105,8 @@ type TReconciliationActions = {
 
 type TReconciliationMeta = {
 	pairId: string;
+	/** Há algo para comparar: um par da fila ou dois clientes escolhidos à mão. */
+	hasTarget: boolean;
 	canReconcile: boolean;
 };
 
@@ -125,6 +127,11 @@ export function useClientReconciliation(): TReconciliationContextValue {
 type ClientReconciliationProviderProps = PropsWithChildren & {
 	/** Par em análise; vazio deixa o provider ocioso (fila em modo lista). */
 	pairId: string;
+	/**
+	 * Alternativa ao `pairId`: dois clientes escolhidos à mão (menu de mesclagem), que podem não ter
+	 * par na fila. Mesclar e descartar funcionam igual; o par só passa a existir no descarte.
+	 */
+	clientIds?: [string, string] | null;
 	/** Cliente da página atual — vira o keeper padrão. */
 	perspectiveClienteId: string;
 	canReconcile: boolean;
@@ -136,6 +143,7 @@ type ClientReconciliationProviderProps = PropsWithChildren & {
 
 function ClientReconciliationProvider({
 	pairId,
+	clientIds = null,
 	perspectiveClienteId,
 	canReconcile,
 	onResolved,
@@ -146,21 +154,29 @@ function ClientReconciliationProvider({
 	const [fieldPicks, setFieldPicks] = useState<Record<string, string>>({});
 	const [confirmingMerge, setConfirmingMerge] = useState(false);
 
+	const clientIdsKey = clientIds?.join(",") ?? "";
+	const target = useMemo<TClientComparisonTarget | null>(() => {
+		if (pairId) return { pairId };
+		if (clientIdsKey) return { clientIds: clientIdsKey.split(",") as [string, string] };
+		return null;
+	}, [pairId, clientIdsKey]);
+
 	// Trocar de par zera as escolhas: keeper padrão, sem picks, confirmação desarmada.
 	useEffect(() => {
 		setKeeperId(perspectiveClienteId);
 		setFieldPicks({});
 		setConfirmingMerge(false);
-	}, [pairId, perspectiveClienteId]);
+	}, [pairId, clientIdsKey, perspectiveClienteId]);
 
 	const queryClient = useQueryClient();
-	const comparisonQuery = useClientDuplicateComparison({ pairId });
+	const comparisonQuery = useClientDuplicateComparison({ target });
 	const comparison = comparisonQuery.data ?? null;
 
 	function invalidateAfterResolution() {
 		void queryClient.invalidateQueries({ queryKey: ["client-duplicates-by-entity"] });
 		void queryClient.invalidateQueries({ queryKey: ["client-duplicates-pending"] });
 		void queryClient.invalidateQueries({ queryKey: ["client-duplicates-pending-count"] });
+		void queryClient.invalidateQueries({ queryKey: ["client-merge-suggestions"] });
 	}
 
 	const dismissMutation = useMutation({
@@ -236,7 +252,8 @@ function ClientReconciliationProvider({
 			const pickedSource = (keeperIsA && pick === "B") || (!keeperIsA && pick === "A");
 			fieldChoices[conflict.field] = pickedSource ? "source" : "keeper";
 		}
-		mergeMutation.mutate({ pairId, keeperId: keeper.id, fieldChoices });
+		if (pairId) mergeMutation.mutate({ pairId, keeperId: keeper.id, fieldChoices });
+		else if (source) mergeMutation.mutate({ sourceId: source.id, keeperId: keeper.id, fieldChoices });
 	}
 
 	const contextValue: TReconciliationContextValue = {
@@ -261,9 +278,9 @@ function ClientReconciliationProvider({
 			pickField: (field, side) => setFieldPicks((previous) => ({ ...previous, [field]: side })),
 			merge,
 			cancelMergeConfirmation: () => setConfirmingMerge(false),
-			dismiss: () => dismissMutation.mutate({ pairId }),
+			dismiss: () => dismissMutation.mutate(pairId ? { pairId } : { clientIds: clientIdsKey.split(",") }),
 		},
-		meta: { pairId, canReconcile },
+		meta: { pairId, hasTarget: !!target, canReconcile },
 	};
 
 	return <ReconciliationContext value={contextValue}>{children}</ReconciliationContext>;

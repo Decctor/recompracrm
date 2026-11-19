@@ -3,6 +3,7 @@ import type {
 	TCreatePointOfInteractionTransactionRequestInput,
 } from "@/app/api/point-of-interaction/new-transaction/route";
 import type { TDeliveryModeEnum, TPoiTransactionRequestStatusEnum } from "@/schemas/enums";
+import { normalizeFreeFormRewardDescription } from "./free-form-reward";
 import { resolvePoiPrizeLines, sumPoiPrizeSaleValue, sumPoiPrizeValue } from "./prize-lines";
 
 export type TPoiTransactionRequestSummaryPrize = {
@@ -34,6 +35,9 @@ export type TPoiTransactionRequestSummary = {
 	// Formato anterior a múltiplas recompensas: presente só em solicitações persistidas antes da
 	// mudança. Novas solicitações gravam `null`. Leitores usam `readPoiSummaryPrizes`.
 	recompensa?: Omit<TPoiTransactionRequestSummaryPrize, "quantity"> | null;
+	// Recompensa avulsa (modo RECOMPENSA, sem catálogo). `valor` nulo: o operador informa na aprovação.
+	// Ausente em solicitações anteriores à recompensa avulsa.
+	recompensaAvulsa?: { descricao: string; valor: number | null } | null;
 	cupom: {
 		cupomId: string;
 		valorDesconto: number | null;
@@ -65,8 +69,16 @@ export function buildPoiTransactionRequestSummary(
 ): TPoiTransactionRequestSummary {
 	const prizeLines = resolvePoiPrizeLines(input.sale);
 	const hasPrizes = prizeLines.length > 0;
-	const valorBruto = hasPrizes ? sumPoiPrizeSaleValue(prizeLines) : input.sale.valor;
-	const valorResgate = hasPrizes ? sumPoiPrizeValue(prizeLines) : input.sale.cashback.aplicar ? input.sale.cashback.valor : 0;
+	const freeFormReward = input.sale.freeFormReward ?? null;
+	// Recompensa avulsa não tem venda: bruto e final são zero, o resgate é o débito (quando já definido).
+	const valorBruto = freeFormReward ? 0 : hasPrizes ? sumPoiPrizeSaleValue(prizeLines) : input.sale.valor;
+	const valorResgate = freeFormReward
+		? (freeFormReward.valor ?? 0)
+		: hasPrizes
+			? sumPoiPrizeValue(prizeLines)
+			: input.sale.cashback.aplicar
+				? input.sale.cashback.valor
+				: 0;
 	return {
 		cliente: {
 			id: input.client.id ?? null,
@@ -79,7 +91,7 @@ export function buildPoiTransactionRequestSummary(
 			valorResgate,
 			// Cupons MANUAL podem chegar sem valor definido (o operador informa na aprovação); nesse caso o valorFinal não o inclui.
 			valorFinal: Math.max(0, valorBruto - valorResgate - (input.sale.coupon?.valorDesconto ?? 0)),
-			modo: hasPrizes ? "RECOMPENSA" : "DESCONTO",
+			modo: hasPrizes || freeFormReward ? "RECOMPENSA" : "DESCONTO",
 			codigoParceiro: input.sale.partnerCode ?? null,
 		},
 		recompensas: prizeLines.map((line) => ({
@@ -91,6 +103,9 @@ export function buildPoiTransactionRequestSummary(
 			prizeImageUrl: prizeInfoById?.[line.prizeId]?.imagemCapaUrl ?? null,
 		})),
 		recompensa: null,
+		recompensaAvulsa: freeFormReward
+			? { descricao: normalizeFreeFormRewardDescription(freeFormReward.descricao), valor: freeFormReward.valor ?? null }
+			: null,
 		cupom: input.sale.coupon
 			? {
 					cupomId: input.sale.coupon.cupomId,
@@ -115,6 +130,19 @@ export function withPoiTransactionProcessingResult({
 }) {
 	if (!resumo) {
 		throw new Error("Resumo da solicitação POI não informado.");
+	}
+
+	// Recompensa avulsa: o débito só existe depois que o operador o informa na aprovação. Gravá-lo no
+	// resumo deixa o histórico da solicitação com o valor real, não com o "a definir" do pedido.
+	const approvedFreeFormReward = resultado?.freeFormReward ?? null;
+	if (approvedFreeFormReward) {
+		return {
+			...resumo,
+			venda: { ...resumo.venda, valorResgate: approvedFreeFormReward.valor },
+			recompensaAvulsa: approvedFreeFormReward,
+			resultadoProcessamento: resultado,
+			statusPublico: status,
+		};
 	}
 
 	return {

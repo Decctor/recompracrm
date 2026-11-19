@@ -2,7 +2,9 @@
 import { buildSalesIntegrationFilterOptions } from "@/components/Sales/sales-integration-filter-options";
 import ClientsGraphs from "@/components/Clients/ClientsGraphs";
 import ClientWhatsappButton from "@/components/Clients/ClientWhatsappButton";
+import { ClientMergeMenu } from "@/components/Clients/duplicates/ClientMergeMenu";
 import { ClientReconciliationQueue } from "@/components/Clients/duplicates/ClientReconciliationQueue";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import ClientsRanking from "@/components/Clients/ClientsRanking";
 import DateIntervalInput from "@/components/Inputs/DateIntervalInput";
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
@@ -43,6 +45,8 @@ import {
 	ListFilter,
 	Mail,
 	Megaphone,
+	Merge,
+	MoreHorizontal,
 	Phone,
 	ShoppingCart,
 	TrendingUp,
@@ -109,6 +113,7 @@ function ClientsDatabaseView({ permissions, canExportClients }: { permissions: T
 	const [newClientModalIsOpen, setNewClientModalIsOpen] = useState<boolean>(false);
 	const [exportClientsModalIsOpen, setExportClientsModalIsOpen] = useState<boolean>(false);
 	const [editingClientId, setEditingClientId] = useState<string | null>(null);
+	const [mergingClient, setMergingClient] = useState<{ id: string; nome: string } | null>(null);
 	// Filtros na URL (nuqs): compartilháveis e alvo de links de outras telas (ex.: dashboard) — o
 	// mesmo padrão do histórico de vendas. Ver `lib/clients/database-url-state.ts`.
 	const [urlState, setUrlState] = useQueryStates(clientsDatabaseParsers, { history: "replace" });
@@ -186,11 +191,24 @@ function ClientsDatabaseView({ permissions, canExportClients }: { permissions: T
 			{isSuccess && clients ? (
 				clients.length > 0 ? (
 					clients.map((client, index: number) => (
-						<ClientPageCard key={client.id} client={client} handleEditClick={permissions.editar ? () => setEditingClientId(client.id) : null} />
+						<ClientPageCard
+							key={client.id}
+							client={client}
+							handleEditClick={permissions.editar ? () => setEditingClientId(client.id) : null}
+							handleMergeClick={permissions.gerenciarBase ? () => setMergingClient({ id: client.id, nome: client.nome }) : null}
+						/>
 					))
 				) : (
 					<p className="w-full tracking-tight text-center">Nenhum cliente encontrado.</p>
 				)
+			) : null}
+			{mergingClient ? (
+				<ClientMergeMenu
+					client={mergingClient}
+					canReconcile={permissions.gerenciarBase}
+					closeMenu={() => setMergingClient(null)}
+					onMerged={() => void handleOnSettled()}
+				/>
 			) : null}
 			{editingClientId ? (
 				<ControlClient
@@ -698,8 +716,10 @@ function ClientsStatsView() {
 type ClientCardProps = {
 	client: TGetClientsOutputDefault["clients"][number];
 	handleEditClick: (() => void) | null;
+	/** Sem clientes.gerenciarBase o menu "…" some: hoje ele só tem a mesclagem. */
+	handleMergeClick: (() => void) | null;
 };
-function ClientPageCard({ client, handleEditClick }: ClientCardProps) {
+function ClientPageCard({ client, handleEditClick, handleMergeClick }: ClientCardProps) {
 	const clientCashbackBalance = client.saldos.length > 0 ? client.saldos[0] : null;
 
 	return (
@@ -781,6 +801,23 @@ function ClientPageCard({ client, handleEditClick }: ClientCardProps) {
 							DETALHES
 						</Link>
 					</Button>
+					{handleMergeClick ? (
+						<DropdownMenu>
+							<DropdownMenuTrigger
+								render={
+									<Button variant="ghost" size="icon-sm" aria-label={`Mais ações para ${client.nome}`}>
+										<MoreHorizontal className="w-4 min-w-4 h-4 min-h-4" />
+									</Button>
+								}
+							/>
+							<DropdownMenuContent align="end">
+								<DropdownMenuItem onClick={handleMergeClick}>
+									<Merge className="w-4 min-w-4 h-4 min-h-4" />
+									Mesclar com outro cadastro
+								</DropdownMenuItem>
+							</DropdownMenuContent>
+						</DropdownMenu>
+					) : null}
 				</div>
 			</div>
 		</div>
