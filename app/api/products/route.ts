@@ -413,6 +413,7 @@ async function getProductsRoute(request: NextRequest) {
 		statsTotalMax: request.nextUrl.searchParams.get("statsTotalMax") ?? undefined,
 		stockStatus: request.nextUrl.searchParams.get("stockStatus") ?? undefined,
 		trackedOnly: request.nextUrl.searchParams.get("trackedOnly") ?? undefined,
+		sellability: request.nextUrl.searchParams.get("sellability") ?? undefined,
 		mainSupplierIds: request.nextUrl.searchParams.get("mainSupplierIds") ?? undefined,
 		withoutMainSupplier: request.nextUrl.searchParams.get("withoutMainSupplier") ?? undefined,
 		abcClasses: request.nextUrl.searchParams.get("abcClasses") ?? undefined,

@@ -42,6 +42,10 @@ const StoredProductsFiltersSchema = z.object({
 		stockStatus: StringListSchema,
 		mainSupplierIds: StringListSchema,
 		withoutMainSupplier: BooleanSchema,
+		sellability: z
+			.array(z.enum(["sellable", "internal"]))
+			.optional()
+			.catch(undefined),
 		trackedOnly: BooleanSchema,
 		abcClasses: z
 			.array(z.enum(["A", "B", "C"]))
@@ -81,6 +85,7 @@ export function getDefaultProductsFilters(referenceDate: Date): TPersistedProduc
 		stockStatus: [],
 		mainSupplierIds: [],
 		withoutMainSupplier: false,
+		sellability: [],
 		trackedOnly: false,
 		abcClasses: [],
 		priceMin: null,
@@ -144,6 +149,7 @@ export function serializeProductsFilters(filters: TPersistedProductsFilters, ref
 			stockStatus: filters.stockStatus,
 			mainSupplierIds: filters.mainSupplierIds,
 			withoutMainSupplier: filters.withoutMainSupplier,
+			sellability: filters.sellability,
 			trackedOnly: filters.trackedOnly,
 			abcClasses: filters.abcClasses as ("A" | "B" | "C")[],
 			priceMin: filters.priceMin,

@@ -74,6 +74,7 @@ export function useProducts({ initialFilters }: UseProductsParams) {
 		statsTotalMin: initialFilters?.statsTotalMin || null,
 		statsTotalMax: initialFilters?.statsTotalMax || null,
 		stockStatus: initialFilters?.stockStatus || [],
+		sellability: initialFilters?.sellability || [],
 		trackedOnly: initialFilters?.trackedOnly ?? false,
 		mainSupplierIds: initialFilters?.mainSupplierIds || [],
 		withoutMainSupplier: initialFilters?.withoutMainSupplier ?? false,
@@ -108,6 +109,7 @@ async function fetchProductsStock(input: TGetProductsDefaultInput, signal?: Abor
 		if (input.statsPeriodBefore) searchParams.set("statsPeriodBefore", input.statsPeriodBefore.toISOString());
 		if (input.stockStatus && input.stockStatus.length > 0) searchParams.set("stockStatus", input.stockStatus.join(","));
 		if (input.trackedOnly) searchParams.set("trackedOnly", "true");
+		if (input.sellability && input.sellability.length > 0) searchParams.set("sellability", input.sellability.join(","));
 		if (input.mainSupplierIds && input.mainSupplierIds.length > 0) searchParams.set("mainSupplierIds", input.mainSupplierIds.join(","));
 		if (input.withoutMainSupplier) searchParams.set("withoutMainSupplier", "true");
 		if (input.priceMin) searchParams.set("priceMin", input.priceMin.toString());
@@ -142,6 +144,7 @@ export function useProductsStock({ initialFilters, enabled = true }: UseProducts
 		statsTotalMin: null,
 		statsTotalMax: null,
 		stockStatus: initialFilters?.stockStatus || [],
+		sellability: initialFilters?.sellability || [],
 		trackedOnly: initialFilters?.trackedOnly ?? false,
 		mainSupplierIds: initialFilters?.mainSupplierIds || [],
 		withoutMainSupplier: initialFilters?.withoutMainSupplier ?? false,

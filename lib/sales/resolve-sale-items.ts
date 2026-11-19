@@ -9,6 +9,7 @@ type TDb = DB | DBTransaction;
 export type TSaleItemResolutionErrorCode =
 	| "PRODUTO_NAO_ENCONTRADO"
 	| "PRODUTO_INATIVO"
+	| "PRODUTO_NAO_VENDAVEL"
 	| "VARIANTE_NAO_ENCONTRADA"
 	| "VARIANTE_INVALIDA"
 	| "PRECO_AUSENTE"
@@ -96,6 +97,7 @@ export async function resolveSaleItems({
 			columns: {
 				id: true,
 				ativo: true,
+				vendavel: true,
 				nome: true,
 				codigo: true,
 				imagemCapaUrl: true,
@@ -148,6 +150,9 @@ export async function resolveSaleItems({
 			throw new SaleItemResolutionError("PRODUTO_NAO_ENCONTRADO", "Um produto não foi encontrado no catálogo da organização.");
 		}
 		if (!product.ativo) throw new SaleItemResolutionError("PRODUTO_INATIVO", `O produto "${product.nome}" está inativo.`, [product.nome]);
+		// Insumo, material de uso interno, manutenção: produto que não se vende não entra em orçamento.
+		if (!product.vendavel)
+			throw new SaleItemResolutionError("PRODUTO_NAO_VENDAVEL", `O produto "${product.nome}" não está disponível para venda.`, [product.nome]);
 
 		const variant = item.produtoVarianteId ? variantMap.get(item.produtoVarianteId) : null;
 		if (item.produtoVarianteId && !variant) {

@@ -89,6 +89,13 @@ export const GetProductsDefaultInputSchema = z.object({
 		.optional()
 		.nullable()
 		.transform((val) => val === "true"),
+	// Vendáveis ("sellable") e/ou de uso interno ("internal": insumos, manutenção, material de consumo —
+	// `vendavel` falso). Vazio ou as duas opções = todos.
+	sellability: z
+		.string({ invalid_type_error: "Tipo não válido para o filtro de disponibilidade para venda." })
+		.optional()
+		.nullable()
+		.transform((val) => (val ? val.split(",").filter((item): item is "sellable" | "internal" => item === "sellable" || item === "internal") : [])),
 	// Só produtos com rastreamento de estoque ativo: sem isso, quantidade nula vira "sem estoque".
 	trackedOnly: z
 		.string({ invalid_type_error: "Tipo não válido para o filtro de rastreamento." })
@@ -143,6 +150,8 @@ export function buildProductFilterConditions(input: TGetProductsDefaultInput, us
 		conditions.push(inArray(products.grupo, input.groups));
 	}
 	if (input.trackedOnly) conditions.push(eq(products.rastreamentoEstoqueAtivo, true));
+	const sellability = new Set(input.sellability ?? []);
+	if (sellability.size === 1) conditions.push(eq(products.vendavel, sellability.has("sellable")));
 	if (input.stockStatus && input.stockStatus.length > 0) {
 		const stockConditions = [];
 		for (const status of input.stockStatus) {

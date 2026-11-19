@@ -53,6 +53,10 @@ export default function ProductsInlineFilters({ filters, updateFilters, showMain
 		{ id: "healthy", label: "ESTOQUE SAUDÁVEL", value: "healthy" },
 		{ id: "overstocked", label: "EXCESSO DE ESTOQUE", value: "overstocked" },
 	] satisfies InteractiveFilterOption<string>[];
+	const sellabilityOptions = [
+		{ id: "sellable", label: "VENDÁVEIS", value: "sellable" },
+		{ id: "internal", label: "USO INTERNO", value: "internal" },
+	] satisfies InteractiveFilterOption<"sellable" | "internal">[];
 	const abcClassOptions = [
 		{ id: "A", label: "A", value: "A" },
 		{ id: "B", label: "B", value: "B" },
@@ -80,6 +84,7 @@ export default function ProductsInlineFilters({ filters, updateFilters, showMain
 	const hasIntegrations = (filters.statsIntegrationsIds ?? []).length > 0;
 	const hasSellers = (filters.statsSellerIds ?? []).length > 0;
 	const hasStock = (filters.stockStatus ?? []).length > 0;
+	const hasSellability = (filters.sellability ?? []).length > 0;
 	const hasMainSupplier = mainSupplierValue.length > 0;
 	const hasABCClasses = (filters.abcClasses ?? []).length > 0;
 	const hasPrice = filters.priceMin != null || filters.priceMax != null;
@@ -143,6 +148,15 @@ export default function ProductsInlineFilters({ filters, updateFilters, showMain
 					value={filters.stockStatus ?? []}
 					onChange={(stockStatus) => updateFilters({ stockStatus, page: 1 })}
 					onClear={() => updateFilters({ stockStatus: [], page: 1 })}
+				/>
+			) : null}
+			{hasSellability ? (
+				<ProductsMultiFilter
+					label="VENDA"
+					options={sellabilityOptions}
+					value={filters.sellability ?? []}
+					onChange={(sellability) => updateFilters({ sellability: sellability as ("sellable" | "internal")[], page: 1 })}
+					onClear={() => updateFilters({ sellability: [], page: 1 })}
 				/>
 			) : null}
 			{showMainSupplierFilter && hasMainSupplier ? (
@@ -238,6 +252,17 @@ export default function ProductsInlineFilters({ filters, updateFilters, showMain
 									value={filters.stockStatus ?? []}
 									onChange={(stockStatus) => updateFilters({ stockStatus, page: 1 })}
 									onClear={() => updateFilters({ stockStatus: [], page: 1 })}
+									clearLabel="TODOS"
+								/>
+							</InteractiveFilter.AddFilterItem>
+						) : null}
+						{!hasSellability ? (
+							<InteractiveFilter.AddFilterItem id="sellability" label="VENDA" icon={<ListFilter className="h-4 w-4" />}>
+								<InteractiveFilter.MultiContent
+									options={sellabilityOptions}
+									value={filters.sellability ?? []}
+									onChange={(sellability) => updateFilters({ sellability: sellability as ("sellable" | "internal")[], page: 1 })}
+									onClear={() => updateFilters({ sellability: [], page: 1 })}
 									clearLabel="TODOS"
 								/>
 							</InteractiveFilter.AddFilterItem>
