@@ -8,6 +8,15 @@ export const PointOfInteractionNewInternalTransactionRequestStateSchema = z.obje
 	client: ClientSchema.pick({
 		nome: true,
 		cpfCnpj: true,
+		email: true,
+		autorVendedorId: true,
+		localizacaoCep: true,
+		localizacaoEstado: true,
+		localizacaoCidade: true,
+		localizacaoBairro: true,
+		localizacaoLogradouro: true,
+		localizacaoNumero: true,
+		localizacaoComplemento: true,
 	}).extend({
 		id: z
 			.string({
@@ -19,6 +28,8 @@ export const PointOfInteractionNewInternalTransactionRequestStateSchema = z.obje
 			required_error: "Telefone não informado.",
 			invalid_type_error: "Tipo não válido para telefone.",
 		}),
+		// Valor do `<input type="date">` (AAAA-MM-DD); vira data só no envio.
+		dataNascimento: z.string({ invalid_type_error: "Tipo não válido para data de nascimento." }).optional().nullable(),
 	}),
 	sale: SaleSchema.pick({
 		valor: true,
@@ -54,11 +65,17 @@ export const PointOfInteractionNewInternalTransactionRequestStateSchema = z.obje
 					quantity: z.number().int().min(1),
 				}),
 			),
+			// Recompensa avulsa: item fora do catálogo, descrito pelo operador, com o débito do saldo.
+			freeFormReward: z.object({
+				descricao: z.string({ invalid_type_error: "Tipo não válido para a descrição da recompensa avulsa." }),
+				valor: z.number({ invalid_type_error: "Tipo não válido para o valor da recompensa avulsa." }).nullable(),
+			}),
 		})
 		.refine((data) => data.valor >= 0, {
 			message: "Valor da venda deve ser positivo.",
 			path: ["valor"],
 		}),
+	marketingConsent: z.boolean({ invalid_type_error: "Tipo não válido para o consentimento de marketing." }),
 	operatorIdentifier: z.string({
 		required_error: "Identificador do operador não informado.",
 		invalid_type_error: "Tipo não válido para identificador do operador.",
@@ -67,19 +84,52 @@ export const PointOfInteractionNewInternalTransactionRequestStateSchema = z.obje
 });
 export type TPointOfInteractionNewInternalTransactionRequestState = z.infer<typeof PointOfInteractionNewInternalTransactionRequestStateSchema>;
 
-export function usePointOfInteractionNewInternalTransactionRequestState() {
-	const [state, setState] = useState<TPointOfInteractionNewInternalTransactionRequestState>({
-		client: { id: null, nome: "", cpfCnpj: null, telefone: "" },
-		sale: { valor: 0, cashback: { aplicar: false, valor: 0 }, partnerCode: null, prizeRedemptions: [] },
+const EMPTY_CLIENT: TPointOfInteractionNewInternalTransactionRequestState["client"] = {
+	id: null,
+	nome: "",
+	cpfCnpj: null,
+	telefone: "",
+	email: null,
+	dataNascimento: null,
+	autorVendedorId: null,
+	localizacaoCep: null,
+	localizacaoEstado: null,
+	localizacaoCidade: null,
+	localizacaoBairro: null,
+	localizacaoLogradouro: null,
+	localizacaoNumero: null,
+	localizacaoComplemento: null,
+};
+
+function buildInitialState(): TPointOfInteractionNewInternalTransactionRequestState {
+	return {
+		client: { ...EMPTY_CLIENT },
+		sale: {
+			valor: 0,
+			cashback: { aplicar: false, valor: 0 },
+			partnerCode: null,
+			prizeRedemptions: [],
+			freeFormReward: { descricao: "", valor: null },
+		},
+		marketingConsent: false,
 		operatorIdentifier: "",
 		operatorConfirmedSaleValue: null,
-	});
+	};
+}
+
+export function usePointOfInteractionNewInternalTransactionRequestState() {
+	const [state, setState] = useState<TPointOfInteractionNewInternalTransactionRequestState>(buildInitialState);
 
 	const updateClient = useCallback((client: Partial<TPointOfInteractionNewInternalTransactionRequestState["client"]>) => {
 		setState((prev) => ({
 			...prev,
 			client: { ...prev.client, ...client },
 		}));
+	}, []);
+
+	/** Troca de telefone: tudo o que foi digitado para o cliente anterior deixa de valer. */
+	const resetClient = useCallback((telefone: string) => {
+		setState((prev) => ({ ...prev, client: { ...EMPTY_CLIENT, telefone }, marketingConsent: false }));
 	}, []);
 
 	const updateSale = useCallback((sale: Partial<TPointOfInteractionNewInternalTransactionRequestState["sale"]>) => {
@@ -120,6 +170,20 @@ export function usePointOfInteractionNewInternalTransactionRequestState() {
 		}));
 	}, []);
 
+	const updateFreeFormReward = useCallback(
+		(freeFormReward: Partial<TPointOfInteractionNewInternalTransactionRequestState["sale"]["freeFormReward"]>) => {
+			setState((prev) => ({
+				...prev,
+				sale: { ...prev.sale, freeFormReward: { ...prev.sale.freeFormReward, ...freeFormReward } },
+			}));
+		},
+		[],
+	);
+
+	const updateMarketingConsent = useCallback((marketingConsent: boolean) => {
+		setState((prev) => ({ ...prev, marketingConsent }));
+	}, []);
+
 	const updateOperatorIdentifier = useCallback((operatorIdentifier: string) => {
 		setState((prev) => ({
 			...prev,
@@ -132,12 +196,7 @@ export function usePointOfInteractionNewInternalTransactionRequestState() {
 	}, []);
 
 	const resetState = useCallback(() => {
-		setState({
-			client: { id: null, nome: "", cpfCnpj: null, telefone: "" },
-			sale: { valor: 0, cashback: { aplicar: false, valor: 0 }, partnerCode: null, prizeRedemptions: [] },
-			operatorIdentifier: "",
-			operatorConfirmedSaleValue: null,
-		});
+		setState(buildInitialState());
 	}, []);
 
 	const redefineState = useCallback((newState: TPointOfInteractionNewInternalTransactionRequestState) => {
@@ -147,11 +206,14 @@ export function usePointOfInteractionNewInternalTransactionRequestState() {
 	return {
 		state,
 		updateClient,
+		resetClient,
 		updateSale,
 		updateCashback,
 		updatePrizeRedemptions,
 		addPrizeRedemption,
 		setPrizeRedemptionQuantity,
+		updateFreeFormReward,
+		updateMarketingConsent,
 		updateOperatorIdentifier,
 		updateOperatorConfirmedSaleValue,
 		resetState,

@@ -2,25 +2,29 @@
 
 import type { TGetPoiTransactionRequestsOutput } from "@/app/api/point-of-interaction/transaction-requests/management/route";
 import { ApproveTransaction } from "@/components/Modals/TransactionRequests/ApproveTransaction";
+import { RejectTransaction } from "@/components/Modals/TransactionRequests/RejectTransaction";
+import { PoiOperationBadge, POI_OPERATION_KINDS, type TPoiOperationKind } from "@/components/PointOfInteraction/operation-kinds";
 import { Button } from "@/components/ui/button";
-import { getErrorMessage } from "@/lib/errors";
-import { formatCashbackValue, formatDateAsLocale, formatToMoney } from "@/lib/formatting";
+import { formatCashbackValue, formatDateAsLocale, formatToMoney, formatToPhone } from "@/lib/formatting";
 import { usePoiTransactionRequestsRealtime } from "@/lib/hooks/use-supabase-realtime";
-import { rejectPoiTransactionRequest } from "@/lib/mutations/poi-transaction-requests";
 import { readPoiSummaryPrizes, type TPoiTransactionRequestSummary } from "@/lib/point-of-interaction/transaction-requests";
 import { usePoiTransactionRequests } from "@/lib/queries/poi-transaction-requests";
 import { cn } from "@/lib/utils";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { BadgeDollarSign, BadgePercent, CheckCheck, Gift, GitPullRequestArrow, Phone, RefreshCcw, X } from "lucide-react";
-import { BsCalendarPlus } from "react-icons/bs";
-import { useState } from "react";
-import { toast } from "sonner";
+import type { TCashbackProgramTerminologyEnum } from "@/schemas/enums";
+import { useQueryClient } from "@tanstack/react-query";
+import { BadgePercent, CheckCheck, Clock3, Gift, GitPullRequestArrow, Phone, RefreshCcw, X } from "lucide-react";
+import { type ReactNode, useEffect, useState } from "react";
+
+// Acima disso, um pedido pendente fica vermelho: o cliente está esperando no balcão.
+const PENDING_WARNING_MINUTES = 5;
 
 type PointOfInteractionTransactionRequestsQueueProps = {
 	orgId: string;
 	usuarioVendedorId: string | null;
 	poiConfirmacaoValorObrigatoria: boolean;
 };
+
+type TQueueRequest = TGetPoiTransactionRequestsOutput["data"]["requests"][number];
 
 type TApprovalCoupon = {
 	cupomId: string;
@@ -35,18 +39,43 @@ type TApprovalFreeFormReward = {
 	descricao: string;
 	valor: number | null;
 	saldoDisponivel: number | null;
-	terminologia: "DINHEIRO" | "PONTOS";
+	terminologia: TCashbackProgramTerminologyEnum;
 };
 
 type ApprovalTarget = {
 	requestId: string;
+	kind: TPoiOperationKind;
 	clientDisplayName: string;
 	valorBruto: number;
 	valorFinal: number;
+	valorResgate: number;
 	requiresSaleValueConfirmation: boolean;
 	coupon: TApprovalCoupon | null;
 	freeFormReward: TApprovalFreeFormReward | null;
 };
+
+type RejectionTarget = {
+	requestId: string;
+	clientDisplayName: string;
+	summary: { kind: TPoiOperationKind; title: string; details: string | null };
+};
+
+/** Relógio que avança sozinho, para o "há X min" da fila não congelar enquanto a tela fica aberta. */
+function useNow(intervalMs: number) {
+	const [now, setNow] = useState(() => Date.now());
+	useEffect(() => {
+		const timer = window.setInterval(() => setNow(Date.now()), intervalMs);
+		return () => window.clearInterval(timer);
+	}, [intervalMs]);
+	return now;
+}
+
+function formatWaitingTime(minutes: number) {
+	if (minutes < 1) return "agora";
+	if (minutes < 60) return `há ${minutes} min`;
+	const hours = Math.floor(minutes / 60);
+	return `há ${hours} h`;
+}
 
 export function PointOfInteractionTransactionRequestsQueue({
 	orgId,
@@ -56,62 +85,59 @@ export function PointOfInteractionTransactionRequestsQueue({
 	const queryClient = useQueryClient();
 	const { data: requests = [], isLoading, queryKey } = usePoiTransactionRequests();
 	const [approvalTarget, setApprovalTarget] = useState<ApprovalTarget | null>(null);
+	const [rejectionTarget, setRejectionTarget] = useState<RejectionTarget | null>(null);
+	const now = useNow(30_000);
 
 	usePoiTransactionRequestsRealtime({
 		orgId,
 		queryKey,
 	});
 
-	const { mutate: rejectRequest, isPending: isRejecting } = useMutation({
-		mutationFn: (requestId: string) => rejectPoiTransactionRequest({ requestId }),
-		onSuccess: () => {
-			toast.success("Solicitação rejeitada.");
-			queryClient.invalidateQueries({ queryKey });
-		},
-		onError: (error) => {
-			toast.error(getErrorMessage(error));
-		},
-	});
-
 	const hasLinkedSeller = !!usuarioVendedorId;
+	// Quem espera há mais tempo primeiro.
+	const sortedRequests = [...requests].sort((a, b) => new Date(a.dataInsercao).getTime() - new Date(b.dataInsercao).getTime());
+	const pendingCount = requests.filter((request) => request.status === "PENDENTE").length;
 
 	return (
 		<div className="bg-card border-border flex w-full flex-col gap-1 rounded-xl border px-3 py-4 shadow-2xs md:h-full md:min-h-0">
 			<div className="flex flex-col">
 				<div className="flex items-center justify-between">
-					<h1 className="text-xs font-medium tracking-tight uppercase">SOLICITAÇÕES</h1>
 					<div className="flex items-center gap-2">
-						<GitPullRequestArrow className="w-4 h-4 min-w-4 min-h-4" />
+						<h1 className="text-xs font-medium tracking-tight uppercase">SOLICITAÇÕES</h1>
+						{pendingCount > 0 ? (
+							<span className="rounded-full bg-brand px-2 py-0.5 text-[0.65rem] font-bold text-brand-foreground">
+								{pendingCount} {pendingCount === 1 ? "pendente" : "pendentes"}
+							</span>
+						) : null}
 					</div>
+					<GitPullRequestArrow className="w-4 h-4 min-w-4 min-h-4" />
 				</div>
-				<p className="text-[0.65rem] text-muted-foreground">Solicitacoes enviadas de transações recebidas pelo ponto de interação.</p>
+				<p className="text-[0.65rem] text-muted-foreground">
+					Solicitações enviadas pelo ponto de interação. Atualiza em tempo real; as mais antigas primeiro.
+				</p>
 			</div>
 
 			{isLoading ? (
 				<div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
 					<RefreshCcw className="h-4 w-4 animate-spin" /> Carregando solicitações...
 				</div>
-			) : requests.length === 0 ? (
+			) : sortedRequests.length === 0 ? (
 				<p className="py-4 text-sm text-muted-foreground">Nenhuma solicitação pendente no momento.</p>
 			) : (
 				<div className="mt-4 flex flex-col gap-3 md:flex-1 md:min-h-0 md:overflow-y-auto md:pr-1">
-					{requests.map((request) => (
+					{sortedRequests.map((request) => (
 						<PoiTransactionRequestCard
 							key={request.id}
 							request={request}
-							onApprove={({ valorBruto, valorFinal, isRewardMode, coupon, freeFormReward }) =>
+							now={now}
+							onApprove={(target) =>
 								setApprovalTarget({
+									...target,
 									requestId: request.id,
-									clientDisplayName: request.cliente?.nome ?? "Cliente não identificado",
-									valorBruto,
-									valorFinal,
-									requiresSaleValueConfirmation: poiConfirmacaoValorObrigatoria && !isRewardMode,
-									coupon,
-									freeFormReward,
+									requiresSaleValueConfirmation: poiConfirmacaoValorObrigatoria && target.kind !== "prize" && target.kind !== "free-form",
 								})
 							}
-							onReject={() => rejectRequest(request.id)}
-							disabled={isRejecting}
+							onReject={(target) => setRejectionTarget({ ...target, requestId: request.id })}
 						/>
 					))}
 				</div>
@@ -120,9 +146,11 @@ export function PointOfInteractionTransactionRequestsQueue({
 			{approvalTarget ? (
 				<ApproveTransaction
 					requestId={approvalTarget.requestId}
+					kind={approvalTarget.kind}
 					clientDisplayName={approvalTarget.clientDisplayName}
 					valorBruto={approvalTarget.valorBruto}
 					valorFinal={approvalTarget.valorFinal}
+					valorResgate={approvalTarget.valorResgate}
 					coupon={approvalTarget.coupon}
 					freeFormReward={approvalTarget.freeFormReward}
 					hasLinkedSeller={hasLinkedSeller}
@@ -137,29 +165,54 @@ export function PointOfInteractionTransactionRequestsQueue({
 					}}
 				/>
 			) : null}
+
+			{rejectionTarget ? (
+				<RejectTransaction
+					requestId={rejectionTarget.requestId}
+					clientDisplayName={rejectionTarget.clientDisplayName}
+					summary={rejectionTarget.summary}
+					closeModal={() => setRejectionTarget(null)}
+					callbacks={{ onSuccess: () => queryClient.invalidateQueries({ queryKey }) }}
+				/>
+			) : null}
 		</div>
+	);
+}
+
+/** O tipo da operação pedida, pelo resumo gravado na solicitação. */
+function resolveRequestKind(resumo: Partial<TPoiTransactionRequestSummary> | null): TPoiOperationKind {
+	if (resumo?.recompensaAvulsa) return "free-form";
+	if (resumo?.venda?.modo === "RECOMPENSA") return "prize";
+	if ((resumo?.venda?.valorResgate ?? 0) > 0) return "discount";
+	return "sale-only";
+}
+
+function ValuePair({ label, value, className }: { label: string; value: ReactNode; className?: string }) {
+	return (
+		<span className={cn("flex items-baseline gap-1 text-xs", className)}>
+			<span className="text-muted-foreground">{label}</span>
+			<span className="font-semibold">{value}</span>
+		</span>
 	);
 }
 
 function PoiTransactionRequestCard({
 	request,
+	now,
 	onApprove,
 	onReject,
-	disabled,
 }: {
-	request: TGetPoiTransactionRequestsOutput["data"]["requests"][number];
-	onApprove: (data: {
-		valorBruto: number;
-		valorFinal: number;
-		isRewardMode: boolean;
-		coupon: TApprovalCoupon | null;
-		freeFormReward: TApprovalFreeFormReward | null;
-	}) => void;
-	onReject: () => void;
-	disabled: boolean;
+	request: TQueueRequest;
+	now: number;
+	onApprove: (data: Omit<ApprovalTarget, "requestId" | "requiresSaleValueConfirmation">) => void;
+	onReject: (data: Omit<RejectionTarget, "requestId">) => void;
 }) {
 	// `resumoSolicitacao` é jsonb sem tipo no Drizzle; o formato persistido é o do builder.
 	const resumo = request.resumoSolicitacao as Partial<TPoiTransactionRequestSummary> | null;
+	const kind = resolveRequestKind(resumo);
+	const kindMeta = POI_OPERATION_KINDS[kind];
+	const clientName = request.cliente?.nome ?? resumo?.cliente?.nome ?? "Cliente não identificado";
+	const clientPhone = request.cliente?.telefone ?? resumo?.cliente?.telefone ?? null;
 	const requestCoupon: TApprovalCoupon | null = resumo?.cupom
 		? {
 				cupomId: resumo.cupom.cupomId,
@@ -170,7 +223,6 @@ function PoiTransactionRequestCard({
 				condicoesTexto: resumo.cupom.condicoesTexto ?? null,
 			}
 		: null;
-	const isRewardMode = resumo?.venda?.modo === "RECOMPENSA";
 	// Saldo e moeda do programa do cliente: o operador define o débito da recompensa avulsa contra eles.
 	const clientBalance = request.cliente?.saldos?.[0] ?? null;
 	const terminology = clientBalance?.programa?.terminologia ?? "DINHEIRO";
@@ -191,59 +243,88 @@ function PoiTransactionRequestCard({
 	const prizeRows = summaryPrizes.map((prize, index) => ({
 		prizeId: prize.prizeId,
 		quantity: prize.quantity,
+		valueTotal: prize.prizeValue * prize.quantity,
 		titulo: prize.prizeTitulo ?? (index === 0 ? (linkedPrize?.descricao ?? null) : null),
 		imageUrl: prize.prizeImageUrl ?? (index === 0 ? (linkedPrize?.imagemCapaUrl ?? null) : null),
 	}));
 	// Solicitação antiga sem recompensas no resumo mas com a transação de resgate vinculada.
 	if (prizeRows.length === 0 && linkedPrize && (linkedPrize.descricao || linkedPrize.imagemCapaUrl)) {
-		prizeRows.push({ prizeId: linkedPrize.id, quantity: 1, titulo: linkedPrize.descricao ?? null, imageUrl: linkedPrize.imagemCapaUrl ?? null });
+		prizeRows.push({
+			prizeId: linkedPrize.id,
+			quantity: 1,
+			valueTotal: 0,
+			titulo: linkedPrize.descricao ?? null,
+			imageUrl: linkedPrize.imagemCapaUrl ?? null,
+		});
 	}
 	const totalPrizeUnits = prizeRows.reduce((sum, row) => sum + row.quantity, 0);
 
+	const valorBruto = resumo?.venda?.valorBruto ?? 0;
+	const valorResgate = resumo?.venda?.valorResgate ?? 0;
+	const valorFinal = resumo?.venda?.valorFinal ?? 0;
+	const deliveryMode = resumo?.venda?.entregaModalidade ?? null;
+
+	const waitingMinutes = Math.max(0, Math.floor((now - new Date(request.dataInsercao).getTime()) / 60_000));
+	const isPending = request.status === "PENDENTE";
+	const isLate = isPending && waitingMinutes >= PENDING_WARNING_MINUTES;
+
+	const rejectionSummary: RejectionTarget["summary"] =
+		kind === "free-form"
+			? {
+					kind,
+					title: freeFormReward?.descricao ?? "Recompensa avulsa",
+					details: freeFormReward?.valor != null ? `Débito ${formatCashbackValue(freeFormReward.valor, terminology)}` : "Débito a definir",
+				}
+			: kind === "prize"
+				? {
+						kind,
+						title: prizeRows.map((row) => `${row.titulo ?? "Recompensa"} ×${row.quantity}`).join(", ") || "Recompensa",
+						details: `Resgate ${formatCashbackValue(valorResgate, terminology)} · final ${formatToMoney(valorFinal)}`,
+					}
+				: {
+						kind,
+						title: `Venda de ${formatToMoney(valorBruto)}`,
+						details: valorResgate > 0 ? `Desconto ${formatToMoney(valorResgate)} · final ${formatToMoney(valorFinal)}` : null,
+					};
+
 	return (
-		<div className="bg-card border border-border flex w-full flex-col gap-1 rounded-xl px-3 py-4 shadow-2xs h-fit">
-			<div className="w-full flex items-center justify-between flex-col md:flex-row gap-2">
+		<div className="bg-card border border-border flex w-full flex-col gap-2 rounded-xl px-3 py-4 shadow-2xs h-fit">
+			<div className="w-full flex items-center justify-between flex-wrap gap-2">
 				<div className="flex items-center gap-2 flex-wrap">
-					<h1 className="text-xs font-bold tracking-tight lg:text-sm">{request.cliente?.nome ?? resumo?.cliente?.nome ?? "Cliente não identificado"}</h1>
-					<div className="flex items-center gap-1">
-						<Phone className="w-4 h-4 min-w-4 min-h-4" />
-						<h1 className="py-0.5 text-center text-[0.65rem] font-medium italic">
-							{request.cliente?.telefone ?? resumo?.cliente?.telefone ?? "Telefone não informado"}
-						</h1>
-					</div>
-					{isRewardMode && (
-						<span className="flex items-center gap-1 rounded-full bg-brand/10 px-2.5 py-0.5 text-[0.65rem] font-bold text-brand dark:bg-brand/30 dark:text-brand">
-							<Gift className="h-3 w-3 min-h-3 min-w-3" />
-							RECOMPENSA
-						</span>
-					)}
+					<h2 className="text-xs font-bold tracking-tight lg:text-sm">{clientName}</h2>
+					<span className="flex items-center gap-1 text-[0.7rem] text-muted-foreground">
+						<Phone className="w-3.5 h-3.5 min-w-3.5 min-h-3.5" />
+						{clientPhone ? formatToPhone(clientPhone) : "Telefone não informado"}
+					</span>
+					<PoiOperationBadge kind={kind} />
 				</div>
 
-				<div className="flex items-center gap-3">
-					<div className={cn("flex items-center gap-1.5 text-[0.65rem] font-bold text-foreground")}>
-						<BsCalendarPlus className="w-4 min-w-4 h-4 min-h-4" />
-						<p className="text-xs font-medium tracking-tight uppercase">{formatDateAsLocale(request.dataInsercao, true)}</p>
-					</div>
-					<div
-						className={cn("flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[0.65rem] bg-secondary text-foreground", {
-							"bg-amber-100 text-amber-700": request.status === "PENDENTE",
-							"bg-green-100 text-green-700": request.status === "APROVADO",
-							"bg-red-100 text-red-700": request.status === "REJEITADO",
-						})}
-					>
-						<p className="text-xs font-medium tracking-tight uppercase">{request.status}</p>
-					</div>
-				</div>
+				<span
+					title={formatDateAsLocale(request.dataInsercao, true) ?? undefined}
+					className={cn(
+						"flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[0.7rem] font-semibold tracking-tight uppercase bg-secondary text-foreground",
+						{
+							"bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300": isPending && !isLate,
+							"bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300": isLate || request.status === "REJEITADO",
+							"bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300": request.status === "APROVADO",
+						},
+					)}
+				>
+					<Clock3 className="h-3.5 w-3.5 min-h-3.5 min-w-3.5" />
+					{request.status}
+					{isPending ? <span className="normal-case">· {formatWaitingTime(waitingMinutes)}</span> : null}
+				</span>
 			</div>
 
 			{requestCoupon ? (
-				<div className="flex items-center gap-2.5 rounded-lg border border-brand/20 bg-brand/5 px-3 py-2">
-					<div className="flex h-10 w-10 min-h-10 min-w-10 items-center justify-center rounded-md bg-brand/10">
-						<BadgePercent className="h-5 w-5 text-brand" />
+				<div className="flex items-center gap-2.5 rounded-lg border border-brand/30 bg-brand/5 px-3 py-2">
+					<div className="flex h-10 w-10 min-h-10 min-w-10 items-center justify-center rounded-md bg-brand/15">
+						<BadgePercent className="h-5 w-5 text-foreground/80" />
 					</div>
 					<div className="flex flex-col gap-0.5">
-						<p className="text-[0.65rem] font-semibold uppercase tracking-tight text-brand">
-							Cupom {requestCoupon.codigo ?? ""} — {requestCoupon.titulo ?? ""}
+						<p className="text-[0.65rem] font-semibold uppercase tracking-tight text-foreground/80">
+							Cupom {requestCoupon.codigo ?? ""}
+							{requestCoupon.titulo ? ` — ${requestCoupon.titulo}` : ""}
 						</p>
 						<p className="text-xs font-bold">
 							{requestCoupon.valorDesconto ? `Desconto: ${formatToMoney(requestCoupon.valorDesconto)}` : "Desconto a informar pelo operador na aprovação"}
@@ -254,26 +335,28 @@ function PoiTransactionRequestCard({
 			) : null}
 
 			{freeFormReward ? (
-				<div className="flex items-center gap-2.5 rounded-lg border border-purple-200 bg-purple-50 px-3 py-2 dark:border-purple-800/40 dark:bg-purple-900/10">
-					<div className="flex h-10 w-10 min-h-10 min-w-10 items-center justify-center rounded-md bg-purple-100 dark:bg-purple-900/30">
-						<Gift className="h-5 w-5 text-purple-500" />
+				<div className={cn("flex items-center gap-2.5 rounded-lg border px-3 py-2", kindMeta.classes.surface)}>
+					<div className={cn("flex h-10 w-10 min-h-10 min-w-10 items-center justify-center rounded-md", kindMeta.classes.iconTile)}>
+						<kindMeta.icon className="h-5 w-5" />
 					</div>
 					<div className="flex min-w-0 flex-col gap-0.5">
-						<p className="text-[0.65rem] font-semibold uppercase tracking-tight text-purple-700 dark:text-purple-300">Recompensa avulsa</p>
-						<p className="text-xs font-bold break-words text-purple-900 dark:text-purple-100">{freeFormReward.descricao}</p>
+						<p className={cn("text-[0.65rem] font-semibold uppercase tracking-tight", kindMeta.classes.text)}>Recompensa avulsa</p>
+						<p className={cn("text-xs font-bold break-words", kindMeta.classes.title)}>{freeFormReward.descricao}</p>
 						<p className="text-[0.65rem] text-muted-foreground">
-							{freeFormReward.valor != null
-								? `Débito: ${formatCashbackValue(freeFormReward.valor, terminology)}`
-								: "Débito a informar pelo operador na aprovação"}
+							{freeFormReward.valor != null ? (
+								`Débito: ${formatCashbackValue(freeFormReward.valor, terminology)}`
+							) : (
+								<strong className="font-semibold text-amber-700 dark:text-amber-400">Débito a definir na aprovação</strong>
+							)}
 							{freeFormReward.saldoDisponivel != null ? ` · Saldo: ${formatCashbackValue(freeFormReward.saldoDisponivel, terminology)}` : null}
 						</p>
 					</div>
 				</div>
 			) : null}
 
-			{isRewardMode && prizeRows.length > 0 && (
-				<div className="flex flex-col gap-2 rounded-lg border border-purple-200 bg-purple-50 px-3 py-2 dark:border-purple-800/40 dark:bg-purple-900/10">
-					<p className="text-[0.65rem] font-semibold uppercase tracking-tight text-purple-700 dark:text-purple-300">
+			{kind === "prize" && prizeRows.length > 0 ? (
+				<div className={cn("flex flex-col gap-2 rounded-lg border px-3 py-2", kindMeta.classes.surface)}>
+					<p className={cn("text-[0.65rem] font-semibold uppercase tracking-tight", kindMeta.classes.text)}>
 						{totalPrizeUnits === 1 ? "Prêmio resgatado" : `Prêmios resgatados (${totalPrizeUnits})`}
 					</p>
 					{prizeRows.map((row) => (
@@ -281,58 +364,61 @@ function PoiTransactionRequestCard({
 							{row.imageUrl ? (
 								<img src={row.imageUrl} alt={row.titulo ?? "Prêmio"} className="h-10 w-10 min-h-10 min-w-10 rounded-md object-cover" />
 							) : (
-								<div className="flex h-10 w-10 min-h-10 min-w-10 items-center justify-center rounded-md bg-purple-100 dark:bg-purple-900/30">
-									<Gift className="h-5 w-5 text-purple-500" />
+								<div className="flex h-10 w-10 min-h-10 min-w-10 items-center justify-center rounded-md bg-violet-100 dark:bg-violet-900/30">
+									<Gift className="h-5 w-5 text-violet-600 dark:text-violet-300" />
 								</div>
 							)}
-							<p className="min-w-0 flex-1 truncate text-xs font-bold text-purple-900 dark:text-purple-100">{row.titulo ?? "Recompensa"}</p>
+							<p className={cn("min-w-0 flex-1 truncate text-xs font-bold", kindMeta.classes.title)}>{row.titulo ?? "Recompensa"}</p>
 							{row.quantity > 1 ? (
-								<span className="rounded-full bg-purple-200 px-2 py-0.5 text-[0.65rem] font-black tabular-nums text-purple-900 dark:bg-purple-800/40 dark:text-purple-100">
+								<span className="rounded-full bg-violet-200 px-2 py-0.5 text-[0.65rem] font-black tabular-nums text-violet-900 dark:bg-violet-800/40 dark:text-violet-100">
 									×{row.quantity}
 								</span>
 							) : null}
 						</div>
 					))}
 				</div>
-			)}
+			) : null}
 
-			<div className="w-full flex items-center justify-center lg:justify-between gap-2 flex-wrap">
-				<div className="flex items-center gap-3 flex-wrap">
-					<div className={cn("flex items-center gap-1.5 text-[0.65rem] font-bold text-foreground")}>
-						<BadgeDollarSign className="w-4 min-w-4 h-4 min-h-4" />
-						<p className="text-xs font-medium tracking-tight uppercase">MODALIDADE: {resumo?.venda?.entregaModalidade ?? "NÃO INFORMADA"}</p>
-						<p className="text-xs font-medium tracking-tight uppercase">BRUTO: {formatToMoney(resumo?.venda?.valorBruto ?? 0)}</p>
-					</div>
-					<div className={cn("flex items-center gap-1.5 text-[0.65rem] font-bold text-foreground")}>
-						<BadgePercent className="w-4 min-w-4 h-4 min-h-4" />
-						<p className="text-xs font-medium tracking-tight uppercase">
-							{freeFormReward
-								? `RESGATE: ${freeFormReward.valor != null ? formatCashbackValue(freeFormReward.valor, terminology) : "A DEFINIR"}`
-								: isRewardMode
-									? `RESGATE: ${resumo?.venda?.valorResgate ?? 0} créditos`
-									: `RESGATE: ${formatToMoney(resumo?.venda?.valorResgate ?? 0)}`}
-						</p>
-					</div>
-					<div className={cn("flex items-center gap-1.5 text-[0.65rem] font-bold text-foreground")}>
-						<BadgeDollarSign className="w-4 min-w-4 h-4 min-h-4" />
-						<p className="text-xs font-medium tracking-tight uppercase">FINAL: {formatToMoney(resumo?.venda?.valorFinal ?? 0)}</p>
-					</div>
+			<div className="w-full flex items-center justify-between gap-2 flex-wrap">
+				<div className="flex items-center gap-x-3.5 gap-y-1 flex-wrap">
+					{kind === "free-form" ? (
+						<span className="text-xs text-muted-foreground">Sem venda · só débito de saldo</span>
+					) : (
+						<>
+							<ValuePair label="Bruto" value={formatToMoney(valorBruto)} />
+							{valorResgate > 0 ? (
+								<ValuePair
+									label="Resgate"
+									value={`− ${kind === "prize" ? formatCashbackValue(valorResgate, terminology) : formatToMoney(valorResgate)}`}
+									className={kindMeta.classes.amount}
+								/>
+							) : null}
+							<ValuePair label="Final" value={formatToMoney(valorFinal)} />
+							{deliveryMode ? <ValuePair label="Modalidade" value={deliveryMode.toLowerCase()} className="capitalize" /> : null}
+						</>
+					)}
 				</div>
 				<div className="flex items-center gap-3">
-					<Button disabled={disabled} variant="ghost-destructive" className="flex items-center gap-1.5" size="sm" onClick={onReject}>
+					<Button
+						variant="ghost-destructive"
+						className="flex items-center gap-1.5"
+						size="sm"
+						onClick={() => onReject({ clientDisplayName: clientName, summary: rejectionSummary })}
+					>
 						<X className="w-4 min-w-4 h-4 min-h-4" />
 						REJEITAR
 					</Button>
 					<Button
-						disabled={disabled}
 						variant="brand"
 						className="flex items-center gap-1.5"
 						size="sm"
 						onClick={() =>
 							onApprove({
-								valorBruto: resumo?.venda?.valorBruto ?? 0,
-								valorFinal: resumo?.venda?.valorFinal ?? 0,
-								isRewardMode,
+								kind,
+								clientDisplayName: clientName,
+								valorBruto,
+								valorFinal,
+								valorResgate,
 								coupon: requestCoupon,
 								freeFormReward,
 							})
@@ -343,40 +429,6 @@ function PoiTransactionRequestCard({
 					</Button>
 				</div>
 			</div>
-			{/* <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-				<div className="space-y-2">
-					<div className="flex flex-wrap items-center gap-2 text-xs">
-						<span className="rounded-full bg-amber-100 px-2.5 py-1 font-bold text-amber-700">{request.status}</span>
-						<span className="rounded-full bg-secondary px-2.5 py-1 font-medium text-muted-foreground">
-							{formatDateAsLocale(request.dataInsercao, true)}
-						</span>
-						{resumo?.venda?.modo ? <span className="rounded-full bg-primary/10 px-2.5 py-1 font-bold text-foreground">{resumo.venda.modo}</span> : null}
-					</div>
-					<div>
-						<h3 className="text-sm font-black uppercase tracking-tight">{request.cliente?.nome ?? resumo?.cliente?.nome ?? "Cliente não identificado"}</h3>
-						<p className="text-xs text-muted-foreground">{request.cliente?.telefone ?? resumo?.cliente?.telefone ?? "Telefone não informado"}</p>
-					</div>
-					<div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-						<span>
-							Valor bruto: <strong className="text-foreground">{formatToMoney(resumo?.venda?.valorBruto ?? 0)}</strong>
-						</span>
-						<span>
-							Resgate: <strong className="text-foreground">{formatToMoney(resumo?.venda?.valorResgate ?? 0)}</strong>
-						</span>
-						<span>
-							Total final: <strong className="text-foreground">{formatToMoney(resumo?.venda?.valorFinal ?? 0)}</strong>
-						</span>
-					</div>
-				</div>
-				<div className="flex flex-col gap-2 sm:flex-row">
-					<Button size="sm" className="gap-2" disabled={disabled} onClick={onApprove}>
-						<ShieldCheck className="h-4 w-4" /> Aprovar
-					</Button>
-					<Button size="sm" variant="outline" className="gap-2" disabled={disabled} onClick={onReject}>
-						<ShieldX className="h-4 w-4" /> Rejeitar
-					</Button>
-				</div>
-			</div> */}
 		</div>
 	);
 }

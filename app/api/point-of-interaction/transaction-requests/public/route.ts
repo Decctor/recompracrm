@@ -4,7 +4,12 @@ import {
 } from "@/app/api/point-of-interaction/new-transaction/route";
 import { appApiHandler } from "@/lib/app-api";
 import { resolvePoiPrizeLines } from "@/lib/point-of-interaction/prize-lines";
-import { type TPoiPrizeInfoById, buildPoiTransactionRequestSummary } from "@/lib/point-of-interaction/transaction-requests";
+import {
+	type TPoiPrizeInfoById,
+	type TPoiTransactionRejection,
+	buildPoiTransactionRequestSummary,
+	getPoiRejectionPublicMessage,
+} from "@/lib/point-of-interaction/transaction-requests";
 import { db } from "@/services/drizzle";
 import { cashbackProgramPrizes, coupons, poiTransactionRequests } from "@/services/drizzle/schema";
 import { and, desc, eq, inArray } from "drizzle-orm";
@@ -103,7 +108,8 @@ async function getPoiTransactionRequestStatus({ input }: { input: TGetPoiTransac
 
 	const resumo = (request.resumoSolicitacao ?? null) as {
 		resultadoProcessamento?: TCreatePointOfInteractionTransactionOutput["data"] | null;
-	};
+		rejeicao?: TPoiTransactionRejection | null;
+	} | null;
 
 	return {
 		data: {
@@ -118,7 +124,7 @@ async function getPoiTransactionRequestStatus({ input }: { input: TGetPoiTransac
 			resultadoProcessamento: resumo?.resultadoProcessamento ?? null,
 			mensagemPublica:
 				request.status === "REJEITADO"
-					? "Sua solicitação não foi aprovada pelo operador. Tente novamente no balcão."
+					? getPoiRejectionPublicMessage(resumo?.rejeicao)
 					: request.status === "ERRO"
 						? "Não foi possível processar sua solicitação. Tente novamente em instantes."
 						: request.status === "APROVADO"

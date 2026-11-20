@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildPoiTransactionRequestSummary, readPoiSummaryPrizes } from "./transaction-requests";
+import { buildPoiTransactionRequestSummary, getPoiRejectionPublicMessage, readPoiSummaryPrizes } from "./transaction-requests";
 
 const baseInput = {
 	orgId: "org",
@@ -34,7 +34,10 @@ test("resumo com duas recompensas: totais somados e uma entrada por recompensa",
 });
 
 test("resumo sem recompensa continua no modo DESCONTO", () => {
-	const summary = buildPoiTransactionRequestSummary({ ...baseInput, sale: { ...baseInput.sale, valor: 100, cashback: { aplicar: true, valor: 30 } } } as never);
+	const summary = buildPoiTransactionRequestSummary({
+		...baseInput,
+		sale: { ...baseInput.sale, valor: 100, cashback: { aplicar: true, valor: 30 } },
+	} as never);
 	assert.equal(summary.venda.modo, "DESCONTO");
 	assert.equal(summary.venda.valorBruto, 100);
 	assert.equal(summary.venda.valorResgate, 30);
@@ -48,4 +51,13 @@ test("leitura de resumo persistido aceita o formato legado", () => {
 	]);
 	assert.deepEqual(readPoiSummaryPrizes(null), []);
 	assert.equal(readPoiSummaryPrizes({ recompensas: [{ prizeId: "b", prizeValue: 1, prizeSaleValue: 1, quantity: 3 }] })[0]?.quantity, 3);
+});
+
+test("mensagem de rejeição: motivo e observação para o cliente; sem motivo, o texto genérico", () => {
+	assert.equal(
+		getPoiRejectionPublicMessage({ motivo: "ITEM_INDISPONIVEL", observacao: "Volta na sexta." }),
+		"Solicitação não aprovada: Item indisponível no momento. Volta na sexta.",
+	);
+	assert.equal(getPoiRejectionPublicMessage({ motivo: "DUPLICADO", observacao: "  " }), "Solicitação não aprovada: Pedido enviado em duplicidade.");
+	assert.equal(getPoiRejectionPublicMessage(null), "Sua solicitação não foi aprovada pelo operador. Tente novamente no balcão.");
 });

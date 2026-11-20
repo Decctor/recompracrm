@@ -592,6 +592,20 @@ export type TPaymentAttemptEventTypeEnum = z.infer<typeof PaymentAttemptEventTyp
 export const PoiTransactionRequestStatusEnum = z.enum(["PENDENTE", "PROCESSANDO", "APROVADO", "REJEITADO", "ERRO"]);
 export type TPoiTransactionRequestStatusEnum = z.infer<typeof PoiTransactionRequestStatusEnum>;
 
+// Motivo da rejeição de uma solicitação do ponto de interação. O cliente lê o rótulo no celular.
+export const PoiTransactionRejectionReasonEnum = z.enum(["ITEM_INDISPONIVEL", "VALOR_DIVERGENTE", "DUPLICADO", "OUTRO"], {
+	required_error: "Motivo da rejeição não informado.",
+	invalid_type_error: "Tipo não válido para o motivo da rejeição.",
+});
+export type TPoiTransactionRejectionReasonEnum = z.infer<typeof PoiTransactionRejectionReasonEnum>;
+
+export const POI_TRANSACTION_REJECTION_REASON_LABELS: Record<TPoiTransactionRejectionReasonEnum, string> = {
+	ITEM_INDISPONIVEL: "Item indisponível no momento",
+	VALOR_DIVERGENTE: "Valor não confere com a compra",
+	DUPLICADO: "Pedido enviado em duplicidade",
+	OUTRO: "Outro motivo",
+};
+
 export const PoiTransactionRequestTypeEnum = z.enum(["NOVA_TRANSACAO"]);
 export type TPoiTransactionRequestTypeEnum = z.infer<typeof PoiTransactionRequestTypeEnum>;
 
