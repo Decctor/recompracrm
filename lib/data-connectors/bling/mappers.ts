@@ -56,16 +56,41 @@ function normalizeSituacaoNumber(value: string | number | null | undefined) {
 	return Number.isFinite(parsed) ? parsed : null;
 }
 
-/** Situação "Em aberto" desta conta Bling (situacao.id=6, situacao.valor=0). */
-export function isBlingEmAbertoValidSaleSituacao(sale: TBlingSale) {
-	const situacao = sale.situacao;
-	if (!situacao) return false;
-	return normalizeSituacaoNumber(situacao.id) === 6 && normalizeSituacaoNumber(situacao.valor) === 0;
-}
+/**
+ * `situacao.valor` é o tipo padrão do Bling, herdado também pelas situações personalizadas;
+ * `situacao.id` identifica a situação (as padrão têm id fixo). O detalhe do pedido não traz `nome`.
+ */
+const BLING_SITUACAO_VALOR = { EM_ABERTO: 0, ATENDIDO: 1, CANCELADO: 2 } as const;
+const BLING_SITUACAO_ID = { EM_ABERTO: 6, ATENDIDO: 9, CANCELADO: 12 } as const;
 
-export function isBlingValidSale({ sale, statusText }: { sale: TBlingSale; statusText: string }) {
-	if (isBlingEmAbertoValidSaleSituacao(sale)) return true;
-	return isBlingValidSaleStatus(statusText);
+/**
+ * Classifica pelos números da situação. Até 2026-11-21 a regra comparava o texto montado
+ * "valor - id" (ex.: "1 - 9") com "1"/"9" isolados e nunca casava: pedido Atendido ficava sem
+ * status (deixava de contar como compra) e Cancelado não era reconhecido como cancelamento.
+ *
+ * - Atendido (valor 1, qualquer id): venda válida.
+ * - Em aberto: válida só na situação padrão (id 6), não nas personalizadas derivadas dela
+ *   (ex.: "aguardando pagamento") — regra de 451c317b.
+ * - Cancelado (valor 2, qualquer id): cancelada.
+ * - Sem números: o nome decide, quando vier. Demais situações (Em digitação, Em andamento…): nem
+ *   válida nem cancelada.
+ */
+export function classifyBlingSaleSituacao(situacao: TBlingSale["situacao"]): { isValidSale: boolean; isCanceled: boolean } {
+	const valor = normalizeSituacaoNumber(situacao?.valor);
+	const id = normalizeSituacaoNumber(situacao?.id);
+
+	if (valor === BLING_SITUACAO_VALOR.CANCELADO || (valor === null && id === BLING_SITUACAO_ID.CANCELADO))
+		return { isValidSale: false, isCanceled: true };
+	if (valor === BLING_SITUACAO_VALOR.ATENDIDO || (valor === null && id === BLING_SITUACAO_ID.ATENDIDO))
+		return { isValidSale: true, isCanceled: false };
+	if (id === BLING_SITUACAO_ID.EM_ABERTO && (valor === BLING_SITUACAO_VALOR.EM_ABERTO || valor === null))
+		return { isValidSale: true, isCanceled: false };
+	if (valor !== null || id !== null) return { isValidSale: false, isCanceled: false };
+
+	const nome = toStringId(situacao?.nome);
+	if (!nome) return { isValidSale: false, isCanceled: false };
+	if (isBlingCanceledSaleStatus(nome)) return { isValidSale: false, isCanceled: true };
+	return { isValidSale: isBlingValidSaleStatus(nome), isCanceled: false };
 }
 
 export function mapBlingContactToCanonicalClient(contact: TBlingContact | null | undefined): TCanonicalClient | null {
@@ -157,8 +182,7 @@ export function mapBlingSaleToCanonicalSale({ sale }: { sale: TBlingSale }): TCa
 	if (!sourceSaleId) throw new Error("[BLING_MAPPER] Pedido de venda recebido sem ID.");
 
 	const statusText = getSaleStatusText(sale);
-	const canceled = isBlingCanceledSaleStatus(statusText);
-	const validSale = isBlingValidSale({ sale, statusText });
+	const { isValidSale: validSale, isCanceled: canceled } = classifyBlingSaleSituacao(sale.situacao);
 	const itemDiscount = sale.itens.reduce((acc, item) => acc + mapBlingSaleItemToCanonicalSaleItem(item).discountValue, 0);
 	const explicitDiscount = sale.desconto?.valor ?? 0;
 	const totalSurcharge = (sale.transporte?.frete ?? 0) + sale.outrasDespesas;

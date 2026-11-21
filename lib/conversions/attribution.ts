@@ -196,6 +196,15 @@ function calculateLastTouchAttribution(
 export async function processConversionAttribution(tx: DBTransaction, params: AttributionParams): Promise<void> {
 	const { vendaId, clienteId, organizacaoId, valorVenda, dataVenda } = params;
 
+	// Idempotente por venda: uma venda pode voltar a ser válida (ex.: um conector que a classificava
+	// errado e foi corrigido — Bling "Atendido", 2026-11-21) e passar de novo por aqui. Sem a guarda,
+	// cada revalidação gravava outra conversão e inflava o resultado da campanha.
+	const existingConversion = await tx.query.campaignConversions.findFirst({
+		where: eq(campaignConversions.vendaId, vendaId),
+		columns: { id: true },
+	});
+	if (existingConversion) return;
+
 	// 1. Find all campaigns with their attribution settings for this organization
 	const allCampaigns = await tx.query.campaigns.findMany({
 		where: eq(campaigns.organizacaoId, organizacaoId),
