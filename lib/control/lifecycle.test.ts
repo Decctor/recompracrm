@@ -1,0 +1,122 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import {
+	buildControlCustomFields,
+	CONTROL_SUCCESS_MILESTONES,
+	controlOrganizationReference,
+	planControlLifecycleSync,
+	shouldMoveSuccessStage,
+	type TControlLifecycleSnapshot,
+} from "./lifecycle";
+
+const NOW = new Date("2026-11-21T12:00:00Z");
+const DAY = 24 * 60 * 60 * 1000;
+const ALL_STAGES = [...CONTROL_SUCCESS_MILESTONES.map((milestone) => milestone.estagio), "Coleta de NPS", "Acompanhamento de sucesso do cliente"];
+
+function snapshot(overrides: Partial<TControlLifecycleSnapshot> = {}): TControlLifecycleSnapshot {
+	return {
+		organizacaoCriadaEm: new Date(NOW.getTime() - 2 * DAY),
+		onboardingConcluidoEm: null,
+		cashbackConfigurado: false,
+		campanhasPreparadas: 0,
+		fonteDadosDefinida: false,
+		whatsappOficialConectado: false,
+		primeiraVendaEm: null,
+		primeiroEnvioCampanhaEm: null,
+		primeiroResgateEm: null,
+		enviosCampanhaUltimos14Dias: 0,
+		now: NOW,
+		...overrides,
+	};
+}
+
+test("a referência da organização no Control é prefixada", () => {
+	assert.equal(controlOrganizationReference("abc"), "recompracrm:org_abc");
+});
+
+test("organização recém-criada: só boas-vindas", () => {
+	const plan = planControlLifecycleSync({ snapshot: snapshot(), marcosEnviados: [], estagiosDoQuadro: ALL_STAGES });
+	assert.deepEqual(
+		plan.novosMarcos.map((milestone) => milestone.chave),
+		["boas_vindas"],
+	);
+	assert.equal(plan.estagioAlvo, "Boas vindas");
+});
+
+test("o alvo é o marco mais adiantado, mesmo fora de ordem", () => {
+	// Vendeu antes de configurar cashback: o cartão vai para "Primeira venda".
+	const plan = planControlLifecycleSync({
+		snapshot: snapshot({ onboardingConcluidoEm: NOW, fonteDadosDefinida: true, primeiraVendaEm: NOW }),
+		marcosEnviados: ["boas_vindas"],
+		estagiosDoQuadro: ALL_STAGES,
+	});
+	assert.equal(plan.estagioAlvo, "Primeira venda");
+	assert.deepEqual(
+		plan.novosMarcos.map((milestone) => milestone.chave),
+		["onboarding_concluido", "fonte_dados_definida", "primeira_venda"],
+	);
+});
+
+test("marcos já entregues não voltam", () => {
+	const plan = planControlLifecycleSync({
+		snapshot: snapshot({ onboardingConcluidoEm: NOW }),
+		marcosEnviados: ["boas_vindas", "onboarding_concluido"],
+		estagiosDoQuadro: ALL_STAGES,
+	});
+	assert.equal(plan.novosMarcos.length, 0);
+});
+
+test("marco sem estágio no quadro não vira alvo — cai no anterior que existe", () => {
+	const withoutWhatsappStage = ALL_STAGES.filter((stage) => stage !== "WhatsApp oficial conectado");
+	const plan = planControlLifecycleSync({
+		snapshot: snapshot({ onboardingConcluidoEm: NOW, fonteDadosDefinida: true, whatsappOficialConectado: true }),
+		marcosEnviados: [],
+		estagiosDoQuadro: withoutWhatsappStage,
+	});
+	assert.equal(plan.estagioAlvo, "Onboarding: Integração ERP ou Tablet/QRcode/PDV");
+	// O evento do marco continua indo: o workflow pode reagir a ele mesmo sem estágio.
+	assert.ok(plan.novosMarcos.some((milestone) => milestone.chave === "whatsapp_conectado"));
+});
+
+test("estágios comparados sem diferenciar caixa e espaços (o quadro real tem 'Primeira venda ')", () => {
+	const plan = planControlLifecycleSync({
+		snapshot: snapshot({ primeiraVendaEm: NOW }),
+		marcosEnviados: [],
+		estagiosDoQuadro: ["Boas vindas", "Primeira venda "],
+	});
+	assert.equal(plan.estagioAlvo, "Primeira venda");
+});
+
+test("primeiro mês exige 30 dias e campanha enviando nas duas últimas semanas", () => {
+	const old = new Date(NOW.getTime() - 31 * DAY);
+	const reached = (s: TControlLifecycleSnapshot) =>
+		planControlLifecycleSync({ snapshot: s, marcosEnviados: [], estagiosDoQuadro: ALL_STAGES }).novosMarcos.some((m) => m.chave === "primeiro_mes");
+	assert.equal(reached(snapshot({ organizacaoCriadaEm: old, enviosCampanhaUltimos14Dias: 3 })), true);
+	assert.equal(reached(snapshot({ organizacaoCriadaEm: old, enviosCampanhaUltimos14Dias: 0 })), false);
+	assert.equal(reached(snapshot({ enviosCampanhaUltimos14Dias: 3 })), false);
+});
+
+test("o cartão só avança", () => {
+	assert.equal(shouldMoveSuccessStage({ estagioAtual: null, estagioAlvo: "Boas vindas" }), true);
+	assert.equal(shouldMoveSuccessStage({ estagioAtual: "Boas vindas", estagioAlvo: "Primeira venda" }), true);
+	assert.equal(shouldMoveSuccessStage({ estagioAtual: "Primeira venda", estagioAlvo: "Boas vindas" }), false);
+	assert.equal(shouldMoveSuccessStage({ estagioAtual: "Primeira venda", estagioAlvo: "Primeira venda" }), false);
+	assert.equal(shouldMoveSuccessStage({ estagioAtual: "primeira venda ", estagioAlvo: "Primeira Campanha realizada" }), true);
+});
+
+test("estágios manuais e desconhecidos não são tocados", () => {
+	assert.equal(shouldMoveSuccessStage({ estagioAtual: "Coleta de NPS", estagioAlvo: "Primeiro mês de Uso" }), false);
+	assert.equal(shouldMoveSuccessStage({ estagioAtual: "Algo que o time criou", estagioAlvo: "Primeira venda" }), false);
+	assert.equal(shouldMoveSuccessStage({ estagioAtual: null, estagioAlvo: null }), false);
+});
+
+test("campos personalizados: só as chaves que existem no Control, sem nulos", () => {
+	assert.deepEqual(
+		buildControlCustomFields({
+			valores: { plano: "ESCALA", segmento: null, campanhas_ativas: 3, inexistente: "x" },
+			chavesDisponiveis: ["plano", "segmento", "campanhas_ativas"],
+		}),
+		{ plano: "ESCALA", campanhas_ativas: 3 },
+	);
+});

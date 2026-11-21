@@ -239,6 +239,16 @@ Campos personalizados da oportunidade (variáveis das mensagens e das condiçõe
 
 ### 9.4. Como os dois conversam
 
+> **Implementado (21/11).** Do lado do Control, a onda 1 da API pública (PR #120 em `syncroniza-control`). Do lado do RecompraCRM:
+>
+> - `services/control` (cliente da API);
+> - `lib/control/lifecycle.ts` (marcos e regras, com testes);
+> - `lib/control/sync.ts`;
+> - ganchos na criação da organização e no onboarding;
+> - cron horário `/api/cron/control-lifecycle`, que também faz o backfill.
+>
+> A sincronização fica desligada até `CONTROL_API_KEY` ser configurada. Convenções em `CLAUDE.md` § *Syncroniza Control Lifecycle Sync Conventions*.
+
 1. **Uma única função de sincronização no RecompraCRM**, por exemplo `syncControlLifecycle({ organizationId })`. Ela lê a prontidão, calcula estágio e campos e chama o Control de forma idempotente: cria a oportunidade pela API v1 com `referenciaExterna` e depois move o estágio ou atualiza os campos. Só envia quando algo mudou.
 2. **Pontos de chamada (todos já existem):**
    - criação da organização (`app/api/organizations/route.ts`);
