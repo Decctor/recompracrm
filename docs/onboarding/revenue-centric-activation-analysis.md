@@ -222,6 +222,8 @@ O Syncroniza Control já é o CRM da própria Syncroniza e tem quase tudo o que 
 
 Cada conta vira um cliente (o responsável) e uma oportunidade no parceiro Syncroniza, com `referenciaExterna = organizacaoId`. Os estágios são **derivados** da prontidão; ninguém os move à mão.
 
+> **Atualização (21/11):** o parceiro **RecompraCRM** no Control já tem dois quadros desenhados pelo time e que devem ser reaproveitados. O **"Funil Comercial RecompraCRM"** (Novo Lead > Qualificação > Teste grátis > Negociação > Fechado > Nutrição) faz a visão comercial. O **"SUCESSO DO CLIENTE"**, vazio hoje, tem estágios que já são os marcos de ativação (Boas vindas … Primeira venda > Primeira Campanha realizada > Primeiro Cashback/giftback resgatado > Primeiro mês de Uso > NPS). O mapeamento estágio ↔ prontidão, as regras de sincronização (só avança, não toca estágios manuais) e a proposta de um estágio "WhatsApp oficial conectado" estão em `syncroniza-control/docs/public-api-v1-plan.md` §4. A tabela abaixo continua valendo como desenho dos workflows por momento.
+
 | Estágio | Entra quando (estado no RecompraCRM) | Workflows do estágio | Sai quando |
 | --- | --- | --- | --- |
 | Cadastro | Usuário criado, sem organização | 5.1; aviso ao time se não criar a org em 2 h | Org criada |
@@ -250,6 +252,8 @@ Campos personalizados da oportunidade (variáveis das mensagens e das condiçõe
 4. **Migrar o que hoje sai pelo gateway interno:** a boas-vindas ao dono e o alerta de nova organização, com os números dos fundadores fixos em `config/internal-coms.ts`, viram workflows do estágio "Onboarding em andamento". Assim, as respostas passam a cair no hub do Control.
 
 ### 9.5. Lacunas no Control
+
+As lacunas 1–3 viraram a onda 1 do plano da API pública do Control (`syncroniza-control/docs/public-api-v1-plan.md`): referências externas, rotas de leitura e atualização, `POST /api/v1/events` e o gatilho `evento_recebido`.
 
 1. **Mudar estágio e campos servidor a servidor.** A API v1 só cria oportunidades. O MCP cobre `move_opportunity_stage` e `update_opportunity`, mas é a superfície dos agentes. Recomendo `PATCH /api/v1/opportunities/{id}` (ou por `referenciaExterna`) com o mesmo modelo de escopo e idempotência do POST.
 2. **Eventos de produto servidor a servidor.** `/api/track` é de navegador: com domínios autorizados configurados, uma requisição sem `Origin` é recusada (`isOriginAllowed`). Falta uma ingestão com chave secreta, para que `org_criada`, `primeiro_envio` e `primeira_recompra` entrem no perfil, no lead score e no funil.
