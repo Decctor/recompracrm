@@ -200,3 +200,33 @@ export function buildControlCustomFields({
 		),
 	);
 }
+
+// ------------------------------------------------------------------ aviso de fim do teste
+
+/** Status do Stripe em que a organização já paga: o aviso de fim do teste não faz sentido. */
+const PAYING_STRIPE_STATUSES = new Set(["active", "trialing", "past_due", "unpaid"]);
+const TRIAL_ENDING_NOTICE_DAYS = 3;
+
+/**
+ * Aviso de serviço "seu teste termina em 3 dias", enviado como evento (`teste_terminando`) para o
+ * workflow do Control. Não é marco: não move o cartão. Vai uma vez por data de fim de teste — se o
+ * teste for estendido, a nova data gera um novo aviso.
+ *
+ * Devolve a chave do aviso (`teste_terminando:<yyyy-mm-dd>`) quando ele é devido agora, ou null.
+ */
+export function resolveTrialEndingNotice({
+	periodoTesteFim,
+	stripeSubscriptionStatus,
+	now,
+}: {
+	periodoTesteFim: Date | null;
+	stripeSubscriptionStatus: string | null;
+	now: Date;
+}): { chave: string; evento: "teste_terminando"; fimDoTeste: string } | null {
+	if (!periodoTesteFim) return null;
+	if (stripeSubscriptionStatus && PAYING_STRIPE_STATUSES.has(stripeSubscriptionStatus)) return null;
+	const remainingMs = periodoTesteFim.getTime() - now.getTime();
+	if (remainingMs <= 0 || remainingMs > TRIAL_ENDING_NOTICE_DAYS * DAY_MS) return null;
+	const fimDoTeste = periodoTesteFim.toISOString().slice(0, 10);
+	return { chave: `teste_terminando:${fimDoTeste}`, evento: "teste_terminando", fimDoTeste };
+}

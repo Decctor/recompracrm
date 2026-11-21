@@ -120,3 +120,18 @@ test("campos personalizados: só as chaves que existem no Control, sem nulos nem
 		{ plano: "ESCALA", campanhas_ativas: 3 },
 	);
 });
+
+test("aviso de fim do teste: só nos últimos 3 dias, sem assinatura paga, uma chave por data", async () => {
+	const { resolveTrialEndingNotice } = await import("./lifecycle");
+	const end = new Date(NOW.getTime() + 2 * DAY);
+	assert.deepEqual(resolveTrialEndingNotice({ periodoTesteFim: end, stripeSubscriptionStatus: null, now: NOW }), {
+		chave: `teste_terminando:${end.toISOString().slice(0, 10)}`,
+		evento: "teste_terminando",
+		fimDoTeste: end.toISOString().slice(0, 10),
+	});
+	assert.equal(resolveTrialEndingNotice({ periodoTesteFim: new Date(NOW.getTime() + 4 * DAY), stripeSubscriptionStatus: null, now: NOW }), null);
+	assert.equal(resolveTrialEndingNotice({ periodoTesteFim: new Date(NOW.getTime() - DAY), stripeSubscriptionStatus: null, now: NOW }), null);
+	assert.equal(resolveTrialEndingNotice({ periodoTesteFim: end, stripeSubscriptionStatus: "active", now: NOW }), null);
+	assert.notEqual(resolveTrialEndingNotice({ periodoTesteFim: end, stripeSubscriptionStatus: "canceled", now: NOW }), null);
+	assert.equal(resolveTrialEndingNotice({ periodoTesteFim: null, stripeSubscriptionStatus: null, now: NOW }), null);
+});
