@@ -1,0 +1,178 @@
+# Onboarding e ativação — análise com Revenue-Centric Design
+
+Status: análise de 21/11/2026, a partir do código em `app/onboarding`, `lib/onboarding`, `components/Onboarding`, do hub em `app/dashboard/_hub` e de uma leitura agregada e anonimizada da base de produção (organizações criadas nos últimos 12 meses). Usa como referência o playbook [revenue-centric-design](https://github.com/heliocosta-dev/revenue-centric-design), em especial `references/onboarding-and-activation.md`. Complementa `onboarding-crm-erp-plan.md`, que continua sendo o plano de produto: esta análise não revoga suas regras de honestidade de estado (não dizer "tudo pronto", não prometer receita, não disparar envios sem liberação explícita).
+
+## 1. Resumo
+
+1. **O valor do CRM chega depois do fim do teste.** Entre as organizações que já enviaram uma campanha, a mediana até o primeiro envio é de **19,6 dias**. O teste grátis dura **15 dias** (`FREE_TRIAL_DURATION_DAYS`). Metade das contas só vê o produto funcionando depois da cobrança.
+2. **Quem envia campanha fica.** Das 26 organizações, 9 têm envios de campanha nos últimos 30 dias, e 8 delas também registraram vendas no período. Das 11 que nunca enviaram, só 3 registraram alguma venda nos últimos 30 dias, e 2 dessas 3 ainda estão dentro do teste. O comportamento que separa quem fica de quem some é **ter uma campanha enviando**, não concluir o onboarding.
+3. **O vazamento está no meio, não no topo.** O onboarding em si é rápido (0–4 min nas jornadas recentes, com uma exceção de 85 min). O que demora é o trecho depois do botão "Entrar no RecompraCRM": conectar o WhatsApp oficial, aprovar templates, liberar a campanha. Esse trecho não tem nenhum acompanhamento.
+4. **Depois do onboarding, o painel fica vazio.** `ActivationPanel` é importado em `app/dashboard/layout.tsx`, mas não é renderizado em lugar nenhum, e `OnboardingQualityBubble` também não. Quem entra cai no hub com "Nenhuma venda registrada ainda." e "Nenhum cliente segmentado ainda.", sem uma próxima ação.
+5. **A plataforma não fala com o lojista entre as sessões.** Não existe sequência de ativação por e-mail ou WhatsApp (ver §6). Quem fecha a aba no meio da configuração do WhatsApp só volta se alguém do time lembrar dele.
+
+Com ~2 cadastros por mês, a alavanca mais barata é juntar três coisas: um gatilho automático para cada ponto de travamento, uma mensagem curta ao lojista nesse momento e um alerta para o time agir pessoalmente. Automação pura ainda não se paga nesse volume; um *concierge* bem instrumentado se paga.
+
+## 2. O que é "valor" e qual é a métrica norte
+
+> Princípios: *Measure activation, not signups* · *Design onboarding as a behavioral trigger, not a feature tour* · *Map the whole journey to value*.
+
+O playbook pede o comportamento que **estatisticamente separa** quem fica de quem some (o "7 amigos em 10 dias" do Facebook). Na nossa base esse comportamento é o envio de campanha:
+
+| Grupo (26 orgs, últimos 12 meses) | Orgs | Com vendas nos últimos 30 dias |
+| --- | --- | --- |
+| Com envios de campanha nos últimos 30 dias | 9 | 8 |
+| Já enviaram, mas pararam | 6 | 5 (vendas via integração; a parte de CRM parou) |
+| Nunca enviaram campanha | 11 | 3 (2 ainda no período de teste) |
+
+Proposta de definições, para instrumentar e mostrar no admin:
+
+| Marco | Definição | Por quê |
+| --- | --- | --- |
+| **Primeiro valor** (micro-vitória) | Primeiro cashback creditado a um cliente real **ou** base importada com clientes segmentados. | Acontece em horas, e não em semanas. É o que dá para entregar dentro do primeiro dia. |
+| **Ativação** (métrica norte) | Primeira mensagem de campanha **entregue** até o D14. | É o comportamento que separa retidos de perdidos na nossa base. |
+| **Hábito** | Campanhas enviando em 3 das primeiras 4 semanas. | Distingue quem testou de quem incorporou o produto. |
+| **Resultado** | Primeira recompra atribuída a uma campanha. | O "momento Stripe" do CRM. Deve ser celebrado (§5.6), não só registrado. |
+
+Trocas de métrica (do playbook): "orgs criadas" → taxa de ativação; "onboarding concluído" → ativação no D14; "tempo médio de onboarding" (o que `getActivationMetrics` mede hoje) → **tempo até o primeiro envio**.
+
+## 3. A jornada real, passo a passo
+
+> Princípio: *Map the whole journey to value — then fix the biggest drop*. A versão "de cabeça" sempre parece mais curta.
+
+| # | Passo | Onde | O que a base mostra |
+| --- | --- | --- | --- |
+| 1 | Cadastro (nome + e-mail, link mágico ou Google) | `app/auth/signup` | Curto, sem atrito desnecessário. |
+| 2 | Escolha CRM ou ERP | `JourneyPicker` | Bom passo declarativo. |
+| 3 | Empresa: logo, nome, endereço da loja online, CNPJ (obrigatório), e-mail, telefone, segmento, termos | `CompanyStage` | O passo mais pesado. Mistura dados administrativos com o único dado declarativo (segmento). |
+| 4 | Fonte de vendas (Bling/Nuvemshop ou balcão) | `DataSourceStage` | A importação roda em segundo plano. |
+| 5 | Cashback (preset por segmento) | `CashbackStage` | Bom: mostra uma prévia concreta ("Uma compra de R$ 100 gera…"). |
+| 6 | Campanhas sugeridas | `CampaignsStage` | Bom: são poucas e já trazem a mensagem pronta. |
+| 7 | WhatsApp oficial (Meta) + pagamento + templates | `WhatsappStage` | Pode ser adiado ("Continuar sem conectar"). É o caminho crítico do valor. |
+| 8 | Entrada: estado real + próxima ação | `EntryStage` | Honesta, mas sem celebração e sem número de impacto. |
+| 9 | Hub `/dashboard` | `app/dashboard/_hub` | Painel vazio; o painel de ativação não aparece. |
+| 10 | Conectar a Meta (dias depois) | Configurações | Tempo do cadastro até a primeira conexão nas contas de ago–out: 8 a 69 dias. |
+| 11 | Templates aprovados + campanha liberada | Configurações / Campanhas | Sem aviso proativo ao lojista. |
+| 12 | **Primeira mensagem entregue** | — | **Mediana de 19,6 dias** (de 0 a 153). |
+| — | Teste termina (D15) | `/subscription` | Paywall genérico, sem lembrar o que a loja construiu. |
+
+Das jornadas novas (`organization_onboardings`), uma conta de mercado concluiu o CRM em 4 minutos adiando cashback, campanhas e WhatsApp. Hoje ela tem 2 vendas nos últimos 30 dias e nada configurado. É o caso do *silent non-activation*: a conta não cancela, simplesmente evapora.
+
+**Maior queda:** entre os passos 8 e 12. É ali que precisam entrar os gatilhos, a interface e as mensagens desta análise.
+
+## 4. Diagnóstico por princípio
+
+Cada item segue a ordem: o que existe hoje → princípio do playbook → movimento proposto.
+
+### 4.1. O painel pós-onboarding não aparece — *Never ship a blank dashboard*
+
+- **Hoje:** `ActivationPanel` (com próxima ação, progresso de importação e dependências das campanhas) e `getOnboardingQuality` estão prontos, mas nenhum dos dois é renderizado. O hub mostra estados vazios passivos.
+- **Movimento:** renderizar a ativação no hub para organizações **não ativadas** (definição do §2), como um bloco de atenção. Cabe na convenção do hub ("attention hub, not analytics"), sem filtros. Uma única ação principal, que é `readiness.proximaAcao`. Os vazios do hub passam a apontar para a ação que os preenche ("Nenhum cliente segmentado ainda" → "Conecte seu sistema ou registre a primeira venda no balcão").
+- **Progresso iniciado (*Progress / started-progress effect*):** contar cadastro, segmento e jornada concluída como etapas feitas. O lojista entra no painel com ~30% já preenchido, em vez de começar do zero.
+
+### 4.2. O tempo até o valor passa do teste — *Tie the trial's end to value consumed, not the calendar*
+
+- **Hoje:** 15 dias corridos a partir do cadastro, e a mediana até o primeiro envio é de 19,6 dias. A espera é, em boa parte, externa (Meta), não do lojista.
+- **Movimento (decisão comercial, ver §8):** o teste passa a contar **do primeiro envio** (com teto, por exemplo 30 dias a partir do cadastro), ou é estendido automaticamente enquanto a pendência for da Meta (template em análise, pagamento verificado). O plano original já lista "tratamento comercial do período de teste quando dependências externas atrasarem a ativação" como definição pendente; os dados mostram que essa é a regra, não a exceção.
+- **Tela de fim de teste (`/subscription`):** trocar o bloqueio genérico por um resumo do que a loja construiu, em enquadramento de perda (*Architect for what users fear losing*): "Você tem 1.284 clientes importados, 3 campanhas preparadas e R$ 412 em cashback ativo com 57 clientes. Assinando, nada disso para." Usar números exatos (*Use precise numbers*).
+
+### 4.3. O WhatsApp é o caminho crítico, mas aparece como opcional — *Cut TTV by reorder, not features*
+
+- **Hoje:** é a 5ª de 6 etapas, com "Continuar sem conectar" no botão principal. A aprovação dos templates só começa depois da conexão. É a etapa com mais espera externa, e fica para o fim.
+- **Movimento:**
+  1. **Inverter a ordem dos trabalhos lentos:** pedir a conexão Meta logo depois da fonte de dados, para que a revisão da Meta corra **em paralelo** ao cashback e às campanhas (o mesmo raciocínio que o plano já aplica à importação em segundo plano).
+  2. Submeter os templates das campanhas sugeridas assim que o número conecta, sem esperar o lojista abrir Configurações.
+  3. **Conexão assistida:** "Prefere que a gente conecte com você? 15 minutos por videochamada", com agendamento ou WhatsApp direto do time. Com 2 cadastros por mês, uma chamada por conta se paga. É o *friction in the right place* do playbook (Superhuman exige uma chamada antes do acesso).
+  4. Rebaixar o texto do botão: "Continuar sem conectar" vira ação secundária. A principal continua sendo conectar.
+- **Hipótese a decidir:** a única conta que começou pelo QR Code enviou no D5. A amostra é pequena demais para concluir algo, e o plano de produto tirou o QR do caminho principal de propósito. Se for usado, deve ser só como ponte temporária para a campanha de boas-vindas enquanto a Meta aprova.
+
+### 4.4. A etapa "Empresa" pede dados administrativos cedo demais — *Add declarative friction, cut administrative friction*
+
+- **Hoje:** logo, endereço da loja online (irrelevante na jornada CRM), CNPJ obrigatório, e-mail e telefone, tudo antes do primeiro valor. O único dado que muda o percurso é o segmento.
+- **Movimento:**
+  - **Cortar ou adiar:** logo (pedir quando o lojista for personalizar a mensagem ou o Ponto de Interação), slug (gerar automaticamente e esconder no CRM) e e-mail corporativo (usar o do usuário). O CNPJ fica para quando um contrato realmente precisar dele (Meta, fiscal, cobrança). Antes de mexer, revisar o que é obrigatório nos contratos atuais, como o próprio plano exige.
+  - **Pedir com propósito:** o **WhatsApp do responsável**, com consentimento explícito para receber avisos da configuração. É o canal das mensagens do §5 e, hoje, nem é obrigatório nem é do usuário (`organizations.telefone` é da loja).
+  - **Expandir o declarativo:** adicionar uma pergunta de intenção de ~30 segundos (o caso brasileiro do playbook: de 24,2 para 2,5 dias até a primeira venda **adicionando** uma etapa de intenção): "O que mais te incomoda hoje?" (clientes que compram uma vez e somem · clientes antigos que pararam de vir · quero que comprem com mais frequência). A resposta escolhe a campanha recomendada e o texto das mensagens.
+
+### 4.5. O teste não tem objetivo — *Give the trial an active goal* · *Calibrate the first step*
+
+- **Hoje:** o teste é acesso passivo.
+- **Movimento:** ao terminar a etapa de campanhas, propor uma meta pequena e fechável (*small-steps effect*): "Meta do teste: trazer de volta 10 clientes em 14 dias." Um contador no hub mostra as recompras atribuídas, e essa meta orienta as mensagens de progresso (§5.8). Evitar metas do tamanho de uma operação ("configure 5 campanhas"), que paralisam.
+
+### 4.6. A entrada confirma, mas não celebra — *Celebrate the activation moment* (peak-end rule)
+
+- **Hoje:** `EntryStage` lista estados com selos. É correto, mas o momento de maior curiosidade passa sem um número que impressione.
+- **Movimento:** quando a importação trouxer dados, a entrada passa a abrir com o número da própria loja, como o hub já faz: "**312 clientes** não compram há mais de 60 dias. Juntos, gastavam **R$ 18.430** por trimestre." A primeira mensagem entregue e a primeira recompra atribuída ganham um momento próprio, no painel e por mensagem (§5.6–5.7). Os números são sempre reais; sem dados suficientes, não se mostra estimativa (regra do plano).
+
+### 4.7. Não sabemos onde o lojista trava dentro da etapa — *Map the journey from session replays*
+
+- **Hoje:** os eventos `onboarding_stage_viewed` / `_completed` vão para o PostHog. Houve uma jornada de 85 minutos, e não sabemos em qual etapa.
+- **Movimento:** ligar a gravação de sessão do PostHog em `/onboarding` e nas telas de conexão Meta. Assistir às 5 próximas sessões e comparar com a tabela do §3. Adicionar ao admin (`getActivationMetrics`) o tempo até o primeiro envio, a taxa de ativação no D14 e a etapa de parada por conta.
+
+### 4.8. Contas pagantes sem uso — *Treat sub-30-day churn as an onboarding fix*
+
+Há pelo menos uma conta com assinatura Stripe `active` e **nenhuma venda registrada desde o cadastro**, além de contas da carteira de consultoria sem venda nenhuma. São cancelamentos que ainda não chegaram ao Stripe. O alerta interno do §5.10 serve para pegá-los antes da próxima cobrança.
+
+### 4.9. ERP
+
+As duas jornadas ERP recentes de contas novas concluíram em 0–2 min (uma adiou a simulação), venderam na primeira semana e estão sem vendas nos últimos 30 dias. Vale a mesma lógica com outro marco norte: **uso recorrente do canal escolhido na semana 2**. O detalhamento fica fora do escopo desta análise.
+
+## 5. Comunicação de ativação: e-mail e WhatsApp por gatilho
+
+> Princípios: *Make onboarding active, not passive* · Zeigarnik (loop aberto) · *Trial conversion is a journey problem* ("lost to life" → mensagem de progresso, não "seu teste acaba") · *Reinforce the decision the user just made*.
+
+Regras da sequência:
+
+- **Cada mensagem nasce de um estado real** (`getOnboardingReadiness`), nunca de um calendário fixo, e é cancelada se o estado já mudou.
+- **Uma ação por mensagem**, com link direto (`/onboarding?retomar=true&etapa=…` ou `proximaAcao.href`).
+- **WhatsApp para o que é urgente ou celebrável; e-mail para resumo e registro.** O varejo local vive no WhatsApp; o e-mail é o canal de apoio.
+- **Teto:** no máximo 1 mensagem por dia e 4 por semana ao lojista. Silêncio total depois que a conta ativa, exceto nas celebrações e nos alertas de falha.
+- **Todo gatilho de travamento também avisa o time** (§5.10). A mensagem ao lojista abre a porta; a pessoa do time é quem fecha.
+
+| # | Gatilho (estado) | Quando | Canal | Mensagem (rascunho) | Ação |
+| --- | --- | --- | --- | --- | --- |
+| 5.1 | Organização criada | Imediato | E-mail + WhatsApp | "Bem-vindo ao RecompraCRM, {nome}! Sua loja já está criada. O próximo passo leva 3 minutos: {próxima etapa}." | Retomar onboarding |
+| 5.2 | Jornada aberta e parada | +2 h, depois +24 h | WhatsApp, depois e-mail | "Você parou em *Cashback*. Faltam 3 etapas, uns 4 minutos. Suas respostas estão salvas." | Retomar na etapa |
+| 5.3 | Importação concluída (ou primeira janela coberta) | Imediato | WhatsApp | "Sua base chegou: 1.284 clientes. 312 deles não compram há mais de 60 dias. Veja quem são." | Hub / audiência |
+| 5.4 | Campanhas preparadas e WhatsApp não conectado | D1 e D3 | WhatsApp + e-mail | "Suas 3 campanhas estão prontas. Só falta conectar o número oficial. Quer que a gente faça com você em 15 min?" | Conectar Meta / agendar |
+| 5.5 | Template aprovado, campanha `PRONTA` | Imediato | WhatsApp | "A Meta aprovou *Boas-vindas*. Libere com um toque e ela começa a enviar." | Liberar campanha |
+| 5.5b | Template rejeitado, pagamento Meta pendente, integração expirada | Imediato | WhatsApp + e-mail | O texto de `resolveNextAction` ("A Meta recusou um envio por falta de forma de pagamento…"). | `proximaAcao.href` |
+| 5.6 | Primeira mensagem de campanha entregue (**ativação**) | Imediato | WhatsApp | "🎉 Sua primeira campanha saiu: 48 clientes receberam *Boas-vindas* hoje." | Ver resultados |
+| 5.7 | Primeira recompra atribuída | Imediato | WhatsApp | "Um cliente que recebeu sua mensagem voltou e comprou R$ 87, 6 dias depois. É o RecompraCRM trabalhando." | Resultados da campanha |
+| 5.8 | Progresso no teste | Semanal (segunda de manhã) | E-mail | "Semana 1: 2 campanhas enviando, 131 mensagens entregues, 4 clientes voltaram (meta: 10)." | Hub |
+| 5.9 | Teste terminando | D-3 e D-1 | E-mail + WhatsApp | **Ativado:** resumo do que foi construído, em enquadramento de perda (§4.2). **Não ativado:** oferecer extensão ou ajuda, não o paywall. | Assinar / falar com o time |
+| 5.10 | Sinais para o time (interno) | Imediato | WhatsApp ou e-mail do time | Novo cadastro · parado na etapa X há 24 h · WhatsApp não conectado no D3 · sem envio no D10 · conta pagante sem venda há 14 dias · integração com erro. | Contato humano |
+
+Os textos são rascunhos com números ilustrativos. Na implementação, os números vêm da conta e, quando não houver dado, a frase não é enviada.
+
+## 6. Infraestrutura de comunicação existente
+
+_Preenchido a partir do mapeamento do código. Ver a próxima revisão desta seção._
+
+## 7. Roteiro priorizado
+
+| Prioridade | Item | Esforço | Mexe em |
+| --- | --- | --- | --- |
+| P0 | Renderizar a ativação no hub para contas não ativadas; vazios do hub com ação (§4.1) | Baixo (componentes existem) | Primeiro dia |
+| P0 | Alertas internos para o time (§5.10) | Baixo | Todo o meio do funil |
+| P0 | Definir e medir ativação (primeiro envio até o D14) e tempo até o primeiro envio no admin (§2, §4.7) | Baixo | Saber se o resto funciona |
+| P1 | Mensagens 5.1, 5.2, 5.4, 5.5, 5.5b (retomada e destravamento do WhatsApp) | Médio | Passos 8–11 |
+| P1 | Conexão Meta mais cedo + submissão automática de templates + conexão assistida (§4.3) | Médio | Maior espera da jornada |
+| P1 | Teste ligado ao valor e tela de fim de teste com resumo de perda (§4.2) | Médio (decisão comercial) | Conversão do teste |
+| P2 | Celebrações 5.3, 5.6, 5.7 e número de impacto na entrada (§4.6) | Médio | Memória do produto |
+| P2 | Pergunta de intenção, meta do teste e progresso semanal (§4.4, §4.5, §5.8) | Médio | Compromisso |
+| P2 | Etapa "Empresa" enxuta + WhatsApp do responsável com consentimento (§4.4) | Médio (revisar contratos) | Atrito inicial |
+| P2 | Gravação de sessão em `/onboarding` (§4.7) | Baixo | Diagnóstico |
+
+## 8. Decisões que precisam de dono
+
+1. **Regra do teste:** contar a partir do primeiro envio, estender durante pendência da Meta ou manter os 15 dias com extensão manual.
+2. **Canal de WhatsApp da plataforma** para falar com lojistas: qual número e qual conexão; templates de utilidade aprovados para mensagens fora da janela de 24 h.
+3. **Consentimento:** onde coletar o opt-in do responsável e como sair (LGPD).
+4. **Concierge:** quem do time recebe os alertas do §5.10 e qual é o tempo de resposta esperado.
+5. **QR Code como ponte** enquanto a Meta aprova: sim ou não (§4.3).
+
+## 9. Limites desta análise
+
+- **Amostra pequena:** são 26 organizações, e só 6 passaram pelo onboarding novo (`organization_onboardings`). As demais são anteriores a ele ou entraram por deal/consultoria. Os números do §2–3 apontam direção; não são estatística.
+- **Correlação não é causa:** quem envia campanha pode ficar porque já era a conta mais engajada. O teste é ver se encurtar o tempo até o primeiro envio aumenta a retenção das próximas coortes.
+- **Leitura feita no banco de produção, apenas agregada e anonimizada:** organizações aparecem por número de ordem, sem nomes. "Vendas" conta registros com `data_venda` posterior ao cadastro; "envio de campanha" conta `interactions` com `campanha_id`.
