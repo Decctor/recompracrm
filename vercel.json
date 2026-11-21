@@ -200,6 +200,10 @@
 			"schedule": "0 7 * * *"
 		},
 		{
+			"path": "/api/cron/control-lifecycle",
+			"schedule": "20 * * * *"
+		},
+		{
 			"path": "/api/cron/sweep-client-duplicates",
 			"schedule": "30 3 * * *"
 		},

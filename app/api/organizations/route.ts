@@ -1,3 +1,5 @@
+import { syncControlLifecycleSafely } from "@/lib/control/sync";
+import { waitUntil } from "@vercel/functions";
 import {
 	AppSubscriptionPlans,
 	DEFAULT_ORGANIZATION_CONFIGURATION_DEFAULTS,
@@ -526,6 +528,8 @@ async function createOrganizationRoute(request: NextRequest) {
 	});
 
 	const result = await createOrganization({ input, session: session, indicadorOrigem });
+	// A organização nasce no Control (Funil Comercial + Sucesso do Cliente) depois da resposta.
+	waitUntil(syncControlLifecycleSafely(result.data.insertedId));
 
 	return NextResponse.json(result);
 }

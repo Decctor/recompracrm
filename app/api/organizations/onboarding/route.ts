@@ -1,3 +1,5 @@
+import { syncControlLifecycleSafely } from "@/lib/control/sync";
+import { waitUntil } from "@vercel/functions";
 import { notifyInternalsOnNewOrganization } from "@/config/internal-coms";
 import { welcomeOrganizationOwnerOnOnboarding } from "@/config/onboarding";
 import { captureServerEvent } from "@/lib/analytics/posthog-server";
@@ -139,6 +141,7 @@ async function completeOnboardingRoute(request: NextRequest) {
 	const body = await request.json().catch(() => ({}));
 	const input = CompleteOnboardingInputSchema.parse(body ?? {});
 	const result = await completeOnboarding({ input, session });
+	if (session.membership) waitUntil(syncControlLifecycleSafely(session.membership.organizacao.id));
 	return NextResponse.json(result);
 }
 

@@ -1,3 +1,5 @@
+import { syncControlLifecycleSafely } from "@/lib/control/sync";
+import { waitUntil } from "@vercel/functions";
 import { captureServerEvent } from "@/lib/analytics/posthog-server";
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
@@ -64,6 +66,7 @@ async function updateProgressRoute(request: NextRequest) {
 	if (!session) throw new createHttpError.Unauthorized("Você não está autenticado.");
 	const input = UpdateJourneyProgressInputSchema.parse(await request.json());
 	const result = await updateProgress({ input, session });
+	if (session.membership) waitUntil(syncControlLifecycleSafely(session.membership.organizacao.id));
 	return NextResponse.json(result);
 }
 

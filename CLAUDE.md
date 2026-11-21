@@ -356,6 +356,20 @@ export function NewFoo({ closeModal, callbacks }: NewFooProps) {
 
 ---
 
+## Syncroniza Control Lifecycle Sync Conventions
+
+**Location**: `services/control/` (API client), `lib/control/lifecycle.ts` (pure, tested), `lib/control/sync.ts`, `app/api/cron/control-lifecycle/`
+
+- **RecompraCRM decides the state; Control decides the conversation.** Each organization is an opportunity in the Syncroniza Control (`ref:recompracrm:org_<id>`) that advances on the "SUCESSO DO CLIENTE" board as milestones happen here. Activation messages, CS tasks and alerts are Control workflows — don't build a second messaging engine here.
+- **Off without `CONTROL_API_KEY`** (server-only; `CONTROL_API_URL` defaults to `https://control.syncroniza.com.br`). Preview and Development stay out of the production CRM.
+- **Forward only, hands off manual stages.** The card moves to the furthest milestone reached and never back; a card in a stage that is not a milestone (NPS, follow-up) is never moved. Milestone order and stage names live in `CONTROL_SUCCESS_MILESTONES`; compared case- and space-insensitively.
+- **Send only what changed.** `control_lifecycle_syncs` remembers delivered milestones and the custom-field hash; each milestone becomes one event (`eventId` = `<ref>:<chave>`) and one interaction, both idempotent on Control's side.
+- **Silent backfill.** The first sync of an organization older than two days records its past milestones as delivered without sending events, so celebration workflows don't fire months late.
+- **Custom fields go only if they exist in Control** (`GET /api/v1/custom-fields`); an unknown key would reject the whole PATCH. Create the field in Control with the key used in `lib/control/sync.ts` to turn it on.
+- Product hooks (`waitUntil(syncControlLifecycleSafely(orgId))`) run after organization creation and onboarding progress/conclusion; they never throw. The hourly cron catches time-based milestones (first sale, first delivered campaign, first redemption, first month) and retries failures.
+
+---
+
 ## Public Page Conventions
 
 **Location**: `/app/(external)/`

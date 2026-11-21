@@ -52,6 +52,7 @@ export * from "./desktop-agent";
 export * from "./preparation-stations";
 export * from "./external-events";
 export * from "./organization-onboardings";
+export * from "./control-lifecycle-syncs";
 export * from "./custom-fields";
 export * from "./sales-channels";
 export * from "./catalog-links";
