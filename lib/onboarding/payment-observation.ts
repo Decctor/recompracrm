@@ -1,7 +1,7 @@
 export function resolvePaymentObservation({ status, errors }: { status: string; errors?: Array<{ code?: number }> }) {
- if (errors?.some((error) => error.code === 131042)) return "PENDENTE" as const;
- if (status === "delivered" || status === "read") return "VERIFICADO" as const;
- return null;
+	if (errors?.some((error) => error.code === 131042)) return "PENDENTE" as const;
+	if (status === "delivered" || status === "read") return "VERIFICADO" as const;
+	return null;
 }
 
 /**
@@ -12,11 +12,13 @@ export function resolvePaymentObservation({ status, errors }: { status: string; 
  *
  * Mudança de status reconcilia sempre. Sem mudança, uma vez por janela basta: além do pagamento,
  * esse fluxo serve de reconciliação periódica para entradas que não disparam a própria (ex.:
- * primeiras vendas vindas da coleta), então ele é espaçado, não removido. O controle é em
- * memória: cada instância reconcilia no máximo uma vez por janela, o que limita a carga sem
- * coluna nova — e uma instância nova simplesmente reconcilia na primeira observação.
+ * primeiras vendas vindas da coleta), então ele é espaçado, não removido.
+ *
+ * Esta função é só o filtro em memória, por instância. No Fluid há várias instâncias, então ela
+ * sozinha deixava a reconciliação rodar a cada poucos minutos; a janela entre instâncias vem da
+ * trava em `metadados.reconciliacaoOnboardingEm` do telefone (lib/onboarding/whatsapp-payment.ts).
  */
-const UNCHANGED_PAYMENT_RECONCILE_INTERVAL_MS = 10 * 60 * 1000;
+export const UNCHANGED_PAYMENT_RECONCILE_INTERVAL_MS = 10 * 60 * 1000;
 
 export function shouldReconcileAfterPaymentObservation({
 	previousStatus,

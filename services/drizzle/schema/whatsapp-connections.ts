@@ -64,6 +64,10 @@ export type TWhatsappConnectionPhoneMetadados = {
 		atualizadoEm: string;
 		ultimoErroCodigo?: string | null;
 	};
+	// Última reconciliação do onboarding disparada por um webhook de status com o pagamento
+	// inalterado (lib/onboarding/whatsapp-payment.ts). Funciona como trava entre instâncias: só
+	// quem avança este carimbo reconcilia naquela janela.
+	reconciliacaoOnboardingEm?: string | null;
 	// Erro da Meta que se repetiria em qualquer envio deste número (pagamento, conta restrita,
 	// credencial, número indisponível). Enquanto presente, nenhum disparo de campanha sai pelo
 	// número. Cai quando o usuário retoma um disparo interrompido, clica em "Já resolvi" no alerta

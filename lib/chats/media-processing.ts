@@ -34,6 +34,7 @@ export async function processChatMessageMedia({
 	storageId,
 	mimeType,
 	mediaType,
+	fileBuffer: providedFileBuffer,
 	log = "[MEDIA_PROCESSING]",
 }: {
 	messageId: string;
@@ -41,6 +42,8 @@ export async function processChatMessageMedia({
 	storageId: string;
 	mimeType: string;
 	mediaType: Exclude<TChatMessageContentTypeEnum, "TEXTO">;
+	/** O arquivo já em memória (o webhook acabou de baixá-lo); sem ele, é lido do storage. */
+	fileBuffer?: Buffer | null;
 	log?: string;
 }): Promise<TChatMediaProcessingResult> {
 	// Figurinha é conteúdo expressivo, não informativo: pular o modelo de visão — um webp por
@@ -53,9 +56,7 @@ export async function processChatMessageMedia({
 	if (mediaType === "LOCALIZACAO") return { status: "skipped" };
 
 	try {
-		const { data: fileData, error: downloadError } = await supabaseClient.storage.from("files").download(storageId);
-		if (downloadError || !fileData) throw new Error(`Erro ao baixar arquivo do storage: ${downloadError?.message ?? "sem dados"}`);
-		const fileBuffer = Buffer.from(await fileData.arrayBuffer());
+		const fileBuffer = providedFileBuffer ?? (await downloadStoredMedia(storageId));
 
 		let processedText = "";
 		let summary = "";
@@ -125,4 +126,10 @@ async function mergeMediaStatus(
 	const current = await db.query.chatMessages.findFirst({ where: eq(chatMessages.id, messageId), columns: { metadados: true } });
 	const metadados: TChatMessageMetadata = current?.metadados ?? {};
 	return { ...metadados, whatsappMidia: { ...metadados.whatsappMidia, ...patch } };
+}
+
+async function downloadStoredMedia(storageId: string) {
+	const { data: fileData, error: downloadError } = await supabaseClient.storage.from("files").download(storageId);
+	if (downloadError || !fileData) throw new Error(`Erro ao baixar arquivo do storage: ${downloadError?.message ?? "sem dados"}`);
+	return Buffer.from(await fileData.arrayBuffer());
 }

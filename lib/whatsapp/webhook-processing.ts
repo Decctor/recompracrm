@@ -14,7 +14,7 @@ import {
 	resolveIncomingChat,
 } from "@/lib/chats/incoming-message";
 import { lockConnectedWhatsappPhone, mergeMessageTemplatePhoneMetadataSql } from "@/lib/db-utils";
-import { downloadAndStoreWhatsappMedia } from "@/lib/files-storage/chat-media";
+import { fetchWhatsappMedia, storeWhatsappMedia, type TFetchedWhatsappMedia } from "@/lib/files-storage/chat-media";
 import { applyProviderStatusUpdate } from "@/lib/interactions/delivery-state";
 import {
 	buildWhatsappTemplateSyncPatch,
@@ -512,7 +512,15 @@ async function handleIncomingMessage(incomingMessage: ReturnType<typeof parseWeb
 	}
 
 	const quotedWhatsappMessageId = incomingMessage.context?.quotedWhatsappMessageId;
-	const [{ chatId, mediaData }, quotedMessage] = await settleAll([
+	// O download na Graph API não depende do chat: começa já e corre junto com a resolução do
+	// chat. Só o upload espera o chatId, que compõe o caminho no storage.
+	const pendingMediaFetch = startWhatsappMediaFetch({
+		mediaId: incomingMessage.mediaId,
+		mimeType: incomingMessage.mimeType,
+		whatsappToken,
+		log: "[WHATSAPP_WEBHOOK]",
+	});
+	const [{ chatId, mediaData, mediaBuffer }, quotedMessage] = await settleAll([
 		(async () => {
 			// Upsert pela chave natural: webhooks concorrentes criavam chats duplicados antes da 0052.
 			const { chatId, isNew } = await resolveIncomingChat({
@@ -524,30 +532,16 @@ async function handleIncomingMessage(incomingMessage: ReturnType<typeof parseWeb
 			});
 			if (isNew) console.log("[WHATSAPP_WEBHOOK] New chat created:", chatId);
 
-			// Download and store media if present (o caminho no storage usa o chatId).
-			let mediaData: {
-				storageId: string;
-				publicUrl: string;
-				mimeType: string;
-				fileSize: number;
-			} | null = null;
-
-			if (incomingMessage.mediaId && incomingMessage.mimeType) {
-				try {
-					mediaData = await downloadAndStoreWhatsappMedia({
-						mediaId: incomingMessage.mediaId,
-						mimeType: incomingMessage.mimeType,
-						filename: incomingMessage.filename,
-						organizacaoId,
-						chatId,
-						whatsappToken,
-					});
-					console.log("[WHATSAPP_WEBHOOK] Media stored:", mediaData.storageId);
-				} catch (error) {
-					console.error("[WHATSAPP_WEBHOOK] Error downloading media:", error);
-				}
-			}
-			return { chatId, mediaData };
+			const stored = await storeFetchedWhatsappMedia({
+				pendingMediaFetch,
+				mediaId: incomingMessage.mediaId,
+				filename: incomingMessage.filename,
+				organizacaoId,
+				chatId,
+				log: "[WHATSAPP_WEBHOOK]",
+			});
+			if (stored.mediaData) console.log("[WHATSAPP_WEBHOOK] Media stored:", stored.mediaData.storageId);
+			return { chatId, ...stored };
 		})(),
 		// Resposta a uma mensagem: o snapshot da citada é resolvido agora, para o painel continuar
 		// legível quando a original sair do histórico carregado. Leitura que só depende da
@@ -625,6 +619,8 @@ async function handleIncomingMessage(incomingMessage: ReturnType<typeof parseWeb
 			storageId: mediaData.storageId,
 			mimeType: mediaData.mimeType,
 			mediaType: midiaTipo,
+			// O arquivo acabou de subir: entrega o buffer em vez de baixá-lo de novo do storage.
+			fileBuffer: mediaBuffer,
 			log: "[WHATSAPP_WEBHOOK]",
 		});
 	}
@@ -803,6 +799,13 @@ async function handleMessageEcho(messageEcho: ReturnType<typeof parseWebhookMess
 	}
 
 	const quotedWhatsappMessageId = messageEcho.context?.quotedWhatsappMessageId;
+	// Mesmo desenho da mensagem recebida: o download na Graph API corre junto com o chat.
+	const pendingMediaFetch = startWhatsappMediaFetch({
+		mediaId: messageEcho.mediaId,
+		mimeType: messageEcho.mimeType,
+		whatsappToken,
+		log: "[WHATSAPP_WEBHOOK] [ECHO]",
+	});
 	const [{ chatId, mediaData }, quotedMessage] = await settleAll([
 		(async () => {
 			const { chatId } = await resolveIncomingChat({
@@ -813,28 +816,14 @@ async function handleMessageEcho(messageEcho: ReturnType<typeof parseWebhookMess
 				whatsappConexaoTelefoneId,
 			});
 
-			// Download and store media if present (o caminho no storage usa o chatId).
-			let mediaData: {
-				storageId: string;
-				publicUrl: string;
-				mimeType: string;
-				fileSize: number;
-			} | null = null;
-
-			if (messageEcho.mediaId && messageEcho.mimeType) {
-				try {
-					mediaData = await downloadAndStoreWhatsappMedia({
-						mediaId: messageEcho.mediaId,
-						mimeType: messageEcho.mimeType,
-						filename: messageEcho.filename,
-						organizacaoId,
-						chatId,
-						whatsappToken,
-					});
-				} catch (error) {
-					console.error("[WHATSAPP_WEBHOOK] [ECHO] Error downloading media:", error);
-				}
-			}
+			const { mediaData } = await storeFetchedWhatsappMedia({
+				pendingMediaFetch,
+				mediaId: messageEcho.mediaId,
+				filename: messageEcho.filename,
+				organizacaoId,
+				chatId,
+				log: "[WHATSAPP_WEBHOOK] [ECHO]",
+			});
 			return { chatId, mediaData };
 		})(),
 		// Leitura independente do chat e da mídia: corre junto com eles.
@@ -875,3 +864,57 @@ async function handleMessageEcho(messageEcho: ReturnType<typeof parseWebhookMess
 
 import { observeWhatsappPayment } from "@/lib/onboarding/whatsapp-payment";
 import { reconcileOnboardingCampaigns } from "@/lib/onboarding/reconcile";
+
+type TStoredWhatsappMedia = { storageId: string; publicUrl: string; mimeType: string; fileSize: number };
+
+/**
+ * Dispara o download da mídia na Graph API sem esperar por ele. A falha vira `null` já aqui, para
+ * a promessa nunca ficar rejeitada sem dono enquanto o chat é resolvido — sem mídia, a mensagem
+ * entra só com o texto, como antes.
+ */
+function startWhatsappMediaFetch({
+	mediaId,
+	mimeType,
+	whatsappToken,
+	log,
+}: {
+	mediaId?: string | null;
+	mimeType?: string | null;
+	whatsappToken: string;
+	log: string;
+}): Promise<TFetchedWhatsappMedia | null> | null {
+	if (!mediaId || !mimeType) return null;
+	return fetchWhatsappMedia({ mediaId, mimeType, whatsappToken }).catch((error) => {
+		console.error(`${log} Error downloading media:`, error);
+		return null;
+	});
+}
+
+async function storeFetchedWhatsappMedia({
+	pendingMediaFetch,
+	mediaId,
+	filename,
+	organizacaoId,
+	chatId,
+	log,
+}: {
+	pendingMediaFetch: Promise<TFetchedWhatsappMedia | null> | null;
+	mediaId?: string | null;
+	filename?: string | null;
+	organizacaoId: string;
+	chatId: string;
+	log: string;
+}): Promise<{ mediaData: TStoredWhatsappMedia | null; mediaBuffer: Buffer | null }> {
+	const media = pendingMediaFetch ? await pendingMediaFetch : null;
+	if (!media || !mediaId) return { mediaData: null, mediaBuffer: null };
+	try {
+		const stored = await storeWhatsappMedia({ media, mediaId, filename: filename ?? undefined, organizacaoId, chatId });
+		return {
+			mediaData: { storageId: stored.storageId, publicUrl: stored.publicUrl, mimeType: stored.mimeType, fileSize: stored.fileSize },
+			mediaBuffer: media.fileBuffer,
+		};
+	} catch (error) {
+		console.error(`${log} Error storing media:`, error);
+		return { mediaData: null, mediaBuffer: null };
+	}
+}

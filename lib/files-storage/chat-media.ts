@@ -106,24 +106,25 @@ export async function getChatMediaSignedUrl(storageId: string, expiresIn = 3600)
 	return data.signedUrl;
 }
 
+export type TFetchedWhatsappMedia = {
+	fileBuffer: Buffer;
+	mimeType: string;
+	fileSize: number;
+};
+
 /**
- * Download media from WhatsApp and upload to Supabase Storage
+ * Baixa a mídia da Graph API, sem gravar. Não depende do chat: o webhook dispara esta etapa
+ * junto com a resolução do chat e só espera por ela na hora do upload (`storeWhatsappMedia`).
  */
-export async function downloadAndStoreWhatsappMedia({
+export async function fetchWhatsappMedia({
 	mediaId,
 	mimeType,
-	filename,
-	organizacaoId,
-	chatId,
 	whatsappToken,
 }: {
 	mediaId: string;
 	mimeType: string;
-	filename?: string;
-	organizacaoId: string;
-	chatId: string;
 	whatsappToken: string;
-}): Promise<UploadChatMediaResult> {
+}): Promise<TFetchedWhatsappMedia> {
 	// Step 1: Get media URL from WhatsApp
 	const mediaUrlResponse = await fetch(`https://graph.facebook.com/v21.0/${mediaId}`, {
 		headers: {
@@ -153,18 +154,34 @@ export async function downloadAndStoreWhatsappMedia({
 	const actualMimeType = mediaResponse.headers.get("content-type") || mimeType;
 	const fileSize = Number.parseInt(mediaResponse.headers.get("content-length") || "0", 10);
 
-	// Step 3: Upload to Supabase Storage
+	return { fileBuffer, mimeType: actualMimeType, fileSize };
+}
+
+/** Grava no Storage, no caminho do chat, a mídia que `fetchWhatsappMedia` baixou. */
+export async function storeWhatsappMedia({
+	media,
+	mediaId,
+	filename,
+	organizacaoId,
+	chatId,
+}: {
+	media: TFetchedWhatsappMedia;
+	mediaId: string;
+	filename?: string;
+	organizacaoId: string;
+	chatId: string;
+}): Promise<UploadChatMediaResult> {
 	const result = await uploadChatMedia({
-		file: fileBuffer,
+		file: media.fileBuffer,
 		organizacaoId,
 		chatId,
-		mimeType: actualMimeType,
+		mimeType: media.mimeType,
 		filename: filename || `media_${mediaId}`,
 	});
 
 	return {
 		...result,
-		fileSize: fileSize || result.fileSize,
+		fileSize: media.fileSize || result.fileSize,
 	};
 }
 
@@ -216,4 +233,24 @@ export async function uploadMediaToWhatsapp({
 
 	const data = await response.json();
 	return { mediaId: data.id };
+}
+
+/** Baixa da Graph API e grava no chat, em sequência (usado por scripts de recuperação). */
+export async function downloadAndStoreWhatsappMedia({
+	mediaId,
+	mimeType,
+	filename,
+	organizacaoId,
+	chatId,
+	whatsappToken,
+}: {
+	mediaId: string;
+	mimeType: string;
+	filename?: string;
+	organizacaoId: string;
+	chatId: string;
+	whatsappToken: string;
+}): Promise<UploadChatMediaResult> {
+	const media = await fetchWhatsappMedia({ mediaId, mimeType, whatsappToken });
+	return storeWhatsappMedia({ media, mediaId, filename, organizacaoId, chatId });
 }
