@@ -147,3 +147,22 @@ test("backfill silencioso: só antes do primeiro marco registrado, mesmo com uma
 	// Organização nova: os marcos viram eventos desde o começo.
 	assert.equal(shouldBackfillSilently({ marcosEnviados: [], organizacaoCriadaEm: new Date(NOW.getTime() - DAY), now: NOW }), false);
 });
+
+test("avisos de parado: pelo estado atual, só para conta viva, sem campanha antes do WhatsApp", async () => {
+	const { resolveStuckNotices } = await import("./lifecycle");
+	const trial = new Date(NOW.getTime() + 10 * DAY);
+	const keys = (overrides: Partial<TControlLifecycleSnapshot>, periodoTesteFim: Date | null = trial, stripeSubscriptionStatus: string | null = null) =>
+		resolveStuckNotices({ snapshot: snapshot(overrides), periodoTesteFim, stripeSubscriptionStatus }).map((n) => n.evento);
+
+	// O caso da trezz: onboarding feito há 5 dias, vendendo, sem WhatsApp oficial.
+	const trezz = { onboardingConcluidoEm: new Date(NOW.getTime() - 5 * DAY), primeiraVendaEm: new Date(NOW.getTime() - 4 * DAY) };
+	assert.deepEqual(keys(trezz), ["whatsapp_pendente"]);
+	// Onboarding de hoje: ainda não é "parado".
+	assert.deepEqual(keys({ onboardingConcluidoEm: NOW }), []);
+	// Com WhatsApp, vendendo há 5 dias sem campanha entregue.
+	assert.deepEqual(keys({ ...trezz, primeiraVendaEm: new Date(NOW.getTime() - 5 * DAY), whatsappOficialConectado: true }), ["vendendo_sem_campanha"]);
+	assert.deepEqual(keys({ ...trezz, whatsappOficialConectado: true, primeiroEnvioCampanhaEm: NOW }), []);
+	// Teste vencido e sem assinatura: nenhum empurrão. Pagante: sim.
+	assert.deepEqual(keys(trezz, new Date(NOW.getTime() - DAY)), []);
+	assert.deepEqual(keys(trezz, new Date(NOW.getTime() - DAY), "active"), ["whatsapp_pendente"]);
+});

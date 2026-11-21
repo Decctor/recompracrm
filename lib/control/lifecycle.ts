@@ -253,3 +253,65 @@ export function resolveTrialEndingNotice({
 	const fimDoTeste = periodoTesteFim.toISOString().slice(0, 10);
 	return { chave: `teste_terminando:${fimDoTeste}`, evento: "teste_terminando", fimDoTeste };
 }
+
+// ------------------------------------------------------------------ avisos de "parado"
+
+const WHATSAPP_PENDING_AFTER_DAYS = 1;
+const SELLING_WITHOUT_CAMPAIGN_AFTER_DAYS = 5;
+
+export type TControlStuckNotice = { chave: string; evento: "whatsapp_pendente" | "vendendo_sem_campanha" };
+
+/** Conta viva: em teste ou com assinatura pagante. Uma conta com o teste vencido há semanas não recebe empurrão. */
+export function isAccountLive({
+	periodoTesteFim,
+	stripeSubscriptionStatus,
+	now,
+}: {
+	periodoTesteFim: Date | null;
+	stripeSubscriptionStatus: string | null;
+	now: Date;
+}) {
+	if (stripeSubscriptionStatus && PAYING_STRIPE_STATUSES.has(stripeSubscriptionStatus)) return true;
+	return periodoTesteFim !== null && periodoTesteFim.getTime() > now.getTime();
+}
+
+/**
+ * Avisos de "parado", pelo **estado de agora**, não pela entrada num estágio: um cartão posto no
+ * quadro pelo backfill, ou uma loja que vendeu antes de conectar o WhatsApp, nunca entra no estágio
+ * que dispararia o empurrão. Cada aviso vai uma vez por organização (`aviso:<evento>`), também no
+ * backfill silencioso, porque é sobre a situação atual. Não são marcos: não movem o cartão.
+ *
+ * - `whatsapp_pendente`: onboarding concluído há 1 dia ou mais e WhatsApp oficial não conectado.
+ * - `vendendo_sem_campanha`: primeira venda há 5 dias ou mais, WhatsApp conectado e nenhuma campanha
+ *   entregue. Sem WhatsApp, o aviso certo é o anterior: a campanha não tem por onde sair.
+ */
+export function resolveStuckNotices({
+	snapshot,
+	periodoTesteFim,
+	stripeSubscriptionStatus,
+}: {
+	snapshot: TControlLifecycleSnapshot;
+	periodoTesteFim: Date | null;
+	stripeSubscriptionStatus: string | null;
+}): TControlStuckNotice[] {
+	const { now } = snapshot;
+	if (!isAccountLive({ periodoTesteFim, stripeSubscriptionStatus, now })) return [];
+	const notices: TControlStuckNotice[] = [];
+	const daysSince = (date: Date) => (now.getTime() - date.getTime()) / DAY_MS;
+	if (
+		snapshot.onboardingConcluidoEm &&
+		!snapshot.whatsappOficialConectado &&
+		daysSince(snapshot.onboardingConcluidoEm) >= WHATSAPP_PENDING_AFTER_DAYS
+	) {
+		notices.push({ chave: "aviso:whatsapp_pendente", evento: "whatsapp_pendente" });
+	}
+	if (
+		snapshot.primeiraVendaEm &&
+		snapshot.whatsappOficialConectado &&
+		snapshot.primeiroEnvioCampanhaEm === null &&
+		daysSince(snapshot.primeiraVendaEm) >= SELLING_WITHOUT_CAMPAIGN_AFTER_DAYS
+	) {
+		notices.push({ chave: "aviso:vendendo_sem_campanha", evento: "vendendo_sem_campanha" });
+	}
+	return notices;
+}

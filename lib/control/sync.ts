@@ -25,6 +25,7 @@ import {
 	controlOrganizationReference,
 	normalizeStageName,
 	planControlLifecycleSync,
+	resolveStuckNotices,
 	resolveTrialEndingNotice,
 	shouldBackfillSilently,
 	shouldMoveSuccessStage,
@@ -292,6 +293,26 @@ export async function syncControlLifecycle({
 		});
 		sent.add(trialNotice.chave);
 		newMilestones.push(trialNotice.chave);
+		await persist({ marcosEnviados: [...sent] });
+	}
+
+	// 3c. Avisos de "parado", pelo estado de agora (o cartão pode nunca entrar no estágio do
+	// empurrão). Uma vez cada; valem também no backfill, porque são sobre a situação atual.
+	for (const notice of resolveStuckNotices({
+		snapshot,
+		periodoTesteFim: organization.periodoTesteFim,
+		stripeSubscriptionStatus: organization.stripeSubscriptionStatus,
+	})) {
+		if (sent.has(notice.chave)) continue;
+		await sendControlEvent({
+			evento: notice.evento,
+			eventId: `${reference}:${notice.chave}`,
+			oportunidadeId: opportunityId,
+			propriedades: { organizacaoId: organizationId, aviso: notice.evento },
+			dataOcorrencia: now.toISOString(),
+		});
+		sent.add(notice.chave);
+		newMilestones.push(notice.chave);
 		await persist({ marcosEnviados: [...sent] });
 	}
 
