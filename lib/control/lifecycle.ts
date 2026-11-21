@@ -193,5 +193,10 @@ export function buildControlCustomFields({
 	chavesDisponiveis: readonly string[];
 }): TControlCustomFieldValues {
 	const available = new Set(chavesDisponiveis);
-	return Object.fromEntries(Object.entries(valores).filter(([key, value]) => available.has(key) && value !== null && value !== undefined));
+	// Texto vazio também fica de fora: o Control recusa um campo TEXTO vazio, e a recusa derruba o PATCH inteiro.
+	return Object.fromEntries(
+		Object.entries(valores).filter(
+			([key, value]) => available.has(key) && value !== null && value !== undefined && !(typeof value === "string" && value.trim() === ""),
+		),
+	);
 }

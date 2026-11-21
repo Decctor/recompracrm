@@ -105,6 +105,11 @@ export async function listControlOpportunityCustomFieldKeys() {
 
 export type TControlCreateOpportunityInput = {
 	referenciaExterna: string;
+	/**
+	 * `false` sempre, nesta integração: sem ele o Control reaproveita a oportunidade aberta do mesmo
+	 * cliente criada nos últimos 7 dias, e organizações do mesmo responsável viravam um cartão só.
+	 */
+	reaproveitarAberta: false;
 	cliente: { nome: string; email?: string; telefone?: string; cpfCnpj?: string };
 	oportunidade: {
 		nome: string;
